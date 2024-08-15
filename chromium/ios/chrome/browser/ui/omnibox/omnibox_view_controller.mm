@@ -53,7 +53,11 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
   // Vivaldi
   // The search engine list to trigger search engine shortcut if matched
-  std::vector<TemplateURL*> _templateURLs;
+  std::vector<raw_ptr<TemplateURL, VectorExperimental>> _templateURLs;
+  // Current default search engine.
+  const TemplateURL* _defaultSearchEngine;
+  // Boolen to track if search engine is overridden
+  BOOL _isSearchEngineOverriden;
   // End Vivaldi
 
 }
@@ -145,7 +149,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
   // Add Paste and Go option to the editing menu
   RegisterEditMenuItem([[UIMenuItem alloc]
       initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_IMAGE)
@@ -160,6 +164,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
   RegisterEditMenuItem([[UIMenuItem alloc]
       initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_TEXT)
              action:@selector(searchCopiedText:)]);
+#endif
 
   self.textField.placeholderTextColor = [self placeholderAndClearButtonColor];
 
@@ -227,6 +232,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
   if (_isTextfieldEditing == owns) {
     return;
   }
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
   if (owns) {
     [[NSNotificationCenter defaultCenter]
         addObserver:self
@@ -239,6 +245,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
                   name:UIMenuControllerWillShowMenuNotification
                 object:nil];
   }
+#endif
   _isTextfieldEditing = owns;
 }
 
@@ -464,6 +471,59 @@ const CGFloat kClearButtonImageSize = 17.0f;
   }
 }
 
+- (UIMenu*)textField:(UITextField*)textField
+    editMenuForCharactersInRange:(NSRange)range
+                suggestedActions:(NSArray<UIMenuElement*>*)suggestedActions
+    API_AVAILABLE(ios(16)) {
+  NSMutableArray* actions = [suggestedActions mutableCopy];
+  if ([self canPerformAction:@selector(searchCopiedImage:) withSender:nil]) {
+    UIAction* searchCopiedImage = [UIAction
+        actionWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_IMAGE)
+                  image:nil
+             identifier:nil
+                handler:^(__kindof UIAction* _Nonnull action) {
+                  [self searchCopiedImage:nil];
+                }];
+    [actions addObject:searchCopiedImage];
+  }
+
+  if ([self canPerformAction:@selector(lensCopiedImage:) withSender:nil]) {
+    UIAction* searchCopiedImageWithLens =
+        [UIAction actionWithTitle:l10n_util::GetNSString(
+                                      IDS_IOS_SEARCH_COPIED_IMAGE_WITH_LENS)
+                            image:nil
+                       identifier:nil
+                          handler:^(__kindof UIAction* _Nonnull action) {
+                            [self lensCopiedImage:nil];
+                          }];
+    [actions addObject:searchCopiedImageWithLens];
+  }
+
+  if ([self canPerformAction:@selector(visitCopiedLink:) withSender:nil]) {
+    UIAction* visitCopiedLink = [UIAction
+        actionWithTitle:l10n_util::GetNSString(IDS_IOS_VISIT_COPIED_LINK)
+                  image:nil
+             identifier:nil
+                handler:^(__kindof UIAction* _Nonnull action) {
+                  [self visitCopiedLink:nil];
+                }];
+    [actions addObject:visitCopiedLink];
+  }
+
+  if ([self canPerformAction:@selector(searchCopiedText:) withSender:nil]) {
+    UIAction* searchCopiedText = [UIAction
+        actionWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_TEXT)
+                  image:nil
+             identifier:nil
+                handler:^(__kindof UIAction* _Nonnull action) {
+                  [self searchCopiedText:nil];
+                }];
+    [actions addObject:searchCopiedText];
+  }
+
+  return [UIMenu menuWithChildren:actions];
+}
+
 #pragma mark - OmniboxConsumer
 
 - (void)updateAutocompleteIcon:(UIImage*)icon
@@ -565,6 +625,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
       }));
 }
 
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
 - (void)menuControllerWillShow:(NSNotification*)notification {
   if (self.showingEditMenu || !self.isTextfieldEditing ||
       !self.textField.window.isKeyWindow) {
@@ -584,6 +645,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
   self.showingEditMenu = NO;
 }
+#endif
 
 - (void)pasteboardDidChange:(NSNotification*)notification {
   [self updateCachedClipboardState];
@@ -730,8 +792,8 @@ const CGFloat kClearButtonImageSize = 17.0f;
 
 #pragma mark - UIScribbleInteractionDelegate
 
-- (void)scribbleInteractionWillBeginWriting:(UIScribbleInteraction*)interaction
-    API_AVAILABLE(ios(14.0)) {
+- (void)scribbleInteractionWillBeginWriting:
+    (UIScribbleInteraction*)interaction {
   if (self.textField.isPreEditing) {
     [self.textField exitPreEditState];
     [self.textField setText:[[NSAttributedString alloc] initWithString:@""]
@@ -741,8 +803,8 @@ const CGFloat kClearButtonImageSize = 17.0f;
   [self.textField clearAutocompleteText];
 }
 
-- (void)scribbleInteractionDidFinishWriting:(UIScribbleInteraction*)interaction
-    API_AVAILABLE(ios(14.0)) {
+- (void)scribbleInteractionDidFinishWriting:
+    (UIScribbleInteraction*)interaction {
   [self cleanupOmniboxAfterScribble];
 
   // Dismiss any inline autocomplete. The user expectation is to not have it.
@@ -753,6 +815,10 @@ const CGFloat kClearButtonImageSize = 17.0f;
 - (void)interceptOmniboxInputForSearchEngineShortcut:(UITextField*)textField
                                              inRange:(NSRange)range
                                    replacementString:(NSString*)newText {
+
+  // If search engine is overriden by shortcut keyword, return early.
+  if (_isSearchEngineOverriden)
+    return;
 
   if (NSMaxRange(range) > textField.text.length)
     return;
@@ -773,7 +839,11 @@ const CGFloat kClearButtonImageSize = 17.0f;
       NSString* templateURLKeyword =
           base::SysUTF16ToNSString(templateURL->keyword());
       // Compare the potential keyword with the known keywords, case-insensitive
-      if ([[potentialKeyword lowercaseString]
+      // Trigger match only when triggered search engine from shortcut
+      // is different than the current default search engine.
+      if (templateURL != _defaultSearchEngine &&
+          templateURL->is_active() != TemplateURLData::ActiveStatus::kFalse &&
+          [[potentialKeyword lowercaseString]
               isEqualToString:[templateURLKeyword lowercaseString]]) {
         // Extracting the search string: text after the keyword and space
         NSString *searchString =
@@ -789,6 +859,7 @@ const CGFloat kClearButtonImageSize = 17.0f;
 - (void)didMatchSearchEngineShortcut:(TemplateURL*)templateURL
                       withSearchText:(NSString*)searchText {
   [self.textInputDelegate searchEngineShortcutActivatedForURL:templateURL];
+  _isSearchEngineOverriden = YES;
 
   self.textField.placeholder =
       l10n_util::GetNSStringF(
@@ -809,12 +880,16 @@ const CGFloat kClearButtonImageSize = 17.0f;
 }
 
 #pragma mark - OmniboxConsumer - Vivaldi Method
-- (void)updateSearchEngineList:(std::vector<TemplateURL*>)templateURLs {
+- (void)updateSearchEngineList:
+      (std::vector<raw_ptr<TemplateURL, VectorExperimental>>)templateURLs
+    currentDefaultSearchEngine:(const TemplateURL*)defaultSearchEngine {
   _templateURLs = templateURLs;
+  _defaultSearchEngine = defaultSearchEngine;
 }
 
-- (void)restorePlaceholderToDefault {
+- (void)resetOverriddenSearchEngine {
   self.textField.placeholder = [self defaultPlaceholder];
+  _isSearchEngineOverriden = NO;
 }
 
 @end

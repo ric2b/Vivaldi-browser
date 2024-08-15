@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/config/chromecast_build.gni")
+import("//build/config/cast.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -50,8 +50,12 @@ component("variations") {
     "entropy_provider.h",
     "fake_crash.cc",
     "fake_crash.h",
+    "field_trial_internals_utils.cc",
+    "field_trial_internals_utils.h",
     "hashing.cc",
     "hashing.h",
+    "limited_entropy_mode_gate.cc",
+    "limited_entropy_mode_gate.h",
     "metrics.cc",
     "metrics.h",
     "platform_field_trials.h",
@@ -213,6 +217,7 @@ source_set("unit_tests") {
     "child_process_field_trial_syncer_unittest.cc",
     "client_filterable_state_unittest.cc",
     "entropy_provider_unittest.cc",
+    "field_trial_internals_utils_unittest.cc",
     "hashing_unittest.cc",
     "net/variations_command_line_unittest.cc",
     "net/variations_http_headers_unittest.cc",

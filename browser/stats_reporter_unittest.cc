@@ -9,35 +9,37 @@ namespace vivaldi {
 namespace {
 #ifdef NDEBUG
 constexpr char kRequestUrlStart[] =
-    "https://update.vivaldi.com/rep/rep?ping_version=1&installation_status=";
+    "https://update.vivaldi.com/rep/rep?ping_version=2&installation_status=";
 #else
 constexpr char kRequestUrlStart[] =
     "https://update.vivaldi.com/rep/"
-    "rep?ping_version=1&debug&installation_status=";
+    "rep?ping_version=2&debug&installation_status=";
 #endif
 
 constexpr char kVivaldiMockVersion[] = "99.9.999";
 constexpr char kMockUserAgent[] = "My fake user agent";
+constexpr char kMockClientHints[] = "{}";
 constexpr char kMockArchitecture[] = "x64";
 constexpr gfx::Size kMockScreenSize(1920, 1200);
 
 // idsite is different in debug builds.
 #ifdef NDEBUG
 constexpr char kBodyStart[] =
-    "rec=1&idsite=36&ua=My+fake+user+agent&res=1920x1200&_cvar={\"1\":[\"cpu\","
-    "\"x64\"],\"2\":[\"v\",\"99.9.999\"]}&architecture=x64&version=99.9.999&"
-    "screen_width=1920&screen_height=1200&";
+    "rec=1&idsite=36&ua=My+fake+user+agent&uadata=%7B%7D&res=1920x1200&_cvar={"
+    "\"1\":[\"cpu\",\"x64\"],\"2\":[\"v\",\"99.9.999\"]}&architecture=x64&"
+    "version=99.9.999&screen_width=1920&screen_height=1200&";
 #else
 constexpr char kBodyStart[] =
-    "rec=1&idsite=13&ua=My+fake+user+agent&res=1920x1200&_cvar={\"1\":[\"cpu\","
-    "\"x64\"],\"2\":[\"v\",\"99.9.999\"]}&architecture=x64&version=99.9.999&"
-    "screen_width=1920&screen_height=1200&";
+    "rec=1&idsite=13&ua=My+fake+user+agent&uadata=%7B%7D&res=1920x1200&_cvar={"
+    "\"1\":[\"cpu\",\"x64\"],\"2\":[\"v\",\"99.9.999\"]}&architecture=x64&"
+    "version=99.9.999&screen_width=1920&screen_height=1200&";
 #endif
 
 void ExpectReportingDataMatch(
     const StatsReporterImpl::ReportingData& local_reporting_data,
     const base::Value& os_reporting_data) {
-  const std::string* uid = os_reporting_data.GetDict().FindString("unique_user_id");
+  const std::string* uid =
+      os_reporting_data.GetDict().FindString("unique_user_id");
   EXPECT_TRUE(uid && *uid == local_reporting_data.user_id);
   absl::optional<int> pings_since_last_month =
       os_reporting_data.GetDict().FindInt("pings_since_last_month");
@@ -56,13 +58,13 @@ void ExpectReportingDataMatch(
       base::ValueToTime(os_reporting_data.GetDict().Find("next_monthly_ping"));
   EXPECT_TRUE(next_monthly_ping &&
               *next_monthly_ping == local_reporting_data.next_pings.monthly);
-  absl::optional<base::Time> next_trimestrial_ping =
-      base::ValueToTime(os_reporting_data.GetDict().Find("next_trimestrial_ping"));
+  absl::optional<base::Time> next_trimestrial_ping = base::ValueToTime(
+      os_reporting_data.GetDict().Find("next_trimestrial_ping"));
   EXPECT_TRUE(next_trimestrial_ping &&
               *next_trimestrial_ping ==
                   local_reporting_data.next_pings.trimestrial);
-  absl::optional<base::Time> next_semestrial_ping =
-      base::ValueToTime(os_reporting_data.GetDict().Find("next_semestrial_ping"));
+  absl::optional<base::Time> next_semestrial_ping = base::ValueToTime(
+      os_reporting_data.GetDict().Find("next_semestrial_ping"));
   EXPECT_TRUE(next_semestrial_ping &&
               *next_semestrial_ping ==
                   local_reporting_data.next_pings.semestrial);
@@ -85,16 +87,16 @@ TEST(StatsReporterTest, FirstRunNormal) {
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   std::string request_url;
   std::string body;
   base::TimeDelta next_reporting_time_interval;
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   EXPECT_TRUE(
       StatsReporterImpl::IsValidUserId(local_state_reporting_data.user_id));
@@ -117,9 +119,9 @@ TEST(StatsReporterTest, FirstRunNormal) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
   ASSERT_TRUE(os_profile_reporting_data_json);
 
   EXPECT_EQ(request_url, std::string(kRequestUrlStart) +
@@ -138,9 +140,9 @@ TEST(StatsReporterTest, FirstRunNormal) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
   ASSERT_TRUE(os_profile_reporting_data_json);
 
   EXPECT_EQ(request_url, std::string(kRequestUrlStart) +
@@ -159,9 +161,9 @@ TEST(StatsReporterTest, FirstRunNormal) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
   ASSERT_TRUE(os_profile_reporting_data_json);
 
   EXPECT_EQ(request_url, std::string(kRequestUrlStart) + "normal");
@@ -200,7 +202,7 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 2);
   os_profile_reporting_data_json->GetDict().Set(
@@ -231,9 +233,9 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -249,9 +251,9 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
   time += base::Hours(7);
   EXPECT_FALSE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 }
 
 TEST(StatsReporterTest, NewInstallation) {
@@ -272,7 +274,7 @@ TEST(StatsReporterTest, NewInstallation) {
   local_state_reporting_data.installation_time = time;
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 2);
   os_profile_reporting_data_json->GetDict().Set(
@@ -296,9 +298,9 @@ TEST(StatsReporterTest, NewInstallation) {
 
   ASSERT_FALSE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   EXPECT_EQ(next_reporting_time_interval, base::Hours(2));
 
@@ -306,9 +308,9 @@ TEST(StatsReporterTest, NewInstallation) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -325,9 +327,9 @@ TEST(StatsReporterTest, NewInstallation) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -369,7 +371,7 @@ TEST(StatsReporterTest, MovedStandalone) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", other_uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 6);
   os_profile_reporting_data_json->GetDict().Set(
@@ -393,9 +395,9 @@ TEST(StatsReporterTest, MovedStandalone) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   EXPECT_FALSE(os_profile_reporting_data_json);
 
@@ -419,16 +421,16 @@ TEST(StatsReporterTest, UseLegacyUserId) {
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   std::string request_url;
   std::string body;
   base::TimeDelta next_reporting_time_interval;
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   EXPECT_EQ(local_state_reporting_data.user_id, legacy_user_id);
   ASSERT_TRUE(os_profile_reporting_data_json);
@@ -450,9 +452,9 @@ TEST(StatsReporterTest, UseLegacyUserId) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
   ASSERT_TRUE(os_profile_reporting_data_json);
 
   EXPECT_EQ(request_url, std::string(kRequestUrlStart) + "normal");
@@ -491,7 +493,7 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 2);
   os_profile_reporting_data_json->GetDict().Set(
@@ -522,9 +524,9 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -564,7 +566,7 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 7);
   os_profile_reporting_data_json->GetDict().Set(
@@ -594,9 +596,9 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -637,13 +639,13 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 0);
   os_profile_reporting_data_json->GetDict().Set(
       "installation_time", base::TimeToValue(time - base::Days(365)));
   os_profile_reporting_data_json->GetDict().Set("next_daily_ping",
-                                         base::TimeToValue(time));
+                                                base::TimeToValue(time));
   os_profile_reporting_data_json->GetDict().Set(
       "next_weekly_ping",
       base::TimeToValue(local_state_reporting_data.next_pings.weekly));
@@ -665,9 +667,9 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -708,7 +710,7 @@ TEST(StatsReporterTest, LongRun) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(5);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 20);
   os_profile_reporting_data_json->GetDict().Set(
@@ -739,9 +741,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -758,9 +760,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -778,9 +780,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -800,9 +802,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -819,9 +821,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -839,9 +841,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -859,9 +861,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -879,9 +881,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -900,9 +902,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -919,9 +921,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -940,9 +942,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -960,9 +962,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -981,9 +983,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -1000,9 +1002,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -1021,9 +1023,9 @@ TEST(StatsReporterTest, LongRun) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 
@@ -1064,7 +1066,7 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(50);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-    base::Value::Type::DICT);
+      base::Value::Type::DICT);
   os_profile_reporting_data_json->GetDict().Set("unique_user_id", uid);
   os_profile_reporting_data_json->GetDict().Set("pings_since_last_month", 10);
   os_profile_reporting_data_json->GetDict().Set(
@@ -1095,9 +1097,9 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
 
   ASSERT_TRUE(StatsReporterImpl::GeneratePingRequest(
       time, legacy_user_id, kMockScreenSize, kMockArchitecture,
-      kVivaldiMockVersion, kMockUserAgent, local_state_reporting_data,
-      os_profile_reporting_data_json, request_url, body,
-      next_reporting_time_interval));
+      kVivaldiMockVersion, kMockUserAgent, kMockClientHints,
+      local_state_reporting_data, os_profile_reporting_data_json, request_url,
+      body, next_reporting_time_interval));
 
   ASSERT_TRUE(os_profile_reporting_data_json);
 

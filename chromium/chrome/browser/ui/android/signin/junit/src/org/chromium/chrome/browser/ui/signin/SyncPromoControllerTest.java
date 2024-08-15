@@ -22,6 +22,8 @@ import org.mockito.quality.Strictness;
 
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -29,8 +31,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
@@ -204,7 +204,7 @@ public class SyncPromoControllerTest {
                 firstShownTime, lastShownTime, /* signinPromoResetAfterHours= */ -1);
         Assert.assertFalse(mSyncPromoController.canShowSyncPromo());
 
-        SyncPromoController.resetNTPSyncPromoLimitsIfHiddenForTooLong();
+        SyncPromoController.resetNtpSyncPromoLimitsIfHiddenForTooLong();
 
         Assert.assertFalse(mSyncPromoController.canShowSyncPromo());
         Assert.assertEquals(
@@ -231,7 +231,7 @@ public class SyncPromoControllerTest {
         disableNTPSyncPromoBySettingLimits(firstShownTime, lastShownTime, RESET_AFTER_HOURS);
         Assert.assertFalse(mSyncPromoController.canShowSyncPromo());
 
-        SyncPromoController.resetNTPSyncPromoLimitsIfHiddenForTooLong();
+        SyncPromoController.resetNtpSyncPromoLimitsIfHiddenForTooLong();
 
         Assert.assertFalse(mSyncPromoController.canShowSyncPromo());
         Assert.assertEquals(
@@ -258,7 +258,7 @@ public class SyncPromoControllerTest {
         disableNTPSyncPromoBySettingLimits(firstShownTime, lastShownTime, RESET_AFTER_HOURS);
         Assert.assertFalse(mSyncPromoController.canShowSyncPromo());
 
-        SyncPromoController.resetNTPSyncPromoLimitsIfHiddenForTooLong();
+        SyncPromoController.resetNtpSyncPromoLimitsIfHiddenForTooLong();
 
         Assert.assertTrue(mSyncPromoController.canShowSyncPromo());
         Assert.assertEquals(

@@ -120,8 +120,8 @@ void XFA_DrawImage(CFGAS_GEGraphics* pGS,
   CFX_RenderDevice::StateRestorer restorer(pRenderDevice);
   CFX_Path path;
   path.AppendRect(rtImage.left, rtImage.bottom(), rtImage.right(), rtImage.top);
-  pRenderDevice->SetClip_PathFill(
-      path, &matrix, {.fill_type = CFX_FillRenderOptions::FillType::kWinding});
+  pRenderDevice->SetClip_PathFill(path, &matrix,
+                                  CFX_FillRenderOptions::WindingOptions());
 
   CFX_Matrix mtImage(1, 0, 0, -1, 0, 1);
   mtImage.Concat(
@@ -424,8 +424,7 @@ bool CXFA_FFWidget::OnSetFocus(CXFA_FFWidget* pOldWidget) {
   }
   GetLayoutItem()->SetStatusBits(XFA_WidgetStatus::kFocused);
 
-  CXFA_EventParam eParam;
-  eParam.m_eType = XFA_EVENT_Enter;
+  CXFA_EventParam eParam(XFA_EVENT_Enter);
   m_pNode->ProcessEvent(GetDocView(), XFA_AttributeValue::Enter, &eParam);
   return true;
 }
@@ -639,8 +638,7 @@ void CXFA_FFWidget::EventKillFocus() {
     pItem->ClearStatusBits(XFA_WidgetStatus::kAccess);
     return;
   }
-  CXFA_EventParam eParam;
-  eParam.m_eType = XFA_EVENT_Exit;
+  CXFA_EventParam eParam(XFA_EVENT_Exit);
   m_pNode->ProcessEvent(GetDocView(), XFA_AttributeValue::Exit, &eParam);
 }
 

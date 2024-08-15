@@ -110,7 +110,7 @@ TabStripScrollContainer::TabStripScrollContainer(
       std::make_unique<views::ScrollView>(
           views::ScrollView::ScrollWithLayers::kEnabled);
   scroll_view_ = scroll_view.get();
-  scroll_view->SetBackgroundColor(absl::nullopt);
+  scroll_view->SetBackgroundColor(std::nullopt);
   scroll_view->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kHiddenButEnabled);
   scroll_view->SetTreatAllScrollEventsAsHorizontal(true);
@@ -330,6 +330,6 @@ void TabStripScrollContainer::RemovedFromWidget() {
   paint_as_active_subscription_ = {};
 }
 
-BEGIN_METADATA(TabStripScrollContainer, views::View)
+BEGIN_METADATA(TabStripScrollContainer)
 ADD_READONLY_PROPERTY_METADATA(int, TabStripAvailableWidth)
 END_METADATA

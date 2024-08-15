@@ -29,16 +29,11 @@
 
 #pragma mark - SET UP UI COMPONENTS
 - (void)setUpUI {
-  UIView *container = [UIView new];
-  container.backgroundColor = UIColor.clearColor;
-  [self addSubview:container];
-  [container fillSuperview];
-
   VivaldiSpeedDialContainerView *speedDialView =
     [VivaldiSpeedDialContainerView new];
   _speedDialView = speedDialView;
   speedDialView.backgroundColor = UIColor.clearColor;
-  [container addSubview:speedDialView];
+  [self addSubview:speedDialView];
   [speedDialView fillSuperview];
   speedDialView.delegate = self;
 }
@@ -94,6 +89,12 @@
                      parent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)
     [self.delegate didSelectDeleteItem:item parent:parent];
+}
+
+- (void)didRefreshThumbnailForItem:(VivaldiSpeedDialItem*)item
+                            parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didRefreshThumbnailForItem:item parent:parent];
 }
 
 - (void)didSelectAddNewSpeedDial:(bool)isFolder

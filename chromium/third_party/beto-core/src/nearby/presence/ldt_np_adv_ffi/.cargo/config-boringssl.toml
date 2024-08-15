@@ -1,3 +1,0 @@
-paths = [
-    "../../../boringssl-build/boringssl/rust/bssl-crypto",
-]

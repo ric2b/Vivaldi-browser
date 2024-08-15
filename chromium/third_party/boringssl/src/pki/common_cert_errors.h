@@ -5,7 +5,7 @@
 #ifndef BSSL_PKI_COMMON_CERT_ERRORS_H_
 #define BSSL_PKI_COMMON_CERT_ERRORS_H_
 
-#include "fillins/openssl_util.h"
+#include <openssl/base.h>
 
 #include "cert_errors.h"
 
@@ -107,10 +107,6 @@ OPENSSL_EXPORT extern const CertErrorId kUnacceptableSignatureAlgorithm;
 // The certificate's public key is not acceptable by the consumer.
 // What constitutes as "acceptable" is determined by the verification delegate.
 OPENSSL_EXPORT extern const CertErrorId kUnacceptablePublicKey;
-
-// The certificate's EKU is missing serverAuth. However Netscape Server Gated
-// Crypto is present instead.
-OPENSSL_EXPORT extern const CertErrorId kEkuLacksServerAuthButHasGatedCrypto;
 
 // The certificate's EKU is missing serverAuth. However EKU ANY is present
 // instead.

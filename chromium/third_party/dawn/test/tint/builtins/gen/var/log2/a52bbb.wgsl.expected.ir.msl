@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void log2_a52bbb() {
+  float4 res = float4(0.0f);
+}
+vertex float4 vertex_main() {
+  log2_a52bbb();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  log2_a52bbb();
+}
+kernel void compute_main() {
+  log2_a52bbb();
+}

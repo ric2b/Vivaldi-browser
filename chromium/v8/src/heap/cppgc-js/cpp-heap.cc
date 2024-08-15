@@ -277,8 +277,6 @@ class UnifiedHeapMarker final : public cppgc::internal::MarkerBase {
 
   ~UnifiedHeapMarker() final = default;
 
-  void AddObject(void*);
-
   cppgc::internal::MarkingWorklists& GetMarkingWorklists() {
     return marking_worklists_;
   }
@@ -322,11 +320,6 @@ UnifiedHeapMarker::UnifiedHeapMarker(Heap* v8_heap,
   concurrent_marker_ = std::make_unique<UnifiedHeapConcurrentMarker>(
       heap_, v8_heap, marking_worklists_, *schedule_, platform_,
       mutator_unified_heap_marking_state_, config.collection_type);
-}
-
-void UnifiedHeapMarker::AddObject(void* object) {
-  mutator_marking_state_.MarkAndPush(
-      cppgc::internal::HeapObjectHeader::FromObject(object));
 }
 
 void CppHeap::MetricRecorderAdapter::AddMainThreadEvent(
@@ -983,6 +976,7 @@ void CppHeap::ReportBufferedAllocationSizeIfPossible() {
       if (allocated_size_ > allocated_size_limit_for_check_) {
         Heap* heap = isolate_->heap();
         heap->StartIncrementalMarkingIfAllocationLimitIsReached(
+            heap->main_thread_local_heap(),
             heap->GCFlagsForIncrementalMarking(),
             kGCCallbackScheduleIdleGarbageCollection);
         if (heap->AllocationLimitOvershotByLargeMargin() &&
@@ -1145,7 +1139,7 @@ CppHeap::MetricRecorderAdapter* CppHeap::GetMetricRecorder() const {
 
 void CppHeap::FinishSweepingIfRunning() {
   sweeper_.FinishIfRunning();
-  if (isolate_) {
+  if (isolate_ && ShouldReduceMemory(current_gc_flags_)) {
     isolate_->traced_handles()->DeleteEmptyBlocks();
   }
 }

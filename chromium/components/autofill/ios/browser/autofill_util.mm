@@ -4,30 +4,32 @@
 
 #import "components/autofill/ios/browser/autofill_util.h"
 
-#include <utility>
+#import <utility>
 
-#include "base/apple/foundation_util.h"
-#include "base/functional/bind.h"
-#include "base/functional/callback.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/types/cxx23_to_underlying.h"
-#include "base/values.h"
-#include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/common/autocomplete_parsing_util.h"
-#include "components/autofill/core/common/autofill_util.h"
+#import "base/apple/foundation_util.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback.h"
+#import "base/json/json_reader.h"
+#import "base/json/json_writer.h"
+#import "base/strings/string_number_conversions.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
+#import "base/types/cxx23_to_underlying.h"
+#import "base/values.h"
+#import "components/autofill/core/browser/autofill_field.h"
+#import "components/autofill/core/common/autocomplete_parsing_util.h"
+#import "components/autofill/core/common/autofill_features.h"
+#import "components/autofill/core/common/autofill_util.h"
 #import "components/autofill/core/common/field_data_manager.h"
-#include "components/autofill/core/common/form_data.h"
-#include "components/autofill/core/common/form_field_data.h"
+#import "components/autofill/core/common/form_data.h"
+#import "components/autofill/core/common/form_field_data.h"
+#import "components/autofill/core/common/signatures.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/security/ssl_status.h"
+#import "ios/web/public/security/ssl_status.h"
 #import "ios/web/public/web_state.h"
-#include "url/gurl.h"
-#include "url/origin.h"
+#import "url/gurl.h"
+#import "url/origin.h"
 
 using autofill::FormControlType;
 using base::NumberToString;
@@ -89,6 +91,26 @@ std::unique_ptr<base::Value> ParseJson(NSString* json_string) {
     return nullptr;
   }
   return base::Value::ToUniquePtrValue(std::move(*json_value));
+}
+
+std::optional<base::UnguessableToken> DeserializeJavaScriptFrameId(
+    const std::string& frame_id) {
+  // A valid ID is 128 bits, or 32 hex digits.
+  if (frame_id.length() != 32) {
+    return std::nullopt;
+  }
+
+  // Break string into first and last 16 hex digits.
+  std::string high_hex = frame_id.substr(0, 16);
+  std::string low_hex = frame_id.substr(16);
+
+  uint64_t high, low;
+  if (!base::HexStringToUInt64(high_hex, &high) ||
+      !base::HexStringToUInt64(low_hex, &low)) {
+    return std::nullopt;
+  }
+
+  return base::UnguessableToken::Deserialize(high, low);
 }
 
 bool ExtractFormsData(NSString* forms_json,
@@ -156,6 +178,27 @@ bool ExtractFormData(const base::Value::Dict& form,
     return false;
   }
 
+  bool include_frame_metadata = base::FeatureList::IsEnabled(
+      autofill::features::kAutofillAcrossIframesIos);
+
+  const url::Origin frame_origin_object =
+      include_frame_metadata ? url::Origin::Create(form_frame_origin)
+                             : url::Origin();
+
+  // Frame ID of the frame containing this form is mandatory when
+  // kAutofillAcrossIframesIos is enabled.
+  std::optional<base::UnguessableToken> host_frame;
+  if (const std::string* frame_id = form.FindString("frame_id")) {
+    form_data->frame_id = *frame_id;
+    if (include_frame_metadata) {
+      host_frame = DeserializeJavaScriptFrameId(*frame_id);
+      if (!host_frame) {
+        return false;
+      }
+      form_data->host_frame = LocalFrameToken(*host_frame);
+    }
+  }
+
   // main_frame_origin is used for logging UKM.
   form_data->main_frame_origin = url::Origin::Create(main_frame_url);
 
@@ -182,8 +225,19 @@ bool ExtractFormData(const base::Value::Dict& form,
   }
   form_data->is_form_tag =
       form.FindBool("is_form_tag").value_or(form_data->is_form_tag);
-  if (const std::string* frame_id = form.FindString("frame_id")) {
-    form_data->frame_id = *frame_id;
+
+  if (include_frame_metadata) {
+    // Child frame tokens, optional.
+    if (const base::Value::List* child_frames_list =
+            form.FindList("child_frames")) {
+      for (const auto& frame_dict : *child_frames_list) {
+        autofill::FrameTokenWithPredecessor token;
+        if (frame_dict.is_dict() &&
+            ExtractRemoteFrameToken(frame_dict.GetDict(), &token)) {
+          form_data->child_frames.push_back(std::move(token));
+        }
+      }
+    }
   }
 
   // Field list (mandatory) is extracted.
@@ -196,9 +250,23 @@ bool ExtractFormData(const base::Value::Dict& form,
     if (field_dict.is_dict() &&
         ExtractFormFieldData(field_dict.GetDict(), field_data_manager,
                              &field_data)) {
+      // Some data is extracted at the form level, but also appears at the
+      // field level. Reuse the extracted values.
+      if (include_frame_metadata) {
+        field_data.host_frame = form_data->host_frame;
+        field_data.host_form_id = form_data->unique_renderer_id;
+        field_data.origin = frame_origin_object;
+      }
       form_data->fields.push_back(std::move(field_data));
     } else {
       return false;
+    }
+  }
+
+  if (include_frame_metadata) {
+    FormSignature form_signature = CalculateFormSignature(*form_data);
+    for (FormFieldData& field : form_data->fields) {
+      field.host_form_signature = form_signature;
     }
   }
   return true;
@@ -241,6 +309,8 @@ bool ExtractFormFieldData(const base::Value::Dict& field,
   }
   field_data->is_autofilled =
       field.FindBool("is_autofilled").value_or(field_data->is_autofilled);
+  field_data->is_user_edited =
+      field.FindBool("is_user_edited").value_or(field_data->is_user_edited);
 
   if (const std::string* autocomplete_attribute =
           field.FindString("autocomplete_attribute")) {
@@ -314,6 +384,31 @@ bool ExtractFormFieldData(const base::Value::Dict& field,
         field_data->unique_renderer_id);
   }
 
+  return true;
+}
+
+bool ExtractRemoteFrameToken(
+    const base::Value::Dict& frame_data,
+    FrameTokenWithPredecessor* token_with_predecessor) {
+  const std::string* frame_id = frame_data.FindString("token");
+  if (!frame_id) {
+    return false;
+  }
+
+  std::optional<base::UnguessableToken> token =
+      DeserializeJavaScriptFrameId(*frame_id);
+  if (!token) {
+    return false;
+  }
+
+  const std::optional<double> predecessor =
+      frame_data.FindDouble("predecessor");
+  if (!predecessor) {
+    return false;
+  }
+
+  token_with_predecessor->token = RemoteFrameToken(*token);
+  token_with_predecessor->predecessor = *predecessor;
   return true;
 }
 

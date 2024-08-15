@@ -130,8 +130,9 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
   close->SetVisible(false);
   close_ = AddChildView(std::move(close));
 
-  auto progress_indicator = std::make_unique<ProgressBar>(
-      kProgressIndicatorHeight, /*allow_round_corner=*/false);
+  auto progress_indicator = std::make_unique<ProgressBar>();
+  progress_indicator->SetPreferredHeight(kProgressIndicatorHeight);
+  progress_indicator->SetPreferredCornerRadii(absl::nullopt);
   progress_indicator->SetBackgroundColor(SK_ColorTRANSPARENT);
   progress_indicator->SetVisible(false);
   progress_indicator->GetViewAccessibility().OverrideIsIgnored(true);
@@ -318,12 +319,11 @@ void BubbleFrameView::ResetWindowControls() {
 
 void BubbleFrameView::UpdateWindowIcon() {
   DCHECK(GetWidget());
-  gfx::ImageSkia image;
+  ui::ImageModel image;
   if (GetWidget()->widget_delegate()->ShouldShowWindowIcon()) {
-    image = GetWidget()->widget_delegate()->GetWindowIcon().Rasterize(
-        GetColorProvider());
+    image = GetWidget()->widget_delegate()->GetWindowIcon();
   }
-  title_icon_->SetImage(&image);
+  title_icon_->SetImage(image);
 }
 
 void BubbleFrameView::UpdateWindowTitle() {
@@ -346,13 +346,25 @@ void BubbleFrameView::InsertClientView(ClientView* client_view) {
       : AddChildView(client_view);
 }
 
+void BubbleFrameView::UpdateWindowRoundedCorners() {
+  // BubbleFrameView makes the frame round by drawing a rounded border.
+  // Additionally, it rounds `footnote_container_` if present; it makes the
+  // client view contents rounded (if needed) by either applying rounded corners
+  // to the client view layer or applying a mask.  However, certain
+  // implementations of the client view may need to do additional work to have a
+  // rounded window.
+  GetWidget()->client_view()->UpdateWindowRoundedCorners();
+}
+
 void BubbleFrameView::SetTitleView(std::unique_ptr<View> title_view) {
   DCHECK(title_view);
-  delete default_title_;
-  default_title_ = nullptr;
-  delete custom_title_;
-  custom_title_ = title_view.get();
-  title_container_->AddChildViewAt(title_view.release(), 0);
+  if (default_title_) {
+    title_container_->RemoveChildViewT(default_title_.ExtractAsDangling());
+  }
+  if (custom_title_) {
+    title_container_->RemoveChildViewT(custom_title_.ExtractAsDangling());
+  }
+  custom_title_ = title_container_->AddChildViewAt(std::move(title_view), 0);
 }
 
 void BubbleFrameView::UpdateSubtitle() {
@@ -368,6 +380,8 @@ void BubbleFrameView::UpdateSubtitle() {
   subtitle_->SetVisible(!bubble_delegate->GetSubtitle().empty() &&
                         default_title_->GetVisible());
   subtitle_->SetText(bubble_delegate->GetSubtitle());
+  subtitle_->SetAllowCharacterBreak(
+      bubble_delegate->GetSubtitleAllowCharacterBreak());
   InvalidateLayout();
 }
 
@@ -421,11 +435,11 @@ void BubbleFrameView::UpdateMainImage() {
 
     const int border_radius = LayoutProvider::Get()->GetCornerRadiusMetric(
         Emphasis::kHigh, gfx::Size());
-    main_image_->SetImage(
+    main_image_->SetImage(ui::ImageModel::FromImageSkia(
         gfx::ImageSkiaOperations::CreateCroppedCenteredRoundRectImage(
             gfx::Size(main_image_dimension, main_image_dimension),
             border_radius - 2 * kBorderStrokeThickness,
-            model.GetImage().AsImageSkia()));
+            model.GetImage().AsImageSkia())));
     main_image_->SetBorder(views::CreateRoundedRectBorder(
         kBorderStrokeThickness, border_radius, image_insets,
         GetColorProvider()
@@ -660,9 +674,10 @@ void BubbleFrameView::SetBubbleBorder(std::unique_ptr<BubbleBorder> border) {
   if (footnote_container_)
     footnote_container_->SetCornerRadius(border->corner_radius());
 
+  // Update the background, which relies on the border. First set it to null to
+  // avoid dangling pointers, and then update it.
+  SetBackground(nullptr);
   SetBorder(std::move(border));
-
-  // Update the background, which relies on the border.
   SetBackground(std::make_unique<views::BubbleBackground>(bubble_border_));
 }
 
@@ -677,8 +692,7 @@ gfx::Insets BubbleFrameView::GetContentMargins() const {
 
 void BubbleFrameView::SetHeaderView(std::unique_ptr<View> view) {
   if (header_view_) {
-    delete header_view_;
-    header_view_ = nullptr;
+    RemoveChildViewT(header_view_.ExtractAsDangling());
   }
 
   if (view) {
@@ -690,8 +704,9 @@ void BubbleFrameView::SetHeaderView(std::unique_ptr<View> view) {
 
 void BubbleFrameView::SetFootnoteView(std::unique_ptr<View> view) {
   // Remove the old footnote container.
-  delete footnote_container_;
-  footnote_container_ = nullptr;
+  if (footnote_container_) {
+    RemoveChildViewT(footnote_container_.ExtractAsDangling());
+  }
   if (view) {
     int radius = bubble_border_ ? bubble_border_->corner_radius() : 0;
     footnote_container_ = AddChildView(std::make_unique<FootnoteContainerView>(
@@ -849,6 +864,10 @@ void BubbleFrameView::UpdateInputProtectorTimeStamp() {
 
 void BubbleFrameView::ResetViewShownTimeStampForTesting() {
   input_protector_.ResetForTesting();
+}
+
+gfx::Insets BubbleFrameView::GetClientViewInsets() const {
+  return GetClientInsetsForFrameWidth(GetContentsBounds().width());
 }
 
 gfx::Rect BubbleFrameView::GetAvailableScreenBounds(
@@ -1191,7 +1210,7 @@ std::unique_ptr<Label> BubbleFrameView::CreateLabelWithContextAndStyle(
   return label;
 }
 
-BEGIN_METADATA(BubbleFrameView, NonClientFrameView)
+BEGIN_METADATA(BubbleFrameView)
 ADD_PROPERTY_METADATA(absl::optional<double>, Progress)
 ADD_PROPERTY_METADATA(gfx::Insets, ContentMargins)
 ADD_PROPERTY_METADATA(gfx::Insets, FootnoteMargins)

@@ -37,23 +37,23 @@ namespace {
 
 using IR_InstructionResultTest = IRTestHelper;
 
-TEST_F(IR_InstructionResultTest, Destroy_HasSource) {
+TEST_F(IR_InstructionResultTest, Destroy_HasInstruction) {
     EXPECT_FATAL_FAILURE(
         {
             Module mod;
             Builder b{mod};
-            auto* val = b.Add(mod.Types().i32(), 1_i, 2_i)->Result();
+            auto* val = b.Add(mod.Types().i32(), 1_i, 2_i)->Result(0);
             val->Destroy();
         },
         "");
 }
 
 TEST_F(IR_InstructionResultTest, Clone) {
-    auto* val = b.Add(mod.Types().i32(), 1_i, 2_i)->Result();
+    auto* val = b.Add(mod.Types().i32(), 1_i, 2_i)->Result(0);
     auto* new_res = clone_ctx.Clone(val);
 
     EXPECT_NE(val, new_res);
-    EXPECT_EQ(nullptr, new_res->Source());
+    EXPECT_EQ(nullptr, new_res->Instruction());
     EXPECT_EQ(mod.Types().i32(), new_res->Type());
 }
 

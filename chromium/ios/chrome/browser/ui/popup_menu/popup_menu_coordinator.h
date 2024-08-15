@@ -9,6 +9,10 @@
 
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+// End Vivaldi
+
 @class BubblePresenter;
 @protocol PopupMenuUIUpdating;
 
@@ -35,6 +39,10 @@
 
 // Starts the popup menu's child help coordinator.
 - (void)startPopupMenuHelpCoordinator;
+
+// Vivaldi
+@property(nonatomic, assign) ToolbarType toolbarType;
+// End Vivaldi
 
 @end
 

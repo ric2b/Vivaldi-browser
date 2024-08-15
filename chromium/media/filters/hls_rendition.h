@@ -26,23 +26,37 @@ class MEDIA_EXPORT HlsRenditionHost {
  public:
   virtual ~HlsRenditionHost() = 0;
 
-  // Lets a rendition read URL data from `uri`. Usually this will be a chunked
-  // read, but can be configured with `read_chunked`, since live video needs to
-  // download full manifests. Additionally, some manifests can specify a custom
-  // byte range, which can be forwarded as `range`.
-  virtual void ReadFromUrl(GURL uri,
-                           bool read_chunked,
-                           absl::optional<hls::types::ByteRange> range,
-                           HlsDataSourceProvider::ReadCb cb) = 0;
+  // Reads the entirety of an HLS manifest from `uri`, and posts the result back
+  // through `cb`.
+  virtual void ReadManifest(const GURL& uri,
+                            HlsDataSourceProvider::ReadCb cb) = 0;
+
+  // Reads media data from a media segment. If `read_chunked` is false, then
+  // the resulting stream will be fully read until either EOS, or its optional
+  // range is fully satisfied. If `read_chunked` is true, then only some data
+  // will be present in the resulting stream, and more data can be requested
+  // through the `ReadStream` method. If `include_init_segment` is true, then
+  // the init segment data will be prepended to the buffer returned if this
+  // segment has an initialization_segment.
+  // TODO (crbug.com/1266991): Remove `read_chunked`, which should ideally
+  // always be true for segments. HlsRenditionImpl needs to handle chunked reads
+  // more effectively first.
+  virtual void ReadMediaSegment(const hls::MediaSegment& segment,
+                                bool read_chunked,
+                                bool include_init_segment,
+                                HlsDataSourceProvider::ReadCb cb) = 0;
 
   // Continue reading from a partially read stream.
   virtual void ReadStream(std::unique_ptr<HlsDataSourceStream> stream,
                           HlsDataSourceProvider::ReadCb cb) = 0;
 
-  virtual hls::ParseStatus::Or<scoped_refptr<hls::MediaPlaylist>>
-  ParseMediaPlaylistFromStringSource(base::StringPiece source,
-                                     GURL uri,
-                                     hls::types::DecimalInteger version) = 0;
+  // Fetch a new playlist for live content at the requested URI.
+  virtual void UpdateRenditionManifestUri(std::string role,
+                                          GURL uri,
+                                          base::OnceClosure cb) = 0;
+
+  // Used to set network speed (bits per second) for the adaptation selector.
+  virtual void UpdateNetworkSpeed(uint64_t bps) = 0;
 };
 
 class MEDIA_EXPORT HlsRendition {
@@ -70,7 +84,11 @@ class MEDIA_EXPORT HlsRendition {
   // `CheckState` and `Seek` should be no-ops.
   virtual void Stop() = 0;
 
-  static HlsDemuxerStatus::Or<std::unique_ptr<HlsRendition>> CreateRendition(
+  // Update playlist because we've adapted to a network or resolution change.
+  virtual void UpdatePlaylist(scoped_refptr<hls::MediaPlaylist> playlist,
+                              std::optional<GURL> new_playlist_uri) = 0;
+
+  static std::unique_ptr<HlsRendition> CreateRendition(
       ManifestDemuxerEngineHost* engine_host,
       HlsRenditionHost* rendition_host,
       std::string role,

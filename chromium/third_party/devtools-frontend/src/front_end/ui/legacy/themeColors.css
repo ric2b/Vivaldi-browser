@@ -110,7 +110,6 @@
   --color-error-text: #f00;
   --color-error-border: hsl(0deg 100% 92%);
   --color-error-background: hsl(0deg 100% 97%);
-  --color-checkbox-accent-color: var(--color-primary-old);
   --color-image-preview-background: rgb(255 255 255);
 
   /* Colors for styling inputs */
@@ -270,6 +269,8 @@
   --sys-color-yellow-outline: var(--ref-palette-yellow70);
   --sys-color-error-outline: var(--ref-palette-error80);
   --sys-color-divider: var(--ref-palette-primary90);
+  --sys-color-divider-on-tonal-container: var(--ref-palette-primary80);
+  --sys-color-divider-prominent: var(--ref-palette-primary70);
 
   /* States */
 
@@ -290,12 +291,11 @@
 
   /* Surfaces */
 
-  --sys-color-surface5: rgb(234 240 249 / 100%);
-  --sys-color-surface4: rgb(237 239 246 / 100%);
-  --sys-color-surface3: rgb(238 243 250 / 100%);
-  --sys-color-surface2: rgb(243 246 252 / 100%);
-  --sys-color-surface1: rgb(247 249 253 / 100%);
-
+  --sys-color-surface5: color-mix(in sRGB, var(--ref-palette-primary40) 14%, var(--ref-palette-neutral99));
+  --sys-color-surface4: color-mix(in sRGB, var(--ref-palette-primary40) 12%, var(--ref-palette-neutral99));
+  --sys-color-surface3: color-mix(in sRGB, var(--ref-palette-primary40) 11%, var(--ref-palette-neutral99));
+  --sys-color-surface2: color-mix(in sRGB, var(--ref-palette-primary40) 8%, var(--ref-palette-neutral99));
+  --sys-color-surface1: color-mix(in sRGB, var(--ref-palette-primary40) 5%, var(--ref-palette-neutral99));
   /* Chrome DevTools Design System */
 
   /* Prominent accent colors for icons */
@@ -341,12 +341,15 @@
   /* Tinted surfaces */
 
   --sys-color-surface-yellow: rgb(254 246 213 / 100%);
+  --sys-color-surface-yellow-high: rgb(253 240 185 / 100%);
   --sys-color-surface-error: rgb(252 235 235 / 100%);
+  --sys-color-surface-green: rgb(219 243 226 / 100%);
 
   /* Corresponding on colors */
 
   --sys-color-on-surface-yellow: var(--ref-palette-yellow20);
   --sys-color-on-surface-error: var(--ref-palette-error30);
+  --sys-color-on-surface-green: var(--ref-palette-green20);
 
   /* Syntax highlighting */
 
@@ -405,6 +408,12 @@
    * Color for the active breadcrumb in the Performance Panel timeline.
    */
   --app-color-active-breadcrumb: var(--ref-palette-blue40);
+
+  /**
+  * Gradients
+  */
+  --sys-color-gradient-primary: var(--ref-palette-primary90);
+  --sys-color-gradient-tertiary: var(--ref-palette-tertiary95);
 }
 
 .-theme-with-dark-background {
@@ -474,7 +483,6 @@
   --color-error-text: hsl(0deg 100% 75%);
   --color-error-border: rgb(92 0 0);
   --color-error-background: hsl(0deg 100% 8%);
-  --color-checkbox-accent-color: rgb(255 165 0);
   /* Colors for styling inputs */
   --color-input-outline: rgb(60 64 67);
   --color-input-outline-active: rgb(138 180 248);
@@ -591,7 +599,7 @@
   --sys-color-on-tertiary-container: var(--ref-palette-tertiary90);
   --sys-color-error-container: var(--ref-palette-error30);
   --sys-color-on-error-container: var(--ref-palette-error90);
-  --sys-color-neutral-container: var(--ref-palette-neutral10);
+  --sys-color-neutral-container: var(--ref-palette-neutral25);
   --sys-color-omnibox-container: var(--ref-palette-neutral15);
 
   /* Prominent accent colors */
@@ -630,6 +638,8 @@
   --sys-color-yellow-outline: var(--ref-palette-yellow40);
   --sys-color-error-outline: var(--ref-palette-error80);
   --sys-color-divider: var(--ref-palette-neutral30);
+  --sys-color-divider-on-tonal-container: var(--ref-palette-neutral40);
+  --sys-color-divider-prominent: var(--ref-palette-neutral50);
 
   /* States */
 
@@ -650,11 +660,11 @@
 
   /* Surfaces */
 
-  --sys-color-surface5: rgb(56 58 62 / 100%);
-  --sys-color-surface4: rgb(52 54 58 / 100%);
-  --sys-color-surface3: rgb(51 52 56 / 100%);
-  --sys-color-surface2: rgb(45 47 49 / 100%);
-  --sys-color-surface1: rgb(40 41 42 / 100%);
+  --sys-color-surface5: color-mix(in sRGB, var(--ref-palette-primary80) 14%, var(--ref-palette-neutral10));
+  --sys-color-surface4: color-mix(in sRGB, var(--ref-palette-primary80) 12%, var(--ref-palette-neutral10));
+  --sys-color-surface3: color-mix(in sRGB, var(--ref-palette-primary80) 11%, var(--ref-palette-neutral10));
+  --sys-color-surface2: color-mix(in sRGB, var(--ref-palette-primary80) 8%, var(--ref-palette-neutral10));
+  --sys-color-surface1: color-mix(in sRGB, var(--ref-palette-primary80) 5%, var(--ref-palette-neutral10));
 
   /* Chrome DevTools Design System */
 
@@ -698,12 +708,15 @@
   /* Tinted surfaces */
 
   --sys-color-surface-yellow: rgb(65 60 38 / 100%);
+  --sys-color-surface-yellow-high: rgb(76 68 37 / 100%);
   --sys-color-surface-error: rgb(78 53 52 / 100%);
+  --sys-color-surface-green: rgb(43 70 51 / 100%);
 
   /* Corresponding on colors */
 
   --sys-color-on-surface-yellow: var(--ref-palette-yellow90);
   --sys-color-on-surface-error: var(--ref-palette-error90);
+  --sys-color-on-surface-green: var(--ref-palette-green90);
 
   /* Syntax highlighting */
 
@@ -762,4 +775,10 @@
    * Color for the active breadcrumb in the Performance Panel timeline.
    */
   --app-color-active-breadcrumb: var(--ref-palette-blue40);
+
+  /**
+  * Gradients
+  */
+  --sys-color-gradient-primary: var(--ref-palette-primary30);
+  --sys-color-gradient-tertiary: var(--ref-palette-tertiary30);
 }

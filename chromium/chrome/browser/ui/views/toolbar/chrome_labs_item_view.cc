@@ -11,7 +11,7 @@
 #include "chrome/browser/flag_descriptions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/toolbar/chrome_labs_model.h"
+#include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_model.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/grit/generated_resources.h"
@@ -95,7 +95,7 @@ class LabsComboboxModel : public ui::ComboboxModel {
     return l10n_util::GetStringUTF16(description_translation_id);
   }
 
-  absl::optional<size_t> GetDefaultIndex() const override {
+  std::optional<size_t> GetDefaultIndex() const override {
     return default_index_;
   }
 
@@ -231,7 +231,7 @@ ChromeLabsItemView::ChromeLabsItemView(
 
 ChromeLabsItemView::~ChromeLabsItemView() = default;
 
-absl::optional<size_t> ChromeLabsItemView::GetSelectedIndex() const {
+std::optional<size_t> ChromeLabsItemView::GetSelectedIndex() const {
   return lab_state_combobox_->GetSelectedIndex();
 }
 
@@ -246,5 +246,5 @@ const flags_ui::FeatureEntry* ChromeLabsItemView::GetFeatureEntry() {
 }
 
 BEGIN_METADATA(ChromeLabsItemView, views::View)
-ADD_READONLY_PROPERTY_METADATA(absl::optional<size_t>, SelectedIndex)
+ADD_READONLY_PROPERTY_METADATA(std::optional<size_t>, SelectedIndex)
 END_METADATA

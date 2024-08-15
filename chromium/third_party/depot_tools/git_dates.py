@@ -9,16 +9,16 @@ import datetime
 def timestamp_offset_to_datetime(timestamp, offset):
     """Converts a timestamp + offset into a datetime.datetime.
 
-  Useful for dealing with the output of porcelain commands, which provide times
-  as timestamp and offset strings.
+    Useful for dealing with the output of porcelain commands, which provide
+    times as timestamp and offset strings.
 
-  Args:
-    timestamp: An int UTC timestamp, or a string containing decimal digits.
-    offset: A str timezone offset. e.g., '-0800'.
+    Args:
+        timestamp: An int UTC timestamp, or a string containing decimal digits.
+        offset: A str timezone offset. e.g., '-0800'.
 
-  Returns:
-    A tz-aware datetime.datetime for this timestamp.
-  """
+    Returns:
+        A tz-aware datetime.datetime for this timestamp.
+    """
     timestamp = int(timestamp)
     tz = FixedOffsetTZ.from_offset_string(offset)
     return datetime.datetime.fromtimestamp(timestamp, tz)

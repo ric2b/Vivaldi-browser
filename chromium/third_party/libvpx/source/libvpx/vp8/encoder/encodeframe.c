@@ -7,6 +7,8 @@
  *  in the file PATENTS.  All contributing project authors may
  *  be found in the AUTHORS file in the root of the source tree.
  */
+#include <stdio.h>
+#include <limits.h>
 
 #include "vpx_config.h"
 #include "vp8_rtcd.h"
@@ -29,9 +31,9 @@
 #include "rdopt.h"
 #include "pickinter.h"
 #include "vp8/common/findnearmv.h"
-#include <stdio.h>
-#include <limits.h>
 #include "vp8/common/invtrans.h"
+#include "vpx/internal/vpx_codec_internal.h"
+#include "vpx_mem/vpx_mem.h"
 #include "vpx_ports/vpx_timer.h"
 #if CONFIG_REALTIME_ONLY & CONFIG_ONTHEFLY_BITPACKING
 #include "bitstream.h"
@@ -445,13 +447,21 @@ static void encode_mb_row(VP8_COMP *cpi, VP8_COMMON *cm, int mb_row,
     x->active_ptr = cpi->active_map + map_index + mb_col;
 
     if (cm->frame_type == KEY_FRAME) {
-      *totalrate += vp8cx_encode_intra_macroblock(cpi, x, tp);
+      const int intra_rate_cost = vp8cx_encode_intra_macroblock(cpi, x, tp);
+      if (INT_MAX - *totalrate > intra_rate_cost)
+        *totalrate += intra_rate_cost;
+      else
+        *totalrate = INT_MAX;
 #ifdef MODE_STATS
       y_modes[xd->mbmi.mode]++;
 #endif
     } else {
-      *totalrate += vp8cx_encode_inter_macroblock(
+      const int inter_rate_cost = vp8cx_encode_inter_macroblock(
           cpi, x, tp, recon_yoffset, recon_uvoffset, mb_row, mb_col);
+      if (INT_MAX - *totalrate > inter_rate_cost)
+        *totalrate += inter_rate_cost;
+      else
+        *totalrate = INT_MAX;
 
 #ifdef MODE_STATS
       inter_y_modes[xd->mbmi.mode]++;

@@ -85,7 +85,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
  private:
   // mojom::AutofillDriver:
   void SetFormToBeProbablySubmitted(
-      const absl::optional<FormData>& form) override {}
+      const std::optional<FormData>& form) override {}
 
   void FormsSeen(const std::vector<FormData>& updated_forms,
                  const std::vector<FormRendererId>& removed_forms) override {
@@ -279,7 +279,7 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
 
   // Callback for TriggeredGeneratePassword.
   MOCK_METHOD1(TriggeredGeneratePasswordReply,
-               void(const absl::optional<
+               void(const std::optional<
                     autofill::password_generation::PasswordGenerationUIData>&));
 
   FakeContentAutofillDriver fake_autofill_driver_;
@@ -420,10 +420,10 @@ void PasswordGenerationAgentTest::SelectGenerationFallbackAndExpect(
     bool available) {
   if (available) {
     EXPECT_CALL(*this,
-                TriggeredGeneratePasswordReply(testing::Ne(absl::nullopt)));
+                TriggeredGeneratePasswordReply(testing::Ne(std::nullopt)));
   } else {
     EXPECT_CALL(*this,
-                TriggeredGeneratePasswordReply(testing::Eq(absl::nullopt)));
+                TriggeredGeneratePasswordReply(testing::Eq(std::nullopt)));
   }
   password_generation_->TriggeredGeneratePassword(base::BindOnce(
       &PasswordGenerationAgentTest::TriggeredGeneratePasswordReply,
@@ -573,6 +573,7 @@ TEST_F(PasswordGenerationAgentTest, FillTest) {
   EXPECT_CALL(fake_pw_client_, PresaveGeneratedPassword(_, Eq(password)));
 
   password_generation_->GeneratedPasswordAccepted(password);
+  password_generation_->FocusNextFieldAfterPasswords();
 
   // Password fields are filled out and set as being autofilled.
   EXPECT_EQ(password, first_password_element.Value().Utf16());
@@ -1212,6 +1213,7 @@ TEST_F(PasswordGenerationAgentTest, JavascriptClearedThePassword_TypeUsername) {
 
   // Edit some other field.
   EXPECT_CALL(fake_pw_client_, PasswordNoLongerGenerated(testing::_));
+  EXPECT_CALL(fake_pw_client_, GenerationElementLostFocus());
   ExecuteJavaScriptForTests(
       "document.getElementById('first_password').value = '';");
   FocusField("username");
@@ -1428,6 +1430,21 @@ TEST_F(PasswordGenerationAgentTest, SuggestionPreviewTest) {
   // Clearing should not succeed when there is nothing to clear.
   EXPECT_FALSE(password_generation_->DidClearGenerationSuggestion(
       first_password_element));
+}
+
+TEST_F(PasswordGenerationAgentTest, AdvancesFocusToNextFieldAfterPasswords) {
+  constexpr char kGenerationElementId[] = "first_password";
+  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
+  SetFoundFormEligibleForGeneration(password_generation_,
+                                    GetMainFrame()->GetDocument(),
+                                    /*new_password_id=*/kGenerationElementId,
+                                    /*confirm_password_id=*/"second_password");
+  ExpectAutomaticGenerationAvailable(kGenerationElementId, kAvailable);
+
+  password_generation_->FocusNextFieldAfterPasswords();
+  WebDocument document = GetMainFrame()->GetDocument();
+  EXPECT_EQ(document.FocusedElement(),
+            document.GetElementById(WebString::FromUTF8("address")));
 }
 
 }  // namespace autofill

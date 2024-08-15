@@ -455,7 +455,6 @@ void RunComputeShaderWithBuffers(const wgpu::Device& device,
 
     wgpu::ComputePipelineDescriptor csDesc;
     csDesc.compute.module = module;
-    csDesc.compute.entryPoint = "main";
 
     wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&csDesc);
 
@@ -542,6 +541,9 @@ std::string AlignDeco(uint32_t value) {
 TEST_P(ComputeLayoutMemoryBufferTests, StructMember) {
     // TODO(crbug.com/dawn/1606): find out why these tests fail on Windows for OpenGL.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES() && IsWindows());
+
+    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
 
     const bool isUniform = GetParam().mAddressSpace == AddressSpace::Uniform;
 
@@ -713,6 +715,7 @@ fn main() {
 TEST_P(ComputeLayoutMemoryBufferTests, NonStructMember) {
     // TODO(crbug.com/dawn/1606): find out why these tests fail on Windows for OpenGL.
     DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES() && IsWindows());
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
 
     const bool isUniform = GetParam().mAddressSpace == AddressSpace::Uniform;
 

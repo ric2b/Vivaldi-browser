@@ -38,6 +38,7 @@
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "./fuzztest/domain.h"
+#include "./fuzztest/internal/configuration.h"
 #include "./fuzztest/internal/coverage.h"
 #include "./fuzztest/internal/fixture_driver.h"
 #include "./fuzztest/internal/io.h"
@@ -65,9 +66,10 @@ namespace internal {
 class FuzzTestFuzzer {
  public:
   virtual ~FuzzTestFuzzer() = default;
-  virtual void RunInUnitTestMode() = 0;
+  virtual void RunInUnitTestMode(const Configuration& configuration) = 0;
   // Returns fuzzing mode's exit code. Zero indicates success.
-  virtual int RunInFuzzingMode(int* argc, char*** argv) = 0;
+  virtual int RunInFuzzingMode(int* argc, char*** argv,
+                               const Configuration& configuration) = 0;
 };
 
 class FuzzTest;
@@ -175,7 +177,7 @@ class Runtime {
  private:
   Runtime() = default;
 
-  void DumpReproducer(std::string_view outdir) const;
+  void DumpReproducer(absl::string_view outdir) const;
 
   // Some failures are not necessarily detected by signal handlers or by
   // sanitizers. For example, we could have test framework failures like
@@ -227,10 +229,11 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
  private:
   // TODO(fniksic): Refactor to reduce code complexity and improve readability.
-  void RunInUnitTestMode() override;
+  void RunInUnitTestMode(const Configuration& configuration) override;
 
   // TODO(fniksic): Refactor to reduce code complexity and improve readability.
-  int RunInFuzzingMode(int* argc, char*** argv) override;
+  int RunInFuzzingMode(int* argc, char*** argv,
+                       const Configuration& configuration) override;
 
   // Use the standard PRNG instead of absl::BitGen because Abseil doesn't
   // guarantee seed stability
@@ -248,9 +251,9 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
     absl::Duration run_time;
   };
 
-  void PopulateFromSeeds();
+  void PopulateFromSeeds(const std::vector<std::string>& corpus_files);
 
-  bool ReplayInputsIfAvailable();
+  bool ReplayInputsIfAvailable(const Configuration& configuration);
 
   std::optional<std::vector<std::string>> GetFilesToReplay();
 
@@ -292,6 +295,10 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
   bool ShouldStop();
 
+  std::optional<GenericDomainCorpusType> GetCorpusValueFromFile(
+      const std::string& path);
+  void ReplayInput(const std::string& path);
+
   const FuzzTest& test_;
   std::unique_ptr<UntypedFixtureDriver> fixture_driver_;
   std::unique_ptr<UntypedDomainInterface> params_domain_;
@@ -302,7 +309,7 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
   // Corpus distribution is only used in Fuzzing mode.
   absl::discrete_distribution<> corpus_distribution_;
 
-  std::string_view corpus_out_dir_;
+  absl::string_view corpus_out_dir_;
   RuntimeStats stats_{};
   std::optional<size_t> runs_limit_;
   absl::Time time_limit_ = absl::InfiniteFuture();
@@ -316,6 +323,7 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
   // Defined in centipede_adaptor.cc
   friend class CentipedeFuzzerAdaptor;
   friend class CentipedeAdaptorRunnerCallbacks;
+  friend class CentipedeAdaptorEngineCallbacks;
 };
 
 }  // namespace internal

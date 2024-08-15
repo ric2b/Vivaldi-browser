@@ -58,6 +58,10 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
     return input.hw_protected;
   }
 
+  static bool needs_detiling(const media::VideoFrameMetadata& input) {
+    return input.needs_detiling;
+  }
+
   static bool is_webgpu_compatible(const media::VideoFrameMetadata& input) {
     return input.is_webgpu_compatible;
   }
@@ -162,6 +166,11 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
   static absl::optional<base::TimeDelta> wallclock_frame_duration(
       const media::VideoFrameMetadata& input) {
     return input.wallclock_frame_duration;
+  }
+
+  static absl::optional<uint64_t> frame_sequence(
+      const media::VideoFrameMetadata& input) {
+    return input.frame_sequence;
   }
 
   static bool Read(media::mojom::VideoFrameMetadataDataView input,

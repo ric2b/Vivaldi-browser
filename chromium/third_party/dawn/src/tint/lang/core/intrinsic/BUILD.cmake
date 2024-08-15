@@ -60,6 +60,7 @@ tint_target_add_dependencies(tint_lang_core_intrinsic lib
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
+  tint_utils_reflection
   tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
@@ -84,6 +85,8 @@ tint_target_add_dependencies(tint_lang_core_intrinsic_test test
   tint_lang_core_type_test
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_intrinsic
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver

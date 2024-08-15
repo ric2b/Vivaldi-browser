@@ -622,9 +622,13 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   void MouseUp(gin::Arguments* args);
   void SetMouseButtonState(gin::Arguments* args);
   void KeyDown(gin::Arguments* args);
+  void KeyDownAsync(gin::Arguments* args);
   void KeyDownOnly(gin::Arguments* args);
   void KeyUp(gin::Arguments* args);
+
   void KeyEvent(EventSender::KeyEventType event_type, gin::Arguments* args);
+  void KeyEventAsync(EventSender::KeyEventType event_type,
+                     gin::Arguments* args);
 
   // Binding properties:
   bool ForceLayoutOnEvents() const;
@@ -739,6 +743,7 @@ gin::ObjectTemplateBuilder EventSenderBindings::GetObjectTemplateBuilder(
       .SetMethod("gestureTwoFingerTap",
                  &EventSenderBindings::GestureTwoFingerTap)
       .SetMethod("keyDown", &EventSenderBindings::KeyDown)
+      .SetMethod("keyDownAsync", &EventSenderBindings::KeyDownAsync)
       .SetMethod("keyDownOnly", &EventSenderBindings::KeyDownOnly)
       .SetMethod("keyUp", &EventSenderBindings::KeyUp)
       .SetMethod("mouseDown", &EventSenderBindings::MouseDown)
@@ -837,7 +842,7 @@ void EventSenderBindings::SetTouchCancelable(bool cancelable) {
 
 void EventSenderBindings::DumpFilenameBeingDragged() {
   if (sender_)
-    sender_->DumpFilenameBeingDragged();
+    sender_->DumpFilenameBeingDragged(frame_);
 }
 
 void EventSenderBindings::TouchStart(gin::Arguments* args) {
@@ -879,14 +884,14 @@ double EventSenderBindings::LastEventTimestamp() {
 void EventSenderBindings::BeginDragWithFiles(
     const std::vector<std::string>& files) {
   if (sender_)
-    sender_->BeginDragWithFiles(files);
+    sender_->BeginDragWithFiles(frame_, files);
 }
 
 void EventSenderBindings::BeginDragWithStringData(
     const std::string& data,
     const std::string& mime_type) {
   if (sender_)
-    sender_->BeginDragWithStringData(data, mime_type);
+    sender_->BeginDragWithStringData(frame_, data, mime_type);
 }
 
 void EventSenderBindings::AddTouchPoint(double x,
@@ -1085,6 +1090,13 @@ void EventSenderBindings::KeyDown(gin::Arguments* args) {
   KeyEvent(EventSender::kKeyPress, args);
 }
 
+// `KeyDownAsync` sends both `KeyDown` and `KeyUp` events. It's similar to
+// `KeyPress` in other APIs. It sends those events asynchronously, outside of a
+// JS task.
+void EventSenderBindings::KeyDownAsync(gin::Arguments* args) {
+  KeyEventAsync(EventSender::kKeyPress, args);
+}
+
 // `KeyDownOnly` sends `KeyDown` without `KeyUp`.
 void EventSenderBindings::KeyDownOnly(gin::Arguments* args) {
   KeyEvent(EventSender::kKeyDown, args);
@@ -1092,6 +1104,19 @@ void EventSenderBindings::KeyDownOnly(gin::Arguments* args) {
 
 void EventSenderBindings::KeyUp(gin::Arguments* args) {
   KeyEvent(EventSender::kKeyUp, args);
+}
+
+void EventSenderBindings::KeyEventAsync(EventSender::KeyEventType event_type,
+                                        gin::Arguments* args) {
+  std::string code_str;
+  int modifiers = 0;
+  int location = DOMKeyLocationStandard;
+  args->GetNext(&code_str);
+  frame_->GetTaskRunner(blink::TaskType::kInternalTest)
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&EventSender::KeyEvent, sender_, event_type, code_str,
+                         modifiers, static_cast<KeyLocationCode>(location)));
 }
 
 void EventSenderBindings::KeyEvent(EventSender::KeyEventType event_type,
@@ -1247,7 +1272,7 @@ EventSender::EventSender(blink::WebFrameWidget* web_frame_widget,
 EventSender::~EventSender() {}
 
 void EventSender::Reset() {
-  current_drag_data_ = absl::nullopt;
+  current_drag_data_ = std::nullopt;
   current_drag_effect_ = ui::mojom::DragOperation::kNone;
   current_drag_effects_allowed_ = blink::kDragOperationNone;
   current_pointer_state_.clear();
@@ -1852,10 +1877,12 @@ void EventSender::SetTouchCancelable(bool cancelable) {
   touch_cancelable_ = cancelable;
 }
 
-void EventSender::DumpFilenameBeingDragged() {
+void EventSender::DumpFilenameBeingDragged(blink::WebLocalFrame* frame) {
   if (!current_drag_data_)
     return;
 
+  auto* frame_proxy =
+      static_cast<WebFrameTestProxy*>(RenderFrame::FromWebFrame(frame));
   WebVector<WebDragData::Item> items = current_drag_data_->Items();
   for (const auto& item : items) {
     if (const auto* binary_data_item =
@@ -1876,7 +1903,8 @@ void EventSender::DumpFilenameBeingDragged() {
       filename = filename.ReplaceExtension(filename_extension.Utf8());
 #endif
       test_runner_->PrintMessage(std::string("Filename being dragged: ") +
-                                 filename.AsUTF8Unsafe() + "\n");
+                                     filename.AsUTF8Unsafe() + "\n",
+                                 *frame_proxy);
       return;
     }
   }
@@ -1919,6 +1947,7 @@ void EventSender::LeapForward(int milliseconds) {
 }
 
 void EventSender::BeginDragWithItems(
+    blink::WebLocalFrame* frame,
     const WebVector<WebDragData::Item>& items) {
   if (current_drag_data_) {
     // Nested dragging not supported, fuzzer code a likely culprit.
@@ -1942,8 +1971,10 @@ void EventSender::BeginDragWithItems(
     }
   }
   if (!file_paths.empty()) {
+    auto* frame_proxy =
+        static_cast<WebFrameTestProxy*>(RenderFrame::FromWebFrame(frame));
     current_drag_data_->SetFilesystemId(
-        test_runner_->RegisterIsolatedFileSystem(file_paths));
+        test_runner_->RegisterIsolatedFileSystem(file_paths, *frame_proxy));
   }
   current_drag_effects_allowed_ = blink::kDragOperationCopy;
 
@@ -1966,7 +1997,8 @@ void EventSender::BeginDragWithItems(
           current_pointer_state_[kRawMousePointerId].pressed_button_);
 }
 
-void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
+void EventSender::BeginDragWithFiles(blink::WebLocalFrame* frame,
+                                     const std::vector<std::string>& files) {
   WebVector<WebDragData::Item> items;
 
   for (const std::string& file_path : files) {
@@ -1976,10 +2008,11 @@ void EventSender::BeginDragWithFiles(const std::vector<std::string>& files) {
     items.emplace_back(item);
   }
 
-  BeginDragWithItems(items);
+  BeginDragWithItems(frame, items);
 }
 
-void EventSender::BeginDragWithStringData(const std::string& data,
+void EventSender::BeginDragWithStringData(blink::WebLocalFrame* frame,
+                                          const std::string& data,
                                           const std::string& mime_type) {
   WebVector<WebDragData::Item> items;
   WebDragData::StringItem item = {
@@ -1988,7 +2021,7 @@ void EventSender::BeginDragWithStringData(const std::string& data,
   };
   items.emplace_back(item);
 
-  BeginDragWithItems(items);
+  BeginDragWithItems(frame, items);
 }
 
 void EventSender::AddTouchPoint(float x, float y, gin::Arguments* args) {
@@ -2683,7 +2716,7 @@ void EventSender::FinishDragAndDrop(const WebMouseEvent& event,
   } else {
     MainFrameWidget()->DragTargetDragLeave(gfx::PointF(), gfx::PointF());
   }
-  current_drag_data_ = absl::nullopt;
+  current_drag_data_ = std::nullopt;
   MainFrameWidget()->DragSourceEndedAt(event.PositionInWidget(),
                                        event.PositionInScreen(),
                                        current_drag_effect_, base::DoNothing());

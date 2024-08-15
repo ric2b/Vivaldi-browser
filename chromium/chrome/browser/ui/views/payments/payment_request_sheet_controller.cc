@@ -238,7 +238,7 @@ class PaymentRequestBackArrowButton : public views::ImageButton {
   METADATA_HEADER(PaymentRequestBackArrowButton);
   explicit PaymentRequestBackArrowButton(
       views::Button::PressedCallback back_arrow_callback)
-      : views::ImageButton(back_arrow_callback) {
+      : views::ImageButton(std::move(back_arrow_callback)) {
     ConfigureVectorImageButton(this);
     constexpr int kBackArrowSize = 16;
     SetSize(gfx::Size(kBackArrowSize, kBackArrowSize));
@@ -432,7 +432,8 @@ std::u16string PaymentRequestSheetController::GetPrimaryButtonLabel() {
 PaymentRequestSheetController::ButtonCallback
 PaymentRequestSheetController::GetPrimaryButtonCallback() {
   return base::BindRepeating(
-      [](const base::WeakPtr<PaymentRequestDialogView>& dialog) {
+      [](const base::WeakPtr<PaymentRequestDialogView>& dialog,
+         const ui::Event& event) {
         if (dialog->IsInteractive())
           dialog->Pay();
       },
@@ -599,7 +600,7 @@ bool PaymentRequestSheetController::CanContentViewBeScrollable() {
   return true;
 }
 
-void PaymentRequestSheetController::CloseButtonPressed() {
+void PaymentRequestSheetController::CloseButtonPressed(const ui::Event& event) {
   if (dialog()->IsInteractive())
     dialog()->CloseDialog();
 }
@@ -620,7 +621,7 @@ void PaymentRequestSheetController::AddPrimaryButton(views::View* container) {
                       .SetID(GetPrimaryButtonId())
                       .SetEnabled(GetPrimaryButtonEnabled())
                       .SetFocusBehavior(views::View::FocusBehavior::ALWAYS)
-                      .SetProminent(true))
+                      .SetStyle(ui::ButtonStyle::kProminent))
         .BuildChildren();
   }
 }

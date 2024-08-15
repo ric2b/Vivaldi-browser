@@ -22,9 +22,9 @@
 #import "components/strings/grit/components_strings.h"
 #import "google_apis/gaia/gaia_auth_util.h"
 #import "google_apis/gaia/gaia_urls.h"
-#import "ios/chrome/browser/policy/cloud/user_policy_signin_service.h"
-#import "ios/chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
-#import "ios/chrome/browser/policy/cloud/user_policy_switch.h"
+#import "ios/chrome/browser/policy/model/cloud/user_policy_signin_service.h"
+#import "ios/chrome/browser/policy/model/cloud/user_policy_signin_service_factory.h"
+#import "ios/chrome/browser/policy/model/cloud/user_policy_switch.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -35,12 +35,12 @@
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/constants.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/signin/system_identity.h"
-#import "ios/chrome/browser/signin/system_identity_manager.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/constants.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/system_identity.h"
+#import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/sync/model/sync_setup_service.h"
 #import "ios/chrome/browser/sync/model/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_constants.h"
@@ -105,7 +105,16 @@ NSString* const kAuthenticationSnackbarCategory =
 
 @implementation AuthenticationFlowPerformer {
   __weak id<AuthenticationFlowPerformerDelegate> _delegate;
-  AlertCoordinator* _alertCoordinator;
+  // This code uses three variables for alert coordinators in order to clarify
+  // crash reports related to crbug.com/1482623
+  // TODO(crbug.com/1482623): The 3 alert coordinator variables can be merged
+  // into one alert coordinator once the bug is fixed.
+  // Dialog for the managed confirmation dialog.
+  AlertCoordinator* _managedConfirmationAlertCoordinator;
+  // Dialog to display an error.
+  AlertCoordinator* _errorAlertCoordinator;
+  // Dialog to ask the user before switching users.
+  AlertCoordinator* _promptSwitchAlertCoordinator;
   SettingsNavigationController* _navigationController;
   std::unique_ptr<base::OneShotTimer> _watchdogTimer;
 }
@@ -124,8 +133,12 @@ NSString* const kAuthenticationSnackbarCategory =
 
 - (void)interruptWithAction:(SigninCoordinatorInterrupt)action
                  completion:(ProceduralBlock)completion {
-  [_alertCoordinator stop];
-  _alertCoordinator = nil;
+  [_managedConfirmationAlertCoordinator stop];
+  _managedConfirmationAlertCoordinator = nil;
+  [_errorAlertCoordinator stop];
+  _errorAlertCoordinator = nil;
+  [_promptSwitchAlertCoordinator stop];
+  _promptSwitchAlertCoordinator = nil;
   if (_navigationController) {
     [_navigationController cleanUpSettings];
     _navigationController = nil;
@@ -367,22 +380,31 @@ NSString* const kAuthenticationSnackbarCategory =
                                 viewController:(UIViewController*)viewController
                                        browser:(Browser*)browser
                                    syncConsent:(BOOL)syncConsent {
-  DCHECK(!_alertCoordinator);
+  DCHECK(!_managedConfirmationAlertCoordinator);
+  DCHECK(!_errorAlertCoordinator);
+  DCHECK(!_promptSwitchAlertCoordinator);
 
   ManagedConfirmationDialogContent* content =
       [self managedConfirmationDialogContentForHostedDomain:hostedDomain
                                                 syncConsent:syncConsent];
 
-  _alertCoordinator =
+  base::RecordAction(
+      base::UserMetricsAction("Signin_AuthenticationFlowPerformer_"
+                              "ManagedConfirmationDialog_Presented"));
+  _managedConfirmationAlertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:viewController
                                                    browser:browser
                                                      title:content.title
                                                    message:content.subtitle];
 
   __weak AuthenticationFlowPerformer* weakSelf = self;
-  __weak AlertCoordinator* weakAlert = _alertCoordinator;
+  __weak AlertCoordinator* weakAlert = _managedConfirmationAlertCoordinator;
 
   ProceduralBlock acceptBlock = ^{
+    base::RecordAction(
+        base::UserMetricsAction("Signin_AuthenticationFlowPerformer_"
+                                "ManagedConfirmationDialog_Confirmed"));
+
     AuthenticationFlowPerformer* strongSelf = weakSelf;
     if (!strongSelf)
       return;
@@ -404,6 +426,9 @@ NSString* const kAuthenticationSnackbarCategory =
     [[strongSelf delegate] didAcceptManagedConfirmation];
   };
   ProceduralBlock cancelBlock = ^{
+    base::RecordAction(
+        base::UserMetricsAction("Signin_AuthenticationFlowPerformer_"
+                                "ManagedConfirmationDialog_Canceled"));
     AuthenticationFlowPerformer* strongSelf = weakSelf;
     if (!strongSelf)
       return;
@@ -411,14 +436,16 @@ NSString* const kAuthenticationSnackbarCategory =
     [[strongSelf delegate] didCancelManagedConfirmation];
   };
 
-  [_alertCoordinator addItemWithTitle:content.cancelLabel
-                               action:cancelBlock
-                                style:UIAlertActionStyleCancel];
-  [_alertCoordinator addItemWithTitle:content.acceptLabel
-                               action:acceptBlock
-                                style:UIAlertActionStyleDefault];
-  _alertCoordinator.noInteractionAction = cancelBlock;
-  [_alertCoordinator start];
+  [_managedConfirmationAlertCoordinator
+      addItemWithTitle:content.cancelLabel
+                action:cancelBlock
+                 style:UIAlertActionStyleCancel];
+  [_managedConfirmationAlertCoordinator
+      addItemWithTitle:content.acceptLabel
+                action:acceptBlock
+                 style:UIAlertActionStyleDefault];
+  _managedConfirmationAlertCoordinator.noInteractionAction = cancelBlock;
+  [_managedConfirmationAlertCoordinator start];
 }
 
 - (void)showSnackbarWithSignInIdentity:(id<SystemIdentity>)identity
@@ -463,24 +490,32 @@ NSString* const kAuthenticationSnackbarCategory =
                  withCompletion:(ProceduralBlock)callback
                  viewController:(UIViewController*)viewController
                         browser:(Browser*)browser {
-  DCHECK(!_alertCoordinator);
+  DCHECK(!_managedConfirmationAlertCoordinator);
+  DCHECK(!_errorAlertCoordinator);
+  DCHECK(!_promptSwitchAlertCoordinator);
 
-  _alertCoordinator = ErrorCoordinatorNoItem(error, viewController, browser);
+  base::RecordAction(base::UserMetricsAction(
+      "Signin_AuthenticationFlowPerformer_ErrorDialog_Presented"));
+  _errorAlertCoordinator =
+      ErrorCoordinatorNoItem(error, viewController, browser);
 
   __weak AuthenticationFlowPerformer* weakSelf = self;
-  __weak AlertCoordinator* weakAlert = _alertCoordinator;
+  __weak AlertCoordinator* weakAlert = _errorAlertCoordinator;
   ProceduralBlock dismissAction = ^{
+    base::RecordAction(base::UserMetricsAction(
+        "Signin_AuthenticationFlowPerformer_ErrorDialog_Confirmed"));
     [weakSelf alertControllerDidDisappear:weakAlert];
-    if (callback)
+    if (callback) {
       callback();
+    }
   };
 
   NSString* okButtonLabel = l10n_util::GetNSString(IDS_OK);
-  [_alertCoordinator addItemWithTitle:okButtonLabel
-                               action:dismissAction
-                                style:UIAlertActionStyleDefault];
+  [_errorAlertCoordinator addItemWithTitle:okButtonLabel
+                                    action:dismissAction
+                                     style:UIAlertActionStyleDefault];
 
-  [_alertCoordinator start];
+  [_errorAlertCoordinator start];
 }
 
 - (void)registerUserPolicy:(ChromeBrowserState*)browserState
@@ -502,22 +537,30 @@ NSString* const kAuthenticationSnackbarCategory =
   [self startWatchdogTimerForUserPolicyRegistration];
   userPolicyService->RegisterForPolicyWithAccountId(
       userEmail, accountID,
-      base::BindOnce(^(const std::string& dmToken,
-                       const std::string& clientID) {
+      base::BindOnce(^(const std::string& dmToken, const std::string& clientID,
+                       const std::vector<std::string>& userAffiliationIDs) {
         if (![self stopWatchdogTimer]) {
           // Watchdog timer has already fired, don't notify the delegate.
           return;
         }
+        NSMutableArray<NSString*>* userAffiliationIDsNSArray =
+            [[NSMutableArray alloc] init];
+        for (const auto& userAffiliationID : userAffiliationIDs) {
+          [userAffiliationIDsNSArray
+              addObject:base::SysUTF8ToNSString(userAffiliationID)];
+        }
         [weakSelf.delegate
             didRegisterForUserPolicyWithDMToken:base::SysUTF8ToNSString(dmToken)
                                        clientID:base::SysUTF8ToNSString(
-                                                    clientID)];
+                                                    clientID)
+                             userAffiliationIDs:userAffiliationIDsNSArray];
       }));
 }
 
 - (void)fetchUserPolicy:(ChromeBrowserState*)browserState
             withDmToken:(NSString*)dmToken
                clientID:(NSString*)clientID
+     userAffiliationIDs:(NSArray<NSString*>*)userAffiliationIDs
                identity:(id<SystemIdentity>)identity {
   // Should only fetch user policies when the feature is enabled.
   DCHECK(policy::IsAnyUserPolicyFeatureEnabled());
@@ -526,7 +569,7 @@ NSString* const kAuthenticationSnackbarCategory =
   DCHECK([dmToken length] > 0);
   DCHECK([clientID length] > 0);
 
-  policy::UserPolicySigninService* policy_service =
+  policy::UserPolicySigninService* policyService =
       policy::UserPolicySigninServiceFactory::GetForBrowserState(browserState);
   const std::string userEmail = base::SysNSStringToUTF8(identity.userEmail);
 
@@ -536,10 +579,16 @@ NSString* const kAuthenticationSnackbarCategory =
 
   __weak __typeof(self) weakSelf = self;
 
+  std::vector<std::string> userAffiliationIDsVector;
+  for (NSString* userAffiliationID in userAffiliationIDs) {
+    userAffiliationIDsVector.push_back(
+        base::SysNSStringToUTF8(userAffiliationID));
+  }
+
   [self startWatchdogTimerForUserPolicyFetch];
-  policy_service->FetchPolicyForSignedInUser(
+  policyService->FetchPolicyForSignedInUser(
       accountID, base::SysNSStringToUTF8(dmToken),
-      base::SysNSStringToUTF8(clientID),
+      base::SysNSStringToUTF8(clientID), userAffiliationIDsVector,
       browserState->GetSharedURLLoaderFactory(),
       base::BindOnce(^(bool success) {
         if (![self stopWatchdogTimer]) {
@@ -660,7 +709,9 @@ NSString* const kAuthenticationSnackbarCategory =
     if (!strongSelf)
       return;
     [strongSelf stopWatchdogTimer];
-    [strongSelf.delegate didRegisterForUserPolicyWithDMToken:@"" clientID:@""];
+    [strongSelf.delegate didRegisterForUserPolicyWithDMToken:@""
+                                                    clientID:@""
+                                          userAffiliationIDs:@[]];
   };
   [self startWatchdogTimerWithTimeoutBlock:timeoutBlock];
 }
@@ -694,7 +745,9 @@ NSString* const kAuthenticationSnackbarCategory =
                              toEmail:(NSString*)toEmail
                       viewController:(UIViewController*)viewController
                              browser:(Browser*)browser {
-  DCHECK(!_alertCoordinator);
+  DCHECK(!_managedConfirmationAlertCoordinator);
+  DCHECK(!_errorAlertCoordinator);
+  DCHECK(!_promptSwitchAlertCoordinator);
   NSString* title = l10n_util::GetNSString(IDS_IOS_MANAGED_SWITCH_TITLE);
   NSString* subtitle = l10n_util::GetNSStringF(
       IDS_IOS_MANAGED_SWITCH_SUBTITLE, base::SysNSStringToUTF16(managedEmail),
@@ -704,15 +757,19 @@ NSString* const kAuthenticationSnackbarCategory =
       l10n_util::GetNSString(IDS_IOS_MANAGED_SWITCH_ACCEPT_BUTTON);
   NSString* cancelLabel = l10n_util::GetNSString(IDS_CANCEL);
 
-  _alertCoordinator =
+  base::RecordAction(base::UserMetricsAction(
+      "Signin_AuthenticationFlowPerformer_SwitchDialog_Presented"));
+  _promptSwitchAlertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:viewController
                                                    browser:browser
                                                      title:title
                                                    message:subtitle];
 
   __weak AuthenticationFlowPerformer* weakSelf = self;
-  __weak AlertCoordinator* weakAlert = _alertCoordinator;
+  __weak AlertCoordinator* weakAlert = _promptSwitchAlertCoordinator;
   ProceduralBlock acceptBlock = ^{
+    base::RecordAction(base::UserMetricsAction(
+        "Signin_AuthenticationFlowPerformer_SwitchDialog_Confirmed"));
     AuthenticationFlowPerformer* strongSelf = weakSelf;
     if (!strongSelf)
       return;
@@ -721,6 +778,8 @@ NSString* const kAuthenticationSnackbarCategory =
         didChooseClearDataPolicy:SHOULD_CLEAR_DATA_CLEAR_DATA];
   };
   ProceduralBlock cancelBlock = ^{
+    base::RecordAction(base::UserMetricsAction(
+        "Signin_AuthenticationFlowPerformer_SwitchDialog_Canceled"));
     AuthenticationFlowPerformer* strongSelf = weakSelf;
     if (!strongSelf)
       return;
@@ -728,26 +787,27 @@ NSString* const kAuthenticationSnackbarCategory =
     [[strongSelf delegate] didChooseCancel];
   };
 
-  [_alertCoordinator addItemWithTitle:cancelLabel
-                               action:cancelBlock
-                                style:UIAlertActionStyleCancel];
-  [_alertCoordinator addItemWithTitle:acceptLabel
-                               action:acceptBlock
-                                style:UIAlertActionStyleDefault];
-  _alertCoordinator.noInteractionAction = cancelBlock;
-  [_alertCoordinator start];
+  [_promptSwitchAlertCoordinator addItemWithTitle:cancelLabel
+                                           action:cancelBlock
+                                            style:UIAlertActionStyleCancel];
+  [_promptSwitchAlertCoordinator addItemWithTitle:acceptLabel
+                                           action:acceptBlock
+                                            style:UIAlertActionStyleDefault];
+  _promptSwitchAlertCoordinator.noInteractionAction = cancelBlock;
+  [_promptSwitchAlertCoordinator start];
 }
 
 // Callback for when the alert is dismissed.
 - (void)alertControllerDidDisappear:(AlertCoordinator*)alertCoordinator {
-  if (_alertCoordinator != alertCoordinator) {
-    // Do not reset the `_alertCoordinator` if it has changed. This typically
-    // happens when the user taps on any of the actions on "Clear Data Before
-    // Syncing?" dialog, as the sign-in confirmation dialog is created before
-    // the "Clear Data Before Syncing?" dialog is dismissed.
-    return;
+  if (_managedConfirmationAlertCoordinator == alertCoordinator) {
+    _managedConfirmationAlertCoordinator = nil;
+  } else if (_errorAlertCoordinator == alertCoordinator) {
+    _errorAlertCoordinator = nil;
+  } else if (_promptSwitchAlertCoordinator == alertCoordinator) {
+    _promptSwitchAlertCoordinator = nil;
   }
-  _alertCoordinator = nil;
+  // TODO(crbug.com/1482623): This code needs to be simpler and clearer.
+  // At least NOTREACHED should be added here.
 }
 
 @end

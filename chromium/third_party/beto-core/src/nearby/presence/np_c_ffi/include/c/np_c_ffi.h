@@ -33,6 +33,21 @@
 #include <stdlib.h>
 
 /**
+ * Result type for trying to add a credential to a credential-slab.
+ */
+enum np_ffi_AddCredentialToSlabResult {
+  /**
+   * We succeeded in adding the credential to the slab.
+   */
+  NP_FFI_ADD_CREDENTIAL_TO_SLAB_RESULT_SUCCESS = 0,
+  /**
+   * The handle to the slab was actually invalid.
+   */
+  NP_FFI_ADD_CREDENTIAL_TO_SLAB_RESULT_INVALID_HANDLE = 1,
+};
+typedef uint8_t np_ffi_AddCredentialToSlabResult;
+
+/**
  * The possible boolean action types which can be present in an Actions data element
  */
 enum np_ffi_BooleanActionType {
@@ -51,17 +66,39 @@ typedef uint8_t np_ffi_BooleanActionType;
  */
 enum np_ffi_CreateCredentialBookResultKind {
   /**
-   * There was no space left to create a new credential book
-   */
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_NO_SPACE_LEFT = 0,
-  /**
    * We created a new credential book behind the given handle.
    * The associated payload may be obtained via
    * `CreateCredentialBookResult#into_success()`.
    */
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_SUCCESS = 1,
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_SUCCESS = 0,
+  /**
+   * There was no space left to create a new credential book
+   */
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_NO_SPACE_LEFT = 1,
+  /**
+   * The slab that we tried to create a credential-book from
+   * actually was an invalid handle.
+   */
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_KIND_INVALID_SLAB_HANDLE = 2,
 };
 typedef uint8_t np_ffi_CreateCredentialBookResultKind;
+
+/**
+ * Discriminant for `CreateCredentialSlabResult`
+ */
+enum np_ffi_CreateCredentialSlabResultKind {
+  /**
+   * There was no space left to create a new credential slab
+   */
+  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_KIND_NO_SPACE_LEFT = 0,
+  /**
+   * We created a new credential slab behind the given handle.
+   * The associated payload may be obtained via
+   * `CreateCredentialSlabResult#into_success()`.
+   */
+  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_KIND_SUCCESS = 1,
+};
+typedef uint8_t np_ffi_CreateCredentialSlabResultKind;
 
 /**
  * A result-type enum which tells the caller whether/not a deallocation
@@ -122,16 +159,8 @@ enum np_ffi_DeserializedV0AdvertisementKind {
 typedef uint8_t np_ffi_DeserializedV0AdvertisementKind;
 
 /**
- * Represents deserialized information about the V0 identity utilized
- * by a deserialized V0 advertisement
- */
-typedef enum {
-  NP_FFI_DESERIALIZED_V0_IDENTITY_PLAINTEXT,
-  NP_FFI_DESERIALIZED_V0_IDENTITY_DECRYPTED,
-} np_ffi_DeserializedV0Identity;
-
-/**
- * Discriminant for `DeserializedV0Identity`.
+ * Discriminant for deserialized information about the V0
+ * identity utilized by a deserialized V0 advertisement.
  */
 enum np_ffi_DeserializedV0IdentityKind {
   /**
@@ -277,8 +306,9 @@ typedef struct {
  * Result type for `create_credential_book`
  */
 enum np_ffi_CreateCredentialBookResult_Tag {
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_NO_SPACE_LEFT = 0,
-  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_SUCCESS = 1,
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_SUCCESS = 0,
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_NO_SPACE_LEFT = 1,
+  NP_FFI_CREATE_CREDENTIAL_BOOK_RESULT_INVALID_SLAB_HANDLE = 2,
 };
 typedef uint8_t np_ffi_CreateCredentialBookResult_Tag;
 
@@ -289,6 +319,79 @@ typedef union {
     np_ffi_CredentialBook success;
   };
 } np_ffi_CreateCredentialBookResult;
+
+/**
+ *A `#[repr(C)]` handle to a value of type `super::CredentialSlabInternals`.
+ */
+typedef struct {
+  uint64_t handle_id;
+} np_ffi_CredentialSlab;
+
+/**
+ * Result type for `create_credential_slab`
+ */
+typedef enum {
+  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_NO_SPACE_LEFT,
+  NP_FFI_CREATE_CREDENTIAL_SLAB_RESULT_SUCCESS,
+} np_ffi_CreateCredentialSlabResult_Tag;
+
+typedef struct {
+  np_ffi_CreateCredentialSlabResult_Tag tag;
+  union {
+    struct {
+      np_ffi_CredentialSlab success;
+    };
+  };
+} np_ffi_CreateCredentialSlabResult;
+
+/**
+ * Cryptographic information about a particular V0 discovery credential
+ * necessary to match and decrypt encrypted V0 advertisements.
+ */
+typedef struct {
+  uint8_t key_seed[32];
+  uint8_t legacy_metadata_key_hmac[32];
+} np_ffi_V0DiscoveryCredential;
+
+/**
+ * A representation of a MatchedCredential which is passable across the FFI boundary
+ */
+typedef struct {
+  uint32_t cred_id;
+  const uint8_t *encrypted_metadata_bytes_buffer;
+  uintptr_t encrypted_metadata_bytes_len;
+} np_ffi_FfiMatchedCredential;
+
+/**
+ * Representation of a V0 credential that contains additional data to provide back to caller once it
+ * is matched. The credential_id can be used by the caller to correlate it back to the full
+ * credentials details.
+ */
+typedef struct {
+  np_ffi_V0DiscoveryCredential discovery_cred;
+  np_ffi_FfiMatchedCredential matched_cred;
+} np_ffi_V0MatchableCredential;
+
+/**
+ * Cryptographic information about a particular V1 discovery credential
+ * necessary to match and decrypt encrypted V1 advertisement sections.
+ */
+typedef struct {
+  uint8_t key_seed[32];
+  uint8_t expected_unsigned_metadata_key_hmac[32];
+  uint8_t expected_signed_metadata_key_hmac[32];
+  uint8_t pub_key[32];
+} np_ffi_V1DiscoveryCredential;
+
+/**
+ * Representation of a V1 credential that contains additional data to provide back to caller once it
+ * is matched. The credential_id can be used by the caller to correlate it back to the full
+ * credentials details.
+ */
+typedef struct {
+  np_ffi_V1DiscoveryCredential discovery_cred;
+  np_ffi_FfiMatchedCredential matched_cred;
+} np_ffi_V1MatchableCredential;
 
 /**
  *A `#[repr(C)]` handle to a value of type `super::V0PayloadInternals`.
@@ -303,7 +406,7 @@ typedef struct {
 typedef struct {
   uint8_t num_des;
   np_ffi_V0Payload payload;
-  np_ffi_DeserializedV0Identity identity;
+  np_ffi_DeserializedV0IdentityKind identity_kind;
 } np_ffi_LegibleDeserializedV0Advertisement;
 
 /**
@@ -527,6 +630,10 @@ typedef struct {
  */
 typedef struct {
   /**
+   * The offset of this generic data-element.
+   */
+  uint8_t offset;
+  /**
    * The DE type code of this generic data-element.
    */
   np_ffi_V1DEType de_type;
@@ -616,6 +723,22 @@ bool np_ffi_global_config_panic_handler(void (*handler)(np_ffi_PanicReason));
 void np_ffi_global_config_set_num_shards(uint8_t num_shards);
 
 /**
+ * Sets the maximum number of active handles to credential slabs
+ * which may be active at any one time.
+ * Default value: Max value.
+ * Max value: `u32::MAX - 1`.
+ *
+ * Useful for bounding the maximum memory used by the client application
+ * on credential slabs in constrained-memory environments.
+ *
+ * Setting this value will have no effect if the handle-maps for the
+ * API have already begun being used by the client code, and any
+ * values set will take effect upon the first usage of any API
+ * call utilizing credential slabs.
+ */
+void np_ffi_global_config_set_max_num_credential_slabs(uint32_t max_num_credential_slabs);
+
+/**
  * Sets the maximum number of active handles to credential books
  * which may be active at any one time.
  * Default value: Max value.
@@ -666,9 +789,10 @@ void np_ffi_global_config_set_max_num_deserialized_v0_advertisements(uint32_t ma
 void np_ffi_global_config_set_max_num_deserialized_v1_advertisements(uint32_t max_num_deserialized_v1_advertisements);
 
 /**
- * Allocates a new credential-book, returning a handle to the created object
+ * Allocates a new credential-book from the given slab, returning a handle
+ * to the created object. The slab will be deallocated by this call.
  */
-np_ffi_CreateCredentialBookResult np_ffi_create_credential_book(void);
+np_ffi_CreateCredentialBookResult np_ffi_create_credential_book_from_slab(np_ffi_CredentialSlab slab);
 
 /**
  * Gets the tag of a `CreateCredentialBookResult` tagged enum.
@@ -682,9 +806,52 @@ np_ffi_CreateCredentialBookResultKind np_ffi_CreateCredentialBookResult_kind(np_
 np_ffi_CredentialBook np_ffi_CreateCredentialBookResult_into_SUCCESS(np_ffi_CreateCredentialBookResult result);
 
 /**
+ * Deallocates a credential-slab by its handle.
+ */
+np_ffi_DeallocateResult np_ffi_deallocate_credential_slab(np_ffi_CredentialSlab credential_slab);
+
+/**
  * Deallocates a credential-book by its handle
  */
 np_ffi_DeallocateResult np_ffi_deallocate_credential_book(np_ffi_CredentialBook credential_book);
+
+/**
+ * Allocates a new credential-slab, returning a handle to the created object
+ */
+np_ffi_CreateCredentialSlabResult np_ffi_create_credential_slab(void);
+
+/**
+ * Gets the tag of a `CreateCredentialSlabResult` tagged enum.
+ */
+np_ffi_CreateCredentialSlabResultKind np_ffi_CreateCredentialSlabResult_kind(np_ffi_CreateCredentialSlabResult result);
+
+/**
+ * Casts a `CreateCredentialSlabResult` to the `SUCCESS` variant, panicking in the
+ * case where the passed value is of a different enum variant.
+ */
+np_ffi_CredentialSlab np_ffi_CreateCredentialSlabResult_into_SUCCESS(np_ffi_CreateCredentialSlabResult result);
+
+/**
+ * Adds the given V0 discovery credential with some associated
+ * match-data to this credential slab.
+ *
+ * Safety: this is safe if the provided pointer points to a valid memory address
+ * which contains the correct len amount of bytes. The copy from the memory address isn't atomic,
+ * so concurrent modification of the array from another thread would cause undefined behavior.
+ */
+np_ffi_AddCredentialToSlabResult np_ffi_CredentialSlab_add_v0_credential(np_ffi_CredentialSlab credential_slab,
+                                                                         np_ffi_V0MatchableCredential v0_cred);
+
+/**
+ * Adds the given V1 discovery credential with some associated
+ * match-data to this credential slab.
+ *
+ * Safety: this is safe if the provided pointer points to a valid memory address
+ * which contains the correct len amount of bytes. The copy from the memory address isn't atomic,
+ * so concurrent modification of the array from another thread would cause undefined behavior.
+ */
+np_ffi_AddCredentialToSlabResult np_ffi_CredentialSlab_add_v1_credential(np_ffi_CredentialSlab credential_slab,
+                                                                         np_ffi_V1MatchableCredential v1_cred);
 
 /**
  * Attempts to deserialize an advertisement with the given service-data
@@ -751,19 +918,14 @@ uint8_t np_ffi_LegibleDeserializedV0Advertisement_get_num_des(np_ffi_LegibleDese
 np_ffi_V0Payload np_ffi_LegibleDeserializedV0Advertisement_into_payload(np_ffi_LegibleDeserializedV0Advertisement adv);
 
 /**
- * Gets just the identity information associated with a `LegibleDeserializedV0Advertisement`.
+ * Gets just the identity kind associated with a `LegibleDeserializedV0Advertisement`.
  */
-np_ffi_DeserializedV0Identity np_ffi_LegibleDeserializedV0Advertisement_into_identity(np_ffi_LegibleDeserializedV0Advertisement adv);
+np_ffi_DeserializedV0IdentityKind np_ffi_LegibleDeserializedV0Advertisement_get_identity_kind(np_ffi_LegibleDeserializedV0Advertisement adv);
 
 /**
  * Deallocates any internal data of a `LegibleDeserializedV0Advertisement`
  */
 np_ffi_DeallocateResult np_ffi_deallocate_legible_v0_advertisement(np_ffi_LegibleDeserializedV0Advertisement adv);
-
-/**
- * Gets the tag of the `DeserializedV0Identity` tagged-union.
- */
-np_ffi_DeserializedV0IdentityKind np_ffi_DeserializedV0Identity_kind(np_ffi_DeserializedV0Identity identity);
 
 /**
  * Attempts to get the data-element with the given index in the passed v0 adv payload

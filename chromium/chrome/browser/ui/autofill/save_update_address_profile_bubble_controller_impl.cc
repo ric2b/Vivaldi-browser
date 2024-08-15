@@ -178,10 +178,10 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetWindowTitle()
   return l10n_util::GetStringUTF16(IDS_AUTOFILL_UPDATE_ADDRESS_PROMPT_TITLE);
 }
 
-absl::optional<SaveUpdateAddressProfileBubbleController::HeaderImages>
+std::optional<SaveUpdateAddressProfileBubbleController::HeaderImages>
 SaveUpdateAddressProfileBubbleControllerImpl::GetHeaderImages() const {
   if (is_migration_to_account_) {
-    absl::optional<AccountInfo> account =
+    std::optional<AccountInfo> account =
         GetPrimaryAccountInfoFromBrowserContext(
             web_contents()->GetBrowserContext());
     if (account) {
@@ -202,7 +202,7 @@ SaveUpdateAddressProfileBubbleControllerImpl::GetHeaderImages() const {
         .dark = ui::ImageModel::FromResourceId(IDR_SAVE_ADDRESS_DARK)};
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetBodyText()
@@ -212,7 +212,7 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetBodyText()
         ContentAutofillClient::FromWebContents(web_contents())
             ->GetPersonalDataManager();
 
-    absl::optional<AccountInfo> account =
+    std::optional<AccountInfo> account =
         GetPrimaryAccountInfoFromBrowserContext(
             web_contents()->GetBrowserContext());
 
@@ -236,12 +236,10 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetAddressSummary()
   // a fixed set of fields and doesn't depend on libaddressinput.
   if (is_migration_to_account_) {
     static constexpr std::array fields = {
-        ServerFieldType::NAME_FULL_WITH_HONORIFIC_PREFIX,
-        ServerFieldType::ADDRESS_HOME_LINE1, ServerFieldType::EMAIL_ADDRESS,
-        ServerFieldType::PHONE_HOME_WHOLE_NUMBER};
+        NAME_FULL, ADDRESS_HOME_LINE1, EMAIL_ADDRESS, PHONE_HOME_WHOLE_NUMBER};
     std::vector<std::u16string> values;
-    for (ServerFieldType field : fields) {
-      std::u16string value = address_profile_.GetInfo(field, app_locale_);
+    for (FieldType field : fields) {
+      std::u16string value = address_profile_->GetInfo(field, app_locale_);
       if (!value.empty()) {
         values.push_back(value);
       }
@@ -252,7 +250,7 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetAddressSummary()
     return base::JoinString(values, u"\n");
   }
 
-  return GetEnvelopeStyleAddress(address_profile_, app_locale_, true, true);
+  return GetEnvelopeStyleAddress(*address_profile_, app_locale_, true, true);
 }
 
 std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetProfileEmail()
@@ -263,7 +261,7 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetProfileEmail()
     return {};
   }
 
-  return address_profile_.GetInfo(EMAIL_ADDRESS, app_locale_);
+  return address_profile_->GetInfo(EMAIL_ADDRESS, app_locale_);
 }
 
 std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetProfilePhone()
@@ -274,7 +272,7 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetProfilePhone()
     return {};
   }
 
-  return address_profile_.GetInfo(PHONE_HOME_WHOLE_NUMBER, app_locale_);
+  return address_profile_->GetInfo(PHONE_HOME_WHOLE_NUMBER, app_locale_);
 }
 
 std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetOkButtonLabel()
@@ -297,8 +295,8 @@ SaveUpdateAddressProfileBubbleControllerImpl::GetCancelCallbackValue() const {
 
 std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetFooterMessage()
     const {
-  if (address_profile_.source() == AutofillProfile::Source::kAccount) {
-    absl::optional<AccountInfo> account =
+  if (address_profile_->source() == AutofillProfile::Source::kAccount) {
+    std::optional<AccountInfo> account =
         GetPrimaryAccountInfoFromBrowserContext(
             web_contents()->GetBrowserContext());
 
@@ -315,7 +313,8 @@ std::u16string SaveUpdateAddressProfileBubbleControllerImpl::GetFooterMessage()
 
 const AutofillProfile&
 SaveUpdateAddressProfileBubbleControllerImpl::GetProfileToSave() const {
-  return address_profile_;
+  DCHECK(address_profile_);
+  return *address_profile_;
 }
 
 const AutofillProfile*
@@ -343,7 +342,7 @@ void SaveUpdateAddressProfileBubbleControllerImpl::OnEditButtonClicked() {
   EditAddressProfileDialogControllerImpl* controller =
       EditAddressProfileDialogControllerImpl::FromWebContents(web_contents());
   controller->OfferEdit(
-      address_profile_, GetOriginalProfile(), GetEditorFooterMessage(),
+      *address_profile_, GetOriginalProfile(), GetEditorFooterMessage(),
       base::BindOnce(&SaveUpdateAddressProfileBubbleController::OnUserDecision,
                      GetWeakPtr()),
       is_migration_to_account_);
@@ -414,7 +413,7 @@ void SaveUpdateAddressProfileBubbleControllerImpl::DoShowBubble() {
 std::u16string
 SaveUpdateAddressProfileBubbleControllerImpl::GetEditorFooterMessage() const {
   if (is_migration_to_account_) {
-    absl::optional<AccountInfo> account =
+    std::optional<AccountInfo> account =
         GetPrimaryAccountInfoFromBrowserContext(
             web_contents()->GetBrowserContext());
     return l10n_util::GetStringFUTF16(

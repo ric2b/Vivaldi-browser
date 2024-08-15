@@ -7,7 +7,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/test/mock_callback.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
 #include "chrome/browser/ash/file_system_provider/fake_extension_provider.h"
@@ -124,8 +124,7 @@ class DlpFilesControllerAshBrowserTest : public InProcessBrowserTest {
  protected:
   // MockDlpRulesManager is owned by KeyedService and is guaranteed to outlive
   // this class.
-  raw_ptr<MockDlpRulesManager, DanglingUntriaged | ExperimentalAsh>
-      mock_rules_manager_ = nullptr;
+  raw_ptr<MockDlpRulesManager, DanglingUntriaged> mock_rules_manager_ = nullptr;
 
   std::unique_ptr<DlpFilesControllerAsh> files_controller_ = nullptr;
 

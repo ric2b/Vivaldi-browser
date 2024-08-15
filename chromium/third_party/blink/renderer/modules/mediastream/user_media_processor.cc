@@ -214,12 +214,15 @@ void SurfaceAudioProcessingSettings(MediaStreamSource* source) {
         break;
     }
 
-    source->SetAudioProcessingProperties(echo_cancellation_mode,
-                                         properties.goog_auto_gain_control,
-                                         properties.goog_noise_suppression);
+    source->SetAudioProcessingProperties(
+        echo_cancellation_mode, properties.goog_auto_gain_control,
+        properties.goog_noise_suppression,
+        properties.voice_isolation ==
+            AudioProcessingProperties::VoiceIsolationType::
+                kVoiceIsolationEnabled);
   } else {
     // If the source is not a processed source, it could still support system
-    // echo cancellation. Surface that if it does.
+    // echo cancellation or voice. Surface that if it does.
     media::AudioParameters params = source_impl->GetAudioParameters();
     const MediaStreamSource::EchoCancellationMode echo_cancellation_mode =
         params.IsValid() &&
@@ -227,7 +230,12 @@ void SurfaceAudioProcessingSettings(MediaStreamSource* source) {
             ? MediaStreamSource::EchoCancellationMode::kSystem
             : MediaStreamSource::EchoCancellationMode::kDisabled;
 
-    source->SetAudioProcessingProperties(echo_cancellation_mode, false, false);
+    source->SetAudioProcessingProperties(
+        echo_cancellation_mode, false, false,
+        params.IsValid() &&
+            (params.effects() &
+             media::AudioParameters::VOICE_ISOLATION_SUPPORTED) &&
+            (params.effects() & media::AudioParameters::VOICE_ISOLATION));
   }
 }
 
@@ -498,8 +506,10 @@ MediaStreamComponent* UserMediaProcessor::RequestInfo::CreateAndStartVideoTrack(
   return MediaStreamVideoTrack::CreateVideoTrack(
       native_source, video_capture_settings_.track_adapter_settings(),
       video_capture_settings_.noise_reduction(), is_video_content_capture_,
-      video_capture_settings_.min_frame_rate(), video_capture_settings_.pan(),
-      video_capture_settings_.tilt(), video_capture_settings_.zoom(),
+      video_capture_settings_.min_frame_rate(),
+      video_capture_settings_.image_capture_device_settings()
+          ? &*video_capture_settings_.image_capture_device_settings()
+          : nullptr,
       pan_tilt_zoom_allowed(),
       WTF::BindOnce(&UserMediaProcessor::RequestInfo::OnTrackStarted,
                     WrapWeakPersistent(this)),
@@ -1488,6 +1498,7 @@ MediaStreamSource* UserMediaProcessor::InitializeAudioSourceObject(
   }
   capabilities.auto_gain_control = {true, false};
   capabilities.noise_suppression = {true, false};
+  capabilities.voice_isolation = {true, false};
   capabilities.sample_size = {
       media::SampleFormatToBitsPerChannel(media::kSampleFormatS16),  // min
       media::SampleFormatToBitsPerChannel(media::kSampleFormatS16)   // max
@@ -1935,13 +1946,9 @@ void UserMediaProcessor::StopAllProcessing() {
         [[fallthrough]];
 
       case RequestInfo::State::kNotSentForGeneration:
-        LogUserMediaRequestWithNoResult(
-            blink::MEDIA_STREAM_REQUEST_NOT_GENERATED);
         break;
 
       case RequestInfo::State::kGenerated:
-        LogUserMediaRequestWithNoResult(
-            blink::MEDIA_STREAM_REQUEST_PENDING_MEDIA_TRACKS);
         break;
     }
     current_request_info_ = nullptr;
@@ -2012,7 +2019,7 @@ bool UserMediaProcessor::HasActiveSources() const {
   return !local_sources_.empty();
 }
 
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 void UserMediaProcessor::FocusCapturedSurface(const String& label, bool focus) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   GetMediaStreamDispatcherHost()->FocusCapturedSurface(label, focus);

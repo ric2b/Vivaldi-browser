@@ -45,10 +45,7 @@ namespace copy_output {
 struct RenderPassGeometry;
 }  // namespace copy_output
 
-// This class extends the OutputSurface for SkiaRenderer needs. In future, the
-// SkiaRenderer will be the only renderer. When other renderers are removed,
-// we will replace OutputSurface with SkiaOutputSurface, and remove all
-// OutputSurface's methods which are not useful for SkiaRenderer.
+// This class extends the OutputSurface for SkiaRenderer needs.
 class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
                                              public ExternalUseClient {
  public:
@@ -80,7 +77,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
   // original color space needed for yuv to rgb conversion.
   virtual void MakePromiseSkImage(
       ExternalUseClient::ImageContext* image_context,
-      const gfx::ColorSpace& yuv_color_space) = 0;
+      const gfx::ColorSpace& yuv_color_space,
+      bool force_rgbx) = 0;
 
   // Make a promise SkImage from the given |contexts| and |image_color_space|.
   // The number of contexts provided should match the number of planes indicated
@@ -109,7 +107,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
                                          const gfx::Size& size,
                                          SharedImageFormat format,
                                          RenderPassAlphaType alpha_type,
-                                         bool mipmap,
+                                         skgpu::Mipmapped mipmap,
                                          bool scanout_dcomp_surface,
                                          sk_sp<SkColorSpace> color_space,
                                          bool is_overlay,
@@ -222,6 +220,10 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
 
   // Enqueue a GPU task to delete the specified shared image.
   virtual void DestroySharedImage(const gpu::Mailbox& mailbox) = 0;
+
+  // Enqueue a GPU task to set specified shared image as `purgeable`.
+  virtual void SetSharedImagePurgeable(const gpu::Mailbox& mailbox,
+                                       bool purgeable) = 0;
 
   virtual bool SupportsBGRA() const = 0;
 };

@@ -20,7 +20,7 @@
 #include "core/fpdfapi/parser/cpdf_array.h"
 #include "core/fpdfapi/parser/cpdf_document.h"
 #include "core/fpdfapi/render/cpdf_type3cache.h"
-#include "core/fxcrt/fixed_uninit_data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "core/fxge/win32/cfx_psfonttracker.h"
@@ -98,15 +98,15 @@ RetainPtr<CPDF_TransferFunc> CPDF_DocRenderData::CreateTransferFunc(
   std::fill(std::begin(output), std::end(output), 0.0f);
 
   bool bIdentity = true;
-  FixedUninitDataVector<uint8_t> samples_r(
+  auto samples_r = FixedSizeDataVector<uint8_t>::Uninit(
       CPDF_TransferFunc::kChannelSampleSize);
-  FixedUninitDataVector<uint8_t> samples_g(
+  auto samples_g = FixedSizeDataVector<uint8_t>::Uninit(
       CPDF_TransferFunc::kChannelSampleSize);
-  FixedUninitDataVector<uint8_t> samples_b(
+  auto samples_b = FixedSizeDataVector<uint8_t>::Uninit(
       CPDF_TransferFunc::kChannelSampleSize);
-  std::array<pdfium::span<uint8_t>, 3> samples = {samples_r.writable_span(),
-                                                  samples_g.writable_span(),
-                                                  samples_b.writable_span()};
+
+  std::array<pdfium::span<uint8_t>, 3> samples = {
+      samples_r.span(), samples_g.span(), samples_b.span()};
   if (pArray) {
     for (size_t v = 0; v < CPDF_TransferFunc::kChannelSampleSize; ++v) {
       float input = static_cast<float>(v) / 255.0f;
@@ -115,7 +115,7 @@ RetainPtr<CPDF_TransferFunc> CPDF_DocRenderData::CreateTransferFunc(
           samples[i][v] = v;
           continue;
         }
-        pFuncs[i]->Call(pdfium::make_span(&input, 1u), output);
+        pFuncs[i]->Call(pdfium::span_from_ref(input), output);
         size_t o = FXSYS_roundf(output[0] * 255);
         if (o != v)
           bIdentity = false;
@@ -126,7 +126,7 @@ RetainPtr<CPDF_TransferFunc> CPDF_DocRenderData::CreateTransferFunc(
     for (size_t v = 0; v < CPDF_TransferFunc::kChannelSampleSize; ++v) {
       float input = static_cast<float>(v) / 255.0f;
       if (pFuncs[0]->CountOutputs() <= kMaxOutputs)
-        pFuncs[0]->Call(pdfium::make_span(&input, 1u), output);
+        pFuncs[0]->Call(pdfium::span_from_ref(input), output);
       size_t o = FXSYS_roundf(output[0] * 255);
       if (o != v)
         bIdentity = false;

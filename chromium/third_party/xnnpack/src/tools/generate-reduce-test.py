@@ -30,7 +30,7 @@ parser.set_defaults(defines=list())
 
 
 def split_ukernel_name(name):
-  match = re.fullmatch(r"xnn_(f16|f16_f32acc|f32)_r(minmax|max|min|sum)_ukernel__(.+)_u(\d+)(_acc\d+)?", name)
+  match = re.fullmatch(r"xnn_(f16|f16_f32acc|f32|u8)_r(minmax|max|min|sum)_ukernel__(.+)_u(\d+)(_acc\d+)?", name)
   if match is None:
     raise ValueError("Unexpected microkernel name: " + name)
   op_type = {
@@ -177,14 +177,7 @@ def main(args):
                                       batch_tile, isa)
       tests += "\n\n" + xnncommon.postprocess_test_case(test_case, arch, isa)
 
-    txt_changed = True
-    if os.path.exists(options.output):
-      with codecs.open(options.output, "r", encoding="utf-8") as output_file:
-        txt_changed = output_file.read() != tests
-
-    if txt_changed:
-      with codecs.open(options.output, "w", encoding="utf-8") as output_file:
-        output_file.write(tests)
+    xnncommon.overwrite_if_changed(options.output, tests)
 
 
 if __name__ == "__main__":

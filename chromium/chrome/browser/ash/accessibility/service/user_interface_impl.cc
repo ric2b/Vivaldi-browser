@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ash/accessibility/service/user_interface_impl.h"
 
-#include "ash/public/cpp/accessibility_controller.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/public/cpp/accessibility_focus_ring_info.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "content/public/common/color_parser.h"
@@ -36,7 +36,7 @@ void UserInterfaceImpl::OpenSettingsSubpage(const std::string& subpage) {
 void UserInterfaceImpl::ShowConfirmationDialog(
     const std::string& title,
     const std::string& description,
-    const absl::optional<std::string>& cancel_name,
+    const std::optional<std::string>& cancel_name,
     ShowConfirmationDialogCallback callback) {
   // If a dialog is already being shown we do not show a new one.
   // Instead, return false through the callback on the new dialog

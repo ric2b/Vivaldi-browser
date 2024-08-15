@@ -22,7 +22,7 @@ Browser* FindBrowserForEmbedderWebContents(const WebContents* web_contents) {
 
 VivaldiBrowserWindow* FindWindowForEmbedderWebContents(
     const content::WebContents* web_contents) {
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
     if (window && window->web_contents() == web_contents) {
       return window;
@@ -79,7 +79,7 @@ Browser* FindBrowserByWindowId(SessionID::id_type window_id) {
 
 int GetBrowserCountOfType(Browser::Type type) {
   int count = 0;
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->type() == type) {
       count++;
     }

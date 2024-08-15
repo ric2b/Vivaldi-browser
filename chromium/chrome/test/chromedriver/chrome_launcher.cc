@@ -196,7 +196,8 @@ Status PrepareDesktopCommandLine(const Capabilities& capabilities,
     LOG(WARNING) << "excluding remote-debugging-port switch is not supported";
   }
   if (switches.HasSwitch("user-data-dir")) {
-    if (switches.HasSwitch("headless")) {
+    if (capabilities.browser_name == kHeadlessShellCapabilityName ||
+        switches.HasSwitch("headless")) {
       // The old headless mode fails to start without a starting page provided
       // See: https://crbug.com/1414672
       // TODO(https://crbub.com/chromedriver/4358): Remove this workaround
@@ -1068,7 +1069,7 @@ Status ProcessExtension(const std::string& extension,
   std::string manifest_data;
   if (!base::ReadFileToString(manifest_path, &manifest_data))
     return Status(kUnknownError, "cannot read manifest");
-  absl::optional<base::Value> manifest_value =
+  std::optional<base::Value> manifest_value =
       base::JSONReader::Read(manifest_data);
   base::Value::Dict* manifest =
       manifest_value ? manifest_value->GetIfDict() : nullptr;

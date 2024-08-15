@@ -265,9 +265,7 @@ export class DOMDebuggerModel extends SDKModel<EventTypes> {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   DOMBreakpointAdded = 'DOMBreakpointAdded',
   DOMBreakpointToggled = 'DOMBreakpointToggled',
   DOMBreakpointsRemoved = 'DOMBreakpointsRemoved',
@@ -391,8 +389,6 @@ export class EventListener {
 
       return this.#eventTarget
                  .callFunction(
-                     // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-                     // @ts-expect-error
                      removeListener,
                      [
                        RemoteObject.toCallArgument(this.#typeInternal),
@@ -411,8 +407,6 @@ export class EventListener {
 
       return this.#customRemoveFunction
           .callFunction(
-              // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-              // @ts-expect-error
               callCustomRemove,
               [
                 RemoteObject.toCallArgument(this.#typeInternal),
@@ -432,8 +426,6 @@ export class EventListener {
   togglePassive(): Promise<undefined> {
     return this.#eventTarget
         .callFunction(
-            // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-            // @ts-expect-error
             callTogglePassive,
             [
               RemoteObject.toCallArgument(this.#typeInternal),
@@ -474,9 +466,7 @@ export class EventListener {
 }
 
 export namespace EventListener {
-  // TODO(crbug.com/1167717): Make this a const enum again
-  // eslint-disable-next-line rulesdir/const_enum
-  export enum Origin {
+  export const enum Origin {
     Raw = 'Raw',
     Framework = 'Framework',
     FrameworkUser = 'FrameworkUser',

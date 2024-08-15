@@ -27,6 +27,7 @@
 #include "components/autofill/core/common/autofill_regex_constants.h"
 #include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -412,7 +413,7 @@ void ParseUsingPredictions(std::vector<ProcessedField>* processed_fields,
   for (const PasswordFieldPrediction& prediction : predictions.fields) {
     ProcessedField* processed_field = nullptr;
 
-    CredentialFieldType field_type = DeriveFromServerFieldType(prediction.type);
+    CredentialFieldType field_type = DeriveFromFieldType(prediction.type);
     bool is_password_prediction = IsPasswordPrediction(field_type);
     if (mode == FormDataParser::Mode::kSaving && is_password_prediction &&
         !base::FeatureList::IsEnabled(
@@ -438,12 +439,10 @@ void ParseUsingPredictions(std::vector<ProcessedField>* processed_fields,
         if (processed_field) {
           result->username = processed_field->field;
           result->is_single_username = true;
-          result->ClearAllPasswordFields();
           base::UmaHistogramBoolean(
               "PasswordManager.SingleUsername."
               "ForgotPasswordServerPredictionUsed",
               prediction.type == autofill::SINGLE_USERNAME_FORGOT_PASSWORD);
-          return;
         }
         break;
       case CredentialFieldType::kCurrentPassword:
@@ -489,6 +488,20 @@ void ParseUsingPredictions(std::vector<ProcessedField>* processed_fields,
     }
   }
 
+  if (result->is_single_username) {
+    if (mode == FormDataParser::Mode::kSaving &&
+        (result->password || result->new_password)) {
+      // Contradicting predictions were received: the form was predicted to be
+      // both a single username form and a password form. Prioritize saving
+      // the password.
+      result->username = nullptr;
+      result->is_single_username = false;
+    } else {
+      result->ClearAllPasswordFields();
+      return;
+    }
+  }
+
   if (!result->new_password || !result->password)
     prevent_handling_two_usernames = true;
 
@@ -514,6 +527,8 @@ void ParseUsingPredictions(std::vector<ProcessedField>* processed_fields,
 
   // For the use of basic heuristics, also mark CVC fields and NOT_PASSWORD
   // fields as such.
+  // TODO(crbug/1507825): Treat non-password related fields as not password and
+  // not username fields.
   for (const PasswordFieldPrediction& prediction : predictions.fields) {
     ProcessedField* current_field = FindField(processed_fields, prediction);
     if (!current_field)
@@ -521,8 +536,10 @@ void ParseUsingPredictions(std::vector<ProcessedField>* processed_fields,
     if (prediction.type == autofill::CREDIT_CARD_VERIFICATION_CODE ||
         prediction.type == autofill::CREDIT_CARD_NUMBER) {
       current_field->server_hints_credit_card_field = true;
-    } else if (prediction.type == autofill::NOT_PASSWORD ||
-               prediction.type == autofill::ONE_TIME_CODE) {
+    } else if (prediction.type == autofill::ONE_TIME_CODE) {
+      current_field->server_hints_not_password = true;
+      current_field->server_hints_not_username = true;
+    } else if (prediction.type == autofill::NOT_PASSWORD) {
       current_field->server_hints_not_password = true;
     } else if (prediction.type == autofill::NOT_USERNAME) {
       current_field->server_hints_not_username = true;
@@ -1000,7 +1017,7 @@ std::vector<ProcessedField> ProcessFields(
 // |form_predictions| has |may_use_prefilled_placeholder| == true for the
 // username field.
 bool GetMayUsePrefilledPlaceholder(
-    const absl::optional<FormPredictions>& form_predictions,
+    const std::optional<FormPredictions>& form_predictions,
     const SignificantFields& significant_fields) {
   if (!form_predictions || !significant_fields.username)
     return false;
@@ -1027,7 +1044,7 @@ std::unique_ptr<PasswordForm> AssemblePasswordForm(
     const SignificantFields& significant_fields,
     AlternativeElementVector all_alternative_passwords,
     AlternativeElementVector all_alternative_usernames,
-    const absl::optional<FormPredictions>& form_predictions) {
+    const std::optional<FormPredictions>& form_predictions) {
   if (!significant_fields.HasPasswords() &&
       !significant_fields.is_single_username &&
       !significant_fields.accepts_webauthn_credentials) {
@@ -1065,6 +1082,10 @@ std::unique_ptr<PasswordForm> AssemblePasswordForm(
   // Set data related to specific fields.
   SetFields(significant_fields, result.get());
   return result;
+}
+
+bool FieldValueIsTooShortForSaving(const FormFieldData* field) {
+  return field && GetFieldValue(*field).size() <= 1;
 }
 
 }  // namespace
@@ -1192,6 +1213,15 @@ FormDataParser::ParseAndReturnUsernameDetection(
   base::UmaHistogramEnumeration("PasswordManager.UsernameDetectionMethod",
                                 method);
 
+  // OTPs and PIN codes are usually split across several 1-digit fields.
+  // Don't automatically show Save/Update prompt in such case.
+  if (mode == Mode::kSaving &&
+      ((!significant_fields.new_password &&
+        FieldValueIsTooShortForSaving(significant_fields.password)) ||
+       FieldValueIsTooShortForSaving(significant_fields.new_password))) {
+    significant_fields.is_fallback = true;
+  }
+
   return {
       AssemblePasswordForm(form_data, significant_fields,
                            std::move(all_alternative_passwords),
@@ -1224,7 +1254,8 @@ const FormFieldData* FindUsernameInPredictions(
   for (autofill::FieldRendererId predicted_id : username_predictions) {
     auto iter = base::ranges::find_if(
         processed_fields, [&](const ProcessedField& processed_field) {
-          return processed_field.field->unique_renderer_id == predicted_id &&
+          return !IsNotUsernameField(processed_field) &&
+                 (processed_field.field->unique_renderer_id == predicted_id) &&
                  MatchesInteractability(processed_field, username_max);
         });
     if (iter != processed_fields.end()) {

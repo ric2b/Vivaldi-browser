@@ -45,9 +45,8 @@ GrGpu::~GrGpu() {
     this->callSubmittedProcs(false);
 }
 
-void GrGpu::initCapsAndCompiler(sk_sp<const GrCaps> caps) {
+void GrGpu::initCaps(sk_sp<const GrCaps> caps) {
     fCaps = std::move(caps);
-    fCompiler = std::make_unique<SkSL::Compiler>(fCaps->shaderCaps());
 }
 
 void GrGpu::disconnect(DisconnectType type) {}
@@ -403,7 +402,7 @@ sk_sp<GrGpuBuffer> GrGpu::createBuffer(size_t size,
         return nullptr;
     }
     sk_sp<GrGpuBuffer> buffer = this->onCreateBuffer(size, intendedType, accessPattern);
-    if (!this->caps()->reuseScratchBuffers()) {
+    if (buffer && !this->caps()->reuseScratchBuffers()) {
         buffer->resourcePriv().removeScratchKey();
     }
     return buffer;

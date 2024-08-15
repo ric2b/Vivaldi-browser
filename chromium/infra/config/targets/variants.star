@@ -195,6 +195,20 @@ targets.variant(
 )
 
 targets.variant(
+    name = "SIM_IPAD_AIR_5TH_GEN_17_2",
+    identifier = "iPad Air (5th generation) 17.2",
+    mixins = [
+        "ios_runtime_cache_17_2",
+    ],
+    args = [
+        "--platform",
+        "iPad Air (5th generation)",
+        "--version",
+        "17.2",
+    ],
+)
+
+targets.variant(
     name = "SIM_IPAD_PRO_6TH_GEN_16_4",
     identifier = "iPad Pro (12.9-inch) (6th generation) 16.4",
     mixins = [
@@ -307,6 +321,20 @@ targets.variant(
 )
 
 targets.variant(
+    name = "SIM_IPHONE_14_17_2",
+    identifier = "iPhone 14 17.2",
+    mixins = [
+        "ios_runtime_cache_17_2",
+    ],
+    args = [
+        "--platform",
+        "iPhone 14",
+        "--version",
+        "17.2",
+    ],
+)
+
+targets.variant(
     name = "SIM_IPHONE_14_PLUS_16_4",
     identifier = "iPhone 14 Plus 16.4",
     mixins = [
@@ -405,6 +433,20 @@ targets.variant(
 )
 
 targets.variant(
+    name = "SIM_IPHONE_SE_3RD_GEN_17_2",
+    identifier = "iPhone SE (3rd generation) 17.2",
+    mixins = [
+        "ios_runtime_cache_17_2",
+    ],
+    args = [
+        "--platform",
+        "iPhone SE (3rd generation)",
+        "--version",
+        "17.2",
+    ],
+)
+
+targets.variant(
     name = "SIM_IPHONE_X_15_5",
     identifier = "iPhone X 15.5",
     mixins = [
@@ -477,25 +519,6 @@ targets.variant(
 )
 
 targets.variant(
-    name = "LACROS_EVE",
-    identifier = "eve",
-    args = [
-        "--board=eve",
-        "--flash",
-    ],
-    # TODO: crbug.com/1479528 - We have limited eve ChromeOS capacity in
-    # swarming, switch the try builders to use skylab or add additional ChromeOS
-    # capacity if we want to test eve on the CQ
-    ci_only = True,
-    swarming = targets.swarming(
-        dimensions = {
-            "os": "ChromeOS",
-            "device_type": "eve",
-        },
-    ),
-)
-
-targets.variant(
     name = "WIN10_INTEL_UHD_630_STABLE",
     identifier = "8086:9bc5",
     mixins = [
@@ -531,9 +554,9 @@ targets.variant(
         "--chromedriver",
         "chromedriver",
         "--binary",
-        "Chromium.app/Contents/MacOS/Chromium",
+        "Google Chrome.app/Contents/MacOS/Google Chrome",
     ],
-    win64_args = [
+    win_args = [
         "--chromedriver",
         "chromedriver.exe",
         "--binary",

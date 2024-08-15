@@ -36,10 +36,10 @@ namespace internal {
 template <typename Impl>
 template <AllocationType allocation>
 Handle<HeapNumber> FactoryBase<Impl>::NewHeapNumber() {
-  static_assert(HeapNumber::kSize <= kMaxRegularHeapObjectSize);
+  static_assert(sizeof(HeapNumber) <= kMaxRegularHeapObjectSize);
   Tagged<Map> map = read_only_roots().heap_number_map();
   Tagged<HeapObject> result = AllocateRawWithImmortalMap(
-      HeapNumber::kSize, allocation, map, kDoubleUnaligned);
+      sizeof(HeapNumber), allocation, map, kDoubleUnaligned);
   return handle(Tagged<HeapNumber>::cast(result), isolate());
 }
 
@@ -76,13 +76,13 @@ Handle<AccessorPair> FactoryBase<Impl>::NewAccessorPair() {
 
 template <typename Impl>
 Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
-  Isolate* isolate_for_sandbox = impl()->isolate_for_sandbox();
+  Handle<CodeWrapper> wrapper = NewCodeWrapper();
   Tagged<Map> map = read_only_roots().code_map();
   int size = map->instance_size();
   Tagged<Code> code = Tagged<Code>::cast(
-      AllocateRawWithImmortalMap(size, AllocationType::kOld, map));
+      AllocateRawWithImmortalMap(size, AllocationType::kTrusted, map));
   DisallowGarbageCollection no_gc;
-  code->init_instruction_start(isolate_for_sandbox, kNullAddress);
+  code->init_self_indirect_pointer(isolate());
   code->initialize_flags(options.kind, options.is_turbofanned,
                          options.stack_slots);
   code->set_builtin_id(options.builtin);
@@ -113,17 +113,32 @@ Handle<Code> FactoryBase<Impl>::NewCode(const NewCodeOptions& options) {
         "Setting the instruction_stream can trigger a write to the marking "
         "bitmap.");
     DCHECK_EQ(options.instruction_start, kNullAddress);
-    code->SetInstructionStreamAndInstructionStart(isolate_for_sandbox,
-                                                  *istream);
+    code->SetInstructionStreamAndInstructionStart(isolate(), *istream);
   } else {
     DCHECK_NE(options.instruction_start, kNullAddress);
     code->set_raw_instruction_stream(Smi::zero(), SKIP_WRITE_BARRIER);
-    code->SetInstructionStartForOffHeapBuiltin(isolate_for_sandbox,
+    code->SetInstructionStartForOffHeapBuiltin(isolate(),
                                                options.instruction_start);
   }
 
+  wrapper->set_code(code);
+  code->set_wrapper(*wrapper);
+
   code->clear_padding();
   return handle(code, isolate());
+}
+
+template <typename Impl>
+Handle<CodeWrapper> FactoryBase<Impl>::NewCodeWrapper() {
+  Handle<CodeWrapper> wrapper(
+      CodeWrapper::cast(NewWithImmortalMap(read_only_roots().code_wrapper_map(),
+                                           AllocationType::kOld)),
+      isolate());
+  // The CodeWrapper is typically created before the Code object it wraps, so
+  // the code field cannot yet be set. However, as a heap verifier might see
+  // the wrapper before the field can be set, we need to clear the field here.
+  wrapper->clear_code();
+  return wrapper;
 }
 
 template <typename Impl>
@@ -133,8 +148,13 @@ Handle<FixedArray> FactoryBase<Impl>::NewFixedArray(int length,
 }
 
 template <typename Impl>
+Handle<TrustedFixedArray> FactoryBase<Impl>::NewTrustedFixedArray(int length) {
+  return TrustedFixedArray::New(isolate(), length);
+}
+
+template <typename Impl>
 Handle<FixedArray> FactoryBase<Impl>::NewFixedArrayWithMap(
-    Handle<Map> map, int length, AllocationType allocation) {
+    DirectHandle<Map> map, int length, AllocationType allocation) {
   // Zero-length case must be handled outside, where the knowledge about
   // the map is.
   DCHECK_LT(0, length);
@@ -154,7 +174,7 @@ Handle<FixedArray> FactoryBase<Impl>::NewFixedArrayWithHoles(
 
 template <typename Impl>
 Handle<FixedArray> FactoryBase<Impl>::NewFixedArrayWithFiller(
-    Handle<Map> map, int length, Handle<HeapObject> filler,
+    DirectHandle<Map> map, int length, DirectHandle<HeapObject> filler,
     AllocationType allocation) {
   Tagged<HeapObject> result = AllocateRawFixedArray(length, allocation);
   DisallowGarbageCollection no_gc;
@@ -223,6 +243,11 @@ Handle<ByteArray> FactoryBase<Impl>::NewByteArray(int length,
 }
 
 template <typename Impl>
+Handle<TrustedByteArray> FactoryBase<Impl>::NewTrustedByteArray(int length) {
+  return TrustedByteArray::New(isolate(), length);
+}
+
+template <typename Impl>
 Handle<ExternalPointerArray> FactoryBase<Impl>::NewExternalPointerArray(
     int length, AllocationType allocation) {
   if (length < 0 || length > ExternalPointerArray::kMaxLength) {
@@ -263,7 +288,8 @@ FactoryBase<Impl>::NewDeoptimizationFrameTranslation(int length) {
 template <typename Impl>
 Handle<BytecodeArray> FactoryBase<Impl>::NewBytecodeArray(
     int length, const uint8_t* raw_bytecodes, int frame_size,
-    int parameter_count, Handle<FixedArray> constant_pool) {
+    int parameter_count, DirectHandle<FixedArray> constant_pool,
+    DirectHandle<TrustedByteArray> handler_table) {
   if (length < 0 || length > BytecodeArray::kMaxLength) {
     FATAL("Fatal JavaScript invalid size error %d", length);
     UNREACHABLE();
@@ -272,38 +298,74 @@ Handle<BytecodeArray> FactoryBase<Impl>::NewBytecodeArray(
   // too.
   DCHECK(!Heap::InYoungGeneration(*constant_pool));
 
+  Handle<BytecodeWrapper> wrapper = NewBytecodeWrapper();
   int size = BytecodeArray::SizeFor(length);
   Tagged<HeapObject> result = AllocateRawWithImmortalMap(
-      size, AllocationType::kOld, read_only_roots().bytecode_array_map());
+      size, AllocationType::kTrusted, read_only_roots().bytecode_array_map());
   DisallowGarbageCollection no_gc;
-  Tagged<BytecodeArray> instance = Tagged<BytecodeArray>::cast(result);
-  instance->init_self_indirect_pointer(isolate()->AsLocalIsolate());
+  Tagged<BytecodeArray> instance = BytecodeArray::cast(result);
+  instance->init_self_indirect_pointer(isolate());
   instance->set_length(length);
   instance->set_frame_size(frame_size);
   instance->set_parameter_count(parameter_count);
   instance->set_incoming_new_target_or_generator_register(
       interpreter::Register::invalid_value());
   instance->set_constant_pool(*constant_pool);
-  instance->set_handler_table(read_only_roots().empty_byte_array(),
-                              SKIP_WRITE_BARRIER);
+  instance->set_handler_table(*handler_table);
+  instance->set_wrapper(*wrapper);
   instance->set_source_position_table(read_only_roots().undefined_value(),
                                       kReleaseStore, SKIP_WRITE_BARRIER);
   CopyBytes(reinterpret_cast<uint8_t*>(instance->GetFirstBytecodeAddress()),
             raw_bytecodes, length);
   instance->clear_padding();
+  wrapper->set_bytecode(instance);
   return handle(instance, isolate());
 }
 
 template <typename Impl>
-Handle<Script> FactoryBase<Impl>::NewScript(Handle<PrimitiveHeapObject> source,
-                                            ScriptEventType script_event_type) {
+Handle<BytecodeWrapper> FactoryBase<Impl>::NewBytecodeWrapper() {
+  Handle<BytecodeWrapper> wrapper(
+      BytecodeWrapper::cast(NewWithImmortalMap(
+          read_only_roots().bytecode_wrapper_map(), AllocationType::kOld)),
+      isolate());
+  // The BytecodeWrapper is typically created before the BytecodeArray it
+  // wraps, so the bytecode field cannot yet be set. However, as a heap
+  // verifier might see the wrapper before the field can be set, we need to
+  // clear the field here.
+  wrapper->clear_bytecode();
+  wrapper->clear_padding();
+  return wrapper;
+}
+
+#if V8_ENABLE_WEBASSEMBLY
+template <typename Impl>
+Handle<WasmTrustedInstanceData>
+FactoryBase<Impl>::NewWasmTrustedInstanceData() {
+  Tagged<WasmTrustedInstanceData> result =
+      WasmTrustedInstanceData::cast(AllocateRawWithImmortalMap(
+          WasmTrustedInstanceData::kSize, AllocationType::kTrusted,
+          read_only_roots().wasm_trusted_instance_data_map()));
+  DisallowGarbageCollection no_gc;
+  result->init_self_indirect_pointer(isolate());
+  result->clear_padding();
+  for (int offset : WasmTrustedInstanceData::kTaggedFieldOffsets) {
+    result->RawField(offset).store(read_only_roots().undefined_value());
+  }
+  return handle(result, isolate());
+}
+#endif  // V8_ENABLE_WEBASSEMBLY
+
+template <typename Impl>
+Handle<Script> FactoryBase<Impl>::NewScript(
+    DirectHandle<PrimitiveHeapObject> source,
+    ScriptEventType script_event_type) {
   return NewScriptWithId(source, isolate()->GetNextScriptId(),
                          script_event_type);
 }
 
 template <typename Impl>
 Handle<Script> FactoryBase<Impl>::NewScriptWithId(
-    Handle<PrimitiveHeapObject> source, int script_id,
+    DirectHandle<PrimitiveHeapObject> source, int script_id,
     ScriptEventType script_event_type) {
   DCHECK(IsString(*source) || IsUndefined(*source));
   // Create and initialize script object.
@@ -342,8 +404,8 @@ Handle<Script> FactoryBase<Impl>::NewScriptWithId(
 
 template <typename Impl>
 Handle<SloppyArgumentsElements> FactoryBase<Impl>::NewSloppyArgumentsElements(
-    int length, Handle<Context> context, Handle<FixedArray> arguments,
-    AllocationType allocation) {
+    int length, DirectHandle<Context> context,
+    DirectHandle<FixedArray> arguments, AllocationType allocation) {
   Tagged<SloppyArgumentsElements> result =
       SloppyArgumentsElements::cast(AllocateRawWithImmortalMap(
           SloppyArgumentsElements::SizeFor(length), allocation,
@@ -367,11 +429,10 @@ Handle<ArrayList> FactoryBase<Impl>::NewArrayList(int size,
 
 template <typename Impl>
 Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfoForLiteral(
-    FunctionLiteral* literal, Handle<Script> script, bool is_toplevel) {
+    FunctionLiteral* literal, DirectHandle<Script> script, bool is_toplevel) {
   FunctionKind kind = literal->kind();
   Handle<SharedFunctionInfo> shared = NewSharedFunctionInfo(
-      literal->GetName(isolate()), MaybeHandle<HeapObject>(),
-      Builtin::kCompileLazy, kind);
+      literal->GetName(isolate()), {}, Builtin::kCompileLazy, kind);
   SharedFunctionInfo::InitFromFunctionLiteral(isolate(), shared, literal,
                                               is_toplevel);
   shared->SetScript(read_only_roots(), *script, literal->function_literal_id(),
@@ -381,7 +442,7 @@ Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfoForLiteral(
 
 template <typename Impl>
 Handle<SharedFunctionInfo> FactoryBase<Impl>::CloneSharedFunctionInfo(
-    Handle<SharedFunctionInfo> other) {
+    DirectHandle<SharedFunctionInfo> other) {
   Tagged<Map> map = read_only_roots().shared_function_info_map();
 
   Tagged<SharedFunctionInfo> shared =
@@ -389,7 +450,7 @@ Handle<SharedFunctionInfo> FactoryBase<Impl>::CloneSharedFunctionInfo(
   DisallowGarbageCollection no_gc;
 
   shared->clear_padding();
-  shared->CopyFrom(*other);
+  shared->CopyFrom(*other, isolate());
 
   return handle(shared, isolate());
 }
@@ -454,14 +515,15 @@ FactoryBase<Impl>::NewUncompiledDataWithPreparseDataAndJob(
 
 template <typename Impl>
 Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfo(
-    MaybeHandle<String> maybe_name, MaybeHandle<HeapObject> maybe_function_data,
-    Builtin builtin, FunctionKind kind) {
+    MaybeDirectHandle<String> maybe_name,
+    MaybeDirectHandle<HeapObject> maybe_function_data, Builtin builtin,
+    FunctionKind kind) {
   Handle<SharedFunctionInfo> shared =
       NewSharedFunctionInfo(AllocationType::kOld);
   DisallowGarbageCollection no_gc;
   Tagged<SharedFunctionInfo> raw = *shared;
   // Function names are assumed to be flat elsewhere.
-  Handle<String> shared_name;
+  DirectHandle<String> shared_name;
   bool has_shared_name = maybe_name.ToHandle(&shared_name);
   if (has_shared_name) {
     DCHECK(shared_name->IsFlat());
@@ -471,13 +533,15 @@ Handle<SharedFunctionInfo> FactoryBase<Impl>::NewSharedFunctionInfo(
               SharedFunctionInfo::kNoSharedNameSentinel);
   }
 
-  Handle<HeapObject> function_data;
+  DirectHandle<HeapObject> function_data;
   if (maybe_function_data.ToHandle(&function_data)) {
     // If we pass function_data then we shouldn't pass a builtin index, and
     // the function_data should not be code with a builtin.
     DCHECK(!Builtins::IsBuiltinId(builtin));
     DCHECK(!IsInstructionStream(*function_data));
-    raw->set_function_data(*function_data, kReleaseStore);
+    DCHECK(!IsCode(*function_data));
+    raw->SetData(*function_data, kReleaseStore,
+                 SharedFunctionInfo::DataType::kRegular);
   } else if (Builtins::IsBuiltinId(builtin)) {
     raw->set_builtin_id(builtin);
   } else {
@@ -508,7 +572,7 @@ FactoryBase<Impl>::NewObjectBoilerplateDescription(int boilerplate,
 template <typename Impl>
 Handle<ArrayBoilerplateDescription>
 FactoryBase<Impl>::NewArrayBoilerplateDescription(
-    ElementsKind elements_kind, Handle<FixedArrayBase> constant_values) {
+    ElementsKind elements_kind, DirectHandle<FixedArrayBase> constant_values) {
   auto result = NewStructInternal<ArrayBoilerplateDescription>(
       ARRAY_BOILERPLATE_DESCRIPTION_TYPE, AllocationType::kOld);
   DisallowGarbageCollection no_gc;
@@ -519,9 +583,9 @@ FactoryBase<Impl>::NewArrayBoilerplateDescription(
 
 template <typename Impl>
 Handle<RegExpBoilerplateDescription>
-FactoryBase<Impl>::NewRegExpBoilerplateDescription(Handle<FixedArray> data,
-                                                   Handle<String> source,
-                                                   Tagged<Smi> flags) {
+FactoryBase<Impl>::NewRegExpBoilerplateDescription(
+    DirectHandle<FixedArray> data, DirectHandle<String> source,
+    Tagged<Smi> flags) {
   auto result = NewStructInternal<RegExpBoilerplateDescription>(
       REG_EXP_BOILERPLATE_DESCRIPTION_TYPE, AllocationType::kOld);
   DisallowGarbageCollection no_gc;
@@ -534,7 +598,8 @@ FactoryBase<Impl>::NewRegExpBoilerplateDescription(Handle<FixedArray> data,
 template <typename Impl>
 Handle<TemplateObjectDescription>
 FactoryBase<Impl>::NewTemplateObjectDescription(
-    Handle<FixedArray> raw_strings, Handle<FixedArray> cooked_strings) {
+    DirectHandle<FixedArray> raw_strings,
+    DirectHandle<FixedArray> cooked_strings) {
   DCHECK_EQ(raw_strings->length(), cooked_strings->length());
   DCHECK_LT(0, raw_strings->length());
   auto result = NewStructInternal<TemplateObjectDescription>(
@@ -688,7 +753,7 @@ MaybeHandle<SeqStringT> FactoryBase<Impl>::NewRawStringWithMap(
   }
   DCHECK_GT(length, 0);  // Use Factory::empty_string() instead.
   int size = SeqStringT::SizeFor(length);
-  DCHECK_GE(SeqStringT::kMaxSize, size);
+  DCHECK_GE(ObjectTraits<SeqStringT>::kMaxSize, size);
 
   Tagged<SeqStringT> string =
       SeqStringT::cast(AllocateRawWithImmortalMap(size, allocation, map));
@@ -782,14 +847,14 @@ MaybeHandle<String> FactoryBase<Impl>::NewConsString(
       uint8_t* dest = result->GetChars(no_gc, access_guard);
       // Copy left part.
       {
-        const uint8_t* src = left->template GetDirectStringChars<uint8_t>(
-            isolate(), no_gc, access_guard);
+        const uint8_t* src =
+            left->template GetDirectStringChars<uint8_t>(no_gc, access_guard);
         CopyChars(dest, src, left_length);
       }
       // Copy right part.
       {
-        const uint8_t* src = right->template GetDirectStringChars<uint8_t>(
-            isolate(), no_gc, access_guard);
+        const uint8_t* src =
+            right->template GetDirectStringChars<uint8_t>(no_gc, access_guard);
         CopyChars(dest + left_length, src, right_length);
       }
       return result;
@@ -801,10 +866,9 @@ MaybeHandle<String> FactoryBase<Impl>::NewConsString(
     DisallowGarbageCollection no_gc;
     SharedStringAccessGuardIfNeeded access_guard(isolate());
     base::uc16* sink = result->GetChars(no_gc, access_guard);
-    String::WriteToFlat(*left, sink, 0, left->length(), isolate(),
-                        access_guard);
+    String::WriteToFlat(*left, sink, 0, left->length(), access_guard);
     String::WriteToFlat(*right, sink + left->length(), 0, right->length(),
-                        isolate(), access_guard);
+                        access_guard);
     return result;
   }
 
@@ -812,8 +876,8 @@ MaybeHandle<String> FactoryBase<Impl>::NewConsString(
 }
 
 template <typename Impl>
-Handle<String> FactoryBase<Impl>::NewConsString(Handle<String> left,
-                                                Handle<String> right,
+Handle<String> FactoryBase<Impl>::NewConsString(DirectHandle<String> left,
+                                                DirectHandle<String> right,
                                                 int length, bool one_byte,
                                                 AllocationType allocation) {
   DCHECK(!IsThinString(*left));
@@ -888,25 +952,24 @@ V8_INLINE Handle<String> CharToString(FactoryBase<Impl>* factory,
 }  // namespace
 
 template <typename Impl>
-Handle<String> FactoryBase<Impl>::NumberToString(Handle<Object> number,
+Handle<String> FactoryBase<Impl>::NumberToString(DirectHandle<Object> number,
                                                  NumberCacheMode mode) {
   SLOW_DCHECK(IsNumber(*number));
   if (IsSmi(*number)) return SmiToString(Smi::cast(*number), mode);
 
-  double double_value = Handle<HeapNumber>::cast(number)->value();
+  double double_value = DirectHandle<HeapNumber>::cast(number)->value();
   // Try to canonicalize doubles.
   int smi_value;
   if (DoubleToSmiInteger(double_value, &smi_value)) {
     return SmiToString(Smi::FromInt(smi_value), mode);
   }
-  return HeapNumberToString(Handle<HeapNumber>::cast(number), double_value,
-                            mode);
+  return HeapNumberToString(DirectHandle<HeapNumber>::cast(number),
+                            double_value, mode);
 }
 
 template <typename Impl>
-Handle<String> FactoryBase<Impl>::HeapNumberToString(Handle<HeapNumber> number,
-                                                     double value,
-                                                     NumberCacheMode mode) {
+Handle<String> FactoryBase<Impl>::HeapNumberToString(
+    DirectHandle<HeapNumber> number, double value, NumberCacheMode mode) {
   int hash = mode == NumberCacheMode::kIgnore
                  ? 0
                  : impl()->NumberToStringCacheHash(value);

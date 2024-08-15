@@ -8,10 +8,12 @@ import("../../../scripts/build/ninja/devtools_module.gni")
 devtools_module("visual_logging") {
   sources = [
     "DomState.ts",
+    "Loggable.ts",
     "LoggingConfig.ts",
     "LoggingDriver.ts",
     "LoggingEvents.ts",
     "LoggingState.ts",
+    "NonDomState.ts",
   ]
   deps = [
     "../../core/common:bundle",
@@ -27,6 +29,7 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     "../../../test/unittests/front_end/ui/visual_logging/*",
+    "../../entrypoints/device_mode_emulation_frame/*",
     "../../entrypoints/main/*",
     "../../panels/*",
     "../components/*",

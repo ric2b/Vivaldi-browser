@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -28,7 +29,6 @@
 #include "extensions/browser/content_verifier.h"
 #include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using extensions::URLPatternSet;
 
@@ -72,9 +72,8 @@ TEST_F(ExtensionUserScriptLoaderTest, NoScriptsWithCallbackAfterLoad) {
                                    /*listen_for_extension_system_loaded=*/true,
                                    /*content_verifier=*/nullptr);
   base::RunLoop run_loop;
-  auto on_load_complete = [&run_loop](
-                              UserScriptLoader* loader,
-                              const absl::optional<std::string>& error) {
+  auto on_load_complete = [&run_loop](UserScriptLoader* loader,
+                                      const std::optional<std::string>& error) {
     EXPECT_FALSE(error.has_value()) << *error;
     run_loop.Quit();
   };
@@ -97,15 +96,14 @@ TEST_F(ExtensionUserScriptLoaderTest, NoScriptsAddedWithCallback) {
   // synchronously.
   bool callback_called = false;
   auto callback = [&callback_called](UserScriptLoader* loader,
-                                     const absl::optional<std::string>& error) {
+                                     const std::optional<std::string>& error) {
     // Check that there is at least an error message.
     EXPECT_TRUE(error.has_value());
     EXPECT_THAT(*error, testing::HasSubstr("No changes to loaded scripts"));
     callback_called = true;
   };
 
-  loader.AddScripts(std::make_unique<UserScriptList>(),
-                    base::BindLambdaForTesting(callback));
+  loader.AddScripts({}, base::BindLambdaForTesting(callback));
   EXPECT_TRUE(callback_called);
 }
 
@@ -130,7 +128,7 @@ TEST_F(ExtensionUserScriptLoaderTest, QueuedLoadWithCallback) {
   // otherwise completes the test.
   auto on_load_complete = [&run_loop, &first_callback_fired](
                               UserScriptLoader* loader,
-                              const absl::optional<std::string>& error) {
+                              const std::optional<std::string>& error) {
     EXPECT_FALSE(error.has_value()) << *error;
     EXPECT_TRUE(loader->initial_load_complete());
     if (first_callback_fired)
@@ -282,8 +280,8 @@ TEST_F(ExtensionUserScriptLoaderTest, SkipBOMAtTheBeginning) {
   user_script->js_scripts().push_back(UserScript::Content::CreateFile(
       temp_dir_.GetPath(), path.BaseName(), GURL()));
 
-  auto user_scripts = std::make_unique<UserScriptList>();
-  user_scripts->push_back(std::move(user_script));
+  UserScriptList user_scripts;
+  user_scripts.push_back(std::move(user_script));
 
   TestingProfile profile;
   base::HistogramTester histogram_tester;
@@ -295,7 +293,7 @@ TEST_F(ExtensionUserScriptLoaderTest, SkipBOMAtTheBeginning) {
   user_scripts = loader.LoadScriptsForTest(std::move(user_scripts));
 
   EXPECT_EQ(content.substr(3),
-            std::string((*user_scripts)[0]->js_scripts()[0]->GetContent()));
+            std::string(user_scripts[0]->js_scripts()[0]->GetContent()));
   // Verify that an entry has been recorded for the appropriate histograms and
   // that the length of the script is 0 kb.
   histogram_tester.ExpectUniqueSample(
@@ -316,8 +314,8 @@ TEST_F(ExtensionUserScriptLoaderTest, LeaveBOMNotAtTheBeginning) {
   user_script->js_scripts().push_back(UserScript::Content::CreateFile(
       temp_dir_.GetPath(), path.BaseName(), GURL()));
 
-  auto user_scripts = std::make_unique<UserScriptList>();
-  user_scripts->push_back(std::move(user_script));
+  UserScriptList user_scripts;
+  user_scripts.push_back(std::move(user_script));
 
   TestingProfile profile;
   base::HistogramTester histogram_tester;
@@ -329,7 +327,7 @@ TEST_F(ExtensionUserScriptLoaderTest, LeaveBOMNotAtTheBeginning) {
   user_scripts = loader.LoadScriptsForTest(std::move(user_scripts));
 
   EXPECT_EQ(content,
-            std::string((*user_scripts)[0]->js_scripts()[0]->GetContent()));
+            std::string(user_scripts[0]->js_scripts()[0]->GetContent()));
   // Verify that an entry has been recorded for the appropriate histograms and
   // that the length of the script is 0 kb.
   histogram_tester.ExpectUniqueSample(
@@ -352,8 +350,8 @@ TEST_F(ExtensionUserScriptLoaderTest, ComponentExtensionContentScriptIsLoaded) {
   user_script->js_scripts().push_back(
       UserScript::Content::CreateFile(extension_path, resource_path, GURL()));
 
-  auto user_scripts = std::make_unique<UserScriptList>();
-  user_scripts->push_back(std::move(user_script));
+  UserScriptList user_scripts;
+  user_scripts.push_back(std::move(user_script));
 
   TestingProfile profile;
   base::HistogramTester histogram_tester;
@@ -364,7 +362,7 @@ TEST_F(ExtensionUserScriptLoaderTest, ComponentExtensionContentScriptIsLoaded) {
                                    /*content_verifier=*/nullptr);
   user_scripts = loader.LoadScriptsForTest(std::move(user_scripts));
 
-  EXPECT_FALSE((*user_scripts)[0]->js_scripts()[0]->GetContent().empty());
+  EXPECT_FALSE(user_scripts[0]->js_scripts()[0]->GetContent().empty());
   // Verify that an entry has been recorded for the appropriate histograms and
   // that the length of the script is 0 kb.
   histogram_tester.ExpectTotalCount(
@@ -402,9 +400,9 @@ TEST_F(ExtensionUserScriptLoaderTest, RecordScriptLengthUmas) {
   user_script_2->js_scripts().push_back(UserScript::Content::CreateFile(
       temp_dir_.GetPath(), c_script_path.BaseName(), GURL()));
 
-  auto user_scripts = std::make_unique<UserScriptList>();
-  user_scripts->push_back(std::move(user_script_1));
-  user_scripts->push_back(std::move(user_script_2));
+  UserScriptList user_scripts;
+  user_scripts.push_back(std::move(user_script_1));
+  user_scripts.push_back(std::move(user_script_2));
 
   TestingProfile profile;
   base::HistogramTester histogram_tester;

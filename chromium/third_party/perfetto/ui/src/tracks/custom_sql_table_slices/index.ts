@@ -64,7 +64,9 @@ export abstract class CustomSqlTableSliceTrack<
   abstract getSqlDataSource(): CustomSqlTableDefConfig;
 
   // Override by subclasses.
-  abstract getDetailsPanel(): CustomSqlDetailsPanelConfig;
+  abstract getDetailsPanel(args:
+                               OnSliceClickArgs<NamedSliceTrackTypes['slice']>):
+      CustomSqlDetailsPanelConfig;
 
   getSqlImports(): CustomSqlImportConfig {
     return {
@@ -90,7 +92,9 @@ export abstract class CustomSqlTableSliceTrack<
         });
     await this.engine.query(sql);
     return DisposableCallback.from(() => {
-      this.engine.query(`DROP VIEW ${this.tableName}`);
+      if (this.engine.isAlive) {
+        this.engine.query(`DROP VIEW ${this.tableName}`);
+      }
     });
   }
 
@@ -106,11 +110,11 @@ export abstract class CustomSqlTableSliceTrack<
   }
 
   onSliceClick(args: OnSliceClickArgs<NamedSliceTrackTypes['slice']>) {
-    if (this.getDetailsPanel() === undefined) {
+    if (this.getDetailsPanel(args) === undefined) {
       return;
     }
 
-    const detailsPanelConfig = this.getDetailsPanel();
+    const detailsPanelConfig = this.getDetailsPanel(args);
     globals.makeSelection(Actions.selectGenericSlice({
       id: args.slice.id,
       sqlTableName: this.tableName,
@@ -132,12 +136,7 @@ export abstract class CustomSqlTableSliceTrack<
 }
 
 class CustomSqlTrackPlugin implements Plugin {
-  onActivate(ctx: PluginContext): void {
-    // noop to allow directory to compile.
-    if (ctx) {
-      return;
-    }
-  }
+  onActivate(_ctx: PluginContext): void {}
 }
 
 export const plugin: PluginDescriptor = {

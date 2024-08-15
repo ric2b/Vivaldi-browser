@@ -188,9 +188,10 @@ void ExtractStats(const cricket::VoiceReceiverInfo& info,
       {StatsReport::kStatsValueNameAccelerateRate, info.accelerate_rate},
       {StatsReport::kStatsValueNamePreemptiveExpandRate,
        info.preemptive_expand_rate},
-      {StatsReport::kStatsValueNameTotalAudioEnergy, info.total_output_energy},
+      {StatsReport::kStatsValueNameTotalAudioEnergy,
+       static_cast<float>(info.total_output_energy)},
       {StatsReport::kStatsValueNameTotalSamplesDuration,
-       info.total_output_duration}};
+       static_cast<float>(info.total_output_duration)}};
 
   const IntForAdd ints[] = {
       {StatsReport::kStatsValueNameCurrentDelayMs, info.delay_estimate_ms},
@@ -244,9 +245,10 @@ void ExtractStats(const cricket::VoiceSenderInfo& info,
   SetAudioProcessingStats(report, info.apm_statistics);
 
   const FloatForAdd floats[] = {
-      {StatsReport::kStatsValueNameTotalAudioEnergy, info.total_input_energy},
+      {StatsReport::kStatsValueNameTotalAudioEnergy,
+       static_cast<float>(info.total_input_energy)},
       {StatsReport::kStatsValueNameTotalSamplesDuration,
-       info.total_input_duration}};
+       static_cast<float>(info.total_input_duration)}};
 
   RTC_DCHECK_GE(info.audio_level, 0);
   const IntForAdd ints[] = {
@@ -340,7 +342,8 @@ void ExtractStats(const cricket::VideoReceiverInfo& info,
       {StatsReport::kStatsValueNamePlisSent, info.plis_sent},
       {StatsReport::kStatsValueNameRenderDelayMs, info.render_delay_ms},
       {StatsReport::kStatsValueNameTargetDelayMs, info.target_delay_ms},
-      {StatsReport::kStatsValueNameFramesDecoded, info.frames_decoded},
+      {StatsReport::kStatsValueNameFramesDecoded,
+       static_cast<int>(info.frames_decoded)},
   };
 
   for (const auto& i : ints)
@@ -355,9 +358,8 @@ void ExtractStats(const cricket::VideoReceiverInfo& info,
   report->AddInt64(StatsReport::kStatsValueNameInterframeDelayMaxMs,
                    info.interframe_delay_max_ms);
 
-  report->AddString(
-      StatsReport::kStatsValueNameContentType,
-      webrtc::videocontenttypehelpers::ToString(info.content_type));
+  report->AddString(StatsReport::kStatsValueNameContentType,
+                    videocontenttypehelpers::ToString(info.content_type));
 }
 
 void ExtractStats(const cricket::VideoSenderInfo& info,
@@ -384,23 +386,26 @@ void ExtractStats(const cricket::VideoSenderInfo& info,
        info.encode_usage_percent},
       {StatsReport::kStatsValueNameFirsReceived, info.firs_received},
       {StatsReport::kStatsValueNameFrameHeightSent, info.send_frame_height},
-      {StatsReport::kStatsValueNameFrameRateInput, round(info.framerate_input)},
+      {StatsReport::kStatsValueNameFrameRateInput,
+       static_cast<int>(round(info.framerate_input))},
       {StatsReport::kStatsValueNameFrameRateSent, info.framerate_sent},
       {StatsReport::kStatsValueNameFrameWidthSent, info.send_frame_width},
-      {StatsReport::kStatsValueNameNacksReceived, info.nacks_received},
+      {StatsReport::kStatsValueNameNacksReceived,
+       static_cast<int>(info.nacks_received)},
       {StatsReport::kStatsValueNamePacketsLost, info.packets_lost},
       {StatsReport::kStatsValueNamePacketsSent, info.packets_sent},
       {StatsReport::kStatsValueNamePlisReceived, info.plis_received},
-      {StatsReport::kStatsValueNameFramesEncoded, info.frames_encoded},
-      {StatsReport::kStatsValueNameHugeFramesSent, info.huge_frames_sent},
+      {StatsReport::kStatsValueNameFramesEncoded,
+       static_cast<int>(info.frames_encoded)},
+      {StatsReport::kStatsValueNameHugeFramesSent,
+       static_cast<int>(info.huge_frames_sent)},
   };
 
   for (const auto& i : ints)
     report->AddInt(i.name, i.value);
   report->AddString(StatsReport::kStatsValueNameMediaType, "video");
-  report->AddString(
-      StatsReport::kStatsValueNameContentType,
-      webrtc::videocontenttypehelpers::ToString(info.content_type));
+  report->AddString(StatsReport::kStatsValueNameContentType,
+                    videocontenttypehelpers::ToString(info.content_type));
 }
 
 void ExtractStats(const cricket::BandwidthEstimationInfo& info,
@@ -491,17 +496,17 @@ void ExtractStatsFromList(
 
 }  // namespace
 
-const char* IceCandidateTypeToStatsType(const std::string& candidate_type) {
-  if (candidate_type == cricket::LOCAL_PORT_TYPE) {
+const char* IceCandidateTypeToStatsType(const cricket::Candidate& candidate) {
+  if (candidate.is_local()) {
     return STATSREPORT_LOCAL_PORT_TYPE;
   }
-  if (candidate_type == cricket::STUN_PORT_TYPE) {
+  if (candidate.is_stun()) {
     return STATSREPORT_STUN_PORT_TYPE;
   }
-  if (candidate_type == cricket::PRFLX_PORT_TYPE) {
+  if (candidate.is_prflx()) {
     return STATSREPORT_PRFLX_PORT_TYPE;
   }
-  if (candidate_type == cricket::RELAY_PORT_TYPE) {
+  if (candidate.is_relay()) {
     return STATSREPORT_RELAY_PORT_TYPE;
   }
   RTC_DCHECK_NOTREACHED();
@@ -780,19 +785,25 @@ StatsReport* LegacyStatsCollector::AddConnectionInfoReport(
                 AddCandidateReport(remote_candidate_stats, false)->id());
 
   const Int64ForAdd int64s[] = {
-      {StatsReport::kStatsValueNameBytesReceived, info.recv_total_bytes},
-      {StatsReport::kStatsValueNameBytesSent, info.sent_total_bytes},
-      {StatsReport::kStatsValueNamePacketsSent, info.sent_total_packets},
-      {StatsReport::kStatsValueNameRtt, info.rtt},
+      {StatsReport::kStatsValueNameBytesReceived,
+       static_cast<int64_t>(info.recv_total_bytes)},
+      {StatsReport::kStatsValueNameBytesSent,
+       static_cast<int64_t>(info.sent_total_bytes)},
+      {StatsReport::kStatsValueNamePacketsSent,
+       static_cast<int64_t>(info.sent_total_packets)},
+      {StatsReport::kStatsValueNameRtt, static_cast<int64_t>(info.rtt)},
       {StatsReport::kStatsValueNameSendPacketsDiscarded,
-       info.sent_discarded_packets},
+       static_cast<int64_t>(info.sent_discarded_packets)},
       {StatsReport::kStatsValueNameSentPingRequestsTotal,
-       info.sent_ping_requests_total},
+       static_cast<int64_t>(info.sent_ping_requests_total)},
       {StatsReport::kStatsValueNameSentPingRequestsBeforeFirstResponse,
-       info.sent_ping_requests_before_first_response},
-      {StatsReport::kStatsValueNameSentPingResponses, info.sent_ping_responses},
-      {StatsReport::kStatsValueNameRecvPingRequests, info.recv_ping_requests},
-      {StatsReport::kStatsValueNameRecvPingResponses, info.recv_ping_responses},
+       static_cast<int64_t>(info.sent_ping_requests_before_first_response)},
+      {StatsReport::kStatsValueNameSentPingResponses,
+       static_cast<int64_t>(info.sent_ping_responses)},
+      {StatsReport::kStatsValueNameRecvPingRequests,
+       static_cast<int64_t>(info.recv_ping_requests)},
+      {StatsReport::kStatsValueNameRecvPingResponses,
+       static_cast<int64_t>(info.recv_ping_responses)},
   };
   for (const auto& i : int64s)
     report->AddInt64(i.name, i.value);
@@ -833,7 +844,7 @@ StatsReport* LegacyStatsCollector::AddCandidateReport(
     report->AddInt(StatsReport::kStatsValueNameCandidatePriority,
                    candidate.priority());
     report->AddString(StatsReport::kStatsValueNameCandidateType,
-                      IceCandidateTypeToStatsType(candidate.type()));
+                      IceCandidateTypeToStatsType(candidate));
     report->AddString(StatsReport::kStatsValueNameCandidateTransportType,
                       candidate.protocol());
   }
@@ -1033,7 +1044,7 @@ void LegacyStatsCollector::ExtractBweInfo() {
   if (pc_->signaling_state() == PeerConnectionInterface::kClosed)
     return;
 
-  webrtc::Call::Stats call_stats = pc_->GetCallStats();
+  Call::Stats call_stats = pc_->GetCallStats();
   cricket::BandwidthEstimationInfo bwe_info;
   bwe_info.available_send_bandwidth = call_stats.send_bandwidth_bps;
   bwe_info.available_recv_bandwidth = call_stats.recv_bandwidth_bps;

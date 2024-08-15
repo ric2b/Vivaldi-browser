@@ -80,17 +80,13 @@ if (is_win) {
       "//vivaldi/tools/vivaldi_proxy",
     ]
     outputs -= [ "$root_out_dir/chrome.7z" ]
-    if (!is_component_build) {
-      outputs -= [ "$root_out_dir/chrome.packed.7z" ]
-    }
+    outputs -= [ "$root_out_dir/chrome.packed.7z" ]
 
     # Have to keep the sequence due to the archive.d file being keyed to the first name
     temp = outputs
     outputs = []
     outputs += [ "$root_out_dir/vivaldi.7z" ]
-    if (!is_component_build) {
-      outputs += [ "$root_out_dir/vivaldi.packed.7z" ]
-    }
+    outputs += [ "$root_out_dir/vivaldi.packed.7z" ]
     outputs += temp
     args -= [
       "--input_file",

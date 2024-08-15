@@ -28,4 +28,6 @@ export enum Variant {
   EXPRESSIVE,
   FIDELITY,
   CONTENT,
+  RAINBOW,
+  FRUIT_SALAD
 }

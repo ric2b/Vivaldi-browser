@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "device/udev_linux/scoped_udev.h"
+#include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/ime_keyboard.h"
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ui_base_features.h"
@@ -39,6 +40,7 @@
 #include "ui/events/event_rewriter.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
@@ -304,6 +306,17 @@ bool IsISOLevel5ShiftUsedByCurrentInputMethod() {
   // TODO(yusukes): Remove the restriction.
   auto* manager = ash::input_method::InputMethodManager::Get();
   return manager->IsISOLevel5ShiftUsedByCurrentInputMethod();
+}
+
+bool IsFirstPartyKoreanIME() {
+  auto* manager = ash::input_method::InputMethodManager::Get();
+  if (!manager) {
+    return false;
+  }
+
+  auto current_input_method =
+      manager->GetActiveIMEState()->GetCurrentInputMethod();
+  return ash::extension_ime_util::IsCros1pKorean(current_input_method.id());
 }
 
 struct KeyboardRemapping {
@@ -605,7 +618,7 @@ bool SkipSearchKeyRemapping(EventRewriterAsh::Delegate* delegate,
 
 bool ShouldBlockSixPackEventRewrite(
     EventRewriterAsh::Delegate* delegate,
-    absl::optional<ui::mojom::SixPackShortcutModifier> modifier,
+    std::optional<ui::mojom::SixPackShortcutModifier> modifier,
     int flags,
     ui::KeyboardCode key_code,
     int device_id) {
@@ -750,8 +763,7 @@ bool MaybeRewriteAltBasedShortcutToSixPackKeyAction(
       {// Alt+Down -> Next (aka PageDown)
        {EF_ALT_DOWN, VKEY_DOWN},
        {EF_NONE, DomCode::PAGE_DOWN, DomKey::PAGE_DOWN, VKEY_NEXT}}};
-  if (!::features::IsImprovedKeyboardShortcutsEnabled() ||
-      !::features::IsDeprecateAltBasedSixPackEnabled()) {
+  if (!::features::IsImprovedKeyboardShortcutsEnabled()) {
     if (RewriteWithKeyboardRemappings(kLegacySixPackRemappings,
                                       std::size(kLegacySixPackRemappings),
                                       incoming, state)) {
@@ -1095,7 +1107,7 @@ bool EventRewriterAsh::RewriteModifierKeys(const KeyEvent& key_event,
         break;
       }
 
-      characteristic_flag = EF_CAPS_LOCK_ON;
+      characteristic_flag = EF_MOD3_DOWN;
       remapped_key =
           GetRemappedKey(device_id, mojom::ModifierKey::kCapsLock,
                          prefs::kLanguageRemapCapsLockKeyTo, delegate_);
@@ -1115,8 +1127,23 @@ bool EventRewriterAsh::RewriteModifierKeys(const KeyEvent& key_event,
           GetRemappedKey(device_id, mojom::ModifierKey::kControl,
                          prefs::kLanguageRemapControlKeyTo, delegate_);
       break;
-    case DomCode::ALT_LEFT:
     case DomCode::ALT_RIGHT:
+      // For the Korean IME, right alt is used for Korean/English mode
+      // switching. It should not be rewritten under any circumstance. Due to
+      // b/311333438, the DomKey from the given keyboard layout is ignored.
+      // Additionally, due to b/311327069, the DomCode and DomKey both get
+      // remapped every time a modifier is pressed, even if it is not remapped.
+      // By special casing right alt only for the Korean IME, we avoid this
+      // problem.
+
+      // TODO(b/311333438, b/311327069): Implement a complete solution to deal
+      // with modifier remapping.
+      if (key_event.GetDomKey() == DomKey::HANGUL_MODE &&
+          IsFirstPartyKoreanIME()) {
+        break;
+      }
+      [[fallthrough]];
+    case DomCode::ALT_LEFT:
       // ALT key
       characteristic_flag = EF_ALT_DOWN;
       remapped_key = GetRemappedKey(device_id, mojom::ModifierKey::kAlt,
@@ -1148,23 +1175,6 @@ bool EventRewriterAsh::RewriteModifierKeys(const KeyEvent& key_event,
     incoming.flags |= characteristic_flag;
     characteristic_flag = remapped_key->flag;
 
-    // If the internal state of CapLocks is enabled, we should not remove
-    // the modifier flag. This is important for the case in which the user
-    // remaps the CapsLock key to another key (e.g. Search) and CapsLock is
-    // enabled. If the user were to press the CapsLock key (remapped to Search),
-    // we risk removing the CapsLock modifier and accidentally disabling
-    // CapsLocks.
-    if (incoming.key_code == VKEY_CAPITAL &&
-        !ime_keyboard_->IsCapsLockEnabled()) {
-      // We remove the CapsLock modifier here because we do not want to
-      // turn on the Capslock modifier when the key has been remapped.
-      incoming.flags &= ~EF_CAPS_LOCK_ON;
-      base::RecordAction(
-          base::UserMetricsAction("CapsLock_Toggled_Using_CapsLockKey"));
-    }
-    if (remapped_key->remap_to == ui::mojom::ModifierKey::kCapsLock) {
-      characteristic_flag |= EF_CAPS_LOCK_ON;
-    }
     auto original_location = KeycodeConverter::DomCodeToLocation(incoming.code);
     state->code = RelocateModifier(state->code, original_location);
     state->key_code = RelocateKeyboardCode(state->key_code, original_location);
@@ -1213,8 +1223,27 @@ bool EventRewriterAsh::RewriteModifierKeys(const KeyEvent& key_event,
   // AcceleratorController, so that the event is visible to apps (see
   // crbug.com/775743).
   if (key_event.type() == ET_KEY_PRESSED && state->key_code == VKEY_CAPITAL) {
-    ime_keyboard_->SetCapsLockEnabled(!ime_keyboard_->IsCapsLockEnabled());
+    // Toggle the EF_CAPS_LOCK_ON only when the key is pressed, so here it
+    // checks whether the key is auto-repeat event. Unfortunately, EF_IS_REPEAT
+    // for CapsLock is not reliable, because it checks whether flags are the
+    // same, too, but actually CapsLock will trigger to change the
+    // EF_CAPS_LOCK_ON flag of the original event. Instead, check whether the
+    // current key is already pressed or not.
+    bool is_repeat = base::ranges::find(
+                         pressed_key_states_,
+                         std::tuple(key_event.code(), key_event.GetDomKey(),
+                                    key_event.key_code()),
+                         [](auto entry) {
+                           return std::tuple(entry.first.code, entry.first.key,
+                                             entry.first.key_code);
+                         }) != pressed_key_states_.end();
+    if (!is_repeat) {
+      ime_keyboard_->SetCapsLockEnabled(!ime_keyboard_->IsCapsLockEnabled());
+    }
   }
+  state->flags = (state->flags & ~EF_CAPS_LOCK_ON) |
+                 (ime_keyboard_->IsCapsLockEnabled() ? EF_CAPS_LOCK_ON : 0);
+
   return exact_event;
 }
 
@@ -1304,7 +1333,7 @@ bool EventRewriterAsh::ShouldRemapToRightClick(
   const bool alt_click_down = AreFlagsSet(flags, kAltLeftButton);
   const bool search_click_down = AreFlagsSet(flags, kSearchLeftButton);
   if (ash::features::IsAltClickAndSixPackCustomizationEnabled()) {
-    absl::optional<ui::mojom::SimulateRightClickModifier> modifier =
+    std::optional<ui::mojom::SimulateRightClickModifier> modifier =
         delegate_->GetRemapRightClickModifier(mouse_event.source_device_id());
     if (!modifier.has_value()) {
       return false;
@@ -1440,7 +1469,7 @@ EventRewriteStatus EventRewriterAsh::RewriteKeyEvent(
   if (sticky_keys_controller_) {
     KeyEvent tmp_event = key_event;
     tmp_event.set_key_code(state.key_code);
-    tmp_event.set_flags(state.flags);
+    tmp_event.SetFlags(state.flags);
     std::unique_ptr<Event> output_event;
     status = sticky_keys_controller_->RewriteEvent(tmp_event, &output_event);
     if (status == EVENT_REWRITE_REWRITTEN ||
@@ -1498,7 +1527,7 @@ EventDispatchDetails EventRewriterAsh::RewriteMouseButtonEvent(
   EventRewriteStatus status = EVENT_REWRITE_CONTINUE;
   if (sticky_keys_controller_) {
     MouseEvent tmp_event = mouse_event;
-    tmp_event.set_flags(flags);
+    tmp_event.SetFlags(flags);
     std::unique_ptr<Event> output_event;
     status = sticky_keys_controller_->RewriteEvent(tmp_event, &output_event);
     if (status == EVENT_REWRITE_REWRITTEN ||
@@ -1516,7 +1545,7 @@ EventDispatchDetails EventRewriterAsh::RewriteMouseButtonEvent(
   }
 
   std::unique_ptr<Event> rewritten_event = mouse_event.Clone();
-  rewritten_event->set_flags(flags);
+  rewritten_event->SetFlags(flags);
   if (changed_button != EF_NONE) {
     static_cast<MouseEvent*>(rewritten_event.get())
         ->set_changed_button_flags(changed_button);
@@ -1543,7 +1572,7 @@ EventDispatchDetails EventRewriterAsh::RewriteMouseWheelEvent(
 
   const int flags = RewriteLocatedEvent(wheel_event);
   MouseWheelEvent tmp_event = wheel_event;
-  tmp_event.set_flags(flags);
+  tmp_event.SetFlags(flags);
   return sticky_keys_controller_->RewriteEvent(tmp_event, continuation);
 }
 
@@ -1555,7 +1584,7 @@ EventDispatchDetails EventRewriterAsh::RewriteTouchEvent(
     return SendEvent(continuation, &touch_event);
   }
   TouchEvent rewritten_touch_event(touch_event);
-  rewritten_touch_event.set_flags(flags);
+  rewritten_touch_event.SetFlags(flags);
   return SendEventFinally(continuation, &rewritten_touch_event);
 }
 
@@ -1627,8 +1656,7 @@ void EventRewriterAsh::RewriteExtendedKeys(const KeyEvent& key_event,
 
   // TODO(crbug.com/1179893): This workaround isn't needed once Alt rewrites
   // are deprecated.
-  if ((!::features::IsImprovedKeyboardShortcutsEnabled() ||
-       !::features::IsDeprecateAltBasedSixPackEnabled()) &&
+  if ((!::features::IsImprovedKeyboardShortcutsEnabled()) &&
       ((incoming.flags & (EF_COMMAND_DOWN | EF_ALT_DOWN)) ==
        (EF_COMMAND_DOWN | EF_ALT_DOWN))) {
     // Allow Search to avoid rewriting extended keys.

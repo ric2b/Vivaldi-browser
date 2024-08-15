@@ -12,6 +12,7 @@
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "content/browser/devtools/browser_devtools_agent_host.h"
+#include "content/browser/devtools/dedicated_worker_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_issue_storage.h"
 #include "content/browser/devtools/devtools_url_loader_interceptor.h"
 #include "content/browser/devtools/protocol/audits.h"
@@ -28,20 +29,19 @@
 #include "content/browser/devtools/protocol/page_handler.h"
 #include "content/browser/devtools/protocol/preload_handler.h"
 #include "content/browser/devtools/protocol/security_handler.h"
+#include "content/browser/devtools/protocol/storage_handler.h"
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/web_contents_devtools_agent_host.h"
-#include "content/browser/devtools/worker_devtools_agent_host.h"
 #include "content/browser/devtools/worker_devtools_manager.h"
-#include "content/browser/portal/portal.h"
 #include "content/browser/preloading/prerender/prerender_final_status.h"
+#include "content/browser/preloading/prerender/prerender_metrics.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_package/signed_exchange_envelope.h"
 #include "content/public/browser/browser_context.h"
@@ -585,6 +585,56 @@ void OnNavigationResponseReceived(const NavigationRequest& nav_request,
                    *head_info, frame_id);
 }
 
+void OnFetchKeepAliveRequestWillBeSent(
+    FrameTreeNode* frame_tree_node,
+    const std::string& request_id,
+    const network::ResourceRequest& request,
+    std::optional<std::pair<const GURL&,
+                            const network::mojom::URLResponseHeadDevToolsInfo&>>
+        redirect_info) {
+  CHECK(frame_tree_node);
+
+  auto timestamp = base::TimeTicks::Now();
+  std::string frame_token =
+      frame_tree_node->current_frame_host()->devtools_frame_token().ToString();
+  GURL initiator_url;
+  if (request.request_initiator.has_value()) {
+    initiator_url = request.request_initiator->GetURL();
+  }
+  DispatchToAgents(frame_tree_node,
+                   &protocol::NetworkHandler::FetchKeepAliveRequestWillBeSent,
+                   request_id, request, initiator_url, frame_token, timestamp,
+                   redirect_info);
+}
+
+void OnFetchKeepAliveResponseReceived(
+    FrameTreeNode* frame_tree_node,
+    const std::string& request_id,
+    const GURL& url,
+    const network::mojom::URLResponseHead& head) {
+  CHECK(frame_tree_node);
+
+  std::string frame_token =
+      frame_tree_node->current_frame_host()->devtools_frame_token().ToString();
+  network::mojom::URLResponseHeadDevToolsInfoPtr head_info =
+      network::ExtractDevToolsInfo(head);
+  DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::ResponseReceived,
+                   request_id, request_id, url,
+                   protocol::Network::ResourceTypeEnum::Fetch, *head_info,
+                   frame_token);
+}
+
+void OnFetchKeepAliveRequestComplete(
+    FrameTreeNode* frame_tree_node,
+    const std::string& request_id,
+    const network::URLLoaderCompletionStatus& status) {
+  CHECK(frame_tree_node);
+
+  DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::LoadingComplete,
+                   request_id, protocol::Network::ResourceTypeEnum::Fetch,
+                   status);
+}
+
 void BackForwardCacheNotUsed(
     const NavigationRequest* nav_request,
     const BackForwardCacheCanStoreDocumentResult* result,
@@ -652,7 +702,7 @@ void WillInitiatePrerender(FrameTree& frame_tree) {
 }
 
 void DidActivatePrerender(const NavigationRequest& nav_request,
-                          const absl::optional<base::UnguessableToken>&
+                          const std::optional<base::UnguessableToken>&
                               initiator_devtools_navigation_token) {
   FrameTreeNode* ftn = nav_request.frame_tree_node();
   UpdateChildFrameTrees(ftn, /* update_target_info= */ true);
@@ -680,10 +730,11 @@ void DidUpdatePrerenderStatus(
     int initiator_frame_tree_node_id,
     const base::UnguessableToken& initiator_devtools_navigation_token,
     const GURL& prerender_url,
-    absl::optional<blink::mojom::SpeculationTargetHint> target_hint,
+    std::optional<blink::mojom::SpeculationTargetHint> target_hint,
     PreloadingTriggeringOutcome status,
-    absl::optional<PrerenderFinalStatus> prerender_status,
-    absl::optional<std::string> disallowed_mojo_interface) {
+    std::optional<PrerenderFinalStatus> prerender_status,
+    std::optional<std::string> disallowed_mojo_interface,
+    const std::vector<PrerenderMismatchedHeaders>* mismatched_headers) {
   auto* ftn = FrameTreeNode::GloballyFindByID(initiator_frame_tree_node_id);
   // ftn will be null if this is browser-initiated, which has no initiator.
   if (!ftn) {
@@ -693,7 +744,7 @@ void DidUpdatePrerenderStatus(
   DispatchToAgents(ftn, &protocol::PreloadHandler::DidUpdatePrerenderStatus,
                    initiator_devtools_navigation_token, prerender_url,
                    target_hint, status, prerender_status,
-                   disallowed_mojo_interface);
+                   disallowed_mojo_interface, mismatched_headers);
 }
 
 namespace {
@@ -849,12 +900,12 @@ void WillBeginDownload(download::DownloadCreateInfo* info,
 
 void OnSignedExchangeReceived(
     FrameTreeNode* frame_tree_node,
-    absl::optional<const base::UnguessableToken> devtools_navigation_token,
+    std::optional<const base::UnguessableToken> devtools_navigation_token,
     const GURL& outer_request_url,
     const network::mojom::URLResponseHead& outer_response,
-    const absl::optional<SignedExchangeEnvelope>& envelope,
+    const std::optional<SignedExchangeEnvelope>& envelope,
     const scoped_refptr<net::X509Certificate>& certificate,
-    const absl::optional<net::SSLInfo>& ssl_info,
+    const std::optional<net::SSLInfo>& ssl_info,
     const std::vector<SignedExchangeError>& errors) {
   DispatchToAgents(frame_tree_node,
                    &protocol::NetworkHandler::OnSignedExchangeReceived,
@@ -939,9 +990,7 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
   if (!parent) {
     FrameTreeNode* outer_delegate_node =
         frame_tree_node->render_manager()->GetOuterDelegateNode();
-    if (outer_delegate_node &&
-        (WebContentsImpl::FromFrameTreeNode(frame_tree_node)->IsPortal() ||
-         frame_tree_node->IsFencedFrameRoot())) {
+    if (outer_delegate_node && frame_tree_node->IsFencedFrameRoot()) {
       parent = outer_delegate_node->parent()->frame_tree_node();
     } else if (frame_tree_node->GetFrameType() ==
                    FrameType::kPrerenderMainFrame &&
@@ -1016,7 +1065,7 @@ void ThrottleWorkerMainScriptFetch(
     const base::UnguessableToken& devtools_worker_token,
     const GlobalRenderFrameHostId& ancestor_render_frame_host_id,
     scoped_refptr<DevToolsThrottleHandle> throttle_handle) {
-  WorkerDevToolsAgentHost* agent_host =
+  DedicatedWorkerDevToolsAgentHost* agent_host =
       WorkerDevToolsManager::GetInstance().GetDevToolsHostFromToken(
           devtools_worker_token);
   if (!agent_host) {
@@ -1106,7 +1155,7 @@ void ApplyNetworkRequestOverrides(
     FrameTreeNode* frame_tree_node,
     blink::mojom::BeginNavigationParams* begin_params,
     bool* report_raw_headers,
-    absl::optional<std::vector<net::SourceStream::SourceType>>*
+    std::optional<std::vector<net::SourceStream::SourceType>>*
         devtools_accepted_stream_types,
     bool* devtools_user_agent_overridden,
     bool* devtools_accept_language_overridden) {
@@ -1150,7 +1199,7 @@ void ApplyNetworkRequestOverrides(
 
 bool ApplyUserAgentMetadataOverrides(
     FrameTreeNode* frame_tree_node,
-    absl::optional<blink::UserAgentMetadata>* override_out) {
+    std::optional<blink::UserAgentMetadata>* override_out) {
   DevToolsAgentHostImpl* agent_host =
       GetDevToolsAgentHostForNetworkOverrides(frame_tree_node);
   if (!agent_host) {
@@ -1372,9 +1421,8 @@ void OnPrefetchRequestWillBeSent(
     const std::string& request_id,
     const GURL& initiator,
     const network::ResourceRequest& request,
-    absl::optional<
-        std::pair<const GURL&,
-                  const network::mojom::URLResponseHeadDevToolsInfo&>>
+    std::optional<std::pair<const GURL&,
+                            const network::mojom::URLResponseHeadDevToolsInfo&>>
         redirect_info) {
   auto timestamp = base::TimeTicks::Now();
   std::string frame_token =
@@ -1437,7 +1485,7 @@ void OnAuctionWorkletNetworkRequestWillBeSent(
     if (ftn == nullptr) {
       return;
     }
-    const absl::optional<base::UnguessableToken>& devtools_navigation_token =
+    const std::optional<base::UnguessableToken>& devtools_navigation_token =
         ftn->current_frame_host()->GetDevToolsNavigationToken();
 
     if (devtools_navigation_token.has_value()) {
@@ -1477,6 +1525,36 @@ void OnAuctionWorkletNetworkRequestComplete(
                    &protocol::NetworkHandler::LoadingComplete, request_id,
                    /*resource_type=*/protocol::Network::ResourceTypeEnum::Other,
                    status);
+}
+
+bool NeedInterestGroupAuctionEvents(int frame_tree_node_id) {
+  FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (!ftn) {
+    return false;
+  }
+  DevToolsAgentHostImpl* agent_host = RenderFrameDevToolsAgentHost::GetFor(ftn);
+  if (!agent_host) {
+    return false;
+  }
+  for (auto* storage : protocol::StorageHandler::ForAgentHost(agent_host)) {
+    if (storage->interest_group_auction_tracking_enabled()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void OnInterestGroupAuctionEventOccurred(
+    int frame_tree_node_id,
+    base::Time event_time,
+    InterestGroupAuctionEventType type,
+    const std::string& unique_auction_id,
+    base::optional_ref<const std::string> parent_auction_id,
+    const base::Value::Dict& auction_config) {
+  DispatchToAgents(
+      frame_tree_node_id,
+      &protocol::StorageHandler::NotifyInterestGroupAuctionEventOccurred,
+      event_time, type, unique_auction_id, parent_auction_id, auction_config);
 }
 
 void OnNavigationRequestWillBeSent(
@@ -1557,35 +1635,6 @@ bool HandleCertificateError(WebContents* web_contents,
     }
   }
   return !callback;
-}
-
-namespace {
-void UpdatePortals(RenderFrameHostImpl* render_frame_host_impl) {
-  if (auto* agent_host = static_cast<RenderFrameDevToolsAgentHost*>(
-          RenderFrameDevToolsAgentHost::GetFor(
-              render_frame_host_impl->frame_tree_node()))) {
-    agent_host->UpdatePortals();
-  }
-  UpdateChildFrameTrees(render_frame_host_impl->frame_tree_node(),
-                        /* update_target_info= */ false);
-}
-}  // namespace
-
-void PortalAttached(RenderFrameHostImpl* render_frame_host_impl) {
-  UpdatePortals(render_frame_host_impl);
-}
-
-void PortalDetached(RenderFrameHostImpl* render_frame_host_impl) {
-  UpdatePortals(render_frame_host_impl);
-}
-
-void PortalActivated(Portal& portal) {
-  WebContents* host_contents = portal.GetPortalHostContents();
-  UpdatePortals(reinterpret_cast<RenderFrameHostImpl*>(
-      host_contents->GetPrimaryMainFrame()));
-  if (auto* host = WebContentsDevToolsAgentHost::GetFor(host_contents)) {
-    host->PortalActivated(portal);
-  }
 }
 
 void FencedFrameCreated(
@@ -1758,7 +1807,7 @@ void ReportCookieIssue(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     blink::mojom::CookieOperation operation,
-    const absl::optional<std::string>& devtools_request_id) {
+    const std::optional<std::string>& devtools_request_id) {
   auto exclusion_reasons =
       BuildExclusionReasons(excluded_cookie->access_result.status);
   auto warning_reasons =
@@ -1884,7 +1933,7 @@ void BuildAndReportBrowserInitiatedIssue(
 void OnWebTransportHandshakeFailed(
     RenderFrameHostImpl* frame,
     const GURL& url,
-    const absl::optional<net::WebTransportError>& error) {
+    const std::optional<net::WebTransportError>& error) {
   FrameTreeNode* ftn = frame->frame_tree_node();
   if (!ftn) {
     return;
@@ -2195,51 +2244,6 @@ protocol::Audits::GenericIssueErrorType GenericIssueErrorTypeToProtocol(
   }
 }
 
-namespace {
-struct GenericIssueInfo {
-  GenericIssueInfo() = default;
-  ~GenericIssueInfo() = default;
-  GenericIssueInfo(const GenericIssueInfo& info) = default;
-
-  blink::mojom::GenericIssueErrorType error_type;
-  absl::optional<std::string> frame_id;
-};
-
-void BuildAndReportGenericIssue(RenderFrameHostImpl* render_frame_host_impl,
-                                const GenericIssueInfo& issue_info) {
-  auto generic_issue_details =
-      protocol::Audits::GenericIssueDetails::Create()
-          .SetErrorType(GenericIssueErrorTypeToProtocol(issue_info.error_type))
-          .Build();
-
-  if (issue_info.frame_id) {
-    generic_issue_details->SetFrameId(*issue_info.frame_id);
-  }
-
-  auto issue =
-      protocol::Audits::InspectorIssue::Create()
-          .SetCode(protocol::Audits::InspectorIssueCodeEnum::GenericIssue)
-          .SetDetails(
-              protocol::Audits::InspectorIssueDetails::Create()
-                  .SetGenericIssueDetails(std::move(generic_issue_details))
-                  .Build())
-          .Build();
-
-  ReportBrowserInitiatedIssue(render_frame_host_impl, issue.get());
-}
-}  // namespace
-
-void DidRejectCrossOriginPortalMessage(
-    RenderFrameHostImpl* render_frame_host_impl) {
-  GenericIssueInfo issue_info;
-  issue_info.error_type =
-      blink::mojom::GenericIssueErrorType::kCrossOriginPortalPostMessageError;
-  issue_info.frame_id =
-      render_frame_host_impl->GetDevToolsFrameToken().ToString();
-
-  BuildAndReportGenericIssue(render_frame_host_impl, issue_info);
-}
-
 void UpdateDeviceRequestPrompt(RenderFrameHost* render_frame_host,
                                DevtoolsDeviceRequestPromptInfo* prompt_info) {
   FrameTreeNode* ftn = FrameTreeNode::From(render_frame_host);
@@ -2262,10 +2266,10 @@ void CleanUpDeviceRequestPrompt(RenderFrameHost* render_frame_host,
                    prompt_info);
 }
 
-void WillSendFedCmRequest(RenderFrameHost* render_frame_host,
+void WillSendFedCmRequest(RenderFrameHost& render_frame_host,
                           bool* intercept,
                           bool* disable_delay) {
-  FrameTreeNode* ftn = FrameTreeNode::From(render_frame_host);
+  FrameTreeNode* ftn = FrameTreeNode::From(&render_frame_host);
   if (!ftn) {
     return;
   }
@@ -2273,20 +2277,28 @@ void WillSendFedCmRequest(RenderFrameHost* render_frame_host,
                    disable_delay);
 }
 
-void WillShowFedCmDialog(RenderFrameHost* render_frame_host, bool* intercept) {
-  FrameTreeNode* ftn = FrameTreeNode::From(render_frame_host);
+void WillShowFedCmDialog(RenderFrameHost& render_frame_host, bool* intercept) {
+  FrameTreeNode* ftn = FrameTreeNode::From(&render_frame_host);
   if (!ftn) {
     return;
   }
   DispatchToAgents(ftn, &protocol::FedCmHandler::WillShowDialog, intercept);
 }
 
-void OnFedCmDialogShown(RenderFrameHost* render_frame_host) {
-  FrameTreeNode* ftn = FrameTreeNode::From(render_frame_host);
+void DidShowFedCmDialog(RenderFrameHost& render_frame_host) {
+  FrameTreeNode* ftn = FrameTreeNode::From(&render_frame_host);
   if (!ftn) {
     return;
   }
-  DispatchToAgents(ftn, &protocol::FedCmHandler::OnDialogShown);
+  DispatchToAgents(ftn, &protocol::FedCmHandler::DidShowDialog);
+}
+
+void DidCloseFedCmDialog(RenderFrameHost& render_frame_host) {
+  FrameTreeNode* ftn = FrameTreeNode::From(&render_frame_host);
+  if (!ftn) {
+    return;
+  }
+  DispatchToAgents(ftn, &protocol::FedCmHandler::DidCloseDialog);
 }
 
 void OnFencedFrameReportRequestSent(int initiator_frame_tree_node_id,
@@ -2301,7 +2313,7 @@ void OnFencedFrameReportRequestSent(int initiator_frame_tree_node_id,
                    /*request_id=*/devtools_request_id,
                    /*loader_id=*/devtools_request_id, headers, *request_info,
                    protocol::Network::Initiator::TypeEnum::Other,
-                   /*initiator_url=*/absl::nullopt,
+                   /*initiator_url=*/std::nullopt,
                    /*initiator_devtools_request_id=*/devtools_request_id,
                    base::TimeTicks::Now());
 }

@@ -4,7 +4,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_store.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
 
 namespace {
 constexpr char kSyncSignonRealm[] = "vivaldi-sync-login";

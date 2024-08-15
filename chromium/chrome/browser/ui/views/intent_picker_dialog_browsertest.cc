@@ -82,7 +82,8 @@ IN_PROC_BROWSER_TEST_F(IntentPickerDialogTest, MAYBE_InvokeUi_default) {
 class IntentPickerDialogGridViewTest : public IntentPickerDialogTest {
  public:
   IntentPickerDialogGridViewTest() {
-    apps::EnableLinkCapturingUXForTesting(feature_list_);
+    feature_list_.InitWithFeaturesAndParameters(
+        apps::test::GetFeaturesToEnableLinkCapturingUX(), {});
   }
 
   void ShowUi(const std::string& name) override {
@@ -94,7 +95,8 @@ class IntentPickerDialogGridViewTest : public IntentPickerDialogTest {
         ui::test::EventGenerator(views::GetRootWindow(bubble->GetWidget()));
     auto* button =
         bubble->GetViewByID(IntentPickerBubbleView::ViewId::kItemContainer)
-            ->children()[0];
+            ->children()[0]
+            .get();
     event_generator.MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
     event_generator.ClickLeftButton();
   }

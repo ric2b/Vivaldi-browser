@@ -24,11 +24,11 @@
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
@@ -36,6 +36,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/presentation_time_recorder.h"
+#include "ui/display/screen.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -58,13 +59,6 @@ constexpr base::TimeDelta kOcclusionPauseDurationForEnd =
 
 constexpr base::TimeDelta kEnterExitPresentationMaxLatency = base::Seconds(2);
 
-bool IsSplitViewDividerDraggedOrAnimated() {
-  SplitViewController* split_view_controller =
-      SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  return split_view_controller->IsResizingWithDivider() ||
-         split_view_controller->IsDividerAnimating();
-}
-
 // Returns the enter/exit type that should be used if kNormal enter/exit type
 // was originally requested - if the overview is expected to transition to/from
 // the home screen, the normal enter/exit mode is expected to be overridden by
@@ -74,13 +68,14 @@ bool IsSplitViewDividerDraggedOrAnimated() {
 OverviewEnterExitType MaybeOverrideEnterExitTypeForHomeScreen(
     OverviewEnterExitType original_type,
     bool enter,
-    const std::vector<aura::Window*>& windows) {
+    const std::vector<raw_ptr<aura::Window, VectorExperimental>>& windows) {
   if (original_type != OverviewEnterExitType::kNormal)
     return original_type;
 
   // Use normal type if home launcher is not available.
-  if (!Shell::Get()->tablet_mode_controller()->InTabletMode())
+  if (!display::Screen::GetScreen()->InTabletMode()) {
     return original_type;
+  }
 
   // Transition to home screen only if all windows are minimized.
   for (const aura::Window* window : windows) {
@@ -132,7 +127,7 @@ OverviewController* OverviewController::Get() {
   return g_instance;
 }
 
-bool OverviewController::StartOverview(OverviewStartAction action,
+bool OverviewController::StartOverview(OverviewStartAction start_action,
                                        OverviewEnterExitType type) {
   // No need to start overview if overview is currently active.
   if (InOverviewSession())
@@ -142,11 +137,11 @@ bool OverviewController::StartOverview(OverviewStartAction action,
     return false;
 
   ToggleOverview(type);
-  RecordOverviewStartAction(action);
+  RecordOverviewStartAction(start_action);
   return true;
 }
 
-bool OverviewController::EndOverview(OverviewEndAction action,
+bool OverviewController::EndOverview(OverviewEndAction end_action,
                                      OverviewEnterExitType type) {
   // No need to end overview if overview is already ended.
   if (!InOverviewSession())
@@ -155,9 +150,9 @@ bool OverviewController::EndOverview(OverviewEndAction action,
   if (!CanEndOverview(type))
     return false;
 
-  overview_session_->set_overview_end_action(action);
+  overview_session_->set_overview_end_action(end_action);
   ToggleOverview(type);
-  RecordOverviewEndAction(action);
+  RecordOverviewEndAction(end_action);
 
   // If there is an undo toast active and the toast was created when ChromeVox
   // was enabled, then we need to close the toast when overview closes.
@@ -285,15 +280,30 @@ void OverviewController::OnWindowActivating(ActivationReason reason,
     overview_session_->OnWindowActivating(reason, gained_active, lost_active);
 }
 
-std::vector<aura::Window*>
-OverviewController::GetWindowsListInOverviewGridsForTest() {
-  std::vector<aura::Window*> windows;
-  for (const std::unique_ptr<OverviewGrid>& grid :
-       overview_session_->grid_list()) {
-    for (const auto& overview_item : grid->window_list())
-      windows.push_back(overview_item->GetWindow());
+bool OverviewController::CanEnterOverview() const {
+  if (!DesksController::Get()->CanEnterOverview()) {
+    return false;
   }
-  return windows;
+
+  if (SnapGroupController* snap_group_controller = SnapGroupController::Get();
+      snap_group_controller && !snap_group_controller->CanEnterOverview()) {
+    return false;
+  }
+
+  // Don't allow a window overview if the user session is not active (e.g.
+  // locked or in user-adding screen) or a modal dialog is open or running in
+  // kiosk app session.
+  Shell* shell = Shell::Get();
+  return shell->session_controller()->GetSessionState() ==
+             session_manager::SessionState::ACTIVE &&
+         !Shell::IsSystemModalWindowOpen() &&
+         !shell->screen_pinning_controller()->IsPinned();
+}
+
+void OverviewController::OnPineWidgetShown() {
+  if (pine_callback_for_test_) {
+    std::move(pine_callback_for_test_).Run();
+  }
 }
 
 void OverviewController::ToggleOverview(OverviewEnterExitType type) {
@@ -325,7 +335,8 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     return w == wm::GetTransientRoot(w) &&
            !WindowState::Get(w)->IsUserPositionable();
   };
-  std::vector<aura::Window*> hide_windows(windows.size());
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> hide_windows(
+      windows.size());
   auto end = base::ranges::copy_if(windows, hide_windows.begin(),
                                    should_hide_for_overview);
   hide_windows.resize(end - hide_windows.begin());
@@ -372,7 +383,8 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
       // windows without animations to prevent them from getting maximized
       // during overview exit. Minimized widgets will get created in their
       // place, and those widgets will fade out of overview.
-      std::vector<aura::Window*> windows_to_minimize(windows.size());
+      std::vector<raw_ptr<aura::Window, VectorExperimental>>
+          windows_to_minimize(windows.size());
       auto it = base::ranges::copy_if(
           windows, windows_to_minimize.begin(), [](aura::Window* window) {
             return !WindowState::Get(window)->IsMinimized();
@@ -505,37 +517,7 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
   }
 }
 
-bool OverviewController::CanEnterOverview() {
-  if (!DesksController::Get()->CanEnterOverview()) {
-    return false;
-  }
-
-  if (SnapGroupController* snap_group_controller = SnapGroupController::Get();
-      snap_group_controller && !snap_group_controller->CanEnterOverview()) {
-    return false;
-  }
-
-  // Prevent entering overview while the divider is dragged or animated.
-  if (IsSplitViewDividerDraggedOrAnimated()) {
-    return false;
-  }
-
-  // Don't allow a window overview if the user session is not active (e.g.
-  // locked or in user-adding screen) or a modal dialog is open or running in
-  // kiosk app session.
-  SessionControllerImpl* session_controller =
-      Shell::Get()->session_controller();
-  return session_controller->GetSessionState() ==
-             session_manager::SessionState::ACTIVE &&
-         !Shell::IsSystemModalWindowOpen() &&
-         !Shell::Get()->screen_pinning_controller()->IsPinned();
-}
-
-bool OverviewController::CanEndOverview(OverviewEnterExitType type) {
-  // Prevent ending overview while the divider is dragged or animated.
-  if (IsSplitViewDividerDraggedOrAnimated())
-    return false;
-
+bool OverviewController::CanEndOverview(OverviewEnterExitType type) const {
   // Do not allow ending overview if we're in single split mode unless swiping
   // up from the shelf in tablet mode, or ending overview immediately without
   // animations.

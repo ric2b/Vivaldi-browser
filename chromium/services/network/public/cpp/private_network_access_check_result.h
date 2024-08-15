@@ -6,9 +6,9 @@
 #define SERVICES_NETWORK_PUBLIC_CPP_PRIVATE_NETWORK_ACCESS_CHECK_RESULT_H_
 
 #include <iosfwd>
+#include <string_view>
 
 #include "base/component_export.h"
-#include "base/strings/string_piece_forward.h"
 #include "services/network/public/mojom/cors.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -16,6 +16,9 @@ namespace network {
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+//
+// Please keep in sync with "PrivateNetworkAccessCheckResult" in
+// src/tools/metrics/histograms/metadata/security/enums.xml.
 enum class PrivateNetworkAccessCheckResult {
   // Request is allowed because it is missing a client security state.
   kAllowedMissingClientSecurityState = 0,
@@ -69,7 +72,7 @@ enum class PrivateNetworkAccessCheckResult {
 };
 
 // Returns a human-readable string representing `result`, suitable for logging.
-base::StringPiece COMPONENT_EXPORT(NETWORK_CPP)
+std::string_view COMPONENT_EXPORT(NETWORK_CPP)
     PrivateNetworkAccessCheckResultToStringPiece(
         PrivateNetworkAccessCheckResult result);
 

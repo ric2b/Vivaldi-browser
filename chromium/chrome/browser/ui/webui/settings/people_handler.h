@@ -79,6 +79,8 @@ class PeopleHandler : public SettingsPageUIHandler,
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
                            ShowSetupCustomPassphraseRequired);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
+                           OngoingSetupCustomPassphraseRequired);
+  FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest,
                            ShowSetupTrustedVaultKeysRequired);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, ShowSetupEncryptAll);
   FRIEND_TEST_ALL_PREFIXES(PeopleHandlerTest, ShowSetupEncryptAllDisallowed);
@@ -248,7 +250,7 @@ class PeopleHandler : public SettingsPageUIHandler,
   std::unique_ptr<base::OneShotTimer> engine_start_timer_;
 
   // Used to listen for pref changes to allow or disallow signin.
-  PrefChangeRegistrar profile_pref_registrar_;
+  std::unique_ptr<PrefChangeRegistrar> profile_pref_registrar_;
 
   // Manages observer lifetimes.
   base::ScopedObservation<signin::IdentityManager,

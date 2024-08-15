@@ -126,13 +126,12 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     anchor_widget_->Init(std::move(params));
     anchor_widget_->Show();
 
-    absl::optional<std::u16string> title =
-        exclude_title ? absl::nullopt
-                      : absl::make_optional<std::u16string>(kIdpETLDPlusOne);
-    absl::optional<std::u16string> iframe_etld_plus_one =
-        exclude_iframe
-            ? absl::nullopt
-            : absl::make_optional<std::u16string>(kIframeETLDPlusOne);
+    std::optional<std::u16string> title =
+        exclude_title ? std::nullopt
+                      : std::make_optional<std::u16string>(kIdpETLDPlusOne);
+    std::optional<std::u16string> iframe_etld_plus_one =
+        exclude_iframe ? std::nullopt
+                       : std::make_optional<std::u16string>(kIframeETLDPlusOne);
     dialog_ = new AccountSelectionBubbleView(
         kTopFrameETLDPlusOne, iframe_etld_plus_one, title,
         blink::mojom::RpContext::kSignIn, show_auto_reauthn_checkbox,
@@ -153,13 +152,33 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     IdentityProviderDisplayData idp_data(
         kIdpETLDPlusOne, idp_metadata,
         CreateTestClientMetadata(terms_of_service_url), {account},
-        /*request_permission=*/true);
+        /*request_permission=*/true, /*has_login_status_mismatch=*/false);
     dialog_->ShowSingleAccountConfirmDialog(
         kTopFrameETLDPlusOne,
-        exclude_iframe
-            ? absl::nullopt
-            : absl::make_optional<std::u16string>(kIframeETLDPlusOne),
+        exclude_iframe ? std::nullopt
+                       : std::make_optional<std::u16string>(kIframeETLDPlusOne),
         account, idp_data, show_back_button);
+  }
+
+  void CreateMultiAccountPicker(
+      const std::vector<std::string>& account_suffixes,
+      bool supports_add_account = false) {
+    std::vector<content::IdentityRequestAccount> account_list =
+        CreateTestIdentityRequestAccounts(
+            account_suffixes,
+            content::IdentityRequestAccount::LoginState::kSignUp);
+
+    CreateAccountSelectionBubble(/*exclude_title=*/false,
+                                 /*exclude_iframe=*/true,
+                                 /*show_auto_reauthn_checkbox=*/false);
+    std::vector<IdentityProviderDisplayData> idp_data;
+    content::IdentityProviderMetadata metadata;
+    metadata.supports_add_account = supports_add_account;
+    idp_data.emplace_back(
+        kIdpETLDPlusOne, metadata,
+        CreateTestClientMetadata(/*terms_of_service_url=*/""), account_list,
+        /*request_permission=*/true, /*has_login_status_mismatch=*/false);
+    dialog_->ShowMultiAccountPicker(idp_data);
   }
 
   void CreateMultiIdpAccountPicker(
@@ -171,7 +190,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
   }
 
   void CheckAccountRow(views::View* row, const std::string& account_suffix) {
-    std::vector<views::View*> row_children = row->children();
+    std::vector<raw_ptr<views::View, VectorExperimental>> row_children =
+        row->children();
     ASSERT_EQ(row_children.size(), 2u);
 
     // Check the image.
@@ -186,7 +206,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     ASSERT_TRUE(layout_manager);
     EXPECT_EQ(layout_manager->GetOrientation(),
               views::BoxLayout::Orientation::kVertical);
-    std::vector<views::View*> text_view_children = text_view->children();
+    std::vector<raw_ptr<views::View, VectorExperimental>> text_view_children =
+        text_view->children();
     ASSERT_EQ(text_view_children.size(), 2u);
 
     std::string expected_name(std::string(kNameBase) + account_suffix);
@@ -204,7 +225,7 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
   void PerformHeaderChecks(
       views::View* header,
       const std::u16string& expected_title,
-      const absl::optional<std::u16string>& expected_subtitle,
+      const std::optional<std::u16string>& expected_subtitle,
       bool expect_idp_brand_icon_in_header) {
     // Perform some basic dialog checks.
     EXPECT_FALSE(dialog()->ShouldShowCloseButton());
@@ -265,7 +286,7 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
   }
 
   void TestSingleAccount(const std::u16string expected_title,
-                         const absl::optional<std::u16string> expected_subtitle,
+                         const std::optional<std::u16string> expected_subtitle,
                          bool expect_idp_brand_icon_in_header) {
     const std::string kAccountSuffix = "suffix";
     content::IdentityRequestAccount account(CreateTestIdentityRequestAccount(
@@ -274,7 +295,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
         /*show_back_button=*/false, account,
         content::IdentityProviderMetadata(), kTermsOfServiceUrl);
 
-    std::vector<views::View*> children = dialog()->children();
+    std::vector<raw_ptr<views::View, VectorExperimental>> children =
+        dialog()->children();
     ASSERT_EQ(children.size(), 3u);
     PerformHeaderChecks(children[0], expected_title, expected_subtitle,
                         expect_idp_brand_icon_in_header);
@@ -303,29 +325,14 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
 
   void TestMultipleAccounts(
       const std::u16string& expected_title,
-      const absl::optional<std::u16string>& expected_subtitle,
+      const std::optional<std::u16string>& expected_subtitle,
       bool expect_idp_brand_icon_in_header,
       bool expect_idp_row) {
     const std::vector<std::string> kAccountSuffixes = {"0", "1", "2"};
+    CreateMultiAccountPicker(kAccountSuffixes);
 
-    {
-      std::vector<content::IdentityRequestAccount> account_list =
-          CreateTestIdentityRequestAccounts(
-              kAccountSuffixes,
-              content::IdentityRequestAccount::LoginState::kSignUp);
-
-      CreateAccountSelectionBubble(/*exclude_title=*/false,
-                                   /*exclude_iframe=*/true,
-                                   /*show_auto_reauthn_checkbox=*/false);
-      std::vector<IdentityProviderDisplayData> idp_data;
-      idp_data.emplace_back(
-          kIdpETLDPlusOne, content::IdentityProviderMetadata(),
-          CreateTestClientMetadata(/*terms_of_service_url=*/""), account_list,
-          /*request_permission=*/true);
-      dialog_->ShowMultiAccountPicker(idp_data);
-    }
-
-    std::vector<views::View*> children = dialog()->children();
+    std::vector<raw_ptr<views::View, VectorExperimental>> children =
+        dialog()->children();
     ASSERT_EQ(children.size(), 3u);
     PerformHeaderChecks(children[0], expected_title, expected_subtitle,
                         expect_idp_brand_icon_in_header);
@@ -341,7 +348,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     EXPECT_TRUE(layout_manager);
     EXPECT_EQ(layout_manager->GetOrientation(),
               views::BoxLayout::Orientation::kVertical);
-    std::vector<views::View*> accounts = contents->children();
+    std::vector<raw_ptr<views::View, VectorExperimental>> accounts =
+        contents->children();
 
     size_t accounts_index = 0;
     if (expect_idp_row) {
@@ -356,7 +364,7 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
   }
 
   void TestFailureDialog(const std::u16string expected_title,
-                         const absl::optional<std::u16string> expected_subtitle,
+                         const std::optional<std::u16string> expected_subtitle,
                          bool expect_idp_brand_icon_in_header) {
     const std::string kAccountSuffix = "suffix";
     content::IdentityRequestAccount account = CreateTestIdentityRequestAccount(
@@ -369,19 +377,20 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     dialog_->ShowFailureDialog(
         kTopFrameETLDPlusOne,
         expected_subtitle.has_value()
-            ? absl::make_optional<std::u16string>(kIframeETLDPlusOne)
-            : absl::nullopt,
+            ? std::make_optional<std::u16string>(kIframeETLDPlusOne)
+            : std::nullopt,
         kIdpETLDPlusOne, content::IdentityProviderMetadata());
 
-    const std::vector<views::View*> children = dialog()->children();
+    const std::vector<raw_ptr<views::View, VectorExperimental>> children =
+        dialog()->children();
     ASSERT_EQ(children.size(), 3u);
 
     PerformHeaderChecks(children[0], expected_title, expected_subtitle,
                         expect_idp_brand_icon_in_header);
 
     const views::View* failure_dialog = children[2];
-    const std::vector<views::View*> failure_dialog_children =
-        failure_dialog->children();
+    const std::vector<raw_ptr<views::View, VectorExperimental>>
+        failure_dialog_children = failure_dialog->children();
     ASSERT_EQ(failure_dialog_children.size(), 2u);
 
     // Check the body shown.
@@ -401,7 +410,7 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
   }
 
   void TestErrorDialog(const std::u16string expected_title,
-                       const absl::optional<std::u16string> expected_subtitle,
+                       const std::optional<std::u16string> expected_subtitle,
                        const std::u16string expected_summary,
                        const std::u16string expected_description,
                        bool expect_idp_brand_icon_in_header,
@@ -414,20 +423,21 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     dialog_->ShowErrorDialog(
         kTopFrameETLDPlusOne,
         expected_subtitle.has_value()
-            ? absl::make_optional<std::u16string>(kIframeETLDPlusOne)
-            : absl::nullopt,
+            ? std::make_optional<std::u16string>(kIframeETLDPlusOne)
+            : std::nullopt,
         kIdpETLDPlusOne, content::IdentityProviderMetadata(),
         content::IdentityCredentialTokenError(error_code, error_url));
 
-    const std::vector<views::View*> children = dialog()->children();
+    const std::vector<raw_ptr<views::View, VectorExperimental>> children =
+        dialog()->children();
     ASSERT_EQ(children.size(), 4u);
 
     PerformHeaderChecks(children[0], expected_title, expected_subtitle,
                         expect_idp_brand_icon_in_header);
 
     const views::View* error_dialog = children[2];
-    const std::vector<views::View*> error_dialog_children =
-        error_dialog->children();
+    const std::vector<raw_ptr<views::View, VectorExperimental>>
+        error_dialog_children = error_dialog->children();
     ASSERT_EQ(error_dialog_children.size(), 2u);
 
     // Check the summary shown.
@@ -443,7 +453,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     EXPECT_EQ(description->GetText(), expected_description);
 
     // Check the buttons shown.
-    const std::vector<views::View*> button_row = children[3]->children();
+    const std::vector<raw_ptr<views::View, VectorExperimental>> button_row =
+        children[3]->children();
 
     if (error_url.is_empty()) {
       ASSERT_EQ(button_row.size(), 1u);
@@ -472,9 +483,10 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
   // Checks the account rows starting at `accounts[accounts_index]`. Updates
   // `accounts_index` to the first unused index in `accounts`, or to
   // `accounts.size()` if done.
-  void CheckAccountRows(const std::vector<views::View*>& accounts,
-                        const std::vector<std::string>& account_suffixes,
-                        size_t& accounts_index) {
+  void CheckAccountRows(
+      const std::vector<raw_ptr<views::View, VectorExperimental>>& accounts,
+      const std::vector<std::string>& account_suffixes,
+      size_t& accounts_index) {
     EXPECT_GE(accounts.size(), account_suffixes.size());
     for (size_t i = 0; i < std::size(account_suffixes); ++i) {
       ASSERT_STREQ("HoverButton", accounts[accounts_index]->GetClassName());
@@ -506,6 +518,28 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
     views::Label* title_view =
         static_cast<views::Label*>(idp_account->children()[1]);
     EXPECT_EQ(title_view->GetText(), expected_idp);
+  }
+
+  void CheckMismatchIdp(views::View* idp_row,
+                        const std::u16string& expected_idp) {
+    ASSERT_STREQ("HoverButton", idp_row->GetClassName());
+    HoverButton* idp_button = static_cast<HoverButton*>(idp_row);
+    ASSERT_TRUE(idp_button);
+    EXPECT_EQ(idp_button->title()->GetText(), u"Sign in to " + expected_idp);
+    EXPECT_EQ(idp_button->subtitle(), nullptr);
+    views::View* icon_view = idp_button->icon_view();
+    EXPECT_TRUE(icon_view);
+  }
+
+  void CheckUseOtherAccount(
+      const std::vector<raw_ptr<views::View, VectorExperimental>>& accounts,
+      size_t& accounts_index) {
+    EXPECT_TRUE(IsViewClass<views::Separator>(accounts[accounts_index++]));
+    views::View* button = accounts[accounts_index++];
+    EXPECT_TRUE(IsViewClass<HoverButton>(button));
+    HoverButton* idp_button = static_cast<HoverButton*>(button);
+    ASSERT_TRUE(idp_button);
+    EXPECT_EQ(idp_button->GetText(), u"Use a different account");
   }
 
   void SetUp() override {
@@ -550,7 +584,7 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase {
 };
 
 TEST_F(AccountSelectionBubbleViewTest, SingleAccount) {
-  TestSingleAccount(kTitleSignIn, /*expected_subtitle=*/absl::nullopt,
+  TestSingleAccount(kTitleSignIn, /*expected_subtitle=*/std::nullopt,
                     /*expect_idp_brand_icon_in_header=*/true);
 }
 
@@ -562,10 +596,11 @@ TEST_F(AccountSelectionBubbleViewTest, SingleAccountNoTermsOfService) {
       /*show_back_button=*/false, account, content::IdentityProviderMetadata(),
       /*terms_of_service_url=*/"");
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
   PerformHeaderChecks(children[0], kTitleSignIn,
-                      /*expected_subtitle=*/absl::nullopt,
+                      /*expected_subtitle=*/std::nullopt,
                       /*expect_idp_brand_icon_in_header=*/true);
 
   views::View* single_account_chooser = children[2];
@@ -589,9 +624,24 @@ TEST_F(AccountSelectionBubbleViewTest, SingleAccountNoTermsOfService) {
 }
 
 TEST_F(AccountSelectionBubbleViewTest, MultipleAccounts) {
-  TestMultipleAccounts(kTitleSignIn, /*expected_subtitle=*/absl::nullopt,
+  TestMultipleAccounts(kTitleSignIn, /*expected_subtitle=*/std::nullopt,
                        /*expect_idp_brand_icon_in_header=*/true,
                        /*expect_idp_row=*/false);
+}
+
+TEST_F(AccountSelectionBubbleViewTest, UseDifferentAccount) {
+  const std::vector<std::string> kAccountSuffixes = {"0"};
+  CreateMultiAccountPicker(kAccountSuffixes, true);
+
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
+  ASSERT_EQ(children.size(), 3u);
+
+  views::ScrollView* scroll_view = static_cast<views::ScrollView*>(children[2]);
+  ASSERT_EQ(scroll_view->contents()->children().size(), 3u);
+
+  size_t index = 1;
+  CheckUseOtherAccount(scroll_view->contents()->children(), index);
 }
 
 TEST_F(AccountSelectionBubbleViewTest, ReturningAccount) {
@@ -602,14 +652,15 @@ TEST_F(AccountSelectionBubbleViewTest, ReturningAccount) {
       /*show_back_button=*/false, account, content::IdentityProviderMetadata(),
       /*terms_of_service_url=*/"");
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
   PerformHeaderChecks(children[0], kTitleSignIn,
-                      /*expected_subtitle=*/absl::nullopt,
+                      /*expected_subtitle=*/std::nullopt,
                       /*expect_idp_brand_icon_in_header=*/true);
 
   views::View* single_account_chooser = children[2];
-  std::vector<views::View*> chooser_children =
+  std::vector<raw_ptr<views::View, VectorExperimental>> chooser_children =
       single_account_chooser->children();
   ASSERT_EQ(chooser_children.size(), 2u);
   views::View* single_account_row = chooser_children[0];
@@ -647,18 +698,19 @@ TEST_F(AccountSelectionBubbleViewTest,
   IdentityProviderDisplayData idp_data(
       kIdpETLDPlusOne, idp_metadata,
       CreateTestClientMetadata(/*terms_of_service_url=*/""), {account},
-      /*request_permission=*/true);
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
 
   dialog()->ShowSingleAccountConfirmDialog(kTopFrameETLDPlusOne,
-                                           /*iframe_for_display=*/absl::nullopt,
+                                           /*iframe_for_display=*/std::nullopt,
                                            account, idp_data,
                                            /*show_back_button=*/false);
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
 
   views::View* single_account_chooser = children[2];
-  std::vector<views::View*> chooser_children =
+  std::vector<raw_ptr<views::View, VectorExperimental>> chooser_children =
       single_account_chooser->children();
   ASSERT_EQ(chooser_children.size(), 2u);
 
@@ -692,18 +744,19 @@ TEST_F(AccountSelectionBubbleViewTest,
   IdentityProviderDisplayData idp_data(
       kIdpETLDPlusOne, idp_metadata,
       CreateTestClientMetadata(/*terms_of_service_url=*/""), {account},
-      /*request_permission=*/true);
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
 
   dialog()->ShowSingleAccountConfirmDialog(kTopFrameETLDPlusOne,
-                                           /*iframe_for_display=*/absl::nullopt,
+                                           /*iframe_for_display=*/std::nullopt,
                                            account, idp_data,
                                            /*show_back_button=*/false);
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
 
   views::View* single_account_chooser = children[2];
-  std::vector<views::View*> chooser_children =
+  std::vector<raw_ptr<views::View, VectorExperimental>> chooser_children =
       single_account_chooser->children();
   ASSERT_EQ(chooser_children.size(), 2u);
 
@@ -721,17 +774,18 @@ TEST_F(AccountSelectionBubbleViewTest, Verifying) {
   IdentityProviderDisplayData idp_data(
       kIdpETLDPlusOne, content::IdentityProviderMetadata(),
       content::ClientMetadata(GURL(), GURL()), {account},
-      /*request_permission=*/true);
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
 
   CreateAccountSelectionBubble(/*exclude_title=*/false, /*exclude_iframe=*/true,
                                /*show_auto_reauthn_checkbox=*/false);
   dialog_->ShowVerifyingSheet(
       account, idp_data, l10n_util::GetStringUTF16(IDS_VERIFY_SHEET_TITLE));
 
-  const std::vector<views::View*> children = dialog()->children();
+  const std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
   PerformHeaderChecks(children[0], kTitleSigningIn,
-                      /*expected_subtitle=*/absl::nullopt,
+                      /*expected_subtitle=*/std::nullopt,
                       /*expect_idp_brand_icon_in_header=*/true);
 
   views::View* row_container = dialog()->children()[2];
@@ -746,7 +800,7 @@ TEST_F(AccountSelectionBubbleViewTest, VerifyingForAutoReauthn) {
   IdentityProviderDisplayData idp_data(
       kIdpETLDPlusOne, content::IdentityProviderMetadata(),
       content::ClientMetadata(GURL(), GURL()), {account},
-      /*request_permission=*/true);
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
 
   CreateAccountSelectionBubble(/*exclude_title=*/false, /*exclude_iframe=*/true,
                                /*show_auto_reauthn_checkbox=*/false);
@@ -754,10 +808,11 @@ TEST_F(AccountSelectionBubbleViewTest, VerifyingForAutoReauthn) {
       l10n_util::GetStringUTF16(IDS_VERIFY_SHEET_TITLE_AUTO_REAUTHN);
   dialog_->ShowVerifyingSheet(account, idp_data, title);
 
-  const std::vector<views::View*> children = dialog()->children();
+  const std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
   PerformHeaderChecks(children[0], kTitleSigningInWithAutoReauthn,
-                      /*expected_subtitle=*/absl::nullopt,
+                      /*expected_subtitle=*/std::nullopt,
                       /*expect_idp_brand_icon_in_header=*/true);
 
   views::View* row_container = dialog()->children()[2];
@@ -774,10 +829,11 @@ TEST_F(AccountSelectionBubbleViewTest, AutoReauthnCheckboxDisplayed) {
       /*terms_of_service_url=*/"",
       /*show_auto_reauthn_checkbox=*/true);
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
   PerformHeaderChecks(children[0], kTitleSignIn,
-                      /*expected_subtitle=*/absl::nullopt,
+                      /*expected_subtitle=*/std::nullopt,
                       /*expect_idp_brand_icon_in_header=*/true);
 
   views::View* single_account_chooser = children[2];
@@ -800,7 +856,7 @@ TEST_F(AccountSelectionBubbleViewTest, AutoReauthnCheckboxDisplayed) {
 
 TEST_F(AccountSelectionBubbleViewTest, Failure) {
   TestFailureDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                    /*expected_subtitle=*/absl::nullopt,
+                    /*expected_subtitle=*/std::nullopt,
                     /*expect_idp_brand_icon_in_header=*/true);
 }
 
@@ -815,7 +871,8 @@ TEST_F(AccountSelectionBubbleViewTest, SuccessIframeSubtitleInHeader) {
       /*terms_of_service_url=*/"",
       /*show_auto_reauthn_checkbox=*/false, /*exclude_iframe=*/false);
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
 
   PerformHeaderChecks(
@@ -851,7 +908,7 @@ class MultipleIdpAccountSelectionBubbleViewTest
 // features::kFedCmMultipleIdentityProviders enabled. See
 // AccountSelectionBubbleViewTest's SingleAccount test.
 TEST_F(MultipleIdpAccountSelectionBubbleViewTest, SingleAccount) {
-  TestSingleAccount(kTitleSignIn, /*expected_subtitle=*/absl::nullopt,
+  TestSingleAccount(kTitleSignIn, /*expected_subtitle=*/std::nullopt,
                     /*expect_idp_brand_icon_in_header=*/true);
 }
 
@@ -859,7 +916,7 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, SingleAccount) {
 // exactly the same with features::kFedCmMultipleIdentityProviders enabled (see
 // AccountSelectionBubbleViewTest's MultipleAccounts test).
 TEST_F(MultipleIdpAccountSelectionBubbleViewTest, MultipleAccountsSingleIdp) {
-  TestMultipleAccounts(kTitleSignIn, /*expected_subtitle=*/absl::nullopt,
+  TestMultipleAccounts(kTitleSignIn, /*expected_subtitle=*/std::nullopt,
                        /*expect_idp_brand_icon_in_header=*/true,
                        /*expect_idp_row=*/false);
 }
@@ -873,23 +930,24 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
   std::vector<IdentityProviderDisplayData> idp_data;
   std::vector<Account> accounts_first_idp = CreateTestIdentityRequestAccounts(
       kAccountSuffixes1, content::IdentityRequestAccount::LoginState::kSignUp);
-  idp_data.emplace_back(kIdpETLDPlusOne, content::IdentityProviderMetadata(),
-                        CreateTestClientMetadata(kTermsOfServiceUrl),
-                        accounts_first_idp,
-                        /*request_permission=*/true);
+  idp_data.emplace_back(
+      kIdpETLDPlusOne, content::IdentityProviderMetadata(),
+      CreateTestClientMetadata(kTermsOfServiceUrl), accounts_first_idp,
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
   idp_data.emplace_back(
       u"idp2.com", content::IdentityProviderMetadata(),
       CreateTestClientMetadata("https://tos-2.com"),
       CreateTestIdentityRequestAccounts(
           kAccountSuffixes2,
           content::IdentityRequestAccount::LoginState::kSignUp),
-      /*request_permission=*/true);
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
   CreateMultiIdpAccountPicker(idp_data);
 
-  std::vector<views::View*> children = dialog()->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
   ASSERT_EQ(children.size(), 3u);
   PerformHeaderChecks(children[0], kTitleSignInWithoutIdp,
-                      /*expected_subtitle=*/absl::nullopt,
+                      /*expected_subtitle=*/std::nullopt,
                       /*expect_idp_brand_icon_in_header=*/false);
 
   views::ScrollView* scroller = static_cast<views::ScrollView*>(children[2]);
@@ -903,7 +961,8 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
   EXPECT_TRUE(layout_manager);
   EXPECT_EQ(layout_manager->GetOrientation(),
             views::BoxLayout::Orientation::kVertical);
-  std::vector<views::View*> accounts = contents->children();
+  std::vector<raw_ptr<views::View, VectorExperimental>> accounts =
+      contents->children();
 
   // There should be 6 rows: 3 for the first IDP, 3 for the second.
   EXPECT_EQ(6u, accounts.size());
@@ -918,9 +977,117 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
   CheckAccountRows(accounts, kAccountSuffixes2, accounts_index);
 }
 
+TEST_F(MultipleIdpAccountSelectionBubbleViewTest, OneIdpWithMismatch) {
+  const std::vector<std::string> kAccountSuffixes1 = {"1", "2"};
+  std::vector<IdentityProviderDisplayData> idp_data;
+  std::vector<Account> accounts_first_idp = CreateTestIdentityRequestAccounts(
+      kAccountSuffixes1, content::IdentityRequestAccount::LoginState::kSignUp);
+  idp_data.emplace_back(
+      kIdpETLDPlusOne, content::IdentityProviderMetadata(),
+      CreateTestClientMetadata(kTermsOfServiceUrl), accounts_first_idp,
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
+  idp_data.emplace_back(
+      u"idp2.com", content::IdentityProviderMetadata(),
+      CreateTestClientMetadata("https://tos-2.com"),
+      CreateTestIdentityRequestAccounts(
+          {}, content::IdentityRequestAccount::LoginState::kSignUp),
+      /*request_permission=*/true, /*has_login_status_mismatch=*/true);
+  CreateMultiIdpAccountPicker(idp_data);
+
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
+  ASSERT_EQ(children.size(), 3u);
+  PerformHeaderChecks(children[0], kTitleSignInWithoutIdp,
+                      /*expected_subtitle=*/std::nullopt,
+                      /*expect_idp_brand_icon_in_header=*/false);
+
+  views::ScrollView* scroller = static_cast<views::ScrollView*>(children[2]);
+  ASSERT_FALSE(scroller->children().empty());
+  views::View* wrapper = scroller->children()[0];
+  ASSERT_FALSE(wrapper->children().empty());
+  views::View* contents = wrapper->children()[0];
+
+  views::BoxLayout* layout_manager =
+      static_cast<views::BoxLayout*>(contents->GetLayoutManager());
+  EXPECT_TRUE(layout_manager);
+  EXPECT_EQ(layout_manager->GetOrientation(),
+            views::BoxLayout::Orientation::kVertical);
+  std::vector<raw_ptr<views::View, VectorExperimental>> accounts =
+      contents->children();
+
+  // There should be 4 rows: 3 for the first IDP, 1 for the second.
+  EXPECT_EQ(4u, accounts.size());
+
+  // Check the first IDP.
+  CheckIdpRow(accounts[0u], u"idp-example.com");
+  size_t accounts_index = 1;
+  CheckAccountRows(accounts, kAccountSuffixes1, accounts_index);
+
+  // Check the second IDP.
+  CheckMismatchIdp(accounts[accounts_index++], u"idp2.com");
+}
+
+TEST_F(MultipleIdpAccountSelectionBubbleViewTest, MultiIdpUserOtherAccount) {
+  const std::vector<std::string> kAccountSuffixes1 = {"1", "2"};
+  const std::vector<std::string> kAccountSuffixes2 = {"3"};
+  std::vector<IdentityProviderDisplayData> idp_data;
+  std::vector<Account> accounts_first_idp = CreateTestIdentityRequestAccounts(
+      kAccountSuffixes1, content::IdentityRequestAccount::LoginState::kSignUp);
+  content::IdentityProviderMetadata idp_with_supports_add =
+      content::IdentityProviderMetadata();
+  idp_with_supports_add.supports_add_account = true;
+  idp_data.emplace_back(
+      kIdpETLDPlusOne, idp_with_supports_add,
+      CreateTestClientMetadata(kTermsOfServiceUrl), accounts_first_idp,
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
+  idp_data.emplace_back(
+      u"idp2.com", idp_with_supports_add,
+      CreateTestClientMetadata("https://tos-2.com"),
+      CreateTestIdentityRequestAccounts(
+          kAccountSuffixes2,
+          content::IdentityRequestAccount::LoginState::kSignUp),
+      /*request_permission=*/true, /*has_login_status_mismatch=*/false);
+  CreateMultiIdpAccountPicker(idp_data);
+
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
+  ASSERT_EQ(children.size(), 3u);
+  PerformHeaderChecks(children[0], kTitleSignInWithoutIdp,
+                      /*expected_subtitle=*/std::nullopt,
+                      /*expect_idp_brand_icon_in_header=*/false);
+
+  views::ScrollView* scroller = static_cast<views::ScrollView*>(children[2]);
+  ASSERT_FALSE(scroller->children().empty());
+  views::View* wrapper = scroller->children()[0];
+  ASSERT_FALSE(wrapper->children().empty());
+  views::View* contents = wrapper->children()[0];
+
+  views::BoxLayout* layout_manager =
+      static_cast<views::BoxLayout*>(contents->GetLayoutManager());
+  EXPECT_TRUE(layout_manager);
+  EXPECT_EQ(layout_manager->GetOrientation(),
+            views::BoxLayout::Orientation::kVertical);
+  std::vector<raw_ptr<views::View, VectorExperimental>> accounts =
+      contents->children();
+
+  // There should be 9 rows: 5 for the first IDP, 4 for the second.
+  EXPECT_EQ(9u, accounts.size());
+
+  // Check the first IDP.
+  CheckIdpRow(accounts[0u], u"idp-example.com");
+  size_t accounts_index = 1;
+  CheckAccountRows(accounts, kAccountSuffixes1, accounts_index);
+  CheckUseOtherAccount(accounts, accounts_index);
+
+  // Check the second IDP.
+  CheckIdpRow(accounts[accounts_index++], u"idp2.com");
+  CheckAccountRows(accounts, kAccountSuffixes2, accounts_index);
+  CheckUseOtherAccount(accounts, accounts_index);
+}
+
 TEST_F(AccountSelectionBubbleViewTest, GenericError) {
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"Can't continue with idp-example.com",
                   u"Something went wrong",
                   /*expect_idp_brand_icon_in_header=*/true,
@@ -931,7 +1098,7 @@ TEST_F(AccountSelectionBubbleViewTest, GenericError) {
 TEST_F(AccountSelectionBubbleViewTest, GenericErrorWithErrorUrl) {
   TestErrorDialog(
       u"Sign in to top-frame-example.com with idp-example.com",
-      /*expected_subtitle=*/absl::nullopt,
+      /*expected_subtitle=*/std::nullopt,
       u"Can't continue with idp-example.com", u"Something went wrong",
       /*expect_idp_brand_icon_in_header=*/true,
       /*error_code=*/"", GURL(u"https://idp-example.com/more-details"));
@@ -940,7 +1107,7 @@ TEST_F(AccountSelectionBubbleViewTest, GenericErrorWithErrorUrl) {
 TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
   // Invalid request without error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"top-frame-example.com can't continue using idp-example.com",
                   u"This option is unavailable right now. You can try other "
                   u"ways to continue on top-frame-example.com.",
@@ -951,7 +1118,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
   // Invalid request with error URL
   TestErrorDialog(
       u"Sign in to top-frame-example.com with idp-example.com",
-      /*expected_subtitle=*/absl::nullopt,
+      /*expected_subtitle=*/std::nullopt,
       u"top-frame-example.com can't continue using idp-example.com",
       u"This option is unavailable right now. Choose \"More "
       u"details\" below to get more information from idp-example.com.",
@@ -961,7 +1128,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Unauthorized client without error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"top-frame-example.com can't continue using idp-example.com",
                   u"This option is unavailable right now. You can try other "
                   u"ways to continue on top-frame-example.com.",
@@ -972,7 +1139,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
   // Unauthorized client with error URL
   TestErrorDialog(
       u"Sign in to top-frame-example.com with idp-example.com",
-      /*expected_subtitle=*/absl::nullopt,
+      /*expected_subtitle=*/std::nullopt,
       u"top-frame-example.com can't continue using idp-example.com",
       u"This option is unavailable right now. Choose \"More "
       u"details\" below to get more information from idp-example.com.",
@@ -982,7 +1149,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Access denied without error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"Check that you chose the right account",
                   u"Check if the selected account is supported. You can try "
                   u"other ways to continue on top-frame-example.com.",
@@ -993,7 +1160,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
   // Access denied with error URL
   TestErrorDialog(
       u"Sign in to top-frame-example.com with idp-example.com",
-      /*expected_subtitle=*/absl::nullopt,
+      /*expected_subtitle=*/std::nullopt,
       u"Check that you chose the right account",
       u"Check if the selected account is supported. Choose \"More "
       u"details\" below to get more information from idp-example.com.",
@@ -1003,7 +1170,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Temporarily unavailable without error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt, u"Try again later",
+                  /*expected_subtitle=*/std::nullopt, u"Try again later",
                   u"idp-example.com isn't available right now. If this issue "
                   u"keeps happening, you can try other ways to continue on "
                   u"top-frame-example.com.",
@@ -1013,7 +1180,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Temporarily unavailable with error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt, u"Try again later",
+                  /*expected_subtitle=*/std::nullopt, u"Try again later",
                   u"idp-example.com isn't available right now. If this issue "
                   u"keeps happening, choose \"More details\" below to get more "
                   u"information from idp-example.com.",
@@ -1023,7 +1190,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Server error without error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"Check your internet connection",
                   u"If you're online but this issue keeps happening, you can "
                   u"try other ways to continue on top-frame-example.com.",
@@ -1033,7 +1200,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Server error with error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"Check your internet connection",
                   u"If you're online but this issue keeps happening, you can "
                   u"try other ways to continue on top-frame-example.com.",
@@ -1043,7 +1210,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Error not in our predefined list without error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"Can't continue with idp-example.com",
                   u"Something went wrong",
                   /*expect_idp_brand_icon_in_header=*/true,
@@ -1052,7 +1219,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 
   // Error not in our predefined list with error URL
   TestErrorDialog(u"Sign in to top-frame-example.com with idp-example.com",
-                  /*expected_subtitle=*/absl::nullopt,
+                  /*expected_subtitle=*/std::nullopt,
                   u"Can't continue with idp-example.com",
                   u"Something went wrong",
                   /*expect_idp_brand_icon_in_header=*/true,

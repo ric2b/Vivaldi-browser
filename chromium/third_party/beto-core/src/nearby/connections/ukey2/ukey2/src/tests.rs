@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::unwrap_used)]
+
 use crate::{
     proto_adapter::{IntoAdapter as _, MessageType, ToWrappedMessage as _},
     ukey2_handshake::HandshakeCipher,
@@ -21,42 +23,41 @@ use crypto_provider::elliptic_curve::{EcdhProvider, EphemeralSecret, PublicKey};
 use crypto_provider::p256::P256;
 use crypto_provider::x25519::X25519;
 use crypto_provider::{CryptoProvider, CryptoRng};
-use crypto_provider_openssl::Openssl;
-use crypto_provider_rustcrypto::RustCrypto;
+use crypto_provider_default::CryptoProviderImpl;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use rstest::rstest;
 use sha2::Digest;
 use std::collections::hash_set;
 use ukey2_proto::protobuf::Message;
 use ukey2_proto::ukey2_all_proto::ukey;
 
-#[rstest]
-fn advance_from_init_to_finish_client_test<C: CryptoProvider>(
-    #[values(RustCrypto::new(), Openssl)] _crypto_provider: C,
-) {
+type X25519EphemeralSecret =
+    <<CryptoProviderImpl as CryptoProvider>::X25519 as EcdhProvider<X25519>>::EphemeralSecret;
+type X25519PublicKey =
+    <<CryptoProviderImpl as CryptoProvider>::X25519 as EcdhProvider<X25519>>::PublicKey;
+type P256EphemeralSecret =
+    <<CryptoProviderImpl as CryptoProvider>::P256 as EcdhProvider<P256>>::EphemeralSecret;
+
+#[test]
+fn advance_from_init_to_finish_client_test() {
     let mut rng = StdRng::from_entropy();
-    let client1 = Ukey2ClientStage1::<C>::from(
+    let client1 = Ukey2ClientStage1::<CryptoProviderImpl>::from(
         &mut rng,
         "next protocol".to_string(),
         HandshakeImplementation::Spec,
     );
 
     let secret =
-        <C::X25519 as EcdhProvider<X25519>>::EphemeralSecret::generate_random(
-            &mut <<C::X25519 as EcdhProvider<X25519>>::EphemeralSecret as EphemeralSecret<
-                X25519,
-            >>::Rng::new(),
-        );
-    let public_key =
-        <C::X25519 as EcdhProvider<X25519>>::PublicKey::from_bytes(&secret.public_key_bytes())
-            .unwrap();
+        X25519EphemeralSecret::generate_random(&mut <X25519EphemeralSecret as EphemeralSecret<
+            X25519,
+        >>::Rng::new());
+    let public_key = X25519PublicKey::from_bytes(secret.public_key_bytes().as_ref()).unwrap();
     let random: [u8; 32] = rng.gen();
     let message_data: ukey::Ukey2ServerInit = ukey::Ukey2ServerInit {
         version: Some(1),
         random: Some(random.to_vec()),
         handshake_cipher: Some(ukey::Ukey2HandshakeCipher::CURVE25519_SHA512.into()),
-        public_key: Some(public_key.to_bytes()),
+        public_key: Some(public_key.to_bytes().as_ref().to_vec()),
         ..Default::default()
     };
 
@@ -66,25 +67,24 @@ fn advance_from_init_to_finish_client_test<C: CryptoProvider>(
     // TODO assertions on client state
 }
 
-#[rstest]
-fn advance_from_init_to_complete_server_x25519_test<C: CryptoProvider>(
-    #[values(RustCrypto::new(), Openssl)] _crypto_provider: C,
-) {
+#[test]
+fn advance_from_init_to_complete_server_x25519_test() {
     let mut rng = StdRng::from_entropy();
     let mut next_protocols = hash_set::HashSet::new();
     let _ = next_protocols.insert("AES_256_CBC-HMAC_SHA256".to_string());
-    let server1 = Ukey2ServerStage1::<C>::from(next_protocols, HandshakeImplementation::Spec);
+    let server1 = Ukey2ServerStage1::<CryptoProviderImpl>::from(
+        next_protocols,
+        HandshakeImplementation::Spec,
+    );
     // We construct a ClientInit message for the server to get it into the state to handle
     // ClientFinish messages.
     let secret =
-        <C::X25519 as EcdhProvider<X25519>>::EphemeralSecret::generate_random(
-            &mut <<C::X25519 as EcdhProvider<X25519>>::EphemeralSecret as EphemeralSecret<
-                X25519,
-            >>::Rng::new(),
-        );
+        X25519EphemeralSecret::generate_random(&mut <X25519EphemeralSecret as EphemeralSecret<
+            X25519,
+        >>::Rng::new());
     let client_finished_msg = {
         let mut msg = ukey::Ukey2ClientFinished::default();
-        msg.set_public_key(secret.public_key_bytes());
+        msg.set_public_key(secret.public_key_bytes().as_ref().to_vec());
         msg.to_wrapped_msg()
     };
     let client_finished_bytes = client_finished_msg.write_to_bytes().unwrap();
@@ -120,23 +120,23 @@ fn advance_from_init_to_complete_server_x25519_test<C: CryptoProvider>(
     // TODO assertions on server state
 }
 
-#[rstest]
-fn advance_from_init_to_complete_server_p256_test<C: CryptoProvider>(
-    #[values(RustCrypto::new(), Openssl)] _crypto_provider: C,
-) {
+#[test]
+fn advance_from_init_to_complete_server_p256_test() {
     let mut rng = StdRng::from_entropy();
     let mut next_protocols = hash_set::HashSet::new();
     let _ = next_protocols.insert("AES_256_CBC-HMAC_SHA256".to_string());
-    let server1 = Ukey2ServerStage1::<C>::from(next_protocols, HandshakeImplementation::Spec);
+    let server1 = Ukey2ServerStage1::<CryptoProviderImpl>::from(
+        next_protocols,
+        HandshakeImplementation::Spec,
+    );
     // We construct a ClientInit message for the server to get it into the state to handle
     // ClientFinish messages.
-    let secret = <C::P256 as EcdhProvider<P256>>::EphemeralSecret::generate_random(
-        &mut <<C::P256 as EcdhProvider<P256>>::EphemeralSecret as EphemeralSecret<P256>>::Rng::new(
-        ),
+    let secret = P256EphemeralSecret::generate_random(
+        &mut <P256EphemeralSecret as EphemeralSecret<P256>>::Rng::new(),
     );
     let client_finished_msg = {
         let mut msg = ukey::Ukey2ClientFinished::default();
-        msg.set_public_key(secret.public_key_bytes());
+        msg.set_public_key(secret.public_key_bytes().as_ref().to_vec());
         msg.to_wrapped_msg()
     };
     let client_finished_bytes = client_finished_msg.write_to_bytes().unwrap();

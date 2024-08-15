@@ -25,7 +25,6 @@
 #include "chrome/browser/metrics/tab_footprint_aggregator.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/metrics/metrics_data_validation.h"
-#include "components/metrics/system_memory_stats_recorder.h"
 #include "components/performance_manager/public/graph/frame_node.h"
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/graph_operations.h"
@@ -675,6 +674,10 @@ const Metric kPartitionAllocAddressSpaceMetrics[] = {
 };
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
+// Record a memory size in megabytes, over a potential interval up to 32 GB.
+#define UMA_HISTOGRAM_LARGE_MEMORY_MB(name, sample) \
+  UMA_HISTOGRAM_CUSTOM_COUNTS(name, sample, 1, 32768, 50)
+
 #define EXPERIMENTAL_UMA_PREFIX "Memory.Experimental."
 #define VERSION_SUFFIX_PERCENT "2."
 #define VERSION_SUFFIX_NORMAL "2."
@@ -746,7 +749,7 @@ void EmitPartitionAllocFragmentationStat(
     HistogramProcessType process_type,
     const char* dump_name,
     const char* uma_name) {
-  absl::optional<uint64_t> value = pmd.GetMetric(dump_name, "fragmentation");
+  std::optional<uint64_t> value = pmd.GetMetric(dump_name, "fragmentation");
   if (value.has_value()) {
     Metric fragmentation_metric = {dump_name,
                                    uma_name,
@@ -762,7 +765,7 @@ void EmitPartitionAllocWastedStat(const GlobalMemoryDump::ProcessDump& pmd,
                                   HistogramProcessType process_type,
                                   const char* dump_name,
                                   const char* uma_name) {
-  absl::optional<uint64_t> value = pmd.GetMetric(dump_name, "wasted");
+  std::optional<uint64_t> value = pmd.GetMetric(dump_name, "wasted");
   if (value.has_value()) {
     Metric wasted_metric = {dump_name,
                             uma_name,
@@ -776,7 +779,7 @@ void EmitPartitionAllocWastedStat(const GlobalMemoryDump::ProcessDump& pmd,
 
 void EmitMallocStats(const GlobalMemoryDump::ProcessDump& pmd,
                      HistogramProcessType process_type,
-                     const absl::optional<base::TimeDelta>& uptime) {
+                     const std::optional<base::TimeDelta>& uptime) {
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   const char* const kMallocDumpName = "malloc/partitions/allocator";
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
@@ -825,7 +828,7 @@ void EmitPartitionAllocAddressSpaceStatVariants(
     const Metric& metric,
     const uint64_t metric_value,
     HistogramProcessType process_type,
-    const absl::optional<base::TimeDelta>& uptime) {
+    const std::optional<base::TimeDelta>& uptime) {
   // Emit the bare metric.
   EmitProcessUma(process_type, metric, metric_value);
 
@@ -854,9 +857,9 @@ void EmitPartitionAllocAddressSpaceStatVariants(
 void EmitPartitionAllocAddressSpaceStats(
     const GlobalMemoryDump::ProcessDump& pmd,
     HistogramProcessType process_type,
-    const absl::optional<base::TimeDelta>& uptime) {
+    const std::optional<base::TimeDelta>& uptime) {
   for (const auto& metric : kPartitionAllocAddressSpaceMetrics) {
-    absl::optional<uint64_t> metric_value =
+    std::optional<uint64_t> metric_value =
         pmd.GetMetric("partition_alloc/address_space", metric.metric);
     if (!metric_value.has_value()) {
       continue;
@@ -869,11 +872,11 @@ void EmitPartitionAllocAddressSpaceStats(
 
 void EmitProcessUmaAndUkm(const GlobalMemoryDump::ProcessDump& pmd,
                           HistogramProcessType process_type,
-                          const absl::optional<base::TimeDelta>& uptime,
+                          const std::optional<base::TimeDelta>& uptime,
                           bool record_uma,
                           Memory_Experimental* builder) {
   for (const auto& item : kAllocatorDumpNamesForMetrics) {
-    absl::optional<uint64_t> value = pmd.GetMetric(item.dump_name, item.metric);
+    std::optional<uint64_t> value = pmd.GetMetric(item.dump_name, item.metric);
     if (!value)
       continue;
 
@@ -979,7 +982,7 @@ void EmitSummedGpuMemory(const GlobalMemoryDump::ProcessDump& pmd,
 void EmitBrowserMemoryMetrics(const GlobalMemoryDump::ProcessDump& pmd,
                               ukm::SourceId ukm_source_id,
                               ukm::UkmRecorder* ukm_recorder,
-                              const absl::optional<base::TimeDelta>& uptime,
+                              const std::optional<base::TimeDelta>& uptime,
                               bool record_uma) {
   Memory_Experimental builder(ukm_source_id);
   builder.SetProcessType(static_cast<int64_t>(
@@ -996,7 +999,7 @@ void EmitRendererMemoryMetrics(
     const ProcessMemoryMetricsEmitter::PageInfo* page_info,
     ukm::UkmRecorder* ukm_recorder,
     int number_of_extensions,
-    const absl::optional<base::TimeDelta>& uptime,
+    const std::optional<base::TimeDelta>& uptime,
     bool record_uma) {
   // If the renderer doesn't host a single page, no page_info will be passed in,
   // and there's no single URL to associate its memory with.
@@ -1027,7 +1030,7 @@ void EmitRendererMemoryMetrics(
 void EmitGpuMemoryMetrics(const GlobalMemoryDump::ProcessDump& pmd,
                           ukm::SourceId ukm_source_id,
                           ukm::UkmRecorder* ukm_recorder,
-                          const absl::optional<base::TimeDelta>& uptime,
+                          const std::optional<base::TimeDelta>& uptime,
                           bool record_uma) {
   Memory_Experimental builder(ukm_source_id);
   builder.SetProcessType(
@@ -1042,7 +1045,7 @@ void EmitUtilityMemoryMetrics(HistogramProcessType ptype,
                               const GlobalMemoryDump::ProcessDump& pmd,
                               ukm::SourceId ukm_source_id,
                               ukm::UkmRecorder* ukm_recorder,
-                              const absl::optional<base::TimeDelta>& uptime,
+                              const std::optional<base::TimeDelta>& uptime,
                               bool record_uma) {
   Memory_Experimental builder(ukm_source_id);
   builder.SetProcessType(static_cast<int64_t>(
@@ -1056,12 +1059,12 @@ void EmitUtilityMemoryMetrics(HistogramProcessType ptype,
 // Return the base::android::ChildBindingState if the process with `pid` is a
 // renderer. If the `pid` is not in the list of live renderers it is assumed to
 // be unbound. If the `process_type` is not for a renderer return nullopt.
-absl::optional<base::android::ChildBindingState>
+std::optional<base::android::ChildBindingState>
 GetAndroidRendererProcessBindingState(
     memory_instrumentation::mojom::ProcessType process_type,
     base::ProcessId pid) {
   if (process_type != memory_instrumentation::mojom::ProcessType::RENDERER) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   for (auto iter = content::RenderProcessHost::AllHostsIterator();
        !iter.IsAtEnd(); iter.Advance()) {
@@ -1223,7 +1226,7 @@ int ProcessMemoryMetricsEmitter::GetNumberOfExtensions(base::ProcessId pid) {
   return number_of_extensions;
 }
 
-absl::optional<base::TimeDelta> ProcessMemoryMetricsEmitter::GetProcessUptime(
+std::optional<base::TimeDelta> ProcessMemoryMetricsEmitter::GetProcessUptime(
     base::TimeTicks now,
     base::ProcessId pid) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1233,7 +1236,7 @@ absl::optional<base::TimeDelta> ProcessMemoryMetricsEmitter::GetProcessUptime(
     if (!process_info->second.launch_time.is_null())
       return now - process_info->second.launch_time;
   }
-  return absl::optional<base::TimeDelta>();
+  return std::optional<base::TimeDelta>();
 }
 
 void ProcessMemoryMetricsEmitter::CollateResults() {

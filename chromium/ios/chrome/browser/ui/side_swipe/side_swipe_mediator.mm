@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator.h"
-#import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator+private.h"
+#import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator+Testing.h"
 
 #import <memory>
 
@@ -25,16 +25,14 @@
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_util.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_highlighting.h"
 #import "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_interacting.h"
-#import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
-#import "ios/chrome/browser/web/web_navigation_util.h"
+#import "ios/chrome/browser/web/model/page_placeholder_tab_helper.h"
+#import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/device_form_factor.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/ui/helpers/vivaldi_global_helpers.h"
-#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -51,11 +49,15 @@ enum class SwipeType { NONE, CHANGE_TAB, CHANGE_PAGE };
 // Swipe starting distance from edge.
 const CGFloat kSwipeEdge = 20;
 
+// The distance between touches for a swipe between tabs to begin.
+const CGFloat kPanGestureRecognizerThreshold = 25;
+
 // Distance between sections of iPad side swipe.
 const CGFloat kIpadTabSwipeDistance = 100;
 
 // Number of tabs to keep in the grey image cache.
 const NSUInteger kIpadGreySwipeTabCount = 8;
+
 }  // namespace
 
 @interface SideSwipeMediator () <CRWWebStateObserver,
@@ -115,8 +117,15 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 
 // The current active WebState.
 @property(nonatomic, readonly) web::WebState* activeWebState;
+
 // The webStateList owned by the current browser.
 @property(nonatomic, readonly) WebStateList* webStateList;
+
+// Whether to allow navigating from the leading edge.
+@property(nonatomic, assign) BOOL leadingEdgeNavigationEnabled;
+
+// Whether to allow navigating from the trailing edge.
+@property(nonatomic, assign) BOOL trailingEdgeNavigationEnabled;
 
 // Load grey snapshots for the next `kIpadGreySwipeTabCount` tabs in
 // `direction`.
@@ -144,7 +153,6 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 @synthesize inSwipe = _inSwipe;
 @synthesize swipeDelegate = _swipeDelegate;
 @synthesize toolbarInteractionHandler = _toolbarInteractionHandler;
-@synthesize snapshotDelegate = _snapshotDelegate;
 @synthesize tabStripDelegate = _tabStripDelegate;
 
 - (instancetype)
@@ -200,7 +208,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
       [[SideSwipeGestureRecognizer alloc] initWithTarget:self
                                                   action:@selector(handlePan:)];
   [_panGestureRecognizer setMaximumNumberOfTouches:1];
-  [_panGestureRecognizer setSwipeThreshold:48];
+  [_panGestureRecognizer setSwipeThreshold:kPanGestureRecognizerThreshold];
   [_panGestureRecognizer setDelegate:self];
   [view addGestureRecognizer:_panGestureRecognizer];
 }
@@ -594,6 +602,11 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 - (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
   [self updateNavigationEdgeSwipeForWebState:webState];
+
+  // Vivaldi
+  [self.swipeDelegate didFinishSideSwipeNavigation];
+  // End Vivaldi
+
 }
 
 #pragma mark - UIGestureRecognizerDelegate Methods
@@ -703,9 +716,7 @@ const NSUInteger kIpadGreySwipeTabCount = 8;
 #pragma mark VIVALDI
 
 - (void)handleSwipeVivaldi:(SideSwipeGestureRecognizer*)gesture {
-  if (VivaldiGlobalHelpers.isDeviceTablet ||
-      VivaldiGlobalHelpers.canShowSidePanel ||
-      [self isDesktopTabBarEnabled]) {
+  if ([self isDesktopTabBarEnabled]) {
     return [self handleiPadTabSwipe:gesture];
   } else {
     return [self handleiPhoneTabSwipe:gesture];

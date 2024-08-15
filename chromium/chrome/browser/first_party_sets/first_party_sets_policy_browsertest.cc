@@ -17,6 +17,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "components/policy/core/common/policy_map.h"
@@ -46,7 +47,6 @@ const char* kHostD = "d.test";
 class EnabledPolicyBrowsertest
     : public PolicyTest,
       public ::testing::WithParamInterface<std::tuple<
-          bool,                       // Feature Enabled
           PolicyTest::BooleanPolicy,  // FirstPartySetsEnabled Policy State
           PolicyTest::BooleanPolicy,  // RelatedWebsiteSetsEnabled Policy State
           const char*                 // Overrides Policy
@@ -54,15 +54,8 @@ class EnabledPolicyBrowsertest
  public:
   EnabledPolicyBrowsertest()
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-    std::vector<base::test::FeatureRef> enabled_features = {
-        blink::features::kStorageAccessAPI};
-    std::vector<base::test::FeatureRef> disabled_features;
-    if (IsFeatureEnabled()) {
-      enabled_features.emplace_back(features::kFirstPartySets);
-    } else {
-      disabled_features.emplace_back(features::kFirstPartySets);
-    }
-    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+    scoped_feature_list_.InitWithFeatures(
+        {}, {content_settings::features::kTrackingProtection3pcd});
   }
 
   void SetBlockThirdPartyCookies(bool value) {
@@ -96,7 +89,7 @@ class EnabledPolicyBrowsertest
 
   void SetUpInProcessBrowserTestFixture() override {
     PolicyTest::SetUpInProcessBrowserTestFixture();
-    if (absl::optional<std::string> policy = GetOverridesPolicy();
+    if (std::optional<std::string> policy = GetOverridesPolicy();
         policy.has_value()) {
       SetPolicyValue(GetOverridesPolicyName(),
                      base::JSONReader::Read(policy.value()));
@@ -120,16 +113,11 @@ class EnabledPolicyBrowsertest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PolicyTest::SetUpCommandLine(command_line);
-    if (IsFeatureEnabled()) {
-      // Only append this switch when the First-Party Sets base::Feature is
-      // enabled.
-      command_line->AppendSwitchASCII(
-          network::switches::kUseRelatedWebsiteSet,
-          base::StringPrintf(
-              R"({"primary": "https://%s",)"
-              R"("associatedSites": ["https://%s","https://%s"]})",
-              kHostA, kHostB, kHostC));
-    }
+    command_line->AppendSwitchASCII(
+        network::switches::kUseRelatedWebsiteSet,
+        base::StringPrintf(R"({"primary": "https://%s",)"
+                           R"("associatedSites": ["https://%s","https://%s"]})",
+                           kHostA, kHostB, kHostC));
   }
 
   content::RenderFrameHost* GetPrimaryMainFrame() {
@@ -143,8 +131,8 @@ class EnabledPolicyBrowsertest
   }
 
  protected:
-  virtual absl::optional<std::string> GetOverridesPolicy() {
-    return absl::nullopt;
+  virtual std::optional<std::string> GetOverridesPolicy() {
+    return std::nullopt;
   }
 
   // Sets the state of the RelatedWebsiteSetsEnabled Policy to
@@ -165,7 +153,7 @@ class EnabledPolicyBrowsertest
   // enabled at the start of the test. This does not account for calls to
   // `SetEnabledPolicyStates`.
   bool IsRelatedWebsiteSetsEnabledInitially() {
-    return IsFeatureEnabled() && IsPrefEnabledInitially();
+    return IsPrefEnabledInitially();
   }
 
   void NavigateToPageWithFrame(const std::string& host) {
@@ -187,14 +175,13 @@ class EnabledPolicyBrowsertest
     return content::ExecJs(GetFrame(), "document.requestStorageAccess()");
   }
 
-  bool IsFeatureEnabled() { return std::get<0>(GetParam()); }
   PolicyTest::BooleanPolicy GetInitialFirstPartySetPolicyState() {
-    return std::get<1>(GetParam());
+    return std::get<0>(GetParam());
   }
   PolicyTest::BooleanPolicy GetInitialRelatedWebsiteSetPolicyState() {
-    return std::get<2>(GetParam());
+    return std::get<1>(GetParam());
   }
-  const char* GetOverridesPolicyName() { return std::get<3>(GetParam()); }
+  const char* GetOverridesPolicyName() { return std::get<2>(GetParam()); }
 
   // If the RelatedWebsiteSetEnabled policy is unset
   // SimpleDeprecatingPolicyHandler falls back to the FirstPartySetEnabled
@@ -211,7 +198,7 @@ class EnabledPolicyBrowsertest
   }
 
  private:
-  void SetPolicyValue(const char* key, absl::optional<base::Value> value) {
+  void SetPolicyValue(const char* key, std::optional<base::Value> value) {
     // POLICY_LEVEL_MANDATORY - since administrators will control FPS policy
     // POLICY_SCOPE_USER - since this policy is per profile, not on local state
     // POLICY_SOURCE_ENTERPRISE_DEFAULT - since this is an enterprise policy
@@ -230,13 +217,6 @@ std::string TestNameGenerator(
     const testing::TestParamInfo<EnabledPolicyBrowsertest::ParamType>& info) {
   std::string name = base::NumberToString(info.index);
 
-  bool is_feature_enabled = std::get<0>(info.param);
-  if (is_feature_enabled) {
-    base::StrAppend(&name, {"_Enabled"});
-  } else {
-    base::StrAppend(&name, {"_Disabled"});
-  }
-
   auto policy_state_to_string =
       [](PolicyTest::BooleanPolicy state) -> std::string {
     switch (state) {
@@ -250,32 +230,32 @@ std::string TestNameGenerator(
   };
 
   PolicyTest::BooleanPolicy first_party_sets_policy_state =
-      std::get<1>(info.param);
+      std::get<0>(info.param);
   base::StrAppend(&name,
                   {"_", policy_state_to_string(first_party_sets_policy_state)});
 
   PolicyTest::BooleanPolicy related_website_sets_policy_state =
-      std::get<2>(info.param);
+      std::get<1>(info.param);
   base::StrAppend(
       &name, {"_", policy_state_to_string(related_website_sets_policy_state)});
 
-  const char* override_policy_name = std::get<3>(info.param);
+  const char* override_policy_name = std::get<2>(info.param);
   base::StrAppend(&name, {"_", override_policy_name});
 
   return name;
 }
 
 IN_PROC_BROWSER_TEST_P(EnabledPolicyBrowsertest, ToggleFeature_Memberships) {
-  EXPECT_EQ(IsFeatureEnabled() && IsPrefEnabledInitially(),
+  EXPECT_EQ(IsPrefEnabledInitially(),
             AreSitesInSameRelatedWebsiteSet(kHostA, kHostC));
-  EXPECT_EQ(IsFeatureEnabled() && IsPrefEnabledInitially(),
+  EXPECT_EQ(IsPrefEnabledInitially(),
             AreSitesInSameRelatedWebsiteSet(kHostA, kHostB));
 
   SetEnabledPolicyStates(!IsPrefEnabledInitially());
 
-  EXPECT_EQ(IsFeatureEnabled() && !IsPrefEnabledInitially(),
+  EXPECT_EQ(!IsPrefEnabledInitially(),
             AreSitesInSameRelatedWebsiteSet(kHostA, kHostC));
-  EXPECT_EQ(IsFeatureEnabled() && !IsPrefEnabledInitially(),
+  EXPECT_EQ(!IsPrefEnabledInitially(),
             AreSitesInSameRelatedWebsiteSet(kHostA, kHostB));
 }
 
@@ -290,7 +270,6 @@ INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     EnabledPolicyBrowsertest,
     ::testing::Combine(
-        ::testing::Bool(),  // Feature Enabled
         ::testing::Values(
             PolicyTest::BooleanPolicy::kNotConfigured,
             PolicyTest::BooleanPolicy::kFalse,
@@ -307,9 +286,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 class OverridesPolicyEmptyBrowsertest : public EnabledPolicyBrowsertest {
  public:
-  absl::optional<std::string> GetOverridesPolicy() override {
-    return R"( {} )";
-  }
+  std::optional<std::string> GetOverridesPolicy() override { return R"( {} )"; }
 };
 
 IN_PROC_BROWSER_TEST_P(OverridesPolicyEmptyBrowsertest, CheckMemberships) {
@@ -328,7 +305,6 @@ INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyEmptyBrowsertest,
     ::testing::Combine(
-        ::testing::Bool(),  // Feature Enabled
         ::testing::Values(
             PolicyTest::BooleanPolicy::kNotConfigured,
             PolicyTest::BooleanPolicy::kFalse,
@@ -345,7 +321,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 class OverridesPolicyReplacementBrowsertest : public EnabledPolicyBrowsertest {
  public:
-  absl::optional<std::string> GetOverridesPolicy() override {
+  std::optional<std::string> GetOverridesPolicy() override {
     return R"(
         {
           "replacements": [
@@ -378,7 +354,6 @@ INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyReplacementBrowsertest,
     ::testing::Combine(
-        ::testing::Bool(),  // Feature Enabled
         ::testing::Values(
             PolicyTest::BooleanPolicy::kNotConfigured,
             PolicyTest::BooleanPolicy::kFalse,
@@ -395,7 +370,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 class OverridesPolicyAdditionBrowsertest : public EnabledPolicyBrowsertest {
  public:
-  absl::optional<std::string> GetOverridesPolicy() override {
+  std::optional<std::string> GetOverridesPolicy() override {
     return R"(
         {
           "replacements": [],
@@ -428,7 +403,6 @@ INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyAdditionBrowsertest,
     ::testing::Combine(
-        ::testing::Bool(),  // Feature Enabled
         ::testing::Values(
             PolicyTest::BooleanPolicy::kNotConfigured,
             PolicyTest::BooleanPolicy::kFalse,
@@ -446,7 +420,7 @@ INSTANTIATE_TEST_SUITE_P(
 class OverridesPolicyReplacementAndAdditionBrowsertest
     : public EnabledPolicyBrowsertest {
  public:
-  absl::optional<std::string> GetOverridesPolicy() override {
+  std::optional<std::string> GetOverridesPolicy() override {
     return R"(
         {
           "replacements": [
@@ -485,7 +459,6 @@ INSTANTIATE_TEST_SUITE_P(
     FirstPartySets,
     OverridesPolicyReplacementAndAdditionBrowsertest,
     ::testing::Combine(
-        ::testing::Bool(),  // Feature Enabled
         ::testing::Values(
             PolicyTest::BooleanPolicy::kNotConfigured,
             PolicyTest::BooleanPolicy::kFalse,

@@ -30,6 +30,7 @@
 #include "components/sync_bookmarks/synced_bookmark_tracker_entity.h"
 #include "ui/base/models/tree_node_iterator.h"
 
+#include "app/vivaldi_apptools.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 using syncer::EntityData;
@@ -548,8 +549,13 @@ BookmarkModelMerger::BookmarkModelMerger(
       remote_forest_(BuildRemoteForest(std::move(updates), bookmark_tracker)),
       uuid_to_match_map_(
           FindGuidMatchesOrReassignLocal(remote_forest_, bookmark_model_)) {
-  DCHECK(bookmark_tracker_->IsEmpty());
-  DCHECK(favicon_service);
+  CHECK(bookmark_tracker_->IsEmpty());
+  CHECK(favicon_service);
+  CHECK(bookmark_model);
+  CHECK(bookmark_model->bookmark_bar_node());
+  CHECK(bookmark_model->mobile_node());
+  CHECK(bookmark_model->other_node());
+  CHECK(!vivaldi::IsVivaldiRunning() ||bookmark_model->trash_node());
 
   int num_updates_in_forest = 0;
   for (const auto& [server_defined_unique_tag, root] : remote_forest_) {
@@ -603,6 +609,7 @@ void BookmarkModelMerger::Merge() {
     DCHECK_EQ(permanent_folder->uuid(),
               GetPermanentFolderUuidForServerDefinedUniqueTag(
                   server_defined_unique_tag));
+
     MergeSubtree(/*local_node=*/permanent_folder,
                  /*remote_node=*/root);
   }

@@ -51,6 +51,10 @@ class PermissionServiceImpl : public blink::mojom::PermissionService {
   // blink::mojom::PermissionService.
   void HasPermission(blink::mojom::PermissionDescriptorPtr permission,
                      PermissionStatusCallback callback) override;
+  void RegisterPageEmbeddedPermissionControl(
+      std::vector<blink::mojom::PermissionDescriptorPtr> permissions,
+      mojo::PendingRemote<blink::mojom::EmbeddedPermissionControlClient> client)
+      override;
   void RequestPageEmbeddedPermission(
       blink::mojom::EmbeddedPermissionRequestDescriptorPtr descriptor,
       RequestPageEmbeddedPermissionCallback callback) override;
@@ -80,6 +84,12 @@ class PermissionServiceImpl : public blink::mojom::PermissionService {
   void OnRequestPermissionsResponse(
       int pending_request_id,
       const std::vector<blink::mojom::PermissionStatus>& result);
+
+  void OnPageEmbeddedPermissionControlRegistered(
+      std::vector<blink::mojom::PermissionDescriptorPtr> permissions,
+      bool allow,
+      const mojo::Remote<blink::mojom::EmbeddedPermissionControlClient>&
+          client);
 
   blink::mojom::PermissionStatus GetPermissionStatus(
       const blink::mojom::PermissionDescriptorPtr& permission);

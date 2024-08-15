@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/resource_mapper.h"
@@ -47,6 +48,7 @@
 namespace autofill {
 namespace {
 
+using ::base::android::ConvertJavaStringToUTF16;
 using ::base::android::ConvertJavaStringToUTF8;
 using ::base::android::ConvertUTF16ToJavaString;
 using ::base::android::ConvertUTF8ToJavaString;
@@ -98,7 +100,7 @@ PersonalDataManagerAndroid::CreateJavaCreditCardFromNative(
       ConvertUTF8ToJavaString(env,
                               payment_request_data.basic_card_issuer_network),
       ResourceMapper::MapToJavaDrawableId(
-          GetIconResourceID(card.CardIconStringForAutofillSuggestion())),
+          GetIconResourceID(card.CardIconForAutofillSuggestion())),
       ConvertUTF8ToJavaString(env, card.billing_address_id()),
       ConvertUTF8ToJavaString(env, card.server_id()), card.instrument_id(),
       ConvertUTF16ToJavaString(env, card.CardNameAndLastFourDigits()),
@@ -260,8 +262,7 @@ ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::SetProfileToLocal(
   AutofillProfile profile = AutofillProfile::CreateFromJavaObject(
       jprofile, target_profile, g_browser_process->GetApplicationLocale());
 
-  if (target_profile != nullptr &&
-      target_profile->record_type() == AutofillProfile::LOCAL_PROFILE) {
+  if (target_profile != nullptr) {
     personal_data_manager_->UpdateProfile(profile);
   } else {
     personal_data_manager_->AddProfile(profile);
@@ -303,7 +304,7 @@ PersonalDataManagerAndroid::GetShippingAddressLabelForPaymentRequest(
     bool include_country_in_label) {
   // The full name is not included in the label for shipping address. It is
   // added separately instead.
-  static constexpr ServerFieldType kLabelFields[] = {
+  static constexpr FieldType kLabelFields[] = {
       COMPANY_NAME,         ADDRESS_HOME_LINE1,
       ADDRESS_HOME_LINE2,   ADDRESS_HOME_DEPENDENT_LOCALITY,
       ADDRESS_HOME_CITY,    ADDRESS_HOME_STATE,
@@ -630,10 +631,10 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     bool include_organization_in_label,
     bool include_country_in_label,
     std::vector<AutofillProfile*> profiles) {
-  ServerFieldTypeSet suggested_fields;
+  FieldTypeSet suggested_fields;
   size_t minimal_fields_shown = 2;
   if (address_only) {
-    suggested_fields = ServerFieldTypeSet();
+    suggested_fields = FieldTypeSet();
     if (include_name_in_label)
       suggested_fields.insert(NAME_FULL);
     if (include_organization_in_label)
@@ -650,17 +651,17 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     minimal_fields_shown = suggested_fields.size();
   }
 
-  ServerFieldType excluded_field =
-      include_name_in_label ? UNKNOWN_TYPE : NAME_FULL;
+  FieldType excluded_field = include_name_in_label ? UNKNOWN_TYPE : NAME_FULL;
 
   std::vector<std::u16string> labels;
   // TODO(crbug.com/1487119): Replace by `profiles` when `GetProfilesToSuggest`
   // starts returning a list of const AutofillProfile*.
   AutofillProfile::CreateInferredLabels(
-      std::vector<const AutofillProfile*>(profiles.begin(), profiles.end()),
-      address_only ? absl::make_optional(suggested_fields) : absl::nullopt,
-      excluded_field, minimal_fields_shown,
-      g_browser_process->GetApplicationLocale(), &labels);
+      std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>(
+          profiles.begin(), profiles.end()),
+      address_only ? std::make_optional(suggested_fields) : std::nullopt,
+      /*triggering_field_type=*/std::nullopt, {excluded_field},
+      minimal_fields_shown, g_browser_process->GetApplicationLocale(), &labels);
 
   return base::android::ToJavaArrayOfStrings(env, labels);
 }

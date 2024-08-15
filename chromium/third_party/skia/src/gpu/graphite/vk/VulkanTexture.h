@@ -16,19 +16,20 @@
 
 #include <utility>
 
-namespace skgpu { class MutableTextureStateRef; }
+namespace skgpu { class MutableTextureState; }
 
 namespace skgpu::graphite {
 
 class VulkanSharedContext;
 class VulkanCommandBuffer;
+class VulkanResourceProvider;
 
 class VulkanTexture : public Texture {
 public:
     struct CreatedImageInfo {
         VkImage fImage = VK_NULL_HANDLE;
         VulkanAlloc fMemoryAlloc;
-        sk_sp<MutableTextureStateRef> fMutableState;
+        sk_sp<MutableTextureState> fMutableState;
     };
 
     static bool MakeVkImage(const VulkanSharedContext*,
@@ -37,14 +38,16 @@ public:
                             CreatedImageInfo* outInfo);
 
     static sk_sp<Texture> Make(const VulkanSharedContext*,
+                               const VulkanResourceProvider*,
                                SkISize dimensions,
                                const TextureInfo&,
                                skgpu::Budgeted);
 
     static sk_sp<Texture> MakeWrapped(const VulkanSharedContext*,
+                                      const VulkanResourceProvider*,
                                       SkISize dimensions,
                                       const TextureInfo&,
-                                      sk_sp<MutableTextureStateRef>,
+                                      sk_sp<MutableTextureState>,
                                       VkImage,
                                       const VulkanAlloc&);
 
@@ -81,16 +84,18 @@ private:
     VulkanTexture(const VulkanSharedContext* sharedContext,
                   SkISize dimensions,
                   const TextureInfo& info,
-                  sk_sp<MutableTextureStateRef>,
+                  sk_sp<MutableTextureState>,
                   VkImage,
                   const VulkanAlloc&,
                   Ownership,
-                  skgpu::Budgeted);
+                  skgpu::Budgeted,
+                  sk_sp<VulkanSamplerYcbcrConversion>);
 
     void freeGpuData() override;
 
     VkImage fImage;
     VulkanAlloc fMemoryAlloc;
+    sk_sp<VulkanSamplerYcbcrConversion> fSamplerYcbcrConversion;
 
     mutable skia_private::STArray<2, std::unique_ptr<const VulkanImageView>> fImageViews;
 };

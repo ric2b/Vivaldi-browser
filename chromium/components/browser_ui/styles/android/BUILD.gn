@@ -22,10 +22,6 @@ android_library("java") {
 
 android_resources("java_resources") {
   sources = [
-    "java/res/color-night/new_tab_button_pressed_tint_list.xml",
-    "java/res/color-night/new_tab_button_tint_list.xml",
-    "java/res/color-night/switch_thumb_tint_list.xml",
-    "java/res/color-night/switch_track_tint.xml",
     "java/res/color/chip_text_color_secondary_list.xml",
     "java/res/color/color_primary_with_alpha_10.xml",
     "java/res/color/color_primary_with_alpha_15.xml",
@@ -49,14 +45,8 @@ android_resources("java_resources") {
     "java/res/color/default_text_color_secondary_list.xml",
     "java/res/color/filled_button_bg_dynamic_list.xml",
     "java/res/color/icon_animated_faded_color_list.xml",
-    "java/res/color/new_tab_button_pressed_tint_list.xml",
-    "java/res/color/new_tab_button_tint_list.xml",
     "java/res/color/progress_bar_bg_color_list.xml",
     "java/res/color/selection_control_button_tint_list.xml",
-    "java/res/color/switch_thumb_tint_incognito_baseline_list.xml",
-    "java/res/color/switch_thumb_tint_list.xml",
-    "java/res/color/switch_track_tint.xml",
-    "java/res/color/switch_track_tint_incognito_baseline_list.xml",
     "java/res/color/target_view_color_list.xml",
     "java/res/color/text_button_ripple_color_list.xml",
     "java/res/color/text_highlight_color.xml",
@@ -240,6 +230,7 @@ android_resources("java_resources") {
     "java/res/drawable/ic_web_asset_24dp.xml",
     "java/res/drawable/ic_youtube_searched_for_24dp.xml",
     "java/res/drawable/smartphone_black_24dp.xml",
+    "java/res/drawable/star_outline_24dp.xml",
     "java/res/drawable/toolbar_hairline.xml",
     "java/res/values-night/colors.xml",
     "java/res/values-night/dimens.xml",

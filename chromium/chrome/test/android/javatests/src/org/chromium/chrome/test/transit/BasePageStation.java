@@ -53,10 +53,10 @@ public abstract class BasePageStation extends TransitStation {
                 menu, (e) -> onView(TAB_SWITCHER_BUTTON).perform(longClick()));
     }
 
-    public AppMenuFacility openAppMenu() {
+    public PageAppMenuFacility openAppMenu() {
         recheckEnterConditions();
 
-        AppMenuFacility menu = new AppMenuFacility(this, mChromeTabbedActivityTestRule);
+        PageAppMenuFacility menu = new PageAppMenuFacility(this, mChromeTabbedActivityTestRule);
 
         // TODO(crbug.com/1489724): Put a real trigger, the app menu doesn't currently show on the
         // screen.
@@ -68,7 +68,17 @@ public abstract class BasePageStation extends TransitStation {
         recheckEnterConditions();
 
         TabSwitcherStation destination = new TabSwitcherStation(mChromeTabbedActivityTestRule);
-        return Trip.goSync(this, destination, (e) -> onView(TAB_SWITCHER_BUTTON).perform(click()));
+        return Trip.travelSync(
+                this, destination, (e) -> onView(TAB_SWITCHER_BUTTON).perform(click()));
+    }
+
+    /** Opens the hub by pressing the toolbar tab switcher button. */
+    public HubStation openHub() {
+        recheckEnterConditions();
+
+        HubStation destination = new HubStation(mChromeTabbedActivityTestRule);
+        return Trip.travelSync(
+                this, destination, (e) -> onView(TAB_SWITCHER_BUTTON).perform(click()));
     }
 
     protected ChromeTabbedActivity getChromeTabbedActivity() {

@@ -46,12 +46,21 @@ void CredentialStorage::SaveCredentials(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-// TODO(b/287334012): Implement.
 void CredentialStorage::UpdateLocalCredential(
     absl::string_view manager_app_id,
     absl::string_view account_name,
     nearby::internal::LocalCredential credential,
-    SaveCredentialsResultCallback callback) {}
+    SaveCredentialsResultCallback callback) {
+  // Credentials are stored per-account with a constant manager_app_id, so
+  // these parameters are disregarded.
+  ash::nearby::presence::mojom::LocalCredentialPtr local_credential_mojom =
+      ash::nearby::presence::proto::LocalCredentialToMojom(credential);
+
+  nearby_presence_credential_storage_->UpdateLocalCredential(
+      std::move(local_credential_mojom),
+      base::BindOnce(&CredentialStorage::OnLocalCredentialUpdated,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
 
 void CredentialStorage::GetLocalCredentials(
     const CredentialSelector& credential_selector,
@@ -96,7 +105,7 @@ void CredentialStorage::OnPublicCredentialsRetrieved(
     nearby::presence::GetPublicCredentialsResultCallback
         on_public_credentials_retrieved_callback,
     mojo_base::mojom::AbslStatusCode retrieved_status,
-    absl::optional<
+    std::optional<
         std::vector<ash::nearby::presence::mojom::SharedCredentialPtr>>
         shared_credentials_mojom) {
   if (retrieved_status != mojo_base::mojom::AbslStatusCode::kOk) {
@@ -124,8 +133,7 @@ void CredentialStorage::OnLocalCredentialsRetrieved(
     nearby::presence::GetLocalCredentialsResultCallback
         on_local_credentials_retrieved_callback,
     mojo_base::mojom::AbslStatusCode retrieved_status,
-    absl::optional<
-        std::vector<ash::nearby::presence::mojom::LocalCredentialPtr>>
+    std::optional<std::vector<ash::nearby::presence::mojom::LocalCredentialPtr>>
         local_credentials_mojom) {
   if (retrieved_status != mojo_base::mojom::AbslStatusCode::kOk) {
     std::move(on_local_credentials_retrieved_callback)
@@ -145,6 +153,21 @@ void CredentialStorage::OnLocalCredentialsRetrieved(
 
   std::move(on_local_credentials_retrieved_callback)
       .credentials_fetched_cb(local_credentials);
+}
+
+void CredentialStorage::OnLocalCredentialUpdated(
+    nearby::presence::SaveCredentialsResultCallback
+        on_local_credential_updated_callback,
+    mojo_base::mojom::AbslStatusCode update_status) {
+  if (update_status != mojo_base::mojom::AbslStatusCode::kOk) {
+    std::move(on_local_credential_updated_callback)
+        .credentials_saved_cb(
+            absl::Status(absl::StatusCode::kAborted,
+                         "Failed to update the local credential."));
+    return;
+  }
+  std::move(on_local_credential_updated_callback)
+      .credentials_saved_cb(absl::OkStatus());
 }
 
 }  // namespace nearby::chrome

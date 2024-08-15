@@ -461,7 +461,8 @@ xmlStrncat(xmlChar *cur, const xmlChar *add, int len) {
         return(NULL);
     ret = (xmlChar *) xmlRealloc(cur, (size_t) size + len + 1);
     if (ret == NULL) {
-        return(cur);
+        xmlFree(cur);
+        return(NULL);
     }
     memcpy(&ret[size], add, len);
     ret[size + len] = 0;
@@ -499,9 +500,8 @@ xmlStrncatNew(const xmlChar *str1, const xmlChar *str2, int len) {
     if ((size < 0) || (size > INT_MAX - len))
         return(NULL);
     ret = (xmlChar *) xmlMalloc((size_t) size + len + 1);
-    if (ret == NULL) {
-        return(xmlStrndup(str1, size));
-    }
+    if (ret == NULL)
+        return(NULL);
     memcpy(ret, str1, size);
     memcpy(&ret[size], str2, len);
     ret[size + len] = 0;
@@ -712,47 +712,47 @@ xmlGetUTF8Char(const unsigned char *utf, int *len) {
         goto error;
     if (len == NULL)
         goto error;
-    if (*len < 1)
-        goto error;
 
     c = utf[0];
-    if (c & 0x80) {
-        if (*len < 2)
+    if (c < 0x80) {
+        if (*len < 1)
             goto error;
-        if ((utf[1] & 0xc0) != 0x80)
+        /* 1-byte code */
+        *len = 1;
+    } else {
+        if ((*len < 2) || ((utf[1] & 0xc0) != 0x80))
             goto error;
-        if ((c & 0xe0) == 0xe0) {
-            if (*len < 3)
+        if (c < 0xe0) {
+            if (c < 0xc2)
                 goto error;
-            if ((utf[2] & 0xc0) != 0x80)
+            /* 2-byte code */
+            *len = 2;
+            c = (c & 0x1f) << 6;
+            c |= utf[1] & 0x3f;
+        } else {
+            if ((*len < 3) || ((utf[2] & 0xc0) != 0x80))
                 goto error;
-            if ((c & 0xf0) == 0xf0) {
-                if (*len < 4)
+            if (c < 0xf0) {
+                /* 3-byte code */
+                *len = 3;
+                c = (c & 0xf) << 12;
+                c |= (utf[1] & 0x3f) << 6;
+                c |= utf[2] & 0x3f;
+                if ((c < 0x800) || ((c >= 0xd800) && (c < 0xe000)))
                     goto error;
-                if ((c & 0xf8) != 0xf0 || (utf[3] & 0xc0) != 0x80)
+            } else {
+                if ((*len < 4) || ((utf[3] & 0xc0) != 0x80))
                     goto error;
                 *len = 4;
                 /* 4-byte code */
-                c = (utf[0] & 0x7) << 18;
+                c = (c & 0x7) << 18;
                 c |= (utf[1] & 0x3f) << 12;
                 c |= (utf[2] & 0x3f) << 6;
                 c |= utf[3] & 0x3f;
-            } else {
-              /* 3-byte code */
-                *len = 3;
-                c = (utf[0] & 0xf) << 12;
-                c |= (utf[1] & 0x3f) << 6;
-                c |= utf[2] & 0x3f;
+                if ((c < 0x10000) || (c >= 0x110000))
+                    goto error;
             }
-        } else {
-          /* 2-byte code */
-            *len = 2;
-            c = (utf[0] & 0x1f) << 6;
-            c |= utf[1] & 0x3f;
         }
-    } else {
-        /* 1-byte code */
-        *len = 1;
     }
     return(c);
 

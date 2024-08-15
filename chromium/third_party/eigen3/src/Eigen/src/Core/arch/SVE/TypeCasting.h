@@ -49,4 +49,4 @@ EIGEN_STRONG_INLINE PacketXi preinterpret<PacketXi, PacketXf>(const PacketXf& a)
 }  // namespace internal
 }  // namespace Eigen
 
-#endif // EIGEN_TYPE_CASTING_SVE_H
+#endif  // EIGEN_TYPE_CASTING_SVE_H

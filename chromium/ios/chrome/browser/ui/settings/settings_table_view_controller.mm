@@ -13,6 +13,7 @@
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/task/sequenced_task_runner.h"
 #import "build/branding_buildflags.h"
 #import "components/autofill/core/common/autofill_prefs.h"
 #import "components/feature_engagement/public/event_constants.h"
@@ -41,22 +42,21 @@
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/language/model/language_model_manager_factory.h"
-#import "ios/chrome/browser/net/crurl.h"
-#import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/ntp/home/features.h"
+#import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/password_check_observer_bridge.h"
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
-#import "ios/chrome/browser/photos/photos_service.h"
-#import "ios/chrome/browser/photos/photos_service_factory.h"
+#import "ios/chrome/browser/photos/model/photos_service.h"
+#import "ios/chrome/browser/photos/model/photos_service_factory.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_settings_util.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_state.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -81,13 +81,13 @@
 #import "ios/chrome/browser/shared/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/signin/system_identity.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/sync/model/enterprise_utils.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
@@ -96,6 +96,8 @@
 #import "ios/chrome/browser/ui/authentication/cells/table_view_account_item.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
+#import "ios/chrome/browser/ui/bubble/bubble_constants.h"
+#import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/settings/about_chrome_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/address_bar_preference/address_bar_preference_coordinator.h"
@@ -118,7 +120,6 @@
 #import "ios/chrome/browser/ui/settings/language/language_settings_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/notifications/notifications_coordinator.h"
 #import "ios/chrome/browser/ui/settings/notifications/notifications_settings_observer.h"
-#import "ios/chrome/browser/ui/settings/notifications/notifications_settings_util.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_coordinator.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_coordinator.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_constants.h"
@@ -145,14 +146,13 @@
 #import "ios/ui/ad_tracker_blocker/settings/vivaldi_atb_settings_view_controller.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/settings/appearance/vivaldi_appearance_setting_swift.h"
-#import "ios/ui/settings/appearance/vivaldi_theme_setting_prefs.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_coordinator.h"
 #import "ios/ui/settings/custom_app_icon/cells/vivaldi_app_icon_item.h"
 #import "ios/ui/settings/custom_app_icon/vivaldi_custom_app_icon_swift.h"
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_view_controller.h"
-#import "ios/ui/settings/start_page/vivaldi_start_page_layout_settings_view_controller.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_settings_coordinator.h"
 #import "ios/ui/settings/sync/vivaldi_sync_coordinator.h"
-#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_settings_coordinator.h"
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
@@ -262,6 +262,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   // Passwords coordinator.
   PasswordsCoordinator* _passwordsCoordinator;
 
+  // Feature engagement tracker for the signin IPH.
+  feature_engagement::Tracker* _featureEngagementTracker;
+  // Presenter for the signin IPH.
+  BubbleViewControllerPresenter* _bubblePresenter;
+
   // Identity object and observer used for Account Item refresh.
   id<SystemIdentity> _identity;
   std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
@@ -301,6 +306,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 
   // Vivaldi
   VivaldiSyncCoordinator* _vivaldiSyncCoordinator;
+  // Appearance settings coordinator.
+  VivaldiAppearanceSettingsCoordinator* _vivaldiAppearanceSettingsCoordinator;
+  // Tab settings coordinator.
+  VivaldiTabSettingsCoordinator* _vivaldiTabSettingsCoordinator;
+  // Start page settings coordinator.
+  VivaldiStartPageSettingsCoordinator* _startPageSettingsCoordinator;
   // The item related to the item for custom app icon.
   VivaldiAppIconItem* _vivaldiAppIconItem;
   // End Vivaldi
@@ -384,6 +395,8 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     _accountManagerServiceObserver.reset(
         new ChromeAccountManagerServiceObserverBridge(self,
                                                       _accountManagerService));
+    _featureEngagementTracker =
+        feature_engagement::TrackerFactory::GetForBrowserState(_browserState);
 
     PrefService* prefService = _browserState->GetPrefs();
 
@@ -402,10 +415,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
                    prefName:prefs::kArticlesForYouEnabled];
     [_articlesEnabled setObserver:self];
 
+    if (!IsVivaldiRunning()) {
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc] initWithPrefService:prefService
                                               prefName:prefs::kBottomOmnibox];
     [_bottomOmniboxEnabled setObserver:self];
+    } // End Vivaldi
 
     _contentSuggestionPolicyEnabled = [[PrefBackedBoolean alloc]
         initWithPrefService:prefService
@@ -474,11 +489,20 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [super viewWillAppear:animated];
   // Update the `_safetyCheckItem` icon when returning to this view controller.
   [self updateSafetyCheckItemTrailingIcon];
+
+  if (!IsVivaldiRunning()) {
   if (IsBottomOmniboxSteadyStateEnabled()) {
     // Update the address bar new IPH badge here as it depends on the number of
     // time it's shown.
     [self updateAddressBarNewIPHBadge];
   }
+  } // End Vivaldi
+
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  [self maybeShowSigninIPH];
 }
 
 #pragma mark SettingsRootTableViewController
@@ -508,10 +532,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
         toSectionWithIdentifier:SettingsSectionIdentifierDefaults];
   }
 
+  if (!IsVivaldiRunning()) {
   if (IsBottomOmniboxSteadyStateEnabled()) {
     [model addItem:[self addressBarPreferenceItem]
         toSectionWithIdentifier:SettingsSectionIdentifierDefaults];
   }
+  } // End Vivaldi
 
   // Basics section
   [model addSectionWithIdentifier:SettingsSectionIdentifierBasics];
@@ -525,9 +551,8 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   // Vivaldi
   [self addVivaldiAppearanceSection];
   [self addVivaldiAppearanceSettingItem];
-  if (!VivaldiGlobalHelpers.isDeviceTablet)
-    [self addVivaldiTabsSettingItem];
-  [self addVivaldiStartPageLayoutSettingItem];
+  [self addVivaldiTabsSettingItem];
+  [self addVivaldiStartPageSettingItem];
   [self addVivaldiCustomAppIconSettingItem];
   // End Vivaldi
 
@@ -562,13 +587,15 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   // End Vivaldi
 
   // Feed is disabled in safe mode.
-  SceneState* sceneState =
-      SceneStateBrowserAgent::FromBrowser(_browser)->GetSceneState();
+  SceneState* sceneState = _browser->GetSceneState();
   BOOL isSafeMode = [sceneState.appState resumingFromSafeMode];
+  TemplateURLService* templateURLService =
+      ios::TemplateURLServiceFactory::GetForBrowserState(_browserState);
 
   if (!IsVivaldiRunning()) {
   if (!IsFeedAblationEnabled() && !isSafeMode &&
-      IsContentSuggestionsForSupervisedUserEnabled(_browserState->GetPrefs())) {
+      IsContentSuggestionsForSupervisedUserEnabled(_browserState->GetPrefs()) &&
+      !ShouldHideFeedWithSearchChoice(templateURLService)) {
     if ([_contentSuggestionPolicyEnabled value]) {
       [model addItem:self.feedSettingsItem
           toSectionWithIdentifier:SettingsSectionIdentifierAdvanced];
@@ -661,19 +688,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   // index 0.
   [model insertSectionWithIdentifier:SettingsSectionIdentifierSignIn atIndex:0];
   [self addPromoToSigninSection];
-}
-
-// Helper method to update the Discover Section cells when called.
-- (void)updateDiscoverSection {
-  // Do not use self to access _managedFeedSettingsItem, as it is lazy loaded
-  // and will create a new item and the following will always be true.
-  if (_managedFeedSettingsItem) {
-    DCHECK(!_feedSettingsItem);
-    self.managedFeedSettingsItem.text = [self feedItemTitle];
-  } else {
-    DCHECK(_feedSettingsItem);
-    self.feedSettingsItem.text = [self feedItemTitle];
-  }
 }
 
 // Adds the identity promo to promote the sign-in or sync state.
@@ -940,10 +954,9 @@ UIImage* GetBrandedGoogleServicesSymbol() {
       l10n_util::GetNSString(IDS_IOS_PASSWORD_MANAGER);
 
   if (IsVivaldiRunning()) {
-    NSString* passwordsItemTitle = l10n_util::GetNSString(IDS_IOS_PASSWORDS);
     _passwordsDetailItem =
         [self detailItemWithType:SettingsItemTypePasswords
-                            text:passwordsItemTitle
+                            text:passwordsSectionTitle
                       detailText:passwordsDetail
                           symbol:[UIImage imageNamed:vPasswordSetting]
            symbolBackgroundColor:[UIColor colorNamed:kYellow500Color]
@@ -1060,6 +1073,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   _safetyCheckItem.leadingIconTintColor = UIColor.whiteColor;
   _safetyCheckItem.leadingIconCornerRadius =
       kColorfulBackgroundSymbolCornerRadius;
+  _safetyCheckItem.accessibilityIdentifier = kSettingsSafetyCheckCellId;
   // Check if an issue state should be shown for updates.
   if (!IsAppUpToDate() && PreviousSafetyCheckIssueFound()) {
     [self updateSafetyCheckItemTrailingIcon];
@@ -1348,13 +1362,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     return cell;
   NSInteger itemType = [self.tableViewModel itemTypeForIndexPath:indexPath];
 
-  if ([cell isKindOfClass:[TableViewDetailIconCell class]]) {
-    TableViewDetailIconCell* detailCell =
-        base::apple::ObjCCastStrict<TableViewDetailIconCell>(cell);
-    [detailCell setUserInteractionEnabled:YES];
-    detailCell.textLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
-  }
-
   switch (itemType) {
     case SettingsItemTypeMemoryDebugging: {
       TableViewSwitchCell* switchCell =
@@ -1424,18 +1431,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           forControlEvents:UIControlEventTouchUpInside];
       break;
     }
-
-    // Vivaldi
-    case SettingsItemTypeVivaldiTabsSettings: {
-      TableViewSwitchCell* tabModeCell =
-          base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
-      [tabModeCell.switchView addTarget:self
-                                 action:@selector(tabStyleChanged:)
-                       forControlEvents:UIControlEventTouchUpInside];
-      break;
-    }
-    // End Vivaldi
-
     default:
       break;
   }
@@ -1567,7 +1562,8 @@ UIImage* GetBrandedGoogleServicesSymbol() {
           [[AutofillProfileTableViewController alloc] initWithBrowser:_browser];
       break;
     case SettingsItemTypeNotifications:
-      DCHECK(IsPriceNotificationsEnabled());
+      DCHECK(IsPriceNotificationsEnabled() ||
+             IsContentPushNotificationsEnabled());
       [self showNotifications];
       break;
     case SettingsItemTypeVoiceSearch:
@@ -1640,8 +1636,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     case SettingsItemTypeAppearanceSettings:
       [self showStartAppearanceSettings];
       break;
-    case SettingsItemTypeVivaldiStartPageLayoutSettings:
-      [self showStartPageLayoutSettings];
+    case SettingsItemTypeVivaldiTabsSettings:
+      [self showVivaldiTabsSettings];
+      break;
+    case SettingsItemTypeVivaldiStartPageSettings:
+      [self showStartPageSettings];
       break;
     case SettingsItemTypeVivaldiATBSettings:
       [self showAdAndTrackerBlockerSettings];
@@ -1811,13 +1810,10 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   // TODO(crbug.com/1464966): Switch back to DCHECK if the number of reports is
   // low.
   DUMP_WILL_BE_CHECK(!_manageSyncSettingsCoordinator);
-  // TODO(crbug.com/1462552): Remove usage of HasSyncConsent() after kSync
-  // users migrated to kSignin in phase 3. See ConsentLevel::kSync
-  // documentation for details.
   SyncSettingsAccountState accountState =
-      SyncServiceFactory::GetForBrowserState(_browserState)->HasSyncConsent()
-          ? SyncSettingsAccountState::kSyncing
-          : SyncSettingsAccountState::kSignedIn;
+      [self shouldReplaceSyncSettingsWithAccountSettings]
+          ? SyncSettingsAccountState::kSignedIn
+          : SyncSettingsAccountState::kSyncing;
   _manageSyncSettingsCoordinator = [[ManageSyncSettingsCoordinator alloc]
       initWithBaseNavigationController:self.navigationController
                                browser:_browser
@@ -1984,6 +1980,72 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     [self updateIdentityAccountItem:identityAccountItem];
     [self reconfigureCellsForItems:@[ identityAccountItem ]];
   }
+}
+
+- (void)maybeShowSigninIPH {
+  if (_settingsAreDismissed) {
+    return;
+  }
+  AuthenticationService* authService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          _browser->GetBrowserState());
+  BOOL shouldShowSigninIPH =
+      authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin) &&
+      [self shouldReplaceSyncSettingsWithAccountSettings];
+  if (!shouldShowSigninIPH) {
+    return;
+  }
+
+  UITableViewCell* accountCell = nil;
+  for (UITableViewCell* cell in [self.tableView visibleCells]) {
+    if ([cell isKindOfClass:[TableViewAccountCell class]]) {
+      accountCell = cell;
+      break;
+    }
+  }
+  if (!accountCell) {
+    return;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  CallbackWithIPHDismissalReasonType dismissalCallback =
+      ^(IPHDismissalReasonType dismissReason,
+        feature_engagement::Tracker::SnoozeAction snoozeAction) {
+        [weakSelf signinIPHDismissed];
+      };
+  _bubblePresenter = [[BubbleViewControllerPresenter alloc]
+           initWithText:l10n_util::GetNSString(IDS_IOS_SETTING_IPH_SIGNIN)
+                  title:nil
+                  image:nil
+         arrowDirection:BubbleArrowDirectionUp
+              alignment:BubbleAlignmentCenter
+             bubbleType:BubbleViewTypeDefault
+      dismissalCallback:dismissalCallback];
+  CGPoint anchorPointInCell = CGPointMake(CGRectGetMidX(accountCell.bounds),
+                                          CGRectGetMaxY(accountCell.bounds));
+  CGPoint anchorPointInWindow = [self.view.window convertPoint:anchorPointInCell
+                                                      fromView:accountCell];
+
+  // The IPH must be presented if
+  // `_featureEngagementTracker->ShouldTriggerHelpUI()` returns true.
+  BOOL canShowSigninIPH =
+      [_bubblePresenter canPresentInView:self.view
+                             anchorPoint:anchorPointInWindow] &&
+      _featureEngagementTracker->ShouldTriggerHelpUI(
+          feature_engagement::kIPHiOSReplaceSyncPromosWithSignInPromos);
+  if (canShowSigninIPH) {
+    [_bubblePresenter presentInViewController:self
+                                         view:self.view
+                                  anchorPoint:anchorPointInWindow];
+  } else {
+    _bubblePresenter = nil;
+  }
+}
+
+- (void)signinIPHDismissed {
+  _featureEngagementTracker->Dismissed(
+      feature_engagement::kIPHiOSReplaceSyncPromosWithSignInPromos);
+  _bubblePresenter = nil;
 }
 
 // Updates the Sync item to display the right icon and status message in the
@@ -2163,14 +2225,14 @@ UIImage* GetBrandedGoogleServicesSymbol() {
       authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   PrefService* prefService = _browserState->GetPrefs();
   const std::string& gaiaID = base::SysNSStringToUTF8(identity.gaiaID);
-  notifications_settings::ClientPermissionState permission_state =
-      notifications_settings::GetNotificationPermissionState(gaiaID,
-                                                             prefService);
+  push_notification_settings::ClientPermissionState permission_state =
+      push_notification_settings::GetNotificationPermissionState(gaiaID,
+                                                                 prefService);
   if (permission_state ==
-      notifications_settings::ClientPermissionState::ENABLED) {
+      push_notification_settings::ClientPermissionState::ENABLED) {
     detailText = l10n_util::GetNSString(IDS_IOS_SETTING_ON);
   } else if (permission_state ==
-             notifications_settings::ClientPermissionState::DISABLED) {
+             push_notification_settings::ClientPermissionState::DISABLED) {
     detailText = l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
   }
 
@@ -2221,14 +2283,23 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (void)didFinishSignin:(BOOL)signedIn {
-  if (_settingsAreDismissed)
+  if (_settingsAreDismissed) {
     return;
+  }
 
   // The sign-in is done. The sign-in promo cell or account cell can be
   // reloaded.
   DCHECK(self.isSigninInProgress);
   self.isSigninInProgress = NO;
   [self reloadData];
+
+  // Post the task to show signin IPH so that the UI has had time to refresh
+  // after `reloadData`.
+  __weak __typeof(self) weakSelf = self;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(^{
+        [weakSelf maybeShowSigninIPH];
+      }));
 }
 
 #pragma mark SettingsControllerProtocol
@@ -2279,6 +2350,12 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [_vivaldiSyncCoordinator stop];
   _vivaldiSyncCoordinator = nil;
   _appIconActionsBridge = nil;
+  [_vivaldiTabSettingsCoordinator stop];
+  _vivaldiTabSettingsCoordinator = nil;
+  [_startPageSettingsCoordinator stop];
+  _startPageSettingsCoordinator = nil;
+  [_vivaldiAppearanceSettingsCoordinator stop];
+  _vivaldiAppearanceSettingsCoordinator = nil;
   // End Vivaldi
 
   // Stop observable prefs.
@@ -2294,9 +2371,11 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   [_allowChromeSigninPreference setObserver:nil];
   _allowChromeSigninPreference = nil;
 
+  if (!IsVivaldiRunning()) {
   [_bottomOmniboxEnabled stop];
   [_bottomOmniboxEnabled setObserver:nil];
   _bottomOmniboxEnabled = nil;
+  } // End Vivaldi
 
   [_contentSuggestionPolicyEnabled stop];
   [_contentSuggestionPolicyEnabled setObserver:nil];
@@ -2333,10 +2412,13 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 #pragma mark SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
-
   if (vivaldi::IsVivaldiRunning()) {
     return;
   } // End Vivaldi
+
+  // Feed settings are subject to sign-in status and account type, ensure
+  // that these sections are updated as necessary.
+  [self booleanDidChange:_contentSuggestionPolicyEnabled];
 
   [self updateSigninSection];
   // The Identity section may be added or removed depending on sign-in is
@@ -2377,7 +2459,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
     [self reconfigureCellsForItems:@[ _showMemoryDebugToolsItem ]];
   } else if (observableBoolean == _allowChromeSigninPreference) {
     [self updateSigninSection];
-    [self updateDiscoverSection];
     // The Identity section may be added or removed depending on sign-in is
     // allowed. Reload all sections in the model to account for the change.
     [self.tableView reloadData];
@@ -2526,7 +2607,7 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   _safetyCheckCoordinator = nil;
 }
 
-#pragma mark - SafetyCheckCoordinatorDelegate
+#pragma mark - PasswordsCoordinatorDelegate
 
 - (void)passwordsCoordinatorDidRemove:(PasswordsCoordinator*)coordinator {
   DCHECK_EQ(_passwordsCoordinator, coordinator);
@@ -2535,7 +2616,28 @@ UIImage* GetBrandedGoogleServicesSymbol() {
   _passwordsCoordinator = nil;
 }
 
-#pragma mark - NotificationsDelegate
+#pragma mark - PasswordManagerReauthenticationDelegate
+
+- (void)dismissPasswordManagerAfterFailedReauthentication {
+  // Pop everything up to the Settings page.
+  // When there is content presented, don't animate the dismissal of the view
+  // controllers in the navigation controller to prevent revealing passwords
+  // when the presented content is the one covered by the reauthentication UI.
+
+  UINavigationController* navigationController = self.navigationController;
+  UIViewController* topViewController = navigationController.topViewController;
+  UIViewController* presentedViewController =
+      topViewController.presentedViewController;
+
+  [navigationController popToViewController:self
+                                   animated:presentedViewController == nil];
+
+  [presentedViewController.presentingViewController
+      dismissViewControllerAnimated:YES
+                         completion:nil];
+}
+
+#pragma mark - NotificationsCoordinatorDelegate
 
 - (void)notificationsCoordinatorDidRemove:
     (NotificationsCoordinator*)coordinator {
@@ -2668,12 +2770,19 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (TableViewItem*)vivaldiTabsItem {
-  TableViewSwitchItem* item = [[TableViewSwitchItem alloc]
+  TableViewDetailIconItem* item = [[TableViewDetailIconItem alloc]
       initWithType:SettingsItemTypeVivaldiTabsSettings];
-  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_DESKTOP_TABS);
+  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_TABS);
   item.iconImage = [UIImage imageNamed:vTabsSetting];
-  item.on = [self isDesktopTabBarEnabled];
+  item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   return item;
+}
+
+- (void)showVivaldiTabsSettings {
+  _vivaldiTabSettingsCoordinator = [[VivaldiTabSettingsCoordinator alloc]
+      initWithBaseNavigationController:self.navigationController
+                               browser:_browser];
+  [_vivaldiTabSettingsCoordinator start];
 }
 
 #pragma mark - APPEARANCE SETTINGS
@@ -2693,41 +2802,34 @@ UIImage* GetBrandedGoogleServicesSymbol() {
 }
 
 - (void)showStartAppearanceSettings {
-  UIViewController *customVC =
-      [VivaldiAppearanceViewProvider makeViewController];
-  [VivaldiThemeSettingPrefs setPrefService: _browserState->GetPrefs()];
-  customVC.title =
-      l10n_util::GetNSString(IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE);
-  customVC.navigationItem.largeTitleDisplayMode =
-      UINavigationItemLargeTitleDisplayModeNever;
-  [self.navigationController pushViewController:customVC animated:YES];
+  _vivaldiAppearanceSettingsCoordinator =
+      [[VivaldiAppearanceSettingsCoordinator alloc]
+          initWithBaseNavigationController:self.navigationController
+                                   browser:_browser];
+  [_vivaldiAppearanceSettingsCoordinator start];
 }
 
-#pragma mark - START PAGE LAYOUT SETTINGS
-- (void)addVivaldiStartPageLayoutSettingItem {
+#pragma mark - START PAGE SETTINGS
+- (void)addVivaldiStartPageSettingItem {
   TableViewModel<TableViewItem*>* model = self.tableViewModel;
-  [model addItem:[self vivaldiStartPageLayoutItem]
+  [model addItem:[self vivaldiStartPageItem]
       toSectionWithIdentifier:SettingsSectionIdentifierVivaldiAppearance];
 }
 
-- (TableViewItem*)vivaldiStartPageLayoutItem {
+- (TableViewItem*)vivaldiStartPageItem {
   TableViewDetailIconItem* item = [[TableViewDetailIconItem alloc]
-      initWithType:SettingsItemTypeVivaldiStartPageLayoutSettings];
+      initWithType:SettingsItemTypeVivaldiStartPageSettings];
   item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT);
-  item.iconImage = [UIImage imageNamed:vStartPageLayoutSetting];
+  item.text = l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_START_PAGE);
+  item.iconImage = [UIImage imageNamed:vStartPageSetting];
   return item;
 }
 
-- (void)showStartPageLayoutSettings {
-  VivaldiStartPageLayoutSettingsViewController* controller =
-    [[VivaldiStartPageLayoutSettingsViewController alloc]
-        initWithTitle:
-          l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT)
-              browser:_browser];
-  controller.navigationItem.largeTitleDisplayMode =
-      UINavigationItemLargeTitleDisplayModeNever;
-  [self.navigationController pushViewController:controller animated:YES];
+- (void)showStartPageSettings {
+  _startPageSettingsCoordinator = [[VivaldiStartPageSettingsCoordinator alloc]
+      initWithBaseNavigationController:self.navigationController
+                               browser:_browser];
+  [_startPageSettingsCoordinator start];
 }
 
 #pragma mark - CUSTOM APP ICON
@@ -2797,26 +2899,6 @@ UIImage* GetBrandedGoogleServicesSymbol() {
       UINavigationItemLargeTitleDisplayModeNever;
   [self.navigationController
     pushViewController:controller animated:YES];
-}
-
-#pragma mark - TABS
-- (void)tabStyleChanged:(UISwitch*)switchView {
-  if (!_browserState)
-    return;
-  [VivaldiTabSettingPrefs setDesktopTabsMode:switchView.isOn
-                              inPrefServices:_browserState->GetPrefs()];
-  [[NSNotificationCenter defaultCenter]
-    postNotificationName:vTabSettingsDidChange
-                  object:self];
-}
-
-/// Returns the setting from prefs for selected tabs mode
-- (BOOL)isDesktopTabBarEnabled {
-  if (!_browserState)
-    return NO;
-
-  return [VivaldiTabSettingPrefs
-          getDesktopTabsModeWithPrefService:_browserState->GetPrefs()];
 }
 
 @end

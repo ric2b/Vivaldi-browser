@@ -40,12 +40,8 @@ suite('WallpaperSubpageElementTest', function() {
         await waitAfterNextRender(wallpaperSubpage);
 
         // Wallpaper Selected is displayed.
-        const wallpaperSubpageTopElement =
-            wallpaperSubpage!.shadowRoot!.querySelector(
-                'wallpaper-subpage-top');
         const wallpaperSelected =
-            wallpaperSubpageTopElement!.shadowRoot!.querySelector(
-                'wallpaper-selected');
+            wallpaperSubpage!.shadowRoot!.querySelector('wallpaper-selected');
         assertTrue(!!wallpaperSelected);
 
         // Check whether Google Photos collection is displayed.
@@ -67,29 +63,5 @@ suite('WallpaperSubpageElementTest', function() {
     const googlePhotosCollections =
         wallpaperSubpage!.shadowRoot!.querySelector('google-photos-collection');
     assertFalse(!!googlePhotosCollections);
-  });
-
-  test('shows SeaPen collection', async () => {
-    loadTimeData.overrideValues({isSeaPenEnabled: true});
-    wallpaperSubpage =
-        initElement(WallpaperSubpageElement, {path: Paths.SEA_PEN_COLLECTION});
-    await waitAfterNextRender(wallpaperSubpage);
-
-    // SeaPen collection is displayed.
-    const seaPenCollection =
-        wallpaperSubpage!.shadowRoot!.querySelector('sea-pen-collection');
-    assertTrue(!!seaPenCollection);
-  });
-
-  test('hides SeaPen collection for ineligible users', async () => {
-    loadTimeData.overrideValues({isSeaPenEnabled: false});
-    wallpaperSubpage =
-        initElement(WallpaperSubpageElement, {path: Paths.SEA_PEN_COLLECTION});
-    await waitAfterNextRender(wallpaperSubpage);
-
-    // SeaPen collection is not displayed.
-    const seaPenCollection =
-        wallpaperSubpage!.shadowRoot!.querySelector('sea-pen-collection');
-    assertFalse(!!seaPenCollection);
   });
 });

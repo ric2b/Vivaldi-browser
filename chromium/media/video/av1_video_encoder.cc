@@ -261,6 +261,9 @@ void Av1VideoEncoder::Initialize(VideoCodecProfile profile,
 
   if (options.content_hint == ContentHint::Screen) {
     CALL_AOM_CONTROL(AV1E_SET_TUNE_CONTENT, AOM_CONTENT_SCREEN);
+    CALL_AOM_CONTROL(AV1E_SET_ENABLE_PALETTE, 1);
+  } else {
+    CALL_AOM_CONTROL(AV1E_SET_ENABLE_PALETTE, 0);
   }
 
   // Keep in mind that AV1E_SET_TILE_[COLUMNS|ROWS] uses log2 units.
@@ -367,7 +370,7 @@ void Av1VideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
     if (resized_frame) {
       auto conv_status =
-          ConvertAndScaleFrame(*frame, *resized_frame, resize_buf_);
+          frame_converter_.ConvertAndScale(*frame, *resized_frame);
       if (!conv_status.is_ok()) {
         std::move(done_cb).Run(
             EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)

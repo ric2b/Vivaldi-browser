@@ -28,6 +28,8 @@
 // VulkanBackend.cpp: contains the definition of symbols exported by VulkanBackend.h so that they
 // can be compiled twice: once export (shared library), once not exported (static library)
 
+#include <utility>
+
 // Include vulkan_platform.h before VulkanBackend.h includes vulkan.h so that we use our version
 // of the non-dispatchable handles.
 #include "dawn/common/vulkan_platform.h"
@@ -42,6 +44,11 @@ namespace dawn::native::vulkan {
 VkInstance GetInstance(WGPUDevice device) {
     Device* backendDevice = ToBackend(FromAPI(device));
     return backendDevice->GetVkInstance();
+}
+
+VkDevice GetVkDevice(WGPUDevice device) {
+    Device* backendDevice = ToBackend(FromAPI(device));
+    return backendDevice->GetVkDevice();
 }
 
 DAWN_NATIVE_EXPORT PFN_vkVoidFunction GetInstanceProcAddr(WGPUDevice device, const char* pName) {
@@ -72,25 +79,25 @@ ExternalImageExportInfoAHardwareBuffer::ExternalImageExportInfoAHardwareBuffer()
 #endif
 
 WGPUTexture WrapVulkanImage(WGPUDevice device, const ExternalImageDescriptorVk* descriptor) {
+    Device* backendDevice = ToBackend(FromAPI(device));
+    auto deviceLock(backendDevice->GetScopedLock());
     switch (descriptor->GetType()) {
 #if DAWN_PLATFORM_IS(ANDROID)
         case ExternalImageType::AHardwareBuffer: {
-            Device* backendDevice = ToBackend(FromAPI(device));
             const ExternalImageDescriptorAHardwareBuffer* ahbDescriptor =
                 static_cast<const ExternalImageDescriptorAHardwareBuffer*>(descriptor);
-
-            return ToAPI(backendDevice->CreateTextureWrappingVulkanImage(
-                ahbDescriptor, ahbDescriptor->handle, ahbDescriptor->waitFDs));
+            Ref<TextureBase> texture = backendDevice->CreateTextureWrappingVulkanImage(
+                ahbDescriptor, ahbDescriptor->handle, ahbDescriptor->waitFDs);
+            return ToAPI(ReturnToAPI(std::move(texture)));
         }
 #elif DAWN_PLATFORM_IS(LINUX)
         case ExternalImageType::OpaqueFD:
         case ExternalImageType::DmaBuf: {
-            Device* backendDevice = ToBackend(FromAPI(device));
             const ExternalImageDescriptorFD* fdDescriptor =
                 static_cast<const ExternalImageDescriptorFD*>(descriptor);
-
-            return ToAPI(backendDevice->CreateTextureWrappingVulkanImage(
-                fdDescriptor, fdDescriptor->memoryFD, fdDescriptor->waitFDs));
+            Ref<TextureBase> texture = backendDevice->CreateTextureWrappingVulkanImage(
+                fdDescriptor, fdDescriptor->memoryFD, fdDescriptor->waitFDs);
+            return ToAPI(ReturnToAPI(std::move(texture)));
         }
 #endif  // DAWN_PLATFORM_IS(LINUX)
 
@@ -105,13 +112,14 @@ bool ExportVulkanImage(WGPUTexture texture,
     if (texture == nullptr) {
         return false;
     }
+    Texture* backendTexture = ToBackend(FromAPI(texture));
+    Device* device = ToBackend(backendTexture->GetDevice());
+    auto deviceLock(device->GetScopedLock());
 #if DAWN_PLATFORM_IS(ANDROID) || DAWN_PLATFORM_IS(LINUX)
     switch (info->GetType()) {
         case ExternalImageType::AHardwareBuffer:
         case ExternalImageType::OpaqueFD:
         case ExternalImageType::DmaBuf: {
-            Texture* backendTexture = ToBackend(FromAPI(texture));
-            Device* device = ToBackend(backendTexture->GetDevice());
             ExternalImageExportInfoFD* fdInfo = static_cast<ExternalImageExportInfoFD*>(info);
 
             return device->SignalAndExportExternalTexture(backendTexture, desiredLayout, fdInfo,

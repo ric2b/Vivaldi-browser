@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void refract_d7569b() {
+  float3 res = float3(-5.0f);
+}
+vertex float4 vertex_main() {
+  refract_d7569b();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  refract_d7569b();
+}
+kernel void compute_main() {
+  refract_d7569b();
+}

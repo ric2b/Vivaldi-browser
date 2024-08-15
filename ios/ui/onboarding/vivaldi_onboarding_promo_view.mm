@@ -179,6 +179,9 @@ NSTimeInterval const kAnimationDelay = 0.0;
 - (void)restartPlayer {
   if (!self.player) return;
   CMTime currentTime = self.player.currentTime;
+  if (!CMTIME_IS_VALID(currentTime)) {
+    return;
+  }
 
   NSURL *fileUrl = [self videoFileURL];
   if (!fileUrl) return;

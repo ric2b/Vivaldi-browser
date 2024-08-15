@@ -16,6 +16,7 @@
 #include "extensions/common/extension_features.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/background_info.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/message_port.mojom-shared.h"
 #include "extensions/renderer/get_script_context.h"
 #include "extensions/renderer/script_context.h"
@@ -132,8 +133,9 @@ std::unique_ptr<Message> MessageFromV8(v8::Local<v8::Context> context,
   blink::WebLocalFrame* web_frame =
       script_context ? script_context->web_frame() : nullptr;
   bool privileged_context =
-      script_context && script_context->context_type() ==
-                            extensions::Feature::BLESSED_EXTENSION_CONTEXT;
+      script_context &&
+      script_context->context_type() ==
+          extensions::mojom::ContextType::kPrivilegedExtension;
   return MessageFromJSONString(isolate, stringified, error_out, web_frame,
                                privileged_context);
 }
@@ -151,7 +153,9 @@ v8::Local<v8::Value> MessageToV8(v8::Local<v8::Context> context,
   v8::Local<v8::Value> parsed_message;
   v8::TryCatch try_catch(isolate);
   if (!v8::JSON::Parse(context, v8_message_string).ToLocal(&parsed_message)) {
-    NOTREACHED();
+    // TODO(crbug.com/1439827): Replace the above with a CHECK that parsing
+    // should always succeed here. This should be trusted data.
+    DUMP_WILL_BE_NOTREACHED_NORETURN();
     return v8::Local<v8::Value>();
   }
   return parsed_message;
@@ -268,7 +272,7 @@ bool GetTargetExtensionId(ScriptContext* script_context,
     }
   }
 
-  if (script_context->context_type() == Feature::USER_SCRIPT_CONTEXT) {
+  if (script_context->context_type() == mojom::ContextType::kUserScript) {
     // User scripts should *always* have an associated extension.
     CHECK(script_context->extension());
     if (script_context->extension()->id() != target_id) {

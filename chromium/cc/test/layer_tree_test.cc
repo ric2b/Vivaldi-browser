@@ -264,7 +264,7 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     return test_hooks_->PrepareToDrawOnThread(this, frame, draw_result);
   }
 
-  absl::optional<SubmitInfo> DrawLayers(FrameData* frame) override {
+  std::optional<SubmitInfo> DrawLayers(FrameData* frame) override {
     auto r = LayerTreeHostImpl::DrawLayers(frame);
     test_hooks_->DrawLayersOnThread(this);
     return r;
@@ -439,14 +439,14 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   void OnDeferCommitsChanged(
       bool,
       PaintHoldingReason,
-      absl::optional<PaintHoldingCommitTrigger>) override {}
+      std::optional<PaintHoldingCommitTrigger>) override {}
   void OnCommitRequested() override {}
 
   void RecordStartOfFrameMetrics() override {}
   void RecordEndOfFrameMetrics(base::TimeTicks,
                                ActiveFrameSequenceTrackers) override {}
   std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() override {
-    return nullptr;
+    return test_hooks_->GetBeginMainFrameMetrics();
   }
   std::unique_ptr<WebVitalMetrics> GetWebVitalMetrics() override {
     return nullptr;
@@ -462,6 +462,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   }
 
   void DidObserveFirstScrollDelay(
+      int source_frame_number,
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) override {}
 
@@ -485,11 +486,13 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
     test_hooks_->WillCommit(commit_state);
   }
 
-  void DidCommit(const base::TimeTicks, const base::TimeTicks) override {
+  void DidCommit(int source_frame_number,
+                 const base::TimeTicks,
+                 const base::TimeTicks) override {
     test_hooks_->DidCommit();
   }
 
-  void DidCommitAndDrawFrame() override {
+  void DidCommitAndDrawFrame(int source_frame_number) override {
     test_hooks_->DidCommitAndDrawFrame();
   }
 
@@ -501,7 +504,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
 
   void DidSubmitCompositorFrame() override {}
   void DidLoseLayerTreeFrameSink() override {}
-  void DidCompletePageScaleAnimation() override {}
+  void DidCompletePageScaleAnimation(int source_frame_number) override {}
   void BeginMainFrameNotExpectedSoon() override {
     test_hooks_->BeginMainFrameNotExpectedSoon();
   }
@@ -729,12 +732,27 @@ LayerTreeTest::LayerTreeTest(viz::RendererType renderer_type)
   if (renderer_type_ == viz::RendererType::kSkiaVk) {
     scoped_feature_list_.InitAndEnableFeature(features::kVulkan);
     init_vulkan = true;
-  } else if (renderer_type_ == viz::RendererType::kSkiaGraphite) {
+  } else if (renderer_type_ == viz::RendererType::kSkiaGraphiteDawn) {
     scoped_feature_list_.InitAndEnableFeature(features::kSkiaGraphite);
+    bool use_gpu = command_line->HasSwitch(::switches::kUseGpuInTests);
+    // Force the use of Graphite even if disallowed for other reasons e.g.
+    // ANGLE Metal is not enabled on Mac. Use dawn-swiftshader backend if
+    // kUseGpuInTests is not set.
+    command_line->AppendSwitch(::switches::kEnableSkiaGraphite);
+    command_line->AppendSwitchASCII(
+        ::switches::kSkiaGraphiteBackend,
+        use_gpu ? ::switches::kSkiaGraphiteBackendDawn
+                : ::switches::kSkiaGraphiteBackendDawnSwiftshader);
     init_dawn = true;
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     init_vulkan = true;
 #endif
+  } else if (renderer_type_ == viz::RendererType::kSkiaGraphiteMetal) {
+    scoped_feature_list_.InitAndEnableFeature(features::kSkiaGraphite);
+    // Force the use of Graphite even if disallowed for other reasons.
+    command_line->AppendSwitch(::switches::kEnableSkiaGraphite);
+    command_line->AppendSwitchASCII(::switches::kSkiaGraphiteBackend,
+                                    ::switches::kSkiaGraphiteBackendMetal);
   } else {
     scoped_feature_list_.InitWithFeatures(
         {}, {features::kVulkan, features::kSkiaGraphite});
@@ -751,15 +769,6 @@ LayerTreeTest::LayerTreeTest(viz::RendererType renderer_type)
   if (init_dawn) {
 #if BUILDFLAG(SKIA_USE_DAWN)
     dawnProcSetProcs(&dawn::native::GetProcs());
-    bool use_gpu = command_line->HasSwitch(::switches::kUseGpuInTests);
-    // Force the use of Graphite even if disallowed for other reasons e.g.
-    // ANGLE Metal is not enabled on Mac. Use dawn-swiftshader backend if
-    // kUseGpuInTests is not set.
-    command_line->AppendSwitch(::switches::kEnableSkiaGraphite);
-    command_line->AppendSwitchASCII(
-        ::switches::kSkiaGraphiteBackend,
-        use_gpu ? ::switches::kSkiaGraphiteBackendDawn
-                : ::switches::kSkiaGraphiteBackendDawnSwiftshader);
 #endif
   }
 }
@@ -1046,7 +1055,7 @@ void LayerTreeTest::RealEndTest() {
     return;
   }
 
-  base::RunLoop::QuitCurrentWhenIdleDeprecated();
+  std::move(quit_closure_).Run();
 }
 
 void LayerTreeTest::DispatchAddNoDamageAnimation(
@@ -1185,7 +1194,9 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
       FROM_HERE,
       base::BindOnce(&LayerTreeTest::DoBeginTest, base::Unretained(this)));
 
-  base::RunLoop().Run();
+  base::RunLoop loop;
+  quit_closure_ = loop.QuitWhenIdleClosure();
+  loop.Run();
   CleanupBeforeDestroy();
   DestroyLayerTreeHost();
 

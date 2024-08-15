@@ -293,7 +293,7 @@ class ArcPolicyBridgeTestBase {
   void ReportComplianceAndVerifyObserverCallback(
       const std::string& compliance_report) {
     Mock::VerifyAndClearExpectations(&observer_);
-    absl::optional<base::Value> compliance_report_value =
+    std::optional<base::Value> compliance_report_value =
         base::JSONReader::Read(compliance_report);
     if (compliance_report_value && compliance_report_value->is_dict()) {
       EXPECT_CALL(observer_, OnComplianceReportReceived(
@@ -307,7 +307,7 @@ class ArcPolicyBridgeTestBase {
     Mock::VerifyAndClearExpectations(&observer_);
 
     if (compliance_report_value) {
-      absl::optional<base::Value> saved_compliance_report_value =
+      std::optional<base::Value> saved_compliance_report_value =
           base::JSONReader::Read(
               policy_bridge()->get_arc_policy_compliance_report());
       ASSERT_TRUE(saved_compliance_report_value);
@@ -349,9 +349,9 @@ class ArcPolicyBridgeTestBase {
       fake_user_manager_;
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
   base::RunLoop run_loop_;
-  raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh> profile_;
+  raw_ptr<TestingProfile, DanglingUntriaged> profile_;
   std::unique_ptr<ArcBridgeService> bridge_service_;
-  raw_ptr<CertStoreService, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<CertStoreService, DanglingUntriaged>
       cert_store_service_;  // Not owned.
 
   std::unique_ptr<ArcSessionManager> arc_session_manager_;

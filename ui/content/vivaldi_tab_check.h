@@ -18,8 +18,10 @@ class CONTENT_EXPORT VivaldiTabCheck {
   // VivaldiPrivateTabObserver. It is defined here so we can use it from
   // Chromium content code.
   static const int kVivaldiTabObserverContextKey;
+  static const int kVivaldiPanelHelperContextKey;
 
   static bool IsVivaldiTab(content::WebContents* web_contents);
+  static bool IsVivaldiPanel(content::WebContents* web_contents);
 
   // Get Vivaldi tab that holds the given web_contents or null if none.
   static content::WebContents* GetOuterVivaldiTab(

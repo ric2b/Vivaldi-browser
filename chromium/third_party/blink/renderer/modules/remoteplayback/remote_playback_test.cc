@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
@@ -61,6 +62,7 @@ class RemotePlaybackTest : public testing::Test,
     page_holder_ = std::make_unique<DummyPageHolder>();
     element_ =
         MakeGarbageCollected<HTMLVideoElement>(page_holder_->GetDocument());
+    ChangeMediaElementDuration(60);
   }
 
  protected:
@@ -88,6 +90,14 @@ class RemotePlaybackTest : public testing::Test,
         *element_, html_names::kDisableremoteplaybackAttr, true);
   }
 
+  void ChangeMediaElementDuration(double duration) {
+    element_->DurationChanged(duration, false);
+  }
+
+  void UpdateAvailabilityUrlsAndStartListening() {
+    get_remote_playback().UpdateAvailabilityUrlsAndStartListening();
+  }
+
   RemotePlayback& get_remote_playback() {
     return RemotePlayback::From(*element_);
   }
@@ -95,6 +105,7 @@ class RemotePlaybackTest : public testing::Test,
   DummyPageHolder* page_holder() { return page_holder_.get(); }
 
  private:
+  test::TaskEnvironment task_environment_;
   std::unique_ptr<DummyPageHolder> page_holder_;
   raw_ptr<HTMLVideoElement> element_ = nullptr;
 };
@@ -339,10 +350,10 @@ TEST_F(RemotePlaybackTest, IsListening) {
 
   EXPECT_CALL(*mock_controller,
               AddAvailabilityObserver(testing::Eq(&remote_playback)))
-      .Times(2);
+      .Times(3);
   EXPECT_CALL(*mock_controller,
               RemoveAvailabilityObserver(testing::Eq(&remote_playback)))
-      .Times(2);
+      .Times(3);
 
   MockFunction* callback_function = MakeGarbageCollected<MockFunction>();
   V8RemotePlaybackAvailabilityCallback* availability_callback =
@@ -377,6 +388,18 @@ TEST_F(RemotePlaybackTest, IsListening) {
   ASSERT_TRUE(IsListening(remote_playback));
   remote_playback.AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
 
+  // Background monitoring is disabled for short videos.
+  ChangeMediaElementDuration(10);
+  UpdateAvailabilityUrlsAndStartListening();
+  ASSERT_TRUE(remote_playback.Urls().empty());
+  ASSERT_FALSE(IsListening(remote_playback));
+
+  ChangeMediaElementDuration(60);
+  UpdateAvailabilityUrlsAndStartListening();
+  ASSERT_EQ((size_t)1, remote_playback.Urls().size());
+  ASSERT_TRUE(IsListening(remote_playback));
+
+  // Background monitoring is disabled for invalid sources.
   remote_playback.SourceChanged(WebURL(), false);
   ASSERT_TRUE(remote_playback.Urls().empty());
   ASSERT_FALSE(IsListening(remote_playback));
@@ -413,16 +436,14 @@ TEST_F(RemotePlaybackTest, GetAvailabilityUrl) {
   remote_playback.SourceChanged(WebURL(KURL("http://www.example.com")), true);
   EXPECT_EQ((size_t)1, remote_playback.Urls().size());
   EXPECT_EQ(
-      "remote-playback:media-element?source=aHR0cDovL3d3dy5leGFtcGxlLmNvbS8=&"
-      "video_codec=unknown&audio_codec=unknown",
+      "remote-playback:media-element?source=aHR0cDovL3d3dy5leGFtcGxlLmNvbS8=",
       remote_playback.Urls()[0]);
 
   remote_playback.MediaMetadataChanged(media::VideoCodec::kVP9,
                                        media::AudioCodec::kMP3);
   EXPECT_EQ(
       "remote-playback:media-element?source=aHR0cDovL3d3dy5leGFtcGxlLmNvbS8=&"
-      "video_codec=vp9&audio_"
-      "codec=mp3",
+      "video_codec=vp9&audio_codec=mp3",
       remote_playback.Urls()[0]);
 }
 

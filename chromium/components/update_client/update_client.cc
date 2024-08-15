@@ -164,8 +164,9 @@ void UpdateClientImpl::OnTaskComplete(Callback callback,
 
   tasks_.erase(task);
 
-  if (is_stopped_)
+  if (is_stopped_) {
     return;
+  }
 
   // Pick up a task from the queue if the queue has pending tasks and no other
   // task is running.
@@ -189,8 +190,9 @@ void UpdateClientImpl::RemoveObserver(Observer* observer) {
 void UpdateClientImpl::NotifyObservers(Observer::Events event,
                                        const std::string& id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto& observer : observer_list_)
+  for (auto& observer : observer_list_) {
     observer.OnEvent(event, id);
+  }
 }
 
 bool UpdateClientImpl::GetCrxUpdateState(const std::string& id,
@@ -277,14 +279,14 @@ scoped_refptr<UpdateClient> UpdateClientFactory(
 }
 
 void RegisterPrefs(PrefRegistrySimple* registry) {
-  PersistedData::RegisterPrefs(registry);
+  RegisterPersistedDataPrefs(registry);
 }
 
 // This function has the exact same implementation as RegisterPrefs. We have
 // this implementation here to make the intention more clear that is local user
 // profile access is needed.
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  PersistedData::RegisterPrefs(registry);
+  RegisterPersistedDataPrefs(registry);
 }
 
 }  // namespace update_client

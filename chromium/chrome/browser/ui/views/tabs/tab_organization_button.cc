@@ -21,26 +21,21 @@
 
 namespace {
 constexpr int kTabOrganizeCornerRadius = 10;
-constexpr int kTabOrganizeFlatCornerRadius = 2;
+constexpr int kTabOrganizeFlatCornerRadius = 4;
 constexpr int kTabOrganizeLabelMargin = 10;
 constexpr int kTabOrganizeCloseButtonMargin = 8;
 constexpr int kTabOrganizeCloseButtonSize = 16;
-}
+}  // namespace
 
 TabOrganizationButton::TabOrganizationButton(
     TabStripController* tab_strip_controller,
-    TabOrganizationService* tab_organization_service,
     PressedCallback pressed_callback,
+    PressedCallback close_pressed_callback,
     Edge flat_edge)
-    : TabStripControlButton(
-          tab_strip_controller,
-          base::BindRepeating(&TabOrganizationButton::ButtonPressed,
-                              base::Unretained(this)),
-          l10n_util::GetStringUTF16(IDS_TAB_ORGANIZE),
-          flat_edge),
-      service_(tab_organization_service),
-      pressed_callback_(std::move(pressed_callback)),
-      browser_(tab_strip_controller->GetBrowser()) {
+    : TabStripControlButton(tab_strip_controller,
+                            std::move(pressed_callback),
+                            l10n_util::GetStringUTF16(IDS_TAB_ORGANIZE),
+                            flat_edge) {
   auto* const layout_manager =
       SetLayoutManager(std::make_unique<views::BoxLayout>());
   layout_manager->set_main_axis_alignment(
@@ -57,16 +52,16 @@ TabOrganizationButton::TabOrganizationButton(
       gfx::Insets().set_left(kTabOrganizeLabelMargin);
   label()->SetProperty(views::kMarginsKey, label_margin);
 
-  SetForegroundFrameActiveColorId(kColorNewTabButtonForegroundFrameActive);
-  SetForegroundFrameInactiveColorId(kColorNewTabButtonForegroundFrameInactive);
+  SetForegroundFrameActiveColorId(kColorTabSearchButtonCRForegroundFrameActive);
+  SetForegroundFrameInactiveColorId(
+      kColorTabSearchButtonCRForegroundFrameInactive);
   SetBackgroundFrameActiveColorId(kColorNewTabButtonCRBackgroundFrameActive);
   SetBackgroundFrameInactiveColorId(
       kColorNewTabButtonCRBackgroundFrameInactive);
 
   set_paint_transparent_for_custom_image_theme(false);
 
-  SetCloseButton(base::BindRepeating(&TabOrganizationButton::ClosePressed,
-                                     base::Unretained(this)));
+  SetCloseButton(std::move(close_pressed_callback));
   layout_manager->SetFlexForView(close_button_, 1);
 
   UpdateColors();
@@ -86,17 +81,6 @@ gfx::Size TabOrganizationButton::CalculatePreferredSize() const {
   return gfx::Size(width, height);
 }
 
-void TabOrganizationButton::ButtonPressed(const ui::Event& event) {
-  if (service_ && browser_) {
-    service_->StartRequest(browser_);
-  }
-  pressed_callback_.Run(event);
-}
-
-void TabOrganizationButton::ClosePressed(const ui::Event& event) {
-  pressed_callback_.Run(event);
-}
-
 int TabOrganizationButton::GetCornerRadius() const {
   return kTabOrganizeCornerRadius;
 }
@@ -114,7 +98,8 @@ void TabOrganizationButton::SetCloseButton(
 
   const ui::ImageModel icon_image_model = ui::ImageModel::FromVectorIcon(
       vector_icons::kCloseChromeRefreshIcon,
-      kColorNewTabButtonForegroundFrameActive, kTabOrganizeCloseButtonSize);
+      kColorTabSearchButtonCRForegroundFrameActive,
+      kTabOrganizeCloseButtonSize);
 
   close_button->SetImageModel(views::Button::STATE_NORMAL, icon_image_model);
   close_button->SetImageModel(views::Button::STATE_HOVERED, icon_image_model);
@@ -128,7 +113,7 @@ void TabOrganizationButton::SetCloseButton(
   views::InkDrop::Get(close_button.get())->SetHighlightOpacity(0.16f);
   views::InkDrop::Get(close_button.get())->SetVisibleOpacity(0.14f);
   views::InkDrop::Get(close_button.get())
-      ->SetBaseColorId(kColorNewTabButtonForegroundFrameActive);
+      ->SetBaseColorId(kColorTabSearchButtonCRForegroundFrameActive);
 
   auto ink_drop_highlight_path =
       std::make_unique<views::CircleHighlightPathGenerator>(gfx::Insets());
@@ -146,5 +131,5 @@ void TabOrganizationButton::SetCloseButton(
   close_button_ = AddChildView(std::move(close_button));
 }
 
-BEGIN_METADATA(TabOrganizationButton, TabStripControlButton)
+BEGIN_METADATA(TabOrganizationButton)
 END_METADATA

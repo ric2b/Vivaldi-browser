@@ -257,7 +257,7 @@ void NetworkStateHandler::RequestTrafficCounters(
   // network is a Tether network or is a non shill Cellular network.
   // see b/266972302.
   if (!network || network->IsNonProfileType()) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return;
   }
 
@@ -2227,9 +2227,9 @@ void NetworkStateHandler::UpdatePortalStateAndNotify(
   NetworkState::PortalState new_portal_state;
   std::string new_default_network_path;
   if (default_network &&
-      (default_network->shill_portal_state() != default_network_portal_state_ ||
+      (default_network->GetPortalState() != default_network_portal_state_ ||
        default_network->proxy_config() != default_network_proxy_config_)) {
-    new_portal_state = default_network->shill_portal_state();
+    new_portal_state = default_network->GetPortalState();
     new_default_network_path = default_network->path();
     if (default_network->proxy_config()) {
       default_network_proxy_config_ = default_network->proxy_config()->Clone();

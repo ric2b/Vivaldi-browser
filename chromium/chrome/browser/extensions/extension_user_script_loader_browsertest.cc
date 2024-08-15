@@ -130,18 +130,18 @@ IN_PROC_BROWSER_TEST_F(ExtensionUserScriptLoaderBrowserTest,
   const UserScriptList& loaded_dynamic_scripts =
       loader->GetLoadedDynamicScripts();
   ASSERT_EQ(1u, loaded_dynamic_scripts.size());
-  auto copied_scripts = std::make_unique<UserScriptList>();
-  copied_scripts->push_back(
+  UserScriptList copied_scripts;
+  copied_scripts.push_back(
       UserScript::CopyMetadataFrom(*loaded_dynamic_scripts[0]));
   {
-    base::test::TestFuture<const absl::optional<std::string>&> future;
+    base::test::TestFuture<const std::optional<std::string>&> future;
     loader->ClearDynamicScripts(UserScript::Source::kDynamicContentScript,
                                 future.GetCallback());
     EXPECT_EQ("<no error>", future.Get().value_or("<no error>"));
   }
   {
-    std::string id = (*copied_scripts)[0]->id();
-    base::test::TestFuture<const absl::optional<std::string>&> future;
+    std::string id = copied_scripts[0]->id();
+    base::test::TestFuture<const std::optional<std::string>&> future;
     loader->AddPendingDynamicScriptIDs({id});
     loader->AddDynamicScripts(std::move(copied_scripts), {id},
                               future.GetCallback());
@@ -153,12 +153,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionUserScriptLoaderBrowserTest,
   // Verify as well that the serialized values are now migrated to the new type.
   FlushScriptStore();
 
-  base::test::TestFuture<absl::optional<base::Value>> value_future;
+  base::test::TestFuture<std::optional<base::Value>> value_future;
   dynamic_scripts_store()->GetExtensionValue(
       extension->id(), scripting::kRegisteredScriptsStorageKey,
       value_future.GetCallback());
 
-  absl::optional<base::Value> value = value_future.Take();
+  std::optional<base::Value> value = value_future.Take();
   ASSERT_TRUE(value);
   ASSERT_TRUE(value->is_list());
   ASSERT_EQ(1u, value->GetList().size());

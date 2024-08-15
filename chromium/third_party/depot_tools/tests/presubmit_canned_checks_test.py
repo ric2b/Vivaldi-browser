@@ -344,8 +344,8 @@ class DescriptionChecksTest(unittest.TestCase):
 class ChromiumDependencyMetadataCheckTest(unittest.TestCase):
     def testDefaultFileFilter(self):
         """Checks the default file filter limits the scope to Chromium dependency
-    metadata files.
-    """
+        metadata files.
+        """
         input_api = MockInputApi()
         input_api.change.RepositoryRoot = lambda: ''
         input_api.files = [

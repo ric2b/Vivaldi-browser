@@ -27,34 +27,116 @@
 
 #include "dawn/native/d3d11/QueueD3D11.h"
 
+#include <utility>
+
+#include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d11/BufferD3D11.h"
 #include "dawn/native/d3d11/CommandBufferD3D11.h"
 #include "dawn/native/d3d11/DeviceD3D11.h"
+#include "dawn/native/d3d11/SharedFenceD3D11.h"
 #include "dawn/native/d3d11/TextureD3D11.h"
 #include "dawn/platform/DawnPlatform.h"
 #include "dawn/platform/tracing/TraceEvent.h"
 
 namespace dawn::native::d3d11 {
 
-Ref<Queue> Queue::Create(Device* device, const QueueDescriptor* descriptor) {
-    return AcquireRef(new Queue(device, descriptor));
+ResultOrError<Ref<Queue>> Queue::Create(Device* device, const QueueDescriptor* descriptor) {
+    Ref<Queue> queue = AcquireRef(new Queue(device, descriptor));
+    DAWN_TRY(queue->Initialize());
+    return queue;
+}
+
+MaybeError Queue::Initialize() {
+    // Create the fence.
+    DAWN_TRY(CheckHRESULT(ToBackend(GetDevice())
+                              ->GetD3D11Device5()
+                              ->CreateFence(0, D3D11_FENCE_FLAG_SHARED, IID_PPV_ARGS(&mFence)),
+                          "D3D11: creating fence"));
+
+    // Create the fence event.
+    mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    DAWN_ASSERT(mFenceEvent != nullptr);
+
+    DAWN_TRY_ASSIGN(mSharedFence, SharedFence::Create(ToBackend(GetDevice()),
+                                                      "Internal shared DXGI fence", mFence));
+
+    return {};
+}
+
+MaybeError Queue::InitializePendingContext() {
+    return mPendingCommands.Initialize(ToBackend(GetDevice()));
+}
+
+void Queue::DestroyImpl() {
+    if (mFenceEvent != nullptr) {
+        ::CloseHandle(mFenceEvent);
+        mFenceEvent = nullptr;
+    }
+
+    // Release the shared fence here to prevent a ref-cycle with the device, but do not destroy the
+    // underlying native fence so that we can return a SharedFence on EndAccess after destruction.
+    mSharedFence = nullptr;
+
+    mPendingCommands.Release();
+}
+
+ResultOrError<Ref<d3d::SharedFence>> Queue::GetOrCreateSharedFence() {
+    if (mSharedFence == nullptr) {
+        DAWN_ASSERT(!IsAlive());
+        return SharedFence::Create(ToBackend(GetDevice()), "Internal shared DXGI fence", mFence);
+    }
+    return mSharedFence;
+}
+
+ScopedCommandRecordingContext Queue::GetScopedPendingCommandContext(SubmitMode submitMode) {
+    // Callers of GetPendingCommandList do so to record commands. Only reserve a command
+    // allocator when it is needed so we don't submit empty command lists
+    DAWN_ASSERT(mPendingCommands.IsOpen());
+
+    if (submitMode == SubmitMode::Normal) {
+        mPendingCommands.SetNeedsSubmit();
+    }
+
+    return ScopedCommandRecordingContext(&mPendingCommands);
+}
+
+ScopedSwapStateCommandRecordingContext Queue::GetScopedSwapStatePendingCommandContext(
+    SubmitMode submitMode) {
+    // Callers of GetPendingCommandList do so to record commands. Only reserve a command
+    // allocator when it is needed so we don't submit empty command lists
+    DAWN_ASSERT(mPendingCommands.IsOpen());
+
+    if (submitMode == SubmitMode::Normal) {
+        mPendingCommands.SetNeedsSubmit();
+    }
+
+    return ScopedSwapStateCommandRecordingContext(&mPendingCommands);
+}
+
+MaybeError Queue::SubmitPendingCommands() {
+    if (!mPendingCommands.IsOpen() || !mPendingCommands.NeedsSubmit()) {
+        return {};
+    }
+
+    DAWN_TRY(mPendingCommands.ExecuteCommandList());
+    return NextSerial();
 }
 
 MaybeError Queue::SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) {
-    Device* device = ToBackend(GetDevice());
-
     // CommandBuffer::Execute() will modify the state of the global immediate device context, it may
     // affect following usage of it.
     // TODO(dawn:1770): figure how if we need to track and restore the state of the immediate device
     // context.
     TRACE_EVENT_BEGIN0(GetDevice()->GetPlatform(), Recording, "CommandBufferD3D11::Execute");
-    for (uint32_t i = 0; i < commandCount; ++i) {
-        DAWN_TRY(ToBackend(commands[i])->Execute());
+    {
+        auto commandContext =
+            GetScopedSwapStatePendingCommandContext(QueueBase::SubmitMode::Normal);
+        for (uint32_t i = 0; i < commandCount; ++i) {
+            DAWN_TRY(ToBackend(commands[i])->Execute(&commandContext));
+        }
     }
-    DAWN_TRY(device->ExecutePendingCommandContext());
+    DAWN_TRY(SubmitPendingCommands());
     TRACE_EVENT_END0(GetDevice()->GetPlatform(), Recording, "CommandBufferD3D11::Execute");
-
-    DAWN_TRY(device->NextSerial());
 
     return {};
 }
@@ -68,8 +150,8 @@ MaybeError Queue::WriteBufferImpl(BufferBase* buffer,
         return {};
     }
 
-    CommandRecordingContext* commandContext = ToBackend(GetDevice())->GetPendingCommandContext();
-    return ToBackend(buffer)->Write(commandContext, bufferOffset, data, size);
+    auto commandContext = GetScopedPendingCommandContext(QueueBase::SubmitMode::Normal);
+    return ToBackend(buffer)->Write(&commandContext, bufferOffset, data, size);
 }
 
 MaybeError Queue::WriteTextureImpl(const ImageCopyTexture& destination,
@@ -81,8 +163,7 @@ MaybeError Queue::WriteTextureImpl(const ImageCopyTexture& destination,
         return {};
     }
 
-    CommandRecordingContext* commandContext = ToBackend(GetDevice())->GetPendingCommandContext();
-
+    auto commandContext = GetScopedPendingCommandContext(QueueBase::SubmitMode::Normal);
     TextureCopy textureCopy;
     textureCopy.texture = destination.texture;
     textureCopy.mipLevel = destination.mipLevel;
@@ -93,25 +174,72 @@ MaybeError Queue::WriteTextureImpl(const ImageCopyTexture& destination,
 
     Texture* texture = ToBackend(destination.texture);
 
-    return texture->Write(commandContext, subresources, destination.origin, writeSizePixel,
+    return texture->Write(&commandContext, subresources, destination.origin, writeSizePixel,
                           static_cast<const uint8_t*>(data) + dataLayout.offset,
                           dataLayout.bytesPerRow, dataLayout.rowsPerImage);
 }
 
 bool Queue::HasPendingCommands() const {
-    return ToBackend(GetDevice())->HasPendingCommands();
+    return mPendingCommands.NeedsSubmit();
 }
 
 ResultOrError<ExecutionSerial> Queue::CheckAndUpdateCompletedSerials() {
-    return ToBackend(GetDevice())->CheckAndUpdateCompletedSerials();
+    ExecutionSerial completedSerial = ExecutionSerial(mFence->GetCompletedValue());
+    if (DAWN_UNLIKELY(completedSerial == ExecutionSerial(UINT64_MAX))) {
+        // GetCompletedValue returns UINT64_MAX if the device was removed.
+        // Try to query the failure reason.
+        ID3D11Device* d3d11Device = ToBackend(GetDevice())->GetD3D11Device();
+        DAWN_TRY(CheckHRESULT(d3d11Device->GetDeviceRemovedReason(),
+                              "ID3D11Device::GetDeviceRemovedReason"));
+        // Otherwise, return a generic device lost error.
+        return DAWN_DEVICE_LOST_ERROR("Device lost");
+    }
+
+    if (completedSerial <= GetCompletedCommandSerial()) {
+        return ExecutionSerial(0);
+    }
+
+    return completedSerial;
 }
 
-void Queue::ForceEventualFlushOfCommands() {
-    return ToBackend(GetDevice())->ForceEventualFlushOfCommands();
-}
+void Queue::ForceEventualFlushOfCommands() {}
 
 MaybeError Queue::WaitForIdleForDestruction() {
-    return ToBackend(GetDevice())->WaitForIdleForDestruction();
+    DAWN_TRY(NextSerial());
+    // Wait for all in-flight commands to finish executing
+    DAWN_TRY(WaitForSerial(GetLastSubmittedCommandSerial()));
+
+    return {};
+}
+
+MaybeError Queue::NextSerial() {
+    IncrementLastSubmittedCommandSerial();
+
+    TRACE_EVENT1(GetDevice()->GetPlatform(), General, "D3D11Device::SignalFence", "serial",
+                 uint64_t(GetLastSubmittedCommandSerial()));
+
+    auto commandContext = GetScopedPendingCommandContext(SubmitMode::Passive);
+    DAWN_TRY(
+        CheckHRESULT(commandContext.Signal(mFence.Get(), uint64_t(GetLastSubmittedCommandSerial())),
+                     "D3D11 command queue signal fence"));
+
+    return {};
+}
+
+MaybeError Queue::WaitForSerial(ExecutionSerial serial) {
+    DAWN_TRY(CheckPassedSerials());
+    if (GetCompletedCommandSerial() >= serial) {
+        return {};
+    }
+
+    DAWN_TRY(CheckHRESULT(mFence->SetEventOnCompletion(uint64_t(serial), mFenceEvent),
+                          "D3D11 set event on completion"));
+    WaitForSingleObject(mFenceEvent, INFINITE);
+    return CheckPassedSerials();
+}
+
+void Queue::SetEventOnCompletion(ExecutionSerial serial, HANDLE event) {
+    mFence->SetEventOnCompletion(static_cast<uint64_t>(serial), event);
 }
 
 }  // namespace dawn::native::d3d11

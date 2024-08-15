@@ -3,6 +3,7 @@
 import * as fs from 'fs';
 
 import { dataCache } from '../framework/data_cache.js';
+import { getResourcePath, setBaseResourcePath } from '../framework/resources.js';
 import { globalTestConfig } from '../framework/test_config.js';
 import { DefaultTestFileLoader } from '../internal/file_loader.js';
 import { prettyPrintLog } from '../internal/logging/log_message.js';
@@ -37,6 +38,12 @@ Options:
   return sys.exit(rc);
 }
 
+if (!sys.existsSync('src/common/runtime/cmdline.ts')) {
+  console.log('Must be run from repository root');
+  usage(1);
+}
+setBaseResourcePath('out-node/resources');
+
 // The interface that exposes creation of the GPU, and optional interface to code coverage.
 interface GPUProviderModule {
   // @returns a GPU with the given flags
@@ -65,7 +72,6 @@ let printJSON = false;
 let quiet = false;
 let loadWebGPUExpectations: Promise<unknown> | undefined = undefined;
 let gpuProviderModule: GPUProviderModule | undefined = undefined;
-let dataPath: string | undefined = undefined;
 
 const queries: string[] = [];
 const gpuProviderFlags: string[] = [];
@@ -84,8 +90,6 @@ for (let i = 0; i < sys.args.length; ++i) {
       listMode = 'unimplemented';
     } else if (a === '--debug') {
       debug = true;
-    } else if (a === '--data') {
-      dataPath = sys.args[++i];
     } else if (a === '--print-json') {
       printJSON = true;
     } else if (a === '--expectations') {
@@ -132,21 +136,20 @@ Did you remember to build with code coverage instrumentation enabled?`
   }
 }
 
-if (dataPath !== undefined) {
-  dataCache.setStore({
-    load: (path: string) => {
-      return new Promise<Uint8Array>((resolve, reject) => {
-        fs.readFile(`${dataPath}/${path}`, (err, data) => {
-          if (err !== null) {
-            reject(err.message);
-          } else {
-            resolve(data);
-          }
-        });
+dataCache.setStore({
+  load: (path: string) => {
+    return new Promise<Uint8Array>((resolve, reject) => {
+      fs.readFile(getResourcePath(`cache/${path}`), (err, data) => {
+        if (err !== null) {
+          reject(err.message);
+        } else {
+          resolve(data);
+        }
       });
-    },
-  });
-}
+    });
+  },
+});
+
 if (verbose) {
   dataCache.setDebugLogger(console.log);
 }

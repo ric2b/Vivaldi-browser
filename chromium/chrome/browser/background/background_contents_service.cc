@@ -97,8 +97,8 @@ class CrashNotificationDelegate : public message_center::NotificationDelegate {
   CrashNotificationDelegate& operator=(const CrashNotificationDelegate&) =
       delete;
 
-  void Click(const absl::optional<int>& button_index,
-             const absl::optional<std::u16string>& reply) override {
+  void Click(const std::optional<int>& button_index,
+             const std::optional<std::u16string>& reply) override {
     // Pass arguments by value as HandleClick() might destroy *this.
     HandleClick(is_hosted_app_, is_platform_app_, extension_id_, profile_);
     // *this might be destroyed now, do not access any members anymore!
@@ -162,8 +162,7 @@ void ReloadExtension(const std::string& extension_id, Profile* profile) {
     return;
   }
 
-  if (!extension_registry->GetExtensionById(
-          extension_id, extensions::ExtensionRegistry::TERMINATED)) {
+  if (!extension_registry->terminated_extensions().GetByID(extension_id)) {
     // Either the app/extension was uninstalled by policy or it has since
     // been restarted successfully by someone else (the user).
     return;

@@ -30,17 +30,55 @@ const currentTimeString = () => {
       .toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
 };
 
+const NODE_PATH = path.join('third_party', 'node', 'node.py');
+const ESBUILD_PATH = path.join('third_party', 'esbuild', 'esbuild');
+const GENERATE_CSS_JS_FILES_PATH = path.join('scripts', 'build', 'generate_css_js_files.js');
+
 const connections = {};
 let lastConnectionId = 0;
 
 // Extract the target if it's provided.
 const target = extractArgument('--target') || 'Default';
 const PORT = 8080;
+const TARGET_GEN_DIR = path.join('out', target, 'gen');
 
-let restartBuild = false;
-let autoninja;
+// Make sure that the target has
+// - `is_debug = true`
+// - `devtools_skip_typecheck = true`
+// flags set.
+const assertTargetArgsForWatchBuild = async () => {
+  const {status, stdout} =
+      childProcess.spawnSync('gn', ['args', '--list', '--json', `out/${target}`], {cwd, env, stdio: 'pipe'});
 
-const changedFiles = new Set();
+  const stdoutText = stdout.toString();
+  if (status !== 0) {
+    throw `gen args --list --json failed for target ${target}\n${stdoutText}`;
+  }
+
+  let args;
+  try {
+    args = JSON.parse(stdoutText);
+  } catch (err) {
+    throw `Parsing args of target ${target} is failed\n${err}`;
+  }
+
+  const argsMap = Object.fromEntries(args.map(arg => [arg.name, arg]));
+  const assertTrueArg = argName => {
+    const argString = argsMap[argName].current ? argsMap[argName].current.value : argsMap[argName].default.value;
+    if (argString !== 'true') {
+      throw `${argName} is expected to be 'true' but it is '${argString}' in target ${target}`;
+    }
+  };
+
+  try {
+    assertTrueArg('is_debug');
+    assertTrueArg('devtools_skip_typecheck');
+  } catch (err) {
+    console.error(
+        `watch_build needs is_debug and devtools_skip_typecheck args to be set to true for target ${target}\n${err}\n`);
+    process.exit(1);
+  }
+};
 
 const startWebSocketServerForCssChanges = () => {
   const wss = new WebSocketServer({port: PORT});
@@ -62,58 +100,86 @@ const startWebSocketServerForCssChanges = () => {
   });
 };
 
-const onFileChange = fileName => {
-  // Some filesystems emit multiple events in quick succession for a
-  // single file change. Here we track the changed files, and reset
-  // after a short timeout.
-  if (!fileName || changedFiles.has(fileName)) {
-    return;
+const runGenerateCssFiles = ({fileName, isLegacy}) => {
+  const scriptArgs = [
+    /* buildTimestamp */ Date.now(),
+    /* isDebugString */ 'true',
+    /* isLegacyString */ isLegacy ? 'true' : 'false',
+    /* targetName */ target,
+    /* srcDir */ '',
+    /* targetGenDir */ TARGET_GEN_DIR,
+    /* files */ relativeFileName(fileName),
+    /* hotReloadEnabledString */ 'true'
+  ];
+
+  childProcess.spawnSync(
+      'vpython', [NODE_PATH, '--output', GENERATE_CSS_JS_FILES_PATH, ...scriptArgs], {cwd, env, stdio: 'inherit'});
+};
+
+const isLegacyCss = absoluteFilePath => {
+  if (!absoluteFilePath.endsWith('.css')) {
+    return false;
   }
 
-  changedFiles.add(fileName);
-  setTimeout(() => {
-    changedFiles.delete(fileName);
-  }, 250);
+  const relativePath = path.relative(cwd, absoluteFilePath);
+  const possibleLegacyCssPath = path.join(TARGET_GEN_DIR, `${relativePath}.legacy.js`);
+  return fs.existsSync(possibleLegacyCssPath);
+};
 
-  // If the exitCode is null, autoninja is still running so stop it
-  // and try to restart it again.
-  const ninjaProcessExists = Boolean(autoninja && autoninja.pid);
-  if (ninjaProcessExists) {
-    const isRunning = ninjaProcessExists && autoninja.exitCode === null;
-    if (isRunning) {
-      autoninja.kill();
-      restartBuild = true;
-    }
+const notifyWebSocketConections = message => {
+  Object.values(connections).forEach(connection => connection.ws.send(message));
+};
+
+const onFileChange = async fileName => {
+  if (!fileName) {
     return;
   }
 
   if (fileName.endsWith('.css')) {
     console.log(`${currentTimeString()} - ${relativeFileName(fileName)} changed, notifying frontend`);
+    const isLegacy = isLegacyCss(fileName);
     const content = fs.readFileSync(fileName, {encoding: 'utf8', flag: 'r'});
+    runGenerateCssFiles({fileName: relativeFileName(fileName), isLegacy});
 
-    Object.values(connections).forEach(connection => {
-      connection.ws.send(JSON.stringify({file: fileName, content}));
-    });
+    if (isLegacy) {
+      notifyWebSocketConections(JSON.stringify({
+        event: 'log-warn',
+        message: `a legacy css file \x1B[1m${
+            path.relative(cwd, fileName)}\x1B[m is updated, you need to refresh the page to see changes.`
+      }));
+    } else {
+      notifyWebSocketConections(JSON.stringify({event: 'css-change', file: fileName, content}));
+    }
     return;
   }
 
-  autoninja = childProcess.spawn('autoninja', ['-C', `out/${target}`], {cwd, env, stdio: 'inherit'});
-  autoninja.on('close', () => {
-    autoninja = null;
-    if (restartBuild) {
-      restartBuild = false;
-      console.log(`${currentTimeString()}  - ${relativeFileName(fileName)} changed, restarting ninja`);
-      onFileChange();
+  if (fileName.endsWith('.ts')) {
+    console.log(`${currentTimeString()} - ${relativeFileName(fileName)} changed, generating js file`);
+
+    const jsFileName = `${fileName.substring(0, fileName.length - 3)}.js`;
+    const outFile = path.resolve('out', target, 'gen', relativeFileName(jsFileName));
+    const res = childProcess.spawnSync(
+        ESBUILD_PATH, [fileName, `--outfile=${outFile}`, '--sourcemap'], {cwd, env, stdio: 'inherit'});
+
+    if (res && res.status === 1) {
+      notifyWebSocketConections(JSON.stringify({
+        event: 'log-warn',
+        message: `TS compilation failed for \x1B[1m${path.relative(cwd, fileName)}\x1B[m, check your terminal.`
+      }));
     }
-  });
+    return;
+  }
+
+  console.log(`${currentTimeString()} - ${relativeFileName(fileName)} changed, running ninja`);
+  childProcess.spawnSync('autoninja', ['-C', `out/${target}`], {cwd, env, stdio: 'inherit'});
 };
 
-// Run build initially before starting to watch for changes.
 console.log('Running initial build before watching changes');
+assertTargetArgsForWatchBuild();
 childProcess.spawnSync('autoninja', ['-C', `out/${target}`], {cwd, env, stdio: 'inherit'});
 
 // Watch the front_end and test folder and build on any change.
 console.log(`Watching for changes in ${frontEndDir} and ${testsDir}`);
-chokidar.watch(frontEndDir).on('change', onFileChange);
-chokidar.watch(testsDir).on('change', onFileChange);
+chokidar.watch(frontEndDir, {usePolling: false, useFsEvents: true}).on('change', onFileChange);
+chokidar.watch(testsDir, {usePolling: false, useFsEvents: true}).on('change', onFileChange);
 startWebSocketServerForCssChanges();

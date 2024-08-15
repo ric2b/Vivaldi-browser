@@ -33,6 +33,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
+#include "gpu/ipc/client/client_shared_image_interface.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -95,6 +96,7 @@ class SoftwareCompositorFrameSinkClient
   void OnBeginFramePausedChanged(bool paused) override {}
   void OnCompositorFrameTransitionDirectiveProcessed(
       uint32_t sequence_id) override {}
+  void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override {}
 };
 
 }  // namespace
@@ -231,10 +233,12 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   // The gpu::GpuTaskSchedulerHelper here is null as the OutputSurface is
   // software only and the overlay processor is a stub.
   display_ = std::make_unique<viz::Display>(
-      &shared_bitmap_manager_, software_renderer_settings, &debug_settings_,
-      kRootFrameSinkId, nullptr /* gpu::GpuTaskSchedulerHelper */,
-      std::move(output_surface), std::move(overlay_processor),
-      nullptr /* scheduler */, nullptr /* current_task_runner */);
+      &shared_bitmap_manager_, /*shared_image_manager=*/nullptr,
+      /*sync_point_manager=*/nullptr, software_renderer_settings,
+      &debug_settings_, kRootFrameSinkId,
+      nullptr /* gpu::GpuTaskSchedulerHelper */, std::move(output_surface),
+      std::move(overlay_processor), nullptr /* scheduler */,
+      nullptr /* current_task_runner */);
   display_->Initialize(&display_client_,
                        frame_sink_manager_->surface_manager());
   display_->SetVisible(true);

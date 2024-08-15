@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
@@ -224,7 +225,7 @@ void SyncTest::SetUp() {
     if (cl->HasSwitch(switches::kSyncUserForTest)) {
       username_ = cl->GetSwitchValueASCII(switches::kSyncUserForTest);
     } else if (server_type_ != EXTERNAL_LIVE_SERVER) {
-      username_ = "user@gmail.com";
+      username_ = kDefaultUserEmail;
     }
     // Decide on password to use.
     password_ = cl->HasSwitch(switches::kSyncPasswordForTest)
@@ -398,8 +399,8 @@ Profile* SyncTest::GetProfile(int index) const {
   return profile;
 }
 
-std::vector<Profile*> SyncTest::GetAllProfiles() {
-  std::vector<Profile*> profiles;
+std::vector<raw_ptr<Profile, VectorExperimental>> SyncTest::GetAllProfiles() {
+  std::vector<raw_ptr<Profile, VectorExperimental>> profiles;
   if (UseVerifier()) {
     profiles.push_back(verifier());
   }
@@ -472,8 +473,9 @@ syncer::UserSelectableTypeSet SyncTest::GetRegisteredSelectableTypes(
       ->GetRegisteredSelectableTypes();
 }
 
-std::vector<SyncServiceImpl*> SyncTest::GetSyncServices() {
-  std::vector<SyncServiceImpl*> services;
+std::vector<raw_ptr<SyncServiceImpl, VectorExperimental>>
+SyncTest::GetSyncServices() {
+  std::vector<raw_ptr<SyncServiceImpl, VectorExperimental>> services;
   for (int i = 0; i < num_clients(); ++i) {
     services.push_back(GetSyncService(i));
   }
@@ -731,7 +733,6 @@ bool SyncTest::SetupSync(SetupSyncMode setup_mode) {
   if (setup_mode != NO_WAITING && TestUsesSelfNotifications()) {
     if (!AwaitQuiescence()) {
       LOG(FATAL) << "AwaitQuiescence() failed.";
-      return false;
     }
   }
 
@@ -942,7 +943,8 @@ void SyncTest::SetUpOnMainThread() {
       // initialized.
       base::FilePath user_data_dir;
       base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
-      fake_server_ = std::make_unique<fake_server::FakeServer>(user_data_dir);
+      fake_server_ = std::make_unique<fake_server::FakeServer>(
+          user_data_dir.AppendASCII("FakeServer"));
       fake_server_sync_invalidation_sender_ =
           std::make_unique<fake_server::FakeServerSyncInvalidationSender>(
               fake_server_.get());
@@ -1142,9 +1144,6 @@ syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
           syncer::kSyncEnableWalletOfferInTransportMode)) {
     allowed_types.Put(syncer::AUTOFILL_WALLET_OFFER);
   }
-  if (base::FeatureList::IsEnabled(syncer::kEnableBookmarksAccountStorage)) {
-    allowed_types.Put(syncer::BOOKMARKS);
-  }
   if (base::FeatureList::IsEnabled(
           password_manager::features::kEnablePasswordsAccountStorage)) {
     allowed_types.Put(syncer::PASSWORDS);
@@ -1156,8 +1155,6 @@ syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
     allowed_types.Put(syncer::PRIORITY_PREFERENCES);
   }
   if (base::FeatureList::IsEnabled(
-          syncer::kReadingListEnableDualReadingListModel) &&
-      base::FeatureList::IsEnabled(
           syncer::kReadingListEnableSyncTransportModeUponSignIn)) {
     allowed_types.Put(syncer::READING_LIST);
   }

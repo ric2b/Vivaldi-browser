@@ -1,20 +1,11 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import {mkdtemp} from 'fs/promises';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -62,6 +53,26 @@ export class ChromeLauncher extends ProductLauncher {
           '  If you encounter any bugs, please report them to https://github.com/puppeteer/puppeteer/issues/new/choose.\x1B[0m\n',
         ].join('\n  ')
       );
+    }
+
+    if (
+      this.puppeteer.configuration.logLevel === 'warn' &&
+      process.platform === 'darwin' &&
+      process.arch === 'x64'
+    ) {
+      const cpus = os.cpus();
+      if (cpus[0]?.model.includes('Apple')) {
+        console.warn(
+          [
+            '\x1B[1m\x1B[43m\x1B[30m',
+            'Degraded performance warning:\x1B[0m\x1B[33m',
+            'Launching Chrome on Mac Silicon (arm64) from an x64 Node installation results in',
+            'Rosetta translating the Chrome binary, even if Chrome is already arm64. This would',
+            'result in huge performance issues. To resolve this, you must run Puppeteer with',
+            'a version of Node built for arm64.',
+          ].join('\n  ')
+        );
+      }
     }
 
     return super.launch(options);
@@ -209,8 +220,9 @@ export class ChromeLauncher extends ProductLauncher {
       '--disable-default-apps',
       '--disable-dev-shm-usage',
       '--disable-extensions',
-      `--disable-features=${disabledFeatures.join(',')}`,
+      '--disable-field-trial-config', // https://source.chromium.org/chromium/chromium/src/+/main:testing/variations/README.md
       '--disable-hang-monitor',
+      '--disable-infobars',
       '--disable-ipc-flooding-protection',
       '--disable-popup-blocking',
       '--disable-prompt-on-repost',
@@ -218,16 +230,14 @@ export class ChromeLauncher extends ProductLauncher {
       '--disable-search-engine-choice-screen',
       '--disable-sync',
       '--enable-automation',
-      // TODO(sadym): remove '--enable-blink-features=IdleDetection' once
-      // IdleDetection is turned on by default.
-      '--enable-blink-features=IdleDetection',
-      `--enable-features=${enabledFeatures.join(',')}`,
       '--export-tagged-pdf',
       '--force-color-profile=srgb',
       '--metrics-recording-only',
       '--no-first-run',
       '--password-store=basic',
       '--use-mock-keychain',
+      `--disable-features=${disabledFeatures.join(',')}`,
+      `--enable-features=${enabledFeatures.join(',')}`,
     ];
     const {
       devtools = false,
@@ -304,7 +314,7 @@ export function getFeatures(flag: string, options: string[] = []): string[] {
       return s.startsWith(flag.endsWith('=') ? flag : `${flag}=`);
     })
     .map(s => {
-      return s.split(new RegExp(`${flag}` + '=\\s*'))[1]?.trim();
+      return s.split(new RegExp(`${flag}=\\s*`))[1]?.trim();
     })
     .filter(s => {
       return s;

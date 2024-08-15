@@ -146,7 +146,7 @@ class SyncConfirmationUIWindowPixelTest
         ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
     DCHECK(browser());
 
-    SignInWithPrimaryAccount(GetParam().account_management_status);
+    SignInWithAccount(GetParam().account_management_status);
     profile_picker_view_ = new ProfileManagementStepTestView(
         ProfilePicker::Params::ForFirstRun(browser()->profile()->GetPath(),
                                            base::DoNothing()),
@@ -158,8 +158,8 @@ class SyncConfirmationUIWindowPixelTest
         }));
     profile_picker_view_->ShowAndWait(
         GetParam().pixel_test_param.use_small_window
-            ? absl::optional<gfx::Size>(gfx::Size(750, 590))
-            : absl::nullopt);
+            ? std::optional<gfx::Size>(gfx::Size(750, 590))
+            : std::nullopt);
   }
 
   bool VerifyUi() override {
@@ -167,7 +167,7 @@ class SyncConfirmationUIWindowPixelTest
 
     auto* test_info = testing::UnitTest::GetInstance()->current_test_info();
     const std::string screenshot_name =
-        base::StrCat({test_info->test_case_name(), "_", test_info->name()});
+        base::StrCat({test_info->test_suite_name(), "_", test_info->name()});
 
     return VerifyPixelUi(widget, "SyncConfirmationUIWindowPixelTest",
                          screenshot_name) != ui::test::ActionResult::kFailed;
@@ -211,7 +211,7 @@ class SyncConfirmationUIDialogPixelTest
   void ShowUi(const std::string& name) override {
     DCHECK(browser());
 
-    SignInWithPrimaryAccount(GetParam().account_management_status);
+    SignInWithAccount(GetParam().account_management_status);
     auto url = GURL(chrome::kChromeUISyncConfirmationURL);
     if (GetParam().sync_style == SyncConfirmationStyle::kSigninInterceptModal) {
       url = AppendSyncConfirmationQueryParams(url, GetParam().sync_style);

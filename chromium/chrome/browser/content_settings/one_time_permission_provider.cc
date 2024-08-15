@@ -22,6 +22,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_constraints.h"
 #include "components/content_settings/core/common/content_settings_metadata.h"
+#include "components/content_settings/core/common/content_settings_partition_key.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/permissions/permission_uma_util.h"
@@ -45,13 +46,31 @@ OneTimePermissionProvider::~OneTimePermissionProvider() {
   base::PowerMonitor::RemovePowerSuspendObserver(this);
 }
 
+// TODO(b/307193732): handle the PartitionKey in all relevant methods, including
+// when we call NotifyObservers().
 std::unique_ptr<content_settings::RuleIterator>
-OneTimePermissionProvider::GetRuleIterator(ContentSettingsType content_type,
-                                           bool incognito) const {
+OneTimePermissionProvider::GetRuleIterator(
+    ContentSettingsType content_type,
+    bool incognito,
+    const content_settings::PartitionKey& partition_key) const {
   if (!permissions::PermissionUtil::CanPermissionBeAllowedOnce(content_type)) {
     return nullptr;
   }
   return value_map_.GetRuleIterator(content_type);
+}
+
+std::unique_ptr<content_settings::Rule> OneTimePermissionProvider::GetRule(
+    const GURL& primary_url,
+    const GURL& secondary_url,
+    ContentSettingsType content_type,
+    bool off_the_record,
+    const content_settings::PartitionKey& partition_key) const {
+  if (!permissions::PermissionUtil::CanPermissionBeAllowedOnce(content_type)) {
+    return nullptr;
+  }
+
+  base::AutoLock auto_lock(value_map_.GetLock());
+  return value_map_.GetRule(primary_url, secondary_url, content_type);
 }
 
 bool OneTimePermissionProvider::SetWebsiteSetting(
@@ -59,17 +78,17 @@ bool OneTimePermissionProvider::SetWebsiteSetting(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_settings_type,
     base::Value&& value,
-    const content_settings::ContentSettingConstraints& constraints) {
-  // The current implementation of this method doesn't handle website settings
-  // because this method doesn't know how to read the state in value for them.
-  // Additionally the transitions as well as responsibility sharing between this
-  // provider and the pref provider may be different in those cases. Such
-  // settings are currently rejected by
-  // `PermissionUtil::CanPermissionBeAllowedOnce`. If in the future such
-  // settings should be supported, this method will need to be amended
-  // accordingly.
+    const content_settings::ContentSettingConstraints& constraints,
+    const content_settings::PartitionKey& partition_key) {
   if (!permissions::PermissionUtil::CanPermissionBeAllowedOnce(
           content_settings_type)) {
+    return false;
+  }
+
+  if (!content_settings::ContentSettingsRegistry::GetInstance()->Get(
+          content_settings_type)) {
+    // Object permissions cannot be mapped to a ContentSetting and thus cannot
+    // be handled by this provider.
     return false;
   }
 
@@ -144,7 +163,8 @@ bool OneTimePermissionProvider::UpdateLastUsedTime(
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType content_type,
-    const base::Time time) {
+    const base::Time time,
+    const content_settings::PartitionKey& partition_key) {
   // Last used time is not tracked for one-time permissions.
   return false;
 }
@@ -152,7 +172,8 @@ bool OneTimePermissionProvider::UpdateLastUsedTime(
 bool OneTimePermissionProvider::ResetLastVisitTime(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type) {
+    ContentSettingsType content_type,
+    const content_settings::PartitionKey& partition_key) {
   // LastVisit time is not currently tracked for one-time permissions.
   return false;
 }
@@ -160,22 +181,25 @@ bool OneTimePermissionProvider::ResetLastVisitTime(
 bool OneTimePermissionProvider::UpdateLastVisitTime(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type) {
+    ContentSettingsType content_type,
+    const content_settings::PartitionKey& partition_key) {
   // LastVisit time is not tracked for one-time permissions.
   return false;
 }
 
-absl::optional<base::TimeDelta> OneTimePermissionProvider::RenewContentSetting(
+std::optional<base::TimeDelta> OneTimePermissionProvider::RenewContentSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType type,
-    absl::optional<ContentSetting> setting_to_match) {
+    std::optional<ContentSetting> setting_to_match,
+    const content_settings::PartitionKey& partition_key) {
   // Setting renewal is not supported for one-time permissions.
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void OneTimePermissionProvider::ClearAllContentSettingsRules(
-    ContentSettingsType content_type) {
+    ContentSettingsType content_type,
+    const content_settings::PartitionKey& partition_key) {
   if (permissions::PermissionUtil::CanPermissionBeAllowedOnce(content_type)) {
     return;
   }
@@ -194,7 +218,8 @@ void OneTimePermissionProvider::SetClockForTesting(base::Clock* clock) {
 void OneTimePermissionProvider::ExpireWebsiteSetting(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_settings_type) {
+    ContentSettingsType content_settings_type,
+    const content_settings::PartitionKey& partition_key) {
   // Custom scope because NotifyObservers also requires value_map_'s exclusive
   // lock.
   {
@@ -211,7 +236,8 @@ void OneTimePermissionProvider::ExpireWebsiteSetting(
   permissions::PermissionUmaUtil::RecordOneTimePermissionEvent(
       content_settings_type,
       permissions::OneTimePermissionEvent::EXPIRED_AFTER_MAXIMUM_LIFETIME);
-  NotifyObservers(primary_pattern, secondary_pattern, content_settings_type);
+  NotifyObservers(primary_pattern, secondary_pattern, content_settings_type,
+                  /*partition_key=*/nullptr);
 }
 
 void OneTimePermissionProvider::OnSuspend() {
@@ -313,7 +339,7 @@ void OneTimePermissionProvider::DeleteEntriesAndNotify(
 
   for (const auto& pattern : entries_to_delete) {
     NotifyObservers(pattern.primary_pattern, pattern.secondary_pattern,
-                    pattern.type);
+                    pattern.type, /*partition_key=*/nullptr);
   }
 }
 

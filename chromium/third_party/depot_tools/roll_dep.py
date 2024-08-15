@@ -61,7 +61,7 @@ def check_call(*args, **kwargs):
 
 def return_code(*args, **kwargs):
     """subprocess2.call() passing shell=True on Windows for git and
-  subprocess2.DEVNULL for stdout and stderr."""
+    subprocess2.DEVNULL for stdout and stderr."""
     kwargs.setdefault('shell', NEED_SHELL)
     kwargs.setdefault('stdout', subprocess2.DEVNULL)
     kwargs.setdefault('stderr', subprocess2.DEVNULL)
@@ -166,8 +166,8 @@ def get_submodule_rev(submodule):
 
 def calculate_roll(full_dir, dependency, roll_to):
     """Calculates the roll for a dependency by processing gclient_dict, and
-  fetching the dependency via git.
-  """
+    fetching the dependency via git.
+    """
     # if the super-project uses submodules, get rev directly using git.
     if is_submoduled():
         head = get_submodule_rev(dependency)

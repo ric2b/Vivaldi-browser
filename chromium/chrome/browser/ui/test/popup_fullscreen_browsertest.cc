@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <string>
+#include "build/chromeos_buildflags.h"
 
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -14,7 +15,6 @@
 #include "chrome/browser/ui/test/popup_test_base.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -41,13 +41,6 @@ class PopupFullscreenTestBase : public PopupTestBase {
   PopupFullscreenTestBase() {
     scoped_feature_list_.InitWithFeatures(
         {blink::features::kFullscreenPopupWindows}, {});
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // Required for permission policy violations to be logged.
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "PermissionsPolicyReporting");
-    PopupTestBase::SetUpCommandLine(command_line);
   }
 
   void SetUpOnMainThread() override {
@@ -150,7 +143,12 @@ IN_PROC_BROWSER_TEST_P(PopupFullscreenTest, BasicFullscreen) {
                                     IsFullscreenExpected() ? 1 : 0);
 }
 
-IN_PROC_BROWSER_TEST_P(PopupFullscreenTest, AboutBlankFullscreen) {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_AboutBlankFullscreen DISABLED_AboutBlankFullscreen
+#else
+#define MAYBE_AboutBlankFullscreen AboutBlankFullscreen
+#endif
+IN_PROC_BROWSER_TEST_P(PopupFullscreenTest, MAYBE_AboutBlankFullscreen) {
   Browser* popup =
       OpenPopup(browser(), "open('about:blank', '_blank', 'popup,fullscreen')",
                 ShouldTestWithUserGesture());

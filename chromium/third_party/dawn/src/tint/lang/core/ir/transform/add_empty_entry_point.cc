@@ -38,7 +38,7 @@ namespace tint::core::ir::transform {
 namespace {
 
 void Run(ir::Module& ir) {
-    for (auto* func : ir.functions) {
+    for (auto& func : ir.functions) {
         if (func->Stage() != Function::PipelineStage::kUndefined) {
             return;
         }
@@ -54,7 +54,7 @@ void Run(ir::Module& ir) {
 
 Result<SuccessType> AddEmptyEntryPoint(Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "AddEmptyEntryPoint transform");
-    if (!result) {
+    if (result != Success) {
         return result.Failure();
     }
 

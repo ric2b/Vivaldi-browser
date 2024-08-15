@@ -8,6 +8,7 @@
 
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -116,7 +117,6 @@
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/constants/chromeos_features.h"
@@ -131,8 +131,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "components/supervised_user/core/browser/supervised_user_service.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #include "app/vivaldi_apptools.h"
@@ -280,7 +279,7 @@ bool ExtensionService::OnExternalExtensionUpdateUrlFound(
 
       // Fetch the installation info from the prefs, and reload the extension
       // with a modified install location.
-      absl::optional<ExtensionInfo> installed_extension(
+      std::optional<ExtensionInfo> installed_extension(
           extension_prefs_->GetInstalledExtensionInfo(info.extension_id));
       installed_extension->extension_location = info.download_location;
 
@@ -780,7 +779,7 @@ void ExtensionService::LoadExtensionForReload(
 
   // Check the installed extensions to see if what we're reloading was already
   // installed.
-  absl::optional<ExtensionInfo> installed_extension(
+  std::optional<ExtensionInfo> installed_extension(
       extension_prefs_->GetInstalledExtensionInfo(extension_id));
   if (installed_extension && installed_extension->extension_manifest.get()) {
     InstalledLoader(this).Load(*installed_extension, false);
@@ -1330,12 +1329,10 @@ void ExtensionService::CheckManagementPolicy() {
 
     // If this profile is not supervised, then remove any supervised user
     // related disable reasons.
-    bool is_supervised;
+    bool is_supervised = false;
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    is_supervised = SupervisedUserServiceFactory::GetForProfile(profile())
-                        ->IsSubjectToParentalControls();
-#else
-    is_supervised = false;
+    is_supervised =
+        profile() && supervised_user::IsChildAccount(*profile()->GetPrefs());
 #endif
     if (!is_supervised) {
       disable_reasons &= (~disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
@@ -2108,8 +2105,8 @@ bool ExtensionService::OnExternalExtensionFileFound(
 
 void ExtensionService::InstallationFromExternalFileFinished(
     const std::string& extension_id,
-    const absl::optional<CrxInstallError>& error) {
-  if (error != absl::nullopt) {
+    const std::optional<CrxInstallError>& error) {
+  if (error != std::nullopt) {
     // When installation is finished, the extension should not remain in the
     // pending extension manager. For successful installations this is done in
     // OnExtensionInstalled handler.

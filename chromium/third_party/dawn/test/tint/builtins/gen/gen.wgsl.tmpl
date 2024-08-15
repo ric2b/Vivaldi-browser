@@ -9,7 +9,7 @@ See:
 --------------------------------------------------------------------------------
 */ -}}
 
-{{- $I := LoadIntrinsics "src/tint/lang/core/core.def" -}}
+{{- $I := LoadIntrinsics "src/tint/lang/wgsl/wgsl.def" -}}
 
 {{- /* For each permutation of each overload of each function... */ -}}
 {{- range $I.Sem.Builtins -}}
@@ -40,6 +40,9 @@ See:
 {{-   $builtin     := $overload.Intrinsic.Name -}}
 {{-   $permutation := printf "%v_%v" $builtin $overload.Hash -}}
 {{-   $args        := Map -}}
+
+{{- /* Generate the optional flag on HLSL shader model */ -}}
+{{- template "HLSLShaderModel" $overload -}}
 
 {{- /* Generate enable directives */ -}}
 {{- template "EnableDirectives" $overload -}}
@@ -189,6 +192,31 @@ fn compute_main() {
 
 {{- end -}}
 
+
+{{- /* ------------------------------------------------------------------ */ -}}
+{{-                        define "HLSLShaderModel"                          -}}
+{{- /* Emits the optional HLSL shader model for a given overload          */ -}}
+{{- /* ------------------------------------------------------------------ */ -}}
+{{-   $permutation  := . -}}
+{{-   $overload := $permutation.Overload -}}
+{{-   $builtin_name := $permutation.Intrinsic.Name -}}
+
+{{- /* Check and emit dot4I8Packed and dot4U8Packed */ -}}
+{{-   if or (eq "pack4xI8" $builtin_name) (eq "pack4xU8" $builtin_name) (eq "pack4xI8Clamp" $builtin_name) (eq "unpack4xI8" $builtin_name) (eq "unpack4xU8" $builtin_name)}}
+// [hlsl-dxc] flags: --hlsl_shader_model 66
+
+{{-   else if or (eq "dot4I8Packed" $builtin_name) (eq "dot4U8Packed" $builtin_name)}}
+// [hlsl-dxc] flags: --hlsl_shader_model 64
+
+{{- /* Check and emit f16 */ -}}
+{{-   else if OverloadUsesF16 $overload}}
+// flags: --hlsl_shader_model 62
+
+{{    end -}}
+
+{{- end -}}
+
+
 {{- /* ------------------------------------------------------------------ */ -}}
 {{-                        define "EnableDirectives"                         -}}
 {{- /* Emits the required enable directives for a given overload          */ -}}
@@ -197,19 +225,9 @@ fn compute_main() {
 {{-   $overload := $permutation.Overload -}}
 {{-   $builtin_name := $permutation.Intrinsic.Name -}}
 
-{{- /* Check and emit chromium_experimental_dp4a */ -}}
-{{-   if or (eq "dot4I8Packed" $builtin_name) (eq "dot4U8Packed" $builtin_name)}}
-enable chromium_experimental_dp4a;
-{{    end -}}
-
 {{- /* Check and emit chromium_experimental_subgroups */ -}}
 {{-   if or (eq "subgroupBallot" $builtin_name) (eq "subgroupBroadcast" $builtin_name)}}
 enable chromium_experimental_subgroups;
-{{    end -}}
-
-{{- /* Check and emit chromium_experimental_read_write_storage_texture */ -}}
-{{-   if or (OverloadUsesReadWriteStorageTexture $overload) (eq "textureBarrier" $builtin_name)}}
-enable chromium_experimental_read_write_storage_texture;
 {{    end -}}
 
 {{- /* Check and emit f16 */ -}}

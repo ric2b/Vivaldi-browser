@@ -344,6 +344,10 @@ RequestContextToMixedContentResourceType(
       return protocol::Audits::MixedContentResourceTypeEnum::Image;
     case mojom::blink::RequestContextType::INTERNAL:
       return protocol::Audits::MixedContentResourceTypeEnum::Resource;
+    case mojom::blink::RequestContextType::JSON:
+      // TODO(crbug.com/1511738): Consider adding a type
+      // specific to JSON modules requests
+      return protocol::Audits::MixedContentResourceTypeEnum::Resource;
     case mojom::blink::RequestContextType::LOCATION:
       return protocol::Audits::MixedContentResourceTypeEnum::Resource;
     case mojom::blink::RequestContextType::MANIFEST:
@@ -362,6 +366,8 @@ RequestContextToMixedContentResourceType(
       return protocol::Audits::MixedContentResourceTypeEnum::ServiceWorker;
     case mojom::blink::RequestContextType::SHARED_WORKER:
       return protocol::Audits::MixedContentResourceTypeEnum::SharedWorker;
+    case mojom::blink::RequestContextType::SPECULATION_RULES:
+      return protocol::Audits::MixedContentResourceTypeEnum::SpeculationRules;
     case mojom::blink::RequestContextType::STYLE:
       return protocol::Audits::MixedContentResourceTypeEnum::Stylesheet;
     case mojom::blink::RequestContextType::SUBRESOURCE:

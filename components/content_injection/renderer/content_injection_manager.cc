@@ -147,8 +147,8 @@ void Manager::OnFrameCreated(content::RenderFrame* render_frame,
 }
 
 /*static*/
-void Manager::RunScriptsForRunTime(int frame_id, mojom::ItemRunTime run_time) {
-  content::RenderFrame* frame = content::RenderFrame::FromRoutingID(frame_id);
+void Manager::RunScriptsForRunTime(content::RenderFrame* frame,
+                                   mojom::ItemRunTime run_time) {
   if (!frame)
     return;
 

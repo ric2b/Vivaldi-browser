@@ -8,28 +8,33 @@
 #import <Foundation/Foundation.h>
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_handler.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator_items_provider.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_shareable_items_provider.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_view_controller_mutator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_mutator.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_buttons_delegate.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_grid_delegate.h"
 
 class Browser;
 @protocol GridConsumer;
-@protocol GridItemProvider;
 @protocol GridMediatorDelegate;
 @protocol GridToolbarsConfigurationProvider;
 @protocol GridToolbarsMutator;
 @protocol TabCollectionConsumer;
-@protocol TabGridToolbarsActionWrangler;
+@class TabGridToolbarsConfiguration;
+@protocol TabGridToolbarsMainTabGridDelegate;
+@protocol TabGroupsCommands;
 @protocol TabPresentationDelegate;
 class WebStateList;
 
 // Mediates between model layer and tab grid UI layer.
-@interface BaseGridMediator : NSObject <GridCommands,
-                                        GridShareableItemsProvider,
+@interface BaseGridMediator : NSObject <BaseGridMediatorItemProvider,
+                                        GridCommands,
+                                        GridViewControllerMutator,
                                         TabCollectionDragDropHandler,
                                         TabGridPageMutator,
-                                        TabGridToolbarsButtonsDelegate>
+                                        TabGridToolbarsGridDelegate>
 
 // The source browser.
 @property(nonatomic, assign) Browser* browser;
@@ -44,18 +49,21 @@ class WebStateList;
 // Contained grid which provides tab grid toolbar configuration.
 @property(nonatomic, weak) id<GridToolbarsConfigurationProvider>
     containedGridToolbarsProvider;
-// Action handler for the tab grid toolbars. Each method is the result of an
-// action on a toolbar button.
-@property(nonatomic, weak) id<TabGridToolbarsActionWrangler> actionWrangler;
+// Action handler for the actions related to the tab grid .
+@property(nonatomic, weak) id<TabGridToolbarsMainTabGridDelegate>
+    toolbarTabGridDelegate;
 // Grid consumer.
 @property(nonatomic, weak) id<GridConsumer> gridConsumer;
 // Delegate to handle presenting tab UI.
 @property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
-@property(nonatomic, weak) id<GridItemProvider> itemProvider;
-
+// Tab Groups Dispatcher.
+@property(nonatomic, weak) id<TabGroupsCommands> dispatcher;
 @end
 
 @interface BaseGridMediator (Subclassing)
+
+// Current mode.
+@property(nonatomic, assign) TabGridMode currentMode;
 
 // Disconnects the mediator.
 - (void)disconnect NS_REQUIRES_SUPER;
@@ -63,6 +71,10 @@ class WebStateList;
 // Called when toolbars should be updated. This function should be implemented
 // in a subclass.
 - (void)configureToolbarsButtons;
+
+// Called when the buttons needs to be updated for the selection mode.
+- (void)configureButtonsInSelectionMode:
+    (TabGridToolbarsConfiguration*)configuration;
 
 @end
 

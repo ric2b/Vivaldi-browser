@@ -44,6 +44,9 @@ class LoadVectorElement final : public Castable<LoadVectorElement, OperandInstru
     /// The offset in Operands() for the `index` value
     static constexpr size_t kIndexOperandOffset = 1;
 
+    /// Constructor (no results, no operands)
+    LoadVectorElement();
+
     /// Constructor
     /// @param result the result value
     /// @param from the vector pointer
@@ -57,11 +60,17 @@ class LoadVectorElement final : public Castable<LoadVectorElement, OperandInstru
     /// @returns the vector pointer value
     ir::Value* From() { return operands_[kFromOperandOffset]; }
 
+    /// @returns the vector pointer value
+    const ir::Value* From() const { return operands_[kFromOperandOffset]; }
+
     /// @returns the new vector element index
     ir::Value* Index() { return operands_[kIndexOperandOffset]; }
 
+    /// @returns the new vector element index
+    const ir::Value* Index() const { return operands_[kIndexOperandOffset]; }
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "load_vector_element"; }
+    std::string FriendlyName() const override { return "load_vector_element"; }
 };
 
 }  // namespace tint::core::ir

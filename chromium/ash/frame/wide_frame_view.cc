@@ -60,7 +60,7 @@ class WideFrameTargeter : public aura::WindowTargeter {
   }
 
  private:
-  raw_ptr<chromeos::HeaderView, ExperimentalAsh> header_view_;
+  raw_ptr<chromeos::HeaderView> header_view_;
 };
 
 }  // namespace
@@ -141,6 +141,7 @@ WideFrameView::WideFrameView(views::Widget* target)
 }
 
 WideFrameView::~WideFrameView() {
+  header_view_->set_context_menu_controller(nullptr);
   if (widget_)
     widget_->CloseNow();
   if (target_) {

@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void step_f9b70c() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  step_f9b70c();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  step_f9b70c();
+}
+kernel void compute_main() {
+  step_f9b70c();
+}

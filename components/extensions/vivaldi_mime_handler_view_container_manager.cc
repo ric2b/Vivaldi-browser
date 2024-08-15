@@ -4,7 +4,8 @@
 
 namespace extensions {
 
-void MimeHandlerViewContainerManager::WillDetach() {
+void MimeHandlerViewContainerManager::WillDetach(
+    blink::DetachReason detach_reason) {
   OnDestruct();
 }
 

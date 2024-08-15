@@ -372,11 +372,11 @@ def _get_counterpart_host(host):
 def _trigger_tryjobs(changelist, jobs, options, patchset):
     """Sends a request to Buildbucket to trigger tryjobs for a changelist.
 
-  Args:
-    changelist: Changelist that the tryjobs are associated with.
-    jobs: A list of (project, bucket, builder).
-    options: Command-line options.
-  """
+    Args:
+        changelist: Changelist that the tryjobs are associated with.
+        jobs: A list of (project, bucket, builder).
+        options: Command-line options.
+    """
     print('Scheduling jobs on:')
     for project, bucket, builder in jobs:
         print('  %s/%s: %s' % (project, bucket, builder))
@@ -460,8 +460,8 @@ def _make_tryjob_schedule_requests(changelist, jobs, options, patchset):
 def _fetch_tryjobs(changelist, buildbucket_host, patchset=None):
     """Fetches tryjobs from buildbucket.
 
-  Returns list of buildbucket.v2.Build with the try jobs for the changelist.
-  """
+    Returns list of buildbucket.v2.Build with the try jobs for the changelist.
+    """
     fields = ['id', 'builder', 'status', 'createTime', 'tags']
     request = {
         'predicate': {
@@ -488,17 +488,17 @@ def _fetch_tryjobs(changelist, buildbucket_host, patchset=None):
 
 def _fetch_latest_builds(changelist, buildbucket_host, latest_patchset=None):
     """Fetches builds from the latest patchset that has builds (within
-  the last few patchsets).
+    the last few patchsets).
 
-  Args:
-    changelist (Changelist): The CL to fetch builds for
-    buildbucket_host (str): Buildbucket host, e.g. "cr-buildbucket.appspot.com"
-    lastest_patchset(int|NoneType): the patchset to start fetching builds from.
-      If None (default), starts with the latest available patchset.
-  Returns:
-    A tuple (builds, patchset) where builds is a list of buildbucket.v2.Build,
-    and patchset is the patchset number where those builds came from.
-  """
+    Args:
+        changelist (Changelist): The CL to fetch builds for
+        buildbucket_host (str): Buildbucket host, e.g. "cr-buildbucket.appspot.com"
+        lastest_patchset(int|NoneType): the patchset to start fetching builds from.
+            If None (default), starts with the latest available patchset.
+    Returns:
+        A tuple (builds, patchset) where builds is a list of buildbucket.v2.Build,
+        and patchset is the patchset number where those builds came from.
+    """
     assert buildbucket_host
     assert changelist.GetIssue(), 'CL must be uploaded first'
     assert changelist.GetCodereviewServer(), 'CL must be uploaded first'
@@ -521,15 +521,15 @@ def _fetch_latest_builds(changelist, buildbucket_host, latest_patchset=None):
 def _filter_failed_for_retry(all_builds):
     """Returns a list of buckets/builders that are worth retrying.
 
-  Args:
-    all_builds (list): Builds, in the format returned by _fetch_tryjobs,
-      i.e. a list of buildbucket.v2.Builds which includes status and builder
-      info.
+    Args:
+        all_builds (list): Builds, in the format returned by _fetch_tryjobs,
+            i.e. a list of buildbucket.v2.Builds which includes status and builder
+            info.
 
-  Returns:
-    A dict {(proj, bucket): [builders]}. This is the same format accepted by
-    _trigger_tryjobs.
-  """
+    Returns:
+        A dict {(proj, bucket): [builders]}. This is the same format accepted by
+        _trigger_tryjobs.
+    """
     grouped = {}
     for build in all_builds:
         builder = build['builder']
@@ -634,10 +634,10 @@ def _print_tryjobs(options, builds):
 def _ComputeFormatDiffLineRanges(files, upstream_commit):
     """Gets the changed line ranges for each file since upstream_commit.
 
-  Parses a git diff on provided files and returns a dict that maps a file name
-  to an ordered list of range tuples in the form (start_line, count).
-  Ranges are in the same format as a git diff.
-  """
+    Parses a git diff on provided files and returns a dict that maps a file name
+    to an ordered list of range tuples in the form (start_line, count).
+    Ranges are in the same format as a git diff.
+    """
     # If files is empty then diff_output will be a full diff.
     if len(files) == 0:
         return {}
@@ -690,10 +690,10 @@ def _ComputeFormatDiffLineRanges(files, upstream_commit):
 def _FindYapfConfigFile(fpath, yapf_config_cache, top_dir=None):
     """Checks if a yapf file is in any parent directory of fpath until top_dir.
 
-  Recursively checks parent directories to find yapf file and if no yapf file
-  is found returns None. Uses yapf_config_cache as a cache for previously found
-  configs.
-  """
+    Recursively checks parent directories to find yapf file and if no yapf file
+    is found returns None. Uses yapf_config_cache as a cache for previously found
+    configs.
+    """
     fpath = os.path.abspath(fpath)
     # Return result if we've already computed it.
     if fpath in yapf_config_cache:
@@ -721,19 +721,19 @@ def _FindYapfConfigFile(fpath, yapf_config_cache, top_dir=None):
 def _GetYapfIgnorePatterns(top_dir):
     """Returns all patterns in the .yapfignore file.
 
-  yapf is supposed to handle the ignoring of files listed in .yapfignore itself,
-  but this functionality appears to break when explicitly passing files to
-  yapf for formatting. According to
-  https://github.com/google/yapf/blob/HEAD/README.rst#excluding-files-from-formatting-yapfignore,
-  the .yapfignore file should be in the directory that yapf is invoked from,
-  which we assume to be the top level directory in this case.
+    yapf is supposed to handle the ignoring of files listed in .yapfignore itself,
+    but this functionality appears to break when explicitly passing files to
+    yapf for formatting. According to
+    https://github.com/google/yapf/blob/HEAD/README.rst#excluding-files-from-formatting-yapfignore,
+    the .yapfignore file should be in the directory that yapf is invoked from,
+    which we assume to be the top level directory in this case.
 
-  Args:
-    top_dir: The top level directory for the repository being formatted.
+    Args:
+        top_dir: The top level directory for the repository being formatted.
 
-  Returns:
-    A set of all fnmatch patterns to be ignored.
-  """
+    Returns:
+        A set of all fnmatch patterns to be ignored.
+    """
     yapfignore_file = os.path.join(top_dir, '.yapfignore')
     ignore_patterns = set()
     if not os.path.exists(yapfignore_file):
@@ -751,14 +751,14 @@ def _GetYapfIgnorePatterns(top_dir):
 def _FilterYapfIgnoredFiles(filepaths, patterns):
     """Filters out any filepaths that match any of the given patterns.
 
-  Args:
-    filepaths: An iterable of strings containing filepaths to filter.
-    patterns: An iterable of strings containing fnmatch patterns to filter on.
+    Args:
+        filepaths: An iterable of strings containing filepaths to filter.
+        patterns: An iterable of strings containing fnmatch patterns to filter on.
 
-  Returns:
-    A list of strings containing all the elements of |filepaths| that did not
-    match any of the patterns in |patterns|.
-  """
+    Returns:
+        A list of strings containing all the elements of |filepaths| that did not
+        match any of the patterns in |patterns|.
+    """
     # Not inlined so that tests can use the same implementation.
     return [
         f for f in filepaths
@@ -770,8 +770,8 @@ def _GetCommitCountSummary(begin_commit: str,
                            end_commit: str = "HEAD") -> Optional[str]:
     """Generate a summary of the number of commits in (begin_commit, end_commit).
 
-  Returns a string containing the summary, or None if the range is empty.
-  """
+    Returns a string containing the summary, or None if the range is empty.
+    """
     count = int(
         RunGitSilent(['rev-list', '--count', f'{begin_commit}..{end_commit}']))
 
@@ -876,8 +876,8 @@ class Settings(object):
     def GetSquashGerritUploadsOverride(self):
         """Return True or False if codereview.settings should be overridden.
 
-    Returns None if no override has been defined.
-    """
+        Returns None if no override has been defined.
+        """
         # See also http://crbug.com/611892#c23
         result = self._GetConfig('gerrit.override-squash-uploads').lower()
         if result == 'true':
@@ -894,7 +894,7 @@ class Settings(object):
 
     def GetGerritSkipEnsureAuthenticated(self):
         """Return True if EnsureAuthenticated should not be done for Gerrit
-    uploads."""
+        uploads."""
         if self.gerrit_skip_ensure_authenticated is None:
             self.gerrit_skip_ensure_authenticated = self._GetConfig(
                 'gerrit.skip-ensure-authenticated').lower() == 'true'
@@ -1121,9 +1121,9 @@ class ChangeDescription(object):
     def update_reviewers(self, reviewers):
         """Rewrites the R= line(s) as a single line each.
 
-    Args:
-      reviewers (list(str)) - list of additional emails to use for reviewers.
-    """
+        Args:
+            reviewers (list(str)) - list of additional emails to use for reviewers.
+        """
         if not reviewers:
             return
 
@@ -1200,10 +1200,10 @@ class ChangeDescription(object):
     def append_footer(self, line):
         """Adds a footer line to the description.
 
-    Differentiates legacy "KEY=xxx" footers (used to be called tags) and
-    Gerrit's footers in the form of "Footer-Key: footer any value" and ensures
-    that Gerrit footers are always at the end.
-    """
+        Differentiates legacy "KEY=xxx" footers (used to be called tags) and
+        Gerrit's footers in the form of "Footer-Key: footer any value" and ensures
+        that Gerrit footers are always at the end.
+        """
         parsed_footer_line = git_footers.parse_footer(line)
         if parsed_footer_line:
             # Line is a gerrit footer in the form: Footer-Key: any value.
@@ -1285,19 +1285,19 @@ class ChangeDescription(object):
     def sanitize_hash_tag(cls, tag):
         """Returns a sanitized Gerrit hash tag.
 
-    A sanitized hashtag can be used as a git push refspec parameter value.
-    """
+        A sanitized hashtag can be used as a git push refspec parameter value.
+        """
         return re.sub(cls.BAD_HASH_TAG_CHUNK, '-', tag).strip('-').lower()
 
 
 class Changelist(object):
     """Changelist works with one changelist in local branch.
 
-  Notes:
-    * Not safe for concurrent multi-{thread,process} use.
-    * Caches values from current branch. Therefore, re-use after branch change
-      with great care.
-  """
+    Notes:
+        * Not safe for concurrent multi-{thread,process} use.
+        * Caches values from current branch. Therefore, re-use after branch change
+        with great care.
+    """
     def __init__(self,
                  branchref=None,
                  issue=None,
@@ -1305,8 +1305,8 @@ class Changelist(object):
                  commit_date=None):
         """Create a new ChangeList instance.
 
-    **kwargs will be passed directly to Gerrit implementation.
-    """
+        **kwargs will be passed directly to Gerrit implementation.
+        """
         # Poke settings so we get the "configure your server" message if
         # necessary.
         global settings
@@ -1358,9 +1358,9 @@ class Changelist(object):
     def GetCCList(self):
         """Returns the users cc'd on this CL.
 
-    The return value is a string suitable for passing to git cl with the --cc
-    flag.
-    """
+        The return value is a string suitable for passing to git cl with the --cc
+        flag.
+        """
         if self.cc is None:
             base_cc = settings.GetDefaultCCList()
             more_cc = ','.join(self.more_cc)
@@ -1405,8 +1405,8 @@ class Changelist(object):
     @staticmethod
     def FetchUpstreamTuple(branch):
         """Returns a tuple containing remote and remote ref,
-       e.g. 'origin', 'refs/heads/main'
-    """
+        e.g. 'origin', 'refs/heads/main'
+        """
         remote, upstream_branch = scm.GIT.FetchUpstreamTuple(
             settings.GetRoot(), branch)
         if not remote or not upstream_branch:
@@ -1477,8 +1477,8 @@ class Changelist(object):
     def GetRemoteUrl(self) -> Optional[str]:
         """Return the configured remote URL, e.g. 'git://example.org/foo.git/'.
 
-    Returns None if there is no remote.
-    """
+        Returns None if there is no remote.
+        """
         is_cached, value = self._cached_remote_url
         if is_cached:
             return value
@@ -1848,7 +1848,7 @@ class Changelist(object):
             return options.message.strip()
 
         # Use the subject of the last commit as title by default.
-        title = RunGit(['show', '-s', '--format=%s', 'HEAD']).strip()
+        title = RunGit(['show', '-s', '--format=%s', 'HEAD', '--']).strip()
         if options.force or options.skip_title:
             return title
         user_title = gclient_utils.AskForData('Title for patchset [%s]: ' %
@@ -1939,16 +1939,15 @@ class Changelist(object):
                               end_commit: Optional[str] = None) -> _NewUpload:
         """Create a squashed commit to upload.
 
-
-      Args:
-        parent: The commit to use as the parent for the new squashed.
-        orig_parent: The commit that is an actual ancestor of `end_commit`. It
-            is part of the same original tree as end_commit, which does not
-            contain squashed commits. This is used to create the change
-            description for the new squashed commit with:
-            `git log orig_parent..end_commit`.
-        end_commit: The commit to use as the end of the new squashed commit.
-    """
+        Args:
+            parent: The commit to use as the parent for the new squashed.
+            orig_parent: The commit that is an actual ancestor of `end_commit`. It
+                is part of the same original tree as end_commit, which does not
+                contain squashed commits. This is used to create the change
+                description for the new squashed commit with:
+                `git log orig_parent..end_commit`.
+            end_commit: The commit to use as the end of the new squashed commit.
+        """
 
         if end_commit is None:
             end_commit = RunGit(['rev-parse', self.branchref]).strip()
@@ -2173,8 +2172,8 @@ class Changelist(object):
     def SetCQState(self, new_state):
         """Updates the CQ state for the latest patchset.
 
-    Issue must have been already uploaded and known.
-    """
+        Issue must have been already uploaded and known.
+        """
         assert new_state in _CQState.ALL_STATES
         assert self.GetIssue()
         try:
@@ -2276,16 +2275,16 @@ class Changelist(object):
     def _GerritChangeIdentifier(self):
         """Handy method for gerrit_util.ChangeIdentifier for a given CL.
 
-    Not to be confused by value of "Change-Id:" footer.
-    If Gerrit project can be determined, this will speed up Gerrit HTTP API RPC.
-    """
+        Not to be confused by value of "Change-Id:" footer.
+        If Gerrit project can be determined, this will speed up Gerrit HTTP API RPC.
+        """
         project = self.GetGerritProject()
         if project:
             return gerrit_util.ChangeIdentifier(project, self.GetIssue())
         # Fall back on still unique, but less efficient change number.
         return str(self.GetIssue())
 
-    def EnsureAuthenticated(self, force, refresh=None):
+    def EnsureAuthenticated(self, force):
         """Best effort check that user is authenticated with Gerrit server."""
         if settings.GetGerritSkipEnsureAuthenticated():
             # For projects with unusual authentication schemes.
@@ -2395,18 +2394,18 @@ class Changelist(object):
 
     def GetStatus(self):
         """Applies a rough heuristic to give a simple summary of an issue's review
-    or CQ status, assuming adherence to a common workflow.
+        or CQ status, assuming adherence to a common workflow.
 
-    Returns None if no issue for this branch, or one of the following keywords:
-      * 'error'   - error from review tool (including deleted issues)
-      * 'unsent'  - no reviewers added
-      * 'waiting' - waiting for review
-      * 'reply'   - waiting for uploader to reply to review
-      * 'lgtm'    - Code-Review label has been set
-      * 'dry-run' - dry-running in the CQ
-      * 'commit'  - in the CQ
-      * 'closed'  - successfully submitted or abandoned
-    """
+        Returns None if no issue for this branch, or one of the following keywords:
+            * 'error'   - error from review tool (including deleted issues)
+            * 'unsent'  - no reviewers added
+            * 'waiting' - waiting for review
+            * 'reply'   - waiting for uploader to reply to review
+            * 'lgtm'    - Code-Review label has been set
+            * 'dry-run' - dry-running in the CQ
+            * 'commit'  - in the CQ
+            * 'closed'  - successfully submitted or abandoned
+        """
         if not self.GetIssue():
             return None
 
@@ -2464,7 +2463,7 @@ class Changelist(object):
 
     def _IsPatchsetRangeSignificant(self, lower, upper):
         """Returns True if the inclusive range of patchsets contains any reworks or
-    rebases."""
+        rebases."""
         if not self.GetIssue():
             return False
 
@@ -2481,8 +2480,8 @@ class Changelist(object):
 
     def GetMostRecentDryRunPatchset(self):
         """Get patchsets equivalent to the most recent patchset and return
-    the patchset with the latest dry run. If none have been dry run, return
-    the latest patchset."""
+        the patchset with the latest dry run. If none have been dry run, return
+        the latest patchset."""
         if not self.GetIssue():
             return None
 
@@ -2742,8 +2741,7 @@ class Changelist(object):
                 break
         return 0
 
-    def CMDPatchWithParsedIssue(self, parsed_issue_arg, nocommit, force,
-                                newbranch):
+    def CMDPatchWithParsedIssue(self, parsed_issue_arg, nocommit, force):
         assert parsed_issue_arg.valid
 
         self.issue = parsed_issue_arg.issue
@@ -3010,7 +3008,7 @@ class Changelist(object):
     def CMDUploadChange(self, options, git_diff_args, custom_cl_base,
                         change_desc):
         """Upload the current branch to Gerrit, retry if new remote HEAD is
-    found. options and change_desc may be mutated."""
+        found. options and change_desc may be mutated."""
         remote, remote_branch = self.GetRemoteBranch()
         branch = GetTargetRef(remote, remote_branch, options.target_branch)
 
@@ -3226,8 +3224,8 @@ class Changelist(object):
                        change_desc):
         """Computes parent of the generated commit to be uploaded to Gerrit.
 
-    Returns revision or a ref name.
-    """
+        Returns revision or a ref name.
+        """
         if custom_cl_base:
             # Try to avoid creating additional unintended CLs when uploading,
             # unless user wants to take this risk.
@@ -3291,8 +3289,8 @@ class Changelist(object):
     def _UpdateWithExternalChanges(self):
         """Updates workspace with external changes.
 
-    Returns the commit hash that should be used as the merge base on upload.
-    """
+        Returns the commit hash that should be used as the merge base on upload.
+        """
         local_ps = self.GetPatchset()
         if local_ps is None:
             return
@@ -3427,8 +3425,8 @@ class Changelist(object):
 
     def _AddChangeIdToCommitMessage(self, log_desc, args):
         """Re-commits using the current message, assumes the commit hook is in
-    place.
-    """
+        place.
+        """
         RunGit(['commit', '--amend', '-m', log_desc])
         new_log_desc = _create_description_from_log(args)
         if git_footers.get_footer_change_id(new_log_desc):
@@ -3479,18 +3477,18 @@ class Changelist(object):
 
 def _get_bug_line_values(default_project_prefix, bugs):
     """Given default_project_prefix and comma separated list of bugs, yields bug
-  line values.
+    line values.
 
-  Each bug can be either:
-    * a number, which is combined with default_project_prefix
-    * string, which is left as is.
+    Each bug can be either:
+        * a number, which is combined with default_project_prefix
+        * string, which is left as is.
 
-  This function may produce more than one line, because bugdroid expects one
-  project per line.
+    This function may produce more than one line, because bugdroid expects one
+    project per line.
 
-  >>> list(_get_bug_line_values('v8:', '123,chromium:789'))
-      ['v8:123', 'chromium:789']
-  """
+    >>> list(_get_bug_line_values('v8:', '123,chromium:789'))
+        ['v8:123', 'chromium:789']
+    """
     default_bugs = []
     others = []
     for bug in bugs.split(','):
@@ -3518,9 +3516,9 @@ def _get_bug_line_values(default_project_prefix, bugs):
 def FindCodereviewSettingsFile(filename='codereview.settings'):
     """Finds the given file starting in the cwd and going up.
 
-  Only looks up to the top of the repository unless an
-  'inherit-review-settings-ok' file exists in the root of the repository.
-  """
+    Only looks up to the top of the repository unless an
+    'inherit-review-settings-ok' file exists in the root of the repository.
+    """
     inherit_ok_file = 'inherit-review-settings-ok'
     cwd = os.getcwd()
     root = settings.GetRoot()
@@ -3595,8 +3593,8 @@ def LoadCodereviewSettingsFromFile(fileobj):
 def urlretrieve(source, destination):
     """Downloads a network object to a local file, like urllib.urlretrieve.
 
-  This is necessary because urllib is broken for SSL connections via a proxy.
-  """
+    This is necessary because urllib is broken for SSL connections via a proxy.
+    """
     with open(destination, 'wb') as f:
         f.write(urllib.request.urlopen(source).read())
 
@@ -3610,9 +3608,9 @@ def hasSheBang(fname):
 def DownloadGerritHook(force):
     """Downloads and installs a Gerrit commit-msg hook.
 
-  Args:
-    force: True to update hooks. False to install hooks if not present.
-  """
+    Args:
+        force: True to update hooks. False to install hooks if not present.
+    """
     src = 'https://gerrit-review.googlesource.com/tools/hooks/commit-msg'
     dst = os.path.join(settings.GetRoot(), '.git', 'hooks', 'commit-msg')
     if not os.access(dst, os.X_OK):
@@ -3645,7 +3643,7 @@ class _GitCookiesChecker(object):
 
     def ensure_configured_gitcookies(self):
         """Runs checks and suggests fixes to make git use .gitcookies from default
-    path."""
+        path."""
         default = gerrit_util.CookiesAuthenticator.get_gitcookies_path()
         configured_path = RunGitSilent(
             ['config', '--global', 'http.cookiefile']).strip()
@@ -3746,8 +3744,8 @@ class _GitCookiesChecker(object):
     def has_generic_host(self):
         """Returns whether generic .googlesource.com has been configured.
 
-    Chrome Infra recommends to use explicit ${host}.googlesource.com instead.
-    """
+        Chrome Infra recommends to use explicit ${host}.googlesource.com instead.
+        """
         for host, _, _ in self.get_hosts_with_creds(include_netrc=False):
             if host == '.' + _GOOGLESOURCE:
                 return True
@@ -3756,8 +3754,8 @@ class _GitCookiesChecker(object):
     def _get_git_gerrit_identity_pairs(self):
         """Returns map from canonic host to pair of identities (Git, Gerrit).
 
-    One of identities might be None, meaning not configured.
-    """
+        One of identities might be None, meaning not configured.
+        """
         host_to_identity_pairs = {}
         for host, identity, _ in self.get_hosts_with_creds():
             canonical = _canonical_git_googlesource_host(host)
@@ -3924,15 +3922,15 @@ def color_for_status(status):
 def get_cl_statuses(changes, fine_grained, max_processes=None):
     """Returns a blocking iterable of (cl, status) for given branches.
 
-  If fine_grained is true, this will fetch CL statuses from the server.
-  Otherwise, simply indicate if there's a matching url for the given branches.
+    If fine_grained is true, this will fetch CL statuses from the server.
+    Otherwise, simply indicate if there's a matching url for the given branches.
 
-  If max_processes is specified, it is used as the maximum number of processes
-  to spawn to fetch CL status from the server. Otherwise 1 process per branch is
-  spawned.
+    If max_processes is specified, it is used as the maximum number of processes
+    to spawn to fetch CL status from the server. Otherwise 1 process per branch
+    is spawned, up to max of gerrit_util.MAX_CONCURRENT_CONNECTION.
 
-  See GetStatus() for a list of possible statuses.
-  """
+    See GetStatus() for a list of possible statuses.
+    """
     if not changes:
         return
 
@@ -3947,7 +3945,7 @@ def get_cl_statuses(changes, fine_grained, max_processes=None):
     # First, sort out authentication issues.
     logging.debug('ensuring credentials exist')
     for cl in changes:
-        cl.EnsureAuthenticated(force=False, refresh=True)
+        cl.EnsureAuthenticated(force=False)
 
     def fetch(cl):
         try:
@@ -3958,7 +3956,7 @@ def get_cl_statuses(changes, fine_grained, max_processes=None):
                               cl.GetIssue())
             raise
 
-    threads_count = len(changes)
+    threads_count = min(gerrit_util.MAX_CONCURRENT_CONNECTION, len(changes))
     if max_processes:
         threads_count = max(1, min(threads_count, max_processes))
     logging.debug('querying %d CLs using %d threads', len(changes),
@@ -3986,21 +3984,23 @@ def get_cl_statuses(changes, fine_grained, max_processes=None):
 def upload_branch_deps(cl, args, force=False):
     """Uploads CLs of local branches that are dependents of the current branch.
 
-  If the local branch dependency tree looks like:
+    If the local branch dependency tree looks like:
 
-    test1 -> test2.1 -> test3.1
-                     -> test3.2
-          -> test2.2 -> test3.3
+        test1 -> test2.1 -> test3.1
+                         -> test3.2
+              -> test2.2 -> test3.3
 
-  and you run "git cl upload --dependencies" from test1 then "git cl upload" is
-  run on the dependent branches in this order:
-  test2.1, test3.1, test3.2, test2.2, test3.3
+    and you run "git cl upload --dependencies" from test1 then "git cl upload" is
+    run on the dependent branches in this order:
+    test2.1, test3.1, test3.2, test2.2, test3.3
 
-  Note: This function does not rebase your local dependent branches. Use it
+    Note: This function does not rebase your local dependent branches. Use it
         when you make a change to the parent branch that will not conflict
         with its dependent branches, and you would like their dependencies
-        updated in Rietveld.
-  """
+        updated in Gerrit.
+        If the new stacked change flow is used, and ancestor diverged, upload
+        will fail. To recover, `git rebase-update [-n]` must be executed.
+    """
     if git_common.is_dirty_git_tree('upload-branch-deps'):
         return 1
 
@@ -4063,7 +4063,8 @@ def upload_branch_deps(cl, args, force=False):
                 if CMDupload(OptionParser(), args) != 0:
                     print('Upload failed for %s!' % dependent_branch)
                     failures[dependent_branch] = 1
-            except:  # pylint: disable=bare-except
+            except Exception as e:
+                print(f"Unexpected exception: {e}")
                 failures[dependent_branch] = 1
             print()
     finally:
@@ -4083,8 +4084,8 @@ def upload_branch_deps(cl, args, force=False):
 
 def GetArchiveTagForBranch(issue_num, branch_name, existing_tags, pattern):
     """Given a proposed tag name, returns a tag name that is guaranteed to be
-  unique. If 'foo' is proposed but already exists, then 'foo-2' is used,
-  or 'foo-3', and so on."""
+    unique. If 'foo' is proposed but already exists, then 'foo-2' is used,
+    or 'foo-3', and so on."""
 
     proposed_tag = pattern.format(**{'issue': issue_num, 'branch': branch_name})
     for suffix_num in itertools.count(1):
@@ -4202,17 +4203,17 @@ def CMDarchive(parser, args):
 def CMDstatus(parser, args):
     """Show status of changelists.
 
-  Colors are used to tell the state of the CL unless --fast is used:
-    - Blue     waiting for review
-    - Yellow   waiting for you to reply to review, or not yet sent
-    - Green    LGTM'ed
-    - Red      'not LGTM'ed
-    - Magenta  in the CQ
-    - Cyan     was committed, branch can be deleted
-    - White    error, or unknown status
+    Colors are used to tell the state of the CL unless --fast is used:
+        - Blue     waiting for review
+        - Yellow   waiting for you to reply to review, or not yet sent
+        - Green    LGTM'ed
+        - Red      'not LGTM'ed
+        - Magenta  in the CQ
+        - Cyan     was committed, branch can be deleted
+        - White    error, or unknown status
 
-  Also see 'git cl comments'.
-  """
+    Also see 'git cl comments'.
+    """
     parser.add_option('--no-branch-color',
                       action='store_true',
                       help='Disable colorized branch names')
@@ -4287,7 +4288,7 @@ def CMDstatus(parser, args):
 
     def FormatBranchName(branch, colorize=False):
         """Simulates 'git branch' behavior. Colorizes and prefixes branch name with
-    an asterisk when it is the current branch."""
+        an asterisk when it is the current branch."""
 
         asterisk = ""
         color = Fore.RESET
@@ -4384,8 +4385,8 @@ def write_json(path, contents):
 def CMDissue(parser, args):
     """Sets or displays the current code review issue number.
 
-  Pass issue number 0 to clear the current issue.
-  """
+    Pass issue number 0 to clear the current issue.
+    """
     parser.add_option('-r',
                       '--reverse',
                       action='store_true',
@@ -4727,13 +4728,13 @@ def CMDpresubmit(parser, args):
 def GenerateGerritChangeId(message):
     """Returns the Change ID footer value (Ixxxxxx...xxx).
 
-  Works the same way as
-  https://gerrit-review.googlesource.com/tools/hooks/commit-msg
-  but can be called on demand on all platforms.
+    Works the same way as
+    https://gerrit-review.googlesource.com/tools/hooks/commit-msg
+    but can be called on demand on all platforms.
 
-  The basic idea is to generate git hash of a state of the tree, original
-  commit message, author/committer info and timestamps.
-  """
+    The basic idea is to generate git hash of a state of the tree, original
+    commit message, author/committer info and timestamps.
+    """
     lines = []
     tree_hash = RunGitSilent(['write-tree'])
     lines.append('tree %s' % tree_hash.strip())
@@ -4758,11 +4759,11 @@ def GenerateGerritChangeId(message):
 def GetTargetRef(remote, remote_branch, target_branch):
     """Computes the remote branch ref to use for the CL.
 
-  Args:
-    remote (str): The git remote for the CL.
-    remote_branch (str): The git remote branch for the CL.
-    target_branch (str): The target branch specified by the user.
-  """
+    Args:
+        remote (str): The git remote for the CL.
+        remote_branch (str): The git remote branch for the CL.
+        target_branch (str): The target branch specified by the user.
+    """
     if not (remote and remote_branch):
         return None
 
@@ -4815,9 +4816,9 @@ def GetTargetRef(remote, remote_branch, target_branch):
 def cleanup_list(l):
     """Fixes a list so that comma separated items are put as individual items.
 
-  So that "--reviewers joe@c,john@c --reviewers joa@c" results in
-  options.reviewers == sorted(['joe@c', 'john@c', 'joa@c']).
-  """
+    So that "--reviewers joe@c,john@c --reviewers joa@c" results in
+    options.reviewers == sorted(['joe@c', 'john@c', 'joa@c']).
+    """
     items = sum((i.split(',') for i in l), [])
     stripped_items = (i.strip() for i in items)
     return sorted(filter(None, stripped_items))
@@ -4828,22 +4829,22 @@ def cleanup_list(l):
 def CMDupload(parser, args):
     """Uploads the current changelist to codereview.
 
-  Can skip dependency patchset uploads for a branch by running:
-    git config branch.branch_name.skip-deps-uploads True
-  To unset, run:
-    git config --unset branch.branch_name.skip-deps-uploads
-  Can also set the above globally by using the --global flag.
+    Can skip dependency patchset uploads for a branch by running:
+        git config branch.branch_name.skip-deps-uploads True
+    To unset, run:
+        git config --unset branch.branch_name.skip-deps-uploads
+    Can also set the above globally by using the --global flag.
 
-  If the name of the checked out branch starts with "bug-" or "fix-" followed
-  by a bug number, this bug number is automatically populated in the CL
-  description.
+    If the name of the checked out branch starts with "bug-" or "fix-" followed
+    by a bug number, this bug number is automatically populated in the CL
+    description.
 
-  If subject contains text in square brackets or has "<text>: " prefix, such
-  text(s) is treated as Gerrit hashtags. For example, CLs with subjects:
-    [git-cl] add support for hashtags
-    Foo bar: implement foo
-  will be hashtagged with "git-cl" and "foo-bar" respectively.
-  """
+    If subject contains text in square brackets or has "<text>: " prefix, such
+    text(s) is treated as Gerrit hashtags. For example, CLs with subjects:
+        [git-cl] add support for hashtags
+        Foo bar: implement foo
+    will be hashtagged with "git-cl" and "foo-bar" respectively.
+    """
     parser.add_option('--bypass-hooks',
                       action='store_true',
                       dest='bypass_hooks',
@@ -4923,8 +4924,10 @@ def CMDupload(parser, args):
                       help='tell the CQ to commit this patchset; '
                       'implies --send-mail')
     parser.add_option('-d',
+                      '--dry-run',
                       '--cq-dry-run',
                       action='store_true',
+                      dest='cq_dry_run',
                       default=False,
                       help='Send the patchset to do a CQ dry run right after '
                       'upload.')
@@ -5084,16 +5087,21 @@ def CMDupload(parser, args):
             'File bugs at https://bit.ly/3Y6opoI\n' % cl.GetGerritHost())
 
     if options.squash and not disable_dogfood_stacked_changes:
-        if options.dependencies:
-            parser.error(
-                '--dependencies is not available for this dogfood workflow.')
-
         if options.cherry_pick_stacked:
             try:
                 orig_args.remove('--cherry-pick-stacked')
             except ValueError:
                 orig_args.remove('--cp')
         UploadAllSquashed(options, orig_args)
+        if options.dependencies:
+            orig_args.remove('--dependencies')
+            if not cl.GetIssue():
+                # UploadAllSquashed stored an issue number for cl, but it
+                # doesn't have access to cl object. By unsetting lookedup_issue,
+                # we force code path that will read issue from the config.
+                cl.lookedup_issue = False
+            return upload_branch_deps(cl, orig_args, options.force)
+
         return 0
 
     if options.cherry_pick_stacked:
@@ -5244,10 +5252,10 @@ def _UploadAllPrecheck(options, orig_args):
     # bool]
     """Checks the state of the tree and gives the user uploading options
 
-  Returns: A tuple of the ordered list of changes that have new commits
-      since their last upload and a boolean of whether the user wants to
-      cherry-pick and upload the current branch instead of uploading all cls.
-  """
+    Returns: A tuple of the ordered list of changes that have new commits
+        since their last upload and a boolean of whether the user wants to
+        cherry-pick and upload the current branch instead of uploading all cls.
+    """
     cl = Changelist()
     if cl.GetBranch() is None:
         DieWithError('Can\'t upload from detached HEAD state. Get on a branch!')
@@ -5373,11 +5381,11 @@ def _UploadAllPrecheck(options, orig_args):
 def CMDsplit(parser, args):
     """Splits a branch into smaller branches and uploads CLs.
 
-  Creates a branch and uploads a CL for each group of files modified in the
-  current branch that share a common OWNERS file. In the CL description and
-  comment, the string '$directory', is replaced with the directory containing
-  the shared OWNERS file.
-  """
+    Creates a branch and uploads a CL for each group of files modified in the
+    current branch that share a common OWNERS file. In the CL description and
+    comment, the string '$directory', is replaced with the directory containing
+    the shared OWNERS file.
+    """
     parser.add_option('-d',
                       '--description',
                       dest='description_file',
@@ -5461,9 +5469,9 @@ def CMDdcommit(parser, args):
 def CMDland(parser, args):
     """Commits the current changelist via git.
 
-  In case of Gerrit, uses Gerrit REST api to "submit" the issue, which pushes
-  upstream and closes the issue automatically and atomically.
-  """
+    In case of Gerrit, uses Gerrit REST api to "submit" the issue, which pushes
+    upstream and closes the issue automatically and atomically.
+    """
     parser.add_option('--bypass-hooks',
                       action='store_true',
                       dest='bypass_hooks',
@@ -5554,7 +5562,7 @@ def CMDpatch(parser, args):
 
         target_issue_arg = ParseIssueNumberArgument(cl.GetIssue())
         return cl.CMDPatchWithParsedIssue(target_issue_arg, options.nocommit,
-                                          options.force, False)
+                                          options.force)
 
     if len(args) != 1 or not args[0]:
         parser.error('Must specify issue number or URL.')
@@ -5581,12 +5589,12 @@ def CMDpatch(parser, args):
         print('canonical issue/change URL: %s\n' % cl.GetIssueURL())
 
     return cl.CMDPatchWithParsedIssue(target_issue_arg, options.nocommit,
-                                      options.force, options.newbranch)
+                                      options.force)
 
 
 def GetTreeStatus(url=None):
     """Fetches the tree status and returns either 'open', 'closed',
-  'unknown' or 'unset'."""
+    'unknown' or 'unset'."""
     url = url or settings.GetTreeStatusUrl(error_ok=True)
     if url:
         status = str(urllib.request.urlopen(url).read().lower())
@@ -5602,7 +5610,7 @@ def GetTreeStatus(url=None):
 
 def GetTreeStatusReason():
     """Fetches the tree status from a json url and returns the message
-  with the reason for the tree to be opened or closed."""
+    with the reason for the tree to be opened or closed."""
     url = settings.GetTreeStatusUrl()
     json_url = urllib.parse.urljoin(url, '/current?format=json')
     connection = urllib.request.urlopen(json_url)
@@ -6193,16 +6201,19 @@ def _RunGoogleJavaFormat(opts, paths, top_dir, upstream_commit):
 
 def _RunRustFmt(opts, rust_diff_files, top_dir, upstream_commit):
     """Runs rustfmt.  Just like _RunClangFormatDiff returns 2 to indicate that
-  presubmit checks have failed (and returns 0 otherwise)."""
+    presubmit checks have failed (and returns 0 otherwise)."""
     # Locate the rustfmt binary.
     try:
         rustfmt_tool = rustfmt.FindRustfmtToolInChromiumTree()
     except rustfmt.NotFoundError as e:
         DieWithError(e)
 
+    chromium_src_path = gclient_paths.GetPrimarySolutionPath()
+    rustfmt_toml_path = os.path.join(chromium_src_path, '.rustfmt.toml')
+
     # TODO(crbug.com/1440869): Support formatting only the changed lines
     # if `opts.full or settings.GetFormatFullByDefault()` is False.
-    cmd = [rustfmt_tool]
+    cmd = [rustfmt_tool, f'--config-path={rustfmt_toml_path}']
     if opts.dry_run:
         cmd.append('--check')
     cmd += rust_diff_files
@@ -6216,7 +6227,7 @@ def _RunRustFmt(opts, rust_diff_files, top_dir, upstream_commit):
 
 def _RunSwiftFormat(opts, swift_diff_files, top_dir, upstream_commit):
     """Runs swift-format.  Just like _RunClangFormatDiff returns 2 to indicate
-  that presubmit checks have failed (and returns 0 otherwise)."""
+    that presubmit checks have failed (and returns 0 otherwise)."""
     if sys.platform != 'darwin':
         DieWithError('swift-format is only supported on macOS.')
     # Locate the swift-format binary.
@@ -6275,13 +6286,7 @@ def _RunYapf(opts, paths, top_dir, upstream_commit):
         if not yapf_style:
             yapf_style = 'pep8'
 
-        with open(path, 'r') as py_f:
-            if 'python2' in py_f.readline():
-                vpython_script = 'vpython'
-            else:
-                vpython_script = 'vpython3'
-
-        cmd = [vpython_script, yapf_tool, '--style', yapf_style, path]
+        cmd = ['vpython3', yapf_tool, '--style', yapf_style, path]
 
         if not opts.full:
             ranges = line_diffs.get(path)
@@ -6347,7 +6352,7 @@ def _FormatXml(opts, paths, top_dir, upstream_commit):
         if not xml_dir:
             continue
 
-        tool_dir = os.path.join(top_dir, xml_dir)
+        tool_dir = os.path.join(top_dir, xml_dir.replace('/', os.path.sep))
         pretty_print_tool = os.path.join(tool_dir, 'pretty_print.py')
         cmd = [shutil.which('vpython3'), pretty_print_tool, '--non-interactive']
 
@@ -6359,12 +6364,12 @@ def _FormatXml(opts, paths, top_dir, upstream_commit):
         # tools/metrics/histogrmas, pretty-print should be run with an
         # additional relative path argument, like: $ python pretty_print.py
         # metadata/UMA/histograms.xml $ python pretty_print.py enums.xml
-        if xml_dir == os.path.join('tools', 'metrics', 'histograms'):
+        if xml_dir == 'tools/metrics/histograms':
             if os.path.basename(path) not in ('histograms.xml', 'enums.xml',
                                               'histogram_suffixes_list.xml'):
                 # Skip this XML file if it's not one of the known types.
                 continue
-            cmd.append(path)
+            cmd.append(path.replace('/', os.path.sep))
 
         if opts.dry_run or opts.diff:
             cmd.append('--diff')
@@ -6519,10 +6524,10 @@ def CMDformat(parser, args):
 
 def GetMetricsDir(diff_xml):
     metrics_xml_dirs = [
-        os.path.join('tools', 'metrics', 'actions'),
-        os.path.join('tools', 'metrics', 'histograms'),
-        os.path.join('tools', 'metrics', 'structured'),
-        os.path.join('tools', 'metrics', 'ukm'),
+        'tools/metrics/actions',
+        'tools/metrics/histograms',
+        'tools/metrics/structured',
+        'tools/metrics/ukm',
     ]
     for xml_dir in metrics_xml_dirs:
         if diff_xml.startswith(xml_dir):

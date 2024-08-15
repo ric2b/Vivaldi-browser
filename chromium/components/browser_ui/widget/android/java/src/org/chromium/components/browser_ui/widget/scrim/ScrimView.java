@@ -39,7 +39,10 @@ class ScrimView extends View {
      * @param parent The {@link ViewGroup} the scrim should exist in.
      * @param eventDelegate A means of passing motion events back to the mediator for processing.
      */
-    public ScrimView(Context context, ViewGroup parent, @ColorInt int defaultColor,
+    public ScrimView(
+            Context context,
+            ViewGroup parent,
+            @ColorInt int defaultColor,
             ScrimCoordinator.TouchEventDelegate eventDelegate) {
         super(context);
         mParent = parent;
@@ -51,8 +54,9 @@ class ScrimView extends View {
         setAlpha(0.0f);
         setVisibility(View.GONE);
         setBackgroundColor(mDefaultBackgroundColor);
-        setLayoutParams(new ViewGroup.MarginLayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        setLayoutParams(
+                new ViewGroup.MarginLayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         if (BuildConfig.IS_VIVALDI)
             setTag(SCRIM_TAG);

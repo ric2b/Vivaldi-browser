@@ -86,23 +86,23 @@ ConnectionManager::Status ConnectionManagerImpl::GetStatus() const {
   return Status::kDisconnected;
 }
 
-void ConnectionManagerImpl::AttemptNearbyConnection() {
+bool ConnectionManagerImpl::AttemptNearbyConnection() {
   if (GetStatus() != Status::kDisconnected) {
     PA_LOG(WARNING) << "Connection to host already established or is "
                     << "currently attempting to establish, exiting "
                     << "AttemptConnection().";
-    return;
+    return false;
   }
 
-  const absl::optional<multidevice::RemoteDeviceRef> remote_device =
+  const std::optional<multidevice::RemoteDeviceRef> remote_device =
       multidevice_setup_client_->GetHostStatus().second;
-  const absl::optional<multidevice::RemoteDeviceRef> local_device =
+  const std::optional<multidevice::RemoteDeviceRef> local_device =
       device_sync_client_->GetLocalDeviceMetadata();
 
   if (!remote_device || !local_device) {
     PA_LOG(ERROR) << "AttemptConnection() failed because either remote or "
                   << "local device is null.";
-    return;
+    return false;
   }
 
   connection_attempt_ = secure_channel_client_->InitiateConnectionToDevice(
@@ -116,6 +116,7 @@ void ConnectionManagerImpl::AttemptNearbyConnection() {
   timer_->Start(FROM_HERE, kConnectionTimeout,
                 base::BindOnce(&ConnectionManagerImpl::OnConnectionTimeout,
                                weak_ptr_factory_.GetWeakPtr()));
+  return true;
 }
 
 void ConnectionManagerImpl::Disconnect() {
@@ -154,11 +155,11 @@ void ConnectionManagerImpl::RegisterPayloadFile(
 }
 
 void ConnectionManagerImpl::GetHostLastSeenTimestamp(
-    base::OnceCallback<void(absl::optional<base::Time>)> callback) {
-  const absl::optional<multidevice::RemoteDeviceRef> remote_device =
+    base::OnceCallback<void(std::optional<base::Time>)> callback) {
+  const std::optional<multidevice::RemoteDeviceRef> remote_device =
       multidevice_setup_client_->GetHostStatus().second;
   if (!remote_device) {
-    std::move(callback).Run(/*timestamp=*/absl::nullopt);
+    std::move(callback).Run(/*timestamp=*/std::nullopt);
     return;
   }
 

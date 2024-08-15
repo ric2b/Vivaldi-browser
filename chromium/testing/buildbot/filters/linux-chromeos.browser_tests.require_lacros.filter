@@ -4,6 +4,7 @@
 *Magn*.*
 AccessibilityExtension*
 AccessibilityHighlightsBrowserTest.*
+AppServiceAppWindowLacrosBrowserTest*
 Autoclick*
 AshTtsApiTest*
 BrowserAppShelfControllerBrowserTest*
@@ -12,14 +13,19 @@ ChromeVox*
 DemoAshRequiresLacrosTest*
 DesksTemplatesClientLacrosTest*
 Dictation*
+*DictationTest*
 ExtensionKeeplistAllowPerfettoTest*
 ExtensionKeeplistTest*
+# Note: Some of FileTaskBrowserTest* runs only on branded ash and lacros builds.
+FileTaskBrowserTest*
 NonKioskAcceleratorLacrosTest*
 SelectToSpeak*
+StickyKeysBrowserTest*
 SwitchAccess*
 VpnExtensionObserverBrowserTest*
 WebAppsCrosapiBrowserTest*
-WebAppPreloadInstallerLacrosBrowserTest*
+*WebAppsPreventCloseCrosapiBrowserTest*
+WebAppInstallerLacrosBrowserTest*
 WebAppProviderBridgeBrowserTest*
 WebKioskAcceleratorLacrosTest*
 WebKioskLacrosTest*
@@ -32,25 +38,30 @@ TestAsNormalAndGuestUser/SpokenFeedbackTest.*
 -ChromeVoxPortalsTest.ShouldFocusPortal
 # TODO(b/276914335): Flaky in Lacros.
 -ChromeVoxAutoScrollHandlerTest.RecyclerViewByCharacter
+# TODO(b/301475127): Remove browser() dependency for the following dictation
+# tests.
+-*DictationTest.Help*
+-*DictationTest.WorksWithSelectToSpeak*
 # TODO(b/301253962): Some Switch Access tests fail/flake on Lacros.
 -SwitchAccessItemScanManagerTest.*
 -SwitchAccessPointScanManagerTest.PointScanLeftClick
 -SwitchAccessTest.NavigateButtonsInTextFieldMenu
 # TODO(https://crbug.com/1378291) Ash and Lacros browser window sizes differ.
 -ChromeVoxEditingTest.SelectAcrossSoftLineWraps
-# TODO(crbug.com/1339456) Disabled when switch to LacrosOnly.
--DesksTemplatesClientLacrosTest.SystemUILaunchBrowser
 # TODO(b/277821091) Flaky
 -ChromeVoxEditingTest.GiantTextAreaPerformance
 # TODO(crbug.com/1478586): Flaky.
 -AutoclickWithAccessibilityServiceTest.ScrollableBoundsPlumbing
 # TODO(b/277256412): Test is flaky
 -DictationUIE2ETest.HintsTimeoutWithChromeVox
+# TODO(b/316393493): Figure out how to set home button pref in Lacros.
+-StickyKeysBrowserTest.CtrlClickHomeButton
 # TODO(accessibility): these are native C++ tests that need investigation.
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.NavigateChromeVoxMenu*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.ShowFormControlsList*
 -SelectToSpeakTest.ContinuesReadingDuringResize
--StickyKeysBrowserTest*
+# TODO(b/318357300): Flaky.
+-AccessibilityHighlightsBrowserTest.CaretHighlightOmnibox
 # These tests do not run with the browser and do not need to run with Lacros.
 -AccessibilityCommonTest*
 -AccessibilityPrivateApiTest*
@@ -62,6 +73,9 @@ TestAsNormalAndGuestUser/SpokenFeedbackTest.*
 -AccessibilityHighlightsBrowserTest.CursorHighlightAddsFocusRing
 -SelectToSpeakTest.SelectToSpeakDoesNotDismissTrayBubble
 -SelectToSpeakTest.SpeakStatusTray
+-StickyKeysBrowserTest.OpenTrayMenu
+-StickyKeysBrowserTest.OverlayShown
+-LoggedInSpokenFeedbackTest.OpenLogPage*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.TouchExploreStatusTray*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.ShelfBlockedAppIconBadgeAnnouncement*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.ShelfNotificationBadgeAnnouncement*
@@ -70,6 +84,7 @@ TestAsNormalAndGuestUser/SpokenFeedbackTest.*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.FocusShelf*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.ShelfIconFocusForward*
 -TestAsNormalAndGuestUser/SpokenFeedbackTest.TouchExploreSecondaryDisplay*
+-TouchExplorationTest
 # TODO(crbug/1484723): Flaky
 -BrowserAppShelfControllerBrowserTest.WindowedApps
 -BrowserAppShelfControllerBrowserTest.TabbedApps

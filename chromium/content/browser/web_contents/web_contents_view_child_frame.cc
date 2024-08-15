@@ -50,15 +50,19 @@ WebContentsViewChildFrame::WebContentsViewChildFrame(
 WebContentsViewChildFrame::~WebContentsViewChildFrame() = default;
 
 WebContentsView* WebContentsViewChildFrame::GetOuterView() {
-  return web_contents_->GetOuterWebContents()->GetView();
+  if (auto* outer_web_contents = web_contents_->GetOuterWebContents()) {
+    return outer_web_contents->GetView();
+  }
+
+  return nullptr;
 }
 
 const WebContentsView* WebContentsViewChildFrame::GetOuterView() const {
-  // NOTE(andre@vivaldi.com) : If a webview has not been shown before being
-  // deleted there is no outerwebcontents.
-  return web_contents_->GetOuterWebContents()
-             ? web_contents_->GetOuterWebContents()->GetView()
-             : nullptr;
+  if (auto* outer_web_contents = web_contents_->GetOuterWebContents()) {
+    return outer_web_contents->GetView();
+  }
+
+  return nullptr;
 }
 
 RenderViewHostDelegateView* WebContentsViewChildFrame::GetOuterDelegateView() {
@@ -75,15 +79,27 @@ RenderViewHostDelegateView* WebContentsViewChildFrame::GetOuterDelegateView() {
 }
 
 gfx::NativeView WebContentsViewChildFrame::GetNativeView() const {
-  return GetOuterView() ? GetOuterView()->GetNativeView() : nullptr;
+  if (auto* outer_view = GetOuterView()) {
+    return outer_view->GetNativeView();
+  }
+
+  return gfx::NativeView();
 }
 
 gfx::NativeView WebContentsViewChildFrame::GetContentNativeView() const {
-  return GetOuterView() ? GetOuterView()->GetContentNativeView() : nullptr;
+  if (auto* outer_view = GetOuterView()) {
+    return outer_view->GetContentNativeView();
+  }
+
+  return gfx::NativeView();
 }
 
 gfx::NativeWindow WebContentsViewChildFrame::GetTopLevelNativeWindow() const {
-  return GetOuterView() ? GetOuterView()->GetTopLevelNativeWindow() : nullptr;
+  if (auto* outer_view = GetOuterView()) {
+    return outer_view->GetTopLevelNativeWindow();
+  }
+
+  return gfx::NativeWindow();
 }
 
 gfx::Rect WebContentsViewChildFrame::GetContainerBounds() const {

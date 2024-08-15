@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <random>
 #include <vector>
@@ -157,14 +158,14 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_f16_f32(
-          channels(), input_stride(), output_stride(),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
 
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f16_f32(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f16_f32(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_f16_f32(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -204,14 +205,14 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_f32_f16(
-          channels(), input_stride(), output_stride(),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
 
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_f16(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_f16(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_f32_f16(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -225,6 +226,62 @@ class ConvertOperatorTester {
     }
   }
 
+  void TestF16toQD8() const {
+    std::random_device random_device;
+    auto rng = std::mt19937(random_device());
+
+    std::vector<float> input_float((batch_size() - 1) * input_stride() + channels());
+    std::vector<uint16_t> input(XNN_EXTRA_BYTES / sizeof(uint16_t) +
+      (batch_size() - 1) * input_stride() + channels());
+    std::vector<int8_t> output((batch_size() - 1) * output_stride() + channels());
+    std::vector<xnn_dynamic_quantization_params> quantization_params(batch_size() + XNN_EXTRA_QUANTIZATION_PARAMS);
+    std::uniform_real_distribution<float> range_dist(-10, 10);
+    for (size_t iteration = 0; iteration < iterations(); iteration++) {
+      const float first_val = range_dist(rng);
+      const float second_val = range_dist(rng);
+      std::uniform_real_distribution<float> f32dist(std::min(first_val, second_val), std::max(first_val, second_val));
+      std::generate(input_float.begin(), input_float.end(), [&]() { return f32dist(rng); });
+      std::transform(input_float.begin(), input_float.end(), input.begin(), [](float f) { return fp16_ieee_from_fp32_value(f); });
+      std::fill(output.begin(), output.end(), INT8_C(0xA5));
+
+      // Create, setup, run, and destroy Convert operator.
+      ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
+      xnn_operator_t convert_op = nullptr;
+
+      xnn_status status = xnn_create_convert_nc_f16_qd8(
+          0, &convert_op);
+      if (status == xnn_status_unsupported_hardware) {
+        GTEST_SKIP();
+      }
+      ASSERT_EQ(xnn_status_success, status);
+      ASSERT_NE(nullptr, convert_op);
+
+      // Smart pointer to automatically delete convert op.
+      std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
+
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f16_qd8(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_f16_qd8(convert_op, input.data(), output.data(), quantization_params.data()));
+      ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
+
+      // Verify results.
+      for (size_t i = 0; i < batch_size(); i++) {
+        const float* input_ptr = &input_float[i * input_stride()];
+        const auto minmax = std::minmax_element(input_ptr, input_ptr + channels());
+        const float rmin = math_min_f32(0.0f, *minmax.first);
+        const float rmax = math_max_f32(0.0f, *minmax.second);
+        const float max_acceptable_error = 0.8f * (rmax - rmin) / std::numeric_limits<uint8_t>::max();
+        for (size_t c = 0; c < channels(); c++) {
+          float expected = fp16_ieee_to_fp32_value(input[i * input_stride() + c]);
+          int8_t quantized_val = (int)output[i * output_stride() + c];
+          float dequantized_val = float(quantized_val - quantization_params[i].zero_point) * quantization_params[i].scale;
+          EXPECT_NEAR(expected, dequantized_val, max_acceptable_error)
+            << "at batch " << i << " / " << batch_size() << ", channel " << c << " / " << channels();
+        }
+      }
+    }
+  }
+
   void TestF32toQD8() const {
     std::random_device random_device;
     auto rng = std::mt19937(random_device());
@@ -232,7 +289,7 @@ class ConvertOperatorTester {
     std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) +
       (batch_size() - 1) * input_stride() + channels());
     std::vector<int8_t> output((batch_size() - 1) * output_stride() + channels());
-    std::vector<xnn_dynamic_quantization_params> quantization_params(batch_size());
+    std::vector<xnn_dynamic_quantization_params> quantization_params(batch_size() + XNN_EXTRA_QUANTIZATION_PARAMS);
     std::uniform_real_distribution<float> range_dist(-100000, 100000);
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       const float first_val = range_dist(rng);
@@ -247,14 +304,14 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_f32_qd8(
-          channels(), input_stride(), output_stride(),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
 
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_qd8(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_qd8(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_f32_qd8(convert_op, input.data(), output.data(), quantization_params.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -313,7 +370,6 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_f32_qs8(
-          channels(), input_stride(), output_stride(),
           output_scale(), int8_t(zero_point()), int8_t(qmin()), int8_t(qmax()),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
@@ -321,7 +377,8 @@ class ConvertOperatorTester {
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_qs8(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_qs8(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_f32_qs8(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -372,7 +429,6 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_f32_qu8(
-          channels(), input_stride(), output_stride(),
           output_scale(), uint8_t(zero_point()), uint8_t(qmin()), uint8_t(qmax()),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
@@ -380,7 +436,8 @@ class ConvertOperatorTester {
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_qu8(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_f32_qu8(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_f32_qu8(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -388,6 +445,63 @@ class ConvertOperatorTester {
       for (size_t i = 0; i < batch_size(); i++) {
         for (size_t c = 0; c < channels(); c++) {
           EXPECT_EQ(uint32_t(output_ref[i * channels() + c]), uint32_t(output[i * output_stride() + c]))
+            << "at batch " << i << " / " << batch_size() << ", channel " << c << " / " << channels();
+        }
+      }
+    }
+  }
+
+  void TestQS8toF16() const {
+    ASSERT_GE(zero_point(), std::numeric_limits<int8_t>::min());
+    ASSERT_LE(zero_point(), std::numeric_limits<int8_t>::max());
+
+    std::random_device random_device;
+    auto rng = std::mt19937(random_device());
+    std::uniform_int_distribution<int32_t> i8dist(
+      std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
+
+    std::vector<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) +
+      (batch_size() - 1) * input_stride() + channels());
+    std::vector<uint16_t> output((batch_size() - 1) * output_stride() + channels());
+    std::vector<float> output_ref(batch_size() * channels());
+    for (size_t iteration = 0; iteration < iterations(); iteration++) {
+      std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
+      std::fill(output.begin(), output.end(), UINT16_C(0x7E00));
+
+      const float fp16_scale = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(input_scale()));
+      // Compute reference results.
+      for (size_t i = 0; i < batch_size(); i++) {
+        for (size_t c = 0; c < channels(); c++) {
+          output_ref[i * channels() + c] = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(float(input[i * input_stride() + c] - zero_point()) * fp16_scale));
+        }
+      }
+
+      // Create, setup, run, and destroy Convert operator.
+      ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
+      xnn_operator_t convert_op = nullptr;
+
+      xnn_status status = xnn_create_convert_nc_qs8_f16(
+          input_scale(), int8_t(zero_point()),
+          0, &convert_op);
+      if (status == xnn_status_unsupported_hardware) {
+        GTEST_SKIP();
+      }
+      ASSERT_EQ(xnn_status_success, status);
+      ASSERT_NE(nullptr, convert_op);
+
+      // Smart pointer to automatically delete convert op.
+      std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
+
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qs8_f16(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_qs8_f16(convert_op, input.data(), output.data()));
+      ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
+
+      // Verify results.
+      for (size_t i = 0; i < batch_size(); i++) {
+        for (size_t c = 0; c < channels(); c++) {
+          const float tolerance = std::max(output_ref[i * channels() + c] * 1e-2, 1e-4);
+          EXPECT_NEAR(output_ref[i * channels() + c], fp16_ieee_to_fp32_value(output[i * output_stride() + c]), tolerance)
             << "at batch " << i << " / " << batch_size() << ", channel " << c << " / " << channels();
         }
       }
@@ -424,7 +538,6 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_qs8_f32(
-          channels(), input_stride(), output_stride(),
           input_scale(), int8_t(zero_point()),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
@@ -432,7 +545,8 @@ class ConvertOperatorTester {
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qs8_f32(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qs8_f32(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_qs8_f32(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -484,7 +598,6 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_qs16_qs8(
-          channels(), input_stride(), output_stride(),
           input_scale(), 1.0f, int8_t(zero_point()),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
@@ -492,7 +605,8 @@ class ConvertOperatorTester {
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qs16_qs8(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qs16_qs8(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_qs16_qs8(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 
@@ -536,7 +650,6 @@ class ConvertOperatorTester {
 
       ASSERT_EQ(xnn_status_success,
         xnn_create_convert_nc_qu8_f32(
-          channels(), input_stride(), output_stride(),
           input_scale(), uint8_t(zero_point()),
           0, &convert_op));
       ASSERT_NE(nullptr, convert_op);
@@ -544,7 +657,8 @@ class ConvertOperatorTester {
       // Smart pointer to automatically delete convert op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_convert_op(convert_op, xnn_delete_operator);
 
-      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qu8_f32(convert_op, batch_size(), /*threadpool=*/nullptr));
+      ASSERT_EQ(xnn_status_success, xnn_reshape_convert_nc_qu8_f32(convert_op, batch_size(),
+          channels(), input_stride(), output_stride(), /*threadpool=*/nullptr));
       ASSERT_EQ(xnn_status_success, xnn_setup_convert_nc_qu8_f32(convert_op, input.data(), output.data()));
       ASSERT_EQ(xnn_status_success, xnn_run_operator(convert_op, /*threadpool=*/nullptr));
 

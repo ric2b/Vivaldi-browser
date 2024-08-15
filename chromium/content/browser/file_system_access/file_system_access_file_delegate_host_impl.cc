@@ -127,7 +127,7 @@ void FileSystemAccessFileDelegateHostImpl::DidRead(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (rv < 0) {
-    std::move(callback).Run(absl::optional<mojo_base::BigBuffer>(),
+    std::move(callback).Run(std::optional<mojo_base::BigBuffer>(),
                             storage::NetErrorToFileError(rv),
                             /*bytes_read=*/0);
     return;
@@ -197,7 +197,9 @@ void FileSystemAccessFileDelegateHostImpl::GetLength(
             std::move(callback).Run(file_error, 0);
           },
           std::move(callback)),
-      url(), storage::FileSystemOperation::GET_METADATA_FIELD_SIZE);
+      url(),
+      storage::FileSystemOperation::GetMetadataFieldSet(
+          {storage::FileSystemOperation::GetMetadataField::kSize}));
 }
 
 void FileSystemAccessFileDelegateHostImpl::SetLength(

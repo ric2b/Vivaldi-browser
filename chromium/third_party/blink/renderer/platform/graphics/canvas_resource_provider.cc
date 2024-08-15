@@ -247,7 +247,7 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
         use_oop_rasterization_(is_accelerated && ContextProviderWrapper()
                                                      ->ContextProvider()
                                                      ->GetCapabilities()
-                                                     .supports_oop_raster) {
+                                                     .gpu_rasterization) {
     resource_ = NewOrRecycledResource();
     GetFlushForImageListener()->AddObserver(this);
 
@@ -780,7 +780,7 @@ class CanvasResourceProviderSwapChain final : public CanvasResourceProvider {
         use_oop_rasterization_(ContextProviderWrapper()
                                    ->ContextProvider()
                                    ->GetCapabilities()
-                                   .supports_oop_raster) {
+                                   .gpu_rasterization) {
     resource_ = CanvasResourceSwapChain::Create(
         GetSkImageInfo(), ContextProviderWrapper(), CreateWeakPtr(),
         FilterQuality());
@@ -1286,11 +1286,12 @@ CanvasResourceProvider::CanvasResourceProvider(
     : type_(type),
       context_provider_wrapper_(std::move(context_provider_wrapper)),
       resource_dispatcher_(resource_dispatcher),
+      info_(info),
       filter_quality_(filter_quality),
       is_origin_top_left_(is_origin_top_left),
-      snapshot_paint_image_id_(cc::PaintImage::GetNextId()),
-      resource_host_(resource_host) {
-  info_ = info;
+      resource_host_(resource_host),
+      recorder_(std::make_unique<MemoryManagedPaintRecorder>(Size(), this)),
+      snapshot_paint_image_id_(cc::PaintImage::GetNextId()) {
   max_recorded_op_bytes_ = static_cast<size_t>(kMaxRecordedOpKB.Get()) * 1024;
   max_pinned_image_bytes_ = static_cast<size_t>(kMaxPinnedImageKB.Get()) * 1024;
   if (context_provider_wrapper_) {
@@ -1301,7 +1302,6 @@ CanvasResourceProvider::CanvasResourceProvider(
   }
 
   CanvasMemoryDumpProvider::Instance()->RegisterClient(this);
-  recorder_.beginRecording(Size());
 }
 
 CanvasResourceProvider::~CanvasResourceProvider() {
@@ -1317,14 +1317,30 @@ CanvasResourceProvider::~CanvasResourceProvider() {
   }
 }
 
+std::unique_ptr<MemoryManagedPaintRecorder>
+CanvasResourceProvider::ReleaseRecorder() {
+  // When releasing the recorder, we swap it with a new, valid one. This way,
+  // the `recorder_` member is guarantied to be always valid.
+  auto recorder = std::make_unique<MemoryManagedPaintRecorder>(Size(), this);
+  recorder_->SetClient(nullptr);
+  recorder_.swap(recorder);
+  return recorder;
+}
+
+void CanvasResourceProvider::SetRecorder(
+    std::unique_ptr<MemoryManagedPaintRecorder> recorder) {
+  recorder->SetClient(this);
+  recorder_ = std::move(recorder);
+}
+
 void CanvasResourceProvider::FlushIfRecordingLimitExceeded() {
   // When printing we avoid flushing if it is still possible to print in
   // vector mode.
   if (IsPrinting() && clear_frame_) {
     return;
   }
-  if (UNLIKELY(TotalOpBytesUsed() > max_recorded_op_bytes_) ||
-      UNLIKELY(TotalImageBytesUsed() > max_pinned_image_bytes_)) {
+  if (UNLIKELY(recorder_->OpBytesUsed() > max_recorded_op_bytes_) ||
+      UNLIKELY(recorder_->ImageBytesUsed() > max_pinned_image_bytes_)) {
     FlushCanvas(FlushReason::kRecordingLimitExceeded);
   }
 }
@@ -1392,6 +1408,15 @@ void CanvasResourceProvider::InitializeForRecording(
   }
 }
 
+void CanvasResourceProvider::RecordingCleared() {
+  // Since the recording has been cleared, it contains no draw commands and it
+  // is now safe to update `mode_` to discard the old copy of canvas content.
+  mode_ = SkSurface::kDiscard_ContentChangeMode;
+  clear_frame_ = true;
+  last_flush_reason_ = FlushReason::kNone;
+  printing_fallback_reason_ = FlushReason::kNone;
+}
+
 cc::PaintCanvas* CanvasResourceProvider::Canvas(bool needs_will_draw) {
   // TODO(https://crbug.com/1211912): Video frames don't work without
   // WillDrawIfNeeded(), but we are getting memory leak on CreatePattern
@@ -1399,7 +1424,7 @@ cc::PaintCanvas* CanvasResourceProvider::Canvas(bool needs_will_draw) {
   if (needs_will_draw)
     WillDrawIfNeeded();
 
-  return recorder_.getRecordingCanvas();
+  return recorder_->getRecordingCanvas();
 }
 
 void CanvasResourceProvider::OnContextDestroyed() {
@@ -1494,7 +1519,7 @@ gfx::ColorSpace CanvasResourceProvider::GetColorSpace() const {
 
 absl::optional<cc::PaintRecord> CanvasResourceProvider::FlushCanvas(
     FlushReason reason) {
-  if (!HasRecordedDrawOps()) {
+  if (!recorder_->HasRecordedDrawOps()) {
     return absl::nullopt;
   }
   ScopedRasterTimer timer(IsAccelerated() ? RasterInterface() : nullptr, *this,
@@ -1517,7 +1542,7 @@ absl::optional<cc::PaintRecord> CanvasResourceProvider::FlushCanvas(
     clear_frame_ = true;
     printing_fallback_reason_ = FlushReason::kNone;
   }
-  cc::PaintRecord recording = recorder_.finishRecordingAsPicture();
+  cc::PaintRecord recording = recorder_->finishRecordingAsPicture();
   RasterRecord(recording);
   last_recording_ =
       preserve_recording ? absl::optional(recording) : absl::nullopt;
@@ -1584,7 +1609,7 @@ bool CanvasResourceProvider::WritePixels(const SkImageInfo& orig_info,
   TRACE_EVENT0("blink", "CanvasResourceProvider::WritePixels");
 
   DCHECK(IsValid());
-  DCHECK(!HasRecordedDrawOps());
+  DCHECK(!recorder_->HasRecordedDrawOps());
 
   EnsureSkiaCanvas();
 
@@ -1716,18 +1741,6 @@ scoped_refptr<CanvasResource> CanvasResourceProvider::GetImportedResource()
   return canvas_resources_.back();
 }
 
-void CanvasResourceProvider::SkipQueuedDrawCommands() {
-  // Note that this function only gets called when canvas needs a full repaint,
-  // so always update the |mode_| to discard the old copy of canvas content.
-  mode_ = SkSurface::kDiscard_ContentChangeMode;
-  clear_frame_ = true;
-  last_flush_reason_ = FlushReason::kNone;
-  printing_fallback_reason_ = FlushReason::kNone;
-  if (!HasRecordedDrawOps())
-    return;
-  recorder_.finishRecordingAsPicture();
-}
-
 void CanvasResourceProvider::RestoreBackBuffer(const cc::PaintImage& image) {
   DCHECK_EQ(image.height(), Size().height());
   DCHECK_EQ(image.width(), Size().width());
@@ -1739,10 +1752,6 @@ void CanvasResourceProvider::RestoreBackBuffer(const cc::PaintImage& image) {
   // PaintImage::GetSwSkImage above
   sk_image->peekPixels(&map);
   WritePixels(map.info(), map.addr(), map.rowBytes(), /*x=*/0, /*y=*/0);
-}
-
-bool CanvasResourceProvider::HasRecordedDrawOps() const {
-  return recorder_.HasRecordedDrawOps();
 }
 
 void CanvasResourceProvider::TearDownSkSurface() {

@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -24,7 +25,6 @@
 #include "content/services/auction_worklet/trusted_signals.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -38,7 +38,8 @@ TrustedSignalsRequestManager::TrustedSignalsRequestManager(
     bool automatically_send_requests,
     const url::Origin& top_level_origin,
     const GURL& trusted_signals_url,
-    absl::optional<uint16_t> experiment_group_id,
+    std::optional<uint16_t> experiment_group_id,
+    const std::string& trusted_bidding_signals_slot_size_param,
     AuctionV8Helper* v8_helper)
     : type_(type),
       url_loader_factory_(url_loader_factory),
@@ -46,9 +47,16 @@ TrustedSignalsRequestManager::TrustedSignalsRequestManager(
       top_level_origin_(top_level_origin),
       trusted_signals_url_(trusted_signals_url),
       experiment_group_id_(experiment_group_id),
+      trusted_bidding_signals_slot_size_param_(
+          trusted_bidding_signals_slot_size_param),
       v8_helper_(v8_helper),
       auction_network_events_handler_(
-          std::move(auction_network_events_handler)) {}
+          std::move(auction_network_events_handler)) {
+  // `trusted_bidding_signals_slot_size_param` are only supported for
+  // Type::kBiddingSignals.
+  DCHECK(trusted_bidding_signals_slot_size_param.empty() ||
+         type_ == Type::kBiddingSignals);
+}
 
 TrustedSignalsRequestManager::~TrustedSignalsRequestManager() {
   // All outstanding Requests should have been destroyed before `this`.
@@ -59,7 +67,7 @@ TrustedSignalsRequestManager::~TrustedSignalsRequestManager() {
 std::unique_ptr<TrustedSignalsRequestManager::Request>
 TrustedSignalsRequestManager::RequestBiddingSignals(
     const std::string& interest_group_name,
-    const absl::optional<std::vector<std::string>>& keys,
+    const std::optional<std::vector<std::string>>& keys,
     LoadSignalsCallback load_signals_callback) {
   DCHECK_EQ(Type::kBiddingSignals, type_);
 
@@ -124,7 +132,7 @@ void TrustedSignalsRequestManager::StartBatchedTrustedSignalsRequest() {
             auction_network_events_handler_),
         std::move(interest_group_names), std::move(keys),
         top_level_origin_.host(), trusted_signals_url_, experiment_group_id_,
-        v8_helper_,
+        trusted_bidding_signals_slot_size_param_, v8_helper_,
         base::BindOnce(&TrustedSignalsRequestManager::OnSignalsLoaded,
                        base::Unretained(this), batched_request));
     return;
@@ -190,7 +198,7 @@ TrustedSignalsRequestManager::BatchedTrustedSignalsRequest::
 void TrustedSignalsRequestManager::OnSignalsLoaded(
     BatchedTrustedSignalsRequest* batched_request,
     scoped_refptr<Result> result,
-    absl::optional<std::string> error_msg) {
+    std::optional<std::string> error_msg) {
   DCHECK(batched_requests_.find(batched_request) != batched_requests_.end());
   for (RequestImpl* request : batched_request->requests) {
     DCHECK_EQ(request->batched_request_, batched_request);

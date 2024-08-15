@@ -11,5 +11,6 @@ ImportedNotesEntry::~ImportedNotesEntry() {}
 bool ImportedNotesEntry::operator==(const ImportedNotesEntry& other) const {
   return (is_folder == other.is_folder && url == other.url &&
           path == other.path && content == other.content &&
-          creation_time == other.creation_time);
+          creation_time == other.creation_time &&
+          last_modification_time == other.last_modification_time);
 }

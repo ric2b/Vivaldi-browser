@@ -27,10 +27,9 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "ui/base/x/x11_util.h"
+#include "ui/gfx/x/atom_cache.h"
 #include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/xproto.h"
-#include "ui/gfx/x/xproto_util.h"
 
 #if BUILDFLAG(IS_LINUX)
 #include "ui/linux/linux_ui.h"
@@ -299,8 +298,6 @@ XCursorLoader::XCursorLoader(x11::Connection* connection,
                 {x11::Atom::RESOURCE_MANAGER},
                 base::BindRepeating(&XCursorLoader::OnPropertyChanged,
                                     base::Unretained(this))) {
-  auto ver_cookie = connection_->render().QueryVersion(
-      {x11::Render::major_version, x11::Render::minor_version});
   auto pf_cookie = connection_->render().QueryPictFormats();
   cursor_font_ = connection_->GenerateId<x11::Font>();
   connection_->OpenFont({cursor_font_, "cursor"});
@@ -308,11 +305,6 @@ XCursorLoader::XCursorLoader(x11::Connection* connection,
   // Fetch the initial property value which will call `OnPropertyChanged` and
   // initialize `rm_xcursor_theme_`, `rm_xcursor_size_`, and `rm_xft_dpi_`.
   rm_cache_.Get(x11::Atom::RESOURCE_MANAGER);
-
-  if (auto reply = ver_cookie.Sync()) {
-    render_version_ =
-        base::Version({reply->major_version, reply->minor_version});
-  }
 
   if (auto pf_reply = pf_cookie.Sync())
     pict_format_ = GetRenderARGBFormat(*pf_reply.reply);
@@ -503,12 +495,12 @@ uint16_t XCursorLoader::CursorNamesToChar(
 
 bool XCursorLoader::SupportsCreateCursor() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return render_version_.IsValid() && render_version_ >= base::Version("0.5");
+  return connection_->render_version() >= std::pair<uint32_t, uint32_t>{0, 5};
 }
 
 bool XCursorLoader::SupportsCreateAnimCursor() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return render_version_.IsValid() && render_version_ >= base::Version("0.8");
+  return connection_->render_version() >= std::pair<uint32_t, uint32_t>{0, 8};
 }
 
 void XCursorLoader::OnPropertyChanged(x11::Atom property,

@@ -86,6 +86,14 @@
 // Programmatically dismisses settings screen.
 + (void)dismissSettings;
 
+// Stops primes performance metrics logging by calling into the
+// internal framework (should only be used by performance tests)
++ (void)primesStopLogging;
+
+// Takes a snapshot of memory usage by calling into the internal
+// framework (should only be used by performance tests)
++ (void)primesTakeMemorySnapshot:(NSString*)eventName;
+
 #pragma mark - Tab Utilities (EG2)
 
 // Selects tab with given index in current mode (incognito or main
@@ -342,9 +350,6 @@
 
 #pragma mark - Sync Utilities (EG2)
 
-// Clears fake sync server data if the server is running.
-+ (void)clearSyncServerData;
-
 // Signs in with `identity` without sync consent.
 + (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity;
 
@@ -383,8 +388,22 @@
 // real one.
 + (void)tearDownFakeSyncServer;
 
+// Clears fake sync server data if the server is running.
++ (void)clearFakeSyncServerData;
+
+// Ensures that all of the FakeServer's data is persisted to disk. This is
+// useful before app restarts, where otherwise the FakeServer may not get to do
+// its usual on-destruction flush.
++ (void)flushFakeSyncServerToDisk;
+
 // Gets the number of entities of the given `type`.
 + (int)numberOfSyncEntitiesWithType:(syncer::ModelType)type;
+
+// Forces every request to fail in a way that simulates a network failure.
++ (void)disconnectFakeSyncServerNetwork;
+
+// Undoes the effects of disconnectFakeSyncServerNetwork.
++ (void)connectFakeSyncServerNetwork;
 
 // Injects a bookmark into the fake sync server with `URL` and `title`.
 + (void)addFakeSyncServerBookmarkWithURL:(NSString*)URL title:(NSString*)title;
@@ -537,9 +556,6 @@
 // Returns whether the Web Channels feature is enabled.
 + (BOOL)isWebChannelsEnabled;
 
-// Returns whether UIButtonConfiguration changes are enabled.
-+ (BOOL)isUIButtonConfigurationEnabled;
-
 // Returns whether the bottom omnibox steady state feature is enabled.
 + (BOOL)isBottomOmniboxSteadyStateEnabled;
 
@@ -592,6 +608,9 @@
 // contains the preferences that are shared between all browser states.
 + (void)setStringValue:(NSString*)value forLocalStatePref:(NSString*)prefName;
 
+// Sets the value of a string user pref in the original browser state.
++ (void)setStringValue:(NSString*)value forUserPref:(NSString*)prefName;
+
 // Sets the bool value for the local state pref with `prefName`. Local State
 // contains the preferences that are shared between all browser states.
 + (void)setBoolValue:(BOOL)value forLocalStatePref:(NSString*)prefName;
@@ -606,6 +625,11 @@
 
 // Sets the value of a integer user pref in the original browser state.
 + (void)setIntegerValue:(int)value forUserPref:(NSString*)prefName;
+
+// Returns true if the Preference is currently using its default value,
+// and has not been set by any higher-priority source (even with the same
+// value).
++ (BOOL)prefWithNameIsDefaultValue:(NSString*)prefName;
 
 // Clears the user pref of |prefName|.
 + (void)clearUserPrefWithName:(NSString*)prefName;
@@ -687,11 +711,6 @@
 
 // Copies a chrome:// URL that doesn't require internet connection.
 + (void)copyURLToPasteBoard;
-
-// Disables default browser promo. If a test needs to check a message drop down
-// in a second window, this needs to be disabled or the popup will kill the
-// message.
-+ (void)disableDefaultBrowserPromo;
 
 #pragma mark - First Run Utilities
 

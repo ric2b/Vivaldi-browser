@@ -37,12 +37,12 @@ class EcheAppAccessibilityProviderProxy : public AccessibilityProviderProxy {
   bool use_full_focus_mode_ = false;
   bool was_accessibility_enabled_;
 
-  absl::optional<base::RepeatingCallback<void(bool)>>
+  std::optional<base::RepeatingCallback<void(bool)>>
       accessibility_state_changed_callback_;
-  absl::optional<base::RepeatingCallback<void(bool)>>
+  std::optional<base::RepeatingCallback<void(bool)>>
       explore_by_touch_state_changed_callback_;
   base::WeakPtrFactory<EcheAppAccessibilityProviderProxy> weak_ptr_factory_{
       this};
 };
 }  // namespace ash::eche_app
-#endif
+#endif  // CHROME_BROWSER_ASH_ECHE_APP_ECHE_APP_ACCESSIBILITY_PROVIDER_PROXY_H_

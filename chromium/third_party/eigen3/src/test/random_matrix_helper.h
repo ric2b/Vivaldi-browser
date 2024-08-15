@@ -13,37 +13,34 @@
 #define EIGEN_RANDOM_MATRIX_HELPER
 
 #include <typeinfo>
-#include <Eigen/QR> // required for createRandomPIMatrixOfRank and generateRandomMatrixSvs
-
+#include <Eigen/QR>  // required for createRandomPIMatrixOfRank and generateRandomMatrixSvs
 
 // Forward declarations to avoid ICC warnings
 #if EIGEN_COMP_ICC
 
 namespace Eigen {
 
-template<typename MatrixType>
+template <typename MatrixType>
 void createRandomPIMatrixOfRank(Index desired_rank, Index rows, Index cols, MatrixType& m);
 
-template<typename PermutationVectorType>
+template <typename PermutationVectorType>
 void randomPermutationVector(PermutationVectorType& v, Index size);
 
-template<typename MatrixType>
+template <typename MatrixType>
 MatrixType generateRandomUnitaryMatrix(const Index dim);
 
-template<typename MatrixType, typename RealScalarVectorType>
-void generateRandomMatrixSvs(const RealScalarVectorType &svs, const Index rows, const Index cols, MatrixType& M);
+template <typename MatrixType, typename RealScalarVectorType>
+void generateRandomMatrixSvs(const RealScalarVectorType& svs, const Index rows, const Index cols, MatrixType& M);
 
-template<typename VectorType, typename RealScalar>
+template <typename VectorType, typename RealScalar>
 VectorType setupRandomSvs(const Index dim, const RealScalar max);
 
-template<typename VectorType, typename RealScalar>
+template <typename VectorType, typename RealScalar>
 VectorType setupRangeSvs(const Index dim, const RealScalar min, const RealScalar max);
 
-} // end namespace Eigen
+}  // end namespace Eigen
 
 #endif  // EIGEN_COMP_ICC
-
-
 
 namespace Eigen {
 
@@ -59,9 +56,8 @@ namespace Eigen {
  * @param cols column dimension of requested random partial isometry matrix
  * @param m random partial isometry matrix
  */
-template<typename MatrixType>
-void createRandomPIMatrixOfRank(Index desired_rank, Index rows, Index cols, MatrixType& m)
-{
+template <typename MatrixType>
+void createRandomPIMatrixOfRank(Index desired_rank, Index rows, Index cols, MatrixType& m) {
   typedef typename internal::traits<MatrixType>::Scalar Scalar;
   enum { Rows = MatrixType::RowsAtCompileTime, Cols = MatrixType::ColsAtCompileTime };
 
@@ -69,27 +65,25 @@ void createRandomPIMatrixOfRank(Index desired_rank, Index rows, Index cols, Matr
   typedef Matrix<Scalar, Rows, Rows> MatrixAType;
   typedef Matrix<Scalar, Cols, Cols> MatrixBType;
 
-  if(desired_rank == 0)
-  {
-    m.setZero(rows,cols);
+  if (desired_rank == 0) {
+    m.setZero(rows, cols);
     return;
   }
 
-  if(desired_rank == 1)
-  {
+  if (desired_rank == 1) {
     // here we normalize the vectors to get a partial isometry
     m = VectorType::Random(rows).normalized() * VectorType::Random(cols).normalized().transpose();
     return;
   }
 
-  MatrixAType a = MatrixAType::Random(rows,rows);
-  MatrixType d = MatrixType::Identity(rows,cols);
-  MatrixBType  b = MatrixBType::Random(cols,cols);
+  MatrixAType a = MatrixAType::Random(rows, rows);
+  MatrixType d = MatrixType::Identity(rows, cols);
+  MatrixBType b = MatrixBType::Random(cols, cols);
 
   // set the diagonal such that only desired_rank non-zero entries remain
-  const Index diag_size = (std::min)(d.rows(),d.cols());
-  if(diag_size != desired_rank)
-    d.diagonal().segment(desired_rank, diag_size-desired_rank) = VectorType::Zero(diag_size-desired_rank);
+  const Index diag_size = (std::min)(d.rows(), d.cols());
+  if (diag_size != desired_rank)
+    d.diagonal().segment(desired_rank, diag_size - desired_rank) = VectorType::Zero(diag_size - desired_rank);
 
   HouseholderQR<MatrixAType> qra(a);
   HouseholderQR<MatrixBType> qrb(b);
@@ -103,18 +97,17 @@ void createRandomPIMatrixOfRank(Index desired_rank, Index rows, Index cols, Matr
  * @param v permutation vector
  * @param size length of permutation vector
  */
-template<typename PermutationVectorType>
-void randomPermutationVector(PermutationVectorType& v, Index size)
-{
+template <typename PermutationVectorType>
+void randomPermutationVector(PermutationVectorType& v, Index size) {
   typedef typename PermutationVectorType::Scalar Scalar;
   v.resize(size);
-  for(Index i = 0; i < size; ++i) v(i) = Scalar(i);
-  if(size == 1) return;
-  for(Index n = 0; n < 3 * size; ++n)
-  {
-    Index i = internal::random<Index>(0, size-1);
+  for (Index i = 0; i < size; ++i) v(i) = Scalar(i);
+  if (size == 1) return;
+  for (Index n = 0; n < 3 * size; ++n) {
+    Index i = internal::random<Index>(0, size - 1);
     Index j;
-    do j = internal::random<Index>(0, size-1); while(j==i);
+    do j = internal::random<Index>(0, size - 1);
+    while (j == i);
     std::swap(v(i), v(j));
   }
 }
@@ -129,16 +122,14 @@ void randomPermutationVector(PermutationVectorType& v, Index size)
  * @param dim row and column dimension of the requested square matrix
  * @return random unitary matrix
  */
-template<typename MatrixType>
-MatrixType generateRandomUnitaryMatrix(const Index dim)
-{
+template <typename MatrixType>
+MatrixType generateRandomUnitaryMatrix(const Index dim) {
   typedef typename internal::traits<MatrixType>::Scalar Scalar;
   typedef Matrix<Scalar, Dynamic, 1> VectorType;
 
   MatrixType v = MatrixType::Identity(dim, dim);
   VectorType h = VectorType::Zero(dim);
-  for (Index i = 0; i < dim; ++i)
-  {
+  for (Index i = 0; i < dim; ++i) {
     v.col(i).tail(dim - i - 1) = VectorType::Random(dim - i - 1);
     h(i) = 2 / v.col(i).tail(dim - i).squaredNorm();
   }
@@ -174,9 +165,8 @@ MatrixType generateRandomUnitaryMatrix(const Index dim)
  * @param cols column dimension of requested random matrix
  * @param M generated matrix with prescribed singular values
  */
-template<typename MatrixType, typename RealScalarVectorType>
-void generateRandomMatrixSvs(const RealScalarVectorType &svs, const Index rows, const Index cols, MatrixType& M)
-{
+template <typename MatrixType, typename RealScalarVectorType>
+void generateRandomMatrixSvs(const RealScalarVectorType& svs, const Index rows, const Index cols, MatrixType& M) {
   enum { Rows = MatrixType::RowsAtCompileTime, Cols = MatrixType::ColsAtCompileTime };
   typedef typename internal::traits<MatrixType>::Scalar Scalar;
   typedef Matrix<Scalar, Rows, Rows> MatrixAType;
@@ -206,9 +196,8 @@ void generateRandomMatrixSvs(const RealScalarVectorType &svs, const Index rows, 
  * @param max upper bound for singular values
  * @return vector of singular values
  */
-template<typename VectorType, typename RealScalar>
-VectorType setupRandomSvs(const Index dim, const RealScalar max)
-{
+template <typename VectorType, typename RealScalar>
+VectorType setupRandomSvs(const Index dim, const RealScalar max) {
   VectorType svs = max / RealScalar(2) * (VectorType::Random(dim) + VectorType::Ones(dim));
   std::sort(svs.begin(), svs.end(), std::greater<RealScalar>());
   return svs;
@@ -232,14 +221,11 @@ VectorType setupRandomSvs(const Index dim, const RealScalar max)
  * @param max largest singular value to use
  * @return vector of singular values
  */
-template<typename VectorType, typename RealScalar>
-VectorType setupRangeSvs(const Index dim, const RealScalar min, const RealScalar max)
-{
+template <typename VectorType, typename RealScalar>
+VectorType setupRangeSvs(const Index dim, const RealScalar min, const RealScalar max) {
   VectorType svs = VectorType::Random(dim);
-  if(dim == 0)
-    return svs;
-  if(dim == 1)
-  {
+  if (dim == 0) return svs;
+  if (dim == 1) {
     svs(0) = min;
     return svs;
   }
@@ -251,6 +237,6 @@ VectorType setupRangeSvs(const Index dim, const RealScalar min, const RealScalar
   return min * (VectorType::Ones(dim) - svs) + max * svs;
 }
 
-} // end namespace Eigen
+}  // end namespace Eigen
 
-#endif // EIGEN_RANDOM_MATRIX_HELPER
+#endif  // EIGEN_RANDOM_MATRIX_HELPER

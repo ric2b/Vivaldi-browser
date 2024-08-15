@@ -78,9 +78,21 @@ std::vector<const wchar_t*> GetDXCArguments(std::wstring_view entryPointNameW,
                 arguments.push_back(L"/O3");
                 break;
         }
+    } else {
+        // D3DCOMPILE_OPTIMIZATION_LEVEL1 is defined to 0
+        arguments.push_back(L"/O1");
+    }
+    if (compileFlags & D3DCOMPILE_SKIP_OPTIMIZATION) {
+        // DXC will use the last optimization flag passed in (/O[n] and /Od), so we make sure
+        // to pass /Od last.
+        arguments.push_back(L"/Od");
     }
     if (compileFlags & D3DCOMPILE_DEBUG) {
         arguments.push_back(L"/Zi");
+        // Unlike FXC, DXC does not embed debug info into the shader object by default, as it's
+        // preferable to save it to pdb files to keep shader objects small. Embed it for now, and we
+        // can consider exposing an option for users to supply a path to dump pdbs to in the future.
+        arguments.push_back(L"/Qembed_debug");
     }
     if (compileFlags & D3DCOMPILE_PACK_MATRIX_ROW_MAJOR) {
         arguments.push_back(L"/Zpr");
@@ -97,6 +109,22 @@ std::vector<const wchar_t*> GetDXCArguments(std::wstring_view entryPointNameW,
     if (compileFlags & D3DCOMPILE_RESOURCES_MAY_ALIAS) {
         arguments.push_back(L"/res_may_alias");
     }
+
+#define ASSERT_UNHANDLED(f) DAWN_ASSERT((compileFlags & f) == 0)
+    ASSERT_UNHANDLED(D3DCOMPILE_SKIP_VALIDATION);
+    ASSERT_UNHANDLED(D3DCOMPILE_PARTIAL_PRECISION);
+    ASSERT_UNHANDLED(D3DCOMPILE_FORCE_VS_SOFTWARE_NO_OPT);
+    ASSERT_UNHANDLED(D3DCOMPILE_FORCE_PS_SOFTWARE_NO_OPT);
+    ASSERT_UNHANDLED(D3DCOMPILE_NO_PRESHADER);
+    ASSERT_UNHANDLED(D3DCOMPILE_ENABLE_STRICTNESS);
+    ASSERT_UNHANDLED(D3DCOMPILE_RESERVED16);
+    ASSERT_UNHANDLED(D3DCOMPILE_RESERVED17);
+    ASSERT_UNHANDLED(D3DCOMPILE_WARNINGS_ARE_ERRORS);
+    ASSERT_UNHANDLED(D3DCOMPILE_ENABLE_UNBOUNDED_DESCRIPTOR_TABLES);
+    ASSERT_UNHANDLED(D3DCOMPILE_ALL_RESOURCES_BOUND);
+    ASSERT_UNHANDLED(D3DCOMPILE_DEBUG_NAME_FOR_SOURCE);
+    ASSERT_UNHANDLED(D3DCOMPILE_DEBUG_NAME_FOR_BINARY);
+#undef ASSERT_UNHANDLED
 
     if (r.hasShaderF16Feature) {
         // enable-16bit-types are only allowed in -HV 2018 (default)
@@ -203,6 +231,7 @@ MaybeError TranslateToHLSL(d3d::HlslCompilationRequest r,
                                       &transformOutputs, nullptr));
     }
 
+    // TODO(dawn:2180): refactor out.
     if (auto* data = transformOutputs.Get<tint::ast::transform::Renamer::Data>()) {
         auto it = data->remappings.find(r.entryPointName.data());
         if (it != data->remappings.end()) {
@@ -217,11 +246,12 @@ MaybeError TranslateToHLSL(d3d::HlslCompilationRequest r,
         return DAWN_VALIDATION_ERROR("Transform output missing renamer data.");
     }
 
+    // Validate workgroup size after program runs transforms.
     if (r.stage == SingleShaderStage::Compute) {
-        // Validate workgroup size after program runs transforms.
         Extent3D _;
-        DAWN_TRY_ASSIGN(_, ValidateComputeStageWorkgroupSize(
-                               transformedProgram, remappedEntryPointName->data(), r.limits));
+        DAWN_TRY_ASSIGN(
+            _, ValidateComputeStageWorkgroupSize(transformedProgram, remappedEntryPointName->data(),
+                                                 r.limits, r.maxSubgroupSizeForFullSubgroups));
     }
 
     bool usesVertexIndex = false;
@@ -235,40 +265,9 @@ MaybeError TranslateToHLSL(d3d::HlslCompilationRequest r,
         }
     }
 
-    tint::hlsl::writer::Options options;
-    options.disable_robustness = !r.isRobustnessEnabled;
-    options.disable_workgroup_init = r.disableWorkgroupInit;
-    options.binding_remapper_options = r.bindingRemapper;
-    options.access_controls = r.accessControls;
-    options.external_texture_options = r.externalTextureOptions;
-
-    if (r.usesNumWorkgroups) {
-        options.root_constant_binding_point =
-            tint::BindingPoint{r.numWorkgroupsRegisterSpace, r.numWorkgroupsShaderRegister};
-    }
-    // TODO(dawn:549): HLSL generation outputs the indices into the
-    // array_length_from_uniform buffer that were actually used. When the blob cache can
-    // store more than compiled shaders, we should reflect these used indices and store
-    // them as well. This would allow us to only upload root constants that are actually
-    // read by the shader.
-    options.array_length_from_uniform = r.arrayLengthFromUniform;
-
-    if (r.stage == SingleShaderStage::Vertex) {
-        // Now that only vertex shader can have interstage outputs.
-        // Pass in the actually used interstage locations for tint to potentially truncate unused
-        // outputs.
-        options.interstage_locations = r.interstageLocations;
-        options.truncate_interstage_variables = true;
-    }
-
-    options.polyfill_reflect_vec2_f32 = r.polyfillReflectVec2F32;
-
-    options.binding_points_ignored_in_robustness_transform =
-        std::move(r.bindingPointsIgnoredInRobustnessTransform);
-
     TRACE_EVENT0(tracePlatform.UnsafeGetValue(), General, "tint::hlsl::writer::Generate");
-    auto result = tint::hlsl::writer::Generate(transformedProgram, options);
-    DAWN_INVALID_IF(!result, "An error occurred while generating HLSL:\n%s",
+    auto result = tint::hlsl::writer::Generate(transformedProgram, r.tintOptions);
+    DAWN_INVALID_IF(result != tint::Success, "An error occurred while generating HLSL:\n%s",
                     result.Failure().reason.str());
 
     compiledShader->usesVertexIndex = usesVertexIndex;

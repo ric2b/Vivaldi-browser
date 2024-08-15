@@ -43,8 +43,8 @@
 #include "menus/context_menu_service_factory.h"
 #include "menus/main_menu_service_factory.h"
 #include "sessions/index_service_factory.h"
-#include "translate_history/th_service_factory.h"
 #include "sync/invalidation/vivaldi_invalidation_service_factory.h"
+#include "translate_history/th_service_factory.h"
 #include "ui/lazy_load_service_factory.h"
 #include "ui/window_registry_service_factory.h"
 
@@ -69,6 +69,7 @@
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/api/import_data/import_data_api.h"
+#include "extensions/api/mail/mail_private_api.h"
 #include "extensions/api/menu_content/menu_content_api.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/api/notes/notes_api.h"
@@ -95,6 +96,11 @@
 #if BUILDFLAG(IS_LINUX)
 #include "base/environment.h"
 #include "base/nix/xdg_util.h"
+#endif
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#include "components/crashreport/crashreport_observer.h"
+#include "components/theme/native_web_theme_observer.h"
 #endif
 
 namespace vivaldi {
@@ -146,6 +152,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::AutoUpdateAPI::GetFactoryInstance();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
+  extensions::MailAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
   extensions::ContentBlockingAPI::GetFactoryInstance();
   extensions::VivaldiBookmarksAPI::GetFactoryInstance();
@@ -181,6 +188,11 @@ void VivaldiBrowserMainExtraParts::
 
 #if !BUILDFLAG(IS_ANDROID)
   vivaldi::LazyLoadServiceFactory::GetInstance();
+#endif
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  vivaldi::CrashReportObserver::GetFactoryInstance();
+  vivaldi::NativeWebThemeObserver::GetFactoryInstance();
 #endif
 
   VivaldiTranslateClient::LoadTranslationScript();

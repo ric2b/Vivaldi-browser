@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 
 #include "base/build_time.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/google/google_brand.h"
+#include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/browser/upgrade_detector/get_installed_version.h"
 #include "chrome/common/chrome_switches.h"
@@ -37,7 +39,6 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "base/enterprise_util.h"
@@ -147,7 +148,7 @@ void UpgradeDetectorImpl::DoCalculateThresholds() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   base::TimeDelta notification_period = GetRelaunchNotificationPeriod();
-  const absl::optional<RelaunchWindow> relaunch_window =
+  const std::optional<RelaunchWindow> relaunch_window =
       GetRelaunchWindowPolicyValue();
 
   if (notification_period.is_zero() && !relaunch_window) {
@@ -202,6 +203,13 @@ void UpgradeDetectorImpl::StartOutdatedBuildDetector() {
 
   if (!base::FeatureList::IsEnabled(kOutdatedBuildDetector))
     return;
+
+  // Don't detect outdated builds for obsolete operating systems when new builds
+  // are no longer available.
+  if (ObsoleteSystem::IsObsoleteNowOrSoon() &&
+      ObsoleteSystem::IsEndOfTheLine()) {
+    return;
+  }
 
   // Don't show the bubble if we have a brand code that is NOT organic, unless
   // an outdated build is being simulated by command line switches.

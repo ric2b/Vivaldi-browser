@@ -33,22 +33,6 @@ std::u16string AddressComponentWithRewriter::GetValueForComparison(
                              /*keep_white_space=*/true);
 }
 
-FeatureGuardedAddressComponent::FeatureGuardedAddressComponent(
-    raw_ptr<const base::Feature> feature,
-    ServerFieldType storage_type,
-    SubcomponentsList children,
-    unsigned int merge_mode)
-    : AddressComponent(storage_type, std::move(children), merge_mode),
-      feature_(feature) {}
-
-void FeatureGuardedAddressComponent::SetValue(std::u16string value,
-                                              VerificationStatus status) {
-  if (!base::FeatureList::IsEnabled(*feature_)) {
-    return;
-  }
-  AddressComponent::SetValue(value, status);
-}
-
 StreetNameNode::StreetNameNode(SubcomponentsList children)
     : AddressComponent(ADDRESS_HOME_STREET_NAME,
                        std::move(children),
@@ -78,9 +62,11 @@ FloorNode::FloorNode(SubcomponentsList children)
 FloorNode::~FloorNode() = default;
 
 ApartmentNode::ApartmentNode(SubcomponentsList children)
-    : AddressComponent(ADDRESS_HOME_APT_NUM,
-                       std::move(children),
-                       MergeMode::kDefault) {}
+    : FeatureGuardedAddressComponent(
+          &features::kAutofillEnableSupportForApartmentNumbers,
+          ADDRESS_HOME_APT_NUM,
+          std::move(children),
+          MergeMode::kDefault) {}
 
 ApartmentNode::~ApartmentNode() = default;
 
@@ -210,13 +196,13 @@ bool StreetAddressNode::IsValueValid() const {
 }
 
 std::u16string StreetAddressNode::GetValueForOtherSupportedType(
-    ServerFieldType field_type) const {
+    FieldType field_type) const {
   // It is assumed below that field_type is an address line type.
   CHECK(IsSupportedType(field_type));
   return GetAddressLine(field_type);
 }
 
-std::u16string StreetAddressNode::GetAddressLine(ServerFieldType type) const {
+std::u16string StreetAddressNode::GetAddressLine(FieldType type) const {
   const size_t line_index = AddressLineIndex(type);
   return address_lines_.size() > line_index ? address_lines_.at(line_index)
                                             : std::u16string();
@@ -224,7 +210,7 @@ std::u16string StreetAddressNode::GetAddressLine(ServerFieldType type) const {
 
 // Implements support for setting the value of the individual address lines.
 void StreetAddressNode::SetValueForOtherSupportedType(
-    ServerFieldType field_type,
+    FieldType field_type,
     const std::u16string& value,
     const VerificationStatus& status) {
   CHECK(IsSupportedType(field_type));
@@ -252,9 +238,8 @@ void StreetAddressNode::PostAssignSanitization() {
   CalculateAddressLines();
 }
 
-const ServerFieldTypeSet StreetAddressNode::GetAdditionalSupportedFieldTypes()
-    const {
-  constexpr ServerFieldTypeSet additional_supported_field_types{
+const FieldTypeSet StreetAddressNode::GetAdditionalSupportedFieldTypes() const {
+  constexpr FieldTypeSet additional_supported_field_types{
       ADDRESS_HOME_LINE1, ADDRESS_HOME_LINE2, ADDRESS_HOME_LINE3};
   return additional_supported_field_types;
 }
@@ -298,20 +283,20 @@ StateNode::StateNode(SubcomponentsList children)
 
 StateNode::~StateNode() = default;
 
-absl::optional<std::u16string> StateNode::GetCanonicalizedValue() const {
+std::optional<std::u16string> StateNode::GetCanonicalizedValue() const {
   std::string country_code =
       base::UTF16ToUTF8(GetRootNode().GetValueForType(ADDRESS_HOME_COUNTRY));
 
   if (country_code.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
-  absl::optional<AlternativeStateNameMap::CanonicalStateName>
+  std::optional<AlternativeStateNameMap::CanonicalStateName>
       canonicalized_state_name = AlternativeStateNameMap::GetCanonicalStateName(
           country_code, GetValue());
 
   if (!canonicalized_state_name.has_value()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return canonicalized_state_name.value().value();
@@ -363,6 +348,24 @@ BetweenStreetsNode::BetweenStreetsNode(SubcomponentsList children)
 
 BetweenStreetsNode::~BetweenStreetsNode() = default;
 
+BetweenStreets1Node::BetweenStreets1Node(SubcomponentsList children)
+    : FeatureGuardedAddressComponent(
+          &features::kAutofillEnableSupportForBetweenStreets,
+          ADDRESS_HOME_BETWEEN_STREETS_1,
+          std::move(children),
+          MergeMode::kDefault) {}
+
+BetweenStreets1Node::~BetweenStreets1Node() = default;
+
+BetweenStreets2Node::BetweenStreets2Node(SubcomponentsList children)
+    : FeatureGuardedAddressComponent(
+          &features::kAutofillEnableSupportForBetweenStreets,
+          ADDRESS_HOME_BETWEEN_STREETS_2,
+          std::move(children),
+          MergeMode::kDefault) {}
+
+BetweenStreets2Node::~BetweenStreets2Node() = default;
+
 AdminLevel2Node::AdminLevel2Node(SubcomponentsList children)
     : FeatureGuardedAddressComponent(
           &features::kAutofillEnableSupportForAdminLevel2,
@@ -371,6 +374,35 @@ AdminLevel2Node::AdminLevel2Node(SubcomponentsList children)
           MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 AdminLevel2Node::~AdminLevel2Node() = default;
+
+AddressOverflowNode::AddressOverflowNode(SubcomponentsList children)
+    : FeatureGuardedAddressComponent(
+          &features::kAutofillEnableSupportForAddressOverflow,
+          ADDRESS_HOME_OVERFLOW,
+          std::move(children),
+          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+
+AddressOverflowNode::~AddressOverflowNode() = default;
+
+AddressOverflowAndLandmarkNode::AddressOverflowAndLandmarkNode(
+    SubcomponentsList children)
+    : FeatureGuardedAddressComponent(
+          &features::kAutofillEnableSupportForAddressOverflowAndLandmark,
+          ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
+          std::move(children),
+          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+
+AddressOverflowAndLandmarkNode::~AddressOverflowAndLandmarkNode() = default;
+
+BetweenStreetsOrLandmarkNode::BetweenStreetsOrLandmarkNode(
+    SubcomponentsList children)
+    : FeatureGuardedAddressComponent(
+          &features::kAutofillEnableSupportForBetweenStreetsOrLandmark,
+          ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
+          std::move(children),
+          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+
+BetweenStreetsOrLandmarkNode::~BetweenStreetsOrLandmarkNode() = default;
 
 AddressNode::AddressNode() : AddressNode(SubcomponentsList{}) {}
 
@@ -418,7 +450,7 @@ void AddressNode::MigrateLegacyStructure() {
   // Otherwise set the status of the subcomponents to observed if they already
   // have a value assigned. Note, those are all the tokens that are already
   // present in the unstructured address representation.
-  for (auto& component : Subcomponents()) {
+  for (AddressComponent* component : Subcomponents()) {
     if (!component->GetValue().empty() &&
         component->GetVerificationStatus() == VerificationStatus::kNoStatus) {
       component->SetValue(component->GetValue(), VerificationStatus::kObserved);

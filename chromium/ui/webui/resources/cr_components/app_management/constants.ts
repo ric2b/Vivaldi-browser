@@ -4,7 +4,7 @@
 
 import {App} from './app_management.mojom-webui.js';
 
-export {AppType, InstallReason, InstallSource, OptionalBool, RunOnOsLogin, RunOnOsLoginMode, WindowMode} from './app_management.mojom-webui.js';
+export {AppType, InstallReason, InstallSource, RunOnOsLogin, RunOnOsLoginMode, WindowMode} from './app_management.mojom-webui.js';
 
 /**
  * The number of apps displayed in app list in the main view before expanding.
@@ -79,6 +79,7 @@ export enum AppManagementUserAction {
   FILE_HANDLING_TURNED_ON = 29,
   FILE_HANDLING_TURNED_OFF = 30,
   FILE_HANDLING_OVERFLOW_SHOWN = 31,
+  APP_STORE_LINK_CLICKED = 32,
 }
 
 // A Record (tuple) of app IDs to app used mostly for the supported links

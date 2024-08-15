@@ -249,18 +249,10 @@ void SkFontDescriptor::serialize(SkWStream* stream) const {
         }
     }
     if (fPaletteEntryOverrideCount > 0) {
-        int nonNegativePaletteOverrideIndexes = 0;
+        write_uint(stream, fPaletteEntryOverrideCount, kPaletteEntryOverrides);
         for (int i = 0; i < fPaletteEntryOverrideCount; ++i) {
-            if (0 <= fPaletteEntryOverrides[i].index) {
-                ++nonNegativePaletteOverrideIndexes;
-            }
-        }
-        write_uint(stream, nonNegativePaletteOverrideIndexes, kPaletteEntryOverrides);
-        for (int i = 0; i < fPaletteEntryOverrideCount; ++i) {
-            if (0 <= fPaletteEntryOverrides[i].index) {
-                stream->writePackedUInt(fPaletteEntryOverrides[i].index);
-                stream->write32(fPaletteEntryOverrides[i].color);
-            }
+            stream->writePackedUInt(fPaletteEntryOverrides[i].index);
+            stream->write32(fPaletteEntryOverrides[i].color);
         }
     }
 

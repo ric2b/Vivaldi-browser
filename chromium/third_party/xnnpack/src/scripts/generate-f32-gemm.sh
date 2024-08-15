@@ -157,17 +157,34 @@ tools/xngen src/f32-gemm/neon-ld64.c.in      -D MR=6 -D NR=8  -D FMA=0 -D INC=0 
 tools/xngen src/f32-gemm/neon-ld64.c.in      -D MR=6 -D NR=8  -D FMA=0 -D INC=1 -D DUP=0 -D DATATYPE=F32  -o src/f32-gemminc/gen/f32-gemminc-6x8-minmax-neon-lane-ld64.c &
 tools/xngen src/f32-gemm/neon-ld64.c.in      -D MR=6 -D NR=8  -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32  -o src/f32-gemm/gen/f32-gemm-6x8-minmax-aarch64-neonfma-lane-ld64.c &
 tools/xngen src/f32-gemm/neon-ld64.c.in      -D MR=6 -D NR=8  -D FMA=1 -D INC=1 -D DUP=0 -D DATATYPE=F32  -o src/f32-gemminc/gen/f32-gemminc-6x8-minmax-aarch64-neonfma-lane-ld64.c &
+
 ### LD128 micro-kernels
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=1 -D NR=8  -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-1x8-minmax-neon-lane-ld128.c &
 tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x8-minmax-neon-lane-ld128.c &
-tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=0 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-4x8-minmax-neon-lane-ld128.c &
-tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x8-minmax-aarch64-neonfma-lane-ld128.c &
-tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=1 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-4x8-minmax-aarch64-neonfma-lane-ld128.c &
 tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=8  -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-6x8-minmax-neon-lane-ld128.c &
-tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=8  -D FMA=0 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-6x8-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=1 -D NR=16 -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-1x16-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=2 -D NR=16 -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-2x16-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=3 -D NR=16 -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-3x16-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=16 -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x16-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=5 -D NR=16 -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-5x16-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=16 -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-6x16-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=1 -D NR=8  -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-1x8-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x8-minmax-aarch64-neonfma-lane-ld128.c &
 tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=8  -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-6x8-minmax-aarch64-neonfma-lane-ld128.c &
-tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=8  -D FMA=1 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-6x8-minmax-aarch64-neonfma-lane-ld128.c &
 tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=1 -D NR=16 -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-1x16-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=2 -D NR=16 -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-2x16-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=3 -D NR=16 -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-3x16-minmax-aarch64-neonfma-lane-ld128.c &
 tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=16 -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x16-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=5 -D NR=16 -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-5x16-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=16 -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-6x16-minmax-aarch64-neonfma-lane-ld128.c &
+
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=1 -D NR=8  -D FMA=0 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-1x8-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=0 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-4x8-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=8  -D FMA=0 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-6x8-minmax-neon-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=1 -D NR=8  -D FMA=1 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-1x8-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=4 -D NR=8  -D FMA=1 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-4x8-minmax-aarch64-neonfma-lane-ld128.c &
+tools/xngen src/f32-gemm/neon-ld128.c.in     -D MR=6 -D NR=8  -D FMA=1 -D INC=1 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-6x8-minmax-aarch64-neonfma-lane-ld128.c &
+
 ### MRx2 micro-kernels
 tools/xngen src/f32-gemm/MRx2-neon-ld64.c.in -D MR=4 -D NR=2  -D FMA=0 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x2-minmax-neon-lane-ld64.c &
 tools/xngen src/f32-gemm/MRx2-neon-ld64.c.in -D MR=4 -D NR=2  -D FMA=1 -D INC=0 -D DUP=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-4x2-minmax-aarch64-neonfma-lane-ld64.c &
@@ -603,14 +620,6 @@ tools/xngen src/f32-gemm/avx512-broadcast.c.in -D MR=7 -D NR=16 -D INC=0 -D DATA
 tools/xngen src/f32-gemm/avx512-broadcast.c.in -D MR=7 -D NR=16 -D INC=1 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-7x16-minmax-avx512f-broadcast.c &
 tools/xngen src/f32-gemm/avx512-broadcast.c.in -D MR=8 -D NR=16 -D INC=0 -D DATATYPE=F32 -o src/f32-gemm/gen/f32-gemm-8x16-minmax-avx512f-broadcast.c &
 tools/xngen src/f32-gemm/avx512-broadcast.c.in -D MR=8 -D NR=16 -D INC=1 -D DATATYPE=F32 -o src/f32-gemminc/gen/f32-gemminc-8x16-minmax-avx512f-broadcast.c &
-
-################################## Unit tests #################################
-tools/generate-gemm-test.py     --spec test/f32-gemm.yaml            --output-test test/f32-gemm.cc           --output-test test/f32-gemm-2.cc &
-tools/generate-gemm-test.py     --spec test/f32-gemm-relu.yaml       --output-test test/f32-gemm-relu.cc      --output-test test/f32-gemm-relu-2.cc &
-tools/generate-gemm-test.py     --spec test/f32-gemm-minmax.yaml     --output-test test/f32-gemm-minmax.cc    --output-test test/f32-gemm-minmax-2.cc &
-tools/generate-gemm-test.py     --spec test/f32-gemm-jit.yaml        --output-test test/f32-gemm-jit.cc &
-tools/generate-gemm-test.py     --spec test/f32-gemminc-minmax.yaml  --output-test test/f32-gemminc-minmax.cc --output-test test/f32-gemminc-minmax-2.cc &
-tools/generate-gemm-goi-test.py --spec test/f32-gemm-goi-minmax.yaml --output test/f32-gemm-goi-minmax.cc &
 
 wait # JIT requires the assembly files to be generated first.
 

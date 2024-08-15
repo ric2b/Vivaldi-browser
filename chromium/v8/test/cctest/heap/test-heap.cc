@@ -102,7 +102,7 @@ TEST(HeapMaps) {
   CcTest::InitializeVM();
   ReadOnlyRoots roots(CcTest::heap());
   CheckMap(roots.meta_map(), MAP_TYPE, Map::kSize);
-  CheckMap(roots.heap_number_map(), HEAP_NUMBER_TYPE, HeapNumber::kSize);
+  CheckMap(roots.heap_number_map(), HEAP_NUMBER_TYPE, sizeof(HeapNumber));
   CheckMap(roots.fixed_array_map(), FIXED_ARRAY_TYPE, kVariableSizeSentinel);
   CheckMap(roots.hash_table_map(), HASH_TABLE_TYPE, kVariableSizeSentinel);
   CheckMap(roots.seq_two_byte_string_map(), SEQ_TWO_BYTE_STRING_TYPE,
@@ -252,7 +252,7 @@ TEST(HandleNull) {
   Isolate* isolate = CcTest::i_isolate();
   HandleScope outer_scope(isolate);
   LocalContext context;
-  Handle<Object> n(Tagged<Object>(0), isolate);
+  Handle<Object> n(Tagged<Object>(kNullAddress), isolate);
   CHECK(!n.is_null());
 }
 
@@ -640,15 +640,19 @@ TEST(BytecodeArray) {
     constant_pool->set(i, *number);
   }
 
+  Handle<TrustedByteArray> handler_table = factory->NewTrustedByteArray(3);
+
   // Allocate and initialize BytecodeArray
-  Handle<BytecodeArray> array = factory->NewBytecodeArray(
-      kRawBytesSize, kRawBytes, kFrameSize, kParameterCount, constant_pool);
+  Handle<BytecodeArray> array =
+      factory->NewBytecodeArray(kRawBytesSize, kRawBytes, kFrameSize,
+                                kParameterCount, constant_pool, handler_table);
 
   CHECK(IsBytecodeArray(*array));
   CHECK_EQ(array->length(), (int)sizeof(kRawBytes));
   CHECK_EQ(array->frame_size(), kFrameSize);
   CHECK_EQ(array->parameter_count(), kParameterCount);
   CHECK_EQ(array->constant_pool(), *constant_pool);
+  CHECK_EQ(array->handler_table(), *handler_table);
   CHECK_LE(array->address(), array->GetFirstBytecodeAddress());
   CHECK_GE(array->address() + array->BytecodeArraySize(),
            array->GetFirstBytecodeAddress() + array->length());
@@ -1127,11 +1131,11 @@ TEST(TestBytecodeFlushing) {
 
     // foo should no longer be in the compilation cache
     CHECK(!function->shared()->is_compiled());
-    CHECK(!function->is_compiled());
+    CHECK(!function->is_compiled(i_isolate));
     // Call foo to get it recompiled.
     CompileRun("foo()");
     CHECK(function->shared()->is_compiled());
-    CHECK(function->is_compiled());
+    CHECK(function->is_compiled(i_isolate));
   }
 }
 
@@ -1202,7 +1206,7 @@ static void TestMultiReferencedBytecodeFlushing(bool sparkplug_compile) {
     // shared SFI is marked old but BytecodeArray is kept alive by copy.
     CHECK(shared->is_compiled());
     CHECK(copy->is_compiled());
-    CHECK(function->is_compiled());
+    CHECK(function->is_compiled(i_isolate));
 
     // The feedback metadata for both SharedFunctionInfo instances should have
     // been reset.
@@ -1278,7 +1282,7 @@ HEAP_TEST(Regress10560) {
 
     CHECK(function->has_feedback_vector());
     CHECK(function->shared()->is_compiled());
-    CHECK(function->is_compiled());
+    CHECK(function->is_compiled(i_isolate));
   }
 }
 
@@ -1442,7 +1446,7 @@ TEST(TestOptimizeAfterBytecodeFlushingCandidate) {
   heap::InvokeMajorGC(CcTest::heap());
 
   CHECK(!function->shared()->is_compiled());
-  CHECK(!function->is_compiled());
+  CHECK(!function->is_compiled(isolate));
 
   // This compile will compile the function again.
   {
@@ -1465,7 +1469,7 @@ TEST(TestOptimizeAfterBytecodeFlushingCandidate) {
   // Simulate one final GC and make sure the candidate wasn't flushed.
   heap::InvokeMajorGC(CcTest::heap());
   CHECK(function->shared()->is_compiled());
-  CHECK(function->is_compiled());
+  CHECK(function->is_compiled(isolate));
 }
 #endif  // !defined(V8_LITE_MODE) && defined(V8_ENABLE_TURBOFAN)
 
@@ -1495,7 +1499,7 @@ TEST(TestUseOfIncrementalBarrierOnCompileLazy) {
       Object::GetProperty(isolate, isolate->global_object(), f_name)
           .ToHandleChecked();
   Handle<JSFunction> f_function = Handle<JSFunction>::cast(f_value);
-  CHECK(f_function->is_compiled());
+  CHECK(f_function->is_compiled(isolate));
 
   // Check g is not compiled.
   Handle<String> g_name = factory->InternalizeUtf8String("g");
@@ -1503,7 +1507,7 @@ TEST(TestUseOfIncrementalBarrierOnCompileLazy) {
       Object::GetProperty(isolate, isolate->global_object(), g_name)
           .ToHandleChecked();
   Handle<JSFunction> g_function = Handle<JSFunction>::cast(g_value);
-  CHECK(!g_function->is_compiled());
+  CHECK(!g_function->is_compiled(isolate));
 
   heap::SimulateIncrementalMarking(heap);
   CompileRun("%OptimizeFunctionOnNextCall(f); f();");
@@ -1512,7 +1516,7 @@ TEST(TestUseOfIncrementalBarrierOnCompileLazy) {
   // CompileLazy built-in will discover it and install it in the closure, and
   // the incremental write barrier should be used.
   CompileRun("g();");
-  CHECK(g_function->is_compiled());
+  CHECK(g_function->is_compiled(isolate));
 }
 
 void CompilationCacheCachingBehavior(bool retain_script) {
@@ -2539,7 +2543,8 @@ TEST(InstanceOfStubWriteBarrier) {
 #endif
 
   CcTest::InitializeVM();
-  if (!CcTest::i_isolate()->use_optimizer()) return;
+  Isolate* isolate = CcTest::i_isolate();
+  if (!isolate->use_optimizer()) return;
   if (v8_flags.force_marking_deque_overflows) return;
   v8::HandleScope outer_scope(CcTest::isolate());
   v8::Local<v8::Context> ctx = CcTest::isolate()->GetCurrentContext();
@@ -2571,12 +2576,12 @@ TEST(InstanceOfStubWriteBarrier) {
       v8::Utils::OpenHandle(*v8::Local<v8::Function>::Cast(
           CcTest::global()->Get(ctx, v8_str("f")).ToLocalChecked())));
 
-  CHECK(f->HasAttachedOptimizedCode());
+  CHECK(f->HasAttachedOptimizedCode(isolate));
 
   MarkingState* marking_state = CcTest::heap()->marking_state();
 
   static constexpr auto kStepSize = v8::base::TimeDelta::FromMilliseconds(100);
-  while (!marking_state->IsMarked(f->code())) {
+  while (!marking_state->IsMarked(f->code(isolate))) {
     // Discard any pending GC requests otherwise we will get GC when we enter
     // code below.
     CHECK(!marking->IsMajorMarkingComplete());
@@ -2995,10 +3000,12 @@ TEST(OptimizedPretenuringNestedObjectLiterals) {
   CcTest::InitializeVM();
   if (!CcTest::i_isolate()->use_optimizer() || v8_flags.always_turbofan) return;
   if (v8_flags.gc_global || v8_flags.stress_compaction ||
-      v8_flags.stress_incremental_marking || v8_flags.single_generation)
+      v8_flags.stress_incremental_marking || v8_flags.single_generation ||
+      v8_flags.stress_concurrent_allocation)
     return;
   v8::HandleScope scope(CcTest::isolate());
   v8::Local<v8::Context> ctx = CcTest::isolate()->GetCurrentContext();
+  ManualGCScope manual_gc_scope;
   GrowNewSpaceToMaximumCapacity(CcTest::heap());
 
   base::ScopedVector<char> source(1024);
@@ -4187,7 +4194,8 @@ TEST(EnsureAllocationSiteDependentCodesProcessed) {
     CHECK_EQ(dependency->length(), DependentCode::kSlotsPerEntry);
     MaybeObject code = dependency->Get(0 + DependentCode::kCodeSlotOffset);
     CHECK(code->IsWeak());
-    CHECK_EQ(bar_handle->code(), Code::cast(code.GetHeapObjectAssumeWeak()));
+    CHECK_EQ(bar_handle->code(isolate),
+             CodeWrapper::cast(code.GetHeapObjectAssumeWeak())->code(isolate));
     Tagged<Smi> groups =
         dependency->Get(0 + DependentCode::kGroupsSlotOffset).ToSmi();
     CHECK_EQ(static_cast<DependentCode::DependencyGroups>(groups.value()),
@@ -4342,7 +4350,7 @@ TEST(CellsInOptimizedCodeAreWeak) {
         *v8::Local<v8::Function>::Cast(CcTest::global()
                                            ->Get(context.local(), v8_str("bar"))
                                            .ToLocalChecked())));
-    code = handle(bar->code(), isolate);
+    code = handle(bar->code(isolate), isolate);
     code = scope.CloseAndEscape(code);
   }
 
@@ -4389,7 +4397,7 @@ TEST(ObjectsInOptimizedCodeAreWeak) {
         *v8::Local<v8::Function>::Cast(CcTest::global()
                                            ->Get(context.local(), v8_str("bar"))
                                            .ToLocalChecked())));
-    code = handle(bar->code(), isolate);
+    code = handle(bar->code(isolate), isolate);
     code = scope.CloseAndEscape(code);
   }
 
@@ -4452,8 +4460,8 @@ TEST(NewSpaceObjectsInOptimizedCode) {
 #ifdef VERIFY_HEAP
     HeapVerifier::VerifyHeap(CcTest::heap());
 #endif
-    CHECK(!bar->code()->marked_for_deoptimization());
-    code = handle(bar->code(), isolate);
+    CHECK(!bar->code(isolate)->marked_for_deoptimization());
+    code = handle(bar->code(isolate), isolate);
     code = scope.CloseAndEscape(code);
   }
 
@@ -4500,7 +4508,7 @@ TEST(ObjectsInEagerlyDeoptimizedCodeAreWeak) {
         *v8::Local<v8::Function>::Cast(CcTest::global()
                                            ->Get(context.local(), v8_str("bar"))
                                            .ToLocalChecked())));
-    code = handle(bar->code(), isolate);
+    code = handle(bar->code(isolate), isolate);
     code = scope.CloseAndEscape(code);
   }
 
@@ -5814,7 +5822,7 @@ TEST(Regress598319) {
   // progress bar, we would fail here.
   for (int i = 0; i < arr.get()->length(); i++) {
     Tagged<HeapObject> arr_value = HeapObject::cast(arr.get()->get(i));
-    CHECK(arr_value.InReadOnlySpace() || marking_state->IsMarked(arr_value));
+    CHECK(InReadOnlySpace(arr_value) || marking_state->IsMarked(arr_value));
   }
 }
 
@@ -6425,6 +6433,7 @@ HEAP_TEST(RegressMissingWriteBarrierInAllocate) {
   if (!v8_flags.incremental_marking) return;
   ManualGCScope manual_gc_scope;
   CcTest::InitializeVM();
+  LocalContext env;
   v8::HandleScope scope(CcTest::isolate());
   Heap* heap = CcTest::heap();
   Isolate* isolate = heap->isolate();
@@ -6433,15 +6442,23 @@ HEAP_TEST(RegressMissingWriteBarrierInAllocate) {
   Handle<Map> map;
   {
     AlwaysAllocateScopeForTesting always_allocate(heap);
-    map = isolate->factory()->NewMap(BIGINT_TYPE, HeapNumber::kSize);
+    map = isolate->factory()->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
   }
   CHECK(heap->incremental_marking()->black_allocation());
-  Handle<HeapObject> object;
+  Handle<JSObject> object;
   {
     AlwaysAllocateScopeForTesting always_allocate(heap);
-    object = handle(isolate->factory()->NewForTest(map, AllocationType::kOld),
+    object = handle(JSObject::cast(isolate->factory()->NewForTest(
+                        map, AllocationType::kOld)),
                     isolate);
   }
+  // Initialize backing stores to ensure object is valid.
+  ReadOnlyRoots roots(isolate);
+  object->set_raw_properties_or_hash(roots.empty_property_array(),
+                                     SKIP_WRITE_BARRIER);
+  object->set_elements(roots.empty_fixed_array(), SKIP_WRITE_BARRIER);
+
   // The object is black. If Factory::New sets the map without write-barrier,
   // then the map is white and will be freed prematurely.
   heap::SimulateIncrementalMarking(heap, true);
@@ -6808,7 +6825,7 @@ UNINITIALIZED_TEST(RestoreHeapLimit) {
 
 void HeapTester::UncommitUnusedMemory(Heap* heap) {
   if (!v8_flags.minor_ms) SemiSpaceNewSpace::From(heap->new_space())->Shrink();
-  heap->memory_allocator()->unmapper()->EnsureUnmappingCompleted();
+  heap->memory_allocator()->pool()->ReleasePooledChunks();
 }
 
 class DeleteNative {
@@ -7201,7 +7218,7 @@ TEST(Regress10900) {
   UseScratchRegisterScope temps(&masm);
   Register tmp = temps.AcquireX();
   masm.Mov(tmp, Operand(static_cast<int32_t>(
-                    ReadOnlyRoots(heap).undefined_value_handle()->ptr())));
+                    ReadOnlyRoots(heap).undefined_value().ptr())));
   masm.Push(tmp, tmp);
 #else
   masm.Push(ReadOnlyRoots(heap).undefined_value_handle());

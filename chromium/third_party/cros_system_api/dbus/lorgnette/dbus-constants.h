@@ -17,6 +17,7 @@ const char kGetScannerCapabilitiesMethod[] = "GetScannerCapabilities";
 const char kOpenScannerMethod[] = "OpenScanner";
 const char kCloseScannerMethod[] = "CloseScanner";
 const char kSetOptionsMethod[] = "SetOptions";
+const char kGetCurrentConfigMethod[] = "GetCurrentConfig";
 const char kStartPreparedScanMethod[] = "StartPreparedScan";
 const char kReadScanDataMethod[] = "ReadScanData";
 const char kScanImageMethod[] = "ScanImage";

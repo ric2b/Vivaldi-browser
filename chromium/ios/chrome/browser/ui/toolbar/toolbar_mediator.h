@@ -31,6 +31,13 @@ class WebStateList;
 /// `toolbarType`. The steady state omnibox is when the omnibox is not focused.
 - (void)transitionSteadyStateOmniboxToToolbarType:(ToolbarType)toolbarType;
 
+// Vivaldi
+- (void)transitionOmniboxToToolbarType:(ToolbarType)toolbarType
+                         tabBarEnabled:(BOOL)tabBarEnabled;
+- (void)transitionSteadyStateOmniboxToToolbarType:(ToolbarType)toolbarType
+                                    tabBarEnabled:(BOOL)tabBarEnabled;
+// End Vivaldi
+
 @end
 
 @interface ToolbarMediator : NSObject

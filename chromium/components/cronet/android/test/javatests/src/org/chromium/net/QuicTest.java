@@ -24,6 +24,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.net.CronetTestRule.CronetImplementation;
 import org.chromium.net.CronetTestRule.IgnoreFor;
+import org.chromium.net.impl.CronetUrlRequestContext;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -35,8 +36,10 @@ import java.util.concurrent.Executors;
 @DoNotBatch(reason = "crbug/1459563")
 @RunWith(AndroidJUnit4.class)
 @IgnoreFor(
-        implementations = {CronetImplementation.FALLBACK},
-        reason = "The fallback implementation doesn't support QUIC")
+        implementations = {CronetImplementation.FALLBACK, CronetImplementation.AOSP_PLATFORM},
+        reason =
+                "The fallback implementation doesn't support QUIC. "
+                        + "crbug.com/1494870: Enable for AOSP_PLATFORM once fixed")
 public class QuicTest {
     @Rule public final CronetTestRule mTestRule = CronetTestRule.withManualEngineStartup();
 
@@ -122,7 +125,7 @@ public class QuicTest {
         assertThat(callback.getResponseInfoWithChecks())
                 .hasReceivedByteCountThat()
                 .isGreaterThan((long) expectedContent.length());
-        CronetTestUtil.nativeFlushWritePropertiesForTesting(cronetEngine);
+        ((CronetUrlRequestContext) cronetEngine).flushWritePropertiesForTesting();
         assertThat(
                         fileContainsString(
                                 "local_prefs.json",
@@ -237,7 +240,7 @@ public class QuicTest {
         assertThat(cronetEngine.getTransportRttMs()).isAtLeast(0);
         assertThat(cronetEngine.getDownstreamThroughputKbps()).isAtLeast(0);
 
-        CronetTestUtil.nativeFlushWritePropertiesForTesting(cronetEngine);
+        ((CronetUrlRequestContext) cronetEngine).flushWritePropertiesForTesting();
         assertThat(fileContainsString("local_prefs.json", "network_qualities")).isTrue();
         cronetEngine.shutdown();
     }

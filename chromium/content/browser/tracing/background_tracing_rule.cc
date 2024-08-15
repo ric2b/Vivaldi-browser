@@ -27,7 +27,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "services/tracing/public/cpp/perfetto/macros.h"
 #include "services/tracing/public/mojom/background_tracing_agent.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_histogram_sample.pbzero.h"
 
 namespace {
@@ -64,7 +63,13 @@ void BackgroundTracingRule::Install(RuleTriggeredCallback trigger_callback) {
   DCHECK(!installed());
   installed_ = true;
   trigger_callback_ = std::move(trigger_callback);
-  DoInstall();
+  if (activation_delay_) {
+    activation_timer_.Start(FROM_HERE, *activation_delay_,
+                            base::BindOnce(&BackgroundTracingRule::DoInstall,
+                                           base::Unretained(this)));
+  } else {
+    DoInstall();
+  }
 }
 
 void BackgroundTracingRule::Uninstall() {
@@ -72,7 +77,8 @@ void BackgroundTracingRule::Uninstall() {
     return;
   }
   installed_ = false;
-  timer_.Stop();
+  trigger_timer_.Stop();
+  activation_timer_.Stop();
   trigger_callback_.Reset();
   DoUninstall();
 }
@@ -86,9 +92,9 @@ bool BackgroundTracingRule::OnRuleTriggered() {
     return false;
   }
   if (delay_) {
-    timer_.Start(FROM_HERE, *delay_,
-                 base::BindOnce(base::IgnoreResult(trigger_callback_),
-                                base::Unretained(this)));
+    trigger_timer_.Start(FROM_HERE, *delay_,
+                         base::BindOnce(base::IgnoreResult(trigger_callback_),
+                                        base::Unretained(this)));
     return true;
   } else {
     return trigger_callback_.Run(this);
@@ -171,6 +177,9 @@ void BackgroundTracingRule::Setup(
   }
   if (config.has_delay_ms()) {
     delay_ = base::Milliseconds(config.delay_ms());
+  }
+  if (config.has_activation_delay_ms()) {
+    activation_delay_ = base::Milliseconds(config.activation_delay_ms());
   }
   if (config.has_name()) {
     rule_id_ = config.name();
@@ -280,7 +289,7 @@ class HistogramRule : public BackgroundTracingRule,
     if (!histogram_name)
       return nullptr;
 
-    absl::optional<int> histogram_lower_value =
+    std::optional<int> histogram_lower_value =
         dict.FindInt(kConfigRuleHistogramValue1Key);
     if (!histogram_lower_value) {
       // Check for the old naming.
@@ -424,7 +433,7 @@ class HistogramRule : public BackgroundTracingRule,
   std::string histogram_name_;
   int histogram_lower_value_;
   int histogram_upper_value_;
-  absl::optional<base::StatisticsRecorder::ScopedHistogramSampleObserver>
+  std::optional<base::StatisticsRecorder::ScopedHistogramSampleObserver>
       histogram_sample_callback_;
 };
 

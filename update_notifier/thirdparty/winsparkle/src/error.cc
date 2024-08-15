@@ -40,7 +40,7 @@ std::string GetWin32ErrorMessage(const char* api_function,
                            reinterpret_cast<LPWSTR>(&buf), 0, nullptr);
   if (n != 0) {
     message += " - ";
-    message += base::WideToUTF8(base::WStringPiece(buf, n));
+    message += base::WideToUTF8(std::wstring_view(buf, n));
     LocalFree(buf);
   }
 

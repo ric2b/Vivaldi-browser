@@ -86,13 +86,17 @@ list(APPEND libgav1_common_avx2_test_sources
             "${libgav1_source}/dsp/x86/common_avx2.h"
             "${libgav1_source}/dsp/x86/common_avx2.inc"
             "${libgav1_source}/dsp/x86/common_avx2_test.cc"
+            "${libgav1_source}/dsp/x86/common_avx2_test.h"
             "${libgav1_source}/dsp/x86/common_sse4.inc")
+list(APPEND libgav1_common_dsp_test_sources
+            "${libgav1_source}/dsp/common_dsp_test.cc")
 list(APPEND libgav1_common_neon_test_sources
             "${libgav1_source}/dsp/arm/common_neon_test.cc")
 list(APPEND libgav1_common_sse4_test_sources
             "${libgav1_source}/dsp/x86/common_sse4.h"
             "${libgav1_source}/dsp/x86/common_sse4.inc"
-            "${libgav1_source}/dsp/x86/common_sse4_test.cc")
+            "${libgav1_source}/dsp/x86/common_sse4_test.cc"
+            "${libgav1_source}/dsp/x86/common_sse4_test.h")
 list(APPEND libgav1_convolve_test_sources
             "${libgav1_source}/dsp/convolve_test.cc")
 list(APPEND libgav1_cpu_test_sources "${libgav1_source}/utils/cpu_test.cc")
@@ -275,19 +279,29 @@ macro(libgav1_add_tests_targets)
                          libgav1_gtest_main)
 
   if(libgav1_have_avx2)
+    list(APPEND libgav1_common_dsp_test_sources
+                ${libgav1_common_avx2_test_sources})
+  endif()
+  if(libgav1_have_sse4)
+    list(APPEND libgav1_common_dsp_test_sources
+                ${libgav1_common_sse4_test_sources})
+  endif()
+  if(libgav1_have_avx2 OR libgav1_have_sse4)
     libgav1_add_executable(TEST
                            NAME
-                           common_avx2_test
+                           common_dsp_test
                            SOURCES
-                           ${libgav1_common_avx2_test_sources}
+                           ${libgav1_common_dsp_test_sources}
                            DEFINES
                            ${libgav1_defines}
                            INCLUDES
                            ${libgav1_test_include_paths}
+                           OBJLIB_DEPS
+                           libgav1_utils
                            LIB_DEPS
                            ${libgav1_common_test_absl_deps}
-                           libgav1_gtest
-                           libgav1_gtest_main)
+                           libgav1_gtest_main
+                           libgav1_gtest)
   endif()
 
   if(libgav1_have_neon)
@@ -302,22 +316,7 @@ macro(libgav1_add_tests_targets)
                            ${libgav1_test_include_paths}
                            OBJLIB_DEPS
                            libgav1_tests_block_utils
-                           LIB_DEPS
-                           ${libgav1_common_test_absl_deps}
-                           libgav1_gtest
-                           libgav1_gtest_main)
-  endif()
-
-  if(libgav1_have_sse4)
-    libgav1_add_executable(TEST
-                           NAME
-                           common_sse4_test
-                           SOURCES
-                           ${libgav1_common_sse4_test_sources}
-                           DEFINES
-                           ${libgav1_defines}
-                           INCLUDES
-                           ${libgav1_test_include_paths}
+                           libgav1_utils
                            LIB_DEPS
                            ${libgav1_common_test_absl_deps}
                            libgav1_gtest

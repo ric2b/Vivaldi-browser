@@ -50,6 +50,7 @@ using base::test::RunClosure;
 using base::test::RunOnceCallback;
 using base::test::TaskEnvironment;
 using drive::FileError;
+using mojom::DocsOfflineEnableStatus;
 using mojom::FileChange;
 using mojom::FileMetadata;
 using mojom::FileMetadataPtr;
@@ -126,7 +127,7 @@ ACTION_P(PopulateSearchItems, items) {
 
 // An action that populates no search results. This is required as the final
 // `GetNextPage` query will return 0 items and this ensures the `MOCK_METHOD`
-// returns the appropriate type (instead of `absl::nullopt`).
+// returns the appropriate type (instead of `std::nullopt`).
 ACTION(PopulateNoSearchItems) {
   *arg0 = vector<QueryItemPtr>();
 }
@@ -155,10 +156,10 @@ class MockDriveFs : public mojom::DriveFsInterceptorForTesting,
 
   MOCK_METHOD(FileError,
               OnGetNextPage,
-              (absl::optional<vector<QueryItemPtr>> * items));
+              (std::optional<vector<QueryItemPtr>> * items));
 
   void GetNextPage(GetNextPageCallback callback) override {
-    absl::optional<vector<QueryItemPtr>> items;
+    std::optional<vector<QueryItemPtr>> items;
     const FileError error = OnGetNextPage(&items);
     SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, BindOnce(std::move(callback), error, std::move(items)));
@@ -186,7 +187,7 @@ class MockDriveFs : public mojom::DriveFsInterceptorForTesting,
 
   MOCK_METHOD(void,
               SetDocsOfflineEnabled,
-              (bool, OnceCallback<void(FileError)>),
+              (bool, OnceCallback<void(FileError, DocsOfflineEnableStatus)>),
               (override));
 
  private:
@@ -2466,7 +2467,7 @@ TEST_F(DriveFsPinningManagerTest, DropQuery) {
 
   EXPECT_CALL(drivefs_, OnGetNextPage(_))
       .WillOnce(
-          Invoke([&manager](absl::optional<vector<QueryItemPtr>>* const items) {
+          Invoke([&manager](std::optional<vector<QueryItemPtr>>* const items) {
             manager.Stop();
             *items = {};
             return FileError::FILE_ERROR_OK;
@@ -2611,7 +2612,8 @@ TEST_F(DriveFsPinningManagerTest, StartPinning) {
 
   EXPECT_CALL(drivefs_, SetDocsOfflineEnabled(true, _))
       .Times(1)
-      .WillOnce(RunOnceCallback<1>(drive::FILE_ERROR_OK));
+      .WillOnce(RunOnceCallback<1>(drive::FILE_ERROR_OK,
+                                   DocsOfflineEnableStatus::kSuccess));
   manager.StartPinning();
   EXPECT_EQ(manager.progress_.stage, Stage::kSuccess);
 

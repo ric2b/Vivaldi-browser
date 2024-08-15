@@ -19,6 +19,7 @@
 #import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -318,21 +319,11 @@ const CGFloat kTitleLabelLineHeightMultiple = 1.3;
         [[ExtendedTouchTargetButton alloc] initWithFrame:CGRectZero
                                            primaryAction:readMoreAction];
 
-    if (IsUIButtonConfigurationEnabled()) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-          CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON);
-      buttonConfiguration.attributedTitle = readMoreString;
-      _expandURLButton.configuration = buttonConfiguration;
-    } else {
-      UIEdgeInsets insets = UIEdgeInsetsMake(CGFLOAT_EPSILON, CGFLOAT_EPSILON,
-                                             CGFLOAT_EPSILON, CGFLOAT_EPSILON);
-      SetTitleEdgeInsets(_expandURLButton, insets);
-      SetContentEdgeInsets(_expandURLButton, insets);
-      [_expandURLButton setAttributedTitle:readMoreString
-                                  forState:UIControlStateNormal];
-    }
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
+    buttonConfiguration.attributedTitle = readMoreString;
+    _expandURLButton.configuration = buttonConfiguration;
 
     _expandURLButton.backgroundColor = self.view.backgroundColor;
     _expandURLButton.translatesAutoresizingMaskIntoConstraints = NO;

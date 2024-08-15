@@ -74,6 +74,16 @@
 // Shows the animation when transitioning to a prerendered page.
 - (void)showPrerenderingAnimation;
 
+// Vivaldi
+// Whether to show progress bar alongside primary toolbar. A 'True' value of
+// this implies the current toolbar has the omnibox.
+@property(nonatomic, assign) BOOL shouldShowProgressBar;
+// To refresh tool bar buttons guide after omnibox position change.
+- (void)refreshToolbarButtonsGuide;
+// Sets whether omnibox is focused.
+- (void)setIsOmniboxFocused:(BOOL)focused;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_ADAPTIVE_TOOLBAR_VIEW_CONTROLLER_H_

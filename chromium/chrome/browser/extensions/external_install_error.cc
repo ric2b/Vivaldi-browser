@@ -13,6 +13,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
@@ -96,7 +97,7 @@ class ExternalInstallMenuAlert : public GlobalError {
 };
 
 // A global error that spawns a bubble when the menu item is clicked.
-class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
+class ExternalInstallBubbleAlert final : public GlobalErrorWithStandardBubble {
  public:
   ExternalInstallBubbleAlert(ExternalInstallError* error,
                              ExtensionInstallPrompt::Prompt* prompt);
@@ -123,6 +124,7 @@ class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
   void OnBubbleViewDidClose(Browser* browser) override;
   void BubbleViewAcceptButtonPressed(Browser* browser) override;
   void BubbleViewCancelButtonPressed(Browser* browser) override;
+  base::WeakPtr<GlobalErrorWithStandardBubble> AsWeakPtr() override;
 
   // The owning ExternalInstallError.
   raw_ptr<ExternalInstallError> error_;
@@ -131,6 +133,8 @@ class ExternalInstallBubbleAlert : public GlobalErrorWithStandardBubble {
   // The Prompt with all information, which we then use to populate the bubble.
   // Owned by |error|.
   raw_ptr<ExtensionInstallPrompt::Prompt> prompt_;
+
+  base::WeakPtrFactory<ExternalInstallBubbleAlert> weak_ptr_factory_{this};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -269,6 +273,11 @@ void ExternalInstallBubbleAlert::BubbleViewCancelButtonPressed(
       ExtensionInstallPrompt::Result::USER_CANCELED));
 }
 
+base::WeakPtr<GlobalErrorWithStandardBubble>
+ExternalInstallBubbleAlert::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -381,9 +390,9 @@ void ExternalInstallError::OnWebstoreRequestFailure(
 void ExternalInstallError::OnWebstoreResponseParseSuccess(
     const std::string& extension_id,
     const base::Value::Dict& webstore_data) {
-  absl::optional<double> average_rating =
+  std::optional<double> average_rating =
       webstore_data.FindDouble(kAverageRatingKey);
-  absl::optional<int> rating_count = webstore_data.FindInt(kRatingCountKey);
+  std::optional<int> rating_count = webstore_data.FindInt(kRatingCountKey);
   const std::string* localized_user_count = webstore_data.FindString(kUsersKey);
   if (!localized_user_count || !average_rating || !rating_count) {
     // If we don't get a valid webstore response, short circuit, and continue
@@ -392,7 +401,7 @@ void ExternalInstallError::OnWebstoreResponseParseSuccess(
     return;
   }
 
-  absl::optional<bool> show_user_count =
+  std::optional<bool> show_user_count =
       webstore_data.FindBool(kShowUserCountKey);
 
   prompt_->SetWebstoreData(*localized_user_count,
@@ -434,8 +443,13 @@ void ExternalInstallError::OnDialogReady(
   if (::vivaldi::IsVivaldiRunning()) {
     // Check if there are some new dialogs we need to implement.
     DCHECK(alert_type_ == MENU_ALERT || alert_type_ == BUBBLE_ALERT);
-    global_error_ = std::make_unique<VivaldiExtensionDisabledGlobalError>(
-        browser_context_, this);
+    extensions::ExtensionActionUtil* utils =
+        extensions::ExtensionActionUtilFactory::GetForBrowserContext(
+            browser_context_);
+    utils->AddGlobalError(std::make_unique<VivaldiExtensionDisabledGlobalError>(
+        browser_context_, weak_factory_.GetWeakPtr()));
+    // This is just for lookup for the ExtensionInstallPrompt.
+    global_error_ = std::make_unique<ExternalInstallMenuAlert>(this);
     error_service_->AddUnownedGlobalError(global_error_.get());
     return;
   }

@@ -23,6 +23,7 @@ import {
 } from '../../shared/helper.js';
 import {describe, it} from '../../shared/mocha-extensions.js';
 import {CONSOLE_TAB_SELECTOR, focusConsolePrompt, getCurrentConsoleMessages} from '../helpers/console-helpers.js';
+import {openSoftContextMenuAndClickOnItem} from '../helpers/context-menu-helpers.js';
 import {
   clickNthChildOfSelectedElementNode,
   focusElementsTree,
@@ -33,7 +34,6 @@ import {
 import {setIgnoreListPattern} from '../helpers/settings-helpers.js';
 import {
   addBreakpointForLine,
-  clickOnContextMenu,
   getBreakpointDecorators,
   getCallFrameNames,
   getValuesForScope,
@@ -221,10 +221,9 @@ describe('The Sources Tab', async function() {
 
     await step('Check local variable is eventually un-minified', async () => {
       const unminifiedVariable = 'element: div';
-      await clickOnContextMenu('.cm-line', 'Add source map…');
+      await openSoftContextMenuAndClickOnItem('.cm-line', 'Add source map…');
 
       // Enter the source map URL into the appropriate input box.
-      await waitFor('.add-source-map');
       await click('.add-source-map');
       await typeText('sourcemap-minified.map');
       await frontend.keyboard.press('Enter');
@@ -337,7 +336,7 @@ describe('The Sources Tab', async function() {
     });
 
     await step('Add source map', async () => {
-      await clickOnContextMenu('.cm-line', 'Add source map…');
+      await openSoftContextMenuAndClickOnItem('.cm-line', 'Add source map…');
 
       // Enter the source map URL into the appropriate input box.
       await click('.add-source-map');
@@ -472,7 +471,7 @@ describe('The Sources Tab', async function() {
     await openSourceCodeEditorForFile('sourcemap-minified.js', 'sourcemap-minified.html');
 
     await step('Attach source map', async () => {
-      await clickOnContextMenu('.cm-line', 'Add source map…');
+      await openSoftContextMenuAndClickOnItem('.cm-line', 'Add source map…');
 
       // Enter the source map URL into the appropriate input box.
       await click('.add-source-map');
@@ -505,7 +504,7 @@ describe('The Sources Tab', async function() {
     await openSourceCodeEditorForFile('sourcemap-minified.js', 'sourcemap-minified.html');
 
     await step('Attach source map', async () => {
-      await clickOnContextMenu('.cm-line', 'Add source map…');
+      await openSoftContextMenuAndClickOnItem('.cm-line', 'Add source map…');
 
       // Enter the source map URL into the appropriate input box.
       await click('.add-source-map');

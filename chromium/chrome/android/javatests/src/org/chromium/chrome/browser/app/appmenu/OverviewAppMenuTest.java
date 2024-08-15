@@ -18,6 +18,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -30,8 +32,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.MenuUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.test.util.UiRestriction;
@@ -98,7 +98,6 @@ public class OverviewAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main"})
-    @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID})
     @DisableFeatures({ChromeFeatureList.QUICK_DELETE_FOR_ANDROID})
     public void testAllMenuItemsWithStartSurface() throws Exception {
         openTabSwitcher();
@@ -151,7 +150,6 @@ public class OverviewAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main"})
-    @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID})
     public void testIncognitoAllMenuItemsWithStartSurface() throws Exception {
         openTabSwitcher();
         TestThreadUtils.runOnUiThreadBlocking(
@@ -188,24 +186,6 @@ public class OverviewAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main"})
-    @DisableFeatures({ChromeFeatureList.START_SURFACE_ANDROID})
-    public void testSelectTabsIsEnabled() throws Exception {
-        openTabSwitcher();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    AppMenuTestSupport.showAppMenu(
-                            mActivityTestRule.getAppMenuCoordinator(), null, false);
-                });
-
-        assertNotNull(
-                AppMenuTestSupport.getMenuItemPropertyModel(
-                        mActivityTestRule.getAppMenuCoordinator(), R.id.menu_select_tabs));
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Browser", "Main"})
-    @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID})
     public void testSelectTabsIsEnabledWithStartSurface() throws Exception {
         openTabSwitcher();
         TestThreadUtils.runOnUiThreadBlocking(

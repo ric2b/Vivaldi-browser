@@ -1205,7 +1205,7 @@ void OS::Abort() {
 
   switch (g_abort_mode) {
     case AbortMode::kSoft:
-      exit(-1);
+      _exit(-1);
     case AbortMode::kHard:
       IMMEDIATE_CRASH();
     case AbortMode::kDefault:
@@ -1658,7 +1658,7 @@ int OS::ActivationFrameAlignment() {
 #endif
 }
 
-#if (defined(_WIN32) || defined(_WIN64))
+#if defined(V8_OS_WIN)
 void EnsureConsoleOutputWin32() {
   UINT new_flags =
       SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX;
@@ -1674,7 +1674,7 @@ void EnsureConsoleOutputWin32() {
   _set_error_mode(_OUT_TO_STDERR);
 #endif  // defined(_MSC_VER)
 }
-#endif  // (defined(_WIN32) || defined(_WIN64))
+#endif  // defined(V8_OS_WIN)
 
 // ----------------------------------------------------------------------------
 // Win32 thread support.

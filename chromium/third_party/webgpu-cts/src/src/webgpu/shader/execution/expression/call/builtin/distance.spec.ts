@@ -10,89 +10,13 @@ Returns the distance between e1 and e2 (e.g. length(e1-e2)).
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16, TypeVec } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import {
-  fullF32Range,
-  fullF16Range,
-  sparseVectorF32Range,
-  sparseVectorF16Range,
-} from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeF16, TypeF32, TypeVec } from '../../../../../util/conversion.js';
 import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
+import { d } from './distance.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Cases: f32_vecN_[non_]const
-const f32_vec_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f32_vec${n}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f32.generateVectorPairToIntervalCases(
-          sparseVectorF32Range(n),
-          sparseVectorF32Range(n),
-          nonConst ? 'unfiltered' : 'finite',
-          FP.f32.distanceInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-// Cases: f16_vecN_[non_]const
-const f16_vec_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f16_vec${n}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f16.generateVectorPairToIntervalCases(
-          sparseVectorF16Range(n),
-          sparseVectorF16Range(n),
-          nonConst ? 'unfiltered' : 'finite',
-          FP.f16.distanceInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('distance', {
-  f32_const: () => {
-    return FP.f32.generateScalarPairToIntervalCases(
-      fullF32Range(),
-      fullF32Range(),
-      'finite',
-      FP.f32.distanceInterval
-    );
-  },
-  f32_non_const: () => {
-    return FP.f32.generateScalarPairToIntervalCases(
-      fullF32Range(),
-      fullF32Range(),
-      'unfiltered',
-      FP.f32.distanceInterval
-    );
-  },
-  ...f32_vec_cases,
-  f16_const: () => {
-    return FP.f16.generateScalarPairToIntervalCases(
-      fullF16Range(),
-      fullF16Range(),
-      'finite',
-      FP.f16.distanceInterval
-    );
-  },
-  f16_non_const: () => {
-    return FP.f16.generateScalarPairToIntervalCases(
-      fullF16Range(),
-      fullF16Range(),
-      'unfiltered',
-      FP.f16.distanceInterval
-    );
-  },
-  ...f16_vec_cases,
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

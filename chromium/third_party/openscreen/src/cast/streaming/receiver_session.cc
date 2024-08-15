@@ -9,7 +9,6 @@
 #include <string>
 #include <utility>
 
-#include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "cast/common/channel/message_util.h"
 #include "cast/common/public/message_port.h"

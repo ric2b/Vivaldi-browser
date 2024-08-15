@@ -54,23 +54,17 @@ constexpr char kFullBubbleVisibleHistogramName[] =
     "Download.Bubble.FullView.VisibleTime";
 
 class ShowAllDownloadsButton : public RichHoverButton {
+  METADATA_HEADER(ShowAllDownloadsButton, RichHoverButton)
+
  public:
-  METADATA_HEADER(ShowAllDownloadsButton);
   explicit ShowAllDownloadsButton(
       base::RepeatingClosure show_all_downloads_callback)
       : RichHoverButton(
             std::move(show_all_downloads_callback),
             /*main_image_icon=*/ui::ImageModel(),
-            base::FeatureList::IsEnabled(
-                safe_browsing::kImprovedDownloadBubbleWarnings)
-                ? l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_FOOTER_LABEL)
-                : l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_FOOTER_LINK),
+            l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_FOOTER_LABEL),
             /*secondary_text=*/std::u16string(),
-            base::FeatureList::IsEnabled(
-                safe_browsing::kImprovedDownloadBubbleWarnings)
-                ? l10n_util::GetStringUTF16(
-                      IDS_DOWNLOAD_BUBBLE_FOOTER_TOOLTIP_LABEL)
-                : l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_FOOTER_TOOLTIP),
+            l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_FOOTER_TOOLTIP_LABEL),
             /*subtitle_text=*/std::u16string(),
             ui::ImageModel::FromVectorIcon(
                 features::IsChromeRefresh2023()
@@ -124,10 +118,14 @@ class ShowAllDownloadsButton : public RichHoverButton {
   }
 };
 
-BEGIN_METADATA(ShowAllDownloadsButton, RichHoverButton)
+BEGIN_METADATA(ShowAllDownloadsButton)
 END_METADATA
 
 }  // namespace
+
+views::View* DownloadDialogView::GetInitiallyFocusedView() {
+  return close_button_;
+}
 
 void DownloadDialogView::CloseBubble() {
   if (navigation_handler_) {
@@ -148,10 +146,7 @@ void DownloadDialogView::AddHeader() {
   header->SetBorder(views::CreateEmptyBorder(GetLayoutInsets(DOWNLOAD_ROW)));
 
   auto* title = header->AddChildView(std::make_unique<views::Label>(
-      base::FeatureList::IsEnabled(
-          safe_browsing::kImprovedDownloadBubbleWarnings)
-          ? l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_HEADER_LABEL)
-          : l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_HEADER_TEXT),
+      l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_HEADER_LABEL),
       views::style::CONTEXT_DIALOG_TITLE, views::style::STYLE_PRIMARY));
   title->SetProperty(
       views::kFlexBehaviorKey,
@@ -163,7 +158,7 @@ void DownloadDialogView::AddHeader() {
     title->SetTextStyle(views::style::STYLE_HEADLINE_4);
   }
 
-  auto* close_button =
+  close_button_ =
       header->AddChildView(views::CreateVectorImageButtonWithNativeTheme(
           base::BindRepeating(&DownloadDialogView::CloseBubble,
                               base::Unretained(this)),
@@ -171,14 +166,14 @@ void DownloadDialogView::AddHeader() {
               ? vector_icons::kCloseChromeRefreshIcon
               : vector_icons::kCloseRoundedIcon,
           GetLayoutConstant(DOWNLOAD_ICON_SIZE)));
-  InstallCircleHighlightPathGenerator(close_button);
-  close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
-  close_button->SetProperty(views::kCrossAxisAlignmentKey,
-                            views::LayoutAlignment::kStart);
+  InstallCircleHighlightPathGenerator(close_button_);
+  close_button_->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
+  close_button_->SetProperty(views::kCrossAxisAlignmentKey,
+                             views::LayoutAlignment::kStart);
   if (features::IsChromeRefresh2023()) {
     // Remove the extra padding of ImageButton that causes the right padding of
     // the title row to appear larger than the left padding.
-    close_button->SetBorder(nullptr);
+    close_button_->SetBorder(nullptr);
   }
 }
 
@@ -211,5 +206,9 @@ base::StringPiece DownloadDialogView::GetVisibleTimeHistogramName() const {
   return kFullBubbleVisibleHistogramName;
 }
 
-BEGIN_METADATA(DownloadDialogView, DownloadBubblePrimaryView)
+bool DownloadDialogView::IsPartialView() const {
+  return false;
+}
+
+BEGIN_METADATA(DownloadDialogView)
 END_METADATA

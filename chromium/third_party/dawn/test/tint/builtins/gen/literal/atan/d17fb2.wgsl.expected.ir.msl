@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void atan_d17fb2() {
+  float4 res = float4(0.78539818525314331055f);
+}
+vertex float4 vertex_main() {
+  atan_d17fb2();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  atan_d17fb2();
+}
+kernel void compute_main() {
+  atan_d17fb2();
+}

@@ -116,10 +116,12 @@ FrameSequenceTracker::~FrameSequenceTracker() {
 void FrameSequenceTracker::ScheduleTerminate() {
   // If the last frame has ended and there is no frame awaiting presentation,
   // then it is ready to terminate.
-  if (!is_inside_frame_ && last_submitted_frame_ == 0)
+  if (!is_inside_frame_ && last_ended_frame_id_.sequence_number <=
+                               last_sorted_frame_id_.sequence_number) {
     termination_status_ = TerminationStatus::kReadyForTermination;
-  else
+  } else {
     termination_status_ = TerminationStatus::kScheduledForTermination;
+  }
 }
 
 void FrameSequenceTracker::ReportBeginImplFrame(
@@ -250,21 +252,6 @@ void FrameSequenceTracker::ReportSubmitFrame(
     const viz::BeginFrameAck& ack,
     const viz::BeginFrameArgs& origin_args) {
   DCHECK_NE(termination_status_, TerminationStatus::kReadyForTermination);
-
-  // TODO(crbug.com/1072482): find a proper way to terminate a tracker.
-  // Right now, we define a magical number |frames_to_terminate_tracker| = 3,
-  // which means that if this frame_token is more than 3 frames compared with
-  // the last submitted frame, then we assume that the last submitted frame is
-  // not going to be presented, and thus terminate this tracker.
-  const uint32_t frames_to_terminate_tracker = 3;
-  if (termination_status_ == TerminationStatus::kScheduledForTermination &&
-      last_submitted_frame_ != 0 &&
-      viz::FrameTokenGT(frame_token,
-                        last_submitted_frame_ + frames_to_terminate_tracker)) {
-    termination_status_ = TerminationStatus::kReadyForTermination;
-    return;
-  }
-
   if (ShouldIgnoreBeginFrameSource(ack.frame_id.source_id) ||
       ShouldIgnoreSequence(ack.frame_id.sequence_number)) {
     ignored_frame_tokens_.insert(frame_token);
@@ -372,10 +359,6 @@ void FrameSequenceTracker::ReportFrameEnd(
         args.frame_id.sequence_number, args.interval);
     begin_impl_frame_data_.previous_sequence = 0;
   }
-  // last_submitted_frame_ == 0 means the last impl frame has been presented.
-  if (termination_status_ == TerminationStatus::kScheduledForTermination &&
-      last_submitted_frame_ == 0)
-    termination_status_ = TerminationStatus::kReadyForTermination;
 
   frame_had_no_compositor_damage_ = false;
   compositor_frame_submitted_ = false;
@@ -386,6 +369,10 @@ void FrameSequenceTracker::ReportFrameEnd(
   DCHECK_EQ(last_started_impl_sequence_, last_processed_impl_sequence_)
       << TRACKER_DCHECK_MSG;
   last_started_impl_sequence_ = 0;
+
+  if (termination_status_ == TerminationStatus::kActive) {
+    last_ended_frame_id_ = args.frame_id;
+  }
 }
 
 void FrameSequenceTracker::ReportFramePresented(
@@ -402,15 +389,6 @@ void FrameSequenceTracker::ReportFramePresented(
   // 0 such that the tracker can be terminated.
   if (last_submitted_frame_ && frame_token_acks_last_frame)
     last_submitted_frame_ = 0;
-  // Update termination status if this is scheduled for termination, and it is
-  // not waiting for any frames, or it has received the presentation-feedback
-  // for the latest frame it is tracking.
-  //
-  // We should always wait for an impl frame to end, that is, ReportFrameEnd.
-  if (termination_status_ == TerminationStatus::kScheduledForTermination &&
-      last_submitted_frame_ == 0 && !is_inside_frame_) {
-    termination_status_ = TerminationStatus::kReadyForTermination;
-  }
 
   if (first_submitted_frame_ == 0 ||
       viz::FrameTokenGT(first_submitted_frame_, frame_token)) {
@@ -635,6 +613,40 @@ void FrameSequenceTracker::CleanUp() {
 
 void FrameSequenceTracker::AddSortedFrame(const viz::BeginFrameArgs& args,
                                           const FrameInfo& frame_info) {
+  // Do not process any frames once we are terminated.
+  if (termination_status_ == TerminationStatus::kReadyForTermination) {
+    return;
+  }
+  last_sorted_frame_id_ = args.frame_id;
+  // For trackers that scheduled for termination, only proceed to update
+  // metrics for the frame if it is before the last ended frame.
+  if (termination_status_ == TerminationStatus::kScheduledForTermination) {
+    if (last_ended_frame_id_.source_id != args.frame_id.source_id) {
+      // Frame source changed so we will no longer receive updates for frames
+      // we submitted to the old source.
+      termination_status_ = TerminationStatus::kReadyForTermination;
+      return;
+    }
+    // We only terminate when the content is no longer dropped.
+    if (frame_info.final_state != FrameInfo::FrameFinalState::kDropped) {
+      if (last_ended_frame_id_.sequence_number <
+          args.frame_id.sequence_number) {
+        termination_status_ = TerminationStatus::kReadyForTermination;
+        return;
+      } else if (last_ended_frame_id_.sequence_number ==
+                 args.frame_id.sequence_number) {
+        // We still report the final `sequence_number`, but need to mark for
+        // termination.
+        termination_status_ = TerminationStatus::kReadyForTermination;
+      }
+    }
+  }
+
+  // Don't count drops from after the sequence has begun termination.
+  if (frame_info.final_state == FrameInfo::FrameFinalState::kDropped &&
+      last_ended_frame_id_.sequence_number < args.frame_id.sequence_number) {
+    return;
+  }
   if (metrics_)
     metrics_->AddSortedFrame(args, frame_info);
 }

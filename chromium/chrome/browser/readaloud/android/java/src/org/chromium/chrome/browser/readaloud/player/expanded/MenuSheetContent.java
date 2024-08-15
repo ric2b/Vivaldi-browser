@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.readaloud.player.expanded;
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
@@ -14,6 +15,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.chrome.browser.readaloud.player.Colors;
 import org.chromium.chrome.browser.readaloud.player.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -22,7 +24,8 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 class MenuSheetContent implements BottomSheetContent {
     private static final String TAG = "ReadAloudMenu";
     private final BottomSheetController mBottomSheetController;
-    private final BottomSheetContent mParent;
+    protected final BottomSheetContent mParent;
+    private final ScrollView mScrollView;
     private boolean mOpeningSubmenu;
     protected final Menu mMenu;
 
@@ -63,16 +66,21 @@ class MenuSheetContent implements BottomSheetContent {
                             onBackPressed();
                         });
         mOpeningSubmenu = false;
+        mScrollView = (ScrollView) mMenu.findViewById(R.id.items_scroll_view);
+
+        // Apply dynamic background color.
+        Colors.setBottomSheetContentBackground(mMenu);
     }
 
     // TODO(b/306426853) Replace this with a BottomSheetObserver.
-    void notifySheetClosed() {
-        if (mBottomSheetController.getCurrentSheetContent() == this) {
+    void notifySheetClosed(BottomSheetContent closingContent) {
+        if (closingContent == this) {
             // If this sheet is closing for any reason besides showing a child menu, bring back the
             // parent.
             if (!mOpeningSubmenu) {
                 mBottomSheetController.requestShowContent(mParent, /* animate= */ true);
             }
+            mScrollView.scrollTo(0, 0);
         }
     }
 
@@ -191,5 +199,11 @@ class MenuSheetContent implements BottomSheetContent {
     public int getSheetClosedAccessibilityStringId() {
         // "Read Aloud player minimized."
         return R.string.readaloud_player_minimized;
+    }
+
+    @Override
+    public boolean canSuppressInAnyState() {
+        // Always immediately hide if a higher-priority sheet content wants to show.
+        return true;
     }
 }

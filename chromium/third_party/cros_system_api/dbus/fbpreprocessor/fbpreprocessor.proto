@@ -1,0 +1,46 @@
+// Copyright 2023 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// The messages in this file comprise the DBus/Protobuf interface for
+// fbpreprocessord.
+syntax = "proto3";
+
+package fbpreprocessor;
+
+message WiFiDump {
+  string dmpfile = 1;
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    RAW = 1;
+    PSEUDONYMIZED = 2;
+  }
+  State state = 2;
+  enum Vendor {
+    VENDOR_UNSPECIFIED = 0;
+    IWLWIFI = 1;
+    ATH10K = 2;
+    ATH11K = 3;
+  }
+  Vendor vendor = 3;
+  enum Compression {
+    COMPRESSION_UNSPECIFIED = 0;
+    UNCOMPRESSED = 1;
+    GZIP = 2;
+    ZSTD = 3;
+  }
+  Compression compression = 4;
+}
+
+message DebugDump {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    WIFI = 1;
+  }
+  Type type = 1;
+  WiFiDump wifi_dump = 2;
+}
+
+message DebugDumps {
+  repeated DebugDump dump = 1;
+}

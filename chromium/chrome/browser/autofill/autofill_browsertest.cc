@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/web_data_service_factory.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -40,10 +41,12 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
+#include "components/autofill/core/browser/personal_data_manager_test_utils.h"
 #include "components/autofill/core/browser/test_autofill_manager_waiter.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
@@ -77,44 +80,6 @@ const char kDocumentClickHandlerSubmitJS[] =
     "  document.getElementById('testform').submit();"
     "};";
 
-// TODO(bondd): PdmChangeWaiter in autofill_uitest_util.cc is a replacement for
-// this class. Remove this class and use helper functions in that file instead.
-class WindowedPersonalDataManagerObserver : public PersonalDataManagerObserver {
- public:
-  explicit WindowedPersonalDataManagerObserver(Browser* browser)
-      : alerted_(false), has_run_message_loop_(false), browser_(browser) {
-    PersonalDataManagerFactory::GetForProfile(browser_->profile())->
-        AddObserver(this);
-  }
-
-  ~WindowedPersonalDataManagerObserver() override {}
-
-  void Wait() {
-    if (!alerted_) {
-      has_run_message_loop_ = true;
-      content::RunMessageLoop();
-    }
-    PersonalDataManagerFactory::GetForProfile(browser_->profile())->
-        RemoveObserver(this);
-  }
-
-  // PersonalDataManagerObserver:
-  void OnPersonalDataChanged() override {
-    if (has_run_message_loop_) {
-      base::RunLoop::QuitCurrentWhenIdleDeprecated();
-      has_run_message_loop_ = false;
-    }
-    alerted_ = true;
-  }
-
-  void OnInsufficientFormData() override { OnPersonalDataChanged(); }
-
- private:
-  bool alerted_;
-  bool has_run_message_loop_;
-  raw_ptr<Browser> browser_;
-};
-
 class AutofillTest : public InProcessBrowserTest {
  protected:
   class TestAutofillManager : public BrowserAutofillManager {
@@ -135,7 +100,7 @@ class AutofillTest : public InProcessBrowserTest {
 
   AutofillTest() {
     feature_list_.InitAndEnableFeature(
-        blink::features::kAutofillDetectRemovedFormControls);
+        features::kAutofillDetectRemovedFormControls);
   }
 
   void SetUpOnMainThread() override {
@@ -151,6 +116,11 @@ class AutofillTest : public InProcessBrowserTest {
   }
 
   void TearDownOnMainThread() override {
+    // RunUntilIdle() is necessary because otherwise, under the hood
+    // PasswordFormManager::OnFetchComplete() callback is run after this test is
+    // destroyed meaning that OsCryptImpl will be used instead of OsCryptMocker,
+    // causing this test to fail.
+    base::RunLoop().RunUntilIdle();
     // Make sure to close any showing popups prior to tearing down the UI.
     ContentAutofillDriverFactory::FromWebContents(web_contents())
         ->DriverForFrame(web_contents()->GetPrimaryMainFrame())
@@ -204,7 +174,8 @@ class AutofillTest : public InProcessBrowserTest {
         autofill_manager_injector_[web_contents()]->WaitForFormsSeen(1));
     // Shortcut explicit save prompts and automatically accept.
     personal_data_manager()->set_auto_accept_address_imports_for_testing(true);
-    WindowedPersonalDataManagerObserver observer(browser());
+    TestAutofillManagerWaiter waiter(*autofill_manager(),
+                                     {AutofillManagerEvent::kFormSubmitted});
     ASSERT_TRUE(
         content::ExecJs(web_contents(), GetJSToFillForm(data) + submit_js));
     if (simulate_click) {
@@ -214,7 +185,12 @@ class AutofillTest : public InProcessBrowserTest {
           browser()->tab_strip_model()->GetActiveWebContents(), 0,
           blink::WebMouseEvent::Button::kLeft);
     }
-    observer.Wait();
+    ASSERT_TRUE(waiter.Wait(1));
+    // Form submission might have triggered an import. The imported data is only
+    // available through the PDM after it has asynchronously updated the
+    // database. Wait for all pending DB tasks to complete.
+    WaitForPendingDBTasks(*WebDataServiceFactory::GetAutofillWebDataForProfile(
+        browser()->profile(), ServiceAccessType::EXPLICIT_ACCESS));
   }
 
   // Aggregate profiles from forms into Autofill preferences. Returns the number
@@ -232,8 +208,9 @@ class AutofillTest : public InProcessBrowserTest {
         data, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     int parsed_profiles = 0;
     for (const auto& line : lines) {
-      if (base::StartsWith(line, "#", base::CompareCase::SENSITIVE))
+      if (line.starts_with("#")) {
         continue;
+      }
 
       std::vector<std::string> fields = base::SplitString(
           line, "|", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
@@ -654,7 +631,8 @@ class AutofillAccessibilityTest : public AutofillTest {
 
 // Test that autofill available state is correctly set on accessibility node.
 // Test is flaky: https://crbug.com/1239099
-IN_PROC_BROWSER_TEST_F(AutofillAccessibilityTest, DISABLED_TestAutofillState) {
+IN_PROC_BROWSER_TEST_F(AutofillAccessibilityTest,
+                       DISABLED_TestAutofillSuggestionAvailability) {
   content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
 
   // Navigate to url and wait for accessibility notification.

@@ -137,7 +137,7 @@ void ScreenshotCapturedBubble::Init() {
                                 .SetPreferredSize(
                                     GetImageSize() +
                                     gfx::Size(border_radius, border_radius))
-                                .SetImage(image_.ToImageSkia())
+                                .SetImage(ui::ImageModel::FromImage(image_))
                                 .SetVisible(true)
                                 .CopyAddressTo(&image_view_)));
 
@@ -148,7 +148,7 @@ void ScreenshotCapturedBubble::Init() {
               weak_factory_.GetWeakPtr()))
           .SetText(l10n_util::GetStringUTF16(
               IDS_BROWSER_SHARING_SCREENSHOT_DIALOG_DOWNLOAD_BUTTON_LABEL))
-          .SetProminent(true)
+          .SetStyle(ui::ButtonStyle::kProminent)
           .Build();
 
   auto download_row = views::Builder<views::TableLayoutView>();
@@ -237,7 +237,7 @@ gfx::Size ScreenshotCapturedBubble::GetImageSize() {
                    scale_factor * image_.Height());
 }
 
-BEGIN_METADATA(ScreenshotCapturedBubble, LocationBarBubbleDelegateView)
+BEGIN_METADATA(ScreenshotCapturedBubble)
 END_METADATA
 
 }  // namespace sharing_hub

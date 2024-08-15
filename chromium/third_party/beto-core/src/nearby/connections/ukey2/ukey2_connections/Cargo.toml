@@ -4,6 +4,15 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
+[features]
+default = []
+test_boringssl = ["crypto_provider_default/boringssl"]
+test_rustcrypto = ["crypto_provider_default/rustcrypto"]
+test_openssl = ["crypto_provider_default/openssl"]
+
 [dependencies]
 ukey2_rs = { path = "../ukey2" }
 
@@ -12,12 +21,13 @@ rand = { workspace = true, features = ["std", "std_rng"] }
 ukey2_proto.workspace = true
 nom = { version = "7.1.1", features = ["alloc"] }
 bytes = "1.2.1"
-criterion = "0.4.0"
+criterion.workspace = true
 
 [dev-dependencies]
-crypto_provider_openssl.workspace = true
+crypto_provider_default.workspace = true
+# This would only be used when the feature "test_rustcrypto" is set, but optional dev-dependencies
+# are not allowed ¯\_(ツ)_/¯
 crypto_provider_rustcrypto = { workspace = true, features = ["alloc", "std"] }
-rstest = "0.16.0"
 
 [[bench]]
 name = "ukey2_benches"

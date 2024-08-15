@@ -8,11 +8,12 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <set>
 #include <tuple>
 #include <utility>
 
-#include "base/bits.h"
 #include "base/containers/contains.h"
 #include "base/format_macros.h"
 #include "base/lazy_instance.h"
@@ -358,9 +359,7 @@ bool SizedFormatAvailable(const FeatureInfo* feature_info,
   if ((feature_info->feature_flags().chromium_image_ycbcr_420v &&
        internal_format == GL_RGB_YCBCR_420V_CHROMIUM) ||
       (feature_info->feature_flags().chromium_image_ycbcr_p010 &&
-       internal_format == GL_RGB_YCBCR_P010_CHROMIUM) ||
-      (feature_info->feature_flags().chromium_image_ycbcr_422 &&
-       internal_format == GL_RGB_YCBCR_422_CHROMIUM)) {
+       internal_format == GL_RGB_YCBCR_P010_CHROMIUM)) {
     return true;
   }
 
@@ -1624,14 +1623,6 @@ bool Texture::IsLevelPartiallyCleared(GLenum target, GLint level) const {
           info.cleared_rect != gfx::Rect());
 }
 
-void Texture::InitTextureMaxAnisotropyIfNeeded(GLenum target) {
-  if (texture_max_anisotropy_initialized_)
-    return;
-  texture_max_anisotropy_initialized_ = true;
-  GLfloat params[] = { 1.0f };
-  glTexParameterfv(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, params);
-}
-
 bool Texture::ClearLevel(DecoderContext* decoder, GLenum target, GLint level) {
   DCHECK(decoder);
   size_t face_index = GLES2Util::GLTargetToFaceIndex(target);
@@ -2361,9 +2352,9 @@ GLsizei TextureManager::ComputeMipMapCount(GLenum target,
     case GL_TEXTURE_RECTANGLE_ARB:
       return 1;
     case GL_TEXTURE_3D:
-      return 1 + base::bits::Log2Floor(std::max({width, height, depth}));
+      return std::bit_width<uint32_t>(std::max({width, height, depth}));
     default:
-      return 1 + base::bits::Log2Floor(std::max(width, height));
+      return std::bit_width<uint32_t>(std::max(width, height));
   }
 }
 
@@ -3549,7 +3540,6 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_RGB16F:
     case GL_RGB32F:
     case GL_RGB_YCBCR_420V_CHROMIUM:
-    case GL_RGB_YCBCR_422_CHROMIUM:
     case GL_RGB_YCRCB_420_CHROMIUM:
       return GL_RGB;
     case GL_RGB8UI:

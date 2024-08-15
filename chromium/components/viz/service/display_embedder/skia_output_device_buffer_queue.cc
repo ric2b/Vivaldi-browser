@@ -441,8 +441,18 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
       // number of fences at the end of each raster task at the ShareImage
       // level is costly. Thus, at this point, the gpu tasks have been
       // dispatched and it's safe to create just a single fence.
-      if (!current_frame_fence)
+      if (!current_frame_fence) {
+        // The GL fence below needs context to be current.
+        //
+        // SkiaOutputSurfaceImpl::SwapBuffers() - one of the methods in the call
+        // stack of to SkiaOutputDeviceBufferQueue::ScheduleOverlays() - used to
+        // schedule a MakeCurrent call. For power consumption and performance
+        // reasons, we delay the call to MakeCurrent 'till it is known to
+        // be needed.
+        context_state_->MakeCurrent(nullptr);
+
         current_frame_fence = gl::GLFence::CreateForGpuFence()->GetGpuFence();
+      }
 
       // Dup the fence - it must be inserted into each shared image before
       // ScopedReadAccess is created.
@@ -606,14 +616,14 @@ void SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers(
 
 gfx::Size SkiaOutputDeviceBufferQueue::GetSwapBuffersSize() {
   switch (overlay_transform_) {
-    case gfx::OVERLAY_TRANSFORM_ROTATE_90:
-    case gfx::OVERLAY_TRANSFORM_ROTATE_270:
+    case gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_90:
+    case gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_270:
       return gfx::Size(image_size_.height(), image_size_.width());
     case gfx::OVERLAY_TRANSFORM_INVALID:
     case gfx::OVERLAY_TRANSFORM_NONE:
     case gfx::OVERLAY_TRANSFORM_FLIP_HORIZONTAL:
     case gfx::OVERLAY_TRANSFORM_FLIP_VERTICAL:
-    case gfx::OVERLAY_TRANSFORM_ROTATE_180:
+    case gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_180:
       return image_size_;
   }
 }

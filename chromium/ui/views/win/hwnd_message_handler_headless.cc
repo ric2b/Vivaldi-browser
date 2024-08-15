@@ -8,9 +8,11 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/win/hwnd_message_handler_delegate.h"
+#include "ui/views/win/hwnd_util.h"
 
 namespace views {
 namespace {
@@ -170,8 +172,33 @@ void HWNDMessageHandlerHeadless::SetSize(const gfx::Size& size) {
 }
 
 void HWNDMessageHandlerHeadless::CenterWindow(const gfx::Size& size) {
-  // TODO(kvitekp): Check if this is used to position modal child windows.
-  NOTIMPLEMENTED_LOG_ONCE();
+  HWND parent = ::GetParent(hwnd());
+  if (!::IsWindow(parent)) {
+    parent = ::GetWindow(hwnd(), GW_OWNER);
+  }
+
+  gfx::Rect center_bounds = views::GetHeadlessWindowBounds(parent);
+  if (center_bounds.IsEmpty()) {
+    // No parent or no parent rect. Since in headless mode there is no monitor
+    // to center the window over, just assume the window size and leave.
+    SetSize(size);
+    return;
+  }
+
+  // This mimics the code in gfx::CenterAndSizeWindow() which we cannot use
+  // in headless mode because it operates on HWNDs.
+  int x = center_bounds.x();
+  if (center_bounds.width() > size.width()) {
+    x += (center_bounds.width() - size.width()) / 2;
+  }
+
+  int y = center_bounds.y();
+  if (center_bounds.height() > size.height()) {
+    y += (center_bounds.height() - size.height()) / 2;
+  }
+
+  gfx::Rect window_bounds(gfx::Point(x, y), size);
+  SetBoundsInternal(window_bounds, /*force_size_changed=*/false);
 }
 
 void HWNDMessageHandlerHeadless::SetRegion(HRGN region) {}
@@ -184,7 +211,30 @@ void HWNDMessageHandlerHeadless::Show(ui::WindowShowState show_state,
                                       const gfx::Rect& pixel_restore_bounds) {
   TRACE_EVENT0("views", "HWNDMessageHandlerHeadless::Show");
 
-  // TODO(kvitekp): this needs to handle min/max/restore show states!
+  bool activate = true;
+
+  switch (show_state) {
+    case ui::SHOW_STATE_MINIMIZED:
+      Minimize();
+      activate = false;
+      break;
+    case ui::SHOW_STATE_MAXIMIZED:
+      if (window_state_ != WindowState::kMaximized) {
+        if (!pixel_restore_bounds.IsEmpty()) {
+          bounds_ = pixel_restore_bounds;
+        }
+        Maximize();
+      }
+      break;
+    case ui::SHOW_STATE_FULLSCREEN:
+      SetFullscreen(true, display::kInvalidDisplayId);
+      break;
+    case ui::SHOW_STATE_INACTIVE:
+      activate = false;
+      break;
+    default:
+      break;
+  }
 
   // In headless mode the platform window is always hidden, so instead of
   // showing it just maintain a local flag to track the expected headless
@@ -195,7 +245,7 @@ void HWNDMessageHandlerHeadless::Show(ui::WindowShowState show_state,
     delegate_->HandleVisibilityChanged(/*visible=*/true);
   }
 
-  if (show_state != ui::SHOW_STATE_INACTIVE) {
+  if (activate) {
     Activate();
   }
 }
@@ -215,8 +265,8 @@ void HWNDMessageHandlerHeadless::Maximize() {
     return;
   }
 
-  window_state_ = WindowState::kMaximized;
   restored_bounds_ = bounds_;
+  window_state_ = WindowState::kMaximized;
 
   gfx::Rect bounds = GetZoomedWindowBounds(bounds_);
   SetBoundsInternal(bounds, /*force_size_changed=*/false);
@@ -243,11 +293,7 @@ void HWNDMessageHandlerHeadless::Restore() {
   auto prev_state = window_state_;
   window_state_ = WindowState::kNormal;
 
-  if (restored_bounds_) {
-    gfx::Rect bounds = restored_bounds_.value();
-    restored_bounds_.reset();
-    SetBoundsInternal(bounds, /*force_size_changed=*/false);
-  }
+  RestoreBounds();
 
   if (prev_state == WindowState::kMinimized) {
     delegate_->HandleWindowMinimizedOrRestored(/*restored=*/true);
@@ -317,19 +363,41 @@ bool HWNDMessageHandlerHeadless::HasCapture() const {
 }
 
 FullscreenHandler* HWNDMessageHandlerHeadless::fullscreen_handler() {
-  // TODO(kvitekp): headless windows don't go fullscreen yet.
+  // Headless windows don't use the fullscreen handler.
   return nullptr;
 }
 
 void HWNDMessageHandlerHeadless::SetFullscreen(bool fullscreen,
                                                int64_t target_display_id) {
-  // Just track the requested state, but don't change window size for now.
-  window_state_ = fullscreen ? WindowState::kFullscreen : WindowState::kNormal;
+  if (fullscreen) {
+    if (window_state_ == WindowState::kFullscreen) {
+      return;
+    }
+
+    if (window_state_ != WindowState::kMaximized) {
+      restored_bounds_ = bounds_;
+    }
+
+    window_state_ = WindowState::kFullscreen;
+
+    gfx::Rect bounds = GetZoomedWindowBounds(bounds_);
+    SetBoundsInternal(bounds, /*force_size_changed=*/false);
+
+  } else {
+    if (window_state_ != WindowState::kFullscreen) {
+      return;
+    }
+
+    window_state_ = WindowState::kNormal;
+
+    RestoreBounds();
+  }
 }
 
 void HWNDMessageHandlerHeadless::SizeConstraintsChanged() {
-  // TODO(kvitekp): Check if we need to handle this.
-  NOTIMPLEMENTED_LOG_ONCE();
+  // Base class method updates platform window style bits WS_THICKFRAME and
+  // WS_MIN/MAXIMIZEBOX according to the delegate's window sizing expectations.
+  // Ignored in headless mode since we don't touch underlying platform window.
 }
 
 void HWNDMessageHandlerHeadless::SetHeadlessWindowBounds(
@@ -350,6 +418,14 @@ void HWNDMessageHandlerHeadless::SetBoundsInternal(
   SetHeadlessWindowBounds(bounds_in_pixels);
   if (old_size != bounds_in_pixels.size() || force_size_changed) {
     delegate_->HandleClientSizeChanged(GetClientAreaBounds().size());
+  }
+}
+
+void HWNDMessageHandlerHeadless::RestoreBounds() {
+  if (restored_bounds_) {
+    gfx::Rect bounds = restored_bounds_.value();
+    restored_bounds_.reset();
+    SetBoundsInternal(bounds, /*force_size_changed=*/false);
   }
 }
 

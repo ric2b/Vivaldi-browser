@@ -252,17 +252,18 @@ class AutofillDriverRouter {
 
   // Events called by the browser, passed to the renderer:
   // Keep in alphabetic order.
-  std::vector<FieldGlobalId> ApplyFormAction(
+  base::flat_set<FieldGlobalId> ApplyFormAction(
       AutofillDriver* source,
       mojom::ActionType action_type,
       mojom::ActionPersistence action_persistence,
       const FormData& data,
       const url::Origin& triggered_origin,
-      const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map,
+      const base::flat_map<FieldGlobalId, FieldType>& field_type_map,
       void (*callback)(AutofillDriver* target,
                        mojom::ActionType action_type,
                        mojom::ActionPersistence action_persistence,
-                       const FormData& form));
+                       FormRendererId form_renderer_id,
+                       const std::vector<FormFieldData>& fields));
   void ApplyFieldAction(
       AutofillDriver* source,
       mojom::ActionPersistence action_persistence,
@@ -276,7 +277,7 @@ class AutofillDriverRouter {
                        const std::u16string& value));
   using BrowserFormHandler = AutofillDriver::BrowserFormHandler;
   using RendererFormHandler =
-      base::OnceCallback<void(const absl::optional<::autofill::FormData>&)>;
+      base::OnceCallback<void(const std::optional<::autofill::FormData>&)>;
   // Routes both the request *and* the response: it calls `callback` with
   // - the `target` driver that shall extract the form,
   // - the `form_id` to be extracted, and
@@ -321,10 +322,11 @@ class AutofillDriverRouter {
   void RendererShouldSetSuggestionAvailability(
       AutofillDriver* source,
       const FieldGlobalId& field,
-      const mojom::AutofillState state,
-      void (*callback)(AutofillDriver* target,
-                       const FieldRendererId& field,
-                       const mojom::AutofillState state));
+      mojom::AutofillSuggestionAvailability suggestion_availability,
+      void (*callback)(
+          AutofillDriver* target,
+          const FieldRendererId& field,
+          mojom::AutofillSuggestionAvailability suggestion_availability));
   void RendererShouldTriggerSuggestions(
       AutofillDriver* source,
       const FieldGlobalId& field,
@@ -337,11 +339,6 @@ class AutofillDriverRouter {
       const std::vector<FormDataPredictions>& type_predictions,
       void (*callback)(AutofillDriver* target,
                        const std::vector<FormDataPredictions>& predictions));
-  void SendFieldsEligibleForManualFillingToRenderer(
-      AutofillDriver* source,
-      const std::vector<FieldGlobalId>& fields,
-      void (*callback)(AutofillDriver* target,
-                       const std::vector<FieldRendererId>& fields));
 
   // Event called by the browser, passed to the browser:
   void OnContextMenuShownInField(

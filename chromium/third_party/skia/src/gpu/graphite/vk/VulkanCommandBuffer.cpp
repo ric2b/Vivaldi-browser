@@ -9,8 +9,9 @@
 
 #include "include/gpu/MutableTextureState.h"
 #include "include/gpu/graphite/BackendSemaphore.h"
+#include "include/gpu/vk/VulkanMutableTextureState.h"
 #include "include/private/base/SkTArray.h"
-#include "src/gpu/graphite/DescriptorTypes.h"
+#include "src/gpu/graphite/DescriptorData.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -215,7 +216,7 @@ void VulkanCommandBuffer::prepareSurfaceForStateUpdate(SkSurface* targetSurface,
     // Even though internally we use this helper for getting src access flags and stages they
     // can also be used for general dst flags since we don't know exactly what the client
     // plans on using the image for.
-    VkImageLayout newLayout = newState->getVkImageLayout();
+    VkImageLayout newLayout = skgpu::MutableTextureStates::GetVkImageLayout(newState);
     if (newLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
         newLayout = texture->currentLayout();
     }
@@ -223,7 +224,7 @@ void VulkanCommandBuffer::prepareSurfaceForStateUpdate(SkSurface* targetSurface,
     VkAccessFlags dstAccess = VulkanTexture::LayoutToSrcAccessMask(newLayout);
 
     uint32_t currentQueueFamilyIndex = texture->currentQueueFamilyIndex();
-    uint32_t newQueueFamilyIndex = newState->getQueueFamilyIndex();
+    uint32_t newQueueFamilyIndex = skgpu::MutableTextureStates::GetVkQueueFamilyIndex(newState);
     auto isSpecialQueue = [](uint32_t queueFamilyIndex) {
         return queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
                queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT;
@@ -274,10 +275,7 @@ static bool submit_to_queue(const VulkanInterface* interface,
     submitInfo.pSignalSemaphores = signalSemaphores;
     VkResult result;
     VULKAN_CALL_RESULT(interface, result, QueueSubmit(queue, 1, &submitInfo, fence));
-    if (result != VK_SUCCESS) {
-        return false;
-    }
-    return true;
+    return result == VK_SUCCESS;
 }
 
 bool VulkanCommandBuffer::submit(VkQueue queue) {
@@ -897,7 +895,10 @@ void VulkanCommandBuffer::recordTextureAndSamplerDescSet(
     // Query resource provider to obtain a descriptor set for the texture/samplers
     TArray<DescriptorData> descriptors(command.fNumTexSamplers);
     for (int i = 0; i < command.fNumTexSamplers; i++) {
-        descriptors.push_back({DescriptorType::kCombinedTextureSampler, 1, i});
+        descriptors.push_back({DescriptorType::kCombinedTextureSampler,
+                               /*descCount=*/1,
+                               /*bindingIdx=*/i,
+                               PipelineStageFlags::kFragmentShader});
     }
     sk_sp<VulkanDescriptorSet> set = fResourceProvider->findOrCreateDescriptorSet(
             SkSpan<DescriptorData>{&descriptors.front(), descriptors.size()});
@@ -908,61 +909,60 @@ void VulkanCommandBuffer::recordTextureAndSamplerDescSet(
         fTextureSamplerDescSetToBind = VK_NULL_HANDLE;
         fBindTextureSamplers = false;
         return;
-    } else {
-        // Populate the descriptor set with texture/sampler descriptors
-        TArray<VkWriteDescriptorSet> writeDescriptorSets(command.fNumTexSamplers);
-        TArray<VkDescriptorImageInfo> descriptorImageInfos(command.fNumTexSamplers);
-        for (int i = 0; i < command.fNumTexSamplers; ++i) {
-            auto texture = const_cast<VulkanTexture*>(static_cast<const VulkanTexture*>(
-                    drawPass.getTexture(command.fTextureIndices[i])));
-            auto sampler = static_cast<const VulkanSampler*>(
-                    drawPass.getSampler(command.fSamplerIndices[i]));
-            if (!texture || !sampler) {
-                // TODO(b/294198324): Investigate the root cause for null texture or samplers on
-                // Ubuntu QuadP400 GPU
-                SKGPU_LOG_E("Texture and sampler must not be null");
-                fNumTextureSamplers = 0;
-                fTextureSamplerDescSetToBind = VK_NULL_HANDLE;
-                fBindTextureSamplers = false;
-                return;
-            }
-
-            VkDescriptorImageInfo& textureInfo = descriptorImageInfos.push_back();
-            memset(&textureInfo, 0, sizeof(VkDescriptorImageInfo));
-            textureInfo.sampler = sampler->vkSampler();
-            textureInfo.imageView =
-                    texture->getImageView(VulkanImageView::Usage::kShaderInput)->imageView();
-            textureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-            VkWriteDescriptorSet& writeInfo = writeDescriptorSets.push_back();
-            memset(&writeInfo, 0, sizeof(VkWriteDescriptorSet));
-            writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeInfo.pNext = nullptr;
-            writeInfo.dstSet = *set->descriptorSet();
-            writeInfo.dstBinding = i;
-            writeInfo.dstArrayElement = 0;
-            writeInfo.descriptorCount = 1;
-            writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            writeInfo.pImageInfo = &textureInfo;
-            writeInfo.pBufferInfo = nullptr;
-            writeInfo.pTexelBufferView = nullptr;
+    }
+    // Populate the descriptor set with texture/sampler descriptors
+    TArray<VkWriteDescriptorSet> writeDescriptorSets(command.fNumTexSamplers);
+    TArray<VkDescriptorImageInfo> descriptorImageInfos(command.fNumTexSamplers);
+    for (int i = 0; i < command.fNumTexSamplers; ++i) {
+        auto texture = const_cast<VulkanTexture*>(static_cast<const VulkanTexture*>(
+                drawPass.getTexture(command.fTextureIndices[i])));
+        auto sampler = static_cast<const VulkanSampler*>(
+                drawPass.getSampler(command.fSamplerIndices[i]));
+        if (!texture || !sampler) {
+            // TODO(b/294198324): Investigate the root cause for null texture or samplers on
+            // Ubuntu QuadP400 GPU
+            SKGPU_LOG_E("Texture and sampler must not be null");
+            fNumTextureSamplers = 0;
+            fTextureSamplerDescSetToBind = VK_NULL_HANDLE;
+            fBindTextureSamplers = false;
+            return;
         }
 
-        VULKAN_CALL(fSharedContext->interface(),
-                UpdateDescriptorSets(fSharedContext->device(),
-                                     command.fNumTexSamplers,
-                                     &writeDescriptorSets[0],
-                                     /*descriptorCopyCount=*/0,
-                                     /*pDescriptorCopies=*/nullptr));
+        VkDescriptorImageInfo& textureInfo = descriptorImageInfos.push_back();
+        memset(&textureInfo, 0, sizeof(VkDescriptorImageInfo));
+        textureInfo.sampler = sampler->vkSampler();
+        textureInfo.imageView =
+                texture->getImageView(VulkanImageView::Usage::kShaderInput)->imageView();
+        textureInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        // Store the updated descriptor set to be actually bound later on. This avoids binding and
-        // potentially having to re-bind in cases where earlier descriptor sets change while going
-        // through drawpass commands.
-        fTextureSamplerDescSetToBind = *set->descriptorSet();
-        fBindTextureSamplers = true;
-        fNumTextureSamplers = command.fNumTexSamplers;
-        this->trackResource(std::move(set));
+        VkWriteDescriptorSet& writeInfo = writeDescriptorSets.push_back();
+        memset(&writeInfo, 0, sizeof(VkWriteDescriptorSet));
+        writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writeInfo.pNext = nullptr;
+        writeInfo.dstSet = *set->descriptorSet();
+        writeInfo.dstBinding = i;
+        writeInfo.dstArrayElement = 0;
+        writeInfo.descriptorCount = 1;
+        writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writeInfo.pImageInfo = &textureInfo;
+        writeInfo.pBufferInfo = nullptr;
+        writeInfo.pTexelBufferView = nullptr;
     }
+
+    VULKAN_CALL(fSharedContext->interface(),
+            UpdateDescriptorSets(fSharedContext->device(),
+                                    command.fNumTexSamplers,
+                                    &writeDescriptorSets[0],
+                                    /*descriptorCopyCount=*/0,
+                                    /*pDescriptorCopies=*/nullptr));
+
+    // Store the updated descriptor set to be actually bound later on. This avoids binding and
+    // potentially having to re-bind in cases where earlier descriptor sets change while going
+    // through drawpass commands.
+    fTextureSamplerDescSetToBind = *set->descriptorSet();
+    fBindTextureSamplers = true;
+    fNumTextureSamplers = command.fNumTexSamplers;
+    this->trackResource(std::move(set));
 }
 
 void VulkanCommandBuffer::bindTextureSamplers() {

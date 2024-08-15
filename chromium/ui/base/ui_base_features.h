@@ -57,7 +57,6 @@ BASE_DECLARE_FEATURE(kInputPaneOnScreenKeyboard);
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kPointerEventsForTouch);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kScreenPowerListenerForNativeWinOcclusion);
-COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kTSFImeSupport);
 
 // Returns true if the system should use WM_POINTER events for touch events.
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUsingWMPointerForTouch();
@@ -68,10 +67,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kImprovedKeyboardShortcuts);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsImprovedKeyboardShortcutsEnabled();
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kDeprecateAltBasedSixPack);
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-bool IsDeprecateAltBasedSixPackEnabled();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -90,10 +85,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsEyeDropperEnabled();
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kSystemCursorSizeSupported);
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsSystemCursorSizeSupported();
-
-// Used to enable the common select popup.
-COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kUseCommonSelectPopup);
-COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUseCommonSelectPopupEnabled();
 
 // Used to enable keyboard accessible tooltips in in-page content
 // (i.e., inside Blink). See
@@ -136,9 +127,6 @@ bool IsShortcutCustomizationEnabled();
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kLacrosResourcesFileSharing);
-
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kAlwaysConfirmComposition);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kSupportF11AndF12KeyShortcuts);
@@ -220,13 +208,6 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsVariableRefreshRateEnabled();
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kEnableVariableRefreshRateAlwaysOn);
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsVariableRefreshRateAlwaysOn();
-
-// Fixes b/265853952.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kWaylandKeepSelectionFix);
-// Fixes b/267944900.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kWaylandCancelComposition);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kLacrosColorManagement);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -318,7 +299,14 @@ BASE_DECLARE_FEATURE(kMacClipboardWriteImageWithPng);
 // ChromeRefresh2023 is enabled.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kCr2023MacFontSmoothing);
-#endif
+#endif  // BUILDFLAG(IS_APPLE)
+
+#if BUILDFLAG(IS_WIN)
+// Use font settings for contrast and gamma as specified in system settings.
+// If not set, these values fall back to the pre-defined Skia defaults.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kUseGammaContrastRegistrySettings);
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace features
 

@@ -27,6 +27,7 @@
 
 #include "dawn/native/ComputePipeline.h"
 
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/ObjectContentHasher.h"
 #include "dawn/native/ObjectType_autogen.h"
@@ -35,35 +36,46 @@ namespace dawn::native {
 
 MaybeError ValidateComputePipelineDescriptor(DeviceBase* device,
                                              const ComputePipelineDescriptor* descriptor) {
-    if (descriptor->nextInChain != nullptr) {
-        return DAWN_VALIDATION_ERROR("nextInChain must be nullptr.");
-    }
+    UnpackedPtr<ComputePipelineDescriptor> unpacked;
+    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(descriptor));
+    auto* fullSubgroupsOption = unpacked.Get<DawnComputePipelineFullSubgroups>();
+    DAWN_INVALID_IF(
+        (fullSubgroupsOption && !device->HasFeature(Feature::ChromiumExperimentalSubgroups)),
+        "DawnComputePipelineFullSubgroups is used without %s enabled.",
+        ToAPI(Feature::ChromiumExperimentalSubgroups));
 
     if (descriptor->layout != nullptr) {
         DAWN_TRY(device->ValidateObject(descriptor->layout));
     }
 
-    DAWN_TRY_CONTEXT(ValidateProgrammableStage(
-                         device, descriptor->compute.module, descriptor->compute.entryPoint,
-                         descriptor->compute.constantCount, descriptor->compute.constants,
-                         descriptor->layout, SingleShaderStage::Compute),
-                     "validating compute stage (%s, entryPoint: %s).", descriptor->compute.module,
-                     descriptor->compute.entryPoint);
+    ShaderModuleEntryPoint entryPoint;
+    DAWN_TRY_ASSIGN_CONTEXT(entryPoint,
+                            ValidateProgrammableStage(
+                                device, descriptor->compute.module, descriptor->compute.entryPoint,
+                                descriptor->compute.constantCount, descriptor->compute.constants,
+                                descriptor->layout, SingleShaderStage::Compute),
+                            "validating compute stage (%s, entryPoint: %s).",
+                            descriptor->compute.module, descriptor->compute.entryPoint);
     return {};
 }
 
 // ComputePipelineBase
 
 ComputePipelineBase::ComputePipelineBase(DeviceBase* device,
-                                         const ComputePipelineDescriptor* descriptor)
+                                         const UnpackedPtr<ComputePipelineDescriptor>& descriptor)
     : PipelineBase(
           device,
           descriptor->layout,
           descriptor->label,
           {{SingleShaderStage::Compute, descriptor->compute.module, descriptor->compute.entryPoint,
-            descriptor->compute.constantCount, descriptor->compute.constants}}) {
+            descriptor->compute.constantCount, descriptor->compute.constants}}),
+      mRequiresFullSubgroups(false) {
     SetContentHash(ComputeContentHash());
     GetObjectTrackingList()->Track(this);
+
+    if (auto* fullSubgroupsOption = descriptor.Get<DawnComputePipelineFullSubgroups>()) {
+        mRequiresFullSubgroups = fullSubgroupsOption->requiresFullSubgroups;
+    }
 
     // Initialize the cache key to include the cache type and device information.
     StreamIn(&mCacheKey, CacheKey::Type::ComputePipeline, device->GetCacheKey());
@@ -80,8 +92,12 @@ void ComputePipelineBase::DestroyImpl() {
     Uncache();
 }
 
+bool ComputePipelineBase::IsFullSubgroupsRequired() const {
+    return mRequiresFullSubgroups;
+}
+
 // static
-ComputePipelineBase* ComputePipelineBase::MakeError(DeviceBase* device, const char* label) {
+Ref<ComputePipelineBase> ComputePipelineBase::MakeError(DeviceBase* device, const char* label) {
     class ErrorComputePipeline final : public ComputePipelineBase {
       public:
         explicit ErrorComputePipeline(DeviceBase* device, const char* label)
@@ -93,7 +109,7 @@ ComputePipelineBase* ComputePipelineBase::MakeError(DeviceBase* device, const ch
         }
     };
 
-    return new ErrorComputePipeline(device, label);
+    return AcquireRef(new ErrorComputePipeline(device, label));
 }
 
 ObjectType ComputePipelineBase::GetType() const {
@@ -102,7 +118,8 @@ ObjectType ComputePipelineBase::GetType() const {
 
 bool ComputePipelineBase::EqualityFunc::operator()(const ComputePipelineBase* a,
                                                    const ComputePipelineBase* b) const {
-    return PipelineBase::EqualForCache(a, b);
+    return PipelineBase::EqualForCache(a, b) &&
+           (a->IsFullSubgroupsRequired() == b->IsFullSubgroupsRequired());
 }
 
 }  // namespace dawn::native

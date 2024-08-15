@@ -11,9 +11,9 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/browser/ui/credential_utils.h"
-#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_bulk_leak_check_service_factory.h"
@@ -28,25 +28,35 @@ using State = password_manager::BulkLeakCheckServiceInterface::State;
 
 // Key used to attach UserData to a LeakCheckCredential.
 constexpr char kPasswordCheckDataKey[] = "password-check-manager-data-key";
-// Minimum time the check should be running.
-constexpr base::TimeDelta kDelay = base::Seconds(3);
 
 // Class which ensures that IOSChromePasswordCheckManager will stay alive
 // until password check is completed even if class what initially created
 // IOSChromePasswordCheckManager was destroyed.
 class IOSChromePasswordCheckManagerHolder : public LeakCheckCredential::Data {
  public:
-  explicit IOSChromePasswordCheckManagerHolder(
-      scoped_refptr<IOSChromePasswordCheckManager> manager)
-      : manager_(std::move(manager)) {}
+  IOSChromePasswordCheckManagerHolder(
+      scoped_refptr<IOSChromePasswordCheckManager> manager,
+      password_manager::TriggerBackendNotification should_trigger_notification)
+      : manager_(std::move(manager)),
+        should_trigger_notification_(should_trigger_notification) {}
   ~IOSChromePasswordCheckManagerHolder() override = default;
 
   std::unique_ptr<Data> Clone() override {
-    return std::make_unique<IOSChromePasswordCheckManagerHolder>(manager_);
+    return std::make_unique<IOSChromePasswordCheckManagerHolder>(
+        manager_, should_trigger_notification_);
+  }
+
+  password_manager::TriggerBackendNotification should_trigger_notification()
+      const {
+    return should_trigger_notification_;
   }
 
  private:
   scoped_refptr<IOSChromePasswordCheckManager> manager_;
+  // Certain client use cases require to notify backend if new leaked
+  // credentials are found. This member indicate whether that should happen.
+  const password_manager::TriggerBackendNotification
+      should_trigger_notification_;
 };
 
 PasswordCheckState ConvertBulkCheckState(State state) {
@@ -106,22 +116,30 @@ IOSChromePasswordCheckManager::~IOSChromePasswordCheckManager() {
   DCHECK(observers_.empty());
 }
 
-void IOSChromePasswordCheckManager::StartPasswordCheck() {
+void IOSChromePasswordCheckManager::StartPasswordCheck(
+    password_manager::LeakDetectionInitiator initiator) {
+  // Calls to StartPasswordCheck() will be only processed after
+  // OnSavedPasswordsChanged() is called. Meaning that all client calls
+  // happening before that will be stored in memory until all conditions are
+  // met. Thus initiator value must be stored to ensure that when this method is
+  // run, it has the correct value.
+  password_check_initiator_ = initiator;
+
   if (is_initialized_) {
     IOSChromePasswordCheckManagerHolder data(
-        scoped_refptr<IOSChromePasswordCheckManager>(this));
-    bulk_leak_check_service_adapter_.StartBulkLeakCheck(kPasswordCheckDataKey,
-                                                        &data);
+        scoped_refptr<IOSChromePasswordCheckManager>(this),
+        password_manager::ShouldTriggerBackendNotificationForInitiator(
+            password_check_initiator_));
+    bulk_leak_check_service_adapter_.StartBulkLeakCheck(
+        password_check_initiator_, kPasswordCheckDataKey, &data);
 
-    if (password_manager::features::IsPasswordCheckupEnabled()) {
-      insecure_credentials_manager_.StartWeakCheck(base::BindOnce(
-          &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
-          weak_ptr_factory_.GetWeakPtr()));
+    insecure_credentials_manager_.StartWeakCheck(base::BindOnce(
+        &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
+        weak_ptr_factory_.GetWeakPtr()));
 
-      insecure_credentials_manager_.StartReuseCheck(base::BindOnce(
-          &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
-          weak_ptr_factory_.GetWeakPtr()));
-    }
+    insecure_credentials_manager_.StartReuseCheck(base::BindOnce(
+        &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
+        weak_ptr_factory_.GetWeakPtr()));
 
     is_check_running_ = true;
     start_time_ = base::Time::Now();
@@ -144,7 +162,7 @@ PasswordCheckState IOSChromePasswordCheckManager::GetPasswordCheckState()
       bulk_leak_check_service_adapter_.GetBulkLeakCheckState());
 }
 
-absl::optional<base::Time>
+std::optional<base::Time>
 IOSChromePasswordCheckManager::GetLastPasswordCheckTime() const {
   if (!user_prefs_->HasPrefPath(
           password_manager::prefs::kLastTimePasswordCheckCompleted)) {
@@ -173,7 +191,7 @@ void IOSChromePasswordCheckManager::OnSavedPasswordsChanged(
   // Observing saved passwords to update possible kNoPasswords state.
   NotifyPasswordCheckStatusChanged();
   if (!std::exchange(is_initialized_, true) && start_check_on_init_) {
-    StartPasswordCheck();
+    StartPasswordCheck(password_manager::LeakDetectionInitiator::kEditCheck);
   }
 }
 
@@ -189,9 +207,6 @@ void IOSChromePasswordCheckManager::OnStateChanged(State state) {
     user_prefs_->SetDouble(
         password_manager::prefs::kLastTimePasswordCheckCompleted,
         base::Time::Now().InSecondsFSinceUnixEpoch());
-    user_prefs_->SetTime(
-        password_manager::prefs::kSyncedLastTimePasswordCheckCompleted,
-        base::Time::Now());
 
     LogInsecureCredentialsCountMetrics();
   }
@@ -199,13 +214,15 @@ void IOSChromePasswordCheckManager::OnStateChanged(State state) {
     // If check was running
     if (is_check_running_) {
       const base::TimeDelta elapsed = base::Time::Now() - start_time_;
-      if (elapsed < kDelay) {
+      const base::TimeDelta minimum_duration =
+          tests_hook::PasswordCheckMinimumDuration();
+      if (elapsed < minimum_duration) {
         base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
             FROM_HERE,
             base::BindOnce(&IOSChromePasswordCheckManager::
                                NotifyPasswordCheckStatusChanged,
                            weak_ptr_factory_.GetWeakPtr()),
-            kDelay - elapsed);
+            minimum_duration - elapsed);
         is_check_running_ = false;
         return;
       }
@@ -219,7 +236,14 @@ void IOSChromePasswordCheckManager::OnCredentialDone(
     const LeakCheckCredential& credential,
     password_manager::IsLeaked is_leaked) {
   if (is_leaked) {
-    insecure_credentials_manager_.SaveInsecureCredential(credential);
+    password_manager::TriggerBackendNotification should_trigger_notification =
+        credential.GetUserData(kPasswordCheckDataKey)
+            ? static_cast<IOSChromePasswordCheckManagerHolder*>(
+                  credential.GetUserData(kPasswordCheckDataKey))
+                  ->should_trigger_notification()
+            : password_manager::TriggerBackendNotification(false);
+    insecure_credentials_manager_.SaveInsecureCredential(
+        credential, should_trigger_notification);
   }
 }
 

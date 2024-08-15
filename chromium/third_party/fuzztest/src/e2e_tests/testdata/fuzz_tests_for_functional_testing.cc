@@ -19,12 +19,17 @@
 #include <signal.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/functional/function_ref.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "./fuzztest/fuzztest.h"
 #include "./fuzztest/internal/test_protobuf.pb.h"
@@ -680,7 +685,7 @@ void DataDependentStackOverflow(const std::string& s) {
   DataDependentStackOverflowImpl(s, 0);
 }
 FUZZ_TEST(MySuite, DataDependentStackOverflow)
-    .WithDomains(fuzztest::Arbitrary<std::string>().WithMaxSize(100000));
+    .WithDomains(fuzztest::Arbitrary<std::string>().WithSize(100000));
 
 void StackCalculationWorksWithAlternateStackForSignalHandlers(int i) {
   static size_t dummy_to_trigger_cmp_in_handler;
@@ -728,5 +733,20 @@ void StackCalculationWorksWithAlternateStackForSignalHandlers(int i) {
   }
 }
 FUZZ_TEST(MySuite, StackCalculationWorksWithAlternateStackForSignalHandlers);
+
+void DetectRegressionAndCoverageInputs(const std::string& input) {
+  if (absl::StartsWith(input, "regression")) {
+    std::cout << "regression input detected: " << input << std::endl;
+  }
+  if (absl::StartsWith(input, "coverage")) {
+    std::cout << "coverage input detected: " << input << std::endl;
+  }
+}
+FUZZ_TEST(MySuite, DetectRegressionAndCoverageInputs);
+
+void CrashOnCrashingInput(const std::string& input) {
+  if (absl::StartsWith(input, "crashing")) std::abort();
+}
+FUZZ_TEST(MySuite, CrashOnCrashingInput);
 
 }  // namespace

@@ -30,7 +30,7 @@ if "%NINJA_SUMMARIZE_BUILD%" == "1" set "NINJA_STATUS=[%%r processes, %%f/%%t @ 
 :: should be consistent between autoninja.bat and the autoninja script used by
 :: git bash.
 
-@call %scriptdir%python-bin\python3.bat %scriptdir%autoninja.py "%%*"
+@call %scriptdir%\vpython3.bat %scriptdir%autoninja.py "%%*"
 @if errorlevel 1 goto buildfailure
 
 :: Use call to invoke python script here, because we use python via python3.bat.

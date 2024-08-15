@@ -17,9 +17,11 @@ add_executable(
         deserialize_result_tests.cc
         deserialize_v0_tests.cc
         deserialize_v1_tests.cc
-        global_config_tests.cc
+        credential_slab_tests.cc
         credential_book_tests.cc
         byte_buffer_tests.cc
+        np_cpp_test.h
+        np_cpp_test.cc
 )
 
 target_link_libraries(

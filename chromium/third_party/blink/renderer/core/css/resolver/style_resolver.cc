@@ -59,6 +59,7 @@
 #include "third_party/blink/renderer/core/css/font_face.h"
 #include "third_party/blink/renderer/core/css/page_rule_collector.h"
 #include "third_party/blink/renderer/core/css/part_names.h"
+#include "third_party/blink/renderer/core/css/position_fallback_data.h"
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
@@ -138,13 +139,24 @@ const ComputedStyle* BuildInitialStyleForImg(
 bool ShouldStoreOldStyle(const StyleRecalcContext& style_recalc_context,
                          StyleResolverState& state) {
   // Storing the old style is only relevant if we risk computing the style
-  // more than once for the same element. This is only possible if we are
-  // currently inside a container.
+  // more than once for the same element. This can happen if we are currently
+  // inside a size query container, or doing multiple style resolutions for
+  // @position-fallback.
   //
-  // If we are not inside a container, we can fall back to the default
-  // behavior (in CSSAnimations) of using the current style on Element
-  // as the old style.
-  return style_recalc_context.container && state.CanAffectAnimations();
+  // If we are not inside a size query container or an element with
+  // position-fallback, we can fall back to the default behavior (in
+  // CSSAnimations) of using the current style on Element as the old style.
+  //
+  // TODO(crbug.com/1502666): We also need to check whether we are a descendant
+  // of an element with position-fallback to cover the case where the descendant
+  // explicitly inherits insets or other valid @try properties from the element
+  // with position-fallback.
+  return (style_recalc_context.container ||
+          style_recalc_context.is_position_fallback ||
+          (RuntimeEnabledFeatures::
+               CSSAnchorPositioningCascadeFallbackEnabled() &&
+           state.StyleBuilder().PositionFallback())) &&
+         state.CanAffectAnimations();
 }
 
 bool ShouldSetPendingUpdate(StyleResolverState& state, Element& element) {
@@ -246,9 +258,6 @@ String ComputeBaseComputedStyleDiff(const ComputedStyle* base_computed_style,
   if (!base_computed_style->GetFont().IsFallbackValid()) {
     exclusions.insert(DebugField::font_);
   }
-
-  // See crbug.com/1469327. (This is a real bug, which we're hiding here.)
-  exclusions.insert(DebugField::filter_);
 
   // Images use instance equality rather than value equality (see
   // crbug.com/781461).
@@ -396,6 +405,9 @@ void ApplyLengthConversionFlags(StyleResolverState& state) {
   if (flags & static_cast<Flags>(Flag::kAnchorRelative)) {
     state.SetHasTreeScopedReference();
   }
+  if (flags & static_cast<Flags>(Flag::kLogicalDirectionRelative)) {
+    builder.SetHasLogicalDirectionRelativeUnits();
+  }
 }
 
 }  // namespace
@@ -451,8 +463,6 @@ static CSSPropertyValueSet* UniversalOverlayUserAgentDeclaration() {
   DEFINE_STATIC_LOCAL(
       Persistent<MutableCSSPropertyValueSet>, decl,
       (MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode)));
-
-  DCHECK(RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled());
 
   if (decl->IsEmpty()) {
     decl->SetProperty(CSSPropertyID::kOverlay,
@@ -813,12 +823,35 @@ void StyleResolver::MatchPseudoPartRules(const Element& part_matching_element,
   }
 }
 
+// Declarations within @try rules match when ResolveStyle is invoked
+// with that rule explicitly specified to match
+// (see StyleRecalcContext.position_fallback/index).
+void StyleResolver::MatchTryRules(const Element& element,
+                                  ElementRuleCollector& collector) {
+  // If StyleEngine::UpdateStyleForPositionFallback was called with
+  // a PseudoElement, the CSSPropertyValueSet we need is stored on the
+  // PositionFallbackData of that pseudo element. However, when resolving
+  // the style of that pseudo element, `element` is the _originating element_,
+  // not the pseudo element itself.
+  PseudoId pseudo_id = collector.GetPseudoId();
+  const Element* try_element =
+      pseudo_id == kPseudoIdNone
+          ? &element
+          : element.GetPseudoElement(pseudo_id, collector.GetPseudoArgument());
+  if (try_element) {
+    if (PositionFallbackData* data = try_element->GetPositionFallbackData()) {
+      collector.AddTryStyleProperties(data->GetTryPropertyValueSet());
+    }
+  }
+}
+
 void StyleResolver::MatchAuthorRules(const Element& element,
                                      ElementRuleCollector& collector) {
   MatchHostRules(element, collector, tracker_);
   MatchSlottedRules(element, collector, tracker_);
   MatchElementScopeRules(element, collector, tracker_);
   MatchPseudoPartRules(element, collector);
+  MatchTryRules(element, collector);
 }
 
 void StyleResolver::MatchUserRules(ElementRuleCollector& collector) {
@@ -1219,6 +1252,8 @@ void StyleResolver::InitStyle(Element& element,
         style_request.originating_element_style->GetFont());
     state.StyleBuilder().SetLineHeight(
         style_request.originating_element_style->LineHeight());
+    state.StyleBuilder().SetWritingMode(
+        style_request.originating_element_style->GetWritingMode());
   }
 
   if (!style_request.IsPseudoStyleRequest() && element.IsLink()) {
@@ -1416,10 +1451,8 @@ void StyleResolver::ApplyBaseStyleNoCache(
     // the UA sheets. Note that this is a universal rule in any namespace.
     // Adding this to the html.css would only do the override in the HTML
     // namespace since the sheet has a default namespace.
-    if (RuntimeEnabledFeatures::CSSTopLayerForTransitionsEnabled()) {
-      cascade.MutableMatchResult().AddMatchedProperties(
-          UniversalOverlayUserAgentDeclaration(), CascadeOrigin::kUserAgent);
-    }
+    cascade.MutableMatchResult().AddMatchedProperties(
+        UniversalOverlayUserAgentDeclaration(), CascadeOrigin::kUserAgent);
 
     // This adds a CSSInitialColorValue to the cascade for the document
     // element. The CSSInitialColorValue will resolve to a color-scheme
@@ -1507,6 +1540,8 @@ void StyleResolver::ApplyBaseStyleNoCache(
       match_result.HasNonUniversalHighlightPseudoStyles());
   state.StyleBuilder().SetHasNonUaHighlightPseudoStyles(
       match_result.HasNonUaHighlightPseudoStyles());
+  state.StyleBuilder().SetHighlightsDependOnSizeContainerQueries(
+      match_result.HighlightsDependOnSizeContainerQueries());
 
   if (match_result.HasFlag(MatchFlag::kAffectedByDrag)) {
     state.StyleBuilder().SetAffectedByDrag();
@@ -1561,9 +1596,7 @@ void StyleResolver::ApplyBaseStyleNoCache(
   ApplyCallbackSelectors(state);
   if (element->IsLink() && (element->HasTagName(html_names::kATag) ||
                             element->HasTagName(html_names::kAreaTag))) {
-    // TODO(crbug.com/1371522): Revisit scoping root used after
-    // https://github.com/WICG/nav-speculation/issues/240 is resolved.
-    ApplyDocumentRulesSelectors(state, &GetDocument());
+    ApplyDocumentRulesSelectors(state, To<ContainerNode>(&element->TreeRoot()));
   }
 
   // Cache our if our original display is inline.
@@ -1626,7 +1659,7 @@ void StyleResolver::ApplyBaseStyle(
     return;
   }
 
-  if (!style_recalc_context.parent_forces_recalc &&
+  if (style_recalc_context.can_use_incremental_style &&
       CanApplyInlineStyleIncrementally(element, state, style_request)) {
     // We are in a situation where we can reuse the old style
     // and just apply the element's inline style on top of it
@@ -2114,8 +2147,14 @@ bool StyleResolver::CacheSuccess::InheritedVariablesChanged(
   if (!cached_matched_properties) {
     return false;
   }
-  return cached_matched_properties->computed_style->InheritedVariables() !=
-         builder.InheritedVariables();
+  if (RuntimeEnabledFeatures::CSSMPCImprovementsEnabled()) {
+    return !base::ValuesEquivalent(
+        cached_matched_properties->computed_style->InheritedVariables(),
+        builder.InheritedVariables());
+  } else {
+    return cached_matched_properties->computed_style->InheritedVariables() !=
+           builder.InheritedVariables();
+  }
 }
 
 bool StyleResolver::CacheSuccess::LineHeightChanged(
@@ -2251,7 +2290,19 @@ void StyleResolver::MaybeAddToMatchedPropertiesCache(
     const CacheSuccess& cache_success,
     const MatchResult& match_result) {
   state.LoadPendingResources();
-  if (!cache_success.cached_matched_properties && cache_success.key.IsValid() &&
+
+  // NOTE: We replace everything that isn't a full cache hit (unless the
+  // CSSMPCImprovements runtime flag has been disabled). There are cases
+  // where this would be bad (e.g., every other element we style with the same
+  // key has a different parent computed style), but it seems a much more common
+  // case, if we don't replace elements giving partial hits, is that a
+  // bad entry gets stuck into the MPC and we _never_ get full hits again
+  // from there because it's never replaced. (Or, similarly, a partial
+  // hit where we have to reapply the inherited properties, or where we trash
+  // the “partner cache” in StyleInheritedVariables.)
+  if ((RuntimeEnabledFeatures::CSSMPCImprovementsEnabled() ||
+       !cache_success.cached_matched_properties) &&
+      cache_success.key.IsValid() &&
       MatchedPropertiesCache::IsCacheable(state)) {
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                   matched_property_cache_added, 1);
@@ -2319,6 +2370,11 @@ bool StyleResolver::CanReuseBaseComputedStyle(const StyleResolverState& state) {
     return false;
   }
 
+  if (RuntimeEnabledFeatures::CSSAnchorPositioningCascadeFallbackEnabled() &&
+      base_data->GetBaseComputedStyle()->PositionFallback()) {
+    return false;
+  }
+
   return true;
 }
 
@@ -2343,6 +2399,16 @@ const CSSValue* StyleResolver::ComputeValue(
   const ComputedStyle* style = state.TakeStyle();
   return ComputedStyleUtils::ComputedPropertyValue(property_ref.GetProperty(),
                                                    *style);
+}
+
+const CSSValue* StyleResolver::ResolveValue(
+    Element& element,
+    const ComputedStyle& style,
+    const CSSPropertyName& property_name,
+    const CSSValue& value) {
+  StyleResolverState state(element.GetDocument(), element);
+  state.SetStyle(style);
+  return StyleCascade::Resolve(state, property_name, value);
 }
 
 FilterOperations StyleResolver::ComputeFilterOperations(
@@ -2447,6 +2513,11 @@ void StyleResolver::ApplyPropertiesFromCascade(StyleResolverState& state,
     }
   };
 
+  const ComputedStyle* old_style = nullptr;
+  if (count_computed_style_bytes_) {
+    old_style = state.StyleBuilder().CloneStyle();
+  }
+
   // In order to use-count whether or not legacy overlapping properties
   // made a real difference to the ComputedStyle, we first apply the cascade
   // while filtering out such properties. If the filter did reject
@@ -2460,6 +2531,17 @@ void StyleResolver::ApplyPropertiesFromCascade(StyleResolverState& state,
     apply(CascadeFilter(CSSProperty::kOverlapping, false));
     UseCountLegacyOverlapping(GetDocument(), *non_legacy_style,
                               state.StyleBuilder());
+  }
+
+  if (count_computed_style_bytes_) {
+    constexpr size_t kOilpanOverheadBytes =
+        sizeof(void*);  // See cppgc::internal::HeapObjectHeader.
+    const ComputedStyle* new_style = state.StyleBuilder().CloneStyle();
+    for (const auto& [group_name, size] :
+         old_style->FindChangedGroups(*new_style)) {
+      computed_style_bytes_used_ += size + kOilpanOverheadBytes;
+    }
+    computed_style_bytes_used_ += sizeof(*new_style) + kOilpanOverheadBytes;
   }
 
   // NOTE: This flag (and the length conversion flags) need to be set before the
@@ -2626,11 +2708,6 @@ bool PropagateScrollSnapStyleToViewport(
                  SetScrollPaddingBottom, Length());
   PROPAGATE_FROM(document_element_style, ScrollPaddingLeft,
                  SetScrollPaddingLeft, Length());
-
-  if (changed && !RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-    document.GetSnapCoordinator().SnapContainerDidChange(
-        *document.GetLayoutView());
-  }
 
   return changed;
 }
@@ -2867,6 +2944,10 @@ void StyleResolver::PropagateStyleToViewport() {
                    absl::nullopt);
     PROPAGATE_FROM(document_element_style, ForcedColorAdjust,
                    SetForcedColorAdjust, EForcedColorAdjust::kAuto);
+    if (RuntimeEnabledFeatures::UsedColorSchemeRootScrollbarsEnabled()) {
+      PROPAGATE_FROM(document_element_style, ColorSchemeFlagsIsNormal,
+                     SetColorSchemeFlagsIsNormal, false);
+    }
   }
 
   // scroll-start

@@ -15,7 +15,6 @@
 #include "components/global_media_controls/public/media_item_ui.h"
 #include "components/global_media_controls/public/views/media_item_ui_device_selector.h"
 #include "components/global_media_controls/public/views/media_item_ui_footer.h"
-#include "components/global_media_controls/public/views/media_notification_view_ash_impl.h"
 #include "components/media_message_center/media_notification_container.h"
 #include "components/media_message_center/media_notification_view_impl.h"
 #include "media/base/media_switches.h"
@@ -34,6 +33,7 @@ class SlideOutController;
 
 namespace global_media_controls {
 
+enum class MediaDisplayPage;
 class MediaItemUIObserver;
 
 // MediaItemUIView holds a media notification for display
@@ -96,8 +96,9 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIView
   void OnColorsChanged(SkColor foreground,
                        SkColor foreground_disabled,
                        SkColor background) override;
-  void OnHeaderClicked() override;
+  void OnHeaderClicked(bool activate_original_media) override;
   void OnShowCastingDevicesRequested() override;
+  void OnDeviceSelectorViewSizeChanged() override;
 
   // views::SlideOutControllerDelegate:
   ui::Layer* GetSlideOutLayer() override;
@@ -114,9 +115,6 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIView
   // Called when the devices in the device selector view have changed.
   void OnDeviceSelectorViewDevicesChanged(bool has_devices);
 
-  // Called when the size of the device selector view has changed.
-  void OnDeviceSelectorViewSizeChanged();
-
   const std::u16string& GetTitle() const;
 
   // Set the scroll view that is currently holding this item.
@@ -130,7 +128,6 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIView
   views::ImageButton* GetDismissButtonForTesting();
 
   media_message_center::MediaNotificationViewImpl* view_for_testing() {
-    DCHECK(!base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI));
     return static_cast<media_message_center::MediaNotificationViewImpl*>(view_);
   }
   MediaItemUIDeviceSelector* device_selector_view_for_testing() {
@@ -154,7 +151,7 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIView
   // Updates the forced expanded state of |view_|.
   void ForceExpandedState();
   // Notify observers that we've been clicked.
-  void ContainerClicked();
+  void ContainerClicked(bool activate_original_media);
   void OnSizeChanged();
 
   const std::string id_;
@@ -201,6 +198,9 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemUIView
 
   // Sets to true when the notification theme is provided on Chrome OS.
   const bool has_notification_theme_;
+
+  // Sets to true if the updated UI is enabled on Chrome OS.
+  bool use_cros_updated_ui_ = false;
 };
 
 }  // namespace global_media_controls

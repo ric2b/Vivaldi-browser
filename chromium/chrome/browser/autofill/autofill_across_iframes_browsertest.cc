@@ -7,6 +7,7 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -106,7 +107,7 @@ class TestAutofillManager : public BrowserAutofillManager {
     submitted_form_ = form;
   }
 
-  absl::optional<FormData> submitted_form() const { return submitted_form_; }
+  std::optional<FormData> submitted_form() const { return submitted_form_; }
 
  private:
   TestAutofillManagerWaiter did_autofill_{
@@ -115,7 +116,7 @@ class TestAutofillManager : public BrowserAutofillManager {
   TestAutofillManagerWaiter form_submitted_{
       *this,
       {AutofillManagerEvent::kFormSubmitted}};
-  absl::optional<FormData> submitted_form_;
+  std::optional<FormData> submitted_form_;
 };
 
 // Fakes an Autofill on of a given form.
@@ -183,7 +184,7 @@ std::vector<std::string> AllFieldValues(content::WebContents* web_contents,
 // accepted by Autofill.
 auto IsWithinAutofillLimits() {
   auto frequencies = [](const FormStructure& form) {
-    std::map<ServerFieldType, size_t> counts;
+    std::map<FieldType, size_t> counts;
     for (const auto& field : form)
       ++counts[field->Type().GetStorableType()];
     return counts;
@@ -215,6 +216,7 @@ class AutofillAcrossIframesTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUpOnMainThread();
     // Prevent the Keychain from coming up on Mac.
     test::DisableSystemServices(browser()->profile()->GetPrefs());
+
     // Set up the HTTPS (!) server (embedded_test_server() is an HTTP server).
     // Every hostname is handled by that server.
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -240,6 +242,7 @@ class AutofillAcrossIframesTest : public InProcessBrowserTest {
   }
 
   void TearDownOnMainThread() override {
+    base::RunLoop().RunUntilIdle();
     // Make sure to close any showing popups prior to tearing down the UI.
     main_autofill_manager().client().HideAutofillPopup(
         PopupHidingReason::kTabGone);
@@ -561,8 +564,15 @@ IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_Dynamic,
 }
 
 // Tests that a newly emerging field inside a frame triggers a refill.
+// TODO(crbug.com/1486516): Test is flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_RefillDynamicFormWithNewField \
+  DISABLED_RefillDynamicFormWithNewField
+#else
+#define MAYBE_RefillDynamicFormWithNewField RefillDynamicFormWithNewField
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_Dynamic,
-                       RefillDynamicFormWithNewField) {
+                       MAYBE_RefillDynamicFormWithNewField) {
   const FormStructure* form = LoadFormWithAppearingField();
   ASSERT_TRUE(form);
   EXPECT_THAT(FillForm(*form, *form->field(1)),
@@ -772,9 +782,16 @@ IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_NestedAndLargeForm,
 
 // Tests that a deeply nested form where some iframes don't even contain any
 // fields (but their subframes do) is extracted and filled correctly.
+// TODO(crbug.com/1486516): Test is flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_FlattenFormEvenAcrossFramesWithoutFields \
+  DISABLED_FlattenFormEvenAcrossFramesWithoutFields
+#else
+#define MAYBE_FlattenFormEvenAcrossFramesWithoutFields \
+  FlattenFormEvenAcrossFramesWithoutFields
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_NestedAndLargeForm,
-                       // TODO(crbug.com/1393990): Re-enable this test
-                       DISABLED_FlattenFormEvenAcrossFramesWithoutFields) {
+                       MAYBE_FlattenFormEvenAcrossFramesWithoutFields) {
   SetUrlContent("/", MakeCss(3) +
                          R"(<iframe src="$4/3.html"></iframe>
                             <iframe src="$3/3.html"></iframe>
@@ -797,7 +814,7 @@ IN_PROC_BROWSER_TEST_F(AutofillAcrossIframesTest_NestedAndLargeForm,
     // and <form> elements.
     auto name = HtmlFieldType::kCreditCardNameFull;
     auto num = HtmlFieldType::kCreditCardNumber;
-    auto exp = HtmlFieldType::kCreditCardExp;
+    auto exp = HtmlFieldType::kCreditCardExpDate4DigitYear;
     auto cvc = HtmlFieldType::kCreditCardVerificationCode;
     auto m = [](HtmlFieldType type) {
       return Pointee(AllOf(Property(&AutofillField::html_type, Eq(type)),
@@ -855,6 +872,14 @@ class AutofillAcrossIframesTest_Submission
       public ::testing::WithParamInterface<bool> {
  public:
   bool submission_happens_in_main_frame() const { return GetParam(); }
+
+  void TearDownOnMainThread() override {
+    // RunUntilIdle() is necessary because otherwise, under the hood
+    // PasswordFormManager::OnFetchComplete() callback is run after this test is
+    // destroyed meaning that OsCryptImpl will be used instead of OsCryptMocker,
+    // causing this test to fail.
+    base::RunLoop().RunUntilIdle();
+  }
 
   // Creates a simple cross-frame form with <form> elements so we can submit the
   // form in the iframe and the main frame.
@@ -914,7 +939,7 @@ class AutofillAcrossIframesTest_FullIframes
  public:
   AutofillAcrossIframesTest_FullIframes() {
     feature_list_.InitAndEnableFeature(
-        blink::features::kAutofillDetectRemovedFormControls);
+        features::kAutofillDetectRemovedFormControls);
   }
 
   [[nodiscard]] const FormStructure* LoadForm() {

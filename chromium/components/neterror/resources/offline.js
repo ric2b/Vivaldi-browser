@@ -16,6 +16,10 @@ import {CollisionBox, spriteDefinitionByType} from './offline-sprite-definitions
  * @export
  */
 export function Runner(outerContainerId, opt_config) {
+
+  // NOTE(andre@vivaldi.com): Make sure the Dino game is not started.
+  return;
+
   // Singleton
   if (Runner.instance_) {
     return Runner.instance_;

@@ -289,6 +289,8 @@ External library support:
   --enable-libwebp         enable WebP encoding via libwebp [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
   --enable-libx265         enable HEVC encoding via x265 [no]
+  --enable-libxeve         enable EVC encoding via libxeve [no]
+  --enable-libxevd         enable EVC decoding via libxevd [no]
   --enable-libxavs         enable AVS encoding via xavs [no]
   --enable-libxavs2        enable AVS2 encoding via xavs2 [no]
   --enable-libxcb          enable X11 grabbing using XCB [autodetect]
@@ -1901,6 +1903,8 @@ EXTERNAL_LIBRARY_LIST="
     libvorbis
     libvpx
     libwebp
+    libxevd
+    libxeve
     libxml2
     libzimg
     libzmq
@@ -2202,7 +2206,6 @@ HAVE_LIST_PUB="
 
 HEADERS_LIST="
     arpa_inet_h
-    asm_hwcap_h
     asm_types_h
     cdio_paranoia_h
     cdio_paranoia_paranoia_h
@@ -2472,6 +2475,7 @@ CONFIG_EXTRA="
     cbs_h266
     cbs_jpeg
     cbs_mpeg2
+    cbs_vp8
     cbs_vp9
     deflate_wrapper
     dirac_parse
@@ -2757,6 +2761,7 @@ cbs_h265_select="cbs"
 cbs_h266_select="cbs"
 cbs_jpeg_select="cbs"
 cbs_mpeg2_select="cbs"
+cbs_vp8_select="cbs"
 cbs_vp9_select="cbs"
 deflate_wrapper_deps="zlib"
 dirac_parse_select="golomb"
@@ -2888,6 +2893,7 @@ ipu_decoder_select="mpegvideodec"
 jpegls_decoder_select="mjpeg_decoder"
 jv_decoder_select="blockdsp"
 lagarith_decoder_select="llviddsp"
+lead_decoder_select="idctdsp jpegtables"
 ljpeg_encoder_select="jpegtables"
 lscr_decoder_select="inflate_wrapper"
 magicyuv_decoder_select="llviddsp"
@@ -3340,7 +3346,7 @@ h264_redundant_pps_bsf_select="cbs_h264"
 hevc_metadata_bsf_select="cbs_h265"
 mjpeg2jpeg_bsf_select="jpegtables"
 mpeg2_metadata_bsf_select="cbs_mpeg2"
-trace_headers_bsf_select="cbs"
+trace_headers_bsf_select="cbs cbs_vp8"
 vp9_metadata_bsf_select="cbs_vp9"
 vvc_metadata_bsf_select="cbs_h266"
 
@@ -3456,6 +3462,8 @@ libx265_encoder_deps="libx265"
 libx265_encoder_select="atsc_a53"
 libxavs_encoder_deps="libxavs"
 libxavs2_encoder_deps="libxavs2"
+libxevd_decoder_deps="libxevd"
+libxeve_encoder_deps="libxeve"
 libxvid_encoder_deps="libxvid"
 libzvbi_teletext_decoder_deps="libzvbi"
 vapoursynth_demuxer_deps="vapoursynth"
@@ -3520,7 +3528,7 @@ mp4_muxer_select="mov_muxer"
 mpegts_demuxer_select="iso_media"
 mpegts_muxer_select="ac3_parser adts_muxer latm_muxer h264_mp4toannexb_bsf hevc_mp4toannexb_bsf"
 mpegtsraw_demuxer_select="mpegts_demuxer"
-mxf_muxer_select="pcm_rechunk_bsf"
+mxf_muxer_select="pcm_rechunk_bsf rangecoder"
 mxf_d10_muxer_select="mxf_muxer"
 mxf_opatom_muxer_select="mxf_muxer"
 nut_muxer_select="riffenc"
@@ -3904,7 +3912,7 @@ ffmpeg_select="aformat_filter anull_filter atrim_filter format_filter
 ffmpeg_suggest="ole32 psapi shell32"
 ffplay_deps="avcodec avformat avfilter swscale swresample sdl2"
 ffplay_select="crop_filter transpose_filter hflip_filter vflip_filter rotate_filter"
-ffplay_suggest="shell32"
+ffplay_suggest="shell32 libplacebo vulkan"
 ffprobe_deps="avcodec avformat"
 ffprobe_suggest="shell32"
 
@@ -5411,6 +5419,9 @@ elif enabled riscv; then
     if test_cpp_condition stddef.h "__riscv_zbb"; then
         enable fast_clz
     fi
+    if test_cpp_condition stddef.h "__riscv_zfhmin"; then
+        enable fast_float16
+    fi
 
 elif enabled sparc; then
 
@@ -5995,7 +6006,7 @@ for restrict_keyword in restrict __restrict__ __restrict ""; do
     test_code cc "" "char * $restrict_keyword p" && break
 done
 
-check_cc pragma_deprecated "" '_Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")'
+check_cc pragma_deprecated "" '_Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")'
 
 # The global variable ensures the bits appear unchanged in the object file.
 test_cc <<EOF || die "endian test failed"
@@ -6056,7 +6067,26 @@ check_inline_asm inline_asm_nonlocal_labels '"Label:\n"'
 if enabled aarch64; then
     as_arch_level="armv8-a"
     check_as as_arch_directive ".arch $as_arch_level"
-    enabled as_arch_directive && check_arch_level armv8.2-a
+    if enabled as_arch_directive; then
+        # Check for higher .arch levels. We only need armv8.2-a in order to
+        # enable the extensions we want below - we primarily want to control
+        # them via .arch_extension. However:
+        #
+        # Clang before version 17 (Xcode versions up to and including 15.0)
+        # didn't support controlling the dotprod/i8mm extensions via
+        # .arch_extension; thus try to enable them via the .arch level as well.
+        for level in armv8.2-a armv8.4-a armv8.6-a; do
+            check_arch_level $level
+        done
+        # Clang before version 17 (Xcode versions up to and including 15.0)
+        # also had a bug (https://github.com/llvm/llvm-project/issues/32220)
+        # causing a plain ".arch <level>" to not have any effect unless it
+        # had an extra "+<feature>" included - but it was activate on the next
+        # ".arch_extension" directive. Check if we can include "+crc" as dummy
+        # feature to make the .arch directive behave as expected and take
+        # effect right away.
+        check_arch_level "${as_arch_level}+crc"
+    fi
 
     enabled armv8 && check_insn armv8 'prfm   pldl1strm, [x0]'
     # internal assembler in clang 3.3 does not support this instruction
@@ -6368,15 +6398,25 @@ if enabled float16; then
 fi
 
 case "$custom_allocator" in
+    "")
+    ;;
     jemalloc)
-        # jemalloc by default does not use a prefix
-        require libjemalloc jemalloc/jemalloc.h malloc -ljemalloc
+        test -n "$malloc_prefix" ||
+            malloc_prefix=$($pkg_config --variable=jemalloc_prefix $pkg_config_flags jemalloc 2>/dev/null)
+        require_pkg_config custom_allocator jemalloc jemalloc/jemalloc.h ${malloc_prefix}malloc
     ;;
     tcmalloc)
-        require_pkg_config libtcmalloc libtcmalloc gperftools/tcmalloc.h tc_malloc
+        require_pkg_config custom_allocator libtcmalloc gperftools/tcmalloc.h tc_malloc
         malloc_prefix=tc_
     ;;
+    *)
+        require_pkg_config custom_allocator "$custom_allocator" stdlib.h malloc
+    ;;
 esac
+
+if test -n "$custom_allocator"; then
+    add_extralibs "$custom_allocator_extralibs"
+fi
 
 check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  ${malloc_prefix}memalign            && enable memalign
@@ -6453,7 +6493,6 @@ check_headers io.h
 enabled libdrm &&
     check_headers linux/dma-buf.h
 
-check_headers asm/hwcap.h
 check_headers linux/perf_event.h
 check_headers libcrystalhd/libcrystalhd_if.h
 check_headers malloc.h
@@ -6679,7 +6718,7 @@ enabled libaom            && require_pkg_config libaom "aom >= 1.0.0" aom/aom_co
 enabled libaribb24        && { check_pkg_config libaribb24 "aribb24 > 1.0.3" "aribb24/aribb24.h" arib_instance_new ||
                                { enabled gpl && require_pkg_config libaribb24 aribb24 "aribb24/aribb24.h" arib_instance_new; } ||
                                die "ERROR: libaribb24 requires version higher than 1.0.3 or --enable-gpl."; }
-enabled libaribcaption    && require_pkg_config libaribcaption "libaribcaption >= 0.1.0" "aribcaption/aribcaption.h" aribcc_context_alloc
+enabled libaribcaption    && require_pkg_config libaribcaption "libaribcaption >= 1.1.1" "aribcaption/aribcaption.h" aribcc_context_alloc
 enabled lv2               && require_pkg_config lv2 lilv-0 "lilv/lilv.h" lilv_world_new
 enabled libiec61883       && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libass            && require_pkg_config libass "libass >= 0.11.0" ass/ass.h ass_library_init
@@ -6719,7 +6758,7 @@ enabled libilbc           && require libilbc ilbc.h WebRtcIlbcfix_InitDecode -li
 enabled libjxl            && require_pkg_config libjxl "libjxl >= 0.7.0" jxl/decode.h JxlDecoderVersion &&
                              require_pkg_config libjxl_threads "libjxl_threads >= 0.7.0" jxl/thread_parallel_runner.h JxlThreadParallelRunner
 enabled libklvanc         && require libklvanc libklvanc/vanc.h klvanc_context_create -lklvanc
-enabled libkvazaar        && require_pkg_config libkvazaar "kvazaar >= 0.8.1" kvazaar.h kvz_api_get
+enabled libkvazaar        && require_pkg_config libkvazaar "kvazaar >= 2.0.0" kvazaar.h kvz_api_get
 enabled liblensfun        && require_pkg_config liblensfun lensfun lensfun.h lf_db_new
 
 if enabled libmfx && enabled libvpl; then
@@ -6740,8 +6779,7 @@ elif enabled libmfx; then
       { require libmfx "mfxvideo.h mfxdefs.h" MFXInit "-llibmfx $advapi32_extralibs" &&
         { test_cpp_condition mfxdefs.h "MFX_VERSION >= 1028 && MFX_VERSION < 2000" || die "ERROR: libmfx version must be >= 1.28 and < 2.0"; }  &&
         warn "using libmfx without pkg-config"; } } &&
-    warn "build FFmpeg against libmfx 1.x, obsolete features of libmfx such as OPAQUE memory,\n"\
-         "multi-frame encode, user plugins and LA_EXT rate control mode are enabled"
+    warn "libmfx is deprecated. Please run configure with --enable-libvpl to use libvpl instead."
 elif enabled libvpl; then
 # Consider pkg-config only. The name of libmfx is still passed to check_pkg_config function for --enable-libvpl option
 # because QSV has dependency on libmfx, we can use the same dependency if using libmfx in this check. The package name
@@ -6788,7 +6826,7 @@ enabled libpulse          && require_pkg_config libpulse libpulse pulse/pulseaud
 enabled librabbitmq       && require_pkg_config librabbitmq "librabbitmq >= 0.7.1" amqp.h amqp_new_connection
 enabled librav1e          && require_pkg_config librav1e "rav1e >= 0.5.0" rav1e.h rav1e_context_new
 enabled librist           && require_pkg_config librist "librist >= 0.2.7" librist/librist.h rist_receiver_create
-enabled librsvg           && require_pkg_config librsvg librsvg-2.0 librsvg-2.0/librsvg/rsvg.h rsvg_handle_render_cairo
+enabled librsvg           && require_pkg_config librsvg librsvg-2.0 librsvg-2.0/librsvg/rsvg.h rsvg_handle_new_from_data
 enabled librtmp           && require_pkg_config librtmp librtmp librtmp/rtmp.h RTMP_Socket
 enabled librubberband     && require_pkg_config librubberband "rubberband >= 1.8.1" rubberband/rubberband-c.h rubberband_new -lstdc++ && append librubberband_extralibs "-lstdc++"
 enabled libshaderc        && require_pkg_config spirv_compiler "shaderc >= 2019.1" shaderc/shaderc.h shaderc_compiler_initialize
@@ -6851,6 +6889,8 @@ enabled libx265           && require_pkg_config libx265 x265 x265.h x265_api_get
                              require_cpp_condition libx265 x265.h "X265_BUILD >= 89"
 enabled libxavs           && require libxavs "stdint.h xavs.h" xavs_encoder_encode "-lxavs $pthreads_extralibs $libm_extralibs"
 enabled libxavs2          && require_pkg_config libxavs2 "xavs2 >= 1.3.0" "stdint.h xavs2.h" xavs2_api_get
+enabled libxevd           && require_pkg_config libxevd "xevd >= 0.4.1" "xevd.h" xevd_decode
+enabled libxeve           && require_pkg_config libxeve "xeve >= 0.4.3" "xeve.h" xeve_encode
 enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
 enabled libzimg           && require_pkg_config libzimg "zimg >= 2.7.0" zimg.h zimg_get_api_version
 enabled libzmq            && require_pkg_config libzmq "libzmq >= 4.2.1" zmq.h zmq_ctx_new
@@ -7154,6 +7194,10 @@ enabled crystalhd && check_lib crystalhd "stdint.h libcrystalhd/libcrystalhd_if.
 if enabled vulkan; then
     check_pkg_config_header_only vulkan "vulkan >= 1.3.255" "vulkan/vulkan.h" "defined VK_VERSION_1_3" ||
         check_cpp_condition vulkan "vulkan/vulkan.h" "defined(VK_VERSION_1_4) || (defined(VK_VERSION_1_3) && VK_HEADER_VERSION >= 255)"
+fi
+
+if disabled vulkan; then
+    disable libglslang libshaderc spirv_compiler
 fi
 
 if enabled x86; then
@@ -7503,6 +7547,12 @@ check_deps $CONFIG_LIST       \
            $ALL_COMPONENTS    \
 
 enabled threads && ! enabled pthreads && ! enabled atomics_native && die "non pthread threading without atomics not supported, try adding --enable-pthreads or --cpu=i486 or higher if you are on x86"
+
+enabled threads || warn \
+    "Threading support was disabled or is not available on the target platform." \
+    "This means that not only is this build not multi-threaded, but also"    \
+    "that the libraries from this build MUST NOT be used in a multi-threaded"\
+    "environment."
 
 case $target_os in
 haiku)

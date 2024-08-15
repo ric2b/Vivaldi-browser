@@ -132,7 +132,7 @@ uint8_t SkReadBuffer::peekByte() {
         fError = true;
         return 0;
     }
-    return *((uint8_t*)fCurr);
+    return *((const uint8_t*)fCurr);
 }
 
 bool SkReadBuffer::readPad32(void* buffer, size_t bytes) {
@@ -332,7 +332,7 @@ uint32_t SkReadBuffer::getArrayCount() {
     if (!this->validate(IsPtrAlign4(fCurr) && this->isAvailable(inc))) {
         return 0;
     }
-    return *((uint32_t*)fCurr);
+    return *((const uint32_t*)fCurr);
 }
 
 static sk_sp<SkImage> deserialize_image(sk_sp<SkData> data, SkDeserialProcs dProcs,
@@ -449,7 +449,7 @@ sk_sp<SkImage> SkReadBuffer::readImage() {
 
 sk_sp<SkTypeface> SkReadBuffer::readTypeface() {
     // Read 32 bits (signed)
-    //   0 -- return null (default font)
+    //   0 -- return null (empty font)
     //  >0 -- index
     //  <0 -- custom (serial procs) : negative size in bytes
 

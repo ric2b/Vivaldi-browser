@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -25,7 +26,6 @@
 #include "net/dns/dns_util.h"
 #include "net/dns/public/dns_protocol.h"
 #include "net/dns/record_rdata.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
 
@@ -276,7 +276,7 @@ DnsResponse::DnsResponse(
     const std::vector<DnsResourceRecord>& answers,
     const std::vector<DnsResourceRecord>& authority_records,
     const std::vector<DnsResourceRecord>& additional_records,
-    const absl::optional<DnsQuery>& query,
+    const std::optional<DnsQuery>& query,
     uint8_t rcode,
     bool validate_records,
     bool validate_names_as_internet_hostnames) {
@@ -317,7 +317,7 @@ DnsResponse::DnsResponse(
       std::accumulate(additional_records.begin(), additional_records.end(),
                       response_size, do_accumulation);
 
-  auto io_buffer = base::MakeRefCounted<IOBuffer>(response_size);
+  auto io_buffer = base::MakeRefCounted<IOBufferWithSize>(response_size);
   base::BigEndianWriter writer(io_buffer->data(), response_size);
   success &= WriteHeader(&writer, header);
   DCHECK(success);
@@ -358,14 +358,15 @@ DnsResponse::DnsResponse(
 }
 
 DnsResponse::DnsResponse()
-    : io_buffer_(base::MakeRefCounted<IOBuffer>(dns_protocol::kMaxUDPSize + 1)),
+    : io_buffer_(base::MakeRefCounted<IOBufferWithSize>(
+          dns_protocol::kMaxUDPSize + 1)),
       io_buffer_size_(dns_protocol::kMaxUDPSize + 1) {}
 
 DnsResponse::DnsResponse(scoped_refptr<IOBuffer> buffer, size_t size)
     : io_buffer_(std::move(buffer)), io_buffer_size_(size) {}
 
 DnsResponse::DnsResponse(size_t length)
-    : io_buffer_(base::MakeRefCounted<IOBuffer>(length)),
+    : io_buffer_(base::MakeRefCounted<IOBufferWithSize>(length)),
       io_buffer_size_(length) {}
 
 DnsResponse::DnsResponse(const void* data, size_t length, size_t answer_offset)
@@ -428,7 +429,7 @@ bool DnsResponse::InitParse(size_t nbytes, const DnsQuery& query) {
     return false;
   }
 
-  absl::optional<std::string> dotted_qname =
+  std::optional<std::string> dotted_qname =
       dns_names_util::NetworkToDottedName(query.qname());
   if (!dotted_qname.has_value())
     return false;
@@ -481,9 +482,9 @@ bool DnsResponse::InitParseWithoutQuery(size_t nbytes) {
   return true;
 }
 
-absl::optional<uint16_t> DnsResponse::id() const {
+std::optional<uint16_t> DnsResponse::id() const {
   if (!id_available_)
-    return absl::nullopt;
+    return std::nullopt;
 
   return base::NetToHost16(header()->id);
 }
@@ -570,7 +571,7 @@ bool DnsResponse::WriteRecord(base::BigEndianWriter* writer,
     return false;
   }
 
-  absl::optional<std::vector<uint8_t>> domain_name =
+  std::optional<std::vector<uint8_t>> domain_name =
       dns_names_util::DottedNameToNetwork(record.name,
                                           validate_name_as_internet_hostname);
   if (!domain_name.has_value()) {
@@ -592,7 +593,7 @@ bool DnsResponse::WriteRecord(base::BigEndianWriter* writer,
 
 bool DnsResponse::WriteAnswer(base::BigEndianWriter* writer,
                               const DnsResourceRecord& answer,
-                              const absl::optional<DnsQuery>& query,
+                              const std::optional<DnsQuery>& query,
                               bool validate_record,
                               bool validate_name_as_internet_hostname) {
   // Generally assumed to be a mistake if we write answers that don't match the

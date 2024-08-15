@@ -106,6 +106,8 @@ g.test('texture_binding')
   .beforeAllSubcases(t => {
     const { format, viewFormat } = t.params;
     t.skipIfTextureFormatNotSupported(format, viewFormat);
+    // Compatibility mode does not support format reinterpretation.
+    t.skipIf(t.isCompatibility);
   })
   .fn(t => {
     const { format, viewFormat } = t.params;
@@ -207,6 +209,8 @@ in view format and match in base format.`
   .beforeAllSubcases(t => {
     const { format, viewFormat } = t.params;
     t.skipIfTextureFormatNotSupported(format, viewFormat);
+    // Compatibility mode does not support format reinterpretation.
+    t.skipIf(t.isCompatibility);
   })
   .fn(t => {
     const { format, viewFormat, sampleCount } = t.params;

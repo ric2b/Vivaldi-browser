@@ -9,7 +9,9 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/containers/id_map.h"
 #include "base/memory/raw_ptr.h"
@@ -28,7 +30,6 @@
 #include "mojo/public/cpp/bindings/shared_remote.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_bypass_option.mojom-shared.h"
@@ -78,7 +79,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   // blink::Platform implementation.
   blink::WebSandboxSupport* GetSandboxSupport() override;
   virtual bool sandboxEnabled();
-  uint64_t VisitedLinkHash(const char* canonicalURL, size_t length) override;
+  uint64_t VisitedLinkHash(std::string_view canonical_url) override;
   bool IsLinkVisited(uint64_t linkHash) override;
   blink::WebString UserAgent() override;
   blink::UserAgentMetadata UserAgentMetadata() override;
@@ -90,8 +91,19 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   std::unique_ptr<blink::URLLoaderThrottleProvider>
   CreateURLLoaderThrottleProviderForWorker(
       blink::URLLoaderThrottleProviderType provider_type) override;
+  void CreateWebGPUGraphicsContext3DProviderAsync(
+      const blink::WebURL& document_url,
+      base::OnceCallback<
+          void(std::unique_ptr<blink::WebGraphicsContext3DProvider>)> callback)
+      override;
+  void OnGpuChannelEstablished(
+      const blink::WebURL& document_url,
+      base::OnceCallback<
+          void(std::unique_ptr<blink::WebGraphicsContext3DProvider>)> callback,
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host);
   std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
   CreateWebSocketHandshakeThrottleProvider() override;
+  bool IsolateStartsInBackground() override;
   blink::WebString DefaultLocale() override;
   void SuddenTerminationChanged(bool enabled) override;
   viz::FrameSinkId GenerateFrameSinkId() override;
@@ -129,7 +141,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
   void EstablishGpuChannel(EstablishGpuChannelCallback callback) override;
   bool RTCSmoothnessAlgorithmEnabled() override;
-  absl::optional<double> GetWebRtcMaxCaptureFrameRate() override;
+  std::optional<double> GetWebRtcMaxCaptureFrameRate() override;
   scoped_refptr<media::AudioRendererSink> NewAudioRendererSink(
       blink::WebAudioDeviceSourceType source_type,
       blink::WebLocalFrame* web_frame,
@@ -178,7 +190,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebSecurityOrigin& script_origin) override;
   blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel(
       const blink::WebSecurityOrigin& origin) override;
-  bool OriginCanAccessServiceWorkers(const blink::WebURL& url) override;
+  bool OriginCanAccessServiceWorkers(const GURL& url) override;
   std::tuple<blink::CrossVariantMojoRemote<
                  blink::mojom::ServiceWorkerContainerHostInterfaceBase>,
              blink::CrossVariantMojoRemote<
@@ -258,7 +270,17 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   // Thread to run the VideoFrameCompositor on.
   std::unique_ptr<base::Thread> video_frame_compositor_thread_;
 
+  // FrameSinks are generated on both the browser and the renderer. The
+  // browser uses routing IDs and will be in the range [0,
+  // std::numeric_limits<int32_t>::max()] The renderer has the
+  // [std::numeric_limits<int32_t>::max() + 1,
+  // std::numeric_limits<uint32_t>::max()] range.
+  uint32_t next_frame_sink_id_;
+
   THREAD_CHECKER(main_thread_checker_);
+
+  // Used for callbacks.
+  base::WeakPtrFactory<RendererBlinkPlatformImpl> weak_factory_{this};
 };
 
 }  // namespace content

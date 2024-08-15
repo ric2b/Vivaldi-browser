@@ -14,6 +14,10 @@ struct tint_array {
     T elements[N];
 };
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 struct Buf {
   /* 0x0000 */ uint count;
   /* 0x0004 */ tint_array<uint, 50> data;
@@ -25,7 +29,7 @@ uint tint_mod(uint lhs, uint rhs) {
 
 kernel void tint_symbol(device Buf* tint_symbol_1 [[buffer(0)]]) {
   uint i = 0u;
-  while (true) {
+  TINT_ISOLATE_UB(tint_volatile_true) while(true) {
     if ((i >= (*(tint_symbol_1)).count)) {
       break;
     }

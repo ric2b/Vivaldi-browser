@@ -16,12 +16,9 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_view.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_home_mediator.h"
-#import "ios/ui/ntp/vivaldi_start_page_prefs.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 
 @interface VivaldiSpeedDialViewController ()
@@ -29,6 +26,8 @@
           SpeedDialHomeConsumer>
 // The view that holds the speed dial folder children
 @property(weak,nonatomic) VivaldiSpeedDialContainerView* speedDialContainerView;
+// The background Image for Speed Dial
+@property(nonatomic, strong) UIImageView* backgroundImageView;
 // Bookmark Model that holds the bookmark data
 @property(assign,nonatomic) BookmarkModel* bookmarks;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
@@ -46,6 +45,7 @@
 @property(strong,nonatomic) VivaldiSpeedDialItem* currentItem;
 // Parent of Speed dial folder which is currently presented.
 @property(strong,nonatomic) VivaldiSpeedDialItem* parentItem;
+@property(strong,nonatomic) UIImage* backgroundImage;
 
 @end
 
@@ -67,7 +67,8 @@
                       parent:(VivaldiSpeedDialItem*)parent
                    bookmarks:(BookmarkModel*)bookmarks
                      browser:(Browser*)browser
-               faviconLoader:(FaviconLoader*)faviconLoader {
+               faviconLoader:(FaviconLoader*)faviconLoader
+             backgroundImage:(UIImage*)backgroundImage {
   DCHECK(bookmarks);
   DCHECK(bookmarks->loaded());
   VivaldiSpeedDialViewController* controller =
@@ -78,6 +79,7 @@
   controller.parentItem = parent;
   controller.browser = browser;
   controller.title = item.title;
+  controller.backgroundImage = backgroundImage;
   return controller;
 }
 
@@ -88,6 +90,7 @@
     _bookmarks = bookmarks;
     _browserState =
         browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    [VivaldiStartPagePrefs setPrefService:_browserState->GetPrefs()];
   }
   return self;
 }
@@ -119,7 +122,18 @@
 - (void)setUpUI {
   self.view.backgroundColor =
     [UIColor colorNamed:vNTPSpeedDialContainerbackgroundColor];
+  [self setupSpeedDialBackground];
   [self setupSpeedDialView];
+}
+
+-(void)setupSpeedDialBackground {
+  UIImageView* backgroundImageView =
+      [[UIImageView alloc] initWithImage:_backgroundImage];
+  backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
+  backgroundImageView.clipsToBounds = YES;
+  self.backgroundImageView = backgroundImageView;
+  [self.view addSubview:backgroundImageView];
+  [self.backgroundImageView fillSuperview];
 }
 
 /// Set up the speed dial view
@@ -189,8 +203,7 @@
 
 /// Returns current layout style for start page
 - (VivaldiStartPageLayoutStyle)currentLayoutStyle {
-  return [VivaldiStartPagePrefs
-          getStartPageLayoutStyleWithPrefService:self.browserState->GetPrefs()];
+  return [VivaldiStartPagePrefsHelper getStartPageLayoutStyle];
 }
 
 #pragma mark - SPEED DIAL HOME CONSUMER
@@ -201,6 +214,15 @@
   if (!loadable)
     return;
   [self.mediator computeSpeedDialChildItems:self.currentItem];
+}
+
+- (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+  NSNumber *bookmarkNodeId = @(bookmarkNode->id());
+  NSDictionary *userInfo = @{vSpeedDialIdentifierKey:bookmarkNodeId};
+  [[NSNotificationCenter defaultCenter]
+       postNotificationName:vSpeedDialPropertyDidChange
+                     object:nil
+                   userInfo:userInfo];
 }
 
 - (void)refreshMenuItems:(NSArray*)items {
@@ -231,7 +253,8 @@
                                             parent:parent
                                          bookmarks:self.bookmarks
                                            browser:self.browser
-                                     faviconLoader:self.faviconLoader];
+                                     faviconLoader:self.faviconLoader
+                                   backgroundImage:self.backgroundImage];
     controller.delegate = self;
     [self.navigationController pushViewController:controller
                                          animated:YES];
@@ -267,6 +290,12 @@
                      parent:(VivaldiSpeedDialItem*)parent {
   if (self.delegate)
     [self.delegate didSelectDeleteItem:item parent:parent];
+}
+
+- (void)didRefreshThumbnailForItem:(VivaldiSpeedDialItem*)item
+                            parent:(VivaldiSpeedDialItem*)parent {
+  if (self.delegate)
+    [self.delegate didRefreshThumbnailForItem:item parent:parent];
 }
 
 - (void)didSelectAddNewSpeedDial:(BOOL)isFolder

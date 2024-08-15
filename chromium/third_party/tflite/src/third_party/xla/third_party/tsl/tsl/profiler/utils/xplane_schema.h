@@ -259,6 +259,7 @@ enum StatType {
   kModelVersion,
   kBytesTransferred,
   kDmaQueue,
+  kDcnCollectiveInfo,
   // Performance counter related.
   kRawValue,
   kScaledValue,
@@ -473,6 +474,8 @@ class XFlow {
 TF_CONST_INIT extern const absl::string_view kMegaScaleDcnReceive;
 TF_CONST_INIT extern const absl::string_view kMegaScaleDcnSend;
 TF_CONST_INIT extern const absl::string_view kMegaScaleDcnSendFinished;
+TF_CONST_INIT extern const absl::string_view kMegaScaleDcnMemAllocate;
+TF_CONST_INIT extern const absl::string_view kMegaScaleDcnMemCopy;
 TF_CONST_INIT extern const absl::string_view kMegaScaleTopologyDiscovery;
 TF_CONST_INIT extern const absl::string_view kMegaScaleBarrier;
 TF_CONST_INIT extern const absl::string_view kMegaScaleHostCommand;
@@ -480,6 +483,8 @@ TF_CONST_INIT extern const absl::string_view kMegaScaleD2HTransferStart;
 TF_CONST_INIT extern const absl::string_view kMegaScaleD2HTransferFinished;
 TF_CONST_INIT extern const absl::string_view kMegaScaleH2DTransferStart;
 TF_CONST_INIT extern const absl::string_view kMegaScaleH2DTransferFinished;
+TF_CONST_INIT extern const absl::string_view kMegaScaleReductionStart;
+TF_CONST_INIT extern const absl::string_view kMegaScaleReductionFinished;
 TF_CONST_INIT extern const char kXProfMetadataKey[];
 TF_CONST_INIT extern const char kXProfMetadataFlow[];
 TF_CONST_INIT extern const char kXProfMetadataTransfers[];

@@ -11,6 +11,8 @@ option java_outer_classname = "ComposeProto";
 
 package optimization_guide.proto;
 
+import "components/optimization_guide/proto/features/common_quality_data.proto";
+
 // ComposeFeatureLoggingData is the wrapper containing of ModelExecution
 // request, response and quality data for one compose execution run.
 message ComposeLoggingData {
@@ -43,21 +45,6 @@ enum ComposeLength {
   COMPOSE_LONGER = 2;
 }
 
-// Information about a previous response in a compose session.
-message ComposePriorResponse {
-  // The model response.
-  string response_text = 1;
-  // The tone and length options used to generate the response.
-  // Allows the service to identify if tone/length options have changed,
-  // and potentially apply a lengthen/formalize operation on top of the
-  // response.
-  ComposeTone tone = 2;
-  ComposeLength length = 3;
-  // If true, we may ensure the next response is not too similar to
-  // this one.
-  bool regenerate_requested_since = 4;
-}
-
 // Stores the metadata associated with a single call to the model execution.
 // This excludes any explicit user input.
 message ComposePageMetadata {
@@ -68,6 +55,8 @@ message ComposePageMetadata {
   // The innerText of the page the input field is on. This is temporary. We do
   // not intend to send inner text in the long run.
   string page_inner_text = 3;
+  // The offset into the inner text of the selected input field.
+  uint64 page_inner_text_offset = 4;
 }
 
 // The final status of the feature.
@@ -83,13 +72,6 @@ enum FinalStatus {
   STATUS_FINISHED_WITHOUT_INSERT = 3;
 }
 
-// The explicit feedback provided by the user.
-enum UserFeedback {
-  FEEDBACK_UNSPECIFIED = 0;
-  FEEDBACK_THUMBS_UP = 1;
-  FEEDBACK_THUMBS_DOWN = 2;
-}
-
 // How the user used their clipboard with the feature.
 enum ClipboardUse {
   CLIPBOARD_UNSPECIFIED = 0;
@@ -100,22 +82,30 @@ enum ClipboardUse {
 // Stores all data associated with a single call to the model execution run for
 // compose.
 message ComposeRequest {
-  // Purely the user input text.
-  string user_input = 2;
+  reserved 1, 2, 4, 5, 6;
+
+  message GenerateParams {
+    // User written input text.
+    string user_input = 1;
+  }
+  message RewriteParams {
+    // A previously received ComposeResponse response_text, which will be
+    // rewritten.
+    string previous_response = 1;
+    // Rewrite with one of the below modifiers.
+    oneof modifier {
+      ComposeTone tone = 2;
+      ComposeLength length = 3;
+      bool regenerate = 4;
+    }
+  }
+  oneof request_params {
+    GenerateParams generate_params = 7;
+    RewriteParams rewrite_params = 8;
+  }
 
   // Contains information scraped from the page.
   ComposePageMetadata page_metadata = 3;
-
-  // Stores the tone selection that the user chose.
-  ComposeTone tone = 4;
-
-  // Stores the length selection that the user chose.
-  ComposeLength length = 5;
-
-  // The previous Compose responses, which may be used when the user is
-  // selecting a different tone or length. Specified only for responses where
-  // the user prompt (and page context) stay the same.
-  repeated ComposePriorResponse previous_responses = 6;
 }
 
 // Stores the response text from the model execution run.
@@ -123,8 +113,18 @@ message ComposeResponse {
   string output = 1;
 }
 
+// A helper message to store the int64 high and uint64 low bits of an int128
+// since protos do not natively handle int128. The underlying value is split
+// into a `low` uint64 holding the low bits, and `high` int64 holding the bits
+// beyond what an int64 can hold.
+message Int128 {
+  uint64 high = 1;
+  uint64 low = 2;
+}
+
 // Any data collected on the client outside of the model request and response.
 // This includes user feedback, and metrics about feature usage.
+// Next Id: 8
 message ComposeQuality {
   FinalStatus final_status = 1;
   UserFeedback user_feedback = 2;
@@ -133,5 +133,9 @@ message ComposeQuality {
   int64 request_latency_ms = 4;
   // How much was the text modified before commit only valid iff
   // final_status = INSERTED.
-  optional int64 edit_distance = 5;
+  int64 edit_distance = 5;
+  // A unique ID for each compose session.
+  Int128 session_id = 6;
+  // Was this request generated via an edit action.
+  bool was_generated_via_edit = 7;
 }

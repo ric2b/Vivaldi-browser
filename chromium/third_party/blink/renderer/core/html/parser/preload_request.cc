@@ -121,13 +121,15 @@ Resource* PreloadRequest::Start(Document* document) {
         network::mojom::AttributionReportingEligibility::kEventSourceOrTrigger);
   }
 
-  bool shared_storage_writable =
-      shared_storage_writable_ &&
+  bool shared_storage_writable_opted_in =
+      shared_storage_writable_opted_in_ &&
       RuntimeEnabledFeatures::SharedStorageAPIM118Enabled(
           document->domWindow()) &&
-      document->domWindow()->IsSecureContext();
-  resource_request.SetSharedStorageWritableOptedIn(shared_storage_writable);
-  if (shared_storage_writable) {
+      document->domWindow()->IsSecureContext() &&
+      !document->domWindow()->GetSecurityOrigin()->IsOpaque();
+  resource_request.SetSharedStorageWritableOptedIn(
+      shared_storage_writable_opted_in);
+  if (shared_storage_writable_opted_in) {
     CHECK_EQ(resource_type_, ResourceType::kImage);
     UseCounter::Count(document, WebFeature::kSharedStorageAPI_Image_Attribute);
   }
@@ -189,6 +191,10 @@ Resource* PreloadRequest::Start(Document* document) {
 
   params.SetIsPotentiallyLCPElement(is_potentially_lcp_element_);
   params.SetIsPotentiallyLCPInfluencer(is_potentially_lcp_influencer_);
+
+  if (LCPCriticalPathPredictor* lcpp = document->GetFrame()->GetLCPP()) {
+    lcpp->OnStartPreload(url);
+  }
 
   return PreloadHelper::StartPreload(resource_type_, params, *document);
 }

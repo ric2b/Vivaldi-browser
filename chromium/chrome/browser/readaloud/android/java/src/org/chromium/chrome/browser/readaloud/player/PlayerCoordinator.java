@@ -10,8 +10,8 @@ import android.view.ViewStub;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BundleUtils;
-import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.readaloud.ReadAloudPrefs;
 import org.chromium.chrome.browser.readaloud.player.expanded.ExpandedPlayerCoordinator;
 import org.chromium.chrome.browser.readaloud.player.mini.MiniPlayerCoordinator;
@@ -38,6 +38,9 @@ public class PlayerCoordinator implements Player {
     private final MiniPlayerCoordinator mMiniPlayer;
     private final ExpandedPlayerCoordinator mExpandedPlayer;
     private Playback mPlayback;
+    private boolean mRestoreMiniPlayer;
+    private boolean mRestoreExpandedPlayer;
+    private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
 
     // TODO remove internal call and then remove this constructor
     public PlayerCoordinator(
@@ -58,10 +61,20 @@ public class PlayerCoordinator implements Player {
         Context contextForInflation =
                 BundleUtils.createContextForInflation(
                         delegate.getActivity(), "read_aloud_playback");
-        mMiniPlayer = new MiniPlayerCoordinator(delegate.getActivity(), contextForInflation, model);
+        mMiniPlayer =
+                new MiniPlayerCoordinator(
+                        delegate.getActivity(),
+                        contextForInflation,
+                        model,
+                        delegate.getBrowserControlsSizer(),
+                        delegate.getLayoutManager());
         mExpandedPlayer = new ExpandedPlayerCoordinator(contextForInflation, delegate, model);
         mMediator = new PlayerMediator(/* coordinator= */ this, delegate, model);
         mDelegate = delegate;
+        mActivityLifecycleDispatcher = delegate.getActivityLifecycleDispatcher();
+        if (mActivityLifecycleDispatcher != null) {
+            mActivityLifecycleDispatcher.register(mExpandedPlayer);
+        }
     }
 
     @VisibleForTesting
@@ -75,6 +88,10 @@ public class PlayerCoordinator implements Player {
         mMediator = mediator;
         mDelegate = delegate;
         mExpandedPlayer = player;
+        mActivityLifecycleDispatcher = delegate.getActivityLifecycleDispatcher();
+        if (mActivityLifecycleDispatcher != null) {
+            mActivityLifecycleDispatcher.register(mExpandedPlayer);
+        }
     }
 
     @Override
@@ -92,13 +109,18 @@ public class PlayerCoordinator implements Player {
         dismissPlayers();
         mMediator.destroy();
         mMiniPlayer.destroy();
+        if (mActivityLifecycleDispatcher != null) {
+            mActivityLifecycleDispatcher.unregister(mExpandedPlayer);
+        }
     }
 
     @Override
     public void playTabRequested() {
         mMediator.setPlayback(null);
         mMediator.setPlaybackState(PlaybackListener.State.BUFFERING);
-        mMiniPlayer.show(shouldAnimateMiniPlayer());
+        if (!mExpandedPlayer.anySheetShowing()) {
+            mMiniPlayer.show(/* animate= */ true);
+        }
     }
 
     @Override
@@ -112,14 +134,23 @@ public class PlayerCoordinator implements Player {
     public void playbackFailed() {
         mMediator.setPlayback(null);
         mMediator.setPlaybackState(PlaybackListener.State.ERROR);
-        Log.e(TAG, "PlayerController.playbackFailed() UI changes not implemented.");
+    }
+
+    @Override
+    public void recordPlaybackDuration() {
+        mMediator.recordPlaybackDuration();
     }
 
     /** Show expanded player. */
     void expand() {
-        if (mPlayback != null) {
-            mExpandedPlayer.show();
-        }
+        mExpandedPlayer.show();
+        mMiniPlayer.dismiss(/* animate= */ false);
+    }
+
+    @Override
+    public void restoreMiniPlayer() {
+        mMiniPlayer.show(/* animate= */ true);
+        mMediator.setHiddenAndPlaying(false);
     }
 
     @Override
@@ -128,8 +159,55 @@ public class PlayerCoordinator implements Player {
         // dismissed when stopping the playback.
         mMediator.setPlayback(null);
         mMediator.setPlaybackState(PlaybackListener.State.STOPPED);
-        mMiniPlayer.dismiss(shouldAnimateMiniPlayer());
+        mMiniPlayer.dismiss(/* animate= */ true);
         mExpandedPlayer.dismiss();
+        mMediator.setHiddenAndPlaying(false);
+    }
+
+    @Override
+    public void hideMiniPlayer() {
+        int miniPlayerVisibility = mMiniPlayer.getVisibility();
+        if (miniPlayerVisibility == VisibilityState.SHOWING
+                || miniPlayerVisibility == VisibilityState.VISIBLE) {
+            mMiniPlayer.dismiss(/* animate= */ true);
+            mMediator.setHiddenAndPlaying(true);
+        }
+    }
+
+    @Override
+    public void hidePlayers() {
+        int expandedSheetVisibility = mExpandedPlayer.getVisibility();
+        int miniPlayerVisibility = mMiniPlayer.getVisibility();
+        if (expandedSheetVisibility == VisibilityState.SHOWING
+                || expandedSheetVisibility == VisibilityState.VISIBLE) {
+            mRestoreExpandedPlayer = true;
+            mRestoreMiniPlayer = false;
+            mExpandedPlayer.dismiss();
+        } else if (miniPlayerVisibility == VisibilityState.SHOWING
+                || miniPlayerVisibility == VisibilityState.VISIBLE) {
+            mRestoreMiniPlayer = true;
+            mRestoreExpandedPlayer = false;
+            mMiniPlayer.dismiss(/* animate= */ true);
+        }
+
+        mMediator.setHiddenAndPlaying(true);
+    }
+
+    @Override
+    public void restorePlayers() {
+        if (mRestoreMiniPlayer) {
+            restoreMiniPlayer();
+            mRestoreMiniPlayer = false;
+        } else if (mRestoreExpandedPlayer) {
+            mExpandedPlayer.show();
+            mRestoreExpandedPlayer = false;
+            mMediator.setHiddenAndPlaying(false);
+        }
+    }
+
+    @Override
+    public void onScreenStatusChanged(boolean isScreenLocked) {
+        mMediator.onScreenStatusChanged(isScreenLocked);
     }
 
     /** To be called when the close button is clicked. */
@@ -139,10 +217,9 @@ public class PlayerCoordinator implements Player {
         }
     }
 
-    private boolean shouldAnimateMiniPlayer() {
-        // If the expanded player is definitely covering the mini player, we can skip
-        // animating the mini player show and hide.
-        // TODO return !mExpandedPlayer.isVisible();
-        return true;
+    void voiceMenuClosed() {
+        for (Observer o : mObserverList) {
+            o.onVoiceMenuClosed();
+        }
     }
 }

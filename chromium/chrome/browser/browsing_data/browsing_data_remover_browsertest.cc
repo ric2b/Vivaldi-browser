@@ -11,6 +11,7 @@
 #include "base/functional/callback.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -30,6 +31,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -43,6 +45,7 @@
 #include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/account_reconcilor.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/test/test_sync_service.h"
@@ -137,7 +140,9 @@ class BrowsingDataRemoverBrowserTest
     // WebSQL is disabled by default as of M119 (crbug/695592). Enable feature
     // in tests during deprecation trial and enterprise policy support.
     enabled_features.push_back(blink::features::kWebSQLAccess);
-    InitFeatureLists(std::move(enabled_features), {});
+    // TODO(b/314968275): Add tests for when UNO Desktop is enabled.
+    InitFeatureLists(std::move(enabled_features),
+                     /*disabled_features=*/{switches::kUnoDesktop});
   }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -823,23 +828,21 @@ class BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest
     : public BrowsingDataRemoverBrowserTest {
  public:
   BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest() {
-    features_.InitAndEnableFeature(
-        password_manager::features::kEnablePasswordsAccountStorage);
+    features_.InitWithFeatures(
+        /*enabled_features=*/{password_manager::features::
+                                  kEnablePasswordsAccountStorage},
+        /*disabled_features=*/{switches::kUnoDesktop});
   }
 
   void ClearSiteDataAndWait(
       const url::Origin& origin,
-      const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
-      const absl::optional<blink::StorageKey>& storage_key,
+      const std::optional<net::CookiePartitionKey>& cookie_partition_key,
+      const std::optional<blink::StorageKey>& storage_key,
       const std::set<std::string>& storage_buckets_to_remove) {
     base::RunLoop loop;
     content::ClearSiteData(
-        /*browser_context_getter=*/base::BindRepeating(
-            [](content::BrowserContext* browser_context) {
-              return browser_context;
-            },
-            base::Unretained(GetBrowser()->profile())),
-        /*storage_partition_config=*/absl::nullopt,
+        GetBrowser()->profile()->GetWeakPtr(),
+        /*storage_partition_config=*/std::nullopt,
         /*origin=*/origin, content::ClearSiteDataTypeSet::All(),
         /*storage_buckets_to_remove=*/storage_buckets_to_remove,
         /*avoid_closing_connections=*/true,
@@ -857,46 +860,34 @@ class BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest
 IN_PROC_BROWSER_TEST_F(
     BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest,
     ClearingCookiesAlsoClearsPasswordAccountStorageOptIn) {
-  PrefService* prefs = GetBrowser()->profile()->GetPrefs();
-
-  CoreAccountInfo account;
-  account.email = "name@account.com";
-  account.gaia = "name";
-  account.account_id = CoreAccountId::FromGaiaId(account.gaia);
-
-  syncer::TestSyncService sync_service;
-  sync_service.SetHasSyncConsent(false);
-  sync_service.SetAccountInfo(account);
-  ASSERT_EQ(sync_service.GetTransportState(),
-            syncer::SyncService::TransportState::ACTIVE);
-  password_manager::features_util::OptInToAccountStorage(prefs, &sync_service);
+  PrefService* prefs = GetProfile()->GetPrefs();
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(GetProfile());
+  signin::MakePrimaryAccountAvailable(
+      IdentityManagerFactory::GetForProfile(GetProfile()), "foo@gmail.com",
+      signin::ConsentLevel::kSignin);
+  password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
   ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, &sync_service));
+      sync_service));
 
   RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA);
 
   EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, &sync_service));
+      sync_service));
 }
 
 IN_PROC_BROWSER_TEST_F(
     BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest,
     ClearingCookiesWithFilterAlsoClearsPasswordAccountStorageOptIn) {
-  PrefService* prefs = GetBrowser()->profile()->GetPrefs();
-
-  CoreAccountInfo account;
-  account.email = "name@account.com";
-  account.gaia = "name";
-  account.account_id = CoreAccountId::FromGaiaId(account.gaia);
-
-  syncer::TestSyncService sync_service;
-  sync_service.SetHasSyncConsent(false);
-  sync_service.SetAccountInfo(account);
-  ASSERT_EQ(sync_service.GetTransportState(),
-            syncer::SyncService::TransportState::ACTIVE);
-  password_manager::features_util::OptInToAccountStorage(prefs, &sync_service);
+  PrefService* prefs = GetProfile()->GetPrefs();
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(GetProfile());
+  signin::MakePrimaryAccountAvailable(
+      IdentityManagerFactory::GetForProfile(GetProfile()), "foo@gmail.com",
+      signin::ConsentLevel::kSignin);
+  password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
   ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, &sync_service));
+      sync_service));
 
   // Clearing cookies for some random domain should have no effect on the
   // opt-in.
@@ -909,7 +900,7 @@ IN_PROC_BROWSER_TEST_F(
                             std::move(filter_builder));
   }
   EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, &sync_service));
+      sync_service));
 
   // Clearing cookies for google.com should clear the opt-in.
   {
@@ -921,50 +912,44 @@ IN_PROC_BROWSER_TEST_F(
                             std::move(filter_builder));
   }
   EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
-      prefs, &sync_service));
+      sync_service));
 }
 
 IN_PROC_BROWSER_TEST_F(
     BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest,
     ClearSiteData) {
-  PrefService* prefs = GetBrowser()->profile()->GetPrefs();
-
-  CoreAccountInfo account;
-  account.email = "name@account.com";
-  account.gaia = "name";
-  account.account_id = CoreAccountId::FromGaiaId(account.gaia);
-
-  syncer::TestSyncService sync_service;
-  sync_service.SetHasSyncConsent(false);
-  sync_service.SetAccountInfo(account);
-  ASSERT_EQ(sync_service.GetTransportState(),
-            syncer::SyncService::TransportState::ACTIVE);
+  PrefService* prefs = GetProfile()->GetPrefs();
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(GetProfile());
+  signin::MakePrimaryAccountAvailable(
+      IdentityManagerFactory::GetForProfile(GetProfile()), "foo@gmail.com",
+      signin::ConsentLevel::kSignin);
 
   const GURL kFirstPartyURL("https://google.com");
   const GURL kCrossSiteURL("https://example.com");
 
   const struct {
     const url::Origin origin;
-    const absl::optional<net::CookiePartitionKey> cookie_partition_key;
-    const absl::optional<blink::StorageKey> storage_key;
+    const std::optional<net::CookiePartitionKey> cookie_partition_key;
+    const std::optional<blink::StorageKey> storage_key;
     bool expects_opted_in;
   } test_cases[] = {
       {
           url::Origin::Create(kFirstPartyURL),
-          absl::nullopt,
-          absl::nullopt,
+          std::nullopt,
+          std::nullopt,
           false,
       },
       {
           url::Origin::Create(kCrossSiteURL),
-          absl::nullopt,
-          absl::nullopt,
+          std::nullopt,
+          std::nullopt,
           true,
       },
       {
           url::Origin::Create(kFirstPartyURL),
           net::CookiePartitionKey::FromURLForTesting(kFirstPartyURL),
-          absl::nullopt,
+          std::nullopt,
           false,
       },
       {
@@ -977,7 +962,7 @@ IN_PROC_BROWSER_TEST_F(
       {
           url::Origin::Create(kFirstPartyURL),
           net::CookiePartitionKey::FromURLForTesting(kCrossSiteURL),
-          absl::nullopt,
+          std::nullopt,
           true,
       },
       {
@@ -990,15 +975,19 @@ IN_PROC_BROWSER_TEST_F(
           true,
       },
   };
-  for (const auto& test_case : test_cases) {
-    password_manager::features_util::OptInToAccountStorage(prefs,
-                                                           &sync_service);
+  for (size_t i = 0; i < std::size(test_cases); i++) {
+    SCOPED_TRACE(base::StringPrintf("Test case %zu", i));
+    const auto& test_case = test_cases[i];
+
+    password_manager::features_util::OptInToAccountStorage(prefs, sync_service);
+    ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
+        sync_service));
 
     ClearSiteDataAndWait(test_case.origin, test_case.cookie_partition_key,
                          test_case.storage_key, {});
 
     ASSERT_EQ(password_manager::features_util::IsOptedInForAccountStorage(
-                  prefs, &sync_service),
+                  sync_service),
               test_case.expects_opted_in);
   }
 }
@@ -1016,7 +1005,7 @@ class BrowsingDataRemoverStorageBucketsBrowserTest
 
   void ClearSiteDataAndWait(
       const url::Origin& origin,
-      const absl::optional<blink::StorageKey>& storage_key,
+      const std::optional<blink::StorageKey>& storage_key,
       const std::set<std::string>& storage_buckets_to_remove) {
     base::RunLoop loop;
     content::ClearSiteDataTypeSet clear_site_data_types =
@@ -1024,16 +1013,12 @@ class BrowsingDataRemoverStorageBucketsBrowserTest
     // We're clearing some storage buckets and not all of them.
     clear_site_data_types.Remove(content::ClearSiteDataType::kStorage);
     content::ClearSiteData(
-        /*browser_context_getter=*/base::BindRepeating(
-            [](content::BrowserContext* browser_context) {
-              return browser_context;
-            },
-            base::Unretained(GetBrowser()->profile())),
-        /*storage_partition_config=*/absl::nullopt,
+        GetBrowser()->profile()->GetWeakPtr(),
+        /*storage_partition_config=*/std::nullopt,
         /*origin=*/origin, clear_site_data_types,
         /*storage_buckets_to_remove=*/storage_buckets_to_remove,
         /*avoid_closing_connections=*/true,
-        /*cookie_partition_key=*/absl::nullopt,
+        /*cookie_partition_key=*/std::nullopt,
         /*storage_key=*/storage_key,
         /*partitioned_state_allowed_only=*/false,
         /*callback=*/loop.QuitClosure());

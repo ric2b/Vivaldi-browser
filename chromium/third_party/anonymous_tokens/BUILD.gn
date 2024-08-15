@@ -95,12 +95,6 @@ source_set("anonymous_tokens_pb_openssl_converters") {
 }
 
 proto_library("anonymous_tokens_cc_proto") {
-  visibility = [
-    ":*",
-    "//net/third_party/quiche:blind_sign_auth_proto",
-    "//net/third_party/quiche:blind_sign_auth_proto_gen",
-  ]
-
   sources = [ "src/anonymous_tokens/proto/anonymous_tokens.proto" ]
 
   component_build_force_source_set = true
@@ -258,6 +252,7 @@ source_set("tokens_encodings") {
     "src/anonymous_tokens/cpp/privacy_pass/token_encodings.cc",
     "src/anonymous_tokens/cpp/privacy_pass/token_encodings.h",
   ]
+  configs += [ ":anonymous_tokens_internal_config" ]
   public_configs = [ ":anonymous_tokens_config" ]
   deps = [ ":status_utils" ]
   public_deps = [

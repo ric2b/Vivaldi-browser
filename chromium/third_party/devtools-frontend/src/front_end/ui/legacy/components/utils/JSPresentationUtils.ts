@@ -36,12 +36,13 @@
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
-import * as Bindings from '../../../../models/bindings/bindings.js';
 import type * as Protocol from '../../../../generated/protocol.js';
+import * as Bindings from '../../../../models/bindings/bindings.js';
+import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
-import {Linkifier} from './Linkifier.js';
 import jsUtilsStyles from './jsUtils.css.js';
+import {Events as LinkifierEvents, Linkifier} from './Linkifier.js';
 
 const UIStrings = {
   /**
@@ -101,8 +102,9 @@ export function buildStackTraceRows(
 
   if (updateCallback) {
     const throttler = new Common.Throttler.Throttler(100);
-    linkifier.setLiveLocationUpdateCallback(
-        () => throttler.schedule(async () => updateHiddenRows(updateCallback, stackTraceRows)));
+    linkifier.addEventListener(LinkifierEvents.LiveLocationUpdated, () => {
+      void throttler.schedule(async () => updateHiddenRows(updateCallback, stackTraceRows));
+    });
   }
 
   function buildStackTraceRowsHelper(
@@ -127,6 +129,7 @@ export function buildStackTraceRows(
         revealBreakpoint: previousStackFrameWasBreakpointCondition,
       });
       if (link) {
+        link.setAttribute('jslog', `${VisualLogging.link().track({click: true}).context('stack-trace-link')}`);
         link.addEventListener('contextmenu', populateContextMenu.bind(null, link));
         // TODO(crbug.com/1183325): fix race condition with uiLocation still being null here
         // Note: This has always checked whether the call frame location *in the generated
@@ -216,6 +219,7 @@ export function buildStackTracePreviewContents(
   const {stackTrace, tabStops} = options;
   const element = document.createElement('span');
   element.classList.add('monospace');
+  element.classList.add('stack-preview-container');
   element.style.display = 'inline-block';
   const shadowRoot =
       UI.Utils.createShadowRootWithCoreStyles(element, {cssFile: [jsUtilsStyles], delegatesFocus: undefined});
@@ -248,7 +252,7 @@ function renderStackTraceTable(
       row.createChild('td', 'function-name').textContent = item.functionName;
       row.createChild('td').textContent = ' @ ';
       if (item.link) {
-        row.createChild('td').appendChild(item.link);
+        row.createChild('td', 'link').appendChild(item.link);
         links.push(item.link);
       }
       if (item.ignoreListHide) {

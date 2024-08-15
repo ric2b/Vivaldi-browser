@@ -32,6 +32,7 @@
 #include "dawn/tests/DawnTest.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn {
 namespace {
@@ -216,7 +217,7 @@ class VertexStateTest : public DawnTest {
 
     struct DrawVertexBuffer {
         uint32_t location;
-        wgpu::Buffer* buffer;
+        raw_ptr<wgpu::Buffer> buffer;
     };
     void DoTestDraw(const wgpu::RenderPipeline& pipeline,
                     unsigned int triangles,
@@ -558,7 +559,8 @@ TEST_P(VertexStateTest, LastAllowedVertexBuffer) {
     // All the other vertex buffers default to no attributes
     vertexState.vertexBufferCount = kMaxVertexBuffers;
     vertexState.cVertexBuffers[kBufferIndex].arrayStride = 4 * sizeof(float);
-    vertexState.cVertexBuffers[kBufferIndex].stepMode = VertexStepMode::Vertex;
+    // (Off-topic) spot-test for defaulting of .stepMode.
+    vertexState.cVertexBuffers[kBufferIndex].stepMode = VertexStepMode::Undefined;
     vertexState.cVertexBuffers[kBufferIndex].attributeCount = 1;
     vertexState.cVertexBuffers[kBufferIndex].attributes = &vertexState.cAttributes[0];
     vertexState.cAttributes[0].shaderLocation = 0;

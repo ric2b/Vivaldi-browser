@@ -34,9 +34,9 @@
 #ifndef {{API}}_CPP_H_
 #define {{API}}_CPP_H_
 
-#include "dawn/{{api}}.h"
-#include "dawn/{{api}}_cpp_chained_struct.h"
-#include "dawn/EnumClassBitmasks.h"
+#include "{{api}}/{{api}}.h"
+#include "{{api}}/{{api}}_cpp_chained_struct.h"
+#include "{{api}}/{{api}}_enum_class_bitmasks.h"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -188,7 +188,7 @@ namespace {{metadata.namespace}} {
         CType mHandle = nullptr;
     };
 
-{% macro render_cpp_default_value(member, is_struct=True, force_default=False) -%}
+{% macro render_cpp_default_value(member, is_struct, force_default=False) -%}
     {%- if member.json_data.get("no_default", false) -%}
     {%- elif member.annotation in ["*", "const*"] and member.optional or member.default_value == "nullptr" -%}
         {{" "}}= nullptr
@@ -265,9 +265,11 @@ namespace {{metadata.namespace}} {
                 }
         {% else %}
             struct {{as_cppType(type.name)}} {
+                {% if type.has_free_members_function %}
+                    {{as_cppType(type.name)}}() = default;
+                {% endif %}
         {% endif %}
             {% if type.has_free_members_function %}
-                {{as_cppType(type.name)}}() = default;
                 ~{{as_cppType(type.name)}}();
                 {{as_cppType(type.name)}}(const {{as_cppType(type.name)}}&) = delete;
                 {{as_cppType(type.name)}}& operator=(const {{as_cppType(type.name)}}&) = delete;
@@ -278,7 +280,7 @@ namespace {{metadata.namespace}} {
                 ChainedStruct{{Out}} {{const}} * nextInChain = nullptr;
             {% endif %}
             {% for member in type.members %}
-                {% set member_declaration = as_annotated_cppType(member, type.has_free_members_function) + render_cpp_default_value(member, False, type.has_free_members_function) %}
+                {% set member_declaration = as_annotated_cppType(member, type.has_free_members_function) + render_cpp_default_value(member, True, type.has_free_members_function) %}
                 {% if type.chained and loop.first %}
                     //* Align the first member after ChainedStruct to match the C struct layout.
                     //* It has to be aligned both to its natural and ChainedStruct's alignment.
@@ -292,20 +294,22 @@ namespace {{metadata.namespace}} {
 
     {% endfor %}
 
-    // The operators of EnumClassBitmmasks in the dawn:: namespace need to be imported
-    // in the {{metadata.namespace}} namespace for Argument Dependent Lookup.
-    DAWN_IMPORT_BITMASK_OPERATORS
+    {%- if metadata.namespace != 'wgpu' %}
+        // The operators of webgpu_enum_class_bitmasks.h are in the wgpu:: namespace,
+        // and need to be imported into this namespace for Argument Dependent Lookup.
+        WGPU_IMPORT_BITMASK_OPERATORS
+    {% endif %}
 }  // namespace {{metadata.namespace}}
 
-namespace dawn {
+namespace wgpu {
     {% for type in by_category["bitmask"] %}
         template<>
-        struct IsDawnBitmask<{{metadata.namespace}}::{{as_cppType(type.name)}}> {
+        struct IsWGPUBitmask<{{metadata.namespace}}::{{as_cppType(type.name)}}> {
             static constexpr bool enable = true;
         };
 
     {% endfor %}
-} // namespace dawn
+} // namespace wgpu
 
 namespace std {
 // Custom boolean class needs corresponding hash function so that it appears as a transparent bool.

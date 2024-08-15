@@ -30,7 +30,7 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
     return RespondNow(Error(error));
 
   auto* service = infobars::ContentInfoBarManager::FromWebContents(contents);
-  for (auto* infobar: service->infobars()) {
+  for (infobars::InfoBar* infobar : service->infobars()) {
     if (infobar->delegate()->GetIdentifier() ==
         static_cast<infobars::InfoBarDelegate::InfoBarIdentifier>(identifier)) {
       ConfirmInfoBarDelegate* delegate =
@@ -45,16 +45,13 @@ ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
             std::move(args), browser_context());
 
         if (action == extensions::vivaldi::infobars::ToString(
-                          extensions::vivaldi::infobars::ButtonAction::
-                              BUTTON_ACTION_ACCEPT)) {
+                          extensions::vivaldi::infobars::ButtonAction::kAccept)) {
           delegate->Accept();
         } else if (action == extensions::vivaldi::infobars::ToString(
-                                 extensions::vivaldi::infobars::ButtonAction::
-                                     BUTTON_ACTION_CANCEL)) {
+                                 extensions::vivaldi::infobars::ButtonAction::kCancel)) {
           delegate->Cancel();
         } else if (action == extensions::vivaldi::infobars::ToString(
-                                 extensions::vivaldi::infobars::ButtonAction::
-                                     BUTTON_ACTION_DISMISS)) {
+                                 extensions::vivaldi::infobars::ButtonAction::kDismiss)) {
           delegate->InfoBarDismissed();
         }
         infobar->RemoveSelf();

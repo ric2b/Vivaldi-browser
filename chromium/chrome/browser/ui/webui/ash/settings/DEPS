@@ -20,6 +20,10 @@ specific_include_rules = {
   'device_section\.cc': [
     '+ash/shell.h',
   ],
+  'display_settings_provider\.cc': [
+    '+ash/shell.h',
+    "+ash/display/display_prefs.h",
+  ],
   'fast_pair_.*': [
     "+ash/quick_pair",
   ],

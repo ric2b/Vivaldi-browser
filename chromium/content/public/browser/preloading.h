@@ -71,6 +71,12 @@ class CONTENT_EXPORT PreloadingPredictor {
   int64_t ukm_value() const { return ukm_value_; }
   base::StringPiece name() const { return name_; }
 
+  bool operator==(const PreloadingPredictor& other) const {
+    // There's no need to compare name_ since every PreloadingPredictor has a
+    // distinct ukm_value_.
+    return other.ukm_value_ == ukm_value_;
+  }
+
  private:
   int64_t ukm_value_;
   base::StringPiece name_;
@@ -209,10 +215,20 @@ enum class PreloadingEligibility {
   // Preloading was ineligible for non-http(s).
   kHttpOrHttpsOnly = 19,
 
-  // Values between `kPreloadingEligibilityCommonEnd` (inclusive) and
-  // `kPreloadingEligibilityContentEnd` (exclusive) are reserved for enums
-  // defined under `//content`, namely `PrefetchStatus`.
-  kPreloadingEligibilityCommonEnd = 50,
+  // See corresponding values in PrefetchStatus for documentation.
+  kUserHasCookies = 55,
+  kUserHasServiceWorker = 56,
+  // This is similar to `kHttpsOnly`, but separately defined here to keep
+  // existing metrics values, for cases corresponding to
+  // `PrefetchStatus::kPrefetchIneligibleSchemeIsNotHttps`.
+  kSchemeIsNotHttps = 57,
+  kNonDefaultStoragePartition = 59,
+  kRetryAfter = 77,
+  kPrefetchProxyNotAvailable = 78,
+  kHostIsNonUnique = 86,
+  kExistingProxy = 88,
+  kBrowserContextOffTheRecord = 89,
+  kSameSiteCrossOriginPrefetchRequiredProxy = 96,
 
   // TODO(crbug.com/1309934): Add more specific ineligibility reasons subject to
   // each preloading operation

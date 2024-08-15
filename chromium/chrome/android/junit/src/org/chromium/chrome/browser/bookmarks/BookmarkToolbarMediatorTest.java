@@ -40,6 +40,9 @@ import org.robolectric.annotation.LooperMode;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity;
@@ -49,9 +52,6 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayP
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowSortOrder;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableRecyclerViewAdapter;
@@ -408,12 +408,14 @@ public class BookmarkToolbarMediatorTest {
         assertTrue(mMediator.onMenuIdClick(R.id.create_new_folder_menu_id));
         verify(mBookmarkAddNewFolderCoordinator).show(any());
 
-        doReturn(mBookmarkId).when(mBookmarkModel).getReadingListFolder();
+        // TODO(crbug.com/1501998): Add account reading list folder support here.
+        doReturn(mBookmarkId).when(mBookmarkModel).getLocalOrSyncableReadingListFolder();
         mMediator.onFolderStateSet(mBookmarkId);
         assertTrue(mModel.get(BookmarkToolbarProperties.NEW_FOLDER_BUTTON_VISIBLE));
         assertFalse(mModel.get(BookmarkToolbarProperties.NEW_FOLDER_BUTTON_ENABLED));
 
-        doReturn(null).when(mBookmarkModel).getReadingListFolder();
+        // TODO(crbug.com/1501998): Add account reading list folder support here.
+        doReturn(null).when(mBookmarkModel).getLocalOrSyncableReadingListFolder();
         doReturn(mBookmarkId).when(mBookmarkModel).getPartnerFolderId();
         mMediator.onFolderStateSet(mBookmarkId);
         assertTrue(mModel.get(BookmarkToolbarProperties.NEW_FOLDER_BUTTON_VISIBLE));
@@ -557,7 +559,8 @@ public class BookmarkToolbarMediatorTest {
                 R.id.sort_by_manual, mModel.get(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID));
         assertTrue(mModel.get(BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED));
 
-        doReturn(mBookmarkId).when(mBookmarkModel).getReadingListFolder();
+        // TODO(crbug.com/1501998): Add account reading list folder support here.
+        doReturn(mBookmarkId).when(mBookmarkModel).getLocalOrSyncableReadingListFolder();
         mMediator.onFolderStateSet(mBookmarkId);
         assertFalse(mModel.get(BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED));
         assertEquals(
@@ -565,7 +568,7 @@ public class BookmarkToolbarMediatorTest {
         verify(mBookmarkUiPrefs, times(0)).setBookmarkRowSortOrder(anyInt());
 
         // Verify  we go back to manual sort order and don't actually update the sorting prefs.
-        doReturn(null).when(mBookmarkModel).getReadingListFolder();
+        doReturn(null).when(mBookmarkModel).getLocalOrSyncableReadingListFolder();
         mMediator.onFolderStateSet(mBookmarkId);
         assertTrue(mModel.get(BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED));
         assertEquals(

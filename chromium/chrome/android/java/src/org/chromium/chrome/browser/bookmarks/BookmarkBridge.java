@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Pair;
 
@@ -21,24 +20,21 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.read_later.ReadingListUtils;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
 import org.chromium.components.power_bookmarks.PowerBookmarkType;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplicationImpl;
+// Vivaldi
+import org.chromium.content_public.browser.WebContents;
 
 /**
  * Provides the communication channel for Android to fetch and manipulate the bookmark model stored
@@ -58,7 +54,7 @@ class BookmarkBridge {
     private @Nullable BookmarkId mMobileFolderId;
     private @Nullable BookmarkId mOtherFolderId;
     private @Nullable BookmarkId mDesktopFolderId;
-    private @Nullable BookmarkId mReadingListFolderId;
+    private @Nullable BookmarkId mLocalOrSyncableReadingListFolderId;
 
     /**
      * Handler to fetch the bookmarks, titles, urls and folder hierarchy.
@@ -67,7 +63,7 @@ class BookmarkBridge {
      */
     static BookmarkModel getForProfile(Profile profile) {
         ThreadUtils.assertOnUiThread();
-        return BookmarkBridgeJni.get().getForProfile(profile);
+        return BookmarkBridgeJni.get().nativeGetForProfile(profile);
     }
 
     @CalledByNative
@@ -107,27 +103,13 @@ class BookmarkBridge {
         BookmarkBridgeJni.get().getImageUrlForBookmark(mNativeBookmarkBridge, url, callback);
     }
 
-    /**
-     * @param tab Tab whose current URL is checked against.
-     * @return {@code true} if the current Tab URL has a bookmark associated with it. If the
-     *     bookmark backend is not loaded, return {@code false}.
-     */
-    public boolean hasBookmarkIdForTab(@Nullable Tab tab) {
-        ThreadUtils.assertOnUiThread();
-        if (mNativeBookmarkBridge == 0) return false;
-        return getUserBookmarkIdForTab(tab) != null;
-    }
-
-    /**
-     * @param tab Tab whose current URL is checked against.
-     * @return BookmarkId or {@link null} if bookmark backend is not loaded or the tab is frozen.
-     */
-    public @Nullable BookmarkId getUserBookmarkIdForTab(@Nullable Tab tab) {
+    /** Returns the most recently added BookmarkId */
+    public @Nullable BookmarkId getMostRecentlyAddedUserBookmarkIdForUrl(@NonNull GURL url) {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
-        if (tab == null || tab.isFrozen() || mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
         return BookmarkBridgeJni.get()
-                .getBookmarkIdForWebContents(mNativeBookmarkBridge, tab.getWebContents(), true);
+                .getMostRecentlyAddedUserBookmarkIdForUrl(mNativeBookmarkBridge, url);
     }
 
     /**
@@ -185,15 +167,11 @@ class BookmarkBridge {
             return true;
         }
 
-        long startTime = SystemClock.elapsedRealtime();
         addObserver(
                 new BookmarkModelObserver() {
                     @Override
                     public void bookmarkModelLoaded() {
                         removeObserver(this);
-                        RecordHistogram.recordTimesHistogram(
-                                "PartnerBookmark.LoadingTime",
-                                SystemClock.elapsedRealtime() - startTime);
                         runAfterModelLoaded.run();
                     }
 
@@ -231,7 +209,8 @@ class BookmarkBridge {
                     /* isManaged= */ false,
                     /* dateAdded= */ 0L,
                     /* read= */ false,
-                    /* dateLastOpened= */ 0L);
+                    /* dateLastOpened= */ 0L,
+                    /* isAccountBookmark= */ false);
         }
 
         return BookmarkBridgeJni.get()
@@ -240,27 +219,63 @@ class BookmarkBridge {
 
     /**
      * @return The top level folders, including special folders (managed bookmarks, reading list,
-     *     partner bookmarks).
+     *     partner bookmarks). Will show empty folder according to the logic in BookmarkClient.
      */
     public List<BookmarkId> getTopLevelFolderIds() {
+        return getTopLevelFolderIds(/* ignoreVisibility= */ false);
+    }
+
+    /**
+     * @param ignoreVisibility Whether the visible while empty logic, found in BookmarkClient, is
+     *     used when gathering nodes. When true, all folders are shown regardless of client defined
+     *     visibility. When false, the client defined visibility rules are used. See
+     *     components/bookmarks/browser/bookmark_client.h for more information.
+     * @return The top level folders, including special folders (managed bookmarks, reading list,
+     *     partner bookmarks).
+     */
+    public List<BookmarkId> getTopLevelFolderIds(boolean ignoreVisibility) {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return new ArrayList<>();
         assert mIsNativeBookmarkModelLoaded;
         List<BookmarkId> result = new ArrayList<>();
-        BookmarkBridgeJni.get().getTopLevelFolderIds(mNativeBookmarkBridge, result);
+        BookmarkBridgeJni.get()
+                .getTopLevelFolderIds(mNativeBookmarkBridge, ignoreVisibility, result);
         return result;
     }
 
-    /** Returns the synthetic reading list folder. */
-    public BookmarkId getReadingListFolder() {
+    /** Returns the local/syncable synthetic reading list folder. */
+    public BookmarkId getLocalOrSyncableReadingListFolder() {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
         assert mIsNativeBookmarkModelLoaded;
-        if (mReadingListFolderId == null) {
-            mReadingListFolderId =
-                    BookmarkBridgeJni.get().getReadingListFolder(mNativeBookmarkBridge);
+        if (mLocalOrSyncableReadingListFolderId == null) {
+            mLocalOrSyncableReadingListFolderId =
+                    BookmarkBridgeJni.get()
+                            .getLocalOrSyncableReadingListFolder(mNativeBookmarkBridge);
         }
-        return mReadingListFolderId;
+        return mLocalOrSyncableReadingListFolderId;
+    }
+
+    /**
+     * Returns the account synthetic reading list folder. Function will return null if the required
+     * conditions to use account-bound data aren't satisfied: - The user is signed-in and not
+     * syncing. - The user has the kReadingList sync data type enabled.
+     */
+    public BookmarkId getAccountReadingListFolder() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+
+        // Note: The account reading list folder isn't cached because the availability can change
+        // during runtime.
+        return BookmarkBridgeJni.get().getAccountReadingListFolder(mNativeBookmarkBridge);
+    }
+
+    public BookmarkId getDefaultReadingListFolder() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getDefaultReadingListFolder(mNativeBookmarkBridge);
     }
 
     /**
@@ -326,9 +341,7 @@ class BookmarkBridge {
         }
     }
 
-    /**
-     * @return The BookmarkId for root folder node
-     */
+    /** Returns the BookmarkId for root folder node. */
     public BookmarkId getRootFolderId() {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
@@ -339,9 +352,7 @@ class BookmarkBridge {
         return mRootFolderId;
     }
 
-    /**
-     * @return The BookmarkId for Mobile folder node
-     */
+    /** Returns the BookmarkId for Mobile folder node. */
     public BookmarkId getMobileFolderId() {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
@@ -352,9 +363,7 @@ class BookmarkBridge {
         return mMobileFolderId;
     }
 
-    /**
-     * @return Id representing the special "other" folder from bookmark model.
-     */
+    /** Returns Id representing the special "other" folder from bookmark model. */
     public BookmarkId getOtherFolderId() {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
@@ -365,9 +374,7 @@ class BookmarkBridge {
         return mOtherFolderId;
     }
 
-    /**
-     * @return BookmarkId representing special "desktop" folder, namely "bookmark bar".
-     */
+    /** Returns the BookmarkId representing special "desktop" folder, namely "bookmark bar". */
     public BookmarkId getDesktopFolderId() {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
@@ -376,6 +383,32 @@ class BookmarkBridge {
             mDesktopFolderId = BookmarkBridgeJni.get().getDesktopFolderId(mNativeBookmarkBridge);
         }
         return mDesktopFolderId;
+    }
+
+    /** Returns the id representing the special account "mobile" folder from bookmark model. */
+    public BookmarkId getAccountMobileFolderId() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getAccountMobileFolderId(mNativeBookmarkBridge);
+    }
+
+    /** Returns the id representing the special account "other" folder from bookmark model. */
+    public BookmarkId getAccountOtherFolderId() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getAccountOtherFolderId(mNativeBookmarkBridge);
+    }
+
+    /**
+     * @return BookmarkId representing special account "desktop" folder, namely "bookmark bar".
+     */
+    public BookmarkId getAccountDesktopFolderId() {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getAccountDesktopFolderId(mNativeBookmarkBridge);
     }
 
     /**
@@ -634,9 +667,6 @@ class BookmarkBridge {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return false;
         assert mIsNativeBookmarkModelLoaded;
-        if (ReadingListUtils.isSwappableReadingListItem(id)) {
-            return true;
-        }
         return BookmarkBridgeJni.get()
                 .isFolderVisible(mNativeBookmarkBridge, id.getId(), id.getType());
     }
@@ -785,46 +815,74 @@ class BookmarkBridge {
     }
 
     /**
-     * Adds an article to the reading list. If the article was already bookmarked, the existing
-     * bookmark ID will be returned.
+     * Adds an item to the default reading list if it doesn't already exist.
      *
      * @param title The title to be used for the reading list item.
      * @param url The URL of the reading list item.
      * @return The bookmark ID created after saving the article to the reading list, or null on
      *     error.
      */
-    public @Nullable BookmarkId addToReadingList(String title, GURL url) {
+    public @Nullable BookmarkId addToDefaultReadingList(@NonNull String title, @NonNull GURL url) {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
         assert title != null;
         assert url != null;
         assert mIsNativeBookmarkModelLoaded;
 
-        return BookmarkBridgeJni.get().addToReadingList(mNativeBookmarkBridge, title, url);
+        return addToReadingList(getLocalOrSyncableReadingListFolder(), title, url);
     }
 
     /**
+     * Adds an item to the given reading list if it doesn't already exist.
+     *
+     * @param parentId The parent reading list to add to.
+     * @param title The title to be used for the reading list item.
      * @param url The URL of the reading list item.
-     * @return The reading list item with the URL, or null if no such reading list item.
+     * @return The bookmark ID created after saving the article to the reading list, or null on
+     *     error.
      */
-    public BookmarkItem getReadingListItem(GURL url) {
+    public @Nullable BookmarkId addToReadingList(
+            @NonNull BookmarkId parentId, @NonNull String title, @NonNull GURL url) {
         ThreadUtils.assertOnUiThread();
         if (mNativeBookmarkBridge == 0) return null;
+        assert parentId != null;
+        assert title != null;
         assert url != null;
         assert mIsNativeBookmarkModelLoaded;
 
-        return BookmarkBridgeJni.get().getReadingListItem(mNativeBookmarkBridge, url);
+        return BookmarkBridgeJni.get()
+                .addToReadingList(mNativeBookmarkBridge, parentId, title, url);
     }
 
     /**
-     * Helper method to mark an article as read.
+     * Helper method to mark an item as read.
      *
-     * @param url The URL of the reading list item.
-     * @param read Whether the article should be marked as read.
+     * @param id The {@link BookmarkId} to set the status for.
+     * @param read Whether the item should be marked as read.
      */
-    public void setReadStatusForReadingList(GURL url, boolean read) {
+    public void setReadStatusForReadingList(@NonNull BookmarkId id, boolean read) {
         if (mNativeBookmarkBridge == 0) return;
-        BookmarkBridgeJni.get().setReadStatus(mNativeBookmarkBridge, url, read);
+        assert id != null;
+        BookmarkBridgeJni.get().setReadStatus(mNativeBookmarkBridge, id, read);
+    }
+
+    /**
+     * Returns the total number of unread reading list items for the given {@link BookmarkId}.
+     *
+     * @param readingListParentId 1 of the 2 reading list parent ids.
+     */
+    public int getUnreadCount(@NonNull BookmarkId readingListParentId) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return 0;
+        assert readingListParentId != null;
+        return BookmarkBridgeJni.get().getUnreadCount(mNativeBookmarkBridge, readingListParentId);
+    }
+
+    /** Returns whether the given {@link BookmarkId} belongs to the account. */
+    public boolean isAccountBookmark(BookmarkId id) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return false;
+        return BookmarkBridgeJni.get().isAccountBookmark(mNativeBookmarkBridge, id);
     }
 
     /**
@@ -846,15 +904,9 @@ class BookmarkBridge {
         return BookmarkBridgeJni.get().getPartnerFolderId(mNativeBookmarkBridge);
     }
 
-    /** Returns the total number of unread reading list articles. */
-    public int getUnreadCount() {
-        ThreadUtils.assertOnUiThread();
-        if (mNativeBookmarkBridge == 0) return 0;
-        return BookmarkBridgeJni.get().getUnreadCount(mNativeBookmarkBridge);
-    }
-
     @CalledByNative
-    private void bookmarkModelLoaded() {
+    @VisibleForTesting
+    void bookmarkModelLoaded() {
         mIsNativeBookmarkModelLoaded = true;
         notifyBookmarkModelLoaded();
     }
@@ -957,7 +1009,8 @@ class BookmarkBridge {
             boolean isManaged,
             long dateAdded,
             boolean read,
-            long dateLastOpened) {
+            long dateLastOpened,
+            boolean isAccountBookmark) {
         return new BookmarkItem(
                 new BookmarkId(id, type),
                 title,
@@ -968,7 +1021,8 @@ class BookmarkBridge {
                 isManaged,
                 dateAdded,
                 read,
-                dateLastOpened);
+                dateLastOpened,
+                isAccountBookmark);
     }
 
     @CalledByNative
@@ -1004,19 +1058,26 @@ class BookmarkBridge {
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods
     public interface Natives {
-        BookmarkModel getForProfile(Profile profile);
+        BookmarkModel nativeGetForProfile(Profile profile);
 
         void getImageUrlForBookmark(long nativeBookmarkBridge, GURL url, Callback<GURL> callback);
 
-        BookmarkId getBookmarkIdForWebContents(
-                long nativeBookmarkBridge, WebContents webContents, boolean onlyEditable);
+        BookmarkId getMostRecentlyAddedUserBookmarkIdForUrl(long nativeBookmarkBridge, GURL url);
 
         BookmarkItem getBookmarkById(long nativeBookmarkBridge, long id, int type);
 
-        void getTopLevelFolderIds(long nativeBookmarkBridge, List<BookmarkId> bookmarksList);
+        void getTopLevelFolderIds(
+                long nativeBookmarkBridge,
+                boolean ignoreVisibility,
+                List<BookmarkId> bookmarksList);
 
-        BookmarkId getReadingListFolder(long nativeBookmarkBridge);
+        BookmarkId getLocalOrSyncableReadingListFolder(long nativeBookmarkBridge);
 
+        BookmarkId getAccountReadingListFolder(long nativeBookmarkBridge);
+
+        BookmarkId getDefaultReadingListFolder(long nativeBookmarkBridge);
+
+        // TODO(crbug.com/1515332): Remove this method.
         void getAllFoldersWithDepths(
                 long nativeBookmarkBridge, List<BookmarkId> folderList, List<Integer> depthList);
 
@@ -1027,6 +1088,12 @@ class BookmarkBridge {
         BookmarkId getOtherFolderId(long nativeBookmarkBridge);
 
         BookmarkId getDesktopFolderId(long nativeBookmarkBridge);
+
+        BookmarkId getAccountMobileFolderId(long nativeBookmarkBridge);
+
+        BookmarkId getAccountOtherFolderId(long nativeBookmarkBridge);
+
+        BookmarkId getAccountDesktopFolderId(long nativeBookmarkBridge);
 
         BookmarkId getPartnerFolderId(long nativeBookmarkBridge);
 
@@ -1054,6 +1121,7 @@ class BookmarkBridge {
 
         boolean doesBookmarkExist(long nativeBookmarkBridge, long id, int type);
 
+        // TODO(crbug.com/1515332): Remove this method.
         void getBookmarksForFolder(
                 long nativeBookmarkBridge, BookmarkId folderId, List<BookmarkItem> bookmarksList);
 
@@ -1072,13 +1140,16 @@ class BookmarkBridge {
                 int index);
 
         BookmarkId addBookmark(
-                long nativeBookmarkBridge, BookmarkId parent, int index, String title, GURL url);
+                long nativeBookmarkBridge, BookmarkId parentId, int index, String title, GURL url);
 
-        BookmarkId addToReadingList(long nativeBookmarkBridge, String title, GURL url);
+        BookmarkId addToReadingList(
+                long nativeBookmarkBridge, BookmarkId parentId, String title, GURL url);
 
-        BookmarkItem getReadingListItem(long nativeBookmarkBridge, GURL url);
+        void setReadStatus(long nativeBookmarkBridge, BookmarkId id, boolean read);
 
-        void setReadStatus(long nativeBookmarkBridge, GURL url, boolean read);
+        int getUnreadCount(long nativeBookmarkBridge, BookmarkId id);
+
+        boolean isAccountBookmark(long nativeBookmarkBridge, BookmarkId id);
 
         void undo(long nativeBookmarkBridge);
 
@@ -1110,8 +1181,6 @@ class BookmarkBridge {
         void reorderChildren(long nativeBookmarkBridge, BookmarkId parent, long[] orderedNodes);
 
         boolean isBookmarked(long nativeBookmarkBridge, GURL url);
-
-        int getUnreadCount(long nativeBookmarkBridge);
 
         /** Vivaldi */
         BookmarkId getTrashFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
@@ -1235,19 +1304,4 @@ class BookmarkBridge {
         return BookmarkBridgeJni.get().getChildCountWithoutSeparators(
                 mNativeBookmarkBridge, BookmarkBridge.this, id.getId(), id.getType());
     }
-
-    /**
-     * Vivaldi
-     * @param webContents
-     * @return
-     */
-    @Nullable
-    public BookmarkId getUserBookmarkIdForWebContents(@Nullable WebContents webContents) {
-        ThreadUtils.assertOnUiThread();
-        if (mNativeBookmarkBridge == 0) return null;
-        BookmarkId id = BookmarkBridgeJni.get().getBookmarkIdForWebContents(
-                mNativeBookmarkBridge, webContents, true);
-        return id;
-    }
-
 }

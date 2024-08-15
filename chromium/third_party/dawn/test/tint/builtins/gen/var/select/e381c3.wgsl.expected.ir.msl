@@ -1,0 +1,17 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void select_e381c3() {
+  bool arg_2 = true;
+  int4 res = select(int4(1), int4(1), arg_2);
+}
+vertex float4 vertex_main() {
+  select_e381c3();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  select_e381c3();
+}
+kernel void compute_main() {
+  select_e381c3();
+}

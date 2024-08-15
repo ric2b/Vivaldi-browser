@@ -100,6 +100,9 @@ class MockDownloadItem : public DownloadItem {
   }
   MOCK_METHOD1(DeleteFile_, void(base::OnceCallback<void(bool)>& cb));
   MOCK_METHOD0(GetDownloadFile, DownloadFile*());
+#if BUILDFLAG(IS_ANDROID)
+  MOCK_METHOD0(IsFromExternalApp, bool());
+#endif  // BUILDFLAG(IS_ANDROID)
   MOCK_CONST_METHOD0(IsDangerous, bool());
   MOCK_CONST_METHOD0(IsInsecure, bool());
   MOCK_CONST_METHOD0(GetDangerType, DownloadDangerType());
@@ -126,7 +129,6 @@ class MockDownloadItem : public DownloadItem {
   MOCK_CONST_METHOD0(RequireSafetyChecks, bool());
   MOCK_CONST_METHOD0(IsParallelDownload, bool());
   MOCK_CONST_METHOD0(GetDownloadCreationType, DownloadCreationType());
-  MOCK_METHOD(bool, IsDlpManaged, (), (override, const));
   MOCK_CONST_METHOD0(GetCredentialsMode, ::network::mojom::CredentialsMode());
   MOCK_METHOD((const absl::optional<net::IsolationInfo>&),
               GetIsolationInfo,
@@ -138,7 +140,6 @@ class MockDownloadItem : public DownloadItem {
   MOCK_METHOD1(SetOpened, void(bool));
   MOCK_METHOD1(SetLastAccessTime, void(base::Time));
   MOCK_METHOD1(SetDisplayName, void(const base::FilePath&));
-  MOCK_METHOD(void, SetIsDlpManaged, (bool), (override));
   MOCK_METHOD1(SetInsecureDownloadStatus, void(InsecureDownloadStatus));
   MOCK_CONST_METHOD1(DebugString, std::string(bool));
   MOCK_METHOD1(SimulateErrorForTesting, void(DownloadInterruptReason));

@@ -39,6 +39,7 @@
 <translation id="2873951654529031587">Çöp Kutusu</translation>
 <translation id="292258461174562431">Canavar 4</translation>
 <translation id="2923448633003185837">Yapıştır ve Git</translation>
+<translation id="2953943267837858202">Videonun otomatik olarak oynatılmasına izin verilmedi</translation>
 <translation id="2977472760057091832">Bağlantıyı Gizli Pencerede Aç</translation>
 <translation id="2989805286512600854">Yeni Sekmede Aç</translation>
 <translation id="3027988479108856431">Maalesef, tarayıcınız çalışıyorken Yandex ayarlarınıza erişilemiyor. Ayarları Vivaldi içerisine almak için, işlerinizi kaydedin ve Yandex pencerelerini kapatın.Daha sonra Devam düğmesine basın.</translation>
@@ -77,12 +78,13 @@
 <translation id="3943857333388298514">Yapıştır</translation>
 <translation id="4005270918754737597">Bu sürümü atla</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Tekrar gösterme</translation>
 <translation id="4074744496918018786">Resmi Gizli Pencerede Aç</translation>
 <translation id="410351446219883937">Otomatik oynatma</translation>
+<translation id="4281844954008187215">Hizmet Koşulları</translation>
 <translation id="4324492550286218827">Manzara 2</translation>
 <translation id="4406101500523955324">Yeni Gizli Pencerede Aç</translation>
 <translation id="4420816922321010053">Gerçekten Vivaldi'den çıkmak istiyor musunuz?</translation>
+<translation id="4430019312045809116">Ses</translation>
 <translation id="443008484043213881">Araçlar</translation>
 <translation id="4456211719108566931">Canavar 6</translation>
 <translation id="4512900838580567989">Bağlan&amp;tıyı Yeni Arka Plan Sekmesinde Aç</translation>
@@ -110,7 +112,6 @@
 <translation id="5615637589913244581">Opera sürüm 15+ (Beta)</translation>
 <translation id="5648110075441906505">Resmi Yeni Pencerede Aç</translation>
 <translation id="5656371807944747581">Güncelleme Hatası!</translation>
-<translation id="5716238312826274098">Bildirimler devre dışı bırakılıyor</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> sürümü var (kullandığınız sürüm <ph name="OLD_VERSION" />) Şimdi güncellemek istiyormusunuz?</translation>
 <translation id="5770433027661640693">Manzara 10</translation>
 <translation id="5857090052475505287">Yeni Klasör</translation>
@@ -138,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Güncelleme kurucusu başlatılamadı. Bilgisayarınızda yeterli bellek ya da boş disk alanı olduğunu kontrol edip yeniden deneyin.</translation>
 <translation id="7658239707568436148">İptal</translation>
-<translation id="7715497554424665066">&amp;Güncellemeyi Yoksay</translation>
 <translation id="7724603315864178912">Kes</translation>
 <translation id="7727481996062361502">Güncelleme doğrulanıyor...</translation>
 <translation id="7793738202466490491">Takvime Etkinlik olarak Ekle</translation>
@@ -151,6 +151,7 @@
 <translation id="8099620695029051217">Sayfa Adresini Kopyala</translation>
 <translation id="8197810018650377191">Yer İmi Sayfası</translation>
 <translation id="8261506727792406068">Sil</translation>
+<translation id="8263047843452521549">Arka plan hizmet çalışanını inceleyin</translation>
 <translation id="8331671104904436324">Yeni Arka Plan Sekmesinde Aç</translation>
 <translation id="8373293945112511707">Manzara 1</translation>
 <translation id="8388552048012645975">Güncelleme indiriliyor...</translation>
@@ -165,6 +166,7 @@
 <translation id="8651348004684669199">Etkin Sekmeyi Ekle</translation>
 <translation id="8669345741879513971">Canavar 10</translation>
 <translation id="867544375504146191">Yandex</translation>
+<translation id="8689295374912158752">Portal-belgesini inceleyin</translation>
 <translation id="8768970203213061953">Manzara 14</translation>
 <translation id="8773635261052182196">Artık bu bildirimleri görmeyeceksiniz. Bunları vivaldi ayarlarından tekrar etkinleştirebilirsiniz.</translation>
 <translation id="8774017153185436870">Siteler otomatik olarak video oynatabilir</translation>

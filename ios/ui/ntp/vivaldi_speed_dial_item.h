@@ -18,6 +18,7 @@ class BookmarkNode;
 // The BookmarkNode that backs this item.
 @property(nonatomic, readwrite, assign)
     const bookmarks::BookmarkNode* bookmarkNode;
+@property(nonatomic, assign) BOOL isThumbnailRefreshing;
 
 // INITIALIZER
 - (instancetype) initWithBookmark:(const bookmarks::BookmarkNode*)node;

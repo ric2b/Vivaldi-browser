@@ -15,10 +15,10 @@ import gclient_utils
 class TrialDir(object):
     """Manages a temporary directory.
 
-  On first object creation, TrialDir.TRIAL_ROOT will be set to a new temporary
-  directory created in /tmp or the equivalent. It will be deleted on process
-  exit unless TrialDir.SHOULD_LEAK is set to True.
-  """
+    On first object creation, TrialDir.TRIAL_ROOT will be set to a new temporary
+    directory created in /tmp or the equivalent. It will be deleted on process
+    exit unless TrialDir.SHOULD_LEAK is set to True.
+    """
     # When SHOULD_LEAK is set to True, temporary directories created while the
     # tests are running aren't deleted at the end of the tests. Expect failures
     # when running more than one test due to inter-test side-effects. Helps with

@@ -177,6 +177,10 @@ void ContentPasswordManagerDriver::GeneratedPasswordAccepted(
       generation_element_id, password);
 }
 
+void ContentPasswordManagerDriver::FocusNextFieldAfterPasswords() {
+  GetPasswordGenerationAgent()->FocusNextFieldAfterPasswords();
+}
+
 void ContentPasswordManagerDriver::FillSuggestion(
     const std::u16string& username,
     const std::u16string& password) {
@@ -220,8 +224,9 @@ void ContentPasswordManagerDriver::ClearPreviewedForm() {
 
 void ContentPasswordManagerDriver::SetSuggestionAvailability(
     autofill::FieldRendererId element_id,
-    const autofill::mojom::AutofillState state) {
-  GetAutofillAgent()->SetSuggestionAvailability(element_id, state);
+    autofill::mojom::AutofillSuggestionAvailability suggestion_availability) {
+  GetAutofillAgent()->SetSuggestionAvailability(element_id,
+                                                suggestion_availability);
 }
 
 PasswordGenerationFrameHelper*
@@ -262,6 +267,11 @@ void ContentPasswordManagerDriver::AnnotateFieldsWithParsingResult(
   if (const auto& agent = GetPasswordAutofillAgent()) {
     agent->AnnotateFieldsWithParsingResult(parsing_result);
   }
+}
+
+base::WeakPtr<password_manager::PasswordManagerDriver>
+ContentPasswordManagerDriver::AsWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 void ContentPasswordManagerDriver::GeneratePassword(
@@ -452,19 +462,15 @@ void ContentPasswordManagerDriver::ShowPasswordSuggestions(
 #if BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
           features::kPasswordSuggestionBottomSheetV2)) {
-    // TODO (crbug.com/1448579): Fix the autosubmission and remove the parameter
-    // autofill::mojom::SubmissionReadinessState::kNoInformation.
-    // TODO (crbug.com/1448579): Make ShowTouchToFill to return bool (whether it
-    // was shown or not) and do not call the OnShowPasswordSuggestions on the
-    // password autofill manager if TTF was shown.
-    bool keyboard_replacing_surface_shown =
-        client_->ShowKeyboardReplacingSurface(
+    // TODO(crbug.com/1448579): Remove the parameter
+    // autofill::mojom::SubmissionReadinessState::kNoInformation when the
+    // feature is launched.
+    if (client_->ShowKeyboardReplacingSurface(
             this,
             SubmissionReadinessParams(
                 form, username_field_index, password_field_index,
                 autofill::mojom::SubmissionReadinessState::kNoInformation),
-            options & autofill::ACCEPTS_WEBAUTHN_CREDENTIALS);
-    if (keyboard_replacing_surface_shown) {
+            options & autofill::ACCEPTS_WEBAUTHN_CREDENTIALS)) {
       return;
     }
   }

@@ -160,7 +160,7 @@ class ScrollableAppsGridViewTest : public AshTestBase,
 
   // Verifies the visible item index range.
   bool IsIndexRangeExpected(size_t first_index, size_t last_index) {
-    const absl::optional<AppsGridView::VisibleItemIndexRange> index_range =
+    const std::optional<AppsGridView::VisibleItemIndexRange> index_range =
         apps_grid_view_->GetVisibleItemIndexRange();
 
     return index_range->first_index == first_index &&
@@ -170,10 +170,8 @@ class ScrollableAppsGridViewTest : public AshTestBase,
   std::unique_ptr<ShelfItemFactoryFake> shelf_item_factory_;
 
   // Cache some view pointers to make the tests more concise.
-  raw_ptr<ScrollableAppsGridView, DanglingUntriaged | ExperimentalAsh>
-      apps_grid_view_ = nullptr;
-  raw_ptr<views::ScrollView, DanglingUntriaged | ExperimentalAsh> scroll_view_ =
-      nullptr;
+  raw_ptr<ScrollableAppsGridView, DanglingUntriaged> apps_grid_view_ = nullptr;
+  raw_ptr<views::ScrollView, DanglingUntriaged> scroll_view_ = nullptr;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 

@@ -21,22 +21,6 @@
 
 namespace content {
 
-namespace {
-
-void RecordAddressContainsDerivedField(
-    const payments::mojom::PaymentAddress& address) {
-  if (address.address_line.empty() || address.address_line.front().empty())
-    return;
-
-  bool has_derived_field = !address.city.empty() || !address.country.empty() ||
-                           !address.postal_code.empty() ||
-                           !address.region.empty();
-  base::UmaHistogramBoolean("Android.ContactsPicker.AddressHasDerivedField",
-                            has_derived_field);
-}
-
-}  // namespace
-
 ContactsProviderAndroid::ContactsProviderAndroid(
     RenderFrameHostImpl* render_frame_host) {
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -69,7 +53,7 @@ void ContactsProviderAndroid::Select(bool multiple,
                                      bool include_icons,
                                      ContactsSelectedCallback callback) {
   if (!dialog_) {
-    std::move(callback).Run(absl::nullopt, /*percentage_shared=*/-1,
+    std::move(callback).Run(std::nullopt, /*percentage_shared=*/-1,
                             PROPERTIES_NONE);
     return;
   }
@@ -92,28 +76,31 @@ void ContactsProviderAndroid::AddContact(
     const base::android::JavaParamRef<jobjectArray>& icons_java) {
   DCHECK(callback_);
 
-  absl::optional<std::vector<std::string>> names;
+  std::optional<std::vector<std::string>> names;
   if (names_java) {
     std::vector<std::string> names_vector;
-    AppendJavaStringArrayToStringVector(env, names_java, &names_vector);
+    base::android::AppendJavaStringArrayToStringVector(env, names_java,
+                                                       &names_vector);
     names = std::move(names_vector);
   }
 
-  absl::optional<std::vector<std::string>> emails;
+  std::optional<std::vector<std::string>> emails;
   if (emails_java) {
     std::vector<std::string> emails_vector;
-    AppendJavaStringArrayToStringVector(env, emails_java, &emails_vector);
+    base::android::AppendJavaStringArrayToStringVector(env, emails_java,
+                                                       &emails_vector);
     emails = std::move(emails_vector);
   }
 
-  absl::optional<std::vector<std::string>> tel;
+  std::optional<std::vector<std::string>> tel;
   if (tel_java) {
     std::vector<std::string> tel_vector;
-    AppendJavaStringArrayToStringVector(env, tel_java, &tel_vector);
+    base::android::AppendJavaStringArrayToStringVector(env, tel_java,
+                                                       &tel_vector);
     tel = std::move(tel_vector);
   }
 
-  absl::optional<std::vector<payments::mojom::PaymentAddressPtr>> addresses;
+  std::optional<std::vector<payments::mojom::PaymentAddressPtr>> addresses;
   if (addresses_java) {
     std::vector<payments::mojom::PaymentAddressPtr> addresses_vector;
 
@@ -125,14 +112,13 @@ void ContactsProviderAndroid::AddContact(
               env->GetDirectBufferCapacity(j_address.obj()), &address)) {
         continue;
       }
-      RecordAddressContainsDerivedField(*address);
       addresses_vector.push_back(std::move(address));
     }
 
     addresses = std::move(addresses_vector);
   }
 
-  absl::optional<std::vector<blink::mojom::ContactIconBlobPtr>> icons;
+  std::optional<std::vector<blink::mojom::ContactIconBlobPtr>> icons;
   if (icons_java) {
     std::vector<blink::mojom::ContactIconBlobPtr> icons_vector;
 
@@ -168,7 +154,7 @@ void ContactsProviderAndroid::EndContactsList(JNIEnv* env,
 
 void ContactsProviderAndroid::EndWithPermissionDenied(JNIEnv* env) {
   DCHECK(callback_);
-  std::move(callback_).Run(absl::nullopt, /*percentage_shared=*/-1,
+  std::move(callback_).Run(std::nullopt, /*percentage_shared=*/-1,
                            PROPERTIES_NONE);
 }
 

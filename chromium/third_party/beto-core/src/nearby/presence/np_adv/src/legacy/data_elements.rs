@@ -13,6 +13,8 @@
 // limitations under the License.
 
 //! V0 data elements and core trait impls.
+use nom::error::{ErrorKind, FromExternalError};
+
 use crate::legacy::{
     de_type::{DataElementType, PlainDataElementType},
     serialize::{DataElementBundle, ToDataElementBundle},
@@ -53,12 +55,44 @@ pub enum DataElementDeserializeError {
         /// The DE type attempting to be deserialized
         de_type: DataElementType,
     },
+    /// Only one identity data element is allowed in an advertisement, but a duplicate is found
+    /// while parsing.
+    DuplicateIdentityDataElement,
+    /// There is unexpected data remaining in the incoming payload.
+    UnexpectedDataRemaining,
+    /// Parsing error returned from Nom.
+    NomError(nom::error::ErrorKind),
+}
+
+impl FromExternalError<&[u8], DataElementDeserializeError> for DataElementDeserializeError {
+    fn from_external_error(
+        _input: &[u8],
+        _kind: ErrorKind,
+        e: DataElementDeserializeError,
+    ) -> Self {
+        e
+    }
+}
+
+impl nom::error::ParseError<&[u8]> for DataElementDeserializeError {
+    /// Creates an error from the input position and an [ErrorKind]
+    fn from_error_kind(_input: &[u8], kind: ErrorKind) -> Self {
+        Self::NomError(kind)
+    }
+
+    /// Combines an existing error with a new one created from the input
+    /// position and an [ErrorKind]. This is useful when backtracking
+    /// through a parse tree, accumulating error context on the way
+    fn append(_input: &[u8], kind: ErrorKind, _other: Self) -> Self {
+        Self::NomError(kind)
+    }
 }
 
 /// Data element holding a [TxPower].
 #[derive(Debug, PartialEq, Eq)]
 pub struct TxPowerDataElement {
-    tx_power: TxPower,
+    /// The tx power value
+    pub tx_power: TxPower,
 }
 
 impl TxPowerDataElement {

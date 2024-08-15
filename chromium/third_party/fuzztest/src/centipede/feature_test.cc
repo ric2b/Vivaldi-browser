@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <cstring>
 #include <numeric>
-#include <string>
 #include <thread>  // NOLINT.
 #include <utility>
 #include <vector>
@@ -27,8 +26,12 @@
 #include "gtest/gtest.h"
 #include "absl/base/const_init.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "./centipede/concurrent_bitset.h"
 #include "./centipede/concurrent_byteset.h"
 #include "./centipede/hashed_ring_buffer.h"
+#include "./centipede/int_utils.h"
 #include "./centipede/logging.h"
 
 namespace centipede {
@@ -94,6 +97,18 @@ TEST(Feature, ConcurrentBitSet) {
   out_bits.clear();
   bs.ForEachNonZeroBit([&](size_t idx) { out_bits.push_back(idx); });
   EXPECT_TRUE(out_bits.empty());
+}
+
+TEST(Feature, ConcurrentBitGet) {
+  constexpr size_t kSize = 1 << 18;
+  static ConcurrentBitSet<kSize> bs(absl::kConstInit);
+  constexpr size_t kInBit1 = 134217728;
+  constexpr size_t kInBit2 = 134217732;
+  ASSERT_EQ(bs.get(kInBit1), 0);
+  ASSERT_EQ(bs.get(kInBit2), 0);
+  bs.set(kInBit1);
+  EXPECT_EQ(bs.get(kInBit1), 1);
+  EXPECT_EQ(bs.get(kInBit2), 0);
 }
 
 TEST(Feature, ConcurrentByteSet) {

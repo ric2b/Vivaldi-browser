@@ -130,6 +130,7 @@ class TestEntryBuilder {
   absl::optional<base::FilePath> distilation_path_;
 };
 
+// TODO(crbug.com/1510547): Add test coverage for GetAccountModelIfSyncing.
 class DualReadingListModelTest : public testing::Test {
  public:
   DualReadingListModelTest() = default;
@@ -306,7 +307,7 @@ TEST_F(DualReadingListModelTest, MetaDataClearedBeforeModelLoaded) {
   ResetStorage();
   static_cast<syncer::ClientTagBasedModelTypeProcessor*>(
       account_model_ptr_->GetSyncBridgeForTest()->change_processor())
-      ->ClearMetadataWhileStopped();
+      ->ClearMetadataIfStopped();
 
   EXPECT_CALL(observer_, ReadingListModelBeganBatchUpdates).Times(0);
   EXPECT_CALL(observer_, ReadingListModelCompletedBatchUpdates).Times(0);

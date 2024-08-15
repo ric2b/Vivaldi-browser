@@ -5,16 +5,15 @@
 #include "chrome/browser/apps/app_service/publishers/extension_apps.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "build/build_config.h"
-#include "chrome/browser/apps/app_service/app_icon/icon_key_util.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/extension_status_utils.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "extensions/common/extension.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace apps {
 
@@ -46,8 +45,7 @@ bool ExtensionApps::ShouldShownInLauncher(
 AppPtr ExtensionApps::CreateApp(const extensions::Extension* extension,
                                 Readiness readiness) {
   auto app = CreateAppImpl(extension, readiness);
-  app->icon_key =
-      std::move(*icon_key_factory().CreateIconKey(GetIconEffects(extension)));
+  app->icon_key = IconKey(GetIconEffects(extension));
   app->has_badge = false;
   app->paused = false;
   return app;

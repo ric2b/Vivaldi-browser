@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/follow/follow_action_state.h"
+#import "ios/chrome/browser/follow/model/follow_action_state.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_consumer.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
 
@@ -20,21 +20,20 @@ class Tracker;
 namespace web {
 class WebState;
 }
-namespace supervised_user {
-class SupervisedUserService;
-}
 namespace syncer {
 class SyncService;
 }
 
 @protocol ActivityServiceCommands;
 @protocol ApplicationCommands;
+@protocol ApplicationSettingsCommands;
 class AuthenticationService;
 @protocol BookmarksCommands;
 @protocol BrowserCoordinatorCommands;
 class BrowserPolicyConnectorIOS;
 @protocol FindInPageCommands;
 class FollowBrowserAgent;
+@protocol HelpCommands;
 @protocol OverflowMenuCustomizationCommands;
 @class OverflowMenuOrderer;
 class OverlayPresenter;
@@ -45,6 +44,7 @@ class PrefService;
 class PromosManager;
 class ReadingListBrowserAgent;
 class ReadingListModel;
+class TabBasedIPHBrowserAgent;
 @protocol TextZoomCommands;
 class WebNavigationBrowserAgent;
 class WebStateList;
@@ -63,6 +63,7 @@ class WebStateList;
 // Command Handlers.
 @property(nonatomic, weak) id<ActivityServiceCommands> activityServiceHandler;
 @property(nonatomic, weak) id<ApplicationCommands> applicationHandler;
+@property(nonatomic, weak) id<ApplicationSettingsCommands> settingsHandler;
 @property(nonatomic, weak) id<BookmarksCommands> bookmarksHandler;
 @property(nonatomic, weak) id<BrowserCoordinatorCommands>
     browserCoordinatorHandler;
@@ -120,10 +121,6 @@ class WebStateList;
 // The Sync Service that provides the status of Sync.
 @property(nonatomic, assign) syncer::SyncService* syncService;
 
-// Service that describes the supervision state of the account.
-@property(nonatomic, assign)
-    supervised_user::SupervisedUserService* supervisedUserService;
-
 // The Promos Manager to alert if the user uses What's New.
 @property(nonatomic, assign) PromosManager* promosManager;
 
@@ -132,6 +129,9 @@ class WebStateList;
 
 // The AuthenticationService to get sign-in info.
 @property(nonatomic, assign) AuthenticationService* authenticationService;
+
+// The TabBasedIPHBrowserAgent to handle tab based in-product help bubbles.
+@property(nonatomic, assign) TabBasedIPHBrowserAgent* tabBasedIPHBrowserAgent;
 
 // Disconnect the mediator.
 - (void)disconnect;

@@ -82,14 +82,14 @@ class ArgsTracker {
 
    protected:
     BoundInserter(ArgsTracker* args_tracker,
-                  Column* arg_set_id_column,
+                  ColumnLegacy* arg_set_id_column,
                   uint32_t row);
 
    private:
     friend class ArgsTracker;
 
     ArgsTracker* args_tracker_ = nullptr;
-    Column* arg_set_id_column_ = nullptr;
+    ColumnLegacy* arg_set_id_column_ = nullptr;
     uint32_t row_ = 0;
   };
 
@@ -139,6 +139,12 @@ class ArgsTracker {
         context_->storage->mutable_surfaceflinger_transactions_table(), id);
   }
 
+  BoundInserter AddArgsTo(tables::WindowManagerShellTransitionsTable::Id id) {
+    return AddArgsTo(
+        context_->storage->mutable_window_manager_shell_transitions_table(),
+        id);
+  }
+
   BoundInserter AddArgsTo(MetadataId id) {
     auto* table = context_->storage->mutable_metadata_table();
     uint32_t row = *table->id().IndexOf(id);
@@ -174,7 +180,8 @@ class ArgsTracker {
   // Note that this means the args stored in this tracker will *not* be flushed
   // into the tables: it is the callers responsibility to ensure this happens if
   // necessary.
-  CompactArgSet ToCompactArgSet(const Column& column, uint32_t row_number) &&;
+  CompactArgSet ToCompactArgSet(const ColumnLegacy& column,
+                                uint32_t row_number) &&;
 
   // Returns whether this ArgsTracker contains any arg which require translation
   // according to the provided |table|.
@@ -191,7 +198,7 @@ class ArgsTracker {
     return BoundInserter(this, table->mutable_arg_set_id(), row);
   }
 
-  void AddArg(Column* arg_set_id,
+  void AddArg(ColumnLegacy* arg_set_id,
               uint32_t row,
               StringId flat_key,
               StringId key,
@@ -201,8 +208,8 @@ class ArgsTracker {
   base::SmallVector<GlobalArgsTracker::Arg, 16> args_;
   TraceProcessorContext* context_ = nullptr;
 
-  using ArrayKeyTuple =
-      std::tuple<Column* /*arg_set_id*/, uint32_t /*row*/, StringId /*key*/>;
+  using ArrayKeyTuple = std::
+      tuple<ColumnLegacy* /*arg_set_id*/, uint32_t /*row*/, StringId /*key*/>;
   std::map<ArrayKeyTuple, size_t /*next_index*/> array_indexes_;
 };
 

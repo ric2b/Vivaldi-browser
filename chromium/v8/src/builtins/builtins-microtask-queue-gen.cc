@@ -4,7 +4,7 @@
 
 #include "src/api/api.h"
 #include "src/builtins/builtins-utils-gen.h"
-#include "src/codegen/code-stub-assembler.h"
+#include "src/codegen/code-stub-assembler-inl.h"
 #include "src/execution/microtask-queue.h"
 #include "src/objects/js-weak-refs.h"
 #include "src/objects/microtask-inl.h"
@@ -235,16 +235,29 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     const TNode<HeapObject> promise_or_capability = CAST(LoadObjectField(
         microtask, PromiseReactionJobTask::kPromiseOrCapabilityOffset));
 
-    TNode<Object> preserved_embedder_data = LoadObjectField(
-        microtask,
-        PromiseReactionJobTask::kContinuationPreservedEmbedderDataOffset);
-    Label preserved_data_done(this);
-    GotoIf(IsUndefined(preserved_embedder_data), &preserved_data_done);
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+    TNode<Object> isolate_preserved_embedder_data = LoadObjectField(
+        microtask, PromiseReactionJobTask::
+                       kIsolateContinuationPreservedEmbedderDataOffset);
+    Label isolate_preserved_data_done(this);
+    GotoIf(IsUndefined(isolate_preserved_embedder_data),
+           &isolate_preserved_data_done);
+    SetContinuationPreservedEmbedderData(isolate_preserved_embedder_data);
+    Goto(&isolate_preserved_data_done);
+    BIND(&isolate_preserved_data_done);
+
+    TNode<Object> context_preserved_embedder_data = LoadObjectField(
+        microtask, PromiseReactionJobTask::
+                       kContextContinuationPreservedEmbedderDataOffset);
+    Label context_preserved_data_done(this);
+    GotoIf(IsUndefined(context_preserved_embedder_data),
+           &context_preserved_data_done);
     StoreContextElement(native_context,
                         Context::CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX,
-                        preserved_embedder_data);
-    Goto(&preserved_data_done);
-    BIND(&preserved_data_done);
+                        context_preserved_embedder_data);
+    Goto(&context_preserved_data_done);
+    BIND(&context_preserved_data_done);
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
     // Run the promise before/debug hook if enabled.
     RunAllPromiseHooks(PromiseHookType::kBefore, microtask_context,
@@ -260,13 +273,23 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     RunAllPromiseHooks(PromiseHookType::kAfter, microtask_context,
                        promise_or_capability);
 
-    Label preserved_data_reset_done(this);
-    GotoIf(IsUndefined(preserved_embedder_data), &preserved_data_reset_done);
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+    Label isolate_preserved_data_reset_done(this);
+    GotoIf(IsUndefined(isolate_preserved_embedder_data),
+           &isolate_preserved_data_reset_done);
+    SetContinuationPreservedEmbedderData(UndefinedConstant());
+    Goto(&isolate_preserved_data_reset_done);
+    BIND(&isolate_preserved_data_reset_done);
+
+    Label context_preserved_data_reset_done(this);
+    GotoIf(IsUndefined(context_preserved_embedder_data),
+           &context_preserved_data_reset_done);
     StoreContextElement(native_context,
                         Context::CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX,
                         UndefinedConstant());
-    Goto(&preserved_data_reset_done);
-    BIND(&preserved_data_reset_done);
+    Goto(&context_preserved_data_reset_done);
+    BIND(&context_preserved_data_reset_done);
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
     RewindEnteredContext(saved_entered_context_count);
     SetCurrentContext(current_context);
@@ -288,16 +311,29 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     const TNode<HeapObject> promise_or_capability = CAST(LoadObjectField(
         microtask, PromiseReactionJobTask::kPromiseOrCapabilityOffset));
 
-    TNode<Object> preserved_embedder_data = LoadObjectField(
-        microtask,
-        PromiseReactionJobTask::kContinuationPreservedEmbedderDataOffset);
-    Label preserved_data_done(this);
-    GotoIf(IsUndefined(preserved_embedder_data), &preserved_data_done);
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+    TNode<Object> isolate_preserved_embedder_data = LoadObjectField(
+        microtask, PromiseReactionJobTask::
+                       kIsolateContinuationPreservedEmbedderDataOffset);
+    Label isolate_preserved_data_done(this);
+    GotoIf(IsUndefined(isolate_preserved_embedder_data),
+           &isolate_preserved_data_done);
+    SetContinuationPreservedEmbedderData(isolate_preserved_embedder_data);
+    Goto(&isolate_preserved_data_done);
+    BIND(&isolate_preserved_data_done);
+
+    TNode<Object> context_preserved_embedder_data = LoadObjectField(
+        microtask, PromiseReactionJobTask::
+                       kContextContinuationPreservedEmbedderDataOffset);
+    Label context_preserved_data_done(this);
+    GotoIf(IsUndefined(context_preserved_embedder_data),
+           &context_preserved_data_done);
     StoreContextElement(native_context,
                         Context::CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX,
-                        preserved_embedder_data);
-    Goto(&preserved_data_done);
-    BIND(&preserved_data_done);
+                        context_preserved_embedder_data);
+    Goto(&context_preserved_data_done);
+    BIND(&context_preserved_data_done);
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
     // Run the promise before/debug hook if enabled.
     RunAllPromiseHooks(PromiseHookType::kBefore, microtask_context,
@@ -313,13 +349,23 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     RunAllPromiseHooks(PromiseHookType::kAfter, microtask_context,
                        promise_or_capability);
 
-    Label preserved_data_reset_done(this);
-    GotoIf(IsUndefined(preserved_embedder_data), &preserved_data_reset_done);
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+    Label isolate_preserved_data_reset_done(this);
+    GotoIf(IsUndefined(isolate_preserved_embedder_data),
+           &isolate_preserved_data_reset_done);
+    SetContinuationPreservedEmbedderData(UndefinedConstant());
+    Goto(&isolate_preserved_data_reset_done);
+    BIND(&isolate_preserved_data_reset_done);
+
+    Label context_preserved_data_reset_done(this);
+    GotoIf(IsUndefined(context_preserved_embedder_data),
+           &context_preserved_data_reset_done);
     StoreContextElement(native_context,
                         Context::CONTINUATION_PRESERVED_EMBEDDER_DATA_INDEX,
                         UndefinedConstant());
-    Goto(&preserved_data_reset_done);
-    BIND(&preserved_data_reset_done);
+    Goto(&context_preserved_data_reset_done);
+    BIND(&context_preserved_data_reset_done);
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
 
     RewindEnteredContext(saved_entered_context_count);
     SetCurrentContext(current_context);

@@ -7,11 +7,10 @@
 #include <algorithm>
 #include <utility>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
-#include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_prefs.h"
 #include "ash/public/cpp/shelf_types.h"
@@ -40,7 +39,6 @@
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/switchable_windows.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_restore/window_restore_controller.h"
@@ -53,11 +51,11 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/containers/unique_ptr_adapters.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
@@ -66,14 +64,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chromeos/utils/haptics_util.h"
-#include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_utils.h"
-#include "components/app_restore/window_info.h"
 #include "components/app_restore/window_properties.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/display/screen.h"
 #include "ui/events/devices/haptic_touchpad_effects.h"
 #include "ui/views/widget/native_widget_private.h"
 #include "ui/wm/core/window_animations.h"
@@ -147,7 +144,8 @@ constexpr int kDeskDefaultNameIds[] = {
 // Appends the given |windows| to the end of the currently active overview mode
 // session such that the most-recently used window is added first. If
 // The windows will animate to their positions in the overview grid.
-void AppendWindowsToOverview(const std::vector<aura::Window*>& windows) {
+void AppendWindowsToOverview(
+    const std::vector<raw_ptr<aura::Window, VectorExperimental>>& windows) {
   DCHECK(Shell::Get()->overview_controller()->InOverviewSession());
 
   // TODO(dandersson): See if we can remove this code and just let
@@ -155,7 +153,7 @@ void AppendWindowsToOverview(const std::vector<aura::Window*>& windows) {
   auto* overview_session =
       Shell::Get()->overview_controller()->overview_session();
   overview_session->set_auto_add_windows_enabled(false);
-  for (auto* window :
+  for (aura::Window* window :
        Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk)) {
     if (!base::Contains(windows, window) ||
         window_util::ShouldExcludeForOverview(window)) {
@@ -204,8 +202,10 @@ void RemoveAllWindowsFromOverview() {
 // given windows will be updated, while the rest will remain unchanged. Either
 // or both window lists can be empty.
 void MaybeUpdateShelfItems(
-    const std::vector<aura::Window*>& windows_on_inactive_desk,
-    const std::vector<aura::Window*>& windows_on_active_desk) {
+    const std::vector<raw_ptr<aura::Window, VectorExperimental>>&
+        windows_on_inactive_desk,
+    const std::vector<raw_ptr<aura::Window, VectorExperimental>>&
+        windows_on_active_desk) {
   if (!features::IsPerDeskShelfEnabled())
     return;
 
@@ -225,10 +225,12 @@ void MaybeUpdateShelfItems(
     shelf_items_updates.push_back({index, is_on_active_desk});
   };
 
-  for (auto* window : windows_on_inactive_desk)
+  for (aura::Window* window : windows_on_inactive_desk) {
     add_shelf_item_update(window, /*is_on_active_desk=*/false);
-  for (auto* window : windows_on_active_desk)
+  }
+  for (aura::Window* window : windows_on_active_desk) {
     add_shelf_item_update(window, /*is_on_active_desk=*/true);
+  }
 
   shelf_model->UpdateItemsForDeskChange(shelf_items_updates);
 }
@@ -240,11 +242,11 @@ bool IsParentSwitchableContainer(const aura::Window* window) {
 
 bool IsApplistActiveInTabletMode(const aura::Window* active_window) {
   DCHECK(active_window);
-  Shell* shell = Shell::Get();
-  if (!shell->tablet_mode_controller()->InTabletMode())
+  if (!display::Screen::GetScreen()->InTabletMode()) {
     return false;
+  }
 
-  auto* app_list_controller = shell->app_list_controller();
+  auto* app_list_controller = Shell::Get()->app_list_controller();
   return active_window == app_list_controller->GetWindow();
 }
 
@@ -405,7 +407,7 @@ class DesksController::DeskTraversalsMetricsHelper {
 
   // Pointer to the DesksController that owns this. Guaranteed to be not
   // nullptr for the lifetime of |this|.
-  const raw_ptr<DesksController, ExperimentalAsh> controller_;
+  const raw_ptr<DesksController> controller_;
 
   base::OneShotTimer timer_;
 
@@ -640,6 +642,7 @@ void DesksController::NewDesk(DesksCreationRemovalSource source) {
     }
     desks_restore_util::UpdatePrimaryUserDeskGuidsPrefs();
     desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
+    desks_restore_util::UpdatePrimaryUserDeskLacrosProfileIdPrefs();
     desks_restore_util::UpdatePrimaryUserDeskMetricsPrefs();
     UMA_HISTOGRAM_ENUMERATION(kNewDeskHistogramName, source);
     ReportDesksCountHistogram();
@@ -714,6 +717,7 @@ void DesksController::ReorderDesk(int old_index, int new_index) {
   // right order.
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
   desks_restore_util::UpdatePrimaryUserDeskGuidsPrefs();
+  desks_restore_util::UpdatePrimaryUserDeskLacrosProfileIdPrefs();
   desks_restore_util::UpdatePrimaryUserDeskMetricsPrefs();
 
   // 2. For multi-profile switching, update all affected active desk index in
@@ -744,7 +748,7 @@ void DesksController::ReorderDesk(int old_index, int new_index) {
   // 4. For restoring windows to the right desks, update workspaces of all
   // windows in the affected desks for all simultaneously logged-in users.
   for (int i = starting_affected_index; i <= ending_affected_index; i++) {
-    for (auto* window : desks_[i]->windows()) {
+    for (aura::Window* window : desks_[i]->windows()) {
       if (desks_util::IsWindowVisibleOnAllWorkspaces(window))
         continue;
       window->SetProperty(aura::client::kWindowWorkspaceKey, i);
@@ -759,7 +763,7 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
   // If we are switching users, we don't want to notify desks of content changes
   // until the user switch animation has shown the new user's windows.
   const bool is_user_switch = source == DesksSwitchSource::kUserSwitch;
-  absl::optional<Desk::ScopedContentUpdateNotificationDisabler>
+  std::optional<Desk::ScopedContentUpdateNotificationDisabler>
       desks_scoped_notify_disabler;
   if (is_user_switch) {
     desks_scoped_notify_disabler.emplace(/*desks=*/desks_,
@@ -871,8 +875,9 @@ bool DesksController::ActivateAdjacentDesk(bool going_left,
           ui::HapticTouchpadEffect::kKnock,
           ui::HapticTouchpadEffectStrength::kMedium);
     }
-    for (auto* root : Shell::GetAllRootWindows())
+    for (aura::Window* root : Shell::GetAllRootWindows()) {
       desks_animations::PerformHitTheWallAnimation(root, going_left);
+    }
   }
 
   return true;
@@ -936,9 +941,8 @@ bool DesksController::MoveWindowFromActiveDeskTo(
   // handles minimized windows differently.
   if (in_overview) {
     auto* overview_session = overview_controller->overview_session();
-    auto* item = overview_session->GetOverviewItemForWindow(window);
     // `item` can be null when we are switching users.
-    if (item) {
+    if (auto* item = overview_session->GetOverviewItemForWindow(window)) {
       item->OnMovingItemToAnotherDesk();
       // The item no longer needs to be in the overview grid.
       overview_session->RemoveItem(item);
@@ -1227,10 +1231,11 @@ void DesksController::CaptureActiveDeskAsSavedDesk(
 
   restore_data_collector_.CaptureActiveDeskAsSavedDesk(
       std::move(callback), template_type,
-      base::UTF16ToUTF8(active_desk_->name()), root_window_to_show);
+      base::UTF16ToUTF8(active_desk_->name()), root_window_to_show,
+      current_account_id_);
 }
 
-const Desk* DesksController::CreateNewDeskForSavedDesk(
+Desk* DesksController::CreateNewDeskForSavedDesk(
     DeskTemplateType template_type,
     const std::u16string& customized_desk_name) {
   DCHECK(CanCreateDesks());
@@ -1745,9 +1750,10 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
 
   // If in the middle of a window cycle gesture, reset the window cycle list
   // contents so it contains the new active desk's windows.
-  auto* window_cycle_controller = shell->window_cycle_controller();
-  if (window_cycle_controller->IsAltTabPerActiveDesk())
+  if (auto* window_cycle_controller = shell->window_cycle_controller();
+      window_cycle_controller->IsAltTabPerActiveDesk()) {
     window_cycle_controller->MaybeResetCycleList();
+  }
 
   for (auto& observer : observers_)
     observer.OnDeskActivationChanged(active_desk_, old_active);
@@ -1787,7 +1793,7 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
   // removed desk since indices of those desks shift by one.
   for (int i = removed_desk_index + 1; i < static_cast<int>(desks_.size());
        i++) {
-    for (auto* window : desks_[i]->windows()) {
+    for (aura::Window* window : desks_[i]->windows()) {
       if (desks_util::IsWindowVisibleOnAllWorkspaces(window))
         continue;
       window->SetProperty(aura::client::kWindowWorkspaceKey, i - 1);
@@ -1984,7 +1990,7 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
 
   // We should only announce desks are being merged if we are combining desks.
   // Otherwise, we tell the user that the desk has closed with its windows.
-  AccessibilityControllerImpl* accessibility_controller =
+  AccessibilityController* accessibility_controller =
       shell->accessibility_controller();
   if (close_type == DeskCloseType::kCombineDesks) {
     accessibility_controller->TriggerAccessibilityAlertWithMessage(
@@ -1998,6 +2004,7 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
 
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
   desks_restore_util::UpdatePrimaryUserDeskGuidsPrefs();
+  desks_restore_util::UpdatePrimaryUserDeskLacrosProfileIdPrefs();
   desks_restore_util::UpdatePrimaryUserDeskMetricsPrefs();
 
   DCHECK_LE(available_container_ids_.size(), desks_util::GetMaxNumberOfDesks());
@@ -2114,7 +2121,8 @@ void DesksController::FinalizeDeskRemoval(RemovedDeskData* removed_desk_data) {
       Desk::ScopedContentUpdateNotificationDisabler(
           /*desks=*/{removed_desk}, /*notify_when_destroyed=*/false);
 
-  std::vector<aura::Window*> app_windows = removed_desk->GetAllAppWindows();
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> app_windows =
+      removed_desk->GetAllAppWindows();
 
   // We use `closing_window_tracker` to track all app windows that should be
   // closed from the removed desk, `WindowTracker` will handle windows that may

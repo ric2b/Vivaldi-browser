@@ -10,7 +10,6 @@
 #ifndef EIGEN_CXX11_TENSOR_TENSOR_DEVICE_DEFAULT_H
 #define EIGEN_CXX11_TENSOR_TENSOR_DEVICE_DEFAULT_H
 
-
 // IWYU pragma: private
 #include "./InternalHeaderCheck.h"
 
@@ -21,15 +20,9 @@ struct DefaultDevice {
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void* allocate(size_t num_bytes) const {
     return internal::aligned_malloc(num_bytes);
   }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void deallocate(void* buffer) const {
-    internal::aligned_free(buffer);
-  }
-    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void* allocate_temp(size_t num_bytes) const {
-    return allocate(num_bytes);
-  }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void deallocate_temp(void* buffer) const {
-    deallocate(buffer);
-  }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void deallocate(void* buffer) const { internal::aligned_free(buffer); }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void* allocate_temp(size_t num_bytes) const { return allocate(num_bytes); }
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void deallocate_temp(void* buffer) const { deallocate(buffer); }
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void memcpy(void* dst, const void* src, size_t n) const {
     ::memcpy(dst, src, n);
   }
@@ -39,10 +32,8 @@ struct DefaultDevice {
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void memcpyDeviceToHost(void* dst, const void* src, size_t n) const {
     memcpy(dst, src, n);
   }
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void memset(void* buffer, int c, size_t n) const {
-    ::memset(buffer, c, n);
-  }
-  template<typename T>
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void memset(void* buffer, int c, size_t n) const { ::memset(buffer, c, n); }
+  template <typename T>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void fill(T* begin, T* end, const T& value) const {
 #ifdef EIGEN_GPU_COMPILE_PHASE
     // std::fill is not a device function, so resort to simple loop.
@@ -53,8 +44,8 @@ struct DefaultDevice {
     std::fill(begin, end, value);
 #endif
   }
-  template<typename Type>
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Type get(Type data) const { 
+  template <typename Type>
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Type get(Type data) const {
     return data;
   }
 
@@ -77,10 +68,10 @@ struct DefaultDevice {
     return l1CacheSize();
 #elif defined(EIGEN_HIP_DEVICE_COMPILE)
     // Running on a HIP device
-    return 48*1024; // FIXME : update this number for HIP
+    return 48 * 1024;  // FIXME : update this number for HIP
 #else
     // Running on a CUDA device, return the amount of shared memory available.
-    return 48*1024;
+    return 48 * 1024;
 #endif
   }
 
@@ -90,13 +81,13 @@ struct DefaultDevice {
     return l3CacheSize();
 #elif defined(EIGEN_HIP_DEVICE_COMPILE)
     // Running on a HIP device
-    return firstLevelCacheSize(); // FIXME : update this number for HIP
+    return firstLevelCacheSize();  // FIXME : update this number for HIP
 #else
     // Running on a CUDA device
     return firstLevelCacheSize();
 #endif
   }
-  
+
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void synchronize() const {
     // Nothing.  Default device operations are synchronous.
   }
@@ -119,4 +110,4 @@ struct DefaultDevice {
 
 }  // namespace Eigen
 
-#endif // EIGEN_CXX11_TENSOR_TENSOR_DEVICE_DEFAULT_H
+#endif  // EIGEN_CXX11_TENSOR_TENSOR_DEVICE_DEFAULT_H

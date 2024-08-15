@@ -139,14 +139,17 @@ IndexedDBTransaction::IndexedDBTransaction(
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("IndexedDB",
                                     "IndexedDBTransaction::lifetime", this);
 
-  callbacks_ = connection_->callbacks();
   database_ = connection_->database();
   if (database_) {
     database_->TransactionCreated();
 
-    for (const PartitionedLockManager::PartitionedLockRequest& lock_request :
-         database_->BuildLockRequestsFromTransaction(this)) {
-      lock_ids_.insert(lock_request.lock_id);
+    if (mode_ == blink::mojom::IDBTransactionMode::VersionChange) {
+      lock_ids_.insert(GetDatabaseLockId(database_->name()));
+    } else {
+      for (const PartitionedLockManager::PartitionedLockRequest& lock_request :
+           BuildLockRequests()) {
+        lock_ids_.insert(lock_request.lock_id);
+      }
     }
   }
 
@@ -182,7 +185,7 @@ void IndexedDBTransaction::SetCommitFlag() {
   }
 
   is_commit_pending_ = true;
-  bucket_context_->delegate().on_tasks_available.Run();
+  bucket_context_->QueueRunTasks();
 }
 
 void IndexedDBTransaction::ScheduleTask(blink::mojom::IDBTaskType type,
@@ -199,7 +202,7 @@ void IndexedDBTransaction::ScheduleTask(blink::mojom::IDBTaskType type,
     preemptive_task_queue_.push(std::move(task));
   }
   if (state() == STARTED)
-    bucket_context_->delegate().on_tasks_available.Run();
+    bucket_context_->QueueRunTasks();
 }
 
 void IndexedDBTransaction::ScheduleAbortTask(AbortOperation abort_task) {
@@ -249,12 +252,11 @@ leveldb::Status IndexedDBTransaction::Abort(
   locks_receiver_.locks.clear();
   locks_receiver_.AbortLockRequest();
 
-  if (callbacks_.get())
-    callbacks_->OnAbort(*this, error);
+  callbacks()->OnAbort(*this, error);
 
   if (database_)
     database_->TransactionFinished(mode_, false);
-  bucket_context_->delegate().on_tasks_available.Run();
+  bucket_context_->QueueRunTasks();
   bucket_context_.Release();
   return leveldb::Status::OK();
 }
@@ -292,7 +294,26 @@ void IndexedDBTransaction::Start() {
   state_ = STARTED;
   DCHECK(!locks_receiver_.locks.empty());
   diagnostics_.start_time = base::Time::Now();
-  bucket_context_->delegate().on_tasks_available.Run();
+
+  const base::TimeDelta time_queued =
+      diagnostics_.start_time - diagnostics_.creation_time;
+  switch (mode_) {
+    case blink::mojom::IDBTransactionMode::ReadOnly:
+      base::UmaHistogramMediumTimes(
+          "WebCore.IndexedDB.Transaction.ReadOnly.TimeQueued", time_queued);
+      break;
+    case blink::mojom::IDBTransactionMode::ReadWrite:
+      base::UmaHistogramMediumTimes(
+          "WebCore.IndexedDB.Transaction.ReadWrite.TimeQueued", time_queued);
+      break;
+    case blink::mojom::IDBTransactionMode::VersionChange:
+      base::UmaHistogramMediumTimes(
+          "WebCore.IndexedDB.Transaction.VersionChange.TimeQueued",
+          time_queued);
+      break;
+  }
+
+  bucket_context_->QueueRunTasks();
 }
 
 // static
@@ -484,13 +505,13 @@ leveldb::Status IndexedDBTransaction::BlobWriteComplete(
               "Failed to write blobs (%s)",
               WriteBlobToFileResultToString(error).c_str()))));
       if (!status.ok())
-        bucket_context_->delegate().on_fatal_error.Run(status);
+        bucket_context_->delegate().on_fatal_error.Run(status, {});
       // The result is ignored.
       return leveldb::Status::OK();
     }
     case BlobWriteResult::kRunPhaseTwoAsync:
       ScheduleTask(base::BindOnce(&CommitPhaseTwoProxy));
-      bucket_context_->delegate().on_tasks_available.Run();
+      bucket_context_->QueueRunTasks();
       return leveldb::Status::OK();
     case BlobWriteResult::kRunPhaseTwoAndReturnResult: {
       return CommitPhaseTwo();
@@ -572,19 +593,34 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
   if (!used_) {
     committed = true;
   } else {
-    base::TimeDelta active_time = base::Time::Now() - diagnostics_.start_time;
+    const base::TimeDelta active_time =
+        base::Time::Now() - diagnostics_.start_time;
     uint64_t size_kb = backing_store_transaction_->GetTransactionSize() / 1024;
-    // All histograms record 1KB to 1GB.
+
+    s = backing_store_transaction_->CommitPhaseTwo();
+
+    // This measurement includes the time it takes to commit to the backing
+    // store (i.e. LevelDB), not just the blobs. It should replace the
+    // `active_time` measurement.
+    const base::TimeDelta active_time2 =
+        base::Time::Now() - diagnostics_.start_time;
+
+    // SizeOnCommit2 histograms record 1KB to 1GB.
     switch (mode_) {
       case blink::mojom::IDBTransactionMode::ReadOnly:
         UMA_HISTOGRAM_MEDIUM_TIMES(
             "WebCore.IndexedDB.Transaction.ReadOnly.TimeActive", active_time);
+        base::UmaHistogramMediumTimes(
+            "WebCore.IndexedDB.Transaction.ReadOnly.TimeActive2", active_time2);
         UMA_HISTOGRAM_COUNTS_1M(
             "WebCore.IndexedDB.Transaction.ReadOnly.SizeOnCommit2", size_kb);
         break;
       case blink::mojom::IDBTransactionMode::ReadWrite:
         UMA_HISTOGRAM_MEDIUM_TIMES(
             "WebCore.IndexedDB.Transaction.ReadWrite.TimeActive", active_time);
+        base::UmaHistogramMediumTimes(
+            "WebCore.IndexedDB.Transaction.ReadWrite.TimeActive2",
+            active_time2);
         UMA_HISTOGRAM_COUNTS_1M(
             "WebCore.IndexedDB.Transaction.ReadWrite.SizeOnCommit2", size_kb);
         break;
@@ -592,6 +628,9 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
         UMA_HISTOGRAM_MEDIUM_TIMES(
             "WebCore.IndexedDB.Transaction.VersionChange.TimeActive",
             active_time);
+        base::UmaHistogramMediumTimes(
+            "WebCore.IndexedDB.Transaction.VersionChange.TimeActive2",
+            active_time2);
         UMA_HISTOGRAM_COUNTS_1M(
             "WebCore.IndexedDB.Transaction.VersionChange.SizeOnCommit2",
             size_kb);
@@ -600,7 +639,6 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
         NOTREACHED();
     }
 
-    s = backing_store_transaction_->CommitPhaseTwo();
     committed = s.ok();
   }
 
@@ -624,7 +662,7 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
           "IndexedDB",
           "IndexedDBTransaction::CommitPhaseTwo.TransactionCompleteCallbacks",
           "txn.id", id());
-      callbacks_->OnComplete(*this);
+      callbacks()->OnComplete(*this);
     }
 
     if (mode() != blink::mojom::IDBTransactionMode::ReadOnly) {
@@ -652,7 +690,7 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
       error = IndexedDBDatabaseError(blink::mojom::IDBException::kUnknownError,
                                      "Internal error committing transaction.");
     }
-    callbacks_->OnAbort(*this, error);
+    callbacks()->OnAbort(*this, error);
     if (database_)
       database_->TransactionFinished(mode_, false);
   }
@@ -743,7 +781,7 @@ void IndexedDBTransaction::Timeout() {
       IndexedDBDatabaseError(blink::mojom::IDBException::kTimeoutError,
                              u"Transaction timed out due to inactivity."));
   if (!result.ok())
-    bucket_context_->delegate().on_fatal_error.Run(result);
+    bucket_context_->delegate().on_fatal_error.Run(result, {});
 }
 
 void IndexedDBTransaction::CloseOpenCursors() {
@@ -756,6 +794,26 @@ void IndexedDBTransaction::CloseOpenCursors() {
   open_cursors_.clear();
   for (auto* cursor : open_cursors)
     cursor->Close();
+}
+
+std::vector<PartitionedLockManager::PartitionedLockRequest>
+IndexedDBTransaction::BuildLockRequests() const {
+  // Locks for version change transactions are covered by `ConnectionRequest`.
+  DCHECK_NE(mode(), blink::mojom::IDBTransactionMode::VersionChange);
+  std::vector<PartitionedLockManager::PartitionedLockRequest> lock_requests;
+  lock_requests.reserve(1 + scope().size());
+  lock_requests.emplace_back(GetDatabaseLockId(database_->name()),
+                             PartitionedLockManager::LockType::kShared);
+  const auto object_store_lock_type =
+      mode() == blink::mojom::IDBTransactionMode::ReadOnly
+          ? PartitionedLockManager::LockType::kShared
+          : PartitionedLockManager::LockType::kExclusive;
+  for (int64_t object_store : scope()) {
+    lock_requests.emplace_back(
+        GetObjectStoreLockId(database_->id(), object_store),
+        object_store_lock_type);
+  }
+  return lock_requests;
 }
 
 }  // namespace content

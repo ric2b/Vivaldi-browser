@@ -257,12 +257,12 @@ void CWSInfoService::Shutdown() {
   info_check_timer_.Stop();
 }
 
-absl::optional<bool> CWSInfoService::IsLiveInCWS(
+std::optional<bool> CWSInfoService::IsLiveInCWS(
     const Extension& extension) const {
   const base::Value::Dict* cws_info_dict =
       extension_prefs_->ReadPrefAsDict(extension.id(), kCWSInfo);
   if (cws_info_dict == nullptr) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   if (!cws_info_dict->FindBool(kIsPresent).value_or(false)) {
     return false;
@@ -270,12 +270,12 @@ absl::optional<bool> CWSInfoService::IsLiveInCWS(
   return cws_info_dict->FindBool(kIsLive).value_or(false);
 }
 
-absl::optional<CWSInfoService::CWSInfo> CWSInfoService::GetCWSInfo(
+std::optional<CWSInfoService::CWSInfo> CWSInfoService::GetCWSInfo(
     const Extension& extension) const {
   const base::Value::Dict* cws_info_dict =
       extension_prefs_->ReadPrefAsDict(extension.id(), kCWSInfo);
   if (cws_info_dict == nullptr) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   CWSInfo info;
   info.is_present = cws_info_dict->FindBool(kIsPresent).value_or(false);
@@ -300,7 +300,7 @@ absl::optional<CWSInfoService::CWSInfo> CWSInfoService::GetCWSInfo(
         cws_info_dict->FindBool(kNoPrivacyPractice).value_or(false);
   }
 
-  return absl::make_optional<CWSInfo>(info);
+  return std::make_optional<CWSInfo>(info);
 }
 
 void CWSInfoService::CheckAndMaybeFetchInfo() {
@@ -312,25 +312,32 @@ void CWSInfoService::CheckAndMaybeFetchInfo() {
 
   if (CanFetchInfo()) {
     base::TimeDelta elapsed_time =
-        base::Time::Now() - pref_service_->GetTime(prefs::kCWSInfoTimestamp);
-    // Enough time has elapsed since the last fetch.
-    bool data_refresh_needed =
-        elapsed_time >= base::Seconds(current_fetch_interval_secs_);
+        base::Time::Now() -
+        pref_service_->GetTime(prefs::kCWSInfoFetchErrorTimestamp);
+    // If there was a previous fetch error, wait a full fetch interval before
+    // retrying.
+    if (elapsed_time >= base::Seconds(current_fetch_interval_secs_)) {
+      elapsed_time =
+          base::Time::Now() - pref_service_->GetTime(prefs::kCWSInfoTimestamp);
+      // Enough time has elapsed since the last successful fetch.
+      bool data_refresh_needed =
+          elapsed_time >= base::Seconds(current_fetch_interval_secs_);
 
-    bool new_info_requested = false;
-    std::unique_ptr<FetchContext> fetch_context =
-        CreateRequests(new_info_requested);
+      bool new_info_requested = false;
+      std::unique_ptr<FetchContext> fetch_context =
+          CreateRequests(new_info_requested);
 
-    if ((data_refresh_needed || new_info_requested) && fetch_context) {
-      // Stop the check timer in case it is running. This can happen if we got
-      // here because of an out-of-cycle fetch.
-      info_check_timer_.Stop();
-      // Save the fetch context and send the (first) request.
-      active_fetch_ = std::move(fetch_context);
-      RecordNumRequestsInFetch(active_fetch_->requests.size());
-      current_fetch_interval_secs_ = GetNextFetchInterval();
-      SendRequest();
-      return;
+      if ((data_refresh_needed || new_info_requested) && fetch_context) {
+        // Stop the check timer in case it is running. This can happen if we got
+        // here because of an out-of-cycle fetch.
+        info_check_timer_.Stop();
+        // Save the fetch context and send the (first) request.
+        active_fetch_ = std::move(fetch_context);
+        RecordNumRequestsInFetch(active_fetch_->requests.size());
+        current_fetch_interval_secs_ = GetNextFetchInterval();
+        SendRequest();
+        return;
+      }
     }
   }
 
@@ -360,11 +367,11 @@ std::unique_ptr<CWSInfoService::FetchContext> CWSInfoService::CreateRequests(
   new_info_requested = false;
 
   auto* extension_mgmt =
-      extensions::ExtensionManagementFactory::GetForBrowserContext(profile_);
+      ExtensionManagementFactory::GetForBrowserContext(profile_);
   if (!extension_mgmt) {
     return nullptr;
   }
-  extensions::ExtensionSet installed_extensions =
+  ExtensionSet installed_extensions =
       extension_registry_->GenerateInstalledExtensionsSet();
   if (installed_extensions.empty()) {
     return nullptr;
@@ -457,7 +464,13 @@ void CWSInfoService::OnResponseReceived(std::unique_ptr<std::string> response) {
     error = true;
   }
 
-  if (!error) {
+  if (error) {
+    // Record the fetch error timestamp. This timestamp is used to
+    // wait at least one fetch interval after an error before
+    // attempting another fetch.
+    pref_service_->SetTime(prefs::kCWSInfoFetchErrorTimestamp,
+                           base::Time::Now());
+  } else {
     // Info response received without any errors. Remove the request object
     // from the request queue.
     active_fetch_->requests.pop();
@@ -527,8 +540,7 @@ void CWSInfoService::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-static_assert(static_cast<int>(
-                  extensions::CWSInfoService::CWSViolationType::kUnknown) == 4,
+static_assert(static_cast<int>(CWSInfoService::CWSViolationType::kUnknown) == 4,
               "GetViolationTypeFromString needs to be updated to match "
               "CWSInfoService::CWSViolationType");
 // static:
@@ -570,6 +582,10 @@ int CWSInfoService::GetCheckIntervalForTesting() const {
 
 base::Time CWSInfoService::GetCWSInfoTimestampForTesting() const {
   return pref_service_->GetTime(prefs::kCWSInfoTimestamp);
+}
+
+base::Time CWSInfoService::GetCWSInfoFetchErrorTimestampForTesting() const {
+  return pref_service_->GetTime(prefs::kCWSInfoFetchErrorTimestamp);
 }
 
 }  // namespace extensions

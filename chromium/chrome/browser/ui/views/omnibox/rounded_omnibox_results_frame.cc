@@ -58,14 +58,29 @@ WidgetEventPair GetParentWidgetAndEvent(views::View* this_view,
     return {nullptr, std::move(event)};
 
 // On macOS if the parent widget is the overlay widget we are in immersive
-// fullscreen. Don't walk any higher up the tree. The overlay widget will handle
-// the event.
+// fullscreen. Don't walk any higher up the tree. The overlay or tab widget will
+// handle the event.
+// TODO(http://crbug.com/1462791): Remove custom event handling.
 #if BUILDFLAG(IS_MAC)
   views::Widget* top_level = nullptr;
   BrowserView* browser_view = BrowserView::GetBrowserViewForNativeWindow(
       parent_widget->GetNativeWindow());
   if (browser_view->overlay_widget() == parent_widget) {
-    top_level = parent_widget;
+    // In immersive fullscreen the floating results shadow spreads into the tab
+    // strip area which is hosted in a separate widget. Decide where to send the
+    // event. This will allow for accurate tab hover card dismissal when the
+    // results window is on screen.
+    top_level = browser_view->overlay_widget();
+    if (browser_view->tab_overlay_widget()) {
+      gfx::Point event_location = this_event->location();
+      views::View::ConvertPointToScreen(this_view, &event_location);
+      views::View::ConvertPointFromScreen(
+          browser_view->tab_overlay_widget()->GetRootView(), &event_location);
+      if (browser_view->tab_overlay_widget()->GetRootView()->HitTestPoint(
+              event_location)) {
+        top_level = browser_view->tab_overlay_widget();
+      }
+    }
   } else {
     top_level = parent_widget->GetTopLevelWidgetForNativeView(
         parent_widget->GetNativeView());
@@ -95,8 +110,9 @@ WidgetEventPair GetParentWidgetAndEvent(views::View* this_view,
 // View at the top of the frame which paints transparent pixels to make a hole
 // so that the location bar shows through.
 class TopBackgroundView : public views::View {
+  METADATA_HEADER(TopBackgroundView, views::View)
+
  public:
-  METADATA_HEADER(TopBackgroundView);
   explicit TopBackgroundView(const LocationBarView* location_bar)
       : location_bar_(location_bar) {}
 
@@ -155,7 +171,7 @@ class TopBackgroundView : public views::View {
   raw_ptr<const LocationBarView> location_bar_;
 };
 
-BEGIN_METADATA(TopBackgroundView, views::View)
+BEGIN_METADATA(TopBackgroundView)
 END_METADATA
 
 // Insets used to position |contents_| within |contents_host_|.
@@ -305,5 +321,5 @@ void RoundedOmniboxResultsFrame::OnMouseEvent(ui::MouseEvent* event) {
 
 #endif  // !USE_AURA
 
-BEGIN_METADATA(RoundedOmniboxResultsFrame, views::View)
+BEGIN_METADATA(RoundedOmniboxResultsFrame)
 END_METADATA

@@ -4,12 +4,15 @@
 
 #include "ash/system/input_device_settings/input_device_notifier.h"
 
+#include <functional>
+
 #include "ash/bluetooth_devices_observer.h"
 #include "ash/public/cpp/input_device_settings_controller.h"
 #include "ash/public/mojom/input_device_settings.mojom-forward.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/system/input_device_settings/input_device_settings_metadata.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/system/input_device_settings/input_device_settings_utils.h"
 #include "base/containers/contains.h"
@@ -35,7 +38,7 @@ using DeviceId = InputDeviceSettingsController::DeviceId;
 
 // The floss bluetooth handler adds a fake mouse device to the system with the
 // following properties. It is filted out based on the name and vid/pid.
-const char kFlossExtraMouseName[] = "suspend uhid";
+const char kFlossExtraMouseName[] = "VIRTUAL_SUSPEND_UHID";
 constexpr VendorProductId kFlossExtraMouseVidPid = {0x0000, 0x0000};
 
 bool AreOnLoginScreen() {
@@ -109,13 +112,20 @@ bool IsDeviceASuspectedImposter<mojom::KeyboardPtr>(
     return false;
   }
 
-  if (IsKeyboardAKnownImposterFalsePositive(device)) {
-    return false;
+  // If the device type is keyboard or keyboard mouse combo, it should not be
+  // considered an imposter.
+  const auto device_type = GetDeviceType(device);
+  switch (device_type) {
+    case DeviceType::kKeyboard:
+    case DeviceType::kKeyboardMouseCombo:
+      return false;
+    case DeviceType::kMouse:
+      return true;
+    case DeviceType::kUnknown:
+      break;
   }
 
-  // If the device is a keyboard that is known to pretend to have mouse-like
-  // functionality, do not use the `suspected_imposter` field.
-  if (IsKeyboardPretendingToBeMouse(device)) {
+  if (IsKeyboardAKnownImposterFalsePositive(device)) {
     return false;
   }
 
@@ -138,7 +148,7 @@ bool IsDeviceASuspectedImposter<mojom::KeyboardPtr>(
     return true;
   }
 
-  return device.suspected_imposter;
+  return device.suspected_keyboard_imposter;
 }
 
 template <>
@@ -149,10 +159,17 @@ bool IsDeviceASuspectedImposter<mojom::MousePtr>(
     return false;
   }
 
-  // If the device is a keyboard that is known to pretend to have mouse-like
-  // functionality, the device should always be considered an imposter.
-  if (IsKeyboardPretendingToBeMouse(device)) {
-    return true;
+  // If the device type is keyboard, the device should
+  // always be considered an imposter.
+  const auto device_type = GetDeviceType(device);
+  switch (device_type) {
+    case DeviceType::kKeyboard:
+      return true;
+    case DeviceType::kKeyboardMouseCombo:
+    case DeviceType::kMouse:
+      return false;
+    case DeviceType::kUnknown:
+      break;
   }
 
   // If the device is bluetooth, check the bluetooth device to see if it is a
@@ -233,7 +250,7 @@ void GetAddedAndRemovedDevices(
   base::ranges::set_difference(connected_devices_ids, updated_device_list,
                                std::back_inserter(*devices_to_remove),
                                /*Comp=*/base::ranges::less(),
-                               /*Proj1=*/base::identity(),
+                               /*Proj1=*/std::identity(),
                                /*Proj2=*/ExtractDeviceIdFromInputDevice);
 }
 
@@ -291,7 +308,7 @@ void InputDeviceNotifier<mojom::KeyboardPtr, ui::KeyboardDevice>::
   // get removed upon device disconnect.
   base::flat_set<DeviceId> updated_imposter_devices;
   for (const ui::KeyboardDevice& device : updated_device_list) {
-    if (device.suspected_imposter) {
+    if (device.suspected_keyboard_imposter) {
       updated_imposter_devices.insert(device.id);
       continue;
     }

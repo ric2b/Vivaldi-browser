@@ -456,6 +456,7 @@ interface EventTarget
     method addEventListener
     method constructor
     method dispatchEvent
+    method on
     method removeEventListener
 interface ExtendableCookieChangeEvent : ExtendableEvent
     attribute @@toStringTag
@@ -557,6 +558,7 @@ interface FileSystemHandle
     method requestPermission
 interface FileSystemWritableFileStream : WritableStream
     attribute @@toStringTag
+    getter mode
     method constructor
     method seek
     method truncate
@@ -792,6 +794,15 @@ interface MediaCapabilities
     method constructor
     method decodingInfo
     method encodingInfo
+interface Mesh2DIndexBuffer
+    attribute @@toStringTag
+    method constructor
+interface Mesh2DUVBuffer
+    attribute @@toStringTag
+    method constructor
+interface Mesh2DVertexBuffer
+    attribute @@toStringTag
+    method constructor
 interface MessageChannel
     attribute @@toStringTag
     getter port1
@@ -809,12 +820,14 @@ interface MessageEvent : Event
     method initMessageEvent
 interface MessagePort : EventTarget
     attribute @@toStringTag
+    getter onclose
     getter onmessage
     getter onmessageerror
     method close
     method constructor
     method postMessage
     method start
+    setter onclose
     setter onmessage
     setter onmessageerror
 interface Mojo
@@ -937,6 +950,7 @@ interface Observable
     attribute @@toStringTag
     method constructor
     method subscribe
+    method toArray
 interface OffscreenCanvas : EventTarget
     attribute @@toStringTag
     getter height
@@ -1327,6 +1341,9 @@ interface Response
     method formData
     method json
     method text
+interface RestrictionTarget
+    attribute @@toStringTag
+    method constructor
 interface Scheduler
     attribute @@toStringTag
     method constructor
@@ -1411,7 +1428,9 @@ interface StorageManager : EventTarget
     setter onquotachange
 interface Subscriber
     attribute @@toStringTag
+    getter active
     getter signal
+    method addTeardown
     method complete
     method constructor
     method error
@@ -1589,6 +1608,7 @@ interface URL
 interface URLPattern
     static method compareComponent
     attribute @@toStringTag
+    getter hasRegExpGroups
     getter hash
     getter hostname
     getter password

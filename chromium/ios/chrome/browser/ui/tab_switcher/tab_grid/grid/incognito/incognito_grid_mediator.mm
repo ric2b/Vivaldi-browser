@@ -9,20 +9,22 @@
 #import "base/metrics/user_metrics_action.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
+#import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/pref_names.h"
-#import "components/supervised_user/core/common/supervised_user_utils.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_toolbars_mutator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/incognito/incognito_grid_mediator_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_metrics.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
+#import "ios/web/public/web_state_id.h"
 
 // TODO(crbug.com/1457146): Needed for `TabPresentationDelegate`, should be
 // refactored.
@@ -79,6 +81,10 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
   NOTREACHED_NORETURN() << "Incognito tabs cannot be saved.";
 }
 
+- (void)setPinState:(BOOL)pinState forItemWithID:(web::WebStateID)itemID {
+  NOTREACHED_NORETURN() << "Should not be called in incognito.";
+}
+
 #pragma mark - TabGridPageMutator
 
 - (void)currentlySelectedGrid:(BOOL)selected {
@@ -92,7 +98,7 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
   // TODO(crbug.com/1457146): Implement.
 }
 
-#pragma mark - TabGridToolbarsButtonsDelegate
+#pragma mark - TabGridToolbarsGridDelegate
 
 - (void)closeAllButtonTapped:(id)sender {
   [self closeAllItems];
@@ -111,12 +117,17 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
   [self.gridConsumer setPageIdleStatus:NO];
   base::RecordAction(base::UserMetricsAction("MobileTabNewTab"));
   [self.gridConsumer prepareForDismissal];
-  [self addNewItem];
-  [self.gridConsumer setActivePageFromPage:TabGridPageIncognitoTabs];
-  [self.tabPresentationDelegate showActiveTabInPage:TabGridPageIncognitoTabs
-                                       focusOmnibox:NO];
-  base::RecordAction(
-      base::UserMetricsAction("MobileTabGridCreateIncognitoTab"));
+  // Present the tab only if it have been added.
+  if ([self addNewItem]) {
+    [self.gridConsumer setActivePageFromPage:TabGridPageIncognitoTabs];
+    [self.tabPresentationDelegate showActiveTabInPage:TabGridPageIncognitoTabs
+                                         focusOmnibox:NO];
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridCreateIncognitoTab"));
+  } else {
+    base::RecordAction(
+        base::UserMetricsAction("MobileTabGridFailedCreateIncognitoTab"));
+  }
 }
 
 #pragma mark - Parent's function
@@ -129,24 +140,37 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
 }
 
 - (void)configureToolbarsButtons {
+  if (!_selected) {
+    return;
+  }
   // Start to configure the delegate, so configured buttons will depend on the
   // correct delegate.
   [self.toolbarsMutator setToolbarsButtonsDelegate:self];
 
   BOOL authenticationRequired = self.reauthSceneAgent.authenticationRequired;
   if (_incognitoDisabled || authenticationRequired) {
-    [self.toolbarsMutator setToolbarConfiguration:[TabGridToolbarsConfiguration
-                                                      disabledConfiguration]];
+    [self.toolbarsMutator
+        setToolbarConfiguration:
+            [TabGridToolbarsConfiguration
+                disabledConfigurationForPage:TabGridPageIncognitoTabs]];
     return;
   }
 
   TabGridToolbarsConfiguration* toolbarsConfiguration =
-      [[TabGridToolbarsConfiguration alloc] init];
-  toolbarsConfiguration.closeAllButton = !self.webStateList->empty();
-  toolbarsConfiguration.doneButton = YES;
-  toolbarsConfiguration.newTabButton = YES;
-  toolbarsConfiguration.searchButton = YES;
-  toolbarsConfiguration.selectTabsButton = !self.webStateList->empty();
+      [[TabGridToolbarsConfiguration alloc]
+          initWithPage:TabGridPageIncognitoTabs];
+  toolbarsConfiguration.mode = self.currentMode;
+
+  if (self.currentMode == TabGridModeSelection) {
+    [self configureButtonsInSelectionMode:toolbarsConfiguration];
+  } else {
+    toolbarsConfiguration.closeAllButton = !self.webStateList->empty();
+    toolbarsConfiguration.doneButton = !self.webStateList->empty();
+    toolbarsConfiguration.newTabButton = YES;
+    toolbarsConfiguration.searchButton = YES;
+    toolbarsConfiguration.selectTabsButton = !self.webStateList->empty();
+  }
+
   [self.toolbarsMutator setToolbarConfiguration:toolbarsConfiguration];
 }
 
@@ -159,6 +183,8 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
       _incognitoDisabled = isDisabled;
       [self.incognitoDelegate shouldDisableIncognito:_incognitoDisabled];
     }
+
+    [self configureToolbarsButtons];
   }
 }
 
@@ -184,8 +210,7 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
           prefs::kSupervisedUserId, _prefChangeRegistrar.get());
     }
 
-    // Pretend the preference changed to force setting _incognitoDisabled.
-    [self onPreferenceChanged:prefs::kSupervisedUserId];
+    _incognitoDisabled = [self isIncognitoModeDisabled];
   }
 }
 
@@ -210,6 +235,9 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
 - (void)reauthAgent:(IncognitoReauthSceneAgent*)agent
     didUpdateAuthenticationRequirement:(BOOL)isRequired {
   if (_selected) {
+    if (isRequired) {
+      self.currentMode = TabGridModeNormal;
+    }
     [self configureToolbarsButtons];
   }
 }
@@ -226,7 +254,7 @@ bool ShouldFilterWebSitesForSupervisedUsers() {
   }
 
   return ShouldFilterWebSitesForSupervisedUsers() &&
-         supervised_user::IsSubjectToParentalControls(prefService);
+         supervised_user::IsSubjectToParentalControls(*prefService);
 }
 
 @end

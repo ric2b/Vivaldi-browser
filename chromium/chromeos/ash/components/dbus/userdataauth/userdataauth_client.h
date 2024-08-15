@@ -54,11 +54,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   using RemoveCallback =
       chromeos::DBusMethodCallback<::user_data_auth::RemoveReply>;
 
-  // This API is still used by old WebAuthN path.
-  // TODO(b/260715686): Remove as part of UseAuthsessionForWebAuthN cleanup.
-  using CheckKeyCallback =
-      chromeos::DBusMethodCallback<::user_data_auth::CheckKeyReply>;
-
   using GetSupportedKeyPoliciesCallback = chromeos::DBusMethodCallback<
       ::user_data_auth::GetSupportedKeyPoliciesReply>;
   using GetAccountDiskUsageCallback =
@@ -101,6 +96,8 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
       ::user_data_auth::PrepareEphemeralVaultReply>;
   using CreatePersistentUserCallback =
       chromeos::DBusMethodCallback<::user_data_auth::CreatePersistentUserReply>;
+  using RestoreDeviceKeyCallback =
+      chromeos::DBusMethodCallback<::user_data_auth::RestoreDeviceKeyReply>;
   using PreparePersistentVaultCallback = chromeos::DBusMethodCallback<
       ::user_data_auth::PreparePersistentVaultReply>;
   using PrepareVaultForMigrationCallback = chromeos::DBusMethodCallback<
@@ -113,6 +110,9 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
 
   using GetArcDiskFeaturesCallback =
       chromeos::DBusMethodCallback<::user_data_auth::GetArcDiskFeaturesReply>;
+
+  using GetRecoverableKeyStoresCallback = chromeos::DBusMethodCallback<
+      ::user_data_auth::GetRecoverableKeyStoresReply>;
 
   // Not copyable or movable.
   UserDataAuthClient(const UserDataAuthClient&) = delete;
@@ -172,12 +172,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   virtual void Remove(const ::user_data_auth::RemoveRequest& request,
                       RemoveCallback callback) = 0;
 
-  // This API is still used by old WebAuthN path.
-  // TODO(b/260715686): Remove as part of UseAuthsessionForWebAuthN cleanup.
-  // Try authenticating with key in user's vault.
-  virtual void CheckKey(const ::user_data_auth::CheckKeyRequest& request,
-                        CheckKeyCallback callback) = 0;
-
   // Instructs cryptohome to migrate the vault from eCryptfs to Dircrypto.
   virtual void StartMigrateToDircrypto(
       const ::user_data_auth::StartMigrateToDircryptoRequest& request,
@@ -223,6 +217,13 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   virtual void CreatePersistentUser(
       const ::user_data_auth::CreatePersistentUserRequest& request,
       CreatePersistentUserCallback callback) = 0;
+
+  // This will restore the filesystem keyset user directories needed to store
+  // keys and download policies. This will be called during lock screen if the
+  // device key is evicted.
+  virtual void RestoreDeviceKey(
+      const ::user_data_auth::RestoreDeviceKeyRequest& request,
+      RestoreDeviceKeyCallback callback) = 0;
 
   // This makes available user directories for them to use.
   virtual void PreparePersistentVault(
@@ -310,6 +311,11 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   virtual void GetArcDiskFeatures(
       const ::user_data_auth::GetArcDiskFeaturesRequest& request,
       GetArcDiskFeaturesCallback callback) = 0;
+
+  // Retrieve LSKF-wrapped key material for upload to a remote recovery service.
+  virtual void GetRecoverableKeyStores(
+      const ::user_data_auth::GetRecoverableKeyStoresRequest& request,
+      GetRecoverableKeyStoresCallback callback) = 0;
 
  protected:
   // Initialize/Shutdown should be used instead.

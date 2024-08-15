@@ -55,9 +55,7 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
      * assumes that any part of the bottom sheet visible at the peeking state is the toolbar.
      */
     public interface SwipeableBottomSheet {
-        /**
-         * @return Whether the content being shown in the sheet is scrolled to the top.
-         */
+        /** @return Whether the content being shown in the sheet is scrolled to the top. */
         boolean isContentScrolledToTop();
 
         /**
@@ -118,8 +116,10 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
 
             // Only start scrolling if the scroll is up or down. If the user is already scrolling,
             // continue moving the sheet.
-            float slope = Math.abs(distanceX) > 0f ? Math.abs(distanceY) / Math.abs(distanceX)
-                                                   : MIN_VERTICAL_SCROLL_SLOPE;
+            float slope =
+                    Math.abs(distanceX) > 0f
+                            ? Math.abs(distanceY) / Math.abs(distanceX)
+                            : MIN_VERTICAL_SCROLL_SLOPE;
             if (!mIsScrolling && slope < MIN_VERTICAL_SCROLL_SLOPE) {
                 mVelocityTracker.clear();
                 return false;
@@ -127,11 +127,13 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
 
             mVelocityTracker.addMovement(e2);
 
-            boolean isSheetInMaxPosition = MathUtils.areFloatsEqual(
-                    mSheetDelegate.getCurrentOffsetPx(), mSheetDelegate.getMaxOffsetPx());
+            boolean isSheetInMaxPosition =
+                    MathUtils.areFloatsEqual(
+                            mSheetDelegate.getCurrentOffsetPx(), mSheetDelegate.getMaxOffsetPx());
 
             // Allow the bottom sheet's content to be scrolled up without dragging the sheet down.
-            if (!mSheetDelegate.isTouchEventInToolbar(e2) && isSheetInMaxPosition
+            if (!mSheetDelegate.isTouchEventInToolbar(e2)
+                    && isSheetInMaxPosition
                     && !mSheetDelegate.isContentScrolledToTop()) {
                 return false;
             }
@@ -140,8 +142,9 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
             // Instead, allow the sheet's content to handle it if it needs to.
             if (isSheetInMaxPosition && distanceY > 0) return false;
 
-            boolean isSheetInMinPosition = MathUtils.areFloatsEqual(
-                    mSheetDelegate.getCurrentOffsetPx(), mSheetDelegate.getMinOffsetPx());
+            boolean isSheetInMinPosition =
+                    MathUtils.areFloatsEqual(
+                            mSheetDelegate.getCurrentOffsetPx(), mSheetDelegate.getMinOffsetPx());
 
             // Similarly, if the sheet is in the min position, don't move if the scroll is downward.
             if (isSheetInMinPosition && distanceY < 0) return false;
@@ -151,7 +154,9 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
             mIsScrolling = true;
 
             mSheetDelegate.setSheetOffset(
-                    MathUtils.clamp(newOffset, mSheetDelegate.getMinOffsetPx(),
+                    MathUtils.clamp(
+                            newOffset,
+                            mSheetDelegate.getMinOffsetPx(),
                             mSheetDelegate.getMaxOffsetPx()),
                     false);
 
@@ -174,7 +179,9 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
             float newOffset = mSheetDelegate.getCurrentOffsetPx() + getFlingDistance(-velocityY);
 
             mSheetDelegate.setSheetOffset(
-                    MathUtils.clamp(newOffset, mSheetDelegate.getMinOffsetPx(),
+                    MathUtils.clamp(
+                            newOffset,
+                            mSheetDelegate.getMinOffsetPx(),
                             mSheetDelegate.getMaxOffsetPx()),
                     true);
 
@@ -188,8 +195,9 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
      * @param delegate A SwipeableBottomSheet that processes swipes.
      */
     public BottomSheetSwipeDetector(Context context, SwipeableBottomSheet delegate) {
-        mGestureDetector = new GestureDetector(
-                context, new SwipeGestureListener(), ThreadUtils.getUiThreadHandler());
+        mGestureDetector =
+                new GestureDetector(
+                        context, new SwipeGestureListener(), ThreadUtils.getUiThreadHandler());
         mGestureDetector.setIsLongpressEnabled(true);
 
         mSheetDelegate = delegate;
@@ -242,11 +250,14 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
 
             mVelocityTracker.computeCurrentVelocity(1000);
 
-            float newOffset = mSheetDelegate.getCurrentOffsetPx()
-                    + getFlingDistance(-mVelocityTracker.getYVelocity());
+            float newOffset =
+                    mSheetDelegate.getCurrentOffsetPx()
+                            + getFlingDistance(-mVelocityTracker.getYVelocity());
 
             mSheetDelegate.setSheetOffset(
-                    MathUtils.clamp(newOffset, mSheetDelegate.getMinOffsetPx(),
+                    MathUtils.clamp(
+                            newOffset,
+                            mSheetDelegate.getMinOffsetPx(),
                             mSheetDelegate.getMaxOffsetPx()),
                     true);
         }
@@ -254,17 +265,10 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
         return true;
     }
 
-    /**
-     * @return Whether or not a gesture is currently being detected as a scroll.
-     */
+    /** @return Whether or not a gesture is currently being detected as a scroll. */
     public boolean isScrolling() {
         return mIsScrolling;
     }
-
-    /** Vivaldi **/
-    public void swipeWithToolbar() {
-        mSwipeWithToolbar = true;
-    } // End Vivaldi
 
     /**
      * Creates an unadjusted version of a MotionEvent.
@@ -288,4 +292,10 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
         // This includes conversion from seconds to ms.
         return velocity * BASE_ANIMATION_DURATION_MS / 2000f;
     }
+
+    /** Vivaldi **/
+    public void swipeWithToolbar() {
+        mSwipeWithToolbar = true;
+    } // End Vivaldi
+
 }

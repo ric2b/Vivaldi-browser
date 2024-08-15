@@ -6,15 +6,14 @@
 
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/histogram_functions.h"
-#import "base/stl_util.h"
-#import "components/segmentation_platform/embedder/default_model/device_switcher_model.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #import "components/segmentation_platform/public/result.h"
-#import "ios/chrome/browser/first_run/first_run.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#import "ios/chrome/browser/first_run/model/first_run.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/active_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
@@ -22,6 +21,7 @@
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/toolbar/public/omnibox_position_metrics.h"
+#import "ios/chrome/browser/ui/toolbar/public/omnibox_position_util.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_omnibox_consumer.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state.h"
@@ -31,70 +31,13 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
-
-namespace {
-
-/// The time delta for a user to be considered as a new user.
-const base::TimeDelta kNewUserTimeDelta = base::Days(60);
-
-/// Returns whether it's first run.
-BOOL IsFirstRun() {
-  return FirstRun::IsChromeFirstRun() ||
-         experimental_flags::AlwaysDisplayFirstRun();
-}
-
-/// Returns wheter the user has seen first run recently (`kNewUserTimeDelta`).
-BOOL IsNewUser() {
-  // Use the first_run age to determine the user is new on this device.
-  if (IsFirstRun()) {
-    return YES;
-  }
-  absl::optional<base::File::Info> info = FirstRun::GetSentinelInfo();
-  if (!info.has_value()) {
-    return NO;
-  }
-  base::Time first_run_time = info.value().creation_time;
-  BOOL isFirstRunRecent =
-      base::Time::Now() - first_run_time < kNewUserTimeDelta;
-  return isFirstRunRecent;
-}
-
-/// Returns whether classification `result` should have bottom omnibox by
-/// default.
-BOOL ShouldSwitchOmniboxToBottom(
-    const segmentation_platform::ClassificationResult& result) {
-  CHECK(result.status == segmentation_platform::PredictionStatus::kSucceeded);
-  if (result.ordered_labels.empty()) {
-    DUMP_WILL_BE_CHECK(!result.ordered_labels.empty());
-    return NO;
-  }
-
-  if (!IsNewUser()) {
-    return NO;
-  }
-
-  std::vector<std::string> excludedLabels = {
-      segmentation_platform::DeviceSwitcherModel::kAndroidPhoneLabel,
-      segmentation_platform::DeviceSwitcherModel::kAndroidTabletLabel,
-      segmentation_platform::DeviceSwitcherModel::kIosPhoneChromeLabel,
-      segmentation_platform::DeviceSwitcherModel::kIosTabletLabel};
-  std::sort(excludedLabels.begin(), excludedLabels.end());
-
-  auto sortedLabels = std::vector<std::string>(result.ordered_labels);
-  std::sort(sortedLabels.begin(), sortedLabels.end());
-
-  std::vector<std::string> intersection =
-      base::STLSetIntersection<std::vector<std::string>>(sortedLabels,
-                                                         excludedLabels);
-  return intersection.empty();
-}
-
-}  // namespace
 
 @interface ToolbarMediator () <BooleanObserver,
                                CRWWebStateObserver,
@@ -108,6 +51,10 @@ BOOL ShouldSwitchOmniboxToBottom(
 /// animation of focusing/defocusing the omnibox changes depending on this
 /// position.
 @property(nonatomic, assign) ToolbarType steadyStateOmniboxPosition;
+
+// Vivaldi
+@property(nonatomic, assign) BOOL isTabBarEnabled;
+// End Vivaldi
 
 @end
 
@@ -142,6 +89,12 @@ BOOL ShouldSwitchOmniboxToBottom(
   BOOL _shouldCheckSafariSwitcherOnFRE;
   /// Whether the NTP was shown in FRE.
   BOOL _hasEnteredNTPOnFRE;
+
+  // Vivaldi
+  /// Pref tracking if tab bar is enabled.
+  PrefBackedBoolean* _tabBarEnabled;
+  // End Vivaldi
+
 }
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
@@ -160,8 +113,14 @@ BOOL ShouldSwitchOmniboxToBottom(
     _webStateList->AddObserver(_webStateListObserverBridge.get());
 
     if (IsBottomOmniboxSteadyStateEnabled()) {
+
+      if (IsVivaldiRunning()) {
+        _shouldCheckSafariSwitcherOnFRE = NO;
+      } else {
       // Device switcher data is not available in incognito.
       _shouldCheckSafariSwitcherOnFRE = !isIncognito && IsFirstRun();
+      } // End Vivaldi
+
     }
   }
   return self;
@@ -177,6 +136,11 @@ BOOL ShouldSwitchOmniboxToBottom(
   [_bottomOmniboxEnabled stop];
   [_bottomOmniboxEnabled setObserver:nil];
   _bottomOmniboxEnabled = nil;
+
+  // Vivaldi
+  [self stopObservingTabBarState];
+  // End Vivaldi
+
 }
 
 - (void)setOriginalPrefService:(PrefService*)originalPrefService {
@@ -186,6 +150,15 @@ BOOL ShouldSwitchOmniboxToBottom(
         [[PrefBackedBoolean alloc] initWithPrefService:_originalPrefService
                                               prefName:prefs::kBottomOmnibox];
     [_bottomOmniboxEnabled setObserver:self];
+
+    // Vivaldi
+    _tabBarEnabled =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:_originalPrefService
+                  prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
+    [_tabBarEnabled setObserver:self];
+    // End Vivaldi
+
     // Initialize to the correct value.
     [self booleanDidChange:_bottomOmniboxEnabled];
     [self updateOmniboxDefaultPosition];
@@ -194,6 +167,11 @@ BOOL ShouldSwitchOmniboxToBottom(
     [_bottomOmniboxEnabled stop];
     [_bottomOmniboxEnabled setObserver:nil];
     _bottomOmniboxEnabled = nil;
+
+    // Vivaldi
+    [self stopObservingTabBarState];
+    // End Vivaldi
+
   }
 }
 
@@ -213,9 +191,19 @@ BOOL ShouldSwitchOmniboxToBottom(
 
 - (void)setInitialOmniboxPosition {
   [self updateOmniboxPosition];
+
+  if (IsVivaldiRunning()) {
+    [self.delegate transitionOmniboxToToolbarType:self.omniboxPosition
+                                    tabBarEnabled:[self tabBarEnabled]];
+    [self.delegate
+      transitionSteadyStateOmniboxToToolbarType:self.steadyStateOmniboxPosition
+                                  tabBarEnabled:[self tabBarEnabled]];
+  } else {
   [self.delegate transitionOmniboxToToolbarType:self.omniboxPosition];
   [self.delegate transitionSteadyStateOmniboxToToolbarType:
                      self.steadyStateOmniboxPosition];
+  } // End Vivaldi
+
   [self.omniboxConsumer
       steadyStateOmniboxMovedToToolbar:self.steadyStateOmniboxPosition];
 }
@@ -232,15 +220,30 @@ BOOL ShouldSwitchOmniboxToBottom(
 - (void)setOmniboxPosition:(ToolbarType)omniboxPosition {
   if (_omniboxPosition != omniboxPosition) {
     _omniboxPosition = omniboxPosition;
+
+    if (IsVivaldiRunning()) {
+      [self.delegate transitionOmniboxToToolbarType:omniboxPosition
+                                      tabBarEnabled:[self tabBarEnabled]];
+    } else {
     [self.delegate transitionOmniboxToToolbarType:omniboxPosition];
+    } // End Vivaldi
+
   }
 }
 
 - (void)setSteadyStateOmniboxPosition:(ToolbarType)steadyStateOmniboxPosition {
   if (_steadyStateOmniboxPosition != steadyStateOmniboxPosition) {
     _steadyStateOmniboxPosition = steadyStateOmniboxPosition;
+
+    if (IsVivaldiRunning()) {
+      [self.delegate
+          transitionSteadyStateOmniboxToToolbarType:steadyStateOmniboxPosition
+              tabBarEnabled:[self tabBarEnabled]];
+    } else {
     [self.delegate
         transitionSteadyStateOmniboxToToolbarType:steadyStateOmniboxPosition];
+    } // End Vivaldi
+
     [self.omniboxConsumer
         steadyStateOmniboxMovedToToolbar:steadyStateOmniboxPosition];
   }
@@ -255,6 +258,13 @@ BOOL ShouldSwitchOmniboxToBottom(
                                     : ToolbarType::kPrimary;
     [self updateOmniboxPosition];
   }
+
+  // Vivaldi
+  if (observableBoolean == _tabBarEnabled) {
+    [self updateOmniboxPosition];
+  }
+  // End Vivaldi
+
 }
 
 #pragma mark - CRWWebStateObserver methods.
@@ -298,6 +308,11 @@ BOOL ShouldSwitchOmniboxToBottom(
 /// current state.
 - (ToolbarType)steadyStateOmniboxPositionInCurrentState {
   CHECK(IsBottomOmniboxSteadyStateEnabled());
+
+  if (IsVivaldiRunning()) {
+    return _preferredOmniboxPosition;
+  } // End Vivaldi
+
   if (_preferredOmniboxPosition == ToolbarType::kPrimary ||
       !IsSplitToolbarMode(_toolbarTraitCollection)) {
     return ToolbarType::kPrimary;
@@ -311,6 +326,11 @@ BOOL ShouldSwitchOmniboxToBottom(
 /// Computes the toolbar that should contain the omnibox in the current state.
 - (ToolbarType)omniboxPositionInCurrentState {
   CHECK(IsBottomOmniboxSteadyStateEnabled());
+
+  if (IsVivaldiRunning()) {
+    return [self steadyStateOmniboxPositionInCurrentState];
+  } // End Vivaldi
+
   if (_locationBarFocused) {
     return ToolbarType::kPrimary;
   } else {
@@ -328,6 +348,11 @@ BOOL ShouldSwitchOmniboxToBottom(
   self.omniboxPosition = [self omniboxPositionInCurrentState];
   self.steadyStateOmniboxPosition =
       [self steadyStateOmniboxPositionInCurrentState];
+
+  // Vivaldi
+  self.isTabBarEnabled = [self tabBarEnabled];
+  // End Vivaldi
+
 }
 
 #pragma mark Default omnibox position
@@ -350,7 +375,7 @@ BOOL ShouldSwitchOmniboxToBottom(
     segmentation_platform::ClassificationResult result =
         self.deviceSwitcherResultDispatcher->GetCachedClassificationResult();
     if (result.status == segmentation_platform::PredictionStatus::kSucceeded) {
-      if (ShouldSwitchOmniboxToBottom(result)) {
+      if (omnibox::IsSafariSwitcher(result)) {
         std::string featureParam = base::GetFieldTrialParamValueByFeature(
             kBottomOmniboxDefaultSetting, kBottomOmniboxDefaultSettingParam);
         if (featureParam == kBottomOmniboxDefaultSettingParamSafariSwitcher) {
@@ -374,15 +399,15 @@ BOOL ShouldSwitchOmniboxToBottom(
 }
 
 /// Returns whether user is a safari switcher at startup.
-/// Used to set the default omnibox position to bottom for `IsNewUser` that are
-/// not in FRE. If bottom omnibox is already default `bottomOmniboxIsDefault`,
-/// still log the status as bottom as the user was classified as safari switcher
-/// in a previous session.
+/// Used to set the default omnibox position to bottom for `IsNewUser`
+/// that are not in FRE. If bottom omnibox is already default
+/// `bottomOmniboxIsDefault`, still log the status as bottom as the user was
+/// classified as safari switcher in a previous session.
 - (BOOL)isSafariSwitcherAtStartup:(BOOL)bottomOmniboxIsDefault {
   CHECK(IsBottomOmniboxSteadyStateEnabled());
   CHECK(self.originalPrefService);
 
-  if (!IsNewUser()) {
+  if (!omnibox::IsNewUser()) {
     base::UmaHistogramEnumeration(kOmniboxDeviceSwitcherResultAtStartup,
                                   OmniboxDeviceSwitcherResult::kNotNewUser);
     return NO;
@@ -402,7 +427,7 @@ BOOL ShouldSwitchOmniboxToBottom(
     return NO;
   }
 
-  if (ShouldSwitchOmniboxToBottom(result)) {
+  if (omnibox::IsSafariSwitcher(result)) {
     base::UmaHistogramEnumeration(kOmniboxDeviceSwitcherResultAtStartup,
                                   OmniboxDeviceSwitcherResult::kBottomOmnibox);
     return YES;
@@ -425,7 +450,8 @@ BOOL ShouldSwitchOmniboxToBottom(
   }
 
   BOOL bottomOmniboxEnabledByDefault = NO;
-  if (base::FeatureList::IsEnabled(kBottomOmniboxDefaultSetting)) {
+  if (self.originalPrefService->GetUserPrefValue(
+          prefs::kBottomOmniboxByDefault)) {
     bottomOmniboxEnabledByDefault =
         self.originalPrefService->GetBoolean(prefs::kBottomOmniboxByDefault);
   }
@@ -476,6 +502,26 @@ BOOL ShouldSwitchOmniboxToBottom(
           kOmniboxSteadyStatePositionAtStartupSelected, positionType);
     }
   });
+}
+
+#pragma mark - Vivaldi
+- (void)setIsTabBarEnabled:(BOOL)isTabBarEnabled {
+  if (_isTabBarEnabled != isTabBarEnabled) {
+    _isTabBarEnabled = isTabBarEnabled;
+    [self.delegate transitionOmniboxToToolbarType:self.omniboxPosition
+                                    tabBarEnabled:isTabBarEnabled];
+  }
+}
+
+// Tab bar enabled always on iPad.
+- (BOOL)tabBarEnabled {
+  return [_tabBarEnabled value] || [VivaldiGlobalHelpers isDeviceTablet];
+}
+
+- (void)stopObservingTabBarState {
+  [_tabBarEnabled stop];
+  [_tabBarEnabled setObserver:nil];
+  _tabBarEnabled = nil;
 }
 
 @end

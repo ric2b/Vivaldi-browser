@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "chromeos/ash/components/tether/active_host.h"
 
@@ -24,16 +25,13 @@ namespace ash {
 
 class NetworkConnect;
 class NetworkState;
-class NetworkStateHandler;
-class TechnologyStateController;
 
 namespace tether {
 
 // Connects to a Wi-Fi hotspot, given an SSID and password.
 class WifiHotspotConnector : public NetworkStateHandlerObserver {
  public:
-  WifiHotspotConnector(NetworkStateHandler* network_state_handler,
-                       TechnologyStateController* technolog_state_controller,
+  WifiHotspotConnector(NetworkHandler* network_handler,
                        NetworkConnect* network_connect);
 
   WifiHotspotConnector(const WifiHotspotConnector&) = delete;
@@ -77,19 +75,19 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
                                                  const std::string& password);
   void OnConnectionTimeout();
 
+  void OnWifiConnectionSucceeded();
+  void OnWifiConnectionFailed(const std::string& error_name);
+
   void SetTestDoubles(std::unique_ptr<base::OneShotTimer> test_timer,
                       base::Clock* test_clock,
                       scoped_refptr<base::TaskRunner> test_task_runner);
 
-  raw_ptr<NetworkStateHandler, ExperimentalAsh> network_state_handler_;
-  raw_ptr<TechnologyStateController, ExperimentalAsh>
-      technology_state_controller_;
-
   NetworkStateHandlerScopedObservation network_state_handler_observer_{this};
 
-  raw_ptr<NetworkConnect, DanglingUntriaged | ExperimentalAsh> network_connect_;
+  raw_ptr<NetworkConnect, DanglingUntriaged> network_connect_;
+  raw_ptr<NetworkHandler> network_handler_;
   std::unique_ptr<base::OneShotTimer> timer_;
-  raw_ptr<base::Clock, ExperimentalAsh> clock_;
+  raw_ptr<base::Clock> clock_;
 
   std::string ssid_;
   std::string password_;

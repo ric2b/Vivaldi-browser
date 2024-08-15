@@ -7,6 +7,7 @@
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/system/sys_info.h"
@@ -40,9 +41,11 @@ namespace {
 bool g_force_use_gpu_memory_buffer_for_test = false;
 
 // A constant flag that describes which APIs the shared image mailboxes created
-// for the video frame will be used with.
+// for the video frame will be used with. They will be read via the raster
+// interface (which will be going over GLES2 if OOP-R is not enabled), sent
+// to the display compositor, and may be used as overlays.
 constexpr uint32_t kSharedImageUsage =
-    gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER |
+    gpu::SHARED_IMAGE_USAGE_GLES2_READ | gpu::SHARED_IMAGE_USAGE_RASTER_READ |
     gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
 // The usage of the GpuMemoryBuffer that backs the video frames on an actual
@@ -120,7 +123,7 @@ bool UsePerPlaneSampling() {
 }
 
 // Creates and returns a list of the buffer planes for each we'll need to create
-// a shared image and store it in `GpuMemoryBufferHandleHolder::mailboxes_`.
+// a shared image and store it in `GpuMemoryBufferHandleHolder::shared_images_`.
 std::vector<gfx::BufferPlane> CreateGpuBufferPlanes() {
   std::vector<gfx::BufferPlane> planes;
   if (UsePerPlaneSampling() && !CreateNonLegacyMultiPlaneSharedImage()) {
@@ -161,8 +164,7 @@ bool IsFatalError(media::VideoCaptureError error) {
 // SharedMemoryBufferHandleHolder:
 
 // Defines an implementation for a `BufferHandleHolder` that can extract a video
-// frame that is backed by a `kSharedMemory` buffer type. This implementation is
-// used only when running on a linux-chromeos build (a.k.a. the emulator).
+// frame that is backed by a `kSharedMemory` buffer type.
 class SharedMemoryBufferHandleHolder : public BufferHandleHolder {
  public:
   explicit SharedMemoryBufferHandleHolder(
@@ -221,6 +223,46 @@ class SharedMemoryBufferHandleHolder : public BufferHandleHolder {
   base::WritableSharedMemoryMapping mapping_;
 };
 
+#if BUILDFLAG(IS_MAC)
+// -----------------------------------------------------------------------------
+// MacGpuMemoryBufferHandleHolder:
+
+// Defines an implementation for a `BufferHandleHolder` that can extract a video
+// frame that is backed by an IOSurface on mac. It maps the memory and produces
+// a software video frame.
+class MacGpuMemoryBufferHandleHolder : public BufferHandleHolder {
+ public:
+  explicit MacGpuMemoryBufferHandleHolder(
+      media::mojom::VideoBufferHandlePtr buffer_handle)
+      : gpu_memory_buffer_handle_(
+            std::move(buffer_handle->get_gpu_memory_buffer_handle())) {
+    DCHECK(buffer_handle->is_gpu_memory_buffer_handle());
+  }
+  MacGpuMemoryBufferHandleHolder(const MacGpuMemoryBufferHandleHolder&) =
+      delete;
+  MacGpuMemoryBufferHandleHolder& operator=(
+      const MacGpuMemoryBufferHandleHolder&) = delete;
+  ~MacGpuMemoryBufferHandleHolder() override = default;
+
+  // BufferHandleHolder:
+  scoped_refptr<media::VideoFrame> OnFrameReadyInBuffer(
+      video_capture::mojom::ReadyFrameInBufferPtr buffer) override {
+    auto frame = media::VideoFrame::WrapUnacceleratedIOSurface(
+        gpu_memory_buffer_handle_.Clone(), buffer->frame_info->visible_rect,
+        buffer->frame_info->timestamp);
+
+    if (!frame) {
+      VLOG(0) << "Failed to create a video frame.";
+    }
+    return frame;
+  }
+
+ private:
+  // The held GPU buffer handle associated with this object.
+  const gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle_;
+};
+#endif
+
 // -----------------------------------------------------------------------------
 // GpuMemoryBufferHandleHolder:
 
@@ -259,11 +301,12 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
         context_provider_->SharedImageInterface();
     DCHECK(shared_image_interface);
 
-    for (const auto& mb : mailboxes_) {
-      if (mb.IsZero() || !mb.IsSharedImage()) {
+    for (auto& si : shared_images_) {
+      if (!si) {
         continue;
       }
-      shared_image_interface->DestroySharedImage(release_sync_token_, mb);
+      shared_image_interface->DestroySharedImage(release_sync_token_,
+                                                 std::move(si));
     }
   }
 
@@ -291,8 +334,8 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
 
     // Clear the mailboxes so that we can recreate the shared images.
     should_create_shared_images_ = true;
-    for (auto& mb : mailboxes_) {
-      mb.SetZero();
+    for (auto& si : shared_images_) {
+      si.reset();
     }
     release_sync_token_ = gpu::SyncToken();
 
@@ -329,7 +372,7 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
   }
 
   // Initializes this holder by creating shared images and storing them in
-  // `mailboxes_`. These shared images are backed by a GpuMemoryBuffer whose
+  // `shared_images_`. These shared images are backed by a GpuMemoryBuffer whose
   // handle is a clone of our `gpu_memory_buffer_handle_`. This operation should
   // only be done the first ever time, or whenever the gpu context is lost.
   // Returns true if shared images are already created or creation is
@@ -369,33 +412,34 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
       }
 #endif
       CHECK_EQ(buffer_planes_.size(), 1u);
-      auto client_shared_image = shared_image_interface->CreateSharedImage(
+      shared_images_[0] = shared_image_interface->CreateSharedImage(
           format, gmb->GetSize(), frame_info->color_space,
           kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, kSharedImageUsage,
           "CameraVideoFrame", gmb->CloneHandle());
-      CHECK(client_shared_image);
-      mailboxes_[0] = client_shared_image->mailbox();
+      CHECK(shared_images_[0]);
     } else {
       gpu::GpuMemoryBufferManager* gmb_manager =
           context_factory_->GetGpuMemoryBufferManager();
       for (size_t plane = 0; plane < buffer_planes_.size(); ++plane) {
-        mailboxes_[plane] = shared_image_interface->CreateSharedImage(
+        shared_images_[plane] = shared_image_interface->CreateSharedImage(
             gmb.get(), gmb_manager, buffer_planes_[plane],
             frame_info->color_space, kTopLeft_GrSurfaceOrigin,
             kPremul_SkAlphaType, kSharedImageUsage, "CameraVideoFrame");
+        CHECK(shared_images_[plane]);
       }
     }
 
-    // Since this is the first time we create the shared images in `mailboxes_`,
-    // we need to guarantee that the mailboxes are created before they're used.
+    // Since this is the first time we create the shared images in
+    // `shared_images_`, we need to guarantee that the shared images are created
+    // before they're used.
     mailbox_holder_sync_token_ = shared_image_interface->GenVerifiedSyncToken();
 
     should_create_shared_images_ = false;
     return true;
   }
 
-  // Wraps the shared images in `mailboxes_` in a video frame and returns it if
-  // wrapping was successful, or an empty refptr otherwise.
+  // Wraps the shared images in `shared_images_` in a video frame and returns it
+  // if wrapping was successful, or an empty refptr otherwise.
   scoped_refptr<media::VideoFrame> WrapMailboxesInVideoFrame(
       const media::mojom::VideoFrameInfoPtr& frame_info) {
     DCHECK(!should_create_shared_images_);
@@ -414,11 +458,10 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
 
     gpu::MailboxHolder mailbox_holder_array[media::VideoFrame::kMaxPlanes];
     for (size_t plane = 0; plane < buffer_planes_.size(); ++plane) {
-      DCHECK(!mailboxes_[plane].IsZero());
-      DCHECK(mailboxes_[plane].IsSharedImage());
-      mailbox_holder_array[plane] =
-          gpu::MailboxHolder(mailboxes_[plane], mailbox_holder_sync_token_,
-                             buffer_texture_target_);
+      DCHECK(shared_images_[plane]);
+      mailbox_holder_array[plane] = gpu::MailboxHolder(
+          shared_images_[plane]->mailbox(), mailbox_holder_sync_token_,
+          buffer_texture_target_);
     }
     mailbox_holder_sync_token_.Clear();
 
@@ -466,7 +509,7 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
   const gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle_;
 
   // The buffer planes for each we need to create a shared image and store it in
-  // `mailboxes_`.
+  // `shared_images_`.
   const std::vector<gfx::BufferPlane> buffer_planes_;
 
   const raw_ptr<ui::ContextFactory> context_factory_;
@@ -483,13 +526,14 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
 
   // Contains the shared images of the video frame planes created from the GPU
   // memory buffer.
-  std::vector<gpu::Mailbox> mailboxes_{media::VideoFrame::kMaxPlanes};
+  std::vector<scoped_refptr<gpu::ClientSharedImage>> shared_images_{
+      media::VideoFrame::kMaxPlanes};
 
   // The sync token used when creating a `MailboxHolder`. This will be a
   // verified sync token the first time we wrap a video frame around a mailbox.
   gpu::SyncToken mailbox_holder_sync_token_;
 
-  // The release sync token of the above `mailboxes_`.
+  // The release sync token of the above `shared_images_`.
   gpu::SyncToken release_sync_token_;
 
   bool should_create_shared_images_ = true;
@@ -523,6 +567,14 @@ std::unique_ptr<BufferHandleHolder> BufferHandleHolder::Create(
   }
 
   DCHECK(buffer_handle->is_gpu_memory_buffer_handle());
+#if BUILDFLAG(IS_MAC)
+  auto provider = context_factory->SharedMainThreadRasterContextProvider();
+  CHECK(provider);
+  if (!provider->ContextCapabilities().gpu_rasterization) {
+    return std::make_unique<MacGpuMemoryBufferHandleHolder>(
+        std::move(buffer_handle));
+  }
+#endif
   return std::make_unique<GpuMemoryBufferHandleHolder>(std::move(buffer_handle),
                                                        context_factory);
 }
@@ -685,7 +737,16 @@ void CameraVideoFrameHandler::OnFatalErrorOrDisconnection() {
   weak_ptr_factory_.InvalidateWeakPtrs();
   video_frame_handler_receiver_.reset();
   camera_video_source_remote_.reset();
+
+  // There is a chance where resetting `camera_video_stream_subsciption_remote_`
+  // causes the deletion of `this`. That is the reason why we need to use a weak
+  // pointer, as to avoid unexpected behaviour.
+  // For more info check `Close()` function.
+  auto weak_ptr = weak_ptr_factory_.GetWeakPtr();
   camera_video_stream_subsciption_remote_.reset();
+  if (!weak_ptr) {
+    return;
+  }
 
   if (delegate_) {
     delegate_->OnFatalErrorOrDisconnection();

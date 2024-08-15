@@ -1,0 +1,10 @@
+#include <metal_stdlib>
+using namespace metal;
+struct _A {
+  int _B;
+};
+
+void f() {
+  _A const c = _A{};
+  int const d = c._B;
+}

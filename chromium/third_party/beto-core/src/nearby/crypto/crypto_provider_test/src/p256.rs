@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate std;
 use crate::elliptic_curve::EphemeralSecretForTesting;
 pub use crate::prelude::*;
 use crate::TestError;
 use core::marker::PhantomData;
-use crypto_provider::p256::{P256PublicKey, P256};
+use core::ops::Deref;
+use crypto_provider::p256::{P256PublicKey, PointCompression, P256};
 use crypto_provider::{
     elliptic_curve::{EcdhProvider, EphemeralSecret, PublicKey},
     CryptoRng,
@@ -62,9 +62,35 @@ pub fn to_bytes_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
              8bbe76c6dc1643088107636deff8aa79e8002a157b92"
     );
     let key = E::PublicKey::from_sec1_bytes(&sec1_bytes).unwrap();
+    // Not part of the API contract, but `to_bytes()` should prefer to use uncompressed
+    // representation since support for compressed point is optional.
+    let key_bytes = key.to_bytes();
+    assert_eq!(sec1_bytes.to_vec(), key_bytes.deref());
+}
+
+/// Test for P256PublicKey::to_sec1_bytes(Compressed). Support for compressed representation is
+/// optional.
+pub fn to_bytes_compressed_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
+    let sec1_bytes = hex!(
+        "04756c07ba5b596fa96c9099e6619dc62deac4297a8fc1d803d74dc5caa9197c09f0b6da270d2a58a06022
+             8bbe76c6dc1643088107636deff8aa79e8002a157b92"
+    );
+    let key = E::PublicKey::from_sec1_bytes(&sec1_bytes).unwrap();
+    let key_bytes = key.to_sec1_bytes(PointCompression::Compressed);
     let sec1_bytes_compressed =
         hex!("02756c07ba5b596fa96c9099e6619dc62deac4297a8fc1d803d74dc5caa9197c09");
-    assert_eq!(sec1_bytes_compressed.to_vec(), key.to_bytes());
+    assert_eq!(sec1_bytes_compressed.to_vec(), key_bytes.deref());
+}
+
+/// Test for P256PublicKey::to_sec1_bytes(Uncompressed)
+pub fn to_bytes_uncompressed_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
+    let sec1_bytes = hex!(
+        "04756c07ba5b596fa96c9099e6619dc62deac4297a8fc1d803d74dc5caa9197c09f0b6da270d2a58a06022
+             8bbe76c6dc1643088107636deff8aa79e8002a157b92"
+    );
+    let key = E::PublicKey::from_sec1_bytes(&sec1_bytes).unwrap();
+    let key_bytes = key.to_sec1_bytes(PointCompression::Uncompressed);
+    assert_eq!(sec1_bytes.to_vec(), key_bytes.deref());
 }
 
 /// Random test for P256PublicKey::to_bytes
@@ -75,7 +101,7 @@ pub fn to_bytes_random_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
                 P256,
             >>::Rng::new())
             .public_key_bytes();
-        let public_key = E::PublicKey::from_bytes(&public_key_bytes).unwrap();
+        let public_key = E::PublicKey::from_bytes(public_key_bytes.as_ref()).unwrap();
         assert_eq!(
             E::PublicKey::from_bytes(&public_key.to_bytes()).unwrap(),
             public_key,
@@ -192,7 +218,7 @@ pub fn public_key_to_affine_coordinates_zero_top_byte_test<E: EcdhProviderForP25
 /// Test for P256 Diffie-Hellman key exchange.
 pub fn p256_ecdh_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
     // From wycheproof ecdh_secp256r1_ecpoint_test.json, tcId 1
-    // http://google3/third_party/wycheproof/testvectors/ecdh_secp256r1_ecpoint_test.json;l=22;rcl=375894991
+    // https://github.com/google/wycheproof/blob/b063b4a/testvectors/ecdh_secp256r1_ecpoint_test.json#L22
     // sec1 public key manually extracted from the ASN encoded test data
     let public_key_sec1 = hex!(
         "0462d5bd3372af75fe85a040715d0f502428e07046868b0bfdfa61d731afe44f
@@ -230,20 +256,24 @@ pub fn wycheproof_p256_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
             };
             let result = p256_ecdh_test_impl::<E>(
                 &test.public_key,
-                &test.private_key.try_into().expect("Private key should be 32 bytes long"),
+                &test
+                    .private_key
+                    .as_slice()
+                    .try_into()
+                    .expect("Private key should be 32 bytes long"),
             );
             match test.result {
                 wycheproof::TestResult::Valid => {
                     let shared_secret =
                         result.unwrap_or_else(|_| panic!("Test {} should succeed", test.tc_id));
-                    assert_eq!(test.shared_secret, shared_secret.into());
+                    assert_eq!(test.shared_secret.as_slice(), shared_secret.into());
                 }
                 wycheproof::TestResult::Invalid => {
                     result.err().unwrap_or_else(|| panic!("Test {} should fail", test.tc_id));
                 }
                 wycheproof::TestResult::Acceptable => {
                     if let Ok(shared_secret) = result {
-                        assert_eq!(test.shared_secret, shared_secret.into());
+                        assert_eq!(test.shared_secret.as_slice(), shared_secret.into());
                     }
                     // Test passes if `result` is an error because this test is "acceptable"
                 }
@@ -268,22 +298,43 @@ pub fn wycheproof_p256_test<E: EcdhProviderForP256Test>(_: PhantomData<E>) {
 #[template]
 #[export]
 #[rstest]
-#[case::to_bytes(to_bytes_test)]
-#[case::to_bytes_random(to_bytes_random_test)]
-#[case::from_sec1_bytes_not_on_curve(from_sec1_bytes_not_on_curve_test)]
-#[case::from_sec1_bytes_not_on_infinity(from_sec1_bytes_at_infinity_test)]
-#[case::from_affine_coordinates(from_affine_coordinates_test)]
-#[case::from_affine_coordinates_not_on_curve(from_affine_coordinates_not_on_curve_test)]
-#[case::public_key_to_affine_coordinates(public_key_to_affine_coordinates_test)]
+#[case::to_bytes(to_bytes_test, "to_bytes")]
+#[case::to_bytes_compressed(to_bytes_compressed_test, "to_bytes_compressed")]
+#[case::to_bytes_uncompressed(to_bytes_uncompressed_test, "to_bytes_uncompressed")]
+#[case::to_bytes_random(to_bytes_random_test, "to_bytes_random")]
+#[case::from_sec1_bytes_not_on_curve(
+    from_sec1_bytes_not_on_curve_test,
+    "from_sec1_bytes_not_on_curve"
+)]
+#[case::from_sec1_bytes_not_on_infinity(
+    from_sec1_bytes_at_infinity_test,
+    "from_sec1_bytes_not_on_infinity"
+)]
+#[case::from_affine_coordinates(from_affine_coordinates_test, "from_affine_coordinates")]
+#[case::from_affine_coordinates_not_on_curve(
+    from_affine_coordinates_not_on_curve_test,
+    "from_affine_coordinates_not_on_curve"
+)]
+#[case::public_key_to_affine_coordinates(
+    public_key_to_affine_coordinates_test,
+    "public_key_to_affine_coordinates"
+)]
 #[case::public_key_to_affine_coordinates_compressed02(
-    public_key_to_affine_coordinates_compressed02_test
+    public_key_to_affine_coordinates_compressed02_test,
+    "public_key_to_affine_coordinates_compressed02"
 )]
 #[case::public_key_to_affine_coordinates_compressed03(
-    public_key_to_affine_coordinates_compressed03_test
+    public_key_to_affine_coordinates_compressed03_test,
+    "public_key_to_affine_coordinates_compressed03"
 )]
 #[case::public_key_to_affine_coordinates_zero_top_byte(
-    public_key_to_affine_coordinates_zero_top_byte_test
+    public_key_to_affine_coordinates_zero_top_byte_test,
+    "public_key_to_affine_coordinates_zero_top_byte"
 )]
-#[case::p256_ecdh(p256_ecdh_test)]
-#[case::wycheproof_p256(wycheproof_p256_test)]
-fn p256_test_cases<C: CryptoProvider>(#[case] testcase: CryptoProviderTestCase<C>) {}
+#[case::p256_ecdh(p256_ecdh_test, "p256_ecdh")]
+#[case::wycheproof_p256(wycheproof_p256_test, "wycheproof_p256")]
+fn p256_test_cases<C: CryptoProvider>(
+    #[case] testcase: CryptoProviderTestCase<C>,
+    #[case] name: &str,
+) {
+}

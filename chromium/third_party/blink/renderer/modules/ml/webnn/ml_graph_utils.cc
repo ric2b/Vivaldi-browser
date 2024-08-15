@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <numeric>
+
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_utils.h"
 
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
@@ -120,12 +122,12 @@ absl::optional<ArrayBufferViewInfo> TransferArrayBufferView(
 DOMArrayBufferView* CreateArrayBufferView(ArrayBufferViewInfo view_info) {
   auto* target_buffer = DOMArrayBuffer::Create(std::move(view_info.contents));
 
-  // Align with the ArrayBufferView types supported by WebNN MLOperandType:
-  // https://www.w3.org/TR/webnn/#appendices-mloperandtype-arraybufferview-compatibility
+  // Align with the ArrayBufferView types supported by WebNN MLOperandDataType:
+  // https://www.w3.org/TR/webnn/#appendices-MLOperandDataType-arraybufferview-compatibility
   DOMArrayBufferView* target_view = nullptr;
   switch (view_info.type) {
     case DOMArrayBufferView::kTypeFloat32:
-      // Float32Array is used for MLOperandType::float32.
+      // Float32Array is used for MLOperandDataType::float32.
       target_view = DOMFloat32Array::Create(target_buffer, view_info.offset,
                                             view_info.length);
       break;
@@ -136,22 +138,32 @@ DOMArrayBufferView* CreateArrayBufferView(ArrayBufferViewInfo view_info) {
                                            view_info.length);
       break;
     case DOMArrayBufferView::kTypeInt32:
-      // Int32Array is used for MLOperandType::int32.
+      // Int32Array is used for MLOperandDataType::int32.
       target_view = DOMInt32Array::Create(target_buffer, view_info.offset,
                                           view_info.length);
       break;
     case DOMArrayBufferView::kTypeUint32:
-      // Uint32Array is used for MLOperandType::uint32.
+      // Uint32Array is used for MLOperandDataType::uint32.
       target_view = DOMUint32Array::Create(target_buffer, view_info.offset,
                                            view_info.length);
       break;
+    case DOMArrayBufferView::kTypeBigInt64:
+      // BigInt64Array is used for MLOperandDataType::int64.
+      target_view = DOMBigInt64Array::Create(target_buffer, view_info.offset,
+                                             view_info.length);
+      break;
+    case DOMArrayBufferView::kTypeBigUint64:
+      // BigUint64Array is used for MLOperandDataType::uint64.
+      target_view = DOMBigUint64Array::Create(target_buffer, view_info.offset,
+                                              view_info.length);
+      break;
     case DOMArrayBufferView::kTypeInt8:
-      // Int8Array is used for MLOperandType::int8.
+      // Int8Array is used for MLOperandDataType::int8.
       target_view = DOMInt8Array::Create(target_buffer, view_info.offset,
                                          view_info.length);
       break;
     case DOMArrayBufferView::kTypeUint8:
-      // Uint8Array is used for MLOperandType::uint8.
+      // Uint8Array is used for MLOperandDataType::uint8.
       target_view = DOMUint8Array::Create(target_buffer, view_info.offset,
                                           view_info.length);
       break;
@@ -209,6 +221,140 @@ Vector<uint32_t> CreateDefaultPermutation(const wtf_size_t rank) {
     default_permutation[i] = rank - 1 - i;
   }
   return default_permutation;
+}
+
+Vector<uint32_t> CreateAllAxes(const wtf_size_t rank) {
+  Vector<uint32_t> default_axes(rank);
+  std::iota(default_axes.begin(), default_axes.end(), 0);
+  return default_axes;
+}
+
+Vector<uint32_t> CreateLayerNormalizationDefaultAxes(const wtf_size_t rank) {
+  Vector<uint32_t> default_axes;
+  if (rank > 1) {
+    default_axes.resize(rank - 1);
+    std::iota(default_axes.begin(), default_axes.end(), 1);
+  }
+  return default_axes;
+}
+
+bool IsDepthwiseConv2d(uint32_t input_channels,
+                       uint32_t output_channels,
+                       uint32_t groups) {
+  return groups == input_channels && groups == output_channels && groups != 1;
+}
+
+base::expected<void, String> ValidateFilterLayout(
+    bool depthwise,
+    V8MLInputOperandLayout input_layout,
+    V8MLConv2dFilterOperandLayout filter_layout) {
+  CHECK(input_layout.AsEnum() == V8MLInputOperandLayout::Enum::kNhwc);
+
+  if (!depthwise) {
+    // For regular conv2d, NHWC input layout expects weights layout in ohwi that
+    // is [groups * group_output_channels, kernel_height, kernel_width,
+    // group_input_channels].
+    //
+    // TODO(crbug.com/1273291): support other layouts by transposing the
+    // filter operand.
+    if (filter_layout.AsEnum() != V8MLConv2dFilterOperandLayout::Enum::kOhwi) {
+      return base::unexpected(String::Format(
+          "The filter layout %s is not supported.", filter_layout.AsCStr()));
+    }
+  } else {
+    // For depthwise conv2d, NHWC input layout expects weights layout in ihwo
+    // that is [1, kernel_height, kernel_width, input_channels *
+    // depth_multiplier].
+    //
+    // TODO(crbug.com/1273291): support other layouts by transposing the
+    // filter operand.
+    if (filter_layout.AsEnum() != V8MLConv2dFilterOperandLayout::Enum::kIhwo) {
+      return base::unexpected(String::Format(
+          "The filter layout %s is not supported.", filter_layout.AsCStr()));
+    }
+  }
+
+  return base::ok();
+}
+
+webnn::Padding2d CalculateConvTransposePadding2D(
+    const blink::MLConvTranspose2dOptions* options,
+    uint32_t input_height,
+    uint32_t input_width,
+    uint32_t filter_height,
+    uint32_t filter_width,
+    uint32_t stride_height,
+    uint32_t stride_width,
+    uint32_t dilation_height,
+    uint32_t dilation_width,
+    uint32_t output_padding_height,
+    uint32_t output_padding_width) {
+  webnn::Padding2d padding;
+  switch (options->autoPad().AsEnum()) {
+    case V8MLAutoPad::Enum::kExplicit: {
+      // Set the padding from WebNN explicit padding that is in
+      // [beginning_height, ending_height, beginning_width, ending_width],
+      // default to 0.
+      auto ml_padding = options->getPaddingOr({0, 0, 0, 0});
+      CHECK_EQ(ml_padding.size(), 4u);
+      padding.beginning.height = ml_padding[0];
+      padding.ending.height = ml_padding[1];
+      padding.beginning.width = ml_padding[2];
+      padding.ending.width = ml_padding[3];
+      break;
+    }
+    case V8MLAutoPad::Enum::kSameUpper:
+    case V8MLAutoPad::Enum::kSameLower: {
+      webnn::AutoPad auto_pad =
+          BlinkAutoPadToComponent(options->autoPad().AsEnum());
+      // Calculate padding based on WebNN auto padding mode and sizes.
+      auto padding_sizes_height = webnn::CalculateConvTranspose2dPadding(
+          auto_pad, input_height, filter_height, stride_height, dilation_height,
+          output_padding_height);
+      CHECK(padding_sizes_height);
+      padding.beginning.height = padding_sizes_height.value().begin;
+      padding.ending.height = padding_sizes_height.value().end;
+      auto padding_sizes_width = webnn::CalculateConvTranspose2dPadding(
+          auto_pad, input_width, filter_width, stride_width, dilation_width,
+          output_padding_width);
+      CHECK(padding_sizes_width);
+      padding.beginning.width = padding_sizes_width.value().begin;
+      padding.ending.width = padding_sizes_width.value().end;
+      break;
+    }
+  }
+  return padding;
+}
+
+webnn::Size2d<uint32_t> CalculateConvTransposeOutputSize2D(
+    const blink::MLConvTranspose2dOptions* options,
+    uint32_t input_height,
+    uint32_t input_width,
+    uint32_t filter_height,
+    uint32_t filter_width,
+    uint32_t stride_height,
+    uint32_t stride_width,
+    uint32_t dilation_height,
+    uint32_t dilation_width,
+    uint32_t output_padding_height,
+    uint32_t output_padding_width) {
+  const auto padding = CalculateConvTransposePadding2D(
+      options, input_height, input_width, filter_height, filter_width,
+      stride_height, stride_width, dilation_height, dilation_width,
+      output_padding_height, output_padding_width);
+  const auto output_height = webnn::CalculateConvTranspose2dOutputSize(
+      input_height, filter_height, padding.beginning.height,
+      padding.ending.height, stride_height, dilation_height,
+      output_padding_height);
+  CHECK(output_height.has_value());
+
+  const auto output_width = webnn::CalculateConvTranspose2dOutputSize(
+      input_width, filter_width, padding.beginning.width, padding.ending.width,
+      stride_width, dilation_width, output_padding_width);
+  CHECK(output_width.has_value());
+
+  return webnn::Size2d<uint32_t>{.height = output_height.value(),
+                                 .width = output_width.value()};
 }
 
 }  // namespace blink

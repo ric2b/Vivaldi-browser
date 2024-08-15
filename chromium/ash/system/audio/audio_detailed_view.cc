@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/system_tray_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -148,7 +148,7 @@ class DeviceNameContainerHighlightPathGenerator
 
  private:
   // HighlightPathGenerator:
-  absl::optional<gfx::RRectF> GetRoundRect(const gfx::RectF& rect) override {
+  std::optional<gfx::RRectF> GetRoundRect(const gfx::RectF& rect) override {
     gfx::Rect slider_bounds = slider_->GetInactiveRadioSliderRect();
     gfx::RectF bounds(slider_bounds.x() + kRadioSliderViewPadding.left(),
                       slider_bounds.y(), slider_bounds.width(),
@@ -159,8 +159,7 @@ class DeviceNameContainerHighlightPathGenerator
   }
 
   // Owned by views hierarchy.
-  const raw_ptr<QuickSettingsSlider, DanglingUntriaged | ExperimentalAsh>
-      slider_;
+  const raw_ptr<QuickSettingsSlider, DanglingUntriaged> slider_;
 };
 
 std::vector<std::string> GetNamesOfAppsAccessingMic(
@@ -174,9 +173,8 @@ std::vector<std::string> GetNamesOfAppsAccessingMic(
   for (const std::string& app :
        app_capability_access_cache->GetAppsAccessingMicrophone()) {
     std::string name;
-    app_registry_cache->ForOneApp(app, [&name](const apps::AppUpdate& update) {
-      name = update.ShortName();
-    });
+    app_registry_cache->ForOneApp(
+        app, [&name](const apps::AppUpdate& update) { name = update.Name(); });
     if (!name.empty()) {
       app_names.push_back(name);
     }
@@ -255,7 +253,7 @@ void AudioDetailedView::Update() {
 }
 
 void AudioDetailedView::OnAccessibilityStatusChanged() {
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   // The live caption state has been updated.
   UpdateLiveCaptionView(controller->live_caption().enabled());
@@ -583,7 +581,7 @@ std::unique_ptr<HoverHighlightView> AudioDetailedView::CreateAgcInfoRow(
 
 void AudioDetailedView::MaybeShowSodaMessage(speech::LanguageCode language_code,
                                              std::u16string message) {
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   const bool is_live_caption_enabled = controller->live_caption().enabled();
   // Only show updates for this feature if the language code applies to the SODA
@@ -616,7 +614,7 @@ void AudioDetailedView::OnSettingsButtonClicked() {
 }
 
 void AudioDetailedView::ToggleLiveCaptionState() {
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   // Updates the enable state for live caption.
   controller->live_caption().SetEnabled(!controller->live_caption().enabled());

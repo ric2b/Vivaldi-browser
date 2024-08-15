@@ -43,7 +43,7 @@ using ::content::RenderWidgetHostView;
 using ::content::WebContents;
 
 const std::string GetTabUrl(RenderWidgetHost* rwh) {
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     for (int i = 0, tab_count = browser->tab_strip_model()->count();
          i < tab_count;
          ++i) {
@@ -70,9 +70,7 @@ constexpr base::FilePath::CharType kChromeFirstRender[] =
 // Names of login UMA values.
 static const char kUmaLogin[] = "BootTime.Login2";
 static const char kUmaLoginNewUser[] = "BootTime.LoginNewUser";
-constexpr char kUmaLoginPrefix[] = "BootTime.";
 constexpr char kUmaLogout[] = "ShutdownTime.Logout";
-constexpr char kUmaLogoutPrefix[] = "ShutdownTime.";
 constexpr char kUmaRestart[] = "ShutdownTime.Restart";
 
 // Name of file collecting login times.

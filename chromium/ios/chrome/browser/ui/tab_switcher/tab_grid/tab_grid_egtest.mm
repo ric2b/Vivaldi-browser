@@ -14,9 +14,9 @@
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/bookmarks/common/storage_type.h"
 #import "components/sync/base/features.h"
-#import "ios/chrome/browser/metrics/metrics_app_interface.h"
+#import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
@@ -52,22 +52,27 @@
 #import "ui/base/l10n/l10n_util.h"
 
 using base::test::ios::kWaitForUIElementTimeout;
-using chrome_test_util::TabGridOtherDevicesPanelButton;
-using chrome_test_util::LongPressCellAndDragToEdge;
-using chrome_test_util::LongPressCellAndDragToOffsetOf;
-using chrome_test_util::TapAtOffsetOf;
-using chrome_test_util::WindowWithNumber;
 using chrome_test_util::AddToBookmarksButton;
 using chrome_test_util::AddToReadingListButton;
 using chrome_test_util::CloseTabMenuButton;
+using chrome_test_util::IncognitoTabGrid;
+using chrome_test_util::LongPressCellAndDragToEdge;
+using chrome_test_util::LongPressCellAndDragToOffsetOf;
+using chrome_test_util::RegularTabGrid;
 using chrome_test_util::TabGridCellAtIndex;
+using chrome_test_util::TabGridEditMenuCloseAllButton;
+using chrome_test_util::TabGridInactiveTabsButton;
+using chrome_test_util::TabGridIncognitoTabsPanelButton;
 using chrome_test_util::TabGridNormalModePageControl;
+using chrome_test_util::TabGridOpenTabsPanelButton;
+using chrome_test_util::TabGridOtherDevicesPanelButton;
 using chrome_test_util::TabGridSearchBar;
 using chrome_test_util::TabGridSearchCancelButton;
 using chrome_test_util::TabGridSearchModeToolbar;
 using chrome_test_util::TabGridSearchTabsButton;
 using chrome_test_util::TabGridSelectTabsMenuButton;
-using chrome_test_util::RegularTabGrid;
+using chrome_test_util::TapAtOffsetOf;
+using chrome_test_util::WindowWithNumber;
 
 namespace {
 const char kSearchEngineURL[] = "http://searchengine/?q={searchTerms}";
@@ -346,7 +351,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
   // See https://crbug.com/1448618.
   // Should be removed after TODO(crbug.com/1451733).
   if ([self isRunningTest:@selector
-            (testSyncSpinnerDismissedInRecentlyClosedTabs)]) {
+            (DISABLE_testSyncSpinnerDismissedInRecentlyClosedTabs)]) {
     [ChromeEarlGrey signOutAndClearIdentitiesAndWaitForCompletion];
   }
 
@@ -393,23 +398,36 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 }
 
 // Tests that tapping Close All shows no tabs, shows Undo button, and displays
-// the empty state. Then tests tapping Undo shows Close All button again.
-// Validates this case when Tab Grid Bulk Actions feature is enabled.
+// the empty state, and ensures that it doesn't affect the other tab grid. Then
+// tests tapping Undo shows Close All button again. Validates this case when Tab
+// Grid Bulk Actions feature is enabled.
 - (void)testCloseAllAndUndoCloseAll {
-  [ChromeEarlGreyUI openTabGrid];
+  // Also add a tab in incognito.
+  [ChromeEarlGrey openNewIncognitoTab];
+  [ChromeEarlGrey waitForIncognitoTabCount:1];
 
-  // Close all tabs
+  // Open tab grid and go to regular tab page.
+  [ChromeEarlGreyUI openTabGrid];
+  [[EarlGrey selectElementWithMatcher:TabGridNormalModePageControl()]
+      performAction:grey_tap()];
+
+  // Close all tabs.
   [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::
                                           TabGridEditMenuCloseAllButton()]
       performAction:grey_tap()];
 
-  // Ensure tabs were closed
+  // Ensure normal tabs were closed.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
       assertWithMatcher:grey_nil()];
 
-  // Ensure undo button is visible and edit button is not visible
+  // Ensure the incognito tab isn't closed.
+  GREYAssertEqual(1, [ChromeEarlGrey incognitoTabCount],
+                  @"Expected that the \"Close All Tabs\" button should not "
+                  @"close tabs in other pages.");
+
+  // Ensure undo button is visible and edit button is not visible.
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::TabGridUndoCloseAllButton()]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -420,7 +438,7 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
                                           TabGridRegularTabsEmptyStateView()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  // Tap Undo button
+  // Tap Undo button.
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::TabGridUndoCloseAllButton()]
       performAction:grey_tap()];
@@ -431,9 +449,9 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
-// Tests that tapping Close All close also inactive tabs. Ensure it is correctly
-// recovered when pressing undo and there is no selection mode when there are
-// inactive tabs but no regular tabs.
+// Tests that tapping Close All also closes inactive tabs. Ensures it is
+// correctly recovered when pressing undo and there is no selection mode when
+// there are inactive tabs but no regular tabs.
 - (void)testCloseAllAndUndoCloseAllWithInactiveTabs {
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Skipped for iPad. The Inactive Tabs feature is "
@@ -448,6 +466,10 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
                   @"been in inactive tab grid.");
   GREYAssertEqual(4, [ChromeEarlGrey inactiveTabCount],
                   @"Expected 4 inactive tabs.");
+
+  // Verify that the Inactive Tabs button is showing.
+  [[EarlGrey selectElementWithMatcher:TabGridInactiveTabsButton()]
+      assertWithMatcher:grey_notNil()];
 
   // Ensure the edit button is visible.
   [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
@@ -469,6 +491,10 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
   GREYAssertEqual(0, [ChromeEarlGrey inactiveTabCount],
                   @"Expected all inactive tab to be closed.");
 
+  // Verify that the Inactive Tabs button is not showing.
+  [[EarlGrey selectElementWithMatcher:TabGridInactiveTabsButton()]
+      assertWithMatcher:grey_nil()];
+
   // Tap Undo button.
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::TabGridUndoCloseAllButton()]
@@ -480,6 +506,10 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
                   @"Expected 4 inactive tabs.");
   [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
       assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Verify that the Inactive Tabs button is showing again.
+  [[EarlGrey selectElementWithMatcher:TabGridInactiveTabsButton()]
+      assertWithMatcher:grey_notNil()];
 
   // Closing the only tab in the regular tab grid and verify there is an empty
   // grid.
@@ -664,6 +694,82 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
   [ChromeEarlGrey waitForIncognitoTabCount:1];
 }
 
+// Tests that done button is disabled if there is no tab in the last active
+// page. This also ensure that the last active page is the correct one
+// (incognito if the last opened tab was incognito and regular if the last
+// active page was a regular.) so the done button open a tab in the correct page
+// (Do not open a regular tab if the active page is an incognito one).
+- (void)testRecentTabDoneButtonAndLastActivePage {
+  // Load 1 regular tab.
+  [ChromeEarlGrey loadURL:_URL1];
+  [ChromeEarlGrey waitForWebStateContainingText:kResponse1];
+  [ChromeEarlGrey waitForMainTabCount:1];
+  [ChromeEarlGrey waitForIncognitoTabCount:0];
+
+  // Open 1 incognito tab.
+  [ChromeEarlGrey openNewIncognitoTab];
+  [ChromeEarlGrey loadURL:_URL2];
+  [ChromeEarlGrey waitForWebStateContainingText:kResponse2];
+  [ChromeEarlGrey waitForMainTabCount:1];
+  [ChromeEarlGrey waitForIncognitoTabCount:1];
+
+  // Go to regular and open the previously created tab.
+  [ChromeEarlGreyUI openTabGrid];
+  [[EarlGrey selectElementWithMatcher:TabGridOpenTabsPanelButton()]
+      performAction:grey_tap()];
+  [self verifyVisibleTabsCount:1];
+  [[EarlGrey selectElementWithMatcher:TabWithTitleAndIndex(kTitle1, 0)]
+      performAction:grey_tap()];
+
+  // Go to remote grid and tap on Done button.
+  [ChromeEarlGreyUI openTabGrid];
+  [[EarlGrey selectElementWithMatcher:TabGridOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridDoneButton()]
+      performAction:grey_tap()];
+
+  // Ensure that we opened a regular tab as the last open tab was a regular one.
+  [ChromeEarlGreyUI openTabGrid];
+  [[EarlGrey selectElementWithMatcher:RegularTabGrid()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Go to incognito and open the previously created tab.
+  [[EarlGrey selectElementWithMatcher:TabGridIncognitoTabsPanelButton()]
+      performAction:grey_tap()];
+  [self verifyVisibleTabsCount:1];
+  [[EarlGrey selectElementWithMatcher:TabWithTitleAndIndex(kTitle2, 0)]
+      performAction:grey_tap()];
+
+  // Go to remote grid and tap on Done button.
+  [ChromeEarlGreyUI openTabGrid];
+  [[EarlGrey selectElementWithMatcher:TabGridOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridDoneButton()]
+      performAction:grey_tap()];
+
+  // Ensure that we opened an incognito tab as the last open tab was an
+  // incognito one.
+  [ChromeEarlGreyUI openTabGrid];
+  [[EarlGrey selectElementWithMatcher:IncognitoTabGrid()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Close all incognito tab.
+  [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:TabGridEditMenuCloseAllButton()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForMainTabCount:1];
+  [ChromeEarlGrey waitForIncognitoTabCount:0];
+
+  // Go to remote grid.
+  [[EarlGrey selectElementWithMatcher:TabGridOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+  // Ensures Done button is disabled.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridDoneButton()]
+      assertWithMatcher:grey_accessibilityTrait(
+                            UIAccessibilityTraitNotEnabled)];
+}
+
 #pragma mark - Recent Tabs Context Menu
 
 // Tests the Copy Link action on a recent tab's context menu.
@@ -725,7 +831,8 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 }
 
 // Tests the Add to Bookmarks action on a tab grid item's context menu.
-- (void)testTabGridItemContextMenuAddToBookmarks {
+// TODO(crbug.com/1519535): Test is failing on iPhone and iPad.
+- (void)DISABLED_testTabGridItemContextMenuAddToBookmarks {
   [ChromeEarlGrey loadURL:_URL1];
   [ChromeEarlGrey waitForWebStateContainingText:kResponse1];
 
@@ -824,11 +931,28 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
         selectElementWithMatcher:chrome_test_util::TabGridEditSelectAllButton()]
         assertWithMatcher:grey_sufficientlyVisible()
                     error:&error];
+    if (error == nil) {
+      // Bypass egtest bug on iOS 15 in which the grid cell element briefly
+      // unselectable.
+      [[EarlGrey
+          selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
+          assertWithMatcher:grey_sufficientlyVisible()
+                      error:&error];
+    }
     return (error == nil);
   };
   GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
                  kWaitForUIElementTimeout, condition),
              @"Wait for select all button to appear in tab grid mode.");
+
+  // Confirm that the tab is selectable.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
+      performAction:grey_tap()];
+  NSString* tabSelected = base::SysUTF16ToNSString(
+      l10n_util::GetPluralStringFUTF16(IDS_IOS_TAB_GRID_SELECTED_TABS_TITLE,
+                                       /*number=*/1));
+  [[EarlGrey selectElementWithMatcher:grey_text(tabSelected)]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 #pragma mark - Drag and drop in Multiwindow
@@ -2143,7 +2267,8 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
 
 // Tests that add to bookmarks action works successfully from the long press
 // context menu on search results.
-- (void)testSearchOpenTabsContextMenuAddToBookmarks {
+// TODO(crbug.com/1519535): Test is failing on iPhone and iPad.
+- (void)DISABLED_testSearchOpenTabsContextMenuAddToBookmarks {
   [self loadTestURLsInNewTabs];
   [ChromeEarlGreyUI openTabGrid];
 
@@ -2591,9 +2716,73 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
       assertWithMatcher:grey_notNil()];
 }
 
+// Tests that interacting with the Tab Grid search UI shows the correct header
+// at each step.
+- (void)testSearchHeaderWithInactiveTabs {
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"Skipped for iPad. The Inactive Tabs feature is "
+                           @"only supported on iPhone.");
+  }
+  [self loadTestURLsInNewTabs];
+  [self relaunchAppWithInactiveTabsEnabled];
+
+  [ChromeEarlGreyUI openTabGrid];
+  GREYAssertEqual(1, [ChromeEarlGrey mainTabCount],
+                  @"Expected only one tab (NTP), all other tabs should have "
+                  @"been in inactive tab grid.");
+  GREYAssertEqual(4, [ChromeEarlGrey inactiveTabCount],
+                  @"Expected 4 inactive tabs.");
+
+  // Verify that the Inactive Tabs button is showing.
+  [[EarlGrey selectElementWithMatcher:TabGridInactiveTabsButton()]
+      assertWithMatcher:grey_notNil()];
+
+  // Enter search mode.
+  [[EarlGrey selectElementWithMatcher:TabGridSearchTabsButton()]
+      performAction:grey_tap()];
+
+  // Verify that the Inactive Tabs button is not showing.
+  [[EarlGrey selectElementWithMatcher:TabGridInactiveTabsButton()]
+      assertWithMatcher:grey_nil()];
+
+  // Verify that search mode is active.
+  [[EarlGrey selectElementWithMatcher:TabGridSearchModeToolbar()]
+      assertWithMatcher:grey_notNil()];
+
+  // Verify that the Search results header is not showing, as the search field
+  // is empty.
+  [[EarlGrey selectElementWithMatcher:SearchOpenTabsSectionHeader()]
+      assertWithMatcher:grey_nil()];
+
+  // Enter some text.
+  [[EarlGrey selectElementWithMatcher:TabGridSearchBar()]
+      performAction:grey_replaceText(@"Page")];
+
+  // Verify that the Search results header is showing now.
+  [[EarlGrey selectElementWithMatcher:SearchOpenTabsSectionHeader()]
+      assertWithMatcher:grey_notNil()];
+
+  // Exit search mode.
+  [[EarlGrey selectElementWithMatcher:TabGridSearchCancelButton()]
+      performAction:grey_tap()];
+
+  // Verify that normal mode is active.
+  [[EarlGrey selectElementWithMatcher:TabGridNormalModePageControl()]
+      assertWithMatcher:grey_notNil()];
+
+  // Verify that the Inactive Tabs button is showing.
+  [[EarlGrey selectElementWithMatcher:TabGridInactiveTabsButton()]
+      assertWithMatcher:grey_notNil()];
+
+  // Verify that the Search results header is not showing, as the search field
+  // is empty.
+  [[EarlGrey selectElementWithMatcher:SearchOpenTabsSectionHeader()]
+      assertWithMatcher:grey_nil()];
+}
+
 // Tests that once an account is signed in, the syncing spinner is eventually
 // dismissed: https://crbug.com/1422634.
-- (void)testSyncSpinnerDismissedInRecentlyClosedTabs {
+- (void)DISABLE_testSyncSpinnerDismissedInRecentlyClosedTabs {
   // Clear browsing history to reduce delay during sign-in and fix this test's
   // flakiness on iOS 16.
   [ChromeEarlGrey clearBrowsingHistory];
@@ -2661,6 +2850,97 @@ void EchoURLDefaultSearchEngineResponseProvider::GetResponseHeadersAndBody(
   // Make sure that the tab is no longer present.
   [[EarlGrey selectElementWithMatcher:TabWithTitle(kTitle1)]
       assertWithMatcher:grey_nil()];
+}
+
+// Tests that "undo" is still possible after navigating to the "recently
+// closed tabs" panel.
+- (void)testClosedTabsAddedToRecentlyClosedTabsAfterConfirmation {
+  // Clear all recently closed tabs.
+  [self clearAllRecentlyClosedItems];
+
+  // Load some real URL (NTP is not added to recently closed tabs).
+  [ChromeEarlGrey loadURL:_URL1];
+  [ChromeEarlGrey waitForWebStateContainingText:kResponse1];
+
+  // Open the tab grid.
+  [ChromeEarlGreyUI openTabGrid];
+
+  // Close all tabs
+  [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          TabGridEditMenuCloseAllButton()]
+      performAction:grey_tap()];
+
+  // Ensure tabs were closed
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
+      assertWithMatcher:grey_nil()];
+
+  // Ensure undo button is visible and edit button is not visible
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::TabGridUndoCloseAllButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
+      assertWithMatcher:grey_nil()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          TabGridRegularTabsEmptyStateView()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Navigate to the "recently closed" panel.
+  [[EarlGrey selectElementWithMatcher:TabGridOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+
+  // Check that there are no "recently closed" tabs visible.
+  [[EarlGrey selectElementWithMatcher:RecentlyClosedTabWithTitle(kTitle1)]
+      assertWithMatcher:grey_nil()];
+
+  // Navigate back to the tab grid.
+  [[EarlGrey selectElementWithMatcher:TabGridOpenTabsPanelButton()]
+      performAction:grey_tap()];
+
+  // Tap Undo button
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::TabGridUndoCloseAllButton()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Close all the tabs (again).
+  [[EarlGrey selectElementWithMatcher:VisibleTabGridEditButton()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          TabGridEditMenuCloseAllButton()]
+      performAction:grey_tap()];
+
+  // Open a new tab. This should result in closing the tab grid, which will
+  // confirm the close operation and add the tabs to recently closed.
+  [ChromeEarlGrey openNewTab];
+  [ChromeEarlGrey loadURL:_URL2];
+  [ChromeEarlGrey waitForWebStateContainingText:kResponse2];
+
+  // Open the tab grid.
+  [ChromeEarlGreyUI openTabGrid];
+
+  // Navigate to the "recently closed" panel.
+  [[EarlGrey selectElementWithMatcher:TabGridOtherDevicesPanelButton()]
+      performAction:grey_tap()];
+
+  // Check that the tabs closed are now visible.
+  [[EarlGrey selectElementWithMatcher:RecentlyClosedTabWithTitle(kTitle1)]
+      assertWithMatcher:grey_notNil()];
+  [[EarlGrey selectElementWithMatcher:RecentlyClosedTabWithTitle(kTitle2)]
+      assertWithMatcher:grey_nil()];
+
+  // Navigate back to the tab grid.
+  [[EarlGrey selectElementWithMatcher:TabGridOpenTabsPanelButton()]
+      performAction:grey_tap()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCellAtIndex(0)]
+      performAction:grey_tap()];
 }
 
 #pragma mark - Helper Methods

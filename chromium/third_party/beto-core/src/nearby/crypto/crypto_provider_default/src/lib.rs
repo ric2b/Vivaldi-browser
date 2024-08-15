@@ -15,6 +15,8 @@
 //! Provides multiple implementations of CryptoProvider through the same struct, configurable by
 //! feature flag.
 
+#![no_std]
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "rustcrypto")] {
         pub use crypto_provider_rustcrypto::RustCrypto as CryptoProviderImpl;

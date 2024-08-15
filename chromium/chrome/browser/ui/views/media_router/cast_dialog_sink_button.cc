@@ -172,7 +172,7 @@ void CastDialogSinkButton::UpdateTitleTextStyle() {
       GetColorProvider()->GetColor(ui::kColorDialogBackground);
   SetTitleTextStyle(
       GetEnabled() ? views::style::STYLE_PRIMARY : views::style::STYLE_DISABLED,
-      background_color, /*color_id=*/absl::nullopt);
+      background_color, /*color_id=*/std::nullopt);
 }
 
 void CastDialogSinkButton::RequestFocus() {
@@ -244,7 +244,7 @@ const gfx::VectorIcon* CastDialogSinkButton::GetVectorIcon(UIMediaSink sink) {
                     : GetVectorIcon(sink.icon_type);
 }
 
-BEGIN_METADATA(CastDialogSinkButton, HoverButton)
+BEGIN_METADATA(CastDialogSinkButton)
 END_METADATA
 
 }  // namespace media_router

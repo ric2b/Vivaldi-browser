@@ -22,11 +22,11 @@
 #include "base/trace_event/traced_value.h"
 #include "base/values.h"
 #include "components/viz/common/buildflags.h"
+#include "components/viz/service/debugger/mojom/viz_debugger.mojom.h"
 #include "components/viz/service/debugger/rwlock.h"
 #include "components/viz/service/viz_service_export.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/viz/privileged/mojom/viz_main.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -379,8 +379,7 @@ DrawRectToTraceValue(const gfx::Vector2dF& pos,
 #define DBG_VIZ_DEBUGGER_TRACE_IMPL_0(anno, pos, size, text) \
   std::ignore = anno;                                        \
   std::ignore = pos;                                         \
-  std::ignore = size;                                        \
-  std::ignore = text;
+  std::ignore = size;
 
 #define DBG_VIZ_DEBUGGER_TRACE_IMPL_1(anno, pos, size, text)                   \
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT(VIZ_DEBUGGER_TRACING_CATEGORY), anno, \

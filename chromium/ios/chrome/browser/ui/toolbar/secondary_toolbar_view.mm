@@ -20,8 +20,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/toolbar/secondary_toolbar_constants+vivaldi.h"
-#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -42,8 +41,12 @@ UIView* SecondaryToolbarLocationBarContainerView(
     ToolbarButtonFactory* buttonFactory) {
   UIView* locationBarContainer = [[UIView alloc] init];
   locationBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+
+  if (!IsVivaldiRunning()) {
   locationBarContainer.backgroundColor = [buttonFactory.toolbarConfiguration
       locationBarBackgroundColorWithVisibility:1];
+  } // End Vivaldi
+
   [locationBarContainer
       setContentHuggingPriority:UILayoutPriorityDefaultLow
                         forAxis:UILayoutConstraintAxisHorizontal];
@@ -124,6 +127,14 @@ UIView* SecondaryToolbarLocationBarContainerView(
 @synthesize progressBar = _progressBar;
 @synthesize toolsMenuButton = _toolsMenuButton;
 @synthesize tabGridButton = _tabGridButton;
+
+// Vivaldi
+@synthesize bottomOmniboxEnabled = _bottomOmniboxEnabled;
+@synthesize tabBarEnabled = _tabBarEnabled;
+@synthesize canShowBack = _canShowBack;
+@synthesize canShowForward = _canShowForward;
+@synthesize canShowAdTrackerBlocker = _canShowAdTrackerBlocker;
+// End Vivaldi
 
 #pragma mark - Public
 
@@ -222,23 +233,6 @@ UIView* SecondaryToolbarLocationBarContainerView(
   self.buttonStackView.translatesAutoresizingMaskIntoConstraints = NO;
   [contentView addSubview:self.buttonStackView];
 
-  if (IsVivaldiRunning()) {
-    [self.buttonStackView anchorTop:self.topAnchor
-                            leading:self.safeLeftAnchor
-                             bottom:nil
-                           trailing:self.safeRightAnchor
-                          padding:UIEdgeInsetsMake(vSecondaryToolbarTopPadding,
-                                                  kAdaptiveToolbarMargin,
-                                                  0,
-                                                  kAdaptiveToolbarMargin)];
-    [self.separator
-      anchorTop:nil
-        leading:self.leadingAnchor
-         bottom:self.topAnchor
-       trailing:self.trailingAnchor
-           size:CGSizeMake(0,
-                     ui::AlignValueToUpperPixel(kToolbarSeparatorHeight))];
-  } else {
   UILayoutGuide* safeArea = self.safeAreaLayoutGuide;
 
   if (IsBottomOmniboxSteadyStateEnabled()) {
@@ -279,6 +273,17 @@ UIView* SecondaryToolbarLocationBarContainerView(
     // Top margin of location bar, constant controlled by view controller.
     self.locationBarTopConstraint = [self.locationBarContainer.topAnchor
         constraintEqualToAnchor:self.topAnchor];
+
+    if (IsVivaldiRunning()) {
+      self.buttonStackView.backgroundColor = UIColor.clearColor;
+      _locationBarBottomConstraint = [self.buttonStackView.topAnchor
+          constraintEqualToAnchor:self.locationBarContainer.bottomAnchor
+                         constant:vBottomAdaptiveLocationBarBottomMargin];
+
+      _buttonStackViewNoOmniboxConstraint = [self.buttonStackView.topAnchor
+          constraintEqualToAnchor:self.topAnchor
+                         constant:vBottomButtonsTopMargin];
+    } else {
     _locationBarBottomConstraint = [self.buttonStackView.topAnchor
         constraintEqualToAnchor:self.locationBarContainer.bottomAnchor
                        constant:kBottomAdaptiveLocationBarBottomMargin];
@@ -286,6 +291,8 @@ UIView* SecondaryToolbarLocationBarContainerView(
     _buttonStackViewNoOmniboxConstraint = [self.buttonStackView.topAnchor
         constraintEqualToAnchor:self.topAnchor
                        constant:kBottomButtonsTopMargin];
+    } // End Vivaldi
+
     [self updateButtonStackViewConstraint];
 
     // Bottom separator used when collapsed above the keyboard.
@@ -298,6 +305,24 @@ UIView* SecondaryToolbarLocationBarContainerView(
     AddSameConstraintsToSides(self, self.bottomSeparator,
                               LayoutSides::kLeading | LayoutSides::kTrailing);
 
+    if (IsVivaldiRunning()) {
+      [NSLayoutConstraint activateConstraints:@[
+        self.locationBarTopConstraint,
+        self.locationBarContainerHeight,
+        [self.locationBarContainer.leadingAnchor
+            constraintEqualToAnchor:safeArea.leadingAnchor],
+        [self.locationBarContainer.trailingAnchor
+            constraintEqualToAnchor:safeArea.trailingAnchor],
+        [self.buttonStackView.topAnchor
+            constraintGreaterThanOrEqualToAnchor:self.topAnchor
+                                        constant:kBottomButtonsTopMargin],
+        [self.bottomSeparator.heightAnchor
+            constraintEqualToConstant:ui::AlignValueToUpperPixel(
+                                          kToolbarSeparatorHeight)],
+        [self.bottomSeparator.bottomAnchor
+            constraintEqualToAnchor:self.locationBarContainer.bottomAnchor],
+      ]];
+    } else {
     [NSLayoutConstraint activateConstraints:@[
       self.locationBarTopConstraint,
       self.locationBarContainerHeight,
@@ -316,6 +341,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
       [self.bottomSeparator.bottomAnchor
           constraintEqualToAnchor:self.locationBarContainer.bottomAnchor],
     ]];
+    } // End Vivaldi
 
   } else {  // Bottom omnibox flag disabled.
     [self.buttonStackView.topAnchor
@@ -324,6 +350,24 @@ UIView* SecondaryToolbarLocationBarContainerView(
         .active = YES;
   }
 
+  if (IsVivaldiRunning()) {
+    [NSLayoutConstraint activateConstraints:@[
+      [self.buttonStackView.leadingAnchor
+          constraintEqualToAnchor:safeArea.leadingAnchor
+                         constant:vAdaptiveToolbarMargin],
+      [self.buttonStackView.trailingAnchor
+          constraintEqualToAnchor:safeArea.trailingAnchor
+                         constant:-vAdaptiveToolbarMargin],
+
+      [self.separator.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+      [self.separator.trailingAnchor
+          constraintEqualToAnchor:self.trailingAnchor],
+      [self.separator.bottomAnchor constraintEqualToAnchor:self.topAnchor],
+      [self.separator.heightAnchor
+          constraintEqualToConstant:ui::AlignValueToUpperPixel(
+                                        kToolbarSeparatorHeight)],
+    ]];
+  } else {
   [NSLayoutConstraint activateConstraints:@[
     [self.buttonStackView.leadingAnchor
         constraintEqualToAnchor:safeArea.leadingAnchor

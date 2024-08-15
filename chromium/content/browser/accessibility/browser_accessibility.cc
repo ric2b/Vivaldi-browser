@@ -269,8 +269,8 @@ BrowserAccessibility* BrowserAccessibility::PlatformDeepestLastChild() const {
 BrowserAccessibility* BrowserAccessibility::InternalDeepestFirstChild() const {
   // By design, this method should be able to traverse platform leaves, hence we
   // don't check for leafiness.
-  ui::AXNode* deepest_child = node()->GetDeepestFirstUnignoredChild();
-  return manager()->GetFromAXNode(deepest_child);
+  ui::AXNode* deepest_descendant = node()->GetDeepestFirstUnignoredDescendant();
+  return manager()->GetFromAXNode(deepest_descendant);
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalDeepestLastChild() const {
@@ -278,8 +278,8 @@ BrowserAccessibility* BrowserAccessibility::InternalDeepestLastChild() const {
   // don't check for leafiness. We need to explicitly check for leafiness here
   // instead of relying on `AXNode::IsLeaf()` because Android has a different
   // notion of this concept.
-  ui::AXNode* deepest_child = node()->GetDeepestLastUnignoredChild();
-  return manager()->GetFromAXNode(deepest_child);
+  ui::AXNode* deepest_descendant = node()->GetDeepestLastUnignoredDescendant();
+  return manager()->GetFromAXNode(deepest_descendant);
 }
 
 size_t BrowserAccessibility::InternalChildCount() const {
@@ -336,7 +336,7 @@ BrowserAccessibility::InternalChildrenEnd() const {
 const BrowserAccessibility*
 BrowserAccessibility::AllChildrenRange::Iterator::operator*() {
   if (child_tree_root_)
-    return index_ == 0 ? child_tree_root_ : nullptr;
+    return index_ == 0 ? child_tree_root_.get() : nullptr;
 
   // TODO(nektar): Consider using
   // `AXNode::GetChildAtIndexCrossingTreeBoundary()`.
@@ -1059,7 +1059,7 @@ BrowserAccessibility::PlatformChildIterator::GetNativeViewAccessible() const {
   return platform_iterator->GetNativeViewAccessible();
 }
 
-absl::optional<size_t>
+std::optional<size_t>
 BrowserAccessibility::PlatformChildIterator::GetIndexInParent() const {
   if (platform_iterator == parent_->PlatformChildrenEnd().platform_iterator)
     return parent_->PlatformChildCount();
@@ -1127,13 +1127,13 @@ ui::AXPlatformNode* BrowserAccessibility::GetFromTreeIDAndNodeID(
   return node->GetAXPlatformNode();
 }
 
-absl::optional<size_t> BrowserAccessibility::GetIndexInParent() const {
+std::optional<size_t> BrowserAccessibility::GetIndexInParent() const {
   if (manager()->GetBrowserAccessibilityRoot() == this &&
       PlatformGetParent() == nullptr) {
     // If it is a root node of WebContent, it doesn't have a parent and a
     // valid index in parent. So it returns -1 in order to compute its
     // index at AXPlatformNodeBase.
-    return absl::nullopt;
+    return std::nullopt;
   }
   return node()->GetUnignoredIndexInParent();
 }
@@ -1620,6 +1620,7 @@ std::u16string BrowserAccessibility::GetLocalizedStringForRoleDescription()
     case ax::mojom::Role::kDirectory:
       return content_client->GetLocalizedString(IDS_AX_ROLE_DIRECTORY);
     case ax::mojom::Role::kDisclosureTriangle:
+    case ax::mojom::Role::kDisclosureTriangleGrouped:
       return content_client->GetLocalizedString(
           IDS_AX_ROLE_DISCLOSURE_TRIANGLE);
     case ax::mojom::Role::kDocument:
@@ -1802,11 +1803,11 @@ bool BrowserAccessibility::ShouldIgnoreHoveredStateForTesting() {
   return accessibility_state->disable_hot_tracking_for_testing();
 }
 
-absl::optional<int> BrowserAccessibility::GetPosInSet() const {
+std::optional<int> BrowserAccessibility::GetPosInSet() const {
   return node()->GetPosInSet();
 }
 
-absl::optional<int> BrowserAccessibility::GetSetSize() const {
+std::optional<int> BrowserAccessibility::GetSetSize() const {
   return node()->GetSetSize();
 }
 

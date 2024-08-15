@@ -1,19 +1,33 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-source_set("thumbnail") {
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("service") {
   sources = [
     "vivaldi_thumbnail_service.h",
     "vivaldi_thumbnail_service.mm",
   ]
 
   deps = [
-    "//ui/base",
     "//base",
+    "//ui/base",
+    "//components/bookmarks/browser",
+    ":thumbnail_capturer_swift",
   ]
 
   frameworks = [
-    "Foundation.framework",
     "ImageIO.framework",
     "UIKit.framework",
+  ]
+}
+
+swift_source_set("thumbnail_capturer_swift") {
+  sources = [
+    "vivaldi_thumbnail_capturer.swift",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "WebKit.framework",
   ]
 }

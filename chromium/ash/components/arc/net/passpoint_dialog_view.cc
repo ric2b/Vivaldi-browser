@@ -5,7 +5,9 @@
 #include "ash/components/arc/net/passpoint_dialog_view.h"
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ash/components/arc/compat_mode/overlay_dialog.h"
@@ -17,8 +19,8 @@
 #include "base/time/time.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "components/strings/grit/components_strings.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -51,10 +53,10 @@ constexpr base::TimeDelta kDialogExpiration = base::Days(365);
 // |subscription_expiration_time_ms| is in the format of number of milliseconds
 // since January 1, 1970, 00:00:00 GMT. Expiration time of int64_min means no
 // expiry date based on Android's behavior.
-absl::optional<base::Time> GetTimeFromSubscriptionExpirationMs(
+std::optional<base::Time> GetTimeFromSubscriptionExpirationMs(
     int64_t subscription_expiration_time_ms) {
   if (subscription_expiration_time_ms == std::numeric_limits<int64_t>::min()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return base::Time::UnixEpoch() +
          base::Milliseconds(subscription_expiration_time_ms);
@@ -62,7 +64,7 @@ absl::optional<base::Time> GetTimeFromSubscriptionExpirationMs(
 
 // Returns true if the expiration time is within |kDialogExpiration| and is
 // still valid.
-bool IsExpiring(absl::optional<base::Time> subscription_expiration_time) {
+bool IsExpiring(std::optional<base::Time> subscription_expiration_time) {
   if (!subscription_expiration_time.has_value()) {
     return false;
   }
@@ -174,7 +176,7 @@ std::unique_ptr<views::View> PasspointDialogView::MakeBaseLabelView(
 }
 
 std::unique_ptr<views::View> PasspointDialogView::MakeSubscriptionLabelView(
-    base::StringPiece friendly_name) {
+    std::string_view friendly_name) {
   std::vector<size_t> offsets;
   const std::u16string learn_more = l10n_util::GetStringUTF16(
       IDS_ASH_ARC_PASSPOINT_APP_APPROVAL_LEARN_MORE_LABEL);
@@ -199,7 +201,7 @@ std::unique_ptr<views::View> PasspointDialogView::MakeSubscriptionLabelView(
 
 std::unique_ptr<views::View> PasspointDialogView::MakeContentsView(
     bool is_expiring,
-    base::StringPiece friendly_name) {
+    std::string_view friendly_name) {
   views::LayoutProvider* provider = views::LayoutProvider::Get();
   std::unique_ptr<views::BoxLayoutView> contents =
       views::Builder<views::BoxLayoutView>()
@@ -232,7 +234,7 @@ std::unique_ptr<views::View> PasspointDialogView::MakeButtonsView() {
                   weak_factory_.GetWeakPtr(), /*allow=*/false))
               .SetText(l10n_util::GetStringUTF16(
                   IDS_ASH_ARC_PASSPOINT_APP_APPROVAL_DONT_ALLOW_BUTTON))
-              .SetProminent(false)
+              .SetStyle(ui::ButtonStyle::kDefault)
               .SetIsDefault(false),
           views::Builder<views::MdTextButton>()  // Allow button.
               .CopyAddressTo(&allow_button_)
@@ -241,7 +243,7 @@ std::unique_ptr<views::View> PasspointDialogView::MakeButtonsView() {
                   weak_factory_.GetWeakPtr(), /*allow=*/true))
               .SetText(l10n_util::GetStringUTF16(
                   IDS_ASH_ARC_PASSPOINT_APP_APPROVAL_ALLOW_BUTTON))
-              .SetProminent(true)
+              .SetStyle(ui::ButtonStyle::kProminent)
               .SetIsDefault(true))
       .Build();
 }

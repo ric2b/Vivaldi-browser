@@ -171,7 +171,7 @@ void DIPSRedirectContext::AppendClientRedirect(
     update_offset_ = redirects_.size();
   }
   if (client_redirect->access_type > SiteDataAccessType::kRead) {
-    redirectors_.insert(GetSiteForDIPS(client_redirect->url));
+    redirectors_.insert(client_redirect->site);
   }
   client_redirect->chain_index = GetRedirectChainLength();
   redirects_.push_back(std::move(client_redirect));
@@ -186,7 +186,7 @@ void DIPSRedirectContext::AppendServerRedirects(
       update_offset_ = redirects_.size();
     }
     if (redirect->access_type > SiteDataAccessType::kRead) {
-      redirectors_.insert(GetSiteForDIPS(redirect->url));
+      redirectors_.insert(redirect->site);
     }
     redirect->chain_index = GetRedirectChainLength();
     redirects_.push_back(std::move(redirect));
@@ -221,15 +221,15 @@ void DIPSRedirectContext::ReportIssue(const GURL& final_url) {
   redirectors_.clear();
 }
 
-absl::optional<std::pair<size_t, DIPSRedirectInfo*>>
+std::optional<std::pair<size_t, DIPSRedirectInfo*>>
 DIPSRedirectContext::GetRedirectInfoFromChain(const std::string& site) const {
   // Iterate in reverse order to obtain the most recent occurrence of the site.
   for (int ind = redirects_.size() - 1; ind >= 0; ind--) {
-    if (GetSiteForDIPS(redirects_.at(ind)->url) == site) {
+    if (redirects_.at(ind)->site == site) {
       return std::make_pair(static_cast<size_t>(ind), redirects_.at(ind).get());
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool DIPSRedirectContext::SiteHadUserActivation(const std::string& site) const {
@@ -239,8 +239,7 @@ bool DIPSRedirectContext::SiteHadUserActivation(const std::string& site) const {
   }
 
   for (const auto& redirect : redirects_) {
-    if (redirect->has_sticky_activation &&
-        GetSiteForDIPS(redirect->url) == site) {
+    if (redirect->has_sticky_activation && redirect->site == site) {
       return true;
     }
   }
@@ -257,7 +256,7 @@ std::set<std::string> DIPSRedirectContext::AllSitesWithUserActivation() const {
 
   for (const auto& redirect : redirects_) {
     if (redirect->has_sticky_activation) {
-      sites.insert(GetSiteForDIPS(redirect->url));
+      sites.insert(redirect->site);
     }
   }
 
@@ -267,7 +266,7 @@ std::set<std::string> DIPSRedirectContext::AllSitesWithUserActivation() const {
 std::map<std::string, std::pair<GURL, bool>>
 DIPSRedirectContext::GetRedirectHeuristicURLs(
     const GURL& first_party_url,
-    absl::optional<std::set<std::string>> allowed_sites) const {
+    std::optional<std::set<std::string>> allowed_sites) const {
   std::map<std::string, std::pair<GURL, bool>>
       sites_to_url_and_current_interaction;
 
@@ -277,7 +276,7 @@ DIPSRedirectContext::GetRedirectHeuristicURLs(
   const std::string& first_party_site = GetSiteForDIPS(first_party_url);
   for (const auto& redirect : redirects_) {
     const GURL& url = redirect->url;
-    const std::string site = GetSiteForDIPS(url);
+    const std::string& site = redirect->site;
 
     // The redirect heuristic does not apply for first-party cookie access.
     if (site == first_party_site) {
@@ -691,7 +690,7 @@ void DIPSWebContentsObserver::OnCookiesAccessed(
 
   // Otherwise, attribute the client cookie access to the first party site of
   // the RFH.
-  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  const std::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
   if (!fpu.has_value()) {
     return;
   }
@@ -720,7 +719,7 @@ void DIPSWebContentsObserver::OnCookiesAccessed(
   // All accesses within the primary page iframes are attributed to the URL of
   // the main frame (ie the first party URL).
   if (IsInPrimaryPageIFrame(navigation_handle)) {
-    const absl::optional<GURL> fpu = GetFirstPartyURL(navigation_handle);
+    const std::optional<GURL> fpu = GetFirstPartyURL(navigation_handle);
     if (!fpu.has_value()) {
       return;
     }
@@ -833,7 +832,7 @@ void DIPSWebContentsObserver::RecordRedirectHeuristic(
     const content::CookieAccessDetails& details,
     const size_t sites_passed_count,
     bool is_current_interaction,
-    absl::optional<base::Time> last_user_interaction_time) {
+    std::optional<base::Time> last_user_interaction_time) {
   // This function can only be reached if the redirect heuristic is satisfied
   // for the previous recorded redirect.
   DCHECK(last_commit_timestamp_.has_value());
@@ -883,7 +882,7 @@ void DIPSWebContentsObserver::CreateAllRedirectHeuristicGrants(
     return;
   }
 
-  absl::optional<std::set<std::string>> sites_with_aba_flow = absl::nullopt;
+  std::optional<std::set<std::string>> sites_with_aba_flow = std::nullopt;
   if (tpcd::experiment::kTpcdRedirectHeuristicRequireABAFlow.Get()) {
     sites_with_aba_flow = AllSitesFollowingFirstParty(first_party_url);
   }
@@ -906,9 +905,9 @@ void DIPSWebContentsObserver::CreateAllRedirectHeuristicGrants(
       // current interaction.
       DCHECK(!tpcd::experiment::kTpcdRedirectHeuristicRequireCurrentInteraction
                   .Get());
-      base::OnceCallback<void(absl::optional<base::Time>)> create_grant =
+      base::OnceCallback<void(std::optional<base::Time>)> create_grant =
           base::BindOnce(
-              [](absl::optional<base::Time> last_user_interaction_time) {
+              [](std::optional<base::Time> last_user_interaction_time) {
                 return last_user_interaction_time.has_value();
               })
               .Then(base::BindOnce(
@@ -948,7 +947,7 @@ void DIPSWebContentsObserver::OnServiceWorkerAccessed(
     return;
   }
 
-  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  const std::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
   if (fpu.has_value()) {
     detector_.OnWorkerInitialized(fpu.value());
   }
@@ -962,7 +961,7 @@ void DIPSWebContentsObserver::OnServiceWorkerAccessed(
     return;
   }
 
-  const absl::optional<GURL> fpu = GetFirstPartyURL(navigation_handle);
+  const std::optional<GURL> fpu = GetFirstPartyURL(navigation_handle);
   if (!fpu.has_value()) {
     return;
   }
@@ -980,7 +979,7 @@ void DIPSWebContentsObserver::OnClientAdded(
     return;
   }
 
-  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  const std::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
   if (fpu.has_value()) {
     detector_.OnWorkerInitialized(fpu.value());
   }
@@ -989,15 +988,21 @@ void DIPSWebContentsObserver::OnClientAdded(
 void DIPSWebContentsObserver::OnWorkerCreated(
     const blink::DedicatedWorkerToken& worker_token,
     int worker_process_id,
-    content::GlobalRenderFrameHostId ancestor_render_frame_host_id) {
+    content::DedicatedWorkerCreator creator) {
+  const content::GlobalRenderFrameHostId* const render_frame_host_id =
+      absl::get_if<content::GlobalRenderFrameHostId>(&creator);
+  if (!render_frame_host_id) {
+    return;
+  }
+
   content::RenderFrameHost* render_frame_host =
-      content::RenderFrameHost::FromID(ancestor_render_frame_host_id);
+      content::RenderFrameHost::FromID(*render_frame_host_id);
 
   if (!IsInPrimaryPage(render_frame_host)) {
     return;
   }
 
-  const absl::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
+  const std::optional<GURL> fpu = GetFirstPartyURL(render_frame_host);
   if (fpu.has_value()) {
     detector_.OnWorkerInitialized(fpu.value());
   }
@@ -1174,7 +1179,7 @@ std::set<std::string> DIPSWebContentsObserver::AllSitesFollowingFirstParty(
 
   int min_index = std::max(0, nav_controller.GetCurrentEntryIndex() -
                                   kAllSitesFollowingFirstPartyLookbackLength);
-  absl::optional<std::string> prev_site = absl::nullopt;
+  std::optional<std::string> prev_site = std::nullopt;
   for (int ind = nav_controller.GetCurrentEntryIndex(); ind >= min_index;
        ind--) {
     std::string cur_site =

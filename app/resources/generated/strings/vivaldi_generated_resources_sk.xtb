@@ -11,7 +11,6 @@
 <translation id="1084824384139382525">Kopírovať adre&amp;su odkazu</translation>
 <translation id="1163931534039071049">&amp;Zobraziť zdrojový kód rámca</translation>
 <translation id="1165039591588034296">Chyba</translation>
-<translation id="1175364870820465910">&amp;Tlačiť...</translation>
 <translation id="1181037720776840403">Odstrániť</translation>
 <translation id="1187722533808055681">Prebudenia z nečinnosti</translation>
 <translation id="1221825588892235038">Len výber</translation>
@@ -23,7 +22,6 @@
 <translation id="1451375123200651445">Webová stránka, jeden súbor</translation>
 <translation id="1465176863081977902">K&amp;opírovať adresu zvuku</translation>
 <translation id="1476607407192946488">&amp;Nastavenia jazyka</translation>
-<translation id="150411034776756821">Odstrániť <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Toto rozšírenie zmenilo stránku, ktorá sa zobrazí po kliknutí na tlačidlo Domovská stránka.</translation>
 <translation id="1552752544932680961">Spravovať rozšírenie</translation>
 <translation id="15662109988763471">Vybratá tlačiareň nie je k dispozícii alebo nie je správne nainštalovaná. Skontrolujte ju alebo vyberte inú.</translation>
@@ -98,7 +96,6 @@
 <translation id="2932085390869194046">Navrhnúť heslo…</translation>
 <translation id="2932883381142163287">Nahlásiť zneužitie</translation>
 <translation id="2941112035454246133">Nízka</translation>
-<translation id="2972581237482394796">&amp;Znova</translation>
 <translation id="3003623123441819449">Vyrovnávacia pamäť CSS</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">&amp;Zobraziť zdrojový kód rámca</translation>
@@ -140,7 +137,6 @@
 <translation id="3711931198657368127">Prilepiť a prejsť na <ph name="URL" /></translation>
 <translation id="3727187387656390258">Preskúmať vyskakovacie okno</translation>
 <translation id="3760460896538743390">Skontrolovať &amp;stránku na pozadí</translation>
-<translation id="3797900183766075808">Pomocou &amp;služby <ph name="SEARCH_ENGINE" /> vyhľadať text „<ph name="SEARCH_TERMS" />“</translation>
 <translation id="3810973564298564668">Spravovať</translation>
 <translation id="3838085852053358637">Načítanie rozšírenia zlyhalo</translation>
 <translation id="383891835335927981">Žiadne stránky neboli priblížené ani oddialené</translation>
@@ -148,10 +144,8 @@
 <translation id="3905761538810670789">Opraviť aplikáciu</translation>
 <translation id="3908501907586732282">Povoliť rozšírenie</translation>
 <translation id="3909701002594999354">Zobraziť všetky &amp;ovládacie prvky</translation>
-<translation id="3909791450649380159">&amp;Vystrihnúť</translation>
 <translation id="3927932062596804919">Odmietnuť</translation>
 <translation id="3936390757709632190">&amp;Otvoriť zvuk v novom liste</translation>
-<translation id="3943582379552582368">&amp;Naspäť</translation>
 <translation id="3948116654032448504">&amp;Hľadať obrázok v službe <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Bolo pridané nové rozšírenie (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -164,7 +158,6 @@
 <translation id="4096508467498758490">Zakázať rozšírenia v režime pre vývojárov</translation>
 <translation id="4100839878934973028">Iný program v počítači pridal aplikáciu, ktorá môže zmeniť spôsob fungovania prehliadača Vivaldi.</translation>
 <translation id="4109898769411476438">Zatvoriť prehliadač pred importovaním</translation>
-<translation id="4130207949184424187">Toto rozšírenie zmenilo stránku, ktorá sa zobrazí pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="4131410914670010031">Čiernobielo</translation>
 <translation id="4176463684765177261">Zakázané</translation>
 <translation id="4200983522494130825">Nový &amp;list</translation>
@@ -175,11 +168,9 @@
 <translation id="4348766275249686434">Zaznamenávať chyby</translation>
 <translation id="4363771538994847871">Nenašli sa žiadne ciele prenášania. Potrebujete pomoc?</translation>
 <translation id="4384652540891215547">Aktivovať rozšírenie</translation>
-<translation id="4394049700291259645">Zakázať</translation>
 <translation id="4409697491990005945">Okraje</translation>
 <translation id="4423376891418188461">Obnoviť nastavenia</translation>
 <translation id="4478664379124702289">Uložiť &amp;odkaz ako...</translation>
-<translation id="4593021220803146968">&amp;Prejsť na adresu <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikácie a rozšírenia môže upraviť iba správca (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Rozšírenie zmenilo stránku, ktorá sa vám zobrazí po otvorení nového listu.</translation>
 <translation id="4643612240819915418">&amp;Otvoriť video na novom liste</translation>
@@ -218,11 +209,9 @@
 <translation id="5301954838959518834">Áno, rozumiem</translation>
 <translation id="5317780077021120954">Uložiť</translation>
 <translation id="5334142896108694079">Vyrovnávacia pamäť skriptov</translation>
-<translation id="5355926466126177564">Rozšírenie „<ph name="EXTENSION_NAME" />“ zmenilo stránku, ktorá sa zobrazí pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="5360150013186312835">Zobraziť v paneli nástrojov</translation>
 <translation id="5362741141255528695">Vybrať súbor súkromného kľúča.</translation>
 <translation id="536638840841140142">Žiadne</translation>
-<translation id="5370819323174483825">&amp;Znova načítať</translation>
 <translation id="5398572795982417028">Odkaz na stránku je mimo rozsahu, limit je <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Pokračovať v sťahovaní</translation>
 <translation id="5427459444770871191">Otočiť &amp;v smere hodinových ručičiek</translation>
@@ -236,7 +225,6 @@
 <translation id="5575473780076478375">Súkromné rozšírenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5614553682702429503">Uložiť heslo?</translation>
 <translation id="5623842676595125836">Nízka</translation>
-<translation id="5627086634964711283">Tiež určuje, ktorá stránka sa zobrazí po kliknutí na tlačidlo Domovská stránka.</translation>
 <translation id="5677928146339483299">Zablokovaný</translation>
 <translation id="5707185214361380026">Nepodarilo sa načítať rozšírenie z:</translation>
 <translation id="5715711091495208045">Doplnok Broker: <ph name="PLUGIN_NAME" /></translation>
@@ -250,15 +238,11 @@
 <translation id="583281660410589416">Neznáma</translation>
 <translation id="5860491529813859533">Zapnúť</translation>
 <translation id="5910363049092958439">Uložiť &amp;obrázok ako...</translation>
-<translation id="5956585768868398362">Je toto stránka vyhľadávania, ktorú ste čakali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maximum: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">Tiež určuje, ktorá stránka sa zobrazí po kliknutí na tlačidlo Domovská stránka alebo pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="5978277834170881274">&amp;Použiť základnú kontrolu pravopisu</translation>
-<translation id="5979421442488174909">&amp;Preložiť do jazyka <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Viac</translation>
 <translation id="6086846494333236931">Nainštalované správcom</translation>
 <translation id="6101226222197207147">Bola pridaná nová aplikácia (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">Vaše internetové pripojenie je ovládané</translation>
 <translation id="6147020289383635445">Ukážka pred tlačou zlyhala</translation>
 <translation id="6156863943908443225">Vyrovnávacia pamäť skriptov</translation>
 <translation id="6196854373336333322">Toto rozšírenie „<ph name="EXTENSION_NAME" />“ prevzalo kontrolu nad vašimi nastaveniami servera proxy, čo znamená, že môže zmeniť, prerušiť alebo zachytiť všetku vašu činnosť online. Ak neviete, prečo k tomu došlo, pravdepodobne si to neželáte.</translation>
@@ -289,7 +273,6 @@
 <translation id="6579369886355986318">Zobraziť všetky &amp;ovládacie prvky</translation>
 <translation id="6639554308659482635">Pamäť nástroja SQLite</translation>
 <translation id="6686817083349815241">Uloženie hesla</translation>
-<translation id="6691936601825168937">&amp;Dopredu</translation>
 <translation id="6798954102094737107">Doplnok: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Zachovať zmeny</translation>
 <translation id="6824564591481349393">Kopírovať &amp;e-mailovú adresu</translation>
@@ -315,11 +298,9 @@
 <translation id="7421925624202799674">&amp;Zobraziť zdrojový kód stránky</translation>
 <translation id="7427348830195639090">Stránka na pozadí: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Výberom tejto tlačiarne udeľujete nasledujúcemu rozšíreniu povolenie k tlačiarni pristupovať:</translation>
-<translation id="749028671485790643">Osoba <ph name="VALUE" /></translation>
 <translation id="7564847347806291057">Ukončiť úlohu</translation>
 <translation id="7576690715254076113">Kompletovať</translation>
 <translation id="7629827748548208700">List: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Zrušiť</translation>
 <translation id="7659154729610375585">Naozaj chcete ukončiť súkromný režim?</translation>
 <translation id="7661259717474717992">Povoliť stránkam ukladať a čítať údaje súborov cookie</translation>
 <translation id="7663719505383602579">Prijímač: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -329,22 +310,18 @@
 <translation id="7704305437604973648">Úloha</translation>
 <translation id="7710568461918838723">&amp;Prenášať...</translation>
 <translation id="7750228210027921155">Obraz v obraze</translation>
-<translation id="7760004034676677601">Je toto úvodná stránka, ktorú ste čakali?</translation>
 <translation id="7771452384635174008">Rozloženie</translation>
 <translation id="7782102568078991263">Žiadne ďalšie návrhy od spoločnosti Google</translation>
 <translation id="7786889348652477777">&amp;Znova načítať aplikáciu</translation>
 <translation id="7791543448312431591">Pridať</translation>
 <translation id="7800518121066352902">Otočiť &amp;proti smeru hodinových ručičiek</translation>
-<translation id="7814458197256864873">&amp;Kopírovať</translation>
 <translation id="7818135753970109980">Bol pridaný nový motív vzhľadu (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">K&amp;opírovať adresu videa</translation>
 <translation id="7849264908733290972">Otvoriť &amp;obrázok v novom liste</translation>
-<translation id="7857949311770343000">Je toto stránka v novom liste, ktorú ste čakali?</translation>
 <translation id="786073089922909430">Služba: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Nástroj: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">K&amp;opírovať adresu videa</translation>
 <translation id="7966241909927244760">K&amp;opírovať adresu obrázka</translation>
-<translation id="7973394300052703468">Nové &amp;súkromné okno</translation>
 <translation id="7978412674231730200">Súkromný kľúč</translation>
 <translation id="7982789257301363584">Sieť</translation>
 <translation id="7997826902155442747">Priorita procesov</translation>
@@ -393,18 +370,15 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="895944840846194039">Pamäť JavaScript</translation>
 <translation id="8962083179518285172">Skryť podrobnosti</translation>
 <translation id="8973557916016709913">Odstrániť úroveň priblíženia</translation>
-<translation id="897939795688207351">Na <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Povoliť na všetkých webových stránkach</translation>
 <translation id="9027459031423301635">Otvoriť odkaz v novom &amp;liste</translation>
 <translation id="9056810968620647706">Nenašli sa žiadne zhody.</translation>
 <translation id="9137916601698928395">Otvoriť odkaz ako <ph name="USER" /></translation>
 <translation id="916607977885256133">Obraz v obraze</translation>
-<translation id="9170848237812810038">&amp;Naspäť</translation>
 <translation id="9215293857209265904">Rozšírenie „<ph name="EXTENSION_NAME" />“ bolo pridané</translation>
 <translation id="9218430445555521422">Nastaviť ako predvolený</translation>
 <translation id="93766956588638423">Opraviť rozšírenie</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Na šírku</translation>
-<translation id="994289308992179865">Opa&amp;kovať</translation>
 <translation id="998747458861718449">P&amp;reskúmať</translation>
 </translationbundle>

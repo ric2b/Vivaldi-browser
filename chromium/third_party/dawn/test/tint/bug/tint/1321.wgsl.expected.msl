@@ -14,6 +14,10 @@ struct tint_array {
     T elements[N];
 };
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 int foo() {
   return 1;
 }
@@ -23,7 +27,7 @@ fragment void tint_symbol() {
   {
     int const tint_symbol_1 = foo();
     int const a_save = tint_symbol_1;
-    while (true) {
+    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
       {
         float const x = arr[a_save];
         break;

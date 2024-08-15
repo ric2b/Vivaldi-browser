@@ -11,6 +11,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/process/process.h"
+#include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -133,15 +134,15 @@ void CookieManager::SetCanonicalCookie(const net::CanonicalCookie& cookie,
 
   auto cookie_ptr = std::make_unique<net::CanonicalCookie>(cookie);
   base::Time adjusted_expiry_date =
-      net::CanonicalCookie::ValidateAndAdjustExpiryDate(cookie.ExpiryDate(),
-                                                        cookie.CreationDate());
+      net::CanonicalCookie::ValidateAndAdjustExpiryDate(
+          cookie.ExpiryDate(), cookie.CreationDate(), cookie.SourceScheme());
   if (adjusted_expiry_date != cookie.ExpiryDate() || !cookie_partition_key) {
     cookie_ptr = net::CanonicalCookie::FromStorage(
         cookie.Name(), cookie.Value(), cookie.Domain(), cookie.Path(),
         cookie.CreationDate(), adjusted_expiry_date, cookie.LastAccessDate(),
         cookie.LastUpdateDate(), cookie.IsSecure(), cookie.IsHttpOnly(),
-        cookie.SameSite(), cookie.Priority(), cookie.IsSameParty(),
-        cookie_partition_key, cookie.SourceScheme(), cookie.SourcePort());
+        cookie.SameSite(), cookie.Priority(), cookie_partition_key,
+        cookie.SourceScheme(), cookie.SourcePort());
     if (!cookie_ptr) {
       std::move(callback).Run(
           net::CookieAccessResult(net::CookieInclusionStatus(
@@ -194,7 +195,7 @@ void CookieManager::DeleteSessionOnlyCookies(
       base::BindRepeating(
           [](const DeleteCookiePredicate& predicate,
              const net::CanonicalCookie& cookie) {
-            return predicate.Run(cookie.Domain(), cookie.IsSecure());
+            return predicate.Run(cookie.Domain(), cookie.SourceScheme());
           },
           std::move(delete_cookie_predicate)),
       std::move(callback));
@@ -291,6 +292,12 @@ void CookieManager::RemoveChangeListener(ListenerRegistration* registration) {
 void CookieManager::CloneInterface(
     mojo::PendingReceiver<mojom::CookieManager> new_interface) {
   AddReceiver(std::move(new_interface));
+}
+
+void CookieManager::SetPreCommitCallbackDelayForTesting(base::TimeDelta delay) {
+  session_cleanup_cookie_store_->SetBeforeCommitCallback(base::BindRepeating(
+      [](base::TimeDelta delay) { base::PlatformThread::Sleep(delay); },
+      delay));
 }
 
 void CookieManager::FlushCookieStore(FlushCookieStoreCallback callback) {

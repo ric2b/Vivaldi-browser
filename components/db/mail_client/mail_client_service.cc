@@ -53,6 +53,20 @@ class MailClientService::MailClientBackendDelegate
       : mail_client_service_(mail_client_service),
         service_task_runner_(service_task_runner) {}
 
+  void NotifyMigrationProgress(int progress,
+                               int total,
+                               std::string msg) override {
+    service_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MailClientService::OnMigrationChanges,
+                                  mail_client_service_, progress, total, msg));
+  }
+
+  void NotifyDeleteMessages(int total) override {
+    service_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MailClientService::OnDeleteMessageChange,
+                                  mail_client_service_, total));
+  }
+
   void DBLoaded() override {
     service_task_runner_->PostTask(
         FROM_HERE,
@@ -90,9 +104,10 @@ bool MailClientService::Init(
 
   // Create the MailClient backend.
   scoped_refptr<MailClientBackend> backend(new MailClientBackend(
-    new MailClientBackendDelegate(weak_ptr_factory_.GetWeakPtr(),
-      base::SingleThreadTaskRunner::GetCurrentDefault()),
-    backend_task_runner_));
+      new MailClientBackendDelegate(
+          weak_ptr_factory_.GetWeakPtr(),
+          base::SingleThreadTaskRunner::GetCurrentDefault()),
+      backend_task_runner_));
   mail_client_backend_.swap(backend);
 
   ScheduleTask(base::BindOnce(&MailClientBackend::Init, mail_client_backend_,
@@ -136,6 +151,20 @@ void MailClientService::NotifyMailClientServiceBeingDeleted() {
     observer.OnMailClientModelBeingDeleted(this);
 }
 
+void MailClientService::OnMigrationChanges(int progress,
+                                           int total,
+                                           std::string msg) {
+  for (MailClientModelObserver& observer : observers_) {
+    observer.OnMigrationProgress(this, progress, total, msg);
+  }
+}
+
+void MailClientService::OnDeleteMessageChange(int total) {
+  for (MailClientModelObserver& observer : observers_) {
+    observer.OnDeleteMessagesProgress(this, total);
+  }
+}
+
 void MailClientService::Cleanup() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!backend_task_runner_) {
@@ -161,42 +190,33 @@ base::CancelableTaskTracker::TaskId MailClientService::CreateMessages(
     mail_client::MessageRows rows,
     ResultCallback callback,
     base::CancelableTaskTracker* tracker) {
-  std::shared_ptr<bool> email_rows = std::shared_ptr<bool>(new bool());
-
-  return tracker->PostTaskAndReply(
+  return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&MailClientBackend::CreateMessages, mail_client_backend_,
-                     rows, email_rows),
-      base::BindOnce(std::move(callback), email_rows));
+                     rows),
+      std::move(callback));
 }
 
 base::CancelableTaskTracker::TaskId MailClientService::DeleteMessages(
-    std::vector<SearchListID> search_list_ids,
+    mail_client::SearchListIDs ids,
     ResultCallback callback,
     base::CancelableTaskTracker* tracker) {
-  std::shared_ptr<bool> delete_messages_result =
-      std::shared_ptr<bool>(new bool());
-
-  return tracker->PostTaskAndReply(
+  return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&MailClientBackend::DeleteMessages, mail_client_backend_,
-                     search_list_ids, delete_messages_result),
-      base::BindOnce(std::move(callback), delete_messages_result));
+                     ids),
+      std::move(callback));
 }
 
-base::CancelableTaskTracker::TaskId MailClientService::AddMessageBody(
-    SearchListID search_list_id,
-    std::u16string body,
+base::CancelableTaskTracker::TaskId MailClientService::UpdateMessage(
+    MessageRow message,
     MessageCallback callback,
     base::CancelableTaskTracker* tracker) {
-  std::shared_ptr<MessageResult> add_message_body_result =
-      std::shared_ptr<MessageResult>(new MessageResult());
-
-  return tracker->PostTaskAndReply(
+  return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&MailClientBackend::AddMessageBody, mail_client_backend_,
-                     search_list_id, body, add_message_body_result),
-      base::BindOnce(std::move(callback), add_message_body_result));
+      base::BindOnce(&MailClientBackend::UpdateMessage, mail_client_backend_,
+                     message),
+      std::move(callback));
 }
 
 base::CancelableTaskTracker::TaskId MailClientService::SearchEmail(
@@ -207,14 +227,11 @@ base::CancelableTaskTracker::TaskId MailClientService::SearchEmail(
       << "MailClient service being called after cleanup";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::shared_ptr<SearchListIdRows> email_rows =
-      std::shared_ptr<SearchListIdRows>(new SearchListIdRows());
-
-  return tracker->PostTaskAndReply(
+  return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&MailClientBackend::EmailSearch, mail_client_backend_,
-                     search, email_rows),
-      base::BindOnce(std::move(callback), email_rows));
+                     search),
+      std::move(callback));
 }
 
 base::CancelableTaskTracker::TaskId MailClientService::MatchMessage(
@@ -226,29 +243,37 @@ base::CancelableTaskTracker::TaskId MailClientService::MatchMessage(
       << "MailClient service being called after cleanup";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::shared_ptr<bool> email_rows = std::shared_ptr<bool>(new bool());
-
-  return tracker->PostTaskAndReply(
+  return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&MailClientBackend::MatchMessage, mail_client_backend_,
-                     search_list_id, search, email_rows),
-      base::BindOnce(std::move(callback), email_rows));
+                     search_list_id, search),
+      std::move(callback));
 }
 
-base::CancelableTaskTracker::TaskId MailClientService::RebuildAndVacuumDatabase(
+base::CancelableTaskTracker::TaskId MailClientService::GetDBVersion(
+    VersionCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_)
+      << "MailClient service being called after cleanup";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MailClientBackend::GetDBVersion, mail_client_backend_),
+      base::BindOnce(std::move(callback)));
+}
+
+base::CancelableTaskTracker::TaskId MailClientService::MigrateSerchDB(
     ResultCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_)
       << "MailClient service being called after cleanup";
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::shared_ptr<bool> result = std::shared_ptr<bool>(new bool());
-
-  return tracker->PostTaskAndReply(
+  return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&MailClientBackend::RebuildAndVacuumDatabase,
-                     mail_client_backend_, result),
-      base::BindOnce(std::move(callback), result));
+      base::BindOnce(&MailClientBackend::MigrateSearchDB, mail_client_backend_),
+      base::BindOnce(std::move(callback)));
 }
 
 }  // namespace mail_client

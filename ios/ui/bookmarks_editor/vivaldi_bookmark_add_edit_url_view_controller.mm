@@ -436,9 +436,13 @@ BookmarksFolderChooserCoordinator* _folderChooserCoordinator;
 /// Executes when delete button is tapped.
 - (void)deleteBookmark {
   if (self.bookmarks->loaded() && self.editingItem.bookmarkNode) {
-    std::set<const BookmarkNode*> nodes;
-    nodes.insert(self.editingItem.bookmarkNode);
-    bookmark_utils_ios::DeleteBookmarks(nodes, self.bookmarks);
+    std::vector<const bookmarks::BookmarkNode*> nodes;
+    nodes.push_back(self.editingItem.bookmarkNode);
+    const BookmarkNode* trashFolder = _bookmarks->trash_node();
+    bookmark_utils_ios::MoveBookmarks(nodes,
+                                      self.bookmarks,
+                                      self.bookmarks,
+                                      trashFolder);
   }
   [self dismissEditor];
 }

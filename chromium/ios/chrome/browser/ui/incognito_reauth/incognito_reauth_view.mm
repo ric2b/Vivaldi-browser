@@ -12,6 +12,14 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 // Button content padding (Vertical and Horizontal).
 const CGFloat kButtonPaddingV = 15.0f;
@@ -45,6 +53,16 @@ const CGFloat kVerticalContentPadding = 70.0f;
       AddSameConstraints(self, blurView);
     }
 
+    // Note(prio@vivaldi.com) - Add a purple background below blur view to
+    // indicate they are private tabs.
+    UIView* privateView = [UIView new];
+    privateView.backgroundColor =
+        [UIColor colorNamed:vPrivateNTPBackgroundColor];
+    [self addSubview:privateView];
+    privateView.translatesAutoresizingMaskIntoConstraints = NO;
+    AddSameConstraints(self, privateView);
+    // End Vivaldi
+
     UIBlurEffect* blurEffect =
         [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
     UIVisualEffectView* blurBackgroundView =
@@ -54,6 +72,10 @@ const CGFloat kVerticalContentPadding = 70.0f;
     AddSameConstraints(self, blurBackgroundView);
 
     UIImage* incognitoLogo = CustomSymbolWithPointSize(kIncognitoSymbol, 28);
+
+    if (IsVivaldiRunning())
+      incognitoLogo = [UIImage imageNamed:vMenuPrivateTab]; // End Vivaldi
+
     _logoView = [[UIImageView alloc] initWithImage:incognitoLogo];
     _logoView.tintColor = UIColor.whiteColor;
     _logoView.translatesAutoresizingMaskIntoConstraints = NO;

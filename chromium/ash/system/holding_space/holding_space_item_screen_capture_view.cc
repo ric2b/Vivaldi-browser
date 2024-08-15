@@ -38,7 +38,7 @@ constexpr gfx::Size kPrimaryActionSize(24, 24);
 
 // Helpers ---------------------------------------------------------------------
 
-absl::optional<const gfx::VectorIcon*> GetOverlayIcon(
+std::optional<const gfx::VectorIcon*> GetOverlayIcon(
     const HoldingSpaceItem* item) {
   DCHECK(HoldingSpaceItem::IsScreenCaptureType(item->type()));
   switch (item->type()) {
@@ -59,13 +59,14 @@ absl::optional<const gfx::VectorIcon*> GetOverlayIcon(
     case HoldingSpaceItem::Type::kLocalSuggestion:
     case HoldingSpaceItem::Type::kNearbyShare:
     case HoldingSpaceItem::Type::kPhoneHubCameraRoll:
+    case HoldingSpaceItem::Type::kPhotoshopWeb:
     case HoldingSpaceItem::Type::kPinnedFile:
     case HoldingSpaceItem::Type::kPrintedPdf:
     case HoldingSpaceItem::Type::kScan:
       NOTREACHED();
       [[fallthrough]];
     case HoldingSpaceItem::Type::kScreenshot:
-      return absl::nullopt;
+      return std::nullopt;
   }
 }
 
@@ -88,7 +89,7 @@ HoldingSpaceItemScreenCaptureView::HoldingSpaceItemScreenCaptureView(
                     .SetID(kHoldingSpaceItemImageId)
                     .SetCornerRadius(kHoldingSpaceCornerRadius));
 
-  if (absl::optional<const gfx::VectorIcon*> overlay_icon =
+  if (std::optional<const gfx::VectorIcon*> overlay_icon =
           GetOverlayIcon(item)) {
     builder.AddChild(
         views::Builder<views::BoxLayoutView>()
@@ -159,7 +160,7 @@ std::u16string HoldingSpaceItemScreenCaptureView::GetTooltipText(
 
 void HoldingSpaceItemScreenCaptureView::OnHoldingSpaceItemUpdated(
     const HoldingSpaceItem* item,
-    uint32_t updated_fields) {
+    const HoldingSpaceItemUpdatedFields& updated_fields) {
   HoldingSpaceItemView::OnHoldingSpaceItemUpdated(item, updated_fields);
   if (this->item() == item)
     TooltipTextChanged();

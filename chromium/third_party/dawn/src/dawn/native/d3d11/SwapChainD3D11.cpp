@@ -33,6 +33,7 @@
 
 #include <utility>
 
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/Surface.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d/UtilsD3D.h"
@@ -86,7 +87,8 @@ MaybeError SwapChain::PresentImpl() {
 ResultOrError<Ref<TextureBase>> SwapChain::GetCurrentTextureImpl() {
     // Create the API side objects for this use of the swapchain's buffer.
     TextureDescriptor descriptor = GetSwapChainBaseTextureDescriptor(this);
-    DAWN_TRY_ASSIGN(mApiTexture, Texture::Create(ToBackend(GetDevice()), &descriptor, mBuffer));
+    DAWN_TRY_ASSIGN(mApiTexture,
+                    Texture::Create(ToBackend(GetDevice()), Unpack(&descriptor), mBuffer));
     return mApiTexture;
 }
 

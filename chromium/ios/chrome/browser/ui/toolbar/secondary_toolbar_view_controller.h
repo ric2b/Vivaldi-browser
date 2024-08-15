@@ -29,6 +29,10 @@ class FullscreenController;
 /// Disconnects observations and references.
 - (void)disconnect;
 
+// Vivaldi
+- (UIStackView*)toolbarButtonStackView;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_SECONDARY_TOOLBAR_VIEW_CONTROLLER_H_

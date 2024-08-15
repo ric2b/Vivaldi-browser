@@ -41,11 +41,12 @@ class ASH_EXPORT FakeTasksClient : public TasksClient {
                        const std::string& task_id,
                        bool checked) override;
   void AddTask(const std::string& task_list_id,
-               const std::string& title) override;
+               const std::string& title,
+               TasksClient::OnTaskSavedCallback callback) override;
   void UpdateTask(const std::string& task_list_id,
                   const std::string& task_id,
                   const std::string& title,
-                  TasksClient::UpdateTaskCallback callback) override;
+                  TasksClient::OnTaskSavedCallback callback) override;
   void OnGlanceablesBubbleClosed(OnAllPendingCompletedTasksSavedCallback
                                      callback = base::DoNothing()) override;
 
@@ -58,11 +59,28 @@ class ASH_EXPORT FakeTasksClient : public TasksClient {
   // Runs `pending_get_task_lists_callbacks_` and returns their number.
   size_t RunPendingGetTaskListsCallbacks();
 
+  // Runs `pending_add_task_callbacks_` and returns their number.
+  size_t RunPendingAddTaskCallbacks();
+
+  // Runs `pending_update_task_callbacks_` and returns their number.
+  size_t RunPendingUpdateTaskCallbacks();
+
   void set_paused(bool paused) { paused_ = paused; }
+  void set_run_with_errors(bool run_with_errors) {
+    run_with_errors_ = run_with_errors;
+  }
 
   ui::ListModel<TaskList>* task_lists() { return task_lists_.get(); }
 
  private:
+  void AddTaskImpl(const std::string& task_list_id,
+                   const std::string& title,
+                   TasksClient::OnTaskSavedCallback callback);
+  void UpdateTaskImpl(const std::string& task_list_id,
+                      const std::string& task_id,
+                      const std::string& title,
+                      TasksClient::OnTaskSavedCallback callback);
+
   void PopulateTasks(base::Time tasks_due_time);
   void PopulateTaskLists(base::Time tasks_due_time);
 
@@ -80,12 +98,18 @@ class ASH_EXPORT FakeTasksClient : public TasksClient {
   int bubble_closed_count_ = 0;
   int completed_tasks_ = 0;
 
-  // If `false` - callbacks executed immediately. If `true` - callbacks get
+  // If `false` - callbacks are executed normally; if `true` - executed with
+  // simulated error (currently works for `AddTask` and `UpdateTask` only).
+  bool run_with_errors_ = false;
+
+  // If `false` - callbacks are executed immediately; if `true` - callbacks get
   // saved to the corresponding list and executed once
   // `RunPending**Callbacks()` is called.
   bool paused_ = false;
   std::list<base::OnceClosure> pending_get_tasks_callbacks_;
   std::list<base::OnceClosure> pending_get_task_lists_callbacks_;
+  std::list<base::OnceClosure> pending_add_task_callbacks_;
+  std::list<base::OnceClosure> pending_update_task_callbacks_;
 };
 
 }  // namespace ash::api

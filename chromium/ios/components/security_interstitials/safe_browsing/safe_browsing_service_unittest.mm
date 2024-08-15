@@ -128,8 +128,9 @@ class TestUrlCheckerClient {
           slow_check_notifier,
       bool proceed,
       bool showed_interstitial,
-      safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check,
-      bool did_check_url_real_time_allowlist) {
+      bool has_post_commit_interstitial_skipped,
+      safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
+          performed_check) {
     if (slow_check_notifier) {
       *slow_check_notifier =
           base::BindOnce(&TestUrlCheckerClient::OnCheckUrlResult,
@@ -305,7 +306,8 @@ class SafeBrowsingServiceTest : public PlatformTest {
         base::BindRepeating([](bool) { return false; }),
         /*is_off_the_record=*/false,
         /*variations_service=*/nullptr,
-        /*referrer_chain_provider=*/nullptr);
+        /*referrer_chain_provider=*/nullptr,
+        /*webui_delegate=*/nullptr);
     safe_browsing_client_.set_real_time_url_lookup_service(
         lookup_service_.get());
   }

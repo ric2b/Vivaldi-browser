@@ -20,18 +20,12 @@
 
 namespace {
 ProfileSelections BuildKAnonymityServiceProfileSelections() {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (!base::FeatureList::IsEnabled(features::kKAnonymityService))
     return ProfileSelections::BuildNoProfilesSelected();
   return ProfileSelections::Builder()
       .WithRegular(ProfileSelection::kOwnInstance)
-      // TODO(crbug.com/1418376): Check if this service is needed in
-      // Guest mode.
       .WithGuest(ProfileSelection::kOwnInstance)
       .Build();
-#else
-  return ProfileSelections::BuildNoProfilesSelected();
-#endif
 }
 
 }  // namespace

@@ -43,7 +43,8 @@ impl SendAlert {
             error_message: self.msg,
             ..Default::default()
         };
-        alert_message.to_wrapped_msg().write_to_bytes().unwrap()
+        #[allow(clippy::expect_used)]
+        alert_message.to_wrapped_msg().write_to_bytes().expect("Writing to proto should succeed")
     }
 }
 

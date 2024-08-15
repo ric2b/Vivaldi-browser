@@ -28,23 +28,16 @@ BookmarkLoadDetails::BookmarkLoadDetails(BookmarkClient* client)
   // constant (but can vary between embedders with the initial visibility
   // of permanent nodes).
   bb_node_ = static_cast<BookmarkPermanentNode*>(
-      root_node_->Add(BookmarkPermanentNode::CreateBookmarkBar(
-          max_id_++, client->IsPermanentNodeVisibleWhenEmpty(
-                         BookmarkNode::BOOKMARK_BAR))));
+      root_node_->Add(BookmarkPermanentNode::CreateBookmarkBar(max_id_++)));
   other_folder_node_ = static_cast<BookmarkPermanentNode*>(
-      root_node_->Add(BookmarkPermanentNode::CreateOtherBookmarks(
-          max_id_++,
-          client->IsPermanentNodeVisibleWhenEmpty(BookmarkNode::OTHER_NODE))));
+      root_node_->Add(BookmarkPermanentNode::CreateOtherBookmarks(max_id_++)));
   mobile_folder_node_ = static_cast<BookmarkPermanentNode*>(
-      root_node_->Add(BookmarkPermanentNode::CreateMobileBookmarks(
-          max_id_++,
-          client->IsPermanentNodeVisibleWhenEmpty(BookmarkNode::MOBILE))));
+      root_node_->Add(BookmarkPermanentNode::CreateMobileBookmarks(max_id_++)));
 
   if (vivaldi::IsVivaldiRunning()) {
     trash_folder_node_ = static_cast<BookmarkPermanentNode*>(
         root_node_->Add(BookmarkPermanentNode::CreateTrashFolder(
-            max_id_++,
-            client->IsPermanentNodeVisibleWhenEmpty(BookmarkNode::TRASH))));
+            max_id_++)));
   }
 }
 

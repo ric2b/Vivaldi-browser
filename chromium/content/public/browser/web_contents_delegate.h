@@ -30,6 +30,7 @@
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom-forward.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/native_widget_types.h"
@@ -116,6 +117,10 @@ struct CONTENT_EXPORT DownloadInformation {
   int64_t size;
   std::string mime_type;
   std::u16string suggested_filename;
+  std::vector<GURL> redirect_chain;
+  // If the download was started by a page or user. False for user. Used to
+  // decide if the download should start automatically or not.
+  bool content_initiated = false;
 
   bool open_when_done = false;
   bool ask_for_target = false;
@@ -387,23 +392,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void PrerenderWebContentsCreated(
       WebContents* prerender_web_contents) {}
 
-  // Notifies the embedder that a new WebContents has been created to contain
-  // the contents of a portal.
-  virtual void PortalWebContentsCreated(WebContents* portal_web_contents) {}
-
-  // Notifies the embedder that an existing WebContents that it manages (e.g., a
-  // browser tab) has become the contents of a portal.
-  //
-  // During portal activation, WebContentsDelegate::ActivatePortalWebContents
-  // will be called to release the delegate's management of a WebContents.
-  // Shortly afterward, the portal will assume ownership of the contents and
-  // call this function to indicate that this is complete, passing the
-  // swapped-out contents as |portal_web_contents|.
-  //
-  // Implementations will likely want to apply changes analogous to those they
-  // would apply to a new WebContents in PortalWebContentsCreated.
-  virtual void WebContentsBecamePortal(WebContents* portal_web_contents) {}
-
   // Notification that one of the frames in the WebContents is hung. |source| is
   // the WebContents that is hung, and |render_widget_host| is the
   // RenderWidgetHost that, while routing events to it, discovered the hang.
@@ -474,18 +462,26 @@ class CONTENT_EXPORT WebContentsDelegate {
                                base::OnceCallback<void()> on_confirm,
                                base::OnceCallback<void()> on_cancel);
 
-  // Returns whether the RFH can use Additional Windowing Controls APIs.
+  // Returns whether the RFH can use Additional Windowing Controls (AWC) APIs.
   // https://github.com/ivansandrk/additional-windowing-controls/blob/main/awc-explainer.md
   virtual bool CanUseWindowingControls(RenderFrameHost* requesting_frame);
 
-  // Sends the resizable boolean set via `window.setResizable(bool)` API to
-  // `BrowserView`. Passing std::nullopt will reset the resizable state to the
-  // default.
-  virtual void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) {}
+  // Notifies `BrowserView` about the resizable boolean having been set vith
+  // `window.setResizable(bool)` API.
+  virtual void OnCanResizeFromWebAPIChanged() {}
+  // Returns the overall resizability of the `BrowserView` when considering
+  // both the value set by the AWC API and browser's "native" resizability.
   virtual bool GetCanResize();
+
+  // Additional Windowing Controls (AWC) APIs to change the state of the window
+  // without the browser's min/max/restore buttons.
   virtual void MinimizeFromWebAPI() {}
   virtual void MaximizeFromWebAPI() {}
   virtual void RestoreFromWebAPI() {}
+
+  // This returns the current state of the window, mappable to display-state
+  // values: normal/minimized/maximized/fullscreen.
+  virtual ui::WindowShowState GetWindowShowState() const;
 
   // Returns whether entering fullscreen with |EnterFullscreenModeForTab()| is
   // allowed.
@@ -600,15 +596,8 @@ class CONTENT_EXPORT WebContentsDelegate {
   // this does not query the user. |type| must be MEDIA_DEVICE_AUDIO_CAPTURE
   // or MEDIA_DEVICE_VIDEO_CAPTURE.
   virtual bool CheckMediaAccessPermission(RenderFrameHost* render_frame_host,
-                                          const GURL& security_origin,
+                                          const url::Origin& security_origin,
                                           blink::mojom::MediaStreamType type);
-
-  // Returns the ID of the default device for the given media device |type|.
-  // If the returned value is an empty string, it means that there is no
-  // default device for the given |type|.
-  virtual std::string GetDefaultMediaDeviceID(
-      WebContents* web_contents,
-      blink::mojom::MediaStreamType type);
 
   // Returns the human-readable name for title in Media Controls.
   // If the returned value is an empty string, it means that there is no
@@ -756,19 +745,17 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual PreloadingEligibility IsPrerender2Supported(
       WebContents& web_contents);
 
-  // Requests the delegate to replace |predecessor_contents| with
-  // |portal_contents| in the container that holds |predecessor_contents|. If
-  // the delegate successfully replaces |predecessor_contents|, the return
-  // parameter passes ownership of |predecessor_contents|. Otherwise,
-  // |portal_contents| is returned.
-  virtual std::unique_ptr<WebContents> ActivatePortalWebContents(
-      WebContents* predecessor_contents,
-      std::unique_ptr<WebContents> portal_contents);
+  // Returns whether to override user agent for prerendering navigation.
+  virtual NavigationController::UserAgentOverrideOption
+  ShouldOverrideUserAgentForPrerender2();
 
   // If |old_contents| is being inspected by a DevTools window, it updates the
   // window to inspect |new_contents| instead and calls |callback| after it
   // finishes asynchronously. If no window is present, or no update is
   // necessary, |callback| is run synchronously (immediately on the same stack).
+  //
+  // TODO(crbug.com/1498140): This has no remaining call sites and can be
+  // removed.
   virtual void UpdateInspectedWebContentsIfNecessary(
       WebContents* old_contents,
       WebContents* new_contents,
@@ -814,6 +801,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // preview mode.
   virtual void CancelPreviewByMojoBinderPolicy(
       const std::string& interface_name) {}
+
+  // Notify the previewed page is activated.
+  virtual void DidActivatePreviewedPage() {}
 
 #if !BUILDFLAG(IS_ANDROID)
   // Whether the WebContents should use per PWA instanced

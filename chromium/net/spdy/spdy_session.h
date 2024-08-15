@@ -15,11 +15,13 @@
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -75,9 +77,13 @@ const int kMaxSpdyFrameChunkSize = (16 * 1024) - 9;
 // specification. A session is always created with this initial window size.
 const int32_t kDefaultInitialWindowSize = 65535;
 
-// Maximum number of concurrent streams we will create, unless the server
-// sends a SETTINGS frame with a different value.
-const size_t kInitialMaxConcurrentStreams = 100;
+// The default maximum number of concurrent streams we will create, unless the
+// server sends a SETTINGS frame with a different value.
+const size_t kDefaultInitialMaxConcurrentStreams = 100;
+
+// Used to override kDefaultInitialMaxConcurrentStreams.
+NET_EXPORT BASE_DECLARE_FEATURE(kH2InitialMaxConcurrentStreamsOverride);
+NET_EXPORT extern const base::FeatureParam<int> kH2InitialMaxConcurrentStreams;
 
 // If more than this many bytes have been read or more than that many
 // milliseconds have passed, return ERR_IO_PENDING from ReadLoop.
@@ -309,13 +315,11 @@ class NET_EXPORT SpdySession
 
   // Returns true if |new_hostname| can be pooled into an existing connection to
   // |old_hostname| associated with |ssl_info|.
-  static bool CanPool(
-      TransportSecurityState* transport_security_state,
-      const SSLInfo& ssl_info,
-      const SSLConfigService& ssl_config_service,
-      const std::string& old_hostname,
-      const std::string& new_hostname,
-      const net::NetworkAnonymizationKey& network_anonymization_key);
+  static bool CanPool(TransportSecurityState* transport_security_state,
+                      const SSLInfo& ssl_info,
+                      const SSLConfigService& ssl_config_service,
+                      const std::string& old_hostname,
+                      const std::string& new_hostname);
 
   // Create a new SpdySession.
   // |spdy_session_key| is the host/port that this session connects to, privacy
@@ -485,9 +489,6 @@ class NET_EXPORT SpdySession
   bool GetSSLInfo(SSLInfo* ssl_info) const override;
   base::StringPiece GetAcceptChViaAlps(
       const url::SchemeHostPort& scheme_host_port) const override;
-
-  // Returns true if ALPN was negotiated for the underlying socket.
-  bool WasAlpnNegotiated() const;
 
   // Returns the protocol negotiated via ALPN for the underlying socket.
   NextProto GetNegotiatedProtocol() const;

@@ -5,18 +5,19 @@
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import cssOverviewSidebarPanelStyles from './cssOverviewSidebarPanel.css.js';
 
 const UIStrings = {
   /**
-   *@description Label for the 'Clear overview' button in the CSS Overview report
+   *@description Label for the 'Clear overview' button in the CSS overview report
    */
   clearOverview: 'Clear overview',
   /**
-   * @description Accessible label for the CSS Overview panel sidebar
+   * @description Accessible label for the CSS overview panel sidebar
    */
-  cssOverviewPanelSidebar: 'CSS Overview panel sidebar',
+  cssOverviewPanelSidebar: 'CSS overview panel sidebar',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/css_overview/CSSOverviewSidebarPanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -52,7 +53,8 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
     UI.ARIAUtils.markAsTree(this.containerElement);
 
     // Clear overview.
-    const clearResultsButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clearOverview), 'clear');
+    const clearResultsButton = new UI.Toolbar.ToolbarButton(
+        i18nString(UIStrings.clearOverview), 'clear', undefined, 'css-overview.clear-overview');
     clearResultsButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.#reset, this);
 
     // Toolbar.
@@ -63,6 +65,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
 
   addItem(name: string, id: string): void {
     const item = this.containerElement.createChild('div', CSSOverviewSidebarPanel.ITEM_CLASS_NAME);
+    item.setAttribute('jslog', `${VisualLogging.item().track({click: true}).context(`css-overview.${id}`)}`);
     UI.ARIAUtils.markAsTreeitem(item);
     item.textContent = name;
     item.dataset.id = id;

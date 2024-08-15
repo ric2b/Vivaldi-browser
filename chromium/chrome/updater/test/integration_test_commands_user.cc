@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -20,7 +21,6 @@
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace updater {
@@ -37,10 +37,11 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   void PrintLog() const override { updater::test::PrintLog(updater_scope_); }
 
   void CopyLog() const override {
-    absl::optional<base::FilePath> path = GetInstallDirectory(updater_scope_);
+    std::optional<base::FilePath> path = GetInstallDirectory(updater_scope_);
     EXPECT_TRUE(path);
-    if (path)
+    if (path) {
       updater::test::CopyLog(*path);
+    }
   }
 
   void Clean() const override { updater::test::Clean(updater_scope_); }
@@ -51,14 +52,14 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
 
   void Install() const override { updater::test::Install(updater_scope_); }
 
-  void InstallUpdaterAndApp(
-      const std::string& app_id,
-      const bool is_silent_install,
-      const std::string& tag,
-      const std::string& child_window_text_to_find) const override {
-    updater::test::InstallUpdaterAndApp(updater_scope_, app_id,
-                                        is_silent_install, tag,
-                                        child_window_text_to_find);
+  void InstallUpdaterAndApp(const std::string& app_id,
+                            const bool is_silent_install,
+                            const std::string& tag,
+                            const std::string& child_window_text_to_find,
+                            const bool always_launch_cmd) const override {
+    updater::test::InstallUpdaterAndApp(
+        updater_scope_, app_id, is_silent_install, tag,
+        child_window_text_to_find, always_launch_cmd);
   }
 
   void ExpectInstalled() const override {
@@ -364,7 +365,16 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   void PrivilegedHelperInstall() const override {
     updater::test::PrivilegedHelperInstall(updater_scope_);
   }
-#endif  // BUILDFLAG(IS_WIN)
+
+  void DeleteLegacyUpdater() const override {
+    updater::test::DeleteLegacyUpdater(updater_scope_);
+  }
+
+  void ExpectPrepareToRunBundleSuccess(
+      const base::FilePath& bundle_path) const override {
+    updater::test::ExpectPrepareToRunBundleSuccess(bundle_path);
+  }
+#endif  // BUILDFLAG(IS_MAC)
 
   void ExpectLegacyUpdaterMigrated() const override {
     updater::test::ExpectLegacyUpdaterMigrated(updater_scope_);

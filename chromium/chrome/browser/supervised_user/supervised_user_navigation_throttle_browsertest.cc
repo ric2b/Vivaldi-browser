@@ -37,7 +37,10 @@
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/features.h"
+#include "components/supervised_user/core/common/features_testutils.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/core/common/supervised_user_utils.h"
+#include "components/supervised_user/test_support/kids_management_api_server_mock.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -50,6 +53,7 @@
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/shell.h"
@@ -201,11 +205,6 @@ void NavigationFinishedWaiter::DidFinishNavigation(
   did_finish_ = true;
   run_loop_.Quit();
 }
-
-enum class LocalWebApprovalSupport {
-  kSupported,
-  kNotSupported
-};
 }  // namespace
 
 class SupervisedUserNavigationThrottleTestBase
@@ -253,6 +252,10 @@ class SupervisedUserNavigationThrottleTestBase
     return browser()->tab_strip_model()->GetActiveWebContents();
   }
 
+  supervised_user::KidsManagementApiServerMock& kids_management_api_mock() {
+    return supervision_mixin_.api_mock_setup_mixin().api_mock();
+  }
+
  private:
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   base::test::ScopedFeatureList feature_list_{
@@ -290,13 +293,26 @@ class SupervisedUserNavigationThrottleTest
       : SupervisedUserNavigationThrottleTestBase(
             supervised_user::SupervisionMixin::SignInMode::kSupervised) {}
   ~SupervisedUserNavigationThrottleTest() override = default;
-
-  // TODO(crbug.com/1491942): This fails with the field trial testing config.
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    MixinBasedInProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch("disable-field-trial-config");
-  }
 };
+
+class SupervisedUserNavigationThrottleWithPrerenderingTest
+    : public SupervisedUserNavigationThrottleTestBase,
+      public testing::WithParamInterface<std::string> {
+ protected:
+  SupervisedUserNavigationThrottleWithPrerenderingTest()
+      : SupervisedUserNavigationThrottleTestBase(
+            supervised_user::SupervisionMixin::SignInMode::kSupervised) {}
+  ~SupervisedUserNavigationThrottleWithPrerenderingTest() override = default;
+
+  static std::string GetTargetHint() { return GetParam(); }
+};
+
+INSTANTIATE_TEST_SUITE_P(,
+                         SupervisedUserNavigationThrottleWithPrerenderingTest,
+                         testing::Values("_self", "_blank"),
+                         [](const testing::TestParamInfo<std::string>& info) {
+                           return info.param;
+                         });
 
 // Tests that prerendering fails in supervised user mode.
 #if BUILDFLAG(IS_CHROMEOS)
@@ -305,26 +321,32 @@ class SupervisedUserNavigationThrottleTest
 #else
 #define MAYBE_DisallowPrerendering DisallowPrerendering
 #endif
-IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
+IN_PROC_BROWSER_TEST_P(SupervisedUserNavigationThrottleWithPrerenderingTest,
                        MAYBE_DisallowPrerendering) {
   const GURL initial_url = embedded_test_server()->GetURL("/simple.html");
   const GURL allowed_url =
       embedded_test_server()->GetURL("/supervised_user/simple.html");
 
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   prerender_helper().NavigatePrimaryPage(initial_url);
 
   // If throttled, the prerendered navigation should not have started and we
   // should not be requesting corresponding resources.
-  content::TestNavigationObserver observer(
-      web_contents(), content::MessageLoopRunner::QuitMode::IMMEDIATE,
-      /*ignore_uncommitted_navigations*/ false);
-  prerender_helper().AddPrerenderAsync(allowed_url);
-  observer.WaitForNavigationFinished();
-  EXPECT_FALSE(observer.last_navigation_succeeded());
-  EXPECT_EQ(allowed_url, observer.last_navigation_url());
+  content::test::PrerenderHostCreationWaiter host_creation_waiter;
+  prerender_helper().AddPrerendersAsync(
+      {allowed_url}, /*eagerness=*/std::nullopt, GetTargetHint());
+  int host_id = host_creation_waiter.Wait();
+  auto* prerender_web_contents =
+      content::WebContents::FromFrameTreeNodeId(host_id);
+  content::test::PrerenderHostObserver host_observer(*prerender_web_contents,
+                                                     host_id);
+  host_observer.WaitForDestroyed();
   EXPECT_EQ(0, prerender_helper().GetRequestCount(allowed_url));
 
   // Regular navigation should proceed, however.
+  content::TestNavigationObserver observer(
+      web_contents(), content::MessageLoopRunner::QuitMode::IMMEDIATE,
+      /*ignore_uncommitted_navigations*/ false);
   prerender_helper().NavigatePrimaryPage(allowed_url);
   observer.WaitForNavigationFinished();
   EXPECT_TRUE(observer.last_navigation_succeeded());
@@ -343,7 +365,8 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
               profile->GetProfileKey());
   supervised_user_settings_service->SetLocalSetting(
       supervised_user::kContentPackDefaultFilteringBehavior,
-      base::Value(supervised_user::SupervisedUserURLFilter::BLOCK));
+      base::Value(
+          static_cast<int>(supervised_user::FilteringBehavior::kBlock)));
 
   std::unique_ptr<WebContents> web_contents(
       WebContents::Create(WebContents::CreateParams(profile)));
@@ -364,6 +387,8 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
 
   GURL allowed_url = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/simple.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), allowed_url));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
 
@@ -382,6 +407,8 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
 
   GURL allowed_url_with_iframes = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), allowed_url_with_iframes));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
@@ -417,10 +444,13 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
 }
 
 class SupervisedUserIframeFilterTest
-    : public SupervisedUserNavigationThrottleTest,
-      public testing::WithParamInterface<LocalWebApprovalSupport> {
+    : public SupervisedUserNavigationThrottleTestBase,
+      public testing::WithParamInterface<
+          supervised_user::testing::LocalWebApprovalsTestCase> {
  protected:
-  SupervisedUserIframeFilterTest() { InitFeatures(); }
+  SupervisedUserIframeFilterTest()
+      : SupervisedUserNavigationThrottleTestBase(
+            supervised_user::SupervisionMixin::SignInMode::kSupervised) {}
 
   ~SupervisedUserIframeFilterTest() override = default;
 
@@ -438,7 +468,6 @@ class SupervisedUserIframeFilterTest
   bool IsLocalApprovalsInsteadButtonBeingShown(int frame_id);
   void SendCommandToFrame(const std::string& command_name, int frame_id);
   void WaitForNavigationFinished(int frame_id, const GURL& url);
-  void InitFeatures();
   bool IsLocalWebApprovalsEnabled() const;
 
   supervised_user::PermissionRequestCreatorMock* permission_creator() {
@@ -448,18 +477,27 @@ class SupervisedUserIframeFilterTest
   RenderFrameTracker* tracker() { return tracker_.get(); }
 
  private:
+  static supervised_user::testing::LocalWebApprovalsTestCase
+  GetLocalWebApprovalsSupportTestParam() {
+    return GetParam();
+  }
+
+ private:
   bool RunCommandAndGetBooleanFromFrame(int frame_id,
                                         const std::string& command);
 
   std::unique_ptr<RenderFrameTracker> tracker_;
-  raw_ptr<supervised_user::PermissionRequestCreatorMock,
-          DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<supervised_user::PermissionRequestCreatorMock, DanglingUntriaged>
       permission_creator_;
-  base::test::ScopedFeatureList scoped_feature_list_;
+
+  // Each feature is enabled within its own feature list.
+  std::unique_ptr<base::test::ScopedFeatureList>
+      local_web_approvals_test_support_{
+          GetLocalWebApprovalsSupportTestParam().MakeFeatureList()};
 };
 
 void SupervisedUserIframeFilterTest::SetUpOnMainThread() {
-  SupervisedUserNavigationThrottleTest::SetUpOnMainThread();
+  SupervisedUserNavigationThrottleTestBase::SetUpOnMainThread();
 
   supervised_user::SupervisedUserService* service =
       SupervisedUserServiceFactory::GetForProfile(browser()->profile());
@@ -484,7 +522,7 @@ void SupervisedUserIframeFilterTest::SetUpOnMainThread() {
 
 void SupervisedUserIframeFilterTest::TearDownOnMainThread() {
   tracker_.reset();
-  SupervisedUserNavigationThrottleTest::TearDownOnMainThread();
+  SupervisedUserNavigationThrottleTestBase::TearDownOnMainThread();
 }
 
 std::vector<int> SupervisedUserIframeFilterTest::GetBlockedFrames() {
@@ -611,26 +649,20 @@ bool SupervisedUserIframeFilterTest::RunCommandAndGetBooleanFromFrame(
       .ExtractBool();
 }
 
-void SupervisedUserIframeFilterTest::InitFeatures() {
-  std::vector<base::test::FeatureRef> enabled_features;
-  std::vector<base::test::FeatureRef> disabled_features;
-  if (IsLocalWebApprovalsEnabled()) {
-    enabled_features.push_back(supervised_user::kLocalWebApprovals);
-  } else {
-    disabled_features.push_back(supervised_user::kLocalWebApprovals);
-  }
-  scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
-}
-
+// Returns whether the feature is in fact enabled, rather that was requested to
+// be enabled.
 bool SupervisedUserIframeFilterTest::IsLocalWebApprovalsEnabled() const {
-  return GetParam() == LocalWebApprovalSupport::kSupported;
+  return supervised_user::IsLocalWebApprovalsEnabled();
 }
 
 INSTANTIATE_TEST_SUITE_P(
     LocalWebApprovalsEnabled,
     SupervisedUserIframeFilterTest,
-    testing::Values(LocalWebApprovalSupport::kSupported,
-                    LocalWebApprovalSupport::kNotSupported));
+    supervised_user::testing::LocalWebApprovalsTestCase::Values(),
+    [](const testing::TestParamInfo<
+        supervised_user::testing::LocalWebApprovalsTestCase>& info) {
+      return static_cast<std::string>(info.param);
+    });
 
 IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest, BlockSubFrame) {
   base::HistogramTester histogram_tester;
@@ -638,6 +670,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest, BlockSubFrame) {
   BlockHost(kIframeHost2);
   GURL allowed_url_with_iframes = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), allowed_url_with_iframes));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
@@ -683,6 +717,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest, BlockMultipleSubFrames) {
 
   GURL allowed_url_with_iframes = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), allowed_url_with_iframes));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
@@ -728,6 +764,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest, TestBackButton) {
 
   GURL allowed_url_with_iframes = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), allowed_url_with_iframes));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
@@ -789,6 +827,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
 
   GURL allowed_url_with_iframes = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), allowed_url_with_iframes));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
@@ -827,6 +867,7 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
   // Navigate to another allowed url.
   GURL allowed_url = embedded_test_server()->GetURL(
       kExampleHost2, "/supervised_user/with_iframes.html");
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), allowed_url));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
 
@@ -875,7 +916,7 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
 
   // Set the default behavior to block.
   filter->SetDefaultFilteringBehavior(
-      supervised_user::SupervisedUserURLFilter::BLOCK);
+      supervised_user::FilteringBehavior::kBlock);
 
   // The async checker will make rpc calls to check if the url should be
   // blocked or not. This may cause flakiness.
@@ -921,8 +962,11 @@ void SupervisedUserNarrowWidthIframeFilterTest::SetUp() {
 INSTANTIATE_TEST_SUITE_P(
     LocalWebApprovalsEnabledNarrowWidth,
     SupervisedUserNarrowWidthIframeFilterTest,
-    testing::Values(LocalWebApprovalSupport::kSupported,
-                    LocalWebApprovalSupport::kNotSupported));
+    supervised_user::testing::LocalWebApprovalsTestCase::OnlySupported(),
+    [](const testing::TestParamInfo<
+        supervised_user::testing::LocalWebApprovalsTestCase>& info) {
+      return static_cast<std::string>(info.param);
+    });
 
 IN_PROC_BROWSER_TEST_P(SupervisedUserNarrowWidthIframeFilterTest,
                        NarrowWidthWindow) {
@@ -954,6 +998,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserNarrowWidthIframeFilterTest,
   // Navigate to another allowed url.
   GURL allowed_url = embedded_test_server()->GetURL(
       kExampleHost2, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), allowed_url));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
 
@@ -993,9 +1039,7 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserNarrowWidthIframeFilterTest,
 
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Tests Chrome OS local web approvals flow.
 using ChromeOSLocalWebApprovalsTest = SupervisedUserIframeFilterTest;
 
@@ -1003,7 +1047,11 @@ using ChromeOSLocalWebApprovalsTest = SupervisedUserIframeFilterTest;
 INSTANTIATE_TEST_SUITE_P(
     ,
     ChromeOSLocalWebApprovalsTest,
-    testing::Values(LocalWebApprovalSupport::kSupported));
+    supervised_user::testing::LocalWebApprovalsTestCase::OnlySupported(),
+    [](const testing::TestParamInfo<
+        supervised_user::testing::LocalWebApprovalsTestCase>& info) {
+      return static_cast<std::string>(info.param);
+    });
 
 IN_PROC_BROWSER_TEST_P(ChromeOSLocalWebApprovalsTest,
                        StartLocalWebApprovalsFromMainFrame) {
@@ -1057,6 +1105,8 @@ IN_PROC_BROWSER_TEST_P(ChromeOSLocalWebApprovalsTest,
 
   const GURL allowed_url_with_iframes = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/with_iframes.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), allowed_url_with_iframes));
   EXPECT_FALSE(IsInterstitialBeingShownInMainFrame(browser()));
@@ -1145,9 +1195,11 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleNotSupervisedTest,
 }
 
 class SupervisedUserNavigationThrottleFencedFramesTest
-    : public SupervisedUserNavigationThrottleTest {
+    : public SupervisedUserNavigationThrottleTestBase {
  public:
-  SupervisedUserNavigationThrottleFencedFramesTest() = default;
+  SupervisedUserNavigationThrottleFencedFramesTest()
+      : SupervisedUserNavigationThrottleTestBase(
+            supervised_user::SupervisionMixin::SignInMode::kSupervised) {}
   ~SupervisedUserNavigationThrottleFencedFramesTest() override = default;
   SupervisedUserNavigationThrottleFencedFramesTest(
       const SupervisedUserNavigationThrottleFencedFramesTest&) = delete;
@@ -1168,6 +1220,8 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleFencedFramesTest,
   BlockHost(kIframeHost2);
   const GURL kInitialUrl = embedded_test_server()->GetURL(
       kExampleHost, "/supervised_user/simple.html");
+
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialUrl));
 
   // Same origin fenced frame is not blocked, and therefore must be allowed.

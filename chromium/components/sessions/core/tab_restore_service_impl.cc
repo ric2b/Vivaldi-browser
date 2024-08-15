@@ -601,6 +601,14 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // observers are notified.
   void LoadStateChanged();
 
+  void VivaldiRequestSave(int num_removed) {
+    if (num_removed > 0) {
+      // All must be rewritten if entries have been removed.
+      entries_to_write_ = tab_restore_service_helper_->entries().size();
+      command_storage_manager_->StartSaveTimer();
+    }
+  }
+
  private:
   // The associated client.
   raw_ptr<TabRestoreServiceClient> client_;

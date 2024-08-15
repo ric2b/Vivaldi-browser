@@ -113,7 +113,7 @@ class PasswordManager : public PasswordManagerInterface {
                               autofill::FormRendererId form_id,
                               autofill::FieldRendererId field_id,
                               const std::u16string& field_value) override;
-  void OnPasswordNoLongerGenerated(PasswordManagerDriver* driver) override;
+  void OnPasswordNoLongerGenerated() override;
   void OnPasswordFormRemoved(
       PasswordManagerDriver* driver,
       const autofill::FieldDataManager& field_data_manager,
@@ -183,9 +183,9 @@ class PasswordManager : public PasswordManagerInterface {
   // Returns the best matches from the manager which manages |form_id|. |driver|
   // is needed to determine the match. Returns nullptr when no matched manager
   // is found.
-  const std::vector<const PasswordForm*>* GetBestMatches(
-      PasswordManagerDriver* driver,
-      autofill::FormRendererId form_id);
+  const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>*
+  GetBestMatches(PasswordManagerDriver* driver,
+                 autofill::FormRendererId form_id);
 
   // Returns true if password element is detected on the current page.
   bool IsPasswordFieldDetectedOnPage() const;
@@ -233,7 +233,7 @@ class PasswordManager : public PasswordManagerInterface {
   bool IsFormManagerPendingPasswordUpdate() const;
 
   // Returns the submitted PasswordForm if there exists one.
-  absl::optional<PasswordForm> GetSubmittedCredentials();
+  std::optional<PasswordForm> GetSubmittedCredentials();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(
@@ -261,10 +261,6 @@ class PasswordManager : public PasswordManagerInterface {
   // asks the user about saving the password or saves it directly, as
   // appropriate.
   void OnLoginSuccessful();
-
-  // Helper function called inside OnLoginSuccessful() to save password hash
-  // data from |submitted_manager| for password reuse detection purpose.
-  void MaybeSavePasswordHash(PasswordFormManager* submitted_manager);
 
   // Checks for every form in |forms_data| whether |pending_login_managers_|
   // already contain a manager for that form. If not, adds a manager for each
@@ -325,7 +321,7 @@ class PasswordManager : public PasswordManagerInterface {
 
   // Finds FormPredictions for a form containing field identified by |field_id|
   // and |driver_id|.
-  absl::optional<FormPredictions> FindPredictionsForField(
+  std::optional<FormPredictions> FindPredictionsForField(
       autofill::FieldRendererId field_id,
       int driver_id);
 

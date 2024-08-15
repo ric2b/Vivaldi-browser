@@ -12,6 +12,7 @@
 #include "ash/public/cpp/ash_typography.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/style/ash_color_provider.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -39,10 +40,13 @@ constexpr int kLabelMinEdgeLength = 20;
 }  // namespace
 
 SearchResultInlineIconView::SearchResultInlineIconView(
-    bool use_modified_styling)
+    bool use_modified_styling,
+    bool is_first_key)
     : use_modified_styling_(use_modified_styling) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
-  SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 6, 0, 6));
+  SetProperty(views::kMarginsKey,
+              gfx::Insets::TLBR(0, is_first_key ? 0 : kLeftRightMargin, 0,
+                                kLeftRightMargin));
 }
 
 SearchResultInlineIconView::~SearchResultInlineIconView() = default;
@@ -58,7 +62,7 @@ void SearchResultInlineIconView::SetIcon(const gfx::VectorIcon& icon) {
   icon_ = &icon;
 
   ui::ImageModel icon_model;
-  if (ash::features::isSearchCustomizableShortcutsInLauncherEnabled()) {
+  if (ash::features::IsSearchCustomizableShortcutsInLauncherEnabled()) {
     icon_model = ui::ImageModel::FromVectorIcon(
         *icon_, use_modified_styling_
                     ? cros_tokens::kCrosSysSystemOnPrimaryContainer
@@ -91,12 +95,13 @@ void SearchResultInlineIconView::SetText(const std::u16string& text) {
     label_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
     label_->SetTextContext(CONTEXT_SEARCH_RESULT_VIEW_INLINE_ANSWER_DETAILS);
     label_->SetTextStyle(views::style::STYLE_EMPHASIZED);
+    label_->SetAutoColorReadabilityEnabled(false);
   }
 
   label_->SetText(text);
   label_->SetVisible(true);
 
-  if (ash::features::isSearchCustomizableShortcutsInLauncherEnabled()) {
+  if (ash::features::IsSearchCustomizableShortcutsInLauncherEnabled()) {
     label_->SetEnabledColorId(
         use_modified_styling_ ? cros_tokens::kCrosSysSystemOnPrimaryContainer
                               : cros_tokens::kCrosSysOnSurface);
@@ -116,8 +121,13 @@ void SearchResultInlineIconView::SetText(const std::u16string& text) {
   SetVisible(true);
 }
 
+void SearchResultInlineIconView::SetTooltipTextForImageView(
+    const std::u16string& text) {
+  icon_image_->SetTooltipText(text);
+}
+
 void SearchResultInlineIconView::OnPaint(gfx::Canvas* canvas) {
-  if (ash::features::isSearchCustomizableShortcutsInLauncherEnabled()) {
+  if (ash::features::IsSearchCustomizableShortcutsInLauncherEnabled()) {
     return;
   }
 
@@ -131,5 +141,8 @@ void SearchResultInlineIconView::OnPaint(gfx::Canvas* canvas) {
   bounds.Inset(gfx::Insets(kBorderThickness));
   canvas->DrawRoundRect(bounds, kFocusRingCornerRadius, paint_flags);
 }
+
+BEGIN_METADATA(SearchResultInlineIconView)
+END_METADATA
 
 }  // namespace ash

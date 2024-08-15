@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doAnswer;
@@ -41,13 +42,12 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.LazyOneshotSupplier;
-import org.chromium.base.supplier.LazyOneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButtonDelegate;
 import org.chromium.ui.base.TestActivity;
+import org.chromium.ui.listmenu.ListMenuButtonDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -81,29 +81,13 @@ public class ImprovedBookmarkRowTest {
     ImprovedBookmarkRow mImprovedBookmarkRow;
     PropertyModel mModel;
     BitmapDrawable mDrawable;
-    LazyOneshotSupplierImpl<Drawable> mDrawableSupplier;
-    LazyOneshotSupplierImpl<Drawable> mNullDrawableSupplier;
+    LazyOneshotSupplier<Drawable> mDrawableSupplier;
+    LazyOneshotSupplier<Drawable> mNullDrawableSupplier;
 
     @Before
     public void setUp() {
         mActivityScenarioRule.getScenario().onActivity((activity) -> mActivity = activity);
-
         doReturn(mStartImageViewAnimator).when(mStartImageView).animate();
-        mDrawableSupplier =
-                new LazyOneshotSupplierImpl<>() {
-                    @Override
-                    public void doSet() {
-                        set(mDrawable);
-                    }
-                };
-        mNullDrawableSupplier =
-                new LazyOneshotSupplierImpl<>() {
-                    @Override
-                    public void doSet() {
-                        set(null);
-                    }
-                };
-
         mStartImageView =
                 spy(
                         new ImageView(mActivity) {
@@ -118,6 +102,8 @@ public class ImprovedBookmarkRowTest {
                 new BitmapDrawable(
                         mActivity.getResources(),
                         Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888));
+        mDrawableSupplier = LazyOneshotSupplier.fromValue(mDrawable);
+        mNullDrawableSupplier = LazyOneshotSupplier.fromValue(null);
         mImprovedBookmarkRow = ImprovedBookmarkRow.buildView(mActivity, /* isVisual= */ true);
 
         mModel =
@@ -131,9 +117,7 @@ public class ImprovedBookmarkRowTest {
                         .with(ImprovedBookmarkRowProperties.POPUP_LISTENER, mPopupListener)
                         .with(
                                 ImprovedBookmarkRowProperties.ROW_CLICK_LISTENER,
-                                (v) -> {
-                                    mOpenBookmarkCallback.run();
-                                })
+                                mOpenBookmarkCallback)
                         .with(ImprovedBookmarkRowProperties.EDITABLE, true)
                         .with(
                                 ImprovedBookmarkRowProperties.END_IMAGE_VISIBILITY,
@@ -344,5 +328,21 @@ public class ImprovedBookmarkRowTest {
 
         mImprovedBookmarkRow.cancelAnimation();
         assertFalse(mImprovedBookmarkRow.hasTransientState());
+    }
+
+    @Test
+    public void testClick() {
+        mImprovedBookmarkRow.performClick();
+        verify(mOpenBookmarkCallback).run();
+    }
+
+    @Test
+    public void testLocalAndRemoteBookmarks() {
+        View localBookmarkImageView = mImprovedBookmarkRow.findViewById(R.id.local_bookmark_image);
+        mModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, true);
+        assertEquals(View.VISIBLE, localBookmarkImageView.getVisibility());
+
+        mModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, false);
+        assertEquals(View.GONE, localBookmarkImageView.getVisibility());
     }
 }

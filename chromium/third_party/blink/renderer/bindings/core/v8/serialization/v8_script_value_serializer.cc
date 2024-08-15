@@ -12,7 +12,6 @@
 #include "third_party/blink/public/platform/web_blob_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialization_tag.h"
-#include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
@@ -323,10 +322,8 @@ void V8ScriptValueSerializer::PrepareTransfer(ExceptionState& exception_state) {
   for (uint32_t i = 0; i < transferables_->array_buffers.size(); i++) {
     DOMArrayBufferBase* array_buffer = transferables_->array_buffers[i].Get();
     if (!array_buffer->IsShared()) {
-      v8::Local<v8::Value> wrapper =
-          ToV8Traits<DOMArrayBuffer>::ToV8(
-              script_state_, static_cast<DOMArrayBuffer*>(array_buffer))
-              .ToLocalChecked();
+      v8::Local<v8::Value> wrapper = ToV8Traits<DOMArrayBuffer>::ToV8(
+          script_state_, static_cast<DOMArrayBuffer*>(array_buffer));
       serializer_.TransferArrayBuffer(
           i, v8::Local<v8::ArrayBuffer>::Cast(wrapper));
     } else {
@@ -910,7 +907,8 @@ void V8ScriptValueSerializer::ThrowDataCloneError(
                                  exception_state_->GetContext());
   exception_state.ThrowDOMException(
       DOMExceptionCode::kDataCloneError,
-      ToBlinkString<String>(v8_message, kDoNotExternalize));
+      ToBlinkString<String>(script_state_->GetIsolate(), v8_message,
+                            kDoNotExternalize));
 }
 
 v8::Maybe<bool> V8ScriptValueSerializer::WriteHostObject(
@@ -955,10 +953,9 @@ DOMSharedArrayBuffer* ToSharedArrayBuffer(v8::Isolate* isolate,
 
   v8::Local<v8::SharedArrayBuffer> v8_shared_array_buffer =
       value.As<v8::SharedArrayBuffer>();
-  if (DOMSharedArrayBuffer* shared_array_buffer =
-          ToScriptWrappable(v8_shared_array_buffer)
-              ->ToImpl<DOMSharedArrayBuffer>()) {
-    return shared_array_buffer;
+  if (ScriptWrappable* shared_array_buffer =
+          ToScriptWrappable(v8_shared_array_buffer)) {
+    return shared_array_buffer->ToImpl<DOMSharedArrayBuffer>();
   }
 
   // Transfer the ownership of the allocated memory to a DOMArrayBuffer without

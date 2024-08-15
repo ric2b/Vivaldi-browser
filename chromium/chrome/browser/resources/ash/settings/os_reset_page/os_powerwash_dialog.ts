@@ -24,6 +24,7 @@ import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_con
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordSettingChange} from '../metrics_recorder.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {Router, routes} from '../router.js';
 
 import {getTemplate} from './os_powerwash_dialog.html.js';
@@ -95,8 +96,6 @@ export class OsSettingsPowerwashDialogElement extends PolymerElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-
-    this.osResetBrowserProxy_.onPowerwashDialogShow();
     this.$.dialog.showModal();
   }
 
@@ -105,7 +104,7 @@ export class OsSettingsPowerwashDialogElement extends PolymerElement {
   }
 
   private onRestartClick_(): void {
-    recordSettingChange();
+    recordSettingChange(Setting.kPowerwash);
     LifetimeBrowserProxyImpl.getInstance().factoryReset(
         this.requestTpmFirmwareUpdate);
   }

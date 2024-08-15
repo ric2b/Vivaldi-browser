@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Einfügen</translation>
 <translation id="4005270918754737597">Diese Version überspringen</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">Nicht mehr anzeigen</translation>
 <translation id="4074744496918018786">Bild in privatem Fenster öffnen</translation>
 <translation id="410351446219883937">Automatisch abspielen</translation>
 <translation id="4281844954008187215">Nutzungsbedingungen</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera Version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Bild in neuem Fenster öffnen</translation>
 <translation id="5656371807944747581">Fehler bei der Aktualisierung!</translation>
-<translation id="5716238312826274098">Deaktiviere Benachrichtigungen</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> ist jetzt verfügbar (Sie haben <ph name="OLD_VERSION" />). Möchten Sie sie jetzt herunterladen?</translation>
 <translation id="5770433027661640693">Landschaft 10</translation>
 <translation id="5857090052475505287">Neuer Ordner</translation>
@@ -141,10 +139,9 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Das Update-Installationsprogramm konnte nicht gestartet werden. Bitte prüfen Sie, ob der Computer über genügend Speicherplatz verfügt und versuchen Sie es später erneut.</translation>
 <translation id="7658239707568436148">Abbrechen</translation>
-<translation id="7715497554424665066">&amp;Update ignorieren</translation>
 <translation id="7724603315864178912">Ausschneiden</translation>
 <translation id="7727481996062361502">Verifizierte Aktualisierung…</translation>
-<translation id="7793738202466490491">Als Kalender Ereignis hinzufügen</translation>
+<translation id="7793738202466490491">Als Kalenderereignis hinzufügen</translation>
 <translation id="7834693436815575883">Automatische Wiedergabe ein</translation>
 <translation id="7848222781052558334">Die digitale Signatur der heruntergeladenen Dateien konnte nicht überprüft werden.</translation>
 <translation id="7865983598101744945">Beenden bestätigen</translation>

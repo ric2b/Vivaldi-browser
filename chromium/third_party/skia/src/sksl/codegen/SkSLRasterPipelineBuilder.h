@@ -237,7 +237,7 @@ private:
     // case, the multi-slot ops can be absent, but numSlots must be 1.
     void appendImmediateBinaryOp(skia_private::TArray<Stage>* pipeline, SkArenaAlloc* alloc,
                                  ProgramOp baseStage,
-                                 SkRPOffset dst, float value, int numSlots) const;
+                                 SkRPOffset dst, int32_t value, int numSlots) const;
 
     // Appends a two-input math operation to the pipeline. `src` must be _immediately_ after `dst`
     // in memory. `baseStage` must refer to an unbounded "apply_to_n_slots" stage. A BinaryOpCtx
@@ -595,10 +595,7 @@ public:
     // Multiplies a CxR matrix/vector against an adjacent CxR matrix/vector on the stack.
     void matrix_multiply(int leftColumns, int leftRows, int rightColumns, int rightRows);
 
-    void push_condition_mask() {
-        SkASSERT(this->executionMaskWritesAreEnabled());
-        this->appendInstruction(BuilderOp::push_condition_mask, {});
-    }
+    void push_condition_mask();
 
     void pop_condition_mask() {
         SkASSERT(this->executionMaskWritesAreEnabled());

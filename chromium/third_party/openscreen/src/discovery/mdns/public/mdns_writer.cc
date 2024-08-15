@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "absl/hash/hash.h"
-#include "absl/strings/ascii.h"
 #include "util/hashing.h"
 #include "util/osp_logging.h"
+#include "util/stringutil.h"
 
 namespace openscreen::discovery {
 
@@ -23,8 +23,8 @@ std::vector<uint64_t> ComputeDomainNameSubhashes(const DomainName& name) {
   uint64_t hash_value = openscreen::kDefaultSeed;
   std::vector<uint64_t> subhashes(labels.size());
   for (size_t i = labels.size(); i-- > 0;) {
-    hash_value =
-        ComputeAggregateHash(hash_value, absl::AsciiStrToLower(labels[i]));
+    hash_value = ComputeAggregateHash(hash_value,
+                                      stringutil::AsciiStrToLower(labels[i]));
     subhashes[i] = hash_value;
   }
   return subhashes;

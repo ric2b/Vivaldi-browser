@@ -9,9 +9,7 @@ import org.chromium.chrome.browser.toolbar.bottom.BottomControlsContentDelegate;
 // Vivaldi
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
-/**
- * Interface for the Tab Groups related UI.
- */
+/** Interface for the Tab Groups related UI. */
 public interface TabGroupUi extends BottomControlsContentDelegate {
     /**
      * @return Whether the TabGridDialog is visible.

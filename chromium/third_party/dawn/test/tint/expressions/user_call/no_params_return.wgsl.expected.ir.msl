@@ -1,0 +1,12 @@
+#include <metal_stdlib>
+using namespace metal;
+
+int c() {
+  int a = 1;
+  a = (a + 2);
+  return a;
+}
+void b() {
+  int b = c();
+  b = (b + c());
+}

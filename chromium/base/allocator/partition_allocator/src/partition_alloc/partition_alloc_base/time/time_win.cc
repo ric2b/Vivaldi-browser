@@ -30,23 +30,23 @@
 // will only increase the system-wide timer if we're not running on battery
 // power.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time.h"
+#include "partition_alloc/partition_alloc_base/time/time.h"
 
 #include <windows.foundation.h>
-#include <windows.h>
-
+// clang-format off
+#include <windows.h> // Must be included before <mmsystem.h>
 #include <mmsystem.h>
-
-#include <stdint.h>
+// clang-format on
 
 #include <atomic>
+#include <cstdint>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/bit_cast.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/cpu.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/threading/platform_thread.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time_override.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/bit_cast.h"
+#include "partition_alloc/partition_alloc_base/check.h"
+#include "partition_alloc/partition_alloc_base/cpu.h"
+#include "partition_alloc/partition_alloc_base/threading/platform_thread.h"
+#include "partition_alloc/partition_alloc_base/time/time_override.h"
 
 namespace partition_alloc::internal::base {
 

@@ -6,6 +6,7 @@
 #define UI_VIEWS_TEST_VIEWS_TEST_BASE_H_
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/compiler_specific.h"
@@ -13,6 +14,7 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
+#include "ui/accessibility/platform/ax_platform_for_test.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/views/test/scoped_views_test_helper.h"
@@ -90,8 +92,6 @@ class ViewsTestBase : public PlatformTest {
 
   virtual std::unique_ptr<Widget> CreateTestWidget(Widget::InitParams params);
 
-  bool HasCompositingManager() const;
-
   // Simulate an OS-level destruction of the native window held by non-desktop
   // |widget|.
   void SimulateNativeDestroy(Widget* widget);
@@ -160,6 +160,7 @@ class ViewsTestBase : public PlatformTest {
 
  private:
   std::unique_ptr<base::test::TaskEnvironment> task_environment_;
+  std::optional<ui::AXPlatformForTest> ax_platform_;
 
   // Controls what type of widget will be created by default for a test (i.e.
   // when creating a Widget and leaving InitParams::native_widget unspecified).
@@ -174,7 +175,6 @@ class ViewsTestBase : public PlatformTest {
   bool interactive_setup_called_ = false;
   bool setup_called_ = false;
   bool teardown_called_ = false;
-  bool has_compositing_manager_ = false;
 
 #if BUILDFLAG(IS_WIN)
   ui::ScopedOleInitializer ole_initializer_;

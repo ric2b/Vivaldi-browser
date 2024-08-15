@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/common/platform/api/quiche_test.h"
+#include "quiche/common/quiche_buffer_allocator.h"
 #include "quiche/common/quiche_ip_address.h"
 #include "quiche/common/simple_buffer_allocator.h"
 #include "quiche/common/test_tools/quiche_test_utils.h"
@@ -84,6 +86,16 @@ TEST_F(CapsuleTest, DatagramCapsule) {
   }
   ValidateParserIsEmpty();
   TestSerialization(expected_capsule, capsule_fragment);
+}
+
+TEST_F(CapsuleTest, DatagramCapsuleViaHeader) {
+  std::string datagram_payload = absl::HexStringToBytes("a1a2a3a4a5a6a7a8");
+  quiche::QuicheBuffer expected_capsule = SerializeCapsule(
+      Capsule::Datagram(datagram_payload), SimpleBufferAllocator::Get());
+  quiche::QuicheBuffer actual_header = SerializeDatagramCapsuleHeader(
+      datagram_payload.size(), SimpleBufferAllocator::Get());
+  EXPECT_EQ(expected_capsule.AsStringView(),
+            absl::StrCat(actual_header.AsStringView(), datagram_payload));
 }
 
 TEST_F(CapsuleTest, LegacyDatagramCapsule) {
@@ -284,6 +296,19 @@ TEST_F(CapsuleTest, WebTransportStreamData) {
   }
   ValidateParserIsEmpty();
   TestSerialization(expected_capsule, capsule_fragment);
+}
+TEST_F(CapsuleTest, WebTransportStreamDataHeader) {
+  std::string capsule_fragment = absl::HexStringToBytes(
+      "990b4d3b"  // WT_STREAM without FIN
+      "04"        // capsule length
+      "17"        // stream ID
+                  // three bytes of stream payload implied below
+  );
+  QuicheBufferAllocator* allocator = SimpleBufferAllocator::Get();
+  QuicheBuffer capsule_header =
+      quiche::SerializeWebTransportStreamCapsuleHeader(0x17, /*fin=*/false, 3,
+                                                       allocator);
+  EXPECT_EQ(capsule_header.AsStringView(), capsule_fragment);
 }
 TEST_F(CapsuleTest, WebTransportStreamDataWithFin) {
   std::string capsule_fragment = absl::HexStringToBytes(

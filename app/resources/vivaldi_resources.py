@@ -14,7 +14,7 @@ GOOGLE_SERVICES_REGEX = (
   "(Payments|Cleanup|Drive|Sheets|Docs|Forms|Slides|"
   "Talk|Cast|Play|Web Store|Cloud|Safe Browsing|OS|"
   "Hangouts|Copresence|Smart Lock|Translate|"
-  "Canary|App|Now|Pay)"
+  "Canary|App|Now|Pay|Photos)"
 )
 
 def REGEXPPATCH(s):

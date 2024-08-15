@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_ATTRIBUTION_REPORTING_TEST_CONFIGURABLE_STORAGE_DELEGATE_H_
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_TEST_CONFIGURABLE_STORAGE_DELEGATE_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/thread_annotations.h"
@@ -12,7 +13,6 @@
 #include "content/browser/attribution_reporting/attribution_config.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_storage_delegate.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 
@@ -30,24 +30,25 @@ class ConfigurableStorageDelegate : public AttributionStorageDelegate {
   base::TimeDelta GetDeleteExpiredSourcesFrequency() const override;
   base::TimeDelta GetDeleteExpiredRateLimitsFrequency() const override;
   base::Uuid NewReportID() const override;
-  absl::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
+  std::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
       const override;
   void ShuffleReports(std::vector<AttributionReport>&) override;
   void ShuffleTriggerVerifications(
       std::vector<network::TriggerVerification>&) override;
   double GetRandomizedResponseRate(
-      attribution_reporting::mojom::SourceType,
-      const attribution_reporting::EventReportWindows&,
-      int max_event_level_reports) const override;
+      const attribution_reporting::TriggerSpecs&,
+      attribution_reporting::MaxEventLevelReports,
+      attribution_reporting::EventLevelEpsilon) const override;
   GetRandomizedResponseResult GetRandomizedResponse(
       attribution_reporting::mojom::SourceType,
-      const attribution_reporting::EventReportWindows&,
-      int max_event_level_reports,
+      const attribution_reporting::TriggerSpecs&,
+      attribution_reporting::MaxEventLevelReports,
+      attribution_reporting::EventLevelEpsilon,
       base::Time source_time) const override;
   std::vector<NullAggregatableReport> GetNullAggregatableReports(
       const AttributionTrigger&,
       base::Time trigger_time,
-      absl::optional<base::Time> attributed_source_time) const override;
+      std::optional<base::Time> attributed_source_time) const override;
 
   void set_max_sources_per_origin(int max);
 
@@ -65,8 +66,7 @@ class ConfigurableStorageDelegate : public AttributionStorageDelegate {
 
   void set_report_delay(base::TimeDelta report_delay);
 
-  void set_offline_report_delay_config(
-      absl::optional<OfflineReportDelayConfig>);
+  void set_offline_report_delay_config(std::optional<OfflineReportDelayConfig>);
 
   void set_reverse_reports_on_shuffle(bool reverse);
 
@@ -81,6 +81,8 @@ class ConfigurableStorageDelegate : public AttributionStorageDelegate {
 
   void set_null_aggregatable_reports(std::vector<NullAggregatableReport>);
 
+  void use_realistic_report_times();
+
   // Detaches the delegate from its current sequence in preparation for being
   // moved to storage, which runs on its own sequence.
   void DetachFromSequence();
@@ -93,7 +95,10 @@ class ConfigurableStorageDelegate : public AttributionStorageDelegate {
 
   base::TimeDelta report_delay_ GUARDED_BY_CONTEXT(sequence_checker_);
 
-  absl::optional<OfflineReportDelayConfig> offline_report_delay_config_
+  bool use_realistic_report_times_ GUARDED_BY_CONTEXT(sequence_checker_) =
+      false;
+
+  std::optional<OfflineReportDelayConfig> offline_report_delay_config_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // If true, `ShuffleReports()` reverses the reports to allow testing the

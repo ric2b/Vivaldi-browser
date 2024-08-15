@@ -1,12 +1,62 @@
 Unreleased:
   Tracing service and probes:
-    * Added reporting of TZ offset under system_info.timezone_off_mins .
+    * Linux/Android: kernel scheduling data (sched_switch and sched_waking
+      ftrace events) is now serialised in a more compact format by default
+      (previously required setting ftrace_config.compact_sched.enabled).
   Trace Processor:
     *
   UI:
-    * Add a new type of debug tracks: counter.
+    * Added "Realtime (Trace TZ)" timestamp formatting option to see timestamps
+      in the local time of the traced device. It requires recent versions of the
+      tracing service which set the system_info.timezone_off_mins field.
   SDK:
-    *
+
+
+v41.0 - 2023-01-02:
+  Tracing service and probes:
+    * Added support for ADB_SERVER_SOCKET in the websocket bridge.
+    * Added support for reading Pressure Stall Information (PSI) from the kernel.
+  Trace Processor:
+    * Added capability to control trace processor using stdin/stdout when using
+      shell binary. This acts as a simpler alternative to the existing HTTP
+      control API.
+    * Fixed multiple edge-case issues in RestoreInitialTables.
+  SDK:
+    * Fixed a long standing bug that caused the last TrackEvent event for each
+      thread to be lost during scraping. The fix works with old versions of the
+      tracing service.
+    * Fixed a long standing bug that caused the last TracePacket for every
+      sequence to be lost during scraping, for data sources that do not support
+      flushing. The fix works with old versions of the tracing service.
+
+
+v40.0 - 2023-12-04:
+  Tracing service and probes:
+    * Added support for collecting battery voltage from the Android Power HAL.
+    * Added support for emitting machine id from producers on remote hosts.
+  Trace Processor:
+    * Added of flow id from trace as a column in the flow table.
+    * Fixed computation of trace_bounds table when using UI native acceleration.
+  UI:
+    * Switched to use "v2" querying and rendering system for tracks by default.
+
+
+v39.0 - 2023-11-15:
+  Tracing service and probes:
+    * Added reporting of TZ offset under system_info.timezone_off_mins .
+    * Added no_flush option to DataSourceDescriptor to avoid unnecessary IPC
+      roundtrips to flush data sources like track_event that rely uniquely on
+      server-side scraping.
+    * Added support for running on Linux & Android systems configured with 16K
+      pagetables.
+  Trace Processor:
+    * Added android_boot metric.
+    * Added new PerfettoSQL syntax (CREATE PERFETTO VIEW) for adding schemas to views.
+    * Added support for the perf.data import format.
+    * Added dvfs and cpu_idle to stdlib.
+  UI:
+    * Added a new type of debug tracks: counter.
+    * Improved visualization of timestamps for durations.
 
 
 v38.0 - 2023-10-10:

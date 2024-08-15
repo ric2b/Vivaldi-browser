@@ -92,13 +92,18 @@ class DownloadProtectionService {
   virtual void CheckClientDownload(
       download::DownloadItem* item,
       CheckDownloadRepeatingCallback callback,
-      base::optional_ref<const std::string> password = absl::nullopt);
+      base::optional_ref<const std::string> password = std::nullopt);
 
   // Checks the user permissions, then calls |CheckClientDownload| if
   // appropriate. Returns whether we began scanning.
   virtual bool MaybeCheckClientDownload(
       download::DownloadItem* item,
       CheckDownloadRepeatingCallback callback);
+
+  // Cancel the pending check for `item`. This function simply drops the pending
+  // work in the `DownloadProtectionService`. The caller is responsible for
+  // updating the download state so that it completes successfully.
+  void CancelChecksForDownload(download::DownloadItem* item);
 
   // Returns whether the download URL should be checked for safety based on user
   // prefs.

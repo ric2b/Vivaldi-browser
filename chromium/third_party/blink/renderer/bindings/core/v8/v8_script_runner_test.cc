@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata.h"
 #include "third_party/blink/renderer/platform/loader/fetch/script_cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/cached_metadata_handler.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
@@ -140,10 +141,7 @@ class V8ScriptRunnerTest : public testing::Test {
   ScriptResource* CreateResource(const WTF::TextEncoding& encoding,
                                  Vector<uint8_t> serialized_metadata,
                                  absl::optional<String> code = {}) {
-    return CreateResource(
-        encoding,
-        base::make_span(serialized_metadata.data(), serialized_metadata.size()),
-        code);
+    return CreateResource(encoding, base::make_span(serialized_metadata), code);
   }
 
   ScriptResource* CreateResource(
@@ -209,6 +207,7 @@ class V8ScriptRunnerTest : public testing::Test {
 
  protected:
   static int counter_;
+  test::TaskEnvironment task_environment_;
   bool code_cache_with_hashing_scheme_ = false;
   base::test::ScopedFeatureList feature_list_;
   base::RunLoop run_loop_;

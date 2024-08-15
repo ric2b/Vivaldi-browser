@@ -243,6 +243,7 @@ void WebThemeEngineDefault::Paint(
     const gfx::Rect& rect,
     const WebThemeEngine::ExtraParams* extra_params,
     mojom::ColorScheme color_scheme,
+    const ui::ColorProvider* color_provider,
     const absl::optional<SkColor>& accent_color) {
   ui::NativeTheme::ExtraParams native_theme_extra_params =
       GetNativeThemeExtraParams(part, state, extra_params);
@@ -265,8 +266,13 @@ void WebThemeEngineDefault::Paint(
 }
 
 void WebThemeEngineDefault::GetOverlayScrollbarStyle(ScrollbarStyle* style) {
-  style->fade_out_delay = ui::kOverlayScrollbarFadeDelay;
-  style->fade_out_duration = ui::kOverlayScrollbarFadeDuration;
+  if (IsFluentOverlayScrollbarEnabled()) {
+    style->fade_out_delay = ui::kFluentOverlayScrollbarFadeDelay;
+    style->fade_out_duration = ui::kFluentOverlayScrollbarFadeDuration;
+  } else {
+    style->fade_out_delay = ui::kOverlayScrollbarFadeDelay;
+    style->fade_out_duration = ui::kOverlayScrollbarFadeDuration;
+  }
   style->idle_thickness_scale = ui::kOverlayScrollbarIdleThicknessScale;
   // The other fields in this struct are used only on Android to draw solid
   // color scrollbars. On other platforms the scrollbars are painted in
@@ -326,6 +332,7 @@ ForcedColors WebThemeEngineDefault::GetForcedColors() const {
              : ForcedColors::kNone;
 }
 
+// TODO(samomekarajr): Remove this when fully migrated to the color pipeline.
 void WebThemeEngineDefault::OverrideForcedColorsTheme(bool is_dark_theme) {
   // Colors were chosen based on Windows 10 default light and dark high contrast
   // themes.
@@ -362,7 +369,7 @@ void WebThemeEngineDefault::EmulateForcedColors(bool is_dark_theme,
                                                 bool is_web_test) {
   SetEmulateForcedColors(true);
   emulated_forced_colors_provider_ =
-      is_web_test ? ui::CreateEmulatedForcedColorsColorProviderForWebTests()
+      is_web_test ? ui::CreateEmulatedForcedColorsColorProviderForTest()
                   : ui::CreateEmulatedForcedColorsColorProvider(is_dark_theme);
 }
 

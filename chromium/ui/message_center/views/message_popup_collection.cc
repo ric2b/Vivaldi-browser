@@ -21,6 +21,7 @@
 #include "ui/message_center/message_center_types.h"
 #include "ui/message_center/notification_view_controller.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/message_center/views/message_popup_view.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/notification_view.h"
@@ -219,6 +220,14 @@ void MessagePopupCollection::OnNotificationAdded(
   // MessagePopupCollection::Update will not update the popup's content. Then
   // the new notification popup fails to show. (see https://crbug.com/921402)
   OnNotificationUpdated(notification_id);
+
+  // Notify if the incoming notification is silent.
+  const Notification* notification =
+      message_center::MessageCenter::Get()->FindNotificationById(
+          notification_id);
+  if (notification && notification->priority() < DEFAULT_PRIORITY) {
+    NotifySilentNotification(notification->id());
+  }
 }
 
 void MessagePopupCollection::OnNotificationRemoved(
@@ -593,10 +602,16 @@ bool MessagePopupCollection::AddPopup() {
 
   CalculateAndUpdateBounds();
 
-  auto& item = popup_items_.back();
-  item.start_bounds = item.bounds;
-  item.start_bounds +=
-      gfx::Vector2d((IsFromLeft() ? -1 : 1) * item.bounds.width(), 0);
+  // We might remove all popup items after update bounds.
+  // TODO(b/302172146): Remove this check once we have the long-term solution
+  // for notifier collision.
+  if (!popup_items_.empty()) {
+    auto& item = popup_items_.back();
+    item.start_bounds = item.bounds;
+    item.start_bounds +=
+        gfx::Vector2d((IsFromLeft() ? -1 : 1) * item.bounds.width(), 0);
+  }
+
   return true;
 }
 

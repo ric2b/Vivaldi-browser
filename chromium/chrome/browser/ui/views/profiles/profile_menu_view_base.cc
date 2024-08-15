@@ -194,21 +194,21 @@ ui::ImageModel SizeImageModel(const ui::ImageModel& image_model, int size) {
                                         size);
 }
 
-const gfx::ImageSkia ProfileManagementImageFromIcon(
+const ui::ImageModel ProfileManagementImageFromIcon(
     const gfx::VectorIcon& icon,
     const ui::ColorProvider* color_provider) {
   constexpr float kIconToImageRatio = 0.75f;
   constexpr int kIconSize = 20;
   const SkColor icon_color = color_provider->GetColor(ui::kColorIcon);
   gfx::ImageSkia image = ImageForMenu(icon, kIconToImageRatio, icon_color);
-  return SizeImage(image, kIconSize);
+  return ui::ImageModel::FromImageSkia(SizeImage(image, kIconSize));
 }
 
 // TODO(crbug.com/1146998): Adjust button size to be 16x16.
 class CircularImageButton : public views::ImageButton {
- public:
-  METADATA_HEADER(CircularImageButton);
+  METADATA_HEADER(CircularImageButton, views::ImageButton)
 
+ public:
   CircularImageButton(PressedCallback callback,
                       const gfx::VectorIcon& icon,
                       const std::u16string& text,
@@ -277,7 +277,9 @@ class CircularImageButton : public views::ImageButton {
     }
     gfx::ImageSkia image =
         ImageForMenu(*icon_, shortcutIconToImageRatio, icon_color);
-    SetImage(views::Button::STATE_NORMAL, SizeImage(image, button_size_));
+    SetImageModel(
+        views::Button::STATE_NORMAL,
+        ui::ImageModel::FromImageSkia(SizeImage(image, button_size_)));
     views::InkDrop::Get(this)->SetBaseColor(icon_color);
   }
 
@@ -302,7 +304,7 @@ class CircularImageButton : public views::ImageButton {
   SkColor themed_icon_color_;
 };
 
-BEGIN_METADATA(CircularImageButton, views::ImageButton)
+BEGIN_METADATA(CircularImageButton)
 END_METADATA
 
 class FeatureButtonIconView : public views::ImageView {
@@ -318,7 +320,8 @@ class FeatureButtonIconView : public views::ImageView {
     const SkColor icon_color = GetColorProvider()->GetColor(ui::kColorIcon);
     gfx::ImageSkia image =
         ImageForMenu(*icon_, icon_to_image_ratio_, icon_color);
-    SetImage(SizeImage(ColorImage(image, icon_color), kIconSize));
+    SetImage(ui::ImageModel::FromImageSkia(
+        SizeImage(ColorImage(image, icon_color), kIconSize)));
   }
 
  private:
@@ -327,8 +330,9 @@ class FeatureButtonIconView : public views::ImageView {
 };
 
 class ProfileManagementFeatureButton : public HoverButton {
+  METADATA_HEADER(ProfileManagementFeatureButton, HoverButton)
+
  public:
-  METADATA_HEADER(ProfileManagementFeatureButton);
   ProfileManagementFeatureButton(PressedCallback callback,
                                  const gfx::VectorIcon& icon,
                                  const std::u16string& clickable_text)
@@ -337,19 +341,20 @@ class ProfileManagementFeatureButton : public HoverButton {
   // HoverButton:
   void OnThemeChanged() override {
     HoverButton::OnThemeChanged();
-    SetImage(STATE_NORMAL,
-             ProfileManagementImageFromIcon(*icon_, GetColorProvider()));
+    SetImageModel(Button::STATE_NORMAL,
+                  ProfileManagementImageFromIcon(*icon_, GetColorProvider()));
   }
 
  private:
   const raw_ref<const gfx::VectorIcon> icon_;
 };
-BEGIN_METADATA(ProfileManagementFeatureButton, HoverButton)
+BEGIN_METADATA(ProfileManagementFeatureButton)
 END_METADATA
 
 class ProfileManagementIconView : public views::ImageView {
+  METADATA_HEADER(ProfileManagementIconView, views::ImageView)
+
  public:
-  METADATA_HEADER(ProfileManagementIconView);
   explicit ProfileManagementIconView(const gfx::VectorIcon& icon)
       : icon_(icon) {}
   ~ProfileManagementIconView() override = default;
@@ -364,12 +369,14 @@ class ProfileManagementIconView : public views::ImageView {
   const raw_ref<const gfx::VectorIcon> icon_;
 };
 
-BEGIN_METADATA(ProfileManagementIconView, views::ImageView)
+BEGIN_METADATA(ProfileManagementIconView)
 END_METADATA
 
 // AvatarImageView is used to ensure avatar adornments are kept in sync with
 // current theme colors.
 class AvatarImageView : public views::ImageView {
+  METADATA_HEADER(AvatarImageView, views::ImageView)
+
  public:
   AvatarImageView(const ui::ImageModel& avatar_image,
                   const ProfileMenuViewBase* root_view)
@@ -395,7 +402,7 @@ class AvatarImageView : public views::ImageView {
         sized_avatar_image, GetBackgroundColor(), kIdentityImageSizeInclBorder);
 
     if (features::IsChromeRefresh2023()) {
-      SetImage(sized_avatar_image);
+      SetImage(ui::ImageModel::FromImageSkia(sized_avatar_image));
     } else {
       gfx::ImageSkia sized_badge = AddCircularBackground(
           SizeImage(root_view_->GetSyncIcon(), kBadgeSize),
@@ -408,7 +415,7 @@ class AvatarImageView : public views::ImageView {
       gfx::ImageSkia badged_image =
           gfx::ImageSkiaOperations::CreateIconWithBadge(
               sized_avatar_image, sized_badge_with_shadow);
-      SetImage(badged_image);
+      SetImage(ui::ImageModel::FromImageSkia(badged_image));
     }
   }
 
@@ -421,9 +428,13 @@ class AvatarImageView : public views::ImageView {
   raw_ptr<const ProfileMenuViewBase> root_view_;
 };
 
+BEGIN_METADATA(AvatarImageView)
+END_METADATA
+
 class SyncButton : public HoverButton {
+  METADATA_HEADER(SyncButton, HoverButton)
+
  public:
-  METADATA_HEADER(SyncButton);
   SyncButton(PressedCallback callback,
              ProfileMenuViewBase* root_view,
              const std::u16string& clickable_text)
@@ -433,33 +444,37 @@ class SyncButton : public HoverButton {
   // HoverButton:
   void OnThemeChanged() override {
     HoverButton::OnThemeChanged();
-    SetImage(STATE_NORMAL, SizeImage(root_view_->GetSyncIcon(), kBadgeSize));
+    SetImageModel(Button::STATE_NORMAL,
+                  ui::ImageModel::FromImageSkia(
+                      SizeImage(root_view_->GetSyncIcon(), kBadgeSize)));
   }
 
  private:
   raw_ptr<const ProfileMenuViewBase> root_view_;
 };
 
-BEGIN_METADATA(SyncButton, HoverButton)
+BEGIN_METADATA(SyncButton)
 END_METADATA
 
 class SyncImageView : public views::ImageView {
+  METADATA_HEADER(SyncImageView, views::ImageView)
+
  public:
-  METADATA_HEADER(SyncImageView);
   explicit SyncImageView(const ProfileMenuViewBase* root_view)
       : root_view_(root_view) {}
 
   // views::ImageView:
   void OnThemeChanged() override {
     ImageView::OnThemeChanged();
-    SetImage(SizeImage(root_view_->GetSyncIcon(), kBadgeSize));
+    SetImage(ui::ImageModel::FromImageSkia(
+        SizeImage(root_view_->GetSyncIcon(), kBadgeSize)));
   }
 
  private:
   raw_ptr<const ProfileMenuViewBase> root_view_;
 };
 
-BEGIN_METADATA(SyncImageView, views::ImageView)
+BEGIN_METADATA(SyncImageView)
 END_METADATA
 
 void BuildProfileTitleAndSubtitle(views::View* parent,
@@ -621,11 +636,8 @@ void ProfileMenuViewBase::BuildProfileBackgroundContainer(
 
   // The |edit_button| is on the right and has fixed width.
   if (edit_button) {
-    edit_button->SetProperty(
-        views::kFlexBehaviorKey,
-        views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
-                                 views::MaximumFlexSizeRule::kPreferred)
-            .WithOrder(2));
+    edit_button->SetProperty(views::kBoxLayoutFlexKey,
+                             views::BoxLayoutFlexSpecification());
     views::View* edit_button_container =
         profile_background_container_->AddChildView(
             std::make_unique<views::View>());
@@ -641,7 +653,7 @@ void ProfileMenuViewBase::BuildProfileBackgroundContainer(
 void ProfileMenuViewBase::SetProfileIdentityInfo(
     const std::u16string& profile_name,
     SkColor profile_background_color,
-    absl::optional<EditButtonParams> edit_button_params,
+    std::optional<EditButtonParams> edit_button_params,
     const ui::ImageModel& image_model,
     const std::u16string& title,
     const std::u16string& subtitle,
@@ -781,8 +793,6 @@ void ProfileMenuViewBase::BuildSyncInfoWithCallToAction(
                                            views::style::STYLE_BODY_3_EMPHASIS)
           : std::make_unique<views::Label>(description));
   label->SetMultiLine(true);
-  // TODO(crbug.com/1495581): Remove this.
-  label->SetUseLegacyPreferredSize(true);
   label->SetHandlesTooltips(false);
   label->SetProperty(
       views::kFlexBehaviorKey,
@@ -802,7 +812,7 @@ void ProfileMenuViewBase::BuildSyncInfoWithCallToAction(
           base::BindRepeating(&ProfileMenuViewBase::ButtonPressed,
                               base::Unretained(this), std::move(action)),
           button_text));
-  button->SetProminent(true);
+  button->SetStyle(ui::ButtonStyle::kProminent);
 
   // TODO(crbug.com/1422119): Remove `background_color_id` parameter after
   // Chrome Refresh 2023 is launched.
@@ -1151,7 +1161,7 @@ void ProfileMenuViewBase::OnThemeChanged() {
   views::BubbleDialogDelegateView::OnThemeChanged();
   const auto* color_provider = GetColorProvider();
   SetBackground(views::CreateSolidBackground(
-      color_provider->GetColor(ui::kColorDialogBackground)));
+      color_provider->GetColor(kColorProfileMenuBackground)));
   if (features::IsChromeRefresh2023()) {
     identity_info_color_callback_.Run(color_provider);
   }
@@ -1213,6 +1223,6 @@ class ProfileMenuViewBase::AXMenuWidgetObserver : public views::WidgetObserver {
       this};
 };
 
-BEGIN_METADATA(ProfileMenuViewBase, views::BubbleDialogDelegateView)
+BEGIN_METADATA(ProfileMenuViewBase)
 ADD_READONLY_PROPERTY_METADATA(gfx::ImageSkia, SyncIcon)
 END_METADATA

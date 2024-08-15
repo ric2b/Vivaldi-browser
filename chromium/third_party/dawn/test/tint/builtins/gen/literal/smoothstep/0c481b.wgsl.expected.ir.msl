@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void smoothstep_0c481b() {
+  float2 res = float2(0.5f);
+}
+vertex float4 vertex_main() {
+  smoothstep_0c481b();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  smoothstep_0c481b();
+}
+kernel void compute_main() {
+  smoothstep_0c481b();
+}

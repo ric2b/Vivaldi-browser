@@ -29,13 +29,13 @@ import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {afterNextRender, flush, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
 import {isAccountManagerEnabled, isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import {LockStateMixin} from '../lock_state_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './os_privacy_page.html.js';
@@ -228,6 +228,36 @@ export class OsSettingsPrivacyPageElement extends
         value: loadTimeData.getBoolean('showSyncSettingsRevamp'),
         readOnly: true,
       },
+
+      rowIcons_: {
+        type: Object,
+        value() {
+          if (isRevampWayfindingEnabled()) {
+            return {
+              privacyHub: 'os-settings:privacy-controls',
+              sync: 'os-settings:sync-revamp',
+              lockScreen: 'os-settings:lock-revamp',
+              manageOtherPeople: 'os-settings:privacy-manage-people',
+              smartPrivacy: 'os-settings:privacy-smart-privacy',
+              suggestedContent: 'os-settings:content-recommend',
+              verifiedAccess: 'os-settings:privacy-verified-access',
+              dataAccessProtection:
+                  'os-settings:privacy-data-access-protection',
+            };
+          }
+
+          return {
+            privacyHub: '',
+            sync: '',
+            lockScreen: '',
+            manageOtherPeople: '',
+            smartPrivacy: '',
+            suggestedContent: '',
+            verifiedAccess: '',
+            dataAccessProtection: '',
+          };
+        },
+      },
     };
   }
 
@@ -238,6 +268,7 @@ export class OsSettingsPrivacyPageElement extends
   syncStatus: SyncStatus;
   private authTokenInfo_: chrome.quickUnlockPrivate.TokenInfo|undefined;
   private browserProxy_: PeripheralDataAccessBrowserProxy;
+  private rowIcons_: Record<string, string>;
 
   /**
    * The timeout ID to pass to clearTimeout() to cancel auth token

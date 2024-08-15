@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIASTREAM_MOCK_MEDIA_STREAM_VIDEO_SOURCE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_MEDIASTREAM_MOCK_MEDIA_STREAM_VIDEO_SOURCE_H_
 
+#include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
 #include "third_party/blink/renderer/modules/mediastream/sub_capture_target.h"
@@ -82,6 +83,24 @@ class MockMediaStreamVideoSource : public blink::MediaStreamVideoSource {
     blink::MediaStreamVideoSource::SetMutedState(muted_state);
     DoSetMutedState(muted_state);
   }
+
+#if !BUILDFLAG(IS_ANDROID)
+  MOCK_METHOD(
+      void,
+      SendWheel,
+      (double, double, int, int, base::OnceCallback<void(bool, const String&)>),
+      (override));
+
+  MOCK_METHOD(void,
+              GetZoomLevel,
+              (base::OnceCallback<void(absl::optional<int>, const String&)>),
+              (override));
+
+  MOCK_METHOD(void,
+              SetZoomLevel,
+              (int, base::OnceCallback<void(bool, const String&)>),
+              (override));
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   void EnableStopForRestart() { can_stop_for_restart_ = true; }
   void DisableStopForRestart() { can_stop_for_restart_ = false; }

@@ -34,6 +34,7 @@
 
 #include "src/tint/lang/core/evaluation_stage.h"
 #include "src/tint/lang/wgsl/ast/pipeline_stage.h"
+#include "src/tint/lang/wgsl/common/allowed_features.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/sem_helper.h"
 #include "src/tint/utils/containers/hashmap.h"
@@ -113,11 +114,13 @@ class Validator {
     /// @param builder the program builder
     /// @param helper the SEM helper to validate with
     /// @param enabled_extensions all the extensions declared in current module
+    /// @param allowed_features the allowed extensions and features
     /// @param atomic_composite_info atomic composite info of the module
     /// @param valid_type_storage_layouts a set of validated type layouts by address space
     Validator(ProgramBuilder* builder,
               SemHelper& helper,
               const wgsl::Extensions& enabled_extensions,
+              const wgsl::AllowedFeatures& allowed_features,
               const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info,
               Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts);
     ~Validator();
@@ -164,6 +167,11 @@ class Validator {
     /// @param type the given type
     /// @returns true if the given type is host-shareable
     bool IsHostShareable(const core::type::Type* type) const;
+
+    /// Validates the enabled extensions
+    /// @param enables the extension enables
+    /// @returns true on success, false otherwise.
+    bool Enables(VectorRef<const ast::Enable*> enables) const;
 
     /// Validates pipeline stages
     /// @param entry_points the entry points to the module
@@ -312,11 +320,20 @@ class Validator {
     bool IncrementDecrementStatement(const ast::IncrementDecrementStatement* stmt) const;
 
     /// Validates an interpolate attribute
-    /// @param attr the interpolation attribute to validate
+    /// @param attr the attribute to validate
     /// @param storage_type the storage type of the attached variable
-    /// @returns true on succes, false otherwise
+    /// @param stage the current pipeline stage
+    /// @returns true on success, false otherwise
     bool InterpolateAttribute(const ast::InterpolateAttribute* attr,
-                              const core::type::Type* storage_type) const;
+                              const core::type::Type* storage_type,
+                              const ast::PipelineStage stage) const;
+
+    /// Validates an invariant attribute
+    /// @param attr the attribute to validate
+    /// @param stage the current pipeline stage
+    /// @returns true on success, false otherwise
+    bool InvariantAttribute(const ast::InvariantAttribute* attr,
+                            const ast::PipelineStage stage) const;
 
     /// Validates a builtin call
     /// @param call the builtin call to validate
@@ -329,23 +346,39 @@ class Validator {
     bool LocalVariable(const sem::Variable* v) const;
 
     /// Validates a location attribute
-    /// @param loc_attr the location attribute to validate
+    /// @param attr the attribute to validate
     /// @param type the variable type
     /// @param stage the current pipeline stage
-    /// @param source the source of the attribute
-    /// @param is_input true if this is an input variable
+    /// @param source the source of declaration using the attribute
     /// @returns true on success, false otherwise.
-    bool LocationAttribute(const ast::LocationAttribute* loc_attr,
+    bool LocationAttribute(const ast::LocationAttribute* attr,
                            const core::type::Type* type,
-                           ast::PipelineStage stage,
-                           const Source& source,
-                           const bool is_input = false) const;
+                           const ast::PipelineStage stage,
+                           const Source& source) const;
+
+    /// Validates a color attribute
+    /// @param attr the color attribute to validate
+    /// @param type the variable type
+    /// @param stage the current pipeline stage
+    /// @param source the source of declaration using the attribute
+    /// @param is_input true if is an input variable, false if output variable, std::nullopt is
+    /// unknown.
+    /// @returns true on success, false otherwise.
+    bool ColorAttribute(const ast::ColorAttribute* attr,
+                        const core::type::Type* type,
+                        ast::PipelineStage stage,
+                        const Source& source,
+                        const std::optional<bool> is_input = std::nullopt) const;
 
     /// Validates a index attribute
     /// @param index_attr the index attribute to validate
     /// @param stage the current pipeline stage
+    /// @param is_input true if is an input variable, false if output variable, std::nullopt is
+    /// unknown.
     /// @returns true on success, false otherwise.
-    bool IndexAttribute(const ast::IndexAttribute* index_attr, ast::PipelineStage stage) const;
+    bool IndexAttribute(const ast::IndexAttribute* index_attr,
+                        ast::PipelineStage stage,
+                        const std::optional<bool> is_input = std::nullopt) const;
 
     /// Validates a loop statement
     /// @param stmt the loop statement
@@ -482,10 +515,10 @@ class Validator {
     /// @returns true on success, false otherwise
     bool SubgroupBroadcast(const sem::Call* call) const;
 
-    /// Validates an optional builtin function and its required extension.
+    /// Validates an optional builtin function and its required extensions and language features.
     /// @param call the builtin call to validate
     /// @returns true on success, false otherwise
-    bool RequiredExtensionForBuiltinFn(const sem::Call* call) const;
+    bool RequiredFeaturesForBuiltinFn(const sem::Call* call) const;
 
     /// Validates that 'f16' extension is enabled for f16 usage at @p source
     /// @param source the source of the f16 usage
@@ -583,6 +616,7 @@ class Validator {
     SemHelper& sem_;
     DiagnosticFilterStack diagnostic_filters_;
     const wgsl::Extensions& enabled_extensions_;
+    const wgsl::AllowedFeatures& allowed_features_;
     const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info_;
     Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts_;
 };

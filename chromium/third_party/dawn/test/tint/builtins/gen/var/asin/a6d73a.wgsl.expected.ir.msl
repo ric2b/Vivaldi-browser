@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void asin_a6d73a() {
+  float res = 0.5f;
+}
+vertex float4 vertex_main() {
+  asin_a6d73a();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  asin_a6d73a();
+}
+kernel void compute_main() {
+  asin_a6d73a();
+}

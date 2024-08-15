@@ -5,8 +5,13 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+
 @interface PanelTransitioningDelegate
     : NSObject<UIViewControllerTransitioningDelegate>
+
+@property(nonatomic, assign) ToolbarType toolbarType;
+
 @end
 
 #endif  // IOS_PANEL_PANEL_TRANSITIONING_DELEGATE_H_

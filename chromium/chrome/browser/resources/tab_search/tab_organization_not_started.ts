@@ -4,6 +4,7 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import './strings.m.js';
+import './tab_organization_not_started_image.js';
 import './tab_organization_shared_style.css.js';
 
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
@@ -22,6 +23,12 @@ enum SyncState {
 }
 
 const TabOrganizationNotStartedElementBase = WebUiListenerMixin(PolymerElement);
+
+export interface TabOrganizationNotStartedElement {
+  $: {
+    header: HTMLElement,
+  };
+}
 
 // Not started state for the tab organization UI.
 export class TabOrganizationNotStartedElement extends
@@ -59,6 +66,11 @@ export class TabOrganizationNotStartedElement extends
     this.addWebUiListener('sync-info-changed', this.setSync_.bind(this));
   }
 
+  announceHeader() {
+    this.$.header.textContent = '';
+    this.$.header.textContent = this.getTitle_();
+  }
+
   private setAccount_(account: AccountInfo) {
     this.account_ = account;
   }
@@ -92,9 +104,11 @@ export class TabOrganizationNotStartedElement extends
   private getBody_(): string {
     switch (this.getSyncState_()) {
       case SyncState.SIGNED_OUT:
+        return loadTimeData.getString('notStartedBodySignedOut');
       case SyncState.UNSYNCED:
-      case SyncState.SYNC_PAUSED:
         return loadTimeData.getString('notStartedBodyUnsynced');
+      case SyncState.SYNC_PAUSED:
+        return loadTimeData.getString('notStartedBodySyncPaused');
       case SyncState.UNSYNCED_HISTORY:
         return loadTimeData.getString('notStartedBodyUnsyncedHistory');
       case SyncState.SYNCED: {
@@ -118,38 +132,66 @@ export class TabOrganizationNotStartedElement extends
     return image || 'chrome://theme/IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE';
   }
 
+  private getButtonAriaLabel_(): string {
+    switch (this.getSyncState_()) {
+      case SyncState.SIGNED_OUT:
+      case SyncState.UNSYNCED:
+        return loadTimeData.getString('notStartedButtonUnsyncedAriaLabel');
+      case SyncState.SYNC_PAUSED:
+        return loadTimeData.getString('notStartedButtonSyncPausedAriaLabel');
+      case SyncState.UNSYNCED_HISTORY:
+        return loadTimeData.getString(
+            'notStartedButtonUnsyncedHistoryAriaLabel');
+      case SyncState.SYNCED:
+        if (this.showFre) {
+          return loadTimeData.getString('notStartedButtonFREAriaLabel');
+        } else {
+          return loadTimeData.getString('notStartedButtonAriaLabel');
+        }
+    }
+  }
+
   private getButtonText_(): string {
     switch (this.getSyncState_()) {
       case SyncState.SIGNED_OUT:
       case SyncState.UNSYNCED:
         return loadTimeData.getString('notStartedButtonUnsynced');
       case SyncState.SYNC_PAUSED:
-        return loadTimeData.getString('notStartedButtonPaused');
+        return loadTimeData.getString('notStartedButtonSyncPaused');
       case SyncState.UNSYNCED_HISTORY:
         return loadTimeData.getString('notStartedButtonUnsyncedHistory');
       case SyncState.SYNCED:
-        return loadTimeData.getString('notStartedButton');
+        if (this.showFre) {
+          return loadTimeData.getString('notStartedButtonFRE');
+        } else {
+          return loadTimeData.getString('notStartedButton');
+        }
     }
   }
 
   private onButtonClick_() {
     switch (this.getSyncState_()) {
       case SyncState.SIGNED_OUT:
-        // TODO(emshack): Trigger sign in & sync flow
-        break;
       case SyncState.UNSYNCED:
-        // TODO(emshack): Trigger sync flow
+        this.dispatchEvent(
+            new CustomEvent('sync-click', {bubbles: true, composed: true}));
         break;
       case SyncState.SYNC_PAUSED:
-        // TODO(emshack): Trigger sign in flow
+        this.dispatchEvent(
+            new CustomEvent('sign-in-click', {bubbles: true, composed: true}));
         break;
       case SyncState.UNSYNCED_HISTORY:
-        // TODO(emshack): Trigger opening sync settings
+        this.dispatchEvent(
+            new CustomEvent('settings-click', {bubbles: true, composed: true}));
         break;
       case SyncState.SYNCED:
         // Start a tab organization
         this.dispatchEvent(new CustomEvent(
             'organize-tabs-click', {bubbles: true, composed: true}));
+        chrome.metricsPrivate.recordBoolean(
+            'Tab.Organization.AllEntrypoints.Clicked', true);
+        chrome.metricsPrivate.recordBoolean(
+            'Tab.Organization.TabSearch.Clicked', true);
         break;
     }
   }

@@ -14,57 +14,70 @@
 
 from enum import Enum
 import re
+import os
 from typing import Dict, List
 
 NAME = r'[a-zA-Z_\d\{\}]+'
-ARGS = '[^\)]*'
 ANY_WORDS = r'[^\s].*'
 ANY_NON_QUOTE = r'[^\']*.*'
 TYPE = r'[A-Z]+'
 SQL = r'[\s\S]*?'
 WS = r'\s*'
-COMMENT = r'--[^\n]*'
-NEW_STYLE_ARG = rf'((?: {COMMENT})*) ({NAME}) ({TYPE})'
+COMMENT = r' --[^\n]*\n'
+COMMENTS = rf'(?:{COMMENT})*'
+ARG = rf'{COMMENTS} {NAME} {TYPE}'
+ARG_PATTERN = rf'({COMMENTS}) ({NAME}) ({TYPE})'
+ARGS = rf'(?:{ARG})?(?: ,{ARG})*'
 
 
 # Make the pattern more readable by allowing the use of spaces
 # and replace then with a wildcard in a separate step.
+# NOTE: two whitespaces next to each other are really bad for performance.
+# Take special care to avoid them.
 def update_pattern(pattern):
   return pattern.replace(' ', WS)
 
 
 CREATE_TABLE_VIEW_PATTERN = update_pattern(
     # Match create table/view and catch type
-    fr'^CREATE (OR REPLACE)? (?:VIRTUAL|PERFETTO)?'
+    fr'^CREATE (OR REPLACE)? (VIRTUAL|PERFETTO)?'
     fr' (TABLE|VIEW) (?:IF NOT EXISTS)?'
     # Catch the name and optional schema.
     fr' ({NAME}) (?: \( ({ARGS}) \) )? (?:AS|USING)? .*')
 
 CREATE_TABLE_AS_PATTERN = update_pattern(fr'^CREATE TABLE ({NAME}) AS')
 
+CREATE_VIEW_AS_PATTERN = update_pattern(fr'^CREATE VIEW ({NAME}) AS')
+
 DROP_TABLE_VIEW_PATTERN = update_pattern(fr'^DROP (TABLE|VIEW) IF EXISTS '
                                          fr'({NAME});$')
+
+INCLUDE_ALL_PATTERN = update_pattern(
+    fr'^INCLUDE PERFETTO MODULE [a-zA-Z0-9_\.]*\*;')
 
 CREATE_FUNCTION_PATTERN = update_pattern(
     # Function name.
     fr"CREATE (OR REPLACE)? PERFETTO FUNCTION ({NAME}) "
     # Args: anything in the brackets.
-    fr" \( ({ARGS}) \) "
+    fr" \( ({ARGS}) \)"
     # Type: word after RETURNS.
+    fr"({COMMENTS})"
     fr" RETURNS ({TYPE}) AS ")
 
 CREATE_TABLE_FUNCTION_PATTERN = update_pattern(
     fr"CREATE (OR REPLACE)? PERFETTO FUNCTION ({NAME}) "
     # Args: anything in the brackets.
     fr" \( ({ARGS}) \) "
-    # Type: word after RETURNS.
-    fr" RETURNS TABLE\( ({ANY_WORDS}) \) AS ")
+    # Type: table definition after RETURNS.
+    fr"({COMMENTS})"
+    fr" RETURNS TABLE\( ({ARGS}) \) AS ")
 
 CREATE_MACRO_PATTERN = update_pattern(
     fr"CREATE (OR REPLACE)? PERFETTO MACRO ({NAME}) "
     # Args: anything in the brackets.
     fr" \( ({ARGS}) \) "
     # Type: word after RETURNS.
+    fr"({COMMENTS})"
     fr" RETURNS")
 
 COLUMN_ANNOTATION_PATTERN = update_pattern(fr'^ ({NAME}) ({ANY_WORDS})')
@@ -73,7 +86,7 @@ NAME_AND_TYPE_PATTERN = update_pattern(fr' ({NAME})\s+({TYPE}) ')
 
 ARG_ANNOTATION_PATTERN = fr'\s*{NAME_AND_TYPE_PATTERN}\s+({ANY_WORDS})'
 
-ARG_DEFINITION_PATTERN = update_pattern(NEW_STYLE_ARG)
+ARG_DEFINITION_PATTERN = update_pattern(ARG_PATTERN)
 
 FUNCTION_RETURN_PATTERN = update_pattern(fr'^ ({TYPE})\s+({ANY_WORDS})')
 
@@ -92,6 +105,9 @@ PATTERN_BY_KIND = {
     ObjKind.table_function: CREATE_TABLE_FUNCTION_PATTERN,
 }
 
+ALLOWED_PREFIXES = {
+    'chrome/util': 'cr',
+}
 
 # Given a regex pattern and a string to match against, returns all the
 # matching positions. Specifically, it returns a dictionary from the line
@@ -154,24 +170,51 @@ def check_banned_words(sql: str, path: str) -> List[str]:
       errors.append('SELECT IMPORT is deprecated in trace processor. '
                     'Use INCLUDE PERFETTO MODULE instead.\n'
                     f'Offending file: {path}')
+
   return errors
 
 
 # Given SQL string check whether there is (not allowlisted) usage of
 # CREATE TABLE {name} AS.
-def check_banned_create_table_as(sql: str, filename: str,
+def check_banned_create_table_as(sql: str, filename: str, stdlib_path: str,
                                  allowlist: Dict[str, List[str]]) -> List[str]:
   errors = []
   for _, matches in match_pattern(CREATE_TABLE_AS_PATTERN, sql).items():
     name = matches[0]
-    if filename not in allowlist:
-      errors.append(f"CREATE TABLE '{name}' is deprecated."
+    # Normalize paths before checking presence in the allowlist so it will
+    # work on Windows for the Chrome stdlib presubmit.
+    allowlist_normpath = dict(
+        (os.path.normpath(path), tables) for path, tables in allowlist.items())
+    allowlist_key = os.path.normpath(filename[len(stdlib_path):])
+    if allowlist_key not in allowlist_normpath:
+      errors.append(f"CREATE TABLE '{name}' is deprecated. "
                     "Use CREATE PERFETTO TABLE instead.\n"
                     f"Offending file: {filename}\n")
       continue
-    if name not in allowlist[filename]:
+    if name not in allowlist_normpath[allowlist_key]:
       errors.append(
           f"Table '{name}' uses CREATE TABLE which is deprecated "
           "and this table is not allowlisted. Use CREATE PERFETTO TABLE.\n"
           f"Offending file: {filename}\n")
+  return errors
+
+
+# Given SQL string check whether there is usage of CREATE VIEW {name} AS.
+def check_banned_create_view_as(sql: str, filename: str) -> List[str]:
+  errors = []
+  for _, matches in match_pattern(CREATE_VIEW_AS_PATTERN, sql).items():
+    name = matches[0]
+    errors.append(f"CREATE VIEW '{name}' is deprecated. "
+                  "Use CREATE PERFETTO VIEW instead.\n"
+                  f"Offending file: {filename}\n")
+  return errors
+
+
+# Given SQL string check whether there is usage of CREATE VIEW {name} AS.
+def check_banned_include_all(sql: str, filename: str) -> List[str]:
+  errors = []
+  for _, matches in match_pattern(INCLUDE_ALL_PATTERN, sql).items():
+    errors.append(
+        f"INCLUDE PERFETTO MODULE with wildcards is not allowed in stdlib. "
+        f"Import specific modules instead. Offending file: {filename}")
   return errors

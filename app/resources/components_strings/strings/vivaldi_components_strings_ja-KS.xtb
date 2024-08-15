@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
 <translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
 <translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Cookie消してみて<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
 <translation id="1559528461873125649">そんなファイルとかフォルダーないみたいやわ</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">システム管理者に聞いてみて。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断試してみて<ph name="END_LINK" />。</translation>
 <translation id="1834321415901700177">このサイト、有害なプログラム入ってるで</translation>
-<translation id="1916770123977586577">さらの設定をこのサイトに適用するんやったら、ページリロードして</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">悪さしよるユーザーが、あんたがこのサイトで見ている画像勝手に変えて、あんたを騙そうとしているかも知れへん。</translation>
 <translation id="2356070529366658676">確認して</translation>
 <translation id="2359808026110333948">続ける</translation>
+<translation id="2388886110302389394">さらのプライベートウィンドウでページ開く (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断使う<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">このページは拡張機能がブロックしたわ</translation>
 <translation id="2501278716633472235">戻る</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />、ブロックされとるわ</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
+<translation id="4075123085690634698">さらのプライベートウィンドウでページ開く (⇧⌘N)</translation>
 <translation id="4075732493274867456">クライアントとサーバーがどっちもサポートするSSLプロトコルのバージョンも暗号化方式も見つからへんわ。</translation>
 <translation id="4116663294526079822">このサイトではいつも許可</translation>
 <translation id="4130226655945681476">ネットワークケーブル、モデム、ルーターを確認する</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">あんたのデバイス、さっきまで寝とったで。</translation>
 <translation id="6890956352250146925">Cookieとサイトデータのオプション</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
+<translation id="6957624206566198865">さらのプライベートタブでページ開く</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7079718277001814089">このサイト、悪さするソフトウェア入ってるで</translation>
 <translation id="7096937462164235847">このウェブサイトのID認証されてへんで。</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" />は普段な、暗号化して情報を保護してるねん。今回Vivaldiから<ph name="SITE" />に接続しよう思った時に、いつものとちゃう誤った認証情報が返ってきてん。悪さしよるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があるわ。データのやり取りが行われる前にVivaldiが接続止めたから、情報は保護されたままやで。</translation>
 <translation id="7878562273885520351">パスワード、不正利用されるかも知れへんで</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">このサイトでさらの設定反映させるんやったら、ページもっかい読み込んでな</translation>
 <translation id="8025119109950072390">このサイト使ったらな、悪さしよるユーザーに危ない操作 - ソフトウェアのインストールとか個人情報（例: パスワード、電話番号、クレジットカード番号）の入力とか - するよう誘導される可能性あるで。</translation>
 <translation id="8037357227543935929">確認して（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（つまり確認）にしとく</translation>

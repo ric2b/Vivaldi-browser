@@ -292,6 +292,10 @@ if(CONFIG_AV1_ENCODER)
               "${AOM_ROOT}/aom_dsp/arm/sum_squares_neon_dotprod.c"
               "${AOM_ROOT}/aom_dsp/arm/variance_neon_dotprod.c")
 
+  list(APPEND AOM_DSP_ENCODER_INTRIN_SVE "${AOM_ROOT}/aom_dsp/arm/avg_sve.c"
+              "${AOM_ROOT}/aom_dsp/arm/blk_sse_sum_sve.c"
+              "${AOM_ROOT}/aom_dsp/arm/sum_squares_sve.c")
+
   if(CONFIG_AV1_HIGHBITDEPTH)
     list(APPEND AOM_DSP_ENCODER_ASM_SSE2
                 "${AOM_ROOT}/aom_dsp/x86/highbd_sad4d_sse2.asm"
@@ -327,6 +331,10 @@ if(CONFIG_AV1_ENCODER)
 
     list(APPEND AOM_DSP_ENCODER_INTRIN_NEON_DOTPROD
                 "${AOM_ROOT}/aom_dsp/arm/highbd_variance_neon_dotprod.c")
+
+    list(APPEND AOM_DSP_ENCODER_INTRIN_SVE
+                "${AOM_ROOT}/aom_dsp/arm/highbd_sse_sve.c"
+                "${AOM_ROOT}/aom_dsp/arm/highbd_variance_sve.c")
   endif()
 
   if(CONFIG_INTERNAL_STATS)
@@ -482,6 +490,13 @@ function(setup_aom_dsp_targets)
     add_intrinsics_object_library("${AOM_NEON_I8MM_FLAG}" "neon_i8mm"
                                   "aom_dsp_common"
                                   "AOM_DSP_COMMON_INTRIN_NEON_I8MM")
+  endif()
+
+  if(HAVE_SVE)
+    if(CONFIG_AV1_ENCODER)
+      add_intrinsics_object_library("${AOM_SVE_FLAG}" "sve" "aom_dsp_encoder"
+                                    "AOM_DSP_ENCODER_INTRIN_SVE")
+    endif()
   endif()
 
   target_sources(aom PRIVATE $<TARGET_OBJECTS:aom_dsp>)

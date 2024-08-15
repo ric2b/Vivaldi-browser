@@ -77,7 +77,7 @@ class SubgriddedItemData {
 
 constexpr SubgriddedItemData kNoSubgriddedItemData;
 
-// This class represents a grid tree (see `ng_grid_subtree.h`) and contains the
+// This class represents a grid tree (see `grid_subtree.h`) and contains the
 // necessary data to perform the track sizing algorithm of its nested subgrids.
 class CORE_EXPORT GridSizingTree {
   DISALLOW_NEW();
@@ -166,15 +166,16 @@ class GridSizingSubtree
                     wtf_size_t subtree_root)
       : GridSubtree(sizing_tree, parent_end_index, subtree_root) {}
 
-  GridLayoutData& LayoutData() const {
-    DCHECK(grid_tree_);
-    return grid_tree_->At(subtree_root_).layout_data;
-  }
-
   SubgriddedItemData LookupSubgriddedItemData(
       const GridItemData& grid_item) const {
     DCHECK(grid_tree_);
     return grid_tree_->LookupSubgriddedItemData(grid_item);
+  }
+
+  wtf_size_t LookupSubgridIndex(const GridItemData& subgrid_data) const {
+    DCHECK(grid_tree_);
+    DCHECK(subgrid_data.IsSubgrid());
+    return grid_tree_->LookupSubgridIndex(subgrid_data);
   }
 
   GridSizingSubtree SubgridSizingSubtree(
@@ -187,11 +188,25 @@ class GridSizingSubtree
         /* subtree_root */ grid_tree_->LookupSubgridIndex(subgrid_data));
   }
 
-  GridSizingTree::GridTreeNode& SubtreeRootData() const {
+  GridItems& GridItems() const {
     DCHECK(grid_tree_);
-    return grid_tree_->At(subtree_root_);
+    return grid_tree_->At(subtree_root_).grid_items;
+  }
+
+  GridLayoutData& LayoutData() const {
+    DCHECK(grid_tree_);
+    return grid_tree_->At(subtree_root_).layout_data;
+  }
+
+  GridSizingTrackCollection& SizingCollection(
+      GridTrackSizingDirection track_direction) const {
+    DCHECK(grid_tree_);
+    return grid_tree_->At(subtree_root_)
+        .layout_data.SizingCollection(track_direction);
   }
 };
+
+constexpr GridSizingSubtree kNoGridSizingSubtree;
 
 }  // namespace blink
 

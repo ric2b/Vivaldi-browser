@@ -7,6 +7,7 @@ package org.chromium.base.jank_tracker;
 import android.os.Handler;
 
 import org.chromium.base.TraceEvent;
+
 /**
  * This runnable receives a FrameMetricsStore instance and starts/stops tracking a given scenario.
  * When a scenario stops it takes its metrics and sends them to native to be recorded in UMA.
@@ -14,7 +15,7 @@ import org.chromium.base.TraceEvent;
  */
 class JankReportingRunnable implements Runnable {
     private final FrameMetricsStore mMetricsStore;
-    private final @JankScenario int mScenario;
+    private final JankScenario mScenario;
     private final boolean mIsStartingTracking;
     // This must be the same handler that this is running on.
     private final Handler mHandler;
@@ -28,14 +29,15 @@ class JankReportingRunnable implements Runnable {
     private class FinalReportingRunnable implements Runnable {
         @Override
         public void run() {
-            try (TraceEvent e = TraceEvent.scoped("ReportingCUJScenarioData", mScenario)) {
+            try (TraceEvent e = TraceEvent.scoped("ReportingCUJScenarioData", mScenario.type())) {
                 JankMetrics metrics;
                 if (mJankEndScenarioTime == null) {
                     metrics = mMetricsStore.stopTrackingScenario(mScenario);
                 } else {
                     // Since this is after the timeout we just unconditionally get the metrics.
-                    metrics = mMetricsStore.stopTrackingScenario(
-                            mScenario, mJankEndScenarioTime.endScenarioTimeNs);
+                    metrics =
+                            mMetricsStore.stopTrackingScenario(
+                                    mScenario, mJankEndScenarioTime.endScenarioTimeNs);
                 }
 
                 if (metrics == null || metrics.timestampsNs.length == 0) {
@@ -55,13 +57,17 @@ class JankReportingRunnable implements Runnable {
                 JankMetricUMARecorderJni.get();
                 // TODO(salg@): Cache metrics in case native takes >30s to initialize.
                 JankMetricUMARecorder.recordJankMetricsToUMA(
-                        metrics, startTime, endTime, mScenario);
+                        metrics, startTime, endTime, mScenario.type());
             }
         }
     }
 
-    JankReportingRunnable(FrameMetricsStore metricsStore, @JankScenario int scenario,
-            boolean isStartingTracking, Handler handler, JankEndScenarioTime endScenarioTime) {
+    JankReportingRunnable(
+            FrameMetricsStore metricsStore,
+            JankScenario scenario,
+            boolean isStartingTracking,
+            Handler handler,
+            JankEndScenarioTime endScenarioTime) {
         mMetricsStore = metricsStore;
         mScenario = scenario;
         mIsStartingTracking = isStartingTracking;
@@ -71,9 +77,13 @@ class JankReportingRunnable implements Runnable {
 
     @Override
     public void run() {
-        try (TraceEvent e = TraceEvent.scoped("StartingOrStoppingJankScenario",
-                     "StartingScenario:" + Boolean.toString(mIsStartingTracking)
-                             + ",Scenario:" + Integer.toString(mScenario))) {
+        try (TraceEvent e =
+                TraceEvent.scoped(
+                        "StartingOrStoppingJankScenario",
+                        "StartingScenario:"
+                                + Boolean.toString(mIsStartingTracking)
+                                + ",Scenario:"
+                                + Integer.toString(mScenario.type()))) {
             if (mIsStartingTracking) {
                 if (mMetricsStore == null) {
                     TraceEvent.instant("StartTrackingScenario metrics store null");
@@ -82,10 +92,11 @@ class JankReportingRunnable implements Runnable {
                 mMetricsStore.startTrackingScenario(mScenario);
                 return;
             }
-            boolean dataIsReady = mJankEndScenarioTime == null
-                    || (mJankEndScenarioTime != null
-                            && mMetricsStore.hasReceivedMetricsPast(
-                                    mJankEndScenarioTime.endScenarioTimeNs));
+            boolean dataIsReady =
+                    mJankEndScenarioTime == null
+                            || (mJankEndScenarioTime != null
+                                    && mMetricsStore.hasReceivedMetricsPast(
+                                            mJankEndScenarioTime.endScenarioTimeNs));
 
             if (dataIsReady) {
                 new FinalReportingRunnable().run();

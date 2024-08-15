@@ -17,7 +17,7 @@ describe('The Console Tab', async () => {
 
   it('shows the toolbar button for one issue correctly', async () => {
     // Navigate to page which causes a single issue.
-    await goToResource('issues/cross-origin-portal-post.html');
+    await goToResource('elements/quirks-mode.html');
     await navigateToConsoleTab();
 
     await waitForIssueButtonLabel('1 Issue:');

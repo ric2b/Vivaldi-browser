@@ -42,9 +42,9 @@ namespace stats {
   F(frame_timeline_event_parser_errors,   kSingle,  kInfo,     kAnalysis, ""), \
   F(frame_timeline_unpaired_end_event,    kSingle,  kInfo,     kAnalysis, ""), \
   F(ftrace_bundle_tokenizer_errors,       kSingle,  kError,    kAnalysis, ""), \
-  F(ftrace_cpu_bytes_read_begin,          kIndexed, kInfo,     kTrace,    ""), \
-  F(ftrace_cpu_bytes_read_end,            kIndexed, kInfo,     kTrace,    ""), \
-  F(ftrace_cpu_bytes_read_delta,          kIndexed, kInfo,     kTrace,    ""), \
+  F(ftrace_cpu_bytes_begin,               kIndexed, kInfo,     kTrace,    ""), \
+  F(ftrace_cpu_bytes_end,                 kIndexed, kInfo,     kTrace,    ""), \
+  F(ftrace_cpu_bytes_delta,               kIndexed, kInfo,     kTrace,    ""), \
   F(ftrace_cpu_commit_overrun_begin,      kIndexed, kInfo,     kTrace,    ""), \
   F(ftrace_cpu_commit_overrun_end,        kIndexed, kInfo,     kTrace,    ""), \
   F(ftrace_cpu_commit_overrun_delta,      kIndexed, kError,    kTrace,    ""), \
@@ -153,6 +153,7 @@ namespace stats {
       "before they were closed in reality"),                                   \
   F(tokenizer_skipped_packets,            kSingle,  kInfo,     kAnalysis, ""), \
   F(vmstat_unknown_keys,                  kSingle,  kError,    kAnalysis, ""), \
+  F(psi_unknown_resource,                 kSingle,  kError,    kAnalysis, ""), \
   F(vulkan_allocations_invalid_string_id,                                      \
                                           kSingle,  kError,    kTrace,    ""), \
   F(clock_sync_failure,                   kSingle,  kError,    kAnalysis, ""), \
@@ -254,6 +255,9 @@ namespace stats {
       "missing. Defaulted to inaccurate packet timestamp."),                   \
   F(atom_unknown,                         kSingle,  kInfo,     kAnalysis,      \
       "Unknown statsd atom. Atom descriptor may need to be updated"),          \
+  F(v8_intern_errors,                                                          \
+                                          kSingle,  kDataLoss, kAnalysis,      \
+      "Failed to resolve V8 interned data."),                                  \
   F(winscope_sf_layers_parse_errors,      kSingle,  kInfo,     kAnalysis,      \
       "SurfaceFlinger layers snapshot has unknown fields, which results in "   \
       "some arguments missing. You may need a newer version of trace "         \
@@ -262,7 +266,16 @@ namespace stats {
                                           kSingle,  kInfo,     kAnalysis,      \
       "SurfaceFlinger transactions packet has unknown fields, which results "  \
       "in some arguments missing. You may need a newer version of trace "      \
-      "processor to parse them.")
+      "processor to parse them."),                                             \
+  F(winscope_shell_transitions_parse_errors,                                   \
+                                          kSingle,  kInfo,     kAnalysis,      \
+      "Shell transition packet has unknown fields, which results "             \
+      "in some arguments missing. You may need a newer version of trace "      \
+      "processor to parse them."),                                             \
+  F(ftrace_missing_event_id,              kSingle,  kInfo,    kAnalysis,       \
+      "Indicates that the ftrace event was dropped because the event id was "  \
+      "missing. This is an 'info' stat rather than an error stat because "     \
+      "this can be legitimately missing due to proto filtering.")
 // clang-format on
 
 enum Type {

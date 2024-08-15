@@ -61,12 +61,8 @@
   if (self) {
     DCHECK(localOrSyncableBookmarkModel);
     DCHECK(localOrSyncableBookmarkModel->loaded());
-    if (base::FeatureList::IsEnabled(syncer::kEnableBookmarksAccountStorage)) {
-      DCHECK(accountBookmarkModel);
-      DCHECK(accountBookmarkModel->loaded());
-    } else {
-      DCHECK(!accountBookmarkModel);
-    }
+    DCHECK(accountBookmarkModel);
+    DCHECK(accountBookmarkModel->loaded());
     DCHECK(bookmarkNode);
     DCHECK(bookmarkNode->is_url()) << "Type: " << bookmarkNode->type();
     _localOrSyncableBookmarkModel = localOrSyncableBookmarkModel->AsWeakPtr();
@@ -259,8 +255,8 @@
 
   // When launched from the star button, removing the current bookmark
   // removes all matching nodes.
-  std::vector<const bookmarks::BookmarkNode*> nodesVector =
-      [self bookmarkModel]->GetNodesByURL([self bookmark]->url());
+  std::vector<raw_ptr<const bookmarks::BookmarkNode, VectorExperimental>>
+      nodesVector = [self bookmarkModel]->GetNodesByURL([self bookmark]->url());
   std::set<const bookmarks::BookmarkNode*> nodes(nodesVector.begin(),
                                                  nodesVector.end());
   if (!nodesVector.empty()) {

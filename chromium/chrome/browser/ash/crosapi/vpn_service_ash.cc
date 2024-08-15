@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -114,7 +115,7 @@ class VpnConfigurationImpl
   }
   const std::string& key() const override { return key_; }
   const std::string& object_path() const override { return object_path_; }
-  const absl::optional<std::string>& service_path() const override {
+  const std::optional<std::string>& service_path() const override {
     return service_path_;
   }
   void set_service_path(std::string service_path) override {
@@ -135,7 +136,7 @@ class VpnConfigurationImpl
   const std::string configuration_name_;
   const std::string key_;
   const std::string object_path_;
-  absl::optional<std::string> service_path_;
+  std::optional<std::string> service_path_;
 
   mojo::Remote<crosapi::mojom::PepperVpnProxyObserver>
       pepper_vpn_proxy_observer_;
@@ -157,12 +158,16 @@ void VpnConfigurationImpl::OnPacketReceived(const std::vector<char>& data) {
 
 void VpnConfigurationImpl::OnPlatformMessage(uint32_t platform_message) {
   DCHECK(vpn_service_);
-  DCHECK_GE(api_vpn::PLATFORM_MESSAGE_LAST, platform_message);
+  DCHECK_GE(static_cast<uint32_t>(api_vpn::PlatformMessage::kMaxValue),
+            platform_message);
 
-  if (platform_message == api_vpn::PLATFORM_MESSAGE_CONNECTED) {
+  if (platform_message ==
+      base::to_underlying(api_vpn::PlatformMessage::kConnected)) {
     vpn_service_->SetActiveConfiguration(this);
-  } else if (platform_message == api_vpn::PLATFORM_MESSAGE_DISCONNECTED ||
-             platform_message == api_vpn::PLATFORM_MESSAGE_ERROR) {
+  } else if (platform_message ==
+                 base::to_underlying(api_vpn::PlatformMessage::kDisconnected) ||
+             platform_message ==
+                 base::to_underlying(api_vpn::PlatformMessage::kError)) {
     vpn_service_->SetActiveConfiguration(nullptr);
     if (pepper_vpn_proxy_observer_) {
       pepper_vpn_proxy_observer_->OnUnbind();
@@ -261,8 +266,7 @@ void VpnServiceForExtensionAsh::DestroyConfiguration(
 
   // Avoid const ref here since configuration gets removed before service_path
   // is used.
-  const absl::optional<std::string> service_path =
-      configuration->service_path();
+  const std::optional<std::string> service_path = configuration->service_path();
 
   if (!service_path) {
     RunFailureCallback(std::move(callback), /*error_name=*/{},
@@ -271,7 +275,8 @@ void VpnServiceForExtensionAsh::DestroyConfiguration(
   }
 
   if (active_configuration_ == configuration) {
-    configuration->OnPlatformMessage(api_vpn::PLATFORM_MESSAGE_DISCONNECTED);
+    configuration->OnPlatformMessage(
+        base::to_underlying(api_vpn::PlatformMessage::kDisconnected));
   }
 
   DestroyConfigurationInternal(configuration);
@@ -339,8 +344,8 @@ void VpnServiceForExtensionAsh::NotifyConnectionStateChanged(
   ash::ShillThirdPartyVpnDriverClient::Get()->UpdateConnectionState(
       active_configuration_->object_path(),
       connection_success
-          ? api_vpn::VpnConnectionState::VPN_CONNECTION_STATE_CONNECTED
-          : api_vpn::VpnConnectionState::VPN_CONNECTION_STATE_FAILURE,
+          ? base::to_underlying(api_vpn::VpnConnectionState::kConnected)
+          : base::to_underlying(api_vpn::VpnConnectionState::kFailure),
       std::move(success), std::move(failure));
 }
 
@@ -464,7 +469,7 @@ void VpnServiceForExtensionAsh::DispatchOnPacketReceivedEvent(
 void VpnServiceForExtensionAsh::DispatchOnPlatformMessageEvent(
     const std::string& configuration_name,
     int32_t platform_message,
-    const absl::optional<std::string>& error) {
+    const std::optional<std::string>& error) {
   for (auto& observer : observers_) {
     observer->OnPlatformMessage(configuration_name, platform_message, error);
   }
@@ -501,7 +506,7 @@ void VpnServiceForExtensionAsh::DestroyConfigurationInternal(
     SetActiveConfiguration(nullptr);
   }
 
-  if (const absl::optional<std::string>& service_path =
+  if (const std::optional<std::string>& service_path =
           configuration->service_path()) {
     ash::ShillThirdPartyVpnDriverClient::Get()
         ->RemoveShillThirdPartyVpnObserver(configuration->object_path());
@@ -615,7 +620,7 @@ void VpnServiceAsh::OnVpnExtensionsChanged(
 
 void VpnServiceAsh::OnGetShillProperties(
     const std::string& service_path,
-    absl::optional<base::Value::Dict> configuration_properties) {
+    std::optional<base::Value::Dict> configuration_properties) {
   if (!configuration_properties) {
     return;
   }

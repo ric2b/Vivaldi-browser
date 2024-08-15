@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/format_macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -20,6 +21,7 @@
 #include "components/autofill/core/browser/data_model/autofill_metadata.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/geo/country_data.h"
 #include "components/autofill/core/browser/profile_token_quality.h"
 #include "components/autofill/core/browser/profile_token_quality_test_api.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
@@ -41,7 +43,7 @@ constexpr VerificationStatus kObserved = VerificationStatus::kObserved;
 namespace {
 
 std::u16string GetSuggestionLabel(AutofillProfile* profile) {
-  std::vector<const AutofillProfile*> profiles;
+  std::vector<raw_ptr<const AutofillProfile, VectorExperimental>> profiles;
   profiles.push_back(profile);
   std::vector<std::u16string> labels;
   AutofillProfile::CreateDifferentiatingLabels(profiles, "en-US", &labels);
@@ -55,9 +57,9 @@ void SetupTestProfile(AutofillProfile& profile) {
                        "Hollywood", "CA", "91601", "US", "12345678910");
 }
 
-std::vector<const AutofillProfile*> ToRawPointerVector(
-    const std::vector<std::unique_ptr<AutofillProfile>>& list) {
-  std::vector<const AutofillProfile*> result;
+std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>
+ToRawPointerVector(const std::vector<std::unique_ptr<AutofillProfile>>& list) {
+  std::vector<raw_ptr<const AutofillProfile, VectorExperimental>> result;
   for (const auto& item : list)
     result.push_back(item.get());
   return result;
@@ -69,21 +71,21 @@ std::vector<const AutofillProfile*> ToRawPointerVector(
 // Based on existence of first name, last name, and address line 1.
 TEST(AutofillProfileTest, PreviewSummaryString) {
   // Case 0/null: ""
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   // Empty profile - nothing to update.
   std::u16string summary0 = GetSuggestionLabel(&profile0);
   EXPECT_EQ(std::u16string(), summary0);
 
   // Case 0a/empty name and address, so the first two fields of the rest of the
   // data is used: "Hollywood, CA"
-  AutofillProfile profile00;
+  AutofillProfile profile00(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile00, "", "", "", "johnwayne@me.xyz", "Fox", "",
                        "", "Hollywood", "CA", "91601", "US", "16505678910");
   std::u16string summary00 = GetSuggestionLabel(&profile00);
   EXPECT_EQ(u"Hollywood, CA", summary00);
 
   // Case 1: "<address>" without line 2.
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "", "", "", "johnwayne@me.xyz", "Fox",
                        "123 Zoo St.", "", "Hollywood", "CA", "91601", "US",
                        "16505678910");
@@ -91,7 +93,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"123 Zoo St., Hollywood", summary1);
 
   // Case 1a: "<address>" with line 2.
-  AutofillProfile profile1a;
+  AutofillProfile profile1a(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1a, "", "", "", "johnwayne@me.xyz", "Fox",
                        "123 Zoo St.", "unit 5", "Hollywood", "CA", "91601",
                        "US", "16505678910");
@@ -99,7 +101,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"123 Zoo St., unit 5", summary1a);
 
   // Case 2: "<lastname>"
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "", "", "Hollywood", "CA",
                        "91601", "US", "16505678910");
@@ -108,7 +110,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"Mitchell Morrison, Hollywood", summary2);
 
   // Case 3: "<lastname>, <address>"
-  AutofillProfile profile3;
+  AutofillProfile profile3(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile3, "", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "",
                        "Hollywood", "CA", "91601", "US", "16505678910");
@@ -116,7 +118,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"Mitchell Morrison, 123 Zoo St.", summary3);
 
   // Case 4: "<firstname>"
-  AutofillProfile profile4;
+  AutofillProfile profile4(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile4, "Marion", "Mitchell", "", "johnwayne@me.xyz",
                        "Fox", "", "", "Hollywood", "CA", "91601", "US",
                        "16505678910");
@@ -124,7 +126,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"Marion Mitchell, Hollywood", summary4);
 
   // Case 5: "<firstname>, <address>"
-  AutofillProfile profile5;
+  AutofillProfile profile5(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile5, "Marion", "Mitchell", "", "johnwayne@me.xyz",
                        "Fox", "123 Zoo St.", "unit 5", "Hollywood", "CA",
                        "91601", "US", "16505678910");
@@ -132,7 +134,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"Marion Mitchell, 123 Zoo St.", summary5);
 
   // Case 6: "<firstname> <lastname>"
-  AutofillProfile profile6;
+  AutofillProfile profile6(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile6, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "", "", "Hollywood", "CA",
                        "91601", "US", "16505678910");
@@ -140,7 +142,7 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
   EXPECT_EQ(u"Marion Mitchell Morrison, Hollywood", summary6);
 
   // Case 7: "<firstname> <lastname>, <address>"
-  AutofillProfile profile7;
+  AutofillProfile profile7(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile7, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "16505678910");
@@ -149,11 +151,11 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
 
   // Case 7a: "<firstname> <lastname>, <address>" - same as #7, except for
   // e-mail.
-  AutofillProfile profile7a;
+  AutofillProfile profile7a(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile7a, "Marion", "Mitchell", "Morrison",
                        "marion@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "16505678910");
-  std::vector<const AutofillProfile*> profiles;
+  std::vector<raw_ptr<const AutofillProfile, VectorExperimental>> profiles;
   profiles.push_back(&profile7);
   profiles.push_back(&profile7a);
   std::vector<std::u16string> labels;
@@ -168,11 +170,13 @@ TEST(AutofillProfileTest, PreviewSummaryString) {
 
 TEST(AutofillProfileTest, AdjustInferredLabels) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[0].get(), "John", "", "Doe",
                        "johndoe@hades.com", "Underworld", "666 Erebus St.", "",
                        "Elysium", "CA", "91111", "US", "16502111111");
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[1].get(), "Jane", "", "Doe",
                        "janedoe@tertium.com", "Pluto Inc.", "123 Letha Shore.",
                        "", "Dis", "CA", "91222", "US", "12345678910");
@@ -183,7 +187,8 @@ TEST(AutofillProfileTest, AdjustInferredLabels) {
   EXPECT_EQ(u"John Doe, 666 Erebus St.", labels[0]);
   EXPECT_EQ(u"Jane Doe, 123 Letha Shore.", labels[1]);
 
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[2].get(), "John", "", "Doe",
                        "johndoe@tertium.com", "Underworld", "666 Erebus St.",
                        "", "Elysium", "CA", "91111", "US", "16502111111");
@@ -199,7 +204,8 @@ TEST(AutofillProfileTest, AdjustInferredLabels) {
 
   profiles.resize(2);
 
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[2].get(), "John", "", "Doe",
                        "johndoe@hades.com", "Underworld", "666 Erebus St.", "",
                        "Elysium", "CO",  // State is different
@@ -215,7 +221,8 @@ TEST(AutofillProfileTest, AdjustInferredLabels) {
   EXPECT_EQ(u"Jane Doe, 123 Letha Shore.", labels[1]);
   EXPECT_EQ(u"John Doe, 666 Erebus St., CO", labels[2]);
 
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[3].get(), "John", "", "Doe",
                        "johndoe@hades.com", "Underworld", "666 Erebus St.", "",
                        "Elysium", "CO",  // State is different for some.
@@ -233,7 +240,8 @@ TEST(AutofillProfileTest, AdjustInferredLabels) {
   // information.
   EXPECT_EQ(u"John Doe, 666 Erebus St., CO, 16504444444", labels[3]);
 
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[4].get(), "John", "", "Doe",
                        "johndoe@styx.com",  // E-Mail is different for some.
                        "Underworld", "666 Erebus St.", "", "Elysium",
@@ -258,7 +266,8 @@ TEST(AutofillProfileTest, AdjustInferredLabels) {
 
 TEST(AutofillProfileTest, CreateInferredLabelsI18n_CH) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles.back().get(), "H.", "R.", "Giger",
                        "hrgiger@beispiel.com", "Beispiel Inc",
                        "Brandschenkestrasse 110", "", "Zurich", "", "8002",
@@ -281,9 +290,11 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_CH) {
 
   std::vector<std::u16string> labels;
   for (size_t i = 0; i < std::size(kExpectedLabels); ++i) {
-    AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                          absl::nullopt, UNKNOWN_TYPE, i,
-                                          "en-US", &labels);
+    AutofillProfile::CreateInferredLabels(
+        ToRawPointerVector(profiles),
+        /*suggested_fields=*/std::nullopt,
+        /*triggering_field_type=*/std::nullopt, /*excluded_fields=*/{},
+        /*minimal_fields_shown=*/i, "en-US", &labels);
     ASSERT_FALSE(labels.empty());
     EXPECT_EQ(UTF8ToUTF16(kExpectedLabels[i]), labels.back());
   }
@@ -291,7 +302,8 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_CH) {
 
 TEST(AutofillProfileTest, CreateInferredLabelsI18n_FR) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles.back().get(), "Antoine", "", "de Saint-Exupéry",
                        "antoine@exemple.com", "Exemple Inc", "8 Rue de Londres",
                        "", "Paris", "", "75009", "FR", "+33 (0) 1 42 68 53 00");
@@ -315,9 +327,11 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_FR) {
 
   std::vector<std::u16string> labels;
   for (size_t i = 0; i < std::size(kExpectedLabels); ++i) {
-    AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                          absl::nullopt, UNKNOWN_TYPE, i,
-                                          "en-US", &labels);
+    AutofillProfile::CreateInferredLabels(
+        ToRawPointerVector(profiles),
+        /*suggested_fields=*/std::nullopt,
+        /*triggering_field_type=*/std::nullopt, /*excluded_fields=*/{},
+        /*minimal_fields_shown=*/i, "en-US", &labels);
     ASSERT_FALSE(labels.empty());
     EXPECT_EQ(UTF8ToUTF16(kExpectedLabels[i]), labels.back());
   }
@@ -325,7 +339,8 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_FR) {
 
 TEST(AutofillProfileTest, CreateInferredLabelsI18n_KR) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles.back().get(), "Park", "", "Jae-sang",
                        "park@yeleul.com", "Yeleul Inc",
                        "Gangnam Finance Center", "152 Teheran-ro", "Gangnam-Gu",
@@ -359,9 +374,11 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_KR) {
 
   std::vector<std::u16string> labels;
   for (size_t i = 0; i < std::size(kExpectedLabels); ++i) {
-    AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                          absl::nullopt, UNKNOWN_TYPE, i,
-                                          "en-US", &labels);
+    AutofillProfile::CreateInferredLabels(
+        ToRawPointerVector(profiles),
+        /*suggested_fields=*/std::nullopt,
+        /*triggering_field_type=*/std::nullopt, /*excluded_fields=*/{},
+        /*minimal_fields_shown=*/i, "en-US", &labels);
     ASSERT_FALSE(labels.empty());
     EXPECT_EQ(UTF8ToUTF16(kExpectedLabels[i]), labels.back());
   }
@@ -369,7 +386,8 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_KR) {
 
 TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_Latn) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles.back().get(), "Miku", "", "Hatsune",
                        "miku@rei.com", "Rei Inc", "Roppongi Hills Mori Tower",
                        "6-10-1 Roppongi, Minato-ku", "", "Tokyo", "106-6126",
@@ -396,9 +414,11 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_Latn) {
 
   std::vector<std::u16string> labels;
   for (size_t i = 0; i < std::size(kExpectedLabels); ++i) {
-    AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                          absl::nullopt, UNKNOWN_TYPE, i,
-                                          "en-US", &labels);
+    AutofillProfile::CreateInferredLabels(
+        ToRawPointerVector(profiles),
+        /*suggested_fields=*/std::nullopt,
+        /*triggering_field_type=*/std::nullopt, /*excluded_fields=*/{},
+        /*minimal_fields_shown=*/i, "en-US", &labels);
     ASSERT_FALSE(labels.empty());
     EXPECT_EQ(UTF8ToUTF16(kExpectedLabels[i]), labels.back());
   }
@@ -406,7 +426,8 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_Latn) {
 
 TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_ja) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles.back().get(), "ミク", "", "初音",
                        "miku@rei.com", "例", "港区六本木ヒルズ森タワー",
                        "六本木 6-10-1", "", "東京都", "106-6126", "JP",
@@ -429,9 +450,11 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_ja) {
 
   std::vector<std::u16string> labels;
   for (size_t i = 0; i < std::size(kExpectedLabels); ++i) {
-    AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                          absl::nullopt, UNKNOWN_TYPE, i,
-                                          "en-US", &labels);
+    AutofillProfile::CreateInferredLabels(
+        ToRawPointerVector(profiles),
+        /*suggested_fields=*/std::nullopt,
+        /*triggering_field_type=*/std::nullopt, /*excluded_fields=*/{},
+        /*minimal_fields_shown=*/i, "en-US", &labels);
     ASSERT_FALSE(labels.empty());
     EXPECT_EQ(UTF8ToUTF16(kExpectedLabels[i]), labels.back());
   }
@@ -439,93 +462,108 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_ja) {
 
 TEST(AutofillProfileTest, CreateInferredLabels) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[0].get(), "John", "", "Doe",
                        "johndoe@hades.com", "Underworld", "666 Erebus St.", "",
                        "Elysium", "CA", "91111", "US", "16502111111");
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[1].get(), "Jane", "", "Doe",
                        "janedoe@tertium.com", "Pluto Inc.", "123 Letha Shore.",
                        "", "Dis", "CA", "91222", "US", "12345678910");
   std::vector<std::u16string> labels;
   // Two fields at least - no filter.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        absl::nullopt, UNKNOWN_TYPE, 2, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles),
+      /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/2, "en-US", &labels);
   EXPECT_EQ(u"John Doe, 666 Erebus St.", labels[0]);
   EXPECT_EQ(u"Jane Doe, 123 Letha Shore.", labels[1]);
 
   // Three fields at least - no filter.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        absl::nullopt, UNKNOWN_TYPE, 3, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles),
+      /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/3, "en-US", &labels);
   EXPECT_EQ(u"John Doe, 666 Erebus St., Elysium", labels[0]);
   EXPECT_EQ(u"Jane Doe, 123 Letha Shore., Dis", labels[1]);
 
-  ServerFieldTypeSet suggested_fields = {ADDRESS_HOME_CITY, ADDRESS_HOME_STATE,
-                                         ADDRESS_HOME_ZIP};
+  FieldTypeSet suggested_fields = {ADDRESS_HOME_CITY, ADDRESS_HOME_STATE,
+                                   ADDRESS_HOME_ZIP};
 
   // Two fields at least, from suggested fields - no filter.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, UNKNOWN_TYPE, 2,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/2, "en-US", &labels);
   EXPECT_EQ(u"Elysium 91111", labels[0]);
   EXPECT_EQ(u"Dis 91222", labels[1]);
 
   // Three fields at least, from suggested fields - no filter.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, UNKNOWN_TYPE, 3,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, /*excluded_fields=*/{},
+      /*minimal_fields_shown=*/3, "en-US", &labels);
   EXPECT_EQ(u"Elysium, CA 91111", labels[0]);
   EXPECT_EQ(u"Dis, CA 91222", labels[1]);
 
   // Three fields at least, from suggested fields - but filter reduces available
   // fields to two.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, ADDRESS_HOME_ZIP, 3,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, {ADDRESS_HOME_ZIP},
+      /*minimal_fields_shown=*/3, "en-US", &labels);
   EXPECT_EQ(u"Elysium, CA", labels[0]);
   EXPECT_EQ(u"Dis, CA", labels[1]);
 
   // In our implementation we always display NAME_FULL for all NAME* fields...
   suggested_fields = {NAME_MIDDLE};
   // One field at least, from suggested fields - no filter.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, UNKNOWN_TYPE, 1,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, /*excluded_fields*/ {},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   EXPECT_EQ(u"John Doe", labels[0]);
   EXPECT_EQ(u"Jane Doe", labels[1]);
 
   // One field at least, from suggested fields - filter the same as suggested
   // field.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, NAME_MIDDLE, 1,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, {NAME_MIDDLE},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   EXPECT_EQ(std::u16string(), labels[0]);
   EXPECT_EQ(std::u16string(), labels[1]);
 
   // In our implementation we always display NAME_FULL for NAME_MIDDLE_INITIAL
   suggested_fields = {NAME_MIDDLE};
   // One field at least, from suggested fields - no filter.
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, UNKNOWN_TYPE, 1,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, /*excluded_fields*/ {},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   EXPECT_EQ(u"John Doe", labels[0]);
   EXPECT_EQ(u"Jane Doe", labels[1]);
 
   // One field at least, from suggested fields - filter same as the first non-
   // unknown suggested field.
   suggested_fields = {UNKNOWN_TYPE, NAME_FULL, ADDRESS_HOME_LINE1};
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, NAME_FULL, 1, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, {NAME_FULL},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   EXPECT_EQ(std::u16string(u"666 Erebus St."), labels[0]);
   EXPECT_EQ(std::u16string(u"123 Letha Shore."), labels[1]);
 
   // No suggested fields, but non-unknown excluded field.
   AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        absl::nullopt, NAME_FULL, 1, "en-US",
-                                        &labels);
+                                        /*suggested_fields=*/std::nullopt,
+                                        /*triggering_field_type=*/std::nullopt,
+                                        {NAME_FULL}, /*minimal_fields_shown=*/1,
+                                        "en-US", &labels);
   EXPECT_EQ(std::u16string(u"666 Erebus St."), labels[0]);
   EXPECT_EQ(std::u16string(u"123 Letha Shore."), labels[1]);
 }
@@ -534,53 +572,104 @@ TEST(AutofillProfileTest, CreateInferredLabels) {
 // distinguishing fields, but only if it makes sense given the suggested fields.
 TEST(AutofillProfileTest, CreateInferredLabelsFallsBackToFullName) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[0].get(), "John", "", "Doe", "doe@example.com",
                        "", "88 Nowhere Ave.", "", "", "", "", "", "");
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[1].get(), "Johnny", "K", "Doe",
                        "doe@example.com", "", "88 Nowhere Ave.", "", "", "", "",
                        "", "");
 
   // If the only name field in the suggested fields is the excluded field, we
   // should not fall back to the full name as a distinguishing field.
-  ServerFieldTypeSet suggested_fields = {NAME_LAST, ADDRESS_HOME_LINE1,
-                                         EMAIL_ADDRESS};
+  FieldTypeSet suggested_fields = {NAME_LAST, ADDRESS_HOME_LINE1,
+                                   EMAIL_ADDRESS};
   std::vector<std::u16string> labels;
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, NAME_LAST, 1, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, {NAME_LAST},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(2U, labels.size());
   EXPECT_EQ(u"88 Nowhere Ave.", labels[0]);
   EXPECT_EQ(u"88 Nowhere Ave.", labels[1]);
 
   // Otherwise, we should.
   suggested_fields.insert(NAME_FIRST);
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, NAME_LAST, 1, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, {NAME_LAST},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(2U, labels.size());
   EXPECT_EQ(u"88 Nowhere Ave., John Doe", labels[0]);
   EXPECT_EQ(u"88 Nowhere Ave., Johnny K Doe", labels[1]);
 }
 
+// Test that we use the triggering field to decide whether an additional
+// differentiating label should be added.
+TEST(
+    AutofillProfileTest,
+    CreateInferredLabels_TriggeringFieldUsedToDecideWhetherToAddADifferentiatingLabel) {
+  base::test::ScopedFeatureList feature{
+      features::kAutofillGranularFillingAvailable};
+  AutofillProfile profile1 = test::GetFullProfile();
+  AutofillProfile profile2 = test::GetFullProfile();
+  profile1.SetRawInfo(EMAIL_ADDRESS, u"hoa@gmail.com");
+  profile2.SetRawInfo(EMAIL_ADDRESS, u"pham@gmail.com");
+
+  std::vector<std::u16string> labels;
+  // First check that when `triggering_field_type` is not present, a second
+  // differentiating label is added.
+  AutofillProfile::CreateInferredLabels(
+      {&profile1, &profile2}, /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
+  ASSERT_EQ(2U, labels.size());
+  EXPECT_EQ(u"John H. Doe, hoa@gmail.com", labels[0]);
+  EXPECT_EQ(u"John H. Doe, pham@gmail.com", labels[1]);
+
+  // If the `triggering_field_type` is present and is unique, there is no need
+  // for a second differentiating label.
+  AutofillProfile::CreateInferredLabels(
+      {&profile1, &profile2}, /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/EMAIL_ADDRESS,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
+  ASSERT_EQ(2U, labels.size());
+  EXPECT_EQ(u"John H. Doe", labels[0]);
+  EXPECT_EQ(u"John H. Doe", labels[1]);
+
+  // If the `triggering_field_type` is present and is not unique, a second
+  // differentiating label is added.
+  AutofillProfile::CreateInferredLabels(
+      {&profile1, &profile2}, /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/NAME_FIRST,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
+  ASSERT_EQ(2U, labels.size());
+  EXPECT_EQ(u"John H. Doe, hoa@gmail.com", labels[0]);
+  EXPECT_EQ(u"John H. Doe, pham@gmail.com", labels[1]);
+}
+
 // Test that we do not show duplicate fields in the labels.
 TEST(AutofillProfileTest, CreateInferredLabelsNoDuplicatedFields) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[0].get(), "John", "", "Doe", "doe@example.com",
                        "", "88 Nowhere Ave.", "", "", "", "", "", "");
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[1].get(), "John", "", "Doe", "dojo@example.com",
                        "", "88 Nowhere Ave.", "", "", "", "", "", "");
 
   // If the only name field in the suggested fields is the excluded field, we
   // should not fall back to the full name as a distinguishing field.
-  ServerFieldTypeSet suggested_fields = {ADDRESS_HOME_LINE1, EMAIL_ADDRESS};
+  FieldTypeSet suggested_fields = {ADDRESS_HOME_LINE1, EMAIL_ADDRESS};
   std::vector<std::u16string> labels;
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, UNKNOWN_TYPE, 2,
-                                        "en-US", &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/2, "en-US", &labels);
   ASSERT_EQ(2U, labels.size());
   EXPECT_EQ(u"88 Nowhere Ave., doe@example.com", labels[0]);
   EXPECT_EQ(u"88 Nowhere Ave., dojo@example.com", labels[1]);
@@ -589,21 +678,26 @@ TEST(AutofillProfileTest, CreateInferredLabelsNoDuplicatedFields) {
 // Make sure that empty fields are not treated as distinguishing fields.
 TEST(AutofillProfileTest, CreateInferredLabelsSkipsEmptyFields) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[0].get(), "John", "", "Doe", "doe@example.com",
                        "Gogole", "", "", "", "", "", "", "");
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[1].get(), "John", "", "Doe", "doe@example.com",
                        "Ggoole", "", "", "", "", "", "", "");
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[2].get(), "John", "", "Doe",
                        "john.doe@example.com", "Goolge", "", "", "", "", "", "",
                        "");
 
   std::vector<std::u16string> labels;
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        absl::nullopt, UNKNOWN_TYPE, 3, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles),
+      /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/3, "en-US", &labels);
   ASSERT_EQ(3U, labels.size());
   EXPECT_EQ(u"John Doe, doe@example.com, Gogole", labels[0]);
   EXPECT_EQ(u"John Doe, doe@example.com, Ggoole", labels[1]);
@@ -612,9 +706,11 @@ TEST(AutofillProfileTest, CreateInferredLabelsSkipsEmptyFields) {
   // A field must have a non-empty value for each profile to be considered a
   // distinguishing field.
   profiles[1]->SetRawInfo(ADDRESS_HOME_LINE1, u"88 Nowhere Ave.");
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        absl::nullopt, UNKNOWN_TYPE, 1, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles),
+      /*suggested_fields=*/std::nullopt,
+      /*triggering_field_type=*/std::nullopt,
+      /*excluded_fields=*/{}, /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(3U, labels.size());
   EXPECT_EQ(u"John Doe, doe@example.com, Gogole", labels[0]);
   EXPECT_EQ(u"John Doe, 88 Nowhere Ave., doe@example.com, Ggoole", labels[1])
@@ -625,18 +721,19 @@ TEST(AutofillProfileTest, CreateInferredLabelsSkipsEmptyFields) {
 // Test that labels that would otherwise have multiline values are flattened.
 TEST(AutofillProfileTest, CreateInferredLabelsFlattensMultiLineValues) {
   std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  profiles.push_back(std::make_unique<AutofillProfile>());
+  profiles.push_back(std::make_unique<AutofillProfile>(
+      i18n_model_definition::kLegacyHierarchyCountryCode));
   test::SetProfileInfo(profiles[0].get(), "John", "", "Doe", "doe@example.com",
                        "", "88 Nowhere Ave.", "Apt. 42", "", "", "", "", "");
 
   // If the only name field in the suggested fields is the excluded field, we
   // should not fall back to the full name as a distinguishing field.
-  ServerFieldTypeSet suggested_fields = {NAME_FULL,
-                                         ADDRESS_HOME_STREET_ADDRESS};
+  FieldTypeSet suggested_fields = {NAME_FULL, ADDRESS_HOME_STREET_ADDRESS};
   std::vector<std::u16string> labels;
-  AutofillProfile::CreateInferredLabels(ToRawPointerVector(profiles),
-                                        suggested_fields, NAME_FULL, 1, "en-US",
-                                        &labels);
+  AutofillProfile::CreateInferredLabels(
+      ToRawPointerVector(profiles), suggested_fields,
+      /*triggering_field_type=*/std::nullopt, {NAME_FULL},
+      /*minimal_fields_shown=*/1, "en-US", &labels);
   ASSERT_EQ(1U, labels.size());
   EXPECT_EQ(u"88 Nowhere Ave., Apt. 42", labels[0]);
 }
@@ -655,15 +752,15 @@ TEST(AutofillProfileTest, IsSubsetOf) {
 }
 
 TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentMiddleNames) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "US", "");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "M", "Fox", "", "", "", "", "",
                        "", "", "US", "");
 
-  AutofillProfile profile3;
+  AutofillProfile profile3(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile3, "Genevieve", "Marie", "Fox", "", "", "", "",
                        "", "", "", "US", "");
 
@@ -703,11 +800,11 @@ TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentMiddleNames) {
 }
 
 TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentFirstNames) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Cynthia", "", "Fox", "", "", "", "", "", "",
                        "", "US", "");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "US", "");
 
@@ -724,11 +821,11 @@ TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentFirstNames) {
 }
 
 TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentLastNames) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Genevieve", "", "Fuller", "", "", "", "", "",
                        "", "", "US", "");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "US", "");
 
@@ -745,11 +842,11 @@ TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentLastNames) {
 }
 
 TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentStreetAddresses) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile1.SetRawInfo(ADDRESS_HOME_COUNTRY, u"US");
   profile1.SetRawInfo(ADDRESS_HOME_STREET_ADDRESS, u"274 Main St");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile2.SetRawInfo(ADDRESS_HOME_COUNTRY, u"US");
   profile2.SetRawInfo(ADDRESS_HOME_STREET_ADDRESS, u"275 Main Street");
 
@@ -779,11 +876,11 @@ TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentStreetAddresses) {
 }
 
 TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentNonStreetAddresses) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Genevieve", "", "Fox", "", "", "274 Main St",
                        "", "Northhampton", "", "", "US", "");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "", "Fox", "", "", "274 Main St",
                        "", "Sturbridge", "", "", "US", "");
 
@@ -799,11 +896,11 @@ TEST(AutofillProfileTest, IsSubsetOfForFieldSet_DifferentNonStreetAddresses) {
 
 TEST(AutofillProfileTest,
      IsSubsetOfForFieldSet_PostalCodesWithAndWithoutSpaces) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "H3B 2Y5", "CA", "");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "H3B2Y5", "CA", "");
 
@@ -817,11 +914,11 @@ TEST(AutofillProfileTest,
 
 TEST(AutofillProfileTest,
      IsSubsetOfForFieldSet_PhoneNumbersWithAndWithoutSpacesAndPunctuation) {
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "CA", "+1 (514) 444-5454");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "CA", "15144445454");
 
@@ -840,17 +937,17 @@ TEST(AutofillProfileTest,
 TEST(AutofillProfileTest,
      IsSubsetOfForFieldSet_PhoneNumbersWithAndWithoutCodes_US) {
   // Has country and city codes.
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "US", "+1 (508) 444-5454");
 
   // Has a city code.
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "US", "5084445454");
 
   // Has neither a country nor a city code.
-  AutofillProfile profile3;
+  AutofillProfile profile3(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile3, "Genevieve", "", "Fox", "", "", "", "", "",
                        "", "", "US", "4445454");
 
@@ -886,17 +983,17 @@ TEST(AutofillProfileTest,
 TEST(AutofillProfileTest,
      IsSubsetOfForFieldSet_PhoneNumbersWithAndWithoutCodes_BR) {
   // Has country and city codes.
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Thiago", "", "Avila", "", "", "", "", "", "",
                        "", "", "BR", "5521987650000");
 
   // Has a city code.
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Thiago", "", "Avila", "", "", "", "", "", "",
                        "", "", "BR", "21987650000");
 
   // Has neither a country nor a city code.
-  AutofillProfile profile3;
+  AutofillProfile profile3(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile3, "Thiago", "", "Avila", "", "", "", "", "", "",
                        "", "", "BR", "987650000");
 
@@ -950,7 +1047,7 @@ TEST(AutofillProfileTest, IsStrictSupersetOf) {
 TEST(AutofillProfileTest, TestFinalizeAfterImport) {
   // A profile with just a full name should be finalizeable.
   {
-    AutofillProfile profile;
+    AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
     profile.SetRawInfoWithVerificationStatus(NAME_FULL, u"Peter Pan",
                                              VerificationStatus::kObserved);
     EXPECT_TRUE(profile.FinalizeAfterImport());
@@ -967,7 +1064,7 @@ TEST(AutofillProfileTest, TestFinalizeAfterImport) {
   // it is highly likely that this scenario is caused by a classification error
   // and would not yield a correctly imported name.
   {
-    AutofillProfile profile;
+    AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
     profile.SetRawInfoWithVerificationStatus(NAME_FULL, u"Peter Pan",
                                              VerificationStatus::kObserved);
     profile.SetRawInfoWithVerificationStatus(NAME_FIRST, u"Michael",
@@ -977,7 +1074,7 @@ TEST(AutofillProfileTest, TestFinalizeAfterImport) {
 }
 
 TEST(AutofillProfileTest, SetAndGetRawInfoWithValidationStatus) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   // An unsupported type should return |kNoStatus|.
   EXPECT_EQ(profile.GetVerificationStatus(UNKNOWN_TYPE),
             VerificationStatus::kNoStatus);
@@ -1002,7 +1099,7 @@ TEST(AutofillProfileTest, SetAndGetRawInfoWithValidationStatus) {
 }
 
 TEST(AutofillProfileTest, SetAndGetInfoWithValidationStatus) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   // An unsupported type should return |kNoStatus|.
   EXPECT_EQ(profile.GetVerificationStatus(UNKNOWN_TYPE),
             VerificationStatus::kNoStatus);
@@ -1044,7 +1141,7 @@ TEST(AutofillProfileTest, SetAndGetInfoWithValidationStatus) {
 }
 
 TEST(AutofillProfileTest, MergeDataFrom_DifferentProfile) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
   SetupTestProfile(a);
 
   // Create an identical profile except that the new profile:
@@ -1076,7 +1173,7 @@ TEST(AutofillProfileTest, MergeDataFrom_DifferentProfile) {
 }
 
 TEST(AutofillProfileTest, MergeDataFrom_SameProfile) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
   SetupTestProfile(a);
 
   // The profile has no full name yet. Merge will add it.
@@ -1106,7 +1203,8 @@ TEST(AutofillProfileTest, MergeDataFrom_TokenQuality) {
   base::test::ScopedFeatureList feature{
       features::kAutofillTrackProfileTokenQuality};
 
-  AutofillProfile a, b;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
+  AutofillProfile b((i18n_model_definition::kLegacyHierarchyCountryCode));
   // Set the same state for both profiles. Expect that a's quality will be kept.
   a.SetRawInfo(ADDRESS_HOME_STATE, u"TX");
   b.SetRawInfo(ADDRESS_HOME_STATE, u"TX");
@@ -1133,7 +1231,7 @@ TEST(AutofillProfileTest, MergeDataFrom_TokenQuality) {
 }
 
 TEST(AutofillProfileTest, OverwriteName_AddNameFull) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   a.SetRawInfo(NAME_FIRST, u"Marion");
   a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
@@ -1156,7 +1254,7 @@ TEST(AutofillProfileTest, OverwriteName_AddNameFull) {
 // Tests that OverwriteName overwrites the name parts if they have different
 // case.
 TEST(AutofillProfileTest, OverwriteName_DifferentCase) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
   AutofillProfile b = a;
 
   a.SetRawInfoWithVerificationStatus(NAME_FIRST, u"marion",
@@ -1183,13 +1281,13 @@ TEST(AutofillProfileTest, OverwriteName_DifferentCase) {
 }
 
 TEST(AutofillProfileTest, AssignmentOperator) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&a, "Marion", "Mitchell", "Morrison", "marion@me.xyz",
                        "Fox", "123 Zoo St.", "unit 5", "Hollywood", "CA",
                        "91601", "US", "12345678910");
 
   // Result of assignment should be logically equal to the original profile.
-  AutofillProfile b;
+  AutofillProfile b(i18n_model_definition::kLegacyHierarchyCountryCode);
   b = a;
   EXPECT_TRUE(a == b);
 
@@ -1199,7 +1297,7 @@ TEST(AutofillProfileTest, AssignmentOperator) {
 }
 
 TEST(AutofillProfileTest, Copy) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&a, "Marion", "Mitchell", "Morrison", "marion@me.xyz",
                        "Fox", "123 Zoo St.", "unit 5", "Hollywood", "CA",
                        "91601", "US", "12345678910");
@@ -1210,8 +1308,8 @@ TEST(AutofillProfileTest, Copy) {
 }
 
 TEST(AutofillProfileTest, Compare) {
-  AutofillProfile a;
-  AutofillProfile b;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
+  AutofillProfile b(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   // Empty profiles are the same.
   EXPECT_EQ(0, a.Compare(b));
@@ -1254,15 +1352,21 @@ TEST(AutofillProfileTest, Compare) {
 
 // For each structured profile tokens, test the comparison operator for both the
 // value and the status.
+// TODO(crbug.com/1464568): Extend this test to cover i18n profiles.
 TEST(AutofillProfileTest, Compare_StructuredTypes) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {autofill::features::kAutofillEnableSupportForLandmark,
-       autofill::features::kAutofillEnableSupportForBetweenStreets,
-       autofill::features::kAutofillEnableSupportForAdminLevel2},
+      {features::kAutofillUseI18nAddressModel,
+       features::kAutofillEnableSupportForLandmark,
+       features::kAutofillEnableSupportForBetweenStreets,
+       features::kAutofillEnableSupportForAdminLevel2,
+       features::kAutofillEnableSupportForApartmentNumbers,
+       features::kAutofillEnableSupportForAddressOverflow,
+       features::kAutofillEnableSupportForBetweenStreetsOrLandmark,
+       features::kAutofillEnableSupportForAddressOverflowAndLandmark},
       {});
   // Those types do store a verification status.
-  ServerFieldTypeSet structured_types{
+  FieldTypeSet structured_types{
       NAME_FULL,
       NAME_FIRST,
       NAME_MIDDLE,
@@ -1278,11 +1382,24 @@ TEST(AutofillProfileTest, Compare_StructuredTypes) {
       ADDRESS_HOME_SORTING_CODE,
       ADDRESS_HOME_COUNTRY,
       ADDRESS_HOME_LANDMARK,
+      ADDRESS_HOME_OVERFLOW,
+      ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
+      ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
       ADDRESS_HOME_BETWEEN_STREETS,
+      ADDRESS_HOME_BETWEEN_STREETS_1,
+      ADDRESS_HOME_BETWEEN_STREETS_2,
+      ADDRESS_HOME_ADMIN_LEVEL2,
       ADDRESS_HOME_HOUSE_NUMBER,
       ADDRESS_HOME_STREET_NAME,
       ADDRESS_HOME_SUBPREMISE,
+      ADDRESS_HOME_STREET_LOCATION,
+      ADDRESS_HOME_FLOOR,
+      ADDRESS_HOME_APT,
+      ADDRESS_HOME_APT_TYPE,
+      ADDRESS_HOME_APT_NUM,
   };
+
+  CountryDataMap* country_data_map = CountryDataMap::GetInstance();
 
   // Those values are legal for all tokens.
   const std::u16string value1 = u"DE";
@@ -1293,34 +1410,51 @@ TEST(AutofillProfileTest, Compare_StructuredTypes) {
 
   ASSERT_NE(value1, value2);
   ASSERT_NE(status1, status2);
+  std::vector<AddressCountryCode> country_codes;
+  base::ranges::transform(country_data_map->country_codes(),
+                          back_inserter(country_codes),
+                          [](const std::string& country_code) {
+                            return AddressCountryCode(country_code);
+                          });
+  // Include the legacy country code as well.
+  country_codes.push_back(i18n_model_definition::kLegacyHierarchyCountryCode);
 
-  for (auto type : structured_types) {
-    // Create two empty profiles to test the tokens individually.
-    AutofillProfile profile1;
-    AutofillProfile profile2;
-
+  for (const AddressCountryCode& country_code : country_codes) {
     SCOPED_TRACE(testing::Message()
-                 << "Testing the Compare method for the type: "
-                 << AutofillType(type).ToString());
+                 << "Testing the Compare method for the country: "
+                 << country_code);
+    for (FieldType type : structured_types) {
+      if (!i18n_model_definition::IsTypeEnabledForCountry(type, country_code)) {
+        continue;
+      }
+      // Create two empty profiles to test the tokens individually.
+      AutofillProfile profile1(country_code);
+      AutofillProfile profile2(country_code);
 
-    SCOPED_TRACE(testing::Message()
-                 << "Verify the correct result for identical values");
-    profile1.SetRawInfoWithVerificationStatus(type, value1, status1);
-    profile2.SetRawInfoWithVerificationStatus(type, value1, status1);
-    EXPECT_EQ(profile1.Compare(profile2), 0);
+      SCOPED_TRACE(testing::Message()
+                   << "Testing the Compare method for the type: "
+                   << AutofillType(type).ToStringView());
 
-    SCOPED_TRACE(testing::Message() << "Verify the sensitivity to the value");
-    profile2.SetRawInfoWithVerificationStatus(type, value2, status1);
-    EXPECT_NE(profile1.Compare(profile2), 0);
+      SCOPED_TRACE(testing::Message()
+                   << "Verify the correct result for identical values");
+      profile1.SetRawInfoWithVerificationStatus(type, value1, status1);
+      profile2.SetRawInfoWithVerificationStatus(type, value1, status1);
+      EXPECT_EQ(profile1.Compare(profile2), 0);
 
-    SCOPED_TRACE(testing::Message() << "Verify the sensitivity to the status");
-    profile2.SetRawInfoWithVerificationStatus(type, value1, status2);
-    EXPECT_NE(profile1.Compare(profile2), 0);
+      SCOPED_TRACE(testing::Message() << "Verify the sensitivity to the value");
+      profile2.SetRawInfoWithVerificationStatus(type, value2, status1);
+      EXPECT_NE(profile1.Compare(profile2), 0);
+
+      SCOPED_TRACE(testing::Message()
+                   << "Verify the sensitivity to the status");
+      profile2.SetRawInfoWithVerificationStatus(type, value1, status2);
+      EXPECT_NE(profile1.Compare(profile2), 0);
+    }
   }
 }
 
 TEST(AutofillProfileTest, IsPresentButInvalid) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   EXPECT_FALSE(profile.IsPresentButInvalid(ADDRESS_HOME_STATE));
   EXPECT_FALSE(profile.IsPresentButInvalid(ADDRESS_HOME_ZIP));
   EXPECT_FALSE(profile.IsPresentButInvalid(PHONE_HOME_WHOLE_NUMBER));
@@ -1354,7 +1488,7 @@ TEST(AutofillProfileTest, IsPresentButInvalid) {
 }
 
 TEST(AutofillProfileTest, SetRawInfoPreservesLineBreaks) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(ADDRESS_HOME_STREET_ADDRESS,
                      u"123 Super St.\n"
                      u"Apt. #42");
@@ -1365,7 +1499,7 @@ TEST(AutofillProfileTest, SetRawInfoPreservesLineBreaks) {
 }
 
 TEST(AutofillProfileTest, SetInfoPreservesLineBreaks) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetInfo(ADDRESS_HOME_STREET_ADDRESS,
                   u"123 Super St.\n"
                   u"Apt. #42",
@@ -1377,24 +1511,30 @@ TEST(AutofillProfileTest, SetInfoPreservesLineBreaks) {
 }
 
 TEST(AutofillProfileTest, SetRawInfoDoesntTrimWhitespace) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(EMAIL_ADDRESS, u"\tuser@example.com    ");
   EXPECT_EQ(u"\tuser@example.com    ", profile.GetRawInfo(EMAIL_ADDRESS));
 }
 
 TEST(AutofillProfileTest, SetRawInfoWorksForLandmark) {
-  base::test::ScopedFeatureList feature_list(
-      features::kAutofillEnableSupportForLandmark);
-  AutofillProfile profile;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({features::kAutofillEnableSupportForLandmark,
+                                 features::kAutofillUseI18nAddressModel},
+                                {});
+
+  AutofillProfile profile(AddressCountryCode("MX"));
 
   profile.SetRawInfo(ADDRESS_HOME_LANDMARK, u"Red tree");
   EXPECT_EQ(u"Red tree", profile.GetRawInfo(ADDRESS_HOME_LANDMARK));
 }
 
 TEST(AutofillProfileTest, SetRawInfoWorksForBetweenStreets) {
-  base::test::ScopedFeatureList feature_list(
-      features::kAutofillEnableSupportForBetweenStreets);
-  AutofillProfile profile;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {features::kAutofillEnableSupportForBetweenStreets,
+       features::kAutofillUseI18nAddressModel},
+      {});
+  AutofillProfile profile(AddressCountryCode("MX"));
 
   profile.SetRawInfo(ADDRESS_HOME_BETWEEN_STREETS, u"Between streets example");
   EXPECT_EQ(u"Between streets example",
@@ -1402,13 +1542,13 @@ TEST(AutofillProfileTest, SetRawInfoWorksForBetweenStreets) {
 }
 
 TEST(AutofillProfileTest, SetInfoTrimsWhitespace) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetInfo(EMAIL_ADDRESS, u"\tuser@example.com    ", "en-US");
   EXPECT_EQ(u"user@example.com", profile.GetRawInfo(EMAIL_ADDRESS));
 }
 
 TEST(AutofillProfileTest, SaveAdditionalInfo_Name_AddingNameFull) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   a.SetRawInfo(NAME_FIRST, u"Marion");
   a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
@@ -1429,7 +1569,7 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_AddingNameFull) {
 }
 
 TEST(AutofillProfileTest, SaveAdditionalInfo_Name_KeepNameFull) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   a.SetRawInfo(NAME_FIRST, u"Marion");
   a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
@@ -1451,7 +1591,7 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_KeepNameFull) {
 // non-empty fields overwriting the initial profiles values.
 TEST(AutofillProfileTest,
      SaveAdditionalInfo_Name_DifferentCaseAndDiacriticsNoNameFull) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   a.SetRawInfoWithVerificationStatus(NAME_FIRST, u"marion", kObserved);
   a.SetRawInfoWithVerificationStatus(NAME_MIDDLE, u"mitchell", kObserved);
@@ -1483,7 +1623,7 @@ TEST(AutofillProfileTest,
 // Tests that no loss of information happens when SavingAdditionalInfo with a
 // profile with an empty name part.
 TEST(AutofillProfileTest, SaveAdditionalInfo_Name_LossOfInformation) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   a.SetRawInfo(NAME_FIRST, u"Marion");
   a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
@@ -1502,13 +1642,13 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_LossOfInformation) {
 // Tests that merging two complementary profiles for names results in a profile
 // with a complete name.
 TEST(AutofillProfileTest, SaveAdditionalInfo_Name_ComplementaryInformation) {
-  AutofillProfile a;
+  AutofillProfile a(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   a.SetRawInfo(NAME_FIRST, u"Marion");
   a.SetRawInfo(NAME_MIDDLE, u"Mitchell");
   a.SetRawInfo(NAME_LAST, u"Morrison");
   a.FinalizeAfterImport();
-  AutofillProfile b;
+  AutofillProfile b(i18n_model_definition::kLegacyHierarchyCountryCode);
 
   b.SetRawInfo(NAME_FULL, u"Marion Mitchell Morrison");
   b.FinalizeAfterImport();
@@ -1525,7 +1665,7 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_ComplementaryInformation) {
 
 // Test that the label is correctly set and retrieved from the profile.
 TEST(AutofillProfileTest, SetAndGetProfileLabels) {
-  AutofillProfile p;
+  AutofillProfile p(i18n_model_definition::kLegacyHierarchyCountryCode);
   EXPECT_EQ(p.profile_label(), std::string());
 
   p.set_profile_label("my label");
@@ -1533,10 +1673,10 @@ TEST(AutofillProfileTest, SetAndGetProfileLabels) {
 }
 
 TEST(AutofillProfileTest, LabelsInAssignmentAndComparisonOperator) {
-  AutofillProfile p1;
+  AutofillProfile p1(i18n_model_definition::kLegacyHierarchyCountryCode);
   p1.set_profile_label("my label");
 
-  AutofillProfile p2;
+  AutofillProfile p2(i18n_model_definition::kLegacyHierarchyCountryCode);
   p2 = p1;
 
   // Check that the label was assigned correctly to p2.
@@ -1548,85 +1688,11 @@ TEST(AutofillProfileTest, LabelsInAssignmentAndComparisonOperator) {
   EXPECT_NE(p1, p2);
 }
 
-TEST(AutofillProfileTest, GetMetadata) {
-  AutofillProfile local_profile = test::GetFullProfile();
-  local_profile.set_use_count(2);
-  local_profile.set_use_date(base::Time::FromSecondsSinceUnixEpoch(25));
-  local_profile.set_has_converted(false);
-  AutofillMetadata local_metadata = local_profile.GetMetadata();
-  EXPECT_EQ(local_profile.guid(), local_metadata.id);
-  EXPECT_EQ(local_profile.has_converted(), local_metadata.has_converted);
-  EXPECT_EQ(local_profile.use_count(), local_metadata.use_count);
-  EXPECT_EQ(local_profile.use_date(), local_metadata.use_date);
-
-  AutofillProfile server_profile = test::GetServerProfile();
-  server_profile.set_use_count(10);
-  server_profile.set_use_date(base::Time::FromSecondsSinceUnixEpoch(100));
-  server_profile.set_has_converted(true);
-  AutofillMetadata server_metadata = server_profile.GetMetadata();
-  EXPECT_EQ(server_profile.server_id(), server_metadata.id);
-  EXPECT_EQ(server_profile.has_converted(), server_metadata.has_converted);
-  EXPECT_EQ(server_profile.use_count(), server_metadata.use_count);
-  EXPECT_EQ(server_profile.use_date(), server_metadata.use_date);
-}
-
-TEST(AutofillProfileTest, SetMetadata_MatchingId) {
-  AutofillProfile local_profile = test::GetFullProfile();
-  AutofillMetadata local_metadata;
-  local_metadata.id = local_profile.guid();
-  local_metadata.use_count = 100;
-  local_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
-  local_metadata.has_converted = true;
-  EXPECT_TRUE(local_profile.SetMetadata(local_metadata));
-  EXPECT_EQ(local_metadata.id, local_profile.guid());
-  EXPECT_EQ(local_metadata.has_converted, local_profile.has_converted());
-  EXPECT_EQ(local_metadata.use_count, local_profile.use_count());
-  EXPECT_EQ(local_metadata.use_date, local_profile.use_date());
-
-  AutofillProfile server_profile = test::GetServerProfile();
-  AutofillMetadata server_metadata;
-  server_metadata.id = server_profile.server_id();
-  server_metadata.use_count = 100;
-  server_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
-  server_metadata.has_converted = true;
-  EXPECT_TRUE(server_profile.SetMetadata(server_metadata));
-  EXPECT_EQ(server_metadata.id, server_profile.server_id());
-  EXPECT_EQ(server_metadata.has_converted, server_profile.has_converted());
-  EXPECT_EQ(server_metadata.use_count, server_profile.use_count());
-  EXPECT_EQ(server_metadata.use_date, server_profile.use_date());
-}
-
-TEST(AutofillProfileTest, SetMetadata_NotMatchingId) {
-  AutofillProfile local_profile = test::GetFullProfile();
-  AutofillMetadata local_metadata;
-  local_metadata.id = "WrongId";
-  local_metadata.use_count = 100;
-  local_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
-  local_metadata.has_converted = true;
-  EXPECT_FALSE(local_profile.SetMetadata(local_metadata));
-  EXPECT_NE(local_metadata.id, local_profile.guid());
-  EXPECT_NE(local_metadata.has_converted, local_profile.has_converted());
-  EXPECT_NE(local_metadata.use_count, local_profile.use_count());
-  EXPECT_NE(local_metadata.use_date, local_profile.use_date());
-
-  AutofillProfile server_profile = test::GetServerProfile();
-  AutofillMetadata server_metadata;
-  server_metadata.id = "WrongId";
-  server_metadata.use_count = 100;
-  server_metadata.use_date = base::Time::FromSecondsSinceUnixEpoch(50);
-  server_metadata.has_converted = true;
-  EXPECT_FALSE(server_profile.SetMetadata(server_metadata));
-  EXPECT_NE(server_metadata.id, server_profile.guid());
-  EXPECT_NE(server_metadata.has_converted, server_profile.has_converted());
-  EXPECT_NE(server_metadata.use_count, server_profile.use_count());
-  EXPECT_NE(server_metadata.use_date, server_profile.use_date());
-}
-
 // Tests that `RecordUseAndLog()` only increments the use count if at least 60
 // seconds have passed.
 TEST(AutofillProfileTest, RecordUseAndLog_Delay) {
   TestAutofillClock clock;
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   // AutofillProfile is initialized with a `use_count()` of 1 and a last used
   // date of `AutofillClock::Now()`.
   ASSERT_EQ(profile.use_count(), 1u);
@@ -1647,7 +1713,7 @@ TEST(AutofillProfileTest, RecordUseAndLog_Delay) {
 // Tests that the |HasStructuredData| returns whether the profile has structured
 // data or not.
 TEST(AutofillProfileTest, HasStructuredData) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfoWithVerificationStatus(
       NAME_FULL, u"marion mitchell morrison", kObserved);
   EXPECT_FALSE(profile.HasStructuredData());
@@ -1675,13 +1741,14 @@ TEST(AutofillProfileTest, ConvertToAccountProfile) {
 TEST(AutofillProfileTest, RemoveInaccessibleProfileValues) {
   // Returns true if at least one field was removed.
   auto RemoveInaccessibleProfileValues = [](AutofillProfile& profile) {
-    const ServerFieldTypeSet inaccessible_fields =
+    const FieldTypeSet inaccessible_fields =
         profile.FindInaccessibleProfileValues();
     profile.ClearFields(inaccessible_fields);
     return !inaccessible_fields.empty();
   };
 
-  AutofillProfile actual_profile;
+  AutofillProfile actual_profile(
+      i18n_model_definition::kLegacyHierarchyCountryCode);
   actual_profile.SetRawInfo(NAME_FIRST, u"Florian");
 
   // State is uncommon in Germany and inaccessible in the settings. Expect it
@@ -1709,34 +1776,17 @@ TEST(AutofillProfileTest, RemoveInaccessibleProfileValues) {
   EXPECT_EQ(actual_profile.Compare(expected_profile), 0);
 }
 
-TEST(AutofillProfileTest, GetNonEmptyRawTypes) {
-  AutofillProfile profile;
-  test::SetProfileInfo(&profile, "Marion", nullptr, "Morrison",
-                       "johnwayne@me.xyz", nullptr, "123 Zoo St.", nullptr,
-                       "Hollywood", "CA", "91601", "US", "14155678910");
-
-  std::vector<ServerFieldType> expected_raw_types{NAME_FIRST,
-                                                  NAME_LAST,
-                                                  NAME_FULL,
-                                                  EMAIL_ADDRESS,
-                                                  PHONE_HOME_WHOLE_NUMBER,
-                                                  ADDRESS_HOME_ADDRESS,
-                                                  ADDRESS_HOME_LINE1,
-                                                  ADDRESS_HOME_CITY,
-                                                  ADDRESS_HOME_STATE,
-                                                  ADDRESS_HOME_ZIP,
-                                                  ADDRESS_HOME_COUNTRY,
-                                                  ADDRESS_HOME_STREET_ADDRESS,
-                                                  ADDRESS_HOME_STREET_NAME,
-                                                  ADDRESS_HOME_STREET_LOCATION,
-                                                  ADDRESS_HOME_HOUSE_NUMBER,
-                                                  NAME_LAST_SECOND};
-
-  ServerFieldTypeSet non_empty_raw_types;
-  profile.GetNonEmptyRawTypes(&non_empty_raw_types);
-
-  EXPECT_THAT(non_empty_raw_types,
-              testing::UnorderedElementsAreArray(expected_raw_types));
+TEST(AutofillProfileTest, GetStorableTypeOf) {
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
+  // Test that additional types are mapped to their stored types
+  EXPECT_EQ(profile.GetStorableTypeOf(ADDRESS_HOME_LINE1),
+            ADDRESS_HOME_STREET_ADDRESS);
+  EXPECT_EQ(profile.GetStorableTypeOf(NAME_MIDDLE_INITIAL), NAME_MIDDLE);
+  EXPECT_EQ(profile.GetStorableTypeOf(PHONE_HOME_CITY_CODE),
+            PHONE_HOME_WHOLE_NUMBER);
+  // Test that stored types are returned as-is.
+  EXPECT_EQ(profile.GetStorableTypeOf(ADDRESS_HOME_STATE), ADDRESS_HOME_STATE);
+  EXPECT_EQ(profile.GetStorableTypeOf(COMPANY_NAME), COMPANY_NAME);
 }
 
 enum Expectation { GREATER, LESS };

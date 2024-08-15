@@ -57,6 +57,8 @@ class EmbeddedA11yManagerLacros
   // accessibility feature that selected text should be spoken.
   void SpeakSelectedText();
 
+  bool IsSelectToSpeakEnabled();
+
   // We can't use extensions::ExtensionHostTestHelper as those require a
   // background page, and these extensions do not have background pages.
   void AddExtensionChangedCallbackForTest(base::RepeatingClosure callback);
@@ -103,7 +105,7 @@ class EmbeddedA11yManagerLacros
   void InstallExtension(extensions::ComponentLoader* component_loader,
                         const base::FilePath& path,
                         const std::string& extension_id,
-                        absl::optional<base::Value::Dict> manifest);
+                        std::optional<base::Value::Dict> manifest);
 
   // Called when focus highlight feature is active and the focused node
   // changed.

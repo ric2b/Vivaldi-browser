@@ -182,9 +182,6 @@ using Window = XID;
 // GL_CHROMIUM_ycrcb_420_image
 #define GL_RGB_YCRCB_420_CHROMIUM                        0x78FA
 
-// GL_CHROMIUM_ycbcr_422_image
-#define GL_RGB_YCBCR_422_CHROMIUM                        0x78FB
-
 // GL_CHROMIUM_ycbcr_420v_image
 #define GL_RGB_YCBCR_420V_CHROMIUM 0x78FC
 
@@ -194,9 +191,6 @@ using Window = XID;
 // GL_CHROMIUM_subscribe_uniforms
 #define GL_SUBSCRIBED_VALUES_BUFFER_CHROMIUM             0x924B
 #define GL_MOUSE_POSITION_CHROMIUM                       0x924C
-
-// GL_CHROMIUM_texture_filtering_hint
-#define GL_TEXTURE_FILTERING_HINT_CHROMIUM               0x8AF0
 
 // GL_OES_texure_3D
 #define GL_SAMPLER_3D_OES                                0x8B5F

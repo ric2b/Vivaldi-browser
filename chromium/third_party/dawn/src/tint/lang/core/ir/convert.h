@@ -42,6 +42,9 @@ class Convert final : public Castable<Convert, Call> {
     /// The offset in Operands() for the value
     static constexpr size_t kValueOperandOffset = 0;
 
+    /// Constructor (no results, no operands)
+    Convert();
+
     /// Constructor
     /// @param result the result value
     /// @param value the value to convert
@@ -52,7 +55,7 @@ class Convert final : public Castable<Convert, Call> {
     Convert* Clone(CloneContext& ctx) override;
 
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "convert"; }
+    std::string FriendlyName() const override { return "convert"; }
 };
 
 }  // namespace tint::core::ir

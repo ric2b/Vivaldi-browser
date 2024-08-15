@@ -13,9 +13,11 @@
 
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/parameter_pack.h"
 #include "build/build_config.h"
@@ -32,7 +34,7 @@ namespace password_manager {
 namespace {
 
 // The current version number of the affiliation database schema.
-const int kVersion = 5;
+const int kVersion = 6;
 
 // The oldest version of the schema such that a legacy Chrome client using that
 // version can still read/write the current database.
@@ -109,6 +111,14 @@ void InitializeTableBuilders(SQLTableBuilders builders) {
 
   builders.psl_extensions->AddColumnToUniqueKey("domain", "VARCHAR NOT NULL");
   SealVersion(builders, /*expected_version=*/5u);
+
+  // Add index on eq_class_groups.facet_uri and eq_class_groups.set_id
+  // manually (to prevent linear scan when joining).
+  builders.eq_class_groups->AddIndex("index_on_eq_groups_url_index",
+                                     {"facet_uri"});
+  builders.eq_class_groups->AddIndex("index_on_eq_groups_set_id_index",
+                                     {"set_id"});
+  SealVersion(builders, /*expected_version=*/6u);
 }
 
 // Migrates from a given version or creates table depending if table exists or
@@ -130,7 +140,7 @@ AffiliationDatabase::AffiliationDatabase() = default;
 AffiliationDatabase::~AffiliationDatabase() = default;
 
 bool AffiliationDatabase::Init(const base::FilePath& path) {
-  sql_connection_ = std::make_unique<sql::Database>();
+  sql_connection_ = std::make_unique<sql::Database>(sql::DatabaseOptions{});
   sql_connection_->set_histogram_tag("Affiliation");
   sql_connection_->set_error_callback(base::BindRepeating(
       &AffiliationDatabase::SQLErrorCallback, base::Unretained(this)));
@@ -177,6 +187,12 @@ bool AffiliationDatabase::Init(const base::FilePath& path) {
     if (!metatable.SetVersionNumber(kVersion)) {
       return false;
     }
+  }
+
+  int64_t db_size;
+  if (base::GetFileSize(path, &db_size)) {
+    base::UmaHistogramMemoryKB(
+        "PasswordManager.AffiliationDatabase.DatabaseSize", db_size / 1024);
   }
 
   return true;
@@ -269,6 +285,49 @@ std::vector<GroupedFacets> AffiliationDatabase::GetAllGroups() const {
         statement.ColumnString(1));
   }
   return results;
+}
+
+GroupedFacets AffiliationDatabase::GetGroup(const FacetURI& facet_uri) const {
+  sql::Statement statement(sql_connection_->GetCachedStatement(
+      SQL_FROM_HERE,
+      "SELECT m2.facet_uri, m2.main_domain, c.group_display_name, "
+      "c.group_icon_url, c.id "
+      "FROM eq_class_groups m1, eq_class_groups m2, eq_classes c "
+      "WHERE m1.facet_uri = ? AND m1.set_id = m2.set_id AND m1.set_id = c.id "
+      "ORDER BY c.id"));
+  statement.BindString(0, facet_uri.potentially_invalid_spec());
+
+  GroupedFacets result;
+  if (!statement.Step()) {
+    // No such |facet_uri| in the database, return group with requested facet.
+    result.facets.emplace_back(facet_uri);
+    return result;
+  }
+
+  int64_t group_id = statement.ColumnInt64(4);
+
+  // Add branding info for a group as it's the same for all steps.
+  result.branding_info.name = statement.ColumnString(2);
+  result.branding_info.icon_url = GURL(statement.ColumnString(3));
+
+  result.facets.emplace_back(
+      FacetURI::FromCanonicalSpec(statement.ColumnString(0)),
+      FacetBrandingInfo(), /*change_password_url=*/GURL(),
+      statement.ColumnString(1));
+
+  while (statement.Step()) {
+    // Return only the first group from the response, as other groups are exact
+    // duplicates.
+    if (group_id != statement.ColumnInt64(4)) {
+      break;
+    }
+    result.facets.emplace_back(
+        FacetURI::FromCanonicalSpec(statement.ColumnString(0)),
+        FacetBrandingInfo(), /*change_password_url=*/GURL(),
+        statement.ColumnString(1));
+  }
+
+  return result;
 }
 
 std::vector<std::string> AffiliationDatabase::GetPSLExtensions() const {

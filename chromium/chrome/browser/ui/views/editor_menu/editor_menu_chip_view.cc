@@ -38,13 +38,11 @@ EditorMenuChipView::EditorMenuChipView(views::Button::PressedCallback callback,
   SetCornerRadius(views::LayoutProvider::Get()->GetCornerRadiusMetric(
       views::Emphasis::kHigh));
   SetCustomPadding(kChipInsets);
-
-  SetTooltipText(preset_text_query.name);
 }
 
 EditorMenuChipView::~EditorMenuChipView() = default;
 
-BEGIN_METADATA(EditorMenuChipView, views::MdTextButton)
+BEGIN_METADATA(EditorMenuChipView)
 END_METADATA
 
 }  // namespace chromeos::editor_menu

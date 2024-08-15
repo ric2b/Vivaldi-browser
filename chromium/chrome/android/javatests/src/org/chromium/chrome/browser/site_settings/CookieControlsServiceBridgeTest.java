@@ -17,6 +17,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -95,6 +97,7 @@ public class CookieControlsServiceBridgeTest {
     /** Test changing the bridge triggers callback for correct toggle state. */
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.TRACKING_PROTECTION_3PCD)
     public void testCookieSettingsCheckedChanges() throws Exception {
         setCookieControlsMode(CookieControlsMode.OFF);
         final String url = mTestServer.getURL("/chrome/test/data/android/cookie.html");
@@ -142,6 +145,7 @@ public class CookieControlsServiceBridgeTest {
     /** Test the ability to set the cookie controls mode pref through the bridge. */
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.TRACKING_PROTECTION_3PCD)
     public void testCookieBridgeWithTPCookiesDisabled() throws Exception {
         setCookieControlsMode(CookieControlsMode.OFF);
         final String url = mTestServer.getURL("/chrome/test/data/android/cookie.html");

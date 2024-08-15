@@ -151,14 +151,14 @@ class AndroidSmsAppSetupControllerImplTest : public testing::Test {
         return;
 
       url_to_pwa_map_[url] =
-          web_app::GenerateAppId(/*manifest_id=*/absl::nullopt, url);
+          web_app::GenerateAppId(/*manifest_id=*/std::nullopt, url);
     }
 
     // AndroidSmsAppSetupControllerImpl::PwaDelegate:
-    absl::optional<webapps::AppId> GetPwaForUrl(const GURL& install_url,
-                                                Profile* profile) override {
+    std::optional<webapps::AppId> GetPwaForUrl(const GURL& install_url,
+                                               Profile* profile) override {
       if (!base::Contains(url_to_pwa_map_, install_url))
-        return absl::nullopt;
+        return std::nullopt;
 
       return url_to_pwa_map_[install_url];
     }
@@ -183,7 +183,7 @@ class AndroidSmsAppSetupControllerImplTest : public testing::Test {
     }
 
    private:
-    raw_ptr<FakeCookieManager, ExperimentalAsh> fake_cookie_manager_;
+    raw_ptr<FakeCookieManager> fake_cookie_manager_;
     base::flat_map<GURL, webapps::AppId> url_to_pwa_map_;
   };
 
@@ -447,17 +447,16 @@ class AndroidSmsAppSetupControllerImplTest : public testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
 
-  absl::optional<bool> last_set_up_app_result_;
-  absl::optional<bool> last_delete_cookie_result_;
-  absl::optional<bool> last_remove_app_result_;
+  std::optional<bool> last_set_up_app_result_;
+  std::optional<bool> last_delete_cookie_result_;
+  std::optional<bool> last_remove_app_result_;
 
   raw_ptr<web_app::FakeWebAppProvider, DanglingUntriaged> provider_;
 
   TestingProfile profile_;
-  raw_ptr<HostContentSettingsMap, ExperimentalAsh> host_content_settings_map_;
+  raw_ptr<HostContentSettingsMap> host_content_settings_map_;
   std::unique_ptr<FakeCookieManager> fake_cookie_manager_;
-  raw_ptr<TestPwaDelegate, DanglingUntriaged | ExperimentalAsh>
-      test_pwa_delegate_;
+  raw_ptr<TestPwaDelegate, DanglingUntriaged> test_pwa_delegate_;
   std::unique_ptr<AndroidSmsAppSetupController> setup_controller_;
 };
 

@@ -18,6 +18,7 @@ skia_graphite_public = [
   "$_include/ImageProvider.h",
   "$_include/Recorder.h",
   "$_include/Recording.h",
+  "$_include/Surface.h",
   "$_include/TextureInfo.h",
   "$_include/YUVABackendTextures.h",
 ]
@@ -57,7 +58,7 @@ skia_graphite_sources = [
   "$_src/ContextUtils.h",
   "$_src/CopyTask.cpp",
   "$_src/CopyTask.h",
-  "$_src/DescriptorTypes.h",
+  "$_src/DescriptorData.h",
   "$_src/Device.cpp",
   "$_src/Device.h",
   "$_src/DrawAtlas.cpp",
@@ -209,6 +210,11 @@ skia_graphite_sources = [
   "$_src/text/TextAtlasManager.h",
 ]
 
+skia_graphite_android_private = [
+  "$_src/surface/Surface_AndroidFactories.cpp",
+  "$_include/android/graphite/SurfaceAndroid.h",
+]
+
 skia_graphite_dawn_public = [
   "$_include/dawn/DawnBackendContext.h",
   "$_include/dawn/DawnTypes.h",
@@ -244,6 +250,8 @@ skia_graphite_dawn_sources = [
   "$_src/dawn/DawnTexture.cpp",
   "$_src/dawn/DawnTexture.h",
   "$_src/dawn/DawnTypesPriv.cpp",
+  "$_src/dawn/DawnUtils.cpp",
+  "$_src/dawn/DawnUtilsPriv.h",
 ]
 
 skia_graphite_mtl_public = [
@@ -316,6 +324,8 @@ skia_graphite_vk_sources = [
   "$_src/vk/VulkanResourceProvider.h",
   "$_src/vk/VulkanSampler.cpp",
   "$_src/vk/VulkanSampler.h",
+  "$_src/vk/VulkanSamplerYcbcrConversion.cpp",
+  "$_src/vk/VulkanSamplerYcbcrConversion.h",
   "$_src/vk/VulkanSharedContext.cpp",
   "$_src/vk/VulkanSharedContext.h",
   "$_src/vk/VulkanTexture.cpp",

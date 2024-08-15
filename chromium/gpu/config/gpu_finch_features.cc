@@ -36,7 +36,7 @@ namespace {
 #if BUILDFLAG(IS_ANDROID)
 bool FieldIsInBlocklist(const char* current_value, std::string blocklist_str) {
   std::vector<std::string> blocklist = base::SplitString(
-      blocklist_str, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+      blocklist_str, "|", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   for (const std::string& blocklisted_value : blocklist) {
     if (base::StartsWith(current_value, blocklisted_value,
                          base::CompareCase::INSENSITIVE_ASCII)) {
@@ -108,10 +108,6 @@ BASE_FEATURE(kWebViewThreadSafeMediaDefault,
 // Use AImageReader for MediaCodec and MediaPlyer on android.
 BASE_FEATURE(kAImageReader, "AImageReader", base::FEATURE_ENABLED_BY_DEFAULT);
 
-// If webview-draw-functor-uses-vulkan is set, use vulkan for composite and
-// raster.
-BASE_FEATURE(kWebViewVulkan, "WebViewVulkan", base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Used to limit AImageReader max queue size to 1 since many devices especially
 // android Tv devices do not support more than 1 images.
 BASE_FEATURE(kLimitAImageReaderMaxSizeToOne,
@@ -154,14 +150,29 @@ BASE_FEATURE(kDefaultEnableGpuRasterization,
 #endif
 );
 
+#if !BUILDFLAG(IS_ANDROID)
 // Enables the use of out of process rasterization for canvas.
 BASE_FEATURE(kCanvasOopRasterization,
              "CanvasOopRasterization",
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN) || \
-    (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN) ||         \
+    (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_ANDROID) || \
+    BUILDFLAG(IS_CHROMEOS_LACROS)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
+#endif
+
+// Enables the use of out of process rasterization for canvas even when GPU tile
+// rasterization is disabled. CanvasOopRasterization is still required to be
+// enabled to use OOP-C path with this flag.
+BASE_FEATURE(kCanvasOopWithoutGpuTileRaster,
+             "CanvasOopWithoutGpuTileRaster",
+#if BUILDFLAG(IS_WIN)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
 #endif
 );
 
@@ -210,13 +221,6 @@ BASE_FEATURE(kDisableVideoOverlayIfMoving,
 BASE_FEATURE(kNoUndamagedOverlayPromotion,
              "NoUndamagedOverlayPromotion",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Use a DCompPresenter as the root surface, instead of a
-// DirectCompositionSurfaceWin. DCompPresenter is surface-less and the actual
-// allocation of the root surface will be owned by DirectRenderer.
-BASE_FEATURE(kDCompPresenter,
-             "DCompPresenter",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_IOS)
@@ -226,6 +230,12 @@ BASE_FEATURE(kAdjustGpuProcessPriority,
              "AdjustGpuProcessPriority",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+// Fix to move cache key prefix generation from host to gpu service side in
+// order to avoid race in GpuInfo. crbug.com/1506660.
+BASE_FEATURE(kGenGpuDiskCacheKeyPrefixInGpuService,
+             "GenGpuDiskCacheKeyPrefixInGpuService",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Causes us to use the SharedImageManager, removing support for the old
 // mailbox system. Any consumers of the GPU process using the old mailbox
@@ -253,7 +263,7 @@ BASE_FEATURE(kVaapiWebPImageDecodeAcceleration,
 // Enable Vulkan graphics backend for compositing and rasterization. Defaults to
 // native implementation if --use-vulkan flag is not used. Otherwise
 // --use-vulkan will be followed.
-// Note Android WebView uses kWebViewVulkan instead of this.
+// Note Android WebView uses kWebViewDrawFunctorUsesVulkan instead of this.
 BASE_FEATURE(kVulkan,
              "Vulkan",
 // NOTE(jarle@vivaldi.com): Temp. solution for white video bug.
@@ -280,7 +290,8 @@ BASE_FEATURE(kForceGpuMainThreadToNormalPriorityDrDc,
 
 // Enable WebGPU on gpu service side only. This is used with origin trial and
 // enabled by default on supported platforms.
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(IS_ANDROID)
 #define WEBGPU_ENABLED base::FEATURE_ENABLED_BY_DEFAULT
 #else
 #define WEBGPU_ENABLED base::FEATURE_DISABLED_BY_DEFAULT
@@ -289,7 +300,24 @@ BASE_FEATURE(kWebGPUService, "WebGPUService", WEBGPU_ENABLED);
 BASE_FEATURE(kWebGPUBlobCache, "WebGPUBlobCache", WEBGPU_ENABLED);
 #undef WEBGPU_ENABLED
 
-BASE_FEATURE(kWebGPUUseDXC, "WebGPUUseDXC2", base::FEATURE_DISABLED_BY_DEFAULT);
+// List of WebGPU feature names, delimited by ,
+// The FeatureParam may be overridden via Finch config, or via the command line
+// For example:
+//   --enable-field-trial-config \
+//   --force-fieldtrial-params=WebGPU.Enabled:UnsafeFeatures/timestamp-query%2Cshader-f16
+// Note that the comma should be URL-encoded.
+const base::FeatureParam<std::string> kWebGPUUnsafeFeatures{
+    &kWebGPUService, "UnsafeFeatures", ""};
+// List of WGSL feature names, delimited by ,
+// The FeatureParam may be overridden via Finch config, or via the command line
+// For example:
+//   --enable-field-trial-config \
+//   --force-fieldtrial-params=WebGPU.Enabled:UnsafeWGSLFeatures/feature_1%2Cfeature_2
+// Note that the comma should be URL-encoded.
+const base::FeatureParam<std::string> kWGSLUnsafeFeatures{
+    &kWebGPUService, "UnsafeWGSLFeatures", ""};
+
+BASE_FEATURE(kWebGPUUseDXC, "WebGPUUseDXC2", base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kWebGPUUseTintIR,
              "WebGPUUseTintIR",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -359,11 +387,7 @@ const base::FeatureParam<std::string> kDrDcBlockListByAndroidBuildFP{
 // --enable-skia-graphite & --disable-skia-graphite.
 BASE_FEATURE(kSkiaGraphite,
              "SkiaGraphite",
-#if BUILDFLAG(IS_IOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
              base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 // Whether the Dawn "skip_validation" toggle is enabled for Skia Graphite.
@@ -373,6 +397,10 @@ const base::FeatureParam<bool> kSkiaGraphiteDawnSkipValidation{
 // Whether Dawn backend validation is enabled for Skia Graphite.
 const base::FeatureParam<bool> kSkiaGraphiteDawnBackendValidation{
     &kSkiaGraphite, "dawn_backend_validation", false};
+
+// Whether Dawn shares device with ANGLE.
+const base::FeatureParam<bool> kSkiaGraphiteDawnShareDevice{
+    &kSkiaGraphite, "dawn_share_device", true};
 
 #if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
@@ -414,6 +442,20 @@ BASE_FEATURE(kForceRestartGpuKillSwitch,
              "ForceRestartGpuKillSwitch",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Prune transfer cache entries not accessed recently. This also turns off
+// similar logic in cc::GpuImageDecodeCache which is the largest (often single)
+// client of transfer cache.
+BASE_FEATURE(kPruneOldTransferCacheEntries,
+             "PruneOldTransferCacheEntries",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// A feature that will start a task on a timer to purge old GpuImageDecodeCache
+// entries. This is similar to `kPruneOldTransferCacheEntries` but done on the
+// client side.
+BASE_FEATURE(kPurgeOldCacheEntriesOnTimer,
+             "PurgeOldCacheEntriesOnTimer",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Using the new SchedulerDfs GPU scheduler.
 BASE_FEATURE(kUseGpuSchedulerDfs,
              "UseGpuSchedulerDfs",
@@ -426,10 +468,12 @@ BASE_FEATURE(kUseGpuSchedulerDfs,
 
 // Use the ClientGmb interface to create GpuMemoryBuffers. This is supposed to
 // reduce number of IPCs happening while creating GpuMemoryBuffers by allowing
-// Renderers to do IPC directly to GPU process.
+// Renderers to do IPC directly to GPU process. This feature is now enabled by
+// default on all platforms.
 BASE_FEATURE(kUseClientGmbInterface,
              "UseClientGmbInterface",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT
+);
 
 // When the application is in background, whether to perform immediate GPU
 // cleanup when executing deferred requests.
@@ -466,8 +510,7 @@ bool IsUsingVulkan() {
   // WebView checks, which do not use (and disables) kVulkan.
   // Do this above the Android version check because there are test devices
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kWebViewDrawFunctorUsesVulkan) &&
-      base::FeatureList::IsEnabled(kWebViewVulkan)) {
+          switches::kWebViewDrawFunctorUsesVulkan)) {
     return true;
   }
 
@@ -514,6 +557,12 @@ bool IsDrDcEnabled() {
   // Enabled on android P+.
   if (base::android::BuildInfo::GetInstance()->sdk_int() <
       base::android::SDK_VERSION_P) {
+    return false;
+  }
+
+  // DrDc is not supported with Graphite-Dawn yet.
+  // TODO(crbug.com/1505023): Add DrDc support with Graphite
+  if (IsSkiaGraphiteEnabled(base::CommandLine::ForCurrentProcess())) {
     return false;
   }
 
@@ -608,6 +657,17 @@ bool IsSkiaGraphiteEnabled(const base::CommandLine* command_line) {
   if (command_line->HasSwitch(switches::kEnableSkiaGraphite)) {
     return true;
   }
+#if !(BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_WIN))
+  // Disallow Graphite from being enabled via the base::Feature on
+  // not-yet-supported platforms to avoid users experiencing undefined behavior,
+  // including behavior that might prevent them from being able to return to
+  // chrome://flags to disable the feature.
+  if (base::FeatureList::IsEnabled(features::kSkiaGraphite)) {
+    LOG(ERROR) << "Enabling Graphite on a not-yet-supported platform is "
+                  "disallowed for safety";
+  }
+  return false;
+#else
 #if BUILDFLAG(IS_APPLE)
   // Graphite only works well with ANGLE Metal on Mac or iOS.
   // TODO(crbug.com/1423574): Remove this after ANGLE Metal launches fully.
@@ -662,6 +722,26 @@ bool IsSkiaGraphiteEnabled(const base::CommandLine* command_line) {
 #endif  // BUILDFLAG(IS_MAC)
 #endif  // BUILDFLAG(IS_APPLE)
   return base::FeatureList::IsEnabled(features::kSkiaGraphite);
+#endif  // !(BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_WIN))
+}
+
+// Set up such that service side purge depends on the client side purge feature
+// being enabled. And enabling service side purge disables client purge
+bool EnablePurgeGpuImageDecodeCache() {
+  return base::FeatureList::IsEnabled(kPurgeOldCacheEntriesOnTimer) &&
+         !base::FeatureList::IsEnabled(kPruneOldTransferCacheEntries);
+}
+bool EnablePruneOldTransferCacheEntries() {
+  return base::FeatureList::IsEnabled(kPurgeOldCacheEntriesOnTimer) &&
+         base::FeatureList::IsEnabled(kPruneOldTransferCacheEntries);
+}
+
+bool IsCanvasOopRasterizationEnabled() {
+#if BUILDFLAG(IS_ANDROID)
+  return true;
+#else
+  return base::FeatureList::IsEnabled(kCanvasOopRasterization);
+#endif
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -677,7 +757,7 @@ bool IsAImageReaderEnabled() {
   }
 
   return base::FeatureList::IsEnabled(kAImageReader) &&
-         base::android::AndroidImageReader::GetInstance().IsSupported();
+         base::android::EnableAndroidImageReader();
 }
 
 bool IsAndroidSurfaceControlEnabled() {

@@ -69,12 +69,13 @@ class ASH_EXPORT DateTray : public TrayBackgroundView,
   friend class DateTrayTest;
   friend class GlanceablesPixelTest;
   friend class GlanceablesBrowserTest;
+  friend class GlanceableTrayBubbleViewTest;
 
   // Owned by the views hierarchy.
-  raw_ptr<TimeTrayItemView, ExperimentalAsh> time_view_ = nullptr;
+  raw_ptr<TimeTrayItemView> time_view_ = nullptr;
 
   // Owned by `StatusAreaWidget`.
-  raw_ptr<UnifiedSystemTray, ExperimentalAsh> unified_system_tray_ = nullptr;
+  raw_ptr<UnifiedSystemTray> unified_system_tray_ = nullptr;
 
   // Bubble container for Glanceable UI.
   std::unique_ptr<GlanceableTrayBubble> bubble_;

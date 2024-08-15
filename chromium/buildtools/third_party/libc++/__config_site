@@ -33,6 +33,14 @@
 /* #undef _LIBCPP_HAS_NO_LOCALIZATION */
 /* #undef _LIBCPP_HAS_NO_WIDE_CHARACTERS */
 
+// TODO(thakis): Is this right?
+/* #undef _LIBCPP_HAS_NO_STD_MODULES */
+
+// TODO(thakis): Is this right?
+/* #undef _LIBCPP_HAS_NO_TIME_ZONE_DATABASE */
+
+#define _LIBCPP_INSTRUMENTED_WITH_ASAN
+
 // PSTL backends
 /* #undef _LIBCPP_PSTL_CPU_BACKEND_SERIAL */
 #if defined(__APPLE__)
@@ -69,14 +77,11 @@
 #define _LIBCPP_HAS_NO_INT128
 #endif
 
-// TODO(crbug.com/1481891): Enable on Android too.
 // TODO(thakis): Remove this after LLVM 19's libc++ is rolled in.
-#if !defined(__ANDROID__)
 // TODO(andre@vivaldi.com) : Update notifier are using unsigned int for 32bit
 // chars, and there are no char_traits defined for this. VB-100878
 #if !defined(VIVALDI_BUILD)
 #define _LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION
 #endif //!VIVALDI_BUILD
-#endif
 
 #endif // _LIBCPP_CONFIG_SITE

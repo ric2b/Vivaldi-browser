@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/test/fake_web_app_ui_manager.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -16,7 +17,6 @@
 #include "chrome/browser/web_applications/web_app_callback_app_identity.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/webapps/browser/uninstall_result_code.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace web_app {
 
@@ -100,7 +100,7 @@ bool FakeWebAppUiManager::IsInAppWindow(
 }
 
 const webapps::AppId* FakeWebAppUiManager::GetAppIdForWindow(
-    content::WebContents* web_contents) const {
+    const content::WebContents* web_contents) const {
   return nullptr;
 }
 
@@ -135,23 +135,31 @@ void FakeWebAppUiManager::ShowWebAppIdentityUpdateDialog(
   std::move(callback).Run(identity_update_dialog_action_for_testing.value());
 }
 
-void FakeWebAppUiManager::WaitForFirstRunAndLaunchWebApp(
-    apps::AppLaunchParams params,
-    LaunchWebAppWindowSetting launch_setting,
-    Profile& profile,
-    LaunchWebAppCallback callback,
-    AppLock& lock) {
+void FakeWebAppUiManager::LaunchWebApp(apps::AppLaunchParams params,
+                                       LaunchWebAppWindowSetting launch_setting,
+                                       Profile& profile,
+                                       LaunchWebAppDebugValueCallback callback,
+                                       WithAppResources& lock) {
   // Due to this sometimes causing confusion in tests, print that a launch has
   // been faked. To have launches create real WebContents in unit_tests (which
   // will be non-functional anyways), populate the WebAppUiManagerImpl in the
   // FakeWebAppProvider during startup.
   LOG(INFO) << "Pretending to launch web app " << params.app_id;
-  std::move(callback).Run(nullptr, nullptr,
-                          apps::LaunchContainer::kLaunchContainerNone);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), /*browser=*/nullptr,
+                     /*web_contents=*/nullptr, params.container,
+                     base::Value("FakeWebAppUiManager::LaunchWebApp")));
   if (on_launch_web_app_callback_) {
     on_launch_web_app_callback_.Run(std::move(params),
                                     std::move(launch_setting));
   }
+}
+
+void FakeWebAppUiManager::WaitForFirstRunService(
+    Profile& profile,
+    FirstRunServiceCompletedCallback callback) {
+  std::move(callback).Run(/*success=*/true);
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -163,14 +171,22 @@ void FakeWebAppUiManager::MigrateLauncherState(
 }
 
 void FakeWebAppUiManager::DisplayRunOnOsLoginNotification(
-    const std::vector<std::string>& app_names,
+    const base::flat_map<webapps::AppId,
+                         WebAppUiManager::RoolNotificationBehavior>& apps,
     base::WeakPtr<Profile> profile) {
   // Still show the notification so it can be tested using the
   // NotificationDisplayServiceTester
-  web_app::DisplayRunOnOsLoginNotification(app_names, profile);
+  web_app::DisplayRunOnOsLoginNotification(apps, std::move(profile));
 }
 
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+void FakeWebAppUiManager::NotifyAppRelaunchState(
+    const webapps::AppId& placeholder_app_id,
+    const webapps::AppId& final_app_id,
+    const std::u16string& final_app_name,
+    base::WeakPtr<Profile> profile,
+    AppRelaunchState relaunch_state) {}
 
 content::WebContents* FakeWebAppUiManager::CreateNewTab() {
   return nullptr;
@@ -210,11 +226,16 @@ void FakeWebAppUiManager::PresentUserUninstallDialog(
   std::move(callback).Run(webapps::UninstallResultCode::kSuccess);
 }
 
-void FakeWebAppUiManager::LaunchIsolatedWebAppInstaller(
+void FakeWebAppUiManager::LaunchOrFocusIsolatedWebAppInstaller(
     const base::FilePath& bundle_path) {}
 
 void FakeWebAppUiManager::MaybeCreateEnableSupportedLinksInfobar(
     content::WebContents* web_contents,
     const std::string& launch_name) {}
+
+void FakeWebAppUiManager::MaybeShowIPHPromoForAppsLaunchedViaLinkCapturing(
+    content::WebContents* web_contents,
+    Profile* profile,
+    const std::string& app_id) {}
 
 }  // namespace web_app

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <optional>
+
 #include "base/feature_list.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
@@ -26,7 +28,6 @@
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/tcp_socket.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 namespace {
@@ -119,8 +120,8 @@ mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext() {
 
 void OnConnected(base::OnceClosure quit_closure,
                  int result,
-                 const absl::optional<net::IPEndPoint>& local_addr,
-                 const absl::optional<net::IPEndPoint>& peer_addr,
+                 const std::optional<net::IPEndPoint>& local_addr,
+                 const std::optional<net::IPEndPoint>& peer_addr,
                  mojo::ScopedDataPipeConsumerHandle receive_stream,
                  mojo::ScopedDataPipeProducerHandle send_stream) {
   base::ScopedClosureRunner closure_runner(std::move(quit_closure));
@@ -154,7 +155,7 @@ void RunTcpEndToEndTest(
 
   base::RunLoop run_loop;
   network_context->CreateTCPConnectedSocket(
-      absl::nullopt, addr,
+      std::nullopt, addr,
       use_options ? std::move(tcp_connected_socket_options) : nullptr,
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
       tcp_connected_socket_remote.InitWithNewPipeAndPassReceiver(),
@@ -210,7 +211,12 @@ IN_PROC_BROWSER_TEST_F(SandboxedSocketBrokerBrowserTest,
   CountingSocketBrokerImpl socket_broker;
   network::mojom::NetworkContextParamsPtr network_context_params =
       network::mojom::NetworkContextParams::New();
-  network_context_params->socket_broker = socket_broker.BindNewRemote();
+  network_context_params->socket_brokers =
+      network::mojom::SocketBrokerRemotes::New();
+  network_context_params->socket_brokers->client =
+      socket_broker.BindNewRemote();
+  network_context_params->socket_brokers->server =
+      socket_broker.BindNewRemote();
   auto file_paths = network::mojom::NetworkContextFilePaths::New();
   base::FilePath context_path =
       shell()->web_contents()->GetBrowserContext()->GetPath().Append(

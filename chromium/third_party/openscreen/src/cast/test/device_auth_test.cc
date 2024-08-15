@@ -131,8 +131,7 @@ class DeviceAuthTest : public ::testing::Test {
 };
 
 TEST_F(DeviceAuthTest, MANUAL_SerializeTestData) {
-  if (::testing::GTEST_FLAG(filter) ==
-      "DeviceAuthTest.MANUAL_SerializeTestData") {
+  if (GTEST_FLAG_GET(filter) == "DeviceAuthTest.MANUAL_SerializeTestData") {
     RunAuthTest(std::string(), nullptr, true, true);
   }
 }

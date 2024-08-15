@@ -66,6 +66,7 @@ enum CalculationResultCategory {
   kCalcTime,
   kCalcFrequency,
   kCalcResolution,
+  kCalcIdent,
   kCalcOther,
 };
 
@@ -84,13 +85,14 @@ class CORE_EXPORT CSSMathExpressionNode
       CSSAnchorQueryTypes allowed_anchor_queries,
       // Variable substitutions for relative color syntax.
       // https://www.w3.org/TR/css-color-5/#relative-colors
-      const HashMap<CSSValueID, double> color_channel_keyword_values = {});
+      const HashMap<CSSValueID, double>& color_channel_keyword_values = {});
 
   virtual CSSMathExpressionNode* Copy() const = 0;
 
   virtual bool IsNumericLiteral() const { return false; }
   virtual bool IsOperation() const { return false; }
   virtual bool IsAnchorQuery() const { return false; }
+  virtual bool IsIdentifierLiteral() const { return false; }
 
   virtual bool IsMathFunction() const { return false; }
 
@@ -141,9 +143,8 @@ class CORE_EXPORT CSSMathExpressionNode
   bool HasPercentage() const {
     return category_ == kCalcPercent || category_ == kCalcPercentLength;
   }
-  bool CanBeResolvedWithConversionData() const {
-    return can_be_resolved_with_conversion_data_;
-  }
+  virtual bool InvolvesPercentage() const { return HasPercentage(); }
+  virtual bool InvolvesAnchorQueries() const { return IsAnchorQuery(); }
 
   // Returns the unit type of the math expression *without doing any type
   // conversion* (e.g., 1px + 1em needs type conversion to resolve).
@@ -178,12 +179,9 @@ class CORE_EXPORT CSSMathExpressionNode
 
  protected:
   CSSMathExpressionNode(CalculationResultCategory category,
-                        const bool can_be_resolved_with_conversion_data,
                         bool has_comparisons,
                         bool needs_tree_scope_population)
       : category_(category),
-        can_be_resolved_with_conversion_data_(
-            can_be_resolved_with_conversion_data),
         has_comparisons_(has_comparisons),
         needs_tree_scope_population_(needs_tree_scope_population) {
     DCHECK_NE(category, kCalcOther);
@@ -197,7 +195,6 @@ class CORE_EXPORT CSSMathExpressionNode
   }
 
   CalculationResultCategory category_;
-  bool can_be_resolved_with_conversion_data_;
   bool is_nested_calc_ = false;
   bool has_comparisons_;
   bool needs_tree_scope_population_;
@@ -262,6 +259,90 @@ struct DowncastTraits<CSSMathExpressionNumericLiteral> {
   }
 };
 
+// Used for media-feature name in media-progress(),
+// for container name in container-progress().
+// Will possibly be used in container name for container units function.
+class CORE_EXPORT CSSMathExpressionIdentifierLiteral final
+    : public CSSMathExpressionNode {
+ public:
+  static CSSMathExpressionIdentifierLiteral* Create(AtomicString identifier) {
+    return MakeGarbageCollected<CSSMathExpressionIdentifierLiteral>(
+        std::move(identifier));
+  }
+
+  explicit CSSMathExpressionIdentifierLiteral(AtomicString identifier);
+
+  CSSMathExpressionNode* Copy() const final { return Create(identifier_); }
+
+  const AtomicString& GetValue() const { return identifier_; }
+
+  bool IsIdentifierLiteral() const final { return true; }
+
+  const CSSMathExpressionNode& PopulateWithTreeScope(
+      const TreeScope* tree_scope) const final {
+    NOTREACHED();
+    return *this;
+  }
+
+  bool IsZero() const final { return false; }
+  String CustomCSSText() const final { return identifier_; }
+  scoped_refptr<const CalculationExpressionNode> ToCalculationExpression(
+      const CSSLengthResolver&) const final;
+  absl::optional<PixelsAndPercent> ToPixelsAndPercent(
+      const CSSLengthResolver&) const final {
+    return absl::nullopt;
+  }
+  double DoubleValue() const final {
+    NOTREACHED();
+    return 0;
+  }
+  absl::optional<double> ComputeValueInCanonicalUnit() const final {
+    return absl::nullopt;
+  }
+  double ComputeLengthPx(const CSSLengthResolver& length_resolver) const final {
+    NOTREACHED();
+    return 0;
+  }
+  bool AccumulateLengthArray(CSSLengthArray& length_array,
+                             double multiplier) const final {
+    return false;
+  }
+  void AccumulateLengthUnitTypes(
+      CSSPrimitiveValue::LengthTypeFlags& types) const final {}
+  bool IsComputationallyIndependent() const final { return true; }
+  bool operator==(const CSSMathExpressionNode& other) const final {
+    return other.IsIdentifierLiteral() &&
+           DynamicTo<CSSMathExpressionIdentifierLiteral>(other)->GetValue() ==
+               GetValue();
+  }
+  CSSPrimitiveValue::UnitType ResolvedUnitType() const final {
+    return CSSPrimitiveValue::UnitType::kIdent;
+  }
+  void Trace(Visitor* visitor) const final {
+    CSSMathExpressionNode::Trace(visitor);
+  }
+
+#if DCHECK_IS_ON()
+  bool InvolvesPercentageComparisons() const final { return false; }
+#endif
+
+ protected:
+  double ComputeDouble(const CSSLengthResolver& length_resolver) const final {
+    NOTREACHED();
+    return 0;
+  }
+
+ private:
+  AtomicString identifier_;
+};
+
+template <>
+struct DowncastTraits<CSSMathExpressionIdentifierLiteral> {
+  static bool AllowFrom(const CSSMathExpressionNode& node) {
+    return node.IsIdentifierLiteral();
+  }
+};
+
 class CORE_EXPORT CSSMathExpressionOperation final
     : public CSSMathExpressionNode {
  public:
@@ -301,23 +382,19 @@ class CORE_EXPORT CSSMathExpressionOperation final
   CSSMathExpressionOperation(const CSSMathExpressionNode* left_side,
                              const CSSMathExpressionNode* right_side,
                              CSSMathOperator op,
-                             CalculationResultCategory category,
-                             const bool can_be_resolved_with_conversion_data);
+                             CalculationResultCategory category);
 
   CSSMathExpressionOperation(CalculationResultCategory category,
-                             const bool can_be_resolved_with_conversion_data,
                              Operands&& operands,
                              CSSMathOperator op);
 
   CSSMathExpressionOperation(CalculationResultCategory category,
-                             const bool can_be_resolved_with_conversion_data,
                              CSSMathOperator op);
 
   CSSMathExpressionNode* Copy() const final {
     Operands operands(operands_);
     return MakeGarbageCollected<CSSMathExpressionOperation>(
-        category_, can_be_resolved_with_conversion_data_, std::move(operands),
-        operator_);
+        category_, std::move(operands), operator_);
   }
 
   const Operands& GetOperands() const { return operands_; }
@@ -327,6 +404,10 @@ class CORE_EXPORT CSSMathExpressionOperation final
   bool IsAddOrSubtract() const {
     return operator_ == CSSMathOperator::kAdd ||
            operator_ == CSSMathOperator::kSubtract;
+  }
+  bool IsMultiplyOrDivide() const {
+    return operator_ == CSSMathOperator::kMultiply ||
+           operator_ == CSSMathOperator::kDivide;
   }
   bool AllOperandsAreNumeric() const;
   bool IsMinOrMax() const {
@@ -355,6 +436,9 @@ class CORE_EXPORT CSSMathExpressionOperation final
     return IsMinOrMax() || IsClamp() || IsSteppedValueFunction() ||
            IsTrigonometricFunction() || IsSignRelatedFunction();
   }
+
+  bool InvolvesPercentage() const final;
+  bool InvolvesAnchorQueries() const final;
 
   String CSSTextAsClamp() const;
 
@@ -386,7 +470,7 @@ class CORE_EXPORT CSSMathExpressionOperation final
   double ComputeDouble(const CSSLengthResolver& length_resolver) const final;
 
  private:
-  static const CSSMathExpressionNode* GetNumberSide(
+  static const CSSMathExpressionNode* GetNumericLiteralSide(
       const CSSMathExpressionNode* left_side,
       const CSSMathExpressionNode* right_side);
 

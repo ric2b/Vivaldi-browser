@@ -12,30 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(
+    missing_docs,
+    unused_results,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
+
 use core::marker::PhantomData;
 use criterion::{black_box, criterion_group, criterion_main, Bencher, Criterion};
 use crypto_provider::{CryptoProvider, CryptoRng};
 use crypto_provider_default::CryptoProviderImpl;
-use ldt_np_adv::{LdtEncrypterXtsAes128, LegacySalt};
+use ldt_np_adv::LegacySalt;
 
+use np_adv::deserialization_arena;
+use np_adv::extended::serialize::AdvertisementType;
 use np_adv::{
-    credential::{simple::*, source::*, v0::*, v1::*},
+    credential::{book::*, v0::*, v1::*, *},
     de_type::EncryptedIdentityDataElementType,
-    deserialize_advertisement, deserialize_v0_advertisement, deserialize_v1_advertisement,
+    deserialize_advertisement,
     extended::{
         data_elements::{GenericDataElement, TxPowerDataElement},
         deserialize::VerificationMode,
         serialize::{
-            AdvBuilder as ExtendedAdvBuilder, MicEncrypted, SectionBuilder, SectionIdentity,
-            SignedEncrypted,
+            AdvBuilder as ExtendedAdvBuilder, MicEncryptedSectionEncoder, PublicSectionEncoder,
+            SectionBuilder, SectionEncoder, SignedEncryptedSectionEncoder,
         },
     },
     legacy::{
         actions::{ActionBits, ActionsDataElement},
         serialize::{AdvBuilder as LegacyAdvBuilder, LdtIdentity},
+        ShortMetadataKey,
     },
     shared_data::{ContextSyncSeqNum, TxPower},
-    PublicIdentity,
+    MetadataKey, PublicIdentity,
 };
 use rand::{Rng as _, SeedableRng as _};
 use strum::IntoEnumIterator;
@@ -58,21 +70,22 @@ pub fn deser_adv_v1_encrypted(c: &mut Criterion) {
                                 .map(|_| V1Identity::random(&mut crypto_rng))
                                 .collect::<Vec<_>>();
 
-                            let mut adv_builder = ExtendedAdvBuilder::new();
+                            let mut adv_builder = ExtendedAdvBuilder::new(AdvertisementType::Encrypted);
 
                             // take the first n identities, one section per identity
                             for identity in identities.iter().take(num_sections) {
-                                let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(
-                                    &identity.key_seed,
+                                let broadcast_cm = SimpleSignedBroadcastCryptoMaterial::new(
+                                    identity.key_seed,
+                                    identity.extended_metadata_key,
+                                    identity.key_pair.private_key(),
                                 );
                                 match identity_type {
                                     VerificationMode::Mic => {
                                         let mut sb = adv_builder
-                                            .section_builder(MicEncrypted::new_random_salt(
+                                            .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
                                                 &mut crypto_rng,
                                                 EncryptedIdentityDataElementType::Private,
-                                                &identity.extended_metadata_key,
-                                                &hkdf,
+                                                &broadcast_cm,
                                             ))
                                             .unwrap();
 
@@ -81,12 +94,10 @@ pub fn deser_adv_v1_encrypted(c: &mut Criterion) {
                                     }
                                     VerificationMode::Signature => {
                                         let mut sb = adv_builder
-                                            .section_builder(SignedEncrypted::new_random_salt(
+                                            .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
                                                 &mut crypto_rng,
                                                 EncryptedIdentityDataElementType::Private,
-                                                &identity.extended_metadata_key,
-                                                &identity.key_pair,
-                                                &hkdf,
+                                                &broadcast_cm,
                                             ))
                                             .unwrap();
 
@@ -98,22 +109,11 @@ pub fn deser_adv_v1_encrypted(c: &mut Criterion) {
 
                             let adv = adv_builder.into_advertisement();
 
-                            match crypto_type {
-                                CryptoMaterialType::MinFootprint => run_with_v1_creds::<
-                                    MinimumFootprintV1CryptoMaterial,
-                                    CryptoProviderImpl,
-                                >(
-                                    b, identities, adv.as_slice()
-                                ),
-                                CryptoMaterialType::Precalculated => {
-                                    run_with_v1_creds::<
-                                        PrecalculatedV1CryptoMaterial,
-                                        CryptoProviderImpl,
-                                    >(
-                                        b, identities, adv.as_slice()
-                                    )
-                                }
-                            }
+                            run_with_v1_creds::<
+                                CryptoProviderImpl
+                            >(
+                                b, crypto_type, identities, adv.as_slice()
+                            )
                         },
                     );
                 }
@@ -123,31 +123,23 @@ pub fn deser_adv_v1_encrypted(c: &mut Criterion) {
 }
 
 pub fn deser_adv_v1_plaintext(c: &mut Criterion) {
-    let _rng = rand::rngs::StdRng::from_entropy();
+    c.bench_function("Deser V1 plaintext: sections=1", |b| {
+        let mut adv_builder = ExtendedAdvBuilder::new(AdvertisementType::Plaintext);
 
-    for &num_sections in &[1, 2, 5, 8] {
-        // measure worst-case performance -- the correct identities will be the last
-        // num_sections of the identities to be tried
-        c.bench_function(&format!("Deser V1 plaintext: sections={num_sections}"), |b| {
-            let mut adv_builder = ExtendedAdvBuilder::new();
+        let mut sb = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
-            // take the first n identities, one section per identity
-            for _ in 0..num_sections {
-                let mut sb = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+        add_des(&mut sb);
+        sb.add_to_advertisement();
 
-                add_des(&mut sb);
-                sb.add_to_advertisement();
-            }
+        let adv = adv_builder.into_advertisement();
 
-            let adv = adv_builder.into_advertisement();
-
-            run_with_v1_creds::<MinimumFootprintV1CryptoMaterial, CryptoProviderImpl>(
-                b,
-                vec![],
-                adv.as_slice(),
-            )
-        });
-    }
+        run_with_v1_creds::<CryptoProviderImpl>(
+            b,
+            CryptoMaterialType::MinFootprint,
+            vec![],
+            adv.as_slice(),
+        )
+    });
 }
 
 pub fn deser_adv_v0_encrypted(c: &mut Criterion) {
@@ -164,17 +156,17 @@ pub fn deser_adv_v0_encrypted(c: &mut Criterion) {
                         .collect::<Vec<_>>();
 
                     let identity = &identities[0];
-                    let hkdf =
-                        np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&identity.key_seed);
+
+                    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(
+                        identity.key_seed,
+                        identity.legacy_metadata_key,
+                    );
 
                     let mut adv_builder =
                         LegacyAdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
                             EncryptedIdentityDataElementType::Private,
                             LegacySalt::from(rng.gen::<[u8; 2]>()),
-                            identity.legacy_metadata_key,
-                            LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(
-                                &hkdf.legacy_ldt_key(),
-                            ),
+                            &broadcast_cm,
                         ));
 
                     let mut action_bits = ActionBits::default();
@@ -183,46 +175,31 @@ pub fn deser_adv_v0_encrypted(c: &mut Criterion) {
 
                     let adv = adv_builder.into_advertisement().unwrap();
 
-                    match crypto_type {
-                        CryptoMaterialType::MinFootprint => run_with_v0_creds::<
-                            MinimumFootprintV0CryptoMaterial,
-                            CryptoProviderImpl,
-                        >(
-                            b, identities, adv.as_slice()
-                        ),
-                        CryptoMaterialType::Precalculated => run_with_v0_creds::<
-                            PrecalculatedV0CryptoMaterial,
-                            CryptoProviderImpl,
-                        >(
-                            b, identities, adv.as_slice()
-                        ),
-                    }
+                    run_with_v0_creds::<CryptoProviderImpl>(
+                        b,
+                        crypto_type,
+                        identities,
+                        adv.as_slice(),
+                    )
                 },
             );
         }
     }
 }
 
-type DefaultV0Credential = np_adv::credential::simple::SimpleV0Credential<
-    np_adv::credential::v0::MinimumFootprintV0CryptoMaterial,
-    (),
->;
-type DefaultV1Credential = np_adv::credential::simple::SimpleV1Credential<
-    np_adv::credential::v1::MinimumFootprintV1CryptoMaterial,
-    (),
->;
-type DefaultBothCredentialSource =
-    np_adv::credential::source::OwnedBothCredentialSource<DefaultV0Credential, DefaultV1Credential>;
-
 pub fn deser_adv_v0_plaintext(c: &mut Criterion) {
-    let mut adv_builder = LegacyAdvBuilder::new(PublicIdentity::default());
+    let mut adv_builder = LegacyAdvBuilder::new(PublicIdentity);
 
     let mut action_bits = ActionBits::default();
     action_bits.set_action(ContextSyncSeqNum::try_from(3).unwrap());
     adv_builder.add_data_element(ActionsDataElement::from(action_bits)).unwrap();
     let adv = adv_builder.into_advertisement().unwrap();
 
-    let cred_source: DefaultBothCredentialSource = DefaultBothCredentialSource::new_empty();
+    let cred_book = CredentialBookBuilder::<EmptyMatchedCredential>::build_cached_slice_book::<
+        0,
+        0,
+        CryptoProviderImpl,
+    >(&[], &[]);
 
     for &num_advs in &[1, 10, 100, 1000] {
         c.bench_function(
@@ -231,9 +208,10 @@ pub fn deser_adv_v0_plaintext(c: &mut Criterion) {
                 b.iter(|| {
                     for _ in 0..num_advs {
                         black_box(
-                            deserialize_advertisement::<_, _, _, _, CryptoProviderImpl>(
+                            deserialize_advertisement::<_, CryptoProviderImpl>(
+                                deserialization_arena!(),
                                 black_box(adv.as_slice()),
-                                black_box(&cred_source),
+                                black_box(&cred_book),
                             )
                             .expect("Should succeed"),
                         );
@@ -246,22 +224,20 @@ pub fn deser_adv_v0_plaintext(c: &mut Criterion) {
 
 /// Benchmark decrypting a V0 advertisement with credentials built from the reversed list of
 /// identities
-fn run_with_v0_creds<M, C>(b: &mut Bencher, identities: Vec<V0Identity<C>>, adv: &[u8])
-where
-    M: V0CryptoMaterialExt,
+fn run_with_v0_creds<C>(
+    b: &mut Bencher,
+    crypto_material_type: CryptoMaterialType,
+    identities: Vec<V0Identity<C>>,
+    adv: &[u8],
+) where
     C: CryptoProvider,
 {
     let mut creds = identities
         .into_iter()
-        .map(|i| {
-            let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&i.key_seed);
-            SimpleV0Credential::new(
-                M::build_cred::<C>(
-                    i.key_seed,
-                    hkdf.legacy_metadata_key_hmac_key().calculate_hmac(&i.legacy_metadata_key),
-                ),
-                i.key_seed,
-            )
+        .map(|identity| identity.into_discovery_credential())
+        .map(|discovery_credential| MatchableCredential {
+            discovery_credential,
+            match_data: EmptyMatchedCredential,
         })
         .collect::<Vec<_>>();
 
@@ -269,34 +245,55 @@ where
     // cred source for predictably bad performance
     creds.reverse();
 
-    let cred_source = SliceCredentialSource::new(&creds);
-    b.iter(|| {
-        black_box(deserialize_v0_advertisement::<_, _, C>(adv, &cred_source).map(|_| 0_u8).unwrap())
-    });
+    match crypto_material_type {
+        CryptoMaterialType::MinFootprint => {
+            // Cache size of 0 => only min-footprint creds
+            let cred_book = CredentialBookBuilder::<_>::build_cached_slice_book::<
+                0,
+                0,
+                CryptoProviderImpl,
+            >(&creds, &[]);
+
+            b.iter(|| {
+                black_box(
+                    deserialize_advertisement::<_, C>(deserialization_arena!(), adv, &cred_book)
+                        .map(|_| 0_u8)
+                        .unwrap(),
+                )
+            });
+        }
+        CryptoMaterialType::Precalculated => {
+            let cred_book = CredentialBookBuilder::<_>::build_precalculated_owned_book::<C>(
+                creds,
+                core::iter::empty(),
+            );
+            b.iter(|| {
+                black_box(
+                    deserialize_advertisement::<_, C>(deserialization_arena!(), adv, &cred_book)
+                        .map(|_| 0_u8)
+                        .unwrap(),
+                )
+            });
+        }
+    }
 }
 
 /// Benchmark decrypting a V1 advertisement with credentials built from the reversed list of
 /// identities
-fn run_with_v1_creds<M, C>(b: &mut Bencher, identities: Vec<V1Identity<C>>, adv: &[u8])
-where
-    M: V1CryptoMaterialExt,
+fn run_with_v1_creds<C>(
+    b: &mut Bencher,
+    crypto_material_type: CryptoMaterialType,
+    identities: Vec<V1Identity<C>>,
+    adv: &[u8],
+) where
     C: CryptoProvider,
 {
     let mut creds = identities
         .into_iter()
-        .map(|i| {
-            let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&i.key_seed);
-            SimpleV1Credential::new(
-                M::build_cred::<C>(
-                    i.key_seed,
-                    hkdf.extended_unsigned_metadata_key_hmac_key()
-                        .calculate_hmac(&i.extended_metadata_key),
-                    hkdf.extended_signed_metadata_key_hmac_key()
-                        .calculate_hmac(&i.extended_metadata_key),
-                    i.key_pair.public(),
-                ),
-                i.key_seed,
-            )
+        .map(|identity| identity.into_discovery_credential())
+        .map(|discovery_credential| MatchableCredential {
+            discovery_credential,
+            match_data: EmptyMatchedCredential,
         })
         .collect::<Vec<_>>();
 
@@ -304,12 +301,39 @@ where
     // cred source for predictably bad performance
     creds.reverse();
 
-    let cred_source = SliceCredentialSource::new(&creds);
-    b.iter(|| {
-        black_box(deserialize_v1_advertisement::<_, _, C>(adv, &cred_source).map(|_| 0_u8).unwrap())
-    });
+    match crypto_material_type {
+        CryptoMaterialType::MinFootprint => {
+            // Cache size of 0 => only min-footprint creds
+            let cred_book = CredentialBookBuilder::<_>::build_cached_slice_book::<
+                0,
+                0,
+                CryptoProviderImpl,
+            >(&[], &creds);
+
+            b.iter(|| {
+                black_box(
+                    deserialize_advertisement::<_, C>(deserialization_arena!(), adv, &cred_book)
+                        .map(|_| 0_u8)
+                        .unwrap(),
+                )
+            });
+        }
+        CryptoMaterialType::Precalculated => {
+            let cred_book = CredentialBookBuilder::<_>::build_precalculated_owned_book::<C>(
+                core::iter::empty(),
+                creds,
+            );
+            b.iter(|| {
+                black_box(
+                    deserialize_advertisement::<_, C>(deserialization_arena!(), adv, &cred_book)
+                        .map(|_| 0_u8)
+                        .unwrap(),
+                )
+            });
+        }
+    }
 }
-fn add_des<I: SectionIdentity>(sb: &mut SectionBuilder<I>) {
+fn add_des<I: SectionEncoder>(sb: &mut SectionBuilder<I>) {
     sb.add_de_res(|_| TxPower::try_from(17).map(TxPowerDataElement::from)).unwrap();
     sb.add_de_res(|_| GenericDataElement::try_from(100_u32.into(), &[0; 10])).unwrap();
 }
@@ -324,20 +348,29 @@ criterion_main!(benches);
 
 struct V0Identity<C: CryptoProvider> {
     key_seed: [u8; 32],
-    legacy_metadata_key: [u8; 14],
+    legacy_metadata_key: ShortMetadataKey,
     _marker: PhantomData<C>,
 }
 
 impl<C: CryptoProvider> V0Identity<C> {
     /// Generate a new identity with random crypto material
     fn random<R: rand::Rng + rand::CryptoRng>(rng: &mut R) -> Self {
-        Self { key_seed: rng.gen(), legacy_metadata_key: rng.gen(), _marker: PhantomData }
+        Self {
+            key_seed: rng.gen(),
+            legacy_metadata_key: ShortMetadataKey(rng.gen()),
+            _marker: PhantomData,
+        }
+    }
+    /// Convert this `V0Identity` into a V0 discovery credential.
+    fn into_discovery_credential(self) -> V0DiscoveryCredential {
+        SimpleBroadcastCryptoMaterial::<V0>::new(self.key_seed, self.legacy_metadata_key)
+            .derive_v0_discovery_credential::<C>()
     }
 }
 
 struct V1Identity<C: CryptoProvider> {
     key_seed: [u8; 32],
-    extended_metadata_key: [u8; 16],
+    extended_metadata_key: MetadataKey,
     key_pair: np_ed25519::KeyPair<C>,
 }
 
@@ -346,77 +379,23 @@ impl<C: CryptoProvider> V1Identity<C> {
     fn random(rng: &mut C::CryptoRng) -> Self {
         Self {
             key_seed: rng.gen(),
-            extended_metadata_key: rng.gen(),
+            extended_metadata_key: MetadataKey(rng.gen()),
             key_pair: np_ed25519::KeyPair::<C>::generate(),
         }
     }
+    /// Convert this `V1Identity` into a `V1DiscoveryCredential`.
+    fn into_discovery_credential(self) -> V1DiscoveryCredential {
+        SimpleSignedBroadcastCryptoMaterial::new(
+            self.key_seed,
+            self.extended_metadata_key,
+            self.key_pair.private_key(),
+        )
+        .derive_v1_discovery_credential::<C>()
+    }
 }
 
-#[derive(strum_macros::EnumIter, Debug)]
+#[derive(strum_macros::EnumIter, Clone, Copy, Debug)]
 enum CryptoMaterialType {
     MinFootprint,
     Precalculated,
-}
-
-// if we get confident this is a valid shared way, could move this to the main trait
-trait V0CryptoMaterialExt: V0CryptoMaterial {
-    fn build_cred<C: CryptoProvider>(
-        key_seed: [u8; 32],
-        legacy_metadata_key_hmac: [u8; 32],
-    ) -> Self;
-}
-
-trait V1CryptoMaterialExt: V1CryptoMaterial {
-    fn build_cred<C: CryptoProvider>(
-        key_seed: [u8; 32],
-        unsigned_metadata_key_hmac: [u8; 32],
-        signed_metadata_key_hmac: [u8; 32],
-        pub_key: np_ed25519::PublicKey<C>,
-    ) -> Self;
-}
-
-impl V0CryptoMaterialExt for MinimumFootprintV0CryptoMaterial {
-    fn build_cred<C: CryptoProvider>(
-        key_seed: [u8; 32],
-        legacy_metadata_key_hmac: [u8; 32],
-    ) -> Self {
-        Self::new(key_seed, legacy_metadata_key_hmac)
-    }
-}
-
-impl V0CryptoMaterialExt for PrecalculatedV0CryptoMaterial {
-    fn build_cred<C: CryptoProvider>(
-        key_seed: [u8; 32],
-        legacy_metadata_key_hmac: [u8; 32],
-    ) -> Self {
-        Self::new::<C>(&key_seed, legacy_metadata_key_hmac)
-    }
-}
-
-impl V1CryptoMaterialExt for MinimumFootprintV1CryptoMaterial {
-    fn build_cred<C: CryptoProvider>(
-        key_seed: [u8; 32],
-        unsigned_metadata_key_hmac: [u8; 32],
-        signed_metadata_key_hmac: [u8; 32],
-        pub_key: np_ed25519::PublicKey<C>,
-    ) -> Self {
-        Self::new(key_seed, unsigned_metadata_key_hmac, signed_metadata_key_hmac, pub_key)
-    }
-}
-
-impl V1CryptoMaterialExt for PrecalculatedV1CryptoMaterial {
-    fn build_cred<C: CryptoProvider>(
-        key_seed: [u8; 32],
-        unsigned_metadata_key_hmac: [u8; 32],
-        signed_metadata_key_hmac: [u8; 32],
-        pub_key: np_ed25519::PublicKey<C>,
-    ) -> Self {
-        let min_foot = MinimumFootprintV1CryptoMaterial::new(
-            key_seed,
-            unsigned_metadata_key_hmac,
-            signed_metadata_key_hmac,
-            pub_key,
-        );
-        min_foot.to_precalculated::<C>()
-    }
 }

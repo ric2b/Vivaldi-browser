@@ -36,6 +36,8 @@ TINT_INSTANTIATE_TYPEINFO(tint::core::ir::Function);
 
 namespace tint::core::ir {
 
+Function::Function() = default;
+
 Function::Function(const core::type::Type* rt,
                    PipelineStage stage,
                    std::optional<std::array<uint32_t, 3>> wg_size)
@@ -87,18 +89,6 @@ std::string_view ToString(Function::PipelineStage value) {
             return "compute";
         default:
             break;
-    }
-    return "<unknown>";
-}
-
-std::string_view ToString(enum Function::ReturnBuiltin value) {
-    switch (value) {
-        case Function::ReturnBuiltin::kFragDepth:
-            return "frag_depth";
-        case Function::ReturnBuiltin::kSampleMask:
-            return "sample_mask";
-        case Function::ReturnBuiltin::kPosition:
-            return "position";
     }
     return "<unknown>";
 }

@@ -16,7 +16,7 @@ float avifRoundf(float v)
 
 uint16_t avifHTONS(uint16_t s)
 {
-    uint16_t result;
+    uint16_t result = 0;
     uint8_t * data = (uint8_t *)&result;
     data[0] = (s >> 8) & 0xff;
     data[1] = (s >> 0) & 0xff;
@@ -37,7 +37,7 @@ uint16_t avifCTOHS(uint16_t s)
 
 uint32_t avifHTONL(uint32_t l)
 {
-    uint32_t result;
+    uint32_t result = 0;
     uint8_t * data = (uint8_t *)&result;
     data[0] = (l >> 24) & 0xff;
     data[1] = (l >> 16) & 0xff;
@@ -60,7 +60,7 @@ uint32_t avifCTOHL(uint32_t l)
 
 uint64_t avifHTON64(uint64_t l)
 {
-    uint64_t result;
+    uint64_t result = 0;
     uint8_t * data = (uint8_t *)&result;
     data[0] = (l >> 56) & 0xff;
     data[1] = (l >> 48) & 0xff;
@@ -99,34 +99,23 @@ avifBool avifArrayCreate(void * arrayStruct, uint32_t elementSize, uint32_t init
     return AVIF_TRUE;
 }
 
-uint32_t avifArrayPushIndex(void * arrayStruct)
+void * avifArrayPush(void * arrayStruct)
 {
     avifArrayInternal * arr = (avifArrayInternal *)arrayStruct;
     if (arr->count == arr->capacity) {
         uint8_t * oldPtr = arr->ptr;
         size_t oldByteCount = (size_t)arr->elementSize * arr->capacity;
         arr->ptr = (uint8_t *)avifAlloc(oldByteCount * 2);
+        if (arr->ptr == NULL) {
+            return NULL;
+        }
         memset(arr->ptr + oldByteCount, 0, oldByteCount);
         memcpy(arr->ptr, oldPtr, oldByteCount);
         arr->capacity *= 2;
         avifFree(oldPtr);
     }
     ++arr->count;
-    return arr->count - 1;
-}
-
-void * avifArrayPushPtr(void * arrayStruct)
-{
-    uint32_t index = avifArrayPushIndex(arrayStruct);
-    avifArrayInternal * arr = (avifArrayInternal *)arrayStruct;
-    return &arr->ptr[index * (size_t)arr->elementSize];
-}
-
-void avifArrayPush(void * arrayStruct, void * element)
-{
-    avifArrayInternal * arr = (avifArrayInternal *)arrayStruct;
-    void * newElement = avifArrayPushPtr(arr);
-    memcpy(newElement, element, arr->elementSize);
+    return &arr->ptr[(arr->count - 1) * (size_t)arr->elementSize];
 }
 
 void avifArrayPop(void * arrayStruct)
@@ -235,14 +224,14 @@ avifBool avifFractionSub(avifFraction a, avifFraction b, avifFraction * result)
     return AVIF_TRUE;
 }
 
-avifBool avifDoubleToUnsignedFraction(double v, uint32_t * numerator, uint32_t * denominator)
+static avifBool avifDoubleToUnsignedFractionImpl(double v, uint32_t maxNumerator, uint32_t * numerator, uint32_t * denominator)
 {
-    if (isnan(v) || v < 0 || v > UINT32_MAX) {
+    if (isnan(v) || v < 0 || v > maxNumerator) {
         return AVIF_FALSE;
     }
 
-    // Maximum denominator: makes sure that both the numerator and denominator are <= UINT32_MAX.
-    const uint64_t maxD = (v <= 1) ? UINT32_MAX : (uint64_t)floor(UINT32_MAX / v);
+    // Maximum denominator: makes sure that the numerator is <= maxNumerator and the denominator is <= UINT32_MAX.
+    const uint64_t maxD = (v <= 1) ? UINT32_MAX : (uint64_t)floor(maxNumerator / v);
 
     // Find the best approximation of v as a fraction using continued fractions, see
     // https://en.wikipedia.org/wiki/Continued_fraction
@@ -256,7 +245,7 @@ avifBool avifDoubleToUnsignedFraction(double v, uint32_t * numerator, uint32_t *
     const int maxIter = 39;
     while (iter < maxIter) {
         const double numeratorDouble = (double)(*denominator) * v;
-        assert(numeratorDouble <= UINT32_MAX);
+        assert(numeratorDouble <= maxNumerator);
         *numerator = (uint32_t)round(numeratorDouble);
         if (fabs(numeratorDouble - (*numerator)) == 0.0) {
             return AVIF_TRUE;
@@ -278,4 +267,22 @@ avifBool avifDoubleToUnsignedFraction(double v, uint32_t * numerator, uint32_t *
     // to a lower value to speed up the algorithm if needed.
     *numerator = (uint32_t)round((double)(*denominator) * v);
     return AVIF_TRUE;
+}
+
+avifBool avifDoubleToSignedFraction(double v, int32_t * numerator, uint32_t * denominator)
+{
+    uint32_t positive_numerator;
+    if (!avifDoubleToUnsignedFractionImpl(fabs(v), INT32_MAX, &positive_numerator, denominator)) {
+        return AVIF_FALSE;
+    }
+    *numerator = (int32_t)positive_numerator;
+    if (v < 0) {
+        *numerator *= -1;
+    }
+    return AVIF_TRUE;
+}
+
+avifBool avifDoubleToUnsignedFraction(double v, uint32_t * numerator, uint32_t * denominator)
+{
+    return avifDoubleToUnsignedFractionImpl(v, UINT32_MAX, numerator, denominator);
 }

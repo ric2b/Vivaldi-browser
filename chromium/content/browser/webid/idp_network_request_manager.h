@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_WEBID_IDP_NETWORK_REQUEST_MANAGER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,7 +18,6 @@
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/client_security_state.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -110,7 +110,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     GURL accounts;
     GURL client_metadata;
     GURL metrics;
-    GURL revoke;
+    GURL disconnect;
   };
 
   struct CONTENT_EXPORT WellKnown {
@@ -133,7 +133,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     TokenResult(const TokenResult&);
 
     std::string token;
-    absl::optional<IdentityCredentialTokenError> error;
+    std::optional<IdentityCredentialTokenError> error;
   };
 
   // Error codes sent to the metrics endpoint.
@@ -156,7 +156,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     kTokenEndpointInvalidResponse = 402,
   };
 
-  enum class RevokeResponse {
+  enum class DisconnectResponse {
     kSuccess,
     kError,
   };
@@ -223,14 +223,15 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   using ParseJsonCallback =
       base::OnceCallback<void(FetchStatus,
                               data_decoder::DataDecoder::ValueOrError)>;
-  using RevokeCallback = base::OnceCallback<void(RevokeResponse)>;
+  using DisconnectCallback =
+      base::OnceCallback<void(FetchStatus, const std::string&)>;
   using TokenRequestCallback =
       base::OnceCallback<void(FetchStatus, TokenResult)>;
   using ContinueOnCallback = base::OnceCallback<void(FetchStatus, const GURL&)>;
   using RecordErrorMetricsCallback =
       base::OnceCallback<void(FedCmTokenResponseType,
-                              absl::optional<FedCmErrorDialogType>,
-                              absl::optional<FedCmErrorUrlType>)>;
+                              std::optional<FedCmErrorDialogType>,
+                              std::optional<FedCmErrorUrlType>)>;
 
   static std::unique_ptr<IdpNetworkRequestManager> Create(
       RenderFrameHostImpl* host);
@@ -246,7 +247,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   IdpNetworkRequestManager& operator=(const IdpNetworkRequestManager&) = delete;
 
   // Computes the well-known URL from the identity provider URL.
-  static absl::optional<GURL> ComputeWellKnownUrl(const GURL& url);
+  static std::optional<GURL> ComputeWellKnownUrl(const GURL& url);
 
   // Fetch the well-known file. This is the /.well-known/web-identity file on
   // the eTLD+1 calculated from the provider URL, used to check that the
@@ -255,6 +256,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
 
   // Attempt to fetch the IDP's FedCM parameters from the config file.
   virtual void FetchConfig(const GURL& provider,
+                           blink::mojom::RpMode rp_mode,
                            int idp_brand_icon_ideal_size,
                            int idp_brand_icon_minimum_size,
                            FetchConfigCallback);
@@ -293,28 +295,29 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   // Send logout request to a single target.
   virtual void SendLogout(const GURL& logout_url, LogoutCallback);
 
-  // Send a revoke request to the IDP.
-  virtual void SendRevokeRequest(const GURL& revoke_url,
-                                 const std::string& account_id,
-                                 const url::Origin& top_frame_origin,
-                                 const url::Origin& relying_party,
-                                 RevokeCallback callback);
+  // Send a disconnect request to the IDP.
+  virtual void SendDisconnectRequest(const GURL& disconnect_url,
+                                     const std::string& account_hint,
+                                     const std::string& client_id,
+                                     DisconnectCallback callback);
 
  private:
   // Starts download request using `url_loader`. Calls `parse_json_callback`
   // when the download result has been parsed.
   void DownloadJsonAndParse(
       std::unique_ptr<network::ResourceRequest> resource_request,
-      absl::optional<std::string> url_encoded_post_data,
+      std::optional<std::string> url_encoded_post_data,
       ParseJsonCallback parse_json_callback,
-      size_t max_download_size);
+      size_t max_download_size,
+      bool allow_http_error_results = false);
 
   // Starts download result using `url_loader`. Calls `download_callback` when
   // the download completes.
   void DownloadUrl(std::unique_ptr<network::ResourceRequest> resource_request,
-                   absl::optional<std::string> url_encoded_post_data,
+                   std::optional<std::string> url_encoded_post_data,
                    DownloadCallback download_callback,
-                   size_t max_download_size);
+                   size_t max_download_size,
+                   bool allow_http_error_results = false);
 
   // Called when download initiated by DownloadUrl() completes.
   void OnDownloadedUrl(std::unique_ptr<network::SimpleURLLoader> url_loader,

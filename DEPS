@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Id5ddeb1fe8c3784141a74988617a4c4ef4256d65",
+  "upstream_commit_id": "I8ef6652397d276043a6c9e54a0381719292a88ec",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -150,6 +150,12 @@ hooks = [
     'name': 'clang',
     'pattern': '.',
     'action': ['python3', "-u", 'chromium/tools/clang/scripts/update.py'],
+  },
+  {
+    # Update prebuilt Rust toolchain.
+    'name': 'rust-toolchain',
+    'pattern': '.',
+    'action': ['python3', "-u", 'chromium/tools/rust/update_rust.py'],
   },
   {
     # Should run after the clang hook. Used on mac, as well as for orderfile
@@ -377,48 +383,6 @@ hooks = [
                 '--local_state=chromium/chrome/android/profiles/arm.local.txt',
                 '--output_name=chromium/chrome/android/profiles/arm.afdo.prof',
                 '--gs_url_base=chromeos-prebuilt/afdo-job/llvm',
-    ],
-  },
-  {
-    'name': 'gvr_static_shim_android',
-    'pattern': '\\.sha1',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-gvr-static-shim',
-                '-d', 'chromium/third_party/gvr-android-sdk',
-    ],
-  },
-  {
-    'name': 'vr_controller_test_api',
-    'pattern': '\\.sha1',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--bucket', 'chromium-gvr-static-shim/controller_test_api',
-                '-s', 'chromium/third_party/gvr-android-sdk/test-libraries/controller_test_api.aar.sha1',
-    ],
-  },
-  # Download VR test APKs only if the environment variable is set
-  {
-    'name': 'vr_test_apks',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-               'chromium/third_party/gvr-android-sdk/test-apks/update.py',
-    ],
-  },
-  # DOWNLOAD AR test APKs only if the environment variable is set
-  {
-    'name': 'ar_test_apks',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': [ 'python3', "-u",
-                'chromium/third_party/arcore-android-sdk/test-apks/update.py',
     ],
   },
   {

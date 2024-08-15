@@ -118,6 +118,9 @@ message DiskImage {
 
   // If true, the disk image will be mounted with O_DIRECT.
   bool o_direct = 10;
+
+  // If true, the disk should enable multiple-workers.
+  bool multiple_workers = 11;
 }
 
 // Information about a particular VM.
@@ -182,8 +185,6 @@ message StartVmRequest {
   // If true, concierge should also perform termina-specific setup.
   bool start_termina = 5;
 
-  reserved 6;
-
   // The owner of the vm.
   string owner_id = 7;
 
@@ -210,8 +211,6 @@ message StartVmRequest {
   // CPUs on the device and cannot be 0.
   uint32 cpus = 12;
 
-  reserved 13, 14;
-
   // Make the rootfs writable.
   bool writable_rootfs = 15;
 
@@ -236,8 +235,8 @@ message StartVmRequest {
   // Kernel cmdline parameters that will be passed to crosvm.
   repeated string kernel_params = 17;
 
-  // Enable Vulkan in the started Vm.
-  bool enable_vulkan = 18;
+  // DEPRECATED: Vulkan is enabled when it's supported, and GPU is enabled.
+  bool enable_vulkan = 18 [deprecated = true];
 
   // Enable Big GL rendering for the started Vm (default is GLES).
   bool enable_big_gl = 19;
@@ -368,9 +367,6 @@ message StartArcVmRequest {
   // How much memory to give ARCVM, in MiB. Optional.
   uint32 memory_mib = 12;
 
-  // Deprecated BalloonPolicyOptions. Do not use.
-  reserved 13;
-
   // Whether per-VM core scheduling should be used instead of the default one
   // (per-vCPU core scheduing.) This option is no-op on devices that have
   // neither MDS nor L1TF vulnerability. On those non-vulnerable devices, core
@@ -414,9 +410,6 @@ message StartArcVmRequest {
 
   // ArcVM metrics memory PSI period, -1 if disabled
   int32 vm_memory_psi_period = 28;
-
-  // Size of Guest Zram in bytes. Deprecated, use guest_zram_mib instead.
-  int32 guest_zram_size = 32 [deprecated = true];
 
   // Likelihood of sending cold memory to swap.
   // Default value of zero means "unset" - will use the system default.
@@ -493,6 +486,13 @@ message StartArcVmRequest {
 
   // Whether to enable O_DIRECT for the root disk (/dev/block/vda).
   bool rootfs_o_direct = 45;
+
+  // Whether to enable s2idle in the guest.
+  bool enable_s2idle = 46;
+
+  // Whether to enable the multiple-workers feature for the root disk
+  // (/dev/block/vda).
+  bool rootfs_multiple_workers = 47;
 }
 
 enum VmStatus {

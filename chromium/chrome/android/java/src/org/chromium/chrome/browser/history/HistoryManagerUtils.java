@@ -19,9 +19,7 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.panels.PanelUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
-/**
- * Utility methods for the browsing history manager.
- */
+/** Utility methods for the browsing history manager. */
 public class HistoryManagerUtils {
     /**
      * Opens the browsing history manager.

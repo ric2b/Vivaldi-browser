@@ -9,6 +9,7 @@ import {
   TestParams,
 } from '../common/framework/fixture.js';
 import { globalTestConfig } from '../common/framework/test_config.js';
+import { getGPU } from '../common/util/navigator_gpu.js';
 import {
   assert,
   makeValueTestVariant,
@@ -20,7 +21,13 @@ import {
   unreachable,
 } from '../common/util/util.js';
 
-import { getDefaultLimits, kLimits, kQueryTypeInfo } from './capability_info.js';
+import {
+  getDefaultLimits,
+  kLimits,
+  kQueryTypeInfo,
+  WGSLLanguageFeature,
+} from './capability_info.js';
+import { InterpolationType, InterpolationSampling } from './constants.js';
 import {
   kTextureFormatInfo,
   kEncodableTextureFormats,
@@ -29,6 +36,7 @@ import {
   EncodableTextureFormat,
   isCompressedTextureFormat,
   ColorTextureFormat,
+  isTextureFormatUsableAsStorageFormat,
 } from './format_info.js';
 import { makeBufferWithContents } from './util/buffer.js';
 import { checkElementsEqual, checkElementsBetween } from './util/check_contents.js';
@@ -36,7 +44,6 @@ import { CommandBufferMaker, EncoderType } from './util/command_buffer_maker.js'
 import { ScalarType } from './util/conversion.js';
 import { DevicePool, DeviceProvider, UncanonicalizedDeviceDescriptor } from './util/device_pool.js';
 import { align, roundDown } from './util/math.js';
-import { createTextureFromTexelView, createTextureFromTexelViews } from './util/texture.js';
 import { physicalMipSizeFromTexture, virtualMipSize } from './util/texture/base.js';
 import {
   bytesInACompleteRow,
@@ -52,6 +59,7 @@ import {
   TexelCompareOptions,
   textureContentIsOKByT2B,
 } from './util/texture/texture_ok.js';
+import { createTextureFromTexelView, createTextureFromTexelViews } from './util/texture.js';
 import { reifyOrigin3D } from './util/unions.js';
 
 const devicePool = new DevicePool();
@@ -61,7 +69,7 @@ const devicePool = new DevicePool();
 const mismatchedDevicePool = new DevicePool();
 
 const kResourceStateValues = ['valid', 'invalid', 'destroyed'] as const;
-export type ResourceState = typeof kResourceStateValues[number];
+export type ResourceState = (typeof kResourceStateValues)[number];
 export const kResourceStates: readonly ResourceState[] = kResourceStateValues;
 
 /** Various "convenient" shorthands for GPUDeviceDescriptors for selectDevice functions. */
@@ -91,12 +99,12 @@ export class GPUTestSubcaseBatchState extends SubcaseBatchState {
   /** Provider for mismatched device. */
   private mismatchedProvider: Promise<DeviceProvider> | undefined;
 
-  async postInit(): Promise<void> {
+  override async postInit(): Promise<void> {
     // Skip all subcases if there's no device.
     await this.acquireProvider();
   }
 
-  async finalize(): Promise<void> {
+  override async finalize(): Promise<void> {
     await super.finalize();
 
     // Ensure devicePool.release is called for both providers even if one rejects.
@@ -245,6 +253,36 @@ export class GPUTestSubcaseBatchState extends SubcaseBatchState {
       }
     }
   }
+
+  skipIfTextureFormatNotUsableAsStorageTexture(...formats: (GPUTextureFormat | undefined)[]) {
+    for (const format of formats) {
+      if (format && !isTextureFormatUsableAsStorageFormat(format, this.isCompatibility)) {
+        this.skip(`Texture with ${format} is not usable as a storage texture`);
+      }
+    }
+  }
+
+  /**
+   * Skips test if the given interpolation type or sampling is not supported.
+   */
+  skipIfInterpolationTypeOrSamplingNotSupported({
+    type,
+    sampling,
+  }: {
+    type?: InterpolationType;
+    sampling?: InterpolationSampling;
+  }) {
+    if (this.isCompatibility) {
+      this.skipIf(
+        type === 'linear',
+        'interpolation type linear is not supported in compatibility mode'
+      );
+      this.skipIf(
+        sampling === 'sample',
+        'interpolation type linear is not supported in compatibility mode'
+      );
+    }
+  }
 }
 
 /**
@@ -254,7 +292,7 @@ export class GPUTestSubcaseBatchState extends SubcaseBatchState {
  * as well as helpers that use that device.
  */
 export class GPUTestBase extends Fixture<GPUTestSubcaseBatchState> {
-  public static MakeSharedState(
+  public static override MakeSharedState(
     recorder: TestCaseRecorder,
     params: TestParams
   ): GPUTestSubcaseBatchState {
@@ -264,7 +302,7 @@ export class GPUTestBase extends Fixture<GPUTestSubcaseBatchState> {
   // This must be overridden in derived classes
   get device(): GPUDevice {
     unreachable();
-    return (null as unknown) as GPUDevice;
+    return null as unknown as GPUDevice;
   }
 
   /** GPUQueue for the test to use. (Same as `t.device.queue`.) */
@@ -280,11 +318,11 @@ export class GPUTestBase extends Fixture<GPUTestSubcaseBatchState> {
     return getDefaultLimits(this.isCompatibility ? 'compatibility' : 'core');
   }
 
-  getDefaultLimit(limit: typeof kLimits[number]) {
+  getDefaultLimit(limit: (typeof kLimits)[number]) {
     return this.getDefaultLimits()[limit].default;
   }
 
-  makeLimitVariant(limit: typeof kLimits[number], variant: ValueTestVariant) {
+  makeLimitVariant(limit: (typeof kLimits)[number], variant: ValueTestVariant) {
     return makeValueTestVariant(this.device.limits[limit], variant);
   }
 
@@ -418,6 +456,26 @@ export class GPUTestBase extends Fixture<GPUTestSubcaseBatchState> {
         }
       }
     }
+  }
+
+  /** Skips this test case if the `langFeature` is *not* supported. */
+  skipIfLanguageFeatureNotSupported(langFeature: WGSLLanguageFeature) {
+    if (!this.hasLanguageFeature(langFeature)) {
+      this.skip(`WGSL language feature '${langFeature}' is not supported`);
+    }
+  }
+
+  /** Skips this test case if the `langFeature` is supported. */
+  skipIfLanguageFeatureSupported(langFeature: WGSLLanguageFeature) {
+    if (this.hasLanguageFeature(langFeature)) {
+      this.skip(`WGSL language feature '${langFeature}' is supported`);
+    }
+  }
+
+  /** returns true iff the `langFeature` is supported  */
+  hasLanguageFeature(langFeature: WGSLLanguageFeature) {
+    const lf = getGPU(this.rec).wgslLanguageFeatures;
+    return lf !== undefined && lf.has(langFeature);
   }
 
   /**
@@ -1074,7 +1132,7 @@ export class GPUTest extends GPUTestBase {
   private provider: DeviceProvider | undefined;
   private mismatchedProvider: DeviceProvider | undefined;
 
-  async init() {
+  override async init() {
     await super.init();
 
     this.provider = await this.sharedState.acquireProvider();
@@ -1084,7 +1142,7 @@ export class GPUTest extends GPUTestBase {
   /**
    * GPUDevice for the test to use.
    */
-  get device(): GPUDevice {
+  override get device(): GPUDevice {
     assert(this.provider !== undefined, 'internal error: GPUDevice missing?');
     return this.provider.device;
   }
@@ -1237,8 +1295,10 @@ export interface TextureTestMixinType {
   ): Generator<Required<GPUOrigin3DDict>>;
 }
 
+type PipelineType = '2d' | '2d-array';
+
 type ImageCopyTestResources = {
-  pipeline: GPURenderPipeline;
+  pipelineByPipelineType: Map<PipelineType, GPURenderPipeline>;
 };
 
 const s_deviceToResourcesMap = new WeakMap<GPUDevice, ImageCopyTestResources>();
@@ -1246,13 +1306,32 @@ const s_deviceToResourcesMap = new WeakMap<GPUDevice, ImageCopyTestResources>();
 /**
  * Gets a (cached) pipeline to render a texture to an rgba8unorm texture
  */
-function getPipelineToRenderTextureToRGB8UnormTexture(device: GPUDevice) {
+function getPipelineToRenderTextureToRGB8UnormTexture(
+  device: GPUDevice,
+  texture: GPUTexture,
+  isCompatibility: boolean
+) {
   if (!s_deviceToResourcesMap.has(device)) {
+    s_deviceToResourcesMap.set(device, {
+      pipelineByPipelineType: new Map<PipelineType, GPURenderPipeline>(),
+    });
+  }
+
+  const { pipelineByPipelineType } = s_deviceToResourcesMap.get(device)!;
+  const pipelineType: PipelineType =
+    isCompatibility && texture.depthOrArrayLayers > 1 ? '2d-array' : '2d';
+  if (!pipelineByPipelineType.get(pipelineType)) {
+    const [textureType, layerCode] =
+      pipelineType === '2d' ? ['texture_2d', ''] : ['texture_2d_array', ', uni.baseArrayLayer'];
     const module = device.createShaderModule({
       code: `
         struct VSOutput {
           @builtin(position) position: vec4f,
           @location(0) texcoord: vec2f,
+        };
+
+        struct Uniforms {
+          baseArrayLayer: u32,
         };
 
         @vertex fn vs(
@@ -1275,10 +1354,11 @@ function getPipelineToRenderTextureToRGB8UnormTexture(device: GPUDevice) {
          }
 
          @group(0) @binding(0) var ourSampler: sampler;
-         @group(0) @binding(1) var ourTexture: texture_2d<f32>;
+         @group(0) @binding(1) var ourTexture: ${textureType}<f32>;
+         @group(0) @binding(2) var<uniform> uni: Uniforms;
 
          @fragment fn fs(fsInput: VSOutput) -> @location(0) vec4f {
-            return textureSample(ourTexture, ourSampler, fsInput.texcoord);
+            return textureSample(ourTexture, ourSampler, fsInput.texcoord${layerCode});
          }
       `,
     });
@@ -1294,10 +1374,10 @@ function getPipelineToRenderTextureToRGB8UnormTexture(device: GPUDevice) {
         targets: [{ format: 'rgba8unorm' }],
       },
     });
-    s_deviceToResourcesMap.set(device, { pipeline });
+    pipelineByPipelineType.set(pipelineType, pipeline);
   }
-  const { pipeline } = s_deviceToResourcesMap.get(device)!;
-  return pipeline;
+  const pipeline = pipelineByPipelineType.get(pipelineType)!;
+  return { pipelineType, pipeline };
 }
 
 type LinearCopyParameters = {
@@ -1311,7 +1391,8 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
 ): FixtureClassWithMixin<F, TextureTestMixinType> {
   class TextureExpectations
     extends (Base as FixtureClassInterface<GPUTest>)
-    implements TextureTestMixinType {
+    implements TextureTestMixinType
+  {
     createTextureFromTexelView(
       texelView: TexelView,
       desc: Omit<GPUTextureDescriptor, 'format'>
@@ -1440,7 +1521,11 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
       // Render every layer of both textures at mipLevel to an rgba8unorm texture
       // that matches the size of the mipLevel. After each render, copy the
       // result to a buffer and expect the results from both textures to match.
-      const pipeline = getPipelineToRenderTextureToRGB8UnormTexture(this.device);
+      const { pipelineType, pipeline } = getPipelineToRenderTextureToRGB8UnormTexture(
+        this.device,
+        actualTexture,
+        this.isCompatibility
+      );
       const readbackPromisesPerTexturePerLayer = [actualTexture, expectedTexture].map(
         (texture, ndx) => {
           const attachmentSize = virtualMipSize('2d', [texture.width, texture.height, 1], mipLevel);
@@ -1456,23 +1541,44 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
 
           const numLayers = texture.depthOrArrayLayers;
           const readbackPromisesPerLayer = [];
+
+          const uniformBuffer = this.device.createBuffer({
+            size: 4,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+          });
+          this.trackForCleanup(uniformBuffer);
+
           for (let layer = 0; layer < numLayers; ++layer) {
+            const viewDescriptor: GPUTextureViewDescriptor = {
+              baseMipLevel: mipLevel,
+              mipLevelCount: 1,
+              ...(!this.isCompatibility && {
+                baseArrayLayer: layer,
+                arrayLayerCount: 1,
+              }),
+              dimension: pipelineType,
+            };
+
             const bindGroup = this.device.createBindGroup({
               layout: pipeline.getBindGroupLayout(0),
               entries: [
                 { binding: 0, resource: sampler },
                 {
                   binding: 1,
-                  resource: texture.createView({
-                    baseMipLevel: mipLevel,
-                    mipLevelCount: 1,
-                    baseArrayLayer: layer,
-                    arrayLayerCount: 1,
-                    dimension: '2d',
-                  }),
+                  resource: texture.createView(viewDescriptor),
                 },
+                ...(pipelineType === '2d-array'
+                  ? [
+                      {
+                        binding: 2,
+                        resource: { buffer: uniformBuffer },
+                      },
+                    ]
+                  : []),
               ],
             });
+
+            this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([layer]));
 
             const encoder = this.device.createCommandEncoder();
             const pass = encoder.beginRenderPass({
@@ -1676,5 +1782,5 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
     }
   }
 
-  return (TextureExpectations as unknown) as FixtureClassWithMixin<F, TextureTestMixinType>;
+  return TextureExpectations as unknown as FixtureClassWithMixin<F, TextureTestMixinType>;
 }

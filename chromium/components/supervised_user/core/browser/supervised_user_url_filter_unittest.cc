@@ -14,6 +14,9 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
+#include "components/prefs/testing_pref_service.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
+#include "components/supervised_user/core/common/supervised_user_utils.h"
 #include "components/supervised_user/test_support/supervised_user_url_filter_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -24,7 +27,9 @@ class SupervisedUserURLFilterTest : public ::testing::Test,
                                     public SupervisedUserURLFilter::Observer {
  public:
   SupervisedUserURLFilterTest() {
-    filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+    PrefRegistrySimple* registry = pref_service_.registry();
+    supervised_user::RegisterProfilePrefs(registry);
+    filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
     filter_.AddObserver(this);
   }
 
@@ -33,7 +38,7 @@ class SupervisedUserURLFilterTest : public ::testing::Test,
   // SupervisedUserURLFilter::Observer:
   void OnSiteListUpdated() override { run_loop_.Quit(); }
   void OnURLChecked(const GURL& url,
-                    SupervisedUserURLFilter::FilteringBehavior behavior,
+                    supervised_user::FilteringBehavior behavior,
                     supervised_user::FilteringBehaviorReason reason,
                     bool uncertain) override {
     behavior_ = behavior;
@@ -43,41 +48,43 @@ class SupervisedUserURLFilterTest : public ::testing::Test,
  protected:
   bool IsURLAllowlisted(const std::string& url) {
     return filter_.GetFilteringBehaviorForURL(GURL(url)) ==
-           SupervisedUserURLFilter::ALLOW;
+           FilteringBehavior::kAllow;
   }
 
   void ExpectURLInDefaultAllowlist(const std::string& url) {
-    ExpectURLCheckMatches(url, SupervisedUserURLFilter::ALLOW,
+    ExpectURLCheckMatches(url, FilteringBehavior::kAllow,
                           supervised_user::FilteringBehaviorReason::DEFAULT);
   }
 
   void ExpectURLInDefaultDenylist(const std::string& url) {
-    ExpectURLCheckMatches(url, SupervisedUserURLFilter::BLOCK,
+    ExpectURLCheckMatches(url, FilteringBehavior::kBlock,
                           supervised_user::FilteringBehaviorReason::DEFAULT);
   }
 
   void ExpectURLInManualAllowlist(const std::string& url) {
-    ExpectURLCheckMatches(url, SupervisedUserURLFilter::ALLOW,
+    ExpectURLCheckMatches(url, FilteringBehavior::kAllow,
                           supervised_user::FilteringBehaviorReason::MANUAL);
   }
 
   void ExpectURLInManualDenylist(const std::string& url) {
-    ExpectURLCheckMatches(url, SupervisedUserURLFilter::BLOCK,
+    ExpectURLCheckMatches(url, FilteringBehavior::kBlock,
                           supervised_user::FilteringBehaviorReason::MANUAL);
   }
 
   base::test::TaskEnvironment task_environment_;
   base::RunLoop run_loop_;
+  TestingPrefServiceSimple pref_service_;
   SupervisedUserURLFilter filter_ = SupervisedUserURLFilter(
+      pref_service_,
       base::BindRepeating([](const GURL& url) { return false; }),
       std::make_unique<FakeURLFilterDelegate>());
-  SupervisedUserURLFilter::FilteringBehavior behavior_;
+  supervised_user::FilteringBehavior behavior_;
   supervised_user::FilteringBehaviorReason reason_;
 
  private:
   void ExpectURLCheckMatches(
       const std::string& url,
-      SupervisedUserURLFilter::FilteringBehavior expected_behavior,
+      supervised_user::FilteringBehavior expected_behavior,
       supervised_user::FilteringBehaviorReason expected_reason,
       bool skip_manual_parent_filter = false) {
     bool called_synchronously =
@@ -95,7 +102,7 @@ TEST_F(SupervisedUserURLFilterTest, Basic) {
   hosts["*.google.com"] = true;
 
   filter_.SetManualHosts(std::move(hosts));
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
 
   EXPECT_TRUE(IsURLAllowlisted("http://google.com"));
   EXPECT_TRUE(IsURLAllowlisted("http://google.com/"));
@@ -120,7 +127,7 @@ TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
   hosts["example.com"] = true;
 
   filter_.SetManualHosts(std::move(hosts));
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
 
   ASSERT_TRUE(IsURLAllowlisted("http://example.com"));
   ASSERT_TRUE(IsURLAllowlisted("https://example.com"));
@@ -193,7 +200,7 @@ TEST_F(SupervisedUserURLFilterTest, EffectiveURL) {
 }
 
 TEST_F(SupervisedUserURLFilterTest, Inactive) {
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kAllow);
   std::map<std::string, bool> hosts;
   hosts["google.com"] = true;
 
@@ -209,7 +216,7 @@ TEST_F(SupervisedUserURLFilterTest, IPAddress) {
   hosts["123.123.123.123"] = true;
 
   filter_.SetManualHosts(std::move(hosts));
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
 
   EXPECT_TRUE(IsURLAllowlisted("http://123.123.123.123/"));
   EXPECT_FALSE(IsURLAllowlisted("http://123.123.123.124/"));
@@ -359,14 +366,14 @@ TEST_F(SupervisedUserURLFilterTest, PatternsWithoutConflicts) {
   hosts["mail.google.com"] = true;
 
   filter_.SetManualHosts(std::move(hosts));
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
 
   EXPECT_TRUE(IsURLAllowlisted("http://www.google.com/foo/"));
   EXPECT_FALSE(IsURLAllowlisted("http://calendar.google.com/bar/"));
   EXPECT_TRUE(IsURLAllowlisted("http://mail.google.com/moose/"));
   EXPECT_FALSE(IsURLAllowlisted("http://www.google.co.uk/blurp/"));
 
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kAllow);
 
   EXPECT_TRUE(IsURLAllowlisted("http://www.google.com/foo/"));
   EXPECT_FALSE(IsURLAllowlisted("http://calendar.google.com/bar/"));
@@ -387,7 +394,7 @@ TEST_F(SupervisedUserURLFilterTest, PatternsWithConflicts) {
   hosts["www.google.*"] = false;
 
   filter_.SetManualHosts(std::move(hosts));
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
 
   EXPECT_FALSE(IsURLAllowlisted("http://www.google.com/foo/"));
   histogram_tester.ExpectBucketCount(
@@ -411,7 +418,7 @@ TEST_F(SupervisedUserURLFilterTest, PatternsWithConflicts) {
       SupervisedUserURLFilter::GetManagedSiteListConflictHistogramNameForTest(),
       0, 2);
 
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kAllow);
 
   EXPECT_FALSE(IsURLAllowlisted("http://www.google.com/foo/"));
   EXPECT_FALSE(IsURLAllowlisted("http://calendar.google.com/bar/"));
@@ -442,7 +449,7 @@ TEST_F(SupervisedUserURLFilterTest, Reason) {
   filter_.SetManualHosts(std::move(hosts));
   filter_.SetManualURLs(std::move(urls));
 
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
 
   ExpectURLInDefaultDenylist("https://m.youtube.com/feed/trending");
   ExpectURLInDefaultDenylist("https://com.google");
@@ -451,7 +458,7 @@ TEST_F(SupervisedUserURLFilterTest, Reason) {
   ExpectURLInManualDenylist("https://youtube.com/robots.txt");
   ExpectURLInManualDenylist("https://google.co.uk/robots.txt");
 
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::ALLOW);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kAllow);
 
   ExpectURLInDefaultAllowlist("https://m.youtube.com/feed/trending");
   ExpectURLInDefaultAllowlist("https://com.google");
@@ -462,7 +469,7 @@ TEST_F(SupervisedUserURLFilterTest, Reason) {
 }
 
 TEST_F(SupervisedUserURLFilterTest, UrlsNotRequiringGuardianApprovalAllowed) {
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
   EXPECT_TRUE(IsURLAllowlisted("https://families.google.com/"));
   EXPECT_TRUE(IsURLAllowlisted("https://families.google.com"));
   EXPECT_TRUE(IsURLAllowlisted("https://families.google.com/something"));
@@ -483,7 +490,7 @@ TEST_F(SupervisedUserURLFilterTest, UrlsNotRequiringGuardianApprovalAllowed) {
 }
 
 TEST_F(SupervisedUserURLFilterTest, PlayTermsAlwaysAllowed) {
-  filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
   EXPECT_TRUE(IsURLAllowlisted("https://play.google.com/about/play-terms"));
   EXPECT_TRUE(IsURLAllowlisted("https://play.google.com/about/play-terms/"));
   EXPECT_TRUE(IsURLAllowlisted(
@@ -504,7 +511,9 @@ class SupervisedUserURLFilteringWithConflictsTest
               SupervisedUserURLFilter::FilteringSubdomainConflictType>>> {
  public:
   SupervisedUserURLFilteringWithConflictsTest() {
-    filter_.SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+    PrefRegistrySimple* registry = pref_service_.registry();
+    supervised_user::RegisterProfilePrefs(registry);
+    filter_.SetDefaultFilteringBehavior(FilteringBehavior::kBlock);
   }
 
  protected:
@@ -512,11 +521,13 @@ class SupervisedUserURLFilteringWithConflictsTest
     GURL gurl = GURL(url);
     CHECK(gurl.is_valid());
     return filter_.GetFilteringBehaviorForURL(gurl) ==
-           SupervisedUserURLFilter::ALLOW;
+           FilteringBehavior::kAllow;
   }
 
   base::test::TaskEnvironment task_environment_;
+  TestingPrefServiceSimple pref_service_;
   SupervisedUserURLFilter filter_ = SupervisedUserURLFilter(
+      pref_service_,
       base::BindRepeating([](const GURL& url) { return false; }),
       std::make_unique<FakeURLFilterDelegate>());
 };

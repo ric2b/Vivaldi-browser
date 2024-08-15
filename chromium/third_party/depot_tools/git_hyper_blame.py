@@ -91,10 +91,10 @@ def parse_blame(blameoutput):
 def print_table(outbuf, table, align):
     """Print a 2D rectangular array, aligning columns with spaces.
 
-  Args:
-    align: string of 'l' and 'r', designating whether each column is left- or
-           right-aligned.
-  """
+    Args:
+        align: string of 'l' and 'r', designating whether each column is
+            left- or right-aligned.
+    """
     if len(table) == 0:
         return
 
@@ -189,20 +189,21 @@ def approx_lineno_across_revs(filename, newfilename, revision, newrevision,
                               lineno):
     """Computes the approximate movement of a line number between two revisions.
 
-  Consider line |lineno| in |filename| at |revision|. This function computes the
-  line number of that line in |newfilename| at |newrevision|. This is
-  necessarily approximate.
+    Consider line |lineno| in |filename| at |revision|. This function computes
+    the line number of that line in |newfilename| at |newrevision|. This is
+    necessarily approximate.
 
-  Args:
-    filename: The file (within the repo) at |revision|.
-    newfilename: The name of the same file at |newrevision|.
-    revision: A git revision.
-    newrevision: Another git revision. Note: Can be ahead or behind |revision|.
-    lineno: Line number within |filename| at |revision|.
+    Args:
+        filename: The file (within the repo) at |revision|.
+        newfilename: The name of the same file at |newrevision|.
+        revision: A git revision.
+        newrevision: Another git revision. Note: Can be ahead or behind
+            |revision|.
+        lineno: Line number within |filename| at |revision|.
 
-  Returns:
-    Line number within |newfilename| at |newrevision|.
-  """
+    Returns:
+        Line number within |newfilename| at |newrevision|.
+    """
     # This doesn't work that well if there are a lot of line changes within the
     # hunk (demonstrated by
     # GitHyperBlameLineMotionTest.testIntraHunkLineMotion). A fuzzy heuristic

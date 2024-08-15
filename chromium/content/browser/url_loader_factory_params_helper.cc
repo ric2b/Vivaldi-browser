@@ -4,6 +4,8 @@
 
 #include "content/browser/url_loader_factory_params_helper.h"
 
+#include <optional>
+
 #include "base/command_line.h"
 #include "base/strings/string_piece.h"
 #include "content/browser/devtools/network_service_devtools_observer.h"
@@ -27,7 +29,6 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/shared_dictionary_access_observer.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 
@@ -41,15 +42,14 @@ namespace {
 //
 // network::mojom::URLLoaderNetworkServiceObserver::OnLoadingStateUpdate is
 // among the most frequent Mojo messages in traces from the field
-// (go/mojos-in-field-traces-2022). We'll disable it via a Canary/Dev-only
-// experiment to measure impact on performance. The user observable impact is
-// that the status bubble will no longer be displayed. We'll determine the next
-// steps after running the experiment.
+// (go/mojos-in-field-traces-2022). Inhibiting the messages has been tested all
+// the way to stable with no ill effect and performance gains.
 //
-// crbug.com/1433341
+// Remove when evaluation of combined performance gains is complete
+// crbug.com/1487544.
 BASE_FEATURE(kInhibitLoadingStateUpdate,
              "InhibitLoadingStateUpdate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Helper used by the public URLLoaderFactoryParamsHelper::Create... methods.
 //
@@ -63,7 +63,7 @@ network::mojom::URLLoaderFactoryParamsPtr CreateParams(
     const url::Origin& origin,
     const url::Origin& request_initiator_origin_lock,
     bool is_trusted,
-    const absl::optional<blink::LocalFrameToken>& top_frame_token,
+    const std::optional<blink::LocalFrameToken>& top_frame_token,
     const net::IsolationInfo& isolation_info,
     network::mojom::ClientSecurityStatePtr client_security_state,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
@@ -263,7 +263,7 @@ URLLoaderFactoryParamsHelper::CreateForWorker(
       request_initiator,  // origin
       request_initiator,  // request_initiator_origin_lock
       false,              // is_trusted
-      absl::nullopt,      // top_frame_token
+      std::nullopt,       // top_frame_token
       isolation_info, std::move(client_security_state),
       std::move(coep_reporter),
       false,  // allow_universal_access_from_file_urls
@@ -325,7 +325,7 @@ URLLoaderFactoryParamsHelper::CreateForEarlyHintsPreload(
   return CreateParams(
       process, /*origin=*/tentative_origin,
       /*request_initiator_origin_lock=*/tentative_origin,
-      /*is_trusted=*/false, /*top_frame_token=*/absl::nullopt, isolation_info,
+      /*is_trusted=*/false, /*top_frame_token=*/std::nullopt, isolation_info,
       std::move(client_security_state),
       /*coep_reporter=*/mojo::NullRemote(),
       /*allow_universal_access_from_file_urls=*/false,

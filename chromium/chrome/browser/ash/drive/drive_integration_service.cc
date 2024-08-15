@@ -50,7 +50,6 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/drivefs/drivefs_bootstrap.h"
 #include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
-#include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "chromeos/components/drivefs/mojom/drivefs_native_messaging.mojom.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/crosapi/mojom/drive_integration_service.mojom.h"
@@ -485,7 +484,7 @@ class DriveIntegrationService::DriveFsHolder
   }
 
   void OnMountFailed(MountFailure failure,
-                     absl::optional<TimeDelta> remount_delay) override {
+                     std::optional<TimeDelta> remount_delay) override {
     mount_observer_->OnMountFailed(failure, std::move(remount_delay));
   }
 
@@ -493,7 +492,7 @@ class DriveIntegrationService::DriveFsHolder
     mount_observer_->OnMounted(path);
   }
 
-  void OnUnmounted(absl::optional<TimeDelta> remount_delay) override {
+  void OnUnmounted(std::optional<TimeDelta> remount_delay) override {
     mount_observer_->OnUnmounted(std::move(remount_delay));
   }
 
@@ -586,9 +585,8 @@ class DriveIntegrationService::DriveFsHolder
     profile_->GetPrefs()->SetString(prefs::kDriveFsMirrorSyncMachineRootId, id);
   }
 
-  const raw_ptr<Profile, ExperimentalAsh> profile_;
-  const raw_ptr<drivefs::DriveFsHost::MountObserver, ExperimentalAsh>
-      mount_observer_;
+  const raw_ptr<Profile> profile_;
+  const raw_ptr<drivefs::DriveFsHost::MountObserver> mount_observer_;
 
   const DriveFsMojoListenerFactory test_drivefs_mojo_listener_factory_;
 
@@ -951,16 +949,13 @@ void DriveIntegrationService::RemoveDriveMountPoint() {
       logger_.Log(logging::LOGGING_INFO, "Drive mount point is removed");
     }
   }
-  GetDriveFsHost()->Unmount();
 
-  if (pinning_manager_) {
-    pinning_manager_->Stop();
-    pinning_manager_.reset();
-  }
+  GetDriveFsHost()->Unmount();
+  pinning_manager_.reset();
 }
 
 void DriveIntegrationService::MaybeRemountFileSystem(
-    absl::optional<TimeDelta> remount_delay,
+    std::optional<TimeDelta> remount_delay,
     bool failed_to_mount) {
   DCHECK_EQ(State::kInitialized, state_);
 
@@ -1042,15 +1037,13 @@ void DriveIntegrationService::OnMounted(const base::FilePath& mount_path) {
 }
 
 void DriveIntegrationService::CreateOrDeleteBulkPinningManager() {
-  VLOG(1) << "CreateOrDeleteBulkPinningManager";
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!util::IsDriveFsBulkPinningAvailable(profile_)) {
     if (pinning_manager_) {
-      LOG(WARNING) << "Delete bulk-pinning manager because of policy change";
-      pinning_manager_->Stop();
-      pinning_manager_.reset();
+      LOG(WARNING) << "Deleting bulk-pinning manager because of policy change";
       GetPrefs()->SetBoolean(kDriveFsBulkPinningEnabled, false);
+      pinning_manager_.reset();
     }
 
     return;
@@ -1062,7 +1055,6 @@ void DriveIntegrationService::CreateOrDeleteBulkPinningManager() {
   }
 
   // Instantiate a PinningManager.
-  VLOG(1) << "Create bulk-pinning manager";
   DCHECK(!pinning_manager_);
   pinning_manager_ = std::make_unique<PinningManager>(
       profile_->GetPath(), GetMountPointPath(), GetDriveFsInterface(),
@@ -1106,7 +1098,7 @@ void DriveIntegrationService::SampleBulkPinningPref() {
 }
 
 void DriveIntegrationService::OnUnmounted(
-    absl::optional<TimeDelta> remount_delay) {
+    std::optional<TimeDelta> remount_delay) {
   UmaEmitUnmountOutcome(remount_delay ? DriveMountStatus::kTemporaryUnavailable
                                       : DriveMountStatus::kUnknownFailure);
   MaybeRemountFileSystem(remount_delay, false);
@@ -1114,7 +1106,7 @@ void DriveIntegrationService::OnUnmounted(
 
 void DriveIntegrationService::OnMountFailed(
     MountFailure failure,
-    absl::optional<TimeDelta> remount_delay) {
+    std::optional<TimeDelta> remount_delay) {
   PrefService* const prefs = GetPrefs();
   const DriveMountStatus status = ConvertMountFailure(failure);
   UmaEmitMountStatus(status);
@@ -1220,12 +1212,11 @@ void DriveIntegrationService::PinFiles(
 }
 
 void DriveIntegrationService::StartOrStopBulkPinning() {
-  VLOG(1) << "StartOrStopBulkPinning";
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!pinning_manager_) {
-    LOG(ERROR) << "Cannot toggle the state of the bulk-pinning manager: "
-                  "There is no bulk-pinning manager";
+    VLOG(1) << "Cannot toggle the state of the bulk-pinning manager: "
+               "There is no bulk-pinning manager";
     return;
   }
 
@@ -1271,10 +1262,7 @@ void DriveIntegrationService::OnGetOfflineFilesSpaceUsage(
 
 void DriveIntegrationService::ClearOfflineFiles(
     base::OnceCallback<void(FileError)> callback) {
-  if ((!util::IsDriveFsBulkPinningAvailable(profile_) &&
-       !base::FeatureList::IsEnabled(
-           ash::features::kFilesGoogleDriveSettingsPage)) ||
-      !IsMounted() || !GetDriveFsInterface()) {
+  if (!IsMounted() || !GetDriveFsInterface()) {
     std::move(callback).Run(FILE_ERROR_SERVICE_UNAVAILABLE);
     return;
   }
@@ -1302,13 +1290,13 @@ void DriveIntegrationService::GetQuickAccessItems(
       std::move(query),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           std::move(on_response), FILE_ERROR_ABORT,
-          absl::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
+          std::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
 }
 
 void DriveIntegrationService::OnGetQuickAccessItems(
     GetQuickAccessItemsCallback callback,
     FileError error,
-    absl::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
+    std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
   if (error != FILE_ERROR_OK || !items.has_value()) {
     std::move(callback).Run(error, {});
     return;
@@ -1349,13 +1337,13 @@ void DriveIntegrationService::SearchDriveByFileName(
       std::move(drive_query),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           std::move(on_response), FILE_ERROR_ABORT,
-          absl::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
+          std::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
 }
 
 void DriveIntegrationService::OnSearchDriveByFileName(
     SearchDriveByFileNameCallback callback,
     FileError error,
-    absl::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
+    std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
   if (error != FILE_ERROR_OK || !items.has_value()) {
     std::move(callback).Run(error, {});
     return;
@@ -1567,11 +1555,6 @@ void DriveIntegrationService::GetSyncingPaths(
   if (DriveFs* const drivefs = GetDriveFsInterface()) {
     drivefs->GetSyncingPaths(std::move(callback));
   }
-}
-
-drivefs::SyncState DriveIntegrationService::GetSyncStateForPath(
-    const base::FilePath& drive_path) {
-  return GetDriveFsHost()->GetSyncStateForPath(drive_path);
 }
 
 void DriveIntegrationService::PollHostedFilePinStates() {
@@ -1815,19 +1798,17 @@ DriveIntegrationServiceFactory::DriveIntegrationServiceFactory()
 
 DriveIntegrationServiceFactory::~DriveIntegrationServiceFactory() = default;
 
-KeyedService* DriveIntegrationServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+DriveIntegrationServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
 
-  DriveIntegrationService* service = nullptr;
   if (!factory_for_test_) {
-    service =
-        new DriveIntegrationService(profile, std::string(), base::FilePath());
+    return std::make_unique<DriveIntegrationService>(profile, std::string(),
+                                                     base::FilePath());
   } else {
-    service = factory_for_test_->Run(profile);
+    return base::WrapUnique(factory_for_test_->Run(profile));
   }
-
-  return service;
 }
 
 DriveIntegrationService::Observer::~Observer() {

@@ -20,13 +20,14 @@ interface AutofillAgent {
   // while another TriggerFormExtractionWithResponse() was ongoing.
   TriggerFormExtractionWithResponse() => (bool success);
 
-  // Fills or previews the form identified by `form.unique_renderer_id` with
-  // the data in `form`.
+  // Fills or previews the form identified by `form_renderer_id` with
+  // the data in `fields`.
   // `action_type` denotes if the action is a Fill or Undo.
   // `action_persistence` denotes if the operation is a Fill or Preview.
   ApplyFormAction(ActionType action_type,
                   ActionPersistence action_persistence,
-                  FormData form);
+                  FormRendererId form_renderer_id,
+                  array<FormFieldData> fields);
 
   // Fills or previews the field identified by `field` with `value`.
   // `action_persistence` denotes if the operation is a Fill or Preview.
@@ -70,7 +71,9 @@ interface AutofillAgent {
 
   // Sets the autofill/autocomplete suggestion availability of |field| (if it is
   // still the currently selected node).
-  SetSuggestionAvailability(FieldRendererId field, AutofillState type);
+  SetSuggestionAvailability(
+    FieldRendererId field,
+    AutofillSuggestionAvailability suggestion_availability);
 
   // Sets the value of |field| (if it is still the currently selected node).
   // to the given data list value.
@@ -107,9 +110,6 @@ interface AutofillAgent {
   // Allows heavy scraping of form data (e.g., button titles for
   // unowned forms).
   EnableHeavyFormDataScraping();
-
-  // Update fields that are eligible to show manual filling on form interaction.
-  SetFieldsEligibleForManualFilling(array<FieldRendererId> fields);
 
   // Returns a vector of four digit combinations present in the DOM of a
   // webpage. Used to check for the presence of the virtual card last four in
@@ -175,4 +175,8 @@ interface PasswordGenerationAgent {
   // Tells the renderer that a password can be generated on the fields
   // identified by |form|.
   FoundFormEligibleForGeneration(PasswordFormGenerationData form);
+
+  // Tells the renderer to advance focus to the next field after password fields
+  // (assuming that password fields are adjacent in account creation).
+  FocusNextFieldAfterPasswords();
 };

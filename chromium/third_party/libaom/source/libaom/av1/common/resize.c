@@ -316,91 +316,6 @@ static void interpolate_core(const uint8_t *const input, int in_length,
   }
 }
 
-static void interpolate_core_double_prec(const double *const input,
-                                         int in_length, double *output,
-                                         int out_length,
-                                         const int16_t *interp_filters,
-                                         int interp_taps) {
-  const int32_t delta =
-      (((uint32_t)in_length << RS_SCALE_SUBPEL_BITS) + out_length / 2) /
-      out_length;
-  const int32_t offset =
-      in_length > out_length
-          ? (((int32_t)(in_length - out_length) << (RS_SCALE_SUBPEL_BITS - 1)) +
-             out_length / 2) /
-                out_length
-          : -(((int32_t)(out_length - in_length)
-               << (RS_SCALE_SUBPEL_BITS - 1)) +
-              out_length / 2) /
-                out_length;
-  double *optr = output;
-  int x, x1, x2, k, int_pel, sub_pel;
-  double sum;
-  int32_t y;
-
-  x = 0;
-  y = offset + RS_SCALE_EXTRA_OFF;
-  while ((y >> RS_SCALE_SUBPEL_BITS) < (interp_taps / 2 - 1)) {
-    x++;
-    y += delta;
-  }
-  x1 = x;
-  x = out_length - 1;
-  y = delta * x + offset + RS_SCALE_EXTRA_OFF;
-  while ((y >> RS_SCALE_SUBPEL_BITS) + (int32_t)(interp_taps / 2) >=
-         in_length) {
-    x--;
-    y -= delta;
-  }
-  x2 = x;
-  if (x1 > x2) {
-    for (x = 0, y = offset + RS_SCALE_EXTRA_OFF; x < out_length;
-         ++x, y += delta) {
-      int_pel = y >> RS_SCALE_SUBPEL_BITS;
-      sub_pel = (y >> RS_SCALE_EXTRA_BITS) & RS_SUBPEL_MASK;
-      const int16_t *filter = &interp_filters[sub_pel * interp_taps];
-      sum = 0;
-      for (k = 0; k < interp_taps; ++k) {
-        const int pk = int_pel - interp_taps / 2 + 1 + k;
-        sum += filter[k] * input[AOMMAX(AOMMIN(pk, in_length - 1), 0)];
-      }
-      *optr++ = sum / (1 << FILTER_BITS);
-    }
-  } else {
-    // Initial part.
-    for (x = 0, y = offset + RS_SCALE_EXTRA_OFF; x < x1; ++x, y += delta) {
-      int_pel = y >> RS_SCALE_SUBPEL_BITS;
-      sub_pel = (y >> RS_SCALE_EXTRA_BITS) & RS_SUBPEL_MASK;
-      const int16_t *filter = &interp_filters[sub_pel * interp_taps];
-      sum = 0;
-      for (k = 0; k < interp_taps; ++k)
-        sum += filter[k] * input[AOMMAX(int_pel - interp_taps / 2 + 1 + k, 0)];
-      *optr++ = sum / (1 << FILTER_BITS);
-    }
-    // Middle part.
-    for (; x <= x2; ++x, y += delta) {
-      int_pel = y >> RS_SCALE_SUBPEL_BITS;
-      sub_pel = (y >> RS_SCALE_EXTRA_BITS) & RS_SUBPEL_MASK;
-      const int16_t *filter = &interp_filters[sub_pel * interp_taps];
-      sum = 0;
-      for (k = 0; k < interp_taps; ++k)
-        sum += filter[k] * input[int_pel - interp_taps / 2 + 1 + k];
-      *optr++ = sum / (1 << FILTER_BITS);
-    }
-    // End part.
-    for (; x < out_length; ++x, y += delta) {
-      int_pel = y >> RS_SCALE_SUBPEL_BITS;
-      sub_pel = (y >> RS_SCALE_EXTRA_BITS) & RS_SUBPEL_MASK;
-      const int16_t *filter = &interp_filters[sub_pel * interp_taps];
-      sum = 0;
-      for (k = 0; k < interp_taps; ++k)
-        sum += filter[k] *
-               input[AOMMIN(int_pel - interp_taps / 2 + 1 + k, in_length - 1)];
-      *optr++ = sum / (1 << FILTER_BITS);
-    }
-  }
-}
-
 static void interpolate(const uint8_t *const input, int in_length,
                         uint8_t *output, int out_length) {
   const InterpKernel *interp_filters =
@@ -408,15 +323,6 @@ static void interpolate(const uint8_t *const input, int in_length,
 
   interpolate_core(input, in_length, output, out_length, &interp_filters[0][0],
                    SUBPEL_TAPS);
-}
-
-static void interpolate_double_prec(const double *const input, int in_length,
-                                    double *output, int out_length) {
-  const InterpKernel *interp_filters =
-      choose_interp_filter(in_length, out_length);
-
-  interpolate_core_double_prec(input, in_length, output, out_length,
-                               &interp_filters[0][0], SUBPEL_TAPS);
 }
 
 int32_t av1_get_upscale_convolve_step(int in_length, int out_length) {
@@ -600,12 +506,6 @@ static void resize_multistep(const uint8_t *const input, int length,
   }
 }
 
-static void upscale_multistep_double_prec(const double *const input, int length,
-                                          double *output, int olength) {
-  assert(length < olength);
-  interpolate_double_prec(input, length, output, olength);
-}
-
 static void fill_col_to_arr(uint8_t *img, int stride, int len, uint8_t *arr) {
   int i;
   uint8_t *iptr = img;
@@ -619,26 +519,6 @@ static void fill_arr_to_col(uint8_t *img, int stride, int len, uint8_t *arr) {
   int i;
   uint8_t *iptr = img;
   uint8_t *aptr = arr;
-  for (i = 0; i < len; ++i, iptr += stride) {
-    *iptr = *aptr++;
-  }
-}
-
-static void fill_col_to_arr_double_prec(double *img, int stride, int len,
-                                        double *arr) {
-  int i;
-  double *iptr = img;
-  double *aptr = arr;
-  for (i = 0; i < len; ++i, iptr += stride) {
-    *aptr++ = *iptr;
-  }
-}
-
-static void fill_arr_to_col_double_prec(double *img, int stride, int len,
-                                        double *arr) {
-  int i;
-  double *iptr = img;
-  double *aptr = arr;
   for (i = 0; i < len; ++i, iptr += stride) {
     *iptr = *aptr++;
   }
@@ -674,38 +554,6 @@ bool av1_resize_plane(const uint8_t *const input, int height, int width,
 Error:
   aom_free(intbuf);
   aom_free(tmpbuf);
-  aom_free(arrbuf);
-  aom_free(arrbuf2);
-  return mem_status;
-}
-
-bool av1_upscale_plane_double_prec(const double *const input, int height,
-                                   int width, int in_stride, double *output,
-                                   int height2, int width2, int out_stride) {
-  int i;
-  bool mem_status = true;
-  double *intbuf = (double *)aom_malloc(sizeof(double) * width2 * height);
-  double *arrbuf = (double *)aom_malloc(sizeof(double) * height);
-  double *arrbuf2 = (double *)aom_malloc(sizeof(double) * height2);
-  if (intbuf == NULL || arrbuf == NULL || arrbuf2 == NULL) {
-    mem_status = false;
-    goto Error;
-  }
-  assert(width > 0);
-  assert(height > 0);
-  assert(width2 > 0);
-  assert(height2 > 0);
-  for (i = 0; i < height; ++i)
-    upscale_multistep_double_prec(input + in_stride * i, width,
-                                  intbuf + width2 * i, width2);
-  for (i = 0; i < width2; ++i) {
-    fill_col_to_arr_double_prec(intbuf + i, width2, height, arrbuf);
-    upscale_multistep_double_prec(arrbuf, height, arrbuf2, height2);
-    fill_arr_to_col_double_prec(output + i, out_stride, height2, arrbuf2);
-  }
-
-Error:
-  aom_free(intbuf);
   aom_free(arrbuf);
   aom_free(arrbuf2);
   return mem_status;
@@ -1247,9 +1095,11 @@ void av1_resize_and_extend_frame_c(const YV12_BUFFER_CONFIG *src,
     uint8_t *dst_buffer = dst->buffers[i];
     const int dst_stride = dst->strides[is_uv];
     for (int y = 0; y < dst_h; y += 16) {
-      const int y_q4 = y * 16 * src_h / dst_h + phase_scaler;
+      const int y_q4 =
+          src_h == dst_h ? 0 : y * 16 * src_h / dst_h + phase_scaler;
       for (int x = 0; x < dst_w; x += 16) {
-        const int x_q4 = x * 16 * src_w / dst_w + phase_scaler;
+        const int x_q4 =
+            src_w == dst_w ? 0 : x * 16 * src_w / dst_w + phase_scaler;
         const uint8_t *src_ptr =
             src_buffer + y * src_h / dst_h * src_stride + x * src_w / dst_w;
         uint8_t *dst_ptr = dst_buffer + y * dst_stride + x;

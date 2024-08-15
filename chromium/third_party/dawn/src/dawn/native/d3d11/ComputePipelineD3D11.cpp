@@ -41,7 +41,7 @@ namespace dawn::native::d3d11 {
 // static
 Ref<ComputePipeline> ComputePipeline::CreateUninitialized(
     Device* device,
-    const ComputePipelineDescriptor* descriptor) {
+    const UnpackedPtr<ComputePipelineDescriptor>& descriptor) {
     return AcquireRef(new ComputePipeline(device, descriptor));
 }
 
@@ -87,7 +87,7 @@ void ComputePipeline::SetLabelImpl() {
     SetDebugName(ToBackend(GetDevice()), mComputeShader.Get(), "Dawn_ComputePipeline", GetLabel());
 }
 
-void ComputePipeline::ApplyNow(CommandRecordingContext* commandContext) {
+void ComputePipeline::ApplyNow(const ScopedSwapStateCommandRecordingContext* commandContext) {
     auto* d3dDeviceContext = commandContext->GetD3D11DeviceContext4();
     d3dDeviceContext->CSSetShader(mComputeShader.Get(), nullptr, 0);
 }

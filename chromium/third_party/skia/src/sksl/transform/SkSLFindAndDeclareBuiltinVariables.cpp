@@ -11,9 +11,7 @@
 #include "src/sksl/SkSLBuiltinTypes.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLContext.h"
-#include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/analysis/SkSLProgramUsage.h"
 #include "src/sksl/ir/SkSLFunctionDeclaration.h"
 #include "src/sksl/ir/SkSLFunctionDefinition.h"
@@ -31,7 +29,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -128,6 +125,7 @@ public:
 }  // namespace
 
 void FindAndDeclareBuiltinVariables(Program& program) {
+    using Interface = Program::Interface;
     const Context& context = *program.fContext;
     const SymbolTable& symbols = *program.fSymbols;
     BuiltinVariableScanner scanner(context, symbols);
@@ -138,48 +136,34 @@ void FindAndDeclareBuiltinVariables(Program& program) {
         scanner.addImplicitFragColorWrite(program.fOwnedElements);
     }
 
-    if (context.fCaps->fMustDeclareFragmentFrontFacing) {
-        scanner.addDeclaringElement(symbols.findBuiltinSymbol("sk_Clockwise"));
-    }
-
     // Scan all the variables used by the program and declare any built-ins.
     for (const auto& [var, counts] : program.fUsage->fVariableCounts) {
         if (var->isBuiltin()) {
             scanner.addDeclaringElement(var);
 
             switch (var->layout().fBuiltin) {
-                // Set the FlipRT program input if we find sk_FragCoord or sk_Clockwise.
+                // Set the RTFlip program input if we find sk_FragCoord or sk_Clockwise.
                 case SK_FRAGCOORD_BUILTIN:
-                    if (context.fCaps->fCanUseFragCoord) {
-                        program.fInterface.fUseFlipRTUniform =
-                                !context.fConfig->fSettings.fForceNoRTFlip;
+                    if (!context.fConfig->fSettings.fForceNoRTFlip) {
+                        program.fInterface.fRTFlipUniform |= Interface::kRTFlip_FragCoord;
                     }
                     break;
 
                 case SK_CLOCKWISE_BUILTIN:
-                    program.fInterface.fUseFlipRTUniform =
-                            !context.fConfig->fSettings.fForceNoRTFlip;
+                    if (!context.fConfig->fSettings.fForceNoRTFlip) {
+                        program.fInterface.fRTFlipUniform |= Interface::kRTFlip_Clockwise;
+                    }
                     break;
 
                 // Set the UseLastFragColor program input if we find sk_LastFragColor.
-                // Metal defines this as a program input, rather than a global variable.
+                // Metal and Dawn define this as a program input, rather than a global variable.
                 case SK_LASTFRAGCOLOR_BUILTIN:
-                    if (context.fCaps->fFBFetchSupport) {
-                        program.fInterface.fUseLastFragColor = true;
-                    } else {
-                        context.fErrors->error({},
-                                               "'" + std::string(var->name()) + "' not supported");
-                    }
+                    program.fInterface.fUseLastFragColor = true;
                     break;
 
                 // Set secondary color output if we find sk_SecondaryFragColor.
                 case SK_SECONDARYFRAGCOLOR_BUILTIN:
-                    if (context.fCaps->fDualSourceBlendingSupport) {
-                        program.fInterface.fOutputSecondaryColor = true;
-                    } else {
-                        context.fErrors->error({},
-                                               "'" + std::string(var->name()) + "' not supported");
-                    }
+                    program.fInterface.fOutputSecondaryColor = true;
                     break;
             }
         }

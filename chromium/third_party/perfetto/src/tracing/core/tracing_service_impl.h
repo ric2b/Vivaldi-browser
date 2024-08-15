@@ -36,6 +36,7 @@
 #include "perfetto/ext/base/uuid.h"
 #include "perfetto/ext/base/weak_ptr.h"
 #include "perfetto/ext/tracing/core/basic_types.h"
+#include "perfetto/ext/tracing/core/client_identity.h"
 #include "perfetto/ext/tracing/core/commit_data_request.h"
 #include "perfetto/ext/tracing/core/observable_events.h"
 #include "perfetto/ext/tracing/core/shared_memory_abi.h"
@@ -96,8 +97,7 @@ class TracingServiceImpl : public TracingService {
   class ProducerEndpointImpl : public TracingService::ProducerEndpoint {
    public:
     ProducerEndpointImpl(ProducerID,
-                         uid_t uid,
-                         pid_t pid,
+                         const ClientIdentity& client_identity,
                          TracingServiceImpl*,
                          base::TaskRunner*,
                          Producer*,
@@ -153,8 +153,9 @@ class TracingServiceImpl : public TracingService {
       return std::nullopt;
     }
 
-    uid_t uid() const { return uid_; }
-    pid_t pid() const { return pid_; }
+    uid_t uid() const { return client_identity_.uid(); }
+    pid_t pid() const { return client_identity_.pid(); }
+    const ClientIdentity& client_identity() const { return client_identity_; }
 
    private:
     friend class TracingServiceImpl;
@@ -164,8 +165,7 @@ class TracingServiceImpl : public TracingService {
     ProducerEndpointImpl& operator=(const ProducerEndpointImpl&) = delete;
 
     ProducerID const id_;
-    const uid_t uid_;
-    const pid_t pid_;
+    ClientIdentity const client_identity_;
     TracingServiceImpl* const service_;
     base::TaskRunner* const task_runner_;
     Producer* producer_;
@@ -278,8 +278,7 @@ class TracingServiceImpl : public TracingService {
   void UpdateDataSource(ProducerID, const DataSourceDescriptor&);
   void UnregisterDataSource(ProducerID, const std::string& name);
   void CopyProducerPageIntoLogBuffer(ProducerID,
-                                     uid_t,
-                                     pid_t,
+                                     const ClientIdentity&,
                                      WriterID,
                                      ChunkID,
                                      BufferID,
@@ -341,8 +340,7 @@ class TracingServiceImpl : public TracingService {
   // Service implementation.
   std::unique_ptr<TracingService::ProducerEndpoint> ConnectProducer(
       Producer*,
-      uid_t uid,
-      pid_t pid,
+      const ClientIdentity& client_identity,
       const std::string& producer_name,
       size_t shared_memory_size_hint_bytes = 0,
       bool in_process = false,
@@ -393,14 +391,16 @@ class TracingServiceImpl : public TracingService {
                        const std::string& ds_name,
                        bool notify_on_start,
                        bool notify_on_stop,
-                       bool handles_incremental_state_invalidation)
+                       bool handles_incremental_state_invalidation,
+                       bool no_flush_)
         : instance_id(id),
           config(cfg),
           data_source_name(ds_name),
           will_notify_on_start(notify_on_start),
           will_notify_on_stop(notify_on_stop),
           handles_incremental_state_clear(
-              handles_incremental_state_invalidation) {}
+              handles_incremental_state_invalidation),
+          no_flush(no_flush_) {}
     DataSourceInstance(const DataSourceInstance&) = delete;
     DataSourceInstance& operator=(const DataSourceInstance&) = delete;
 
@@ -410,6 +410,7 @@ class TracingServiceImpl : public TracingService {
     bool will_notify_on_start;
     bool will_notify_on_stop;
     bool handles_incremental_state_clear;
+    bool no_flush;
 
     enum DataSourceInstanceState {
       CONFIGURED,
@@ -464,9 +465,10 @@ class TracingServiceImpl : public TracingService {
       return timeout_ms ? timeout_ms : kDataSourceStopTimeoutMs;
     }
 
-    PacketSequenceID GetPacketSequenceID(ProducerID producer_id,
+    PacketSequenceID GetPacketSequenceID(MachineID machine_id,
+                                         ProducerID producer_id,
                                          WriterID writer_id) {
-      auto key = std::make_pair(producer_id, writer_id);
+      auto key = std::make_tuple(machine_id, producer_id, writer_id);
       auto it = packet_sequence_ids.find(key);
       if (it != packet_sequence_ids.end())
         return it->second;
@@ -539,9 +541,6 @@ class TracingServiceImpl : public TracingService {
 
     // List of data source instances that have been enabled on the various
     // producers for this tracing session.
-    // TODO(rsavitski): at the time of writing, the map structure is unused
-    // (even when the calling code has a key). This is also an opportunity to
-    // consider an alternative data type, e.g. a map of vectors.
     std::multimap<ProducerID, DataSourceInstance> data_source_instances;
 
     // For each Flush(N) request, keeps track of the set of producers for which
@@ -553,7 +552,7 @@ class TracingServiceImpl : public TracingService {
     // many entries as |config.buffers_size()|.
     std::vector<BufferID> buffers_index;
 
-    std::map<std::pair<ProducerID, WriterID>, PacketSequenceID>
+    std::map<std::tuple<MachineID, ProducerID, WriterID>, PacketSequenceID>
         packet_sequence_ids;
     PacketSequenceID last_packet_sequence_id = kServicePacketSequenceID;
 
@@ -565,11 +564,9 @@ class TracingServiceImpl : public TracingService {
     // called.
     bool should_emit_sync_marker = false;
 
-    // Whether we mirrored the trace config back to the trace output yet.
-    bool did_emit_config = false;
-
-    // Whether we put the system info into the trace output yet.
-    bool did_emit_system_info = false;
+    // Whether we put the initial packets (trace config, system info,
+    // etc.) into the trace output yet.
+    bool did_emit_initial_packets = false;
 
     // Whether we should compress TracePackets after reading them.
     bool compress_deflate = false;
@@ -657,6 +654,7 @@ class TracingServiceImpl : public TracingService {
     uint64_t filter_output_bytes = 0;
     uint64_t filter_errors = 0;
     uint64_t filter_time_taken_ns = 0;
+    std::vector<uint64_t> filter_bytes_discarded_per_buffer;
 
     // A randomly generated trace identifier. Note that this does NOT always
     // match the requested TraceConfig.trace_uuid_msb/lsb. Spcifically, it does
@@ -717,8 +715,9 @@ class TracingServiceImpl : public TracingService {
   void EmitStats(TracingSession*, std::vector<TracePacket>*);
   TraceStats GetTraceStats(TracingSession*);
   void EmitLifecycleEvents(TracingSession*, std::vector<TracePacket>*);
-  void MaybeEmitUuidAndTraceConfig(TracingSession*, std::vector<TracePacket>*);
-  void MaybeEmitSystemInfo(TracingSession*, std::vector<TracePacket>*);
+  void EmitUuid(TracingSession*, std::vector<TracePacket>*);
+  void MaybeEmitTraceConfig(TracingSession*, std::vector<TracePacket>*);
+  void EmitSystemInfo(std::vector<TracePacket>*);
   void MaybeEmitReceivedTriggers(TracingSession*, std::vector<TracePacket>*);
   void MaybeNotifyAllDataSourcesStarted(TracingSession*);
   void OnFlushTimeout(TracingSessionID, FlushRequestID);
@@ -733,6 +732,7 @@ class TracingServiceImpl : public TracingService {
   TraceBuffer* GetBufferByID(BufferID);
   base::Status DoCloneSession(ConsumerEndpointImpl*,
                               TracingSessionID,
+                              bool for_bugreport,
                               bool final_flush_outcome,
                               base::Uuid*);
 

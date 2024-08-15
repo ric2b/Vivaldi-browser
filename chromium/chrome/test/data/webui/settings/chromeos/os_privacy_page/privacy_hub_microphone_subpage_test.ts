@@ -5,23 +5,36 @@
 import 'chrome://os-settings/lazy_load.js';
 
 import {MediaDevicesProxy, PrivacyHubBrowserProxyImpl, SettingsPrivacyHubMicrophoneSubpage} from 'chrome://os-settings/lazy_load.js';
-import {CrLinkRowElement, CrToggleElement, PaperTooltipElement, Router} from 'chrome://os-settings/os_settings.js';
+import {appPermissionHandlerMojom, CrLinkRowElement, CrToggleElement, PaperTooltipElement, PrivacyHubSensorSubpageUserAction, Router, setAppPermissionProviderForTesting} from 'chrome://os-settings/os_settings.js';
+import {PermissionType, TriState} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {DomRepeat, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertNull, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
+import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
 import {FakeMediaDevices} from '../fake_media_devices.js';
+import {FakeMetricsPrivate} from '../fake_metrics_private.js';
 
+import {FakeAppPermissionHandler} from './fake_app_permission_handler.js';
+import {createApp, createFakeMetricsPrivate, getSystemServicePermissionText, getSystemServicesFromSubpage} from './privacy_hub_app_permission_test_util.js';
 import {TestPrivacyHubBrowserProxy} from './test_privacy_hub_browser_proxy.js';
 
+type App = appPermissionHandlerMojom.App;
+
 suite('<settings-privacy-hub-microphone-subpage>', () => {
+  let fakeHandler: FakeAppPermissionHandler;
+  let metrics: FakeMetricsPrivate;
   let privacyHubMicrophoneSubpage: SettingsPrivacyHubMicrophoneSubpage;
   let privacyHubBrowserProxy: TestPrivacyHubBrowserProxy;
   let mediaDevices: FakeMediaDevices;
 
   setup(() => {
+    fakeHandler = new FakeAppPermissionHandler();
+    setAppPermissionProviderForTesting(fakeHandler);
+
+    metrics = createFakeMetricsPrivate();
+
     privacyHubBrowserProxy = new TestPrivacyHubBrowserProxy();
     PrivacyHubBrowserProxyImpl.setInstanceForTesting(privacyHubBrowserProxy);
 
@@ -80,7 +93,7 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         '#microphoneListSection'));
   }
 
-  function getNoMicrophoneText(): HTMLDivElement|null {
+  function getNoMicrophoneTextElement(): HTMLDivElement|null {
     return privacyHubMicrophoneSubpage.shadowRoot!.querySelector(
         '#noMicrophoneText');
   }
@@ -94,6 +107,11 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
     assertTrue(getMicrophoneCrToggle().checked);
   });
 
+  function isBlockedSuffixDisplayedAfterMicrophoneName(): boolean {
+    return isVisible(privacyHubMicrophoneSubpage.shadowRoot!.querySelector(
+        '#microphoneNameWithBlockedSuffix'));
+  }
+
   test('Microphone section view when microphone access is enabled', () => {
     const microphoneToggle = getMicrophoneCrToggle();
 
@@ -105,6 +123,7 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         privacyHubMicrophoneSubpage.i18n('microphoneToggleSubtext'),
         getOnOffSubtext());
     assertTrue(isMicrophoneListSectionVisible());
+    assertFalse(isBlockedSuffixDisplayedAfterMicrophoneName());
   });
 
   test(
@@ -126,8 +145,18 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
                 .value);
         assertEquals(
             privacyHubMicrophoneSubpage.i18n('deviceOff'), getOnOffText());
-        assertEquals('Blocked for all', getOnOffSubtext());
-        assertFalse(isMicrophoneListSectionVisible());
+        assertEquals(
+            privacyHubMicrophoneSubpage.i18n(
+                'privacyHubMicrophoneAccessBlockedText'),
+            getOnOffSubtext());
+        assertTrue(isMicrophoneListSectionVisible());
+        assertTrue(isBlockedSuffixDisplayedAfterMicrophoneName());
+        assertEquals(
+            privacyHubMicrophoneSubpage.i18n(
+                'privacyHubSensorNameWithBlockedSuffix', 'Fake Microphone'),
+            privacyHubMicrophoneSubpage.shadowRoot!
+                .querySelector<HTMLDivElement>(
+                    '#microphoneNameWithBlockedSuffix')!.innerText.trim());
       });
 
   test('Repeatedly toggle microphone access', async () => {
@@ -145,15 +174,53 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
       assertEquals(
           microphoneToggle.checked,
           privacyHubMicrophoneSubpage.prefs.ash.user.microphone_allowed.value);
+      assertEquals(
+          i + 1,
+          metrics.countMetricValue(
+              'ChromeOS.PrivacyHub.MicrophoneSubpage.UserAction',
+              PrivacyHubSensorSubpageUserAction.SYSTEM_ACCESS_CHANGED));
     }
   });
 
+  function isMicrophoneRowActionable(): boolean {
+    const actionableAttribute =
+        privacyHubMicrophoneSubpage.shadowRoot!
+            .querySelector('#accessStatusRow')!.getAttribute('actionable');
+    return actionableAttribute === '';
+  }
+
+  test(
+      'Clicking toggle is no-op when accessStatusRow is not actionable',
+      async () => {
+        const microphoneToggle = getMicrophoneCrToggle();
+        assertTrue(microphoneToggle.checked);
+
+        assertFalse(isMicrophoneRowActionable());
+        microphoneToggle.click();
+        assertTrue(microphoneToggle.checked);
+
+        // Add a microphone to make accessStatusRow actionable.
+        mediaDevices.addDevice('audioinput', 'Fake Microphone');
+        await flushTasks();
+        assertTrue(isMicrophoneRowActionable());
+        microphoneToggle.click();
+        assertFalse(microphoneToggle.checked);
+
+        // Activate microphone hardware toggle to make the accessStatusRow not
+        // actionable.
+        webUIListenerCallback('microphone-hardware-toggle-changed', true);
+        flush();
+        assertFalse(isMicrophoneRowActionable());
+        microphoneToggle.click();
+        assertFalse(microphoneToggle.checked);
+      });
+
   test('No microphone connected by default', () => {
     assertNull(getMicrophoneList());
-    assertTrue(!!getNoMicrophoneText());
+    assertTrue(!!getNoMicrophoneTextElement());
     assertEquals(
         privacyHubMicrophoneSubpage.i18n('noMicrophoneConnectedText'),
-        getNoMicrophoneText()!.textContent!.trim());
+        getNoMicrophoneTextElement()!.textContent!.trim());
   });
 
   test(
@@ -172,7 +239,7 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
 
         assertFalse(getMicrophoneCrToggle()!.disabled);
         assertTrue(getMicrophoneTooltip()!.hidden);
-        assertNull(getNoMicrophoneText());
+        assertNull(getNoMicrophoneTextElement());
       });
 
   test(
@@ -274,6 +341,91 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
         }
       });
 
+  function getNoAppHasAccessTextSection(): HTMLDivElement|null {
+    return privacyHubMicrophoneSubpage.shadowRoot!.querySelector(
+        '#noAppHasAccessText');
+  }
+
+  function getAppList(): DomRepeat|null {
+    return privacyHubMicrophoneSubpage.shadowRoot!.querySelector('#appList');
+  }
+
+  test('Apps section when microphone allowed', () => {
+    assertEquals(
+        privacyHubMicrophoneSubpage.i18n('privacyHubAppsSectionTitle'),
+        privacyHubMicrophoneSubpage.shadowRoot!
+            .querySelector('#appsSectionTitle')!.textContent!.trim());
+    assertTrue(!!getAppList());
+    assertNull(getNoAppHasAccessTextSection());
+  });
+
+  test('Apps section when microphone not allowed', async () => {
+    mediaDevices.addDevice('audioinput', 'Fake Microphone');
+    await waitAfterNextRender(privacyHubMicrophoneSubpage);
+    // Disable microphone access.
+    getMicrophoneCrToggle().click();
+    await waitAfterNextRender(privacyHubMicrophoneSubpage);
+
+    assertNull(getAppList());
+    assertTrue(!!getNoAppHasAccessTextSection());
+    assertEquals(
+        privacyHubMicrophoneSubpage.i18n('noAppCanUseMicText'),
+        getNoAppHasAccessTextSection()!.textContent!.trim());
+  });
+
+  function initializeObserver(): Promise<void> {
+    return fakeHandler.whenCalled('addObserver');
+  }
+
+  function simulateAppUpdate(app: App): void {
+    fakeHandler.getObserverRemote().onAppUpdated(app);
+  }
+
+  function simulateAppRemoval(id: string): void {
+    fakeHandler.getObserverRemote().onAppRemoved(id);
+  }
+
+  test('AppList displays all apps with microphone permission', async () => {
+    const app1 = createApp(
+        'app1_id', 'app1_name', PermissionType.kMicrophone, TriState.kAllow);
+    const app2 = createApp(
+        'app2_id', 'app2_name', PermissionType.kCamera, TriState.kAllow);
+    const app3 = createApp(
+        'app3_id', 'app3_name', PermissionType.kMicrophone, TriState.kAsk);
+
+    await initializeObserver();
+    simulateAppUpdate(app1);
+    simulateAppUpdate(app2);
+    simulateAppUpdate(app3);
+    await flushTasks();
+
+    assertEquals(2, getAppList()!.items!.length);
+  });
+
+  test('Removed app are removed from appList', async () => {
+    const app1 = createApp(
+        'app1_id', 'app1_name', PermissionType.kMicrophone, TriState.kAllow);
+    const app2 = createApp(
+        'app2_id', 'app2_name', PermissionType.kCamera, TriState.kAllow);
+
+    await initializeObserver();
+    simulateAppUpdate(app1);
+    simulateAppUpdate(app2);
+    await flushTasks();
+
+    assertEquals(1, getAppList()!.items!.length);
+
+    simulateAppRemoval(app2.id);
+    await flushTasks();
+
+    assertEquals(1, getAppList()!.items!.length);
+
+    simulateAppRemoval(app1.id);
+    await flushTasks();
+
+    assertEquals(0, getAppList()!.items!.length);
+  });
+
   function getManagePermissionsInChromeRow(): CrLinkRowElement {
     const managePermissionsInChromeRow =
         privacyHubMicrophoneSubpage.shadowRoot!.querySelector<CrLinkRowElement>(
@@ -289,7 +441,6 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
     assertTrue(!!noWebsiteHasAccessTextRow);
     return noWebsiteHasAccessTextRow;
   }
-
 
   test('Websites section texts', async () => {
     assertEquals(
@@ -321,5 +472,52 @@ suite('<settings-privacy-hub-microphone-subpage>', () => {
 
     assertTrue(getManagePermissionsInChromeRow().hidden);
     assertFalse(getNoWebsiteHasAccessTextRow().hidden);
+  });
+
+  test('Website section metric recorded when clicked', () => {
+    assertEquals(
+        0,
+        metrics.countMetricValue(
+            'ChromeOS.PrivacyHub.MicrophoneSubpage.UserAction',
+            PrivacyHubSensorSubpageUserAction.WEBSITE_PERMISSION_LINK_CLICKED));
+
+    getManagePermissionsInChromeRow().click();
+
+    assertEquals(
+        1,
+        metrics.countMetricValue(
+            'ChromeOS.PrivacyHub.MicrophoneSubpage.UserAction',
+            PrivacyHubSensorSubpageUserAction.WEBSITE_PERMISSION_LINK_CLICKED));
+  });
+
+  test('System services section when microphone is allowed', async () => {
+    assertEquals(
+        privacyHubMicrophoneSubpage.i18n(
+            'privacyHubSystemServicesSectionTitle'),
+        privacyHubMicrophoneSubpage.shadowRoot!
+            .querySelector('#systemServicesSectionTitle')!.textContent!.trim());
+
+    await flushTasks();
+    const systemServices =
+        getSystemServicesFromSubpage(privacyHubMicrophoneSubpage);
+    assertEquals(1, systemServices.length);
+    assertEquals(
+        privacyHubMicrophoneSubpage.i18n('privacyHubSystemServicesAllowedText'),
+        getSystemServicePermissionText(systemServices[0]!));
+  });
+
+  test('System services section when microphone is not allowed', async () => {
+    mediaDevices.addDevice('audioinput', 'Fake Microphone');
+    await flushTasks();
+    // Toggle microphone access.
+    getMicrophoneCrToggle().click();
+    flush();
+
+    const systemServices =
+        getSystemServicesFromSubpage(privacyHubMicrophoneSubpage);
+    assertEquals(1, systemServices.length);
+    assertEquals(
+        privacyHubMicrophoneSubpage.i18n('privacyHubSystemServicesBlockedText'),
+        getSystemServicePermissionText(systemServices[0]!));
   });
 });

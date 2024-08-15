@@ -11,8 +11,7 @@
 #import "ios/panel/slide_out_animator.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
-@interface SidebarPanelPresentationController() {
-}
+@interface SidebarPanelPresentationController()
 
 @property(nonatomic, strong) UIView* backgroundView;
 @property(nonatomic, strong) UIView* dimmingView;
@@ -53,33 +52,35 @@
 }
 
 -(CGRect)frameOfPresentedViewInContainerView {
-   CGRect frame = CGRectZero;
-   frame.size = [self sizeForChildContentContainer:self
-            withParentContainerSize:self.containerView.bounds.size];
-   frame.size.width = panel_sidebar_width + panel_icon_size;
-   frame.size.height = [self containerView].frame.size.height
-                            - [self topPadding];
-   frame.origin = CGPointMake(0, [self topPadding]);
-   return frame;
+  CGRect frame = CGRectZero;
+  frame.size = [self sizeForChildContentContainer:self
+      withParentContainerSize:self.containerView.bounds.size];
+  frame.size.width = panel_sidebar_width + panel_icon_size;
+  frame.size.height =
+      [self presentedViewHeightFromParentHeight:
+          [self containerView].frame.size.height];
+  frame.origin = CGPointMake(0, [self topPadding]);
+  return frame;
 }
 
 - (void)presentationTransitionWillBegin {
-    [[self containerView] addSubview:self.backgroundView];
-    [self.backgroundView addSubview:[self.presentedViewController view]];
-    [self.backgroundView fillSuperview];
-    [self.dimmingView fillSuperviewWithPadding:UIEdgeInsetsMake(
-                                                  [self topPadding], 0, 0, 0)];
-        self.dimmingView.backgroundColor = UIColor.blackColor;
-    [self.backgroundView.topAnchor constraintEqualToAnchor:
-        self.presentedViewController.view.topAnchor].active = YES;
-    [super presentationTransitionWillBegin];
-    [self.presentedViewController.transitionCoordinator
-        animateAlongsideTransition:
-         ^(id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
-            self.backgroundView.alpha = 0.5;
-        } completion:^(id<UIViewControllerTransitionCoordinatorContext>
-                       _Nonnull context) {
-      }];
+  [[self containerView] addSubview:self.backgroundView];
+  [self.backgroundView addSubview:[self.presentedViewController view]];
+  [self.backgroundView fillSuperview];
+  [self.dimmingView
+      fillSuperviewWithPadding:UIEdgeInsetsMake(
+          [self topPadding], 0, [self bottomPadding], 0)];
+  self.dimmingView.backgroundColor = UIColor.blackColor;
+  [self.backgroundView.topAnchor constraintEqualToAnchor:
+   self.presentedViewController.view.topAnchor].active = YES;
+  [super presentationTransitionWillBegin];
+  [self.presentedViewController.transitionCoordinator
+   animateAlongsideTransition:
+     ^(id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
+    self.backgroundView.alpha = 0.5;
+  } completion:^(id<UIViewControllerTransitionCoordinatorContext>
+                 _Nonnull context) {
+  }];
 }
 
 - (void)dismissalTransitionWillBegin {
@@ -98,26 +99,49 @@
 
 - (CGSize)sizeForChildContentContainer:(id<UIContentContainer>)container
                  withParentContentSize:(CGSize)parentSize {
-    return CGSizeMake(panel_sidebar_width + panel_icon_size,
-                      parentSize.height - [self topPadding]);
+  return CGSizeMake(panel_sidebar_width + panel_icon_size,
+      [self presentedViewHeightFromParentHeight:parentSize.height]);
 }
 
 - (void)presentationTransitionDidEnd {}
 
-// Calculate top padding from location bar height, safe top area insets, and
-// tab bar height.
-- (CGFloat)topPadding {
-  return ToolbarExpandedHeight(
-      self.traitCollection.preferredContentSizeCategory) +
-      kTabStripHeight + kTopToolbarUnsplitMargin + [self safeAreaTopHeight];
+- (CGFloat)presentedViewHeightFromParentHeight:(CGFloat)parentHeight {
+  return parentHeight - [self topPadding] - [self bottomPadding];
 }
 
-- (CGFloat)safeAreaTopHeight {
+// Calculate top padding from location bar height, safe top area insets,
+// tab bar height, and toolbar type.
+- (CGFloat)topPadding {
+  if (self.toolbarType == ToolbarType::kPrimary) {
+    return [self toolbarHeight] +
+        kTabStripHeight + kTopToolbarUnsplitMargin + self.safeAreaInsets.top;
+  } else {
+    return self.safeAreaInsets.top;
+  }
+}
+
+// Calculate bottom padding from location bar height, safe bottom area insets,
+// tab bar height, and toolbar type.
+- (CGFloat)bottomPadding {
+  if (self.toolbarType == ToolbarType::kPrimary) {
+    return 0;
+  } else {
+    return [self toolbarHeight] + kSecondaryToolbarWithoutOmniboxHeight +
+        self.safeAreaInsets.bottom;
+  }
+}
+
+- (CGFloat)toolbarHeight {
+  return ToolbarExpandedHeight(
+      self.traitCollection.preferredContentSizeCategory);
+}
+
+- (UIEdgeInsets)safeAreaInsets {
   if (self.containerView) {
     UIEdgeInsets safeAreaInsets = self.containerView.safeAreaInsets;
-    return safeAreaInsets.top;
+    return safeAreaInsets;
   }
-  return 0;
+  return UIEdgeInsetsZero;
 }
 
 @end

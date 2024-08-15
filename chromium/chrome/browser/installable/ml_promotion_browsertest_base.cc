@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <string>
-
 #include "chrome/browser/installable/ml_promotion_browsertest_base.h"
+
+#include <optional>
+#include <string>
 
 #include "base/functional/callback_helpers.h"
 #include "base/test/test_future.h"
@@ -14,7 +15,6 @@
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/test/base/android/android_browser_test.h"
@@ -97,8 +97,9 @@ bool MLPromotionBrowserTestBase::InstallAppForCurrentWebContents(
   }
 
   const webapps::AppId& app_id = install_future.Get<webapps::AppId>();
-  provider->sync_bridge_unsafe().SetAppIsLocallyInstalledForTesting(
-      app_id, /*is_locally_installed=*/install_locally);
+  if (!install_locally) {
+    provider->sync_bridge_unsafe().SetAppNotLocallyInstalledForTesting(app_id);
+  }
   return success;
 #endif  // BUILDFLAG(IS_ANDROID)
 }
@@ -146,7 +147,7 @@ bool MLPromotionBrowserTestBase::NavigateAndAwaitInstallabilityCheck(
   return false;
 #else
   auto* manager = TestAppBannerManagerDesktop::FromWebContents(web_contents());
-  web_app::NavigateToURLAndWait(browser(), url);
+  web_app::NavigateViaLinkClickToURLAndWait(browser(), url);
   return manager->WaitForInstallableCheck();
 #endif  // BUILDFLAG(IS_ANDROID)
 }

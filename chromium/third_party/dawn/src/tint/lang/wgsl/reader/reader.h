@@ -30,6 +30,7 @@
 
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/wgsl/program/program.h"
+#include "src/tint/lang/wgsl/reader/options.h"
 
 namespace tint::wgsl::reader {
 
@@ -38,13 +39,24 @@ namespace tint::wgsl::reader {
 /// `program.Diagnostics.contains_errors()` will be true, and the
 /// `program.Diagnostics()` will describe the error.
 /// @param file the source file
+/// @param options the configuration options to use when parsing WGSL
 /// @returns the parsed program
-Program Parse(const Source::File* file);
+Program Parse(const Source::File* file, const Options& options = {});
 
 /// Parse a WGSL program from source, and return an IR module.
 /// @param file the input WGSL file
+/// @param options the configuration options to use when parsing WGSL
 /// @returns the resulting IR module, or failure
-Result<core::ir::Module> WgslToIR(const Source::File* file);
+Result<core::ir::Module> WgslToIR(const Source::File* file, const Options& options = {});
+
+/// Builds a core-dialect core::ir::Module from the given Program
+/// @param program the Program to use.
+/// @returns the core-dialect IR module.
+///
+/// @note this assumes the `program.IsValid()`, and has had const-eval done so
+/// any abstract values have been calculated and converted into the relevant
+/// concrete types.
+tint::Result<core::ir::Module> ProgramToLoweredIR(const Program& program);
 
 }  // namespace tint::wgsl::reader
 

@@ -9,6 +9,9 @@ import {
 } from '../../common/util/util.js';
 import { getDefaultLimits, kLimits } from '../capability_info.js';
 
+// MUST_NOT_BE_IMPORTED_BY_DATA_CACHE
+// This file should not be transitively imported by .cache.ts files
+
 export interface DeviceProvider {
   readonly device: GPUDevice;
   expectDeviceLost(reason: GPUDeviceLostReason): void;
@@ -230,7 +233,7 @@ function canonicalizeDescriptor(
    * specified _and_ non-default. */
   const limitsCanonicalized: Record<string, number> = {};
   // MAINTENANCE_TODO: Remove cast when @webgpu/types includes compatibilityMode
-  const adapterOptions = (getDefaultRequestAdapterOptions() as unknown) as {
+  const adapterOptions = getDefaultRequestAdapterOptions() as unknown as {
     compatibilityMode?: boolean;
   };
   const featureLevel = adapterOptions?.compatibilityMode ? 'compatibility' : 'core';
@@ -378,10 +381,10 @@ class DeviceHolder implements DeviceProvider {
       await this.device.queue.onSubmittedWorkDone();
     }
 
-    await assertReject(
-      this.device.popErrorScope(),
-      'There was an extra error scope on the stack after a test'
-    );
+    await assertReject('OperationError', this.device.popErrorScope(), {
+      allowMissingStack: true,
+      message: 'There was an extra error scope on the stack after a test',
+    });
 
     if (gpuOutOfMemoryError !== null) {
       assert(gpuOutOfMemoryError instanceof GPUOutOfMemoryError);

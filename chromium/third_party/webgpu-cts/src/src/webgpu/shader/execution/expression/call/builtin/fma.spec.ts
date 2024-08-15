@@ -9,63 +9,13 @@ Returns e1 * e2 + e3. Component-wise when T is a vector.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16, TypeAbstractFloat } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { sparseF32Range, sparseF16Range, sparseF64Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeAbstractFloat, TypeF16, TypeF32 } from '../../../../../util/conversion.js';
 import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
 import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './fma.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('fma', {
-  f32_const: () => {
-    return FP.f32.generateScalarTripleToIntervalCases(
-      sparseF32Range(),
-      sparseF32Range(),
-      sparseF32Range(),
-      'finite',
-      FP.f32.fmaInterval
-    );
-  },
-  f32_non_const: () => {
-    return FP.f32.generateScalarTripleToIntervalCases(
-      sparseF32Range(),
-      sparseF32Range(),
-      sparseF32Range(),
-      'unfiltered',
-      FP.f32.fmaInterval
-    );
-  },
-  f16_const: () => {
-    return FP.f16.generateScalarTripleToIntervalCases(
-      sparseF16Range(),
-      sparseF16Range(),
-      sparseF16Range(),
-      'finite',
-      FP.f16.fmaInterval
-    );
-  },
-  f16_non_const: () => {
-    return FP.f16.generateScalarTripleToIntervalCases(
-      sparseF16Range(),
-      sparseF16Range(),
-      sparseF16Range(),
-      'unfiltered',
-      FP.f16.fmaInterval
-    );
-  },
-  abstract: () => {
-    return FP.abstract.generateScalarTripleToIntervalCases(
-      sparseF64Range(),
-      sparseF64Range(),
-      sparseF64Range(),
-      'finite',
-      FP.abstract.fmaInterval
-    );
-  },
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
@@ -76,7 +26,7 @@ g.test('abstract_float')
       .combine('vectorize', [undefined, 2, 3, 4] as const)
   )
   .fn(async t => {
-    const cases = await d.get('abstract');
+    const cases = await d.get('abstract_const');
     await run(
       t,
       abstractBuiltin('fma'),

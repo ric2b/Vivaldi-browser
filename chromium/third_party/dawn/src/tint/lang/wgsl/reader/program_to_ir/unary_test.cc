@@ -44,7 +44,7 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Not) {
     WrapInFunction(expr);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()), R"(%my_func = func():bool -> %b1 {
   %b1 = block {
@@ -54,7 +54,8 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Not) {
 %test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
   %b2 = block {
     %3:bool = call %my_func
-    %tint_symbol:bool = eq %3, false
+    %4:bool = eq %3, false
+    %tint_symbol:bool = let %4
     ret
   }
 }
@@ -67,7 +68,7 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Not_Vector) {
     WrapInFunction(expr);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()), R"(%my_func = func():vec4<bool> -> %b1 {
   %b1 = block {
@@ -77,7 +78,8 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Not_Vector) {
 %test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
   %b2 = block {
     %3:vec4<bool> = call %my_func
-    %tint_symbol:vec4<bool> = eq %3, vec4<bool>(false)
+    %4:vec4<bool> = eq %3, vec4<bool>(false)
+    %tint_symbol:vec4<bool> = let %4
     ret
   }
 }
@@ -90,7 +92,7 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Complement) {
     WrapInFunction(expr);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()), R"(%my_func = func():u32 -> %b1 {
   %b1 = block {
@@ -100,7 +102,8 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Complement) {
 %test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
   %b2 = block {
     %3:u32 = call %my_func
-    %tint_symbol:u32 = complement %3
+    %4:u32 = complement %3
+    %tint_symbol:u32 = let %4
     ret
   }
 }
@@ -113,7 +116,7 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Negation) {
     WrapInFunction(expr);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()), R"(%my_func = func():i32 -> %b1 {
   %b1 = block {
@@ -123,7 +126,8 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Negation) {
 %test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b2 {
   %b2 = block {
     %3:i32 = call %my_func
-    %tint_symbol:i32 = negation %3
+    %4:i32 = negation %3
+    %tint_symbol:i32 = let %4
     ret
   }
 }
@@ -137,7 +141,7 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_AddressOf) {
     WrapInFunction(expr);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()), R"(%b1 = block {  # root
   %v1:ptr<private, i32, read_write> = var
@@ -161,7 +165,7 @@ TEST_F(ProgramToIRUnaryTest, EmitExpression_Unary_Indirection) {
     WrapInFunction(stmts);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()), R"(%b1 = block {  # root
   %v1:ptr<private, i32, read_write> = var

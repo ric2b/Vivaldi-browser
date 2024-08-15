@@ -5,10 +5,10 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_SCOPED_CLEAR_LAST_ERROR_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_SCOPED_CLEAR_LAST_ERROR_H_
 
-#include <errno.h>
+#include <cerrno>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
 
 namespace partition_alloc::internal::base {
 
@@ -19,7 +19,7 @@ namespace partition_alloc::internal::base {
 
 // Common implementation of ScopedClearLastError for all platforms. Use
 // ScopedClearLastError instead.
-class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ScopedClearLastErrorBase {
+class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) ScopedClearLastErrorBase {
  public:
   ScopedClearLastErrorBase() : last_errno_(errno) { errno = 0; }
   ScopedClearLastErrorBase(const ScopedClearLastErrorBase&) = delete;
@@ -33,7 +33,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ScopedClearLastErrorBase {
 #if BUILDFLAG(IS_WIN)
 
 // Windows specific implementation of ScopedClearLastError.
-class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ScopedClearLastError
+class PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE) ScopedClearLastError
     : public ScopedClearLastErrorBase {
  public:
   ScopedClearLastError();

@@ -38,6 +38,7 @@ include_rules = [
   "+chromeos",
   "+components/about_ui",
   "+components/account_id",
+  "+components/allocation_recorder",
   "+components/app_constants/constants.h",
   "+components/federated_learning",
   # TODO(b/129295708): Remove after move is complete.
@@ -85,8 +86,6 @@ include_rules = [
   "+components/cdm/browser",
   "+components/certificate_matching",
   "+components/certificate_transparency",
-  "+components/chrome_cleaner/public",
-  "+components/chrome_cleaner/test",
   "+components/chromeos_camera",
   "+components/client_hints/browser",
   "+components/client_hints/common",
@@ -99,7 +98,6 @@ include_rules = [
   "+components/consent_auditor",
   "+components/constrained_window",
   "+components/content_capture/browser",
-  "+components/content_creation/notes/core",
   "+components/content_settings/browser",
   "+components/content_settings/core/browser",
   "+components/content_settings/core/test",
@@ -122,6 +120,7 @@ include_rules = [
   "+components/device_signals/core/browser",
   "+components/device_signals/core/common",
   "+components/content_relationship_verification",
+  "+components/data_sharing/public",
   "+components/digital_goods",
   "+components/domain_reliability",
   "+components/dom_distiller/content/browser",
@@ -139,10 +138,10 @@ include_rules = [
   "+components/embedder_support",
   "+components/encrypted_messages",
   "+components/enterprise",
-  "+components/environment_integrity/android",
   "+components/error_page/content/browser",
   "+components/exo",
   "+components/external_intents",
+  "+components/facilitated_payments/core/features",
   "+components/favicon_base",
   "+components/favicon/android",
   "+components/favicon/content",
@@ -209,6 +208,7 @@ include_rules = [
   "+components/mirroring/browser",
   "+components/mirroring/mojom",
   "+components/mirroring/service",
+  "+components/ml/webnn/features.mojom-features.h",
   "+components/module_installer/android",
   "+components/nacl/broker",
   "+components/nacl/browser",
@@ -259,6 +259,7 @@ include_rules = [
   "+components/performance_manager/test_support",
   "+components/performance_manager/performance_manager_impl.h",
   "+components/permissions",
+  "+components/webid",
   "+components/pdf/browser",
   "+components/pdf/common",
   "+components/plus_addresses",
@@ -442,7 +443,6 @@ include_rules = [
   "+services/media_session/public",
   "+services/metrics/metrics_mojo_service.h",
   "+services/metrics/public",
-  "+services/network/cert_verifier_with_trust_anchors.h",
   "+services/network/network_service.h",
   "+services/network/public",
   "+services/network/test",
@@ -581,6 +581,9 @@ specific_include_rules = {
     # For GetVirtualKeyboardController.
     "+ash/keyboard/ui/keyboard_ui_controller.h",
   ],
+  "chrome_back_forward_cache_browsertest.cc": [
+    "+pdf/pdf_features.h",
+  ],
   "chrome_browsing_data_remover_delegate_unittest.cc": [
     "+services/network/network_context.h",
     "+services/network/network_service.h",
@@ -597,6 +600,9 @@ specific_include_rules = {
   "chrome_navigation_browsertest.cc" : [
     "+content/common/content_navigation_policy.h",
   ],
+  "chrome_web_platform_security_metrics_browsertest.cc" : [
+    "+pdf/pdf_features.h",
+  ],
   "about_flags\.cc" : [
     "+mojo/core/embedder/features.h",
     "+pdf/pdf_features.h",
@@ -604,6 +610,9 @@ specific_include_rules = {
   ],
   "dbus_memory_pressure_evaluator_linux(_unittest)?\.(cc|h)" : [
     "+dbus",
+  ],
+  "permission_element_browsertest.cc": [
+    "+chrome/browser/ui/views/permissions/embedded_permission_prompt_content_scrim_view.h",
   ],
   "browsing_data_model_browsertest.cc" : [
     "+components/services/storage/shared_storage/shared_storage_manager.h",

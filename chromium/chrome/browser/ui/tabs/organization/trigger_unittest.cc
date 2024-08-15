@@ -6,6 +6,7 @@
 
 #include "chrome/browser/ui/tabs/organization/trigger.h"
 
+#include "chrome/browser/ui/tabs/organization/trigger_policies.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/test/base/testing_profile.h"
@@ -31,10 +32,12 @@ class TriggerTest : public testing::Test {
                                                              nullptr);
   }
 
-  content::WebContents* AddTab() {
+  content::WebContents* AddTab(GURL url) {
     std::unique_ptr<content::WebContents> contents_unique_ptr =
         CreateWebContents();
     content::WebContents* content_ptr = contents_unique_ptr.get();
+    content::WebContentsTester::For(contents_unique_ptr.get())
+        ->NavigateAndCommit(url);
     tab_strip_model()->AppendWebContents(std::move(contents_unique_ptr), true);
 
     return content_ptr;
@@ -49,18 +52,20 @@ class TriggerTest : public testing::Test {
   const std::unique_ptr<TabStripModel> tab_strip_model_;
 };
 
-TEST_F(TriggerTest, MVPTriggerHappyPath) {
-  std::unique_ptr<TabOrganizationTrigger> trigger = MakeMVPTrigger();
+TEST_F(TriggerTest, TriggerHappyPath) {
+  auto trigger = std::make_unique<TabOrganizationTrigger>(
+      GetTriggerScoringFunction(), GetTriggerScoreThreshold(),
+      std::make_unique<DemoTriggerPolicy>());
 
-  // Should not trigger with few tabs.
+  // Should not trigger under the score threshold.
   EXPECT_FALSE(trigger->ShouldTrigger(tab_strip_model()));
 
-  // Should trigger with more tabs.
+  // Should trigger the first time over the score threshold.
   for (int i = 0; i < 10; i++) {
-    AddTab();
+    AddTab(GURL("https://www.example.com"));
   }
   EXPECT_TRUE(trigger->ShouldTrigger(tab_strip_model()));
 
-  // Should trigger only once.
-  EXPECT_FALSE(trigger->ShouldTrigger(tab_strip_model()));
+  // Should trigger every time (because DemoTriggerPolicy).
+  EXPECT_TRUE(trigger->ShouldTrigger(tab_strip_model()));
 }

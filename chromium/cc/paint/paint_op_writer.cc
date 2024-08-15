@@ -101,6 +101,19 @@ size_t PaintOpWriter::SerializedSize(const gfx::HDRMetadata& hdr_metadata) {
 }
 
 // static
+size_t PaintOpWriter::SerializedSize(const SkGainmapInfo& gainmap_info) {
+  return SerializedSizeSimple<SkColor4f>() +  // fGainmapRatioMin
+         SerializedSizeSimple<SkColor4f>() +  // fGainmapRatioMax
+         SerializedSizeSimple<SkColor4f>() +  // fGainmapGamma
+         SerializedSizeSimple<SkColor4f>() +  // fEpsilonSdr
+         SerializedSizeSimple<SkColor4f>() +  // fEpsilonHdr
+         SerializedSizeSimple<SkScalar>() +   // fDisplayRatioSdr
+         SerializedSizeSimple<SkScalar>() +   // fDisplayRatioHdr
+         SerializedSizeSimple<uint32_t>() +   // fBaseImageType
+         SerializedSize(gainmap_info.fGainmapMathColorSpace.get());
+}
+
+// static
 size_t PaintOpWriter::SerializedSize(const PaintRecord& record) {
   // TODO(khushalsagar): Querying the size of a PaintRecord is not supported.
   // This works only for security constrained serialization which ignores
@@ -259,8 +272,7 @@ void PaintOpWriter::Write(const PaintFlags& flags, const SkM44& current_ctm) {
     // Fast path for when there is nothing complicated to write.
     // NOTE: size_t is written as two 32-bit zeros (see WriteSize()).
     WriteSimpleMultiple(
-        flags.color_, flags.width_, flags.miter_limit_, flags.blend_mode_,
-        flags.bitfields_uint_,
+        flags.color_, flags.width_, flags.miter_limit_, flags.bitfields_uint_,
         // flags.path_effect_.
         uint32_t{0}, uint32_t{0},
         // flags.mask_filter_.
@@ -279,7 +291,6 @@ void PaintOpWriter::Write(const PaintFlags& flags, const SkM44& current_ctm) {
   WriteSimple(flags.color_);
   Write(flags.width_);
   Write(flags.miter_limit_);
-  Write(flags.blend_mode_);
   WriteSimple(flags.bitfields_uint_);
 
   WriteFlattenable(flags.path_effect_.get());
@@ -380,7 +391,7 @@ void PaintOpWriter::WriteImage(const DecodedDrawImage& decoded_draw_image) {
     return;
   }
 
-  absl::optional<uint32_t> id = decoded_draw_image.transfer_cache_entry_id();
+  std::optional<uint32_t> id = decoded_draw_image.transfer_cache_entry_id();
   // In the case of a decode failure, id may not be set. Send an invalid ID.
   WriteImage(id.value_or(kInvalidImageTransferCacheEntryId),
              decoded_draw_image.transfer_cache_entry_needs_mips());
@@ -486,6 +497,7 @@ void PaintOpWriter::Write(const SkGainmapInfo& gainmap_info) {
       break;
   }
   Write(base_image_type);
+  Write(gainmap_info.fGainmapMathColorSpace.get());
 }
 
 void PaintOpWriter::Write(const sk_sp<sktext::gpu::Slug>& slug) {
@@ -508,14 +520,9 @@ void PaintOpWriter::Write(const sk_sp<sktext::gpu::Slug>& slug) {
       if (!img) {
         return nullptr;
       }
-      // TODO(crbug.com/1484682)
-      // We are pretty sure Slugs never use GPU-backed images because
-      // OOP-R does not use GrDirectContext.
-      DUMP_WILL_BE_CHECK(!img->isTextureBacked());
-      if (img->isTextureBacked()) {
-        GrDirectContext* ctx = SkImages::GetContext(img);
-        return SkPngEncoder::Encode(ctx, img, SkPngEncoder::Options{});
-      }
+      // Slugs never use GPU-backed images because OOP-R does not use
+      // GrDirectContext.
+      CHECK(!img->isTextureBacked());
       return SkPngEncoder::Encode(nullptr, img, SkPngEncoder::Options{});
     };
     bytes_written = slug->serialize(

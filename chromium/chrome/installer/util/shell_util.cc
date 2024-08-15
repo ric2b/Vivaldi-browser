@@ -186,9 +186,7 @@ UserSpecificRegistrySuffix::UserSpecificRegistrySuffix() {
   std::string user_sid_ascii(base::WideToASCII(user_sid));
   base::MD5Sum(user_sid_ascii.c_str(), user_sid_ascii.length(), &md5_digest);
   std::string base32_md5 = base32::Base32Encode(
-      base::StringPiece(reinterpret_cast<char*>(md5_digest.a),
-                        std::size(md5_digest.a)),
-      base32::Base32EncodePolicy::OMIT_PADDING);
+      md5_digest.a, base32::Base32EncodePolicy::OMIT_PADDING);
   // The value returned by the base32 algorithm above must never change.
   DCHECK_EQ(base32_md5.length(), 26U);
   suffix_.reserve(base32_md5.length() + 1);
@@ -1855,14 +1853,14 @@ std::wstring ShellUtil::FormatIconLocation(const base::FilePath& icon_path,
       {icon_path.value(), L",", base::NumberToWString(icon_index)});
 }
 
-absl::optional<std::pair<base::FilePath, int>> ShellUtil::ParseIconLocation(
+std::optional<std::pair<base::FilePath, int>> ShellUtil::ParseIconLocation(
     const std::wstring& argument) {
   std::vector<std::wstring> icon_parts =
       base::SplitString(argument, std::wstring(L","), base::TRIM_WHITESPACE,
                         base::SPLIT_WANT_NONEMPTY);
 
   if (icon_parts.size() < 2)
-    return absl::nullopt;
+    return std::nullopt;
 
   int icon_index = 0;
   base::StringToInt(icon_parts[1], &icon_index);
@@ -2282,7 +2280,7 @@ std::wstring ShellUtil::ProtocolAssociations::ToCommandLineArgument() const {
   return cmd_arg;
 }
 
-absl::optional<ShellUtil::ProtocolAssociations>
+std::optional<ShellUtil::ProtocolAssociations>
 ShellUtil::ProtocolAssociations::FromCommandLineArgument(
     const std::wstring& argument) {
   // Given that protocol associations are stored in a string in the following
@@ -2294,7 +2292,7 @@ ShellUtil::ProtocolAssociations::FromCommandLineArgument(
                                      &protocol_association_string_pairs);
 
   if (protocol_association_string_pairs.empty())
-    return absl::nullopt;
+    return std::nullopt;
 
   std::vector<std::pair<std::wstring, std::wstring>> protocol_association_pairs;
   protocol_association_pairs.reserve(protocol_association_string_pairs.size());
@@ -2686,7 +2684,7 @@ ShellUtil::ApplicationInfo ShellUtil::GetApplicationInfoForProgId(
 
   std::wstring file_type_icon_value;
   file_type_icon_key.ReadValue(L"", &file_type_icon_value);
-  absl::optional<std::pair<base::FilePath, int>> file_type_icon_parts =
+  std::optional<std::pair<base::FilePath, int>> file_type_icon_parts =
       ShellUtil::ParseIconLocation(file_type_icon_value);
 
   if (file_type_icon_parts.has_value()) {
@@ -2717,7 +2715,7 @@ ShellUtil::ApplicationInfo ShellUtil::GetApplicationInfoForProgId(
   std::wstring application_icon_value;
   application_key.ReadValue(ShellUtil::kRegApplicationIcon,
                             &application_icon_value);
-  absl::optional<std::pair<base::FilePath, int>> application_icon_parts =
+  std::optional<std::pair<base::FilePath, int>> application_icon_parts =
       ShellUtil::ParseIconLocation(application_icon_value);
 
   if (application_icon_parts.has_value()) {

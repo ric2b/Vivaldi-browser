@@ -11,7 +11,6 @@
 #include "media/media_buildflags.h"
 #include "media/video/alpha_video_encoder_wrapper.h"
 #include "media/video/gpu_video_accelerator_factories.h"
-#include "third_party/blink/renderer/modules/mediarecorder/buildflags.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 
 namespace blink {
@@ -61,11 +60,15 @@ MediaRecorderEncoderWrapper::MediaRecorderEncoderWrapper(
       media::VideoCodec::kAV1,
   };
   CHECK(base::Contains(kSupportedCodecs, codec_));
+  options_.latency_mode = media::VideoEncoder::LatencyMode::Quality;
   options_.bitrate = media::Bitrate::VariableBitrate(
       bits_per_second, base::ClampMul(bits_per_second, 2u).RawValue());
   options_.content_hint = is_screencast
                               ? media::VideoEncoder::ContentHint::Screen
                               : media::VideoEncoder::ContentHint::Camera;
+  if (codec_ == media::VideoCodec::kH264) {
+    options_.avc.produce_annexb = true;
+  }
 }
 
 MediaRecorderEncoderWrapper::~MediaRecorderEncoderWrapper() {
@@ -194,10 +197,7 @@ void MediaRecorderEncoderWrapper::EncodeFrame(
 
 void MediaRecorderEncoderWrapper::EncodePendingTasks() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK_EQ(state_, State::kEncoding)
-      << ", unexpected status: " << static_cast<int>(state_);
-
-  while (!pending_encode_tasks_.empty()) {
+  while (state_ == State::kEncoding && !pending_encode_tasks_.empty()) {
     auto& task = pending_encode_tasks_.front();
     const gfx::Size& frame_size = task.frame->visible_rect().size();
     CHECK(media::IsOpaque(task.frame->format()) ||
@@ -212,7 +212,7 @@ void MediaRecorderEncoderWrapper::EncodePendingTasks() {
     if (frame_size != options_.frame_size ||
         encode_alpha_ != need_alpha_encode) {
       if (encoder_) {
-        Reconfigure(frame_size, encode_alpha_);
+        Reconfigure(frame_size, need_alpha_encode);
       } else {
         // Only first Encode() call.
         CreateAndInitialize(frame_size, need_alpha_encode,

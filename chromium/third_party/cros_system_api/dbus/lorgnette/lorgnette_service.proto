@@ -89,11 +89,16 @@ message ScannerInfo {
 
   // MIME types that can be returned from this scanner.
   repeated string image_format = 8;
+
+  // A suggested string for displaying to the user.
+  string display_name = 9;
 }
 
 // Information returned from a ListScanners dbus request.
 message ListScannersResponse {
   repeated ScannerInfo scanners = 1;
+
+  OperationResult result = 2;
 }
 
 // Information returned from a GetScannerCapabilities dbus request.
@@ -697,6 +702,26 @@ message SetOptionsResponse {
   // An updated configuration after setting all of the options in order.  This
   // will be present even if setting some options fails, but can be missing if
   // the scanner has been entirely disconnected or some other permanent error.
+  optional ScannerConfig config = 3;
+}
+
+// Input parameter for the GetCurrentConfig d-bus method.
+message GetCurrentConfigRequest {
+  // Scanner to get config for.  Must have been returned from a previous call to
+  // OpenScanner.
+  ScannerHandle scanner = 1;
+}
+
+// Response from the GetCurrentConfig d-bus method.
+message GetCurrentConfigResponse {
+  // Scanner handle that was passed to GetCurrentConfigRequest.
+  ScannerHandle scanner = 1;
+
+  // Result of getting the config.
+  OperationResult result = 2;
+
+  // If result is OPERATION_RESULT_SUCCESS, the current configuration of the
+  // scanner.
   optional ScannerConfig config = 3;
 }
 

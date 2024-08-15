@@ -13,16 +13,16 @@
 // limitations under the License.
 
 import {Time} from '../base/time';
-import {Engine} from '../common/engine';
-import {featureFlags} from '../common/feature_flags';
 import {pluginManager} from '../common/plugins';
-import {LONG, NUM, STR_NULL} from '../common/query_result';
 import {Area} from '../common/state';
+import {featureFlags} from '../core/feature_flags';
 import {Flow, globals} from '../frontend/globals';
 import {publishConnectedFlows, publishSelectedFlows} from '../frontend/publish';
 import {asSliceSqlId} from '../frontend/sql_types';
-import {ACTUAL_FRAMES_SLICE_TRACK_KIND} from '../tracks/actual_frames';
+import {Engine} from '../trace_processor/engine';
+import {LONG, NUM, STR_NULL} from '../trace_processor/query_result';
 import {SLICE_TRACK_KIND} from '../tracks/chrome_slices';
+import {ACTUAL_FRAMES_SLICE_TRACK_KIND} from '../tracks/frames';
 
 import {Controller} from './controller';
 
@@ -100,6 +100,7 @@ export class FlowEventsController extends Controller<'main'> {
       name: STR_NULL,
       category: STR_NULL,
       id: NUM,
+      flowToDescendant: NUM,
     });
 
     const nullToStr = (s: null|string): string => {
@@ -155,6 +156,7 @@ export class FlowEventsController extends Controller<'main'> {
         dur: it.endSliceStartTs - it.beginSliceEndTs,
         category,
         name,
+        flowToDescendant: !!it.flowToDescendant,
       });
     }
 
@@ -343,7 +345,8 @@ export class FlowEventsController extends Controller<'main'> {
       (process_in.name || ' ' || process_in.pid) as endProcessName,
       extract_arg(f.arg_set_id, 'cat') as category,
       extract_arg(f.arg_set_id, 'name') as name,
-      f.id as id
+      f.id as id,
+      slice_is_ancestor(t1.slice_id, t2.slice_id) as flowToDescendant
     from ${connectedFlows} f
     join slice t1 on f.slice_out = t1.slice_id
     join slice t2 on f.slice_in = t2.slice_id
@@ -417,7 +420,8 @@ export class FlowEventsController extends Controller<'main'> {
       NULL as endProcessName,
       extract_arg(f.arg_set_id, 'cat') as category,
       extract_arg(f.arg_set_id, 'name') as name,
-      f.id as id
+      f.id as id,
+      slice_is_ancestor(t1.slice_id, t2.slice_id) as flowToDescendant
     from flow f
     join slice t1 on f.slice_out = t1.slice_id
     join slice t2 on f.slice_in = t2.slice_id
@@ -442,14 +446,13 @@ export class FlowEventsController extends Controller<'main'> {
 
     // TODO(b/155483804): This is a hack as annotation slices don't contain
     // flows. We should tidy this up when fixing this bug.
-    if (selection && selection.kind === 'CHROME_SLICE' &&
-        selection.table !== 'annotation') {
+    if (selection.kind === 'CHROME_SLICE' && selection.table !== 'annotation') {
       this.sliceSelected(selection.id);
     } else {
       publishConnectedFlows([]);
     }
 
-    if (selection && selection.kind === 'AREA') {
+    if (selection.kind === 'AREA') {
       this.areaSelected(selection.areaId);
     } else {
       publishSelectedFlows([]);

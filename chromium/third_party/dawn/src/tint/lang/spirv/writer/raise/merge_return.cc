@@ -132,7 +132,7 @@ struct State {
         for (auto* inst = *block->begin(); inst;) {  // For each instruction in 'block'
             // As we're modifying the block that we're iterating over, grab the pointer to the next
             // instruction before (potentially) moving 'inst' to another block.
-            auto* next = inst->next;
+            auto* next = inst->next.Get();
             TINT_DEFER(inst = next);
 
             if (auto* ret = inst->As<core::ir::Return>()) {
@@ -178,8 +178,8 @@ struct State {
                 return b.InstructionResult(v->Type());
             };
 
-            if (inner_if->True()->HasTerminator()) {
-                if (auto* exit_if = inner_if->True()->Terminator()->As<core::ir::ExitIf>()) {
+            if (auto* terminator = inner_if->True()->Terminator()) {
+                if (auto* exit_if = terminator->As<core::ir::ExitIf>()) {
                     // Ensure the associated 'if' is updated.
                     exit_if->SetIf(inner_if);
 
@@ -198,10 +198,10 @@ struct State {
             // Loop over the 'if' instructions, starting with the inner-most, and add any missing
             // terminating instructions to the blocks holding the 'if'.
             for (auto* i = inner_if; i; i = tint::As<core::ir::If>(i->Block()->Parent())) {
-                if (!i->Block()->HasTerminator() && i->Block()->Parent()) {
+                if (!i->Block()->Terminator() && i->Block()->Parent()) {
                     // Append the exit instruction to the block holding the 'if'.
                     Vector<core::ir::InstructionResult*, 8> exit_args = i->Results();
-                    if (!i->HasResults()) {
+                    if (i->Results().IsEmpty()) {
                         i->SetResults(tint::Transform(exit_args, new_value_with_type));
                     }
                     auto* exit = b.Exit(i->Block()->Parent(), std::move(exit_args));
@@ -244,7 +244,7 @@ struct State {
         // Change the function return to unconditionally load 'return_val' and return it
         auto* load = b.Load(return_val);
         load->InsertBefore(ret);
-        ret->SetValue(load->Result());
+        ret->SetValue(load->Result(0));
     }
 
     /// Transforms the return instruction that is found in a control instruction.
@@ -301,12 +301,12 @@ struct State {
 
 Result<SuccessType> MergeReturn(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "MergeReturn transform");
-    if (!result) {
+    if (result != Success) {
         return result;
     }
 
     // Process each function.
-    for (auto* fn : ir.functions) {
+    for (auto& fn : ir.functions) {
         State{ir}.Process(fn);
     }
 

@@ -143,11 +143,6 @@ WebViewImpl.prototype.onSizeChanged = function(webViewEvent) {
 WebViewImpl.prototype.createGuest = function() {
   const params = this.buildParams();
   if (GuestViewInternalNatives.IsVivaldi()) {
-    if (this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue()) {
-      params['tab_id'] = Number(this.attributes[
-          WebViewConstants.ATTRIBUTE_TAB_ID].getValue());
-    }
-
     if (this.attributes[WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue()) {
       params['inspect_tab_id'] = Number(this.attributes[
           WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID].getValue());
@@ -158,6 +153,30 @@ WebViewImpl.prototype.createGuest = function() {
           this.attributes[WebViewConstants.ATTRIBUTE_WINDOW_ID].getValue();
     }
 
+    const tab_id_str = this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue();
+    if (tab_id_str) {
+      const tab_id = Number(tab_id_str);
+      if (Number.isInteger(tab_id)) {
+        params['tab_id'] = tab_id;
+      } else {
+        const createOptions = {
+          url: 'about:blank',
+          vivExtData: JSON.stringify({
+            panelId: tab_id_str,
+          }),
+        };
+
+        chrome.tabs.create(createOptions, tab => {
+          params['tab_id'] = tab.id;
+          this.guest.create(
+              this.viewInstanceId, params, $Function.bind(function() {
+                this.attachWindow();
+              }, this));
+        });
+
+        return;
+      }
+    }
   }
 
   this.guest.create(

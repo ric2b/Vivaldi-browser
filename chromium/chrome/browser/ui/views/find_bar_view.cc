@@ -41,6 +41,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_border.h"
@@ -64,11 +65,14 @@ void SetCommonButtonAttributes(views::ImageButton* button) {
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(FindBarView, kElementId);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(FindBarView, kTextField);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(FindBarView, kPreviousButtonElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(FindBarView, kNextButtonElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(FindBarView, kCloseButtonElementId);
 
 class FindBarMatchCountLabel : public views::Label {
- public:
-  METADATA_HEADER(FindBarMatchCountLabel);
+  METADATA_HEADER(FindBarMatchCountLabel, views::Label)
 
+ public:
   FindBarMatchCountLabel() = default;
 
   FindBarMatchCountLabel(const FindBarMatchCountLabel&) = delete;
@@ -106,14 +110,17 @@ class FindBarMatchCountLabel : public views::Label {
       return;
 
     last_result_ = result;
+    // TODO(1499078): Get NO_RESULTS to be announced under Orca and ChromeVox.
     SetText(l10n_util::GetStringFUTF16(
         IDS_FIND_IN_PAGE_COUNT,
         base::FormatNumber(last_result_->active_match_ordinal()),
         base::FormatNumber(last_result_->number_of_matches())));
 
     if (last_result_->final_update()) {
-      NotifyAccessibilityEvent(ax::mojom::Event::kLiveRegionChanged,
-                               /* send_native_event = */ true);
+      ui::AXNodeData node_data;
+      GetAccessibleNodeData(&node_data);
+      GetViewAccessibility().AnnouncePolitely(
+          node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
     }
   }
 
@@ -123,7 +130,7 @@ class FindBarMatchCountLabel : public views::Label {
   }
 
  private:
-  absl::optional<find_in_page::FindNotificationDetails> last_result_;
+  std::optional<find_in_page::FindNotificationDetails> last_result_;
 };
 
 BEGIN_VIEW_BUILDER(/* No Export */, FindBarMatchCountLabel, views::Label)
@@ -131,7 +138,7 @@ END_VIEW_BUILDER
 
 DEFINE_VIEW_BUILDER(/* No Export */, FindBarMatchCountLabel)
 
-BEGIN_METADATA(FindBarMatchCountLabel, views::Label)
+BEGIN_METADATA(FindBarMatchCountLabel)
 END_METADATA
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,6 +227,8 @@ FindBarView::FindBarView(FindBarHost* host) {
               .SetAccessibleName(
                   l10n_util::GetStringUTF16(IDS_ACCNAME_PREVIOUS))
               .SetID(VIEW_ID_FIND_IN_PAGE_PREVIOUS_BUTTON)
+              .SetProperty(views::kElementIdentifierKey,
+                           kPreviousButtonElementId)
               .SetTooltipText(
                   l10n_util::GetStringUTF16(IDS_FIND_IN_PAGE_PREVIOUS_TOOLTIP))
               .SetCallback(base::BindRepeating(&FindBarView::FindNext,
@@ -229,6 +238,7 @@ FindBarView::FindBarView(FindBarHost* host) {
               .CopyAddressTo(&find_next_button_)
               .SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_NEXT))
               .SetID(VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON)
+              .SetProperty(views::kElementIdentifierKey, kNextButtonElementId)
               .SetTooltipText(
                   l10n_util::GetStringUTF16(IDS_FIND_IN_PAGE_NEXT_TOOLTIP))
               .SetCallback(base::BindRepeating(&FindBarView::FindNext,
@@ -237,6 +247,7 @@ FindBarView::FindBarView(FindBarHost* host) {
           views::Builder<views::ImageButton>()
               .CopyAddressTo(&close_button_)
               .SetID(VIEW_ID_FIND_IN_PAGE_CLOSE_BUTTON)
+              .SetProperty(views::kElementIdentifierKey, kCloseButtonElementId)
               .SetTooltipText(
                   l10n_util::GetStringUTF16(IDS_FIND_IN_PAGE_CLOSE_TOOLTIP))
               .SetAnimationDuration(base::TimeDelta())
@@ -511,5 +522,5 @@ void FindBarView::OnThemeChanged() {
                                          fg_color, fg_disabled_color);
 }
 
-BEGIN_METADATA(FindBarView, views::View)
+BEGIN_METADATA(FindBarView)
 END_METADATA

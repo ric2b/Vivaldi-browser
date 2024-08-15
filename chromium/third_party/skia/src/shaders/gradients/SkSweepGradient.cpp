@@ -92,7 +92,7 @@ void SkSweepGradient::flatten(SkWriteBuffer& buffer) const {
 void SkSweepGradient::appendGradientStages(SkArenaAlloc* alloc, SkRasterPipeline* p,
                                            SkRasterPipeline*) const {
     p->append(SkRasterPipelineOp::xy_to_unit_angle);
-    p->append_matrix(alloc, SkMatrix::Scale(fTScale, 1) * SkMatrix::Translate(fTBias, 0));
+    p->appendMatrix(alloc, SkMatrix::Scale(fTScale, 1) * SkMatrix::Translate(fTBias, 0));
 }
 
 sk_sp<SkShader> SkGradientShader::MakeSweep(SkScalar cx, SkScalar cy,
@@ -140,10 +140,8 @@ sk_sp<SkShader> SkGradientShader::MakeSweep(SkScalar cx, SkScalar cy,
         mode = SkTileMode::kClamp;
     }
 
-    SkGradientBaseShader::ColorStopOptimizer opt(colors, pos, colorCount, mode);
-
     SkGradientBaseShader::Descriptor desc(
-            opt.fColors, std::move(colorSpace), opt.fPos, opt.fCount, mode, interpolation);
+            colors, std::move(colorSpace), pos, colorCount, mode, interpolation);
 
     const SkScalar t0 = startAngle / 360,
                    t1 =   endAngle / 360;

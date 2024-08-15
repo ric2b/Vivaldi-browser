@@ -10,9 +10,8 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.FeatureList;
 import org.chromium.base.SysUtils;
-import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
+import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -29,84 +28,27 @@ public class OmniboxFeatures {
     private static Boolean sIsLowMemoryDevice;
 
     public static final BooleanCachedFieldTrialParameter ENABLE_MODERNIZE_VISUAL_UPDATE_ON_TABLET =
-            new BooleanCachedFieldTrialParameter(
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
                     ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
                     "enable_modernize_visual_update_on_tablet",
                     false);
 
     public static final BooleanCachedFieldTrialParameter
             MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX =
-                    new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.newBooleanCachedFieldTrialParameter(
                             ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
                             "modernize_visual_update_active_color_on_omnibox",
                             true);
 
-    public static final BooleanCachedFieldTrialParameter
-            MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN =
-                    new BooleanCachedFieldTrialParameter(
-                            ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                            "modernize_visual_update_small_bottom_margin",
-                            false);
-
-    public static final BooleanCachedFieldTrialParameter MODERNIZE_VISUAL_UPDATE_SMALLER_MARGINS =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                    "modernize_visual_update_smaller_margins",
-                    false);
-
     public static final BooleanCachedFieldTrialParameter MODERNIZE_VISUAL_UPDATE_SMALLEST_MARGINS =
-            new BooleanCachedFieldTrialParameter(
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
                     ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
                     "modernize_visual_update_smallest_margins",
                     true);
 
-    public static final BooleanCachedFieldTrialParameter
-            MODERNIZE_VISUAL_UPDATE_MERGE_CLIPBOARD_ON_NTP =
-                    new BooleanCachedFieldTrialParameter(
-                            ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE,
-                            "modernize_visual_update_merge_clipboard_on_ntp",
-                            true);
-
-    private static final MutableFlagWithSafeDefault sJourneysActionChipFlag =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_HISTORY_CLUSTER_ACTION_CHIP, false);
-    private static final MutableFlagWithSafeDefault sJourneysRowUiFlag =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_HISTORY_CLUSTER_PROVIDER, false);
-
-    private static final MutableFlagWithSafeDefault sCacheSuggestionResources =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_CACHE_SUGGESTION_RESOURCES, true);
-
-    private static final MutableFlagWithSafeDefault sWarmRecycledViewPoolFlag =
-            new MutableFlagWithSafeDefault(ChromeFeatureList.OMNIBOX_WARM_RECYCLED_VIEW_POOL, true);
-
-    private static final MutableFlagWithSafeDefault sNoopEditUrlSuggestionClicks =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_NOOP_EDIT_URL_SUGGESTION_CLICKS, false);
-
-    private static final MutableFlagWithSafeDefault sAvoidRelayoutDuringFocusAnimation =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.AVOID_RELAYOUT_DURING_FOCUS_ANIMATION, true);
-
-    private static final MutableFlagWithSafeDefault sShortCircuitUnfocusAnimation =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.SHORT_CIRCUIT_UNFOCUS_ANIMATION, false);
-
-    public static final MutableFlagWithSafeDefault sSearchReadyOmniboxAllowQueryEdit =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.SEARCH_READY_OMNIBOX_ALLOW_QUERY_EDIT, false);
-
-    private static final MutableFlagWithSafeDefault sTouchDownTriggerForPrefetchFlag =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.OMNIBOX_TOUCH_DOWN_TRIGGER_FOR_PREFETCH, false);
-
-    private static final MutableFlagWithSafeDefault sVisibleUrlTruncationFlag =
-            new MutableFlagWithSafeDefault(ChromeFeatureList.ANDROID_VISIBLE_URL_TRUNCATION, false);
-
-    private static final MutableFlagWithSafeDefault sNoVisibleHintForTablets =
-            new MutableFlagWithSafeDefault(
-                    ChromeFeatureList.ANDROID_NO_VISIBLE_HINT_FOR_TABLETS, false);
+    public static final BooleanCachedFieldTrialParameter QUERY_TILES_SHOW_AS_CAROUSEL =
+            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.QUERY_TILES_IN_ZPS_ON_NTP, "QueryTilesShowAsCarousel", false);
 
     public static final int DEFAULT_MAX_PREFETCHES_PER_OMNIBOX_SESSION = 5;
 
@@ -125,19 +67,6 @@ public class OmniboxFeatures {
      */
     public static boolean shouldShowActiveColorOnOmnibox() {
         return MODERNIZE_VISUAL_UPDATE_ACTIVE_COLOR_ON_OMNIBOX.getValue();
-    }
-
-    /** Returns whether the margin between groups should be "small" in the visual update. */
-    public static boolean shouldShowSmallBottomMargin() {
-        return MODERNIZE_VISUAL_UPDATE_SMALL_BOTTOM_MARGIN.getValue();
-    }
-
-    /**
-     * Returns whether smaller vertical and horizontal margins should be used in the visual update.
-     */
-    public static boolean shouldShowSmallerMargins(Context context) {
-        return shouldShowModernizeVisualUpdate(context)
-                && MODERNIZE_VISUAL_UPDATE_SMALLER_MARGINS.getValue();
     }
 
     /**
@@ -169,29 +98,16 @@ public class OmniboxFeatures {
         return ChromeFeatureList.sOmniboxMatchToolbarAndStatusBarColor.isEnabled();
     }
 
-    /** Whether Journeys suggestions should be shown as an action chip. */
-    public static boolean isJourneysActionChipEnabled() {
-        return sJourneysActionChipFlag.isEnabled();
-    }
-
     /** Whether Journeys suggestions should be shown in a dedicated row. */
     public static boolean isJourneysRowUiEnabled() {
-        return sJourneysRowUiFlag.isEnabled();
-    }
-
-    /**
-     * Returns whether suggestion resources should be cached directly instead of relying on Android
-     * system caching.
-     */
-    public static boolean shouldCacheSuggestionResources() {
-        return sCacheSuggestionResources.isEnabled();
+        return ChromeFeatureList.sOmniboxHistoryClusterProvider.isEnabled();
     }
 
     /**
      * Returns whether the omnibox's recycler view pool should be pre-warmed prior to initial use.
      */
     public static boolean shouldPreWarmRecyclerViewPool() {
-        return !isLowMemoryDevice() && sWarmRecycledViewPoolFlag.isEnabled();
+        return !isLowMemoryDevice();
     }
 
     /**
@@ -212,19 +128,7 @@ public class OmniboxFeatures {
      * Currently the default behavior is to refresh the page.
      */
     public static boolean noopEditUrlSuggestionClicks() {
-        return sNoopEditUrlSuggestionClicks.isEnabled();
-    }
-
-    public static boolean shouldAvoidRelayoutDuringFocusAnimation() {
-        return sAvoidRelayoutDuringFocusAnimation.isEnabled();
-    }
-
-    /**
-     * Whether the omnibox unfocus animation should be short-circuited when navigating to a
-     * suggestion in order to speed up navigation.
-     */
-    public static boolean shouldShortCircuitUnfocusAnimation() {
-        return sShortCircuitUnfocusAnimation.isEnabled();
+        return ChromeFeatureList.sOmniboxNoopEditUrlSuggestionClicks.isEnabled();
     }
 
     /**
@@ -232,7 +136,7 @@ public class OmniboxFeatures {
      * the corresponding page.
      */
     public static boolean isTouchDownTriggerForPrefetchEnabled() {
-        return sTouchDownTriggerForPrefetchFlag.isEnabled();
+        return ChromeFeatureList.sTouchDownTriggerForPrefetch.isEnabled();
     }
 
     /**
@@ -251,7 +155,11 @@ public class OmniboxFeatures {
 
     /** Returns whether the visible url in the url bar should be truncated. */
     public static boolean shouldTruncateVisibleUrl() {
-        return sVisibleUrlTruncationFlag.isEnabled();
+        return ChromeFeatureList.sVisibleUrlTruncation.isEnabled();
+    }
+
+    public static boolean shouldTruncateVisibleUrlV2() {
+        return ChromeFeatureList.sVisibleUrlTruncationV2.isEnabled();
     }
 
     /**
@@ -260,6 +168,12 @@ public class OmniboxFeatures {
      *     on tablets that have sNoVisibleHintForTablets enabled.
      */
     public static boolean shouldCalculateVisibleHint(Context context) {
-        return !(isTablet(context) && sNoVisibleHintForTablets.isEnabled());
+        return !(isTablet(context) && ChromeFeatureList.sNoVisibleHintForTablets.isEnabled());
+    }
+
+    /** Returns whether to show the incognito status for tablet. */
+    public static boolean showIncognitoStatusForTablet() {
+        return ChromeFeatureList.sTabletToolbarIncognitoStatus.isEnabled()
+                || ChromeFeatureList.sDynamicTopChrome.isEnabled();
     }
 }

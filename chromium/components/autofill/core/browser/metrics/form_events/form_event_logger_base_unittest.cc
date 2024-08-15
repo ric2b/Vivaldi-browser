@@ -8,16 +8,20 @@
 #include "base/strings/strcat.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_test_base.h"
 #include "components/autofill/core/browser/metrics/ukm_metrics_test_utils.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/form_data.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill::autofill_metrics {
 
 using UkmAutofillKeyMetricsType = ukm::builders::Autofill_KeyMetrics;
+using base::Bucket;
+using base::BucketsAre;
 using test::CreateTestFormField;
 
 // Parameterized test where the parameter indicates how far we went through
@@ -39,16 +43,15 @@ INSTANTIATE_TEST_SUITE_P(,
                          testing::Values(0, 1, 2, 3, 4));
 
 TEST_P(FormEventLoggerBaseFunnelTest, LogFunnelMetrics) {
-  // Create a profile.
-  RecreateProfile(/*is_server=*/false);
+  RecreateProfile();
 
   FormData form = CreateForm(
       {CreateTestFormField("State", "state", "", FormControlType::kInputText),
        CreateTestFormField("City", "city", "", FormControlType::kInputText),
        CreateTestFormField("Street", "street", "",
                            FormControlType::kInputText)});
-  std::vector<ServerFieldType> field_types = {
-      ADDRESS_HOME_STATE, ADDRESS_HOME_CITY, ADDRESS_HOME_STREET_ADDRESS};
+  std::vector<FieldType> field_types = {ADDRESS_HOME_STATE, ADDRESS_HOME_CITY,
+                                        ADDRESS_HOME_STREET_ADDRESS};
 
   base::HistogramTester histogram_tester;
 
@@ -182,16 +185,15 @@ TEST_F(FormEventLoggerBaseFunnelTest, AblationState) {
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kAutofillEnableAblationStudy, feature_parameters);
 
-  // Create a profile.
-  RecreateProfile(/*is_server=*/false);
+  RecreateProfile();
 
   FormData form = CreateForm(
       {CreateTestFormField("State", "state", "", FormControlType::kInputText),
        CreateTestFormField("City", "city", "", FormControlType::kInputText),
        CreateTestFormField("Street", "street", "",
                            FormControlType::kInputText)});
-  std::vector<ServerFieldType> field_types = {
-      ADDRESS_HOME_STATE, ADDRESS_HOME_CITY, ADDRESS_HOME_STREET_ADDRESS};
+  std::vector<FieldType> field_types = {ADDRESS_HOME_STATE, ADDRESS_HOME_CITY,
+                                        ADDRESS_HOME_STREET_ADDRESS};
 
   base::HistogramTester histogram_tester;
 
@@ -240,8 +242,7 @@ class FormEventLoggerBaseKeyMetricsTest : public AutofillMetricsBaseTest,
 void FormEventLoggerBaseKeyMetricsTest::SetUp() {
   SetUpHelper();
 
-  // Create a profile.
-  RecreateProfile(/*is_server=*/false);
+  RecreateProfile();
 
   // Load a fillable form.
   form_ = CreateEmptyForm();
@@ -249,8 +250,8 @@ void FormEventLoggerBaseKeyMetricsTest::SetUp() {
       CreateTestFormField("State", "state", "", FormControlType::kInputText),
       CreateTestFormField("City", "city", "", FormControlType::kInputText),
       CreateTestFormField("Street", "street", "", FormControlType::kInputText)};
-  std::vector<ServerFieldType> field_types = {
-      ADDRESS_HOME_STATE, ADDRESS_HOME_CITY, ADDRESS_HOME_STREET_ADDRESS};
+  std::vector<FieldType> field_types = {ADDRESS_HOME_STATE, ADDRESS_HOME_CITY,
+                                        ADDRESS_HOME_STREET_ADDRESS};
 
   autofill_manager().AddSeenForm(form_, field_types, field_types);
 }
@@ -485,13 +486,12 @@ class FormEventLoggerBaseEmailHeuristicOnlyMetricsTest
 void FormEventLoggerBaseEmailHeuristicOnlyMetricsTest::SetUp() {
   SetUpHelper();
 
-  // Create a profile.
-  RecreateProfile(/*is_server=*/false);
+  RecreateProfile();
 
   // Load a fillable form.
   form_ = test::GetFormData({.fields = {{.role = EMAIL_ADDRESS}}});
-  std::vector<ServerFieldType> heuristic_types = {EMAIL_ADDRESS};
-  std::vector<ServerFieldType> server_types = {NO_SERVER_DATA};
+  std::vector<FieldType> heuristic_types = {EMAIL_ADDRESS};
+  std::vector<FieldType> server_types = {NO_SERVER_DATA};
 
   autofill_manager().AddSeenForm(form_, heuristic_types, server_types);
 }
@@ -550,7 +550,7 @@ TEST_F(FormEventLoggerBaseEmailHeuristicOnlyMetricsTest, ServerTypeKnown) {
 
   // Reset the form to include only a known server type.
   form_ = test::GetFormData({.fields = {{.role = EMAIL_ADDRESS}}});
-  std::vector<ServerFieldType> field_types = {EMAIL_ADDRESS};
+  std::vector<FieldType> field_types = {EMAIL_ADDRESS};
   autofill_manager().AddSeenForm(form_, field_types, field_types);
 
   // Simulate that suggestion is shown and user accepts it.
@@ -604,6 +604,79 @@ TEST_F(FormEventLoggerBaseEmailHeuristicOnlyMetricsTest, TooManyFields) {
   ResetDriverToCommitMetrics();
 
   histogram_tester.ExpectTotalCount("Autofill.EmailHeuristicOnlyAcceptance", 0);
+}
+
+// Test for logging Undo metrics.
+class FormEventLoggerUndoTest : public AutofillMetricsBaseTest,
+                                public testing::Test {
+ public:
+  void SetUp() override {
+    SetUpHelper();
+
+    // Initialize a FormData, cache it and interact with it.
+    form_ = test::CreateTestAddressFormData();
+    SeeForm(form_);
+    autofill_manager().OnAskForValuesToFillTest(form_, form_.fields[0]);
+  }
+  void TearDown() override { TearDownHelper(); }
+
+  const FormData& form() const { return form_; }
+
+ private:
+  FormData form_;
+};
+
+TEST_F(FormEventLoggerUndoTest, LogUndoMetrics_NoInitialFilling) {
+  base::HistogramTester histogram_tester;
+  SubmitForm(form());
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.UndoAfterFill.Address"),
+              base::BucketsAre(Bucket(0, 0), Bucket(1, 0)));
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.FillAfterUndo.Address"),
+              base::BucketsAre(Bucket(0, 0), Bucket(1, 0)));
+}
+
+TEST_F(FormEventLoggerUndoTest, LogUndoMetrics_FillWithNoUndo) {
+  FillTestProfile(form());
+
+  base::HistogramTester histogram_tester;
+  SubmitForm(form());
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.UndoAfterFill.Address"),
+              base::BucketsAre(Bucket(0, 1), Bucket(1, 0)));
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.FillAfterUndo.Address"),
+              base::BucketsAre(Bucket(0, 0), Bucket(1, 0)));
+}
+
+TEST_F(FormEventLoggerUndoTest, LogUndoMetrics_FillThenUndo) {
+  FillTestProfile(form());
+  UndoAutofill(form());
+
+  base::HistogramTester histogram_tester;
+  SubmitForm(form());
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.UndoAfterFill.Address"),
+              base::BucketsAre(Bucket(0, 0), Bucket(1, 1)));
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.FillAfterUndo.Address"),
+              base::BucketsAre(Bucket(0, 1), Bucket(1, 0)));
+}
+
+TEST_F(FormEventLoggerUndoTest, LogUndoMetrics_FillThenUndoThenFill) {
+  FillTestProfile(form());
+  UndoAutofill(form());
+  FillTestProfile(form());
+
+  base::HistogramTester histogram_tester;
+  SubmitForm(form());
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.UndoAfterFill.Address"),
+              base::BucketsAre(Bucket(0, 0), Bucket(1, 1)));
+
+  EXPECT_THAT(histogram_tester.GetAllSamples("Autofill.FillAfterUndo.Address"),
+              base::BucketsAre(Bucket(0, 0), Bucket(1, 1)));
 }
 
 }  // namespace autofill::autofill_metrics

@@ -26,12 +26,10 @@
 #ifndef THIRD_PARTY_CENTIPEDE_BLOB_FILE_H_
 #define THIRD_PARTY_CENTIPEDE_BLOB_FILE_H_
 
-#include <cstdint>
 #include <memory>
 #include <string_view>
 
 #include "absl/status/status.h"
-#include "absl/types/span.h"
 #include "./centipede/defs.h"
 
 namespace centipede {
@@ -51,16 +49,15 @@ class BlobFileReader {
   BlobFileReader &operator=(BlobFileReader &&) = delete;
 
   // Opens the file `path`.
-  // Implementations must ensure that this is called only once.
   virtual absl::Status Open(std::string_view path) = 0;
 
   // Reads one `blob` from an open file.
   // Implementations must ensure that the memory wrapped by `blob` remains valid
   // until the next Read() or Close() call.
   // Returns absl::OutOfRangeError when there are no more blobs to read.
-  virtual absl::Status Read(absl::Span<uint8_t> &blob) = 0;
+  virtual absl::Status Read(ByteSpan &blob) = 0;
 
-  // Closes the file, which was previously opened and never closed.
+  // Closes the previously opened file, if any.
   virtual absl::Status Close() = 0;
 };
 
@@ -84,22 +81,30 @@ class BlobFileWriter {
 
   // Writes `blob` to this file. Implementations must ensure that the file has
   // been opened.
-  virtual absl::Status Write(absl::Span<const uint8_t> blob) = 0;
+  virtual absl::Status Write(ByteSpan blob) = 0;
 
   // Same as above, but for `ByteArray`.
-  absl::Status Write(const ByteArray &bytes) {
-    return Write(absl::Span<const uint8_t>{bytes});
-  }
+  absl::Status Write(const ByteArray &bytes) { return Write(ByteSpan{bytes}); }
 
   // Closes the file, which was previously opened and never closed.
   virtual absl::Status Close() = 0;
 };
 
 // Creates a new object of a default implementation of BlobFileReader.
+// The current default implementation supports reading files in the bespoke
+// legacy or Riegeli (https://github.com/google/riegeli) format.
 std::unique_ptr<BlobFileReader> DefaultBlobFileReaderFactory();
 
 // Creates a new object of a default implementation of BlobFileWriter.
-std::unique_ptr<BlobFileWriter> DefaultBlobFileWriterFactory();
+// If `riegeli` is `true`, the implementation uses Riegeli
+// (https://github.com/google/riegeli).
+std::unique_ptr<BlobFileWriter> DefaultBlobFileWriterFactory(
+#ifdef CENTIPEDE_DISABLE_RIEGELI
+    bool riegeli = false
+#else
+    bool riegeli = true
+#endif  // CENTIPEDE_DISABLE_RIEGELI
+);
 
 }  // namespace centipede
 

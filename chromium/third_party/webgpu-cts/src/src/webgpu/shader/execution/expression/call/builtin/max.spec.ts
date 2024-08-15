@@ -19,20 +19,19 @@ Component-wise when T is a vector.
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
 import {
-  i32,
-  TypeF32,
+  TypeAbstractFloat,
   TypeF16,
+  TypeF32,
   TypeI32,
   TypeU32,
+  i32,
   u32,
-  TypeAbstractFloat,
 } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { fullF32Range, fullF16Range, sparseF64Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
-import { allInputSources, Case, onlyConstInputSource, run } from '../../expression.js';
+import { Case } from '../../case.js';
+import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
 import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './max.cache.js';
 
 /** Generate set of max test cases from list of interesting values */
 function generateTestCases(
@@ -49,33 +48,6 @@ function generateTestCases(
 }
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('max', {
-  f32: () => {
-    return FP.f32.generateScalarPairToIntervalCases(
-      fullF32Range(),
-      fullF32Range(),
-      'unfiltered',
-      FP.f32.maxInterval
-    );
-  },
-  f16: () => {
-    return FP.f16.generateScalarPairToIntervalCases(
-      fullF16Range(),
-      fullF16Range(),
-      'unfiltered',
-      FP.f16.maxInterval
-    );
-  },
-  abstract: () => {
-    return FP.abstract.generateScalarPairToIntervalCases(
-      sparseF64Range(),
-      sparseF64Range(),
-      'unfiltered',
-      FP.abstract.maxInterval
-    );
-  },
-});
 
 g.test('abstract_int')
   .specURL('https://www.w3.org/TR/WGSL/#integer-builtin-functions')

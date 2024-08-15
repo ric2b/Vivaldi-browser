@@ -36,9 +36,7 @@ import org.chromium.ui.util.ColorUtils;
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
-/**
- * Controls the bottom system navigation bar color for the provided {@link Window}.
- */
+/** Controls the bottom system navigation bar color for the provided {@link Window}. */
 @RequiresApi(Build.VERSION_CODES.O_MR1)
 class TabbedNavigationBarColorController {
     private final Window mWindow;
@@ -58,7 +56,6 @@ class TabbedNavigationBarColorController {
 
     private @ColorInt int mNavigationBarColor;
     private boolean mForceDarkNavigationBarColor;
-    private boolean mOverviewModeHiding;
     private boolean mIsInFullscreen;
     private float mNavigationBarScrimFraction;
 
@@ -72,7 +69,9 @@ class TabbedNavigationBarColorController {
      * @param fullscreenManager The {@link FullscreenManager} used to determine if fullscreen is
      *                          enabled
      */
-    TabbedNavigationBarColorController(Window window, TabModelSelector tabModelSelector,
+    TabbedNavigationBarColorController(
+            Window window,
+            TabModelSelector tabModelSelector,
             ObservableSupplier<LayoutManager> layoutManagerSupplier,
             FullscreenManager fullscreenManager) {
         assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1;
@@ -95,25 +94,28 @@ class TabbedNavigationBarColorController {
         }
 
         mTabModelSelector = tabModelSelector;
-        mTabModelSelectorObserver = new TabModelSelectorObserver() {
-            @Override
-            public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                updateNavigationBarColor();
-            }
-        };
+        mTabModelSelectorObserver =
+                new TabModelSelectorObserver() {
+                    @Override
+                    public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
+                        updateNavigationBarColor();
+                    }
+                };
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
-        mFullscreenObserver = new FullscreenManager.Observer() {
-            @Override
-            public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
-                mIsInFullscreen = true;
-                updateNavigationBarColor();
-            }
-            @Override
-            public void onExitFullscreen(Tab tab) {
-                mIsInFullscreen = false;
-                updateNavigationBarColor();
-            }
-        };
+        mFullscreenObserver =
+                new FullscreenManager.Observer() {
+                    @Override
+                    public void onEnterFullscreen(Tab tab, FullscreenOptions options) {
+                        mIsInFullscreen = true;
+                        updateNavigationBarColor();
+                    }
+
+                    @Override
+                    public void onExitFullscreen(Tab tab) {
+                        mIsInFullscreen = false;
+                        updateNavigationBarColor();
+                    }
+                };
         mFullScreenManager.addObserver(mFullscreenObserver);
         layoutManagerSupplier.addObserver(
                 mCallbackController.makeCancelable(this::setLayoutManager));
@@ -124,9 +126,7 @@ class TabbedNavigationBarColorController {
         updateNavigationBarColor();
     }
 
-    /**
-     * Destroy this {@link TabbedNavigationBarColorController} instance.
-     */
+    /** Destroy this {@link TabbedNavigationBarColorController} instance. */
     public void destroy() {
         if (mTabModelSelector != null) mTabModelSelector.removeObserver(mTabModelSelectorObserver);
         if (mLayoutManager != null) {
@@ -150,24 +150,19 @@ class TabbedNavigationBarColorController {
 
         mLayoutManager = layoutManager;
         mLayoutStateObserver =
-                new FilterLayoutStateObserver(LayoutType.TAB_SWITCHER, new LayoutStateObserver() {
-                    @Override
-                    public void onStartedShowing(int layoutType) {
-                        mOverviewModeHiding = false;
-                        updateNavigationBarColor();
-                    }
+                new FilterLayoutStateObserver(
+                        LayoutType.TAB_SWITCHER,
+                        new LayoutStateObserver() {
+                            @Override
+                            public void onStartedShowing(@LayoutType int layoutType) {
+                                updateNavigationBarColor();
+                            }
 
-                    @Override
-                    public void onStartedHiding(int layoutType) {
-                        mOverviewModeHiding = true;
-                        updateNavigationBarColor();
-                    }
-
-                    @Override
-                    public void onFinishedHiding(int layoutType) {
-                        mOverviewModeHiding = false;
-                    }
-                });
+                            @Override
+                            public void onStartedHiding(@LayoutType int layoutType) {
+                                updateNavigationBarColor();
+                            }
+                        });
         mLayoutManager.addObserver(mLayoutStateObserver);
         updateNavigationBarColor();
     }
@@ -213,8 +208,9 @@ class TabbedNavigationBarColorController {
         mWindow.setNavigationBarColor(
                 applyCurrentScrimToColor(getNavigationBarColor(mForceDarkNavigationBarColor)));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            mWindow.setNavigationBarDividerColor(applyCurrentScrimToColor(
-                    getNavigationBarDividerColor(mForceDarkNavigationBarColor)));
+            mWindow.setNavigationBarDividerColor(
+                    applyCurrentScrimToColor(
+                            getNavigationBarDividerColor(mForceDarkNavigationBarColor)));
         }
 
         // Adjust the color of navigation bar icons based on color state of the navigation bar.
@@ -238,10 +234,6 @@ class TabbedNavigationBarColorController {
     }
 
     private @ColorInt int applyCurrentScrimToColor(@ColorInt int color) {
-        // Apply a color overlay.
-        float scrimColorAlpha = (mDefaultScrimColor >>> 24) / 255f;
-        int scrimColorOpaque = mDefaultScrimColor & 0xFF000000;
-        return ColorUtils.getColorWithOverlay(
-                color, scrimColorOpaque, mNavigationBarScrimFraction * scrimColorAlpha, true);
+        return ColorUtils.overlayColor(color, mDefaultScrimColor, mNavigationBarScrimFraction);
     }
 }

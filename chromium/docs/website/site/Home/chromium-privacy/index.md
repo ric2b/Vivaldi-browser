@@ -32,21 +32,19 @@ forums](/developers/technical-discussion-groups).
 
 ### Privacy Reviews
 
-**To ensure users maintain a consistent way to control their experience with the
+To ensure users maintain a consistent way to control their experience with the
 web, new privacy relevant features are required to undergo a privacy review.
 Through these reviews, developers receive feedback on how to improve user
-control and over how Chromium handles user data.**
+control and over how Chromium handles user data.
 
 ### Additional Information on Chromium, Google Chrome, and Privacy
 
-**Features that communicate with Google made available through the compilation of code in Chromium are subject to the [Google Privacy Policy](http://www.google.com/policies/privacy/).**
-**Additionally, the [Google Chrome Privacy
-Notice](http://www.google.com/chrome/intl/en/privacy.html) describes the privacy
-practices that are specific to the Google Chrome family of products. If you want
-to learn more about Google Chrome's privacy features you can also check out the
-[Google Chrome Privacy landing
-page](https://www.google.com/chrome/browser/features.html#privacy) and the
-[Google Chrome Privacy
-Whitepaper](http://www.google.com/intl/en/landing/chrome/google-chrome-privacy-whitepaper.pdf)
-which describes what information is transmitted to Google and why, as well as
-how to disable certain features in Google Chrome which affect your privacy.**
+Features that communicate with Google made available through the compilation
+of code in Chromium are subject to the
+[Google Privacy Policy](http://www.google.com/policies/privacy/).
+Learn more about Google Chrome's privacy features
+[here](https://www.google.com/chrome/#safe) and specifically about the Privacy
+Sandbox effort [here](https://www.google.com/chrome/privacy-on-the-web/).
+To understand the privacy practices of some of the most important Chrome
+features that send data to Google, take a look at our series of
+[Help Center articles](https://support.google.com/chrome/answer/14225066).

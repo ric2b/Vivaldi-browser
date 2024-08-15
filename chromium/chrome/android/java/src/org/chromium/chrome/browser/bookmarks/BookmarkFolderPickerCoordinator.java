@@ -17,13 +17,13 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.browser_ui.widget.FadingShadow;
 import org.chromium.components.browser_ui.widget.FadingShadowView;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
-import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -37,7 +37,6 @@ public class BookmarkFolderPickerCoordinator implements BackPressHandler {
     private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
             new ObservableSupplierImpl<>();
     private final ModelList mModelList = new ModelList();
-    private final SelectionDelegate mEmptySelectionDelegate = new SelectionDelegate();
     private final Context mContext;
     private final View mView;
     private final View mMoveButton;
@@ -50,7 +49,6 @@ public class BookmarkFolderPickerCoordinator implements BackPressHandler {
     public BookmarkFolderPickerCoordinator(
             Context context,
             BookmarkModel bookmarkModel,
-            BookmarkImageFetcher bookmarkImageFetcher,
             List<BookmarkId> bookmarkIds,
             Runnable finishRunnable,
             BookmarkAddNewFolderCoordinator addNewFolderCoordinator,
@@ -66,9 +64,17 @@ public class BookmarkFolderPickerCoordinator implements BackPressHandler {
                 new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
         mRecyclerView.setAdapter(mAdapter);
         mAdapter.registerType(
-                BookmarkFolderPickerMediator.FOLDER_ROW,
-                this::buildFolderRow,
+                ViewType.IMPROVED_BOOKMARK_VISUAL,
+                BookmarkManagerCoordinator::buildVisualImprovedBookmarkRow,
                 ImprovedBookmarkRowViewBinder::bind);
+        mAdapter.registerType(
+                ViewType.IMPROVED_BOOKMARK_COMPACT,
+                BookmarkManagerCoordinator::buildCompactImprovedBookmarkRow,
+                ImprovedBookmarkRowViewBinder::bind);
+        mAdapter.registerType(
+                ViewType.SECTION_HEADER,
+                BookmarkManagerCoordinator::buildSectionHeaderView,
+                BookmarkManagerViewBinder::bindSectionHeaderView);
 
         PropertyModel model = new PropertyModel(BookmarkFolderPickerProperties.ALL_KEYS);
         PropertyModelChangeProcessor.create(model, mView, BookmarkFolderPickerViewBinder::bind);
@@ -77,7 +83,6 @@ public class BookmarkFolderPickerCoordinator implements BackPressHandler {
                 new BookmarkFolderPickerMediator(
                         context,
                         bookmarkModel,
-                        bookmarkImageFetcher,
                         bookmarkIds,
                         finishRunnable,
                         new BookmarkUiPrefs(ChromeSharedPreferences.getInstance()),

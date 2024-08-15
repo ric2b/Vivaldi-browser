@@ -68,6 +68,7 @@ class NetworkConnectImpl : public NetworkConnect {
                             bool enabled_state) override;
   void ShowMobileSetup(const std::string& network_id) override;
   void ShowCarrierAccountDetail(const std::string& network_id) override;
+  void ShowCarrierUnlockNotification() override;
   void ShowPortalSignin(const std::string& network_id, Source source) override;
   void ConfigureNetworkIdAndConnect(const std::string& network_id,
                                     const base::Value::Dict& shill_properties,
@@ -104,7 +105,7 @@ class NetworkConnectImpl : public NetworkConnect {
   void ConfigureSetProfileSucceeded(const std::string& network_id,
                                     base::Value::Dict properties_to_set);
 
-  raw_ptr<Delegate, ExperimentalAsh> delegate_;
+  raw_ptr<Delegate> delegate_;
   base::WeakPtrFactory<NetworkConnectImpl> weak_factory_{this};
 };
 
@@ -494,15 +495,13 @@ void NetworkConnectImpl::ShowCarrierAccountDetail(
   delegate_->ShowCarrierAccountDetail(network_id);
 }
 
+void NetworkConnectImpl::ShowCarrierUnlockNotification() {
+  CHECK(features::IsCellularCarrierLockEnabled());
+  delegate_->ShowCarrierUnlockNotification();
+}
+
 void NetworkConnectImpl::ShowPortalSignin(const std::string& network_id,
                                           Source source) {
-  const NetworkState* network = GetNetworkStateFromId(network_id);
-  if (!network || !network->IsConnectedState() ||
-      !NetworkState::StateIsPortalled(network->connection_state())) {
-    NET_LOG(ERROR) << "ShowPortalSignin without a portalled state: "
-                   << NetworkGuidId(network_id);
-    return;
-  }
   delegate_->ShowPortalSignin(network_id, source);
 }
 

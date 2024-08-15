@@ -15,6 +15,8 @@
 import m from 'mithril';
 
 import {Trash} from '../base/disposable';
+import {Gate} from '../base/mithril_utils';
+import {exists} from '../base/utils';
 import {Actions} from '../common/actions';
 import {isEmptyData} from '../common/aggregation_data';
 import {LogExists, LogExistsKey} from '../common/logs';
@@ -64,8 +66,9 @@ function getFullScreenHeight() {
 }
 
 function hasLogs(): boolean {
-  const data = globals.trackDataStore.get(LogExistsKey) as LogExists;
-  return data && data.exists;
+  const data =
+      globals.trackDataStore.get(LogExistsKey) as LogExists | undefined;
+  return Boolean(data?.exists);
 }
 
 interface Tab {
@@ -336,6 +339,7 @@ export class DetailsPanel implements m.ClassComponent {
     }
 
     const trackGroup = globals.state.trackGroups['ftrace-track-group'];
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (trackGroup) {
       const {collapsed} = trackGroup;
       if (!collapsed) {
@@ -395,7 +399,7 @@ export class DetailsPanel implements m.ClassComponent {
 
     const panel = currentTabDetails?.vnode;
 
-    if (!panel) {
+    if (!exists(panel)) {
       return null;
     }
 
@@ -410,11 +414,16 @@ export class DetailsPanel implements m.ClassComponent {
         }),
         currentTabKey: currentTabDetails?.key,
       }),
-      m('.details-panel-container',
-        {
-          style: {height: `${this.detailsHeight}px`},
-        },
-        panel),
+      m(
+          '.details-panel-container',
+          {
+            style: {height: `${this.detailsHeight}px`},
+          },
+          detailsPanels.map((tab) => {
+            const active = tab === currentTabDetails;
+            return m(Gate, {open: active}, tab.vnode);
+          }),
+          ),
     ];
   }
 }

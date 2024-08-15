@@ -15,48 +15,90 @@
  */
 package com.google.android.gms.nearby.presence.hazmat;
 
-/** JNI for LDT-XTS-AES128 with the "swap" mix function. */
+import androidx.annotation.IntDef;
+
+
+/** JNI for a Nearby Presence LDT-XTS-AES128 cipher with the "swap" mix function. */
 class LdtNpJni {
+
+  /** Error codes which map to return values on the native side. */
+  @IntDef({DecryptErrorCode.DATA_LEN_ERROR, DecryptErrorCode.JNI_OP_ERROR, DecryptErrorCode.MAC_MISMATCH} )
+  public @interface DecryptErrorCode {
+    int  DATA_LEN_ERROR = -1;
+    int JNI_OP_ERROR = -2;
+    int MAC_MISMATCH = -3;
+  }
+
+  /** Error codes which map to return values on the native side. */
+  @IntDef({EncryptErrorCode.DATA_LEN_ERROR, EncryptErrorCode.JNI_OP_ERROR} )
+  public @interface EncryptErrorCode {
+    int  DATA_LEN_ERROR = -1;
+    int JNI_OP_ERROR = -2;
+  }
 
   static {
     System.loadLibrary("ldt_np_jni");
   }
 
   /**
-   * Create an instance of LDT-XTS-AES-128 using the Swap mix function.
+   * Create a new LDT-XTS-AES128 Encryption cipher using the "swap" mix function.
    *
-   * @param key key bytes, must be 4x AES key size = 64 bytes
-   * @return 0 on error, and any other value for success
+   * @param keySeed is the 32-byte key material from the Nearby Presence credential from which
+   *     the LDT key will be derived.
+   * @return 0 on error, or a non-zero handle on success.
    */
-  static native long createLdtCipher(byte[] key_seed, byte[] metadata_key_hmac_tag);
+  static native long createEncryptionCipher(byte[] keySeed);
 
   /**
-   * Close the native resources for an Ldt instance.
+   * Create a new LDT-XTS-AES128 Decryption cipher using the "swap" mix function.
    *
-   * @param ldtHandle An ldt handle returned from {@link LdtNpJni#createLdtCipher}.
-   * @return 0 on success, <0 for any error
+   * @param keySeed is the 32-byte key material from the Nearby Presence credential from which
+   *     the LDT key will be derived.
+   * @param hmacTag is the hmac auth tag calculated on the metadata key used to verify
+   *     decryption was successful.
+   * @return 0 on error, or a non-zero handle on success.
    */
-  static native int closeLdtCipher(long ldtHandle);
+  static native long createDecryptionCipher(byte[] keySeed, byte[] hmacTag);
 
   /**
-   * Encrypt the data in place.
-   *
-   * @param ldtHandle An ldt handle returned from {@link LdtNpJni#createLdtCipher}.
-   * @param salt big-endian salt to be expanded into bytes XORd into the LDT tweaks
-   * @param data size must be between 16 and 31 bytes
-   * @return 0 on success, -1 if the data size is wrong, or another negative number for any other
-   *     error
+   * Close the native resources for an LdtEncryptCipher instance.
+   * @param ldtEncryptHandle a ldt handle returned from {@link LdtNpJni#createEncryptionCipher}.
    */
-  static native int encrypt(long ldtHandle, char salt, byte[] data);
+  static native void closeEncryptCipher(long ldtEncryptHandle);
 
   /**
-   * Decrypt the data in place using the default LDT tweak padding scheme.
+   * Close the native resources for an LdtDecryptCipher instance.
    *
-   * @param ldtHandle An ldt address returned from {@link LdtNpJni#createLdtCipher}.
-   * @param salt big-endian salt to be expanded into bytes XORd into the LDT tweaks
-   * @param data size must be between 16 and 31 bytes
-   * @return 0 on success, -1 if the data size is wrong, -2 if the calculated hmac
-   *     does not match the provided tag or another negative number for any other error
+   * @param ldtDecryptHandle a ldt handle returned from {@link LdtNpJni#createDecryptionCipher}.
    */
-  static native int decrypt_and_verify(long ldtHandle, char salt, byte[] data);
+  static native void closeDecryptCipher(long ldtDecryptHandle);
+
+  /**
+   * Encrypt a 16-31 byte buffer in-place.
+   *
+   * @param ldtEncryptHandle a ldt encryption handle returned from {@link LdtNpJni#createEncryptionCipher}.
+   * @param salt is the big-endian 2 byte salt that will be used in the Nearby
+   *     Presence advertisement, which will be incorporated into the tweaks LDT uses
+   *     while encrypting.
+   * @param data 16-31 bytes of plaintext data to be encrypted
+   * @return 0 on success, in which case `buffer` will now contain ciphertext or a non-zero
+   *     an error code on failure
+   */
+  @EncryptErrorCode
+  static native int encrypt(long ldtEncryptHandle, char salt, byte[] data);
+
+  /**
+   *  Decrypt a 16-31 byte buffer in-place and verify the plaintext metadata key matches
+   *  this item's MAC, if not the buffer will not be decrypted.
+   *
+   * @param ldtDecryptHandle  a ldt encryption handle returned from {@link LdtNpJni#createDecryptionCipher}.
+   * @param salt is the big-endian 2 byte salt that will be used in the Nearby
+   *     Presence advertisement, which will be incorporated into the tweaks LDT uses
+   *     while encrypting.
+   * @param data 16-31 bytes of ciphertext data to be decrypted
+   * @return 0 on success, in which case `buffer` will now contain ciphertext or a non-zero
+   *     an error code on failure, in which case data will remain unchanged.
+   */
+  @DecryptErrorCode
+  static native int decryptAndVerify(long ldtDecryptHandle, char salt, byte[] data);
 }

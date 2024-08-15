@@ -2,27 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc.h"
-
-#include <string.h>
+#include "partition_alloc/partition_alloc.h"
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/address_pool_manager.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_address_space.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_hooks.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_direct_map_extent.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_oom.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_page.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_stats.h"
+#include "partition_alloc/address_pool_manager.h"
+#include "partition_alloc/memory_reclaimer.h"
+#include "partition_alloc/partition_address_space.h"
+#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_hooks.h"
+#include "partition_alloc/partition_direct_map_extent.h"
+#include "partition_alloc/partition_oom.h"
+#include "partition_alloc/partition_page.h"
+#include "partition_alloc/partition_root.h"
+#include "partition_alloc/partition_stats.h"
 
 #if BUILDFLAG(USE_STARSCAN)
-#include "base/allocator/partition_allocator/src/partition_alloc/starscan/pcscan.h"
+#include "partition_alloc/starscan/pcscan.h"
 #endif
 
 namespace partition_alloc {
@@ -51,8 +50,9 @@ void PartitionAllocGlobalInit(OomFunction on_out_of_memory) {
   STATIC_ASSERT_OR_PA_CHECK(
       (internal::PartitionPageSize() & internal::SystemPageOffsetMask()) == 0,
       "ok partition page multiple");
-  static_assert(sizeof(internal::PartitionPage) <= internal::kPageMetadataSize,
-                "PartitionPage should not be too big");
+  static_assert(
+      sizeof(internal::PartitionPageMetadata) <= internal::kPageMetadataSize,
+      "PartitionPage should not be too big");
   STATIC_ASSERT_OR_PA_CHECK(
       internal::kPageMetadataSize * internal::NumPartitionPagesPerSuperPage() <=
           internal::SystemPageSize(),
@@ -72,7 +72,7 @@ void PartitionAllocGlobalInit(OomFunction on_out_of_memory) {
       internal::MaxSystemPagesPerRegularSlotSpan() <= 16,
       "System pages per slot span must be no greater than 16.");
 
-#if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   STATIC_ASSERT_OR_PA_CHECK(
       internal::GetPartitionRefCountIndexMultiplierShift() <
           std::numeric_limits<size_t>::max() / 2,
@@ -91,9 +91,9 @@ void PartitionAllocGlobalInit(OomFunction on_out_of_memory) {
         (internal::kSuperPageSize / internal::SystemPageSize()))
        << internal::GetPartitionRefCountIndexMultiplierShift()) <=
           internal::SystemPageSize(),
-      "PartitionRefCount Bitmap size must be smaller than or equal to "
+      "PartitionRefCount table size must be smaller than or equal to "
       "<= SystemPageSize().");
-#endif  // BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
   PA_DCHECK(on_out_of_memory);
   internal::g_oom_handling_function = on_out_of_memory;

@@ -309,6 +309,8 @@ the next client restart.
 *   Implement the actual data type logic. This will mostly be an implementation
     of the [`ModelTypeSyncBridge`][Bridge] interface.
 *   Write some `sync_integration_tests` (see next section).
+*   Finally: While rolling out your new data type, keep the Sync team in the
+    loop! E.g. CC your assigned champion on all Finch CLs.
 
 [protocol]: https://cs.chromium.org/chromium/src/components/sync/protocol/
 [ModelType]: https://cs.chromium.org/chromium/src/components/sync/base/model_type.h
@@ -323,7 +325,7 @@ the next client restart.
 [pref_names]: https://cs.chromium.org/chromium/src/components/sync/base/pref_names.h
 [GetPrefName]: https://cs.chromium.org/search/?q=GetPrefNameForType+file:sync_prefs.cc
 [GetUserSelectableTypeInfo]: https://cs.chromium.org/chromium/src/components/sync/base/user_selectable_type.cc?type=cs&q="UserSelectableTypeInfo+GetUserSelectableTypeInfo"+f:components/sync/base/user_selectable_type.cc
-[enums]: https://cs.chromium.org/chromium/src/tools/metrics/histograms/enums.xml
+[enums]: https://source.chromium.org/chromium/chromium/src/+/main:tools/metrics/histograms/metadata/sync/enums.xml
 [histograms]: https://source.chromium.org/chromium/chromium/src/+/main:tools/metrics/histograms/metadata/sync/histograms.xml
 [DataTypeHistogram]: https://cs.chromium.org/chromium/src/components/sync/base/data_type_histogram.h
 

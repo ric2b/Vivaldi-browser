@@ -31,6 +31,7 @@ import org.chromium.url.GURL;
 import java.util.HashMap;
 
 // Vivaldi
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.screen_lock.ScreenLock;
 
@@ -56,8 +57,8 @@ class ManualFillingComponentBridge {
         if (getManualFillingComponent() == null) return null;
         if (mWebContents.isDestroyed()) return null;
         if (mProviders.size() == 0) { // True iff the component is available for the first time.
-            getManualFillingComponent().registerSheetUpdateDelegate(
-                    mWebContents, this::requestSheet);
+            getManualFillingComponent()
+                    .registerSheetUpdateDelegate(mWebContents, this::requestSheet);
         }
         provider = new PropertyProvider<>();
         mProviders.put(tabType, provider);
@@ -146,14 +147,27 @@ class ManualFillingComponentBridge {
     }
 
     @CalledByNative
-    private void addOptionToggleToAccessorySheetData(Object objAccessorySheetData,
-            String displayText, boolean enabled, @AccessoryAction int accessoryAction) {
+    private void addOptionToggleToAccessorySheetData(
+            Object objAccessorySheetData,
+            String displayText,
+            boolean enabled,
+            @AccessoryAction int accessoryAction) {
         ((AccessorySheetData) objAccessorySheetData)
-                .setOptionToggle(new OptionToggle(displayText, enabled, accessoryAction, on -> {
-                    assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
-                    ManualFillingComponentBridgeJni.get().onToggleChanged(
-                            mNativeView, ManualFillingComponentBridge.this, accessoryAction, on);
-                }));
+                .setOptionToggle(
+                        new OptionToggle(
+                                displayText,
+                                enabled,
+                                accessoryAction,
+                                on -> {
+                                    assert mNativeView != 0
+                                            : "Controller was destroyed but the bridge wasn't!";
+                                    ManualFillingComponentBridgeJni.get()
+                                            .onToggleChanged(
+                                                    mNativeView,
+                                                    ManualFillingComponentBridge.this,
+                                                    accessoryAction,
+                                                    on);
+                                }));
     }
 
     @CalledByNative
@@ -165,31 +179,48 @@ class ManualFillingComponentBridge {
     }
 
     @CalledByNative
-    private void addFieldToUserInfo(Object objUserInfo, @AccessoryTabType int sheetType,
-            String displayText, String textToFill, String a11yDescription, String guid,
-            boolean isObfuscated, boolean selectable) {
+    private void addFieldToUserInfo(
+            Object objUserInfo,
+            @AccessoryTabType int sheetType,
+            String displayText,
+            String textToFill,
+            String a11yDescription,
+            String guid,
+            boolean isObfuscated,
+            boolean selectable) {
         Callback<UserInfoField> callback = null;
         if (selectable) {
-            callback = (field) -> {
-                assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
-                ManualFillingMetricsRecorder.recordSuggestionSelected(
-                        sheetType, field.isObfuscated());
-                // Note(david@vivaldi.com): Before autofill trigger screen lock.
-                if (ScreenLock.getInstance().canReauthenticate()) {
-                    ScreenLock.getInstance().reauthenticate(succeed -> {
-                        if (succeed) {
-                            ManualFillingComponentBridgeJni.get().onFillingTriggered(mNativeView,
-                                    ManualFillingComponentBridge.this, sheetType, field);
+            callback =
+                    (field) -> {
+                        assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
+                        ManualFillingMetricsRecorder.recordSuggestionSelected(
+                                sheetType, field.isObfuscated());
+                        // Vivaldi
+                        if (!VivaldiUtils.isDeviceSecure()) {
+                            VivaldiUtils.showMissingDeviceLockDialog(mWindowAndroid.getActivity().get());
+                            return;
                         }
-                    });
-                } else
-                ManualFillingComponentBridgeJni.get().onFillingTriggered(
-                        mNativeView, ManualFillingComponentBridge.this, sheetType, field);
-            };
+                        // Note(david@vivaldi.com): Before autofill trigger screen lock.
+                        if (ScreenLock.getInstance().canReauthenticate()) {
+                            ScreenLock.getInstance().reauthenticate(succeed -> {
+                                if (succeed) {
+                                    ManualFillingComponentBridgeJni.get().onFillingTriggered(mNativeView,
+                                            ManualFillingComponentBridge.this, sheetType, field);
+                                }
+                            });
+                        } else
+                        ManualFillingComponentBridgeJni.get()
+                                .onFillingTriggered(
+                                        mNativeView,
+                                        ManualFillingComponentBridge.this,
+                                        sheetType,
+                                        field);
+                    };
         }
         ((UserInfo) objUserInfo)
                 .getFields()
-                .add(new UserInfoField.Builder()
+                .add(
+                        new UserInfoField.Builder()
                                 .setDisplayText(displayText)
                                 .setTextToFill(textToFill)
                                 .setA11yDescription(a11yDescription)
@@ -200,40 +231,64 @@ class ManualFillingComponentBridge {
     }
 
     @CalledByNative
-    private void addPasskeySectionToAccessorySheetData(Object objAccessorySheetData,
-            @AccessoryTabType int sheetType, String displayName, byte[] passkeyId) {
+    private void addPasskeySectionToAccessorySheetData(
+            Object objAccessorySheetData,
+            @AccessoryTabType int sheetType,
+            String displayName,
+            byte[] passkeyId) {
         ((AccessorySheetData) objAccessorySheetData)
                 .getPasskeySectionList()
-                .add(new PasskeySection(displayName, () -> {
-                    assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
-                    ManualFillingComponentBridgeJni.get().onPasskeySelected(
-                            mNativeView, ManualFillingComponentBridge.this, sheetType, passkeyId);
-                }));
+                .add(
+                        new PasskeySection(
+                                displayName,
+                                () -> {
+                                    assert mNativeView != 0
+                                            : "Controller was destroyed but the bridge wasn't!";
+                                    ManualFillingComponentBridgeJni.get()
+                                            .onPasskeySelected(
+                                                    mNativeView,
+                                                    ManualFillingComponentBridge.this,
+                                                    sheetType,
+                                                    passkeyId);
+                                }));
     }
 
     @CalledByNative
-    private void addPromoCodeInfoToAccessorySheetData(Object objAccessorySheetData,
-            @AccessoryTabType int sheetType, String displayText, String textToFill,
-            String a11yDescription, String guid, boolean isObfuscated, String detailsText) {
+    private void addPromoCodeInfoToAccessorySheetData(
+            Object objAccessorySheetData,
+            @AccessoryTabType int sheetType,
+            String displayText,
+            String textToFill,
+            String a11yDescription,
+            String guid,
+            boolean isObfuscated,
+            String detailsText) {
         PromoCodeInfo promoCodeInfo = new PromoCodeInfo();
         ((AccessorySheetData) objAccessorySheetData).getPromoCodeInfoList().add(promoCodeInfo);
 
         Callback<UserInfoField> callback = null;
-        callback = (field) -> {
-            assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
-            ManualFillingMetricsRecorder.recordSuggestionSelected(sheetType, field.isObfuscated());
-            ManualFillingComponentBridgeJni.get().onFillingTriggered(
-                    mNativeView, ManualFillingComponentBridge.this, sheetType, field);
-        };
+        callback =
+                (field) -> {
+                    assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
+                    ManualFillingMetricsRecorder.recordSuggestionSelected(
+                            sheetType, field.isObfuscated());
+                    ManualFillingComponentBridgeJni.get()
+                            .onFillingTriggered(
+                                    mNativeView,
+                                    ManualFillingComponentBridge.this,
+                                    sheetType,
+                                    field);
+                };
         ((PromoCodeInfo) promoCodeInfo)
-                .setPromoCode(new UserInfoField.Builder()
-                                      .setDisplayText(displayText)
-                                      .setTextToFill(textToFill)
-                                      .setA11yDescription(a11yDescription)
-                                      .setId(guid)
-                                      .setIsObfuscated(isObfuscated)
-                                      .setCallback(callback)
-                                      .build());
+                .setPromoCode(
+                        new UserInfoField.Builder()
+                                .setDisplayText(displayText)
+                                .setTextToFill(textToFill)
+                                .setA11yDescription(a11yDescription)
+                                .setId(guid)
+                                .setIsObfuscated(isObfuscated)
+                                .setCallback(callback)
+                                .build());
         ((PromoCodeInfo) promoCodeInfo).setDetailsText(detailsText);
     }
 
@@ -242,31 +297,42 @@ class ManualFillingComponentBridge {
             Object objAccessorySheetData, String displayText, int accessoryAction) {
         ((AccessorySheetData) objAccessorySheetData)
                 .getFooterCommands()
-                .add(new FooterCommand(displayText, (footerCommand) -> {
-                    assert mNativeView != 0 : "Controller was destroyed but the bridge wasn't!";
-                    ManualFillingComponentBridgeJni.get().onOptionSelected(
-                            mNativeView, ManualFillingComponentBridge.this, accessoryAction);
-                }));
+                .add(
+                        new FooterCommand(
+                                displayText,
+                                (footerCommand) -> {
+                                    assert mNativeView != 0
+                                            : "Controller was destroyed but the bridge wasn't!";
+                                    ManualFillingComponentBridgeJni.get()
+                                            .onOptionSelected(
+                                                    mNativeView,
+                                                    ManualFillingComponentBridge.this,
+                                                    accessoryAction);
+                                }));
     }
 
     @VisibleForTesting
-    public static void cachePasswordSheetData(WebContents webContents, String[] userNames,
-            String[] passwords, boolean originDenylisted) {
-        ManualFillingComponentBridgeJni.get().cachePasswordSheetDataForTesting(
-                webContents, userNames, passwords, originDenylisted);
+    public static void cachePasswordSheetData(
+            WebContents webContents,
+            String[] userNames,
+            String[] passwords,
+            boolean originDenylisted) {
+        ManualFillingComponentBridgeJni.get()
+                .cachePasswordSheetDataForTesting(
+                        webContents, userNames, passwords, originDenylisted);
     }
 
     @VisibleForTesting
     public static void notifyFocusedFieldType(
             WebContents webContents, long focusedFieldId, int focusedFieldType) {
-        ManualFillingComponentBridgeJni.get().notifyFocusedFieldTypeForTesting(
-                webContents, focusedFieldId, focusedFieldType);
+        ManualFillingComponentBridgeJni.get()
+                .notifyFocusedFieldTypeForTesting(webContents, focusedFieldId, focusedFieldType);
     }
 
     @VisibleForTesting
     public static void signalAutoGenerationStatus(WebContents webContents, boolean available) {
-        ManualFillingComponentBridgeJni.get().signalAutoGenerationStatusForTesting(
-                webContents, available);
+        ManualFillingComponentBridgeJni.get()
+                .signalAutoGenerationStatusForTesting(webContents, available);
     }
 
     public static void disableServerPredictionsForTesting() {
@@ -288,14 +354,14 @@ class ManualFillingComponentBridge {
 
     private void onComponentDestroyed() {
         if (mNativeView == 0) return; // Component was destroyed already.
-        ManualFillingComponentBridgeJni.get().onViewDestroyed(
-                mNativeView, ManualFillingComponentBridge.this);
+        ManualFillingComponentBridgeJni.get()
+                .onViewDestroyed(mNativeView, ManualFillingComponentBridge.this);
     }
 
     private void requestSheet(int sheetType) {
         if (mNativeView == 0) return; // Component was destroyed already.
-        ManualFillingComponentBridgeJni.get().requestAccessorySheet(
-                mNativeView, ManualFillingComponentBridge.this, sheetType);
+        ManualFillingComponentBridgeJni.get()
+                .requestAccessorySheet(mNativeView, ManualFillingComponentBridge.this, sheetType);
     }
 
     private void createOrClearAction(boolean available, @AccessoryAction int actionType) {
@@ -309,8 +375,8 @@ class ManualFillingComponentBridge {
     }
 
     private PropertyProvider<Action[]> getOrCreateActionProvider(@AccessoryAction int actionType) {
-        assert getManualFillingComponent()
-                != null : "Bridge has been destroyed but the bridge wasn't cleaned-up!";
+        assert getManualFillingComponent() != null
+                : "Bridge has been destroyed but the bridge wasn't cleaned-up!";
         if (mActionProviders.containsKey(actionType)) {
             return mActionProviders.get(actionType);
         }
@@ -323,29 +389,55 @@ class ManualFillingComponentBridge {
     private void onActionSelected(Action action) {
         if (mNativeView == 0) return; // Component was destroyed already.
         ManualFillingMetricsRecorder.recordActionSelected(action.getActionType());
-        ManualFillingComponentBridgeJni.get().onOptionSelected(
-                mNativeView, ManualFillingComponentBridge.this, action.getActionType());
+        ManualFillingComponentBridgeJni.get()
+                .onOptionSelected(
+                        mNativeView, ManualFillingComponentBridge.this, action.getActionType());
     }
 
     @NativeMethods
     interface Natives {
-        void onFillingTriggered(long nativeManualFillingViewAndroid,
-                ManualFillingComponentBridge caller, int tabType, UserInfoField userInfoField);
-        void onPasskeySelected(long nativeManualFillingViewAndroid,
-                ManualFillingComponentBridge caller, int tabType, byte[] passkeyId);
-        void onOptionSelected(long nativeManualFillingViewAndroid,
-                ManualFillingComponentBridge caller, int accessoryAction);
-        void onToggleChanged(long nativeManualFillingViewAndroid,
-                ManualFillingComponentBridge caller, int accessoryAction, boolean enabled);
+        void onFillingTriggered(
+                long nativeManualFillingViewAndroid,
+                ManualFillingComponentBridge caller,
+                int tabType,
+                UserInfoField userInfoField);
+
+        void onPasskeySelected(
+                long nativeManualFillingViewAndroid,
+                ManualFillingComponentBridge caller,
+                int tabType,
+                byte[] passkeyId);
+
+        void onOptionSelected(
+                long nativeManualFillingViewAndroid,
+                ManualFillingComponentBridge caller,
+                int accessoryAction);
+
+        void onToggleChanged(
+                long nativeManualFillingViewAndroid,
+                ManualFillingComponentBridge caller,
+                int accessoryAction,
+                boolean enabled);
+
         void onViewDestroyed(
                 long nativeManualFillingViewAndroid, ManualFillingComponentBridge caller);
-        void requestAccessorySheet(long nativeManualFillingViewAndroid,
-                ManualFillingComponentBridge caller, int sheetType);
-        void cachePasswordSheetDataForTesting(WebContents webContents, String[] userNames,
-                String[] passwords, boolean originDenylisted);
+
+        void requestAccessorySheet(
+                long nativeManualFillingViewAndroid,
+                ManualFillingComponentBridge caller,
+                int sheetType);
+
+        void cachePasswordSheetDataForTesting(
+                WebContents webContents,
+                String[] userNames,
+                String[] passwords,
+                boolean originDenylisted);
+
         void notifyFocusedFieldTypeForTesting(
                 WebContents webContents, long focusedFieldId, int focusedFieldType);
+
         void signalAutoGenerationStatusForTesting(WebContents webContents, boolean available);
+
         void disableServerPredictionsForTesting();
     }
 }

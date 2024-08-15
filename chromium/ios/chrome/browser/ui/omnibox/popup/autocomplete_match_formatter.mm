@@ -12,7 +12,7 @@
 #import "components/omnibox/browser/autocomplete_match.h"
 #import "components/omnibox/browser/autocomplete_provider.h"
 #import "components/omnibox/browser/suggestion_answer.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
@@ -108,10 +108,15 @@ UIColor* DimColorIncognito() {
     // the name of the currently selected search engine, which for mobile we
     // suppress.
     NSString* detailText = nil;
-    if (self.isURL)
+    if (self.isURL) {
       detailText = base::SysUTF16ToNSString(_match.contents);
-    else if (_match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY)
+    } else if (_match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
       detailText = base::SysUTF16ToNSString(_match.description);
+    }
+
+    if (!detailText.length) {
+      return nil;
+    }
     const ACMatchClassifications* classifications =
         self.isURL ? &_match.contents_class : nullptr;
     // The suggestion detail color should match the main text color for entity

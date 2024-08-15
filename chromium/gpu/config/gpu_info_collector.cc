@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include <optional>
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -27,7 +28,6 @@
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/webgpu_blocklist.h"
 #include "skia/buildflags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"  // nogncheck
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/gl/buildflags.h"
@@ -244,9 +244,11 @@ void AddTogglesToDawnInfoList(dawn::native::Instance* instance,
                               std::vector<std::string>* dawn_info_list) {
   for (auto* name : toggle_names) {
     const dawn::native::ToggleInfo* info = instance->GetToggleInfo(name);
-    dawn_info_list->push_back(info->name);
-    dawn_info_list->push_back(info->url);
-    dawn_info_list->push_back(info->description);
+    if (!info) {
+      dawn_info_list->push_back(info->name);
+      dawn_info_list->push_back(info->url);
+      dawn_info_list->push_back(info->description);
+    }
   }
 }
 
@@ -362,7 +364,7 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
 void ReportWebGPUSupportMetrics(dawn::native::Instance* instance) {
   static BASE_FEATURE(kCollectWebGPUSupportMetrics,
                       "CollectWebGPUSupportMetrics",
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
                       base::FEATURE_DISABLED_BY_DEFAULT);
 #else
                       base::FEATURE_ENABLED_BY_DEFAULT);
@@ -528,7 +530,7 @@ bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
       gl::UsePassthroughCommandDecoder(command_line);
 
   bool fallback_to_software = false;
-  absl::optional<gl::GLImplementationParts> implementation =
+  std::optional<gl::GLImplementationParts> implementation =
       gl::GetRequestedGLImplementationFromCommandLine(command_line,
                                                       &fallback_to_software);
 
@@ -621,7 +623,6 @@ bool CollectGraphicsInfoGL(GPUInfo* gpu_info, gl::GLDisplay* display) {
     glGetIntegerv(GL_MAX_SAMPLES, &max_samples);
   }
   gpu_info->max_msaa_samples = base::NumberToString(max_samples);
-  base::UmaHistogramSparse("GPU.MaxMSAASampleCount", max_samples);
 
 #if BUILDFLAG(IS_ANDROID)
   gpu_info->can_support_threaded_texture_mailbox =

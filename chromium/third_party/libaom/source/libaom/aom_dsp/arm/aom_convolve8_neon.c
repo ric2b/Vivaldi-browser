@@ -113,10 +113,8 @@ void aom_convolve8_horiz_neon(const uint8_t *src, ptrdiff_t src_stride,
 
       transpose_elems_inplace_u8_4x4(&d01, &d23);
 
-      store_u8_4x1(dst + 0 * dst_stride, d01, 0);
-      store_u8_4x1(dst + 1 * dst_stride, d23, 0);
-      store_u8_4x1(dst + 2 * dst_stride, d01, 1);
-      store_u8_4x1(dst + 3 * dst_stride, d23, 1);
+      store_u8x4_strided_x2(dst + 0 * dst_stride, 2 * dst_stride, d01);
+      store_u8x4_strided_x2(dst + 1 * dst_stride, 2 * dst_stride, d23);
 
       s0 = s4;
       s1 = s5;
@@ -161,14 +159,10 @@ void aom_convolve8_horiz_neon(const uint8_t *src, ptrdiff_t src_stride,
 
         transpose_elems_inplace_u8_8x4(&d0, &d1, &d2, &d3);
 
-        store_u8_4x1(dst + 0 * dst_stride, d0, 0);
-        store_u8_4x1(dst + 1 * dst_stride, d1, 0);
-        store_u8_4x1(dst + 2 * dst_stride, d2, 0);
-        store_u8_4x1(dst + 3 * dst_stride, d3, 0);
-        store_u8_4x1(dst + 4 * dst_stride, d0, 1);
-        store_u8_4x1(dst + 5 * dst_stride, d1, 1);
-        store_u8_4x1(dst + 6 * dst_stride, d2, 1);
-        store_u8_4x1(dst + 7 * dst_stride, d3, 1);
+        store_u8x4_strided_x2(dst + 0 * dst_stride, 4 * dst_stride, d0);
+        store_u8x4_strided_x2(dst + 1 * dst_stride, 4 * dst_stride, d1);
+        store_u8x4_strided_x2(dst + 2 * dst_stride, 4 * dst_stride, d2);
+        store_u8x4_strided_x2(dst + 3 * dst_stride, 4 * dst_stride, d3);
 
         src += 8 * src_stride;
         dst += 8 * dst_stride;
@@ -287,10 +281,8 @@ void aom_convolve8_vert_neon(const uint8_t *src, ptrdiff_t src_stride,
       d01 = vqrshrun_n_s16(vcombine_s16(d0, d1), FILTER_BITS);
       d23 = vqrshrun_n_s16(vcombine_s16(d2, d3), FILTER_BITS);
 
-      store_u8_4x1(dst + 0 * dst_stride, d01, 0);
-      store_u8_4x1(dst + 1 * dst_stride, d01, 1);
-      store_u8_4x1(dst + 2 * dst_stride, d23, 0);
-      store_u8_4x1(dst + 3 * dst_stride, d23, 1);
+      store_u8x4_strided_x2(dst + 0 * dst_stride, dst_stride, d01);
+      store_u8x4_strided_x2(dst + 2 * dst_stride, dst_stride, d23);
 
       s0 = s4;
       s1 = s5;

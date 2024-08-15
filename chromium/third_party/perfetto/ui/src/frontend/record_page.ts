@@ -16,7 +16,6 @@
 import m from 'mithril';
 
 import {Actions} from '../common/actions';
-import {featureFlags} from '../common/feature_flags';
 import {
   AdbRecordingTarget,
   getDefaultRecordingTargets,
@@ -36,6 +35,7 @@ import {
   createEmptyRecordConfig,
   RecordConfig,
 } from '../controller/record_config_types';
+import {featureFlags} from '../core/feature_flags';
 import {raf} from '../core/raf_scheduler';
 
 import {globals} from './globals';
@@ -328,7 +328,7 @@ export function Configurations(cssClass: string) {
 function BufferUsageProgressBar() {
   if (!globals.state.recordingInProgress) return [];
 
-  const bufferUsage = globals.bufferUsage ? globals.bufferUsage : 0.0;
+  const bufferUsage = globals.bufferUsage ?? 0.0;
   // Buffer usage is not available yet on Android.
   if (bufferUsage === 0) return [];
 

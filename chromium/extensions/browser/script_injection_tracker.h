@@ -5,14 +5,18 @@
 #ifndef EXTENSIONS_BROWSER_SCRIPT_INJECTION_TRACKER_H_
 #define EXTENSIONS_BROWSER_SCRIPT_INJECTION_TRACKER_H_
 
+#include <optional>
+#include "base/debug/crash_logging.h"
 #include "base/types/pass_key.h"
 #include "extensions/common/extension_id.h"
+#include "extensions/common/mojom/context_type.mojom-forward.h"
 #include "extensions/common/mojom/host_id.mojom-forward.h"
 #include "url/gurl.h"
 
 struct HostID;
 
 namespace content {
+class BrowserContext;
 class NavigationHandle;
 class RenderFrameHost;
 class RenderProcessHost;
@@ -23,6 +27,7 @@ namespace extensions {
 class Extension;
 class ExtensionWebContentsObserver;
 class UserScriptLoader;
+class PermissionsUpdater;
 class RequestContentScript;
 class ScriptExecutor;
 
@@ -56,8 +61,8 @@ class ScriptInjectionTracker {
   // TODO(https://crbug.com/1186557): The above is true (and how this class has
   // historically tracked injections), but if a script only executes in the main
   // world, it won't have content script bindings or be associated with a
-  // Feature::CONTENT_SCRIPT_CONTEXT. Should we just not track those, or track
-  // them separately? The injection world can be determined dynamically by
+  // mojom::ContextType::kContentScript. Should we just not track those, or
+  // track them separately? The injection world can be determined dynamically by
   // looking at `UserScript::execution_world` for persistent scripts and
   // `mojom::JSInjection::world` for one-time scripts.
   enum class ScriptType {
@@ -94,12 +99,6 @@ class ScriptInjectionTracker {
   static void DidFinishNavigation(
       base::PassKey<ExtensionWebContentsObserver> pass_key,
       content::NavigationHandle* navigation);
-  static void RenderFrameCreated(
-      base::PassKey<ExtensionWebContentsObserver> pass_key,
-      content::RenderFrameHost* frame);
-  static void RenderFrameDeleted(
-      base::PassKey<ExtensionWebContentsObserver> pass_key,
-      content::RenderFrameHost* frame);
 
   // Called before ExtensionMsg_ExecuteCode is sent to a renderer process
   // (typically when handling chrome.tabs.executeScript or a similar API call).
@@ -125,6 +124,13 @@ class ScriptInjectionTracker {
       const mojom::HostID& host_id,
       content::RenderProcessHost& process);
 
+  // Called right after the given renderer `process` is notified about
+  // permission updates.
+  static void DidUpdatePermissionsInRenderer(
+      base::PassKey<PermissionsUpdater> pass_key,
+      const Extension& extension,
+      content::RenderProcessHost& process);
+
  private:
   using PassKey = base::PassKey<ScriptInjectionTracker>;
 
@@ -136,6 +142,49 @@ class ScriptInjectionTracker {
       content::RenderFrameHost* frame,
       const GURL& url);
 };
+
+namespace debug {
+
+// Helper for adding a set of `ScriptInjectionTracker`-related crash keys.
+//
+// For example, the `extension_registry_status` crash key will log if the
+// affected extension has been enebled, and the
+// `do_static_content_scripts_match` crash key will log if the tracker thinks
+// that the affected frame matches the content script URL patterns from the
+// extension manifest.  Search for the `Get...CrashKey` functions in the `.cc`
+// file for a comprehensive, up-to-date list of the generated crash keys and
+// of their names.
+class ScopedScriptInjectionTrackerFailureCrashKeys {
+ public:
+  ScopedScriptInjectionTrackerFailureCrashKeys(
+      content::BrowserContext& browser_context,
+      const ExtensionId& extension_id);
+  ScopedScriptInjectionTrackerFailureCrashKeys(content::RenderFrameHost& frame,
+                                               const ExtensionId& extension_id);
+  ~ScopedScriptInjectionTrackerFailureCrashKeys();
+
+ private:
+  base::debug::ScopedCrashKeyString registry_status_crash_key_;
+  base::debug::ScopedCrashKeyString is_incognito_crash_key_;
+
+  std::optional<base::debug::ScopedCrashKeyString>
+      last_committed_origin_crash_key_;
+  std::optional<base::debug::ScopedCrashKeyString>
+      last_committed_url_crash_key_;
+  std::optional<base::debug::ScopedCrashKeyString> lifecycle_state_crash_key_;
+  std::optional<base::debug::ScopedCrashKeyString> is_guest_crash_key_;
+
+  std::optional<base::debug::ScopedCrashKeyString>
+      do_web_view_scripts_match_crash_key_;
+  std::optional<base::debug::ScopedCrashKeyString>
+      do_static_content_scripts_match_crash_key_;
+  std::optional<base::debug::ScopedCrashKeyString>
+      do_dynamic_content_scripts_match_crash_key_;
+  std::optional<base::debug::ScopedCrashKeyString>
+      do_user_scripts_match_crash_key_;
+};
+
+}  // namespace debug
 
 }  // namespace extensions
 

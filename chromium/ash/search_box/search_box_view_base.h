@@ -5,13 +5,14 @@
 #ifndef ASH_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
 #define ASH_SEARCH_BOX_SEARCH_BOX_VIEW_BASE_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "ash/search_box/search_box_constants.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
@@ -34,6 +35,7 @@ class Textfield;
 
 namespace ash {
 
+class LauncherSearchIphView;
 class SearchBoxImageButton;
 class SearchIconImageView;
 
@@ -43,6 +45,8 @@ class SearchIconImageView;
 // provides common functions for the search box view across Chrome OS.
 class SearchBoxViewBase : public views::View,
                           public views::TextfieldController {
+  METADATA_HEADER(SearchBoxViewBase, views::View)
+
  public:
   SearchBoxViewBase();
 
@@ -90,9 +94,9 @@ class SearchBoxViewBase : public views::View,
   views::ImageView* search_icon();
   views::Textfield* search_box() { return search_box_; }
 
-  void SetIphView(std::unique_ptr<views::View> iph_view);
+  void SetIphView(std::unique_ptr<LauncherSearchIphView> iph_view);
+  LauncherSearchIphView* GetIphView();
   void DeleteIphView();
-  raw_ptr<views::View> iph_view() { return iph_view_tracker_.view(); }
 
   // Called when the query in the search box textfield changes. The search box
   // implementation is expected to handle the new query.
@@ -123,7 +127,6 @@ class SearchBoxViewBase : public views::View,
 
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
-  const char* GetClassName() const override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnThemeChanged() override;
@@ -174,7 +177,7 @@ class SearchBoxViewBase : public views::View,
     bool increase_child_view_padding = false;
 
     // If set, the margins that should be used for the search box text field.
-    absl::optional<gfx::Insets> textfield_margins;
+    std::optional<gfx::Insets> textfield_margins;
   };
 
   void Init(const InitParams& params);
@@ -238,26 +241,23 @@ class SearchBoxViewBase : public views::View,
 
   // Owned by views hierarchy.
   raw_ptr<views::BoxLayoutView> main_container_;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh> content_container_;
-  raw_ptr<SearchIconImageView, ExperimentalAsh> search_icon_ = nullptr;
-  raw_ptr<SearchBoxImageButton, ExperimentalAsh> assistant_button_ = nullptr;
-  raw_ptr<SearchBoxImageButton, ExperimentalAsh> close_button_ = nullptr;
-  raw_ptr<SearchBoxImageButton, ExperimentalAsh> filter_button_ = nullptr;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh> assistant_button_container_ =
-      nullptr;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh>
-      filter_and_close_button_container_ = nullptr;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh> text_container_ = nullptr;
+  raw_ptr<views::BoxLayoutView> content_container_;
+  raw_ptr<SearchIconImageView> search_icon_ = nullptr;
+  raw_ptr<SearchBoxImageButton> assistant_button_ = nullptr;
+  raw_ptr<SearchBoxImageButton> close_button_ = nullptr;
+  raw_ptr<SearchBoxImageButton> filter_button_ = nullptr;
+  raw_ptr<views::BoxLayoutView> assistant_button_container_ = nullptr;
+  raw_ptr<views::BoxLayoutView> filter_and_close_button_container_ = nullptr;
+  raw_ptr<views::BoxLayoutView> text_container_ = nullptr;
 
-  raw_ptr<views::Textfield, ExperimentalAsh> search_box_;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh> ghost_text_container_ =
-      nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> separator_label_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> autocomplete_ghost_text_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> category_separator_label_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> category_ghost_text_ = nullptr;
+  raw_ptr<views::Textfield> search_box_;
+  raw_ptr<views::BoxLayoutView> ghost_text_container_ = nullptr;
+  raw_ptr<views::Label> separator_label_ = nullptr;
+  raw_ptr<views::Label> autocomplete_ghost_text_ = nullptr;
+  raw_ptr<views::Label> category_separator_label_ = nullptr;
+  raw_ptr<views::Label> category_ghost_text_ = nullptr;
 
-  raw_ptr<views::View, ExperimentalAsh> search_box_button_container_ = nullptr;
+  raw_ptr<views::View> search_box_button_container_ = nullptr;
 
   views::ViewTracker iph_view_tracker_;
 

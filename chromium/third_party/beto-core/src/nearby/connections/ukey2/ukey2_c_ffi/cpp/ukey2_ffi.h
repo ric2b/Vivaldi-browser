@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "ukey2_bindings.h"
+
 #include <string>
 
 struct D2DRestoreConnectionContextV1Result;

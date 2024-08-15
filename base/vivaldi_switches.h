@@ -8,7 +8,8 @@
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_LINUX)
-// Needed for chromium/services/service_manager/zygote/host/zygote_communication_linux.cc
+// Needed for
+// chromium/services/service_manager/zygote/host/zygote_communication_linux.cc
 #include "base/base_export.h"
 
 #define SWITCHES_EXPORT BASE_EXPORT
@@ -23,16 +24,21 @@ namespace switches {
 
 SWITCHES_EXPORT extern const char kAutoTestMode[];
 SWITCHES_EXPORT extern const char kDisableVivaldi[];
-SWITCHES_EXPORT extern const char kRunningVivaldi[];
 
-SWITCHES_EXPORT extern const char kVivaldiSilentUpdate[];
-SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 #if defined(COMPONENT_BUILD)
 SWITCHES_EXPORT extern const char kLaunchUpdater[];
 #endif
+
+SWITCHES_EXPORT extern const char kOverrideStatsReporterPingUrl[];
+
+SWITCHES_EXPORT extern const char kRunningVivaldi[];
+
 SWITCHES_EXPORT extern const char kTestAlreadyRunningDialog[];
 SWITCHES_EXPORT extern const char kTranslateLanguageListUrl[];
 SWITCHES_EXPORT extern const char kTranslateServerUrl[];
+
+SWITCHES_EXPORT extern const char kVivaldiSilentUpdate[];
+SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 
 }  // namespace switches
 

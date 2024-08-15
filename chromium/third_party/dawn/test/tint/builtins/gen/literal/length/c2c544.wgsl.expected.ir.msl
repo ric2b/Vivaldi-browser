@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void length_c2c544() {
+  float res = 0.0f;
+}
+vertex float4 vertex_main() {
+  length_c2c544();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  length_c2c544();
+}
+kernel void compute_main() {
+  length_c2c544();
+}

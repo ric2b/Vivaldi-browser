@@ -108,7 +108,7 @@ int64_t avx512_trsm_cutoff(int64_t L2Size, int64_t N, double L2Cap) {
   int64_t cutoff_l = static_cast<int64_t>(cutoff_d);
   return (cutoff_l / EIGEN_AVX_MAX_NUM_ROW) * EIGEN_AVX_MAX_NUM_ROW;
 }
-#else // !(EIGEN_USE_AVX512_TRSM_KERNELS) || !(EIGEN_COMP_CLANG != 0)
+#else  // !(EIGEN_USE_AVX512_TRSM_KERNELS) || !(EIGEN_COMP_CLANG != 0)
 #define EIGEN_ENABLE_AVX512_NOCOPY_TRSM_CUTOFFS 0
 #define EIGEN_ENABLE_AVX512_NOCOPY_TRSM_R_CUTOFFS 0
 #define EIGEN_ENABLE_AVX512_NOCOPY_TRSM_L_CUTOFFS 0
@@ -118,8 +118,8 @@ int64_t avx512_trsm_cutoff(int64_t L2Size, int64_t N, double L2Cap) {
  * Used by gemmKernel for the case A/B row-major and C col-major.
  */
 template <typename Scalar, typename vec, int64_t unrollM, int64_t unrollN, bool remM, bool remN>
-EIGEN_ALWAYS_INLINE void transStoreC(PacketBlock<vec, EIGEN_ARCH_DEFAULT_NUMBER_OF_REGISTERS> &zmm,
-                                            Scalar *C_arr, int64_t LDC, int64_t remM_ = 0, int64_t remN_ = 0) {
+EIGEN_ALWAYS_INLINE void transStoreC(PacketBlock<vec, EIGEN_ARCH_DEFAULT_NUMBER_OF_REGISTERS> &zmm, Scalar *C_arr,
+                                     int64_t LDC, int64_t remM_ = 0, int64_t remN_ = 0) {
   EIGEN_UNUSED_VARIABLE(remN_);
   EIGEN_UNUSED_VARIABLE(remM_);
   using urolls = unrolls::trans<Scalar>;
@@ -811,7 +811,7 @@ void triSolveKernelLxK(Scalar *A_arr, Scalar *B_arr, int64_t M, int64_t K, int64
  */
 template <typename Scalar, bool toTemp = true, bool remM = false>
 EIGEN_ALWAYS_INLINE void copyBToRowMajor(Scalar *B_arr, int64_t LDB, int64_t K, Scalar *B_temp, int64_t LDB_,
-                                                int64_t remM_ = 0) {
+                                         int64_t remM_ = 0) {
   EIGEN_UNUSED_VARIABLE(remM_);
   using urolls = unrolls::transB<Scalar>;
   using vecHalf = typename std::conditional<std::is_same<Scalar, float>::value, vecHalfFloat, vecFullDouble>::type;
@@ -1062,7 +1062,8 @@ void triSolve(Scalar *A_arr, Scalar *B_arr, int64_t M, int64_t numRHS, int64_t L
 // Template specializations of trsmKernelL/R for float/double and inner strides of 1.
 #if (EIGEN_USE_AVX512_TRSM_KERNELS)
 #if (EIGEN_USE_AVX512_TRSM_R_KERNELS)
-template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder, int OtherInnerStride, bool Specialized>
+template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder, int OtherInnerStride,
+          bool Specialized>
 struct trsmKernelR;
 
 template <typename Index, int Mode, int TriStorageOrder>
@@ -1082,10 +1083,10 @@ EIGEN_DONT_INLINE void trsmKernelR<float, Index, Mode, false, TriStorageOrder, 1
     Index size, Index otherSize, const float *_tri, Index triStride, float *_other, Index otherIncr,
     Index otherStride) {
   EIGEN_UNUSED_VARIABLE(otherIncr);
-#ifdef EIGEN_NO_RUNTIME_MALLOC
+#ifdef EIGEN_RUNTIME_NO_MALLOC
   if (!is_malloc_allowed()) {
     trsmKernelR<float, Index, Mode, false, TriStorageOrder, 1, /*Specialized=*/false>::kernel(
-          size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
+        size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
     return;
   }
 #endif
@@ -1098,10 +1099,10 @@ EIGEN_DONT_INLINE void trsmKernelR<double, Index, Mode, false, TriStorageOrder, 
     Index size, Index otherSize, const double *_tri, Index triStride, double *_other, Index otherIncr,
     Index otherStride) {
   EIGEN_UNUSED_VARIABLE(otherIncr);
-#ifdef EIGEN_NO_RUNTIME_MALLOC
+#ifdef EIGEN_RUNTIME_NO_MALLOC
   if (!is_malloc_allowed()) {
     trsmKernelR<double, Index, Mode, false, TriStorageOrder, 1, /*Specialized=*/false>::kernel(
-          size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
+        size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
     return;
   }
 #endif
@@ -1112,7 +1113,8 @@ EIGEN_DONT_INLINE void trsmKernelR<double, Index, Mode, false, TriStorageOrder, 
 
 // These trsm kernels require temporary memory allocation
 #if (EIGEN_USE_AVX512_TRSM_L_KERNELS)
-template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder, int OtherInnerStride, bool Specialized = true>
+template <typename Scalar, typename Index, int Mode, bool Conjugate, int TriStorageOrder, int OtherInnerStride,
+          bool Specialized = true>
 struct trsmKernelL;
 
 template <typename Index, int Mode, int TriStorageOrder>
@@ -1132,10 +1134,10 @@ EIGEN_DONT_INLINE void trsmKernelL<float, Index, Mode, false, TriStorageOrder, 1
     Index size, Index otherSize, const float *_tri, Index triStride, float *_other, Index otherIncr,
     Index otherStride) {
   EIGEN_UNUSED_VARIABLE(otherIncr);
-#ifdef EIGEN_NO_RUNTIME_MALLOC
+#ifdef EIGEN_RUNTIME_NO_MALLOC
   if (!is_malloc_allowed()) {
     trsmKernelL<float, Index, Mode, false, TriStorageOrder, 1, /*Specialized=*/false>::kernel(
-          size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
+        size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
     return;
   }
 #endif
@@ -1148,10 +1150,10 @@ EIGEN_DONT_INLINE void trsmKernelL<double, Index, Mode, false, TriStorageOrder, 
     Index size, Index otherSize, const double *_tri, Index triStride, double *_other, Index otherIncr,
     Index otherStride) {
   EIGEN_UNUSED_VARIABLE(otherIncr);
-#ifdef EIGEN_NO_RUNTIME_MALLOC
+#ifdef EIGEN_RUNTIME_NO_MALLOC
   if (!is_malloc_allowed()) {
     trsmKernelL<double, Index, Mode, false, TriStorageOrder, 1, /*Specialized=*/false>::kernel(
-          size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
+        size, otherSize, _tri, triStride, _other, otherIncr, otherStride);
     return;
   }
 #endif

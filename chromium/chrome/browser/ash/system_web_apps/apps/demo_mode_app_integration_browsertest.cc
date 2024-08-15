@@ -125,7 +125,7 @@ class WidgetFullscreenWaiter : public views::WidgetObserver {
       run_loop_.Quit();
     }
   }
-  const raw_ptr<views::Widget, ExperimentalAsh> widget_;
+  const raw_ptr<views::Widget> widget_;
   bool is_fullscreen_;
   base::RunLoop run_loop_;
   base::ScopedObservation<views::Widget, views::WidgetObserver>
@@ -172,7 +172,7 @@ class MockWebAppPublisher : public apps::AppPublisher {
 IN_PROC_BROWSER_TEST_P(DemoModeAppIntegrationTestBase, AppIsMissing) {
   WaitForTestSystemAppInstall();
 
-  absl::optional<webapps::AppId> missing_app_id =
+  std::optional<webapps::AppId> missing_app_id =
       GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::DEMO_MODE);
   ASSERT_FALSE(missing_app_id.has_value());
 }

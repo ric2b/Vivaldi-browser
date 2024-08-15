@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::unwrap_used)]
+
 extern crate std;
 
 use super::*;
+use crate::extended::serialize::AdvertisementType;
 use crate::{
-    extended::serialize::{section_tests::SectionBuilderExt, AdvBuilder},
+    extended::serialize::{section_tests::SectionBuilderExt, AdvBuilder, PublicSectionEncoder},
     shared_data::TxPower,
-    PublicIdentity,
 };
 
 #[test]
 fn serialize_tx_power_de() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder.add_de_res(|_| TxPower::try_from(3_i8).map(TxPowerDataElement::from)).unwrap();
 
@@ -41,8 +43,8 @@ fn serialize_tx_power_de() {
 
 #[test]
 fn serialize_actions_de_empty() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder.add_de_res(|_| ActionsDataElement::try_from_actions(&[])).unwrap();
 
@@ -58,8 +60,8 @@ fn serialize_actions_de_empty() {
 
 #[test]
 fn serialize_actions_de_non_empty() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder
         .add_de_res(|_| ActionsDataElement::try_from_actions(&[1, 1, 2, 3, 5, 8]))
@@ -78,8 +80,8 @@ fn serialize_actions_de_non_empty() {
 
 #[test]
 fn serialize_context_sync_seq_num_de() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder
         .add_de_res(|_| ContextSyncSeqNum::try_from(3).map(ContextSyncSeqNumDataElement::from))
@@ -98,8 +100,8 @@ fn serialize_context_sync_seq_num_de() {
 
 #[test]
 fn serialize_connectivity_info_de_bluetooth() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder.add_de(|_| ConnectivityInfoDataElement::bluetooth([1; 4], [2; 6])).unwrap();
 
@@ -118,8 +120,8 @@ fn serialize_connectivity_info_de_bluetooth() {
 
 #[test]
 fn serialize_connectivity_info_de_mdns() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder.add_de(|_| ConnectivityInfoDataElement::mdns([1; 4], 2)).unwrap();
 
@@ -138,8 +140,8 @@ fn serialize_connectivity_info_de_mdns() {
 
 #[test]
 fn serialize_connectivity_info_de_wifi_direct() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder
         .add_de(|_| ConnectivityInfoDataElement::wifi_direct([1; 10], [2; 10], [3; 2], 4))
@@ -162,8 +164,8 @@ fn serialize_connectivity_info_de_wifi_direct() {
 
 #[test]
 fn serialize_connectivity_capabilities_de_wifi_direct() {
-    let mut adv_builder = AdvBuilder::new();
-    let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 
     section_builder
         .add_de(|_| ConnectivityCapabilityDataElement::wifi_direct([1; 3], [2; 3]))

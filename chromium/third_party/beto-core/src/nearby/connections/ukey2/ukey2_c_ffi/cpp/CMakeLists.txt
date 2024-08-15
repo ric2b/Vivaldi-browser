@@ -14,12 +14,16 @@
 
 cmake_minimum_required(VERSION 3.14)
 
+project(Ukey2)
+
 enable_testing()
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/ukey2_c_ffi/cpp/)
 
+include(GoogleTest)
 include(ExternalProject)
+
 set_directory_properties(PROPERTIES EP_PREFIX ${CMAKE_BINARY_DIR}/target/tmp)
 ExternalProject_Add(
     ukey2_c_ffi
@@ -33,11 +37,9 @@ ExternalProject_Add(
 set(CMAKE_CXX_STANDARD 20)
 
 if(UNIX)
-    add_compile_options(-Wall -Werror -Wextra -Wimplicit-fallthrough -Wextra-semi
+    add_compile_options(-Wall -Wextra -Wimplicit-fallthrough -Wextra-semi
             -Wno-missing-field-initializers -Wno-unused-parameter -Wno-psabi
-            -Wno-unneeded-internal-declaration
-            -Wno-ignored-pragma-optimize
-            -Wno-bitfield-constant-conversion -Wno-deprecated-this-capture -Wshadow
+            -Wshadow
             -Wsign-compare)
 elseif(MSVC)
     add_compile_options(-W4 -MD)
@@ -81,5 +83,4 @@ elseif(MSVC)
     )
 endif()
 
-include(GoogleTest)
 gtest_discover_tests(ffi_test)

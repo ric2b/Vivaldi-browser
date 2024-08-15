@@ -98,7 +98,7 @@ PersistentNotesEntity::PersistentNotesEntity(
     bool is_folder,
     const string& parent_id,
     int64_t creation_time,
-    int64_t last_modified_time)
+    int64_t last_modification_time)
     : LoopbackServerEntity(id, syncer::NOTES, version, name),
       originator_cache_guid_(originator_cache_guid),
       originator_client_item_id_(originator_client_item_id),
@@ -106,7 +106,7 @@ PersistentNotesEntity::PersistentNotesEntity(
       is_folder_(is_folder),
       parent_id_(parent_id),
       creation_time_(creation_time),
-      last_modified_time_(last_modified_time) {
+      last_modification_time_(last_modification_time) {
   SetSpecifics(specifics);
 }
 
@@ -132,7 +132,7 @@ void PersistentNotesEntity::SerializeAsProto(
 
   sync_entity->set_parent_id_string(parent_id_);
   sync_entity->set_ctime(creation_time_);
-  sync_entity->set_mtime(last_modified_time_);
+  sync_entity->set_mtime(last_modification_time_);
 
   sync_pb::UniquePosition* unique_position =
       sync_entity->mutable_unique_position();

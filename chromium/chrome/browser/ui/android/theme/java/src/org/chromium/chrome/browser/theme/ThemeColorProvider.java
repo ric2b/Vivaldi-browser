@@ -17,24 +17,18 @@ import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
-/**
- * An abstract class that provides the current theme color.
- */
+/** An abstract class that provides the current theme color. */
 public abstract class ThemeColorProvider {
-    /**
-     * An interface to be notified about changes to the theme color.
-     */
+    /** An interface to be notified about changes to the theme color. */
     public interface ThemeColorObserver {
         /**
          * @param color The new color the observer should use.
          * @param shouldAnimate Whether the change of color should be animated.
          */
-        void onThemeColorChanged(int color, boolean shouldAnimate);
+        void onThemeColorChanged(@ColorInt int color, boolean shouldAnimate);
     }
 
-    /**
-     * An interface to be notified about changes to the tint.
-     */
+    /** An interface to be notified about changes to the tint. */
     public interface TintObserver {
         /**
          * @param tint The new tint the observer should use.
@@ -44,7 +38,7 @@ public abstract class ThemeColorProvider {
     }
 
     /** Current primary color. */
-    private int mPrimaryColor;
+    private @ColorInt int mPrimaryColor;
 
     /** The current {@link BrandedColorScheme}. */
     private @Nullable @BrandedColorScheme Integer mBrandedColorScheme;
@@ -62,8 +56,8 @@ public abstract class ThemeColorProvider {
      * @param context The {@link Context} that is used to retrieve color related resources.
      */
     public ThemeColorProvider(Context context) {
-        mThemeColorObservers = new ObserverList<ThemeColorObserver>();
-        mTintObservers = new ObserverList<TintObserver>();
+        mThemeColorObservers = new ObserverList<>();
+        mTintObservers = new ObserverList<>();
         mTint = ThemeUtils.getThemedToolbarIconTint(context, BrandedColorScheme.APP_DEFAULT);
     }
 
@@ -118,15 +112,13 @@ public abstract class ThemeColorProvider {
         return mBrandedColorScheme != null ? mBrandedColorScheme : BrandedColorScheme.APP_DEFAULT;
     }
 
-    /**
-     * Clears out the observer lists.
-     */
+    /** Clears out the observer lists. */
     public void destroy() {
         mThemeColorObservers.clear();
         mTintObservers.clear();
     }
 
-    protected void updatePrimaryColor(int color, boolean shouldAnimate) {
+    protected void updatePrimaryColor(@ColorInt int color, boolean shouldAnimate) {
         if (!BuildConfig.IS_VIVALDI)
         if (mPrimaryColor == color) return;
         mPrimaryColor = color;

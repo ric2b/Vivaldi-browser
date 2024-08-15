@@ -26,7 +26,6 @@ import org.chromium.net.CronetTestRule.IgnoreFor;
 import org.chromium.net.CronetTestRule.RequiresMinApi;
 import org.chromium.net.MetricsTestUtil.TestExecutor;
 import org.chromium.net.impl.CronetMetrics;
-import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -39,12 +38,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @DoNotBatch(reason = "crbug/1459563")
 @RunWith(AndroidJUnit4.class)
 @IgnoreFor(
-        implementations = {CronetImplementation.FALLBACK},
-        reason = "The fallback implementation doesn't RequestFinished listeners")
+        implementations = {CronetImplementation.FALLBACK, CronetImplementation.AOSP_PLATFORM},
+        reason = "Fallback and AOSP implementations do not support RequestFinishedListeners")
 public class RequestFinishedInfoTest {
     @Rule public final CronetTestRule mTestRule = CronetTestRule.withAutomaticEngineStartup();
 
-    private EmbeddedTestServer mTestServer;
     private String mUrl;
 
     // A subclass of TestRequestFinishedListener to additionally assert that UrlRequest.Callback's
@@ -70,14 +68,13 @@ public class RequestFinishedInfoTest {
 
     @Before
     public void setUp() throws Exception {
-        mTestServer =
-                EmbeddedTestServer.createAndStartServer(mTestRule.getTestFramework().getContext());
-        mUrl = mTestServer.getURL("/echo?status=200");
+        NativeTestServer.startNativeTestServer(mTestRule.getTestFramework().getContext());
+        mUrl = NativeTestServer.getFileURL("/echo?status=200");
     }
 
     @After
     public void tearDown() throws Exception {
-        mTestServer.stopAndDestroyServer();
+        NativeTestServer.shutdownNativeTestServer();
     }
 
     static class DirectExecutor implements Executor {
@@ -440,7 +437,7 @@ public class RequestFinishedInfoTest {
         // Empty headers are invalid and will cause start() to throw an exception.
         UrlRequest request = urlRequestBuilder.addHeader("", "").build();
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, request::start);
-        assertThat(e).hasMessageThat().isEqualTo("Invalid header =");
+        assertThat(e).hasMessageThat().isEqualTo("Invalid header with headername: ");
     }
 
     @Test

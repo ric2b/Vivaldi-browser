@@ -253,8 +253,6 @@ base::apple::ScopedCFTypeRef<IOSurfaceRef> CreateIOSurface(
     bool should_clear,
     bool override_rgba_to_bgra) {
   TRACE_EVENT0("ui", "CreateIOSurface");
-  base::TimeTicks start_time = base::TimeTicks::Now();
-
   base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> properties(
       CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
                                 &kCFTypeDictionaryKeyCallBacks,
@@ -313,10 +311,12 @@ base::apple::ScopedCFTypeRef<IOSurfaceRef> CreateIOSurface(
     const size_t bytes_per_element = BytesPerElement(format, 0);
     const size_t bytes_per_row = IOSurfaceAlignProperty(
         kIOSurfaceBytesPerRow,
-        base::bits::AlignUp(size.width(), 2) * bytes_per_element);
+        base::bits::AlignUpDeprecatedDoNotUse(size.width(), 2) *
+            bytes_per_element);
     const size_t bytes_alloc = IOSurfaceAlignProperty(
         kIOSurfaceAllocSize,
-        base::bits::AlignUp(size.height(), 2) * bytes_per_row);
+        base::bits::AlignUpDeprecatedDoNotUse(size.height(), 2) *
+            bytes_per_row);
     AddIntegerValue(properties.get(), kIOSurfaceBytesPerElement,
                     bytes_per_element);
     AddIntegerValue(properties.get(), kIOSurfaceBytesPerRow, bytes_per_row);
@@ -344,8 +344,6 @@ base::apple::ScopedCFTypeRef<IOSurfaceRef> CreateIOSurface(
   IOSurfaceSetValue(surface.get(), CFSTR("IOSurfaceColorSpace"),
                     kCGColorSpaceSRGB);
 
-  UMA_HISTOGRAM_TIMES("GPU.IOSurface.CreateTime",
-                      base::TimeTicks::Now() - start_time);
   return surface;
 }
 

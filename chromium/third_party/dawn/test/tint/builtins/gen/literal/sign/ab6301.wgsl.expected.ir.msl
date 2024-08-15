@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void sign_ab6301() {
+  float3 res = float3(1.0f);
+}
+vertex float4 vertex_main() {
+  sign_ab6301();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  sign_ab6301();
+}
+kernel void compute_main() {
+  sign_ab6301();
+}

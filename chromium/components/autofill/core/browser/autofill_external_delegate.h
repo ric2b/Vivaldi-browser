@@ -31,6 +31,7 @@ namespace autofill {
 class AutofillDriver;
 class BrowserAutofillManager;
 class CreditCard;
+enum class CreditCardFetchResult;
 
 // TODO(csharp): A lot of the logic in this class is copied from AutofillAgent.
 // Once Autofill is moved out of WebKit this class should be the only home for
@@ -49,31 +50,29 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
 
   ~AutofillExternalDelegate() override;
 
+  // Returns true if `item_id` identifies a suggestion which can appear on the
+  // first layer of the Autofill popup and can fill form fields.
+  static bool IsAutofillAndFirstLayerSuggestionId(PopupItemId item_id);
+
   // AutofillPopupDelegate implementation.
   void OnPopupShown() override;
   void OnPopupHidden() override;
-  void DidSelectSuggestion(
-      const Suggestion& suggestion,
-      AutofillSuggestionTriggerSource trigger_source) override;
-  void DidAcceptSuggestion(
-      const Suggestion& suggestion,
-      int position,
-      AutofillSuggestionTriggerSource trigger_source) override;
+  void DidSelectSuggestion(const Suggestion& suggestion) override;
+  void DidAcceptSuggestion(const Suggestion& suggestion,
+                           const SuggestionPosition& position) override;
   void DidPerformButtonActionForSuggestion(
       const Suggestion& suggestion) override;
-  bool GetDeletionConfirmationText(const std::u16string& value,
-                                   PopupItemId popup_item_id,
-                                   Suggestion::BackendId backend_id,
-                                   std::u16string* title,
-                                   std::u16string* body) override;
-  bool RemoveSuggestion(const std::u16string& value,
-                        PopupItemId popup_item_id,
-                        Suggestion::BackendId backend_id) override;
+  bool RemoveSuggestion(const Suggestion& suggestion) override;
   void ClearPreviewedForm() override;
 
-  // Returns PopupType::kUnspecified for all popups prior to |onQuery|, or the
-  // popup type after call to |onQuery|.
+  // Returns PopupType::kUnspecified for all popups prior to `onQuery`, or the
+  // popup type after call to `onQuery`.
   PopupType GetPopupType() const override;
+
+  // Returns FillingProduct::kNone for all popups prior to
+  // `OnSuggestionsReturned`. Returns the filling product of the first
+  // suggestion that has a filling product that is not none.
+  FillingProduct GetMainFillingProduct() const override;
 
   // Returns the ax node id associated with the current web contents' element
   // who has a controller relation to the current autofill popup.
@@ -90,14 +89,14 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // breaks the cache.
   virtual void OnQuery(const FormData& form,
                        const FormFieldData& field,
-                       const gfx::RectF& element_bounds);
+                       const gfx::RectF& element_bounds,
+                       AutofillSuggestionTriggerSource trigger_source);
 
   // Records query results and correctly formats them before sending them off
-  // to be displayed.  Called when an Autofill query result is available.
+  // to be displayed. Called when an Autofill query result is available.
   virtual void OnSuggestionsReturned(
       FieldGlobalId field_id,
       const std::vector<Suggestion>& suggestions,
-      AutofillSuggestionTriggerSource trigger_source,
       bool is_all_server_suggestions = false);
 
   // Returns the last targeted field types to be filled. This does not
@@ -110,15 +109,17 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // will store these fields so that in a next iteration, when the user clicks,
   // say a name field only fields that are of group name are filled, therefore
   // staying at a group filling level.
-  absl::optional<ServerFieldTypeSet> GetLastFieldTypesToFillForSection(
+  std::optional<FieldTypeSet> GetLastFieldTypesToFillForSection(
       const Section& section) const;
 
   // Returns true if there is a screen reader installed on the machine.
   virtual bool HasActiveScreenReader() const;
 
   // Indicates on focus changed if autofill/autocomplete is available or
-  // unavailable, so state can be announced by screen readers.
-  virtual void OnAutofillAvailabilityEvent(const mojom::AutofillState state);
+  // unavailable, so `suggestion_availability` can be announced by screen
+  // readers.
+  virtual void OnAutofillAvailabilityEvent(
+      mojom::AutofillSuggestionAvailability suggestion_availability);
 
   // Set the data list value associated with the current field.
   void SetCurrentDataListValues(std::vector<SelectOption> datalist);
@@ -150,11 +151,12 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // to delete is determined by the passed `guid`.
   void ShowDeleteAddressProfileDialog(const std::string& guid);
 
-  // Triggered when user closes the address editor dialog.
+  // Triggered when the user closes the address editor dialog.
   void OnAddressEditorClosed(
       AutofillClient::SaveAddressProfileOfferUserDecision decision,
       base::optional_ref<const AutofillProfile> profile);
 
+  // Triggered when the user closes the delete address profile dialog.
   void OnDeleteDialogClosed(const std::string& guid, bool user_accepted_delete);
 
   // Called when a credit card is scanned using device camera.
@@ -164,7 +166,7 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // Returns the last Autofill triggering field. Derived from the `form` and
   // `field` parameters of `OnQuery(). Returns nullptr if called before
   // `OnQuery()` or if the `form` becomes outdated, see crbug.com/1117028.
-  AutofillField* GetQueriedAutofillField() const;
+  const AutofillField* GetQueriedAutofillField() const;
 
   // Fills the form with the Autofill data corresponding to `backend_id`.
   // If `is_preview` is true then this is just a preview to show the user what
@@ -174,6 +176,52 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
                             Suggestion::BackendId backend_id,
                             bool is_preview,
                             const AutofillTriggerDetails& trigger_details);
+
+  // Determines the correct data type (`AutofillProfile` or `CreditCard`) to be
+  // previewed and previews the corresponding field-by-field filling suggestion.
+  void PreviewFieldByFieldFillingSuggestion(const Suggestion& suggestion);
+
+  // Determines the correct data type (`AutofillProfile` or `CreditCard`) to be
+  // filled and fills the corresponding field-by-field filling suggestion.
+  void FillFieldByFieldFillingSuggestion(
+      const Suggestion& suggestion,
+      const SuggestionPosition& position,
+      AutofillSuggestionTriggerSource trigger_source);
+
+  // Previews the value from `profile` specified in the `suggestion`.
+  void PreviewAddressFieldByFieldFillingSuggestion(
+      const AutofillProfile& profile,
+      const Suggestion& suggestion);
+
+  // Previews the main text from the `suggestion`.
+  void PreviewCreditCardFieldByFieldFillingSuggestion(
+      const Suggestion& suggestion);
+
+  // Fills the value from `profile` specified in the `suggestion`. Emits
+  // necessary metrics based on the
+  // `suggestion.field_by_field_filling_type_used`.
+  void FillAddressFieldByFieldFillingSuggestion(
+      const AutofillProfile& profile,
+      const Suggestion& suggestion,
+      const SuggestionPosition& position,
+      AutofillSuggestionTriggerSource trigger_source);
+
+  // Uses the `credit_card` to optionally fetch the credit card number depending
+  // on the `suggestion.field_by_field_filling_type_used`. Fills the fetched
+  // credit card number or the `suggestion::main_text`.
+  void FillCreditCardFieldByFieldFillingSuggestion(
+      const CreditCard& credit_card,
+      const Suggestion& suggestion);
+
+  // Triggered when the user closes the authentication flow needed to access
+  // the number and cvc of the `credit_card`.
+  void OnCreditCardFetched(CreditCardFetchResult result,
+                           const CreditCard* credit_card);
+
+  // Triggered when the user completes the authentication flow needed to access
+  // virtual credit card details.
+  void OnVirtualCreditCardFetched(CreditCardFetchResult result,
+                                  const CreditCard* credit_card);
 
   // Will remove Autofill warnings from |suggestions| if there are also
   // autocomplete entries in the vector. Note: at this point, it is assumed that
@@ -196,6 +244,8 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // version.
   void InsertDataListValues(std::vector<Suggestion>* suggestions);
 
+  bool IsPaymentsManualFallbackOnNonPaymentsField() const;
+
   // Returns the text (i.e. |Suggestion| value) for Chrome autofill options.
   std::u16string GetSettingsSuggestionValue() const;
 
@@ -204,23 +254,22 @@ class AutofillExternalDelegate : public AutofillPopupDelegate,
   // The current form and field selected by Autofill.
   FormData query_form_;
   FormFieldData query_field_;
+  // The bounds of the form field that the user is interacting with.
+  gfx::RectF element_bounds_;
+  // The method how suggestions were triggered on the current form.
+  AutofillSuggestionTriggerSource trigger_source_;
 
   // Stores the last `AutofillTriggerDetails::field_types_to_fill`.
   // We key this information by form section to guarantee granular filling
   // side effects are specific are not "leaked" to other forms.
-  base::flat_map<Section, ServerFieldTypeSet>
+  base::flat_map<Section, FieldTypeSet>
       last_field_types_to_fill_for_address_form_section_;
 
-  // The bounds of the form field that user is interacting with.
-  gfx::RectF element_bounds_;
-
-  // Does the popup include any Autofill profile or credit card suggestions?
-  bool has_autofill_suggestions_ = false;
-
-  bool should_show_scan_credit_card_ = false;
   PopupType popup_type_ = PopupType::kUnspecified;
 
-  bool should_show_cards_from_account_option_ = false;
+  bool show_cards_from_account_suggestion_was_shown_ = false;
+
+  std::vector<PopupItemId> shown_suggestion_types_;
 
   // The current data list values.
   std::vector<SelectOption> datalist_;

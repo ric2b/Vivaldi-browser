@@ -521,10 +521,14 @@ config("common_config") {
     cflags_cc += [
       "/EHsc",  # DXC uses exceptions
       "/Zc:__cplusplus",
-      "/Zc:twoPhase-",  # DXC source relies on MSVC's non-conforming
-                        # two-phase lookup
       "/Zc:sizedDealloc-",  # Disable sized allocation
     ]
+    if (!is_clang) {
+      cflags_cc += [
+        "/Zc:twoPhase-",  # DXC source relies on MSVC's non-conforming
+                          # two-phase lookup
+      ]
+    }
 
     cflags_c += [
       "/EHsc",  # DXC uses exceptions
@@ -544,9 +548,17 @@ config("common_config") {
     "$dawn_dxc_dir/include",
     "$dawn_dxc_dir/tools/clang/include",
     "$dawn_dxc_dir/tools/clang/tools",
-    "$dawn_dxc_dir/include/llvm/llvm_assert",
     "${target_gen_dir}/include",  # Generated files
   ]
+
+  if (is_win) {
+    include_dirs += [
+      # $dawn_dxc_dir/lib/Support/assert.cpp depends on a "assert.h" include for the windows path,
+      # but the other architectures include <assert.h>. The system include would be shadowed if this
+      # include directory is added.
+      "$dawn_dxc_dir/include/llvm/llvm_assert",
+    ]
+  }
 
   defines = []
   if (is_debug && dawn_dxc_disable_asserts_debug) {
@@ -572,6 +584,7 @@ static_library("Support") {
   public_deps = [
     ":AsmParsers-def",
     ":AsmPrinters-def",
+    ":DataTypes-header",
     ":Disassemblers-def",
     ":Targets-def",
     ":abi-breaking-header",
@@ -684,10 +697,7 @@ static_library("Support") {
 
 # Common code for both llvm-tblgen and clang-tblgen
 source_set("TableGen") {
-  public_deps = [
-    ":DataTypes-header",
-    ":Support",
-  ]
+  public_deps = [ ":Support" ]
 
   sources = [
     "$dawn_dxc_dir/lib/TableGen/Error.cpp",
@@ -1141,7 +1151,6 @@ static_library("dxclib") {
     configs += [ "//build/config/compiler:no_chromium_code" ]
   }
   public_deps = [
-    ":DataTypes-header",
     ":HLSLOptions-inc",
     ":Intrinsics-td",
     ":SharedLibAffix-h",
@@ -1155,6 +1164,7 @@ static_library("dxclib") {
     "$dawn_dxc_dir/lib/DXIL/DxilMetadataHelper.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilModule.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilModuleHelper.cpp",
+    "$dawn_dxc_dir/lib/DXIL/DxilNodeProps.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilOperations.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilPDB.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilResource.cpp",
@@ -1171,6 +1181,7 @@ static_library("dxclib") {
     "$dawn_dxc_dir/lib/DXIL/DxilTypeSystem.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilUtil.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilUtilDbgInfoAndMisc.cpp",
+    "$dawn_dxc_dir/lib/DXIL/DxilWaveMatrix.cpp",
     "$dawn_dxc_dir/lib/DxcSupport/FileIOHelper.cpp",
     "$dawn_dxc_dir/lib/DxcSupport/Global.cpp",
     "$dawn_dxc_dir/lib/DxcSupport/HLSLOptions.cpp",
@@ -2098,6 +2109,7 @@ dxcompiler_sourceset("clang_lib_sema") {
     "$dawn_dxc_dir/tools/clang/lib/Sema/SemaExprObjC.cpp",
     "$dawn_dxc_dir/tools/clang/lib/Sema/SemaFixItUtils.cpp",
     "$dawn_dxc_dir/tools/clang/lib/Sema/SemaHLSL.cpp",
+    "$dawn_dxc_dir/tools/clang/lib/Sema/SemaHLSLDiagnoseTU.cpp",
     "$dawn_dxc_dir/tools/clang/lib/Sema/SemaInit.cpp",
     "$dawn_dxc_dir/tools/clang/lib/Sema/SemaLambda.cpp",
     "$dawn_dxc_dir/tools/clang/lib/Sema/SemaLookup.cpp",
@@ -2335,9 +2347,11 @@ executable("dxc") {
 
   data_deps = [ ":dxcompiler" ]
 
-  # Set rpath to executable_path to be able to find dxcompiler.so on MacOS
+  # Set rpath to be able to find the dxcompiler shared library
   if (is_mac) {
     ldflags = [ "-Wl,-rpath,@executable_path" ]
+  } else if (is_linux) {
+    ldflags = [ "-Wl,-rpath=\$ORIGIN" ]
   }
 
   if (is_win) {

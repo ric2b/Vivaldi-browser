@@ -51,15 +51,6 @@ import java.util.Set;
 public class GeolocationHeader {
     private static final String TAG = "GeolocationHeader";
 
-    // Values for the histogram Geolocation.HeaderSentOrNot. Values 1, 5, 6, and 7 are defined in
-    // histograms.xml and should not be used in other ways.
-    public static final int UMA_LOCATION_DISABLED_FOR_GOOGLE_DOMAIN = 0;
-    public static final int UMA_LOCATION_NOT_AVAILABLE = 2;
-    public static final int UMA_LOCATION_STALE = 3;
-    public static final int UMA_HEADER_SENT = 4;
-    public static final int UMA_LOCATION_DISABLED_FOR_CHROME_APP = 5;
-    public static final int UMA_MAX = 8;
-
     @IntDef({
         UmaPermission.UNKNOWN,
         UmaPermission.HIGH_ACCURACY_APP_YES_DOMAIN_YES_LOCATION,
@@ -460,13 +451,8 @@ public class GeolocationHeader {
      */
     static @ContentSettingValues @Nullable Integer locationContentSettingForUrl(
             Profile profile, Uri uri) {
-        PermissionInfo locationSettings =
-                new PermissionInfo(
-                        ContentSettingsType.GEOLOCATION,
-                        uri.toString(),
-                        null,
-                        profile.isOffTheRecord());
-        return locationSettings.getContentSetting(profile);
+        return PermissionInfo.getContentSetting(
+                profile, ContentSettingsType.GEOLOCATION, uri.toString(), null);
     }
 
     static void setLocationSourceForTesting(int locationSourceForTesting) {

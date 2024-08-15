@@ -24,6 +24,7 @@
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/Resources.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/timer/TimeUtils.h"
 
 #include <cmath>
@@ -341,8 +342,8 @@ public:
         for(const auto& s : fTextStringSlots) {
             auto t = fSlotManager->getTextSlot(s.first);
             t->fText = SkString(s.second.source.data());
-            t->fTypeface = SkFontMgr::RefDefault()->matchFamilyStyle(s.second.font.c_str(),
-                                                                     SkFontStyle());
+            t->fTypeface = ToolUtils::TestFontMgr()->matchFamilyStyle(s.second.font.c_str(),
+                                                                      SkFontStyle());
             fSlotManager->setTextSlot(s.first, *t);
         }
         for(const auto& s : fImageSlots) {
@@ -442,7 +443,7 @@ static void draw_stats_box(SkCanvas* canvas, const skottie::Animation::Builder::
     paint.setAntiAlias(true);
     paint.setColor(0xffeeeeee);
 
-    SkFont font(nullptr, kTextSize);
+    SkFont font(ToolUtils::DefaultTypeface(), kTextSize);
 
     canvas->drawRect(kR, paint);
 
@@ -515,12 +516,13 @@ void SkottieSlide::init() {
     }
     skottie::Animation::Builder builder(flags);
 
+    auto predecode = skresources::ImageDecodeStrategy::kPreDecode;
     auto resource_provider =
-        sk_make_sp<AudioProviderProxy>(
-            skresources::DataURIResourceProviderProxy::Make(
-                skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
-                                                        /*predecode=*/true),
-                /*predecode=*/true));
+            sk_make_sp<AudioProviderProxy>(skresources::DataURIResourceProviderProxy::Make(
+                    skresources::FileResourceProvider::Make(SkOSPath::Dirname(fPath.c_str()),
+                                                            predecode),
+                    predecode,
+                    ToolUtils::TestFontMgr()));
 
     static constexpr char kInterceptPrefix[] = "__";
     auto precomp_interceptor =
@@ -531,6 +533,7 @@ void SkottieSlide::init() {
     auto text_tracker = sk_make_sp<TextTracker>(fTransformTracker);
 
     builder.setLogger(logger)
+           .setFontManager(ToolUtils::TestFontMgr())
            .setPrecompInterceptor(std::move(precomp_interceptor))
            .setResourceProvider(resource_provider)
            .setPropertyObserver(text_tracker);

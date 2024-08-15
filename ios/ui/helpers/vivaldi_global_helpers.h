@@ -46,6 +46,17 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns true if device is iPad and multitasking UI has
 /// enough space to show iPad side panel.
 + (BOOL)canShowSidePanel;
+/// Safe area insets for the key window.
++ (UIEdgeInsets)safeAreaInsets;
+/// Returns boolean whether dark text should be used above a view using the
+/// given color for background.
++ (BOOL)shouldUseDarkTextForColor:(UIColor* _Nonnull)color;
+/// Returns boolean whether tab strip should use default themeColor for
+/// the given color. Too bright or dark(near white/black) webState themeColor could
+/// conflict with tab selected color which is also white for light scheme.
++ (BOOL)shouldUseDefaultThemeColor:(UIColor* _Nonnull)color;
+/// Returns the luminance for given color.
++ (CGFloat)luminanceForColor:(UIColor* _Nonnull)color;
 
 /// Returns whether the build is final release build.
 + (BOOL)isFinalReleaseBuild;
@@ -80,6 +91,12 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns True if URL A and URL B has same host.
 + (BOOL)areHostsEquivalentForURL:(NSURL* _Nonnull)aURL
                             bURL:(NSURL* _Nonnull)bURL;
+/// Returns UIColor from provided HEX code for color
++ (UIColor* _Nonnull)colorWithHexString:(NSString* _Nonnull)hexString;
++ (CGFloat)colorComponentFrom:(NSString* _Nonnull)string
+                        start:(NSUInteger)start
+                       length:(NSUInteger)length;
+
 @end
 
 #endif  // IOS_UI_HELPERS_VIVALDI_GLOBAL_HELPERS_H_

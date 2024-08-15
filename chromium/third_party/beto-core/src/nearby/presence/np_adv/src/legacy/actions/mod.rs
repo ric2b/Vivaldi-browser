@@ -42,27 +42,8 @@ pub(crate) mod tests;
 /// of 3 bytes occupied by the DE payload.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ActionsDataElement<F: PacketFlavor> {
-    action: ActionBits<F>,
-}
-
-impl<F: PacketFlavor> ActionsDataElement<F> {
-    /// Returns the actions bits as a u32. The upper limit of an actions field is 3 bytes,
-    /// so the last bytes of this u32 will always be 0
-    pub fn as_u32(self) -> u32 {
-        self.action.bits
-    }
-
-    /// Return whether a boolean action type is set in this data element, or `None` if the given
-    /// action type does not represent a boolean.
-    pub fn has_action(&self, action_type: &ActionType) -> Option<bool> {
-        (action_type.bits_len() == 1).then_some(self.action.bits_for_type(action_type) != 0)
-    }
-
-    /// Return the context sync sequence number.
-    pub fn context_sync_seq_num(&self) -> ContextSyncSeqNum {
-        ContextSyncSeqNum::try_from(self.action.bits_for_type(&ActionType::ContextSyncSeqNum) as u8)
-            .expect("Masking with ActionType::ContextSyncSeqNum should always be in range")
-    }
+    /// The action bits
+    pub action: ActionBits<F>,
 }
 
 pub(crate) const ACTIONS_MAX_LEN: usize = 3;
@@ -170,6 +151,26 @@ pub struct ActionBits<F: PacketFlavor> {
     bits: u32,
     // marker for element type
     flavor: marker::PhantomData<F>,
+}
+
+impl<F: PacketFlavor> ActionBits<F> {
+    /// Returns the actions bits as a u32. The upper limit of an actions field is 3 bytes,
+    /// so the last bytes of this u32 will always be 0
+    pub fn as_u32(self) -> u32 {
+        self.bits
+    }
+
+    /// Return whether a boolean action type is set in this data element, or `None` if the given
+    /// action type does not represent a boolean.
+    pub fn has_action(&self, action_type: &ActionType) -> Option<bool> {
+        (action_type.bits_len() == 1).then_some(self.bits_for_type(action_type) != 0)
+    }
+
+    /// Return the context sync sequence number.
+    pub fn context_sync_seq_num(&self) -> ContextSyncSeqNum {
+        ContextSyncSeqNum::try_from(self.bits_for_type(&ActionType::ContextSyncSeqNum) as u8)
+            .expect("Masking with ActionType::ContextSyncSeqNum should always be in range")
+    }
 }
 
 impl<F: PacketFlavor> Default for ActionBits<F> {

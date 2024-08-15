@@ -8,7 +8,8 @@
 #import <UIKit/UIKit.h>
 
 // An enum representing the different Features and Chrome tips added to What's
-// New.
+// New. Please do not modify this enum. The content is updated by script. For
+// more info, please see `tools/whats_new`.
 enum class WhatsNewType {
   kError = -1,
   kMinValue = 0,
@@ -24,7 +25,10 @@ enum class WhatsNewType {
   kCalendarEvent = 9,
   kChromeActions = 10,
   kMiniMaps = 11,
-  kMaxValue = kMiniMaps,
+  kLensSearch = 12,
+  kBottomOmnibox = 13,
+  kESB = 14,
+  kMaxValue = kESB
 };
 
 // An enum representing the different primary button actions for features in
@@ -37,7 +41,8 @@ enum class WhatsNewPrimaryAction {
   kPrivacySettings = 2,
   kChromeSettings = 3,
   kIOSSettingsPasswords = 4,
-  kMaxValue = kIOSSettingsPasswords,
+  kLens = 5,
+  kMaxValue = kLens,
 };
 
 class GURL;
@@ -53,10 +58,6 @@ class GURL;
 @property(nonatomic, copy) NSString* title;
 // What's New entry subtitle.
 @property(nonatomic, copy) NSString* subtitle;
-// What's New entry hero banner image.
-@property(nonatomic, copy) UIImage* heroBannerImage;
-// What's New entry banner image.
-@property(nonatomic, copy) UIImage* bannerImage;
 // What's New entry icon image.
 @property(nonatomic, copy) UIImage* iconImage;
 // What's New entry icon background color.
@@ -71,6 +72,8 @@ class GURL;
 @property(nonatomic, copy) NSString* screenshotName;
 // What's New entry screenshot text provier for localization.
 @property(nonatomic, copy) NSDictionary* screenshotTextProvider;
+// Whether or not the feature or Chrome tip is exclusively available on iPhone.
+@property(nonatomic, assign) BOOL isIphoneOnly;
 
 @end
 

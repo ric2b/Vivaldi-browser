@@ -183,7 +183,7 @@ Index_Node* Index_Model::Add(std::unique_ptr<Index_Node> node,
   Index_Node* node_ptr = node.get();
   parent->Add(std::move(node), index);
 
-  // Save quick access to backup. This node is only removed on exit once set.
+  // Save quick access to backup. This node can be invalidated in Remove().
   if (node_ptr->id() == Index_Node::backup_node_id()) {
     backup_node_ = node_ptr;
   } else if (node_ptr->id() == Index_Node::persistent_node_id()) {

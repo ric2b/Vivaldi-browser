@@ -30,6 +30,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/google/core/common/google_switches.h"
 #include "components/google/core/common/google_util.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
@@ -495,7 +496,7 @@ class HintsFetcherDisabledBrowserTest : public InProcessBrowserTest {
   // expected to arrive. This set is verified to match with the set of hosts and
   // URLs present in the hints request. If null, then the verification is not
   // done.
-  absl::optional<base::flat_set<std::string>>
+  std::optional<base::flat_set<std::string>>
       expect_hints_request_for_hosts_and_urls_;
 
   // The expected authorization header holding the bearer access token.
@@ -538,7 +539,8 @@ class HintsFetcherBrowserTest : public HintsFetcherDisabledBrowserTest {
     PopulateEnabledFeatures(&enabled_features);
 
     // Enable OptimizationHintsFetching with |kRemoteOptimizationGuideFetching|.
-    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                       disabled_features_);
     // Call to inherited class to match same set up with feature flags added.
     HintsFetcherDisabledBrowserTest::SetUp();
   }
@@ -574,6 +576,9 @@ class HintsFetcherBrowserTest : public HintsFetcherDisabledBrowserTest {
             urls, optimization_types,
             optimization_guide::proto::CONTEXT_BOOKMARKS, callback);
   }
+
+ protected:
+  std::vector<base::test::FeatureRef> disabled_features_;
 };
 
 // This test creates new browser with no profile and loads a random page with
@@ -1264,7 +1269,16 @@ IN_PROC_BROWSER_TEST_F(
   }
 }
 
-IN_PROC_BROWSER_TEST_F(HintsFetcherBrowserTest, HintsFetcherDoesntFetchOnNSP) {
+class HintsFetcherPre3pcdBrowserTest : public HintsFetcherBrowserTest {
+ public:
+  HintsFetcherPre3pcdBrowserTest() {
+    disabled_features_.push_back(
+        content_settings::features::kTrackingProtection3pcd);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(HintsFetcherPre3pcdBrowserTest,
+                       HintsFetcherDoesntFetchOnNSP) {
   const base::HistogramTester* histogram_tester = GetHistogramTester();
 
   // Allowlist NoScript for https_url()'s' host.

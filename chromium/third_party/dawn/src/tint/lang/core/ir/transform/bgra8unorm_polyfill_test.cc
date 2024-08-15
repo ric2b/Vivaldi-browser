@@ -72,14 +72,14 @@ TEST_F(IR_Bgra8UnormPolyfillTest, NoModify_ModuleScopeVariable_Rgba) {
     auto* value = b.FunctionParam("value", ty.vec4<f32>());
     func->SetParams({value, coords});
     b.Append(func->Block(), [&] {
-        auto* load = b.Load(var->Result());
+        auto* load = b.Load(var->Result(0));
         b.Call(ty.void_(), core::BuiltinFn::kTextureStore, load, coords, value);
         b.Return(func);
     });
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%value:vec4<f32>, %coords:vec2<u32>):void -> %b2 {
@@ -145,14 +145,14 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopeVariable) {
     auto* value = b.FunctionParam("value", ty.vec4<f32>());
     func->SetParams({value, coords});
     b.Append(func->Block(), [&] {
-        auto* load = b.Load(var->Result());
+        auto* load = b.Load(var->Result(0));
         b.Call(ty.void_(), core::BuiltinFn::kTextureStore, load, coords, value);
         b.Return(func);
     });
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%value:vec4<f32>, %coords:vec2<u32>):void -> %b2 {
@@ -165,7 +165,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopeVariable) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%value:vec4<f32>, %coords:vec2<u32>):void -> %b2 {
@@ -252,7 +252,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopePassedToUserFunction) {
         auto* value = b.FunctionParam("value", ty.vec4<f32>());
         foo->SetParams({coords, value});
         b.Append(foo->Block(), [&] {
-            auto* load = b.Load(var->Result());
+            auto* load = b.Load(var->Result(0));
             b.Call(ty.void_(), bar, load, coords, value);
             b.Return(foo);
         });
@@ -260,7 +260,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopePassedToUserFunction) {
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %bar = func(%texture_1:texture_storage_2d<bgra8unorm, write>, %coords:vec2<u32>, %value:vec4<f32>):void -> %b2 {  # %texture_1: 'texture'
@@ -279,7 +279,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopePassedToUserFunction) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %bar = func(%texture_1:texture_storage_2d<rgba8unorm, write>, %coords:vec2<u32>, %value:vec4<f32>):void -> %b2 {  # %texture_1: 'texture'
@@ -342,9 +342,9 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopePassedToUserFunction_MultipleTextur
         auto* value = b.FunctionParam("value", ty.vec4<f32>());
         foo->SetParams({coords, value});
         b.Append(foo->Block(), [&] {
-            auto* load_a = b.Load(var_a->Result());
-            auto* load_b = b.Load(var_b->Result());
-            auto* load_c = b.Load(var_c->Result());
+            auto* load_a = b.Load(var_a->Result(0));
+            auto* load_b = b.Load(var_b->Result(0));
+            auto* load_c = b.Load(var_c->Result(0));
             b.Call(ty.void_(), bar, load_a, load_b, load_c, coords, value);
             b.Return(foo);
         });
@@ -352,9 +352,9 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopePassedToUserFunction_MultipleTextur
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture_a:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 2)
-  %texture_b:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 3)
-  %texture_c:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 4)
+  %texture_a:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 2)
+  %texture_b:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 3)
+  %texture_c:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 4)
 }
 
 %bar = func(%texture_a_1:texture_storage_2d<bgra8unorm, write>, %texture_b_1:texture_storage_2d<bgra8unorm, write>, %texture_b_2:texture_storage_2d<bgra8unorm, write>, %coords:vec2<u32>, %value:vec4<f32>):void -> %b2 {  # %texture_a_1: 'texture_a', %texture_b_1: 'texture_b', %texture_b_2: 'texture_b'
@@ -377,9 +377,9 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ModuleScopePassedToUserFunction_MultipleTextur
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture_a:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
-  %texture_b:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 3)
-  %texture_c:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 4)
+  %texture_a:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 2)
+  %texture_b:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 3)
+  %texture_c:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 4)
 }
 
 %bar = func(%texture_a_1:texture_storage_2d<rgba8unorm, write>, %texture_b_1:texture_storage_2d<rgba8unorm, write>, %texture_b_2:texture_storage_2d<rgba8unorm, write>, %coords:vec2<u32>, %value:vec4<f32>):void -> %b2 {  # %texture_a_1: 'texture_a', %texture_b_1: 'texture_b', %texture_b_2: 'texture_b'
@@ -440,11 +440,11 @@ TEST_F(IR_Bgra8UnormPolyfillTest, MutipleUsesOfOneTexture) {
         auto* value = b.FunctionParam("value", ty.vec4<f32>());
         foo->SetParams({coords, value});
         b.Append(foo->Block(), [&] {
-            auto* load_a = b.Load(var_a->Result());
+            auto* load_a = b.Load(var_a->Result(0));
             b.Call(ty.void_(), core::BuiltinFn::kTextureStore, load_a, coords, value);
-            auto* load_b = b.Load(var_a->Result());
+            auto* load_b = b.Load(var_a->Result(0));
             b.Call(ty.void_(), bar, load_b, coords, value);
-            auto* load_c = b.Load(var_a->Result());
+            auto* load_c = b.Load(var_a->Result(0));
             b.Call(ty.void_(), bar, load_c, coords, value);
             b.Return(foo);
         });
@@ -452,7 +452,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, MutipleUsesOfOneTexture) {
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %bar = func(%texture_1:texture_storage_2d<bgra8unorm, write>, %coords:vec2<u32>, %value:vec4<f32>):void -> %b2 {  # %texture_1: 'texture'
@@ -477,7 +477,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, MutipleUsesOfOneTexture) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %bar = func(%texture_1:texture_storage_2d<rgba8unorm, write>, %coords:vec2<u32>, %value:vec4<f32>):void -> %b2 {  # %texture_1: 'texture'
@@ -527,14 +527,14 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ArrayedImage) {
     auto* value = b.FunctionParam("value", ty.vec4<f32>());
     func->SetParams({value, coords});
     b.Append(func->Block(), [&] {
-        auto* load = b.Load(var->Result());
+        auto* load = b.Load(var->Result(0));
         b.Call(ty.void_(), core::BuiltinFn::kTextureStore, load, coords, index, value);
         b.Return(func);
     });
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d_array<bgra8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d_array<bgra8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%value:vec4<f32>, %coords:vec2<u32>):void -> %b2 {
@@ -547,7 +547,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, ArrayedImage) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d_array<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d_array<rgba8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%value:vec4<f32>, %coords:vec2<u32>):void -> %b2 {
@@ -578,7 +578,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureDimensions) {
 
     auto* func = b.Function("foo", ty.vec2<u32>());
     b.Append(func->Block(), [&] {
-        auto* load = b.Load(var->Result());
+        auto* load = b.Load(var->Result(0));
         auto* dims = b.Call(ty.vec2<u32>(), core::BuiltinFn::kTextureDimensions, load);
         b.Return(func, dims);
         mod.SetName(dims, "dims");
@@ -586,7 +586,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureDimensions) {
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<bgra8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func():vec2<u32> -> %b2 {
@@ -599,7 +599,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureDimensions) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func():vec2<u32> -> %b2 {
@@ -631,7 +631,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureLoad) {
     auto* coords = b.FunctionParam("coords", ty.vec2<u32>());
     func->SetParams({coords});
     b.Append(func->Block(), [&] {
-        auto* load = b.Load(var->Result());
+        auto* load = b.Load(var->Result(0));
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureLoad, load, coords);
         b.Return(func, result);
         mod.SetName(result, "result");
@@ -639,7 +639,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureLoad) {
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<bgra8unorm, read>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<bgra8unorm, read>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%coords:vec2<u32>):vec4<f32> -> %b2 {
@@ -652,7 +652,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureLoad) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, read>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, read>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%coords:vec2<u32>):vec4<f32> -> %b2 {
@@ -685,7 +685,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureLoadAndStore) {
     auto* coords = b.FunctionParam("coords", ty.vec2<u32>());
     func->SetParams({coords});
     b.Append(func->Block(), [&] {
-        auto* load = b.Load(var->Result());
+        auto* load = b.Load(var->Result(0));
         auto* result = b.Call(ty.vec4<f32>(), core::BuiltinFn::kTextureLoad, load, coords);
         b.Call(ty.void_(), core::BuiltinFn::kTextureStore, load, coords, result);
         b.Return(func);
@@ -694,7 +694,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureLoadAndStore) {
 
     auto* src = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<bgra8unorm, read_write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<bgra8unorm, read_write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%coords:vec2<u32>):void -> %b2 {
@@ -708,7 +708,7 @@ TEST_F(IR_Bgra8UnormPolyfillTest, TextureLoadAndStore) {
 )";
     auto* expect = R"(
 %b1 = block {  # root
-  %texture:ptr<handle, texture_storage_2d<rgba8unorm, read_write>, read_write> = var @binding_point(1, 2)
+  %texture:ptr<handle, texture_storage_2d<rgba8unorm, read_write>, read> = var @binding_point(1, 2)
 }
 
 %foo = func(%coords:vec2<u32>):void -> %b2 {

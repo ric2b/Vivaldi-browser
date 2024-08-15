@@ -80,11 +80,7 @@ const char kProhibitedByPoliciesError[] =
 
 LazyContextId LazyContextIdFor(content::BrowserContext* browser_context,
                                const Extension* extension) {
-  if (BackgroundInfo::HasLazyBackgroundPage(extension))
-    return LazyContextId(browser_context, extension->id());
-
-  DCHECK(BackgroundInfo::IsServiceWorkerBased(extension));
-  return LazyContextId(browser_context, extension->id(), extension->url());
+  return LazyContextId::ForExtension(browser_context, extension);
 }
 
 const Extension* GetExtensionForNativeAppChannel(
@@ -190,7 +186,7 @@ struct MessageService::MessageChannel {
 
 struct MessageService::OpenChannelParams {
   ChannelEndpoint source;
-  absl::optional<base::Value::Dict> source_tab;
+  std::optional<base::Value::Dict> source_tab;
   ExtensionApiFrameIdMap::FrameData source_frame;
   std::unique_ptr<MessagePort> receiver;
   PortId receiver_port_id;
@@ -198,14 +194,14 @@ struct MessageService::OpenChannelParams {
   std::unique_ptr<MessagePort> opener_port;
   std::string target_extension_id;
   GURL source_url;
-  absl::optional<url::Origin> source_origin;
+  std::optional<url::Origin> source_origin;
   mojom::ChannelType channel_type;
   std::string channel_name;
   bool include_guest_process_info;
 
   // Takes ownership of receiver.
   OpenChannelParams(const ChannelEndpoint& source,
-                    absl::optional<base::Value::Dict> source_tab,
+                    std::optional<base::Value::Dict> source_tab,
                     const ExtensionApiFrameIdMap::FrameData& source_frame,
                     MessagePort* receiver,
                     const PortId& receiver_port_id,
@@ -213,7 +209,7 @@ struct MessageService::OpenChannelParams {
                     std::unique_ptr<MessagePort> opener_port,
                     const std::string& target_extension_id,
                     const GURL& source_url,
-                    absl::optional<url::Origin> source_origin,
+                    std::optional<url::Origin> source_origin,
                     mojom::ChannelType channel_type,
                     const std::string& channel_name,
                     bool include_guest_process_info)
@@ -258,6 +254,9 @@ class MessageServiceFactory
       public MessageServiceApi {
  public:
   MessageServiceFactory() { MessageServiceApi::SetMessageService(this); }
+  ~MessageServiceFactory() override {
+    MessageServiceApi::SetMessageService(nullptr);
+  }
 
   void OpenChannelToExtension(
       content::BrowserContext* context,
@@ -439,10 +438,10 @@ void MessageService::OpenChannelToExtension(
   bool include_guest_process_info = false;
 
   // Get information about the opener's tab, if applicable.
-  absl::optional<base::Value::Dict> source_tab =
+  std::optional<base::Value::Dict> source_tab =
       messaging_delegate_->MaybeGetTabInfo(source_contents);
 
-  absl::optional<url::Origin> source_origin;
+  std::optional<url::Origin> source_origin;
   if (source_render_frame_host)
     source_origin = source_render_frame_host->GetLastCommittedOrigin();
 
@@ -681,7 +680,7 @@ void MessageService::OpenChannelToTabImpl(
   std::unique_ptr<OpenChannelParams> params =
       std::make_unique<OpenChannelParams>(
           source,
-          absl::nullopt,  // No source_tab, as there is no frame.
+          std::nullopt,  // No source_tab, as there is no frame.
           ExtensionApiFrameIdMap::FrameData(), receiver.release(),
           receiver_port_id, MessagingEndpoint::ForExtension(extension_id),
           std::move(opener_port), extension_id,

@@ -69,7 +69,7 @@ g.test('large_dispatch')
       .beginSubcases()
       // 0 == x axis; 1 == y axis; 2 == z axis.
       .combine('largeDimension', [0, 1, 2] as const)
-      .expand('workgroupSize', p => [1, 2, 8, 32, 'maximum'] as const)
+      .expand('workgroupSize', () => [1, 2, 8, 32, 'maximum'] as const)
   )
   .fn(t => {
     // The output storage buffer is filled with this value.
@@ -153,7 +153,7 @@ g.test('large_dispatch')
     pass.end();
     t.device.queue.submit([encoder.finish()]);
 
-    t.expectGPUBufferValuesPassCheck(dst, a => checkElementsEqualGenerated(a, i => val), {
+    t.expectGPUBufferValuesPassCheck(dst, a => checkElementsEqualGenerated(a, _i => val), {
       type: Uint32Array,
       typedLength: bufferLength,
     });

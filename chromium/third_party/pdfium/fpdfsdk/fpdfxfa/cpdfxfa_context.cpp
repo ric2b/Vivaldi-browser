@@ -17,7 +17,7 @@
 #include "core/fpdfapi/parser/cpdf_seekablemultistream.h"
 #include "core/fxcodec/jpeg/jpeg_progressive_decoder.h"
 #include "core/fxcrt/autonuller.h"
-#include "core/fxcrt/fixed_zeroed_data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/xml/cfx_xmldocument.h"
 #include "core/fxcrt/xml/cfx_xmlparser.h"
@@ -364,17 +364,16 @@ WideString CPDFXFA_Context::Response(const WideString& wsQuestion,
     return WideString();
 
   constexpr int kMaxWideChars = 1024;
-  FixedZeroedDataVector<uint16_t> buffer(kMaxWideChars);
-  pdfium::span<uint16_t> buffer_span = buffer.writable_span();
+  constexpr int kMaxBytes = kMaxWideChars * sizeof(uint16_t);
+  auto buffer = FixedSizeDataVector<uint8_t>::Zeroed(kMaxBytes);
+  pdfium::span<uint8_t> buffer_span = buffer.span();
   int byte_length = m_pFormFillEnv->JS_appResponse(
-      wsQuestion, wsTitle, wsDefaultAnswer, WideString(), bMark,
-      pdfium::as_writable_bytes(buffer_span));
+      wsQuestion, wsTitle, wsDefaultAnswer, WideString(), bMark, buffer_span);
   if (byte_length <= 0)
     return WideString();
 
-  buffer_span = buffer_span.first(
-      std::min<size_t>(kMaxWideChars, byte_length / sizeof(uint16_t)));
-  return WideString::FromUTF16LE(buffer_span.data(), buffer_span.size());
+  buffer_span = buffer_span.first(std::min<size_t>(kMaxBytes, byte_length));
+  return WideString::FromUTF16LE(buffer_span);
 }
 
 RetainPtr<IFX_SeekableReadStream> CPDFXFA_Context::DownloadURL(
@@ -443,8 +442,7 @@ void CPDFXFA_Context::SendPostSaveToXFADoc() {
   CXFA_FFWidgetHandler* pWidgetHandler = pXFADocView->GetWidgetHandler();
   CXFA_ReadyNodeIterator it(pXFADocView->GetRootSubform());
   while (CXFA_Node* pNode = it.MoveToNext()) {
-    CXFA_EventParam preParam;
-    preParam.m_eType = XFA_EVENT_PostSave;
+    CXFA_EventParam preParam(XFA_EVENT_PostSave);
     preParam.m_bTargeted = false;
     pWidgetHandler->ProcessEvent(pNode, &preParam);
   }
@@ -464,8 +462,7 @@ void CPDFXFA_Context::SendPreSaveToXFADoc(
   CXFA_FFWidgetHandler* pWidgetHandler = pXFADocView->GetWidgetHandler();
   CXFA_ReadyNodeIterator it(pXFADocView->GetRootSubform());
   while (CXFA_Node* pNode = it.MoveToNext()) {
-    CXFA_EventParam preParam;
-    preParam.m_eType = XFA_EVENT_PreSave;
+    CXFA_EventParam preParam(XFA_EVENT_PreSave);
     preParam.m_bTargeted = false;
     pWidgetHandler->ProcessEvent(pNode, &preParam);
   }

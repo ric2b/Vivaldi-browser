@@ -108,9 +108,16 @@ bool CachedMatchedProperties::DependenciesEqual(
     return false;
   }
   if (computed_style->HasVariableReferenceFromNonInheritedProperty()) {
-    if (parent_computed_style->InheritedVariables() !=
-        state.ParentStyle()->InheritedVariables()) {
-      return false;
+    if (RuntimeEnabledFeatures::CSSMPCImprovementsEnabled()) {
+      if (!base::ValuesEquivalent(parent_computed_style->InheritedVariables(),
+                                  state.ParentStyle()->InheritedVariables())) {
+        return false;
+      }
+    } else {
+      if (parent_computed_style->InheritedVariables() !=
+          state.ParentStyle()->InheritedVariables()) {
+        return false;
+      }
     }
   }
 
@@ -191,6 +198,10 @@ bool CachedMatchedProperties::operator==(
     }
     if (properties[i].types_.is_inline_style !=
         matched_properties_types[i].is_inline_style) {
+      return false;
+    }
+    if (properties[i].types_.is_fallback_style !=
+        matched_properties_types[i].is_fallback_style) {
       return false;
     }
   }

@@ -9,15 +9,13 @@
 
 #include "main.h"
 
-template<typename Scalar> void smallVectors()
-{
+template <typename Scalar>
+void smallVectors() {
   typedef Matrix<Scalar, 1, 2> V2;
   typedef Matrix<Scalar, 3, 1> V3;
   typedef Matrix<Scalar, 1, 4> V4;
   typedef Matrix<Scalar, Dynamic, 1> VX;
-  Scalar x1 = internal::random<Scalar>(),
-         x2 = internal::random<Scalar>(),
-         x3 = internal::random<Scalar>(),
+  Scalar x1 = internal::random<Scalar>(), x2 = internal::random<Scalar>(), x3 = internal::random<Scalar>(),
          x4 = internal::random<Scalar>();
   V2 v2(x1, x2);
   V3 v3(x1, x2, x3);
@@ -39,11 +37,10 @@ template<typename Scalar> void smallVectors()
   VERIFY_RAISES_ASSERT(VX(3, 2))
 }
 
-EIGEN_DECLARE_TEST(smallvectors)
-{
-  for(int i = 0; i < g_repeat; i++) {
-    CALL_SUBTEST(smallVectors<int>() );
-    CALL_SUBTEST(smallVectors<float>() );
-    CALL_SUBTEST(smallVectors<double>() );
+EIGEN_DECLARE_TEST(smallvectors) {
+  for (int i = 0; i < g_repeat; i++) {
+    CALL_SUBTEST(smallVectors<int>());
+    CALL_SUBTEST(smallVectors<float>());
+    CALL_SUBTEST(smallVectors<double>());
   }
 }

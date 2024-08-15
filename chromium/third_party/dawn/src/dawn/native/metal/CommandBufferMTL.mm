@@ -32,6 +32,7 @@
 #include "dawn/native/Commands.h"
 #include "dawn/native/DynamicUploader.h"
 #include "dawn/native/ExternalTexture.h"
+#include "dawn/native/Queue.h"
 #include "dawn/native/RenderBundle.h"
 #include "dawn/native/metal/BindGroupMTL.h"
 #include "dawn/native/metal/BufferMTL.h"
@@ -43,6 +44,7 @@
 #include "dawn/native/metal/SamplerMTL.h"
 #include "dawn/native/metal/TextureMTL.h"
 #include "dawn/native/metal/UtilsMetal.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 #include <tint/tint.h>
 
@@ -179,8 +181,7 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
     NSRef<MTLRenderPassDescriptor> descriptorRef = [MTLRenderPassDescriptor renderPassDescriptor];
     MTLRenderPassDescriptor* descriptor = descriptorRef.Get();
 
-    for (ColorAttachmentIndex attachment :
-         IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
+    for (auto attachment : IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
         uint8_t i = static_cast<uint8_t>(attachment);
         auto& attachmentInfo = renderPass->colorAttachments[attachment];
 
@@ -205,6 +206,8 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
         descriptor.colorAttachments[i].texture = colorAttachment.texture.Get();
         descriptor.colorAttachments[i].level = colorAttachment.baseMipLevel;
         descriptor.colorAttachments[i].slice = colorAttachment.baseArrayLayer;
+        // We'd validated that depthSlice must be undefined and set to 0 for 2d texture views.
+        descriptor.colorAttachments[i].depthPlane = attachmentInfo.depthSlice;
 
         bool hasResolveTarget = attachmentInfo.resolveTarget != nullptr;
         if (hasResolveTarget) {
@@ -325,6 +328,80 @@ NSRef<MTLRenderPassDescriptor> CreateMTLRenderPassDescriptor(
     if (@available(macOS 11.0, iOS 14.0, *)) {
         if (useCounterSamplingAtStageBoundary) {
             SetSampleBufferAttachments(descriptor, renderPass);
+        }
+    }
+
+    if (renderPass->attachmentState->HasPixelLocalStorage()) {
+        const std::vector<wgpu::TextureFormat>& storageAttachmentSlots =
+            renderPass->attachmentState->GetStorageAttachmentSlots();
+        std::vector<ColorAttachmentIndex> storageAttachmentPacking =
+            renderPass->attachmentState->ComputeStorageAttachmentPackingInColorAttachments();
+
+        for (size_t attachment = 0; attachment < storageAttachmentSlots.size(); attachment++) {
+            uint8_t i = static_cast<uint8_t>(storageAttachmentPacking[attachment]);
+            MTLRenderPassColorAttachmentDescriptor* mtlAttachment = descriptor.colorAttachments[i];
+
+            // For implicit pixel local storage slots use transient memoryless textures.
+            if (storageAttachmentSlots[attachment] == wgpu::TextureFormat::Undefined) {
+                NSRef<MTLTextureDescriptor> texDescRef = AcquireNSRef([MTLTextureDescriptor new]);
+                MTLTextureDescriptor* texDesc = texDescRef.Get();
+                texDesc.textureType = MTLTextureType2D;
+                texDesc.width = renderPass->width;
+                texDesc.height = renderPass->height;
+                texDesc.usage = MTLTextureUsageRenderTarget;
+                if (@available(macOS 11.0, iOS 10.0, *)) {
+                    texDesc.storageMode = MTLStorageModeMemoryless;
+                } else {
+                    DAWN_UNREACHABLE();
+                }
+                texDesc.pixelFormat =
+                    MetalPixelFormat(device, RenderPipelineBase::kImplicitPLSSlotFormat);
+
+                NSPRef<id<MTLTexture>> implicitAttachment =
+                    AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:texDesc]);
+
+                mtlAttachment.loadAction = MTLLoadActionClear;
+                mtlAttachment.clearColor = MTLClearColorMake(0, 0, 0, 0);
+                mtlAttachment.storeAction = MTLStoreActionDontCare;
+                mtlAttachment.texture = *implicitAttachment;
+                continue;
+            }
+
+            auto& attachmentInfo = renderPass->storageAttachments[attachment];
+
+            switch (attachmentInfo.loadOp) {
+                case wgpu::LoadOp::Clear:
+                    mtlAttachment.loadAction = MTLLoadActionClear;
+                    mtlAttachment.clearColor =
+                        MTLClearColorMake(attachmentInfo.clearColor.r, attachmentInfo.clearColor.g,
+                                          attachmentInfo.clearColor.b, attachmentInfo.clearColor.a);
+                    break;
+
+                case wgpu::LoadOp::Load:
+                    mtlAttachment.loadAction = MTLLoadActionLoad;
+                    break;
+
+                case wgpu::LoadOp::Undefined:
+                    DAWN_UNREACHABLE();
+                    break;
+            }
+
+            switch (attachmentInfo.storeOp) {
+                case wgpu::StoreOp::Store:
+                    mtlAttachment.storeAction = MTLStoreActionStore;
+                    break;
+                case wgpu::StoreOp::Discard:
+                    mtlAttachment.storeAction = MTLStoreActionDontCare;
+                    break;
+                case wgpu::StoreOp::Undefined:
+                    DAWN_UNREACHABLE();
+                    break;
+            }
+
+            auto storageAttachment = ToBackend(attachmentInfo.storage)->GetAttachmentInfo();
+            mtlAttachment.texture = storageAttachment.texture.Get();
+            mtlAttachment.level = storageAttachment.baseMipLevel;
+            mtlAttachment.slice = storageAttachment.baseArrayLayer;
         }
     }
 
@@ -581,7 +658,7 @@ class BindGroupTracker : public BindGroupTrackerBase<true, uint64_t> {
         ApplyBindGroupImpl(nullptr, encoder, std::forward<Args&&>(args)...);
     }
 
-    StorageBufferLengthTracker* mLengthTracker;
+    raw_ptr<StorageBufferLengthTracker> mLengthTracker;
 };
 
 // Keeps track of the dirty vertex buffer values so they can be lazily applied when we know
@@ -610,14 +687,13 @@ class VertexBufferTracker {
         // When a new pipeline is bound we must set all the vertex buffers again because
         // they might have been offset by the pipeline layout, and they might be packed
         // differently from the previous pipeline.
-        mDirtyVertexBuffers |= pipeline->GetVertexBufferSlotsUsed();
+        mDirtyVertexBuffers |= pipeline->GetVertexBuffersUsed();
     }
 
     void Apply(id<MTLRenderCommandEncoder> encoder,
                RenderPipeline* pipeline,
                bool enableVertexPulling) {
-        const auto& vertexBuffersToApply =
-            mDirtyVertexBuffers & pipeline->GetVertexBufferSlotsUsed();
+        const auto& vertexBuffersToApply = mDirtyVertexBuffers & pipeline->GetVertexBuffersUsed();
 
         for (VertexBufferSlot slot : IterateBitSet(vertexBuffersToApply)) {
             uint32_t metalIndex = pipeline->GetMtlVertexBufferIndex(slot);
@@ -639,12 +715,12 @@ class VertexBufferTracker {
 
   private:
     // All the indices in these arrays are Dawn vertex buffer indices
-    ityp::bitset<VertexBufferSlot, kMaxVertexBuffers> mDirtyVertexBuffers;
-    ityp::array<VertexBufferSlot, id<MTLBuffer>, kMaxVertexBuffers> mVertexBuffers;
-    ityp::array<VertexBufferSlot, NSUInteger, kMaxVertexBuffers> mVertexBufferOffsets;
-    ityp::array<VertexBufferSlot, uint32_t, kMaxVertexBuffers> mVertexBufferBindingSizes;
+    VertexBufferMask mDirtyVertexBuffers;
+    PerVertexBuffer<id<MTLBuffer>> mVertexBuffers;
+    PerVertexBuffer<NSUInteger> mVertexBufferOffsets;
+    PerVertexBuffer<uint32_t> mVertexBufferBindingSizes;
 
-    StorageBufferLengthTracker* mLengthTracker;
+    raw_ptr<StorageBufferLengthTracker> mLengthTracker;
 };
 
 }  // anonymous namespace
@@ -668,6 +744,8 @@ void RecordCopyBufferToTexture(CommandRecordingContext* commandContext,
     for (const auto& copyInfo : splitCopies) {
         uint64_t bufferOffset = copyInfo.bufferOffset;
         switch (texture->GetDimension()) {
+            case wgpu::TextureDimension::Undefined:
+                DAWN_UNREACHABLE();
             case wgpu::TextureDimension::e1D: {
                 [commandContext->EnsureBlit()
                          copyFromBuffer:mtlBuffer
@@ -746,16 +824,18 @@ MaybeError CommandBuffer::FillCommands(CommandRecordingContext* commandContext) 
         for (size_t i = 0; i < scope.textures.size(); ++i) {
             Texture* texture = ToBackend(scope.textures[i]);
 
-            // Clear subresources that are not render attachments. Render attachments will be
-            // cleared in RecordBeginRenderPass by setting the loadop to clear when the texture
-            // subresource has not been initialized before the render pass.
-            DAWN_TRY(scope.textureUsages[i].Iterate([&](const SubresourceRange& range,
-                                                        wgpu::TextureUsage usage) -> MaybeError {
-                if (usage & ~wgpu::TextureUsage::RenderAttachment) {
-                    DAWN_TRY(texture->EnsureSubresourceContentInitialized(commandContext, range));
-                }
-                return {};
-            }));
+            // Clear subresources that are not attachments. Attachments will be cleared in
+            // RecordBeginRenderPass by setting the loadop to clear when the texture subresource
+            // has not been initialized before the render pass.
+            DAWN_TRY(scope.textureSyncInfos[i].Iterate(
+                [&](const SubresourceRange& range, const TextureSyncInfo& syncInfo) -> MaybeError {
+                    if (syncInfo.usage & ~(wgpu::TextureUsage::RenderAttachment |
+                                           wgpu::TextureUsage::StorageAttachment)) {
+                        DAWN_TRY(
+                            texture->EnsureSubresourceContentInitialized(commandContext, range));
+                    }
+                    return {};
+                }));
         }
         for (BufferBase* bufferBase : scope.buffers) {
             ToBackend(bufferBase)->EnsureDataInitialized(commandContext);
@@ -920,6 +1000,8 @@ MaybeError CommandBuffer::FillCommands(CommandRecordingContext* commandContext) 
                     uint64_t bufferOffset = copyInfo.bufferOffset;
 
                     switch (texture->GetDimension()) {
+                        case wgpu::TextureDimension::Undefined:
+                            DAWN_UNREACHABLE();
                         case wgpu::TextureDimension::e1D: {
                             [commandContext->EnsureBlit()
                                          copyFromTexture:texture->GetMTLTexture(src.aspect)
@@ -1166,9 +1248,10 @@ MaybeError CommandBuffer::FillCommands(CommandRecordingContext* commandContext) 
                 Device* device = ToBackend(GetDevice());
 
                 UploadHandle uploadHandle;
-                DAWN_TRY_ASSIGN(uploadHandle, device->GetDynamicUploader()->Allocate(
-                                                  size, device->GetPendingCommandSerial(),
-                                                  kCopyBufferToBufferOffsetAlignment));
+                DAWN_TRY_ASSIGN(uploadHandle,
+                                device->GetDynamicUploader()->Allocate(
+                                    size, device->GetQueue()->GetPendingCommandSerial(),
+                                    kCopyBufferToBufferOffsetAlignment));
                 DAWN_ASSERT(uploadHandle.mappedBuffer != nullptr);
                 memcpy(uploadHandle.mappedBuffer, data, size);
 

@@ -55,6 +55,7 @@ using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::JavaRef;
+using base::android::RunRunnableAndroid;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaArrayOfStringArray;
@@ -120,7 +121,9 @@ void CreateJavaAXSnapshot(JNIEnv* env,
       env, j_view_structure_builder, j_view_structure_node, is_root,
       node->rect.x(), node->rect.y(), node->rect.width(), node->rect.height(),
       node->unclipped_rect.x(), node->unclipped_rect.y(),
-      node->unclipped_rect.width(), node->unclipped_rect.height());
+      node->unclipped_rect.width(), node->unclipped_rect.height(),
+      node->page_absolute_rect.x(), node->page_absolute_rect.y(),
+      node->page_absolute_rect.width(), node->page_absolute_rect.height());
 
   // HTML/CSS attributes.
   ScopedJavaLocalRef<jstring> j_html_tag =
@@ -492,6 +495,10 @@ void WebContentsAndroid::SetAudioMuted(JNIEnv* env, jboolean mute) {
   web_contents_->SetAudioMuted(mute);
 }
 
+jboolean WebContentsAndroid::IsAudioMuted(JNIEnv* env) {
+  return web_contents_->IsAudioMuted();
+}
+
 jboolean WebContentsAndroid::FocusLocationBarByDefault(JNIEnv* env) {
   return web_contents_->FocusLocationBarByDefault();
 }
@@ -861,7 +868,7 @@ void WebContentsAndroid::OnScaleFactorChanged(JNIEnv* env) {
     // |SendScreenRects()| indirectly calls GetViewSize() that asks Java layer.
     web_contents_->SendScreenRects();
     rwhva->SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
-                                       absl::nullopt);
+                                       std::nullopt);
   }
 }
 

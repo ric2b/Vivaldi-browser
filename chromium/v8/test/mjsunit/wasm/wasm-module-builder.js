@@ -264,6 +264,8 @@ const kWasmOpcodes = {
   'If': 0x04,
   'Else': 0x05,
   'Try': 0x06,
+  'TryTable': 0x1f,
+  'ThrowRef': 0x0a,
   'Catch': 0x07,
   'Throw': 0x08,
   'Rethrow': 0x09,
@@ -953,6 +955,12 @@ let kTrapIllegalCast = 15;
 let kAtomicWaitOk = 0;
 let kAtomicWaitNotEqual = 1;
 let kAtomicWaitTimedOut = 2;
+
+// Exception handling with exnref.
+let kCatchNoRef = 0x0;
+let kCatchRef = 0x1;
+let kCatchAllNoRef = 0x2;
+let kCatchAllRef = 0x3;
 
 let kTrapMsgs = [
   'unreachable',                                    // --
@@ -2129,8 +2137,8 @@ class WasmModuleBuilder {
     return Array.from(this.toBuffer(debug));
   }
 
-  instantiate(ffi) {
-    let module = this.toModule();
+  instantiate(ffi, options) {
+    let module = this.toModule(options);
     let instance = new WebAssembly.Instance(module, ffi);
     return instance;
   }
@@ -2140,8 +2148,8 @@ class WasmModuleBuilder {
         .then(({module, instance}) => instance);
   }
 
-  toModule(debug = false) {
-    return new WebAssembly.Module(this.toBuffer(debug));
+  toModule(options, debug = false) {
+    return new WebAssembly.Module(this.toBuffer(debug), options);
   }
 }
 
@@ -2274,4 +2282,18 @@ let [wasmBrOnCast, wasmBrOnCastFail] = (function() {
 
 function getOpcodeName(opcode) {
   return globalThis.kWasmOpcodeNames?.[opcode] ?? 'unknown';
+}
+
+// Make a wasm export "promising" using JS Promise Integration.
+function ToPromising(wasm_export) {
+  let sig = wasm_export.type();
+  assertTrue(sig.parameters.length > 0);
+  assertEquals('externref', sig.parameters[0]);
+  let wrapper_sig = {
+    parameters: sig.parameters.slice(1),
+    results: ['externref']
+  };
+  return new WebAssembly.Function(
+      wrapper_sig, wasm_export, {promising: 'first'});
+
 }

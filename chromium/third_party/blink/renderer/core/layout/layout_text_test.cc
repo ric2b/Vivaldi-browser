@@ -95,8 +95,9 @@ class LayoutTextTest : public RenderingTest {
     // accept out-of-bound offset but |IsAfterNonCollapsedCharacter()| doesn't.
     result[0] = layout_text.IsBeforeNonCollapsedCharacter(offset) ? 'B' : '-';
     result[1] = layout_text.ContainsCaretOffset(offset) ? 'C' : '-';
-    if (offset <= layout_text.TextLength())
+    if (offset <= layout_text.TransformedTextLength()) {
       result[2] = layout_text.IsAfterNonCollapsedCharacter(offset) ? 'A' : '-';
+    }
     return result;
   }
   static constexpr unsigned kIncludeSnappedWidth = 1;
@@ -593,7 +594,7 @@ TEST_F(LayoutTextTest, ContainsCaretOffsetWithTrailingSpace3) {
   const auto& text_a = *GetLayoutTextById("target");
   const auto& layout_br1 = *To<LayoutText>(text_a.NextSibling());
   const auto& text_space = *To<LayoutText>(layout_br1.NextSibling());
-  EXPECT_EQ(1u, text_space.TextLength());
+  EXPECT_EQ(1u, text_space.TransformedTextLength());
   const auto& layout_br2 = *To<LayoutText>(text_space.NextSibling());
   const auto& text_b = *To<LayoutText>(layout_br2.NextSibling());
   // Note: the last <br> doesn't have layout object.
@@ -1072,7 +1073,7 @@ TEST_F(LayoutTextTest, PhysicalLinesBoundingBoxTextCombine) {
   //         LayoutText {#text} at (15,0) size 100x100
   //           text run at (15,0) width 100: "a"
   //         LayoutInline {C} at (15,100) size 100x100
-  //           LayoutNGTextCombine (anonymous) at (15,100) size 100x100
+  //           LayoutTextCombine (anonymous) at (15,100) size 100x100
   //             LayoutText {#text} at (-5,0) size 110x100
   //               text run at (0,0) width 500: "01234"
   //         LayoutText {#text} at (15,200) size 100x100
@@ -1081,7 +1082,7 @@ TEST_F(LayoutTextTest, PhysicalLinesBoundingBoxTextCombine) {
 
   EXPECT_EQ(PhysicalRect(15, 0, 100, 100), text_a.PhysicalLinesBoundingBox());
   // Note: Width 110 comes from |100px * kTextCombineMargin| in
-  // |LayoutNGTextCombine::DesiredWidth()|.
+  // |LayoutTextCombine::DesiredWidth()|.
   EXPECT_EQ(PhysicalRect(-5, 0, 110, 100),
             text_01234.PhysicalLinesBoundingBox());
   EXPECT_EQ(PhysicalRect(15, 200, 100, 100), text_b.PhysicalLinesBoundingBox());

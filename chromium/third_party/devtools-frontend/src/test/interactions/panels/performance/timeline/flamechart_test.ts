@@ -10,9 +10,7 @@ import {assertElementScreenshotUnchanged} from '../../../../shared/screenshots.j
 import {loadComponentDocExample, preloadForCodeCoverage} from '../../../helpers/shared.js';
 
 describe('FlameChart', function() {
-  // TODO(crbug.com/1492405): Improve perf panel trace load speed to
-  // prevent timeout bump.
-  this.timeout(20_000);
+
   preloadForCodeCoverage('performance_panel/flamechart.html');
 
   async function getFlameChartContainerWhenReady(selector: string): Promise<puppeteer.ElementHandle<HTMLDivElement>> {
@@ -33,7 +31,7 @@ describe('FlameChart', function() {
     await assertElementScreenshotUnchanged(flameChart, 'performance/flame_chart_1.png', 1);
   });
 
-  itScreenshot('can add candy striping to events', async () => {
+  itScreenshot('can add decorations to events', async () => {
     await loadComponentDocExample('performance_panel/flamechart.html');
     const flameChart = await getFlameChartContainerWhenReady('#container2');
     await assertElementScreenshotUnchanged(flameChart, 'performance/flame_chart_candystripe.png', 0.5);

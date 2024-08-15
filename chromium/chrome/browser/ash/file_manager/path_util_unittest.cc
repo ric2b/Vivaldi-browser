@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/file_manager/path_util.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "ash/components/arc/arc_features.h"
@@ -62,7 +63,6 @@
 #include "content/public/test/browser_task_environment.h"
 #include "storage/browser/file_system/external_mount_points.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
@@ -733,9 +733,8 @@ class FileManagerPathUtilConvertUrlTest : public testing::Test {
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh> primary_profile_;
-  raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh>
-      secondary_profile_;
+  raw_ptr<TestingProfile, DanglingUntriaged> primary_profile_;
+  raw_ptr<TestingProfile, DanglingUntriaged> secondary_profile_;
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
   base::FilePath drive_mount_point_;
   base::FilePath crostini_mount_point_;
@@ -1287,13 +1286,13 @@ TEST_F(FileManagerPathUtilTest, GetDisplayablePathTest) {
     EXPECT_EQ(base::FilePath(test.expected),
               *GetDisplayablePath(profile_.get(), base::FilePath(test.path)));
   }
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             GetDisplayablePath(profile_.get(),
                                base::FilePath("/non_existent/mount")));
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             GetDisplayablePath(profile_.get(),
                                base::FilePath("/mount_path/share_cache")));
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             GetDisplayablePath(profile_.get(),
                                base::FilePath("/mount_path/testing")));
 }

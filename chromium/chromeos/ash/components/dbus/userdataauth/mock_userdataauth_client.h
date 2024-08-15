@@ -42,11 +42,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
                RemoveCallback callback),
               (override));
   MOCK_METHOD(void,
-              CheckKey,
-              (const ::user_data_auth::CheckKeyRequest& request,
-               CheckKeyCallback callback),
-              (override));
-  MOCK_METHOD(void,
               StartMigrateToDircrypto,
               (const ::user_data_auth::StartMigrateToDircryptoRequest& request,
                StartMigrateToDircryptoCallback callback),
@@ -85,6 +80,11 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
               CreatePersistentUser,
               (const ::user_data_auth::CreatePersistentUserRequest& request,
                CreatePersistentUserCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              RestoreDeviceKey,
+              (const ::user_data_auth::RestoreDeviceKeyRequest& request,
+               RestoreDeviceKeyCallback callback),
               (override));
   MOCK_METHOD(void,
               PreparePersistentVault,
@@ -161,6 +161,11 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
               GetArcDiskFeatures,
               (const ::user_data_auth::GetArcDiskFeaturesRequest& request,
                GetArcDiskFeaturesCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              GetRecoverableKeyStores,
+              (const ::user_data_auth::GetRecoverableKeyStoresRequest& request,
+               GetRecoverableKeyStoresCallback),
               (override));
 };
 

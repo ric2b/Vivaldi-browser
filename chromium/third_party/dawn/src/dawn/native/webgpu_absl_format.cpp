@@ -165,6 +165,22 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     return {true};
 }
 
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConvert(
+    const ShaderModuleEntryPoint* value,
+    const absl::FormatConversionSpec& spec,
+    absl::FormatSink* s) {
+    if (value == nullptr) {
+        s->Append("[null]");
+        return {true};
+    }
+    s->Append(absl::StrFormat("[EntryPoint \"%s\"", value->name));
+    if (value->defaulted) {
+        s->Append(" (defaulted)");
+    }
+    s->Append("]");
+    return {true};
+}
+
 //
 // Objects
 //
@@ -214,10 +230,10 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
 
     s->Append("{ colorFormats: [");
 
-    ColorAttachmentIndex nextColorIndex(uint8_t(0));
+    ColorAttachmentIndex nextColorIndex{};
 
     bool needsComma = false;
-    for (ColorAttachmentIndex i : IterateBitSet(value->GetColorAttachmentsMask())) {
+    for (auto i : IterateBitSet(value->GetColorAttachmentsMask())) {
         if (needsComma) {
             s->Append(", ");
         }

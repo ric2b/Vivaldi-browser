@@ -115,6 +115,8 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
   if (@available(macOS 10.14, *)) {
     SystemDarkModeChanged(CFNotificationCenterGetDistributedCenter(), this,
       CFSTR("AppleColorPreferencesChangedNotification"), nullptr, nullptr);
+    ColorPreferencesChanged(CFNotificationCenterGetDistributedCenter(), this,
+      CFSTR("AppleColorPreferencesChangedNotification"), nullptr, nullptr);
   }
 
   if (@available(macos 12.0.1, *)) {

@@ -39,8 +39,9 @@ using bubble_anchor_util::GetPageInfoAnchorRect;
 // extension pages. Instead of the |PageInfoBubbleView|, the
 // |InternalPageInfoBubbleView| is displayed.
 class InternalPageInfoBubbleView : public PageInfoBubbleViewBase {
+  METADATA_HEADER(InternalPageInfoBubbleView, PageInfoBubbleViewBase)
+
  public:
-  METADATA_HEADER(InternalPageInfoBubbleView);
   // If |anchor_view| is nullptr, or has no Widget, |parent_window| may be
   // provided to ensure this bubble is closed when the parent closes.
   InternalPageInfoBubbleView(views::View* anchor_view,
@@ -119,7 +120,7 @@ InternalPageInfoBubbleView::InternalPageInfoBubbleView(
 
 InternalPageInfoBubbleView::~InternalPageInfoBubbleView() = default;
 
-BEGIN_METADATA(InternalPageInfoBubbleView, PageInfoBubbleViewBase)
+BEGIN_METADATA(InternalPageInfoBubbleView)
 END_METADATA
 
 PageInfoBubbleView::PageInfoBubbleView(
@@ -229,7 +230,7 @@ void PageInfoBubbleView::OpenPermissionPage(ContentSettingsType type) {
   presenter_->RecordPageInfoAction(
       PageInfo::PageInfoAction::PAGE_INFO_PERMISSION_DIALOG_OPENED);
   std::unique_ptr<views::View> permissions_page_view =
-      view_factory_->CreatePermissionPageView(type);
+      view_factory_->CreatePermissionPageView(type, web_contents());
   permissions_page_view->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_CURRENT_VIEW);
   page_container_->SwitchToPage(std::move(permissions_page_view));
@@ -244,11 +245,8 @@ void PageInfoBubbleView::OpenAdPersonalizationPage() {
   ad_personalization_page_view->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_CURRENT_VIEW);
   page_container_->SwitchToPage(std::move(ad_personalization_page_view));
-  const auto header_id =
-      base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings4)
-          ? IDS_PAGE_INFO_AD_PRIVACY_HEADER
-          : IDS_PAGE_INFO_AD_PERSONALIZATION_HEADER;
-  AnnouncePageOpened(l10n_util::GetStringUTF16(header_id));
+  AnnouncePageOpened(
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_AD_PRIVACY_HEADER));
 }
 
 void PageInfoBubbleView::OpenCookiesPage() {
@@ -311,13 +309,7 @@ void PageInfoBubbleView::ChildPreferredSizeChanged(views::View* child) {
 void PageInfoBubbleView::AnnouncePageOpened(std::u16string announcement) {
   // Announce that the subpage was opened to inform the user about the changes
   // in the UI.
-#if BUILDFLAG(IS_MAC)
-  GetViewAccessibility().OverrideRole(ax::mojom::Role::kAlert);
-  GetViewAccessibility().OverrideName(announcement);
-  NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
-#else
   GetViewAccessibility().AnnounceText(announcement);
-#endif
 
   // Focus the back button by default to ensure that focus is set when new
   // content is displayed.
@@ -347,3 +339,6 @@ void ShowPageInfoDialogImpl(Browser* browser,
   bubble->SetArrow(configuration.bubble_arrow);
   bubble->GetWidget()->Show();
 }
+
+BEGIN_METADATA(PageInfoBubbleView)
+END_METADATA

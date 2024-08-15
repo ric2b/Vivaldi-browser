@@ -63,11 +63,11 @@ class StagingDescriptorAllocator;
 class Device final : public d3d::Device {
   public:
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
-                                             const DeviceDescriptor* descriptor,
+                                             const UnpackedPtr<DeviceDescriptor>& descriptor,
                                              const TogglesState& deviceToggles);
     ~Device() override;
 
-    MaybeError Initialize(const DeviceDescriptor* descriptor);
+    MaybeError Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor);
 
     ResultOrError<Ref<CommandBufferBase>> CreateCommandBuffer(
         CommandEncoder* encoder,
@@ -76,20 +76,14 @@ class Device final : public d3d::Device {
     MaybeError TickImpl() override;
 
     ID3D12Device* GetD3D12Device() const;
-    ComPtr<ID3D12CommandQueue> GetCommandQueue() const;
-    ID3D12SharingContract* GetSharingContract() const;
 
     ComPtr<ID3D12CommandSignature> GetDispatchIndirectSignature() const;
     ComPtr<ID3D12CommandSignature> GetDrawIndirectSignature() const;
     ComPtr<ID3D12CommandSignature> GetDrawIndexedIndirectSignature() const;
 
-    CommandAllocatorManager* GetCommandAllocatorManager() const;
     MutexProtected<ResidencyManager>& GetResidencyManager() const;
 
     const PlatformFunctions* GetFunctions() const;
-
-    ResultOrError<CommandRecordingContext*> GetPendingCommandContext(
-        Device::SubmitMode submitMode = Device::SubmitMode::Normal);
 
     MaybeError ClearBufferToZero(CommandRecordingContext* commandContext,
                                  BufferBase* destination,
@@ -98,12 +92,7 @@ class Device final : public d3d::Device {
 
     const D3D12DeviceInfo& GetDeviceInfo() const;
 
-    MaybeError NextSerial();
-    MaybeError WaitForSerial(ExecutionSerial serial);
-
     void ReferenceUntilUnused(ComPtr<IUnknown> object);
-
-    MaybeError ExecutePendingCommandContext();
 
     MaybeError CopyFromStagingToBufferImpl(BufferBase* source,
                                            uint64_t sourceOffset,
@@ -150,14 +139,14 @@ class Device final : public d3d::Device {
 
     MutexProtected<StagingDescriptorAllocator>& GetDepthStencilViewAllocator() const;
 
-    ResultOrError<Ref<d3d::Fence>> CreateFence(
+    ResultOrError<FenceAndSignalValue> CreateFence(
         const d3d::ExternalImageDXGIFenceDescriptor* descriptor) override;
     ResultOrError<std::unique_ptr<d3d::ExternalImageDXGIImpl>> CreateExternalImageDXGIImplImpl(
         const ExternalImageDescriptor* descriptor) override;
 
-    Ref<TextureBase> CreateD3DExternalTexture(const TextureDescriptor* descriptor,
+    Ref<TextureBase> CreateD3DExternalTexture(const UnpackedPtr<TextureDescriptor>& descriptor,
                                               ComPtr<IUnknown> d3dTexture,
-                                              std::vector<Ref<d3d::Fence>> waitFences,
+                                              std::vector<FenceAndSignalValue> waitFences,
                                               bool isSwapChainTexture,
                                               bool isInitialized) override;
 
@@ -179,12 +168,6 @@ class Device final : public d3d::Device {
     // Dawn APIs
     void SetLabelImpl() override;
 
-    // TODO(dawn:1413) move these methods to the d3d12::Queue.
-    void ForceEventualFlushOfCommands();
-    bool HasPendingCommands() const;
-    ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials();
-    MaybeError WaitForIdleForDestruction();
-
     // Those DXC methods are needed by d3d12::ShaderModule
     ComPtr<IDxcLibrary> GetDxcLibrary() const;
     ComPtr<IDxcCompiler3> GetDxcCompiler() const;
@@ -193,35 +176,37 @@ class Device final : public d3d::Device {
     using Base = d3d::Device;
 
     Device(AdapterBase* adapter,
-           const DeviceDescriptor* descriptor,
+           const UnpackedPtr<DeviceDescriptor>& descriptor,
            const TogglesState& deviceToggles);
 
     ResultOrError<Ref<BindGroupBase>> CreateBindGroupImpl(
         const BindGroupDescriptor* descriptor) override;
     ResultOrError<Ref<BindGroupLayoutInternalBase>> CreateBindGroupLayoutImpl(
         const BindGroupLayoutDescriptor* descriptor) override;
-    ResultOrError<Ref<BufferBase>> CreateBufferImpl(const BufferDescriptor* descriptor) override;
+    ResultOrError<Ref<BufferBase>> CreateBufferImpl(
+        const UnpackedPtr<BufferDescriptor>& descriptor) override;
     ResultOrError<Ref<PipelineLayoutBase>> CreatePipelineLayoutImpl(
-        const PipelineLayoutDescriptor* descriptor) override;
+        const UnpackedPtr<PipelineLayoutDescriptor>& descriptor) override;
     ResultOrError<Ref<QuerySetBase>> CreateQuerySetImpl(
         const QuerySetDescriptor* descriptor) override;
     ResultOrError<Ref<SamplerBase>> CreateSamplerImpl(const SamplerDescriptor* descriptor) override;
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModuleImpl(
-        const ShaderModuleDescriptor* descriptor,
+        const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
         const SwapChainDescriptor* descriptor) override;
-    ResultOrError<Ref<TextureBase>> CreateTextureImpl(const TextureDescriptor* descriptor) override;
+    ResultOrError<Ref<TextureBase>> CreateTextureImpl(
+        const UnpackedPtr<TextureDescriptor>& descriptor) override;
     ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
         TextureBase* texture,
         const TextureViewDescriptor* descriptor) override;
     Ref<ComputePipelineBase> CreateUninitializedComputePipelineImpl(
-        const ComputePipelineDescriptor* descriptor) override;
+        const UnpackedPtr<ComputePipelineDescriptor>& descriptor) override;
     Ref<RenderPipelineBase> CreateUninitializedRenderPipelineImpl(
-        const RenderPipelineDescriptor* descriptor) override;
+        const UnpackedPtr<RenderPipelineDescriptor>& descriptor) override;
     void InitializeComputePipelineAsyncImpl(Ref<ComputePipelineBase> computePipeline,
                                             WGPUCreateComputePipelineAsyncCallback callback,
                                             void* userdata) override;
@@ -244,22 +229,14 @@ class Device final : public d3d::Device {
 
     MaybeError CreateZeroBuffer();
 
-    ComPtr<ID3D12Fence> mFence;
-    HANDLE mFenceEvent = nullptr;
-
     ComPtr<ID3D12Device> mD3d12Device;  // Device is owned by adapter and will not be outlived.
-    ComPtr<ID3D12CommandQueue> mCommandQueue;
-    ComPtr<ID3D12SharingContract> mD3d12SharingContract;
 
     ComPtr<ID3D12CommandSignature> mDispatchIndirectSignature;
     ComPtr<ID3D12CommandSignature> mDrawIndirectSignature;
     ComPtr<ID3D12CommandSignature> mDrawIndexedIndirectSignature;
 
-    CommandRecordingContext mPendingCommands;
-
     MutexProtected<SerialQueue<ExecutionSerial, ComPtr<IUnknown>>> mUsedComObjectRefs;
 
-    std::unique_ptr<CommandAllocatorManager> mCommandAllocatorManager;
     std::unique_ptr<MutexProtected<ResourceAllocatorManager>> mResourceAllocatorManager;
     std::unique_ptr<MutexProtected<ResidencyManager>> mResidencyManager;
 

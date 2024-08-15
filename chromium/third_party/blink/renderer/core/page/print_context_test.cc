@@ -79,11 +79,7 @@ class MockPageContextCanvas : public SkCanvas {
   }
 
   MOCK_METHOD2(onDrawRect, void(const SkRect&, const SkPaint&));
-  MOCK_METHOD1(DrawPicture, void(const SkPicture*));
-  MOCK_METHOD1(OnDrawPicture, void(const SkPicture*));
-  MOCK_METHOD3(OnDrawPicture,
-               void(const SkPicture*, const SkMatrix*, const SkPaint*));
-  MOCK_METHOD3(DrawPicture,
+  MOCK_METHOD3(onDrawPicture,
                void(const SkPicture*, const SkMatrix*, const SkPaint*));
   MOCK_METHOD5(onDrawImage2,
                void(const SkImage*,
@@ -1031,7 +1027,7 @@ class PrintContextOOPRCanvasTest : public PrintContextTest {
         std::make_unique<ScopedAccelerated2dCanvasForTest>(true);
     std::unique_ptr<viz::TestGLES2Interface> gl_context =
         std::make_unique<viz::TestGLES2Interface>();
-    gl_context->set_supports_oop_raster(true);
+    gl_context->set_gpu_rasterization(true);
     std::unique_ptr<viz::TestContextSupport> context_support =
         std::make_unique<viz::TestContextSupport>();
     std::unique_ptr<viz::TestRasterInterface> raster_interface =

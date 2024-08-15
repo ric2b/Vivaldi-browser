@@ -1045,24 +1045,28 @@ static int streamcopy_init(const Muxer *mux, OutputStream *ost)
         }
     }
 
-    for (int i = 0; i < ist->st->nb_side_data; i++) {
-        const AVPacketSideData *sd_src = &ist->st->side_data[i];
-        uint8_t *dst_data;
+    for (int i = 0; i < ist->st->codecpar->nb_coded_side_data; i++) {
+        const AVPacketSideData *sd_src = &ist->st->codecpar->coded_side_data[i];
+        AVPacketSideData *sd_dst;
 
-        dst_data = av_stream_new_side_data(ost->st, sd_src->type, sd_src->size);
-        if (!dst_data) {
+        sd_dst = av_packet_side_data_new(&ost->st->codecpar->coded_side_data,
+                                         &ost->st->codecpar->nb_coded_side_data,
+                                         sd_src->type, sd_src->size, 0);
+        if (!sd_dst) {
             ret = AVERROR(ENOMEM);
             goto fail;
         }
-        memcpy(dst_data, sd_src->data, sd_src->size);
+        memcpy(sd_dst->data, sd_src->data, sd_src->size);
     }
 
 #if FFMPEG_ROTATION_METADATA
     if (ost->rotate_overridden) {
-        uint8_t *sd = av_stream_new_side_data(ost->st, AV_PKT_DATA_DISPLAYMATRIX,
-                                              sizeof(int32_t) * 9);
+        AVPacketSideData *sd = av_packet_side_data_new(&ost->st->codecpar->coded_side_data,
+                                                       &ost->st->codecpar->nb_coded_side_data,
+                                                       AV_PKT_DATA_DISPLAYMATRIX,
+                                                       sizeof(int32_t) * 9, 0);
         if (sd)
-            av_display_rotation_set((int32_t *)sd, -ost->rotate_override_value);
+            av_display_rotation_set((int32_t *)sd->data, -ost->rotate_override_value);
     }
 #endif
 
@@ -2178,11 +2182,11 @@ static int copy_metadata(Muxer *mux, AVFormatContext *ic,
     if (ret < 0)
         return ret;
 
-    if (type_in == 'g' || type_out == 'g' || !*outspec)
+    if (type_in == 'g' || type_out == 'g' || (!*outspec && !ic))
         *metadata_global_manual = 1;
-    if (type_in == 's' || type_out == 's' || !*outspec)
+    if (type_in == 's' || type_out == 's' || (!*outspec && !ic))
         *metadata_streams_manual = 1;
-    if (type_in == 'c' || type_out == 'c' || !*outspec)
+    if (type_in == 'c' || type_out == 'c' || (!*outspec && !ic))
         *metadata_chapters_manual = 1;
 
     /* ic is NULL when just disabling automatic mappings */
@@ -2509,8 +2513,12 @@ static int process_forced_keyframes(Muxer *mux, const OptionsContext *o)
             // parse it only for static kf timings
         } else if (!strcmp(forced_keyframes, "source")) {
             ost->kf.type = KF_FORCE_SOURCE;
+#if FFMPEG_OPT_FORCE_KF_SOURCE_NO_DROP
         } else if (!strcmp(forced_keyframes, "source_no_drop")) {
-            ost->kf.type = KF_FORCE_SOURCE_NO_DROP;
+            av_log(ost, AV_LOG_WARNING, "The 'source_no_drop' value for "
+                   "-force_key_frames is deprecated, use just 'source'\n");
+            ost->kf.type = KF_FORCE_SOURCE;
+#endif
         } else {
             int ret = parse_forced_key_frames(ost, &ost->kf, mux, forced_keyframes);
             if (ret < 0)

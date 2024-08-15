@@ -35,8 +35,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 
-enable chromium_experimental_dp4a;
-
+// [hlsl-dxc] flags: --hlsl_shader_model 64
 // fn dot4U8Packed(u32, u32) -> u32
 fn dot4U8Packed_fbed7b() {
   var arg_0 = 1u;

@@ -8,8 +8,10 @@
 #import <string>
 
 #import "base/check.h"
+#import "base/files/file_path.h"
 #import "base/functional/bind.h"
 #import "base/memory/ptr_util.h"
+#import "base/path_service.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -40,9 +42,10 @@
 #import "components/sync_device_info/local_device_info_provider.h"
 #import "components/sync_sessions/session_store.h"
 #import "components/sync_sessions/session_sync_test_helper.h"
-#import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
-#import "ios/chrome/browser/history/history_service_factory.h"
+#import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
+#import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/chrome/browser/sync/model/device_info_sync_service_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/synced_sessions/model/distant_session.h"
@@ -89,7 +92,10 @@ bool IsFakeSyncServerSetUp() {
 
 void SetUpFakeSyncServer() {
   DCHECK(!gSyncFakeServer);
-  gSyncFakeServer = new fake_server::FakeServer();
+  base::FilePath user_data_dir;
+  base::PathService::Get(ios::DIR_USER_DATA, &user_data_dir);
+  gSyncFakeServer =
+      new fake_server::FakeServer(user_data_dir.AppendASCII("FakeServer"));
   OverrideSyncNetwork(fake_server::CreateFakeServerHttpPostProviderFactory(
       gSyncFakeServer->AsWeakPtr()));
 }
@@ -101,19 +107,24 @@ void TearDownFakeSyncServer() {
   OverrideSyncNetwork(syncer::CreateHttpPostProviderFactory());
 }
 
+void ClearFakeSyncServerData() {
+  // Allow the caller to preventively clear server data.
+  if (gSyncFakeServer) {
+    gSyncFakeServer->ClearServerData();
+  }
+}
+
+void FlushFakeSyncServerToDisk() {
+  DCHECK(gSyncFakeServer);
+  gSyncFakeServer->FlushToDisk();
+}
+
 void TriggerSyncCycle(syncer::ModelType type) {
   ChromeBrowserState* browser_state =
       chrome_test_util::GetOriginalBrowserState();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForBrowserState(browser_state);
   sync_service->TriggerRefresh({type});
-}
-
-void ClearSyncServerData() {
-  // Allow the caller to preventively clear server data.
-  if (gSyncFakeServer) {
-    gSyncFakeServer->ClearServerData();
-  }
 }
 
 int GetNumberOfSyncEntities(syncer::ModelType type) {
@@ -171,7 +182,7 @@ void AddLegacyBookmarkToFakeSyncServer(std::string url,
 void AddSessionToFakeSyncServer(
     const synced_sessions::DistantSession& session) {
   std::vector<sync_pb::SessionSpecifics> specifics_list;
-  SessionID window_id = SessionID::FromSerializedValue(1);
+  SessionID window_id = SessionID::NewUnique();
   // Tab specifics.
   std::vector<SessionID> tab_list;
   sync_sessions::SessionSyncTestHelper helper;

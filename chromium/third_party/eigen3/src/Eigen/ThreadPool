@@ -15,15 +15,15 @@
 #include "src/Core/util/DisableStupidWarnings.h"
 
 /** \defgroup ThreadPool_Module ThreadPool Module
-  *
-  * This module provides 2 threadpool implementations
-  *  - a simple reference implementation
-  *  - a faster non blocking implementation
-  *
-  * \code
-  * #include <Eigen/ThreadPool>
-  * \endcode
-  */
+ *
+ * This module provides 2 threadpool implementations
+ *  - a simple reference implementation
+ *  - a faster non blocking implementation
+ *
+ * \code
+ * #include <Eigen/ThreadPool>
+ * \endcode
+ */
 
 #include <cstddef>
 #include <cstring>
@@ -75,4 +75,4 @@
 
 #include "src/Core/util/ReenableStupidWarnings.h"
 
-#endif // EIGEN_CXX11_THREADPOOL_MODULE_H
+#endif  // EIGEN_CXX11_THREADPOOL_MODULE_H

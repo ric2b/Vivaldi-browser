@@ -17,7 +17,6 @@ class View;
 namespace ash {
 
 class CalendarView;
-class ClassroomBubbleTeacherView;
 class ClassroomBubbleStudentView;
 class GlanceableTrayBubbleView;
 
@@ -41,7 +40,6 @@ class ASH_EXPORT GlanceableTrayBubble : public TrayBubbleBase {
   bool IsBubbleActive() const;
 
   views::View* GetTasksView();
-  ClassroomBubbleTeacherView* GetClassroomTeacherView();
   ClassroomBubbleStudentView* GetClassroomStudentView();
   CalendarView* GetCalendarView();
 
@@ -53,7 +51,7 @@ class ASH_EXPORT GlanceableTrayBubble : public TrayBubbleBase {
   void UpdateBubble();
 
   // Owner of this class.
-  raw_ptr<DateTray, ExperimentalAsh> tray_;
+  raw_ptr<DateTray> tray_;
 
   // Bubble wrapper that manages the bubble widget when shown.
   std::unique_ptr<TrayBubbleWrapper> bubble_wrapper_;

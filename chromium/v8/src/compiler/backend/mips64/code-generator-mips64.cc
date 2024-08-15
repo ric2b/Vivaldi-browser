@@ -290,15 +290,19 @@ FPUCondition FlagsConditionToConditionCmpFPU(bool* predicate,
       *predicate = false;
       return EQ;
     case kUnsignedLessThan:
+    case kFloatLessThan:
       *predicate = true;
       return OLT;
     case kUnsignedGreaterThanOrEqual:
+    case kFloatGreaterThanOrEqual:
       *predicate = false;
       return OLT;
     case kUnsignedLessThanOrEqual:
+    case kFloatLessThanOrEqual:
       *predicate = true;
       return OLE;
     case kUnsignedGreaterThan:
+    case kFloatGreaterThan:
       *predicate = false;
       return OLE;
     case kUnorderedEqual:
@@ -552,8 +556,8 @@ void CodeGenerator::BailoutIfDeoptimized() {
   __ Lwu(kScratchReg, FieldMemOperand(kScratchReg, Code::kFlagsOffset));
   __ And(kScratchReg, kScratchReg,
          Operand(1 << Code::kMarkedForDeoptimizationBit));
-  __ Jump(BUILTIN_CODE(isolate(), CompileLazyDeoptimizedCode),
-          RelocInfo::CODE_TARGET, ne, kScratchReg, Operand(zero_reg));
+  __ TailCallBuiltin(Builtin::kCompileLazyDeoptimizedCode, ne, kScratchReg,
+                     Operand(zero_reg));
 }
 
 // Assembles an instruction after register allocation, producing machine code.
@@ -766,8 +770,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         // We don't actually want to generate a pile of code for this, so just
         // claim there is a stack frame, without generating one.
         FrameScope scope(masm(), StackFrame::NO_FRAME_TYPE);
-        __ Call(isolate()->builtins()->code_handle(Builtin::kAbortCSADcheck),
-                RelocInfo::CODE_TARGET);
+        __ CallBuiltin(Builtin::kAbortCSADcheck);
       }
       __ stop();
       break;
@@ -775,7 +778,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ DebugBreak();
       break;
     case kArchComment:
-      __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)));
+      __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)),
+                       SourceLocation());
       break;
     case kArchNop:
     case kArchThrowTerminator:
@@ -790,9 +794,18 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchRet:
       AssembleReturn(instr->InputAt(0));
       break;
+#if V8_ENABLE_WEBASSEMBLY
     case kArchStackPointer:
-    case kArchSetStackPointer:
-      UNREACHABLE();
+      // The register allocator expects an allocatable register for the output,
+      // we cannot use sp directly.
+      __ mov(i.OutputRegister(), sp);
+      break;
+    case kArchSetStackPointer: {
+      DCHECK(instr->InputAt(0)->IsRegister());
+      __ mov(sp, i.InputRegister(0));
+      break;
+    }
+#endif  // V8_ENABLE_WEBASSEMBLY
     case kArchStackPointerGreaterThan: {
       Register lhs_register = sp;
       uint32_t offset;
@@ -4133,7 +4146,16 @@ void CodeGenerator::AssembleConstructFrame() {
         // accessors.
         __ Push(kWasmInstanceRegister);
       }
-      if (call_descriptor->IsWasmCapiFunction()) {
+      if (call_descriptor->IsWasmImportWrapper()) {
+        // If the wrapper is running on a secondary stack, it will switch to the
+        // central stack and fill these slots with the central stack pointer and
+        // secondary stack limit. Otherwise the slots remain empty.
+        static_assert(WasmImportWrapperFrameConstants::kCentralStackSPOffset ==
+                      -24);
+        static_assert(
+            WasmImportWrapperFrameConstants::kSecondaryStackLimitOffset == -32);
+        __ Push(zero_reg, zero_reg);
+      } else if (call_descriptor->IsWasmCapiFunction()) {
         // Reserve space for saving the PC later.
         __ Dsubu(sp, sp, Operand(kSystemPointerSize));
       }

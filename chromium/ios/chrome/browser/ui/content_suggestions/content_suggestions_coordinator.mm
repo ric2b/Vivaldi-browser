@@ -22,28 +22,26 @@
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
-#import "ios/chrome/browser/discover_feed/discover_feed_service.h"
-#import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_cache_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/favicon/large_icon_cache.h"
-#import "ios/chrome/browser/ntp/home/features.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/ntp/set_up_list_item_type.h"
-#import "ios/chrome/browser/ntp/set_up_list_prefs.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_prefs.h"
 #import "ios/chrome/browser/ntp_tiles/model/ios_most_visited_sites_factory.h"
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_factory.h"
-#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -61,28 +59,29 @@
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_menu_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack_half_sheet_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack_half_sheet_table_view_controller.h"
-#import "ios/chrome/browser/ui/content_suggestions/magic_stack_parcel_list_half_sheet_table_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/magic_stack_parcel_list_half_sheet_table_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/types.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/utils.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_content_notification_promo_coordinator.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_content_notification_promo_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_default_browser_promo_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_default_browser_promo_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_show_more_view_controller.h"
@@ -95,8 +94,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_metrics_delegate.h"
-#import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/sharing/sharing_params.h"
+#import "ios/chrome/browser/ui/push_notification/notifications_confirmation_presenter.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_browser_agent.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
@@ -108,12 +106,12 @@
 #import "url/gurl.h"
 
 @interface ContentSuggestionsCoordinator () <
-    ContentSuggestionsMenuProvider,
     ContentSuggestionsViewControllerAudience,
     MagicStackHalfSheetTableViewControllerDelegate,
-    SafetyCheckViewDelegate,
-    SetUpListDefaultBrowserPromoCoordinatorDelegate,
     MagicStackParcelListHalfSheetTableViewControllerDelegate,
+    NotificationsConfirmationPresenter,
+    SetUpListContentNotificationPromoCoordinatorDelegate,
+    SetUpListDefaultBrowserPromoCoordinatorDelegate,
     SetUpListViewDelegate>
 
 @property(nonatomic, strong)
@@ -121,8 +119,6 @@
 @property(nonatomic, assign) BOOL contentSuggestionsEnabled;
 // Authentication Service for the user's signed-in state.
 @property(nonatomic, assign) AuthenticationService* authService;
-// Coordinator in charge of handling sharing use cases.
-@property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
 // Redefined to not be readonly.
 @property(nonatomic, strong)
     ContentSuggestionsMediator* contentSuggestionsMediator;
@@ -140,6 +136,10 @@
   // The coordinator that displays the Default Browser Promo for the Set Up
   // List.
   SetUpListDefaultBrowserPromoCoordinator* _defaultBrowserPromoCoordinator;
+
+  // The coordinator that displays the Content Notification Promo for the Set Up
+  // List.
+  SetUpListContentNotificationPromoCoordinator* _contentNotificationCoordinator;
 
   // The coordinator used to present an action sheet for the Set Up List menu.
   ActionSheetCoordinator* _actionSheetCoordinator;
@@ -232,9 +232,13 @@
                     shoppingService:shoppingService
                             browser:self.browser];
   self.contentSuggestionsMediator.delegate = self.delegate;
+  self.contentSuggestionsMediator.presentationDelegate = self;
   self.contentSuggestionsMediator.promosManager = promosManager;
   self.contentSuggestionsMediator.contentSuggestionsMetricsRecorder =
       self.contentSuggestionsMetricsRecorder;
+  self.contentSuggestionsMediator.actionFactory = [[BrowserActionFactory alloc]
+      initWithBrowser:self.browser
+             scenario:kMenuScenarioHistogramMostVisitedEntry];
   if (base::FeatureList::IsEnabled(segmentation_platform::features::
                                        kSegmentationPlatformIosModuleRanker)) {
     self.contentSuggestionsMediator.segmentationService =
@@ -256,8 +260,11 @@
       [[ContentSuggestionsViewController alloc] init];
   self.contentSuggestionsViewController.suggestionCommandHandler =
       self.contentSuggestionsMediator;
+  self.contentSuggestionsViewController.imageDataSource =
+      self.contentSuggestionsMediator;
   self.contentSuggestionsViewController.audience = self;
-  self.contentSuggestionsViewController.menuProvider = self;
+  self.contentSuggestionsViewController.menuProvider =
+      self.contentSuggestionsMediator;
   self.contentSuggestionsViewController.urlLoadingBrowserAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
   self.contentSuggestionsViewController.contentSuggestionsMetricsRecorder =
@@ -287,8 +294,6 @@
   self.contentSuggestionsMetricsRecorder = nil;
   self.contentSuggestionsViewController.audience = nil;
   self.contentSuggestionsViewController = nil;
-  [self.sharingCoordinator stop];
-  self.sharingCoordinator = nil;
   [_defaultBrowserPromoCoordinator stop];
   _defaultBrowserPromoCoordinator = nil;
   [_magicStackHalfSheetMediator disconnect];
@@ -332,8 +337,7 @@
 }
 
 - (UIEdgeInsets)safeAreaInsetsForDiscoverFeed {
-  return [SceneStateBrowserAgent::FromBrowser(self.browser)
-              ->GetSceneState()
+  return [self.browser->GetSceneState()
               .window.rootViewController.view safeAreaInsets];
 }
 
@@ -350,6 +354,7 @@
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
+    case ContentSuggestionsModuleType::kSetUpListContentNotification:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
       [self.contentSuggestionsMediator disableSetUpList];
       break;
@@ -464,90 +469,6 @@
   return self.contentSuggestionsViewController.view;
 }
 
-#pragma mark - ContentSuggestionsMenuProvider
-
-- (UIContextMenuConfiguration*)contextMenuConfigurationForItem:
-                                   (ContentSuggestionsMostVisitedItem*)item
-                                                      fromView:(UIView*)view {
-  __weak __typeof(self) weakSelf = self;
-
-  UIContextMenuActionProvider actionProvider =
-      ^(NSArray<UIMenuElement*>* suggestedActions) {
-        if (!weakSelf) {
-          // Return an empty menu.
-          return [UIMenu menuWithTitle:@"" children:@[]];
-        }
-
-        ContentSuggestionsCoordinator* strongSelf = weakSelf;
-
-        // Record that this context menu was shown to the user.
-        RecordMenuShown(MenuScenarioHistogram::kMostVisitedEntry);
-
-        BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
-            initWithBrowser:strongSelf.browser
-                   scenario:MenuScenarioHistogram::kMostVisitedEntry];
-
-        NSMutableArray<UIMenuElement*>* menuElements =
-            [[NSMutableArray alloc] init];
-
-        CGPoint centerPoint = [view.superview convertPoint:view.center
-                                                    toView:nil];
-
-        [menuElements addObject:[actionFactory actionToOpenInNewTabWithBlock:^{
-                        [weakSelf.contentSuggestionsMediator
-                            openNewTabWithMostVisitedItem:item
-                                                incognito:NO
-                                                  atIndex:item.index
-                                                fromPoint:centerPoint];
-                      }]];
-
-        UIAction* incognitoAction =
-            [actionFactory actionToOpenInNewIncognitoTabWithBlock:^{
-              [weakSelf.contentSuggestionsMediator
-                  openNewTabWithMostVisitedItem:item
-                                      incognito:YES
-                                        atIndex:item.index
-                                      fromPoint:centerPoint];
-            }];
-
-        if (IsIncognitoModeDisabled(
-                self.browser->GetBrowserState()->GetPrefs())) {
-          // Disable the "Open in Incognito" option if the incognito mode is
-          // disabled.
-          incognitoAction.attributes = UIMenuElementAttributesDisabled;
-        }
-
-        [menuElements addObject:incognitoAction];
-
-        if (base::ios::IsMultipleScenesSupported()) {
-          UIAction* newWindowAction = [actionFactory
-              actionToOpenInNewWindowWithURL:item.URL
-                              activityOrigin:
-                                  WindowActivityContentSuggestionsOrigin];
-          [menuElements addObject:newWindowAction];
-        }
-
-        [menuElements addObject:[actionFactory actionToCopyURL:item.URL]];
-
-        [menuElements addObject:[actionFactory actionToShareWithBlock:^{
-                        [weakSelf shareURL:item.URL
-                                     title:item.title
-                                  fromView:view];
-                      }]];
-
-        [menuElements addObject:[actionFactory actionToRemoveWithBlock:^{
-                        [weakSelf.contentSuggestionsMediator
-                            removeMostVisited:item];
-                      }]];
-
-        return [UIMenu menuWithTitle:@"" children:menuElements];
-      };
-  return
-      [UIContextMenuConfiguration configurationWithIdentifier:nil
-                                              previewProvider:nil
-                                               actionProvider:actionProvider];
-}
-
 #pragma mark - SafetyCheckViewDelegate
 
 // Called when a Safety Check item is selected by the user. Depending on the
@@ -557,52 +478,44 @@
   CHECK(IsSafetyCheckMagicStackEnabled());
 
   [self.NTPMetricsDelegate safetyCheckOpened];
+  Browser* browser = self.browser;
   [self.contentSuggestionsMediator
       logMagicStackEngagementForType:ContentSuggestionsModuleType::
                                          kSafetyCheck];
 
   IOSChromeSafetyCheckManager* safetyCheckManager =
       IOSChromeSafetyCheckManagerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+          browser->GetBrowserState());
+
+  id<ApplicationCommands> applicationHandler =
+      HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands);
+  id<ApplicationSettingsCommands> settingsHandler = HandlerForProtocol(
+      browser->GetCommandDispatcher(), ApplicationSettingsCommands);
 
   switch (type) {
     case SafetyCheckItemType::kUpdateChrome: {
       const GURL& chrome_upgrade_url =
           safetyCheckManager->GetChromeAppUpgradeUrl();
-
-      HandleSafetyCheckUpdateChromeTap(
-          chrome_upgrade_url,
-          HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                             ApplicationCommands));
-
+      HandleSafetyCheckUpdateChromeTap(chrome_upgrade_url, applicationHandler);
       break;
     }
     case SafetyCheckItemType::kPassword: {
       std::vector<password_manager::CredentialUIEntry> credentials =
           safetyCheckManager->GetInsecureCredentials();
-
-      HandleSafetyCheckPasswordTap(
-          credentials, HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                                          ApplicationCommands));
-
+      HandleSafetyCheckPasswordTap(credentials, applicationHandler,
+                                   settingsHandler);
       break;
     }
     case SafetyCheckItemType::kSafeBrowsing:
-      [HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                          ApplicationSettingsCommands)
-          showSafeBrowsingSettings];
-
+      [settingsHandler showSafeBrowsingSettings];
       break;
     case SafetyCheckItemType::kAllSafe:
     case SafetyCheckItemType::kRunning:
     case SafetyCheckItemType::kDefault:
-      [HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                          ApplicationCommands)
-          showAndStartSafetyCheckInHalfSheet:YES
-                                    referrer:password_manager::
-                                                 PasswordCheckReferrer::
-                                                     kSafetyCheckMagicStack];
-
+      password_manager::PasswordCheckReferrer referrer =
+          password_manager::PasswordCheckReferrer::kSafetyCheckMagicStack;
+      [settingsHandler showAndStartSafetyCheckInHalfSheet:YES
+                                                 referrer:referrer];
       break;
   }
 }
@@ -637,6 +550,9 @@
         break;
       case SetUpListItemType::kAutofill:
         [weakSelf showCredentialProviderPromo];
+        break;
+      case SetUpListItemType::kContentNotification:
+        [weakSelf showContentNotificationBottomSheet];
         break;
       case SetUpListItemType::kFollow:
       case SetUpListItemType::kAllSet:
@@ -775,6 +691,21 @@
                                   completion:nil];
 }
 
+- (void)showContentNotificationBottomSheet {
+  // Stop the coordinator if it is already running. If the user swipes to
+  // dismiss a previous instance and then clicks the item again the
+  // previous instance may not have been stopped yet due to the animation.
+  [_contentNotificationCoordinator stop];
+  _contentNotificationCoordinator =
+      [[SetUpListContentNotificationPromoCoordinator alloc]
+          initWithBaseViewController:[self viewController]
+                             browser:self.browser
+                         application:[UIApplication sharedApplication]];
+  _contentNotificationCoordinator.delegate = self;
+  _contentNotificationCoordinator.messagePresenter = self;
+  [_contentNotificationCoordinator start];
+}
+
 #pragma mark - SetUpListDefaultBrowserPromoCoordinatorDelegate
 
 - (void)setUpListDefaultBrowserPromoDidFinish:(BOOL)success {
@@ -782,11 +713,43 @@
   _defaultBrowserPromoCoordinator = nil;
 }
 
+#pragma mark - SetUpListContentNotificationPromoCoordinatorDelegate
+
+- (void)setUpListContentNotificationPromoDidFinish {
+  [_contentNotificationCoordinator stop];
+  _contentNotificationCoordinator = nil;
+}
+
+#pragma mark - NotificationsConfirmationPresenter
+
+- (void)presentNotificationsConfirmationMessage {
+  id<SnackbarCommands> snackbarHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), SnackbarCommands);
+  __weak __typeof(self) weakSelf = self;
+  [snackbarHandler
+      showSnackbarWithMessage:l10n_util::GetNSString(
+                                  IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_TITLE)
+                   buttonText:
+                       l10n_util::GetNSString(
+                           IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_ACTION_MANAGE)
+                messageAction:^{
+                  [weakSelf.contentSuggestionsMetricsRecorder
+                      recordContentNotificationSnackbarEvent:
+                          ContentNotificationSnackbarEvent::
+                              kActionButtonTapped];
+                  [weakSelf showNotificationSettings];
+                }
+             completionAction:nil];
+
+  [self.contentSuggestionsMetricsRecorder
+      recordContentNotificationSnackbarEvent:ContentNotificationSnackbarEvent::
+                                                 kShown];
+}
+
 #pragma mark - Helpers
 
 - (void)configureStartSurfaceIfNeeded {
-  SceneState* scene =
-      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
+  SceneState* scene = self.browser->GetSceneState();
   if (!NewTabPageTabHelper::FromWebState(self.webState)
            ->ShouldShowStartSurface()) {
     return;
@@ -811,23 +774,6 @@
     StartSurfaceRecentTabBrowserAgent::FromBrowser(self.browser)
         ->AddObserver(_startSurfaceObserver.get());
   }
-}
-
-// Triggers the URL sharing flow for the given `URL` and `title`, with the
-// origin `view` representing the UI component for that URL.
-- (void)shareURL:(const GURL&)URL
-           title:(NSString*)title
-        fromView:(UIView*)view {
-  SharingParams* params =
-      [[SharingParams alloc] initWithURL:URL
-                                   title:title
-                                scenario:SharingScenario::MostVisitedEntry];
-  self.sharingCoordinator = [[SharingCoordinator alloc]
-      initWithBaseViewController:self.contentSuggestionsViewController
-                         browser:self.browser
-                          params:params
-                      originView:view];
-  [self.sharingCoordinator start];
 }
 
 // Presents the parcel tracking alert modal.
@@ -867,6 +813,12 @@
                  style:UIAlertActionStyleCancel];
 
   [_parcelTrackingAlertCoordinator start];
+}
+
+// Display the notification settings.
+- (void)showNotificationSettings {
+  [HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                      ApplicationSettingsCommands) showNotificationsSettings];
 }
 
 // Dismisses the parcel tracking alert modal.

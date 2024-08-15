@@ -39,13 +39,10 @@ extern const char kMediaBackgrounded[];
 // The user opened the Global Media Controls dialog.
 extern const char kGlobalMediaControlsOpened[];
 
-// All the events declared below are the string names of deferred onboarding
-// events for the Focus Mode feature.
-
-// The user has opened a Focus Mode window.
-extern const char kFocusModeOpened[];
-// All conditions for show Focus Mode IPH were met.
-extern const char kFocusModeConditionsMet[];
+// A side panel has been pinned.
+extern const char kSidePanelPinned[];
+// A side panel has been opened from the app menu.
+extern const char kSidePanelFromMenuShown[];
 
 // The side search panel was automatically triggered.
 extern const char kSideSearchAutoTriggered[];
@@ -79,7 +76,7 @@ extern const char kFocusHelpBubbleAcceleratorPromoRead[];
 extern const char kBatterySaverDialogShown[];
 
 // The user has opened the high efficiency page action chip
-extern const char kHighEfficiencyDialogShown[];
+extern const char kMemorySaverDialogShown[];
 
 // Extensions menu is opened when any extension has access to the current site.
 extern const char kExtensionsMenuOpenedWhileExtensionHasAccess[];
@@ -203,11 +200,36 @@ extern const char kDefaultBrowserVideoPromoConditionsMet[];
 // The user has triggered the Lens button in the Omnibox keyboard.
 extern const char kLensButtonKeyboardUsed[];
 
+// The omnibox position choice promo has been shown.
+extern const char kOmniboxPositionPromoShown[];
+
 // The user has triggered Parcel Tracking.
 extern const char kParcelTrackingTriggered[];
 
 // The user has tracked a parcel.
 extern const char kParcelTracked[];
+
+// The user has more than one gesture to refresh a page in iOS. This includes
+// but not limited to re-typing the URL in omnibox and refreshing from context
+// menu.
+extern const char kIOSMultiGestureRefreshUsed[];
+
+// The user has used the pull-to-refresh feature in iOS.
+extern const char kIOSPullToRefreshUsed[];
+
+// The user has tapped "incognito" on the page control in the tab grid.
+extern const char kIOSIncognitoPageControlTapped[];
+
+// The user has swiped left from regular tab grid to the incognito tab grid.
+extern const char kIOSSwipeLeftForIncognitoUsed[];
+
+// The user has met a condition that makes the Enhanced Safe Browsing
+// inline and blue-dot promos eligible to be displayed.
+extern const char kEnhancedSafeBrowsingPromoCriterionMet[];
+
+// The user has tapped on the 'X' button to remove the Enhanced Safe Browsing
+// inline promo from the settings menu.
+extern const char kEnhancedSafeBrowsingInlinePromoClosed[];
 
 #endif  // BUILDFLAG(IS_IOS)
 

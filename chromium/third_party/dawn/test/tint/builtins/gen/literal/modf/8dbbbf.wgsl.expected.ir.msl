@@ -1,0 +1,20 @@
+#include <metal_stdlib>
+using namespace metal;
+struct modf_result_f16 {
+  half fract;
+  half whole;
+};
+
+void modf_8dbbbf() {
+  modf_result_f16 res = modf_result_f16{.fract=-0.5h, .whole=-1.0h};
+}
+vertex float4 vertex_main() {
+  modf_8dbbbf();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  modf_8dbbbf();
+}
+kernel void compute_main() {
+  modf_8dbbbf();
+}

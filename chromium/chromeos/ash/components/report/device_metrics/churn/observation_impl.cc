@@ -40,9 +40,12 @@ void ObservationImpl::Run(base::OnceCallback<void()> callback) {
   callback_ = std::move(callback);
 
   if (!IsDevicePingRequired()) {
+    utils::RecordIsDevicePingRequired(utils::PsmUseCase::kObservation, false);
     std::move(callback_).Run();
     return;
   }
+
+  utils::RecordIsDevicePingRequired(utils::PsmUseCase::kObservation, true);
 
   // Perform check membership if the local state pref has default value.
   // This is done to avoid duplicate check in if the device pinged already.
@@ -61,9 +64,11 @@ base::WeakPtr<ObservationImpl> ObservationImpl::GetWeakPtr() {
 }
 
 void ObservationImpl::CheckMembershipOprf() {
-  SetPsmRlweClient(kPsmUseCase, GetPsmIdentifiersToQuery());
+  PsmClientManager* psm_client_manager = GetParams()->GetPsmClientManager();
 
-  if (!GetPsmRlweClient()) {
+  psm_client_manager->SetPsmRlweClient(kPsmUseCase, GetPsmIdentifiersToQuery());
+
+  if (!psm_client_manager->GetPsmRlweClient()) {
     LOG(ERROR) << "Check membership failed since the PSM RLWE client could "
                << "not be initialized.";
     std::move(callback_).Run();
@@ -71,7 +76,7 @@ void ObservationImpl::CheckMembershipOprf() {
   }
 
   // Generate PSM Oprf request body.
-  const auto status_or_oprf_request = GetPsmRlweClient()->CreateOprfRequest();
+  const auto status_or_oprf_request = psm_client_manager->CreateOprfRequest();
   if (!status_or_oprf_request.ok()) {
     LOG(ERROR) << "Failed to create OPRF request.";
     std::move(callback_).Run();
@@ -142,9 +147,11 @@ void ObservationImpl::OnCheckMembershipOprfComplete(
 
 void ObservationImpl::CheckMembershipQuery(
     const psm_rlwe::PrivateMembershipRlweOprfResponse& oprf_response) {
+  PsmClientManager* psm_client_manager = GetParams()->GetPsmClientManager();
+
   // Generate PSM Query request body.
   const auto status_or_query_request =
-      GetPsmRlweClient()->CreateQueryRequest(oprf_response);
+      psm_client_manager->CreateQueryRequest(oprf_response);
   if (!status_or_query_request.ok()) {
     LOG(ERROR) << "Failed to create Query request.";
     std::move(callback_).Run();
@@ -210,7 +217,7 @@ void ObservationImpl::OnCheckMembershipQueryComplete(
   psm_rlwe::PrivateMembershipRlweQueryResponse query_response =
       psm_query_response.rlwe_query_response();
   auto status_or_response =
-      GetPsmRlweClient()->ProcessQueryResponse(query_response);
+      GetParams()->GetPsmClientManager()->ProcessQueryResponse(query_response);
 
   if (!status_or_response.ok()) {
     LOG(ERROR) << "Failed to process query response.";
@@ -248,7 +255,7 @@ void ObservationImpl::OnCheckMembershipQueryComplete(
 }
 
 void ObservationImpl::CheckIn() {
-  absl::optional<FresnelImportDataRequest> import_request =
+  std::optional<FresnelImportDataRequest> import_request =
       GenerateImportRequestBody();
   if (!import_request.has_value()) {
     LOG(ERROR) << "Failed to create the import request body.";
@@ -310,7 +317,7 @@ ObservationImpl::GetPsmIdentifiersToQuery() {
   return query_psm_ids;
 }
 
-absl::optional<FresnelImportDataRequest>
+std::optional<FresnelImportDataRequest>
 ObservationImpl::GenerateImportRequestBody() {
   FresnelImportDataRequest import_request;
   import_request.set_use_case(kPsmUseCase);
@@ -334,13 +341,13 @@ ObservationImpl::GenerateImportRequestBody() {
   if (!local_state->GetBoolean(
           prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0)) {
     FresnelImportData* import_data = import_request.add_import_data();
-    absl::optional<FresnelImportData> period_0_data =
+    std::optional<FresnelImportData> period_0_data =
         GenerateObservationImportData(0);
 
     if (!period_0_data.has_value()) {
       LOG(ERROR) << "Failed to generate import data request body since period 0"
                  << " could not be generated. ";
-      return absl::nullopt;
+      return std::nullopt;
     }
     *import_data = period_0_data.value();
   }
@@ -348,13 +355,13 @@ ObservationImpl::GenerateImportRequestBody() {
   if (!local_state->GetBoolean(
           prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1)) {
     FresnelImportData* import_data = import_request.add_import_data();
-    absl::optional<FresnelImportData> period_1_data =
+    std::optional<FresnelImportData> period_1_data =
         GenerateObservationImportData(1);
 
     if (!period_1_data.has_value()) {
       LOG(ERROR) << "Failed to generate import data request body since period 1"
                  << " could not be generated. ";
-      return absl::nullopt;
+      return std::nullopt;
     }
     *import_data = period_1_data.value();
   }
@@ -362,13 +369,13 @@ ObservationImpl::GenerateImportRequestBody() {
   if (!local_state->GetBoolean(
           prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2)) {
     FresnelImportData* import_data = import_request.add_import_data();
-    absl::optional<FresnelImportData> period_2_data =
+    std::optional<FresnelImportData> period_2_data =
         GenerateObservationImportData(2);
 
     if (!period_2_data.has_value()) {
       LOG(ERROR) << "Failed to generate import data request body since period 2"
                  << " could not be generated. ";
-      return absl::nullopt;
+      return std::nullopt;
     }
     *import_data = period_2_data.value();
   }
@@ -376,23 +383,23 @@ ObservationImpl::GenerateImportRequestBody() {
   return import_request;
 }
 
-absl::optional<FresnelImportData>
-ObservationImpl::GenerateObservationImportData(int period) {
+std::optional<FresnelImportData> ObservationImpl::GenerateObservationImportData(
+    int period) {
   DCHECK(period >= 0 && period <= 2) << "Period must be in [0,2] range.";
   FresnelImportData import_data;
 
   base::Time active_ts = GetParams()->GetActiveTs();
-  absl::optional<base::Time> last_month_ts = utils::GetPreviousMonth(active_ts);
-  absl::optional<base::Time> two_months_ago_ts =
+  std::optional<base::Time> last_month_ts = utils::GetPreviousMonth(active_ts);
+  std::optional<base::Time> two_months_ago_ts =
       utils::GetPreviousMonth(last_month_ts.value_or(base::Time()));
-  absl::optional<base::Time> next_month_ts = utils::GetNextMonth(active_ts);
-  absl::optional<base::Time> two_months_later_ts =
+  std::optional<base::Time> next_month_ts = utils::GetNextMonth(active_ts);
+  std::optional<base::Time> two_months_later_ts =
       utils::GetNextMonth(next_month_ts.value_or(base::Time()));
 
   if (!last_month_ts.has_value() || !two_months_ago_ts.has_value() ||
       !next_month_ts.has_value() || !two_months_later_ts.has_value()) {
     LOG(ERROR) << "Failed to get observation periods.";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   std::string cur_month = utils::TimeToYYYYMMString(active_ts);
@@ -409,18 +416,47 @@ ObservationImpl::GenerateObservationImportData(int period) {
         utils::TimeToYYYYMMString(two_months_ago_ts.value()) + "-" + cur_month;
   }
 
-  absl::optional<psm_rlwe::RlwePlaintextId> psm_id =
+  std::optional<psm_rlwe::RlwePlaintextId> psm_id =
       utils::GeneratePsmIdentifier(GetParams()->GetHighEntropySeed(),
                                    psm_rlwe::RlweUseCase_Name(kPsmUseCase),
                                    window_id);
-  absl::optional<ChurnObservationMetadata> observation_metadata =
+  std::optional<ChurnObservationMetadata> observation_metadata =
       active_status_->CalculateObservationMetadata(active_ts, period);
 
   if (window_id.empty() || !psm_id.has_value() ||
       !observation_metadata.has_value()) {
     LOG(ERROR) << "Failed to generate observation import data for period = "
                << period;
-    return absl::nullopt;
+    return std::nullopt;
+  }
+
+  // Finch flag is disabled by default.
+  if (base::FeatureList::IsEnabled(
+          features::kDeviceActiveClientChurnObservationNewDeviceMetadata)) {
+    std::optional<base::Time> first_active_week_ts =
+        utils::GetFirstActiveWeek();
+
+    if (!first_active_week_ts.has_value() ||
+        first_active_week_ts.value() == base::Time() ||
+        first_active_week_ts.value() == base::Time::UnixEpoch()) {
+      LOG(ERROR) << "Failed to retrieve first active week from VPD. Leaving "
+                    "first active and last powerwash week unset.";
+    } else {
+      bool within_date_range = utils::IsFirstActiveUnderFourMonthsAgo(
+          active_ts, first_active_week_ts.value());
+
+      // Privacy approved 4 months of first active week history.
+      // Reference b/316402479.
+      if (within_date_range) {
+        observation_metadata->set_first_active_week(
+            utils::ConvertTimeToISO8601String(first_active_week_ts.value()));
+
+        // Last powerwash week is read from preserved file and stored in
+        // |ReportControllerInitializer|.
+        observation_metadata->set_last_powerwash_week(
+            GetParams()->GetChromeDeviceParams().last_powerwash_week);
+      }
+    }
   }
 
   import_data.set_plaintext_id(psm_id.value().sensitive_id());

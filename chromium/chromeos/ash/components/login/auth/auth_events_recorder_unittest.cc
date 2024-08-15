@@ -10,12 +10,51 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/cryptohome/auth_factor.h"
+#include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "components/crash/core/common/crash_key.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
 
 namespace {
+
+cryptohome::AuthFactor MakeRecoveryFactor() {
+  cryptohome::AuthFactorRef ref(
+      cryptohome::AuthFactorType::kRecovery,
+      cryptohome::KeyLabel(kCryptohomeRecoveryKeyLabel));
+  return cryptohome::AuthFactor(std::move(ref),
+                                cryptohome::AuthFactorCommonMetadata());
+}
+
+cryptohome::AuthFactor MakeGaiaAuthFactor() {
+  cryptohome::AuthFactorRef ref(cryptohome::AuthFactorType::kPassword,
+                                cryptohome::KeyLabel(kCryptohomeGaiaKeyLabel));
+  return cryptohome::AuthFactor(std::move(ref),
+                                cryptohome::AuthFactorCommonMetadata());
+}
+
+cryptohome::AuthFactor MakeLocalPasswordFactor() {
+  cryptohome::AuthFactorRef ref(
+      cryptohome::AuthFactorType::kPassword,
+      cryptohome::KeyLabel(kCryptohomeLocalPasswordKeyLabel));
+  return cryptohome::AuthFactor(std::move(ref),
+                                cryptohome::AuthFactorCommonMetadata());
+}
+
+cryptohome::AuthFactor MakePinAuthFactor() {
+  cryptohome::AuthFactorRef ref(cryptohome::AuthFactorType::kPin,
+                                cryptohome::KeyLabel(kCryptohomePinLabel));
+  return cryptohome::AuthFactor(std::move(ref),
+                                cryptohome::AuthFactorCommonMetadata());
+}
+
+cryptohome::AuthFactor MakeLegacyAuthFactor(int legacy_key_index) {
+  cryptohome::AuthFactorRef ref(
+      cryptohome::AuthFactorType::kPassword,
+      cryptohome::KeyLabel(base::StringPrintf("legacy-%d", legacy_key_index)));
+  return cryptohome::AuthFactor(std::move(ref),
+                                cryptohome::AuthFactorCommonMetadata());
+}
 
 std::string GetSessionStateCrashKeyValue() {
   return crash_reporter::GetCrashKeyValue("session-state");
@@ -229,15 +268,14 @@ TEST_F(AuthEventsRecorderTest, OnExistingUserLoginScreenExitWithNoFailure) {
       "Ash.OSAuth.Lock.NbPasswordAttempts.UntilSuccess", zero_attempts, 1);
 }
 
-TEST_F(AuthEventsRecorderTest, RecordUserAuthFactors) {
+TEST_F(AuthEventsRecorderTest, RecordSessionAuthFactors) {
   base::HistogramTester histogram_tester;
 
-  std::vector<cryptohome::AuthFactorType> factors{
-      cryptohome::AuthFactorType::kPassword, cryptohome::AuthFactorType::kPin,
-      cryptohome::AuthFactorType::kRecovery};
+  SessionAuthFactors factors(
+      {MakeGaiaAuthFactor(), MakePinAuthFactor(), MakeRecoveryFactor()});
   recorder_->OnAuthenticationSurfaceChange(
       AuthEventsRecorder::AuthenticationSurface::kLogin);
-  recorder_->RecordUserAuthFactors(factors);
+  recorder_->RecordSessionAuthFactors(factors);
 
   // The following factors are recorded with `true`.
   histogram_tester.ExpectBucketCount(
@@ -250,6 +288,56 @@ TEST_F(AuthEventsRecorderTest, RecordUserAuthFactors) {
   // The following factors are recorded with `false`.
   histogram_tester.ExpectBucketCount(
       "Ash.OSAuth.Login.ConfiguredAuthFactors.SmartCard", 0, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.LocalPassword", 0, 1);
+}
+
+TEST_F(AuthEventsRecorderTest, RecordSessionAuthFactorsLocalPassword) {
+  base::HistogramTester histogram_tester;
+
+  SessionAuthFactors factors(
+      {MakeLocalPasswordFactor(), MakePinAuthFactor(), MakeRecoveryFactor()});
+  recorder_->OnAuthenticationSurfaceChange(
+      AuthEventsRecorder::AuthenticationSurface::kLogin);
+  recorder_->RecordSessionAuthFactors(factors);
+
+  // The following factors are recorded with `true`.
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.LocalPassword", 1, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.CryptohomePin", 1, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.Recovery", 1, 1);
+
+  // The following factors are recorded with `false`.
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.SmartCard", 0, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.GaiaPassword", 0, 1);
+}
+
+TEST_F(AuthEventsRecorderTest, RecordSessionAuthFactorsLegacyPassword) {
+  base::HistogramTester histogram_tester;
+
+  SessionAuthFactors factors(
+      {MakeLegacyAuthFactor(1), MakePinAuthFactor(), MakeRecoveryFactor()});
+  recorder_->OnAuthenticationSurfaceChange(
+      AuthEventsRecorder::AuthenticationSurface::kLogin);
+  recorder_->RecordSessionAuthFactors(factors);
+
+  // The following factors are recorded with `true`.
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.GaiaPassword", 1, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.CryptohomePin", 1, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.Recovery", 1, 1);
+
+  // The following factors are recorded with `false`.
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.SmartCard", 0, 1);
+  histogram_tester.ExpectBucketCount(
+      "Ash.OSAuth.Login.ConfiguredAuthFactors.LocalPassword", 0, 1);
 }
 
 TEST_F(AuthEventsRecorderTest, OnRecoveryDone) {
@@ -303,11 +391,12 @@ TEST_F(AuthEventsRecorderTest, AuthEventsCrashKeyOnSuccessfullLogin) {
   recorder_->OnLoginSuccess(SuccessReason::OFFLINE_ONLY,
                             /*is_new_user=*/false, /*is_login_offline=*/true,
                             /*is_ephemeral=*/false);
+  recorder_->OnAuthComplete(true);
   recorder_->OnExistingUserLoginScreenExit(
       AuthEventsRecorder::AuthenticationOutcome::kSuccess, 1);
   EXPECT_EQ(GetAuthEventsCrashKeyValue(),
             "auth_surface_change_Login,update_lock_screen_view,auth_submit,"
-            "login_offline,login_screen_exit_success,");
+            "login_offline,auth_complete_success,login_screen_exit_success,");
   // Lock screen:
   recorder_->OnAuthenticationSurfaceChange(
       AuthEventsRecorder::AuthenticationSurface::kLock);
@@ -316,25 +405,58 @@ TEST_F(AuthEventsRecorderTest, AuthEventsCrashKeyOnSuccessfullLogin) {
   recorder_->OnAuthSubmit();
   recorder_->OnAuthFailure(
       AuthFailure::FailureReason::COULD_NOT_MOUNT_CRYPTOHOME);
+  recorder_->OnAuthComplete(false);
   recorder_->OnAuthSubmit();
   recorder_->OnAuthFailure(
       AuthFailure::FailureReason::COULD_NOT_MOUNT_CRYPTOHOME);
+  recorder_->OnAuthComplete(false);
   recorder_->OnAuthSubmit();
   recorder_->OnAuthFailure(
       AuthFailure::FailureReason::COULD_NOT_MOUNT_CRYPTOHOME);
+  recorder_->OnAuthComplete(false);
   // 1 successfull attempt:
   recorder_->OnAuthSubmit();
   recorder_->OnLoginSuccess(SuccessReason::OFFLINE_ONLY,
                             /*is_new_user=*/false, /*is_login_offline=*/true,
                             /*is_ephemeral=*/false);
+  recorder_->OnAuthComplete(true);
+  recorder_->OnExistingUserLoginScreenExit(
+      AuthEventsRecorder::AuthenticationOutcome::kSuccess, 4);
+  EXPECT_EQ(
+      GetAuthEventsCrashKeyValue(),
+      "auth_surface_change_Login,update_lock_screen_view,auth_submit,"
+      "login_offline,auth_complete_success,login_screen_exit_success,"
+      "auth_surface_change_Lock,update_lock_screen_view,auth_submit,"
+      "login_failure,auth_complete_failure,auth_submit,login_failure,"
+      "auth_complete_failure,auth_submit,login_failure,auth_complete_failure,"
+      "auth_submit,login_offline,auth_complete_success,"
+      "login_screen_exit_success,");
+}
+
+TEST_F(AuthEventsRecorderTest, AuthEventsCrashKeyOnSuccessfullUnlock) {
+  // Lock screen:
+  recorder_->OnAuthenticationSurfaceChange(
+      AuthEventsRecorder::AuthenticationSurface::kLock);
+  recorder_->OnLockContentsViewUpdate();
+  recorder_->OnAuthSubmit();
+  recorder_->OnAuthComplete(true);
   recorder_->OnExistingUserLoginScreenExit(
       AuthEventsRecorder::AuthenticationOutcome::kSuccess, 4);
   EXPECT_EQ(GetAuthEventsCrashKeyValue(),
-            "auth_surface_change_Login,update_lock_screen_view,auth_submit,"
-            "login_offline,login_screen_exit_success,auth_surface_change_Lock,"
-            "update_lock_screen_view,auth_submit,login_failure,auth_submit,"
-            "login_failure,auth_submit,login_failure,auth_submit,login_offline,"
-            "login_screen_exit_success,");
+            "auth_surface_change_Lock,update_lock_screen_view,auth_submit,"
+            "auth_complete_success,login_screen_exit_success,");
+}
+
+TEST_F(AuthEventsRecorderTest, AuthEventsCrashKeyOnFailureUnlock) {
+  // Lock screen:
+  recorder_->OnAuthenticationSurfaceChange(
+      AuthEventsRecorder::AuthenticationSurface::kLock);
+  recorder_->OnLockContentsViewUpdate();
+  recorder_->OnAuthSubmit();
+  recorder_->OnAuthComplete(false);
+  EXPECT_EQ(GetAuthEventsCrashKeyValue(),
+            "auth_surface_change_Lock,update_lock_screen_view,auth_submit,"
+            "auth_complete_failure,");
 }
 
 }  // namespace ash

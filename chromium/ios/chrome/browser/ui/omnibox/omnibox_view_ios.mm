@@ -25,7 +25,7 @@
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
@@ -92,7 +92,7 @@ void OmniboxViewIOS::OnReceiveClipboardURLForOpenMatch(
     const std::u16string& pasted_text,
     size_t selected_line,
     base::TimeTicks match_selection_timestamp,
-    absl::optional<GURL> optional_gurl) {
+    std::optional<GURL> optional_gurl) {
   if (!optional_gurl) {
     return;
   }
@@ -115,7 +115,7 @@ void OmniboxViewIOS::OnReceiveClipboardTextForOpenMatch(
     const std::u16string& pasted_text,
     size_t selected_line,
     base::TimeTicks match_selection_timestamp,
-    absl::optional<std::u16string> optional_text) {
+    std::optional<std::u16string> optional_text) {
   if (!optional_text) {
     return;
   }
@@ -124,7 +124,7 @@ void OmniboxViewIOS::OnReceiveClipboardTextForOpenMatch(
 
   ClipboardProvider* clipboard_provider =
       controller()->autocomplete_controller()->clipboard_provider();
-  absl::optional<AutocompleteMatch> new_match =
+  std::optional<AutocompleteMatch> new_match =
       clipboard_provider->NewClipboardTextMatch(text);
 
   if (!new_match) {
@@ -144,7 +144,7 @@ void OmniboxViewIOS::OnReceiveClipboardImageForOpenMatch(
     const std::u16string& pasted_text,
     size_t selected_line,
     base::TimeTicks match_selection_timestamp,
-    absl::optional<gfx::Image> optional_image) {
+    std::optional<gfx::Image> optional_image) {
   ClipboardProvider* clipboard_provider =
       controller()->autocomplete_controller()->clipboard_provider();
   clipboard_provider->NewClipboardImageMatch(
@@ -161,7 +161,7 @@ void OmniboxViewIOS::OnReceiveImageMatchForOpenMatch(
     const std::u16string& pasted_text,
     size_t selected_line,
     base::TimeTicks match_selection_timestamp,
-    absl::optional<AutocompleteMatch> optional_match) {
+    std::optional<AutocompleteMatch> optional_match) {
   if (!optional_match) {
     return;
   }
@@ -413,12 +413,12 @@ bool OmniboxViewIOS::OnWillChange(NSRange range, NSString* new_text) {
   if ([field_ isPreEditing]) {
     [field_ setClearingPreEditText:YES];
 
-    if (!base::FeatureList::IsEnabled(kIOSNewOmniboxImplementation)) {
-      // Exit the pre-editing state in OnWillChange() instead of OnDidChange(),
-      // as that allows IME to continue working.  The following code selects the
-      // text as if the pre-edit fake selection was real.
-      [field_ exitPreEditState];
+    // Exit the pre-editing state in OnWillChange() instead of OnDidChange(), as
+    // that allows IME to continue working.  The following code selects the text
+    // as if the pre-edit fake selection was real.
+    [field_ exitPreEditState];
 
+    if (!base::FeatureList::IsEnabled(kIOSNewOmniboxImplementation)) {
       field_.text = @"";
     }
 
@@ -494,11 +494,6 @@ bool OmniboxViewIOS::OnWillChange(NSRange range, NSString* new_text) {
 }
 
 void OmniboxViewIOS::OnDidChange(bool processing_user_event) {
-  if (base::FeatureList::IsEnabled(kIOSNewOmniboxImplementation)) {
-    if (field_.isPreEditing)
-      [field_ exitPreEditState];
-  }
-
   // Sanitize pasted text.
   if (model() && model()->is_pasting()) {
     std::u16string pastedText = base::SysNSStringToUTF16(field_.text);
@@ -754,11 +749,12 @@ void OmniboxViewIOS::OnSelectedMatchForOpening(
   // Sometimes the match provided does not correspond to the autocomplete
   // result match specified by `index`. Most Visited Tiles, for example,
   // provide ad hoc matches that are not in the result at all.
-  if (index >= controller()->result().size() ||
-      controller()->result().match_at(index).destination_url !=
+  auto* autocomplete_controller = controller()->autocomplete_controller();
+  if (index >= autocomplete_controller->result().size() ||
+      autocomplete_controller->result().match_at(index).destination_url !=
           match.destination_url) {
     OmniboxPopupSelection selection(
-        controller()->autocomplete_controller()->InjectAdHocMatch(match));
+        autocomplete_controller->InjectAdHocMatch(match));
     model()->OpenSelection(selection, match_selection_timestamp, disposition);
     return;
   }

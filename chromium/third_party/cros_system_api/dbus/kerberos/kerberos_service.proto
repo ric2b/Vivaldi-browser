@@ -101,7 +101,7 @@ enum ClearMode {
   CLEAR_ONLY_MANAGED_ACCOUNTS = 3;
 }
 
-// Message sent to Chrome by authpolicyd as a response to a successful
+// Message sent to Chrome by kerberosd as a response to a successful
 // GetUserKerberosFiles call.
 message KerberosFiles {
   // Kerberos credential cache.

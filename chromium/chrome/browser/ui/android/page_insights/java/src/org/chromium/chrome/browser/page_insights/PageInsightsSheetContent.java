@@ -24,6 +24,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.page_insights.proto.IntentParams.PageInsightsIntentParams;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
@@ -45,9 +46,12 @@ public class PageInsightsSheetContent implements BottomSheetContent, View.OnLayo
     static final String PAGE_INSIGHTS_PEEK_WITH_PRIVACY_HEIGHT_RATIO_PARAM =
             "page_insights_peek_with_privacy_height_ratio";
 
-    interface OnBottomSheetTapHandler {
+    interface OnBottomSheetTouchHandler {
         /** Returns true if the tap has been handled. */
-        boolean handle();
+        boolean handleTap();
+
+        /** Returns true if touch events should be intercepted. */
+        boolean shouldInterceptTouchEvents();
     }
 
     interface OnBackPressHandler {
@@ -89,17 +93,21 @@ public class PageInsightsSheetContent implements BottomSheetContent, View.OnLayo
      * Constructor.
      *
      * @param context An Android context.
+     * @param intentParams params specified in the custom tabs intent
      * @param layoutView the top-level view for the Window
      * @param onPrivacyNoticeLinkClickCallback callback for use on privacy notice
-     * @param onBottomSheetTapHandler handler for taps on bottom sheet
+     * @param onBackPressHandler back press handler
+     * @param willHandleBackPressSupplier supplier of whether we will handle back presses
+     * @param onBottomSheetTouchHandler handler for touches on bottom sheet
      */
     public PageInsightsSheetContent(
             Context context,
+            PageInsightsIntentParams intentParams,
             View layoutView,
             Callback<View> onPrivacyNoticeLinkClickCallback,
             OnBackPressHandler onBackPressHandler,
             ObservableSupplierImpl<Boolean> willHandleBackPressSupplier,
-            OnBottomSheetTapHandler onBottomSheetTapHandler) {
+            OnBottomSheetTouchHandler onBottomSheetTouchHandler) {
         mFullHeightRatio =
                 (float)
                         ChromeFeatureList.getFieldTrialParamByFeatureAsDouble(
@@ -107,33 +115,41 @@ public class PageInsightsSheetContent implements BottomSheetContent, View.OnLayo
                                 PAGE_INSIGHTS_FULL_HEIGHT_RATIO_PARAM,
                                 DEFAULT_FULL_HEIGHT_RATIO);
         mPeekHeightRatio =
-                (float)
-                        ChromeFeatureList.getFieldTrialParamByFeatureAsDouble(
-                                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
-                                PAGE_INSIGHTS_PEEK_HEIGHT_RATIO_PARAM,
-                                DEFAULT_PEEK_HEIGHT_RATIO);
+                intentParams.hasPeekHeightRatio()
+                        ? intentParams.getPeekHeightRatio()
+                        : (float)
+                                ChromeFeatureList.getFieldTrialParamByFeatureAsDouble(
+                                        ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                                        PAGE_INSIGHTS_PEEK_HEIGHT_RATIO_PARAM,
+                                        DEFAULT_PEEK_HEIGHT_RATIO);
         mPeekWithPrivacyHeightRatio =
-                (float)
-                        ChromeFeatureList.getFieldTrialParamByFeatureAsDouble(
-                                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
-                                PAGE_INSIGHTS_PEEK_WITH_PRIVACY_HEIGHT_RATIO_PARAM,
-                                DEFAULT_PEEK_WITH_PRIVACY_HEIGHT_RATIO);
+                intentParams.hasPeekWithNoticeHeightRatio()
+                        ? intentParams.getPeekWithNoticeHeightRatio()
+                        : (float)
+                                ChromeFeatureList.getFieldTrialParamByFeatureAsDouble(
+                                        ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                                        PAGE_INSIGHTS_PEEK_WITH_PRIVACY_HEIGHT_RATIO_PARAM,
+                                        DEFAULT_PEEK_WITH_PRIVACY_HEIGHT_RATIO);
         mLayoutView = layoutView;
-        mToolbarView = (ViewGroup) LayoutInflater.from(context).inflate(
-            R.layout.page_insights_sheet_toolbar, null);
+        mToolbarView =
+                (ViewGroup)
+                        LayoutInflater.from(context)
+                                .inflate(R.layout.page_insights_sheet_toolbar, null);
         mToolbarView
                 .findViewById(R.id.page_insights_back_button)
                 .setOnClickListener((view) -> onBackPressHandler.handle());
-        mSheetContentView = (ViewGroup) LayoutInflater.from(context).inflate(
-                R.layout.page_insights_sheet_content, null);
+        mSheetContentView =
+                (ViewGroup)
+                        LayoutInflater.from(context)
+                                .inflate(R.layout.page_insights_sheet_content, null);
 
         // TODO(b/306377148): Remove this once a solution is built into bottom sheet infra.
-        TapInterceptingLinearLayout contentContainer =
-                (TapInterceptingLinearLayout)
+        TouchInterceptingLinearLayout contentContainer =
+                (TouchInterceptingLinearLayout)
                         mSheetContentView.findViewById(R.id.page_insights_content_container);
-        contentContainer.setOnTapHandler(onBottomSheetTapHandler);
-        contentContainer.setOnClickListener((view) -> onBottomSheetTapHandler.handle());
-        mToolbarView.setOnClickListener((view) -> onBottomSheetTapHandler.handle());
+        contentContainer.setOnTouchHandler(onBottomSheetTouchHandler);
+        contentContainer.setOnClickListener((view) -> onBottomSheetTouchHandler.handleTap());
+        mToolbarView.setOnClickListener((view) -> onBottomSheetTouchHandler.handleTap());
 
         mContext = context;
         mOnPrivacyNoticeLinkClickCallback = onPrivacyNoticeLinkClickCallback;
@@ -276,14 +292,6 @@ public class PageInsightsSheetContent implements BottomSheetContent, View.OnLayo
     @Override
     public void onBackPressed() {
         mOnBackPressHandler.handle();
-    }
-
-    /**
-     * Returns the actual height of the fully expanded bottom sheet, as a ratio of the screen
-     * height.
-     */
-    public float getActualFullHeightRatio() {
-        return mFullHeightRatio;
     }
 
     void showLoadingIndicator() {
@@ -472,7 +480,8 @@ public class PageInsightsSheetContent implements BottomSheetContent, View.OnLayo
     }
 
     private void preparePrivacyNoticeView() {
-        mSheetContentView.findViewById(R.id.page_insights_privacy_notice_close_button)
+        mSheetContentView
+                .findViewById(R.id.page_insights_privacy_notice_close_button)
                 .setOnClickListener((view) -> onPrivacyNoticeClosed());
         TextView privacyNoticeMessage =
                 mSheetContentView.findViewById(R.id.page_insights_privacy_notice_message);
@@ -520,5 +529,17 @@ public class PageInsightsSheetContent implements BottomSheetContent, View.OnLayo
             }
         }
         return null;
+    }
+
+    void setContentViewForTesting(ViewGroup view) {
+        mSheetContentView = view;
+    }
+
+    void setShouldHavePeekStateForTesting(boolean hasPeek) {
+        mShouldHavePeekState = hasPeek;
+    }
+
+    void setFullScreenHeightForTesting(int height) {
+        mFullScreenHeight = height;
     }
 }

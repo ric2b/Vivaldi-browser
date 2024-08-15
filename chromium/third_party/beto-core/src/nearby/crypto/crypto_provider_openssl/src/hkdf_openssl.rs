@@ -42,7 +42,9 @@ impl<H: OpenSslHash> crypto_provider::hkdf::Hkdf for Hkdf<H> {
         let md = H::get_md();
         ctx.derive_init().expect("hkdf derive init should not fail");
         ctx.set_hkdf_md(md).expect("hkdf set md should not fail");
-        self.salt.as_ref().map(|salt| ctx.set_hkdf_salt(salt.as_slice()));
+        let _ = self.salt.as_ref().map(|salt| {
+            ctx.set_hkdf_salt(salt.as_slice()).expect("setting the salt is infallible")
+        });
         ctx.set_hkdf_key(self.ikm.as_slice()).expect("should be able to set key");
         ctx.add_hkdf_info(&info_components.concat()).expect("should be able to add info");
         ctx.derive(Some(okm)).map_err(|_| InvalidLength).map(|_| ())

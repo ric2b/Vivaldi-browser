@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/check.h"
 #include "base/dcheck_is_on.h"
@@ -196,8 +197,9 @@ TargetPolicy* TestRunner::GetPolicy() {
 }
 
 TestRunner::~TestRunner() {
-  if (target_process_.IsValid() && kill_on_destruction_)
-    ::TerminateProcess(target_process_.Get(), 0);
+  if (target_process_.is_valid() && kill_on_destruction_) {
+    ::TerminateProcess(target_process_.get(), 0);
+  }
 }
 
 bool TestRunner::WaitForAllTargets() {
@@ -214,18 +216,6 @@ bool TestRunner::AllowFileAccess(FileSemantics semantics,
 
   return (SBOX_ALL_OK ==
           policy_->GetConfig()->AllowFileAccess(semantics, pattern));
-}
-
-bool TestRunner::AllowNamedPipes(const wchar_t* pattern) {
-  if (!is_init_) {
-    return false;
-  }
-
-  if (policy_->GetConfig()->IsConfigured()) {
-    return false;
-  }
-
-  return (SBOX_ALL_OK == policy_->GetConfig()->AllowNamedPipes(pattern));
 }
 
 bool TestRunner::AddRuleSys32(FileSemantics semantics, const wchar_t* pattern) {
@@ -268,9 +258,10 @@ int TestRunner::InternalRunTest(const wchar_t* command) {
     return SBOX_TEST_FAILED_TO_RUN_TEST;
 
   // For simplicity TestRunner supports only one process per instance.
-  if (target_process_.IsValid()) {
-    if (IsProcessRunning(target_process_.Get()))
+  if (target_process_.is_valid()) {
+    if (IsProcessRunning(target_process_.get())) {
       return SBOX_TEST_FAILED_TO_RUN_TEST;
+    }
     target_process_.Close();
     target_process_id_ = 0;
   }
@@ -403,15 +394,16 @@ int DispatchCall(int argc, wchar_t **argv) {
   // in read only mode and sleep infinitely if we succeed.
   if (0 == _wcsicmp(argv[3], L"shared_memory_handle")) {
     HANDLE raw_handle = nullptr;
-    base::StringPiece test_contents = "Hello World";
+    std::string_view test_contents = "Hello World";
     base::StringToUint(base::AsStringPiece16(argv[4]),
                        reinterpret_cast<unsigned int*>(&raw_handle));
     if (raw_handle == nullptr)
       return SBOX_TEST_INVALID_PARAMETER;
     // First extract the handle to the platform-native ScopedHandle.
     base::win::ScopedHandle scoped_handle(raw_handle);
-    if (!scoped_handle.IsValid())
+    if (!scoped_handle.is_valid()) {
       return SBOX_TEST_INVALID_PARAMETER;
+    }
     // Then convert to the low-level chromium region.
     base::subtle::PlatformSharedMemoryRegion platform_region =
         base::subtle::PlatformSharedMemoryRegion::Take(

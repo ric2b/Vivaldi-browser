@@ -8,11 +8,9 @@
 namespace vivaldi {
 
 class VIEWS_EXPORT VolumeSlider : public views::Slider {
+  METADATA_HEADER(VolumeSlider, views::Slider)
  public:
   enum class Mode { kMute = 0, kAudible };
-
-  // The button's class name.
-  static const char kViewClassName[];
 
   VolumeSlider(views::SliderListener* listener = nullptr);
   ~VolumeSlider() override;

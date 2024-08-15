@@ -117,7 +117,7 @@ Removal of already-shipped features.
 
 ### Web developer facing change to existing code {:#change-to-existing-code}
 
-This is generally a public
+This type is not commonly used.  It is basically a public
 service announcement- “This is a web-developer-facing change to existing
 code without API changes, but you may see side effects.” This may be due to
 large-scale code refactoring or rewriting, where the goal is to cause no
@@ -125,12 +125,12 @@ behavioral changes (but due to scope of change, side effects are likely), or
 this may encompass changes to current code that fix a bug or implement new
 changes to the spec without changes to the API shape itself.
 
-### Changing stages
+### Changing feature type
 
 It is possible to change types later in the process - for example, if you start
 out implementing an already existing standard, but discover you need to incubate
-a new API during the process, you can change the feature type and move back
-stages. Note that there are few [strictly required gates to the Chromium
+a new API during the process, you can start over with a new ChromeStatus entry.
+Note that there are few [strictly required gates to the Chromium
 process](/blink/guidelines/api-owners/procedures) (e.g., 3 LGTMs from API owners
 on an intent-to-ship) - particularly in the earlier stages we want to encourage
 experimentation. However, there are required fields for most stages in the
@@ -169,8 +169,16 @@ Proceed to the "Start Incubating" stage in ChromeStatus.
 Write up the use cases and scenarios for the feature in an
 [explainer](https://tag.w3.org/explainers/), which is typically written in
 [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax).
-Then host your explainer at a public URL, typically in a public personal Github
-repo, and put a link to your public explainer in the feature entry.
+Then host your explainer at a public URL. Some organizations recommend specific
+places:
+* Google: <https://github.com/explainers-by-googlers>
+* Microsoft: <https://github.com/MicrosoftEdge/MSEdgeExplainers>
+* If your organization has an area for explainers, [send us a
+  patch](https://source.chromium.org/chromium/chromium/src/+/main:docs/website/docs/CONTRIBUTING.md)
+  to describe it here.
+
+Otherwise, a public personal Github repo typically works well. Then put a link
+to your public explainer in the feature entry.
 
 We have a [program for to provide mentorship for specification
 writing](/blink/spec-mentors); If you are a Googler you must file a
@@ -248,6 +256,11 @@ the API shape while iterating. You should work with the TAG to complete their
 review and address any issues raised during this stage, and should address any
 issues raised by other horizontal reviews (accessibility, privacy,
 internationalization, etc.).
+
+[Flag guidelines](https://chromium.googlesource.com/chromium/src/+/main/docs/flag_guarding_guidelines.md) require you to place the code change behind a
+[flag](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/RuntimeEnabledFeatures.md),
+which enables a quick roll-back of that change in situations where we find our estimate
+regarding its breaking potential was overly optimistic.
 
 #### Step 4: Widen review {:#widen-review}
 
@@ -386,8 +399,7 @@ Update ChromeStatus with:
 * any changes in vendor signals.
 
 Proceed to the “Prepare to Ship” stage in ChromeStatus; this will generate an
-[Intent to
-Ship](https://docs.google.com/document/d/1vlTlsQKThwaX0-lj_iZbVTzyqY7LioqERU8DK3u3XjI/edit#bookmark=id.w8j30a6lypz0)
+"Intent to Ship"
 mail that you should send to [blink-dev](mailto:blink-dev@chromium.org). If your
 specification isn't a modification of an existing specification, include a
 one-line [spec maturity
@@ -404,10 +416,8 @@ owners](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/
 if there is no open/unaddressed feedback and you are still blocked on LGTMs
 after 5 days.
 
-Once you have shipped your feature, proceed to the "Ship" stage in ChromeStatus.
-
-The approval status of various stages of the intent process is tracked by the
-API owners in [this spreadsheet](https://bit.ly/blinkintents).
+Once you have the needed approvals, set the implementation status to "Enabled by default" in
+ChromeStatus.
 
 ### Implementations of already-defined consensus-based standards {:#process-existing-standard}
 
@@ -477,7 +487,8 @@ owners](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/
 if no open/unaddressed feedback and you are still blocked on LGTMs after 5
 days.)
 
-Once you have shipped your feature, proceed to the "Ship" stage in ChromeStatus.
+Once you have the needed approvals, set the implementation status to "Enabled by default" in
+ChromeStatus.
 
 ### Feature deprecations
 
@@ -642,6 +653,18 @@ trials framework ([see
 details](/blink/origin-trials/running-an-origin-trial#integrate-feature)).
 Once your Deprecation Trial is in place, proceed to the next step.
 
+Deprecation trials are run for up to 6 chromium milestones, and can be
+repeatedly extended for 6 milestones as long as significant progress is
+demonstrated in at least one of the following areas:
+ * Designing and shipping alternative APIs for the use case, directly addressing
+   feedback from developers currently relying on the deprecation trial.
+ * Driving the number of origins signed up for the deprecation trial down to
+   zero.
+
+If significant progress cannot be demonstrated towards removing the need for the
+deprecation trial, it will be necessary to un-deprecate the API to acknowledge
+the reality that ongoing support for the API is required for web compatibility.
+
 #### Step 6: Prepare to Ship {:#deprecation-prepare-to-ship}
 
 You should update ChromeStatus with a target milestone for disabling the
@@ -682,14 +705,9 @@ remove the code, and set the ChromeStatus to “Removed.”
 
 ### Web-developer-facing change to existing behavior {:#behavior-changes}
 
-#### Step 1: Write up motivation {:#behavior-change-motivation}
+#### Before you begin: Assess backwards compatibility {:#behavior-change-compat}
 
-Fill out the “Motivation” section in ChromeStatus with a brief summary of the
-reasons we want to modify the current behavior.
-
-#### Step 2: Assess backwards compatibility {:#behavior-change-compat}
-
-At this step, you should determine if the behavior change you're trying to
+Before choosing this feature type, you should determine if the behavior change you're trying to
 make can be considered a low-risk bug fix, or it has non-negligible
 likelihood to result in site breakage.
 
@@ -711,9 +729,10 @@ The following criteria are worthwhile to consider:
 * How likely is breakage in sites that only support Chromium browsers?
 (enterprise environments, kiosks, etc)
 
-After considering these factors, sending an Intent to Ship would be appropriate
-for any change with some potential to break sites. Sending a PSA, on the other
-hand, would be appropriate only for changes deemed very unlikely to break sites.
+After considering these factors, choose the "New feature incubation"
+or "Existing feature implementation" feature types
+for any change with some potential to break sites. Use "Web developer facing code change"
+only for changes deemed very unlikely to break sites, and that change APIs in at most a trivial way.
 
 Another reason for a PSA could be a large-scale refactoring that
 doesn't *intend* to result in behavior changes, but may do so in practice.
@@ -722,15 +741,12 @@ The purpose of a PSA is to notify the broader Chromium community about
 the change, and enables folks to test against it and potentially
 re-examine the risk assessment regarding potential breakage.
 
-For an intent-to-ship, you're required to place the code change behind a
-[flag](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/RuntimeEnabledFeatures.md),
-which enables a quick roll-back of that change in case that our estimate
-regarding its breaking potential was overly optimistic. For a PSA you're
-expected to follow the [flag guarding
-guidelines](https://chromium.googlesource.com/chromium/src/+/main/docs/flag_guarding_guidelines.md),
-which generally allow for some discretion for trivial changes.
+#### Step 1: Write up motivation {:#behavior-change-motivation}
 
-#### Step 3: (Optional) Dev trial {:#psa-dev-trial}
+Fill out the “Motivation” section in ChromeStatus with a brief summary of the
+reasons we want to modify the current behavior.
+
+#### Step 2: (Optional) Dev trial {:#psa-dev-trial}
 
 If you want developers to try out this change before shipping it (e.g.,
 to assess potential breakage), put the relevant code behind a [runtime
@@ -748,14 +764,12 @@ Ship” stage in ChromeStatus; this will generate a “Web-Facing Change PSA” 
 for you. Send that email to [blink-dev](mailto:blink-dev@chromium.org) with the
 summary of the code change and the expected milestone.
 
-#### Step 4: (Optional) Finch trial {:#psa-finch-trial}
+For a PSA you're expected to follow the [flag guarding
+guidelines](https://chromium.googlesource.com/chromium/src/+/main/docs/flag_guarding_guidelines.md),
+which generally allow for some discretion for trivial changes.
 
 You may wish to use [Finch](http://go/finch) to increase confidence in the new
 code as you deploy it.
-
-#### Step 5: Ship {:#psa-ship}
-
-Ship it, and set the status to “Shipped”.
 
 ## Post Launch
 

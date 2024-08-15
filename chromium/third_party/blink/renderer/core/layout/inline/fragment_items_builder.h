@@ -41,12 +41,6 @@ class CORE_EXPORT FragmentItemsBuilder {
 
   wtf_size_t Size() const { return items_.size(); }
 
-  // Returns true if we have any floating descendants which need to be
-  // traversed during the float paint phase.
-  bool HasFloatingDescendantsForPaint() const {
-    return has_floating_descendants_for_paint_;
-  }
-
   const String& TextContent(bool first_line) const {
     return UNLIKELY(first_line && first_line_text_content_)
                ? first_line_text_content_
@@ -58,11 +52,11 @@ class CORE_EXPORT FragmentItemsBuilder {
   // positions the line box.
   //
   // 1. |AcquireLogicalLineItems| to get an instance of |LogicalLineItems|.
-  // 2. Add items to |LogicalLineItems| and create |NGPhysicalFragment|,
+  // 2. Add items to |LogicalLineItems| and create |PhysicalFragment|,
   //    then associate them by |AssociateLogicalLineItems|.
   // 3. |AddLine| adds the |PhysicalLineBoxFragment|.
   //
-  // |NGBlockLayoutAlgorithm| runs these phases in the order for each line. In
+  // |BlockLayoutAlgorithm| runs these phases in the order for each line. In
   // this case, one instance of |LogicalLineItems| is reused for all lines to
   // reduce memory allocations.
   //
@@ -76,12 +70,12 @@ class CORE_EXPORT FragmentItemsBuilder {
   const LogicalLineItems& GetLogicalLineItems(
       const PhysicalLineBoxFragment&) const;
   void AssociateLogicalLineItems(LogicalLineItems* line_items,
-                                 const NGPhysicalFragment& line_fragment);
+                                 const PhysicalFragment& line_fragment);
   void AddLine(const PhysicalLineBoxFragment& line,
                const LogicalOffset& offset);
 
   // Add a list marker to the current line.
-  void AddListMarker(const NGPhysicalBoxFragment& marker_fragment,
+  void AddListMarker(const PhysicalBoxFragment& marker_fragment,
                      const LogicalOffset& offset);
 
   // See |AddPreviousItems| below.
@@ -100,9 +94,9 @@ class CORE_EXPORT FragmentItemsBuilder {
   // When |stop_at_dirty| is true, this function checks reusability of previous
   // items and stops copying before the first dirty line.
   AddPreviousItemsResult AddPreviousItems(
-      const NGPhysicalBoxFragment& container,
+      const PhysicalBoxFragment& container,
       const FragmentItems& items,
-      NGBoxFragmentBuilder* container_builder = nullptr,
+      BoxFragmentBuilder* container_builder = nullptr,
       const FragmentItem* end_item = nullptr,
       wtf_size_t max_lines = 0);
 
@@ -161,9 +155,9 @@ class CORE_EXPORT FragmentItemsBuilder {
 
   // Keeps children of a line until the offset is determined. See |AddLine|.
   LogicalLineItems* current_line_items_ = nullptr;
-  const NGPhysicalFragment* current_line_fragment_ = nullptr;
+  const PhysicalFragment* current_line_fragment_ = nullptr;
 
-  HeapHashMap<Member<const NGPhysicalFragment>, Member<LogicalLineItems>>
+  HeapHashMap<Member<const PhysicalFragment>, Member<LogicalLineItems>>
       line_items_map_;
   LogicalLineItems* const line_items_pool_ =
       MakeGarbageCollected<LogicalLineItems>();
@@ -172,7 +166,6 @@ class CORE_EXPORT FragmentItemsBuilder {
 
   WritingDirectionMode writing_direction_;
 
-  bool has_floating_descendants_for_paint_ = false;
   bool is_converted_to_physical_ = false;
   bool is_line_items_pool_acquired_ = false;
 

@@ -85,11 +85,15 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdev
 
   bool IsEnabled() const;
 
-  // Flag this device as being suspected for identifying as a device that it is
-  // not.
-  void SetSuspectedImposter(bool is_suspected);
+  // Flag this device as being suspected for falsely identifying as a keyboard.
+  void SetSuspectedKeyboardImposter(bool is_suspected);
 
-  bool IsSuspectedImposter() const;
+  bool IsSuspectedKeyboardImposter() const;
+
+  // Flag this device as being suspected for falsely identifying as a mouse.
+  void SetSuspectedMouseImposter(bool is_suspected);
+
+  bool IsSuspectedMouseImposter() const;
 
   // Cleanup after we stop reading events (release buttons, etc).
   virtual void OnStopped();

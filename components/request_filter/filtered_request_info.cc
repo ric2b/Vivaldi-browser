@@ -2,6 +2,8 @@
 
 #include "components/request_filter/filtered_request_info.h"
 
+#include <optional>
+
 namespace vivaldi {
 
 FilteredRequestInfo::FilteredRequestInfo(
@@ -12,7 +14,7 @@ FilteredRequestInfo::FilteredRequestInfo(
     content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
     bool is_async,
     bool is_webtransport,
-    absl::optional<int64_t> navigation_id)
+    std::optional<int64_t> navigation_id)
     : id(request_id),
       request(request),
       render_process_id(render_process_id),

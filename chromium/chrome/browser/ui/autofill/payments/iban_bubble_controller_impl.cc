@@ -68,7 +68,7 @@ void IbanBubbleControllerImpl::OfferLocalSave(
 
 void IbanBubbleControllerImpl::OfferUploadSave(
     const Iban& iban,
-    const LegalMessageLines& legal_message_lines,
+    LegalMessageLines legal_message_lines,
     bool should_show_prompt,
     AutofillClient::SaveIbanPromptCallback save_iban_prompt_callback) {
   // Don't show the bubble if it's already visible.
@@ -79,7 +79,7 @@ void IbanBubbleControllerImpl::OfferUploadSave(
   iban_ = iban;
   is_reshow_ = false;
   is_upload_save_ = true;
-  legal_message_lines_ = legal_message_lines;
+  legal_message_lines_ = std::move(legal_message_lines);
   save_iban_prompt_callback_ = std::move(save_iban_prompt_callback);
   current_bubble_type_ = IbanBubbleType::kUploadSave;
   // Save callback should not be null for IBAN save.
@@ -193,13 +193,15 @@ void IbanBubbleControllerImpl::OnAcceptButton(const std::u16string& nickname) {
       // UpdatePageActionIcon() is called.
       should_show_iban_saved_label_animation_ = true;
       autofill_metrics::LogSaveIbanBubbleResultSavedWithNicknameMetric(
-          !nickname.empty());
+          !nickname.empty(), /*is_upload_save=*/false);
       iban_.set_nickname(nickname);
       std::move(save_iban_prompt_callback_)
           .Run(AutofillClient::SaveIbanOfferUserDecision::kAccepted, nickname);
       return;
     case IbanBubbleType::kUploadSave:
       CHECK(!save_iban_prompt_callback_.is_null());
+      autofill_metrics::LogSaveIbanBubbleResultSavedWithNicknameMetric(
+          !nickname.empty(), /*is_upload_save=*/true);
       iban_.set_nickname(nickname);
       std::move(save_iban_prompt_callback_)
           .Run(AutofillClient::SaveIbanOfferUserDecision::kAccepted, nickname);
@@ -231,18 +233,19 @@ void IbanBubbleControllerImpl::OnBubbleClosed(
     if (closed_reason == PaymentsBubbleClosedReason::kCancelled) {
       std::move(save_iban_prompt_callback_)
           .Run(AutofillClient::SaveIbanOfferUserDecision::kDeclined,
-               absl::nullopt);
+               /*nickname=*/u"");
     } else if (closed_reason == PaymentsBubbleClosedReason::kClosed) {
       std::move(save_iban_prompt_callback_)
           .Run(AutofillClient::SaveIbanOfferUserDecision::kIgnored,
-               absl::nullopt);
+               /*nickname=*/u"");
     }
   }
 
   set_bubble_view(nullptr);
 
   // Log save IBAN prompt result according to the closed reason.
-  if (current_bubble_type_ == IbanBubbleType::kLocalSave) {
+  if (current_bubble_type_ == IbanBubbleType::kLocalSave ||
+      current_bubble_type_ == IbanBubbleType::kUploadSave) {
     autofill_metrics::SaveIbanBubbleResult metric;
     switch (closed_reason) {
       case PaymentsBubbleClosedReason::kAccepted:
@@ -265,7 +268,9 @@ void IbanBubbleControllerImpl::OnBubbleClosed(
         NOTREACHED();
         break;
     }
-    autofill_metrics::LogSaveIbanBubbleResultMetric(metric, is_reshow_);
+    autofill_metrics::LogSaveIbanBubbleResultMetric(
+        metric, is_reshow_,
+        /*is_upload_save=*/current_bubble_type_ == IbanBubbleType::kUploadSave);
   }
 
   // Handles `current_bubble_type_` change according to its current type and the
@@ -313,10 +318,6 @@ bool IbanBubbleControllerImpl::ShouldShowSavingPaymentAnimation() const {
 
 bool IbanBubbleControllerImpl::ShouldShowPaymentSavedLabelAnimation() const {
   return should_show_iban_saved_label_animation_;
-}
-
-bool IbanBubbleControllerImpl::ShouldShowSaveFailureBadge() const {
-  return false;
 }
 
 void IbanBubbleControllerImpl::OnAnimationEnded() {
@@ -368,11 +369,13 @@ void IbanBubbleControllerImpl::DoShowBubble() {
   switch (current_bubble_type_) {
     case IbanBubbleType::kLocalSave:
       autofill_metrics::LogSaveIbanBubbleOfferMetric(
-          autofill_metrics::SaveIbanPromptOffer::kShown, is_reshow_);
+          autofill_metrics::SaveIbanPromptOffer::kShown, is_reshow_,
+          /*is_upload_save=*/false);
       break;
     case IbanBubbleType::kUploadSave:
-      // TODO(b/296651786): Extend SaveIbanPromptOffer UMA to include Upload
-      // subhistogram.
+      autofill_metrics::LogSaveIbanBubbleOfferMetric(
+          autofill_metrics::SaveIbanPromptOffer::kShown, is_reshow_,
+          /*is_upload_save=*/true);
       break;
     case IbanBubbleType::kManageSavedIban:
       // TODO(crbug.com/1349109): Add metrics for manage saved IBAN mode.
@@ -411,9 +414,13 @@ void IbanBubbleControllerImpl::ShowIconOnly() {
     case IbanBubbleType::kLocalSave:
       autofill_metrics::LogSaveIbanBubbleOfferMetric(
           autofill_metrics::SaveIbanPromptOffer::kNotShownMaxStrikesReached,
-          is_reshow_);
+          is_reshow_, /*is_upload_save=*/false);
       break;
     case IbanBubbleType::kUploadSave:
+      autofill_metrics::LogSaveIbanBubbleOfferMetric(
+          autofill_metrics::SaveIbanPromptOffer::kNotShownMaxStrikesReached,
+          is_reshow_, /*is_upload_save=*/true);
+      break;
     case IbanBubbleType::kManageSavedIban:
       break;
     case IbanBubbleType::kInactive:

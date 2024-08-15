@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile_key.h"
 #include "ui/gfx/android/java_bitmap.h"
 
+using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
@@ -55,7 +56,7 @@ void JNI_DisplayAgent_OnUserAction(JNIEnv* env,
     button_click_info.type =
         static_cast<notifications::ActionButtonType>(j_button_type);
     action_data.button_click_info =
-        absl::make_optional(std::move(button_click_info));
+        std::make_optional(std::move(button_click_info));
   }
 
   GetUserActionHandler()->OnUserAction(action_data);

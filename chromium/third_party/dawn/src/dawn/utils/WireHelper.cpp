@@ -42,6 +42,7 @@
 #include "dawn/utils/WireHelper.h"
 #include "dawn/wire/WireClient.h"
 #include "dawn/wire/WireServer.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::utils {
 
@@ -85,7 +86,10 @@ class WireServerTraceLayer : public dawn::wire::CommandHandler {
 
   private:
     std::string mDir;
-    dawn::wire::CommandHandler* mHandler;
+    // TODO(https://crbug.com/2345): Investigate `DanglingUntriaged` in DawnWire. To reproduce:
+    // dawn_unittests --use-wire --wire-trace-dir={} \
+    //   --gtest_filter=CountUTF16CodeUnitsFromUTF8StringTest.ValidUnicodeString
+    raw_ptr<dawn::wire::CommandHandler, DanglingUntriaged> mHandler;
     std::ofstream mFile;
 };
 
@@ -93,7 +97,8 @@ class WireHelperDirect : public WireHelper {
   public:
     explicit WireHelperDirect(const DawnProcTable& procs) { dawnProcSetProcs(&procs); }
 
-    wgpu::Instance RegisterInstance(WGPUInstance backendInstance) override {
+    wgpu::Instance RegisterInstance(WGPUInstance backendInstance,
+                                    const WGPUInstanceDescriptor* wireDesc) override {
         DAWN_ASSERT(backendInstance != nullptr);
         return wgpu::Instance(backendInstance);
     }
@@ -131,10 +136,11 @@ class WireHelperProxy : public WireHelper {
         dawnProcSetProcs(&dawn::wire::client::GetProcs());
     }
 
-    wgpu::Instance RegisterInstance(WGPUInstance backendInstance) override {
+    wgpu::Instance RegisterInstance(WGPUInstance backendInstance,
+                                    const WGPUInstanceDescriptor* wireDesc) override {
         DAWN_ASSERT(backendInstance != nullptr);
 
-        auto reservation = mWireClient->ReserveInstance();
+        auto reservation = mWireClient->ReserveInstance(wireDesc);
         mWireServer->InjectInstance(backendInstance, reservation.id, reservation.generation);
 
         return wgpu::Instance::Acquire(reservation.instance);
@@ -159,6 +165,17 @@ class WireHelperProxy : public WireHelper {
 };
 
 }  // anonymous namespace
+
+std::pair<wgpu::Instance, std::unique_ptr<dawn::native::Instance>> WireHelper::CreateInstances(
+    const wgpu::InstanceDescriptor* nativeDesc,
+    const wgpu::InstanceDescriptor* wireDesc) {
+    auto nativeInstance = std::make_unique<dawn::native::Instance>(
+        reinterpret_cast<const WGPUInstanceDescriptor*>(nativeDesc));
+
+    return {RegisterInstance(nativeInstance->Get(),
+                             reinterpret_cast<const WGPUInstanceDescriptor*>(wireDesc)),
+            std::move(nativeInstance)};
+}
 
 std::unique_ptr<WireHelper> CreateWireHelper(const DawnProcTable& procs,
                                              bool useWire,

@@ -63,6 +63,7 @@
 #import "chrome/common/mac/app_mode_common.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "components/crx_file/id_util.h"
+#include "components/variations/net/variations_command_line.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -228,10 +229,6 @@ namespace web_app {
 BASE_FEATURE(kWebAppMaskableIconsOnMac,
              "WebAppMaskableIconsOnMac",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kUseAdHocSigningForWebAppShims,
-             "UseAdHocSigningForWebAppShims",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
 
@@ -456,17 +453,6 @@ base::CommandLine BuildCommandLineForShimLaunch() {
       app_mode::kLaunchedByChromeFrameworkDylibPath,
       framework_bundle_path.Append(chrome::kFrameworkExecutableName));
 
-  // The shim must use the same Mojo implementation as this browser. Since
-  // feature parameters and field trials are otherwise not passed to shim
-  // processes, we use feature override switches to ensure Mojo parity.
-  if (mojo::core::IsMojoIpczEnabled()) {
-    command_line.AppendSwitchASCII(switches::kEnableFeatures,
-                                   mojo::core::kMojoIpcz.name);
-  } else {
-    command_line.AppendSwitchASCII(switches::kDisableFeatures,
-                                   mojo::core::kMojoIpcz.name);
-  }
-
   return command_line;
 }
 
@@ -577,6 +563,13 @@ void LaunchTheFirstShimThatWorksOnFileThread(
   if (launched_after_rebuild) {
     command_line.AppendSwitch(app_mode::kLaunchedAfterRebuild);
   }
+
+  // The shim must have the same feature parameter and field trial state as
+  // Chrome, so pass this over the command line. This is not done as part of
+  // `BuildcommandLineForShimLaunch`, as the other caller of that method is
+  // to simulate a launch by the OS, which would not have these arguments.
+  variations::VariationsCommandLine::GetForCurrentProcess().ApplyToCommandLine(
+      command_line);
 
   LaunchApplicationWithRetry(
       shim_path, command_line, /*url_specs=*/{},
@@ -852,7 +845,7 @@ std::list<BundleInfoPlist> SearchForBundlesById(const std::string& bundle_id) {
   // First search using LaunchServices.
   NSArray* bundle_urls =
       base::apple::CFToNSOwnershipCast(LSCopyApplicationURLsForBundleIdentifier(
-          base::SysUTF8ToCFStringRef(bundle_id), /*outError=*/nullptr));
+          base::SysUTF8ToCFStringRef(bundle_id).get(), /*outError=*/nullptr));
   for (NSURL* url : bundle_urls) {
     base::FilePath bundle_path = base::apple::NSURLToFilePath(url);
     BundleInfoPlist info(bundle_path);
@@ -1487,7 +1480,7 @@ void WebAppShortcutCreator::CreateShortcutsAt(
 
     // LaunchServices will eventually detect the (updated) app, but explicitly
     // calling LSRegisterURL ensures tests see the right state immediately.
-    LSRegisterURL(base::apple::FilePathToCFURL(dst_app_path), true);
+    LSRegisterURL(base::apple::FilePathToCFURL(dst_app_path).get(), true);
 
     updated_paths->push_back(dst_app_path);
   }
@@ -1796,28 +1789,16 @@ bool WebAppShortcutCreator::UpdateIcon(const base::FilePath& app_path) const {
   return icns_encoder.WriteToFile(resources_path.Append("app.icns"));
 }
 
-bool UseAdHocSigningForWebAppShims() {
-  if (@available(macOS 11.7, *)) {
-    // macOS 11.7 and above can code sign at runtime without requiring that the
-    // developer tools be installed.
-    return base::FeatureList::IsEnabled(kUseAdHocSigningForWebAppShims);
-  }
-
-  // Code signing on older macOS versions invokes `codesign_allocate` from the
-  // developer tools, so we can't do it at runtime.
-  return false;
-}
-
 bool WebAppShortcutCreator::UpdateSignature(
     const base::FilePath& app_path) const {
-  if (!UseAdHocSigningForWebAppShims()) {
+  if (!app_mode::UseAdHocSigningForWebAppShims()) {
     return true;
   }
 
   base::apple::ScopedCFTypeRef<CFURLRef> app_url =
       base::apple::FilePathToCFURL(app_path);
   base::apple::ScopedCFTypeRef<SecStaticCodeRef> app_code;
-  if (SecStaticCodeCreateWithPath(app_url, kSecCSDefaultFlags,
+  if (SecStaticCodeCreateWithPath(app_url.get(), kSecCSDefaultFlags,
                                   app_code.InitializeInto()) != errSecSuccess) {
     return false;
   }
@@ -1842,23 +1823,23 @@ bool WebAppShortcutCreator::UpdateSignature(
   }
 
   base::apple::ScopedCFTypeRef<CFErrorRef> errors;
-  if (SecCodeSignerAddSignatureWithErrors(signer, app_code, kSecCSDefaultFlags,
-                                          errors.InitializeInto()) !=
-      errSecSuccess) {
-    LOG(ERROR) << "Failed to sign web app shim: " << errors;
+  if (SecCodeSignerAddSignatureWithErrors(
+          signer.get(), app_code.get(), kSecCSDefaultFlags,
+          errors.InitializeInto()) != errSecSuccess) {
+    LOG(ERROR) << "Failed to sign web app shim: " << errors.get();
     return false;
   }
 
   base::apple::ScopedCFTypeRef<CFDictionaryRef> app_shim_info;
-  if (SecCodeCopySigningInformation(app_code, kSecCSSigningInformation,
+  if (SecCodeCopySigningInformation(app_code.get(), kSecCSSigningInformation,
                                     app_shim_info.InitializeInto()) !=
       errSecSuccess) {
     LOG(ERROR) << "Failed to copy signing information from web app shim";
     return false;
   }
 
-  CFDataRef cd_hash_data =
-      GetValueFromDictionary<CFDataRef>(app_shim_info, kSecCodeInfoUnique);
+  CFDataRef cd_hash_data = base::apple::GetValueFromDictionary<CFDataRef>(
+      app_shim_info.get(), kSecCodeInfoUnique);
   std::vector<uint8_t> cd_hash(
       CFDataGetBytePtr(cd_hash_data),
       CFDataGetBytePtr(cd_hash_data) + CFDataGetLength(cd_hash_data));
@@ -1982,13 +1963,6 @@ void LaunchShimForTesting(const base::FilePath& shim_path,  // IN-TEST
   command_line.AppendSwitch(app_mode::kLaunchedForTest);
   command_line.AppendSwitch(app_mode::kIsNormalLaunch);
   command_line.AppendSwitchPath(app_mode::kLaunchChromeForTest, chromium_path);
-  if (mojo::core::IsMojoIpczEnabled()) {
-    command_line.AppendSwitchASCII(switches::kEnableFeatures,
-                                   mojo::core::kMojoIpcz.name);
-  } else {
-    command_line.AppendSwitchASCII(switches::kDisableFeatures,
-                                   mojo::core::kMojoIpcz.name);
-  }
 
   std::vector<std::string> url_specs;
   url_specs.reserve(urls.size());
@@ -2156,7 +2130,7 @@ void DeleteMultiProfileShortcutsForApp(const std::string& app_id) {
 Result UpdatePlatformShortcuts(
     const base::FilePath& app_data_path,
     const std::u16string& old_app_title,
-    absl::optional<ShortcutLocations> user_specified_locations,
+    std::optional<ShortcutLocations> user_specified_locations,
     const ShortcutInfo& shortcut_info) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);

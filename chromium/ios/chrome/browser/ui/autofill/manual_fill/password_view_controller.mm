@@ -10,12 +10,11 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/google/core/common/google_util.h"
 #import "components/password_manager/core/browser/password_manager_constants.h"
-#import "components/password_manager/core/common/password_manager_features.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_link_item.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_favicon_data_source.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_action_cell.h"
@@ -85,15 +84,9 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
   self.searchController.searchBar.accessibilityIdentifier =
       manual_fill::kPasswordSearchBarAccessibilityIdentifier;
+  self.title = l10n_util::GetNSString(IDS_IOS_PASSWORD_MANAGER);
 
-  bool useUISplitHeader = base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordUISplit);
-  int titleStringID = useUISplitHeader
-                          ? IDS_IOS_PASSWORD_MANAGER
-                          : IDS_IOS_MANUAL_FALLBACK_USE_OTHER_PASSWORD;
-  self.title = l10n_util::GetNSString(titleStringID);
-
-  if (useUISplitHeader && self.searchController) {
+  if (self.searchController) {
     [self setUpCustomTitleView];
     [self addHeaderItem];
   }

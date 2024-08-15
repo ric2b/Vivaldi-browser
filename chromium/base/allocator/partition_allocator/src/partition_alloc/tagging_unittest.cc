@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/tagging.h"
+#include "partition_alloc/tagging.h"
 
 #include <cstdint>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/cpu.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_config.h"
 #include "build/build_config.h"
+#include "partition_alloc/page_allocator.h"
+#include "partition_alloc/partition_alloc_base/cpu.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace partition_alloc::internal {
@@ -144,7 +145,7 @@ TEST(PartitionAllocMemoryTaggingTest, TagMemoryRangeIncrementBadAlign) {
 }
 #endif  // defined(ARCH_CPU_64_BITS)
 
-#if PA_CONFIG(HAS_MEMORY_TAGGING)
+#if BUILDFLAG(HAS_MEMORY_TAGGING)
 #if BUILDFLAG(IS_ANDROID)
 TEST(PartitionAllocMemoryTaggingTest,
      ChangeMemoryTaggingModeForAllThreadsPerProcess) {
@@ -211,6 +212,6 @@ TEST(PartitionAllocMemoryTaggingTest, ChangeMemoryTaggingModeForCurrentThread) {
   // Restore mode to original.
   ChangeMemoryTaggingModeForCurrentThread(original_mode);
 }
-#endif  // PA_CONFIG(HAS_MEMORY_TAGGING)
+#endif  // BUILDFLAG(HAS_MEMORY_TAGGING)
 
 }  // namespace partition_alloc::internal

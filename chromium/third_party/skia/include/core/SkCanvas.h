@@ -24,11 +24,13 @@
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkString.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypes.h"
 #include "include/private/base/SkCPUTypes.h"
 #include "include/private/base/SkDeque.h"
+#include "include/private/base/SkTArray.h"
 
 #include <cstdint>
 #include <cstring>
@@ -69,6 +71,9 @@ class SkTextBlob;
 class SkVertices;
 struct SkDrawShadowRec;
 struct SkRSXform;
+
+template<typename E>
+class SkEnumBitMask;
 
 namespace skgpu::graphite { class Recorder; }
 namespace sktext::gpu { class Slug; }
@@ -667,7 +672,9 @@ public:
         kF16ColorType                   = 1 << 4,
     };
 
-    typedef uint32_t SaveLayerFlags;
+    using SaveLayerFlags = uint32_t;
+    using FilterSpan = SkSpan<sk_sp<SkImageFilter>>;
+    static constexpr int kMaxFiltersPerLayer = 16;
 
     /** \struct SkCanvas::SaveLayerRec
         SaveLayerRec contains the state used to create the layer.
@@ -687,7 +694,7 @@ public:
             @return                SaveLayerRec with empty fBackdrop
         */
         SaveLayerRec(const SkRect* bounds, const SkPaint* paint, SaveLayerFlags saveLayerFlags = 0)
-            : SaveLayerRec(bounds, paint, nullptr, 1.f, saveLayerFlags) {}
+            : SaveLayerRec(bounds, paint, nullptr, 1.f, saveLayerFlags, /*filters=*/{}) {}
 
         /** Sets fBounds, fPaint, fBackdrop, and fSaveLayerFlags.
 
@@ -703,13 +710,15 @@ public:
         */
         SaveLayerRec(const SkRect* bounds, const SkPaint* paint, const SkImageFilter* backdrop,
                      SaveLayerFlags saveLayerFlags)
-            : SaveLayerRec(bounds, paint, backdrop, 1.f, saveLayerFlags) {}
+            : SaveLayerRec(bounds, paint, backdrop, 1.f, saveLayerFlags, /*filters=*/{}) {}
 
         /** hints at layer size limit */
         const SkRect*        fBounds         = nullptr;
 
         /** modifies overlay */
         const SkPaint*       fPaint          = nullptr;
+
+        FilterSpan           fFilters        = {};
 
         /**
          *  If not null, this triggers the same initialization behavior as setting
@@ -726,13 +735,23 @@ public:
         friend class SkCanvas;
         friend class SkCanvasPriv;
 
-        SaveLayerRec(const SkRect* bounds, const SkPaint* paint, const SkImageFilter* backdrop,
-                     SkScalar backdropScale, SaveLayerFlags saveLayerFlags)
-            : fBounds(bounds)
-            , fPaint(paint)
-            , fBackdrop(backdrop)
-            , fSaveLayerFlags(saveLayerFlags)
-            , fExperimentalBackdropScale(backdropScale) {}
+        SaveLayerRec(const SkRect* bounds,
+                     const SkPaint* paint,
+                     const SkImageFilter* backdrop,
+                     SkScalar backdropScale,
+                     SaveLayerFlags saveLayerFlags,
+                     FilterSpan filters)
+                : fBounds(bounds)
+                , fPaint(paint)
+                , fFilters(filters)
+                , fBackdrop(backdrop)
+                , fSaveLayerFlags(saveLayerFlags)
+                , fExperimentalBackdropScale(backdropScale) {
+            // We only allow the paint's image filter or the side-car list of filters -- not both.
+            SkASSERT(fFilters.empty() || !paint || !paint->getImageFilter());
+            // To keep things reasonable (during deserialization), we limit filter list size.
+            SkASSERT(fFilters.size() <= kMaxFiltersPerLayer);
+        }
 
         // Relative scale factor that the image content used to initialize the layer when the
         // kInitFromPrevious flag or a backdrop filter is used.
@@ -2283,30 +2302,33 @@ protected:
     virtual void onDrawSlug(const sktext::gpu::Slug* slug);
 
 private:
-
-    enum ShaderOverrideOpacity {
-        kNone_ShaderOverrideOpacity,        //!< there is no overriding shader (bitmap or image)
-        kOpaque_ShaderOverrideOpacity,      //!< the overriding shader is opaque
-        kNotOpaque_ShaderOverrideOpacity,   //!< the overriding shader may not be opaque
+    enum class PredrawFlags : unsigned {
+        kNone                    = 0,
+        kOpaqueShaderOverride    = 1, // The paint's shader is overridden with an opaque image
+        kNonOpaqueShaderOverride = 2, // The paint's shader is overridden but is not opaque
+        kCheckForOverwrite       = 4, // Check if the draw would overwrite the entire surface
+        kSkipMaskFilterAutoLayer = 8, // Do not apply mask filters in the AutoLayer
     };
+    // Inlined SK_DECL_BITMASK_OPS_FRIENDS to avoid including SkEnumBitMask.h
+    friend constexpr SkEnumBitMask<PredrawFlags> operator|(PredrawFlags, PredrawFlags);
+    friend constexpr SkEnumBitMask<PredrawFlags> operator&(PredrawFlags, PredrawFlags);
+    friend constexpr SkEnumBitMask<PredrawFlags> operator^(PredrawFlags, PredrawFlags);
+    friend constexpr SkEnumBitMask<PredrawFlags> operator~(PredrawFlags);
 
     // notify our surface (if we have one) that we are about to draw, so it
     // can perform copy-on-write or invalidate any cached images
     // returns false if the copy failed
     [[nodiscard]] bool predrawNotify(bool willOverwritesEntireSurface = false);
-    [[nodiscard]] bool predrawNotify(const SkRect*, const SkPaint*, ShaderOverrideOpacity);
+    [[nodiscard]] bool predrawNotify(const SkRect*, const SkPaint*, SkEnumBitMask<PredrawFlags>);
 
-    enum class CheckForOverwrite : bool {
-        kNo = false,
-        kYes = true
-    };
     // call the appropriate predrawNotify and create a layer if needed.
     std::optional<AutoLayerForImageFilter> aboutToDraw(
-        SkCanvas* canvas,
-        const SkPaint& paint,
-        const SkRect* rawBounds = nullptr,
-        CheckForOverwrite = CheckForOverwrite::kNo,
-        ShaderOverrideOpacity = kNone_ShaderOverrideOpacity);
+            const SkPaint& paint,
+            const SkRect* rawBounds,
+            SkEnumBitMask<PredrawFlags> flags);
+    std::optional<AutoLayerForImageFilter> aboutToDraw(
+            const SkPaint& paint,
+            const SkRect* rawBounds = nullptr);
 
     // The bottom-most device in the stack, only changed by init(). Image properties and the final
     // canvas pixels are determined by this device.
@@ -2323,14 +2345,14 @@ private:
     // clip, and matrix commands. There is a layer per call to saveLayer() using the
     // kFullLayer_SaveLayerStrategy.
     struct Layer {
-        sk_sp<SkDevice>      fDevice;
-        sk_sp<SkImageFilter> fImageFilter; // applied to layer *before* being drawn by paint
-        SkPaint              fPaint;
-        bool                 fIsCoverage;
-        bool                 fDiscard;
+        sk_sp<SkDevice>                                fDevice;
+        skia_private::STArray<1, sk_sp<SkImageFilter>> fImageFilters;
+        SkPaint                                        fPaint;
+        bool                                           fIsCoverage;
+        bool                                           fDiscard;
 
         Layer(sk_sp<SkDevice> device,
-              sk_sp<SkImageFilter> imageFilter,
+              FilterSpan imageFilters,
               const SkPaint& paint,
               bool isCoverage);
     };
@@ -2368,7 +2390,7 @@ private:
         ~MCRec();
 
         void newLayer(sk_sp<SkDevice> layerDevice,
-                      sk_sp<SkImageFilter> filter,
+                      FilterSpan filters,
                       const SkPaint& restorePaint,
                       bool layerIsCoverage);
 
@@ -2504,7 +2526,7 @@ private:
      * relative transforms between the devices).
      */
     void internalDrawDeviceWithFilter(SkDevice* src, SkDevice* dst,
-                                      const SkImageFilter* filter, const SkPaint& paint,
+                                      FilterSpan filters, const SkPaint& paint,
                                       DeviceCompatibleWithFilter compat,
                                       SkScalar scaleFactor = 1.f,
                                       bool srcIsCoverageLayer = false);
@@ -2514,7 +2536,8 @@ private:
      *  paint (or default if null) would overwrite the entire root device of the canvas
      *  (i.e. the canvas' surface if it had one).
      */
-    bool wouldOverwriteEntireSurface(const SkRect*, const SkPaint*, ShaderOverrideOpacity) const;
+    bool wouldOverwriteEntireSurface(const SkRect*, const SkPaint*,
+                                     SkEnumBitMask<PredrawFlags>) const;
 
     /**
      *  Returns true if the paint's imagefilter can be invoked directly, without needed a layer.

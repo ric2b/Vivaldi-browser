@@ -4,6 +4,7 @@
 
 #include "google_apis/gaia/fake_gaia.h"
 
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -21,7 +22,6 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -326,7 +326,8 @@ void FakeGaia::Initialize() {
   REGISTER_PATH_RESPONSE_HANDLER("/SSO", HandleSSO);
 
   // Handles the /samlredirect requests for tests.
-  REGISTER_PATH_RESPONSE_HANDLER("/samlredirect", HandleSAMLRedirect);
+  REGISTER_RESPONSE_HANDLER(gaia_urls->saml_redirect_chromeos_url(),
+                            HandleSAMLRedirect);
 
   REGISTER_RESPONSE_HANDLER(
       gaia_urls->gaia_url().Resolve(kFakeSAMLContinuePath),
@@ -728,7 +729,7 @@ void FakeGaia::HandleTokenInfo(const HttpRequest& request,
             .Set("issued_to", token_info->issued_to)
             .Set("audience", token_info->audience)
             .Set("user_id", token_info->user_id)
-            .Set("scope", base::JoinString(std::vector<base::StringPiece>(
+            .Set("scope", base::JoinString(std::vector<std::string_view>(
                                                token_info->scopes.begin(),
                                                token_info->scopes.end()),
                                            " "))
@@ -816,7 +817,7 @@ void FakeGaia::HandleSAMLRedirect(const HttpRequest& request,
                                   BasicHttpResponse* http_response) {
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
 
-  absl::optional<GURL> redirect_url = GetSamlRedirectUrl(request_url);
+  std::optional<GURL> redirect_url = GetSamlRedirectUrl(request_url);
   if (!redirect_url) {
     http_response->set_code(net::HTTP_BAD_REQUEST);
     return;
@@ -883,7 +884,6 @@ void FakeGaia::HandleGetReAuthProofToken(const HttpRequest& request,
     default:
       LOG(FATAL) << "Unsupported ReAuthProofTokenStatus: "
                  << static_cast<int>(next_reauth_status_);
-      break;
   }
 }
 
@@ -950,7 +950,7 @@ std::string FakeGaia::GetEmbeddedSetupChromeosResponseContent() const {
   return response_with_iframe;
 }
 
-absl::optional<GURL> FakeGaia::GetSamlRedirectUrl(
+std::optional<GURL> FakeGaia::GetSamlRedirectUrl(
     const GURL& request_url) const {
   // When deciding on saml redirection, gaia is expected to prioritize sso
   // profile over the domain.
@@ -971,5 +971,5 @@ absl::optional<GURL> FakeGaia::GetSamlRedirectUrl(
     return itr_domain->second;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }

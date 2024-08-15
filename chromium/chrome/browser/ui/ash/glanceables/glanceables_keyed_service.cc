@@ -6,10 +6,10 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/glanceables/glanceables_controller.h"
@@ -17,6 +17,7 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
@@ -36,6 +37,46 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace ash {
+
+namespace {
+
+constexpr net::NetworkTrafficAnnotationTag kTasksTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("glanceables_tasks_integration",
+                                        R"(
+        semantics {
+          sender: "Glanceables keyed service"
+          description: "Provide ChromeOS users quick access to their "
+                       "task lists without opening the app or website"
+          trigger: "User presses the calendar pill in shelf, which triggers "
+                   "opening the calendar, classroom (if available) and tasks "
+                   "widgets. This specific client implementation "
+                   "is responsible for fetching user's tasks data from "
+                   "Google Tasks API."
+          internal {
+            contacts {
+              email: "chromeos-launcher@google.com"
+            }
+          }
+          user_data {
+            type: ACCESS_TOKEN
+          }
+          data: "The request is authenticated with an OAuth2 access token "
+                "identifying the Google account"
+          destination: GOOGLE_OWNED_SERVICE
+          last_reviewed: "2023-08-21"
+        }
+        policy {
+          cookies_allowed: NO
+          setting: "This feature cannot be disabled in settings"
+          chrome_policy {
+            GlanceablesEnabled {
+              GlanceablesEnabled: false
+            }
+          }
+        }
+    )");
+
+}  // namespace
 
 GlanceablesKeyedService::GlanceablesKeyedService(Profile* profile)
     : profile_(profile),
@@ -63,20 +104,33 @@ void GlanceablesKeyedService::Shutdown() {
   ClearClients();
 }
 
-bool GlanceablesKeyedService::AreGlanceablesEnabled() const {
+GlanceablesKeyedService::GlanceablesStatus
+GlanceablesKeyedService::AreGlanceablesEnabled() const {
+  if (features::AreAnyGlanceablesTimeManagementViewsEnabled()) {
+    // TODO(b/319251265): Finalize policies to control the feature.
+    return GlanceablesStatus::kEnabledForFullLaunch;
+  }
+
   PrefService* const prefs = profile_->GetPrefs();
   if (features::AreGlanceablesV2Enabled()) {
-    return prefs->GetBoolean(prefs::kGlanceablesEnabled) ||
-           base::CommandLine::ForCurrentProcess()->HasSwitch(
-               ash::switches::kAshBypassGlanceablesPref);
+    if (prefs->GetBoolean(prefs::kGlanceablesEnabled)) {
+      return GlanceablesStatus::kEnabledByV2Flag;
+    }
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            ash::switches::kAshBypassGlanceablesPref)) {
+      return GlanceablesStatus::kEnabledByPrefBypass;
+    }
+    return GlanceablesStatus::kDisabled;
   }
 
   if (features::AreGlanceablesV2EnabledForTrustedTesters()) {
-    return prefs->IsManagedPreference(prefs::kGlanceablesEnabled) &&
-           prefs->GetBoolean(prefs::kGlanceablesEnabled);
+    if (prefs->IsManagedPreference(prefs::kGlanceablesEnabled) &&
+        prefs->GetBoolean(prefs::kGlanceablesEnabled)) {
+      return GlanceablesStatus::kEnabledForTrustedTesters;
+    }
   }
 
-  return false;
+  return GlanceablesStatus::kDisabled;
 }
 
 std::unique_ptr<google_apis::RequestSender>
@@ -106,8 +160,8 @@ void GlanceablesKeyedService::RegisterClients() {
       base::Unretained(this));
   classroom_client_ = std::make_unique<GlanceablesClassroomClientImpl>(
       base::DefaultClock::GetInstance(), create_request_sender_callback);
-  tasks_client_ =
-      std::make_unique<TasksClientImpl>(create_request_sender_callback);
+  tasks_client_ = std::make_unique<TasksClientImpl>(
+      create_request_sender_callback, kTasksTrafficAnnotation);
 
   Shell::Get()->glanceables_controller()->UpdateClientsRegistration(
       account_id_, GlanceablesController::ClientsRegistration{
@@ -136,7 +190,11 @@ void GlanceablesKeyedService::UpdateRegistration() {
 
   CHECK(prefs);
 
-  if (!AreGlanceablesEnabled()) {
+  GlanceablesStatus status = AreGlanceablesEnabled();
+  base::UmaHistogramEnumeration("Ash.Glanceables.TimeManagement.FeatureStatus",
+                                status);
+
+  if (status == GlanceablesStatus::kDisabled) {
     Shell::Get()->glanceables_controller()->ClearUserStatePrefs(prefs);
     ClearClients();
     return;

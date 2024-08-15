@@ -14,11 +14,9 @@
 #import "components/proxy_config/pref_proxy_config_tracker.h"
 #import "components/sync_preferences/pref_service_syncable.h"
 #import "components/user_prefs/user_prefs.h"
-#import "ios/chrome/browser/net/ios_chrome_url_request_context_getter.h"
+#import "ios/chrome/browser/net/model/ios_chrome_url_request_context_getter.h"
 #import "ios/chrome/browser/prefs/model/ios_chrome_pref_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/web/public/thread/web_task_traits.h"
-#import "ios/web/public/thread/web_thread.h"
 
 // Vivaldi
 #import "components/ad_blocker/adblock_rule_service.h"
@@ -140,6 +138,7 @@ void OffTheRecordChromeBrowserStateImpl::ClearNetworkingHistorySince(
   // BrowsingDataRemover will never be destroyed and the dialog will never be
   // closed. We must do this asynchronously in order to avoid reentrancy issues.
   if (!completion.is_null()) {
-    web::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(completion));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(completion));
   }
 }

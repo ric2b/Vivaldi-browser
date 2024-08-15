@@ -7,12 +7,12 @@
 
 #include <chrono>
 #include <map>
+#include <optional>
 
 #include "base/containers/circular_deque.h"
 #include "base/memory/ref_counted.h"
 #include "content/public/browser/tts_platform.h"
 #include "content/public/test/test_utils.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // TODO(katie): This may need to move into Content as part of the TTS refactor.
 
@@ -76,7 +76,7 @@ class SpeechMonitor : public content::TtsPlatform {
 
     std::string text_;
     bool as_pattern_ = false;
-    absl::optional<std::string> locale_;
+    std::optional<std::string> locale_;
     std::vector<std::string> disallowed_text_;
   };
 
@@ -106,7 +106,7 @@ class SpeechMonitor : public content::TtsPlatform {
   // * For matching text, use the methods above;
   // * use this to check if some TTS parameters were set when a specific piece
   // of text was being spoken.
-  absl::optional<content::UtteranceContinuousParameters>
+  std::optional<content::UtteranceContinuousParameters>
   GetParamsForPreviouslySpokenTextPattern(const std::string& pattern);
 
   // Adds a call to be included in replay.
@@ -118,8 +118,21 @@ class SpeechMonitor : public content::TtsPlatform {
   // Replays all expectations.
   void Replay();
 
+  // Finishes an in-progress utterance if `send_word_events_and_wait_to_finish`
+  // was set.
+  void FinishSpeech();
+
   // Delayed utterances.
   double GetDelayForLastUtteranceMS();
+
+  // When set to `true`, SpeechMonitor will send `START` and `WORD` events for
+  // each utterance and will wait to send the `END` event until `FinishSpeech()`
+  // is called. When `false` (default), the user does not need to call
+  // `FinishSpeech()` explicitly. This should be called after word events are
+  // consumed and before `ExpectSpeech` and `Replay`.
+  void send_word_events_and_wait_to_finish(bool wait) {
+    send_word_events_and_wait_to_finish_ = wait;
+  }
 
   int stop_count() { return stop_count_; }
 
@@ -193,6 +206,11 @@ class SpeechMonitor : public content::TtsPlatform {
   // Indicates if there were two consecutive utterances that match (i.e.
   // repeated speech).
   std::vector<std::string> repeated_speech_;
+
+  bool send_word_events_and_wait_to_finish_ = false;
+  std::string utterance_ = "";
+  int utterance_id_ = -1;
+  base::OnceCallback<void(bool)> on_speak_finished_;
 
   base::WeakPtrFactory<SpeechMonitor> weak_factory_{this};
 };

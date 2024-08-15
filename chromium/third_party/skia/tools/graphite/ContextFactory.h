@@ -14,6 +14,7 @@
 #include "include/private/base/SkTArray.h"
 #include "tools/gpu/ContextType.h"
 #include "tools/graphite/GraphiteTestContext.h"
+#include "tools/graphite/TestOptions.h"
 
 namespace skgpu::graphite {
 class Context;
@@ -28,7 +29,7 @@ struct ContextInfo {
 
 class ContextFactory {
 public:
-    explicit ContextFactory(const skgpu::graphite::ContextOptions&);
+    explicit ContextFactory(const TestOptions&);
     ContextFactory() = default;
     ContextFactory(const ContextFactory&) = delete;
     ContextFactory& operator=(const ContextFactory&) = delete;
@@ -39,6 +40,15 @@ public:
 
 private:
     struct OwnedContextInfo {
+        OwnedContextInfo();
+        OwnedContextInfo(skgpu::ContextType,
+                         std::unique_ptr<GraphiteTestContext>,
+                         std::unique_ptr<skgpu::graphite::Context>);
+
+        ~OwnedContextInfo();
+        OwnedContextInfo(OwnedContextInfo&&);
+        OwnedContextInfo& operator=(OwnedContextInfo&&);
+
         // This holds the same data as ContextInfo, but uses unique_ptr to maintain ownership.
         skgpu::ContextType fType = skgpu::ContextType::kMock;
         std::unique_ptr<GraphiteTestContext> fTestContext;
@@ -48,7 +58,7 @@ private:
     static ContextInfo AsContextInfo(const OwnedContextInfo& ctx);
 
     skia_private::TArray<OwnedContextInfo> fContexts;
-    const skgpu::graphite::ContextOptions fOptions;
+    const TestOptions fOptions = {};
 };
 
 }  // namespace skiatest::graphite

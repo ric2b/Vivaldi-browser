@@ -490,9 +490,15 @@ void NigoriModelTypeProcessor::ClearMetadataAndReset() {
       sync_pb::EntitySpecifics::kNigoriFieldNumber);
 }
 
-void NigoriModelTypeProcessor::ClearMetadataWhileStopped() {
-  NOTREACHED() << "Nigori has a separate load callback and way to clear data. "
-                  "This method should not have been called.";
+void NigoriModelTypeProcessor::ClearMetadataIfStopped() {
+  // Nigori has a separate load callback and way to clear data. In particular,
+  // Nigori is never considered to be stopped.
+}
+
+void NigoriModelTypeProcessor::ReportBridgeErrorForTest() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(!model_error_.has_value());
+  ReportError(ModelError(FROM_HERE, "Reported error for test"));
 }
 
 }  // namespace syncer

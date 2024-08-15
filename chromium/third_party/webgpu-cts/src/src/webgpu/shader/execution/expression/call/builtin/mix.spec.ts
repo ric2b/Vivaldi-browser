@@ -16,121 +16,81 @@ Same as mix(e1,e2,T2(e3)).
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeVec, TypeF32, TypeF16 } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import {
-  sparseF32Range,
-  sparseF16Range,
-  sparseVectorF32Range,
-  sparseVectorF16Range,
-} from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
-import { allInputSources, run } from '../../expression.js';
+import { TypeAbstractFloat, TypeF16, TypeF32, TypeVec } from '../../../../../util/conversion.js';
+import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
-import { builtin } from './builtin.js';
+import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './mix.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Cases: f32_vecN_scalar_[non_]const
-const f32_vec_scalar_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f32_vec${n}_scalar_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f32.generateVectorPairScalarToVectorComponentWiseCase(
-          sparseVectorF32Range(n),
-          sparseVectorF32Range(n),
-          sparseF32Range(),
-          nonConst ? 'unfiltered' : 'finite',
-          ...FP.f32.mixIntervals
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-// Cases: f16_vecN_scalar_[non_]const
-const f16_vec_scalar_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f16_vec${n}_scalar_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f16.generateVectorPairScalarToVectorComponentWiseCase(
-          sparseVectorF16Range(n),
-          sparseVectorF16Range(n),
-          sparseF16Range(),
-          nonConst ? 'unfiltered' : 'finite',
-          ...FP.f16.mixIntervals
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('mix', {
-  f32_const: () => {
-    return FP.f32.generateScalarTripleToIntervalCases(
-      sparseF32Range(),
-      sparseF32Range(),
-      sparseF32Range(),
-      'finite',
-      ...FP.f32.mixIntervals
-    );
-  },
-  f32_non_const: () => {
-    return FP.f32.generateScalarTripleToIntervalCases(
-      sparseF32Range(),
-      sparseF32Range(),
-      sparseF32Range(),
-      'unfiltered',
-      ...FP.f32.mixIntervals
-    );
-  },
-  ...f32_vec_scalar_cases,
-  f16_const: () => {
-    return FP.f16.generateScalarTripleToIntervalCases(
-      sparseF16Range(),
-      sparseF16Range(),
-      sparseF16Range(),
-      'finite',
-      ...FP.f16.mixIntervals
-    );
-  },
-  f16_non_const: () => {
-    return FP.f16.generateScalarTripleToIntervalCases(
-      sparseF16Range(),
-      sparseF16Range(),
-      sparseF16Range(),
-      'unfiltered',
-      ...FP.f16.mixIntervals
-    );
-  },
-  ...f16_vec_scalar_cases,
-});
 
 g.test('abstract_float_matching')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
   .desc(`abstract_float test with matching third param`)
   .params(u =>
-    u.combine('inputSource', allInputSources).combine('vectorize', [undefined, 2, 3, 4] as const)
+    u
+      .combine('inputSource', onlyConstInputSource)
+      .combine('vectorize', [undefined, 2, 3, 4] as const)
   )
-  .unimplemented();
+  .fn(async t => {
+    const cases = await d.get('abstract_const');
+    await run(
+      t,
+      abstractBuiltin('mix'),
+      [TypeAbstractFloat, TypeAbstractFloat, TypeAbstractFloat],
+      TypeAbstractFloat,
+      t.params,
+      cases
+    );
+  });
 
 g.test('abstract_float_nonmatching_vec2')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
   .desc(`abstract_float tests with two vec2<abstract_float> params and scalar third param`)
-  .params(u => u.combine('inputSource', allInputSources))
-  .unimplemented();
+  .params(u => u.combine('inputSource', onlyConstInputSource))
+  .fn(async t => {
+    const cases = await d.get('abstract_vec2_scalar_const');
+    await run(
+      t,
+      abstractBuiltin('mix'),
+      [TypeVec(2, TypeAbstractFloat), TypeVec(2, TypeAbstractFloat), TypeAbstractFloat],
+      TypeVec(2, TypeAbstractFloat),
+      t.params,
+      cases
+    );
+  });
 
 g.test('abstract_float_nonmatching_vec3')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
   .desc(`abstract_float tests with two vec3<abstract_float> params and scalar third param`)
-  .params(u => u.combine('inputSource', allInputSources))
-  .unimplemented();
+  .params(u => u.combine('inputSource', onlyConstInputSource))
+  .fn(async t => {
+    const cases = await d.get('abstract_vec3_scalar_const');
+    await run(
+      t,
+      abstractBuiltin('mix'),
+      [TypeVec(3, TypeAbstractFloat), TypeVec(3, TypeAbstractFloat), TypeAbstractFloat],
+      TypeVec(3, TypeAbstractFloat),
+      t.params,
+      cases
+    );
+  });
 
 g.test('abstract_float_nonmatching_vec4')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
   .desc(`abstract_float tests with two vec4<abstract_float> params and scalar third param`)
-  .params(u => u.combine('inputSource', allInputSources))
-  .unimplemented();
+  .params(u => u.combine('inputSource', onlyConstInputSource))
+  .fn(async t => {
+    const cases = await d.get('abstract_vec4_scalar_const');
+    await run(
+      t,
+      abstractBuiltin('mix'),
+      [TypeVec(4, TypeAbstractFloat), TypeVec(4, TypeAbstractFloat), TypeAbstractFloat],
+      TypeVec(4, TypeAbstractFloat),
+      t.params,
+      cases
+    );
+  });
 
 g.test('f32_matching')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

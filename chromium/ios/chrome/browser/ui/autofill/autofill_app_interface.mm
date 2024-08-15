@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/autofill/autofill_app_interface.h"
 
+#import "base/apple/foundation_util.h"
 #import "base/check.h"
 #import "base/memory/singleton.h"
 #import "base/strings/sys_string_conversions.h"
@@ -20,13 +21,16 @@
 #import "components/autofill/ios/browser/credit_card_save_manager_test_observer_bridge.h"
 #import "components/autofill/ios/browser/ios_test_event_waiter.h"
 #import "components/keyed_service/core/service_access_type.h"
-#import "components/password_manager/core/browser/password_store_consumer.h"
-#import "components/password_manager/core/browser/password_store_interface.h"
-#import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
+#import "components/password_manager/core/browser/password_manager_util.h"
+#import "components/password_manager/core/browser/password_store/password_store_consumer.h"
+#import "components/password_manager/core/browser/password_store/password_store_interface.h"
+#import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ui/autofill/scoped_autofill_payment_reauth_module_override.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
+#import "ios/chrome/test/app/mock_reauthentication_module.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/public/provider/chrome/browser/risk_data/risk_data_api.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
@@ -39,8 +43,9 @@ namespace {
 const char16_t kExampleUsername[] = u"concrete username";
 const char16_t kExamplePassword[] = u"concrete password";
 
-// Gets the current password store.
-scoped_refptr<password_manager::PasswordStoreInterface> GetPasswordStore() {
+// Gets the current profile password store.
+scoped_refptr<password_manager::PasswordStoreInterface>
+GetPasswordProfileStore() {
   // ServiceAccessType governs behaviour in Incognito: only modifications with
   // EXPLICIT_ACCESS, which correspond to user's explicit gesture, succeed.
   // This test does not deal with Incognito, and should not run in Incognito
@@ -65,7 +70,7 @@ class TestStoreConsumer : public password_manager::PasswordStoreConsumer {
   const std::vector<password_manager::PasswordForm>& GetStoreResults() {
     results_.clear();
     ResetObtained();
-    GetPasswordStore()->GetAllLogins(weak_ptr_factory_.GetWeakPtr());
+    GetPasswordProfileStore()->GetAllLogins(weak_ptr_factory_.GetWeakPtr());
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-result"
     base::test::ios::WaitUntilConditionOrTimeout(
@@ -104,10 +109,10 @@ class TestStoreConsumer : public password_manager::PasswordStoreConsumer {
   base::WeakPtrFactory<TestStoreConsumer> weak_ptr_factory_{this};
 };
 
-// Saves `form` to the password store and waits until the async processing is
-// done.
-void SaveToPasswordStore(const password_manager::PasswordForm& form) {
-  GetPasswordStore()->AddLogin(form);
+// Saves `form` to the profile password store and waits until the async
+// processing is done.
+void SaveToPasswordProfileStore(const password_manager::PasswordForm& form) {
+  GetPasswordProfileStore()->AddLogin(form);
   // When we retrieve the form from the store, `in_store` should be set.
   password_manager::PasswordForm expected_form = form;
   expected_form.in_store = password_manager::PasswordForm::Store::kProfileStore;
@@ -119,30 +124,30 @@ void SaveToPasswordStore(const password_manager::PasswordForm& form) {
   }
 }
 
-// Saves an example form in the store.
-void SaveExamplePasswordForm() {
+// Saves an example form in the profile store.
+void SaveExamplePasswordFormInProfileStore() {
   password_manager::PasswordForm example;
   example.username_value = kExampleUsername;
   example.password_value = kExamplePassword;
   example.url = GURL("https://example.com/");
-  example.signon_realm = example.url.spec();
-  SaveToPasswordStore(example);
+  example.signon_realm = password_manager_util::GetSignonRealm(example.url);
+  SaveToPasswordProfileStore(example);
 }
 
-// Saves an example form in the store for the passed URL.
+// Saves an example form in the profile store for the passed URL.
 void SaveLocalPasswordForm(const GURL& url) {
   password_manager::PasswordForm localForm;
   localForm.username_value = kExampleUsername;
   localForm.password_value = kExamplePassword;
   localForm.url = url;
-  localForm.signon_realm = localForm.url.spec();
-  SaveToPasswordStore(localForm);
+  localForm.signon_realm = password_manager_util::GetSignonRealm(localForm.url);
+  SaveToPasswordProfileStore(localForm);
 }
 
-// Removes all credentials stored.
-void ClearPasswordStore() {
-  GetPasswordStore()->RemoveLoginsCreatedBetween(base::Time(), base::Time(),
-                                                 base::DoNothing());
+// Removes all credentials from the profile store.
+void ClearProfilePasswordStore() {
+  GetPasswordProfileStore()->RemoveLoginsCreatedBetween(
+      base::Time(), base::Time(), base::DoNothing());
   TestStoreConsumer consumer;
 }
 
@@ -202,11 +207,11 @@ class SaveCardInfobarEGTestHelper
         ->GetAutofillManager()
         .client()
         .GetFormDataImporter()
-        ->credit_card_save_manager_.get();
+        ->GetCreditCardSaveManager();
   }
 
-  // Access the PaymentsClient.
-  static payments::PaymentsClient* GetPaymentsClient() {
+  // Access the PaymentsNetworkInterface.
+  static payments::PaymentsNetworkInterface* GetPaymentsNetworkInterface() {
     web::WebState* web_state = chrome_test_util::GetCurrentWebState();
     web::WebFramesManager* frames_manager =
         autofill::AutofillJavaScriptFeature::GetInstance()->GetWebFramesManager(
@@ -216,7 +221,7 @@ class SaveCardInfobarEGTestHelper
     return AutofillDriverIOS::FromWebStateAndWebFrame(web_state, main_frame)
         ->GetAutofillManager()
         .client()
-        .GetPaymentsClient();
+        .GetPaymentsNetworkInterface();
   }
 
   // Delete all failed attempds registered on every cards.
@@ -302,19 +307,20 @@ class SaveCardInfobarEGTestHelper
   void SetUp() {
     test_url_loader_factory_ =
         std::make_unique<network::TestURLLoaderFactory>();
-    // Set up the URL loader factory for the PaymentsClient so we can intercept
-    // those network requests.
+    // Set up the URL loader factory for the PaymentsNetworkInterface so we can
+    // intercept those network requests.
     shared_url_loader_factory_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             test_url_loader_factory_.get());
 
-    payments::PaymentsClient* payments_client =
-        SaveCardInfobarEGTestHelper::GetPaymentsClient();
-    payments_client->set_url_loader_factory_for_testing(
+    payments::PaymentsNetworkInterface* payments_network_interface =
+        SaveCardInfobarEGTestHelper::GetPaymentsNetworkInterface();
+    payments_network_interface->set_url_loader_factory_for_testing(
         shared_url_loader_factory_);
 
     // Set a fake access token to avoid fetch requests.
-    payments_client->set_access_token_for_testing("fake_access_token");
+    payments_network_interface->set_access_token_for_testing(
+        "fake_access_token");
 
     // Observe actions in CreditCardSaveManager.
     CreditCardSaveManager* credit_card_save_manager =
@@ -342,12 +348,15 @@ class SaveCardInfobarEGTestHelper
 
 @implementation AutofillAppInterface
 
-+ (void)clearPasswordStore {
-  ClearPasswordStore();
+static std::unique_ptr<ScopedAutofillPaymentReauthModuleOverride>
+    _scopedReauthModuleOverride;
+
++ (void)clearProfilePasswordStore {
+  ClearProfilePasswordStore();
 }
 
-+ (void)saveExamplePasswordForm {
-  SaveExamplePasswordForm();
++ (void)saveExamplePasswordFormToProfileStore {
+  SaveExamplePasswordFormInProfileStore();
 }
 
 + (void)savePasswordFormForURLSpec:(NSString*)URLSpec {
@@ -365,7 +374,8 @@ class SaveCardInfobarEGTestHelper
       chrome_test_util::GetOriginalBrowserState();
   autofill::PersonalDataManager* personalDataManager =
       autofill::PersonalDataManagerFactory::GetForBrowserState(browserState);
-  for (const auto* profile : personalDataManager->GetProfiles()) {
+  for (const autofill::AutofillProfile* profile :
+       personalDataManager->GetProfiles()) {
     personalDataManager->RemoveByGUID(profile->guid());
   }
 
@@ -397,7 +407,9 @@ class SaveCardInfobarEGTestHelper
 + (void)clearCreditCardStore {
   autofill::PersonalDataManager* personalDataManager =
       [self personalDataManager];
-  for (const auto* creditCard : personalDataManager->GetCreditCards()) {
+  for (const autofill::CreditCard* creditCard :
+       personalDataManager->GetCreditCards()) {
+    // This will not remove server cards, as they have no guid.
     personalDataManager->RemoveByGUID(creditCard->guid());
   }
 
@@ -405,6 +417,11 @@ class SaveCardInfobarEGTestHelper
       chrome_test_util::GetOriginalBrowserState();
   autofill::prefs::SetAutofillPaymentMethodsEnabled(browserState->GetPrefs(),
                                                     YES);
+}
+
+// Clears all server data including server cards.
++ (void)clearAllServerDataForTesting {
+  [self personalDataManager]->ClearAllServerDataForTesting();
 }
 
 + (NSString*)saveLocalCreditCard {
@@ -432,7 +449,6 @@ class SaveCardInfobarEGTestHelper
   autofill::CreditCard card =
       autofill::test::WithCvc(autofill::test::GetMaskedServerCard());
   DCHECK(card.record_type() != autofill::CreditCard::RecordType::kLocalCard);
-
   personalDataManager->AddServerCreditCardForTest(
       std::make_unique<autofill::CreditCard>(card));
   personalDataManager->NotifyPersonalDataObserver();
@@ -489,6 +505,41 @@ class SaveCardInfobarEGTestHelper
 
 + (NSString*)paymentsRiskData {
   return ios::provider::GetRiskData();
+}
+
++ (void)setUpMockReauthenticationModule {
+  MockReauthenticationModule* mock_reauthentication_module =
+      [[MockReauthenticationModule alloc] init];
+  _scopedReauthModuleOverride =
+      ScopedAutofillPaymentReauthModuleOverride::MakeAndArmForTesting(
+          mock_reauthentication_module);
+}
+
++ (void)clearMockReauthenticationModule {
+  _scopedReauthModuleOverride = nullptr;
+}
+
++ (void)mockReauthenticationModuleCanAttempt:(BOOL)canAttempt {
+  CHECK(_scopedReauthModuleOverride);
+  MockReauthenticationModule* mockModule =
+      base::apple::ObjCCastStrict<MockReauthenticationModule>(
+          _scopedReauthModuleOverride->module);
+  mockModule.canAttempt = canAttempt;
+}
+
++ (void)mockReauthenticationModuleExpectedResult:
+    (ReauthenticationResult)expectedResult {
+  CHECK(_scopedReauthModuleOverride);
+  MockReauthenticationModule* mockModule =
+      base::apple::ObjCCastStrict<MockReauthenticationModule>(
+          _scopedReauthModuleOverride->module);
+  mockModule.expectedResult = expectedResult;
+}
+
++ (void)setMandatoryReauthEnabled:(BOOL)enabled {
+  autofill::PersonalDataManager* personalDataManager =
+      [self personalDataManager];
+  personalDataManager->SetPaymentMethodsMandatoryReauthEnabled(enabled);
 }
 
 #pragma mark - Private

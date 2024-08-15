@@ -25,7 +25,7 @@
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
 #include "core/fxcrt/autorestorer.h"
 #include "core/fxcrt/cfx_read_only_vector_stream.h"
-#include "core/fxcrt/fixed_uninit_data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "third_party/base/check.h"
@@ -587,7 +587,8 @@ RetainPtr<CPDF_Object> CPDF_SyntaxParser::GetObjectBodyInternal(
       }
 
       // `key` has to be "/X" at the minimum.
-      if (key.GetLength() > 1) {
+      // `pObj` cannot be a stream, per ISO 32000-1:2008 section 7.3.8.1.
+      if (key.GetLength() > 1 && !pObj->IsStream()) {
         pDict->SetFor(key.Substr(1), std::move(pObj));
       }
     }
@@ -790,8 +791,8 @@ RetainPtr<CPDF_Stream> CPDF_SyntaxParser::ReadStream(
     // `substream` is ultimately holding references to. To avoid unexpectedly
     // changing object lifetimes by handing `substream` to `pStream`, make a
     // copy of the data here.
-    FixedUninitDataVector<uint8_t> data(substream->GetSize());
-    bool did_read = substream->ReadBlockAtOffset(data.writable_span(), 0);
+    auto data = FixedSizeDataVector<uint8_t>::Uninit(substream->GetSize());
+    bool did_read = substream->ReadBlockAtOffset(data.span(), 0);
     CHECK(did_read);
     auto data_as_stream =
         pdfium::MakeRetain<CFX_ReadOnlyVectorStream>(std::move(data));

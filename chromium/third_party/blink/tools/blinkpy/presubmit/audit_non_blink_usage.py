@@ -28,6 +28,11 @@ _DISALLOW_NON_BLINK_MOJOM = (
     'of "::mojom::Foo" unless you have clear reasons not to do so.',
     'Warning')
 
+_DISALLOW_CONTINUATION_DATA_ = (
+    '.*(Get|Set|Ensure)ContinuationPreservedEmbedderData.*',
+    '[Get|Set|Ensure]ContinuationPreservedEmbedderData does not support multiple '
+    'clients.')
+
 _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/'],
@@ -39,6 +44,9 @@ _CONFIG = [
             'gfx::HdrMetadataExtendedRange',
             'gfx::ICCProfile',
             'gfx::RadToDeg',
+
+            # For fast cos/sin functions
+            'gfx::SinCosDegrees',
 
             # absl
             'absl::MakeInt128',
@@ -82,6 +90,7 @@ _CONFIG = [
             'base::FilePath',
             'base::FunctionRef',
             'base::GetUniqueIdForProcess',
+            'base::HeapArray',
             'base::HexStringToUInt64',
             'base::Hours',
             "base::i18n::TextDirection",
@@ -138,7 +147,10 @@ _CONFIG = [
             'base::WeakPtrFactory',
             'base::WrapRefCounted',
             'base::WritableSharedMemoryMapping',
+            'base::as_byte_span',
             'base::as_bytes',
+            'base::as_chars',
+            'base::as_writable_bytes',
             'base::bit_cast',
             'base::expected',
             'base::make_span',
@@ -173,6 +185,7 @@ _CONFIG = [
 
             # //base/functional/callback_helpers.h.
             'base::DoNothing',
+            'base::IgnoreArgs',
             'base::SplitOnceCallback',
 
             # //base/functional/callback.h is allowed, but you need to use
@@ -265,10 +278,6 @@ _CONFIG = [
             # //base/strings/strcat.h.
             'base::StrCat',
 
-            # //base/template_util.h.
-            'base::void_t',
-            'base::remove_cvref_t',
-
             # Debugging helpers from //base/debug are allowed everywhere.
             'base::debug::.+',
 
@@ -338,6 +347,7 @@ _CONFIG = [
             'cc::RecordPaintCanvas',
             'cc::PaintShader',
             'cc::PaintWorkletInput',
+            'cc::RefCountedBuffer',
             'cc::NodeId',
             'cc::NodeInfo',
             'cc::UsePaintCache',
@@ -515,6 +525,7 @@ _CONFIG = [
             'cc::SnapAreaData',
             'cc::SnapAxis',
             'cc::SnapContainerData',
+            'cc::SnappedTargetData',
             'cc::SnapFlingClient',
             'cc::SnapFlingController',
             'cc::SnapPositionData',
@@ -628,7 +639,7 @@ _CONFIG = [
             'net::HTTP_.+',
 
             # For ConnectionInfo enumeration
-            'net::HttpResponseInfo',
+            'net::HttpConnectionInfo',
 
             # Network service.
             'network::.+',
@@ -744,6 +755,7 @@ _CONFIG = [
              'Use WTF::Bind or WTF::BindRepeating.'),
             'base::BindPostTaskToCurrentDefault',
             _DISALLOW_NON_BLINK_MOJOM,
+            _DISALLOW_CONTINUATION_DATA_,
         ],
         # These task runners are generally banned in blink to ensure
         # that blink tasks remain properly labeled. See
@@ -1441,10 +1453,12 @@ _CONFIG = [
         ],
         'allowed': [
             'base::ClampMul',
+            'base::IsAligned',
             'base::DoNothingWithBoundArgs',
             'base::PlatformThreadRef',
             'base::WrapRefCounted',
             'cc::kNumYUVPlanes',
+            'cc::SkiaPaintCanvas',
             'cc::YUVIndex',
             'cc::YUVSubsampling',
             'gpu::kNullSurfaceHandle',
@@ -1575,6 +1589,7 @@ _CONFIG = [
         'allowed': [
             # Required to provide a canonicalization functor to liburlpattern.
             "absl::InvalidArgumentError",
+            "absl::Status",
             "absl::StatusOr",
 
             # Required by liburlpattern API in order to pass string data
@@ -1658,13 +1673,12 @@ _CONFIG = [
             'base::LazyInstance',
             'base::Lock',
             # TODO(crbug.com/787254): Remove base::BindOnce, base::Unretained,
-            # base::Passed, base::OnceClosure, base::RepeatingClosure,
-            # base::CurrentThread and base::RetainedRef.
+            # base::OnceClosure, base::RepeatingClosure, base::CurrentThread and
+            # base::RetainedRef.
             'base::Bind.*',
             'base::MD5.*',
             'base::CurrentThread',
             'base::.*Closure',
-            'base::Passed',
             'base::PowerObserver',
             'base::RetainedRef',
             'base::StringPrintf',
@@ -1747,6 +1761,15 @@ _CONFIG = [
         ],
         'allowed': [
             'storage::GetIdentifierFromOrigin',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/frame/local_frame.cc',
+            'third_party/blink/renderer/core/frame/local_frame.h',
+        ],
+        'allowed': [
+            'gfx::ImageSkia',
         ],
     },
     {
@@ -1941,7 +1964,6 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/service_worker/service_worker_router_type_converter.cc',
             'third_party/blink/renderer/modules/service_worker/service_worker_router_type_converter_test.cc',
             # TODO(crbug.com/1371756): consolidate code using liburlpattern.
             # Especially, consolidate manifest and this code.
@@ -1962,11 +1984,28 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/ml/webnn/ml_graph_test_mojo.cc',
             'third_party/blink/renderer/modules/ml/webnn/ml_graph_builder.cc',
         ],
         'allowed': [
             'webnn::features::.+',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/ml/webnn/ml_graph_test_mojo.cc',
+        ],
+        'allowed': [
+            'base::test::ScopedFeatureList',
+            'blink_mojom::.+',
+            'webnn::features::.+',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/ml/webnn/ml_graph_type_converter.cc',
+        ],
+        'allowed': [
+            'blink_mojom::.+',
         ]
     },
     {
@@ -1976,6 +2015,15 @@ _CONFIG = [
         ],
         'allowed': [
             'aggregation_service::.+',
+        ]
+    },
+     {
+        'paths': [
+            'third_party/blink/renderer/modules/scheduler/',
+            'third_party/blink/renderer/modules/shared_storage/',
+        ],
+        'allowed': [
+            _DISALLOW_CONTINUATION_DATA_[0],
         ]
     },
 ]
@@ -2052,11 +2100,14 @@ _COMPILED_CONFIG = _precompile_config()
 #
 # As a bit of a minor hack, this regex also hardcodes a check for GURL, since
 # GURL isn't namespace qualified and wouldn't match otherwise.
+# ContinuationPreservedEmbedder data is similarly hardcoded to restrict access
+# to the v8 APIs which would not otherwise match.
 #
 # An example of an identifier that will be matched with this RE is
 # "base::BindOnce" or "performance_manager::policies::WorkingSetTrimData".
 _IDENTIFIER_WITH_NAMESPACE_RE = re.compile(
-    r'\b(?:(?:[a-z_][a-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*|GURL)\b')
+    r'\b(?:(?:[a-z_][a-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*|GURL|.*ContinuationPreservedEmbedderData.*)\b'
+)
 
 # Different check which matches a non-empty sequence of lower-case
 # alphanumeric namespaces, followed by at least one

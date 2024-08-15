@@ -29,7 +29,7 @@ CreateAssignmentsWithStringForStudents(
         GURL(base::StringPrintf(
             "https://classroom.google.com/c/test/a/test_course_id_%d/details",
             i)),
-        absl::nullopt, base::Time(), absl::nullopt));
+        std::nullopt, base::Time(), std::nullopt));
   }
   return assignments;
 }
@@ -69,24 +69,6 @@ void FakeGlanceablesClassroomClient::GetStudentAssignmentsWithoutDueDate(
   std::move(callback).Run(
       true, CreateAssignmentsWithStringForStudents("No Due Date", 3));
 }
-
-void FakeGlanceablesClassroomClient::IsTeacherRoleActive(
-    IsRoleEnabledCallback callback) {
-  std::move(callback).Run(false);
-}
-
-void FakeGlanceablesClassroomClient::
-    GetTeacherAssignmentsWithApproachingDueDate(
-        GetAssignmentsCallback callback) {}
-
-void FakeGlanceablesClassroomClient::GetTeacherAssignmentsRecentlyDue(
-    GetAssignmentsCallback callback) {}
-
-void FakeGlanceablesClassroomClient::GetTeacherAssignmentsWithoutDueDate(
-    GetAssignmentsCallback callback) {}
-
-void FakeGlanceablesClassroomClient::GetGradedTeacherAssignments(
-    GetAssignmentsCallback callback) {}
 
 void FakeGlanceablesClassroomClient::OnGlanceablesBubbleClosed() {}
 

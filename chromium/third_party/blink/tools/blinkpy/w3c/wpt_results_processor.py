@@ -17,8 +17,10 @@ import time
 from typing import (
     Any,
     Dict,
+    FrozenSet,
     Iterator,
     List,
+    Literal,
     NamedTuple,
     Optional,
     Set,
@@ -33,10 +35,10 @@ from blinkpy.common.html_diff import html_diff
 from blinkpy.common.memoized import memoized
 from blinkpy.common.system.filesystem import FileSystem
 from blinkpy.common.unified_diff import unified_diff
-from blinkpy.w3c.wpt_metadata import RunInfo
 from blinkpy.web_tests.port.base import Port
 from blinkpy.web_tests.models import test_failures
 from blinkpy.web_tests.models.testharness_results import (
+    ABBREVIATED_ALL_PASS,
     LineType,
     Status,
     TestharnessLine,
@@ -50,7 +52,57 @@ from blinkpy.web_tests.models.typ_types import (
     ResultType,
 )
 
+path_finder.bootstrap_wpt_imports()
+from wptrunner import wpttest
+
 _log = logging.getLogger(__name__)
+_status_mapping = collections.OrderedDict([
+    ('OK', ResultType.Pass),
+    ('FAIL', ResultType.Failure),
+    ('PASS', ResultType.Pass),
+    ('TIMEOUT', ResultType.Timeout),
+    ('ERROR', ResultType.Failure),
+    ('CRASH', ResultType.Crash),
+    ('PRECONDITION_FAILED', ResultType.Failure),
+    ('SKIP', ResultType.Skip),
+    ('NOTRUN', ResultType.Failure),
+])
+
+RunInfo = Dict[str, Any]
+TestType = Literal[tuple(wpttest.manifest_test_cls)]
+
+
+def wptrunner_to_chromium_status(status: str) -> str:
+    return _status_mapping[status]
+
+
+@memoized
+def chromium_to_wptrunner_statuses(
+    statuses: FrozenSet[str],
+    test_type: TestType,
+    subtest: bool = False,
+) -> Set[str]:
+    wptrunner_statuses = {
+        wptrunner_status
+        for wptrunner_status, chromium_status in _status_mapping.items()
+        if chromium_status in statuses
+    }
+    test_cls = wpttest.manifest_test_cls[test_type]
+    if subtest:
+        result_cls = test_cls.subtest_result_cls
+        assert result_cls, f'{test_type!r} tests cannot have subtests'
+    else:
+        result_cls = test_cls.result_cls
+    return wptrunner_statuses & result_cls.statuses
+
+
+def normalize_statuses(statuses: Iterator[str]) -> List[str]:
+    status_order = list(_status_mapping.keys())
+    # Some Chromium statuses may map to more than one wptrunner status (e.g.,
+    # ResultType.FAIL -> FAIL, PRECONDITION_FAILED), so return a list of
+    # statuses instead of a single status. Also, return them in a well-defined
+    # order (generally, most commonly used statuses to least).
+    return sorted(set(statuses), key=status_order.index)
 
 
 class WPTResult(Result):
@@ -64,21 +116,7 @@ class WPTResult(Result):
      3. Format (sub)test statuses and messages into baselines or logs.
     """
 
-    _wptrunner_to_chromium_statuses = {
-        'OK': ResultType.Pass,
-        'PASS': ResultType.Pass,
-        'FAIL': ResultType.Failure,
-        'ERROR': ResultType.Failure,
-        'PRECONDITION_FAILED': ResultType.Failure,
-        'TIMEOUT': ResultType.Timeout,
-        'EXTERNAL-TIMEOUT': ResultType.Timeout,
-        'CRASH': ResultType.Crash,
-        'INTERNAL-ERROR': ResultType.Crash,
-        'SKIP': ResultType.Skip,
-        'NOTRUN': ResultType.Failure,
-    }
-
-    _status_priority = [
+    status_priority = [
         # Sorted from least to most "interesting" statuses. A status is more
         # "interesting" when it indicates the test did not run to completion.
         ResultType.Pass,
@@ -106,8 +144,9 @@ class WPTResult(Result):
         try:
             status = Status[status]
         except KeyError:
+            # `OK` (and other statuses not recorded in baselines) aren't
+            # contained in `Status` and take this early out.
             return
-        # The optimizer removes unnecessary PASS lines later.
         line_type = LineType.SUBTEST if subtest else LineType.HARNESS_ERROR
         result = TestharnessLine(line_type, frozenset([status]), message,
                                  subtest)
@@ -130,11 +169,8 @@ class WPTResult(Result):
         overrides a subtest-level status when they have the same priority.
         """
         unexpected = status not in expected
-        actual = self._wptrunner_to_chromium_statuses[status]
-        expected = {
-            self._wptrunner_to_chromium_statuses[status]
-            for status in expected
-        }
+        actual = wptrunner_to_chromium_status(status)
+        expected = set(map(wptrunner_to_chromium_status, expected))
         # Converting wptrunner to ResultDB statuses is lossy, so it's possible
         # for the wptrunner result to be unexpected, but ResultDB status
         # `actual` maps to a member of `expected`. Removing the common status
@@ -151,7 +187,7 @@ class WPTResult(Result):
     def _result_priority(self, status: str,
                          unexpected: bool) -> Tuple[bool, bool, int]:
         incomplete = status in {ResultType.Timeout, ResultType.Crash}
-        return (incomplete, unexpected, self._status_priority.index(status))
+        return (incomplete, unexpected, self.status_priority.index(status))
 
     def update_from_subtest(self,
                             subtest: str,
@@ -179,14 +215,17 @@ class WPTResult(Result):
         self._maybe_add_testharness_result(status, message)
         self._maybe_set_statuses(status, expected)
 
-    def get_result(self):
+    def format_baseline(self) -> str:
+        if all(result.statuses <= {Status.PASS}
+               for result in self.testharness_results):
+            return ABBREVIATED_ALL_PASS
         header = (LineType.TESTHARNESS_HEADER if self.test_type
                   == 'testharness' else LineType.WDSPEC_HEADER)
-        return [
+        return format_testharness_baseline([
             TestharnessLine(header),
             *self.testharness_results,
             TestharnessLine(LineType.FOOTER),
-        ]
+        ])
 
 
 class Event(NamedTuple):
@@ -235,7 +274,8 @@ class WPTResultsProcessor:
                  sink: Optional[ResultSinkReporter] = None,
                  test_name_prefix: str = '',
                  failure_threshold: Optional[int] = None,
-                 crash_timeout_threshold: Optional[int] = None):
+                 crash_timeout_threshold: Optional[int] = None,
+                 reset_results: bool = False):
         self.fs = fs
         self.port = port
         self.artifacts_dir = artifacts_dir
@@ -266,6 +306,7 @@ class WPTResultsProcessor:
         }
         self.failure_threshold = failure_threshold or math.inf
         self.crash_timeout_threshold = crash_timeout_threshold or math.inf
+        self.reset_results = reset_results
         assert self.failure_threshold > 0
         assert self.crash_timeout_threshold > 0
 
@@ -624,23 +665,31 @@ class WPTResultsProcessor:
             artifacts: Artifact manager (note that this is not the artifact ID
                 to paths mapping itself).
         """
-        actual_text = None
+        assert result.test_type in {
+            'testharness', 'wdspec'
+        }, (f'{result.name!r} cannot have a text baseline')
         actual_subpath = self.port.output_filename(
             result.name, test_failures.FILENAME_SUFFIX_ACTUAL, '.txt')
-        if result.testharness_results:
-            actual_text = format_testharness_baseline(
-                result.get_result(), '/html/dom/reflection' in result.name)
-            artifacts.CreateArtifact('actual_text', actual_subpath,
-                                     actual_text.encode())
-
-        expected_text = self.port.expected_text(result.name)
         expected_subpath = self.port.output_filename(
             result.name, test_failures.FILENAME_SUFFIX_EXPECTED, '.txt')
+        actual_text = result.format_baseline()
+        artifacts.CreateArtifact('actual_text', actual_subpath,
+                                 actual_text.encode())
+        if self.reset_results and self._iteration == 0 and result.actual not in {
+                ResultType.Crash,
+                ResultType.Timeout,
+        }:
+            source = self.fs.join(self.artifacts_dir, actual_subpath)
+            dest = self.fs.join(self.port.baseline_version_dir(),
+                                expected_subpath)
+            self.fs.maybe_make_directory(self.fs.dirname(dest))
+            self.fs.copyfile(source, dest)
+
+        expected_text = self.port.expected_text(result.name)
         if expected_text:
             expected_text = expected_text.decode().strip() + '\n'
             artifacts.CreateArtifact('expected_text', expected_subpath,
                                      expected_text.encode())
-
 
         if not actual_text or not expected_text:
             return
@@ -732,7 +781,11 @@ class WPTResultsProcessor:
                               artifacts_base_dir=self.fs.basename(
                                   self.artifacts_dir))
         image_diff_stats = None
-        if result.actual not in [ResultType.Pass, ResultType.Skip]:
+        # Dump output for `--reset-results`, even if the test passes, as the
+        # current port may fall back to a failing port.
+        if self.reset_results or result.actual not in [
+                ResultType.Pass, ResultType.Skip
+        ]:
             if result.test_type in {'testharness', 'wdspec'}:
                 self._write_text_results(result, artifacts)
             screenshots = (extra or {}).get('reftest_screenshots') or []
@@ -779,8 +832,6 @@ class WPTResultsProcessor:
                 report['results'].extend(retry_report['results'])
         report_filename = self.fs.basename(report_path)
         artifact_path = self.fs.join(self.artifacts_dir, report_filename)
-        if not report['run_info'].get('used_upstream'):
-            report['results'] = self._compact_wpt_results(report['results'])
         with self.fs.open_text_file_for_writing(artifact_path) as report_file:
             json.dump(report, report_file, separators=(',', ':'))
         self.sink.report_invocation_level_artifacts({
@@ -788,43 +839,3 @@ class WPTResultsProcessor:
                 'filePath': artifact_path,
             },
         })
-
-    def _compact_wpt_results(self, results):
-        """Remove nonessential fields from wptreport (sub)tests.
-
-        Fields unnecessary for updating metadata include:
-           * 'message': Informational messages like stack traces.
-           * 'expected': When omitted, implies the test ran as expected.
-             Expected results are still included because the updater removes
-             stale expectations by default.
-           * 'known_intermittent': When omitted, no intermittent statuses are
-              expected.
-
-        See Also:
-            https://github.com/web-platform-tests/wpt/blob/131b8a541ba98afcef35ae757e4fb2f805714230/tools/wptrunner/wptrunner/metadata.py#L439-L450
-            https://github.com/web-platform-tests/wpt.fyi/blob/8bf23a6f68d18acab002aa6a613fc5660afb0a85/webapp/components/test-file-results-table.js#L240-L283
-        """
-        compact_results = []
-        for result in results:
-            compact_result = {'status': result['status']}
-            subsuite = result.get('subsuite', '')
-            if subsuite:
-                compact_result['subsuite'] = subsuite
-            duration = result.get('duration')
-            if duration:
-                compact_result['duration'] = duration
-            expected = result.get('expected')
-            if expected and expected != result['status']:
-                compact_result['expected'] = expected
-            intermittent = result.get('known_intermittent')
-            if intermittent:
-                compact_result['known_intermittent'] = intermittent
-            test_id = result.get('test')
-            if test_id:
-                compact_result['test'] = test_id
-                compact_result['subtests'] = self._compact_wpt_results(
-                    result['subtests'])
-            else:
-                compact_result['name'] = result['name']  # Subtest detected
-            compact_results.append(compact_result)
-        return compact_results

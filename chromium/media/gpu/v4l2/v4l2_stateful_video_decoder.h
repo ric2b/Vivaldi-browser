@@ -26,6 +26,7 @@ namespace media {
 
 class H264FrameReassembler;
 class H264Parser;
+class V4L2FrameRateControl;
 class V4L2Queue;
 
 // V4L2StatefulVideoDecoder is an implementation of VideoDecoderMixin
@@ -122,8 +123,9 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
   bool TryAndEnqueueOUTPUTQueueBuffers();
 
   // Prints a VLOG with the state of |OUTPUT_queue| and |CAPTURE_queue_| for
-  // debugging, preceded with |from_here|s function name.
-  void PrintOutQueueStatesForVLOG(const base::Location& from_here);
+  // debugging, preceded with |from_here|s function name. Also TRACEs the
+  // queues' state.
+  void PrintAndTraceQueueStates(const base::Location& from_here);
 
   // Returns true if this class has successfully Initialize()d.
   bool IsInitialized() const;
@@ -160,6 +162,10 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
   scoped_refptr<V4L2Queue> OUTPUT_queue_ GUARDED_BY_CONTEXT(sequence_checker_);
   scoped_refptr<V4L2Queue> CAPTURE_queue_ GUARDED_BY_CONTEXT(sequence_checker_);
 
+  // Some drivers, e.g. QC SC7180, require the client to inform the driver of
+  // the framerate (to tweak internal resources).
+  std::unique_ptr<V4L2FrameRateControl> framerate_control_;
+
   // A sequenced TaskRunner to wait for events coming from |CAPTURE_queue_| or
   // |wake_event_|.
   scoped_refptr<base::SequencedTaskRunner> event_task_runner_;
@@ -179,7 +185,7 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
   // Weak factories associated with the main thread (|sequence_checker|).
   base::WeakPtrFactory<V4L2StatefulVideoDecoder> weak_ptr_factory_for_events_;
   base::WeakPtrFactory<V4L2StatefulVideoDecoder>
-      weak_ptr_factory_for_frame_pool_;
+      weak_ptr_factory_for_CAPTURE_availability_;
 };
 
 }  // namespace media

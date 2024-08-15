@@ -22,6 +22,7 @@
 #include "perfetto/ext/base/string_utils.h"
 #include "perfetto/ext/base/temp_file.h"
 #include "perfetto/ext/base/utils.h"
+#include "perfetto/ext/tracing/core/client_identity.h"
 #include "perfetto/ext/tracing/core/consumer.h"
 #include "perfetto/ext/tracing/core/observable_events.h"
 #include "perfetto/ext/tracing/core/producer.h"
@@ -187,7 +188,7 @@ class TracingServiceImplTest : public testing::Test {
   ProducerID* last_producer_id() { return &svc->last_producer_id_; }
 
   uid_t GetProducerUid(ProducerID producer_id) {
-    return svc->GetProducer(producer_id)->uid_;
+    return svc->GetProducer(producer_id)->uid();
   }
 
   TracingServiceImpl::TracingSession* GetTracingSession(TracingSessionID tsid) {
@@ -212,7 +213,11 @@ class TracingServiceImplTest : public testing::Test {
     return svc->GetProducer(producer_id)->writers_;
   }
 
-  std::unique_ptr<SharedMemoryArbiterImpl> TakeShmemArbiterForProducer(
+  SharedMemoryArbiterImpl* GetShmemArbiterForProducer(ProducerID producer_id) {
+    return svc->GetProducer(producer_id)->inproc_shmem_arbiter_.get();
+  }
+
+  std::unique_ptr<SharedMemoryArbiterImpl> StealShmemArbiterForProducer(
       ProducerID producer_id) {
     return std::move(svc->GetProducer(producer_id)->inproc_shmem_arbiter_);
   }
@@ -1590,9 +1595,10 @@ TEST_F(TracingServiceImplTest, LockdownMode) {
   producer->WaitForDataSourceStart("data_source");
 
   std::unique_ptr<MockProducer> producer_otheruid = CreateMockProducer();
-  auto x = svc->ConnectProducer(producer_otheruid.get(),
-                                base::GetCurrentUserId() + 1,
-                                base::GetProcessId(), "mock_producer_ouid");
+  auto x = svc->ConnectProducer(
+      producer_otheruid.get(),
+      ClientIdentity(base::GetCurrentUserId() + 1, base::GetProcessId()),
+      "mock_producer_ouid");
   EXPECT_CALL(*producer_otheruid, OnConnect()).Times(0);
   task_runner.RunUntilIdle();
   Mock::VerifyAndClearExpectations(producer_otheruid.get());
@@ -1887,59 +1893,6 @@ TEST_F(TracingServiceImplTest, CompressionConfiguredButUnsupported) {
 }
 
 #if PERFETTO_BUILDFLAG(PERFETTO_ZLIB)
-TEST_F(TracingServiceImplTest, CompressionFromCli) {
-  TracingService::InitOpts init_opts;
-  init_opts.compressor_fn = ZlibCompressFn;
-  InitializeSvcWithOpts(init_opts);
-
-  std::unique_ptr<MockConsumer> consumer = CreateMockConsumer();
-  consumer->Connect(svc.get());
-
-  std::unique_ptr<MockProducer> producer = CreateMockProducer();
-  producer->Connect(svc.get(), "mock_producer");
-  producer->RegisterDataSource("data_source");
-
-  TraceConfig trace_config;
-  trace_config.add_buffers()->set_size_kb(4096);
-  auto* ds_config = trace_config.add_data_sources()->mutable_config();
-  ds_config->set_name("data_source");
-  ds_config->set_target_buffer(0);
-  trace_config.set_compression_type(TraceConfig::COMPRESSION_TYPE_DEFLATE);
-  // When compress_from_cli is enabled, the service shouldn't do compression
-  trace_config.set_compress_from_cli(true);
-  consumer->EnableTracing(trace_config);
-
-  producer->WaitForTracingSetup();
-  producer->WaitForDataSourceSetup("data_source");
-  producer->WaitForDataSourceStart("data_source");
-
-  std::unique_ptr<TraceWriter> writer =
-      producer->CreateTraceWriter("data_source");
-  {
-    auto tp = writer->NewTracePacket();
-    tp->set_for_testing()->set_str("payload-1");
-  }
-  {
-    auto tp = writer->NewTracePacket();
-    tp->set_for_testing()->set_str("payload-2");
-  }
-
-  writer->Flush();
-  writer.reset();
-
-  consumer->DisableTracing();
-  producer->WaitForDataSourceStop("data_source");
-  consumer->WaitForTracingDisabled();
-
-  std::vector<protos::gen::TracePacket> packets = consumer->ReadBuffers();
-  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
-                                         Property(&protos::gen::TestEvent::str,
-                                                  Eq("payload-1")))));
-  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
-                                         Property(&protos::gen::TestEvent::str,
-                                                  Eq("payload-2")))));
-}
-
 TEST_F(TracingServiceImplTest, CompressionReadIpc) {
   TracingService::InitOpts init_opts;
   init_opts.compressor_fn = ZlibCompressFn;
@@ -2630,6 +2583,46 @@ TEST_F(TracingServiceImplTest, PeriodicFlush) {
                                   Property(&protos::gen::TestEvent::str,
                                            Eq("f_" + std::to_string(i))))));
   }
+}
+
+TEST_F(TracingServiceImplTest, NoFlush) {
+  std::unique_ptr<MockConsumer> consumer = CreateMockConsumer();
+  consumer->Connect(svc.get());
+
+  std::unique_ptr<MockProducer> producer_1 = CreateMockProducer();
+  producer_1->Connect(svc.get(), "mock_producer_1");
+  producer_1->RegisterDataSource("ds_flush");
+  producer_1->RegisterDataSource("ds_noflush", false, false, false, true);
+
+  TraceConfig trace_config;
+  trace_config.add_buffers()->set_size_kb(128);
+  trace_config.add_data_sources()->mutable_config()->set_name("ds_flush");
+  trace_config.add_data_sources()->mutable_config()->set_name("ds_noflush");
+
+  consumer->EnableTracing(trace_config);
+  producer_1->WaitForTracingSetup();
+  producer_1->WaitForDataSourceSetup("ds_flush");
+  producer_1->WaitForDataSourceSetup("ds_noflush");
+  producer_1->WaitForDataSourceStart("ds_flush");
+  producer_1->WaitForDataSourceStart("ds_noflush");
+
+  std::unique_ptr<MockProducer> producer_2 = CreateMockProducer();
+  producer_2->Connect(svc.get(), "mock_producer_2");
+  producer_2->RegisterDataSource("ds_noflush", false, false, false,
+                                 /*no_flush=*/true);
+  producer_2->WaitForTracingSetup();
+  producer_2->WaitForDataSourceSetup("ds_noflush");
+  producer_2->WaitForDataSourceStart("ds_noflush");
+
+  auto wr_p1_ds1 = producer_1->CreateTraceWriter("ds_flush");
+  producer_1->ExpectFlush(wr_p1_ds1.get());
+
+  EXPECT_CALL(*producer_2, Flush(_, _, _, _)).Times(0);
+
+  auto flush_request = consumer->Flush();
+  ASSERT_TRUE(flush_request.WaitForReply());
+
+  consumer->DisableTracing();
 }
 
 TEST_F(TracingServiceImplTest, PeriodicClearIncrementalState) {
@@ -3392,8 +3385,7 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnFlush) {
   producer->ExpectFlush(nullptr, /*reply=*/true);
   ASSERT_TRUE(flush_request.WaitForReply());
 
-  // Chunk with the packets should have been scraped. The service can't know
-  // whether the last packet was completed, so shouldn't read it.
+  // Chunk with the packets should have been scraped.
   auto packets = consumer->ReadBuffers();
   EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
                                          Property(&protos::gen::TestEvent::str,
@@ -3401,10 +3393,9 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnFlush) {
   EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
                                          Property(&protos::gen::TestEvent::str,
                                                   Eq("payload2")))));
-  EXPECT_THAT(packets,
-              Not(Contains(Property(
-                  &protos::gen::TracePacket::for_testing,
-                  Property(&protos::gen::TestEvent::str, Eq("payload3"))))));
+  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
+                                         Property(&protos::gen::TestEvent::str,
+                                                  Eq("payload3")))));
 
   // Write some more packets.
   writer->NewTracePacket()->set_for_testing()->set_str("payload4");
@@ -3416,8 +3407,7 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnFlush) {
   ASSERT_FALSE(flush_request.WaitForReply());
 
   // Chunk with the packets should have been scraped again, overriding the
-  // original one. Again, the last packet should be ignored and the first two
-  // should not be read twice.
+  // original one. The first three should not be read twice.
   packets = consumer->ReadBuffers();
   EXPECT_THAT(packets,
               Not(Contains(Property(
@@ -3427,16 +3417,16 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnFlush) {
               Not(Contains(Property(
                   &protos::gen::TracePacket::for_testing,
                   Property(&protos::gen::TestEvent::str, Eq("payload2"))))));
-  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
-                                         Property(&protos::gen::TestEvent::str,
-                                                  Eq("payload3")))));
-  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
-                                         Property(&protos::gen::TestEvent::str,
-                                                  Eq("payload4")))));
   EXPECT_THAT(packets,
               Not(Contains(Property(
                   &protos::gen::TracePacket::for_testing,
-                  Property(&protos::gen::TestEvent::str, Eq("payload5"))))));
+                  Property(&protos::gen::TestEvent::str, Eq("payload3"))))));
+  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
+                                         Property(&protos::gen::TestEvent::str,
+                                                  Eq("payload4")))));
+  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
+                                         Property(&protos::gen::TestEvent::str,
+                                                  Eq("payload5")))));
 
   consumer->DisableTracing();
   producer->WaitForDataSourceStop("data_source");
@@ -3538,11 +3528,10 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnProducerDisconnect) {
   // Disconnect the producer without committing the chunk. This should cause a
   // scrape of the SMB. Avoid destroying the ShmemArbiter until writer is
   // destroyed.
-  auto shmem_arbiter = TakeShmemArbiterForProducer(producer_id);
+  auto shmem_arbiter = StealShmemArbiterForProducer(producer_id);
   producer.reset();
 
-  // Chunk with the packets should have been scraped. The service can't know
-  // whether the last packet was completed, so shouldn't read it.
+  // Chunk with the packets should have been scraped.
   auto packets = consumer->ReadBuffers();
   EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
                                          Property(&protos::gen::TestEvent::str,
@@ -3550,10 +3539,9 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnProducerDisconnect) {
   EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
                                          Property(&protos::gen::TestEvent::str,
                                                   Eq("payload2")))));
-  EXPECT_THAT(packets,
-              Not(Contains(Property(
-                  &protos::gen::TracePacket::for_testing,
-                  Property(&protos::gen::TestEvent::str, Eq("payload3"))))));
+  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
+                                         Property(&protos::gen::TestEvent::str,
+                                                  Eq("payload3")))));
 
   // Cleanup writer without causing a crash because the producer already went
   // away.
@@ -3604,8 +3592,7 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnDisable) {
   producer->WaitForDataSourceStop("data_source");
   consumer->WaitForTracingDisabled();
 
-  // Chunk with the packets should have been scraped. The service can't know
-  // whether the last packet was completed, so shouldn't read it.
+  // Chunk with the packets should have been scraped.
   auto packets = consumer->ReadBuffers();
   EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
                                          Property(&protos::gen::TestEvent::str,
@@ -3613,10 +3600,204 @@ TEST_F(TracingServiceImplTest, ScrapeBuffersOnDisable) {
   EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
                                          Property(&protos::gen::TestEvent::str,
                                                   Eq("payload2")))));
-  EXPECT_THAT(packets,
+  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
+                                         Property(&protos::gen::TestEvent::str,
+                                                  Eq("payload3")))));
+}
+
+// Fixture for testing scraping from a single data source that writes directly
+// to the shared memory, to cover all cases.
+class TracingServiceImplScrapingWithSmbTest : public TracingServiceImplTest {
+ public:
+  void SetUp() override {
+    TracingServiceImplTest::SetUp();
+    svc->SetSMBScrapingEnabled(true);
+
+    consumer_ = CreateMockConsumer();
+    consumer_->Connect(svc.get());
+    producer_ = CreateMockProducer();
+    producer_->Connect(svc.get(), "mock_producer");
+    ProducerID producer_id = *last_producer_id();
+    producer_->RegisterDataSource("data_source");
+
+    TraceConfig trace_config;
+    trace_config.add_buffers()->set_size_kb(128);
+    auto* ds_config = trace_config.add_data_sources()->mutable_config();
+    ds_config->set_name("data_source");
+    ds_config->set_target_buffer(0);
+    consumer_->EnableTracing(trace_config);
+
+    producer_->WaitForTracingSetup();
+    producer_->WaitForDataSourceSetup("data_source");
+    producer_->WaitForDataSourceStart("data_source");
+
+    writer_ = producer_->endpoint()->CreateTraceWriter(
+        tracing_session()->buffers_index[0]);
+    WaitForTraceWritersChanged(producer_id);
+
+    arbiter_ = GetShmemArbiterForProducer(producer_id);
+  }
+
+  void TearDown() override {
+    TracingServiceImplTest::TearDown();
+
+    consumer_->DisableTracing();
+    producer_->WaitForDataSourceStop("data_source");
+    consumer_->WaitForTracingDisabled();
+  }
+
+ protected:
+  std::optional<std::vector<protos::gen::TracePacket>> FlushAndRead() {
+    // Scrape: ask the service to flush but don't flush the chunk.
+    auto flush_request = consumer_->Flush();
+    producer_->ExpectFlush(nullptr, /*reply=*/true);
+    if (flush_request.WaitForReply()) {
+      return consumer_->ReadBuffers();
+    }
+    return std::nullopt;
+  }
+  std::unique_ptr<MockConsumer> consumer_;
+  std::unique_ptr<MockProducer> producer_;
+  std::unique_ptr<TraceWriter> writer_;
+  // Owned by `svc`.
+  SharedMemoryArbiterImpl* arbiter_;
+
+  struct : public protozero::ScatteredStreamWriter::Delegate {
+    protozero::ContiguousMemoryRange GetNewBuffer() override {
+      PERFETTO_FATAL("Unreachable");
+    }
+
+    uint8_t* AnnotatePatch(uint8_t*) override { PERFETTO_FATAL("Unreachable"); }
+  } empty_delegate_;
+  PatchList empty_patch_list_;
+};
+
+TEST_F(TracingServiceImplScrapingWithSmbTest, ScrapeAfterInflatedCount) {
+  SharedMemoryABI::ChunkHeader header = {};
+  header.writer_id.store(writer_->writer_id(), std::memory_order_relaxed);
+  header.chunk_id.store(0, std::memory_order_relaxed);
+  header.packets.store({}, std::memory_order_relaxed);
+
+  SharedMemoryABI::Chunk chunk =
+      arbiter_->GetNewChunk(header, BufferExhaustedPolicy::kDrop);
+  ASSERT_TRUE(chunk.is_valid());
+
+  protozero::ScatteredStreamWriter stream_writer(&empty_delegate_);
+  stream_writer.Reset({chunk.payload_begin(), chunk.end()});
+
+  chunk.IncrementPacketCount();
+
+  perfetto::protos::pbzero::TracePacket trace_packet;
+  protozero::MessageArena arena;
+  trace_packet.Reset(&stream_writer, &arena);
+  trace_packet.set_size_field(stream_writer.ReserveBytes(4));
+
+  trace_packet.set_for_testing()->set_str("payload1");
+
+  trace_packet.Finalize();
+
+  auto packets = FlushAndRead();
+  ASSERT_TRUE(packets.has_value());
+  // The scraping should not have seen the packet.
+  EXPECT_THAT(*packets,
               Not(Contains(Property(
                   &protos::gen::TracePacket::for_testing,
-                  Property(&protos::gen::TestEvent::str, Eq("payload3"))))));
+                  Property(&protos::gen::TestEvent::str, Eq("payload1"))))));
+
+  // Inflate the packet count: this is what
+  // TraceWriterImpl::FinishTracePacket() does.
+  chunk.IncrementPacketCount();
+
+  packets = FlushAndRead();
+  ASSERT_TRUE(packets.has_value());
+  // The scraping now should see the packet.
+  EXPECT_THAT(*packets,
+              Contains(Property(
+                  &protos::gen::TracePacket::for_testing,
+                  Property(&protos::gen::TestEvent::str, Eq("payload1")))));
+
+  // Before marking the chunk as complete, the trace writer writes an empty
+  // trace packet (a single byte with zero size), to account for the inflated
+  // trace count.
+  ASSERT_GT(stream_writer.bytes_available(), 0u);
+  uint8_t zero_size = 0;
+  stream_writer.WriteBytesUnsafe(&zero_size, sizeof zero_size);
+
+  packets = FlushAndRead();
+  ASSERT_TRUE(packets.has_value());
+  // The past scraping has already seen the packet.
+  EXPECT_THAT(*packets,
+              Not(Contains(Property(
+                  &protos::gen::TracePacket::for_testing,
+                  Property(&protos::gen::TestEvent::str, Eq("payload1"))))));
+
+  arbiter_->ReturnCompletedChunk(std::move(chunk),
+                                 tracing_session()->buffers_index[0],
+                                 &empty_patch_list_);
+
+  packets = FlushAndRead();
+  ASSERT_TRUE(packets.has_value());
+  // The past scraping has already seen the packet.
+  EXPECT_THAT(*packets,
+              Not(Contains(Property(
+                  &protos::gen::TracePacket::for_testing,
+                  Property(&protos::gen::TestEvent::str, Eq("payload1"))))));
+}
+
+TEST_F(TracingServiceImplScrapingWithSmbTest, ScrapeAfterCompleteChunk) {
+  SharedMemoryABI::ChunkHeader header = {};
+  header.writer_id.store(writer_->writer_id(), std::memory_order_relaxed);
+  header.chunk_id.store(0, std::memory_order_relaxed);
+  header.packets.store({}, std::memory_order_relaxed);
+
+  SharedMemoryABI::Chunk chunk =
+      arbiter_->GetNewChunk(header, BufferExhaustedPolicy::kDrop);
+  ASSERT_TRUE(chunk.is_valid());
+
+  protozero::ScatteredStreamWriter stream_writer(&empty_delegate_);
+  stream_writer.Reset({chunk.payload_begin(), chunk.end()});
+
+  chunk.IncrementPacketCount();
+
+  perfetto::protos::pbzero::TracePacket trace_packet;
+  protozero::MessageArena arena;
+  trace_packet.Reset(&stream_writer, &arena);
+  trace_packet.set_size_field(stream_writer.ReserveBytes(4));
+
+  trace_packet.set_for_testing()->set_str("payload1");
+
+  trace_packet.Finalize();
+
+  auto packets = FlushAndRead();
+  ASSERT_TRUE(packets.has_value());
+  // The scraping should not have seen the packet.
+  EXPECT_THAT(*packets,
+              Not(Contains(Property(
+                  &protos::gen::TracePacket::for_testing,
+                  Property(&protos::gen::TestEvent::str, Eq("payload1"))))));
+
+  // Inflate the packet count: this is what
+  // TraceWriterImpl::FinishTracePacket() does.
+  chunk.IncrementPacketCount();
+
+  // Before marking the chunk as complete, the trace writer writes an empty
+  // trace packet (a single byte with zero size), to account for the inflated
+  // trace count.
+  ASSERT_GT(stream_writer.bytes_available(), 0u);
+  uint8_t zero_size = 0;
+  stream_writer.WriteBytesUnsafe(&zero_size, sizeof zero_size);
+
+  arbiter_->ReturnCompletedChunk(std::move(chunk),
+                                 tracing_session()->buffers_index[0],
+                                 &empty_patch_list_);
+
+  packets = FlushAndRead();
+  ASSERT_TRUE(packets.has_value());
+  // The chunk has been marked as completed. Flushing should see the packet.
+  EXPECT_THAT(*packets,
+              Contains(Property(
+                  &protos::gen::TracePacket::for_testing,
+                  Property(&protos::gen::TestEvent::str, Eq("payload1")))));
 }
 
 TEST_F(TracingServiceImplTest, AbortIfTraceDurationIsTooLong) {
@@ -3675,25 +3856,33 @@ TEST_F(TracingServiceImplTest, TraceWriterStats) {
 
   std::unique_ptr<MockProducer> producer = CreateMockProducer();
   producer->Connect(svc.get(), "mock_producer");
-  producer->RegisterDataSource("data_source");
+  producer->RegisterDataSource("data_source_1");
+  producer->RegisterDataSource("data_source_2");
 
   TraceConfig trace_config;
-  trace_config.add_buffers()->set_size_kb(512);
-  auto* ds_config = trace_config.add_data_sources()->mutable_config();
-  ds_config->set_name("data_source");
+  for (uint32_t i = 0; i < 3; i++)
+    trace_config.add_buffers()->set_size_kb(512);
+  for (uint32_t i = 1; i <= 2; i++) {
+    auto* ds_config = trace_config.add_data_sources()->mutable_config();
+    ds_config->set_name("data_source_" + std::to_string(i));
+    ds_config->set_target_buffer(i);  // DS1 : buf[1], DS2: buf[2].
+    // buf[0] is deliberately unused, to check we get the buffer_idx right.
+  }
 
   consumer->EnableTracing(trace_config);
   producer->WaitForTracingSetup();
-  producer->WaitForDataSourceSetup("data_source");
-  producer->WaitForDataSourceStart("data_source");
+  producer->WaitForDataSourceSetup("data_source_1");
+  producer->WaitForDataSourceSetup("data_source_2");
+  producer->WaitForDataSourceStart("data_source_1");
+  producer->WaitForDataSourceStart("data_source_2");
 
   const std::string payload_128(128 - 32, 'a');
   const std::string payload_512(512 - 32, 'b');
   const std::string payload_1k(1024 - 32, 'c');
   const std::string payload_2k(2048 - 32, 'd');
 
-  auto writer1 = producer->CreateTraceWriter("data_source");
-  auto writer2 = producer->CreateTraceWriter("data_source");
+  auto writer1 = producer->CreateTraceWriter("data_source_1");
+  auto writer2 = producer->CreateTraceWriter("data_source_2");
 
   // Flush after each packet to create chunks that match packets.
   writer1->NewTracePacket()->set_for_testing()->set_str(payload_128);
@@ -3719,7 +3908,8 @@ TEST_F(TracingServiceImplTest, TraceWriterStats) {
   writer2.reset();
 
   consumer->DisableTracing();
-  producer->WaitForDataSourceStop("data_source");
+  producer->WaitForDataSourceStop("data_source_1");
+  producer->WaitForDataSourceStop("data_source_2");
   consumer->WaitForTracingDisabled();
 
   auto packets = consumer->ReadBuffers();
@@ -3744,12 +3934,14 @@ TEST_F(TracingServiceImplTest, TraceWriterStats) {
         case 1:  // Ignore service-generated packets.
           continue;
         case 2:  // writer1
+          EXPECT_EQ(wri.buffer(), 1u);
           EXPECT_THAT(wri.chunk_payload_histogram_counts(),
                       ElementsAreArray({0 /*8*/, 0 /*32*/, 1 /*128*/, 0 /*512*/,
                                         1 /*1K*/, 0 /*2K*/, 0 /*4K*/, 0 /*8K*/,
                                         0 /*12K*/, 0 /*16K*/, 0 /*>16K*/}));
           continue;
         case 3:  // writer2
+          EXPECT_EQ(wri.buffer(), 2u);
           EXPECT_THAT(wri.chunk_payload_histogram_counts(),
                       ElementsAreArray({0 /*8*/, 0 /*32*/, 0 /*128*/, 1 /*512*/,
                                         0 /*1K*/, 2 /*2K*/, 0 /*4K*/, 0 /*8K*/,
@@ -4726,19 +4918,31 @@ TEST_F(TracingServiceImplTest, CloneSessionAcrossUidForBugreport) {
   producer->RegisterDataSource("ds_1");
 
   // The consumer that clones it and reads back the data.
-  std::unique_ptr<MockConsumer> consumer2 = CreateMockConsumer();
-  consumer2->Connect(svc.get(), 1234);
+  std::unique_ptr<MockConsumer> clone_consumer = CreateMockConsumer();
+  clone_consumer->Connect(svc.get(), 1234);
 
   TraceConfig trace_config;
   trace_config.add_buffers()->set_size_kb(32);
   trace_config.set_bugreport_score(1);
-  auto* ds_cfg = trace_config.add_data_sources()->mutable_config();
-  ds_cfg->set_name("ds_1");
+  trace_config.add_data_sources()->mutable_config()->set_name("ds_1");
 
-  EXPECT_CALL(*producer, SetupDataSource(_, _));
-  EXPECT_CALL(*producer, StartDataSource(_, _));
+  // Add a trace filter and ensure it's ignored for bugreports (b/317065412).
+  protozero::FilterBytecodeGenerator filt;
+  filt.AddNestedField(1 /* root trace.packet*/, 1);
+  filt.EndMessage();
+  // Add a random field to keep the generator happy. This technically still
+  // filters out the for_testing packet that we are using below.
+  filt.AddSimpleField(protos::pbzero::TracePacket::kTraceUuidFieldNumber);
+  filt.EndMessage();
+  trace_config.mutable_trace_filter()->set_bytecode_v2(filt.Serialize());
+
   consumer->EnableTracing(trace_config);
   producer->WaitForTracingSetup();
+  producer->WaitForDataSourceSetup("ds_1");
+  producer->WaitForDataSourceStart("ds_1");
+  std::unique_ptr<TraceWriter> writer = producer->CreateTraceWriter("ds_1");
+  writer->NewTracePacket()->set_for_testing()->set_str("payload");
+  writer.reset();
 
   auto flush_request = consumer->Flush();
   FlushFlags flush_flags(FlushFlags::Initiator::kConsumerSdk,
@@ -4747,7 +4951,7 @@ TEST_F(TracingServiceImplTest, CloneSessionAcrossUidForBugreport) {
   ASSERT_TRUE(flush_request.WaitForReply());
 
   auto clone_done = task_runner.CreateCheckpoint("clone_done");
-  EXPECT_CALL(*consumer2, OnSessionCloned(_))
+  EXPECT_CALL(*clone_consumer, OnSessionCloned(_))
       .WillOnce(Invoke([clone_done](const Consumer::OnSessionClonedArgs& args) {
         clone_done();
         ASSERT_TRUE(args.success);
@@ -4758,8 +4962,13 @@ TEST_F(TracingServiceImplTest, CloneSessionAcrossUidForBugreport) {
                           FlushFlags::CloneTarget::kBugreport);
   producer->ExpectFlush({}, /*reply=*/true, flush_flags2);
 
-  consumer2->CloneSession(kBugreportSessionId);
+  clone_consumer->CloneSession(kBugreportSessionId);
   task_runner.RunUntilCheckpoint("clone_done");
+
+  auto packets = clone_consumer->ReadBuffers();
+  EXPECT_THAT(packets, Contains(Property(&protos::gen::TracePacket::for_testing,
+                                         Property(&protos::gen::TestEvent::str,
+                                                  HasSubstr("payload")))));
 }
 
 TEST_F(TracingServiceImplTest, TransferOnClone) {
@@ -5114,6 +5323,57 @@ TEST_F(TracingServiceImplTest, StringFilteringAndCloneSession) {
               Not(Contains(Property(&protos::gen::TracePacket::for_testing,
                                     Property(&protos::gen::TestEvent::str,
                                              Eq("B|1023|payload"))))));
+}
+
+// This is a regression test for https://b.corp.google.com/issues/307601836. The
+// test covers the case of a consumer disconnecting while the tracing session is
+// executing the final flush.
+TEST_F(TracingServiceImplTest, ConsumerDisconnectionRacesFlushAndDisable) {
+  std::unique_ptr<MockConsumer> consumer = CreateMockConsumer();
+  consumer->Connect(svc.get());
+
+  std::unique_ptr<MockProducer> producer = CreateMockProducer();
+  producer->Connect(svc.get(), "mock_producer");
+
+  producer->RegisterDataSource("ds");
+
+  TraceConfig trace_config;
+  trace_config.add_buffers()->set_size_kb(128);
+  auto* trigger_config = trace_config.mutable_trigger_config();
+  trigger_config->set_trigger_mode(TraceConfig::TriggerConfig::STOP_TRACING);
+  trigger_config->set_trigger_timeout_ms(100000);
+  auto* trigger = trigger_config->add_triggers();
+  trigger->set_name("trigger_name");
+  auto* ds_cfg = trace_config.add_data_sources()->mutable_config();
+  ds_cfg->set_name("ds");
+
+  consumer->EnableTracing(trace_config);
+  producer->WaitForTracingSetup();
+  producer->WaitForDataSourceSetup("ds");
+  producer->WaitForDataSourceStart("ds");
+
+  auto writer1 = producer->CreateTraceWriter("ds");
+
+  auto producer_flush_cb = [&](FlushRequestID flush_req_id,
+                               const DataSourceInstanceID* /*id*/, size_t,
+                               FlushFlags) {
+    // Notify the tracing service that the flush is complete.
+    producer->endpoint()->NotifyFlushComplete(flush_req_id);
+    // Also disconnect the consumer (this terminates the tracing session). The
+    // consumer disconnection is postponed with a PostTask(). The goal is to run
+    // the lambda inside TracingServiceImpl::FlushAndDisableTracing() with an
+    // empty `tracing_sessions_` map.
+    task_runner.PostTask([&]() { consumer.reset(); });
+  };
+  EXPECT_CALL(*producer, Flush(_, _, _, _)).WillOnce(Invoke(producer_flush_cb));
+
+  // Cause the tracing session to stop. Note that
+  // TracingServiceImpl::FlushAndDisableTracing() is also called when
+  // duration_ms expires, but in a test it's faster to use a trigger.
+  producer->endpoint()->ActivateTriggers({"trigger_name"});
+  producer->WaitForDataSourceStop("ds");
+
+  task_runner.RunUntilIdle();
 }
 
 }  // namespace perfetto

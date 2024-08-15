@@ -37,6 +37,7 @@ luci.bucket(
                 # or fix yet.
                 "mdb/chrome-active-sheriffs",
                 "mdb/chrome-gpu",
+                "mdb/bling-engprod",
             ],
             users = [
                 # Allow chrome-release/branch builders on luci.chrome.official.infra
@@ -58,6 +59,7 @@ luci.bucket(
                 # Allow currently-oncall gardeners to pause schedulers.
                 "mdb/chrome-active-sheriffs",
                 "mdb/chrome-gpu",
+                "mdb/bling-engprod",
             ],
         ),
     ],
@@ -71,12 +73,21 @@ luci.bucket(
         luci.binding(
             roles = "role/buildbucket.creator",
             groups = [
+                "mdb/chrome-build-access-sphinx",
                 "mdb/chrome-troopers",
                 "chromium-led-users",
             ],
             users = [
                 ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
                 ci.gpu.SHADOW_SERVICE_ACCOUNT,
+            ],
+        ),
+        # TODO(crbug.com/1501383): Remove this binding after shadow bucket
+        # could inherit the view permission from the actual bucket.
+        luci.binding(
+            roles = "role/buildbucket.reader",
+            groups = [
+                "all",
             ],
         ),
         # Allow ci builders to create invocations in their own builds.
@@ -166,6 +177,7 @@ consoles.console_view(
     category = category,
     short_name = short_name,
 ) for name, category, short_name in (
+    ("fuchsia-arm64-rel-ready", "gardener|p/chrome|arm64", "rel-ready"),
     ("fuchsia-arm64-nest-sd", "gardener|p/chrome|arm64", "nest-arm"),
     ("fuchsia-builder-perf-arm64", "gardener|p/chrome|arm64", "perf-arm"),
     ("fuchsia-cast-astro", "gardener|hardware|cast", "ast"),
@@ -175,6 +187,7 @@ consoles.console_view(
     ("fuchsia-fyi-astro", "gardener|hardware", "ast"),
     ("fuchsia-fyi-nelson", "gardener|hardware", "nsn"),
     ("fuchsia-fyi-sherlock", "gardener|hardware", "sher"),
+    ("fuchsia-smoke-astro", "gardener|hardware|smoke", "ast"),
     ("fuchsia-smoke-nelson", "gardener|hardware|smoke", "nsn"),
     ("fuchsia-smoke-sherlock", "gardener|hardware|smoke", "sher"),
     ("fuchsia-perf-nsn", "gardener|hardware|perf", "nsn"),
@@ -190,7 +203,6 @@ exec("./ci/chromium.accessibility.star")
 exec("./ci/chromium.android.star")
 exec("./ci/chromium.android.fyi.star")
 exec("./ci/chromium.angle.star")
-exec("./ci/chromium.build.star")
 exec("./ci/chromium.cft.star")
 exec("./ci/chromium.chromiumos.star")
 exec("./ci/chromium.clang.star")

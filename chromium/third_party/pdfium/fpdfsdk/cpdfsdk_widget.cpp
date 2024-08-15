@@ -224,8 +224,7 @@ bool CPDFSDK_Widget::OnXFAAAction(PDFSDK_XFAAActionType eXFAAAT,
   if (!pXFAWidgetHandler)
     return false;
 
-  CXFA_EventParam param;
-  param.m_eType = eEventType;
+  CXFA_EventParam param(eEventType);
   param.m_wsChange = data->sChange;
   param.m_iCommitKey = 0;
   param.m_bShift = data->bShift;
@@ -320,8 +319,7 @@ bool CPDFSDK_Widget::HandleXFAAAction(
   if (!pXFAWidgetHandler)
     return false;
 
-  CXFA_EventParam param;
-  param.m_eType = eEventType;
+  CXFA_EventParam param(eEventType);
   param.m_wsChange = data->sChange;
   param.m_iCommitKey = 0;
   param.m_bShift = data->bShift;
@@ -923,7 +921,7 @@ void CPDFSDK_Widget::DrawAppearance(CFX_RenderDevice* pDevice,
     CFX_Path path;
     path.AppendFloatRect(GetRect());
     pDevice->DrawPath(path, &mtUser2Device, &gsd, 0, 0xFFAAAAAA,
-                      {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+                      CFX_FillRenderOptions::EvenOddOptions());
   } else {
     CPDFSDK_BAAnnot::DrawAppearance(pDevice, mtUser2Device, mode);
   }

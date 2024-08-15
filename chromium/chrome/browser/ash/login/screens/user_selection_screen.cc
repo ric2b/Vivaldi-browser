@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "ash/components/arc/arc_util.h"
@@ -67,7 +68,6 @@
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 
 // Enable VLOG level 1.
@@ -248,7 +248,7 @@ proximity_auth::mojom::AuthType GetInitialUserAuthType(
   }
 
   user_manager::KnownUser known_user(g_browser_process->local_state());
-  const absl::optional<base::TimeDelta> offline_signin_time_limit =
+  const std::optional<base::TimeDelta> offline_signin_time_limit =
       known_user.GetOfflineSigninLimit(user->GetAccountId());
   if (!offline_signin_time_limit) {
     return proximity_auth::mojom::AuthType::OFFLINE_PASSWORD;
@@ -336,7 +336,7 @@ class UserSelectionScreen::DircryptoMigrationChecker {
   // Callback invoked when NeedsDircryptoMigration call is finished.
   void OnCryptohomeNeedsDircryptoMigrationCallback(
       const AccountId& account_id,
-      absl::optional<user_data_auth::NeedsDircryptoMigrationReply> reply) {
+      std::optional<user_data_auth::NeedsDircryptoMigrationReply> reply) {
     if (!reply.has_value()) {
       LOG(ERROR) << "Failed to call cryptohome NeedsDircryptoMigration.";
       // Hide the banner to avoid confusion in http://crbug.com/721948.
@@ -365,7 +365,7 @@ class UserSelectionScreen::DircryptoMigrationChecker {
         needs_migration);
   }
 
-  const raw_ptr<UserSelectionScreen, ExperimentalAsh> owner_;
+  const raw_ptr<UserSelectionScreen> owner_;
   AccountId focused_user_ = EmptyAccountId();
 
   // Cached result of NeedsDircryptoMigration cryptohome check. Key is the
@@ -466,7 +466,7 @@ class UserSelectionScreen::TpmLockedChecker {
     wake_lock_->RequestWakeLock();
   }
 
-  const raw_ptr<UserSelectionScreen, ExperimentalAsh> owner_;
+  const raw_ptr<UserSelectionScreen> owner_;
 
   base::TimeTicks check_finised_;
   base::TimeDelta dictionary_attack_lockout_time_remaining_;
@@ -629,7 +629,7 @@ void UserSelectionScreen::HandleFocusPod(const AccountId& account_id) {
   lock_screen_utils::SetKeyboardSettings(account_id);
 
   user_manager::KnownUser known_user(g_browser_process->local_state());
-  absl::optional<bool> use_24hour_clock =
+  std::optional<bool> use_24hour_clock =
       known_user.FindBoolPath(account_id, ::prefs::kUse24HourClock);
   if (!use_24hour_clock.has_value()) {
     focused_user_clock_type_.reset();
@@ -732,12 +732,7 @@ void UserSelectionScreen::NotifySmartLockAuthResult(const AccountId& account_id,
 }
 
 void UserSelectionScreen::EnableInput() {
-  // If Easy Unlock fails to unlock the screen, re-enable the password input.
-  // This is only necessary on the lock screen, because the error handling for
-  // the sign-in screen uses a different code path.
-  if (ScreenLocker::default_screen_locker()) {
-    ScreenLocker::default_screen_locker()->EnableInput();
-  }
+  // TODO(b/271261286): Remove this.
 }
 
 void UserSelectionScreen::Unlock(const AccountId& account_id) {
@@ -838,7 +833,7 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
     }
     CrosSettings::Get()->GetBoolean(kDeviceShowNumericKeyboardForPassword,
                                     &user_info.show_pin_pad_for_password);
-    if (absl::optional<bool> show_display_password_button =
+    if (std::optional<bool> show_display_password_button =
             known_user.FindBoolPath(
                 user->GetAccountId(),
                 prefs::kLoginDisplayPasswordButtonEnabled)) {

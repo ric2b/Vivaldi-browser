@@ -45,7 +45,8 @@ def RunSteps(api):
       file_name=api.properties.get('checkout_file_name'),
       submodule_update_recursive=submodule_update_recursive,
       use_git_cache=api.properties.get('use_git_cache'),
-      tags=api.properties.get('tags'))
+      tags=api.properties.get('tags'),
+      depth=api.properties.get('depth'))
 
   assert retVal == "deadbeef", (
     "expected retVal to be %r but was %r" % ("deadbeef", retVal))
@@ -172,3 +173,5 @@ def GenTests(api):
   yield (api.test('new_branch_failed', status="INFRA_FAILURE") +
          api.properties(set_both_upstream_and_upstream_current=True) +
          api.expect_exception('ValueError'))
+
+  yield (api.test('git-checkout-with-depth') + api.properties(depth=1))

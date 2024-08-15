@@ -41,7 +41,7 @@ source_set("streaming_configs") {
 
   deps = [
     "../../platform:base",
-    "../../util:base",
+    "../../util",
   ]
 }
 
@@ -55,6 +55,7 @@ source_set("common") {
     "environment.h",
     "frame_id.h",
     "offer_messages.h",
+    "receiver_message.h",
     "rpc_messenger.h",
     "rtp_time.h",
     "sender_message.h",  # FIXME: Remove Chromium #include and make private
@@ -78,7 +79,6 @@ source_set("common") {
     "packet_util.cc",
     "packet_util.h",
     "receiver_message.cc",
-    "receiver_message.h",
     "rpc_messenger.cc",
     "rtcp_common.cc",
     "rtcp_common.h",

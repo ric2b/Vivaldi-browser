@@ -12,7 +12,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/display/tablet_state.h"
 
 namespace crostini {
 
@@ -39,12 +39,12 @@ class MockDelegate : public CrostiniUnsupportedActionNotifier::Delegate {
               (aura::client::FocusChangeObserver * observer),
               (override));
   MOCK_METHOD(void,
-              AddTabletModeObserver,
-              (ash::TabletModeObserver * observer),
+              AddDisplayObserver,
+              (display::DisplayObserver * observer),
               (override));
   MOCK_METHOD(void,
-              RemoveTabletModeObserver,
-              (ash::TabletModeObserver * observer),
+              RemoveDisplayObserver,
+              (display::DisplayObserver * observer),
               (override));
   MOCK_METHOD(void,
               AddKeyboardControllerObserver,
@@ -109,8 +109,8 @@ TEST_P(CrostiniUnsupportedActionNotifierTest,
 
   SetExpectations(show_tablet_toast, show_vk_toast);
 
-  notifier.OnTabletModeStarted();
-  notifier.OnTabletModeStarted();
+  notifier.OnDisplayTabletStateChanged(display::TabletState::kInTabletMode);
+  notifier.OnDisplayTabletStateChanged(display::TabletState::kInTabletMode);
 }
 
 TEST_P(CrostiniUnsupportedActionNotifierTest,

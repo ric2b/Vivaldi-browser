@@ -52,7 +52,7 @@ export class Cookie {
     if ('partitionKey' in protocolCookie) {
       cookie.addAttribute('partitionKey', protocolCookie.partitionKey);
     }
-    if ('partitionKeyOpaque' in protocolCookie) {
+    if ('partitionKeyOpaque' in protocolCookie && protocolCookie.partitionKeyOpaque) {
       cookie.addAttribute('partitionKey', OPAQUE_PARTITION_KEY);
     }
     cookie.setSize(protocolCookie['size']);
@@ -60,7 +60,7 @@ export class Cookie {
   }
 
   key(): string {
-    return (this.domain() || '-') + ' ' + this.name() + ' ' + (this.path() || '-');
+    return (this.domain() || '-') + ' ' + this.name() + ' ' + (this.path() || '-') + ' ' + (this.partitionKey() || '-');
   }
 
   name(): string {
@@ -81,6 +81,10 @@ export class Cookie {
 
   secure(): boolean {
     return 'secure' in this.#attributes;
+  }
+
+  partitioned(): boolean {
+    return 'partitioned' in this.#attributes || Boolean(this.partitionKey()) || this.partitionKeyOpaque();
   }
 
   sameSite(): Protocol.Network.CookieSameSite {
@@ -241,27 +245,23 @@ export class Cookie {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Type {
+export const enum Type {
   Request = 0,
   Response = 1,
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Attributes {
+export const enum Attributes {
   Name = 'name',
   Value = 'value',
   Size = 'size',
   Domain = 'domain',
   Path = 'path',
   Expires = 'expires',
-  HttpOnly = 'httpOnly',
+  HttpOnly = 'http-only',
   Secure = 'secure',
-  SameSite = 'sameSite',
-  SourceScheme = 'sourceScheme',
-  SourcePort = 'sourcePort',
+  SameSite = 'same-site',
+  SourceScheme = 'source-scheme',
+  SourcePort = 'source-port',
   Priority = 'priority',
-  PartitionKey = 'partitionKey',
+  PartitionKey = 'partition-key',
 }

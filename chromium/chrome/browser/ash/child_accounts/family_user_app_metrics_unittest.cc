@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/app_service_test.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_extensions_delegate_impl.h"
@@ -91,6 +92,8 @@ class FamilyUserAppMetricsTest
     ExtensionServiceInitParams params;
     params.profile_is_supervised = IsFamilyLink();
     InitializeExtensionService(params);
+    WaitForAppServiceProxyReady(
+        apps::AppServiceProxyFactory::GetForProfile(profile()));
 
     EXPECT_EQ(IsFamilyLink(), profile()->IsChild());
 
@@ -162,10 +165,6 @@ class FamilyUserAppMetricsTest
     deltas.push_back(MakeApp(/*app_id=*/"w", /*app_name=*/"web",
                              /*last_launch_time=*/base::Time::Now(),
                              apps::AppType::kWeb));
-    deltas.push_back(MakeApp(
-        /*app_id=*/"m", /*app_name=*/"macos",
-        /*last_launch_time=*/base::Time::Now() - kOneDay,
-        apps::AppType::kMacOs));
     deltas.push_back(MakeApp(
         /*app_id=*/"p", /*app_name=*/"pluginvm",
         /*last_launch_time=*/base::Time::Now() - kOneDay,
@@ -308,8 +307,7 @@ TEST_P(FamilyUserAppMetricsTest, FastForwardOneDay) {
       apps::AppType::kBorealis,
   };
   // Launched over 28 days ago and dropped from the count.
-  const apps::AppType stale_app_types[4] = {
-      apps::AppType::kMacOs,
+  const apps::AppType stale_app_types[3] = {
       apps::AppType::kPluginVm,
       apps::AppType::kStandaloneBrowser,
       apps::AppType::kRemote,

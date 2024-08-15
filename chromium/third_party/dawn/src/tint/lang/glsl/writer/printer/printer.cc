@@ -50,13 +50,13 @@ class Printer : public tint::TextGenerator {
   public:
     /// Constructor
     /// @param module the Tint IR module to generate
-    explicit Printer(core::ir::Module& module) : ir_(module) {}
+    explicit Printer(const core::ir::Module& module) : ir_(module) {}
 
     /// @param version the GLSL version information
     /// @returns the generated GLSL shader
     tint::Result<std::string> Generate(const Version& version) {
         auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "GLSL writer");
-        if (!valid) {
+        if (valid != Success) {
             return std::move(valid.Failure());
         }
 
@@ -74,7 +74,7 @@ class Printer : public tint::TextGenerator {
         EmitBlockInstructions(ir_.root_block);
 
         // Emit functions.
-        for (auto* func : ir_.functions) {
+        for (auto& func : ir_.functions) {
             EmitFunction(func);
         }
 
@@ -84,19 +84,19 @@ class Printer : public tint::TextGenerator {
     }
 
   private:
-    core::ir::Module& ir_;
+    const core::ir::Module& ir_;
 
     /// The buffer holding preamble text
     TextBuffer preamble_buffer_;
 
     /// The current function being emitted
-    core::ir::Function* current_function_ = nullptr;
+    const core::ir::Function* current_function_ = nullptr;
     /// The current block being emitted
-    core::ir::Block* current_block_ = nullptr;
+    const core::ir::Block* current_block_ = nullptr;
 
     /// Emit the function
     /// @param func the function to emit
-    void EmitFunction(core::ir::Function* func) {
+    void EmitFunction(const core::ir::Function* func) {
         TINT_SCOPED_ASSIGNMENT(current_function_, func);
 
         {
@@ -120,7 +120,7 @@ class Printer : public tint::TextGenerator {
 
     /// Emit a block
     /// @param block the block to emit
-    void EmitBlock(core::ir::Block* block) {
+    void EmitBlock(const core::ir::Block* block) {
         // TODO(dsinclair): Handle marking inline
         // MarkInlinable(block);
 
@@ -129,14 +129,14 @@ class Printer : public tint::TextGenerator {
 
     /// Emit the instructions in a block
     /// @param block the block with the instructions to emit
-    void EmitBlockInstructions(core::ir::Block* block) {
+    void EmitBlockInstructions(const core::ir::Block* block) {
         TINT_SCOPED_ASSIGNMENT(current_block_, block);
 
         for (auto* inst : *block) {
             Switch(
-                inst,                                                //
-                [&](core::ir::Return* r) { EmitReturn(r); },         //
-                [&](core::ir::Unreachable*) { EmitUnreachable(); },  //
+                inst,                                                      //
+                [&](const core::ir::Return* r) { EmitReturn(r); },         //
+                [&](const core::ir::Unreachable*) { EmitUnreachable(); },  //
                 TINT_ICE_ON_NO_MATCH);
         }
     }
@@ -148,7 +148,7 @@ class Printer : public tint::TextGenerator {
 
     /// Emit a return instruction
     /// @param r the return instruction
-    void EmitReturn(core::ir::Return* r) {
+    void EmitReturn(const core::ir::Return* r) {
         // If this return has no arguments and the current block is for the function which is
         // being returned, skip the return.
         if (current_block_ == current_function_->Block() && r->Args().IsEmpty()) {
@@ -169,7 +169,7 @@ class Printer : public tint::TextGenerator {
 };
 }  // namespace
 
-Result<std::string> Print(core::ir::Module& module, const Version& version) {
+Result<std::string> Print(const core::ir::Module& module, const Version& version) {
     return Printer{module}.Generate(version);
 }
 

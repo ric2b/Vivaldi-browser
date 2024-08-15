@@ -4,13 +4,16 @@
 
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 
+#import "base/check.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
+#import "ios/chrome/browser/ui/menu/menu_action_type.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -57,7 +60,7 @@ using l10n_util::GetNSString;
                            }];
 }
 
-- (UIAction*)actionToCopyURL:(const GURL)URL {
+- (UIAction*)actionToCopyURL:(CrURL*)URL {
   UIImage* image =
       DefaultSymbolWithPointSize(kLinkActionSymbol, kSymbolActionPointSize);
 
@@ -69,7 +72,7 @@ using l10n_util::GetNSString;
                 image:image
                  type:MenuActionType::CopyURL
                 block:^{
-                  StoreURLInPasteboard(URL);
+                  StoreURLInPasteboard(URL.gurl);
                 }];
 }
 
@@ -321,9 +324,26 @@ using l10n_util::GetNSString;
   return [self actionToCloseTabWithTitle:title block:block];
 }
 
+- (UIAction*)actionToCloseAllOtherTabsWithBlock:(ProceduralBlock)block {
+  NSString* title =
+      l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_CLOSEOTHERTABS);
+  UIImage* image =
+      DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolActionPointSize);
+  UIAction* action = [self actionWithTitle:title
+                                     image:image
+                                      type:MenuActionType::CloseAllOtherTabs
+                                     block:block];
+  action.attributes = UIMenuElementAttributesDestructive;
+  return action;
+}
+
 - (UIAction*)actionSaveImageWithBlock:(ProceduralBlock)block {
   UIImage* image = DefaultSymbolWithPointSize(kSaveImageActionSymbol,
                                               kSymbolActionPointSize);
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuSaveToPhotos]; // End Vivaldi
+
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE)
                 image:image
@@ -416,6 +436,21 @@ using l10n_util::GetNSString;
   };
 }
 
+- (UIAction*)actionToAddTabToNewGroupWithBlock:(ProceduralBlock)block {
+  CHECK(base::FeatureList::IsEnabled(kTabGroupsInGrid))
+      << "You should not be able to create a tab group context menu action "
+         "outside the Tab Groups experiment.";
+  UIImage* image = DefaultSymbolWithPointSize(kNewTabGroupActionSymbol,
+                                              kSymbolActionPointSize);
+  UIAction* action =
+      [self actionWithTitle:l10n_util::GetNSString(
+                                IDS_IOS_CONTENT_CONTEXT_ADDTABTONEWTABGROUP)
+                      image:image
+                       type:MenuActionType::AddTabToNewGroup
+                      block:block];
+  return action;
+}
+
 #pragma mark - Private
 
 // Creates a UIAction instance for closing a tab with a provided `title`.
@@ -423,6 +458,10 @@ using l10n_util::GetNSString;
                                  block:(ProceduralBlock)block {
   UIImage* image =
       DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolActionPointSize);
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuClose]; // End Vivaldi
+
   UIAction* action = [self actionWithTitle:title
                                      image:image
                                       type:MenuActionType::CloseTab
@@ -432,6 +471,16 @@ using l10n_util::GetNSString;
 }
 
 #pragma mark - Vivaldi
+
+- (UIAction*)actionToOpenInNewBackgroundTabWithBlock:(ProceduralBlock)block {
+  UIImage* image = CustomSymbolWithPointSize(vMenuNewBackgroundTab,
+                                             kVivaldiSymbolActionPointSize);
+  return [self actionWithTitle:l10n_util::GetNSString(
+                            IDS_IOS_CONTENT_CONTEXT_OPENLINK_NEWBACKGROUNDTAB)
+                         image:image
+                          type:MenuActionType::OpenInNewBackgroundTab
+                         block:block];
+}
 
 - (UIAction*)actionToAddNoteWithBlock:(ProceduralBlock)block {
   UIImage* image = [UIImage imageNamed:@"note"];

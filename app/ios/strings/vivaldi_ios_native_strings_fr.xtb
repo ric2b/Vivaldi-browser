@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Élément mis à jour</translation>
 <translation id="1041637248958093184">Vos recherches, les sites visités, les cookies et autres fichiers temporaires ne seront pas conservés par Vivaldi quand vous utilisez des onglets privés.</translation>
 <translation id="1066692930984703744">Activer le blocage des publicités et traqueurs pour une navigation plus rapide et plus sûre</translation>
-<translation id="1076258485383101882">Synchroniser les URL saisies</translation>
 <translation id="1116694919640316211">À propos de</translation>
 <translation id="1123707809902612118">Bloquer les traqueurs et les publicités</translation>
 <translation id="1151972924205500581">Mot de passe requis</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">Conditions d’utilisation</translation>
 <translation id="1771413903824396513">Par alias</translation>
 <translation id="1804522390855853698">Chinois (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Clair</translation>
 <translation id="1809939268435598390">Supprimer le dossier</translation>
 <translation id="1813686536470127172">Autre dossier</translation>
 <translation id="1828800626900562968">Appuyez sur l’icône « + » ci-dessous pour créer un nouvel onglet.</translation>
@@ -71,12 +71,17 @@
 <translation id="2388224692799337242">Quand vous allez commencer à naviguer, votre historique apparaîtra ici</translation>
 <translation id="2391028308389203648">Turc (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Activer</translation>
+<translation id="2414886740292270097">Sombre</translation>
+<translation id="2433507940547922241">Apparence</translation>
 <translation id="2434910957904013691">Tout synchroniser</translation>
 <translation id="2448144008809286557">Vous avez oublié votre <ph name="BEGIN_LINK" />nom d’utilisateur<ph name="END_LINK" /> ou votre <ph name="BEGIN_LINK" />mot de passe<ph name="END_LINK" /> ?</translation>
 <translation id="2536780277491102902">EXCEPTIONS</translation>
 <translation id="2558801801411970131">Blocage des traqueurs</translation>
+<translation id="2562040727226360285">Supprimer les éléments gênants – peut casser certains sites (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">Nouvelle note</translation>
 <translation id="2619628557366098325">Portugais (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Système</translation>
+<translation id="2666092431469916601">En haut</translation>
 <translation id="2677862276555105603">Pubs
 bloquées</translation>
 <translation id="2678542925523700624">Estonien (<ph name="ORIGIN" />)</translation>
@@ -85,6 +90,7 @@ bloquées</translation>
 <translation id="2745324713975967671">Mot de passe de chiffrement</translation>
 <translation id="276436995507680929">Synchroniser la liste de lecture</translation>
 <translation id="2765217105034171413">Petit</translation>
+<translation id="2767124759205735526">Synchroniser l’historique et les URL saisies</translation>
 <translation id="2825232297853754349">Vous devez accepter les conditions d’utilisation.</translation>
 <translation id="2842985007712546952">Dossier parent</translation>
 <translation id="2843343418360315034">Hongrois (<ph name="ORIGIN" />)</translation>
@@ -92,12 +98,13 @@ bloquées</translation>
 <translation id="2874111661876416905">Rechercher avec Vivaldi</translation>
 <translation id="2898963176829412617">Nouveau dossier…</translation>
 <translation id="2961573414320947355">Voulez-vous ouvrir tous les liens dans Vivaldi ? Assurez-vous de nous définir comme navigateur par défaut.</translation>
-<translation id="3006429105107822794">Vous n’aurez pas à vous souvenir de ce mot de passe. Il sera enregistrer dans le gestionnaire de mot de passe de Vivaldi.</translation>
+<translation id="3006429105107822794">Vous n’aurez pas à vous souvenir de ce mot de passe. Il sera enregistré dans le gestionnaire de mot de passe de Vivaldi.</translation>
 <translation id="3018244467214569202">Grec (<ph name="ORIGIN" />)</translation>
 <translation id="3039671569659952257">Supprimer le dossier</translation>
 <translation id="3073196329485613487">Se connecter à votre compte</translation>
 <translation id="307859903981308731">En continuant, vous acceptez</translation>
 <translation id="3086746722712840547">note</translation>
+<translation id="3087734570205094154">En bas</translation>
 <translation id="3091563570137981919">Blocage des traceurs et des publicités</translation>
 <translation id="3134385238404760368">Pas d’onglet récent</translation>
 <translation id="3157931365184549694">Restaurer</translation>
@@ -127,12 +134,14 @@ bloquées</translation>
 <translation id="3699026013955941879">Le code a expiré. Veuillez demander un nouveau code d’activation.</translation>
 <translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
 <translation id="3766350025418769949">Vous pouvez utiliser les mots de passe que vous avez enregistrés dans le gestionnaire de mots de passe de Vivaldi dans d'autres applications sur votre iPad.</translation>
+<translation id="3842727926262967527">Choisissez où vous préférez placer vos barres d’onglets et d’adresses.</translation>
 <translation id="3845564230651302310">Application des nouveaux paramètres de blocage…</translation>
 <translation id="3858860766373142691">Nom</translation>
 <translation id="3866249974567520381">Description</translation>
 <translation id="3872195896030547485">Merci de saisir une adresse mail valide.</translation>
 <translation id="3894427358181296146">Ajouter un dossier</translation>
 <translation id="3897092660631435901">Menu</translation>
+<translation id="3921585859122905677">Position de la barre d’adresses</translation>
 <translation id="3953599441418463312">Japonais (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Traceur bloqué</translation>
 <translation id="3958433364221339259">Rechercher avec <ph name="SEARCH_ENGINE" /></translation>
@@ -163,7 +172,9 @@ bloqués</translation>
 <translation id="4394049700291259645">Désactiver</translation>
 <translation id="4413780690230851155">Effacer l’historique de navigation</translation>
 <translation id="4452878871193896747">Indonésien (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Style des onglets</translation>
 <translation id="4474581062946673155">Vous n’avez actuellement aucun onglet synchronisé sur d’autres appareils.</translation>
+<translation id="4488900295693536220">S’applique lorsque la barre d’adresses est en bas. Cela facilite l’accès aux suggestions.</translation>
 <translation id="4493850495402472953">et</translation>
 <translation id="4497115807425788318">Emplacement</translation>
 <translation id="4507213865286211606">Aperçu de la taille</translation>
@@ -207,6 +218,7 @@ bloqué</translation>
 <translation id="5238642303473095117">Supprimer les données</translation>
 <translation id="5245732982828228444">Vous trouverez vos notes ici</translation>
 <translation id="5249199221558969362">Veuillez indiquer votre âge réel.</translation>
+<translation id="5271549068863921519">Enregistrer le mot de passe</translation>
 <translation id="5290452628447338707">Aucune note</translation>
 <translation id="5317780077021120954">Enregistrer</translation>
 <translation id="5349678548463426691">Par description</translation>
@@ -240,6 +252,7 @@ bloqué</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> éléments déplacés</translation>
 <translation id="6147094071357011481">Les onglets récemment fermés sont indisponibles</translation>
 <translation id="6193995664633100765">Indien (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">Thème</translation>
 <translation id="6365929278691047681">Allemand (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Modifier le signet</translation>
 <translation id="6406506848690869874">Synchronisation</translation>
@@ -278,7 +291,6 @@ bloqué</translation>
 <translation id="7041964446309059643">Manuel</translation>
 <translation id="7110758301321962823">Récupération de nom d’utilisateur</translation>
 <translation id="7194677467200983873">Dernière synchronisation :</translation>
-<translation id="7196846668589096106">Barre d’onglets</translation>
 <translation id="7210372243397300116">Rechercher le dossier</translation>
 <translation id="7215420652436283416">Par adresse</translation>
 <translation id="7229439505896086266">Créer une note</translation>
@@ -318,6 +330,7 @@ bloqué</translation>
 <translation id="8076492880354921740">Onglets</translation>
 <translation id="8112996065264879835">Ce code ne correspond pas à celui que nous vous avons envoyé.
 Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander un nouveau code en utilisant l’option de renvoi ci-dessous.</translation>
+<translation id="8142291334394582384">Inverser l’ordre des suggestions</translation>
 <translation id="8147118677117542370">Merci d’indiquer votre âge.</translation>
 <translation id="8165573437634525334">Données sécurisées par un mot de passe de chiffrement</translation>
 <translation id="8182979418912184986">Nouvel onglet privé</translation>
@@ -326,6 +339,7 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8273666073173891138">Note enregistrée en <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Importer</translation>
 <translation id="8284356787013856231">Permission refusée pour ouvrir le fichier</translation>
+<translation id="8289933454364510719">En haut ou en bas</translation>
 <translation id="8326104954595890674">Nouvel onglet privé</translation>
 <translation id="8329813750766387010">Mis à jour : <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Supprimer les bannières de consentement aux cookies (<ph name="TYPE" />)</translation>
@@ -349,6 +363,8 @@ Vous avez atteint la limite maximale de mauvaises tentatives. Veuillez demander 
 <translation id="8684294196284714094">Souhaitez-vous définir Vivaldi en tant que navigateur par défaut ?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> éléments supprimés</translation>
 <translation id="8763006697839582351">Ouvrir dans Vivaldi en navigation privée</translation>
+<translation id="8765173886020357878">Suggestions de recherche</translation>
+<translation id="8786689981011401964">Fonds d’écran</translation>
 <translation id="8804164990146287819">Politique de respect de la vie privée</translation>
 <translation id="8819841443522803117">Il est temps de changer de navigateur par défaut ? Choisissez Vivaldi.</translation>
 <translation id="8820817407110198400">Signets</translation>

@@ -329,7 +329,7 @@ class WrappedOverlayCompoundImageRepresentation
     return wrapped_->EndReadAccess(std::move(release_fence));
   }
 #if BUILDFLAG(IS_WIN)
-  absl::optional<gl::DCLayerOverlayImage> GetDCLayerOverlayImage() final {
+  std::optional<gl::DCLayerOverlayImage> GetDCLayerOverlayImage() final {
     return wrapped_->GetDCLayerOverlayImage();
   }
 #endif
@@ -495,7 +495,7 @@ CompoundImageBacking::CompoundImageBacking(
     bool allow_shm_overlays,
     std::unique_ptr<SharedMemoryImageBacking> shm_backing,
     base::WeakPtr<SharedImageBackingFactory> gpu_backing_factory,
-    absl::optional<gfx::BufferUsage> buffer_usage)
+    std::optional<gfx::BufferUsage> buffer_usage)
     : SharedImageBacking(mailbox,
                          format,
                          size,
@@ -609,13 +609,14 @@ std::unique_ptr<DawnImageRepresentation> CompoundImageBacking::ProduceDawn(
     MemoryTypeTracker* tracker,
     const wgpu::Device& device,
     wgpu::BackendType backend_type,
-    std::vector<wgpu::TextureFormat> view_formats) {
+    std::vector<wgpu::TextureFormat> view_formats,
+    scoped_refptr<SharedContextState> context_state) {
   auto* backing = GetBacking(SharedImageAccessStream::kDawn);
   if (!backing)
     return nullptr;
 
   auto real_rep = backing->ProduceDawn(manager, tracker, device, backend_type,
-                                       std::move(view_formats));
+                                       std::move(view_formats), context_state);
   if (!real_rep)
     return nullptr;
 

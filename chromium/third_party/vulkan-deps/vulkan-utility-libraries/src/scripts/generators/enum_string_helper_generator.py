@@ -26,6 +26,9 @@ class EnumStringHelperOutputGenerator(BaseGenerator):
 ''')
         out.append('''
 #pragma once
+
+// clang-format off
+
 #ifdef __cplusplus
 #include <string>
 #endif
@@ -108,4 +111,5 @@ static inline std::string string_{bitmask.flagName}({bitmask.flagName} input_val
 }}\n''')
             out.append('#endif // __cplusplus\n')
         out.extend(guard_helper.addGuard(None))
+        out.append('// clang-format on')
         self.write("".join(out))

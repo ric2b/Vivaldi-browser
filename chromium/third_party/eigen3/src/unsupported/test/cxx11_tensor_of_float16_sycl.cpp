@@ -20,10 +20,10 @@
 #include "main.h"
 #include <unsupported/Eigen/CXX11/Tensor>
 
-using Eigen::Tensor;
 using Eigen::SyclDevice;
+using Eigen::Tensor;
 
-void test_gpu_numext(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_numext(const Eigen::SyclDevice& sycl_device) {
   int num_elem = 101;
 
   float* d_float = static_cast<float*>(sycl_device.allocate(num_elem * sizeof(float)));
@@ -36,13 +36,14 @@ void test_gpu_numext(const Eigen::SyclDevice &sycl_device) {
 
   gpu_float.device(sycl_device) = gpu_float.random() - gpu_float.constant(0.5f);
   gpu_res_float.device(sycl_device) = gpu_float.unaryExpr(Eigen::internal::scalar_isnan_op<float>());
-  gpu_res_half.device(sycl_device) = gpu_float.cast<Eigen::half>().unaryExpr(Eigen::internal::scalar_isnan_op<Eigen::half>());
+  gpu_res_half.device(sycl_device) =
+      gpu_float.cast<Eigen::half>().unaryExpr(Eigen::internal::scalar_isnan_op<Eigen::half>());
 
   Tensor<bool, 1> half_prec(num_elem);
   Tensor<bool, 1> full_prec(num_elem);
 
-  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half,num_elem * sizeof(bool));
-  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float,num_elem * sizeof(bool));
+  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, num_elem * sizeof(bool));
+  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem * sizeof(bool));
 
   for (int i = 0; i < num_elem; ++i) {
     std::cout << "Checking numext " << i << std::endl;
@@ -50,19 +51,16 @@ void test_gpu_numext(const Eigen::SyclDevice &sycl_device) {
   }
 }
 
-void test_gpu_conversion(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_conversion(const Eigen::SyclDevice& sycl_device) {
   int num_elem = 101;
 
   float* d_float = static_cast<float*>(sycl_device.allocate(num_elem * sizeof(float)));
   Eigen::half* d_half = static_cast<Eigen::half*>(sycl_device.allocate(num_elem * sizeof(Eigen::half)));
   float* d_conv = static_cast<float*>(sycl_device.allocate(num_elem * sizeof(float)));
 
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_float(
-      d_float, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 1>, Eigen::Aligned> gpu_half(
-      d_half, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_conv(
-      d_conv, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_float(d_float, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 1>, Eigen::Aligned> gpu_half(d_half, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_conv(d_conv, num_elem);
 
   gpu_float.device(sycl_device) = gpu_float.random();
   gpu_half.device(sycl_device) = gpu_float.cast<Eigen::half>();
@@ -70,27 +68,24 @@ void test_gpu_conversion(const Eigen::SyclDevice &sycl_device) {
 
   Tensor<float, 1> initial(num_elem);
   Tensor<float, 1> final(num_elem);
-  sycl_device.memcpyDeviceToHost(initial.data(), d_float, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(final.data(), d_conv, num_elem*sizeof(float));
+  sycl_device.memcpyDeviceToHost(initial.data(), d_float, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(final.data(), d_conv, num_elem * sizeof(float));
 
   for (int i = 0; i < num_elem; ++i) {
     VERIFY_IS_APPROX(initial(i), final(i));
   }
 }
 
-void test_gpu_unary(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_unary(const Eigen::SyclDevice& sycl_device) {
   int num_elem = 101;
 
   float* d_float = (float*)sycl_device.allocate(num_elem * sizeof(float));
   float* d_res_half = (float*)sycl_device.allocate(num_elem * sizeof(float));
   float* d_res_float = (float*)sycl_device.allocate(num_elem * sizeof(float));
 
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_float(
-      d_float, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_half(
-      d_res_half, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_float(
-      d_res_float, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_float(d_float, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_half(d_res_half, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_float(d_res_float, num_elem);
 
   gpu_float.device(sycl_device) = gpu_float.random() - gpu_float.constant(0.5f);
   gpu_res_float.device(sycl_device) = gpu_float.abs();
@@ -98,8 +93,8 @@ void test_gpu_unary(const Eigen::SyclDevice &sycl_device) {
 
   Tensor<float, 1> half_prec(num_elem);
   Tensor<float, 1> full_prec(num_elem);
-  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem*sizeof(float));
+  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem * sizeof(float));
   sycl_device.synchronize();
 
   for (int i = 0; i < num_elem; ++i) {
@@ -108,7 +103,7 @@ void test_gpu_unary(const Eigen::SyclDevice &sycl_device) {
   }
 }
 
-void test_gpu_elementwise(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_elementwise(const Eigen::SyclDevice& sycl_device) {
   int num_elem = 101;
 
   float* d_float1 = static_cast<float*>(sycl_device.allocate(num_elem * sizeof(float)));
@@ -124,21 +119,24 @@ void test_gpu_elementwise(const Eigen::SyclDevice &sycl_device) {
   gpu_float1.device(sycl_device) = gpu_float1.random();
   gpu_float2.device(sycl_device) = gpu_float2.random();
   gpu_res_float.device(sycl_device) = (gpu_float1 + gpu_float2) * gpu_float1;
-  gpu_res_half.device(sycl_device) = ((gpu_float1.cast<Eigen::half>() + gpu_float2.cast<Eigen::half>()) * gpu_float1.cast<Eigen::half>()).cast<float>();
+  gpu_res_half.device(sycl_device) =
+      ((gpu_float1.cast<Eigen::half>() + gpu_float2.cast<Eigen::half>()) * gpu_float1.cast<Eigen::half>())
+          .cast<float>();
 
   Tensor<float, 1> half_prec(num_elem);
   Tensor<float, 1> full_prec(num_elem);
 
-  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half,num_elem * sizeof(float));
-  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float,num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem * sizeof(float));
 
   for (int i = 0; i < num_elem; ++i) {
-    std::cout << "Checking elemwise " << i << ": full prec = " << full_prec(i) << " vs half prec = " << half_prec(i) << std::endl;
+    std::cout << "Checking elemwise " << i << ": full prec = " << full_prec(i) << " vs half prec = " << half_prec(i)
+              << std::endl;
     VERIFY_IS_APPROX(static_cast<Eigen::half>(full_prec(i)), static_cast<Eigen::half>(half_prec(i)));
   }
 }
 
-void test_gpu_trancendental(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_trancendental(const Eigen::SyclDevice& sycl_device) {
   int num_elem = 101;
 
   float* d_float1 = (float*)sycl_device.allocate(num_elem * sizeof(float));
@@ -192,52 +190,51 @@ void test_gpu_trancendental(const Eigen::SyclDevice &sycl_device) {
   Tensor<float, 1> input3(num_elem);
   Tensor<Eigen::half, 1> half_prec3(num_elem);
   Tensor<Eigen::half, 1> full_prec3(num_elem);
-  sycl_device.memcpyDeviceToHost(input1.data(), d_float1, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(input2.data(), d_float2, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(input3.data(), d_float3, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(half_prec1.data(), d_res1_half, num_elem*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(full_prec1.data(), d_res1_float, num_elem*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(half_prec2.data(), d_res2_half, num_elem*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(full_prec2.data(), d_res2_float, num_elem*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(half_prec3.data(), d_res3_half, num_elem*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(full_prec3.data(), d_res3_float, num_elem*sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(input1.data(), d_float1, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(input2.data(), d_float2, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(input3.data(), d_float3, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(half_prec1.data(), d_res1_half, num_elem * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(full_prec1.data(), d_res1_float, num_elem * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(half_prec2.data(), d_res2_half, num_elem * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(full_prec2.data(), d_res2_float, num_elem * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(half_prec3.data(), d_res3_half, num_elem * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(full_prec3.data(), d_res3_float, num_elem * sizeof(Eigen::half));
   sycl_device.synchronize();
 
   for (int i = 0; i < num_elem; ++i) {
-    std::cout << "Checking elemwise exp " << i << " input = " << input1(i) << " full = " << full_prec1(i) << " half = " << half_prec1(i) << std::endl;
+    std::cout << "Checking elemwise exp " << i << " input = " << input1(i) << " full = " << full_prec1(i)
+              << " half = " << half_prec1(i) << std::endl;
     VERIFY_IS_APPROX(full_prec1(i), half_prec1(i));
   }
   for (int i = 0; i < num_elem; ++i) {
-    std::cout << "Checking elemwise log " << i << " input = " << input2(i) << " full = " << full_prec2(i) << " half = " << half_prec2(i) << std::endl;
-    if(std::abs(input2(i)-1.f)<0.05f) // log lacks accuracy nearby 1
-      VERIFY_IS_APPROX(full_prec2(i)+Eigen::half(0.1f), half_prec2(i)+Eigen::half(0.1f));
+    std::cout << "Checking elemwise log " << i << " input = " << input2(i) << " full = " << full_prec2(i)
+              << " half = " << half_prec2(i) << std::endl;
+    if (std::abs(input2(i) - 1.f) < 0.05f)  // log lacks accuracy nearby 1
+      VERIFY_IS_APPROX(full_prec2(i) + Eigen::half(0.1f), half_prec2(i) + Eigen::half(0.1f));
     else
       VERIFY_IS_APPROX(full_prec2(i), half_prec2(i));
   }
   for (int i = 0; i < num_elem; ++i) {
-    std::cout << "Checking elemwise plog1 " << i << " input = " << input3(i) << " full = " << full_prec3(i) << " half = " << half_prec3(i) << std::endl;
+    std::cout << "Checking elemwise plog1 " << i << " input = " << input3(i) << " full = " << full_prec3(i)
+              << " half = " << half_prec3(i) << std::endl;
     VERIFY_IS_APPROX(full_prec3(i), half_prec3(i));
   }
 }
 
-void test_gpu_contractions(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_contractions(const Eigen::SyclDevice& sycl_device) {
   int rows = 23;
   int cols = 23;
-  int num_elem = rows*cols;
+  int num_elem = rows * cols;
 
   float* d_float1 = (float*)sycl_device.allocate(num_elem * sizeof(float));
   float* d_float2 = (float*)sycl_device.allocate(num_elem * sizeof(float));
   Eigen::half* d_res_half = (Eigen::half*)sycl_device.allocate(num_elem * sizeof(Eigen::half));
   Eigen::half* d_res_float = (Eigen::half*)sycl_device.allocate(num_elem * sizeof(Eigen::half));
 
-  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float1(
-      d_float1, rows, cols);
-  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float2(
-      d_float2, rows, cols);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 2>, Eigen::Aligned> gpu_res_half(
-      d_res_half, rows, cols);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 2>, Eigen::Aligned> gpu_res_float(
-      d_res_float, rows, cols);
+  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float1(d_float1, rows, cols);
+  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float2(d_float2, rows, cols);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 2>, Eigen::Aligned> gpu_res_half(d_res_half, rows, cols);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 2>, Eigen::Aligned> gpu_res_float(d_res_float, rows, cols);
 
   gpu_float1.device(sycl_device) = gpu_float1.random() - gpu_float1.constant(0.5f);
   gpu_float2.device(sycl_device) = gpu_float2.random() - gpu_float2.constant(0.5f);
@@ -249,8 +246,8 @@ void test_gpu_contractions(const Eigen::SyclDevice &sycl_device) {
 
   Tensor<Eigen::half, 2> half_prec(rows, cols);
   Tensor<Eigen::half, 2> full_prec(rows, cols);
-  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, num_elem*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem*sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, num_elem * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem * sizeof(Eigen::half));
   sycl_device.synchronize();
 
   for (int i = 0; i < rows; ++i) {
@@ -263,23 +260,19 @@ void test_gpu_contractions(const Eigen::SyclDevice &sycl_device) {
   }
 }
 
-void test_gpu_reductions(const Eigen::SyclDevice &sycl_device, int size1, int size2, int redux) {
-   std::cout << "Reducing " << size1 << " by " << size2
-             << " tensor along dim " << redux << std::endl;
+void test_gpu_reductions(const Eigen::SyclDevice& sycl_device, int size1, int size2, int redux) {
+  std::cout << "Reducing " << size1 << " by " << size2 << " tensor along dim " << redux << std::endl;
 
-  int num_elem = size1*size2;
+  int num_elem = size1 * size2;
   int result_size = (redux == 1 ? size1 : size2);
 
   float* d_float = (float*)sycl_device.allocate(num_elem * sizeof(float));
   Eigen::half* d_res_half = (Eigen::half*)sycl_device.allocate(result_size * sizeof(Eigen::half));
   Eigen::half* d_res_float = (Eigen::half*)sycl_device.allocate(result_size * sizeof(Eigen::half));
 
-  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float(
-      d_float, size1, size2);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 1>, Eigen::Aligned> gpu_res_half(
-      d_res_half, result_size);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 1>, Eigen::Aligned> gpu_res_float(
-      d_res_float, result_size);
+  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float(d_float, size1, size2);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 1>, Eigen::Aligned> gpu_res_half(d_res_half, result_size);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 1>, Eigen::Aligned> gpu_res_float(d_res_float, result_size);
 
   gpu_float.device(sycl_device) = gpu_float.random() * 2.0f;
 
@@ -289,8 +282,8 @@ void test_gpu_reductions(const Eigen::SyclDevice &sycl_device, int size1, int si
 
   Tensor<Eigen::half, 1> half_prec(result_size);
   Tensor<Eigen::half, 1> full_prec(result_size);
-  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, result_size*sizeof(Eigen::half));
-  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, result_size*sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(half_prec.data(), d_res_half, result_size * sizeof(Eigen::half));
+  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, result_size * sizeof(Eigen::half));
   sycl_device.synchronize();
 
   for (int i = 0; i < result_size; ++i) {
@@ -299,7 +292,7 @@ void test_gpu_reductions(const Eigen::SyclDevice &sycl_device, int size1, int si
   }
 }
 
-void test_gpu_reductions(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_reductions(const Eigen::SyclDevice& sycl_device) {
   test_gpu_reductions(sycl_device, 13, 13, 0);
   test_gpu_reductions(sycl_device, 13, 13, 1);
 
@@ -310,20 +303,17 @@ void test_gpu_reductions(const Eigen::SyclDevice &sycl_device) {
   test_gpu_reductions(sycl_device, 36, 35, 1);
 }
 
-void test_gpu_full_reductions(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_full_reductions(const Eigen::SyclDevice& sycl_device) {
   int size = 13;
-  int num_elem = size*size;
+  int num_elem = size * size;
 
   float* d_float = (float*)sycl_device.allocate(num_elem * sizeof(float));
   Eigen::half* d_res_half = (Eigen::half*)sycl_device.allocate(1 * sizeof(Eigen::half));
   Eigen::half* d_res_float = (Eigen::half*)sycl_device.allocate(1 * sizeof(Eigen::half));
 
-  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float(
-      d_float, size, size);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 0>, Eigen::Aligned> gpu_res_half(
-      d_res_half);
-  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 0>, Eigen::Aligned> gpu_res_float(
-      d_res_float);
+  Eigen::TensorMap<Eigen::Tensor<float, 2>, Eigen::Aligned> gpu_float(d_float, size, size);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 0>, Eigen::Aligned> gpu_res_half(d_res_half);
+  Eigen::TensorMap<Eigen::Tensor<Eigen::half, 0>, Eigen::Aligned> gpu_res_float(d_res_float);
 
   gpu_float.device(sycl_device) = gpu_float.random();
 
@@ -347,7 +337,7 @@ void test_gpu_full_reductions(const Eigen::SyclDevice &sycl_device) {
   VERIFY_IS_APPROX(full_prec(), half_prec());
 }
 
-void test_gpu_forced_evals(const Eigen::SyclDevice &sycl_device) {
+void test_gpu_forced_evals(const Eigen::SyclDevice& sycl_device) {
   int num_elem = 101;
 
   float* d_float = (float*)sycl_device.allocate(num_elem * sizeof(float));
@@ -355,14 +345,10 @@ void test_gpu_forced_evals(const Eigen::SyclDevice &sycl_device) {
   float* d_res_half2 = (float*)sycl_device.allocate(num_elem * sizeof(float));
   float* d_res_float = (float*)sycl_device.allocate(num_elem * sizeof(float));
 
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_float(
-      d_float, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_half1(
-      d_res_half1, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Unaligned> gpu_res_half2(
-      d_res_half2, num_elem);
-  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_float(
-      d_res_float, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_float(d_float, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_half1(d_res_half1, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Unaligned> gpu_res_half2(d_res_half2, num_elem);
+  Eigen::TensorMap<Eigen::Tensor<float, 1>, Eigen::Aligned> gpu_res_float(d_res_float, num_elem);
 
   Eigen::array<int, 1> no_bcast;
   no_bcast[0] = 1;
@@ -375,20 +361,20 @@ void test_gpu_forced_evals(const Eigen::SyclDevice &sycl_device) {
   Tensor<float, 1> half_prec1(num_elem);
   Tensor<float, 1> half_prec2(num_elem);
   Tensor<float, 1> full_prec(num_elem);
-  sycl_device.memcpyDeviceToHost(half_prec1.data(), d_res_half1, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(half_prec2.data(), d_res_half2, num_elem*sizeof(float));
-  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem*sizeof(float));
+  sycl_device.memcpyDeviceToHost(half_prec1.data(), d_res_half1, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(half_prec2.data(), d_res_half2, num_elem * sizeof(float));
+  sycl_device.memcpyDeviceToHost(full_prec.data(), d_res_float, num_elem * sizeof(float));
   sycl_device.synchronize();
 
   for (int i = 0; i < num_elem; ++i) {
-    std::cout << "Checking forced eval " << i << full_prec(i) << " vs " << half_prec1(i) << " vs " << half_prec2(i) << std::endl;
+    std::cout << "Checking forced eval " << i << full_prec(i) << " vs " << half_prec1(i) << " vs " << half_prec2(i)
+              << std::endl;
     VERIFY_IS_APPROX(full_prec(i), half_prec1(i));
     VERIFY_IS_APPROX(full_prec(i), half_prec2(i));
   }
 }
 
-EIGEN_DECLARE_TEST(cxx11_tensor_of_float16_sycl)
-{
+EIGEN_DECLARE_TEST(cxx11_tensor_of_float16_sycl) {
   for (const auto& s : Eigen::get_sycl_supported_devices()) {
     QueueInterface queueInterface(s);
     auto sycl_device = Eigen::SyclDevice(&queueInterface);

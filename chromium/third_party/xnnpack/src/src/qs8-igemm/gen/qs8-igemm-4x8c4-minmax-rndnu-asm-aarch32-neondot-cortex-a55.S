@@ -24,7 +24,7 @@
 //     size_t cn_stride,                   sp + 112 -> (r7)
 //     size_t a_offset,                    sp + 116 -> (r5)
 //     const int8_t* zero,                 sp + 120 -> (r7)
-//     xnn_qs8_conv_minmax_params*params); sp + 124 -> (r5)
+//     xnn_qs8_conv_minmax_params *params)  sp + 124 -> (r5)
 
 // d8-d15, r4-r11,r14(lr) need to be preserved if used. r13(sp),r15(pc) are reserved.
 
@@ -66,7 +66,8 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_rndnu_ukernel_4x8c4__asm_aarch32_neondot_cor
         LDR         r6, [sp, 108]           // cm_stride
         LDR         r2, [sp, 96]            // a
         LDR         r9, [sp, 100]           // w
-        LDR         r5, [sp, 124]           // params
+
+        LDR         r5, [sp, 124]       // params
         MOV         r14, r3                 // p = ks
 
         # Clamp C pointers
@@ -82,6 +83,7 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_rndnu_ukernel_4x8c4__asm_aarch32_neondot_cor
 
         # Load params values
         VLDM        r5, {d12-d13}           // RNDNU params
+
 
 0:
         # Load initial bias from w into accumulators
@@ -106,26 +108,26 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_rndnu_ukernel_4x8c4__asm_aarch32_neondot_cor
         LDR         r12, [r2,  4]           // A1
         ADD         r3,  r3, r5             // a0 += a_offset
         LDR         r10, [r2,  8]           // A2
-        MOVEQ       r3,  r7                 //   a0 = zero, else += a0 + a_offset
+        MOVEQ       r3,  r7                 // a0 = zero, else += a0 + a_offset
         LDR         r0, [r2, 12]            // A3
         CMP         r12,  r7                // if a1 == zero
         VLD1.8      {d4},  [r9]!            // B0
         ADD         r12, r12, r5            // a1 += a_offset
         VLD1.8      {d5},  [r9]!            // B1
-        MOVEQ       r12,  r7                //   a1 = zero, else += a1 + a_offset
+        MOVEQ       r12,  r7                // a1 = zero, else += a1 + a_offset
         VLD1.8      {d6},  [r9]!            // B2
         CMP         r10,  r7                // if a2 == zero
         VLD1.8      {d7},  [r9]!            // B3
         ADD         r10, r10, r5            // a2 += a_offset
         VLD1.8      {d0},  [r3]!            // A0
-        MOVEQ       r10,  r7                //   a2 = zero, else += a2 + a_offset
+        MOVEQ       r10,  r7                // a2 = zero, else += a2 + a_offset
         VLD1.8      {d1}, [r12]!            // A1
         CMP         r0,  r7                 // if a3 == zero
         ADD         r0,  r0, r5             // a3 += a_offset
-        LDR         r5, [sp, 52]            // k = kc
         MOVEQ       r0,  r7                 //   a3 = zero, else += a3 + a_offset
-        SUBS        r5, r5, 8               // k = k - 8
         ADD         r2, r2, 16
+        LDR         r5, [sp, 52]            // k = kc
+        SUBS        r5, r5, 8               // k = k - 8
 
         BLO         6f                      // less than 8 channels?
 

@@ -9,8 +9,8 @@
         display: none;
       }
     </style>
-    <template is="dom-if" if="[[showBasicPage_(
-        currentRoute_, inSearchMode, hasExpandedSection_)]]">
+    <template is="dom-if" if="[[showBasicPage_(currentRoute_, inSearchMode)]]"
+        restamp>
       <div id="basicPage">
         <template is="dom-if" if="[[showResetProfileBanner_]]" restamp>
           <settings-reset-profile-banner on-close="onResetProfileBannerClosed_">
@@ -24,6 +24,13 @@
             </settings-people-page>
           </settings-section>
         </template>
+        <template is="dom-if"
+            if="[[showExperimentalAdvancedPage_(pageVisibility.ai)]]"
+            restamp>
+          <settings-section page-title="$i18n{aiPageTitle}" section="ai">
+            <settings-ai-page prefs="{{prefs}}"></settings-ai-page>
+          </settings-section>
+        </template>
         <template is="dom-if" if="[[showPage_(pageVisibility.autofill)]]"
             restamp>
           <settings-section page-title="$i18n{autofillPageTitle}"
@@ -31,13 +38,13 @@
             <settings-autofill-page prefs="{{prefs}}"></settings-autofill-page>
           </settings-section>
         </template>
-        <settings-section id="privacyGuidePromoSection" page-title=""
+        <!-- settings-section id="privacyGuidePromoSection" page-title=""
             hidden$="[[!showPrivacyGuidePromo_]]" nest-under-section="privacy"
             no-search>
           <settings-privacy-guide-promo id="privacyGuidePromo"
               prefs="{{prefs}}">
           </settings-privacy-guide-promo>
-        </settings-section>
+        </settings-section -->
         <!-- TODO(crbug/1469277): Remove after SafetyHub launched. -->
         <template is="dom-if"
               if="[[showSafetyCheckPage_(pageVisibility.safetyCheck)]]" restamp>
@@ -72,10 +79,10 @@
         <template is="dom-if"
             if="[[showPerformancePage_(pageVisibility.performance)]]"
             restamp>
-          <settings-section page-title="[[getPerformancePageTitle_()]]"
+          <settings-section page-title="$i18n{memoryPageTitle}"
 <if expr="_google_chrome">
               show-send-feedback-button
-              on-send-feedback="onSendHighEfficiencyFeedbackClick_"
+              on-send-feedback="onSendMemorySaverFeedbackClick_"
 </if>
               section="performance" id="performanceSettingsSection">
             <settings-performance-page prefs="{{prefs}}">
@@ -151,9 +158,7 @@
         if="[[showAdvancedSettings_(pageVisibility.advancedSettings)]]">
       <settings-idle-load id="advancedPageTemplate">
         <template>
-          <div id="advancedPage" hidden$="[[!showAdvancedPage_(
-              currentRoute_, inSearchMode, hasExpandedSection_,
-              advancedToggleExpanded)]]">
+          <div id="advancedPage">
             <template is="dom-if" if="[[showPage_(pageVisibility.languages)]]"
                 restamp>
 <if expr="not chromeos_ash">

@@ -80,7 +80,7 @@ def _try_lock(lockfile):
 def _lock(path, timeout=0):
     """_lock returns function to release the lock if locking was successful.
 
-  _lock also implements simple retry logic."""
+    _lock also implements simple retry logic."""
     elapsed = 0
     while True:
         try:
@@ -101,13 +101,13 @@ def _lock(path, timeout=0):
 def lock(path, timeout=0):
     """Get exclusive lock to path.
 
-  Usage:
-    import lockfile
-    with lockfile.lock(path, timeout):
-      # Do something
-      pass
+    Usage:
+        import lockfile
+        with lockfile.lock(path, timeout):
+            # Do something
+            pass
 
-   """
+    """
     release_fn = _lock(path, timeout)
     try:
         yield

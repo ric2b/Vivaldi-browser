@@ -8,13 +8,13 @@ ts_library("components") {
   testonly = true
   sources = [
     "ChromeLink_test.ts",
+    "CodeBlock_test.ts",
     "CodeHighlighter_test.ts",
     "DataGridController_test.ts",
     "DataGridHelpers.ts",
     "DataGrid_test.ts",
     "Dialog_test.ts",
     "ExpandableList_test.ts",
-    "IconButton_test.ts",
     "Linkifier_test.ts",
     "MarkdownImage_test.ts",
     "MarkdownLink_test.ts",
@@ -29,6 +29,7 @@ ts_library("components") {
   ]
 
   deps = [
+    "../../../../../front_end/core/host:bundle",
     "../../../../../front_end/core/platform:bundle",
     "../../../../../front_end/third_party/marked:bundle",
     "../../../../../front_end/ui/components/chrome_link:bundle",

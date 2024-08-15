@@ -15,16 +15,13 @@
 import m from 'mithril';
 import {v4 as uuidv4} from 'uuid';
 
-import {Disposable} from '../../base/disposable';
-import {Actions} from '../../common/actions';
-import {EngineProxy} from '../../common/engine';
+import {Actions, DeferredAction} from '../../common/actions';
 import {SCROLLING_TRACK_GROUP} from '../../common/state';
 import {globals} from '../../frontend/globals';
-import {
-  NamedSliceTrackTypes,
-} from '../../frontend/named_slice_track';
+import {NamedSliceTrackTypes} from '../../frontend/named_slice_track';
 import {TrackButton} from '../../frontend/track_panel';
 import {PrimaryTrackSortKey, TrackContext} from '../../public';
+import {EngineProxy} from '../../trace_processor/engine';
 import {
   CustomSqlDetailsPanelConfig,
   CustomSqlTableDefConfig,
@@ -45,21 +42,24 @@ export interface SliceColumns {
 export interface DebugTrackV2Config {
   sqlTableName: string;
   columns: SliceColumns;
+  closeable: boolean;
 }
 
-interface DebugTrackV2Types extends NamedSliceTrackTypes {
-  config: DebugTrackV2Config;
+export interface DebugTrackV2CreateConfig {
+  pinned?: boolean;     // default true
+  closeable?: boolean;  // default true
 }
 
-export class DebugTrackV2 extends CustomSqlTableSliceTrack<DebugTrackV2Types> {
-  constructor(engine: EngineProxy, trackKey: string) {
+export class DebugTrackV2 extends
+    CustomSqlTableSliceTrack<NamedSliceTrackTypes> {
+  private config: DebugTrackV2Config;
+
+  constructor(engine: EngineProxy, ctx: TrackContext) {
     super({
       engine,
-      trackKey,
+      trackKey: ctx.trackKey,
     });
-  }
 
-  onCreate(ctx: TrackContext): void {
     // TODO(stevegolton): Validate params before type asserting.
     // TODO(stevegolton): Avoid just pushing this config up for some base
     // class to use. Be more explicit.
@@ -68,7 +68,7 @@ export class DebugTrackV2 extends CustomSqlTableSliceTrack<DebugTrackV2Types> {
 
   getSqlDataSource(): CustomSqlTableDefConfig {
     return {
-      sqlTableName: this.config.sqlTableName,
+      sqlTableName: this.config!.sqlTableName,
     };
   }
 
@@ -76,25 +76,22 @@ export class DebugTrackV2 extends CustomSqlTableSliceTrack<DebugTrackV2Types> {
     return {
       kind: DebugSliceDetailsTab.kind,
       config: {
-        sqlTableName: this.config.sqlTableName,
+        sqlTableName: this.config!.sqlTableName,
         title: 'Debug Slice',
       },
     };
   }
 
-  async onInit(): Promise<Disposable> {
-    return super.onInit();
-  }
-
   getTrackShellButtons(): m.Children {
-    return m(TrackButton, {
+    return this.config.closeable ? m(TrackButton, {
       action: () => {
         globals.dispatch(Actions.removeTracks({trackKeys: [this.trackKey]}));
       },
       i: 'close',
       tooltip: 'Close',
       showButton: true,
-    });
+    }) :
+                                   [];
   }
 }
 
@@ -103,9 +100,12 @@ let debugTrackCount = 0;
 export interface SqlDataSource {
   // SQL source selecting the necessary data.
   sqlSource: string;
+
+  // Optional: Rename columns from the query result.
+  // If omitted, original column names from the query are used instead.
   // The caller is responsible for ensuring that the number of items in this
   // list matches the number of columns returned by sqlSource.
-  columns: string[];
+  columns?: string[];
 }
 
 export async function addDebugSliceTrack(
@@ -113,7 +113,8 @@ export async function addDebugSliceTrack(
     data: SqlDataSource,
     trackName: string,
     sliceColumns: SliceColumns,
-    argColumns: string[]) {
+    argColumns: string[],
+    config?: DebugTrackV2CreateConfig) {
   // To prepare displaying the provided data as a track, materialize it and
   // compute depths.
   const debugTrackId = ++debugTrackCount;
@@ -148,8 +149,9 @@ export async function addDebugSliceTrack(
       from prepared_data
       order by ts;`);
 
+  const closeable = config?.closeable ?? true;
   const trackKey = uuidv4();
-  globals.dispatchMultiple([
+  const actions: DeferredAction<{}>[] = [
     Actions.addTrack({
       key: trackKey,
       name: trackName.trim() || `Debug Track ${debugTrackId}`,
@@ -159,8 +161,12 @@ export async function addDebugSliceTrack(
       params: {
         sqlTableName,
         columns: sliceColumns,
+        closeable,
       },
     }),
-    Actions.toggleTrackPinned({trackKey}),
-  ]);
+  ];
+  if (config?.pinned ?? true) {
+    actions.push(Actions.toggleTrackPinned({trackKey}));
+  }
+  globals.dispatchMultiple(actions);
 }

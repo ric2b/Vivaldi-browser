@@ -28,6 +28,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
@@ -38,6 +39,10 @@
 namespace ash {
 class WindowState;
 }  // namespace ash
+
+namespace views {
+class ClientView;
+}  // namespace views
 
 namespace base {
 namespace trace_event {
@@ -155,7 +160,10 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void SetPersistable(bool persistable);
 
   // Sets the window corner radii.
-  void SetWindowCornerRadii(const gfx::RoundedCornersF& radii);
+  void SetWindowCornersRadii(const gfx::RoundedCornersF& radii);
+
+  // Sets the shadow corner radii.
+  void SetShadowCornersRadii(const gfx::RoundedCornersF& radii);
 
   // Set normal shadow bounds, |shadow_bounds_|, to |bounds| to be used and
   // applied via `UpdateShadow()`. Set and update resize shadow bounds with
@@ -292,6 +300,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool ShouldSaveWindowPlacement() const override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(SkPath* mask) const override;
+  views::ClientView* CreateClientView(views::Widget* widget) override;
 
   // views::WidgetObserver:
   void OnWidgetClosing(views::Widget* widget) override;
@@ -453,7 +462,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
 
   static bool IsPopupWithGrab(aura::Window* window);
 
-  raw_ptr<views::Widget, ExperimentalAsh> widget_ = nullptr;
+  raw_ptr<views::Widget> widget_ = nullptr;
   bool movement_disabled_ = false;
   gfx::Point origin_;
 
@@ -465,9 +474,14 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   absl::optional<cc::Region> shape_dp_;
   absl::optional<cc::Region> pending_shape_dp_;
 
-  // Radii of window corners in dips.
+  // Radii of window corners in dps. Currently only specified by clients that do
+  // server-side rounded windows.
   absl::optional<gfx::RoundedCornersF> window_corners_radii_dp_;
   absl::optional<gfx::RoundedCornersF> pending_window_corners_radii_dp_;
+
+  // Radii of shadow corners in dps.
+  absl::optional<gfx::RoundedCornersF> shadow_corners_radii_dp_;
+  absl::optional<gfx::RoundedCornersF> pending_shadow_corners_radii_dp_;
 
   int64_t display_id_ = display::kInvalidDisplayId;
   int64_t pending_display_id_ = display::kInvalidDisplayId;
@@ -541,7 +555,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   // without actually updating it.
   bool CalculateCanResize() const;
 
-  raw_ptr<aura::Window, ExperimentalAsh> parent_ = nullptr;
+  raw_ptr<aura::Window> parent_ = nullptr;
   bool activatable_ = true;
   bool can_minimize_ = true;
   bool has_frame_colors_ = false;

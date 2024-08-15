@@ -49,6 +49,7 @@
 #include "third_party/blink/public/common/history/session_history_constants.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
+#include "third_party/blink/public/common/page/color_provider_color_maps.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/switches.h"
@@ -536,28 +537,24 @@ void WebViewImpl::SetNoStatePrefetchClient(
                                      *page_, no_state_prefetch_client));
 }
 
-void WebViewImpl::CloseWindowSoon() {
-  // Ask the RenderViewHost with a local main frame to initiate close.  We
-  // could be called from deep in Javascript.  If we ask the RenderViewHost to
-  // close now, the window could be closed before the JS finishes executing,
-  // thanks to nested message loops running and handling the resulting
-  // disconnecting `page_broadcast_`. So instead, post a message back to the
-  // message loop, which won't run until the JS is complete, and then the
-  // RouteCloseEvent/RequestClose request can be sent.
-  GetPage()
-      ->GetPageScheduler()
-      ->GetAgentGroupScheduler()
-      .DefaultTaskRunner()
-      ->PostTask(FROM_HERE,
-                 WTF::BindOnce(&WebViewImpl::DoDeferredCloseWindowSoon,
-                               weak_ptr_factory_.GetWeakPtr()));
-}
+void WebViewImpl::CloseWindow() {
+#if !(BUILDFLAG(IS_ANDROID) || \
+      (BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM64)))
+  auto close_task_trace = close_task_posted_stack_trace_;
+  base::debug::Alias(&close_task_trace);
+  auto close_trace = close_called_stack_trace_;
+  base::debug::Alias(&close_trace);
+  auto prev_close_window_trace = close_window_called_stack_trace_;
+  base::debug::Alias(&prev_close_window_trace);
+  close_window_called_stack_trace_.emplace();
+  auto cur_close_window_trace = close_window_called_stack_trace_;
+  base::debug::Alias(&cur_close_window_trace);
+#endif
+  SCOPED_CRASH_KEY_BOOL("Bug1499519", "page_exists", !!page_);
 
-void WebViewImpl::DoDeferredCloseWindowSoon() {
   // Have the browser process a close request. We should have either a
   // |local_main_frame_host_remote_| or |remote_main_frame_host_remote_|.
   // This method will not execute if Close has been called as WeakPtrs
-  // will be invalidated in Close.
   if (GetPage()->MainFrame()->IsLocalFrame()) {
     DCHECK(local_main_frame_host_remote_);
     local_main_frame_host_remote_->RequestClose();
@@ -617,9 +614,7 @@ WebViewImpl::WebViewImpl(
   SetVisibilityState(visibility, /*is_initial_state=*/true);
   page_->SetIsPrerendering(is_prerendering);
 
-  // We pass this state to Page, but it's only used by the main frame in the
-  // page.
-  SetInsidePortal(is_inside_portal);
+  // TODO(crbug.com/1498140): Remove the in_inside_portal parameter.
 
   if (fenced_frame_mode && features::IsFencedFramesEnabled()) {
     page_->SetIsMainFrameFencedFrameRoot();
@@ -1125,6 +1120,20 @@ Frame* WebViewImpl::FocusedCoreFrame() const {
 // WebWidget ------------------------------------------------------------------
 
 void WebViewImpl::Close() {
+#if !(BUILDFLAG(IS_ANDROID) || \
+      (BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM64)))
+  auto close_task_trace = close_task_posted_stack_trace_;
+  base::debug::Alias(&close_task_trace);
+  auto prev_close_trace = close_called_stack_trace_;
+  base::debug::Alias(&prev_close_trace);
+  close_called_stack_trace_.emplace();
+  auto cur_close_trace = close_called_stack_trace_;
+  base::debug::Alias(&cur_close_trace);
+  auto close_window_trace = close_window_called_stack_trace_;
+  base::debug::Alias(&close_window_trace);
+#endif
+  SCOPED_CRASH_KEY_BOOL("Bug1499519", "page_exists", !!page_);
+
   // Closership is a single relationship, so only 1 call to Close() should
   // occur.
   CHECK(page_);
@@ -1138,6 +1147,8 @@ void WebViewImpl::Close() {
   // Invalidate any weak ptrs as we are starting to shutdown.
   weak_ptr_factory_.InvalidateWeakPtrs();
   receiver_.reset();
+
+  dev_tools_emulator_->Shutdown();
 
   // Initiate shutdown for the entire frameset.  This will cause a lot of
   // notifications to be sent. This will detach all frames in this WebView's
@@ -1363,9 +1374,8 @@ void WebViewImpl::ResizeWithBrowserControls(
   size_ = main_frame_widget_size;
 
   if (!main_frame->IsOutermostMainFrame()) {
-    // Anchoring should not be performed from embedded frames (not even
-    // portals) as anchoring should only be performed when the size/orientation
-    // is user controlled.
+    // Anchoring should not be performed from embedded frames as anchoring
+    // should only be performed when the size/orientation is user controlled.
     ResizeViewWhileAnchored(browser_controls_params, visible_viewport_size);
   } else if (is_rotation) {
     gfx::PointF viewport_anchor_coords(viewportAnchorCoordX,
@@ -1697,8 +1707,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
       WebString::FromASCII(prefs.default_video_poster_url.spec()));
   settings->SetSupportDeprecatedTargetDensityDPI(
       prefs.support_deprecated_target_density_dpi);
-  settings->SetUseLegacyBackgroundSizeShorthandBehavior(
-      prefs.use_legacy_background_size_shorthand_behavior);
   settings->SetWideViewportQuirkEnabled(prefs.wide_viewport_quirk);
   settings->SetUseWideViewport(prefs.use_wide_viewport);
   settings->SetForceZeroLayoutHeight(prefs.force_zero_layout_height);
@@ -2524,14 +2532,11 @@ void WebViewImpl::SetPageLifecycleStateInternal(
       LocalFrame* local_frame = To<LocalFrame>(page->MainFrame());
       probe::DidRestoreFromBackForwardCache(local_frame);
 
-      if (base::FeatureList::IsEnabled(
-              blink::features::kRetriggerPreloadingOnBFCacheRestoration)) {
-        if (local_frame->IsOutermostMainFrame()) {
-          Document* document = local_frame->GetDocument();
-          if (auto* document_rules =
-                  DocumentSpeculationRules::FromIfExists(*document)) {
-            document_rules->DocumentRestoredFromBFCache();
-          }
+      if (local_frame->IsOutermostMainFrame()) {
+        Document* document = local_frame->GetDocument();
+        if (auto* document_rules =
+                DocumentSpeculationRules::FromIfExists(*document)) {
+          document_rules->DocumentRestoredFromBFCache();
         }
       }
     }
@@ -2776,19 +2781,12 @@ void WebViewImpl::SetIgnoreViewportTagScaleLimits(bool ignore) {
   PageScaleConstraints constraints =
       GetPageScaleConstraintsSet().UserAgentConstraints();
   if (ignore) {
-    // Don't ignore the minimum limits in touchless mode to prevent wide
-    // loading elements from causing us to zoom pages out beyond their layout
-    // which is fairly common.
-    if (!RuntimeEnabledFeatures::FocuslessSpatialNavigationEnabled()) {
-      constraints.minimum_scale =
-          GetPageScaleConstraintsSet().DefaultConstraints().minimum_scale;
-    }
+    constraints.minimum_scale =
+        GetPageScaleConstraintsSet().DefaultConstraints().minimum_scale;
     constraints.maximum_scale =
         GetPageScaleConstraintsSet().DefaultConstraints().maximum_scale;
   } else {
-    if (!RuntimeEnabledFeatures::FocuslessSpatialNavigationEnabled()) {
-      constraints.minimum_scale = -1;
-    }
+    constraints.minimum_scale = -1;
     constraints.maximum_scale = -1;
   }
   GetPage()->SetUserAgentPageScaleConstraints(constraints);
@@ -2848,7 +2846,6 @@ void WebViewImpl::UpdatePageDefinedViewportConstraints(
     return;
 
   if (virtual_keyboard_mode_ != description.virtual_keyboard_mode) {
-    // TODO(bokan): This should handle portals.
     DCHECK(MainFrameImpl()->IsOutermostMainFrame());
     virtual_keyboard_mode_ = description.virtual_keyboard_mode;
     mojom::blink::LocalFrameHost& frame_host =
@@ -3059,6 +3056,21 @@ void WebViewImpl::SendWindowRectToMainFrameHost(
 void WebViewImpl::DidAccessInitialMainDocument() {
   DCHECK(local_main_frame_host_remote_);
   local_main_frame_host_remote_->DidAccessInitialMainDocument();
+}
+
+void WebViewImpl::Minimize() {
+  DCHECK(local_main_frame_host_remote_);
+  local_main_frame_host_remote_->Minimize();
+}
+
+void WebViewImpl::Maximize() {
+  DCHECK(local_main_frame_host_remote_);
+  local_main_frame_host_remote_->Maximize();
+}
+
+void WebViewImpl::Restore() {
+  DCHECK(local_main_frame_host_remote_);
+  local_main_frame_host_remote_->Restore();
 }
 
 void WebViewImpl::SetResizable(bool resizable) {
@@ -3284,6 +3296,11 @@ void WebViewImpl::SetPageBaseBackgroundColor(absl::optional<SkColor> color) {
   UpdateBaseBackgroundColor();
 }
 
+void WebViewImpl::UpdateColorProviders(
+    const ColorProviderColorMaps& color_provider_colors) {
+  page_->UpdateColorProviders(color_provider_colors);
+}
+
 void WebViewImpl::SetBaseBackgroundColorOverrideTransparent(
     bool override_to_transparent) {
   DCHECK(does_composite_);
@@ -3418,16 +3435,6 @@ void WebViewImpl::ActivatePrerenderedPage(
   }
 
   std::move(callback).Run();
-}
-
-void WebViewImpl::SetInsidePortal(bool inside_portal) {
-  GetPage()->SetInsidePortal(inside_portal);
-
-  // We may not have created the frame widget yet but that's ok because it'll
-  // be created with this value correctly initialized. This can also be null if
-  // the main frame is remote.
-  if (web_widget_)
-    web_widget_->SetIsNestedMainFrameWidget(inside_portal);
 }
 
 void WebViewImpl::RegisterRendererPreferenceWatcher(
@@ -3803,14 +3810,16 @@ void WebViewImpl::DidChangeRootLayer(bool root_layer_exists) {
   if (root_layer_exists) {
     if (!device_emulation_transform_.IsIdentity())
       UpdateDeviceEmulationTransform();
-  } else {
-    // When the document in an already-attached main frame is being replaced by
-    // a navigation then DidChangeRootLayer(false) will be called. Since we are
-    // navigating, defer BeginMainFrames until the new document is ready for
-    // them.
+  } else if (!MainFrameImpl()->FrameWidgetImpl()->WillBeDestroyed()) {
+    // When the document in an already-attached main frame is being replaced
+    // by a navigation then DidChangeRootLayer(false) will be called. Since we
+    // are navigating, defer BeginMainFrames until the new document is ready
+    // for them.
     //
-    // TODO(crbug.com/936696): This should not be needed once we always swap
-    // frames when swapping documents.
+    // If WillBeDestroyed() is true, it means we're swapping the frame as well
+    // as the document for this navigation. BeginMainFrames are instead
+    // deferred for a newly attached frame via DidAttachLocalMainFrame(). See
+    // crbug.com/936696.
     scoped_defer_main_frame_update_ =
         MainFrameImpl()->FrameWidgetImpl()->DeferMainFrameUpdate();
   }
@@ -3959,7 +3968,7 @@ void WebViewImpl::ClearAutoplayFlags() {
   page_->ClearAutoplayFlags();
 }
 
-int32_t WebViewImpl::AutoplayFlagsForTest() {
+int32_t WebViewImpl::AutoplayFlagsForTest() const {
   return page_->AutoplayFlags();
 }
 
@@ -3976,6 +3985,11 @@ void WebViewImpl::SetDeviceColorSpaceForTesting(
   web_widget_->SetDeviceColorSpaceForTesting(color_space);
 }
 
+void WebViewImpl::SetColorProviders(
+    const ColorProviderColorMaps& color_provider_colors) {
+  UpdateColorProviders(color_provider_colors);
+}
+
 const SessionStorageNamespaceId& WebViewImpl::GetSessionStorageNamespaceId() {
   CHECK(!session_storage_namespace_id_.empty());
   return session_storage_namespace_id_;
@@ -3985,7 +3999,40 @@ bool WebViewImpl::IsFencedFrameRoot() const {
   return GetPage()->IsMainFrameFencedFrameRoot();
 }
 
+void WebViewImpl::SetSupportsAppRegion(bool supports_app_region) {
+  supports_app_region_ = supports_app_region;
+  if (!MainFrameImpl() || !MainFrameImpl()->GetFrame()) {
+    return;
+  }
+
+  LocalFrame* local_frame = MainFrameImpl()->GetFrame();
+
+  if (supports_app_region_) {
+    local_frame->View()->UpdateDocumentAnnotatedRegions();
+  } else {
+    local_frame->GetDocument()->SetAnnotatedRegions(
+        Vector<AnnotatedRegionValue>());
+    local_frame->Client()->AnnotatedRegionsChanged();
+  }
+}
+
+bool WebViewImpl::SupportsAppRegion() {
+  return supports_app_region_;
+}
+
 void WebViewImpl::MojoDisconnected() {
+#if !(BUILDFLAG(IS_ANDROID) || \
+      (BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_ARM64)))
+  auto prev_close_task_trace = close_task_posted_stack_trace_;
+  base::debug::Alias(&prev_close_task_trace);
+  close_task_posted_stack_trace_.emplace();
+  auto cur_close_task_trace = close_task_posted_stack_trace_;
+  base::debug::Alias(&cur_close_task_trace);
+  auto close_trace = close_called_stack_trace_;
+  base::debug::Alias(&close_trace);
+  auto close_window_trace = close_window_called_stack_trace_;
+  base::debug::Alias(&close_window_trace);
+#endif
   // This IPC can be called from re-entrant contexts. We can't destroy a
   // RenderViewImpl while references still exist on the stack, so we dispatch a
   // non-nestable task. This method is called exactly once by the browser

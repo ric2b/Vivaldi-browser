@@ -310,7 +310,7 @@ TEST(test_layer_setting_file, vkuGetLayerSettingValues_String) {
     EXPECT_EQ(VK_SUCCESS, result_count);
     EXPECT_EQ(2, value_count);
 
-    std::vector<const char*> values(static_cast<uint32_t>(value_count));
+    std::vector<const char *> values(static_cast<uint32_t>(value_count));
 
     value_count = 1;
     VkResult result_incomplete =

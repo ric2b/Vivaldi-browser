@@ -26,16 +26,18 @@
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/supervised_user/core/browser/kids_chrome_management_client.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/core/common/supervised_user_utils.h"
 #include "components/supervised_user/test_support/supervised_user_url_filter_test_utils.h"
 #include "components/sync/test/mock_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace supervised_user {
@@ -47,16 +49,16 @@ const char kExampleUrl1[] = "http://www.example1.com/123";
 
 }  // namespace
 
+class MockPlatformDelegate : public SupervisedUserService::PlatformDelegate {
+ public:
+  MOCK_METHOD(void, CloseIncognitoTabs, (), (override));
+};
+
 class SupervisedUserServiceTestBase : public ::testing::Test {
  public:
-  explicit SupervisedUserServiceTestBase(bool is_supervised)
-      : kids_chrome_management_client_(
-            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-                &test_url_loader_factory_),
-            identity_test_env_.identity_manager()) {
+  explicit SupervisedUserServiceTestBase(bool is_supervised) {
     settings_service_.Init(syncable_pref_service_.user_prefs_store());
-    SupervisedUserService::RegisterProfilePrefs(
-        syncable_pref_service_.registry());
+    supervised_user::RegisterProfilePrefs(syncable_pref_service_.registry());
     if (is_supervised) {
       syncable_pref_service_.SetString(prefs::kSupervisedUserId,
                                        kChildAccountSUID);
@@ -65,11 +67,13 @@ class SupervisedUserServiceTestBase : public ::testing::Test {
     }
 
     service_ = std::make_unique<SupervisedUserService>(
-        identity_test_env_.identity_manager(), &kids_chrome_management_client_,
-        syncable_pref_service_, settings_service_, sync_service_,
+        identity_test_env_.identity_manager(),
+        test_url_loader_factory_.GetSafeWeakWrapper(), syncable_pref_service_,
+        settings_service_, &sync_service_,
         /*check_webstore_url_callback=*/
         base::BindRepeating([](const GURL& url) { return false; }),
         std::make_unique<FakeURLFilterDelegate>(),
+        std::make_unique<MockPlatformDelegate>(),
         /*can_show_first_time_interstitial_banner=*/true);
 
     service_->Init();
@@ -89,7 +93,6 @@ class SupervisedUserServiceTestBase : public ::testing::Test {
   syncer::MockSyncService sync_service_;
   sync_preferences::TestingPrefServiceSyncable syncable_pref_service_;
   SupervisedUserSettingsService settings_service_;
-  KidsChromeManagementClient kids_chrome_management_client_;
 
   std::unique_ptr<SupervisedUserService> service_;
 };
@@ -100,50 +103,50 @@ class SupervisedUserServiceTest : public SupervisedUserServiceTestBase {
       : SupervisedUserServiceTestBase(/*is_supervised=*/true) {}
 };
 
-TEST_F(SupervisedUserServiceTest, IsURLFilteringEnabled) {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  ASSERT_TRUE(service_->IsURLFilteringEnabled());
-#else
-  ASSERT_FALSE(service_->IsURLFilteringEnabled());
-#endif
+// Tests that changes in parent configuration for web filter types are recorded.
+TEST_F(SupervisedUserServiceTest, WebFilterTypeOnPrefsChange) {
+  base::HistogramTester histogram_tester;
 
-  // Enable filtering flag across platforms.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
+  // Tests filter "try to block mature sites".
+  syncable_pref_service_.SetInteger(
+      prefs::kDefaultSupervisedUserFilteringBehavior,
+      static_cast<int>(FilteringBehavior::kAllow));
+  syncable_pref_service_.SetBoolean(prefs::kSupervisedUserSafeSites, true);
 
-  EXPECT_TRUE(service_->IsURLFilteringEnabled());
+  // This should not increase since only changes from the default are recorded.
+  histogram_tester.ExpectUniqueSample(
+      SupervisedUserURLFilter::GetWebFilterTypeHistogramNameForTest(),
+      /*sample=*/
+      WebFilterType::kTryToBlockMatureSites,
+      /*expected_bucket_count=*/0);
+
+  // Tests filter "allow all sites".
+  syncable_pref_service_.SetBoolean(prefs::kSupervisedUserSafeSites, false);
+  histogram_tester.ExpectBucketCount(
+      SupervisedUserURLFilter::GetWebFilterTypeHistogramNameForTest(),
+      /*sample=*/
+      WebFilterType::kAllowAllSites,
+      /*expected_count=*/1);
+
+  // Tests filter "only allow certain sites".
+  syncable_pref_service_.SetInteger(
+      prefs::kDefaultSupervisedUserFilteringBehavior,
+      static_cast<int>(FilteringBehavior::kBlock));
+  service_->GetURLFilter()->SetDefaultFilteringBehavior(
+      FilteringBehavior::kBlock);
+  histogram_tester.ExpectBucketCount(
+      SupervisedUserURLFilter::GetWebFilterTypeHistogramNameForTest(),
+      /*sample=*/
+      WebFilterType::kCertainSites,
+      /*expected_count=*/1);
+
+  histogram_tester.ExpectTotalCount(
+      SupervisedUserURLFilter::GetWebFilterTypeHistogramNameForTest(),
+      /*expected_count=*/2);
 }
 
-TEST_F(SupervisedUserServiceTest,
-       AreExtensionsPermissionsEnabledWithExtensionsPermissionsFlagDisabled) {
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
-  EXPECT_TRUE(service_->AreExtensionsPermissionsEnabled());
-#else
-  EXPECT_FALSE(service_->AreExtensionsPermissionsEnabled());
-#endif
-}
-
-TEST_F(SupervisedUserServiceTest,
-       AreExtensionsPermissionsEnabledWithExtensionsPermissionsFlagEnabled) {
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-  base::test::ScopedFeatureList feature_list(
-      kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  EXPECT_TRUE(service_->AreExtensionsPermissionsEnabled());
-#else
-  EXPECT_FALSE(service_->AreExtensionsPermissionsEnabled());
-#endif
-}
-
+// Tests that changes to the allow or blocklist of the parent configuration are
+// recorded.
 TEST_F(SupervisedUserServiceTest, ManagedSiteListTypeMetricOnPrefsChange) {
   base::HistogramTester histogram_tester;
 
@@ -154,7 +157,7 @@ TEST_F(SupervisedUserServiceTest, ManagedSiteListTypeMetricOnPrefsChange) {
   // doesn't change and no report here.
   syncable_pref_service_.SetInteger(
       prefs::kDefaultSupervisedUserFilteringBehavior,
-      SupervisedUserURLFilter::ALLOW);
+      static_cast<int>(FilteringBehavior::kAllow));
   syncable_pref_service_.SetBoolean(prefs::kSupervisedUserSafeSites, true);
 
   // Blocks `kExampleUrl0`.
@@ -227,29 +230,6 @@ TEST_F(SupervisedUserServiceTest, ManagedSiteListTypeMetricOnPrefsChange) {
       SupervisedUserURLFilter::GetBlockedSitesCountHistogramNameForTest(),
       /*expected_count=*/3);
 }
-TEST_F(SupervisedUserServiceTest,
-       CookieDeletionDisabledForYoutubeDomainsWhenClearingCookiesEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      kClearingCookiesKeepsSupervisedUsersSignedIn);
-
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://google.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://example.com")));
-  EXPECT_TRUE(service_->IsCookieDeletionDisabled(GURL("http://youtube.com")));
-  EXPECT_TRUE(service_->IsCookieDeletionDisabled(GURL("https://youtube.com")));
-}
-
-TEST_F(SupervisedUserServiceTest,
-       CookieDeletionAllowedForYoutubeDomainsWhenClearingCookiesDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      kClearingCookiesKeepsSupervisedUsersSignedIn);
-
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://google.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://example.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("http://youtube.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://youtube.com")));
-}
 
 TEST_F(SupervisedUserServiceTest, InterstitialBannerState) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
@@ -257,6 +237,10 @@ TEST_F(SupervisedUserServiceTest, InterstitialBannerState) {
   {
     // If disabled kFilterWebsitesForSupervisedUsersOnDesktopAndIOS
     // the state remains unchanged.
+    base::test::ScopedFeatureList features;
+    features.InitAndDisableFeature(
+        kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
+
     EXPECT_TRUE(service_->GetUpdatedBannerState(
                     FirstTimeInterstitialBannerState::kUnknown) ==
                 FirstTimeInterstitialBannerState::kUnknown);
@@ -306,23 +290,6 @@ class SupervisedUserServiceTestUnsupervised
       : SupervisedUserServiceTestBase(/*is_supervised=*/false) {}
 };
 
-TEST_F(SupervisedUserServiceTestUnsupervised, IsURLFilteringEnabled) {
-  ASSERT_FALSE(service_->IsURLFilteringEnabled());
-
-  // Enable filtering flag across platforms.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
-  EXPECT_TRUE(base::FeatureList::IsEnabled(
-      kFilterWebsitesForSupervisedUsersOnDesktopAndIOS));
-
-  EXPECT_FALSE(service_->IsURLFilteringEnabled());
-}
-
-TEST_F(SupervisedUserServiceTestUnsupervised, AreExtensionsPermissionsEnabled) {
-  EXPECT_FALSE(service_->AreExtensionsPermissionsEnabled());
-}
-
 // TODO(crbug.com/1364589): Failing consistently on linux-chromeos-dbg
 // due to failed timezone conversion assertion.
 #if BUILDFLAG(IS_CHROMEOS)
@@ -333,34 +300,10 @@ TEST_F(SupervisedUserServiceTestUnsupervised, AreExtensionsPermissionsEnabled) {
 TEST_F(SupervisedUserServiceTest, MAYBE_DeprecatedFilterPolicy) {
   ASSERT_EQ(syncable_pref_service_.GetInteger(
                 prefs::kDefaultSupervisedUserFilteringBehavior),
-            SupervisedUserURLFilter::ALLOW);
+            static_cast<int>(FilteringBehavior::kAllow));
   EXPECT_DCHECK_DEATH(syncable_pref_service_.SetInteger(
       prefs::kDefaultSupervisedUserFilteringBehavior,
       /* SupervisedUserURLFilter::WARN */ 1));
-}
-
-TEST_F(SupervisedUserServiceTestUnsupervised,
-       CookieDeletionAllowedForYoutubeDomainsWhenClearingCookiesEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      kClearingCookiesKeepsSupervisedUsersSignedIn);
-
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://google.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://example.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("http://youtube.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://youtube.com")));
-}
-
-TEST_F(SupervisedUserServiceTestUnsupervised,
-       CookieDeletionAllowedForYoutubeDomainsWhenClearingCookiesDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      kClearingCookiesKeepsSupervisedUsersSignedIn);
-
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://google.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://example.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("http://youtube.com")));
-  EXPECT_FALSE(service_->IsCookieDeletionDisabled(GURL("https://youtube.com")));
 }
 
 }  // namespace supervised_user

@@ -19,6 +19,7 @@
 #include "components/download/public/common/download_danger_type.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "content/public/browser/download_manager_delegate.h"
+#include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -52,7 +53,6 @@ constexpr char kKeyTags[] = "tags";
 constexpr char kKeyBlockUntilVerdict[] = "block_until_verdict";
 constexpr char kKeyBlockPasswordProtected[] = "block_password_protected";
 constexpr char kKeyBlockLargeFiles[] = "block_large_files";
-constexpr char kKeyBlockUnsupportedFileTypes[] = "block_unsupported_file_types";
 constexpr char kKeyMinimumDataSize[] = "minimum_data_size";
 constexpr char kKeyEnabledEventNames[] = "enabled_event_names";
 constexpr char kKeyCustomMessages[] = "custom_messages";
@@ -62,6 +62,7 @@ constexpr char kKeyCustomMessagesMessage[] = "message";
 constexpr char kKeyCustomMessagesLearnMoreUrl[] = "learn_more_url";
 constexpr char kKeyMimeTypes[] = "mime_types";
 constexpr char kKeyEnterpriseId[] = "enterprise_id";
+constexpr char kKeyDefaultAction[] = "default_action";
 constexpr char kKeyDomain[] = "domain";
 constexpr char kKeyEnabledOptInEvents[] = "enabled_opt_in_events";
 constexpr char kKeyOptInEventName[] = "name";
@@ -150,7 +151,7 @@ struct ScanResult : public base::SupportsUserData::Data {
   static const char kKey[];
 
   std::vector<FileMetadata> file_metadata;
-  absl::optional<std::u16string> user_justification;
+  std::optional<std::u16string> user_justification;
 };
 
 // Enum to identify which message to show once scanning is complete. Ordered
@@ -159,25 +160,37 @@ enum class FinalContentAnalysisResult {
   // Show that an issue was found and that the upload is blocked.
   FAILURE = 0,
 
+  // Show that the scan failed and that the upload is blocked.
+  FAIL_CLOSED = 1,
+
   // Show that files were not uploaded since they were too large.
-  LARGE_FILES = 1,
+  LARGE_FILES = 2,
 
   // Show that files were not uploaded since they were encrypted.
-  ENCRYPTED_FILES = 2,
+  ENCRYPTED_FILES = 3,
 
   // Show that DLP checks failed, but that the user can proceed if they want.
-  WARNING = 3,
+  WARNING = 4,
 
   // Show that no issue was found and that the user may proceed.
-  SUCCESS = 4,
+  SUCCESS = 5,
 };
 
 // Result for a single request of the RequestHandler classes.
 struct RequestHandlerResult {
+  RequestHandlerResult();
+  ~RequestHandlerResult();
+  RequestHandlerResult(RequestHandlerResult&&);
+  RequestHandlerResult& operator=(RequestHandlerResult&&);
+  RequestHandlerResult(const RequestHandlerResult&);
+  RequestHandlerResult& operator=(const RequestHandlerResult&);
+
   bool complies;
   FinalContentAnalysisResult final_result;
   std::string tag;
   std::string request_token;
+  ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage
+      custom_rule_message;
 };
 
 // Calculates the result for the request handler based on the upload result and
@@ -205,6 +218,19 @@ safe_browsing::EventResult CalculateEventResult(
 // based on the response it got from scanning.
 ContentAnalysisAcknowledgement::FinalAction GetAckFinalAction(
     const ContentAnalysisResponse& response);
+
+// Extracts the message string from the custom rule message field in the content
+// analysis response.
+std::u16string GetCustomRuleString(
+    const ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage&
+        custom_rule_message);
+
+// Extracts the ranges and their corresponding links from the custom rule
+// message field in the content analysis response. Used to style the custom rule
+// message in the content analysis dialog.
+std::vector<std::pair<gfx::Range, GURL>> GetCustomRuleStyles(
+    const ContentAnalysisResponse::Result::TriggeredRule::CustomRuleMessage&
+        custom_rule_message);
 
 // User data to persist a save package's final callback allowing/denying
 // completion. This is used since the callback can be called either when
@@ -244,13 +270,18 @@ void ShowDownloadReviewDialog(const std::u16string& filename,
                               base::OnceClosure keep_closure,
                               base::OnceClosure discard_closure);
 
-// Returns true if `result` as returned by FileAnalysisRequest is considered a
+// Returns true if `result` as returned by BinaryUploadService is considered a
 // a failed result when attempting a cloud-based content analysis.
 bool CloudResultIsFailure(safe_browsing::BinaryUploadService::Result result);
 
-// Returns true if `result` as returned by FileAnalysisRequest is considered a
+// Returns true if `result` as returned by BinaryUploadService is considered a
 // a failed result when attempting a local content analysis.
 bool LocalResultIsFailure(safe_browsing::BinaryUploadService::Result result);
+
+// Returns true if `result` as returned by BinaryUploadService is considered a
+// fail-closed result, regardless of attempting a cloud-based or a local-based
+// content analysis.
+bool ResultIsFailClosed(safe_browsing::BinaryUploadService::Result result);
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 // Returns the single main profile, or nullptr if none is found.

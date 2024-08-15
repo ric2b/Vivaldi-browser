@@ -31,6 +31,9 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
+#include "services/metrics/public/cpp/metrics_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -299,12 +302,12 @@ void FullscreenController::ExitFullscreenModeForTab(WebContents* web_contents) {
 void FullscreenController::FullscreenTabOpeningPopup(
     content::WebContents* opener,
     content::WebContents* popup) {
-  if (popunder_preventer_) {
-    DCHECK_EQ(exclusive_access_tab(), opener);
-    popunder_preventer_->AddPotentialPopunder(popup);
-  } else {
-    DCHECK(IsFullscreenWithinTab(opener));
+  if (!popunder_preventer_) {
+    return;
   }
+
+  DCHECK_EQ(exclusive_access_tab(), opener);
+  popunder_preventer_->AddPotentialPopunder(popup);
 }
 
 void FullscreenController::OnTabDeactivated(
@@ -366,10 +369,20 @@ void FullscreenController::WindowFullscreenStateChanged() {
           ExclusiveAccessBubbleHideCallback(),
           /*force_update=*/true);
     }
+    if (!fullscreen_start_time_) {
+      fullscreen_start_time_ = base::TimeTicks::Now();
+    }
+    // This must be posted because keyboard lock engages right after entering
+    // fullscreen, and we want to record the keyboard/pointer lock state after
+    // that.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&FullscreenController::RecordMetricsOnEnteringFullscreen,
+                       ptr_factory_.GetWeakPtr()));
   }
 }
 
-void FullscreenController::FullscreenTransititionCompleted() {
+void FullscreenController::FullscreenTransitionCompleted() {
   if (fullscreen_transition_complete_callback_)
     std::move(fullscreen_transition_complete_callback_).Run();
 #if DCHECK_IS_ON()
@@ -404,6 +417,7 @@ bool FullscreenController::HandleUserPressedEscape() {
     return false;
 
   ExitExclusiveAccessIfNecessary();
+  base::RecordAction(base::UserMetricsAction("ExitFullscreen_Esc"));
   return true;
 }
 
@@ -519,6 +533,7 @@ void FullscreenController::EnterFullscreenModeInternal(
       url = extension_caused_fullscreen_;
   }
 
+  fullscreen_start_time_ = base::TimeTicks::Now();
   if (option == BROWSER)
     base::RecordAction(base::UserMetricsAction("ToggleFullscreen"));
   // TODO(scheib): Record metrics for WITH_TOOLBAR, without counting transitions
@@ -535,6 +550,18 @@ void FullscreenController::ExitFullscreenModeInternal() {
   // In kiosk mode, we always want to be fullscreen.
   if (chrome::IsRunningInAppMode())
     return;
+
+  CHECK(fullscreen_start_time_);
+  if (exclusive_access_tab()) {
+    ukm::SourceId source_id =
+        exclusive_access_tab()->GetPrimaryMainFrame()->GetPageUkmSourceId();
+    ukm::builders::Fullscreen_Exit(source_id)
+        .SetSessionDuration(ukm::GetSemanticBucketMinForDurationTiming(
+            (base::TimeTicks::Now() - fullscreen_start_time_.value())
+                .InMilliseconds()))
+        .Record(ukm::UkmRecorder::Get());
+    fullscreen_start_time_.reset();
+  }
 
   toggled_into_fullscreen_ = false;
   started_fullscreen_transition_ = true;
@@ -602,4 +629,12 @@ GURL FullscreenController::GetEmbeddingOrigin() const {
   DCHECK(exclusive_access_tab());
 
   return exclusive_access_tab()->GetLastCommittedURL();
+}
+
+void FullscreenController::RecordMetricsOnEnteringFullscreen() {
+  if (IsFullscreenCausedByTab()) {
+    exclusive_access_manager()->RecordLockStateOnEnteringApiFullscreen();
+  } else {
+    exclusive_access_manager()->RecordLockStateOnEnteringBrowserFullscreen();
+  }
 }

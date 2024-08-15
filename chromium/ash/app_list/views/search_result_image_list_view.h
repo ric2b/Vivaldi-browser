@@ -14,7 +14,6 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 
 namespace views {
-class BoxLayoutView;
 class FlexLayoutView;
 class Label;
 }  // namespace views
@@ -41,7 +40,8 @@ class ASH_EXPORT SearchResultImageListView : public SearchResultContainerView {
   SearchResultImageView* GetResultViewAt(size_t index) override;
 
   // Returns all search result image views children of this view.
-  std::vector<SearchResultImageView*> GetSearchResultImageViews();
+  std::vector<raw_ptr<SearchResultImageView, VectorExperimental>>
+  GetSearchResultImageViews();
 
   // Returns the preferred width of the image search result according to the
   // layout.
@@ -51,10 +51,11 @@ class ASH_EXPORT SearchResultImageListView : public SearchResultContainerView {
   // `image_info_container_` if needed.
   void OnImageMetadataLoaded(ash::FileMetadata metadata);
 
-  const views::BoxLayoutView* image_info_container_for_test() const {
+  const views::FlexLayoutView* image_info_container_for_test() const {
     return image_info_container_.get();
   }
-  const std::vector<views::Label*>& metadata_content_labels_for_test() const {
+  const std::vector<raw_ptr<views::Label, VectorExperimental>>&
+  metadata_content_labels_for_test() const {
     return metadata_content_labels_;
   }
 
@@ -65,24 +66,22 @@ class ASH_EXPORT SearchResultImageListView : public SearchResultContainerView {
   views::View* GetTitleLabel() override;
   std::vector<views::View*> GetViewsToAnimate() override;
 
-  // The singleton delegate for search result image views that implements
-  // support for context menu and drag-and-drop operations. This delegate needs
-  // to be a singleton to support multi-selection which requires a shared state.
+  // Delegate for search result image views that implements support for context
+  // menu and drag-and-drop operations.
   SearchResultImageViewDelegate delegate_;
 
   // Owned by views hierarchy.
   raw_ptr<views::Label> title_label_ = nullptr;
   raw_ptr<views::FlexLayoutView> image_view_container_ = nullptr;
-  raw_ptr<views::BoxLayoutView> image_info_container_ = nullptr;
-  raw_ptr<views::FlexLayoutView> image_info_title_container_ = nullptr;
-  raw_ptr<views::FlexLayoutView> image_info_content_container_ = nullptr;
+  raw_ptr<views::FlexLayoutView> image_info_container_ = nullptr;
 
-  std::vector<SearchResultImageView*> image_views_;
+  std::vector<raw_ptr<SearchResultImageView, VectorExperimental>> image_views_;
 
   // Labels that show the file metadata in `image_info_container_`. There should
-  // always be 4 labels, which in the order of {file size, date modified, mime
-  // type, file path}.
-  std::vector<views::Label*> metadata_content_labels_;
+  // always be 3 labels, which in the order of {file name, file directory, date
+  // modified}.
+  std::vector<raw_ptr<views::Label, VectorExperimental>>
+      metadata_content_labels_;
 
   base::WeakPtrFactory<SearchResultImageListView> weak_ptr_factory_{this};
 };

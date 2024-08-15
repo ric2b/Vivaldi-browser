@@ -116,6 +116,10 @@ title: Guides
 
 * [Working with Coreboot upstream and Chromium](/chromium-os/developer-library/guides/third-party/coreboot-upstream)
 
+## TypeScript
+
+* [Generating a local `tsconfig.json` file](/chromium-os/developer-library/guides/typescript/generating-local-tsconfig)
+
 ## Who do I notify?
 
 * [ChromiumOS contact](/chromium-os/developer-library/guides/who-do-i-notify/contact)

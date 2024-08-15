@@ -87,7 +87,6 @@
 #include "third_party/blink/public/web/web_associated_url_loader.h"
 #include "third_party/blink/public/web/web_associated_url_loader_options.h"
 #include "third_party/blink/public/web/web_document.h"
-#include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_print_params.h"
@@ -314,7 +313,7 @@ bool PdfViewWebPlugin::InitializeCommon() {
   // Allow the plugin to handle find requests.
   client_->UsePluginAsFindHandler();
 
-  absl::optional<ParsedParams> params = ParseWebPluginParams(initial_params_);
+  std::optional<ParsedParams> params = ParseWebPluginParams(initial_params_);
 
   // The contents of `initial_params_` are no longer needed.
   initial_params_ = {};
@@ -1071,6 +1070,10 @@ std::unique_ptr<UrlLoader> PdfViewWebPlugin::CreateUrlLoader() {
   return std::make_unique<UrlLoader>(weak_factory_.GetWeakPtr());
 }
 
+v8::Isolate* PdfViewWebPlugin::GetIsolate() {
+  return client_->GetIsolate();
+}
+
 std::vector<PDFEngine::Client::SearchStringResult>
 PdfViewWebPlugin::SearchString(const char16_t* string,
                                const char16_t* term,
@@ -1342,7 +1345,7 @@ void PdfViewWebPlugin::HandleDisplayAnnotationsMessage(
 
 void PdfViewWebPlugin::HandleGetNamedDestinationMessage(
     const base::Value::Dict& message) {
-  absl::optional<PDFEngine::NamedDestination> named_destination =
+  std::optional<PDFEngine::NamedDestination> named_destination =
       engine_->GetNamedDestination(*message.FindString("namedDestination"));
 
   const int page_number = named_destination.has_value()

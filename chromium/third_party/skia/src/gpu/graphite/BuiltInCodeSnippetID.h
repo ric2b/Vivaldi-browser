@@ -43,6 +43,7 @@ enum class BuiltInCodeSnippetID : int32_t {
     kCubicImageShader,
     kHWImageShader,
     kYUVImageShader,
+    kCubicYUVImageShader,
     kCoordClampShader,
     kDitherShader,
     kPerlinNoiseShader,
@@ -65,6 +66,10 @@ enum class BuiltInCodeSnippetID : int32_t {
     // Dest Read code snippets
     kDstReadSample,
     kDstReadFetch,
+
+    // Clip shader snippet
+    // TODO(b/238763003): Avoid incorporating clip shaders into the actual shader code.
+    kClipShader,
 
     kCompose,
 

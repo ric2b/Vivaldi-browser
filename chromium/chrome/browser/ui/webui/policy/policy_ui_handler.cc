@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -79,7 +80,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -118,39 +118,41 @@ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
   source->AddLocalizedStrings(policy::kPolicySources);
 
   static constexpr webui::LocalizedString kStrings[] = {
-    {"conflict", IDS_POLICY_LABEL_CONFLICT},
-    {"superseding", IDS_POLICY_LABEL_SUPERSEDING},
-    {"conflictValue", IDS_POLICY_LABEL_CONFLICT_VALUE},
-    {"supersededValue", IDS_POLICY_LABEL_SUPERSEDED_VALUE},
-    {"headerLevel", IDS_POLICY_HEADER_LEVEL},
-    {"headerName", IDS_POLICY_HEADER_NAME},
-    {"headerScope", IDS_POLICY_HEADER_SCOPE},
-    {"headerSource", IDS_POLICY_HEADER_SOURCE},
-    {"headerStatus", IDS_POLICY_HEADER_STATUS},
-    {"headerValue", IDS_POLICY_HEADER_VALUE},
-    {"warning", IDS_POLICY_HEADER_WARNING},
-    {"levelMandatory", IDS_POLICY_LEVEL_MANDATORY},
-    {"levelRecommended", IDS_POLICY_LEVEL_RECOMMENDED},
-    {"error", IDS_POLICY_LABEL_ERROR},
-    {"deprecated", IDS_POLICY_LABEL_DEPRECATED},
-    {"future", IDS_POLICY_LABEL_FUTURE},
-    {"info", IDS_POLICY_LABEL_INFO},
-    {"ignored", IDS_POLICY_LABEL_IGNORED},
-    {"notSpecified", IDS_POLICY_NOT_SPECIFIED},
-    {"ok", IDS_POLICY_OK},
-    {"scopeDevice", IDS_POLICY_SCOPE_DEVICE},
-    {"scopeUser", IDS_POLICY_SCOPE_USER},
-    {"scopeAllUsers", IDS_POLICY_SCOPE_ALL_USERS},
-    {"title", IDS_POLICY_TITLE},
-    {"unknown", IDS_POLICY_UNKNOWN},
-    {"unset", IDS_POLICY_UNSET},
-    {"value", IDS_POLICY_LABEL_VALUE},
-    {"sourceDefault", IDS_POLICY_SOURCE_DEFAULT},
-    {"loadPoliciesDone", IDS_POLICY_LOAD_POLICIES_DONE},
-    {"loadingPolicies", IDS_POLICY_LOADING_POLICIES},
+      {"conflict", IDS_POLICY_LABEL_CONFLICT},
+      {"superseding", IDS_POLICY_LABEL_SUPERSEDING},
+      {"conflictValue", IDS_POLICY_LABEL_CONFLICT_VALUE},
+      {"supersededValue", IDS_POLICY_LABEL_SUPERSEDED_VALUE},
+      {"headerLevel", IDS_POLICY_HEADER_LEVEL},
+      {"headerName", IDS_POLICY_HEADER_NAME},
+      {"headerScope", IDS_POLICY_HEADER_SCOPE},
+      {"headerSource", IDS_POLICY_HEADER_SOURCE},
+      {"headerStatus", IDS_POLICY_HEADER_STATUS},
+      {"headerValue", IDS_POLICY_HEADER_VALUE},
+      {"warning", IDS_POLICY_HEADER_WARNING},
+      {"levelMandatory", IDS_POLICY_LEVEL_MANDATORY},
+      {"levelRecommended", IDS_POLICY_LEVEL_RECOMMENDED},
+      {"error", IDS_POLICY_LABEL_ERROR},
+      {"deprecated", IDS_POLICY_LABEL_DEPRECATED},
+      {"future", IDS_POLICY_LABEL_FUTURE},
+      {"info", IDS_POLICY_LABEL_INFO},
+      {"ignored", IDS_POLICY_LABEL_IGNORED},
+      {"notSpecified", IDS_POLICY_NOT_SPECIFIED},
+      {"ok", IDS_POLICY_OK},
+      {"scopeDevice", IDS_POLICY_SCOPE_DEVICE},
+      {"scopeUser", IDS_POLICY_SCOPE_USER},
+      {"scopeAllUsers", IDS_POLICY_SCOPE_ALL_USERS},
+      {"title", IDS_POLICY_TITLE},
+      {"unknown", IDS_POLICY_UNKNOWN},
+      {"unset", IDS_POLICY_UNSET},
+      {"value", IDS_POLICY_LABEL_VALUE},
+      {"sourceDefault", IDS_POLICY_SOURCE_DEFAULT},
+      {"reloadingPolicies", IDS_POLICY_RELOADING_POLICIES},
+      {"reloadPoliciesDone", IDS_POLICY_RELOAD_POLICIES_DONE},
+      {"copyPoliciesDone", IDS_COPY_POLICIES_DONE},
+      {"exportPoliciesDone", IDS_EXPORT_POLICIES_JSON_DONE},
 #if !BUILDFLAG(IS_CHROMEOS)
-    {"reportUploading", IDS_REPORT_UPLOADING},
-    {"reportUploaded", IDS_REPORT_UPLOADED},
+      {"reportUploading", IDS_REPORT_UPLOADING},
+      {"reportUploaded", IDS_REPORT_UPLOADED},
 #endif  // !BUILDFLAG(IS_CHROMEOS)
   };
   source->AddLocalizedStrings(kStrings);
@@ -210,7 +212,10 @@ void PolicyUIHandler::RegisterMessages() {
       "setUserAffiliation",
       base::BindRepeating(&PolicyUIHandler::HandleSetUserAffiliated,
                           base::Unretained(this)));
-
+  web_ui()->RegisterMessageCallback(
+      "getAppliedTestPolicies",
+      base::BindRepeating(&PolicyUIHandler::HandleGetAppliedTestPolicies,
+                          base::Unretained(this)));
 #if !BUILDFLAG(IS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "uploadReport", base::BindRepeating(&PolicyUIHandler::HandleUploadReport,
@@ -293,9 +298,11 @@ void PolicyUIHandler::HandleSetLocalTestPolicies(
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
   std::string profile_separation_policy_response = args[2].GetString();
-  Profile::FromWebUI(web_ui())->GetPrefs()->SetString(
+  Profile::FromWebUI(web_ui())->GetPrefs()->ClearPref(
+      prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage);
+  Profile::FromWebUI(web_ui())->GetPrefs()->SetDefaultPrefValue(
       prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage,
-      profile_separation_policy_response);
+      base::Value(profile_separation_policy_response));
 #endif
 
   Profile::FromWebUI(web_ui())
@@ -312,6 +319,9 @@ void PolicyUIHandler::HandleRevertLocalTestPolicies(
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
   Profile::FromWebUI(web_ui())->GetPrefs()->ClearPref(
       prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage);
+  Profile::FromWebUI(web_ui())->GetPrefs()->SetDefaultPrefValue(
+      prefs::kUserCloudSigninPolicyResponseFromPolicyTestPage,
+      base::Value(std::string()));
 #endif
   Profile::FromWebUI(web_ui())
       ->GetProfilePolicyConnector()
@@ -341,6 +351,18 @@ void PolicyUIHandler::HandleSetUserAffiliated(const base::Value::List& args) {
   local_test_provider->SetUserAffiliated(affiliated);
   AllowJavascript();
   ResolveJavascriptCallback(args[0], true);
+}
+
+void PolicyUIHandler::HandleGetAppliedTestPolicies(
+    const base::Value::List& args) {
+  CHECK_EQ(static_cast<int>(args.size()), 1);
+
+  auto* local_test_provider = static_cast<policy::LocalTestPolicyProvider*>(
+      g_browser_process->browser_policy_connector()
+          ->local_test_policy_provider());
+
+  AllowJavascript();
+  ResolveJavascriptCallback(args[0], local_test_provider->GetPolicies());
 }
 
 void PolicyUIHandler::HandleGetPolicyLogs(const base::Value::List& args) {

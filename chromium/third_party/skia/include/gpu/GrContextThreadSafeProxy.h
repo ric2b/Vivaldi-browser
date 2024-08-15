@@ -8,11 +8,8 @@
 #ifndef GrContextThreadSafeProxy_DEFINED
 #define GrContextThreadSafeProxy_DEFINED
 
-#include "include/core/SkRefCnt.h"
-
-#if defined(SK_GANESH)
-
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrTypes.h"
@@ -34,9 +31,9 @@ namespace sktext::gpu { class TextBlobRedrawCoordinator; }
  * Can be used to perform actions related to the generating GrContext in a thread safe manner. The
  * proxy does not access the 3D API (e.g. OpenGL) that backs the generating GrContext.
  */
-class SK_API GrContextThreadSafeProxy final : public SkNVRefCnt<GrContextThreadSafeProxy> {
+class SK_API GrContextThreadSafeProxy : public SkNVRefCnt<GrContextThreadSafeProxy> {
 public:
-    ~GrContextThreadSafeProxy();
+    virtual ~GrContextThreadSafeProxy();
 
     /**
      *  Create a surface characterization for a DDL that will be replayed into the GrContext
@@ -68,7 +65,7 @@ public:
      *  @param surfaceProps                    The surface properties of the SkSurface that the DDL
      *                                         created with this characterization will be replayed
      *                                         into
-     *  @param isMipMapped                     Will the surface the DDL will be replayed into have
+     *  @param isMipmapped                     Will the surface the DDL will be replayed into have
      *                                         space allocated for mipmaps?
      *  @param willUseGLFBO0                   Will the surface the DDL will be replayed into be
      *                                         backed by GL FBO 0. This flag is only valid if using
@@ -81,24 +78,39 @@ public:
      *                                         command buffer via a GrVkSecondaryCBDrawContext? If
      *                                         this is true then the following is required:
      *                                         isTexureable = false
-     *                                         isMipMapped = false
+     *                                         isMipmapped = false
      *                                         willUseGLFBO0 = false
      *                                         vkRTSupportsInputAttachment = false
      */
     GrSurfaceCharacterization createCharacterization(
-                                  size_t cacheMaxResourceBytes,
-                                  const SkImageInfo& ii,
-                                  const GrBackendFormat& backendFormat,
-                                  int sampleCount,
-                                  GrSurfaceOrigin origin,
-                                  const SkSurfaceProps& surfaceProps,
-                                  bool isMipMapped,
-                                  bool willUseGLFBO0 = false,
-                                  bool isTextureable = true,
-                                  GrProtected isProtected = GrProtected::kNo,
-                                  bool vkRTSupportsInputAttachment = false,
-                                  bool forVulkanSecondaryCommandBuffer = false);
+            size_t cacheMaxResourceBytes,
+            const SkImageInfo& ii,
+            const GrBackendFormat& backendFormat,
+            int sampleCount,
+            GrSurfaceOrigin origin,
+            const SkSurfaceProps& surfaceProps,
+            skgpu::Mipmapped isMipmapped,
+            bool willUseGLFBO0 = false,
+            bool isTextureable = true,
+            skgpu::Protected isProtected = GrProtected::kNo,
+            bool vkRTSupportsInputAttachment = false,
+            bool forVulkanSecondaryCommandBuffer = false);
 
+#if !defined(SK_DISABLE_LEGACY_CREATE_CHARACTERIZATION)
+    GrSurfaceCharacterization createCharacterization(
+            size_t cacheMaxResourceBytes,
+            const SkImageInfo& ii,
+            const GrBackendFormat& backendFormat,
+            int sampleCount,
+            GrSurfaceOrigin origin,
+            const SkSurfaceProps& surfaceProps,
+            bool isMipmapped,
+            bool willUseGLFBO0 = false,
+            bool isTextureable = true,
+            skgpu::Protected isProtected = GrProtected::kNo,
+            bool vkRTSupportsInputAttachment = false,
+            bool forVulkanSecondaryCommandBuffer = false);
+#endif
     /*
      * Retrieve the default GrBackendFormat for a given SkColorType and renderability.
      * It is guaranteed that this backend format will be the one used by the following
@@ -138,11 +150,12 @@ public:
     GrContextThreadSafeProxyPriv priv();
     const GrContextThreadSafeProxyPriv priv() const;  // NOLINT(readability-const-return-type)
 
-private:
-    friend class GrContextThreadSafeProxyPriv; // for ctor and hidden methods
-
+protected:
     // DDL TODO: need to add unit tests for backend & maybe options
     GrContextThreadSafeProxy(GrBackendApi, const GrContextOptions&);
+
+private:
+    friend class GrContextThreadSafeProxyPriv;  // for ctor and hidden methods
 
     void abandonContext();
     bool abandoned() const;
@@ -151,6 +164,13 @@ private:
     // with GrContext where we get the caps by creating a GPU which requires a context (see the
     // `init` method on GrContext_Base).
     void init(sk_sp<const GrCaps>, sk_sp<GrThreadSafePipelineBuilder>);
+
+    virtual bool isValidCharacterizationForVulkan(sk_sp<const GrCaps>,
+                                                  bool isTextureable,
+                                                  skgpu::Mipmapped isMipmapped,
+                                                  skgpu::Protected isProtected,
+                                                  bool vkRTSupportsInputAttachment,
+                                                  bool forVulkanSecondaryCommandBuffer);
 
     const GrBackendApi                                      fBackend;
     const GrContextOptions                                  fOptions;
@@ -161,9 +181,5 @@ private:
     sk_sp<GrThreadSafePipelineBuilder>                      fPipelineBuilder;
     std::atomic<bool>                                       fAbandoned{false};
 };
-
-#else // !defined(SK_GANESH)
-class SK_API GrContextThreadSafeProxy final : public SkNVRefCnt<GrContextThreadSafeProxy> {};
-#endif
 
 #endif

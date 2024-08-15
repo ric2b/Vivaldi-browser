@@ -1,7 +1,7 @@
 export const description = `copyTextureToTexture operation tests`;
 
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
-import { assert, memcpy, unreachable } from '../../../../common/util/util.js';
+import { assert, ErrorWithExtra, memcpy } from '../../../../common/util/util.js';
 import {
   kBufferSizeAlignment,
   kMinDynamicBufferOffsetAlignment,
@@ -17,15 +17,19 @@ import {
   DepthStencilFormat,
   ColorTextureFormat,
   isCompressedTextureFormat,
+  isEncodableTextureformat,
   viewCompatible,
+  EncodableTextureFormat,
 } from '../../../format_info.js';
 import { GPUTest, TextureTestMixin } from '../../../gpu_test.js';
 import { makeBufferWithContents } from '../../../util/buffer.js';
-import { checkElementsEqual, checkElementsEqualEither } from '../../../util/check_contents.js';
+import { checkElementsEqual } from '../../../util/check_contents.js';
 import { align } from '../../../util/math.js';
 import { physicalMipSize } from '../../../util/texture/base.js';
 import { DataArrayGenerator } from '../../../util/texture/data_generation.js';
 import { kBytesPerRowAlignment, dataBytesForCopyOrFail } from '../../../util/texture/layout.js';
+import { TexelView } from '../../../util/texture/texel_view.js';
+import { findFailedPixels } from '../../../util/texture/texture_ok.js';
 
 const dataGenerator = new DataArrayGenerator();
 
@@ -304,6 +308,7 @@ class F extends TextureTestMixin(GPUTest) {
       y: appliedDstOffset.y / blockHeight,
       z: appliedDstOffset.z,
     };
+    const bytesInRow = appliedCopyBlocksPerRow * bytesPerBlock;
 
     for (let z = 0; z < appliedCopyDepth; ++z) {
       const srcOffsetZ = srcCopyOffsetInBlocks.z + z;
@@ -321,7 +326,6 @@ class F extends TextureTestMixin(GPUTest) {
             (srcBlockRowsPerImage * srcOffsetZ + srcOffsetYInBlocks) +
           srcCopyOffsetInBlocks.x * bytesPerBlock;
 
-        const bytesInRow = appliedCopyBlocksPerRow * bytesPerBlock;
         memcpy(
           { src: expectedUint8Data, start: expectedDataOffset, length: bytesInRow },
           { dst: expectedUint8DataWithPadding, start: expectedDataWithPaddingOffset }
@@ -329,46 +333,69 @@ class F extends TextureTestMixin(GPUTest) {
       }
     }
 
-    let alternateExpectedData = expectedUint8DataWithPadding;
-    // For 8-byte snorm formats, allow an alternative encoding of -1.
-    // MAINTENANCE_TODO: Use textureContentIsOKByT2B with TexelView.
-    if (srcFormat.includes('snorm')) {
-      switch (srcFormat) {
-        case 'r8snorm':
-        case 'rg8snorm':
-        case 'rgba8snorm':
-          alternateExpectedData = alternateExpectedData.slice();
-          for (let i = 0; i < alternateExpectedData.length; ++i) {
-            if (alternateExpectedData[i] === 128) {
-              alternateExpectedData[i] = 129;
-            } else if (alternateExpectedData[i] === 129) {
-              alternateExpectedData[i] = 128;
-            }
-          }
-          break;
-        case 'bc4-r-snorm':
-        case 'bc5-rg-snorm':
-        case 'eac-r11snorm':
-        case 'eac-rg11snorm':
-          break;
-        default:
-          unreachable();
-      }
+    if (isCompressedTextureFormat(dstFormat)) {
+      this.expectGPUBufferValuesPassCheck(
+        dstBuffer,
+        vals => checkElementsEqual(vals, expectedUint8DataWithPadding),
+        {
+          srcByteOffset: 0,
+          type: Uint8Array,
+          typedLength: expectedUint8DataWithPadding.length,
+        }
+      );
+      return;
     }
 
+    assert(isEncodableTextureformat(dstFormat));
+    const encodableDstFormat = dstFormat as EncodableTextureFormat;
+
     // Verify the content of the whole subresource of dstTexture at dstCopyLevel (in dstBuffer) is expected.
-    this.expectGPUBufferValuesPassCheck(
-      dstBuffer,
-      alternateExpectedData === expectedUint8DataWithPadding
-        ? vals => checkElementsEqual(vals, expectedUint8DataWithPadding)
-        : vals =>
-            checkElementsEqualEither(vals, [expectedUint8DataWithPadding, alternateExpectedData]),
-      {
-        srcByteOffset: 0,
-        type: Uint8Array,
-        typedLength: expectedUint8DataWithPadding.length,
+    const checkByTextureFormat = (actual: Uint8Array) => {
+      const zero = { x: 0, y: 0, z: 0 };
+
+      const actTexelView = TexelView.fromTextureDataByReference(encodableDstFormat, actual, {
+        bytesPerRow: bytesInRow,
+        rowsPerImage: dstBlockRowsPerImage,
+        subrectOrigin: zero,
+        subrectSize: dstTextureSizeAtLevel,
+      });
+      const expTexelView = TexelView.fromTextureDataByReference(
+        encodableDstFormat,
+        expectedUint8DataWithPadding,
+        {
+          bytesPerRow: bytesInRow,
+          rowsPerImage: dstBlockRowsPerImage,
+          subrectOrigin: zero,
+          subrectSize: dstTextureSizeAtLevel,
+        }
+      );
+
+      const failedPixelsMessage = findFailedPixels(
+        encodableDstFormat,
+        zero,
+        dstTextureSizeAtLevel,
+        { actTexelView, expTexelView },
+        {
+          maxFractionalDiff: 0,
+        }
+      );
+
+      if (failedPixelsMessage !== undefined) {
+        const msg = 'Texture level had unexpected contents:\n' + failedPixelsMessage;
+        return new ErrorWithExtra(msg, () => ({
+          expTexelView,
+          actTexelView,
+        }));
       }
-    );
+
+      return undefined;
+    };
+
+    this.expectGPUBufferValuesPassCheck(dstBuffer, checkByTextureFormat, {
+      srcByteOffset: 0,
+      type: Uint8Array,
+      typedLength: expectedUint8DataWithPadding.length,
+    });
   }
 
   InitializeStencilAspect(

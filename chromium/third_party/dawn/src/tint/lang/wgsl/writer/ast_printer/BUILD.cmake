@@ -51,6 +51,7 @@ tint_target_add_dependencies(tint_lang_wgsl_writer_ast_printer lib
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
   tint_utils_containers
@@ -61,6 +62,7 @@ tint_target_add_dependencies(tint_lang_wgsl_writer_ast_printer lib
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
+  tint_utils_reflection
   tint_utils_result
   tint_utils_rtti
   tint_utils_strconv
@@ -102,6 +104,7 @@ tint_add_target(tint_lang_wgsl_writer_ast_printer_test test
   lang/wgsl/writer/ast_printer/literal_test.cc
   lang/wgsl/writer/ast_printer/loop_test.cc
   lang/wgsl/writer/ast_printer/member_accessor_test.cc
+  lang/wgsl/writer/ast_printer/requires_test.cc
   lang/wgsl/writer/ast_printer/return_test.cc
   lang/wgsl/writer/ast_printer/switch_test.cc
   lang/wgsl/writer/ast_printer/type_test.cc
@@ -117,6 +120,8 @@ tint_target_add_dependencies(tint_lang_wgsl_writer_ast_printer_test test
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver
   tint_lang_wgsl_sem

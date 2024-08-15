@@ -47,8 +47,6 @@ namespace ash {
 namespace {
 
 constexpr char kGaiaURL[] = "chrome://oobe/gaia-signin";
-constexpr int kOobeDialogShadowElevation = 12;
-constexpr int kOobeDialogCornerRadius = 24;
 
 }  // namespace
 
@@ -59,7 +57,7 @@ class OobeWebDialogView : public views::WebDialogView {
                     ui::WebDialogDelegate* delegate,
                     std::unique_ptr<WebContentsHandler> handler)
       : views::WebDialogView(context, delegate, std::move(handler)) {
-    if (features::IsOobeJellyEnabled() || features::IsOobeSimonEnabled()) {
+    if (features::IsOobeJellyEnabled() || features::IsBootAnimationEnabled()) {
       set_use_round_corners(/*round=*/true);
       set_corner_radius(kOobeDialogCornerRadius);
     }
@@ -79,7 +77,7 @@ class OobeWebDialogView : public views::WebDialogView {
   }
 
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
-                                  const GURL& security_origin,
+                                  const url::Origin& security_origin,
                                   blink::mojom::MediaStreamType type) override {
     return MediaCaptureDevicesDispatcher::GetInstance()
         ->CheckMediaAccessPermission(render_frame_host, security_origin, type);
@@ -143,7 +141,7 @@ class LayoutWidgetDelegateView : public views::WidgetDelegateView {
     SetFocusTraversesOut(true);
     AddChildView(oobe_view_.get());
 
-    if (features::IsOobeJellyEnabled() || features::IsOobeSimonEnabled()) {
+    if (features::IsOobeJellyEnabled() || features::IsBootAnimationEnabled()) {
       // Create a shadow for the OOBE dialog.
       view_shadow_ = std::make_unique<ViewShadow>(oobe_view_.get(),
                                                   kOobeDialogShadowElevation);
@@ -194,10 +192,9 @@ class LayoutWidgetDelegateView : public views::WidgetDelegateView {
   View* GetInitiallyFocusedView() override { return oobe_view_; }
 
  private:
-  raw_ptr<OobeUIDialogDelegate, DanglingUntriaged | ExperimentalAsh>
-      dialog_delegate_ = nullptr;  // Owned by us.
-  raw_ptr<OobeWebDialogView, ExperimentalAsh> oobe_view_ =
-      nullptr;  // Owned by views hierarchy.
+  raw_ptr<OobeUIDialogDelegate, DanglingUntriaged> dialog_delegate_ =
+      nullptr;                                      // Owned by us.
+  raw_ptr<OobeWebDialogView> oobe_view_ = nullptr;  // Owned by views hierarchy.
   std::unique_ptr<ViewShadow> view_shadow_;
 
   // Indicates whether Oobe web view should fully occupy the hosting widget.
@@ -440,7 +437,7 @@ void OobeUIDialogDelegate::OnFocusLeavingSystemTray(bool reverse) {
 
 ui::WebDialogDelegate::FrameKind OobeUIDialogDelegate::GetWebDialogFrameKind()
     const {
-  return (features::IsOobeJellyEnabled() || features::IsOobeSimonEnabled())
+  return (features::IsOobeJellyEnabled() || features::IsBootAnimationEnabled())
              ? ui::WebDialogDelegate::FrameKind::kDialog
              : ui::WebDialogDelegate::FrameKind::kNonClient;
 }

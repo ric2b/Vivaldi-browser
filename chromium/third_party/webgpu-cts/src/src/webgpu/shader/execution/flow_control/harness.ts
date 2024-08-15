@@ -221,9 +221,8 @@ ${main_wgsl.extra}
 
         // returns a string that shows the outputted values to help understand the whole trace.
         const print_output_value = () => {
-          return `Output values (length: ${outputCount}): ${outputs.data
-            .slice(1, outputCount + 1)
-            .join(', ')}`;
+          const subarray = outputs.data.subarray(1, outputCount + 1);
+          return `Output values (length: ${outputCount}): ${subarray.join(', ')}`;
         };
 
         // returns a colorized string of the expect_order() call, highlighting

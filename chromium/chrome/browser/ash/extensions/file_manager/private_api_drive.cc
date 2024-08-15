@@ -148,23 +148,23 @@ class SingleEntryPropertiesGetterForFileSystemProvider {
 
     ProvidedFileSystemInterface::MetadataFieldMask field_mask =
         ProvidedFileSystemInterface::METADATA_FIELD_NONE;
-    if (names_.find(api::file_manager_private::ENTRY_PROPERTY_NAME_SIZE) !=
+    if (names_.find(api::file_manager_private::EntryPropertyName::kSize) !=
         names_.end()) {
       field_mask |= ProvidedFileSystemInterface::METADATA_FIELD_SIZE;
     }
     if (names_.find(
-            api::file_manager_private::ENTRY_PROPERTY_NAME_MODIFICATIONTIME) !=
+            api::file_manager_private::EntryPropertyName::kModificationTime) !=
         names_.end()) {
       field_mask |=
           ProvidedFileSystemInterface::METADATA_FIELD_MODIFICATION_TIME;
     }
     if (names_.find(
-            api::file_manager_private::ENTRY_PROPERTY_NAME_CONTENTMIMETYPE) !=
+            api::file_manager_private::EntryPropertyName::kContentMimeType) !=
         names_.end()) {
       field_mask |= ProvidedFileSystemInterface::METADATA_FIELD_MIME_TYPE;
     }
     if (names_.find(
-            api::file_manager_private::ENTRY_PROPERTY_NAME_THUMBNAILURL) !=
+            api::file_manager_private::EntryPropertyName::kThumbnailUrl) !=
         names_.end()) {
       field_mask |= ProvidedFileSystemInterface::METADATA_FIELD_THUMBNAIL;
     }
@@ -189,27 +189,27 @@ class SingleEntryPropertiesGetterForFileSystemProvider {
       return;
     }
 
-    if (names_.find(api::file_manager_private::ENTRY_PROPERTY_NAME_SIZE) !=
+    if (names_.find(api::file_manager_private::EntryPropertyName::kSize) !=
         names_.end()) {
       properties_->size = *metadata->size;
     }
 
     if (names_.find(
-            api::file_manager_private::ENTRY_PROPERTY_NAME_MODIFICATIONTIME) !=
+            api::file_manager_private::EntryPropertyName::kModificationTime) !=
         names_.end()) {
       properties_->modification_time =
           metadata->modification_time->InMillisecondsFSinceUnixEpoch();
     }
 
     if (names_.find(
-            api::file_manager_private::ENTRY_PROPERTY_NAME_CONTENTMIMETYPE) !=
+            api::file_manager_private::EntryPropertyName::kContentMimeType) !=
             names_.end() &&
         metadata->mime_type.get()) {
       properties_->content_mime_type = *metadata->mime_type;
     }
 
     if (names_.find(
-            api::file_manager_private::ENTRY_PROPERTY_NAME_THUMBNAILURL) !=
+            api::file_manager_private::EntryPropertyName::kThumbnailUrl) !=
             names_.end() &&
         metadata->thumbnail.get()) {
       properties_->thumbnail_url = *metadata->thumbnail;
@@ -337,7 +337,7 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
   // Given parameters.
   ResultCallback callback_;
   const storage::FileSystemURL file_system_url_;
-  const raw_ptr<Profile, ExperimentalAsh> profile_;
+  const raw_ptr<Profile> profile_;
 
   // Values used in the process.
   std::unique_ptr<EntryProperties> properties_;
@@ -349,20 +349,20 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
 void OnSearchDriveFs(
     scoped_refptr<ExtensionFunction> function,
     bool filter_dirs,
-    base::OnceCallback<void(absl::optional<base::Value::List>)> callback,
+    base::OnceCallback<void(std::optional<base::Value::List>)> callback,
     drive::FileError error,
-    absl::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
+    std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
   Profile* const profile =
       Profile::FromBrowserContext(function->browser_context());
   DriveIntegrationService* const service =
       GetIntegrationServiceByProfile(profile);
   if (!service) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return;
   }
 
   if (error != drive::FILE_ERROR_OK || !items.has_value()) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return;
   }
 
@@ -398,7 +398,7 @@ drivefs::mojom::QueryParameters::QuerySource SearchDriveFs(
     scoped_refptr<ExtensionFunction> function,
     drivefs::mojom::QueryParametersPtr query,
     bool filter_dirs,
-    base::OnceCallback<void(absl::optional<base::Value::List>)> callback) {
+    base::OnceCallback<void(std::optional<base::Value::List>)> callback) {
   DriveIntegrationService* const service = GetIntegrationServiceByProfile(
       Profile::FromBrowserContext(function->browser_context()));
   auto on_response = base::BindOnce(&OnSearchDriveFs, std::move(function),
@@ -407,7 +407,7 @@ drivefs::mojom::QueryParameters::QuerySource SearchDriveFs(
       std::move(query),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           std::move(on_response), drive::FileError::FILE_ERROR_ABORT,
-          absl::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
+          std::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
 }
 
 void UmaEmitSearchOutcome(
@@ -458,7 +458,7 @@ FileManagerPrivateInternalGetEntryPropertiesFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   using api::file_manager_private_internal::GetEntryProperties::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -555,7 +555,7 @@ FileManagerPrivateInternalPinDriveFileFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   using extensions::api::file_manager_private_internal::PinDriveFile::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -620,7 +620,7 @@ FileManagerPrivateSearchDriveFunction::FileManagerPrivateSearchDriveFunction() {
 
 ExtensionFunction::ResponseAction FileManagerPrivateSearchDriveFunction::Run() {
   using extensions::api::file_manager_private::SearchDrive::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (!GetIntegrationServiceByProfile(
@@ -662,7 +662,8 @@ ExtensionFunction::ResponseAction FileManagerPrivateSearchDriveFunction::Run() {
 }
 
 void FileManagerPrivateSearchDriveFunction::OnSearchDriveFs(
-    absl::optional<base::Value::List> results) {
+    std::optional<base::Value::List> results) {
+  using api::file_manager_private::SearchDriveResponse;
   if (!results) {
     UmaEmitSearchOutcome(
         false, !is_offline_,
@@ -671,16 +672,26 @@ void FileManagerPrivateSearchDriveFunction::OnSearchDriveFs(
     Respond(Error("No search results"));
     return;
   }
-  base::Value::Dict result;
-  result.Set("entries", std::move(*results));
+
+  SearchDriveResponse response;
   // Search queries are capped at 100 of items anyway and pagination is
   // never actually used, so no need to fill this.
-  result.Set("nextFeed", "");
+  response.next_feed = "";
+  response.entries.reserve(results.value().size());
+  for (const auto& e : results.value()) {
+    auto entry = SearchDriveResponse::EntriesType::FromValue(e);
+    if (!entry) {
+      LOG(ERROR) << "Failed to convert entry: " << e.DebugString();
+      continue;
+    }
+    response.entries.push_back(std::move(entry.value()));
+  }
+
   UmaEmitSearchOutcome(
       true, !is_offline_,
       FileManagerPrivateSearchDriveMetadataFunction::SearchType::kText,
       operation_start_);
-  Respond(WithArguments(std::move(result)));
+  Respond(WithArguments(response.ToValue()));
 }
 
 FileManagerPrivateSearchDriveMetadataFunction::
@@ -692,7 +703,7 @@ FileManagerPrivateSearchDriveMetadataFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateSearchDriveMetadataFunction::Run() {
   using api::file_manager_private::SearchDriveMetadata::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -742,21 +753,21 @@ FileManagerPrivateSearchDriveMetadataFunction::Run() {
   query->page_size = params->search_params.max_results;
   bool filter_dirs = false;
   switch (params->search_params.types) {
-    case api::file_manager_private::SEARCH_TYPE_EXCLUDE_DIRECTORIES:
+    case api::file_manager_private::SearchType::kExcludeDirectories:
       filter_dirs = true;
       search_type_ = SearchType::kText;
       break;
-    case api::file_manager_private::SEARCH_TYPE_SHARED_WITH_ME:
+    case api::file_manager_private::SearchType::kSharedWithMe:
       query->shared_with_me = true;
       search_type_ = SearchType::kSharedWithMe;
       break;
-    case api::file_manager_private::SEARCH_TYPE_OFFLINE:
+    case api::file_manager_private::SearchType::kOffline:
       query->available_offline = true;
       query->query_source =
           drivefs::mojom::QueryParameters::QuerySource::kLocalOnly;
       search_type_ = SearchType::kOffline;
       break;
-    case api::file_manager_private::SEARCH_TYPE_ALL:
+    case api::file_manager_private::SearchType::kAll:
       search_type_ = SearchType::kText;
       break;
     default:
@@ -775,7 +786,7 @@ FileManagerPrivateSearchDriveMetadataFunction::Run() {
 
 void FileManagerPrivateSearchDriveMetadataFunction::OnSearchDriveFs(
     const std::string& query_text,
-    absl::optional<base::Value::List> results) {
+    std::optional<base::Value::List> results) {
   if (!results) {
     UmaEmitSearchOutcome(false, !is_offline_, search_type_, operation_start_);
     Respond(Error("No search results"));
@@ -830,27 +841,30 @@ FileManagerPrivateGetDriveConnectionStateFunction::Run() {
   api::file_manager_private::DriveConnectionState result;
 
   using enum drive::util::ConnectionStatus;
-  using enum api::file_manager_private::DriveConnectionStateType;
-  using enum api::file_manager_private::DriveOfflineReason;
   switch (drive::util::GetDriveConnectionStatus(
       Profile::FromBrowserContext(browser_context()))) {
     case kNoService:
-      result.type = DRIVE_CONNECTION_STATE_TYPE_OFFLINE;
-      result.reason = DRIVE_OFFLINE_REASON_NO_SERVICE;
+      result.type =
+          api::file_manager_private::DriveConnectionStateType::kOffline;
+      result.reason = api::file_manager_private::DriveOfflineReason::kNoService;
       break;
     case kNoNetwork:
-      result.type = DRIVE_CONNECTION_STATE_TYPE_OFFLINE;
-      result.reason = DRIVE_OFFLINE_REASON_NO_NETWORK;
+      result.type =
+          api::file_manager_private::DriveConnectionStateType::kOffline;
+      result.reason = api::file_manager_private::DriveOfflineReason::kNoNetwork;
       break;
     case kNotReady:
-      result.type = DRIVE_CONNECTION_STATE_TYPE_OFFLINE;
-      result.reason = DRIVE_OFFLINE_REASON_NOT_READY;
+      result.type =
+          api::file_manager_private::DriveConnectionStateType::kOffline;
+      result.reason = api::file_manager_private::DriveOfflineReason::kNotReady;
       break;
     case kMetered:
-      result.type = DRIVE_CONNECTION_STATE_TYPE_METERED;
+      result.type =
+          api::file_manager_private::DriveConnectionStateType::kMetered;
       break;
     case kConnected:
-      result.type = DRIVE_CONNECTION_STATE_TYPE_ONLINE;
+      result.type =
+          api::file_manager_private::DriveConnectionStateType::kOnline;
       break;
   }
 
@@ -862,7 +876,7 @@ FileManagerPrivateGetDriveConnectionStateFunction::Run() {
 ExtensionFunction::ResponseAction
 FileManagerPrivateNotifyDriveDialogResultFunction::Run() {
   using api::file_manager_private::NotifyDriveDialogResult::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   file_manager::EventRouter* const event_router =
@@ -871,17 +885,17 @@ FileManagerPrivateNotifyDriveDialogResultFunction::Run() {
   if (event_router) {
     drivefs::mojom::DialogResult result;
     switch (params->result) {
-      case api::file_manager_private::DRIVE_DIALOG_RESULT_NONE:
-      case api::file_manager_private::DRIVE_DIALOG_RESULT_NOT_DISPLAYED:
+      case api::file_manager_private::DriveDialogResult::kNone:
+      case api::file_manager_private::DriveDialogResult::kNotDisplayed:
         result = drivefs::mojom::DialogResult::kNotDisplayed;
         break;
-      case api::file_manager_private::DRIVE_DIALOG_RESULT_ACCEPT:
+      case api::file_manager_private::DriveDialogResult::kAccept:
         result = drivefs::mojom::DialogResult::kAccept;
         break;
-      case api::file_manager_private::DRIVE_DIALOG_RESULT_REJECT:
+      case api::file_manager_private::DriveDialogResult::kReject:
         result = drivefs::mojom::DialogResult::kReject;
         break;
-      case api::file_manager_private::DRIVE_DIALOG_RESULT_DISMISS:
+      case api::file_manager_private::DriveDialogResult::kDismiss:
         result = drivefs::mojom::DialogResult::kDismiss;
         break;
     }

@@ -9,9 +9,14 @@
 #include <vector>
 
 #include "components/signin/public/identity_manager/account_info.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 class PrefService;
+
+namespace signin {
+class IdentityManager;
+}
 
 namespace supervised_user {
 
@@ -23,6 +28,16 @@ enum class FilteringBehaviorReason {
   MANUAL = 3,
   ALLOWLIST = 4,
   NOT_SIGNED_IN = 5,
+};
+
+// A Java counterpart will be generated for this enum.
+// Values are stored in prefs under kDefaultSupervisedUserFilteringBehavior.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.superviseduser
+enum class FilteringBehavior : int {
+  kAllow = 0,
+  // Deprecated, kWarn = 1.
+  kBlock = 2,
+  kInvalid = 3,
 };
 
 // This enum describes the state of the interstitial banner that is shown for
@@ -73,18 +88,15 @@ GURL NormalizeUrl(const GURL& url);
 // Check if web filtering prefs are set to default values.
 bool AreWebFilterPrefsDefault(const PrefService& pref_service);
 
-// Categorizes the account into a FamilyLink supervision type to segment the
-// Chrome user population.
-// `primary_accounts` should contain only primary accounts, possibly sourced
-// from multiple Chrome profiles. In the case of multiple accounts, the function
-// emits a single record to signal the multi-profile state.
+// Gets the supervision status of the given account, suitable for passing in to
+// EmitLogSegmentHistogram.
+absl::optional<LogSegment> SupervisionStatusForUser(
+    const signin::IdentityManager* identity_manager);
+
+// Emits a single merged FamilyLink supervision metric, from a list of
+// zero or more individual profile/account values.
 // Returns true if one or more histograms were emitted.
-bool EmitLogSegmentHistogram(const std::vector<AccountInfo>& primary_accounts);
-
-// Returns true if the primary account is a child account subject to parental
-// controls.
-bool IsSubjectToParentalControls(const PrefService* pref_service);
-
+bool EmitLogSegmentHistogram(const std::vector<LogSegment>& log_segments);
 }  // namespace supervised_user
 
 #endif  // COMPONENTS_SUPERVISED_USER_CORE_COMMON_SUPERVISED_USER_UTILS_H_

@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/metrics/frame_sequence_tracker.h"
@@ -145,7 +146,18 @@ FrameSequenceMetrics::FrameSequenceMetrics(FrameSequenceTrackerType type)
   }
 }
 
-FrameSequenceMetrics::~FrameSequenceMetrics() = default;
+FrameSequenceMetrics::~FrameSequenceMetrics() {
+  // If we did not see sufficient frames to report we will be kept around to
+  // have the data `Merge` into the next sequence of `type_`. We do not
+  // terminate active traces immediately when we stop, as the sequence may
+  // restart, leading to `AdoptTrace`.
+  //
+  // However we may not be merged before teardown, if so terminate the trace
+  // now.
+  if (trace_data_v3_.trace_id) {
+    trace_data_v3_.TerminateV3(v3_, GetEffectiveThread());
+  }
+}
 
 void FrameSequenceMetrics::ReportLeftoverData() {
   if (HasDataLeftForReporting() || type_ == FrameSequenceTrackerType::kCustom)
@@ -246,8 +258,12 @@ void FrameSequenceMetrics::AdoptTrace(FrameSequenceMetrics* adopt_from) {
   DCHECK(!trace_data_.trace_id);
   trace_data_.trace_id = adopt_from->trace_data_.trace_id;
   trace_data_v3_.trace_id = adopt_from->trace_data_v3_.trace_id;
-  adopt_from->trace_data_.trace_id = nullptr;
-  adopt_from->trace_data_v3_.trace_id = nullptr;
+  trace_data_v3_.last_presented_sequence_number =
+      adopt_from->trace_data_v3_.trace_id;
+  trace_data_v3_.last_timestamp = adopt_from->trace_data_v3_.last_timestamp;
+  trace_data_v3_.frame_count = adopt_from->trace_data_v3_.frame_count;
+  adopt_from->trace_data_.trace_id = 0u;
+  adopt_from->trace_data_v3_.trace_id = 0u;
 }
 
 void FrameSequenceMetrics::AdvanceTrace(base::TimeTicks timestamp,
@@ -279,15 +295,12 @@ void FrameSequenceMetrics::ReportMetrics() {
 
   // Terminates |trace_data_| for all types of FrameSequenceTracker.
   trace_data_.Terminate();
-  trace_data_v3_.TerminateV3(v3_);
+  trace_data_v3_.TerminateV3(v3_, GetEffectiveThread());
 
   if (type_ == FrameSequenceTrackerType::kCustom) {
     DCHECK(!custom_reporter_.is_null());
     std::move(custom_reporter_)
         .Run({
-            main_throughput_.frames_expected,
-            main_throughput_.frames_produced,
-            jank_reporter_->jank_count(),
             v3_.frames_expected,
             v3_.frames_dropped,
             v3_.jank_count,
@@ -480,10 +493,12 @@ void FrameSequenceMetrics::TraceData::Terminate() {
       ThroughputData::ToTracedValue(metrics->impl_throughput(),
                                     metrics->main_throughput(),
                                     metrics->GetEffectiveThread()));
-  trace_id = nullptr;
+  trace_id = 0u;
 }
 
-void FrameSequenceMetrics::TraceData::TerminateV3(const V3& v3) {
+void FrameSequenceMetrics::TraceData::TerminateV3(
+    const V3& v3,
+    FrameInfo::SmoothEffectDrivingThread effective_thread) {
   if (!enabled || !trace_id) {
     return;
   }
@@ -493,10 +508,33 @@ void FrameSequenceMetrics::TraceData::TerminateV3(const V3& v3) {
   dict->SetInteger("dropped", v3.frames_dropped);
   dict->SetInteger("missing_content", v3.frames_missing_content);
   dict->EndDictionary();
-  TRACE_EVENT_NESTABLE_ASYNC_END1("cc,benchmark", "FrameSequenceTrackerV3",
-                                  TRACE_ID_LOCAL(trace_id), "args",
-                                  std::move(dict));
-  trace_id = nullptr;
+  base::TimeTicks termination_time =
+      v3.last_presented_frame.GetTerminationTimeForThread(effective_thread);
+  // FrameSequenceTracker termination is based on FrameSorter. This way it can
+  // reflect delays in gfx::PresentationFeedback arriving, while also not
+  // terminating due to out-of-order dropped frames. The default termination is
+  // when the final frame produced for the sequence has been presented.
+  //
+  // Otherwise we will terminate once a frame, newer than the final one of the
+  // sequence has been produced, not dropped, and sorted. This can be a
+  // FrameInfo::FrameFinalState::NoUpdateDesired, which has no termination time,
+  // due to never being presented. When this occurs after a series of dropped
+  // frames, we can potentially have an entire sequence that was dropped.
+  // Leading to `v3.last_presented_frame` having no valid timestamp.
+  //
+  // Here we check for alternative timestamps, so as not to provide a null
+  // timestamp to the trace.
+  if (termination_time.is_null()) {
+    termination_time =
+        v3.last_frame.GetTerminationTimeForThread(effective_thread);
+    if (termination_time.is_null()) {
+      termination_time = base::TimeTicks::Now();
+    }
+  }
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP1(
+      "cc,benchmark", "FrameSequenceTrackerV3", TRACE_ID_LOCAL(trace_id),
+      termination_time, "args", std::move(dict));
+  trace_id = 0u;
 }
 
 void FrameSequenceMetrics::TraceData::Advance(base::TimeTicks start_timestamp,
@@ -508,7 +546,15 @@ void FrameSequenceMetrics::TraceData::Advance(base::TimeTicks start_timestamp,
   if (!enabled)
     return;
   if (!trace_id) {
-    trace_id = this;
+    // The underlying usage of TRACE_ID_LOCAL is mapping the raw uint64_t from
+    // the point into either `trace_event_internal::TraceID::LocalId` or
+    // `perfetto::internal::LegacyTraceId`. However the trace macros don't
+    // support just providing that object directly. Here we do the cast
+    // ourselves ahead, and save the resulting value. This value will be used to
+    // nest other traces, as well as close the async trace at a later time. The
+    // value can also be merged into future sequences. This avoids holding
+    // dangling ptrs.
+    trace_id = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(this));
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
         "cc,benchmark", histogram_name, TRACE_ID_LOCAL(trace_id),
         start_timestamp, "name",
@@ -656,7 +702,16 @@ void FrameSequenceMetrics::CalculateCheckerboardingAndJankV3(
       v3_.last_frame_delta = current_frame_delta;
       v3_.no_update_duration = base::TimeDelta();
       v3_.no_update_count = 0;
-      v3_.last_presented_frame = frame_info;
+      // It is possible for `frame_info` to have been terminated without
+      // presentation before `last_presented_frame` was presented. We do not
+      // update `last_presented_frame` in these cases so that the nested frames
+      // in the trace are all aligned on presentations.
+      if (v3_.last_presented_frame.GetTerminationTimeForThread(
+              GetEffectiveThread()) >
+          frame_info.GetTerminationTimeForThread(GetEffectiveThread())) {
+      } else {
+        v3_.last_presented_frame = frame_info;
+      }
       break;
   }
 }

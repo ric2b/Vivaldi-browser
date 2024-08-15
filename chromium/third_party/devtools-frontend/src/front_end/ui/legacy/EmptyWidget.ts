@@ -31,6 +31,7 @@
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
+import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import emptyWidgetStyles from './emptyWidget.css.legacy.js';
 import {Infobar, Type} from './Infobar.js';
@@ -54,6 +55,7 @@ export class EmptyWidget extends VBox {
     this.registerRequiredCSS(emptyWidgetStyles);
     this.element.classList.add('empty-view-scroller');
     this.contentElement = this.element.createChild('div', 'empty-view') as HTMLDivElement;
+    this.contentElement.setAttribute('jslog', `${VisualLogging.section().context('empty-view')}`);
     this.textElement = this.contentElement.createChild('div', 'empty-bold-text');
     this.textElement.textContent = text;
   }
@@ -63,10 +65,11 @@ export class EmptyWidget extends VBox {
   }
 
   appendLink(link: Platform.DevToolsPath.UrlString): HTMLElement {
-    return this.contentElement.appendChild(XLink.create(link, i18nString(UIStrings.learnMore))) as HTMLElement;
+    const learnMoreLink = XLink.create(link, i18nString(UIStrings.learnMore), undefined, undefined, 'learn-more');
+    return this.contentElement.appendChild(learnMoreLink) as HTMLElement;
   }
 
-  appendWarning(message: string, learnMoreLink: Platform.DevToolsPath.UrlString): Infobar {
+  appendWarning(message: string, learnMoreLink: Platform.DevToolsPath.UrlString, jsLogContext?: string): Infobar {
     function openLink(): void {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.openInNewTab(learnMoreLink);
     }
@@ -76,10 +79,11 @@ export class EmptyWidget extends VBox {
       highlight: true,
       delegate: openLink,
       dismiss: false,
+      jsLogContext: 'learn-more',
     }] :
                                     undefined;
 
-    const warningBar = new Infobar(Type.Warning, message, actions);
+    const warningBar = new Infobar(Type.Warning, message, actions, undefined, undefined, jsLogContext);
     warningBar.element.classList.add('warning');
     this.element.prepend(warningBar.element);
     return warningBar;

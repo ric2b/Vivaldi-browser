@@ -11,13 +11,14 @@
 #import "components/navigation_metrics/navigation_metrics.h"
 #import "components/profile_metrics/browser_profile_type.h"
 #import "ios/chrome/browser/crash_report/model/crash_loop_detection_util.h"
-#import "ios/chrome/browser/sessions/session_restoration_observer_helper.h"
+#import "ios/chrome/browser/sessions/session_restoration_service.h"
+#import "ios/chrome/browser/sessions/session_restoration_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/web_state_list/session_metrics.h"
+#import "ios/chrome/browser/web_state_list/model/session_metrics.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -38,7 +39,9 @@ WebStateListMetricsBrowserAgent::WebStateListMetricsBrowserAgent(
   web_state_forwarder_ =
       std::make_unique<AllWebStateObservationForwarder>(web_state_list_, this);
 
-  AddSessionRestorationObserver(browser, this);
+  ChromeBrowserState* browser_state = browser->GetBrowserState();
+  session_restoration_service_observation_.Observe(
+      SessionRestorationServiceFactory::GetForBrowserState(browser_state));
 }
 
 WebStateListMetricsBrowserAgent::~WebStateListMetricsBrowserAgent() = default;
@@ -143,22 +146,18 @@ void WebStateListMetricsBrowserAgent::DidFinishNavigation(
 void WebStateListMetricsBrowserAgent::PageLoaded(
     web::WebState* web_state,
     web::PageLoadCompletionStatus load_completion_status) {
-  switch (GetInterfaceOrientation()) {
-    case UIInterfaceOrientationPortrait:
-    case UIInterfaceOrientationPortraitUpsideDown:
-      UMA_HISTOGRAM_BOOLEAN("Tab.PageLoadInPortrait", YES);
-      break;
-    case UIInterfaceOrientationLandscapeLeft:
-    case UIInterfaceOrientationLandscapeRight:
-      UMA_HISTOGRAM_BOOLEAN("Tab.PageLoadInPortrait", NO);
-      break;
-    case UIInterfaceOrientationUnknown:
-      // TODO(crbug.com/228832): Convert from a boolean histogram to an
-      // enumerated histogram and log this case as well.
-      break;
-  }
   base::UmaHistogramBoolean("Tab.HasThemeColor",
                             web_state->GetThemeColor() != nil);
+  // By default the underpage color is white. Only consider color as custom if
+  // it is not white.
+  CGFloat red = 1;
+  CGFloat green = 1;
+  CGFloat blue = 1;
+  CGFloat alpha = 1;
+  UIColor* color = web_state->GetUnderPageBackgroundColor();
+  [color getRed:&red green:&green blue:&blue alpha:&alpha];
+  BOOL isWhite = red > 0.999 && green > 0.999 && blue > 0.999 && alpha > 0.99;
+  base::UmaHistogramBoolean("Tab.HasCustomUnderPageBackgroundColor", isWhite);
 }
 
 #pragma mark - BrowserObserver
@@ -166,7 +165,7 @@ void WebStateListMetricsBrowserAgent::PageLoaded(
 void WebStateListMetricsBrowserAgent::BrowserDestroyed(Browser* browser) {
   DCHECK_EQ(browser->GetWebStateList(), web_state_list_);
 
-  RemoveSessionRestorationObserver(browser, this);
+  session_restoration_service_observation_.Reset();
 
   web_state_forwarder_.reset(nullptr);
   web_state_list_->RemoveObserver(this);

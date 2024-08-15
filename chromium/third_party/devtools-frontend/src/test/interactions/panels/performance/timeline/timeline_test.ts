@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assert} from 'chai';
+
 import {click, getBrowserAndPages, timeout, waitFor, waitForFunction} from '../../../../shared/helper.js';
 import {describe, itScreenshot} from '../../../../shared/mocha-extensions.js';
 import {assertElementScreenshotUnchanged} from '../../../../shared/screenshots.js';
@@ -9,98 +11,40 @@ import {loadComponentDocExample, preloadForCodeCoverage} from '../../../helpers/
 
 describe('Performance panel', function() {
   preloadForCodeCoverage('performance_panel/basic.html');
-  // TODO(crbug.com/1492405): Improve perf panel trace load speed to
-  // prevent timeout bump.
-  this.timeout(20_000);
 
-  itScreenshot('loads a trace file and renders it in the timeline', async () => {
+  itScreenshot.skip('[crbug.com/1520848]: loads a trace file and renders it in the timeline', async () => {
     await loadComponentDocExample('performance_panel/basic.html?trace=basic');
     await waitFor('.timeline-flamechart');
     const panel = await waitFor('body');
     await assertElementScreenshotUnchanged(panel, 'performance/timeline.png', 3);
   });
 
-  // Flaky test
-  itScreenshot.skip('[crbug.com/1478133] renders correctly the Bottom Up datagrid', async () => {
+  itScreenshot('renders correctly the Bottom Up datagrid', async () => {
     await loadComponentDocExample('performance_panel/basic.html?trace=one-second-interaction');
     await waitFor('.timeline-flamechart');
     await waitFor('div.tabbed-pane');
     await click('#tab-BottomUp');
     const datagrid = await waitFor('.timeline-tree-view');
+    await waitForFunction(async () => {
+      const datagrid = await waitFor('.timeline-tree-view');
+      const height = await datagrid.evaluate(elem => elem.clientHeight);
+      return height > 150;
+    });
     await assertElementScreenshotUnchanged(datagrid, 'performance/bottomUp.png', 3);
   });
 
-  // Flaky test
-  itScreenshot.skip('[crbug.com/1478133] renders correctly the Call Tree datagrid', async () => {
+  itScreenshot('renders correctly the Call Tree datagrid', async () => {
     await loadComponentDocExample('performance_panel/basic.html?trace=one-second-interaction');
     await waitFor('.timeline-flamechart');
     await waitFor('div.tabbed-pane');
     await click('#tab-CallTree');
     const datagrid = await waitFor('.timeline-tree-view');
-    await assertElementScreenshotUnchanged(datagrid, 'performance/callTree.png', 3);
-  });
-
-  // Flaky test
-  itScreenshot.skip('[crbug.com/1478133] renders correctly the Event Log datagrid', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=one-second-interaction');
-    await waitFor('.timeline-flamechart');
-    await waitFor('div.tabbed-pane');
-    await click('#tab-EventLog');
-    const datagrid = await waitFor('.timeline-tree-view');
-    // This value is obtained by waiting for the scroll of the datagrid to be completed
-    const TOP_OFFSET = 2938;
-    const scrollableDatagrid = await waitFor('.data-container');
-    // Wait for the scroll of the datagrid to be done before taking a screenshot
     await waitForFunction(async () => {
-      const scrollablePosition = await scrollableDatagrid.evaluate(el => {
-        return el.scrollTop;
-      });
-      return scrollablePosition === TOP_OFFSET;
+      const datagrid = await waitFor('.timeline-tree-view');
+      const height = await datagrid.evaluate(elem => elem.clientHeight);
+      return height > 150;
     });
-
-    await assertElementScreenshotUnchanged(datagrid, 'performance/eventLog.png', 4);
-  });
-
-  // Flaky test
-  itScreenshot.skip('[crbug.com/1478133] renders correctly the datagrid in the split widget of Bottom Up', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=one-second-interaction');
-    await waitFor('.timeline-flamechart');
-    await waitFor('div.tabbed-pane');
-    await click('#tab-BottomUp');
-    const datagrid = await waitFor('.timeline-tree-view');
-    await click('[aria-label="Show Heaviest stack"]');
-    const rows = await datagrid.$$('.data-grid-data-grid-node');
-
-    // The trace one-second-interaction contains more than 3 rows in the bottom up tree
-    // so it is safe to click the third one
-    if (rows.length >= 3) {
-      await rows[2].click();
-    } else {
-      throw new Error('There are less than three rows with the class \'data-grid-data-grid-node\'');
-    }
-
-    await assertElementScreenshotUnchanged(datagrid, 'performance/splitWidgetBottomUp.png', 3);
-  });
-
-  // Flaky test
-  itScreenshot.skip('[crbug.com/1478133] renders correctly the datagrid in the split widget of Call Tree', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=one-second-interaction');
-    await waitFor('.timeline-flamechart');
-    await waitFor('div.tabbed-pane');
-    await click('#tab-CallTree');
-    const datagrid = await waitFor('.timeline-tree-view');
-    await click('[aria-label="Show Heaviest stack"]');
-    const rows = await datagrid.$$('.data-grid-data-grid-node');
-
-    // The trace one-second-interaction contains more than 3 rows in the call tree
-    // so it is safe to click the third one
-    if (rows.length >= 3) {
-      await rows[2].click();
-    } else {
-      throw new Error('There are less than three rows with the class \'data-grid-data-grid-node\'');
-    }
-
-    await assertElementScreenshotUnchanged(datagrid, 'performance/splitWidgetCallTree.png', 3);
+    await assertElementScreenshotUnchanged(datagrid, 'performance/callTree.png', 3);
   });
 
   itScreenshot('renders the timeline correctly when scrolling', async () => {
@@ -125,8 +69,7 @@ describe('Performance panel', function() {
 
   itScreenshot(
       'loads a cpuprofile and renders it in node mode with default track source set to new engine', async () => {
-        await loadComponentDocExample(
-            'performance_panel/basic.html?cpuprofile=node-fibonacci-website&isNode=true&threadTracksSource=new');
+        await loadComponentDocExample('performance_panel/basic.html?cpuprofile=node-fibonacci-website&isNode=true');
         await waitFor('.timeline-flamechart');
         const panel = await waitFor('body');
         await assertElementScreenshotUnchanged(panel, 'performance/cpu-profile-node-new-engine.png', 3);
@@ -134,8 +77,7 @@ describe('Performance panel', function() {
 
   itScreenshot(
       'loads a cpuprofile and renders it in node mode with default track source set to old engine', async () => {
-        await loadComponentDocExample(
-            'performance_panel/basic.html?cpuprofile=node-fibonacci-website&isNode=true&threadTracksSource=old');
+        await loadComponentDocExample('performance_panel/basic.html?cpuprofile=node-fibonacci-website&isNode=true');
         await waitFor('.timeline-flamechart');
         const panel = await waitFor('body');
         await assertElementScreenshotUnchanged(panel, 'performance/cpu-profile-node-old-engine.png', 3);
@@ -148,26 +90,18 @@ describe('Performance panel', function() {
     await assertElementScreenshotUnchanged(panel, 'performance/timeline-long-task-candystripe.png', 2);
   });
 
-  itScreenshot('renders screenshots in the frames track', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=web-dev&flamechart-force-expand=frames');
-    await waitFor('.timeline-flamechart');
+  // Flaky test
+  itScreenshot.skip('[crbug.com/1511265]: renders screenshots in the frames track', async () => {
+    await loadComponentDocExample(
+        'performance_panel/basic.html?trace=web-dev-with-commit&flamechart-force-expand=frames');
     const panel = await waitFor('body');
+    await waitForFunction(async () => {
+      const mainFlameChart = await waitFor('.timeline-flamechart');
+      const height = await mainFlameChart.evaluate(elem => elem.clientHeight);
+      return height > 500;
+    });
     // With some changes made to timeline-details-view it passes with a diff of 1.98 so reduce it to 1.
     await assertElementScreenshotUnchanged(panel, 'performance/timeline-web-dev-screenshot-frames.png', 1);
-  });
-
-  itScreenshot('renders correctly with the OLD_ENGINE ThreadTracksSource', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=web-dev&threadTracksSource=old');
-    await waitFor('.timeline-flamechart');
-    const panel = await waitFor('body');
-    await assertElementScreenshotUnchanged(panel, 'performance/timeline-web-dev-old-engine.png', 1);
-  });
-
-  itScreenshot('renders correctly with the NEW_ENGINE ThreadTracksSource', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=web-dev&threadTracksSource=new');
-    await waitFor('.timeline-flamechart');
-    const panel = await waitFor('body');
-    await assertElementScreenshotUnchanged(panel, 'performance/timeline-web-dev-new-engine.png', 1);
   });
 
   itScreenshot('supports the network track being expanded and then clicked', async function() {
@@ -184,5 +118,23 @@ describe('Performance panel', function() {
     await frontend.mouse.click(104, 144);
     await timeout(100);  // cannot await for DOM as this is a purely canvas change.
     await assertElementScreenshotUnchanged(panel, 'performance/timeline-expand-network-panel-and-select-event.png', 1);
+  });
+
+  it('renders the window range bounds correctly when loading multiple profiles', async () => {
+    await loadComponentDocExample('performance_panel/basic.html?cpuprofile=basic');
+    let timingTitleHandle = await waitFor('.timeline-details-chip-title');
+    let timingTitle = await timingTitleHandle.evaluate(element => element.innerHTML);
+    assert.isTrue(timingTitle.includes('0 – 2.38'));
+    const {frontend} = getBrowserAndPages();
+
+    // load another profile and ensure the time range is updated correctly.
+    await frontend.evaluate(`(async () => {
+      await loadFromFile('node-fibonacci-website.cpuprofile.gz');
+    })()`);
+    await waitForFunction(async () => {
+      timingTitleHandle = await waitFor('.timeline-details-chip-title');
+      timingTitle = await timingTitleHandle.evaluate(element => element.innerHTML);
+      return timingTitle.includes('0 – 2.66');
+    });
   });
 });

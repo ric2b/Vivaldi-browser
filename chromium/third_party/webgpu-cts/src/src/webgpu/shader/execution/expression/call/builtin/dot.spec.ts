@@ -8,37 +8,13 @@ Returns the dot product of e1 and e2.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16, TypeVec } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { sparseVectorF32Range, vectorF32Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeF16, TypeF32, TypeVec } from '../../../../../util/conversion.js';
 import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
+import { d } from './dot.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Cases: [f32|f16]_vecN_[non_]const
-const cases = (['f32', 'f16'] as const)
-  .flatMap(trait =>
-    ([2, 3, 4] as const).flatMap(N =>
-      ([true, false] as const).map(nonConst => ({
-        [`${trait}_vec${N}_${nonConst ? 'non_const' : 'const'}`]: () => {
-          // vec3 and vec4 require calculating all possible permutations, so their runtime is much
-          // longer per test, so only using sparse vectors for them.
-          return FP[trait].generateVectorPairToIntervalCases(
-            N === 2 ? vectorF32Range(2) : sparseVectorF32Range(N),
-            N === 2 ? vectorF32Range(2) : sparseVectorF32Range(N),
-            nonConst ? 'unfiltered' : 'finite',
-            FP[trait].dotInterval
-          );
-        },
-      }))
-    )
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('dot', cases);
 
 g.test('abstract_int')
   .specURL('https://www.w3.org/TR/WGSL/#vector-builtin-functions')

@@ -15,6 +15,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/mojom/context_type.mojom-forward.h"
 #include "extensions/common/mojom/frame.mojom-forward.h"
 #include "extensions/common/mojom/message_port.mojom-shared.h"
 #include "extensions/renderer/api/messaging/message_target.h"
@@ -104,8 +105,9 @@ class TestIPCMessageSender : public IPCMessageSender {
   MOCK_METHOD2(SendMessageResponsePending,
                void(int routing_id, const PortId& port_id));
 #endif
-  MOCK_METHOD5(SendActivityLogIPC,
-               void(const ExtensionId& extension_id,
+  MOCK_METHOD6(SendActivityLogIPC,
+               void(ScriptContext* script_context,
+                    const ExtensionId& extension_id,
                     IPCMessageSender::ActivityLogCallType call_type,
                     const std::string& call_name,
                     base::Value::List args,
@@ -142,7 +144,7 @@ class NativeExtensionBindingsSystemUnittest
 
   ScriptContext* CreateScriptContext(v8::Local<v8::Context> v8_context,
                                      const Extension* extension,
-                                     Feature::Context context_type);
+                                     mojom::ContextType context_type);
 
   void RegisterExtension(scoped_refptr<const Extension> extension);
 
@@ -171,7 +173,7 @@ class NativeExtensionBindingsSystemUnittest
   ExtensionIdSet extension_ids_;
   std::unique_ptr<content::MockRenderThread> render_thread_;
   std::unique_ptr<ScriptContextSet> script_context_set_;
-  std::vector<ScriptContext*> raw_script_contexts_;
+  std::vector<raw_ptr<ScriptContext, VectorExperimental>> raw_script_contexts_;
   std::unique_ptr<NativeExtensionBindingsSystem> bindings_system_;
   // The TestIPCMessageSender; owned by the bindings system.
   raw_ptr<TestIPCMessageSender, DanglingUntriaged> ipc_message_sender_ =

@@ -4,6 +4,7 @@
 
 #include "extensions/renderer/bindings/api_binding.h"
 
+#include <string_view>
 #include <tuple>
 
 #include "base/auto_reset.h"
@@ -1640,7 +1641,7 @@ TEST_F(APIBindingUnittest, FilteredEvents) {
   ASSERT_FALSE(function.IsEmpty());
 
   auto check_supports_filters = [context, binding_object, function](
-                                    base::StringPiece name,
+                                    std::string_view name,
                                     bool expect_supports) {
     SCOPED_TRACE(name);
     v8::Local<v8::Value> event =
@@ -1828,19 +1829,20 @@ TEST_F(APIBindingUnittest, TestSendingRequestsAndSilentRequestsWithHooks) {
 
   SetHooksDelegate(std::move(hooks));
 
-  auto on_silent_request =
-      [](absl::optional<std::string>* name_out,
-         absl::optional<std::vector<std::string>>* args_out,
-         v8::Local<v8::Context> context, const std::string& call_name,
-         const v8::LocalVector<v8::Value>& arguments) {
-        *name_out = call_name;
-        *args_out = std::vector<std::string>();
-        (*args_out)->reserve(arguments.size());
-        for (const auto& arg : arguments)
-          (*args_out)->push_back(V8ToString(arg, context));
-      };
-  absl::optional<std::string> silent_request;
-  absl::optional<std::vector<std::string>> request_arguments;
+  auto on_silent_request = [](std::optional<std::string>* name_out,
+                              std::optional<std::vector<std::string>>* args_out,
+                              v8::Local<v8::Context> context,
+                              const std::string& call_name,
+                              const v8::LocalVector<v8::Value>& arguments) {
+    *name_out = call_name;
+    *args_out = std::vector<std::string>();
+    (*args_out)->reserve(arguments.size());
+    for (const auto& arg : arguments) {
+      (*args_out)->push_back(V8ToString(arg, context));
+    }
+  };
+  std::optional<std::string> silent_request;
+  std::optional<std::vector<std::string>> request_arguments;
   SetOnSilentRequest(base::BindRepeating(on_silent_request, &silent_request,
                                          &request_arguments));
 
@@ -1852,8 +1854,8 @@ TEST_F(APIBindingUnittest, TestSendingRequestsAndSilentRequestsWithHooks) {
   v8::Local<v8::Object> binding_object = binding()->CreateInstance(context);
 
   auto call_api_method = [binding_object, context](
-                             base::StringPiece name,
-                             base::StringPiece string_args) {
+                             std::string_view name,
+                             std::string_view string_args) {
     v8::Local<v8::Function> call = FunctionFromString(
         context, base::StringPrintf("(function(binding) { binding.%s(%s); })",
                                     name.data(), string_args.data()));

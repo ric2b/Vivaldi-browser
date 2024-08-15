@@ -90,6 +90,7 @@ inline constexpr char kGetRemoteVendorProductInfo[] =
     "GetRemoteVendorProductInfo";
 inline constexpr char kGetConnectionState[] = "GetConnectionState";
 inline constexpr char kGetRemoteUuids[] = "GetRemoteUuids";
+inline constexpr char kFetchRemoteUuids[] = "FetchRemoteUuids";
 inline constexpr char kGetBondState[] = "GetBondState";
 inline constexpr char kConnectAllEnabledProfiles[] =
     "ConnectAllEnabledProfiles";
@@ -151,6 +152,7 @@ inline constexpr char kOnAdvertisementLost[] = "OnAdvertisementLost";
 namespace manager {
 inline constexpr char kStart[] = "Start";
 inline constexpr char kStop[] = "Stop";
+inline constexpr char kGetAdapterEnabled[] = "GetAdapterEnabled";
 inline constexpr char kGetFlossEnabled[] = "GetFlossEnabled";
 inline constexpr char kSetFlossEnabled[] = "SetFlossEnabled";
 inline constexpr char kGetState[] = "GetState";

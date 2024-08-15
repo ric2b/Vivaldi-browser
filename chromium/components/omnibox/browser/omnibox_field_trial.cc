@@ -596,6 +596,17 @@ bool OmniboxFieldTrial::ShouldEncodeLeadingSpaceForOnDeviceTailSuggest() {
                                                  /*default_value=*/false);
 }
 
+bool OmniboxFieldTrial::ShouldApplyOnDeviceHeadModelSelectionFix() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+             omnibox::kOnDeviceHeadProviderNonIncognito,
+             OmniboxFieldTrial::kOnDeviceHeadModelSelectionFix,
+             /*default_value=*/false) ||
+         base::GetFieldTrialParamByFeatureAsBool(
+             omnibox::kOnDeviceHeadProviderIncognito,
+             OmniboxFieldTrial::kOnDeviceHeadModelSelectionFix,
+             /*default_value=*/false);
+}
+
 bool OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForLocale(
     const std::string& locale) {
   if (IsKoreanLocale(locale) &&
@@ -612,11 +623,9 @@ std::string OmniboxFieldTrial::OnDeviceHeadModelLocaleConstraint(
                    : &omnibox::kOnDeviceHeadProviderNonIncognito;
   std::string constraint = base::GetFieldTrialParamValueByFeature(
       *feature, kOnDeviceHeadModelLocaleConstraint);
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   if (constraint.empty()) {
     constraint = "500000";
   }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   return constraint;
 }
 
@@ -787,6 +796,7 @@ const char OmniboxFieldTrial::kDynamicMaxAutocompleteIncreasedLimitParam[] =
 
 const char OmniboxFieldTrial::kOnDeviceHeadModelLocaleConstraint[] =
     "ForceModelLocaleConstraint";
+const char OmniboxFieldTrial::kOnDeviceHeadModelSelectionFix[] = "SelectionFix";
 
 int OmniboxFieldTrial::kDefaultMinimumTimeBetweenSuggestQueriesMs = 100;
 
@@ -1006,33 +1016,10 @@ const base::FeatureParam<bool> kMlUrlScoringUnlimitedNumCandidates(
     "MlUrlScoringUnlimitedNumCandidates",
     false);
 
-// If true, the ML model only re-scores and re-ranks the final set of matches
-// that would be shown in the legacy scoring system. The full legacy system
-// including the final call to `SortAndCull()` is completed before the ML model
-// is invoked.
-const base::FeatureParam<bool> kMlUrlscoringRerankFinalMatchesOnly(
-    &omnibox::kMlUrlScoring,
-    "MlUrlScoringRerankFinalMatchesOnly",
-    false);
-
-// If true, the would-be default match from the legacy system is determined
-// before ML scoring is invoked, and preserved even after re-scoring and
-// re-ranking with the new scores. This also means only the final set of matches
-// from the legacy system will be re-scored and re-ranked.
-const base::FeatureParam<bool> kMlUrlScoringPreserveDefault(
-    &omnibox::kMlUrlScoring,
-    "MlUrlScoringPreserveDefault",
-    false);
-
 const base::FeatureParam<std::string> kMlUrlScoringMaxMatchesByProvider(
     &omnibox::kMlUrlScoring,
     "MlUrlScoringMaxMatchesByProvider",
     "");
-
-// If true, synchronously runs the ML model for a batch of urls.
-const base::FeatureParam<bool> kMlSyncBatchUrlScoring(&omnibox::kMlUrlScoring,
-                                                      "MlSyncBatchUrlScoring",
-                                                      true);
 
 MLConfig::MLConfig() {
   log_url_scoring_signals =
@@ -1049,15 +1036,40 @@ MLConfig::MLConfig() {
           .Get();
 
   ml_url_scoring = base::FeatureList::IsEnabled(omnibox::kMlUrlScoring);
-  ml_sync_batch_url_scoring = kMlSyncBatchUrlScoring.Get();
   ml_url_scoring_counterfactual = kMlUrlScoringCounterfactual.Get();
   ml_url_scoring_unlimited_num_candidates =
       kMlUrlScoringUnlimitedNumCandidates.Get();
-  ml_url_scoring_preserve_default = kMlUrlScoringPreserveDefault.Get();
-  ml_url_scoring_rerank_final_matches_only =
-      kMlUrlscoringRerankFinalMatchesOnly.Get();
   ml_url_scoring_max_matches_by_provider =
       kMlUrlScoringMaxMatchesByProvider.Get();
+
+  // `kMlUrlSearchBlending` parameters.
+  stable_search_blending =
+      base::FeatureParam<bool>(&omnibox::kMlUrlSearchBlending,
+                               "MlUrlSearchBlending_StableSearchBlending",
+                               stable_search_blending)
+          .Get();
+  mapped_search_blending =
+      base::FeatureParam<bool>(&omnibox::kMlUrlSearchBlending,
+                               "MlUrlSearchBlending_MappedSearchBlending",
+                               mapped_search_blending)
+          .Get();
+  mapped_search_blending_min =
+      base::FeatureParam<int>(&omnibox::kMlUrlSearchBlending,
+                              "MlUrlSearchBlending_MappedSearchBlendingMin",
+                              mapped_search_blending_min)
+          .Get();
+  mapped_search_blending_max =
+      base::FeatureParam<int>(&omnibox::kMlUrlSearchBlending,
+                              "MlUrlSearchBlending_MappedSearchBlendingMax",
+                              mapped_search_blending_max)
+          .Get();
+  mapped_search_blending_grouping_threshold =
+      base::FeatureParam<int>(
+          &omnibox::kMlUrlSearchBlending,
+          "MlUrlSearchBlending_MappedSearchBlendingGroupingThreshold",
+          mapped_search_blending_grouping_threshold)
+          .Get();
+
   url_scoring_model = base::FeatureList::IsEnabled(omnibox::kUrlScoringModel);
 }
 
@@ -1100,13 +1112,6 @@ bool IsMlUrlScoringEnabled() {
   return false;
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 }
-bool IsMlSyncBatchUrlScoringEnabled() {
-#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-  return IsMlUrlScoringEnabled() && GetMLConfig().ml_sync_batch_url_scoring;
-#else
-  return false;
-#endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-}
 bool IsMlUrlScoringCounterfactual() {
   return IsMlUrlScoringEnabled() && GetMLConfig().ml_url_scoring_counterfactual;
 }
@@ -1119,20 +1124,6 @@ bool IsUrlScoringModelEnabled() {
 }
 
 // <- ML Relevance Scoring
-// ---------------------------------------------------------
-// Two-column realbox ->
-
-const base::FeatureParam<int> kRealboxMaxPreviousSearchRelatedSuggestions(
-    &omnibox::kRealboxSecondaryZeroSuggest,
-    "RealboxMaxPreviousSearchRelatedSuggestions",
-    3);
-
-const base::FeatureParam<bool> kRealboxSecondaryZeroSuggestCounterfactual(
-    &omnibox::kRealboxSecondaryZeroSuggest,
-    "RealboxSecondaryZeroSuggestCounterfactual",
-    false);
-
-// <- Two-column realbox
 // ---------------------------------------------------------
 // Android UI Revamp ->
 const base::FeatureParam<bool> kOmniboxModernizeVisualUpdateMergeClipboardOnNTP(

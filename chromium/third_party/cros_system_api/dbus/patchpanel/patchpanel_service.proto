@@ -80,6 +80,15 @@ message NetworkDevice {
     PARALLELS_VM = 4;
   };
 
+  // Identifies the technology of the underlying physical device of the virtual
+  // device reported.
+  enum TechnologyType {
+    UNKNOWN_TECHNOLOGY = 0;
+    CELLULAR = 1;
+    ETHERNET = 2;
+    WIFI = 3;
+  };
+
   // The name of the main virtual interface created by patchpanel for carrying
   // packets out of the guest environment and onto the host routing setup. For
   // ARC this corresponds to the virtual bridge used for that virtual device.
@@ -122,6 +131,11 @@ message NetworkDevice {
   // array of size 4 and 16 respectively for IPv4 and IPv6.
   bytes dns_proxy_ipv4_addr = 8;
   bytes dns_proxy_ipv6_addr = 9;
+
+  // Technology of the underlying physical device of the virtual device.
+  // Only valid for ARC virtual devices, and otherwise empty for virtual devices
+  // tracking the default logical or physical networks.
+  TechnologyType technology_type = 10;
 }
 
 // Request to obtain the list of virtual network devices that patchpanel
@@ -270,6 +284,42 @@ message BruschettaVmShutdownRequest {
 // Intentionally empty response.
 message BruschettaVmShutdownResponse {}
 
+// Notification that a Borealis VM is starting up.
+message BorealisVmStartupRequest {
+  // The content ID of the VM.
+  uint32 id = 1;
+}
+
+// Information required by Concierge to continue the Borealis VM startup.
+message BorealisVmStartupResponse {
+  // The TAP device to be used for the VM.
+  string tap_device_ifname = 1;
+
+  // The IPv4 subnet assigned to the VM.
+  IPv4Subnet ipv4_subnet = 2;
+
+  // The IPv4 address assigned to the VM, represented as 4 bytes in network
+  // order, contained inside |ipv4_subnet|.
+  bytes ipv4_address = 3;
+
+  // The IPv4 next hop gateway address for the VM, represented as 4 bytes in
+  // network order, contained inside |ipv4_subnet|.
+  bytes gateway_ipv4_address = 4;
+}
+
+// Notification that the Borealis VM is shutting down.
+// This message must also be sent if the startup process fails so any
+// allocated resources, including the subnets, are properly freed.
+message BorealisVmShutdownRequest {
+  // The CID of the Borealis VM; must match the PID that was sent at
+  // startup.
+  // Required.
+  uint32 id = 1;
+}
+
+// Intentionally empty response.
+message BorealisVmShutdownResponse {}
+
 // Request to set the VPN routing policy for a socket. The socket file
 // descriptor must be immediately appended to the DBUS message after the
 // serialized SetVpnIntentRequest message. The request must be sent before
@@ -371,7 +421,10 @@ message ConnectNamespaceResponse {
 // counter will keep growing until the system (CrOS) shuts down.
 // Used in TrafficCountersResponse.
 message TrafficCounter {
-  // Possible traffic sources.
+  // Possible traffic sources. The names of these entries are used in shill to
+  // associate storage keys for persisting traffic counter data. Changing the
+  // name of an existing entry or removing an entry should be accompanied with
+  // the appropriate data migration or cleanup code in shill::Service::Save().
   enum Source {
     UNKNOWN = 0;
     // Traffic associated with user chronos.
@@ -379,16 +432,35 @@ message TrafficCounter {
     // Traffic associated with user debugd, cups, and tlsdate, i.e., other user
     // traffic except for that for user chronos.
     USER = 2;
-    ARC = 3;
-    CROSVM = 4;
-    PARALLELS_VM = 5;
-    UPDATE_ENGINE = 6;
+    UPDATE_ENGINE = 3;
+    // Other system traffic.
+    SYSTEM = 4;
     // As a source, VPN means traffic initiated by the VPN app/program and going
     // to the underlying physical network (or from physical network to the VPN
     // app/program).
-    VPN = 7;
-    // All other traffic.
-    SYSTEM = 8;
+    VPN = 5;
+    // Traffic from ARC container or ARCVM.
+    ARC = 6;
+    // Traffic from a Borealis VM.
+    BOREALIS_VM = 7;
+    // Traffic from a Bruschetta VM.
+    BRUSCHETTA_VM = 8;
+    // Traffic from a Crostini VM.
+    CROSTINI_VM = 9;
+    // Traffic from a Parallels VM.
+    PARALLELS_VM = 10;
+    // Traffic from a tethered client.
+    TETHERING = 11;
+    // Traffic from a WiFi Direct client. This entry is defined for consistency
+    // with patchpanel's source enum but it is not expected to be used in
+    // traffic counters since WiFi Direct traffic should not be forwarded to any
+    // other Network.
+    WIFI_DIRECT = 12;
+    // Traffic from a WiFi local only hotspot client. This entry is defined for
+    // consistency with patchpanel's source enum but it is not expected to be
+    // used in traffic counters since WiFi local only hotspot traffic should not
+    // be forwarded to any other Network.
+    WIFI_LOHS = 13;
   }
 
   // Possible IP address family numbers.
@@ -846,6 +918,86 @@ message GetDownstreamNetworkInfoResponse {
   repeated NetworkClientInfo clients_info = 3;
 }
 
+// Request to configure an IP network or modify the configuration of an existing
+// IP network on a certain physical or VPN network interface corresponding to a
+// shill Service.
+message ConfigureNetworkRequest {
+  // Index of the interface used by the Network.
+  int32 ifindex = 1;
+
+  // Name of the interface used by this Network.
+  string ifname = 2;
+
+  // A bit flag indicating the field that should be configured. See detailed
+  // definition in NetworkApplier::Area.
+  uint32 area = 3;
+
+  // A serialization of the net_base::NetworkConfig object, which contains the
+  // configuration that should be used to configure the Network.
+  NetworkConfig network_config = 4;
+
+  // Technology of the Network.
+  NetworkTechnology technology = 5;
+
+  // The priority of the Network, calculated by shill Manager.
+  NetworkPriority priority = 6;
+}
+
+// ConfigureNetwork response object.
+message ConfigureNetworkResponse {
+  // True if the Network was successfully configured.
+  bool success = 1;
+}
+
+// Possible technologies for a Network created in patchpanel.
+enum NetworkTechnology {
+  UNKNOWN = 0;
+  CELLULAR = 1;
+  ETHERNET = 2;
+  VPN = 3;
+  WIFI = 4;
+}
+
+// A representation of shill SortServices() result. See
+// net_base::NetworkPriority.
+message NetworkPriority {
+  bool is_primary_logical = 1;
+  bool is_primary_physical = 2;
+  bool is_primary_for_dns = 3;
+  uint32 ranking_order = 4;
+}
+
+// Mirroring of net_base::NetworkConfig. IP addresses are represented as bytes
+// array of length 4 or 16 in network order.
+message NetworkConfig {
+  optional IPAddrCIDR ipv4_address = 1;
+  optional bytes ipv4_broadcast = 2;
+  optional bytes ipv4_gateway = 3;
+
+  repeated IPAddrCIDR ipv6_addresses = 4;
+  optional bytes ipv6_gateway = 5;
+
+  bool ipv4_default_route = 6;
+  bool ipv6_blackhole_route = 7;
+
+  repeated IPAddrCIDR excluded_route_prefixes = 8;
+  repeated IPAddrCIDR included_route_prefixes = 9;
+  repeated Route rfc3442_routes = 10;
+
+  repeated bytes dns_servers = 11;
+  repeated string dns_search_domains = 12;
+  optional int32 mtu = 13;
+
+  optional string captive_portal_uri = 14;
+}
+
+// Representation of custom routes, in the form of destination prefix plus a
+// gateway address. IP address are represented in network order byte arrays.
+message Route {
+  IPAddrCIDR prefix = 1;
+  bytes gateway = 2;
+}
+
 // Notification change in power state of ARC.
 message NotifyAndroidInteractiveStateRequest {
   bool interactive = 1;
@@ -934,3 +1086,12 @@ message SetFeatureFlagResponse {
   // Value of the enabled flag before the call to SetFeatureFlag.
   bool enabled = 1;
 }
+
+// Notification for a socket connection event of an ARC VPN app.
+// Currently used for ARC VPN traffic counting.
+message NotifyVPNSocketConnectionEventRequest {
+  SocketConnectionEvent msg = 1;
+}
+
+// Response to a NotifyVPNSocketConnectionEvent call.
+message NotifyVPNSocketConnectionEventResponse {}

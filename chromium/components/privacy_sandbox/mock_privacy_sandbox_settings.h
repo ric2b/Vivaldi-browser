@@ -104,10 +104,8 @@ class MockPrivacySandboxSettings
               IsCookieDeprecationLabelAllowedForContext,
               (const url::Origin&, const url::Origin&),
               (override, const));
-  MOCK_METHOD(bool, IsPrivacySandboxEnabled, (), (override, const));
   MOCK_METHOD(void, SetAllPrivacySandboxAllowedForTesting, (), (override));
   MOCK_METHOD(void, SetTopicsBlockedForTesting, (), (override));
-  MOCK_METHOD(void, SetPrivacySandboxEnabled, (bool), (override));
   MOCK_METHOD(bool, IsPrivacySandboxRestricted, (), (override, const));
   MOCK_METHOD(bool,
               IsPrivacySandboxCurrentlyUnrestricted,
@@ -127,4 +125,4 @@ class MockPrivacySandboxSettings
 
 }  // namespace privacy_sandbox_test_util
 
-#endif  // COMPONENTS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_TEST_UTIL_H_
+#endif  // COMPONENTS_PRIVACY_SANDBOX_MOCK_PRIVACY_SANDBOX_SETTINGS_H_

@@ -27,8 +27,8 @@ secure, because TLS security depends upon it. An attacker who can control the
 time on the user’s computer can, for example, cause Chrome to accept an expired
 certificate as valid.
 
-[Time Sources](/developers/design-documents/time-sources) discusses a similar
-problem for Chrome OS devices.
+[Timekeeping](/chromium-os/chromiumos-design-docs/timekeeping) discusses a
+similar problem for ChromiumOS devices.
 
 ## Design
 

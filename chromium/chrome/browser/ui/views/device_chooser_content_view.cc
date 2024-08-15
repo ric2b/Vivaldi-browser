@@ -66,8 +66,9 @@ DeviceChooserContentView::DeviceChooserContentView(
   std::vector<ui::TableColumn> table_columns = {ui::TableColumn()};
   auto table_view = std::make_unique<views::TableView>(
       this, table_columns,
-      chooser_controller_->ShouldShowIconBeforeText() ? views::ICON_AND_TEXT
-                                                      : views::TEXT_ONLY,
+      chooser_controller_->ShouldShowIconBeforeText()
+          ? views::TableType::kIconAndText
+          : views::TableType::kTextOnly,
       !chooser_controller_->AllowMultipleSelection() /* single_selection */);
   table_view_ = table_view.get();
   table_view->SetSelectOnRemove(false);
@@ -218,7 +219,7 @@ void DeviceChooserContentView::OnAdapterEnabledChanged(bool enabled) {
   // No row is selected since the adapter status has changed.
   // This will also disable the OK button if it was enabled because
   // of a previously selected row.
-  table_view_->Select(absl::nullopt);
+  table_view_->Select(std::nullopt);
   adapter_enabled_ = enabled;
   UpdateTableView();
 
@@ -230,7 +231,7 @@ void DeviceChooserContentView::OnAdapterEnabledChanged(bool enabled) {
 
 void DeviceChooserContentView::OnAdapterAuthorizationChanged(bool authorized) {
   // No row is selected since we are not authorized to get device info anyway.
-  table_view_->Select(absl::nullopt);
+  table_view_->Select(std::nullopt);
   adapter_authorized_ = authorized;
   UpdateTableView();
 
@@ -242,7 +243,7 @@ void DeviceChooserContentView::OnRefreshStateChanged(bool refreshing) {
     // No row is selected since the chooser is refreshing. This will also
     // disable the OK button if it was enabled because of a previously
     // selected row.
-    table_view_->Select(absl::nullopt);
+    table_view_->Select(std::nullopt);
     UpdateTableView();
   }
 
@@ -434,6 +435,6 @@ views::Label* DeviceChooserContentView::ThrobberLabelForTesting() {
   return throbber_label_;
 }
 
-BEGIN_METADATA(DeviceChooserContentView, views::View)
+BEGIN_METADATA(DeviceChooserContentView)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, WindowTitle)
 END_METADATA

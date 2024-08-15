@@ -1,0 +1,11 @@
+#include <metal_stdlib>
+using namespace metal;
+
+bool call_discard() {
+  discard_fragment();
+  return true;
+}
+fragment void f() {
+  bool v = call_discard();
+  bool also_unreachable = false;
+}

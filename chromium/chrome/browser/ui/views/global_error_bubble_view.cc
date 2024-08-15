@@ -48,10 +48,20 @@ GlobalErrorBubbleViewBase* GlobalErrorBubbleViewBase::ShowStandardBubbleView(
         static_cast<VivaldiBrowserWindow*>(browser->window());
     views::View* anchor_view = browserwindow->toolbar_button_provider()
                                    ->GetDefaultExtensionDialogAnchorView();
+    // Show this in the middle of the browser window.
+    const gfx::Rect view_rect = anchor_view->GetBoundsInScreen();
+    gfx::Rect anchor_rect;
+    anchor_rect.set_x(view_rect.x() + (view_rect.width() /2));
+    anchor_rect.set_y(view_rect.y() + (view_rect.height() /2));
+
     GlobalErrorBubbleView* bubble_view = new GlobalErrorBubbleView(
-        anchor_view, views::BubbleBorder::TOP_RIGHT, browser, error);
+        anchor_view, views::BubbleBorder::FLOAT, browser, error);
     views::BubbleDialogDelegateView::CreateBubble(bubble_view);
+
+    bubble_view->SetAnchorRect(anchor_rect);
+
     bubble_view->GetWidget()->Show();
+
     return bubble_view;
   }
 
@@ -146,5 +156,5 @@ void GlobalErrorBubbleView::CloseBubbleView() {
   GetWidget()->Close();
 }
 
-BEGIN_METADATA(GlobalErrorBubbleView, views::BubbleDialogDelegateView)
+BEGIN_METADATA(GlobalErrorBubbleView)
 END_METADATA

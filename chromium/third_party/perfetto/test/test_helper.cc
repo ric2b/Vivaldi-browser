@@ -20,8 +20,8 @@
 #include "perfetto/base/compiler.h"
 #include "perfetto/ext/base/string_utils.h"
 #include "perfetto/ext/tracing/core/trace_packet.h"
-#include "perfetto/ext/tracing/ipc/default_socket.h"
 #include "perfetto/tracing/core/tracing_service_state.h"
+#include "perfetto/tracing/default_socket.h"
 
 #include "protos/perfetto/trace/trace_packet.pbzero.h"
 
@@ -94,6 +94,7 @@ TestHelper::TestHelper(base::TestTaskRunner* task_runner,
 }
 
 void TestHelper::OnConnect() {
+  endpoint_->ObserveEvents(ObservableEvents::TYPE_ALL_DATA_SOURCES_STARTED);
   std::move(on_connect_callback_)();
 }
 
@@ -202,6 +203,9 @@ void TestHelper::StartTracing(const TraceConfig& config,
   trace_.clear();
   on_stop_tracing_callback_ =
       CreateCheckpoint("stop.tracing" + std::to_string(++trace_count_));
+  on_all_ds_started_callback_ = CreateCheckpoint("all.datasources.started" +
+                                                 std::to_string(trace_count_));
+
   endpoint_->EnableTracing(config, std::move(file));
 }
 
@@ -241,7 +245,11 @@ void TestHelper::WaitForProducerEnabled(size_t idx) {
 }
 
 void TestHelper::WaitForTracingDisabled(uint32_t timeout_ms) {
-  RunUntilCheckpoint(std::string("stop.tracing") + std::to_string(trace_count_),
+  RunUntilCheckpoint("stop.tracing" + std::to_string(trace_count_), timeout_ms);
+}
+
+void TestHelper::WaitForAllDataSourceStarted(uint32_t timeout_ms) {
+  RunUntilCheckpoint("all.datasources.started" + std::to_string(trace_count_),
                      timeout_ms);
 }
 
@@ -314,7 +322,10 @@ void TestHelper::OnAttach(bool success, const TraceConfig&) {
 
 void TestHelper::OnTraceStats(bool, const TraceStats&) {}
 
-void TestHelper::OnObservableEvents(const ObservableEvents&) {}
+void TestHelper::OnObservableEvents(const ObservableEvents& events) {
+  if (events.all_data_sources_started())
+    std::move(on_all_ds_started_callback_)();
+}
 
 void TestHelper::OnSessionCloned(const OnSessionClonedArgs&) {}
 

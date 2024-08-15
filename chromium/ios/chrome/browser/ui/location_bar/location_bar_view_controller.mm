@@ -37,6 +37,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -94,6 +96,11 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 // Starts voice search, updating the layout guide to be constrained to the
 // trailing button.
 - (void)startVoiceSearch;
+
+// Vivaldi
+// Whether current page is loading.
+@property(nonatomic, assign, getter=isLoading) BOOL loading;
+// End Vivaldi
 
 @end
 
@@ -230,6 +237,11 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   AddSameConstraints(self.locationBarSteadyView, self.view);
   [self updateTrailingButtonState];
   [self switchToEditing:NO];
+
+  // Vivaldi
+  [self setUpLeadingButton];
+  // End Vivaldi
+
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -327,6 +339,10 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
 - (void)setShareButtonEnabled:(BOOL)enabled {
   _shareButtonEnabled = enabled;
+
+  if (IsVivaldiRunning()) {
+    [self.locationBarSteadyView setLeadingButtonEnabled:enabled];
+  } else {
   if (self.trailingButtonState == kShareButton) {
     [self.locationBarSteadyView enableTrailingButton:enabled];
 
@@ -336,6 +352,8 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
               underName:kShareButtonGuide];
     }
   }
+  } // End Vivaldi
+
 }
 
 #pragma mark - LocationBarAnimatee
@@ -427,23 +445,20 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
               requestElementsInRect:(CGRect)rect
                          completion:
                              (void (^)(NSArray<UIScribbleElementIdentifier>*
-                                           elements))completion
-    API_AVAILABLE(ios(14.0)) {
+                                           elements))completion {
   completion(@[ kScribbleOmniboxElementId ]);
 }
 
 - (BOOL)indirectScribbleInteraction:(UIIndirectScribbleInteraction*)interaction
                    isElementFocused:
-                       (UIScribbleElementIdentifier)elementIdentifier
-    API_AVAILABLE(ios(14.0)) {
+                       (UIScribbleElementIdentifier)elementIdentifier {
   DCHECK(elementIdentifier == kScribbleOmniboxElementId);
   return self.delegate.omniboxScribbleForwardingTarget.isFirstResponder;
 }
 
 - (CGRect)
     indirectScribbleInteraction:(UIIndirectScribbleInteraction*)interaction
-                frameForElement:(UIScribbleElementIdentifier)elementIdentifier
-    API_AVAILABLE(ios(14.0)) {
+                frameForElement:(UIScribbleElementIdentifier)elementIdentifier {
   DCHECK(elementIdentifier == kScribbleOmniboxElementId);
 
   // Imitate the entire location bar being scribblable.
@@ -456,7 +471,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                      referencePoint:(CGPoint)focusReferencePoint
                          completion:
                              (void (^)(UIResponder<UITextInput>* focusedInput))
-                                 completion API_AVAILABLE(ios(14.0)) {
+                                 completion {
   if (!self.delegate.omniboxScribbleForwardingTarget.isFirstResponder) {
     [self.delegate locationBarRequestScribbleTargetFocus];
   }
@@ -496,9 +511,48 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   switch (state) {
     case kNoButton: {
       self.locationBarSteadyView.trailingButton.hidden = YES;
+
+      // Vivaldi
+      self.locationBarSteadyView.leadingButton.hidden = YES;
+      // End Vivaldi
+
       break;
     };
     case kShareButton: {
+
+      // Note(prio@vivaldi.com) - (VIB-547) Reuse Chrome share button as reload
+      // button.
+      if (IsVivaldiRunning()) {
+        UIImage* reloadImage = [UIImage imageNamed:vLocationBarReload];
+        UIImage* stopImage = [UIImage imageNamed:vLocationBarStop];
+        [self.locationBarSteadyView.trailingButton
+            setImage:self.isLoading ? stopImage : reloadImage
+            forState:UIControlStateNormal];
+
+        if (self.isLoading) {
+          [self.locationBarSteadyView.trailingButton
+                     addTarget:self.dispatcher
+                        action:@selector(stopLoadingPage)
+              forControlEvents:UIControlEventTouchUpInside];
+          self.locationBarSteadyView.trailingButton.accessibilityIdentifier =
+              kOmniboxStopLoadingButtonIdentifier;
+          self.locationBarSteadyView.trailingButton.accessibilityLabel =
+              l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_STOP);
+        } else {
+          [self.locationBarSteadyView.trailingButton
+                     addTarget:self.dispatcher
+                        action:@selector(reloadPage)
+              forControlEvents:UIControlEventTouchUpInside];
+          self.locationBarSteadyView.trailingButton.accessibilityIdentifier =
+              kOmniboxReloadButtonIdentifier;
+          self.locationBarSteadyView.trailingButton.accessibilityLabel =
+              l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_RELOAD);
+        }
+
+        [self.locationBarSteadyView
+            setLeadingButtonEnabled:self.shareButtonEnabled];
+
+      } else {
       [self.locationBarSteadyView.trailingButton
                  addTarget:self.dispatcher
                     action:@selector(sharePage)
@@ -512,10 +566,6 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
       UIImage* shareImage =
           DefaultSymbolWithPointSize(kShareSymbol, kSymbolImagePointSize);
-
-      if (IsVivaldiRunning())
-        shareImage = [UIImage imageNamed:@"toolbar_share"]; // End Vivaldi
-
       [self.locationBarSteadyView.trailingButton setImage:shareImage
                                                  forState:UIControlStateNormal];
       self.locationBarSteadyView.trailingButton.accessibilityLabel =
@@ -529,6 +579,8 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
             referenceView:self.locationBarSteadyView.trailingButton
                 underName:kShareButtonGuide];
       }
+      } // End Vivaldi
+
       break;
     };
     case kVoiceSearchButton: {
@@ -593,6 +645,25 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   __weak __typeof__(self) weakSelf = self;
   UIImage* pasteImage = nil;
   if (IsBottomOmniboxSteadyStateEnabled()) {
+
+    if (IsVivaldiRunning()) {
+      pasteImage =
+          [[UIImage imageNamed:vToolbarPaste]
+              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      // Copy link action.
+      if (!self.locationBarSteadyView.hidden) {
+        UIAction* copyAction = [UIAction
+            actionWithTitle:
+                l10n_util::GetNSString(IDS_IOS_COPY_LINK_ACTION_TITLE)
+                      image:[[UIImage imageNamed:vToolbarCopyLink]
+                    imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+                 identifier:nil
+                    handler:^(UIAction* action) {
+                      [weakSelf.delegate locationBarCopyTapped];
+                    }];
+        [menuElements addObject:copyAction];
+      }
+    } else {
     pasteImage =
         DefaultSymbolWithPointSize(kPasteActionSymbol, kSymbolActionPointSize);
 
@@ -608,12 +679,14 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                   }];
       [menuElements addObject:copyAction];
     }
+    } // End Vivaldi
+
   } else {
     // Keep the suggested actions to have the copy action in a separate section.
     [menuElements addObjectsFromArray:suggestedActions];
   }
 
-  absl::optional<std::set<ClipboardContentType>> clipboard_content_types =
+  std::optional<std::set<ClipboardContentType>> clipboard_content_types =
       ClipboardRecentContent::GetInstance()->GetCachedClipboardContentTypes();
 
   if (clipboard_content_types.has_value()) {
@@ -671,6 +744,44 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
     }
   }
 
+  if (IsVivaldiRunning()) {
+    // Show Top or Bottom Address Bar action.
+    if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService) {
+      NSString* title = nil;
+      UIImage* image = nil;
+      ToolbarType targetToolbarType;
+      if (_originalPrefService->GetBoolean(prefs::kBottomOmnibox)) {
+        title = l10n_util::GetNSString(IDS_IOS_TOOLBAR_MENU_TOP_OMNIBOX);
+        image =
+            [[UIImage imageNamed:vToolbarMoveToTop]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+
+        targetToolbarType = ToolbarType::kPrimary;
+      } else {
+        title = l10n_util::GetNSString(IDS_IOS_TOOLBAR_MENU_BOTTOM_OMNIBOX);
+
+        image =
+            [[UIImage imageNamed:vToolbarMoveToBottom]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+
+        targetToolbarType = ToolbarType::kSecondary;
+      }
+      UIAction* moveAddressBarAction = [UIAction
+          actionWithTitle:title
+                    image:image
+               identifier:nil
+                  handler:^(UIAction* action) {
+                    [weakSelf moveOmniboxToToolbarType:targetToolbarType];
+                  }];
+
+      UIMenu* divider = [UIMenu menuWithTitle:@""
+                                        image:nil
+                                   identifier:nil
+                                      options:UIMenuOptionsDisplayInline
+                                     children:@[ moveAddressBarAction ]];
+      [menuElements addObject:divider];
+    }
+  } else {
   // Show Top or Bottom Address Bar action.
   if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService &&
       IsSplitToolbarMode(self)) {
@@ -713,6 +824,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                                    children:@[ moveAddressBarAction ]];
     [menuElements addObject:divider];
   }
+  } // End Vivaldi
 
   // Reverse the array manually when preferredMenuElementOrder is not available.
   if (IsBottomOmniboxSteadyStateEnabled() && _originalPrefService) {
@@ -730,6 +842,15 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
                           (UIContextMenuInteraction*)interaction
     previewForHighlightingMenuWithConfiguration:
         (UIContextMenuConfiguration*)configuration {
+
+  if (IsVivaldiRunning()) {
+    UIPreviewParameters* previewParameters = [[UIPreviewParameters alloc] init];
+    previewParameters.backgroundColor = self.locationBarContainerColor;
+    return [[UITargetedPreview alloc]
+        initWithView:self.view.superview
+          parameters:previewParameters];
+  } // End Vivaldi
+
   // Use the location bar's container view because that's the view that has the
   // background color and corner radius.
   return [[UITargetedPreview alloc]
@@ -789,7 +910,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   LogCopyPasteInOmniboxForDefaultBrowserPromo();
   [self.delegate locationBarVisitCopyLinkTapped];
   ClipboardRecentContent::GetInstance()->GetRecentURLFromClipboard(
-      base::BindOnce(^(absl::optional<GURL> optionalURL) {
+      base::BindOnce(^(std::optional<GURL> optionalURL) {
         if (!optionalURL) {
           return;
         }
@@ -807,7 +928,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   LogCopyPasteInOmniboxForDefaultBrowserPromo();
   RecordAction(UserMetricsAction("Mobile.OmniboxContextMenu.SearchCopiedText"));
   ClipboardRecentContent::GetInstance()->GetRecentTextFromClipboard(
-      base::BindOnce(^(absl::optional<std::u16string> optionalText) {
+      base::BindOnce(^(std::optional<std::u16string> optionalText) {
         if (!optionalText) {
           return;
         }
@@ -836,7 +957,46 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 }
 
 #pragma mark VIVALDI
-- (LocationBarSteadyView*)steadyView {
+- (LocationBarSteadyView*)sharingSourceView {
   return self.locationBarSteadyView;
 }
+
+- (void)setUpLeadingButton {
+  [self.locationBarSteadyView.leadingButton
+             addTarget:self.dispatcher
+                action:@selector(showSiteInfo)
+      forControlEvents:UIControlEventTouchUpInside];
+
+  UITapGestureRecognizer* tapGestureLocationBar =
+      [[UITapGestureRecognizer alloc]
+           initWithTarget:self
+                   action:@selector(locationBarSteadyViewTapped)];
+  [self.locationBarSteadyView.locationContainerView
+      addGestureRecognizer:tapGestureLocationBar];
+}
+
+- (void)setLoadingState:(BOOL)loading {
+  if (self.loading == loading)
+    return;
+
+  self.loading = loading;
+  [self updateTrailingButton];
+  [self.view layoutIfNeeded];
+}
+
+- (void)updateSteadyViewColorSchemeWithColor:(UIColor*)tintColor {
+  LocationBarSteadyViewColorScheme* colorScheme =
+      [LocationBarSteadyViewColorScheme standardScheme];
+  colorScheme.fontColor = _isNTP ?
+      [tintColor
+          colorWithAlphaComponent:vLocationBarSteadyViewPlaceholderOpacity] :
+      tintColor;
+  colorScheme.placeholderColor =
+      [tintColor
+          colorWithAlphaComponent:vLocationBarSteadyViewPlaceholderOpacity];
+  colorScheme.trailingButtonColor = tintColor;
+
+  self.locationBarSteadyView.colorScheme = colorScheme;
+}
+
 @end

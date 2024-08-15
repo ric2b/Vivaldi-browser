@@ -8,6 +8,7 @@
 #ifndef SkRasterPipelineOpContexts_DEFINED
 #define SkRasterPipelineOpContexts_DEFINED
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -18,12 +19,47 @@ namespace SkSL { class TraceHook; }
 // by stages that have no lowp implementation. They can therefore use the (smaller) highp value to
 // save memory in the arena.
 inline static constexpr int SkRasterPipeline_kMaxStride = 16;
-inline static constexpr int SkRasterPipeline_kMaxStride_highp = 8;
+inline static constexpr int SkRasterPipeline_kMaxStride_highp = 16;
+
+// How much space to allocate for each MemoryCtx scratch buffer, as part of tail-pixel handling.
+inline static constexpr size_t SkRasterPipeline_MaxScratchPerPatch =
+        std::max(SkRasterPipeline_kMaxStride_highp * 16,  // 16 == largest highp bpp (RGBA_F32)
+                 SkRasterPipeline_kMaxStride * 4);        // 4 == largest lowp bpp (RGBA_8888)
 
 // These structs hold the context data for many of the Raster Pipeline ops.
 struct SkRasterPipeline_MemoryCtx {
     void* pixels;
     int   stride;
+};
+
+// Raster Pipeline typically processes N (4, 8, 16) pixels at a time, in SIMT fashion. If the
+// number of pixels in a row isn't evenly divisible by N, there will be leftover pixels; this is
+// called the "tail". To avoid reading or writing past the end of any source or destination buffers
+// when we reach the tail:
+//
+//   1) Source buffers have their tail contents copied to a scratch buffer that is at least N wide.
+//      In practice, each scratch buffer uses SkRasterPipeline_MaxScratchPerPatch bytes.
+//   2) Each MemoryCtx in the pipeline is patched, such that access to them (at the current scanline
+//      and x-offset) will land in the scratch buffer.
+//   3) Pipeline is run as normal (with all memory access happening safely in the scratch buffers).
+//   4) Destination buffers have their tail contents copied back from the scratch buffer.
+//   5) Each MemoryCtx is "un-patched".
+//
+// To do all of this, the pipeline creates a MemoryCtxPatch for each unique MemoryCtx referenced by
+// the pipeline.
+struct SkRasterPipeline_MemoryCtxInfo {
+    SkRasterPipeline_MemoryCtx* context;
+
+    int bytesPerPixel;
+    bool load;
+    bool store;
+};
+
+struct SkRasterPipeline_MemoryCtxPatch {
+    SkRasterPipeline_MemoryCtxInfo info;
+
+    void* backup;  // Remembers context->pixels so we can restore it
+    std::byte scratch[SkRasterPipeline_MaxScratchPerPatch];
 };
 
 struct SkRasterPipeline_GatherCtx {
@@ -156,14 +192,18 @@ struct SkRasterPipeline_TablesCtx {
 
 using SkRPOffset = uint32_t;
 
+struct SkRasterPipeline_InitLaneMasksCtx {
+    uint8_t* tail;
+};
+
 struct SkRasterPipeline_ConstantCtx {
-    float value;
+    int32_t value;
     SkRPOffset dst;
 };
 
 struct SkRasterPipeline_UniformCtx {
-    float *dst;
-    const float *src;
+    int32_t* dst;
+    const int32_t* src;
 };
 
 struct SkRasterPipeline_BinaryOpCtx {
@@ -191,20 +231,20 @@ struct SkRasterPipeline_SwizzleCtx {
 };
 
 struct SkRasterPipeline_ShuffleCtx {
-    float *ptr;
+    int32_t* ptr;
     int count;
     uint16_t offsets[16];  // values must be byte offsets (4 * highp-stride * component-index)
 };
 
 struct SkRasterPipeline_SwizzleCopyCtx {
-    float *dst;
-    float *src;           // src values must _not_ overlap dst values
+    int32_t* dst;
+    const int32_t* src;   // src values must _not_ overlap dst values
     uint16_t offsets[4];  // values must be byte offsets (4 * highp-stride * component-index)
 };
 
 struct SkRasterPipeline_CopyIndirectCtx {
-    float *dst;
-    const float *src;
+    int32_t* dst;
+    const int32_t* src;
     const uint32_t *indirectOffset;  // this applies to `src` or `dst` based on the op
     uint32_t indirectLimit;          // the indirect offset is clamped to this upper bound
     uint32_t slots;                  // the number of slots to copy
@@ -216,6 +256,10 @@ struct SkRasterPipeline_SwizzleCopyIndirectCtx : public SkRasterPipeline_CopyInd
 
 struct SkRasterPipeline_BranchCtx {
     int offset;  // contains the label ID during compilation, and the program offset when compiled
+};
+
+struct SkRasterPipeline_BranchIfAllLanesActiveCtx : public SkRasterPipeline_BranchCtx {
+    uint8_t* tail = nullptr;  // lanes past the tail are _never_ active, so we need to exclude them
 };
 
 struct SkRasterPipeline_BranchIfEqualCtx : public SkRasterPipeline_BranchCtx {

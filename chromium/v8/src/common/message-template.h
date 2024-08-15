@@ -35,6 +35,7 @@ namespace internal {
     "'arguments' is not allowed in class field initializer or static "         \
     "initialization block")                                                    \
   T(ArgumentIsNonObject, "% argument must be an object")                       \
+  T(ArgumentIsNonString, "% argument must be a string")                        \
   T(ArrayBufferDetachKeyDoesntMatch,                                           \
     "Provided key doesn't match [[ArrayBufferDetachKey]]")                     \
   T(ArrayBufferTooShort,                                                       \
@@ -130,6 +131,7 @@ namespace internal {
   T(InvalidRegExpExecResult,                                                   \
     "RegExp exec method returned something other than an Object or null")      \
   T(InvalidUnit, "Invalid unit argument for %() '%'")                          \
+  T(IsNotNumber, "Type of '%' must be 'number', found '%'")                    \
   T(IterableYieldedNonString, "Iterable yielded % which is not a string")      \
   T(IteratorReduceNoInitial,                                                   \
     "Reduce of a done iterator with no initial value")                         \
@@ -330,6 +332,8 @@ namespace internal {
     "small")                                                                   \
   T(SharedArrayBufferSpeciesThis,                                              \
     "SharedArrayBuffer subclass returned this from species constructor")       \
+  T(SharedStructTypeRegistryMismatch,                                          \
+    "SharedStructType registered as '%' does not match")                       \
   T(StaticPrototype,                                                           \
     "Classes may not have a static property named 'prototype'")                \
   T(StrictDeleteProperty, "Cannot delete property '%' of %")                   \

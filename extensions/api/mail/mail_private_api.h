@@ -4,15 +4,70 @@
 #define EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_
 
 #include "base/files/file_path.h"
+#include "base/scoped_observation.h"
 #include "components/db/mail_client/mail_client_service.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/mail_private.h"
 
 using mail_client::MailClientService;
 
 namespace extensions {
+class MailEventRouter : public mail_client::MailClientModelObserver {
+ public:
+  explicit MailEventRouter(Profile* profile, MailClientService* mail_service);
+  ~MailEventRouter() override;
+
+ private:
+  // Helper to actually dispatch an event to extension listeners.
+  void DispatchEvent(Profile* profile,
+                     const std::string& event_name,
+                     base::Value::List event_args);
+
+  // MailClientModelObserver
+  void OnMigrationProgress(MailClientService* service,
+                           int progress,
+                           int total,
+                           std::string msg) override;
+
+  void OnDeleteMessagesProgress(MailClientService* service,
+                                int delete_progress_count) override;
+
+  const raw_ptr<Profile> profile_;
+  base::ScopedObservation<MailClientService,
+                          mail_client::MailClientModelObserver>
+      mail_service_observation_{this};
+};
+
+class MailAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
+ public:
+  explicit MailAPI(content::BrowserContext* context);
+  ~MailAPI() override;
+
+  // KeyedService implementation.
+  void Shutdown() override;
+
+  // BrowserContextKeyedAPI implementation.
+  static BrowserContextKeyedAPIFactory<MailAPI>* GetFactoryInstance();
+
+  // EventRouter::Observer implementation.
+  void OnListenerAdded(const EventListenerInfo& details) override;
+
+ private:
+  friend class BrowserContextKeyedAPIFactory<MailAPI>;
+
+  const raw_ptr<content::BrowserContext> browser_context_;
+
+  // BrowserContextKeyedAPI implementation.
+  static const char* service_name() { return "MailAPI"; }
+  static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
+
+  // Created lazily upon OnListenerAdded.
+  std::unique_ptr<MailEventRouter> mail_client_event_router_;
+};
 
 class MailPrivateAsyncFunction : public ExtensionFunction {
  public:
@@ -97,6 +152,19 @@ class MailPrivateDeleteMessageFileFunction : public ExtensionFunction {
 
  private:
   ~MailPrivateDeleteMessageFileFunction() override = default;
+  void OnFinished(bool result);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
+class MailPrivateRenameMessageFileFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.renameMessageFile",
+                             MAIL_RENAME_MESSAGE_FILE)
+ public:
+  MailPrivateRenameMessageFileFunction() = default;
+
+ private:
+  ~MailPrivateRenameMessageFileFunction() override = default;
   void OnFinished(bool result);
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -200,7 +268,7 @@ class MailPrivateCreateMessagesFunction : public MailPrivateAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the create message function to provide results.
-  void CreateMessagesComplete(std::shared_ptr<bool> result);
+  void CreateMessagesComplete(bool result);
 
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -217,26 +285,24 @@ class MailPrivateDeleteMessagesFunction : public MailPrivateAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the DeleteMessages function to provide results.
-  void DeleteMessagesComplete(std::shared_ptr<bool> result);
+  void DeleteMessagesComplete(bool result);
 
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
 };
 
-class MailPrivateAddMessageBodyFunction : public MailPrivateAsyncFunction {
+class MailPrivateUpdateMessageFunction : public MailPrivateAsyncFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.addMessageBody",
-                             MAIL_ADD_MESSAGE_BODY)
-  MailPrivateAddMessageBodyFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.updateMessage", MAIL_UPDATE_MESSAGE)
+  MailPrivateUpdateMessageFunction() = default;
 
  private:
-  ~MailPrivateAddMessageBodyFunction() override = default;
+  ~MailPrivateUpdateMessageFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
 
   // Callback for the AddMessageBody function to provide results.
-  void AddMessageBodyComplete(
-      std::shared_ptr<mail_client::MessageResult> result);
+  void UpdateMessageComplete(mail_client::MessageResult result);
 
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -254,8 +320,7 @@ class MailPrivateSearchMessagesFunction : public MailPrivateAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the MessageSearch function to provide results.
-  void MessagesSearchComplete(
-      std::shared_ptr<mail_client::SearchListIdRows> results);
+  void MessagesSearchComplete(mail_client::SearchListIDs results);
 
   base::CancelableTaskTracker task_tracker_;
 };
@@ -272,27 +337,34 @@ class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the MatchMessage function to provide results.
-  void MatchMessageComplete(std::shared_ptr<bool> results);
+  void MatchMessageComplete(bool results);
 
   base::CancelableTaskTracker task_tracker_;
 };
 
-class MailPrivateRebuildAndVacuumDatabaseFunction
-    : public MailPrivateAsyncFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.rebuildAndVacuumDatabase",
-                             MAIL_SEARCH_REBUILD_DATABASE)
+class MailPrivateGetDBVersionFunction : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.getDBVersion", MAIL_GET_DB_VERSION)
  public:
-  MailPrivateRebuildAndVacuumDatabaseFunction() = default;
+  MailPrivateGetDBVersionFunction() = default;
 
  private:
-  ~MailPrivateRebuildAndVacuumDatabaseFunction() override = default;
-
+  ~MailPrivateGetDBVersionFunction() override = default;
+  void OnGetDBVersionFinished(mail_client::Migration migration);
   // ExtensionFunction:
   ResponseAction Run() override;
+  base::CancelableTaskTracker task_tracker_;
+};
 
-  // Callback for the RebuildDatabse function to provide results.
-  void RebuildStartedCallback(std::shared_ptr<bool> results);
+class MailPrivateStartMigrationFunction : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.startMigration", MAIL_START_MIGRATION)
+ public:
+  MailPrivateStartMigrationFunction() = default;
 
+ private:
+  ~MailPrivateStartMigrationFunction() override = default;
+  void OnMigrationFinished(bool success);
+  // ExtensionFunction:
+  ResponseAction Run() override;
   base::CancelableTaskTracker task_tracker_;
 };
 

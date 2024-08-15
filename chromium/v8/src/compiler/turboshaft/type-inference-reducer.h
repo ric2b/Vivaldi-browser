@@ -11,8 +11,8 @@
 #include "src/base/vector.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/turboshaft/assembler.h"
+#include "src/compiler/turboshaft/copying-phase.h"
 #include "src/compiler/turboshaft/operations.h"
-#include "src/compiler/turboshaft/optimization-phase.h"
 #include "src/compiler/turboshaft/representations.h"
 #include "src/compiler/turboshaft/sidetable.h"
 #include "src/compiler/turboshaft/snapshot-table.h"
@@ -220,7 +220,7 @@ class TypeInferenceReducer
     // types.
     if (args_.output_graph_typing ==
         Args::OutputGraphTyping::kRefineFromInputGraph) {
-      if (new_block->HasExactlyNPredecessors(1)) {
+      if (new_block->PredecessorCount() == 1) {
         Block* predecessor = new_block->LastPredecessor();
         const Operation& terminator =
             predecessor->LastOperation(Asm().output_graph());

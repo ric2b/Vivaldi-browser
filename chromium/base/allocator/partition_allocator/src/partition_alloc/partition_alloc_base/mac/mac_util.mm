@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/mac/mac_util.h"
+#include "partition_alloc/partition_alloc_base/mac/mac_util.h"
 
-#include <stddef.h>
-#include <string.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.h"
+#include <cstddef>
+#include <cstring>
+
+#include "partition_alloc/partition_alloc_base/check.h"
+#include "partition_alloc/partition_alloc_base/logging.h"
 
 // This is a simplified version of base::mac. Because
 // "base/strings/string_split.h" is unavailable, only provide access to the

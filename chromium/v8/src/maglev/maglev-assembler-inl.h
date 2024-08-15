@@ -343,6 +343,13 @@ inline void MaglevAssembler::LoadAndUntagTaggedSignedField(Register result,
   MacroAssembler::SmiUntagField(result, FieldMemOperand(object, offset));
 }
 
+inline void MaglevAssembler::LoadHeapNumberOrOddballValue(DoubleRegister result,
+                                                          Register object) {
+  static_assert(offsetof(HeapNumber, value_) ==
+                offsetof(Oddball, to_number_raw_));
+  LoadHeapNumberValue(result, object);
+}
+
 namespace detail {
 
 #ifdef DEBUG
@@ -858,8 +865,16 @@ inline void MaglevAssembler::StringLength(Register result, Register string) {
                              LAST_STRING_TYPE);
     Check(kUnsignedLessThanEqual, AbortReason::kUnexpectedValue);
   }
-  LoadSignedField(result, FieldMemOperand(string, String::kLengthOffset),
+  LoadSignedField(result, FieldMemOperand(string, offsetof(String, length_)),
                   sizeof(int32_t));
+}
+
+void MaglevAssembler::LoadMapForCompare(Register dst, Register obj) {
+#ifdef V8_COMPRESS_POINTERS
+  MacroAssembler::LoadCompressedMap(dst, obj);
+#else
+  MacroAssembler::LoadMap(dst, obj);
+#endif
 }
 
 }  // namespace maglev

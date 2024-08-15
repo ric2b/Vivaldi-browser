@@ -12,6 +12,7 @@
 #include "base/strings/stringprintf.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/buffering_state.h"
+#include "media/base/cdm_config.h"
 #include "media/base/decoder.h"
 #include "media/base/media_serializers_base.h"
 #include "media/base/renderer.h"
@@ -243,6 +244,20 @@ struct MediaSerializer<SampleFormat> {
   }
 };
 
+// Class (complex)
+template <>
+struct MediaSerializer<CdmConfig> {
+  static base::Value Serialize(const CdmConfig& value) {
+    base::Value::Dict result;
+    FIELD_SERIALIZE("key_system", value.key_system);
+    FIELD_SERIALIZE("allow_distinctive_identifier",
+                    value.allow_distinctive_identifier);
+    FIELD_SERIALIZE("allow_persistent_state", value.allow_persistent_state);
+    FIELD_SERIALIZE("use_hw_secure_codecs", value.use_hw_secure_codecs);
+    return base::Value(std::move(result));
+  }
+};
+
 // Enum (complex)
 template <>
 struct MediaSerializer<EncryptionScheme> {
@@ -281,21 +296,19 @@ struct MediaSerializer<VideoColorSpace> {
 template <>
 struct MediaSerializer<gfx::HDRMetadata> {
   static base::Value Serialize(const gfx::HDRMetadata& value) {
-    // TODO(tmathmeyer) serialize more fields here potentially.
-    gfx::HdrMetadataSmpteSt2086 smpte_st_2086 =
-        value.smpte_st_2086.value_or(gfx::HdrMetadataSmpteSt2086());
     base::Value::Dict result;
-    FIELD_SERIALIZE(
-        "luminance range",
-        base::StringPrintf("%.2f => %.2f", smpte_st_2086.luminance_min,
-                           smpte_st_2086.luminance_max));
-    const auto& primaries = smpte_st_2086.primaries;
-    FIELD_SERIALIZE(
-        "primaries",
-        base::StringPrintf(
-            "[r:%.4f,%.4f, g:%.4f,%.4f, b:%.4f,%.4f, wp:%.4f,%.4f]",
-            primaries.fRX, primaries.fRY, primaries.fGX, primaries.fGY,
-            primaries.fBX, primaries.fBY, primaries.fWX, primaries.fWY));
+    if (value.smpte_st_2086.has_value()) {
+      FIELD_SERIALIZE("smpte_st_2086", value.smpte_st_2086->ToString());
+    }
+    if (value.cta_861_3.has_value()) {
+      FIELD_SERIALIZE("cta_861_3", value.cta_861_3->ToString());
+    }
+    if (value.ndwl.has_value()) {
+      FIELD_SERIALIZE("ndwl", value.ndwl->ToString());
+    }
+    if (value.extended_range.has_value()) {
+      FIELD_SERIALIZE("extended_range", value.extended_range->ToString());
+    }
     return base::Value(std::move(result));
   }
 };

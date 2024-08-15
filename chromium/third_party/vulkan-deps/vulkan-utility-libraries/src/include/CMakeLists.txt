@@ -8,7 +8,6 @@ target_include_directories(VulkanLayerSettings PUBLIC $<BUILD_INTERFACE:${CMAKE_
 target_sources(VulkanLayerSettings PRIVATE
 	vulkan/layer/vk_layer_settings.h
 	vulkan/layer/vk_layer_settings.hpp
-	vulkan/layer/vk_layer_settings_ext.h
 )
 
 set(CMAKE_FOLDER "${CMAKE_FOLDER}/VulkanUtilityHeaders")

@@ -16,11 +16,13 @@
 #define THIRD_PARTY_CENTIPEDE_WORKDIR_MGR_H_
 
 #include <cstddef>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "./centipede/environment.h"
+#include "./centipede/logging.h"
 
 namespace centipede {
 
@@ -31,11 +33,43 @@ class WorkDir {
   // pad indices with 0's in output file names so the names are sorted by index.
   static constexpr int kDigitsInShardIndex = 6;
 
+  // Provides APIs for getting paths of a particular category of sharded files.
+  class ShardedFileInfo {
+   public:
+    // Returns the path of the shard file for `shard_index`.
+    std::string ShardPath(size_t shard_index) const;
+    // Returns the path of the shard file for `my_shard_index_`.
+    std::string MyShardPath() const;
+    // Returns a glob matching all the shard files.
+    std::string AllShardsGlob() const;
+    // Returns true if `path` looks like a shard file path from this set.
+    // Matching is purely lexicographical: the actual file doesn't have to exist
+    // on disk, but `path` must have the exact `base_dir`/`rel_prefix` prefix,
+    // including any relative "." and ".." path elements.
+    bool IsShardPath(std::string_view path) const;
+
+   private:
+    friend class WorkDir;
+
+    ShardedFileInfo(std::string_view base_dir, std::string_view rel_prefix,
+                    size_t my_shard_index);
+
+    const std::string prefix_;
+    const size_t my_shard_index_;
+  };
+
+  // Deduces the workdir properties from a provided corpus shard path and
+  // coverage binary basename and hash.
+  static WorkDir FromCorpusShardPath(      //
+      std::string_view corpus_shard_path,  //
+      std::string_view binary_name,        //
+      std::string_view binary_hash);
+
   // Constructs an object from directly provided field values.
-  WorkDir(                      //
-      std::string workdir,      //
-      std::string binary_name,  //
-      std::string binary_hash,  //
+  WorkDir(                           //
+      std::string_view workdir,      //
+      std::string_view binary_name,  //
+      std::string_view binary_hash,  //
       size_t my_shard_index);
 
   // Constructs an object by recording referenced to the field values in the
@@ -50,6 +84,24 @@ class WorkDir {
   WorkDir(WorkDir&&) noexcept = delete;
   WorkDir& operator=(WorkDir&&) noexcept = delete;
 
+  // Comparisons and debugging I/O (mainly for tests).
+  friend bool operator==(const WorkDir &a, const WorkDir &b) {
+    return a.workdir_ == b.workdir_ && a.binary_name_ == b.binary_name_ &&
+           a.binary_hash_ == b.binary_hash_ &&
+           a.my_shard_index_ == b.my_shard_index_;
+  }
+  friend bool operator!=(const WorkDir &a, const WorkDir &b) {
+    return !(a == b);
+  }
+  friend std::ostream &operator<<(std::ostream &os, const WorkDir &wd) {
+    return os << VV(wd.workdir_) << VV(wd.binary_name_) << VV(wd.binary_hash_)
+              << VV(wd.my_shard_index_);
+  }
+
+  // Returns the path to a dir for dumping debug configs, command lines, logs,
+  // and anything else that might aid in debugging issues or understanding the
+  // provenance of the data.
+  std::string DebugInfoDirPath() const;
   // Returns the path to the coverage dir.
   std::string CoverageDirPath() const;
   // Returns the path to the crash reproducer dir.
@@ -57,21 +109,14 @@ class WorkDir {
   // Returns the path where the BinaryInfo will be serialized within workdir.
   std::string BinaryInfoDirPath() const;
 
-  // Returns the path for a corpus file by its shard_index.
-  std::string CorpusPath(size_t shard_index) const;
-  std::string CorpusPath() const { return CorpusPath(my_shard_index_); }
-  // Returns the prefix of all corpus shards
-  std::string CorpusPathPrefix() const;
-  // Returns the path for the distilled corpus file for my_shard_index.
-  std::string DistilledCorpusPath() const;
-
-  // Returns the path for a features file by its shard_index.
-  std::string FeaturesPath(size_t shard_index) const;
-  std::string FeaturesPath() const { return FeaturesPath(my_shard_index_); }
-  // Returns the prefix of all feature shards
-  std::string FeaturesPathPrefix() const;
-  // Returns the path for the distilled features file for my_shard_index.
-  std::string DistilledFeaturesPath() const;
+  // Returns the path info for the corpus files.
+  ShardedFileInfo CorpusFiles() const;
+  // Returns the path info for the distilled corpus files.
+  ShardedFileInfo DistilledCorpusFiles() const;
+  // Returns the path info for the features files.
+  ShardedFileInfo FeaturesFiles() const;
+  // Returns the path info for the distilled features files.
+  ShardedFileInfo DistilledFeaturesFiles() const;
 
   // Returns the path for the coverage report file for my_shard_index.
   // Non-default `annotation` becomes a part of the returned filename.

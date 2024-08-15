@@ -556,6 +556,12 @@ ContentSettingsPattern ContentSettingsPattern::ToHostOnlyPattern(
   return builder->Build();
 }
 
+bool ContentSettingsPattern::CompareDomains::operator()(
+    const std::string_view& domain_a,
+    const std::string_view& domain_b) const {
+  return CompareDomainNames(domain_a, domain_b) > 0;
+}
+
 ContentSettingsPattern::ContentSettingsPattern() : is_valid_(false) {}
 
 ContentSettingsPattern::ContentSettingsPattern(PatternParts parts, bool valid)
@@ -587,8 +593,14 @@ bool ContentSettingsPattern::Matches(const GURL& url) const {
       local_url->scheme_piece() == url::kFileScheme)
     return parts_.is_path_wildcard || parts_.path == local_url->path_piece();
 
-  // Match the host part.
-  const std::string trimmed_host = net::TrimEndingDot(local_url->host_piece());
+  // Match the host part. Code is the same as url::TrimEndingDot but that method
+  // unnecessarily creates a new std::string.
+  std::string_view trimmed_host = local_url->host_piece();
+  size_t len = trimmed_host.length();
+  if (len > 1 && trimmed_host[len - 1] == '.') {
+    trimmed_host.remove_suffix(1);
+  }
+
   if (!parts_.has_domain_wildcard) {
     if (parts_.host != trimmed_host)
       return false;

@@ -18,7 +18,6 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/rand_util.h"
 #include "base/strings/escape.h"
@@ -72,24 +71,10 @@ using metrics::OmniboxEventProto;
 
 namespace {
 
-// We keep track in a histogram how many suggest requests we send, how
-// many suggest requests we invalidate (e.g., due to a user typing
-// another character), and how many replies we receive.
-// *** ADD NEW ENUMS AFTER ALL PREVIOUSLY DEFINED ONES! ***
-//     (excluding the end-of-list enum value)
-// We do not want values of existing enums to change or else it screws
-// up the statistics.
-enum SuggestRequestsHistogramValue {
-  REQUEST_SENT = 1,
-  REQUEST_INVALIDATED,
-  REPLY_RECEIVED,
-  MAX_SUGGEST_REQUEST_HISTOGRAM_VALUE
-};
-
 // Increments the appropriate value in the histogram by one.
-void LogOmniboxSuggestRequest(SuggestRequestsHistogramValue request_value) {
-  UMA_HISTOGRAM_ENUMERATION("Omnibox.SuggestRequests", request_value,
-                            MAX_SUGGEST_REQUEST_HISTOGRAM_VALUE);
+void LogOmniboxSuggestRequest(RemoteRequestHistogramValue request_value) {
+  base::UmaHistogramEnumeration("Omnibox.SuggestRequests", request_value,
+                                RemoteRequestHistogramValue::kMaxValue);
 }
 
 bool HasMultipleWords(const std::u16string& text) {
@@ -258,6 +243,14 @@ void SearchProvider::Start(const AutocompleteInput& input,
   // per-user models into memory.  Having a per-user model in memory allows the
   // suggest server to respond more quickly with personalized suggestions as the
   // user types.
+  //
+  // 2024-01 Adding a feature flag for experiment to ablate the warmup request.
+  if (base::FeatureList::IsEnabled(omnibox::kAblateSearchProviderWarmup) &&
+      (input.IsZeroSuggest() ||
+       input.type() == metrics::OmniboxInputType::EMPTY)) {
+    Stop(true, false);
+    return;
+  }
 
   keyword_input_ = input;
   const TemplateURL* keyword_provider =
@@ -305,7 +298,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   providers_.set(default_provider_keyword, keyword_provider_keyword);
 
-  if (input.focus_type() != metrics::OmniboxFocusType::INTERACTION_DEFAULT) {
+  if (input.IsZeroSuggest()) {
     // Don't display any suggestions for on-focus requests.
     ClearAllResults();
   } else if (input.text().empty()) {
@@ -329,7 +322,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   // Don't search the query history database for on-focus inputs; these inputs
   // should only be used to warm up the suggest server.
-  if (input.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT) {
+  if (!input.IsZeroSuggest()) {
     DoHistoryQuery(minimal_changes);
     // Answers needs scored history results before any suggest query has been
     // started, since the query for answer-bearing results needs additional
@@ -446,8 +439,7 @@ void SearchProvider::OnURLLoadComplete(
   // that's left to ZeroSuggestProvider and friends.  Furthermore, it's not
   // clear if the suggest server will send back sensible results to the
   // request we're constructing here for on-focus inputs.
-  if (input_.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT &&
-      request_succeeded) {
+  if (!input_.IsZeroSuggest() && request_succeeded) {
     absl::optional<base::Value::List> data =
         SearchSuggestionParser::DeserializeJsonData(
             SearchSuggestionParser::ExtractJsonData(source,
@@ -532,7 +524,8 @@ void SearchProvider::SortResults(bool is_keyword,
 }
 
 void SearchProvider::LogLoadComplete(bool success, bool is_keyword) {
-  LogOmniboxSuggestRequest(REPLY_RECEIVED);
+  LogOmniboxSuggestRequest(
+      RemoteRequestHistogramValue::kRemoteResponseReceived);
   // Record response time for suggest requests sent to Google.  We care
   // only about the common case: the Google default provider used in
   // non-keyword mode.
@@ -543,11 +536,11 @@ void SearchProvider::LogLoadComplete(bool success, bool is_keyword) {
     const base::TimeDelta elapsed_time =
         base::TimeTicks::Now() - time_suggest_request_sent_;
     if (success) {
-      UMA_HISTOGRAM_TIMES("Omnibox.SuggestRequest.Success.GoogleResponseTime",
-                          elapsed_time);
+      base::UmaHistogramTimes(
+          "Omnibox.SuggestRequest.Success.GoogleResponseTime", elapsed_time);
     } else {
-      UMA_HISTOGRAM_TIMES("Omnibox.SuggestRequest.Failure.GoogleResponseTime",
-                          elapsed_time);
+      base::UmaHistogramTimes(
+          "Omnibox.SuggestRequest.Failure.GoogleResponseTime", elapsed_time);
     }
   }
 }
@@ -558,7 +551,7 @@ void SearchProvider::UpdateMatches() {
   // enforce constraints about inlinability in this case.  Indeed, most of
   // these steps would be bad, as they'd add a suggestion of some form, thus
   // opening the dropdown (which we do not want to happen).
-  if (input_.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT) {
+  if (!input_.IsZeroSuggest()) {
     PersistTopSuggestions(&default_results_);
     PersistTopSuggestions(&keyword_results_);
     ConvertResultsToAutocompleteMatches();
@@ -779,7 +772,7 @@ void SearchProvider::StartOrStopSuggestQuery(bool minimal_changes) {
 void SearchProvider::CancelLoader(
     std::unique_ptr<network::SimpleURLLoader>* loader) {
   if (*loader) {
-    LogOmniboxSuggestRequest(REQUEST_INVALIDATED);
+    LogOmniboxSuggestRequest(RemoteRequestHistogramValue::kRequestInvalidated);
     loader->reset();
   }
 }
@@ -941,7 +934,7 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
     search_term_args.current_page_url = input.current_url().spec();
   }
 
-  LogOmniboxSuggestRequest(REQUEST_SENT);
+  LogOmniboxSuggestRequest(RemoteRequestHistogramValue::kRequestSent);
 
   // If the request is from omnibox focus, send empty search term args. The
   // purpose of such a request is to signal the server to warm up; no info
@@ -950,9 +943,8 @@ std::unique_ptr<network::SimpleURLLoader> SearchProvider::CreateSuggestLoader(
       ->GetRemoteSuggestionsService(/*create_if_necessary=*/true)
       ->StartSuggestionsRequest(
           template_url,
-          input.focus_type() != metrics::OmniboxFocusType::INTERACTION_DEFAULT
-              ? TemplateURLRef::SearchTermsArgs()
-              : search_term_args,
+          input.IsZeroSuggest() ? TemplateURLRef::SearchTermsArgs()
+                                : search_term_args,
           search_terms_data,
           base::BindOnce(&SearchProvider::OnURLLoadComplete,
                          base::Unretained(this)));

@@ -5,8 +5,8 @@
 
 #include <string>
 
-#include "components/password_manager/core/browser/password_store.h"
-#include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
+#include "components/password_manager/core/browser/password_store/password_store_consumer.h"
 
 class Profile;
 

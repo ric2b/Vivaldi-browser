@@ -1977,8 +1977,8 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
             { 0, 6, 0, 4, 12 },       /* X */
             { 0, 6, 2, 4, 12 },       /* Y */
             { 0, 6, 4, 4, 12 },       /* Z */
-      },
-      /*.flags = -- not used*/
+        },
+        .flags = AV_PIX_FMT_FLAG_XYZ,
     },
     [AV_PIX_FMT_XYZ12BE] = {
         .name = "xyz12be",
@@ -1990,7 +1990,7 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
             { 0, 6, 2, 4, 12 },       /* Y */
             { 0, 6, 4, 4, 12 },       /* Z */
        },
-        .flags = AV_PIX_FMT_FLAG_BE,
+        .flags = AV_PIX_FMT_FLAG_XYZ | AV_PIX_FMT_FLAG_BE,
     },
 
 #define BAYER8_DESC_COMMON \
@@ -3055,13 +3055,13 @@ static int get_color_type(const AVPixFmtDescriptor *desc) {
     if (desc->name) {
         if (av_strstart(desc->name, "yuvj", NULL))
             return FF_COLOR_YUV_JPEG;
-
-        if (av_strstart(desc->name, "xyz", NULL))
-            return FF_COLOR_XYZ;
     }
 
     if(desc->flags & AV_PIX_FMT_FLAG_RGB)
-        return  FF_COLOR_RGB;
+        return FF_COLOR_RGB;
+
+    if(desc->flags & AV_PIX_FMT_FLAG_XYZ)
+        return FF_COLOR_XYZ;
 
     if(desc->nb_components == 0)
         return FF_COLOR_NA;

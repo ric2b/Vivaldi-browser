@@ -126,10 +126,12 @@ base::apple::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
   if (!image_config.get())
     return image_config;
 
-  CFDictionarySetValue(image_config, kCVPixelBufferPixelFormatTypeKey,
-                       cf_pixel_format);
-  CFDictionarySetValue(image_config, kCVPixelBufferWidthKey, cf_width);
-  CFDictionarySetValue(image_config, kCVPixelBufferHeightKey, cf_height);
+  CFDictionarySetValue(image_config.get(), kCVPixelBufferPixelFormatTypeKey,
+                       cf_pixel_format.get());
+  CFDictionarySetValue(image_config.get(), kCVPixelBufferWidthKey,
+                       cf_width.get());
+  CFDictionarySetValue(image_config.get(), kCVPixelBufferHeightKey,
+                       cf_height.get());
 
   return image_config;
 }
@@ -584,7 +586,7 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // Make sure that the memory is actually allocated.
   // CMBlockBufferReplaceDataBytes() is documented to do this, but prints a
   // message each time starting in Mac OS X 10.10.
-  status = CMBlockBufferAssureBlockMemory(data);
+  status = CMBlockBufferAssureBlockMemory(data.get());
   if (status) {
     NOTIFY_STATUS("CMBlockBufferAssureBlockMemory()", status);
     return;
@@ -595,14 +597,15 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   for (size_t i = 0; i < nalus.size(); i++) {
     H264NALU& nalu = nalus[i];
     uint32_t header = base::HostToNet32(static_cast<uint32_t>(nalu.size));
-    status =
-        CMBlockBufferReplaceDataBytes(&header, data, offset, kNALUHeaderLength);
+    status = CMBlockBufferReplaceDataBytes(&header, data.get(), offset,
+        kNALUHeaderLength);
     if (status) {
       NOTIFY_STATUS("CMBlockBufferReplaceDataBytes()", status);
       return;
     }
     offset += kNALUHeaderLength;
-    status = CMBlockBufferReplaceDataBytes(nalu.data, data, offset, nalu.size);
+    status = CMBlockBufferReplaceDataBytes(nalu.data, data.get(), offset,
+        nalu.size);
     if (status) {
       NOTIFY_STATUS("CMBlockBufferReplaceDataBytes()", status);
       return;
@@ -613,16 +616,16 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   // Package the data in a CMSampleBuffer.
   base::apple::ScopedCFTypeRef<CMSampleBufferRef> sample;
   status = CMSampleBufferCreate(kCFAllocatorDefault,
-                                data,        // data_buffer
-                                true,        // data_ready
-                                nullptr,     // make_data_ready_callback
-                                nullptr,     // make_data_ready_refcon
-                                format_,     // format_description
-                                1,           // num_samples
-                                0,           // num_sample_timing_entries
-                                nullptr,     // &sample_timing_array
-                                1,           // num_sample_size_entries
-                                &data_size,  // &sample_size_array
+                                data.get(),   // data_buffer
+                                true,         // data_ready
+                                nullptr,      // make_data_ready_callback
+                                nullptr,      // make_data_ready_refcon
+                                format_.get(),// format_description
+                                1,            // num_samples
+                                0,            // num_sample_timing_entries
+                                nullptr,      // &sample_timing_array
+                                1,            // num_sample_size_entries
+                                &data_size,   // &sample_size_array
                                 sample.InitializeInto());
   if (status) {
     NOTIFY_STATUS("CMSampleBufferCreate()", status);
@@ -637,8 +640,8 @@ void VivVideoDecoder::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
   VTDecodeFrameFlags decode_flags =
       kVTDecodeFrame_EnableAsynchronousDecompression;
   status = VTDecompressionSessionDecodeFrame(
-      session_,
-      sample,                          // sample_buffer
+      session_.get(),
+      sample.get(),                    // sample_buffer
       decode_flags,                    // decode_flags
       reinterpret_cast<void*>(frame),  // source_frame_refcon
       nullptr);                        // &info_flags_out
@@ -652,7 +655,8 @@ bool VivVideoDecoder::FinishDelayedFrames() {
   DVLOG(3) << __func__;
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   if (session_) {
-    OSStatus status = VTDecompressionSessionWaitForAsynchronousFrames(session_);
+    OSStatus status = VTDecompressionSessionWaitForAsynchronousFrames(
+        session_.get());
     if (status) {
       NOTIFY_STATUS("VTDecompressionSessionWaitForAsynchronousFrames()",
                     status);
@@ -843,7 +847,7 @@ bool VivVideoDecoder::SendFrame(const Frame& frame) {
       V_stride, Y_data, U_data, V_data, frame.timestamp);
 
   output->AddDestructionObserver(
-      base::BindRepeating(&BufferHolder, frame.image));
+      base::BindRepeating(&BufferHolder, frame.image.get()));
 
   // Unlock the returned image data.
   CVPixelBufferUnlockBaseAddress(image, kCVPixelBufferLock_ReadOnly);
@@ -904,7 +908,8 @@ bool VivVideoDecoder::ConfigureDecoder() {
   // VideoToolbox scales the visible rect to the output size, so we set the
   // output size for a 1:1 ratio. (Note though that VideoToolbox does not handle
   // top or left crops correctly.) We expect the visible rect to be integral.
-  CGRect visible_rect = CMVideoFormatDescriptionGetCleanAperture(format_, true);
+  CGRect visible_rect = CMVideoFormatDescriptionGetCleanAperture(
+      format_.get(), true);
   CMVideoDimensions visible_dimensions = {
       static_cast<int32_t>(visible_rect.size.width),
       static_cast<int32_t>(visible_rect.size.height)};
@@ -925,10 +930,10 @@ bool VivVideoDecoder::ConfigureDecoder() {
 
   status = VTDecompressionSessionCreate(
       kCFAllocatorDefault,
-      format_,       // video_format_description
-      NULL,          // video_decoder_specification, NULL means VT decides
-      image_config,  // destination_image_buffer_attributes
-      &callback_,    // output_callback
+      format_.get(),      // video_format_description
+      NULL,               // video_decoder_specification, NULL means VT decides
+      image_config.get(), // destination_image_buffer_attributes
+      &callback_,         // output_callback
       session_.InitializeInto());
   if (status) {
     NOTIFY_STATUS("VTDecompressionSessionCreate()", status);
@@ -971,9 +976,9 @@ void VivVideoDecoder::FlushTask(TaskType type) {
 
   FinishDelayedFrames();
 
-  if (type == TASK_DESTROY && session_) {
+  if (type == TASK_DESTROY && session_.get()) {
     // Destroy the decoding session before returning from the decoder thread.
-    VTDecompressionSessionInvalidate(session_);
+    VTDecompressionSessionInvalidate(session_.get());
     session_.reset();
   }
 

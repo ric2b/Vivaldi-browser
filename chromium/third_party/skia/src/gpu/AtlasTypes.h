@@ -22,7 +22,7 @@
 
 class GrOpFlushState;
 class TestingUploadTarget;
-namespace skgpu::graphite { class Device; }
+namespace skgpu::graphite { class RecorderPriv; }
 
 /**
  * This file includes internal types that are used by all of our gpu backends for atlases.
@@ -211,7 +211,7 @@ private:
     // Only these classes get to increment the token counters
     friend class ::GrOpFlushState;
     friend class ::TestingUploadTarget;
-    friend class skgpu::graphite::Device;
+    friend class skgpu::graphite::RecorderPriv;
 
     // Issues the next token for a draw.
     AtlasToken issueDrawToken() { return ++fCurrentDrawToken; }
@@ -467,7 +467,7 @@ public:
     void incFlushesSinceLastUsed() { fFlushesSinceLastUse++; }
 
     bool needsUpload() { return !fDirtyRect.isEmpty(); }
-    std::pair<const void*, SkIRect> prepareForUpload(bool useCachedUploads);
+    std::pair<const void*, SkIRect> prepareForUpload();
     void resetRects();
 
     /**
@@ -511,7 +511,6 @@ private:
     const SkColorType fColorType;
     const size_t fBytesPerPixel;
     SkIRect fDirtyRect;  // area in the Plot that needs to be uploaded
-    SkIRect fCachedRect; // area in the Plot that has already been uploaded
     SkDEBUGCODE(bool fDirty);
 };
 

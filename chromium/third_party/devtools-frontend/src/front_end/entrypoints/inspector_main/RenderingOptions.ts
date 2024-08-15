@@ -31,6 +31,7 @@
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import renderingOptionsStyles from './renderingOptions.css.js';
 
@@ -210,11 +211,11 @@ const supportsPrefersContrast = (): boolean => {
   return window.matchMedia(query).matches;
 };
 
-let renderingOptionsViewInstance: RenderingOptionsView;
-
 export class RenderingOptionsView extends UI.Widget.VBox {
-  private constructor() {
+  constructor() {
     super(true);
+
+    this.element.setAttribute('jslog', `${VisualLogging.panel().context('rendering')}`);
 
     this.#appendCheckbox(
         i18nString(UIStrings.paintFlashing), i18nString(UIStrings.highlightsAreasOfThePageGreen),
@@ -298,34 +299,15 @@ export class RenderingOptionsView extends UI.Widget.VBox {
     this.contentElement.createChild('div').classList.add('panel-section-separator');
   }
 
-  static instance(opts: {
-    forceNew: boolean|null,
-  } = {forceNew: null}): RenderingOptionsView {
-    const {forceNew} = opts;
-    if (!renderingOptionsViewInstance || forceNew) {
-      renderingOptionsViewInstance = new RenderingOptionsView();
-    }
-
-    return renderingOptionsViewInstance;
-  }
-
-  #createCheckbox(label: string, subtitle: string, setting: Common.Settings.Setting<boolean>):
-      UI.UIUtils.CheckboxLabel {
-    const checkboxLabel = UI.UIUtils.CheckboxLabel.create(label, false, subtitle);
-    UI.SettingsUI.bindCheckbox(checkboxLabel.checkboxElement, setting);
-    return checkboxLabel;
-  }
-
   #appendCheckbox(label: string, subtitle: string, setting: Common.Settings.Setting<boolean>):
       UI.UIUtils.CheckboxLabel {
-    const checkbox = this.#createCheckbox(label, subtitle, setting);
+    const checkbox = UI.UIUtils.CheckboxLabel.create(label, false, subtitle, setting.name);
+    UI.SettingsUI.bindCheckbox(checkbox.checkboxElement, setting);
     this.contentElement.appendChild(checkbox);
     return checkbox;
   }
 
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #appendSelect(label: string, setting: Common.Settings.Setting<any>): void {
+  #appendSelect(label: string, setting: Common.Settings.Setting<unknown>): void {
     const control = UI.SettingsUI.createControlForSetting(setting, label);
     if (control) {
       this.contentElement.appendChild(control);
@@ -337,21 +319,8 @@ export class RenderingOptionsView extends UI.Widget.VBox {
   }
 }
 
-let reloadActionDelegateInstance: ReloadActionDelegate;
-
 export class ReloadActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  static instance(opts: {
-    forceNew: boolean|null,
-  } = {forceNew: null}): ReloadActionDelegate {
-    const {forceNew} = opts;
-    if (!reloadActionDelegateInstance || forceNew) {
-      reloadActionDelegateInstance = new ReloadActionDelegate();
-    }
-
-    return reloadActionDelegateInstance;
-  }
-
-  handleAction(context: UI.Context.Context, actionId: string): boolean {
+  handleAction(_context: UI.Context.Context, actionId: string): boolean {
     const emulatedCSSMediaFeaturePrefersColorSchemeSetting =
         Common.Settings.Settings.instance().moduleSetting('emulatedCSSMediaFeaturePrefersColorScheme');
 

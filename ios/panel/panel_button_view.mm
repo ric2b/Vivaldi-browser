@@ -100,10 +100,8 @@ CGFloat iconSize = 56.0;
   PanelButtonCell *cell =
     [collectionView dequeueReusableCellWithReuseIdentifier:cellId
                                               forIndexPath:indexPath];
-  if (indexPath.row == activeIndex)
-    [cell configureHighlightedCellWithIndex:indexPath.row];
-  else
-    [cell configureCellWithIndex:indexPath.row];
+  [cell configureCellWithIndex:indexPath.row
+                   highlighted:indexPath.row == activeIndex];
   return cell;
 }
 

@@ -134,7 +134,6 @@ group("All") {
     deps += [
       "//chrome/test:interactive_ui_tests",
       "//chrome/test:sync_integration_tests",
-      "//ppapi:ppapi_unittests",
     ]
   }
   if (use_aura && vivaldi_build_tests) {

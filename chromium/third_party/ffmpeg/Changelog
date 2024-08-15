@@ -2,6 +2,11 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- LEAD MCMP decoder
+- EVC decoding using external library libxevd
+- EVC encoding using external library libxeve
+
+version 6.1:
 - libaribcaption decoder
 - Playdate video decoder and demuxer
 - Extend VAAPI support for libva-win32 on Windows
@@ -35,6 +40,9 @@ version <next>:
 - CRI USM demuxer
 - ffmpeg CLI '-top' option deprecated in favor of the setfield filter
 - VAAPI AV1 encoder
+- ffprobe XML output schema changed to account for multiple
+  variable-fields elements within the same parent element
+- ffprobe -output_format option added as an alias of -of
 
 
 version 6.0:

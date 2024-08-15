@@ -112,7 +112,7 @@ ImagePyramid *aom_alloc_pyramid(int width, int height, int n_levels,
     return NULL;
   }
 
-  pyr->layers = aom_calloc(n_levels, sizeof(PyramidLayer));
+  pyr->layers = aom_calloc(n_levels, sizeof(*pyr->layers));
   if (!pyr->layers) {
     aom_free(pyr);
     return NULL;
@@ -125,10 +125,10 @@ ImagePyramid *aom_alloc_pyramid(int width, int height, int n_levels,
   // These are gathered up first, so that we can allocate all pyramid levels
   // in a single buffer
   size_t buffer_size = 0;
-  size_t *layer_offsets = aom_calloc(n_levels, sizeof(size_t));
+  size_t *layer_offsets = aom_calloc(n_levels, sizeof(*layer_offsets));
   if (!layer_offsets) {
-    aom_free(pyr);
     aom_free(pyr->layers);
+    aom_free(pyr);
     return NULL;
   }
 
@@ -195,8 +195,8 @@ ImagePyramid *aom_alloc_pyramid(int width, int height, int n_levels,
   pyr->buffer_alloc =
       aom_memalign(PYRAMID_ALIGNMENT, buffer_size * sizeof(*pyr->buffer_alloc));
   if (!pyr->buffer_alloc) {
-    aom_free(pyr);
     aom_free(pyr->layers);
+    aom_free(pyr);
     aom_free(layer_offsets);
     return NULL;
   }

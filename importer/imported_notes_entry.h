@@ -22,6 +22,7 @@ struct ImportedNotesEntry {
   std::u16string title;
   std::u16string content;
   base::Time creation_time;
+  base::Time last_modification_time;
 };
 
 #endif  // IMPORTER_IMPORTED_NOTES_ENTRY_H_

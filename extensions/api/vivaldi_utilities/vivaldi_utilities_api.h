@@ -17,7 +17,7 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
 #include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"
-//#include "components/password_manager/core/browser/reauth_purpose.h"
+// #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -193,6 +193,18 @@ class UtilitiesClearAllRecentlyClosedSessionsFunction
   ResponseAction Run() override;
 };
 
+class UtilitiesClearRecentlyClosedTabsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.clearRecentlyClosedTabs",
+                             UTILITIES_CLEAR_RECENTLY_CLOSED_TABS)
+  UtilitiesClearRecentlyClosedTabsFunction() = default;
+
+ private:
+  ~UtilitiesClearRecentlyClosedTabsFunction() override = default;
+
+  ResponseAction Run() override;
+};
+
 class UtilitiesIsTabInLastSessionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isTabInLastSession",
@@ -335,17 +347,15 @@ class UtilitiesStoreImageFunction : public ExtensionFunction {
 };
 
 class UtilitiesCleanUnusedImagesFunction : public ExtensionFunction {
-public:
+ public:
   DECLARE_EXTENSION_FUNCTION("utilities.cleanUnusedImages",
-      UTILITIES_CLEAN_UNUSED_IMAGES)
+                             UTILITIES_CLEAN_UNUSED_IMAGES)
   UtilitiesCleanUnusedImagesFunction();
 
-private:
+ private:
   ~UtilitiesCleanUnusedImagesFunction() override;
   ResponseAction Run() override;
-
 };
-
 
 // This is implemented in VivaldiUtilitiesHookDelegate and only here to satisfy
 // various JS bindings constrains.
@@ -804,7 +814,7 @@ class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
   std::unique_ptr<qrcode_generator::QRImageGenerator> qr_generator_;
 
   vivaldi::utilities::CaptureQRDestination dest_ =
-      vivaldi::utilities::CAPTURE_QR_DESTINATION_DATAURL;
+      vivaldi::utilities::CaptureQRDestination::kDataurl;
 };
 
 class UtilitiesGetGAPIKeyFunction : public ExtensionFunction {
@@ -904,6 +914,28 @@ class UtilitiesGetFOAuthClientIdFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesGetFOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetAOLOAuthClientIdFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getAOLOAuthClientId",
+                             UTILITIES_GET_AOL_API_CLIENT_ID)
+  UtilitiesGetAOLOAuthClientIdFunction() = default;
+
+ private:
+  ~UtilitiesGetAOLOAuthClientIdFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetAOLOAuthClientSecretFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getAOLOAuthClientSecret",
+                             UTILITIES_GET_AOL_API_CLIENT_SECRET)
+  UtilitiesGetAOLOAuthClientSecretFunction() = default;
+
+ private:
+  ~UtilitiesGetAOLOAuthClientSecretFunction() override = default;
   ResponseAction Run() override;
 };
 
@@ -1016,7 +1048,7 @@ class UtilitiesSupportsProxyFunction : public ExtensionFunction {
 class UtilitiesGetOtherProxiesFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getOtherProxies",
-                              UTILITIES_PROXY_GET_OTHER_PROXIES)
+                             UTILITIES_PROXY_GET_OTHER_PROXIES)
   UtilitiesGetOtherProxiesFunction() = default;
 
  private:
@@ -1027,7 +1059,7 @@ class UtilitiesGetOtherProxiesFunction : public ExtensionFunction {
 class UtilitiesBrowserWindowReadyFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.browserWindowReady",
-                              UTILITIES_BROWSER_WINDOW_READY)
+                             UTILITIES_BROWSER_WINDOW_READY)
   UtilitiesBrowserWindowReadyFunction() = default;
 
  private:
@@ -1045,10 +1077,25 @@ class UtilitiesReadImageFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void SendResult(std::unique_ptr<std::vector<uint8_t>> data,
-                  std::unique_ptr<std::string> mimeType, bool result);
+                  std::unique_ptr<std::string> mimeType,
+                  bool result);
   bool ReadFileAndMimeType(base::FilePath file_path,
                            std::vector<uint8_t>* data,
                            std::string* mimeType);
+};
+
+class UtilitiesDetectNewCrashesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.detectNewCrashes",
+                             UTILITIES_DETECT_NEW_CRASHES)
+  UtilitiesDetectNewCrashesFunction() = default;
+
+ private:
+  ~UtilitiesDetectNewCrashesFunction() override = default;
+  ResponseAction Run() override;
+
+  std::string CheckForNewCrashes(const std::string& lastSeenUUID);
+  void SendResult(const std::string& lastCrashUUID);
 };
 
 }  // namespace extensions

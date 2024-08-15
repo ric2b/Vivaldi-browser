@@ -74,7 +74,8 @@ class HintsFetcher {
       const std::string& locale,
       const std::string& access_token,
       bool skip_cache,
-      HintsFetchedCallback hints_fetched_callback);
+      HintsFetchedCallback hints_fetched_callback,
+      proto::RequestContextMetadata* request_context_metadata);
 
   // Set |time_clock_| for testing.
   void SetTimeClockForTesting(const base::Clock* time_clock);
@@ -169,8 +170,7 @@ class HintsFetcher {
   base::TimeTicks hints_fetch_start_time_;
 
   // Owned by OptimizationGuideKeyedService and outlives |this|.
-  raw_ptr<OptimizationGuideLogger, DanglingUntriaged>
-      optimization_guide_logger_;
+  raw_ptr<OptimizationGuideLogger> optimization_guide_logger_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

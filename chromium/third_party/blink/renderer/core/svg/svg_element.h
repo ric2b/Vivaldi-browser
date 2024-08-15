@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
+#include "third_party/blink/renderer/core/svg/animation/smil_time_container.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_property_info.h"
 #include "third_party/blink/renderer/core/svg/svg_parsing_error.h"
 #include "third_party/blink/renderer/core/svg_names.h"
@@ -291,6 +292,8 @@ class CORE_EXPORT SVGElement : public Element {
 
   void AccessKeyAction(SimulatedClickCreationScope creation_scope) override;
 
+  void AttachLayoutTree(AttachContext&) override;
+
  private:
   FRIEND_TEST_ALL_PREFIXES(SVGElementTest,
                            BaseComputedStyleForSMILWithContainerQueries);
@@ -300,11 +303,13 @@ class CORE_EXPORT SVGElement : public Element {
   bool IsStyledElement() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
-  bool SupportsFocus() const override { return false; }
+  bool SupportsFocus(UpdateBehavior) const override { return false; }
 
   void WillRecalcStyle(const StyleRecalcChange) override;
   static SVGElementSet& GetDependencyTraversalVisitedSet();
   void UpdateWebAnimatedAttributeOnBaseValChange(const QualifiedName&);
+
+  SMILTimeContainer* GetTimeContainer() const;
 
   HeapHashSet<WeakMember<SVGElement>> elements_with_relative_lengths_;
 

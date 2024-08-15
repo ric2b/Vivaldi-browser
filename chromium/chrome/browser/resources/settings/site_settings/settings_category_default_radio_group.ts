@@ -129,6 +129,7 @@ export class SettingsCategoryDefaultRadioGroupElement extends
       case ContentSettingsTypes.FEDERATED_IDENTITY_API:
       case ContentSettingsTypes.IMAGES:
       case ContentSettingsTypes.JAVASCRIPT:
+      case ContentSettingsTypes.JAVASCRIPT_JIT:
       case ContentSettingsTypes.MIXEDSCRIPT:
       case ContentSettingsTypes.PAYMENT_HANDLER:
       case ContentSettingsTypes.POPUPS:
@@ -159,6 +160,7 @@ export class SettingsCategoryDefaultRadioGroupElement extends
       case ContentSettingsTypes.USB_DEVICES:
       case ContentSettingsTypes.VR:
       case ContentSettingsTypes.WINDOW_MANAGEMENT:
+      case ContentSettingsTypes.WEB_PRINTING:
         // "Ask" vs "Blocked".
         return ContentSetting.ASK;
       default:

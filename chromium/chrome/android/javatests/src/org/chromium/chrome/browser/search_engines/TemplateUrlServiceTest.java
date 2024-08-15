@@ -193,10 +193,18 @@ public class TemplateUrlServiceTest {
         List<TemplateUrl> searchEngines = getSearchEngines(mTemplateUrlService);
         // Ensure known state of default search index before running test.
         TemplateUrl defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
-        SearchEngineAdapter.sortAndFilterUnnecessaryTemplateUrl(searchEngines, defaultSearchEngine);
+        SearchEngineAdapter.sortAndFilterUnnecessaryTemplateUrl(
+                searchEngines,
+                defaultSearchEngine,
+                /* isEeaChoiceCountry= */ false,
+                mTemplateUrlService.shouldShowUpdatedSettings());
+
+        // Outside of the EEA, where prepopulated engines are always sorted by ID, Google has the
+        // lowest ID and will be at the index 0 in the sorted list.
+        Assert.assertEquals(defaultSearchEngine.getPrepopulatedId(), /* Google's ID: */ 1);
         Assert.assertEquals(searchEngines.get(0), defaultSearchEngine);
 
-        // Set search engine index and verified it stuck.
+        // Set search engine index and verify it stuck.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     Assert.assertTrue(

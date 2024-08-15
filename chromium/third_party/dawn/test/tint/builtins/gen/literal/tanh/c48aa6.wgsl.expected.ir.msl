@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void tanh_c48aa6() {
+  float2 res = float2(0.76159417629241943359f);
+}
+vertex float4 vertex_main() {
+  tanh_c48aa6();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  tanh_c48aa6();
+}
+kernel void compute_main() {
+  tanh_c48aa6();
+}

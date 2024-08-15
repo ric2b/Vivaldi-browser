@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 #include "app/vivaldi_resources.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "message_type.h"
 #include "sql/statement.h"
@@ -24,46 +26,16 @@ MessageTable::MessageTable() {}
 MessageTable::~MessageTable() {}
 
 bool MessageTable::CreateMessageTable() {
-  const char* name = "messages";
+  const char* name = "messages_search_fts";
 
   if (GetDB().DoesTableExist(name))
     return true;
 
-  std::string sql;
-  sql.append("CREATE TABLE ");
-  sql.append(name);
-  sql.append(
-      "("
-      "searchListId INTEGER PRIMARY KEY,"
-      "toAddress TEXT NOT NULL,"
-      "fromAddress TEXT,"
-      "cc TEXT,"
-      "replyTo TEXT,"
-      "subject TEXT,"
-      "body TEXT)");
-
-  bool emailTable = GetDB().Execute(sql.c_str());
-
-  bool indexTable = GetDB().Execute(
-      "CREATE VIRTUAL TABLE messages_fts USING fts5(searchListId, toAddress, "
-      " fromAddress, cc, replyTo, subject, body, content = messages, "
-      " content_rowid = searchListId, tokenize = trigram);");
-
-  bool insertTrigger = GetDB().Execute(
-      "CREATE TRIGGER messages_ai AFTER INSERT ON messages "
-      " BEGIN "
-      " INSERT INTO messages_fts(rowid, toAddress, fromAddress, cc, replyTo, "
-      "subject, body) "
-      " VALUES(new.searchListId, new.toAddress, new.fromAddress, new.cc, "
-      " new.replyTo, new.subject, new.body); "
-      " END;");
-
-  bool deleteTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_DELETE);
-
-  bool updateTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_UPDATE);
-
-  return emailTable && indexTable && insertTrigger && deleteTrigger &&
-         updateTrigger;
+  return GetDB().Execute(
+      "CREATE VIRTUAL TABLE messages_search_fts USING fts5(searchListId, "
+      "toAddress, "
+      " fromAddress, cc, replyTo, subject, body, content='', "
+      " tokenize = trigram, contentless_delete=1);");
 }
 
 bool MessageTable::CreateMessages(
@@ -73,8 +45,8 @@ bool MessageTable::CreateMessages(
     return false;
 
   const char kCreateMessage[] =
-      "INSERT OR REPLACE INTO messages "
-      "(searchListId, toAddress, fromAddress, cc, replyTo, "
+      "INSERT INTO messages_search_fts "
+      "(rowid, toAddress, fromAddress, cc, replyTo, "
       "subject, body) "
       "VALUES (?, ?, ?, ?, ?, ?, ?)";
   sql::Statement statement(
@@ -99,25 +71,25 @@ bool MessageTable::CreateMessages(
 }
 
 bool MessageTable::SearchMessages(std::u16string search,
-                                  SearchListIdRows* out_rows) {
-  sql::Statement statement(
-      GetDB().GetUniqueStatement("SELECT searchListId FROM "
-                                 "messages_fts where messages_fts MATCH ?"));
+                                  SearchListIDs* out_ids) {
+  sql::Statement statement(GetDB().GetUniqueStatement(
+      "SELECT rowid FROM "
+      "messages_search_fts where messages_search_fts MATCH ?"));
 
   statement.BindString16(0, search);
 
   while (statement.Step()) {
     SearchListID searchListId = statement.ColumnInt64(0);
-    out_rows->push_back(searchListId);
+    out_ids->push_back(searchListId);
   }
   return true;
 }
 
 bool MessageTable::MatchMessage(const SearchListID& search_list_id,
                                 std::u16string search) {
-  sql::Statement statement(
-      GetDB().GetUniqueStatement("SELECT count(*) FROM messages_fts where "
-                                 "messages_fts MATCH ? and searchListId=?"));
+  sql::Statement statement(GetDB().GetUniqueStatement(
+      "SELECT count(*) FROM messages_search_fts where "
+      "messages_search_fts MATCH ? and rowid=?"));
 
   statement.BindString16(0, search);
   statement.BindInt64(1, search_list_id);
@@ -128,46 +100,37 @@ bool MessageTable::MatchMessage(const SearchListID& search_list_id,
   return statement.ColumnInt(0) == 1;
 }
 
-bool MessageTable::AddMessageBody(const SearchListID& search_list_id,
-                                  std::u16string body) {
-  sql::Statement statement(GetDB().GetCachedStatement(
-      SQL_FROM_HERE, "UPDATE messages SET body=? WHERE searchListId=?"));
+bool MessageTable::UpdateMessage(mail_client::MessageRow row) {
+  const char kUpdateMessage[] =
+      "UPDATE messages_search_fts SET "
+      "searchListId = ?, toAddress = ?, fromAddress = ?, cc = ?, replyTo = ?, "
+      "subject = ?, body = ? where rowid = ?";
+  sql::Statement statement(GetDB().GetUniqueStatement(kUpdateMessage));
 
-  statement.BindString16(0, body);
-  statement.BindInt64(1, search_list_id);
+  int column_index = 0;
+  statement.BindInt64(column_index++, row.searchListId);
+  statement.BindString16(column_index++, row.to);
+  statement.BindString16(column_index++, row.from);
+  statement.BindString16(column_index++, row.cc);
+  statement.BindString16(column_index++, row.replyTo);
+  statement.BindString16(column_index++, row.subject);
+  statement.BindString16(column_index++, row.body);
+  statement.BindInt64(column_index++, row.searchListId);
+
   return statement.Run();
 }
 
-bool MessageTable::DeleteMessages(std::vector<SearchListID> search_list_ids) {
-  std::string sql;
-  sql.append("DELETE FROM messages ");
-  std::ostringstream slids;
-  bool has_id = false;
-  for (std::vector<SearchListID>::const_iterator i = search_list_ids.begin();
-       i != search_list_ids.end(); ++i) {
-    if (has_id)
-      slids << ", ";
-    else
-      has_id = true;
-    slids << *i;
+bool MessageTable::DeleteMessages(SearchListIDs search_list_ids) {
+  std::string sql = "DELETE from messages_search_fts WHERE rowid IN (";
+  for (const auto& id : search_list_ids) {
+    sql.append(base::NumberToString(id));
+    if (&id != &search_list_ids.back()) {
+      sql.push_back(',');
+    }
   }
-
-  if (has_id) {
-    sql.append(" WHERE searchListId in ( ");
-    sql.append(slids.str());
-    sql.append(" )");
-  }
-
-  if (!GetDB().Execute(sql.c_str())) {
-    LOG(ERROR) << GetDB().GetErrorMessage();
-    return false;
-  }
-  return true;
-}
-
-bool MessageTable::RebuildDatabase() {
-  return GetDB().Execute(
-      "INSERT INTO messages_fts(messages_fts) VALUES('rebuild');");
+  sql.append(")");
+  sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
+  return statement.Run();
 }
 
 bool MessageTable::UpdateToVersion2() {
@@ -179,17 +142,111 @@ bool MessageTable::UpdateToVersion2() {
   if (!GetDB().Execute("DROP TRIGGER messages_au"))
     return false;
 
-  bool updateTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_UPDATE);
-
   if (!GetDB().Execute("DROP TRIGGER messages_ad"))
     return false;
 
-  bool deleteTrigger = GetDB().Execute(MESSAGES_TRIGGER_AFTER_DELETE);
-
-  if (!updateTrigger || !deleteTrigger)
-    return false;
-
-  return RebuildDatabase();
+  return true;
 }
 
+bool MessageTable::UpdateToVersion3() {
+  return CreateMessageTable();
+}
+
+// Note. DB must have been attached to the "old" MailDB using the logical
+// database name: old
+bool MessageTable::CopyMessagesToContentless(int limit, int offs) {
+  sql::Transaction transaction(&GetDB());
+  if (!transaction.Begin())
+    return false;
+
+  sql::Statement statement(GetDB().GetUniqueStatement(
+      "INSERT INTO messages_search_fts(rowid, toAddress, fromAddress, "
+      " cc, replyTo,  subject, body) "
+      " select searchListId, toAddress, fromAddress, "
+      " cc, replyTo, subject, body from old.messages  limit ? offset ? "));
+  statement.BindInt(0, limit);
+  statement.BindInt(1, offs);
+
+  bool insert = statement.Run();
+
+  if (!insert) {
+    return false;
+  }
+
+  InsertIntoMigrationTable(limit, offs);
+
+  return transaction.Commit();
+}
+
+bool MessageTable::DoesAttachedMessageTableExists() {
+  std::string sql_str =
+      "SELECT 1 FROM old.sqlite_master WHERE type='table' AND name= 'messages'";
+
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str.c_str()));
+
+  return statement.Step();
+}
+
+int MessageTable::CountRows(std::string table) {
+  std::string sql_str = "SELECT COUNT(rowid) FROM " + table;
+
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str.c_str()));
+
+  if (!statement.Step())
+    return -1;
+  return statement.ColumnInt(0);
+}
+
+bool MessageTable::DoesTableExist(std::string name) {
+  return GetDB().DoesTableExist(name);
+}
+
+bool MessageTable::CreateMigrationTable() {
+  return GetDB().Execute(
+      "CREATE TABLE IF NOT EXISTS migrationLogger (lim INTEGER, offs "
+      "INTEGER);");
+}
+
+bool MessageTable::InsertIntoMigrationTable(int limit, int offset) {
+  sql::Statement statement(
+      GetDB().GetUniqueStatement("INSERT INTO migrationLogger(lim, offs) "
+                                 " values(?, ?)"));
+  statement.BindInt(0, limit);
+  statement.BindInt(1, offset);
+  return statement.Run();
+}
+
+int MessageTable::SelectMaxOffsetFromMigration() {
+  std::string sql_str = "SELECT max(offs) FROM migrationLogger;";
+
+  sql::Statement statement(GetDB().GetUniqueStatement(sql_str.c_str()));
+
+  if (!statement.Step())
+    return 0;
+  int max_offset = statement.ColumnInt(0);
+
+  if (!max_offset) {
+    return 0;
+  }
+
+  return max_offset;
+}
+
+bool MessageTable::DetachDBAfterMigrate() {
+  sql::Statement detach_statement(GetDB().GetUniqueStatement("DETACH old"));
+  return detach_statement.Run();
+}
+
+bool MessageTable::AttachDBForMigrate(base::FilePath db_dir) {
+  base::FilePath old_db = db_dir.Append(FILE_PATH_LITERAL("MailDB"));
+
+  sql::Statement statement(GetDB().GetUniqueStatement("ATTACH ? AS old"));
+#if BUILDFLAG(IS_WIN)
+  statement.BindString16(0, old_db.AsUTF16Unsafe());
+#else
+  statement.BindString(0, old_db.value());
+#endif
+
+  return statement.Run();
+}
 }  // namespace mail_client

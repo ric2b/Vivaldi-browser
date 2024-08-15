@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void inverseSqrt_6d0783() {
+  float3 res = float3(1.0f);
+}
+vertex float4 vertex_main() {
+  inverseSqrt_6d0783();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  inverseSqrt_6d0783();
+}
+kernel void compute_main() {
+  inverseSqrt_6d0783();
+}

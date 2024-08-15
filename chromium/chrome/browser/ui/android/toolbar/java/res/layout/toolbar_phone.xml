@@ -76,6 +76,9 @@ found in the LICENSE file.
         android:focusable="true"
         android:focusableInTouchMode="true">
 
+        <!-- Vivaldi -->
+        <include layout="@layout/tracker_shield_button"/>
+
         <ViewStub
             android:id="@+id/optional_button_stub"
             android:inflatedId="@+id/optional_toolbar_button_container"

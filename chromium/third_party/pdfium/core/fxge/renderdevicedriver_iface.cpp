@@ -71,13 +71,13 @@ bool RenderDeviceDriverIface::DrawShading(const CPDF_ShadingPattern* pPattern,
   return false;
 }
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 bool RenderDeviceDriverIface::SetBitsWithMask(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
-    const RetainPtr<CFX_DIBBase>& pMask,
+    RetainPtr<const CFX_DIBBase> bitmap,
+    RetainPtr<const CFX_DIBBase> mask,
     int left,
     int top,
-    int bitmap_alpha,
+    float alpha,
     BlendMode blend_type) {
   return false;
 }

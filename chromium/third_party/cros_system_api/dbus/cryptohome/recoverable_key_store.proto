@@ -1,0 +1,128 @@
+// Copyright 2023 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Provides types used in the recoverable key store service. The service
+// supports syncing passwords, passkeys, device backups etc. where new
+// devices can join with presenting the knowledge factor of an existing
+// device. This is currently only used for passkey sync in ChromeOS.
+
+syntax = "proto3";
+
+option optimize_for = LITE_RUNTIME;
+
+package cryptohome;
+option go_package = "chromiumos/system_api/cryptohome_proto";
+
+// The parameters associated with a recoverable key store.
+message RecoverableKeyStoreParameters {
+  // The recoverable key store service public key picked by the client from a
+  // published list of public keys. It will be in SecureBox-encoded public key
+  // format (go/securebox2).
+  bytes backend_public_key = 1;
+
+  // The 8-byte ID to uniquely identify a counter for the failed verification
+  // attempts, which should be generated randomly by the client when creating
+  // the recoverable key store.
+  bytes counter_id = 2;
+
+  // The maximum number of failed attempts to verify the Knowledge Factor,
+  // after which the contents of the key store cannot be recovered.
+  int32 max_attempts = 3;
+
+  // The recoverable key store handle. 17 bytes like this: first byte having
+  // value 2, bytes 2 through 17 holding random bytes.
+  bytes key_store_handle = 4;
+}
+
+// An asymmetric key pair (a P-256 key pair) which private key is wrapped by a
+// symmetric wrapping key, which is then wrapped by the recovery key.
+message WrappedSecurityDomainKey {
+  // The name of the security domain key. This is always set to
+  // "security_domain_member_key_encrypted_locally" for the CrOS client usage.
+  string key_name = 1;
+
+  // The public key in SecureBox-encoded format.
+  bytes public_key = 2;
+
+  // The private key, wrapped by the wrapping key.
+  // More precisely, this is the AES-GCM encryption result of the
+  //  SecureBox-encoded private key with the wrapping key as the shared secret.
+  bytes wrapped_private_key = 3;
+
+  // The wrapping key, wrapped by the recovery key.
+  // The wrapping key is the symmetric key used to wrap the private key.
+  // This field is the SecureBox encryption result of the wrapping key
+  // with the recovery key as the shared secret.
+  bytes wrapped_wrapping_key = 4;
+}
+
+enum KnowledgeFactorType {
+  KNOWLEDGE_FACTOR_TYPE_UNSPECIFIED = 0;
+
+  // The PIN auth factor type.
+  KNOWLEDGE_FACTOR_TYPE_PIN = 1;
+
+  // The password auth factor type. But note that we only allow local passwords
+  // as a knowledge factor. GAIA password can't be used as a knowledge factor.
+  KNOWLEDGE_FACTOR_TYPE_PASSWORD = 2;
+}
+
+// Type of the hashing algorithm used to hash the knowledge factor on the
+// client side before using the knowledge factor for any operation.
+enum KnowledgeFactorHashAlgorithm {
+  HASH_TYPE_UNSPECIFIED = 0;
+
+  // Used for hashing PINs in Chrome.
+  HASH_TYPE_PBKDF2_AES256_1234 = 1;
+
+  // Used for hashing passwords in Chrome.
+  HASH_TYPE_SHA256_TOP_HALF = 2;
+}
+
+// The metadata associated with a recoverable key store.
+message RecoverableKeyStoreMetadata {
+  KnowledgeFactorType knowledge_factor_type = 1;
+
+  // Type of the hashing algorithm used to hash the knowledge factor on the
+  // client side before using the knowledge factor for any operation.
+  KnowledgeFactorHashAlgorithm hash_type = 2;
+
+  // Salt used for hashing.
+  bytes hash_salt = 3;
+
+  // The certificate path chosen by the client, which contains the endpoint
+  // certificiate and necessary intermediate certificates. It is encoded
+  // using the encoding "PkiPath". The endpoint certificate needs to contain
+  // the exact public key in RecoverableKeyStoreParameters.
+  bytes cert_path = 4;
+
+  // The version of certificate list used to pick the endpoint certificate
+  // from.
+  uint64 cert_list_version = 5;
+
+  // The Unix timestamp of the key store generation.
+  uint64 timestamp = 6;
+}
+
+// The recoverable key store that contains all the data required for another
+// device to recover the security domain key through the recoverable key store
+// service.
+message RecoverableKeyStore {
+  // The key store's parameters. This field is authenticated as a part of the
+  // recovery key encryption.
+  RecoverableKeyStoreParameters key_store_parameters = 1;
+
+  // The key store's metadata. The difference from |key_store_parameters| is
+  // that this field isn't authenticated.
+  RecoverableKeyStoreMetadata key_store_metadata = 2;
+
+  // The recovery key is guarded by the knowledge factor.
+  // It is encrypted by the recoverable key store service public key and the
+  // hash of the knowledge factor. And the encrypted blob includes information
+  // of the recoverable key store parameters.
+  bytes wrapped_recovery_key = 3;
+
+  // The security domain key encrypted to the recovery key.
+  WrappedSecurityDomainKey wrapped_security_domain_key = 4;
+}

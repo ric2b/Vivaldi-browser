@@ -6,8 +6,6 @@
 <translation id="1110994991967754504">Select permission for <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> unexpectedly closed the connection.</translation>
 <translation id="1161325031994447685">Reconnecting to Wi-Fi</translation>
-<translation id="1175364870820465910">&amp;Print...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Try clearing your cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">About Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> didn’t send any data.</translation>
 <translation id="1559528461873125649">No such file or directory</translation>
@@ -18,7 +16,6 @@
 <translation id="1734878702283171397">Try contacting the system admin.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Try running Windows Network Diagnostics<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">This site contains harmful programs</translation>
-<translation id="1916770123977586577">To apply your updated settings to this site, reload this page</translation>
 <translation id="1974060860693918893">Advanced</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Checking the proxy and the firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Issued to: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -206,7 +203,6 @@
 <translation id="8940028675168378100">Blocked by <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Go to site settings</translation>
 <translation id="9001074447101275817">The proxy <ph name="DOMAIN" /> requires a username and password.</translation>
-<translation id="9008201768610948239">Ignore</translation>
 <translation id="9025348182339809926">(Invalid)</translation>
 <translation id="9039213469156557790">Furthermore, this page includes other resources which are not secure. These resources can be viewed by others while in transit, and can be modified by an attacker to change the behaviour of the page.</translation>
 <translation id="9062620674789239642">It may have been moved, edited, or deleted.</translation>

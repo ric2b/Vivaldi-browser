@@ -34,6 +34,8 @@
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace base {
 
 namespace {
@@ -353,7 +355,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     HistogramType histogram_type,
-    const std::string& name,
+    std::string_view name,
     int minimum,
     int maximum,
     const BucketRanges* bucket_ranges,
@@ -374,9 +376,10 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
   // once histogram construction is complete.
   PersistentHistogramData* histogram_data =
       memory_allocator_->New<PersistentHistogramData>(
-          offsetof(PersistentHistogramData, name) + name.length() + 1);
+          offsetof(PersistentHistogramData, name) + name.size() + 1);
   if (histogram_data) {
-    memcpy(histogram_data->name, name.c_str(), name.size() + 1);
+    memcpy(histogram_data->name, name.data(), name.size());
+    histogram_data->name[name.size()] = '\0';
     histogram_data->histogram_type = histogram_type;
     histogram_data->flags = flags | HistogramBase::kIsPersistent;
 
@@ -961,6 +964,7 @@ void GlobalHistogramAllocator::Set(GlobalHistogramAllocator* allocator) {
 
 // static
 GlobalHistogramAllocator* GlobalHistogramAllocator::Get() {
+  if (vivaldi::IsVivaldiRunning()) return nullptr;
   return reinterpret_cast<GlobalHistogramAllocator*>(
       subtle::Acquire_Load(&g_histogram_allocator));
 }

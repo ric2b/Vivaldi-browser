@@ -150,8 +150,31 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 		}
 
 		if b.extraConfig("Graphite") {
-			if b.extraConfig("Metal") {
-				configs = []string{"grmtl"}
+			if b.extraConfig("Dawn") {
+				if b.extraConfig("D3D11") {
+					configs = []string{"grdawn_d3d11"}
+				}
+				if b.extraConfig("D3D12") {
+					configs = []string{"grdawn_d3d12"}
+				}
+				if b.extraConfig("Metal") {
+					configs = []string{"grdawn_mtl"}
+				}
+				if b.extraConfig("Vulkan") {
+					configs = []string{"grdawn_vk"}
+				}
+				if b.extraConfig("GL") {
+					configs = []string{"grdawn_gl"}
+				}
+				if b.extraConfig("GLES") {
+					configs = []string{"grdawn_gles"}
+				}
+
+			}
+			if b.extraConfig("Native") {
+				if b.extraConfig("Metal") {
+					configs = []string{"grmtl"}
+				}
 			}
 		}
 
@@ -264,7 +287,7 @@ func (b *taskBuilder) nanobenchFlags(doUpload bool) {
 	if b.model(DONT_REDUCE_OPS_TASK_SPLITTING_MODELS...) {
 		args = append(args, "--dontReduceOpsTaskSplitting", "true")
 	}
-	if (!b.isLinux() && b.extraConfig("Vulkan") && b.gpu("QuadroP400")) {
+	if !b.isLinux() && b.extraConfig("Vulkan") && b.gpu("QuadroP400") {
 		// skia:14302 (desk_carsvg.skp hangs indefinitely on Windows QuadroP400 vkdmsaa configs)
 		match = append(match, "~desk_carsvg.skp")
 	}

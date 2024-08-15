@@ -6,23 +6,24 @@
 
 #include "avif/avif.h"
 #include "avif_fuzztest_helpers.h"
+#include "aviftest_helpers.h"
 #include "fuzztest/fuzztest.h"
 #include "gtest/gtest.h"
 
 using ::fuzztest::Arbitrary;
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 namespace {
 
-::testing::Environment* const stack_limit_env =
-    ::testing::AddGlobalTestEnvironment(
-        new FuzztestStackLimitEnvironment("524288"));  // 512 * 1024
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo512x1024Bytes();
 
 //------------------------------------------------------------------------------
 
-void Decode(const std::string& arbitrary_bytes, AvifDecoderPtr decoder) {
-  testutil::AvifImagePtr decoded(avifImageCreateEmpty(), avifImageDestroy);
+void Decode(const std::string& arbitrary_bytes, DecoderPtr decoder) {
+  ASSERT_FALSE(GetSeedDataDirs().empty());  // Make sure seeds are available.
+
+  ImagePtr decoded(avifImageCreateEmpty());
   ASSERT_NE(decoded, nullptr);
   const avifResult result = avifDecoderReadMemory(
       decoder.get(), decoded.get(),
@@ -34,17 +35,12 @@ void Decode(const std::string& arbitrary_bytes, AvifDecoderPtr decoder) {
   }
 }
 
-constexpr uint32_t kMaxFileSize = 1024 * 1024;  // 1MB.
-
 FUZZ_TEST(DecodeAvifTest, Decode)
-    .WithDomains(Arbitrary<std::string>()
-                     .WithMaxSize(kMaxFileSize)
-                     .WithSeeds(GetTestImagesContents(
-                         kMaxFileSize, {AVIF_APP_FILE_FORMAT_AVIF})),
-                 ArbitraryAvifDecoder({AVIF_CODEC_CHOICE_AUTO}));
+    .WithDomains(ArbitraryImageWithSeeds({AVIF_APP_FILE_FORMAT_AVIF}),
+                 ArbitraryAvifDecoder());
 
 //------------------------------------------------------------------------------
 
 }  // namespace
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif

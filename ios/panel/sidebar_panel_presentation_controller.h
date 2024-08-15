@@ -5,6 +5,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+
 @interface SidebarPanelPresentationController
     : UIPresentationController
 
@@ -12,6 +14,8 @@
                 (UIViewController*)presentedViewController
                        presentingViewController:
                 (UIViewController*)presentingViewController;
+
+@property(nonatomic, assign) ToolbarType toolbarType;
 
 @end
 

@@ -77,7 +77,7 @@ source_set("unittests") {
     "../../third_party/abseil",
     "../../third_party/googletest:gmock",
     "../../third_party/googletest:gtest",
-    "../../util:base",
+    "../../util",
     "//third_party/valijson",
   ]
 }

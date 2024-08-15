@@ -921,7 +921,7 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
   // Default is true.
   bool connect_to_server_on_initialize_;
   QuicSocketAddress server_address_;
-  absl::optional<QuicSocketAddress> server_listening_address_;
+  std::optional<QuicSocketAddress> server_listening_address_;
   std::string server_hostname_;
   QuicTestBackend memory_cache_backend_;
   std::unique_ptr<ServerThread> server_thread_;
@@ -2845,7 +2845,7 @@ TEST_P(EndToEndTest, StreamCancelErrorTest) {
       client_connection->GetStats().packets_sent;
 
   if (version_.UsesHttp3()) {
-    if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data)) {
+    if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3)) {
       // QPACK decoder instructions and RESET_STREAM and STOP_SENDING frames are
       // sent in a single packet.
       EXPECT_EQ(packets_sent_before + 1, packets_sent_now);
@@ -3028,7 +3028,7 @@ TEST_P(EndToEndTest,
     return;
   }
   override_client_connection_id_length_ = kQuicDefaultConnectionIdLength;
-  SetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data, false);
+  SetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3, false);
   ASSERT_TRUE(Initialize());
   SendSynchronousFooRequestAndCheckResponse();
 
@@ -4172,7 +4172,7 @@ class DowngradePacketWriter : public PacketDroppingTestWriter {
     QuicVersionLabel version_label;
     ParsedQuicVersion parsed_version = ParsedQuicVersion::Unsupported();
     QuicConnectionId destination_connection_id, source_connection_id;
-    absl::optional<absl::string_view> retry_token;
+    std::optional<absl::string_view> retry_token;
     std::string detailed_error;
     if (QuicFramer::ParsePublicHeaderDispatcher(
             QuicEncryptedPacket(buffer, buf_len),
@@ -5006,10 +5006,8 @@ TEST_P(EndToEndTest, PreSharedKey) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    bool ok = true;
-    EXPECT_QUIC_BUG(ok = Initialize(),
+    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
                     "QUIC client pre-shared keys not yet supported with TLS");
-    EXPECT_FALSE(ok);
     return;
   }
 
@@ -5029,10 +5027,8 @@ TEST_P(EndToEndTest, QUIC_TEST_DISABLED_IN_CHROME(PreSharedKeyMismatch)) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    bool ok = true;
-    EXPECT_QUIC_BUG(ok = Initialize(),
+    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
                     "QUIC client pre-shared keys not yet supported with TLS");
-    EXPECT_FALSE(ok);
     return;
   }
 
@@ -5056,10 +5052,8 @@ TEST_P(EndToEndTest, QUIC_TEST_DISABLED_IN_CHROME(PreSharedKeyNoClient)) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    bool ok = true;
-    EXPECT_QUIC_BUG(ok = Initialize(),
+    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
                     "QUIC server pre-shared keys not yet supported with TLS");
-    EXPECT_FALSE(ok);
     return;
   }
 
@@ -5077,10 +5071,8 @@ TEST_P(EndToEndTest, QUIC_TEST_DISABLED_IN_CHROME(PreSharedKeyNoServer)) {
 
   if (version_.UsesTls()) {
     // TODO(b/154162689) add PSK support to QUIC+TLS.
-    bool ok = true;
-    EXPECT_QUIC_BUG(ok = Initialize(),
+    EXPECT_QUIC_BUG(EXPECT_FALSE(Initialize()),
                     "QUIC client pre-shared keys not yet supported with TLS");
-    EXPECT_FALSE(ok);
     return;
   }
 
@@ -6051,10 +6043,9 @@ TEST_P(EndToEndTest, CustomTransportParameters) {
   EXPECT_CALL(visitor, OnTransportParametersSent(_))
       .WillOnce(Invoke([kCustomParameter](
                            const TransportParameters& transport_parameters) {
-        ASSERT_NE(transport_parameters.custom_parameters.find(kCustomParameter),
-                  transport_parameters.custom_parameters.end());
-        EXPECT_EQ(transport_parameters.custom_parameters.at(kCustomParameter),
-                  "test");
+        auto it = transport_parameters.custom_parameters.find(kCustomParameter);
+        ASSERT_NE(it, transport_parameters.custom_parameters.end());
+        EXPECT_EQ(it->second, "test");
       }));
   EXPECT_CALL(visitor, OnTransportParametersReceived(_)).Times(1);
   ASSERT_TRUE(Initialize());
@@ -6070,12 +6061,10 @@ TEST_P(EndToEndTest, CustomTransportParameters) {
     ADD_FAILURE() << "Missing server session";
   }
   if (server_config != nullptr) {
-    if (server_config->received_custom_transport_parameters().find(
-            kCustomParameter) !=
-        server_config->received_custom_transport_parameters().end()) {
-      EXPECT_EQ(server_config->received_custom_transport_parameters().at(
-                    kCustomParameter),
-                "test");
+    if (auto it = server_config->received_custom_transport_parameters().find(
+            kCustomParameter);
+        it != server_config->received_custom_transport_parameters().end()) {
+      EXPECT_EQ(it->second, "test");
     } else {
       ADD_FAILURE() << "Did not find custom parameter";
     }
@@ -7210,7 +7199,7 @@ TEST_P(EndToEndTest, OriginalConnectionIdClearedFromMap) {
 
 TEST_P(EndToEndTest, ServerReportsNotEct) {
   // Client connects using not-ECT.
-  SetQuicReloadableFlag(quic_send_ect1, true);
+  SetQuicRestartFlag(quic_support_ect1, true);
   ASSERT_TRUE(Initialize());
   QuicConnection* client_connection = GetClientConnection();
   QuicConnectionPeer::DisableEcnCodepointValidation(client_connection);
@@ -7230,7 +7219,7 @@ TEST_P(EndToEndTest, ServerReportsNotEct) {
 
 TEST_P(EndToEndTest, ServerReportsEct0) {
   // Client connects using not-ECT.
-  SetQuicReloadableFlag(quic_send_ect1, true);
+  SetQuicRestartFlag(quic_support_ect1, true);
   ASSERT_TRUE(Initialize());
   QuicConnection* client_connection = GetClientConnection();
   QuicConnectionPeer::DisableEcnCodepointValidation(client_connection);
@@ -7255,7 +7244,7 @@ TEST_P(EndToEndTest, ServerReportsEct0) {
 
 TEST_P(EndToEndTest, ServerReportsEct1) {
   // Client connects using not-ECT.
-  SetQuicReloadableFlag(quic_send_ect1, true);
+  SetQuicRestartFlag(quic_support_ect1, true);
   ASSERT_TRUE(Initialize());
   QuicConnection* client_connection = GetClientConnection();
   QuicConnectionPeer::DisableEcnCodepointValidation(client_connection);
@@ -7280,7 +7269,7 @@ TEST_P(EndToEndTest, ServerReportsEct1) {
 
 TEST_P(EndToEndTest, ServerReportsCe) {
   // Client connects using not-ECT.
-  SetQuicReloadableFlag(quic_send_ect1, true);
+  SetQuicRestartFlag(quic_support_ect1, true);
   ASSERT_TRUE(Initialize());
   QuicConnection* client_connection = GetClientConnection();
   QuicConnectionPeer::DisableEcnCodepointValidation(client_connection);
@@ -7304,7 +7293,7 @@ TEST_P(EndToEndTest, ServerReportsCe) {
 }
 
 TEST_P(EndToEndTest, ClientReportsEct1) {
-  SetQuicReloadableFlag(quic_send_ect1, true);
+  SetQuicRestartFlag(quic_support_ect1, true);
   ASSERT_TRUE(Initialize());
   // Wait for handshake to complete, so that we can manipulate the server
   // connection without race conditions.
@@ -7494,6 +7483,37 @@ TEST_P(EndToEndTest, MaxPacingRate) {
   QUIC_LOG(INFO) << "Response 2 duration: " << duration;
   EXPECT_GE(duration, QuicTime::Delta::FromSeconds(20));
   EXPECT_LE(duration, QuicTime::Delta::FromSeconds(25));
+}
+
+TEST_P(EndToEndTest, RequestsBurstMitigation) {
+  ASSERT_TRUE(Initialize());
+  if (!version_.HasIetfQuicFrames()) {
+    return;
+  }
+
+  // Send 50 requests simutanuously and wait for their responses. Hopefully at
+  // least more than 5 of these requests will arrive at the server in the same
+  // event loop and cause some of them to be pending till the next loop.
+  for (int i = 0; i < 50; ++i) {
+    EXPECT_LT(0, client_->SendRequest("/foo"));
+  }
+
+  while (50 > client_->num_responses()) {
+    client_->ClearPerRequestState();
+    client_->WaitForResponse();
+    CheckResponseHeaders(client_.get());
+  }
+  EXPECT_TRUE(client_->connected());
+
+  server_thread_->Pause();
+  QuicConnection* server_connection = GetServerConnection();
+  if (server_connection != nullptr) {
+    const QuicConnectionStats& server_stats = server_connection->GetStats();
+    EXPECT_LT(0u, server_stats.num_total_pending_streams);
+  } else {
+    ADD_FAILURE() << "Missing server connection";
+  }
+  server_thread_->Resume();
 }
 
 }  // namespace

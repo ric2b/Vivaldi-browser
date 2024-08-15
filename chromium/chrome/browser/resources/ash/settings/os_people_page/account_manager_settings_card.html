@@ -74,6 +74,10 @@
     left: auto;
     right: var(--badge-offset);
   }
+
+  :host-context(body.revamp-wayfinding-enabled) #managedUserIcon {
+    --iron-icon-fill-color: var(--cros-sys-secondary);
+  }
 </style>
 
 <settings-card header-text="$i18n{accountManagerPageTitle}">
@@ -88,7 +92,7 @@
    <template is="dom-if" if="[[isDeviceAccountManaged_]]">
     <div class="settings-box managed-message">
       <template is="dom-if" if="[[!isChildUser_]]">
-        <iron-icon icon="cr20:domain"></iron-icon>
+        <iron-icon id="managedUserIcon" icon="[[managedByIcon_]]"></iron-icon>
       </template>
       <template is="dom-if" if="[[isChildUser_]]">
         <cr-icon-button iron-icon="cr20:kite"
@@ -97,7 +101,7 @@
       </template>
       <localized-link
           localized-string=
-            "[[getManagementDescription_(isChildUser_, deviceAccount_)]]"
+            "[[getManagementDescription_(isChildUser_, deviceAccount)]]"
           link-url="$i18nRaw{accountManagerChromeUIManagementURL}">
       </localized-link>
     </div>
@@ -109,7 +113,7 @@
       aria-describedby="deviceAccountEmail">
     <div class="profile-icon device-account-icon"
         aria-hidden="true"
-        style="background-image: [[getIconImageSet_(deviceAccount_.pic)]]">
+        style="background-image: [[getIconImageSet_(deviceAccount)]]">
       <template is="dom-if"
           if="[[shouldShowManagedBadge_(isDeviceAccountManaged_,
                 isChildUser_)]]">
@@ -119,10 +123,10 @@
       </template>
     </div>
     <span id="deviceAccountFullName" class="primary" aria-hidden="true">
-      [[deviceAccount_.fullName]]
+      [[deviceAccount.fullName]]
     </span>
     <span id="deviceAccountEmail" class="secondary" aria-hidden="true">
-      [[deviceAccount_.email]]
+      [[deviceAccount.email]]
     </span>
   </div>
 </settings-card>

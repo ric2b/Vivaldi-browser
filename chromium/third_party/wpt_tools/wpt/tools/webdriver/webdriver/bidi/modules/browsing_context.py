@@ -1,18 +1,17 @@
 import base64
+from enum import Enum
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Union
 
 from ._module import BidiModule, command
+from .script import OwnershipModel, SerializationOptions
+from ..undefined import UNDEFINED, Undefined
+
 
 
 class ElementOptions(Dict[str, Any]):
-    def __init__(
-        self, element: Mapping[str, Any], scroll_into_view: Optional[bool] = None
-    ):
+    def __init__(self, element: Mapping[str, Any]):
         self["type"] = "element"
         self["element"] = element
-
-        if scroll_into_view is not None:
-            self["scrollIntoView"] = scroll_into_view
 
 
 class BoxOptions(Dict[str, Any]):
@@ -27,6 +26,19 @@ class BoxOptions(Dict[str, Any]):
 ClipOptions = Union[ElementOptions, BoxOptions]
 
 
+class OriginOptions(Enum):
+    DOCUMENT = "document"
+    VIEWPORT = "viewport"
+
+
+class FormatOptions(Dict[str, Any]):
+    def __init__(self, type: str, quality: Optional[float] = None):
+        dict.__init__(self, type=type)
+
+        if quality is not None:
+            self["quality"] = quality
+
+
 class BrowsingContext(BidiModule):
     @command
     def activate(self, context: str) -> Mapping[str, Any]:
@@ -34,12 +46,20 @@ class BrowsingContext(BidiModule):
 
     @command
     def capture_screenshot(
-        self, context: str, clip: Optional[ClipOptions] = None
+        self,
+        context: str,
+        clip: Optional[ClipOptions] = None,
+        origin: Optional[OriginOptions] = None,
+        format: Optional[FormatOptions] = None,
     ) -> Mapping[str, Any]:
         params: MutableMapping[str, Any] = {"context": context}
 
+        if format is not None:
+            params["format"] = format
         if clip is not None:
             params["clip"] = clip
+        if origin is not None:
+            params["origin"] = origin
 
         return params
 
@@ -112,6 +132,35 @@ class BrowsingContext(BidiModule):
         return params
 
     @command
+    def locate_nodes(self,
+                     context: str,
+                     locator: Mapping[str, Any],
+                     max_node_count: Optional[int] = None,
+                     ownership: Optional[OwnershipModel] = None,
+                     sandbox: Optional[str] = None,
+                     serialization_options: Optional[SerializationOptions] = None,
+                     start_nodes: Optional[List[Mapping[str, Any]]] = None) -> Mapping[str, Any]:
+        params: MutableMapping[str, Any] = {"context": context, "locator": locator}
+        if max_node_count is not None:
+            params["maxNodeCount"] = max_node_count
+        if ownership is not None:
+            params["ownership"] = ownership
+        if sandbox is not None:
+            params["sandbox"] = sandbox
+        if serialization_options is not None:
+            params["serializationOptions"] = serialization_options
+        if start_nodes is not None:
+            params["startNodes"] = start_nodes
+        return params
+
+    @locate_nodes.result
+    def _locate_nodes(self, result: Mapping[str, Any]) -> Any:
+        assert result["nodes"] is not None
+        assert isinstance(result["nodes"], List)
+
+        return result
+
+    @command
     def navigate(self,
                  context: str,
                  url: str,
@@ -178,5 +227,22 @@ class BrowsingContext(BidiModule):
         return result["data"]
 
     @command
-    def set_viewport(self, context: str, viewport: Optional[Mapping[str, Any]] = None) -> Mapping[str, Any]:
-        return {"context": context, "viewport": viewport}
+    def set_viewport(self,
+                     context: str,
+                     viewport: Union[Optional[Mapping[str, Any]], Undefined] = UNDEFINED,
+                     device_pixel_ratio: Union[Optional[float], Undefined] = UNDEFINED) -> Mapping[str, Any]:
+        params: MutableMapping[str, Any] = {
+            "context": context,
+        }
+
+        if viewport is not UNDEFINED:
+            params["viewport"] = viewport
+
+        if device_pixel_ratio is not UNDEFINED:
+            params["devicePixelRatio"] = device_pixel_ratio
+
+        return params
+
+    @command
+    def traverse_history(self, context: str, delta: int) -> Mapping[str, Any]:
+        return {"context": context, "delta": delta}

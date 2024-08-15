@@ -5,17 +5,20 @@
 #include "components/plus_addresses/plus_address_service.h"
 
 #include "base/scoped_observation.h"
+#include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/plus_addresses/features.h"
 #include "components/plus_addresses/plus_address_client.h"
 #include "components/plus_addresses/plus_address_prefs.h"
 #include "components/plus_addresses/plus_address_types.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/persistent_repeating_timer.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/http/http_status_code.h"
 
 namespace plus_addresses {
 
@@ -50,17 +53,38 @@ PlusAddressService::PlusAddressService(
     PlusAddressClient plus_address_client)
     : identity_manager_(identity_manager),
       pref_service_(pref_service),
-      plus_address_client_(std::move(plus_address_client)) {
-  // Begin PlusAddress periodic actions at construction.
-  CreateAndStartTimer();
+      plus_address_client_(std::move(plus_address_client)),
+      excluded_sites_(GetAndParseExcludedSites()) {
+  if (pref_service) {
+    // Clear the pref to always force a poll on service construction.
+    pref_service->ClearPref(prefs::kPlusAddressLastFetchedTime);
+    CreateAndStartTimer();
+  }
   if (identity_manager) {
     identity_manager_observation_.Observe(identity_manager);
   }
 }
 
-bool PlusAddressService::SupportsPlusAddresses(url::Origin origin) {
-  // TODO(b/295187452): Also check `origin` here.
-  return is_enabled();
+bool PlusAddressService::SupportsPlusAddresses(url::Origin origin,
+                                               bool is_off_the_record) {
+  // First, check prerequisites (the feature enabled, etc.).
+  if (!is_enabled()) {
+    return false;
+  }
+
+  // Check if origin is supported (Not opaque, in the `excluded_sites_`, or is
+  // non http/https scheme).
+  if (!IsSupportedOrigin(origin)) {
+    return false;
+  }
+  // We've met the prerequisites. If this isn't an OTR session, plus_addresses
+  // are supported.
+  if (!is_off_the_record) {
+    return true;
+  }
+  // Prerequisites are met, but it's an off-the-record session. If there's an
+  // existing plus_address, it's supported, otherwise it is not.
+  return GetPlusAddress(origin).has_value();
 }
 
 absl::optional<std::string> PlusAddressService::GetPlusAddress(
@@ -97,36 +121,6 @@ void PlusAddressService::SavePlusAddress(url::Origin origin,
 bool PlusAddressService::IsPlusAddress(std::string potential_plus_address) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return plus_addresses_.contains(potential_plus_address);
-}
-
-void PlusAddressService::OfferPlusAddressCreation(
-    const url::Origin& origin,
-    PlusAddressCallback callback) {
-  if (!is_enabled()) {
-    return;
-  }
-  // Check the local mapping before issuing a network request.
-  if (absl::optional<std::string> plus_address = GetPlusAddress(origin);
-      plus_address) {
-    std::move(callback).Run(plus_address.value());
-    return;
-  }
-  plus_address_client_.CreatePlusAddress(
-      origin,
-      // On receiving the PlusAddress...
-      base::BindOnce(
-          // ... first send it back to Autofill
-          [](PlusAddressCallback callback, const std::string& plus_address) {
-            std::move(callback).Run(plus_address);
-            return plus_address;
-          },
-          std::move(callback))
-          // ... then save it in this service.
-          .Then(base::BindOnce(
-              &PlusAddressService::SavePlusAddress,
-              // base::Unretained is safe here since PlusAddressService owns
-              // the PlusAddressClient and they will have the same lifetime.
-              base::Unretained(this), origin)));
 }
 
 void PlusAddressService::ReservePlusAddress(
@@ -190,7 +184,7 @@ std::u16string PlusAddressService::GetCreateSuggestionLabel() {
   // TODO(crbug.com/1467623): once ready, use standard
   // `l10n_util::GetStringUTF16` instead of using feature params.
   return base::UTF8ToUTF16(
-      plus_addresses::kEnterprisePlusAddressLabelOverride.Get());
+      plus_addresses::kEnterprisePlusAddressSuggestionLabelOverride.Get());
 }
 
 absl::optional<std::string> PlusAddressService::GetPrimaryEmail() {
@@ -206,7 +200,12 @@ absl::optional<std::string> PlusAddressService::GetPrimaryEmail() {
 }
 
 bool PlusAddressService::is_enabled() const {
+  if (kDisableForForbiddenUsers.Get() && account_is_forbidden_.has_value() &&
+      account_is_forbidden_.value()) {
+    return false;
+  }
   return base::FeatureList::IsEnabled(plus_addresses::kFeature) &&
+         (kEnterprisePlusAddressServerUrl.Get() != "") &&
          identity_manager_ != nullptr &&
          // Note that having a primary account implies that account's email will
          // be populated.
@@ -236,7 +235,17 @@ void PlusAddressService::SyncPlusAddressMapping() {
     return;
   }
   plus_address_client_.GetAllPlusAddresses(base::BindOnce(
-      &PlusAddressService::UpdatePlusAddressMap,
+      [](PlusAddressService* service,
+         const PlusAddressMapOrError& maybe_mapping) {
+        if (maybe_mapping.has_value()) {
+          service->UpdatePlusAddressMap(maybe_mapping.value());
+          if (!service->account_is_forbidden_.has_value()) {
+            service->account_is_forbidden_.emplace(false);
+          }
+        } else {
+          service->HandlePollingError(maybe_mapping.error());
+        }
+      },
       // base::Unretained is safe here since PlusAddressService owns
       // the PlusAddressClient and they have the same lifetime.
       base::Unretained(this)));
@@ -253,6 +262,22 @@ void PlusAddressService::UpdatePlusAddressMap(const PlusAddressMap& map) {
   }
 }
 
+void PlusAddressService::HandlePollingError(PlusAddressRequestError error) {
+  if (!kDisableForForbiddenUsers.Get() ||
+      error.type() != PlusAddressRequestErrorType::kNetworkError) {
+    return;
+  }
+  if (!account_is_forbidden_.has_value() &&
+      error.http_response_code() == net::HTTP_FORBIDDEN) {
+    // Only retry failed 403s up to the limit.
+    if (initial_poll_retry_attempt_ < MAX_INITIAL_POLL_RETRY_ATTEMPTS) {
+      initial_poll_retry_attempt_++;
+      SyncPlusAddressMapping();
+    } else {
+      account_is_forbidden_.emplace(true);
+    }
+  }
+}
 void PlusAddressService::OnPrimaryAccountChanged(
     const signin::PrimaryAccountChangeEvent& event) {
   signin::PrimaryAccountChangeEvent::Type type =
@@ -284,6 +309,25 @@ void PlusAddressService::HandleSignout() {
   plus_address_by_site_.clear();
   plus_addresses_.clear();
   repeating_timer_.reset();
+}
+
+std::set<std::string> PlusAddressService::GetAndParseExcludedSites() {
+  std::set<std::string> parsed_excluded_sites;
+  for (const std::string& site :
+       base::SplitString(kPlusAddressExcludedSites.Get(), ",",
+                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    parsed_excluded_sites.insert(site);
+  }
+  return parsed_excluded_sites;
+}
+
+bool PlusAddressService::IsSupportedOrigin(const url::Origin& origin) const {
+  if (origin.opaque() || excluded_sites_.contains(GetEtldPlusOne(origin))) {
+    return false;
+  }
+
+  return origin.scheme() == url::kHttpsScheme ||
+         origin.scheme() == url::kHttpScheme;
 }
 
 }  // namespace plus_addresses

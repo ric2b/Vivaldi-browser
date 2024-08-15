@@ -35,6 +35,35 @@ message LogicalVolumeConfiguration {
   int64 size = 2;
 }
 
+// Encapsulates the request into CreateLogicalVolumes API.
+message CreateLogicalVolumesRequest {
+  // Encapsulates the info needed to create a single logical volume.
+  message LogicalVolumeInfo {
+    Thinpool thinpool = 1;
+    LogicalVolumeConfiguration lv_config = 2;
+  }
+  repeated LogicalVolumeInfo logical_volume_infos = 1;
+}
+
+// Encapsulates the response from CreateLogicalVolumes API.
+// Note: Use a proto in case response need to be expanded/tweaked without
+// breaking callers of the API.
+message CreateLogicalVolumesResponse {
+  LogicalVolumeList logical_volume_list = 1;
+}
+
+// Encapsulates the request into RemoveLogicalVolumes API.
+message RemoveLogicalVolumesRequest {
+  LogicalVolumeList logical_volume_list = 1;
+}
+
+// Encapsulates the response from  RemoveLogicalVolumes API.
+// Note: Use a proto in case response need to be expanded/tweaked without
+// breaking callers of the API.
+message RemoveLogicalVolumesResponse {
+  LogicalVolumeList logical_volume_list = 1;
+}
+
 // Encapsulates information about an LVM logical volume.
 message LogicalVolume {
   VolumeGroup volume_group = 1;

@@ -50,7 +50,7 @@ const std::vector<SearchConcept>& GetDefaultSearchConcepts(
        {.section = section}},
       {IDS_OS_SETTINGS_TAG_FILES_NETWORK_FILE_SHARES,
        mojom::kNetworkFileSharesSubpagePath,
-       mojom::SearchResultIcon::kFolder,
+       mojom::SearchResultIcon::kFolderShared,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kNetworkFileShares},
@@ -60,14 +60,27 @@ const std::vector<SearchConcept>& GetDefaultSearchConcepts(
   return *tags;
 }
 
-const std::vector<SearchConcept>& GetFilesOfficeSearchConcepts() {
+const std::vector<SearchConcept>& GetFilesMicrosoft365SearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags(
-      {{IDS_OS_SETTINGS_TAG_FILES_OFFICE,
+      {{IDS_OS_SETTINGS_TAG_FILES_MICROSOFT_365,
         mojom::kOfficeFilesSubpagePath,
         mojom::SearchResultIcon::kFolder,
         mojom::SearchResultDefaultRank::kMedium,
         mojom::SearchResultType::kSubpage,
-        {.subpage = mojom::Subpage::kOfficeFiles}}});
+        {.subpage = mojom::Subpage::kOfficeFiles},
+        {IDS_OS_SETTINGS_TAG_FILES_MICROSOFT_365_ALT1,
+         SearchConcept::kAltTagEnd}}});
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetFilesOneDriveSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags(
+      {{IDS_OS_SETTINGS_TAG_FILES_ONEDRIVE,
+        mojom::kOneDriveSubpagePath,
+        mojom::SearchResultIcon::kOneDrive,
+        mojom::SearchResultDefaultRank::kMedium,
+        mojom::SearchResultType::kSubpage,
+        {.subpage = mojom::Subpage::kOneDrive}}});
   return *tags;
 }
 
@@ -76,7 +89,7 @@ const std::vector<SearchConcept>& GetFilesGoogleDriveFileSyncSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags(
       {{IDS_OS_SETTINGS_TAG_FILES_GOOGLE_DRIVE_FILE_SYNC,
         mojom::kGoogleDriveSubpagePath,
-        mojom::SearchResultIcon::kDrive,
+        mojom::SearchResultIcon::kGoogleDrive,
         mojom::SearchResultDefaultRank::kMedium,
         mojom::SearchResultType::kSubpage,
         {.setting = mojom::Setting::kGoogleDriveFileSync},
@@ -91,30 +104,16 @@ const std::vector<SearchConcept>& GetFilesGoogleDriveSubpageSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags(
       {{IDS_OS_SETTINGS_TAG_FILES_GOOGLE_DRIVE,
         mojom::kGoogleDriveSubpagePath,
-        mojom::SearchResultIcon::kDrive,
+        mojom::SearchResultIcon::kGoogleDrive,
         mojom::SearchResultDefaultRank::kMedium,
         mojom::SearchResultType::kSubpage,
         {.subpage = mojom::Subpage::kGoogleDrive}},
        {IDS_OS_SETTINGS_TAG_FILES_REMOVE_GOOGLE_DRIVE_ACCESS,
         mojom::kGoogleDriveSubpagePath,
-        mojom::SearchResultIcon::kDrive,
+        mojom::SearchResultIcon::kGoogleDrive,
         mojom::SearchResultDefaultRank::kMedium,
         mojom::SearchResultType::kSetting,
         {.setting = mojom::Setting::kGoogleDriveRemoveAccess}}});
-  return *tags;
-}
-
-// If the Google Drive subpage is not enabled, returns search terms to navigate
-// to the existing Disconnect Google Drive setting.
-const std::vector<SearchConcept>&
-GetFilesGoogleDriveDisconnectSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags(
-      {{IDS_OS_SETTINGS_TAG_FILES_DISCONNECT_GOOGLE_DRIVE,
-        mojom::kFilesSectionPath,
-        mojom::SearchResultIcon::kDrive,
-        mojom::SearchResultDefaultRank::kMedium,
-        mojom::SearchResultType::kSetting,
-        {.setting = mojom::Setting::kGoogleDriveConnection}}});
   return *tags;
 }
 
@@ -127,20 +126,15 @@ FilesSection::FilesSection(Profile* profile,
   updater.AddSearchTags(
       GetDefaultSearchConcepts(GetSection(), GetSectionPath()));
   if (chromeos::IsEligibleAndEnabledUploadOfficeToCloud(profile)) {
-    updater.AddSearchTags(GetFilesOfficeSearchConcepts());
+    updater.AddSearchTags(GetFilesMicrosoft365SearchConcepts());
+    updater.AddSearchTags(GetFilesOneDriveSearchConcepts());
   }
 
   if (drive::util::IsDriveFsBulkPinningAvailable(profile)) {
     updater.AddSearchTags(GetFilesGoogleDriveFileSyncSearchConcepts());
   }
 
-  if (base::FeatureList::IsEnabled(
-          ash::features::kFilesGoogleDriveSettingsPage) ||
-      drive::util::IsDriveFsBulkPinningAvailable(profile)) {
-    updater.AddSearchTags(GetFilesGoogleDriveSubpageSearchConcepts());
-  } else {
-    updater.AddSearchTags(GetFilesGoogleDriveDisconnectSearchConcepts());
-  }
+  updater.AddSearchTags(GetFilesGoogleDriveSubpageSearchConcepts());
 }
 
 FilesSection::~FilesSection() = default;
@@ -293,10 +287,6 @@ void FilesSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "enableDriveFsBulkPinning",
       drive::util::IsDriveFsBulkPinningAvailable(profile()));
-
-  html_source->AddBoolean("showGoogleDriveSettingsPage",
-                          base::FeatureList::IsEnabled(
-                              ash::features::kFilesGoogleDriveSettingsPage));
 }
 
 void FilesSection::AddHandlers(content::WebUI* web_ui) {
@@ -335,26 +325,29 @@ void FilesSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kGoogleDriveRemoveAccess);
 
   // Network file shares.
-  generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_DOWNLOADS_SMB_SHARES, mojom::Subpage::kNetworkFileShares,
-      mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kNetworkFileSharesSubpagePath);
+  generator->RegisterTopLevelSubpage(IDS_SETTINGS_DOWNLOADS_SMB_SHARES,
+                                     mojom::Subpage::kNetworkFileShares,
+                                     mojom::SearchResultIcon::kFolderShared,
+                                     mojom::SearchResultDefaultRank::kMedium,
+                                     mojom::kNetworkFileSharesSubpagePath);
 
-  // Office.
+  // MS Office.
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_OFFICE_LABEL, mojom::Subpage::kOfficeFiles,
       mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
       mojom::kNetworkFileSharesSubpagePath);
 
+  // Google Drive.
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_GOOGLE_DRIVE, mojom::Subpage::kGoogleDrive,
-      mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kGoogleDriveSubpagePath);
+      mojom::SearchResultIcon::kGoogleDrive,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kGoogleDriveSubpagePath);
 
+  // One Drive
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_ONE_DRIVE_LABEL, mojom::Subpage::kOneDrive,
-      mojom::SearchResultIcon::kFolder, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kOneDriveSubpagePath);
+      mojom::SearchResultIcon::kOneDrive,
+      mojom::SearchResultDefaultRank::kMedium, mojom::kOneDriveSubpagePath);
 }
 
 }  // namespace ash::settings

@@ -118,6 +118,8 @@ class FieldValidationTest(unittest.TestCase):
             valid_values=[
                 "Apache, 2.0 / MIT / MPL 2",
                 "LGPL 2.1",
+                "GPL v2 or later",
+                "LGPL2 with the classpath exception",
                 "Apache, Version 2 and Public domain",
             ],
             error_values=["", "\n", ",", "Apache 2.0 / MIT / "],

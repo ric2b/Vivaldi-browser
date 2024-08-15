@@ -67,10 +67,11 @@ cc_library(
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/type",
-    "//src/tint/lang/spirv/reader/common",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
     "//src/tint/lang/wgsl/ast/transform",
+    "//src/tint/lang/wgsl/common",
+    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",
     "//src/tint/lang/wgsl/resolver",
     "//src/tint/lang/wgsl/sem",
@@ -90,6 +91,7 @@ cc_library(
   ] + select({
     ":tint_build_spv_reader": [
       "//src/tint/lang/spirv/reader/ast_lower",
+      "//src/tint/lang/spirv/reader/common",
     ],
     "//conditions:default": [],
   }) + select({
@@ -146,9 +148,10 @@ cc_library(
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/type",
-    "//src/tint/lang/spirv/reader/common",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
+    "//src/tint/lang/wgsl/common",
+    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",
     "//src/tint/lang/wgsl/sem",
     "//src/tint/utils/containers",
@@ -169,6 +172,7 @@ cc_library(
   ] + select({
     ":tint_build_spv_reader": [
       "//src/tint/lang/spirv/reader/ast_parser",
+      "//src/tint/lang/spirv/reader/common",
     ],
     "//conditions:default": [],
   }) + select({

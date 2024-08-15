@@ -28,7 +28,7 @@ class LanguagePackEventRouter
       const ash::language_packs::PackResult& pack_result) override;
 
  private:
-  const raw_ptr<content::BrowserContext, ExperimentalAsh> context_;
+  const raw_ptr<content::BrowserContext> context_;
   base::ScopedObservation<ash::language_packs::LanguagePackManager,
                           ash::language_packs::LanguagePackManager::Observer>
       obs_{this};
@@ -36,4 +36,4 @@ class LanguagePackEventRouter
 
 }  // namespace chromeos
 
-#endif
+#endif  // CHROME_BROWSER_ASH_EXTENSIONS_LANGUAGE_PACKS_LANGUAGE_PACK_EVENT_ROUTER_H_

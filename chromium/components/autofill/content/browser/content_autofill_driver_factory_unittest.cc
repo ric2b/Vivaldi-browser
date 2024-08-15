@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -80,7 +81,8 @@ class MockAutofillAgent : public mojom::AutofillAgent {
               ApplyFormAction,
               (mojom::ActionType action_type,
                mojom::ActionPersistence action_persistence,
-               const FormData& form),
+               FormRendererId form_renderer_id,
+               const std::vector<FormFieldData>& fields),
               (override));
   MOCK_METHOD(void,
               ApplyFieldAction,
@@ -102,7 +104,8 @@ class MockAutofillAgent : public mojom::AutofillAgent {
               (override));
   MOCK_METHOD(void,
               SetSuggestionAvailability,
-              (FieldRendererId field, mojom::AutofillState type),
+              (FieldRendererId field,
+               mojom::AutofillSuggestionAvailability suggestion_availability),
               (override));
   MOCK_METHOD(void,
               AcceptDataListSuggestion,
@@ -122,10 +125,6 @@ class MockAutofillAgent : public mojom::AutofillAgent {
   MOCK_METHOD(void, SetFocusRequiresScroll, (bool require), (override));
   MOCK_METHOD(void, SetQueryPasswordSuggestion, (bool query), (override));
   MOCK_METHOD(void, EnableHeavyFormDataScraping, (), (override));
-  MOCK_METHOD(void,
-              SetFieldsEligibleForManualFilling,
-              (const std::vector<FieldRendererId>& fields),
-              (override));
   MOCK_METHOD(void,
               GetPotentialLastFourCombinationsForStandaloneCvc,
               (base::OnceCallback<void(const std::vector<std::string>&)>),
@@ -171,7 +170,7 @@ class ContentAutofillDriverFactoryTest
     content::RenderViewHostTestHarness::TearDown();
   }
 
-  void NavigateMainFrame(base::StringPiece url) {
+  void NavigateMainFrame(std::string_view url) {
     content::NavigationSimulator::CreateBrowserInitiated(GURL(url),
                                                          web_contents())
         ->Commit();
@@ -200,7 +199,7 @@ TEST_F(ContentAutofillDriverFactoryTest, MainDriver) {
 class ContentAutofillDriverFactoryTest_WithTwoFrames
     : public ContentAutofillDriverFactoryTest {
  public:
-  void NavigateChildFrame(base::StringPiece url) {
+  void NavigateChildFrame(std::string_view url) {
     CHECK(main_rfh());
     if (!child_rfh()) {
       child_rfh_id_ = content::RenderFrameHostTester::For(main_rfh())

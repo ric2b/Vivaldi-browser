@@ -25,23 +25,25 @@ FrameNode::Visibility GetFrameNodeVisibility(FrameNodeImpl* frame_node,
   }
 
   // Only frame nodes that are current can be visible.
-  if (!frame_node->is_current()) {
+  if (!frame_node->IsCurrent()) {
     return FrameNode::Visibility::kNotVisible;
   }
 
-  // A main frame is always visible if the page is visible.
-  if (frame_node->IsMainFrame()) {
+  // The main frame is always visible if its page is visible. Fenced frames are
+  // an exception, as `IsMainFrame()` returns true for them, but they aren't
+  // really the outermost frame of the frame tree.
+  if (!frame_node->parent_or_outer_document_or_embedder()) {
     return FrameNode::Visibility::kVisible;
   }
 
   // Too early in the frame's lifecycle, don't know yet if it intersects with
   // the viewport. Can't determine the visibility.
-  if (!frame_node->intersects_viewport().has_value()) {
+  if (!frame_node->IntersectsViewport().has_value()) {
     return FrameNode::Visibility::kUnknown;
   }
 
   // The frame intersects with the viewport and is thus visible.
-  if (frame_node->intersects_viewport().value()) {
+  if (frame_node->IntersectsViewport().value()) {
     return FrameNode::Visibility::kVisible;
   }
 
@@ -124,7 +126,7 @@ void FrameVisibilityDecorator::OnIsCurrentChanged(const FrameNode* frame_node) {
 
 void FrameVisibilityDecorator::OnIntersectsViewportChanged(
     const FrameNode* frame_node) {
-  CHECK(!frame_node->IsMainFrame());
+  CHECK(frame_node->GetParentOrOuterDocumentOrEmbedder());
   CHECK(frame_node->IntersectsViewport().has_value());
   OnFramePropertyChanged(frame_node);
 }
@@ -135,7 +137,7 @@ void FrameVisibilityDecorator::OnPageUserVisibilityChanged(
   PageNodeImpl* page_node_impl = PageNodeImpl::FromNode(page_node);
 
   // A page can sometimes have no main frame.
-  FrameNodeImpl* main_frame_node = page_node_impl->GetMainFrameNodeImpl();
+  FrameNodeImpl* main_frame_node = page_node_impl->main_frame_node();
   if (!main_frame_node) {
     return;
   }
@@ -149,7 +151,7 @@ void FrameVisibilityDecorator::OnFramePropertyChanged(
   FrameNode::Visibility new_visibility = GetFrameNodeVisibility(
       frame_node_impl, IsPageUserVisible(frame_node_impl->page_node()));
 
-  if (new_visibility == frame_node_impl->visibility()) {
+  if (new_visibility == frame_node_impl->GetVisibility()) {
     // No visibility change.
     return;
   }

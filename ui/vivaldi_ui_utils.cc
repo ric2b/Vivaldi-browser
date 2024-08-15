@@ -97,7 +97,7 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
   gfx::Point screen_point(screen_x, screen_y);
 
   bool outside = true;
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     gfx::Rect rect = browser->is_type_devtools()
                          ? gfx::Rect()
                          : browser->window()->GetBounds();
@@ -116,7 +116,7 @@ Browser* FindBrowserForPersistentTabs(Browser* current_browser) {
     // Do not move anything on shutdown
     return nullptr;
   }
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser == current_browser) {
       continue;
     }
@@ -177,7 +177,7 @@ bool MoveTabToWindow(Browser* source_browser,
 }
 
 bool GetTabById(int tab_id, content::WebContents** contents, int* index) {
-  for (auto* target_browser : *BrowserList::GetInstance()) {
+  for (Browser* target_browser : *BrowserList::GetInstance()) {
     TabStripModel* target_tab_strip = target_browser->tab_strip_model();
     for (int i = 0; i < target_tab_strip->count(); ++i) {
       content::WebContents* target_contents =

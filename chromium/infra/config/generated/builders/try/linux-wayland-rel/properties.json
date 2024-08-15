@@ -1,17 +1,16 @@
 {
-  "$build/chromium_orchestrator": {
-    "compilator": "linux-wayland-rel-compilator",
-    "compilator_watcher_git_revision": "039b345114555dea8996630f1fc6e08319fa0422"
-  },
   "$build/chromium_tests_builder_config": {
     "builder_config": {
+      "additional_exclusions": [
+        "infra/config/generated/builders/try/linux-wayland-rel/gn-args.json"
+      ],
       "builder_db": {
         "entries": [
           {
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Builder (Wayland)",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -23,7 +22,8 @@
                 ],
                 "build_config": "Release",
                 "config": "chromium",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "apply_configs": [
@@ -37,7 +37,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Tests (Wayland)",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -49,7 +49,8 @@
                 ],
                 "build_config": "Release",
                 "config": "chromium",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "apply_configs": [
@@ -60,7 +61,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux Builder (Wayland)",
-                "project": "chromium-m120"
+                "project": "chromium-m122"
               }
             }
           }
@@ -70,14 +71,14 @@
         {
           "bucket": "ci",
           "builder": "Linux Builder (Wayland)",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Linux Tests (Wayland)",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
       ]
     }
@@ -89,9 +90,10 @@
     ],
     "use_clang_coverage": true
   },
-  "$build/flakiness": {
-    "check_for_flakiness": true,
-    "check_for_flakiness_with_resultdb": true
+  "$build/reclient": {
+    "instance": "rbe-chromium-untrusted",
+    "metrics_project": "chromium-reclient-metrics",
+    "scandeps_server": true
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],
@@ -101,6 +103,5 @@
     ]
   },
   "builder_group": "tryserver.chromium.linux",
-  "cq": "required",
-  "recipe": "chromium/orchestrator"
+  "recipe": "chromium_trybot"
 }

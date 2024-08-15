@@ -40,7 +40,7 @@ import (
 	"dawn.googlesource.com/dawn/tools/src/match"
 )
 
-// Glob returns all the strings that match the given filepath glob
+// Glob returns all the paths that match the given filepath glob
 func Glob(str string) ([]string, error) {
 	abs, err := filepath.Abs(str)
 	if err != nil {
@@ -71,7 +71,7 @@ func Glob(str string) ([]string, error) {
 		}
 	}
 	// No wildcard found. Does the file exist at 'str'?
-	if s, err := os.Stat(str); err != nil && !s.IsDir() {
+	if s, err := os.Stat(str); err == nil && !s.IsDir() {
 		return []string{str}, nil
 	}
 	return []string{}, nil

@@ -149,6 +149,36 @@ struct GetOpenDeviceResponse {
   bool pan_tilt_zoom_allowed;
 };
 
+// Mouse-wheel events to be delivered from a capturing app to a captured tab.
+// https://screen-share.github.io/captured-surface-control/
+//
+// |relative_x| is a value from [0, 1). It denotes the relative position
+// in the coordinate space of the captured surface, which is unknown to the
+// capturer. A value of 0 denotes the leftmost pixel; increasing values denote
+// values further to the right. The sender of the message scales from its own
+// coordinate space down to the relative values, and the receiver scales
+// back up to its own coordinates.
+//
+// |relative_y| is defined analogously to |relative_x|.
+//
+// |wheel_delta_x| and |wheel_delta_y| represent the scroll deltas in pixels.
+struct CapturedWheelAction {
+  double relative_x;
+  double relative_y;
+  int32 wheel_delta_x;
+  int32 wheel_delta_y;
+};
+
+// The result of a call to any of the Captured Surface Control APIs.
+// https://screen-share.github.io/captured-surface-control/
+enum CapturedSurfaceControlResult {
+  kSuccess,
+  kUnknownError,
+  kNoPermissionError,
+  kCapturedSurfaceNotFoundError,
+  kDisallowedForSelfCaptureError,
+};
+
 // Per-frame renderer-side interface that receives device stopped/change
 // notifications or pause requests from the browser process.
 interface MediaStreamDeviceObserver {
@@ -212,7 +242,7 @@ interface MediaStreamDispatcherHost {
   // the captured source (tab/window).
   // It is an error to set it to |true| for anything other than
   // a video track derived from tab/window screen-capture.
-  [EnableIfNot=is_android]
+  [EnableIfNot=is_android_or_ios]
   FocusCapturedSurface(string label, bool focus);
 
   // Cancels the request for a new media stream or opening a device.
@@ -263,12 +293,44 @@ interface MediaStreamDispatcherHost {
   // a higher version.)
   //
   // The callback reports success/failure.
-  [EnableIfNot=is_android]
+  [EnableIfNot=is_android_or_ios]
   ApplySubCaptureTarget(mojo_base.mojom.UnguessableToken device_id,
        media.mojom.SubCaptureTargetType type,
        mojo_base.mojom.Token sub_capture_target,
        uint32 sub_capture_target_version)
     => (media.mojom.ApplySubCaptureTargetResult result);
+
+  // Deliver a wheel event from a capturing app to a captured tab.
+  //
+  // |device_id| identifies the captured tab.
+  // |action| is the action (mouse event) to be delivered.
+  // |callback| will be invoked with the result.
+  [EnableIfNot=is_android_or_ios]
+  SendWheel(mojo_base.mojom.UnguessableToken device_id,
+            CapturedWheelAction action) =>
+    (CapturedSurfaceControlResult result);
+
+  // Retrieves the zoom level from the captured tab.
+  //
+  // |device_id| identifies the captured tab.
+  // |zoom_level| will contain the zoom level if the request is successful.
+  // |result| reports if the call was successful or what type of error occurred.
+  [EnableIfNot=is_android_or_ios]
+  GetZoomLevel(mojo_base.mojom.UnguessableToken device_id)
+           => (int32? zoom_level, CapturedSurfaceControlResult result);
+
+  // Sets the zoom level of the captured tab.
+  //
+  // |device_id| identifies the captured tab.
+  // |zoom_level| is the zoom level to be set.
+  // |result| reports if the call was successful or what type of error occurred.
+  //
+  // TODO(crbug.com/1512609): Create a new device mojo interface to replace the
+  // use of the device_id token.
+  [EnableIfNot=is_android_or_ios]
+  SetZoomLevel(mojo_base.mojom.UnguessableToken device_id,
+               int32 zoom_level)
+           => (CapturedSurfaceControlResult result);
 
   // Get a MediaStreamDevice metadata object which refers to the same flow of
   // media backing an existing MediaStreamDevice.

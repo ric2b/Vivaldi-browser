@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/build_config.h"
-
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -25,8 +24,10 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
+#include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/autofill_flow_test_util.h"
 #include "chrome/browser/autofill/autofill_uitest.h"
@@ -57,14 +58,11 @@
 #include "components/autofill/core/browser/browser_autofill_manager_test_api.h"
 #include "components/autofill/core/browser/browser_autofill_manager_test_delegate.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/test_autofill_clock.h"
+#include "components/autofill/core/browser/mock_autofill_manager_observer.h"
 #include "components/autofill/core/browser/test_autofill_manager_waiter.h"
-#include "components/autofill/core/browser/test_autofill_tick_clock.h"
 #include "components/autofill/core/browser/validation.h"
-#include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -90,7 +88,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -112,9 +109,15 @@
 using base::ASCIIToUTF16;
 using content::URLLoaderInterceptor;
 using ::testing::_;
+using ::testing::AllOf;
 using ::testing::AssertionFailure;
 using ::testing::AssertionResult;
 using ::testing::AssertionSuccess;
+using ::testing::ElementsAre;
+using ::testing::Eq;
+using ::testing::Field;
+using ::testing::StartsWith;
+using ::testing::UnorderedElementsAreArray;
 
 namespace autofill {
 
@@ -157,6 +160,30 @@ constexpr char kTestShippingFormString[] = R"(
      <input type="text" id="phone"><br>
     </form>
     )";
+
+constexpr std::string_view kNumElementsMatchesNumFields =
+    "Autofill.NumElementsMatchesNumFields";
+
+ACTION_P(InvokeClosure, closure) {
+  closure.Run();
+}
+
+// Continuously merges histograms from all subprocesses and checks if the
+// histogram `histogram_name` got observed with `expected_count` and
+// `expected_sample`. Then runs `base::HistogramTester::ExpectUniqueSample`.
+bool WaitAndExpectUniqueSample(const base::HistogramTester* histogram_tester,
+                               const std::string_view histogram_name,
+                               const bool expected_sample,
+                               const int expected_count) {
+  bool expected_count_observed = base::test::RunUntil([&]() {
+    ::metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+    return histogram_tester->GetBucketCount(histogram_name, expected_sample) ==
+           expected_count;
+  });
+  histogram_tester->ExpectUniqueSample(kNumElementsMatchesNumFields,
+                                       expected_sample, expected_count);
+  return expected_count_observed;
+}
 
 // Version of `kTestShippingFormString` which uses <selectlist> instead of
 // <select>.
@@ -246,21 +273,6 @@ std::vector<FieldValue> GetFieldValues(
   return AssertionSuccess();
 }
 
-// Executes `EnterTextIntoField()` for a series of fields.
-[[nodiscard]] AssertionResult EnterTextsIntoFields(
-    std::vector<std::pair<autofill::ElementExpr, std::string>> values,
-    AutofillUiTest* test,
-    content::ToRenderFrameHost execution_target) {
-  for (const auto& [element, value] : values) {
-    AssertionResult a =
-        EnterTextIntoField(element, value, test, execution_target);
-    if (!a) {
-      return AssertionFailure() << __func__ << "(): " << a;
-    }
-  }
-  return AssertionSuccess();
-}
-
 const std::vector<FieldValue> kEmptyAddress{
     {"firstname", ""}, {"lastname", ""}, {"address1", ""},
     {"address2", ""},  {"city", ""},     {"state", ""},
@@ -270,6 +282,7 @@ const struct {
   const char* first_name = "Milton";
   const char* middle_name = "C.";
   const char* last_name = "Waddams";
+  const char* full_name = "Milton C. Waddams";
   const char* address1 = "4120 Freidrich Lane";
   const char* address2 = "Basement";
   const char* city = "Austin";
@@ -316,20 +329,32 @@ const std::vector<FieldValue> kDefaultAddress{
   return fields;
 }
 
+// A generic "map" function, intended to lift values `args...` to a matcher
+// `fun(args)...`. For example, `ElementsAreArray(Map({x, y, z}, fun))` is
+// `ElementsAreArray({fun(x), fun(y), fun(z)})`.
+template <typename Arg, typename Fun>
+[[nodiscard]] auto Map(const std::vector<Arg>& args, Fun fun) {
+  std::vector<decltype(std::invoke(fun, args[0]))> matchers;
+  for (const Arg& arg : args) {
+    matchers.push_back(std::invoke(fun, arg));
+  }
+  return matchers;
+}
+
 // Matches a container of FieldValues if the `i`th actual FieldValue::value
 // matches the `i`th `expected` FieldValue::value.
 // As a sanity check, also requires that the `i`th actual FieldValue::id
 // starts with the `i`th `expected` FieldValue::id.
 [[nodiscard]] auto ValuesAre(const std::vector<FieldValue>& expected) {
-  auto FieldEq = [](const FieldValue& expected) {
-    return ::testing::AllOf(
-        ::testing::Field(&FieldValue::id, ::testing::StartsWith(expected.id)),
-        ::testing::Field(&FieldValue::value, ::testing::Eq(expected.value)));
-  };
-  std::vector<decltype(FieldEq(expected[0]))> matchers;
-  for (const FieldValue& field : expected)
-    matchers.push_back(FieldEq(field));
-  return ::testing::UnorderedElementsAreArray(matchers);
+  return UnorderedElementsAreArray(
+      Map(expected, [](const FieldValue& expected) {
+        return AllOf(Field(&FieldValue::id, StartsWith(expected.id)),
+                     Field(&FieldValue::value, Eq(expected.value)));
+      }));
+}
+
+[[nodiscard]] auto FieldsAre(auto matcher) {
+  return Field(&FormData::fields, ElementsAreArray(matcher));
 }
 
 // An object that waits for an observed form-control element to change its value
@@ -344,8 +369,8 @@ class ValueWaiter {
       : waiterId_(waiterId), execution_target_(execution_target) {}
 
   // Returns the non-empty value of the observed form-control element, or
-  // absl::nullopt if no value change is observed before `timeout`.
-  [[nodiscard]] absl::optional<std::string> Wait(
+  // std::nullopt if no value change is observed before `timeout`.
+  [[nodiscard]] std::optional<std::string> Wait(
       base::TimeDelta timeout = kDefaultTimeout) && {
     const std::string kFunction = R"(
       // Polls the value of `window[observedValueSlots]` and replies with the
@@ -390,8 +415,8 @@ class ValueWaiter {
                                           waiterId_, timeout.InMilliseconds());
     content::EvalJsResult r =
         content::EvalJs(execution_target_, kFunction + call);
-    return !r.value.is_none() ? absl::make_optional(r.ExtractString())
-                              : absl::nullopt;
+    return !r.value.is_none() ? std::make_optional(r.ExtractString())
+                              : std::nullopt;
   }
 
  private:
@@ -422,7 +447,7 @@ class ValueWaiter {
 // Event 9 happens no later than 5 seconds after that.
 [[nodiscard]] ValueWaiter ListenForValueChange(
     const std::string& id,
-    const absl::optional<std::string>& unblock_variable,
+    const std::optional<std::string>& unblock_variable,
     content::ToRenderFrameHost execution_target) {
   const std::string kFunction = R"(
     // This function observes the DOM for an attached form-control element `id`.
@@ -503,21 +528,6 @@ class ValueWaiter {
   return ValueWaiter(waiterId, execution_target);
 }
 
-// Matcher for a FormData which checks that the submitted fields correspond
-// to the name/value pairs in `expected`.
-auto SubmittedValuesAre(
-    const std::map<std::u16string, std::u16string>& expected) {
-  auto get_submitted_values = [](const FormData& form) {
-    std::map<std::u16string, std::u16string> result;
-    for (const auto& field : form.fields) {
-      result[field.name] = field.value;
-    }
-    return result;
-  };
-  return ResultOf("get_submitted_values", get_submitted_values,
-                  ::testing::ContainerEq(expected));
-}
-
 }  // namespace
 
 // Test fixtures derive from this class. This class hierarchy allows test
@@ -535,7 +545,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     // "fr" instead of "en").
     feature_list_.InitWithFeatures(
         /*enabled_features=*/
-        {blink::features::kAutofillShadowDOM},
+        {features::kAutofillTextAreaChangeEvents},
         /*disabled_features=*/{features::kAutofillPageLanguageDetection});
   }
   ~AutofillInteractiveTestBase() override = default;
@@ -717,7 +727,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
   }
 
   void CreateTestProfile() {
-    AutofillProfile profile;
+    AutofillProfile profile(AddressCountryCode(kDefaultAddressValues.country));
     test::SetProfileInfo(
         &profile, kDefaultAddressValues.first_name,
         kDefaultAddressValues.middle_name, kDefaultAddressValues.last_name,
@@ -731,7 +741,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
   }
 
   void CreateSecondTestProfile() {
-    AutofillProfile profile;
+    AutofillProfile profile(AddressCountryCode("US"));
     test::SetProfileInfo(&profile, "Alice", "M.", "Wonderland",
                          "alice@wonderland.com", "Magic", "333 Cat Queen St.",
                          "Rooftop", "Liliput", "CA", "10003", "US",
@@ -867,7 +877,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
 
   // KeyPressEventCallback that serves as a sink to ensure that every key press
   // event the tests create and have the WebContents forward is handled by some
-  // key press event callback. It is necessary to have this sinkbecause if no
+  // key press event callback. It is necessary to have this sink because if no
   // key press event callback handles the event (at least on Mac), a DCHECK
   // ends up going off that the |event| doesn't have an |os_event| associated
   // with it.
@@ -1021,22 +1031,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveDisableAutofillSelectListTest,
                          {"state", ""}}));
 }
 
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, BasicClear) {
-  CreateTestProfile();
-  SetTestUrlResponse(kTestShippingFormString);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
-
-  ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this,
-                           {.show_method = ShowMethod::ByChar('M'),
-                            .after_select = ExpectValues(MergeValue(
-                                kEmptyAddress, {"firstname", "M"}))}));
-  EXPECT_THAT(GetFormValues(), ValuesAre(kDefaultAddress));
-
-  ASSERT_TRUE(
-      AutofillFlow(GetElementById("firstname"), this, {.target_index = 1}));
-  EXPECT_THAT(GetFormValues(), ValuesAre(kEmptyAddress));
-}
-
 class AutofillInteractiveTest_UndoAutofill : public AutofillInteractiveTest {
   base::test::ScopedFeatureList scoped_feature_list_{features::kAutofillUndo};
 };
@@ -1061,7 +1055,34 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_UndoAutofill,
   EXPECT_THAT(GetFormValues(), ValuesAre(expected_values));
 }
 
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ClearTwoSection) {
+class AutofillInteractiveTest_ClearForm : public AutofillInteractiveTest {
+ public:
+  AutofillInteractiveTest_ClearForm() {
+    scoped_feature_list_.InitAndDisableFeature(features::kAutofillUndo);
+  }
+  ~AutofillInteractiveTest_ClearForm() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_ClearForm, BasicClear) {
+  CreateTestProfile();
+  SetTestUrlResponse(kTestShippingFormString);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
+
+  ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this,
+                           {.show_method = ShowMethod::ByChar('M'),
+                            .after_select = ExpectValues(MergeValue(
+                                kEmptyAddress, {"firstname", "M"}))}));
+  EXPECT_THAT(GetFormValues(), ValuesAre(kDefaultAddress));
+
+  ASSERT_TRUE(
+      AutofillFlow(GetElementById("firstname"), this, {.target_index = 1}));
+  EXPECT_THAT(GetFormValues(), ValuesAre(kEmptyAddress));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_ClearForm, ClearTwoSection) {
   static const char kTestBillingFormString[] =
       R"( An example of a billing address form.
           <form action="https://www.example.com/" method="POST" id="billing">
@@ -1144,6 +1165,74 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
               ValuesAre(MergeValue(kDefaultAddress, {"city", "Montreal"})));
 }
 
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ModifyTextNotifiesObserver) {
+  CreateTestProfile();
+  SetTestUrlResponse(kTestShippingFormString);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
+
+  autofill::MockAutofillManagerObserver observer;
+  BrowserAutofillManager* autofill_manager = GetBrowserAutofillManager();
+  autofill_manager->AddObserver(&observer);
+
+  // OnAfterTextFieldDidChange will eventually be called with the final text
+  // "Montreal".
+  EventWaiter<bool> waiter({true});
+  EXPECT_CALL(observer, OnAfterTextFieldDidChange(_, _, _, _))
+      .WillRepeatedly([&](AutofillManager&, FormGlobalId, FieldGlobalId,
+                          std::u16string text_value) {
+        if (text_value == u"Montreal") {
+          waiter.OnEvent(true);
+        }
+      });
+
+  ASSERT_TRUE(FocusField(GetElementById("city"), GetWebContents()));
+  FillElementWithValue("city", "Montreal");
+
+  ASSERT_TRUE(waiter.Wait());
+  autofill_manager->RemoveObserver(&observer);
+}
+
+// Same as ModifyTextNotifiesObserver, but for textarea rather than input
+// elements.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+                       ModifyTextAreaNotifiesObserver) {
+  constexpr char kForm[] = R"(
+  <html>
+  <head>
+    <!-- Disable extra network request for /favicon.ico -->
+    <link rel="icon" href="data:,">
+  </head>
+  <body>
+    <form action="https://www.example.com/" method="POST" id="shipping">
+    <label for="address1">Address line 1:</label>
+     <textarea id="address1"></textarea>
+    </form>
+    )";
+
+  CreateTestProfile();
+  SetTestUrlResponse(kForm);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
+
+  autofill::MockAutofillManagerObserver observer;
+  BrowserAutofillManager* autofill_manager = GetBrowserAutofillManager();
+  autofill_manager->AddObserver(&observer);
+
+  EventWaiter<bool> waiter({true});
+  EXPECT_CALL(observer, OnAfterTextFieldDidChange(_, _, _, _))
+      .WillRepeatedly([&](AutofillManager&, FormGlobalId, FieldGlobalId,
+                          std::u16string text_value) {
+        if (text_value == u"My Address") {
+          waiter.OnEvent(true);
+        }
+      });
+
+  ASSERT_TRUE(FocusField(GetElementById("address1"), GetWebContents()));
+  FillElementWithValue("address1", "My Address");
+
+  ASSERT_TRUE(waiter.Wait());
+  autofill_manager->RemoveObserver(&observer);
+}
+
 void DoModifySelectFieldAndFill(AutofillInteractiveTest* test,
                                 bool should_test_selectlist) {
   test->CreateTestProfile();
@@ -1175,9 +1264,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ModifySelectListFieldAndFill) {
   DoModifySelectFieldAndFill(this, /*should_test_selectlist=*/true);
 }
 
-// Test that autofill works when the website prefills the form when
-// |kAutofillPreventOverridingPrefilledValues| is not enabled, otherwise, the
-// prefilled field values are not overridden.
+// Test that autofill works when the website prefills the form.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, PrefillFormAndFill) {
   const char kPrefillScript[] =
       R"( <script>
@@ -1198,22 +1285,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, PrefillFormAndFill) {
   ASSERT_TRUE(
       AutofillFlow(GetElementById("firstname"), this,
                    {.after_focus = base::BindLambdaForTesting(Delete)}));
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillPreventOverridingPrefilledValues)) {
-    EXPECT_EQ("Milton", GetFieldValueById("firstname"));
-    EXPECT_EQ("Bell", GetFieldValueById("lastname"));
-    EXPECT_EQ("3243 Notre-Dame Ouest", GetFieldValueById("address1"));
-    EXPECT_EQ("apt 843", GetFieldValueById("address2"));
-    EXPECT_EQ("Montreal", GetFieldValueById("city"));
-    EXPECT_EQ("H5D 4D3", GetFieldValueById("zip"));
-    EXPECT_EQ("15142223344", GetFieldValueById("phone"));
-  } else {
-    EXPECT_THAT(GetFormValues(), ValuesAre(kDefaultAddress));
-  }
+  EXPECT_THAT(GetFormValues(), ValuesAre(kDefaultAddress));
 }
 
 // Test that autofill doesn't refill a field modified by the user.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_ClearForm,
                        FillChangeSecondFieldRefillAndClearFirstFill) {
   CreateTestProfile();
   SetTestUrlResponse(kTestShippingFormString);
@@ -1246,8 +1322,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
               ValuesAre(MergeValue(kEmptyAddress, {"lastname", "Wadda"})));
 }
 
-// Test that multiple autofillings work.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+// Test that multiple autofill operations work.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_ClearForm,
                        FillChangeSecondFieldRefillAndClearSecondField) {
   CreateTestProfile();
   SetTestUrlResponse(kTestShippingFormString);
@@ -1279,8 +1355,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   EXPECT_THAT(GetFormValues(), ValuesAre(kEmptyAddress));
 }
 
-// Test that multiple autofillings work.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+// Test that multiple autofill operations work.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_ClearForm,
                        FillChangeSecondFieldRefillSecondFieldClearFirst) {
   CreateTestProfile();
   SetTestUrlResponse(kTestShippingFormString);
@@ -1309,8 +1385,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   EXPECT_THAT(GetFormValues(), ValuesAre(kEmptyAddress));
 }
 
-// Test that multiple autofillings work.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+// Test that multiple autofill operations work.
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest_ClearForm,
                        FillThenFillSomeWithAnotherProfileThenClear) {
   CreateTestProfile();
   CreateSecondTestProfile();
@@ -1492,11 +1568,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, OnSelectOptionFromDatalist) {
         id->c_str());
     return content::EvalJs(GetWebContents(), script).ExtractString();
   };
-  std::string orginalcolor = GetBackgroundColor(GetElementById("firstname"));
+  std::string original_color = GetBackgroundColor(GetElementById("firstname"));
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this,
                            {.num_profile_suggestions = 0, .target_index = 1}));
   EXPECT_EQ("Bob", GetFieldValueById("firstname"));
-  EXPECT_EQ(GetBackgroundColor(GetElementById("firstname")), orginalcolor);
+  EXPECT_EQ(GetBackgroundColor(GetElementById("firstname")), original_color);
 }
 
 // Test that an <input> field with a <datalist> has a working drop down even if
@@ -1651,7 +1727,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, InputFiresBeforeChange) {
           .ExtractString(),
   };
 
-  EXPECT_THAT(input_element_events, testing::ElementsAre("input", "change"));
+  EXPECT_THAT(input_element_events, ElementsAre("input", "change"));
 
   EXPECT_EQ(2,
             content::EvalJs(GetWebContents(), "selectElementEvents.length;"));
@@ -1663,7 +1739,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, InputFiresBeforeChange) {
           .ExtractString(),
   };
 
-  EXPECT_THAT(select_element_events, testing::ElementsAre("input", "change"));
+  EXPECT_THAT(select_element_events, ElementsAre("input", "change"));
 }
 
 // Test that we can autofill forms distinguished only by their |id| attribute.
@@ -2076,14 +2152,13 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, AutofillAfterTranslate) {
 // field, invoke the autofill popup list, select the first profile within the
 // list, and commit to the profile to populate the form.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ComparePhoneNumbers) {
-  AutofillProfile profile;
+  AutofillProfile profile(AddressCountryCode("US"));
   profile.SetRawInfo(NAME_FIRST, u"Bob");
   profile.SetRawInfo(NAME_LAST, u"Smith");
   profile.SetRawInfo(ADDRESS_HOME_LINE1, u"1234 H St.");
   profile.SetRawInfo(ADDRESS_HOME_CITY, u"San Jose");
   profile.SetRawInfo(ADDRESS_HOME_STATE, u"CA");
   profile.SetRawInfo(ADDRESS_HOME_ZIP, u"95110");
-  profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"US");
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, u"1-408-555-4567");
   AddTestProfile(browser()->profile(), profile);
 
@@ -2128,7 +2203,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, NoAutofillForCompanyName) {
   std::string addr_line1("1234 H St.");
   std::string company_name("Company X");
 
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(NAME_FIRST, u"Bob");
   profile.SetRawInfo(NAME_LAST, u"Smith");
   profile.SetRawInfo(EMAIL_ADDRESS, u"bsmith@gmail.com");
@@ -2151,7 +2226,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, NoAutofillForCompanyName) {
 
 // TODO(https://crbug.com/1279102): Check back if flakiness is fixed now.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
-                       NoAutofillSugggestionForCompanyName) {
+                       NoAutofillSuggestionForCompanyName) {
   static const char kTestShippingFormWithCompanyString[] = R"(
       An example of a shipping address form.
       <form action="https://www.example.com/" method="POST">
@@ -2199,7 +2274,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, NoAutofillForReadOnlyFields) {
   std::string addr_line1("1234 H St.");
 
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(NAME_FIRST, u"Bob");
   profile.SetRawInfo(NAME_LAST, u"Smith");
   profile.SetRawInfo(EMAIL_ADDRESS, u"bsmith@gmail.com");
@@ -2268,7 +2343,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
                        MultipleEmailFilledByOneUserGesture) {
   std::string email("bsmith@gmail.com");
 
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(NAME_FIRST, u"Bob");
   profile.SetRawInfo(NAME_LAST, u"Smith");
   profile.SetRawInfo(EMAIL_ADDRESS, ASCIIToUTF16(email));
@@ -2305,7 +2380,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
   constexpr int kNumProfiles = 1500;
   for (int i = 0; i < kNumProfiles; i++) {
-    AutofillProfile profile;
+    AutofillProfile profile(AddressCountryCode("US"));
     std::u16string name(base::NumberToString16(i));
     std::u16string email(name + u"@example.com");
     std::u16string street =
@@ -2320,7 +2395,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
     profile.SetRawInfo(ADDRESS_HOME_CITY, city);
     profile.SetRawInfo(ADDRESS_HOME_STATE, u"CA");
     profile.SetRawInfo(ADDRESS_HOME_ZIP, zip);
-    profile.SetRawInfo(ADDRESS_HOME_COUNTRY, u"US");
     AddTestProfile(browser()->profile(), profile);
   }
 
@@ -2499,9 +2573,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, FillLocalCreditCard) {
 
 // Test that we do not fill formless non-checkout forms when we enable the
 // formless form restrictions.
-//
-// TODO(crbug.com/1478563): Deflake this test everywhere.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_NoAutocomplete) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, NoAutocomplete) {
   CreateTestProfile();
   GURL url =
       embedded_test_server()->GetURL("/autofill/formless_no_autocomplete.html");
@@ -2509,13 +2581,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_NoAutocomplete) {
 
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
 
-  ::metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-
   // If only some form fields are tagged with autocomplete types, then the
   // number of input elements will not match the number of fields when autofill
-  // triees to preview or fill.
-  histogram_tester().ExpectUniqueSample("Autofill.NumElementsMatchesNumFields",
-                                        true, 2);
+  // tries to preview or fill.
+  ASSERT_TRUE(WaitAndExpectUniqueSample(&histogram_tester(),
+                                        kNumElementsMatchesNumFields, true, 2));
 
   EXPECT_EQ("Milton", GetFieldValueById("firstname"));
   EXPECT_EQ("4120 Freidrich Lane", GetFieldValueById("address"));
@@ -2527,12 +2597,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_NoAutocomplete) {
 }
 
 // Test that we do not fill formless non-checkout forms when we enable the
-// formless form restrictions. This test differes from the NoAutocomplete
+// formless form restrictions. This test differs from the NoAutocomplete
 // version of the the test in that at least one of the fields has an
 // autocomplete attribute, so autofill will always be aware of the existence
 // of the form.
-// TODO(crbug.com/1478122): Flaky.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_SomeAutocomplete) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, SomeAutocomplete) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "/autofill/formless_some_autocomplete.html");
@@ -2540,13 +2609,11 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_SomeAutocomplete) {
 
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
 
-  ::metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-
   // If only some form fields are tagged with autocomplete types, then the
   // number of input elements will not match the number of fields when autofill
-  // triees to preview or fill.
-  histogram_tester().ExpectUniqueSample("Autofill.NumElementsMatchesNumFields",
-                                        true, 2);
+  // tries to preview or fill.
+  ASSERT_TRUE(WaitAndExpectUniqueSample(&histogram_tester(),
+                                        kNumElementsMatchesNumFields, true, 2));
 
   EXPECT_EQ("Milton", GetFieldValueById("firstname"));
   EXPECT_EQ("4120 Freidrich Lane", GetFieldValueById("address"));
@@ -2559,8 +2626,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_SomeAutocomplete) {
 
 // Test that we do not fill formless non-checkout forms when we enable the
 // formless form restrictions.
-// TODO(crbug.com/1478122): Flaky.
-IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_AllAutocomplete) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, AllAutocomplete) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "/autofill/formless_all_autocomplete.html");
@@ -2568,12 +2634,10 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestBase, DISABLED_AllAutocomplete) {
 
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
 
-  ::metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-
   // If all form fields are tagged with autocomplete types, we make them all
   // available to be filled.
-  histogram_tester().ExpectUniqueSample("Autofill.NumElementsMatchesNumFields",
-                                        true, 2);
+  ASSERT_TRUE(WaitAndExpectUniqueSample(&histogram_tester(),
+                                        kNumElementsMatchesNumFields, true, 2));
 
   EXPECT_EQ("Milton", GetFieldValueById("firstname"));
   EXPECT_EQ("4120 Freidrich Lane", GetFieldValueById("address"));
@@ -2613,7 +2677,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
 
   // Select element on `other` and wait for `onchange` event.
   ValueWaiter onchange_waiter =
-      ListenForValueChange("other", absl::nullopt, GetWebContents());
+      ListenForValueChange("other", std::nullopt, GetWebContents());
   ASSERT_TRUE(FocusField(GetElementById("other"), GetWebContents()));
   EXPECT_EQ("First", GetFieldValueById("other"));
   FillElementWithValue("other", "Second");
@@ -2648,7 +2712,6 @@ class AutofillInteractiveFencedFrameTest
     std::vector<base::test::FeatureRef> disabled;
     if (GetParam() != FrameType::kIFrame) {
       enabled.push_back({blink::features::kBrowsingTopics, {}});
-      enabled.push_back({blink::features::kBrowsingTopicsXHR, {}});
       enabled.push_back({blink::features::kFencedFramesAPIChanges, {}});
       scoped_feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
       fenced_frame_test_helper_ =
@@ -2829,33 +2892,21 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ChangingTabClosesPopup) {
 //
 // BrowserAutofillManager only executes a refill if it happens within the time
 // delta `kLimitBeforeRefill` of the original refill. On slow bots, this timeout
-// may cause flakiness. Therefore, this fixture mocks test clocks, which shall
-// be advanced when waiting for a refill after AutofillFlow():
-// - advance by a delta less than `kLimitBeforeRefill` to simulate that a
-//   natural delay between fill and refill;
-// - advance by a delta greater than `kLimitBeforeRefill` to simulate that an
-//   event happens too late to actually trigger a refill.
+// may cause flakiness. Therefore, this fixture increases the limit before
+// refill to an unreasonably large time.
 class AutofillInteractiveTestDynamicForm : public AutofillInteractiveTest {
  public:
+  void SetUpOnMainThread() override {
+    AutofillInteractiveTest::SetUpOnMainThread();
+    test_api(*GetBrowserAutofillManager())
+        .set_limit_before_refill(base::Minutes(1));
+  }
+
   ValueWaiter ListenForRefill(
       const std::string& id,
-      absl::optional<std::string> unblock_variable = "refill") {
+      std::optional<std::string> unblock_variable = "refill") {
     return ListenForValueChange(id, unblock_variable, GetWebContents());
   }
-
-  // Refills only happen within `kLimitBeforeRefill` second of the initial fill.
-  // Slow bots may exceed this limit and thus cause flakiness.
-  static constexpr base::TimeDelta kLessThanLimitBeforeRefill =
-      kLimitBeforeRefill / 10;
-
-  void AdvanceClock(base::TimeDelta delta) {
-    clock_.Advance(delta);
-    tick_clock_.Advance(delta);
-  }
-
- protected:
-  TestAutofillClock clock_{AutofillClock::Now()};
-  TestAutofillTickClock tick_clock_{AutofillTickClock::NowTicks()};
 };
 
 // Test that we can Autofill dynamically generated forms.
@@ -2868,7 +2919,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_form1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -2890,7 +2940,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_form1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname_form1"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -2904,7 +2953,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   refill = ListenForRefill("firstname_form2");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname_form2"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -2927,7 +2975,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_form2");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_FALSE(std::move(refill).Wait());
 
   // Make sure the new form was not filled.
@@ -2940,9 +2987,15 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   EXPECT_EQ("", GetFieldValueById("phone_form2"));
 }
 
-// Test that forms that dynamically change after a second do not get filled.
+// Test that forms that dynamically change after the refill limit do not get
+// filled.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
                        DynamicChangingFormFill_AfterDelay) {
+  // Lower the refill limit, so the test doesn't have to wait forever.
+  constexpr base::TimeDelta kLimitBeforeRefillForTest = base::Milliseconds(100);
+  test_api(*GetBrowserAutofillManager())
+      .set_limit_before_refill(kLimitBeforeRefillForTest);
+
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com", "/autofill/dynamic_form_after_delay.html");
@@ -2950,7 +3003,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_form1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLimitBeforeRefill + base::Milliseconds(1));
+  DoNothingAndWaitAndIgnoreEvents(kLimitBeforeRefillForTest +
+                                  base::Milliseconds(1));
   ASSERT_FALSE(std::move(refill).Wait());
 
   // Make sure that the new form was not filled.
@@ -2973,7 +3027,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_form1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // The fields present in the initial fill should be filled.
@@ -3004,7 +3057,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3028,7 +3080,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3062,7 +3113,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("address1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3094,7 +3144,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("address1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3120,7 +3169,6 @@ IN_PROC_BROWSER_TEST_F(
 
   ValueWaiter refill = ListenForRefill("address1_7");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname_5"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the second form was filled correctly, and the first form was left
@@ -3155,7 +3203,6 @@ IN_PROC_BROWSER_TEST_F(
 
   ValueWaiter refill = ListenForRefill("address1_7");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname_5"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the second form was filled correctly, and the first form was left
@@ -3171,9 +3218,17 @@ IN_PROC_BROWSER_TEST_F(
 
 // Test that we can autofill forms that dynamically change the element that
 // has been clicked on, even though there are multiple forms with no name.
+// TODO(crbug.com/1481004): Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicFormFill_FirstElementDisappearsMultipleNoNameForms \
+  DISABLED_DynamicFormFill_FirstElementDisappearsMultipleNoNameForms
+#else
+#define MAYBE_DynamicFormFill_FirstElementDisappearsMultipleNoNameForms \
+  DynamicFormFill_FirstElementDisappearsMultipleNoNameForms
+#endif
 IN_PROC_BROWSER_TEST_F(
     AutofillInteractiveTestDynamicForm,
-    DynamicFormFill_FirstElementDisappearsMultipleNoNameForms) {
+    MAYBE_DynamicFormFill_FirstElementDisappearsMultipleNoNameForms) {
   CreateTestProfile();
   GURL url = embedded_test_server()->GetURL(
       "a.com",
@@ -3182,7 +3237,6 @@ IN_PROC_BROWSER_TEST_F(
 
   ValueWaiter refill = ListenForRefill("address1_7");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname_5"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the second form was filled correctly, and the first form was left
@@ -3215,7 +3269,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("address1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3229,8 +3282,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
 // Test that credit card fields are re-filled.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       // TODO(crbug.com/1478260): Re-enable this test
-                       DISABLED_DynamicChangingFormFill_AlsoForCreditCard) {
+                       DynamicChangingFormFill_AlsoForCreditCard) {
   CreateTestCreditCart();
   GURL url = https_server()->GetURL("a.com",
                                     "/autofill/dynamic_form_credit_card.html");
@@ -3239,8 +3291,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   ValueWaiter refill = ListenForRefill("cc-name");
   ASSERT_TRUE(AutofillFlow(GetElementById("cc-name"), this,
                            {.show_method = ShowMethod::ByChar('M')}));
-  AdvanceClock(kLessThanLimitBeforeRefill);
-  ASSERT_TRUE(std::move(refill).Wait());
+  ASSERT_TRUE(std::move(refill).Wait(base::Seconds(10)));
 
   EXPECT_EQ("Milton Waddams", GetFieldValueById("cc-name"));
   EXPECT_EQ("4111111111111111", GetFieldValueById("cc-num"));
@@ -3290,8 +3341,6 @@ void DoDynamicChangingFormFill_SelectUpdated(
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), test));
   // Wait till the first onchange event fired on the 'state' field after the
   // <option>s in the 'state' field have been updated.
-  test->AdvanceClock(
-      AutofillInteractiveTestDynamicForm::kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Check that the page correctly parsed the 'is_async' GET parameter.
@@ -3309,8 +3358,16 @@ void DoDynamicChangingFormFill_SelectUpdated(
 
 // Test that we can Autofill dynamically changing selects that have options
 // added and removed.
+// TODO(crbug.com/1481004) Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicChangingFormFill_SelectUpdated \
+    DISABLED_DynamicChangingFormFill_SelectUpdated
+#else
+#define MAYBE_DynamicChangingFormFill_SelectUpdated \
+    DynamicChangingFormFill_SelectUpdated
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicChangingFormFill_SelectUpdated) {
+                       MAYBE_DynamicChangingFormFill_SelectUpdated) {
   DoDynamicChangingFormFill_SelectUpdated(this, embedded_test_server(),
                                           /*should_test_selectlist=*/false,
                                           /*should_test_async_update=*/false);
@@ -3318,8 +3375,16 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
 // Test that we can Autofill dynamically changing selectlists that have options
 // added and removed.
+// TODO(crbug.com/1481004) Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicChangingFormFill_SelectListUpdated \
+    DISABLED_DynamicChangingFormFill_SelectListUpdated
+#else
+#define MAYBE_DynamicChangingFormFill_SelectListUpdated \
+    DynamicChangingFormFill_SelectListUpdated
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicChangingFormFill_SelectListUpdated) {
+                       MAYBE_DynamicChangingFormFill_SelectListUpdated) {
   DoDynamicChangingFormFill_SelectUpdated(this, embedded_test_server(),
                                           /*should_test_selectlist=*/true,
                                           /*should_test_async_update=*/false);
@@ -3327,8 +3392,16 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
 // Test that we can Autofill dynamically changing selects that have options
 // added and removed, when the updating occurs asynchronously.
+// TODO(crbug.com/1481004) Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicChangingFormFill_SelectUpdatedAsync \
+    DISABLED_DynamicChangingFormFill_SelectUpdatedAsync
+#else
+#define MAYBE_DynamicChangingFormFill_SelectUpdatedAsync \
+    DynamicChangingFormFill_SelectUpdatedAsync
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicChangingFormFill_SelectUpdatedAsync) {
+                       MAYBE_DynamicChangingFormFill_SelectUpdatedAsync) {
   DoDynamicChangingFormFill_SelectUpdated(this, embedded_test_server(),
                                           /*should_test_selectlist=*/false,
                                           /*should_test_async_update=*/true);
@@ -3336,8 +3409,16 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
 // Test that we can Autofill dynamically changing selectlists that have options
 // added and removed, when the updating occurs asynchronously.
+// TODO(crbug.com/1481004) Flaky on win-asan.
+#if defined(ADDRESS_SANITIZER) && BUILDFLAG(IS_WIN)
+#define MAYBE_DynamicChangingFormFill_SelectListUpdatedAsync \
+    DISABLED_DynamicChangingFormFill_SelectListUpdatedAsync
+#else
+#define MAYBE_DynamicChangingFormFill_SelectListUpdatedAsync \
+    DynamicChangingFormFill_SelectListUpdatedAsync
+#endif
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
-                       DynamicChangingFormFill_SelectListUpdatedAsync) {
+                       MAYBE_DynamicChangingFormFill_SelectListUpdatedAsync) {
   DoDynamicChangingFormFill_SelectUpdated(this, embedded_test_server(),
                                           /*should_test_selectlist=*/true,
                                           /*should_test_async_update=*/true);
@@ -3355,7 +3436,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   ValueWaiter refill1 = ListenForRefill("address1", "refill1");
   ValueWaiter refill2 = ListenForRefill("firstname", "refill2");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill1).Wait());
   ASSERT_FALSE(std::move(refill2).Wait());
 
@@ -3382,7 +3462,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_form1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3408,7 +3487,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3432,7 +3510,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname_syntheticform1");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3457,7 +3534,6 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
 
   ValueWaiter refill = ListenForRefill("firstname");
   ASSERT_TRUE(AutofillFlow(GetElementById("firstname"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(refill).Wait());
 
   // Make sure the new form was filled correctly.
@@ -3492,15 +3568,8 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   ValueWaiter reformat_waiter =
       ListenForValueChange("CREDIT_CARD_EXP_DATE", "unblock", GetWebContents());
   ASSERT_TRUE(AutofillFlow(GetElementById("CREDIT_CARD_NAME_FULL"), this));
-  AdvanceClock(kLessThanLimitBeforeRefill);
   ASSERT_TRUE(std::move(reformat_waiter).Wait());
   EXPECT_EQ("09 / 99", GetFieldValue(GetElementById("CREDIT_CARD_EXP_DATE")));
-
-  // The timestamp from BrowserAutofillManager::OnDidFillAutofillFormData()
-  // comes from the renderer process and thus from an actual clock. Since this
-  // interaction timestamp must be before the submission timestamp, we advance
-  // the browser by a lot.
-  AdvanceClock(base::Minutes(10));
 
   // Since votes are emitted and quality metrics are recorded asynchronously, we
   // need to explicitly wait for the pending votes. Since voting is scheduled on
@@ -3519,7 +3588,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   ASSERT_TRUE(test_api(*autofill_manager).FlushPendingVotes());
   load_stop_observer.Wait();
 
-  // Short hand for ExpectbucketCount:
+  // Short hand for ExpectBucketCount:
   auto expect_count = [&](base::StringPiece name,
                           base::HistogramBase::Sample sample,
                           base::HistogramBase::Count expected_count) {
@@ -3616,7 +3685,7 @@ class AutofillInteractiveTestChromeVox : public AutofillInteractiveTestBase {
     // Enable ChromeVox, disable earcons and wait for key mappings to be
     // fetched.
     ASSERT_FALSE(ash::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-    // TODO(accessibility): fix console error/warnings and insantiate
+    // TODO(accessibility): fix console error/warnings and instantiate
     // |console_observer_| here.
 
     // Load ChromeVox and block until it's fully loaded.
@@ -3733,20 +3802,19 @@ class MAYBE_AutofillInteractiveFormSubmissionTest
         autofill_manager(), base::BindRepeating([](const FormStructure& form) {
           return form.active_field_count() == 5;
         })));
-
-    EnterValues();
   }
 
   void SetUpServer() {
     SetTestUrlResponse(R"(
         <html><body>
-        <form id='form' method='POST' action='/success.html'>
+        <form id='shipping' method='POST' action='/success.html'>
         Name: <input type='text' id='name'><br>
         Address: <input type='text' id='address'><br>
         City: <input type='text' id='city'><br>
         ZIP: <input type='text' id='zip'><br>
         State: <select id='state'>
           <option value='CA'>CA</option>
+          <option value='TX'>TX</option>
           <option value='WA'>WA</option>
         </select><br>
         </form>
@@ -3756,26 +3824,56 @@ class MAYBE_AutofillInteractiveFormSubmissionTest
   }
 
   void EnterValues() {
-    TestAutofillManagerWaiter waiter(
-        *autofill_manager(), {AutofillManagerEvent::kTextFieldDidChange});
-    // Normally we would enter the state last, but we don't have a
-    // kSelectElementDidChange event, yet. Therefore, we just wait until
-    // the second text field was reported to the autofill manager.
-    ASSERT_TRUE(
-        EnterTextsIntoFields({{GetElementById("name"), "Sarah"},
-                              {GetElementById("state"), "WA"},
-                              {GetElementById("address"), "123 Main Road"}},
-                             this, GetWebContents()));
-    ASSERT_TRUE(waiter.Wait(2u));
+    // Normally we would enter the "US state" last, but we don't have a
+    // kSelectElementDidChange event, yet. Use multi-arg version of
+    // EnterValues() to wait until the last field was reported to the autofill
+    // manager.
+    EnterValues(
+        {{"name", "Sarah"}, {"state", "WA"}, {"address", "123 Main Road"}},
+        /*num_modified_textfields=*/2u);
   }
 
-  std::map<std::u16string, std::u16string> GetExpectedValues() {
-    return std::map<std::u16string, std::u16string>{
-        {u"name", u"Sarah"},
-        {u"address", u"123 Main Road"},
-        {u"city", u""},
-        {u"zip", u""},
-        {u"state", u"WA"}};
+  void EnterValues(const std::vector<FieldValue>& values,
+                   size_t num_modified_textfields) {
+    TestAutofillManagerWaiter waiter(
+        *autofill_manager(), {AutofillManagerEvent::kTextFieldDidChange});
+    for (const FieldValue& value : values) {
+      ASSERT_TRUE(EnterTextIntoField(GetElementById(value.id), value.value,
+                                     this, GetWebContents()));
+    }
+    ASSERT_TRUE(waiter.Wait(num_modified_textfields));
+  }
+
+  struct NameValue {
+    std::u16string name;
+    std::u16string value;
+  };
+
+  [[nodiscard]] static auto HasNameValue(const NameValue& nv) {
+    return AllOf(Field("name", &FormFieldData::name, nv.name),
+                 Field("value", &FormFieldData::value, nv.value));
+  }
+
+  [[nodiscard]] static auto HasExpectedValues() {
+    std::vector<NameValue> expected = {{u"name", u"Sarah"},
+                                       {u"address", u"123 Main Road"},
+                                       {u"city", u""},
+                                       {u"zip", u""},
+                                       {u"state", u"WA"}};
+    return FieldsAre(Map(expected, HasNameValue));
+  }
+
+  struct NameValueUserInput {
+    std::u16string name;
+    std::u16string value;
+    std::u16string user_input;
+  };
+  [[nodiscard]] static auto HasNameValueUserInput(
+      const NameValueUserInput& nvu) {
+    return AllOf(
+        Field("name", &FormFieldData::name, nvu.name),
+        Field("value", &FormFieldData::value, nvu.value),
+        Field("user_input", &FormFieldData::user_input, nvu.user_input));
   }
 
   void ExecuteScript(const std::string& script) {
@@ -3790,35 +3888,37 @@ class MAYBE_AutofillInteractiveFormSubmissionTest
 // BrowserAutofillManager.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
                        Submission) {
+  EnterValues();
+
   base::RunLoop run_loop;
   // Ensure that only expected form submissions are recorded.
   EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
   EXPECT_CALL(*autofill_manager(),
-              OnFormSubmittedImpl(SubmittedValuesAre(GetExpectedValues()),
+              OnFormSubmittedImpl(HasExpectedValues(),
                                   /*known_success=*/false,
                                   mojom::SubmissionSource::FORM_SUBMISSION))
       .Times(1)
-      .WillRepeatedly(
-          testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
-  ExecuteScript("document.getElementById('form').submit();");
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
+  ExecuteScript("document.getElementById('shipping').submit();");
   run_loop.Run();
 }
 
-// Tests that non-link-click, renderer-inititiated navigation triggers a
+// Tests that non-link-click, renderer-initiated navigation triggers a
 // submission event in BrowserAutofillManager.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
                        ProbableSubmission) {
+  EnterValues();
+
   base::RunLoop run_loop;
   // Ensure that only expected form submissions are recorded.
   EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
   EXPECT_CALL(
       *autofill_manager(),
-      OnFormSubmittedImpl(SubmittedValuesAre(GetExpectedValues()),
+      OnFormSubmittedImpl(HasExpectedValues(),
                           /*known_success=*/false,
                           mojom::SubmissionSource::PROBABLY_FORM_SUBMITTED))
       .Times(1)
-      .WillRepeatedly(
-          testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
   // Add a delay before navigating away to avoid race conditions. This is
   // appropriate since we're faking user interaction here.
   ExecuteScript(
@@ -3829,54 +3929,56 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
 // Tests that a same document navigation can trigger a form submission.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
                        SameDocumentNavigation) {
+  EnterValues();
+
   base::RunLoop run_loop;
   // Ensure that only expected form submissions are recorded.
   EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
   EXPECT_CALL(
       *autofill_manager(),
-      OnFormSubmittedImpl(SubmittedValuesAre(GetExpectedValues()),
+      OnFormSubmittedImpl(HasExpectedValues(),
                           /*known_success=*/true,
                           mojom::SubmissionSource::SAME_DOCUMENT_NAVIGATION))
       .Times(1)
-      .WillRepeatedly(
-          testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
 
   // Simulate form submission.
   ExecuteScript(
       R"(
       // Same document navigation:
-      document.getElementById('form').style.display = 'none';
+      document.getElementById('shipping').style.display = 'none';
       const url = new URL(window.location);
       url.searchParams.set('foo', 'bar');
       window.history.pushState({}, '', url);
 
       // Hide form, which is the trigger for the submission event.
-      document.getElementById('form').style.display = 'none';
+      document.getElementById('shipping').style.display = 'none';
       )");
   run_loop.Run();
 }
 
 // Tests that an XHR request can indicate a form submission.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
-                       XhrSuccededAndHideForm) {
+                       XhrSucceededAndHideForm) {
+  EnterValues();
+
   base::RunLoop run_loop;
 
   // Ensure that only expected form submissions are recorded.
   EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
   EXPECT_CALL(*autofill_manager(),
-              OnFormSubmittedImpl(SubmittedValuesAre(GetExpectedValues()),
+              OnFormSubmittedImpl(HasExpectedValues(),
                                   /*known_success=*/true,
                                   mojom::SubmissionSource::XHR_SUCCEEDED))
       .Times(1)
-      .WillRepeatedly(
-          testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
 
   // Simulate form submission.
   ExecuteScript(
       R"(
       // SubmissionSource::XHR_SUCCEEDED is triggered if an XHR is observed
       // after the form has been made invisible.
-      document.getElementById('form').style.display = 'none';
+      document.getElementById('shipping').style.display = 'none';
 
       const xhr = new XMLHttpRequest();
       xhr.open('GET', '/xhr', true);
@@ -3888,25 +3990,26 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
 // Tests that an XHR request can indicate a form submission - even if the form
 // is deleted from the DOM.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
-                       XhrSuccededAndDeleteForm) {
+                       XhrSucceededAndDeleteForm) {
+  EnterValues();
+
   base::RunLoop run_loop;
 
   // Ensure that only expected form submissions are recorded.
   EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
   EXPECT_CALL(*autofill_manager(),
-              OnFormSubmittedImpl(SubmittedValuesAre(GetExpectedValues()),
+              OnFormSubmittedImpl(HasExpectedValues(),
                                   /*known_success=*/true,
                                   mojom::SubmissionSource::XHR_SUCCEEDED))
       .Times(1)
-      .WillRepeatedly(
-          testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
 
   // Simulate form submission.
   ExecuteScript(
       R"(
       // SubmissionSource::XHR_SUCCEEDED is triggered if an XHR is observed
       // after the form has been deleted.
-      const form = document.getElementById('form');
+      const form = document.getElementById('shipping');
       form.remove();
 
       const xhr = new XMLHttpRequest();
@@ -3919,18 +4022,18 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
 // Tests that a DOM mutation after an XHR can indicate a form submission.
 IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
                        DomMutationAfterXhr) {
+  EnterValues();
+
   base::RunLoop run_loop;
 
   // Ensure that only expected form submissions are recorded.
   EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
-  EXPECT_CALL(
-      *autofill_manager(),
-      OnFormSubmittedImpl(SubmittedValuesAre(GetExpectedValues()),
-                          /*known_success=*/true,
-                          mojom::SubmissionSource::DOM_MUTATION_AFTER_XHR))
+  EXPECT_CALL(*autofill_manager(),
+              OnFormSubmittedImpl(HasExpectedValues(),
+                                  /*known_success=*/true,
+                                  mojom::SubmissionSource::XHR_SUCCEEDED))
       .Times(1)
-      .WillRepeatedly(
-          testing::InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
 
   // Simulate form submission.
   ExecuteScript(
@@ -3938,12 +4041,237 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
       const xhr = new XMLHttpRequest();
       xhr.open('GET', '/xhr', true);
       xhr.onload = () => {
-        // SubmissionSource::DOM_MUTATION_AFTER_XHR is triggered if a form
+        // SubmissionSource::XHR_SUCCEEDED is triggered if a form
         // is hidden an XHR was observed.
-        // The DOM modification has to happen asynchronously. Otherwise this
-        // is reported as an XHR_SUCCEEDED event.
+        document.getElementById('shipping').style.display = 'none';
+      }
+      xhr.send(null);
+      )");
+  run_loop.Run();
+}
+
+// Tests that FormFieldData::user_input has the text that the user typed into
+// the field. This is needed in order to show the save-card dialog when the
+// page replaces the <input> value with '***'.
+IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
+                       RememberUserInput) {
+  const std::vector<NameValueUserInput> kExpectedSubmittedValues{
+      {u"name", u"JS Modified Name", u"Sarah"},
+      {u"address", u"JS Modified Address", u"123 Main Road"},
+      {u"city", u"", u""},
+      {u"zip", u"", u""},
+      {u"state", u"WA", u""}};  // user_input is not set for <select>.
+
+  EnterValues();
+  ExecuteScript("document.getElementById('name').value = 'JS Modified Name';");
+  ExecuteScript(
+      "document.getElementById('address').value = 'JS Modified Address';");
+
+  base::RunLoop run_loop;
+  // Ensure that only expected form submissions are recorded.
+  EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
+  EXPECT_CALL(
+      *autofill_manager(),
+      OnFormSubmittedImpl(
+          FieldsAre(Map(kExpectedSubmittedValues, HasNameValueUserInput)),
+          /*known_success=*/false, mojom::SubmissionSource::FORM_SUBMISSION))
+      .Times(1)
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
+  ExecuteScript("document.getElementById('shipping').submit();");
+  run_loop.Run();
+}
+
+// Tests scenario where in sequence:
+// 1) The user types into a form
+// 2) The form is cleared via JavaScript
+// 3) The user autofills the form
+// 4) The user submits the form
+// That FormFieldData::user_input is empty and does not contain stale data that
+// the user typed into the form.
+IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionTest,
+                       TreatAutofillAsUserInput) {
+  CreateTestProfile();
+
+  EnterValues({{"address", "User Entered Address"}},
+              /*num_modified_textfields=*/1u);
+  ExecuteScript("document.getElementById('address').value = '';");
+
+  ASSERT_TRUE(AutofillFlow(GetElementById("name"), this,
+                           {.show_method = ShowMethod::ByChar('M')}));
+  const std::vector<FieldValue> kExpectedAddress{
+      {"name", kDefaultAddressValues.full_name},
+      {"address", kDefaultAddressValues.address1},
+      {"city", kDefaultAddressValues.city},
+      {"zip", kDefaultAddressValues.zip},
+      {"state", kDefaultAddressValues.state_short}};
+  EXPECT_THAT(GetFormValues(), ValuesAre(kExpectedAddress));
+
+  base::RunLoop run_loop;
+  // Ensure that only expected form submissions are recorded.
+  EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
+  EXPECT_CALL(
+      *autofill_manager(),
+      OnFormSubmittedImpl(
+          FieldsAre(Map(kExpectedAddress,
+                        [](const FieldValue& fv) {
+                          return HasNameValueUserInput(
+                              {base::UTF8ToUTF16(fv.id),
+                               base::UTF8ToUTF16(fv.value), u""});
+                        })),
+          /*known_success=*/false, mojom::SubmissionSource::FORM_SUBMISSION))
+      .Times(1)
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
+  ExecuteScript("document.getElementById('shipping').submit();");
+  run_loop.Run();
+}
+
+// MAYBE_AutofillInteractiveFormSubmissionTest subclass which disables
+// features::kAutofillUndo
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_AutofillInteractiveFormSubmissionClearFormTest \
+  DISABLED_AutofillInteractiveFormSubmissionClearFormTest
+#else
+#define MAYBE_AutofillInteractiveFormSubmissionClearFormTest \
+  AutofillInteractiveFormSubmissionClearFormTest
+#endif
+class MAYBE_AutofillInteractiveFormSubmissionClearFormTest
+    : public MAYBE_AutofillInteractiveFormSubmissionTest {
+ public:
+   MAYBE_AutofillInteractiveFormSubmissionClearFormTest() {
+    scoped_feature_list_.InitAndDisableFeature(features::kAutofillUndo);
+   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests scenario where in sequence:
+// 1) The user autofills the form
+// 2) The user clears the form via the context menu
+// 3) The user submits the form
+// That FormFieldData::user_input is empty and does not contain stale data.
+IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormSubmissionClearFormTest,
+                       ClearFormClearsUserInput) {
+  CreateTestProfile();
+
+  // Autofill
+  ASSERT_TRUE(AutofillFlow(GetElementById("name"), this,
+                           {.show_method = ShowMethod::ByChar('M')}));
+  const std::vector<FieldValue> kAutofilledAddress{
+      {"name", kDefaultAddressValues.full_name},
+      {"address", kDefaultAddressValues.address1},
+      {"city", kDefaultAddressValues.city},
+      {"zip", kDefaultAddressValues.zip},
+      {"state", kDefaultAddressValues.state_short}};
+  EXPECT_THAT(GetFormValues(), ValuesAre(kAutofilledAddress));
+
+  // Clear form.
+  ASSERT_TRUE(AutofillFlow(GetElementById("name"), this, {.target_index = 1}));
+  const std::vector<FieldValue> kClearedAddress{{"name", ""},
+                                                {"address", ""},
+                                                {"city", ""},
+                                                {"zip", ""},
+                                                {"state", "CA"}};
+  EXPECT_THAT(GetFormValues(), ValuesAre(kClearedAddress));
+
+  std::vector<NameValueUserInput> kSubmittedValues = {{u"name", u"", u""},
+                                                      {u"address", u"", u""},
+                                                      {u"city", u"", u""},
+                                                      {u"zip", u"", u""},
+                                                      {u"state", u"CA", u""}};
+
+  base::RunLoop run_loop;
+  // Ensure that only expected form submissions are recorded.
+  EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
+  EXPECT_CALL(
+      *autofill_manager(),
+      OnFormSubmittedImpl(
+          FieldsAre(Map(kSubmittedValues, HasNameValueUserInput)),
+          /*known_success=*/false, mojom::SubmissionSource::FORM_SUBMISSION))
+      .Times(1)
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
+  ExecuteScript("document.getElementById('shipping').submit();");
+  run_loop.Run();
+}
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#define MAYBE_AutofillInteractiveFormlessFormSubmissionTest \
+  DISABLED_AutofillInteractiveFormlessFormSubmissionTest
+#else
+#define MAYBE_AutofillInteractiveFormlessFormSubmissionTest \
+  AutofillInteractiveFormlessFormSubmissionTest
+#endif
+class MAYBE_AutofillInteractiveFormlessFormSubmissionTest
+    : public MAYBE_AutofillInteractiveFormSubmissionTest {
+ public:
+  MAYBE_AutofillInteractiveFormlessFormSubmissionTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::
+            kAutofillDontCheckForDisappearingFormlessElementsForSubmission);
+  }
+
+  void SetUpOnMainThread() override {
+    AutofillInteractiveTestBase::SetUpOnMainThread();
+
+    SetUpServer();
+
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
+    ASSERT_TRUE(WaitForMatchingForm(
+        autofill_manager(), base::BindRepeating([](const FormStructure& form) {
+          return form.active_field_count() == 3;
+        })));
+  }
+
+  void SetUpServer() {
+    SetTestUrlResponse(R"(
+        <html><body>
+        Name: <input type='text' id='name'><br>
+        Address: <input type='text' id='address'><br>
+        City: <input type='text' id='city'><br>
+    )");
+    SetResponseForUrlPath("/success.html", "<html><body>Happy times!");
+    SetResponseForUrlPath("/xhr", "<foo>Happy times!</foo>");
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests that a submission is detected when the following steps are done in
+// sequence:
+// 1) User fills <input>s on page without <form>.
+// 2) The page does an XHR
+// 3) The page navigates
+IN_PROC_BROWSER_TEST_F(MAYBE_AutofillInteractiveFormlessFormSubmissionTest,
+                       NavigationAfterXhr) {
+  const std::vector<FieldValue> kEnteredValues = {
+      {"name", "Sarah"}, {"address", "123 Main Road"}, {"city", "Moonbeam"}};
+
+  EnterValues(kEnteredValues, /*num_modified_textfields=*/3u);
+
+  base::RunLoop run_loop;
+  // Ensure that only expected form submissions are recorded.
+  EXPECT_CALL(*autofill_manager(), OnFormSubmittedImpl).Times(0);
+  EXPECT_CALL(
+      *autofill_manager(),
+      OnFormSubmittedImpl(FieldsAre(Map(kEnteredValues,
+                                        [](const FieldValue& fv) {
+                                          return HasNameValue(
+                                              {base::UTF8ToUTF16(fv.id),
+                                               base::UTF8ToUTF16(fv.value)});
+                                        })),
+                          /*known_success=*/false,
+                          mojom::SubmissionSource::PROBABLY_FORM_SUBMITTED))
+      .Times(1)
+      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
+
+  // Simulate XHR, then page navigation.
+  ExecuteScript(
+      R"(
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', '/xhr', true);
+      xhr.onload = () => {
         setTimeout(() => {
-            document.getElementById('form').style.display = 'none';
+            window.location.href = 'success.html';
           }, 50);
       }
       xhr.send(null);

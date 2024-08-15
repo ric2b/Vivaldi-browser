@@ -11,6 +11,7 @@ shared_library("fake_drv_video") {
   deps = [
     ":fake_libva_driver_internals",
     "//base",
+    "//third_party/libyuv",
   ]
 }
 
@@ -26,8 +27,12 @@ source_set("fake_libva_driver_internals") {
     "fake_context.h",
     "fake_driver.cc",
     "fake_driver.h",
+    "fake_image.cc",
+    "fake_image.h",
     "fake_surface.cc",
     "fake_surface.h",
+    "no_op_context_delegate.cc",
+    "no_op_context_delegate.h",
     "object_tracker.h",
     "scoped_bo_mapping_factory.cc",
     "scoped_bo_mapping_factory.h",
@@ -39,6 +44,7 @@ source_set("fake_libva_driver_internals") {
     "//base",
     "//build/config/linux/libdrm",
     "//third_party/libvpx",
+    "//third_party/libyuv",
   ]
   public_deps = [ "//third_party/minigbm" ]
 }

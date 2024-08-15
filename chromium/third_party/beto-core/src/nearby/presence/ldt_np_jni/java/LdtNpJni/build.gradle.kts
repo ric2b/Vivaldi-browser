@@ -15,24 +15,35 @@
  */
 
 plugins {
-    id("java")
-    kotlin("jvm") version "1.8.0"
+  id("java")
+  kotlin("jvm") version "1.9.0"
+}
+
+kotlin {
+  jvmToolchain {
+    languageVersion.set(JavaLanguageVersion.of("17"))
+  }
 }
 
 group = "com.google.android.gms.nearby.presence.hazmat"
 version = "1.0-SNAPSHOT"
 
 repositories {
-    mavenCentral()
+  mavenCentral()
+  google()
 }
 
 dependencies {
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.1")
-    implementation(kotlin("stdlib"))
+  testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
+  testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.1")
+  implementation(kotlin("stdlib"))
+  implementation("androidx.annotation:annotation:1.6.0")
 }
 
 tasks.getByName<Test>("test") {
-    useJUnitPlatform()
-    jvmArgs = mutableListOf("-Djava.library.path=../../../../target/debug")
+  useJUnitPlatform()
+  jvmArgs = mutableListOf("-Djava.library.path=../../../../target/debug")
+  testLogging {
+    events("passed", "skipped", "failed")
+  }
 }

@@ -19,7 +19,7 @@
 <translation id="1756026472674246267">Abrir enlace en una pestaña nueva</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Propiedades de la imagen...</translation>
-<translation id="1920297417712412573">Copiar en una nota</translation>
+<translation id="1920297417712412573">Copiar en una nota nueva</translation>
 <translation id="1921101374471252440">Recargar &amp;imagen</translation>
 <translation id="1924750141060565109">Paisaje 15</translation>
 <translation id="19598411548897379">Genérico</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Pegar</translation>
 <translation id="4005270918754737597">Omitir esta versión</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;No volver a mostrar</translation>
 <translation id="4074744496918018786">Abrir imagen en una ventana privada</translation>
 <translation id="410351446219883937">Autoreproducción</translation>
 <translation id="4281844954008187215">Condiciones de servicio</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera versión 15+ (beta)</translation>
 <translation id="5648110075441906505">Abrir imagen en una ventana nueva</translation>
 <translation id="5656371807944747581">¡Error al actualizar!</translation>
-<translation id="5716238312826274098">Desactivando notificaciones</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> está disponible (actualmente tienes instalada la versión <ph name="OLD_VERSION" />). ¿Quieres descargarla ahora?</translation>
 <translation id="5770433027661640693">Paisaje 10</translation>
 <translation id="5857090052475505287">Nueva carpeta</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error al iniciar el instalador de actualizaciones. Por favor, revisa que el equipo tenga suficiente memoria o espacio en disco y reinténtalo más tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
-<translation id="7715497554424665066">&amp;Ignorar actualización</translation>
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7727481996062361502">Verificando actualización...</translation>
 <translation id="7793738202466490491">Añadir como evento de calendario</translation>

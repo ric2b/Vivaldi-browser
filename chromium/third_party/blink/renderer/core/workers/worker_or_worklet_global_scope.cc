@@ -233,11 +233,10 @@ const AtomicString& WorkerOrWorkletGlobalScope::InterfaceName() const {
   return g_null_atom;
 }
 
-v8::MaybeLocal<v8::Value> WorkerOrWorkletGlobalScope::Wrap(ScriptState*) {
+v8::Local<v8::Value> WorkerOrWorkletGlobalScope::Wrap(ScriptState*) {
   LOG(FATAL) << "WorkerOrWorkletGlobalScope must never be wrapped with wrap "
                 "method. The global object of ECMAScript environment is used "
                 "as the wrapper.";
-  return v8::Local<v8::Value>();
 }
 
 v8::Local<v8::Object> WorkerOrWorkletGlobalScope::AssociateWithWrapper(
@@ -247,13 +246,6 @@ v8::Local<v8::Object> WorkerOrWorkletGlobalScope::AssociateWithWrapper(
   LOG(FATAL) << "WorkerOrWorkletGlobalScope must never be wrapped with wrap "
                 "method. The global object of ECMAScript environment is used "
                 "as the wrapper.";
-  return v8::Local<v8::Object>();
-}
-
-bool WorkerOrWorkletGlobalScope::HasPendingActivity() const {
-  // The global scope wrapper is kept alive as longs as its execution context is
-  // active.
-  return !ExecutionContext::IsContextDestroyed();
 }
 
 void WorkerOrWorkletGlobalScope::CountUse(WebFeature feature) {

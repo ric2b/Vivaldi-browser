@@ -11,6 +11,7 @@
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_divider.h"
+#include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/tablet_mode/tablet_mode_multitask_cue_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_multitask_menu.h"
@@ -96,8 +97,7 @@ class TabletModeMultitaskMenuTest : public AshTestBase {
                                            : half_bounds.right_center());
     auto* split_view_controller = SplitViewController::Get(window);
     DCHECK_EQ(split_view_controller->GetPositionOfSnappedWindow(window),
-              left ? SplitViewController::SnapPosition::kPrimary
-                   : SplitViewController::SnapPosition::kSecondary);
+              left ? SnapPosition::kPrimary : SnapPosition::kSecondary);
   }
 
   void PressPartialPrimary(const aura::Window& window) {
@@ -400,10 +400,8 @@ TEST_F(TabletModeMultitaskMenuTest, CloseOnDoubleTapDivider) {
 
   auto* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller->SnapWindow(window1.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
 
   // Open the menu on one of the windows.
   ShowMultitaskMenu(*window1);
@@ -531,8 +529,7 @@ TEST_F(TabletModeMultitaskMenuTest, AdjustedMenuBounds) {
             GetMultitaskMenu()->widget()->GetWindowBoundsInScreen().right());
 
   // Swap windows so the 1/3 window is on the left. Test that the menu fits.
-  split_view_controller->SwapWindows(
-      SplitViewController::SwapWindowsSource::kDoubleTap);
+  split_view_controller->SwapWindows();
   ShowMultitaskMenu(*window2);
   EXPECT_EQ(work_area.x(),
             GetMultitaskMenu()->widget()->GetWindowBoundsInScreen().x());
@@ -589,6 +586,29 @@ TEST_F(TabletModeMultitaskMenuTest, WindowMinimumSizes) {
   EXPECT_FALSE(
       chromeos::MultitaskMenuViewTestApi(multitask_menu_view).GetHalfButton());
   EXPECT_FALSE(multitask_menu_view->partial_button());
+  GetMultitaskMenu()->Reset();
+
+  // Snap `window` to 1/3 to set its snap ratio to 1/3.
+  const WindowSnapWMEvent snap_left(WM_EVENT_SNAP_PRIMARY,
+                                    chromeos::kOneThirdSnapRatio);
+  WindowState::Get(window.get())->OnWMEvent(&snap_left);
+  const WMEvent restore(WM_EVENT_RESTORE);
+  WindowState::Get(window.get())->OnWMEvent(&restore);
+
+  // Set minimum size to make `window` snappable in 1/2 ratio but not in 1/3
+  // ratio.
+  delegate.set_minimum_size(gfx::Size(work_area_bounds.width() * 0.4, 0));
+
+  // Half button should be visible according to snappability with the default
+  // snap ratio instead of the window's current snap ratio.
+  ShowMultitaskMenu(*window);
+  multitask_menu_view = GetMultitaskMenuView(GetMultitaskMenu());
+  EXPECT_TRUE(
+      chromeos::MultitaskMenuViewTestApi(multitask_menu_view).GetHalfButton());
+  EXPECT_TRUE(multitask_menu_view->partial_button()->GetEnabled());
+  ASSERT_FALSE(multitask_menu_view->partial_button()
+                   ->GetRightBottomButton()
+                   ->GetEnabled());
 }
 
 // Tests that if a window cannot be snapped or floated, the buttons will not
@@ -700,12 +720,11 @@ TEST_F(TabletModeMultitaskMenuTest, ShowBottomMenuPortraitPrimary) {
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
   std::unique_ptr<aura::Window> top_window(CreateAppWindow());
   std::unique_ptr<aura::Window> bottom_window(CreateAppWindow());
-  split_view_controller->SnapWindow(
-      top_window.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      bottom_window.get(), SplitViewController::SnapPosition::kSecondary);
-  EXPECT_FALSE(split_view_controller->IsPhysicalLeftOrTop(
-      SplitViewController::SnapPosition::kSecondary, bottom_window.get()));
+  split_view_controller->SnapWindow(top_window.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(bottom_window.get(),
+                                    SnapPosition::kSecondary);
+  EXPECT_FALSE(
+      IsPhysicalLeftOrTop(SnapPosition::kSecondary, bottom_window.get()));
   wm::ActivateWindow(bottom_window.get());
 
   // Event generation coordinates are relative to the natural origin, but
@@ -740,12 +759,11 @@ TEST_F(TabletModeMultitaskMenuTest, DISABLED_ShowBottomMenuPortraitSecondary) {
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
   std::unique_ptr<aura::Window> bottom_window(CreateAppWindow());
   std::unique_ptr<aura::Window> top_window(CreateAppWindow());
-  split_view_controller->SnapWindow(
-      bottom_window.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      top_window.get(), SplitViewController::SnapPosition::kSecondary);
-  EXPECT_FALSE(split_view_controller->IsPhysicalLeftOrTop(
-      SplitViewController::SnapPosition::kPrimary, bottom_window.get()));
+  split_view_controller->SnapWindow(bottom_window.get(),
+                                    SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(top_window.get(), SnapPosition::kSecondary);
+  EXPECT_FALSE(
+      IsPhysicalLeftOrTop(SnapPosition::kPrimary, bottom_window.get()));
   wm::ActivateWindow(bottom_window.get());
 
   // Event generation coordinates are relative to the natural origin, but

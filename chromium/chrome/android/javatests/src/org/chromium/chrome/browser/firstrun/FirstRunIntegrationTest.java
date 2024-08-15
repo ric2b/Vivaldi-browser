@@ -57,6 +57,7 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.ScalableTimeout;
@@ -75,20 +76,22 @@ import org.chromium.chrome.browser.partnercustomizations.BasePartnerBrowserCusto
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEngineDialogHelperUtils;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.SigninFirstRunFragment;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.policy.AbstractAppRestrictionsProvider;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeImpl;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -143,6 +146,11 @@ public class FirstRunIntegrationTest {
 
     @Before
     public void setUp() {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    AccountManagerFacadeProvider.setInstanceForTests(
+                            new AccountManagerFacadeImpl(new FakeAccountManagerDelegate()));
+                });
         MockitoAnnotations.initMocks(this);
         when(mExternalAuthUtilsMock.canUseGooglePlayServices()).thenReturn(false);
         ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtilsMock);
@@ -530,8 +538,8 @@ public class FirstRunIntegrationTest {
         if (testCase.cctTosDisabled()) skipTosDialogViaPolicy();
 
         FirstRunFlowSequencer.setDelegateFactoryForTesting(
-                (profileSupplier) ->
-                        new TestFirstRunFlowSequencerDelegate(testCase, profileSupplier));
+                (profileProvider) ->
+                        new TestFirstRunFlowSequencerDelegate(testCase, profileProvider));
 
         setUpLocaleManagerDelegate(testCase.searchPromoType());
     }
@@ -763,7 +771,11 @@ public class FirstRunIntegrationTest {
                 0,
                 secondFreData.abortFirstRunExperienceCallback.getCallCount());
 
-        secondFreActivity.onBackPressed();
+        Assert.assertTrue(
+                "FirstRunActivity should intercept back press",
+                secondFreActivity.getOnBackPressedDispatcher().hasEnabledCallbacks());
+        TestThreadUtils.runOnUiThreadBlocking(
+                secondFreActivity.getOnBackPressedDispatcher()::onBackPressed);
         secondFreData.abortFirstRunExperienceCallback.waitForCallback(
                 "Second FirstRunActivity didn't abort", 0);
         CriteriaHelper.pollInstrumentationThread(
@@ -1277,7 +1289,8 @@ public class FirstRunIntegrationTest {
 
         protected FirstRunNavigationHelper goBackToPreviousPage() throws Exception {
             int jumpCallCount = mScopedObserverData.jumpToPageCallback.getCallCount();
-            TestThreadUtils.runOnUiThreadBlocking(() -> mFirstRunActivity.onBackPressed());
+            TestThreadUtils.runOnUiThreadBlocking(
+                    mFirstRunActivity.getOnBackPressedDispatcher()::onBackPressed);
             mScopedObserverData.jumpToPageCallback.waitForCallback(
                     "Failed go back to previous page", jumpCallCount);
 
@@ -1302,8 +1315,8 @@ public class FirstRunIntegrationTest {
         private FirstRunPagesTestCase mTestCase;
 
         public TestFirstRunFlowSequencerDelegate(
-                FirstRunPagesTestCase testCase, OneshotSupplier<Profile> profileSupplier) {
-            super(profileSupplier);
+                FirstRunPagesTestCase testCase, OneshotSupplier<ProfileProvider> profileProvider) {
+            super(profileProvider);
             mTestCase = testCase;
         }
 

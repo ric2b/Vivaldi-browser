@@ -2044,6 +2044,12 @@ declare namespace ProtocolProxyApi {
     invoke_setUserAgentOverride(params: Protocol.Network.SetUserAgentOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
+     * Enables streaming of the response for the given requestId.
+     * If enabled, the dataReceived event contains the data that was received during streaming.
+     */
+    invoke_streamResourceContent(params: Protocol.Network.StreamResourceContentRequest): Promise<Protocol.Network.StreamResourceContentResponse>;
+
+    /**
      * Returns information about the COEP/COOP isolation status.
      */
     invoke_getSecurityIsolationStatus(params: Protocol.Network.GetSecurityIsolationStatusRequest): Promise<Protocol.Network.GetSecurityIsolationStatusResponse>;
@@ -2463,13 +2469,6 @@ declare namespace ProtocolProxyApi {
     invoke_getAppId(): Promise<Protocol.Page.GetAppIdResponse>;
 
     invoke_getAdScriptId(params: Protocol.Page.GetAdScriptIdRequest): Promise<Protocol.Page.GetAdScriptIdResponse>;
-
-    /**
-     * Returns all browser cookies for the page and all of its subframes. Depending
-     * on the backend support, will return detailed cookie information in the
-     * `cookies` field.
-     */
-    invoke_getCookies(): Promise<Protocol.Page.GetCookiesResponse>;
 
     /**
      * Returns present frame tree structure.
@@ -3080,6 +3079,11 @@ declare namespace ProtocolProxyApi {
     invoke_setInterestGroupTracking(params: Protocol.Storage.SetInterestGroupTrackingRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
+     * Enables/Disables issuing of interestGroupAuctionEvent events.
+     */
+    invoke_setInterestGroupAuctionTracking(params: Protocol.Storage.SetInterestGroupAuctionTrackingRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
      * Gets metadata for an origin's shared storage.
      */
     invoke_getSharedStorageMetadata(params: Protocol.Storage.GetSharedStorageMetadataRequest): Promise<Protocol.Storage.GetSharedStorageMetadataResponse>;
@@ -3162,9 +3166,16 @@ declare namespace ProtocolProxyApi {
     indexedDBListUpdated(params: Protocol.Storage.IndexedDBListUpdatedEvent): void;
 
     /**
-     * One of the interest groups was accessed by the associated page.
+     * One of the interest groups was accessed. Note that these events are global
+     * to all targets sharing an interest group store.
      */
     interestGroupAccessed(params: Protocol.Storage.InterestGroupAccessedEvent): void;
+
+    /**
+     * An auction involving interest groups is taking place. These events are
+     * target-specific.
+     */
+    interestGroupAuctionEventOccurred(params: Protocol.Storage.InterestGroupAuctionEventOccurredEvent): void;
 
     /**
      * Shared storage was accessed by the associated page.
@@ -3176,11 +3187,9 @@ declare namespace ProtocolProxyApi {
 
     storageBucketDeleted(params: Protocol.Storage.StorageBucketDeletedEvent): void;
 
-    /**
-     * TODO(crbug.com/1458532): Add other Attribution Reporting events, e.g.
-     * trigger registration.
-     */
     attributionReportingSourceRegistered(params: Protocol.Storage.AttributionReportingSourceRegisteredEvent): void;
+
+    attributionReportingTriggerRegistered(params: Protocol.Storage.AttributionReportingTriggerRegisteredEvent): void;
 
   }
 
@@ -3791,11 +3800,7 @@ declare namespace ProtocolProxyApi {
 
     invoke_selectAccount(params: Protocol.FedCm.SelectAccountRequest): Promise<Protocol.ProtocolResponseWithError>;
 
-    /**
-     * Only valid if the dialog type is ConfirmIdpLogin. Acts as if the user had
-     * clicked the continue button.
-     */
-    invoke_confirmIdpLogin(params: Protocol.FedCm.ConfirmIdpLoginRequest): Promise<Protocol.ProtocolResponseWithError>;
+    invoke_clickDialogButton(params: Protocol.FedCm.ClickDialogButtonRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     invoke_dismissDialog(params: Protocol.FedCm.DismissDialogRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -3808,6 +3813,12 @@ declare namespace ProtocolProxyApi {
   }
   export interface FedCmDispatcher {
     dialogShown(params: Protocol.FedCm.DialogShownEvent): void;
+
+    /**
+     * Triggered when a dialog is closed, either by user action, JS abort,
+     * or a command below.
+     */
+    dialogClosed(params: Protocol.FedCm.DialogClosedEvent): void;
 
   }
 

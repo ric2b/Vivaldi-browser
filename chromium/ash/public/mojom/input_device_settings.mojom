@@ -163,6 +163,8 @@ struct Mouse {
   string device_key;
   // Used to check customization restriction of the mouse.
   CustomizationRestriction customization_restriction;
+  // Used to get the mouse button config.
+  MouseButtonConfig mouse_button_config;
   MouseSettings settings;
 };
 
@@ -279,6 +281,8 @@ struct GraphicsTablet {
   // "vendor_id:product_id" where the ids are 16-bit hex in lowercase.
   // Example: 5022:18d1.
   string device_key;
+  // Used to check customization restriction of the graphics tablet.
+  CustomizationRestriction customization_restriction;
   GraphicsTabletSettings settings;
 };
 
@@ -337,6 +341,17 @@ enum CustomizableButton {
   kSide = 6,
 };
 
+// Contains the valid set of mouse button configs.
+enum MouseButtonConfig {
+  // Mouse with no explicit configuration about
+  // what customizable buttons it has.
+  kNoConfig = 0,
+  // Mouse with five customizable buttons.
+  kFiveKey = 1,
+  // Logitech mouse with six customizable buttons.
+  kLogitechSixKey = 2,
+};
+
 // Contains the valid set of static shortcut actions.
 enum StaticShortcutAction {
   kDisable = 0,
@@ -361,4 +376,8 @@ enum CustomizationRestriction {
   kDisallowCustomizations = 1,
   // Disable key event rewrites.
   kDisableKeyEventRewrites = 2,
+  // Allow Alphabet key event rewrites.
+  kAllowAlphabetKeyEventRewrites = 3,
+  // Allow Alphabet or Number key event rewrites.
+  kAllowAlphabetOrNumberKeyEventRewrites = 4,
 };

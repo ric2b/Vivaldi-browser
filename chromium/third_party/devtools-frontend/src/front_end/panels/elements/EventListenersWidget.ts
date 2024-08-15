@@ -44,10 +44,6 @@ const UIStrings = {
    */
   frameworkListeners: '`Framework` listeners',
   /**
-   *@description Text to refresh the page
-   */
-  refresh: 'Refresh',
-  /**
    *@description Tooltip text that appears on the setting when hovering over it in Event Listeners Widget of the Elements panel
    */
   showListenersOnTheAncestors: 'Show listeners on the ancestors',
@@ -106,12 +102,9 @@ export class EventListenersWidget extends UI.ThrottledWidget.ThrottledWidget imp
     this.showFrameworkListenersSetting.addChangeListener(this.showFrameworkListenersChanged.bind(this));
     this.eventListenersView = new EventListeners.EventListenersView.EventListenersView(this.update.bind(this));
     this.eventListenersView.show(this.element);
-    this.element.setAttribute('jslog', `${VisualLogging.eventListenersPane()}`);
+    this.element.setAttribute('jslog', `${VisualLogging.pane().context('event-listeners')}`);
 
-    const refreshButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.refresh), 'refresh');
-    refreshButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.update.bind(this));
-    refreshButton.element.setAttribute('jslog', `${VisualLogging.refresh().track({click: true})}`);
-    this.toolbarItemsInternal.push(refreshButton);
+    this.toolbarItemsInternal.push(UI.Toolbar.Toolbar.createActionButtonForId('elements.refresh-event-listeners'));
     this.toolbarItemsInternal.push(new UI.Toolbar.ToolbarSettingCheckbox(
         this.showForAncestorsSetting, i18nString(UIStrings.showListenersOnTheAncestors),
         i18nString(UIStrings.ancestors)));
@@ -176,6 +169,16 @@ export class EventListenersWidget extends UI.ThrottledWidget.ThrottledWidget imp
         .then(this.showFrameworkListenersChanged.bind(this));
   }
 
+  override wasShown(): void {
+    UI.Context.Context.instance().setFlavor(EventListenersWidget, this);
+    super.wasShown();
+  }
+
+  override willHide(): void {
+    super.willHide();
+    UI.Context.Context.instance().setFlavor(EventListenersWidget, null);
+  }
+
   toolbarItems(): UI.Toolbar.ToolbarItem[] {
     return this.toolbarItemsInternal;
   }
@@ -235,3 +238,15 @@ export const DispatchFilterBy = {
 };
 
 const objectGroupName = 'event-listeners-panel';
+
+export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
+  handleAction(_context: UI.Context.Context, actionId: string): boolean {
+    switch (actionId) {
+      case 'elements.refresh-event-listeners': {
+        EventListenersWidget.instance().update();
+        return true;
+      }
+    }
+    return false;
+  }
+}

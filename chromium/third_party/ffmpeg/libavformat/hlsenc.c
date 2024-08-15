@@ -998,7 +998,7 @@ static int sls_flags_filename_process(struct AVFormatContext *s, HLSContext *hls
                                              't',  (int64_t)round(duration * HLS_MICROSECOND_UNIT)) < 1) {
                 av_log(hls, AV_LOG_ERROR,
                        "Invalid second level segment filename template '%s', "
-                       "you can try to remove second_level_segment_time flag\n",
+                       "you can try to remove second_level_segment_duration flag\n",
                        vs->avf->url);
                 av_freep(&filename);
                 return AVERROR(EINVAL);
@@ -1091,7 +1091,7 @@ static int sls_flag_use_localtime_filename(AVFormatContext *oc, HLSContext *c, V
             char *filename = NULL;
             if (replace_int_data_in_filename(&filename, oc->url, 't', 0) < 1) {
                 av_log(c, AV_LOG_ERROR, "Invalid second level segment filename template '%s', "
-                        "you can try to remove second_level_segment_time flag\n",
+                        "you can try to remove second_level_segment_duration flag\n",
                        oc->url);
                 av_freep(&filename);
                 return AVERROR(EINVAL);
@@ -1353,16 +1353,17 @@ static const char* get_relative_url(const char *master_url, const char *media_ur
 
 static int64_t get_stream_bit_rate(AVStream *stream)
 {
-    AVCPBProperties *props = (AVCPBProperties*)av_stream_get_side_data(
-        stream,
-        AV_PKT_DATA_CPB_PROPERTIES,
-        NULL
+    const AVPacketSideData *sd = av_packet_side_data_get(
+        stream->codecpar->coded_side_data, stream->codecpar->nb_coded_side_data,
+        AV_PKT_DATA_CPB_PROPERTIES
     );
 
     if (stream->codecpar->bit_rate)
         return stream->codecpar->bit_rate;
-    else if (props)
+    else if (sd) {
+        AVCPBProperties *props = (AVCPBProperties*)sd->data;
         return props->max_bitrate;
+    }
 
     return 0;
 }
@@ -1385,6 +1386,7 @@ static int create_master_playlist(AVFormatContext *s,
     int is_file_proto = proto && !strcmp(proto, "file");
     int use_temp_file = is_file_proto && ((hls->flags & HLS_TEMP_FILE) || hls->master_publish_rate);
     char temp_filename[MAX_URL_SIZE];
+    int nb_channels;
 
     input_vs->m3u8_created = 1;
     if (!hls->master_m3u8_created) {
@@ -1433,8 +1435,13 @@ static int create_master_playlist(AVFormatContext *s,
             av_log(s, AV_LOG_ERROR, "Unable to find relative URL\n");
             goto fail;
         }
+        nb_channels = 0;
+        for (j = 0; j < vs->nb_streams; j++)
+            if (vs->streams[j]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                if (vs->streams[j]->codecpar->ch_layout.nb_channels > nb_channels)
+                    nb_channels = vs->streams[j]->codecpar->ch_layout.nb_channels;
 
-        ff_hls_write_audio_rendition(hls->m3u8_out, vs->agroup, m3u8_rel_name, vs->language, i, hls->has_default_key ? vs->is_default : 1);
+        ff_hls_write_audio_rendition(hls->m3u8_out, vs->agroup, m3u8_rel_name, vs->language, i, hls->has_default_key ? vs->is_default : 1, nb_channels);
     }
 
     /* For variant streams with video add #EXT-X-STREAM-INF tag with attributes*/
@@ -1580,7 +1587,9 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
 
     set_http_options(s, &options, hls);
     snprintf(temp_filename, sizeof(temp_filename), use_temp_file ? "%s.tmp" : "%s", vs->m3u8_name);
-    if ((ret = hlsenc_io_open(s, byterange_mode ? &hls->m3u8_out : &vs->out, temp_filename, &options)) < 0) {
+    ret = hlsenc_io_open(s, byterange_mode ? &hls->m3u8_out : &vs->out, temp_filename, &options);
+    av_dict_free(&options);
+    if (ret < 0) {
         if (hls->ignore_io_errors)
             ret = 0;
         goto fail;
@@ -1635,8 +1644,11 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
         ff_hls_write_end_list(byterange_mode ? hls->m3u8_out : vs->out);
 
     if (vs->vtt_m3u8_name) {
+        set_http_options(vs->vtt_avf, &options, hls);
         snprintf(temp_vtt_filename, sizeof(temp_vtt_filename), use_temp_file ? "%s.tmp" : "%s", vs->vtt_m3u8_name);
-        if ((ret = hlsenc_io_open(s, &hls->sub_m3u8_out, temp_vtt_filename, &options)) < 0) {
+        ret = hlsenc_io_open(s, &hls->sub_m3u8_out, temp_vtt_filename, &options);
+        av_dict_free(&options);
+        if (ret < 0) {
             if (hls->ignore_io_errors)
                 ret = 0;
             goto fail;

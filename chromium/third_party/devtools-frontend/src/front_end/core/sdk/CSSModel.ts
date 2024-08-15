@@ -343,6 +343,7 @@ export class CSSModel extends SDKModel<EventTypes> {
       positionFallbackRules: response.cssPositionFallbackRules || [],
       propertyRules: response.cssPropertyRules ?? [],
       cssPropertyRegistrations: response.cssPropertyRegistrations ?? [],
+      fontPaletteValuesRule: response.cssFontPaletteValuesRule,
     });
   }
 
@@ -865,8 +866,6 @@ export class CSSModel extends SDKModel<EventTypes> {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   FontsUpdated = 'FontsUpdated',
   MediaQueryResultChanged = 'MediaQueryResultChanged',
@@ -1027,9 +1026,7 @@ export class CSSPropertyTracker extends Common.ObjectWrapper.ObjectWrapper<CSSPr
 
 const StylePollingInterval = 1000;  // throttling interval for style polling, in milliseconds
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum CSSPropertyTrackerEvents {
+export const enum CSSPropertyTrackerEvents {
   TrackedCSSPropertiesUpdated = 'TrackedCSSPropertiesUpdated',
 }
 

@@ -15,7 +15,7 @@
 /// Set of themes supported by Dynamic Color.
 /// Instantiate the corresponding subclass, ex. SchemeTonalSpot, to create
 /// colors corresponding to the theme.
-enum Variant {
+public enum Variant {
   case monochrome
   case neutral
   case tonalSpot
@@ -23,4 +23,6 @@ enum Variant {
   case expressive
   case fidelity
   case content
+  case rainbow
+  case fruitSalad
 }

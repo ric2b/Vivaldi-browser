@@ -23,6 +23,11 @@ interface SafeBrowsing {
   // The check and (subsequent checks performed using SafeBrowsingUrlChecker)
   // checks against SafeBrowsing's Malware, Phishing, and UwS blocklists.
   //
+  // `frame_token` is set when the request originates from the context of a
+  // frame. Dedicated workers are associated with a frame context and will
+  // have the value set. Service workers and shared workers are not associated
+  // with a frame and will have it set to null.
+  //
   // The SafeBrowsingUrlChecker interface should be used (and only used) for
   // subsequent checks of redirects, so that the server side could keep track of
   // the redirect chain. Disconnecting the checker interface cancels on-going
@@ -44,7 +49,7 @@ interface SafeBrowsing {
   // |showed_interstitial| indicates whether the SafeBrowsing interstitial page
   // has been shown to the user.
   CreateCheckerAndCheck(
-      int32 render_frame_id,
+      blink.mojom.LocalFrameToken? frame_token,
       pending_receiver<SafeBrowsingUrlChecker> receiver,
       url.mojom.Url url,
       string method,
@@ -118,8 +123,27 @@ enum PhishingDetectorResult {
   // classifier previously ran on this URL, it did not run again.
   FORWARD_BACK_TRANSITION = 3,
 
-  // The classifier returned an invalid score.
+  // The classifier returned an invalid score because the model is
+  // misconfigured.
   INVALID_SCORE = 4,
+
+  // Invalid URL request came in that is not HTTP/HTTPS or GET requests.
+  INVALID_URL_FORMAT_REQUEST = 5,
+
+  // WebDocumentLoader failed to load.
+  INVALID_DOCUMENT_LOADER = 6,
+
+  // URL feature extraction has failed.
+  URL_FEATURE_EXTRACTION_FAILED = 7,
+
+  // DOM feature extraction failed.
+  DOM_EXTRACTION_FAILED = 8,
+
+  // Term feature extraction failed.
+  TERM_EXTRACTION_FAILED = 9,
+
+  // Visual extraction failed.
+  VISUAL_EXTRACTION_FAILED = 10,
 };
 
 [EnableIf=full_safe_browsing]

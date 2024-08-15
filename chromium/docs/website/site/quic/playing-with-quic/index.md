@@ -8,7 +8,8 @@ title: Playing with QUIC
 
 ### **Build the QUIC client and server**
 
-A sample server and client implementation are provided in Chromium. To use these
+A sample server and client implementation are provided in Chromium, and several
+more are provided as part of QUICHE. To use these
 you should first have [checked out the Chromium
 source](/developers/how-tos/get-the-code), and then build the binaries:
 
@@ -16,10 +17,36 @@ source](/developers/how-tos/get-the-code), and then build the binaries:
 ninja -C out/Debug quic_server quic_client
 ```
 
+Binary targets include:
+
+ * `quic_server` - a QUIC server for testing purposes defined in
+   `//net/tools/quic/quic_simple_server_bin.cc`. This binary supports proxying,
+   but that support has bugs.
+
+ * `quic_client` - a QUIC client defined in
+   `//net/tools/quic/quic_simple_client_bin.cc`.
+
+ * `epoll_quic_server` - a QUIC server defined in QUICHE. This is similar to
+   `quic_server` but supports proxying via CONNECT, including CONNECT-UDP. This
+   only works on Linux, as it uses `epoll(7)`.
+
+ * `epoll_quic_client` - a QUIC client defined in QUICHE. This only works on
+   Linux, as it uses `epoll(7)`.
+
+ * `masque_server` - a server defined in QUICHE which only allows proxying via
+   MASQUE (CONNECT-UDP, CONNECT-IP, or CONNECT-ETHERNET). Note that
+   `masque_server` does not support plain `CONNECT` tunnels.
+
+ * `masque_client` - a client defined in QUICHE which can either fetch URLs via
+   QUIC in a CONNECT-UDP tunnel, or connect a `tun` (CONNECT-IP) or `tap`
+   (CONNECT-ETHERNET) tunnel.
+
 ### **Prep test data from www.example.org**
 
-Download a copy of www.example.org, which we will serve locally using the
-quic_server binary:
+The server implementations support serving data cached on disk. The data is in
+the format written by `wget -p --save-headers`.
+
+To download a copy of `www.example.org`:
 
 ```none
 mkdir /tmp/quic-data
@@ -29,9 +56,9 @@ wget -p --save-headers https://www.example.org
 
 Manually edit index.html and adjust the headers:
 
-    *   **Remove (if it exists):** "Transfer-Encoding: chunked"
-    *   **Remove (if it exists):** "Alternate-Protocol: ..."
-    *   **Add:** X-Original-Url: https://www.example.org/
+ * **Remove (if it exists):** `Transfer-Encoding: chunked`
+ * **Remove (if it exists):** `Alternate-Protocol: ...`
+ * **Add:** `X-Original-Url: https://www.example.org/`
 
 ### Generate certificates
 
@@ -45,21 +72,36 @@ cd net/tools/quic/certs
 cd -
 ```
 
+These generate a certificate and key for `www.example.org` in
+`net/tools/quic/certs/out`, good for only three days.
+
 In addition to the server's certificate and public key, this script will also
 generate a CA certificate (`net/tools/quic/certs/out/2048-sha256-root.pem`)
 which you will need to add to your OS's root certificate store in order for it
 to be trusted during certificate validation. For doing this on Linux, please see
 [these
 instructions](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/linux/cert_management.md).
-This will allow quic_client to verify the certificate correctly. However, note
-that Chrome/Chromium (the browser) does not allow custom CAs for QUIC, so you'll
-also need to pass in --ignore-certificate-errors-spki-list with the
-certificate's spki to allow Chrome/Chromium to accept your custom certificate as
+This will allow `quic_client` to verify the certificate correctly.
+
+Note that Chrome/Chromium (the browser) does not allow custom CAs for
+QUIC, so _in addition_ to adding the root certificate to the certificate store,
+you'll need to pass in `--ignore-certificate-errors-spki-list=..` with the
+certificate's SPKI to allow Chrome/Chromium to accept your custom certificate as
 valid.
 
-### Run the QUIC server and client
+You can generate the SPKI with:
 
-Run the quic_server:
+```shell
+openssl x509 -noout -pubkey < net/tools/quic/certs/out/leaf_cert.pem | \
+    openssl rsa -pubin -outform der | \
+    openssl dgst -sha256 -binary | \
+    openssl enc -base64
+```
+
+### Run the QUIC server and client with cached data
+
+Run the `quic_server`, pointing to the cached `www.example.org` content
+and cert/key generated above:
 
 ```none
 ./out/Debug/quic_server \
@@ -69,7 +111,7 @@ Run the quic_server:
 ```
 
 And you should be able to successfully request the file over QUIC using
-quic_client:
+`quic_client`:
 
 ```none
 ./out/Debug/quic_client --host=127.0.0.1 --port=6121 https://www.example.org/
@@ -112,6 +154,37 @@ certificate or a certificate that is signed by a custom CA, you need to use the
 certificate based on its SPKI. It is not possible to trust a custom CA using this
 flag. If you wish to deploy a MITM proxy that intercepts traffic, you need to
 block QUIC entirely and intercept TLS instead.
+
+### Proxying Requests
+
+To set up proxying with `CONNECT`:
+
+```none
+./out/Default/epoll_quic_server \
+    --mode=proxy \
+    --connect_proxy_destinations=google.com:443 \
+    --certificate_file=net/tools/quic/certs/out/leaf_cert.pem \
+    --key_file=net/tools/quic/certs/out/leaf_cert.pkcs8
+```
+
+and, ensuring you've added the root cert to the cert store and put the leaf
+cert's SPKI in $SPKI,
+
+```none
+out/Default/chrome \
+    --user-data-dir=/tmp/chrome-profile \
+    --host-resolver-rules='MAP www.example.org 127.0.0.1' \
+    --proxy-server=quic://www.example.org:6121 \
+    --origin-to-force-quic-on=www.example.org:6121 \
+    --ignore-certificate-errors \
+    --ignore-certificate-errors-spki-list="${SPKI}"
+```
+
+Note that all of `--ignore-cerificate-errors`,
+`--ignore-certificate-errors-spki-list`, and
+[`--origin-to-force-quic-on`](https://bugs.chromium.org/p/chromium/issues/detail?id=980654#c3) are
+required, along with the root cert in the cert store, to avoid certificate
+validation errors.
 
 ### **Troubleshooting**
 

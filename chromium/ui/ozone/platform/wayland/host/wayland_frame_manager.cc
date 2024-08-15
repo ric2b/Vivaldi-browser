@@ -43,7 +43,7 @@ constexpr base::TimeDelta kPresentationFlushTimerStopThreshold =
 constexpr char kBoundsRectNanOrInf[] =
     "Overlay bounds_rect is invalid (NaN or infinity).";
 
-bool potential_compositor_buffer_lock = true;
+bool potential_compositor_buffer_lock = false;
 
 bool ValidateRect(const gfx::RectF& rect) {
   return !std::isnan(rect.x()) && !std::isnan(rect.y()) &&
@@ -113,14 +113,7 @@ WaylandFrame::~WaylandFrame() = default;
 
 WaylandFrameManager::WaylandFrameManager(WaylandWindow* window,
                                          WaylandConnection* connection)
-    : window_(window), connection_(connection), weak_factory_(this) {
-  if (!connection->zaura_shell() ||
-      connection->zaura_shell()->HasBugFix(1358908)) {
-    // TODO(msisov): if this gets removed at some point, the
-    // WaylandSurfaceFactoryTest can also stop sending this bug fix.
-    potential_compositor_buffer_lock = false;
-  }
-}
+    : window_(window), connection_(connection), weak_factory_(this) {}
 
 WaylandFrameManager::~WaylandFrameManager() {
   ClearStates();
@@ -242,6 +235,25 @@ void WaylandFrameManager::PlayBackFrame(std::unique_ptr<WaylandFrame> frame) {
   auto& root_config = frame->root_config;
   bool empty_frame = !root_config.buffer_id;
 
+  // Configure the root surface first so it gets the presentation_feedback and
+  // frame_callback listeners attached if possible. This can reduce the overall
+  // number of commits required.
+  if (empty_frame) {
+    // GPU channel has been destroyed. Do nothing for empty frames except that
+    // the frame should be marked as failed if it hasn't been presented yet.
+    if (!frame->presentation_acked) {
+      frame->feedback = gfx::PresentationFeedback::Failure();
+    }
+  } else {
+    // Opaque region is set during OnSequencePoint() no need to set it again.
+    ApplySurfaceConfigure(frame.get(), root_surface, root_config, false);
+    // A fatal error happened. Must stop the playback and terminate the gpu
+    // process as it might have been compromised.
+    if (!fatal_error_message_.empty()) {
+      return;
+    }
+  }
+
   // Configure subsurfaces. Traverse the deque backwards s.t. we can set
   // frame_callback and presentation_feedback on the top-most possible surface.
   WaylandSubsurface* reference_above = nullptr;
@@ -272,35 +284,24 @@ void WaylandFrameManager::PlayBackFrame(std::unique_ptr<WaylandFrame> frame) {
     } else {
       // TODO(crbug.com/1457446): Remove clip_rect when
       // augmented_surface_set_clip_rect become supported widely enough.
-      subsurface->ConfigureAndShowSurface(
+      bool needs_commit = subsurface->ConfigureAndShowSurface(
           config.bounds_rect, root_config.bounds_rect, config.clip_rect,
           config.transform, root_config.surface_scale_factor, nullptr,
           reference_above);
-      ApplySurfaceConfigure(frame.get(), surface, config, true);
+      needs_commit |= ApplySurfaceConfigure(frame.get(), surface, config, true);
       // A fatal error happened. Must stop the playback and terminate the gpu
       // process as it might have been compromised.
       if (!fatal_error_message_.empty())
         return;
       reference_above = subsurface;
-      surface->Commit(false);
+
+      if (needs_commit) {
+        surface->Commit(false);
+      }
     }
   }
 
   DCHECK(fatal_error_message_.empty());
-
-  if (empty_frame) {
-    // GPU channel has been destroyed. Do nothing for empty frames except that
-    // the frame should be marked as failed if it hasn't been presented yet.
-    if (!frame->presentation_acked)
-      frame->feedback = gfx::PresentationFeedback::Failure();
-  } else {
-    // Opaque region is set during OnSequencePoint() no need to set it again.
-    ApplySurfaceConfigure(frame.get(), root_surface, root_config, false);
-    // A fatal error happened. Must stop the playback and terminate the gpu
-    // process as it might have been compromised.
-    if (!fatal_error_message_.empty())
-      return;
-  }
 
   DCHECK(empty_frame || !connection_->presentation() ||
          frame->pending_feedback || frame->feedback.has_value());
@@ -335,14 +336,14 @@ void WaylandFrameManager::DiscardFrame(std::unique_ptr<WaylandFrame> frame) {
   MaybeProcessSubmittedFrames();
 }
 
-void WaylandFrameManager::ApplySurfaceConfigure(
+bool WaylandFrameManager::ApplySurfaceConfigure(
     WaylandFrame* frame,
     WaylandSurface* surface,
     wl::WaylandOverlayConfig& config,
     bool set_opaque_region) {
   DCHECK(surface);
   if (!config.buffer_id)
-    return;
+    return true;
 
   if (!ValidateRect(config.bounds_rect)) {
     DCHECK(fatal_error_message_.empty());
@@ -350,7 +351,7 @@ void WaylandFrameManager::ApplySurfaceConfigure(
     // terminating the gpu during the playback is illegal - a pending frame will
     // DCHECK in ::ClearStates.
     fatal_error_message_ = kBoundsRectNanOrInf;
-    return;
+    return true;
   }
 
   surface->set_buffer_transform(
@@ -427,6 +428,8 @@ void WaylandFrameManager::ApplySurfaceConfigure(
   if (!config.access_fence_handle.is_null())
     surface->set_acquire_fence(std::move(config.access_fence_handle));
 
+  bool needs_commit = false;
+
   // If it's a solid color buffer, do not set a release callback as it's not
   // required to wait for this buffer - Wayland compositor only uses that to
   // produce a config for the quad.
@@ -444,6 +447,7 @@ void WaylandFrameManager::ApplySurfaceConfigure(
       frame->wl_frame_callback.reset(wl_surface_frame(surface->surface()));
       wl_callback_add_listener(frame->wl_frame_callback.get(),
                                &kFrameCallbackListener, this);
+      needs_commit = true;
     }
 
     if (!is_solid_color_buffer) {
@@ -468,6 +472,7 @@ void WaylandFrameManager::ApplySurfaceConfigure(
         connection_->presentation(), surface->surface()));
     wp_presentation_feedback_add_listener(frame->pending_feedback.get(),
                                           &kPresentationFeedbackListener, this);
+    needs_commit = true;
   }
 
   if (!is_solid_color_buffer) {
@@ -488,7 +493,8 @@ void WaylandFrameManager::ApplySurfaceConfigure(
 
   // Send instructions across wayland protocol, but do not commit yet, let the
   // caller decide whether the commit should flush.
-  surface->ApplyPendingState();
+  needs_commit |= surface->ApplyPendingState();
+  return needs_commit;
 }
 
 // static

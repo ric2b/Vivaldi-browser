@@ -145,12 +145,12 @@ class BookmarksPrivateIOFunction : public BookmarksFunction,
  public:
   BookmarksPrivateIOFunction();
 
-  void FileSelected(const base::FilePath& path,
+  void FileSelected(const ui::SelectedFileInfo& path,
                     int index,
                     void* params) override = 0;
 
   // ui::SelectFileDialog::Listener:
-  void MultiFilesSelected(const std::vector<base::FilePath>& files,
+  void MultiFilesSelected(const std::vector<ui::SelectedFileInfo>& files,
                           void* params) override;
   void FileSelectionCanceled(void* params) override;
 
@@ -172,7 +172,7 @@ class BookmarksPrivateExportFunction
                              BOOKMARKSPRIVATE_EXPORT)
 
   // BookmarkManagerIOFunction:
-  void FileSelected(const base::FilePath& path,
+  void FileSelected(const ui::SelectedFileInfo& path,
                     int index,
                     void* params) override;
  protected:

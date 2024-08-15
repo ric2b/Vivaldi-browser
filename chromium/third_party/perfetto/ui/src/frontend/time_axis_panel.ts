@@ -30,10 +30,17 @@ import {
   TickType,
   timeScaleForVisibleWindow,
 } from './gridline_helper';
-import {Panel, PanelSize} from './panel';
+import {PanelSize} from './panel';
+import {Panel} from './panel_container';
 
-export class TimeAxisPanel extends Panel {
-  view() {
+export class TimeAxisPanel implements Panel {
+  readonly kind = 'panel';
+  readonly selectable = false;
+  readonly trackKey = undefined;
+
+  constructor(readonly key: string) {}
+
+  get mithril() {
     return m('.time-axis-panel');
   }
 
@@ -58,6 +65,12 @@ export class TimeAxisPanel extends Panel {
         const dateStr = toISODateOnly(offsetDate);
         ctx.fillText(`UTC ${dateStr}`, 6, 10);
         break;
+      case TimestampFormat.TraceTz:
+        const offsetTzDate =
+            Time.toDate(globals.traceTzOffset, globals.realtimeOffset);
+        const dateTzStr = toISODateOnly(offsetTzDate);
+        ctx.fillText(dateTzStr, 6, 10);
+        break;
     }
 
     ctx.save();
@@ -66,7 +79,7 @@ export class TimeAxisPanel extends Panel {
     ctx.clip();
 
     // Draw time axis.
-    const span = globals.frontendLocalState.visibleTimeSpan;
+    const span = globals.timeline.visibleTimeSpan;
     if (size.width > TRACK_SHELL_WIDTH && span.duration > 0n) {
       const maxMajorTicks = getMaxMajorTicks(size.width - TRACK_SHELL_WIDTH);
       const map = timeScaleForVisibleWindow(TRACK_SHELL_WIDTH, size.width);
@@ -96,6 +109,7 @@ function renderTimestamp(
   const fmt = timestampFormat();
   switch (fmt) {
     case TimestampFormat.UTC:
+    case TimestampFormat.TraceTz:
     case TimestampFormat.Timecode:
       return renderTimecode(ctx, time, x, y, minWidth);
     case TimestampFormat.Raw:

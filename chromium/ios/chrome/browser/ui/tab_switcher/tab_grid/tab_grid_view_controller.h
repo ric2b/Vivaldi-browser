@@ -7,14 +7,14 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/keyboard/key_command_actions.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/disabled_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_action_wrangler.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_main_tab_grid_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_animation_layout_providing.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/tab_grid_transition_layout_providing.h"
 
 @protocol ApplicationCommands;
 @class GridContainerViewController;
@@ -30,11 +30,12 @@ class GURL;
 @class RecentTabsTableViewController;
 @class RegularGridViewController;
 @class TabGridBottomToolbar;
-@protocol TabCollectionCommands;
 @protocol TabCollectionConsumer;
 @protocol TabCollectionDragDropHandler;
+@protocol TabGridActivityObserver;
 @protocol TabGridConsumer;
 @protocol TabContextMenuProvider;
+@protocol TabGridMediatorProviderWrangler;
 @protocol TabGridMutator;
 @protocol TabGridToolbarsCommandsWrangler;
 @class TabGridTopToolbar;
@@ -72,6 +73,22 @@ enum class TabGridPageConfiguration {
 // Asks the delegate to show the inactive tabs.
 - (void)showInactiveTabs;
 
+// Asks the delegate whether the user is eligible for the swipe-to-incognito
+// in-product help message. This depends on multiple factors, including but not
+// limited to the current tab grid mode and the frequency that the IPH has
+// previously shown.
+- (BOOL)tabGridIsUserEligibleForSwipeToIncognitoIPH;
+
+// Asks the delegate whether the tab grid should present the swipe-to-incognito
+// in-product help message. Once this is invoked, `swipeToIncognitoIPH` must
+// show, and `tabGridDidDismissSwipeToIncognitoIPH` must be invoked on
+// dismissal.
+- (BOOL)tabGridShouldPresentSwipeToIncognitoIPH;
+
+// Notifies the delegate that the tab grid has dismissed the swipe-to-incognito
+// in-product help message.
+- (void)tabGridDidDismissSwipeToIncognitoIPH;
+
 @end
 
 // View controller representing a tab switcher. The tab switcher has an
@@ -79,25 +96,31 @@ enum class TabGridPageConfiguration {
 @interface TabGridViewController
     : UIViewController <DisabledGridViewControllerDelegate,
                         GridConsumer,
-                        IncognitoReauthObserver,
                         KeyCommandActions,
                         TabGridConsumer,
                         LegacyGridTransitionAnimationLayoutProviding,
                         TabGridPaging,
-                        TabGridToolbarsActionWrangler,
+                        TabGridToolbarsMainTabGridDelegate,
+                        TabGridTransitionLayoutProviding,
                         UISearchBarDelegate>
 
 @property(nonatomic, weak) id<ApplicationCommands> handler;
-// TODO(crbug.com/1457146): Move to Incognito Coordinator.
-@property(nonatomic, weak) IncognitoReauthSceneAgent* reauthAgent;
 
 // Delegate for this view controller to handle presenting tab UI.
 @property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
 
 @property(nonatomic, weak) id<TabGridViewControllerDelegate> delegate;
 
+// Delegate to notify when activity has to be updated.
+@property(nonatomic, weak) id<TabGridActivityObserver> activityObserver;
+
 // Mutator to apply all user change in the model.
 @property(nonatomic, weak) id<TabGridMutator> mutator;
+
+// Temporary provider to determine where the mediator and the view controller
+// lose current page sync.
+// TODO(crbug.com/1457146): Remove once all the flow have been matched.
+@property(nonatomic, weak) id<TabGridMediatorProviderWrangler> provider;
 
 // Consumers send updates from the model layer to the UI layer.
 @property(nonatomic, readonly) id<RecentTabsConsumer> remoteTabsConsumer;
@@ -111,7 +134,6 @@ enum class TabGridPageConfiguration {
 @property(nonatomic, weak) id<GridCommands> regularTabsDelegate;
 @property(nonatomic, weak) id<GridCommands> inactiveTabsDelegate;
 @property(nonatomic, weak) id<GridCommands> incognitoTabsDelegate;
-@property(nonatomic, weak) id<TabCollectionCommands> pinnedTabsDelegate;
 
 // Handles drag and drop interactions that require the model layer.
 @property(nonatomic, weak) id<TabCollectionDragDropHandler>
@@ -134,7 +156,7 @@ enum class TabGridPageConfiguration {
 // TODO(crbug.com/845192) : This was only exposed in the public interface so
 // that TabGridViewController does not need to know about model objects. The
 // model objects used in this view controller should be factored out.
-@property(nonatomic, strong)
+@property(nonatomic, readonly)
     RecentTabsTableViewController* remoteTabsViewController;
 
 // Vivaldi
@@ -185,11 +207,6 @@ enum class TabGridPageConfiguration {
 - (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
-
-// Tells the receiver to prepare for its appearance by pre-requesting any
-// resources it needs from data sources. This should be called before any
-// transitions are triggered.
-- (void)prepareForAppearance;
 
 // Notifies the ViewController that its content is being displayed or hidden.
 - (void)contentWillAppearAnimated:(BOOL)animated;

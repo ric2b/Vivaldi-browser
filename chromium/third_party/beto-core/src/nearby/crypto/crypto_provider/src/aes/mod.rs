@@ -20,7 +20,6 @@ use core::{array, fmt};
 
 pub mod ctr;
 
-#[cfg(feature = "alloc")]
 pub mod cbc;
 
 /// Block size in bytes for AES (and XTS-AES)

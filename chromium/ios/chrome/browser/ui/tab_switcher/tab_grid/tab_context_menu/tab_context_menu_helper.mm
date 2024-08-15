@@ -4,17 +4,19 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_helper.h"
 
+#import "base/check.h"
 #import "base/metrics/histogram_functions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/model/account_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
-#import "ios/chrome/browser/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tabs/model/features.h"
 #import "ios/chrome/browser/tabs/model/tab_title_util.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
@@ -85,8 +87,8 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
   const BOOL pinned = IsPinnedTabsEnabled() &&
                       [self isTabPinnedForIdentifier:cell.itemIdentifier];
   const BOOL tabSearchScenario =
-      scenario == MenuScenarioHistogram::kTabGridSearchResult;
-  const BOOL inactive = scenario == MenuScenarioHistogram::kInactiveTabsEntry;
+      scenario == kMenuScenarioHistogramTabGridSearchResult;
+  const BOOL inactive = scenario == kMenuScenarioHistogramInactiveTabsEntry;
 
   TabItem* item = [self tabItemForIdentifier:cell.itemIdentifier];
 
@@ -110,6 +112,14 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
                           pinTabWithIdentifier:cell.itemIdentifier];
                     }]];
     }
+  }
+
+  if (base::FeatureList::IsEnabled(kTabGroupsInGrid)) {
+    [menuElements addObject:[actionFactory actionToAddTabToNewGroupWithBlock:^{
+                    [self.contextMenuDelegate
+                        createNewTabGroupWithIdentifier:cell.itemIdentifier
+                                              incognito:self.incognito];
+                  }]];
   }
 
   if (!IsURLNewTabPage(item.URL)) {
@@ -157,9 +167,9 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
   // Pinned tabs, inactive tabs and search results menus don't
   // support tab selection.
   BOOL scenarioDisablesSelection =
-      scenario == MenuScenarioHistogram::kTabGridSearchResult ||
-      scenario == MenuScenarioHistogram::kPinnedTabsEntry ||
-      scenario == MenuScenarioHistogram::kInactiveTabsEntry;
+      scenario == kMenuScenarioHistogramTabGridSearchResult ||
+      scenario == kMenuScenarioHistogramPinnedTabsEntry ||
+      scenario == kMenuScenarioHistogramInactiveTabsEntry;
   if (!scenarioDisablesSelection) {
     [menuElements addObject:[actionFactory actionToSelectTabsWithBlock:^{
                     [self.contextMenuDelegate selectTabs];
@@ -169,8 +179,7 @@ using PinnedState = WebStateSearchCriteria::PinnedState;
   UIAction* closeTabAction;
   ProceduralBlock closeTabActionBlock = ^{
     [self.contextMenuDelegate closeTabWithIdentifier:cell.itemIdentifier
-                                           incognito:self.incognito
-                                              pinned:pinned];
+                                           incognito:self.incognito];
   };
 
   if (IsPinnedTabsEnabled() && !self.incognito && pinned) {

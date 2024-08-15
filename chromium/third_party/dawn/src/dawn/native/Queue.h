@@ -65,7 +65,7 @@ class QueueBase : public ApiObjectBase, public ExecutionQueueBase {
   public:
     ~QueueBase() override;
 
-    static QueueBase* MakeError(DeviceBase* device, const char* label);
+    static Ref<QueueBase> MakeError(DeviceBase* device, const char* label);
 
     ObjectType GetType() const override;
 
@@ -112,7 +112,6 @@ class QueueBase : public ApiObjectBase, public ExecutionQueueBase {
     QueueBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label);
 
     void DestroyImpl() override;
-    virtual SystemEventReceiver InsertWorkDoneEvent();
 
   private:
     MaybeError WriteTextureInternal(const ImageCopyTexture* destination,

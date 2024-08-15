@@ -4,6 +4,10 @@
 
 package org.chromium.content.browser.accessibility;
 
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_PAGE_ABSOLUTE_HEIGHT;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_PAGE_ABSOLUTE_LEFT;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_PAGE_ABSOLUTE_TOP;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_PAGE_ABSOLUTE_WIDTH;
 import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_UNCLIPPED_HEIGHT;
 import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_UNCLIPPED_LEFT;
 import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_UNCLIPPED_TOP;
@@ -20,6 +24,8 @@ import android.view.ViewStructure;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
 
+import androidx.annotation.NonNull;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -35,7 +41,6 @@ public class TestViewStructure extends ViewStructure {
     private HtmlInfo mHtmlInfo;
     private int mChildCount;
     private ArrayList<TestViewStructure> mChildren = new ArrayList<TestViewStructure>();
-    private boolean mDone = true;
     private float mTextSize;
     private int mFgColor;
     private int mBgColor;
@@ -44,16 +49,6 @@ public class TestViewStructure extends ViewStructure {
     private int mSelectionEnd;
 
     public TestViewStructure() {}
-
-    public boolean isDone() {
-        if (!mDone) return false;
-
-        for (TestViewStructure child : mChildren) {
-            if (!child.isDone()) return false;
-        }
-
-        return true;
-    }
 
     @Override
     public String toString() {
@@ -97,6 +92,11 @@ public class TestViewStructure extends ViewStructure {
                     || key.equals(EXTRAS_KEY_UNCLIPPED_TOP)
                     || key.equals(EXTRAS_KEY_UNCLIPPED_WIDTH)
                     || key.equals(EXTRAS_KEY_UNCLIPPED_HEIGHT)
+                    || key.equals(EXTRAS_KEY_PAGE_ABSOLUTE_LEFT)
+                    || key.equals(EXTRAS_KEY_PAGE_ABSOLUTE_TOP)
+                    || key.equals(EXTRAS_KEY_PAGE_ABSOLUTE_WIDTH)
+                    || key.equals(EXTRAS_KEY_PAGE_ABSOLUTE_HEIGHT)
+                    || key.equals("root_scroll_y")
                     || key.equals("url")) {
                 continue;
             }
@@ -110,7 +110,9 @@ public class TestViewStructure extends ViewStructure {
         }
         builder.append(TextUtils.join(", ", bundleStrings)).append("]");
 
-        return builder.toString();
+        // If all keys were filtered, return an empty string.
+        String ret = builder.toString();
+        return ret.equals("[]") ? "" : ret;
     }
 
     private void recursiveDumpToString(StringBuilder builder, int indent) {
@@ -146,7 +148,7 @@ public class TestViewStructure extends ViewStructure {
         }
 
         // Print font styling values.
-        builder.append(" textSize:").append(String.format("%.2f", mTextSize));
+        builder.append(" textSize:").append(String.format("%.1f", mTextSize));
         builder.append(" style:").append(mStyle);
         if (mFgColor != 0xFF000000) {
             builder.append(" fgColor:").append(mFgColor);
@@ -157,14 +159,23 @@ public class TestViewStructure extends ViewStructure {
 
         // Print Bundle extras and htmlInfo attributes.
         if (mBundle != null) {
-            builder.append(" bundle:").append(bundleToString(mBundle));
+            String bundleString = bundleToString(mBundle);
+            if (!bundleString.isEmpty()) {
+                builder.append(" bundle:").append(bundleString);
+            }
         }
         if (mHtmlInfo != null) {
             builder.append(" htmlInfo:[");
+            List<String> attrStrings = new ArrayList<>();
+            attrStrings.add("{htmlTag=\"" + mHtmlInfo.getTag() + "\"}");
             for (Pair<String, String> pair : mHtmlInfo.getAttributes()) {
-                builder.append(" {").append(pair.first).append(",").append(pair.second).append("}");
+                // We add an extra html attribute for debugging, do not print these values in tests.
+                if (pair.first.equals("root_scroll_y")) {
+                    continue;
+                }
+                attrStrings.add("{" + pair.first + "=\"" + pair.second + "\"}");
             }
-            builder.append(" ]");
+            builder.append(TextUtils.join(", ", attrStrings)).append("]");
         }
 
         builder.append("\n");
@@ -172,6 +183,14 @@ public class TestViewStructure extends ViewStructure {
         for (TestViewStructure child : mChildren) {
             child.recursiveDumpToString(builder, indent + 1);
         }
+    }
+
+    public int getTotalDescendantCount() {
+        int totalChildren = mChildCount;
+        for (int i = 0; i < mChildCount; i++) {
+            totalChildren += getChild(i).getTotalDescendantCount();
+        }
+        return totalChildren;
     }
 
     @Override
@@ -260,16 +279,11 @@ public class TestViewStructure extends ViewStructure {
 
     @Override
     public ViewStructure asyncNewChild(int index) {
-        TestViewStructure result = (TestViewStructure) newChild(index);
-        result.mDone = false;
-        return result;
+        return newChild(index);
     }
 
     @Override
-    public void asyncCommit() {
-        assert !mDone;
-        mDone = true;
-    }
+    public void asyncCommit() {}
 
     @Override
     public AutofillId getAutofillId() {
@@ -278,7 +292,7 @@ public class TestViewStructure extends ViewStructure {
 
     @Override
     public HtmlInfo.Builder newHtmlInfoBuilder(String tag) {
-        return null;
+        return new TestBuilder(tag);
     }
 
     @Override
@@ -388,4 +402,48 @@ public class TestViewStructure extends ViewStructure {
 
     @Override
     public void setWebDomain(String webDomain) {}
+
+    /** Test implementation of {@link HtmlInfo}. */
+    public static class TestHtmlInfo extends HtmlInfo {
+        private final String mTag;
+        private final List<Pair<String, String>> mAttributes;
+
+        public TestHtmlInfo(String tag, List<Pair<String, String>> attributes) {
+            mTag = tag;
+            mAttributes = attributes;
+        }
+
+        @Override
+        public List<Pair<String, String>> getAttributes() {
+            return mAttributes;
+        }
+
+        @NonNull
+        @Override
+        public String getTag() {
+            return mTag;
+        }
+    }
+
+    /** Test implementation of {@link HtmlInfo.Builder}. */
+    public static class TestBuilder extends HtmlInfo.Builder {
+        private final String mTag;
+        private final List<Pair<String, String>> mAttributes;
+
+        public TestBuilder(String tag) {
+            mTag = tag;
+            mAttributes = new ArrayList<Pair<String, String>>();
+        }
+
+        @Override
+        public HtmlInfo.Builder addAttribute(@NonNull String name, @NonNull String value) {
+            mAttributes.add(new Pair<String, String>(name, value));
+            return this;
+        }
+
+        @Override
+        public HtmlInfo build() {
+            return new TestHtmlInfo(mTag, mAttributes);
+        }
+    }
 }

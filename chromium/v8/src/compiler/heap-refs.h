@@ -229,6 +229,8 @@ struct ref_traits<ByteArray> : public ref_traits<HeapObject> {};
 template <>
 struct ref_traits<ExternalPointerArray> : public ref_traits<HeapObject> {};
 template <>
+struct ref_traits<TrustedFixedArray> : public ref_traits<HeapObject> {};
+template <>
 struct ref_traits<ClosureFeedbackCellArray> : public ref_traits<HeapObject> {};
 template <>
 struct ref_traits<NumberDictionary> : public ref_traits<HeapObject> {};
@@ -371,6 +373,7 @@ class V8_EXPORT_PRIVATE ObjectRef {
   bool IsTheHole() const;
   bool IsPropertyCellHole() const;
   bool IsHashTableHole() const;
+  bool IsPromiseHole() const;
   bool IsNullOrUndefined() const;
 
   base::Optional<bool> TryGetBooleanValue(JSHeapBroker* broker) const;
@@ -378,12 +381,13 @@ class V8_EXPORT_PRIVATE ObjectRef {
 
   bool should_access_heap() const;
 
+  ObjectData* data() const;
+
   struct Hash {
     size_t operator()(ObjectRef ref) const { return ref.hash_value(); }
   };
 
  protected:
-  ObjectData* data() const;
   ObjectData* data_;  // Should be used only by object() getters.
 
  private:
@@ -524,9 +528,8 @@ class JSObjectRef : public JSReceiverRef {
   OptionalObjectRef raw_properties_or_hash(JSHeapBroker* broker) const;
 
   // Usable only for in-object properties. Only use this if the underlying
-  // value can be an uninitialized-sentinel, or if HeapNumber construction must
-  // be avoided for some reason. Otherwise, use the higher-level
-  // GetOwnFastDataProperty.
+  // value can be an uninitialized-sentinel. Otherwise, use the higher-level
+  // GetOwnFastConstantDataProperty/GetOwnFastConstantDoubleProperty.
   OptionalObjectRef RawInobjectPropertyAt(JSHeapBroker* broker,
                                           FieldIndex index) const;
 
@@ -545,13 +548,25 @@ class JSObjectRef : public JSReceiverRef {
       ElementsKind elements_kind, uint32_t index) const;
 
   // Return the value of the property identified by the field {index}
-  // if {index} is known to be an own data property of the object.
-  // If {dependencies} is non-null, and a property was successfully read,
-  // then the function will take a dependency to check the value of the
-  // property at code finalization time.
-  OptionalObjectRef GetOwnFastDataProperty(
+  // if {index} is known to be an own data property of the object and the field
+  // is constant.
+  // If a property was successfully read, then the function will take a
+  // dependency to check the value of the property at code finalization time.
+  //
+  // This is *not* allowed to be a double representation field. Those should use
+  // GetOwnFastDoubleProperty, to avoid unnecessary HeapNumber allocation.
+  OptionalObjectRef GetOwnFastConstantDataProperty(
       JSHeapBroker* broker, Representation field_representation,
       FieldIndex index, CompilationDependencies* dependencies) const;
+
+  // Return the value of the double property identified by the field {index}
+  // if {index} is known to be an own data property of the object and the field
+  // is constant.
+  // If a property was successfully read, then the function will take a
+  // dependency to check the value of the property at code finalization time.
+  base::Optional<double> GetOwnFastConstantDoubleProperty(
+      JSHeapBroker* broker, FieldIndex index,
+      CompilationDependencies* dependencies) const;
 
   // Return the value of the dictionary property at {index} in the dictionary
   // if {index} is known to be an own data property of the object.
@@ -695,6 +710,7 @@ class ContextRef : public HeapObjectRef {
   V(Map, map_key_iterator_map)                   \
   V(Map, map_key_value_iterator_map)             \
   V(Map, map_value_iterator_map)                 \
+  V(Map, meta_map)                               \
   V(Map, set_key_value_iterator_map)             \
   V(Map, set_value_iterator_map)                 \
   V(Map, sloppy_arguments_map)                   \

@@ -6,8 +6,7 @@
 <translation id="1110994991967754504">Seleccionar permiso de <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885">El sitio <ph name="HOST_NAME" /> ha cerrado inesperadamente la conexión.</translation>
 <translation id="1161325031994447685">Reconectarte a una red Wi-Fi</translation>
-<translation id="1175364870820465910">Im&amp;primir...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Prueba a eliminar las cookies<ph name="END_LINK" /></translation>
+<translation id="1175364870820465910">&amp;Imprimir...</translation>
 <translation id="1375198122581997741">Información de la versión</translation>
 <translation id="139305205187523129">El sitio <ph name="HOST_NAME" /> no envió datos.</translation>
 <translation id="1559528461873125649">No existe el archivo o carpeta</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Prueba a contactar con el administrador del sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de red de Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este sitio contiene programas dañinos</translation>
-<translation id="1916770123977586577">Recarga esta página para aplicar a este sitio tus ajustes actualizados</translation>
 <translation id="1974060860693918893">Avanzado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Revisar el proxy y el cortafuegos<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Los atacantes pueden ver las imágenes que estás mirando en este sitio y engañarte modificándolas.</translation>
 <translation id="2356070529366658676">Preguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
+<translation id="2388886110302389394">Abrir página en pestaña privada nueva (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ejecutar el diagnóstico de red<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Esta página ha sido bloqueada por una extensión</translation>
 <translation id="2501278716633472235">Volver atrás</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Iniciar sesión</translation>
 <translation id="3973234410852337861">El sitio <ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
+<translation id="4075123085690634698">Abrir página en ventana privada nueva (⇧⌘N)</translation>
 <translation id="4075732493274867456">El cliente y el servidor no son compatibles con una versión de protocolo SSL o un conjunto de cifrado comunes.</translation>
 <translation id="4116663294526079822">Permitir siempre en este sitio</translation>
 <translation id="4130226655945681476">Revisar los cables de red, el módem y el router</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Tu dispositivo entró en suspensión.</translation>
 <translation id="6890956352250146925">Opciones para cookies y datos de sitios</translation>
 <translation id="6897140037006041989">Agente de usuario</translation>
+<translation id="6957624206566198865">Abrir página en una pestaña privada nueva</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este sitio contiene programas maliciosos</translation>
 <translation id="7096937462164235847">La identidad de este sitio web no se ha verificado.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676">Normalmente <ph name="SITE" /> usa el cifrado para proteger tu información. Cuando Vivaldi intentó establecer una conexión con <ph name="SITE" />, el sitio web devolvió unas credenciales inusuales e incorrectas. Esto puede ocurrir si un atacante está intentando suplantar a <ph name="SITE" /> o si la conexión es interrumpida por el inicio de sesión en una red inalámbrica. Tu información sigue estando protegida, ya que Vivaldi detuvo la conexión antes de intercambiar datos.</translation>
 <translation id="7878562273885520351">Tu contraseña puede estar comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
+<translation id="7953236668995583915">Recarga la página para aplicar la configuración actualizada a este sitio</translation>
 <translation id="8025119109950072390">Los atacantes de este sitio pueden engañarte para que realices algo peligroso, como instalar programas o revelar tu información personal (por ejemplo, contraseñas, números de teléfono o tarjetas de crédito).</translation>
 <translation id="8037357227543935929">Preguntar (por defecto)</translation>
 <translation id="8041940743680923270">Usar valor por defecto global (preguntar)</translation>

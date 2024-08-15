@@ -33,6 +33,7 @@
 #include "content/public/common/content_client.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_facing.h"
+#include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/capture/video/video_capture_device.h"
 #include "services/video_capture/public/mojom/video_effects_manager.mojom.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
@@ -132,9 +133,9 @@ void VideoCaptureManager::RegisterListener(
   listeners_.AddObserver(listener);
 #if BUILDFLAG(IS_ANDROID)
   application_state_has_running_activities_ = true;
-  app_status_listener_ = base::android::ApplicationStatusListener::New(
-      base::BindRepeating(&VideoCaptureManager::OnApplicationStateChange,
-                          base::Unretained(this)));
+  app_status_listener_ =
+      base::android::ApplicationStatusListener::New(base::BindRepeating(
+          &VideoCaptureManager::OnApplicationStateChange, this));
 #endif
 }
 
@@ -236,9 +237,10 @@ void VideoCaptureManager::Close(
   sessions_.erase(session_it);
 }
 
-void VideoCaptureManager::Crop(
+void VideoCaptureManager::ApplySubCaptureTarget(
     const base::UnguessableToken& session_id,
-    const base::Token& crop_id,
+    media::mojom::SubCaptureTargetType type,
+    const base::Token& target,
     uint32_t sub_capture_target_version,
     base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
         callback) {
@@ -251,7 +253,8 @@ void VideoCaptureManager::Crop(
         media::mojom::ApplySubCaptureTargetResult::kErrorGeneric);
     return;
   }
-  controller->Crop(crop_id, sub_capture_target_version, std::move(callback));
+  controller->ApplySubCaptureTarget(type, target, sub_capture_target_version,
+                                    std::move(callback));
 }
 
 void VideoCaptureManager::QueueStartDevice(
@@ -450,7 +453,7 @@ void VideoCaptureManager::ConnectClient(
     EmitLogMessage(string_stream.str(), 1);
     mojo::PendingRemote<video_capture::mojom::VideoEffectsManager>
         video_effects_manager;
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_FUCHSIA)
     if (base::FeatureList::IsEnabled(media::kCameraMicEffects)) {
       auto* content_client = GetContentClient();
       if (browser_context && content_client && content_client->browser()) {
@@ -605,7 +608,7 @@ bool VideoCaptureManager::GetDeviceFormatsInUse(
   string_stream << "GetDeviceFormatsInUse for device: " << it->second.name;
   EmitLogMessage(string_stream.str(), 1);
 
-  absl::optional<media::VideoCaptureFormat> format =
+  std::optional<media::VideoCaptureFormat> format =
       GetDeviceFormatInUse(it->second.type, it->second.id);
   if (format.has_value())
     formats_in_use->push_back(format.value());
@@ -613,7 +616,7 @@ bool VideoCaptureManager::GetDeviceFormatsInUse(
   return true;
 }
 
-absl::optional<media::VideoCaptureFormat>
+std::optional<media::VideoCaptureFormat>
 VideoCaptureManager::GetDeviceFormatInUse(
     blink::mojom::MediaStreamType stream_type,
     const std::string& device_id) {
@@ -621,10 +624,10 @@ VideoCaptureManager::GetDeviceFormatInUse(
   // Return the currently in-use format of the device, if it's started.
   VideoCaptureController* device_in_use =
       LookupControllerByMediaTypeAndDeviceId(stream_type, device_id);
-  return device_in_use ? device_in_use->GetVideoCaptureFormat() : absl::nullopt;
+  return device_in_use ? device_in_use->GetVideoCaptureFormat() : std::nullopt;
 }
 
-GlobalRoutingID VideoCaptureManager::GetGlobalRoutingID(
+GlobalRenderFrameHostId VideoCaptureManager::GetGlobalRenderFrameHostId(
     const base::UnguessableToken& session_id) const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -632,7 +635,7 @@ GlobalRoutingID VideoCaptureManager::GetGlobalRoutingID(
       LookupControllerBySessionId(session_id);
   if (!controller || !controller->IsDeviceAlive() ||
       !blink::IsVideoDesktopCaptureMediaType(controller->stream_type())) {
-    return GlobalRoutingID();
+    return GlobalRenderFrameHostId();
   }
 
   const DesktopMediaID desktop_media_id =
@@ -640,11 +643,12 @@ GlobalRoutingID VideoCaptureManager::GetGlobalRoutingID(
 
   if (desktop_media_id.type != DesktopMediaID::Type::TYPE_WEB_CONTENTS ||
       desktop_media_id.web_contents_id.is_null()) {
-    return GlobalRoutingID();
+    return GlobalRenderFrameHostId();
   }
 
-  return GlobalRoutingID(desktop_media_id.web_contents_id.render_process_id,
-                         desktop_media_id.web_contents_id.main_render_frame_id);
+  return GlobalRenderFrameHostId(
+      desktop_media_id.web_contents_id.render_process_id,
+      desktop_media_id.web_contents_id.main_render_frame_id);
 }
 
 void VideoCaptureManager::SetDesktopCaptureWindowId(
@@ -785,9 +789,6 @@ void VideoCaptureManager::OnDeviceInfosReceived(
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
                "VideoCaptureManager::OnDeviceInfosReceived");
 
-  base::UmaHistogramTimes(
-      "Media.VideoCaptureManager.GetAvailableDevicesInfoOnDeviceThreadTime",
-      timer.Elapsed());
 
   if (error_code != media::mojom::DeviceEnumerationResult::kSuccess) {
     EmitLogMessage(

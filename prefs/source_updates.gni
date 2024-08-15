@@ -22,12 +22,38 @@ if (vivaldi_build_tests) {
       }
       sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
     }
+  }
 
-    # On linux headless pulls in a lot of unused components libs in debug mode,
-    # some of which depends on vivaldi functions. In this case we can use the
-    # dummy functions used for the tests
-    update_target("//headless:headless_non_renderer") {
+  if (!is_ios) {
+    update_target("//content/test:content_unittests") {
       sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
+    }
+
+    # |headless_non_renderer| is linked in for static builds so we need to make
+    # sure the correct pref is used when this is shared. For component-builds
+    # the tests version must be used becuase the component has no linkage of
+    # Profile or Prefs.
+    # See VB-99944 and VB-100673.
+    if (is_component_build) {
+      update_target("//headless:headless_non_renderer") {
+        sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
+      }
+    } else {
+      update_target("//headless:headless_non_renderer") {
+        sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref.cc" ]
+      }
+    }
+
+  }
+
+  if (is_mac && is_debug) {
+    update_target("//content/shell:content_shell_app") {
+      if (!defined(sources)) {
+        sources = []
+      }
+      sources += [
+        "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc",
+      ]
     }
   }
 }

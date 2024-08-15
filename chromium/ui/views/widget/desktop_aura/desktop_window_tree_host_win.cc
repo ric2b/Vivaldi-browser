@@ -174,7 +174,7 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
 
   message_handler_ = HWNDMessageHandler::Create(
       this, native_widget_delegate_->AsWidget()->GetName(),
-      params.headless_mode);
+      params.ShouldInitAsHeadless());
 
   ConfigureWindowStyles(message_handler_.get(), params,
                         GetWidget()->widget_delegate(),
@@ -200,8 +200,12 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
   if (base::FeatureList::IsEnabled(views::features::kWidgetLayering)) {
     // Stack immedately above its parent so that it does not cover other
     // root-level windows.
-    if (params.parent)
+    //
+    // With the exception of menus, to allow them to be displayed on
+    // top of other windows.
+    if (params.parent && params.type != views::Widget::InitParams::TYPE_MENU) {
       StackAbove(params.parent);
+    }
   }
 }
 
@@ -389,6 +393,10 @@ void DesktopWindowTreeHostWin::SetShape(
   message_handler_->SetRegion(gfx::CreateHRGNFromSkRegion(shape));
 }
 
+void DesktopWindowTreeHostWin::SetParent(gfx::AcceleratedWidget parent) {
+  message_handler_->SetParentOrOwner(parent);
+}
+
 void DesktopWindowTreeHostWin::Activate() {
   message_handler_->Activate();
 }
@@ -527,7 +535,7 @@ DesktopWindowTreeHostWin::CreateNonClientFrameView() {
 }
 
 bool DesktopWindowTreeHostWin::ShouldUseNativeFrame() const {
-  return IsTranslucentWindowOpacitySupported();
+  return true;
 }
 
 bool DesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent() const {
@@ -591,10 +599,6 @@ void DesktopWindowTreeHostWin::FlashFrame(bool flash_frame) {
 
 bool DesktopWindowTreeHostWin::IsAnimatingClosed() const {
   return pending_close_;
-}
-
-bool DesktopWindowTreeHostWin::IsTranslucentWindowOpacitySupported() const {
-  return true;
 }
 
 void DesktopWindowTreeHostWin::SizeConstraintsChanged() {
@@ -993,6 +997,10 @@ void DesktopWindowTreeHostWin::HandleEndWMSizeMove() {
 }
 
 void DesktopWindowTreeHostWin::HandleMove() {
+  // Adding/removing a monitor, or changing the primary monitor can cause a
+  // WM_MOVE message before `OnDisplayChanged()`. Without this call, we would
+  // DCHECK due to stale `DisplayInfo`s. See https:://crbug.com/1413940.
+  display::win::ScreenWin::UpdateDisplayInfosIfNeeded();
   CheckForMonitorChange();
   OnHostMovedInPixels();
 }
@@ -1253,7 +1261,7 @@ bool DesktopWindowTreeHostWin::IsModalWindowActive() const {
   if (!dispatcher())
     return false;
 
-  const auto is_active = [](const auto* child) {
+  const auto is_active = [](const aura::Window* child) {
     return child->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE &&
            child->TargetVisibility();
   };

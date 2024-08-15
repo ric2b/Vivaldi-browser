@@ -29,20 +29,24 @@ import {
 } from '../base/time';
 import {Actions} from '../common/actions';
 import {pluginManager} from '../common/plugins';
-import {setTimestampFormat, TimestampFormat} from '../common/timestamp_format';
+import {
+  DurationPrecision,
+  setDurationPrecision,
+  setTimestampFormat,
+  TimestampFormat,
+} from '../common/timestamp_format';
 import {raf} from '../core/raf_scheduler';
 import {Command} from '../public';
 import {HotkeyConfig, HotkeyContext} from '../widgets/hotkey_context';
 import {HotkeyGlyphs} from '../widgets/hotkey_glyphs';
+import {maybeRenderFullscreenModalDialog} from '../widgets/modal';
 
 import {addTab} from './bottom_tab';
 import {onClickCopy} from './clipboard';
 import {CookieConsent} from './cookie_consent';
 import {globals} from './globals';
 import {toggleHelp} from './help_modal';
-import {fullscreenModalContainer} from './modal';
 import {Omnibox, OmniboxOption} from './omnibox';
-import {runQueryInNewTab} from './query_result_tab';
 import {verticalScrollToTrack} from './scroll_helper';
 import {executeSearch} from './search_handler';
 import {Sidebar} from './sidebar';
@@ -188,12 +192,16 @@ export class App implements m.ClassComponent {
   private cmds: Command[] = [
     {
       id: 'perfetto.SetTimestampFormat',
-      name: 'Set timestamp format',
+      name: 'Set timestamp and duration format',
       callback:
           async () => {
             const options: PromptOption[] = [
               {key: TimestampFormat.Timecode, displayName: 'Timecode'},
               {key: TimestampFormat.UTC, displayName: 'Realtime (UTC)'},
+              {
+                key: TimestampFormat.TraceTz,
+                displayName: 'Realtime (Trace TZ)',
+              },
               {key: TimestampFormat.Seconds, displayName: 'Seconds'},
               {key: TimestampFormat.Raw, displayName: 'Raw'},
               {
@@ -201,11 +209,34 @@ export class App implements m.ClassComponent {
                 displayName: 'Raw (with locale-specific formatting)',
               },
             ];
-            const promptText = 'Select timecode format...';
+            const promptText = 'Select format...';
 
             try {
               const result = await this.prompt(promptText, options);
               setTimestampFormat(result as TimestampFormat);
+              raf.scheduleFullRedraw();
+            } catch {
+              // Prompt was probably cancelled - do nothing.
+            }
+          },
+    },
+    {
+      id: 'perfetto.SetDurationPrecision',
+      name: 'Set duration precision',
+      callback:
+          async () => {
+            const options: PromptOption[] = [
+              {key: DurationPrecision.Full, displayName: 'Full'},
+              {
+                key: DurationPrecision.HumanReadable,
+                displayName: 'Human readable',
+              },
+            ];
+            const promptText = 'Select duration precision mode...';
+
+            try {
+              const result = await this.prompt(promptText, options);
+              setDurationPrecision(result as DurationPrecision);
               raf.scheduleFullRedraw();
             } catch {
               // Prompt was probably cancelled - do nothing.
@@ -287,12 +318,10 @@ export class App implements m.ClassComponent {
       callback:
           () => {
             const window = getTimeSpanOfSelectionOrVisibleWindow();
-            if (window) {
-              this.enterQueryMode();
-              this.queryText =
-                  `select  where ts >= ${window.start} and ts < ${window.end}`;
-              this.pendingCursorPlacement = 7;
-            }
+            this.enterQueryMode();
+            this.queryText =
+                `select  where ts >= ${window.start} and ts < ${window.end}`;
+            this.pendingCursorPlacement = 7;
           },
     },
     {
@@ -301,10 +330,8 @@ export class App implements m.ClassComponent {
       callback:
           () => {
             const window = getTimeSpanOfSelectionOrVisibleWindow();
-            if (window) {
-              const query = `ts >= ${window.start} and ts < ${window.end}`;
-              copyToClipboard(query);
-            }
+            const query = `ts >= ${window.start} and ts < ${window.end}`;
+            copyToClipboard(query);
           },
     },
     {
@@ -381,12 +408,10 @@ export class App implements m.ClassComponent {
     if (msgTTL > 0 || engineIsBusy) {
       setTimeout(() => raf.scheduleFullRedraw(), msgTTL * 1000);
       return m(
-          `.omnibox.message-mode`,
-          m(`input[placeholder=${
-                globals.state.status.msg}][readonly][disabled][ref=omnibox]`,
-            {
-              value: '',
-            }));
+          `.omnibox.message-mode`, m(`input[readonly][disabled][ref=omnibox]`, {
+            value: '',
+            placeholder: globals.state.status.msg,
+          }));
     }
 
     if (this.omniboxMode === OmniboxMode.Command) {
@@ -532,7 +557,7 @@ export class App implements m.ClassComponent {
         raf.scheduleFullRedraw();
       },
       onSubmit: (value, alt) => {
-        runQueryInNewTab(
+        globals.openQuery(
             undoCommonChatAppReplacements(value),
             alt ? 'Pinned query' : 'Omnibox query',
             alt ? undefined : 'omnibox_query');
@@ -555,7 +580,7 @@ export class App implements m.ClassComponent {
 
     return m(Omnibox, {
       value: globals.state.omniboxState.omnibox,
-      placeholder: 'Search...',
+      placeholder: 'Search or type \'>\' for commands or \':\' for SQL mode',
       inputRef: App.OMNIBOX_INPUT_REF,
       onInput: (value, prev) => {
         if (prev === '') {
@@ -637,7 +662,7 @@ export class App implements m.ClassComponent {
             m(Alerts),
             children,
             m(CookieConsent),
-            m(fullscreenModalContainer.mithrilComponent),
+            maybeRenderFullscreenModalDialog(),
             globals.state.perfDebug && m('.perf-stats'),
             ),
     );

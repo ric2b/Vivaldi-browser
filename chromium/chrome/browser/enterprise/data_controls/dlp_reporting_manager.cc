@@ -110,9 +110,6 @@ DlpPolicyEvent_UserType GetCurrentUserType() {
     case user_manager::USER_TYPE_GUEST:
     case user_manager::USER_TYPE_CHILD:
       return DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE;
-    case user_manager::NUM_USER_TYPES:
-      NOTREACHED();
-      return DlpPolicyEvent_UserType_UNDEFINED_USER_TYPE;
   }
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   switch (chromeos::BrowserParamsProxy::Get()->SessionType()) {
@@ -355,6 +352,11 @@ void DlpReportingManager::ReportEvent(DlpPolicyEvent event) {
                      "functionality will be disabled.";
     return;
   }
+
+  for (auto& observer : observers_) {
+    observer.OnReportEvent(event);
+  }
+
   reporting::ReportQueue::EnqueueCallback callback = base::BindOnce(
       &DlpReportingManager::OnEventEnqueued, weak_factory_.GetWeakPtr());
 
@@ -390,6 +392,14 @@ void DlpReportingManager::ReportEvent(DlpPolicyEvent event) {
   report_queue_->Enqueue(std::make_unique<DlpPolicyEvent>(std::move(event)),
                          reporting::Priority::SLOW_BATCH, std::move(callback));
   VLOG(1) << "DLP event sent to reporting infrastructure.";
+}
+
+void DlpReportingManager::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void DlpReportingManager::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 }  // namespace data_controls

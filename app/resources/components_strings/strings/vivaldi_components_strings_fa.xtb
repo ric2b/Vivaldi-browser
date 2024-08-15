@@ -6,8 +6,6 @@
 <translation id="1110994991967754504">انتخاب مجوز برای <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> به‌طور غیرمنتظره‌ای اتصال را قطع کرد.</translation>
 <translation id="1161325031994447685">‏اتصال مجدد به Wi-Fi</translation>
-<translation id="1175364870820465910">چاپ...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />کوکی‌ها را پاک کنید<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">درباره نسخه</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> داده‌ای ارسال نکرد.</translation>
 <translation id="1559528461873125649">فاقد چنین فایل یا دایرکتوری است</translation>
@@ -18,7 +16,6 @@
 <translation id="1734878702283171397">با سرپرست سیستم تماس بگیرید.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />از عیب‌یابی شبکه‌ی ویندوز استفاده کنید<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">این سایت حاوی برنامه‌های مضر است</translation>
-<translation id="1916770123977586577">برای اعمال تنظیمات خود در این سایت، این صفحه را دوباره بارگذاری نمایید</translation>
 <translation id="1974060860693918893">پیشرفته</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />بررسی پروکسی و دیوار آتش<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">صادر شده برای: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -207,7 +204,6 @@
 <translation id="8940028675168378100">مسدود شده توسط <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">رفتن به تنظیمات سایت</translation>
 <translation id="9001074447101275817">پروکسی <ph name="DOMAIN" /> نیاز به یک نام کاربری و رمز عبور دارد.</translation>
-<translation id="9008201768610948239">نادیده گرفتن</translation>
 <translation id="9025348182339809926">(نامعتبر)</translation>
 <translation id="9039213469156557790">علاوه بر آن، این صفحه دارای منابع دیگری است که امن نیستند. این منابع در حین انتقال، توسط دیگران قابل مشاهده بوده و ممکن است برای تغییر رفتار صفحه، توسط یک مهاجم تغییر داده شوند.</translation>
 <translation id="9062620674789239642">ممکن است جابه‌جا، ویرایش ویا حذف شده باشد.</translation>

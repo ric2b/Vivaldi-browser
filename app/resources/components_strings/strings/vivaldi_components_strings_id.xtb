@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> mendadak menutup sambungan.</translation>
 <translation id="1161325031994447685">Menyambungkan ulang ke Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Cetak...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Coba hapus kuki Anda<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Tentang Versi</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> tidak mengirimkan data apapun.</translation>
 <translation id="1559528461873125649">Tidak ada berkas atau direktori tersebut</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Coba hubungi admin sistem.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Mencoba menjalankan Diagnostik Jaringan Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Situs ini berisi program yang berbahaya</translation>
-<translation id="1916770123977586577">Untuk menerapkan pengaturan yang telah diperbarui pada situs ini, muat ulang halaman ini</translation>
 <translation id="1974060860693918893">Tingkat Lanjut</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Memeriksa proxy dan firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Diterbitkan untuk: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Penyerang mungkin dapat melihat gambar yang sedang Anda lihat di situs ini dan mengelabui Anda dengan memodifikasinya.</translation>
 <translation id="2356070529366658676">Tanyakan</translation>
 <translation id="2359808026110333948">Lanjutkan</translation>
+<translation id="2388886110302389394">Buka halaman ini di jendela Pribadi baru (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Menjalankan Diagnostik Jaringan<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Halaman ini telah diblokir oleh ekstensi</translation>
 <translation id="2501278716633472235">Kembali</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Masuk</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> diblokir</translation>
 <translation id="3987940399970879459">Kurang dari 1 MB</translation>
+<translation id="4075123085690634698">Buka halaman di jendela Pribadi baru (⇧⌘N)</translation>
 <translation id="4075732493274867456">Klien dan server tidak mendukung versi protokol SSL umum atau cipher suite.</translation>
 <translation id="4116663294526079822">Selalu izinkan di situs ini</translation>
 <translation id="4130226655945681476">Memeriksa kabel jaringan, modem, dan router</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Perangkat Anda siap untuk tidur.</translation>
 <translation id="6890956352250146925">Opsi untuk kuki dan data situs</translation>
 <translation id="6897140037006041989">Agen Pengguna</translation>
+<translation id="6957624206566198865">Buka halaman di tab Pribadi baru</translation>
 <translation id="7053983685419859001">Blokir</translation>
 <translation id="7079718277001814089">Situs ini berisi malware</translation>
 <translation id="7096937462164235847">Identitas situs ini tidak terverifikasi.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> biasanya menggunakan enkripsi untuk melindungi informasi Anda. Saat Vivaldi mencoba menyambung ke <ph name="SITE" /> kali ini, situs web mengembalikan kredensial yang salah dan tidak biasa. Hal ini dapat terjadi jika ada penyerang yang berpura-pura menjadi <ph name="SITE" />, atau layar masuk Wi-Fi mengganggu sambungan. Informasi Anda masih aman karena Vivaldi menghentikan sambungan sebelum terjadi pertukaran data apapun.</translation>
 <translation id="7878562273885520351">Sandi Anda mungkin bocor</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
+<translation id="7953236668995583915">Muat ulang halaman ini untuk menerapkan pengaturan yang diperbarui di situs ini</translation>
 <translation id="8025119109950072390">Penyerang di situs ini dapat mengelabui Anda agar melakukan hal yang berbahaya seperti memasang software atau mengungkap informasi pribadi Anda (misalnya sandi, nomor telepon, atau kartu kredit).</translation>
 <translation id="8037357227543935929">Tanyakan (standar)</translation>
 <translation id="8041940743680923270">Gunakan standar global (Tanyakan)</translation>

@@ -1415,6 +1415,9 @@ message UpgradeContainerRequest {
 
     // Debian 11 AKA Bullseye.
     DEBIAN_BULLSEYE = 3;
+
+    // Debian 12 AKA Bookworm.
+    DEBIAN_BOOKWORM = 4;
   }
 
   // Version from which the container will upgrade.

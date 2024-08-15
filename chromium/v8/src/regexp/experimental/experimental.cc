@@ -14,11 +14,17 @@
 namespace v8 {
 namespace internal {
 
-bool ExperimentalRegExp::CanBeHandled(RegExpTree* tree, RegExpFlags flags,
-                                      int capture_count) {
+bool ExperimentalRegExp::CanBeHandled(RegExpTree* tree, Handle<String> pattern,
+                                      RegExpFlags flags, int capture_count) {
   DCHECK(v8_flags.enable_experimental_regexp_engine ||
          v8_flags.enable_experimental_regexp_engine_on_excessive_backtracks);
-  return ExperimentalRegExpCompiler::CanBeHandled(tree, flags, capture_count);
+  bool can_be_handled =
+      ExperimentalRegExpCompiler::CanBeHandled(tree, flags, capture_count);
+  if (!can_be_handled && v8_flags.trace_experimental_regexp_engine) {
+    StdoutStream{} << "Pattern not supported by experimental engine: "
+                   << pattern << std::endl;
+  }
+  return can_be_handled;
 }
 
 void ExperimentalRegExp::Initialize(Isolate* isolate, Handle<JSRegExp> re,
@@ -72,7 +78,7 @@ base::Optional<CompilationResult> CompileImpl(Isolate* isolate,
 
   // Parse and compile the regexp source.
   RegExpCompileData parse_result;
-  DCHECK(!isolate->has_pending_exception());
+  DCHECK(!isolate->has_exception());
 
   RegExpFlags flags = JSRegExp::AsRegExpFlags(regexp->flags());
   bool parse_success = RegExpParser::ParseRegExpFromHeapString(
@@ -113,7 +119,7 @@ bool ExperimentalRegExp::Compile(Isolate* isolate, Handle<JSRegExp> re) {
   base::Optional<CompilationResult> compilation_result =
       CompileImpl(isolate, re);
   if (!compilation_result.has_value()) {
-    DCHECK(isolate->has_pending_exception());
+    DCHECK(isolate->has_exception());
     return false;
   }
 
@@ -210,7 +216,7 @@ MaybeHandle<Object> ExperimentalRegExp::Exec(
 #endif
 
   if (!IsCompiled(regexp, isolate) && !Compile(isolate, regexp)) {
-    DCHECK(isolate->has_pending_exception());
+    DCHECK(isolate->has_exception());
     return MaybeHandle<Object>();
   }
 
@@ -252,7 +258,7 @@ MaybeHandle<Object> ExperimentalRegExp::Exec(
         // Re-run execution.
         continue;
       }
-      DCHECK(isolate->has_pending_exception());
+      DCHECK(isolate->has_exception());
       return MaybeHandle<Object>();
     }
   } while (true);
@@ -323,7 +329,7 @@ MaybeHandle<Object> ExperimentalRegExp::OneshotExec(
         // Re-run execution.
         continue;
       }
-      DCHECK(isolate->has_pending_exception());
+      DCHECK(isolate->has_exception());
       return MaybeHandle<Object>();
     }
   } while (true);

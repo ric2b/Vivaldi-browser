@@ -70,7 +70,7 @@ NSString* tonemapping_shader_source =
      "  constexpr float c3 = (2392.0 / 4096.0) * 32.0;\n"
      "  float p = pow(v, 1.f / m2);\n"
      "  v = pow(max(p - c1, 0.f) / (c2 - c3 * p), 1.f / m1);\n"
-     "  float sdr_white_level = 100.f;\n"
+     "  float sdr_white_level = 203.f;\n"
      "  v *= 10000.f / sdr_white_level;\n"
      "  return v;\n"
      "}\n"
@@ -227,7 +227,7 @@ id<MTLRenderPipelineState> CreateRenderPipelineState(id<MTLDevice> device) {
     self.pixelFormat = MTLPixelFormatRGBA16Float;
     base::apple::ScopedCFTypeRef<CGColorSpaceRef> colorSpace(
         CGColorSpaceCreateWithName(kCGColorSpaceExtendedLinearSRGB));
-    self.colorspace = colorSpace;
+    self.colorspace = colorSpace.get();
   }
   return self;
 }
@@ -257,10 +257,10 @@ id<MTLRenderPipelineState> CreateRenderPipelineState(id<MTLDevice> device) {
               gfx::GenerateContentLightLevelInfo(hdrMetadata);
           edrMetadata = [CAEDRMetadata
               HDR10MetadataWithDisplayInfo:base::apple::CFToNSPtrCast(
-                                               display_info)
+                                               display_info.get())
                                contentInfo:base::apple::CFToNSPtrCast(
-                                               content_info)
-                        opticalOutputScale:100];
+                                               content_info.get())
+                        opticalOutputScale:203];
           break;
         }
         case gfx::ColorSpace::TransferID::HLG:
@@ -300,7 +300,7 @@ id<MTLRenderPipelineState> CreateRenderPipelineState(id<MTLDevice> device) {
   // Create a texture to wrap the IOSurface.
   id<MTLTexture> bufferTexture = nil;
   {
-    MTLTextureDescriptor* texDesc = [MTLTextureDescriptor new];
+    MTLTextureDescriptor* texDesc = [[MTLTextureDescriptor alloc] init];
     texDesc.textureType = MTLTextureType2D;
     texDesc.usage = MTLTextureUsageShaderRead;
     texDesc.pixelFormat = mtlFormat;

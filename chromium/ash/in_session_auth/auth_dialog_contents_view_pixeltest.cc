@@ -53,7 +53,7 @@ class AuthDialogContentsViewPixelTest
   ~AuthDialogContentsViewPixelTest() override = default;
 
   // AshTestBase
-  absl::optional<pixel_test::InitParams> CreatePixelTestInitParams()
+  std::optional<pixel_test::InitParams> CreatePixelTestInitParams()
       const override;
   void SetUp() override;
   void TearDown() override;
@@ -70,7 +70,7 @@ class AuthDialogContentsViewPixelTest
   base::test::ScopedFeatureList scoped_features_;
 };
 
-absl::optional<pixel_test::InitParams>
+std::optional<pixel_test::InitParams>
 AuthDialogContentsViewPixelTest::CreatePixelTestInitParams() const {
   return pixel_test::InitParams();
 }
@@ -116,14 +116,14 @@ AuthDialogContentsViewPixelTest::CreateDialogWidget(
   // Hide cursor
   AuthDialogContentsView::TestApi dialog_api(dialog.get());
 
-  if (const raw_ptr<LoginPasswordView, ExperimentalAsh> password_view =
+  if (const raw_ptr<LoginPasswordView> password_view =
           dialog_api.GetPasswordView()) {
     views::TextfieldTestApi(
         LoginPasswordView::TestApi(password_view).textfield())
         .SetCursorLayerOpacity(0.f);
   }
 
-  if (const raw_ptr<LoginPasswordView, ExperimentalAsh> pin_view =
+  if (const raw_ptr<LoginPasswordView> pin_view =
           dialog_api.GetPinTextInputView()) {
     views::TextfieldTestApi(LoginPasswordView::TestApi(pin_view).textfield())
         .SetCursorLayerOpacity(0.f);

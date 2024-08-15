@@ -5,7 +5,9 @@
 #ifndef CHROME_BROWSER_ASH_INPUT_METHOD_EDITOR_TEXT_QUERY_PROVIDER_H_
 #define CHROME_BROWSER_ASH_INPUT_METHOD_EDITOR_TEXT_QUERY_PROVIDER_H_
 
-#include "chrome/browser/ash/input_method/editor_switch.h"
+#include <optional>
+
+#include "chrome/browser/ash/input_method/editor_metrics_recorder.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/services/orca/public/mojom/orca_service.mojom.h"
 #include "components/manta/orca_provider.h"
@@ -15,17 +17,30 @@ namespace ash::input_method {
 
 class EditorTextQueryProvider : public orca::mojom::TextQueryProvider {
  public:
-  EditorTextQueryProvider(
+  // orca::mojom::TextQueryProvider overrides
+  void Process(orca::mojom::TextQueryRequestPtr request,
+               ProcessCallback callback) override = 0;
+
+  virtual std::optional<
+      mojo::PendingAssociatedReceiver<orca::mojom::TextQueryProvider>>
+  Unbind() = 0;
+};
+
+class TextQueryProviderForOrca : public EditorTextQueryProvider {
+ public:
+  TextQueryProviderForOrca(
       mojo::PendingAssociatedReceiver<orca::mojom::TextQueryProvider> receiver,
       Profile* profile,
-      EditorSwitch* editor_switch);
-  ~EditorTextQueryProvider() override;
+      EditorMetricsRecorder* metrics_recorder);
 
-  // orca::mojom::TextQueryProvider overrides
+  ~TextQueryProviderForOrca() override;
+
+  // EditorTextQueryProvider overrides
   void Process(orca::mojom::TextQueryRequestPtr request,
                ProcessCallback callback) override;
 
-  void OnProfileChanged(Profile* profile);
+  std::optional<mojo::PendingAssociatedReceiver<orca::mojom::TextQueryProvider>>
+  Unbind() override;
 
  private:
   mojo::AssociatedReceiver<orca::mojom::TextQueryProvider>
@@ -33,7 +48,7 @@ class EditorTextQueryProvider : public orca::mojom::TextQueryProvider {
   std::unique_ptr<manta::OrcaProvider> orca_provider_;
 
   // not owned by this class
-  raw_ptr<EditorSwitch> editor_switch_;
+  raw_ptr<EditorMetricsRecorder> metrics_recorder_;
 
   // Unsigned to allow safe overflows.
   unsigned int request_id_ = 0;

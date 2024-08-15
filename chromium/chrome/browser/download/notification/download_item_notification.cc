@@ -43,7 +43,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_item.h"
@@ -324,8 +323,8 @@ void DownloadItemNotification::Close(bool by_user) {
 }
 
 void DownloadItemNotification::Click(
-    const absl::optional<int>& button_index,
-    const absl::optional<std::u16string>& reply) {
+    const std::optional<int>& button_index,
+    const std::optional<std::u16string>& reply) {
   if (!item_)
     return;
 
@@ -492,9 +491,7 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
 
   if (item_->IsDangerous()) {
     notification_->set_type(message_center::NOTIFICATION_TYPE_SIMPLE);
-    RecordDangerousDownloadWarningShown(
-        item_->GetDangerType(), item_->GetTargetFilePath(),
-        item_->GetURL().SchemeIs(url::kHttpsScheme), item_->HasUserGesture());
+    MaybeRecordDangerousDownloadWarningShown(*item_);
     if (!item_->MightBeMalicious() &&
         item_->GetDangerType() !=
             download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING) {
@@ -555,23 +552,19 @@ void DownloadItemNotification::UpdateNotificationData(bool display,
     }
   }
   SkColor notification_color = GetNotificationIconColor();
-  if (chromeos::features::IsJellyEnabled()) {
-    ui::ColorId color_id = cros_tokens::kCrosSysPrimary;
-    switch (notification_color) {
-      case ash::kSystemNotificationColorNormal:
-        color_id = cros_tokens::kCrosSysPrimary;
-        break;
-      case ash::kSystemNotificationColorWarning:
-        color_id = cros_tokens::kCrosSysWarning;
-        break;
-      case ash::kSystemNotificationColorCriticalWarning:
-        color_id = cros_tokens::kCrosSysError;
-        break;
-    }
-    notification_->set_accent_color_id(color_id);
-  } else {
-    notification_->set_accent_color(notification_color);
+  ui::ColorId color_id = cros_tokens::kCrosSysPrimary;
+  switch (notification_color) {
+    case ash::kSystemNotificationColorNormal:
+      color_id = cros_tokens::kCrosSysPrimary;
+      break;
+    case ash::kSystemNotificationColorWarning:
+      color_id = cros_tokens::kCrosSysWarning;
+      break;
+    case ash::kSystemNotificationColorCriticalWarning:
+      color_id = cros_tokens::kCrosSysError;
+      break;
   }
+  notification_->set_accent_color_id(color_id);
 
   std::vector<message_center::ButtonInfo> notification_actions;
   std::unique_ptr<std::vector<DownloadCommands::Command>> actions(
@@ -1035,7 +1028,8 @@ std::u16string DownloadItemNotification::GetWarningStatusString() const {
       return l10n_util::GetStringFUTF16(IDS_PROMPT_DEEP_SCANNING,
                                         elided_filename);
     }
-    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING: {
+    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING: {
       // TODO(crbug.com/1491184): Implement UX for this danger type.
       NOTREACHED();
       break;

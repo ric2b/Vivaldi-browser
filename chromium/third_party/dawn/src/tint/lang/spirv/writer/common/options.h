@@ -49,6 +49,10 @@ struct BindingInfo {
     inline bool operator==(const BindingInfo& rhs) const {
         return group == rhs.group && binding == rhs.binding;
     }
+    /// Inequality operator
+    /// @param rhs the BindingInfo to compare against
+    /// @returns true if this BindingInfo is not equal to `rhs`
+    inline bool operator!=(const BindingInfo& rhs) const { return !(*this == rhs); }
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(group, binding);
@@ -103,7 +107,7 @@ struct Bindings {
     ExternalTextureBindings external_texture{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(uniform, storage, texture, sampler, external_texture);
+    TINT_REFLECT(uniform, storage, texture, storage_texture, sampler, external_texture);
 };
 
 /// Configuration options used for generating SPIR-V.
@@ -134,13 +138,16 @@ struct Options {
     /// Set to `true` to always pass matrices to user functions by pointer instead of by value.
     bool pass_matrix_by_pointer = false;
 
-    /// Set to `true` to generate SPIR-V via the Tint IR instead of from the AST.
-    bool use_tint_ir = false;
-
     /// Set to `true` to require `SPV_KHR_subgroup_uniform_control_flow` extension and
     /// `SubgroupUniformControlFlowKHR` execution mode for compute stage entry points in generated
     /// SPIRV module. Issue: dawn:464
     bool experimental_require_subgroup_uniform_control_flow = false;
+
+    /// Set to `true` to generate polyfill for `dot4I8Packed` and `dot4U8Packed` builtins
+    bool polyfill_dot_4x8_packed = false;
+
+    /// Set to `true` to disable the polyfills on integer division and modulo.
+    bool disable_polyfill_integer_div_mod = false;
 
     /// The bindings
     Bindings bindings;
@@ -153,8 +160,9 @@ struct Options {
                  use_zero_initialize_workgroup_memory_extension,
                  emit_vertex_point_size,
                  clamp_frag_depth,
-                 use_tint_ir,
                  experimental_require_subgroup_uniform_control_flow,
+                 polyfill_dot_4x8_packed,
+                 disable_polyfill_integer_div_mod,
                  bindings);
 };
 

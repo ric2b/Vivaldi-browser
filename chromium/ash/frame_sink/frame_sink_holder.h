@@ -97,7 +97,7 @@ class ASH_EXPORT FrameSinkHolder final : public cc::LayerTreeFrameSinkClient,
 
   // Overridden from cc::LayerTreeFrameSinkClient:
   void SetBeginFrameSource(viz::BeginFrameSource* source) override;
-  absl::optional<viz::HitTestRegionList> BuildHitTestData() override;
+  std::optional<viz::HitTestRegionList> BuildHitTestData() override;
   void ReclaimResources(std::vector<viz::ReturnedResource> resources) override;
   void SetTreeActivationCallback(base::RepeatingClosure callback) override;
   void DidReceiveCompositorFrameAck() override;
@@ -148,7 +148,7 @@ class ASH_EXPORT FrameSinkHolder final : public cc::LayerTreeFrameSinkClient,
 
   // The currently observed `BeginFrameSource` which will notify us with
   // `OnBeginFrameDerivedImpl()`.
-  raw_ptr<viz::BeginFrameSource, ExperimentalAsh> begin_frame_source_ = nullptr;
+  raw_ptr<viz::BeginFrameSource> begin_frame_source_ = nullptr;
 
   // True if we submitted a compositor frame and are waiting for a call to
   // `DidReceiveCompositorFrameAck()`.

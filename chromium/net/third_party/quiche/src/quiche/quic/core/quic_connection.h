@@ -21,11 +21,11 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "quiche/quic/core/congestion_control/rtt_stats.h"
 #include "quiche/quic/core/crypto/quic_decrypter.h"
 #include "quiche/quic/core/crypto/quic_encrypter.h"
@@ -263,6 +263,9 @@ class QUICHE_EXPORT QuicConnectionVisitorInterface {
 
   // Asks session to bundle data opportunistically with outgoing data.
   virtual void MaybeBundleOpportunistically() = 0;
+
+  // Get from session the flow control send window for stream |id|.
+  virtual QuicByteCount GetFlowControlSendWindowSize(QuicStreamId id) = 0;
 };
 
 // Interface which gets callbacks from the QuicConnection at interesting
@@ -689,7 +692,7 @@ class QUICHE_EXPORT QuicConnection
   bool OnAckTimestamp(QuicPacketNumber packet_number,
                       QuicTime timestamp) override;
   bool OnAckFrameEnd(QuicPacketNumber start,
-                     const absl::optional<QuicEcnCounts>& ecn_counts) override;
+                     const std::optional<QuicEcnCounts>& ecn_counts) override;
   bool OnStopWaitingFrame(const QuicStopWaitingFrame& frame) override;
   bool OnPaddingFrame(const QuicPaddingFrame& frame) override;
   bool OnPingFrame(const QuicPingFrame& frame) override;
@@ -727,7 +730,10 @@ class QUICHE_EXPORT QuicConnection
   // QuicPacketCreator::DelegateInterface
   bool ShouldGeneratePacket(HasRetransmittableData retransmittable,
                             IsHandshake handshake) override;
-  const QuicFrames MaybeBundleOpportunistically() override;
+  void MaybeBundleOpportunistically() override;
+  QuicByteCount GetFlowControlSendWindowSize(QuicStreamId id) override {
+    return visitor_->GetFlowControlSendWindowSize(id);
+  }
   QuicPacketBuffer GetPacketBuffer() override;
   void OnSerializedPacket(SerializedPacket packet) override;
   void OnUnrecoverableError(QuicErrorCode error,
@@ -1294,7 +1300,7 @@ class QUICHE_EXPORT QuicConnection
 
   void AddKnownServerAddress(const QuicSocketAddress& address);
 
-  absl::optional<QuicNewConnectionIdFrame>
+  std::optional<QuicNewConnectionIdFrame>
   MaybeIssueNewConnectionIdForPreferredAddress();
 
   // Kicks off validation of received server preferred address.
@@ -1458,7 +1464,7 @@ class QUICHE_EXPORT QuicConnection
               const QuicSocketAddress& alternative_peer_address,
               const QuicConnectionId& client_connection_id,
               const QuicConnectionId& server_connection_id,
-              absl::optional<StatelessResetToken> stateless_reset_token)
+              std::optional<StatelessResetToken> stateless_reset_token)
         : self_address(alternative_self_address),
           peer_address(alternative_peer_address),
           client_connection_id(client_connection_id),
@@ -1477,7 +1483,7 @@ class QUICHE_EXPORT QuicConnection
     QuicSocketAddress peer_address;
     QuicConnectionId client_connection_id;
     QuicConnectionId server_connection_id;
-    absl::optional<StatelessResetToken> stateless_reset_token;
+    std::optional<StatelessResetToken> stateless_reset_token;
     // True if the peer address has been validated. Address is considered
     // validated when 1) an address token of the peer address is received and
     // validated, or 2) a HANDSHAKE packet has been successfully processed on
@@ -1490,7 +1496,7 @@ class QUICHE_EXPORT QuicConnection
     // Points to the send algorithm on the old default path while connection is
     // validating migrated peer address. Nullptr otherwise.
     std::unique_ptr<SendAlgorithmInterface> send_algorithm;
-    absl::optional<RttStats> rtt_stats;
+    std::optional<RttStats> rtt_stats;
     // If true, an ECN packet was acked on this path, so the path probably isn't
     // dropping ECN-marked packets.
     bool ecn_marked_packet_acked = false;
@@ -1549,7 +1555,7 @@ class QUICHE_EXPORT QuicConnection
     QuicByteCount length = 0;
     QuicConnectionId destination_connection_id;
     // Fields below are only populated if packet gets decrypted successfully.
-    // TODO(fayang): consider using absl::optional for following fields.
+    // TODO(fayang): consider using std::optional for following fields.
     bool decrypted = false;
     EncryptionLevel decrypted_level = ENCRYPTION_INITIAL;
     QuicPacketHeader header;
@@ -1679,7 +1685,7 @@ class QUICHE_EXPORT QuicConnection
       const PathState& default_path, const PathState& alternative_path,
       const QuicConnectionId& server_connection_id,
       QuicConnectionId* client_connection_id,
-      absl::optional<StatelessResetToken>* stateless_reset_token);
+      std::optional<StatelessResetToken>* stateless_reset_token);
 
   // Returns true and sets connection IDs if (self_address, peer_address)
   // corresponds to either the default path or alternative path. Returns false
@@ -2255,14 +2261,14 @@ class QUICHE_EXPORT QuicConnection
   // |server_connection_id_| with the value from that packet and save off the
   // original value of |server_connection_id_| into
   // |original_destination_connection_id_| for validation.
-  absl::optional<QuicConnectionId> original_destination_connection_id_;
+  std::optional<QuicConnectionId> original_destination_connection_id_;
 
   // The connection ID that replaces original_destination_connection_id_.
   QuicConnectionId original_destination_connection_id_replacement_;
 
   // After we receive a RETRY packet, |retry_source_connection_id_| contains
   // the source connection ID from that packet.
-  absl::optional<QuicConnectionId> retry_source_connection_id_;
+  std::optional<QuicConnectionId> retry_source_connection_id_;
 
   // Used to store content of packets which cannot be sent because of write
   // blocked. Packets' encrypted buffers are copied and owned by
@@ -2407,21 +2413,6 @@ class QUICHE_EXPORT QuicConnection
   // The ECN codepoint of the last packet to be sent to the writer, which
   // might be different from the next codepoint in per_packet_options_.
   QuicEcnCodepoint last_ecn_codepoint_sent_ = ECN_NOT_ECT;
-
-  // The reason for the last call to CanWrite with a true return value.
-  enum LastCanWriteReason : uint8_t {
-    LAST_CAN_WRITE_REASON_NONE = 0,
-    LAST_CAN_WRITE_REASON_COALESCE_PACKET,
-    LAST_CAN_WRITE_REASON_PENDING_TIMER,
-    LAST_CAN_WRITE_REASON_NO_RETRANSMITTABLE_DATA,
-    LAST_CAN_WRITE_REASON_DELAY_WITHIN_RELEASE_TIME,
-    LAST_CAN_WRITE_REASON_NO_DELAY,
-  };
-  void RecordLastCanWriteReason(LastCanWriteReason reason);
-  // TODO(b/299071230): Delete |packets_sent_on_last_successful_can_write_| and
-  // |last_can_write_reason_| after debugging.
-  LastCanWriteReason last_can_write_reason_ = LAST_CAN_WRITE_REASON_NONE;
-  QuicPacketCount packets_sent_on_last_successful_can_write_ = 0;
 };
 
 }  // namespace quic

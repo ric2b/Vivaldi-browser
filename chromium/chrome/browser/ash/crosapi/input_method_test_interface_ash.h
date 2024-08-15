@@ -34,7 +34,6 @@ class FakeTextInputMethod : public ash::TextInputMethod {
 
   void Focus(const InputContext& input_context) override;
   void Blur() override {}
-  void OnTouch(ui::EventPointerType pointerType) override {}
   void Enable(const std::string& component_id) override {}
   void Disable() override {}
   void Reset() override {}
@@ -128,7 +127,7 @@ class InputMethodTestInterfaceAsh : public mojom::InputMethodTestInterface,
     extensions::ExtensionId extension_id_;
   };
 
-  raw_ptr<ash::InputMethodAsh, ExperimentalAsh> text_input_target_;
+  raw_ptr<ash::InputMethodAsh> text_input_target_;
   FakeTextInputMethod fake_text_input_method_;
   // For testing, only allow one input method to be installed.
   std::unique_ptr<ScopedInputMethodInstall> installed_input_method_;

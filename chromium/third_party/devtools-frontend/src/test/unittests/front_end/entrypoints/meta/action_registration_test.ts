@@ -15,7 +15,7 @@ import {
 const {assert} = chai;
 let actionExecuted = false;
 const actionTitle = 'Mock action';
-const actionId = 'mockAction';
+const actionId = 'mock.action';
 class MockActionDelegate implements UI.ActionRegistration.ActionDelegate {
   handleAction(_context: UI.Context.Context, _actionId: string): boolean {
     actionExecuted = true;
@@ -54,12 +54,25 @@ describeWithEnvironment('Action registration', () => {
     UI.Context.Context.instance().setFlavor(MockContextType, null);
   });
 
-  it('retrieves a registered action', () => {
-    const preRegisteredAction = UI.ActionRegistry.ActionRegistry.instance().action(actionId);
-    assert.isNotNull(preRegisteredAction, 'Failed to find action registration');
-    if (preRegisteredAction) {
+  describe('hasAction', () => {
+    it('yields true for a registered action', () => {
+      assert.isTrue(UI.ActionRegistry.ActionRegistry.instance().hasAction(actionId));
+    });
+
+    it('yields false for an unknown action', () => {
+      assert.isFalse(UI.ActionRegistry.ActionRegistry.instance().hasAction('foo'));
+    });
+  });
+
+  describe('getAction', () => {
+    it('retrieves a registered action', () => {
+      const preRegisteredAction = UI.ActionRegistry.ActionRegistry.instance().getAction(actionId);
       assert.strictEqual(preRegisteredAction.title(), actionTitle, 'Action title is not returned correctly');
-    }
+    });
+
+    it('throws for unknown actions', () => {
+      assert.throws(() => UI.ActionRegistry.ActionRegistry.instance().getAction('foo'));
+    });
   });
 
   it('finds a pre registered action as available when its context types are in the current context flavors', () => {
@@ -69,12 +82,9 @@ describeWithEnvironment('Action registration', () => {
 
   it('executes a pre registered action', async () => {
     actionExecuted = false;
-    const preRegisteredAction =
-        UI.ActionRegistry.ActionRegistry.instance().action(actionId) as UI.ActionRegistration.Action;
-    if (preRegisteredAction) {
-      await preRegisteredAction.execute();
-      assert.isTrue(actionExecuted, 'Action was not executed');
-    }
+    const preRegisteredAction = UI.ActionRegistry.ActionRegistry.instance().getAction(actionId);
+    await preRegisteredAction.execute();
+    assert.isTrue(actionExecuted, 'Action was not executed');
   });
 
   it('executes a pre registered from the command menu', async () => {
@@ -90,6 +100,15 @@ describeWithEnvironment('Action registration', () => {
       UI.ActionRegistration.registerActionExtension({
         actionId,
         category: UI.ActionRegistration.ActionCategory.ELEMENTS,
+      });
+    });
+  });
+
+  it('throws an error trying to register an action with an invalid id', () => {
+    assert.throws(() => {
+      UI.ActionRegistration.registerActionExtension({
+        actionId: 'quickOpen.show',
+        category: UI.ActionRegistration.ActionCategory.GLOBAL,
       });
     });
   });

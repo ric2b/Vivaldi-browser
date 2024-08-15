@@ -12,6 +12,7 @@
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
@@ -62,31 +63,44 @@ class MockSyncServiceCryptoDelegate : public SyncServiceCrypto::Delegate {
   MOCK_METHOD(std::string, GetEncryptionBootstrapToken, (), (const override));
 };
 
-class SyncUserSettingsImplTest : public testing::Test {
+class SyncUserSettingsImplTest : public testing::Test,
+                                 public SyncUserSettingsImpl::Delegate {
  protected:
   SyncUserSettingsImplTest() {
     SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
+    // Pref is registered in signin internal `PrimaryAccountManager`.
+    pref_service_.registry()->RegisterBooleanPref(
+        ::prefs::kExplicitBrowserSignin, false);
     sync_prefs_ = std::make_unique<SyncPrefs>(&pref_service_);
 
     sync_service_crypto_ = std::make_unique<SyncServiceCrypto>(
         &sync_service_crypto_delegate_, &trusted_vault_client_);
   }
 
-  std::unique_ptr<SyncUserSettingsImpl> MakeSyncUserSettings(
-      ModelTypeSet registered_types,
-      SyncPrefs::SyncAccountState sync_account_state =
-          SyncPrefs::SyncAccountState::kSyncing) {
+  // SyncUserSettingsImpl::Delegate implementation.
+  bool IsCustomPassphraseAllowed() const override { return true; }
+
+  SyncPrefs::SyncAccountState GetSyncAccountStateForPrefs() const override {
+    return sync_account_state_;
+  }
+
+  CoreAccountInfo GetSyncAccountInfoForPrefs() const override {
     CoreAccountInfo account;
     account.email = "name@account.com";
     account.gaia = "name";
     account.account_id = CoreAccountId::FromGaiaId(account.gaia);
+    return account;
+  }
 
+  void SetSyncAccountState(SyncPrefs::SyncAccountState sync_account_state) {
+    sync_account_state_ = sync_account_state;
+  }
+
+  std::unique_ptr<SyncUserSettingsImpl> MakeSyncUserSettings(
+      ModelTypeSet registered_types) {
     return std::make_unique<SyncUserSettingsImpl>(
-        sync_service_crypto_.get(), sync_prefs_.get(),
-        /*preference_provider=*/nullptr, registered_types,
-        base::BindLambdaForTesting(
-            [sync_account_state] { return sync_account_state; }),
-        base::BindLambdaForTesting([account] { return account; }));
+        /*delegate=*/this, sync_service_crypto_.get(), sync_prefs_.get(),
+        registered_types);
   }
 
   // The order of fields matters because it determines destruction order and
@@ -97,6 +111,8 @@ class SyncUserSettingsImplTest : public testing::Test {
       sync_service_crypto_delegate_;
   trusted_vault::FakeTrustedVaultClient trusted_vault_client_;
   std::unique_ptr<SyncServiceCrypto> sync_service_crypto_;
+  SyncPrefs::SyncAccountState sync_account_state_ =
+      SyncPrefs::SyncAccountState::kSyncing;
 };
 
 TEST_F(SyncUserSettingsImplTest, PreferredTypesSyncEverything) {
@@ -129,32 +145,24 @@ TEST_F(SyncUserSettingsImplTest, PreferredTypesSyncEverything) {
 }
 
 TEST_F(SyncUserSettingsImplTest, GetSelectedTypesWhileSignedOut) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{kReplaceSyncPromosWithSignInPromos,
-                            kEnableBookmarksAccountStorage,
-                            kReadingListEnableDualReadingListModel,
-                            kReadingListEnableSyncTransportModeUponSignIn,
-                            password_manager::features::
-                                kEnablePasswordsAccountStorage,
-                            kSyncEnableContactInfoDataTypeInTransportMode,
-                            kEnablePreferencesAccountStorage},
-      /*disabled_features=*/{});
+  // Sanity check: signed-in there are selected types.
+  SetSyncAccountState(SyncPrefs::SyncAccountState::kSignedInNotSyncing);
+  ASSERT_FALSE(
+      MakeSyncUserSettings(GetUserTypes())->GetSelectedTypes().Empty());
 
-  std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
-      MakeSyncUserSettings(GetUserTypes(),
-                           SyncPrefs::SyncAccountState::kNotSignedIn);
-
-  EXPECT_EQ(sync_user_settings->GetSelectedTypes(), UserSelectableTypeSet());
+  // But signed out there are none.
+  SetSyncAccountState(SyncPrefs::SyncAccountState::kNotSignedIn);
+  EXPECT_TRUE(MakeSyncUserSettings(GetUserTypes())->GetSelectedTypes().Empty());
 }
 
-TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInTransportMode) {
+TEST_F(SyncUserSettingsImplTest, DefaultSelectedTypesWhileSignedIn) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      /*enabled_features=*/{kReplaceSyncPromosWithSignInPromos,
-                            kEnableBookmarksAccountStorage,
-                            kReadingListEnableDualReadingListModel,
+      /*enabled_features=*/{kEnableBookmarkFoldersForAccountStorage,
+                            kReplaceSyncPromosWithSignInPromos,
+#if !BUILDFLAG(IS_IOS)
                             kReadingListEnableSyncTransportModeUponSignIn,
+#endif  // !BUILDFLAG(IS_IOS)
                             password_manager::features::
                                 kEnablePasswordsAccountStorage,
                             kSyncEnableContactInfoDataTypeInTransportMode,
@@ -162,8 +170,8 @@ TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInTransportMode) {
       /*disabled_features=*/{});
 
   std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
-      MakeSyncUserSettings(GetUserTypes(),
-                           SyncPrefs::SyncAccountState::kSignedInNotSyncing);
+      MakeSyncUserSettings(GetUserTypes());
+  SetSyncAccountState(SyncPrefs::SyncAccountState::kSignedInNotSyncing);
 
   UserSelectableTypeSet registered_types =
       sync_user_settings->GetRegisteredSelectableTypes();
@@ -176,26 +184,36 @@ TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInTransportMode) {
       UserSelectableType::kApps,    UserSelectableType::kExtensions,
       UserSelectableType::kThemes,  UserSelectableType::kSavedTabGroups};
 
-  EXPECT_EQ(selected_types,
-            Difference(registered_types, expected_disabled_types));
-
-  sync_user_settings->SetSelectedType(UserSelectableType::kPasswords, false);
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // On Desktop, kPasswords is disabled by default.
   expected_disabled_types.Put(UserSelectableType::kPasswords);
-  selected_types = sync_user_settings->GetSelectedTypes();
-  EXPECT_EQ(selected_types,
-            Difference(registered_types, expected_disabled_types));
+#endif
 
-  sync_user_settings->SetSelectedType(UserSelectableType::kPasswords, true);
-  expected_disabled_types.Remove(UserSelectableType::kPasswords);
-  selected_types = sync_user_settings->GetSelectedTypes();
   EXPECT_EQ(selected_types,
             Difference(registered_types, expected_disabled_types));
 }
 
+TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInTransportMode) {
+  SetSyncAccountState(SyncPrefs::SyncAccountState::kSignedInNotSyncing);
+  std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
+      MakeSyncUserSettings(GetUserTypes());
+  const UserSelectableTypeSet default_types =
+      sync_user_settings->GetSelectedTypes();
+
+  sync_user_settings->SetSelectedType(UserSelectableType::kPayments, false);
+
+  EXPECT_EQ(sync_user_settings->GetSelectedTypes(),
+            Difference(default_types, {UserSelectableType::kPayments}));
+
+  sync_user_settings->SetSelectedType(UserSelectableType::kPayments, true);
+
+  EXPECT_EQ(sync_user_settings->GetSelectedTypes(), default_types);
+}
+
 TEST_F(SyncUserSettingsImplTest, SetSelectedTypeInFullSyncMode) {
   std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
-      MakeSyncUserSettings(GetUserTypes(),
-                           SyncPrefs::SyncAccountState::kSyncing);
+      MakeSyncUserSettings(GetUserTypes());
+  SetSyncAccountState(SyncPrefs::SyncAccountState::kSyncing);
 
   UserSelectableTypeSet registered_types =
       sync_user_settings->GetRegisteredSelectableTypes();
@@ -541,6 +559,18 @@ TEST_F(SyncUserSettingsImplTest, ShouldClearPassphrasePromptMuteUponUpgrade) {
   sync_user_settings->MarkPassphrasePromptMutedForCurrentProductVersion();
   EXPECT_TRUE(
       sync_user_settings->IsPassphrasePromptMutedForCurrentProductVersion());
+}
+
+// Protects against GetSelectedTypes() incorrectly requiring a
+// SetBookmarksAndReadingListAccountStorageOptIn() for syncing users.
+// TODO(crbug.com/1440628): Remove when the temporary opt-in is deleted.
+TEST_F(SyncUserSettingsImplTest, BookmarksOnByDefaultForSyncingUsers) {
+  SetSyncAccountState(SyncPrefs::SyncAccountState::kSyncing);
+  std::unique_ptr<SyncUserSettingsImpl> sync_user_settings =
+      MakeSyncUserSettings(GetUserTypes());
+
+  EXPECT_TRUE(sync_user_settings->GetSelectedTypes().Has(
+      UserSelectableType::kBookmarks));
 }
 
 }  // namespace

@@ -5,14 +5,17 @@
 #include "chrome/browser/web_applications/commands/external_app_resolution_command.h"
 
 #include <memory>
+#include <string>
 
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_future.h"
 #include "base/test/to_vector.h"
-#include "chrome/browser/web_applications/commands/callback_command.h"
+#include "chrome/browser/web_applications/commands/internal/callback_command.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
@@ -38,8 +41,13 @@
 #include "components/services/app_service/public/cpp/icon_info.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_logging.h"
+#include "components/webapps/common/web_app_id.h"
 #include "net/http/http_status_code.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkColor.h"
+
+using testing::_;
+using testing::Return;
 
 namespace web_app {
 namespace {
@@ -47,6 +55,23 @@ namespace {
 struct PageStateOptions {
   bool empty_web_app_info = false;
   WebAppUrlLoaderResult url_load_result = WebAppUrlLoaderResult::kUrlLoaded;
+  std::optional<GURL> manifest_id;
+};
+
+class MockWebAppUiManager : public web_app::FakeWebAppUiManager {
+ public:
+  MOCK_METHOD(void,
+              NotifyAppRelaunchState,
+              (const webapps::AppId& placeholder_app_id,
+               const webapps::AppId& final_app_id,
+               const std::u16string& final_app_name,
+               base::WeakPtr<Profile> profile,
+               AppRelaunchState relaunch_state),
+              (override));
+  MOCK_METHOD(size_t,
+              GetNumWindowsForApp,
+              (const webapps::AppId& app_id),
+              (override));
 };
 
 class ExternalAppResolutionCommandTest : public WebAppTest {
@@ -54,7 +79,7 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
   const GURL kWebAppUrl = GURL("https://example.com/path/index.html");
   const GURL kWebAppScope = GURL("https://example.com/path/");
   const webapps::AppId kWebAppId =
-      GenerateAppId(/*manifest_id_path=*/absl::nullopt, kWebAppUrl);
+      GenerateAppId(/*manifest_id_path=*/std::nullopt, kWebAppUrl);
   const GURL kWebAppManifestUrl =
       GURL("https://example.com/path/manifest.json");
 
@@ -66,7 +91,7 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
     base::test::TestFuture<ExternallyManagedAppManager::InstallResult> future;
 
     webapps::AppId placeholder_app_id =
-        GenerateAppId(absl::nullopt, install_options.install_url);
+        GenerateAppId(std::nullopt, install_options.install_url);
     const bool is_placeholder_installed = registrar().IsPlaceholderApp(
         placeholder_app_id,
         ConvertExternalInstallSourceToSource(install_options.install_source));
@@ -74,8 +99,8 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
         std::make_unique<ExternalAppResolutionCommand>(
             *profile(), install_options,
             is_placeholder_installed
-                ? absl::optional<webapps::AppId>(placeholder_app_id)
-                : absl::nullopt,
+                ? std::optional<webapps::AppId>(placeholder_app_id)
+                : std::nullopt,
             future.GetCallback());
     if (data_retriever) {
       command->SetDataRetrieverForTesting(std::move(data_retriever));
@@ -103,11 +128,17 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
         .AsTestOsIntegrationManager()
         ->SetShortcutManager(std::move(shortcut_manager));
 
+    auto ui_manager = std::make_unique<MockWebAppUiManager>();
+    ui_manager_ = ui_manager.get();
+    web_app::FakeWebAppProvider::Get(profile())->SetWebAppUiManager(
+        std::move(ui_manager));
+
     test::AwaitStartWebAppProviderAndSubsystems(profile());
   }
 
   void TearDown() override {
     shortcut_manager_ = nullptr;
+    ui_manager_ = nullptr;
     WebAppTest::TearDown();
   }
 
@@ -178,10 +209,15 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
         fake_web_contents_manager().GetOrCreatePageState(options.install_url);
     state.opt_manifest = blink::mojom::Manifest::New();
     state.opt_manifest->start_url = options.install_url;
-    state.opt_manifest->id =
-        GenerateManifestIdFromStartUrlOnly(options.install_url);
-    state.opt_manifest->name = u"Manifest Name";
 
+    if (mock_options.manifest_id.has_value()) {
+      state.opt_manifest->id = *mock_options.manifest_id;
+    } else {
+      state.opt_manifest->id =
+          GenerateManifestIdFromStartUrlOnly(options.install_url);
+    }
+
+    state.opt_manifest->name = u"Manifest Name";
     state.return_null_info = mock_options.empty_web_app_info;
 
     state.error_code = webapps::InstallableStatusCode::NO_ERROR_DETECTED;
@@ -224,6 +260,7 @@ class ExternalAppResolutionCommandTest : public WebAppTest {
  private:
   base::flat_map<webapps::AppId, BitmapData> app_to_icons_data_;
   raw_ptr<TestShortcutManager> shortcut_manager_ = nullptr;
+  raw_ptr<MockWebAppUiManager> ui_manager_ = nullptr;
 };
 
 TEST_F(ExternalAppResolutionCommandTest, SuccessInternalDefault) {
@@ -238,7 +275,7 @@ TEST_F(ExternalAppResolutionCommandTest, SuccessInternalDefault) {
   ASSERT_TRUE(result.app_id.has_value());
   EXPECT_TRUE(registrar().IsLocallyInstalled(*result.app_id));
   EXPECT_FALSE(IsPlaceholderAppUrl(kWebAppUrl));
-  absl::optional<webapps::AppId> id =
+  std::optional<webapps::AppId> id =
       registrar().LookupExternalAppId(kWebAppUrl);
   ASSERT_TRUE(id.has_value());
   EXPECT_EQ(*result.app_id, *id);
@@ -262,7 +299,7 @@ TEST_F(ExternalAppResolutionCommandTest, SuccessAppFromPolicy) {
   ASSERT_TRUE(result.app_id.has_value());
   EXPECT_TRUE(registrar().IsLocallyInstalled(*result.app_id));
   EXPECT_FALSE(IsPlaceholderAppUrl(kWebAppUrl));
-  absl::optional<webapps::AppId> id =
+  std::optional<webapps::AppId> id =
       registrar().LookupExternalAppId(kWebAppUrl);
   ASSERT_TRUE(id.has_value());
   EXPECT_EQ(*result.app_id, *id);
@@ -285,7 +322,7 @@ TEST_F(ExternalAppResolutionCommandTest, InstallFails) {
   auto result = InstallAndWait(
       install_options, fake_web_contents_manager().CreateDataRetriever());
 
-  absl::optional<webapps::AppId> id =
+  std::optional<webapps::AppId> id =
       registrar().LookupExternalAppId(kWebAppUrl);
 
   EXPECT_EQ(webapps::InstallResultCode::kGetWebAppInstallInfoFailed,
@@ -398,6 +435,10 @@ TEST_F(ExternalAppResolutionCommandTest, ReinstallPlaceholderSucceeds) {
   auto data_retriever = std::make_unique<FakeDataRetriever>();
   data_retriever->BuildDefaultDataToRetrieve(kWebAppUrl, kWebAppScope);
 
+  MockWebAppUiManager& ui_manager =
+      static_cast<MockWebAppUiManager&>(fake_ui_manager());
+  EXPECT_CALL(ui_manager, NotifyAppRelaunchState(_, _, _, _, _)).Times(0);
+
   auto result = InstallAndWait(options, std::move(data_retriever));
 
   EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
@@ -410,6 +451,135 @@ TEST_F(ExternalAppResolutionCommandTest, ReinstallPlaceholderSucceeds) {
 
   EXPECT_FALSE(IsPlaceholderAppUrl(kWebAppUrl));
   EXPECT_FALSE(IsPlaceholderAppId(placeholder_app_id));
+}
+
+TEST_F(ExternalAppResolutionCommandTest,
+       ReinstallPlaceholderSucceedsWithAppRelaunch) {
+  const std::string origin = "https://foo.example";
+  const GURL kWebAppUrl(origin);
+  const GURL kManifestId(GURL(origin + "/id"));
+  ExternalInstallOptions options(kWebAppUrl,
+                                 mojom::UserDisplayMode::kStandalone,
+                                 ExternalInstallSource::kExternalPolicy);
+  options.install_placeholder = true;
+  webapps::AppId placeholder_app_id;
+
+  // Install a placeholder app.
+  {
+    SetPageState(options, {.url_load_result =
+                               WebAppUrlLoaderResult::kRedirectedUrlLoaded});
+
+    auto result = InstallAndWait(options);
+
+    EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
+    ASSERT_TRUE(result.app_id.has_value());
+    placeholder_app_id = result.app_id.value();
+
+    const WebApp* web_app = registrar().GetAppById(placeholder_app_id);
+    ASSERT_TRUE(web_app);
+    EXPECT_TRUE(web_app->HasOnlySource(WebAppManagement::Type::kPolicy));
+    EXPECT_TRUE(IsPlaceholderAppId(placeholder_app_id));
+  }
+
+  // Replace the placeholder with a real app.
+  const webapps::AppId final_app_id = GenerateAppIdFromManifestId(kManifestId);
+  options.placeholder_resolution_behavior =
+      PlaceholderResolutionBehavior::kCloseAndRelaunch;
+  SetPageState(options, {.manifest_id = kManifestId});
+
+  MockWebAppUiManager& ui_manager =
+      static_cast<MockWebAppUiManager&>(fake_ui_manager());
+  EXPECT_CALL(ui_manager, GetNumWindowsForApp(GenerateAppId(
+                              /*manifest_id_path=*/std::nullopt, kWebAppUrl)))
+      .WillOnce(Return(1u));
+  EXPECT_CALL(ui_manager,
+              NotifyAppRelaunchState(placeholder_app_id, final_app_id, _, _,
+                                     AppRelaunchState::kAppAboutToRelaunch))
+      .Times(1);
+  EXPECT_CALL(ui_manager,
+              NotifyAppRelaunchState(placeholder_app_id, final_app_id, _, _,
+                                     AppRelaunchState::kAppClosingForRelaunch))
+      .Times(1);
+  EXPECT_CALL(ui_manager,
+              NotifyAppRelaunchState(placeholder_app_id, final_app_id, _, _,
+                                     AppRelaunchState::kAppRelaunched))
+      .Times(1);
+
+  auto result = InstallAndWait(options);
+
+  EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
+  ASSERT_TRUE(result.app_id.has_value());
+  EXPECT_EQ(result.app_id.value(), final_app_id);
+
+  const WebApp* web_app = registrar().GetAppById(placeholder_app_id);
+  ASSERT_FALSE(web_app);
+
+  const WebApp* final_web_app = registrar().GetAppById(final_app_id);
+  ASSERT_TRUE(final_web_app);
+  EXPECT_TRUE(final_web_app->HasOnlySource(WebAppManagement::Type::kPolicy));
+
+  EXPECT_FALSE(IsPlaceholderAppUrl(kWebAppUrl));
+  EXPECT_FALSE(IsPlaceholderAppId(placeholder_app_id));
+  EXPECT_FALSE(IsPlaceholderAppId(final_app_id));
+}
+
+TEST_F(ExternalAppResolutionCommandTest,
+       ReinstallPlaceholderAppRelaunchNoWindow) {
+  const std::string origin = "https://foo.example";
+  const GURL kWebAppUrl(origin);
+  const GURL kManifestId(GURL(origin + "/id"));
+  ExternalInstallOptions options(kWebAppUrl,
+                                 mojom::UserDisplayMode::kStandalone,
+                                 ExternalInstallSource::kExternalPolicy);
+  options.install_placeholder = true;
+  webapps::AppId placeholder_app_id;
+
+  // Install a placeholder app.
+  {
+    SetPageState(options, {.url_load_result =
+                               WebAppUrlLoaderResult::kRedirectedUrlLoaded});
+
+    auto result = InstallAndWait(options);
+
+    EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
+    ASSERT_TRUE(result.app_id.has_value());
+    placeholder_app_id = result.app_id.value();
+
+    const WebApp* web_app = registrar().GetAppById(placeholder_app_id);
+    ASSERT_TRUE(web_app);
+    EXPECT_TRUE(web_app->HasOnlySource(WebAppManagement::Type::kPolicy));
+    EXPECT_TRUE(IsPlaceholderAppId(placeholder_app_id));
+  }
+
+  // Replace the placeholder with a real app.
+  const webapps::AppId final_app_id = GenerateAppIdFromManifestId(kManifestId);
+  options.placeholder_resolution_behavior =
+      PlaceholderResolutionBehavior::kCloseAndRelaunch;
+  SetPageState(options, {.manifest_id = kManifestId});
+
+  MockWebAppUiManager& ui_manager =
+      static_cast<MockWebAppUiManager&>(fake_ui_manager());
+  EXPECT_CALL(ui_manager, GetNumWindowsForApp(GenerateAppId(
+                              /*manifest_id_path=*/std::nullopt, kWebAppUrl)))
+      .WillOnce(Return(0u));
+  EXPECT_CALL(ui_manager, NotifyAppRelaunchState(_, _, _, _, _)).Times(0);
+
+  auto result = InstallAndWait(options);
+
+  EXPECT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
+  ASSERT_TRUE(result.app_id.has_value());
+  EXPECT_EQ(result.app_id.value(), final_app_id);
+
+  const WebApp* web_app = registrar().GetAppById(placeholder_app_id);
+  ASSERT_FALSE(web_app);
+
+  const WebApp* final_web_app = registrar().GetAppById(final_app_id);
+  ASSERT_TRUE(final_web_app);
+  EXPECT_TRUE(final_web_app->HasOnlySource(WebAppManagement::Type::kPolicy));
+
+  EXPECT_FALSE(IsPlaceholderAppUrl(kWebAppUrl));
+  EXPECT_FALSE(IsPlaceholderAppId(placeholder_app_id));
+  EXPECT_FALSE(IsPlaceholderAppId(final_app_id));
 }
 
 // With go/external_app_refactoring the placeholder is updated in-place and not
@@ -426,7 +596,7 @@ TEST_F(ExternalAppResolutionCommandTest,
   // Install a placeholder app.
   {
     webapps::AppId expected_app_id =
-        GenerateAppId(/*manifest_id_path=*/absl::nullopt, kWebAppUrl);
+        GenerateAppId(/*manifest_id_path=*/std::nullopt, kWebAppUrl);
 
     SetPageState(options, {.url_load_result =
                                WebAppUrlLoaderResult::kRedirectedUrlLoaded});
@@ -490,7 +660,7 @@ TEST_F(ExternalAppResolutionCommandTest, InstallPlaceholderCustomName) {
 
 TEST_F(ExternalAppResolutionCommandTest, UninstallAndReplace) {
   const GURL kWebAppUrl("https://foo.example");
-  ExternalInstallOptions options = {kWebAppUrl, absl::nullopt,
+  ExternalInstallOptions options = {kWebAppUrl, std::nullopt,
                                     ExternalInstallSource::kInternalDefault};
   webapps::AppId app_id;
   {
@@ -548,6 +718,7 @@ TEST_F(ExternalAppResolutionCommandTest, InstallURLLoadFailed) {
 }
 
 TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoSucceeds) {
+  base::HistogramTester tester;
   const GURL kWebAppUrl("https://foo.example");
   ExternalInstallOptions options(kWebAppUrl,
                                  mojom::UserDisplayMode::kStandalone,
@@ -563,7 +734,7 @@ TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoSucceeds) {
 
   auto result = InstallAndWait(options);
 
-  absl::optional<webapps::AppId> id =
+  std::optional<webapps::AppId> id =
       registrar().LookupExternalAppId(kWebAppUrl);
   EXPECT_EQ(webapps::InstallResultCode::kSuccessOfflineOnlyInstall,
             result.code);
@@ -580,9 +751,14 @@ TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoSucceeds) {
             mojom::UserDisplayMode::kStandalone);
   EXPECT_EQ(registrar().GetLatestAppInstallSource(app_id),
             webapps::WebappInstallSource::EXTERNAL_DEFAULT);
+
+  // Ensure that the WebApp.Install.Result histogram is only measured once.
+  tester.ExpectBucketCount("WebApp.Install.Result", /*sample=*/true,
+                           /*expected_count=*/1);
 }
 
 TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoFails) {
+  base::HistogramTester tester;
   const GURL kWebAppUrl("https://foo.example");
   ExternalInstallOptions options(kWebAppUrl,
                                  mojom::UserDisplayMode::kStandalone,
@@ -601,13 +777,15 @@ TEST_F(ExternalAppResolutionCommandTest, InstallWithWebAppInfoFails) {
 
   auto result = InstallAndWait(options);
 
-  absl::optional<webapps::AppId> id =
+  std::optional<webapps::AppId> id =
       registrar().LookupExternalAppId(kWebAppUrl);
 
   EXPECT_EQ(webapps::InstallResultCode::kWriteDataFailed, result.code);
   EXPECT_FALSE(result.app_id.has_value());
 
   EXPECT_FALSE(id.has_value());
+  tester.ExpectBucketCount("WebApp.Install.Result", /*sample=*/false,
+                           /*expected_count=*/1);
 }
 
 TEST_F(ExternalAppResolutionCommandTest, SucessInstallForcedContainerWindow) {
@@ -622,7 +800,7 @@ TEST_F(ExternalAppResolutionCommandTest, SucessInstallForcedContainerWindow) {
   ASSERT_TRUE(result.app_id.has_value());
   EXPECT_TRUE(registrar().IsLocallyInstalled(*result.app_id));
   EXPECT_FALSE(IsPlaceholderAppUrl(kWebAppUrl));
-  absl::optional<webapps::AppId> id =
+  std::optional<webapps::AppId> id =
       registrar().LookupExternalAppId(kWebAppUrl);
   ASSERT_TRUE(id.has_value());
   EXPECT_EQ(*result.app_id, *id);
@@ -640,7 +818,7 @@ TEST_F(ExternalAppResolutionCommandTest, GetWebAppInstallInfoFailed) {
       ExternalInstallSource::kExternalDefault);
 
   SetPageState(
-      {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault},
+      {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault},
       {.empty_web_app_info = true});
 
   auto result = InstallAndWait(install_options);
@@ -660,10 +838,10 @@ TEST_F(ExternalAppResolutionCommandTest,
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->user_display_mode = mojom::UserDisplayMode::kBrowser;
     data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-    SetPageState({url, absl::nullopt, ExternalInstallSource::kInternalDefault});
+    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions install_options(
-        url, /*user_display_mode=*/absl::nullopt,
+        url, /*user_display_mode=*/std::nullopt,
         ExternalInstallSource::kExternalDefault);
     auto result = InstallAndWait(install_options, std::move(data_retriever));
 
@@ -681,10 +859,10 @@ TEST_F(ExternalAppResolutionCommandTest,
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
     data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-    SetPageState({url, absl::nullopt, ExternalInstallSource::kInternalDefault});
+    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions install_options(
-        url, /*user_display_mode=*/absl::nullopt,
+        url, /*user_display_mode=*/std::nullopt,
         ExternalInstallSource::kExternalDefault);
     auto result = InstallAndWait(install_options, std::move(data_retriever));
 
@@ -707,7 +885,7 @@ TEST_F(ExternalAppResolutionCommandTest,
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
     data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
-    SetPageState({url, absl::nullopt, ExternalInstallSource::kInternalDefault});
+    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions install_options(
         url, mojom::UserDisplayMode::kBrowser,
@@ -724,7 +902,7 @@ TEST_F(ExternalAppResolutionCommandTest,
     GURL url("https://example4.com/");
     auto data_retriever = std::make_unique<FakeDataRetriever>();
     data_retriever->BuildDefaultDataToRetrieve(url, url);
-    SetPageState({url, absl::nullopt, ExternalInstallSource::kInternalDefault});
+    SetPageState({url, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->user_display_mode = mojom::UserDisplayMode::kBrowser;
@@ -752,38 +930,40 @@ TEST_F(ExternalAppResolutionCommandTest, UpgradeLock) {
   auto data_retriever = std::make_unique<FakeDataRetriever>();
   data_retriever->BuildDefaultDataToRetrieve(kWebAppUrl, kWebAppScope);
   SetPageState(
-      {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+      {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
   base::flat_set<webapps::AppId> app_ids{
-      GenerateAppId(/*manifest_id_path=*/absl::nullopt, kWebAppUrl)};
+      GenerateAppId(/*manifest_id_path=*/std::nullopt, kWebAppUrl)};
 
   bool callback_command_run = false;
-  auto callback_command = std::make_unique<CallbackCommand<AppLock>>(
-      "", std::make_unique<AppLockDescription>(app_ids),
+  auto callback_command = std::make_unique<internal::CallbackCommand<AppLock>>(
+      "", AppLockDescription(app_ids),
       base::BindLambdaForTesting(
-          [&](AppLock&) { callback_command_run = true; }));
+          [&](AppLock&, base::Value::Dict&) { callback_command_run = true; }),
+      /*completion_callback=*/base::DoNothing());
 
   bool callback_command_2_run = false;
   base::RunLoop callback_runloop;
-  auto callback_command_2 = std::make_unique<CallbackCommand<AppLock>>(
-      "", std::make_unique<AppLockDescription>(app_ids),
-      base::BindLambdaForTesting([&](AppLock&) {
-        callback_command_2_run = true;
-        callback_runloop.Quit();
-      }));
+  auto callback_command_2 =
+      std::make_unique<internal::CallbackCommand<AppLock>>(
+          "", AppLockDescription(app_ids),
+          base::BindLambdaForTesting([&](AppLock&, base::Value::Dict&) {
+            callback_command_2_run = true;
+          }),
+          /*completion_callback=*/callback_runloop.QuitClosure());
 
   base::RunLoop run_loop;
   ExternallyManagedAppManager::InstallResult result;
   webapps::AppId placeholder_app_id =
-      GenerateAppId(absl::nullopt, install_options.install_url);
+      GenerateAppId(std::nullopt, install_options.install_url);
   const bool is_placeholder_installed = registrar().IsPlaceholderApp(
       placeholder_app_id,
       ConvertExternalInstallSourceToSource(install_options.install_source));
   auto command = std::make_unique<ExternalAppResolutionCommand>(
       *profile(), install_options,
       is_placeholder_installed
-          ? absl::optional<webapps::AppId>(placeholder_app_id)
-          : absl::nullopt,
+          ? std::optional<webapps::AppId>(placeholder_app_id)
+          : std::nullopt,
       base::BindLambdaForTesting(
           [&](ExternallyManagedAppManager::InstallResult install_result) {
             result = std::move(install_result);
@@ -828,7 +1008,7 @@ TEST_F(ExternalAppResolutionCommandTest,
     web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
     data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
     SetPageState(
-        {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+        {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions install_options(
         kWebAppUrl, mojom::UserDisplayMode::kStandalone,
@@ -862,7 +1042,7 @@ TEST_F(ExternalAppResolutionCommandTest,
         std::move(manifest), webapps::InstallableStatusCode::NO_ERROR_DETECTED);
     new_data_retriever->SetEmptyRendererWebAppInstallInfo();
     SetPageState(
-        {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+        {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions new_install_options(
         kWebAppUrl, mojom::UserDisplayMode::kStandalone,
@@ -911,7 +1091,7 @@ TEST_F(ExternalAppResolutionCommandTest, IconDownloadSuccessOverwriteOldIcons) {
         std::move(manifest), webapps::InstallableStatusCode::NO_ERROR_DETECTED);
     data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
     SetPageState(
-        {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+        {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions install_options(
         kWebAppUrl, mojom::UserDisplayMode::kStandalone,
@@ -954,7 +1134,7 @@ TEST_F(ExternalAppResolutionCommandTest, IconDownloadSuccessOverwriteOldIcons) {
         webapps::InstallableStatusCode::NO_ERROR_DETECTED);
     new_data_retriever->SetEmptyRendererWebAppInstallInfo();
     SetPageState(
-        {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+        {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions new_install_options(
         kWebAppUrl, mojom::UserDisplayMode::kStandalone,
@@ -1005,7 +1185,7 @@ TEST_F(ExternalAppResolutionCommandTest,
         std::move(manifest), webapps::InstallableStatusCode::NO_ERROR_DETECTED);
     data_retriever->SetRendererWebAppInstallInfo(std::move(web_app_info));
     SetPageState(
-        {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+        {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions install_options(
         kWebAppUrl, mojom::UserDisplayMode::kStandalone,
@@ -1049,7 +1229,7 @@ TEST_F(ExternalAppResolutionCommandTest,
         webapps::InstallableStatusCode::NO_ERROR_DETECTED);
     new_data_retriever->SetEmptyRendererWebAppInstallInfo();
     SetPageState(
-        {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+        {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
     ExternalInstallOptions new_install_options(
         kWebAppUrl, mojom::UserDisplayMode::kStandalone,
@@ -1104,7 +1284,7 @@ TEST_F(ExternalAppResolutionCommandTest, SuccessWithUninstallAndReplace) {
   auto data_retriever = std::make_unique<FakeDataRetriever>();
   data_retriever->BuildDefaultDataToRetrieve(kWebAppUrl, kWebAppScope);
   SetPageState(
-      {kWebAppUrl, absl::nullopt, ExternalInstallSource::kInternalDefault});
+      {kWebAppUrl, std::nullopt, ExternalInstallSource::kInternalDefault});
 
   auto result = InstallAndWait(install_options, std::move(data_retriever));
   EXPECT_EQ(result.code, webapps::InstallResultCode::kSuccessNewInstall);
@@ -1117,7 +1297,7 @@ TEST_F(ExternalAppResolutionCommandTest, SuccessWithUninstallAndReplace) {
   EXPECT_TRUE(options->add_to_quick_launch_bar);
   EXPECT_TRUE(options->os_hooks[OsHookType::kRunOnOsLogin]);
   if (AreOsIntegrationSubManagersEnabled()) {
-    absl::optional<proto::WebAppOsIntegrationState> os_state =
+    std::optional<proto::WebAppOsIntegrationState> os_state =
         registrar().GetAppCurrentOsIntegrationState(*result.app_id);
     ASSERT_TRUE(os_state.has_value());
     EXPECT_TRUE(os_state->has_shortcut());

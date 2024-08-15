@@ -7,9 +7,9 @@
 #import "base/ios/ios_util.h"
 #import "base/metrics/field_trial_params.h"
 #import "components/variations/service/variations_service.h"
-#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 
 #pragma mark - Constants
 
@@ -47,10 +47,6 @@ BASE_FEATURE(kOverrideFeedSettings,
              "OverrideFeedSettings",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableFeedSyntheticCapabilities,
-             "EnableFeedSyntheticCapabilities",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kWebFeedFeedbackReroute,
              "WebFeedFeedbackReroute",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -61,6 +57,10 @@ BASE_FEATURE(kEnableFollowManagementInstantReload,
 
 BASE_FEATURE(kEnableSignedOutViewDemotion,
              "EnableSignedOutViewDemotion",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableiPadFeedGhostCards,
+             "EnableiPadFeedGhostCards",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #pragma mark - Feature parameters
@@ -168,10 +168,6 @@ bool IsDotEnabledForNewFollowedContent() {
       kFeedHeaderSettings, kEnableDotForNewFollowedContent, false);
 }
 
-bool IsFeedSyntheticCapabilitiesEnabled() {
-  return base::FeatureList::IsEnabled(kEnableFeedSyntheticCapabilities);
-}
-
 int FollowingFeedHeaderHeight() {
   int defaultWebChannelsHeaderHeight = 30;
   return base::GetFieldTrialParamByFeatureAsInt(kFeedHeaderSettings,
@@ -189,4 +185,8 @@ bool IsFollowManagementInstantReloadEnabled() {
 
 bool IsSignedOutViewDemotionEnabled() {
   return base::FeatureList::IsEnabled(kEnableSignedOutViewDemotion);
+}
+
+bool IsiPadFeedGhostCardsEnabled() {
+  return base::FeatureList::IsEnabled(kEnableiPadFeedGhostCards);
 }

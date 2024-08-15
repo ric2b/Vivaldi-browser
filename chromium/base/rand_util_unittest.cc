@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -121,9 +122,9 @@ TEST(RandUtilTest, BitsToOpenEndedUnitIntervalF) {
 
 TEST(RandUtilTest, RandBytes) {
   const size_t buffer_size = 50;
-  char buffer[buffer_size];
+  uint8_t buffer[buffer_size];
   memset(buffer, 0, buffer_size);
-  base::RandBytes(buffer, buffer_size);
+  base::RandBytes(buffer);
   std::sort(buffer, buffer + buffer_size);
   // Probability of occurrence of less than 25 unique bytes in 50 random bytes
   // is below 10^-25.
@@ -132,7 +133,24 @@ TEST(RandUtilTest, RandBytes) {
 
 // Verify that calling base::RandBytes with an empty buffer doesn't fail.
 TEST(RandUtilTest, RandBytes0) {
+  base::RandBytes(span<uint8_t>());
   base::RandBytes(nullptr, 0);
+}
+
+TEST(RandUtilTest, RandBytesAsVector) {
+  std::vector<uint8_t> random_vec = base::RandBytesAsVector(0);
+  EXPECT_TRUE(random_vec.empty());
+  random_vec = base::RandBytesAsVector(1);
+  EXPECT_EQ(1U, random_vec.size());
+  random_vec = base::RandBytesAsVector(145);
+  EXPECT_EQ(145U, random_vec.size());
+  char accumulator = 0;
+  for (auto i : random_vec) {
+    accumulator |= i;
+  }
+  // In theory this test can fail, but it won't before the universe dies of
+  // heat death.
+  EXPECT_NE(0, accumulator);
 }
 
 TEST(RandUtilTest, RandBytesAsString) {
@@ -240,7 +258,7 @@ TEST(RandUtilTest, DISABLED_RandBytesPerf) {
   std::unique_ptr<uint8_t[]> buffer(new uint8_t[kTestBufferSize]);
   const base::TimeTicks now = base::TimeTicks::Now();
   for (int i = 0; i < kTestIterations; ++i)
-    base::RandBytes(buffer.get(), kTestBufferSize);
+    base::RandBytes(make_span(buffer.get(), kTestBufferSize));
   const base::TimeTicks end = base::TimeTicks::Now();
 
   LOG(INFO) << "RandBytes(" << kTestBufferSize

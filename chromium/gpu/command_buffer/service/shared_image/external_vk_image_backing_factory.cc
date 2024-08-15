@@ -66,9 +66,10 @@ base::flat_map<VkFormat, VkImageUsageFlags> CreateImageUsageCache(
     if (!HasVkFormat(format)) {
       return;
     }
-    VkFormat vk_format = format.PrefersExternalSampler()
-                             ? ToVkFormatExternalSampler(format)
-                             : ToVkFormatSinglePlanar(format);
+    // External sampler should only be used when creating shared image out of
+    // GpuMemoryBuffer.
+    CHECK(!format.PrefersExternalSampler());
+    VkFormat vk_format = ToVkFormatSinglePlanar(format);
     DCHECK_NE(vk_format, VK_FORMAT_UNDEFINED);
     VkFormatProperties format_props = {};
     vkGetPhysicalDeviceFormatProperties(vk_physical_device, vk_format,
@@ -85,15 +86,62 @@ base::flat_map<VkFormat, VkImageUsageFlags> CreateImageUsageCache(
     add_to_cache_if_supported(format);
   }
 
-#if BUILDFLAG(IS_OZONE)
-  // Support multiplanar formats with external sampling.
-  for (auto format : viz::MultiPlaneFormat::kAll) {
-    format.SetPrefersExternalSampler();
-    add_to_cache_if_supported(format);
+  return image_usage_cache;
+}
+
+bool IsFormatSupported(viz::SharedImageFormat format,
+                       gfx::GpuMemoryBufferType gmb_type,
+                       uint32_t usage) {
+  // Accessing via GL does not work with external sampling. Also, see
+  // https://crbug.com/1394888.
+  // NOTE: At the current time this check is elided on Fuchsia as there is no
+  // alternative backing that can be used in this case on Fuchsia, which results
+  // in test failures if this short-circuit is applied. Fuchsia does not
+  // actually rely on GL interop via ExternalVkImageBacking - instead, it relies
+  // on Skia to do YUV/RGB conversion using Vulkan before accessing textures via
+  // GL (implemented by setting VideoFrame's MailboxHolder::texture_target to
+  // zero on Fuchsia and checking it everywhere necessary).
+  // TODO(crbug.com/1310026): Enable ImageBackingOzone to be used for all planes
+  // in Fuchsia and enable this check for Fuchsia.
+#if !BUILDFLAG(IS_FUCHSIA)
+  if (HasGLES2ReadOrWriteUsage(usage)) {
+    if (format.IsLegacyMultiplanar() || format.PrefersExternalSampler()) {
+      return false;
+    }
   }
 #endif
 
-  return image_usage_cache;
+  if (format.is_multi_plane()) {
+    if (gmb_type != gfx::GpuMemoryBufferType::EMPTY_BUFFER) {
+      // Must prefer external sampler for GpuMemoryBuffers.
+      if (!format.PrefersExternalSampler()) {
+        return false;
+      }
+      if (ToVkFormatExternalSampler(format) == VK_FORMAT_UNDEFINED) {
+        return false;
+      }
+    } else {
+      // Cannot prefer external sampler for non-GMB cases.
+      if (format.PrefersExternalSampler()) {
+        return false;
+      }
+      for (int plane = 0; plane < format.NumberOfPlanes(); plane++) {
+        if (ToVkFormat(format, plane) == VK_FORMAT_UNDEFINED) {
+          return false;
+        }
+      }
+    }
+  }
+
+  // ALPHA_8 is only used by UI and should never need GL/Vulkan interop.
+  // LUMINANCE_8 is only used with GL ES2 contexts and shouldn't be relevant for
+  // devices that support Vulkan.
+  if (format == viz::SinglePlaneFormat::kALPHA_8 ||
+      format == viz::SinglePlaneFormat::kLUMINANCE_8) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -103,12 +151,13 @@ constexpr uint32_t kSupportedUsage =
     SHARED_IMAGE_USAGE_WEBGPU | SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE |
 #endif
-    SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+    SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
+    SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
-    SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
-    SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_VIDEO_DECODE |
-    SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
-    SHARED_IMAGE_USAGE_CPU_WRITE;
+    SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+    SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_SCANOUT |
+    SHARED_IMAGE_USAGE_VIDEO_DECODE | SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU |
+    SHARED_IMAGE_USAGE_CPU_UPLOAD | SHARED_IMAGE_USAGE_CPU_WRITE;
 
 ExternalVkImageBackingFactory::ExternalVkImageBackingFactory(
     scoped_refptr<SharedContextState> context_state)
@@ -248,33 +297,9 @@ bool ExternalVkImageBackingFactory::IsSupported(
     gfx::GpuMemoryBufferType gmb_type,
     GrContextType gr_context_type,
     base::span<const uint8_t> pixel_data) {
-  if (format.is_multi_plane()) {
-    if (gmb_type != gfx::EMPTY_BUFFER && !format.PrefersExternalSampler()) {
-      return false;
-    }
-
-    if (format != viz::MultiPlaneFormat::kNV12 &&
-        format != viz::MultiPlaneFormat::kYV12 &&
-        format != viz::MultiPlaneFormat::kI420) {
-      return false;
-    }
-  }
-
-  // ALPHA_8 is only used by UI and should never need GL/Vulkan interop.
-  // LUMINANCE_8 is only used with GL ES2 contexts and shouldn't be relevant for
-  // devices that support Vulkan.
-  if (format == viz::SinglePlaneFormat::kALPHA_8 ||
-      format == viz::SinglePlaneFormat::kLUMINANCE_8) {
+  if (!IsFormatSupported(format, gmb_type, usage)) {
     return false;
   }
-
-#if BUILDFLAG(IS_LINUX)
-  if (format.IsLegacyMultiplanar()) {
-    // ExternalVkImageBacking doesn't work properly with external sampler
-    // multi-planar formats on Linux, see https://crbug.com/1394888.
-    return false;
-  }
-#endif
 
   if (gmb_type == gfx::EMPTY_BUFFER) {
     if (usage & SHARED_IMAGE_USAGE_CPU_WRITE) {

@@ -69,6 +69,14 @@ struct BuiltinPolyfillConfig {
     bool saturate = false;
     /// Should `textureSampleBaseClampToEdge()` be polyfilled for texture_2d<f32> textures?
     bool texture_sample_base_clamp_to_edge_2d_f32 = false;
+    /// Should `dot4U8Packed()` and `dot4I8Packed()` be polyfilled?
+    bool dot_4x8_packed = false;
+    /// Should `pack4xI8()`, `pack4xU8()`, `pack4xI8Clamp()`, `unpack4xI8()` and `unpack4xU8()`
+    /// be polyfilled?
+    bool pack_unpack_4x8 = false;
+    /// Should `pack4xU8Clamp()` be polyfilled?
+    /// TODO(tint:1497): remove the option once the bug in DXC is fixed.
+    bool pack_4xu8_clamp = false;
 };
 
 /// BuiltinPolyfill is a transform that replaces calls to builtin functions and uses of other core

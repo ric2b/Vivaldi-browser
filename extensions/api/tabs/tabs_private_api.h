@@ -58,6 +58,7 @@ absl::optional<double> GetActiveWorkspaceId(Browser* browser);
 int CountTabsInWorkspace(TabStripModel* tab_strip, const double workspace_id);
 base::Value::List getLinkRoutes(content::WebContents* contents);
 bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id);
+bool IsWorkspacesEnabled(content::WebContents* contents);
 
 class TabsPrivateAPI : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;

@@ -38,10 +38,49 @@ namespace blink {
 
 struct PixelsAndPercent {
   DISALLOW_NEW();
-  PixelsAndPercent(float pixels, float percent)
-      : pixels(pixels), percent(percent) {}
+  explicit PixelsAndPercent(float pixels)
+      : pixels(pixels),
+        percent(0.0f),
+        has_explicit_pixels(true),
+        has_explicit_percent(false) {}
+  PixelsAndPercent(float pixels,
+                   float percent,
+                   bool has_explicit_pixels,
+                   bool has_explicit_percent)
+      : pixels(pixels),
+        percent(percent),
+        has_explicit_pixels(has_explicit_pixels),
+        has_explicit_percent(has_explicit_percent) {}
+
+  PixelsAndPercent& operator+=(const PixelsAndPercent& rhs) {
+    pixels += rhs.pixels;
+    percent += rhs.percent;
+    has_explicit_pixels |= rhs.has_explicit_pixels;
+    has_explicit_percent |= rhs.has_explicit_percent;
+    return *this;
+  }
+  friend PixelsAndPercent operator+(PixelsAndPercent lhs,
+                                    const PixelsAndPercent& rhs) {
+    lhs += rhs;
+    return lhs;
+  }
+  PixelsAndPercent& operator-=(const PixelsAndPercent& rhs) {
+    pixels -= rhs.pixels;
+    percent -= rhs.percent;
+    has_explicit_pixels |= rhs.has_explicit_pixels;
+    has_explicit_percent |= rhs.has_explicit_percent;
+    return *this;
+  }
+  PixelsAndPercent& operator*=(float number) {
+    pixels *= number;
+    percent *= number;
+    return *this;
+  }
+
   float pixels;
   float percent;
+  bool has_explicit_pixels;
+  bool has_explicit_percent;
 };
 
 class CalculationExpressionNode;
@@ -50,6 +89,7 @@ class Length;
 
 PLATFORM_EXPORT extern const Length& g_auto_length;
 PLATFORM_EXPORT extern const Length& g_none_length;
+PLATFORM_EXPORT extern const Length& g_fixed_zero_length;
 
 class PLATFORM_EXPORT Length {
   DISALLOW_NEW();
@@ -146,6 +186,7 @@ class PLATFORM_EXPORT Length {
     return Length(number, kFixed);
   }
   static Length Fixed() { return Length(kFixed); }
+  static const Length& FixedZero() { return g_fixed_zero_length; }
   static const Length& Auto() { return g_auto_length; }
   static Length FillAvailable() { return Length(kFillAvailable); }
   static Length MinContent() { return Length(kMinContent); }
@@ -161,7 +202,7 @@ class PLATFORM_EXPORT Length {
   static Length Percent(NUMBER_TYPE number) {
     return Length(number, kPercent);
   }
-  static Length Flex(double value) { return Length(value, kFlex); }
+  static Length Flex(float value) { return Length(value, kFlex); }
 
   // FIXME: Make this private (if possible) or at least rename it
   // (http://crbug.com/432707).

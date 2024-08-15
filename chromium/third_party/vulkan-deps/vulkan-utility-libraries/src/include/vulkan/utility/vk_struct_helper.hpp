@@ -9,6 +9,8 @@
 #pragma once
 #include <vulkan/vulkan.h>
 
+// clang-format off
+
 namespace vku {
 
 template <typename T>
@@ -276,6 +278,34 @@ template <> inline VkStructureType GetSType<VkVideoCodingControlInfoKHR>() { ret
 template <> inline VkStructureType GetSType<VkVideoDecodeCapabilitiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_DECODE_CAPABILITIES_KHR; }
 template <> inline VkStructureType GetSType<VkVideoDecodeUsageInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkVideoDecodeInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_DECODE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264CapabilitiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_CAPABILITIES_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264QualityLevelPropertiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_QUALITY_LEVEL_PROPERTIES_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionCreateInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersAddInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_ADD_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersCreateInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_CREATE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersGetInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_GET_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersFeedbackInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_FEEDBACK_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264NaluSliceInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_NALU_SLICE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264PictureInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PICTURE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264DpbSlotInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_DPB_SLOT_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264ProfileInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264RateControlInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264RateControlLayerInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_LAYER_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH264GopRemainingFrameInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_GOP_REMAINING_FRAME_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265CapabilitiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_CAPABILITIES_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionCreateInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265QualityLevelPropertiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_QUALITY_LEVEL_PROPERTIES_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersAddInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_ADD_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersCreateInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_CREATE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersGetInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_GET_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersFeedbackInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_FEEDBACK_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265NaluSliceSegmentInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_SEGMENT_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265PictureInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PICTURE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265DpbSlotInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_DPB_SLOT_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265ProfileInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265RateControlInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265RateControlLayerInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_LAYER_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkVideoEncodeH265GopRemainingFrameInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_GOP_REMAINING_FRAME_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkVideoDecodeH264ProfileInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkVideoDecodeH264CapabilitiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_CAPABILITIES_KHR; }
 template <> inline VkStructureType GetSType<VkVideoDecodeH264SessionParametersAddInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_SESSION_PARAMETERS_ADD_INFO_KHR; }
@@ -361,7 +391,6 @@ template <> inline VkStructureType GetSType<VkMemoryUnmapInfoKHR>() { return VK_
 template <> inline VkStructureType GetSType<VkPipelineLibraryCreateInfoKHR>() { return VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkPresentIdKHR>() { return VK_STRUCTURE_TYPE_PRESENT_ID_KHR; }
 template <> inline VkStructureType GetSType<VkPhysicalDevicePresentIdFeaturesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR; }
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 template <> inline VkStructureType GetSType<VkVideoEncodeInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkVideoEncodeCapabilitiesKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_CAPABILITIES_KHR; }
 template <> inline VkStructureType GetSType<VkQueryPoolVideoEncodeFeedbackCreateInfoKHR>() { return VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR; }
@@ -373,7 +402,6 @@ template <> inline VkStructureType GetSType<VkVideoEncodeQualityLevelPropertiesK
 template <> inline VkStructureType GetSType<VkVideoEncodeQualityLevelInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_QUALITY_LEVEL_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkVideoEncodeSessionParametersGetInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_PARAMETERS_GET_INFO_KHR; }
 template <> inline VkStructureType GetSType<VkVideoEncodeSessionParametersFeedbackInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_SESSION_PARAMETERS_FEEDBACK_INFO_KHR; }
-#endif  // VK_ENABLE_BETA_EXTENSIONS
 template <> inline VkStructureType GetSType<VkQueueFamilyCheckpointProperties2NV>() { return VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_2_NV; }
 template <> inline VkStructureType GetSType<VkCheckpointData2NV>() { return VK_STRUCTURE_TYPE_CHECKPOINT_DATA_2_NV; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR; }
@@ -393,6 +421,21 @@ template <> inline VkStructureType GetSType<VkPhysicalDeviceRayTracingPositionFe
 template <> inline VkStructureType GetSType<VkCooperativeMatrixPropertiesKHR>() { return VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceCooperativeMatrixFeaturesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceCooperativeMatrixPropertiesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceVideoMaintenance1FeaturesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR; }
+template <> inline VkStructureType GetSType<VkVideoInlineQueryInfoKHR>() { return VK_STRUCTURE_TYPE_VIDEO_INLINE_QUERY_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceVertexAttributeDivisorPropertiesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_KHR; }
+template <> inline VkStructureType GetSType<VkPipelineVertexInputDivisorStateCreateInfoKHR>() { return VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceVertexAttributeDivisorFeaturesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_KHR; }
+template <> inline VkStructureType GetSType<VkCalibratedTimestampInfoKHR>() { return VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceMaintenance6FeaturesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES_KHR; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceMaintenance6PropertiesKHR>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES_KHR; }
+template <> inline VkStructureType GetSType<VkBindMemoryStatusKHR>() { return VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR; }
+template <> inline VkStructureType GetSType<VkBindDescriptorSetsInfoKHR>() { return VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkPushConstantsInfoKHR>() { return VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkPushDescriptorSetInfoKHR>() { return VK_STRUCTURE_TYPE_PUSH_DESCRIPTOR_SET_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkPushDescriptorSetWithTemplateInfoKHR>() { return VK_STRUCTURE_TYPE_PUSH_DESCRIPTOR_SET_WITH_TEMPLATE_INFO_KHR; }
+template <> inline VkStructureType GetSType<VkSetDescriptorBufferOffsetsInfoEXT>() { return VK_STRUCTURE_TYPE_SET_DESCRIPTOR_BUFFER_OFFSETS_INFO_EXT; }
+template <> inline VkStructureType GetSType<VkBindDescriptorBufferEmbeddedSamplersInfoEXT>() { return VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_BUFFER_EMBEDDED_SAMPLERS_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkDebugReportCallbackCreateInfoEXT>() { return VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkPipelineRasterizationStateRasterizationOrderAMD>() { return VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD; }
 template <> inline VkStructureType GetSType<VkDebugMarkerObjectNameInfoEXT>() { return VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT; }
@@ -409,36 +452,6 @@ template <> inline VkStructureType GetSType<VkCuFunctionCreateInfoNVX>() { retur
 template <> inline VkStructureType GetSType<VkCuLaunchInfoNVX>() { return VK_STRUCTURE_TYPE_CU_LAUNCH_INFO_NVX; }
 template <> inline VkStructureType GetSType<VkImageViewHandleInfoNVX>() { return VK_STRUCTURE_TYPE_IMAGE_VIEW_HANDLE_INFO_NVX; }
 template <> inline VkStructureType GetSType<VkImageViewAddressPropertiesNVX>() { return VK_STRUCTURE_TYPE_IMAGE_VIEW_ADDRESS_PROPERTIES_NVX; }
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-template <> inline VkStructureType GetSType<VkVideoEncodeH264CapabilitiesEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_CAPABILITIES_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264QualityLevelPropertiesEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_QUALITY_LEVEL_PROPERTIES_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionCreateInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_CREATE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersAddInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_ADD_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersCreateInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_CREATE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersGetInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_GET_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264SessionParametersFeedbackInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_SESSION_PARAMETERS_FEEDBACK_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264NaluSliceInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_NALU_SLICE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264PictureInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PICTURE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264DpbSlotInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_DPB_SLOT_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264ProfileInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264RateControlInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264RateControlLayerInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_RATE_CONTROL_LAYER_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH264GopRemainingFrameInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_GOP_REMAINING_FRAME_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265CapabilitiesEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_CAPABILITIES_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionCreateInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_CREATE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265QualityLevelPropertiesEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_QUALITY_LEVEL_PROPERTIES_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersAddInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_ADD_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersCreateInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_CREATE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersGetInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_GET_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265SessionParametersFeedbackInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_SESSION_PARAMETERS_FEEDBACK_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265NaluSliceSegmentInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_NALU_SLICE_SEGMENT_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265PictureInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PICTURE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265DpbSlotInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_DPB_SLOT_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265ProfileInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265RateControlInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265RateControlLayerInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_RATE_CONTROL_LAYER_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkVideoEncodeH265GopRemainingFrameInfoEXT>() { return VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_GOP_REMAINING_FRAME_INFO_EXT; }
-#endif  // VK_ENABLE_BETA_EXTENSIONS
 template <> inline VkStructureType GetSType<VkTextureLODGatherFormatPropertiesAMD>() { return VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD; }
 #ifdef VK_USE_PLATFORM_GGP
 template <> inline VkStructureType GetSType<VkStreamDescriptorSurfaceCreateInfoGGP>() { return VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP; }
@@ -479,6 +492,7 @@ template <> inline VkStructureType GetSType<VkPipelineRasterizationConservativeS
 template <> inline VkStructureType GetSType<VkPhysicalDeviceDepthClipEnableFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT; }
 template <> inline VkStructureType GetSType<VkPipelineRasterizationDepthClipStateCreateInfoEXT>() { return VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkHdrMetadataEXT>() { return VK_STRUCTURE_TYPE_HDR_METADATA_EXT; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG; }
 #ifdef VK_USE_PLATFORM_IOS_MVK
 template <> inline VkStructureType GetSType<VkIOSSurfaceCreateInfoMVK>() { return VK_STRUCTURE_TYPE_IOS_SURFACE_CREATE_INFO_MVK; }
 #endif  // VK_USE_PLATFORM_IOS_MVK
@@ -549,12 +563,9 @@ template <> inline VkStructureType GetSType<VkImportMemoryHostPointerInfoEXT>() 
 template <> inline VkStructureType GetSType<VkMemoryHostPointerPropertiesEXT>() { return VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceExternalMemoryHostPropertiesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT; }
 template <> inline VkStructureType GetSType<VkPipelineCompilerControlCreateInfoAMD>() { return VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD; }
-template <> inline VkStructureType GetSType<VkCalibratedTimestampInfoEXT>() { return VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceShaderCorePropertiesAMD>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD; }
 template <> inline VkStructureType GetSType<VkDeviceMemoryOverallocationCreateInfoAMD>() { return VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT; }
-template <> inline VkStructureType GetSType<VkPipelineVertexInputDivisorStateCreateInfoEXT>() { return VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT; }
-template <> inline VkStructureType GetSType<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT; }
 #ifdef VK_USE_PLATFORM_GGP
 template <> inline VkStructureType GetSType<VkPresentFrameTokenGGP>() { return VK_STRUCTURE_TYPE_PRESENT_FRAME_TOKEN_GGP; }
 #endif  // VK_USE_PLATFORM_GGP
@@ -667,6 +678,11 @@ template <> inline VkStructureType GetSType<VkSurfaceCapabilitiesPresentBarrierN
 template <> inline VkStructureType GetSType<VkSwapchainPresentBarrierCreateInfoNV>() { return VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_BARRIER_CREATE_INFO_NV; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceDiagnosticsConfigFeaturesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV; }
 template <> inline VkStructureType GetSType<VkDeviceDiagnosticsConfigCreateInfoNV>() { return VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV; }
+template <> inline VkStructureType GetSType<VkCudaModuleCreateInfoNV>() { return VK_STRUCTURE_TYPE_CUDA_MODULE_CREATE_INFO_NV; }
+template <> inline VkStructureType GetSType<VkCudaFunctionCreateInfoNV>() { return VK_STRUCTURE_TYPE_CUDA_FUNCTION_CREATE_INFO_NV; }
+template <> inline VkStructureType GetSType<VkCudaLaunchInfoNV>() { return VK_STRUCTURE_TYPE_CUDA_LAUNCH_INFO_NV; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceCudaKernelLaunchFeaturesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceCudaKernelLaunchPropertiesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV; }
 template <> inline VkStructureType GetSType<VkQueryLowLatencySupportNV>() { return VK_STRUCTURE_TYPE_QUERY_LOW_LATENCY_SUPPORT_NV; }
 #ifdef VK_USE_PLATFORM_METAL_EXT
 template <> inline VkStructureType GetSType<VkExportMetalObjectCreateInfoEXT>() { return VK_STRUCTURE_TYPE_EXPORT_METAL_OBJECT_CREATE_INFO_EXT; }
@@ -794,10 +810,14 @@ template <> inline VkStructureType GetSType<VkAccelerationStructureTrianglesDisp
 #endif  // VK_ENABLE_BETA_EXTENSIONS
 template <> inline VkStructureType GetSType<VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_VRS_FEATURES_HUAWEI; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceBorderColorSwizzleFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT; }
 template <> inline VkStructureType GetSType<VkSamplerBorderColorComponentMappingCreateInfoEXT>() { return VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceShaderCorePropertiesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM; }
+template <> inline VkStructureType GetSType<VkDeviceQueueShaderCoreControlCreateInfoARM>() { return VK_STRUCTURE_TYPE_DEVICE_QUEUE_SHADER_CORE_CONTROL_CREATE_INFO_ARM; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceSchedulingControlsFeaturesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_FEATURES_ARM; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceSchedulingControlsPropertiesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_PROPERTIES_ARM; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT; }
 template <> inline VkStructureType GetSType<VkImageViewSlicedCreateInfoEXT>() { return VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE; }
@@ -805,6 +825,11 @@ template <> inline VkStructureType GetSType<VkDescriptorSetBindingReferenceVALVE
 template <> inline VkStructureType GetSType<VkDescriptorSetLayoutHostMappingInfoVALVE>() { return VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_HOST_MAPPING_INFO_VALVE; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceDepthClampZeroOneFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceRenderPassStripedFeaturesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM; }
+template <> inline VkStructureType GetSType<VkPhysicalDeviceRenderPassStripedPropertiesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM; }
+template <> inline VkStructureType GetSType<VkRenderPassStripeInfoARM>() { return VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_INFO_ARM; }
+template <> inline VkStructureType GetSType<VkRenderPassStripeBeginInfoARM>() { return VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_BEGIN_INFO_ARM; }
+template <> inline VkStructureType GetSType<VkRenderPassStripeSubmitInfoARM>() { return VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM; }
 template <> inline VkStructureType GetSType<VkSubpassFragmentDensityMapOffsetEndInfoQCOM>() { return VK_STRUCTURE_TYPE_SUBPASS_FRAGMENT_DENSITY_MAP_OFFSET_END_INFO_QCOM; }
@@ -861,6 +886,7 @@ template <> inline VkStructureType GetSType<VkPhysicalDeviceRayTracingInvocation
 template <> inline VkStructureType GetSType<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV; }
+template <> inline VkStructureType GetSType<VkLayerSettingsCreateInfoEXT>() { return VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM; }
 template <> inline VkStructureType GetSType<VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT; }
@@ -876,6 +902,7 @@ template <> inline VkStructureType GetSType<VkOutOfBandQueueTypeInfoNV>() { retu
 template <> inline VkStructureType GetSType<VkLatencySurfaceCapabilitiesNV>() { return VK_STRUCTURE_TYPE_LATENCY_SURFACE_CAPABILITIES_NV; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM; }
 template <> inline VkStructureType GetSType<VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM>() { return VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_RENDER_AREAS_RENDER_PASS_BEGIN_INFO_QCOM; }
+template <> inline VkStructureType GetSType<VkPhysicalDevicePerStageDescriptorSetFeaturesNV>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceImageProcessing2FeaturesQCOM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM; }
 template <> inline VkStructureType GetSType<VkPhysicalDeviceImageProcessing2PropertiesQCOM>() { return VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM; }
 template <> inline VkStructureType GetSType<VkSamplerBlockMatchWindowCreateInfoQCOM>() { return VK_STRUCTURE_TYPE_SAMPLER_BLOCK_MATCH_WINDOW_CREATE_INFO_QCOM; }
@@ -1035,6 +1062,8 @@ template<> inline VkObjectType GetObjectType<VkValidationCacheEXT>() { return VK
 template<> inline VkObjectType GetObjectType<VkAccelerationStructureNV>() { return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV; }
 template<> inline VkObjectType GetObjectType<VkPerformanceConfigurationINTEL>() { return VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL; }
 template<> inline VkObjectType GetObjectType<VkIndirectCommandsLayoutNV>() { return VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV; }
+template<> inline VkObjectType GetObjectType<VkCudaModuleNV>() { return VK_OBJECT_TYPE_CUDA_MODULE_NV; }
+template<> inline VkObjectType GetObjectType<VkCudaFunctionNV>() { return VK_OBJECT_TYPE_CUDA_FUNCTION_NV; }
 template<> inline VkObjectType GetObjectType<VkAccelerationStructureKHR>() { return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR; }
 #ifdef VK_USE_PLATFORM_FUCHSIA
 template<> inline VkObjectType GetObjectType<VkBufferCollectionFUCHSIA>() { return VK_OBJECT_TYPE_BUFFER_COLLECTION_FUCHSIA; }
@@ -1046,4 +1075,4 @@ template<> inline VkObjectType GetObjectType<VkShaderEXT>() { return VK_OBJECT_T
 #endif // VK_USE_64_BIT_PTR_DEFINES == 1
 } // namespace vku
 
-// NOLINTEND
+// NOLINTEND// clang-format on

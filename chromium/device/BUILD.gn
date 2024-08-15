@@ -174,6 +174,7 @@ test("device_unittests") {
       "fido/credential_management_handler_unittest.cc",
       "fido/ctap_request_unittest.cc",
       "fido/ctap_response_unittest.cc",
+      "fido/enclave/enclave_protocol_utils_unittest.cc",
       "fido/fake_fido_discovery_unittest.cc",
       "fido/fido_device_authenticator_unittest.cc",
       "fido/fido_device_discovery_unittest.cc",
@@ -198,6 +199,7 @@ test("device_unittests") {
     ]
 
     deps += [
+      "//components/sync/protocol:protocol",
       "//device/fido:mocks",
       "//services/data_decoder/public/cpp:test_support",
     ]
@@ -523,35 +525,5 @@ if (is_android) {
 
   java_cpp_enum("bluetooth_test_javagen") {
     sources = [ "bluetooth/test/bluetooth_test.h" ]
-  }
-}
-
-if (is_win || is_linux || is_mac) {
-  test("passkey_enclave") {
-    testonly = true
-    sources = [ "fido/enclave/test/passkey_enclave.cc" ]
-
-    deps = [
-      "//base",
-      "//build/win:default_exe_manifest",
-      "//device/fido:enclave_service",
-      "//device/fido:fido",
-    ]
-  }
-
-  test("passkey_enclave_client") {
-    testonly = true
-    sources = [ "fido/enclave/test/passkey_enclave_client.cc" ]
-
-    deps = [
-      "//base",
-      "//build/win:default_exe_manifest",
-      "//components/sync/protocol:protocol",
-      "//device/fido",
-      "//mojo/public/cpp/bindings",
-      "//services/cert_verifier:lib",
-      "//services/network:network_service",
-      "//services/network/public/cpp",
-    ]
   }
 }

@@ -88,8 +88,8 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
   void DeviceSettingsUpdated() override;
 
   // EventDrivenTelemetryCollectorPool:
-  std::vector<CollectorBase*> GetTelemetryCollectors(
-      MetricEventType event_type) override;
+  std::vector<raw_ptr<CollectorBase, VectorExperimental>>
+  GetTelemetryCollectors(MetricEventType event_type) override;
 
  private:
   MetricReportingManager(
@@ -283,10 +283,13 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
   // Initializes a periodic collector that collects device activity state.
   void InitDeviceActivityCollector();
 
+  // Initializes a periodic collector that sends out heartbeat signals.
+  void InitKioskHeartbeatTelemetryCollector();
+
   base::TimeDelta GetUploadDelay() const;
 
-  std::vector<CollectorBase*> GetTelemetryCollectorsFromSetting(
-      std::string_view setting_name);
+  std::vector<raw_ptr<CollectorBase, VectorExperimental>>
+  GetTelemetryCollectorsFromSetting(std::string_view setting_name);
 
   CrosReportingSettings reporting_settings_;
   std::unique_ptr<UserReportingSettings> user_reporting_settings_;
@@ -306,10 +309,13 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
   std::unique_ptr<MetricReportQueue> telemetry_report_queue_;
   std::unique_ptr<MetricReportQueue> user_telemetry_report_queue_;
   std::unique_ptr<MetricReportQueue> event_report_queue_;
+  std::unique_ptr<MetricReportQueue> crash_event_report_queue_;
   std::unique_ptr<MetricReportQueue> user_event_report_queue_;
   std::unique_ptr<MetricReportQueue> app_event_report_queue_;
+  std::unique_ptr<MetricReportQueue> website_event_report_queue_;
   std::unique_ptr<MetricReportQueue>
       user_peripheral_events_and_telemetry_report_queue_;
+  std::unique_ptr<MetricReportQueue> kiosk_heartbeat_telemetry_report_queue_;
 
   base::ScopedObservation<policy::ManagedSessionService,
                           policy::ManagedSessionService::Observer>

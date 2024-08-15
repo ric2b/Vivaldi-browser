@@ -30,10 +30,10 @@
 
 #include <cstdint>
 #include <map>
-#include <set>
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "dawn/common/NonCopyable.h"
 #include "dawn/common/Ref.h"
 #include "dawn/native/Buffer.h"
@@ -57,6 +57,7 @@ class IndirectDrawMetadata : public NonCopyable {
   public:
     struct IndirectDraw {
         uint64_t inputBufferOffset;
+        uint64_t numIndexBufferElements;
         // This is a pointer to the command that should be populated with the validated
         // indirect scratch buffer. It is only valid up until the encoded command buffer
         // is submitted.
@@ -111,7 +112,6 @@ class IndirectDrawMetadata : public NonCopyable {
     };
     struct IndexedIndirectConfig {
         BufferBase* inputIndirectBuffer;
-        uint64_t numIndexBufferElements;
         bool duplicateBaseVertexInstance;
         DrawType drawType;
 
@@ -145,7 +145,7 @@ class IndirectDrawMetadata : public NonCopyable {
 
   private:
     IndexedIndirectBufferValidationInfoMap mIndexedIndirectBufferValidationInfo;
-    std::set<RenderBundleBase*> mAddedBundles;
+    absl::flat_hash_set<RenderBundleBase*> mAddedBundles;
 
     uint64_t mMaxBatchOffsetRange;
     uint32_t mMaxDrawCallsPerBatch;

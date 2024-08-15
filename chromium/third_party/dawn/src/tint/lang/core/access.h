@@ -39,6 +39,7 @@
 
 #include <cstdint>
 
+#include "src/tint/utils/reflection/reflection.h"
 #include "src/tint/utils/traits/traits.h"
 
 namespace tint::core {
@@ -68,12 +69,19 @@ auto& operator<<(STREAM& out, Access value) {
 /// @returns the parsed enum, or Access::kUndefined if the string could not be parsed.
 Access ParseAccess(std::string_view str);
 
-constexpr const char* kAccessStrings[] = {
+constexpr std::string_view kAccessStrings[] = {
     "read",
     "read_write",
     "write",
 };
 
 }  // namespace tint::core
+
+namespace tint {
+
+/// Access reflection information
+TINT_REFLECT_ENUM_RANGE(core::Access, kUndefined, kWrite);
+
+}  // namespace tint
 
 #endif  // SRC_TINT_LANG_CORE_ACCESS_H_

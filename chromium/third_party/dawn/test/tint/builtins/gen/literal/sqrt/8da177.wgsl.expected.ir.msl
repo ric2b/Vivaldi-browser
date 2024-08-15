@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void sqrt_8da177() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  sqrt_8da177();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  sqrt_8da177();
+}
+kernel void compute_main() {
+  sqrt_8da177();
+}

@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_RUBY_TEXT_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 
 namespace blink {
 
@@ -21,7 +21,10 @@ class CORE_EXPORT LayoutRubyText final : public LayoutNGBlockFlow {
     NOT_DESTROYED();
     return "LayoutRubyText";
   }
-  bool IsOfType(LayoutObjectType type) const override;
+  bool IsRubyText() const final {
+    NOT_DESTROYED();
+    return true;
+  }
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
   void StyleDidChange(StyleDifference diff,
                       const ComputedStyle* old_style) override;

@@ -4,11 +4,11 @@
 :: found in the LICENSE file.
 setlocal
 
-:: Ensure that "depot_tools" is somewhere in PATH so this tool can be used
-:: standalone, but allow other PATH manipulations to take priority.
-set PATH=%PATH%;%~dp0
+echo Error: 'autosiso' is deprecated and will be removed soon.
+echo.
+echo You can just run 'autoninja' instead, which will delegate either to Ninja
+echo or to Siso based on the value of the 'use_siso' GN arg.
 
-:: Defer control.
-:: Add double quotes to the arguments to preserve the special '^' character.
-:: See autosiso.py for more information.
-python3 "%~dp0\autosiso.py" "%*"
+:: Return an error code of 1 so that if a developer types:
+:: "autosiso chrome && chrome" then the second part won't accidentally be run.
+cmd /c exit 1

@@ -7,12 +7,13 @@
 namespace bssl {
 
 OCSPVerifyResult::OCSPVerifyResult() = default;
-OCSPVerifyResult::OCSPVerifyResult(const OCSPVerifyResult&) = default;
+OCSPVerifyResult::OCSPVerifyResult(const OCSPVerifyResult &) = default;
 OCSPVerifyResult::~OCSPVerifyResult() = default;
 
-bool OCSPVerifyResult::operator==(const OCSPVerifyResult& other) const {
-  if (response_status != other.response_status)
+bool OCSPVerifyResult::operator==(const OCSPVerifyResult &other) const {
+  if (response_status != other.response_status) {
     return false;
+  }
 
   if (response_status == PROVIDED) {
     // |revocation_status| is only defined when |response_status| is PROVIDED.
@@ -21,4 +22,4 @@ bool OCSPVerifyResult::operator==(const OCSPVerifyResult& other) const {
   return true;
 }
 
-}  // namespace net
+}  // namespace bssl

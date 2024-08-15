@@ -78,18 +78,13 @@
 - (void)removeFakeOmniboxTarget;
 
 // Vivaldi
+@property(nonatomic, assign) ATBSettingType atbSettingForActiveWebState;
 /// Redraws the primary toolbar buttons based on device
 /// orientation.
 - (void)redrawToolbarButtons;
 /// Used to hide and show the toolbar buttons based on orientation and omnibox
 /// state.
 - (void)handleToolbarButtonVisibility:(BOOL)show;
-/// Update the vivaldi more actions based on web context. This is only available
-/// for iPhone landscape mode.
-- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled
-                                 atbSettingType:(ATBSettingType)type;
-/// Update tracker blocker shield icon based on settings.
-- (void)updateVivaldiShieldState:(ATBSettingType)setting;
 // End Vivaldi
 
 @end

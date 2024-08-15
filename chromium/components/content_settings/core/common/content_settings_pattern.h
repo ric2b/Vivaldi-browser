@@ -11,7 +11,7 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 
 class GURL;
@@ -203,6 +203,13 @@ class ContentSettingsPattern {
   // Convert pattern to host only pattern.
   static ContentSettingsPattern ToHostOnlyPattern(
       const ContentSettingsPattern& pattern);
+
+  // Expose an comparator to sort domains by precedence. Highest precedence
+  // first.
+  struct CompareDomains {
+    bool operator()(const std::string_view& domain_a,
+                    const std::string_view& domain_b) const;
+  };
 
   // Constructs an empty pattern. Empty patterns are invalid patterns. Invalid
   // patterns match nothing.

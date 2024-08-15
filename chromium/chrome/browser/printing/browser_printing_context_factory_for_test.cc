@@ -44,6 +44,13 @@ BrowserPrintingContextFactoryForTest::CreatePrintingContext(
   auto context =
       MakeDefaultTestPrintingContext(delegate, process_behavior, printer_name_);
 
+  if (new_document_job_id_.has_value()) {
+    context->SetNewDocumentJobId(new_document_job_id_.value());
+  }
+
+  if (failed_error_for_update_printer_settings_) {
+    context->SetUpdatePrinterSettingsFails();
+  }
   if (cancels_in_new_document_) {
     context->SetNewDocumentCancels();
   }
@@ -89,6 +96,11 @@ void BrowserPrintingContextFactoryForTest::SetPrinterNameForSubsequentContexts(
   printer_name_ = printer_name;
 }
 
+void BrowserPrintingContextFactoryForTest::
+    SetFailedErrorOnUpdatePrinterSettings() {
+  failed_error_for_update_printer_settings_ = true;
+}
+
 void BrowserPrintingContextFactoryForTest::SetCancelErrorOnNewDocument(
     bool cause_errors) {
   cancels_in_new_document_ = cause_errors;
@@ -97,6 +109,10 @@ void BrowserPrintingContextFactoryForTest::SetCancelErrorOnNewDocument(
 void BrowserPrintingContextFactoryForTest::SetFailedErrorOnNewDocument(
     bool cause_errors) {
   failed_error_for_new_document_ = cause_errors;
+}
+
+void BrowserPrintingContextFactoryForTest::SetJobIdOnNewDocument(int job_id) {
+  new_document_job_id_ = job_id;
 }
 
 void BrowserPrintingContextFactoryForTest::SetAccessDeniedErrorOnNewDocument(

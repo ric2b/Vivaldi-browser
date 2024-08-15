@@ -77,6 +77,8 @@ tint_add_target(tint_lang_wgsl_ast lib
   lang/wgsl/ast/case_statement.h
   lang/wgsl/ast/clone_context.cc
   lang/wgsl/ast/clone_context.h
+  lang/wgsl/ast/color_attribute.cc
+  lang/wgsl/ast/color_attribute.h
   lang/wgsl/ast/compound_assignment_statement.cc
   lang/wgsl/ast/compound_assignment_statement.h
   lang/wgsl/ast/const.cc
@@ -158,6 +160,8 @@ tint_add_target(tint_lang_wgsl_ast lib
   lang/wgsl/ast/phony_expression.h
   lang/wgsl/ast/pipeline_stage.cc
   lang/wgsl/ast/pipeline_stage.h
+  lang/wgsl/ast/requires.cc
+  lang/wgsl/ast/requires.h
   lang/wgsl/ast/return_statement.cc
   lang/wgsl/ast/return_statement.h
   lang/wgsl/ast/stage_attribute.cc
@@ -205,6 +209,7 @@ tint_target_add_dependencies(tint_lang_wgsl_ast lib
   tint_lang_core_constant
   tint_lang_core_type
   tint_lang_wgsl
+  tint_lang_wgsl_features
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice
@@ -242,6 +247,7 @@ tint_add_target(tint_lang_wgsl_ast_test test
   lang/wgsl/ast/case_selector_test.cc
   lang/wgsl/ast/case_statement_test.cc
   lang/wgsl/ast/clone_context_test.cc
+  lang/wgsl/ast/color_attribute_test.cc
   lang/wgsl/ast/compound_assignment_statement_test.cc
   lang/wgsl/ast/const_assert_test.cc
   lang/wgsl/ast/continue_statement_test.cc
@@ -271,6 +277,7 @@ tint_add_target(tint_lang_wgsl_ast_test test
   lang/wgsl/ast/member_accessor_expression_test.cc
   lang/wgsl/ast/module_test.cc
   lang/wgsl/ast/phony_expression_test.cc
+  lang/wgsl/ast/requires_test.cc
   lang/wgsl/ast/return_statement_test.cc
   lang/wgsl/ast/stage_attribute_test.cc
   lang/wgsl/ast/stride_attribute_test.cc
@@ -298,9 +305,12 @@ tint_target_add_dependencies(tint_lang_wgsl_ast_test test
   tint_lang_wgsl
   tint_lang_wgsl_ast
   tint_lang_wgsl_ast_transform
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver
   tint_lang_wgsl_sem
+  tint_lang_wgsl_writer_ir_to_program
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice

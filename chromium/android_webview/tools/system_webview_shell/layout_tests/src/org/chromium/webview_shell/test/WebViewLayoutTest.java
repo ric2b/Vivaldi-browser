@@ -347,12 +347,12 @@ public class WebViewLayoutTest {
                     errorMessage.append(
                             String.format(
                                     "\n"
-                                        + "At least one of the properties of the Blink interface"
-                                        + " \"%s\" is not exposed in WebView.\n"
-                                        + "Add them to the list of properties not exposed for the"
-                                        + " \"%s\" interface in\n"
-                                        + "%s\n"
-                                        + "to resolve this error\n",
+                                            + "At least one of the properties of the Blink interface"
+                                            + " \"%s\" is not exposed in WebView.\n"
+                                            + "Add them to the list of properties not exposed for the"
+                                            + " \"%s\" interface in\n"
+                                            + "%s\n"
+                                            + "to resolve this error\n",
                                     blinkInterface,
                                     blinkInterface,
                                     NOT_WEBVIEW_EXPOSED_CHROMIUM_PATH));
@@ -402,7 +402,6 @@ public class WebViewLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add("use-fake-device-for-media-stream")
-    @DisabledTest(message = "crbug.com/1477889")
     public void testMediaStreamApiDenyPermission() throws Exception {
         runWebViewLayoutTest(
                 "blink-apis/webrtc/mediastream-permission-denied-callbacks.html",
@@ -412,7 +411,6 @@ public class WebViewLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add("use-fake-device-for-media-stream")
-    @DisabledTest(message = "crbug.com/1477889")
     public void testMediaStreamApi() throws Exception {
         mTestActivity.setGrantPermission(true);
         runWebViewLayoutTest(

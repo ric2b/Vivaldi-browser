@@ -53,7 +53,7 @@ static void test_trivial_reductions() {
   }
 }
 
-template <typename Scalar,int DataLayout>
+template <typename Scalar, int DataLayout>
 static void test_simple_reductions() {
   Tensor<Scalar, 4, DataLayout> tensor(2, 3, 5, 7);
   tensor.setRandom();
@@ -227,20 +227,19 @@ static void test_simple_reductions() {
     Tensor<int, 1> ints(10);
     std::iota(ints.data(), ints.data() + ints.dimension(0), 0);
 
-    TensorFixedSize<bool, Sizes<> > all_;
+    TensorFixedSize<bool, Sizes<>> all_;
     all_ = ints.all();
     VERIFY(!all_());
     all_ = (ints >= ints.constant(0)).all();
     VERIFY(all_());
 
-    TensorFixedSize<bool, Sizes<> > any;
+    TensorFixedSize<bool, Sizes<>> any;
     any = (ints > ints.constant(10)).any();
     VERIFY(!any());
     any = (ints < ints.constant(1)).any();
     VERIFY(any());
   }
 }
-
 
 template <int DataLayout>
 static void test_reductions_in_expr() {
@@ -266,7 +265,6 @@ static void test_reductions_in_expr() {
     }
   }
 }
-
 
 template <int DataLayout>
 static void test_full_reductions() {
@@ -333,11 +331,9 @@ static void test_user_defined_reductions() {
 template <int DataLayout>
 static void test_tensor_maps() {
   int inputs[2 * 3 * 5 * 7];
-  TensorMap<Tensor<int, 4, DataLayout> > tensor_map(inputs, 2, 3, 5, 7);
-  TensorMap<Tensor<const int, 4, DataLayout> > tensor_map_const(inputs, 2, 3, 5,
-                                                                7);
-  const TensorMap<Tensor<const int, 4, DataLayout> > tensor_map_const_const(
-      inputs, 2, 3, 5, 7);
+  TensorMap<Tensor<int, 4, DataLayout>> tensor_map(inputs, 2, 3, 5, 7);
+  TensorMap<Tensor<const int, 4, DataLayout>> tensor_map_const(inputs, 2, 3, 5, 7);
+  const TensorMap<Tensor<const int, 4, DataLayout>> tensor_map_const_const(inputs, 2, 3, 5, 7);
 
   tensor_map.setRandom();
   array<ptrdiff_t, 2> reduction_axis;
@@ -346,8 +342,7 @@ static void test_tensor_maps() {
 
   Tensor<int, 2, DataLayout> result = tensor_map.sum(reduction_axis);
   Tensor<int, 2, DataLayout> result2 = tensor_map_const.sum(reduction_axis);
-  Tensor<int, 2, DataLayout> result3 =
-      tensor_map_const_const.sum(reduction_axis);
+  Tensor<int, 2, DataLayout> result3 = tensor_map_const_const.sum(reduction_axis);
 
   for (int i = 0; i < 2; ++i) {
     for (int j = 0; j < 5; ++j) {
@@ -370,7 +365,7 @@ static void test_static_dims() {
   Tensor<float, 2, DataLayout> out(72, 97);
   in.setRandom();
 
-  Eigen::IndexList<Eigen::type2index<1>, Eigen::type2index<3> > reduction_axis;
+  Eigen::IndexList<Eigen::type2index<1>, Eigen::type2index<3>> reduction_axis;
 
   out = in.maximum(reduction_axis);
 
@@ -393,9 +388,9 @@ static void test_innermost_last_dims() {
   Tensor<float, 2, DataLayout> out(97, 113);
   in.setRandom();
 
-// Reduce on the innermost dimensions.
+  // Reduce on the innermost dimensions.
   // This triggers the use of packets for ColMajor.
-  Eigen::IndexList<Eigen::type2index<0>, Eigen::type2index<1> > reduction_axis;
+  Eigen::IndexList<Eigen::type2index<0>, Eigen::type2index<1>> reduction_axis;
 
   out = in.maximum(reduction_axis);
 
@@ -418,7 +413,7 @@ static void test_innermost_first_dims() {
   Tensor<float, 2, DataLayout> out(72, 53);
   in.setRandom();
 
-// Reduce on the innermost dimensions.
+  // Reduce on the innermost dimensions.
   // This triggers the use of packets for RowMajor.
   Eigen::IndexList<Eigen::type2index<2>, Eigen::type2index<3>> reduction_axis;
 
@@ -443,7 +438,7 @@ static void test_reduce_middle_dims() {
   Tensor<float, 2, DataLayout> out(72, 53);
   in.setRandom();
 
-// Reduce on the innermost dimensions.
+  // Reduce on the innermost dimensions.
   // This triggers the use of packets for RowMajor.
   Eigen::IndexList<Eigen::type2index<1>, Eigen::type2index<2>> reduction_axis;
 
@@ -466,7 +461,8 @@ template <typename ScalarType, int num_elements, int max_mean>
 void test_sum_accuracy() {
   Tensor<double, 1> double_tensor(num_elements);
   Tensor<ScalarType, 1> tensor(num_elements);
-  for (double prescribed_mean = 0; prescribed_mean <= max_mean; prescribed_mean = numext::maxi(1.0, prescribed_mean*3.99)) {
+  for (double prescribed_mean = 0; prescribed_mean <= max_mean;
+       prescribed_mean = numext::maxi(1.0, prescribed_mean * 3.99)) {
     // FIXME: NormalRandomGenerator doesn't work in bfloat and half.
     double_tensor.setRandom<Eigen::internal::NormalRandomGenerator<double>>();
     double_tensor += double_tensor.constant(prescribed_mean);
@@ -485,7 +481,8 @@ void test_sum_accuracy() {
     // Test against probabilistic forward error bound. In reality, the error is much smaller
     // when we use tree summation.
     double err = Eigen::numext::abs(static_cast<double>(sum()) - expected_sum);
-    double tol = numext::sqrt(static_cast<double>(num_elements)) * static_cast<double>(NumTraits<ScalarType>::epsilon()) * abs_sum;
+    double tol = numext::sqrt(static_cast<double>(num_elements)) *
+                 static_cast<double>(NumTraits<ScalarType>::epsilon()) * abs_sum;
     VERIFY_LE(err, tol);
   }
 }
@@ -493,10 +490,10 @@ void test_sum_accuracy() {
 EIGEN_DECLARE_TEST(cxx11_tensor_reduction) {
   CALL_SUBTEST(test_trivial_reductions<ColMajor>());
   CALL_SUBTEST(test_trivial_reductions<RowMajor>());
-  CALL_SUBTEST(( test_simple_reductions<float,ColMajor>() ));
-  CALL_SUBTEST(( test_simple_reductions<float,RowMajor>() ));
-  CALL_SUBTEST(( test_simple_reductions<Eigen::half,ColMajor>() ));
-  CALL_SUBTEST(( test_simple_reductions<Eigen::bfloat16,ColMajor>() ));
+  CALL_SUBTEST((test_simple_reductions<float, ColMajor>()));
+  CALL_SUBTEST((test_simple_reductions<float, RowMajor>()));
+  CALL_SUBTEST((test_simple_reductions<Eigen::half, ColMajor>()));
+  CALL_SUBTEST((test_simple_reductions<Eigen::bfloat16, ColMajor>()));
   CALL_SUBTEST(test_reductions_in_expr<ColMajor>());
   CALL_SUBTEST(test_reductions_in_expr<RowMajor>());
   CALL_SUBTEST(test_full_reductions<ColMajor>());
@@ -513,11 +510,11 @@ EIGEN_DECLARE_TEST(cxx11_tensor_reduction) {
   CALL_SUBTEST(test_innermost_first_dims<RowMajor>());
   CALL_SUBTEST(test_reduce_middle_dims<ColMajor>());
   CALL_SUBTEST(test_reduce_middle_dims<RowMajor>());
-  CALL_SUBTEST((test_sum_accuracy<float,10*1024*1024,8*1024>()));
-  CALL_SUBTEST((test_sum_accuracy<Eigen::bfloat16,10*1024*1024,8*1024>()));
+  CALL_SUBTEST((test_sum_accuracy<float, 10 * 1024 * 1024, 8 * 1024>()));
+  CALL_SUBTEST((test_sum_accuracy<Eigen::bfloat16, 10 * 1024 * 1024, 8 * 1024>()));
   // The range of half is limited to 65519 when using round-to-even,
   // so we are severely limited in the size and mean of the tensors
   // we can reduce without overflow.
-  CALL_SUBTEST((test_sum_accuracy<Eigen::half,4*1024,16>()));
-  CALL_SUBTEST((test_sum_accuracy<Eigen::half,10*1024*1024,0>()));
+  CALL_SUBTEST((test_sum_accuracy<Eigen::half, 4 * 1024, 16>()));
+  CALL_SUBTEST((test_sum_accuracy<Eigen::half, 10 * 1024 * 1024, 0>()));
 }

@@ -133,6 +133,17 @@ bool SearchCompanionSidePanelCoordinator::Show(
   return true;
 }
 
+void SearchCompanionSidePanelCoordinator::ShowLens(
+    const content::OpenURLParams& url_params) {
+  // First, we need to modify our view to make sure we are showing Lens.
+  auto* companion_tab_helper = companion::CompanionTabHelper::FromWebContents(
+      browser_->tab_strip_model()->GetActiveWebContents());
+  companion_tab_helper->OpenContextualLensView(url_params);
+  SidePanelUI::GetSidePanelUIForBrowser(&GetBrowser())
+      ->Show(SidePanelEntry::Id::kSearchCompanion,
+             SidePanelOpenTrigger::kLensContextMenu);
+}
+
 BrowserView* SearchCompanionSidePanelCoordinator::GetBrowserView() const {
   return BrowserView::GetBrowserViewForBrowser(&GetBrowser());
 }
@@ -157,7 +168,7 @@ void SearchCompanionSidePanelCoordinator::SetAccessibleNameForToolbarButton(
 }
 
 void SearchCompanionSidePanelCoordinator::NotifyCompanionOfSidePanelOpenTrigger(
-    absl::optional<SidePanelOpenTrigger> side_panel_open_trigger) {
+    std::optional<SidePanelOpenTrigger> side_panel_open_trigger) {
   auto* companion_tab_helper = companion::CompanionTabHelper::FromWebContents(
       browser_->tab_strip_model()->GetActiveWebContents());
   companion_tab_helper->SetMostRecentSidePanelOpenTrigger(
@@ -235,7 +246,7 @@ void SearchCompanionSidePanelCoordinator::
         CompanionSidePanelAvailabilityChanged::kUnavailableToAvailable);
     is_currently_observing_tab_changes_ = true;
 
-    if (base::FeatureList::IsEnabled(features::kSidePanelPinning)) {
+    if (features::IsSidePanelPinningEnabled()) {
       GetActionItem()->SetVisible(true);
     } else {
       container->AddPinnedEntryButtonFor(SidePanelEntry::Id::kSearchCompanion,
@@ -253,7 +264,7 @@ void SearchCompanionSidePanelCoordinator::
         CompanionSidePanelAvailabilityChanged::kAvailableToUnavailable);
     is_currently_observing_tab_changes_ = false;
 
-    if (base::FeatureList::IsEnabled(features::kSidePanelPinning)) {
+    if (features::IsSidePanelPinningEnabled()) {
       GetActionItem()->SetVisible(false);
     } else {
       container->RemovePinnedEntryButtonFor(
@@ -291,7 +302,7 @@ actions::ActionItem* SearchCompanionSidePanelCoordinator::GetActionItem() {
 void SearchCompanionSidePanelCoordinator::MaybeUpdateCompanionEnabledState() {
   bool enabled = companion::IsCompanionAvailableForCurrentActiveTab(browser_);
 
-  if (base::FeatureList::IsEnabled(features::kSidePanelPinning)) {
+  if (features::IsSidePanelPinningEnabled()) {
     actions::ActionItem* action_item = GetActionItem();
     action_item->SetEnabled(enabled);
     action_item->SetImage(ui::ImageModel::FromVectorIcon(

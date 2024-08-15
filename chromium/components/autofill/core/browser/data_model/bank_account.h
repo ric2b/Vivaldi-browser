@@ -16,13 +16,15 @@ class GURL;
 
 namespace autofill {
 
+class BankAccount;
+
 // Details for a user's bank account. This data is synced from Google payments.
 class BankAccount : public PaymentInstrument {
  public:
   // The type of bank account owned by the user. This is used for display
   // purposes only.
   enum class AccountType {
-    kAccountTypeUnspecified = 0,
+    kUnknown = 0,
     kChecking = 1,
     kSavings = 2,
     kCurrent = 3,
@@ -30,50 +32,42 @@ class BankAccount : public PaymentInstrument {
     kTransactingAccount = 5
   };
 
-  using BankName = base::StrongAlias<class BankNameTag, std::u16string_view>;
-  using AccountNumberSuffix =
-      base::StrongAlias<class AccountNumberSuffixTag, std::u16string_view>;
-
   BankAccount(const BankAccount& other);
+  BankAccount& operator=(const BankAccount& other);
   BankAccount(int64_t instrument_id,
-              Nickname nickname,
+              std::u16string_view nickname,
               const GURL& display_icon_url,
-              BankName bank_name,
-              AccountNumberSuffix account_number_suffix,
+              std::u16string_view bank_name,
+              std::u16string_view account_number_suffix,
               AccountType account_type);
   ~BankAccount() override;
 
+  friend bool operator==(const BankAccount&, const BankAccount&);
+
   // PaymentInstrument
   PaymentInstrument::InstrumentType GetInstrumentType() const override;
-  bool AddToDatabase(AutofillTable* database) override;
-  bool UpdateInDatabase(AutofillTable* database) override;
-  bool DeleteFromDatabase(AutofillTable* database) override;
+  bool AddToDatabase(PaymentsAutofillTable* database) const override;
+  bool UpdateInDatabase(PaymentsAutofillTable* database) const override;
+  bool DeleteFromDatabase(PaymentsAutofillTable* database) const override;
 
-  BankName bank_name() const { return bank_name_; }
-  void set_bank_name(BankName bank_name) { bank_name_ = bank_name; }
+  const std::u16string& bank_name() const { return bank_name_; }
 
-  AccountNumberSuffix account_number_suffix() const {
+  const std::u16string& account_number_suffix() const {
     return account_number_suffix_;
-  }
-  void set_account_number_suffix(AccountNumberSuffix account_number_suffix) {
-    account_number_suffix_ = account_number_suffix;
   }
 
   AccountType account_type() const { return account_type_; }
-  void set_account_type(AccountType account_type) {
-    account_type_ = account_type;
-  }
 
  private:
   // The name of the bank to which the account belongs to. This is not
   // localized.
-  BankName bank_name_;
+  std::u16string bank_name_;
 
   // The account number suffix used to identify the bank account.
-  AccountNumberSuffix account_number_suffix_;
+  std::u16string account_number_suffix_;
 
   // The type of bank account.
-  AccountType account_type_ = AccountType::kAccountTypeUnspecified;
+  AccountType account_type_ = AccountType::kUnknown;
 };
 
 }  // namespace autofill

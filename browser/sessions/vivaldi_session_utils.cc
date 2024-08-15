@@ -271,6 +271,8 @@ base::FilePath MakePath(BrowserContext* browser_context, std::string seed,
 
 int CopySessionFile(BrowserContext* browser_context,
                     sessions::WriteSessionOptions& opts) {
+  // PathExists() triggers IO restriction.
+  base::VivaldiScopedAllowBlocking allow_blocking;
 
   Index_Model* model = IndexServiceFactory::GetForBrowserContext(
       browser_context);
@@ -673,7 +675,7 @@ std::vector<std::string> CollectThumbnailUrls(
   std::vector<std::string> res;
   Profile* profile = Profile::FromBrowserContext(browser_context);
   ::vivaldi::VivaldiSessionService service(profile);
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (service.ShouldTrackWindow(browser) &&
         browser->tab_strip_model()->count() && browser->window() &&
         // An empty list means all tabs.
@@ -695,7 +697,7 @@ std::vector<std::string> CollectAllThumbnailUrls(
   std::vector<std::string> res;
   Profile* profile = Profile::FromBrowserContext(browser_context);
   ::vivaldi::VivaldiSessionService service(profile);
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->window()) {
       auto thumbnails =
           service.CollectThumbnailUrls(browser, std::vector<int>());
@@ -723,7 +725,7 @@ int WriteSessionFile(content::BrowserContext* browser_context,
   }
 
   ::vivaldi::VivaldiSessionService service(profile);
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     // 1 The tracking test will prevent saving content in private (or guest)
     //   windows from regular (but private can save regular).
     // 2 Make sure the browser has tabs and a window. Browser's destructor
@@ -898,7 +900,24 @@ int AutoSaveFromBackup(BrowserContext* browser_context) {
   return HandleAutoSave(browser_context, ctl, &create_time);
 }
 
-void AutoSave(BrowserContext* browser_context) {
+void AutoSave(BrowserContext* browser_context, bool from_ui) {
+  // Guard. We attempt to save the session when profile manager shuts down
+  // ('from_ui' is false) or from UI when we have accepcted a confirmation
+  // dialog or when we exit from a menu without the dialog. The UI code dialog
+  // gets executed after the profile manager hook (the profile mananger is
+  // reborn if we cancel exit from the dialog). In order not to save too early
+  // (we can cancel exit from the dialog) we test here if ok to proceed.
+  if (!from_ui) {
+#if !BUILDFLAG(IS_MAC)
+    Profile* profile = Profile::FromBrowserContext(browser_context);
+    if (profile->GetPrefs()->GetBoolean(
+        vivaldiprefs::kSystemShowExitConfirmationDialog)) {
+      // Ignore: Not from UI and we will save when dialog is accecpted.
+      return;
+    }
+#endif
+  }
+
   // Guard. This function shall save once in the program's lifetime to prevent
   // multiple entries set up on exit.
   static bool has_been_called = false;

@@ -39,8 +39,7 @@ namespace gpu {
 
 class ImageTransportSurfaceOverlayMacEGL : public gl::Presenter {
  public:
-  ImageTransportSurfaceOverlayMacEGL(
-      base::WeakPtr<ImageTransportSurfaceDelegate> delegate);
+  ImageTransportSurfaceOverlayMacEGL();
 
   // Presenter implementation
   bool Resize(const gfx::Size& size,
@@ -77,8 +76,6 @@ class ImageTransportSurfaceOverlayMacEGL : public gl::Presenter {
                        const gfx::PresentationFeedback& feedback);
   void PopulateCALayerParameters();
 
-  base::WeakPtr<ImageTransportSurfaceDelegate> delegate_;
-
   const bool use_remote_layer_api_;
   CAContext* __strong ca_context_;
   std::unique_ptr<ui::CALayerTreeCoordinator> ca_layer_tree_coordinator_;
@@ -92,10 +89,31 @@ class ImageTransportSurfaceOverlayMacEGL : public gl::Presenter {
   uint64_t previous_frame_fence_ = 0;
 
 #if BUILDFLAG(IS_MAC)
+  base::TimeTicks GetDisplaytime(base::TimeTicks latch_time);
+
   // CGDirectDisplayID of the current monitor used for Creating CVDisplayLink.
   int64_t display_id_ = display::kInvalidDisplayId;
   scoped_refptr<ui::DisplayLinkMac> display_link_mac_;
   std::unique_ptr<ui::VSyncCallbackMac> vsync_callback_mac_;
+
+  // This is the number of vsync_callbacks running without populating CaLayer
+  // parameters, used for detecting consecutive frames.
+  int vsync_callback_mac_keep_alive_counter_ = 0;
+
+  // Ensure vsync_callback_mac_ is still alive in the case of frame rate
+  // throttling such as 30 fps video playback.
+  constexpr static int kMaxKeepAliveCounter = 8;
+
+  // The timetick when the GPU has finished completing all the drawing commands
+  base::TimeTicks ready_timestamp_;
+  // The timetick when CATransaction Commits and CoreAnimation latches the
+  // frame.
+  base::TimeTicks latch_timestamp_;
+
+  // Parameters from CVDisplayLinkCallback
+  base::TimeTicks current_display_time_;
+  base::TimeTicks next_display_time_;
+  base::TimeDelta frame_interval_;
 #endif
 
   SwapCompletionCallback completion_callback_;

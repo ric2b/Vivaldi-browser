@@ -19,6 +19,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -136,7 +137,7 @@ class LoginBubbleHandler : public ui::EventHandler {
     }
   }
 
-  raw_ptr<LoginBaseBubbleView, ExperimentalAsh> bubble_;
+  raw_ptr<LoginBaseBubbleView> bubble_;
 };
 
 LoginBaseBubbleView::LoginBaseBubbleView(base::WeakPtr<views::View> anchor_view)
@@ -391,5 +392,8 @@ void LoginBaseBubbleView::ScheduleAnimation(bool visible) {
     layer()->SetOpacity(opacity_end);
   }
 }
+
+BEGIN_METADATA(LoginBaseBubbleView)
+END_METADATA
 
 }  // namespace ash

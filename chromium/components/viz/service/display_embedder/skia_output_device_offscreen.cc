@@ -123,7 +123,9 @@ void SkiaOutputDeviceOffscreen::EnsureBackbuffer() {
     if (!has_alpha_) {
       is_emulated_rgbx_ = true;
     }
-    skgpu::graphite::TextureInfo texture_info = gpu::GetGraphiteTextureInfo(
+    // Get backend texture info needed for creating backend textures for
+    // offscreen.
+    skgpu::graphite::TextureInfo texture_info = gpu::GraphiteBackendTextureInfo(
         context_state_->gr_context_type(),
         SkColorTypeToSinglePlaneSharedImageFormat(sk_color_type_));
     graphite_texture_ =
@@ -159,7 +161,7 @@ SkSurface* SkiaOutputDeviceOffscreen::BeginPaint(
     std::vector<GrBackendSemaphore>* end_semaphores) {
   DCHECK(backend_texture_.isValid() || graphite_texture_.isValid());
   if (!sk_surface_) {
-    SkSurfaceProps surface_props{0, kUnknown_SkPixelGeometry};
+    SkSurfaceProps surface_props;
     if (gr_context_) {
       sk_surface_ = SkSurfaces::WrapBackendTexture(
           context_state_->gr_context(), backend_texture_,

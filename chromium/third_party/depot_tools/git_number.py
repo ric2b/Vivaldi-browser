@@ -51,24 +51,24 @@ POOL_KIND = 'procs'
 
 def pathlify(hash_prefix):
     """Converts a binary object hash prefix into a posix path, one folder per
-  byte.
+    byte.
 
-  >>> pathlify('\xDE\xAD')
-  'de/ad'
-  """
+    >>> pathlify('\xDE\xAD')
+    'de/ad'
+    """
     return '/'.join('%02x' % b for b in hash_prefix)
 
 
 @git.memoize_one(threadsafe=False)
 def get_number_tree(prefix_bytes):
     """Returns a dictionary of the git-number registry specified by
-  |prefix_bytes|.
+    |prefix_bytes|.
 
-  This is in the form of {<full binary ref>: <gen num> ...}
+    This is in the form of {<full binary ref>: <gen num> ...}
 
-  >>> get_number_tree('\x83\xb4')
-  {'\x83\xb4\xe3\xe4W\xf9J*\x8f/c\x16\xecD\xd1\x04\x8b\xa9qz': 169, ...}
-  """
+    >>> get_number_tree('\x83\xb4')
+    {'\x83\xb4\xe3\xe4W\xf9J*\x8f/c\x16\xecD\xd1\x04\x8b\xa9qz': 169, ...}
+    """
     ref = '%s:%s' % (REF, pathlify(prefix_bytes))
 
     try:
@@ -84,9 +84,9 @@ def get_number_tree(prefix_bytes):
 def get_num(commit_hash):
     """Returns the generation number for a commit.
 
-  Returns None if the generation number for this commit hasn't been calculated
-  yet (see load_generation_numbers()).
-  """
+    Returns None if the generation number for this commit hasn't been calculated
+    yet (see load_generation_numbers()).
+    """
     return get_number_tree(commit_hash[:PREFIX_LEN]).get(commit_hash)
 
 
@@ -100,14 +100,14 @@ def clear_caches(on_disk=False):
 
 def intern_number_tree(tree):
     """Transforms a number tree (in the form returned by |get_number_tree|) into
-  a git blob.
+    a git blob.
 
-  Returns the git blob id as hex-encoded string.
+    Returns the git blob id as hex-encoded string.
 
-  >>> d = {'\x83\xb4\xe3\xe4W\xf9J*\x8f/c\x16\xecD\xd1\x04\x8b\xa9qz': 169}
-  >>> intern_number_tree(d)
-  'c552317aa95ca8c3f6aae3357a4be299fbcb25ce'
-  """
+    >>> d = {'\x83\xb4\xe3\xe4W\xf9J*\x8f/c\x16\xecD\xd1\x04\x8b\xa9qz': 169}
+    >>> intern_number_tree(d)
+    'c552317aa95ca8c3f6aae3357a4be299fbcb25ce'
+    """
     with tempfile.TemporaryFile() as f:
         for k, v in sorted(tree.items()):
             f.write(struct.pack(CHUNK_FMT, k, v))
@@ -124,11 +124,11 @@ def leaf_map_fn(pre_tree):
 def finalize(targets):
     """Saves all cache data to the git repository.
 
-  After calculating the generation number for |targets|, call finalize() to
-  save all the work to the git repository.
+    After calculating the generation number for |targets|, call finalize() to
+    save all the work to the git repository.
 
-  This in particular saves the trees referred to by DIRTY_TREES.
-  """
+    This in particular saves the trees referred to by DIRTY_TREES.
+    """
     if not DIRTY_TREES:
         return
 
@@ -197,14 +197,14 @@ def all_prefixes(depth=PREFIX_LEN):
 
 def load_generation_numbers(targets):
     """Populates the caches of get_num and get_number_tree so they contain
-  the results for |targets|.
+    the results for |targets|.
 
-  Loads cached numbers from disk, and calculates missing numbers if one or
-  more of |targets| is newer than the cached calculations.
+    Loads cached numbers from disk, and calculates missing numbers if one or
+    more of |targets| is newer than the cached calculations.
 
-  Args:
-    targets - An iterable of binary-encoded full git commit hashes.
-  """
+    Args:
+        targets - An iterable of binary-encoded full git commit hashes.
+    """
     # In case they pass us a generator, listify targets.
     targets = list(targets)
 

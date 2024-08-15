@@ -52,6 +52,7 @@
 #include "tools/ToolUtils.h"
 #include "tools/flags/CommonFlags.h"
 #include "tools/flags/CommonFlagsConfig.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/ios_utils.h"
 #include "tools/trace/EventTracingPriv.h"
 #include "tools/trace/SkDebugfTracer.h"
@@ -604,7 +605,7 @@ static std::optional<Config> create_config(const SkCommandLineConfig* config) {
 
         using ContextFactory = skiatest::graphite::ContextFactory;
 
-        ContextFactory factory;
+        ContextFactory factory(gpuConfig->asConfigGraphite()->getOptions());
         skiatest::graphite::ContextInfo ctxInfo = factory.getContextInfo(graphiteCtxType);
         skgpu::graphite::Context* ctx = ctxInfo.fContext;
         if (ctx) {
@@ -866,7 +867,8 @@ public:
 
 #if defined(SK_ENABLE_SVG)
         SkMemoryStream stream(std::move(data));
-        sk_sp<SkSVGDOM> svgDom = SkSVGDOM::MakeFromStream(stream);
+        sk_sp<SkSVGDOM> svgDom =
+                SkSVGDOM::Builder().setFontManager(ToolUtils::TestFontMgr()).make(stream);
         if (!svgDom) {
             SkDebugf("Could not parse %s.\n", path);
             return nullptr;

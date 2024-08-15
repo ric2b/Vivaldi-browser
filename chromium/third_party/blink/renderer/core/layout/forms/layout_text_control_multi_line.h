@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_FORMS_LAYOUT_TEXT_CONTROL_MULTI_LINE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_FORMS_LAYOUT_TEXT_CONTROL_MULTI_LINE_H_
 
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 
 namespace blink {
 
@@ -17,7 +17,10 @@ class LayoutTextControlMultiLine final : public LayoutNGBlockFlow {
  private:
   HTMLElement* InnerEditorElement() const;
 
-  bool IsOfType(LayoutObjectType) const override;
+  bool IsTextArea() const final {
+    NOT_DESTROYED();
+    return true;
+  }
 
   const char* GetName() const override {
     NOT_DESTROYED();

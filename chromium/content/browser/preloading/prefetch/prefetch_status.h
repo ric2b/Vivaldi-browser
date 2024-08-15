@@ -5,14 +5,14 @@
 #ifndef CONTENT_BROWSER_PRELOADING_PREFETCH_PREFETCH_STATUS_H_
 #define CONTENT_BROWSER_PRELOADING_PREFETCH_PREFETCH_STATUS_H_
 
+#include "content/public/browser/preloading.h"
+
 namespace content {
 
 // The various states that a prefetch can go through or terminate with. Used in
 // UKM logging so don't remove or reorder values. Update
 // |PrefetchProxyPrefetchStatus| in //tools/metrics/histograms/enums.xml
 // whenever this is changed.
-// These are also mapped onto the first content internal range of
-// `PreloadingEligibility` and onto `PreloadingFailureReason`.
 //
 // If you change this, please follow the process
 // https://docs.google.com/document/d/1PnrfowsZMt62PX1EvvTp2Nqs3ji1zrklrAEe1JYbkTk
@@ -151,7 +151,7 @@ enum class PrefetchStatus {
   // initial eligibility check.
   kPrefetchNotUsedCookiesChanged = 34,
 
-  // Deprecated. Support for redirecs added.
+  // Deprecated. Support for redirects added.
   //
   // The prefetch was redirected, but following redirects was disabled.
   // See crbug.com/1266876 for more details.
@@ -208,11 +208,29 @@ enum class PrefetchStatus {
 
   // The prefetch was evicted to make room for a newer prefetch. This currently
   // only happens when |kPrefetchNewLimits| is enabled.
-  kPrefetchEvicted = 49,
+  // kPrefetchEvicted = 49, DEPRECATED
+  kPrefetchEvictedAfterCandidateRemoved = 50,
+  kPrefetchEvictedForNewerPrefetch = 51,
 
   // The max value of the PrefetchStatus. Update this when new enums are added.
-  kMaxValue = kPrefetchEvicted,
+  kMaxValue = kPrefetchEvictedForNewerPrefetch,
 };
+
+// Mapping from `PrefetchStatus` to `PreloadingFailureReason`.
+static_assert(
+    static_cast<int>(PrefetchStatus::kMaxValue) +
+        static_cast<int>(
+            PreloadingFailureReason::kPreloadingFailureReasonCommonEnd) <=
+    static_cast<int>(
+        PreloadingFailureReason::kPreloadingFailureReasonContentEnd));
+
+inline PreloadingFailureReason ToPreloadingFailureReason(
+    PrefetchStatus prefetch_container_metrics) {
+  return static_cast<PreloadingFailureReason>(
+      static_cast<int>(prefetch_container_metrics) +
+      static_cast<int>(
+          PreloadingFailureReason::kPreloadingFailureReasonCommonEnd));
+}
 
 }  // namespace content
 

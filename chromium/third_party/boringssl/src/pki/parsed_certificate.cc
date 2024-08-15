@@ -4,14 +4,14 @@
 
 #include "parsed_certificate.h"
 
+#include <openssl/pool.h>
 #include "cert_errors.h"
 #include "certificate_policies.h"
 #include "extended_key_usage.h"
 #include "name_constraints.h"
+#include "parser.h"
 #include "signature_algorithm.h"
 #include "verify_name_match.h"
-#include "parser.h"
-#include <openssl/pool.h>
 
 namespace bssl {
 
@@ -49,17 +49,18 @@ DEFINE_CERT_ERROR_ID(kFailedParsingAuthorityKeyIdentifier,
 DEFINE_CERT_ERROR_ID(kFailedParsingSubjectKeyIdentifier,
                      "Failed parsing subject key identifier");
 
-[[nodiscard]] bool GetSequenceValue(const der::Input& tlv, der::Input* value) {
+[[nodiscard]] bool GetSequenceValue(const der::Input &tlv, der::Input *value) {
   der::Parser parser(tlv);
   return parser.ReadTag(der::kSequence, value) && !parser.HasMore();
 }
 
 }  // namespace
 
-bool ParsedCertificate::GetExtension(const der::Input& extension_oid,
-                                     ParsedExtension* parsed_extension) const {
-  if (!tbs_.extensions_tlv)
+bool ParsedCertificate::GetExtension(const der::Input &extension_oid,
+                                     ParsedExtension *parsed_extension) const {
+  if (!tbs_.extensions_tlv) {
     return false;
+  }
 
   auto it = extensions_.find(extension_oid);
   if (it == extensions_.end()) {
@@ -77,13 +78,13 @@ ParsedCertificate::~ParsedCertificate() = default;
 // static
 std::shared_ptr<const ParsedCertificate> ParsedCertificate::Create(
     bssl::UniquePtr<CRYPTO_BUFFER> backing_data,
-    const ParseCertificateOptions& options,
-    CertErrors* errors) {
+    const ParseCertificateOptions &options, CertErrors *errors) {
   // |errors| is an optional parameter, but to keep the code simpler, use a
   // dummy object when one wasn't provided.
   CertErrors unused_errors;
-  if (!errors)
+  if (!errors) {
     errors = &unused_errors;
+  }
 
   auto result = std::make_shared<ParsedCertificate>(PrivateConstructor{});
   result->cert_data_ = std::move(backing_data);
@@ -280,15 +281,16 @@ std::shared_ptr<const ParsedCertificate> ParsedCertificate::Create(
 // static
 bool ParsedCertificate::CreateAndAddToVector(
     bssl::UniquePtr<CRYPTO_BUFFER> cert_data,
-    const ParseCertificateOptions& options,
-    std::vector<std::shared_ptr<const bssl::ParsedCertificate>>* chain,
-    CertErrors* errors) {
+    const ParseCertificateOptions &options,
+    std::vector<std::shared_ptr<const bssl::ParsedCertificate>> *chain,
+    CertErrors *errors) {
   std::shared_ptr<const ParsedCertificate> cert(
       Create(std::move(cert_data), options, errors));
-  if (!cert)
+  if (!cert) {
     return false;
+  }
   chain->push_back(std::move(cert));
   return true;
 }
 
-}  // namespace net
+}  // namespace bssl

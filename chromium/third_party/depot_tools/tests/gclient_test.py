@@ -113,12 +113,12 @@ class GclientTest(trial_dir.TestCase):
     def _dependencies(self, jobs):
         """Verifies that dependencies are processed in the right order.
 
-    e.g. if there is a dependency 'src' and another 'src/third_party/bar', that
-    bar isn't fetched until 'src' is done.
+        e.g. if there is a dependency 'src' and another 'src/third_party/bar', that
+        bar isn't fetched until 'src' is done.
 
-    Args:
-      |jobs| is the number of parallel jobs simulated.
-    """
+        Args:
+            |jobs| is the number of parallel jobs simulated.
+        """
         parser = gclient.OptionParser()
         options, args = parser.parse_args(['--jobs', jobs])
         write(
@@ -450,10 +450,10 @@ class GclientTest(trial_dir.TestCase):
     def testTargetOS(self):
         """Verifies that specifying a target_os pulls in all relevant dependencies.
 
-    The target_os variable allows specifying the name of an additional OS which
-    should be considered when selecting dependencies from a DEPS' deps_os. The
-    value will be appended to the _enforced_os tuple.
-    """
+        The target_os variable allows specifying the name of an additional OS which
+        should be considered when selecting dependencies from a DEPS' deps_os. The
+        value will be appended to the _enforced_os tuple.
+        """
 
         write(
             '.gclient', 'solutions = [\n'
@@ -479,13 +479,13 @@ class GclientTest(trial_dir.TestCase):
 
     def testTargetOsWithTargetOsOnly(self):
         """Verifies that specifying a target_os and target_os_only pulls in only
-    the relevant dependencies.
+        the relevant dependencies.
 
-    The target_os variable allows specifying the name of an additional OS which
-    should be considered when selecting dependencies from a DEPS' deps_os. With
-    target_os_only also set, the _enforced_os tuple will be set to only the
-    target_os value.
-    """
+        The target_os variable allows specifying the name of an additional OS which
+        should be considered when selecting dependencies from a DEPS' deps_os. With
+        target_os_only also set, the _enforced_os tuple will be set to only the
+        target_os value.
+        """
 
         write(
             '.gclient', 'solutions = [\n'
@@ -512,8 +512,8 @@ class GclientTest(trial_dir.TestCase):
 
     def testTargetOsOnlyWithoutTargetOs(self):
         """Verifies that specifying a target_os_only without target_os_only raises
-    an exception.
-    """
+        an exception.
+        """
 
         write(
             '.gclient', 'solutions = [\n'
@@ -542,12 +542,12 @@ class GclientTest(trial_dir.TestCase):
 
     def testTargetOsInDepsFile(self):
         """Verifies that specifying a target_os value in a DEPS file pulls in all
-    relevant dependencies.
+        relevant dependencies.
 
-    The target_os variable in a DEPS file allows specifying the name of an
-    additional OS which should be considered when selecting dependencies from a
-    DEPS' deps_os. The value will be appended to the _enforced_os tuple.
-    """
+        The target_os variable in a DEPS file allows specifying the name of an
+        additional OS which should be considered when selecting dependencies from a
+        DEPS' deps_os. The value will be appended to the _enforced_os tuple.
+        """
 
         write(
             '.gclient', 'solutions = [\n'
@@ -575,8 +575,8 @@ class GclientTest(trial_dir.TestCase):
 
     def testTargetOsForHooksInDepsFile(self):
         """Verifies that specifying a target_os value in a DEPS file runs the right
-    entries in hooks_os.
-    """
+        entries in hooks_os.
+        """
 
         write(
             'DEPS', 'hooks = [\n'
@@ -703,8 +703,8 @@ class GclientTest(trial_dir.TestCase):
 
     def testDepsOsOverrideDepsInDepsFile(self):
         """Verifies that a 'deps_os' path cannot override a 'deps' path. Also
-    see testUpdateWithOsDeps above.
-    """
+        see testUpdateWithOsDeps above.
+        """
 
         write(
             '.gclient', 'solutions = [\n'
@@ -741,14 +741,14 @@ class GclientTest(trial_dir.TestCase):
     def testRecursedepsOverride(self):
         """Verifies gclient respects the |recursedeps| var syntax.
 
-    This is what we mean to check here:
-    - |recursedeps| = [...] on 2 levels means we pull exactly 3 deps
-      (up to /fizz, but not /fuzz)
-    - pulling foo/bar with no recursion (in .gclient) is overridden by
-      a later pull of foo/bar with recursion (in the dep tree)
-    - pulling foo/tar with no recursion (in .gclient) is no recursively
-      pulled (taz is left out)
-    """
+        This is what we mean to check here:
+        - |recursedeps| = [...] on 2 levels means we pull exactly 3 deps
+        (up to /fizz, but not /fuzz)
+        - pulling foo/bar with no recursion (in .gclient) is overridden by
+        a later pull of foo/bar with recursion (in the dep tree)
+        - pulling foo/tar with no recursion (in .gclient) is no recursively
+        pulled (taz is left out)
+        """
         write(
             '.gclient', 'solutions = [\n'
             '  { "name": "foo", "url": "svn://example.com/foo" },\n'
@@ -908,11 +908,11 @@ class GclientTest(trial_dir.TestCase):
 
     def testRecursedepsAltfile(self):
         """Verifies gclient respects the |recursedeps| var syntax with overridden
-    target DEPS file.
+        target DEPS file.
 
-    This is what we mean to check here:
-    - Naming an alternate DEPS file in recursedeps pulls from that one.
-    """
+        This is what we mean to check here:
+        - Naming an alternate DEPS file in recursedeps pulls from that one.
+        """
         write(
             '.gclient', 'solutions = [\n'
             '  { "name": "foo", "url": "svn://example.com/foo" },\n'
@@ -939,10 +939,10 @@ class GclientTest(trial_dir.TestCase):
     def testGitDeps(self):
         """Verifies gclient respects a .DEPS.git deps file.
 
-    Along the way, we also test that if both DEPS and .DEPS.git are present,
-    that gclient does not read the DEPS file.  This will reliably catch bugs
-    where gclient is always hitting the wrong file (DEPS).
-    """
+        Along the way, we also test that if both DEPS and .DEPS.git are present,
+        that gclient does not read the DEPS file.  This will reliably catch bugs
+        where gclient is always hitting the wrong file (DEPS).
+        """
         write(
             '.gclient', 'solutions = [\n'
             '  { "name": "foo", "url": "svn://example.com/foo",\n'
@@ -1329,7 +1329,7 @@ class GclientTest(trial_dir.TestCase):
         self.assertEqual(sol.ParseGitSubmodules(), {})
 
     def testParseGitSubmodules_ParsesSubmodules(self):
-        """ParseGitSubmodules returns submodules when present. """
+        """ParseGitSubmodules returns submodules when present."""
         solutions = [{
             'name': 'foobar',
             'url': 'https://example.com/foobar',

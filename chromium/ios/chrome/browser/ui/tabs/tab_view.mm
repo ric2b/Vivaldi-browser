@@ -6,10 +6,7 @@
 
 #import <MaterialComponents/MaterialActivityIndicator.h>
 
-#import "base/i18n/rtl.h"
 #import "base/ios/ios_util.h"
-#import "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/elements/fade_truncating_label.h"
@@ -32,6 +29,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
@@ -110,6 +108,15 @@ UIImage* DefaultFaviconImage() {
   // End Vivaldi
 }
 
+// Vivaldi
+// Constraint for the tab view background when omnibox is as the top.
+@property(nonatomic, strong) NSLayoutConstraint*
+    tabViewBackgroundTopConstraint;
+// Constraint for the tab view background when omnibox is as the bottom.
+@property(nonatomic, strong) NSLayoutConstraint*
+    tabViewBackgroundBottomConstraint;
+// End Vivaldi
+
 @end
 
 @interface TabView (Private)
@@ -134,10 +141,6 @@ UIImage* DefaultFaviconImage() {
   if ((self = [super initWithFrame:CGRectZero])) {
     [self setOpaque:NO];
     [self createCommonViews];
-
-    if (IsVivaldiRunning() && !emptyView) {
-      [self createTabViewBackrgound:selected];
-    } // End Vivaldi
 
     if (!emptyView)
       [self createButtonsAndLabel];
@@ -176,12 +179,6 @@ UIImage* DefaultFaviconImage() {
 - (void)setTitle:(NSString*)title {
   if ([_titleLabel.text isEqualToString:title])
     return;
-  if (base::i18n::GetStringDirection(base::SysNSStringToUTF16(title)) ==
-      base::i18n::RIGHT_TO_LEFT) {
-    _titleLabel.truncateMode = FadeTruncatingHead;
-  } else {
-    _titleLabel.truncateMode = FadeTruncatingTail;
-  }
   _titleLabel.text = title;
   [_closeButton setAccessibilityValue:title];
 }
@@ -321,21 +318,13 @@ UIImage* DefaultFaviconImage() {
           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   // End Vivaldi
 
-  if (IsUIButtonConfigurationEnabled()) {
-    UIButtonConfiguration* buttonConfiguration =
-        [UIButtonConfiguration plainButtonConfiguration];
-    buttonConfiguration.contentInsets =
-        NSDirectionalEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
-                                    kTabCloseBottomInset, kTabCloseRightInset);
-    buttonConfiguration.image = closeButton;
-    _closeButton.configuration = buttonConfiguration;
-  } else {
-    [_closeButton setImage:closeButton forState:UIControlStateNormal];
-    UIEdgeInsets contentInsets =
-        UIEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
-                         kTabCloseBottomInset, kTabCloseRightInset);
-    SetContentEdgeInsets(_closeButton, contentInsets);
-  }
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  buttonConfiguration.contentInsets =
+      NSDirectionalEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
+                                  kTabCloseBottomInset, kTabCloseRightInset);
+  buttonConfiguration.image = closeButton;
+  _closeButton.configuration = buttonConfiguration;
 
   [_closeButton setAccessibilityLabel:l10n_util::GetNSString(
                                           IDS_IOS_TOOLS_MENU_CLOSE_TAB)];
@@ -350,7 +339,6 @@ UIImage* DefaultFaviconImage() {
   // Add fade truncating label.
   _titleLabel = [[FadeTruncatingLabel alloc] initWithFrame:CGRectZero];
   [_titleLabel setTranslatesAutoresizingMaskIntoConstraints:NO];
-  [_titleLabel setTextAlignment:NSTextAlignmentNatural];
   [self addSubview:_titleLabel];
 
   CGRect faviconFrame = CGRectMake(0, 0, kFaviconSize, kFaviconSize);
@@ -359,7 +347,9 @@ UIImage* DefaultFaviconImage() {
   [_faviconView setContentMode:UIViewContentModeScaleAspectFit];
 
   if (IsVivaldiRunning()) {
-    [_faviconView setImage:[UIImage imageNamed:vToolbarMenu]];
+    [_faviconView setImage:
+      [[UIImage imageNamed:vToolbarMenu]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
   } else {
   [_faviconView setImage:DefaultFaviconImage()];
   } // End Vivaldi
@@ -412,22 +402,7 @@ UIImage* DefaultFaviconImage() {
 - (void)updateStyleForSelected:(BOOL)selected {
   // Style the background image first.
 
-  if (IsVivaldiRunning()) {
-    _backgroundImageView.hidden = YES;
-    if (_incognitoStyle) {
-      tabViewBackground.backgroundColor = selected ?
-          [UIColor colorNamed: vPrivateModeToolbarBackgroundColor]  :
-          [UIColor colorNamed: vPrivateModeTabSelectedBackgroundColor];
-      tabViewBackground.layer.borderColor =
-        [UIColor colorNamed:vPrivateNTPBackgroundColor].CGColor;
-    } else {
-      tabViewBackground.backgroundColor = selected ?
-        [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
-        [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
-      tabViewBackground.layer.borderColor =
-        [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
-    }
-  } else {
+  if (!IsVivaldiRunning()) {
   NSString* state = (selected ? @"foreground" : @"background");
   NSString* imageName = [NSString stringWithFormat:@"tabstrip_%@_tab", state];
   _backgroundImageView.image = [UIImage imageNamed:imageName];
@@ -443,6 +418,8 @@ UIImage* DefaultFaviconImage() {
     [self addInteraction:_pointerInteraction];
   }
 
+  // Note:(prio@vivaldi.com) - We have our own logic of tint color below.
+  if (!IsVivaldiRunning()) {
   // Style the close button tint color.
   NSString* closeButtonColorName = selected ? kGrey600Color : kGrey500Color;
   _closeButton.tintColor = [UIColor colorNamed:closeButtonColorName];
@@ -454,6 +431,7 @@ UIImage* DefaultFaviconImage() {
   // Style the title tint color.
   NSString* titleColorName = selected ? kTextPrimaryColor : kGrey600Color;
   _titleLabel.textColor = [UIColor colorNamed:titleColorName];
+  } // End Vivaldi
 
   _titleLabel.font = [UIFont systemFontOfSize:kFontSize
                                        weight:UIFontWeightMedium];
@@ -462,22 +440,6 @@ UIImage* DefaultFaviconImage() {
   // several complicated layers to UIA.  Instead, simply set active/inactive
   // here to be used by UIA.
   [_titleLabel setAccessibilityValue:(selected ? @"active" : @"inactive")];
-
-  if (IsVivaldiRunning()) {
-      UIColor *tintColor;
-      if (_incognitoStyle) {
-        tintColor = selected ? UIColor.whiteColor :
-          [UIColor colorNamed: vTabViewNotSelectedTintColor];
-      } else {
-        tintColor = selected ? [UIColor colorNamed: vTabViewSelectedTintColor] :
-          [UIColor colorNamed: vTabViewNotSelectedTintColor];
-      }
-      _closeButton.tintColor = tintColor;
-      _faviconView.tintColor = tintColor;
-      _titleLabel.textColor = tintColor;
-  }
- // End Vivaldi
-
 }
 
 // Bezier path for the border shape of the tab. While the shape of the tab is an
@@ -579,36 +541,152 @@ UIImage* DefaultFaviconImage() {
 }
 
 #pragma mark - VIVALDI
-- (void)createTabViewBackrgound:(BOOL)selected {
-  tabViewBackground = [UIView new];
+- (id)initWithEmptyView:(BOOL)emptyView
+             isSelected:(BOOL)isSelected
+   bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
+             themeColor:(UIColor*)themeColor
+              tintColor:(UIColor*)tintColor {
+  if ((self = [super initWithFrame:CGRectZero])) {
+    [self setOpaque:NO];
+    [self createCommonViews];
 
-  tabViewBackground.backgroundColor = selected ?
-    [UIColor colorNamed: vTabViewSelectedBackgroundColor] :
-    [UIColor colorNamed: vTabViewNotSelectedBackgroundColor];
+    if (!emptyView) {
+      [self createTabViewBackrgound:isSelected
+               bottomOmniboxEnabled:bottomOmniboxEnabled
+                         themeColor:themeColor
+                          tintColor:tintColor];
+      [self createButtonsAndLabel];
+    }
 
-  tabViewBackground.layer.cornerRadius = vTabViewBackgroundCornerRadius;
-  tabViewBackground.layer.maskedCorners = kCALayerMinXMinYCorner |
-                                          kCALayerMaxXMinYCorner;
-  if (_incognitoStyle) {
-    tabViewBackground.layer.borderColor = [UIColor blackColor].CGColor;
-  } else {
-    tabViewBackground.layer.borderColor =
-      [UIColor colorNamed:vTabStripDefaultBackgroundColor].CGColor;
+    // -setSelected only calls -updateStyleForSelected if the selected state
+    // changes.  `isSelected` defaults to NO, so if `selected` is also NO,
+    // -updateStyleForSelected needs to be called explicitly.
+    [self setSelected:isSelected];
+    if (!isSelected) {
+      [self updateStyleForSelected:isSelected];
+      [self updateTabViewStyleWithThemeColor:themeColor
+                                   tintColor:tintColor
+                                  isSelected:isSelected];
+    }
+
+    [self addTarget:self
+                  action:@selector(tabWasTapped)
+        forControlEvents:UIControlEventTouchUpInside];
   }
+  return self;
+}
+
+- (void)createTabViewBackrgound:(BOOL)selected
+           bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
+                     themeColor:(UIColor*)themeColor
+                      tintColor:(UIColor*)tintColor {
+  tabViewBackground = [[UIView alloc] init];
+  tabViewBackground.layer.cornerRadius = vTabViewBackgroundCornerRadius;
   tabViewBackground.layer.borderWidth = 1.0;
+  tabViewBackground.layer.borderColor = [UIColor clearColor].CGColor;
+
+  tabViewBackground.backgroundColor =
+      [self tabViewBackgroundColor:selected
+                        themeColor:themeColor
+                         tintColor:tintColor];
+
   [self insertSubview:tabViewBackground atIndex:0];
+  [self setupTabViewBackgroundConstraints];
+  [self updateTabViewStyleWithBottomOmniboxEnabled:bottomOmniboxEnabled];
+  [self setupTabViewTapGesture];
+}
 
-  [tabViewBackground anchorTop:self.topAnchor
+- (void)setupTabViewBackgroundConstraints {
+  [tabViewBackground anchorTop:nil
                        leading:self.leadingAnchor
-                        bottom:self.bottomAnchor
+                        bottom:nil
                       trailing:self.trailingAnchor
-                       padding:vTabViewBackgroundPadding];
+                       padding:vTabViewBackgroundPaddingBottomAddressBar];
 
-  // Setup tap gesture
+  self.tabViewBackgroundTopConstraint =
+      [tabViewBackground.topAnchor constraintEqualToAnchor:self.topAnchor];
+  self.tabViewBackgroundBottomConstraint =
+      [tabViewBackground.bottomAnchor
+          constraintEqualToAnchor:self.bottomAnchor];
+
+  self.tabViewBackgroundTopConstraint.active = YES;
+  self.tabViewBackgroundBottomConstraint.active = YES;
+}
+
+- (void)setupTabViewTapGesture {
   UITapGestureRecognizer *tap =
-    [[UITapGestureRecognizer alloc] initWithTarget:self
-                                            action:@selector(tabWasTapped)];
+      [[UITapGestureRecognizer alloc] initWithTarget:self
+                                              action:@selector(tabWasTapped)];
   [tabViewBackground addGestureRecognizer:tap];
-} // End Vivaldi
+}
+
+- (void)updateTabViewStyleWithBottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled {
+  UIRectCorner corners = bottomOmniboxEnabled ?
+      (kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner) :
+      (kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner);
+  tabViewBackground.layer.maskedCorners = corners;
+  self.tabViewBackgroundTopConstraint.constant = bottomOmniboxEnabled ? -1 : 0;
+  self.tabViewBackgroundBottomConstraint.constant =
+      bottomOmniboxEnabled ? 0 : 1;
+}
+
+- (void)updateTabViewStyleWithThemeColor:(UIColor*)themeColor
+                               tintColor:(UIColor*)tintColor
+                              isSelected:(BOOL)isSelected {
+  tabViewBackground.backgroundColor =
+      [self tabViewBackgroundColor:isSelected
+                        themeColor:themeColor
+                         tintColor:tintColor];
+
+  UIColor* defaultTintColor = isSelected ?
+      [UIColor colorNamed:vTabViewSelectedTintColor] :
+      [UIColor colorNamed:vTabViewNotSelectedTintColor];
+
+  if (_incognitoStyle) {
+    defaultTintColor = isSelected ?
+        UIColor.whiteColor : [UIColor colorNamed:vTabViewNotSelectedTintColor];
+  }
+  _closeButton.tintColor = defaultTintColor;
+  _faviconView.tintColor = defaultTintColor;
+  _titleLabel.textColor = defaultTintColor;
+}
+
+// Returns background color for tab view based on selected state, current color
+// scheme, and theme color.
+- (UIColor*)tabViewBackgroundColor:(BOOL)isSelected
+                        themeColor:(UIColor*)themeColor
+                         tintColor:(UIColor*)tintColor {
+  NSString *backgroundColorName;
+  UIColor *defaultBackgroundColor;
+  if (_incognitoStyle) {
+    backgroundColorName = isSelected ?
+        vPrivateModeToolbarBackgroundColor :
+        vPrivateModeTabSelectedBackgroundColor;
+    defaultBackgroundColor = [UIColor colorNamed:backgroundColorName];
+  } else {
+    if (isSelected) {
+      defaultBackgroundColor =
+          [UIColor colorNamed:vTabViewSelectedBackgroundColor];
+    }
+  }
+
+  if (!isSelected && !_incognitoStyle) {
+    BOOL isDarkTintColor = ![VivaldiGlobalHelpers
+                                shouldUseDarkTextForColor:themeColor];
+    UIColor* inactiveTabColor =
+        (!isDarkTintColor || self.isDarkScheme) ?
+            UIColor.blackColor : UIColor.whiteColor;
+    return [inactiveTabColor colorWithAlphaComponent:
+                isDarkTintColor ? vTabViewDarkTintOpacity :
+                    vTabViewLightTintOpacity];
+  } else {
+    return defaultBackgroundColor;
+  }
+}
+
+- (BOOL)isDarkScheme {
+  return [VivaldiGlobalHelpers keyWindow].traitCollection.userInterfaceStyle
+      == UIUserInterfaceStyleDark;
+}
 
 @end

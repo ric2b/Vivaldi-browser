@@ -56,7 +56,7 @@ PhysicalSize SvgTextLayoutAlgorithm::Layout(
 
   // 3. Resolve character positioning
   // This was already done in PrepareLayout() step. See
-  // NGSvgTextLayoutAttributesBuilder.
+  // SvgTextLayoutAttributesBuilder.
   // Copy |rotate| and |anchored_chunk| fields.
   ResolvedTextLayoutAttributesIterator iterator(
       inline_node_.SvgCharacterDataList());
@@ -269,7 +269,7 @@ void SvgTextLayoutAlgorithm::ResolveTextLength(
 
   // 2.2. Let i and j be the global index of the first character and last
   // characters in node, respectively.
-  // ==> They are computed in NGTextLayoutAttributeBuilder.
+  // ==> They are computed in TextLayoutAttributeBuilder.
 
   // 2.3. For each index k in the range [i, j] where the "addressable" flag of
   // result[k] is true:
@@ -819,17 +819,14 @@ PhysicalSize SvgTextLayoutAlgorithm::WriteBackToFragmentItems(
     const float scaling_factor = layout_object->ScalingFactor();
     DCHECK_NE(scaling_factor, 0.0f);
     gfx::RectF unscaled_rect = gfx::ScaleRect(scaled_rect, 1 / scaling_factor);
-    auto data = std::make_unique<SvgFragmentData>();
-    data->shape_result = item->TextShapeResult();
-    data->text_offset = item->TextOffset();
+    auto* data = MakeGarbageCollected<SvgFragmentData>();
     data->rect = scaled_rect;
     data->length_adjust_scale = info.length_adjust_scale;
     data->angle = info.rotate.value_or(0.0f);
     data->baseline_shift = info.baseline_shift;
     data->in_text_path = info.in_text_path;
-    item.item.ConvertToSvgText(std::move(data),
-                               PhysicalRect::EnclosingRect(unscaled_rect),
-                               info.hidden);
+    item.item.SetSvgFragmentData(
+        data, PhysicalRect::EnclosingRect(unscaled_rect), info.hidden);
 
     gfx::RectF transformd_rect = scaled_rect;
     if (item.item.HasSvgTransformForBoundingBox()) {

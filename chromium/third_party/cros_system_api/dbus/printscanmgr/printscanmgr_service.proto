@@ -38,6 +38,9 @@ message CupsAddAutoConfiguredPrinterRequest {
   string name = 1;
   // URI of the printer to be added to CUPS.
   string uri = 2;
+  // The user's language, expressed in "ll", "ll-CC", or "ll_CC" format. UTF-8
+  // will always be used as the text encoding for printing-related strings.
+  string language = 3;
 }
 
 // Output for the org.chromium.printscanmgr.CupsAddAutoConfiguredPrinter D-Bus
@@ -58,6 +61,9 @@ message CupsAddManuallyConfiguredPrinterRequest {
   // Contents of the CUPS Postscript Printer Driver for the printer to be added
   // to CUPS. Can optionally be gzip compressed.
   bytes ppd_contents = 3;
+  // The user's language, expressed in "ll", "ll-CC", or "ll_CC" format. UTF-8
+  // will always be used as the text encoding for printing-related strings.
+  string language = 4;
 }
 
 // Output for the org.chromium.printscanmgr.CupsAddManuallyConfiguredPrinter

@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> fechou a ligação inesperadamente.</translation>
 <translation id="1161325031994447685">Ligar novamente à rede Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Experimente limpar os cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Sobre a versão</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> não enviou quaisquer dados.</translation>
 <translation id="1559528461873125649">Esse ficheiro ou diretório não existe</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Experimente contactar o administrador do sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente executar os diagnósticos de rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este website contém programas prejudiciais</translation>
-<translation id="1916770123977586577">Para aplicar as definições atualizadas a este website, recarregue esta página</translation>
 <translation id="1974060860693918893">Avançadas</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A verificar o proxy e a firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido em nome de: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Os atacantes podem ver as imagens par onde está a olhar neste website e enganá-lo/a, modificando-as.</translation>
 <translation id="2356070529366658676">Perguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
+<translation id="2388886110302389394">Abrir páginas numa nova janela privada (Ctrl+Shift+N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />A executar diagnósticos de rede<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Esta página foi bloqueada por uma extensão</translation>
 <translation id="2501278716633472235">Voltar</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Iniciar sessão</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
+<translation id="4075123085690634698">Abrir página numa nova janela privada (⇧⌘N)</translation>
 <translation id="4075732493274867456">O cliente e o servidor não suportam uma versão do protocolo SSL ou um conjunto de cifras comum.</translation>
 <translation id="4116663294526079822">Permitir sempre neste website</translation>
 <translation id="4130226655945681476">Verificar os cabos de rede, o modem e o router</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">O seu equipamento entrou em suspensão.</translation>
 <translation id="6890956352250146925">Opções para cookies e dados de websites</translation>
 <translation id="6897140037006041989">Agente do utilizador</translation>
+<translation id="6957624206566198865">Abrir página num novo separador privado</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este website contém um software malicioso</translation>
 <translation id="7096937462164235847">A identidade deste Website não foi validada.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676">Normalmente, o website <ph name="SITE" /> utiliza encriptação para proteger as suas informações. Quando o Vivaldi tentou estabelecer ligação a <ph name="SITE" /> desta vez, o website devolveu credenciais invulgares e incorretas. Isto pode acontecer quando um utilizador mal intencionado tenta simular ser <ph name="SITE" /> ou quando um ecrã de início de sessão Wi-Fi interrompe a ligação. As suas informações continuam seguras porque o Vivaldi interrompeu a ligação antes de qualquer troca de dados.</translation>
 <translation id="7878562273885520351">A sua palavra-passe pode estar comprometida</translation>
 <translation id="7951415247503192394">(32-bits)</translation>
+<translation id="7953236668995583915">Recarregue esta página para aplicar as suas definições atualizadas neste site</translation>
 <translation id="8025119109950072390">Os utilizadores mal intencionados neste website podem enganá-lo/a no sentido de fazer algo perigoso como instalar programas ou revelar as suas informações pessoais (por exemplo, palavras-passe, números de telefone ou cartões de crédito).</translation>
 <translation id="8037357227543935929">Pedir (pré-definição)</translation>
 <translation id="8041940743680923270">Utilizar pré-definição global (Perguntar)</translation>

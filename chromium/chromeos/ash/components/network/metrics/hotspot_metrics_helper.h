@@ -5,6 +5,8 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_NETWORK_METRICS_HOTSPOT_METRICS_HELPER_H_
 #define CHROMEOS_ASH_COMPONENTS_NETWORK_METRICS_HOTSPOT_METRICS_HELPER_H_
 
+#include <optional>
+
 #include "base/component_export.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -17,7 +19,6 @@
 #include "chromeos/ash/components/network/hotspot_state_handler.h"
 #include "chromeos/ash/services/hotspot_config/public/mojom/cros_hotspot_config.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 
@@ -96,6 +97,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotMetricsHelper
   FRIEND_TEST_ALL_PREFIXES(HotspotCapabilitiesProviderTest,
                            CheckTetheringReadiness_NotAllowed);
   FRIEND_TEST_ALL_PREFIXES(HotspotCapabilitiesProviderTest,
+                           CheckTetheringReadiness_NotAllowedByCarrier);
+  FRIEND_TEST_ALL_PREFIXES(HotspotCapabilitiesProviderTest,
                            CheckTetheringReadiness_UpstreamNotAvailable);
   FRIEND_TEST_ALL_PREFIXES(HotspotCapabilitiesProviderTest,
                            CheckTetheringReadiness_EmptyResult);
@@ -173,7 +176,11 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotMetricsHelper
     kUpstreamNetworkNotAvailable = 2,
     kShillOperationFailed = 3,
     kUnknownResult = 4,
-    kMaxValue = kUnknownResult,
+    kNotAllowedByCarrier = 5,
+    kNotAllowedOnFW = 6,
+    kNotAllowedOnVariant = 7,
+    kNotAllowedUserNotEntitled = 8,
+    kMaxValue = kNotAllowedUserNotEntitled,
   };
 
   // Represents the operation result of enable/disable hotspot used for related
@@ -217,7 +224,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotMetricsHelper
     kUpstreamNetworkNotAvailable = 5,
     kSuspended = 6,
     kRestart = 7,
-    kMaxValue = kRestart,
+    kUpstreamNoInternet = 8,
+    kMaxValue = kUpstreamNoInternet,
   };
 
   // HotspotCapabilitiesProvider::Observer:
@@ -243,22 +251,18 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotMetricsHelper
   void LogDisableReason(const hotspot_config::mojom::DisableReason& reason);
 
   // Retrieves the latest hotspot allow status and converts to
-  // HotspotMetricsAllowStatus enum. Return absl::nullopt if it is disallowed
+  // HotspotMetricsAllowStatus enum. Return std::nullopt if it is disallowed
   // due to device is not cellular capable.
-  absl::optional<HotspotMetricsAllowStatus> GetMetricsAllowStatus();
+  std::optional<HotspotMetricsAllowStatus> GetMetricsAllowStatus();
 
-  raw_ptr<EnterpriseManagedMetadataStore, ExperimentalAsh>
-      enterprise_managed_metadata_store_ = nullptr;
-  raw_ptr<HotspotCapabilitiesProvider, ExperimentalAsh>
-      hotspot_capabilities_provider_ = nullptr;
-  raw_ptr<HotspotStateHandler, ExperimentalAsh> hotspot_state_handler_ =
+  raw_ptr<EnterpriseManagedMetadataStore> enterprise_managed_metadata_store_ =
       nullptr;
-  raw_ptr<HotspotConfigurationHandler, ExperimentalAsh>
-      hotspot_configuration_handler_ = nullptr;
-  raw_ptr<HotspotEnabledStateNotifier, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<HotspotCapabilitiesProvider> hotspot_capabilities_provider_ = nullptr;
+  raw_ptr<HotspotStateHandler> hotspot_state_handler_ = nullptr;
+  raw_ptr<HotspotConfigurationHandler> hotspot_configuration_handler_ = nullptr;
+  raw_ptr<HotspotEnabledStateNotifier, DanglingUntriaged>
       hotspot_enabled_state_notifier_ = nullptr;
-  raw_ptr<NetworkStateHandler, ExperimentalAsh> network_state_handler_ =
-      nullptr;
+  raw_ptr<NetworkStateHandler> network_state_handler_ = nullptr;
 
   // A timer to wait for user connecting to their upstream cellular network
   // after login.
@@ -274,7 +278,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotMetricsHelper
   bool is_hotspot_active_ = false;
 
   // Tracks the usage time for each hotspot session.
-  absl::optional<base::ElapsedTimer> usage_timer_;
+  std::optional<base::ElapsedTimer> usage_timer_;
 
   // Tracks if the device is enterprise managed or not.
   bool is_enterprise_managed_ = false;

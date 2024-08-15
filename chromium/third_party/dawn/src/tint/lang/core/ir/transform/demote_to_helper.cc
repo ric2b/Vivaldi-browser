@@ -66,7 +66,7 @@ struct State {
         // Check each function for discard instructions, potentially inside other functions called
         // (transitively) by the function.
         Vector<Function*, 4> to_process;
-        for (auto* func : ir.functions) {
+        for (auto& func : ir.functions) {
             // If the function contains a discard (directly or indirectly), we need to process it.
             if (HasDiscard(func)) {
                 to_process.Push(func);
@@ -145,11 +145,12 @@ struct State {
             // Move the original instruction into the if-true block.
             auto* result = ifelse->True()->Append(inst);
 
-            TINT_ASSERT(!inst->HasMultiResults());
-            if (inst->HasResults() && !inst->Result()->Type()->Is<core::type::Void>()) {
+            auto results = inst->Results();
+            TINT_ASSERT(results.Length() < 2);
+            if (!results.IsEmpty() && !results[0]->Type()->Is<core::type::Void>()) {
                 // The original instruction had a result, so return it from the if instruction.
-                ifelse->SetResults(Vector{b.InstructionResult(inst->Result()->Type())});
-                inst->Result()->ReplaceAllUsesWith(ifelse->Result());
+                ifelse->SetResults(Vector{b.InstructionResult(results[0]->Type())});
+                results[0]->ReplaceAllUsesWith(ifelse->Result(0));
                 ifelse->True()->Append(b.ExitIf(ifelse, result));
             } else {
                 ifelse->True()->Append(b.ExitIf(ifelse));
@@ -160,7 +161,7 @@ struct State {
         for (auto* inst = *block->begin(); inst;) {
             // As we're (potentially) modifying the block that we're iterating over, grab a pointer
             // to the next instruction before we make any changes.
-            auto* next = inst->next;
+            auto* next = inst->next.Get();
             TINT_DEFER(inst = next);
 
             tint::Switch(
@@ -203,6 +204,10 @@ struct State {
                 [&](ControlInstruction* ctrl) {
                     // Recurse into control instructions.
                     ctrl->ForeachBlock([&](Block* blk) { ProcessBlock(blk); });
+                },
+                [&](BuiltinCall*) {
+                    // TODO(crbug.com/tint/2102): Catch this with the validator instead.
+                    TINT_UNREACHABLE() << "unexpected non-core instruction";
                 });
         }
     }
@@ -212,7 +217,7 @@ struct State {
 
 Result<SuccessType> DemoteToHelper(Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "DemoteToHelper transform");
-    if (!result) {
+    if (result != Success) {
         return result;
     }
 

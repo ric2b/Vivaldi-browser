@@ -24,7 +24,8 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcontroller,
       Profile* profile,
-      std::unique_ptr<ChromeAutocompleteProviderClient> client);
+      std::unique_ptr<ChromeAutocompleteProviderClient> client,
+      bool is_low_memory_device);
 
   AutocompleteControllerAndroid(const AutocompleteControllerAndroid&) = delete;
   AutocompleteControllerAndroid& operator=(
@@ -74,7 +75,7 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer {
   void DeleteMatch(JNIEnv* env, uintptr_t match_ptr);
   void DeleteMatchElement(JNIEnv* env, uintptr_t match_ptr, jint element_index);
   base::android::ScopedJavaLocalRef<jobject>
-  UpdateMatchDestinationURLWithAdditionalAssistedQueryStats(
+  UpdateMatchDestinationURLWithAdditionalSearchboxStats(
       JNIEnv* env,
       uintptr_t match_ptr,
       jlong elapsed_time_since_input_change);

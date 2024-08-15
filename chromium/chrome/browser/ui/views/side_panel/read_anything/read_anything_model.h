@@ -46,11 +46,11 @@ class ReadAnythingFontModel : public ui::ComboboxModel {
   void SetSelectedIndex(size_t index);
   size_t GetSelectedIndex() { return selected_index_; }
 
-  absl::optional<ui::ColorId> GetDropdownForegroundColorIdAt(
+  std::optional<ui::ColorId> GetDropdownForegroundColorIdAt(
       size_t index) const override;
-  absl::optional<ui::ColorId> GetDropdownBackgroundColorIdAt(
+  std::optional<ui::ColorId> GetDropdownBackgroundColorIdAt(
       size_t index) const override;
-  absl::optional<ui::ColorId> GetDropdownSelectedBackgroundColorIdAt(
+  std::optional<ui::ColorId> GetDropdownSelectedBackgroundColorIdAt(
       size_t index) const override;
 
   void SetForegroundColorId(ui::ColorId foreground_color) {
@@ -66,11 +66,11 @@ class ReadAnythingFontModel : public ui::ComboboxModel {
   }
 
   // Used by tests only.
-  absl::optional<size_t> GetDefaultIndexForTesting();
+  std::optional<size_t> GetDefaultIndexForTesting();
 
  protected:
   // ui::Combobox implementation:
-  absl::optional<size_t> GetDefaultIndex() const override;
+  std::optional<size_t> GetDefaultIndex() const override;
   size_t GetItemCount() const override;
   std::u16string GetItemAt(size_t index) const override;
   std::u16string GetDropDownTextAt(size_t index) const override;
@@ -81,9 +81,9 @@ class ReadAnythingFontModel : public ui::ComboboxModel {
 
   size_t selected_index_ = 0;
 
-  absl::optional<ui::ColorId> foreground_color_id_;
-  absl::optional<ui::ColorId> background_color_id_;
-  absl::optional<ui::ColorId> selected_color_id_;
+  std::optional<ui::ColorId> foreground_color_id_;
+  std::optional<ui::ColorId> background_color_id_;
+  std::optional<ui::ColorId> selected_color_id_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -176,8 +176,8 @@ class ReadAnythingLineSpacingModel : public ReadAnythingMenuModel {
     std::u16string name;
 
     // The resources value/identifier for the icon image asset.
-    // This field is not a raw_ref<> because it was filtered by the rewriter
-    // for: #constexpr-ctor-field-initializer
+    // RAW_PTR_EXCLUSION: Never allocated by PartitionAlloc (always points to a
+    // global), so there is no benefit to using a raw_ptr, only cost.
     RAW_PTR_EXCLUSION const gfx::VectorIcon& icon_asset;
   };
 
@@ -216,8 +216,8 @@ class ReadAnythingLetterSpacingModel : public ReadAnythingMenuModel {
     std::u16string name;
 
     // The resources value/identifier for the icon image asset.
-    // This field is not a raw_ref<> because it was filtered by the rewriter
-    // for: #constexpr-ctor-field-initializer
+    // RAW_PTR_EXCLUSION: Never allocated by PartitionAlloc (always points to a
+    // global), so there is no benefit to using a raw_ptr, only cost.
     RAW_PTR_EXCLUSION const gfx::VectorIcon& icon_asset;
   };
 
@@ -245,6 +245,7 @@ class ReadAnythingModel {
     virtual void OnReadAnythingThemeChanged(
         const std::string& font_name,
         double font_scale,
+        bool links_enabled,
         ui::ColorId foreground_color_id,
         ui::ColorId background_color_id,
         ui::ColorId separator_color_id,
@@ -263,6 +264,7 @@ class ReadAnythingModel {
   void Init(const std::string& lang_code,
             const std::string& font_name,
             double font_scale,
+            bool links_enabled,
             read_anything::mojom::Colors colors,
             read_anything::mojom::LineSpacing line_spacing,
             read_anything::mojom::LetterSpacing letter_spacing);
@@ -274,6 +276,7 @@ class ReadAnythingModel {
   double GetValidFontScale(double font_scale);
   void DecreaseTextSize();
   void IncreaseTextSize();
+  void SetLinksEnabled(bool enabled);
   void SetSelectedColorsByIndex(size_t new_index);
   void SetSelectedLineSpacingByIndex(size_t new_index);
   void SetSelectedLetterSpacingByIndex(size_t new_index);
@@ -293,6 +296,8 @@ class ReadAnythingModel {
     return letter_spacing_;
   }
 
+  bool GetLinksEnabled() { return links_enabled_; }
+
  private:
   void NotifyThemeChanged();
 
@@ -311,6 +316,8 @@ class ReadAnythingModel {
 
   // A scale multiplier for font size (internal use only, not shown to user).
   float font_scale_ = kReadAnythingDefaultFontScale;
+
+  bool links_enabled_ = kReadAnythingDefaultLinksEnabled;
 
   read_anything::mojom::LineSpacing line_spacing_ = LineSpacing::kDefaultValue;
   read_anything::mojom::LetterSpacing letter_spacing_ =

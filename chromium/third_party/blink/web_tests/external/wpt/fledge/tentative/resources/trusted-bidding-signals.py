@@ -2,7 +2,7 @@ import json
 from urllib.parse import unquote_plus
 from fledge.tentative.resources.fledge_http_server_util import headersToAscii
 
-# Script to generate trusted bidding signals. The responses depends on the
+# Script to generate trusted bidding signals. The response depends on the
 # keys and interestGroupNames - some result in entire response failures, others
 # affect only their own value. Keys are preferentially used over
 # interestGroupName, since keys are composible, but some tests need to cover
@@ -31,6 +31,8 @@ def main(request, response):
             continue
         if pair[0] == "interestGroupNames" and interestGroupNames == None:
             interestGroupNames = list(map(unquote_plus, pair[1].split(",")))
+            continue
+        if pair[0] == "slotSize" or pair[0] == "allSlotsRequestedSizes":
             continue
         return fail(response, "Unexpected query parameter: " + param)
 
@@ -102,6 +104,10 @@ def main(request, response):
                 value = request.GET.first(b"hostname", b"not-found").decode("ASCII")
             elif key == "headers":
                 value = headersToAscii(request.headers)
+            elif key == "slotSize":
+                value = request.GET.first(b"slotSize", b"not-found").decode("ASCII")
+            elif key == "allSlotsRequestedSizes":
+                value = request.GET.first(b"allSlotsRequestedSizes", b"not-found").decode("ASCII")
             responseBody["keys"][key] = value
 
     if "data-version" in interestGroupNames:

@@ -18,7 +18,7 @@
 #include "components/reporting/util/test_support_callbacks.h"
 #include "content/public/test/browser_task_environment.h"
 
-using ::base::EqualsProto;
+using ::base::test::EqualsProto;
 using ::testing::HasSubstr;
 
 namespace reporting {
@@ -48,7 +48,7 @@ class ConfigurationFileControllerTest : public ::testing::Test {
   void EnableSignatureTestFlag() {
     scoped_feature_list_.Reset();
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(
+    feature_list->InitFromCommandLine(
         "ReportingConfigurationFileTestSignature, "
         "ShouldRequestConfigurationFile",
         "");

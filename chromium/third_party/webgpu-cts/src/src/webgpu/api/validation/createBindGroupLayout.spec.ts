@@ -163,8 +163,10 @@ g.test('visibility,VERTEX_shader_stage_storage_texture_access')
   .fn(t => {
     const { shaderStage, access } = t.params;
 
+    const appliedAccess = access ?? 'write-only';
     const success = !(
-      (access ?? 'write-only') === 'write-only' && shaderStage & GPUShaderStage.VERTEX
+      // If visibility includes VERETX, storageTexture.access must be "read-only"
+      (shaderStage & GPUShaderStage.VERTEX && appliedAccess !== 'read-only')
     );
 
     t.expectValidationError(() => {
@@ -173,7 +175,7 @@ g.test('visibility,VERTEX_shader_stage_storage_texture_access')
           {
             binding: 0,
             visibility: shaderStage,
-            storageTexture: { access, format: 'rgba8unorm' },
+            storageTexture: { access, format: 'r32uint' },
           },
         ],
       });
@@ -258,9 +260,12 @@ g.test('max_dynamic_buffers')
       entries,
     };
 
-    t.expectValidationError(() => {
-      t.device.createBindGroupLayout(descriptor);
-    }, extraDynamicBuffers > 0 || entries.length > perStageLimit);
+    t.expectValidationError(
+      () => {
+        t.device.createBindGroupLayout(descriptor);
+      },
+      extraDynamicBuffers > 0 || entries.length > perStageLimit
+    );
   });
 
 /**
@@ -433,16 +438,26 @@ g.test('storage_texture,layout_dimension')
 g.test('storage_texture,formats')
   .desc(
     `
-  Test that a validation error is generated if the format doesn't support the storage usage.
+  Test that a validation error is generated if the format doesn't support the storage usage. A
+  validation error is also generated if the format doesn't support the 'read-write' storage access
+  when the storage access is 'read-write'.
   `
   )
-  .params(u => u.combine('format', kAllTextureFormats))
+  .params(u =>
+    u //
+      .combine('format', kAllTextureFormats) //
+      .combine('access', kStorageTextureAccessValues)
+  )
   .beforeAllSubcases(t => {
     t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format);
+    t.skipIfTextureFormatNotUsableAsStorageTexture(t.params.format);
   })
   .fn(t => {
-    const { format } = t.params;
+    const { format, access } = t.params;
     const info = kTextureFormatInfo[format];
+
+    const success =
+      info.color?.storage && !(access === 'read-write' && !info.color?.readWriteStorage);
 
     t.expectValidationError(() => {
       t.device.createBindGroupLayout({
@@ -450,9 +465,9 @@ g.test('storage_texture,formats')
           {
             binding: 0,
             visibility: GPUShaderStage.COMPUTE,
-            storageTexture: { format },
+            storageTexture: { format, access },
           },
         ],
       });
-    }, !info.color?.storage);
+    }, !success);
   });

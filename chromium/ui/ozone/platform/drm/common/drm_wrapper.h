@@ -27,7 +27,7 @@ typedef struct _drmModeModeInfo drmModeModeInfo;
 struct SkImageInfo;
 
 namespace display {
-struct GammaRampRGBEntry;
+class GammaCurve;
 }  // namespace display
 
 namespace ui {
@@ -46,7 +46,7 @@ class DrmPropertyBlobMetadata {
   uint32_t id() const { return id_; }
 
  private:
-  raw_ptr<DrmWrapper, ExperimentalAsh> drm_;  // Not owned;
+  raw_ptr<DrmWrapper> drm_;  // Not owned;
   uint32_t id_;
 };
 
@@ -181,8 +181,7 @@ class DrmWrapper {
    * Gamma
    *******/
 
-  virtual bool SetGammaRamp(uint32_t crtc_id,
-                            const std::vector<display::GammaRampRGBEntry>& lut);
+  virtual bool SetGammaRamp(uint32_t crtc_id, const display::GammaCurve& lut);
 
   /********
    * Planes

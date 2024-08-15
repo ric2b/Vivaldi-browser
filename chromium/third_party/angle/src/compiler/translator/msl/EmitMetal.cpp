@@ -433,23 +433,23 @@ static const char *GetOperatorString(TOperator op,
         case TOperator::EOpDegrees:
             return "ANGLE_degrees";
         case TOperator::EOpAtan:
-            return "ANGLE_atan";
+            return argType1 == nullptr ? "metal::atan" : "metal::atan2";
         case TOperator::EOpMod:
             return "ANGLE_mod";  // differs from metal::mod
         case TOperator::EOpRefract:
-            return "ANGLE_refract";
+            return argType0->isVector() ? "metal::refract" : "ANGLE_refract_scalar";
         case TOperator::EOpDistance:
-            return "ANGLE_distance";
+            return argType0->isVector() ? "metal::distance" : "ANGLE_distance_scalar";
         case TOperator::EOpLength:
-            return "ANGLE_length";
+            return argType0->isVector() ? "metal::length" : "metal::abs";
         case TOperator::EOpDot:
-            return "ANGLE_dot";
+            return argType0->isVector() ? "metal::dot" : "*";
         case TOperator::EOpNormalize:
-            return "ANGLE_normalize";
+            return argType0->isVector() ? "metal::fast::normalize" : "metal::sign";
         case TOperator::EOpFaceforward:
-            return "ANGLE_faceforward";
+            return argType0->isVector() ? "metal::faceforward" : "ANGLE_faceforward_scalar";
         case TOperator::EOpReflect:
-            return "ANGLE_reflect";
+            return argType0->isVector() ? "metal::reflect" : "ANGLE_reflect_scalar";
         case TOperator::EOpMatrixCompMult:
             return "ANGLE_componentWiseMultiply";
         case TOperator::EOpOuterProduct:
@@ -478,7 +478,8 @@ static const char *GetOperatorString(TOperator op,
         case TOperator::EOpCosh:
             return "metal::cosh";
         case TOperator::EOpTanh:
-            return "metal::tanh";
+            return resultType.getPrecision() == TPrecision::EbpHigh ? "metal::precise::tanh"
+                                                                    : "metal::tanh";
         case TOperator::EOpAsinh:
             return "metal::asinh";
         case TOperator::EOpAcosh:
@@ -520,8 +521,10 @@ static const char *GetOperatorString(TOperator op,
         case TOperator::EOpSaturate:
             return "metal::saturate";  // TODO fast vs precise namespace
         case TOperator::EOpMix:
-            if (argType2 && argType2->getBasicType() == EbtBool)
+            if (!argType1->isScalar() && argType2 && argType2->getBasicType() == EbtBool)
+            {
                 return "ANGLE_mix_bool";
+            }
             return "metal::mix";
         case TOperator::EOpStep:
             return "metal::step";
@@ -1191,7 +1194,8 @@ void GenMetalTraverser::emitFieldDeclaration(const TField &field,
         case TQualifier::EvqFragmentOut:
         case TQualifier::EvqFragmentInOut:
         case TQualifier::EvqFragData:
-            if (mPipelineStructs.fragmentOut.external == &parent)
+            if (mPipelineStructs.fragmentOut.external == &parent ||
+                mPipelineStructs.fragmentOut.externalExtra == &parent)
             {
                 if ((type.isVector() &&
                      (basic == TBasicType::EbtInt || basic == TBasicType::EbtUInt ||
@@ -1258,7 +1262,7 @@ void GenMetalTraverser::emitFieldDeclaration(const TField &field,
             if (field.symbolType() == SymbolType::AngleInternal)
             {
                 mOut << " [[sample_mask, function_constant("
-                     << sh::mtl::kMultisampledRenderingConstName << ")]]";
+                     << sh::mtl::kSampleMaskWriteEnabledConstName << ")]]";
             }
             break;
 
@@ -1407,6 +1411,15 @@ void GenMetalTraverser::emitStructDeclaration(const TType &type)
 
     if (hasAttributeIndices)
     {
+        // When attribute aliasing is supported, external attribute struct is filled post-link.
+        if (mCompiler.supportsAttributeAliasing())
+        {
+            mtl::getTranslatorMetalReflection(&mCompiler)->hasAttributeAliasing = true;
+            mOut << "@@Attrib-Bindings@@\n";
+            emitCloseBrace();
+            return;
+        }
+
         fieldToAttributeIndex =
             BuildExternalAttributeIndexMap(mCompiler, mPipelineStructs.vertexIn);
     }
@@ -2460,6 +2473,15 @@ bool GenMetalTraverser::visitDeclaration(Visit, TIntermDeclaration *declNode)
     {
         const TVariable &var = symbolNode->variable();
         emitVariableDeclaration(VarDecl(var), evdConfig);
+        if (var.getType().isArray() && var.getType().getQualifier() == EvqTemporary)
+        {
+            // The translator frontend injects a loop-based init for user arrays when the source
+            // shader is using ESSL 1.00. Some Metal drivers may fail to access elements of such
+            // arrays at runtime depending on the array size. An empty literal initializer added
+            // to the generated MSL bypasses the issue. The frontend may be further optimized to
+            // skip the loop-based init when targeting MSL.
+            mOut << "{}";
+        }
     }
     else if (TIntermBinary *initNode = node.getAsBinaryNode())
     {

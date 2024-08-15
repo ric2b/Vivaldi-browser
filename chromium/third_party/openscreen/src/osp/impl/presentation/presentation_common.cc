@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "absl/strings/ascii.h"
+#include "util/stringutil.h"
 
 namespace openscreen::osp {
 
@@ -35,7 +35,7 @@ PresentationID::PresentationID(std::string presentation_id)
   // of at least 16 ASCII characters.
   bool is_valid = presentation_id.length() >= 16;
   for (const char& c : presentation_id) {
-    is_valid &= absl::ascii_isprint(c);
+    is_valid &= stringutil::ascii_isprint(c);
   }
 
   if (is_valid) {

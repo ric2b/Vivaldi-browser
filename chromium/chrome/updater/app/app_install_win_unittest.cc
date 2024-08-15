@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/updater/app/app_install_win_internal.h"
-
 #include <string>
+#include <vector>
 
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
+#include "chrome/updater/app/app_install_win_internal.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/win/ui/l10n_util.h"
 #include "chrome/updater/win/ui/resources/updater_installer_strings.h"
@@ -21,7 +22,7 @@ struct AppInstallWinHandleInstallResultTestCase {
   const UpdateService::ErrorCategory error_category;
   const int error_code;
   const CompletionCodes expected_completion_code;
-  const std::wstring expected_completion_text;
+  const std::u16string expected_completion_text;
   const std::u16string expected_completion_message;
 };
 
@@ -37,19 +38,20 @@ INSTANTIATE_TEST_SUITE_P(
          UpdateService::ErrorCategory::kNone,
          0,
          CompletionCodes::COMPLETION_CODE_SUCCESS,
-         GetLocalizedString(IDS_BUNDLE_INSTALLED_SUCCESSFULLY_BASE),
+         base::WideToUTF16(
+             GetLocalizedString(IDS_BUNDLE_INSTALLED_SUCCESSFULLY_BASE)),
          {}},
         {UpdateService::UpdateState::State::kNoUpdate,
          UpdateService::ErrorCategory::kNone,
          0,
          CompletionCodes::COMPLETION_CODE_ERROR,
-         GetLocalizedString(IDS_NO_UPDATE_RESPONSE_BASE),
+         base::WideToUTF16(GetLocalizedString(IDS_NO_UPDATE_RESPONSE_BASE)),
          {}},
         {UpdateService::UpdateState::State::kUpdateError,
          UpdateService::ErrorCategory::kNone,
          0,
          CompletionCodes::COMPLETION_CODE_ERROR,
-         GetLocalizedString(IDS_INSTALL_UPDATER_FAILED_BASE),
+         base::WideToUTF16(GetLocalizedString(IDS_INSTALL_UPDATER_FAILED_BASE)),
          {}},
     }));
 

@@ -108,32 +108,28 @@ struct ScanKernelFunctor {
         inclusive(inclusive_) {}
 
   template <scan_step sst = stp, typename Input>
-  std::enable_if_t<sst == scan_step::first, CoeffReturnType> EIGEN_DEVICE_FUNC
-      EIGEN_STRONG_INLINE
-      read(const Input &inpt, Index global_id) const {
+  std::enable_if_t<sst == scan_step::first, CoeffReturnType> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE read(
+      const Input &inpt, Index global_id) const {
     return inpt.coeff(global_id);
   }
 
   template <scan_step sst = stp, typename Input>
-  std::enable_if_t<sst != scan_step::first, CoeffReturnType> EIGEN_DEVICE_FUNC
-      EIGEN_STRONG_INLINE
-      read(const Input &inpt, Index global_id) const {
+  std::enable_if_t<sst != scan_step::first, CoeffReturnType> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE read(
+      const Input &inpt, Index global_id) const {
     return inpt[global_id];
   }
 
   template <scan_step sst = stp, typename InclusiveOp>
-  std::enable_if_t<sst == scan_step::first> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
-  first_step_inclusive_Operation(InclusiveOp inclusive_op) const {
+  std::enable_if_t<sst == scan_step::first> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE first_step_inclusive_Operation(
+      InclusiveOp inclusive_op) const {
     inclusive_op();
   }
 
   template <scan_step sst = stp, typename InclusiveOp>
-  std::enable_if_t<sst != scan_step::first> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
-  first_step_inclusive_Operation(InclusiveOp) const {}
+  std::enable_if_t<sst != scan_step::first> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE first_step_inclusive_Operation(
+      InclusiveOp) const {}
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void operator()(cl::sycl::nd_item<1> itemID) const {
-
-
     for (Index loop_offset = 0; loop_offset < scanParameters.loop_range; loop_offset++) {
       Index data_offset = (itemID.get_global_id(0) + (itemID.get_global_range(0) * loop_offset));
       Index tmp = data_offset % scanParameters.panel_threads;
@@ -301,13 +297,9 @@ struct ScanAdjustmentKernelFunctor {
                                                                     OutAccessor out_accessor_,
                                                                     const ScanParameters<Index> scanParameters_,
                                                                     Op accumulator_)
-      : in_ptr(in_accessor_),
-        out_ptr(out_accessor_),
-        scanParameters(scanParameters_),
-        accumulator(accumulator_) {}
+      : in_ptr(in_accessor_), out_ptr(out_accessor_), scanParameters(scanParameters_), accumulator(accumulator_) {}
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void operator()(cl::sycl::nd_item<1> itemID) const {
-
     for (Index loop_offset = 0; loop_offset < scanParameters.loop_range; loop_offset++) {
       Index data_offset = (itemID.get_global_id(0) + (itemID.get_global_range(0) * loop_offset));
       Index tmp = data_offset % scanParameters.panel_threads;
@@ -423,7 +415,8 @@ struct SYCLAdjustBlockOffset {
         AdjustFuctor;
     dev.template unary_kernel_launcher<CoeffReturnType, AdjustFuctor>(in_ptr, out_ptr, scan_info.get_thread_range(),
                                                                       scan_info.max_elements_per_block,
-                                                                      scan_info.get_scan_parameter(), accumulator).wait();
+                                                                      scan_info.get_scan_parameter(), accumulator)
+        .wait();
   }
 };
 
@@ -445,8 +438,9 @@ struct ScanLauncher_impl {
 
     typedef ScanKernelFunctor<Input, CoeffReturnType, EvaluatorPointerType, Reducer, Index, stp> ScanFunctor;
     dev.template binary_kernel_launcher<CoeffReturnType, ScanFunctor>(
-        in_ptr, out_ptr, tmp_global_accessor, scan_info.get_thread_range(), scratch_size,
-        scan_info.get_scan_parameter(), accumulator, inclusive).wait();
+           in_ptr, out_ptr, tmp_global_accessor, scan_info.get_thread_range(), scratch_size,
+           scan_info.get_scan_parameter(), accumulator, inclusive)
+        .wait();
 
     if (scan_info.block_size > 1) {
       ScanLauncher_impl<CoeffReturnType, scan_step::second>::scan_block(
@@ -506,7 +500,7 @@ struct ScanLauncher<Self, Reducer, Eigen::SyclDevice, vectorize> {
         inclusive, dev);
   }
 };
-} // namespace internal
+}  // namespace internal
 }  // namespace Eigen
 
 #endif  // UNSUPPORTED_EIGEN_CXX11_SRC_TENSOR_TENSOR_SYCL_SYCL_HPP

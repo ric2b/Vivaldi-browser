@@ -29,7 +29,7 @@ const IDENTITY_DE_TYPES_BY_CODE: [Option<IdentityDataElementType>; 5] = [
 ///
 /// Shared between V0 and V1.
 ///
-/// Must not overlap with [PlainDataElementType].
+/// Must not overlap with [`PlainDataElementType`](crate::legacy::de_type::PlainDataElementType).
 #[derive(strum_macros::EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum IdentityDataElementType {

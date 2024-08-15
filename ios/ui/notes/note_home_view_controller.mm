@@ -14,11 +14,9 @@
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/table_view_url_drag_drop_handler.h"
-#import "ios/chrome/browser/metrics/new_tab_page_uma.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -27,7 +25,7 @@
 #import "ios/chrome/browser/shared/ui/elements/home_waiting_view.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_illustrated_empty_view.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
@@ -601,8 +599,7 @@ const int kRowsHiddenByNavigationBar = 3;
              newTab:(BOOL)newTab {
   if (inIncognito) {
     IncognitoReauthSceneAgent* reauthAgent = [IncognitoReauthSceneAgent
-        agentFromScene:SceneStateBrowserAgent::FromBrowser(self.browser)
-                           ->GetSceneState()];
+        agentFromScene:self.browser->GetSceneState()];
     if (reauthAgent.authenticationRequired) {
       __weak NoteHomeViewController* weakSelf = self;
       [reauthAgent
@@ -2037,7 +2034,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
       BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
           initWithBrowser:strongSelf.browser
-                 scenario:MenuScenarioHistogram::kNoteEntry];
+                 scenario:kMenuScenarioHistogramNoteEntry];
 
       NSMutableArray<UIMenuElement*>* menuElements =
             [[NSMutableArray alloc] init];
@@ -2098,7 +2095,7 @@ const int kRowsHiddenByNavigationBar = 3;
           return [UIMenu menuWithTitle:@"" children:@[]];
 
         ActionFactory* actionFactory = [[ActionFactory alloc]
-            initWithScenario:MenuScenarioHistogram::kNoteFolder];
+            initWithScenario:kMenuScenarioHistogramNoteFolder];
 
         NSMutableArray<UIMenuElement*>* menuElements =
             [[NSMutableArray alloc] init];

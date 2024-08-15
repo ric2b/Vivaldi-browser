@@ -69,8 +69,9 @@ WebAppOriginText::~WebAppOriginText() = default;
 
 void WebAppOriginText::SetTextColor(SkColor color, bool show_text) {
   label_->SetEnabledColor(color);
-  if (show_text)
+  if (show_text) {
     StartFadeAnimation();
+  }
 }
 
 void WebAppOriginText::SetAllowedToAnimate(bool allowed) {
@@ -170,10 +171,11 @@ void WebAppOriginText::DidFinishNavigation(content::NavigationHandle* handle) {
   // as input. ShouldShowCustomTabBar is currently implemented to be used after
   // navigation has committed.
   if (app_controller->ShouldShowCustomTabBar()) {
+    label_->layer()->GetAnimator()->StopAnimating();
     return;
   }
   StartFadeAnimation();
 }
 
-BEGIN_METADATA(WebAppOriginText, views::View)
+BEGIN_METADATA(WebAppOriginText)
 END_METADATA

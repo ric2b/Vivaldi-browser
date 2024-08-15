@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> het die verbinding onverwags gesluit.</translation>
 <translation id="1161325031994447685">Herverbind tans aan Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Druk Af…</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Probeer u koekies wis<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Oor Weergawe</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> het geen data verstuur nie.</translation>
 <translation id="1559528461873125649">So ’n lêer of gids bestaan nie</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Probeer tans die stelseladmin kontak.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probeer die Windows netwerkdiagnose<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Hierdie werf bevat skadelike programmatuur</translation>
-<translation id="1916770123977586577">Herlaai die blad om u bygewerkte werfinstellings toe te pas</translation>
 <translation id="1974060860693918893">Gevorderd</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Gaan tans die instaanbediener en brandmuur na<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Uitgereik aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Aanvallers sien moontlik die beelde waarna u op hierdie werf kyk en kan u probeer fop deur dit te verander.</translation>
 <translation id="2356070529366658676">Vra</translation>
 <translation id="2359808026110333948">Gaan voort</translation>
+<translation id="2388886110302389394">Open blad in ’n nuwe privaat venster (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwerkdiagnose loop tans<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Hierdie bladsy is deur 'n uitbreiding geblokkeer</translation>
 <translation id="2501278716633472235">Gaan terug</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Teken aan</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is geblokkeer</translation>
 <translation id="3987940399970879459">Minder as 1MB</translation>
+<translation id="4075123085690634698">Open blad in ’n nuwe privaat venster (⇧⌘N)</translation>
 <translation id="4075732493274867456">Die kliënt en bediener ondersteun nie ’n algemene SSL-protokolweergawe of koderingsuite nie.</translation>
 <translation id="4116663294526079822">Laat altyd hierdie werf toe</translation>
 <translation id="4130226655945681476">Gaan die netwerkkabels, modem en roeteerder na</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">U toestel het gaan slaap.</translation>
 <translation id="6890956352250146925">Opsies vir koekies en werfdata</translation>
 <translation id="6897140037006041989">Gebruikeragent</translation>
+<translation id="6957624206566198865">Open blad in ’n nuwe privaat oortjie</translation>
 <translation id="7053983685419859001">Versper</translation>
 <translation id="7079718277001814089">Hierdie werf bevat skadelike programmatuur</translation>
 <translation id="7096937462164235847">Hierdie webwerf se identiteit is nie geverifieer nie.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> gebruik gewoonlik enkripsie om u inligting te beskerm. Toe Vivaldi hierdie keer ’n verbinding met <ph name="SITE" /> gepoog het, het die webwerf ongewone en verkeerde aantekengegewens teruggestuur. Dit kan gebeur wanneer ’n aanvaller homself as <ph name="SITE" /> probeer voorhou, of wanneer ’n Wi-Fi-aantekenskerm die verbinding onderbreek het. U inligting is steeds veilig omdat Vivaldi die verbinding gestop het voor enige data uitgeruil is.</translation>
 <translation id="7878562273885520351">U wagwoord is dalk gekompromitteer</translation>
 <translation id="7951415247503192394">(32-bis)</translation>
+<translation id="7953236668995583915">Herlaai hierdie blad om u bygewerkte instellings op hierdie webwerf toe te pas</translation>
 <translation id="8025119109950072390">Aanvallers op hierdie werf kan u dalk iets gevaarliks probeer laat doen soos om programmatuur te installeer of u persoonlike inligting (bv. wagwoorde, telefoonnommers of kredietkaarte) bloot te stel.</translation>
 <translation id="8037357227543935929">Vra (verstek)</translation>
 <translation id="8041940743680923270">Gebruik globale verstek (Vra)</translation>

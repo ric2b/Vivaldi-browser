@@ -204,7 +204,7 @@ class PredictionManagerBrowserTestBase : public InProcessBrowserTest {
     OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
         ->AddObserverForOptimizationTargetModel(
             optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-            absl::nullopt, model_file_observer);
+            std::nullopt, model_file_observer);
   }
 
   PredictionManager* GetPredictionManager() {
@@ -323,12 +323,17 @@ class PredictionManagerBrowserTest
         {optimization_guide::features::kOptimizationTargetPrediction,
          {{"fetch_startup_delay_ms", "8000"}}},
     };
+    std::vector<base::test::FeatureRef> disabled_features;
     if (ShouldEnableInstallWideModelStore()) {
       enabled_features.emplace_back(
           features::kOptimizationGuideInstallWideModelStore,
           base::FieldTrialParams());
+    } else {
+      disabled_features.emplace_back(
+          features::kOptimizationGuideInstallWideModelStore);
     }
-    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                       disabled_features);
   }
 };
 
@@ -449,7 +454,7 @@ class PredictionManagerModelDownloadingBrowserTest
         profile ? profile : browser()->profile())
         ->AddObserverForOptimizationTargetModel(
             proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-            /*model_metadata=*/absl::nullopt, model_file_observer_.get());
+            /*model_metadata=*/std::nullopt, model_file_observer_.get());
   }
 
  private:
@@ -461,16 +466,21 @@ class PredictionManagerModelDownloadingBrowserTest
         {features::kOptimizationGuideModelDownloading,
          {{"unrestricted_model_downloading", "true"}}},
     };
+    std::vector<base::test::FeatureRef> disabled_features;
     if (ShouldEnableInstallWideModelStore()) {
       enabled_features.emplace_back(
           features::kOptimizationGuideInstallWideModelStore,
           base::FieldTrialParams());
+    } else {
+      disabled_features.emplace_back(
+          features::kOptimizationGuideInstallWideModelStore);
     }
     if (ShouldEnableModelStoreUseRelativePath()) {
       enabled_features.emplace_back(features::kModelStoreUseRelativePath,
                                     base::FieldTrialParams());
     }
-    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                       disabled_features);
   }
 
   std::unique_ptr<ModelFileObserver> model_file_observer_;
@@ -965,7 +975,7 @@ IN_PROC_BROWSER_TEST_P(PredictionManagerModelDownloadingBrowserTest,
         guest_browser->profile())
         ->AddObserverForOptimizationTargetModel(
             proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-            /*model_metadata=*/absl::nullopt, &model_file_observer);
+            /*model_metadata=*/std::nullopt, &model_file_observer);
     // Wait until the opt guide is up and the model is loaded as its shared
     // between profiles.
     RetryForHistogramUntilCountReached(
@@ -1011,7 +1021,7 @@ IN_PROC_BROWSER_TEST_F(PredictionManagerModelPackageOverrideTest, TestE2E) {
   OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
       ->AddObserverForOptimizationTargetModel(
           proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-          /*model_metadata=*/absl::nullopt, &model_file_observer);
+          /*model_metadata=*/std::nullopt, &model_file_observer);
 
   run_loop.Run();
 }

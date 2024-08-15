@@ -9,6 +9,10 @@
 #pragma mark - NOTIFICATION
 // Notification name for start page layout change
 extern NSString* vStartPageLayoutChangeDidChange;
+// Speed dial item change notification
+extern NSString* vSpeedDialPropertyDidChange;
+extern NSString* vSpeedDialIdentifierKey;
+extern NSString* vSpeedDialThumbnailRefreshStateKey;
 
 #pragma mark - SIZE AND PADDINGS
 // Speed dial container top padding

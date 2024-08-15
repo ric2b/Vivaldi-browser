@@ -12,8 +12,8 @@
 
 #include <Eigen/CXX11/Tensor>
 
-using Eigen::Tensor;
 using Eigen::array;
+using Eigen::Tensor;
 
 template <typename FromType, typename ToType>
 static void test_type_cast() {
@@ -21,7 +21,7 @@ static void test_type_cast() {
   // Generate random values for a valid cast.
   for (int i = 0; i < 101; ++i) {
     for (int j = 0; j < 201; ++j) {
-      ftensor(i, j) = internal::random_without_cast_overflow<FromType,ToType>::value();
+      ftensor(i, j) = internal::random_without_cast_overflow<FromType, ToType>::value();
     }
   }
 
@@ -36,7 +36,7 @@ static void test_type_cast() {
   }
 }
 
-template<typename Scalar, typename EnableIf = void>
+template <typename Scalar, typename EnableIf = void>
 struct test_cast_runner {
   static void run() {
     test_type_cast<Scalar, bool>();
@@ -58,7 +58,7 @@ struct test_cast_runner {
 };
 
 // Only certain types allow cast from std::complex<>.
-template<typename Scalar>
+template <typename Scalar>
 struct test_cast_runner<Scalar, std::enable_if_t<NumTraits<Scalar>::IsComplex>> {
   static void run() {
     test_type_cast<Scalar, half>();
@@ -68,9 +68,7 @@ struct test_cast_runner<Scalar, std::enable_if_t<NumTraits<Scalar>::IsComplex>> 
   }
 };
 
-
-EIGEN_DECLARE_TEST(cxx11_tensor_casts)
-{
+EIGEN_DECLARE_TEST(cxx11_tensor_casts) {
   CALL_SUBTEST(test_cast_runner<bool>::run());
   CALL_SUBTEST(test_cast_runner<int8_t>::run());
   CALL_SUBTEST(test_cast_runner<int16_t>::run());
@@ -86,5 +84,4 @@ EIGEN_DECLARE_TEST(cxx11_tensor_casts)
   CALL_SUBTEST(test_cast_runner<double>::run());
   CALL_SUBTEST(test_cast_runner<std::complex<float>>::run());
   CALL_SUBTEST(test_cast_runner<std::complex<double>>::run());
-
 }

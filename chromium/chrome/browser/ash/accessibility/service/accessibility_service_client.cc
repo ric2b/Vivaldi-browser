@@ -23,6 +23,7 @@
 #include "chrome/browser/ash/accessibility/service/automation_client_impl.h"
 #include "chrome/browser/ash/accessibility/service/speech_recognition_impl.h"
 #include "chrome/browser/ash/accessibility/service/tts_client_impl.h"
+#include "chrome/browser/ash/accessibility/service/user_input_impl.h"
 #include "chrome/browser/ash/accessibility/service/user_interface_impl.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_context.h"
@@ -61,9 +62,13 @@ AccessibilityServiceClient::~AccessibilityServiceClient() {
 }
 
 void AccessibilityServiceClient::BindAutomation(
-    mojo::PendingAssociatedRemote<ax::mojom::Automation> automation,
+    mojo::PendingAssociatedRemote<ax::mojom::Automation> automation) {
+  automation_client_->BindAutomation(std::move(automation));
+}
+
+void AccessibilityServiceClient::BindAutomationClient(
     mojo::PendingReceiver<ax::mojom::AutomationClient> automation_client) {
-  automation_client_->Bind(std::move(automation), std::move(automation_client));
+  automation_client_->BindAutomationClient(std::move(automation_client));
 }
 
 void AccessibilityServiceClient::BindAutoclickClient(
@@ -79,6 +84,11 @@ void AccessibilityServiceClient::BindSpeechRecognition(
 void AccessibilityServiceClient::BindTts(
     mojo::PendingReceiver<ax::mojom::Tts> tts_receiver) {
   tts_client_->Bind(std::move(tts_receiver));
+}
+
+void AccessibilityServiceClient::BindUserInput(
+    mojo::PendingReceiver<ax::mojom::UserInput> ui_receiver) {
+  user_input_client_->Bind(std::move(ui_receiver));
 }
 
 void AccessibilityServiceClient::BindUserInterface(
@@ -156,9 +166,10 @@ void AccessibilityServiceClient::Reset() {
   autoclick_client_.reset();
   file_loader_.reset();
   automation_client_.reset();
+  devtools_agent_hosts_.clear();
   speech_recognition_impl_.reset();
   tts_client_.reset();
-  devtools_agent_hosts_.clear();
+  user_input_client_.reset();
   user_interface_client_.reset();
 }
 
@@ -178,6 +189,13 @@ void AccessibilityServiceClient::EnableAssistiveTechnology(
   } else if (!enabled && iter != enabled_features_.end()) {
     enabled_features_.erase(iter);
     AccessibilityManager::Get()->RemoveFocusRings(type);
+  }
+
+  // If nothing at all is enabled, ensure that automation gets disabled,
+  // which will keep the system from collecting and passing a11y trees.
+  // Note it is safe to call Disable multiple times in a row.
+  if (enabled_features_.empty()) {
+    automation_client_->Disable();
   }
 
   if (!enabled && !at_controller_.is_bound()) {
@@ -222,6 +240,7 @@ void AccessibilityServiceClient::LaunchAccessibilityServiceAndBind() {
   automation_client_ = std::make_unique<AutomationClientImpl>();
   speech_recognition_impl_ = std::make_unique<SpeechRecognitionImpl>(profile_);
   tts_client_ = std::make_unique<TtsClientImpl>(profile_);
+  user_input_client_ = std::make_unique<UserInputImpl>();
   user_interface_client_ = std::make_unique<UserInterfaceImpl>();
 
   // Bind the AXServiceClient before enabling features.

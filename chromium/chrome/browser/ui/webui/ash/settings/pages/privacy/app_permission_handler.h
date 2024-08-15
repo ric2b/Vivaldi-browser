@@ -39,6 +39,15 @@ class AppPermissionHandler
   void GetApps(
       base::OnceCallback<void(std::vector<app_permission::mojom::AppPtr>)>
           callback) override;
+  void GetSystemAppsThatUseCamera(
+      base::OnceCallback<void(std::vector<app_permission::mojom::AppPtr>)>
+          callback) override;
+  void GetSystemAppsThatUseMicrophone(
+      base::OnceCallback<void(std::vector<app_permission::mojom::AppPtr>)>
+          callback) override;
+  void OpenNativeSettings(const std::string& app_id) override;
+  void SetPermission(const std::string& app_id,
+                     apps::PermissionPtr permission) override;
 
   // apps::AppRegistryCache::Observer:
   void OnAppUpdate(const apps::AppUpdate& update) override;
@@ -46,10 +55,13 @@ class AppPermissionHandler
       apps::AppRegistryCache* cache) override;
 
   std::vector<app_permission::mojom::AppPtr> GetAppList();
+  std::vector<app_permission::mojom::AppPtr> GetSystemAppListThatUsesCamera();
+  std::vector<app_permission::mojom::AppPtr>
+  GetSystemAppListThatUsesMicrophone();
 
   mojo::RemoteSet<app_permission::mojom::AppPermissionsObserver> observer_list_;
 
-  raw_ptr<apps::AppServiceProxy, ExperimentalAsh> app_service_proxy_;
+  raw_ptr<apps::AppServiceProxy> app_service_proxy_;
 
   base::ScopedObservation<apps::AppRegistryCache,
                           apps::AppRegistryCache::Observer>

@@ -20,6 +20,7 @@ use crate::deserialize::v1::*;
 use crate::utils::FfiEnum;
 use crypto_provider_default::CryptoProviderImpl;
 use handle_map::{HandleLike, HandleMapFullError, HandleNotPresentError};
+use np_adv::deserialization_arena;
 
 pub mod v0;
 pub mod v1;
@@ -86,7 +87,7 @@ enum DeserializeAdvertisementSuccess {
     V1(DeserializedV1Advertisement),
 }
 
-struct DeserializeAdvertisementError;
+pub(crate) struct DeserializeAdvertisementError;
 
 impl From<HandleMapFullError> for DeserializeAdvertisementError {
     fn from(_: HandleMapFullError) -> Self {
@@ -106,32 +107,18 @@ impl From<np_adv::AdvDeserializationError> for DeserializeAdvertisementError {
     }
 }
 
-type DefaultV0Credential = np_adv::credential::simple::SimpleV0Credential<
-    np_adv::credential::v0::MinimumFootprintV0CryptoMaterial,
-    (),
->;
-type DefaultV1Credential = np_adv::credential::simple::SimpleV1Credential<
-    np_adv::credential::v1::MinimumFootprintV1CryptoMaterial,
-    (),
->;
-type DefaultBothCredentialSource =
-    np_adv::credential::source::OwnedBothCredentialSource<DefaultV0Credential, DefaultV1Credential>;
-
 fn deserialize_advertisement_from_slice_internal(
     adv_payload: &[u8],
     credential_book: CredentialBook,
 ) -> Result<DeserializeAdvertisementSuccess, DeserializeAdvertisementError> {
     // Deadlock Safety: Credential-book locks always live longer than deserialized advs.
-    let _credential_book_read_guard = credential_book.get()?;
+    let credential_book_read_guard = credential_book.get()?;
 
-    //TODO(b/283249542): Use an actual credential source
-    let cred_source: DefaultBothCredentialSource = DefaultBothCredentialSource::new_empty();
+    let cred_book = &credential_book_read_guard.book;
 
+    let arena = deserialization_arena!();
     let deserialized_advertisement =
-        np_adv::deserialize_advertisement::<_, _, _, _, CryptoProviderImpl>(
-            adv_payload,
-            &cred_source,
-        )?;
+        np_adv::deserialize_advertisement::<_, CryptoProviderImpl>(arena, adv_payload, cred_book)?;
     match deserialized_advertisement {
         np_adv::DeserializedAdvertisement::V0(adv_contents) => {
             let adv_handle = DeserializedV0Advertisement::allocate_with_contents(adv_contents)?;
@@ -165,4 +152,14 @@ pub fn deserialize_advertisement(
     credential_book: CredentialBook,
 ) -> DeserializeAdvertisementResult {
     deserialize_advertisement_from_slice(adv_payload.as_slice(), credential_book)
+}
+
+/// Errors returned from [`crate::deserialize::v0::v0_payload::V0Payload#decrypt_metadata`].
+pub enum DecryptMetadataError {
+    /// The advertisement payload handle was either deallocated
+    /// or corresponds to a public advertisement, and so we
+    /// don't have any metadata to decrypt.
+    EncryptedMetadataNotAvailable,
+    /// Decryption of the raw metadata bytes failed.
+    DecryptionFailed,
 }

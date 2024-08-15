@@ -31,6 +31,7 @@
 #include <string>
 
 #include "src/tint/lang/core/ir/terminator.h"
+#include "src/tint/utils/containers/const_propagating_ptr.h"
 #include "src/tint/utils/rtti/castable.h"
 
 // Forward declarations
@@ -46,6 +47,9 @@ class Continue final : public Castable<Continue, Terminator> {
     /// The base offset in Operands() for the args
     static constexpr size_t kArgsOperandOffset = 0;
 
+    /// Constructor (no operands, no loop)
+    Continue();
+
     /// Constructor
     /// @param loop the loop owning the continue block
     /// @param args the arguments for the MultiInBlock
@@ -58,11 +62,17 @@ class Continue final : public Castable<Continue, Terminator> {
     /// @returns the loop owning the continue block
     ir::Loop* Loop() { return loop_; }
 
+    /// @returns the loop owning the continue block
+    const ir::Loop* Loop() const { return loop_; }
+
+    /// @param loop the new loop owning the continue block
+    void SetLoop(ir::Loop* loop);
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "continue"; }
+    std::string FriendlyName() const override { return "continue"; }
 
   private:
-    ir::Loop* loop_ = nullptr;
+    ConstPropagatingPtr<ir::Loop> loop_;
 };
 
 }  // namespace tint::core::ir

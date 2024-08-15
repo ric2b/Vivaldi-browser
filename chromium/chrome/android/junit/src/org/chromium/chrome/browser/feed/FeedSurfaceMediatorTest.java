@@ -45,6 +45,9 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.feed.sections.OnSectionHeaderSelectedListener;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderListProperties;
@@ -67,19 +70,16 @@ import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ListLayoutHelper;
 import org.chromium.chrome.browser.xsurface.feed.StreamType;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.widget.displaystyle.DisplayStyleObserver;
 import org.chromium.components.browser_ui.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig.DisplayStyle;
 import org.chromium.components.browser_ui.widget.displaystyle.VerticalDisplayStyle;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -94,7 +94,6 @@ import org.chromium.ui.modelutil.PropertyModel;
     ChromeFeatureList.WEB_FEED,
     ChromeFeatureList.INTEREST_FEED_V2_HEARTS,
     ChromeFeatureList.WEB_FEED_SORT,
-    ChromeFeatureList.FEED_HEADER_STICK_TO_TOP
 })
 public class FeedSurfaceMediatorTest {
     static final @Px int TOOLBAR_HEIGHT = 10;
@@ -230,6 +229,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
 
         PropertyModel sectionHeaderModel = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
         mFeedSurfaceMediator =
@@ -249,6 +249,7 @@ public class FeedSurfaceMediatorTest {
     public void updateContent_openingTabIdForYou() {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
 
         PropertyModel sectionHeaderModel = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
@@ -273,6 +274,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
         mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOR_YOU, model);
@@ -293,6 +295,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
         mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOR_YOU, model);
@@ -315,6 +318,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
         mFeedSurfaceMediator = createMediator(FeedSurfaceCoordinator.StreamTabId.FOR_YOU, model);
@@ -332,6 +336,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         doReturn(true).when(mUrlService).isDefaultSearchEngineGoogle();
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
@@ -351,6 +356,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(false);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         doReturn(true).when(mUrlService).isDefaultSearchEngineGoogle();
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
@@ -370,6 +376,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         doReturn(false).when(mUrlService).isDefaultSearchEngineGoogle();
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
@@ -390,6 +397,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(false);
         when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         doReturn(false).when(mUrlService).isDefaultSearchEngineGoogle();
 
         PropertyModel model = SectionHeaderListProperties.create(TOOLBAR_HEIGHT);
@@ -565,6 +573,7 @@ public class FeedSurfaceMediatorTest {
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
         mFeedSurfaceMediator = createMediator();
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS_BY_DSE)).thenReturn(true);
 
         mFeedSurfaceMediator.updateContent();
 
@@ -1143,6 +1152,7 @@ public class FeedSurfaceMediatorTest {
                 tabId,
                 /* actionDelegate= */ null,
                 mOptionsCoordinator,
-                uiConfig);
+                uiConfig,
+                mProfileMock);
     }
 }

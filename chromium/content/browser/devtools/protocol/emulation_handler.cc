@@ -60,13 +60,25 @@ display::mojom::ScreenOrientation WebScreenOrientationTypeFromString(
   return display::mojom::ScreenOrientation::kUndefined;
 }
 
-absl::optional<content::DisplayFeature::Orientation>
+std::optional<content::DisplayFeature::Orientation>
 DisplayFeatureOrientationTypeFromString(const std::string& type) {
   if (type == Emulation::DisplayFeature::OrientationEnum::Vertical)
     return content::DisplayFeature::Orientation::kVertical;
   if (type == Emulation::DisplayFeature::OrientationEnum::Horizontal)
     return content::DisplayFeature::Orientation::kHorizontal;
-  return absl::nullopt;
+  return std::nullopt;
+}
+
+base::expected<device::mojom::DevicePostureType, protocol::Response>
+DevicePostureTypeFromString(const std::string& type) {
+  if (type == Emulation::DevicePosture::TypeEnum::Continuous) {
+    return device::mojom::DevicePostureType::kContinuous;
+  } else if (type == Emulation::DevicePosture::TypeEnum::Folded) {
+    return device::mojom::DevicePostureType::kFolded;
+  } else {
+    return base::unexpected(
+        protocol::Response::InvalidParams("Invalid posture type"));
+  }
 }
 
 ui::GestureProviderConfigType TouchEmulationConfigurationToType(
@@ -247,11 +259,11 @@ ParseSensorMetadata(Maybe<Emulation::SensorMetadata>& metadata) {
   }
   if (metadata->HasMinimumFrequency()) {
     virtual_sensor_metadata->minimum_frequency =
-        device::mojom::NullableDouble::New(metadata->GetMinimumFrequency(0));
+        metadata->GetMinimumFrequency(0);
   }
   if (metadata->HasMaximumFrequency()) {
     virtual_sensor_metadata->maximum_frequency =
-        device::mojom::NullableDouble::New(metadata->GetMaximumFrequency(0));
+        metadata->GetMaximumFrequency(0);
   }
   return virtual_sensor_metadata;
 }
@@ -487,7 +499,8 @@ Response EmulationHandler::SetDeviceMetricsOverride(
     Maybe<bool> dont_set_visible_size,
     Maybe<Emulation::ScreenOrientation> screen_orientation,
     Maybe<protocol::Page::Viewport> viewport,
-    Maybe<protocol::Emulation::DisplayFeature> displayFeature) {
+    Maybe<protocol::Emulation::DisplayFeature> display_feature,
+    Maybe<protocol::Emulation::DevicePosture> device_posture) {
   const static int max_size = 10000000;
   const static double max_scale = 10;
   const static int max_orientation_angle = 360;
@@ -542,11 +555,11 @@ Response EmulationHandler::SetDeviceMetricsOverride(
     }
   }
 
-  absl::optional<content::DisplayFeature> display_feature = absl::nullopt;
-  if (displayFeature.has_value()) {
+  std::optional<content::DisplayFeature> content_display_feature = std::nullopt;
+  if (display_feature.has_value()) {
     protocol::Emulation::DisplayFeature& emu_display_feature =
-        displayFeature.value();
-    absl::optional<content::DisplayFeature::Orientation> disp_orientation =
+        display_feature.value();
+    std::optional<content::DisplayFeature::Orientation> disp_orientation =
         DisplayFeatureOrientationTypeFromString(
             emu_display_feature.GetOrientation());
     if (!disp_orientation) {
@@ -554,11 +567,11 @@ Response EmulationHandler::SetDeviceMetricsOverride(
           "Invalid display feature orientation type");
     }
     content::DisplayFeature::ParamErrorEnum error;
-    display_feature = content::DisplayFeature::Create(
+    content_display_feature = content::DisplayFeature::Create(
         *disp_orientation, emu_display_feature.GetOffset(),
         emu_display_feature.GetMaskLength(), width, height, &error);
 
-    if (!display_feature) {
+    if (!content_display_feature) {
       switch (error) {
         case content::DisplayFeature::ParamErrorEnum::
             kDisplayFeatureWithZeroScreenSize:
@@ -592,9 +605,14 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   params.screen_orientation_type = orientationType;
   params.screen_orientation_angle = orientationAngle;
 
-  if (display_feature) {
+  if (content_display_feature) {
     params.window_segments =
-        display_feature->ComputeWindowSegments(params.view_size);
+        content_display_feature->ComputeWindowSegments(params.view_size);
+  }
+
+  if (device_posture.has_value()) {
+    params.device_posture =
+        DevicePostureTypeFromString(device_posture.value().GetType()).value();
   }
 
   if (viewport.has_value()) {
@@ -688,7 +706,7 @@ Response EmulationHandler::SetUserAgentOverride(
   user_agent_ = user_agent;
   accept_language_ = accept_lang;
 
-  user_agent_metadata_ = absl::nullopt;
+  user_agent_metadata_ = std::nullopt;
   if (!ua_metadata_override.has_value()) {
     return Response::FallThrough();
   }
@@ -979,7 +997,7 @@ void EmulationHandler::ApplyOverrides(net::HttpRequestHeaders* headers,
 }
 
 bool EmulationHandler::ApplyUserAgentMetadataOverrides(
-    absl::optional<blink::UserAgentMetadata>* override_out) {
+    std::optional<blink::UserAgentMetadata>* override_out) {
   // This is conditional on basic user agent override being on; this helps us
   // emulate a device not sending any UA client hints.
   if (user_agent_.empty())

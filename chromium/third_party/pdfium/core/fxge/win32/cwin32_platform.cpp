@@ -25,11 +25,11 @@ using ScopedSelectObject = pdfium::base::win::ScopedSelectObject;
 
 struct Variant {
   const char* m_pFaceName;
-  const char* m_pVariantName;  // Note: UTF-16LE terminator required.
+  pdfium::span<const char> m_pVariantName;
 };
 
 constexpr Variant kVariantNames[] = {
-    {"DFKai-SB", "\x19\x6A\x77\x69\xD4\x9A\x00\x00"},
+    {"DFKai-SB", pdfium::make_span("\x19\x6A\x77\x69\xD4\x9A")},
 };
 
 struct Substs {
@@ -159,7 +159,7 @@ bool CFX_Win32FontInfo::IsSupportedFont(const LOGFONTA* plf) {
   size_t font_size = GetFontData(hFont, 0, {});
   if (font_size != GDI_ERROR && font_size >= sizeof(uint32_t)) {
     uint32_t header;
-    auto span = pdfium::as_writable_bytes(pdfium::make_span(&header, 1u));
+    auto span = pdfium::as_writable_bytes(pdfium::span_from_ref(header));
     GetFontData(hFont, 0, span);
     header = FXSYS_UINT32_GET_MSBFIRST(span);
     ret = header == FXBSTR_ID('O', 'T', 'T', 'O') ||
@@ -375,10 +375,8 @@ void* CFX_Win32FontInfo::MapFont(int weight,
     if (new_face != variant.m_pFaceName)
       continue;
 
-    const auto* pName =
-        reinterpret_cast<const unsigned short*>(variant.m_pVariantName);
-    size_t len = WideString::WStringLength(pName);
-    WideString wsName = WideString::FromUTF16LE(pName, len);
+    WideString wsName =
+        WideString::FromUTF16LE(pdfium::as_bytes(variant.m_pVariantName));
     if (wsFace == wsName)
       return hFont;
   }

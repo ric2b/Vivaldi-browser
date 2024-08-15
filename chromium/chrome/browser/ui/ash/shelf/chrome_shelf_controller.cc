@@ -205,7 +205,7 @@ class ChromeShelfControllerUserSwitchObserver
   void AddUser(Profile* profile);
 
   // The owning ChromeShelfController.
-  raw_ptr<ChromeShelfController, ExperimentalAsh> controller_;
+  raw_ptr<ChromeShelfController> controller_;
 
   base::ScopedObservation<user_manager::UserManager,
                           user_manager::UserManager::UserSessionStateObserver>
@@ -352,7 +352,7 @@ void ChromeShelfController::Init() {
 
   // Tag all open browser windows with the appropriate shelf id property. This
   // associates each window with the shelf item for the active web contents.
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (IsBrowserRepresentedInBrowserList(browser, model_) &&
         browser->tab_strip_model()->GetActiveWebContents()) {
       SetShelfIDForBrowserWindowContents(
@@ -491,8 +491,10 @@ bool ChromeShelfController::IsOpen(const ash::ShelfID& id) const {
 void ChromeShelfController::LaunchApp(const ash::ShelfID& id,
                                       ash::ShelfLaunchSource source,
                                       int event_flags,
-                                      int64_t display_id) {
-  shelf_controller_helper_->LaunchApp(id, source, event_flags, display_id);
+                                      int64_t display_id,
+                                      bool new_window) {
+  shelf_controller_helper_->LaunchApp(id, source, event_flags, display_id,
+                                      new_window);
 }
 
 void ChromeShelfController::SetItemImage(const ash::ShelfID& shelf_id,
@@ -503,8 +505,8 @@ void ChromeShelfController::SetItemImage(const ash::ShelfID& shelf_id,
     ash::ShelfItem new_item = *item;
     new_item.image = image;
     new_item.notification_badge_color =
-        ash::AppIconColorCache::GetInstance().GetLightVibrantColorForApp(
-            new_item.id.app_id, image);
+        ash::AppIconColorCache::GetInstance(profile())
+            .GetLightVibrantColorForApp(new_item.id.app_id, image);
     model_->Set(model_->ItemIndexByID(shelf_id), new_item);
   }
 
@@ -694,7 +696,7 @@ ChromeShelfController::GetBrowserShortcutShelfItemControllerForTesting() {
 
 void ChromeShelfController::UpdateBrowserItemState() {
   ash::ShelfItemStatus browser_status = ash::STATUS_CLOSED;
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (IsBrowserRepresentedInBrowserList(browser, model_)) {
       browser_status = ash::STATUS_RUNNING;
       break;
@@ -1177,6 +1179,14 @@ void ChromeShelfController::OnShortcutUpdated(
     item.title = title;
     model_->Set(index, item);
   }
+
+  std::u16string accessible_name =
+      ShelfControllerHelper::GetAppServiceShortcutAccessibleLabel(
+          latest_active_profile_, update.ShortcutId());
+  if (accessible_name != item.accessible_name) {
+    item.accessible_name = accessible_name;
+    model_->Set(index, item);
+  }
 }
 
 void ChromeShelfController::OnShortcutRemoved(const apps::ShortcutId& id) {
@@ -1189,8 +1199,11 @@ void ChromeShelfController::OnShortcutRemoved(const apps::ShortcutId& id) {
 ///////////////////////////////////////////////////////////////////////////////
 // AppIconLoaderDelegate:
 
-void ChromeShelfController::OnAppImageUpdated(const std::string& app_id,
-                                              const gfx::ImageSkia& image) {
+void ChromeShelfController::OnAppImageUpdated(
+    const std::string& app_id,
+    const gfx::ImageSkia& image,
+    bool is_placeholder_icon,
+    const std::optional<gfx::ImageSkia>& badge_image) {
   TRACE_EVENT0("ui", "ChromeShelfController::OnAppImageUpdated");
   bool is_standard_icon = true;
   if (!AppServiceAppIconLoader::CanLoadImage(latest_active_profile_, app_id) &&
@@ -1202,7 +1215,7 @@ void ChromeShelfController::OnAppImageUpdated(const std::string& app_id,
   }
 
   if (is_standard_icon) {
-    UpdateAppImage(app_id, image);
+    UpdateAppImage(app_id, badge_image, is_placeholder_icon, image);
     return;
   }
 
@@ -1223,11 +1236,15 @@ void ChromeShelfController::OnAppImageUpdated(const std::string& app_id,
   standard_icon_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(&CreateStandardImageOnWorkerThread, copy),
       base::BindOnce(&ChromeShelfController::UpdateAppImage,
-                     weak_ptr_factory_.GetWeakPtr(), app_id));
+                     weak_ptr_factory_.GetWeakPtr(), app_id, badge_image,
+                     is_placeholder_icon));
 }
 
-void ChromeShelfController::UpdateAppImage(const std::string& app_id,
-                                           const gfx::ImageSkia& image) {
+void ChromeShelfController::UpdateAppImage(
+    const std::string& app_id,
+    const std::optional<gfx::ImageSkia>& badge_image,
+    bool is_placeholder_icon,
+    const gfx::ImageSkia& image) {
   TRACE_EVENT0("ui", "ChromeShelfController::UpdateAppImage");
   // TODO: need to get this working for shortcuts.
   for (int index = 0; index < model_->item_count(); ++index) {
@@ -1238,10 +1255,12 @@ void ChromeShelfController::UpdateAppImage(const std::string& app_id,
       continue;
     }
     item.image = image;
+    item.badge_image = badge_image.value_or(gfx::ImageSkia());
+    item.has_placeholder_icon = is_placeholder_icon;
     shelf_spinner_controller_->MaybeApplySpinningEffect(app_id, &item.image);
     item.notification_badge_color =
-        ash::AppIconColorCache::GetInstance().GetLightVibrantColorForApp(app_id,
-                                                                         image);
+        ash::AppIconColorCache::GetInstance(profile())
+            .GetLightVibrantColorForApp(app_id, image);
     model_->Set(index, item);
     // It's possible we're waiting on more than one item, so don't break.
   }
@@ -1506,12 +1525,15 @@ void ChromeShelfController::UpdatePinnedByPolicyForItemAtIndex(
 void ChromeShelfController::UpdateForcedPinStateForItemAtIndex(
     int model_index) {
   ash::ShelfItem item = model_->items()[model_index];
-  auto app_type = apps::AppServiceProxyFactory::GetForProfile(profile())
-                      ->AppRegistryCache()
-                      .GetAppType(item.id.app_id);
+  bool pin_state_forced_by_type = true;
 
-  const bool pin_state_forced_by_type =
-      !IsAppPinEditable(app_type, item.id.app_id, profile());
+  if (item.type == ash::TYPE_PINNED_APP || item.type == ash::TYPE_APP) {
+    auto app_type = apps::AppServiceProxyFactory::GetForProfile(profile())
+                        ->AppRegistryCache()
+                        .GetAppType(item.id.app_id);
+    pin_state_forced_by_type =
+        !IsAppPinEditable(app_type, item.id.app_id, profile());
+  }
   if (item.pin_state_forced_by_type != pin_state_forced_by_type) {
     item.pin_state_forced_by_type = pin_state_forced_by_type;
     model_->Set(model_index, item);
@@ -1573,7 +1595,7 @@ void ChromeShelfController::CreateBrowserShortcutItem(bool pinned) {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   browser_shortcut.image = *rb.GetImageSkiaNamed(IDR_CHROME_APP_ICON_192);
   browser_shortcut.notification_badge_color =
-      ash::AppIconColorCache::GetInstance().GetLightVibrantColorForApp(
+      ash::AppIconColorCache::GetInstance(profile()).GetLightVibrantColorForApp(
           kChromeAppId, browser_shortcut.image);
   browser_shortcut.title = l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
 
@@ -1789,6 +1811,17 @@ void ChromeShelfController::ShelfItemAdded(int index) {
           ShelfControllerHelper::GetPromiseAppAccessibleName(
               latest_active_profile_, id.app_id);
       if (is_promise_app && accessible_name != item.accessible_name) {
+        needs_update = true;
+        item.accessible_name = accessible_name;
+      }
+    }
+
+    if (ShelfControllerHelper::IsAppServiceShortcut(latest_active_profile_,
+                                                    id.app_id)) {
+      std::u16string accessible_name =
+          ShelfControllerHelper::GetAppServiceShortcutAccessibleLabel(
+              latest_active_profile_, apps::ShortcutId(id.app_id));
+      if (accessible_name != item.accessible_name) {
         needs_update = true;
         item.accessible_name = accessible_name;
       }

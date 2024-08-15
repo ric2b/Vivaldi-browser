@@ -31,7 +31,7 @@ class OverviewDropTarget : public OverviewItemBase {
 
   // OverviewItemBase:
   aura::Window* GetWindow() override;
-  std::vector<aura::Window*> GetWindows() override;
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> GetWindows() override;
   bool HasVisibleOnAllDesksWindow() override;
   bool Contains(const aura::Window* target) const override;
   OverviewItem* GetLeafItemForWindow(aura::Window* window) override;
@@ -46,7 +46,7 @@ class OverviewDropTarget : public OverviewItemBase {
   float GetItemScale(int height) override;
   void ScaleUpSelectedItem(OverviewAnimationType animation_type) override;
   void EnsureVisible() override;
-  OverviewFocusableView* GetFocusableView() const override;
+  std::vector<OverviewFocusableView*> GetFocusableViews() const override;
   views::View* GetBackDropView() const override;
   void UpdateRoundedCornersAndShadow() override;
   void SetOpacity(float opacity) override;
@@ -76,9 +76,8 @@ class OverviewDropTarget : public OverviewItemBase {
   gfx::Point GetMagnifierFocusPointInScreen() const override;
   const gfx::RoundedCornersF GetRoundedCorners() const override;
 
- protected:
-  // OverviewItemBase:
-  void CreateItemWidget() override;
+ private:
+  void CreateItemWidget();
 };
 
 }  // namespace ash

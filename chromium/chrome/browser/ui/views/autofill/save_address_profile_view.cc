@@ -276,6 +276,8 @@ SaveAddressProfileView::SaveAddressProfileView(
     SetFootnoteView(
         views::Builder<views::Label>()
             .SetText(footer_message)
+            .SetTextContext(views::style::CONTEXT_BUBBLE_FOOTER)
+            .SetTextStyle(views::style::STYLE_SECONDARY)
             .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
             .SetMultiLine(true)
             .Build());
@@ -322,8 +324,8 @@ void SaveAddressProfileView::Hide() {
 }
 
 void SaveAddressProfileView::AddedToWidget() {
-  absl::optional<SaveUpdateAddressProfileBubbleController::HeaderImages>
-      images = controller_->GetHeaderImages();
+  std::optional<SaveUpdateAddressProfileBubbleController::HeaderImages> images =
+      controller_->GetHeaderImages();
   if (images) {
     GetBubbleFrameView()->SetHeaderView(
         std::make_unique<ThemeTrackingNonAccessibleImageView>(

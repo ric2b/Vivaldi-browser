@@ -41,6 +41,7 @@
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/resolve.h"
 #include "src/tint/lang/wgsl/sem/function.h"
+#include "src/tint/utils/containers/transform.h"
 
 using namespace tint::core::number_suffixes;  // NOLINT
 using namespace tint::core::fluent_types;     // NOLINT
@@ -64,6 +65,8 @@ struct MemberInfo {
     std::optional<uint32_t> location;
     /// The struct member index if provided
     std::optional<uint32_t> index;
+    /// The struct member color if provided
+    std::optional<uint32_t> color;
 };
 
 /// FXC is sensitive to field order in structures, this is used by StructMemberComparator to ensure
@@ -99,13 +102,14 @@ uint32_t BuiltinOrder(core::BuiltinValue builtin) {
         default:
             break;
     }
+    TINT_UNREACHABLE();
     return 0;
 }
 
 // Returns true if `attr` is a shader IO attribute.
 bool IsShaderIOAttribute(const Attribute* attr) {
     return attr->IsAnyOf<BuiltinAttribute, InterpolateAttribute, InvariantAttribute,
-                         LocationAttribute, IndexAttribute>();
+                         LocationAttribute, ColorAttribute, IndexAttribute>();
 }
 
 }  // namespace
@@ -284,11 +288,13 @@ struct CanonicalizeEntryPointIO::State {
     /// @param name the name of the shader input
     /// @param type the type of the shader input
     /// @param location the location if provided
+    /// @param color the color if provided
     /// @param attrs the attributes to apply to the shader input
     /// @returns an expression which evaluates to the value of the shader input
     const Expression* AddInput(std::string name,
                                const core::type::Type* type,
                                std::optional<uint32_t> location,
+                               std::optional<uint32_t> color,
                                tint::Vector<const Attribute*, 8> attrs) {
         auto ast_type = CreateASTTypeFor(ctx, type);
 
@@ -347,9 +353,20 @@ struct CanonicalizeEntryPointIO::State {
             // Otherwise, move it to the new structure member list.
             Symbol symbol = input_names.emplace(name).second ? b.Symbols().Register(name)
                                                              : b.Symbols().New(name);
-            wrapper_struct_param_members.Push(
-                {b.Member(symbol, ast_type, std::move(attrs)), location, std::nullopt});
-            return b.MemberAccessor(InputStructSymbol(), symbol);
+            wrapper_struct_param_members.Push({b.Member(symbol, ast_type, std::move(attrs)),
+                                               location, /* index */ std::nullopt, color});
+            const Expression* expr = b.MemberAccessor(InputStructSymbol(), symbol);
+
+            // If this is a fragment position builtin and we're targeting D3D, we need to invert the
+            // 'w' component of the vector.
+            if (cfg.shader_style == ShaderStyle::kHlsl &&
+                builtin_attr == core::BuiltinValue::kPosition) {
+                auto* xyz = b.MemberAccessor(expr, "xyz");
+                auto* w = b.MemberAccessor(b.MemberAccessor(InputStructSymbol(), symbol), "w");
+                expr = b.Call<vec4<f32>>(xyz, b.Div(1_a, w));
+            }
+
+            return expr;
         }
     }
 
@@ -428,7 +445,8 @@ struct CanonicalizeEntryPointIO::State {
         }
 
         auto name = param->Declaration()->name->symbol.Name();
-        auto* input_expr = AddInput(name, param->Type(), param->Location(), std::move(attributes));
+        auto* input_expr = AddInput(name, param->Type(), param->Attributes().location,
+                                    param->Attributes().color, std::move(attributes));
         inner_call_parameters.Push(input_expr);
     }
 
@@ -462,7 +480,7 @@ struct CanonicalizeEntryPointIO::State {
             auto attributes =
                 CloneShaderIOAttributes(member->Declaration()->attributes, do_interpolate);
             auto* input_expr = AddInput(name, member->Type(), member->Attributes().location,
-                                        std::move(attributes));
+                                        member->Attributes().color, std::move(attributes));
             inner_struct_values.Push(input_expr);
         }
 
@@ -545,44 +563,68 @@ struct CanonicalizeEntryPointIO::State {
     }
 
     /// Comparison function used to reorder struct members such that all members with
-    /// location attributes appear first (ordered by location slot), followed by
-    /// those with builtin attributes.
+    /// color attributes appear first (ordered by color slot), then location attributes (ordered by
+    /// location slot), then index attributes (ordered by index slot), followed by those with
+    /// builtin attributes (ordered by BuiltinOrder).
     /// @param x a struct member
     /// @param y another struct member
     /// @returns true if a comes before b
     bool StructMemberComparator(const MemberInfo& x, const MemberInfo& y) {
-        auto* x_loc = GetAttribute<LocationAttribute>(x.member->attributes);
-        auto* y_loc = GetAttribute<LocationAttribute>(y.member->attributes);
-        auto* x_blt = GetAttribute<BuiltinAttribute>(x.member->attributes);
-        auto* y_blt = GetAttribute<BuiltinAttribute>(y.member->attributes);
-        if (x_loc) {
-            if (!y_loc) {
-                // `a` has location attribute and `b` does not: `a` goes first.
-                return true;
-            }
+        if (x.color.has_value() && y.color.has_value() && x.color != y.color) {
+            // Both have color attributes: smallest goes first.
+            return x.color < y.color;
+        } else if (x.color.has_value() != y.color.has_value()) {
+            // The member with the color goes first
+            return x.color.has_value();
+        }
+
+        if (x.location.has_value() && y.location.has_value() && x.location != y.location) {
             // Both have location attributes: smallest goes first.
             return x.location < y.location;
-        } else {
-            if (y_loc) {
-                // `b` has location attribute and `a` does not: `b` goes first.
-                return false;
-            }
-            // Both are builtins: order matters for FXC.
-            auto builtin_a = BuiltinOf(x_blt);
-            auto builtin_b = BuiltinOf(y_blt);
-            return BuiltinOrder(builtin_a) < BuiltinOrder(builtin_b);
+        } else if (x.location.has_value() != y.location.has_value()) {
+            // The member with the location goes first
+            return x.location.has_value();
         }
+
+        if (x.index.has_value() && y.index.has_value() && x.index != y.index) {
+            // Both have index attributes: smallest goes first.
+            return x.index < y.index;
+        } else if (x.index.has_value() != y.index.has_value()) {
+            // The member with the index goes first
+            return x.index.has_value();
+        }
+
+        {
+            auto* x_blt = GetAttribute<BuiltinAttribute>(x.member->attributes);
+            auto* y_blt = GetAttribute<BuiltinAttribute>(y.member->attributes);
+            if (x_blt && y_blt) {
+                // Both are builtins: order matters for FXC.
+                auto builtin_a = BuiltinOf(x_blt);
+                auto builtin_b = BuiltinOf(y_blt);
+                auto order_a = BuiltinOrder(builtin_a);
+                auto order_b = BuiltinOrder(builtin_b);
+                if (order_a != order_b) {
+                    return order_a < order_b;
+                }
+            } else if ((x_blt != nullptr) != (y_blt != nullptr)) {
+                // The member with the builtin goes first
+                return x_blt != nullptr;
+            }
+        }
+
+        // Control flow reaches here if x is the same as y.
+        // Sort algorithms sometimes do that.
+        return false;
     }
+
     /// Create the wrapper function's struct parameter and type objects.
     void CreateInputStruct() {
         // Sort the struct members to satisfy HLSL interfacing matching rules.
         std::sort(wrapper_struct_param_members.begin(), wrapper_struct_param_members.end(),
                   [&](auto& x, auto& y) { return StructMemberComparator(x, y); });
 
-        tint::Vector<const StructMember*, 8> members;
-        for (auto& mem : wrapper_struct_param_members) {
-            members.Push(mem.member);
-        }
+        auto members =
+            tint::Transform(wrapper_struct_param_members, [](auto& info) { return info.member; });
 
         // Create the new struct type.
         auto struct_name = b.Sym();
@@ -613,9 +655,12 @@ struct CanonicalizeEntryPointIO::State {
             }
             member_names.insert(name.Name());
 
-            wrapper_struct_output_members.Push(
-                {b.Member(name, outval.type, std::move(outval.attributes)), outval.location,
-                 std::nullopt});
+            wrapper_struct_output_members.Push({
+                /* member */ b.Member(name, outval.type, std::move(outval.attributes)),
+                /* location */ outval.location,
+                /* index */ outval.index,
+                /* color */ std::nullopt,
+            });
             assignments.Push(b.Assign(b.MemberAccessor(wrapper_result, name), outval.value));
         }
 

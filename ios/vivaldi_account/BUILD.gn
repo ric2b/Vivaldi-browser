@@ -11,6 +11,8 @@ source_set("vivaldi_account") {
   ]
 
   deps = [
+    "//components/keyed_service/core",
+    "//components/keyed_service/ios",
     "//ios/chrome/browser/browser_state/model",
     "//ios/chrome/browser/passwords/model:store_factory",
     "//vivaldi/prefs",

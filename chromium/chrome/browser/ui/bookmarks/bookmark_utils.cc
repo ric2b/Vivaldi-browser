@@ -9,6 +9,7 @@
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -248,14 +249,15 @@ bool IsValidBookmarkDropLocation(Profile* profile,
 
   const base::FilePath& profile_path = profile->GetPath();
   if (data.IsFromProfilePath(profile_path)) {
-    std::vector<const BookmarkNode*> nodes = data.GetNodes(model, profile_path);
+    std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes =
+        data.GetNodes(model, profile_path);
     for (size_t i = 0; i < nodes.size(); ++i) {
       // Don't allow the drop if the user is attempting to drop on one of the
       // nodes being dragged.
       const BookmarkNode* node = nodes[i];
-      absl::optional<size_t> node_index =
-          (drop_parent == node->parent()) ? drop_parent->GetIndexOf(nodes[i])
-                                          : absl::nullopt;
+      std::optional<size_t> node_index = (drop_parent == node->parent())
+                                             ? drop_parent->GetIndexOf(nodes[i])
+                                             : std::nullopt;
       if (node_index.has_value() &&
           (index == node_index.value() || index == node_index.value() + 1)) {
         return false;

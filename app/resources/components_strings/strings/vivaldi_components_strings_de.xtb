@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat die Verbindung unerwartet geschlossen.</translation>
 <translation id="1161325031994447685">WLAN-Verbindung erneut herstellen</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Löschen Sie Ihre Cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Informationen zur Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat keine Daten gesendet.</translation>
 <translation id="1559528461873125649">Datei oder Verzeichnis nicht vorhanden</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Setzen Sie sich mit dem Systemadministrator in Verbindung.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Versuchen Sie eine Windows Netzwerkdiagnose durchzuführen<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Diese Website enthält schädliche Programme</translation>
-<translation id="1916770123977586577">Laden Sie diese Seite neu, um die aktualisierten Einstellungen für diese Website zu übernehmen</translation>
 <translation id="1974060860693918893">Erweitert</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy und Firewall prüfen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ausgestellt für: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Angreifer können unter Umständen die Bilder sehen, die Sie sich auf dieser Website ansehen, und könnten dann versuchen, Sie durch Ändern der Bilder zu täuschen.</translation>
 <translation id="2356070529366658676">Nachfragen</translation>
 <translation id="2359808026110333948">Weiter</translation>
+<translation id="2388886110302389394">Seite in einem neuen privaten Fenster öffnen (Strg-Umschalt-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Eine Netzwerkdiagnose durchführen<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Diese Seite wurde von einer Erweiterung blockiert</translation>
 <translation id="2501278716633472235">Gehe zurück</translation>
@@ -70,7 +69,8 @@
 <translation id="3566021033012934673">Dies ist keine sichere Verbindung</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details ausblenden</translation>
-<translation id="3630155396527302611">Falls das Programm schon in der Liste mit erlaubtem Netzwerkzugriff eingetragen ist, entfernen Sie es aus der Liste und fügen Sie es noch einmal hinzu.</translation>
+<translation id="3630155396527302611">Falls das Programm schon in der Liste mit erlaubtem Netzwerkzugriff eingetragen ist,
+ entfernen Sie es aus der Liste und fügen Sie es noch einmal hinzu.</translation>
 <translation id="3658742229777143148">Überarbeitung</translation>
 <translation id="3681007416295224113">Zertifikatinformationen</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Proxy, Firewall und DNS-Konfiguration prüfen<ph name="END_LINK" /></translation>
@@ -79,6 +79,7 @@
 <translation id="3950820424414687140">Anmelden</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> ist gesperrt</translation>
 <translation id="3987940399970879459">Weniger als 1 MB</translation>
+<translation id="4075123085690634698">Seite in einem neuen privaten Fenster öffnen (⇧⌘N)</translation>
 <translation id="4075732493274867456">Client und Server unterstützen keine gemeinsamen SSL-Protokollversionen oder Verschlüsselungsverfahren.</translation>
 <translation id="4116663294526079822">Auf dieser Website immer zulassen</translation>
 <translation id="4130226655945681476">Prüfen Sie Netzwerkkabel, Modem und Router</translation>
@@ -107,7 +108,7 @@
 <translation id="4764776831041365478">Die Webseite unter <ph name="URL" /> ist möglicherweise vorübergehend nicht verfügbar oder wurde dauerhaft an eine neue Webadresse verschoben.</translation>
 <translation id="483241715238664915">Warnmeldungen aktivieren</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
-<translation id="5023310440958281426">Informieren Sie sich über die von Ihrem Administrator festgelegten Richtlinien.</translation>
+<translation id="5023310440958281426">Prüfen Sie die Richtlinien Ihres Administrators</translation>
 <translation id="5039804452771397117">Zulassen</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 wird verwendet)}other{(# werden verwendet)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxyadresse prüfen<ph name="END_LINK" /></translation>
@@ -137,12 +138,12 @@
 <translation id="614940544461990577">Versuchen Sie folgendes:</translation>
 <translation id="6165508094623778733">Weitere Informationen</translation>
 <translation id="6177128806592000436">Die Verbindung zu dieser Website ist nicht sicher</translation>
-<translation id="6203231073485539293">Überprüfen Sie Ihre Internetverbindung.</translation>
+<translation id="6203231073485539293">Überprüfen Sie Ihre Internetverbindung</translation>
 <translation id="6225522625585012689">Unter &lt;strong&gt;vivaldi://policy&lt;/strong&gt; finden Sie eine Liste mit blockierten URLs und andere Richtlinien, die von Ihrem Systemadministrator festgelegt wurden.</translation>
 <translation id="6264485186158353794">Zurück zu sicherer Website</translation>
 <translation id="6305205051461490394"><ph name="URL" /> ist nicht erreichbar.</translation>
-<translation id="6321917430147971392">Überprüfen Sie Ihre DNS-Einstellungen.</translation>
-<translation id="6328639280570009161">Deaktivieren Sie die Netzwerkvervollständigung.</translation>
+<translation id="6321917430147971392">Überprüfen Sie Ihre DNS-Einstellungen</translation>
+<translation id="6328639280570009161">Deaktivieren Sie die Netzwerkvervollständigung</translation>
 <translation id="6328786501058569169">Sie befinden sich auf einer betrügerischen Website</translation>
 <translation id="6348220984832452017">Aktive Variationen</translation>
 <translation id="6358450015545214790">Was bedeuten diese Hinweise?</translation>
@@ -155,6 +156,7 @@
 <translation id="6757797048963528358">Ihr Gerät geht in den Ruhemodus.</translation>
 <translation id="6890956352250146925">Optionen für Cookies und Websitedaten</translation>
 <translation id="6897140037006041989">User-Agent</translation>
+<translation id="6957624206566198865">Seite in einem neuen privaten Tab öffnen</translation>
 <translation id="7053983685419859001">Blockieren</translation>
 <translation id="7079718277001814089">Diese Website enthält Malware</translation>
 <translation id="7096937462164235847">Die Identität dieser Website ist nicht verifiziert.</translation>
@@ -169,7 +171,7 @@
 <translation id="7419106976560586862">Profilpfad</translation>
 <translation id="7445762425076701745">Die Identität des Servers, mit dem Sie verbunden sind, kann nicht vollständig überprüft werden. Sie sind mit einem Server verbunden, dessen Name nur innerhalb Ihres Netzwerks gültig ist. Eine externe Zertifizierungsstelle hat keine Möglichkeit, den Eigentümer dieses Namens zu bestätigen. Da einige Zertifizierungsstellen ungeachtet dessen dennoch Zertifikate für derartige Namen ausstellen, gibt es keine Möglichkeit sicherzustellen, dass Sie mit der gewünschten Website und nicht mit einem Angreifer verbunden sind.</translation>
 <translation id="7455133967321480974">Globalen Standard verwenden (Blockieren)</translation>
-<translation id="7518003948725431193">Für die folgende Webadresse wurde keine Webseite gefunden: <ph name="URL" />.</translation>
+<translation id="7518003948725431193">Für die folgende Webadresse wurde keine Webseite gefunden: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Damit diese Webseite richtig angezeigt wird, werden die Daten benötigt, die Sie zuvor eingegeben haben. Sie können diese Daten erneut senden, dabei werden jedoch sämtliche Aktionen wiederholt, die zuvor durch diese Seite ausgeführt wurden.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kann diese Anfrage momentan nicht verarbeiten.</translation>
 <translation id="7662298039739062396">Einstellung wird von einer Erweiterung gesteuert</translation>
@@ -183,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> schützt Ihre Daten in der Regel durch Verschlüsselung. Als Vivaldi dieses Mal versuchte, eine Verbindung zu <ph name="SITE" /> herzustellen, sendete die Website ungewöhnliche und falsche Informationen zurück, um sich zu identifizieren. Entweder versucht ein Angreifer, sich als <ph name="SITE" /> auszugeben, oder die Verbindung wurde durch eine WLAN-Anmeldeseite unterbrochen. Da Vivaldi die Verbindung vor dem Austausch von Daten unterbrochen hat, sind Ihre Informationen weiterhin sicher.</translation>
 <translation id="7878562273885520351">Ihr Passwort könnte kompromittiert sein</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
+<translation id="7953236668995583915">Diese Seite neu laden, um die neuen Einstellungen für diese Website zu übernehmen</translation>
 <translation id="8025119109950072390">Angreifer auf dieser Website können Sie dazu verleiten etwas Gefährliches zu tun, wie die Installation von Software oder die Offenlegung Ihrer persönlichen Daten (z. B. Passwörter, Telefonnummern oder Kreditkartendaten).</translation>
 <translation id="8037357227543935929">Nachfragen (Standardeinstellung)</translation>
 <translation id="8041940743680923270">Globalen Standard verwenden (Nachfragen)</translation>

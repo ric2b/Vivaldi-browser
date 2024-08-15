@@ -13,6 +13,8 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_gesture_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_menu_provider.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_removal_observer_bridge.h"
 
 namespace commerce {
@@ -46,7 +48,9 @@ class PrefRegistrySyncable;
 @protocol ApplicationCommands;
 class AuthenticationService;
 class Browser;
+@class BrowserActionFactory;
 @protocol BrowserCoordinatorCommands;
+@protocol ContentSuggestionsViewControllerAudience;
 @protocol ContentSuggestionsDelegate;
 @class ContentSuggestionsMetricsRecorder;
 enum class ContentSuggestionsModuleType;
@@ -63,7 +67,9 @@ class WebStateList;
 // Mediator for ContentSuggestions.
 @interface ContentSuggestionsMediator
     : NSObject <ContentSuggestionsCommands,
+                ContentSuggestionsImageDataSource,
                 ContentSuggestionsGestureCommands,
+                ContentSuggestionsMenuProvider,
                 StartSurfaceRecentTabObserving>
 
 // Default initializer.
@@ -99,6 +105,10 @@ class WebStateList;
 // Delegate used to communicate Content Suggestions events to the delegate.
 @property(nonatomic, weak) id<ContentSuggestionsDelegate> delegate;
 
+// Delegate for presentation actions.
+@property(nonatomic, weak) id<ContentSuggestionsViewControllerAudience>
+    presentationDelegate;
+
 // The consumer that will be notified when the data change.
 @property(nonatomic, weak) id<ContentSuggestionsConsumer> consumer;
 
@@ -124,6 +134,9 @@ class WebStateList;
 // Service.
 @property(nonatomic, assign)
     segmentation_platform::SegmentationPlatformService* segmentationService;
+
+// Action factory for mediator.
+@property(nonatomic, strong) BrowserActionFactory* actionFactory;
 
 // Disconnects the mediator.
 - (void)disconnect;

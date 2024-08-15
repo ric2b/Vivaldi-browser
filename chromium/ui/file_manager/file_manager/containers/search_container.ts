@@ -4,27 +4,23 @@
 
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 
+import type {VolumeManager} from '../background/js/volume_manager.js';
 import {queryRequiredElement} from '../common/js/dom_utils.js';
+import {isEntryInsideDrive} from '../common/js/entry_utils.js';
+import type {FakeEntry} from '../common/js/files_app_entry_types.js';
 import {recordUserAction} from '../common/js/metrics.js';
 import {str, strf} from '../common/js/translations.js';
-import {VolumeManagerCommon} from '../common/js/volume_manager_types.js';
-import {CurrentDirectory, PropStatus, SearchData, SearchLocation, SearchOptions, SearchRecency, State} from '../externs/ts/state.js';
-import {VolumeManager} from '../externs/volume_manager.js';
+import {RootType} from '../common/js/volume_manager_types.js';
 import {PathComponent} from '../foreground/js/path_component.js';
-import {A11yAnnounce} from '../foreground/js/ui/a11y_announce.js';
+import type {A11yAnnounce} from '../foreground/js/ui/a11y_announce.js';
 import {changeDirectory} from '../state/ducks/current_directory.js';
 import {clearSearch, getDefaultSearchOptions, isSearchEmpty, updateSearch} from '../state/ducks/search.js';
 import type {FileKey} from '../state/file_key.js';
+import {type CurrentDirectory, PropStatus, type SearchData, SearchLocation, type SearchOptions, SearchRecency, type State} from '../state/state.js';
 import {getStore, type Store} from '../state/store.js';
 import {type BreadcrumbClickedEvent, XfBreadcrumb} from '../widgets/xf_breadcrumb.js';
 import {OptionKind, SEARCH_OPTIONS_CHANGED, type SearchOptionsChangedEvent, XfSearchOptionsElement} from '../widgets/xf_search_options.js';
 import type {XfOption} from '../widgets/xf_select.js';
-
-/**
- * @fileoverview
- * This file is checked via TS, so we suppress Closure checks.
- * @suppress {checkTypes}
- */
 
 /**
  * Defines the possible states of the query input widget. This is a widget with
@@ -42,7 +38,7 @@ enum SearchInputState {
  * directory.
  */
 function isInRecent(dir: CurrentDirectory|undefined): boolean {
-  return dir?.rootType == VolumeManagerCommon.RootType.RECENT;
+  return dir?.rootType === RootType.RECENT;
 }
 
 /**
@@ -60,8 +56,8 @@ function createLocationOptions(state: State): XfOption[] {
       default: !dirPath,
     },
   ];
-  if (dirPath) {
-    if (dir?.rootType === VolumeManagerCommon.RootType.DRIVE) {
+  if (dirPath.length > 0) {
+    if (dir && isEntryInsideDrive(dir)) {
       // For Google Drive we currently do not have the ability to search a
       // specific folder. Thus the only options shown, when the user is
       // triggering search from a location in Drive, is Everywhere (set up
@@ -141,34 +137,35 @@ function createRecencyOptions(state: State): XfOption[] {
 function createFileCategoryOptions(state: State): XfOption[] {
   let fileCategory = chrome.fileManagerPrivate.FileCategory.ALL;
   if (isInRecent(state.currentDirectory)) {
-    fileCategory =
-        state.allEntries[state.currentDirectory!.key].entry.fileCategory;
+    const entry =
+        state.allEntries[state.currentDirectory!.key]!.entry as FakeEntry;
+    fileCategory = entry.fileCategory!;
   }
   return [
     {
       value: chrome.fileManagerPrivate.FileCategory.ALL,
       text: str('SEARCH_OPTIONS_TYPES_ALL_TYPES'),
-      default: fileCategory == chrome.fileManagerPrivate.FileCategory.ALL,
+      default: fileCategory === chrome.fileManagerPrivate.FileCategory.ALL,
     },
     {
       value: chrome.fileManagerPrivate.FileCategory.AUDIO,
       text: str('SEARCH_OPTIONS_TYPES_AUDIO'),
-      default: fileCategory == chrome.fileManagerPrivate.FileCategory.AUDIO,
+      default: fileCategory === chrome.fileManagerPrivate.FileCategory.AUDIO,
     },
     {
       value: chrome.fileManagerPrivate.FileCategory.DOCUMENT,
       text: str('SEARCH_OPTIONS_TYPES_DOCUMENTS'),
-      default: fileCategory == chrome.fileManagerPrivate.FileCategory.DOCUMENT,
+      default: fileCategory === chrome.fileManagerPrivate.FileCategory.DOCUMENT,
     },
     {
       value: chrome.fileManagerPrivate.FileCategory.IMAGE,
       text: str('SEARCH_OPTIONS_TYPES_IMAGES'),
-      default: fileCategory == chrome.fileManagerPrivate.FileCategory.IMAGE,
+      default: fileCategory === chrome.fileManagerPrivate.FileCategory.IMAGE,
     },
     {
       value: chrome.fileManagerPrivate.FileCategory.VIDEO,
       text: str('SEARCH_OPTIONS_TYPES_VIDEOS'),
-      default: fileCategory == chrome.fileManagerPrivate.FileCategory.VIDEO,
+      default: fileCategory === chrome.fileManagerPrivate.FileCategory.VIDEO,
     },
   ];
 }

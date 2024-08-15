@@ -737,7 +737,8 @@ int HandlerMain(int argc,
   options.initial_client_fd = kInvalidFileHandle;
 #endif
   options.periodic_tasks = true;
-  options.rate_limit = true;
+  options.rate_limit = false;  // Vivaldi doesn't want to rate limit crashes
+                               // scheduled for uploading
   options.upload_gzip = true;
 #if BUILDFLAG(IS_ANDROID)
   options.write_minidump_to_database = true;
@@ -1170,6 +1171,7 @@ int HandlerMain(int argc,
   ExceptionHandlerServer exception_handler_server;
 #endif  // BUILDFLAG(IS_APPLE)
 
+#if !defined(VIVALDI_BUILD)
   base::GlobalHistogramAllocator* histogram_allocator = nullptr;
   if (!options.metrics_dir.empty()) {
     static constexpr char kMetricsName[] = "CrashpadMetrics";
@@ -1180,6 +1182,7 @@ int HandlerMain(int argc,
       histogram_allocator->CreateTrackingHistograms(kMetricsName);
     }
   }
+#endif
 
   Metrics::HandlerLifetimeMilestone(Metrics::LifetimeMilestone::kStarted);
 

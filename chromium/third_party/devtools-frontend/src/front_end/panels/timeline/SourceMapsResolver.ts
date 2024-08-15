@@ -26,7 +26,7 @@ const resolvedNodeNames:
         Map<TraceEngine.Types.TraceEvents.ThreadID, Map<number, string|null>>> = new Map();
 
 export class SourceMapsResolver extends EventTarget {
-  #traceData: TraceEngine.Handlers.Migration.PartialTraceData;
+  #traceData: TraceEngine.Handlers.Types.TraceParseData;
 
   #isResolvingNames = false;
 
@@ -37,7 +37,7 @@ export class SourceMapsResolver extends EventTarget {
   // those workers too.
   #debuggerModelsToListen = new Set<SDK.DebuggerModel.DebuggerModel>();
 
-  constructor(traceData: TraceEngine.Handlers.Migration.PartialTraceData) {
+  constructor(traceData: TraceEngine.Handlers.Types.TraceParseData) {
     super();
     this.#traceData = traceData;
   }
@@ -46,7 +46,7 @@ export class SourceMapsResolver extends EventTarget {
     resolvedNodeNames.clear();
   }
 
-  static resolvedNodeNameForEntry(entry: TraceEngine.Types.TraceEvents.TraceEventSyntheticProfileCall): string|null {
+  static resolvedNodeNameForEntry(entry: TraceEngine.Types.TraceEvents.SyntheticProfileCall): string|null {
     return resolvedNodeNames.get(entry.pid)?.get(entry.tid)?.get(entry.nodeId) ?? null;
   }
 
@@ -137,6 +137,7 @@ export class SourceMapsResolver extends EventTarget {
         }
       }
     }
+    this.dispatchEvent(new NodeNamesUpdated());
   }
 
   #onAttachedSourceMap(): void {
@@ -155,7 +156,6 @@ export class SourceMapsResolver extends EventTarget {
     setTimeout(async () => {
       this.#isResolvingNames = false;
       await this.#resolveNamesForNodes();
-      this.dispatchEvent(new NodeNamesUpdated());
     }, 500);
   }
 

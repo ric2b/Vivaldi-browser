@@ -706,6 +706,14 @@ void av1_scale_references(AV1_COMP *cpi, const InterpFilter filter,
         if (ref_frame == ALTREF_FRAME && cpi->svc.skip_mvsearch_altref)
           continue;
       }
+      // For RTC with superres on: golden reference only needs to be scaled
+      // if it was refreshed in previous frame.
+      if (is_one_pass_rt_params(cpi) &&
+          cpi->oxcf.superres_cfg.enable_superres && ref_frame == GOLDEN_FRAME &&
+          cpi->rc.frame_num_last_gf_refresh <
+              (int)cm->current_frame.frame_number - 1) {
+        continue;
+      }
 
       if (ref->y_crop_width != cm->width || ref->y_crop_height != cm->height) {
         // Replace the reference buffer with a copy having a thicker border,

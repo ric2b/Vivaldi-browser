@@ -184,8 +184,7 @@ class RasterBufferProviderTest
         raster_caps.use_gpu_rasterization = false;
         raster_buffer_provider_ =
             std::make_unique<ZeroCopyRasterBufferProvider>(
-                &gpu_memory_buffer_manager_, context_provider_.get(),
-                raster_caps);
+                context_provider_.get(), raster_caps);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY:
         Create3dResourceProvider();
@@ -233,7 +232,6 @@ class RasterBufferProviderTest
 
   void AllTileTasksFinished() {
     tile_task_manager_->CheckForCompletedTasks();
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
   void RunMessageLoopUntilAllTasksHaveCompleted() {
@@ -321,7 +319,7 @@ class RasterBufferProviderTest
       return;
     }
 
-    absl::optional<viz::RasterContextProvider::ScopedRasterContextLock> lock;
+    std::optional<viz::RasterContextProvider::ScopedRasterContextLock> lock;
     if (use_lock) {
       lock.emplace(context_provider);
     }
@@ -361,7 +359,6 @@ class RasterBufferProviderTest
 
   void OnTimeout() {
     timed_out_ = true;
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
   }
 
  protected:

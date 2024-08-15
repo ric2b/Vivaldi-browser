@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -30,6 +31,7 @@ limitations under the License.
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "absl/algorithm/container.h"
@@ -51,8 +53,9 @@ limitations under the License.
 #include "tsl/platform/bfloat16.h"
 #include "tsl/platform/casts.h"
 #include "tsl/platform/errors.h"  // IWYU pragma: keep
-#include "tsl/platform/float8.h"
 #include "tsl/platform/logging.h"
+#include "tsl/platform/ml_dtypes.h"
+#include "tsl/platform/threadpool.h"
 
 namespace xla {
 
@@ -491,20 +494,32 @@ constexpr inline T KeepLowerBits(T value, int width) {
 // Returns `base` multiplied by itself `exponent` number of times.
 //
 // Note: returns 1 when `exponent` is zero.
-// Precondition: `exponent` is non-negative.
-template <typename T>
-constexpr T IPow(T base, int exponent) {
-  // A negative `exponent` is indicative of a logic bug for integral `base`.
-  // We disallow it for floating-point types for symmetry.
-  ABSL_ASSERT(exponent >= 0);
+// Precondition: `exponent` is non-negative for integral `T`.
+template <typename T, typename ExpType>
+constexpr T IPow(T base, ExpType exponent) {
+  static_assert(std::numeric_limits<ExpType>::is_integer);
+  if constexpr (std::numeric_limits<T>::is_integer) {
+    // A negative `exponent` is indicative of a logic bug for integral `base`.
+    // We disallow it for floating-point types for symmetry.
+    ABSL_ASSERT(exponent >= 0);
+  }
+  const bool take_reciprocal = exponent < 0;
   // We use the right-to-left binary exponentiation algorithm.
-  T result{1};
-  while (exponent > 0) {
+  T result(1);
+  for (;;) {
     if ((exponent & 1) != 0) {
       result *= base;
     }
+    exponent /= 2;
+    if (exponent == 0) {
+      break;
+    }
     base *= base;
-    exponent >>= 1;
+  }
+  if constexpr (std::numeric_limits<ExpType>::is_signed) {
+    if (take_reciprocal) {
+      return T(1) / result;
+    }
   }
   return result;
 }
@@ -715,16 +730,6 @@ Status EraseElementFromVector(std::vector<T>* container, const T& value) {
   return OkStatus();
 }
 
-// Utility function which splits a double-precision float (F64) into a pair of
-// single-precision floating point numbers. The most significant 49 bits (out of
-// the total 53 available) in the mantissa of the F64 is represented as the
-// unevaluated sum of two non-overlapping single-precision F32s; the 'high' part
-// contains 24 bits in its mantissa, and the 'low' part contains 25 bits in its
-// sign bit and its mantissa.
-// Note: The resulting representation can still only represent 8-bit exponent
-// range that is available in F32s (out of a total of 11 exponent bits in F64s).
-std::pair<float, float> SplitF64ToF32(double x);
-
 // Takes a sequence of unpacked int4 values, such that every byte stores one
 // int4 value in the low-order four bits, and packs them so every byte stores
 // two int4 values. 'input' should have num_elements bytes; 'output' should have
@@ -751,6 +756,37 @@ inline bool HloPredicateFalse(const HloInstruction*) { return false; }
 
 using Vector2 = std::array<int64_t, 2>;
 using Vector3 = std::array<int64_t, 3>;
+
+// A class for storing either an owned thread pool or a non-owning pointer to an
+// external thread pool.
+class MaybeOwningThreadPool {
+ public:
+  // Gets or creates a thread pool.
+  //
+  // See the code for the logic.
+  static MaybeOwningThreadPool GetOrCreate(
+      int parallelism, tsl::thread::ThreadPool* default_thread_pool,
+      int default_parallelism);
+
+  // Not owning (nullptr).
+  MaybeOwningThreadPool();
+  // Not owning.
+  explicit MaybeOwningThreadPool(tsl::thread::ThreadPool* thread_pool);
+  // Owning.
+  explicit MaybeOwningThreadPool(
+      std::unique_ptr<tsl::thread::ThreadPool> thread_pool);
+  tsl::thread::ThreadPool* get();
+  const tsl::thread::ThreadPool* get() const;
+  tsl::thread::ThreadPool* operator->();
+  const tsl::thread::ThreadPool* operator->() const;
+  explicit operator bool() const;
+  bool operator!() const;
+
+ private:
+  std::variant<tsl::thread::ThreadPool*,
+               std::unique_ptr<tsl::thread::ThreadPool>>
+      thread_pool_;
+};
 
 }  // namespace xla
 

@@ -20,16 +20,17 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertExists} from '../assert_extras.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
+import {PrefsState} from '../common/types.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, routes} from '../router.js';
 
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl, NoteAppInfo, NoteAppLockScreenSupport} from './device_page_browser_proxy.js';
 import {getTemplate} from './stylus.html.js';
 
-interface SettingsStylusElement {
+export interface SettingsStylusElement {
   $: {
     selectApp: HTMLSelectElement,
   };
@@ -41,7 +42,7 @@ const FIND_MORE_APPS_URL = 'https://play.google.com/store/apps/' +
 const SettingsStylusElementBase =
     DeepLinkingMixin(RouteObserverMixin(PolymerElement));
 
-class SettingsStylusElement extends SettingsStylusElementBase {
+export class SettingsStylusElement extends SettingsStylusElementBase {
   static get is() {
     return 'settings-stylus';
   }
@@ -121,6 +122,7 @@ class SettingsStylusElement extends SettingsStylusElementBase {
     };
   }
 
+  prefs: PrefsState;
   private appChoices_: NoteAppInfo[];
   private browserProxy_: DevicePageBrowserProxy;
   private selectedApp_: NoteAppInfo|null;

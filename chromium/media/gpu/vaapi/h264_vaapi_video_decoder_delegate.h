@@ -55,6 +55,7 @@ class H264VaapiVideoDecoderDelegate : public H264Decoder::H264Accelerator,
   Status ParseEncryptedSliceHeader(
       const std::vector<base::span<const uint8_t>>& data,
       const std::vector<SubsampleEntry>& subsamples,
+      uint64_t secure_handle,
       H264SliceHeader* slice_header_out) override;
   Status SubmitSlice(const H264PPS* pps,
                      const H264SliceHeader* slice_hdr,
@@ -68,8 +69,7 @@ class H264VaapiVideoDecoderDelegate : public H264Decoder::H264Accelerator,
   bool OutputPicture(scoped_refptr<H264Picture> pic) override;
   void Reset() override;
   Status SetStream(base::span<const uint8_t> stream,
-                   const DecryptConfig* decrypt_config,
-                   uint64_t secure_handle) override;
+                   const DecryptConfig* decrypt_config) override;
 
   bool RequiresRefLists() override;
 

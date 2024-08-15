@@ -730,6 +730,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   friend class WebGLMultiDraw;
   friend class WebGLMultiDrawCommon;
   friend class WebGLMultiDrawInstancedBaseVertexBaseInstance;
+  friend class WebGLPolygonMode;
   friend class WebGLShaderPixelLocalStorage;
 
   WebGLRenderingContextBase(CanvasRenderingContextHost*,
@@ -795,7 +796,14 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                                      drawing_buffer_.get());
     OnBeforeDrawCall(draw_type);
     draw_func();
-    RecordUKMCanvasDrawnToAtFirstDrawCall();
+    if (!has_been_drawn_to_) {
+      // At first draw call, record
+      // Canvas/OffscreenCanvas.RenderingContextDrawnTo and what the ANGLE
+      // implementation is.
+      has_been_drawn_to_ = true;
+      RecordUKMCanvasDrawnToRenderingAPI();
+      RecordANGLEImplementation();
+    }
   }
 
   virtual void DestroyContext();
@@ -1594,6 +1602,13 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                 GLenum src,
                                 GLenum dst);
 
+  // Helper function to validate WEBGL_blend_func_extended
+  // factors. Needed only to make negative tests pass on the
+  // validating command decoder.
+  bool ValidateBlendFuncExtendedFactors(const char* function_name,
+                                        GLenum src,
+                                        GLenum dst);
+
   // Helper function to validate a GL capability.
   virtual bool ValidateCapability(const char* function_name, GLenum);
 
@@ -1944,9 +1959,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                         DOMArrayBufferView* pixels,
                         int64_t offset);
 
-  // Record Canvas/OffscreenCanvas.RenderingContextDrawnTo at the first draw
-  // call.
-  void RecordUKMCanvasDrawnToAtFirstDrawCall();
+  void RecordANGLEImplementation();
 
  private:
   WebGLRenderingContextBase(CanvasRenderingContextHost*,

@@ -21,6 +21,7 @@
 #include "include/core/SkShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/private/base/SkFloatingPoint.h"
+#include "src/base/SkMathPriv.h"
 #include "src/core/SkBitmapDevice.h"
 #include "src/core/SkBlenderBase.h"
 #include "src/core/SkBlurEngine.h"
@@ -34,6 +35,7 @@
 #include "src/effects/colorfilters/SkColorFilterBase.h"
 
 #include <algorithm>
+#include <tuple>
 
 namespace skif {
 
@@ -82,13 +84,10 @@ std::pair<sk_sp<SkSpecialImage>, LayerSpace<SkIPoint>> extract_subset(
         bool clampSrcIfDisjoint=false) {
     LayerSpace<SkIRect> imageBounds(SkIRect::MakeXYWH(origin.x(), origin.y(),
                                                       image->width(), image->height()));
-    if (!imageBounds.intersect(dstBounds)) {
-        if (clampSrcIfDisjoint) {
-            auto edge = SkRectPriv::ClosestDisjointEdge(SkIRect(imageBounds), SkIRect(dstBounds));
-            imageBounds = LayerSpace<SkIRect>(edge);
-        } else {
-            return {nullptr, {}};
-        }
+    imageBounds = imageBounds.relevantSubset(dstBounds, clampSrcIfDisjoint ? SkTileMode::kClamp
+                                                                           : SkTileMode::kDecal);
+    if (imageBounds.isEmpty()) {
+        return {nullptr, {}};
     }
 
     // Offset the image subset directly to avoid issues negating (origin). With the prior
@@ -227,7 +226,8 @@ bool decal_tiling_differs_from_aa(const LayerSpace<SkMatrix> transform,
     // transformed 'imageBounds', then the sampling would not access texels outside the image bounds
     if (SkRectPriv::QuadContainsRect(SkMatrix(transform),
                                      SkIRect(imageBounds),
-                                     SkIRect(bufferedSampleBounds.roundOut()))) {
+                                     SkIRect(bufferedSampleBounds.roundOut()),
+                                     kRoundEpsilon)) {
         return false;
     }
 
@@ -311,9 +311,11 @@ public:
         // It is assumed the caller has already accounted for the desired output, or it's a
         // situation where the desired output shouldn't apply (e.g. this surface will be transformed
         // to align with the actual desired output via FilterResult metadata).
-        auto device = ctx.backend()->makeDevice(SkISize(dstBounds.size()),
-                                                ctx.refColorSpace(),
-                                                props);
+        sk_sp<SkDevice> device =
+                dstBounds.isEmpty() ? nullptr
+                                    : ctx.backend()->makeDevice(SkISize(dstBounds.size()),
+                                                                ctx.refColorSpace(),
+                                                                props);
         if (!device) {
             return;
         }
@@ -345,7 +347,11 @@ public:
             // Snap a subset of the device matching the expected dst bounds.
             SkIRect subset = SkIRect::MakeWH(fDstBounds.width(), fDstBounds.height());
             fCanvas->restoreToCount(0);
-            return {this->device()->snapSpecial(subset), fDstBounds.topLeft()};
+            this->device()->setImmutable();
+            auto snapped = std::make_pair(this->device()->snapSpecial(subset),
+                                          fDstBounds.topLeft());
+            fCanvas.reset(); // Only use the AutoSurface once
+            return snapped;
         } else {
             return {nullptr, {}};
         }
@@ -412,12 +418,9 @@ SkIRect RoundOut(SkRect r) { return r.makeInset(kRoundEpsilon, kRoundEpsilon).ro
 
 SkIRect RoundIn(SkRect r) { return r.makeOutset(kRoundEpsilon, kRoundEpsilon).roundIn(); }
 
-bool Mapping::decomposeCTM(const SkMatrix& ctm, const SkImageFilter* filter,
+bool Mapping::decomposeCTM(const SkMatrix& ctm, MatrixCapability capability,
                            const skif::ParameterSpace<SkPoint>& representativePt) {
     SkMatrix remainder, layer;
-    using MatrixCapability = SkImageFilter_Base::MatrixCapability;
-    MatrixCapability capability =
-            filter ? as_IFB(filter)->getCTMCapability() : MatrixCapability::kComplex;
     if (capability == MatrixCapability::kTranslate) {
         // Apply the entire CTM post-filtering
         remainder = ctm;
@@ -446,6 +449,15 @@ bool Mapping::decomposeCTM(const SkMatrix& ctm, const SkImageFilter* filter,
         fDevToLayerMatrix = invRemainder;
         return true;
     }
+}
+
+bool Mapping::decomposeCTM(const SkMatrix& ctm,
+                           const SkImageFilter* filter,
+                           const skif::ParameterSpace<SkPoint>& representativePt) {
+    return this->decomposeCTM(
+            ctm,
+            filter ? as_IFB(filter)->getCTMCapability() : MatrixCapability::kComplex,
+            representativePt);
 }
 
 bool Mapping::adjustLayerSpace(const SkMatrix& layer) {
@@ -555,6 +567,27 @@ SkMatrix Mapping::map<SkMatrix>(const SkMatrix& m, const SkMatrix& matrix) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // LayerSpace<T>
+
+LayerSpace<SkIRect> LayerSpace<SkIRect>::relevantSubset(const LayerSpace<SkIRect> dstRect,
+                                                        SkTileMode tileMode) const {
+    LayerSpace<SkIRect> fittedSrc = *this;
+    if (tileMode == SkTileMode::kDecal || tileMode == SkTileMode::kClamp) {
+        // For both decal/clamp, we only care about the region that is in dstRect, unless we are
+        // clamping and have to preserve edge pixels when there's no overlap.
+        if (!fittedSrc.intersect(dstRect)) {
+            if (tileMode == SkTileMode::kDecal) {
+                // The dstRect would be filled with transparent black.
+                fittedSrc = LayerSpace<SkIRect>::Empty();
+            } else {
+                // We just need the closest row/column/corner of this rect to dstRect.
+                auto edge = SkRectPriv::ClosestDisjointEdge(SkIRect(fittedSrc),  SkIRect(dstRect));
+                fittedSrc = LayerSpace<SkIRect>(edge);
+            }
+        }
+    } // else assume the entire source is needed for periodic tile modes, so leave fittedSrc alone
+
+    return fittedSrc;
+}
 
 // Match rounding tolerances of SkRects to SkIRects
 LayerSpace<SkISize> LayerSpace<SkSize>::round() const {
@@ -675,7 +708,8 @@ SkEnumBitMask<FilterResult::BoundsAnalysis> FilterResult::analyzeBounds(
             // won't be visible; otherwise add the analysis flag.
             if (!SkRectPriv::QuadContainsRect(SkMatrix::Concat(xtraTransform, SkMatrix(fTransform)),
                                               SkIRect::MakeSize(fImage->dimensions()),
-                                              dstBounds)) {
+                                              dstBounds,
+                                              kRoundEpsilon)) {
                 // We add the effects-visible flag for any reason, but we only mark the effect as
                 // filling layer bounds if there's an effect that applies *before* the layer clip.
                 // If it's just a non-transparency-preserving blend, that applies after the layer
@@ -703,7 +737,8 @@ SkEnumBitMask<FilterResult::BoundsAnalysis> FilterResult::analyzeBounds(
         // NOTE: For the identity transform, this is equal to !fLayerBounds.contains(dstBounds)
         if (!SkRectPriv::QuadContainsRect(SkMatrix(xtraTransform),
                                           SkIRect(fLayerBounds),
-                                          dstBounds)) {
+                                          dstBounds,
+                                          kRoundEpsilon)) {
             analysis |= BoundsAnalysis::kLayerCropVisible;
         }
     }
@@ -741,22 +776,7 @@ FilterResult FilterResult::applyCrop(const Context& ctx,
     }
 
     // Second, determine the subset of 'crop' that is relevant to ctx.desiredOutput().
-    LayerSpace<SkIRect> fittedCrop = crop;
-    if (tileMode == SkTileMode::kDecal || tileMode == SkTileMode::kClamp) {
-        // For both decal/clamp, we only care about the pixels within crop that are in the desired
-        // output, unless we are clamping and have to preserve edge pixels when there's no overlap.
-        if (!fittedCrop.intersect(ctx.desiredOutput())) {
-            if (tileMode == SkTileMode::kDecal) {
-                // The desired output would be filled with transparent black.
-                fittedCrop = LayerSpace<SkIRect>::Empty();
-            } else {
-                // We just need the closest row/column/corner of 'crop' to the desired output.
-                auto edge = SkRectPriv::ClosestDisjointEdge(SkIRect(crop),
-                                                            SkIRect(ctx.desiredOutput()));
-                fittedCrop = LayerSpace<SkIRect>(edge);
-            }
-        }
-    }
+    LayerSpace<SkIRect> fittedCrop = crop.relevantSubset(ctx.desiredOutput(), tileMode);
 
     // Third, check if there's overlap with the known non-transparent cropped content and what's
     // used to tile the desired output. If not, the image is known to be empty. This modifies
@@ -1163,11 +1183,15 @@ sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
     const bool currentXformIsInteger = is_nearly_integer_translation(fTransform);
     const bool nextXformIsInteger = !(flags & ShaderFlags::kNonTrivialSampling);
 
+    SkBlendMode colorFilterMode;
     SkSamplingOptions sampling = xtraSampling;
     const bool needsResolve =
-            // Deferred calculations on the input would be repeated with each sample
+            // Deferred calculations on the input would be repeated with each sample, but we allow
+            // simple color filters to skip resolving since their repeated math should be cheap.
             (flags & ShaderFlags::kSampledRepeatedly &&
-             (fColorFilter || !SkColorSpace::Equals(fImage->getColorSpace(), ctx.colorSpace()))) ||
+                    ((fColorFilter && (!fColorFilter->asAColorMode(nullptr, &colorFilterMode) ||
+                                       colorFilterMode > SkBlendMode::kLastCoeffMode)) ||
+                     !SkColorSpace::Equals(fImage->getColorSpace(), ctx.colorSpace()))) ||
             // The deferred sampling options can't be merged with the one requested
             !compatible_sampling(fSamplingOptions, currentXformIsInteger,
                                  &sampling, nextXformIsInteger) ||
@@ -1204,6 +1228,213 @@ sk_sp<SkShader> FilterResult::asShader(const Context& ctx,
     }
 
     return shader;
+}
+
+static int downscale_step_count(float netScaleFactor) {
+    int steps = SkNextLog2(sk_float_ceil2int(1.f / netScaleFactor));
+    // There are (steps-1) 1/2x steps and then one step that will be between 1/2-1x. If the
+    // final step is practically the identity scale, we can save a render pass and not incur too
+    // much sampling error by reducing the step count and using a final scale that's slightly less
+    // than 1/2.
+    if (steps > 0) {
+        // For a multipass rescale, we allow for a lot of tolerance when deciding to collapse the
+        // final step. If there's only a single pass, we require the scale factor to be very close
+        // to the identity since it causes the step count to go to 0.
+        static constexpr float kMultiPassLimit = 0.8f;
+        static constexpr float kNearIdentityLimit = 1.f - kRoundEpsilon; // 1px error in 1000px img
+
+        float finalStepScale = netScaleFactor * (1 << (steps - 1));
+        float limit = steps == 1 ? kNearIdentityLimit : kMultiPassLimit;
+        if (finalStepScale >= limit) {
+            steps--;
+        }
+    }
+
+    return steps;
+}
+
+// The following code uses "PixelSpace" as an alias to refer to the LayerSpace of the low-res
+// input image and blurred output to differentiate values for the original and final layer space
+template <typename T>
+using PixelSpace = LayerSpace<T>;
+
+FilterResult FilterResult::rescale(const Context& ctx,
+                                   const LayerSpace<SkSize>& scale,
+                                   bool enforceDecal) const {
+    LayerSpace<SkIRect> visibleLayerBounds = fLayerBounds;
+    if (!fImage || !visibleLayerBounds.intersect(ctx.desiredOutput()) ||
+        scale.width() <= 0.f || scale.height() <= 0.f) {
+        return {};
+    }
+
+    int xSteps = downscale_step_count(scale.width());
+    int ySteps = downscale_step_count(scale.height());
+
+    // NOTE: For the first pass, PixelSpace and LayerSpace are equivalent
+    PixelSpace<SkIPoint> origin;
+    const bool pixelAligned = is_nearly_integer_translation(fTransform, &origin);
+    SkEnumBitMask<BoundsAnalysis> analysis = this->analyzeBounds(ctx.desiredOutput());
+
+    // If there's no actual scaling, and no other effects that have to be resolved for blur(),
+    // then just extract the necessary subset. Otherwise fall through and apply the effects with
+    // scale factor (possibly identity).
+    const bool canDeferTiling =
+            pixelAligned &&
+            !(analysis & BoundsAnalysis::kLayerCropVisible) &&
+            !(enforceDecal && (analysis & BoundsAnalysis::kEffectsVisible));
+
+    const bool hasEffectsToApply =
+            !canDeferTiling ||
+            SkToBool(fColorFilter) ||
+            fImage->colorType() != ctx.backend()->colorType() ||
+            !SkColorSpace::Equals(fImage->getColorSpace(), ctx.colorSpace());
+
+    if (xSteps == 0 && ySteps == 0 && !hasEffectsToApply) {
+        if (analysis & BoundsAnalysis::kEffectsVisible) {
+            // At this point, the only effects that could be visible is a non-decal mode, so just
+            // return the image with adjusted layer bounds to match desired output.
+            FilterResult noop = *this;
+            noop.fLayerBounds = visibleLayerBounds;
+            return noop;
+        } else {
+            // The visible layer bounds represents a tighter bounds than the image itself
+            return extract_subset(fImage.get(), origin, visibleLayerBounds);
+        }
+    }
+
+    PixelSpace<SkIRect> srcRect;
+    SkTileMode tileMode;
+    if (canDeferTiling && (analysis & BoundsAnalysis::kEffectsVisible)) {
+        // When we can defer tiling, and said tiling is visible, rescaling the original image
+        // uses smaller textures.
+        srcRect = LayerSpace<SkIRect>(SkIRect::MakeXYWH(origin.x(), origin.y(),
+                                                        fImage->width(), fImage->height()));
+        tileMode = fTileMode;
+    } else {
+        // Otherwise we either have to rescale the layer-bounds-sized image (!canDeferTiling)
+        // or the tiling isn't visible so the layer bounds reprenents a smaller effective
+        // image than the original image data.
+        srcRect = visibleLayerBounds;
+        tileMode = SkTileMode::kDecal;
+    }
+
+    srcRect = srcRect.relevantSubset(ctx.desiredOutput(), tileMode);
+    if (srcRect.isEmpty()) {
+        return {};
+    }
+
+    // To avoid incurring error from rounding up the dimensions at every step, the logical size of
+    // the image is tracked in floats through the whole process; rounding to integers is only done
+    // to produce a conservative pixel buffer and clamp-tiling is used so that partially covered
+    // pixels are filled with the un-weighted color.
+    PixelSpace<SkRect> stepBoundsF{srcRect};
+    // stepPixelBounds is used to calculate how much padding needs to be added. Adding 1px outset
+    // keeps the math consistent for first iteration vs. later iterations, and logically represents
+    // the first downscale triggering the tilemode vs. later steps sampling the preserved tiling
+    // in the padded pixels.
+    PixelSpace<SkIRect> stepPixelBounds{srcRect};
+    stepPixelBounds.outset(PixelSpace<SkISize>({1, 1}));
+
+    // If we made it here, at least one iteration is required, even if xSteps and ySteps are 0.
+    sk_sp<SkSpecialImage> image = nullptr;
+    while(!image || xSteps > 0 || ySteps > 0) {
+        float sx = 1.f;
+        if (xSteps > 0) {
+            sx = xSteps > 1 ? 0.5f : srcRect.width()*scale.width() / stepBoundsF.width();
+            xSteps--;
+        }
+
+        float sy = 1.f;
+        if (ySteps > 0) {
+            sy = ySteps > 1 ? 0.5f : srcRect.height()*scale.height() / stepBoundsF.height();
+            ySteps--;
+        }
+
+        PixelSpace<SkRect> dstBoundsF{SkRect::MakeWH(stepBoundsF.width() * sx,
+                                                     stepBoundsF.height() * sy)};
+        PixelSpace<SkIRect> dstPixelBounds = dstBoundsF.roundOut();
+        if (tileMode == SkTileMode::kClamp || tileMode == SkTileMode::kDecal) {
+            // To sample beyond the padded src texel, we need
+            //      dstFracX + px - 1/2 > sx*(srcFracX - 1/2)
+            // px=1 always satisfies this for sx=1/2 on intermediate steps, but for 0.5 < sx < 1
+            // the fractional bounds and rounding can require an additional padded pixel.
+            // We calculate from the right edge because we keep the left edge pixel aligned.
+            float srcFracX = stepPixelBounds.right() - stepBoundsF.right() - 0.5f;
+            float dstFracX = dstPixelBounds.right()  - dstBoundsF.right()  - 0.5f;
+            int px = std::max(1, sk_float_ceil2int((sx*srcFracX - dstFracX)));
+
+            float srcFracY = stepPixelBounds.bottom() - stepBoundsF.bottom() - 0.5f;
+            float dstFracY = dstPixelBounds.bottom()  - dstBoundsF.bottom()  - 0.5f;
+            int py = std::max(1, sk_float_ceil2int((sy*srcFracY - dstFracY)));
+
+            dstPixelBounds.outset(PixelSpace<SkISize>({px, py}));
+
+            // If the axis scale factor was identity, the dst pixel bounds *after* padding will
+            // match the step pixel bounds. We have to add re-add the padding on identity iterations
+            // because the initial dst bounds is based on the un-padded stepBoundsF.
+            SkASSERT(sx != 1.f || dstPixelBounds.width() == stepPixelBounds.width());
+            SkASSERT(sy != 1.f || dstPixelBounds.height() == stepPixelBounds.height());
+        }
+
+        AutoSurface surface{ctx, dstPixelBounds, /*renderInParameterSpace=*/false};
+        if (surface) {
+            // Fill all of surface (to include any padded edge pixels) with 'scaleXform' as the CTM.
+            const auto scaleXform = PixelSpace<SkMatrix>::RectToRect(stepBoundsF, dstBoundsF);
+            surface->concat(SkMatrix(scaleXform));
+
+            SkPaint paint;
+            if (!image) {
+                // For the first iteration, paint with the original properties of the FilterResult.
+                if (fTileMode == SkTileMode::kDecal) {
+                    paint.setShader(apply_decal(fTransform, fImage, srcRect, fSamplingOptions));
+                } else {
+                    paint.setShader(fImage->asShader(fTileMode,
+                                                     fSamplingOptions,
+                                                     SkMatrix(fTransform)));
+                }
+                paint.setColorFilter(fColorFilter);
+            } else {
+                // Otherwise just bilinearly downsample the origin-aligned prior step's image.
+                paint.setShader(image->asShader(tileMode, SkFilterMode::kLinear,
+                                                SkMatrix::Translate(origin.x(), origin.y())));
+            }
+
+            surface->drawPaint(paint);
+        } else {
+            // Rescaling can't complete, no sense in downscaling non-existent data
+            return {};
+        }
+
+        if (tileMode == SkTileMode::kDecal) {
+            // Now we have incorporated a 1px transparent border, so next image can use clamping.
+            // OR we have incorporated the transparency-affecting color filter's result to the
+            // 1px transparent border so the next image can still use clamping.
+            tileMode = SkTileMode::kClamp;
+        } // else we are non-decal deferred so use repeat/mirror/clamp all the way down.
+
+        std::tie(image, origin) = surface.snap();
+        stepBoundsF = dstBoundsF;
+        stepPixelBounds = dstPixelBounds;
+    }
+
+    // Rebuild the downscaled image as a FilterResult, including a transform back to the original
+    // layer-space resolution, restoring the layer bounds it should fill, and setting tile mode.
+    FilterResult result{std::move(image), origin};
+    result.fTransform.postConcat(
+            LayerSpace<SkMatrix>::RectToRect(stepBoundsF, LayerSpace<SkRect>{srcRect}));
+    result.fLayerBounds = visibleLayerBounds;
+
+    if (enforceDecal) {
+        // Since we weren't deferring the tiling, the original tile mode should have been resolved
+        // in the first iteration. However, as part of the decimation, we included transparent
+        // padding and switched to clamp. Switching back to "decal" in this case has no visual
+        // effect but keeps downstream legacy blur algorithms happy.
+        SkASSERT(!canDeferTiling && tileMode == SkTileMode::kClamp);
+        result.fTileMode = SkTileMode::kDecal;
+    } else {
+        result.fTileMode = tileMode;
+    }
+    return result;
 }
 
 FilterResult FilterResult::MakeFromPicture(const Context& ctx,
@@ -1392,7 +1623,7 @@ FilterResult FilterResult::Builder::blur(const LayerSpace<SkSize>& sigma) {
 
     // TODO: All tilemodes are applied right now in resolve() so query with just kDecal
     const SkBlurEngine::Algorithm* algorithm = blurEngine->findAlgorithm(
-            SkSize(sigma), SkTileMode::kDecal, fContext.backend()->colorType());
+            SkSize(sigma), fContext.backend()->colorType());
     if (!algorithm) {
         return {};
     }

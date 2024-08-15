@@ -17,16 +17,16 @@
 #include "src/util/CXX11Meta.h"
 
 /** \defgroup CXX11_TensorSymmetry_Module Tensor Symmetry Module
-  *
-  * This module provides a classes that allow for the definition of
-  * symmetries w.r.t. tensor indices.
-  *
-  * Including this module will implicitly include the Tensor module.
-  *
-  * \code
-  * #include <Eigen/TensorSymmetry>
-  * \endcode
-  */
+ *
+ * This module provides a classes that allow for the definition of
+ * symmetries w.r.t. tensor indices.
+ *
+ * Including this module will implicitly include the Tensor module.
+ *
+ * \code
+ * #include <Eigen/TensorSymmetry>
+ * \endcode
+ */
 
 // IWYU pragma: begin_exports
 #include "src/TensorSymmetry/util/TemplateGroupTheory.h"
@@ -37,4 +37,4 @@
 
 #include "../../../Eigen/src/Core/util/ReenableStupidWarnings.h"
 
-#endif // EIGEN_CXX11_TENSORSYMMETRY_MODULE_H
+#endif  // EIGEN_CXX11_TENSORSYMMETRY_MODULE_H

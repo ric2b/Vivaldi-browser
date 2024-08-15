@@ -63,16 +63,21 @@
 - (ToolbarButton*)panelButton;
 // Tracker blocker shield button.
 - (ToolbarButton*)shieldButton;
-// More button -> Visible only in iPhone landscape mode.
+// Visible only in iPhone portrait + Tab bar enabled + bottom omnibox enabled
+// state.
 - (ToolbarButton*)vivaldiMoreButton;
 // Vivaldi search button -> Visible only on new tab page.
 - (ToolbarButton*)vivaldiSearchButton;
 
-/// Returns the more button options based on the browsing state. In new tab page
-/// we show only the panels button. But, in webpage we show the ad and tracker
-/// blocker item.
-- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons
-                             atbSettingType:(ATBSettingType)type;
+/// Returns the context menu for overflow action for
+/// tab bar enabled + bottom omnibox + iPhone portrait state.
+/// For NTP only panel and tab switcher button is visible.
+/// For valid browsing state ad and tracker blocker, and navigation buttons
+/// are present too.
+- (UIMenu*)overflowMenuWithTrackerBlocker:(BOOL)trackerBlockerEnabled
+                           atbSettingType:(ATBSettingType)type
+                 navigationForwardEnabled:(BOOL)navigationForwardEnabled
+                navigationBackwordEnabled:(BOOL)navigationBackwordEnabled;
 // End Vivaldi
 @end
 

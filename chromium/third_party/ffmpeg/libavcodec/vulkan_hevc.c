@@ -70,14 +70,15 @@ typedef struct HEVCHeaderSet {
 
 static int alloc_hevc_header_structs(FFVulkanDecodeContext *s,
                                      int nb_vps,
-                                     AVBufferRef * const vps_list[HEVC_MAX_VPS_COUNT])
+                                     const int vps_list_idx[HEVC_MAX_VPS_COUNT],
+                                     const HEVCVPS * const vps_list[HEVC_MAX_VPS_COUNT])
 {
     uint8_t *data_ptr;
     HEVCHeaderSet *hdr;
 
     size_t buf_size = sizeof(HEVCHeaderSet) + nb_vps*sizeof(HEVCHeaderVPS);
     for (int i = 0; i < nb_vps; i++) {
-        const HEVCVPS *vps = (const HEVCVPS *)vps_list[i]->data;
+        const HEVCVPS *vps = vps_list[vps_list_idx[i]];
         buf_size += sizeof(HEVCHeaderVPSSet)*vps->vps_num_hrd_parameters;
     }
 
@@ -96,7 +97,7 @@ static int alloc_hevc_header_structs(FFVulkanDecodeContext *s,
     hdr->hvps = (HEVCHeaderVPS *)(data_ptr + sizeof(HEVCHeaderSet));
     data_ptr += sizeof(HEVCHeaderSet) + nb_vps*sizeof(HEVCHeaderVPS);
     for (int i = 0; i < nb_vps; i++) {
-        const HEVCVPS *vps = (const HEVCVPS *)vps_list[i]->data;
+        const HEVCVPS *vps = vps_list[vps_list_idx[i]];
         hdr->hvps[i].sls = (HEVCHeaderVPSSet *)data_ptr;
         data_ptr += sizeof(HEVCHeaderVPSSet)*vps->vps_num_hrd_parameters;
     }
@@ -636,7 +637,7 @@ static int vk_hevc_create_params(AVCodecContext *avctx, AVBufferRef **buf)
     int err;
     const HEVCContext *h = avctx->priv_data;
     FFVulkanDecodeContext *dec = avctx->internal->hwaccel_priv_data;
-    FFVulkanDecodeShared *ctx = (FFVulkanDecodeShared *)dec->shared_ref->data;
+    FFVulkanDecodeShared *ctx = dec->shared_ctx;
 
     VkVideoDecodeH265SessionParametersAddInfoKHR h265_params_info = {
         .sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_SESSION_PARAMETERS_ADD_INFO_KHR,
@@ -655,13 +656,15 @@ static int vk_hevc_create_params(AVCodecContext *avctx, AVBufferRef **buf)
         .videoSessionParametersTemplate = NULL,
     };
 
-    int nb_vps = 0;
     HEVCHeaderSet *hdr;
+    int nb_vps = 0;
+    int vps_list_idx[HEVC_MAX_VPS_COUNT];
 
-    for (int i = 0; h->ps.vps_list[i]; i++)
-        nb_vps++;
+    for (int i = 0; i < HEVC_MAX_VPS_COUNT; i++)
+        if (h->ps.vps_list[i])
+            vps_list_idx[nb_vps++] = i;
 
-    err = alloc_hevc_header_structs(dec, nb_vps, h->ps.vps_list);
+    err = alloc_hevc_header_structs(dec, nb_vps, vps_list_idx, h->ps.vps_list);
     if (err < 0)
         return err;
 
@@ -672,26 +675,31 @@ static int vk_hevc_create_params(AVCodecContext *avctx, AVBufferRef **buf)
     h265_params_info.pStdVPSs = hdr->vps;
 
     /* SPS list */
-    for (int i = 0; h->ps.sps_list[i]; i++) {
-        const HEVCSPS *sps_l = (const HEVCSPS *)h->ps.sps_list[i]->data;
-        set_sps(sps_l, i, &hdr->hsps[i].scaling, &hdr->hsps[i].vui_header,
-                &hdr->hsps[i].vui, &hdr->sps[i], hdr->hsps[i].nal_hdr,
-                hdr->hsps[i].vcl_hdr, &hdr->hsps[i].ptl, &hdr->hsps[i].dpbm,
-                &hdr->hsps[i].pal, hdr->hsps[i].str, &hdr->hsps[i].ltr);
-        h265_params_info.stdSPSCount++;
+    for (int i = 0; i < HEVC_MAX_SPS_COUNT; i++) {
+        if (h->ps.sps_list[i]) {
+            const HEVCSPS *sps_l = h->ps.sps_list[i];
+            int idx = h265_params_info.stdSPSCount++;
+            set_sps(sps_l, i, &hdr->hsps[idx].scaling, &hdr->hsps[idx].vui_header,
+                    &hdr->hsps[idx].vui, &hdr->sps[idx], hdr->hsps[idx].nal_hdr,
+                    hdr->hsps[idx].vcl_hdr, &hdr->hsps[idx].ptl, &hdr->hsps[idx].dpbm,
+                    &hdr->hsps[idx].pal, hdr->hsps[idx].str, &hdr->hsps[idx].ltr);
+        }
     }
 
     /* PPS list */
-    for (int i = 0; h->ps.pps_list[i]; i++) {
-        const HEVCPPS *pps_l = (const HEVCPPS *)h->ps.pps_list[i]->data;
-        const HEVCSPS *sps_l = (const HEVCSPS *)h->ps.sps_list[pps_l->sps_id]->data;
-        set_pps(pps_l, sps_l, &hdr->hpps[i].scaling, &hdr->pps[i], &hdr->hpps[i].pal);
-        h265_params_info.stdPPSCount++;
+    for (int i = 0; i < HEVC_MAX_PPS_COUNT; i++) {
+        if (h->ps.pps_list[i]) {
+            const HEVCPPS *pps_l = h->ps.pps_list[i];
+            const HEVCSPS *sps_l = h->ps.sps_list[pps_l->sps_id];
+            int idx = h265_params_info.stdPPSCount++;
+            set_pps(pps_l, sps_l, &hdr->hpps[idx].scaling,
+                    &hdr->pps[idx], &hdr->hpps[idx].pal);
+        }
     }
 
     /* VPS list */
     for (int i = 0; i < nb_vps; i++) {
-        const HEVCVPS *vps_l = (const HEVCVPS *)h->ps.vps_list[i]->data;
+        const HEVCVPS *vps_l = h->ps.vps_list[vps_list_idx[i]];
         set_vps(vps_l, &hdr->vps[i], &hdr->hvps[i].ptl, &hdr->hvps[i].dpbm,
                 hdr->hvps[i].hdr, hdr->hvps[i].sls);
         h265_params_info.stdVPSCount++;
@@ -871,7 +879,7 @@ static int vk_hevc_end_frame(AVCodecContext *avctx)
         if (!pps) {
             unsigned int pps_id = h->sh.pps_id;
             if (pps_id < HEVC_MAX_PPS_COUNT && h->ps.pps_list[pps_id] != NULL)
-                pps = (const HEVCPPS *)h->ps.pps_list[pps_id]->data;
+                pps = h->ps.pps_list[pps_id];
         }
 
         if (!pps) {
@@ -901,16 +909,13 @@ static int vk_hevc_end_frame(AVCodecContext *avctx)
     return ff_vk_decode_frame(avctx, pic->frame, vp, rav, rvp);
 }
 
-static void vk_hevc_free_frame_priv(void *_hwctx, uint8_t *data)
+static void vk_hevc_free_frame_priv(FFRefStructOpaque _hwctx, void *data)
 {
-    AVHWDeviceContext *hwctx = _hwctx;
-    HEVCVulkanDecodePicture *hp = (HEVCVulkanDecodePicture *)data;
+    AVHWDeviceContext *hwctx = _hwctx.nc;
+    HEVCVulkanDecodePicture *hp = data;
 
     /* Free frame resources */
     ff_vk_decode_free_frame(hwctx, &hp->vp);
-
-    /* Free frame context */
-    av_free(hp);
 }
 
 const FFHWAccel ff_hevc_vulkan_hwaccel = {

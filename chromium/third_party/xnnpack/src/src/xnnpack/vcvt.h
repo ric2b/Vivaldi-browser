@@ -155,6 +155,29 @@ DECLARE_F32_F16_VCVT_UKERNEL_FUNCTION(xnn_f32_f16_vcvt_ukernel__scalar_fabsf_u3)
 DECLARE_F32_F16_VCVT_UKERNEL_FUNCTION(xnn_f32_f16_vcvt_ukernel__scalar_fabsf_u4)
 
 
+#define DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(fn_name) \
+  XNN_INTERNAL void fn_name(                           \
+      size_t n,                                        \
+      const void* input,                               \
+      int8_t* output,                                  \
+      const union xnn_f16_qs8_cvt_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__neonfp16arith_u8)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__neonfp16arith_u16)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__neonfp16arith_u24)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__neonfp16arith_u32)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__neonfp16arith_u64)
+
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_fmagic_u1)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_fmagic_u2)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_fmagic_u3)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_fmagic_u4)
+
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_imagic_u1)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_imagic_u2)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_imagic_u3)
+DECLARE_F16_QS8_VCVT_UKERNEL_FUNCTION(xnn_f16_qs8_vcvt_ukernel__scalar_imagic_u4)
+
 #define DECLARE_F32_QS8_VCVT_UKERNEL_FUNCTION(fn_name) \
   XNN_INTERNAL void fn_name(                           \
       size_t n,                                        \
@@ -376,6 +399,23 @@ DECLARE_QS16_QS8_VCVT_UKERNEL_FUNCTION(xnn_qs16_qs8_vcvt_ukernel__wasmsimd_u32)
 DECLARE_QS16_QS8_VCVT_UKERNEL_FUNCTION(xnn_qs16_qs8_vcvt_ukernel__scalar_u1)
 DECLARE_QS16_QS8_VCVT_UKERNEL_FUNCTION(xnn_qs16_qs8_vcvt_ukernel__scalar_u2)
 DECLARE_QS16_QS8_VCVT_UKERNEL_FUNCTION(xnn_qs16_qs8_vcvt_ukernel__scalar_u4)
+
+#define DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(fn_name) \
+  XNN_INTERNAL void fn_name(                           \
+      size_t n,                                        \
+      const int8_t* input,                             \
+      void* output,                                    \
+      const union xnn_qs8_f16_cvt_params params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
+
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__neonfp16arith_u8)
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__neonfp16arith_u16)
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__neonfp16arith_u24)
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__neonfp16arith_u32)
+
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__avx2_u16)
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__avx2_u24)
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__avx2_u32)
+DECLARE_QS8_F16_VCVT_UKERNEL_FUNCTION(xnn_qs8_f16_vcvt_ukernel__avx2_u64)
 
 #define DECLARE_QS8_F32_VCVT_UKERNEL_FUNCTION(fn_name) \
   XNN_INTERNAL void fn_name(                           \

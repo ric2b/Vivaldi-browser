@@ -43,26 +43,12 @@ PageInfoCookiesContentView::PageInfoCookiesContentView(PageInfo* presenter)
   const auto button_insets = layout_provider->GetInsetsMetric(
       ChromeInsetsMetric::INSETS_PAGE_INFO_HOVER_BUTTON);
 
-  // The left and right margins should align with the title labels inside other
-  // buttons in this subpage (as if there was place for an icon).
-  const int horizontal_offset = button_insets.left() +
-                                GetLayoutConstant(PAGE_INFO_ICON_SIZE) +
-                                layout_provider->GetDistanceMetric(
-                                    views::DISTANCE_RELATED_LABEL_HORIZONTAL);
-
   cookies_description_label_ =
       AddChildView(std::make_unique<views::StyledLabel>());
 
   // In the new UI iteration, description labels are aligned with the icons on
   // the left, not with the bubble title.
-  if (base::FeatureList::IsEnabled(content_settings::features::kUserBypassUI)) {
-    cookies_description_label_->SetProperty(views::kMarginsKey, button_insets);
-  } else {
-    cookies_description_label_->SetProperty(
-        views::kMarginsKey,
-        gfx::Insets::TLBR(button_insets.top(), horizontal_offset,
-                          button_insets.bottom(), horizontal_offset));
-  }
+  cookies_description_label_->SetProperty(views::kMarginsKey, button_insets);
   cookies_description_label_->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_COOKIES_DESCRIPTION_LABEL);
   if (features::IsChromeRefresh2023()) {
@@ -144,17 +130,7 @@ void PageInfoCookiesContentView::SetCookieInfo(
   SetDescriptionLabel(cookie_info.blocking_status, cookie_info.enforcement,
                       cookie_info.is_otr);
 
-  if (base::FeatureList::IsEnabled(content_settings::features::kUserBypassUI)) {
-    SetThirdPartyCookiesInfo(cookie_info);
-  } else {
-    // Create the cookie dialog button, blocking third-party cookies button
-    // (only if third-party cookies are blocked in settings) and FPS button
-    // (only if fps are not blocked) if they don't yet exist. Those methods get
-    // called each time site data is updated, so if they *do* already exist,
-    // skip creating the buttons and just update the texts.
-    SetBlockingThirdPartyCookiesInfo(cookie_info);
-  }
-
+  SetThirdPartyCookiesInfo(cookie_info);
   InitCookiesDialogButton();
   // Update the text displaying the number of allowed sites.
   cookies_dialog_button_->SetSubtitleText(l10n_util::GetPluralStringFUTF16(
@@ -172,44 +148,6 @@ void PageInfoCookiesContentView::SetCookieInfo(
   }
 }
 
-void PageInfoCookiesContentView::SetBlockingThirdPartyCookiesInfo(
-    const CookiesNewInfo& cookie_info) {
-  bool are_cookies_blocked =
-      cookie_info.status == CookieControlsStatus::kEnabled;
-
-  if (cookie_info.status == CookieControlsStatus::kDisabledForSite ||
-      are_cookies_blocked) {
-    InitBlockingThirdPartyCookiesRow();
-    blocking_third_party_cookies_row_->SetVisible(true);
-    InitBlockingThirdPartyCookiesToggleOrIcon(cookie_info.enforcement);
-    if (blocking_third_party_cookies_toggle_) {
-      UpdateBlockingThirdPartyCookiesToggle(are_cookies_blocked);
-    }
-
-    if (are_cookies_blocked) {
-      // TODO(crbug.com/1349370): Use
-      // IDS_PAGE_INFO_COOKIES_BLOCKED_SITES_COUNT_WHEN_FPS_BLOCKED when FPS are
-      // disabled and the site belongs to a set.
-      const auto blocked_sites_count_message_id =
-          IDS_PAGE_INFO_COOKIES_BLOCKED_SITES_COUNT;
-      const std::u16string num_blocked_sites_text =
-          l10n_util::GetPluralStringFUTF16(
-              blocked_sites_count_message_id,
-              cookie_info.blocked_third_party_sites_count);
-
-      // Update the text displaying the number of blocked sites.
-      blocking_third_party_cookies_subtitle_label_->SetText(
-          num_blocked_sites_text);
-    }
-
-    // If third party cookies are being blocked the subtitle should be visible.
-    blocking_third_party_cookies_subtitle_label_->SetVisible(
-        are_cookies_blocked);
-  } else if (blocking_third_party_cookies_row_) {
-    blocking_third_party_cookies_row_->SetVisible(false);
-  }
-}
-
 void PageInfoCookiesContentView::SetThirdPartyCookiesTitleAndDescription(
     const CookiesNewInfo& cookie_info) {
   bool tracking_protection_3pcd =
@@ -217,7 +155,7 @@ void PageInfoCookiesContentView::SetThirdPartyCookiesTitleAndDescription(
 
   std::u16string title_text;
   int description;
-  if (cookie_info.status == CookieControlsStatus::kEnabled) {
+  if (cookie_info.protections_on) {
     title_text =
         l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_SITE_NOT_WORKING_TITLE);
     // Check if site exception would be permanent (no expiration).
@@ -269,11 +207,9 @@ void PageInfoCookiesContentView::SetThirdPartyCookiesTitleAndDescription(
 
 void PageInfoCookiesContentView::SetThirdPartyCookiesToggle(
     const CookiesNewInfo& cookie_info) {
-  bool are_third_party_cookies_blocked =
-      cookie_info.status == CookieControlsStatus::kEnabled;
 
   std::u16string subtitle, a11y_name;
-  if (are_third_party_cookies_blocked) {
+  if (cookie_info.protections_on) {
     if (cookie_info.blocking_status == CookieBlocking3pcdStatus::kAll) {
       subtitle = l10n_util::GetStringUTF16(
           IDS_PAGE_INFO_TRACKING_PROTECTION_COOKIES_BLOCKED);
@@ -301,7 +237,7 @@ void PageInfoCookiesContentView::SetThirdPartyCookiesToggle(
         IDS_PAGE_INFO_COOKIES_THIRD_PARTY_COOKIES_ALLOWED_TOGGLE_A11Y,
         cookie_info.allowed_third_party_sites_count);
   }
-  third_party_cookies_toggle_->SetIsOn(!are_third_party_cookies_blocked);
+  third_party_cookies_toggle_->SetIsOn(!cookie_info.protections_on);
   third_party_cookies_toggle_->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_THIRD_PARTY_COOKIES_TOGGLE);
   third_party_cookies_toggle_->SetAccessibleName(a11y_name);
@@ -353,14 +289,8 @@ void PageInfoCookiesContentView::SetDescriptionLabel(
 
 void PageInfoCookiesContentView::SetThirdPartyCookiesInfo(
     const CookiesNewInfo& cookie_info) {
-  bool show_control =
-      cookie_info.confidence !=
-          CookieControlsBreakageConfidenceLevel::kUninitialized &&
-      cookie_info.enforcement !=
-          CookieControlsEnforcement::kEnforcedByTpcdGrant;
-
-  third_party_cookies_container_->SetVisible(show_control);
-  if (!show_control) {
+  third_party_cookies_container_->SetVisible(cookie_info.controls_visible);
+  if (!cookie_info.controls_visible) {
     return;
   }
 
@@ -368,7 +298,7 @@ void PageInfoCookiesContentView::SetThirdPartyCookiesInfo(
   SetThirdPartyCookiesToggle(cookie_info);
   third_party_cookies_row_->SetIcon(
       PageInfoViewFactory::GetThirdPartyCookiesIcon(
-          cookie_info.status != CookieControlsStatus::kEnabled));
+          !cookie_info.protections_on));
   third_party_cookies_row_->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_THIRD_PARTY_COOKIES_ROW);
 
@@ -410,115 +340,15 @@ void PageInfoCookiesContentView::UpdateBlockingThirdPartyCookiesToggle(
   blocking_third_party_cookies_toggle_->SetIsOn(are_cookies_blocked);
 }
 
-void PageInfoCookiesContentView::InitBlockingThirdPartyCookiesToggleOrIcon(
-    CookieControlsEnforcement enforcement) {
-  // The row needs to be initiated before with
-  // |InitBlockingThirdPartyCookiesRow| because we're adding subview to it.
-  DCHECK(blocking_third_party_cookies_row_);
-
-  int tooltip_id = 0;
-  bool enforced = false;
-  switch (enforcement) {
-    case CookieControlsEnforcement::kEnforcedByExtension:
-      tooltip_id = IDS_PAGE_INFO_PERMISSION_MANAGED_BY_EXTENSION;
-      enforced = true;
-      break;
-    case CookieControlsEnforcement::kEnforcedByPolicy:
-      tooltip_id = IDS_PAGE_INFO_PERMISSION_MANAGED_BY_POLICY;
-      enforced = true;
-      break;
-    case CookieControlsEnforcement::kEnforcedByCookieSetting:
-      // TODO(crbug.com/1346305): Add what should happen when it's managed by
-      // cookies settings.
-      tooltip_id =
-          IDS_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_MANAGED_BY_SETTINGS_TOOLTIP;
-      enforced = true;
-      break;
-    case CookieControlsEnforcement::kEnforcedByTpcdGrant:
-    case CookieControlsEnforcement::kNoEnforcement:
-      break;
-  }
-
-  // Set correct visibility for existing views.
-  if (enforced_icon_) {
-    enforced_icon_->SetVisible(enforced);
-  }
-  if (blocking_third_party_cookies_toggle_) {
-    blocking_third_party_cookies_toggle_->SetVisible(!enforced);
-  }
-
-  // If it's not enforced then toggle is for sure not being changed.
-  if (!enforced && blocking_third_party_cookies_toggle_) {
-    return;
-  }
-
-  // Newly created views are visible by default.
-  if (enforced) {
-    if (!enforced_icon_) {
-      enforced_icon_ = blocking_third_party_cookies_row_->AddControl(
-          std::make_unique<NonAccessibleImageView>());
-      enforced_icon_->SetTooltipText(l10n_util::GetStringUTF16(tooltip_id));
-    }
-    // If it's enforced then the icon might need to be changed.
-    enforced_icon_->SetImage(PageInfoViewFactory::GetImageModel(
-        CookieControlsUtil::GetEnforcedIcon(enforcement)));
-  } else {
-    blocking_third_party_cookies_toggle_ =
-        blocking_third_party_cookies_row_->AddControl(
-            std::make_unique<views::ToggleButton>(base::BindRepeating(
-                &PageInfoCookiesContentView::OnToggleButtonPressed,
-                base::Unretained(this))));
-    blocking_third_party_cookies_toggle_->SetAccessibleName(
-        l10n_util::GetStringUTF16(
-            IDS_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_TOGGLE_TOOLTIP));
-    blocking_third_party_cookies_toggle_->SetPreferredSize(gfx::Size(
-        blocking_third_party_cookies_toggle_->GetPreferredSize().width(),
-        blocking_third_party_cookies_row_->GetFirstLineHeight()));
-    blocking_third_party_cookies_toggle_->SetID(
-        PageInfoViewFactory::
-            VIEW_ID_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_TOGGLE);
-  }
-}
-
-void PageInfoCookiesContentView::InitBlockingThirdPartyCookiesRow() {
-  if (blocking_third_party_cookies_row_) {
-    return;
-  }
-
-  // |blocking_third_party_cookies_row_| has to be the first cookie button.
-  blocking_third_party_cookies_row_ =
-      cookies_buttons_container_view_->AddChildViewAt(
-          std::make_unique<RichControlsContainerView>(), 0);
-  blocking_third_party_cookies_row_->SetTitle(
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_TITLE));
-  blocking_third_party_cookies_row_->SetIcon(
-      PageInfoViewFactory::GetBlockingThirdPartyCookiesIcon());
-  blocking_third_party_cookies_row_->SetID(
-      PageInfoViewFactory::VIEW_ID_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_ROW);
-
-  // The subtext is only visible when third-party cookies are being blocked.
-  // At the beginning it's not.
-  blocking_third_party_cookies_subtitle_label_ =
-      blocking_third_party_cookies_row_->AddSecondaryLabel(u"");
-  blocking_third_party_cookies_subtitle_label_->SetVisible(false);
-  blocking_third_party_cookies_subtitle_label_->SetID(
-      PageInfoViewFactory::
-          VIEW_ID_PAGE_INFO_BLOCK_THIRD_PARTY_COOKIES_SUBTITLE);
-}
-
 void PageInfoCookiesContentView::OnToggleButtonPressed() {
-  if (base::FeatureList::IsEnabled(content_settings::features::kUserBypassUI)) {
-    presenter_->OnThirdPartyToggleClicked(
-        /*block_third_party_cookies=*/!third_party_cookies_toggle_->GetIsOn());
-  } else {
-    presenter_->OnThirdPartyToggleClicked(
-        /*block_third_party_cookies=*/blocking_third_party_cookies_toggle_
-            ->GetIsOn());
-  }
+  presenter_->OnThirdPartyToggleClicked(
+      /*block_third_party_cookies=*/!third_party_cookies_toggle_->GetIsOn());
+  third_party_cookies_container_->NotifyAccessibilityEvent(
+      ax::mojom::Event::kAlert, true);
 }
 
 void PageInfoCookiesContentView::SetFpsCookiesInfo(
-    absl::optional<CookiesFpsInfo> fps_info,
+    std::optional<CookiesFpsInfo> fps_info,
     bool is_fps_allowed) {
   if (is_fps_allowed) {
     InitFpsButton(fps_info->is_managed);
@@ -558,9 +388,9 @@ void PageInfoCookiesContentView::InitFpsButton(bool is_managed) {
           l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES), std::u16string(),
           l10n_util::GetStringUTF16(IDS_PAGE_INFO_FPS_BUTTON_TOOLTIP),
           /*secondary_text=*/u" ", PageInfoViewFactory::GetLaunchIcon(),
-          is_managed ? absl::optional<ui::ImageModel>(
+          is_managed ? std::optional<ui::ImageModel>(
                            PageInfoViewFactory::GetEnforcedByPolicyIcon())
-                     : absl::nullopt));
+                     : std::nullopt));
   fps_button_->SetID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_FPS_SETTINGS);
 }
@@ -578,6 +408,7 @@ void PageInfoCookiesContentView::AddThirdPartyCookiesContainer() {
 
   third_party_cookies_container_ =
       AddChildView(std::make_unique<views::BoxLayoutView>());
+  third_party_cookies_container_->SetAccessibleRole(ax::mojom::Role::kAlert);
   third_party_cookies_container_->SetOrientation(
       views::BoxLayout::Orientation::kVertical);
   third_party_cookies_container_->SetVisible(false);

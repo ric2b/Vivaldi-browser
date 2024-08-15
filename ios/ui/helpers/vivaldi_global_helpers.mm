@@ -116,6 +116,36 @@
         self.iPadLayoutState == LayoutStateTwoThirdScreen));
 }
 
++ (UIEdgeInsets)safeAreaInsets {
+  if (self.keyWindow) {
+    return self.keyWindow.safeAreaInsets;
+  }
+  return UIEdgeInsetsZero;
+}
+
++ (BOOL)shouldUseDarkTextForColor:(UIColor* _Nonnull)color {
+  return [self luminanceForColor:color] >= 0.6;
+}
+
++ (BOOL)shouldUseDefaultThemeColor:(UIColor* _Nonnull)color {
+  // Convert UIColor to CIColor
+  CIColor *ciColor = [[CIColor alloc] initWithColor:color];
+  if (ciColor.alpha == 0)
+    return YES;
+
+  return [self luminanceForColor:color] >= 0.95;
+}
+
++ (CGFloat)luminanceForColor:(UIColor* _Nonnull)color {
+  // Convert UIColor to CIColor
+  CIColor *ciColor = [[CIColor alloc] initWithColor:color];
+  // Calculate the luminance
+  // Equation: Y = 0.2126 * R + 0.7152 * G + 0.0722 * B
+  CGFloat luminance =
+      0.2126 * ciColor.red + 0.7152 * ciColor.green + 0.0722 * ciColor.blue;
+  return luminance;
+}
+
 + (BOOL)isFinalReleaseBuild {
   NSString* scheme =
       base::apple::ObjCCast<NSString>([base::apple::FrameworkBundle()
@@ -126,19 +156,38 @@
 }
 
 + (BOOL)isValidDomain:(NSString* _Nonnull)urlString {
-  NSString *pattern =
+  NSString *domainPattern =
       @"^(https?://)?([\\da-z.-]+)\\.([a-z.]{2,6})([/\\w .-]*)*/?$";
   NSError *error = nil;
-  NSRegularExpression *regex =
-    [NSRegularExpression regularExpressionWithPattern:pattern
-          options:NSRegularExpressionCaseInsensitive
-            error:&error];
 
-  NSTextCheckingResult *match =
-    [regex firstMatchInString:urlString
-                      options:0
-                        range:NSMakeRange(0, [urlString length])];
-  return match;
+  // Check for valid domain
+  NSRegularExpression *domainRegex =
+      [NSRegularExpression
+         regularExpressionWithPattern:domainPattern
+                              options:NSRegularExpressionCaseInsensitive
+                                error:&error];
+  NSTextCheckingResult *domainMatch =
+      [domainRegex firstMatchInString:urlString
+                              options:0
+                                range:NSMakeRange(0, urlString.length)];
+  // If its a valid domain return early.
+  if (domainMatch != nil)
+    return YES;
+
+  // Check for valid IP or Localhost
+  NSString *ipOrLocalhostPattern =
+      @"^(https?://)?((\\d{1,3}\\.){3}\\d{1,3}|localhost)([/\\w .-]*)*/?$";
+  NSRegularExpression *ipOrLocalhostRegex =
+      [NSRegularExpression
+         regularExpressionWithPattern:ipOrLocalhostPattern
+                              options:NSRegularExpressionCaseInsensitive
+                                error:&error];
+  NSTextCheckingResult *ipOrLocalhostMatch =
+      [ipOrLocalhostRegex firstMatchInString:urlString
+                                     options:0
+                                       range:NSMakeRange(0, urlString.length)];
+
+  return ipOrLocalhostMatch != nil;
 }
 
 + (BOOL)isValidURL:(NSString* _Nonnull)urlString {
@@ -243,6 +292,59 @@
 
   // Return YES if the domain strings are equal, NO otherwise.
   return [aDomain isEqualToString:bDomain];
+}
+
++ (UIColor* _Nonnull)colorWithHexString:(NSString* _Nonnull)hexString {
+  NSString *colorString =
+      [[hexString stringByReplacingOccurrencesOfString: @"#"
+                                            withString: @""] uppercaseString];
+
+  CGFloat alpha, red, blue, green;
+  switch ([colorString length]) {
+    case 3: // #RGB
+      alpha = 1.0f;
+      red   = [self colorComponentFrom: colorString start: 0 length: 1];
+      green = [self colorComponentFrom: colorString start: 1 length: 1];
+      blue  = [self colorComponentFrom: colorString start: 2 length: 1];
+      break;
+    case 4: // #ARGB
+      alpha = [self colorComponentFrom: colorString start: 0 length: 1];
+      red   = [self colorComponentFrom: colorString start: 1 length: 1];
+      green = [self colorComponentFrom: colorString start: 2 length: 1];
+      blue  = [self colorComponentFrom: colorString start: 3 length: 1];
+      break;
+    case 6: // #RRGGBB
+      alpha = 1.0f;
+      red   = [self colorComponentFrom: colorString start: 0 length: 2];
+      green = [self colorComponentFrom: colorString start: 2 length: 2];
+      blue  = [self colorComponentFrom: colorString start: 4 length: 2];
+      break;
+    case 8: // #AARRGGBB
+      alpha = [self colorComponentFrom: colorString start: 0 length: 2];
+      red   = [self colorComponentFrom: colorString start: 2 length: 2];
+      green = [self colorComponentFrom: colorString start: 4 length: 2];
+      blue  = [self colorComponentFrom: colorString start: 6 length: 2];
+      break;
+    default:
+      alpha = 1.0;
+      red   = 1.0;
+      green = 1.0;
+      blue  = 1.0;
+      break;
+  }
+  return [UIColor colorWithRed: red green: green blue: blue alpha: alpha];
+}
+
++ (CGFloat)colorComponentFrom:(NSString* _Nonnull)string
+                        start:(NSUInteger)start
+                       length:(NSUInteger)length {
+  NSString *substring = [string substringWithRange: NSMakeRange(start, length)];
+  NSString *fullHex = length == 2 ? substring :
+      [NSString stringWithFormat: @"%@%@", substring, substring];
+
+  unsigned hexComponent;
+  [[NSScanner scannerWithString: fullHex] scanHexInt: &hexComponent];
+  return hexComponent / 255.0;
 }
 
 @end

@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crypto_provider::elliptic_curve::{EcdhProvider, EphemeralSecret};
-use crypto_provider::p256::P256;
+use crypto_provider::{
+    elliptic_curve::{EcdhProvider, EphemeralSecret},
+    p256::{PointCompression, P256},
+    tinyvec::ArrayVec,
+};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::derive::Deriver;
 use openssl::ec::{EcGroup, EcKey, EcPoint, PointConversionForm};
@@ -65,15 +68,24 @@ impl crypto_provider::p256::P256PublicKey for P256PublicKey {
         Ok(Self(eckey.try_into()?))
     }
 
-    fn to_sec1_bytes(&self) -> Vec<u8> {
+    fn to_sec1_bytes(&self, point_compression: PointCompression) -> ArrayVec<[u8; 65]> {
+        let point_conversion_form = match point_compression {
+            PointCompression::Compressed => PointConversionForm::COMPRESSED,
+            PointCompression::Uncompressed => PointConversionForm::UNCOMPRESSED,
+        };
         let ecgroup = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
         let mut bncontext = BigNumContext::new().unwrap();
-        self.0
-            .ec_key()
-            .unwrap()
-            .public_key()
-            .to_bytes(&ecgroup, PointConversionForm::COMPRESSED, &mut bncontext)
-            .unwrap()
+        let mut bytes = ArrayVec::<[u8; 65]>::new();
+        bytes.extend_from_slice(
+            &self
+                .0
+                .ec_key()
+                .unwrap()
+                .public_key()
+                .to_bytes(&ecgroup, point_conversion_form, &mut bncontext)
+                .unwrap(),
+        );
+        bytes
     }
 
     fn from_affine_coordinates(x: &[u8; 32], y: &[u8; 32]) -> Result<Self, Self::Error> {
@@ -115,6 +127,7 @@ impl EphemeralSecret<P256> for P256EphemeralSecret {
     type Impl = P256Ecdh;
     type Error = Error;
     type Rng = ();
+    type EncodedPublicKey = ArrayVec<[u8; 65]>;
 
     fn generate_random(_rng: &mut Self::Rng) -> Self {
         let ecgroup = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
@@ -122,15 +135,20 @@ impl EphemeralSecret<P256> for P256EphemeralSecret {
         Self(eckey.try_into().unwrap())
     }
 
-    fn public_key_bytes(&self) -> Vec<u8> {
+    fn public_key_bytes(&self) -> Self::EncodedPublicKey {
         let ecgroup = EcGroup::from_curve_name(Nid::X9_62_PRIME256V1).unwrap();
         let mut bncontext = BigNumContext::new().unwrap();
-        self.0
-            .ec_key()
-            .unwrap()
-            .public_key()
-            .to_bytes(&ecgroup, PointConversionForm::COMPRESSED, &mut bncontext)
-            .unwrap()
+        let mut bytes = Self::EncodedPublicKey::new();
+        bytes.extend_from_slice(
+            &self
+                .0
+                .ec_key()
+                .unwrap()
+                .public_key()
+                .to_bytes(&ecgroup, PointConversionForm::COMPRESSED, &mut bncontext)
+                .unwrap(),
+        );
+        bytes
     }
 
     fn diffie_hellman(
@@ -178,7 +196,7 @@ mod tests {
     use crypto_provider_test::p256::*;
 
     #[apply(p256_test_cases)]
-    fn p256_tests(testcase: CryptoProviderTestCase<P256Ecdh>) {
-        testcase(PhantomData::<P256Ecdh>)
+    fn p256_tests(testcase: CryptoProviderTestCase<P256Ecdh>, _name: &str) {
+        testcase(PhantomData)
     }
 }

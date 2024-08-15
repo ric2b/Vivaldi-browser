@@ -79,6 +79,9 @@ extern "C" {
 #define DISFLOW_INTERP_BITS 14
 
 typedef struct {
+  // Start of allocation for u and v buffers
+  double *buf0;
+
   // x and y directions of flow, per patch
   double *u;
   double *v;

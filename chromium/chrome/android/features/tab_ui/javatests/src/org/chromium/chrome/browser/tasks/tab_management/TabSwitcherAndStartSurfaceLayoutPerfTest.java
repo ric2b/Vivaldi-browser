@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
-import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -45,6 +45,8 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.EnormousTest;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -64,8 +66,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -92,6 +92,7 @@ import java.util.concurrent.TimeoutException;
     Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE
 })
 @EnableFeatures({ChromeFeatureList.DEFER_TAB_SWITCHER_LAYOUT_CREATION})
+@DisableFeatures({ChromeFeatureList.ANDROID_HUB})
 public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     private static final String TAG = "SSLayoutPerfTest";
     private static final String BASE_PARAMS =
@@ -501,7 +502,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     @CommandLineFlags.Add({BASE_PARAMS})
     @DisableFeatures(ChromeFeatureList.GRID_TAB_SWITCHER_ANDROID_ANIMATIONS)
     @DisabledTest(message = "https://crbug.com/1184787 and https://crbug.com/1363755")
-    public void testGridToTabToCurrentNTP(boolean isStartSurfaceRefactorEnabled)
+    public void testGridToTabToCurrentNtp(boolean isStartSurfaceRefactorEnabled)
             throws InterruptedException, TimeoutException {
         prepareTabs(1, NTP_URL);
         reportGridToTabPerf(false, false, "Grid-to-Tab to current NTP");
@@ -514,7 +515,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     @CommandLineFlags.Add({BASE_PARAMS})
     @EnableFeatures(ChromeFeatureList.GRID_TAB_SWITCHER_ANDROID_ANIMATIONS)
     @DisabledTest(message = "https://crbug.com/1184787 and https://crbug.com/1363755")
-    public void testGridToTabToCurrentNTP_AndroidAnimation(boolean isStartSurfaceRefactorEnabled)
+    public void testGridToTabToCurrentNtp_AndroidAnimation(boolean isStartSurfaceRefactorEnabled)
             throws InterruptedException, TimeoutException {
         prepareTabs(1, NTP_URL);
         reportGridToTabPerf(false, false, "Grid-to-Tab to current NTP Android animation");
@@ -527,7 +528,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     @CommandLineFlags.Add({BASE_PARAMS})
     @DisableFeatures(ChromeFeatureList.GRID_TAB_SWITCHER_ANDROID_ANIMATIONS)
     @DisabledTest(message = "crbug.com/1087608")
-    public void testGridToTabToOtherNTP(boolean isStartSurfaceRefactorEnabled)
+    public void testGridToTabToOtherNtp(boolean isStartSurfaceRefactorEnabled)
             throws InterruptedException, TimeoutException {
         prepareTabs(2, NTP_URL);
         reportGridToTabPerf(true, false, "Grid-to-Tab to other NTP");
@@ -540,7 +541,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     @CommandLineFlags.Add({BASE_PARAMS})
     @EnableFeatures(ChromeFeatureList.GRID_TAB_SWITCHER_ANDROID_ANIMATIONS)
     @DisabledTest(message = "crbug.com/1087608")
-    public void testGridToTabToOtherNTP_AndroidAnimation(boolean isStartSurfaceRefactorEnabled)
+    public void testGridToTabToOtherNtp_AndroidAnimation(boolean isStartSurfaceRefactorEnabled)
             throws InterruptedException, TimeoutException {
         prepareTabs(2, NTP_URL);
         reportGridToTabPerf(true, false, "Grid-to-Tab to other NTP Android animation");
@@ -674,9 +675,9 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
             Thread.sleep(mWaitingTime);
             Espresso.onView(
                             allOf(
-                                    withParent(
+                                    isDescendantOfA(
                                             withId(
-                                                    TabUiTestHelper.getTabSwitcherParentId(
+                                                    TabUiTestHelper.getTabSwitcherAncestorId(
                                                             mActivityTestRule.getActivity()))),
                                     withId(R.id.tab_list_recycler_view)))
                     .perform(

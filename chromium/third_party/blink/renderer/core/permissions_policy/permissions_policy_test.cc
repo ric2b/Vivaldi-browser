@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/renderer/core/permissions_policy/permissions_policy_parser.h"
-
 #include <map>
 #include <string>
 
@@ -16,7 +14,9 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
+#include "third_party/blink/renderer/core/permissions_policy/permissions_policy_parser.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -107,6 +107,7 @@ class PermissionsPolicyParserTest : public ::testing::Test {
     return PermissionsPolicyParser::ParseHeader(
         feature_policy_header, g_empty_string, origin, logger, logger, context);
   }
+  test::TaskEnvironment task_environment_;
 };
 
 struct OriginWithPossibleWildcardsForTest {
@@ -631,6 +632,76 @@ const PermissionsPolicyParserTestCase
                     /* matches_all_origins */ false,
                     /* matches_opaque_src */ false,
                     {},
+                },
+            },
+        },
+        {
+            /* test_name */ "AttributeWithLineBreaks",
+            /* feature_policy_string */
+            "geolocation;\n"
+            "fullscreen",
+            /* permissions_policy_string */ NOT_APPLICABLE,
+            /* self_origin */ ORIGIN_A,
+            /* src_origin */ ORIGIN_B,
+            /* expected_parse_result */
+            {
+                {
+                    mojom::blink::PermissionsPolicyFeature::kGeolocation,
+                    /* self_if_matches */ absl::nullopt,
+                    /* matches_all_origins */ false,
+                    /* matches_opaque_src */ false,
+                    {{ORIGIN_B, /*has_subdomain_wildcard=*/false}},
+                },
+                {
+                    mojom::blink::PermissionsPolicyFeature::kFullscreen,
+                    /* self_if_matches */ absl::nullopt,
+                    /* matches_all_origins */ false,
+                    /* matches_opaque_src */ false,
+                    {{ORIGIN_B, /*has_subdomain_wildcard=*/false}},
+                },
+            },
+        },
+        {
+            /* test_name */ "AttributeWithCRLF",
+            /* feature_policy_string */
+            "geolocation;\r\n"
+            "fullscreen",
+            /* permissions_policy_string */ NOT_APPLICABLE,
+            /* self_origin */ ORIGIN_A,
+            /* src_origin */ ORIGIN_B,
+            /* expected_parse_result */
+            {
+                {
+                    mojom::blink::PermissionsPolicyFeature::kGeolocation,
+                    /* self_if_matches */ absl::nullopt,
+                    /* matches_all_origins */ false,
+                    /* matches_opaque_src */ false,
+                    {{ORIGIN_B, /*has_subdomain_wildcard=*/false}},
+                },
+                {
+                    mojom::blink::PermissionsPolicyFeature::kFullscreen,
+                    /* self_if_matches */ absl::nullopt,
+                    /* matches_all_origins */ false,
+                    /* matches_opaque_src */ false,
+                    {{ORIGIN_B, /*has_subdomain_wildcard=*/false}},
+                },
+            },
+        },
+        {
+            /* test_name */ "AlternativeWhitespceBetweenTokens",
+            /* feature_policy_string */
+            "\r\n\r\ngeolocation\t 'self'\f\f" ORIGIN_B "\t",
+            /* permissions_policy_string */ NOT_APPLICABLE,
+            /* self_origin */ ORIGIN_A,
+            /* src_origin */ ORIGIN_B,
+            /* expected_parse_result */
+            {
+                {
+                    mojom::blink::PermissionsPolicyFeature::kGeolocation,
+                    /* self_if_matches */ ORIGIN_A,
+                    /* matches_all_origins */ false,
+                    /* matches_opaque_src */ false,
+                    {{ORIGIN_B, /*has_subdomain_wildcard=*/false}},
                 },
             },
         },
@@ -1268,6 +1339,7 @@ class FeaturePolicyMutationTest : public testing::Test {
        /*matches_opaque_src=*/false}};
 
   ParsedPermissionsPolicy empty_policy = {};
+  test::TaskEnvironment task_environment_;
 };
 
 TEST_F(FeaturePolicyMutationTest, TestIsFeatureDeclared) {
@@ -1442,6 +1514,8 @@ class PermissionsPolicyViolationHistogramTest : public testing::Test {
   PermissionsPolicyViolationHistogramTest() = default;
 
   ~PermissionsPolicyViolationHistogramTest() override = default;
+  test::TaskEnvironment task_environment_;
 };
 
 }  // namespace blink
+

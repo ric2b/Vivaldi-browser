@@ -36,6 +36,14 @@
 namespace np_ffi {
 namespace internal {
 
+/// Result type for trying to add a credential to a credential-slab.
+enum class AddCredentialToSlabResult : uint8_t {
+  /// We succeeded in adding the credential to the slab.
+  Success = 0,
+  /// The handle to the slab was actually invalid.
+  InvalidHandle = 1,
+};
+
 /// The possible boolean action types which can be present in an Actions data element
 enum class BooleanActionType : uint8_t {
   ActiveUnlock = 8,
@@ -49,11 +57,24 @@ enum class BooleanActionType : uint8_t {
 
 /// Discriminant for `CreateCredentialBookResult`
 enum class CreateCredentialBookResultKind : uint8_t {
-  /// There was no space left to create a new credential book
-  NoSpaceLeft = 0,
   /// We created a new credential book behind the given handle.
   /// The associated payload may be obtained via
   /// `CreateCredentialBookResult#into_success()`.
+  Success = 0,
+  /// There was no space left to create a new credential book
+  NoSpaceLeft = 1,
+  /// The slab that we tried to create a credential-book from
+  /// actually was an invalid handle.
+  InvalidSlabHandle = 2,
+};
+
+/// Discriminant for `CreateCredentialSlabResult`
+enum class CreateCredentialSlabResultKind : uint8_t {
+  /// There was no space left to create a new credential slab
+  NoSpaceLeft = 0,
+  /// We created a new credential slab behind the given handle.
+  /// The associated payload may be obtained via
+  /// `CreateCredentialSlabResult#into_success()`.
   Success = 1,
 };
 
@@ -93,14 +114,8 @@ enum class DeserializedV0AdvertisementKind : uint8_t {
   NoMatchingCredentials = 1,
 };
 
-/// Represents deserialized information about the V0 identity utilized
-/// by a deserialized V0 advertisement
-enum class DeserializedV0Identity {
-  Plaintext,
-  Decrypted,
-};
-
-/// Discriminant for `DeserializedV0Identity`.
+/// Discriminant for deserialized information about the V0
+/// identity utilized by a deserialized V0 advertisement.
 enum class DeserializedV0IdentityKind : uint8_t {
   /// The deserialized identity was a plaintext identity.
   Plaintext = 0,
@@ -193,8 +208,9 @@ struct CredentialBook {
 /// Result type for `create_credential_book`
 union CreateCredentialBookResult {
   enum class Tag : uint8_t {
-    NoSpaceLeft = 0,
-    Success = 1,
+    Success = 0,
+    NoSpaceLeft = 1,
+    InvalidSlabHandle = 2,
   };
 
   struct Success_Body {
@@ -208,6 +224,67 @@ union CreateCredentialBookResult {
   Success_Body success;
 };
 
+///A `#[repr(C)]` handle to a value of type `super::CredentialSlabInternals`.
+struct CredentialSlab {
+  uint64_t handle_id;
+};
+
+/// Result type for `create_credential_slab`
+struct CreateCredentialSlabResult {
+  enum class Tag {
+    NoSpaceLeft,
+    Success,
+  };
+
+  struct Success_Body {
+    CredentialSlab _0;
+  };
+
+  Tag tag;
+  union {
+    Success_Body success;
+  };
+};
+
+/// Cryptographic information about a particular V0 discovery credential
+/// necessary to match and decrypt encrypted V0 advertisements.
+struct V0DiscoveryCredential {
+  uint8_t key_seed[32];
+  uint8_t legacy_metadata_key_hmac[32];
+};
+
+/// A representation of a MatchedCredential which is passable across the FFI boundary
+struct FfiMatchedCredential {
+  uint32_t cred_id;
+  const uint8_t *encrypted_metadata_bytes_buffer;
+  uintptr_t encrypted_metadata_bytes_len;
+};
+
+/// Representation of a V0 credential that contains additional data to provide back to caller once it
+/// is matched. The credential_id can be used by the caller to correlate it back to the full
+/// credentials details.
+struct V0MatchableCredential {
+  V0DiscoveryCredential discovery_cred;
+  FfiMatchedCredential matched_cred;
+};
+
+/// Cryptographic information about a particular V1 discovery credential
+/// necessary to match and decrypt encrypted V1 advertisement sections.
+struct V1DiscoveryCredential {
+  uint8_t key_seed[32];
+  uint8_t expected_unsigned_metadata_key_hmac[32];
+  uint8_t expected_signed_metadata_key_hmac[32];
+  uint8_t pub_key[32];
+};
+
+/// Representation of a V1 credential that contains additional data to provide back to caller once it
+/// is matched. The credential_id can be used by the caller to correlate it back to the full
+/// credentials details.
+struct V1MatchableCredential {
+  V1DiscoveryCredential discovery_cred;
+  FfiMatchedCredential matched_cred;
+};
+
 ///A `#[repr(C)]` handle to a value of type `super::V0PayloadInternals`.
 struct V0Payload {
   uint64_t handle_id;
@@ -217,7 +294,7 @@ struct V0Payload {
 struct LegibleDeserializedV0Advertisement {
   uint8_t num_des;
   V0Payload payload;
-  DeserializedV0Identity identity;
+  DeserializedV0IdentityKind identity_kind;
 };
 
 /// Represents a deserialized V0 advertisement
@@ -409,6 +486,8 @@ struct V1DEType {
 /// This representation is stable, and so you may directly
 /// reference this struct's fields if you wish.
 struct GenericV1DataElement {
+  /// The offset of this generic data-element.
+  uint8_t offset;
   /// The DE type code of this generic data-element.
   V1DEType de_type;
   /// The raw data-element byte payload, up to

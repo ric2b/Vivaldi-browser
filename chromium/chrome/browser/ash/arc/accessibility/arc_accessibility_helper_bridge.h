@@ -127,15 +127,15 @@ class ArcAccessibilityHelperBridge
   void OnActionResult(const ui::AXActionData& data, bool result) const;
   void OnGetTextLocationDataResult(
       const ui::AXActionData& data,
-      const absl::optional<gfx::Rect>& result_rect) const;
+      const std::optional<gfx::Rect>& result_rect) const;
 
   void PopulateActionParameters(
       const ui::AXActionData& chrome_data,
       ax::android::mojom::AccessibilityActionData& action_data) const;
 
-  absl::optional<gfx::Rect> OnGetTextLocationDataResultInternal(
+  std::optional<gfx::Rect> OnGetTextLocationDataResultInternal(
       const ui::AXTreeID& ax_tree_id,
-      const absl::optional<gfx::Rect>& result_rect) const;
+      const std::optional<gfx::Rect>& result_rect) const;
 
   void OnAccessibilityStatusChanged(
       const ash::AccessibilityStatusEventDetails& event_details);
@@ -150,8 +150,8 @@ class ArcAccessibilityHelperBridge
 
   bool is_focus_event_enabled_ = false;
   bool use_full_focus_mode_ = false;
-  const raw_ptr<Profile, ExperimentalAsh> profile_;
-  const raw_ptr<ArcBridgeService, ExperimentalAsh> arc_bridge_service_;
+  const raw_ptr<Profile> profile_;
+  const raw_ptr<ArcBridgeService> arc_bridge_service_;
 
   const AccessibilityHelperInstanceRemoteProxy accessibility_helper_instance_;
 

@@ -18,6 +18,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/hit_report.h"
 #include "components/safe_browsing/core/browser/db/util.h"
@@ -63,7 +64,8 @@ class SafeBrowsingDatabaseManager
   // request is still pending.
   class Client {
    public:
-    virtual ~Client() {}
+    Client();
+    virtual ~Client();
 
     // Called when the result of checking the API blocklist is known.
     // TODO(kcarattini): Consider if we need |url| passed here, remove if not.
@@ -92,6 +94,12 @@ class SafeBrowsingDatabaseManager
     // Called when the result of checking a allowlist is known.
     // Currently only used for CSD allowlist.
     virtual void OnCheckAllowlistUrlResult(bool did_match_allowlist) {}
+
+    // Returns a WeakPtr to this.
+    base::WeakPtr<Client> GetWeakPtr();
+
+   private:
+    base::WeakPtrFactory<Client> weak_factory_{this};
   };
 
   //
@@ -150,16 +158,13 @@ class SafeBrowsingDatabaseManager
   // can synchronously determine that the url is safe, CheckUrl returns true.
   // Otherwise it returns false, and |client| is called asynchronously with the
   // result when it is ready. The URL will only be checked for the threat types
-  // in |threat_types|. |experiment_cache_selection| specifies which cache to
-  // use. See comments above MechanismExperimentHashDatabaseCache's definition
-  // for more details. |check_type| specifies the type of check the url will be
+  // in |threat_types|. |check_type| specifies the type of check the url will be
   // checked against. See comments above CheckBrowseUrlType's definition for
   // more details.
   virtual bool CheckBrowseUrl(
       const GURL& url,
       const SBThreatTypeSet& threat_types,
       Client* client,
-      MechanismExperimentHashDatabaseCache experiment_cache_selection,
       CheckBrowseUrlType check_type) = 0;
 
   // Check if the prefix for |url| is in safebrowsing download add lists.
@@ -234,9 +239,6 @@ class SafeBrowsingDatabaseManager
 
   // Returns whether download protection is enabled.
   virtual bool IsDownloadProtectionEnabled() const = 0;
-
-  // Calls the method with the same name in |v4_get_hash_protocol_manager_|.
-  virtual void SetLookupMechanismExperimentIsEnabled();
 
   //
   // Methods to indicate when to start or suspend the SafeBrowsing operations.

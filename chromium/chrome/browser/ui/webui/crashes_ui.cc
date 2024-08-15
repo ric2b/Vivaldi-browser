@@ -45,6 +45,11 @@
 #include "components/crash/core/app/crashpad.h"
 #endif
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#include "app/vivaldi_apptools.h"
+#include "components/crashreport/crashreport_accessor.h"
+#endif
+
 using content::WebContents;
 using content::WebUIMessageHandler;
 
@@ -177,6 +182,10 @@ void CrashesDOMHandler::OnUploadListAvailable() {
 
 void CrashesDOMHandler::UpdateUI() {
   bool crash_reporting_enabled =
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+      vivaldi::IsVivaldiRunning()
+          ? vivaldi::IsVivaldiCrashReportingEnabled() :
+#endif
       ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled();
 
   bool system_crash_reporter = false;

@@ -13,6 +13,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/services/storage/public/mojom/storage_service.mojom.h"
 #include "components/services/storage/storage_service_impl.h"
 #include "content/child/child_process.h"
@@ -31,7 +32,6 @@
 #include "services/data_decoder/data_decoder_service.h"
 #include "services/network/network_service.h"
 #include "services/on_device_model/on_device_model_service.h"
-#include "services/on_device_model/public/cpp/features.h"
 #include "services/tracing/public/mojom/tracing_service.mojom.h"
 #include "services/tracing/tracing_service.h"
 #include "services/video_capture/public/mojom/video_capture_service.mojom.h"
@@ -107,10 +107,11 @@ extern sandbox::TargetServices* g_utility_target_services;
 #include "ui/accessibility/accessibility_features.h"
 #endif  // BUILDFLAG(ENABLE_ACCESSIBILITY_SERVICE)
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 #include "media/capture/capture_switches.h"
 #include "services/viz/public/cpp/gpu/gpu.h"
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) ||
+        // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace content {
 base::LazyInstance<NetworkBinderCreationCallback>::Leaky
@@ -166,7 +167,8 @@ class UtilityThreadVideoCaptureServiceImpl final
       mojo::PendingReceiver<video_capture::mojom::VideoCaptureService> receiver,
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner)
       : VideoCaptureServiceImpl(std::move(receiver),
-                                std::move(ui_task_runner)) {}
+                                std::move(ui_task_runner),
+                                /*create_system_monitor=*/true) {}
 
  private:
 #if BUILDFLAG(IS_WIN)
@@ -306,8 +308,12 @@ auto RunVideoCapture(
     mojo::PendingReceiver<video_capture::mojom::VideoCaptureService> receiver) {
   auto service = std::make_unique<UtilityThreadVideoCaptureServiceImpl>(
       std::move(receiver), base::SingleThreadTaskRunner::GetCurrentDefault());
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  {
+#else
   if (switches::IsVideoCaptureUseGpuMemoryBufferEnabled()) {
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     mojo::PendingRemote<viz::mojom::Gpu> remote_gpu;
     content::UtilityThread::Get()->BindHostReceiver(
         remote_gpu.InitWithNewPipeAndPassReceiver());
@@ -316,7 +322,8 @@ auto RunVideoCapture(
                          content::UtilityThread::Get()->GetIOTaskRunner());
     service->SetVizGpu(std::move(viz_gpu));
   }
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) ||
+        // BUILDFLAG(IS_CHROMEOS_ASH)
   return service;
 }
 
@@ -401,8 +408,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunTracing);
   services.Add(RunVideoCapture);
 
-  if (base::FeatureList::IsEnabled(
-          on_device_model::features::kOnDeviceModelService)) {
+  if (optimization_guide::features::CanLaunchOnDeviceModelService()) {
     services.Add(RunOnDeviceModel);
   }
 

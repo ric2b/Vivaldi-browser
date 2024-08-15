@@ -75,14 +75,6 @@ class WebSettings {
     kSubtitles
   };
 
-  // Defines the default for 'passive' field used in the AddEventListenerOptions
-  // interface when javascript calls addEventListener.
-  enum class PassiveEventListenerDefault {
-    kFalse,        // Default of false.
-    kTrue,         // Default of true.
-    kForceAllTrue  // Force all values to be true even when specified.
-  };
-
   // Sets value of a setting by its string identifier from Settings.in and
   // string representation of value. An enum's string representation is the
   // string representation of the integer value of the enum.
@@ -245,7 +237,6 @@ class WebSettings {
   virtual void SetTouchDragDropEnabled(bool) = 0;
   virtual void SetTouchDragEndContextMenu(bool) = 0;
   virtual void SetBarrelButtonForDragEnabled(bool) = 0;
-  virtual void SetUseLegacyBackgroundSizeShorthandBehavior(bool) = 0;
   virtual void SetViewportStyle(mojom::ViewportStyle) = 0;
   virtual void SetUseWideViewport(bool) = 0;
   virtual void SetV8CacheOptions(mojom::V8CacheOptions) = 0;
@@ -268,12 +259,12 @@ class WebSettings {
   virtual void SetLazyFrameLoadingDistanceThresholdPx2G(int) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPx3G(int) = 0;
   virtual void SetLazyFrameLoadingDistanceThresholdPx4G(int) = 0;
-  virtual void SetLazyImageLoadingDistanceThresholdPxUnknown(int) = 0;
-  virtual void SetLazyImageLoadingDistanceThresholdPxOffline(int) = 0;
-  virtual void SetLazyImageLoadingDistanceThresholdPxSlow2G(int) = 0;
-  virtual void SetLazyImageLoadingDistanceThresholdPx2G(int) = 0;
-  virtual void SetLazyImageLoadingDistanceThresholdPx3G(int) = 0;
-  virtual void SetLazyImageLoadingDistanceThresholdPx4G(int) = 0;
+  virtual void SetLazyLoadingImageMarginPxUnknown(int) = 0;
+  virtual void SetLazyLoadingImageMarginPxOffline(int) = 0;
+  virtual void SetLazyLoadingImageMarginPxSlow2G(int) = 0;
+  virtual void SetLazyLoadingImageMarginPx2G(int) = 0;
+  virtual void SetLazyLoadingImageMarginPx3G(int) = 0;
+  virtual void SetLazyLoadingImageMarginPx4G(int) = 0;
   virtual void SetForceDarkModeEnabled(bool) = 0;
   virtual void SetPreferredColorScheme(blink::mojom::PreferredColorScheme) = 0;
   virtual void SetPreferredContrast(mojom::PreferredContrast) = 0;

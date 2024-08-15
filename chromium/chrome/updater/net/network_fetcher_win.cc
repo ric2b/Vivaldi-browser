@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/updater/net/network.h"
+#include "components/winhttp/network_fetcher.h"
 
 #include <windows.h>
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -20,15 +21,14 @@
 #include "base/sequence_checker.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/updater/net/network.h"
 #include "chrome/updater/policy/service.h"
 #include "chrome/updater/util/util.h"
 #include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/user_info.h"
 #include "components/update_client/network.h"
-#include "components/winhttp/network_fetcher.h"
 #include "components/winhttp/proxy_configuration.h"
 #include "components/winhttp/scoped_hinternet.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace updater {
@@ -36,7 +36,7 @@ namespace {
 
 // Factory method for the proxy configuration strategy.
 scoped_refptr<winhttp::ProxyConfiguration> GetProxyConfiguration(
-    absl::optional<PolicyServiceProxyConfiguration>
+    std::optional<PolicyServiceProxyConfiguration>
         policy_service_proxy_configuration) {
   if (policy_service_proxy_configuration) {
     return base::MakeRefCounted<winhttp::ProxyConfiguration>(winhttp::ProxyInfo{
@@ -182,7 +182,7 @@ void NetworkFetcher::DownloadToFileComplete(int /*response_code*/) {
 
 class NetworkFetcherFactory::Impl {
  public:
-  explicit Impl(absl::optional<PolicyServiceProxyConfiguration>
+  explicit Impl(std::optional<PolicyServiceProxyConfiguration>
                     policy_service_proxy_configuration)
       : proxy_configuration_(
             GetProxyConfiguration(policy_service_proxy_configuration)),
@@ -203,7 +203,7 @@ class NetworkFetcherFactory::Impl {
 };
 
 NetworkFetcherFactory::NetworkFetcherFactory(
-    absl::optional<PolicyServiceProxyConfiguration>
+    std::optional<PolicyServiceProxyConfiguration>
         policy_service_proxy_configuration)
     : impl_(std::make_unique<Impl>(policy_service_proxy_configuration)) {}
 NetworkFetcherFactory::~NetworkFetcherFactory() = default;

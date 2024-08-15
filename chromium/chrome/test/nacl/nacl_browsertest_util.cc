@@ -98,7 +98,7 @@ MessageResponse LoadTestMessageHandler::HandleStructuredMessage(
     if (!message) {
       return MissingField(type, "message");
     }
-    absl::optional<bool> passed = msg.FindBool("passed");
+    std::optional<bool> passed = msg.FindBool("passed");
     if (!passed) {
       return MissingField(type, "passed");
     }
@@ -161,7 +161,7 @@ MessageResponse NaClIntegrationMessageHandler::HandleStructuredMessage(
     if (!message) {
       return MissingField(type, "message");
     }
-    absl::optional<bool> passed = msg.FindBool("passed");
+    std::optional<bool> passed = msg.FindBool("passed");
     if (!passed) {
       return MissingField(type, "passed");
     }
@@ -272,11 +272,7 @@ void NaClBrowserTestBase::RunNaClIntegrationTest(
 
   GURL url;
   if (full_url) {
-#if BUILDFLAG(IS_WIN)
-    url = GURL(base::WideToUTF16(url_fragment_with_both));
-#else
     url = GURL(url_fragment_with_both);
-#endif
   } else {
     url = TestURL(url_fragment_with_both);
   }

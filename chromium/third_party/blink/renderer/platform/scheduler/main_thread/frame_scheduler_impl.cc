@@ -6,14 +6,15 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/task/common/lazy_now.h"
 #include "base/task/common/scoped_defer_task_posting.h"
 #include "base/task/common/task_annotator.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
@@ -45,11 +46,35 @@ using perfetto::protos::pbzero::RendererMainThreadTaskExecution;
 
 namespace {
 
+// When enabled, the main thread's type is reduced from `kCompositing` to
+// `kDefault` when WebRTC is in use within the renderer. This is a simple
+// workaround meant to be merged to higher channels while we're working on a
+// more refined solution. See crbug.com/1513904.
+BASE_FEATURE(kRendererMainIsDefaultThreadTypeForWebRTC,
+             "RendererMainIsNormalThreadTypeForWebRTC",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const char* VisibilityStateToString(bool is_visible) {
   if (is_visible) {
     return "visible";
   } else {
     return "hidden";
+  }
+}
+
+const char* IsVisibleAreaLargeStateToString(bool is_large) {
+  if (is_large) {
+    return "large";
+  } else {
+    return "small";
+  }
+}
+
+const char* UserActivationStateToString(bool had_user_activation) {
+  if (had_user_activation) {
+    return "had user activation";
+  } else {
+    return "no user activation";
   }
 }
 
@@ -121,6 +146,14 @@ FrameSchedulerImpl::FrameSchedulerImpl(
                      "FrameScheduler.FrameVisible",
                      &tracing_controller_,
                      VisibilityStateToString),
+      is_visible_area_large_(true,
+                             "FrameScheduler.IsVisibleAreaLarge",
+                             &tracing_controller_,
+                             IsVisibleAreaLargeStateToString),
+      had_user_activation_(false,
+                           "FrameScheduler.HadUserActivation",
+                           &tracing_controller_,
+                           UserActivationStateToString),
       frame_paused_(false,
                     "FrameScheduler.FramePaused",
                     &tracing_controller_,
@@ -264,7 +297,8 @@ void FrameSchedulerImpl::MoveTaskQueuesToCorrectWakeUpBudgetPool() {
       continue;
 
     auto* new_wake_up_budget_pool = parent_page_scheduler_->GetWakeUpBudgetPool(
-        task_queue, frame_origin_type_, frame_visible_);
+        task_queue, frame_origin_type_, frame_visible_, is_visible_area_large_,
+        had_user_activation_);
     if (task_queue->GetWakeUpBudgetPool() == new_wake_up_budget_pool) {
       continue;
     }
@@ -272,7 +306,8 @@ void FrameSchedulerImpl::MoveTaskQueuesToCorrectWakeUpBudgetPool() {
     parent_page_scheduler_->RemoveQueueFromWakeUpBudgetPool(task_queue,
                                                             &lazy_now);
     parent_page_scheduler_->AddQueueToWakeUpBudgetPool(
-        task_queue, frame_origin_type_, frame_visible_, &lazy_now);
+        task_queue, frame_origin_type_, frame_visible_, is_visible_area_large_,
+        had_user_activation_, &lazy_now);
   }
 }
 
@@ -280,7 +315,6 @@ void FrameSchedulerImpl::SetFrameVisible(bool frame_visible) {
   DCHECK(parent_page_scheduler_);
   if (frame_visible_ == frame_visible)
     return;
-  UMA_HISTOGRAM_BOOLEAN("RendererScheduler.IPC.FrameVisibility", frame_visible);
   frame_visible_ = frame_visible;
 
   MoveTaskQueuesToCorrectWakeUpBudgetPool();
@@ -289,6 +323,44 @@ void FrameSchedulerImpl::SetFrameVisible(bool frame_visible) {
 
 bool FrameSchedulerImpl::IsFrameVisible() const {
   return frame_visible_;
+}
+
+void FrameSchedulerImpl::SetVisibleAreaLarge(bool is_large) {
+  DCHECK(parent_page_scheduler_);
+  if (is_visible_area_large_ == is_large) {
+    return;
+  }
+  is_visible_area_large_ = is_large;
+
+  if (!IsCrossOriginToNearestMainFrame()) {
+    return;
+  }
+
+  MoveTaskQueuesToCorrectWakeUpBudgetPool();
+  UpdatePolicy();
+}
+
+bool FrameSchedulerImpl::IsVisibleAreaLarge() const {
+  return is_visible_area_large_;
+}
+
+void FrameSchedulerImpl::SetHadUserActivation(bool had_user_activation) {
+  DCHECK(parent_page_scheduler_);
+  if (had_user_activation_ == had_user_activation) {
+    return;
+  }
+  had_user_activation_ = had_user_activation;
+
+  if (!IsCrossOriginToNearestMainFrame()) {
+    return;
+  }
+
+  MoveTaskQueuesToCorrectWakeUpBudgetPool();
+  UpdatePolicy();
+}
+
+bool FrameSchedulerImpl::HadUserActivation() const {
+  return had_user_activation_;
 }
 
 void FrameSchedulerImpl::SetCrossOriginToNearestMainFrame(bool cross_origin) {
@@ -376,7 +448,7 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
       return IsInflightNetworkRequestBackForwardCacheSupportEnabled()
                  ? UnfreezableLoadingTaskQueueTraits()
                  : LoadingTaskQueueTraits();
-    case TaskType::kNetworkingUnfreezableImageLoading: {
+    case TaskType::kNetworkingUnfreezableRenderBlockingLoading: {
       QueueTraits queue_traits =
           IsInflightNetworkRequestBackForwardCacheSupportEnabled()
               ? UnfreezableLoadingTaskQueueTraits()
@@ -417,6 +489,7 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
     case TaskType::kPermission:
     case TaskType::kWakeLock:
     case TaskType::kStorage:
+    case TaskType::kClipboard:
       // TODO(altimin): Move appropriate tasks to throttleable task queue.
       return DeferrableTaskQueueTraits();
     case TaskType::kFileReading:
@@ -621,6 +694,13 @@ void FrameSchedulerImpl::OnStartedUsingNonStickyFeature(
   if (policy.disable_align_wake_ups) {
     DisableAlignWakeUpsForProcess();
   }
+
+  if (feature == SchedulingPolicy::Feature::kWebRTC &&
+      base::FeatureList::IsEnabled(kRendererMainIsDefaultThreadTypeForWebRTC) &&
+      base::PlatformThread::GetCurrentThreadType() ==
+          base::ThreadType::kCompositing) {
+    base::PlatformThread::SetCurrentThreadType(base::ThreadType::kDefault);
+  }
 }
 
 void FrameSchedulerImpl::OnStartedUsingStickyFeature(
@@ -682,12 +762,9 @@ void FrameSchedulerImpl::OnRemovedAggressiveThrottlingOptOut() {
     parent_page_scheduler_->OnThrottlingStatusUpdated();
 }
 
-void FrameSchedulerImpl::OnTaskCompleted(
-    TaskQueue::TaskTiming* timing,
-    base::TimeTicks desired_execution_time) {
+void FrameSchedulerImpl::OnTaskCompleted(TaskQueue::TaskTiming* timing) {
   if (delegate_) {
-    delegate_->OnTaskCompleted(timing->start_time(), timing->end_time(),
-                               desired_execution_time);
+    delegate_->OnTaskCompleted(timing->start_time(), timing->end_time());
   }
 }
 
@@ -699,6 +776,8 @@ void FrameSchedulerImpl::WriteIntoTrace(perfetto::TracedValue context) const {
   dict.Add("frame_type", frame_type_ == FrameScheduler::FrameType::kMainFrame
                              ? "MainFrame"
                              : "Subframe");
+  dict.Add("is_visible_area_large", IsVisibleAreaLarge());
+  dict.Add("had_user_activation", HadUserActivation());
   dict.Add("disable_background_timer_throttling",
            !RuntimeEnabledFeatures::TimerThrottlingForBackgroundTabsEnabled());
 
@@ -891,6 +970,11 @@ bool FrameSchedulerImpl::ShouldThrottleTaskQueues() const {
 
   if (parent_page_scheduler_->ThrottleForegroundTimers())
     return true;
+  if (parent_page_scheduler_->ThrottleUnimportantFrameTimers() &&
+      IsCrossOriginToNearestMainFrame() && frame_visible_ &&
+      !IsVisibleAreaLarge() && !HadUserActivation()) {
+    return true;
+  }
   if (!RuntimeEnabledFeatures::TimerThrottlingForBackgroundTabsEnabled())
     return false;
   if (parent_page_scheduler_->IsAudioPlaying())
@@ -1056,7 +1140,8 @@ void FrameSchedulerImpl::OnTaskQueueCreated(
     }
 
     parent_page_scheduler_->AddQueueToWakeUpBudgetPool(
-        task_queue, frame_origin_type_, frame_visible_, &lazy_now);
+        task_queue, frame_origin_type_, frame_visible_, is_visible_area_large_,
+        had_user_activation_, &lazy_now);
 
     if (task_queues_throttled_) {
       MainThreadTaskQueue::ThrottleHandle handle = task_queue->Throttle();

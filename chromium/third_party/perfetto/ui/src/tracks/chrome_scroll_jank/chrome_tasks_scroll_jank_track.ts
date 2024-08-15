@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Engine} from '../../common/engine';
-import {NUM} from '../../common/query_result';
 import {InThreadTrackSortKey} from '../../common/state';
 import {
   NamedSliceTrack,
   NamedSliceTrackTypes,
 } from '../../frontend/named_slice_track';
-import {runQueryInNewTab} from '../../frontend/query_result_tab';
-import {NewTrackArgs, TrackBase} from '../../frontend/track';
+import {NewTrackArgs} from '../../frontend/track';
+import {Engine} from '../../trace_processor/engine';
+import {NUM} from '../../trace_processor/query_result';
 
 import {
   ENABLE_CHROME_SCROLL_JANK_PLUGIN,
@@ -36,9 +35,6 @@ interface ChromeTasksScrollJankTrackTypes extends NamedSliceTrackTypes {
 export class ChromeTasksScrollJankTrack extends
     NamedSliceTrack<ChromeTasksScrollJankTrackTypes> {
   static readonly kind = 'org.chromium.ScrollJank.BrowserUIThreadLongTasks';
-  static create(args: NewTrackArgs): TrackBase {
-    return new ChromeTasksScrollJankTrack(args);
-  }
 
   constructor(args: NewTrackArgs) {
     super(args);
@@ -86,30 +82,6 @@ export async function decideTracks(
     name: 'Scroll Jank causes - long tasks',
     trackGroup: getTrackGroupUuid(it.utid, it.upid),
   });
-
-  // Initialise the chrome_tasks_delaying_input_processing table. It will be
-  // used in the sql table above.
-  // TODO(stevegolton): Use viewer.tabs.openQuery().
-  await engine.query(`
-select RUN_METRIC(
-   'chrome/chrome_tasks_delaying_input_processing.sql',
-   'duration_causing_jank_ms',
-   /* duration_causing_jank_ms = */ '8');`);
-
-  const query = `
-     select
-       s1.full_name,
-       s1.duration_ms,
-       s1.slice_id,
-       s1.thread_dur_ms,
-       s2.id,
-       s2.ts,
-       s2.dur,
-       s2.track_id
-     from chrome_tasks_delaying_input_processing s1
-     join slice s2 on s1.slice_id=s2.id
-     `;
-  runQueryInNewTab(query, 'Scroll Jank: long tasks');
 
   return result;
 }

@@ -32,7 +32,7 @@
 <translation id="2444387452209867610">Indsæt note</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
 <translation id="2612127540243995147">Klar til at installere. Vivaldi vil blive lukket og genstartet.</translation>
-<translation id="2613387515621326337">Vis opdaterings-webside</translation>
+<translation id="2613387515621326337">Vis opdaterings-website</translation>
 <translation id="2647368062414805334">Desværre, er dine Edge-indstillinger ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Edge-vinduer. Klik derefter fortsæt.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Sæt ind</translation>
 <translation id="4005270918754737597">Spring denne version over</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Vis ikke igen</translation>
 <translation id="4074744496918018786">Åbn billede i nyt vindue</translation>
 <translation id="410351446219883937">Automatisk afspilning</translation>
 <translation id="4281844954008187215">Servicevilkår</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Åbn billede i nyt vindue</translation>
 <translation id="5656371807944747581">Opdateringsfejl!</translation>
-<translation id="5716238312826274098">Deaktiverer notifikationer</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> er nu tilgængelig (du har <ph name="OLD_VERSION" />). Vil du downloade den nu?</translation>
 <translation id="5770433027661640693">Landskab 10</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Start af opdaterings-installationsprogramet fejlede. Kontrollér venligst at computeren har nok RAM eller diskplads og prøv igen senere.</translation>
 <translation id="7658239707568436148">Annuller</translation>
-<translation id="7715497554424665066">&amp;Ignorer opdatering</translation>
 <translation id="7724603315864178912">Klip</translation>
 <translation id="7727481996062361502">Bekræfter opdatering...</translation>
 <translation id="7793738202466490491">Tilføj som kalender-begivenhed</translation>

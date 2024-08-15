@@ -9,69 +9,13 @@ Returns the length of e (e.g. abs(e) if T is a scalar, or sqrt(e[0]^2 + e[1]^2 +
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16, TypeVec } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import {
-  fullF32Range,
-  fullF16Range,
-  vectorF32Range,
-  vectorF16Range,
-} from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeF16, TypeF32, TypeVec } from '../../../../../util/conversion.js';
 import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
+import { d } from './length.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Cases: f32_vecN_[non_]const
-const f32_vec_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f32_vec${n}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f32.generateVectorToIntervalCases(
-          vectorF32Range(n),
-          nonConst ? 'unfiltered' : 'finite',
-          FP.f32.lengthInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-// Cases: f16_vecN_[non_]const
-const f16_vec_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f16_vec${n}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f16.generateVectorToIntervalCases(
-          vectorF16Range(n),
-          nonConst ? 'unfiltered' : 'finite',
-          FP.f16.lengthInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('length', {
-  f32: () => {
-    return FP.f32.generateScalarToIntervalCases(
-      fullF32Range(),
-      'unfiltered',
-      FP.f32.lengthInterval
-    );
-  },
-  ...f32_vec_cases,
-  f16: () => {
-    return FP.f16.generateScalarToIntervalCases(
-      fullF16Range(),
-      'unfiltered',
-      FP.f16.lengthInterval
-    );
-  },
-  ...f16_vec_cases,
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#numeric-builtin-functions')

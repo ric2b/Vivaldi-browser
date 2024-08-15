@@ -139,6 +139,8 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
       return kIdSpecificity;
     case kPseudoClass:
       switch (GetPseudoType()) {
+        case kPseudoActiveViewTransition:
+          return (IdentList().empty() ? 1 : 2) * kClassLikeSpecificity;
         case kPseudoWhere:
           return 0;
         case kPseudoHost:
@@ -306,6 +308,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoViewTransitionNew:
       return kPseudoIdViewTransitionNew;
     case kPseudoActive:
+    case kPseudoActiveViewTransition:
     case kPseudoAny:
     case kPseudoAnyLink:
     case kPseudoAutofill:
@@ -320,7 +323,6 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoDefault:
     case kPseudoDefined:
     case kPseudoDetailsContent:
-    case kPseudoDetailsSummary:
     case kPseudoDialogInTopLayer:
     case kPseudoDir:
     case kPseudoDisabled:
@@ -395,7 +397,6 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoSingleButton:
     case kPseudoSlotted:
     case kPseudoSpatialNavigationFocus:
-    case kPseudoSpatialNavigationInterest:
     case kPseudoStart:
     case kPseudoState:
     case kPseudoTarget:
@@ -458,8 +459,6 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
      CSSSelector::kPseudoHostHasAppearance},
     {"-internal-spatial-navigation-focus",
      CSSSelector::kPseudoSpatialNavigationFocus},
-    {"-internal-spatial-navigation-interest",
-     CSSSelector::kPseudoSpatialNavigationInterest},
     {"-internal-video-persistent", CSSSelector::kPseudoVideoPersistent},
     {"-internal-video-persistent-ancestor",
      CSSSelector::kPseudoVideoPersistentAncestor},
@@ -490,7 +489,6 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"default", CSSSelector::kPseudoDefault},
     {"defined", CSSSelector::kPseudoDefined},
     {"details-content", CSSSelector::kPseudoDetailsContent},
-    {"details-summary", CSSSelector::kPseudoDetailsSummary},
     {"disabled", CSSSelector::kPseudoDisabled},
     {"double-button", CSSSelector::kPseudoDoubleButton},
     {"empty", CSSSelector::kPseudoEmpty},
@@ -559,6 +557,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
 
 const static NameToPseudoStruct kPseudoTypeWithArgumentsMap[] = {
     {"-webkit-any", CSSSelector::kPseudoAny},
+    {"active-view-transition", CSSSelector::kPseudoActiveViewTransition},
     {"cue", CSSSelector::kPseudoCue},
     {"dir", CSSSelector::kPseudoDir},
     {"has", CSSSelector::kPseudoHas},
@@ -620,28 +619,13 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
-  if (match->type == CSSSelector::kPseudoFocusVisible &&
-      !RuntimeEnabledFeatures::CSSFocusVisibleEnabled()) {
-    return CSSSelector::kPseudoUnknown;
-  }
-
   if (match->type == CSSSelector::kPseudoPaused &&
       !RuntimeEnabledFeatures::CSSPseudoPlayingPausedEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
-  if (match->type == CSSSelector::kPseudoPictureInPicture &&
-      !RuntimeEnabledFeatures::CSSPictureInPictureEnabled()) {
-    return CSSSelector::kPseudoUnknown;
-  }
-
   if (match->type == CSSSelector::kPseudoPlaying &&
       !RuntimeEnabledFeatures::CSSPseudoPlayingPausedEnabled()) {
-    return CSSSelector::kPseudoUnknown;
-  }
-
-  if (match->type == CSSSelector::kPseudoHighlight &&
-      !RuntimeEnabledFeatures::HighlightAPIEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -651,8 +635,7 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
-  if ((match->type == CSSSelector::kPseudoDetailsContent ||
-       match->type == CSSSelector::kPseudoDetailsSummary) &&
+  if (match->type == CSSSelector::kPseudoDetailsContent &&
       !RuntimeEnabledFeatures::DetailsStylingEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
@@ -665,6 +648,12 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   if ((match->type == CSSSelector::kPseudoUserInvalid ||
        match->type == CSSSelector::kPseudoUserValid) &&
       !RuntimeEnabledFeatures::UserValidUserInvalidEnabled()) {
+    return CSSSelector::kPseudoUnknown;
+  }
+
+  if ((match->type == CSSSelector::kPseudoOpen ||
+       match->type == CSSSelector::kPseudoClosed) &&
+      !RuntimeEnabledFeatures::HTMLSelectListElementEnabled()) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -768,7 +757,6 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoViewTransitionOld:
     case kPseudoViewTransitionNew:
     case kPseudoDetailsContent:
-    case kPseudoDetailsSummary:
       if (match_ != kPseudoElement) {
         pseudo_type_ = kPseudoUnknown;
       }
@@ -784,7 +772,6 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoListBox:
     case kPseudoMultiSelectFocus:
     case kPseudoSpatialNavigationFocus:
-    case kPseudoSpatialNavigationInterest:
     case kPseudoVideoPersistent:
     case kPseudoVideoPersistentAncestor:
       if (mode != kUASheetMode) {
@@ -794,6 +781,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
       [[fallthrough]];
     // For pseudo classes
     case kPseudoActive:
+    case kPseudoActiveViewTransition:
     case kPseudoAny:
     case kPseudoAnyLink:
     case kPseudoAutofill:
@@ -1039,6 +1027,21 @@ bool CSSSelector::SerializeSimpleSelector(StringBuilder& builder) const {
       case kPseudoRelativeAnchor:
         NOTREACHED();
         return false;
+      case kPseudoActiveViewTransition:
+        if (IdentList().empty()) {
+          builder.Append("(*)");
+        } else {
+          String separator = "(";
+          for (AtomicString type : IdentList()) {
+            builder.Append(separator);
+            if (separator == "(") {
+              separator = ", ";
+            }
+            SerializeIdentifier(type, builder);
+          }
+          builder.Append(')');
+        }
+        break;
       default:
         break;
     }
@@ -1299,7 +1302,6 @@ static bool ValidateSubSelector(const CSSSelector* selector) {
     case CSSSelector::kPseudoHostContext:
     case CSSSelector::kPseudoNot:
     case CSSSelector::kPseudoSpatialNavigationFocus:
-    case CSSSelector::kPseudoSpatialNavigationInterest:
     case CSSSelector::kPseudoHasDatalist:
     case CSSSelector::kPseudoIsHtml:
     case CSSSelector::kPseudoListBox:

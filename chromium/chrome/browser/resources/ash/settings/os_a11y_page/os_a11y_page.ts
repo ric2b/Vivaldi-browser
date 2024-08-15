@@ -20,10 +20,11 @@ import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
+import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './os_a11y_page.html.js';
@@ -72,14 +73,6 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
       },
 
       /**
-       * Whether to show accessibility labels settings.
-       */
-      showAccessibilityLabelsSetting_: {
-        type: Boolean,
-        value: false,
-      },
-
-      /**
        * Whether the user is in kiosk mode.
        */
       isKioskModeActive_: {
@@ -110,6 +103,35 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
           Setting.kLiveCaption,
         ]),
       },
+
+      rowIcons_: {
+        type: Object,
+        value() {
+          if (isRevampWayfindingEnabled()) {
+            return {
+              imageDescription: 'os-settings:a11y-image-description',
+              showInQuickSettings: 'os-settings:accessibility-revamp',
+              textToSpeech: 'os-settings:text-to-speech',
+              displayAndMagnification: 'os-settings:zoom-in',
+              keyboardAndTextInput: 'os-settings:a11y-keyboard-and-text-input',
+              cursorAndTouchpad: 'os-settings:cursor-click',
+              audioAndCaptions: 'os-settings:a11y-hearing',
+              findMore: 'os-settings:a11y-find-more',
+            };
+          }
+
+          return {
+            imageDescription: '',
+            showInQuickSettings: '',
+            textToSpeech: '',
+            displayAndMagnification: '',
+            keyboardAndTextInput: '',
+            cursorAndTouchpad: '',
+            audioAndCaptions: '',
+            findMore: '',
+          };
+        },
+      },
     };
   }
 
@@ -118,8 +140,8 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
   private hasScreenReader_: boolean;
   private isGuest_: boolean;
   private isKioskModeActive_: boolean;
+  private rowIcons_: Record<string, string>;
   private section_: Section;
-  private showAccessibilityLabelsSetting_: boolean;
 
   constructor() {
     super();
@@ -155,14 +177,17 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
       this.addFocusConfig(
           routes.A11Y_AUDIO_AND_CAPTIONS, '#audioAndCaptionsPageTrigger');
     }
+  }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+
+    const updateScreenReaderState = (hasScreenReader: boolean): void => {
+      this.hasScreenReader_ = hasScreenReader;
+    };
+    this.browserProxy_.getScreenReaderState().then(updateScreenReaderState);
     this.addWebUiListener(
-        'screen-reader-state-changed',
-        (hasScreenReader: boolean) =>
-            this.onScreenReaderStateChanged_(hasScreenReader));
-
-    // Enables javascript and gets the screen reader state.
-    this.browserProxy_.a11yPageReady();
+        'screen-reader-state-changed', updateScreenReaderState);
   }
 
   override currentRouteChanged(newRoute: Route, prevRoute?: Route): void {
@@ -171,11 +196,6 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
     if (newRoute === this.route) {
       this.attemptDeepLink();
     }
-  }
-
-  private onScreenReaderStateChanged_(hasScreenReader: boolean): void {
-    this.hasScreenReader_ = hasScreenReader;
-    this.showAccessibilityLabelsSetting_ = this.hasScreenReader_;
   }
 
   private onToggleAccessibilityImageLabels_(): void {

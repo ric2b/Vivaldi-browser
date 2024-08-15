@@ -24,22 +24,24 @@
 #include <sstream>
 
 #ifdef EIGEN_GOOGLEHASH_SUPPORT
-  #include <google/dense_hash_map>
-  #include <google/sparse_hash_map>
+#include <google/dense_hash_map>
+#include <google/sparse_hash_map>
 #endif
 
 /**
-  * \defgroup SparseExtra_Module SparseExtra module
-  *
-  * This module contains some experimental features extending the sparse module:
-  * - A RandomSetter which is a wrapper object allowing to set/update a sparse matrix with random access.
-  * - A SparseInverse which calculates a sparse subset of the inverse of a sparse matrix corresponding to nonzeros of the input
-  * - MatrixMarket format(https://math.nist.gov/MatrixMarket/formats.html) readers and writers for sparse and dense matrices.
-  *
-  * \code
-  * #include <unsupported/Eigen/SparseExtra>
-  * \endcode
-  */
+ * \defgroup SparseExtra_Module SparseExtra module
+ *
+ * This module contains some experimental features extending the sparse module:
+ * - A RandomSetter which is a wrapper object allowing to set/update a sparse matrix with random access.
+ * - A SparseInverse which calculates a sparse subset of the inverse of a sparse matrix corresponding to nonzeros of the
+ * input
+ * - MatrixMarket format(https://math.nist.gov/MatrixMarket/formats.html) readers and writers for sparse and dense
+ * matrices.
+ *
+ * \code
+ * #include <unsupported/Eigen/SparseExtra>
+ * \endcode
+ */
 
 // IWYU pragma: begin_exports
 #include "src/SparseExtra/RandomSetter.h"
@@ -55,4 +57,4 @@
 
 #include "../../Eigen/src/Core/util/ReenableStupidWarnings.h"
 
-#endif // EIGEN_SPARSE_EXTRA_MODULE_H
+#endif  // EIGEN_SPARSE_EXTRA_MODULE_H

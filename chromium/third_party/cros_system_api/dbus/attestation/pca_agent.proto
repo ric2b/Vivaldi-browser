@@ -37,3 +37,14 @@ message GetCertificateReply {
   optional AttestationStatus status = 1;
   optional bytes response = 2;
 }
+
+// Protos below are used for the recoverable key store service functionalities
+// inside pca_agentd.
+
+// The certificate/signature XML pair. Check
+// https://www.gstatic.com/cryptauthvault/v0/cert.xml and
+// https://www.gstatic.com/cryptauthvault/v0/cert.sig.xml for examples.
+message RksCertificateAndSignature {
+  optional string certificate_xml = 1;
+  optional string signature_xml = 2;
+}

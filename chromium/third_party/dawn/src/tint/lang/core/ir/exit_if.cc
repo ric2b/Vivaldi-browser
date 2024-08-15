@@ -38,6 +38,8 @@ TINT_INSTANTIATE_TYPEINFO(tint::core::ir::ExitIf);
 
 namespace tint::core::ir {
 
+ExitIf::ExitIf() = default;
+
 ExitIf::ExitIf(ir::If* i, VectorRef<Value*> args) {
     SetIf(i);
     AddOperands(ExitIf::kArgsOperandOffset, std::move(args));
@@ -57,6 +59,10 @@ void ExitIf::SetIf(ir::If* i) {
 
 ir::If* ExitIf::If() {
     return static_cast<ir::If*>(ControlInstruction());
+}
+
+const ir::If* ExitIf::If() const {
+    return static_cast<const ir::If*>(ControlInstruction());
 }
 
 }  // namespace tint::core::ir

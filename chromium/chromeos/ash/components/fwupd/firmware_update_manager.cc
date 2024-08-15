@@ -5,6 +5,7 @@
 #include "chromeos/ash/components/fwupd/firmware_update_manager.h"
 
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 #include "ash/constants/ash_features.h"
@@ -24,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_client.h"
 #include "chromeos/ash/components/fwupd/histogram_util.h"
 #include "crypto/sha2.h"
@@ -42,24 +44,6 @@
 namespace ash {
 
 namespace {
-// State of the fwupd daemon. Enum defined here:
-// https://github.com/fwupd/fwupd/blob/4389f9f913588edae7243a8dbed88ce3788c8bc2/libfwupd/fwupd-enums.h
-enum class FwupdStatus {
-  kUnknown,
-  kIdle,
-  kLoading,
-  kDecompressing,
-  kDeviceRestart,
-  kDeviceWrite,
-  kDeviceVerify,
-  kScheduling,
-  kDownloading,
-  kDeviceRead,
-  kDeviceErase,
-  kWaitingForAuth,
-  kDeviceBusy,
-  kShutdown,
-};
 
 static constexpr auto FwupdStatusStringMap =
     base::MakeFixedFlatMap<FwupdStatus, const char*>(
@@ -76,7 +60,8 @@ static constexpr auto FwupdStatusStringMap =
          {FwupdStatus::kDeviceErase, "Erasing a device"},
          {FwupdStatus::kWaitingForAuth, "Waiting for authentication"},
          {FwupdStatus::kDeviceBusy, "The device is busy"},
-         {FwupdStatus::kShutdown, "The daemon is shutting down"}});
+         {FwupdStatus::kShutdown, "The daemon is shutting down"},
+         {FwupdStatus::kWaitingForUser, "Waiting for user action"}});
 
 const char* GetFwupdStatusString(FwupdStatus enum_val) {
   DCHECK(base::Contains(FwupdStatusStringMap, enum_val));
@@ -207,10 +192,11 @@ std::unique_ptr<network::SimpleURLLoader> CreateSimpleURLLoader(GURL url) {
 }
 
 int GetResponseCode(network::SimpleURLLoader* simple_loader) {
-  if (simple_loader->ResponseInfo() && simple_loader->ResponseInfo()->headers)
+  if (simple_loader->ResponseInfo() && simple_loader->ResponseInfo()->headers) {
     return simple_loader->ResponseInfo()->headers->response_code();
-  else
+  } else {
     return -1;
+  }
 }
 
 // TODO(michaelcheco): Determine if more granular states are needed.
@@ -234,6 +220,8 @@ firmware_update::mojom::UpdateState GetUpdateState(FwupdStatus fwupd_status) {
       return firmware_update::mojom::UpdateState::kRestarting;
     case FwupdStatus::kDeviceWrite:
       return firmware_update::mojom::UpdateState::kUpdating;
+    case FwupdStatus::kWaitingForUser:
+      return firmware_update::mojom::UpdateState::kWaitingForUser;
   }
 }
 
@@ -247,6 +235,14 @@ bool IsValidFirmwarePatchFile(const base::FilePath& filepath) {
   // Check for invalid characters in filepath.
   return base::ContainsOnlyChars(filepath.BaseName().value(),
                                  kAllowedFilepathChars);
+}
+
+// Converts a FwupdRequest into a mojom DeviceRequest.
+firmware_update::mojom::DeviceRequestPtr GetDeviceRequest(
+    FwupdRequest request) {
+  return firmware_update::mojom::DeviceRequest::New(
+      static_cast<firmware_update::mojom::DeviceRequestId>(request.id),
+      static_cast<firmware_update::mojom::DeviceRequestKind>(request.kind));
 }
 
 }  // namespace
@@ -339,6 +335,10 @@ void FirmwareUpdateManager::ObservePeripheralUpdates(
 void FirmwareUpdateManager::ResetInstallState() {
   install_controller_receiver_.reset();
   update_progress_observer_.reset();
+  device_request_observer_.reset();
+  last_fwupd_status_ = FwupdStatus::kUnknown;
+  last_device_request_ = nullptr;
+  last_request_started_timestamp_ = std::nullopt;
 }
 
 void FirmwareUpdateManager::PrepareForUpdate(
@@ -389,9 +389,6 @@ void FirmwareUpdateManager::RequestUpdates(const std::string& device_id) {
   }
 }
 
-// TODO(jimmyxgong): Currently only looks for the local cache for the update
-// file. This needs to update to fetch the update file from a server and
-// download it to the local cache.
 void FirmwareUpdateManager::StartInstall(const std::string& device_id,
                                          const base::FilePath& filepath,
                                          base::OnceCallback<void()> callback) {
@@ -662,6 +659,23 @@ void FirmwareUpdateManager::OnUpdateListResponse(const std::string& device_id,
 void FirmwareUpdateManager::OnInstallResponse(bool success) {
   auto state = success ? firmware_update::mojom::UpdateState::kSuccess
                        : firmware_update::mojom::UpdateState::kFailed;
+  if (!success) {
+    firmware_update::metrics::EmitInstallFailedWithStatus(last_fwupd_status_);
+
+    // If the install failed and the last fwupd status was WaitingForUser,
+    // this install failure probably occurred because of a timeout waiting for
+    // user action from a device request, so we record the duration of that
+    // request.
+    if (last_request_started_timestamp_.has_value() &&
+        !last_request_started_timestamp_->is_null() &&
+        !last_device_request_.is_null() &&
+        last_fwupd_status_ == FwupdStatus::kWaitingForUser) {
+      const base::TimeDelta request_duration =
+          base::Time::Now() - last_request_started_timestamp_.value();
+      firmware_update::metrics::EmitFailedDeviceRequestDuration(
+          request_duration, last_device_request_->id);
+    }
+  }
   const auto result =
       success ? firmware_update::metrics::FirmwareUpdateInstallResult::kSuccess
               : firmware_update::metrics::FirmwareUpdateInstallResult::
@@ -698,12 +712,46 @@ void FirmwareUpdateManager::BindInterface(
   receiver_.Bind(std::move(pending_receiver));
 }
 
+void FirmwareUpdateManager::OnDeviceRequestResponse(FwupdRequest request) {
+  if (!device_request_observer_.is_bound()) {
+    LOG(ERROR) << "OnDeviceRequestResponse triggered with unbound observer";
+    return;
+  }
+  // Convert the FwupdRequest into a mojom DeviceRequest, then record the metric
+  // and pass that request to observers.
+  firmware_update::metrics::EmitDeviceRequest(GetDeviceRequest(request));
+  device_request_observer_->OnDeviceRequest(GetDeviceRequest(request));
+
+  // Save details about the request for metrics purposes.
+  last_device_request_ = GetDeviceRequest(request);
+  last_request_started_timestamp_ = base::Time::Now();
+}
+
 void FirmwareUpdateManager::OnPropertiesChangedResponse(
     FwupdProperties* properties) {
   if (!properties || !update_progress_observer_.is_bound()) {
     return;
   }
   const auto status = FwupdStatus(properties->status.value());
+
+  // If the FwupdStatus just switched from WaitingForUser to anything else,
+  // consider the request successful and record a metric.
+  if (last_fwupd_status_ == FwupdStatus::kWaitingForUser &&
+      status != FwupdStatus::kWaitingForUser &&
+      last_request_started_timestamp_.has_value() &&
+      !last_request_started_timestamp_->is_null() &&
+      !last_device_request_.is_null()) {
+    const base::TimeDelta request_duration =
+        base::Time::Now() - last_request_started_timestamp_.value();
+    firmware_update::metrics::EmitDeviceRequestSuccessfulWithDuration(
+        request_duration, last_device_request_->id);
+
+    // Reset these tracking variables now that we've used them.
+    last_device_request_ = nullptr;
+    last_request_started_timestamp_ = std::nullopt;
+  }
+
+  last_fwupd_status_ = status;
   const auto percentage = properties->percentage.value();
   VLOG(1) << "fwupd: OnPropertiesChangedResponse called with Status: "
           << GetFwupdStatusString(static_cast<FwupdStatus>(status))
@@ -724,7 +772,14 @@ void FirmwareUpdateManager::BeginUpdate(const std::string& device_id,
   StartInstall(device_id, filepath, /**callback=*/base::DoNothing());
 }
 
-void FirmwareUpdateManager::AddObserver(
+void FirmwareUpdateManager::AddDeviceRequestObserver(
+    mojo::PendingRemote<firmware_update::mojom::DeviceRequestObserver>
+        observer) {
+  device_request_observer_.reset();
+  device_request_observer_.Bind(std::move(observer));
+}
+
+void FirmwareUpdateManager::AddUpdateProgressObserver(
     mojo::PendingRemote<firmware_update::mojom::UpdateProgressObserver>
         observer) {
   update_progress_observer_.reset();

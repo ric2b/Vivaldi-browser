@@ -103,8 +103,7 @@ class StatisticsRecorderTest : public testing::TestWithParam<bool> {
     // Note: We can't clear |top_| in the locked block, because the
     // StatisticsRecorder destructor expects that the lock isn't already held.
     {
-      const StatisticsRecorder::SrAutoWriterLock auto_lock(
-          StatisticsRecorder::GetLock());
+      const AutoLock auto_lock(StatisticsRecorder::GetLock());
       statistics_recorder_.reset(StatisticsRecorder::top_);
       if (statistics_recorder_) {
         // Prevent releasing ranges in test to avoid dangling pointers in
@@ -118,8 +117,7 @@ class StatisticsRecorderTest : public testing::TestWithParam<bool> {
   }
 
   bool HasGlobalRecorder() {
-    const StatisticsRecorder::SrAutoReaderLock auto_lock(
-        StatisticsRecorder::GetLock());
+    const AutoLock auto_lock(StatisticsRecorder::GetLock());
     return StatisticsRecorder::top_ != nullptr;
   }
 
@@ -390,22 +388,35 @@ TEST_P(StatisticsRecorderTest, ToJSON) {
   const Value::List* buckets_list = histogram_dict->FindList("buckets");
   ASSERT_TRUE(buckets_list);
   EXPECT_EQ(2u, buckets_list->size());
+}
 
-  // Check the serialized JSON with a different verbosity level.
-  json = StatisticsRecorder::ToJSON(JSON_VERBOSITY_LEVEL_OMIT_BUCKETS);
-  root = JSONReader::Read(json);
+// Check the serialized JSON with a different verbosity level.
+TEST_P(StatisticsRecorderTest, ToJSONOmitBuckets) {
+  Histogram::FactoryGet("TestHistogram1", 1, 1000, 50, HistogramBase::kNoFlags)
+      ->Add(30);
+  Histogram::FactoryGet("TestHistogram1", 1, 1000, 50, HistogramBase::kNoFlags)
+      ->Add(40);
+  Histogram::FactoryGet("TestHistogram2", 1, 1000, 50, HistogramBase::kNoFlags)
+      ->Add(30);
+  Histogram::FactoryGet("TestHistogram2", 1, 1000, 50, HistogramBase::kNoFlags)
+      ->Add(40);
+
+  std::string json =
+      StatisticsRecorder::ToJSON(JSON_VERBOSITY_LEVEL_OMIT_BUCKETS);
+  absl::optional<Value> root = JSONReader::Read(json);
   ASSERT_TRUE(root);
-  root_dict = root->GetIfDict();
+  Value::Dict* root_dict = root->GetIfDict();
   ASSERT_TRUE(root_dict);
-  histogram_list = root_dict->FindList("histograms");
+  const Value::List* histogram_list = root_dict->FindList("histograms");
   ASSERT_TRUE(histogram_list);
+
   ASSERT_EQ(2u, histogram_list->size());
   const Value::Dict* histogram_dict2 = (*histogram_list)[0].GetIfDict();
   ASSERT_TRUE(histogram_dict2);
-  sample_count = histogram_dict2->FindInt("count");
+  auto sample_count = histogram_dict2->FindInt("count");
   ASSERT_TRUE(sample_count);
   EXPECT_EQ(2, *sample_count);
-  buckets_list = histogram_dict2->FindList("buckets");
+  const Value::List* buckets_list = histogram_dict2->FindList("buckets");
   // Bucket information should be omitted.
   ASSERT_FALSE(buckets_list);
 }
@@ -742,17 +753,9 @@ TEST_P(StatisticsRecorderTest, GlobalCallbackCalled) {
   EXPECT_EQ(callback_callcount, 1u);
 }
 
-#if BUILDFLAG(USE_RUNTIME_VLOG)
-// The following check that StatisticsRecorder::InitLogOnShutdownWhileLocked
-// dumps the histogram graph to vlog if VLOG_IS_ON(1) at runtime. When
-// USE_RUNTIME_VLOG is not set, all vlog levels are determined at build time
-// and default to off. Since we do not want StatisticsRecorder to dump all the
-// time, VLOG in its code stays off. As a result, the following tests would
-// fail.
-
 TEST_P(StatisticsRecorderTest, LogOnShutdownNotInitialized) {
   ResetVLogInitialized();
-  logging::SetMinLogLevel(logging::LOG_WARNING);
+  logging::SetMinLogLevel(logging::LOGGING_WARNING);
   InitializeStatisticsRecorder();
   EXPECT_FALSE(VLOG_IS_ON(1));
   EXPECT_FALSE(IsVLogInitialized());
@@ -762,11 +765,11 @@ TEST_P(StatisticsRecorderTest, LogOnShutdownNotInitialized) {
 
 TEST_P(StatisticsRecorderTest, LogOnShutdownInitializedExplicitly) {
   ResetVLogInitialized();
-  logging::SetMinLogLevel(logging::LOG_WARNING);
+  logging::SetMinLogLevel(logging::LOGGING_WARNING);
   InitializeStatisticsRecorder();
   EXPECT_FALSE(VLOG_IS_ON(1));
   EXPECT_FALSE(IsVLogInitialized());
-  logging::SetMinLogLevel(logging::LOG_VERBOSE);
+  logging::SetMinLogLevel(logging::LOGGING_VERBOSE);
   EXPECT_TRUE(VLOG_IS_ON(1));
   InitLogOnShutdown();
   EXPECT_TRUE(IsVLogInitialized());
@@ -774,12 +777,11 @@ TEST_P(StatisticsRecorderTest, LogOnShutdownInitializedExplicitly) {
 
 TEST_P(StatisticsRecorderTest, LogOnShutdownInitialized) {
   ResetVLogInitialized();
-  logging::SetMinLogLevel(logging::LOG_VERBOSE);
+  logging::SetMinLogLevel(logging::LOGGING_VERBOSE);
   InitializeStatisticsRecorder();
   EXPECT_TRUE(VLOG_IS_ON(1));
   EXPECT_TRUE(IsVLogInitialized());
 }
-#endif  // BUILDFLAG(USE_RUNTIME_VLOG)
 
 class TestHistogramProvider : public StatisticsRecorder::HistogramProvider {
  public:

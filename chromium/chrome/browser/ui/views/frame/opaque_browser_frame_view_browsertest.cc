@@ -79,7 +79,7 @@ class WebAppOpaqueBrowserFrameViewTest : public InProcessBrowserTest {
   }
 
   bool InstallAndLaunchWebApp(
-      absl::optional<SkColor> theme_color = absl::nullopt) {
+      std::optional<SkColor> theme_color = std::nullopt) {
     auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
     web_app_info->start_url = GetAppURL();
     web_app_info->scope = GetAppURL().GetWithoutFilename();
@@ -297,7 +297,7 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
     Browser* app_browser =
         web_app::LaunchWebAppBrowser(browser()->profile(), app_id);
 
-    web_app::NavigateToURLAndWait(app_browser, start_url);
+    web_app::NavigateViaLinkClickToURLAndWait(app_browser, start_url);
 
     browser_view_ = BrowserView::GetBrowserViewForBrowser(app_browser);
     views::NonClientFrameView* frame_view =

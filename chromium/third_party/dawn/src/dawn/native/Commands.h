@@ -122,6 +122,16 @@ struct RenderPassColorAttachmentInfo {
     dawn::native::Color clearColor;
 };
 
+struct RenderPassStorageAttachmentInfo {
+    RenderPassStorageAttachmentInfo();
+    ~RenderPassStorageAttachmentInfo();
+
+    Ref<TextureViewBase> storage;
+    wgpu::LoadOp loadOp;
+    wgpu::StoreOp storeOp;
+    dawn::native::Color clearColor;
+};
+
 struct RenderPassDepthStencilAttachmentInfo {
     RenderPassDepthStencilAttachmentInfo();
     ~RenderPassDepthStencilAttachmentInfo();
@@ -142,9 +152,10 @@ struct BeginRenderPassCmd {
     ~BeginRenderPassCmd();
 
     Ref<AttachmentState> attachmentState;
-    ityp::array<ColorAttachmentIndex, RenderPassColorAttachmentInfo, kMaxColorAttachments>
-        colorAttachments;
+    PerColorAttachment<RenderPassColorAttachmentInfo> colorAttachments;
     RenderPassDepthStencilAttachmentInfo depthStencilAttachment;
+
+    std::array<RenderPassStorageAttachmentInfo, kMaxPLSSlots> storageAttachments;
 
     // Cache the width and height of all attachments for convenience
     uint32_t width;

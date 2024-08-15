@@ -38,7 +38,7 @@ struct DIPSRedirectChainInfo {
 
   // These properties aren't known at the time of creation, and are filled in
   // later:
-  absl::optional<DIPSCookieMode> cookie_mode;
+  std::optional<DIPSCookieMode> cookie_mode;
 };
 
 // Properties of one URL within a redirect chain.
@@ -64,17 +64,16 @@ struct DIPSRedirectInfo {
   // These properties are required for all redirects:
 
   const GURL url;
+  const std::string site;  // the cached result of GetSiteForDIPS(url)
   const DIPSRedirectType redirect_type;
   SiteDataAccessType
       access_type;  // may be updated by late cookie notifications
   const ukm::SourceId source_id;
   const base::Time time;
-  // TODO(amaliev): Add the `site` string computed by GetSiteForDIPS to avoid
-  // recomputing.
 
   // These properties aren't known at the time of creation, and are filled in
   // later:
-  absl::optional<bool> has_interaction;
+  std::optional<bool> has_interaction;
   size_t chain_index = 0u;
 
   // The following properties are only applicable for client-side redirects:

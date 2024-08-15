@@ -8,19 +8,22 @@
 
 #include <cstdint>
 
+#include "base/command_line.h"
 #include "base/strings/sys_string_conversions.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "content/browser/renderer_host/browser_compositor_ios.h"
 #include "content/browser/renderer_host/input/motion_event_web.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_ios.h"
-#include "content/browser/renderer_host/input/web_input_event_builders_ios.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/renderer_host/ui_events_helper.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/input/web_input_event_builders_ios.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/common/content_switches.h"
 #include "ui/accelerated_widget_mac/ca_layer_frame_sink_provider.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/base/ime/text_input_mode.h"
@@ -28,10 +31,6 @@
 #include "ui/display/screen.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/geometry/size_conversions.h"
-
-// Used for settng the requested renderer size when testing.
-constexpr int kDefaultWidthForTesting = 980;
-constexpr int kDefaultHeightForTesting = 735;
 
 static void* kObservingContext = &kObservingContext;
 
@@ -46,9 +45,23 @@ static void* kObservingContext = &kObservingContext;
 @end
 
 namespace {
+
+// Used for setting the requested renderer size when testing.
+constexpr gfx::Size kDefaultSizeForTesting = gfx::Size(800, 600);
+constexpr gfx::Size KDefaultSizeForPreventResizingForTesting =
+    gfx::Size(980, 735);
+
 bool IsTesting() {
   return [[UIApplication sharedApplication] isRunningTests];
 }
+
+gfx::Rect GetDefaultSizeForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kPreventResizingContentsForTesting)
+             ? gfx::Rect(KDefaultSizeForPreventResizingForTesting)
+             : gfx::Rect(kDefaultSizeForTesting);
+}
+
 }  // namespace
 
 // TODO(dtapuska): Change this to be UITextInput and handle the other
@@ -65,7 +78,7 @@ bool IsTesting() {
 
 @interface RenderWidgetUIView : CALayerFrameSinkProvider {
   base::WeakPtr<content::RenderWidgetHostViewIOS> _view;
-  absl::optional<gfx::Vector2dF> _viewOffsetDuringTouchSequence;
+  std::optional<gfx::Vector2dF> _viewOffsetDuringTouchSequence;
 }
 
 // TextInput state.
@@ -349,7 +362,7 @@ RenderWidgetHostViewIOS::RenderWidgetHostViewIOS(RenderWidgetHost* widget)
       host()->GetFrameSinkId());
 
   if (IsTesting()) {
-    view_bounds_ = gfx::Rect(kDefaultWidthForTesting, kDefaultHeightForTesting);
+    view_bounds_ = GetDefaultSizeForTesting();
     browser_compositor_->UpdateSurfaceFromUIView(GetViewBounds().size());
   }
 
@@ -462,6 +475,12 @@ const viz::LocalSurfaceId& RenderWidgetHostViewIOS::GetLocalSurfaceId() const {
   return browser_compositor_->GetRendererLocalSurfaceId();
 }
 
+void RenderWidgetHostViewIOS::UpdateFrameSinkIdRegistration() {
+  RenderWidgetHostViewBase::UpdateFrameSinkIdRegistration();
+  browser_compositor_->GetDelegatedFrameHost()->SetIsFrameSinkIdOwner(
+      is_frame_sink_id_owner());
+}
+
 const viz::FrameSinkId& RenderWidgetHostViewIOS::GetFrameSinkId() const {
   return browser_compositor_->GetDelegatedFrameHost()->frame_sink_id();
 }
@@ -565,8 +584,8 @@ gfx::Size RenderWidgetHostViewIOS::GetRequestedRendererSize() {
   return GetViewBounds().size();
 }
 
-absl::optional<DisplayFeature> RenderWidgetHostViewIOS::GetDisplayFeature() {
-  return absl::nullopt;
+std::optional<DisplayFeature> RenderWidgetHostViewIOS::GetDisplayFeature() {
+  return std::nullopt;
 }
 void RenderWidgetHostViewIOS::SetDisplayFeatureForTesting(
     const DisplayFeature* display_feature) {}
@@ -643,10 +662,16 @@ void RenderWidgetHostViewIOS::UpdateCALayerTree(
   display_tree_->UpdateCALayerTree(ca_layer_params);
 }
 
-void RenderWidgetHostViewIOS::DidNavigateMainFramePreCommit() {
-  CHECK(browser_compositor_) << "Shouldn't be called during destruction!";
+void RenderWidgetHostViewIOS::OnOldViewDidNavigatePreCommit() {
+  if (base::FeatureList::IsEnabled(
+          features::kInvalidateLocalSurfaceIdPreCommit)) {
+    CHECK(browser_compositor_) << "Shouldn't be called during destruction!";
+    browser_compositor_->DidNavigateMainFramePreCommit();
+  }
+}
+
+void RenderWidgetHostViewIOS::OnNewViewDidNavigatePostCommit() {
   gesture_provider_.ResetDetection();
-  browser_compositor_->DidNavigateMainFramePreCommit();
 }
 
 void RenderWidgetHostViewIOS::DidEnterBackForwardCache() {
@@ -967,8 +992,11 @@ ui::Compositor* RenderWidgetHostViewIOS::GetCompositor() {
 
 void RenderWidgetHostViewIOS::GestureEventAck(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result,
-    blink::mojom::ScrollResultDataPtr scroll_result_data) {
+    blink::mojom::InputEventResultState ack_result) {
+  // Stop flinging if a GSU event with momentum phase is sent to the renderer
+  // but not consumed.
+  StopFlingingIfNecessary(event, ack_result);
+
   UIScrollView* scrollView = (UIScrollView*)[ui_view_->view_ superview];
   switch (event.GetType()) {
     case blink::WebInputEvent::Type::kGestureScrollBegin:
@@ -979,10 +1007,11 @@ void RenderWidgetHostViewIOS::GestureEventAck(
       [[scrollView delegate] scrollViewWillBeginDragging:scrollView];
       break;
     case blink::WebInputEvent::Type::kGestureScrollUpdate:
-      if (scroll_result_data && scroll_result_data->root_scroll_offset) {
-        ApplyRootScrollOffsetChanged(*scroll_result_data->root_scroll_offset,
-                                     /*force=*/false);
-      }
+      // TODO(crbug.com/1458640): Since ScrollResultData has been removed from
+      // GestureEventAck, the invocation of ApplyRootScrollOffsetChanged here
+      // has also been eliminated for now. We should address the
+      // GestureScrollUpdate event after examining how the bug implements
+      // GestureEventAck.
       break;
     case blink::WebInputEvent::Type::kGestureScrollEnd: {
       // Make sure our cached view bounds gets updated.
@@ -1009,12 +1038,11 @@ void RenderWidgetHostViewIOS::GestureEventAck(
 
 void RenderWidgetHostViewIOS::ChildDidAckGestureEvent(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result,
-    blink::mojom::ScrollResultDataPtr scroll_result_data) {
-  if (scroll_result_data && scroll_result_data->root_scroll_offset) {
-    ApplyRootScrollOffsetChanged(*scroll_result_data->root_scroll_offset,
-                                 /*force=*/false);
-  }
+    blink::mojom::InputEventResultState ack_result) {
+  // TODO(crbug.com/1458640): Since ScrollResultData has been removed from
+  // GestureEventAck, the invocation of ApplyRootScrollOffsetChanged here has
+  // also been eliminated for now. We should address the GestureScrollUpdate
+  // event after examining how the bug implements GestureEventAck.
 }
 
 void RenderWidgetHostViewIOS::UpdateFrameBounds() {

@@ -32,6 +32,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_AUTOFILL_CLIENT_H_
 
 #include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_form_related_change_type.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 
 namespace blink {
@@ -65,6 +66,9 @@ class WebAutofillClient {
   virtual void TextFieldDidChange(const WebFormControlElement&) {}
   virtual void TextFieldDidReceiveKeyDown(const WebInputElement&,
                                           const WebKeyboardEvent&) {}
+  // This is called once per-character when a user edits a contenteditable
+  // element by typing.
+  virtual void ContentEditableDidChange(const WebElement&) {}
   // This is called when a datalist indicator is clicked.
   virtual void OpenTextDataListChooser(const WebInputElement&) {}
   // This is called when the datalist for an input has changed.
@@ -82,7 +86,9 @@ class WebAutofillClient {
   // Called when the user interacts with the page after a load.
   virtual void UserGestureObserved() {}
 
-  virtual void DidAddOrRemoveFormRelatedElementsDynamically() {}
+  virtual void DidChangeFormRelatedElementDynamically(
+      const WebElement&,
+      WebFormRelatedChangeType) {}
   virtual void AjaxSucceeded() {}
   // Called when |element| is in autofilled state and the value has been changed
   // by JavaScript. |old_value| contains the value before being changed.

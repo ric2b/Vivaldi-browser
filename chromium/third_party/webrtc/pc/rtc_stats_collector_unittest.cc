@@ -29,6 +29,7 @@
 #include "api/media_stream_track.h"
 #include "api/rtp_parameters.h"
 #include "api/rtp_transceiver_direction.h"
+#include "api/stats/attribute.h"
 #include "api/stats/rtc_stats.h"
 #include "api/stats/rtc_stats_report.h"
 #include "api/stats/rtcstats_objects.h"
@@ -263,9 +264,9 @@ class FakeAudioTrackForStats : public MediaStreamTrack<AudioTrackInterface> {
   std::string kind() const override {
     return MediaStreamTrackInterface::kAudioKind;
   }
-  webrtc::AudioSourceInterface* GetSource() const override { return nullptr; }
-  void AddSink(webrtc::AudioTrackSinkInterface* sink) override {}
-  void RemoveSink(webrtc::AudioTrackSinkInterface* sink) override {}
+  AudioSourceInterface* GetSource() const override { return nullptr; }
+  void AddSink(AudioTrackSinkInterface* sink) override {}
+  void RemoveSink(AudioTrackSinkInterface* sink) override {}
   bool GetSignalLevel(int* level) override { return false; }
   rtc::scoped_refptr<AudioProcessorInterface> GetAudioProcessor() override {
     return processor_;
@@ -2030,7 +2031,7 @@ TEST_F(RTCStatsCollectorTest, CollectRTCIceCandidatePairStats) {
   EXPECT_TRUE(report->Get(*expected_pair.transport_id));
 
   // Set bandwidth and "GetStats" again.
-  webrtc::Call::Stats call_stats;
+  Call::Stats call_stats;
   const int kSendBandwidth = 888;
   call_stats.send_bandwidth_bps = kSendBandwidth;
   const int kRecvBandwidth = 999;
@@ -2303,7 +2304,7 @@ TEST_F(RTCStatsCollectorTest, CollectRTCInboundRtpStreamStats_Audio_PlayoutId) {
     ASSERT_TRUE(report->Get("ITTransportName1A1"));
     auto stats =
         report->Get("ITTransportName1A1")->cast_to<RTCInboundRtpStreamStats>();
-    ASSERT_FALSE(stats.playout_id.is_defined());
+    ASSERT_FALSE(stats.playout_id.has_value());
   }
   {
     // We do expect a playout id when receiving.
@@ -2314,7 +2315,7 @@ TEST_F(RTCStatsCollectorTest, CollectRTCInboundRtpStreamStats_Audio_PlayoutId) {
     ASSERT_TRUE(report->Get("ITTransportName1A1"));
     auto stats =
         report->Get("ITTransportName1A1")->cast_to<RTCInboundRtpStreamStats>();
-    ASSERT_TRUE(stats.playout_id.is_defined());
+    ASSERT_TRUE(stats.playout_id.has_value());
     EXPECT_EQ(*stats.playout_id, "AP");
   }
 }
@@ -2339,12 +2340,9 @@ TEST_F(RTCStatsCollectorTest, CollectRTCInboundRtpStreamStats_Video) {
   video_media_info.receivers[0].key_frames_decoded = 3;
   video_media_info.receivers[0].frames_dropped = 13;
   video_media_info.receivers[0].qp_sum = absl::nullopt;
-  video_media_info.receivers[0].total_decode_time =
-      webrtc::TimeDelta::Seconds(9);
-  video_media_info.receivers[0].total_processing_delay =
-      webrtc::TimeDelta::Millis(600);
-  video_media_info.receivers[0].total_assembly_time =
-      webrtc::TimeDelta::Millis(500);
+  video_media_info.receivers[0].total_decode_time = TimeDelta::Seconds(9);
+  video_media_info.receivers[0].total_processing_delay = TimeDelta::Millis(600);
+  video_media_info.receivers[0].total_assembly_time = TimeDelta::Millis(500);
   video_media_info.receivers[0].frames_assembled_from_multiple_packets = 23;
   video_media_info.receivers[0].total_inter_frame_delay = 0.123;
   video_media_info.receivers[0].total_squared_inter_frame_delay = 0.00456;
@@ -2481,6 +2479,10 @@ TEST_F(RTCStatsCollectorTest, CollectRTCAudioPlayoutStats) {
   audio_device_stats.total_playout_delay_s = 5;
   pc_->SetAudioDeviceStats(audio_device_stats);
 
+  pc_->AddVoiceChannel("AudioMid", "TransportName", {});
+  stats_->SetupRemoteTrackAndReceiver(
+      cricket::MEDIA_TYPE_AUDIO, "RemoteAudioTrackID", "RemoteStreamId", 1);
+
   rtc::scoped_refptr<const RTCStatsReport> report = stats_->GetStatsReport();
   auto stats_of_track_type = report->GetStatsOfType<RTCAudioPlayoutStats>();
   ASSERT_EQ(1U, stats_of_track_type.size());
@@ -2529,7 +2531,7 @@ TEST_F(RTCStatsCollectorTest, CollectGoogTimingFrameInfo) {
   rtc::scoped_refptr<const RTCStatsReport> report = stats_->GetStatsReport();
   auto inbound_rtps = report->GetStatsOfType<RTCInboundRtpStreamStats>();
   ASSERT_EQ(inbound_rtps.size(), 1u);
-  ASSERT_TRUE(inbound_rtps[0]->goog_timing_frame_info.is_defined());
+  ASSERT_TRUE(inbound_rtps[0]->goog_timing_frame_info.has_value());
   EXPECT_EQ(*inbound_rtps[0]->goog_timing_frame_info,
             "1,2,3,4,5,6,7,8,9,10,11,12,13,1,0");
 }
@@ -2617,12 +2619,12 @@ TEST_F(RTCStatsCollectorTest, CollectRTCOutboundRtpStreamStats_Video) {
   video_media_info.senders[0].key_frames_encoded = 3;
   video_media_info.senders[0].total_encode_time_ms = 9000;
   video_media_info.senders[0].total_encoded_bytes_target = 1234;
-  video_media_info.senders[0].total_packet_send_delay =
-      webrtc::TimeDelta::Seconds(10);
+  video_media_info.senders[0].total_packet_send_delay = TimeDelta::Seconds(10);
   video_media_info.senders[0].quality_limitation_reason =
       QualityLimitationReason::kBandwidth;
-  video_media_info.senders[0].quality_limitation_durations_ms
-      [webrtc::QualityLimitationReason::kBandwidth] = 300;
+  video_media_info.senders[0]
+      .quality_limitation_durations_ms[QualityLimitationReason::kBandwidth] =
+      300;
   video_media_info.senders[0].quality_limitation_resolution_changes = 56u;
   video_media_info.senders[0].qp_sum = absl::nullopt;
   video_media_info.senders[0].content_type = VideoContentType::UNSPECIFIED;
@@ -3138,8 +3140,8 @@ TEST_F(RTCStatsCollectorTest,
   rtc::scoped_refptr<const RTCStatsReport> report = stats_->GetStatsReport();
   ASSERT_TRUE(report->Get("SV42"));
   auto video_stats = report->Get("SV42")->cast_to<RTCVideoSourceStats>();
-  EXPECT_FALSE(video_stats.frames_per_second.is_defined());
-  EXPECT_FALSE(video_stats.frames.is_defined());
+  EXPECT_FALSE(video_stats.frames_per_second.has_value());
+  EXPECT_FALSE(video_stats.frames.has_value());
 }
 
 // The track not having a source is not expected to be true in practise, but
@@ -3168,8 +3170,8 @@ TEST_F(RTCStatsCollectorTest,
   rtc::scoped_refptr<const RTCStatsReport> report = stats_->GetStatsReport();
   ASSERT_TRUE(report->Get("SV42"));
   auto video_stats = report->Get("SV42")->cast_to<RTCVideoSourceStats>();
-  EXPECT_FALSE(video_stats.width.is_defined());
-  EXPECT_FALSE(video_stats.height.is_defined());
+  EXPECT_FALSE(video_stats.width.has_value());
+  EXPECT_FALSE(video_stats.height.has_value());
 }
 
 TEST_F(RTCStatsCollectorTest,
@@ -3370,9 +3372,9 @@ TEST_P(RTCStatsCollectorTestWithParamKind,
   auto& remote_inbound_rtp = report->Get(remote_inbound_rtp_id)
                                  ->cast_to<RTCRemoteInboundRtpStreamStats>();
 
-  EXPECT_TRUE(remote_inbound_rtp.round_trip_time_measurements.is_defined());
+  EXPECT_TRUE(remote_inbound_rtp.round_trip_time_measurements.has_value());
   EXPECT_EQ(0, *remote_inbound_rtp.round_trip_time_measurements);
-  EXPECT_FALSE(remote_inbound_rtp.round_trip_time.is_defined());
+  EXPECT_FALSE(remote_inbound_rtp.round_trip_time.has_value());
 }
 
 TEST_P(RTCStatsCollectorTestWithParamKind,
@@ -3434,10 +3436,10 @@ TEST_P(RTCStatsCollectorTestWithParamKind,
   auto& remote_inbound_rtp = report->Get(remote_inbound_rtp_id)
                                  ->cast_to<RTCRemoteInboundRtpStreamStats>();
 
-  EXPECT_TRUE(remote_inbound_rtp.codec_id.is_defined());
+  EXPECT_TRUE(remote_inbound_rtp.codec_id.has_value());
   EXPECT_TRUE(report->Get(*remote_inbound_rtp.codec_id));
 
-  EXPECT_TRUE(remote_inbound_rtp.jitter.is_defined());
+  EXPECT_TRUE(remote_inbound_rtp.jitter.has_value());
   // The jitter (in seconds) is the report block's jitter divided by the codec's
   // clock rate.
   EXPECT_EQ(5.0, *remote_inbound_rtp.jitter);
@@ -3474,7 +3476,7 @@ TEST_P(RTCStatsCollectorTestWithParamKind,
   auto& remote_inbound_rtp = report->Get(remote_inbound_rtp_id)
                                  ->cast_to<RTCRemoteInboundRtpStreamStats>();
 
-  EXPECT_TRUE(remote_inbound_rtp.transport_id.is_defined());
+  EXPECT_TRUE(remote_inbound_rtp.transport_id.has_value());
   EXPECT_EQ("TTransportName2",  // 2 for RTCP
             *remote_inbound_rtp.transport_id);
   EXPECT_TRUE(report->Get(*remote_inbound_rtp.transport_id));
@@ -3719,12 +3721,15 @@ class RTCTestStats : public RTCStats {
   WEBRTC_RTCSTATS_DECL();
 
   RTCTestStats(const std::string& id, Timestamp timestamp)
-      : RTCStats(id, timestamp), dummy_stat("dummyStat") {}
+      : RTCStats(id, timestamp) {}
 
   RTCStatsMember<int32_t> dummy_stat;
 };
 
-WEBRTC_RTCSTATS_IMPL(RTCTestStats, RTCStats, "test-stats", &dummy_stat)
+WEBRTC_RTCSTATS_IMPL(RTCTestStats,
+                     RTCStats,
+                     "test-stats",
+                     AttributeInit("dummyStat", &dummy_stat))
 
 // Overrides the stats collection to verify thread usage and that the resulting
 // partial reports are merged.

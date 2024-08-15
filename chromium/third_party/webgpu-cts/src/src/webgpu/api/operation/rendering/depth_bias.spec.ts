@@ -175,7 +175,7 @@ class DepthBiasTest extends TextureTestMixin(GPUTest) {
     });
 
     const expColor = { Depth: _expectedDepth };
-    const expTexelView = TexelView.fromTexelsAsColors(depthFormat, coords => expColor);
+    const expTexelView = TexelView.fromTexelsAsColors(depthFormat, _coords => expColor);
     this.expectTexelViewComparisonIsOkInTexture({ texture: depthTexture }, expTexelView, [1, 1]);
   }
 
@@ -210,7 +210,7 @@ class DepthBiasTest extends TextureTestMixin(GPUTest) {
       B: _expectedColor[2],
       A: _expectedColor[3],
     };
-    const expTexelView = TexelView.fromTexelsAsColors(renderTargetFormat, coords => expColor);
+    const expTexelView = TexelView.fromTexelsAsColors(renderTargetFormat, _coords => expColor);
     this.expectTexelViewComparisonIsOkInTexture({ texture: renderTarget }, expTexelView, [1, 1]);
   }
 
@@ -304,6 +304,12 @@ g.test('depth_bias')
         },
       ] as const)
   )
+  .beforeAllSubcases(t => {
+    t.skipIf(
+      t.isCompatibility && t.params.biasClamp !== 0,
+      'non zero depthBiasClamp is not supported in compatibility mode'
+    );
+  })
   .fn(t => {
     t.runDepthBiasTest('depth32float', t.params);
   });
@@ -346,6 +352,12 @@ g.test('depth_bias_24bit_format')
         },
       ] as const)
   )
+  .beforeAllSubcases(t => {
+    t.skipIf(
+      t.isCompatibility && t.params.biasClamp !== 0,
+      'non zero depthBiasClamp is not supported in compatibility mode'
+    );
+  })
   .fn(t => {
     const { format } = t.params;
     t.runDepthBiasTestFor24BitFormat(format, t.params);

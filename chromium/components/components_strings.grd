@@ -292,7 +292,6 @@
       <part file="compose_strings.grdp" />
       <part file="live_caption_strings.grdp" />
       <part file="components_settings_strings.grdp" />
-      <part file="content_creation_strings.grdp" />
       <part file="crash_strings.grdp" />
       <part file="dialog_strings.grdp" />
       <part file="dom_distiller_strings.grdp" />
@@ -316,6 +315,7 @@
       <part file="payments_strings.grdp" />
       <part file="pdf_strings.grdp" />
       <part file="permissions_strings.grdp" />
+      <part file="plus_addresses_strings.grdp" />
       <part file="policy_strings.grdp" />
       <part file="print_media_strings.grdp" />
       <part file="printing_component_strings.grdp" />
@@ -344,7 +344,6 @@
       <if expr="is_android">
         <part file="android_system_error_page_strings.grdp" />
         <part file="external_intents_strings.grdp" />
-        <part file="webauthn_strings.grdp" />
       </if>
       <if expr="is_ios">
         <part file="management_ios_strings.grdp" />

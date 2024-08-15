@@ -56,7 +56,6 @@ class TabHandleLayer : public Layer {
                      float spinner_rotation,
                      float brightness,
                      float opacity,
-                     bool is_tab_strip_redesign_enable,
                      float tab_alpha, // Vivaldi
                      bool is_shown_as_favicon, // Vivaldi
                      float title_offset); // Vivaldi

@@ -63,17 +63,17 @@ ConvertLaunchResultToTaskResult(const apps::LaunchResult& result,
   // on how the app will be opened in multiprofile.
   namespace fmp = extensions::api::file_manager_private;
   switch (result.state) {
-    case apps::State::SUCCESS:
+    case apps::State::kSuccess:
       if (task_type == TASK_TYPE_WEB_APP) {
-        return fmp::TASK_RESULT_OPENED;
+        return fmp::TaskResult::kOpened;
       } else {
-        return fmp::TASK_RESULT_MESSAGE_SENT;
+        return fmp::TaskResult::kMessageSent;
       }
-    case apps::State::FAILED_DIRECTORY_NOT_SHARED:
+    case apps::State::kFailedDirectoryNotShared:
       DCHECK(task_type == TASK_TYPE_PLUGIN_VM_APP);
-      return fmp::TASK_RESULT_FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED;
-    case apps::State::FAILED:
-      return fmp::TASK_RESULT_FAILED;
+      return fmp::TaskResult::kFailedPluginVmDirectoryNotShared;
+    case apps::State::kFailed:
+      return fmp::TaskResult::kFailed;
   }
 }
 
@@ -103,7 +103,6 @@ TaskType GetTaskType(apps::AppType app_type) {
       return TASK_TYPE_PLUGIN_VM_APP;
     case apps::AppType::kUnknown:
     case apps::AppType::kBuiltIn:
-    case apps::AppType::kMacOs:
     case apps::AppType::kStandaloneBrowser:
     case apps::AppType::kRemote:
     case apps::AppType::kBorealis:
@@ -348,7 +347,7 @@ void ExecuteAppServiceTask(
   Profile* profile_with_app_service = GetProfileWithAppService(profile);
   if (!profile_with_app_service) {
     std::move(done).Run(
-        extensions::api::file_manager_private::TASK_RESULT_FAILED,
+        extensions::api::file_manager_private::TaskResult::kFailed,
         "Unexpected profile type");
     return;
   }
@@ -445,7 +444,7 @@ bool ChooseAndSetDefaultTaskFromPolicyPrefs(
 
   std::vector<FullTaskDescriptor*> filtered_tasks;
   // `app_id` matching is not necessary if the policy points to a virtual task.
-  if (absl::optional<base::StringPiece> virtual_task_id =
+  if (std::optional<base::StringPiece> virtual_task_id =
           apps_util::GetVirtualTaskIdFromPolicyId(policy_id)) {
     std::string full_virtual_task_id = ToSwaActionId(*virtual_task_id);
     for (auto& task : resulting_tasks->tasks) {

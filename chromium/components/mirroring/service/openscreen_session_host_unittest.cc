@@ -20,8 +20,6 @@
 #include "components/mirroring/service/fake_video_capture_host.h"
 #include "components/mirroring/service/mirror_settings.h"
 #include "components/mirroring/service/mirroring_features.h"
-#include "components/mirroring/service/receiver_response.h"
-#include "components/mirroring/service/value_util.h"
 #include "media/base/media_switches.h"
 #include "media/cast/test/utility/default_config.h"
 #include "media/cast/test/utility/net_utility.h"
@@ -157,8 +155,7 @@ class OpenscreenSessionHostTest : public mojom::ResourceProvider,
                                   public mojom::CastMessageChannel,
                                   public ::testing::Test {
  public:
-  OpenscreenSessionHostTest()
-      : feature_list_(media::kOpenscreenCastStreamingSession) {}
+  OpenscreenSessionHostTest() = default;
 
   OpenscreenSessionHostTest(const OpenscreenSessionHostTest&) = delete;
   OpenscreenSessionHostTest& operator=(const OpenscreenSessionHostTest&) =
@@ -571,7 +568,6 @@ class OpenscreenSessionHostTest : public mojom::ResourceProvider,
   std::unique_ptr<FakeVideoCaptureHost> video_host_;
 
  private:
-  base::test::ScopedFeatureList feature_list_;
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   const net::IPEndPoint receiver_endpoint_ =

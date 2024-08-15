@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 import * as i18n from '../../core/i18n/i18n.js';
 import * as TraceEngine from '../../models/trace/trace.js';
-import type * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
 import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
@@ -28,14 +27,11 @@ export class LayoutShiftsTrackAppender implements TrackAppender {
   readonly appenderName: TrackAppenderName = 'LayoutShifts';
 
   #compatibilityBuilder: CompatibilityTracksAppender;
-  #flameChartData: PerfUI.FlameChart.FlameChartTimelineData;
-  #traceParsedData: Readonly<TraceEngine.Handlers.Migration.PartialTraceData>;
+  #traceParsedData: Readonly<TraceEngine.Handlers.Types.TraceParseData>;
 
   constructor(
-      compatibilityBuilder: CompatibilityTracksAppender, flameChartData: PerfUI.FlameChart.FlameChartTimelineData,
-      traceParsedData: TraceEngine.Handlers.Migration.PartialTraceData) {
+      compatibilityBuilder: CompatibilityTracksAppender, traceParsedData: TraceEngine.Handlers.Types.TraceParseData) {
     this.#compatibilityBuilder = compatibilityBuilder;
-    this.#flameChartData = flameChartData;
     this.#traceParsedData = traceParsedData;
   }
 
@@ -83,22 +79,20 @@ export class LayoutShiftsTrackAppender implements TrackAppender {
    */
   #appendLayoutShiftsAtLevel(currentLevel: number): number {
     const allLayoutShifts = this.#traceParsedData.LayoutShifts.clusters.flatMap(cluster => cluster.events);
-    const newLevel = this.#compatibilityBuilder.appendEventsAtLevel(allLayoutShifts, currentLevel, this);
-
-    // Bit of a hack: LayoutShifts are instant events, so have no duration. But
-    // OPP doesn't do well at making tiny events easy to spot and click. So we
-    // set it to a small duration so that the user is able to see and click
-    // them more easily. Long term we will explore a better UI solution to
-    // allow us to do this properly and not hack around it.
     const msDuration = TraceEngine.Types.Timing.MicroSeconds(5_000);
-    for (let i = 0; i < allLayoutShifts.length; ++i) {
-      const index = this.#compatibilityBuilder.indexForEvent(allLayoutShifts[i]);
-      if (index === undefined) {
-        continue;
-      }
-      this.#flameChartData.entryTotalTimes[index] = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(msDuration);
-    }
-    return newLevel;
+    const setFlameChartEntryTotalTime =
+        (_event: TraceEngine.Types.TraceEvents.SyntheticLayoutShift, index: number): void => {
+          // Bit of a hack: LayoutShifts are instant events, so have no duration. But
+          // OPP doesn't do well at making tiny events easy to spot and click. So we
+          // set it to a small duration so that the user is able to see and click
+          // them more easily. Long term we will explore a better UI solution to
+          // allow us to do this properly and not hack around it.
+          this.#compatibilityBuilder.getFlameChartTimelineData().entryTotalTimes[index] =
+              TraceEngine.Helpers.Timing.microSecondsToMilliseconds(msDuration);
+        };
+
+    return this.#compatibilityBuilder.appendEventsAtLevel(
+        allLayoutShifts, currentLevel, this, setFlameChartEntryTotalTime);
   }
 
   /*

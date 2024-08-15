@@ -13,19 +13,19 @@
 // limitations under the License.
 
 import {BigintMath as BIMath} from '../../base/bigint_math';
+import {clamp} from '../../base/math_utils';
 import {Duration, duration, time} from '../../base/time';
 import {
-  LONG,
-  LONG_NULL,
-  NUM,
-  NUM_NULL,
-  STR,
-  STR_NULL,
-} from '../../common/query_result';
+  NAMED_ROW,
+  NamedSliceTrack,
+  NamedSliceTrackTypes,
+} from '../../frontend/named_slice_track';
+import {SLICE_LAYOUT_FIT_CONTENT_DEFAULTS} from '../../frontend/slice_layout';
 import {
   SliceData,
-  SliceTrackBase,
-} from '../../frontend/slice_track_base';
+  SliceTrackLEGACY,
+} from '../../frontend/slice_track';
+import {NewTrackArgs} from '../../frontend/track';
 import {
   EngineProxy,
   Plugin,
@@ -34,12 +34,18 @@ import {
   PluginDescriptor,
 } from '../../public';
 import {getTrackName} from '../../public/utils';
-
-import {GenericSliceTrack} from './generic_slice_track';
+import {
+  LONG,
+  LONG_NULL,
+  NUM,
+  NUM_NULL,
+  STR,
+  STR_NULL,
+} from '../../trace_processor/query_result';
 
 export const SLICE_TRACK_KIND = 'ChromeSliceTrack';
 
-export class ChromeSliceTrack extends SliceTrackBase {
+export class ChromeSliceTrack extends SliceTrackLEGACY {
   private maxDurNs: duration = 0n;
 
   constructor(
@@ -57,7 +63,7 @@ export class ChromeSliceTrack extends SliceTrackBase {
           SELECT max(iif(dur = -1, (SELECT end_ts FROM trace_bounds) - ts, dur))
           AS maxDur FROM ${tableName} WHERE track_id = ${this.trackId}`;
       const queryRes = await this.engine.query(query);
-      this.maxDurNs = queryRes.firstRow({maxDur: LONG_NULL}).maxDur || 0n;
+      this.maxDurNs = queryRes.firstRow({maxDur: LONG_NULL}).maxDur ?? 0n;
     }
 
     const query = `
@@ -146,6 +152,65 @@ export class ChromeSliceTrack extends SliceTrackBase {
   }
 }
 
+export const CHROME_SLICE_ROW = {
+  // Base columns (tsq, ts, dur, id, depth).
+  ...NAMED_ROW,
+
+  // Chrome-specific columns.
+  threadDur: LONG_NULL,
+};
+export type ChromeSliceRow = typeof CHROME_SLICE_ROW;
+
+export interface ChromeSliceTrackTypes extends NamedSliceTrackTypes {
+  row: ChromeSliceRow;
+}
+
+export class ChromeSliceTrackV2 extends NamedSliceTrack<ChromeSliceTrackTypes> {
+  constructor(args: NewTrackArgs, private trackId: number, maxDepth: number) {
+    super(args);
+    this.sliceLayout = {
+      ...SLICE_LAYOUT_FIT_CONTENT_DEFAULTS,
+      depthGuess: maxDepth,
+    };
+  }
+
+  // This is used by the base class to call iter().
+  getRowSpec() {
+    return CHROME_SLICE_ROW;
+  }
+
+  getSqlSource(): string {
+    return `select
+      ts,
+      dur,
+      id,
+      depth,
+      ifnull(name, '') as name,
+      thread_dur as threadDur
+    from slice
+    where track_id = ${this.trackId}`;
+  }
+
+  // Converts a SQL result row to an "Impl" Slice.
+  rowToSlice(row: ChromeSliceTrackTypes['row']):
+      ChromeSliceTrackTypes['slice'] {
+    const namedSlice = super.rowToSlice(row);
+
+    if (row.dur > 0n && row.threadDur !== null) {
+      const fillRatio = clamp(BIMath.ratio(row.threadDur, row.dur), 0, 1);
+      return {...namedSlice, fillRatio};
+    } else {
+      return namedSlice;
+    }
+  }
+
+  onUpdatedSlices(slices: ChromeSliceTrackTypes['slice'][]) {
+    for (const slice of slices) {
+      slice.isHighlighted = (slice === this.hoveredSlice);
+    }
+  }
+}
+
 class ChromeSlicesPlugin implements Plugin {
   onActivate(_ctx: PluginContext): void {}
 
@@ -196,7 +261,7 @@ class ChromeSlicesPlugin implements Plugin {
         kind: 'Slices',
       });
 
-      ctx.registerStaticTrack({
+      ctx.registerTrack({
         uri: `perfetto.ChromeSlices#${trackId}`,
         displayName,
         trackIds: [trackId],
@@ -213,17 +278,17 @@ class ChromeSlicesPlugin implements Plugin {
 
       // trackIds can only be registered by one track at a time.
       // TODO(hjd): Move trackIds to only be on V2.
-      ctx.registerStaticTrack({
+      ctx.registerTrack({
         uri: `perfetto.ChromeSlices#${trackId}.v2`,
         displayName,
+        trackIds: [trackId],
         kind: SLICE_TRACK_KIND,
         track: ({trackKey}) => {
-          const track = GenericSliceTrack.create({
+          const newTrackArgs = {
             engine: ctx.engine,
             trackKey,
-          });
-          track.config = {sqlTrackId: trackId};
-          return track;
+          };
+          return new ChromeSliceTrackV2(newTrackArgs, trackId, maxDepth);
         },
       });
     }

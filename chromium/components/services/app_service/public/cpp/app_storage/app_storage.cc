@@ -14,6 +14,7 @@
 #include "base/task/task_runner.h"
 #include "components/services/app_service/public/cpp/app_storage/app_storage_file_handler.h"
 #include "components/services/app_service/public/cpp/app_update.h"
+#include "components/services/app_service/public/cpp/icon_effects.h"
 #include "components/services/app_service/public/cpp/types_util.h"
 
 namespace apps {
@@ -29,7 +30,7 @@ namespace apps {
   }
 
 AppStorage::AppStorage(const base::FilePath& base_path,
-                       apps::AppRegistryCache& app_registry_cache,
+                       AppRegistryCache& app_registry_cache,
                        base::OnceCallback<void()> on_get_app_info_callback)
     : app_registry_cache_(app_registry_cache) {
   file_handler_ = base::MakeRefCounted<AppStorageFileHandler>(base_path);
@@ -51,7 +52,7 @@ AppStorage::AppStorage(const base::FilePath& base_path,
 
 AppStorage::~AppStorage() = default;
 
-void AppStorage::OnAppUpdate(const apps::AppUpdate& update) {
+void AppStorage::OnAppUpdate(const AppUpdate& update) {
   // If OnApps is in progress for the apps saved in the AppStorage file,
   // we can skip these updates, because the app info has been saved in the
   // AppStorage file.
@@ -66,8 +67,42 @@ void AppStorage::OnAppUpdate(const apps::AppUpdate& update) {
   MaybeSaveAppInfo();
 }
 
-void AppStorage::OnAppRegistryCacheWillBeDestroyed(
-    apps::AppRegistryCache* cache) {
+void AppStorage::OnAppTypePublishing(const std::vector<AppPtr>& deltas,
+                                     apps::AppType app_type) {
+  // If OnApps is in progress for the apps saved in the AppStorage file,
+  // we can skip it, because `deltas` is come from the AppStorage file.
+  if (onapps_in_progress_) {
+    return;
+  }
+
+  std::set<std::string> app_ids;
+  for (const auto& app : deltas) {
+    app_ids.insert(app->app_id);
+  }
+
+  // Checks whether the apps of `app_type` in AppRegistryCache are included in
+  // `deltas`. If not, uninstall the app. This is used to remove the redundant
+  // apps saved in AppStorage, as the apps could be removed from other devices
+  // via sync.
+  std::vector<AppPtr> removed_apps;
+  app_registry_cache_->ForEachApp([&](const apps::AppUpdate& update) {
+    if (update.AppType() != app_type ||
+        base::Contains(app_ids, update.AppId())) {
+      return;
+    }
+
+    auto app = std::make_unique<App>(app_type, update.AppId());
+    app->readiness = Readiness::kUninstalledByNonUser;
+    removed_apps.push_back(std::move(app));
+  });
+
+  if (!removed_apps.empty()) {
+    app_registry_cache_->OnApps(std::move(removed_apps), AppType::kUnknown,
+                                /*should_notify_initialized=*/false);
+  }
+}
+
+void AppStorage::OnAppRegistryCacheWillBeDestroyed(AppRegistryCache* cache) {
   app_registry_cache_observer_.Reset();
 }
 
@@ -80,13 +115,11 @@ void AppStorage::OnGetAppInfoData(base::OnceCallback<void()> callback,
   if (app_info) {
     onapps_in_progress_ = true;
 
-    app_registry_cache_->OnApps(std::move(app_info->apps), AppType::kUnknown,
-                                /*should_notify_initialized=*/false);
+    app_registry_cache_->OnApps(std::move(app_info->apps));
 
     // Init app types.
     for (auto app_type : app_info->app_types) {
-      app_registry_cache_->OnApps(std::vector<AppPtr>(), app_type,
-                                  /*should_notify_initialized=*/true);
+      app_registry_cache_->InitApps(app_type);
     }
 
     onapps_in_progress_ = false;
@@ -97,7 +130,7 @@ void AppStorage::OnGetAppInfoData(base::OnceCallback<void()> callback,
   }
 }
 
-bool AppStorage::IsAppChanged(const apps::AppUpdate& update) {
+bool AppStorage::IsAppChanged(const AppUpdate& update) {
   if (!update.Delta()) {
     return false;
   }
@@ -133,6 +166,7 @@ bool AppStorage::IsAppChanged(const apps::AppUpdate& update) {
 
   IS_APP_VALUE_CHANGED(name);
   IS_APP_VALUE_CHANGED(short_name);
+  IS_APP_VALUE_CHANGED(publisher_id);
   IS_APP_VALUE_CHANGED(description);
   IS_APP_VALUE_CHANGED(version);
 
@@ -141,11 +175,21 @@ bool AppStorage::IsAppChanged(const apps::AppUpdate& update) {
     return true;
   }
 
-  if (app->icon_key.has_value() &&
-      (!it->second->icon_key.has_value() ||
-       app->icon_key.value().resource_id !=
-           it->second->icon_key.value().resource_id)) {
-    return true;
+  if (app->icon_key.has_value()) {
+    if (!it->second->icon_key.has_value()) {
+      return true;
+    }
+    if (app->icon_key.value().resource_id !=
+        it->second->icon_key.value().resource_id) {
+      return true;
+    }
+    // Skip the kPaused icon effect, because we don't save the paused status,
+    // and we wait for the family link to set the paused status and apply the
+    // kPaused icon effect.
+    if ((app->icon_key.value().icon_effects & (~IconEffects::kPaused)) !=
+        (it->second->icon_key.value().icon_effects & (~IconEffects::kPaused))) {
+      return true;
+    }
   }
 
   IS_APP_VALUE_CHANGED(last_launch_time);
@@ -180,7 +224,19 @@ bool AppStorage::IsAppChanged(const apps::AppUpdate& update) {
 
   IS_APP_VALUE_CHANGED_FOR_ENUM(window_mode, WindowMode::kUnknown)
 
-  // TODO(crbug.com/1385932): Add other files in the App structure.
+  IS_APP_VALUE_CHANGED(run_on_os_login)
+  IS_APP_VALUE_CHANGED(allow_close)
+  IS_APP_VALUE_CHANGED(app_size_in_bytes)
+  IS_APP_VALUE_CHANGED(data_size_in_bytes)
+
+  if (!app->supported_locales.empty() &&
+      app->supported_locales != it->second->supported_locales) {
+    return true;
+  }
+
+  IS_APP_VALUE_CHANGED(selected_locale);
+  IS_APP_VALUE_CHANGED(extra);
+
   return false;
 }
 

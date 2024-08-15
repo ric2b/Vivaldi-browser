@@ -161,7 +161,7 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     [selectedItemTitle
       sizeWithAttributes:
        @{NSFontAttributeName:
-          [UIFont preferredFontForTextStyle:UIFontTextStyleBody]}];
+          [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline]}];
   // Adding extra padding with the width for spacing between two items.
   CGFloat width = stringSize.width + textPadding;
 

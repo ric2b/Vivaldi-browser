@@ -67,7 +67,6 @@ class FakeDisplaySnapshot : public DisplaySnapshot {
     Builder& SetIsAspectPreservingScaling(bool is_aspect_preserving_scaling);
     Builder& SetHasOverscan(bool has_overscan);
     Builder& SetHasColorCorrectionMatrix(bool val);
-    Builder& SetColorCorrectionInLinearSpace(bool val);
     Builder& SetName(const std::string& name);
     Builder& SetSysPath(const base::FilePath& sys_path);
     Builder& SetProductCode(int64_t product_code);
@@ -110,8 +109,6 @@ class FakeDisplaySnapshot : public DisplaySnapshot {
     bool has_overscan_ = false;
     PrivacyScreenState privacy_screen_state_ = kNotSupported;
     bool has_content_protection_key_ = false;
-    bool has_color_correction_matrix_ = false;
-    bool color_correction_in_linear_space_ = false;
     std::string name_;
     base::FilePath sys_path_;
     int64_t product_code_ = DisplaySnapshot::kInvalidProductCode;
@@ -119,9 +116,7 @@ class FakeDisplaySnapshot : public DisplaySnapshot {
     DisplayModeList modes_;
     raw_ptr<const DisplayMode> current_mode_ = nullptr;
     raw_ptr<const DisplayMode> native_mode_ = nullptr;
-    gfx::ColorSpace color_space_;
-    uint32_t bits_per_channel_ = 8u;
-    gfx::HDRStaticMetadata hdr_static_metadata_;
+    DisplaySnapshot::ColorInfo color_info_;
     VariableRefreshRateState variable_refresh_rate_state_ = kVrrNotCapable;
     absl::optional<uint16_t> vsync_rate_min_ = absl::nullopt;
   };
@@ -139,8 +134,6 @@ class FakeDisplaySnapshot : public DisplaySnapshot {
                       bool has_overscan,
                       PrivacyScreenState privacy_screen_state,
                       bool has_content_protection_key_,
-                      bool has_color_correction_matrix,
-                      bool color_correction_in_linear_space,
                       std::string display_name,
                       const base::FilePath& sys_path,
                       DisplayModeList modes,
@@ -148,9 +141,7 @@ class FakeDisplaySnapshot : public DisplaySnapshot {
                       const DisplayMode* native_mode,
                       int64_t product_code,
                       const gfx::Size& maximum_cursor_size,
-                      const gfx::ColorSpace& color_space,
-                      uint32_t bits_per_channel,
-                      const gfx::HDRStaticMetadata& hdr_static_metadata,
+                      const DisplaySnapshot::ColorInfo& color_info,
                       VariableRefreshRateState variable_refresh_rate_state,
                       const absl::optional<uint16_t>& vsync_rate_min,
                       const DrmFormatsAndModifiers& drm_formats_and_modifiers);

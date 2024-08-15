@@ -46,9 +46,9 @@ import {PhoneticData} from '../phonetic_data.js';
 import {ChromeVoxPrefs} from '../prefs.js';
 import {TtsBackground} from '../tts_background.js';
 
+import {BackgroundKeyboardHandler} from './background_keyboard_handler.js';
 import {CommandHandlerInterface} from './command_handler_interface.js';
 import {GestureInterface} from './gesture_interface.js';
-import {BackgroundKeyboardHandler} from './keyboard_handler.js';
 import {SmartStickyMode} from './smart_sticky_mode.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
@@ -100,7 +100,14 @@ export class CommandHandler extends CommandHandlerInterface {
         SmartStickyMode.instance.toggle();
         return false;
       case Command.PASS_THROUGH_MODE:
-        BackgroundKeyboardHandler.enablePassThroughMode();
+        if (ChromeVoxPrefs.isStickyModeOn()) {
+          new Output()
+              .withString(
+                  Msgs.getMsg('pass_through_unavailable_with_sticky_mode'))
+              .go();
+        } else {
+          BackgroundKeyboardHandler.enablePassThroughMode();
+        }
         return true;
       case Command.SHOW_LEARN_MODE_PAGE:
         this.showLearnModePage_();
@@ -572,7 +579,8 @@ export class CommandHandler extends CommandHandlerInterface {
         new Output().withString(node.root.docUrl || '').go();
         return false;
       case Command.TOGGLE_SELECTION:
-        if (!this.toggleSelection_()) {
+        // If the selection was toggled off, return.
+        if (!ChromeVoxRange.toggleSelection()) {
           return false;
         }
         break;
@@ -1057,8 +1065,7 @@ export class CommandHandler extends CommandHandlerInterface {
       return;
     }
 
-    while (actionNode.role === RoleType.INLINE_TEXT_BOX ||
-           actionNode.role === RoleType.STATIC_TEXT) {
+    while (actionNode && AutomationPredicate.text(actionNode)) {
       actionNode = actionNode.parent;
     }
     if (actionNode.inPageLinkTarget) {
@@ -1625,43 +1632,6 @@ export class CommandHandler extends CommandHandlerInterface {
           .format((newState) ? '@toggle_screen_off' : '@toggle_screen_on')
           .go();
     }
-  }
-
-  /**
-   * @return {boolean} whether execution should continue.
-   * @private
-   */
-  toggleSelection_() {
-    if (!ChromeVoxRange.pageSel) {
-      ChromeVox.earcons.playEarcon(EarconId.SELECTION);
-      ChromeVoxRange.pageSel = ChromeVoxRange.current;
-      DesktopAutomationInterface.instance.ignoreDocumentSelectionFromAction(
-          true);
-    } else {
-      const root = ChromeVoxRange.current.start.node.root;
-      if (root && root.selectionStartObject && root.selectionEndObject &&
-          !isNaN(Number(root.selectionStartOffset)) &&
-          !isNaN(Number(root.selectionEndOffset))) {
-        ChromeVox.earcons.playEarcon(EarconId.SELECTION_REVERSE);
-        const sel = new CursorRange(
-            new Cursor(
-                root.selectionStartObject,
-                /** @type {number} */ (root.selectionStartOffset)),
-            new Cursor(
-                root.selectionEndObject,
-                /** @type {number} */ (root.selectionEndOffset)));
-        const o =
-            new Output()
-                .format('@end_selection')
-                .withSpeechAndBraille(sel, sel, OutputCustomEvent.NAVIGATE)
-                .go();
-        DesktopAutomationInterface.instance.ignoreDocumentSelectionFromAction(
-            false);
-      }
-      ChromeVoxRange.pageSel = null;
-      return false;
-    }
-    return true;
   }
 
   /**

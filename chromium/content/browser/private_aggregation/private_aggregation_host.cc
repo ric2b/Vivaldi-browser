@@ -6,6 +6,7 @@
 
 #include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,7 +40,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
@@ -74,8 +74,8 @@ struct PrivateAggregationHost::ReceiverContext {
   url::Origin worklet_origin;
   url::Origin top_frame_origin;
   PrivateAggregationBudgetKey::Api api_for_budgeting;
-  absl::optional<std::string> context_id;
-  absl::optional<url::Origin> aggregation_coordinator_origin;
+  std::optional<std::string> context_id;
+  std::optional<url::Origin> aggregation_coordinator_origin;
 
   // If contributions have been truncated, tracks this for triggering the right
   // histogram value.
@@ -111,7 +111,8 @@ PrivateAggregationHost::PrivateAggregationHost(
       on_report_request_details_received_(
           std::move(on_report_request_details_received)),
       browser_context_(*browser_context) {
-  DCHECK(!on_report_request_details_received_.is_null());
+  CHECK(browser_context);
+  CHECK(!on_report_request_details_received_.is_null());
 
   // `base::Unretained()` is safe as `receiver_set_` is owned by `this`.
   receiver_set_.set_disconnect_handler(base::BindRepeating(
@@ -138,9 +139,9 @@ bool PrivateAggregationHost::BindNewReceiver(
     url::Origin worklet_origin,
     url::Origin top_frame_origin,
     PrivateAggregationBudgetKey::Api api_for_budgeting,
-    absl::optional<std::string> context_id,
-    absl::optional<base::TimeDelta> timeout,
-    absl::optional<url::Origin> aggregation_coordinator_origin,
+    std::optional<std::string> context_id,
+    std::optional<base::TimeDelta> timeout,
+    std::optional<url::Origin> aggregation_coordinator_origin,
     mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>
         pending_receiver) {
   // If rejected, let the pending receiver be destroyed as it goes out of scope
@@ -159,7 +160,7 @@ bool PrivateAggregationHost::BindNewReceiver(
           aggregation_service::kAggregationServiceMultipleCloudProviders)) {
     // Override with the default if a non-default coordinator is specified when
     // the feature is disabled.
-    aggregation_coordinator_origin = absl::nullopt;
+    aggregation_coordinator_origin = std::nullopt;
   }
 
   if (aggregation_coordinator_origin.has_value() &&
@@ -280,8 +281,8 @@ AggregatableReportRequest PrivateAggregationHost::GenerateReportRequest(
     base::Uuid report_id,
     const url::Origin& reporting_origin,
     PrivateAggregationBudgetKey::Api api_for_budgeting,
-    absl::optional<std::string> context_id,
-    absl::optional<url::Origin> aggregation_coordinator_origin,
+    std::optional<std::string> context_id,
+    std::optional<url::Origin> aggregation_coordinator_origin,
     std::vector<blink::mojom::AggregatableReportHistogramContribution>
         contributions) {
   CHECK(context_id.has_value() || !contributions.empty());
@@ -308,7 +309,7 @@ AggregatableReportRequest PrivateAggregationHost::GenerateReportRequest(
       api_for_budgeting,
       /*is_immediate_debug_report=*/false);
 
-  absl::optional<uint64_t> debug_key;
+  std::optional<uint64_t> debug_key;
   if (!debug_mode_details->debug_key.is_null()) {
     CHECK(debug_mode_details->is_enabled);
     debug_key = debug_mode_details->debug_key->value;
@@ -319,7 +320,7 @@ AggregatableReportRequest PrivateAggregationHost::GenerateReportRequest(
     additional_fields["context_id"] = context_id.value();
   }
 
-  absl::optional<AggregatableReportRequest> report_request =
+  std::optional<AggregatableReportRequest> report_request =
       AggregatableReportRequest::Create(
           std::move(payload_contents), std::move(shared_info),
           std::move(reporting_path), debug_key, std::move(additional_fields));
@@ -465,7 +466,7 @@ void PrivateAggregationHost::SendReportOnTimeoutOrDisconnect(
           ? PipeResult::kReportSuccessButTruncatedDueToTooManyContributions
           : PipeResult::kReportSuccess);
 
-  absl::optional<PrivateAggregationBudgetKey> budget_key =
+  std::optional<PrivateAggregationBudgetKey> budget_key =
       PrivateAggregationBudgetKey::Create(
           /*origin=*/reporting_origin, /*api_invocation_time=*/now,
           /*api=*/receiver_context.api_for_budgeting);

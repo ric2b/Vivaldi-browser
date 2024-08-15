@@ -25,7 +25,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
-#include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -251,7 +250,14 @@ void BodyStreamBuffer::StartLoading(FetchDataLoader* loader,
                                     ExceptionState& exception_state) {
   DCHECK(!loader_);
   DCHECK(!keep_alive_);
-  DCHECK(script_state_->ContextIsValid());
+
+  if (!script_state_->ContextIsValid()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Cannot load body from a frame or worker than has been detached");
+    return;
+  }
+
   if (signal_) {
     if (signal_->aborted()) {
       client->Abort();
@@ -340,10 +346,8 @@ ScriptPromise BodyStreamBuffer::Cancel(ScriptState* script_state,
                                        ScriptValue reason,
                                        ExceptionState& exception_state) {
   if (underlying_byte_source_) {
-    ScriptPromise cancel_promise = underlying_byte_source_->Cancel(
-        ToV8(reason, script_state->GetContext()->Global(),
-             script_state->GetIsolate()),
-        exception_state);
+    ScriptPromise cancel_promise =
+        underlying_byte_source_->Cancel(reason.V8Value(), exception_state);
     if (exception_state.HadException()) {
       exception_state.ClearException();
       return ScriptPromise::CastUndefined(script_state);
@@ -668,7 +672,7 @@ BytesConsumer* BodyStreamBuffer::ReleaseHandle(
     // Avoid crashing if ContextDestroyed() has been called.
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
-        "Cannot release body in a window or worker than has been detached");
+        "Cannot release body in a window or worker that has been detached");
     return nullptr;
   }
 

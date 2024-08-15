@@ -16,17 +16,9 @@
 //!
 //! All HKDF calls should happen in this module and expose the correct result type for
 //! each derived key use case.
-#![no_std]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used
-)]
 
-extern crate core;
+#![no_std]
+
 #[cfg(feature = "std")]
 extern crate std;
 

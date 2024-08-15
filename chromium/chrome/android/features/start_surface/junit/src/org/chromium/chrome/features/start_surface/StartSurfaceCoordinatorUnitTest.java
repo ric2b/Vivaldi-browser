@@ -27,6 +27,8 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -38,9 +40,7 @@ import org.chromium.chrome.browser.suggestions.tile.TileSource;
 import org.chromium.chrome.browser.suggestions.tile.TileTitleSource;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
-import org.chromium.chrome.browser.util.BrowserUiUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
@@ -49,8 +49,7 @@ import org.chromium.url.GURL;
 /** Tests for {@link StartSurfaceCoordinator}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-@EnableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
-@DisableFeatures({ChromeFeatureList.WEB_FEED, ChromeFeatureList.SHOPPING_LIST})
+@DisableFeatures({ChromeFeatureList.WEB_FEED})
 public class StartSurfaceCoordinatorUnitTest {
     private static final String START_SURFACE_TIME_SPENT = "StartSurface.TimeSpent";
     private static final String HISTOGRAM_START_SURFACE_MODULE_CLICK = "StartSurface.Module.Click";
@@ -211,7 +210,7 @@ public class StartSurfaceCoordinatorUnitTest {
                 1,
                 RecordHistogram.getHistogramValueCountForTesting(
                         HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.MOST_VISITED_TILES));
+                        ModuleTypeOnStartAndNtp.MOST_VISITED_TILES));
 
         // Test long press then open in new tab on MV tiles.
         tileGroupDelegate.openMostVisitedItem(
@@ -223,7 +222,7 @@ public class StartSurfaceCoordinatorUnitTest {
                 2,
                 RecordHistogram.getHistogramValueCountForTesting(
                         HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.MOST_VISITED_TILES));
+                        ModuleTypeOnStartAndNtp.MOST_VISITED_TILES));
 
         // Test long press then open in other window on MV tiles.
         tileGroupDelegate.openMostVisitedItem(WindowOpenDisposition.NEW_WINDOW, tileForTest);
@@ -234,7 +233,7 @@ public class StartSurfaceCoordinatorUnitTest {
                 2,
                 RecordHistogram.getHistogramValueCountForTesting(
                         HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.MOST_VISITED_TILES));
+                        ModuleTypeOnStartAndNtp.MOST_VISITED_TILES));
 
         // Test long press then download link on MV tiles.
         tileGroupDelegate.openMostVisitedItem(WindowOpenDisposition.SAVE_TO_DISK, tileForTest);
@@ -245,7 +244,7 @@ public class StartSurfaceCoordinatorUnitTest {
                 3,
                 RecordHistogram.getHistogramValueCountForTesting(
                         HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.MOST_VISITED_TILES));
+                        ModuleTypeOnStartAndNtp.MOST_VISITED_TILES));
 
         // Test long press then open in Incognito tab on MV tiles.
         tileGroupDelegate.openMostVisitedItem(WindowOpenDisposition.OFF_THE_RECORD, tileForTest);
@@ -256,7 +255,7 @@ public class StartSurfaceCoordinatorUnitTest {
                 4,
                 RecordHistogram.getHistogramValueCountForTesting(
                         HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.MOST_VISITED_TILES));
+                        ModuleTypeOnStartAndNtp.MOST_VISITED_TILES));
     }
 
     /**
@@ -326,8 +325,7 @@ public class StartSurfaceCoordinatorUnitTest {
                         + "long press then check about this source & topic on Feeds.",
                 1,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED));
+                        HISTOGRAM_START_SURFACE_MODULE_CLICK, ModuleTypeOnStartAndNtp.FEED));
 
         // Test long press then open in new tab on Feeds.
         feedActionDelegate.openSuggestionUrl(
@@ -342,8 +340,7 @@ public class StartSurfaceCoordinatorUnitTest {
                         + "new tab on Feeds.",
                 2,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED));
+                        HISTOGRAM_START_SURFACE_MODULE_CLICK, ModuleTypeOnStartAndNtp.FEED));
 
         // Test long press then open in incognito tab on Feeds.
         feedActionDelegate.openSuggestionUrl(
@@ -358,8 +355,7 @@ public class StartSurfaceCoordinatorUnitTest {
                         + "on Feeds.",
                 3,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED));
+                        HISTOGRAM_START_SURFACE_MODULE_CLICK, ModuleTypeOnStartAndNtp.FEED));
 
         // Test manage activity or manage interests on Feeds.
         feedActionDelegate.openUrl(
@@ -371,8 +367,7 @@ public class StartSurfaceCoordinatorUnitTest {
                         + "on Feeds.",
                 3,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED));
+                        HISTOGRAM_START_SURFACE_MODULE_CLICK, ModuleTypeOnStartAndNtp.FEED));
 
         // Test click Learn More button on Feeds.
         feedActionDelegate.openHelpPage();
@@ -381,8 +376,7 @@ public class StartSurfaceCoordinatorUnitTest {
                         + " is not recorded correctly when click Learn More button on Feeds.",
                 4,
                 RecordHistogram.getHistogramValueCountForTesting(
-                        HISTOGRAM_START_SURFACE_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED));
+                        HISTOGRAM_START_SURFACE_MODULE_CLICK, ModuleTypeOnStartAndNtp.FEED));
     }
 
     private static HistogramWatcher expectMvtClickHistogramRecords(int times) {

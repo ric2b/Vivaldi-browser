@@ -63,9 +63,8 @@ class MotionFieldProjectionTest : public testing::TestWithParam<int> {
     } else if (absl::StartsWith(test_case, "NEON/")) {
       MotionFieldProjectionInit_NEON();
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        MotionFieldProjectionInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      MotionFieldProjectionInit_SSE4_1();
     } else {
       FAIL() << "Unrecognized architecture prefix in test case name: "
              << test_case;

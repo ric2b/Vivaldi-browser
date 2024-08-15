@@ -22,14 +22,17 @@ class TimerBase;
 class TimerBasedTickProvider;
 class WebRtcTaskQueue;
 }
-namespace webrtc {
-class ThreadWrapper;
-}  // namespace webrtc
+namespace IPC {
+class ChannelAssociatedGroupController;
+}  // namespace IPC
 namespace media {
 class AlsaPcmOutputStream;
 class AlsaPcmInputStream;
 class FakeAudioWorker;
 }  // namespace media
+namespace webrtc {
+class ThreadWrapper;
+}  // namespace webrtc
 
 namespace base {
 
@@ -39,13 +42,13 @@ class DelayedTaskManager;
 }
 class DeadlineTimer;
 class MetronomeTimer;
+class PreFreezeBackgroundMemoryTrimmer;
 class TimeDelta;
 class TimeTicks;
 
 namespace subtle {
 
-// Used to restrict access to PostCancelableDelayedTaskAt() to authorize
-// callers.
+// Restricts access to PostCancelableDelayedTask*() to authorized callers.
 class PostDelayedTaskPassKey {
  private:
   // Avoid =default to disallow creation by uniform initialization.
@@ -64,9 +67,23 @@ class PostDelayedTaskPassKey {
   friend class media::AlsaPcmOutputStream;
   friend class media::AlsaPcmInputStream;
   friend class media::FakeAudioWorker;
+#if BUILDFLAG(IS_ANDROID)
+  friend class base::PreFreezeBackgroundMemoryTrimmer;
+#endif
+};
+
+// Restricts access to RunOrPostTask() to authorized callers.
+class RunOrPostTaskPassKey {
+ private:
+  // Avoid =default to disallow creation by uniform initialization.
+  RunOrPostTaskPassKey() {}
+
+  friend class IPC::ChannelAssociatedGroupController;
+  friend class RunOrPostTaskPassKeyForTesting;
 };
 
 class PostDelayedTaskPassKeyForTesting : public PostDelayedTaskPassKey {};
+class RunOrPostTaskPassKeyForTesting : public RunOrPostTaskPassKey {};
 
 }  // namespace subtle
 
@@ -218,6 +235,19 @@ class BASE_EXPORT SequencedTaskRunner : public TaskRunner {
                                  OnceClosure task,
                                  TimeTicks delayed_run_time,
                                  subtle::DelayPolicy delay_policy);
+
+  // May run `task` synchronously if no work that has ordering or mutual
+  // exclusion expectations with tasks from this `SequencedTaskRunner` is
+  // pending or running (if such work arrives after `task` starts running
+  // synchronously, it waits until `task` finishes). Otherwise, behaves like
+  // `PostTask`. Since `task` may run synchronously, it is generally not
+  // appropriate to invoke this if `task` may take a long time to run.
+  //
+  // TODO(crbug.com/1503967): This API is still in development. It doesn't yet
+  // support SEQUENCE_CHECKER or SequenceLocalStorage.
+  virtual bool RunOrPostTask(subtle::RunOrPostTaskPassKey,
+                             const Location& from_here,
+                             OnceClosure task);
 
   // Submits a non-nestable task to delete the given object.  Returns
   // true if the object may be deleted at some point in the future,

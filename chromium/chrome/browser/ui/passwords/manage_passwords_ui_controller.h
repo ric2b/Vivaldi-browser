@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
@@ -16,7 +17,7 @@
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/common/buildflags.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
+#include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/ui/post_save_compromised_helper.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -98,9 +99,11 @@ class ManagePasswordsUIController
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_manager,
       bool is_update_confirmation) override;
   void OnPasswordAutofilled(
-      const std::vector<const password_manager::PasswordForm*>& password_forms,
+      const std::vector<raw_ptr<const password_manager::PasswordForm,
+                                VectorExperimental>>& password_forms,
       const url::Origin& origin,
-      const std::vector<const password_manager::PasswordForm*>*
+      const std::vector<
+          raw_ptr<const password_manager::PasswordForm, VectorExperimental>>*
           federated_matches) override;
   void OnCredentialLeak(password_manager::CredentialLeakType leak_dialog_type,
                         const GURL& url,
@@ -112,6 +115,7 @@ class ManagePasswordsUIController
   void ShowBiometricActivationConfirmation() override;
   void OnBiometricAuthBeforeFillingDeclined() override;
   void OnAddUsernameSaveClicked(const std::u16string& username) override;
+  void OnKeychainError() override;
 
   virtual void NotifyUnsyncedCredentialsWillBeDeleted(
       std::vector<password_manager::PasswordForm> unsynced_credentials);
@@ -182,10 +186,10 @@ class ManagePasswordsUIController
   void AuthenticateUserForAccountStoreOptInAndSavePassword(
       const std::u16string& username,
       const std::u16string& password) override;
-  void AuthenticateUserForAccountStoreOptInAndMovePassword() override;
   void AuthenticateUserForAccountStoreOptInAfterSavingLocallyAndMovePassword()
       override;
   void MaybeShowIOSPasswordPromo() override;
+  void RelaunchChrome() override;
   // Skips user os level authentication during the life time of the returned
   // object. To be used in tests of flows that require user authentication.
   [[nodiscard]] std::unique_ptr<base::AutoReset<bool>>
@@ -295,13 +299,6 @@ class ManagePasswordsUIController
   void OnTriggerPostSaveCompromisedBubble(
       password_manager::PostSaveCompromisedHelper::BubbleType type,
       size_t count_compromised_passwords_);
-
-  // Triggered from a reauthentication flow. If |form_manager| is still valid
-  // and the reauth was successful, the password is moved to the account store.
-  void FinishMovingPasswordAfterAccountStoreOptInAuth(
-      password_manager::PasswordFormManagerForUI* form_manager,
-      password_manager::PasswordManagerClient::ReauthSucceeded
-          reauth_succeeded);
 
   // Called from an opt-in/reauth flow that was triggered after a new
   // account-storage-eligible user saved a password locally. If the opt-in was

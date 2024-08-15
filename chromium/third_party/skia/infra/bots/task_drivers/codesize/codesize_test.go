@@ -19,7 +19,7 @@ import (
 
 	"go.skia.org/infra/go/exec"
 	"go.skia.org/infra/go/gcs"
-	"go.skia.org/infra/go/gcs/test_gcsclient"
+	"go.skia.org/infra/go/gcs/mocks"
 	"go.skia.org/infra/go/gerrit"
 	gerrit_testutils "go.skia.org/infra/go/gerrit/testutils"
 	"go.skia.org/infra/go/git"
@@ -132,9 +132,9 @@ func TestRunSteps_PostSubmit_Success(t *testing.T) {
 			// This argument indicates it's a binary diff invocation, see
 			// https://github.com/google/bloaty/blob/f01ea59bdda11708d74a3826c23d6e2db6c996f0/doc/using.md#size-diffs.
 			if util.In("--", cmd.Args) {
-				cmd.CombinedOutput.Write([]byte(expectedBloatyDiffFileContents))
+				_, _ = cmd.CombinedOutput.Write([]byte(expectedBloatyDiffFileContents))
 			} else {
-				cmd.CombinedOutput.Write([]byte(expectedBloatyFileContents))
+				_, _ = cmd.CombinedOutput.Write([]byte(expectedBloatyFileContents))
 			}
 			return nil
 		}
@@ -172,13 +172,19 @@ func TestRunSteps_PostSubmit_Success(t *testing.T) {
 	res := td.RunTestSteps(t, false, func(ctx context.Context) error {
 		ctx = now.TimeTravelingContext(fakeNow).WithContext(ctx)
 		ctx = td.WithExecRunFn(ctx, commandCollector.Run)
-		// Be in a temporary directory
+		// Be in a temporary directory. We must restore the working directory after this test case
+		// finishes, or subsequent test cases that call os.Getwd() might fail with "getwd: no such file
+		// or directory".
+		origWd, err := os.Getwd()
+		require.NoError(t, err)
+		defer func() { _ = os.Chdir(origWd) }()
 		require.NoError(t, os.Chdir(t.TempDir()))
+
 		// Create a file to simulate the result of copying and stripping the binary
 		createTestFile(t, filepath.Join("build", "dm_stripped"), "This has 17 bytes")
 		createTestFile(t, filepath.Join("build_nopatch", "dm_stripped"), "This has 23 bytes total")
 
-		err := runSteps(ctx, args)
+		err = runSteps(ctx, args)
 		assert.NoError(t, err)
 		return err
 	})
@@ -301,9 +307,9 @@ func TestRunSteps_Tryjob_Success(t *testing.T) {
 			// This argument indicates it's a binary diff invocation, see
 			// https://github.com/google/bloaty/blob/f01ea59bdda11708d74a3826c23d6e2db6c996f0/doc/using.md#size-diffs.
 			if util.In("--", cmd.Args) {
-				cmd.CombinedOutput.Write([]byte(expectedBloatyDiffFileContents))
+				_, _ = cmd.CombinedOutput.Write([]byte(expectedBloatyDiffFileContents))
 			} else {
-				cmd.CombinedOutput.Write([]byte(expectedBloatyFileContents))
+				_, _ = cmd.CombinedOutput.Write([]byte(expectedBloatyFileContents))
 			}
 			return nil
 		}
@@ -337,13 +343,19 @@ func TestRunSteps_Tryjob_Success(t *testing.T) {
 	res := td.RunTestSteps(t, false, func(ctx context.Context) error {
 		ctx = now.TimeTravelingContext(fakeNow).WithContext(ctx)
 		ctx = td.WithExecRunFn(ctx, commandCollector.Run)
-		// Be in a temporary directory
+		// Be in a temporary directory. We must restore the working directory after this test case
+		// finishes, or subsequent test cases that call os.Getwd() might fail with "getwd: no such file
+		// or directory".
+		origWd, err := os.Getwd()
+		require.NoError(t, err)
+		defer func() { _ = os.Chdir(origWd) }()
 		require.NoError(t, os.Chdir(t.TempDir()))
+
 		// Create a file to simulate the result of copying and stripping the binary
 		createTestFile(t, filepath.Join("build", "dm_stripped"), "This has 17 bytes")
 		createTestFile(t, filepath.Join("build_nopatch", "dm_stripped"), "This has 23 bytes total")
 
-		err := runSteps(ctx, args)
+		err = runSteps(ctx, args)
 		assert.NoError(t, err)
 		return err
 	})
@@ -387,13 +399,13 @@ func TestRunSteps_Tryjob_Success(t *testing.T) {
 	mockCodeSizeGCS.AssertExpectations(t)
 }
 
-func mockGCSClient(name string) *test_gcsclient.GCSClient {
-	m := test_gcsclient.NewMockClient()
+func mockGCSClient(name string) *mocks.GCSClient {
+	m := &mocks.GCSClient{}
 	m.On("Bucket").Return(name).Maybe()
 	return m
 }
 
-func expectUpload(t *testing.T, client *test_gcsclient.GCSClient, path, contents string) {
+func expectUpload(t *testing.T, client *mocks.GCSClient, path, contents string) {
 	client.On("SetFileContents", testutils.AnyContext, path, gcs.FILE_WRITE_OPTS_TEXT, mock.Anything).Run(func(args mock.Arguments) {
 		fileContents := string(args.Get(3).([]byte))
 		assert.Equal(t, contents, fileContents)

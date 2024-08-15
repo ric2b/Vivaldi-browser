@@ -8,6 +8,7 @@ import * as TraceModel from '../../../../../../front_end/models/trace/trace.js';
 import * as Timeline from '../../../../../../front_end/panels/timeline/timeline.js';
 import {describeWithEnvironment} from '../../../helpers/EnvironmentHelpers.js';
 import {
+  getAllNodes,
   getEventsIn,
   getRootAt,
   makeBeginEvent,
@@ -195,12 +196,13 @@ describeWithEnvironment('RendererHandler', function() {
     }
 
     const isRoot = (node: TraceModel.Helpers.TreeHelpers.TraceEntryNode) => node.depth === 0;
-    const isInstant = (event: TraceModel.Types.TraceEvents.TraceEntry) =>
+    const isInstant = (event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
         TraceModel.Types.TraceEvents.isTraceEventInstant(event);
-    const isLong = (event: TraceModel.Types.TraceEvents.TraceEntry) =>
+    const isLong = (event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
         TraceModel.Types.TraceEvents.isTraceEventComplete(event) && event.dur > 1000;
     const isIncluded =
-        (node: TraceModel.Helpers.TreeHelpers.TraceEntryNode, event: TraceModel.Types.TraceEvents.TraceEntry) =>
+        (node: TraceModel.Helpers.TreeHelpers.TraceEntryNode,
+         event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
             (!isRoot(node) || isInstant(event) || isLong(event)) &&
         Boolean(Timeline.EventUICategory.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
     assert.strictEqual(prettyPrint(tree, isIncluded), `
@@ -403,7 +405,8 @@ describeWithEnvironment('RendererHandler', function() {
       return;
     }
     const isIncluded =
-        (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode, event: TraceModel.Types.TraceEvents.TraceEntry) =>
+        (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode,
+         event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
             Boolean(Timeline.EventUICategory.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
     assert.strictEqual(prettyPrint(tree, isIncluded), `
 -RunTask [0.13ms]
@@ -862,13 +865,18 @@ describeWithEnvironment('RendererHandler', function() {
 
       const data = await handleEvents(traceEvents);
 
-      assert.strictEqual(data.allRendererEvents.length, 7);
+      assert.strictEqual(data.allTraceEntries.length, 7);
       assert.strictEqual(data.processes.size, 1);
       const [process] = data.processes.values();
       assert.strictEqual(process.threads.size, 1);
       const [thread] = process.threads.values();
       assert.strictEqual(thread.tree?.roots.size, 2);
-      assert.strictEqual(thread.tree?.nodes.size, 5);
+      if (!thread.tree?.roots) {
+        // This shouldn't happen, since the tree.roots.size is 2, but add this if check to pass ts check.
+        return;
+      }
+      const allNodes = getAllNodes(thread.tree?.roots);
+      assert.strictEqual(allNodes.length, 5);
       if (!thread.tree) {
         return;
       }
@@ -896,13 +904,18 @@ describeWithEnvironment('RendererHandler', function() {
 
       const data = await handleEvents(traceEvents);
 
-      assert.strictEqual(data.allRendererEvents.length, 6);
+      assert.strictEqual(data.allTraceEntries.length, 6);
       assert.strictEqual(data.processes.size, 1);
       const [process] = data.processes.values();
       assert.strictEqual(process.threads.size, 1);
       const [thread] = process.threads.values();
       assert.strictEqual(thread.tree?.roots.size, 1);
-      assert.strictEqual(thread.tree?.nodes.size, 4);
+      if (!thread.tree?.roots) {
+        // This shouldn't happen, since the tree.roots.size is 1, but add this if check to pass ts check.
+        return;
+      }
+      const allNodes = getAllNodes(thread.tree?.roots);
+      assert.strictEqual(allNodes.length, 4);
       if (!thread.tree) {
         return;
       }
@@ -923,8 +936,8 @@ describeWithEnvironment('RendererHandler', function() {
         throw new Error('Tree not found');
       }
       const onlyLongTasksPredicate =
-          (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode, event: TraceModel.Types.TraceEvents.TraceEntry) =>
-              Boolean(event.dur && event.dur > 1000) &&
+          (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode,
+           event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) => Boolean(event.dur && event.dur > 1000) &&
           Boolean(Timeline.EventUICategory.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
       assert.strictEqual(prettyPrint(thread.tree, onlyLongTasksPredicate), `
 .............

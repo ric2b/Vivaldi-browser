@@ -10,6 +10,7 @@ source_set("account_picker") {
   ]
   deps = [
     ":account_picker_configuration",
+    ":account_picker_consumer",
     ":account_picker_layout",
     "//components/prefs",
     "//components/signin/public/identity_manager",
@@ -21,9 +22,9 @@ source_set("account_picker") {
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/public/commands",
-    "//ios/chrome/browser/signin",
-    "//ios/chrome/browser/signin:constants",
-    "//ios/chrome/browser/signin:system_identity",
+    "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/signin/model:constants",
+    "//ios/chrome/browser/signin/model:system_identity",
     "//ios/chrome/browser/ui/account_picker/account_picker_confirmation",
     "//ios/chrome/browser/ui/account_picker/account_picker_screen",
     "//ios/chrome/browser/ui/account_picker/account_picker_selection",
@@ -32,6 +33,10 @@ source_set("account_picker") {
     "//ios/chrome/common/ui/colors",
     "//ui/base",
   ]
+}
+
+source_set("account_picker_consumer") {
+  sources = [ "account_picker_consumer.h" ]
 }
 
 source_set("account_picker_configuration") {

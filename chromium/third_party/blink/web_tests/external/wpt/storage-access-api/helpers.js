@@ -264,6 +264,14 @@ function FetchFromFrame(frame, url) {
     { command: "cors fetch", url }, frame.contentWindow);
 }
 
+// Makes a subresource request to the provided host in the given frame with
+// the mode set to 'no-cors'
+function NoCorsSubresourceCookiesFromFrame(frame, host) {
+  const url = `${host}/storage-access-api/resources/echo-cookie-header.py`;
+  return PostMessageAndAwaitReply(
+    { command: "no-cors fetch", url }, frame.contentWindow);
+}
+
 // Tries to set storage access policy, ignoring any errors.
 //
 // Note: to discourage the writing of tests that assume unpartitioned cookie
@@ -289,4 +297,10 @@ function StartDedicatedWorker(frame) {
 function MessageWorker(frame, message = {}) {
   return PostMessageAndAwaitReply(
     { command: "message_worker", message }, frame.contentWindow);
+}
+// Opens a WebSocket connection to origin from within frame, and
+// returns the cookie header that was sent during the handshake.
+function ReadCookiesFromWebSocketConnection(frame, origin) {
+  return PostMessageAndAwaitReply(
+   { command: "get_cookie_via_websocket", origin}, frame.contentWindow);
 }

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -29,7 +30,6 @@
 #include "net/dns/public/util.h"
 #include "net/dns/record_rdata.h"
 #include "net/socket/datagram_socket.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 // TODO(gene): Remove this temporary method of disabling NSEC support once it
 // becomes clear whether this feature should be
@@ -68,11 +68,11 @@ void RecordQueryMetric(mdnsQueryType query_type, std::string_view host) {
       "_uscan._tcp.local",
   });
 
-  if (base::EndsWith(host, "_googlecast._tcp.local")) {
+  if (host.ends_with("_googlecast._tcp.local")) {
     base::UmaHistogramEnumeration("Network.Mdns.Googlecast", query_type);
   } else if (base::ranges::any_of(kPrintScanServices,
                                   [&host](std::string_view service) {
-                                    return base::EndsWith(host, service);
+                                    return host.ends_with(service);
                                   })) {
     base::UmaHistogramEnumeration("Network.Mdns.PrintScan", query_type);
   } else {
@@ -256,7 +256,7 @@ int MDnsClientImpl::Core::Init(MDnsSocketFactory* socket_factory) {
 }
 
 bool MDnsClientImpl::Core::SendQuery(uint16_t rrtype, const std::string& name) {
-  absl::optional<std::vector<uint8_t>> name_dns =
+  std::optional<std::vector<uint8_t>> name_dns =
       dns_names_util::DottedNameToNetwork(name);
   if (!name_dns.has_value())
     return false;

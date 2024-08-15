@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void floor_dcd5a2() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  floor_dcd5a2();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  floor_dcd5a2();
+}
+kernel void compute_main() {
+  floor_dcd5a2();
+}

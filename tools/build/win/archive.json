@@ -35,6 +35,7 @@
       "vivaldi.dll.pdb",
       "vivaldi.dll.pdb",
       "vivaldi.exe.pdb",
+      "vivaldi_elf.dll.pdb",
       "vivaldi_proxy.exe.pdb",
       "update_notifier.exe.pdb"
     ]

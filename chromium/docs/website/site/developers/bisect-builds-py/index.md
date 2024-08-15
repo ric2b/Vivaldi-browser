@@ -99,7 +99,7 @@ First, visit the [chrome://version](javascript:void(0);) page and copy the
 version number (for example 85.0.4183.121). Then, use this version number as the
 parameter to -g or -b. Alternately you can use stable-release milestone numbers
 (M85, M86) or look in git commit messages for "Cr-Commit-Position:
-refs/heads/master@{{ '{%' }}825204}".
+refs/heads/main@{{ '{%' }}825204}".
 
 ### Verifying the range
 

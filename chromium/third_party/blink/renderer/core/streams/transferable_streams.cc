@@ -811,7 +811,8 @@ class ConcatenatingUnderlyingSource final : public UnderlyingSourceBase {
         : source_(source), resolver_(resolver) {}
 
     void ChunkSteps(ScriptState* script_state,
-                    v8::Local<v8::Value> chunk) const override {
+                    v8::Local<v8::Value> chunk,
+                    ExceptionState&) const override {
       source_->Controller()->Enqueue(chunk);
       resolver_->ResolveWithUndefined(script_state);
     }
@@ -827,11 +828,11 @@ class ConcatenatingUnderlyingSource final : public UnderlyingSourceBase {
                                        ExceptionContextType::kUnknown, "", "");
         resolver_->Resolve(
             script_state,
-            ToV8(source_->source2_
-                     ->StartWrapper(script_state, controller, exception_state)
-                     .Then(CreateFunction<PullSource2>(
-                         script_state, source_, exception_state.GetContext())),
-                 script_state->GetContext()->Global(), isolate));
+            source_->source2_
+                ->StartWrapper(script_state, controller, exception_state)
+                .Then(CreateFunction<PullSource2>(script_state, source_,
+                                                  exception_state.GetContext()))
+                .V8Value());
       } else {
         // TODO(crbug.com/1418910): Investigate how to handle cases when the
         // controller is cleared.
@@ -903,7 +904,7 @@ class ConcatenatingUnderlyingSource final : public UnderlyingSourceBase {
         MakeGarbageCollected<ConcatenatingUnderlyingSourceReadRequest>(this,
                                                                        promise);
     ReadableStreamDefaultReader::Read(script_state, reader_for_stream1_,
-                                      read_request);
+                                      read_request, exception_state);
     return promise->GetScriptPromise(script_state);
   }
 

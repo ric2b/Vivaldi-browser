@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/visible_selection.h"
 #include "third_party/blink/renderer/core/events/clipboard_event.h"
@@ -118,6 +119,9 @@ void WebElement::SetAttribute(const WebString& attr_name,
 WebString WebElement::TextContent() const {
   return ConstUnwrap<Element>()->textContent();
 }
+WebString WebElement::TextContentAbridged(const unsigned int max_length) const {
+  return ConstUnwrap<Element>()->textContent(false, nullptr, max_length);
+}
 
 WebString WebElement::InnerHTML() const {
   return ConstUnwrap<Element>()->innerHTML();
@@ -135,6 +139,36 @@ bool WebElement::IsContentEditable() const {
          normalized_value == ContentEditableType::kPlaintextOnly;
 }
 
+bool WebElement::ContainsFrameSelection() const {
+  auto& e = *ConstUnwrap<Element>();
+  LocalFrame* frame = e.GetDocument().GetFrame();
+  if (!frame) {
+    return false;
+  }
+  Element* root = frame->Selection().RootEditableElementOrDocumentElement();
+  if (!root) {
+    return false;
+  }
+  // For form controls, the selection's root editable is a contenteditable in
+  // a shadow DOM tree.
+  return (e.IsFormControlElement() ? root->OwnerShadowHost() : root) == e;
+}
+
+WebString WebElement::SelectedText() const {
+  if (!ContainsFrameSelection()) {
+    return "";
+  }
+  return ConstUnwrap<Element>()
+      ->GetDocument()
+      .GetFrame()
+      ->Selection()
+      .SelectedText(TextIteratorBehavior::Builder()
+                        .SetEntersOpenShadowRoots(true)
+                        .SetSkipsUnselectableContent(true)
+                        .SetEntersTextControls(true)
+                        .Build());
+}
+
 void WebElement::PasteText(const WebString& text, bool replace_all) {
   if (!IsEditable()) {
     return;
@@ -149,18 +183,8 @@ void WebElement::PasteText(const WebString& text, bool replace_all) {
   auto is_destroyed = [](LocalFrame& frame) {
     return frame.GetDocument()->GetFrame() != frame;
   };
-  // Returns true if text in `e` is selected.
-  auto is_selected = [](Element& e) {
-    auto* root = e.GetDocument()
-                     .GetFrame()
-                     ->Selection()
-                     .RootEditableElementOrDocumentElement();
-    // For form controls, the selection's root editable is a contenteditable in
-    // a shadow DOM tree.
-    return (e.IsFormControlElement() ? root->OwnerShadowHost() : root) == e;
-  };
 
-  if (replace_all || !is_selected(*element)) {
+  if (replace_all || !ContainsFrameSelection()) {
     // Makes sure the selection is inside `element`: if `replace_all`, selects
     // all inside `element`; otherwise, selects an empty range at the end.
     if (auto* text_control_element =
@@ -185,7 +209,7 @@ void WebElement::PasteText(const WebString& text, bool replace_all) {
           SetSelectionOptions());
     }
     // JavaScript handlers may have destroyed the frame or moved the selection.
-    if (is_destroyed(*frame) || !is_selected(*element)) {
+    if (is_destroyed(*frame) || !ContainsFrameSelection()) {
       return;
     }
   }
@@ -195,29 +219,31 @@ void WebElement::PasteText(const WebString& text, bool replace_all) {
   // of ClipboardCommands::Paste() that's limited to pasting plain text.
   Element* target = FindEventTargetFrom(
       *frame, frame->Selection().ComputeVisibleSelectionInDOMTree());
-  auto create_data_transfer = [&text]() {
+  auto create_data_transfer = [](const WebString& text) {
     return DataTransfer::Create(DataTransfer::kCopyAndPaste,
                                 DataTransferAccessPolicy::kReadable,
                                 DataObject::CreateFromString(text));
   };
   // Fires "paste" event.
-  target->DispatchEvent(*ClipboardEvent::Create(event_type_names::kPaste,
-                                                create_data_transfer()));
+  if (target->DispatchEvent(*ClipboardEvent::Create(
+          event_type_names::kPaste, create_data_transfer(text))) !=
+      DispatchEventResult::kNotCanceled) {
+    return;
+  }
   // Fires "beforeinput" event.
   if (DispatchBeforeInputDataTransfer(
           target, InputEvent::InputType::kInsertFromPaste,
-          create_data_transfer()) == DispatchEventResult::kNotCanceled) {
-    // Fires "textInput" and "input" events.
-    target->DispatchEvent(
-        *TextEvent::CreateForPlainTextPaste(frame->DomWindow(), text,
-                                            /*should_smart_replace=*/true));
-  }
-
-  if (is_destroyed(*frame)) {
+          create_data_transfer(text)) != DispatchEventResult::kNotCanceled) {
     return;
   }
-  // Revealing the selection currently doesn't work on contenteditables.
-  frame->Selection().RevealSelection();
+  // No DOM mutation if EditContext is active.
+  if (frame->GetInputMethodController().GetActiveEditContext()) {
+    return;
+  }
+  // Fires "textInput" and "input".
+  target->DispatchEvent(
+      *TextEvent::CreateForPlainTextPaste(frame->DomWindow(), text,
+                                          /*should_smart_replace=*/true));
 }
 
 WebVector<WebLabelElement> WebElement::Labels() const {

@@ -12,6 +12,8 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/system/sys_info.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/help_app_launcher.h"
@@ -99,6 +101,8 @@ std::string GetFlowString(EnrollmentScreenView::FlowType type) {
       return "enterpriseLicense";
     case EnrollmentScreenView::FlowType::kEducationLicense:
       return "educationLicense";
+    case EnrollmentScreenView::FlowType::kDeviceEnrollment:
+      return "deviceEnrollment";
   }
 }
 
@@ -293,6 +297,10 @@ void EnrollmentScreenHandler::Shutdown() {
   shutdown_ = true;
 }
 
+base::WeakPtr<EnrollmentScreenView> EnrollmentScreenHandler::AsWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 void EnrollmentScreenHandler::ShowEnrollmentStatus(
     policy::EnrollmentStatus status) {
   switch (status.enrollment_code()) {
@@ -421,7 +429,6 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
           // LOCK_NOT_READY is transient, if retries are given up, LOCK_TIMEOUT
           // is reported instead.  This piece of code is unreached.
           LOG(FATAL) << "Invalid lock status.";
-          return;
         case InstallAttributes::LOCK_TIMEOUT:
           ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_LOCK_TIMEOUT,
                     /*retry=*/false);
@@ -459,10 +466,6 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
       return;
     case policy::EnrollmentStatus::Code::kNoMachineIdentification:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_NO_MACHINE_IDENTIFICATION,
-                /*retry=*/false);
-      return;
-    case policy::EnrollmentStatus::Code::kActiveDirectoryPolicyFetchFailed:
-      ShowError(IDS_ENTERPRISE_ENROLLMENT_ERROR_ACTIVE_DIRECTORY_POLICY_FETCH,
                 /*retry=*/false);
       return;
     case policy::EnrollmentStatus::Code::kDmTokenStoreFailed:
@@ -601,8 +604,9 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
 }
 
 void EnrollmentScreenHandler::DeclareJSCallbacks() {
-  AddCallback("toggleFakeEnrollment",
-              &EnrollmentScreenHandler::HandleToggleFakeEnrollment);
+  AddCallback(
+      "toggleFakeEnrollmentAndCompleteLogin",
+      &EnrollmentScreenHandler::HandleToggleFakeEnrollmentAndCompleteLogin);
   AddCallback("oauthEnrollClose", &EnrollmentScreenHandler::HandleClose);
   AddCallback("oauthEnrollCompleteLogin",
               &EnrollmentScreenHandler::HandleCompleteLogin);
@@ -615,6 +619,8 @@ void EnrollmentScreenHandler::DeclareJSCallbacks() {
               &EnrollmentScreenHandler::HandleDeviceAttributesProvided);
   AddCallback("oauthEnrollOnLearnMore",
               &EnrollmentScreenHandler::HandleOnLearnMore);
+  AddCallback("getDeviceIdForEnrollment",
+              &EnrollmentScreenHandler::HandleGetDeviceId);
 }
 
 void EnrollmentScreenHandler::GetAdditionalParameters(
@@ -641,13 +647,20 @@ void EnrollmentScreenHandler::ShowSkipConfirmationDialog() {
 }
 
 // EnrollmentScreenHandler, private -----------------------------
-void EnrollmentScreenHandler::HandleToggleFakeEnrollment() {
+void EnrollmentScreenHandler::HandleToggleFakeEnrollmentAndCompleteLogin(
+    const std::string& user,
+    int license_type) {
+  // This method should only be used on test images.
+  base::SysInfo::CrashIfChromeOSNonTestImage();
+
   // TODO(crbug.com/1271134): Logging as "WARNING" to make sure it's preserved
   // in the logs.
-  LOG(WARNING) << "HandleToggleFakeEnrollment";
+  LOG(WARNING) << "HandleToggleFakeEnrollmentAndCompleteLogin";
   policy::PolicyOAuth2TokenFetcher::UseFakeTokensForTesting();
   WizardController::SkipEnrollmentPromptsForTesting();
   use_fake_login_for_testing_ = true;
+
+  HandleCompleteLogin(user, license_type);
 }
 
 void EnrollmentScreenHandler::HandleClose(const std::string& reason) {
@@ -783,6 +796,21 @@ void EnrollmentScreenHandler::HandleOnLearnMore() {
     help_app_ = new HelpAppLauncher(
         LoginDisplayHost::default_host()->GetNativeWindow());
   help_app_->ShowHelpTopic(HelpAppLauncher::HELP_DEVICE_ATTRIBUTES);
+}
+
+void EnrollmentScreenHandler::HandleGetDeviceId(
+    const std::string& callback_id) {
+  if (!IsJavascriptAllowed()) {
+    return;
+  }
+
+  // We need to respond to "getDeviceId" message from Gaia. This is normally
+  // used for regular signin scenarios but since we need to respond with
+  // something here - we will respond with a GUID. The account used for
+  // enrollment is not actually logging into the device - and "getDeviceId" is
+  // meant for those kinds of users.
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            base::Uuid::GenerateRandomV4().AsLowercaseString());
 }
 
 void EnrollmentScreenHandler::ShowStep(const std::string& step) {

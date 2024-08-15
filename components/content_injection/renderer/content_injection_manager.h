@@ -27,7 +27,8 @@ class Manager : public mojom::Manager {
 
   static void OnFrameCreated(content::RenderFrame* render_frame,
                              service_manager::BinderRegistry* registry);
-  static void RunScriptsForRunTime(int frame_id, mojom::ItemRunTime run_time);
+  static void RunScriptsForRunTime(content::RenderFrame* frame,
+                                   mojom::ItemRunTime run_time);
 
   // Implementing mojom::Manager
   void OnStaticContentUpdated(

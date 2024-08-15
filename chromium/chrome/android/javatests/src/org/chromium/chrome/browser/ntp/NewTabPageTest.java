@@ -29,7 +29,6 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.MarginLayoutParams;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -65,8 +64,11 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
@@ -78,7 +80,6 @@ import org.chromium.chrome.browser.logo.LogoBridgeJni;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
-import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
@@ -90,8 +91,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.BrowserUiUtils;
-import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNTP;
+import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
@@ -99,8 +100,6 @@ import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
@@ -120,6 +119,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
+import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.url.GURL;
 
 import java.io.IOException;
@@ -162,7 +162,7 @@ public class NewTabPageTest {
     private static final String HISTOGRAM_NTP_MODULE_CLICK = "NewTabPage.Module.Click";
     private static final String HISTOGRAM_NTP_MODULE_LONGCLICK = "NewTabPage.Module.LongClick";
 
-    private static final String SURFACE_POLISH_PARAMS = "force-fieldtrial-params=Study.Group:";
+    private static final String SURFACE_POLISH_BASE_PARAMS = "force-fieldtrial-params=Study.Group:";
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -211,8 +211,14 @@ public class NewTabPageTest {
         FeatureList.TestValues testValuesOverride = new FeatureList.TestValues();
         testValuesOverride.addFeatureFlagOverride(
                 ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_ANDROID, isScrollableMVTEnabled);
-        testValuesOverride.addFeatureFlagOverride(
-                ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_PHONE_ANDROID, isScrollableMVTEnabled);
+        if (!ChromeFeatureList.sSurfacePolish.isEnabled()) {
+            testValuesOverride.addFeatureFlagOverride(
+                    ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_PHONE_ANDROID,
+                    isScrollableMVTEnabled);
+        } else {
+            StartSurfaceConfiguration.SURFACE_POLISH_SCROLLABLE_MVT.setForTesting(
+                    isScrollableMVTEnabled);
+        }
         FeatureList.setTestValues(testValuesOverride);
     }
 
@@ -330,7 +336,6 @@ public class NewTabPageTest {
     public void testSearchFromFakebox() {
         TouchCommon.singleClickView(mFakebox);
         waitForFakeboxFocusAnimationComplete(mNtp);
-        final UrlBar urlBar = (UrlBar) mActivityTestRule.getActivity().findViewById(R.id.url_bar);
         mOmnibox.requestFocus();
         mOmnibox.typeText(UrlConstants.VERSION_URL, false);
         mOmnibox.checkSuggestionsShown();
@@ -921,8 +926,7 @@ public class NewTabPageTest {
         waitForSignIn();
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
-                        HISTOGRAM_NTP_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.PROFILE_BUTTON);
+                        HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNtp.PROFILE_BUTTON);
         onView(withId(R.id.optional_toolbar_button)).perform(click());
         histogramWatcher.assertExpected(
                 HISTOGRAM_NTP_MODULE_CLICK
@@ -945,7 +949,7 @@ public class NewTabPageTest {
         logoCoordinator.setOnLogoClickUrlForTesting(TEST_URL);
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
-                        HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNTP.DOODLE);
+                        HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNtp.DOODLE);
         TestThreadUtils.runOnUiThreadBlocking(() -> logoCoordinator.onLogoClickedForTesting(true));
         histogramWatcher.assertExpected(
                 HISTOGRAM_NTP_MODULE_CLICK
@@ -961,8 +965,7 @@ public class NewTabPageTest {
     public void testRecordHistogramMenuButtonClick_Ntp() {
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
-                        HISTOGRAM_NTP_MODULE_CLICK,
-                        BrowserUiUtils.ModuleTypeOnStartAndNTP.MENU_BUTTON);
+                        HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNtp.MENU_BUTTON);
         onView(withId(R.id.menu_button_wrapper)).perform(click());
         histogramWatcher.assertExpected(
                 HISTOGRAM_NTP_MODULE_CLICK
@@ -973,7 +976,11 @@ public class NewTabPageTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @EnableFeatures({ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_PHONE_ANDROID})
+    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH + "<Study,"})
+    @CommandLineFlags.Add({
+        "force-fieldtrials=Study/Group",
+        SURFACE_POLISH_BASE_PARAMS + "scrollable_mvt/true"
+    })
     public void testSingleTabCardShowAndClick() {
         ChromeTabbedActivity activity = mActivityTestRule.getActivity();
         mActivityTestRule.loadUrl(TEST_URL);
@@ -1215,7 +1222,7 @@ public class NewTabPageTest {
     @EnableFeatures({ChromeFeatureList.SURFACE_POLISH + "<Study,"})
     @CommandLineFlags.Add({
         "force-fieldtrials=Study/Group",
-        SURFACE_POLISH_PARAMS + "scrollable_mvt/true"
+        SURFACE_POLISH_BASE_PARAMS + "scrollable_mvt/true"
     })
     public void test1RowMvtOnNtpAfterPolish() {
         verifyMostVisitedTileMarginPolish();
@@ -1237,8 +1244,13 @@ public class NewTabPageTest {
     @Test
     @MediumTest
     @Feature({"NewTabPage"})
-    @EnableFeatures(ChromeFeatureList.SURFACE_POLISH)
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     @DisableFeatures({ChromeFeatureList.FEED_POSITION_ANDROID})
+    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH + "<Study,"})
+    @CommandLineFlags.Add({
+        "force-fieldtrials=Study/Group",
+        SURFACE_POLISH_BASE_PARAMS + "scrollable_mvt/false"
+    })
     public void test2RowMvtOnNtpAfterPolish() {
         verifyMostVisitedTileMarginPolish();
 
@@ -1248,7 +1260,7 @@ public class NewTabPageTest {
 
         int expectedTitleTopMargin =
                 res.getDimensionPixelSize(R.dimen.tile_view_title_margin_top_modern_polish);
-        TileView suggestionsTileElement = (TileView) ((FrameLayout) mvTilesLayout).getChildAt(0);
+        TileView suggestionsTileElement = (TileView) ((ViewGroup) mvTilesLayout).getChildAt(0);
         Assert.assertEquals(
                 "The top margin of the tile element's title is wrong.",
                 expectedTitleTopMargin,
@@ -1386,23 +1398,22 @@ public class NewTabPageTest {
 
     private static HistogramWatcher expectMostVisitedTilesRecordForNtpModuleClick() {
         return HistogramWatcher.newSingleRecordWatcher(
-                HISTOGRAM_NTP_MODULE_CLICK,
-                BrowserUiUtils.ModuleTypeOnStartAndNTP.MOST_VISITED_TILES);
+                HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNtp.MOST_VISITED_TILES);
     }
 
     private static HistogramWatcher expectFeedRecordForNtpModuleClick() {
         return HistogramWatcher.newSingleRecordWatcher(
-                HISTOGRAM_NTP_MODULE_CLICK, BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED);
+                HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNtp.FEED);
     }
 
     private static HistogramWatcher expectHomeButtonRecordForNtpModuleClick() {
         return HistogramWatcher.newSingleRecordWatcher(
-                HISTOGRAM_NTP_MODULE_CLICK, BrowserUiUtils.ModuleTypeOnStartAndNTP.HOME_BUTTON);
+                HISTOGRAM_NTP_MODULE_CLICK, ModuleTypeOnStartAndNtp.HOME_BUTTON);
     }
 
     private static HistogramWatcher expectHomeButtonRecordForNtpModuleLongClick() {
         return HistogramWatcher.newSingleRecordWatcher(
-                HISTOGRAM_NTP_MODULE_LONGCLICK, BrowserUiUtils.ModuleTypeOnStartAndNTP.HOME_BUTTON);
+                HISTOGRAM_NTP_MODULE_LONGCLICK, ModuleTypeOnStartAndNtp.HOME_BUTTON);
     }
 
     private static HistogramWatcher expectNoRecordsForNtpModuleClick() {

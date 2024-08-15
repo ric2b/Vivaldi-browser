@@ -79,12 +79,12 @@ ACTION_P2(ExitMessageLoop, task_runner, quit_closure) {
   task_runner->PostTask(FROM_HERE, quit_closure);
 }
 
-class MockRenderProcessHostDelegate
-    : public VideoCaptureHost::RenderProcessHostDelegate {
+class MockRenderFrameHostDelegate
+    : public VideoCaptureHost::RenderFrameHostDelegate {
  public:
   MOCK_METHOD0(NotifyStreamAdded, void());
   MOCK_METHOD0(NotifyStreamRemoved, void());
-  MOCK_CONST_METHOD0(GetRenderProcessId, uint32_t());
+  MOCK_CONST_METHOD0(GetRenderFrameHostId, GlobalRenderFrameHostId());
 };
 
 // This is an integration test of VideoCaptureHost in conjunction with
@@ -95,10 +95,6 @@ class VideoCaptureTest : public testing::Test,
  public:
   VideoCaptureTest()
       : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP),
-        audio_manager_(std::make_unique<media::MockAudioManager>(
-            std::make_unique<media::TestAudioThread>())),
-        audio_system_(
-            std::make_unique<media::AudioSystemImpl>(audio_manager_.get())),
         task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {}
 
   VideoCaptureTest(const VideoCaptureTest&) = delete;
@@ -108,6 +104,10 @@ class VideoCaptureTest : public testing::Test,
 
   void SetUp() override {
     SetBrowserClientForTesting(&browser_client_);
+    audio_manager_ = std::make_unique<media::MockAudioManager>(
+        std::make_unique<media::TestAudioThread>());
+    audio_system_ =
+        std::make_unique<media::AudioSystemImpl>(audio_manager_.get());
 
     media_stream_manager_ = std::make_unique<MediaStreamManager>(
         audio_system_.get(), std::make_unique<FakeVideoCaptureProvider>());
@@ -115,8 +115,9 @@ class VideoCaptureTest : public testing::Test,
         &VideoCaptureTest::CreateFakeUI, base::Unretained(this)));
 
     // Create a Host and connect it to a simulated IPC channel.
-    host_ = std::make_unique<VideoCaptureHost>(0 /* render_process_id */,
-                                               media_stream_manager_.get());
+    host_ = std::make_unique<VideoCaptureHost>(
+        GlobalRenderFrameHostId() /* render_frame_host_id */,
+        media_stream_manager_.get());
 
     OpenSession();
   }
@@ -350,12 +351,13 @@ class VideoCaptureTest : public testing::Test,
     std::move(quit_closure).Run();
   }
 
+  std::unique_ptr<media::AudioManager> audio_manager_;
+  std::unique_ptr<media::AudioSystem> audio_system_;
+
   // |media_stream_manager_| needs to outlive |task_environment_| because it is
   // a CurrentThread::DestructionObserver.
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   const content::BrowserTaskEnvironment task_environment_;
-  std::unique_ptr<media::AudioManager> audio_manager_;
-  std::unique_ptr<media::AudioSystem> audio_system_;
   content::TestBrowserContext browser_context_;
   content::TestContentBrowserClient browser_client_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -419,9 +421,9 @@ TEST_F(VideoCaptureTest, CloseSessionWithoutStopping) {
 // Tests if RenderProcessHostDelegate methods are called as often as as
 // expected.
 TEST_F(VideoCaptureTest, IncrementMatchesDecrementCalls) {
-  std::unique_ptr<MockRenderProcessHostDelegate> mock_delegate =
-      std::make_unique<MockRenderProcessHostDelegate>();
-  MockRenderProcessHostDelegate* const mock_delegate_ptr = mock_delegate.get();
+  std::unique_ptr<MockRenderFrameHostDelegate> mock_delegate =
+      std::make_unique<MockRenderFrameHostDelegate>();
+  MockRenderFrameHostDelegate* const mock_delegate_ptr = mock_delegate.get();
   std::unique_ptr<VideoCaptureHost> host =
       std::make_unique<VideoCaptureHost>(std::move(mock_delegate), nullptr);
 
@@ -441,8 +443,9 @@ TEST_F(VideoCaptureTest, IncrementMatchesDecrementCalls) {
 TEST_F(VideoCaptureTest, RegisterAndUnregisterWithMediaStreamManager) {
   {
     mojo::Remote<media::mojom::VideoCaptureHost> client;
-    VideoCaptureHost::Create(0 /* render_process_id */, media_stream_manager(),
-                             client.BindNewPipeAndPassReceiver());
+    VideoCaptureHost::Create(
+        GlobalRenderFrameHostId() /* render_frame_host_id */,
+        media_stream_manager(), client.BindNewPipeAndPassReceiver());
     EXPECT_TRUE(client.is_bound());
     EXPECT_EQ(media_stream_manager()->num_video_capture_hosts(), 1u);
   }

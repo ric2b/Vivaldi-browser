@@ -32,6 +32,7 @@
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/image_util.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -94,8 +95,8 @@ namespace {
 
 // If the same property is specified for the inner and outer bounds, raise an
 // error.
-bool CheckBoundsConflict(const absl::optional<int>& inner_property,
-                         const absl::optional<int>& outer_property,
+bool CheckBoundsConflict(const std::optional<int>& inner_property,
+                         const std::optional<int>& outer_property,
                          const std::string& property_name,
                          std::string* error) {
   if (inner_property && outer_property) {
@@ -143,7 +144,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   if (ExtensionsBrowserClient::Get()->IsShuttingDown())
     return RespondNow(Error(kUnknownErrorDoNotUse));
 
-  absl::optional<Create::Params> params = Create::Params::Create(args());
+  std::optional<Create::Params> params = Create::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   GURL url = extension()->GetResourceURL(params->url);
@@ -165,7 +166,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   // AppWindow::Create so we can set the opener at create time rather than
   // with a hack in AppWindowCustomBindings::GetView().
   AppWindow::CreateParams create_params;
-  absl::optional<app_window::CreateWindowOptions>& options = params->options;
+  std::optional<app_window::CreateWindowOptions>& options = params->options;
   if (options) {
     if (options->avoid_cached_positions) {
       create_params.avoid_cached_positions = *options->avoid_cached_positions;
@@ -193,9 +194,9 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
         if (existing_window) {
           content::RenderFrameHost* existing_frame =
               existing_window->web_contents()->GetPrimaryMainFrame();
-          int frame_id = MSG_ROUTING_NONE;
+          std::string frame_token;
           if (source_process_id() == existing_frame->GetProcess()->GetID()) {
-            frame_id = existing_frame->GetRoutingID();
+            frame_token = existing_frame->GetFrameToken().ToString();
           }
 
           if (!options->hidden || !*options->hidden) {
@@ -210,7 +211,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
           // completion.
           if (existing_window->DidFinishFirstNavigation()) {
             base::Value::Dict result;
-            result.Set("frameId", frame_id);
+            result.Set("frameToken", frame_token);
             existing_window->GetSerializedState(&result);
             result.Set("existingWindow", true);
 
@@ -383,7 +384,7 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
       api::app_runtime::ActionType::kNone;
   if (options &&
       options->lock_screen_action != api::app_runtime::ActionType::kNone) {
-    if (source_context_type() != Feature::LOCK_SCREEN_EXTENSION_CONTEXT) {
+    if (source_context_type() != mojom::ContextType::kLockscreenExtension) {
       return RespondNow(Error(
           app_window_constants::kLockScreenActionRequiresLockScreenContext));
     }
@@ -454,12 +455,12 @@ void AppWindowCreateFunction::OnAppWindowFinishedFirstNavigationOrClosed(
   CHECK(app_window);
   content::RenderFrameHost* app_frame =
       app_window->web_contents()->GetPrimaryMainFrame();
-  int frame_id = MSG_ROUTING_NONE;
+  std::string frame_token;
   if (source_process_id() == app_frame->GetProcess()->GetID()) {
-    frame_id = app_frame->GetRoutingID();
+    frame_token = app_frame->GetFrameToken().ToString();
   }
   base::Value::Dict result;
-  result.Set("frameId", frame_id);
+  result.Set("frameToken", frame_token);
   if (is_existing_window) {
     result.Set("existingWindow", true);
   } else {
@@ -488,9 +489,9 @@ bool AppWindowCreateFunction::GetBoundsSpec(
     // new API, the deprecated fields will be ignored - do not attempt to merge
     // them.
 
-    const absl::optional<app_window::BoundsSpecification>& inner_bounds =
+    const std::optional<app_window::BoundsSpecification>& inner_bounds =
         options.inner_bounds;
-    const absl::optional<app_window::BoundsSpecification>& outer_bounds =
+    const std::optional<app_window::BoundsSpecification>& outer_bounds =
         options.outer_bounds;
     if (inner_bounds && outer_bounds) {
       if (!CheckBoundsConflict(inner_bounds->left, outer_bounds->left, "left",

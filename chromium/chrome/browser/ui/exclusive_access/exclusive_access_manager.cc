@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ui/browser.h"
@@ -17,9 +18,30 @@
 #include "chrome/browser/ui/exclusive_access/mouse_lock_controller.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/common/input/native_web_keyboard_event.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 using content::WebContents;
+
+namespace {
+
+constexpr char kHistogramFullscreenLockStateAtEntryViaApi[] =
+    "WebCore.Fullscreen.LockStateAtEntryViaApi";
+constexpr char kHistogramFullscreenLockStateAtEntryViaBrowserUi[] =
+    "WebCore.Fullscreen.LockStateAtEntryViaBrowserUi";
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class LockState {
+  kUnlocked = 0,
+  kKeyboardLocked = 1,
+  kPointerLocked = 2,
+  kKeyboardAndPointerLocked = 3,
+  kMaxValue = kKeyboardAndPointerLocked,
+};
+
+}  // namespace
 
 ExclusiveAccessManager::ExclusiveAccessManager(
     ExclusiveAccessContext* exclusive_access_context)
@@ -28,8 +50,7 @@ ExclusiveAccessManager::ExclusiveAccessManager(
       keyboard_lock_controller_(this),
       mouse_lock_controller_(this) {}
 
-ExclusiveAccessManager::~ExclusiveAccessManager() {
-}
+ExclusiveAccessManager::~ExclusiveAccessManager() = default;
 
 ExclusiveAccessBubbleType
 ExclusiveAccessManager::GetExclusiveAccessExitBubbleType() const {
@@ -89,6 +110,17 @@ GURL ExclusiveAccessManager::GetExclusiveAccessBubbleURL() const {
   return result;
 }
 
+void ExclusiveAccessManager::RecordLockStateOnEnteringApiFullscreen() const {
+  RecordLockStateOnEnteringFullscreen(
+      kHistogramFullscreenLockStateAtEntryViaApi);
+}
+
+void ExclusiveAccessManager::RecordLockStateOnEnteringBrowserFullscreen()
+    const {
+  RecordLockStateOnEnteringFullscreen(
+      kHistogramFullscreenLockStateAtEntryViaBrowserUi);
+}
+
 void ExclusiveAccessManager::OnTabDeactivated(WebContents* web_contents) {
   fullscreen_controller_.OnTabDeactivated(web_contents);
   keyboard_lock_controller_.OnTabDeactivated(web_contents);
@@ -136,4 +168,27 @@ void ExclusiveAccessManager::ExitExclusiveAccess() {
   fullscreen_controller_.ExitExclusiveAccessToPreviousState();
   keyboard_lock_controller_.LostKeyboardLock();
   mouse_lock_controller_.LostMouseLock();
+}
+
+void ExclusiveAccessManager::RecordLockStateOnEnteringFullscreen(
+    const char histogram_name[]) const {
+  LockState lock_state = LockState::kUnlocked;
+  if (keyboard_lock_controller_.IsKeyboardLockActive()) {
+    if (mouse_lock_controller_.IsMouseLocked()) {
+      lock_state = LockState::kKeyboardAndPointerLocked;
+    } else {
+      lock_state = LockState::kKeyboardLocked;
+    }
+  } else if (mouse_lock_controller_.IsMouseLocked()) {
+    lock_state = LockState::kPointerLocked;
+  }
+  base::UmaHistogramEnumeration(histogram_name, lock_state);
+  if (fullscreen_controller_.exclusive_access_tab()) {
+    ukm::SourceId source_id = fullscreen_controller_.exclusive_access_tab()
+                                  ->GetPrimaryMainFrame()
+                                  ->GetPageUkmSourceId();
+    ukm::builders::Fullscreen_Enter(source_id)
+        .SetLockState(static_cast<int64_t>(lock_state))
+        .Record(ukm::UkmRecorder::Get());
+  }
 }

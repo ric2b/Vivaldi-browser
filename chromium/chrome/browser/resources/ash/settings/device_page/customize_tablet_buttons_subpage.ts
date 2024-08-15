@@ -16,7 +16,7 @@ import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../assert_extras.js';
-import {RouteObserverMixin} from '../route_observer_mixin.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './customize_tablet_buttons_subpage.html.js';
@@ -45,6 +45,13 @@ export class SettingsCustomizeTabletButtonsSubpageElement extends
       graphicsTablets: {
         type: Array,
       },
+
+      /**
+       * Use hasLauncherButton to decide which meta key icon to display.
+       */
+      hasLauncherButton_: {
+        type: Boolean,
+      },
     };
   }
 
@@ -61,11 +68,15 @@ export class SettingsCustomizeTabletButtonsSubpageElement extends
       getInputDeviceSettingsProvider();
   private previousRoute_: Route|null = null;
   private isInitialized_: boolean = false;
+  private hasLauncherButton_: boolean;
 
-  override connectedCallback(): void {
+  override async connectedCallback(): Promise<void> {
     super.connectedCallback();
 
     this.addEventListener('button-remapping-changed', this.onSettingsChanged);
+    this.hasLauncherButton_ =
+        (await this.inputDeviceSettingsProvider_.hasLauncherButton())
+            ?.hasLauncherButton;
   }
 
   override disconnectedCallback(): void {

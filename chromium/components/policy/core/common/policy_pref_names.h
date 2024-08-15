@@ -62,8 +62,6 @@ extern const char kLastPolicyCheckTime[];
 #if BUILDFLAG(IS_IOS)
 extern const char kUserPolicyNotificationWasShown[];
 #endif
-extern const char kOffsetParentNewSpecBehaviorEnabled[];
-extern const char kSendMouseEventsDisabledFormControlsEnabled[];
 extern const char kForceGoogleSafeSearch[];
 extern const char kForceYouTubeRestrict[];
 extern const char kHideWebStoreIcon[];
@@ -73,8 +71,9 @@ extern const char kPolicyTestPageEnabled[];
 extern const char kAllowBackForwardCacheForCacheControlNoStorePageEnabled[];
 extern const char kLocalTestPoliciesForNextStartup[];
 extern const char kForcePermissionPolicyUnloadDefaultEnabled[];
-extern const char kPPAPISharedImagesForVideoDecoderAllowed[];
-
+#if BUILDFLAG(IS_CHROMEOS)
+extern const char kAlwaysOnVpnPreConnectUrlAllowlist[];
+#endif
 }  // namespace policy_prefs
 }  // namespace policy
 

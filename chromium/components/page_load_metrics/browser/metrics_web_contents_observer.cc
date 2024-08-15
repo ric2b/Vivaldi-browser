@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
+#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/page_load_metrics/browser/metrics_lifecycle_observer.h"
@@ -38,6 +39,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
@@ -423,8 +425,11 @@ void MetricsWebContentsObserver::ResourceLoadComplete(
     content::RenderFrameHost* render_frame_host,
     const content::GlobalRequestID& request_id,
     const blink::mojom::ResourceLoadInfo& resource_load_info) {
-  if (!resource_load_info.final_url.SchemeIsHTTPOrHTTPS())
+  // Ignore non-HTTP schemes (e.g. chrome://) for non-webUI surfaces.
+  if (!resource_load_info.final_url.SchemeIsHTTPOrHTTPS() &&
+      !embedder_interface_->IsNonTabWebUI()) {
     return;
+  }
 
   PageLoadTracker* tracker = GetTrackerOrNullForRequest(
       request_id, render_frame_host, resource_load_info.request_destination,
@@ -502,36 +507,30 @@ void MetricsWebContentsObserver::OnCookiesAccessedImpl(
     PageLoadTracker& tracker,
     const content::CookieAccessDetails& details) {
   // TODO(altimin): Propagate `CookieAccessDetails` further.
+  bool is_partitioned_access = base::ranges::all_of(
+      details.cookie_list, &net::CanonicalCookie::IsPartitioned);
+
   switch (details.type) {
     case content::CookieAccessDetails::Type::kRead:
       tracker.OnCookiesRead(details.url, details.first_party_url,
                             details.blocked_by_policy, details.is_ad_tagged,
-                            details.cookie_setting_overrides);
+                            details.cookie_setting_overrides,
+                            is_partitioned_access);
       break;
     case content::CookieAccessDetails::Type::kChange:
       for (const auto& cookie : details.cookie_list) {
         tracker.OnCookieChange(details.url, details.first_party_url, cookie,
                                details.blocked_by_policy, details.is_ad_tagged,
-                               details.cookie_setting_overrides);
+                               details.cookie_setting_overrides,
+                               is_partitioned_access);
       }
       break;
   }
 }
 
-void MetricsWebContentsObserver::DidActivatePortal(
-    content::WebContents* predecessor_web_contents,
+void MetricsWebContentsObserver::DidActivatePreviewedPage(
     base::TimeTicks activation_time) {
-  // The `predecessor_web_contents` is the WebContents that instantiated the
-  // portal.
-  MetricsWebContentsObserver* predecessor_observer =
-      MetricsWebContentsObserver::FromWebContents(predecessor_web_contents);
-  // We only track the portal activation if the predecessor is also being
-  // tracked.
-  if (!primary_page_ || !predecessor_observer ||
-      !predecessor_observer->primary_page_) {
-    return;
-  }
-  primary_page_->DidActivatePortal(activation_time);
+  primary_page_->DidActivatePreviewedPage(activation_time);
 }
 
 void MetricsWebContentsObserver::OnStorageAccessed(
@@ -1120,7 +1119,8 @@ bool MetricsWebContentsObserver::DoesTimingUpdateHaveError(
     return true;
   }
 
-  if (!tracker->GetUrl().SchemeIsHTTPOrHTTPS()) {
+  if (!tracker->GetUrl().SchemeIsHTTPOrHTTPS() &&
+      !embedder_interface_->IsNonTabWebUI()) {
     RecordInternalError(ERR_IPC_FROM_BAD_URL_SCHEME);
     return true;
   }
@@ -1173,9 +1173,11 @@ bool MetricsWebContentsObserver::ShouldTrackMainFrameNavigation(
   CHECK(navigation_handle->IsInMainFrame());
   CHECK(!navigation_handle->HasCommitted() ||
         !navigation_handle->IsSameDocument());
-  // Ignore non-HTTP schemes (e.g. chrome://).
-  if (!navigation_handle->GetURL().SchemeIsHTTPOrHTTPS())
+  // Ignore non-HTTP schemes (e.g. chrome://) for non-webUI surfaces.
+  if (!navigation_handle->GetURL().SchemeIsHTTPOrHTTPS() &&
+      !embedder_interface_->IsNonTabWebUI()) {
     return false;
+  }
 
   // Ignore NTP loads.
   if (embedder_interface_->IsNewTabPageUrl(navigation_handle->GetURL()))

@@ -27,15 +27,18 @@
 
 #include "dawn/native/d3d11/PhysicalDeviceD3D11.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
 #include "dawn/common/Constants.h"
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d11/BackendD3D11.h"
 #include "dawn/native/d3d11/DeviceD3D11.h"
 #include "dawn/native/d3d11/PlatformFunctionsD3D11.h"
+#include "dawn/native/d3d11/UtilsD3D11.h"
 
 namespace dawn::native::d3d11 {
 namespace {
@@ -76,8 +79,12 @@ MaybeError InitializeDebugLayerFilters(ComPtr<ID3D11Device> d3d11Device) {
 
 }  // namespace
 
-PhysicalDevice::PhysicalDevice(Backend* backend, ComPtr<IDXGIAdapter3> hardwareAdapter)
-    : Base(backend, std::move(hardwareAdapter), wgpu::BackendType::D3D11) {}
+PhysicalDevice::PhysicalDevice(Backend* backend,
+                               ComPtr<IDXGIAdapter3> hardwareAdapter,
+                               ComPtr<ID3D11Device> d3d11Device)
+    : Base(backend, std::move(hardwareAdapter), wgpu::BackendType::D3D11),
+      mIsSharedD3D11Device(!!d3d11Device),
+      mD3D11Device(std::move(d3d11Device)) {}
 
 PhysicalDevice::~PhysicalDevice() = default;
 
@@ -102,28 +109,54 @@ const DeviceInfo& PhysicalDevice::GetDeviceInfo() const {
 }
 
 ResultOrError<ComPtr<ID3D11Device>> PhysicalDevice::CreateD3D11Device() {
-    ComPtr<ID3D11Device> device = std::move(mD3d11Device);
-    if (!device) {
-        const PlatformFunctions* functions = static_cast<Backend*>(GetBackend())->GetFunctions();
-        const D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
-
-        UINT flags = 0;
-        if (GetInstance()->IsBackendValidationEnabled()) {
-            flags |= D3D11_CREATE_DEVICE_DEBUG;
+    if (mIsSharedD3D11Device) {
+        DAWN_ASSERT(mD3D11Device);
+        // If the shared d3d11 device was created with debug layer, we have to initialize debug
+        // layer filters to avoid some unwanted warnings.
+        if (IsDebugLayerEnabled(mD3D11Device)) {
+            DAWN_TRY(InitializeDebugLayerFilters(mD3D11Device));
         }
+        return ComPtr<ID3D11Device>(mD3D11Device);
+    }
 
-        DAWN_TRY(CheckHRESULT(functions->d3d11CreateDevice(
-                                  GetHardwareAdapter(), D3D_DRIVER_TYPE_UNKNOWN,
-                                  /*Software=*/nullptr, flags, featureLevels,
-                                  std::size(featureLevels), D3D11_SDK_VERSION, &device,
-                                  /*pFeatureLevel=*/nullptr, /*[out] ppImmediateContext=*/nullptr),
-                              "D3D11CreateDevice failed"));
+    // If there mD3D11Device which is used for collecting GPU info is not null, try to use it.
+    if (mD3D11Device) {
+        bool isDebugLayerEnabled = IsDebugLayerEnabled(mD3D11Device);
+        // Backend validation level doesn't match, recreate the d3d11 device.
+        if (GetInstance()->IsBackendValidationEnabled() == isDebugLayerEnabled) {
+            return std::move(mD3D11Device);
+        }
+        mD3D11Device = nullptr;
+    }
 
-        if (GetInstance()->IsBackendValidationEnabled()) {
-            DAWN_TRY(InitializeDebugLayerFilters(device));
+    const PlatformFunctions* functions = static_cast<Backend*>(GetBackend())->GetFunctions();
+    const D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
+
+    ComPtr<ID3D11Device> d3d11Device;
+
+    if (GetInstance()->IsBackendValidationEnabled()) {
+        // Try create d3d11 device with debug layer.
+        HRESULT hr = functions->d3d11CreateDevice(
+            GetHardwareAdapter(), D3D_DRIVER_TYPE_UNKNOWN,
+            /*Software=*/nullptr, D3D11_CREATE_DEVICE_DEBUG, featureLevels,
+            std::size(featureLevels), D3D11_SDK_VERSION, &d3d11Device,
+            /*pFeatureLevel=*/nullptr, /*[out] ppImmediateContext=*/nullptr);
+
+        if (SUCCEEDED(hr)) {
+            DAWN_ASSERT(IsDebugLayerEnabled(d3d11Device));
+            DAWN_TRY(InitializeDebugLayerFilters(d3d11Device));
+            return d3d11Device;
         }
     }
-    return device;
+
+    DAWN_TRY(CheckHRESULT(functions->d3d11CreateDevice(
+                              GetHardwareAdapter(), D3D_DRIVER_TYPE_UNKNOWN,
+                              /*Software=*/nullptr, /*Flags=*/0, featureLevels,
+                              std::size(featureLevels), D3D11_SDK_VERSION, &d3d11Device,
+                              /*pFeatureLevel=*/nullptr, /*[out] ppImmediateContext=*/nullptr),
+                          "D3D11CreateDevice failed"));
+
+    return d3d11Device;
 }
 
 MaybeError PhysicalDevice::InitializeImpl() {
@@ -131,10 +164,12 @@ MaybeError PhysicalDevice::InitializeImpl() {
     // D3D11 cannot check for feature support without a device.
     // Create the device to populate the adapter properties then reuse it when needed for actual
     // rendering.
-    DAWN_TRY_ASSIGN(mD3d11Device, CreateD3D11Device());
+    if (!mIsSharedD3D11Device) {
+        DAWN_TRY_ASSIGN(mD3D11Device, CreateD3D11Device());
+    }
 
-    mFeatureLevel = mD3d11Device->GetFeatureLevel();
-    DAWN_TRY_ASSIGN(mDeviceInfo, GatherDeviceInfo(mD3d11Device));
+    mFeatureLevel = mD3D11Device->GetFeatureLevel();
+    DAWN_TRY_ASSIGN(mDeviceInfo, GatherDeviceInfo(GetHardwareAdapter(), mD3D11Device));
 
     // Base::InitializeImpl() cannot distinguish between discrete and integrated GPUs, so we need to
     // overwrite it.
@@ -154,16 +189,28 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::MSAARenderToSingleSampled);
     EnableFeature(Feature::DualSourceBlending);
     EnableFeature(Feature::Norm16TextureFormats);
+    EnableFeature(Feature::AdapterPropertiesMemoryHeaps);
+    EnableFeature(Feature::AdapterPropertiesD3D);
 
     // To import multi planar textures, we need to at least tier 2 support.
     if (mDeviceInfo.supportsSharedResourceCapabilityTier2) {
         EnableFeature(Feature::DawnMultiPlanarFormats);
         EnableFeature(Feature::MultiPlanarFormatP010);
     }
+    if (mDeviceInfo.supportsROV) {
+        EnableFeature(Feature::PixelLocalStorageCoherent);
+    }
 
     EnableFeature(Feature::SharedTextureMemoryDXGISharedHandle);
     EnableFeature(Feature::SharedTextureMemoryD3D11Texture2D);
     EnableFeature(Feature::SharedFenceDXGISharedHandle);
+
+    UINT formatSupport = 0;
+    HRESULT hr = mD3D11Device->CheckFormatSupport(DXGI_FORMAT_B8G8R8A8_UNORM, &formatSupport);
+    DAWN_ASSERT(SUCCEEDED(hr));
+    if (formatSupport & D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW) {
+        EnableFeature(Feature::BGRA8UnormStorage);
+    }
 }
 
 MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
@@ -179,7 +226,8 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // Slot values can be 0-15, inclusive:
     // https://docs.microsoft.com/en-ca/windows/win32/api/d3d11/ns-d3d11-d3d11_input_element_desc
     limits->v1.maxVertexBuffers = 16;
-    limits->v1.maxVertexAttributes = D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT;
+    // Both SV_VertexID and SV_InstanceID will consume vertex input slots.
+    limits->v1.maxVertexAttributes = D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 2;
 
     uint32_t maxUAVsAllStages = mFeatureLevel == D3D_FEATURE_LEVEL_11_1
                                     ? D3D11_1_UAV_SLOT_COUNT
@@ -246,7 +294,7 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     return {};
 }
 
-MaybeError PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
+FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
     wgpu::FeatureName feature,
     const TogglesState& toggles) const {
     return {};
@@ -263,9 +311,10 @@ void PhysicalDevice::SetupBackendDeviceToggles(TogglesState* deviceToggles) cons
     deviceToggles->Default(Toggle::UseBlitForBufferToStencilTextureCopy, true);
 }
 
-ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(AdapterBase* adapter,
-                                                                const DeviceDescriptor* descriptor,
-                                                                const TogglesState& deviceToggles) {
+ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(
+    AdapterBase* adapter,
+    const UnpackedPtr<DeviceDescriptor>& descriptor,
+    const TogglesState& deviceToggles) {
     return Device::Create(adapter, descriptor, deviceToggles);
 }
 
@@ -274,11 +323,45 @@ ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(AdapterBase* ada
 // and the subequent call to CreateDevice will return a handle the existing device instead of
 // creating a new one.
 MaybeError PhysicalDevice::ResetInternalDeviceForTestingImpl() {
-    [[maybe_unused]] auto refCount = mD3d11Device.Reset();
+    [[maybe_unused]] auto refCount = mD3D11Device.Reset();
     DAWN_ASSERT(refCount == 0);
     DAWN_TRY(Initialize());
 
     return {};
+}
+
+void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const {
+    if (auto* memoryHeapProperties = properties.Get<AdapterPropertiesMemoryHeaps>()) {
+        // https://microsoft.github.io/DirectX-Specs/d3d/D3D12GPUUploadHeaps.html describes
+        // the properties of D3D12 Default/Upload/Readback heaps. The assumption is that these are
+        // roughly how D3D11 allocates memory has well.
+        if (mDeviceInfo.isUMA) {
+            auto* heapInfo = new MemoryHeapInfo[1];
+            memoryHeapProperties->heapCount = 1;
+            memoryHeapProperties->heapInfo = heapInfo;
+
+            heapInfo[0].size =
+                std::max(mDeviceInfo.dedicatedVideoMemory, mDeviceInfo.sharedSystemMemory);
+            heapInfo[0].properties =
+                wgpu::HeapProperty::DeviceLocal | wgpu::HeapProperty::HostVisible |
+                wgpu::HeapProperty::HostUncached | wgpu::HeapProperty::HostCached;
+        } else {
+            auto* heapInfo = new MemoryHeapInfo[2];
+            memoryHeapProperties->heapCount = 2;
+            memoryHeapProperties->heapInfo = heapInfo;
+
+            heapInfo[0].size = mDeviceInfo.dedicatedVideoMemory;
+            heapInfo[0].properties = wgpu::HeapProperty::DeviceLocal;
+
+            heapInfo[1].size = mDeviceInfo.sharedSystemMemory;
+            heapInfo[1].properties =
+                wgpu::HeapProperty::HostVisible | wgpu::HeapProperty::HostCoherent |
+                wgpu::HeapProperty::HostUncached | wgpu::HeapProperty::HostCached;
+        }
+    }
+    if (auto* d3dProperties = properties.Get<AdapterPropertiesD3D>()) {
+        d3dProperties->shaderModel = GetDeviceInfo().shaderModel;
+    }
 }
 
 }  // namespace dawn::native::d3d11

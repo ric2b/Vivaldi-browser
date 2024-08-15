@@ -265,8 +265,8 @@ std::vector<ByteString> CPDF_Dictionary::GetKeys() const {
 }
 
 void CPDF_Dictionary::SetFor(const ByteString& key,
-                             RetainPtr<CPDF_Object> pObj) {
-  (void)SetForInternal(key, std::move(pObj));
+                             RetainPtr<CPDF_Object> object) {
+  (void)SetForInternal(key, std::move(object));
 }
 
 CPDF_Object* CPDF_Dictionary::SetForInternal(const ByteString& key,
@@ -276,7 +276,8 @@ CPDF_Object* CPDF_Dictionary::SetForInternal(const ByteString& key,
     m_Map.erase(key);
     return nullptr;
   }
-  DCHECK(pObj->IsInline());
+  CHECK(pObj->IsInline());
+  CHECK(!pObj->IsStream());
   CPDF_Object* pRet = pObj.Get();
   m_Map[MaybeIntern(key)] = std::move(pObj);
   return pRet;

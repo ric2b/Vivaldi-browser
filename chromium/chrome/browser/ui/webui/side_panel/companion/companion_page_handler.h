@@ -12,7 +12,7 @@
 #include "chrome/browser/companion/core/companion_metrics_logger.h"
 #include "chrome/browser/companion/core/constants.h"
 #include "chrome/browser/companion/core/mojom/companion.mojom.h"
-#include "chrome/browser/companion/visual_search/visual_search_classifier_host.h"
+#include "chrome/browser/companion/visual_query/visual_query_classifier_host.h"
 #include "chrome/browser/ui/side_panel/side_panel_enums.h"
 #include "components/lens/buildflags.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -66,10 +66,11 @@ class CompanionPageHandler
       const std::vector<std::string>& text_directives) override;
   void OnPhFeedback(side_panel::mojom::PhFeedback ph_feedback) override;
   void OnCqJumptagClicked(const std::string& text_directive) override;
-  void OpenUrlInBrowser(const absl::optional<GURL>& url_to_open,
+  void OpenUrlInBrowser(const std::optional<GURL>& url_to_open,
                         bool use_new_tab) override;
   void OnLoadingState(side_panel::mojom::LoadingState loading_state) override;
   void RefreshCompanionPage() override;
+  void OnServerSideUrlFilterEvent() override;
 
   // content::WebContentsObserver overrides.
   void DidFinishNavigation(
@@ -129,15 +130,24 @@ class CompanionPageHandler
   void DidFinishFindingCqTexts(
       const std::vector<std::pair<std::string, bool>>& text_found_vec);
 
-  // This method is used as the callback that handles visual search results.
+  // This method is used as the callback that handles visual query results.
   // Its role is to perform some checks and do a mojom IPC to side panel.
-  void HandleVisualSearchResult(
-      const visual_search::VisualSuggestionsResults results,
+  void HandleVisualQueryResult(
+      const visual_query::VisualSuggestionsResults results,
       const VisualSuggestionsMetrics stats);
 
   // Method responsible for binding and sending VQS results to panel.
-  void SendVisualSearchResult(
-      const visual_search::VisualSuggestionsResults& results);
+  void SendVisualQueryResult(
+      const visual_query::VisualSuggestionsResults& results);
+
+  // The callback that handles the response to the request for the innerHTML of
+  // the main frame. Stores the response in |inner_html_| and sends it to the
+  // side panel if ready.
+  void HandleInnerHtmlResponse(const std::optional<std::string>& inner_html);
+
+  // Notifies the companion side panel about the title and the innerHTML of the
+  // main frame using a postmessage() update.
+  void SendPageContent();
 
   mojo::Receiver<side_panel::mojom::CompanionPageHandler> receiver_;
   mojo::Remote<side_panel::mojom::CompanionPage> page_;
@@ -148,9 +158,8 @@ class CompanionPageHandler
   std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>
       consent_helper_;
 
-  // Owns the orchestrator for visual search suggestions.
-  std::unique_ptr<visual_search::VisualSearchClassifierHost>
-      visual_search_host_;
+  // Owns the orchestrator for visual query suggestions.
+  std::unique_ptr<visual_query::VisualQueryClassifierHost> visual_query_host_;
 
   // Logs metrics for companion page. Reset when there is a new navigation.
   std::unique_ptr<CompanionMetricsLogger> metrics_logger_;
@@ -168,9 +177,19 @@ class CompanionPageHandler
       consent_helper_observation_{this};
   PrefChangeRegistrar pref_change_registrar_;
 
-  absl::optional<base::TimeTicks> full_load_start_time_;
-  absl::optional<base::TimeTicks> reload_start_time_;
-  absl::optional<base::TimeTicks> ui_loading_start_time_;
+  std::optional<base::TimeTicks> full_load_start_time_;
+  std::optional<base::TimeTicks> reload_start_time_;
+  std::optional<base::TimeTicks> ui_ready_for_visual_queries_time_;
+
+  // Indicates that the kStartedLoading signal was received from side panel. The
+  // page content is sent to the side panel only if the side panel is ready.
+  // Otherwise, it is stored to be sent when the kStartedLoading signal is
+  // received from the side panel.
+  std::optional<base::TimeTicks> ui_ready_for_page_content_time_;
+  // Used to store the page content before the side panel is ready for it. This
+  // is untrustworthy content which will be sent to the webui for processing.
+  // TODO(1493364): Use an opaque mojo type to hold this data in the browser.
+  std::optional<std::string> inner_html_;
 
   base::WeakPtrFactory<CompanionPageHandler> weak_ptr_factory_{this};
 };

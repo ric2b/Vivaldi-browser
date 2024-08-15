@@ -4,6 +4,8 @@
 
 #include "ash/components/arc/arc_features_parser.h"
 
+#include <string_view>
+
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace arc {
@@ -93,20 +95,20 @@ constexpr const char kInvalidJsonWithMissingFields[] =
     "invalid_root_third": {}})json";
 
 TEST_F(ArcFeaturesParserTest, ParseEmptyJson) {
-  absl::optional<ArcFeatures> arc_features =
-      ArcFeaturesParser::ParseFeaturesJsonForTesting(base::StringPiece());
-  EXPECT_EQ(arc_features, absl::nullopt);
+  std::optional<ArcFeatures> arc_features =
+      ArcFeaturesParser::ParseFeaturesJsonForTesting(std::string_view());
+  EXPECT_EQ(arc_features, std::nullopt);
 }
 
 TEST_F(ArcFeaturesParserTest, ParseInvalidJson) {
-  absl::optional<ArcFeatures> arc_features =
+  std::optional<ArcFeatures> arc_features =
       ArcFeaturesParser::ParseFeaturesJsonForTesting(
           kInvalidJsonWithMissingFields);
-  EXPECT_EQ(arc_features, absl::nullopt);
+  EXPECT_EQ(arc_features, std::nullopt);
 }
 
 TEST_F(ArcFeaturesParserTest, ParseValidJson) {
-  absl::optional<ArcFeatures> arc_features =
+  std::optional<ArcFeatures> arc_features =
       ArcFeaturesParser::ParseFeaturesJsonForTesting(kValidJson);
   auto feature_map = arc_features->feature_map;
   auto unavailable_features = arc_features->unavailable_features;
@@ -123,7 +125,7 @@ TEST_F(ArcFeaturesParserTest, ParseValidJson) {
 }
 
 TEST_F(ArcFeaturesParserTest, ParseValidJsonWithUnavailableFeature) {
-  absl::optional<ArcFeatures> arc_features =
+  std::optional<ArcFeatures> arc_features =
       ArcFeaturesParser::ParseFeaturesJsonForTesting(
           kValidJsonWithUnavailableFeature);
   auto feature_map = arc_features->feature_map;
@@ -136,10 +138,10 @@ TEST_F(ArcFeaturesParserTest, ParseValidJsonWithUnavailableFeature) {
 }
 
 TEST_F(ArcFeaturesParserTest, ParseValidJsonWithEmptyFeatureName) {
-  absl::optional<ArcFeatures> arc_features =
+  std::optional<ArcFeatures> arc_features =
       ArcFeaturesParser::ParseFeaturesJsonForTesting(
           kValidJsonFeatureEmptyName);
-  EXPECT_EQ(arc_features, absl::nullopt);
+  EXPECT_EQ(arc_features, std::nullopt);
 }
 
 TEST_F(ArcFeaturesParserTest, ParseValidJsonWithSystemAbiListProperty) {
@@ -153,7 +155,7 @@ TEST_F(ArcFeaturesParserTest, ParseValidJsonWithSystemAbiListProperty) {
     },
     "play_store_version": "81010860"})json";
 
-  absl::optional<ArcFeatures> arc_features =
+  std::optional<ArcFeatures> arc_features =
       ArcFeaturesParser::ParseFeaturesJsonForTesting(
           kValidJsonWithSystemAbiList);
   EXPECT_EQ(arc_features->build_props.abi_list,

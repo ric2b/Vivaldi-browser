@@ -100,14 +100,16 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
       case IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE:
         if (platform_app && platform_app->is_platform_app()) {
           extensions::devtools_util::InspectBackgroundPage(platform_app,
-                                                           browser_->profile());
+              browser_->profile(),
+              DevToolsOpenedByAction::kContextMenuInspect);
         }
         return true;
 
       case IDC_VIV_INSPECT_SERVICE_WORKER:
         if (platform_app && platform_app->is_platform_app()) {
           extensions::devtools_util::InspectServiceWorkerBackground(platform_app,
-                                                           browser_->profile());
+              browser_->profile(),
+              DevToolsOpenedByAction::kContextMenuInspect);
         }
         return true;
 
@@ -122,7 +124,8 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
                 ? root_doc_handler->GetOTRWebContents()
                 : root_doc_handler->GetWebContents();
 
-        DevToolsWindow::OpenDevToolsWindow(portal_content);
+        DevToolsWindow::OpenDevToolsWindow(
+            portal_content, DevToolsOpenedByAction::kContextMenuInspect);
         return true;
       }
     }

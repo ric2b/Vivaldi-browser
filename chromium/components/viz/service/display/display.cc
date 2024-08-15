@@ -87,7 +87,9 @@ const DrawQuad::Material kNonSplittableMaterials[] = {
     DrawQuad::Material::kYuvVideoContent,
 };
 
+#if !BUILDFLAG(IS_MAC)
 constexpr base::TimeDelta kAllowedDeltaFromFuture = base::Milliseconds(16);
+#endif
 
 // A lower bounds for GetEstimatedDisplayDrawTime, influenced by
 // Compositing.Display.DrawToSwapUs.
@@ -112,22 +114,33 @@ gfx::PresentationFeedback SanitizePresentationFeedback(
   // before swap-time), then invalidate the feedback. Also report how far into
   // the future (or from the past) the timestamps are.
   // https://crbug.com/894440
-  const auto now = base::TimeTicks::Now();
+  //
   // The timestamp for the presentation feedback may have a different source and
   // therefore the timestamp can be slightly in the future in comparison with
   // base::TimeTicks::Now(). Such presentation feedbacks should not be rejected.
   // See https://crbug.com/1040178
   // Sometimes we snap the feedback's time stamp to the nearest vsync, and that
   // can be offset by one vsync-internal. These feedback has kVSync set.
+
+  // If the the presentation is from before the swap-time, then invalidate
+  // the feedback.
+  if (feedback.timestamp < draw_time) {
+    return gfx::PresentationFeedback::Failure();
+  }
+
+  // All |feedback.timestamp| on Mac are valid and should not be sanitized.
+#if !BUILDFLAG(IS_MAC)
+  const auto now = base::TimeTicks::Now();
   const auto allowed_delta_from_future =
       ((feedback.flags & (gfx::PresentationFeedback::kHWClock |
                           gfx::PresentationFeedback::kVSync)) != 0)
           ? kAllowedDeltaFromFuture
           : base::TimeDelta();
-  if ((feedback.timestamp > now + allowed_delta_from_future) ||
-      (feedback.timestamp < draw_time)) {
+  if (feedback.timestamp > now + allowed_delta_from_future) {
     return gfx::PresentationFeedback::Failure();
   }
+#endif
+
   return feedback;
 }
 
@@ -317,6 +330,8 @@ void Display::PresentationGroupTiming::OnPresent(
 
 Display::Display(
     SharedBitmapManager* bitmap_manager,
+    gpu::SharedImageManager* shared_image_manager,
+    gpu::SyncPointManager* sync_point_manager,
     const RendererSettings& settings,
     const DebugRendererSettings* debug_settings,
     const FrameSinkId& frame_sink_id,
@@ -326,6 +341,8 @@ Display::Display(
     std::unique_ptr<DisplaySchedulerBase> scheduler,
     scoped_refptr<base::SingleThreadTaskRunner> current_task_runner)
     : bitmap_manager_(bitmap_manager),
+      shared_image_manager_(shared_image_manager),
+      sync_point_manager_(sync_point_manager),
       settings_(settings),
       debug_settings_(debug_settings),
       frame_sink_id_(frame_sink_id),
@@ -550,8 +567,8 @@ void Display::InitializeRenderer(bool enable_shared_images) {
         resource_provider.get(), overlay_processor_.get());
     resource_provider_ = std::move(resource_provider);
   } else {
-    auto resource_provider =
-        std::make_unique<DisplayResourceProviderSoftware>(bitmap_manager_);
+    auto resource_provider = std::make_unique<DisplayResourceProviderSoftware>(
+        bitmap_manager_, shared_image_manager_, sync_point_manager_);
     DCHECK(!overlay_processor_->IsOverlaySupported());
     auto renderer = std::make_unique<SoftwareRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
@@ -683,14 +700,9 @@ void DebugDrawFrame(
             base::NumberToString(static_cast<int>(
                 resource_provider->GetBufferFormat(quad->resources.ids[0]))));
         DBG_DRAW_TEXT_OPT(
-            "frame.render_pass.buf_sampled_color_space", DBG_OPT_RED,
+            "frame.render_pass.buf_color_space", DBG_OPT_GREEN,
             display_rect.origin(),
-            resource_provider->GetSamplerColorSpace(quad->resources.ids[0])
-                .ToString());
-        DBG_DRAW_TEXT_OPT(
-            "frame.render_pass.buf_overlay_color_space", DBG_OPT_GREEN,
-            display_rect.origin(),
-            resource_provider->GetOverlayColorSpace(quad->resources.ids[0])
+            resource_provider->GetColorSpace(quad->resources.ids[0])
                 .ToString());
       }
       DBG_DRAW_RECT("frame.render_pass.quad", display_rect);

@@ -20,6 +20,9 @@
 //!
 //! The output shows how many times a change to the first n bytes wasn't detected, as well as a
 //! histogram of how many bits were flipped in the entire plaintext.
+
+#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
 use clap::{self, Parser as _};
 use crypto_provider::aes::BLOCK_SIZE;
 use crypto_provider::{CryptoProvider, CryptoRng};

@@ -39,11 +39,13 @@ load("@bazel_skylib//lib:selects.bzl", "selects")
 cc_library(
   name = "text",
   srcs = [
+    "base64.cc",
     "string.cc",
     "string_stream.cc",
     "unicode.cc",
   ],
   hdrs = [
+    "base64.h",
     "string.h",
     "string_stream.h",
     "unicode.h",
@@ -64,6 +66,7 @@ cc_library(
   name = "test",
   alwayslink = True,
   srcs = [
+    "base64_test.cc",
     "string_stream_test.cc",
     "string_test.cc",
     "unicode_test.cc",

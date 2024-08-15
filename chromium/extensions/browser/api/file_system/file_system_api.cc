@@ -626,8 +626,8 @@ void FileSystemChooseEntryFunction::OnDirectoryAccessConfirmed(
 void FileSystemChooseEntryFunction::BuildFileTypeInfo(
     ui::SelectFileDialog::FileTypeInfo* file_type_info,
     const base::FilePath::StringType& suggested_extension,
-    const absl::optional<AcceptOptions>& accepts,
-    const absl::optional<bool>& accepts_all_types) {
+    const std::optional<AcceptOptions>& accepts,
+    const std::optional<bool>& accepts_all_types) {
   file_type_info->include_all_files = accepts_all_types.value_or(true);
 
   bool need_suggestion =
@@ -659,7 +659,7 @@ void FileSystemChooseEntryFunction::BuildFileTypeInfo(
 }
 
 void FileSystemChooseEntryFunction::BuildSuggestion(
-    const absl::optional<std::string>& opt_name,
+    const std::optional<std::string>& opt_name,
     base::FilePath* suggested_name,
     base::FilePath::StringType* suggested_extension) {
   if (opt_name) {
@@ -716,7 +716,7 @@ void FileSystemChooseEntryFunction::MaybeUseManagedSavePath(
 FileSystemChooseEntryFunction::~FileSystemChooseEntryFunction() = default;
 
 ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
-  absl::optional<ChooseEntry::Params> params =
+  std::optional<ChooseEntry::Params> params =
       ChooseEntry::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -891,7 +891,8 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
             base::IgnoreResult(
                 &storage::FileSystemOperationRunner::GetMetadata),
             base::Unretained(file_system_context->operation_runner()), url,
-            storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
+            storage::FileSystemOperation::GetMetadataFieldSet(
+                {storage::FileSystemOperation::GetMetadataField::kIsDirectory}),
             base::BindOnce(
                 &PassFileInfoToUIThread,
                 base::BindOnce(&FileSystemRetainEntryFunction::RetainFileEntry,
@@ -990,7 +991,7 @@ FileSystemRequestFileSystemFunction::~FileSystemRequestFileSystemFunction() =
 
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using file_system::RequestFileSystem::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   consent_provider_ =
@@ -1071,7 +1072,7 @@ FileSystemRequestFileSystemFunction::~FileSystemRequestFileSystemFunction() =
 
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using file_system::RequestFileSystem::Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   NOTIMPLEMENTED();

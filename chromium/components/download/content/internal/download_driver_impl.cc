@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -185,8 +186,7 @@ void DownloadDriverImpl::Start(
     download_url_params->add_request_header(it.name(), it.value());
   }
 
-  if (base::FeatureList::IsEnabled(features::kDownloadRange) &&
-      request_params.request_headers.HasHeader(
+  if (request_params.request_headers.HasHeader(
           net::HttpRequestHeaders::kRange)) {
     absl::optional<net::HttpByteRange> byte_range =
         ParseRangeHeader(request_params.request_headers);
@@ -290,10 +290,10 @@ std::set<std::string> DownloadDriverImpl::GetActiveDownloads() {
   if (!download_manager_coordinator_)
     return guids;
 
-  std::vector<DownloadItem*> items;
+  std::vector<raw_ptr<DownloadItem, VectorExperimental>> items;
   download_manager_coordinator_->GetAllDownloads(&items);
 
-  for (auto* item : items) {
+  for (download::DownloadItem* item : items) {
     DriverEntry::State state = ToDriverEntryState(item->GetState());
     if (state == DriverEntry::State::IN_PROGRESS)
       guids.insert(item->GetGuid());

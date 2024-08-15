@@ -12,6 +12,7 @@
 #include "include/docs/SkPDFDocument.h"
 #include "include/private/base/SkMutex.h"
 #include "src/core/SkTHash.h"
+#include "src/pdf/SkPDFBitmap.h"
 #include "src/pdf/SkPDFGraphicState.h"
 #include "src/pdf/SkPDFMetadata.h"
 #include "src/pdf/SkPDFShader.h"
@@ -112,17 +113,20 @@ public:
     const SkPDF::Metadata& metadata() const { return fMetadata; }
 
     SkPDFIndirectReference getPage(size_t pageIndex) const;
+    bool hasCurrentPage() const { return bool(fPageDevice); }
     SkPDFIndirectReference currentPage() const {
-        return SkASSERT(!fPageRefs.empty()), fPageRefs.back();
+        return SkASSERT(this->hasCurrentPage() && !fPageRefs.empty()), fPageRefs.back();
     }
     // Used to allow marked content to refer to its corresponding structure
     // tree node, via a page entry in the parent tree. Returns -1 if no
     // mark ID.
-    int createMarkIdForNodeId(int nodeId);
+    SkPDFTagTree::Mark createMarkIdForNodeId(int nodeId, SkPoint);
     // Used to allow annotations to refer to their corresponding structure
     // tree node, via the struct parent tree. Returns -1 if no struct parent
     // key.
     int createStructParentKeyForNodeId(int nodeId);
+
+    void addNodeTitle(int nodeId, SkSpan<const char>);
 
     std::unique_ptr<SkPDFArray> getAnnotations();
 
@@ -147,6 +151,9 @@ public:
                            SkPDFIndirectReference,
                            SkPDFGradientShader::KeyHash> fGradientPatternMap;
     skia_private::THashMap<SkBitmapKey, SkPDFIndirectReference> fPDFBitmapMap;
+    skia_private::THashMap<SkPDFIccProfileKey,
+                           SkPDFIndirectReference,
+                           SkPDFIccProfileKey::Hash> fICCProfileMap;
     skia_private::THashMap<uint32_t, std::unique_ptr<SkAdvancedTypefaceMetrics>> fTypefaceMetrics;
     skia_private::THashMap<uint32_t, std::vector<SkString>> fType1GlyphNames;
     skia_private::THashMap<uint32_t, std::vector<SkUnichar>> fToUnicodeMap;

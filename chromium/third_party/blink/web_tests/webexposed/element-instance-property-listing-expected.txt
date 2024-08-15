@@ -176,6 +176,7 @@ namespace http://www.w3.org/1999/xhtml
     property offsetParent
     property offsetTop
     property offsetWidth
+    property on
     property onabort
     property onanimationend
     property onanimationiteration
@@ -265,6 +266,8 @@ namespace http://www.w3.org/1999/xhtml
     property onselectionchange
     property onselectstart
     property onslotchange
+    property onsnapchanged
+    property onsnapchanging
     property onstalled
     property onsubmit
     property onsuspend
@@ -479,6 +482,7 @@ html element body
     property onlanguagechange
     property onmessage
     property onmessageerror
+    property onmove
     property onoffline
     property ononline
     property onpagehide
@@ -641,6 +645,7 @@ html element frameset
     property onlanguagechange
     property onmessage
     property onmessageerror
+    property onmove
     property onoffline
     property ononline
     property onpagehide
@@ -674,10 +679,10 @@ html element hr
     property size
     property width
 html element html
-    property blocking
     property version
 html element i
 html element iframe
+    property adAuctionHeaders
     property align
     property allow
     property allowFullscreen
@@ -1428,6 +1433,7 @@ namespace http://www.w3.org/2000/svg
     property nodeValue
     property nonce
     property normalize
+    property on
     property onabort
     property onanimationend
     property onanimationiteration
@@ -1517,6 +1523,8 @@ namespace http://www.w3.org/2000/svg
     property onselectionchange
     property onselectstart
     property onslotchange
+    property onsnapchanged
+    property onsnapchanging
     property onstalled
     property onsubmit
     property onsuspend

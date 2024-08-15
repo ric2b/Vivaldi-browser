@@ -4,7 +4,6 @@
 
 #include "ash/system/unified/quick_settings_view.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/test/test_cast_config_controller.h"
 #include "ash/shell.h"
@@ -15,9 +14,9 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/display/screen.h"
 
 namespace ash {
 
@@ -30,7 +29,6 @@ class QuickSettingsViewTest : public AshTestBase {
   ~QuickSettingsViewTest() override = default;
 
   void SetUp() override {
-    feature_list_.InitAndEnableFeature(features::kQsRevamp);
     AshTestBase::SetUp();
     cast_config_ = std::make_unique<TestCastConfigController>();
   }
@@ -70,7 +68,6 @@ class QuickSettingsViewTest : public AshTestBase {
   // This is required to make the cast tile visible in the
   // `CastAndAutoRotateCompactTiles` unit test. Cast features will not be used.
   std::unique_ptr<TestCastConfigController> cast_config_;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 // Tests that the cast and auto-rotate tiles are presented in their compact
@@ -82,7 +79,7 @@ TEST_F(QuickSettingsViewTest, CastAndAutoRotateCompactTiles) {
 
   // Test that the cast tile is in its primary form when in clamshell mode,
   // when the auto-rotate tile is not visible.
-  EXPECT_FALSE(tablet_mode_controller->IsInTabletMode());
+  EXPECT_FALSE(display::Screen::GetScreen()->InTabletMode());
   tray->ShowBubble();
 
   FeatureTile* cast_tile = GetTileById(VIEW_ID_CAST_MAIN_VIEW);
@@ -97,7 +94,7 @@ TEST_F(QuickSettingsViewTest, CastAndAutoRotateCompactTiles) {
 
   // Test that cast and auto-rotate tiles are compact in tablet mode.
   tablet_mode_controller->SetEnabledForTest(true);
-  EXPECT_TRUE(tablet_mode_controller->IsInTabletMode());
+  EXPECT_TRUE(display::Screen::GetScreen()->InTabletMode());
 
   tray->ShowBubble();
 

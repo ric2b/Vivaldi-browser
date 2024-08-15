@@ -1,0 +1,17 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void ldexp_a6126e() {
+  int3 arg_1 = int3(1);
+  float3 res = ldexp(float3(1.0f), arg_1);
+}
+vertex float4 vertex_main() {
+  ldexp_a6126e();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  ldexp_a6126e();
+}
+kernel void compute_main() {
+  ldexp_a6126e();
+}

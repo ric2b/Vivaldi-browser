@@ -39,6 +39,8 @@ TINT_INSTANTIATE_TYPEINFO(tint::core::ir::ExitLoop);
 
 namespace tint::core::ir {
 
+ExitLoop::ExitLoop() = default;
+
 ExitLoop::ExitLoop(ir::Loop* loop, VectorRef<Value*> args /* = tint::Empty */) {
     SetLoop(loop);
     AddOperands(ExitLoop::kArgsOperandOffset, std::move(args));
@@ -58,6 +60,10 @@ void ExitLoop::SetLoop(ir::Loop* l) {
 
 ir::Loop* ExitLoop::Loop() {
     return static_cast<ir::Loop*>(ControlInstruction());
+}
+
+const ir::Loop* ExitLoop::Loop() const {
+    return static_cast<const ir::Loop*>(ControlInstruction());
 }
 
 }  // namespace tint::core::ir

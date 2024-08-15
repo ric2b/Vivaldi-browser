@@ -32,19 +32,12 @@
 #include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
-#include "core/fxge/freetype/fx_freetype.h"
 #include "core/fxge/text_char_pos.h"
 #include "core/fxge/win32/cfx_psfonttracker.h"
 #include "third_party/base/check_op.h"
 #include "third_party/base/numerics/safe_conversions.h"
 
 namespace {
-
-bool CanEmbed(CFX_Font* font) {
-  FT_UShort fstype = FT_Get_FSType_Flags(font->GetFaceRec());
-  return (fstype & (FT_FSTYPE_RESTRICTED_LICENSE_EMBEDDING |
-                    FT_FSTYPE_BITMAP_EMBEDDING_ONLY)) == 0;
-}
 
 absl::optional<ByteString> GenerateType42SfntData(
     const ByteString& psname,
@@ -164,9 +157,15 @@ ByteString GenerateType42FontDictionary(const ByteString& psname,
 }
 
 ByteString GenerateType42FontData(const CFX_Font* font) {
-  const FXFT_FaceRec* font_face_rec = font->GetFaceRec();
-  if (!font_face_rec)
+  RetainPtr<const CFX_Face> face = font->GetFace();
+  if (!face) {
     return ByteString();
+  }
+
+  int num_glyphs = face->GetGlyphCount();
+  if (num_glyphs < 0) {
+    return ByteString();
+  }
 
   const ByteString psname = font->GetPsName();
   DCHECK(!psname.IsEmpty());
@@ -181,8 +180,7 @@ ByteString GenerateType42FontData(const CFX_Font* font) {
   output += "\n";
   output += sfnt_data.value();
   output += GenerateType42FontDictionary(psname, font->GetRawBBox().value(),
-                                         font_face_rec->num_glyphs,
-                                         kGlyphsPerDescendantFont);
+                                         num_glyphs, kGlyphsPerDescendantFont);
   return output;
 }
 
@@ -480,17 +478,17 @@ void CFX_PSRenderer::SetGraphState(const CFX_GraphStateData* pGraphState) {
   WriteStream(buf);
 }
 
-bool CFX_PSRenderer::SetDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CFX_PSRenderer::SetDIBits(const RetainPtr<const CFX_DIBBase>& pSource,
                                uint32_t color,
                                int left,
                                int top) {
   StartRendering();
   CFX_Matrix matrix = CFX_RenderDevice::GetFlipMatrix(
       pSource->GetWidth(), pSource->GetHeight(), left, top);
-  return DrawDIBits(pSource, color, matrix, FXDIB_ResampleOptions());
+  return DrawDIBits(std::move(pSource), color, matrix, FXDIB_ResampleOptions());
 }
 
-bool CFX_PSRenderer::StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CFX_PSRenderer::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                    uint32_t color,
                                    int dest_left,
                                    int dest_top,
@@ -500,10 +498,10 @@ bool CFX_PSRenderer::StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   StartRendering();
   CFX_Matrix matrix = CFX_RenderDevice::GetFlipMatrix(dest_width, dest_height,
                                                       dest_left, dest_top);
-  return DrawDIBits(pSource, color, matrix, options);
+  return DrawDIBits(std::move(bitmap), color, matrix, options);
 }
 
-bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CFX_PSRenderer::DrawDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                 uint32_t color,
                                 const CFX_Matrix& matrix,
                                 const FXDIB_ResampleOptions& options) {
@@ -511,12 +509,14 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   if ((matrix.a == 0 && matrix.b == 0) || (matrix.c == 0 && matrix.d == 0))
     return true;
 
-  if (pSource->IsAlphaFormat())
+  if (bitmap->IsAlphaFormat()) {
     return false;
+  }
 
   int alpha = FXARGB_A(color);
-  if (pSource->IsMaskFormat() && (alpha < 255 || pSource->GetBPP() != 1))
+  if (bitmap->IsMaskFormat() && (alpha < 255 || bitmap->GetBPP() != 1)) {
     return false;
+  }
 
   WriteString("q\n");
 
@@ -524,16 +524,16 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   buf << "[" << matrix.a << " " << matrix.b << " " << matrix.c << " "
       << matrix.d << " " << matrix.e << " " << matrix.f << "]cm ";
 
-  const int width = pSource->GetWidth();
-  const int height = pSource->GetHeight();
+  const int width = bitmap->GetWidth();
+  const int height = bitmap->GetHeight();
   buf << width << " " << height;
 
-  if (pSource->GetBPP() == 1 && !pSource->HasPalette()) {
-    FaxCompressResult compress_result = FaxCompressData(pSource);
+  if (bitmap->GetBPP() == 1 && !bitmap->HasPalette()) {
+    FaxCompressResult compress_result = FaxCompressData(bitmap);
     if (compress_result.data.empty())
       return false;
 
-    if (pSource->IsMaskFormat()) {
+    if (bitmap->IsMaskFormat()) {
       SetColor(color);
       m_bColorSet = false;
       buf << " true[";
@@ -547,48 +547,48 @@ bool CFX_PSRenderer::DrawDIBits(const RetainPtr<CFX_DIBBase>& pSource,
       buf << "<</K -1/EndOfBlock false/Columns " << width << "/Rows " << height
           << ">>/CCITTFaxDecode filter ";
     }
-    if (pSource->IsMaskFormat())
+    if (bitmap->IsMaskFormat()) {
       buf << "iM\n";
-    else
+    } else {
       buf << "false 1 colorimage\n";
+    }
 
     WriteStream(buf);
     WritePSBinary(compress_result.data);
   } else {
-    RetainPtr<CFX_DIBBase> pConverted = pSource;
-    switch (pSource->GetFormat()) {
+    switch (bitmap->GetFormat()) {
       case FXDIB_Format::k1bppRgb:
       case FXDIB_Format::kRgb32:
-        pConverted = pConverted->ConvertTo(FXDIB_Format::kRgb);
+        bitmap = bitmap->ConvertTo(FXDIB_Format::kRgb);
         break;
       case FXDIB_Format::k8bppRgb:
-        if (pSource->HasPalette())
-          pConverted = pConverted->ConvertTo(FXDIB_Format::kRgb);
+        if (bitmap->HasPalette()) {
+          bitmap = bitmap->ConvertTo(FXDIB_Format::kRgb);
+        }
         break;
       default:
         break;
     }
-    if (!pConverted) {
+    if (!bitmap) {
       WriteString("\nQ\n");
       return false;
     }
 
-    int bpp = pConverted->GetBPP() / 8;
+    int bpp = bitmap->GetBPP() / 8;
     uint8_t* output_buf = nullptr;
     size_t output_size = 0;
     bool output_buf_is_owned = true;
     absl::optional<PSCompressResult> compress_result;
     ByteString filter;
     if ((m_Level.value() == RenderingLevel::kLevel2 || options.bLossy) &&
-        m_pEncoderIface->pJpegEncodeFunc(pConverted, &output_buf,
-                                         &output_size)) {
+        m_pEncoderIface->pJpegEncodeFunc(bitmap, &output_buf, &output_size)) {
       filter = "/DCTDecode filter ";
     } else {
       int src_pitch = width * bpp;
       output_size = height * src_pitch;
       output_buf = FX_Alloc(uint8_t, output_size);
       for (int row = 0; row < height; row++) {
-        const uint8_t* src_scan = pConverted->GetScanline(row).data();
+        const uint8_t* src_scan = bitmap->GetScanline(row).data();
         uint8_t* dest_scan = output_buf + row * src_pitch;
         if (bpp == 3) {
           for (int col = 0; col < width; col++) {
@@ -766,8 +766,14 @@ bool CFX_PSRenderer::DrawTextAsType42Font(int char_count,
                                           CFX_Font* font,
                                           float font_size,
                                           fxcrt::ostringstream& buf) {
-  if (m_Level != RenderingLevel::kLevel3Type42 || !CanEmbed(font))
+  if (m_Level != RenderingLevel::kLevel3Type42) {
     return false;
+  }
+
+  RetainPtr<CFX_Face> face = font->GetFace();
+  if (!face || !face->CanEmbed()) {
+    return false;
+  }
 
   if (font->GetFontType() != CFX_Font::FontType::kCIDTrueType)
     return false;
@@ -833,7 +839,7 @@ bool CFX_PSRenderer::DrawText(int nChars,
 }
 
 CFX_PSRenderer::FaxCompressResult CFX_PSRenderer::FaxCompressData(
-    RetainPtr<CFX_DIBBase> src) const {
+    RetainPtr<const CFX_DIBBase> src) const {
   DCHECK_EQ(1, src->GetBPP());
 
   FaxCompressResult result;
@@ -898,7 +904,8 @@ void CFX_PSRenderer::WritePSBinary(pdfium::span<const uint8_t> data) {
   DataVector<uint8_t> encoded_data = m_pEncoderIface->pA85EncodeFunc(data);
   pdfium::span<const uint8_t> result =
       encoded_data.empty() ? data : encoded_data;
-  m_Output.write(reinterpret_cast<const char*>(result.data()), result.size());
+  auto chars = fxcrt::reinterpret_span<const char>(result);
+  m_Output.write(chars.data(), chars.size());
 }
 
 void CFX_PSRenderer::WriteStream(fxcrt::ostringstream& stream) {

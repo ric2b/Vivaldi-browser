@@ -30,12 +30,12 @@ inline constexpr char kEvictDeviceKey[] = "EvictDeviceKey";
 inline constexpr char kRestoreDeviceKey[] = "RestoreDeviceKey";
 inline constexpr char kUnmount[] = "Unmount";
 inline constexpr char kRemove[] = "Remove";
-inline constexpr char kCheckKey[] = "CheckKey";
 inline constexpr char kStartFingerprintAuthSession[] =
     "StartFingerprintAuthSession";
 inline constexpr char kEndFingerprintAuthSession[] =
     "EndFingerprintAuthSession";
 inline constexpr char kGetWebAuthnSecret[] = "GetWebAuthnSecret";
+inline constexpr char kGetRecoverableKeyStores[] = "GetRecoverableKeyStores";
 inline constexpr char kGetHibernateSecret[] = "GetHibernateSecret";
 inline constexpr char kGetEncryptionInfo[] = "GetEncryptionInfo";
 inline constexpr char kStartMigrateToDircrypto[] = "StartMigrateToDircrypto";
@@ -111,6 +111,10 @@ inline constexpr char kPrepareAuthFactorProgressSignal[] =
 inline constexpr char kAuthenticateAuthFactorCompletedSignal[] =
     "AuthenticateAuthFactorCompleted";
 inline constexpr char kEvictedKeyRestoredSignal[] = "EvictedKeyRestored";
+inline constexpr char kAuthFactorAddedl[] = "AuthFactorAdded";
+inline constexpr char kAuthFactorRemoved[] = "AuthFactorRemoved";
+inline constexpr char kAuthFactorUpdted[] = "AuthFactorUpdated";
+inline constexpr char kAuthSessionExpiring[] = "AuthSessionExpiring";
 
 }  // namespace user_data_auth
 

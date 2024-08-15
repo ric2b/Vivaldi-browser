@@ -70,7 +70,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
 
   if (params->window_id) {
     int window_id = *params->window_id;
-    for (auto* browser : *BrowserList::GetInstance()) {
+    for (Browser* browser : *BrowserList::GetInstance()) {
       if (browser->session_id().id() == window_id) {
         TabStripModel* tabs = browser->tab_strip_model();
         for (int n = 0; n < tabs->count(); n++) {
@@ -128,7 +128,8 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
       window->ForceCloseWindow();
     } else {
       // Will activate the existing devtools.
-      DevToolsWindow::OpenDevToolsWindow(current_tab);
+      DevToolsWindow::OpenDevToolsWindow(
+          current_tab, DevToolsOpenedByAction::kContextMenuInspect);
     }
   } else {
     std::string host = net::GetHostOrSpecFromURL(current_tab->GetURL());
@@ -142,15 +143,18 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
               ->GetPrimaryMainFrame(),
           0, 0);
     } else {
-      if (panelType == PanelType::PANEL_TYPE_DEFAULT) {
+      if (panelType == PanelType::kDefault) {
         DevToolsWindow::OpenDevToolsWindow(current_tab,
-                                           DevToolsToggleAction::Show());
-      } else if (panelType == PanelType::PANEL_TYPE_INSPECT) {
+            DevToolsToggleAction::Show(),
+            DevToolsOpenedByAction::kContextMenuInspect);
+      } else if (panelType == PanelType::kInspect) {
         DevToolsWindow::OpenDevToolsWindow(current_tab,
-                                           DevToolsToggleAction::Inspect());
-      } else if (panelType == PanelType::PANEL_TYPE_CONSOLE) {
+            DevToolsToggleAction::Inspect(),
+            DevToolsOpenedByAction::kContextMenuInspect);
+      } else if (panelType == PanelType::kConsole) {
         DevToolsWindow::OpenDevToolsWindow(
-            current_tab, DevToolsToggleAction::ShowConsolePanel());
+            current_tab, DevToolsToggleAction::ShowConsolePanel(),
+            DevToolsOpenedByAction::kContextMenuInspect);
       }
     }
   }

@@ -5,15 +5,15 @@
 import {assert} from 'chai';
 import * as fs from 'fs';
 import * as path from 'path';
-
 import type * as puppeteer from 'puppeteer-core';
-import {requireTestRunnerConfigSetting} from '../../conductor/test_runner_config.js';
 
+import {requireTestRunnerConfigSetting} from '../../conductor/test_runner_config.js';
 import {
   $,
   $$,
   assertNotNullOrUndefined,
   click,
+  clickElement,
   getBrowserAndPages,
   getPendingEvents,
   getTestServerPort,
@@ -22,15 +22,18 @@ import {
   platform,
   pressKey,
   reloadDevTools,
+  setCheckBox,
   step,
   timeout,
   typeText,
   waitFor,
-  clickElement,
+  waitForAria,
   waitForFunction,
   waitForFunctionWithTries,
-  waitForAria,
+  waitForVisible,
 } from '../../shared/helper.js';
+
+import {openSoftContextMenuAndClickOnItem} from './context-menu-helpers.js';
 
 export const ACTIVE_LINE = '.CodeMirror-activeline > pre > span';
 export const PAUSE_BUTTON = '[aria-label="Pause script execution"]';
@@ -109,12 +112,7 @@ export async function openFileInSourcesPanel(testInput: string) {
 
 export async function openRecorderSubPane() {
   const root = await waitFor('.navigator-tabbed-pane');
-
-  await waitFor('[aria-label="More tabs"]', root);
   await click('[aria-label="More tabs"]', {root});
-
-  await waitFor('[aria-label="Recordings"]');
-
   await click('[aria-label="Recordings"]');
   await waitFor('[aria-label="Add recording"]');
 }
@@ -132,12 +130,7 @@ export async function createNewRecording(recordingName: string) {
 
 export async function openSnippetsSubPane() {
   const root = await waitFor('.navigator-tabbed-pane');
-
-  await waitFor('[aria-label="More tabs"]', root);
   await click('[aria-label="More tabs"]', {root});
-
-  await waitFor('[aria-label="Snippets"]');
-
   await click('[aria-label="Snippets"]');
   await waitFor('[aria-label="New snippet"]');
 }
@@ -169,12 +162,7 @@ export async function createNewSnippet(snippetName: string, content?: string) {
 
 export async function openOverridesSubPane() {
   const root = await waitFor('.navigator-tabbed-pane');
-
-  await waitFor('[aria-label="More tabs"]', root);
   await click('[aria-label="More tabs"]', {root});
-
-  await waitFor('[aria-label="Overrides"]');
-
   await click('[aria-label="Overrides"]');
   await waitFor('[aria-label="Overrides panel"]');
 }
@@ -420,6 +408,36 @@ export async function waitForStackTopMatch(matcher: RegExp) {
   return stepLocation;
 }
 
+export async function setEventListenerBreakpoint(groupName: string, eventName: string) {
+  const {frontend} = getBrowserAndPages();
+  const eventListenerBreakpointsSection = await waitForAria('Event Listener Breakpoints');
+  const expanded = await eventListenerBreakpointsSection.evaluate(el => el.getAttribute('aria-expanded'));
+  if (expanded !== 'true') {
+    await click('[aria-label="Event Listener Breakpoints"]');
+    await waitFor('[aria-label="Event Listener Breakpoints"][aria-expanded="true"]');
+  }
+
+  const eventSelector = `input[type="checkbox"][title="${eventName}"]`;
+  const groupSelector = `input[type="checkbox"][title="${groupName}"]`;
+  const groupCheckbox = await waitFor(groupSelector);
+  await waitForVisible(groupSelector);
+  const eventCheckbox = await waitFor(eventSelector);
+  if (!(await eventCheckbox.evaluate(x => x.checkVisibility()))) {
+    // Unfortunately the shadow DOM makes it hard to find the expander element
+    // we are attempting to click on, so we click to the left of the checkbox
+    // bounding box.
+    const rectData = await groupCheckbox.evaluate(element => {
+      const {left, top, width, height} = element.getBoundingClientRect();
+      return {left, top, width, height};
+    });
+
+    await frontend.mouse.click(rectData.left - 10, rectData.top + rectData.height * .5);
+    await waitForVisible(eventSelector);
+  }
+
+  await setCheckBox(eventSelector, true);
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface Window {
@@ -611,19 +629,9 @@ export async function openNestedWorkerFile(selectors: NestedFileSelector) {
   await click(selectors.fileSelector);
 }
 
-export async function clickOnContextMenu(selector: string, label: string) {
-  // Find the selected node, right click.
-  await click(selector, {clickOptions: {button: 'right'}});
-
-  // Wait for the context menu option, and click it.
-  const labelSelector = `.soft-context-menu > [aria-label="${label}"]`;
-  await waitFor(labelSelector);
-  await click(labelSelector);
-}
-
 export async function inspectMemory(variableName: string) {
-  await clickOnContextMenu(
-      `[data-object-property-name-for-test="${variableName}"]`, 'Reveal in Memory Inspector panel');
+  await openSoftContextMenuAndClickOnItem(
+      `[data-object-property-name-for-test="${variableName}"]`, 'Reveal in Memory inspector panel');
 }
 
 export async function typeIntoSourcesAndSave(text: string) {
@@ -643,9 +651,7 @@ export async function getValuesForScope(scope: string, expandCount: number, wait
   const scopeSelector = `[aria-label="${scope}"]`;
   await waitFor(scopeSelector);
   for (let i = 0; i < expandCount; i++) {
-    const unexpandedSelector = `${scopeSelector} + ol li[aria-expanded=false]`;
-    await waitFor(unexpandedSelector);
-    await click(unexpandedSelector);
+    await click(`${scopeSelector} + ol li[aria-expanded=false]`);
   }
   const valueSelector = `${scopeSelector} + ol .name-and-value`;
   const valueSelectorElements = await waitForFunction(async () => {

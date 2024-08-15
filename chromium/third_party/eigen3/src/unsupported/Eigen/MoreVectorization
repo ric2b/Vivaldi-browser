@@ -14,8 +14,8 @@
 namespace Eigen {
 
 /**
-  * \defgroup MoreVectorization More vectorization module
-  */
+ * \defgroup MoreVectorization More vectorization module
+ */
 
 }
 
@@ -23,4 +23,4 @@ namespace Eigen {
 #include "src/MoreVectorization/MathFunctions.h"
 // IWYU pragma: end_exports
 
-#endif // EIGEN_MOREVECTORIZATION_MODULE_H
+#endif  // EIGEN_MOREVECTORIZATION_MODULE_H

@@ -9,7 +9,7 @@
   { "host": "pluralsight.com", "selector": ".player-wrapper", "capture": false },
   { "host": "pornhub.com", "selector": "#main-container .video-wrapper #player", "capture": false },
   { "host": "primevideo.com", "selector": "#dv-web-player", "capture": true },
-  { "host": "rutube.ru", "selector": ".video-js", "capture": true },
+  { "host": "rutube.ru", "selector": ".raichu-video-tag", "capture": true },
   { "host": "ruv.is", "selector": ".video-js", "capture": true },
   { "host": "ted.com", "selector": "html", "capture": false },
   { "host": "twitch.tv", "selector": ".persistent-player", "capture": false },

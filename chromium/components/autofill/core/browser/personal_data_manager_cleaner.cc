@@ -34,7 +34,7 @@ PersonalDataManagerCleaner::PersonalDataManagerCleaner(
 
 PersonalDataManagerCleaner::~PersonalDataManagerCleaner() = default;
 
-void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
+void PersonalDataManagerCleaner::CleanupData() {
   // The profile de-duplication is run once every major chrome version. If the
   // profile de-duplication has not run for the |CHROME_VERSION_MAJOR| yet,
   // |AlternativeStateNameMap| needs to be populated first. Otherwise,
@@ -43,8 +43,7 @@ void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
            ->is_alternative_state_name_map_populated() &&
       is_autofill_profile_dedupe_pending_) {
     alternative_state_name_map_updater_->PopulateAlternativeStateNameMap(
-        base::BindOnce(&PersonalDataManagerCleaner::
-                           CleanupDataAndNotifyPersonalDataObservers,
+        base::BindOnce(&PersonalDataManagerCleaner::CleanupData,
                        weak_ptr_factory_.GetWeakPtr()));
     return;
   }
@@ -61,14 +60,7 @@ void PersonalDataManagerCleaner::CleanupDataAndNotifyPersonalDataObservers() {
           syncer::UserSelectableType::kPayments)) {
     ApplyCardFixesAndCleanups();
   }
-
-  // Log address, credit card, offer, IBAN, and usage data startup metrics.
-  personal_data_manager_->LogStoredDataMetrics();
-
-  personal_data_manager_->NotifyPersonalDataObserver();
 }
-
-void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {}
 
 void PersonalDataManagerCleaner::ApplyAddressAndCardFixesAndCleanups(
     syncer::ModelType model_type) {
@@ -118,9 +110,6 @@ void PersonalDataManagerCleaner::ApplyAddressFixesAndCleanups() {
   // Ran once on browser startup.
   DeleteDisusedAddresses();
 
-  // Ran once on browser startup.
-  RemoveInaccessibleProfileValues();
-
   is_profile_cleanup_pending_ = false;
 }
 
@@ -138,28 +127,6 @@ void PersonalDataManagerCleaner::ApplyCardFixesAndCleanups() {
   is_credit_card_cleanup_pending_ = true;
 }
 
-void PersonalDataManagerCleaner::RemoveInaccessibleProfileValues() {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillRemoveInaccessibleProfileValuesOnStartup)) {
-    return;
-  }
-
-  for (const AutofillProfile* profile :
-       personal_data_manager_->GetProfilesFromSource(
-           AutofillProfile::Source::kLocalOrSyncable)) {
-    const ServerFieldTypeSet inaccessible_fields =
-        profile->FindInaccessibleProfileValues();
-    if (!inaccessible_fields.empty()) {
-      // We need to create a copy, because otherwise the internally stored
-      // profile in |personal_data_manager_| is modified, which should only
-      // happen via UpdateProfile().
-      AutofillProfile updated_profile = *profile;
-      updated_profile.ClearFields(inaccessible_fields);
-      personal_data_manager_->UpdateProfile(updated_profile);
-    }
-  }
-}
-
 bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
   // Check if de-duplication has already been performed on this major version.
   if (!is_autofill_profile_dedupe_pending_) {
@@ -167,21 +134,15 @@ bool PersonalDataManagerCleaner::ApplyDedupingRoutine() {
   }
 
   const std::vector<AutofillProfile*>& profiles =
-      base::FeatureList::IsEnabled(
-                  features::kAutofillAccountProfileStorage)
-          ? personal_data_manager_->GetProfiles()
-          : personal_data_manager_->GetProfilesFromSource(
-                AutofillProfile::Source::kLocalOrSyncable);
+      personal_data_manager_->GetProfiles();
 
   // No need to de-duplicate if there are less than two profiles.
   if (profiles.size() < 2) {
-    DVLOG(1) << "Autofill profile de-duplication not needed.";
     pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
                               CHROME_VERSION_MAJOR);
     return false;
   }
 
-  DVLOG(1) << "Starting autofill profile de-duplication.";
   std::unordered_set<std::string> profiles_to_delete;
   profiles_to_delete.reserve(profiles.size());
 
@@ -318,7 +279,6 @@ bool PersonalDataManagerCleaner::DeleteDisusedAddresses() {
 
   // Early exit when there are no profiles.
   if (profiles.empty()) {
-    DVLOG(1) << "There are no profiles";
     return true;
   }
 

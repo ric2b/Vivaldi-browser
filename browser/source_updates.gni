@@ -182,4 +182,15 @@ if (!is_android) {
       }
     }
   }
+
+  update_template_instance("//chrome/browser/resources/settings:build") {
+    web_component_files -= [
+      "privacy_sandbox/privacy_sandbox_ad_measurement_subpage.ts",
+      "privacy_sandbox/privacy_sandbox_fledge_subpage.ts",
+      "privacy_sandbox/privacy_sandbox_interest_item.ts",
+      "privacy_sandbox/privacy_sandbox_page.ts",
+      "privacy_sandbox/privacy_sandbox_manage_topics_subpage.ts",
+      "privacy_sandbox/privacy_sandbox_topics_subpage.ts",
+    ]
+  }
 }

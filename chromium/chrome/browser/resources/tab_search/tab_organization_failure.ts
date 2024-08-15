@@ -11,6 +11,12 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {getTemplate} from './tab_organization_failure.html.js';
 import {TabOrganizationError} from './tab_search.mojom-webui.js';
 
+export interface TabOrganizationFailureElement {
+  $: {
+    header: HTMLElement,
+  };
+}
+
 // Failure state for the tab organization UI.
 export class TabOrganizationFailureElement extends PolymerElement {
   static get is() {
@@ -20,13 +26,20 @@ export class TabOrganizationFailureElement extends PolymerElement {
   static get properties() {
     return {
       error: Object,
+      showFre: Boolean,
     };
   }
 
   error: TabOrganizationError = TabOrganizationError.kNone;
+  showFre: boolean;
 
   static get template() {
     return getTemplate();
+  }
+
+  announceHeader() {
+    this.$.header.textContent = '';
+    this.$.header.textContent = this.getTitle_();
   }
 
   private getTitle_(): string {
@@ -40,14 +53,62 @@ export class TabOrganizationFailureElement extends PolymerElement {
     }
   }
 
-  private getBody_(): string {
+  private getBodyPreLink_(): string {
     switch (this.error) {
       case TabOrganizationError.kGrouping:
-        return loadTimeData.getString('failureBodyGrouping');
+        return loadTimeData.getString('failureBodyGroupingPreLink');
       case TabOrganizationError.kGeneric:
-        return loadTimeData.getString('failureBodyGeneric');
+        return loadTimeData.getString('failureBodyGenericPreLink');
       default:
         return '';
+    }
+  }
+
+  private getBodyLink_(): string {
+    switch (this.error) {
+      case TabOrganizationError.kGrouping:
+        return loadTimeData.getString('failureBodyGroupingLink');
+      case TabOrganizationError.kGeneric:
+        return loadTimeData.getString('failureBodyGenericLink');
+      default:
+        return '';
+    }
+  }
+
+  private getBodyPostLink_(): string {
+    switch (this.error) {
+      case TabOrganizationError.kGrouping:
+        return loadTimeData.getString('failureBodyGroupingPostLink');
+      case TabOrganizationError.kGeneric:
+        return loadTimeData.getString('failureBodyGenericPostLink');
+      default:
+        return '';
+    }
+  }
+
+  private onCheckNow_() {
+    this.dispatchEvent(new CustomEvent('check-now', {
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private onCheckNowKeyDown_(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.onCheckNow_();
+    }
+  }
+
+  private onTipClick_() {
+    this.dispatchEvent(new CustomEvent('tip-click', {
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private onTipKeyDown_(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.onTipClick_();
     }
   }
 }

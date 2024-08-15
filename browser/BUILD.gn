@@ -228,9 +228,9 @@ source_set("stats_reporter") {
 
   deps= [
     "//base",
+    "//base/version_info:generate_version_info",
     "//components/metrics",
     "//components/prefs",
-    "//components/version_info:generate_version_info",
     "//net",
     "//net/traffic_annotation",
     "//services/network/public/cpp",

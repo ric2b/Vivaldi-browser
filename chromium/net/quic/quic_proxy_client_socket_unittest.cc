@@ -43,7 +43,7 @@
 #include "net/quic/quic_crypto_client_config_handle.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/quic/quic_server_info.h"
-#include "net/quic/quic_stream_factory.h"
+#include "net/quic/quic_session_pool.h"
 #include "net/quic/quic_test_packet_maker.h"
 #include "net/quic/test_quic_crypto_client_config_handle.h"
 #include "net/quic/test_task_runner.h"
@@ -98,6 +98,11 @@ static const int kLen333 = kLen3 + kLen3 + kLen3;
 static constexpr int k0ByteConnectionId = 0;
 static constexpr int k8ByteConnectionId = 8;
 
+constexpr char kTestHeaderName[] = "Foo";
+// Note: `kTestQuicHeaderName` should be a lowercase version of
+// `kTestHeaderName`.
+constexpr char kTestQuicHeaderName[] = "foo";
+
 }  // anonymous namespace
 
 class QuicProxyClientSocketTest
@@ -119,10 +124,8 @@ class QuicProxyClientSocketTest
     quiche::QuicheVariableLengthIntegerLength retry_token_length_length =
         quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0;
     quiche::QuicheVariableLengthIntegerLength length_length =
-        quic::QuicVersionHasLongHeaderLengths(version.transport_version) &&
-                include_version
-            ? quiche::VARIABLE_LENGTH_INTEGER_LENGTH_2
-            : quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0;
+        include_version ? quiche::VARIABLE_LENGTH_INTEGER_LENGTH_2
+                        : quiche::VARIABLE_LENGTH_INTEGER_LENGTH_0;
     size_t min_data_length = 1;
     size_t min_packet_length =
         quic::test::TaggingEncrypter(quic::ENCRYPTION_FORWARD_SECURE)
@@ -249,7 +252,8 @@ class QuicProxyClientSocketTest
         quic::QuicTime::Delta::FromMilliseconds(
             kDefaultRetransmittableOnWireTimeout.InMilliseconds()),
         /*migrate_idle_session=*/true, /*allow_port_migration=*/false,
-        kDefaultIdleSessionMigrationPeriod, kMaxTimeOnNonDefaultNetwork,
+        kDefaultIdleSessionMigrationPeriod, /*multi_port_probing_interval=*/0,
+        kMaxTimeOnNonDefaultNetwork,
         kMaxMigrationsToNonDefaultNetworkOnWriteError,
         kMaxMigrationsToNonDefaultNetworkOnPathDegrading,
         kQuicYieldAfterPacketsRead,
@@ -257,8 +261,7 @@ class QuicProxyClientSocketTest
             kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
-        dns_start, dns_end,
-        base::DefaultTickClock::GetInstance(),
+        dns_start, dns_end, base::DefaultTickClock::GetInstance(),
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         /*socket_performance_watcher=*/nullptr, HostResolverEndpointResult(),
         NetLog::Get());
@@ -514,8 +517,7 @@ class QuicProxyClientSocketTest
   }
 
   void AssertWriteReturns(const char* data, int len, int rv) {
-    scoped_refptr<IOBufferWithSize> buf =
-        base::MakeRefCounted<IOBufferWithSize>(len);
+    auto buf = base::MakeRefCounted<IOBufferWithSize>(len);
     memcpy(buf->data(), data, len);
     EXPECT_EQ(rv,
               sock_->Write(buf.get(), buf->size(), write_callback_.callback(),
@@ -523,8 +525,7 @@ class QuicProxyClientSocketTest
   }
 
   void AssertSyncWriteSucceeds(const char* data, int len) {
-    scoped_refptr<IOBufferWithSize> buf =
-        base::MakeRefCounted<IOBufferWithSize>(len);
+    auto buf = base::MakeRefCounted<IOBufferWithSize>(len);
     memcpy(buf->data(), data, len);
     EXPECT_EQ(len,
               sock_->Write(buf.get(), buf->size(), CompletionOnceCallback(),
@@ -532,14 +533,14 @@ class QuicProxyClientSocketTest
   }
 
   void AssertSyncReadEquals(const char* data, int len) {
-    scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(len);
+    auto buf = base::MakeRefCounted<IOBufferWithSize>(len);
     ASSERT_EQ(len, sock_->Read(buf.get(), len, CompletionOnceCallback()));
     ASSERT_EQ(std::string(data, len), std::string(buf->data(), len));
     ASSERT_TRUE(sock_->IsConnected());
   }
 
   void AssertAsyncReadEquals(const char* data, int len) {
-    scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(len);
+    auto buf = base::MakeRefCounted<IOBufferWithSize>(len);
     ASSERT_EQ(ERR_IO_PENDING,
               sock_->Read(buf.get(), len, read_callback_.callback()));
     EXPECT_TRUE(sock_->IsConnected());
@@ -553,7 +554,7 @@ class QuicProxyClientSocketTest
 
   void AssertReadStarts(const char* data, int len) {
     // Issue the read, which will be completed asynchronously.
-    read_buf_ = base::MakeRefCounted<IOBuffer>(len);
+    read_buf_ = base::MakeRefCounted<IOBufferWithSize>(len);
     ASSERT_EQ(ERR_IO_PENDING,
               sock_->Read(read_buf_.get(), len, read_callback_.callback()));
     EXPECT_TRUE(sock_->IsConnected());
@@ -647,13 +648,13 @@ TEST_P(QuicProxyClientSocketTest, ConnectSendsCorrectRequest) {
   // values.
   net::SSLInfo ssl_info;
   EXPECT_FALSE(sock_->GetSSLInfo(&ssl_info));
-  EXPECT_FALSE(sock_->WasAlpnNegotiated());
   EXPECT_EQ(sock_->GetNegotiatedProtocol(), NextProto::kProtoUnknown);
 }
 
 TEST_P(QuicProxyClientSocketTest, ProxyDelegateExtraHeaders) {
   // TODO(https://crbug.com/1491092): Add a version of this test for multi-hop.
   proxy_delegate_ = std::make_unique<TestProxyDelegate>();
+  proxy_delegate_->set_extra_header_name(kTestHeaderName);
   // TODO(crbug.com/1206799) Construct `proxy_chain` with plain
   // `proxy_endpoint_` once it supports `url::SchemeHostPort`.
   ProxyChain proxy_chain(ProxyServer::SCHEME_HTTPS,
@@ -669,8 +670,9 @@ TEST_P(QuicProxyClientSocketTest, ProxyDelegateExtraHeaders) {
       SYNCHRONOUS, ConstructConnectRequestPacketWithExtraHeaders(
                        packet_number++,
                        // Order matters! Keep these alphabetical.
-                       {{TestProxyDelegate::kTestSpdyHeaderName,
-                         ProxyServerToProxyUri(proxy_chain.proxy_server())},
+                       {{kTestQuicHeaderName,
+                         ProxyServerToProxyUri(
+                             proxy_chain.GetProxyServer(/*chain_index=*/0))},
                         {"user-agent", kUserAgent}}));
   mock_quic_data_.AddRead(
       ASYNC, ConstructServerConnectReplyPacketWithExtraHeaders(
@@ -1300,7 +1302,7 @@ TEST_P(QuicProxyClientSocketTest, MultipleReadsFromSameLargeFrame) {
   AssertSyncReadEquals(kMsg33, kLen33);
 
   // Now attempt to do a read of more data than remains buffered
-  scoped_refptr<IOBuffer> buf = base::MakeRefCounted<IOBuffer>(kLen33);
+  auto buf = base::MakeRefCounted<IOBufferWithSize>(kLen33);
   ASSERT_EQ(kLen3, sock_->Read(buf.get(), kLen33, CompletionOnceCallback()));
   ASSERT_EQ(std::string(kMsg3, kLen3), std::string(buf->data(), kLen3));
   ASSERT_TRUE(sock_->IsConnected());
@@ -1894,7 +1896,7 @@ TEST_P(QuicProxyClientSocketTest, RstWithReadAndWritePendingDelete) {
   EXPECT_TRUE(sock_->IsConnected());
 
   DeleteSockCallback read_callback(&sock_);
-  scoped_refptr<IOBuffer> read_buf = base::MakeRefCounted<IOBuffer>(kLen1);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kLen1);
   ASSERT_EQ(ERR_IO_PENDING,
             sock_->Read(read_buf.get(), kLen1, read_callback.callback()));
 

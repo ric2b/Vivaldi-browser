@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 
 import android.view.InputDevice;
 import android.view.MotionEvent;
+import android.view.MotionEvent.PointerCoords;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -88,6 +89,63 @@ public class EventForwarderTest {
     }
 
     @Test
+    public void testMotionEventWithHistory() {
+        EventForwarder eventForwarder = new EventForwarder(NATIVE_EVENT_FORWARDER_ID, true, false);
+        final long eventTime = 200;
+        final long latestEventTime = 400;
+        MotionEvent dragEvent =
+                MotionEvent.obtain(
+                        /* downTime= */ 100,
+                        eventTime,
+                        MotionEvent.ACTION_MOVE,
+                        /* x= */ 14,
+                        /* y= */ 21,
+                        /* metaState= */ 0);
+        var pointerCoords = new PointerCoords();
+        pointerCoords.x = 16;
+        pointerCoords.y = 23;
+        PointerCoords[] newMovements = {pointerCoords};
+        dragEvent.addBatch(latestEventTime, newMovements, /* metaState= */ 0);
+        eventForwarder.onTouchEvent(dragEvent);
+
+        // Check that the timestamp is forwarded from the first event in the batch (dragEvent) while
+        // coordinates are forwarded from the last (pointerCoords).
+        verify(mNativeMock, times(1))
+                .onTouchEvent(
+                        EventForwarderTest.NATIVE_EVENT_FORWARDER_ID,
+                        eventForwarder,
+                        dragEvent,
+                        eventTime * 1000_000,
+                        latestEventTime * 1000_000,
+                        dragEvent.getActionMasked(),
+                        1,
+                        /* historySize= */ 1,
+                        0,
+                        pointerCoords.x,
+                        pointerCoords.y,
+                        0,
+                        0,
+                        dragEvent.getPointerId(0),
+                        -1,
+                        0.0f,
+                        0.0f,
+                        0.0f,
+                        0.0f,
+                        dragEvent.getOrientation(0),
+                        0,
+                        dragEvent.getAxisValue(MotionEvent.AXIS_TILT),
+                        0,
+                        pointerCoords.x,
+                        pointerCoords.y,
+                        dragEvent.getToolType(0),
+                        MotionEvent.TOOL_TYPE_UNKNOWN,
+                        0,
+                        dragEvent.getButtonState(),
+                        dragEvent.getMetaState(),
+                        false);
+    }
+
+    @Test
     public void testSendTrackEventAsTouchEventWhenButtonIsNotClicked() {
         EventForwarder eventForwarder = new EventForwarder(NATIVE_EVENT_FORWARDER_ID, true, true);
         MotionEvent trackpadTouchDownEventNoClick = getTrackpadTouchDownEventNoClick();
@@ -97,6 +155,7 @@ public class EventForwarderTest {
                         anyLong(),
                         any(EventForwarder.class),
                         any(MotionEvent.class),
+                        anyLong(),
                         anyLong(),
                         anyInt(),
                         anyInt(),

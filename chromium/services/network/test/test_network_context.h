@@ -147,13 +147,8 @@ class TestNetworkContext : public mojom::NetworkContext {
                             mojom::NetworkConditionsPtr conditions) override {}
   void SetAcceptLanguage(const std::string& new_accept_language) override {}
   void SetEnableReferrers(bool enable_referrers) override {}
-#if BUILDFLAG(IS_CHROMEOS)
-  void UpdateAdditionalCertificates(
-      mojom::AdditionalCertificatesPtr additional_certificates) override {}
-#endif
 #if BUILDFLAG(IS_CT_SUPPORTED)
   void SetCTPolicy(mojom::CTPolicyPtr ct_policy) override {}
-  void SetCTLogListAlwaysTimelyForTesting() override {}
   void SetSCTAuditingMode(mojom::SCTAuditingMode mode) override {}
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
   void CreateUDPSocket(
@@ -238,7 +233,6 @@ class TestNetworkContext : public mojom::NetworkContext {
   void VerifyCertForSignedExchange(
       const scoped_refptr<net::X509Certificate>& certificate,
       const GURL& url,
-      const net::NetworkAnonymizationKey& network_anonymization_key,
       const std::string& ocsp_result,
       const std::string& sct_list,
       VerifyCertForSignedExchangeCallback callback) override {}
@@ -344,9 +338,6 @@ class TestNetworkContext : public mojom::NetworkContext {
   void FlushCachedClientCertIfNeeded(
       const net::HostPortPair& host,
       const scoped_refptr<net::X509Certificate>& certificate) override {}
-  void VerifyIpProtectionConfigGetterForTesting(
-      VerifyIpProtectionConfigGetterForTestingCallback callback) override {}
-  void InvalidateIpProtectionConfigCacheTryAgainAfterTime() override {}
   void SetCookieDeprecationLabel(
       const absl::optional<std::string>& label) override {}
 };

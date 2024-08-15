@@ -1434,9 +1434,9 @@ TEST_F(IR_ZeroInitWorkgroupMemoryTest, ExistingLocalInvocationIndex) {
 
     auto* func = MakeEntryPoint("main", 1, 1, 1);
     auto* global_id = b.FunctionParam("global_id", ty.vec4<u32>());
-    global_id->SetBuiltin(FunctionParam::Builtin::kGlobalInvocationId);
+    global_id->SetBuiltin(BuiltinValue::kGlobalInvocationId);
     auto* index = b.FunctionParam("index", ty.u32());
-    index->SetBuiltin(FunctionParam::Builtin::kLocalInvocationIndex);
+    index->SetBuiltin(BuiltinValue::kLocalInvocationIndex);
     func->SetParams({global_id, index});
     b.Append(func->Block(), [&] {  //
         b.Load(var);
@@ -1486,20 +1486,33 @@ TEST_F(IR_ZeroInitWorkgroupMemoryTest, ExistingLocalInvocationIndex) {
 TEST_F(IR_ZeroInitWorkgroupMemoryTest, ExistingLocalInvocationIndexInStruct) {
     auto* var = MakeVar("wgvar", ty.bool_());
 
-    auto* structure =
-        ty.Struct(mod.symbols.New("MyStruct"),
-                  {
-                      {
-                          mod.symbols.New("global_id"),
-                          ty.vec3<u32>(),
-                          {{}, {}, core::BuiltinValue::kGlobalInvocationId, {}, false},
-                      },
-                      {
-                          mod.symbols.New("index"),
-                          ty.u32(),
-                          {{}, {}, core::BuiltinValue::kLocalInvocationIndex, {}, false},
-                      },
-                  });
+    auto* structure = ty.Struct(mod.symbols.New("MyStruct"),
+                                {
+                                    {
+                                        mod.symbols.New("global_id"),
+                                        ty.vec3<u32>(),
+                                        core::type::StructMemberAttributes{
+                                            /* location */ std::nullopt,
+                                            /* index */ std::nullopt,
+                                            /* color */ std::nullopt,
+                                            /* builtin */ core::BuiltinValue::kGlobalInvocationId,
+                                            /* interpolation */ std::nullopt,
+                                            /* invariant */ false,
+                                        },
+                                    },
+                                    {
+                                        mod.symbols.New("index"),
+                                        ty.u32(),
+                                        core::type::StructMemberAttributes{
+                                            /* location */ std::nullopt,
+                                            /* index */ std::nullopt,
+                                            /* color */ std::nullopt,
+                                            /* builtin */ core::BuiltinValue::kLocalInvocationIndex,
+                                            /* interpolation */ std::nullopt,
+                                            /* invariant */ false,
+                                        },
+                                    },
+                                });
     auto* func = MakeEntryPoint("main", 1, 1, 1);
     func->SetParams({b.FunctionParam("params", structure)});
     b.Append(func->Block(), [&] {  //
@@ -1566,7 +1579,7 @@ TEST_F(IR_ZeroInitWorkgroupMemoryTest, UseInsideNestedBlock) {
         auto* ifelse = b.If(true);
         b.Append(ifelse->True(), [&] {  //
             auto* sw = b.Switch(42_i);
-            auto* def_case = b.Case(sw, Vector{core::ir::Switch::CaseSelector()});
+            auto* def_case = b.DefaultCase(sw);
             b.Append(def_case, [&] {  //
                 auto* loop = b.Loop();
                 b.Append(loop->Body(), [&] {  //
@@ -1690,7 +1703,7 @@ TEST_F(IR_ZeroInitWorkgroupMemoryTest, UseInsideIndirectFunctionCall) {
         auto* ifelse = b.If(true);
         b.Append(ifelse->True(), [&] {  //
             auto* sw = b.Switch(42_i);
-            auto* def_case = b.Case(sw, Vector{core::ir::Switch::CaseSelector()});
+            auto* def_case = b.DefaultCase(sw);
             b.Append(def_case, [&] {  //
                 auto* loop = b.Loop();
                 b.Append(loop->Body(), [&] {  //

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_ASH_CROSAPI_BROWSER_DATA_BACK_MIGRATOR_H_
 #define CHROME_BROWSER_ASH_CROSAPI_BROWSER_DATA_BACK_MIGRATOR_H_
 
+#include <optional>
+
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
@@ -14,7 +16,6 @@
 #include "chrome/browser/ash/crosapi/browser_data_migrator_util.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "components/account_id/account_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefService;
 
@@ -95,7 +96,7 @@ class BrowserDataBackMigrator : public BrowserDataBackMigratorBase {
     TaskStatus status;
 
     // Value of `errno` set after a task has failed.
-    absl::optional<int> posix_errno;
+    std::optional<int> posix_errno;
   };
 
   explicit BrowserDataBackMigrator(const base::FilePath& ash_profile_dir,
@@ -156,6 +157,8 @@ class BrowserDataBackMigrator : public BrowserDataBackMigratorBase {
                            DeletesLacrosItemsFromAshDirCorrectly);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
                            MovesLacrosItemsToAshDirCorrectly);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
+                           MovesMergedItemsBackToAshCorrectly);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
                            MergesAshOnlyPreferencesCorrectly);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
@@ -357,7 +360,7 @@ class BrowserDataBackMigrator : public BrowserDataBackMigratorBase {
   const std::string user_id_hash_;
 
   // Local state prefs, not owned.
-  raw_ptr<PrefService, ExperimentalAsh> local_state_ = nullptr;
+  raw_ptr<PrefService> local_state_ = nullptr;
 
   // Used to record how long the migration takes in UMA.
   base::TimeTicks migration_start_time_;

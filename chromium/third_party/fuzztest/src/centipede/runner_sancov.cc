@@ -22,10 +22,11 @@
 #include <cstdio>
 
 #include "./centipede/feature.h"
+#include "./centipede/int_utils.h"
 #include "./centipede/pc_info.h"
 #include "./centipede/reverse_pc_table.h"
 #include "./centipede/runner.h"
-#include "./centipede/runner_utils.h"
+#include "./centipede/runner_dl_info.h"
 
 namespace centipede {
 void RunnerSancov() {}  // to be referenced in runner.cc
@@ -191,11 +192,22 @@ static inline void HandleOnePc(PCGuard pc_guard) {
   if (!state.run_time_flags.use_pc_features) return;
   state.pc_counter_set.SaturatedIncrement(pc_guard.pc_index);
 
-  if (pc_guard.is_function_entry && state.run_time_flags.callstack_level != 0) {
+  if (pc_guard.is_function_entry) {
     uintptr_t sp = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
-    if (sp < tls.lowest_sp) tls.lowest_sp = sp;
-    tls.call_stack.OnFunctionEntry(pc_guard.pc_index, sp);
-    state.callstack_set.set(tls.call_stack.Hash());
+    // It should be rare for the stack depth to exceed the previous record.
+    if (__builtin_expect(
+            sp < tls.lowest_sp &&
+                // And ignore the stack pointer when it is not in the known
+                // region (e.g. for signal handling with an alternative stack).
+                (tls.stack_region_low == 0 || sp >= tls.stack_region_low),
+            0)) {
+      tls.lowest_sp = sp;
+      centipede::CheckStackLimit(sp);
+    }
+    if (state.run_time_flags.callstack_level != 0) {
+      tls.call_stack.OnFunctionEntry(pc_guard.pc_index, sp);
+      state.callstack_set.set(tls.call_stack.Hash());
+    }
   }
 
   // path features.

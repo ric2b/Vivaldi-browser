@@ -38,6 +38,7 @@ class PhysicalDevice;
 
 struct D3D12DeviceInfo {
     bool isUMA;
+    bool isCacheCoherentUMA;
     uint32_t resourceHeapTier;
     bool supportsRenderPass;
     bool supportsShaderF16;
@@ -46,7 +47,8 @@ struct D3D12DeviceInfo {
     uint32_t shaderModel;
     PerStage<std::wstring> shaderProfiles;
     bool supportsSharedResourceCapabilityTier1;
-    bool supportsDP4a;
+    bool supportsPacked4x8IntegerDotProduct;
+    bool supportsPackUnpack4x8Intrinsics;
     bool supportsCastingFullyTypedFormat;
     uint32_t programmableSamplePositionsTier;
     bool supportsRootSignatureVersion1_1;
@@ -60,6 +62,8 @@ struct D3D12DeviceInfo {
     // unclear. Reference:
     // https://github.com/Microsoft/DirectXShaderCompiler/wiki/Wave-Intrinsics#:~:text=UINT%20WaveLaneCountMax
     uint32_t waveLaneCountMax;
+    size_t dedicatedVideoMemory;
+    size_t sharedSystemMemory;
 };
 
 ResultOrError<D3D12DeviceInfo> GatherDeviceInfo(const PhysicalDevice& physicalDevice);

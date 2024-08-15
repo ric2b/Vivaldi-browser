@@ -22,7 +22,6 @@ BASE_DECLARE_FEATURE(kGroupingFrameworkForZPS);
 BASE_DECLARE_FEATURE(kGroupingFrameworkForNonZPS);
 BASE_DECLARE_FEATURE(kOmniboxDemoteByType);
 BASE_DECLARE_FEATURE(kPreferNonShortcutMatchesWhenDeduping);
-BASE_DECLARE_FEATURE(kSingleSortAndCullPass);
 
 // Features below this line should be sorted alphabetically by their comments.
 
@@ -46,7 +45,6 @@ BASE_DECLARE_FEATURE(kClobberTriggersSRPZeroSuggest);
 BASE_DECLARE_FEATURE(kLocalHistoryZeroSuggestBeyondNTP);
 BASE_DECLARE_FEATURE(kNormalizeSearchSuggestions);
 BASE_DECLARE_FEATURE(kOmniboxOnClobberFocusTypeOnContent);
-BASE_DECLARE_FEATURE(kRealboxSecondaryZeroSuggest);
 BASE_DECLARE_FEATURE(kZeroSuggestInMemoryCaching);
 BASE_DECLARE_FEATURE(kZeroSuggestOnNTPForSignedOutUsers);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetching);
@@ -131,13 +129,10 @@ BASE_DECLARE_FEATURE(kUpdatedConnectionSecurityIndicators);
 BASE_DECLARE_FEATURE(kDefaultTypedNavigationsToHttps);
 extern const char kDefaultTypedNavigationsToHttpsTimeoutParam[];
 
-// Omnibox Logging.
-BASE_DECLARE_FEATURE(kReportAssistedQueryStats);
-BASE_DECLARE_FEATURE(kReportSearchboxStats);
-
 // Omnibox ML scoring.
 BASE_DECLARE_FEATURE(kLogUrlScoringSignals);
 BASE_DECLARE_FEATURE(kMlUrlScoring);
+BASE_DECLARE_FEATURE(kMlUrlSearchBlending);
 BASE_DECLARE_FEATURE(kUrlScoringModel);
 
 // Inspire Me - additional suggestions based on user's location and interests.
@@ -159,6 +154,18 @@ bool IsOmniboxCr23CustomizeGuardedFeatureEnabled(const base::Feature& feature);
 // start prefetching the suggestion. The feature only applies to search
 // suggestions and only controls whether the signal is sent.
 BASE_DECLARE_FEATURE(kOmniboxTouchDownTriggerForPrefetch);
+
+// Enables the |SiteSearchSettings| policy, which allows admins to configure
+// intranet site search engines.
+BASE_DECLARE_FEATURE(kSiteSearchSettingsPolicy);
+
+// Unifies the UI for managed search engines in chrome://settings.
+BASE_DECLARE_FEATURE(kPolicyIndicationForManagedDefaultSearch);
+
+// Kill switch for use of the new SQL recovery module in `ShortcutsDatabase`.
+BASE_DECLARE_FEATURE(kShortcutsDatabaseUseBuiltInRecoveryIfSupported);
+
+BASE_DECLARE_FEATURE(kAblateSearchProviderWarmup);
 
 }  // namespace omnibox
 

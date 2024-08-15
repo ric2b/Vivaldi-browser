@@ -15,7 +15,7 @@
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_prefs.h"
 #import "ios/chrome/browser/passwords/model/password_manager_app_interface.h"
-#import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_constants.h"
@@ -204,8 +204,9 @@ BOOL WaitForKeyboardToAppear() {
                           IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_TITLE))];
 
   [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityLabel(l10n_util::GetNSString(
-                     IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
+                 chrome_test_util::StaticTextWithAccessibilityLabel(
+                     l10n_util::GetNSString(
+                         IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
       performAction:grey_tap()];
 
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
@@ -233,8 +234,9 @@ BOOL WaitForKeyboardToAppear() {
                           IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_TITLE))];
 
   [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityLabel(l10n_util::GetNSString(
-                     IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
+                 chrome_test_util::StaticTextWithAccessibilityLabel(
+                     l10n_util::GetNSString(
+                         IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
       performAction:grey_tap()];
 
   [ChromeEarlGrey waitForUIElementToAppearWithMatcher:grey_accessibilityLabel(
@@ -269,16 +271,18 @@ BOOL WaitForKeyboardToAppear() {
                           IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_TITLE))];
 
   [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityLabel(l10n_util::GetNSString(
-                     IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
+                 chrome_test_util::StaticTextWithAccessibilityLabel(
+                     l10n_util::GetNSString(
+                         IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_BUTTON_TEXT))]
       performAction:grey_tap()];
 
   [ChromeEarlGrey
       waitForUIElementToAppearWithMatcher:grey_accessibilityID(@"user")];
 
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
-                                   IDS_IOS_PASSWORD_BOTTOM_SHEET_USE_PASSWORD))]
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::StaticTextWithAccessibilityLabel(
+                     l10n_util::GetNSString(
+                         IDS_IOS_PASSWORD_BOTTOM_SHEET_USE_PASSWORD))]
       performAction:grey_tap()];
 }
 

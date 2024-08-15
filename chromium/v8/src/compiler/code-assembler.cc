@@ -6,7 +6,7 @@
 
 #include <ostream>
 
-#include "src/codegen/code-factory.h"
+#include "src/builtins/builtins-inl.h"
 #include "src/codegen/interface-descriptors-inl.h"
 #include "src/codegen/machine-type.h"
 #include "src/compiler/backend/instruction-selector.h"
@@ -535,7 +535,7 @@ void CodeAssembler::Unreachable() {
   raw_assembler()->Unreachable();
 }
 
-void CodeAssembler::Comment(std::string str) {
+void CodeAssembler::EmitComment(std::string str) {
   if (!v8_flags.code_comments) return;
   raw_assembler()->Comment(str);
 }
@@ -578,10 +578,26 @@ TNode<RawPtrT> CodeAssembler::LoadParentFramePointer() {
   return UncheckedCast<RawPtrT>(raw_assembler()->LoadParentFramePointer());
 }
 
+#if V8_ENABLE_WEBASSEMBLY
+TNode<RawPtrT> CodeAssembler::LoadStackPointer() {
+  return UncheckedCast<RawPtrT>(raw_assembler()->LoadStackPointer());
+}
+
+void CodeAssembler::SetStackPointer(TNode<RawPtrT> ptr,
+                                    wasm::FPRelativeScope fp_scope) {
+  raw_assembler()->SetStackPointer(ptr, fp_scope);
+}
+#endif
+
 TNode<RawPtrT> CodeAssembler::LoadPointerFromRootRegister(
     TNode<IntPtrT> offset) {
   return UncheckedCast<RawPtrT>(
       Load(MachineType::IntPtr(), raw_assembler()->LoadRootRegister(), offset));
+}
+
+TNode<Uint8T> CodeAssembler::LoadUint8FromRootRegister(TNode<IntPtrT> offset) {
+  return UncheckedCast<Uint8T>(
+      Load(MachineType::Uint8(), raw_assembler()->LoadRootRegister(), offset));
 }
 
 TNode<RawPtrT> CodeAssembler::StackSlotPtr(int size, int alignment) {
@@ -1013,7 +1029,7 @@ TNode<HeapObject> CodeAssembler::OptimizedAllocate(TNode<IntPtrT> size,
 }
 
 void CodeAssembler::HandleException(Node* node) {
-  if (state_->exception_handler_labels_.size() == 0) return;
+  if (state_->exception_handler_labels_.empty()) return;
   CodeAssemblerExceptionHandlerLabel* label =
       state_->exception_handler_labels_.back();
 
@@ -1060,10 +1076,22 @@ Node* CodeAssembler::CallRuntimeImpl(
     Runtime::FunctionId function, TNode<Object> context,
     std::initializer_list<TNode<Object>> args) {
   int result_size = Runtime::FunctionForId(function)->result_size;
+#if V8_ENABLE_WEBASSEMBLY
   bool switch_to_the_central_stack =
-      Runtime::SwitchToTheCentralStackForTarget(function);
-  TNode<Code> centry = HeapConstantNoHole(CodeFactory::RuntimeCEntry(
-      isolate(), result_size, switch_to_the_central_stack));
+      state_->kind_ == CodeKind::WASM_FUNCTION ||
+      state_->kind_ == CodeKind::WASM_TO_JS_FUNCTION ||
+      state_->kind_ == CodeKind::JS_TO_WASM_FUNCTION ||
+      state_->builtin_ == Builtin::kJSToWasmWrapper ||
+      state_->builtin_ == Builtin::kJSToWasmHandleReturns ||
+      state_->builtin_ == Builtin::kWasmToJsWrapperCSA ||
+      wasm::BuiltinLookup::IsWasmBuiltinId(state_->builtin_);
+#else
+  bool switch_to_the_central_stack = false;
+#endif
+  Builtin centry =
+      Builtins::RuntimeCEntry(result_size, switch_to_the_central_stack);
+  TNode<Code> centry_code =
+      HeapConstantNoHole(isolate()->builtins()->code_handle(centry));
   constexpr size_t kMaxNumArgs = 6;
   DCHECK_GE(kMaxNumArgs, args.size());
   int argc = static_cast<int>(args.size());
@@ -1077,8 +1105,8 @@ Node* CodeAssembler::CallRuntimeImpl(
   TNode<Int32T> arity = Int32Constant(argc);
 
   NodeArray<kMaxNumArgs + 4> inputs;
-  inputs.Add(centry);
-  for (auto arg : args) inputs.Add(arg);
+  inputs.Add(centry_code);
+  for (const auto& arg : args) inputs.Add(arg);
   inputs.Add(ref);
   inputs.Add(arity);
   inputs.Add(context);
@@ -1095,10 +1123,23 @@ void CodeAssembler::TailCallRuntimeImpl(
     Runtime::FunctionId function, TNode<Int32T> arity, TNode<Object> context,
     std::initializer_list<TNode<Object>> args) {
   int result_size = Runtime::FunctionForId(function)->result_size;
+#if V8_ENABLE_WEBASSEMBLY
   bool switch_to_the_central_stack =
-      Runtime::SwitchToTheCentralStackForTarget(function);
-  TNode<Code> centry = HeapConstantNoHole(CodeFactory::RuntimeCEntry(
-      isolate(), result_size, switch_to_the_central_stack));
+      state_->kind_ == CodeKind::WASM_FUNCTION ||
+      state_->kind_ == CodeKind::WASM_TO_JS_FUNCTION ||
+      state_->kind_ == CodeKind::JS_TO_WASM_FUNCTION ||
+      state_->builtin_ == Builtin::kJSToWasmWrapper ||
+      state_->builtin_ == Builtin::kJSToWasmHandleReturns ||
+      state_->builtin_ == Builtin::kWasmToJsWrapperCSA ||
+      wasm::BuiltinLookup::IsWasmBuiltinId(state_->builtin_);
+#else
+  bool switch_to_the_central_stack = false;
+#endif
+  Builtin centry =
+      Builtins::RuntimeCEntry(result_size, switch_to_the_central_stack);
+  TNode<Code> centry_code =
+      HeapConstantNoHole(isolate()->builtins()->code_handle(centry));
+
   constexpr size_t kMaxNumArgs = 6;
   DCHECK_GE(kMaxNumArgs, args.size());
   int argc = static_cast<int>(args.size());
@@ -1110,8 +1151,8 @@ void CodeAssembler::TailCallRuntimeImpl(
       ExternalConstant(ExternalReference::Create(function));
 
   NodeArray<kMaxNumArgs + 4> inputs;
-  inputs.Add(centry);
-  for (auto arg : args) inputs.Add(arg);
+  inputs.Add(centry_code);
+  for (const auto& arg : args) inputs.Add(arg);
   inputs.Add(ref);
   inputs.Add(arity);
   inputs.Add(context);
@@ -1405,7 +1446,7 @@ Factory* CodeAssembler::factory() const { return isolate()->factory(); }
 Zone* CodeAssembler::zone() const { return raw_assembler()->zone(); }
 
 bool CodeAssembler::IsExceptionHandlerActive() const {
-  return state_->exception_handler_labels_.size() != 0;
+  return !state_->exception_handler_labels_.empty();
 }
 
 RawMachineAssembler* CodeAssembler::raw_assembler() const {

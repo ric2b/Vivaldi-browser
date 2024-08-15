@@ -8,8 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <functional>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -40,10 +42,11 @@
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/app_service_test.h"
 #include "chrome/browser/apps/app_service/publisher_host.h"
 #include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_data.h"
-#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_cryptohome_remover.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
@@ -121,7 +124,6 @@
 #include "storage/common/file_system/file_system_types.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/test_windows.h"
@@ -427,7 +429,7 @@ class TestingDeviceStatusCollector : public DeviceStatusCollector {
   }
 
  private:
-  const raw_ref<base::SimpleTestClock, ExperimentalAsh> test_clock_;
+  const raw_ref<base::SimpleTestClock> test_clock_;
 
   std::unique_ptr<DeviceLocalAccount> kiosk_account_;
 };
@@ -700,8 +702,7 @@ cros_healthd::TpmResultPtr CreatePartialTpmResult() {
       cros_healthd::TpmVersion::New(), cros_healthd::TpmStatus::New(),
       cros_healthd::TpmDictionaryAttack::New(),
       cros_healthd::TpmAttestation::New(),
-      cros_healthd::TpmSupportedFeatures::New(),
-      absl::optional<std::string>()));
+      cros_healthd::TpmSupportedFeatures::New(), std::optional<std::string>()));
 }
 
 cros_healthd::BusResultPtr CreateBusResult() {
@@ -926,7 +927,7 @@ class DeviceStatusCollectorTest : public testing::Test {
 
   ~DeviceStatusCollectorTest() override {
     ash::SeneschalClient::Shutdown();
-    kiosk_app_manager_.reset();
+    kiosk_chrome_app_manager_.reset();
     // |testing_profile_| must be destroyed while ConciergeClient is alive.
     testing_profile_.reset();
     ash::ConciergeClient::Shutdown();
@@ -1121,15 +1122,16 @@ class DeviceStatusCollectorTest : public testing::Test {
   void MockAutoLaunchKioskAppWithRequiredPlatformVersion(
       const DeviceLocalAccount& auto_launch_app_account,
       const std::string& required_platform_version) {
-    if (!kiosk_app_manager_) {
-      kiosk_app_manager_ = std::make_unique<ash::KioskAppManager>();
+    if (!kiosk_chrome_app_manager_) {
+      kiosk_chrome_app_manager_ =
+          std::make_unique<ash::KioskChromeAppManager>();
     }
-    kiosk_app_manager_->AddAppForTest(
+    kiosk_chrome_app_manager_->AddAppForTest(
         auto_launch_app_account.kiosk_app_id,
         AccountId::FromUserEmail(auto_launch_app_account.user_id),
         GURL("http://cws/"),  // Dummy URL to avoid setup ExtensionsClient.
         required_platform_version);
-    kiosk_app_manager_->SetEnableAutoLaunch(true);
+    kiosk_chrome_app_manager_->SetEnableAutoLaunch(true);
 
     std::vector<DeviceLocalAccount> accounts;
     accounts.push_back(auto_launch_app_account);
@@ -1141,8 +1143,9 @@ class DeviceStatusCollectorTest : public testing::Test {
 
     base::RunLoop().RunUntilIdle();
 
-    ASSERT_EQ(required_platform_version,
-              kiosk_app_manager_->GetAutoLaunchAppRequiredPlatformVersion());
+    ASSERT_EQ(
+        required_platform_version,
+        kiosk_chrome_app_manager_->GetAutoLaunchAppRequiredPlatformVersion());
   }
 
   void MockAutoLaunchArcKioskApp(
@@ -1210,7 +1213,7 @@ class DeviceStatusCollectorTest : public testing::Test {
   std::unique_ptr<ash::WebKioskAppManager> web_kiosk_app_manager_;
   // Only set after MockAutoLaunchKioskAppWithRequiredPlatformVersion was
   // called.
-  std::unique_ptr<ash::KioskAppManager> kiosk_app_manager_;
+  std::unique_ptr<ash::KioskChromeAppManager> kiosk_chrome_app_manager_;
   user_manager::ScopedUserManager user_manager_;
   std::unique_ptr<ReportingUserTracker> reporting_user_tracker_;
   em::DeviceStatusReportRequest device_status_;
@@ -1226,8 +1229,7 @@ class DeviceStatusCollectorTest : public testing::Test {
   const DeviceLocalAccount fake_web_kiosk_device_local_account_;
   base::ScopedPathOverride user_data_dir_override_;
   base::ScopedPathOverride crash_dumps_dir_override_;
-  raw_ptr<ash::FakeUpdateEngineClient, DanglingUntriaged | ExperimentalAsh>
-      update_engine_client_;
+  raw_ptr<ash::FakeUpdateEngineClient, DanglingUntriaged> update_engine_client_;
   std::unique_ptr<base::RunLoop> run_loop_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::SimpleTestClock test_clock_;
@@ -3811,6 +3813,7 @@ TEST_F(DeviceStatusCollectorTest, GenerateAppInfo) {
   apps.push_back(std::move(app2));
   app_proxy->OnApps(std::move(apps), apps::AppType::kUnknown,
                     /*should_notify_initialized=*/false);
+  apps::WaitForAppServiceProxyReady(app_proxy);
 
   // Start app instance
   base::Time start_time;
@@ -4132,7 +4135,7 @@ class DeviceStatusCollectorNetworkInterfacesTest
              base::ranges::equal(iface->eids().begin(), iface->eids().end(),
                                  kFakeSimSlots,
                                  kFakeSimSlots + std::size(kFakeSimSlots),
-                                 base::ranges::equal_to(), base::identity(),
+                                 base::ranges::equal_to(), std::identity(),
                                  &FakeSimSlotInfo::eid))) {
           found_match = true;
           break;

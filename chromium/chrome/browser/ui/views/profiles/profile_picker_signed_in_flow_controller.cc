@@ -29,7 +29,7 @@ ProfilePickerSignedInFlowController::ProfilePickerSignedInFlowController(
     const CoreAccountInfo& account_info,
     std::unique_ptr<content::WebContents> contents,
     signin_metrics::AccessPoint signin_access_point,
-    absl::optional<SkColor> profile_color)
+    std::optional<SkColor> profile_color)
     : host_(host),
       profile_(profile),
       account_info_(account_info),
@@ -69,9 +69,6 @@ void ProfilePickerSignedInFlowController::Init() {
   new TurnSyncOnHelper(
       profile_, signin_access_point_,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
-      signin_util::IsForceSigninEnabled()
-          ? signin_metrics::Reason::kForcedSigninPrimaryAccount
-          : signin_metrics::Reason::kSigninPrimaryAccount,
       account_info.account_id,
       TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
       std::make_unique<ProfilePickerTurnSyncOnDelegate>(
@@ -92,15 +89,15 @@ void ProfilePickerSignedInFlowController::SwitchToSyncConfirmation() {
                                    base::Unretained(this)));
 }
 
-void ProfilePickerSignedInFlowController::SwitchToEnterpriseProfileWelcome(
-    EnterpriseProfileWelcomeUI::ScreenType type,
+void ProfilePickerSignedInFlowController::SwitchToManagedUserProfileNotice(
+    ManagedUserProfileNoticeUI::ScreenType type,
     signin::SigninChoiceCallback proceed_callback) {
   DCHECK(IsInitialized());
   host_->ShowScreen(contents(),
-                    GURL(chrome::kChromeUIEnterpriseProfileWelcomeURL),
+                    GURL(chrome::kChromeUIManagedUserProfileNoticeUrl),
                     /*navigation_finished_closure=*/
                     base::BindOnce(&ProfilePickerSignedInFlowController::
-                                       SwitchToEnterpriseProfileWelcomeFinished,
+                                       SwitchToManagedUserProfileNoticeFinished,
                                    // Unretained is enough as the callback is
                                    // called by the owner of this instance.
                                    base::Unretained(this), type,
@@ -125,7 +122,7 @@ void ProfilePickerSignedInFlowController::SwitchToProfileSwitch(
       GURL(chrome::kChromeUIProfilePickerUrl).Resolve("profile-switch"));
 }
 
-absl::optional<SkColor> ProfilePickerSignedInFlowController::GetProfileColor()
+std::optional<SkColor> ProfilePickerSignedInFlowController::GetProfileColor()
     const {
   // The new profile theme may be overridden by an existing policy theme. This
   // check ensures the correct theme is applied to the sync confirmation window.
@@ -170,18 +167,18 @@ void ProfilePickerSignedInFlowController::SwitchToSyncConfirmationFinished() {
 }
 
 void ProfilePickerSignedInFlowController::
-    SwitchToEnterpriseProfileWelcomeFinished(
-        EnterpriseProfileWelcomeUI::ScreenType type,
+    SwitchToManagedUserProfileNoticeFinished(
+        ManagedUserProfileNoticeUI::ScreenType type,
         signin::SigninChoiceCallback proceed_callback) {
   DCHECK(IsInitialized());
   // Initialize the WebUI page once we know it's committed.
-  EnterpriseProfileWelcomeUI* enterprise_profile_welcome_ui =
+  ManagedUserProfileNoticeUI* managed_user_profile_notice_ui =
       contents()
           ->GetWebUI()
           ->GetController()
-          ->GetAs<EnterpriseProfileWelcomeUI>();
+          ->GetAs<ManagedUserProfileNoticeUI>();
 
-  enterprise_profile_welcome_ui->Initialize(
+  managed_user_profile_notice_ui->Initialize(
       /*browser=*/nullptr, type,
       IdentityManagerFactory::GetForProfile(profile_)
           ->FindExtendedAccountInfoByEmailAddress(email_),

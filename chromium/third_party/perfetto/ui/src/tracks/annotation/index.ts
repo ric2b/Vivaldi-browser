@@ -13,16 +13,16 @@
 // limitations under the License.
 
 import {
-  NUM,
-  NUM_NULL,
-  STR,
-} from '../../common/query_result';
-import {
   Plugin,
   PluginContext,
   PluginContextTrace,
   PluginDescriptor,
 } from '../../public';
+import {
+  NUM,
+  NUM_NULL,
+  STR,
+} from '../../trace_processor/query_result';
 import {ChromeSliceTrack, SLICE_TRACK_KIND} from '../chrome_slices/';
 import {
   Config as CounterTrackConfig,
@@ -56,7 +56,7 @@ class AnnotationPlugin implements Plugin {
       const id = it.id;
       const name = it.name;
 
-      ctx.registerStaticTrack({
+      ctx.registerTrack({
         uri: `perfetto.Annotation#${id}`,
         displayName: name,
         kind: SLICE_TRACK_KIND,
@@ -109,7 +109,7 @@ class AnnotationPlugin implements Plugin {
         maximumValue,
       };
 
-      ctx.registerStaticTrack({
+      ctx.registerTrack({
         uri: `perfetto.Annotation#counter${id}`,
         displayName: name,
         kind: COUNTER_TRACK_KIND,

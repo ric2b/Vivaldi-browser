@@ -16,6 +16,7 @@
 
 namespace cc {
 
+class ContentLayerClient;
 class DisplayItemList;
 class RasterSource;
 class Region;
@@ -24,16 +25,16 @@ class CC_EXPORT RecordingSource {
  public:
   RecordingSource();
   RecordingSource(const RecordingSource&) = delete;
-  virtual ~RecordingSource();
+  ~RecordingSource();
 
   RecordingSource& operator=(const RecordingSource&) = delete;
 
-  bool UpdateAndExpandInvalidation(Region* invalidation,
-                                   const gfx::Size& layer_size,
-                                   const gfx::Rect& new_recorded_viewport);
-  void UpdateDisplayItemList(const scoped_refptr<DisplayItemList>& display_list,
-                             float recording_scale_factor);
+  bool Update(const gfx::Size& layer_size,
+              float recording_scale_factor,
+              ContentLayerClient& content_layer_client,
+              Region& invalidation);
   gfx::Size GetSize() const;
+  const DisplayItemList* display_list() const { return display_list_.get(); }
   void SetEmptyBounds();
   void SetSlowdownRasterScaleFactor(int factor);
   void SetBackgroundColor(SkColor4f background_color);
@@ -41,12 +42,13 @@ class CC_EXPORT RecordingSource {
 
   void SetNeedsDisplayRect(const gfx::Rect& layer_rect);
 
-  // These functions are virtual for testing.
-  virtual scoped_refptr<RasterSource> CreateRasterSource() const;
+  scoped_refptr<RasterSource> CreateRasterSource() const;
 
   bool is_solid_color() const { return is_solid_color_; }
 
  protected:
+  // TODO(crbug.com/1157714): For now this is different from gfx::Rect(size_)
+  // in unit tests only. Remove this field and use display_list_->bounds().
   gfx::Rect recorded_viewport_;
   gfx::Size size_;
   int slow_down_raster_scale_factor_for_debug_ = 0;
@@ -60,8 +62,11 @@ class CC_EXPORT RecordingSource {
  private:
   void UpdateInvalidationForNewViewport(const gfx::Rect& old_recorded_viewport,
                                         const gfx::Rect& new_recorded_viewport,
-                                        Region* invalidation);
+                                        Region& invalidation);
 
+  void UpdateDisplayItemList(scoped_refptr<DisplayItemList> display_list,
+                             float recording_scale_factor,
+                             Region& invalidation);
   void FinishDisplayItemListUpdate();
 
   friend class RasterSource;

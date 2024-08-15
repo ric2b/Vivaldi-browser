@@ -42,6 +42,10 @@ base::FilePath CrxCache::BuildCrxFilePath(const std::string& id,
   return crx_cache_root_path_.AppendASCII(base::JoinString({id, fp}, "_"));
 }
 
+bool CrxCache::Contains(const std::string& id, const std::string& fp) {
+  return base::PathExists(BuildCrxFilePath(id, fp));
+}
+
 void CrxCache::Get(const std::string& id,
                    const std::string& fp,
                    base::OnceCallback<void(const Result& result)> callback) {
@@ -54,9 +58,7 @@ void CrxCache::Get(const std::string& id,
 CrxCache::Result CrxCache::ProcessGet(const std::string& id,
                                       const std::string& fp) {
   CrxCache::Result result;
-  absl::optional<base::FilePath> opt_file_path;
-  base::FilePath file_path = BuildCrxFilePath(id, fp);
-  if (!base::PathExists(file_path)) {
+  if (!Contains(id, fp)) {
     result.error = UnpackerError::kPuffinMissingPreviousCrx;
   } else {
     result.error = UnpackerError::kNone;
@@ -95,7 +97,7 @@ CrxCache::Result CrxCache::ProcessPut(const base::FilePath& crx_path,
 void CrxCache::RemoveAll(const std::string& id) {
   if (base::PathExists(crx_cache_root_path_)) {
     base::FileEnumerator file_enum(
-        crx_cache_root_path_, false, base::FileEnumerator::FILES, [&id]() {
+        crx_cache_root_path_, false, base::FileEnumerator::FILES, [&id] {
           std::string result = base::StrCat({id, "*"});
 #if BUILDFLAG(IS_WIN)
           return base::ASCIIToWide(result);

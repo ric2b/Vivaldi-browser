@@ -4,7 +4,7 @@
 
 #include "ash/system/accessibility/dictation_button_tray.h"
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/tray_background_view_catalog.h"
 #include "ash/metrics/user_metrics_recorder.h"
@@ -207,7 +207,7 @@ void DictationButtonTray::UpdateOnSpeechRecognitionDownloadChanged(
     // changed events.
     progress_indicator_ =
         ProgressIndicator::CreateDefaultInstance(base::BindRepeating(
-            [](DictationButtonTray* tray) -> absl::optional<float> {
+            [](DictationButtonTray* tray) -> std::optional<float> {
               // If download is in-progress, return the progress as a decimal.
               // Otherwise, the progress indicator shouldn't be painted.
               const int progress = tray->download_progress();

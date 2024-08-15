@@ -18,28 +18,6 @@ package(default_visibility = ["//visibility:private"])
 
 licenses(["notice"])
 
-cc_library(
-    name = "domain_testing",
-    testonly = 1,
-    hdrs = ["domain_testing.h"],
-    visibility = ["@com_google_fuzztest//fuzztest:__subpackages__"],
-    deps = [
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/hash",
-        "@com_google_absl//absl/random",
-        "@com_google_absl//absl/random:bit_gen_ref",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@com_google_fuzztest//fuzztest:logging",
-        "@com_google_fuzztest//fuzztest:meta",
-        "@com_google_fuzztest//fuzztest:serialization",
-        "@com_google_fuzztest//fuzztest:test_protobuf_cc_proto",
-        "@com_google_fuzztest//fuzztest:type_support",
-        "@com_google_googletest//:gtest",
-        "@com_google_protobuf//:protobuf",
-    ],
-)
-
 cc_test(
     name = "aggregate_combinators_test",
     srcs = ["aggregate_combinators_test.cc"],
@@ -52,6 +30,22 @@ cc_test(
         "@com_google_absl//absl/types:variant",
         "@com_google_fuzztest//fuzztest:domain",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "arbitrary_domains_protobuf_test",
+    srcs = ["arbitrary_domains_protobuf_test.cc"],
+    deps = [
+        ":domain_testing",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:bit_gen_ref",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_fuzztest//fuzztest:domain",
+        "@com_google_fuzztest//fuzztest:test_protobuf_cc_proto",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
     ],
 )
 
@@ -72,7 +66,6 @@ cc_test(
         "@com_google_fuzztest//fuzztest:test_protobuf_cc_proto",
         "@com_google_fuzztest//fuzztest:type_support",
         "@com_google_googletest//:gtest_main",
-        "@com_google_protobuf//:protobuf",
     ],
 )
 
@@ -85,10 +78,46 @@ cc_test(
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:span",
         "@com_google_fuzztest//fuzztest:domain",
         "@com_google_fuzztest//fuzztest:type_support",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "container_test",
+    srcs = ["container_test.cc"],
+    deps = [
+        ":domain_testing",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/random",
+        "@com_google_fuzztest//fuzztest:coverage",
+        "@com_google_fuzztest//fuzztest:domain",
+        "@com_google_fuzztest//fuzztest:type_support",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "domain_testing",
+    testonly = 1,
+    hdrs = ["domain_testing.h"],
+    visibility = ["@com_google_fuzztest//fuzztest:__subpackages__"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/random",
+        "@com_google_absl//absl/random:bit_gen_ref",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_fuzztest//fuzztest:logging",
+        "@com_google_fuzztest//fuzztest:meta",
+        "@com_google_fuzztest//fuzztest:serialization",
+        "@com_google_fuzztest//fuzztest:test_protobuf_cc_proto",
+        "@com_google_fuzztest//fuzztest:type_support",
+        "@com_google_googletest//:gtest",
+        "@com_google_protobuf//:protobuf",
     ],
 )
 
@@ -191,18 +220,6 @@ cc_test(
 )
 
 cc_test(
-    name = "string_domains_test",
-    srcs = ["string_domains_test.cc"],
-    deps = [
-        ":domain_testing",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/random",
-        "@com_google_fuzztest//fuzztest:domain",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_test(
     name = "specific_value_domains_test",
     srcs = ["specific_value_domains_test.cc"],
     deps = [
@@ -211,6 +228,18 @@ cc_test(
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
+        "@com_google_fuzztest//fuzztest:domain",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "string_domains_test",
+    srcs = ["string_domains_test.cc"],
+    deps = [
+        ":domain_testing",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/random",
         "@com_google_fuzztest//fuzztest:domain",
         "@com_google_googletest//:gtest_main",
     ],

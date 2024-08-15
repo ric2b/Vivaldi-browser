@@ -54,6 +54,13 @@ sk_sp<SkImage> CreateStringImage(int w, int h, SkColor c, int x, int y, int text
 // This returns the SkFontMgr that has been compiled in and configured (e.g. via CLI flag)
 sk_sp<SkFontMgr> TestFontMgr();
 
+// Must be called before the first call to TestFontMgr to have any effect.
+void UsePortableFontMgr();
+
+// Returns true if this platform is Windows and this binary is being configured to run
+// with the GDI font manager.
+bool FontMgrIsGDI();
+
 // This returns the default SkTypeface returned by the TestFontMgr(). If there was no default
 // Typeface, DefaultPortableTypeface() is returned instead.
 sk_sp<SkTypeface> DefaultTypeface();
@@ -61,6 +68,9 @@ sk_sp<SkTypeface> DefaultTypeface();
 // Returns a Typeface matching the given criteria as returned by TestFontMgr(). This may be different
 // on different platforms.
 sk_sp<SkTypeface> CreateTestTypeface(const char* name, SkFontStyle style);
+
+// Load the resource with the provided name as a Typeface using TestFontMgr().
+sk_sp<SkTypeface> CreateTypefaceFromResource(const char* resource, int ttcIndex = 0);
 
 // This returns a font using DefaultTypeface()
 SkFont DefaultFont();

@@ -16,29 +16,32 @@ import {Actions} from '../common/actions';
 import {
   getColorForSlice,
 } from '../common/colorizer';
-import {STR_NULL} from '../common/query_result';
+import {STR_NULL} from '../trace_processor/query_result';
 
 import {
-  BASE_SLICE_ROW,
+  BASE_ROW,
   BaseSliceTrack,
   BaseSliceTrackTypes,
   OnSliceClickArgs,
   OnSliceOverArgs,
+  SLICE_FLAGS_INCOMPLETE,
+  SLICE_FLAGS_INSTANT,
 } from './base_slice_track';
 import {globals} from './globals';
 import {NewTrackArgs} from './track';
+import {renderDuration} from './widgets/duration';
 
-export const NAMED_SLICE_ROW = {
+export const NAMED_ROW = {
   // Base columns (tsq, ts, dur, id, depth).
-  ...BASE_SLICE_ROW,
+  ...BASE_ROW,
 
   // Impl-specific columns.
   name: STR_NULL,
 };
-export type NamedSliceRow = typeof NAMED_SLICE_ROW;
+export type NamedRow = typeof NAMED_ROW;
 
 export interface NamedSliceTrackTypes extends BaseSliceTrackTypes {
-  row: NamedSliceRow;
+  row: NamedRow;
 }
 
 export abstract class NamedSliceTrack<
@@ -50,7 +53,7 @@ export abstract class NamedSliceTrack<
 
   // This is used by the base class to call iter().
   getRowSpec(): T['row'] {
-    return NAMED_SLICE_ROW;
+    return NAMED_ROW;
   }
 
   // Converts a SQL result row to an "Impl" Slice.
@@ -58,13 +61,21 @@ export abstract class NamedSliceTrack<
     const baseSlice = super.rowToSlice(row);
     // Ignore PIDs or numeric arguments when hashing.
     const name = row.name || '';
-    const baseColor = getColorForSlice(name, false);
-    return {...baseSlice, title: name, baseColor};
+    const colorScheme = getColorForSlice(name);
+    return {...baseSlice, title: name, colorScheme};
   }
 
   onSliceOver(args: OnSliceOverArgs<T['slice']>) {
-    const name = args.slice.title;
-    args.tooltip = [name];
+    const {title, dur, flags} = args.slice;
+    let duration;
+    if (flags & SLICE_FLAGS_INCOMPLETE) {
+      duration = 'Incomplete';
+    } else if (flags & SLICE_FLAGS_INSTANT) {
+      duration = 'Instant';
+    } else {
+      duration = renderDuration(dur);
+    }
+    args.tooltip = [`${title} - [${duration}]`];
   }
 
   onSliceClick(args: OnSliceClickArgs<T['slice']>) {

@@ -64,7 +64,7 @@ MaybeError ValidateQueryIndexOverwrite(QuerySetBase* querySet,
 // BeginRenderPassCmd. If we had RenderPassEncoder responsible for recording the
 // command, then this wouldn't be necessary.
 RenderPassEncoder::RenderPassEncoder(DeviceBase* device,
-                                     const RenderPassDescriptor* descriptor,
+                                     const UnpackedPtr<RenderPassDescriptor>& descriptor,
                                      CommandEncoder* commandEncoder,
                                      EncodingContext* encodingContext,
                                      RenderPassResourceUsageTracker usageTracker,
@@ -86,26 +86,25 @@ RenderPassEncoder::RenderPassEncoder(DeviceBase* device,
       mOcclusionQuerySet(descriptor->occlusionQuerySet),
       mEndCallback(std::move(endCallback)) {
     mUsageTracker = std::move(usageTracker);
-    const RenderPassDescriptorMaxDrawCount* maxDrawCountInfo = nullptr;
-    FindInChain(descriptor->nextInChain, &maxDrawCountInfo);
-    if (maxDrawCountInfo) {
+    if (auto* maxDrawCountInfo = descriptor.Get<RenderPassDescriptorMaxDrawCount>()) {
         mMaxDrawCount = maxDrawCountInfo->maxDrawCount;
     }
     GetObjectTrackingList()->Track(this);
 }
 
 // static
-Ref<RenderPassEncoder> RenderPassEncoder::Create(DeviceBase* device,
-                                                 const RenderPassDescriptor* descriptor,
-                                                 CommandEncoder* commandEncoder,
-                                                 EncodingContext* encodingContext,
-                                                 RenderPassResourceUsageTracker usageTracker,
-                                                 Ref<AttachmentState> attachmentState,
-                                                 uint32_t renderTargetWidth,
-                                                 uint32_t renderTargetHeight,
-                                                 bool depthReadOnly,
-                                                 bool stencilReadOnly,
-                                                 std::function<void()> endCallback) {
+Ref<RenderPassEncoder> RenderPassEncoder::Create(
+    DeviceBase* device,
+    const UnpackedPtr<RenderPassDescriptor>& descriptor,
+    CommandEncoder* commandEncoder,
+    EncodingContext* encodingContext,
+    RenderPassResourceUsageTracker usageTracker,
+    Ref<AttachmentState> attachmentState,
+    uint32_t renderTargetWidth,
+    uint32_t renderTargetHeight,
+    bool depthReadOnly,
+    bool stencilReadOnly,
+    std::function<void()> endCallback) {
     return AcquireRef(new RenderPassEncoder(device, descriptor, commandEncoder, encodingContext,
                                             std::move(usageTracker), std::move(attachmentState),
                                             renderTargetWidth, renderTargetHeight, depthReadOnly,
@@ -346,12 +345,13 @@ void RenderPassEncoder::APIExecuteBundles(uint32_t count, RenderBundleBase* cons
 
                 const RenderPassResourceUsage& usages = bundles[i]->GetResourceUsage();
                 for (uint32_t j = 0; j < usages.buffers.size(); ++j) {
-                    mUsageTracker.BufferUsedAs(usages.buffers[j], usages.bufferUsages[j]);
+                    mUsageTracker.BufferUsedAs(usages.buffers[j], usages.bufferSyncInfos[j].usage,
+                                               usages.bufferSyncInfos[j].shaderStages);
                 }
 
                 for (uint32_t j = 0; j < usages.textures.size(); ++j) {
                     mUsageTracker.AddRenderBundleTextureUsage(usages.textures[j],
-                                                              usages.textureUsages[j]);
+                                                              usages.textureSyncInfos[j]);
                 }
 
                 if (IsValidationEnabled()) {

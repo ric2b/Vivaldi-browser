@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "content/public/browser/web_contents_delegate.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/web_dialogs/web_dialogs_export.h"
@@ -30,7 +31,6 @@ class Size;
 }
 
 namespace ui {
-class Accelerator;
 
 // Implement this class to receive notifications.
 class WEB_DIALOGS_EXPORT WebDialogDelegate {
@@ -131,10 +131,6 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
   // certain that the window is about to be closed.
   virtual void OnDialogWillClose() {}
 
-  // A callback to notify the delegate that the dialog is about to close due to
-  // the user pressing the ESC key.
-  virtual void OnDialogClosingFromKeyEvent() {}
-
   // A callback to notify the delegate that the dialog closed.
   // IMPORTANT: Implementations should delete |this| here (unless they've
   // arranged for the delegate to be deleted in some other way, e.g. by
@@ -225,13 +221,18 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
     allow_web_contents_creation_ = allow_web_contents_creation;
   }
 
-  // Stores the dialog bounds.
-  virtual void StoreDialogSize(const gfx::Size& dialog_size) {}
+  // Accelerator handling: there are two ways to supply accelerators. You can
+  // register individual accelerators using RegisterAccelerator(), or you can
+  // get more flexibility by overriding GetAccelerators() and
+  // AcceleratorPressed() to provide arbitrary handling.
+  using AcceleratorHandler =
+      base::RepeatingCallback<bool(WebDialogDelegate&, const Accelerator&)>;
+  void RegisterAccelerator(Accelerator accelerator, AcceleratorHandler handler);
 
-  // Returns the accelerators handled by the delegate.
+  // The default behavior of these methods is to return/invoke accelerators
+  // registered with RegisterAccelerator().
+  // TODO(ellyjones): Remove these.
   virtual std::vector<Accelerator> GetAccelerators();
-
-  // Returns true if |accelerator| is processed, otherwise false.
   virtual bool AcceleratorPressed(const Accelerator& accelerator);
 
   virtual void OnWebContentsFinishedLoad() {}
@@ -245,7 +246,7 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
       content::MediaResponseCallback callback) {}
   virtual bool CheckMediaAccessPermission(
       content::RenderFrameHost* render_frame_host,
-      const GURL& security_origin,
+      const url::Origin& security_origin,
       blink::mojom::MediaStreamType type);
 
   // Whether to use dialog frame view for non client frame view.
@@ -253,6 +254,7 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
   void set_dialog_frame_kind(FrameKind frame_kind) { frame_kind_ = frame_kind; }
 
  private:
+  base::flat_map<Accelerator, AcceleratorHandler> accelerators_;
   absl::optional<std::u16string> accessible_title_;
   bool allow_default_context_menu_ = true;
   bool allow_web_contents_creation_ = true;

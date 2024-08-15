@@ -268,8 +268,9 @@ class Arm64OperandConverter final : public InstructionOperandConverter {
     if (offset.from_frame_pointer()) {
       int from_sp = offset.offset() + frame_access_state()->GetSPToFPOffset();
       // Convert FP-offsets to SP-offsets if it results in better code.
-      if (Assembler::IsImmLSUnscaled(from_sp) ||
-          Assembler::IsImmLSScaled(from_sp, 3)) {
+      if (!frame_access_state()->FPRelativeOnly() &&
+          (Assembler::IsImmLSUnscaled(from_sp) ||
+           Assembler::IsImmLSScaled(from_sp, 3))) {
         offset = FrameOffset::FromStackPointer(from_sp);
       }
     }
@@ -451,13 +452,6 @@ void RecordTrapInfoIfNeeded(Zone* zone, CodeGenerator* codegen,
   const MemoryAccessMode access_mode = AccessModeField::decode(opcode);
   if (access_mode == kMemoryAccessProtectedMemOutOfBounds ||
       access_mode == kMemoryAccessProtectedNullDereference) {
-    ReferenceMap* reference_map =
-        codegen->zone()->New<ReferenceMap>(codegen->zone());
-    // The safepoint has to be recorded at the return address of a call. Address
-    // we use as the fake return address in the case of the trap handler is the
-    // fault address (here `pc`) + 1. Therefore the safepoint here has to be
-    // recorded at pc + 1;
-    codegen->RecordSafepoint(reference_map, pc + 1);
     codegen->RecordProtectedInstruction(pc);
   }
 }
@@ -944,8 +938,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         // We don't actually want to generate a pile of code for this, so just
         // claim there is a stack frame, without generating one.
         FrameScope scope(masm(), StackFrame::NO_FRAME_TYPE);
-        __ Call(BUILTIN_CODE(isolate(), AbortCSADcheck),
-                RelocInfo::CODE_TARGET);
+        __ CallBuiltin(Builtin::kAbortCSADcheck);
       }
       __ Debug("kArchAbortCSADcheck", 0, BREAK);
       unwinding_info_writer_.MarkBlockWillExit();
@@ -981,9 +974,35 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ mov(i.OutputRegister(), fp);
       }
       break;
+#if V8_ENABLE_WEBASSEMBLY
     case kArchStackPointer:
-    case kArchSetStackPointer:
-      UNREACHABLE();
+      // The register allocator expects an allocatable register for the output,
+      // we cannot use sp directly.
+      __ mov(i.OutputRegister(), sp);
+      break;
+    case kArchSetStackPointer: {
+      DCHECK(instr->InputAt(0)->IsRegister());
+      if (masm()->options().enable_simulator_code) {
+        __ RecordComment("-- Set simulator stack limit --");
+        DCHECK(__ TmpList()->IncludesAliasOf(kSimulatorHltArgument));
+        __ LoadStackLimit(kSimulatorHltArgument,
+                          StackLimitKind::kRealStackLimit);
+        __ hlt(kImmExceptionIsSwitchStackLimit);
+      }
+      __ Mov(sp, i.InputRegister(0));
+      auto fp_scope = static_cast<wasm::FPRelativeScope>(
+          MiscField::decode(instr->opcode()));
+      if (fp_scope == wasm::kEnterFPRelativeOnlyScope) {
+        DCHECK(frame_access_state()->has_frame());
+        frame_access_state()->SetFrameAccessToFP();
+      } else {
+        frame_access_state()->SetFrameAccessToDefault();
+      }
+      frame_access_state()->SetFPRelativeOnly(fp_scope ==
+                                              wasm::kEnterFPRelativeOnlyScope);
+      break;
+    }
+#endif  // V8_ENABLE_WEBASSEMBLY
     case kArchStackPointerGreaterThan: {
       // Potentially apply an offset to the current stack pointer before the
       // comparison to consider the size difference of an optimized frame versus
@@ -1274,6 +1293,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArm64Mul32:
       __ Mul(i.OutputRegister32(), i.InputRegister32(0), i.InputRegister32(1));
       break;
+#if V8_ENABLE_WEBASSEMBLY
     case kArm64Sadalp: {
       DCHECK_EQ(i.OutputSimd128Register(), i.InputSimd128Register(0));
       VectorFormat dst_f = VectorFormatFillQ(LaneSizeField::decode(opcode));
@@ -1337,6 +1357,25 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
                 i.InputSimd128Register(2).Format(src_f));
       break;
     }
+    case kArm64Umlal: {
+      VectorFormat dst_f = VectorFormatFillQ(LaneSizeField::decode(opcode));
+      VectorFormat src_f = VectorFormatHalfWidth(dst_f);
+      DCHECK_EQ(i.OutputSimd128Register(), i.InputSimd128Register(0));
+      __ Umlal(i.OutputSimd128Register().Format(dst_f),
+               i.InputSimd128Register(1).Format(src_f),
+               i.InputSimd128Register(2).Format(src_f));
+      break;
+    }
+    case kArm64Umlal2: {
+      VectorFormat dst_f = VectorFormatFillQ(LaneSizeField::decode(opcode));
+      VectorFormat src_f = VectorFormatHalfWidthDoubleLanes(dst_f);
+      DCHECK_EQ(i.OutputSimd128Register(), i.InputSimd128Register(0));
+      __ Umlal2(i.OutputSimd128Register().Format(dst_f),
+                i.InputSimd128Register(1).Format(src_f),
+                i.InputSimd128Register(2).Format(src_f));
+      break;
+    }
+#endif  // V8_ENABLE_WEBASSEMBLY
     case kArm64Smull: {
       if (instr->InputAt(0)->IsRegister()) {
         __ Smull(i.OutputRegister(), i.InputRegister32(0),
@@ -1357,24 +1396,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ Smull2(i.OutputSimd128Register().Format(dst_f),
                 i.InputSimd128Register(0).Format(src_f),
                 i.InputSimd128Register(1).Format(src_f));
-      break;
-    }
-    case kArm64Umlal: {
-      VectorFormat dst_f = VectorFormatFillQ(LaneSizeField::decode(opcode));
-      VectorFormat src_f = VectorFormatHalfWidth(dst_f);
-      DCHECK_EQ(i.OutputSimd128Register(), i.InputSimd128Register(0));
-      __ Umlal(i.OutputSimd128Register().Format(dst_f),
-               i.InputSimd128Register(1).Format(src_f),
-               i.InputSimd128Register(2).Format(src_f));
-      break;
-    }
-    case kArm64Umlal2: {
-      VectorFormat dst_f = VectorFormatFillQ(LaneSizeField::decode(opcode));
-      VectorFormat src_f = VectorFormatHalfWidthDoubleLanes(dst_f);
-      DCHECK_EQ(i.OutputSimd128Register(), i.InputSimd128Register(0));
-      __ Umlal2(i.OutputSimd128Register().Format(dst_f),
-                i.InputSimd128Register(1).Format(src_f),
-                i.InputSimd128Register(2).Format(src_f));
       break;
     }
     case kArm64Umull: {
@@ -2237,6 +2258,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
 #undef ASSEMBLE_IEEE754_BINOP
 #undef ASSEMBLE_IEEE754_UNOP
 
+#if V8_ENABLE_WEBASSEMBLY
 #define SIMD_UNOP_CASE(Op, Instr, FORMAT)            \
   case Op:                                           \
     __ Instr(i.OutputSimd128Register().V##FORMAT(),  \
@@ -3023,6 +3045,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       SIMD_REDUCE_OP_CASE(kArm64I32x4AllTrue, Uminv, kFormatS, 4S);
       SIMD_REDUCE_OP_CASE(kArm64I16x8AllTrue, Uminv, kFormatH, 8H);
       SIMD_REDUCE_OP_CASE(kArm64I8x16AllTrue, Uminv, kFormatB, 16B);
+#endif  // V8_ENABLE_WEBASSEMBLY
   }
   return kSuccess;
 }
@@ -3258,6 +3281,48 @@ void CodeGenerator::AssembleConstructFrame() {
       // Update required_slots count since we have just claimed one extra slot.
       static_assert(MacroAssembler::kExtraSlotClaimedByPrologue == 1);
       required_slots -= MacroAssembler::kExtraSlotClaimedByPrologue;
+#if V8_ENABLE_WEBASSEMBLY
+    } else if (call_descriptor->IsWasmFunctionCall() ||
+               call_descriptor->IsWasmCapiFunction() ||
+               call_descriptor->IsWasmImportWrapper() ||
+               (call_descriptor->IsCFunctionCall() &&
+                info()->GetOutputStackFrameType() ==
+                    StackFrame::C_WASM_ENTRY)) {
+      UseScratchRegisterScope temps(masm());
+      Register scratch = temps.AcquireX();
+      __ Mov(scratch,
+             StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
+      __ Push<MacroAssembler::kSignLR>(lr, fp, scratch, kWasmInstanceRegister);
+      static constexpr int kSPToFPDelta = 2 * kSystemPointerSize;
+      __ Add(fp, sp, kSPToFPDelta);
+      if (call_descriptor->IsWasmCapiFunction()) {
+        // The C-API function has one extra slot for the PC.
+        required_slots++;
+      } else if (call_descriptor->IsWasmImportWrapper()) {
+        // If the wrapper is running on a secondary stack, it will switch to the
+        // central stack and fill these slots with the central stack pointer and
+        // secondary stack limit. Otherwise the slots remain empty.
+        static_assert(WasmImportWrapperFrameConstants::kCentralStackSPOffset ==
+                      -24);
+        static_assert(
+            WasmImportWrapperFrameConstants::kSecondaryStackLimitOffset == -32);
+        __ Push(xzr, xzr);
+      }
+#endif  // V8_ENABLE_WEBASSEMBLY
+    } else if (call_descriptor->kind() == CallDescriptor::kCallCodeObject) {
+      UseScratchRegisterScope temps(masm());
+      Register scratch = temps.AcquireX();
+      __ Mov(scratch,
+             StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
+      __ Push<MacroAssembler::kSignLR>(lr, fp, scratch, padreg);
+      static constexpr int kSPToFPDelta = 2 * kSystemPointerSize;
+      __ Add(fp, sp, kSPToFPDelta);
+      // One of the extra slots has just been claimed when pushing the padreg.
+      // We also know that we have at least one slot to claim here, as the typed
+      // frame has an odd number of fixed slots, and all other parts of the
+      // total frame slots are even, leaving {required_slots} to be odd.
+      DCHECK_GE(required_slots, 1);
+      required_slots--;
     } else {
       __ Push<MacroAssembler::kSignLR>(lr, fp);
       __ Mov(fp, sp);
@@ -3304,15 +3369,6 @@ void CodeGenerator::AssembleConstructFrame() {
         __ B(hs, &done);
       }
 
-      {
-        // Finish the frame that hasn't been fully built yet.
-        UseScratchRegisterScope temps(masm());
-        Register scratch = temps.AcquireX();
-        __ Mov(scratch,
-               StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
-        __ Push(scratch, kWasmInstanceRegister);
-      }
-
       __ Call(static_cast<intptr_t>(Builtin::kWasmStackOverflow),
               RelocInfo::WASM_STUB_CALL);
       // The call does not return, hence we can ignore any references and just
@@ -3329,72 +3385,7 @@ void CodeGenerator::AssembleConstructFrame() {
     required_slots -= saves_fp.Count();
     required_slots -= returns;
 
-    // Build remainder of frame, including accounting for and filling-in
-    // frame-specific header information, i.e. claiming the extra slot that
-    // other platforms explicitly push for STUB (code object) frames and frames
-    // recording their argument count.
-    switch (call_descriptor->kind()) {
-      case CallDescriptor::kCallJSFunction:
-        __ Claim(required_slots);
-        break;
-      case CallDescriptor::kCallCodeObject: {
-        UseScratchRegisterScope temps(masm());
-        Register scratch = temps.AcquireX();
-        __ Mov(scratch,
-               StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
-        __ Push(scratch, padreg);
-        // One of the extra slots has just been claimed when pushing the frame
-        // type marker above. We also know that we have at least one slot to
-        // claim here, as the typed frame has an odd number of fixed slots, and
-        // all other parts of the total frame slots are even, leaving
-        // {required_slots} to be odd.
-        DCHECK_GE(required_slots, 1);
-        __ Claim(required_slots - 1);
-        break;
-      }
-#if V8_ENABLE_WEBASSEMBLY
-      case CallDescriptor::kCallWasmFunction: {
-        UseScratchRegisterScope temps(masm());
-        Register scratch = temps.AcquireX();
-        __ Mov(scratch,
-               StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
-        __ Push(scratch, kWasmInstanceRegister);
-        __ Claim(required_slots);
-        break;
-      }
-      case CallDescriptor::kCallWasmImportWrapper:
-      case CallDescriptor::kCallWasmCapiFunction: {
-        UseScratchRegisterScope temps(masm());
-        Register scratch = temps.AcquireX();
-        __ Mov(scratch,
-               StackFrame::TypeToMarker(info()->GetOutputStackFrameType()));
-        // This stack slot is only used for printing stack traces in V8. Also,
-        // it holds a WasmApiFunctionRef instead of the instance itself, which
-        // is taken care of in the frames accessors.
-        __ Push(scratch, kWasmInstanceRegister);
-        int extra_slots =
-            call_descriptor->kind() == CallDescriptor::kCallWasmImportWrapper
-                ? 0   // Import wrapper: none.
-                : 1;  // C-API function: PC.
-        __ Claim(required_slots + extra_slots);
-        break;
-      }
-#endif  // V8_ENABLE_WEBASSEMBLY
-      case CallDescriptor::kCallAddress:
-#if V8_ENABLE_WEBASSEMBLY
-        if (info()->GetOutputStackFrameType() == StackFrame::C_WASM_ENTRY) {
-          UseScratchRegisterScope temps(masm());
-          Register scratch = temps.AcquireX();
-          __ Mov(scratch, StackFrame::TypeToMarker(StackFrame::C_WASM_ENTRY));
-          __ Push(scratch, padreg);
-          // The additional slot will be used for the saved c_entry_fp.
-        }
-#endif  // V8_ENABLE_WEBASSEMBLY
-        __ Claim(required_slots);
-        break;
-      default:
-        UNREACHABLE();
-    }
+    __ Claim(required_slots);
   }
 
   // Save FP registers.

@@ -23,14 +23,14 @@
 #include "components/viz/test/host_frame_sink_manager_test_api.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/cursor_manager.h"
-#include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
-#include "content/browser/renderer_host/input/synthetic_tap_gesture.h"
-#include "content/browser/renderer_host/input/synthetic_touchpad_pinch_gesture.h"
 #include "content/browser/renderer_host/input/touch_emulator.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/site_per_process_browsertest.h"
+#include "content/common/input/synthetic_smooth_scroll_gesture.h"
+#include "content/common/input/synthetic_tap_gesture.h"
+#include "content/common/input/synthetic_touchpad_pinch_gesture.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_menu_params.h"
@@ -645,14 +645,14 @@ void HitTestRootWindowTransform(
 
 #if defined(USE_AURA)
 bool ConvertJSONToPoint(const std::string& str, gfx::PointF* point) {
-  absl::optional<base::Value> value = base::JSONReader::Read(str);
+  std::optional<base::Value> value = base::JSONReader::Read(str);
   if (!value)
     return false;
   base::Value::Dict* root = value->GetIfDict();
   if (!root)
     return false;
-  absl::optional<double> x = root->FindDouble("x");
-  absl::optional<double> y = root->FindDouble("y");
+  std::optional<double> x = root->FindDouble("x");
+  std::optional<double> y = root->FindDouble("y");
   if (!x || !y)
     return false;
   point->set_x(*x);
@@ -661,22 +661,22 @@ bool ConvertJSONToPoint(const std::string& str, gfx::PointF* point) {
 }
 
 bool ConvertJSONToRect(const std::string& str, gfx::Rect* rect) {
-  absl::optional<base::Value> value = base::JSONReader::Read(str);
+  std::optional<base::Value> value = base::JSONReader::Read(str);
   if (!value)
     return false;
   base::Value::Dict* root = value->GetIfDict();
   if (!root)
     return false;
-  absl::optional<int> x = root->FindInt("x");
+  std::optional<int> x = root->FindInt("x");
   if (!x)
     return false;
-  absl::optional<int> y = root->FindInt("y");
+  std::optional<int> y = root->FindInt("y");
   if (!y)
     return false;
-  absl::optional<int> width = root->FindInt("width");
+  std::optional<int> width = root->FindInt("width");
   if (!width)
     return false;
-  absl::optional<int> height = root->FindInt("height");
+  std::optional<int> height = root->FindInt("height");
   if (!height)
     return false;
   rect->set_x(*x);
@@ -4279,12 +4279,12 @@ class SetCursorInterceptor
 
   void Wait() { run_loop_.Run(); }
 
-  absl::optional<ui::Cursor> cursor() const { return cursor_; }
+  std::optional<ui::Cursor> cursor() const { return cursor_; }
 
  private:
   base::RunLoop run_loop_;
   raw_ptr<RenderWidgetHostImpl> render_widget_host_;
-  absl::optional<ui::Cursor> cursor_;
+  std::optional<ui::Cursor> cursor_;
   mojo::test::ScopedSwapImplForTesting<
       mojo::AssociatedReceiver<blink::mojom::WidgetHost>>
       swapped_impl_;
@@ -7384,17 +7384,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestDataGenerationBrowserTest,
 }
 
 #if defined(USE_AURA)
-class SitePerProcessDelegatedInkBrowserTest
-    : public SitePerProcessHitTestBrowserTest {
- public:
-  SitePerProcessDelegatedInkBrowserTest() = default;
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SitePerProcessHitTestBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "DelegatedInkTrails");
-  }
-};
+using SitePerProcessDelegatedInkBrowserTest = SitePerProcessHitTestBrowserTest;
 
 // Test confirms that a point hitting an OOPIF that is requesting delegated ink
 // trails results in the metadata being correctly sent to the child's

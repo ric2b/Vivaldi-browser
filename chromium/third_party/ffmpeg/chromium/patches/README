@@ -796,3 +796,13 @@ Date:   Wed Oct 4 10:12:40 2023 -0700
 Affects:
     configure
 
+------------------------------------------------------------------
+commit 70399d75c002bd2c5e226ac771bc57f5e5465f06
+Author: John Rummell <jrummell@chromium.org>
+Date:   Wed Oct 4 10:36:29 2023 -0700
+
+    README.chromium file
+
+Affects:
+    libavformat/matroskadec.c
+

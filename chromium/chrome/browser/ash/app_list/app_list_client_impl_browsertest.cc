@@ -10,10 +10,13 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/app_list_metrics.h"
+#include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/test/app_list_test_api.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/test/active_window_waiter.h"
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -89,8 +92,6 @@
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/wm/core/window_util.h"
-#include "ui/wm/public/activation_change_observer.h"
-#include "ui/wm/public/activation_client.h"
 
 // Browser Test for AppListClientImpl.
 using AppListClientImplBrowserTest = extensions::PlatformAppBrowserTest;
@@ -120,40 +121,6 @@ class TestObserver : public app_list::AppListSyncableService::Observer {
                           app_list::AppListSyncableService::Observer>
       observer_{this};
   size_t add_or_update_count_ = 0;
-};
-
-class ActiveWindowWaiter : public wm::ActivationChangeObserver {
- public:
-  explicit ActiveWindowWaiter(aura::Window* root_window) {
-    observation_.Observe(wm::GetActivationClient(root_window));
-  }
-
-  ActiveWindowWaiter(const ActiveWindowWaiter&) = delete;
-  ActiveWindowWaiter& operator=(const ActiveWindowWaiter&) = delete;
-
-  ~ActiveWindowWaiter() override = default;
-
-  aura::Window* Wait() {
-    run_loop_.Run();
-    return found_window_;
-  }
-
-  void OnWindowActivated(wm::ActivationChangeObserver::ActivationReason reason,
-                         aura::Window* gained_active,
-                         aura::Window* lost_active) override {
-    if (gained_active) {
-      found_window_ = gained_active;
-      observation_.Reset();
-      run_loop_.Quit();
-    }
-  }
-
- private:
-  base::RunLoop run_loop_;
-  raw_ptr<aura::Window, ExperimentalAsh> found_window_ = nullptr;
-
-  base::ScopedObservation<wm::ActivationClient, wm::ActivationChangeObserver>
-      observation_{this};
 };
 
 }  // namespace
@@ -301,7 +268,7 @@ class SelfDestroyAppItem : public ChromeAppListItem {
   }
 
  private:
-  raw_ptr<AppListModelUpdater, ExperimentalAsh> updater_;
+  raw_ptr<AppListModelUpdater> updater_;
 };
 
 // Verifies that activating an app item which destroys itself during activation
@@ -452,7 +419,14 @@ class AppListClientImplBrowserPromiseAppTest
   }
 
   // AppListModelUpdaterObserver:
-  void OnAppListItemUpdated(ChromeAppListItem* item) override { updates_++; }
+  void OnAppListItemUpdated(ChromeAppListItem* item) override {
+    last_updated_metadata_ = item->CloneMetadata();
+    updates_++;
+  }
+
+  ash::AppListItemMetadata* GetMetadataFromLastUpdate() {
+    return last_updated_metadata_.get();
+  }
 
   int GetAndResetUpdateCount() {
     int cached_updates = updates_;
@@ -462,6 +436,7 @@ class AppListClientImplBrowserPromiseAppTest
 
  private:
   int updates_ = 0;
+  std::unique_ptr<ash::AppListItemMetadata> last_updated_metadata_;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -497,6 +472,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserPromiseAppTest,
             base::UTF16ToUTF8(
                 ShelfControllerHelper::GetAccessibleLabelForPromiseStatus(
                     app_name, apps::PromiseStatus::kPending)));
+  GetAndResetUpdateCount();
 
   // Update the promise app in the promise app registry cache.
   apps::PromiseAppPtr update =
@@ -504,6 +480,10 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserPromiseAppTest,
   update->progress = 0.3;
   update->status = apps::PromiseStatus::kInstalling;
   cache()->OnPromiseApp(std::move(update));
+
+  // Verify that OnAppListItemUpdated was called four times:
+  // For accessible name, for name, for progress and for app_status.
+  EXPECT_EQ(4, GetAndResetUpdateCount());
 
   // Promise app item should have updated fields.
   EXPECT_EQ(item->progress(), 0.3f);
@@ -515,7 +495,6 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserPromiseAppTest,
             base::UTF16ToUTF8(
                 ShelfControllerHelper::GetAccessibleLabelForPromiseStatus(
                     app_name, apps::PromiseStatus::kInstalling)));
-  GetAndResetUpdateCount();
 
   // Register (i.e. "install") an app with a matching package ID. This should
   // trigger removal of the promise app.
@@ -529,8 +508,13 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserPromiseAppTest,
   app_service_proxy()->OnApps(std::move(apps), apps::AppType::kArc,
                               /*should_notify_initialized=*/false);
 
-  // Expect 2 updates: one for the name, one for the accessible name.
-  EXPECT_EQ(2, GetAndResetUpdateCount());
+  // Verify that the promise app was updated correctly into a successful status
+  // before it was removed.
+  ash::AppListItemMetadata* metadata_before_removal =
+      GetMetadataFromLastUpdate();
+  EXPECT_EQ(1, GetAndResetUpdateCount());
+  EXPECT_EQ(ash::AppStatus::kInstallSuccess,
+            metadata_before_removal->app_status);
   EXPECT_FALSE(model_updater->FindItem(kTestPackageId.ToString()));
 }
 
@@ -676,7 +660,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
   AppListModelUpdater* model_updater = test::GetModelUpdater(client);
   ASSERT_TRUE(model_updater);
 
-  ActiveWindowWaiter window_waiter(primary_root_window);
+  ash::ActiveWindowWaiter window_waiter(primary_root_window);
 
   client->OpenSearchResult(model_updater->model_id(), app_result_id,
                            ui::EF_NONE,
@@ -747,7 +731,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
   AppListModelUpdater* model_updater = test::GetModelUpdater(client);
   ASSERT_TRUE(model_updater);
 
-  ActiveWindowWaiter window_waiter(secondary_root_window);
+  ash::ActiveWindowWaiter window_waiter(secondary_root_window);
 
   client->OpenSearchResult(model_updater->model_id(), app_result_id,
                            ui::EF_NONE,
@@ -981,8 +965,7 @@ class AppListAppLaunchTest : public extensions::ExtensionBrowserTest {
   std::unique_ptr<base::HistogramTester> histogram_tester_;
 
  private:
-  raw_ptr<AppListModelUpdater, DanglingUntriaged | ExperimentalAsh>
-      model_updater_;
+  raw_ptr<AppListModelUpdater, DanglingUntriaged> model_updater_;
 };
 
 IN_PROC_BROWSER_TEST_F(AppListAppLaunchTest,

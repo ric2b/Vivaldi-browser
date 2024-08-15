@@ -15,10 +15,13 @@
 // -wrap linker flags (e.g., libchrome.so) will be rewritten to the
 // linker as references to __wrap_malloc, __wrap_free, which are defined here.
 
+#include "partition_alloc/partition_alloc_buildflags.h"
+
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
 #include <algorithm>
 #include <cstring>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim_internals.h"
+#include "partition_alloc/shim/allocator_shim_internals.h"
 
 extern "C" {
 
@@ -65,7 +68,7 @@ static_assert(kPathMaxSize >= PATH_MAX, "");
 
 extern char* __wrap_strdup(const char* str);
 
-// Override <stdlib.h>
+// Override <cstdlib>
 
 extern char* __real_realpath(const char* path, char* resolved_path);
 
@@ -82,7 +85,7 @@ SHIM_ALWAYS_EXPORT char* __wrap_realpath(const char* path,
   return __wrap_strdup(buffer);
 }
 
-// Override <string.h> functions
+// Override <cstring> functions
 
 SHIM_ALWAYS_EXPORT char* __wrap_strdup(const char* str) {
   std::size_t length = std::strlen(str) + 1;
@@ -174,5 +177,7 @@ SHIM_ALWAYS_EXPORT int __wrap_asprintf(char** strp, const char* fmt, ...) {
 }
 
 }  // extern "C"
+
+#endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_SHIM_ALLOCATOR_SHIM_OVERRIDE_LINKER_WRAPPED_SYMBOLS_H_

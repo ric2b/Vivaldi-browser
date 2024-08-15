@@ -39,7 +39,7 @@ namespace {
 #if BUILDFLAG(IS_MAC)
 std::vector<apps::IntentPickerAppInfo> CombinePossibleMacAppWithOtherApps(
     std::vector<apps::IntentPickerAppInfo> apps,
-    absl::optional<apps::IntentPickerAppInfo> mac_app) {
+    std::optional<apps::IntentPickerAppInfo> mac_app) {
   if (mac_app) {
     apps.emplace_back(std::move(mac_app.value()));
   }
@@ -89,8 +89,8 @@ bool WebAppsIntentPickerDelegate::IsPreferredAppForSupportedLinks(
 }
 
 void WebAppsIntentPickerDelegate::LoadSingleAppIcon(
-    apps::AppType app_type,
-    const webapps::AppId& app_id,
+    PickerEntryType entry_type,
+    const std::string& app_id,
     int size_in_dep,
     IconLoadedCallback icon_loaded_callback) {
   web_app::WebAppIconManager& icon_manager = provider_->icon_manager();
@@ -140,8 +140,7 @@ bool WebAppsIntentPickerDelegate::ShouldLaunchAppDirectly(
   // Launch app directly only if |url| is in the scope of |app_id|.
   // TODO(b/294079334): Use `IsUrlInAppExtendedScope` to support scope
   // extensions for user link capturing on desktop platforms.
-  return base::FeatureList::IsEnabled(
-             apps::features::kDesktopPWAsLinkCapturing) &&
+  return features::ShouldShowLinkCapturingUX() &&
          provider_->registrar_unsafe().IsUrlInAppScope(url, app_id);
 }
 
@@ -165,7 +164,7 @@ void WebAppsIntentPickerDelegate::RecordOutputMetrics(
       break;
     case apps::IntentPickerCloseReason::STAY_IN_CHROME:
       base::RecordAction(
-          base::UserMetricsAction("IntentPickerViewClosedOpenInChrome"));
+          base::UserMetricsAction("IntentPickerViewClosedStayInChrome"));
       break;
     case apps::IntentPickerCloseReason::ERROR_BEFORE_PICKER:
     case apps::IntentPickerCloseReason::ERROR_AFTER_PICKER:
@@ -193,10 +192,11 @@ void WebAppsIntentPickerDelegate::LaunchApp(content::WebContents* web_contents,
   if (entry_type == apps::PickerEntryType::kWeb) {
     provider_->ui_manager().ReparentAppTabToWindow(web_contents, launch_name,
                                                    /*shortcut_created=*/true);
-    if (base::FeatureList::IsEnabled(
-            apps::features::kDesktopPWAsLinkCapturing)) {
+    if (features::ShouldShowLinkCapturingUX()) {
       provider_->ui_manager().MaybeCreateEnableSupportedLinksInfobar(
           web_contents, launch_name);
+      provider_->ui_manager().MaybeShowIPHPromoForAppsLaunchedViaLinkCapturing(
+          web_contents, &profile_.get(), launch_name);
     }
   } else if (entry_type == apps::PickerEntryType::kMacOs) {
 #if BUILDFLAG(IS_MAC)

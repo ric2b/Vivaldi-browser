@@ -9,7 +9,7 @@
 
 #include "content/common/content_export.h"
 #include "content/public/browser/preloading.h"
-#include "content/public/browser/prerender_trigger_type.h"
+#include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -24,25 +24,25 @@ namespace content {
 struct CONTENT_EXPORT PrerenderAttributes {
   PrerenderAttributes(
       const GURL& prerendering_url,
-      PrerenderTriggerType trigger_type,
+      PreloadingTriggerType trigger_type,
       const std::string& embedder_histogram_suffix,
-      absl::optional<blink::mojom::SpeculationTargetHint> target_hint,
+      std::optional<blink::mojom::SpeculationTargetHint> target_hint,
       Referrer referrer,
-      absl::optional<blink::mojom::SpeculationEagerness> eagerness,
-      absl::optional<url::Origin> initiator_origin,
+      std::optional<blink::mojom::SpeculationEagerness> eagerness,
+      std::optional<url::Origin> initiator_origin,
       int initiator_process_id,
       base::WeakPtr<WebContents> initiator_web_contents,
-      absl::optional<blink::LocalFrameToken> initiator_frame_token,
+      std::optional<blink::LocalFrameToken> initiator_frame_token,
       int initiator_frame_tree_node_id,
       ukm::SourceId initiator_ukm_id,
       ui::PageTransition transition_type,
-      absl::optional<base::RepeatingCallback<bool(const GURL&)>>
+      std::optional<base::RepeatingCallback<bool(const GURL&)>>
           url_match_predicate,
-      absl::optional<base::RepeatingCallback<void(NavigationHandle&)>>
+      std::optional<base::RepeatingCallback<void(NavigationHandle&)>>
           prerender_navigation_handle_callback,
       // TODO(crbug/1384419): use pattern other than default parameter.
-      const absl::optional<base::UnguessableToken>&
-          initiator_devtools_navigation_token = absl::nullopt);
+      const std::optional<base::UnguessableToken>&
+          initiator_devtools_navigation_token = std::nullopt);
 
   ~PrerenderAttributes();
   PrerenderAttributes(const PrerenderAttributes&);
@@ -54,25 +54,25 @@ struct CONTENT_EXPORT PrerenderAttributes {
 
   GURL prerendering_url;
 
-  PrerenderTriggerType trigger_type;
+  PreloadingTriggerType trigger_type;
 
   // Used for kEmbedder trigger type to avoid exposing information of embedders
   // to content/. Only used for metrics.
   std::string embedder_histogram_suffix;
 
   // Records the target hint of the corresponding speculation rule.
-  // This is absl::nullopt when prerendering is initiated by browser.
-  absl::optional<blink::mojom::SpeculationTargetHint> target_hint;
+  // This is std::nullopt when prerendering is initiated by browser.
+  std::optional<blink::mojom::SpeculationTargetHint> target_hint;
 
   Referrer referrer;
 
   // Records the eagerness of the corresponding speculation rule.
-  // This is absl::nullopt when prerendering is initiated by the browser.
-  absl::optional<blink::mojom::SpeculationEagerness> eagerness;
+  // This is std::nullopt when prerendering is initiated by the browser.
+  std::optional<blink::mojom::SpeculationEagerness> eagerness;
 
-  // This is absl::nullopt when prerendering is initiated by the browser
+  // This is std::nullopt when prerendering is initiated by the browser
   // (not by a renderer using Speculation Rules API).
-  absl::optional<url::Origin> initiator_origin;
+  std::optional<url::Origin> initiator_origin;
 
   // This is ChildProcessHost::kInvalidUniqueID when prerendering is initiated
   // by the browser.
@@ -81,8 +81,8 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // This hosts a primary page that is initiating this prerender attempt.
   base::WeakPtr<WebContents> initiator_web_contents;
 
-  // This is absl::nullopt when prerendering is initiated by the browser.
-  absl::optional<blink::LocalFrameToken> initiator_frame_token;
+  // This is std::nullopt when prerendering is initiated by the browser.
+  std::optional<blink::LocalFrameToken> initiator_frame_token;
 
   // This is RenderFrameHost::kNoFrameTreeNodeId when prerendering is initiated
   // by the browser.
@@ -103,14 +103,13 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // Triggers can specify their own predicate judging whether two URLs are
   // considered as pointing to the same destination. The URLs must be in
   // same-origin.
-  absl::optional<base::RepeatingCallback<bool(const GURL&)>>
-      url_match_predicate;
+  std::optional<base::RepeatingCallback<bool(const GURL&)>> url_match_predicate;
 
-  absl::optional<base::RepeatingCallback<void(NavigationHandle&)>>
+  std::optional<base::RepeatingCallback<void(NavigationHandle&)>>
       prerender_navigation_handle_callback;
 
-  // This is absl::nullopt when prerendering is initiated by the browser.
-  absl::optional<base::UnguessableToken> initiator_devtools_navigation_token;
+  // This is std::nullopt when prerendering is initiated by the browser.
+  std::optional<base::UnguessableToken> initiator_devtools_navigation_token;
 
   // Serialises this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue trace_context) const;

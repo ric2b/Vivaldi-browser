@@ -20,6 +20,8 @@
     clippy::panic,
     clippy::expect_used
 )]
+#![allow(internal_features)]
+// TODO: Remove usage of `lang_items` when ffi is no longer alloc
 // These features are needed to support no_std + alloc
 #![feature(lang_items)]
 
@@ -128,7 +130,7 @@ extern "C" fn NpLdtEncryptClose(handle: NpLdtEncryptHandle) -> i32 {
         get_enc_handle_map()
             .remove(&handle.handle)
             .ok_or(CloseCipherError::InvalidHandle)
-            .map(|_| 0)
+            .map(|_| SUCCESS)
     })
 }
 
@@ -138,14 +140,11 @@ extern "C" fn NpLdtDecryptClose(handle: NpLdtDecryptHandle) -> i32 {
         get_dec_handle_map()
             .remove(&handle.handle)
             .ok_or(CloseCipherError::InvalidHandle)
-            .map(|_| 0)
+            .map(|_| SUCCESS)
     })
 }
 
 #[no_mangle]
-// continue to use LdtAdvDecrypter::encrypt() for now, but we should expose a higher level API
-// and get rid of this.
-#[allow(deprecated)]
 extern "C" fn NpLdtEncrypt(
     handle: NpLdtEncryptHandle,
     buffer: *mut u8,

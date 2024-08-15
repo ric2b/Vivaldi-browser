@@ -67,19 +67,25 @@ class TestAuthenticationRequester
           response) override;
   void OnVirtualCardRiskBasedAuthenticationResponseReceived(
       AutofillClient::PaymentsRpcResult result,
-      payments::PaymentsClient::UnmaskResponseDetails& response_details)
-      override;
+      payments::PaymentsNetworkInterface::UnmaskResponseDetails&
+          response_details) override;
 
   base::WeakPtr<TestAuthenticationRequester> GetWeakPtr();
 
-  absl::optional<bool> is_user_verifiable() { return is_user_verifiable_; }
+  std::optional<bool> is_user_verifiable() { return is_user_verifiable_; }
 
-  absl::optional<bool> did_succeed() { return did_succeed_; }
+  std::optional<bool> did_succeed() { return did_succeed_; }
 
   std::u16string number() { return number_; }
 
-  payments::PaymentsClient::UnmaskResponseDetails response_details() const {
+  payments::PaymentsNetworkInterface::UnmaskResponseDetails response_details()
+      const {
     return response_details_;
+  }
+
+  CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse&
+  risk_based_authentication_response() {
+    return risk_based_authentication_response_;
   }
 
   payments::FullCardRequest::FailureType failure_type() {
@@ -88,10 +94,10 @@ class TestAuthenticationRequester
 
  private:
   // Set when CreditCardFidoAuthenticator invokes IsUserVerifiableCallback().
-  absl::optional<bool> is_user_verifiable_;
+  std::optional<bool> is_user_verifiable_;
 
   // Is set to true if authentication was successful.
-  absl::optional<bool> did_succeed_;
+  std::optional<bool> did_succeed_;
 
   // The failure type of the full card request. Set when the request is
   // finished.
@@ -102,7 +108,11 @@ class TestAuthenticationRequester
   std::u16string number_;
 
   // Unmask response returned from UnmaskCard request.
-  payments::PaymentsClient::UnmaskResponseDetails response_details_;
+  payments::PaymentsNetworkInterface::UnmaskResponseDetails response_details_;
+
+  // Authentication response returned from CreditCardRiskBasedAuthenticator.
+  CreditCardRiskBasedAuthenticator::RiskBasedAuthenticationResponse
+      risk_based_authentication_response_;
 
   base::WeakPtrFactory<TestAuthenticationRequester> weak_ptr_factory_{this};
 };

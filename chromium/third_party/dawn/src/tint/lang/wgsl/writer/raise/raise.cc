@@ -35,6 +35,7 @@
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/wgsl/builtin_fn.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
+#include "src/tint/lang/wgsl/writer/raise/rename_conflicts.h"
 
 namespace tint::wgsl::writer {
 namespace {
@@ -169,7 +170,7 @@ wgsl::BuiltinFn Convert(core::BuiltinFn fn) {
 void ReplaceBuiltinFnCall(core::ir::Module& mod, core::ir::CoreBuiltinCall* call) {
     Vector<core::ir::Value*, 8> args(call->Args());
     auto* replacement = mod.instructions.Create<wgsl::ir::BuiltinCall>(
-        call->Result(), Convert(call->Func()), std::move(args));
+        call->Result(0), Convert(call->Func()), std::move(args));
     call->ReplaceWith(replacement);
     call->ClearResults();
     call->Destroy();
@@ -183,7 +184,7 @@ void ReplaceWorkgroupBarrier(core::ir::Module& mod, core::ir::CoreBuiltinCall* c
     // And replace with:
     //    %value = call workgroupUniformLoad %ptr
 
-    auto* load = As<core::ir::Load>(call->next);
+    auto* load = As<core::ir::Load>(call->next.Get());
     if (!load || load->From()->Type()->As<core::type::Pointer>()->AddressSpace() !=
                      core::AddressSpace::kWorkgroup) {
         // No match
@@ -191,7 +192,7 @@ void ReplaceWorkgroupBarrier(core::ir::Module& mod, core::ir::CoreBuiltinCall* c
         return;
     }
 
-    auto* post_load = As<core::ir::CoreBuiltinCall>(load->next);
+    auto* post_load = As<core::ir::CoreBuiltinCall>(load->next.Get());
     if (!post_load || post_load->Func() != core::BuiltinFn::kWorkgroupBarrier) {
         // No match
         ReplaceBuiltinFnCall(mod, call);
@@ -204,7 +205,7 @@ void ReplaceWorkgroupBarrier(core::ir::Module& mod, core::ir::CoreBuiltinCall* c
 
     // Replace load with workgroupUniformLoad
     auto* replacement = mod.instructions.Create<wgsl::ir::BuiltinCall>(
-        load->Result(), wgsl::BuiltinFn::kWorkgroupUniformLoad, Vector{load->From()});
+        load->Result(0), wgsl::BuiltinFn::kWorkgroupUniformLoad, Vector{load->From()});
     load->ReplaceWith(replacement);
     load->ClearResults();
     load->Destroy();
@@ -228,6 +229,11 @@ Result<SuccessType> Raise(core::ir::Module& mod) {
             }
         }
     }
+
+    if (auto result = raise::RenameConflicts(mod); result != Success) {
+        return result.Failure();
+    }
+
     return Success;
 }
 

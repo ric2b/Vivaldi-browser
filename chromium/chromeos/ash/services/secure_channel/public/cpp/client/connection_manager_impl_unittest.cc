@@ -172,8 +172,7 @@ class ConnectionManagerImplTest : public testing::Test {
                                         expected_count);
   }
 
-  raw_ptr<base::MockOneShotTimer, DanglingUntriaged | ExperimentalAsh>
-      mock_timer_;
+  raw_ptr<base::MockOneShotTimer, DanglingUntriaged> mock_timer_;
   multidevice::RemoteDeviceRef test_remote_device_;
   multidevice::RemoteDeviceRef test_local_device_;
   device_sync::FakeDeviceSyncClient fake_device_sync_client_;
@@ -181,8 +180,7 @@ class ConnectionManagerImplTest : public testing::Test {
   std::unique_ptr<FakeSecureChannelClient> fake_secure_channel_client_;
   std::unique_ptr<ConnectionManagerImpl> connection_manager_;
   FakeObserver fake_observer_;
-  raw_ptr<FakeConnectionAttempt, DanglingUntriaged | ExperimentalAsh>
-      fake_connection_attempt_;
+  raw_ptr<FakeConnectionAttempt, DanglingUntriaged> fake_connection_attempt_;
   std::unique_ptr<base::SimpleTestClock> test_clock_;
   base::HistogramTester histogram_tester_;
 };
@@ -305,7 +303,7 @@ TEST_F(ConnectionManagerImplTest, AttemptConnectionWithMessageReceived) {
 TEST_F(ConnectionManagerImplTest, AttemptConnectionWithoutLocalDevice) {
   // Simulate a missing local device.
   fake_device_sync_client_.set_local_device_metadata(
-      absl::optional<multidevice::RemoteDeviceRef>());
+      std::optional<multidevice::RemoteDeviceRef>());
   connection_manager_->AttemptNearbyConnection();
 
   // Status is still disconnected since there is a missing device, verify that
@@ -318,7 +316,7 @@ TEST_F(ConnectionManagerImplTest, AttemptConnectionWithoutRemoteDevice) {
   // Simulate a missing remote device.
   fake_multidevice_setup_client_.SetHostStatusWithDevice(
       std::make_pair(HostStatus::kHostVerified,
-                     absl::optional<multidevice::RemoteDeviceRef>()));
+                     std::optional<multidevice::RemoteDeviceRef>()));
   connection_manager_->AttemptNearbyConnection();
 
   // Status is still disconnected since there is a missing device, verify that

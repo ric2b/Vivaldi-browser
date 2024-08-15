@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void cross_1d7933() {
+  float3 res = float3(0.0f);
+}
+vertex float4 vertex_main() {
+  cross_1d7933();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  cross_1d7933();
+}
+kernel void compute_main() {
+  cross_1d7933();
+}

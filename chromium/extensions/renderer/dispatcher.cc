@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <memory>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/containers/contains.h"
 #include "base/debug/alias.h"
@@ -20,7 +22,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -52,10 +53,12 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/host_id.mojom.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
+#include "extensions/common/utils/extension_utils.h"
 #include "extensions/grit/extensions_renderer_resources.h"
 #include "extensions/renderer/api/app_window_custom_bindings.h"
 #include "extensions/renderer/api/automation/automation_internal_custom_bindings.h"
@@ -71,6 +74,7 @@
 #include "extensions/renderer/dom_activity_logger.h"
 #include "extensions/renderer/extension_frame_helper.h"
 #include "extensions/renderer/extension_interaction_provider.h"
+#include "extensions/renderer/extensions_renderer_api_provider.h"
 #include "extensions/renderer/extensions_renderer_client.h"
 #include "extensions/renderer/guest_view/guest_view_internal_custom_bindings.h"
 #include "extensions/renderer/id_generator_custom_bindings.h"
@@ -299,8 +303,11 @@ Dispatcher::PendingServiceWorker::~PendingServiceWorker() = default;
 
 // Note that we can't use Blink public APIs in the constructor because Blink
 // is not initialized at the point we create Dispatcher.
-Dispatcher::Dispatcher(std::unique_ptr<DispatcherDelegate> delegate)
+Dispatcher::Dispatcher(
+    std::unique_ptr<DispatcherDelegate> delegate,
+    std::vector<std::unique_ptr<ExtensionsRendererAPIProvider>> api_providers)
     : delegate_(std::move(delegate)),
+      api_providers_(std::move(api_providers)),
       content_watcher_(new ContentWatcher()),
       source_map_(&ui::ResourceBundle::GetSharedInstance()),
       v8_schema_registry_(new V8SchemaRegistry),
@@ -416,8 +423,9 @@ void Dispatcher::DidCreateScriptContext(
 
   // Initialize origin permissions for content scripts, which can't be
   // initialized in |ActivateExtension|.
-  if (context->context_type() == Feature::CONTENT_SCRIPT_CONTEXT)
+  if (context->context_type() == mojom::ContextType::kContentScript) {
     InitOriginPermissions(context->extension());
+  }
 
   context->SetModuleSystem(
       std::make_unique<ModuleSystem>(context, &source_map_));
@@ -441,44 +449,44 @@ void Dispatcher::DidCreateScriptContext(
 
   const base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
   switch (context->context_type()) {
-    case Feature::UNSPECIFIED_CONTEXT:
+    case mojom::ContextType::kUnspecified:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_Unspecified",
                           elapsed);
       break;
-    case Feature::BLESSED_EXTENSION_CONTEXT:
+    case mojom::ContextType::kPrivilegedExtension:
       // For service workers this is handled in
       // WillEvaluateServiceWorkerOnWorkerThread().
       DCHECK(!context->IsForServiceWorker());
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_Blessed", elapsed);
       break;
-    case Feature::UNBLESSED_EXTENSION_CONTEXT:
+    case mojom::ContextType::kUnprivilegedExtension:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_Unblessed",
                           elapsed);
       break;
-    case Feature::CONTENT_SCRIPT_CONTEXT:
+    case mojom::ContextType::kContentScript:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_ContentScript",
                           elapsed);
       break;
-    case Feature::WEB_PAGE_CONTEXT:
+    case mojom::ContextType::kWebPage:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_WebPage", elapsed);
       break;
-    case Feature::BLESSED_WEB_PAGE_CONTEXT:
+    case mojom::ContextType::kPrivilegedWebPage:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_BlessedWebPage",
                           elapsed);
       break;
-    case Feature::WEBUI_CONTEXT:
+    case mojom::ContextType::kWebUi:
       UMA_HISTOGRAM_TIMES("Extensions.DidCreateScriptContext_WebUI", elapsed);
       break;
-    case Feature::WEBUI_UNTRUSTED_CONTEXT:
+    case mojom::ContextType::kUntrustedWebUi:
       // Extension APIs in untrusted WebUIs are temporary so don't bother
       // recording metrics for them.
       break;
-    case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
+    case mojom::ContextType::kLockscreenExtension:
       UMA_HISTOGRAM_TIMES(
           "Extensions.DidCreateScriptContext_LockScreenExtension", elapsed);
       break;
-    case Feature::OFFSCREEN_EXTENSION_CONTEXT:
-    case Feature::USER_SCRIPT_CONTEXT:
+    case mojom::ContextType::kOffscreenExtension:
+    case mojom::ContextType::kUserScript:
       // We don't really care about offscreen extension context or user script
       // context initialization time at the moment. Offscreen extension context
       // initialization is a strict subset (and very similar to) blessed
@@ -574,14 +582,15 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
   // by extensions minimal bindings, just as we might want to give them to
   // service workers that aren't registered by extensions.
   ScriptContext* context = new ScriptContext(
-      v8_context, nullptr, extension, Feature::BLESSED_EXTENSION_CONTEXT,
-      extension, Feature::BLESSED_EXTENSION_CONTEXT);
+      v8_context, nullptr, GenerateHostIdFromExtensionId(extension->id()),
+      extension, mojom::ContextType::kPrivilegedExtension, extension,
+      mojom::ContextType::kPrivilegedExtension);
   context->set_url(script_url);
   context->set_service_worker_scope(service_worker_scope);
   context->set_service_worker_version_id(service_worker_version_id);
 
   WorkerThreadDispatcher* worker_dispatcher = WorkerThreadDispatcher::Get();
-  absl::optional<base::UnguessableToken> worker_activation_token =
+  std::optional<base::UnguessableToken> worker_activation_token =
       RendererExtensionRegistry::Get()->GetWorkerActivationToken(
           extension->id());
 
@@ -630,7 +639,7 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
   v8::Isolate* isolate = context->isolate();
 
   // Fetch the source code for service_worker_bindings.js.
-  base::StringPiece script_resource =
+  std::string_view script_resource =
       ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
           IDR_SERVICE_WORKER_BINDINGS_JS);
   v8::Local<v8::String> script =
@@ -841,12 +850,12 @@ void Dispatcher::RunScriptsAtDocumentIdle(content::RenderFrame* render_frame) {
 }
 
 void Dispatcher::DispatchEventHelper(
-    const std::string& extension_id,
+    const mojom::HostID& host_id,
     const std::string& event_name,
     const base::Value::List& event_args,
     mojom::EventFilteringInfoPtr filtering_info) const {
   script_context_set_->ForEach(
-      extension_id, nullptr,
+      host_id, nullptr,
       base::BindRepeating(
           &NativeExtensionBindingsSystem::DispatchEventInContext,
           base::Unretained(bindings_system_.get()), event_name,
@@ -859,7 +868,7 @@ void Dispatcher::InvokeModuleSystemMethod(content::RenderFrame* render_frame,
                                           const std::string& function_name,
                                           const base::Value::List& args) {
   script_context_set_->ForEach(
-      extension_id, render_frame,
+      GenerateHostIdFromExtensionId(extension_id), render_frame,
       base::BindRepeating(&CallModuleMethod, module_name, function_name,
                           &args));
 }
@@ -1041,18 +1050,9 @@ void Dispatcher::RegisterNativeHandlers(
       "runtime",
       std::unique_ptr<NativeHandler>(new RuntimeCustomBindings(context)));
 
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr;
-  // RenderThread::Get() returns nullptr from some tests.
-  if (context->IsForServiceWorker() && RenderThread::Get()) {
-    io_task_runner = RenderThread::Get()->GetIOTaskRunner();
-  } else if (context->web_frame()) {
-    io_task_runner =
-        context->web_frame()->GetTaskRunner(blink::TaskType::kInternalDefault);
-  }
   module_system->RegisterNativeHandler(
       "automationInternal", std::make_unique<AutomationInternalCustomBindings>(
-                                context, bindings_system, io_task_runner,
-                                content::WorkerThread::GetCurrentId()));
+                                context, bindings_system));
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
@@ -1148,7 +1148,7 @@ void Dispatcher::LoadExtensions(
   for (auto& param : loaded_extensions) {
     std::string error;
     std::string id = param->id;
-    absl::optional<base::UnguessableToken> worker_activation_token =
+    std::optional<base::UnguessableToken> worker_activation_token =
         param->worker_activation_token;
 
     scoped_refptr<const Extension> extension =
@@ -1239,7 +1239,7 @@ void Dispatcher::UnloadExtension(const std::string& extension_id) {
   // to clear out context-specific data, and then remove the contexts
   // themselves.
   script_context_set_->ForEach(
-      extension_id, nullptr,
+      GenerateHostIdFromExtensionId(extension_id), nullptr,
       base::BindRepeating(
           &NativeExtensionBindingsSystem::WillReleaseScriptContext,
           base::Unretained(bindings_system_.get())));
@@ -1274,14 +1274,14 @@ void Dispatcher::SuspendExtension(
   // the browser know when we are starting and stopping the event dispatch, so
   // that it still considers the extension idle despite any activity the suspend
   // event creates.
-  DispatchEventHelper(extension_id, kOnSuspendEvent, base::Value::List(),
-                      nullptr);
+  DispatchEventHelper(GenerateHostIdFromExtensionId(extension_id),
+                      kOnSuspendEvent, base::Value::List(), nullptr);
   std::move(callback).Run();
 }
 
 void Dispatcher::CancelSuspendExtension(const std::string& extension_id) {
-  DispatchEventHelper(extension_id, kOnSuspendCanceledEvent,
-                      base::Value::List(), nullptr);
+  DispatchEventHelper(GenerateHostIdFromExtensionId(extension_id),
+                      kOnSuspendCanceledEvent, base::Value::List(), nullptr);
 }
 
 void Dispatcher::SetSystemFont(const std::string& font_family,
@@ -1418,8 +1418,20 @@ void Dispatcher::DispatchEvent(mojom::DispatchEventParamsPtr params,
                                base::Value::List event_args,
                                DispatchEventCallback callback) {
   CHECK_EQ(params->worker_thread_id, kMainThreadId);
-  content::RenderFrame* background_frame =
-      ExtensionFrameHelper::GetBackgroundPageFrame(params->extension_id);
+  CHECK(params->host_id);
+  content::RenderFrame* background_frame = nullptr;
+  if (params->host_id->type == mojom::HostID::HostType::kExtensions) {
+    background_frame = ExtensionFrameHelper::GetBackgroundPageFrame(
+        GenerateExtensionIdFromHostId(*params->host_id));
+  }
+  ScriptContext* background_context = nullptr;
+  if (background_frame) {
+    background_context =
+        ScriptContextSet::GetMainWorldContextForFrame(background_frame);
+  }
+  bool event_has_listener_in_background_context =
+      background_context && bindings_system_->HasEventListenerInContext(
+                                params->event_name, background_context);
 
   // Synthesize a user gesture if this was in response to user action; this is
   // necessary if the gesture was e.g. by clicking on the extension toolbar
@@ -1430,32 +1442,28 @@ void Dispatcher::DispatchEvent(mojom::DispatchEventParamsPtr params,
   // the user gesture. This is intentional, since frames other than the
   // background page should have their own user gestures, such as through button
   // clicks.
-  if (params->is_user_gesture && background_frame) {
-    ScriptContext* background_context =
-        ScriptContextSet::GetMainWorldContextForFrame(background_frame);
-    if (background_context && bindings_system_->HasEventListenerInContext(
-                                  params->event_name, background_context)) {
-      background_frame->GetWebFrame()->NotifyUserActivation(
-          blink::mojom::UserActivationNotificationType::kExtensionEvent);
-    }
+  if (params->is_user_gesture && background_context &&
+      event_has_listener_in_background_context) {
+    background_frame->GetWebFrame()->NotifyUserActivation(
+        blink::mojom::UserActivationNotificationType::kExtensionEvent);
   }
 
-  DispatchEventHelper(params->extension_id, params->event_name, event_args,
+  DispatchEventHelper(*params->host_id, params->event_name, event_args,
                       std::move(params->filtering_info));
-
 #if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
   if (background_frame) {
     // Tell the browser process when an event has been dispatched with a lazy
     // background page active.
-    const Extension* extension =
-        RendererExtensionRegistry::Get()->GetByID(params->extension_id);
-    if (extension && BackgroundInfo::HasLazyBackgroundPage(extension)) {
+    const Extension* extension = RendererExtensionRegistry::Get()->GetByID(
+        GenerateExtensionIdFromHostID(*params->host_id));
+    if (extension && BackgroundInfo::HasBackgroundPage(extension)) {
       background_frame->Send(new ExtensionHostMsg_EventAck(
-          background_frame->GetRoutingID(), params->event_id));
+          background_frame->GetRoutingID(), params->event_id,
+          event_has_listener_in_background_context));
     }
   }
 #endif
-  std::move(callback).Run();
+  std::move(callback).Run(event_has_listener_in_background_context);
 }
 
 void Dispatcher::SetDeveloperMode(bool current_developer_mode) {
@@ -1566,7 +1574,9 @@ void Dispatcher::EnableCustomElementAllowlist() {
   blink::WebCustomElement::AddEmbedderCustomElementName("appview");
   blink::WebCustomElement::AddEmbedderCustomElementName("extensionoptions");
   blink::WebCustomElement::AddEmbedderCustomElementName("webview");
-  delegate_->EnableCustomElementAllowlist();
+  for (const auto& api_provider : api_providers_) {
+    api_provider->EnableCustomElementAllowlist();
+  }
 }
 
 void Dispatcher::UpdateAllBindings(bool api_permissions_changed) {
@@ -1609,6 +1619,9 @@ void Dispatcher::PopulateSourceMap() {
   for (const auto& resource : resources)
     source_map_.RegisterSource(resource.name, resource.id);
   delegate_->PopulateSourceMap(&source_map_);
+  for (const auto& api_provider : api_providers_) {
+    api_provider->PopulateSourceMap(&source_map_);
+  }
 }
 
 bool Dispatcher::IsWithinPlatformApp() {
@@ -1635,7 +1648,7 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   // to use GuestViews, but we don't define the error-providing elements in this
   // case.
   const bool is_platform_app =
-      context->context_type() == Feature::BLESSED_EXTENSION_CONTEXT &&
+      context->context_type() == mojom::ContextType::kPrivilegedExtension &&
       !context->IsForServiceWorker() && context->extension() &&
       context->extension()->is_platform_app();
   const bool app_view_permission_exists = is_platform_app;
@@ -1664,9 +1677,14 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   // Require WebView.
   if (context->GetAvailability("webViewInternal").is_available()) {
     requires_guest_view_module = true;
-    // The embedder of the extensions layer may define its own implementation
-    // of WebView.
-    delegate_->RequireWebViewModules(context);
+
+    // If none of the API providers require a WebView module, use the embedder's
+    // implementation.
+    if (!RequireWebViewModulesFromProviders(context)) {
+      // The embedder of the extensions layer may define its own implementation
+      // of WebView.
+      delegate_->RequireWebViewModules(context);
+    }
   } else if (web_view_permission_exists) {
     module_system->Require("webViewDeny");
   }
@@ -1683,6 +1701,15 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   }
 
   vivaldi::VivaldiAddRequiredModules(context, module_system);
+}
+
+bool Dispatcher::RequireWebViewModulesFromProviders(ScriptContext* context) {
+  for (const auto& api_provider : api_providers_) {
+    if (api_provider->RequireWebViewModules(context)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::unique_ptr<NativeExtensionBindingsSystem> Dispatcher::CreateBindingsSystem(

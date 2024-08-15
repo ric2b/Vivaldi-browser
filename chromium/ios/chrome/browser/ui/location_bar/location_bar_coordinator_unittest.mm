@@ -15,10 +15,8 @@
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#import "ios/chrome/browser/history/history_service_factory.h"
+#import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -33,6 +31,7 @@
 #import "ios/chrome/browser/url_loading/model/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -68,8 +67,7 @@ namespace {
 
 class LocationBarCoordinatorTest : public PlatformTest {
  protected:
-  LocationBarCoordinatorTest()
-      : scene_state_([[SceneState alloc] initWithAppState:nil]) {}
+  LocationBarCoordinatorTest() {}
 
   void SetUp() override {
     PlatformTest::SetUp();
@@ -100,8 +98,6 @@ class LocationBarCoordinatorTest : public PlatformTest {
     browser_ = std::make_unique<TestBrowser>(browser_state_.get());
     UrlLoadingNotifierBrowserAgent::CreateForBrowser(browser_.get());
     FakeUrlLoadingBrowserAgent::InjectForBrowser(browser_.get());
-
-    SceneStateBrowserAgent::CreateForBrowser(browser_.get(), scene_state_);
 
     auto web_state = std::make_unique<web::FakeWebState>();
     web_state->SetBrowserState(browser_state_.get());
@@ -155,12 +151,12 @@ class LocationBarCoordinatorTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
   LocationBarCoordinator* coordinator_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<Browser> browser_;
-  SceneState* scene_state_;
   TestOmniboxFocusDelegate* delegate_;
 };
 

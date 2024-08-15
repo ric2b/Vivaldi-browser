@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void reflect_bba2d0() {
+  float2 res = float2(-3.0f);
+}
+vertex float4 vertex_main() {
+  reflect_bba2d0();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  reflect_bba2d0();
+}
+kernel void compute_main() {
+  reflect_bba2d0();
+}

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "components/segmentation_platform/internal/execution/model_execution_status.h"
 #include "components/segmentation_platform/internal/selection/segment_selector_impl.h"
 
@@ -85,12 +85,12 @@ class MockTrainingDataCollector : public TrainingDataCollector {
   MOCK_METHOD0(OnModelMetadataUpdated, void());
   MOCK_METHOD0(OnServiceInitialized, void());
   MOCK_METHOD0(ReportCollectedContinuousTrainingData, void());
-  MOCK_METHOD4(
-      OnDecisionTime,
-      TrainingRequestId(proto::SegmentId id,
-                        scoped_refptr<InputContext> input_context,
-                        DecisionType type,
-                        absl::optional<ModelProvider::Request> inputs));
+  MOCK_METHOD5(OnDecisionTime,
+               TrainingRequestId(proto::SegmentId id,
+                                 scoped_refptr<InputContext> input_context,
+                                 DecisionType type,
+                                 absl::optional<ModelProvider::Request> inputs,
+                                 bool decision_result_update_trigger));
   MOCK_METHOD4(CollectTrainingData,
                void(SegmentId segment_id,
                     TrainingRequestId request_id,
@@ -204,13 +204,13 @@ class SegmentSelectorTest : public testing::Test {
   base::SimpleTestClock clock_;
   std::unique_ptr<test::TestSegmentInfoDatabase> segment_database_;
   MockSignalStorageConfig signal_storage_config_;
-  raw_ptr<TestSegmentationResultPrefs, DanglingUntriaged> prefs_;
-  std::unique_ptr<SegmentSelectorImpl> segment_selector_;
-  MockTrainingDataCollector training_data_collector_;
-  raw_ptr<processing::MockFeatureListQueryProcessor, DanglingUntriaged>
-      mock_query_processor_ = nullptr;
   std::unique_ptr<MockModelManager> mock_model_manager_;
   std::unique_ptr<ExecutionService> execution_service_;
+  std::unique_ptr<SegmentSelectorImpl> segment_selector_;
+  raw_ptr<TestSegmentationResultPrefs> prefs_;
+  MockTrainingDataCollector training_data_collector_;
+  raw_ptr<processing::MockFeatureListQueryProcessor> mock_query_processor_ =
+      nullptr;
 };
 
 TEST_F(SegmentSelectorTest, FindBestSegmentFlowWithTwoSegments) {

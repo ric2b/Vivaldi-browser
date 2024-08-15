@@ -54,9 +54,9 @@ namespace language_packs {
 struct PackResult;
 }  // namespace language_packs
 
+class AccessibilityDlcInstaller;
 class AccessibilityExtensionLoader;
 class Dictation;
-class PumpkinInstaller;
 class SelectToSpeakEventHandlerDelegateImpl;
 enum class SelectToSpeakState;
 enum class SelectToSpeakPanelAction;
@@ -96,11 +96,13 @@ using AccessibilityStatusCallbackList =
     base::RepeatingCallbackList<void(const AccessibilityStatusEventDetails&)>;
 using AccessibilityStatusCallback =
     AccessibilityStatusCallbackList::CallbackType;
-using GetDlcContentsCallback =
+using GetTtsDlcContentsCallback =
     base::OnceCallback<void(const std::vector<uint8_t>&,
-                            absl::optional<std::string>)>;
+                            std::optional<std::string>)>;
+using InstallFaceGazeAssetsCallback = base::OnceCallback<void(
+    std::optional<::extensions::api::accessibility_private::FaceGazeAssets>)>;
 using InstallPumpkinCallback = base::OnceCallback<void(
-    absl::optional<::extensions::api::accessibility_private::PumpkinData>)>;
+    std::optional<::extensions::api::accessibility_private::PumpkinData>)>;
 
 class AccessibilityPanelWidgetObserver;
 
@@ -185,6 +187,12 @@ class AccessibilityManager
 
   // Returns true if autoclick is enabled.
   bool IsAutoclickEnabled() const;
+
+  // Enables or disables FaceGaze.
+  void EnableFaceGaze(bool enabled);
+
+  // Returns true if FaceGaze is enabled.
+  bool IsFaceGazeEnabled() const;
 
   // Requests the Autoclick extension find the bounds of the nearest scrollable
   // ancestor to the point in the screen, as given in screen coordinates.
@@ -434,18 +442,27 @@ class AccessibilityManager
     return is_pumpkin_installed_for_testing_;
   }
 
-  // Triggers a request to install Pumpkin. Runs `callback` with a value of
-  // true if the install was successful. Otherwise, runs `callback` with a
-  // value of false.
+  // Triggers a request to install the FaceGaze assets DLC. Runs `callback` with
+  // the file bytes if the DLC was successfully downloaded. Runs `callback` with
+  // an empty object otherwise.
+  void InstallFaceGazeAssets(InstallFaceGazeAssetsCallback callback);
+
+  // Triggers a request to install Pumpkin. Runs `callback` with the file bytes
+  // if the DLC was successfully downloaded. Runs `callback` with an empty
+  // object otherwise.
   void InstallPumpkinForDictation(InstallPumpkinCallback callback);
 
   // Reads the contents of a DLC file and runs `callback` with the results.
-  void GetDlcContents(::extensions::api::accessibility_private::DlcType dlc,
-                      GetDlcContentsCallback callback);
-  // A helper for GetDlcContents, which is called after retrieving the state
+  void GetTtsDlcContents(
+      ::extensions::api::accessibility_private::DlcType dlc,
+      ::extensions::api::accessibility_private::TtsVariant variant,
+      GetTtsDlcContentsCallback callback);
+  // A helper for GetTtsDlcContents, which is called after retrieving the state
   // of the target DLC.
-  void GetDlcContentsOnPackState(GetDlcContentsCallback callback,
-                                 const language_packs::PackResult& pack_result);
+  void GetTtsDlcContentsOnPackState(
+      ::extensions::api::accessibility_private::TtsVariant variant,
+      GetTtsDlcContentsCallback callback,
+      const language_packs::PackResult& pack_result);
   void SetDlcPathForTest(base::FilePath path);
 
  protected:
@@ -567,21 +584,23 @@ class AccessibilityManager
 
   void CreateChromeVoxPanel();
 
+  // Methods for managing the FaceGaze assets DLC.
+  void OnFaceGazeAssetsInstalled(bool success, const std::string& root_path);
+  void OnFaceGazeAssetsCreated(
+      std::optional<::extensions::api::accessibility_private::FaceGazeAssets>
+          assets);
+
   // Pumpkin-related methods.
-  void OnPumpkinInstalled(bool success);
+  void OnPumpkinInstalled(bool success, const std::string& root_path);
   void OnPumpkinError(const std::string& error);
   void OnPumpkinDataCreated(
-      absl::optional<::extensions::api::accessibility_private::PumpkinData>
+      std::optional<::extensions::api::accessibility_private::PumpkinData>
           data);
 
   void OnAppTerminating();
 
-  // Returns a full file path given a DLC.
-  base::FilePath TtsDlcTypeToPath(
-      ::extensions::api::accessibility_private::DlcType dlc);
-
   // Profile which has the current a11y context.
-  raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
 
   base::ScopedObservation<session_manager::SessionManager,
@@ -617,7 +636,7 @@ class AccessibilityManager
 
   bool braille_ime_current_ = false;
 
-  raw_ptr<ChromeVoxPanel, ExperimentalAsh> chromevox_panel_ = nullptr;
+  raw_ptr<ChromeVoxPanel> chromevox_panel_ = nullptr;
   std::unique_ptr<AccessibilityPanelWidgetObserver>
       chromevox_panel_widget_observer_;
 
@@ -641,7 +660,7 @@ class AccessibilityManager
 
   std::unique_ptr<AccessibilityExtensionLoader> switch_access_loader_;
 
-  std::unique_ptr<PumpkinInstaller> pumpkin_installer_;
+  std::unique_ptr<AccessibilityDlcInstaller> dlc_installer_;
 
   std::map<ax::mojom::AssistiveTechnologyType, std::set<std::string>>
       focus_ring_names_for_at_type_;
@@ -671,6 +690,8 @@ class AccessibilityManager
 
   // Whether the virtual keyboard was enabled before Switch Access loaded.
   bool was_vk_enabled_before_switch_access_ = false;
+
+  InstallFaceGazeAssetsCallback install_facegaze_assets_callback_;
 
   InstallPumpkinCallback install_pumpkin_callback_;
   bool is_pumpkin_installed_for_testing_ = false;

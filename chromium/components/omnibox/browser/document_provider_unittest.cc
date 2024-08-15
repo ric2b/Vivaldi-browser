@@ -49,7 +49,9 @@ using testing::Return;
 class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
  public:
   FakeAutocompleteProviderClient()
-      : template_url_service_(new TemplateURLService(nullptr, 0)),
+      : template_url_service_(
+            new TemplateURLService(/*prefs=*/nullptr,
+                                   /*search_engine_choice_service=*/nullptr)),
         pref_service_(new TestingPrefServiceSimple()) {
     pref_service_->registry()->RegisterBooleanPref(
         omnibox::kDocumentSuggestEnabled, true);
@@ -234,10 +236,15 @@ TEST_F(DocumentProviderTest, IsDocumentProviderAllowed) {
   // Client-side toggle must be enabled. This should be enabled by default; i.e.
   // we didn't explicitly enable this above.
   PrefService* fake_prefs = client_->GetPrefs();
-  fake_prefs->SetBoolean(omnibox::kDocumentSuggestEnabled, false);
-  EXPECT_FALSE(provider_->IsDocumentProviderAllowed(ac_input));
-  fake_prefs->SetBoolean(omnibox::kDocumentSuggestEnabled, true);
-  EXPECT_TRUE(provider_->IsDocumentProviderAllowed(ac_input));
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(omnibox::kDocumentProviderNoSetting);
+
+    fake_prefs->SetBoolean(omnibox::kDocumentSuggestEnabled, false);
+    EXPECT_FALSE(provider_->IsDocumentProviderAllowed(ac_input));
+    fake_prefs->SetBoolean(omnibox::kDocumentSuggestEnabled, true);
+    EXPECT_TRUE(provider_->IsDocumentProviderAllowed(ac_input));
+  }
 
   // Unless the "no setting" Feature is enabled, in which case the setting state
   // shouldn't matter.

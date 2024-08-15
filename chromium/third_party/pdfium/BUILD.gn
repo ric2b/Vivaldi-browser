@@ -4,6 +4,7 @@
 
 import("//build/config/clang/clang.gni")
 import("//build/config/gclient_args.gni")
+import("//build/config/rust.gni")
 import("//testing/test.gni")
 import("pdfium.gni")
 
@@ -40,7 +41,11 @@ config("pdfium_common_config") {
   }
 
   if (pdf_use_skia) {
-    defines += [ "_SKIA_SUPPORT_" ]
+    defines += [ "PDF_USE_SKIA" ]
+
+    if (pdf_enable_fontations) {
+      defines += [ "PDF_ENABLE_FONTATIONS" ]
+    }
   }
 
   if (pdf_use_partition_alloc) {
@@ -317,6 +322,14 @@ config("pdfium_plugin_config") {
         "-Xclang",
         "blink-gc-plugin",
       ]
+
+      # Disable GC plugin forbidding off-heap collections of GCed:
+      cflags += [
+        "-Xclang",
+        "-plugin-arg-blink-gc-plugin",
+        "-Xclang",
+        "disable-off-heap-collections-of-gced-check",
+      ]
     }
   }
 }
@@ -583,6 +596,11 @@ group("pdfium_all") {
   if (pdf_is_standalone) {
     deps += [ "testing/tools:test_runner_py" ]
   }
+  if (enable_rust) {
+    # Until there's actual Rust code to use, include the rust_build_tests in the
+    # all group to verify the language keeps working here.
+    deps += [ ":rust_build_tests" ]
+  }
 }
 
 # Makes additional targets reachable only for "gn check". These are not always
@@ -595,5 +613,12 @@ group("gn_check") {
   # available.
   if (defined(checkout_skia) && checkout_skia && !is_android) {
     deps += [ "//skia" ]
+  }
+}
+
+if (enable_rust) {
+  group("rust_build_tests") {
+    testonly = true
+    deps = [ "//build/rust/tests" ]
   }
 }

@@ -95,22 +95,22 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
 
   RetainPtr<CFX_DIBitmap> GetBackDrop() override;
 
-  bool SetDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
                  uint32_t color,
                  const FX_RECT& src_rect,
                  int dest_left,
                  int dest_top,
                  BlendMode blend_type) override;
-  bool SetBitsWithMask(const RetainPtr<CFX_DIBBase>& pBitmap,
-                       const RetainPtr<CFX_DIBBase>& pMask,
+  bool SetBitsWithMask(RetainPtr<const CFX_DIBBase> bitmap,
+                       RetainPtr<const CFX_DIBBase> mask,
                        int dest_left,
                        int dest_top,
-                       int bitmap_alpha,
+                       float alpha,
                        BlendMode blend_type) override;
   void SetGroupKnockout(bool group_knockout) override;
   bool SyncInternalBitmaps() override;
 
-  bool StretchDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                      uint32_t color,
                      int dest_left,
                      int dest_top,
@@ -120,8 +120,8 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                      const FXDIB_ResampleOptions& options,
                      BlendMode blend_type) override;
 
-  bool StartDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
-                   int bitmap_alpha,
+  bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                   float alpha,
                    uint32_t color,
                    const CFX_Matrix& matrix,
                    const FXDIB_ResampleOptions& options,
@@ -131,9 +131,9 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
   bool ContinueDIBits(CFX_ImageRenderer* handle,
                       PauseIndicatorIface* pPause) override;
 
-  bool DrawBitsWithMask(const RetainPtr<CFX_DIBBase>& pSource,
-                        const RetainPtr<CFX_DIBBase>& pMask,
-                        int bitmap_alpha,
+  bool DrawBitsWithMask(RetainPtr<const CFX_DIBBase> bitmap,
+                        RetainPtr<const CFX_DIBBase> mask,
+                        float alpha,
                         const CFX_Matrix& matrix,
                         BlendMode blend_type);
 
@@ -153,7 +153,7 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                    bool bAlphaMode) override;
 
   bool MultiplyAlpha(float alpha) override;
-  bool MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask) override;
+  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) override;
 
   void Clear(uint32_t color);
   void Dump() const;
@@ -207,9 +207,9 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                    uint32_t color,
                    const CFX_TextRenderOptions& options);
 
-  bool StartDIBitsSkia(const RetainPtr<CFX_DIBBase>& pSource,
+  bool StartDIBitsSkia(RetainPtr<const CFX_DIBBase> bitmap,
                        const FX_RECT& src_rect,
-                       int bitmap_alpha,
+                       float alpha,
                        uint32_t color,
                        const CFX_Matrix& matrix,
                        const FXDIB_ResampleOptions& options,

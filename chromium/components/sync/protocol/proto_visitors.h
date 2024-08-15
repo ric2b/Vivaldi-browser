@@ -206,7 +206,6 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(use_count);
   VISIT(use_date);
   VISIT(profile_label);
-  VISIT_REP(name_honorific);
   VISIT_REP(name_first);
   VISIT_REP(name_middle);
   VISIT_REP(name_last_first);
@@ -214,9 +213,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_REP(name_last_second);
   VISIT_REP(name_last);
   VISIT_REP(name_full);
-  VISIT_REP(name_full_with_honorific);
 
-  VISIT_REP(name_honorific_status);
   VISIT_REP(name_first_status);
   VISIT_REP(name_middle_status);
   VISIT_REP(name_last_first_status);
@@ -224,7 +221,6 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_REP(name_last_second_status);
   VISIT_REP(name_last_status);
   VISIT_REP(name_full_status);
-  VISIT_REP(name_full_with_honorific_status);
 
   VISIT_REP(email_address);
   VISIT(company_name);
@@ -236,7 +232,12 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(address_home_zip);
   VISIT(address_home_country);
   VISIT(address_home_landmark);
+  VISIT(address_home_overflow);
   VISIT(address_home_between_streets);
+  VISIT(address_home_between_streets_1);
+  VISIT(address_home_between_streets_2);
+  VISIT(address_home_between_streets_or_landmark);
+  VISIT(address_home_overflow_and_landmark);
   VISIT(address_home_admin_level_2);
   VISIT(address_home_street_address);
   VISIT(address_home_sorting_code);
@@ -244,13 +245,21 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT(address_home_thoroughfare_name);
   VISIT(address_home_thoroughfare_number);
   VISIT(address_home_subpremise_name);
+  VISIT(address_home_apt);
+  VISIT(address_home_apt_num);
+  VISIT(address_home_apt_type);
 
   VISIT_ENUM(address_home_city_status);
   VISIT_ENUM(address_home_state_status);
   VISIT_ENUM(address_home_zip_status);
   VISIT_ENUM(address_home_country_status);
   VISIT_ENUM(address_home_landmark_status);
+  VISIT_ENUM(address_home_overflow_status);
   VISIT_ENUM(address_home_between_streets_status);
+  VISIT_ENUM(address_home_between_streets_1_status);
+  VISIT_ENUM(address_home_between_streets_2_status);
+  VISIT_ENUM(address_home_between_streets_or_landmark_status);
+  VISIT_ENUM(address_home_overflow_and_landmark_status);
   VISIT_ENUM(address_home_admin_level_2_status);
   VISIT_ENUM(address_home_street_address_status);
   VISIT_ENUM(address_home_sorting_code_status);
@@ -258,6 +267,9 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillProfileSpecifics& proto) {
   VISIT_ENUM(address_home_thoroughfare_name_status);
   VISIT_ENUM(address_home_thoroughfare_number_status);
   VISIT_ENUM(address_home_subpremise_name_status);
+  VISIT_ENUM(address_home_apt_status);
+  VISIT_ENUM(address_home_apt_num_status);
+  VISIT_ENUM(address_home_apt_type_status);
 
   VISIT(address_home_language_code);
   VISIT_REP(phone_home_whole_number);
@@ -277,7 +289,7 @@ VISIT_PROTO_FIELDS(const sync_pb::AutofillSpecifics& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::AutofillWalletCredentialSpecifics& proto) {
   VISIT(instrument_id);
-  VISIT(cvc);
+  VISIT_SECRET(cvc);
   VISIT(last_updated_time_unix_epoch_millis);
 }
 
@@ -334,7 +346,6 @@ VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics& proto) {
   VISIT(profile_label);
   VISIT(initial_creator_id);
   VISIT(last_modifier_id);
-  VISIT(name_honorific);
   VISIT(name_first);
   VISIT(name_middle);
   VISIT(name_last);
@@ -342,7 +353,6 @@ VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics& proto) {
   VISIT(name_last_conjunction);
   VISIT(name_last_second);
   VISIT(name_full);
-  VISIT(name_full_with_honorific);
   VISIT(email_address);
   VISIT(company_name);
   VISIT(address_city);
@@ -355,13 +365,20 @@ VISIT_PROTO_FIELDS(const sync_pb::ContactInfoSpecifics& proto) {
   VISIT(address_thoroughfare_name);
   VISIT(address_thoroughfare_number);
   VISIT(address_subpremise_name);
+  VISIT(address_apt);
   VISIT(address_apt_num);
+  VISIT(address_apt_type);
   VISIT(address_floor);
   VISIT(address_landmark);
   VISIT(address_between_streets);
   VISIT(address_admin_level_2);
   VISIT(phone_home_whole_number);
   VISIT(address_street_location);
+  VISIT(address_overflow);
+  VISIT(address_between_streets_1);
+  VISIT(address_between_streets_2);
+  VISIT(address_between_streets_or_landmark);
+  VISIT(address_overflow_and_landmark);
   VISIT(birthdate_day);
   VISIT(birthdate_month);
   VISIT(birthdate_year);
@@ -396,7 +413,6 @@ VISIT_PROTO_FIELDS(const sync_pb::CustomNudgeDelay& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::ClientCommand& proto) {
   VISIT(set_sync_poll_interval);
   VISIT(max_commit_batch_size);
-  VISIT(sessions_commit_delay_seconds);
   VISIT(throttle_delay_seconds);
   VISIT(client_invalidation_hint_buffer_size);
   VISIT(gu_retry_delay_seconds);
@@ -428,7 +444,6 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientToServerMessage& proto) {
   VISIT(commit);
   VISIT(get_updates);
   VISIT(store_birthday);
-  VISIT(sync_problem_detected);
   VISIT(debug_info);
   VISIT(client_status);
   VISIT(invalidator_client_id);
@@ -925,6 +940,7 @@ VISIT_PROTO_FIELDS(
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSharingInvitationData& proto) {
   VISIT(password_data);
+  VISIT(password_group_data);
 }
 
 VISIT_PROTO_FIELDS(
@@ -935,6 +951,25 @@ VISIT_PROTO_FIELDS(
   VISIT(origin);
   VISIT(username_element);
   VISIT(username_value);
+  VISIT(password_element);
+  VISIT(display_name);
+  VISIT(avatar_url);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::PasswordSharingInvitationData::PasswordGroupData& proto) {
+  VISIT(username_value);
+  VISIT(password_value);
+  VISIT_REP(element_data);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::PasswordSharingInvitationData::PasswordGroupElementData&
+        proto) {
+  VISIT(scheme);
+  VISIT(signon_realm);
+  VISIT(origin);
+  VISIT(username_element);
   VISIT(password_element);
   VISIT(display_name);
   VISIT(avatar_url);
@@ -1481,6 +1516,26 @@ VISIT_PROTO_FIELDS(const sync_pb::BankAccountDetails& proto) {
   VISIT_ENUM(account_type);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::CardBenefit& proto) {
+  VISIT(benefit_id);
+  VISIT(benefit_description);
+  VISIT(start_time_unix_epoch_milliseconds);
+  VISIT(end_time_unix_epoch_milliseconds);
+  VISIT(flat_rate_benefit);
+  VISIT(category_benefit);
+  VISIT(merchant_benefit);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::CardBenefit_FlatRateBenefit& proto) {}
+
+VISIT_PROTO_FIELDS(const sync_pb::CardBenefit_CategoryBenefit& proto) {
+  VISIT_ENUM(category_benefit_type);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::CardBenefit_MerchantBenefit& proto) {
+  VISIT_REP(merchant_domain);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::CardIssuer& proto) {
   VISIT_ENUM(issuer);
   VISIT(issuer_id);
@@ -1503,6 +1558,8 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {
   VISIT(card_art_url);
   VISIT(product_description);
   VISIT_ENUM(virtual_card_enrollment_type);
+  VISIT_REP(card_benefit);
+  VISIT(product_terms_url);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMetadataSpecifics& proto) {
@@ -1543,6 +1600,14 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletCreditCardCloudTokenData& proto) {
   VISIT(instrument_token);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedIban& proto) {
+  VISIT(instrument_id);
+  VISIT(prefix);
+  VISIT(suffix);
+  VISIT(length);
+  VISIT(nickname);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::WebApkIconInfo& proto) {
   VISIT(size_in_px);
   VISIT(url);
@@ -1568,13 +1633,14 @@ VISIT_PROTO_FIELDS(const sync_pb::WebAppIconInfo& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::WebAppSpecifics& proto) {
   VISIT(start_url);
   VISIT(name);
-  VISIT_ENUM(user_display_mode);
+  VISIT_ENUM(user_display_mode_non_cros);
   VISIT(theme_color);
   VISIT(scope);
   VISIT_REP(icon_infos);
   VISIT(user_page_ordinal);
   VISIT(user_launch_ordinal);
   VISIT(relative_manifest_id);
+  VISIT_ENUM(user_display_mode_cros);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WifiConfigurationSpecifics::

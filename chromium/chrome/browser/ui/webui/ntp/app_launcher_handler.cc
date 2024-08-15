@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -96,7 +97,6 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "net/base/url_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
@@ -227,8 +227,8 @@ base::Value::Dict AppLauncherHandler::CreateWebAppInfo(
   const bool hide_display_mode = registrar.IsIsolated(app_id);
   dict.Set("hideDisplayMode", hide_display_mode);
 
-  absl::optional<std::string> icon_big;
-  absl::optional<std::string> icon_small;
+  std::optional<std::string> icon_big;
+  std::optional<std::string> icon_small;
 
   if (HasMatchingOrGreaterThanIcon(
           registrar.GetAppDownloadedIconSizesAny(app_id),
@@ -496,7 +496,7 @@ void AppLauncherHandler::RegisterMessages() {
 
 void AppLauncherHandler::OnAppsReordered(
     content::BrowserContext* context,
-    const absl::optional<std::string>& extension_id) {
+    const std::optional<std::string>& extension_id) {
   if (ignore_changes_ || !has_loaded_apps_)
     return;
 
@@ -557,7 +557,7 @@ void AppLauncherHandler::OnWebAppInstalled(const webapps::AppId& app_id) {
 
   visible_apps_.insert(app_id);
   base::Value highlight(attempting_web_app_install_page_ordinal_.has_value());
-  attempting_web_app_install_page_ordinal_ = absl::nullopt;
+  attempting_web_app_install_page_ordinal_ = std::nullopt;
   web_ui()->CallJavascriptFunctionUnsafe("ntp.appAdded",
                                          CreateWebAppInfo(app_id), highlight);
 }
@@ -752,13 +752,8 @@ void AppLauncherHandler::HandleGetApps(const base::Value::List& args) {
       if (extensions::IsExtensionUnsupportedDeprecatedApp(profile, app_id) &&
           !deprecated_app_ids_.empty()) {
         TabDialogs::FromWebContents(web_contents)
-            ->ShowDeprecatedAppsDialog(
-                app_id, deprecated_app_ids_, web_contents,
-                base::BindOnce(
-                    &AppLauncherHandler::LaunchApp,
-                    weak_ptr_factory_.GetWeakPtr(), app_id,
-                    extension_misc::AppLaunchBucket::APP_LAUNCH_CMD_LINE_APP,
-                    "", WindowOpenDisposition::CURRENT_TAB, true));
+            ->ShowDeprecatedAppsDialog(app_id, deprecated_app_ids_,
+                                       web_contents);
       }
     }
     if (net::GetValueForKeyInQuery(web_contents->GetLastCommittedURL(),
@@ -771,13 +766,7 @@ void AppLauncherHandler::HandleGetApps(const base::Value::List& args) {
                                                                   web_contents);
         } else {
           TabDialogs::FromWebContents(web_contents)
-              ->ShowForceInstalledDeprecatedAppsDialog(
-                  app_id, web_contents,
-                  base::BindOnce(
-                      &AppLauncherHandler::LaunchApp,
-                      weak_ptr_factory_.GetWeakPtr(), app_id,
-                      extension_misc::AppLaunchBucket::APP_LAUNCH_CMD_LINE_APP,
-                      "", WindowOpenDisposition::CURRENT_TAB, true));
+              ->ShowForceInstalledDeprecatedAppsDialog(app_id, web_contents);
         }
       }
     }
@@ -801,28 +790,23 @@ void AppLauncherHandler::HandleLaunchApp(const base::Value::List& args) {
   if (args.size() > 2) {
     source_value = args[2].GetString();
   }
-  LaunchApp(extension_id, launch_bucket, source_value, disposition, false);
+  LaunchApp(extension_id, launch_bucket, source_value, disposition);
 }
 
 void AppLauncherHandler::LaunchApp(
     std::string extension_id,
     extension_misc::AppLaunchBucket launch_bucket,
     const std::string& source_value,
-    WindowOpenDisposition disposition,
-    bool force_launch_deprecated_apps) {
+    WindowOpenDisposition disposition) {
   Profile* profile = extension_service_->profile();
 
-  if (!force_launch_deprecated_apps &&
-      extensions::IsExtensionUnsupportedDeprecatedApp(profile, extension_id) &&
+  if (extensions::IsExtensionUnsupportedDeprecatedApp(profile, extension_id) &&
       base::FeatureList::IsEnabled(features::kChromeAppsDeprecation)) {
     if (!extensions::IsExtensionForceInstalled(profile, extension_id,
                                                nullptr)) {
       TabDialogs::FromWebContents(web_ui()->GetWebContents())
-          ->ShowDeprecatedAppsDialog(
-              extension_id, deprecated_app_ids_, web_ui()->GetWebContents(),
-              base::BindOnce(&AppLauncherHandler::LaunchApp,
-                             weak_ptr_factory_.GetWeakPtr(), extension_id,
-                             launch_bucket, source_value, disposition, true));
+          ->ShowDeprecatedAppsDialog(extension_id, deprecated_app_ids_,
+                                     web_ui()->GetWebContents());
       return;
     } else if (extensions::IsPreinstalledAppId(extension_id)) {
       TabDialogs::FromWebContents(web_ui()->GetWebContents())
@@ -831,11 +815,8 @@ void AppLauncherHandler::LaunchApp(
       return;
     } else {
       TabDialogs::FromWebContents(web_ui()->GetWebContents())
-          ->ShowForceInstalledDeprecatedAppsDialog(
-              extension_id, web_ui()->GetWebContents(),
-              base::BindOnce(&AppLauncherHandler::LaunchApp,
-                             weak_ptr_factory_.GetWeakPtr(), extension_id,
-                             launch_bucket, source_value, disposition, true));
+          ->ShowForceInstalledDeprecatedAppsDialog(extension_id,
+                                                   web_ui()->GetWebContents());
       return;
     }
   }
@@ -1259,7 +1240,7 @@ void AppLauncherHandler::HandleLaunchDeprecatedAppDialog(
     const base::Value::List& args) {
   TabDialogs::FromWebContents(web_ui()->GetWebContents())
       ->ShowDeprecatedAppsDialog(extensions::ExtensionId(), deprecated_app_ids_,
-                                 web_ui()->GetWebContents(), base::DoNothing());
+                                 web_ui()->GetWebContents());
 }
 
 void AppLauncherHandler::OnFaviconForAppInstallFromLink(
@@ -1284,7 +1265,7 @@ void AppLauncherHandler::OnFaviconForAppInstallFromLink(
           return;
         if (install_result != webapps::InstallResultCode::kSuccessNewInstall) {
           app_launcher_handler->attempting_web_app_install_page_ordinal_ =
-              absl::nullopt;
+              std::nullopt;
         }
       },
       weak_ptr_factory_.GetWeakPtr());

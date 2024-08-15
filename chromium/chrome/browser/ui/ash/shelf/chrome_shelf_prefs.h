@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
@@ -75,16 +76,16 @@ class ChromeShelfPrefs : public app_list::AppListSyncableService::Observer {
   // `PinnedLauncherApps` policy.
   void SetPinPosition(const ash::ShelfID& shelf_id,
                       const ash::ShelfID& shelf_id_before,
-                      const std::vector<ash::ShelfID>& shelf_ids_after,
+                      base::span<const ash::ShelfID> shelf_ids_after,
                       bool pinned_by_policy);
 
   // Makes GetPinnedAppsFromSync() return an empty list. Avoids test failures
   // due to an untitled Play Store icon in the shelf.
   // https://crbug.com/1085597
-  static void SkipPinnedAppsFromSyncForTest();
+  static void SetSkipPinnedAppsFromSyncForTest(bool value);
 
-  // Makes ShouldAddDefaultApps() return true.
-  static void SetShouldAddDefaultAppsForTest();
+  // Makes ShouldAddDefaultApps() return true if set to true.
+  static void SetShouldAddDefaultAppsForTest(bool value);
 
   // In multi-user login, it's possible for the profile to change during a
   // session. This requires resetting all migrations. This method is also called
@@ -159,7 +160,7 @@ class ChromeShelfPrefs : public app_list::AppListSyncableService::Observer {
 
   // The owner of this class is responsible for ensuring the validity of this
   // pointer.
-  raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
 };
 
 #endif  // CHROME_BROWSER_UI_ASH_SHELF_CHROME_SHELF_PREFS_H_

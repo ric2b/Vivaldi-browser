@@ -123,18 +123,30 @@ class MessageSender : public ExtensionHostRegistry::Observer {
 
 class MessagingApiTest : public ExtensionApiTest {
  public:
-  MessagingApiTest() : MessagingApiTest(/*enable_back_forward_cache=*/true) {
-    // Enable back/forward cache.
-  }
-  explicit MessagingApiTest(bool enable_back_forward_cache) {
-    if (enable_back_forward_cache) {
-      feature_list_.InitWithFeaturesAndParameters(
-          content::GetBasicBackForwardCacheFeatureForTesting(),
-          content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
-    } else {
+  explicit MessagingApiTest(
+      bool enable_back_forward_cache = true,
+      bool disconnect_extension_port_when_page_enters_bfcache = true) {
+    if (!enable_back_forward_cache) {
       feature_list_.InitWithFeaturesAndParameters(
           {}, {features::kBackForwardCache});
+      return;
     }
+
+    std::vector<base::test::FeatureRefAndParams> enabled_features =
+        content::GetBasicBackForwardCacheFeatureForTesting();
+    std::vector<base::test::FeatureRef> disabled_features =
+        content::GetDefaultDisabledBackForwardCacheFeaturesForTesting();
+
+    if (disconnect_extension_port_when_page_enters_bfcache) {
+      enabled_features.push_back(
+          {features::kDisconnectExtensionMessagePortWhenPageEntersBFCache, {}});
+    } else {
+      disabled_features.push_back(
+          features::kDisconnectExtensionMessagePortWhenPageEntersBFCache);
+    }
+
+    feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                disabled_features);
   }
 
   MessagingApiTest(const MessagingApiTest&) = delete;
@@ -152,6 +164,15 @@ class MessagingApiTest : public ExtensionApiTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+class MessagingApiWithoutDisconnectExtensionMessagePortWhenPageEntersBFCacheTest
+    : public MessagingApiTest {
+ public:
+  MessagingApiWithoutDisconnectExtensionMessagePortWhenPageEntersBFCacheTest()
+      : MessagingApiTest(
+            /*enable_back_forward_cache=*/true,
+            /*disconnect_extension_port_when_page_enters_bfcache=*/false) {}
+};
+
 class MessagingApiWithoutBackForwardCacheTest : public MessagingApiTest {
  public:
   MessagingApiWithoutBackForwardCacheTest()
@@ -160,6 +181,14 @@ class MessagingApiWithoutBackForwardCacheTest : public MessagingApiTest {
 
 IN_PROC_BROWSER_TEST_F(MessagingApiTest, Messaging) {
   ASSERT_TRUE(RunExtensionTest("messaging/connect", {.custom_arg = "bfcache"}))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(
+    MessagingApiWithoutDisconnectExtensionMessagePortWhenPageEntersBFCacheTest,
+    Messaging) {
+  ASSERT_TRUE(RunExtensionTest("messaging/connect",
+                               {.custom_arg = "bfcache/without_disconnection"}))
       << message_;
 }
 
@@ -1505,10 +1534,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
 
 #endif  // !BUILDFLAG(IS_WIN)
 
-// Tests that messages sent in the unload handler of a window arrive.
-IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingOnUnload) {
+// Tests that messages sent in the pagehide handler of a window arrive.
+IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingOnPagehide) {
   const Extension* extension =
-      LoadExtension(test_data_dir_.AppendASCII("messaging/on_unload"));
+      LoadExtension(test_data_dir_.AppendASCII("messaging/on_pagehide"));
   ExtensionTestMessageListener listener("listening");
   ASSERT_TRUE(extension);
   // Open a new tab to example.com. Since we'll be closing it later, we need
@@ -1533,7 +1562,7 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingOnUnload) {
   chrome::CloseTab(browser());
   destroyed_watcher.Wait();
   base::RunLoop().RunUntilIdle();
-  // The extension should have sent a message from its unload handler.
+  // The extension should have sent a message from its pagehide handler.
   EXPECT_EQ(1, content::EvalJs(background_contents, "window.messageCount;"));
 }
 

@@ -10,6 +10,7 @@
 @class TabSwitcherItem;
 
 #ifdef __cplusplus
+class GURL;
 namespace web {
 class WebStateID;
 }  // namespace web
@@ -37,6 +38,7 @@ typedef void (^TabSwitcherImageFetchingCompletionBlock)(TabSwitcherItem* item,
 
 #ifdef __cplusplus
 @property(nonatomic, readonly) web::WebStateID identifier;
+@property(nonatomic, assign) GURL URL;
 #endif
 @property(nonatomic, readonly) NSString* title;
 @property(nonatomic, readonly) BOOL hidesTitle;
@@ -51,13 +53,6 @@ typedef void (^TabSwitcherImageFetchingCompletionBlock)(TabSwitcherItem* item,
 // Fetches the snapshot, calling `completion` on the calling sequence when the
 // operation completes.
 - (void)fetchSnapshot:(TabSwitcherImageFetchingCompletionBlock)completion;
-
-// Prefetches the snapshot. Once the asynchronous fetch has returned, the next
-// call to `fetchSnapshot:` can be synchronous.
-- (void)prefetchSnapshot;
-
-// Clears the potential prefetched snapshot.
-- (void)clearPrefetchedSnapshot;
 
 @end
 

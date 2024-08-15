@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/android/historical_tab_saver.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/tab/web_contents_state.h"
@@ -35,7 +36,7 @@ class AndroidLiveTabContextCloseWrapper : public AndroidLiveTabContext {
   //   `id_to_tab_group`. If the title is null in Java use "".
   AndroidLiveTabContextCloseWrapper(
       TabModel* tab_model,
-      std::vector<TabAndroid*>&& closed_tabs,
+      std::vector<raw_ptr<TabAndroid, VectorExperimental>>&& closed_tabs,
       std::map<int, tab_groups::TabGroupId>&& tab_id_to_tab_group,
       std::map<tab_groups::TabGroupId, tab_groups::TabGroupVisualData>&&
           tab_group_visual_data,
@@ -63,7 +64,7 @@ class AndroidLiveTabContextCloseWrapper : public AndroidLiveTabContext {
 
   // Gets the TabGroupId for the Tab at `relative_index` into `closed_tabs` or
   // returns nullopt otherwise.
-  absl::optional<tab_groups::TabGroupId> GetTabGroupForTab(
+  std::optional<tab_groups::TabGroupId> GetTabGroupForTab(
       int relative_index) const override;
 
   // Gets the visual data for `group_id` if it exists or nullptr otherwise.
@@ -75,7 +76,7 @@ class AndroidLiveTabContextCloseWrapper : public AndroidLiveTabContext {
 
   // List of indices to close for using BrowserClosing to proxy bulk
   // closure.
-  std::vector<TabAndroid*> closed_tabs_;
+  std::vector<raw_ptr<TabAndroid, VectorExperimental>> closed_tabs_;
 
   // Maps tab IDs to tab groups.
   std::map<int, tab_groups::TabGroupId> tab_id_to_tab_group_;
@@ -131,7 +132,7 @@ class AndroidLiveTabContextRestoreWrapper : public AndroidLiveTabContext {
       int tab_index,
       int selected_navigation,
       const std::string& extension_app_id,
-      absl::optional<tab_groups::TabGroupId> group,
+      std::optional<tab_groups::TabGroupId> group,
       const tab_groups::TabGroupVisualData& group_visual_data,
       bool select,
       bool pin,

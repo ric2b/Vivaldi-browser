@@ -72,13 +72,13 @@ class RenderDeviceDriverIface {
                          int left,
                          int top);
   virtual RetainPtr<CFX_DIBitmap> GetBackDrop();
-  virtual bool SetDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  virtual bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
                          uint32_t color,
                          const FX_RECT& src_rect,
                          int dest_left,
                          int dest_top,
                          BlendMode blend_type) = 0;
-  virtual bool StretchDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  virtual bool StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                              uint32_t color,
                              int dest_left,
                              int dest_top,
@@ -87,8 +87,8 @@ class RenderDeviceDriverIface {
                              const FX_RECT* pClipRect,
                              const FXDIB_ResampleOptions& options,
                              BlendMode blend_type) = 0;
-  virtual bool StartDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
-                           int bitmap_alpha,
+  virtual bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                           float alpha,
                            uint32_t color,
                            const CFX_Matrix& matrix,
                            const FXDIB_ResampleOptions& options,
@@ -108,12 +108,12 @@ class RenderDeviceDriverIface {
                            const FX_RECT& clip_rect,
                            int alpha,
                            bool bAlphaMode);
-#if defined(_SKIA_SUPPORT_)
-  virtual bool SetBitsWithMask(const RetainPtr<CFX_DIBBase>& pBitmap,
-                               const RetainPtr<CFX_DIBBase>& pMask,
+#if defined(PDF_USE_SKIA)
+  virtual bool SetBitsWithMask(RetainPtr<const CFX_DIBBase> bitmap,
+                               RetainPtr<const CFX_DIBBase> mask,
                                int left,
                                int top,
-                               int bitmap_alpha,
+                               float alpha,
                                BlendMode blend_type);
   virtual void SetGroupKnockout(bool group_knockout);
 
@@ -127,7 +127,7 @@ class RenderDeviceDriverIface {
   virtual bool MultiplyAlpha(float alpha) = 0;
 
   // Multiplies the device by an alpha mask, returning `true` on success.
-  virtual bool MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask) = 0;
+  virtual bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) = 0;
 };
 
 #endif  // CORE_FXGE_RENDERDEVICEDRIVER_IFACE_H_

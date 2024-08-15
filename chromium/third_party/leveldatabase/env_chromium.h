@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/containers/linked_list.h"
@@ -305,6 +306,13 @@ LEVELDB_EXPORT leveldb::Status OpenDB(const leveldb_env::Options& options,
                                       const std::string& name,
                                       std::unique_ptr<leveldb::DB>* dbptr);
 
+// Overrides OpenDB with the given closure.
+using DBFactoryMethod =
+    base::RepeatingCallback<leveldb::Status(const leveldb_env::Options&,
+                                            const std::string&,
+                                            std::unique_ptr<leveldb::DB>*)>;
+LEVELDB_EXPORT void SetDBFactoryForTesting(DBFactoryMethod factory);
+
 // Copies the content of |dbptr| into a fresh database to remove traces of
 // deleted data. |options| and |name| of the old database are required to create
 // an identical copy. |dbptr| will be replaced with the new database on success.
@@ -314,8 +322,8 @@ LEVELDB_EXPORT leveldb::Status RewriteDB(const leveldb_env::Options& options,
                                          const std::string& name,
                                          std::unique_ptr<leveldb::DB>* dbptr);
 
-LEVELDB_EXPORT base::StringPiece MakeStringPiece(const leveldb::Slice& s);
-LEVELDB_EXPORT leveldb::Slice MakeSlice(const base::StringPiece& s);
+LEVELDB_EXPORT std::string_view MakeStringView(const leveldb::Slice& s);
+LEVELDB_EXPORT leveldb::Slice MakeSlice(std::string_view s);
 LEVELDB_EXPORT leveldb::Slice MakeSlice(base::span<const uint8_t> s);
 
 }  // namespace leveldb_env

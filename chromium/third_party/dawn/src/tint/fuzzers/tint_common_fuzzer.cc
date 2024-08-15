@@ -55,8 +55,12 @@
 #include "src/tint/utils/math/hash.h"
 
 #if TINT_BUILD_SPV_WRITER
-#include "src/tint/lang/spirv/writer/helpers/generate_bindings.h"
+#include "src/tint/lang/spirv/writer/helpers/ast_generate_bindings.h"
 #endif  // TINT_BUILD_SPV_WRITER
+
+#if TINT_BUILD_MSL_WRITER
+#include "src/tint/lang/msl/writer/helpers/generate_bindings.h"
+#endif  // TINT_BUILD_MSL_WRITER
 
 namespace tint::fuzzers {
 
@@ -263,6 +267,9 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
 
     switch (output_) {
         case OutputFormat::kMSL:
+#if TINT_BUILD_MSL_WRITER
+            options_msl_.bindings = tint::msl::writer::GenerateBindings(program);
+#endif  // TINT_BUILD_MSL_WRITER
             break;
         case OutputFormat::kHLSL:
             break;
@@ -277,14 +284,14 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
 
     // For the generates which use MultiPlanar, make sure the configuration options are provided so
     // that the transformer will execute.
-    if (output_ == OutputFormat::kMSL || output_ == OutputFormat::kHLSL) {
+    if (output_ == OutputFormat::kHLSL) {
         // Gather external texture binding information
         // Collect next valid binding number per group
         std::unordered_map<uint32_t, uint32_t> group_to_next_binding_number;
         std::vector<BindingPoint> ext_tex_bps;
         for (auto* var : program.AST().GlobalVariables()) {
             if (auto* sem_var = program.Sem().Get(var)->As<sem::GlobalVariable>()) {
-                if (auto bp = sem_var->BindingPoint()) {
+                if (auto bp = sem_var->Attributes().binding_point) {
                     auto& n = group_to_next_binding_number[bp->group];
                     n = std::max(n, bp->binding + 1);
 
@@ -306,7 +313,6 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
 
         switch (output_) {
             case OutputFormat::kMSL: {
-                options_msl_.external_texture_options.bindings_map = new_bindings_map;
                 break;
             }
             case OutputFormat::kHLSL: {
@@ -338,7 +344,7 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
             }
 
             auto result = spirv::writer::Generate(program, options_spirv_);
-            if (result) {
+            if (result == Success) {
                 generated_spirv_ = std::move(result->spirv);
 
                 if (!SPIRVToolsValidationCheck(program, generated_spirv_)) {
@@ -358,12 +364,6 @@ int CommonFuzzer::Run(const uint8_t* data, size_t size) {
         }
         case OutputFormat::kMSL: {
 #if TINT_BUILD_MSL_WRITER
-            // TODO(crbug.com/tint/1967): Skip fuzzing of the IR version of the MSL writer, which is
-            // still under construction.
-            if (options_msl_.use_tint_ir) {
-                return 0;
-            }
-
             // Remap resource numbers to a flat namespace.
             // TODO(crbug.com/tint/1501): Do this via Options::BindingMap.
             if (auto flattened = tint::wgsl::FlattenBindings(program)) {

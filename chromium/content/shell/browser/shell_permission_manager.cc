@@ -6,10 +6,10 @@
 
 #include "base/command_line.h"
 #include "base/functional/callback.h"
-#include "components/permissions/features.h"
 #include "components/permissions/permission_util.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/shell/common/shell_switches.h"
 #include "media/base/media_switches.h"
@@ -48,8 +48,7 @@ bool IsAllowlistedPermissionType(PermissionType permission) {
       return true;
 
     case PermissionType::MIDI:
-      if (base::FeatureList::IsEnabled(
-              permissions::features::kBlockMidiByDefault)) {
+      if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
         return false;
       }
       return true;
@@ -69,6 +68,9 @@ bool IsAllowlistedPermissionType(PermissionType permission) {
     case PermissionType::WINDOW_MANAGEMENT:
     case PermissionType::LOCAL_FONTS:
     case PermissionType::DISPLAY_CAPTURE:
+    case PermissionType::CAPTURED_SURFACE_CONTROL:
+    case PermissionType::SMART_CARD:
+    case PermissionType::WEB_PRINTING:
       return false;
   }
 
@@ -196,7 +198,7 @@ ShellPermissionManager::GetPermissionStatusForEmbeddedRequester(
 }
 
 ShellPermissionManager::SubscriptionId
-ShellPermissionManager::SubscribePermissionStatusChange(
+ShellPermissionManager::SubscribeToPermissionStatusChange(
     PermissionType permission,
     RenderProcessHost* render_process_host,
     RenderFrameHost* render_frame_host,
@@ -205,7 +207,7 @@ ShellPermissionManager::SubscribePermissionStatusChange(
   return SubscriptionId();
 }
 
-void ShellPermissionManager::UnsubscribePermissionStatusChange(
+void ShellPermissionManager::UnsubscribeFromPermissionStatusChange(
     SubscriptionId subscription_id) {}
 
 }  // namespace content

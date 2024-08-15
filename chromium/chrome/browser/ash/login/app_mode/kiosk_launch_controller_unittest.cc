@@ -9,7 +9,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_accelerators.h"
+#include "base/check_deref.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -18,10 +20,13 @@
 #include "base/test/scoped_command_line.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/fake_kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_controller.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
@@ -125,9 +130,39 @@ class FakeNetworkMonitor : public ash::NetworkUiController::NetworkMonitor {
 
  private:
   bool online_ = false;
-  raw_ptr<ash::NetworkUiController::NetworkMonitor::Observer, ExperimentalAsh>
-      observer_;
+  raw_ptr<ash::NetworkUiController::NetworkMonitor::Observer> observer_;
   base::WeakPtrFactory<FakeNetworkMonitor> weak_ptr_factory_{this};
+};
+
+// Helper class to own `KioskController` and the Kiosk managers it depends on.
+class KioskControllerHolder {
+ public:
+  KioskControllerHolder()
+      : kiosk_controller(web_kiosk_app_manager_,
+                         chrome_app_manager_,
+                         arc_kiosk_app_manager_) {}
+  ~KioskControllerHolder() = default;
+
+  WebKioskAppManager web_kiosk_app_manager_;
+  KioskChromeAppManager chrome_app_manager_;
+  ArcKioskAppManager arc_kiosk_app_manager_;
+  KioskController kiosk_controller;
+};
+
+class FakeAcceleratorController
+    : public KioskLaunchController::AcceleratorController {
+ public:
+  FakeAcceleratorController() = default;
+  ~FakeAcceleratorController() override = default;
+
+  void EnableAccelerators() override { enabled_ = true; }
+
+  void DisableAccelerators() override { enabled_ = false; }
+
+  bool enabled() { return enabled_; }
+
+ private:
+  bool enabled_ = false;
 };
 
 }  // namespace
@@ -180,12 +215,16 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     view_ = std::make_unique<FakeAppLaunchSplashScreenHandler>();
     auto network_monitor_unique = std::make_unique<FakeNetworkMonitor>();
     network_monitor_ = network_monitor_unique->GetWeakPtr();
+    auto fake_accelerator_controller =
+        std::make_unique<FakeAcceleratorController>();
+    accelerator_controller_ = fake_accelerator_controller.get();
     controller_ = std::make_unique<KioskLaunchController>(
         /*host=*/nullptr, view_.get(),
         base::BindRepeating(
             &KioskLaunchControllerTest::BuildFakeKioskAppLauncher,
             base::Unretained(this)),
-        std::move(network_monitor_unique));
+        std::move(network_monitor_unique),
+        std::move(fake_accelerator_controller));
 
     // We can't call `crash_reporter::ResetCrashKeysForTesting()` to reset crash
     // keys since it destroys the storage for static crash keys. Instead we set
@@ -202,7 +241,7 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   void TearDown() override {
     extensions::ExtensionServiceTestBase::TearDown();
 
-    kiosk_app_manager_.reset();
+    kiosk_controller_holder_.reset();
 
     policy::BrowserPolicyConnectorBase::SetPolicyServiceForTesting(nullptr);
   }
@@ -216,6 +255,10 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   KioskProfileLoader::Delegate& profile_controls() { return *controller_; }
 
   FakeKioskAppLauncher& launcher() { return *app_launcher_; }
+
+  FakeAcceleratorController& accelerator_controller() {
+    return *accelerator_controller_;
+  }
 
   int num_launchers_created() { return app_launchers_created_; }
 
@@ -269,8 +312,8 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   void CleanUpController() { controller().CleanUp(); }
 
   void LoginFakeUser() {
-    fake_user_manager_->AddWebKioskAppUser(kiosk_app_id().account_id.value());
-    fake_user_manager_->LoginUser(kiosk_app_id().account_id.value());
+    fake_user_manager_->AddWebKioskAppUser(kiosk_app_id().account_id);
+    fake_user_manager_->LoginUser(kiosk_app_id().account_id);
   }
 
  private:
@@ -285,9 +328,9 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     AccountId account_id(AccountId::FromUserEmail(email));
     kiosk_app_id_ = KioskAppId::ForWebApp(account_id);
 
-    kiosk_app_manager_ = std::make_unique<WebKioskAppManager>();
-    kiosk_app_manager_->AddAppForTesting(kiosk_app_id_.account_id.value(),
-                                         GURL(kInstallUrl));
+    kiosk_controller_holder_ = std::make_unique<KioskControllerHolder>();
+    WebKioskAppManager::Get()->AddAppForTesting(kiosk_app_id_.account_id,
+                                                GURL(kInstallUrl));
   }
 
   std::unique_ptr<KioskAppLauncher> BuildFakeKioskAppLauncher(
@@ -304,9 +347,9 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   session_manager::SessionManager session_manager_;
   std::unique_ptr<ChromeKeyboardControllerClientTestHelper>
       keyboard_controller_client_;
-  std::unique_ptr<WebKioskAppManager> kiosk_app_manager_;
+  std::unique_ptr<KioskControllerHolder> kiosk_controller_holder_;
 
-  std::unique_ptr<base::AutoReset<absl::optional<bool>>>
+  std::unique_ptr<base::AutoReset<std::optional<bool>>>
       can_configure_network_for_testing_;
 
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
@@ -315,19 +358,31 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   std::unique_ptr<base::AutoReset<bool>>
       disable_wait_timer_and_login_operations_for_testing_;
   std::unique_ptr<FakeAppLaunchSplashScreenHandler> view_;
-  raw_ptr<FakeKioskAppLauncher, DanglingUntriaged | ExperimentalAsh>
-      app_launcher_ = nullptr;  // owned by `controller_`.
+  raw_ptr<FakeKioskAppLauncher, DanglingUntriaged> app_launcher_ =
+      nullptr;  // owned by `controller_`.
   base::WeakPtr<FakeNetworkMonitor>
       network_monitor_;  // owned by `controller_`.
   int app_launchers_created_ = 0;
   std::unique_ptr<KioskLaunchController> controller_;
+  raw_ptr<FakeAcceleratorController>
+      accelerator_controller_;  // owned by `controller_`.
   KioskAppId kiosk_app_id_;
 };
 
 TEST_F(KioskLaunchControllerTest, StartShouldShowAppDataOnSplashScreen) {
   controller().Start(kiosk_app_id(), /*auto_launch=*/false);
+  EXPECT_EQ(view().last_data().url, GURL(kInstallUrl));
+}
 
-  EXPECT_EQ(view().last_app_data().url, GURL(kInstallUrl));
+TEST_F(KioskLaunchControllerTest, ControllerShouldDisableAccelerators) {
+  controller().Start(kiosk_app_id(), /*auto_launch=*/false);
+  EXPECT_FALSE(accelerator_controller().enabled());
+}
+
+TEST_F(KioskLaunchControllerTest, CleanUpShouldReenableAccelerators) {
+  controller().Start(kiosk_app_id(), /*auto_launch=*/false);
+  CleanUpController();
+  EXPECT_TRUE(accelerator_controller().enabled());
 }
 
 TEST_F(KioskLaunchControllerTest, ProfileLoadedShouldInitializeLauncher) {
@@ -848,8 +903,8 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
         testing_profile_manager_.CreateTestingProfile("testing_profile@test");
     crosapi_manager_ = crosapi::CreateCrosapiManagerWithTestRegistry();
     SetUpKioskAppId();
-    fake_user_manager_->AddWebKioskAppUser(kiosk_app_id().account_id.value());
-    fake_user_manager_->LoginUser(kiosk_app_id().account_id.value());
+    fake_user_manager_->AddWebKioskAppUser(kiosk_app_id().account_id);
+    fake_user_manager_->LoginUser(kiosk_app_id().account_id);
     ASSERT_TRUE(crosapi::browser_util::IsLacrosEnabledInWebKioskSession());
 
     keyboard_controller_client_ =
@@ -867,7 +922,8 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
         base::BindRepeating(
             &KioskLaunchControllerUsingLacrosTest::BuildFakeKioskAppLauncher,
             base::Unretained(this)),
-        std::make_unique<FakeNetworkMonitor>());
+        std::make_unique<FakeNetworkMonitor>(),
+        std::make_unique<FakeAcceleratorController>());
 
     SetUpKioskAppInAppManager();
   }
@@ -930,9 +986,9 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
   }
 
   void SetUpKioskAppInAppManager() {
-    kiosk_app_manager_ = std::make_unique<WebKioskAppManager>();
-    kiosk_app_manager_->AddAppForTesting(kiosk_app_id_.account_id.value(),
-                                         GURL(kInstallUrl));
+    kiosk_controller_holder_ = std::make_unique<KioskControllerHolder>();
+    WebKioskAppManager::Get()->AddAppForTesting(kiosk_app_id_.account_id,
+                                                GURL(kInstallUrl));
   }
 
   std::unique_ptr<KioskAppLauncher> BuildFakeKioskAppLauncher(
@@ -954,20 +1010,20 @@ class KioskLaunchControllerUsingLacrosTest : public testing::Test {
       fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};
   TestingProfileManager testing_profile_manager_{
       TestingBrowserProcess::GetGlobal(), &testing_local_state_};
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   crosapi::FakeBrowserManager browser_manager_;
 
   std::unique_ptr<ChromeKeyboardControllerClientTestHelper>
       keyboard_controller_client_;
-  std::unique_ptr<WebKioskAppManager> kiosk_app_manager_;
+  std::unique_ptr<KioskControllerHolder> kiosk_controller_holder_;
 
-  std::unique_ptr<base::AutoReset<absl::optional<bool>>>
+  std::unique_ptr<base::AutoReset<std::optional<bool>>>
       can_configure_network_for_testing_;
   std::unique_ptr<base::AutoReset<bool>>
       disable_wait_timer_and_login_operations_for_testing_;
   std::unique_ptr<FakeAppLaunchSplashScreenHandler> view_;
-  raw_ptr<FakeKioskAppLauncher, DanglingUntriaged | ExperimentalAsh>
-      app_launcher_ = nullptr;  // owned by `controller_`.
+  raw_ptr<FakeKioskAppLauncher, DanglingUntriaged> app_launcher_ =
+      nullptr;  // owned by `controller_`.
   int app_launchers_created_ = 0;
   base::test::TestFuture<bool> launcher_waiter_;
   std::unique_ptr<KioskLaunchController> controller_;

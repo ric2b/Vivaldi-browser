@@ -23,7 +23,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/base/containers/span.h"
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #include "core/fxge/fx_font.h"
 #endif
 
@@ -57,12 +57,6 @@ class CFX_Font {
 
   static const char kDefaultAnsiFontName[];
   static const char kUniversalDefaultFontName[];
-
-  // Returns negative values on failure.
-  static int GetWeightLevel(FX_Charset charset, size_t index);
-
-  // |angle| is typically negative.
-  static int GetSkewFromAngle(int angle);
 
   static ByteString GetDefaultFontNameByCharset(FX_Charset nCharset);
   static FX_Charset GetCharSetFromUnicode(uint16_t word);
@@ -132,12 +126,11 @@ class CFX_Font {
   void SetFontType(FontType type) { m_FontType = type; }
   uint64_t GetObjectTag() const { return m_ObjectTag; }
   pdfium::span<uint8_t> GetFontSpan() const { return m_FontData; }
-  void AdjustMMParams(int glyph_index, int dest_width, int weight) const;
   std::unique_ptr<CFX_Path> LoadGlyphPathImpl(uint32_t glyph_index,
                                               int dest_width) const;
   int GetGlyphWidthImpl(uint32_t glyph_index, int dest_width, int weight) const;
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
   CFX_TypeFace* GetDeviceCache() const;
   bool IsSubstFontBold() const;
 #endif

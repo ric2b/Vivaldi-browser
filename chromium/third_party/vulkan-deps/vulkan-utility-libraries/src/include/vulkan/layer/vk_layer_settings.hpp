@@ -60,4 +60,3 @@ void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pS
 // Return the list of Unknown setting in all VkLayerSettingsCreateInfoEXT
 VkResult vkuGetUnknownSettings(const VkLayerSettingsCreateInfoEXT *pFirstCreateInfo, uint32_t settingsCount, const char **pSettings,
                                std::vector<const char *> &unknownSettings);
-

@@ -14,6 +14,7 @@
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxge/cfx_font.h"
+#include "core/fxge/dib/cfx_dibbase.h"
 #include "core/fxge/text_char_pos.h"
 #include "third_party/base/check_op.h"
 #include "third_party/base/notreached.h"
@@ -50,8 +51,7 @@ int CTextOnlyPrinterDriver::GetDeviceCaps(int caps_id) const {
     case FXDC_VERT_SIZE:
       return m_VertSize;
     default:
-      NOTREACHED();
-      return 0;
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -83,12 +83,13 @@ bool CTextOnlyPrinterDriver::DrawPath(const CFX_Path& path,
   return false;
 }
 
-bool CTextOnlyPrinterDriver::SetDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
-                                       uint32_t color,
-                                       const FX_RECT& src_rect,
-                                       int left,
-                                       int top,
-                                       BlendMode blend_type) {
+bool CTextOnlyPrinterDriver::SetDIBits(
+    const RetainPtr<const CFX_DIBBase>& pBitmap,
+    uint32_t color,
+    const FX_RECT& src_rect,
+    int left,
+    int top,
+    BlendMode blend_type) {
   return false;
 }
 
@@ -100,22 +101,21 @@ bool CTextOnlyPrinterDriver::GetClipBox(FX_RECT* pRect) {
   return true;
 }
 
-bool CTextOnlyPrinterDriver::StretchDIBits(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
-    uint32_t color,
-    int dest_left,
-    int dest_top,
-    int dest_width,
-    int dest_height,
-    const FX_RECT* pClipRect,
-    const FXDIB_ResampleOptions& options,
-    BlendMode blend_type) {
+bool CTextOnlyPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                           uint32_t color,
+                                           int dest_left,
+                                           int dest_top,
+                                           int dest_width,
+                                           int dest_height,
+                                           const FX_RECT* pClipRect,
+                                           const FXDIB_ResampleOptions& options,
+                                           BlendMode blend_type) {
   return false;
 }
 
 bool CTextOnlyPrinterDriver::StartDIBits(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
-    int bitmap_alpha,
+    RetainPtr<const CFX_DIBBase> bitmap,
+    float alpha,
     uint32_t color,
     const CFX_Matrix& matrix,
     const FXDIB_ResampleOptions& options,
@@ -182,13 +182,12 @@ bool CTextOnlyPrinterDriver::DrawDeviceText(
 bool CTextOnlyPrinterDriver::MultiplyAlpha(float alpha) {
   // Not needed. All callers are using `CFX_DIBitmap`-backed raster devices
   // anyway.
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }
 
-bool CTextOnlyPrinterDriver::MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask) {
+bool CTextOnlyPrinterDriver::MultiplyAlphaMask(
+    const RetainPtr<const CFX_DIBBase>& mask) {
   // Not needed. All callers are using `CFX_DIBitmap`-backed raster devices
   // anyway.
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }

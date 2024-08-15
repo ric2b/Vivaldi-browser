@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_FORMS_LAYOUT_FIELDSET_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 
 namespace blink {
 
@@ -36,7 +36,10 @@ class CORE_EXPORT LayoutFieldset final : public LayoutNGBlockFlow {
   }
 
  protected:
-  bool IsOfType(LayoutObjectType) const override;
+  bool IsFieldset() const final {
+    NOT_DESTROYED();
+    return true;
+  }
   void InsertedIntoTree() override;
   void UpdateAnonymousChildStyle(
       const LayoutObject* child,

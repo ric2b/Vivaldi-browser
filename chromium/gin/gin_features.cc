@@ -61,6 +61,11 @@ BASE_FEATURE(kV8PerContextMarkingWorklist,
              "V8PerContextMarkingWorklist",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables profile guided tiering heuristics in V8 GC.
+BASE_FEATURE(kV8ProfileGuidedOptimization,
+             "V8ProfileGuidedOptimization",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables flushing of the instruction cache for the embedded blob.
 BASE_FEATURE(kV8FlushEmbeddedBlobICache,
              "V8FlushEmbeddedBlobICache",
@@ -150,6 +155,13 @@ BASE_FEATURE(kV8SingleThreadedGCInBackground,
              "V8SingleThreadedGCInBackground",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Use V8 efficiency mode for tiering decisions.
+BASE_FEATURE(kV8EfficiencyModeTiering,
+             "V8EfficiencyModeTiering",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<int> kV8EfficiencyModeTieringDelayTurbofan{
+    &kV8EfficiencyModeTiering, "V8EfficiencyModeTieringDelayTurbofan", 0};
+
 // Enables slow histograms that provide detailed information at increased
 // runtime overheads.
 BASE_FEATURE(kV8SlowHistograms,
@@ -190,22 +202,11 @@ BASE_FEATURE(kV8IgnitionElideRedundantTdzChecks,
              "V8IgnitionElideRedundantTdzChecks",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// The currently enabled fallback to the mid-tier register allocator for huge
-// Wasm functions. We want to remove this fallback in the future.
-BASE_FEATURE(kV8MidtierRegallocFallback,
-             "V8MidtierRegallocFallback",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // JavaScript language features.
 
 // Enables the Symbols-as-WeakMap-keys proposal.
 BASE_FEATURE(kJavaScriptSymbolAsWeakMapKey,
              "JavaScriptSymbolAsWeakMapKey",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Enables the change-Array-by-copy proposal.
-BASE_FEATURE(kJavaScriptChangeArrayByCopy,
-             "JavaScriptChangeArrayByCopy",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the Resizable ArrayBuffer proposal.
@@ -243,6 +244,26 @@ BASE_FEATURE(kJavaScriptPromiseWithResolvers,
              "JavaScriptPromiseWithResolvers",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables the Array.fromAsync proposal.
+BASE_FEATURE(kJavaScriptArrayFromAsync,
+             "JavaScriptArrayFromAsync",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the RegExp modifiers proposal.
+BASE_FEATURE(kJavaScriptRegExpModifiers,
+             "JavaScriptRegExpModifiers",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the `with` syntax for the Import Attributes proposal.
+BASE_FEATURE(kJavaScriptImportAttributes,
+             "kJavaScriptImportAttributes",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the set methods proposal.
+BASE_FEATURE(kJavaScriptSetMethods,
+             "JavaScriptSetMethods",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // WebAssembly features.
 
 // Enable support for the WebAssembly tail-call proposal:
@@ -271,5 +292,25 @@ BASE_FEATURE(kWebAssemblyMultipleMemories,
 BASE_FEATURE(kWebAssemblyTurboshaft,
              "WebAssemblyTurboshaft",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kWebAssemblyTurboshaftInstructionSelection,
+             "WebAssemblyTurboshaftInstructionSelection",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Feature for more aggressive code caching (https://crbug.com/v8/14411) and
+// three parameters to control caching behavior.
+BASE_FEATURE(kWebAssemblyMoreAggressiveCodeCaching,
+             "WebAssemblyMoreAggressiveCodeCaching",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<int> kWebAssemblyMoreAggressiveCodeCachingThreshold{
+    &kWebAssemblyMoreAggressiveCodeCaching, "WebAssemblyCodeCachingThreshold",
+    1'000};
+const base::FeatureParam<int> kWebAssemblyMoreAggressiveCodeCachingTimeoutMs{
+    &kWebAssemblyMoreAggressiveCodeCaching, "WebAssemblyCodeCachingTimeoutMs",
+    5000};
+const base::FeatureParam<int>
+    kWebAssemblyMoreAggressiveCodeCachingHardThreshold{
+        &kWebAssemblyMoreAggressiveCodeCaching,
+        "WebAssemblyCodeCachingHardThreshold", 100'000};
 
 }  // namespace features

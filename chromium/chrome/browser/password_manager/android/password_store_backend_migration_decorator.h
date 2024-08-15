@@ -10,7 +10,8 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "components/password_manager/core/browser/password_store_backend.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend.h"
 #include "components/sync/service/sync_service_observer.h"
 
 class PrefService;
@@ -30,7 +31,8 @@ class PasswordStoreBackendMigrationDecorator : public PasswordStoreBackend {
   PasswordStoreBackendMigrationDecorator(
       std::unique_ptr<PasswordStoreBackend> built_in_backend,
       std::unique_ptr<PasswordStoreBackend> android_backend,
-      PrefService* prefs);
+      PrefService* prefs,
+      IsAccountStore is_account_store);
   PasswordStoreBackendMigrationDecorator(
       const PasswordStoreBackendMigrationDecorator&) = delete;
   PasswordStoreBackendMigrationDecorator(
@@ -99,7 +101,7 @@ class PasswordStoreBackendMigrationDecorator : public PasswordStoreBackend {
   void GetAllLoginsWithAffiliationAndBrandingAsync(
       LoginsOrErrorReply callback) override;
   void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) override;
-  void GetAllLoginsForAccountAsync(absl::optional<std::string> account,
+  void GetAllLoginsForAccountAsync(std::string account,
                                    LoginsOrErrorReply callback) override;
   void FillMatchingLoginsAsync(
       LoginsOrErrorReply callback,
@@ -130,6 +132,7 @@ class PasswordStoreBackendMigrationDecorator : public PasswordStoreBackend {
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
+  base::WeakPtr<PasswordStoreBackend> AsWeakPtr() override;
 
   // Starts migration process.
   void StartMigrationAfterInit();

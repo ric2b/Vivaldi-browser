@@ -237,9 +237,9 @@ class PageContentAnnotationsWebContentsObserverTest
     history_service_->Shutdown();
     task_environment()->RunUntilIdle();
 
+    DeleteContents();
+
     page_content_annotations_service_.reset();
-    optimization_guide_model_provider_.reset();
-    template_url_service_.reset();
 
     content::RenderViewHostTestHarness::TearDown();
   }
@@ -261,16 +261,16 @@ class PageContentAnnotationsWebContentsObserverTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestOptimizationGuideModelProvider>
       optimization_guide_model_provider_;
   std::unique_ptr<history::HistoryService> history_service_;
-  base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
   std::unique_ptr<ZeroSuggestCacheService> zero_suggest_cache_service_;
+  std::unique_ptr<TemplateURLService> template_url_service_;
+  raw_ptr<TemplateURL> template_url_;
   std::unique_ptr<FakePageContentAnnotationsService>
       page_content_annotations_service_;
-  std::unique_ptr<TemplateURLService> template_url_service_;
-  raw_ptr<TemplateURL, DanglingUntriaged> template_url_;
 };
 
 TEST_F(PageContentAnnotationsWebContentsObserverTest,
@@ -317,7 +317,7 @@ TEST_F(PageContentAnnotationsWebContentsObserverTest, OgImagePresent) {
       "OptimizationGuide.PageContentAnnotations.SalientImageAvailability",
       /*kAvailableFromOgImage=*/3, 1);
 
-  std::vector<const ukm::mojom::UkmEntry*> entries =
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>> entries =
       ukm_recorder.GetEntriesByName(
           ukm::builders::SalientImageAvailability::kEntryName);
   ASSERT_EQ(1u, entries.size());
@@ -352,7 +352,7 @@ TEST_F(PageContentAnnotationsWebContentsObserverTest, OgImageMalformed) {
       "OptimizationGuide.PageContentAnnotations.SalientImageAvailability",
       /*kNotAvailable=*/1, 1);
 
-  std::vector<const ukm::mojom::UkmEntry*> entries =
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>> entries =
       ukm_recorder.GetEntriesByName(
           ukm::builders::SalientImageAvailability::kEntryName);
   ASSERT_EQ(1u, entries.size());
@@ -388,7 +388,7 @@ TEST_F(PageContentAnnotationsWebContentsObserverTest, NoOgImage) {
       "OptimizationGuide.PageContentAnnotations.SalientImageAvailability",
       /*kNotAvailable=*/1, 1);
 
-  std::vector<const ukm::mojom::UkmEntry*> entries =
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>> entries =
       ukm_recorder.GetEntriesByName(
           ukm::builders::SalientImageAvailability::kEntryName);
   ASSERT_EQ(1u, entries.size());
@@ -423,7 +423,7 @@ TEST_F(PageContentAnnotationsWebContentsObserverTest, OgImageIsNotHTTP) {
       "OptimizationGuide.PageContentAnnotations.SalientImageAvailability",
       /*kNotAvailable=*/1, 1);
 
-  std::vector<const ukm::mojom::UkmEntry*> entries =
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>> entries =
       ukm_recorder.GetEntriesByName(
           ukm::builders::SalientImageAvailability::kEntryName);
   ASSERT_EQ(1u, entries.size());

@@ -34,25 +34,6 @@ class GitWrapperTestCase(unittest.TestCase):
         mockCapture.assert_called_with(['config', 'user.email'],
                                        cwd=self.root_dir)
 
-    @mock.patch('scm.GIT.Capture')
-    def testAssertVersion(self, mockCapture):
-        cases = [
-            ('1.7', True),
-            ('1.7.9', True),
-            ('1.7.9.foo-bar-baz', True),
-            ('1.8', True),
-            ('1.6.9', False),
-        ]
-        for expected_version, expected_ok in cases:
-
-            class GIT(scm.GIT):
-                pass
-
-            mockCapture.return_value = 'git version ' + expected_version
-            ok, version = GIT.AssertVersion('1.7')
-            self.assertEqual(expected_ok, ok)
-            self.assertEqual(expected_version, version)
-
     def testRefToRemoteRef(self):
         remote = 'origin'
         refs = {
@@ -151,6 +132,18 @@ class GitWrapperTestCase(unittest.TestCase):
         actual_state = scm.GIT.IsVersioned('cwd', 'dir')
         self.assertEqual(actual_state, scm.VERSIONED_DIR)
 
+    @mock.patch('scm.GIT.Capture')
+    @mock.patch('os.path.exists', return_value=True)
+    def testListSubmodules(self, mockExists, mockCapture):
+        mockCapture.return_value = (
+            'submodule.submodulename.path foo/path/script'
+            '\nsubmodule.submodule2name.path foo/path/script2')
+        actual_list = scm.GIT.ListSubmodules('root')
+        self.assertEqual(actual_list, ['foo/path/script', 'foo/path/script2'])
+
+    def testListSubmodules_missing(self):
+        self.assertEqual(scm.GIT.ListSubmodules('root'), [])
+
 
 class RealGitTest(fake_repos.FakeReposTestBase):
     def setUp(self):
@@ -162,8 +155,10 @@ class RealGitTest(fake_repos.FakeReposTestBase):
             self.skipTest('git fake repos not available')
 
     def testResolveCommit(self):
-        self.assertIsNone(scm.GIT.ResolveCommit(self.cwd, 'zebra'))
-        self.assertIsNone(scm.GIT.ResolveCommit(self.cwd, 'r123456'))
+        with self.assertRaises(Exception):
+            scm.GIT.ResolveCommit(self.cwd, 'zebra')
+        with self.assertRaises(Exception):
+            scm.GIT.ResolveCommit(self.cwd, 'r123456')
         first_rev = self.githash('repo_1', 1)
         self.assertEqual(first_rev, scm.GIT.ResolveCommit(self.cwd, first_rev))
         self.assertEqual(self.githash('repo_1', 2),

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {exists} from '../../base/utils';
 import {ColumnDef} from '../../common/aggregation_data';
-import {Engine} from '../../common/engine';
 import {pluginManager} from '../../common/plugins';
 import {Area, Sorting} from '../../common/state';
 import {globals} from '../../frontend/globals';
+import {Engine} from '../../trace_processor/engine';
 import {CPU_SLICE_TRACK_KIND} from '../../tracks/cpu_slices';
 
 import {AggregationController} from './aggregation_controller';
@@ -31,7 +32,7 @@ export class CpuByProcessAggregationController extends AggregationController {
       if (track?.uri) {
         const trackInfo = pluginManager.resolveTrackInfo(track.uri);
         if (trackInfo?.kind === CPU_SLICE_TRACK_KIND) {
-          trackInfo.cpu && selectedCpus.push(trackInfo.cpu);
+          exists(trackInfo.cpu) && selectedCpus.push(trackInfo.cpu);
         }
       }
     }

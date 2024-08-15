@@ -78,6 +78,15 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
     kLocalIoCaps,
     kLocalIoCapsBle,
     kDynamicAudioBuffer,
+    kRemoteIsCoordinatedSetMember,
+    kAppearance,
+    kVendorProductInfo,
+    // Unimplemented:
+    //  BT_PROPERTY_WL_MEDIA_PLAYERS_LIST,
+    //  BT_PROPERTY_REMOTE_ASHA_CAPABILITY,
+    //  BT_PROPERTY_REMOTE_ASHA_TRUNCATED_HISYNCID,
+    //  BT_PROPERTY_REMOTE_MODEL_NUM,
+    kRemoteAddrType = 0x18,
 
     kUnknown = 0xFE,
     kRemoteDeviceTimestamp = 0xFF,
@@ -257,6 +266,10 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdapterClient : public FlossDBusClient {
   virtual void GetRemoteUuids(
       ResponseCallback<device::BluetoothDevice::UUIDList> callback,
       FlossDeviceId device);
+
+  // Triggers SDP to fetch UUIDs of a device.
+  virtual void FetchRemoteUuids(ResponseCallback<bool> callback,
+                                FlossDeviceId device);
 
   virtual void GetRemoteVendorProductInfo(
       ResponseCallback<VendorProductInfo> callback,

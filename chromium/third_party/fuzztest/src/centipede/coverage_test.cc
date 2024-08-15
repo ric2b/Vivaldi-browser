@@ -17,12 +17,12 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
+#include <filesystem>  // NOLINT
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>  // NOLINT
@@ -30,15 +30,16 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "./centipede/binary_info.h"
-#include "./centipede/centipede_interface.h"
+#include "./centipede/centipede_callbacks.h"
 #include "./centipede/control_flow.h"
 #include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
-#include "./centipede/logging.h"
+#include "./centipede/mutation_input.h"
 #include "./centipede/pc_info.h"
 #include "./centipede/runner_result.h"
 #include "./centipede/symbol_table.h"
@@ -191,20 +192,6 @@ static std::string GetThreadedTargetPath() {
   return GetDataDependencyFilepath("centipede/testing/threaded_fuzz_target");
 }
 
-// Returns path to llvm-symbolizer.
-static std::string GetLLVMSymbolizerPath() {
-  CHECK_EQ(system("which llvm-symbolizer"), EXIT_SUCCESS)
-      << "llvm-symbolizer has to be installed and findable via PATH";
-  return "llvm-symbolizer";
-}
-
-// Returns path to objdump.
-static std::string GetObjDumpPath() {
-  CHECK_EQ(system("which objdump"), EXIT_SUCCESS)
-      << "objdump has to be installed and findable via PATH";
-  return "objdump";
-}
-
 // A simple CentipedeCallbacks derivative for this test.
 class TestCallbacks : public CentipedeCallbacks {
  public:
@@ -319,6 +306,43 @@ TEST(Coverage, DataFlowFeatures) {
     EXPECT_EQ(
         ExtractDomainFeatures(features[0], feature_domains::k8bitCounters),
         ExtractDomainFeatures(features[1], feature_domains::k8bitCounters));
+  }
+}
+
+// Tests feature collection for counters (--use_counter_features).
+TEST(Coverage, CounterFeatures) {
+  Environment env;
+  env.binary = GetTargetPath();
+
+  // Inputs that generate the same PC coverage but different counters.
+  std::vector<std::string> inputs = {"cnt\x01", "cnt\x02", "cnt\x04", "cnt\x08",
+                                     "cnt\x10"};
+  const size_t n = inputs.size();
+
+  // Run with use_counter_features = true.
+  env.use_counter_features = true;
+  auto features = RunInputsAndCollectCoverage(env, inputs);
+  EXPECT_EQ(features.size(), n);
+  // Counter features should be different.
+  for (size_t i = 0; i < n; ++i) {
+    for (size_t j = i + 1; j < n; ++j) {
+      EXPECT_NE(
+          ExtractDomainFeatures(features[i], feature_domains::k8bitCounters),
+          ExtractDomainFeatures(features[j], feature_domains::k8bitCounters));
+    }
+  }
+
+  // Run with use_counter_features = false.
+  env.use_counter_features = false;
+  features = RunInputsAndCollectCoverage(env, inputs);
+  EXPECT_EQ(features.size(), n);
+  // Counter features should be the same now.
+  for (size_t i = 0; i < n; ++i) {
+    for (size_t j = i + 1; j < n; ++j) {
+      EXPECT_EQ(
+          ExtractDomainFeatures(features[i], feature_domains::k8bitCounters),
+          ExtractDomainFeatures(features[j], feature_domains::k8bitCounters));
+    }
   }
 }
 

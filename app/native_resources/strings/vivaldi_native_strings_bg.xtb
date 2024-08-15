@@ -31,7 +31,7 @@
 <translation id="2441056087170876076">Чудовище 2</translation>
 <translation id="2444387452209867610">Вмъкни записка</translation>
 <translation id="2486841023299517366">Животно 4</translation>
-<translation id="2612127540243995147">Готовност за инсталиране. Vivaldi ще бъде затворен и презареден.</translation>
+<translation id="2612127540243995147">Готовност за инсталиране. Vivaldi ще бъде презареден.</translation>
 <translation id="2613387515621326337">Покажи сайта на обновяването</translation>
 <translation id="2647368062414805334">Настройките на вашия Edge са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Edge. После натиснете „Напред“.</translation>
 <translation id="2721334646575696520">Edge на Microsoft</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Постави</translation>
 <translation id="4005270918754737597">Пропусни версията</translation>
 <translation id="4044951018940382324">Вивалди</translation>
-<translation id="4073157431025461511">&amp;Повече не показвай</translation>
 <translation id="4074744496918018786">Отвори картината в частен прозорец</translation>
 <translation id="410351446219883937">Самопускане</translation>
 <translation id="4281844954008187215">Общи условия</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera версия 15+ (бета)</translation>
 <translation id="5648110075441906505">Отвори картината в нов прозорец</translation>
 <translation id="5656371807944747581">Грешка при обновяване!</translation>
-<translation id="5716238312826274098">Забрана на известяването</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> е налична (вашата версия е <ph name="OLD_VERSION" />). Изтегляне сега?</translation>
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Създай папка</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Провалено зареждане на инсталатора с обновяване. Моля, проверете дали компютърът разполага с достатъчно памет или свободно място и по-късно опитайте отново.</translation>
 <translation id="7658239707568436148">Отказ</translation>
-<translation id="7715497554424665066">&amp;Подмини обновяването</translation>
 <translation id="7724603315864178912">Изрежи</translation>
 <translation id="7727481996062361502">Потвърждаване на обновяването…</translation>
 <translation id="7793738202466490491">Добави като събитие</translation>

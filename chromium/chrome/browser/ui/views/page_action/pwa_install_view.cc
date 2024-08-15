@@ -22,7 +22,7 @@
 #include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_prefs_utils.h"
+#include "chrome/browser/web_applications/web_app_pref_guardrails.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
@@ -40,7 +40,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/metrics/structured/event_logging_features.h"
-// TODO(crbug/4925196): enable gn check once it learn about conditional includes
+// TODO(crbug.com/1125897): Enable gn check once it handles conditional includes
 #include "components/metrics/structured/structured_events.h"  // nogncheck
 #endif
 
@@ -119,7 +119,7 @@ void PwaInstallView::UpdateImpl() {
 
   bool is_probably_promotable = manager->IsProbablyPromotableWebApp();
   if (is_probably_promotable && manager->MaybeConsumeInstallAnimation()) {
-    AnimateIn(absl::nullopt);
+    AnimateIn(std::nullopt);
   } else {
     ResetSlideAnimation(false);
   }
@@ -163,12 +163,13 @@ void PwaInstallView::OnIphClosed() {
   if (!manager) {
     return;
   }
+
   PrefService* prefs =
       Profile::FromBrowserContext(web_contents->GetBrowserContext())
           ->GetPrefs();
 
-  web_app::RecordInstallIphIgnored(
-      prefs, web_app::GenerateAppIdFromManifest(manager->manifest()),
+  web_app::WebAppPrefGuardrails::GetForDesktopInstallIph(prefs).RecordIgnore(
+      web_app::GenerateAppIdFromManifest(manager->manifest()),
       base::Time::Now());
 }
 
@@ -229,9 +230,12 @@ bool PwaInstallView::ShouldShowIph(content::WebContents* web_contents,
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   auto score = site_engagement::SiteEngagementService::Get(profile)->GetScore(
       web_contents->GetVisibleURL());
+
   return score > kIphSiteEngagementThresholdParam.Get() &&
-         web_app::ShouldShowIph(profile->GetPrefs(), app_id);
+         !web_app::WebAppPrefGuardrails::GetForDesktopInstallIph(
+              profile->GetPrefs())
+              .IsBlockedByGuardrails(app_id);
 }
 
-BEGIN_METADATA(PwaInstallView, PageActionIconView)
+BEGIN_METADATA(PwaInstallView)
 END_METADATA

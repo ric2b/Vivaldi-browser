@@ -160,6 +160,8 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   cc::PaintCanvas* GetOrCreatePaintCanvas() final;
   cc::PaintCanvas* GetPaintCanvas() final;
+  MemoryManagedPaintRecorder* Recorder() override;
+
   void WillDraw(const SkIRect& dirty_rect,
                 CanvasPerformanceMonitor::DrawType) final;
 
@@ -181,7 +183,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   void WillDrawImage(CanvasImageSource*) const final;
 
-  void FlushCanvas(FlushReason) override;
+  absl::optional<cc::PaintRecord> FlushCanvas(FlushReason) override;
 
   void Trace(Visitor*) const override;
 
@@ -222,7 +224,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
                    size_t row_bytes,
                    int x,
                    int y) override;
-  void WillOverwriteCanvas() override;
   void TryRestoreContextEvent(TimerBase*) override;
 
   bool WillSetFont() const final;

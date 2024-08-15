@@ -2,16 +2,21 @@
 
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 #pragma mark - SIZE AND PADDINGS
 
 const CGFloat vPrimaryToolbarHorizontalPadding = 4;
 const CGFloat vPrimaryToolbarTextFieldLeadingOffsetNoImage = 0;
 const CGFloat vPrimaryToolbarTextFieldLeadingOffsetImage = 2;
-const CGFloat vStickyToolbarViewHeight = 20.0;
+const CGFloat vPrimaryToolbarLeadingStackViewWidthNoItems = 9;
+const CGFloat vPrimaryToolbarLocationContainerTrailingPadding = 8;
+
+// Secondary toolbar
+const CGFloat vBottomButtonsTopMargin = 8.0;
+const CGFloat vBottomAdaptiveLocationBarTopMargin = 10.0;
+const CGFloat vBottomAdaptiveLocationBarBottomMargin = 12.0;
+const CGFloat vAdaptiveToolbarMargin = 4.0;
+const CGFloat vBottomToolbarSteadyViewTopPadding = 2.0;
+const CGFloat vBottomToolbarSteadyViewTopPaddingFullScreen = 1.0;
 
 #pragma mark - ANIMATIONS
 const CGFloat vPrimaryToolbarAnimationDuration = 0.5;
@@ -30,3 +35,16 @@ const CGFloat vStickyToolbarCollapsedAlpha = 0.0;
 
 NSString* vToolbarPanelButtonIcon = @"toolbar_panel";
 NSString* vToolbarSearchButtonIcon = @"toolbar_search";
+NSString* vToolbarForwardButtonIcon = @"toolbar_forward";
+NSString* vToolbarBackButtonIcon = @"toolbar_back";
+NSString* vToolbarTabSwitcherButtonIcon = @"toolbar_switcher";
+NSString* vToolbarTabSwitcherOveflowButtonIcon = @"toolbar_switcher_overflow";
+
+NSString* vToolbarButtonColor = @"toolbar_button_color";
+NSString* vToolbarLightButton = @"toolbar_button_color_light";
+NSString* vToolbarDarkButton = @"toolbar_button_color_dark";
+
+NSString* vToolbarMoveToTop = @"toolbar_move_to_top";
+NSString* vToolbarMoveToBottom = @"toolbar_move_to_bottom";
+NSString* vToolbarCopyLink = @"toolbar_copy_link";
+NSString* vToolbarPaste = @"toolbar_paste";

@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void cos_a297d4() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  cos_a297d4();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  cos_a297d4();
+}
+kernel void compute_main() {
+  cos_a297d4();
+}

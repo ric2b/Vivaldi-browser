@@ -16,6 +16,7 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.Log;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -58,10 +59,11 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
      */
     private @Nullable ObservableSupplier<Integer> mBrowserCutoutModeSupplier;
 
-    /**
-     * Observes {@link mBrowserCutoutModeSupplier}.
-     */
+    /** Observes {@link mBrowserCutoutModeSupplier}. */
     private @Nullable Callback<Integer> mBrowserCutoutModeObserver;
+
+    /** Observes {@link Delegate#getWebContents()}. */
+    private @Nullable WebContentsObserver mWebContentsObserver;
 
     /** Tracks Safe Area Insets. */
     private final SafeAreaInsetsTrackerImpl mSafeAreaInsetsTracker;
@@ -72,9 +74,7 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
      */
     public interface SafeAreaInsetsTracker {
 
-        /**
-         * @return whether this Tracker was created for a web page set to Cover.
-         */
+        /** @return whether this Tracker was created for a web page set to Cover. */
         boolean isViewportFitCover();
     }
 
@@ -174,12 +174,21 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
      * Add observers to {@link InsetObserver} and the browser display cutout mode supplier if we
      * have not added them.
      */
-    void maybeAddObservers() {
+    @VisibleForTesting
+    public void maybeAddObservers() {
         Activity activity = mDelegate.getAttachedActivity();
         if (activity == null) return;
 
         updateInsetObserver(mDelegate.getInsetObserverView());
         updateBrowserCutoutObserver(mDelegate.getBrowserDisplayCutoutModeSupplier());
+        mWebContentsObserver =
+                new WebContentsObserver(mDelegate.getWebContents()) {
+                    @Override
+                    public void didToggleFullscreenModeForTab(
+                            boolean enteredFullscreen, boolean willCauseResize) {
+                        maybeUpdateLayout();
+                    }
+                };
         mWindow = activity.getWindow();
     }
 
@@ -187,6 +196,10 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
     void removeObservers() {
         updateInsetObserver(null);
         updateBrowserCutoutObserver(null);
+        if (mWebContentsObserver != null) {
+            mWebContentsObserver.destroy();
+            mWebContentsObserver = null;
+        }
         mWindow = null;
     }
 
@@ -211,9 +224,10 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
         mBrowserCutoutModeSupplier = supplier;
         mBrowserCutoutModeObserver = null;
         if (mBrowserCutoutModeSupplier != null) {
-            mBrowserCutoutModeObserver = (browserDisplayCutoutMode) -> {
-                maybeUpdateLayout();
-            };
+            mBrowserCutoutModeObserver =
+                    (browserDisplayCutoutMode) -> {
+                        maybeUpdateLayout();
+                    };
             mBrowserCutoutModeSupplier.addObserver(mBrowserCutoutModeObserver);
         }
     }
@@ -228,13 +242,15 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
      * @param value The new viewport fit value.
      */
     public void setViewportFit(@WebContentsObserver.ViewportFitType int value) {
+        Log.i(TAG, "setViewportFit: %s", value);
         mSafeAreaInsetsTracker.setIsViewportFitCover(
                 value == ViewportFit.COVER || value == ViewportFit.COVER_FORCED_BY_USER_AGENT);
 
         // TODO(crbug.com/1480477): Investigate whether if() can be turned into assert.
-        if (!mDelegate.getWebContents().isFullscreenForCurrentTab()
-                && !mDelegate.isInBrowserFullscreen()
-                && !mDelegate.isDrawEdgeToEdgeEnabled()) {
+        // Most likely we will need to just remove this section when E2E is launched.
+        if (!mDelegate.isDrawEdgeToEdgeEnabled()
+                && !mDelegate.getWebContents().isFullscreenForCurrentTab()
+                && !mDelegate.isInBrowserFullscreen()) {
             value = ViewportFit.AUTO;
         }
 
@@ -263,7 +279,9 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
         if (webContents == null) return;
 
         float dipScale = getDipScale();
-        area.set(adjustInsetForScale(area.left, dipScale), adjustInsetForScale(area.top, dipScale),
+        area.set(
+                adjustInsetForScale(area.left, dipScale),
+                adjustInsetForScale(area.top, dipScale),
                 adjustInsetForScale(area.right, dipScale),
                 adjustInsetForScale(area.bottom, dipScale));
 
@@ -306,16 +324,17 @@ public class DisplayCutoutController implements InsetObserver.WindowInsetObserve
             }
         }
 
-        switch (mViewportFit) {
-            case ViewportFit.CONTAIN:
-                return LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-            case ViewportFit.COVER_FORCED_BY_USER_AGENT:
-            case ViewportFit.COVER:
-                return LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            case ViewportFit.AUTO:
-            default:
-                return LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+        // Never draw under notch if it is not in fullscreen mode.
+        if (!mDelegate.getWebContents().isFullscreenForCurrentTab()) {
+            return LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
         }
+
+        return switch (mViewportFit) {
+            case ViewportFit.CONTAIN -> LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
+            case ViewportFit.COVER_FORCED_BY_USER_AGENT, ViewportFit.COVER -> LayoutParams
+                    .LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            default -> LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+        };
     }
 
     @VisibleForTesting

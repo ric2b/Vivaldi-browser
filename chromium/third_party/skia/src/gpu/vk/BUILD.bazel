@@ -12,7 +12,10 @@ VK_FILES = [
     "VulkanInterface.h",
     "VulkanMemory.cpp",
     "VulkanMemory.h",
+    "VulkanUtilsPriv.cpp",
     "VulkanUtilsPriv.h",
+    "VulkanMutableTextureStatePriv.h",
+    "VulkanMutableTextureState.cpp",
 ]
 
 split_srcs_and_hdrs(

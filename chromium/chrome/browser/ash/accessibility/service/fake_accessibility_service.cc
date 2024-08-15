@@ -15,6 +15,7 @@
 #include "services/accessibility/public/mojom/accessibility_service.mojom.h"
 #include "services/accessibility/public/mojom/autoclick.mojom.h"
 #include "services/accessibility/public/mojom/tts.mojom.h"
+#include "services/accessibility/public/mojom/user_input.mojom.h"
 #include "services/accessibility/public/mojom/user_interface.mojom.h"
 
 namespace ash {
@@ -31,17 +32,34 @@ void FakeAccessibilityService::BindAccessibilityServiceClient(
       file_loader_remote_.BindNewPipeAndPassReceiver());
 }
 
+void FakeAccessibilityService::BindAnotherAutoclickClient() {
+  mojo::PendingReceiver<ax::mojom::AutoclickClient> autoclick_client_receiver;
+  autoclick_client_remotes_.Add(
+      autoclick_client_receiver.InitWithNewPipeAndPassRemote());
+  accessibility_service_client_remote_->BindAutoclickClient(
+      std::move(autoclick_client_receiver));
+
+  // Now connect the autoclick remote in the service back to the client in the
+  // browser by getting a PendingReceiver<Autoclick> from the browser.
+  for (auto& remote : autoclick_client_remotes_) {
+    remote->BindAutoclick(
+        base::BindOnce(&FakeAccessibilityService::OnAutoclickBoundCallback,
+                       base::Unretained(this)));
+  }
+}
+
 void FakeAccessibilityService::BindAnotherAutomation() {
   mojo::PendingAssociatedRemote<ax::mojom::Automation> automation_remote;
   automation_receivers_.Add(
       this, automation_remote.InitWithNewEndpointAndPassReceiver());
+  accessibility_service_client_remote_->BindAutomation(
+      std::move(automation_remote));
+}
 
+void FakeAccessibilityService::BindAnotherAutomationClient() {
   mojo::PendingReceiver<ax::mojom::AutomationClient> automation_client_receiver;
   automation_client_remotes_.Add(
       automation_client_receiver.InitWithNewPipeAndPassRemote());
-
-  accessibility_service_client_remote_->BindAutomation(
-      std::move(automation_remote), std::move(automation_client_receiver));
 }
 
 void FakeAccessibilityService::BindAnotherSpeechRecognition() {
@@ -57,20 +75,10 @@ void FakeAccessibilityService::BindAnotherTts() {
   accessibility_service_client_remote_->BindTts(std::move(tts_receiver));
 }
 
-void FakeAccessibilityService::BindAnotherAutoclickClient() {
-  mojo::PendingReceiver<ax::mojom::AutoclickClient> autoclick_client_receiver;
-  autoclick_client_remotes_.Add(
-      autoclick_client_receiver.InitWithNewPipeAndPassRemote());
-  accessibility_service_client_remote_->BindAutoclickClient(
-      std::move(autoclick_client_receiver));
-
-  // Now connect the autoclick remote in the service back to the client in the
-  // browser by getting a PendingReceiver<Autoclick> from the browser.
-  for (auto& remote : autoclick_client_remotes_) {
-    remote->BindAutoclick(
-        base::BindOnce(&FakeAccessibilityService::OnAutoclickBoundCallback,
-                       base::Unretained(this)));
-  }
+void FakeAccessibilityService::BindAnotherUserInput() {
+  mojo::PendingReceiver<ax::mojom::UserInput> ui_receiver;
+  ui_remotes_.Add(ui_receiver.InitWithNewPipeAndPassRemote());
+  accessibility_service_client_remote_->BindUserInput(std::move(ui_receiver));
 }
 
 void FakeAccessibilityService::BindAnotherUserInterface() {
@@ -134,7 +142,7 @@ void FakeAccessibilityService::DispatchAccessibilityLocationChange(
 
 void FakeAccessibilityService::DispatchGetTextLocationResult(
     const ui::AXActionData& data,
-    const absl::optional<gfx::Rect>& rect) {}
+    const std::optional<gfx::Rect>& rect) {}
 
 void FakeAccessibilityService::EnableAssistiveTechnology(
     const std::vector<ax::mojom::AssistiveTechnologyType>& enabled_features) {
@@ -201,7 +209,7 @@ void FakeAccessibilityService::RequestSpeechRecognitionStart(
 
 void FakeAccessibilityService::RequestSpeechRecognitionStop(
     ax::mojom::StopOptionsPtr options,
-    base::OnceCallback<void()> callback) {
+    base::OnceCallback<void(const std::optional<std::string>&)> callback) {
   CHECK_EQ(sr_remotes_.size(), 1u);
   for (auto& remote : sr_remotes_) {
     remote->Stop(std::move(options), std::move(callback));
@@ -260,6 +268,15 @@ void FakeAccessibilityService::RequestTtsVoices(
   }
 }
 
+void FakeAccessibilityService::
+    RequestSendSyntheticKeyEventForShortcutOrNavigation(
+        ax::mojom::SyntheticKeyEventPtr key_event) {
+  for (auto& ui_client : ui_remotes_) {
+    ui_client->SendSyntheticKeyEventForShortcutOrNavigation(
+        mojo::Clone(key_event));
+  }
+}
+
 void FakeAccessibilityService::RequestDarkenScreen(bool darken) {
   for (auto& ux_client : ux_remotes_) {
     ux_client->DarkenScreen(darken);
@@ -276,7 +293,7 @@ void FakeAccessibilityService::RequestOpenSettingsSubpage(
 void FakeAccessibilityService::RequestShowConfirmationDialog(
     const std::string& title,
     const std::string& description,
-    const absl::optional<std::string>& cancel_name,
+    const std::optional<std::string>& cancel_name,
     ax::mojom::UserInterface::ShowConfirmationDialogCallback callback) {
   for (auto& ux_client : ux_remotes_) {
     ux_client->ShowConfirmationDialog(title, description, cancel_name,

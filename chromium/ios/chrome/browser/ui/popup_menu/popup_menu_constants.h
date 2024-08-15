@@ -86,6 +86,8 @@ extern NSString* const kToolsMenuEditActionsId;
 // Vivaldi
 // About Vivaldi accessibility Identifier.
 extern NSString* const kToolsMenuAboutVivaldiId;
+// Share item accessibility Identifier.
+extern NSString* const kToolsMenuShareId;
 // End Vivaldi
 
 #endif  // IOS_CHROME_BROWSER_UI_POPUP_MENU_POPUP_MENU_CONSTANTS_H_

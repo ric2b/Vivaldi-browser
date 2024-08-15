@@ -105,16 +105,6 @@ static uint64_t var_restoration_unit(const RestorationTileLimits *limits,
 }
 
 typedef struct {
-  // The best coefficients for Wiener or Sgrproj restoration
-  WienerInfo wiener;
-  SgrprojInfo sgrproj;
-
-  // The rtype to use for this unit given a frame rtype as
-  // index. Indices: WIENER, SGRPROJ, SWITCHABLE.
-  RestorationType best_rtype[RESTORE_TYPES - 1];
-} RestUnitSearchInfo;
-
-typedef struct {
   const YV12_BUFFER_CONFIG *src;
   YV12_BUFFER_CONFIG *dst;
 
@@ -230,7 +220,7 @@ static int64_t try_restoration_unit(const RestSearchCtxt *rsc,
       is_uv && cm->seq_params->subsampling_x,
       is_uv && cm->seq_params->subsampling_y, highbd, bit_depth,
       fts->buffers[plane], fts->strides[is_uv], rsc->dst->buffers[plane],
-      rsc->dst->strides[is_uv], cm->rst_tmpbuf, optimized_lr);
+      rsc->dst->strides[is_uv], cm->rst_tmpbuf, optimized_lr, cm->error);
 
   return sse_restoration_unit(limits, rsc->src, rsc->dst, plane, highbd);
 }
@@ -764,7 +754,8 @@ static AOM_INLINE void apply_sgr(int sgr_params_idx, const uint8_t *dat8,
                                  int width, int height, int dat_stride,
                                  int use_highbd, int bit_depth, int pu_width,
                                  int pu_height, int32_t *flt0, int32_t *flt1,
-                                 int flt_stride) {
+                                 int flt_stride,
+                                 struct aom_internal_error_info *error_info) {
   for (int i = 0; i < height; i += pu_height) {
     const int h = AOMMIN(pu_height, height - i);
     int32_t *flt0_row = flt0 + i * flt_stride;
@@ -774,11 +765,13 @@ static AOM_INLINE void apply_sgr(int sgr_params_idx, const uint8_t *dat8,
     // Iterate over the stripe in blocks of width pu_width
     for (int j = 0; j < width; j += pu_width) {
       const int w = AOMMIN(pu_width, width - j);
-      const int ret = av1_selfguided_restoration(
-          dat8_row + j, w, h, dat_stride, flt0_row + j, flt1_row + j,
-          flt_stride, sgr_params_idx, bit_depth, use_highbd);
-      (void)ret;
-      assert(!ret);
+      if (av1_selfguided_restoration(
+              dat8_row + j, w, h, dat_stride, flt0_row + j, flt1_row + j,
+              flt_stride, sgr_params_idx, bit_depth, use_highbd) != 0) {
+        aom_internal_error(
+            error_info, AOM_CODEC_MEM_ERROR,
+            "Error allocating buffer in av1_selfguided_restoration");
+      }
     }
   }
 }
@@ -788,10 +781,11 @@ static AOM_INLINE void compute_sgrproj_err(
     const int dat_stride, const uint8_t *src8, const int src_stride,
     const int use_highbitdepth, const int bit_depth, const int pu_width,
     const int pu_height, const int ep, int32_t *flt0, int32_t *flt1,
-    const int flt_stride, int *exqd, int64_t *err) {
+    const int flt_stride, int *exqd, int64_t *err,
+    struct aom_internal_error_info *error_info) {
   int exq[2];
   apply_sgr(ep, dat8, width, height, dat_stride, use_highbitdepth, bit_depth,
-            pu_width, pu_height, flt0, flt1, flt_stride);
+            pu_width, pu_height, flt0, flt1, flt_stride, error_info);
   const sgr_params_type *const params = &av1_sgr_params[ep];
   get_proj_subspace(src8, width, height, src_stride, dat8, dat_stride,
                     use_highbitdepth, flt0, flt_stride, flt1, flt_stride, exq,
@@ -816,7 +810,8 @@ static AOM_INLINE void get_best_error(int64_t *besterr, const int64_t err,
 static SgrprojInfo search_selfguided_restoration(
     const uint8_t *dat8, int width, int height, int dat_stride,
     const uint8_t *src8, int src_stride, int use_highbitdepth, int bit_depth,
-    int pu_width, int pu_height, int32_t *rstbuf, int enable_sgr_ep_pruning) {
+    int pu_width, int pu_height, int32_t *rstbuf, int enable_sgr_ep_pruning,
+    struct aom_internal_error_info *error_info) {
   int32_t *flt0 = rstbuf;
   int32_t *flt1 = flt0 + RESTORATION_UNITPELS_MAX;
   int ep, idx, bestep = 0;
@@ -832,7 +827,7 @@ static SgrprojInfo search_selfguided_restoration(
       int64_t err;
       compute_sgrproj_err(dat8, width, height, dat_stride, src8, src_stride,
                           use_highbitdepth, bit_depth, pu_width, pu_height, ep,
-                          flt0, flt1, flt_stride, exqd, &err);
+                          flt0, flt1, flt_stride, exqd, &err, error_info);
       get_best_error(&besterr, err, exqd, bestxqd, &bestep, ep);
     }
   } else {
@@ -842,7 +837,7 @@ static SgrprojInfo search_selfguided_restoration(
       int64_t err;
       compute_sgrproj_err(dat8, width, height, dat_stride, src8, src_stride,
                           use_highbitdepth, bit_depth, pu_width, pu_height, ep,
-                          flt0, flt1, flt_stride, exqd, &err);
+                          flt0, flt1, flt_stride, exqd, &err, error_info);
       get_best_error(&besterr, err, exqd, bestxqd, &bestep, ep);
     }
     // evaluate left and right ep of winner in seed ep
@@ -853,7 +848,7 @@ static SgrprojInfo search_selfguided_restoration(
       int64_t err;
       compute_sgrproj_err(dat8, width, height, dat_stride, src8, src_stride,
                           use_highbitdepth, bit_depth, pu_width, pu_height, ep,
-                          flt0, flt1, flt_stride, exqd, &err);
+                          flt0, flt1, flt_stride, exqd, &err, error_info);
       get_best_error(&besterr, err, exqd, bestxqd, &bestep, ep);
     }
     // evaluate last two group
@@ -862,7 +857,7 @@ static SgrprojInfo search_selfguided_restoration(
       int64_t err;
       compute_sgrproj_err(dat8, width, height, dat_stride, src8, src_stride,
                           use_highbitdepth, bit_depth, pu_width, pu_height, ep,
-                          flt0, flt1, flt_stride, exqd, &err);
+                          flt0, flt1, flt_stride, exqd, &err, error_info);
       get_best_error(&besterr, err, exqd, bestxqd, &bestep, ep);
     }
   }
@@ -891,10 +886,10 @@ static int count_sgrproj_bits(SgrprojInfo *sgrproj_info,
   return bits;
 }
 
-static AOM_INLINE void search_sgrproj(const RestorationTileLimits *limits,
-                                      int rest_unit_idx, void *priv,
-                                      int32_t *tmpbuf,
-                                      RestorationLineBuffers *rlbs) {
+static AOM_INLINE void search_sgrproj(
+    const RestorationTileLimits *limits, int rest_unit_idx, void *priv,
+    int32_t *tmpbuf, RestorationLineBuffers *rlbs,
+    struct aom_internal_error_info *error_info) {
   (void)rlbs;
   RestSearchCtxt *rsc = (RestSearchCtxt *)priv;
   RestUnitSearchInfo *rusi = &rsc->rusi[rest_unit_idx];
@@ -929,7 +924,7 @@ static AOM_INLINE void search_sgrproj(const RestorationTileLimits *limits,
       dgd_start, limits->h_end - limits->h_start,
       limits->v_end - limits->v_start, rsc->dgd_stride, src_start,
       rsc->src_stride, highbd, bit_depth, procunit_width, procunit_height,
-      tmpbuf, rsc->lpf_sf->enable_sgr_ep_pruning);
+      tmpbuf, rsc->lpf_sf->enable_sgr_ep_pruning, error_info);
 
   RestorationUnitInfo rui;
   rui.restoration_type = RESTORE_SGRPROJ;
@@ -1588,12 +1583,13 @@ static int64_t finer_search_wiener(const RestSearchCtxt *rsc,
   return err;
 }
 
-static AOM_INLINE void search_wiener(const RestorationTileLimits *limits,
-                                     int rest_unit_idx, void *priv,
-                                     int32_t *tmpbuf,
-                                     RestorationLineBuffers *rlbs) {
+static AOM_INLINE void search_wiener(
+    const RestorationTileLimits *limits, int rest_unit_idx, void *priv,
+    int32_t *tmpbuf, RestorationLineBuffers *rlbs,
+    struct aom_internal_error_info *error_info) {
   (void)tmpbuf;
   (void)rlbs;
+  (void)error_info;
   RestSearchCtxt *rsc = (RestSearchCtxt *)priv;
   RestUnitSearchInfo *rusi = &rsc->rusi[rest_unit_idx];
 
@@ -1732,13 +1728,14 @@ static AOM_INLINE void search_wiener(const RestorationTileLimits *limits,
   if (cost_wiener < cost_none) rsc->ref_wiener = rusi->wiener;
 }
 
-static AOM_INLINE void search_norestore(const RestorationTileLimits *limits,
-                                        int rest_unit_idx, void *priv,
-                                        int32_t *tmpbuf,
-                                        RestorationLineBuffers *rlbs) {
+static AOM_INLINE void search_norestore(
+    const RestorationTileLimits *limits, int rest_unit_idx, void *priv,
+    int32_t *tmpbuf, RestorationLineBuffers *rlbs,
+    struct aom_internal_error_info *error_info) {
   (void)rest_unit_idx;
   (void)tmpbuf;
   (void)rlbs;
+  (void)error_info;
 
   RestSearchCtxt *rsc = (RestSearchCtxt *)priv;
 
@@ -1749,13 +1746,14 @@ static AOM_INLINE void search_norestore(const RestorationTileLimits *limits,
   rsc->total_sse[RESTORE_NONE] += rsc->sse[RESTORE_NONE];
 }
 
-static AOM_INLINE void search_switchable(const RestorationTileLimits *limits,
-                                         int rest_unit_idx, void *priv,
-                                         int32_t *tmpbuf,
-                                         RestorationLineBuffers *rlbs) {
+static AOM_INLINE void search_switchable(
+    const RestorationTileLimits *limits, int rest_unit_idx, void *priv,
+    int32_t *tmpbuf, RestorationLineBuffers *rlbs,
+    struct aom_internal_error_info *error_info) {
   (void)limits;
   (void)tmpbuf;
   (void)rlbs;
+  (void)error_info;
   RestSearchCtxt *rsc = (RestSearchCtxt *)priv;
   RestUnitSearchInfo *rusi = &rsc->rusi[rest_unit_idx];
 
@@ -1857,6 +1855,10 @@ static void restoration_search(AV1_COMMON *cm, int plane, RestSearchCtxt *rsc,
     search_norestore, search_wiener, search_sgrproj, search_switchable
   };
 
+  const int plane_num_units = rsi->num_rest_units;
+  const RestorationType num_rtypes =
+      (plane_num_units > 1) ? RESTORE_TYPES : RESTORE_SWITCHABLE_TYPES;
+
   reset_rsc(rsc);
 
   // Iterate over restoration units in encoding order, so that each RU gets
@@ -1913,10 +1915,11 @@ static void restoration_search(AV1_COMMON *cm, int plane, RestSearchCtxt *rsc,
               const int unit_idx = rrow * rsi->horz_units + rcol;
 
               rsc->skip_sgr_eval = 0;
-              for (RestorationType r = RESTORE_NONE; r < RESTORE_TYPES; r++) {
+              for (RestorationType r = RESTORE_NONE; r < num_rtypes; r++) {
                 if (disable_lr_filter[r]) continue;
 
-                funs[r](&limits, unit_idx, rsc, rsc->cm->rst_tmpbuf, NULL);
+                funs[r](&limits, unit_idx, rsc, rsc->cm->rst_tmpbuf, NULL,
+                        cm->error);
               }
             }
           }
@@ -1944,31 +1947,101 @@ static INLINE void av1_derive_flags_for_lr_processing(
       (is_wiener_disabled || is_sgr_disabled);
 }
 
-void av1_pick_filter_restoration(const YV12_BUFFER_CONFIG *src, AV1_COMP *cpi) {
-  AV1_COMMON *const cm = &cpi->common;
-  MACROBLOCK *const x = &cpi->td.mb;
-  const SequenceHeader *const seq_params = cm->seq_params;
-  const int num_planes = av1_num_planes(cm);
-  assert(!cm->features.all_lossless);
+#define COUPLED_CHROMA_FROM_LUMA_RESTORATION 0
+// Allocate both decoder-side and encoder-side info structs for a single plane.
+// The unit size passed in should be the minimum size which we are going to
+// search; before each search, set_restoration_unit_size() must be called to
+// configure the actual size.
+static RestUnitSearchInfo *allocate_search_structs(AV1_COMMON *cm,
+                                                   RestorationInfo *rsi,
+                                                   int is_uv,
+                                                   int min_luma_unit_size) {
+#if COUPLED_CHROMA_FROM_LUMA_RESTORATION
+  int sx = cm->seq_params.subsampling_x;
+  int sy = cm->seq_params.subsampling_y;
+  int s = (p > 0) ? AOMMIN(sx, sy) : 0;
+#else
+  int s = 0;
+#endif  // !COUPLED_CHROMA_FROM_LUMA_RESTORATION
+  int min_unit_size = min_luma_unit_size >> s;
 
-  av1_fill_lr_rates(&x->mode_costs, x->e_mbd.tile_ctx);
+  int plane_w, plane_h;
+  av1_get_upsampled_plane_size(cm, is_uv, &plane_w, &plane_h);
 
-  int num_units[2];
-  for (int is_uv = 0; is_uv < 2; ++is_uv)
-    num_units[is_uv] = cm->rst_info[is_uv].num_rest_units;
+  const int max_horz_units = av1_lr_count_units(min_unit_size, plane_w);
+  const int max_vert_units = av1_lr_count_units(min_unit_size, plane_h);
+  const int max_num_units = max_horz_units * max_vert_units;
 
-  assert(num_units[1] <= num_units[0]);
+  aom_free(rsi->unit_info);
+  CHECK_MEM_ERROR(cm, rsi->unit_info,
+                  (RestorationUnitInfo *)aom_memalign(
+                      16, sizeof(*rsi->unit_info) * max_num_units));
+
   RestUnitSearchInfo *rusi;
   CHECK_MEM_ERROR(
       cm, rusi,
-      (RestUnitSearchInfo *)aom_memalign(16, sizeof(*rusi) * num_units[0]));
+      (RestUnitSearchInfo *)aom_memalign(16, sizeof(*rusi) * max_num_units));
 
   // If the restoration unit dimensions are not multiples of
   // rsi->restoration_unit_size then some elements of the rusi array may be
   // left uninitialised when we reach copy_unit_info(...). This is not a
   // problem, as these elements are ignored later, but in order to quiet
   // Valgrind's warnings we initialise the array below.
-  memset(rusi, 0, sizeof(*rusi) * num_units[0]);
+  memset(rusi, 0, sizeof(*rusi) * max_num_units);
+
+  return rusi;
+}
+
+static void set_restoration_unit_size(AV1_COMMON *cm, RestorationInfo *rsi,
+                                      int is_uv, int luma_unit_size) {
+#if COUPLED_CHROMA_FROM_LUMA_RESTORATION
+  int sx = cm->seq_params.subsampling_x;
+  int sy = cm->seq_params.subsampling_y;
+  int s = (p > 0) ? AOMMIN(sx, sy) : 0;
+#else
+  int s = 0;
+#endif  // !COUPLED_CHROMA_FROM_LUMA_RESTORATION
+  int unit_size = luma_unit_size >> s;
+
+  int plane_w, plane_h;
+  av1_get_upsampled_plane_size(cm, is_uv, &plane_w, &plane_h);
+
+  const int horz_units = av1_lr_count_units(unit_size, plane_w);
+  const int vert_units = av1_lr_count_units(unit_size, plane_h);
+
+  rsi->restoration_unit_size = unit_size;
+  rsi->num_rest_units = horz_units * vert_units;
+  rsi->horz_units = horz_units;
+  rsi->vert_units = vert_units;
+}
+
+void av1_pick_filter_restoration(const YV12_BUFFER_CONFIG *src, AV1_COMP *cpi) {
+  AV1_COMMON *const cm = &cpi->common;
+  MACROBLOCK *const x = &cpi->td.mb;
+  const SequenceHeader *const seq_params = cm->seq_params;
+  const LOOP_FILTER_SPEED_FEATURES *lpf_sf = &cpi->sf.lpf_sf;
+  const int num_planes = av1_num_planes(cm);
+  const int highbd = cm->seq_params->use_highbitdepth;
+  assert(!cm->features.all_lossless);
+
+  av1_fill_lr_rates(&x->mode_costs, x->e_mbd.tile_ctx);
+
+  // Select unit size based on speed feature settings, and allocate
+  // rui structs based on this size
+  int min_lr_unit_size = cpi->sf.lpf_sf.min_lr_unit_size;
+  int max_lr_unit_size = cpi->sf.lpf_sf.max_lr_unit_size;
+
+  // The minimum allowed unit size at a syntax level is 1 superblock.
+  // Apply this constraint here so that the speed features code which sets
+  // cpi->sf.lpf_sf.min_lr_unit_size does not need to know the superblock size
+  min_lr_unit_size =
+      AOMMAX(min_lr_unit_size, block_size_wide[cm->seq_params->sb_size]);
+
+  for (int plane = 0; plane < num_planes; ++plane) {
+    cpi->pick_lr_ctxt.rusi[plane] = allocate_search_structs(
+        cm, &cm->rst_info[plane], plane > 0, min_lr_unit_size);
+  }
+
   x->rdmult = cpi->rd.RDMULT;
 
   // Allocate the frame buffer trial_frame_rst, which is used to temporarily
@@ -1976,9 +2049,8 @@ void av1_pick_filter_restoration(const YV12_BUFFER_CONFIG *src, AV1_COMP *cpi) {
   if (aom_realloc_frame_buffer(
           &cpi->trial_frame_rst, cm->superres_upscaled_width,
           cm->superres_upscaled_height, seq_params->subsampling_x,
-          seq_params->subsampling_y, seq_params->use_highbitdepth,
-          AOM_RESTORATION_FRAME_BORDER, cm->features.byte_alignment, NULL, NULL,
-          NULL, 0, 0))
+          seq_params->subsampling_y, highbd, AOM_RESTORATION_FRAME_BORDER,
+          cm->features.byte_alignment, NULL, NULL, NULL, 0, 0))
     aom_internal_error(cm->error, AOM_CODEC_MEM_ERROR,
                        "Failed to allocate trial restored frame buffer");
 
@@ -1996,12 +2068,13 @@ void av1_pick_filter_restoration(const YV12_BUFFER_CONFIG *src, AV1_COMP *cpi) {
   // The buffers allocated below are used during Wiener filter processing of low
   // bitdepth path. Hence, allocate the same when Wiener filter is enabled in
   // low bitdepth path.
-  if (!cpi->sf.lpf_sf.disable_wiener_filter &&
-      !cm->seq_params->use_highbitdepth) {
-    const int buf_size = sizeof(*rsc.dgd_avg) * 6 * RESTORATION_UNITSIZE_MAX *
-                         RESTORATION_UNITSIZE_MAX;
-    CHECK_MEM_ERROR(cm, rsc.dgd_avg, (int16_t *)aom_memalign(32, buf_size));
+  if (!cpi->sf.lpf_sf.disable_wiener_filter && !highbd) {
+    const int buf_size = sizeof(*cpi->pick_lr_ctxt.dgd_avg) * 6 *
+                         RESTORATION_UNITSIZE_MAX * RESTORATION_UNITSIZE_MAX;
+    CHECK_MEM_ERROR(cm, cpi->pick_lr_ctxt.dgd_avg,
+                    (int16_t *)aom_memalign(32, buf_size));
 
+    rsc.dgd_avg = cpi->pick_lr_ctxt.dgd_avg;
     // When LRU width isn't multiple of 16, the 256 bits load instruction used
     // in AVX2 intrinsic can read data beyond valid LRU. Hence, in order to
     // silence Valgrind warning this buffer is initialized with zero. Overhead
@@ -2014,62 +2087,131 @@ void av1_pick_filter_restoration(const YV12_BUFFER_CONFIG *src, AV1_COMP *cpi) {
   }
 #endif
 
-  const int plane_start = AOM_PLANE_Y;
-  const int plane_end = num_planes > 1 ? AOM_PLANE_V : AOM_PLANE_Y;
+  // Initialize all planes, so that any planes we skip searching will still have
+  // valid data
+  for (int plane = 0; plane < num_planes; plane++) {
+    cm->rst_info[plane].frame_restoration_type = RESTORE_NONE;
+  }
+
+  // Decide which planes to search
+  int plane_start, plane_end;
+
+  if (lpf_sf->disable_loop_restoration_luma) {
+    plane_start = AOM_PLANE_U;
+  } else {
+    plane_start = AOM_PLANE_Y;
+  }
+
+  if (num_planes == 1 || lpf_sf->disable_loop_restoration_chroma) {
+    plane_end = AOM_PLANE_Y;
+  } else {
+    plane_end = AOM_PLANE_V;
+  }
 
   // Derive the flags to enable/disable Loop restoration filters based on the
   // speed features 'disable_wiener_filter' and 'disable_sgr_filter'.
   bool disable_lr_filter[RESTORE_TYPES] = { false };
-  const LOOP_FILTER_SPEED_FEATURES *lpf_sf = &cpi->sf.lpf_sf;
   av1_derive_flags_for_lr_processing(lpf_sf, disable_lr_filter);
 
-  for (int plane = plane_start; plane <= plane_end; ++plane) {
-    init_rsc(src, &cpi->common, x, lpf_sf, plane, rusi, &cpi->trial_frame_rst,
-             &rsc);
+  for (int plane = plane_start; plane <= plane_end; plane++) {
+    const YV12_BUFFER_CONFIG *dgd = &cm->cur_frame->buf;
+    const int is_uv = plane != AOM_PLANE_Y;
+    int plane_w, plane_h;
+    av1_get_upsampled_plane_size(cm, is_uv, &plane_w, &plane_h);
+    av1_extend_frame(dgd->buffers[plane], plane_w, plane_h, dgd->strides[is_uv],
+                     RESTORATION_BORDER, RESTORATION_BORDER, highbd);
+  }
 
-    const int plane_num_units = num_units[plane > 0];
-    const RestorationType num_rtypes =
-        (plane_num_units > 1) ? RESTORE_TYPES : RESTORE_SWITCHABLE_TYPES;
-
-    double best_cost = 0;
-    RestorationType best_rtype = RESTORE_NONE;
-
-    const int highbd = rsc.cm->seq_params->use_highbitdepth;
-    if ((plane && !lpf_sf->disable_loop_restoration_chroma) ||
-        (!plane && !lpf_sf->disable_loop_restoration_luma)) {
-      av1_extend_frame(rsc.dgd_buffer, rsc.plane_w, rsc.plane_h, rsc.dgd_stride,
-                       RESTORATION_BORDER, RESTORATION_BORDER, highbd);
+  double best_cost = DBL_MAX;
+  int best_luma_unit_size = max_lr_unit_size;
+  for (int luma_unit_size = max_lr_unit_size;
+       luma_unit_size >= min_lr_unit_size; luma_unit_size >>= 1) {
+    int64_t bits_this_size = 0;
+    int64_t sse_this_size = 0;
+    RestorationType best_rtype[MAX_MB_PLANE] = { RESTORE_NONE, RESTORE_NONE,
+                                                 RESTORE_NONE };
+    for (int plane = plane_start; plane <= plane_end; ++plane) {
+      set_restoration_unit_size(cm, &cm->rst_info[plane], plane > 0,
+                                luma_unit_size);
+      init_rsc(src, &cpi->common, x, lpf_sf, plane,
+               cpi->pick_lr_ctxt.rusi[plane], &cpi->trial_frame_rst, &rsc);
 
       restoration_search(cm, plane, &rsc, disable_lr_filter);
 
+      const int plane_num_units = cm->rst_info[plane].num_rest_units;
+      const RestorationType num_rtypes =
+          (plane_num_units > 1) ? RESTORE_TYPES : RESTORE_SWITCHABLE_TYPES;
+      double best_cost_this_plane = DBL_MAX;
       for (RestorationType r = 0; r < num_rtypes; ++r) {
         // Disable Loop restoration filter based on the flags set using speed
         // feature 'disable_wiener_filter' and 'disable_sgr_filter'.
         if (disable_lr_filter[r]) continue;
 
-        double cost = RDCOST_DBL_WITH_NATIVE_BD_DIST(
+        double cost_this_plane = RDCOST_DBL_WITH_NATIVE_BD_DIST(
             x->rdmult, rsc.total_bits[r] >> 4, rsc.total_sse[r],
             cm->seq_params->bit_depth);
 
-        if (r == 0 || cost < best_cost) {
-          best_cost = cost;
-          best_rtype = r;
+        if (cost_this_plane < best_cost_this_plane) {
+          best_cost_this_plane = cost_this_plane;
+          best_rtype[plane] = r;
         }
       }
+
+      bits_this_size += rsc.total_bits[best_rtype[plane]];
+      sse_this_size += rsc.total_sse[best_rtype[plane]];
     }
 
-    cm->rst_info[plane].frame_restoration_type = best_rtype;
-    if (best_rtype != RESTORE_NONE) {
-      for (int u = 0; u < plane_num_units; ++u) {
-        copy_unit_info(best_rtype, &rusi[u], &cm->rst_info[plane].unit_info[u]);
+    double cost_this_size = RDCOST_DBL_WITH_NATIVE_BD_DIST(
+        x->rdmult, bits_this_size >> 4, sse_this_size,
+        cm->seq_params->bit_depth);
+
+    if (cost_this_size < best_cost) {
+      best_cost = cost_this_size;
+      best_luma_unit_size = luma_unit_size;
+      // Copy parameters out of rusi struct, before we overwrite it at
+      // the start of the next iteration
+      bool all_none = true;
+      for (int plane = plane_start; plane <= plane_end; ++plane) {
+        cm->rst_info[plane].frame_restoration_type = best_rtype[plane];
+        if (best_rtype[plane] != RESTORE_NONE) {
+          all_none = false;
+          const int plane_num_units = cm->rst_info[plane].num_rest_units;
+          for (int u = 0; u < plane_num_units; ++u) {
+            copy_unit_info(best_rtype[plane], &cpi->pick_lr_ctxt.rusi[plane][u],
+                           &cm->rst_info[plane].unit_info[u]);
+          }
+        }
       }
+      // Heuristic: If all best_rtype entries are RESTORE_NONE, this means we
+      // couldn't find any good filters at this size. So we likely won't find
+      // any good filters at a smaller size either, so skip
+      if (all_none) {
+        break;
+      }
+    } else {
+      // Heuristic: If this size is worse than the previous (larger) size, then
+      // the next size down will likely be even worse, so skip
+      break;
     }
   }
+
+  // Final fixup to set the correct unit size
+  // We set this for all planes, even ones we have skipped searching,
+  // so that other code does not need to care which planes were and weren't
+  // searched
+  for (int plane = 0; plane < num_planes; ++plane) {
+    set_restoration_unit_size(cm, &cm->rst_info[plane], plane > 0,
+                              best_luma_unit_size);
+  }
+
 #if HAVE_AVX || HAVE_NEON
-  if (!cpi->sf.lpf_sf.disable_wiener_filter &&
-      !cm->seq_params->use_highbitdepth) {
-    aom_free(rsc.dgd_avg);
+  if (!cpi->sf.lpf_sf.disable_wiener_filter && !highbd) {
+    aom_free(cpi->pick_lr_ctxt.dgd_avg);
+    cpi->pick_lr_ctxt.dgd_avg = NULL;
   }
 #endif
-  aom_free(rusi);
+  for (int plane = 0; plane < num_planes; plane++) {
+    aom_free(cpi->pick_lr_ctxt.rusi[plane]);
+    cpi->pick_lr_ctxt.rusi[plane] = NULL;
+  }
 }

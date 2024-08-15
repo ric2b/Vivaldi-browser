@@ -42,17 +42,9 @@ BASE_FEATURE(kLensRegionSearchStaticPage,
              "LensRegionSearchStaticPage",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kLensImageFormatOptimizations,
-             "LensImageFormatOptimizations",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnableContextMenuInLensSidePanel,
              "EnableContextMenuInLensSidePanel",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kEnableLensPing,
-             "EnableLensPing",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<std::string> kHomepageURLForLens{
     &kLensStandalone, "lens-homepage-url", "https://lens.google.com/v3/"};
@@ -93,11 +85,8 @@ constexpr base::FeatureParam<bool> kDismissLoadingStateOnDidFinishLoad{
 constexpr base::FeatureParam<bool> kDismissLoadingStateOnPrimaryPageChanged{
     &kLensStandalone, "dismiss-loading-state-on-primary-page-changed", false};
 
-constexpr base::FeatureParam<int> kMaxPixelsForRegionSearch{
-    &kLensImageCompression, "region-search-dimensions-max-pixels", 1000};
-
-constexpr base::FeatureParam<int> kMaxAreaForRegionSearch{
-    &kLensImageCompression, "region-search-dimensions-max-area", 1000000};
+constexpr base::FeatureParam<int> kMaxAreaForImageSearch{
+    &kLensImageCompression, "dimensions-max-area", 1000000};
 
 constexpr base::FeatureParam<int> kMaxPixelsForImageSearch{
     &kLensImageCompression, "dimensions-max-pixels", 1000};
@@ -105,36 +94,13 @@ constexpr base::FeatureParam<int> kMaxPixelsForImageSearch{
 const base::FeatureParam<bool> kEnableLensFullscreenSearch{
     &kLensSearchOptimizations, "enable-lens-fullscreen-search", false};
 
-const base::FeatureParam<int> kEncodingQualityJpeg{
-    &kLensImageFormatOptimizations, "encoding-quality-jpeg", 40};
-
-const base::FeatureParam<int> kEncodingQualityWebp{
-    &kLensImageFormatOptimizations, "encoding-quality-webp", 45};
-
-const base::FeatureParam<bool> kUseWebpInRegionSearch{
-    &kLensImageFormatOptimizations, "use-webp-region-search", false};
-
-const base::FeatureParam<bool> kUseJpegInRegionSearch{
-    &kLensImageFormatOptimizations, "use-jpeg-region-search", true};
-
-constexpr base::FeatureParam<std::string> kLensPingURL{
-    &kEnableLensPing, "lens-ping-url",
-    "https://lens.google.com/_/LensWebStandaloneUi/gen204/"};
-
-const base::FeatureParam<bool> kPingLensSequentially{
-    &kEnableLensPing, "ping-lens-sequentially", true};
-
 bool GetEnableLatencyLogging() {
   return base::FeatureList::IsEnabled(kEnableLatencyLogging) &&
          base::FeatureList::IsEnabled(kLensStandalone);
 }
 
-int GetMaxPixelsForRegionSearch() {
-  return kMaxPixelsForRegionSearch.Get();
-}
-
-int GetMaxAreaForRegionSearch() {
-  return kMaxAreaForRegionSearch.Get();
+int GetMaxAreaForImageSearch() {
+  return kMaxAreaForImageSearch.Get();
 }
 
 int GetMaxPixelsForImageSearch() {
@@ -187,46 +153,12 @@ bool IsLensSidePanelEnabled() {
   return base::FeatureList::IsEnabled(kLensStandalone);
 }
 
-bool IsLensSidePanelEnabledForRegionSearch() {
-  return IsLensSidePanelEnabled() && !IsLensFullscreenSearchEnabled();
-}
-
 bool IsLensRegionSearchStaticPageEnabled() {
   return base::FeatureList::IsEnabled(kLensRegionSearchStaticPage);
 }
 
-int GetEncodingQualityJpeg() {
-  return kEncodingQualityJpeg.Get();
-}
-
-int GetEncodingQualityWebp() {
-  return kEncodingQualityWebp.Get();
-}
-
-bool IsWebpForRegionSearchEnabled() {
-  return base::FeatureList::IsEnabled(kLensImageFormatOptimizations) &&
-         kUseWebpInRegionSearch.Get();
-}
-
-bool IsJpegForRegionSearchEnabled() {
-  return base::FeatureList::IsEnabled(kLensImageFormatOptimizations) &&
-         kUseJpegInRegionSearch.Get();
-}
-
 bool GetEnableContextMenuInLensSidePanel() {
   return base::FeatureList::IsEnabled(kEnableContextMenuInLensSidePanel);
-}
-
-bool GetEnableLensPing() {
-  return base::FeatureList::IsEnabled(kEnableLensPing);
-}
-
-std::string GetLensPingURL() {
-  return kLensPingURL.Get();
-}
-
-bool GetLensPingIsSequential() {
-  return kPingLensSequentially.Get();
 }
 
 bool GetShouldIssuePreconnectForLens() {

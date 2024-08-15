@@ -128,7 +128,7 @@ static INLINE void convolve_x_sr_12tap_neon_dotprod(
       do {
         uint8x8_t d0 = vld1_u8(s);
         if (w == 4) {
-          store_u8_4x1(d, d0, 0);
+          store_u8_4x1(d, d0);
         } else {
           vst1_u8(d, d0);
         }
@@ -158,10 +158,8 @@ static INLINE void convolve_x_sr_12tap_neon_dotprod(
         uint8x8_t d01 = vqmovun_s16(vcombine_s16(d0, d1));
         uint8x8_t d23 = vqmovun_s16(vcombine_s16(d2, d3));
 
-        store_u8_4x1(dst + 0 * dst_stride, d01, 0);
-        store_u8_4x1(dst + 1 * dst_stride, d01, 1);
-        store_u8_4x1(dst + 2 * dst_stride, d23, 0);
-        store_u8_4x1(dst + 3 * dst_stride, d23, 1);
+        store_u8x4_strided_x2(dst + 0 * dst_stride, dst_stride, d01);
+        store_u8x4_strided_x2(dst + 2 * dst_stride, dst_stride, d23);
 
         dst += 4 * dst_stride;
         src += 4 * src_stride;
@@ -314,10 +312,8 @@ void av1_convolve_x_sr_neon_dotprod(const uint8_t *src, int src_stride,
       uint8x8_t d01 = vqrshrun_n_s16(vcombine_s16(d0, d1), FILTER_BITS - 1);
       uint8x8_t d23 = vqrshrun_n_s16(vcombine_s16(d2, d3), FILTER_BITS - 1);
 
-      store_u8_4x1(dst + 0 * dst_stride, d01, 0);
-      store_u8_4x1(dst + 1 * dst_stride, d01, 1);
-      store_u8_4x1(dst + 2 * dst_stride, d23, 0);
-      store_u8_4x1(dst + 3 * dst_stride, d23, 1);
+      store_u8x4_strided_x2(dst + 0 * dst_stride, dst_stride, d01);
+      store_u8x4_strided_x2(dst + 2 * dst_stride, dst_stride, d23);
 
       src += 4 * src_stride;
       dst += 4 * dst_stride;

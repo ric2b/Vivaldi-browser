@@ -139,9 +139,6 @@ inline constexpr char kChromeNativeScheme[] = "chrome-native";
 inline constexpr char16_t kChromeSafePageURL[] =
     u"https://www.google.com/chrome/#safe";
 
-// Pages under chrome-search.
-inline constexpr char kChromeSearchLocalNtpHost[] = "local-ntp";
-
 // Host and URL for most visited iframes used on the Instant Extended NTP.
 inline constexpr char kChromeSearchMostVisitedHost[] = "most-visited";
 inline constexpr char kChromeSearchMostVisitedUrl[] =
@@ -287,13 +284,13 @@ inline constexpr char kGooglePasswordManagerURL[] =
 // URL of the Google Photos.
 inline constexpr char kGooglePhotosURL[] = "https://photos.google.com";
 
-// The URL for the "Learn more" link for the High Efficiency Mode.
-inline constexpr char kHighEfficiencyModeLearnMoreUrl[] =
+// The URL for the "Learn more" link for the Memory Saver Mode.
+inline constexpr char kMemorySaverModeLearnMoreUrl[] =
     "https://support.google.com/chrome?p=chrome_memory_saver";
 
-// The URL in the help text for the High Efficiency Mode tab discarding
+// The URL in the help text for the Memory Saver Mode tab discarding
 // exceptions add dialog.
-inline constexpr char16_t kHighEfficiencyModeTabDiscardingHelpUrl[] =
+inline constexpr char16_t kMemorySaverModeTabDiscardingHelpUrl[] =
     u"https://support.google.com/chrome?p=performance_site_exclusion";
 
 // The URL to the help center article of Incognito mode.
@@ -378,18 +375,6 @@ inline constexpr char kPasswordSharingLearnMoreURL[] =
 // Help URL for troubleshooting password sharing.
 inline constexpr char kPasswordSharingTroubleshootURL[] =
     "https://support.google.com/chrome?p=password_sharing_troubleshoot";
-
-// Help URL for the Payment methods page of the Google Pay site.
-inline constexpr char16_t kPaymentMethodsURL[] =
-    u"https://pay.google.com/payments/"
-    u"home?utm_source=chrome&utm_medium=settings&utm_campaign=chrome-payment#"
-    u"paymentMethods";
-
-// Help URL for the newer GPay Web site instead of the legacy Payments Center.
-inline constexpr char16_t kPaymentMethodsURLForGPayWeb[] =
-    u"https://pay.google.com/"
-    u"pay?p=paymentmethods&utm_source=chrome&utm_medium=settings&utm_campaign="
-    u"payment_methods";
 
 // The URL for the "Fill out forms automatically" support page.
 inline constexpr char kAddressesAndPaymentMethodsLearnMoreURL[] =
@@ -571,6 +556,10 @@ inline constexpr char kArcPrivacyPolicyPathFormat[] =
 // Relative to |kChromeOSAssetPath|.
 inline constexpr char kArcTermsPathFormat[] = "arc_tos/%s/terms.html";
 
+// Help center URL for ChromeOS Battery Saver.
+inline constexpr char kCrosBatterySaverLearnMoreURL[] =
+    "https://support.google.com/chromebook/?p=battery_saver";
+
 // The URL for the "Learn more" link during Bluetooth pairing.
 // TODO(crbug.com/1010321): Remove 'm100' prefix from link once Bluetooth Revamp
 // has shipped.
@@ -640,6 +629,15 @@ inline constexpr char kGoogleNameserversLearnMoreURL[] =
 // The URL for the "learn more" link for Instant Tethering.
 inline constexpr char kInstantTetheringLearnMoreURL[] =
     "https://support.google.com/chromebook?p=instant_tethering";
+
+// The URL for the "learn more" link for Chromebook hotspot.
+inline constexpr char kChromebookHotspotLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=chromebook_hotspot";
+
+// The URL for the "learn more" link for cellular carrier lock.
+// TODO(b/293463820): Replace the link with carrier lock link once ready.
+inline constexpr char kCellularCarrierLockLearnMoreURL[] =
+    "https://support.google.com/chromebook";
 
 // The URL for the "Learn more" link for Kerberos accounts.
 inline constexpr char kKerberosAccountsLearnMoreURL[] =

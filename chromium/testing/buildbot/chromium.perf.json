@@ -9,9 +9,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_monochrome_minimal_apks",
-        "override_compile_targets": [
-          "resource_sizes_monochrome_minimal_apks"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -35,9 +32,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_system_webview_google_bundle",
-        "override_compile_targets": [
-          "resource_sizes_system_webview_google_bundle"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -61,9 +55,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_trichrome_google",
-        "override_compile_targets": [
-          "resource_sizes_trichrome_google"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -84,104 +75,6 @@
     ]
   },
   "android-builder-perf-pgo": {},
-  "android-go-perf": {
-    "isolated_scripts": [
-      {
-        "args": [
-          "-v",
-          "--browser=android-chrome",
-          "--upload-results",
-          "--test-shard-map-filename=android-go-perf_map.json",
-          "--ignore-benchmark-exit-code"
-        ],
-        "merge": {
-          "args": [
-            "--lightweight",
-            "--skip-perf"
-          ],
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_monochrome"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimensions": {
-            "device_os": "OMB1.180119.001",
-            "device_os_flavor": "google",
-            "device_type": "gobo",
-            "os": "Android",
-            "pool": "chrome.tests.perf"
-          },
-          "expiration": 7200,
-          "hard_timeout": 21600,
-          "io_timeout": 21600,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 13
-        },
-        "test": "performance_test_suite_android_clank_monochrome",
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      }
-    ]
-  },
-  "android-go-perf-pgo": {
-    "isolated_scripts": [
-      {
-        "args": [
-          "-v",
-          "--browser=android-chrome",
-          "--upload-results",
-          "--test-shard-map-filename=android-go-perf-pgo_map.json",
-          "--ignore-benchmark-exit-code"
-        ],
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_monochrome"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimensions": {
-            "device_os": "OMB1.180119.001",
-            "device_os_flavor": "google",
-            "device_type": "gobo",
-            "os": "Android",
-            "pool": "chrome.tests.perf"
-          },
-          "expiration": 7200,
-          "hard_timeout": 21600,
-          "io_timeout": 21600,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 13
-        },
-        "test": "performance_test_suite_android_clank_monochrome",
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      }
-    ]
-  },
   "android-go-processor-perf": {
     "merge": {
       "args": [
@@ -204,9 +97,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -250,9 +140,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
-        "override_compile_targets": [
-          "performance_webview_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -282,53 +169,6 @@
       }
     ]
   },
-  "android-go_webview-perf": {
-    "isolated_scripts": [
-      {
-        "args": [
-          "-v",
-          "--browser=android-webview-google",
-          "--upload-results",
-          "--test-shard-map-filename=android-go_webview-perf_map.json",
-          "--ignore-benchmark-exit-code"
-        ],
-        "merge": {
-          "script": "//tools/perf/process_perf_results.py"
-        },
-        "name": "performance_webview_test_suite",
-        "override_compile_targets": [
-          "performance_webview_test_suite"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimensions": {
-            "device_os": "OMB1.180119.001",
-            "device_os_flavor": "google",
-            "device_type": "gobo",
-            "os": "Android",
-            "pool": "chrome.tests.perf-webview"
-          },
-          "expiration": 7200,
-          "hard_timeout": 21600,
-          "io_timeout": 21600,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 8
-        },
-        "test": "performance_webview_test_suite",
-        "trigger_script": {
-          "args": [
-            "--multiple-dimension-script-verbose",
-            "True"
-          ],
-          "requires_simultaneous_shard_dispatch": true,
-          "script": "//testing/trigger_scripts/perf_device_trigger.py"
-        }
-      }
-    ]
-  },
   "android-new-pixel-perf": {
     "isolated_scripts": [
       {
@@ -343,9 +183,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -384,9 +221,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -425,9 +259,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -466,9 +297,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -511,9 +339,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_monochrome_64_32_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_monochrome_64_32_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -559,9 +384,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_android_clank_monochrome_64_32_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_monochrome_64_32_bundle"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -618,9 +440,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
-        "override_compile_targets": [
-          "performance_webview_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -665,9 +484,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
-        "override_compile_targets": [
-          "performance_webview_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -711,7 +527,7 @@
       {
         "args": [
           "-v",
-          "--browser=android-trichrome-bundle",
+          "--browser=android-trichrome-chrome-google-64-32-bundle",
           "--upload-results",
           "--test-shard-map-filename=android-pixel4-perf_map.json",
           "--ignore-benchmark-exit-code"
@@ -719,10 +535,7 @@
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
+        "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "resultdb": {
           "enable": true
         },
@@ -741,7 +554,7 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 44
         },
-        "test": "performance_test_suite_android_clank_trichrome_bundle",
+        "test": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
           "args": [
             "--multiple-dimension-script-verbose",
@@ -758,7 +571,7 @@
       {
         "args": [
           "-v",
-          "--browser=android-trichrome-bundle",
+          "--browser=android-trichrome-chrome-google-64-32-bundle",
           "--upload-results",
           "--test-shard-map-filename=android-pixel4-perf-pgo_map.json",
           "--ignore-benchmark-exit-code"
@@ -766,10 +579,7 @@
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
+        "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "resultdb": {
           "enable": true
         },
@@ -788,7 +598,7 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 28
         },
-        "test": "performance_test_suite_android_clank_trichrome_bundle",
+        "test": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
           "args": [
             "--multiple-dimension-script-verbose",
@@ -814,9 +624,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_webview_test_suite",
-        "override_compile_targets": [
-          "performance_webview_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -852,7 +659,7 @@
       {
         "args": [
           "-v",
-          "--browser=android-trichrome-bundle",
+          "--browser=android-trichrome-chrome-google-64-32-bundle",
           "--upload-results",
           "--test-shard-map-filename=android-pixel6-perf_map.json",
           "--ignore-benchmark-exit-code"
@@ -860,10 +667,7 @@
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
+        "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "resultdb": {
           "enable": true
         },
@@ -882,7 +686,7 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 28
         },
-        "test": "performance_test_suite_android_clank_trichrome_bundle",
+        "test": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
           "args": [
             "--multiple-dimension-script-verbose",
@@ -899,7 +703,7 @@
       {
         "args": [
           "-v",
-          "--browser=android-trichrome-bundle",
+          "--browser=android-trichrome-chrome-google-64-32-bundle",
           "--upload-results",
           "--test-shard-map-filename=android-pixel6-perf-pgo_map.json",
           "--ignore-benchmark-exit-code"
@@ -907,10 +711,7 @@
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
+        "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "resultdb": {
           "enable": true
         },
@@ -929,7 +730,7 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 4
         },
-        "test": "performance_test_suite_android_clank_trichrome_bundle",
+        "test": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
           "args": [
             "--multiple-dimension-script-verbose",
@@ -946,7 +747,7 @@
       {
         "args": [
           "-v",
-          "--browser=android-trichrome-bundle",
+          "--browser=android-trichrome-chrome-google-64-32-bundle",
           "--upload-results",
           "--test-shard-map-filename=android-pixel6-pro-perf_map.json",
           "--ignore-benchmark-exit-code"
@@ -954,10 +755,7 @@
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
+        "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "resultdb": {
           "enable": true
         },
@@ -976,7 +774,7 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 16
         },
-        "test": "performance_test_suite_android_clank_trichrome_bundle",
+        "test": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
           "args": [
             "--multiple-dimension-script-verbose",
@@ -993,7 +791,7 @@
       {
         "args": [
           "-v",
-          "--browser=android-trichrome-bundle",
+          "--browser=android-trichrome-chrome-google-64-32-bundle",
           "--upload-results",
           "--test-shard-map-filename=android-pixel6-pro-perf-pgo_map.json",
           "--ignore-benchmark-exit-code"
@@ -1001,10 +799,7 @@
         "merge": {
           "script": "//tools/perf/process_perf_results.py"
         },
-        "name": "performance_test_suite_android_clank_trichrome_bundle",
-        "override_compile_targets": [
-          "performance_test_suite_android_clank_trichrome_bundle"
-        ],
+        "name": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "resultdb": {
           "enable": true
         },
@@ -1023,7 +818,7 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
           "shards": 16
         },
-        "test": "performance_test_suite_android_clank_trichrome_bundle",
+        "test": "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
         "trigger_script": {
           "args": [
             "--multiple-dimension-script-verbose",
@@ -1043,9 +838,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_monochrome_minimal_apks",
-        "override_compile_targets": [
-          "resource_sizes_monochrome_minimal_apks"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1069,9 +861,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_system_webview_google_bundle",
-        "override_compile_targets": [
-          "resource_sizes_system_webview_google_bundle"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1095,9 +884,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_trichrome_google",
-        "override_compile_targets": [
-          "resource_sizes_trichrome_google"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1129,9 +915,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_chromecast",
-        "override_compile_targets": [
-          "resource_sizes_chromecast"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1164,9 +947,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_lacros_chrome",
-        "override_compile_targets": [
-          "resource_sizes_lacros_chrome"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1199,9 +979,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_lacros_chrome",
-        "override_compile_targets": [
-          "resource_sizes_lacros_chrome"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1234,9 +1011,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "resource_sizes_lacros_chrome",
-        "override_compile_targets": [
-          "resource_sizes_lacros_chrome"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1271,9 +1045,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_eve",
-        "override_compile_targets": [
-          "performance_test_suite_eve"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1319,9 +1090,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite_octopus",
-        "override_compile_targets": [
-          "performance_test_suite_octopus"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1363,9 +1131,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
-        "override_compile_targets": [
-          "chrome_sizes"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1406,9 +1171,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1453,9 +1215,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1500,9 +1259,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1555,9 +1311,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1598,9 +1351,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
-        "override_compile_targets": [
-          "chrome_sizes"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1632,9 +1382,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
-        "override_compile_targets": [
-          "chrome_sizes"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },
@@ -1674,9 +1421,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1722,9 +1466,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1782,9 +1523,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1830,9 +1568,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1886,9 +1621,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1933,9 +1665,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -1980,9 +1709,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -2031,9 +1757,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -2078,9 +1801,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -2133,9 +1853,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -2143,7 +1860,7 @@
           "can_use_on_swarming_builders": true,
           "dimensions": {
             "gpu": "1002:1638-30.0.13033.1000",
-            "os": "Windows-10-19043.1052",
+            "os": "Windows-10-19043",
             "pool": "chrome.tests.perf",
             "synthetic_product_name": "OMEN by HP Laptop 16-c0xxx [ ] (HP)"
           },
@@ -2151,7 +1868,7 @@
           "hard_timeout": 21600,
           "io_timeout": 21600,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 5
+          "shards": 3
         },
         "test": "performance_test_suite",
         "trigger_script": {
@@ -2180,9 +1897,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
@@ -2190,7 +1904,7 @@
           "can_use_on_swarming_builders": true,
           "dimensions": {
             "gpu": "1002:1638-30.0.13033.1000",
-            "os": "Windows-10-19043.1052",
+            "os": "Windows-10-19043",
             "pool": "chrome.tests.perf",
             "synthetic_product_name": "OMEN by HP Laptop 16-c0xxx [ ] (HP)"
           },
@@ -2198,7 +1912,7 @@
           "hard_timeout": 21600,
           "io_timeout": 21600,
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 5
+          "shards": 3
         },
         "test": "performance_test_suite",
         "trigger_script": {
@@ -2231,17 +1945,14 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimensions": {
-            "gpu": "8086:1616-20.19.15.5070",
-            "os": "Windows-10-18363.476",
+            "gpu": "8086:1616-20.19.15.5070|8086:1616-10.0.18362.1",
+            "os": "Windows-10-18363.476|Windows-10-18363.1621",
             "pool": "chrome.tests.perf",
             "synthetic_product_name": "HP Laptop 15-bs1xx [Type1ProductConfigId] (HP)"
           },
@@ -2278,17 +1989,14 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "performance_test_suite",
-        "override_compile_targets": [
-          "performance_test_suite"
-        ],
         "resultdb": {
           "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimensions": {
-            "gpu": "8086:1616-20.19.15.5070",
-            "os": "Windows-10-18363.476",
+            "gpu": "8086:1616-20.19.15.5070|8086:1616-10.0.18362.1",
+            "os": "Windows-10-18363.476|Windows-10-18363.1621",
             "pool": "chrome.tests.perf"
           },
           "expiration": 7200,
@@ -2317,6 +2025,106 @@
       "script": "//tools/perf/process_perf_results.py"
     }
   },
+  "win-11-perf": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "-v",
+          "--browser=release_x64",
+          "--upload-results",
+          "--test-shard-map-filename=win-11-perf_map.json",
+          "--ignore-benchmark-exit-code",
+          "--assert-gpu-compositing"
+        ],
+        "merge": {
+          "args": [
+            "--lightweight",
+            "--skip-perf"
+          ],
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "performance_test_suite",
+        "resultdb": {
+          "enable": true
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimensions": {
+            "gpu": "102b:0536-4.5.0.5",
+            "os": "Windows-11-22631.2428",
+            "pool": "chrome.tests.perf",
+            "synthetic_product_name": "PowerEdge R350 (Dell Inc.)"
+          },
+          "expiration": 7200,
+          "hard_timeout": 21600,
+          "io_timeout": 21600,
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 20
+        },
+        "test": "performance_test_suite",
+        "trigger_script": {
+          "args": [
+            "--multiple-dimension-script-verbose",
+            "True"
+          ],
+          "requires_simultaneous_shard_dispatch": true,
+          "script": "//testing/trigger_scripts/perf_device_trigger.py"
+        }
+      }
+    ]
+  },
+  "win-11-perf-pgo": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "-v",
+          "--browser=release_x64",
+          "--upload-results",
+          "--test-shard-map-filename=win-11-perf-pgo_map.json",
+          "--ignore-benchmark-exit-code",
+          "--assert-gpu-compositing"
+        ],
+        "merge": {
+          "script": "//tools/perf/process_perf_results.py"
+        },
+        "name": "performance_test_suite",
+        "resultdb": {
+          "enable": true
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimensions": {
+            "gpu": "102b:0536-4.5.0.5",
+            "os": "Windows-11-22631.2428",
+            "pool": "chrome.tests.perf",
+            "synthetic_product_name": "PowerEdge R350 (Dell Inc.)"
+          },
+          "expiration": 7200,
+          "hard_timeout": 21600,
+          "io_timeout": 21600,
+          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 26
+        },
+        "test": "performance_test_suite",
+        "trigger_script": {
+          "args": [
+            "--multiple-dimension-script-verbose",
+            "True"
+          ],
+          "requires_simultaneous_shard_dispatch": true,
+          "script": "//testing/trigger_scripts/perf_device_trigger.py"
+        }
+      }
+    ]
+  },
+  "win-11-processor-perf": {
+    "merge": {
+      "args": [
+        "--lightweight"
+      ],
+      "script": "//tools/perf/process_perf_results.py"
+    }
+  },
   "win64-builder-perf": {
     "additional_compile_targets": [
       "chromedriver"
@@ -2328,9 +2136,6 @@
           "script": "//tools/perf/process_perf_results.py"
         },
         "name": "chrome_sizes",
-        "override_compile_targets": [
-          "chrome_sizes"
-        ],
         "resultdb": {
           "has_native_resultdb_integration": true
         },

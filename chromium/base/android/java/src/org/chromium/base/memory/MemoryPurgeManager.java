@@ -8,8 +8,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BaseFeatureMap;
-import org.chromium.base.BaseFeatures;
 import org.chromium.base.MemoryPressureLevel;
 import org.chromium.base.MemoryPressureListener;
 import org.chromium.base.ThreadUtils;
@@ -33,9 +31,9 @@ public class MemoryPurgeManager implements ApplicationStatus.ApplicationStateLis
     // for freezing.
     // TODO(crbug.com/1356242): Should ideally be tuned according to the distribution of background
     // time residency.
-    @VisibleForTesting
-    static final long PURGE_DELAY_MS = 4 * 60 * 1000;
+    @VisibleForTesting static final long PURGE_DELAY_MS = 4 * 60 * 1000;
     private static final long NEVER = -1;
+
     @VisibleForTesting
     static final String BACKGROUND_DURATION_HISTOGRAM_NAME =
             "Android.ApplicationState.TimeInBackgroundBeforeForegroundedAgain";
@@ -59,10 +57,7 @@ public class MemoryPurgeManager implements ApplicationStatus.ApplicationStateLis
         ThreadUtils.assertOnUiThread();
         if (mStarted) return;
         mStarted = true;
-        if (!BaseFeatureMap.isEnabled(BaseFeatures.BROWSER_PROCESS_MEMORY_PURGE)) return;
-
         ApplicationStatus.registerApplicationStateListener(this);
-
         // We may already be in background, capture the initial state.
         onApplicationStateChange(getApplicationState());
     }
@@ -122,10 +117,12 @@ public class MemoryPurgeManager implements ApplicationStatus.ApplicationStateLis
         ThreadUtils.assertOnUiThread();
         if (mDelayedPurgeTaskPending) return;
 
-        ThreadUtils.postOnUiThreadDelayed(() -> {
-            mDelayedPurgeTaskPending = false;
-            delayedPurge();
-        }, delayMillis);
+        ThreadUtils.postOnUiThreadDelayed(
+                () -> {
+                    mDelayedPurgeTaskPending = false;
+                    delayedPurge();
+                },
+                delayMillis);
         mDelayedPurgeTaskPending = true;
     }
 }

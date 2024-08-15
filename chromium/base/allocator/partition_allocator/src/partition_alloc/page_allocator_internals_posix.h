@@ -13,26 +13,26 @@
 
 #include <sys/mman.h>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/notreached.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/posix/eintr_wrapper.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.h"
 #include "build/build_config.h"
+#include "partition_alloc/oom.h"
+#include "partition_alloc/page_allocator.h"
+#include "partition_alloc/page_allocator_constants.h"
+#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
+#include "partition_alloc/partition_alloc_base/notreached.h"
+#include "partition_alloc/partition_alloc_base/posix/eintr_wrapper.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/thread_isolation/thread_isolation.h"
 
 #if BUILDFLAG(IS_APPLE)
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/apple/foundation_util.h"
+#include "partition_alloc/partition_alloc_base/apple/foundation_util.h"
 #if BUILDFLAG(IS_IOS)
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/ios/ios_util.h"
+#include "partition_alloc/partition_alloc_base/ios/ios_util.h"
 #elif BUILDFLAG(IS_MAC)
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/mac/mac_util.h"
+#include "partition_alloc/partition_alloc_base/mac/mac_util.h"
 #else
 #error "Unknown platform"
 #endif
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/apple/scoped_cftyperef.h"
+#include "partition_alloc/partition_alloc_base/apple/scoped_cftyperef.h"
 
 #include <Availability.h>
 #include <Security/Security.h>
@@ -223,8 +223,8 @@ bool TrySetSystemPagesAccessInternal(
                                             accessibility.thread_isolation);
   }
 #endif  // BUILDFLAG(ENABLE_THREAD_ISOLATION)
-  return 0 == PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
-                                       GetAccessFlags(accessibility)));
+  return 0 == WrapEINTR(mprotect)(reinterpret_cast<void*>(address), length,
+                                  GetAccessFlags(accessibility));
 }
 
 void SetSystemPagesAccessInternal(
@@ -241,8 +241,8 @@ void SetSystemPagesAccessInternal(
   } else
 #endif  // BUILDFLAG(ENABLE_THREAD_ISOLATION)
   {
-    ret = PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
-                                   GetAccessFlags(accessibility)));
+    ret = WrapEINTR(mprotect)(reinterpret_cast<void*>(address), length,
+                              GetAccessFlags(accessibility));
   }
 
   // On Linux, man mprotect(2) states that ENOMEM is returned when (1) internal
@@ -332,7 +332,7 @@ void DecommitSystemPagesInternal(
   }
 }
 
-void DecommitAndZeroSystemPagesInternal(uintptr_t address,
+bool DecommitAndZeroSystemPagesInternal(uintptr_t address,
                                         size_t length,
                                         PageTag page_tag) {
   int fd = -1;
@@ -349,11 +349,19 @@ void DecommitAndZeroSystemPagesInternal(uintptr_t address,
   void* ptr = reinterpret_cast<void*>(address);
   void* ret = mmap(ptr, length, PROT_NONE,
                    MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE, fd, 0);
-  PA_CHECK(ptr == ret);
+  if (ret == MAP_FAILED) {
+    // Decomitting may create additional VMAs (e.g. if we're decommitting pages
+    // in the middle of a larger mapping) and so it can fail with ENOMEM if the
+    // limit of VMAs is exceeded.
+    PA_CHECK(errno == ENOMEM);
+    return false;
+  }
+  PA_CHECK(ret == ptr);
   // Since we just remapped the region, need to set is name again.
 #if defined(LINUX_NAME_REGION)
   NameRegion(ret, length, page_tag);
 #endif
+  return true;
 }
 
 void RecommitSystemPagesInternal(

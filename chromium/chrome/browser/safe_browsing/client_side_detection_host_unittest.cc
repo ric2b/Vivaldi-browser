@@ -31,6 +31,7 @@
 #include "components/safe_browsing/content/browser/client_side_detection_service.h"
 #include "components/safe_browsing/content/browser/client_side_phishing_model.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
+#include "components/safe_browsing/content/browser/unsafe_resource_util.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom-shared.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/safe_browsing/core/browser/db/test_database_manager.h"
@@ -38,7 +39,6 @@
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/security_interstitials/content/unsafe_resource_util.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/browser/back_forward_cache.h"
@@ -177,8 +177,12 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     // Note: this will delete the client object in the case of the CsdClient
     // implementation.
-    if (!callback.is_null())
-      callback.Run(false /*proceed*/, true /*showed_interstitial*/);
+    if (!callback.is_null()) {
+      security_interstitials::UnsafeResource::UrlCheckResult result(
+          false /*proceed*/, true /*showed_interstitial*/,
+          false /*has_post_commit_interstitial_skipped*/);
+      callback.Run(result);
+    }
   }
 
  protected:
@@ -448,37 +452,6 @@ class ClientSideDetectionHostIncognitoTest
       : ClientSideDetectionHostTestBase(true /*is_incognito*/) {}
 };
 
-class ClientSideDetectionHostPolicyTest
-    : public ClientSideDetectionHostTestBase,
-      public ::testing::WithParamInterface<bool> {
- public:
-  ClientSideDetectionHostPolicyTest()
-      : ClientSideDetectionHostTestBase(false /*is_incognito*/) {}
-
-  // Verify that client side phishing protection follows policy value.
-  void TestPreClassificationCheckCsdPhishingPolicy() {
-    // Configures enterprise policy
-    profile()->GetPrefs()->SetBoolean(
-        prefs::kSafeBrowsingCsdPhishingProtectionAllowedByPolicy, GetParam());
-
-    GURL url("http://host.com/");
-    if (GetParam()) {
-      ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
-                                    &kFalse, &kFalse);
-    } else {
-      ExpectPreClassificationChecks(url, &kFalse, nullptr, nullptr, nullptr,
-                                    nullptr, &kFalse);
-    }
-    NavigateAndKeepLoading(web_contents(), url);
-    WaitAndCheckPreClassificationChecks();
-    if (GetParam()) {
-      fake_phishing_detector_.CheckMessage(&url);
-    } else {
-      fake_phishing_detector_.CheckMessage(nullptr);
-    }
-  }
-};
-
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneInvalidVerdict) {
   if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
     GTEST_SKIP();
@@ -576,7 +549,7 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
   EXPECT_EQ(SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING, resource.threat_type);
   EXPECT_EQ(ThreatSource::CLIENT_SIDE_DETECTION, resource.threat_source);
   EXPECT_EQ(web_contents(),
-            security_interstitials::GetWebContentsForResource(resource));
+            unsafe_resource_util::GetWebContentsForResource(resource));
 
   // Make sure the client object will be deleted.
   content::GetIOThreadTaskRunner({})->PostTask(
@@ -647,7 +620,7 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   EXPECT_EQ(SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING, resource.threat_type);
   EXPECT_EQ(ThreatSource::CLIENT_SIDE_DETECTION, resource.threat_source);
   EXPECT_EQ(web_contents(),
-            security_interstitials::GetWebContentsForResource(resource));
+            unsafe_resource_util::GetWebContentsForResource(resource));
 
   // Make sure the client object will be deleted.
   content::GetIOThreadTaskRunner({})->PostTask(
@@ -1167,17 +1140,6 @@ TEST_F(ClientSideDetectionHostTest, TestPreClassificationAllowlistedByPolicy) {
   WaitAndCheckPreClassificationChecks();
 
   fake_phishing_detector_.CheckMessage(nullptr);
-}
-
-INSTANTIATE_TEST_SUITE_P(, ClientSideDetectionHostPolicyTest, testing::Bool());
-
-TEST_P(ClientSideDetectionHostPolicyTest,
-       TestPreClassificationCheckPolicyEnabled) {
-  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch)) {
-    GTEST_SKIP();
-  }
-
-  TestPreClassificationCheckCsdPhishingPolicy();
 }
 
 TEST_F(ClientSideDetectionHostTest, RecordsPhishingDetectorResults) {

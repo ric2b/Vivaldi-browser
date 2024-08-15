@@ -130,7 +130,8 @@ void vkuGetLayerSettingValue(VkuLayerSettingSet layerSettingSet, const char *pSe
     settingValue = Merge(values);
 }
 
-void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pSettingName, std::vector<std::string> &settingValues) {
+void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pSettingName,
+                              std::vector<std::string> &settingValues) {
     uint32_t value_count = 0;
     vkuGetLayerSettingValues(layerSettingSet, pSettingName, VKU_LAYER_SETTING_TYPE_STRING, &value_count, nullptr);
     if (value_count > 0) {
@@ -140,12 +141,13 @@ void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pS
     }
 }
 
-void vkuGetLayerSettingValue(VkuLayerSettingSet layerSettingSet, const char* pSettingName, VkuFrameset& settingValue) {
+void vkuGetLayerSettingValue(VkuLayerSettingSet layerSettingSet, const char *pSettingName, VkuFrameset &settingValue) {
     uint32_t value_count = sizeof(VkuFrameset) / sizeof(VkuFrameset::count);
     vkuGetLayerSettingValues(layerSettingSet, pSettingName, VKU_LAYER_SETTING_TYPE_UINT32, &value_count, &settingValue);
 }
 
-void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pSettingName, std::vector<VkuFrameset> &settingValues) {
+void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pSettingName,
+                              std::vector<VkuFrameset> &settingValues) {
     uint32_t value_count = 0;
     vkuGetLayerSettingValues(layerSettingSet, pSettingName, VKU_LAYER_SETTING_TYPE_UINT32, &value_count, nullptr);
     if (value_count > 0) {
@@ -164,7 +166,7 @@ static uint32_t TokenToUint(const std::string &token) {
     return int_id;
 }
 
-static void SetCustomStypeInfo(std::vector<const char *> raw_id_list, std::vector<VkuCustomSTypeInfo>& custom_stype_info) {
+static void SetCustomStypeInfo(std::vector<const char *> raw_id_list, std::vector<VkuCustomSTypeInfo> &custom_stype_info) {
     // List format is a list of integer pairs
     for (std::size_t i = 0, n = raw_id_list.size(); i < n; i += 2) {
         uint32_t stype_id = TokenToUint(raw_id_list[i + 0]);
@@ -184,7 +186,8 @@ static void SetCustomStypeInfo(std::vector<const char *> raw_id_list, std::vecto
     }
 }
 
-void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pSettingName, std::vector<VkuCustomSTypeInfo> &settingValues) {
+void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pSettingName,
+                              std::vector<VkuCustomSTypeInfo> &settingValues) {
     uint32_t value_count = 0;
     vkuGetLayerSettingValues(layerSettingSet, pSettingName, VKU_LAYER_SETTING_TYPE_STRING, &value_count, nullptr);
     if (value_count > 0) {
@@ -195,7 +198,7 @@ void vkuGetLayerSettingValues(VkuLayerSettingSet layerSettingSet, const char *pS
 }
 
 VkResult vkuGetUnknownSettings(const VkLayerSettingsCreateInfoEXT *pFirstCreateInfo, uint32_t settingsCount, const char **pSettings,
-                              std::vector<const char *> &unknownSettings) {
+                               std::vector<const char *> &unknownSettings) {
     uint32_t unknown_setting_count = 0;
     VkResult result = vkuGetUnknownSettings(pFirstCreateInfo, settingsCount, pSettings, &unknown_setting_count, nullptr);
 

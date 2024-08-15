@@ -40,7 +40,7 @@ base::Value ConvertVpnStringToValue(const std::string& str,
   if (type == base::Value::Type::STRING)
     return base::Value(str);
 
-  absl::optional<base::Value> value = base::JSONReader::Read(str);
+  std::optional<base::Value> value = base::JSONReader::Read(str);
   if (!value || value->type() != type)
     return base::Value(type);
 
@@ -200,14 +200,12 @@ class ShillToONCTranslator {
   // for debugging.
   std::string GetName();
 
-  raw_ptr<const base::Value::Dict, ExperimentalAsh> shill_dictionary_;
+  raw_ptr<const base::Value::Dict> shill_dictionary_;
   ::onc::ONCSource onc_source_;
-  raw_ptr<const chromeos::onc::OncValueSignature, ExperimentalAsh>
-      onc_signature_;
-  raw_ptr<const FieldTranslationEntry, ExperimentalAsh>
-      field_translation_table_;
+  raw_ptr<const chromeos::onc::OncValueSignature> onc_signature_;
+  raw_ptr<const FieldTranslationEntry> field_translation_table_;
   base::Value::Dict onc_object_;
-  raw_ptr<const NetworkState, ExperimentalAsh> network_state_;
+  raw_ptr<const NetworkState> network_state_;
 };
 
 base::Value::Dict ShillToONCTranslator::CreateTranslatedONCObject() {
@@ -456,7 +454,7 @@ void ShillToONCTranslator::TranslateVPN() {
     provider_type_dictionary = onc_provider_type;
   }
 
-  absl::optional<bool> save_credentials =
+  std::optional<bool> save_credentials =
       shill_dictionary_->FindBool(shill::kSaveCredentialsProperty);
   if (onc_provider_type != ::onc::vpn::kThirdPartyVpn &&
       onc_provider_type != ::onc::vpn::kArcVpn && save_credentials) {
@@ -484,7 +482,7 @@ void ShillToONCTranslator::TranslateWiFiWithState() {
   if (!unknown_encoding && !ssid.empty())
     onc_object_.Set(::onc::wifi::kSSID, ssid);
 
-  absl::optional<bool> link_monitor_disable =
+  std::optional<bool> link_monitor_disable =
       shill_dictionary_->FindBool(shill::kLinkMonitorDisableProperty);
   if (link_monitor_disable) {
     onc_object_.Set(::onc::wifi::kAllowGatewayARPPolling,
@@ -776,10 +774,10 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
   const std::string* proxy_config_str =
       shill_dictionary_->FindString(shill::kProxyConfigProperty);
   if (proxy_config_str && !proxy_config_str->empty()) {
-    absl::optional<base::Value::Dict> proxy_config =
+    std::optional<base::Value::Dict> proxy_config =
         chromeos::onc::ReadDictionaryFromJson(*proxy_config_str);
     if (proxy_config.has_value()) {
-      absl::optional<base::Value::Dict> proxy_settings =
+      std::optional<base::Value::Dict> proxy_settings =
           ConvertProxyConfigToOncProxySettings(proxy_config.value());
       if (proxy_settings) {
         onc_object_.Set(::onc::network_config::kProxySettings,
@@ -788,7 +786,7 @@ void ShillToONCTranslator::TranslateNetworkWithState() {
     }
   }
 
-  absl::optional<double> traffic_counter_reset_time =
+  std::optional<double> traffic_counter_reset_time =
       shill_dictionary_->FindDouble(shill::kTrafficCounterResetTimeProperty);
   if (traffic_counter_reset_time.has_value()) {
     onc_object_.Set(::onc::network_config::kTrafficCounterResetTime,

@@ -31,6 +31,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "ui/display/test/test_screen.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -42,11 +43,11 @@ TEST(EventRouterTest, PopulateCrostiniEvent) {
       extensions::Extension::GetBaseURLFromExtensionId("extensionid"));
   EventRouter::PopulateCrostiniEvent(
       ext_event,
-      extensions::api::file_manager_private::CROSTINI_EVENT_TYPE_UNSHARE,
+      extensions::api::file_manager_private::CrostiniEventType::kUnshare,
       "vmname", ext_origin, "mountname", "filesystemname", "/full/path");
 
   EXPECT_EQ(ext_event.event_type,
-            extensions::api::file_manager_private::CROSTINI_EVENT_TYPE_UNSHARE);
+            extensions::api::file_manager_private::CrostiniEventType::kUnshare);
   EXPECT_EQ(ext_event.vm_name, "vmname");
   EXPECT_EQ(ext_event.entries.size(), 1u);
   base::Value::Dict ext_props;
@@ -63,11 +64,11 @@ TEST(EventRouterTest, PopulateCrostiniEvent) {
       GURL("chrome://file-manager/this-part-should-not-be-in?the=event"));
   EventRouter::PopulateCrostiniEvent(
       swa_event,
-      extensions::api::file_manager_private::CROSTINI_EVENT_TYPE_SHARE,
+      extensions::api::file_manager_private::CrostiniEventType::kShare,
       "vmname", swa_origin, "mountname", "filesystemname", "/full/path");
 
   EXPECT_EQ(swa_event.event_type,
-            extensions::api::file_manager_private::CROSTINI_EVENT_TYPE_SHARE);
+            extensions::api::file_manager_private::CrostiniEventType::kShare);
   EXPECT_EQ(swa_event.vm_name, "vmname");
   EXPECT_EQ(swa_event.entries.size(), 1u);
   base::Value::Dict swa_props;
@@ -162,6 +163,8 @@ class FileManagerEventRouterTest : public testing::Test {
   }
 
   content::BrowserTaskEnvironment task_environment_;
+  display::test::TestScreen test_screen_{/*create_dispay=*/true,
+                                         /*register_screen=*/true};
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<TestingProfile> profile_;
   const blink::StorageKey kTestStorageKey =
@@ -214,7 +217,7 @@ MATCHER_P4(ExpectEventArgPauseParams,
       << "The policyParams field is not available on the event";
   const std::string* actual_type = policy_pause_params->FindString("type");
   EXPECT_TRUE(actual_type) << "Could not find the string with key: type";
-  const absl::optional<int> actual_count =
+  const std::optional<int> actual_count =
       policy_pause_params->FindInt("policyFileCount");
   EXPECT_TRUE(actual_count.has_value())
       << "Could not find the number with key: type";
@@ -222,7 +225,7 @@ MATCHER_P4(ExpectEventArgPauseParams,
       policy_pause_params->FindString("fileName");
   EXPECT_TRUE(actual_file_name)
       << "Could not find the string with key: fileName";
-  const absl::optional<bool> actual_always_show_review =
+  const std::optional<bool> actual_always_show_review =
       policy_pause_params->FindBool("alwaysShowReview");
   EXPECT_TRUE(actual_always_show_review.has_value())
       << "Could not find the string with key: alwaysShowReview";
@@ -254,14 +257,14 @@ MATCHER_P4(ExpectEventArgPolicyError,
 
   const std::string* actual_type = policy_error->FindString("type");
   EXPECT_TRUE(actual_type) << "Could not find the string with key: type";
-  const absl::optional<int> actual_count =
+  const std::optional<int> actual_count =
       policy_error->FindInt("policyFileCount");
   EXPECT_TRUE(actual_count.has_value())
       << "Could not find the string with key: type";
   const std::string* actual_file_name = policy_error->FindString("fileName");
   EXPECT_TRUE(actual_file_name)
       << "Could not find the string with key: fileName";
-  const absl::optional<bool> actual_always_show_review =
+  const std::optional<bool> actual_always_show_review =
       policy_error->FindBool("alwaysShowReview");
   EXPECT_TRUE(actual_always_show_review.has_value())
       << "Could not find the string with key: alwaysShowReview";

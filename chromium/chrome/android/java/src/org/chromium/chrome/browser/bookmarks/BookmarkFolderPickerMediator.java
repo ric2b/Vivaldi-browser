@@ -5,10 +5,9 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
-import android.view.MenuItem;
-import android.view.View;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -20,11 +19,10 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /** Mediator for the folder picker activity. */
 class BookmarkFolderPickerMediator {
-    static final int FOLDER_ROW = 1;
-
     private final BookmarkModelObserver mBookmarkModelObserver =
             new BookmarkModelObserver() {
                 @Override
@@ -40,7 +38,7 @@ class BookmarkFolderPickerMediator {
                 }
             };
 
-    private BookmarkUiPrefs.Observer mBookmarkUiPrefsObserver =
+    private final BookmarkUiPrefs.Observer mBookmarkUiPrefsObserver =
             new BookmarkUiPrefs.Observer() {
                 @Override
                 public void onBookmarkRowDisplayPrefChanged(
@@ -55,7 +53,6 @@ class BookmarkFolderPickerMediator {
     private final ModelList mModelList;
     private final Context mContext;
     private final BookmarkModel mBookmarkModel;
-    private final BookmarkImageFetcher mBookmarkImageFetcher;
     private final List<BookmarkId> mBookmarkIds;
     private final BookmarkId mInitialParentId;
     private final Runnable mFinishRunnable;
@@ -67,13 +64,11 @@ class BookmarkFolderPickerMediator {
 
     private boolean mMovingAtLeastOneFolder;
     private boolean mMovingAtLeastOneBookmark;
-    private MenuItem mCreateNewFolderMenu;
     private BookmarkItem mCurrentParentItem;
 
     BookmarkFolderPickerMediator(
             Context context,
             BookmarkModel bookmarkModel,
-            BookmarkImageFetcher bookmarkImageFetcher,
             List<BookmarkId> bookmarkIds,
             Runnable finishRunnable,
             BookmarkUiPrefs bookmarkUiPrefs,
@@ -85,7 +80,6 @@ class BookmarkFolderPickerMediator {
         mContext = context;
         mBookmarkModel = bookmarkModel;
         mBookmarkModel.addObserver(mBookmarkModelObserver);
-        mBookmarkImageFetcher = bookmarkImageFetcher;
         mBookmarkIds = bookmarkIds;
         mFinishRunnable = finishRunnable;
         mQueryHandler =
@@ -118,7 +112,7 @@ class BookmarkFolderPickerMediator {
         mInitialParentId =
                 mAllMovedBookmarksMatchParent ? firstParent : mBookmarkModel.getRootFolderId();
 
-        mModel.set(BookmarkFolderPickerProperties.CANCEL_CLICK_LISTENER, this::onCancelClicked);
+        mModel.set(BookmarkFolderPickerProperties.CANCEL_CLICK_LISTENER, mFinishRunnable);
         mModel.set(BookmarkFolderPickerProperties.MOVE_CLICK_LISTENER, this::onMoveClicked);
 
         mBookmarkModel.finishLoadingBookmarkModel(
@@ -139,62 +133,58 @@ class BookmarkFolderPickerMediator {
         updateButtonsForCurrentParent();
 
         List<BookmarkListEntry> children =
-                mQueryHandler.buildBookmarkListForParent(
-                        parentItem.getId(), /* powerFilter= */ null);
+                mQueryHandler.buildBookmarkListForFolderSelect(
+                        parentItem.getId(), mMovingAtLeastOneFolder);
+        children =
+                children.stream().filter(this::filterMovingBookmarks).collect(Collectors.toList());
 
         mModelList.clear();
         for (int i = 0; i < children.size(); i++) {
-            BookmarkItem childItem = children.get(i).getBookmarkItem();
-            if (childItem == null) continue;
-
-            // Filter out everything that's not a folder.
-            if (!childItem.isFolder()) {
-                continue;
+            BookmarkListEntry child = children.get(i);
+            @ViewType int viewType = child.getViewType();
+            if (viewType == ViewType.SECTION_HEADER) {
+                mModelList.add(createSectionHeaderRow(child));
+            } else {
+                mModelList.add(createFolderPickerRow(child));
             }
-            // Filter out the bookmarks being moved.
-            if (mBookmarkIds.contains(childItem.getId())) {
-                continue;
-            }
-
-            boolean excludeForFolder =
-                    mMovingAtLeastOneFolder
-                            && !BookmarkUtils.canAddFolderToParent(
-                                    mBookmarkModel, childItem.getId());
-            boolean excludeForBookmark =
-                    mMovingAtLeastOneBookmark
-                            && !BookmarkUtils.canAddBookmarkToParent(
-                                    mBookmarkModel, childItem.getId());
-            // Remove any folders which can't have children added to them.
-            if (excludeForFolder || excludeForBookmark) {
-                continue;
-            }
-            mModelList.add(createFolderPickerRow(childItem));
         }
     }
 
-    ListItem createFolderPickerRow(BookmarkItem bookmarkItem) {
+    private boolean filterMovingBookmarks(BookmarkListEntry entry) {
+        BookmarkItem item = entry.getBookmarkItem();
+        // Allow non-bookmarks.
+        if (item == null) {
+            return true;
+        }
+
+        return !mBookmarkIds.contains(item.getId());
+    }
+
+    ListItem createSectionHeaderRow(BookmarkListEntry entry) {
+        PropertyModel propertyModel = new PropertyModel(BookmarkManagerProperties.ALL_KEYS);
+        propertyModel.set(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY, entry);
+        return new ListItem(entry.getViewType(), propertyModel);
+    }
+
+    ListItem createFolderPickerRow(BookmarkListEntry entry) {
+        BookmarkItem bookmarkItem = entry.getBookmarkItem();
         BookmarkId bookmarkId = bookmarkItem.getId();
 
         PropertyModel propertyModel =
                 mImprovedBookmarkRowCoordinator.createBasePropertyModel(bookmarkId);
 
+        propertyModel.set(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY, entry);
         propertyModel.set(
                 ImprovedBookmarkRowProperties.END_IMAGE_RES, R.drawable.outline_chevron_right_24dp);
         propertyModel.set(
                 ImprovedBookmarkRowProperties.END_IMAGE_VISIBILITY, ImageVisibility.DRAWABLE);
         propertyModel.set(
                 ImprovedBookmarkRowProperties.ROW_CLICK_LISTENER,
-                (v) -> {
-                    populateFoldersForParentId(bookmarkId);
-                });
+                () -> populateFoldersForParentId(bookmarkId));
         // Intentionally ignore long clicks to prevent selection.
-        propertyModel.set(
-                ImprovedBookmarkRowProperties.ROW_LONG_CLICK_LISTENER,
-                (v) -> {
-                    return true;
-                });
+        propertyModel.set(ImprovedBookmarkRowProperties.ROW_LONG_CLICK_LISTENER, () -> true);
 
-        return new ListItem(FOLDER_ROW, propertyModel);
+        return new ListItem(entry.getViewType(), propertyModel);
     }
 
     void updateToolbarTitleForCurrentParent() {
@@ -257,14 +247,10 @@ class BookmarkFolderPickerMediator {
 
     // Private methods.
 
-    private void onCancelClicked(View v) {
-        mFinishRunnable.run();
-    }
-
-    private void onMoveClicked(View v) {
+    private void onMoveClicked() {
         BookmarkUtils.moveBookmarksToParent(
                 mBookmarkModel, mBookmarkIds, mCurrentParentItem.getId());
-        BookmarkUtils.setLastUsedParent(mContext, mCurrentParentItem.getId());
+        BookmarkUtils.setLastUsedParent(mCurrentParentItem.getId());
         mFinishRunnable.run();
     }
 }

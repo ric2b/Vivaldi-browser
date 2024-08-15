@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -175,7 +176,7 @@ class MockPrefHashStore : public PrefHashStore {
     }
 
     // PrefHashStoreTransaction implementation.
-    base::StringPiece GetStoreUMASuffix() const override;
+    std::string_view GetStoreUMASuffix() const override;
     ValueState CheckValue(const std::string& path,
                           const base::Value* value) const override;
     void StoreHash(const std::string& path,
@@ -294,7 +295,7 @@ void MockPrefHashStore::ClearStoreHash(const std::string& path) {
   stored_values_.erase(path);
 }
 
-base::StringPiece
+std::string_view
 MockPrefHashStore::MockPrefHashStoreTransaction ::GetStoreUMASuffix() const {
   return "unused";
 }
@@ -394,7 +395,7 @@ class MockHashStoreContents : public HashStoreContents {
   // HashStoreContents implementation.
   bool IsCopyable() const override;
   std::unique_ptr<HashStoreContents> MakeCopy() const override;
-  base::StringPiece GetUMASuffix() const override;
+  std::string_view GetUMASuffix() const override;
   void Reset() override;
   bool GetMac(const std::string& path, std::string* out_value) override;
   bool GetSplitMacs(const std::string& path,
@@ -458,7 +459,7 @@ std::string MockHashStoreContents::GetStoredSplitMac(
   if (out_value) {
     EXPECT_TRUE(out_value->is_dict());
 
-    out_value = dictionary_.Find(split_path);
+    out_value = out_value->GetDict().Find(split_path);
     if (out_value) {
       EXPECT_TRUE(out_value->is_string());
 
@@ -483,7 +484,7 @@ std::unique_ptr<HashStoreContents> MockHashStoreContents::MakeCopy() const {
       new MockHashStoreContents(const_cast<MockHashStoreContents*>(this)));
 }
 
-base::StringPiece MockHashStoreContents::GetUMASuffix() const {
+std::string_view MockHashStoreContents::GetUMASuffix() const {
   return "Unused";
 }
 
@@ -628,6 +629,10 @@ class PrefHashFilterTest : public testing::TestWithParam<EnforcementLevel>,
         base::BindOnce(&PrefHashFilterTest::GetPrefsBack,
                        base::Unretained(this), expect_prefs_modifications),
         std::move(pref_store_contents_));
+    // `mock_pref_hash_store_` is updated over an in-process mojo interface,
+    // flush pending tasks to make sure everything is up to date after this
+    // call.
+    task_environment_.RunUntilIdle();
   }
 
   raw_ptr<MockPrefHashStore, DanglingUntriaged> mock_pref_hash_store_;
@@ -838,8 +843,7 @@ TEST_P(PrefHashFilterTest, MultiplePrefsFilterSerializeData) {
   ASSERT_EQ(PrefTrackingStrategy::SPLIT, stored_value_split.second);
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_UnknownNullValue) {
+TEST_P(PrefHashFilterTest, UnknownNullValue) {
   ASSERT_FALSE(pref_store_contents_.contains(kAtomicPref));
   ASSERT_FALSE(pref_store_contents_.contains(kSplitPref));
   // nullptr values are always trusted by the PrefHashStore.
@@ -882,8 +886,7 @@ TEST_P(PrefHashFilterTest, DISABLED_UnknownNullValue) {
   ASSERT_TRUE(validated_atomic_pref->is_personal);
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_InitialValueUnknown) {
+TEST_P(PrefHashFilterTest, InitialValueUnknown) {
   base::Value* string_value =
       pref_store_contents_.Set(kAtomicPref, "string value");
 
@@ -954,8 +957,7 @@ TEST_P(PrefHashFilterTest, DISABLED_InitialValueUnknown) {
   }
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_InitialValueTrustedUnknown) {
+TEST_P(PrefHashFilterTest, InitialValueTrustedUnknown) {
   base::Value* string_value = pref_store_contents_.Set(kAtomicPref, "test");
 
   auto* value = pref_store_contents_.Set(kSplitPref, base::Value::Dict());
@@ -1086,8 +1088,7 @@ TEST_P(PrefHashFilterTest, InitialValueChanged) {
   }
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_EmptyCleared) {
+TEST_P(PrefHashFilterTest, EmptyCleared) {
   ASSERT_FALSE(pref_store_contents_.contains(kAtomicPref));
   ASSERT_FALSE(pref_store_contents_.contains(kSplitPref));
   mock_pref_hash_store_->SetCheckResult(kAtomicPref, ValueState::CLEARED);
@@ -1122,8 +1123,7 @@ TEST_P(PrefHashFilterTest, DISABLED_EmptyCleared) {
   ASSERT_EQ(PrefTrackingStrategy::SPLIT, stored_split_value.second);
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_InitialValueUnchangedLegacyId) {
+TEST_P(PrefHashFilterTest, InitialValueUnchangedLegacyId) {
   base::Value* string_value =
       pref_store_contents_.Set(kAtomicPref, "string value");
 
@@ -1181,8 +1181,7 @@ TEST_P(PrefHashFilterTest, DISABLED_InitialValueUnchangedLegacyId) {
   VerifyRecordedReset(false);
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_DontResetReportOnly) {
+TEST_P(PrefHashFilterTest, DontResetReportOnly) {
   base::Value* int_value1 = pref_store_contents_.Set(kAtomicPref, 1);
   base::Value* int_value2 = pref_store_contents_.Set(kAtomicPref2, 2);
   base::Value* report_only_val = pref_store_contents_.Set(kReportOnlyPref, 3);
@@ -1253,8 +1252,7 @@ TEST_P(PrefHashFilterTest, DISABLED_DontResetReportOnly) {
   }
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_CallFilterSerializeDataCallbacks) {
+TEST_P(PrefHashFilterTest, CallFilterSerializeDataCallbacks) {
   base::Value::Dict root_dict;
   base::Value::Dict dict_value;
   dict_value.Set("a", true);
@@ -1327,8 +1325,7 @@ TEST_P(PrefHashFilterTest, CallFilterSerializeDataCallbacksWithFailure) {
       0u, mock_external_validation_hash_store_contents_->stored_hashes_count());
 }
 
-// TODO(https://crbug.com/1401148): Reenable.
-TEST_P(PrefHashFilterTest, DISABLED_ExternalValidationValueChanged) {
+TEST_P(PrefHashFilterTest, ExternalValidationValueChanged) {
   pref_store_contents_.Set(kAtomicPref, 1234);
 
   base::Value::Dict dict_value;

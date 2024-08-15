@@ -6,7 +6,7 @@
     package="org.chromium.chrome.stable"
     platformBuildVersionCode="34"
     platformBuildVersionName="14"
-    android:versionCode="OFFSET=20"
+    android:versionCode="OFFSET=21"
     android:versionName="#.#.#.#">
   <dist:module dist:onDemand="false">  # DIFF-ANCHOR: 2805007f
     <dist:fusing dist:include="true"/>
@@ -515,6 +515,7 @@
       <intent-filter>  # DIFF-ANCHOR: 48f4c2ef
         <category android:name="android.intent.category.XR"/>
       </intent-filter>  # DIFF-ANCHOR: 48f4c2ef
+      <property android:name="android.window.PROPERTY_ACTIVITY_STARTS_IN_IMMERSIVE_XR" android:value="true"/>
     </activity>  # DIFF-ANCHOR: 5d3091ca
     <activity-alias  # DIFF-ANCHOR: 9da0e5b6
         android:name="com.google.android.apps.chrome.IntentDispatcher"
@@ -998,13 +999,6 @@
         android:name="org.chromium.chrome.browser.tracing.TracingNotificationService"
         android:exported="false">
     </service>  # DIFF-ANCHOR: c26364a8
-    <service  # DIFF-ANCHOR: 878b448b
-        android:name="org.chromium.chrome.browser.webapps.WebApkInstallCoordinatorService"
-        android:exported="true">
-      <intent-filter>  # DIFF-ANCHOR: 875093ee
-        <action android:name="org.chromium.intent.action.INSTALL_WEB_APK"/>
-      </intent-filter>  # DIFF-ANCHOR: 875093ee
-    </service>  # DIFF-ANCHOR: 878b448b
     <service  # DIFF-ANCHOR: a550decc
         android:name="org.chromium.components.background_task_scheduler.internal.BackgroundTaskJobService"
         android:exported="false"

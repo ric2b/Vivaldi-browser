@@ -25,7 +25,7 @@ set(API_TYPE "vulkan")
 
 add_subdirectory(scripts)
 
-find_package(VulkanHeaders CONFIG QUIET)
+find_package(VulkanHeaders CONFIG)
 
 add_subdirectory(src)
 add_subdirectory(include)
@@ -38,24 +38,50 @@ if (VUL_IS_TOP_LEVEL)
     endif()
 
     include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
 
     install(
         DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/${API_TYPE}/"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/vulkan"
-        PATTERN ".clang-format" EXCLUDE
     )
 
+    # Create VulkanUtilityLibraries-targets.cmake
     set_target_properties(VulkanLayerSettings PROPERTIES EXPORT_NAME "LayerSettings")
     set_target_properties(VulkanUtilityHeaders PROPERTIES EXPORT_NAME "UtilityHeaders")
     set_target_properties(VulkanCompilerConfiguration PROPERTIES EXPORT_NAME "CompilerConfiguration")
     install(
         TARGETS VulkanLayerSettings VulkanUtilityHeaders VulkanCompilerConfiguration
-        EXPORT VulkanUtilityLibrariesConfig
+        EXPORT VulkanUtilityLibraries-targets
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
     install(
-        EXPORT VulkanUtilityLibrariesConfig
+        EXPORT VulkanUtilityLibraries-targets
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VulkanUtilityLibraries
         NAMESPACE Vulkan::
+    )
+
+    # Create VulkanUtilityLibrariesConfig.cmake
+    set(VUL_EXPORT_TARGETS ${CMAKE_INSTALL_LIBDIR}/cmake/VulkanUtilityLibraries/VulkanUtilityLibraries-targets.cmake)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/VulkanUtilityLibrariesConfig.cmake.in" [=[
+        include(CMakeFindDependencyMacro)
+        # NOTE: Because VulkanHeaders is a PUBLIC dependency it needs to be found prior to VulkanUtilityLibraries
+        find_dependency(VulkanHeaders REQUIRED)
+
+        @PACKAGE_INIT@
+
+        include(@PACKAGE_VUL_EXPORT_TARGETS@)
+    ]=])
+
+    configure_package_config_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/VulkanUtilityLibrariesConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/VulkanUtilityLibrariesConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VulkanUtilityLibraries
+        PATH_VARS VUL_EXPORT_TARGETS
+        NO_SET_AND_CHECK_MACRO
+        NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    )
+
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/VulkanUtilityLibrariesConfig.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VulkanUtilityLibraries
     )
 endif()

@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -51,9 +52,10 @@
 #include "net/http/http_status_code.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -344,8 +346,8 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
           ".well-known/_generated_install_page.html"),
       WebAppUrlLoader::Result::kUrlLoaded);
 
-  absl::optional<WebAppUrlLoader::UrlComparison> last_url_comparison =
-      absl::nullopt;
+  std::optional<WebAppUrlLoader::UrlComparison> last_url_comparison =
+      std::nullopt;
   url_loader->TrackLoadUrlCalls(base::BindLambdaForTesting(
       [&](const GURL& unused_url, content::WebContents* unused_web_contents,
           WebAppUrlLoader::UrlComparison url_comparison) {
@@ -373,7 +375,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
           ".well-known/_generated_install_page.html"),
       WebAppUrlLoader::Result::kUrlLoaded);
 
-  absl::optional<IsolatedWebAppLocation> location = absl::nullopt;
+  std::optional<IsolatedWebAppLocation> location = std::nullopt;
   url_loader->TrackLoadUrlCalls(base::BindLambdaForTesting(
       [&](const GURL& unused_url, content::WebContents* web_contents,
           WebAppUrlLoader::UrlComparison unused_url_comparison) {
@@ -407,7 +409,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperLoadUrlTest,
           ".well-known/_generated_install_page.html"),
       WebAppUrlLoader::Result::kUrlLoaded);
 
-  absl::optional<IsolatedWebAppLocation> location = absl::nullopt;
+  std::optional<IsolatedWebAppLocation> location = std::nullopt;
   url_loader->TrackLoadUrlCalls(base::BindLambdaForTesting(
       [&](const GURL& unused_url, content::WebContents* web_contents,
           WebAppUrlLoader::UrlComparison unused_url_comparison) {
@@ -519,7 +521,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperRetrieveManifestTest,
 }
 
 struct InvalidVersionParam {
-  absl::optional<std::u16string> version;
+  std::optional<std::u16string> version;
   std::string error;
   std::string test_name;
 };
@@ -549,7 +551,7 @@ TEST_P(InstallIsolatedWebAppCommandHelperInvalidVersionTest,
 
   base::expected<WebAppInstallInfo, std::string> result =
       command_helper->ValidateManifestAndCreateInstallInfo(
-          /*expected_version=*/absl::nullopt, std::move(manifest_and_url));
+          /*expected_version=*/std::nullopt, std::move(manifest_and_url));
   EXPECT_THAT(result, ErrorIs(HasSubstr(GetParam().error)));
 }
 
@@ -557,7 +559,7 @@ INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     InstallIsolatedWebAppCommandHelperInvalidVersionTest,
     ::testing::Values(
-        InvalidVersionParam{.version = absl::nullopt,
+        InvalidVersionParam{.version = std::nullopt,
                             .error = "`version` is not present",
                             .test_name = "NoVersion"},
         InvalidVersionParam{
@@ -598,7 +600,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperValidateManifestTest,
 
   base::expected<WebAppInstallInfo, std::string> result =
       command_helper->ValidateManifestAndCreateInstallInfo(
-          /*expected_version=*/absl::nullopt,
+          /*expected_version=*/std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               CreateDefaultManifest(url_info.origin().GetURL()),
               CreateDefaultManifestURL(url_info.origin().GetURL())));
@@ -618,7 +620,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperValidateManifestTest,
 
   base::expected<WebAppInstallInfo, std::string> result =
       command_helper->ValidateManifestAndCreateInstallInfo(
-          /*expected_version=*/absl::nullopt,
+          /*expected_version=*/std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               std::move(manifest),
               CreateDefaultManifestURL(url_info.origin().GetURL())));
@@ -638,7 +640,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperValidateManifestTest,
 
   base::expected<WebAppInstallInfo, std::string> result =
       command_helper->ValidateManifestAndCreateInstallInfo(
-          /*expected_version=*/absl::nullopt,
+          /*expected_version=*/std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               std::move(manifest),
               CreateDefaultManifestURL(url_info.origin().GetURL())));
@@ -658,7 +660,7 @@ TEST_F(IsolatedWebAppInstallCommandHelperValidateManifestTest,
 
   base::expected<WebAppInstallInfo, std::string> result =
       command_helper->ValidateManifestAndCreateInstallInfo(
-          /*expected_version=*/absl::nullopt,
+          /*expected_version=*/std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               std::move(manifest),
               CreateDefaultManifestURL(url_info.origin().GetURL())));
@@ -675,12 +677,12 @@ TEST_F(IsolatedWebAppInstallCommandHelperValidateManifestTest,
 
   blink::mojom::ManifestPtr manifest =
       CreateDefaultManifest(url_info.origin().GetURL());
-  manifest->name = absl::nullopt;
-  manifest->short_name = absl::nullopt;
+  manifest->name = std::nullopt;
+  manifest->short_name = std::nullopt;
 
   base::expected<WebAppInstallInfo, std::string> result =
       command_helper->ValidateManifestAndCreateInstallInfo(
-          /*expected_version=*/absl::nullopt,
+          /*expected_version=*/std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               std::move(manifest),
               CreateDefaultManifestURL(url_info.origin().GetURL())));
@@ -697,13 +699,6 @@ class InstallIsolatedWebAppCommandHelperManifestIconsTest
 
   blink::mojom::ManifestPtr CreateManifest() const {
     return CreateDefaultManifest(kSomeTestApplicationUrl);
-  }
-
-  SkBitmap CreateTestBitmap(SkColor color) {
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(kImageSize, kImageSize);
-    bitmap.eraseColor(color);
-    return bitmap;
   }
 
   blink::Manifest::ImageResource CreateImageResourceForAnyPurpose(
@@ -733,7 +728,7 @@ TEST_F(InstallIsolatedWebAppCommandHelperManifestIconsTest,
 
   std::map<GURL, std::vector<SkBitmap>> icons = {{
       img_url,
-      {CreateTestBitmap(SK_ColorRED)},
+      {gfx::test::CreateBitmap(kImageSize, SK_ColorRED)},
   }};
 
   using HttpStatusCode = int;
@@ -743,10 +738,11 @@ TEST_F(InstallIsolatedWebAppCommandHelperManifestIconsTest,
 
   std::unique_ptr<MockDataRetriever> fake_data_retriever =
       CreateDefaultDataRetriever(kSomeTestApplicationUrl);
-  EXPECT_CALL(*fake_data_retriever,
-              GetIcons(_, UnorderedElementsAre(img_url),
-                       /*skip_page_favicons=*/true,
-                       /*fail_all_if_any_fail=*/true, IsNotNullCallback()))
+  EXPECT_CALL(
+      *fake_data_retriever,
+      GetIcons(_, UnorderedElementsAre(std::make_tuple(img_url, gfx::Size())),
+               /*skip_page_favicons=*/true,
+               /*fail_all_if_any_fail=*/true, IsNotNullCallback()))
       .WillOnce(RunOnceCallback<4>(IconsDownloadedResult::kCompleted,
                                    std::move(icons), http_result));
   auto command_helper = std::make_unique<IsolatedWebAppInstallCommandHelper>(
@@ -756,7 +752,7 @@ TEST_F(InstallIsolatedWebAppCommandHelperManifestIconsTest,
   ASSERT_OK_AND_ASSIGN(
       auto install_info,
       command_helper->ValidateManifestAndCreateInstallInfo(
-          absl::nullopt,
+          std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               std::move(manifest),
               CreateDefaultManifestURL(kSomeTestApplicationUrl))));
@@ -812,7 +808,7 @@ TEST_F(InstallIsolatedWebAppCommandHelperManifestIconsTest,
   ASSERT_OK_AND_ASSIGN(
       auto install_info,
       command_helper->ValidateManifestAndCreateInstallInfo(
-          absl::nullopt,
+          std::nullopt,
           IsolatedWebAppInstallCommandHelper::ManifestAndUrl(
               std::move(manifest),
               CreateDefaultManifestURL(kSomeTestApplicationUrl))));

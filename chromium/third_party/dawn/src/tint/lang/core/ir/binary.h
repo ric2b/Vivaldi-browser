@@ -30,42 +30,27 @@
 
 #include <string>
 
+#include "src/tint/lang/core/binary_op.h"
 #include "src/tint/lang/core/ir/operand_instruction.h"
-#include "src/tint/utils/rtti/castable.h"
+
+// Forward declarations
+namespace tint::core::intrinsic {
+struct TableData;
+}
 
 namespace tint::core::ir {
 
-/// A binary operator.
-enum class BinaryOp {
-    kAdd,
-    kSubtract,
-    kMultiply,
-    kDivide,
-    kModulo,
-
-    kAnd,
-    kOr,
-    kXor,
-
-    kEqual,
-    kNotEqual,
-    kLessThan,
-    kGreaterThan,
-    kLessThanEqual,
-    kGreaterThanEqual,
-
-    kShiftLeft,
-    kShiftRight
-};
-
-/// A binary instruction in the IR.
-class Binary final : public Castable<Binary, OperandInstruction<2, 1>> {
+/// The abstract base class for dialect-specific binary-op instructions in the IR.
+class Binary : public Castable<Binary, OperandInstruction<2, 1>> {
   public:
     /// The offset in Operands() for the LHS
     static constexpr size_t kLhsOperandOffset = 0;
 
     /// The offset in Operands() for the RHS
     static constexpr size_t kRhsOperandOffset = 1;
+
+    /// Constructor (no results, no operands)
+    Binary();
 
     /// Constructor
     /// @param result the result value
@@ -75,34 +60,33 @@ class Binary final : public Castable<Binary, OperandInstruction<2, 1>> {
     Binary(InstructionResult* result, BinaryOp op, Value* lhs, Value* rhs);
     ~Binary() override;
 
-    /// @copydoc Instruction::Clone()
-    Binary* Clone(CloneContext& ctx) override;
-
     /// @returns the binary operator
-    BinaryOp Op() { return op_; }
+    BinaryOp Op() const { return op_; }
+
+    /// @param op the new binary operator
+    void SetOp(BinaryOp op) { op_ = op; }
 
     /// @returns the left-hand-side value for the instruction
     Value* LHS() { return operands_[kLhsOperandOffset]; }
 
+    /// @returns the left-hand-side value for the instruction
+    const Value* LHS() const { return operands_[kLhsOperandOffset]; }
+
     /// @returns the right-hand-side value for the instruction
     Value* RHS() { return operands_[kRhsOperandOffset]; }
 
+    /// @returns the right-hand-side value for the instruction
+    const Value* RHS() const { return operands_[kRhsOperandOffset]; }
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "binary"; }
+    std::string FriendlyName() const override { return "binary"; }
+
+    /// @returns the table data to validate this builtin
+    virtual const core::intrinsic::TableData& TableData() const = 0;
 
   private:
-    BinaryOp op_;
+    BinaryOp op_ = BinaryOp::kAdd;
 };
-
-/// @param kind the enum value
-/// @returns the string for the given enum value
-std::string_view ToString(BinaryOp kind);
-
-/// Emits the name of the intrinsic type.
-template <typename STREAM, typename = traits::EnableIfIsOStream<STREAM>>
-auto& operator<<(STREAM& out, BinaryOp kind) {
-    return out << ToString(kind);
-}
 
 }  // namespace tint::core::ir
 

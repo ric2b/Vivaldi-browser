@@ -239,8 +239,7 @@ export interface CreateCommandOptions {
   isPanelOrDrawer?: PanelOrDrawer;
 }
 
-// eslint-disable-next-line rulesdir/const_enum
-export enum PanelOrDrawer {
+export const enum PanelOrDrawer {
   PANEL = 'PANEL',
   DRAWER = 'DRAWER',
 }
@@ -269,9 +268,13 @@ export class CommandMenuProvider extends Provider {
     }
 
     for (const command of allCommands) {
-      if (command.available()) {
-        this.commands.push(command);
+      if (!command.available()) {
+        continue;
       }
+      if (this.commands.find(({title, category}) => title === command.title && category === command.category)) {
+        continue;
+      }
+      this.commands.push(command);
     }
 
     this.commands = this.commands.sort(commandComparator);
@@ -331,7 +334,7 @@ export class CommandMenuProvider extends Provider {
     }
     const index = Platform.StringUtilities.hashCode(command.category) % MaterialPaletteColors.length;
     tagElement.style.backgroundColor = MaterialPaletteColors[index];
-    tagElement.style.color = 'var(--sys-color-cdt-base-container)';
+    tagElement.style.color = '#fff';
     tagElement.textContent = command.category;
   }
 
@@ -402,19 +405,7 @@ export class Command {
   }
 }
 
-let showActionDelegateInstance: ShowActionDelegate;
 export class ShowActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  static instance(opts: {
-    forceNew: boolean|null,
-  } = {forceNew: null}): ShowActionDelegate {
-    const {forceNew} = opts;
-    if (!showActionDelegateInstance || forceNew) {
-      showActionDelegateInstance = new ShowActionDelegate();
-    }
-
-    return showActionDelegateInstance;
-  }
-
   handleAction(_context: UI.Context.Context, _actionId: string): boolean {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.bringToFront();
     QuickOpenImpl.show('>');

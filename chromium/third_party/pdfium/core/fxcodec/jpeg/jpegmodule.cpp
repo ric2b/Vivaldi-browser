@@ -29,7 +29,7 @@ static pdfium::span<const uint8_t> JpegScanSOI(
     pdfium::span<const uint8_t> src_span) {
   DCHECK(!src_span.empty());
 
-  for (size_t offset = 0; offset < src_span.size() - 1; ++offset) {
+  for (size_t offset = 0; offset + 1 < src_span.size(); ++offset) {
     if (src_span[offset] == 0xff && src_span[offset + 1] == 0xd8)
       return src_span.subspan(offset);
   }
@@ -403,7 +403,7 @@ absl::optional<JpegModule::ImageInfo> JpegModule::LoadInfo(
 }
 
 #if BUILDFLAG(IS_WIN)
-bool JpegModule::JpegEncode(const RetainPtr<CFX_DIBBase>& pSource,
+bool JpegModule::JpegEncode(const RetainPtr<const CFX_DIBBase>& pSource,
                             uint8_t** dest_buf,
                             size_t* dest_size) {
   jpeg_error_mgr jerr;

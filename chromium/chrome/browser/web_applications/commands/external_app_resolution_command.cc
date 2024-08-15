@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
-#include <utility>
-
 #include "chrome/browser/web_applications/commands/external_app_resolution_command.h"
+
+#include <memory>
+#include <optional>
+#include <utility>
 
 #include "base/barrier_closure.h"
 #include "base/containers/extend.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
+#include "base/notreached.h"
+#include "base/strings/to_string.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/commands/web_app_uninstall_command.h"
@@ -33,12 +37,15 @@
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "chrome/common/chrome_features.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/uninstall_result_code.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
 
 namespace web_app {
@@ -46,48 +53,50 @@ namespace web_app {
 ExternalAppResolutionCommand::ExternalAppResolutionCommand(
     Profile& profile,
     const ExternalInstallOptions& install_options,
-    absl::optional<webapps::AppId> installed_placeholder_app_id,
+    std::optional<webapps::AppId> installed_placeholder_app_id,
     InstalledCallback installed_callback)
-    : WebAppCommandTemplate<SharedWebContentsLock>(
-          "ExternalAppResolutionCommand"),
-      web_contents_lock_description_(
-          std::make_unique<SharedWebContentsLockDescription>()),
+    : WebAppCommand<SharedWebContentsLock,
+                    ExternallyManagedAppManager::InstallResult>(
+          "ExternalAppResolutionCommand",
+          SharedWebContentsLockDescription(),
+          std::move(installed_callback),
+          /*args_for_shutdown=*/
+          ExternallyManagedAppManager::InstallResult(
+              webapps::InstallResultCode::
+                  kCancelledOnWebAppProviderShuttingDown,
+              std::nullopt,
+              /*did_uninstall_and_replace=*/false)),
       profile_(profile),
-      installed_callback_(std::move(installed_callback)),
       install_options_(install_options),
       installed_placeholder_app_id_(std::move(installed_placeholder_app_id)),
       install_surface_(ConvertExternalInstallSourceToInstallSource(
           install_options_.install_source)),
       install_error_log_entry_(/*background_installation=*/true,
                                install_surface_) {
-  debug_value_.Set("external_install_options", install_options_.AsDebugValue());
+  GetMutableDebugValue().Set("external_install_options",
+                             install_options_.AsDebugValue());
+  GetMutableDebugValue().Set(
+      "installed_placeholder_app_id",
+      installed_placeholder_app_id_.has_value()
+          ? base::ToString(installed_placeholder_app_id_.value())
+          : "nullopt");
 }
 
 ExternalAppResolutionCommand::~ExternalAppResolutionCommand() = default;
 
-const LockDescription& ExternalAppResolutionCommand::lock_description() const {
-  if (!web_contents_lock_ || web_contents_lock_description_) {
-    return *web_contents_lock_description_;
-  }
-  CHECK(apps_lock_description_);
-  return *apps_lock_description_;
+void ExternalAppResolutionCommand::SetDataRetrieverForTesting(
+    std::unique_ptr<WebAppDataRetriever> data_retriever) {
+  data_retriever_ = std::move(data_retriever);
 }
 
-base::Value ExternalAppResolutionCommand::ToDebugValue() const {
-  base::Value::Dict dict = debug_value_.Clone();
-  dict.Set("error_log", error_log_.Clone());
-  dict.Set("app_id", app_id_ ? base::Value(*app_id_) : base::Value());
-  dict.Set("install_placeholder_job",
-           install_placeholder_job_ ? install_placeholder_job_->ToDebugValue()
-                                    : base::Value());
-  dict.Set("install_from_info_job", install_from_info_job_
-                                        ? install_from_info_job_->ToDebugValue()
-                                        : base::Value());
-  return base::Value(std::move(dict));
+void ExternalAppResolutionCommand::SetOnLockUpgradedCallbackForTesting(
+    base::OnceClosure callback) {
+  on_lock_upgraded_callback_for_testing_ = std::move(callback);
 }
 
-void ExternalAppResolutionCommand::OnShutdown() {
-  Abort(webapps::InstallResultCode::kCancelledOnWebAppProviderShuttingDown);
+void ExternalAppResolutionCommand::OnShutdown(
+    base::PassKey<WebAppCommandManager>) const {
+  webapps::InstallableMetrics::TrackInstallResult(false);
 }
 
 void ExternalAppResolutionCommand::StartWithLock(
@@ -114,32 +123,19 @@ void ExternalAppResolutionCommand::StartWithLock(
           weak_ptr_factory_.GetWeakPtr()));
 }
 
-void ExternalAppResolutionCommand::SetDataRetrieverForTesting(
-    std::unique_ptr<WebAppDataRetriever> data_retriever) {
-  data_retriever_ = std::move(data_retriever);
-}
-
-void ExternalAppResolutionCommand::SetOnLockUpgradedCallbackForTesting(
-    base::OnceClosure callback) {
-  on_lock_upgraded_callback_for_testing_ = std::move(callback);
+WebAppProvider& ExternalAppResolutionCommand::provider() const {
+  WebAppProvider* provider = WebAppProvider::GetForWebApps(&profile_.get());
+  CHECK(provider);
+  return *provider;
 }
 
 void ExternalAppResolutionCommand::Abort(webapps::InstallResultCode code) {
-  if (!installed_callback_) {
-    return;
-  }
-
-  debug_value_.Set("result_code", base::ToString(code));
+  GetMutableDebugValue().Set("abort_result_code", base::ToString(code));
   webapps::InstallableMetrics::TrackInstallResult(false);
-  SignalCompletionAndSelfDestruct(
-      (code ==
-       webapps::InstallResultCode::kCancelledOnWebAppProviderShuttingDown)
-          ? CommandResult::kShutdown
-          : CommandResult::kFailure,
-      base::BindOnce(std::move(installed_callback_),
-                     ExternallyManagedAppManager::InstallResult(
-                         code, absl::nullopt,
-                         /*did_uninstall_and_replace=*/false)));
+  CompleteAndSelfDestruct(CommandResult::kFailure,
+                          ExternallyManagedAppManager::InstallResult(
+                              code, std::nullopt,
+                              /*did_uninstall_and_replace=*/false));
 }
 
 void ExternalAppResolutionCommand::OnUrlLoadedAndBranchInstallation(
@@ -160,26 +156,24 @@ void ExternalAppResolutionCommand::OnUrlLoadedAndBranchInstallation(
     if (installed_placeholder_app_id_.has_value() &&
         !install_options_.force_reinstall) {
       // No need to install a placeholder app again.
-      OnInstallationJobsCompleted(
-          /*success=*/true,
-          base::BindOnce(
-              std::move(installed_callback_),
-              PrepareResult(
-                  /*is_offline_install=*/false,
-                  ExternallyManagedAppManager::InstallResult(
-                      webapps::InstallResultCode::kSuccessAlreadyInstalled,
-                      *installed_placeholder_app_id_))));
+      GetMutableDebugValue().Set("success", true);
+      CompleteAndSelfDestruct(
+          CommandResult::kSuccess,
+          PrepareResult(
+              /*is_offline_install=*/false,
+              ExternallyManagedAppManager::InstallResult(
+                  webapps::InstallResultCode::kSuccessAlreadyInstalled,
+                  *installed_placeholder_app_id_)));
       return;
     }
 
-    apps_lock_description_ =
-        command_manager()->lock_manager().UpgradeAndAcquireLock(
-            std::move(web_contents_lock_),
-            {GenerateAppId(/*manifest_id_path=*/absl::nullopt,
-                           install_options_.install_url)},
-            base::BindOnce(
-                &ExternalAppResolutionCommand::OnPlaceHolderAppLockAcquired,
-                weak_ptr_factory_.GetWeakPtr()));
+    command_manager()->lock_manager().UpgradeAndAcquireLock(
+        std::move(web_contents_lock_),
+        {GenerateAppId(/*manifest_id_path=*/std::nullopt,
+                       install_options_.install_url)},
+        base::BindOnce(
+            &ExternalAppResolutionCommand::OnPlaceHolderAppLockAcquired,
+            weak_ptr_factory_.GetWeakPtr()));
     return;
   }
 
@@ -271,9 +265,9 @@ void ExternalAppResolutionCommand::OnDidPerformInstallableCheck(
     CHECK(!opt_manifest->icons.empty());
   }
 
-  debug_value_.Set("had_manifest", false);
+  GetMutableDebugValue().Set("had_manifest", false);
   if (opt_manifest) {
-    debug_value_.Set("had_manifest", true);
+    GetMutableDebugValue().Set("had_manifest", true);
     UpdateWebAppInfoFromManifest(*opt_manifest, manifest_url,
                                  web_app_info_.get());
   }
@@ -287,11 +281,12 @@ void ExternalAppResolutionCommand::OnDidPerformInstallableCheck(
   // TODO(b/300878868): Reject installation if the manifest id provided in the
   // WebAppInstallForceList does not match the final manifest id.
   app_id_ = GenerateAppIdFromManifestId(web_app_info_->manifest_id);
+  GetMutableDebugValue().Set("app_id", app_id_);
 
   // If the manifest specified icons, don't use the page icons.
   const bool skip_page_favicons = opt_manifest && !opt_manifest->icons.empty();
 
-  base::flat_set<GURL> icon_urls = GetValidIconUrlsToDownload(*web_app_info_);
+  IconUrlSizeSet icon_urls = GetValidIconUrlsToDownload(*web_app_info_);
 
   if (!web_contents_->GetVisibleURL().EqualsIgnoringRef(
           GURL(url::kAboutBlankURL))) {
@@ -313,7 +308,7 @@ void ExternalAppResolutionCommand::OnDidPerformInstallableCheck(
 }
 
 void ExternalAppResolutionCommand::OnPreparedForIconRetrieving(
-    base::flat_set<GURL> icon_urls,
+    IconUrlSizeSet icon_urls,
     bool skip_page_favicons,
     WebAppUrlLoaderResult result) {
   data_retriever_->GetIcons(
@@ -328,7 +323,7 @@ void ExternalAppResolutionCommand::OnIconsRetrievedUpgradeLockDescription(
     IconsDownloadedResult result,
     IconsMap icons_map,
     DownloadedIconsHttpResults icons_http_results) {
-  CHECK(install_params_.has_value() && app_id_.has_value());
+  CHECK(install_params_.has_value() && !app_id_.empty());
   CHECK(web_contents_ && !web_contents_->IsBeingDestroyed());
 
   PopulateProductIcons(web_app_info_.get(), &icons_map);
@@ -339,20 +334,19 @@ void ExternalAppResolutionCommand::OnIconsRetrievedUpgradeLockDescription(
   install_error_log_entry_.LogDownloadedIconsErrors(
       *web_app_info_, result, icons_map, icons_http_results);
 
-  apps_lock_description_ =
-      command_manager()->lock_manager().UpgradeAndAcquireLock(
-          std::move(web_contents_lock_), {*app_id_},
-          base::BindOnce(
-              &ExternalAppResolutionCommand::OnLockUpgradedFinalizeInstall,
-              weak_ptr_factory_.GetWeakPtr(),
-              result != IconsDownloadedResult::kCompleted));
+  command_manager()->lock_manager().UpgradeAndAcquireLock(
+      std::move(web_contents_lock_), {app_id_},
+      base::BindOnce(
+          &ExternalAppResolutionCommand::OnLockUpgradedFinalizeInstall,
+          weak_ptr_factory_.GetWeakPtr(),
+          result != IconsDownloadedResult::kCompleted));
 }
 
 void ExternalAppResolutionCommand::OnLockUpgradedFinalizeInstall(
     bool icon_download_failed,
     std::unique_ptr<SharedWebContentsWithAppLock> apps_lock) {
   apps_lock_ = std::move(apps_lock);
-  CHECK(install_params_.has_value() && app_id_.has_value());
+  CHECK(install_params_.has_value() && !app_id_.empty());
   CHECK(web_contents_ && !web_contents_->IsBeingDestroyed());
 
   if (on_lock_upgraded_callback_for_testing_) {
@@ -361,7 +355,6 @@ void ExternalAppResolutionCommand::OnLockUpgradedFinalizeInstall(
 
   WebAppInstallFinalizer::FinalizeOptions finalize_options(install_surface_);
 
-  finalize_options.locally_installed = install_params_->locally_installed;
   finalize_options.overwrite_existing_manifest_fields =
       install_params_->force_reinstall;
 
@@ -376,7 +369,7 @@ void ExternalAppResolutionCommand::OnLockUpgradedFinalizeInstall(
   finalize_options.add_to_quick_launch_bar =
       install_params_->add_to_quick_launch_bar;
 
-  if (apps_lock_->registrar().IsInstalled(*app_id_)) {
+  if (apps_lock_->registrar().IsInstalled(app_id_)) {
     // If an installation is triggered for the same app but with a
     // different install_url, then we overwrite the manifest fields.
     // If icon downloads fail, then we would not overwrite the icon
@@ -389,10 +382,6 @@ void ExternalAppResolutionCommand::OnLockUpgradedFinalizeInstall(
       *web_app_info_, finalize_options,
       base::BindOnce(&ExternalAppResolutionCommand::OnInstallFinalized,
                      weak_ptr_factory_.GetWeakPtr()));
-
-  // Check that the finalizer hasn't called OnInstallFinalizedMaybeReparentTab
-  // synchronously:
-  CHECK(installed_callback_);
 }
 
 void ExternalAppResolutionCommand::OnInstallFinalized(
@@ -400,9 +389,10 @@ void ExternalAppResolutionCommand::OnInstallFinalized(
     webapps::InstallResultCode code,
     OsHooksErrors os_hooks_errors) {
   CHECK(web_contents_ && !web_contents_->IsBeingDestroyed());
+  CHECK_EQ(app_id, app_id_);
+  install_code_ = code;
 
-  debug_value_.Set("result_code", base::ToString(code));
-  debug_value_.Set("install_url", install_options_.install_url.spec());
+  GetMutableDebugValue().Set("install_code", base::ToString(code));
   if (!webapps::IsSuccess(code)) {
     TryAppInfoFactoryOnFailure(
         ExternallyManagedAppManager::InstallResult(code));
@@ -412,7 +402,7 @@ void ExternalAppResolutionCommand::OnInstallFinalized(
   RecordWebAppInstallationTimestamp(
       Profile::FromBrowserContext(web_contents_->GetBrowserContext())
           ->GetPrefs(),
-      app_id, install_surface_);
+      app_id_, install_surface_);
 
   if (base::FeatureList::IsEnabled(features::kRecordWebAppDebugInfo)) {
     if (install_error_log_entry_.HasErrorDict()) {
@@ -426,52 +416,130 @@ void ExternalAppResolutionCommand::OnInstallFinalized(
   CHECK(apps_lock_);
 
   uninstall_and_replace_job_.emplace(
-      &profile_.get(), *apps_lock_, install_options_.uninstall_and_replace,
-      app_id,
+      &profile_.get(),
+      *GetMutableDebugValue().EnsureDict("uninstall_and_replace_job"),
+      *apps_lock_, install_options_.uninstall_and_replace, app_id_,
       base::BindOnce(&ExternalAppResolutionCommand::
                          OnUninstallAndReplaceCompletedUninstallPlaceholder,
-                     weak_ptr_factory_.GetWeakPtr(), app_id, std::move(code)));
+                     weak_ptr_factory_.GetWeakPtr()));
   uninstall_and_replace_job_->Start();
 }
 
 void ExternalAppResolutionCommand::
     OnUninstallAndReplaceCompletedUninstallPlaceholder(
-        webapps::AppId app_id,
-        webapps::InstallResultCode code,
         bool uninstall_triggered) {
   CHECK(apps_lock_);
+  uninstalled_for_replace_ = uninstall_triggered;
+  GetMutableDebugValue().Set("uninstalled_for_replace", uninstall_triggered);
+  uninstall_and_replace_job_ = std::nullopt;
 
   const bool uninstall_placeholder =
       installed_placeholder_app_id_.has_value() &&
-      *installed_placeholder_app_id_ != app_id;
+      *installed_placeholder_app_id_ != app_id_;
+  GetMutableDebugValue().Set("uninstall_placeholder", uninstall_placeholder);
 
-  // If the placeholder should be uninstalled, the number of callbacks will be
-  // one callback for the parent placeholder + one callback for the finishing of
-  // this command.
-  const size_t number_of_expected_callbacks = uninstall_placeholder ? 2 : 1;
-
-  debug_value_.Set("number_of_expected_callbacks",
-                   base::ToString(number_of_expected_callbacks));
-
-  base::RepeatingClosure barrier = base::BarrierClosure(
-      number_of_expected_callbacks,
-      base::BindOnce(std::move(installed_callback_),
-                     PrepareResult(/*is_offline_install=*/false,
-                                   ExternallyManagedAppManager::InstallResult(
-                                       std::move(code), std::move(app_id),
-                                       uninstall_triggered))));
-
-  if (uninstall_placeholder) {
-    auto& scheduler =
-        WebAppProvider::GetForWebApps(&profile_.get())->scheduler();
-    scheduler.RemoveInstallSource(
-        *installed_placeholder_app_id_,
-        ConvertExternalInstallSourceToSource(install_options_.install_source),
-        webapps::WebappUninstallSource::kPlaceholderReplacement,
-        base::IgnoreArgs<webapps::UninstallResultCode>(barrier));
+  if (!uninstall_placeholder) {
+    CompleteAndSelfDestruct(
+        CommandResult::kSuccess,
+        PrepareResult(
+            /*is_offline_install=*/false,
+            ExternallyManagedAppManager::InstallResult(
+                install_code_, app_id_, uninstalled_for_replace_)));
+    return;
   }
 
-  OnInstallationJobsCompleted(webapps::IsSuccess(code), barrier);
+  const bool is_placeholder_running =
+      installed_placeholder_app_id_.has_value() &&
+      (provider().ui_manager().GetNumWindowsForApp(
+           *installed_placeholder_app_id_) > 0);
+  GetMutableDebugValue().Set("is_placeholder_running", is_placeholder_running);
+
+  if (is_placeholder_running) {
+    provider().ui_manager().NotifyAppRelaunchState(
+        *installed_placeholder_app_id_, app_id_, web_app_info_->title,
+        profile_->GetWeakPtr(), AppRelaunchState::kAppClosingForRelaunch);
+  }
+
+  relaunch_app_after_placeholder_uninstall_ =
+      install_options_.placeholder_resolution_behavior ==
+          PlaceholderResolutionBehavior::kCloseAndRelaunch &&
+      is_placeholder_running;
+  GetMutableDebugValue().Set("relaunch_app_after_placeholder_uninstall",
+                             relaunch_app_after_placeholder_uninstall_);
+
+  all_apps_lock_description_ = std::make_unique<AllAppsLockDescription>();
+  command_manager()->lock_manager().AcquireLock(
+      *all_apps_lock_description_,
+      base::BindOnce(
+          &ExternalAppResolutionCommand::OnAllAppsLockGrantedRemovePlaceholder,
+          weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE);
+  web_contents_ = nullptr;
+  apps_lock_.reset();
+}
+
+void ExternalAppResolutionCommand::OnAllAppsLockGrantedRemovePlaceholder(
+    std::unique_ptr<AllAppsLock> lock) {
+  all_apps_lock_ = std::move(lock);
+  CHECK(installed_placeholder_app_id_);
+
+  remove_placeholder_job_.emplace(
+      webapps::WebappUninstallSource::kPlaceholderReplacement, *profile_,
+      *GetMutableDebugValue().EnsureDict("remove_placeholder_job"),
+      *installed_placeholder_app_id_,
+      ConvertExternalInstallSourceToSource(install_options_.install_source));
+
+  remove_placeholder_job_->Start(
+      *all_apps_lock_,
+      base::BindOnce(
+          &ExternalAppResolutionCommand::OnPlaceholderUninstalledMaybeRelaunch,
+          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ExternalAppResolutionCommand::OnPlaceholderUninstalledMaybeRelaunch(
+    webapps::UninstallResultCode result) {
+  remove_placeholder_job_ = std::nullopt;
+  GetMutableDebugValue().Set("placeholder_uninstall_result",
+                             base::ToString(result));
+  if (!relaunch_app_after_placeholder_uninstall_) {
+    CompleteAndSelfDestruct(
+        CommandResult::kSuccess,
+        PrepareResult(/*is_offline_install=*/false,
+                      ExternallyManagedAppManager::InstallResult(
+                          install_code_, app_id_, uninstalled_for_replace_)));
+    return;
+  }
+
+  provider().ui_manager().NotifyAppRelaunchState(
+      *installed_placeholder_app_id_, app_id_, web_app_info_->title,
+      profile_->GetWeakPtr(), AppRelaunchState::kAppAboutToRelaunch);
+  provider().ui_manager().LaunchWebApp(
+      WebAppUiManager::CreateAppLaunchParamsWithoutWindowConfig(
+          app_id_, *base::CommandLine::ForCurrentProcess(),
+          /*current_directory=*/base::FilePath(),
+          /*url_handler_launch_url=*/std::nullopt,
+          /*protocol_handler_launch_url=*/std::nullopt,
+          /*file_launch_url=*/std::nullopt, /*launch_files=*/{}),
+      LaunchWebAppWindowSetting::kOverrideWithWebAppConfig, *profile_,
+      base::BindOnce(&ExternalAppResolutionCommand::OnLaunch,
+                     weak_ptr_factory_.GetWeakPtr()),
+      *all_apps_lock_);
+}
+
+void ExternalAppResolutionCommand::OnLaunch(base::WeakPtr<Browser>,
+                                            base::WeakPtr<content::WebContents>,
+                                            apps::LaunchContainer,
+                                            base::Value debug_value) {
+  GetMutableDebugValue().Set("launch", std::move(debug_value));
+  provider().ui_manager().NotifyAppRelaunchState(
+      *installed_placeholder_app_id_, app_id_, web_app_info_->title,
+      profile_->GetWeakPtr(), AppRelaunchState::kAppRelaunched);
+
+  CompleteAndSelfDestruct(
+      CommandResult::kSuccess,
+      PrepareResult(/*is_offline_install=*/false,
+                    ExternallyManagedAppManager::InstallResult(
+                        install_code_, app_id_, uninstalled_for_replace_)));
 }
 
 void ExternalAppResolutionCommand::OnPlaceHolderAppLockAcquired(
@@ -485,7 +553,9 @@ void ExternalAppResolutionCommand::OnPlaceHolderAppLockAcquired(
   // `WebAppInstallForceList` to generate the placeholder app id. This is needed
   // to make sure an in-place installation can be done.
   install_placeholder_job_.emplace(
-      &profile_.get(), install_options_,
+      &profile_.get(),
+      *GetMutableDebugValue().EnsureDict("install_placeholder_job"),
+      install_options_,
       base::BindOnce(&ExternalAppResolutionCommand::OnPlaceHolderInstalled,
                      weak_ptr_factory_.GetWeakPtr()),
       *apps_lock_);
@@ -495,13 +565,20 @@ void ExternalAppResolutionCommand::OnPlaceHolderAppLockAcquired(
 void ExternalAppResolutionCommand::OnPlaceHolderInstalled(
     webapps::InstallResultCode code,
     webapps::AppId app_id) {
+  install_placeholder_job_ = std::nullopt;
+  app_id_ = app_id;
+  install_code_ = code;
+  GetMutableDebugValue().Set("new_placeholder_app_id", app_id_);
+  GetMutableDebugValue().Set("placeholder_install_code",
+                             base::ToString(install_code_));
+
   uninstall_and_replace_job_.emplace(
-      &profile_.get(), *apps_lock_, install_options_.uninstall_and_replace,
-      app_id,
+      &profile_.get(),
+      *GetMutableDebugValue().EnsureDict("uninstall_and_replace_job"),
+      *apps_lock_, install_options_.uninstall_and_replace, app_id,
       base::BindOnce(
           &ExternalAppResolutionCommand::OnUninstallAndReplaceCompleted,
-          weak_ptr_factory_.GetWeakPtr(), /*is_offline_install=*/false, app_id,
-          std::move(code)));
+          weak_ptr_factory_.GetWeakPtr(), /*is_offline_install=*/false));
   uninstall_and_replace_job_->Start();
 }
 
@@ -539,13 +616,12 @@ void ExternalAppResolutionCommand::InstallFromInfo() {
   }
 
   if (!apps_lock_) {
-    apps_lock_description_ =
-        command_manager()->lock_manager().UpgradeAndAcquireLock(
-            std::move(web_contents_lock_),
-            {GenerateAppIdFromManifestId(web_app_info_->manifest_id)},
-            base::BindOnce(
-                &ExternalAppResolutionCommand::OnInstallFromInfoAppLockAcquired,
-                weak_ptr_factory_.GetWeakPtr()));
+    command_manager()->lock_manager().UpgradeAndAcquireLock(
+        std::move(web_contents_lock_),
+        {GenerateAppIdFromManifestId(web_app_info_->manifest_id)},
+        base::BindOnce(
+            &ExternalAppResolutionCommand::OnInstallFromInfoAppLockAcquired,
+            weak_ptr_factory_.GetWeakPtr()));
     return;
   }
   OnInstallFromInfoAppLockAcquired(std::move(apps_lock_));
@@ -556,7 +632,9 @@ void ExternalAppResolutionCommand::OnInstallFromInfoAppLockAcquired(
   apps_lock_ = std::move(apps_lock);
 
   install_from_info_job_.emplace(
-      &profile_.get(), std::move(web_app_info_),
+      &profile_.get(),
+      *GetMutableDebugValue().EnsureDict("install_from_info_job"),
+      std::move(web_app_info_),
       /*overwrite_existing_manifest_fields=*/install_params_->force_reinstall,
       install_surface_, *install_params_,
       base::BindOnce(&ExternalAppResolutionCommand::OnInstallFromInfoCompleted,
@@ -565,41 +643,53 @@ void ExternalAppResolutionCommand::OnInstallFromInfoAppLockAcquired(
 }
 
 void ExternalAppResolutionCommand::OnInstallFromInfoCompleted(
-    const webapps::AppId& app_id,
+    webapps::AppId app_id,
     webapps::InstallResultCode code,
     OsHooksErrors os_hook_errors) {
-  if (!webapps::IsSuccess(code)) {
+  install_from_info_job_ = std::nullopt;
+  app_id_ = app_id;
+  install_code_ = code;
+  GetMutableDebugValue().Set("install_from_info_app_id", app_id_);
+  GetMutableDebugValue().Set("install_from_info_install_code",
+                             base::ToString(install_code_));
+
+  bool successful_install_from_info = webapps::IsSuccess(code);
+  GetMutableDebugValue().Set("successful_install_from_info",
+                             successful_install_from_info);
+  if (!successful_install_from_info) {
     Abort(code);
     return;
   }
 
+  webapps::InstallableMetrics::TrackInstallResult(successful_install_from_info);
+
   uninstall_and_replace_job_.emplace(
-      &profile_.get(), *apps_lock_, install_options_.uninstall_and_replace,
-      app_id,
+      &profile_.get(),
+      *GetMutableDebugValue().EnsureDict("uninstall_and_replace_job"),
+      *apps_lock_, install_options_.uninstall_and_replace, app_id,
       base::BindOnce(
           &ExternalAppResolutionCommand::OnUninstallAndReplaceCompleted,
-          weak_ptr_factory_.GetWeakPtr(), /*is_offline_install=*/true, app_id,
-          std::move(code)));
+          weak_ptr_factory_.GetWeakPtr(), /*is_offline_install=*/true));
   uninstall_and_replace_job_->Start();
 }
 
 void ExternalAppResolutionCommand::OnUninstallAndReplaceCompleted(
     bool is_offline_install,
-    webapps::AppId app_id,
-    webapps::InstallResultCode code,
     bool uninstall_triggered) {
-  OnInstallationJobsCompleted(
-      webapps::IsSuccess(code),
-      base::BindOnce(std::move(installed_callback_),
-                     PrepareResult(is_offline_install,
-                                   ExternallyManagedAppManager::InstallResult(
-                                       code, app_id, uninstall_triggered))));
+  uninstall_and_replace_job_ = std::nullopt;
+  GetMutableDebugValue().Set("uninstalled_for_replace", uninstall_triggered);
+  CompleteAndSelfDestruct(
+      webapps::IsSuccess(install_code_) ? CommandResult::kSuccess
+                                        : CommandResult::kFailure,
+      PrepareResult(is_offline_install,
+                    ExternallyManagedAppManager::InstallResult(
+                        install_code_, app_id_, uninstall_triggered)));
 }
 
 void ExternalAppResolutionCommand::TryAppInfoFactoryOnFailure(
     ExternallyManagedAppManager::InstallResult result) {
-  debug_value_.Set("retry_app_info_factory_on_failure",
-                   base::ToString(result.code));
+  GetMutableDebugValue().Set("retry_app_info_factory_on_failure",
+                             base::ToString(result.code));
 
   if (!webapps::IsSuccess(result.code) && install_options_.app_info_factory) {
     InstallFromInfo();
@@ -613,9 +703,10 @@ ExternallyManagedAppManager::InstallResult
 ExternalAppResolutionCommand::PrepareResult(
     bool is_offline_install,
     ExternallyManagedAppManager::InstallResult result) {
-  debug_value_.Set("result_code", base::ToString(result.code));
+  GetMutableDebugValue().Set("is_offline_install", is_offline_install);
+  GetMutableDebugValue().Set("result_code", base::ToString(result.code));
   if (!IsSuccess(result.code)) {
-    result.app_id = absl::nullopt;
+    result.app_id = std::nullopt;
     return result;
   }
 
@@ -626,16 +717,6 @@ ExternalAppResolutionCommand::PrepareResult(
             : webapps::InstallResultCode::kSuccessOfflineFallbackInstall;
   }
   return result;
-}
-
-void ExternalAppResolutionCommand::OnInstallationJobsCompleted(
-    bool success,
-    base::OnceClosure result_closure) {
-  debug_value_.Set("installation_jobs_complete_success",
-                   base::ToString(success));
-  SignalCompletionAndSelfDestruct(
-      success ? CommandResult::kSuccess : CommandResult::kFailure,
-      std::move(result_closure));
 }
 
 }  // namespace web_app

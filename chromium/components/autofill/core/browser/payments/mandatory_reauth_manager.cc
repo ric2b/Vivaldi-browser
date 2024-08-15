@@ -9,6 +9,7 @@
 #include "components/autofill/core/browser/metrics/payments/mandatory_reauth_metrics.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/strings/grit/components_branded_strings.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace autofill::payments {
@@ -48,7 +49,7 @@ void MandatoryReauthManager::OnAuthenticationCompleted(
 }
 
 bool MandatoryReauthManager::ShouldOfferOptin(
-    absl::optional<CreditCard::RecordType>
+    std::optional<CreditCard::RecordType>
         card_record_type_if_non_interactive_authentication_flow_completed) {
   opt_in_source_ = autofill_metrics::MandatoryReauthOptInOrOutSource::kUnknown;
   // We should not offer to update a user pref in off the record mode.

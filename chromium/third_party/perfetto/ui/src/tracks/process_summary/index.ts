@@ -15,32 +15,27 @@
 import {v4 as uuidv4} from 'uuid';
 
 import {
-  NUM,
-  NUM_NULL,
-  STR,
-  STR_NULL,
-} from '../../common/query_result';
-import {TrackWithControllerAdapter} from '../../common/track_adapter';
-import {
   Plugin,
   PluginContext,
   PluginContextTrace,
   PluginDescriptor,
 } from '../../public';
+import {
+  NUM,
+  NUM_NULL,
+  STR,
+  STR_NULL,
+} from '../../trace_processor/query_result';
 
 import {
   Config as ProcessSchedulingTrackConfig,
-  Data as ProcessSchedulingTrackData,
   PROCESS_SCHEDULING_TRACK_KIND,
   ProcessSchedulingTrack,
-  ProcessSchedulingTrackController,
 } from './process_scheduling_track';
 import {
   Config as ProcessSummaryTrackConfig,
-  Data as ProcessSummaryTrackData,
   PROCESS_SUMMARY_TRACK,
   ProcessSummaryTrack,
-  ProcessSummaryTrackController,
 } from './process_summary_track';
 
 // This plugin now manages both process "scheduling" and "summary" tracks.
@@ -197,8 +192,8 @@ class ProcessSummaryPlugin implements Plugin {
       const tid = it.tid;
       const upid = it.upid;
       const pid = it.pid;
-      const hasSched = !!it.hasSched;
-      const isDebuggable = !!it.isDebuggable;
+      const hasSched = Boolean(it.hasSched);
+      const isDebuggable = Boolean(it.isDebuggable);
 
       // Group by upid if present else by utid.
       let pUuid =
@@ -206,7 +201,7 @@ class ProcessSummaryPlugin implements Plugin {
       // These should only happen once for each track group.
       if (pUuid === undefined) {
         pUuid = this.getOrCreateUuid(utid, upid);
-        const pidForColor = pid || tid || upid || utid || 0;
+        const pidForColor = pid ?? tid ?? upid ?? utid ?? 0;
         const type = hasSched ? 'schedule' : 'summary';
         const uri = `perfetto.ProcessScheduling#${upid}.${utid}.${type}`;
 
@@ -217,23 +212,14 @@ class ProcessSummaryPlugin implements Plugin {
             utid,
           };
 
-          ctx.registerStaticTrack({
+          ctx.registerTrack({
             uri,
             displayName: `${upid === null ? tid : pid} schedule`,
             kind: PROCESS_SCHEDULING_TRACK_KIND,
             tags: {
               isDebuggable,
             },
-            track: ({trackKey}) => {
-              return new TrackWithControllerAdapter<
-                  ProcessSchedulingTrackConfig,
-                  ProcessSchedulingTrackData>(
-                  ctx.engine,
-                  trackKey,
-                  config,
-                  ProcessSchedulingTrack,
-                  ProcessSchedulingTrackController);
-            },
+            track: () => new ProcessSchedulingTrack(ctx.engine, config),
           });
         } else {
           const config: ProcessSummaryTrackConfig = {
@@ -242,23 +228,14 @@ class ProcessSummaryPlugin implements Plugin {
             utid,
           };
 
-          ctx.registerStaticTrack({
+          ctx.registerTrack({
             uri,
             displayName: `${upid === null ? tid : pid} summary`,
             kind: PROCESS_SUMMARY_TRACK,
             tags: {
               isDebuggable,
             },
-            track: ({trackKey}) => {
-              return new TrackWithControllerAdapter<
-                  ProcessSummaryTrackConfig,
-                  ProcessSummaryTrackData>(
-                  ctx.engine,
-                  trackKey,
-                  config,
-                  ProcessSummaryTrack,
-                  ProcessSummaryTrackController);
-            },
+            track: () => new ProcessSummaryTrack(ctx.engine, config),
           });
         }
       }
@@ -310,20 +287,11 @@ class ProcessSummaryPlugin implements Plugin {
       utid: it.utid,
     };
 
-    ctx.registerStaticTrack({
+    ctx.registerTrack({
       uri: 'perfetto.ProcessSummary#kernel',
       displayName: `Kernel thread summary`,
       kind: PROCESS_SUMMARY_TRACK,
-      track: ({trackKey}) => {
-        return new TrackWithControllerAdapter<
-            ProcessSummaryTrackConfig,
-            ProcessSummaryTrackData>(
-            ctx.engine,
-            trackKey,
-            config,
-            ProcessSummaryTrack,
-            ProcessSummaryTrackController);
-      },
+      track: () => new ProcessSummaryTrack(ctx.engine, config),
     });
   }
 

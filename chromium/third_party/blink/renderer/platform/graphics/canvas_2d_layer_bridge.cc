@@ -25,6 +25,8 @@
 
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
 
+#include <utility>
+
 #include "base/feature_list.h"
 #include "cc/layers/texture_layer.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -35,6 +37,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_context_rate_limiter.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
+#include "third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -130,7 +133,7 @@ void Canvas2DLayerBridge::Hibernate() {
   // case because flushRecording should only fail it it fails to allocate
   // a surface, and we have an early exit at the top of this function for when
   // 'this' does not already have a surface.
-  DCHECK(!resource_host_->ResourceProvider()->HasRecordedDrawOps());
+  DCHECK(!resource_host_->ResourceProvider()->Recorder().HasRecordedDrawOps());
   SkPaint copy_paint;
   copy_paint.setBlendMode(SkBlendMode::kSrc);
   scoped_refptr<StaticBitmapImage> snapshot =
@@ -139,8 +142,15 @@ void Canvas2DLayerBridge::Hibernate() {
     logger_->ReportHibernationEvent(kHibernationAbortedDueSnapshotFailure);
     return;
   }
-  hibernation_handler_.TakeHibernationImage(
-      snapshot->PaintImageForCurrentFrame().GetSwSkImage());
+  sk_sp<SkImage> sw_image =
+      snapshot->PaintImageForCurrentFrame().GetSwSkImage();
+  if (!sw_image) {
+    logger_->ReportHibernationEvent(kHibernationAbortedDueSnapshotFailure);
+    return;
+  }
+  hibernation_handler_.SaveForHibernation(
+      std::move(sw_image),
+      resource_host_->ResourceProvider()->ReleaseRecorder());
 
   ResetResourceProvider();
   resource_host_->ClearLayerTexture();
@@ -163,9 +173,6 @@ void Canvas2DLayerBridge::LoseContext() {
       resource_host_->context_lost()) {
     return;
   }
-
-  SkipQueuedDrawCommands();
-  DCHECK(!resource_host_->ResourceProvider()->HasRecordedDrawOps());
 
   // Frees canvas resource.
   lose_context_in_background_ = true;
@@ -241,6 +248,7 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider() {
                     PaintImage::GetNextContentId());
   builder.set_id(PaintImage::GetNextId());
   resource_provider->RestoreBackBuffer(builder.TakePaintImage());
+  resource_provider->SetRecorder(hibernation_handler_.ReleaseRecorder());
   // The hibernation image is no longer valid, clear it.
   hibernation_handler_.Clear();
   DCHECK(!IsHibernating());
@@ -315,13 +323,15 @@ bool Canvas2DLayerBridge::WritePixels(const SkImageInfo& orig_info,
                                       int x,
                                       int y) {
   CHECK(resource_host_);
-  if (!GetOrCreateResourceProvider())
+  CanvasResourceProvider* provider = GetOrCreateResourceProvider();
+  if (provider == nullptr) {
     return false;
+  }
 
   if (x <= 0 && y <= 0 &&
       x + orig_info.width() >= resource_host_->Size().width() &&
       y + orig_info.height() >= resource_host_->Size().height()) {
-    SkipQueuedDrawCommands();
+    provider->Recorder().SkipQueuedDrawCommands();
   } else {
     FlushRecording(FlushReason::kWritePixels);
     if (!GetOrCreateResourceProvider())
@@ -331,14 +341,10 @@ bool Canvas2DLayerBridge::WritePixels(const SkImageInfo& orig_info,
   return ResourceProvider()->WritePixels(orig_info, pixels, row_bytes, x, y);
 }
 
-void Canvas2DLayerBridge::SkipQueuedDrawCommands() {
-  ResourceProvider()->SkipQueuedDrawCommands();
-}
-
 void Canvas2DLayerBridge::FlushRecording(FlushReason reason) {
   CHECK(resource_host_);
   CanvasResourceProvider* provider = GetOrCreateResourceProvider();
-  if (!provider || !provider->HasRecordedDrawOps()) {
+  if (!provider || !provider->Recorder().HasRecordedDrawOps()) {
     return;
   }
 
@@ -440,10 +446,6 @@ scoped_refptr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot(
   if (!GetOrCreateResourceProvider())
     return nullptr;
   return ResourceProvider()->Snapshot(reason);
-}
-
-void Canvas2DLayerBridge::WillOverwriteCanvas() {
-  SkipQueuedDrawCommands();
 }
 
 void Canvas2DLayerBridge::Logger::ReportHibernationEvent(

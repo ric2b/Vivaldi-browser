@@ -5,13 +5,39 @@
 #ifndef CORE_FXGE_CFX_FACE_H_
 #define CORE_FXGE_CFX_FACE_H_
 
+#include <stdint.h>
+
+#include <array>
+#include <memory>
+#include <vector>
+
+#include "build/build_config.h"
+#include "core/fxcrt/bytestring.h"
+#include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/observed_ptr.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxge/freetype/fx_freetype.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/base/containers/span.h"
+
+namespace fxge {
+enum class FontEncoding : uint32_t;
+}
+
+class CFX_Font;
+class CFX_GlyphBitmap;
+class CFX_Path;
+class CFX_SubstFont;
 
 class CFX_Face final : public Retainable, public Observable {
  public:
+  using CharMap = void*;
+
+  struct CharCodeAndIndex {
+    uint32_t char_code;
+    uint32_t glyph_index;
+  };
+
   static RetainPtr<CFX_Face> New(FT_Library library,
                                  RetainPtr<Retainable> pDesc,
                                  pdfium::span<const FT_Byte> data,
@@ -21,12 +47,85 @@ class CFX_Face final : public Retainable, public Observable {
                                   const FT_Open_Args* args,
                                   FT_Long face_index);
 
-  ~CFX_Face() override;
+  bool HasGlyphNames() const;
+  bool IsTtOt() const;
+  bool IsTricky() const;
+  bool IsFixedWidth() const;
+
+#if defined(PDF_ENABLE_XFA)
+  bool IsScalable() const;
+  void ClearExternalStream();
+#endif
+
+  bool IsItalic() const;
+  bool IsBold() const;
+
+  ByteString GetFamilyName() const;
+  ByteString GetStyleName() const;
+
+  FX_RECT GetBBox() const;
+  uint16_t GetUnitsPerEm() const;
+  int16_t GetAscender() const;
+  int16_t GetDescender() const;
+  int GetAdjustedAscender() const;
+  int GetAdjustedDescender() const;
+#if BUILDFLAG(IS_ANDROID)
+  int16_t GetHeight() const;
+#endif
+
+  pdfium::span<uint8_t> GetData() const;
+
+  // Returns the size of the data, or 0 on failure. Only write into `buffer` if
+  // it is large enough to hold the data.
+  size_t GetSfntTable(uint32_t table, pdfium::span<uint8_t> buffer);
+
+  absl::optional<std::array<uint32_t, 4>> GetOs2UnicodeRange();
+  absl::optional<std::array<uint32_t, 2>> GetOs2CodePageRange();
+  absl::optional<std::array<uint8_t, 2>> GetOs2Panose();
+
+  int GetGlyphCount() const;
+  std::unique_ptr<CFX_GlyphBitmap> RenderGlyph(const CFX_Font* pFont,
+                                               uint32_t glyph_index,
+                                               bool bFontStyle,
+                                               const CFX_Matrix& matrix,
+                                               int dest_width,
+                                               int anti_alias);
+  std::unique_ptr<CFX_Path> LoadGlyphPath(uint32_t glyph_index,
+                                          int dest_width,
+                                          bool is_vertical,
+                                          const CFX_SubstFont* subst_font);
+  int GetGlyphWidth(uint32_t glyph_index,
+                    int dest_width,
+                    int weight,
+                    const CFX_SubstFont* subst_font);
+
+  int GetCharIndex(uint32_t code);
+  int GetNameIndex(const char* name);
+
+  std::vector<CharCodeAndIndex> GetCharCodesAndIndices(char32_t max_char);
+
+  CharMap GetCurrentCharMap() const;
+  absl::optional<fxge::FontEncoding> GetCurrentCharMapEncoding() const;
+  int GetCharMapPlatformIdByIndex(size_t index) const;
+  int GetCharMapEncodingIdByIndex(size_t index) const;
+  fxge::FontEncoding GetCharMapEncodingByIndex(size_t index) const;
+  size_t GetCharMapCount() const;
+  void SetCharMap(CharMap map);
+  void SetCharMapByIndex(size_t index);
+  bool SelectCharMap(fxge::FontEncoding encoding);
+
+#if BUILDFLAG(IS_WIN)
+  bool CanEmbed();
+#endif
 
   FXFT_FaceRec* GetRec() { return m_pRec.get(); }
+  const FXFT_FaceRec* GetRec() const { return m_pRec.get(); }
 
  private:
   CFX_Face(FXFT_FaceRec* pRec, RetainPtr<Retainable> pDesc);
+  ~CFX_Face() override;
+
+  void AdjustVariationParams(int glyph_index, int dest_width, int weight);
 
   ScopedFXFTFaceRec const m_pRec;
   RetainPtr<Retainable> const m_pDesc;

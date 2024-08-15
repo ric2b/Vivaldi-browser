@@ -44,7 +44,9 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/messaging/blink_cloneable_message_mojom_traits.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
+#include "third_party/blink/renderer/core/workers/worker_thread_test_helper.h"
 #include "third_party/blink/renderer/modules/shared_storage/shared_storage_worklet_messaging_proxy.h"
+#include "third_party/blink/renderer/modules/shared_storage/shared_storage_worklet_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "v8/include/v8-isolate.h"
 
@@ -205,7 +207,8 @@ class TestClient : public blink::mojom::SharedStorageWorkletServiceClient {
                             remaining_budget_result_.bits);
   }
 
-  void ConsoleLog(const std::string& message) override {
+  void DidAddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
+                              const std::string& message) override {
     observed_console_log_messages_.push_back(message);
   }
 
@@ -293,6 +296,30 @@ class MockMojomPrivateAggregationHost
  private:
   mojo::ReceiverSet<blink::mojom::blink::PrivateAggregationHost> receiver_set_;
 };
+
+std::unique_ptr<GlobalScopeCreationParams> MakeTestGlobalScopeCreationParams() {
+  return std::make_unique<GlobalScopeCreationParams>(
+      KURL("https://foo.com"),
+      /*script_type=*/mojom::blink::ScriptType::kModule, "SharedStorageWorklet",
+      /*user_agent=*/String(),
+      /*ua_metadata=*/absl::optional<UserAgentMetadata>(),
+      /*web_worker_fetch_context=*/nullptr,
+      /*outside_content_security_policies=*/
+      Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
+      /*response_content_security_policies=*/
+      Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
+      /*referrer_policy=*/network::mojom::ReferrerPolicy::kDefault,
+      /*starter_origin=*/nullptr,
+      /*starter_secure_context=*/false,
+      /*starter_https_state=*/HttpsState::kNone,
+      /*worker_clients=*/nullptr,
+      /*content_settings_client=*/nullptr,
+      /*inherited_trial_features=*/nullptr,
+      /*parent_devtools_token=*/base::UnguessableToken::Create(),
+      /*worker_settings=*/nullptr,
+      /*v8_cache_options=*/mojom::blink::V8CacheOptions::kDefault,
+      /*module_responses_map=*/nullptr);
+}
 
 }  // namespace
 
@@ -584,12 +611,7 @@ TEST_F(SharedStorageWorkletTest,
       "console.log"
     ];
 
-    var expectedUndefinedVariables = [
-      // PrivateAggregation related variables are undefined because the
-      // corresponding base::Feature(s) are not enabled.
-      "privateAggregation",
-      "PrivateAggregation"
-    ];
+    var expectedUndefinedVariables = [];
 
     for (let expectedObject of expectedObjects) {
       if (eval("typeof " + expectedObject) !== "object") {
@@ -1279,11 +1301,6 @@ TEST_F(SharedStorageWorkletTest,
             "sharedStorage.run",
             "sharedStorage.worklet",
             "sharedStorage.context",
-
-            // PrivateAggregation related variables are undefined because the
-            // corresponding base::Feature(s) are not enabled.
-            "privateAggregation",
-            "PrivateAggregation"
           ];
 
           for (let expectedObject of expectedObjects) {
@@ -1353,11 +1370,6 @@ TEST_F(SharedStorageWorkletTest,
             "sharedStorage.run",
             "sharedStorage.worklet",
             "sharedStorage.context",
-
-            // PrivateAggregation related variables are undefined because the
-            // corresponding base::Feature(s) are not enabled.
-            "privateAggregation",
-            "PrivateAggregation"
           ];
 
           for (let expectedObject of expectedObjects) {
@@ -2812,6 +2824,236 @@ TEST_F(SharedStorageWorkletTest,
   EXPECT_EQ(test_client_->observed_console_log_messages_[0], "123abc");
 }
 
+// TODO(crbug.com/1316659): When the Private Aggregation feature is removed
+// (after being default enabled for a few milestones), removes these tests and
+// integrate the feature-enabled tests into the broader tests.
+class SharedStoragePrivateAggregationDisabledTest
+    : public SharedStorageWorkletTest {
+ public:
+  SharedStoragePrivateAggregationDisabledTest() {
+    private_aggregation_feature_.InitAndDisableFeature(
+        blink::features::kPrivateAggregationApi);
+  }
+
+ private:
+  base::test::ScopedFeatureList private_aggregation_feature_;
+};
+
+TEST_F(SharedStoragePrivateAggregationDisabledTest,
+       GlobalScopeObjectsAndFunctions_DuringAddModule) {
+  AddModuleResult add_module_result = AddModule(/*script_content=*/R"(
+    var expectedObjects = [
+      "console",
+      "crypto"
+    ];
+
+    var expectedFunctions = [
+      "SharedStorage",
+      "Crypto",
+      "CryptoKey",
+      "SubtleCrypto",
+      "TextEncoder",
+      "TextDecoder",
+      "register",
+      "console.log"
+    ];
+
+    var expectedUndefinedVariables = [
+      // PrivateAggregation related variables are undefined because the
+      // corresponding base::Feature(s) are not enabled.
+      "privateAggregation",
+      "PrivateAggregation"
+    ];
+
+    for (let expectedObject of expectedObjects) {
+      if (eval("typeof " + expectedObject) !== "object") {
+        throw Error(expectedObject + " is not object type.")
+      }
+    }
+
+    for (let expectedFunction of expectedFunctions) {
+      if (eval("typeof " + expectedFunction) !== "function") {
+        throw Error(expectedFunction + " is not function type.")
+      }
+    }
+
+    for (let expectedUndefined of expectedUndefinedVariables) {
+      if (eval("typeof " + expectedUndefined) !== "undefined") {
+        throw Error(expectedUndefined + " is not undefined.")
+      }
+    }
+
+    // Verify that trying to access `sharedStorage` would throw a custom error.
+    try {
+      sharedStorage;
+    } catch (e) {
+      console.log("Expected error:", e.message);
+    }
+  )");
+
+  EXPECT_TRUE(add_module_result.success);
+  EXPECT_EQ(add_module_result.error_message, "");
+
+  EXPECT_EQ(test_client_->observed_console_log_messages_.size(), 1u);
+  EXPECT_EQ(test_client_->observed_console_log_messages_[0],
+            "Expected error: Failed to read the 'sharedStorage' property from "
+            "'SharedStorageWorkletGlobalScope': sharedStorage cannot be "
+            "accessed during addModule().");
+}
+
+TEST_F(SharedStoragePrivateAggregationDisabledTest,
+       GlobalScopeObjectsAndFunctions_AfterAddModuleSuccess) {
+  AddModuleResult add_module_result = AddModule(/*script_content=*/R"(
+      class TestClass {
+        async run() {
+          var expectedObjects = [
+            "console",
+            "sharedStorage",
+            "crypto"
+          ];
+
+          var expectedFunctions = [
+            "SharedStorage",
+            "Crypto",
+            "CryptoKey",
+            "SubtleCrypto",
+            "TextEncoder",
+            "TextDecoder",
+            "register",
+            "sharedStorage.set",
+            "sharedStorage.append",
+            "sharedStorage.delete",
+            "sharedStorage.clear",
+            "sharedStorage.get",
+            "sharedStorage.length",
+            "sharedStorage.keys",
+            "sharedStorage.entries",
+            "sharedStorage.remainingBudget"
+          ];
+
+          // Those are either not implemented yet, or should stay undefined.
+          var expectedUndefinedVariables = [
+            "sharedStorage.selectURL",
+            "sharedStorage.run",
+            "sharedStorage.worklet",
+            "sharedStorage.context",
+
+            // PrivateAggregation related variables are undefined because the
+            // corresponding base::Feature(s) are not enabled.
+            "privateAggregation",
+            "PrivateAggregation"
+          ];
+
+          for (let expectedObject of expectedObjects) {
+            if (eval("typeof " + expectedObject) !== "object") {
+              throw Error(expectedObject + " is not object type.")
+            }
+          }
+
+          for (let expectedFunction of expectedFunctions) {
+            if (eval("typeof " + expectedFunction) !== "function") {
+              throw Error(expectedFunction + " is not function type.")
+            }
+          }
+
+          for (let expectedUndefined of expectedUndefinedVariables) {
+            if (eval("typeof " + expectedUndefined) !== "undefined") {
+              throw Error(expectedUndefined + " is not undefined.")
+            }
+          }
+        }
+      }
+
+      register("test-operation", TestClass);
+  )");
+
+  EXPECT_TRUE(add_module_result.success);
+
+  RunResult run_result = Run("test-operation", CreateSerializedUndefined());
+
+  EXPECT_TRUE(run_result.success);
+  EXPECT_EQ(run_result.error_message, "");
+}
+
+TEST_F(SharedStoragePrivateAggregationDisabledTest,
+       GlobalScopeObjectsAndFunctions_AfterAddModuleFailure) {
+  AddModuleResult add_module_result = AddModule(/*script_content=*/R"(
+      class TestClass {
+        async run() {
+          var expectedObjects = [
+            "console",
+            "sharedStorage",
+            "crypto"
+          ];
+
+          var expectedFunctions = [
+            "SharedStorage",
+            "Crypto",
+            "CryptoKey",
+            "SubtleCrypto",
+            "TextEncoder",
+            "TextDecoder",
+            "register",
+            "sharedStorage.set",
+            "sharedStorage.append",
+            "sharedStorage.delete",
+            "sharedStorage.clear",
+            "sharedStorage.get",
+            "sharedStorage.length",
+            "sharedStorage.keys",
+            "sharedStorage.entries",
+            "sharedStorage.remainingBudget"
+          ];
+
+          // Those are either not implemented yet, or should stay undefined.
+          var expectedUndefinedVariables = [
+            "sharedStorage.selectURL",
+            "sharedStorage.run",
+            "sharedStorage.worklet",
+            "sharedStorage.context",
+
+            // PrivateAggregation related variables are undefined because the
+            // corresponding base::Feature(s) are not enabled.
+            "privateAggregation",
+            "PrivateAggregation"
+          ];
+
+          for (let expectedObject of expectedObjects) {
+            if (eval("typeof " + expectedObject) !== "object") {
+              throw Error(expectedObject + " is not object type.")
+            }
+          }
+
+          for (let expectedFunction of expectedFunctions) {
+            if (eval("typeof " + expectedFunction) !== "function") {
+              throw Error(expectedFunction + " is not function type.")
+            }
+          }
+
+          for (let expectedUndefined of expectedUndefinedVariables) {
+            if (eval("typeof " + expectedUndefined) !== "undefined") {
+              throw Error(expectedUndefined + " is not undefined.")
+            }
+          }
+        }
+      }
+
+      register("test-operation", TestClass);
+
+      // This should fail the addModule()
+      a;
+  )");
+
+  EXPECT_FALSE(add_module_result.success);
+  EXPECT_THAT(add_module_result.error_message,
+              testing::HasSubstr("ReferenceError: a is not defined"));
+
+  RunResult run_result = Run("test-operation", CreateSerializedUndefined());
+
+  EXPECT_TRUE(run_result.success);
+  EXPECT_EQ(run_result.error_message, "");
+}
+
 class SharedStoragePrivateAggregationTest : public SharedStorageWorkletTest {
  public:
   SharedStoragePrivateAggregationTest() {
@@ -3268,6 +3510,36 @@ TEST_F(SharedStoragePrivateAggregationTest,
   EXPECT_TRUE(worklet_terminated_future_.Wait());
 
   run_loop.Run();
+}
+
+class SharedStorageWorkletThreadTest : public testing::Test {};
+
+// Assert that each `SharedStorageWorkletThread` owns a dedicated
+// `WorkerBackingThread`.
+TEST_F(SharedStorageWorkletThreadTest, DedicatedBackingThread) {
+  test::TaskEnvironment task_environment;
+
+  MockWorkerReportingProxy reporting_proxy1;
+  MockWorkerReportingProxy reporting_proxy2;
+  SharedStorageWorkletThread thread1(reporting_proxy1);
+  SharedStorageWorkletThread thread2(reporting_proxy2);
+  EXPECT_NE(&thread1.GetWorkerBackingThread(),
+            &thread2.GetWorkerBackingThread());
+
+  // Start and terminate the threads, so that the test can terminate gracefully.
+  auto thread_startup_data = WorkerBackingThreadStartupData::CreateDefault();
+  thread_startup_data.atomics_wait_mode =
+      WorkerBackingThreadStartupData::AtomicsWaitMode::kAllow;
+
+  thread1.Start(MakeTestGlobalScopeCreationParams(), thread_startup_data,
+                std::make_unique<WorkerDevToolsParams>());
+  thread2.Start(MakeTestGlobalScopeCreationParams(), thread_startup_data,
+                std::make_unique<WorkerDevToolsParams>());
+
+  thread1.TerminateForTesting();
+  thread1.WaitForShutdownForTesting();
+  thread2.TerminateForTesting();
+  thread2.WaitForShutdownForTesting();
 }
 
 }  // namespace blink

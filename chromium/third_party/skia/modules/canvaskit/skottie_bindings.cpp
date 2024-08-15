@@ -7,6 +7,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkImage.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
 #include "modules/canvaskit/WasmCommon.h"
@@ -19,6 +20,7 @@
 #include "modules/sksg/include/SkSGInvalidationController.h"
 #include "modules/skunicode/include/SkUnicode.h"
 #include "src/base/SkUTF.h"
+#include "src/ports/SkTypeface_FreeType.h"
 #include "tools/skui/InputState.h"
 #include "tools/skui/ModifierKey.h"
 
@@ -160,9 +162,13 @@ public:
         return nullptr;
     }
 
-    sk_sp<SkData> loadFont(const char name[], const char[] /* url */) const override {
-        // Same as images paths, we ignore font URLs.
-        return this->findAsset(name);
+    sk_sp<SkTypeface> loadTypeface(const char name[], const char[] /* url */) const override {
+        sk_sp<SkData> faceData = this->findAsset(name);
+        if (!faceData) {
+            return nullptr;
+        }
+        auto stream = std::make_unique<SkMemoryStream>(faceData);
+        return SkTypeface_FreeType::MakeFromStream(std::move(stream), SkFontArguments());
     }
 
     sk_sp<SkData> load(const char[]/*path*/, const char name[]) const override {

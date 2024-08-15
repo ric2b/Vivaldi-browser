@@ -8,21 +8,27 @@
 #import <Foundation/Foundation.h>
 
 // The accessibility identifiers of the family picker view.
-extern NSString* const kFamilyPickerTableViewId;
-extern NSString* const kFamilyPickerBackButtonId;
-extern NSString* const kFamilyPickerCancelButtonId;
-extern NSString* const kFamilyPickerShareButtonId;
-extern NSString* const kFamilyPickerInfoButtonId;
+extern NSString* const kFamilyPickerTableViewID;
+extern NSString* const kFamilyPickerBackButtonID;
+extern NSString* const kFamilyPickerCancelButtonID;
+extern NSString* const kFamilyPickerShareButtonID;
+extern NSString* const kFamilyPickerInfoButtonID;
+
+// The accessibility identifier of the family promo view.
+extern NSString* const kFamilyPromoViewID;
 
 // The accessibility identifiers of the password picker view.
-extern NSString* const kPasswordPickerCancelButtonId;
-extern NSString* const kPasswordPickerNextButtonId;
+extern NSString* const kPasswordPickerViewID;
+extern NSString* const kPasswordPickerCancelButtonID;
+extern NSString* const kPasswordPickerNextButtonID;
 
-// The accessibility identifier of the sharing status view.
-extern NSString* const kSharingStatusDoneButtonId;
+// The accessibility identifiers of the sharing status view.
+extern NSString* const kSharingStatusViewID;
+extern NSString* const kSharingStatusDoneButtonID;
 
-// Link for creating family group with Google Families.
-extern const char kFamilyGroupSiteURL[];
+// Links for managing Google Family groups.
+extern const char kCreateFamilyGroupURL[];
+extern const char kManageFamilyGroupURL[];
 
 // Link for the password sharing HC article.
 extern const char kPasswordSharingLearnMoreURL[];

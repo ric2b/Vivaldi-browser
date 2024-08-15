@@ -14,11 +14,14 @@
 
 #include "nearby_protocol.h"
 #include "shared_test_util.h"
+#include "np_cpp_test.h"
 
 #include "gtest/gtest.h"
 
-TEST(NpFfiDeserializeV1Tests, V1SimpleTestCase) {
-  auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreate();
+TEST_F(NpCppTest, V1SimpleTestCase) {
+  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
+  ASSERT_TRUE(maybe_credential_slab.ok());
+  auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreateFromSlab(maybe_credential_slab.value());
   ASSERT_TRUE(maybe_credential_book.ok());
 
   auto deserialize_result =
@@ -47,7 +50,7 @@ TEST(NpFfiDeserializeV1Tests, V1SimpleTestCase) {
 
   auto de = section.value().TryGetDataElement(0);
   ASSERT_TRUE(de.ok());
-  ASSERT_EQ(de.value().GetDataElementTypeCode(), 5);
+  ASSERT_EQ(de.value().GetDataElementTypeCode(), (uint8_t)5);
 
   auto payload = de.value().GetPayload();
   auto vec = payload.ToVector();
@@ -55,52 +58,9 @@ TEST(NpFfiDeserializeV1Tests, V1SimpleTestCase) {
   ASSERT_EQ(vec, expected);
 }
 
-TEST(NpFfiDeserializeV1Tests, V1MultipleSections) {
-  auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreate();
-  ASSERT_TRUE(maybe_credential_book.ok());
-
-  auto deserialize_result =
-      nearby_protocol::Deserializer::DeserializeAdvertisement(
-          V1AdvMultipleSections, maybe_credential_book.value());
-  ASSERT_EQ(deserialize_result.GetKind(),
-            nearby_protocol::DeserializeAdvertisementResultKind::V1);
-
-  auto v1_adv = deserialize_result.IntoV1();
-  ASSERT_EQ(v1_adv.GetNumLegibleSections(), 2);
-  ASSERT_EQ(v1_adv.GetNumUndecryptableSections(), 0);
-
-  auto invalid = v1_adv.TryGetSection(2);
-  ASSERT_FALSE(invalid.ok());
-  ASSERT_TRUE(absl::IsOutOfRange(invalid.status()));
-
-  auto section = v1_adv.TryGetSection(0);
-  ASSERT_TRUE(section.ok());
-  ASSERT_EQ(section.value().GetIdentityKind(),
-            nearby_protocol::DeserializedV1IdentityKind::Plaintext);
-  ASSERT_EQ(section.value().NumberOfDataElements(), 1);
-
-  auto invalid_de = section.value().TryGetDataElement(1);
-  ASSERT_FALSE(invalid_de.ok());
-  ASSERT_TRUE(absl::IsOutOfRange(invalid_de.status()));
-
-  auto de = section.value().TryGetDataElement(0);
-  ASSERT_TRUE(de.ok());
-  ASSERT_EQ(de.value().GetDataElementTypeCode(), 6);
-
-  auto payload = de.value().GetPayload();
-  auto vec = payload.ToVector();
-  std::vector<uint8_t> expected{0x00, 0x46};
-  ASSERT_EQ(vec, expected);
-
-  auto section2 = v1_adv.TryGetSection(1);
-  ASSERT_TRUE(section2.ok());
-  ASSERT_EQ(section2.value().GetIdentityKind(),
-            nearby_protocol::DeserializedV1IdentityKind::Plaintext);
-  ASSERT_EQ(section2.value().NumberOfDataElements(), 1);
-}
-
-TEST(NpFfiDeserializeV1Tests, TestV1AdvMoveConstructor) {
-  auto book = nearby_protocol::CredentialBook::TryCreate().value();
+TEST_F(NpCppTest, TestV1AdvMoveConstructor) {
+  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
+  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V1AdvSimple, book);
   ASSERT_EQ(result.GetKind(),
@@ -135,8 +95,9 @@ TEST(NpFfiDeserializeV1Tests, TestV1AdvMoveConstructor) {
                "");
 }
 
-TEST(NpFfiDeserializeV1Tests, TestV1AdvMoveAssignment) {
-  auto book = nearby_protocol::CredentialBook::TryCreate().value();
+TEST_F(NpCppTest, TestV1AdvMoveAssignment) {
+  auto slab = nearby_protocol::CredentialSlab::TryCreate().value();
+  auto book = nearby_protocol::CredentialBook::TryCreateFromSlab(slab).value();
   auto result = nearby_protocol::Deserializer::DeserializeAdvertisement(
       V1AdvSimple, book);
   ASSERT_EQ(result.GetKind(),
@@ -195,10 +156,10 @@ bool TryDeserializeNewV1Adv(nearby_protocol::CredentialBook &book) {
          np_ffi::internal::DeserializeAdvertisementResultKind::V1;
 }
 
-TEST(NpFfiDeserializeV1Tests, TestSectionOwnership) {
-  // Capping the max number so we can verify that de-allocations are happening
-  nearby_protocol::GlobalConfig::SetMaxNumDeserializedV1Advertisements(1);
-  auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreate();
+TEST_F(NpCppTest, TestSectionOwnership) {
+  auto maybe_credential_slab = nearby_protocol::CredentialSlab::TryCreate();
+  ASSERT_TRUE(maybe_credential_slab.ok());
+  auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreateFromSlab(maybe_credential_slab.value());
   ASSERT_TRUE(maybe_credential_book.ok());
 
   {
@@ -208,6 +169,12 @@ TEST(NpFfiDeserializeV1Tests, TestSectionOwnership) {
     ASSERT_EQ(section.NumberOfDataElements(), 1);
     ASSERT_TRUE(section.TryGetDataElement(0).ok());
 
+    auto section2 = GetSection(maybe_credential_book.value());
+    ASSERT_EQ(section2.GetIdentityKind(),
+              nearby_protocol::DeserializedV1IdentityKind::Plaintext);
+    ASSERT_EQ(section2.NumberOfDataElements(), 1);
+    ASSERT_TRUE(section2.TryGetDataElement(0).ok());
+
     ASSERT_FALSE(TryDeserializeNewV1Adv(maybe_credential_book.value()));
   }
 
@@ -216,39 +183,50 @@ TEST(NpFfiDeserializeV1Tests, TestSectionOwnership) {
   ASSERT_TRUE(TryDeserializeNewV1Adv(maybe_credential_book.value()));
 }
 
-void NestedGetSectionsPart2(nearby_protocol::DeserializedV1Advertisement &adv,
-                            nearby_protocol::CredentialBook &book) {
-  { auto section = adv.TryGetSection(1); }
-  assert(!TryDeserializeNewV1Adv(book));
-}
-
-nearby_protocol::DeserializedV1Section
-NestedGetSections(nearby_protocol::CredentialBook &book) {
-  auto v1_adv = nearby_protocol::Deserializer::DeserializeAdvertisement(
-                    V1AdvMultipleSections, book)
-                    .IntoV1();
-  auto section = v1_adv.TryGetSection(0);
-  NestedGetSectionsPart2(v1_adv, book);
-  return section.value();
-}
-
-// Make sure handle stays in scope until all of the sections and adv have gone
-// out of scope
-TEST(NpFfiDeserializeV1Tests, TestSectionOwnershipMultipleSections) {
-  // Capping the max number so we can verify that de-allocations are happening
-  nearby_protocol::GlobalConfig::SetMaxNumDeserializedV1Advertisements(1);
+/*
+ * Multiple sections are not supported in plaintext advertisements
+ * TODO Update the below test to use encrypted sections
+TEST(NpCppTest, V1MultipleSections) {
   auto maybe_credential_book = nearby_protocol::CredentialBook::TryCreate();
   ASSERT_TRUE(maybe_credential_book.ok());
-  {
-    auto section = NestedGetSections(maybe_credential_book.value());
-    ASSERT_EQ(section.GetIdentityKind(),
-              nearby_protocol::DeserializedV1IdentityKind::Plaintext);
-    ASSERT_EQ(section.NumberOfDataElements(), 1);
 
-    ASSERT_FALSE(TryDeserializeNewV1Adv(maybe_credential_book.value()));
-  }
+  auto deserialize_result =
+      nearby_protocol::Deserializer::DeserializeAdvertisement(
+          V1AdvMultipleSections, maybe_credential_book.value());
+  ASSERT_EQ(deserialize_result.GetKind(),
+            nearby_protocol::DeserializeAdvertisementResultKind::V1);
 
-  // now that the section has gone out of scope, deserializing a new adv should
-  // succeed
-  ASSERT_TRUE(TryDeserializeNewV1Adv(maybe_credential_book.value()));
+  auto v1_adv = deserialize_result.IntoV1();
+  ASSERT_EQ(v1_adv.GetNumLegibleSections(), 2);
+  ASSERT_EQ(v1_adv.GetNumUndecryptableSections(), 0);
+
+  auto invalid = v1_adv.TryGetSection(2);
+  ASSERT_FALSE(invalid.ok());
+  ASSERT_TRUE(absl::IsOutOfRange(invalid.status()));
+
+  auto section = v1_adv.TryGetSection(0);
+  ASSERT_TRUE(section.ok());
+  ASSERT_EQ(section.value().GetIdentityKind(),
+            nearby_protocol::DeserializedV1IdentityKind::Plaintext);
+  ASSERT_EQ(section.value().NumberOfDataElements(), 1);
+
+  auto invalid_de = section.value().TryGetDataElement(1);
+  ASSERT_FALSE(invalid_de.ok());
+  ASSERT_TRUE(absl::IsOutOfRange(invalid_de.status()));
+
+  auto de = section.value().TryGetDataElement(0);
+  ASSERT_TRUE(de.ok());
+  ASSERT_EQ(de.value().GetDataElementTypeCode(), 6);
+
+  auto payload = de.value().GetPayload();
+  auto vec = payload.ToVector();
+  std::vector<uint8_t> expected{0x00, 0x46};
+  ASSERT_EQ(vec, expected);
+
+  auto section2 = v1_adv.TryGetSection(1);
+  ASSERT_TRUE(section2.ok());
+  ASSERT_EQ(section2.value().GetIdentityKind(),
+            nearby_protocol::DeserializedV1IdentityKind::Plaintext);
+  ASSERT_EQ(section2.value().NumberOfDataElements(), 1);
 }
+*/

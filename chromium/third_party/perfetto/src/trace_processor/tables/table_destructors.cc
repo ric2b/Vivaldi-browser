@@ -24,6 +24,7 @@
 #include "src/trace_processor/tables/slice_tables_py.h"
 #include "src/trace_processor/tables/trace_proto_tables_py.h"
 #include "src/trace_processor/tables/track_tables_py.h"
+#include "src/trace_processor/tables/v8_tables_py.h"
 #include "src/trace_processor/tables/winscope_tables_py.h"
 
 namespace perfetto {
@@ -93,6 +94,8 @@ ProcessTrackTable::~ProcessTrackTable() = default;
 ThreadTrackTable::~ThreadTrackTable() = default;
 CpuTrackTable::~CpuTrackTable() = default;
 GpuTrackTable::~GpuTrackTable() = default;
+UidTrackTable::~UidTrackTable() = default;
+GpuWorkPeriodTrackTable::~GpuWorkPeriodTrackTable() = default;
 CounterTrackTable::~CounterTrackTable() = default;
 ThreadCounterTrackTable::~ThreadCounterTrackTable() = default;
 ProcessCounterTrackTable::~ProcessCounterTrackTable() = default;
@@ -115,11 +118,21 @@ ProcessMemorySnapshotTable::~ProcessMemorySnapshotTable() = default;
 MemorySnapshotNodeTable::~MemorySnapshotNodeTable() = default;
 MemorySnapshotEdgeTable::~MemorySnapshotEdgeTable() = default;
 
+// v8_tables_py.h
+V8IsolateTable::~V8IsolateTable() = default;
+V8JsScriptTable::~V8JsScriptTable() = default;
+V8WasmScriptTable::~V8WasmScriptTable() = default;
+V8JsFunctionTable::~V8JsFunctionTable() = default;
+
 // winscope_tables_py.h
 SurfaceFlingerLayersSnapshotTable::~SurfaceFlingerLayersSnapshotTable() =
     default;
 SurfaceFlingerLayerTable::~SurfaceFlingerLayerTable() = default;
 SurfaceFlingerTransactionsTable::~SurfaceFlingerTransactionsTable() = default;
+WindowManagerShellTransitionsTable::~WindowManagerShellTransitionsTable() =
+    default;
+WindowManagerShellTransitionHandlersTable::
+    ~WindowManagerShellTransitionHandlersTable() = default;
 
 }  // namespace tables
 

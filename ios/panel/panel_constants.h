@@ -22,9 +22,13 @@ double panel_transition_damping = 0.95;
 }
 
 extern NSString* vPanelBookmarks;
+extern NSString* vPanelBookmarksActive;
 extern NSString* vPanelNotes;
+extern NSString* vPanelNotesActive;
 extern NSString* vPanelHistory;
+extern NSString* vPanelHistoryActive;
 extern NSString* vPanelReadingList;
+extern NSString* vPanelReadingListActive;
 
 
 #endif // IOS_PANEL_PANEL_CONSTANTS_H_

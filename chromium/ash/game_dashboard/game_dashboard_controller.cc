@@ -42,17 +42,8 @@ bool GameDashboardController::IsGameWindow(aura::Window* window) {
 
 // static
 bool GameDashboardController::ReadyForAccelerator(aura::Window* window) {
-  if (!IsGameWindow(window)) {
-    return false;
-  }
-
-  if (IsArcWindow(window)) {
-    return game_dashboard_utils::IsFlagSet(
-        window->GetProperty(kArcGameControlsFlagsKey),
-        ArcGameControlsFlag::kKnown);
-  }
-
-  return true;
+  return IsGameWindow(window) &&
+             game_dashboard_utils::ShouldEnableGameDashboardButton(window);
 }
 
 GameDashboardController::GameDashboardController(
@@ -93,7 +84,7 @@ void GameDashboardController::StartCaptureSession(
   auto* game_window = game_context->game_window();
   CHECK(game_window_contexts_.contains(game_window));
   auto* capture_mode_controller = CaptureModeController::Get();
-  CHECK(!capture_mode_controller->is_recording_in_progress());
+  CHECK(capture_mode_controller->can_start_new_recording());
 
   active_recording_context_ = game_context;
   if (record_instantly) {
@@ -104,9 +95,13 @@ void GameDashboardController::StartCaptureSession(
   }
 }
 
+void GameDashboardController::ShowResizeToggleMenu(aura::Window* window) {
+  delegate_->ShowResizeToggleMenu(window);
+}
+
 void GameDashboardController::OnWindowInitialized(aura::Window* new_window) {
-  auto* top_level_window = new_window->GetToplevelWindow();
-  if (!top_level_window ||
+  if (const auto* top_level_window = new_window->GetToplevelWindow();
+      !top_level_window ||
       top_level_window->GetType() != aura::client::WINDOW_TYPE_NORMAL) {
     // Ignore non-NORMAL window types.
     return;
@@ -158,7 +153,11 @@ void GameDashboardController::OnRecordingEnded() {
 
 void GameDashboardController::OnVideoFileFinalized(
     bool user_deleted_video_file,
-    const gfx::ImageSkia& thumbnail) {}
+    const gfx::ImageSkia& thumbnail) {
+  for (auto const& [game_window, context] : game_window_contexts_) {
+    context->OnVideoFileFinalized();
+  }
+}
 
 void GameDashboardController::OnRecordedWindowChangingRoot(
     aura::Window* new_root) {
@@ -191,16 +190,17 @@ void GameDashboardController::OnOverviewModeEnded() {
 }
 
 void GameDashboardController::GetWindowGameState(aura::Window* window) {
-  const auto* app_id = window->GetProperty(kAppIDKey);
-  if (!app_id) {
+  if (const auto* app_id = window->GetProperty(kAppIDKey); !app_id) {
     RefreshWindowTracking(window, WindowGameState::kNotYetKnown);
   } else if (IsArcWindow(window)) {
     // For ARC apps, the "app_id" is equivalent to its package name.
     delegate_->GetIsGame(
-        *app_id, base::BindOnce(&GameDashboardController::OnArcWindowIsGame,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                std::make_unique<aura::WindowTracker>(
-                                    std::vector<aura::Window*>({window}))));
+        *app_id, base::BindOnce(
+                     &GameDashboardController::OnArcWindowIsGame,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::make_unique<aura::WindowTracker>(
+                         std::vector<raw_ptr<aura::Window, VectorExperimental>>(
+                             {window}))));
   } else {
     RefreshWindowTracking(window, (*app_id == extension_misc::kGeForceNowAppId)
                                       ? WindowGameState::kGame
@@ -211,12 +211,10 @@ void GameDashboardController::GetWindowGameState(aura::Window* window) {
 void GameDashboardController::OnArcWindowIsGame(
     std::unique_ptr<aura::WindowTracker> window_tracker,
     bool is_game) {
-  const auto windows = window_tracker->windows();
-  if (windows.empty()) {
-    return;
+  if (const auto windows = window_tracker->windows(); !windows.empty()) {
+    RefreshWindowTracking(windows[0], is_game ? WindowGameState::kGame
+                                              : WindowGameState::kNotGame);
   }
-  RefreshWindowTracking(
-      windows[0], is_game ? WindowGameState::kGame : WindowGameState::kNotGame);
 }
 
 void GameDashboardController::RefreshWindowTracking(aura::Window* window,
@@ -227,15 +225,20 @@ void GameDashboardController::RefreshWindowTracking(aura::Window* window,
 
   if (state != WindowGameState::kNotYetKnown) {
     const bool is_game = state == WindowGameState::kGame;
-    DCHECK(!window->GetProperty(chromeos::kIsGameKey) || is_game)
-        << "Window property cannot change from `Game` to `Not Game`";
+    const bool prev_is_game_property =
+        window->GetProperty(chromeos::kIsGameKey);
     window->SetProperty(chromeos::kIsGameKey, is_game);
     if (is_game) {
       auto& context = game_window_contexts_[window];
       if (!context) {
         context = std::make_unique<GameDashboardContext>(window);
         RefreshForGameControlsFlags(window);
+        delegate_->RecordGameWindowOpenedEvent(window);
       }
+    } else if (prev_is_game_property) {
+      // The window was a game, but NOT anymore. This can happen if the user
+      // disables ARC during the existing session.
+      game_window_contexts_.erase(window);
     }
   }
 

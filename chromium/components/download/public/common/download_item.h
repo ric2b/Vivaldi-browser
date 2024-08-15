@@ -27,6 +27,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list_types.h"
 #include "base/supports_user_data.h"
+#include "build/build_config.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_export.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
@@ -439,6 +440,11 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // Gets the pointer to the DownloadFile owned by this object.
   virtual DownloadFile* GetDownloadFile() = 0;
 
+#if BUILDFLAG(IS_ANDROID)
+  // Gets whether the download is triggered from external app.
+  virtual bool IsFromExternalApp() = 0;
+#endif  // BUILDFLAG(IS_ANDROID)
+
   //    Progress State accessors -----------------------------------------------
 
   // Simple calculation of the amount of time remaining to completion. Fills
@@ -524,10 +530,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // Gets the DownloadCreationType of this item.
   virtual DownloadCreationType GetDownloadCreationType() const = 0;
 
-  // Returns whether the download item is covered by any Data Leak Prevention
-  // (DLP) policy, and thus might be restricted from certain user actions.
-  virtual bool IsDlpManaged() const = 0;
-
   // External state transitions/setters ----------------------------------------
 
   // TODO(rdsmith): These should all be removed; the download item should
@@ -559,9 +561,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItem : public base::SupportsUserData {
   // filename. If |name| is not empty, then GetFileNameToReportUser() will
   // return |name|. Has no effect on the final target filename.
   virtual void SetDisplayName(const base::FilePath& name) = 0;
-
-  // Mark the download as managed by Data Leak Protection (DLP) policy.
-  virtual void SetIsDlpManaged(bool is_managed) = 0;
 
   // Debug/testing -------------------------------------------------------------
   virtual std::string DebugString(bool verbose) const = 0;

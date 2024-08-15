@@ -21,6 +21,7 @@
 #include "base/test/task_environment.h"
 #include "base/threading/sequence_bound.h"
 #include "base/types/expected.h"
+#include "base/types/expected_macros.h"
 #include "components/reporting/compression/compression_module.h"
 #include "components/reporting/compression/test_compression_module.h"
 #include "components/reporting/encryption/decryption.h"
@@ -761,7 +762,7 @@ class StorageTest
     const raw_ptr<base::flat_map<Priority, int64_t>> last_upload_generation_id_;
     const raw_ptr<LastRecordDigestMap> last_record_digest_map_;
 
-    const raw_ptr<const MockUpload, DanglingUntriaged> mock_upload_;
+    const raw_ptr<const MockUpload> mock_upload_;
     const base::SequenceBound<SequenceBoundUpload> sequence_bound_upload_;
 
     const scoped_refptr<test::Decryptor> decryptor_;

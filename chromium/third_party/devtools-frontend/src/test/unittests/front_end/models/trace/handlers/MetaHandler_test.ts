@@ -518,4 +518,80 @@ describe('MetaHandler', function() {
       ],
     ]);
   });
+
+  it('can handle edge cases where there are multiple navigations with the same ID', async function() {
+    // For context to why this test and trace file exist, see crbug.com/1503982
+    // If an HTML page contains <script>window.location.href =
+    // 'javascript:console.log(1)'</script>, the backend will emit two
+    // navigationStarted events that are identical except for timestamps, and
+    // this caused the trace engine to crash.
+    // To ensure that we handle this case, we have this test which makes sure a
+    // trace that does have two navigations with the same ID does not cause the
+    // MetaHandler to throw an error.
+    const events = await TraceLoader.rawEvents(this, 'multiple-navigations-same-id.json.gz');
+    assert.doesNotThrow(function() {
+      for (const event of events) {
+        TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+      }
+    });
+  });
+
+  it('marks a generic trace as generic', async function() {
+    const events = await TraceLoader.rawEvents(this, 'generic-about-tracing.json.gz');
+    for (const event of events) {
+      TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+    }
+    await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+    assert.isTrue(TraceModel.Handlers.ModelHandlers.Meta.data().traceIsGeneric);
+  });
+
+  it('marks a web trace as being not generic', async function() {
+    const events = await TraceLoader.rawEvents(this, 'web-dev-with-commit.json.gz');
+    for (const event of events) {
+      TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+    }
+    await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+    assert.isFalse(TraceModel.Handlers.ModelHandlers.Meta.data().traceIsGeneric);
+  });
+
+  it('sets the main frame URL from the TracingStartedInBrowser event', async function() {
+    // This trace has the right URL in TracingStartedInBrowser
+    const events = await TraceLoader.rawEvents(this, 'web-dev-with-commit.json.gz');
+    for (const event of events) {
+      TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+    }
+    await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+    const data = TraceModel.Handlers.ModelHandlers.Meta.data();
+    assert.strictEqual(data.mainFrameURL, 'https://web.dev/');
+  });
+
+  it('will alter the main frame URL based on the first main frame navigation', async function() {
+    // This trace has the wrong URL in TracingStartedInBrowser - but it will be
+    // corrected by looking at the first main frame navigation.
+    const events = await TraceLoader.rawEvents(this, 'web-dev-initial-url.json.gz');
+    for (const event of events) {
+      TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+    }
+    await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+    const data = TraceModel.Handlers.ModelHandlers.Meta.data();
+    assert.strictEqual(data.mainFrameURL, 'https://web.dev/articles/inp');
+  });
+
+  it('returns a list of processes and process_name events', async function() {
+    const events = await TraceLoader.rawEvents(this, 'web-dev-initial-url.json.gz');
+    for (const event of events) {
+      TraceModel.Handlers.ModelHandlers.Meta.handleEvent(event);
+    }
+    await TraceModel.Handlers.ModelHandlers.Meta.finalize();
+    const data = TraceModel.Handlers.ModelHandlers.Meta.data();
+    const pidsToNames = Array.from(data.processNames.entries(), ([pid, event]) => {
+      return [pid, event.args.name];
+    });
+    assert.deepEqual(pidsToNames, [
+      [TraceModel.Types.TraceEvents.ProcessID(37605), 'Browser'],
+      [TraceModel.Types.TraceEvents.ProcessID(48544), 'Renderer'],
+      [TraceModel.Types.TraceEvents.ProcessID(37613), 'GPU Process'],
+      [TraceModel.Types.TraceEvents.ProcessID(48531), 'Renderer'],
+    ]);
+  });
 });

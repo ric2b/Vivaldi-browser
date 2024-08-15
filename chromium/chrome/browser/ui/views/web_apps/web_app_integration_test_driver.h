@@ -7,6 +7,7 @@
 
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,11 +15,11 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/intent_chip_button.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
@@ -31,7 +32,6 @@
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/common/web_app_id.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "url/gurl.h"
 
@@ -170,13 +170,9 @@ struct BrowserState {
   BrowserState(const BrowserState&);
   bool operator==(const BrowserState& other) const;
 
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #union
-  RAW_PTR_EXCLUSION Browser* browser;
+  raw_ptr<Browser, DanglingUntriaged> browser;
   base::flat_map<content::WebContents*, TabState> tabs;
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #union
-  RAW_PTR_EXCLUSION content::WebContents* active_tab;
+  raw_ptr<content::WebContents, DanglingUntriaged> active_tab;
   // If this isn't an app browser, `app_id` is empty.
   webapps::AppId app_id;
   bool launch_icon_shown;
@@ -188,7 +184,7 @@ struct AppState {
            GURL app_scope,
            apps::RunOnOsLoginMode run_on_os_login_mode,
            blink::mojom::DisplayMode effective_display_mode,
-           absl::optional<mojom::UserDisplayMode> user_display_mode,
+           std::optional<mojom::UserDisplayMode> user_display_mode,
            std::string manifest_launcher_icon_filename,
            bool is_installed_locally,
            bool is_shortcut_created);
@@ -201,7 +197,7 @@ struct AppState {
   GURL scope;
   apps::RunOnOsLoginMode run_on_os_login_mode;
   blink::mojom::DisplayMode effective_display_mode;
-  absl::optional<mojom::UserDisplayMode> user_display_mode;
+  std::optional<mojom::UserDisplayMode> user_display_mode;
   std::string manifest_launcher_icon_filename;
   bool is_installed_locally;
   bool is_shortcut_created;
@@ -424,9 +420,9 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
 
   webapps::AppId GetAppIdBySiteMode(Site site);
   GURL GetUrlForSite(Site site);
-  absl::optional<AppState> GetAppBySiteMode(StateSnapshot* state_snapshot,
-                                            Profile* profile,
-                                            Site site);
+  std::optional<AppState> GetAppBySiteMode(StateSnapshot* state_snapshot,
+                                           Profile* profile,
+                                           Site site);
 
   WebAppProvider* GetProviderForProfile(Profile* profile);
 
@@ -494,7 +490,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   Browser* app_browser() { return app_browser_; }
   WebAppProvider* provider() { return WebAppProvider::GetForTest(profile()); }
   PageActionIconView* pwa_install_view();
-  PageActionIconView* intent_picker_view();
+  IntentChipButton* intent_chip_view();
 
   const net::EmbeddedTestServer& GetTestServerForSiteMode(Site site_mode) const;
 
@@ -510,7 +506,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
   // |waiting_for_update_*| variables are either all populated or all not
   // populated. These signify that the test is currently waiting for the
   // given |waiting_for_update_id_| to receive an update before continuing.
-  absl::optional<webapps::AppId> waiting_for_update_id_;
+  std::optional<webapps::AppId> waiting_for_update_id_;
   std::unique_ptr<base::RunLoop> waiting_for_update_run_loop_;
 
   raw_ptr<TestDelegate> delegate_;
@@ -549,7 +545,7 @@ class WebAppIntegrationTestDriver : WebAppInstallManagerObserver {
       nullptr;
 
   base::flat_set<Site> site_remember_deny_open_file_;
-  base::AutoReset<absl::optional<web_app::AppIdentityUpdate>>
+  base::AutoReset<std::optional<web_app::AppIdentityUpdate>>
       update_dialog_scope_;
 
   base::TimeTicks start_time_ = base::TimeTicks::Now();

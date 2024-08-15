@@ -9,47 +9,13 @@ Returns the sign of e. Component-wise when T is a vector.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import {
-  i32,
-  TypeF32,
-  TypeF16,
-  TypeI32,
-  TypeAbstractFloat,
-} from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import {
-  fullF32Range,
-  fullF16Range,
-  fullI32Range,
-  fullF64Range,
-} from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeAbstractFloat, TypeF16, TypeF32, TypeI32 } from '../../../../../util/conversion.js';
 import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
 import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './sign.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('sign', {
-  f32: () => {
-    return FP.f32.generateScalarToIntervalCases(fullF32Range(), 'unfiltered', FP.f32.signInterval);
-  },
-  f16: () => {
-    return FP.f16.generateScalarToIntervalCases(fullF16Range(), 'unfiltered', FP.f16.signInterval);
-  },
-  abstract_float: () => {
-    return FP.abstract.generateScalarToIntervalCases(
-      fullF64Range(),
-      'unfiltered',
-      FP.abstract.signInterval
-    );
-  },
-  i32: () =>
-    fullI32Range().map(i => {
-      const signFunc = (i: number): number => (i < 0 ? -1 : i > 0 ? 1 : 0);
-      return { input: [i32(i)], expected: i32(signFunc(i)) };
-    }),
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#sign-builtin')
@@ -60,7 +26,7 @@ g.test('abstract_float')
       .combine('vectorize', [undefined, 2, 3, 4] as const)
   )
   .fn(async t => {
-    const cases = await d.get('abstract_float');
+    const cases = await d.get('abstract');
     await run(t, abstractBuiltin('sign'), [TypeAbstractFloat], TypeAbstractFloat, t.params, cases);
   });
 

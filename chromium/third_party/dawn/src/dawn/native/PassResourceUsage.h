@@ -28,9 +28,9 @@
 #ifndef SRC_DAWN_NATIVE_PASSRESOURCEUSAGE_H_
 #define SRC_DAWN_NATIVE_PASSRESOURCEUSAGE_H_
 
-#include <set>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "dawn/native/SubresourceStorage.h"
 #include "dawn/native/dawn_platform.h"
 
@@ -45,18 +45,33 @@ class BufferBase;
 class QuerySetBase;
 class TextureBase;
 
+// Info about how a buffer is used and in which shader stages
+struct BufferSyncInfo {
+    wgpu::BufferUsage usage = wgpu::BufferUsage::None;
+    wgpu::ShaderStage shaderStages = wgpu::ShaderStage::None;
+};
+
+// Info about how a texture is used and in which shader stages
+// TODO(crbug.com/dawn/851): Optimize by merging into one u32?
+struct TextureSyncInfo {
+    wgpu::TextureUsage usage = wgpu::TextureUsage::None;
+    wgpu::ShaderStage shaderStages = wgpu::ShaderStage::None;
+};
+
+bool operator==(const TextureSyncInfo& a, const TextureSyncInfo& b);
+
 // The texture usage inside passes must be tracked per-subresource.
-using TextureSubresourceUsage = SubresourceStorage<wgpu::TextureUsage>;
+using TextureSubresourceSyncInfo = SubresourceStorage<TextureSyncInfo>;
 
 // Which resources are used by a synchronization scope and how they are used. The command
 // buffer validation pre-computes this information so that backends with explicit barriers
 // don't have to re-compute it.
 struct SyncScopeResourceUsage {
     std::vector<BufferBase*> buffers;
-    std::vector<wgpu::BufferUsage> bufferUsages;
+    std::vector<BufferSyncInfo> bufferSyncInfos;
 
     std::vector<TextureBase*> textures;
-    std::vector<TextureSubresourceUsage> textureUsages;
+    std::vector<TextureSubresourceSyncInfo> textureSyncInfos;
 
     std::vector<ExternalTextureBase*> externalTextures;
 };
@@ -77,9 +92,9 @@ struct ComputePassResourceUsage {
     std::vector<SyncScopeResourceUsage> dispatchUsages;
 
     // All the resources referenced by this compute pass for validation in Queue::Submit.
-    std::set<BufferBase*> referencedBuffers;
-    std::set<TextureBase*> referencedTextures;
-    std::set<ExternalTextureBase*> referencedExternalTextures;
+    absl::flat_hash_set<BufferBase*> referencedBuffers;
+    absl::flat_hash_set<TextureBase*> referencedTextures;
+    absl::flat_hash_set<ExternalTextureBase*> referencedExternalTextures;
 };
 
 // Contains all the resource usage data for a render pass.
@@ -103,9 +118,9 @@ struct CommandBufferResourceUsage {
     ComputePassUsages computePasses;
 
     // Resources used in commands that aren't in a pass.
-    std::set<BufferBase*> topLevelBuffers;
-    std::set<TextureBase*> topLevelTextures;
-    std::set<QuerySetBase*> usedQuerySets;
+    absl::flat_hash_set<BufferBase*> topLevelBuffers;
+    absl::flat_hash_set<TextureBase*> topLevelTextures;
+    absl::flat_hash_set<QuerySetBase*> usedQuerySets;
 };
 
 }  // namespace dawn::native

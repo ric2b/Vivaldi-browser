@@ -32,6 +32,14 @@ IOSOverflowMenuDestination HistogramDestinationFromDestination(
       return IOSOverflowMenuDestination::kSpotlightDebugger;
     case overflow_menu::Destination::PriceNotifications:
       return IOSOverflowMenuDestination::kPriceNotifications;
+
+    // Vivaldi
+    // Note:(@prio@vivaldi.com) - This is not necessary for us. SiteInfo is
+    // returning for the sake of compilation.
+    default:
+      return IOSOverflowMenuDestination::kSiteInfo;
+    // End Vivaldi
+
   }
 }
 

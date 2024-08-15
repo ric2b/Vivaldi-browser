@@ -176,14 +176,14 @@ RoundedDisplayFrameFactory::CreateUiResource(const gfx::Size& size,
       LOG(ERROR) << "Failed to create MappableSharedImage";
       return nullptr;
     }
-    resource->mailbox = client_shared_image->mailbox();
+    resource->SetClientSharedImage(std::move(client_shared_image));
   } else {
     auto client_shared_image = sii->CreateSharedImage(
         format, size, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
         kPremul_SkAlphaType, usage, "RoundedDisplayFrameUi",
         resource->gpu_memory_buffer->CloneHandle());
     CHECK(client_shared_image);
-    resource->mailbox = client_shared_image->mailbox();
+    resource->SetClientSharedImage(std::move(client_shared_image));
   }
 
   resource->sync_token = sii->GenVerifiedSyncToken();
@@ -294,7 +294,7 @@ std::unique_ptr<RoundedDisplayUiResource> RoundedDisplayFrameFactory::Draw(
     gpu::SharedImageInterface* sii =
         resource->context_provider->SharedImageInterface();
 
-    sii->UpdateSharedImage(resource->sync_token, resource->mailbox);
+    sii->UpdateSharedImage(resource->sync_token, resource->mailbox());
 
     resource->sync_token = sii->GenVerifiedSyncToken();
     resource->damaged = false;
@@ -307,7 +307,7 @@ void RoundedDisplayFrameFactory::Paint(
     const RoundedDisplayGutter& gutter,
     RoundedDisplayUiResource* resource) const {
   gfx::GpuMemoryBuffer* buffer = resource->gpu_memory_buffer.get();
-  std::unique_ptr<gpu::SharedImageInterface::ScopedMapping> mapping;
+  std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping;
 
   gfx::Canvas canvas(gutter.bounds().size(), 1.0, true);
   gutter.Paint(&canvas);
@@ -315,9 +315,8 @@ void RoundedDisplayFrameFactory::Paint(
   if (base::FeatureList::IsEnabled(
           kUseMappableSIInRoundedDisplayFrameFactory)) {
     DCHECK(!buffer);
-    gpu::SharedImageInterface* sii =
-        resource->context_provider->SharedImageInterface();
-    mapping = sii->MapSharedImage(resource->mailbox);
+    CHECK(resource->client_shared_image());
+    mapping = resource->client_shared_image()->Map();
     if (!mapping) {
       return;
     }
@@ -367,7 +366,7 @@ void RoundedDisplayFrameFactory::AppendQuad(
                      /*layer_rect=*/layer_rect,
                      /*visible_layer_rect=*/layer_rect,
                      /*filter_info=*/gfx::MaskFilterInfo(),
-                     /*clip=*/absl::nullopt, /*contents_opaque=*/false,
+                     /*clip=*/std::nullopt, /*contents_opaque=*/false,
                      /*opacity_f=*/1.f,
                      /*blend=*/SkBlendMode::kSrcOver,
                      /*sorting_context=*/0,
@@ -375,8 +374,6 @@ void RoundedDisplayFrameFactory::AppendQuad(
 
   viz::TextureDrawQuad* texture_quad =
       render_pass_out.CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
-
-  constexpr float kVertexOpacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
   // Since a single gutter is created for the full layer and we re-render the
   // full texture making the quad_rect same as the layer_rect.
@@ -390,7 +387,7 @@ void RoundedDisplayFrameFactory::AppendQuad(
       /*needs_blending=*/true, resource.id,
       /*premultiplied=*/true, /*uv_top_left=*/gfx::PointF(0, 0),
       /*uv_bottom_right=*/gfx::PointF(1, 1),
-      /*background=*/SkColors::kTransparent, kVertexOpacity,
+      /*background=*/SkColors::kTransparent,
       /*flipped=*/false,
       /*nearest=*/false,
       /*secure_output=*/false, gfx::ProtectedVideoType::kClear);

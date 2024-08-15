@@ -24,6 +24,8 @@
 #include "chrome/browser/lacros/automation_manager_lacros.h"
 #include "chrome/browser/lacros/browser_service_lacros.h"
 #include "chrome/browser/lacros/clipboard_history_lacros.h"
+#include "chrome/browser/lacros/debug_interface_lacros.h"
+#include "chrome/browser/lacros/desk_profiles_lacros.h"
 #include "chrome/browser/lacros/desk_template_client_lacros.h"
 #include "chrome/browser/lacros/download_controller_client_lacros.h"
 #include "chrome/browser/lacros/drivefs_cache.h"
@@ -42,6 +44,7 @@
 #include "chrome/browser/lacros/launcher_search/search_controller_lacros.h"
 #include "chrome/browser/lacros/multitask_menu_nudge_delegate_lacros.h"
 #include "chrome/browser/lacros/net/network_change_manager_bridge.h"
+#include "chrome/browser/lacros/net/network_settings_observer.h"
 #include "chrome/browser/lacros/screen_orientation_delegate_lacros.h"
 #include "chrome/browser/lacros/sync/sync_crosapi_manager_lacros.h"
 #include "chrome/browser/lacros/task_manager_lacros.h"
@@ -52,7 +55,7 @@
 #include "chrome/browser/lacros/web_page_info_lacros.h"
 #include "chrome/browser/lacros/webauthn_request_registrar_lacros.h"
 #include "chrome/browser/memory/oom_kills_monitor.h"
-#include "chrome/browser/metrics/structured/chrome_structured_metrics_recorder.h"
+#include "chrome/browser/metrics/structured/chrome_structured_metrics_delegate.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/quick_answers/read_write_cards_manager_impl.h"
 #include "chromeos/components/kiosk/kiosk_utils.h"
@@ -90,6 +93,20 @@ CreateClipboardHistoryLacros() {
                   kRegisterClientMinVersion}) {
     return std::make_unique<crosapi::ClipboardHistoryLacros>(
         service->GetRemote<crosapi::mojom::ClipboardHistory>().get());
+  }
+
+  return nullptr;
+}
+
+std::unique_ptr<crosapi::DeskProfilesLacros> CreateDeskProfilesLacros() {
+  CHECK(chromeos::features::IsDeskProfilesEnabled());
+
+  if (chromeos::LacrosService* const service = chromeos::LacrosService::Get();
+      service->IsAvailable<crosapi::mojom::DeskProfileObserver>() &&
+      g_browser_process) {
+    return std::make_unique<crosapi::DeskProfilesLacros>(
+        g_browser_process->profile_manager(),
+        service->GetRemote<crosapi::mojom::DeskProfileObserver>().get());
   }
 
   return nullptr;
@@ -164,7 +181,11 @@ void ChromeBrowserMainExtraPartsLacros::PreProfileInit() {
 void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
   automation_manager_ = std::make_unique<AutomationManagerLacros>();
   browser_service_ = std::make_unique<BrowserServiceLacros>();
+  debug_interface_ = std::make_unique<crosapi::DebugInterfaceLacros>();
   desk_template_client_ = std::make_unique<DeskTemplateClientLacros>();
+  if (chromeos::features::IsDeskProfilesEnabled()) {
+    desk_profiles_lacros_ = CreateDeskProfilesLacros();
+  }
   drivefs_native_message_host_bridge_ =
       std::make_unique<drive::DriveFsNativeMessageHostBridge>();
   download_controller_client_ =
@@ -212,10 +233,8 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
     extensions_controller_->Initialize(extensions_publisher_->publisher());
   }
 
-  if (chromeos::BrowserParamsProxy::Get()->WebAppsEnabled()) {
-    web_app_provider_bridge_ =
-        std::make_unique<crosapi::WebAppProviderBridgeLacros>();
-  }
+  web_app_provider_bridge_ =
+      std::make_unique<crosapi::WebAppProviderBridgeLacros>();
 
   EmbeddedA11yManagerLacros::GetInstance()->Init();
 
@@ -243,7 +262,7 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
   webauthn_request_registrar_lacros_ =
       std::make_unique<WebAuthnRequestRegistrarLacros>();
 
-  metrics::structured::ChromeStructuredMetricsRecorder::Get()->Initialize();
+  metrics::structured::ChromeStructuredMetricsDelegate::Get()->Initialize();
 
   if (g_browser_process != nullptr &&
       g_browser_process->local_state() != nullptr) {
@@ -337,6 +356,9 @@ void ChromeBrowserMainExtraPartsLacros::PostProfileInit(
               }
             }));
   }
+  network_settings_observer_ =
+      std::make_unique<NetworkSettingsObserver>(profile);
+  network_settings_observer_->Start();
 }
 
 void ChromeBrowserMainExtraPartsLacros::PostMainMessageLoopRun() {

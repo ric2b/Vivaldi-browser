@@ -163,8 +163,7 @@ class ExtensionEnableFlowTestSupervised
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  raw_ptr<ParentPermissionDialogView, DanglingUntriaged | ExperimentalAsh>
-      view_ = nullptr;
+  raw_ptr<ParentPermissionDialogView, DanglingUntriaged> view_ = nullptr;
   std::unique_ptr<ParentPermissionDialog> parent_permission_dialog_;
   ParentPermissionDialog::Result result_;
 
@@ -186,7 +185,7 @@ class ExtensionEnableFlowTestSupervised
 
   scoped_refptr<const extensions::Extension> test_extension_;
 
-  absl::optional<NextDialogAction> next_dialog_action_;
+  std::optional<NextDialogAction> next_dialog_action_;
 };
 
 // Tests launching an app that requires parent approval from the launcher.

@@ -319,6 +319,10 @@ const DevToolsAPIImpl = class {
     this._dispatchOnInspectorFrontendAPI('searchCompleted', [requestId, fileSystemPath, files]);
   }
 
+  colorThemeChanged() {
+    this._dispatchOnInspectorFrontendAPI('colorThemeChanged', []);
+  }
+
   /**
    * @param {string} tabId
    */
@@ -425,6 +429,7 @@ const EnumeratedHistogram = {
   ManifestSectionSelected: 'DevTools.ManifestSectionSelected',
   PanelClosed: 'DevTools.PanelClosed',
   PanelShown: 'DevTools.PanelShown',
+  PanelShownInLocation: 'DevTools.PanelShownInLocation',
   RecordingAssertion: 'DevTools.RecordingAssertion',
   RecordingCodeToggled: 'DevTools.RecordingCodeToggled',
   RecordingCopiedToClipboard: 'DevTools.RecordingCopiedToClipboard',
@@ -451,6 +456,12 @@ const EnumeratedHistogram = {
   BadgeActivated: 'DevTools.BadgeActivated',
   AnimationPlaybackRateChanged: 'DevTools.AnimationPlaybackRateChanged',
   AnimationPointDragged: 'DevTools.AnimationPointDragged',
+  LegacyResourceTypeFilterNumberOfSelectedChanged: 'DevTools.LegacyResourceTypeFilterNumberOfSelectedChanged',
+  LegacyResourceTypeFilterItemSelected: 'DevTools.LegacyResourceTypeFilterItemSelected',
+  ResourceTypeFilterNumberOfSelectedChanged: 'DevTools.ResourceTypeFilterNumberOfSelectedChanged',
+  ResourceTypeFilterItemSelected: 'DevTools.ResourceTypeFilterItemSelected',
+  NetworkPanelMoreFiltersNumberOfSelectedChanged: 'DevTools.NetworkPanelMoreFiltersNumberOfSelectedChanged',
+  NetworkPanelMoreFiltersItemSelected: 'DevTools.NetworkPanelMoreFiltersItemSelected',
 };
 
 /**
@@ -1010,7 +1021,7 @@ const InspectorFrontendHostImpl = class {
    * @override
    * @param {InspectorFrontendHostAPI.DragEvent} dragEvent
    */
-  recordDrag(DragEvent) {
+  recordDrag(dragEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordDrag', [dragEvent], null);
   }
 

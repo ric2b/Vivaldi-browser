@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assertNotNullOrUndefined} from '../../../../../front_end/core/platform/platform.js';
 import * as Root from '../../../../../front_end/core/root/root.js';
 import * as SDK from '../../../../../front_end/core/sdk/sdk.js';
-import * as Accessibility from '../../../../../front_end/panels/accessibility/accessibility.js';
-
 import type * as Protocol from '../../../../../front_end/generated/protocol.js';
+import * as Accessibility from '../../../../../front_end/panels/accessibility/accessibility.js';
 import {createTarget, stubNoopSettings} from '../../helpers/EnvironmentHelpers.js';
-import {assertNotNullOrUndefined} from '../../../../../front_end/core/platform/platform.js';
 import {describeWithMockConnection, setMockConnectionResponseHandler} from '../../helpers/MockConnection.js';
 
 const {assert} = chai;
@@ -24,7 +23,6 @@ describeWithMockConnection('AccessibilitySidebarView', () => {
     target = createTarget();
     setMockConnectionResponseHandler('DOM.getDocument', () => ({root: {nodeId: NODE_ID}}));
     setMockConnectionResponseHandler('DOM.getNodesForSubtreeByStyle', () => ({nodeIds: []}));
-    Root.Runtime.experiments.register('sourceOrderViewer', '');
     Root.Runtime.experiments.register(Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE, '');
   });
 

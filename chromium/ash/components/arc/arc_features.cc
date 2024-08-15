@@ -47,12 +47,18 @@ BASE_FEATURE(kEnableArcIdleManager,
 const base::FeatureParam<bool> kEnableArcIdleManagerIgnoreBatteryForPLT{
     &kEnableArcIdleManager, "ignore_battery_for_test", false};
 
+const base::FeatureParam<int> kEnableArcIdleManagerDelayMs{
+    &kEnableArcIdleManager, "delay_ms", 0};
+
 // Controls whether files shared to ARC Nearby Share are shared through the
 // FuseBox filesystem, instead of the default method (through a temporary path
 // managed by file manager).
 BASE_FEATURE(kEnableArcNearbyShareFuseBox,
              "ArcNearbyShareFuseBox",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Controls whether to enable support for s2idle in ARCVM.
+BASE_FEATURE(kEnableArcS2Idle, "ArcS2Idle", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether to enable ARCVM /data migration. It does not take effect
 // when kEnableVirtioBlkForData is set, in which case virtio-blk is used for
@@ -209,12 +215,22 @@ BASE_FEATURE(kOutOfProcessVideoDecoding,
              "OutOfProcessVideoDecoding",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, Android per-app-language settings will be surfaced in ChromeOS
+// Settings page.
+BASE_FEATURE(kPerAppLanguage,
+             "PerAppLanguage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls ARC picture-in-picture feature. If this is enabled, then Android
 // will control which apps can enter PIP. If this is disabled, then ARC PIP
 // will be disabled.
 BASE_FEATURE(kPictureInPictureFeature,
              "ArcPictureInPicture",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kResizeCompat,
+             "ArcResizeCompat",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRoundedWindowCompat,
              "ArcRoundedWindowCompat",
@@ -400,5 +416,5 @@ const base::FeatureParam<std::string> kPriorityAppLmkDelayList{
 // top Android apps from being killed that result in bad user experience.
 BASE_FEATURE(kLmkPerceptibleMinStateUpdate,
              "ArcLmkPerceptibleMinStateUpdate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 }  // namespace arc

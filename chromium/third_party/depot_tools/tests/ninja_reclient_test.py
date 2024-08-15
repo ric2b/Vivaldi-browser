@@ -42,7 +42,8 @@ class NinjaReclientTest(trial_dir.TestCase):
         super(NinjaReclientTest, self).tearDown()
 
     @unittest.mock.patch.dict(os.environ,
-                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"})
+                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"},
+                              clear=True)
     @unittest.mock.patch('reclient_helper.datetime_now',
                          return_value=datetime.datetime(2017, 3, 16, 20, 0, 41,
                                                         0))
@@ -98,7 +99,6 @@ class NinjaReclientTest(trial_dir.TestCase):
                     os.path.join(self.root_dir, "out", "a",
                                  ".reproxy_tmp").encode()).hexdigest())
 
-    @unittest.mock.patch.dict(os.environ, {})
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)
     @unittest.mock.patch('reclient_metrics.check_status', return_value=False)
@@ -167,7 +167,8 @@ class NinjaReclientTest(trial_dir.TestCase):
         mock_metrics_status.assert_called_once_with("out/a")
 
     @unittest.mock.patch.dict(os.environ,
-                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"})
+                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"},
+                              clear=True)
     @unittest.mock.patch('reclient_helper.datetime_now',
                          return_value=datetime.datetime(2017, 3, 16, 20, 0, 41,
                                                         0))
@@ -215,7 +216,8 @@ expiry:  {
         mock_metrics_status.assert_called_once_with("out/a")
 
     @unittest.mock.patch.dict(os.environ,
-                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"})
+                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"},
+                              clear=True)
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)
     @unittest.mock.patch('reclient_metrics.check_status', return_value=True)
@@ -258,8 +260,7 @@ expiry:  {
 
         mock_metrics_status.assert_called_once_with("out/a")
 
-    @unittest.mock.patch.dict(os.environ,
-                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"})
+    @unittest.mock.patch.dict(os.environ, {})
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)
     @unittest.mock.patch('reclient_metrics.check_status', return_value=False)
@@ -283,8 +284,6 @@ expiry:  {
 
         mock_metrics_status.assert_called_once_with("out/a")
 
-    @unittest.mock.patch.dict(os.environ,
-                              {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"})
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)
     @unittest.mock.patch('reclient_metrics.check_status', return_value=True)
@@ -300,10 +299,12 @@ expiry:  {
         argv = ["ninja_reclient.py", "-C", "out/a", "chrome"]
 
         for i in range(7):
-            os.environ["AUTONINJA_BUILD_ID"] = "SOME_RANDOM_ID_%d" % i
             run_time = datetime.datetime(2017, 3, 16, 20, 0, 40 + i, 0)
             mock_now.return_value = run_time
-            self.assertEqual(0, ninja_reclient.main(argv))
+            with unittest.mock.patch.dict(
+                    os.environ,
+                {"AUTONINJA_BUILD_ID": "SOME_RANDOM_ID_%d" % i}):
+                self.assertEqual(0, ninja_reclient.main(argv))
             run_log_dir = os.path.join(
                 self.root_dir, "out", "a", ".reproxy_tmp", "logs",
                 "20170316T2000%d.000000_SOME_RANDOM_ID_%d" % (40 + i, i))
@@ -324,16 +325,18 @@ expiry:  {
             '20170316T200042.000000_SOME_RANDOM_ID_2',
             '20170316T200045.000000_SOME_RANDOM_ID_5',
         ]
-        for p in reclient_helper._test_only_cleanup_logdir_handles:
-            p.wait()
-        self.assertCountEqual(os.listdir(log_dir), want_remaining_dirs)
+
+        existing_log_dirs = [
+            d for d in os.listdir(log_dir)
+            if os.path.isdir(os.path.join(log_dir, d))
+        ]
+        self.assertCountEqual(existing_log_dirs, want_remaining_dirs)
         for d in want_remaining_dirs:
             self.assertTrue(
                 os.path.isfile(
                     os.path.join(self.root_dir, "out", "a", ".reproxy_tmp",
                                  "logs", d, "reproxy.rpl")))
 
-    @unittest.mock.patch.dict(os.environ, {})
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', side_effect=KeyboardInterrupt())
     def test_ninja_reclient_ninja_interrupted(self, mock_ninja, mock_call):

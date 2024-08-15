@@ -20,14 +20,14 @@
 #include "../../Eigen/SparseQR"
 
 /**
-  * \defgroup LevenbergMarquardt_Module Levenberg-Marquardt module
-  *
-  * \code
-  * #include </Eigen/LevenbergMarquardt>
-  * \endcode
-  *
-  * 
-  */
+ * \defgroup LevenbergMarquardt_Module Levenberg-Marquardt module
+ *
+ * \code
+ * #include </Eigen/LevenbergMarquardt>
+ * \endcode
+ *
+ *
+ */
 
 #include "../../Eigen/SparseCore"
 
@@ -46,4 +46,4 @@
 
 #include "../../Eigen/src/Core/util/ReenableStupidWarnings.h"
 
-#endif // EIGEN_LEVENBERGMARQUARDT_MODULE_H
+#endif  // EIGEN_LEVENBERGMARQUARDT_MODULE_H

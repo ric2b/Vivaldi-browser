@@ -8,6 +8,7 @@ import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.Pair;
 
+import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.supplier.LazyOneshotSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
@@ -57,12 +58,13 @@ public class ImprovedBookmarkRowCoordinator {
 
         propertyModel.set(BookmarkManagerProperties.BOOKMARK_ID, bookmarkId);
 
-        // Title
+        // Title.
         if (displayPref == BookmarkRowDisplayPref.COMPACT && bookmarkItem.isFolder()) {
             propertyModel.set(
                     ImprovedBookmarkRowProperties.TITLE,
                     String.format(
-                            bookmarkItem.getTitle() + " (%s)",
+                            "%s (%s)",
+                            bookmarkItem.getTitle(),
                             BookmarkUtils.getChildCountForDisplay(bookmarkId, mBookmarkModel)));
         } else {
             propertyModel.set(ImprovedBookmarkRowProperties.TITLE, bookmarkItem.getTitle());
@@ -105,8 +107,14 @@ public class ImprovedBookmarkRowCoordinator {
             propertyModel.set(ImprovedBookmarkRowProperties.ACCESSORY_VIEW, null);
         }
 
-        // Icon
+        // Icon.
         resolveImagesForBookmark(propertyModel, bookmarkItem);
+
+        if (BookmarkFeatures.isBookmarksAccountStorageEnabled()) {
+            propertyModel.set(
+                    ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK,
+                    !bookmarkItem.isAccountBookmark());
+        }
 
         return propertyModel;
     }
@@ -137,7 +145,7 @@ public class ImprovedBookmarkRowCoordinator {
             propertyModel.set(ImprovedBookmarkRowProperties.START_ICON_TINT, null);
         }
 
-        LazyOneshotSupplierImpl<Drawable> drawableSupplier =
+        LazyOneshotSupplier<Drawable> drawableSupplier =
                 new LazyOneshotSupplierImpl<>() {
                     @Override
                     public void doSet() {

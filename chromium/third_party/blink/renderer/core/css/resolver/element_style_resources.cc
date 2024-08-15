@@ -48,9 +48,8 @@
 #include "third_party/blink/renderer/core/style/style_generated_image.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
 #include "third_party/blink/renderer/core/style/style_image_set.h"
+#include "third_party/blink/renderer/core/style/style_mask_source_image.h"
 #include "third_party/blink/renderer/core/style/style_pending_image.h"
-#include "third_party/blink/renderer/core/style/style_svg_mask_reference_image.h"
-#include "third_party/blink/renderer/core/svg/svg_resource.h"
 #include "third_party/blink/renderer/core/svg/svg_tree_scope_resources.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cross_origin_attribute_value.h"
@@ -113,10 +112,13 @@ StyleImage* StyleImageLoader::Load(
   }
 
   if (auto* crossfade_value = DynamicTo<cssvalue::CSSCrossfadeValue>(value)) {
-    return MakeGarbageCollected<StyleCrossfadeImage>(
-        *crossfade_value,
-        CrossfadeArgument(crossfade_value->From(), cross_origin),
-        CrossfadeArgument(crossfade_value->To(), cross_origin));
+    HeapVector<Member<StyleImage>> style_images;
+    for (const auto& [image, percentage] :
+         crossfade_value->GetImagesAndPercentages()) {
+      style_images.push_back(CrossfadeArgument(*image, cross_origin));
+    }
+    return MakeGarbageCollected<StyleCrossfadeImage>(*crossfade_value,
+                                                     std::move(style_images));
   }
 
   if (auto* image_gradient_value =
@@ -169,8 +171,7 @@ StyleImage* StyleImageLoader::ResolveImageSet(
   }
   CSSValue& image_value = option->GetImage();
   // Artificially reject types that are not "supported".
-  if (RuntimeEnabledFeatures::CSSImageSetEnabled() &&
-      !IsA<CSSImageValue>(image_value) &&
+  if (!IsA<CSSImageValue>(image_value) &&
       !IsA<cssvalue::CSSGradientValue>(image_value)) {
     return nullptr;
   }
@@ -340,10 +341,14 @@ StyleImage* ElementStyleResources::LoadMaskSource(CSSValue& pending_value) {
         element_.OriginatingTreeScope().EnsureSVGTreeScopedResources();
     SVGResource* resource = tree_scope_resources.ResourceForId(
         image_value->NormalizedFragmentIdentifier());
-    return MakeGarbageCollected<StyleSVGMaskReferenceImage>(resource,
-                                                            image_value);
+    return MakeGarbageCollected<StyleMaskSourceImage>(resource, image_value);
   }
-  return nullptr;
+  StyleImage* image = image_value->CacheImage(
+      element_.GetDocument(), FetchParameters::ImageRequestBehavior::kNone,
+      kCrossOriginAttributeAnonymous);
+  return MakeGarbageCollected<StyleMaskSourceImage>(
+      To<StyleFetchedImage>(image), image_value->EnsureSVGResource(),
+      image_value);
 }
 
 void ElementStyleResources::LoadPendingImages(ComputedStyleBuilder& builder) {

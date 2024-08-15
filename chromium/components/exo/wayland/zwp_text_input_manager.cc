@@ -452,17 +452,16 @@ class WaylandTextInputDelegate : public TextInput::Delegate {
                ZCR_EXTENDED_TEXT_INPUT_V1_CONFIRM_PREEDIT_SINCE_VERSION;
   }
 
-  raw_ptr<wl_resource, DanglingUntriaged | ExperimentalAsh> text_input_;
-  raw_ptr<wl_resource, DanglingUntriaged | ExperimentalAsh>
-      extended_text_input_ = nullptr;
-  raw_ptr<wl_resource, DanglingUntriaged | ExperimentalAsh> surface_ = nullptr;
+  raw_ptr<wl_resource, DanglingUntriaged> text_input_;
+  raw_ptr<wl_resource, DanglingUntriaged> extended_text_input_ = nullptr;
+  raw_ptr<wl_resource, DanglingUntriaged> surface_ = nullptr;
 
   // Owned by Seat, which is updated before calling the callbacks of this
   // class.
-  const raw_ptr<const XkbTracker, ExperimentalAsh> xkb_tracker_;
+  const raw_ptr<const XkbTracker> xkb_tracker_;
 
   // Owned by Server, which always outlives this delegate.
-  const raw_ptr<SerialTracker, ExperimentalAsh> serial_tracker_;
+  const raw_ptr<SerialTracker> serial_tracker_;
   ui::XkbModifierConverter modifier_converter_{
       std::vector<std::string>(std::begin(kModifierNames),
                                std::end(kModifierNames))};
@@ -949,7 +948,7 @@ void extended_text_input_set_large_surrounding_text(wl_client* client,
   {
     text.resize(size);
     base::ScopedFD fd(raw_fd);
-    if (!base::ReadFromFD(fd.get(), text.data(), size)) {
+    if (!base::ReadFromFD(fd.get(), text)) {
       PLOG(ERROR) << "Failed to read file descriptor for surrounding text";
       return;
     }

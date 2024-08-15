@@ -217,6 +217,13 @@ struct FeaturesGL : FeatureSetBase
         &members,
     };
 
+    FeatureInfo preTransformTextureCubeGradDerivatives = {
+        "preTransformTextureCubeGradDerivatives",
+        FeatureCategory::OpenGLWorkarounds,
+        "Apply a vendor-specific transformation to explicit cubemap derivatives",
+        &members,
+    };
+
     FeatureInfo disableBlendFuncExtended = {
         "disableBlendFuncExtended",
         FeatureCategory::OpenGLWorkarounds,
@@ -701,6 +708,13 @@ struct FeaturesGL : FeatureSetBase
         FeatureCategory::OpenGLWorkarounds,
         "Resync depth range to apply clip control updates.",
         &members, "https://anglebug.com/8381"
+    };
+
+    FeatureInfo corruptProgramBinaryForTesting = {
+        "corruptProgramBinaryForTesting",
+        FeatureCategory::OpenGLWorkarounds,
+        "Corrupt the program binary retrieved from the driver for testing purposes.",
+        &members, "https://anglebug.com/8471"
     };
 
 };

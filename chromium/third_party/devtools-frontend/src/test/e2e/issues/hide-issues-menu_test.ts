@@ -26,7 +26,7 @@ import {
   toggleGroupByKind,
 } from '../helpers/issues-helpers.js';
 
-describe('Hide issues menu', async () => {
+describe('Hide issues menu', () => {
   it('should become visible on hovering over the issue header', async () => {
     const {frontend} = getBrowserAndPages();
     frontend.evaluate(() => {
@@ -102,10 +102,10 @@ describe('Hide issues menu', async () => {
   });
 
   it('should hide issue upon clicking the context menu entry', async () => {
-    await goToResource('issues/cross-origin-portal-post.html');
+    await goToResource('elements/quirks-mode.html');
     await navigateToIssuesTab();
 
-    const issueTitle = 'Cross-origin portal post messages are blocked on your site';
+    const issueTitle = 'Page layout may be unexpected due to Quirks Mode';
     const issueHeader = await getIssueHeaderByTitle(issueTitle);
     assertNotNullOrUndefined(issueHeader);
     await issueHeader.hover();
@@ -119,9 +119,10 @@ describe('Hide issues menu', async () => {
   });
 
   it('should unhide all issues upon clicking unhide all issues button', async () => {
-    await goToResource('issues/cross-origin-portal-post.html');
+    await goToResource('elements/quirks-mode.html');
     await navigateToIssuesTab();
-    const issueTitle = 'Cross-origin portal post messages are blocked on your site';
+
+    const issueTitle = 'Page layout may be unexpected due to Quirks Mode';
     const issueHeader = await getIssueHeaderByTitle(issueTitle);
     assertNotNullOrUndefined(issueHeader);
     await issueHeader.hover();
@@ -137,9 +138,10 @@ describe('Hide issues menu', async () => {
   });
 
   it('should contain unhide issues like this entry while hovering over a hidden issue', async () => {
-    await goToResource('issues/cross-origin-portal-post.html');
+    await goToResource('elements/quirks-mode.html');
     await navigateToIssuesTab();
-    const issueTitle = 'Cross-origin portal post messages are blocked on your site';
+
+    const issueTitle = 'Page layout may be unexpected due to Quirks Mode';
     const issueHeader = await getIssueHeaderByTitle(issueTitle);
     assertNotNullOrUndefined(issueHeader);
     await issueHeader.hover();
@@ -165,9 +167,10 @@ describe('Hide issues menu', async () => {
   });
 
   it('should unhide issue after clicking the unhide issues like this entry', async () => {
-    await goToResource('issues/cross-origin-portal-post.html');
+    await goToResource('elements/quirks-mode.html');
     await navigateToIssuesTab();
-    const issueTitle = 'Cross-origin portal post messages are blocked on your site';
+
+    const issueTitle = 'Page layout may be unexpected due to Quirks Mode';
     const issueHeader = await getIssueHeaderByTitle(issueTitle);
     assertNotNullOrUndefined(issueHeader);
     await issueHeader.hover();

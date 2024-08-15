@@ -118,6 +118,16 @@ TEST(TintSliceTest, CtorCArray) {
     EXPECT_FALSE(slice.IsEmpty());
 }
 
+TEST(TintSliceTest, CtorStdArray) {
+    std::array elements{1, 2, 3};
+
+    auto slice = Slice{elements};
+    EXPECT_EQ(slice.data, &elements[0]);
+    EXPECT_EQ(slice.len, 3u);
+    EXPECT_EQ(slice.cap, 3u);
+    EXPECT_FALSE(slice.IsEmpty());
+}
+
 TEST(TintSliceTest, Index) {
     int elements[] = {1, 2, 3};
 
@@ -192,6 +202,34 @@ TEST(TintSliceTest, Truncate_PastEnd) {
     EXPECT_EQ(truncated[0], 1);
     EXPECT_EQ(truncated[1], 2);
     EXPECT_EQ(truncated[2], 3);
+}
+
+TEST(TintSliceTest, Equality) {
+    int elements[] = {1, 2, 3};
+    auto a = Slice{elements};
+    {
+        auto b = a;
+        EXPECT_TRUE(a == b);
+        EXPECT_FALSE(a != b);
+    }
+    {
+        auto b = a;
+        b.data++;
+        EXPECT_FALSE(a == b);
+        EXPECT_TRUE(a != b);
+    }
+    {
+        auto b = a;
+        b.len++;
+        EXPECT_FALSE(a == b);
+        EXPECT_TRUE(a != b);
+    }
+    {
+        auto b = a;
+        b.cap++;
+        EXPECT_FALSE(a == b);
+        EXPECT_TRUE(a != b);
+    }
 }
 
 }  // namespace

@@ -11,7 +11,7 @@
 
 #include <emmintrin.h>
 
-#include "config/aom_dsp_rtcd.h"
+#include "config/av1_rtcd.h"
 
 #include "aom_dsp/aom_filter.h"
 #include "aom_dsp/x86/convolve_sse2.h"

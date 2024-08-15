@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/web_contents/web_contents_impl.h"
+
 #include <array>
+#include <optional>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -44,7 +47,6 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/text_input_manager.h"
-#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame.mojom-test-utils.h"
@@ -71,6 +73,7 @@
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -103,13 +106,15 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
+#include "ui/color/color_provider_manager.h"
+#include "ui/color/color_provider_utils.h"
 #include "ui/display/screen.h"
 #include "url/gurl.h"
 
@@ -487,11 +492,13 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ(new_size, shell()->web_contents()->GetContainerBounds().size());
 }
 
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, SetTitleOnUnload) {
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, SetTitleOnPagehide) {
+  DisableBackForwardCacheForTesting(shell()->web_contents(),
+                                    BackForwardCache::TEST_REQUIRES_NO_CACHING);
   GURL url(
       "data:text/html,"
       "<title>A</title>"
-      "<body onunload=\"document.title = 'B'\"></body>");
+      "<body onpagehide=\"document.title = 'B'\"></body>");
   ASSERT_TRUE(NavigateToURL(shell(), url));
   ASSERT_EQ(1, shell()->web_contents()->GetController().GetEntryCount());
   NavigationEntryImpl* entry1 = NavigationEntryImpl::FromNavigationEntry(
@@ -2628,8 +2635,6 @@ class WebContentsImplBrowserTestClientHintsEnabled
  public:
   void SetUp() override {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kUserAgentClientHint);
     WebContentsImplBrowserTest::SetUp();
   }
 };
@@ -2712,7 +2717,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTestClientHintsEnabled,
   blink::UserAgentOverride ua_override;
   ua_override.ua_string_override = "x";
   // Do NOT set `ua_metadata_override`, so the UA-CH headers are *removed*
-  ua_override.ua_metadata_override = absl::nullopt;
+  ua_override.ua_metadata_override = std::nullopt;
   UserAgentInjector injector(shell()->web_contents(), ua_override);
   EXPECT_TRUE(NavigateToURL(shell(), http2_server.GetURL("/empty.html")));
 
@@ -2766,7 +2771,7 @@ class WebContentsImplBrowserTestReduceAcceptLanguageOn
   void VerifyPersistAndGetReduceAcceptLanguage(
       const GURL& url,
       const std::string& persist_lang,
-      const absl::optional<std::string>& expect_lang) {
+      const std::optional<std::string>& expect_lang) {
     ReduceAcceptLanguageControllerDelegate* delegate =
         ShellContentBrowserClient::Get()
             ->browser_context()
@@ -2774,7 +2779,7 @@ class WebContentsImplBrowserTestReduceAcceptLanguageOn
 
     url::Origin origin = url::Origin::Create(url);
     delegate->PersistReducedLanguage(origin, persist_lang);
-    const absl::optional<std::string>& language =
+    const std::optional<std::string>& language =
         delegate->GetReducedLanguage(origin);
     EXPECT_EQ(expect_lang, language);
 
@@ -2809,7 +2814,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTestReduceAcceptLanguageOn,
                                           /*expect_lang=*/test_lang);
   VerifyPersistAndGetReduceAcceptLanguage(/*url=*/GURL("ws://example.com/"),
                                           /*persist_lang=*/test_lang,
-                                          /*expect_lang=*/absl::nullopt);
+                                          /*expect_lang=*/std::nullopt);
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -3168,7 +3173,7 @@ class UpdateTargetURLWaiter : public WebContentsDelegate {
       runner_->QuitClosure().Run();
   }
 
-  absl::optional<GURL> updated_target_url_;
+  std::optional<GURL> updated_target_url_;
   scoped_refptr<MessageLoopRunner> runner_;
 };
 
@@ -3429,15 +3434,14 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, TitleUpdateOnRestore) {
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url, Referrer(), /* initiator_origin= */ absl::nullopt,
-              /* initiator_base_url= */ absl::nullopt,
+              main_url, Referrer(), /* initiator_origin= */ std::nullopt,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context;
   restored_entry->SetPageState(
-      controller.GetLastCommittedEntry()->GetPageState(), context.get());
+      controller.GetLastCommittedEntry()->GetPageState(), &context);
   restored_entry->SetTitle(controller.GetLastCommittedEntry()->GetTitle());
 
   // Create a new tab.
@@ -4508,6 +4512,150 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_EQ(url_a, web_contents->GetLastCommittedURL());
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+// https://crbug.com/1402816. This test verifies that when mouse down is on main
+// frame and mouse up is on OOF iframe, the mouse up event is delivered to the
+// main frame as well to clear cached mouse states including autoscroll
+// selection state.
+// TODO(crbug.com/1517238): Disabled due to too many timeouts.
+IN_PROC_BROWSER_TEST_F(
+    WebContentsImplBrowserTest,
+    DISABLED_MouseUpInOOPIframeShouldCancelMainFrameAutoscrollSelection) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  GURL data_url(R"HTML(
+    data:text/html,
+    <!DOCTYPE html>
+    <html lang='en'>
+    <head>
+    <style>
+      %23parentDiv {
+        display: flex;
+      }
+      %23input1 {
+        border: 1px solid black;
+        margin: 20px;
+      }
+      %23iframe1 {
+        height: 200vh;
+      }
+    </style>
+    </head>
+    <body>
+      <div id='parentDiv'>
+        <iframe src='https://b.com/title1.html' id='iframe1'></iframe>
+        <div>
+          <input type='text' id='input1'>
+        </div>
+      </div>
+      </body>
+      </html>)HTML");
+
+  EXPECT_TRUE(NavigateToURL(shell(), data_url));
+  WaitForLoadStop(web_contents);
+
+  const double input_center_y =
+      EvalJs(web_contents,
+             "document.getElementById('input1').offsetTop + "
+             "document.getElementById('input1').offsetHeight / 2")
+          .ExtractDouble();
+  const double input_center_x =
+      EvalJs(web_contents,
+             "document.getElementById('input1').offsetLeft + "
+             "document.getElementById('input1').offsetWidth / 2")
+          .ExtractDouble();
+
+  // Click the input element and start typing.
+  SimulateMouseClickAt(web_contents, 0, blink::WebMouseEvent::Button::kLeft,
+                       gfx::Point(input_center_x, input_center_y));
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('A'),
+                   ui::DomCode::US_A, ui::VKEY_A, false, false, false, false);
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('B'),
+                   ui::DomCode::US_B, ui::VKEY_B, false, false, false, false);
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "var inputElement = document.getElementById('input1');"
+                     "new Promise(function(resolve) {"
+                     "  if (inputElement.value == 'AB')"
+                     "    resolve(true);"
+                     "  inputElement.addEventListener('change', () => {"
+                     "    if (inputElement.value == 'AB')"
+                     "      resolve(true);"
+                     "  });"
+                     "});"));
+  EXPECT_EQ("AB",
+            EvalJs(web_contents, "document.getElementById('input1').value")
+                .ExtractString());
+
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "document.addEventListener('mousedown', () => { "
+                     "window.receivedMouseDown = true; });"));
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "document.addEventListener('mouseup', () => { "
+                     "window.receivedMouseUp = true; });"));
+
+  // Now, start the drag from input element to the OOP iframe.
+  SimulateMouseEvent(web_contents, blink::WebMouseEvent::Type::kMouseDown,
+                     blink::WebMouseEvent::Button::kLeft,
+                     gfx::Point(input_center_x, input_center_y));
+  SimulateMouseEvent(web_contents, blink::WebMouseEvent::Type::kMouseMove,
+                     blink::WebMouseEvent::Button::kLeft,
+                     gfx::Point(input_center_x - 5, input_center_y));
+  SimulateMouseEvent(web_contents, blink::WebMouseEvent::Type::kMouseMove,
+                     blink::WebMouseEvent::Button::kLeft,
+                     gfx::Point(input_center_x - 10, input_center_y));
+
+  const double iframe_center_x =
+      EvalJs(web_contents,
+             "document.getElementById('iframe1').offsetLeft + "
+             "document.getElementById('iframe1').offsetWidth / 2")
+          .ExtractDouble();
+
+  SimulateMouseEvent(web_contents, blink::WebMouseEvent::Type::kMouseMove,
+                     blink::WebMouseEvent::Button::kLeft,
+                     gfx::Point(iframe_center_x, input_center_y));
+  RunUntilInputProcessed(web_contents->GetRenderWidgetHostWithPageFocus());
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "new Promise(resolve => setTimeout(() => {"
+                     "  resolve(window.receivedMouseDown);"
+                     "}));"));
+  EXPECT_TRUE(web_contents->GetInputEventRouter()
+                  ->root_view_receive_additional_mouse_up_);
+
+  SimulateMouseEvent(web_contents, blink::WebMouseEvent::Type::kMouseUp,
+                     blink::WebMouseEvent::Button::kLeft,
+                     gfx::Point(iframe_center_x, input_center_y));
+  RunUntilInputProcessed(web_contents->GetRenderWidgetHostWithPageFocus());
+  // Main frame should receive mouse up event.
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "new Promise(resolve => setTimeout(() => {"
+                     "  resolve(window.receivedMouseUp);"
+                     "}));"));
+  EXPECT_FALSE(web_contents->GetInputEventRouter()
+                   ->root_view_receive_additional_mouse_up_);
+
+  // Type again in input element, insert text should be left to right.
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('E'),
+                   ui::DomCode::US_E, ui::VKEY_E, false, false, false, false);
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('F'),
+                   ui::DomCode::US_F, ui::VKEY_F, false, false, false, false);
+  EXPECT_TRUE(ExecJs(web_contents,
+                     "var inputElement = document.getElementById('input1');"
+                     "new Promise(function(resolve) {"
+                     "  if (inputElement.value == 'EF')"
+                     "    resolve(true);"
+                     "  inputElement.addEventListener('change', () => {"
+                     "    if (inputElement.value == 'EF')"
+                     "      resolve(true);"
+                     "  });"
+                     "});"));
+  EXPECT_EQ("EF",
+            EvalJs(web_contents, "document.getElementById('input1').value")
+                .ExtractString());
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FrameCount) {
   ASSERT_TRUE(embedded_test_server()->Start());
   base::HistogramTester histogram_tester;
@@ -4918,7 +5066,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ(shell()->web_contents()->GetThemeColor(), 0xFFFF0000u);
 
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
-  EXPECT_EQ(shell()->web_contents()->GetThemeColor(), absl::nullopt);
+  EXPECT_EQ(shell()->web_contents()->GetThemeColor(), std::nullopt);
 
   shell()->web_contents()->GetController().GoBack();
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
@@ -5207,12 +5355,18 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       ClipboardPasteData("random pasted text", std::string(), {});
 
   EXPECT_FALSE(web_contents->ShouldIgnoreUnresponsiveRenderer());
-  web_contents->IsClipboardPasteContentAllowed(
-      GURL("https://google.com"), ui::ClipboardFormatType::PlainTextType(),
+  web_contents->IsClipboardPasteAllowedByPolicy(
+      ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                        base::BindLambdaForTesting([web_contents] {
+                          return web_contents->GetBrowserContext();
+                        }),
+                        *web_contents->GetPrimaryMainFrame()),
+      {.format_type = ui::ClipboardFormatType::PlainTextType()},
       clipboard_paste_data,
       base::BindLambdaForTesting(
           [&web_contents](
-              absl::optional<ClipboardPasteData> clipboard_paste_data) {
+              std::optional<ClipboardPasteData> clipboard_paste_data) {
             EXPECT_TRUE(clipboard_paste_data.has_value());
             EXPECT_TRUE(web_contents->ShouldIgnoreUnresponsiveRenderer());
           }));
@@ -5673,7 +5827,7 @@ class MediaWaiter : public WebContentsObserver {
   void WaitForMediaDestroyed() { media_destroyed_loop_.Run(); }
 
  private:
-  absl::optional<MediaPlayerId> started_media_id_;
+  std::optional<MediaPlayerId> started_media_id_;
   base::RunLoop media_started_playing_loop_;
   base::RunLoop media_destroyed_loop_;
 };
@@ -5986,15 +6140,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsFencedFrameBrowserTest,
     video.play();
   )"));
 
-  // Get a watch time callback from `fenced_frame`.
-  media::MediaMetricsProvider::RecordAggregateWatchTimeCallback
-      record_playback_cb = static_cast<RenderFrameHostImpl*>(fenced_frame)
-                               ->GetRecordAggregateWatchTimeCallback();
-  std::move(record_playback_cb)
-      .Run(base::TimeDelta(), base::TimeDelta(), true, true);
-  // Check if the URL is from the top level frame.
-  DCHECK_EQ(top_url, delegate.watch_time().url);
-
   base::RunLoop run_loop;
   test_recorder.SetOnAddEntryCallback(UkmEntry::kEntryName,
                                       run_loop.QuitClosure());
@@ -6007,8 +6152,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsFencedFrameBrowserTest,
 
   const auto& entries = test_recorder.GetEntriesByName(UkmEntry::kEntryName);
   EXPECT_EQ(1u, entries.size());
-  for (const auto* entry : entries)
+  for (const ukm::mojom::UkmEntry* entry : entries) {
     test_recorder.ExpectEntryMetric(entry, UkmEntry::kIsTopFrameName, false);
+  }
 }
 
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(USE_STARSCAN)
@@ -6164,6 +6310,18 @@ class MockColorProviderSource : public ui::ColorProviderSource {
   const ui::ColorProvider* GetColorProvider() const override {
     return &provider_;
   }
+  const ui::RendererColorMap GetRendererColorMap(
+      ui::ColorProviderKey::ColorMode color_mode,
+      ui::ColorProviderKey::ForcedColors forced_colors) const override {
+    auto key = GetColorProviderKey();
+    key.color_mode = color_mode;
+    key.forced_colors = forced_colors;
+    ui::ColorProvider* color_provider =
+        ui::ColorProviderManager::Get().GetColorProviderFor(key);
+    CHECK(color_provider);
+    return ui::CreateRendererColorMap(*color_provider);
+  }
+
   ui::ColorProviderKey GetColorProviderKey() const override { return key_; }
 
  private:

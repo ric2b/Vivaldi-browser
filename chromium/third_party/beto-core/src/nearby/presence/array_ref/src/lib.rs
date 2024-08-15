@@ -12,8 +12,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 //! Crate exposing macros to take array references of slices
 

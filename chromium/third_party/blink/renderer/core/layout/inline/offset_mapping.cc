@@ -13,9 +13,9 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/position.h"
-#include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
+#include "third_party/blink/renderer/core/layout/block_node.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_node.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
+#include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/platform/text/character.h"
 
 namespace blink {
@@ -117,10 +117,13 @@ void OffsetMappingUnit::AssertValid() const {
     const auto& layout_text = To<LayoutText>(*layout_object_);
     const unsigned text_start =
         AssociatedNode() ? layout_text.TextStartOffset() : 0;
-    const unsigned text_end = text_start + layout_text.TextLength();
     SECURITY_DCHECK(dom_end_ >= text_start)
         << dom_end_ << " vs. " << text_start;
-    SECURITY_DCHECK(dom_end_ <= text_end) << dom_end_ << " vs. " << text_end;
+    if (!RuntimeEnabledFeatures::OffsetMappingUnitVariableEnabled()) {
+      const unsigned text_end =
+          text_start + layout_text.TransformedTextLength();
+      SECURITY_DCHECK(dom_end_ <= text_end) << dom_end_ << " vs. " << text_end;
+    }
   } else {
     SECURITY_DCHECK(dom_start_ == 0) << dom_start_;
     SECURITY_DCHECK(dom_end_ == 1) << dom_end_;
@@ -365,7 +368,6 @@ base::span<const OffsetMappingUnit> OffsetMapping::GetMappingUnitsForNode(
     const Node& node) const {
   const auto it = ranges_.find(&node);
   if (it == ranges_.end()) {
-    DUMP_WILL_BE_NOTREACHED_NORETURN() << node;
     return {};
   }
   return base::make_span(units_.begin() + it->value.first,

@@ -82,9 +82,6 @@ void BalsaFrame::Reset() {
   trailer_lines_.clear();
   start_of_trailer_line_ = 0;
   trailer_length_ = 0;
-  if (trailer_ != nullptr) {
-    trailer_->Clear();
-  }
   if (trailers_ != nullptr) {
     trailers_->Clear();
   }
@@ -458,15 +455,6 @@ bool BalsaFrame::FindColonsAndParseIntoKeyValue(const Lines& lines,
       CleanUpKeyValueWhitespace(stream_begin, line_begin, current, line_end,
                                 &current_header_line);
     }
-
-    const absl::string_view key(
-        stream_begin + current_header_line.first_char_idx,
-        current_header_line.key_end_idx - current_header_line.first_char_idx);
-    const absl::string_view value(
-        stream_begin + current_header_line.value_begin_idx,
-        current_header_line.last_char_idx -
-            current_header_line.value_begin_idx);
-    visitor_->OnHeader(key, value);
   }
 
   return true;
@@ -1263,7 +1251,7 @@ size_t BalsaFrame::ProcessInput(const char* input, size_t size) {
           const char c = *current;
           ++current;
           ++trailer_length_;
-          if (GetTrailers() != nullptr) {
+          if (trailers_ != nullptr) {
             // Reuse the header length limit for trailer, which is just a bunch
             // of headers.
             if (trailer_length_ > max_header_length_) {
@@ -1279,22 +1267,19 @@ size_t BalsaFrame::ProcessInput(const char* input, size_t size) {
           }
           if (HeaderFramingFound(c) != 0) {
             parse_state_ = BalsaFrameEnums::MESSAGE_FULLY_READ;
-            if (BalsaHeaders* trailers = GetTrailers(); trailers != nullptr) {
-              trailers->WriteFromFramer(on_entry, current - on_entry);
-              trailers->DoneWritingFromFramer();
-              ProcessHeaderLines(trailer_lines_, true /*is_trailer*/, trailers);
+            if (trailers_ != nullptr) {
+              trailers_->WriteFromFramer(on_entry, current - on_entry);
+              trailers_->DoneWritingFromFramer();
+              ProcessHeaderLines(trailer_lines_, true /*is_trailer*/,
+                                 trailers_.get());
               if (parse_state_ == BalsaFrameEnums::ERROR) {
                 return current - input;
               }
-              if (trailers_ != nullptr) {
-                visitor_->OnTrailers(std::move(trailers_));
+              visitor_->OnTrailers(std::move(trailers_));
 
-                // Allows trailers to be delivered without another call to
-                // EnableTrailers() in case the framer is Reset().
-                trailers_ = std::make_unique<BalsaHeaders>();
-              } else {
-                visitor_->ProcessTrailers(*trailer_);
-              }
+              // Allows trailers to be delivered without another call to
+              // EnableTrailers() in case the framer is Reset().
+              trailers_ = std::make_unique<BalsaHeaders>();
             }
             visitor_->OnTrailerInput(
                 absl::string_view(on_entry, current - on_entry));
@@ -1302,8 +1287,8 @@ size_t BalsaFrame::ProcessInput(const char* input, size_t size) {
             return current - input;
           }
         }
-        if (BalsaHeaders* trailers = GetTrailers(); trailers != nullptr) {
-          trailers->WriteFromFramer(on_entry, current - on_entry);
+        if (trailers_ != nullptr) {
+          trailers_->WriteFromFramer(on_entry, current - on_entry);
         }
         visitor_->OnTrailerInput(
             absl::string_view(on_entry, current - on_entry));
@@ -1371,13 +1356,6 @@ void BalsaFrame::HandleHeadersTooLongError() {
   }
 
   HandleError(BalsaFrameEnums::HEADERS_TOO_LONG);
-}
-
-BalsaHeaders* BalsaFrame::GetTrailers() const {
-  if (trailers_ != nullptr) {
-    return trailers_.get();
-  }
-  return trailer_;
 }
 
 const int32_t BalsaFrame::kValidTerm1;

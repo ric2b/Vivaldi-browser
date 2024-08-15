@@ -5,6 +5,7 @@
 #define COMPONENTS_OPTIMIZATION_GUIDE_CORE_MODEL_EXECUTION_MODEL_EXECUTION_MANAGER_H_
 
 #include <map>
+#include <memory>
 
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
@@ -13,7 +14,11 @@
 #include "base/sequence_checker.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
+#include "components/optimization_guide/core/optimization_target_model_observer.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
+#include "components/optimization_guide/proto/model_quality_service.pb.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 #include "url/gurl.h"
 
 class OptimizationGuideLogger;
@@ -30,29 +35,55 @@ namespace optimization_guide {
 
 class ModelExecutionFetcher;
 class OnDeviceModelServiceController;
+class OptimizationGuideModelProvider;
 
-class ModelExecutionManager {
+class ModelExecutionManager : public OptimizationTargetModelObserver {
  public:
   ModelExecutionManager(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       signin::IdentityManager* identity_manager,
-      std::unique_ptr<OnDeviceModelServiceController>
+      scoped_refptr<OnDeviceModelServiceController>
           on_device_model_service_controller,
+      OptimizationGuideModelProvider* model_provider,
       OptimizationGuideLogger* optimization_guide_logger);
 
-  ~ModelExecutionManager();
+  ~ModelExecutionManager() override;
 
   ModelExecutionManager(const ModelExecutionManager&) = delete;
   ModelExecutionManager& operator=(const ModelExecutionManager&) = delete;
 
-  void ExecuteModel(proto::ModelExecutionFeature feature,
-                    const google::protobuf::MessageLite& request_metadata,
-                    OptimizationGuideModelExecutionResultCallback callback);
+  // Executes the model when model execution happens remotely.
+  //
+  // As this can potentially be called as a fallback from on-device,
+  // `log_ai_data_request` may be populated already with any existing work prior
+  // to calling this function.
+  void ExecuteModel(
+      proto::ModelExecutionFeature feature,
+      const google::protobuf::MessageLite& request_metadata,
+      std::unique_ptr<proto::LogAiDataRequest> log_ai_data_request,
+      OptimizationGuideModelExecutionResultCallback callback);
+
+  // Starts a new session for `feature`.
+  std::unique_ptr<OptimizationGuideModelExecutor::Session> StartSession(
+      proto::ModelExecutionFeature feature);
+
+  // OptimizationTargetModelObserver:
+  void OnModelUpdated(proto::OptimizationTarget target,
+                      base::optional_ref<const ModelInfo> model_info) override;
 
  private:
+  // Called from SessionImpl (via ExecuteRemoteFn) when model execution happens
+  // remotely.
+  void ExecuteModelWithStreaming(
+      proto::ModelExecutionFeature feature,
+      const google::protobuf::MessageLite& request_metadata,
+      std::unique_ptr<proto::LogAiDataRequest> log_ai_data_request,
+      OptimizationGuideModelExecutionResultStreamingCallback callback);
+
   // Invoked when the model execution result is available.
   void OnModelExecuteResponse(
       proto::ModelExecutionFeature feature,
+      std::unique_ptr<proto::LogAiDataRequest> log_ai_data_request,
       OptimizationGuideModelExecutionResultCallback callback,
       base::expected<const proto::ExecuteResponse,
                      OptimizationGuideModelExecutionError> execute_response);
@@ -74,16 +105,12 @@ class ModelExecutionManager {
   // incognito profiles.
   const raw_ptr<signin::IdentityManager> identity_manager_;
 
-  // The set of OAuth scopes to use for requesting access token.
-  std::set<std::string> oauth_scopes_;
+  // The model provider to observe for updates to auxiliary models.
+  raw_ptr<OptimizationGuideModelProvider> model_provider_;
 
   // Controller for the on-device service.
-  std::unique_ptr<OnDeviceModelServiceController>
+  scoped_refptr<OnDeviceModelServiceController>
       on_device_model_service_controller_;
-
-  // The path for the on-device model. Can be empty when it was not populated
-  // yet. Can be overridden from command-line.
-  base::FilePath on_device_model_path_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

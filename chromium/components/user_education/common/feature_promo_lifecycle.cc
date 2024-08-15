@@ -10,44 +10,14 @@
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
+#include "components/user_education/common/feature_promo_data.h"
 #include "components/user_education/common/feature_promo_storage_service.h"
 #include "components/user_education/common/help_bubble.h"
+#include "components/user_education/common/user_education_features.h"
 
 namespace user_education {
 
 namespace {
-
-FeaturePromoResult CanShowSnoozePromo(
-    const FeaturePromoStorageService::PromoData& promo_data) {
-  // This IPH has been dismissed by user permanently.
-  if (promo_data.is_dismissed) {
-    return FeaturePromoResult::kPermanentlyDismissed;
-  }
-
-  // This IPH is shown for the first time.
-  if (promo_data.show_count == 0) {
-    return FeaturePromoResult::Success();
-  }
-
-  // Corruption: Snooze time is in the future.
-  if (promo_data.last_snooze_time > base::Time::Now()) {
-    return FeaturePromoResult::kSnoozed;
-  }
-
-  // Use the snooze duration if this promo was snoozed the last time it was
-  // shown; otherwise use the default duration.
-  // TODO(dfried): Revisit this for 2.0.
-  const base::TimeDelta snooze_time =
-      (promo_data.last_snooze_time > promo_data.last_show_time)
-          ? promo_data.last_snooze_duration
-          : FeaturePromoLifecycle::kDefaultSnoozeDuration;
-
-  // The IPH was snoozed, so it shouldn't be shown again until the snooze
-  // duration ends.
-  return base::Time::Now() >= (promo_data.last_show_time + snooze_time)
-             ? FeaturePromoResult::Success()
-             : FeaturePromoResult::kSnoozed;
-}
 
 class ScopedPromoData {
  public:
@@ -55,24 +25,22 @@ class ScopedPromoData {
                   const base::Feature* iph_feature)
       : storage_service_(storage_service), iph_feature_(iph_feature) {
     promo_data_ = storage_service_->ReadPromoData(*iph_feature)
-                      .value_or(FeaturePromoStorageService::PromoData());
+                      .value_or(FeaturePromoData());
   }
 
   ~ScopedPromoData() {
     storage_service_->SavePromoData(*iph_feature_, promo_data_);
   }
 
-  FeaturePromoStorageService::PromoData* operator->() { return &promo_data_; }
+  FeaturePromoData* operator->() { return &promo_data_; }
 
  private:
-  FeaturePromoStorageService::PromoData promo_data_;
+  FeaturePromoData promo_data_;
   const raw_ptr<FeaturePromoStorageService> storage_service_;
   const raw_ptr<const base::Feature> iph_feature_;
 };
 
 }  // namespace
-
-constexpr base::TimeDelta FeaturePromoLifecycle::kDefaultSnoozeDuration;
 
 FeaturePromoLifecycle::FeaturePromoLifecycle(
     FeaturePromoStorageService* storage_service,
@@ -118,8 +86,27 @@ FeaturePromoResult FeaturePromoLifecycle::CanShow() const {
                  ? FeaturePromoResult::kPermanentlyDismissed
                  : FeaturePromoResult::Success();
     case PromoSubtype::kLegalNotice:
+    case PromoSubtype::kActionableAlert:
       return data->is_dismissed ? FeaturePromoResult::kPermanentlyDismissed
                                 : FeaturePromoResult::Success();
+  }
+}
+
+bool FeaturePromoLifecycle::CanSnooze() const {
+  switch (promo_type_) {
+    case PromoType::kLegacy:
+    case PromoType::kToast:
+      return false;
+    case PromoType::kCustomAction:
+    case PromoType::kSnooze:
+    case PromoType::kTutorial:
+      // Only enforce snooze count in V2 to avoid breaking backwards behavior.
+      return !features::IsUserEducationV2() ||
+             storage_service_->GetSnoozeCount(*iph_feature_) <
+                 features::GetMaxSnoozeCount();
+    case PromoType::kUnspecified:
+      NOTREACHED();
+      return false;
   }
 }
 
@@ -134,8 +121,12 @@ void FeaturePromoLifecycle::OnPromoShown(
     return;
   }
   ScopedPromoData data(storage_service_, iph_feature_);
+  const auto now = GetCurrentTime();
+  if (data->show_count == 0) {
+    data->first_show_time = now;
+  }
   ++data->show_count;
-  data->last_show_time = base::Time::Now();
+  data->last_show_time = now;
   RecordShown();
 }
 
@@ -147,16 +138,16 @@ void FeaturePromoLifecycle::OnPromoShownForDemo(
 bool FeaturePromoLifecycle::OnPromoBubbleClosed() {
   help_bubble_.reset();
   if (state_ == State::kRunning) {
-    MaybeRecordCloseReason(CloseReason::kAbortPromo);
+    MaybeRecordClosedReason(FeaturePromoClosedReason::kAbortPromo);
     CHECK(MaybeEndPromo());
     return true;
   }
   return false;
 }
 
-void FeaturePromoLifecycle::OnPromoEnded(CloseReason close_reason,
+void FeaturePromoLifecycle::OnPromoEnded(FeaturePromoClosedReason close_reason,
                                          bool continue_promo) {
-  MaybeRecordCloseReason(close_reason);
+  MaybeRecordClosedReason(close_reason);
   if (continue_promo) {
     CHECK(is_bubble_visible());
     state_ = State::kContinued;
@@ -164,19 +155,20 @@ void FeaturePromoLifecycle::OnPromoEnded(CloseReason close_reason,
     // custom action), the result is not recorded until after the follow-up
     // finishes, because e.g. an aborted tutorial counts as a snooze.
     if (promo_subtype_ != PromoSubtype::kNormal ||
-        close_reason != CloseReason::kAction) {
-      MaybeWriteClosePromoData(close_reason);
+        close_reason != FeaturePromoClosedReason::kAction) {
+      MaybeWriteClosedPromoData(close_reason);
     }
     help_bubble_->Close();
   } else {
     CHECK(MaybeEndPromo());
-    MaybeWriteClosePromoData(close_reason);
+    MaybeWriteClosedPromoData(close_reason);
   }
 }
 
 void FeaturePromoLifecycle::OnContinuedPromoEnded(bool completed_successfully) {
-  MaybeWriteClosePromoData(completed_successfully ? CloseReason::kAction
-                                                  : CloseReason::kSnooze);
+  MaybeWriteClosedPromoData(completed_successfully
+                                ? FeaturePromoClosedReason::kAction
+                                : FeaturePromoClosedReason::kSnooze);
   MaybeEndPromo();
 }
 
@@ -192,7 +184,51 @@ bool FeaturePromoLifecycle::MaybeEndPromo() {
   return true;
 }
 
-void FeaturePromoLifecycle::MaybeWriteClosePromoData(CloseReason close_reason) {
+FeaturePromoResult FeaturePromoLifecycle::CanShowSnoozePromo(
+    const FeaturePromoData& promo_data) const {
+  // This IPH has been dismissed by user permanently.
+  if (promo_data.is_dismissed) {
+    return FeaturePromoResult::kPermanentlyDismissed;
+  }
+
+  // This IPH is shown for the first time.
+  if (promo_data.show_count == 0) {
+    return FeaturePromoResult::Success();
+  }
+
+  const auto now = GetCurrentTime();
+
+  // Figure out when the promo can show next.
+  if (features::IsUserEducationV2()) {
+    // In V2, there is a separate cooldown if a promo is snoozed vs. shown but
+    // not snoozed, for example, if it was aborted for some other reason and not
+    // dismissed.
+    if (now < promo_data.last_snooze_time + features::GetSnoozeDuration()) {
+      return FeaturePromoResult::kSnoozed;
+    }
+    if (now < promo_data.last_show_time + features::GetAbortCooldown()) {
+      return FeaturePromoResult::kRecentlyAborted;
+    }
+  } else {
+    // In V1, it was always the default snooze duration from the previous
+    // show or snooze time (non-snoozed IPH were subject to "non-clicker policy"
+    // which still used the default snooze duration).
+    const auto last_show =
+        std::max(promo_data.last_show_time, promo_data.last_snooze_time);
+    if (now < last_show + features::GetSnoozeDuration()) {
+      return FeaturePromoResult::kSnoozed;
+    }
+  }
+
+  return FeaturePromoResult::Success();
+}
+
+base::Time FeaturePromoLifecycle::GetCurrentTime() const {
+  return storage_service_->GetCurrentTime();
+}
+
+void FeaturePromoLifecycle::MaybeWriteClosedPromoData(
+    FeaturePromoClosedReason close_reason) {
   if (is_demo() || wrote_close_data_) {
     return;
   }
@@ -200,11 +236,11 @@ void FeaturePromoLifecycle::MaybeWriteClosePromoData(CloseReason close_reason) {
   wrote_close_data_ = true;
 
   switch (close_reason) {
-    case CloseReason::kAction:
-    case CloseReason::kCancel:
-    case CloseReason::kDismiss:
-    case CloseReason::kFeatureEngaged:
-    case CloseReason::kTimeout: {
+    case FeaturePromoClosedReason::kAction:
+    case FeaturePromoClosedReason::kCancel:
+    case FeaturePromoClosedReason::kDismiss:
+    case FeaturePromoClosedReason::kFeatureEngaged:
+    case FeaturePromoClosedReason::kTimeout: {
       ScopedPromoData data(storage_service_, iph_feature_);
       if (!app_id_.empty()) {
         data->shown_for_apps.insert(app_id_);
@@ -214,19 +250,18 @@ void FeaturePromoLifecycle::MaybeWriteClosePromoData(CloseReason close_reason) {
       break;
     }
 
-    case CloseReason::kSnooze: {
+    case FeaturePromoClosedReason::kSnooze: {
       ScopedPromoData data(storage_service_, iph_feature_);
       ++data->snooze_count;
-      data->last_snooze_time = base::Time::Now();
-      data->last_snooze_duration = kDefaultSnoozeDuration;
+      data->last_snooze_time = GetCurrentTime();
       break;
     }
 
-    case CloseReason::kAbortPromo:
-    case CloseReason::kOverrideForDemo:
-    case CloseReason::kOverrideForPrecedence:
-    case CloseReason::kOverrideForTesting:
-    case CloseReason::kOverrideForUIRegionConflict:
+    case FeaturePromoClosedReason::kAbortPromo:
+    case FeaturePromoClosedReason::kOverrideForDemo:
+    case FeaturePromoClosedReason::kOverrideForPrecedence:
+    case FeaturePromoClosedReason::kOverrideForTesting:
+    case FeaturePromoClosedReason::kOverrideForUIRegionConflict:
       // No additional action required.
       break;
   }
@@ -258,6 +293,10 @@ void FeaturePromoLifecycle::RecordShown() {
       // Ends with a period.
       type_action_name.append("LegalNotice.");
       break;
+    case PromoSubtype::kActionableAlert:
+      // Ends with a period.
+      type_action_name.append("ActionableAlert.");
+      break;
   }
   switch (promo_type_) {
     case PromoType::kLegacy:
@@ -281,7 +320,8 @@ void FeaturePromoLifecycle::RecordShown() {
   base::RecordComputedAction(type_action_name);
 }
 
-void FeaturePromoLifecycle::MaybeRecordCloseReason(CloseReason close_reason) {
+void FeaturePromoLifecycle::MaybeRecordClosedReason(
+    FeaturePromoClosedReason close_reason) {
   if (is_demo() || state_ != State::kRunning) {
     return;
   }
@@ -289,37 +329,37 @@ void FeaturePromoLifecycle::MaybeRecordCloseReason(CloseReason close_reason) {
   std::string action_name = "UserEducation.MessageAction.";
 
   switch (close_reason) {
-    case CloseReason::kDismiss:
+    case FeaturePromoClosedReason::kDismiss:
       action_name.append("Dismiss");
       break;
-    case CloseReason::kSnooze:
+    case FeaturePromoClosedReason::kSnooze:
       action_name.append("Snooze");
       break;
-    case CloseReason::kAction:
+    case FeaturePromoClosedReason::kAction:
       action_name.append("Action");
       break;
-    case CloseReason::kCancel:
+    case FeaturePromoClosedReason::kCancel:
       action_name.append("Cancel");
       break;
-    case CloseReason::kTimeout:
+    case FeaturePromoClosedReason::kTimeout:
       action_name.append("Timeout");
       break;
-    case CloseReason::kAbortPromo:
+    case FeaturePromoClosedReason::kAbortPromo:
       action_name.append("Abort");
       break;
-    case CloseReason::kFeatureEngaged:
+    case FeaturePromoClosedReason::kFeatureEngaged:
       action_name.append("FeatureEngaged");
       break;
-    case CloseReason::kOverrideForUIRegionConflict:
+    case FeaturePromoClosedReason::kOverrideForUIRegionConflict:
       action_name.append("OverrideForUIRegionConflict");
       break;
-    case CloseReason::kOverrideForPrecedence:
+    case FeaturePromoClosedReason::kOverrideForPrecedence:
       action_name.append("OverrideForPrecedence");
       break;
-    case CloseReason::kOverrideForDemo:
+    case FeaturePromoClosedReason::kOverrideForDemo:
       // Not used for metrics.
       return;
-    case CloseReason::kOverrideForTesting:
+    case FeaturePromoClosedReason::kOverrideForTesting:
       // Not used for metrics.
       return;
   }
@@ -331,8 +371,8 @@ void FeaturePromoLifecycle::MaybeRecordCloseReason(CloseReason close_reason) {
   // Record the histogram.
   std::string histogram_name =
       std::string("UserEducation.MessageAction.").append(iph_feature()->name);
-  base::UmaHistogramEnumeration(histogram_name,
-                                static_cast<CloseReason>(close_reason));
+  base::UmaHistogramEnumeration(
+      histogram_name, static_cast<FeaturePromoClosedReason>(close_reason));
 }
 
 }  // namespace user_education

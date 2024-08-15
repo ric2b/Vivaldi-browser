@@ -77,7 +77,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         @Override
         public void bookmarkModelChanged() {
             boolean isReadingListFolder = mCurrentFolder != null &&
-                    mCurrentFolder.getId().equals(mBookmarkModel.getReadingListFolder());
+                    mCurrentFolder.getId().equals(mBookmarkModel.getDefaultReadingListFolder());
             setAddToReadingListButtonVisible(isReadingListFolder);
         }
     };
@@ -103,7 +103,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
                     getMenu().findItem(R.id.add_page_to_reading_list_menu_id).setVisible(false);
                 if (mCurrentFolder != null &&
                         mCurrentFolder.getId().equals(mBookmarkModel.getTrashFolderId()))
-                    BookmarkUtils.setLastUsedParent(getContext(), mCurrentFolder.getId());
+                    BookmarkUtils.setLastUsedParent(mCurrentFolder.getId());
             }
         }
         setOnMenuItemClickListener(this);
@@ -381,7 +381,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setSortButtonVisible(boolean visible) {
-        getMenu().findItem(R.id.sort_bookmarks_id).setVisible(visible);
+//!!        getMenu().findItem(R.id.sort_bookmarks_id).setVisible(visible); TODO 122
     }
 
     void setCloseButtonVisible(boolean visible) {

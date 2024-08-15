@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './lit/components/record-time-chip.js';
-import './lit/components/svg-wrapper.js';
+import './lit/components/index.js';
 
 import {
   ColorChangeUpdater,
@@ -27,7 +26,6 @@ import {ModeConstraints} from './device/type.js';
 import * as dom from './dom.js';
 import {reportError} from './error.js';
 import * as expert from './expert.js';
-import {GalleryButton} from './gallerybutton.js';
 import {Intent} from './intent.js';
 import * as Comlink from './lib/comlink.js';
 import {startMeasuringMemoryUsage} from './memory_usage.js';
@@ -35,6 +33,7 @@ import * as metrics from './metrics.js';
 import * as filesystem from './models/file_system.js';
 import * as loadTimeData from './models/load_time_data.js';
 import * as localStorage from './models/local_storage.js';
+import {DefaultResultSaver} from './models/result_saver.js';
 import {ChromeHelper} from './mojo/chrome_helper.js';
 import {DeviceOperator} from './mojo/device_operator.js';
 import {WindowStateType} from './mojo/type.js';
@@ -331,7 +330,7 @@ async function setupMultiWindowHandling(
       Comlink.proxy(handleSuspend), Comlink.proxy(handleResume));
   await ChromeHelper.getInstance().initCameraWindowController();
   windowController.addWindowStateListener((states) => {
-    const isMinimizing = states.includes(WindowStateType.MINIMIZED);
+    const isMinimizing = states.includes(WindowStateType.kMinimized);
     // If the window is minimized while recording time-lapse, the camera
     // usage will not be paused to keep recording.
     if (isMinimizing && state.get(state.State.RECORDING) &&
@@ -474,11 +473,11 @@ async function main() {
   };
   const cameraManager = new CameraManager(perfLogger, facing, modeConstraints);
 
-  const galleryButton = new GalleryButton();
+  const resultSaver = new DefaultResultSaver();
 
   const cameraView = shouldHandleIntentResult ?
       new CameraIntent(intent, cameraManager, perfLogger) :
-      new Camera(galleryButton, cameraManager, perfLogger);
+      new Camera(resultSaver, cameraManager, perfLogger);
 
   // Set up views navigation by their DOM z-order.
   nav.setup([
@@ -519,7 +518,7 @@ async function main() {
     await filesystem.initialize();
     const cameraDir = filesystem.getCameraDirectory();
     if (!shouldHandleIntentResult) {
-      await galleryButton.initialize(cameraDir);
+      await resultSaver.initialize(cameraDir);
     }
   } catch (error) {
     reportError(ErrorType.FILE_SYSTEM_FAILURE, ErrorLevel.ERROR, error);

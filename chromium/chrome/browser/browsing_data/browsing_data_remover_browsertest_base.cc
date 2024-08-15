@@ -187,7 +187,7 @@ void BrowsingDataRemoverBrowserTestBase::VerifyDownloadCount(size_t expected,
   content::DownloadManager* download_manager = profile->GetDownloadManager();
   DownloadManagerWaiter download_manager_waiter(download_manager);
   download_manager_waiter.WaitForInitialized();
-  std::vector<download::DownloadItem*> downloads;
+  std::vector<raw_ptr<download::DownloadItem, VectorExperimental>> downloads;
   download_manager->GetAllDownloads(&downloads);
   EXPECT_EQ(expected, downloads.size());
 }
@@ -424,8 +424,7 @@ bool BrowsingDataRemoverBrowserTestBase::SetGaiaCookieForProfile(
       "SAPISID", std::string(), "." + google_url.host(), "/", base::Time(),
       base::Time(), base::Time(), base::Time(), /*secure=*/true,
       /*httponly=*/false, net::CookieSameSite::NO_RESTRICTION,
-      net::COOKIE_PRIORITY_DEFAULT,
-      /*same_party=*/false);
+      net::COOKIE_PRIORITY_DEFAULT);
   bool success = false;
   base::RunLoop loop;
   base::OnceCallback<void(net::CookieAccessResult)> callback =

@@ -40,9 +40,6 @@ namespace ash {
 
 namespace {
 
-// For testing proxy-auth case for shill status code.
-const int ProxyAuthenticationRequiredStatusCode = 407;
-
 // Used to compare values for finding entries to erase in a ListValue.
 // (ListValue only implements a const_iterator version of Find).
 struct ValueEquals {
@@ -50,7 +47,7 @@ struct ValueEquals {
   bool operator()(const base::Value* second) const {
     return *first_ == *second;
   }
-  raw_ptr<const base::Value, ExperimentalAsh> first_;
+  raw_ptr<const base::Value> first_;
 };
 
 bool GetBoolValue(const base::Value::Dict& dict, const char* key) {
@@ -208,13 +205,6 @@ void UpdatePortaledState(const std::string& service_path,
                          const std::string& state) {
   ShillServiceClient::Get()->GetTestInterface()->SetServiceProperty(
       service_path, shill::kStateProperty, base::Value(state));
-}
-
-void UpdateProxyState(const std::string& service_path) {
-  ShillServiceClient::Get()->GetTestInterface()->SetServiceProperty(
-      service_path, shill::kPortalDetectionFailedStatusCodeProperty,
-      base::Value(ProxyAuthenticationRequiredStatusCode));
-  UpdatePortaledState(service_path, shill::kStatePortalSuspected);
 }
 
 bool IsCellularTechnology(const std::string& type) {
@@ -847,7 +837,7 @@ void FakeShillManagerClient::SetNetworkThrottlingStatus(
 }
 
 bool FakeShillManagerClient::GetFastTransitionStatus() {
-  absl::optional<bool> fast_transition_status = stub_properties_.FindBool(
+  std::optional<bool> fast_transition_status = stub_properties_.FindBool(
       base::StringPiece(shill::kWifiGlobalFTEnabledProperty));
   return fast_transition_status && fast_transition_status.value();
 }
@@ -1008,16 +998,10 @@ void FakeShillManagerClient::SetupDefaultEnvironment() {
       services->SetServiceProperty(kPortaledWifiPath,
                                    shill::kSecurityClassProperty,
                                    base::Value(shill::kSecurityClassNone));
-      if (proxy_auth_) {
-        services->SetConnectBehavior(
-            kPortaledWifiPath,
-            base::BindRepeating(&UpdateProxyState, kPortaledWifiPath));
-      } else {
-        services->SetConnectBehavior(
-            kPortaledWifiPath,
-            base::BindRepeating(&UpdatePortaledState, kPortaledWifiPath,
-                                portal_state));
-      }
+      services->SetConnectBehavior(
+          kPortaledWifiPath,
+          base::BindRepeating(&UpdatePortaledState, kPortaledWifiPath,
+                              portal_state));
       services->SetServiceProperty(
           kPortaledWifiPath, shill::kConnectableProperty, base::Value(true));
       profiles->AddService(shared_profile, kPortaledWifiPath);
@@ -1065,6 +1049,8 @@ void FakeShillManagerClient::SetupDefaultEnvironment() {
       services->AddService(kCellularServicePath, "cellular1_guid",
                            "cellular1" /* name */, shill::kTypeCellular, state,
                            add_to_visible);
+      services->SetServiceProperty(kCellularServicePath, shill::kIccidProperty,
+                                   base::Value("cellular1"));
       base::Value technology_value(cellular_technology_);
       SetInitialDeviceProperty("/device/cellular1",
                                shill::kTechnologyFamilyProperty,
@@ -1181,7 +1167,7 @@ void FakeShillManagerClient::SetupDefaultEnvironment() {
 
 void FakeShillManagerClient::PassNullopt(
     chromeos::DBusMethodCallback<base::Value::Dict> callback) const {
-  std::move(callback).Run(absl::nullopt);
+  std::move(callback).Run(std::nullopt);
 }
 
 void FakeShillManagerClient::PassStubProperties(
@@ -1421,11 +1407,6 @@ bool FakeShillManagerClient::SetInitialNetworkState(
   } else if (state_arg == "portal-suspected") {
     // Technology is enabled, a service is connected and in portal-suspected
     // state.
-    state = shill::kStatePortalSuspected;
-  } else if (state_arg == "proxy-auth") {
-    // Technology is enabled, a service is connected and in portal-suspected
-    // state for proxy-auth. Set the PortalDetectionStatusCode to 407.
-    proxy_auth_ = true;
     state = shill::kStatePortalSuspected;
   } else if (state_arg == "no-connectivity") {
     // Technology is enabled, a service is connected and in no-connectivity

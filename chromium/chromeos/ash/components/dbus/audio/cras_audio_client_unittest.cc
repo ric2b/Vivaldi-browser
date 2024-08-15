@@ -345,7 +345,7 @@ void WriteNodesToResponse(const AudioNodeList& node_list,
 // Expect the AudioNodeList result.
 void ExpectAudioNodeListResult(bool* called,
                                const AudioNodeList& expected_node_list,
-                               absl::optional<AudioNodeList> result) {
+                               std::optional<AudioNodeList> result) {
   *called = true;
   ASSERT_TRUE(result.has_value());
   const AudioNodeList& node_list = result.value();
@@ -710,7 +710,7 @@ class CrasAudioClientTest : public testing::Test {
   // The name of the method which is expected to be called.
   std::string expected_method_name_;
   // The response which the mock cras proxy returns.
-  raw_ptr<dbus::Response, DanglingUntriaged | ExperimentalAsh> response_;
+  raw_ptr<dbus::Response, DanglingUntriaged> response_;
   // A callback to intercept and check the method call arguments.
   ArgumentCheckCallback argument_checker_;
 

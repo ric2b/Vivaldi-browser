@@ -160,6 +160,10 @@ void FileAnalyzer::OnZipAnalysisFinished(
              ArchiveAnalysisResult::kTooLarge) {
     results_.archive_summary.set_parser_status(
         ClientDownloadRequest::ArchiveSummary::TOO_LARGE);
+  } else if (archive_results.analysis_result ==
+             ArchiveAnalysisResult::kDiskError) {
+    results_.archive_summary.set_parser_status(
+        ClientDownloadRequest::ArchiveSummary::DISK_ERROR);
   }
   results_.archived_executable = archive_results.has_executable;
   results_.archived_archive = archive_results.has_archive;
@@ -180,6 +184,8 @@ void FileAnalyzer::OnZipAnalysisFinished(
 
   results_.archive_summary.set_file_count(archive_results.file_count);
   results_.archive_summary.set_directory_count(archive_results.directory_count);
+  results_.archive_summary.set_is_encrypted(
+      archive_results.encryption_info.is_encrypted);
   results_.encryption_info = archive_results.encryption_info;
 
   std::move(callback_).Run(std::move(results_));
@@ -236,6 +242,8 @@ void FileAnalyzer::OnRarAnalysisFinished(
 
   results_.archive_summary.set_file_count(archive_results.file_count);
   results_.archive_summary.set_directory_count(archive_results.directory_count);
+  results_.archive_summary.set_is_encrypted(
+      archive_results.encryption_info.is_encrypted);
   results_.encryption_info = archive_results.encryption_info;
 
   std::move(callback_).Run(std::move(results_));
@@ -308,6 +316,8 @@ void FileAnalyzer::OnDmgAnalysisFinished(
         ClientDownloadRequest::ArchiveSummary::TOO_LARGE);
   }
 
+  results_.archive_summary.set_is_encrypted(
+      archive_results.encryption_info.is_encrypted);
   results_.encryption_info = archive_results.encryption_info;
 
   std::move(callback_).Run(std::move(results_));
@@ -411,6 +421,8 @@ void FileAnalyzer::OnSevenZipAnalysisFinished(
 
   results_.archive_summary.set_file_count(archive_results.file_count);
   results_.archive_summary.set_directory_count(archive_results.directory_count);
+  results_.archive_summary.set_is_encrypted(
+      archive_results.encryption_info.is_encrypted);
   results_.encryption_info = archive_results.encryption_info;
 
   std::move(callback_).Run(std::move(results_));

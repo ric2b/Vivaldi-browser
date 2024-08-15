@@ -8,9 +8,8 @@ publish.workspace = true
 ukey2_connections = { path = "../ukey2_connections" }
 ukey2_rs = { path = "../ukey2" }
 cfg-if.workspace = true
-crypto_provider_openssl = { workspace = true, optional = true }
-crypto_provider_rustcrypto = { workspace = true, optional = true, features = ["alloc"] }
-lock_adapter.workspace = true
+crypto_provider_default.workspace = true
+lock_adapter = {workspace = true, features = ["spin"]}
 
 lazy_static.workspace = true
 log.workspace = true
@@ -18,11 +17,11 @@ rand.workspace = true
 rand_chacha.workspace = true
 
 [features]
-default = ["rustcrypto"]
-std = ["crypto_provider_rustcrypto/std", "lock_adapter/std"]
-openssl = ["dep:crypto_provider_openssl", "std"]
-rustcrypto = ["crypto_provider_rustcrypto"]
-crypto_provider_rustcrypto = ["dep:crypto_provider_rustcrypto"]
+default = ["rustcrypto", "std"]
+std = ["lock_adapter/std"]
+openssl = ["crypto_provider_default/openssl", "std"]
+boringssl = ["crypto_provider_default/boringssl", "std"]
+rustcrypto = ["crypto_provider_default/rustcrypto"]
 
 
 [lib]

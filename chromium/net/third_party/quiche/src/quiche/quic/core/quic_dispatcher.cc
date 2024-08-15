@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <list>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -21,7 +22,6 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "quiche/quic/core/chlo_extractor.h"
 #include "quiche/quic/core/connection_id_generator.h"
 #include "quiche/quic/core/crypto/crypto_handshake_message.h"
@@ -141,9 +141,11 @@ class PacketCollector : public QuicPacketCreator::DelegateInterface,
     return true;
   }
 
-  const QuicFrames MaybeBundleOpportunistically() override {
+  void MaybeBundleOpportunistically() override { QUICHE_DCHECK(false); }
+
+  QuicByteCount GetFlowControlSendWindowSize(QuicStreamId /*id*/) override {
     QUICHE_DCHECK(false);
-    return {};
+    return std::numeric_limits<QuicByteCount>::max();
   }
 
   SerializedPacketFate GetSerializedPacketFate(
@@ -1190,7 +1192,7 @@ void QuicDispatcher::BufferEarlyPacket(const ReceivedPacketInfo& packet_info) {
       packet_info.destination_connection_id,
       packet_info.form != GOOGLE_QUIC_PACKET, packet_info.packet,
       packet_info.self_address, packet_info.peer_address, packet_info.version,
-      /*parsed_chlo=*/absl::nullopt, /*connection_id_generator=*/nullptr);
+      /*parsed_chlo=*/std::nullopt, /*connection_id_generator=*/nullptr);
   if (rs != EnqueuePacketResult::SUCCESS) {
     OnBufferPacketFailure(rs, packet_info.destination_connection_id);
   }
@@ -1294,24 +1296,32 @@ std::shared_ptr<QuicSession> QuicDispatcher::CreateSessionFromChlo(
   if (connection_id_generator == nullptr) {
     connection_id_generator = &ConnectionIdGenerator();
   }
-  absl::optional<QuicConnectionId> server_connection_id =
+  std::optional<QuicConnectionId> server_connection_id =
       connection_id_generator->MaybeReplaceConnectionId(original_connection_id,
                                                         version);
   const bool replaced_connection_id = server_connection_id.has_value();
   if (!replaced_connection_id) {
     server_connection_id = original_connection_id;
   }
+  QUIC_CODE_COUNT(quic_connection_id_chosen);
   if (reference_counted_session_map_.count(*server_connection_id) > 0) {
     // The new connection ID is owned by another session. Avoid creating one
     // altogether, as this connection attempt cannot possibly succeed.
-    if (replaced_connection_id) {
+    QUIC_CODE_COUNT(quic_connection_id_collision);
+    QuicConnection* other_connection =
+        reference_counted_session_map_[*server_connection_id]->connection();
+    if (other_connection != nullptr) {  // Just make sure there is no crash.
       QUIC_LOG_EVERY_N_SEC(ERROR, 10)
           << "QUIC Connection ID collision. original_connection_id:"
           << original_connection_id.ToString()
           << " server_connection_id:" << server_connection_id->ToString()
           << ", version:" << version << ", self_address:" << self_address
           << ", peer_address:" << peer_address
-          << ", parsed_chlo:" << parsed_chlo;
+          << ", parsed_chlo:" << parsed_chlo
+          << ", other peer address: " << other_connection->peer_address();
+    }
+    if (replaced_connection_id) {
+      QUIC_CODE_COUNT(quic_replaced_connection_id_collision);
       // The original connection ID does not correspond to an existing
       // session. It is safe to send CONNECTION_CLOSE and add to TIME_WAIT.
       StatelesslyTerminateConnection(

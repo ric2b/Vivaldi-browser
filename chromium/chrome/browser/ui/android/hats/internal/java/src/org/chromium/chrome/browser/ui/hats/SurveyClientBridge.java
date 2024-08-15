@@ -24,8 +24,9 @@ import java.util.Map;
  */
 @JNINamespace("hats")
 class SurveyClientBridge implements SurveyClient {
+
     private final SurveyClient mDelegate;
-    private long mNativeSurveyClient;
+    private final long mNativeSurveyClient;
 
     private SurveyClientBridge(long nativeSurveyClient, SurveyClient delegate) {
         mNativeSurveyClient = nativeSurveyClient;
@@ -35,10 +36,16 @@ class SurveyClientBridge implements SurveyClient {
     @CalledByNative
     @VisibleForTesting
     static SurveyClientBridge create(
-            long nativeSurveyClient, String trigger, SurveyUiDelegate uiDelegate, Profile profile) {
+            long nativeSurveyClient,
+            String trigger,
+            SurveyUiDelegate uiDelegate,
+            Profile profile,
+            String suppliedTriggerId) {
         assert SurveyClientFactory.getInstance() != null;
-        SurveyConfig config = SurveyConfig.get(trigger);
-        if (config == null) return null;
+        SurveyConfig config = SurveyConfig.get(trigger, suppliedTriggerId);
+        if (config == null) {
+            return null;
+        }
 
         return new SurveyClientBridge(
                 nativeSurveyClient,
@@ -53,22 +60,24 @@ class SurveyClientBridge implements SurveyClient {
         mDelegate.showSurvey(activity, lifecycleDispatcher);
     }
 
-    /**
-     * Called from Java to show a survey with PSD. Used if SurveyUiDelegate is created from C++.
-     */
+    /** Called from Java to show a survey with PSD. Used if SurveyUiDelegate is created from C++. */
     @Override
-    public void showSurvey(Activity activity, ActivityLifecycleDispatcher lifecycleDispatcher,
-            Map<String, Boolean> surveyPsdBitValues, Map<String, String> surveyPsdStringValues) {
+    public void showSurvey(
+            Activity activity,
+            ActivityLifecycleDispatcher lifecycleDispatcher,
+            Map<String, Boolean> surveyPsdBitValues,
+            Map<String, String> surveyPsdStringValues) {
         mDelegate.showSurvey(
                 activity, lifecycleDispatcher, surveyPsdBitValues, surveyPsdStringValues);
     }
 
-    /**
-     * Called when a C++ client wants to display a survey with PSD.
-     */
+    /** Called when a C++ client wants to display a survey with PSD. */
     @CalledByNative
-    void showSurvey(WindowAndroid windowAndroid, String[] surveyPsdBitFields,
-            boolean[] surveyPsdBitValues, String[] surveyPsdStringFields,
+    void showSurvey(
+            WindowAndroid windowAndroid,
+            String[] surveyPsdBitFields,
+            boolean[] surveyPsdBitValues,
+            String[] surveyPsdStringFields,
             String[] surveyPsdStringValues) {
         assert surveyPsdBitFields.length == surveyPsdBitValues.length;
         assert surveyPsdStringFields.length == surveyPsdStringValues.length;

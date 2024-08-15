@@ -28,32 +28,60 @@
 #ifndef SRC_DAWN_NATIVE_D3D12_QUEUED3D12_H_
 #define SRC_DAWN_NATIVE_D3D12_QUEUED3D12_H_
 
-#include "dawn/native/Queue.h"
+#include <memory>
 
+#include "dawn/common/MutexProtected.h"
+#include "dawn/common/SerialMap.h"
+#include "dawn/native/SystemEvent.h"
+#include "dawn/native/d3d/QueueD3D.h"
 #include "dawn/native/d3d12/CommandRecordingContext.h"
 #include "dawn/native/d3d12/d3d12_platform.h"
 
 namespace dawn::native::d3d12 {
 
 class Device;
+class SharedFence;
 
-class Queue final : public QueueBase {
+class Queue final : public d3d::Queue {
   public:
-    static Ref<Queue> Create(Device* device, const QueueDescriptor* descriptor);
+    static ResultOrError<Ref<Queue>> Create(Device* device, const QueueDescriptor* descriptor);
+
+    MaybeError NextSerial();
+    MaybeError WaitForSerial(ExecutionSerial serial);
+    ResultOrError<CommandRecordingContext*> GetPendingCommandContext(
+        SubmitMode submitMode = SubmitMode::Normal);
+    ID3D12CommandQueue* GetCommandQueue() const;
+    ID3D12SharingContract* GetSharingContract() const;
+    MaybeError SubmitPendingCommands();
 
   private:
-    Queue(Device* device, const QueueDescriptor* descriptor);
+    using d3d::Queue::Queue;
+    ~Queue() override;
 
-    void Initialize();
+    MaybeError Initialize();
 
+    void DestroyImpl() override;
     MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
     bool HasPendingCommands() const override;
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void ForceEventualFlushOfCommands() override;
     MaybeError WaitForIdleForDestruction() override;
 
+    ResultOrError<Ref<d3d::SharedFence>> GetOrCreateSharedFence() override;
+    void SetEventOnCompletion(ExecutionSerial serial, HANDLE event) override;
+
     // Dawn API
     void SetLabelImpl() override;
+
+    ComPtr<ID3D12Fence> mFence;
+    HANDLE mFenceEvent = nullptr;
+    Ref<SharedFence> mSharedFence;
+
+    CommandRecordingContext mPendingCommands;
+    ComPtr<ID3D12CommandQueue> mCommandQueue;
+    ComPtr<ID3D12SharingContract> mD3d12SharingContract;
+
+    std::unique_ptr<CommandAllocatorManager> mCommandAllocatorManager;
 };
 
 }  // namespace dawn::native::d3d12

@@ -39,6 +39,12 @@
 }
 
 - (ToolbarComponentVisibility)tabGridButtonVisibility {
+
+  // Note: (prio@vivaldi.com): We will always show the tab grid button.
+  // The visibility is controlled in the primary toolbar view.
+  if (vivaldi::IsVivaldiRunning())
+    return ToolbarComponentVisibilityAlways; // End Vivaldi
+
   switch (self.type) {
     case ToolbarType::kPrimary:
       return ToolbarComponentVisibilityAlways &

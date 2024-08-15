@@ -4,6 +4,8 @@
 
 #include "chrome/browser/signin/bound_session_credentials/bound_session_params_storage.h"
 
+#include <optional>
+
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/protobuf_matchers.h"
@@ -13,7 +15,6 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/protobuf/src/google/protobuf/message_lite.h"
 
 namespace {
@@ -42,7 +43,7 @@ CreateInvalidBoundSessionParams() {
 }
 
 MATCHER(TupleEqualsProto, "") {
-  return testing::ExplainMatchResult(base::EqualsProto(std::get<1>(arg)),
+  return testing::ExplainMatchResult(base::test::EqualsProto(std::get<1>(arg)),
                                      std::get<0>(arg), result_listener);
 }
 

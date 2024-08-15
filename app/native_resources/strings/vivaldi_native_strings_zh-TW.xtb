@@ -20,12 +20,12 @@
 <translation id="1759842336958782510">Chrome 瀏覽器</translation>
 <translation id="1769904678986817931">圖片屬性……</translation>
 <translation id="1920297417712412573">複製到筆記</translation>
-<translation id="1921101374471252440">重新載入圖片(&amp;R)</translation>
+<translation id="1921101374471252440">重新載入圖片 (&amp;R)</translation>
 <translation id="1924750141060565109">風景 15</translation>
 <translation id="19598411548897379">一般</translation>
 <translation id="1973351931613083086">自動播放</translation>
 <translation id="1985669426322966465">軟體更新</translation>
-<translation id="2079036669923635404">按這裡升級為Vivaldi <ph name="VERSION" /> 版。</translation>
+<translation id="2079036669923635404">按這裡升級為 Vivaldi <ph name="VERSION" /> 版。</translation>
 <translation id="2141974047387702305">下載檔案時發生錯誤，請檢查您的網路連線並稍後再試。</translation>
 <translation id="2339641773402824483">檢查更新中……</translation>
 <translation id="2441056087170876076">怪獸 2</translation>
@@ -65,7 +65,7 @@
 <translation id="3588820906588687999">在新分頁開啟圖片</translation>
 <translation id="3601066750251199488">怪獸 3</translation>
 <translation id="3620979700683094848">網站可以自動播放影音</translation>
-<translation id="3680031241659195730">有新版的 Vivaldi可以使用！</translation>
+<translation id="3680031241659195730">有新版的 Vivaldi 可以使用！</translation>
 <translation id="3708982624815781692">下載已被取消。</translation>
 <translation id="3732157130969736834">新增連結為書籤</translation>
 <translation id="3732388226447288666">動物 2</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">貼上</translation>
 <translation id="4005270918754737597">略過這個版本</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">不再顯示(&amp;D)</translation>
 <translation id="4074744496918018786">在無痕式視窗開啟圖片</translation>
 <translation id="410351446219883937">自動播放</translation>
 <translation id="4281844954008187215">服務條款</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera 15+（Beta）瀏覽器</translation>
 <translation id="5648110075441906505">在新視窗開啟圖片</translation>
 <translation id="5656371807944747581">更新錯誤！</translation>
-<translation id="5716238312826274098">停用訊息通知</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版已經可以使用（您正在使用 <ph name="OLD_VERSION" />版）。您想要立即下載嗎？</translation>
 <translation id="5770433027661640693">風景 10</translation>
 <translation id="5857090052475505287">新增資料夾</translation>
@@ -126,7 +124,7 @@
 <translation id="6339818817272922368">本地帳號</translation>
 <translation id="6438786710866753178">風景 4</translation>
 <translation id="6477028720702061455">選取 Opera 設定檔資料夾以匯入</translation>
-<translation id="6510706699590490869">更新 Vivaldi(&amp;U)</translation>
+<translation id="6510706699590490869">更新 Vivaldi (&amp;U)</translation>
 <translation id="6538338088414940408">在背景分頁中開啟連結</translation>
 <translation id="6551219277044048123">新增為搜尋引擎 (&amp;G) ……</translation>
 <translation id="6630781781151951863">風景 18</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium 瀏覽器</translation>
 <translation id="7581266044164103589">啟動更新安裝程式失敗，請檢查電腦有足夠記憶體或硬碟空間並稍後再試。</translation>
 <translation id="7658239707568436148">取消</translation>
-<translation id="7715497554424665066">忽略更新(&amp;I)</translation>
 <translation id="7724603315864178912">剪下</translation>
 <translation id="7727481996062361502">驗證更新中……</translation>
 <translation id="7793738202466490491">新增為日曆活動</translation>
@@ -164,7 +161,7 @@
 <translation id="8539196077526389150">風景 13</translation>
 <translation id="8562339533180097902">關閉 Vivaldi 並立即安裝</translation>
 <translation id="8567452685425968223">解壓縮更新中……</translation>
-<translation id="8624587806981488221">重新載入圖片(&amp;R)</translation>
+<translation id="8624587806981488221">重新載入圖片 (&amp;R)</translation>
 <translation id="864444594187862076">Opera 15+（開發者版本）瀏覽器</translation>
 <translation id="8651348004684669199">新增現用分頁</translation>
 <translation id="8669345741879513971">怪獸 10</translation>

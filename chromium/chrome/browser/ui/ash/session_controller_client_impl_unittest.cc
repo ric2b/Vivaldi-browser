@@ -109,8 +109,7 @@ class SessionControllerClientImplTest : public testing::Test {
       const SessionControllerClientImplTest&) = delete;
 
  protected:
-  SessionControllerClientImplTest()
-      : browser_manager_(std::make_unique<crosapi::FakeBrowserManager>()) {}
+  SessionControllerClientImplTest() = default;
   ~SessionControllerClientImplTest() override {}
 
   void SetUp() override {
@@ -131,11 +130,15 @@ class SessionControllerClientImplTest : public testing::Test {
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
 
+    browser_manager_ = std::make_unique<crosapi::FakeBrowserManager>();
+
     cros_settings_test_helper_ =
         std::make_unique<ash::ScopedCrosSettingsTestHelper>();
   }
 
   void TearDown() override {
+    cros_settings_test_helper_.reset();
+    browser_manager_.reset();
     assistant_delegate_.reset();
     user_manager_->set_multi_profile_user_controller(nullptr);
     controller_.reset();
@@ -213,8 +216,7 @@ class SessionControllerClientImplTest : public testing::Test {
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 
   // Owned by |user_manager_enabler_|.
-  raw_ptr<TestChromeUserManager, DanglingUntriaged | ExperimentalAsh>
-      user_manager_ = nullptr;
+  raw_ptr<TestChromeUserManager, DanglingUntriaged> user_manager_ = nullptr;
 
   std::unique_ptr<ash::MultiProfileUserController> controller_;
 

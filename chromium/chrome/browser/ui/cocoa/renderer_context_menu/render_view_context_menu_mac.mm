@@ -82,9 +82,17 @@ void RenderViewContextMenuMac::UpdateTextDirection(
   if (direction == base::i18n::RIGHT_TO_LEFT)
     command_id = IDC_WRITING_DIRECTION_RTL;
 
-  content::RenderViewHost* view_host = GetRenderViewHost();
-  view_host->GetWidget()->UpdateTextDirection(direction);
-  view_host->GetWidget()->NotifyTextDirection();
+  // Note: we get the local render frame host so that the writing mode settings
+  // changes apply to the correct frame. See crbug.com/1129073 for a
+  // description of what happens if we use the outermost frame.
+  content::RenderFrameHost* rfh = GetRenderFrameHost();
+  // It's possible that the frame drops out from under us while the context
+  // menu is open. In this case, we'll not perform the action, but still record
+  // metrics.
+  if (rfh) {
+    rfh->GetRenderWidgetHost()->UpdateTextDirection(direction);
+    rfh->GetRenderWidgetHost()->NotifyTextDirection();
+  }
 
   RenderViewContextMenu::RecordUsedItem(command_id);
 }
@@ -103,7 +111,7 @@ void RenderViewContextMenuMac::InitToolkitMenu() {
     // In case the user has selected a word that triggers spelling suggestions,
     // show the dictionary lookup under the group that contains the command to
     // “Add to Dictionary.”
-    const absl::optional<size_t> index_opt =
+    const std::optional<size_t> index_opt =
         menu_model_.GetIndexOfCommandId(IDC_SPELLCHECK_ADD_TO_DICTIONARY);
     size_t index = index_opt.value_or(0);
     if (index_opt.has_value()) {
@@ -128,7 +136,7 @@ void RenderViewContextMenuMac::InitToolkitMenu() {
 
 void RenderViewContextMenuMac::LookUpInDictionary() {
   content::RenderWidgetHostView* view =
-      GetRenderViewHost()->GetWidget()->GetView();
+      GetRenderFrameHost()->GetRenderWidgetHost()->GetView();
   if (view)
     view->ShowDefinitionForSelection();
 }

@@ -15,14 +15,17 @@
 
 namespace skgpu::graphite {
 struct ContextOptions;
+struct VulkanTextureInfo;
 
 class VulkanCaps final : public Caps {
 public:
-    VulkanCaps(const skgpu::VulkanInterface*,
-               VkPhysicalDevice device,
+    VulkanCaps(const ContextOptions&,
+               const skgpu::VulkanInterface*,
+               VkPhysicalDevice,
                uint32_t physicalDeviceVersion,
+               const VkPhysicalDeviceFeatures2*,
                const skgpu::VulkanExtensions*,
-               const ContextOptions&);
+               Protected);
     ~VulkanCaps() override;
 
     TextureInfo getDefaultSampledTextureInfo(SkColorType,
@@ -74,12 +77,21 @@ public:
         return fShouldPersistentlyMapCpuToGpuBuffers;
     }
 
+    bool supportsYcbcrConversion() const { return fSupportsYcbcrConversion; }
+
     uint32_t maxVertexAttributes() const {
         return fMaxVertexAttributes;
     }
     uint64_t maxUniformBufferRange() const { return fMaxUniformBufferRange; }
 
     uint64_t getRenderPassDescKey(const RenderPassDesc& renderPassDesc) const;
+
+    const VkPhysicalDeviceMemoryProperties2& physicalDeviceMemoryProperties2() const {
+        return fPhysicalDeviceMemoryProperties2;
+    }
+
+    bool isTransferSrc(const VulkanTextureInfo&) const;
+    bool isTransferDst(const VulkanTextureInfo&) const;
 
 private:
     enum VkVendor {
@@ -91,11 +103,13 @@ private:
         kQualcomm_VkVendor        = 20803,
     };
 
-    void init(const skgpu::VulkanInterface*,
+    void init(const ContextOptions&,
+              const skgpu::VulkanInterface*,
               VkPhysicalDevice,
               uint32_t physicalDeviceVersion,
+              const VkPhysicalDeviceFeatures2*,
               const skgpu::VulkanExtensions*,
-              const ContextOptions&);
+              Protected);
 
     void applyDriverCorrectnessWorkarounds(const VkPhysicalDeviceProperties&);
 
@@ -114,12 +128,14 @@ private:
     bool supportsWritePixels(const TextureInfo&) const override;
     bool supportsReadPixels(const TextureInfo&) const override;
 
-    SkColorType supportedWritePixelsColorType(SkColorType dstColorType,
-                                              const TextureInfo& dstTextureInfo,
-                                              SkColorType srcColorType) const override;
-    SkColorType supportedReadPixelsColorType(SkColorType srcColorType,
-                                             const TextureInfo& srcTextureInfo,
-                                             SkColorType dstColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedWritePixelsColorType(
+            SkColorType dstColorType,
+            const TextureInfo& dstTextureInfo,
+            SkColorType srcColorType) const override;
+    std::pair<SkColorType, bool /*isRGBFormat*/> supportedReadPixelsColorType(
+            SkColorType srcColorType,
+            const TextureInfo& srcTextureInfo,
+            SkColorType dstColorType) const override;
 
     // Struct that determines and stores which sample count quantities a VkFormat supports.
     struct SupportedSampleCounts {
@@ -153,6 +169,8 @@ private:
         bool isTexturable(VkImageTiling) const;
         bool isRenderable(VkImageTiling, uint32_t sampleCount) const;
         bool isStorage(VkImageTiling) const;
+        bool isTransferSrc(VkImageTiling) const;
+        bool isTransferDst(VkImageTiling) const;
 
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;
@@ -167,6 +185,8 @@ private:
         bool isTexturable(VkFormatFeatureFlags) const;
         bool isRenderable(VkFormatFeatureFlags) const;
         bool isStorage(VkFormatFeatureFlags) const;
+        bool isTransferSrc(VkFormatFeatureFlags) const;
+        bool isTransferDst(VkFormatFeatureFlags) const;
     };
 
     // Map SkColorType to VkFormat.
@@ -207,10 +227,11 @@ private:
 
     uint32_t fMaxVertexAttributes;
     uint64_t fMaxUniformBufferRange;
+    VkPhysicalDeviceMemoryProperties2 fPhysicalDeviceMemoryProperties2;
 
     // Various bools to define whether certain Vulkan features are supported.
     bool fSupportsMemorylessAttachments = false;
-    bool fSupportsYcbcrConversion = false; // TODO: Determine & assign real value.
+    bool fSupportsYcbcrConversion = false;
     bool fShouldAlwaysUseDedicatedImageMemory = false;
     bool fGpuOnlyBuffersMorePerformant = false;
     bool fShouldPersistentlyMapCpuToGpuBuffers = true;

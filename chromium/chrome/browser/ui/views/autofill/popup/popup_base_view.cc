@@ -13,7 +13,6 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
-#include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -86,10 +85,8 @@ std::unique_ptr<views::Border> CreateBorder() {
 // static
 int PopupBaseView::GetCornerRadius() {
   return ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
-      base::FeatureList::IsEnabled(
-          features::kAutofillShowAutocompleteDeleteButton)
-          ? views::Emphasis::kHigh
-          : views::Emphasis::kMedium);
+      ShouldApplyNewAutofillPopupStyle() ? views::Emphasis::kHigh
+                                         : views::Emphasis::kMedium);
 }
 
 // static
@@ -160,10 +157,21 @@ class PopupBaseView::Widget : public views::Widget {
       return;
     }
 
+    // Suppress the exit event on MacOS and Windows generated when the sub-popup
+    // initially opens. We assume that it is the sub-popup that hovers
+    // the parent by its semi-transparent shadow part. But in theory it could be
+    // another window, which is not a problem because the popup closes on focus
+    // loss anyway. The exit event will be synthesized by the sub-popup later
+    // (find the trick that does this below).
+    if (event->type() == ui::EventType::ET_MOUSE_EXITED &&
+        GetContentsView()->IsMouseHovered()) {
+      return;
+    }
+
     // Retrigger mouse moves on the parent to make selection/highlighting work
-    // properly and thus provide more intuitive UX when the child's
-    // transparent parts (e.g. shadow) overlap parent (assuming that
-    // the contents are not x`overlapped).
+    // properly and thus provide more intuitive UX when the child's transparent
+    // parts (e.g. shadow) overlap the parent (assuming that the child contents
+    // view is not overlapped).
     if (event->type() == ui::EventType::ET_MOUSE_MOVED &&
         !GetContentsView()->IsMouseHovered() &&
         parent_content_view->IsMouseHovered()) {
@@ -192,7 +200,7 @@ class PopupBaseView::Widget : public views::Widget {
   }
 
  private:
-  absl::optional<gfx::Point> last_synthesized_parent_mouse_move_position_;
+  std::optional<gfx::Point> last_synthesized_parent_mouse_move_position_;
 };
 
 PopupBaseView::PopupBaseView(
@@ -209,9 +217,8 @@ PopupBaseView::PopupBaseView(
 PopupBaseView::~PopupBaseView() {
   if (delegate_) {
     delegate_->ViewDestroyed();
-
-    RemoveWidgetObservers();
   }
+  RemoveWidgetObservers();
 
   CHECK(!IsInObserverList());
 }
@@ -247,14 +254,8 @@ bool PopupBaseView::DoShow() {
   }
 
   if (content::WebContents* web_contents = GetWebContents()) {
-    if (base::FeatureList::IsEnabled(
-            features::kAutofillPopupMultiWindowCursorSuppression)) {
-      custom_cursor_suppressor_.Start(
-          /*max_dimension_dips=*/kMaximumAllowedCustomCursorDimension + 1);
-    } else {
-      custom_cursor_blocker_ = web_contents->CreateDisallowCustomCursorScope(
-          /*max_dimension_dips=*/kMaximumAllowedCustomCursorDimension + 1);
-    }
+    custom_cursor_suppressor_.Start(
+        /*max_dimension_dips=*/kMaximumAllowedCustomCursorDimension + 1);
   } else {
     // `delegate_` is already gone and `WebContents` is destroying itself.
     return false;
@@ -328,8 +329,8 @@ void PopupBaseView::NotifyAXSelection(views::View& selected_view) {
   constexpr auto kDerivedClasses = base::MakeFixedFlatSet<base::StringPiece>(
       {"PopupSuggestionView", "PopupPasswordSuggestionView", "PopupFooterView",
        "PopupSeparatorView", "PopupWarningView", "PopupBaseView",
-       "PasswordGenerationPopupViewViews::GeneratedPasswordBox",
-       "PopupCellView", "PopupCellWithButtonView"});
+       "PasswordGenerationPopupViewViews::GeneratedPasswordBox", "PopupRowView",
+       "PopupRowContentView", "EditPasswordRow", "MdTextButton"});
   DCHECK(kDerivedClasses.contains(selected_view.GetClassName()))
       << "If you add a new derived class from AutofillPopupRowView, add it "
          "here and to onSelection(evt) in "
@@ -373,7 +374,9 @@ void PopupBaseView::RemoveWidgetObservers() {
   if (parent_widget_) {
     parent_widget_->RemoveObserver(this);
   }
-  GetWidget()->RemoveObserver(this);
+  if (views::Widget* widget = GetWidget()) {
+    widget->RemoveObserver(this);
+  }
   focus_observation_.Reset();
 }
 
@@ -556,7 +559,7 @@ gfx::NativeView PopupBaseView::container_view() {
   return delegate_->container_view();
 }
 
-BEGIN_METADATA(PopupBaseView, views::WidgetDelegateView)
+BEGIN_METADATA(PopupBaseView)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, ContentAreaBounds)
 END_METADATA
 

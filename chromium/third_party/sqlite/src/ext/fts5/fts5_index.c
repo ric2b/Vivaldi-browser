@@ -2719,6 +2719,14 @@ static void fts5SegIterHashInit(
         pLeaf->p = (u8*)pList;
       }
     }
+
+    /* The call to sqlite3Fts5HashScanInit() causes the hash table to
+    ** fill the size field of all existing position lists. This means they
+    ** can no longer be appended to. Since the only scenario in which they
+    ** can be appended to is if the previous operation on this table was
+    ** a DELETE, by clearing the Fts5Index.bDelete flag we can avoid this
+    ** possibility altogether.  */
+    p->bDelete = 0;
   }else{
     p->rc = sqlite3Fts5HashQuery(p->pHash, sizeof(Fts5Data), 
         (const char*)pTerm, nTerm, (void**)&pLeaf, &nList
@@ -2904,7 +2912,6 @@ static int fts5MultiIterDoCompare(Fts5Iter *pIter, int iOut){
       assert_nc( i2!=0 );
       pRes->bTermEq = 1;
       if( p1->iRowid==p2->iRowid ){
-        p1->bDel = p2->bDel;
         return i2;
       }
       res = ((p1->iRowid > p2->iRowid)==pIter->bRev) ? -1 : +1;
@@ -3272,7 +3279,7 @@ static Fts5Iter *fts5MultiIterAlloc(
   int nSeg
 ){
   Fts5Iter *pNew;
-  int nSlot;                      /* Power of two >= nSeg */
+  i64 nSlot;                      /* Power of two >= nSeg */
 
   for(nSlot=2; nSlot<nSeg; nSlot=nSlot*2);
   pNew = fts5IdxMalloc(p, 
@@ -4397,7 +4404,7 @@ static void fts5WriteAppendPoslistData(
   const u8 *a = aData;
   int n = nData;
   
-  assert( p->pConfig->pgsz>0 );
+  assert( p->pConfig->pgsz>0 || p->rc!=SQLITE_OK );
   while( p->rc==SQLITE_OK 
      && (pPage->buf.n + pPage->pgidx.n + n)>=p->pConfig->pgsz 
   ){
@@ -5048,7 +5055,6 @@ static void fts5DoSecureDelete(
   int iPgIdx = pSeg->pLeaf->szLeaf;
 
   u64 iDelta = 0;
-  u64 iNextDelta = 0;
   int iNextOff = 0;
   int iOff = 0;
   int nIdx = 0;
@@ -5056,7 +5062,6 @@ static void fts5DoSecureDelete(
   int bLastInDoclist = 0;
   int iIdx = 0;
   int iStart = 0;
-  int iKeyOff = 0;
   int iDelKeyOff = 0;       /* Offset of deleted key, if any */
 
   nIdx = nPg-iPgIdx;
@@ -5081,10 +5086,21 @@ static void fts5DoSecureDelete(
   ** This block sets the following variables:
   **
   **   iStart:
+  **     The offset of the first byte of the rowid or delta-rowid
+  **     value for the doclist entry being removed.
+  **
   **   iDelta:
+  **     The value of the rowid or delta-rowid value for the doclist
+  **     entry being removed.
+  **
+  **   iNextOff:
+  **     The offset of the next entry following the position list
+  **     for the one being removed. If the position list for this
+  **     entry overflows onto the next leaf page, this value will be
+  **     greater than pLeaf->szLeaf.
   */
   {
-    int iSOP;
+    int iSOP;                     /* Start-Of-Position-list */
     if( pSeg->iLeafPgno==pSeg->iTermLeafPgno ){
       iStart = pSeg->iTermLeafOffset;
     }else{
@@ -5120,47 +5136,81 @@ static void fts5DoSecureDelete(
   }
 
   iOff = iStart;
+
+  /* If the position-list for the entry being removed flows over past
+  ** the end of this page, delete the portion of the position-list on the
+  ** next page and beyond.
+  **
+  ** Set variable bLastInDoclist to true if this entry happens 
+  ** to be the last rowid in the doclist for its term.  */
   if( iNextOff>=iPgIdx ){
     int pgno = pSeg->iLeafPgno+1;
     fts5SecureDeleteOverflow(p, pSeg->pSeg, pgno, &bLastInDoclist);
     iNextOff = iPgIdx;
-  }else{
-    /* Set bLastInDoclist to true if the entry being removed is the last
-    ** in its doclist.  */
-    for(iIdx=0, iKeyOff=0; iIdx<nIdx; /* no-op */){
-      u32 iVal = 0;
-      iIdx += fts5GetVarint32(&aIdx[iIdx], iVal);
-      iKeyOff += iVal;
-      if( iKeyOff==iNextOff ){
-        bLastInDoclist = 1;
+  }
+
+  if( pSeg->bDel==0 ){
+    if( iNextOff!=iPgIdx ){
+      /* Loop through the page-footer. If iNextOff (offset of the
+      ** entry following the one we are removing) is equal to the 
+      ** offset of a key on this page, then the entry is the last 
+      ** in its doclist. */
+      int iKeyOff = 0;
+      for(iIdx=0; iIdx<nIdx; /* no-op */){
+        u32 iVal = 0;
+        iIdx += fts5GetVarint32(&aIdx[iIdx], iVal);
+        iKeyOff += iVal;
+        if( iKeyOff==iNextOff ){
+          bLastInDoclist = 1;
+        }
       }
+    }
+
+    /* If this is (a) the first rowid on a page and (b) is not followed by
+    ** another position list on the same page, set the "first-rowid" field
+    ** of the header to 0.  */
+    if( fts5GetU16(&aPg[0])==iStart && (bLastInDoclist || iNextOff==iPgIdx) ){
+      fts5PutU16(&aPg[0], 0);
     }
   }
 
-  if( fts5GetU16(&aPg[0])==iStart && (bLastInDoclist||iNextOff==iPgIdx) ){
-    fts5PutU16(&aPg[0], 0);
-  }
-
-  if( bLastInDoclist==0 ){
+  if( pSeg->bDel ){
+    iOff += sqlite3Fts5PutVarint(&aPg[iOff], iDelta);
+    aPg[iOff++] = 0x01;
+  }else if( bLastInDoclist==0 ){
     if( iNextOff!=iPgIdx ){
+      u64 iNextDelta = 0;
       iNextOff += fts5GetVarint(&aPg[iNextOff], &iNextDelta);
       iOff += sqlite3Fts5PutVarint(&aPg[iOff], iDelta + iNextDelta);
     }
   }else if( 
-      iStart==pSeg->iTermLeafOffset && pSeg->iLeafPgno==pSeg->iTermLeafPgno 
+      pSeg->iLeafPgno==pSeg->iTermLeafPgno 
+   && iStart==pSeg->iTermLeafOffset 
   ){
     /* The entry being removed was the only position list in its
     ** doclist. Therefore the term needs to be removed as well. */
     int iKey = 0;
-    for(iIdx=0, iKeyOff=0; iIdx<nIdx; iKey++){
+    int iKeyOff = 0;
+
+    /* Set iKeyOff to the offset of the term that will be removed - the
+    ** last offset in the footer that is not greater than iStart. */
+    for(iIdx=0; iIdx<nIdx; iKey++){
       u32 iVal = 0;
       iIdx += fts5GetVarint32(&aIdx[iIdx], iVal);
       if( (iKeyOff+iVal)>(u32)iStart ) break;
       iKeyOff += iVal;
     }
+    assert_nc( iKey>=1 );
 
+    /* Set iDelKeyOff to the value of the footer entry to remove from 
+    ** the page. */
     iDelKeyOff = iOff = iKeyOff;
+
     if( iNextOff!=iPgIdx ){
+      /* This is the only position-list associated with the term, and there
+      ** is another term following it on this page. So the subsequent term
+      ** needs to be moved to replace the term associated with the entry
+      ** being removed. */
       int nPrefix = 0;
       int nSuffix = 0;
       int nPrefix2 = 0;
@@ -5239,6 +5289,15 @@ static void fts5DoSecureDelete(
     }
   }
 
+  /* Assuming no error has occurred, this block does final edits to the
+  ** leaf page before writing it back to disk. Input variables are:
+  **
+  **   nPg: Total initial size of leaf page.
+  **   iPgIdx: Initial offset of page footer.
+  **
+  **   iOff: Offset to move data to
+  **   iNextOff: Offset to move data from
+  */
   if( p->rc==SQLITE_OK ){
     const int nMove = nPg - iNextOff;     /* Number of bytes to move */
     int nShift = iNextOff - iOff;         /* Distance to move them */
@@ -5439,10 +5498,16 @@ static void fts5FlushOneHash(Fts5Index *p){
                 fts5WriteFlushLeaf(p, &writer);
               }
             }else{
-              int bDummy;
-              int nPos;
-              int nCopy = fts5GetPoslistSize(&pDoclist[iOff], &nPos, &bDummy);
-              nCopy += nPos;
+              int bDel = 0;
+              int nPos = 0;
+              int nCopy = fts5GetPoslistSize(&pDoclist[iOff], &nPos, &bDel);
+              if( bDel && bSecureDelete ){
+                fts5BufferAppendVarint(&p->rc, pBuf, nPos*2);
+                iOff += nCopy;
+                nCopy = nPos;
+              }else{
+                nCopy += nPos;
+              }
               if( (pBuf->n + pPgidx->n + nCopy) <= pgsz ){
                 /* The entire poslist will fit on the current leaf. So copy
                 ** it in one go. */
@@ -5480,7 +5545,6 @@ static void fts5FlushOneHash(Fts5Index *p){
         assert( pBuf->n<=pBuf->nSpace );
         if( p->rc==SQLITE_OK ) sqlite3Fts5HashScanNext(pHash);
       }
-      sqlite3Fts5HashClear(pHash);
       fts5WriteFinish(p, &writer, &pgnoLast);
   
       assert( p->rc!=SQLITE_OK || bSecureDelete || pgnoLast>0 );
@@ -5513,7 +5577,6 @@ static void fts5FlushOneHash(Fts5Index *p){
   fts5IndexCrisismerge(p, &pStruct);
   fts5StructureWrite(p, pStruct);
   fts5StructureRelease(pStruct);
-  p->nContentlessDelete = 0;
 }
 
 /*
@@ -5524,8 +5587,12 @@ static void fts5IndexFlush(Fts5Index *p){
   if( p->nPendingData || p->nContentlessDelete ){
     assert( p->pHash );
     fts5FlushOneHash(p);
-    p->nPendingData = 0;
-    p->nPendingRow = 0;
+    if( p->rc==SQLITE_OK ){
+      sqlite3Fts5HashClear(p->pHash);
+      p->nPendingData = 0;
+      p->nPendingRow = 0;
+      p->nContentlessDelete = 0;
+    }
   }
 }
 
@@ -5603,8 +5670,9 @@ int sqlite3Fts5IndexOptimize(Fts5Index *p){
 
   assert( p->rc==SQLITE_OK );
   fts5IndexFlush(p);
-  assert( p->nContentlessDelete==0 );
+  assert( p->rc!=SQLITE_OK || p->nContentlessDelete==0 );
   pStruct = fts5StructureRead(p);
+  assert( p->rc!=SQLITE_OK || pStruct!=0 );
   fts5StructureInvalidate(p);
 
   if( pStruct ){
@@ -6151,7 +6219,7 @@ int sqlite3Fts5IndexBeginWrite(Fts5Index *p, int bDelete, i64 iRowid){
   /* Flush the hash table to disk if required */
   if( iRowid<p->iWriteRowid 
    || (iRowid==p->iWriteRowid && p->bDelete==0)
-   || (p->nPendingData > p->pConfig->nHashSize) 
+   || (p->nPendingData > p->pConfig->nHashSize)
   ){
     fts5IndexFlush(p);
   }
@@ -8267,7 +8335,8 @@ int sqlite3Fts5IndexInit(sqlite3 *db){
       0,                           /* xSavepoint    */
       0,                           /* xRelease      */
       0,                           /* xRollbackTo   */
-      0                            /* xShadowName   */
+      0,                           /* xShadowName   */
+      0                            /* xIntegrity    */
     };
     rc = sqlite3_create_module(db, "fts5_structure", &fts5structure_module, 0);
   }

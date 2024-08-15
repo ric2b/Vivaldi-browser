@@ -30,14 +30,14 @@ public:
      * Creates a GrVkCaps that is set such that nothing is supported. The init function should
      * be called to fill out the caps.
      */
-    GrVkCaps(const GrContextOptions& contextOptions,
-             const skgpu::VulkanInterface* vkInterface,
-             VkPhysicalDevice device,
-             const VkPhysicalDeviceFeatures2& features,
+    GrVkCaps(const GrContextOptions&,
+             const skgpu::VulkanInterface*,
+             VkPhysicalDevice,
+             const VkPhysicalDeviceFeatures2&,
              uint32_t instanceVersion,
              uint32_t physicalDeviceVersion,
-             const skgpu::VulkanExtensions& extensions,
-             skgpu::Protected isProtected = skgpu::Protected::kNo);
+             const skgpu::VulkanExtensions&,
+             skgpu::Protected);
 
     bool isFormatSRGB(const GrBackendFormat&) const override;
 
@@ -325,13 +325,13 @@ private:
         SkUNREACHABLE;
     }
 
-    void init(const GrContextOptions& contextOptions,
-              const skgpu::VulkanInterface* vkInterface,
-              VkPhysicalDevice device,
+    void init(const GrContextOptions&,
+              const skgpu::VulkanInterface*,
+              VkPhysicalDevice,
               const VkPhysicalDeviceFeatures2&,
               uint32_t physicalDeviceVersion,
               const skgpu::VulkanExtensions&,
-              GrProtected isProtected);
+              GrProtected);
     void initGrCaps(const skgpu::VulkanInterface* vkInterface,
                     VkPhysicalDevice physDev,
                     const VkPhysicalDeviceProperties&,
@@ -422,7 +422,7 @@ private:
         std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
         int fColorTypeInfoCount = 0;
     };
-    static const size_t kNumVkFormats = 23;
+    static const size_t kNumVkFormats = 25;
     FormatInfo fFormatTable[kNumVkFormats];
 
     FormatInfo& getFormatInfo(VkFormat);

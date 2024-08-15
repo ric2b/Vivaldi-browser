@@ -32,14 +32,6 @@ namespace {
 
 const uint32_t kMaxStreamSize = 20 * 1024 * 1024;
 
-uint16_t GetUnicodeFromBigEndianBytes(const uint8_t* bytes) {
-  return bytes[0] << 8 | bytes[1];
-}
-
-uint16_t GetUnicodeFromLittleEndianBytes(const uint8_t* bytes) {
-  return bytes[1] << 8 | bytes[0];
-}
-
 bool CheckFlateDecodeParams(int Colors, int BitsPerComponent, int Columns) {
   if (Colors < 0 || BitsPerComponent < 0 || Columns < 0)
     return false;
@@ -284,7 +276,7 @@ uint32_t RunLengthDecode(pdfium::span<const uint8_t> src_span,
       dest_count += src_span[i] + 1;
       i += src_span[i] + 2;
     } else {
-      const uint8_t fill = i < src_span.size() - 1 ? src_span[i + 1] : 0;
+      const uint8_t fill = i + 1 < src_span.size() ? src_span[i + 1] : 0;
       const size_t fill_size = 257 - src_span[i];
       fxcrt::spanset(dest_span.subspan(dest_count, fill_size), fill);
       dest_count += fill_size;
@@ -474,72 +466,39 @@ bool PDF_DataDecode(pdfium::span<const uint8_t> src_span,
   return true;
 }
 
+static size_t StripLanguageCodes(pdfium::span<wchar_t> s, size_t n) {
+  size_t dest_pos = 0;
+  for (size_t i = 0; i < n; ++i) {
+    // 0x001B is a begin/end marker for language metadata region that
+    // should not be in the decoded text.
+    if (s[i] == 0x001B) {
+      for (++i; i < n && s[i] != 0x001B; ++i) {
+        // No for-loop body. The loop searches for the terminating 0x001B.
+      }
+      continue;
+    }
+    s[dest_pos++] = s[i];
+  }
+  return dest_pos;
+}
+
 WideString PDF_DecodeText(pdfium::span<const uint8_t> span) {
   size_t dest_pos = 0;
   WideString result;
   if (span.size() >= 2 && ((span[0] == 0xfe && span[1] == 0xff) ||
                            (span[0] == 0xff && span[1] == 0xfe))) {
-    size_t max_chars = (span.size() - 2) / 2;
-    if (!max_chars)
-      return result;
-
-    pdfium::span<wchar_t> dest_buf = result.GetBuffer(max_chars);
-    uint16_t (*GetUnicodeFromBytes)(const uint8_t*) =
-        span[0] == 0xfe ? GetUnicodeFromBigEndianBytes
-                        : GetUnicodeFromLittleEndianBytes;
-    const uint8_t* unicode_str = &span[2];
-
-#if defined(WCHAR_T_IS_UTF32)
-    char16_t high_surrogate = 0;
-#endif  // defined(WCHAR_T_IS_UTF32)
-    for (size_t i = 0; i < max_chars * 2; i += 2) {
-      uint16_t unicode = GetUnicodeFromBytes(unicode_str + i);
-
-      // 0x001B is a begin/end marker for language metadata region that
-      // should not be in the decoded text.
-      if (unicode == 0x001B) {
-        i += 2;
-        for (; i < max_chars * 2; i += 2) {
-          unicode = GetUnicodeFromBytes(unicode_str + i);
-          if (unicode == 0x001B) {
-            i += 2;
-            if (i < max_chars * 2)
-              unicode = GetUnicodeFromBytes(unicode_str + i);
-            break;
-          }
-        }
-        if (i >= max_chars * 2)
-          break;
-      }
-
-#if defined(WCHAR_T_IS_UTF32)
-      // TODO(crbug.com/pdfium/2031): Always use UTF-16.
-      if (high_surrogate) {
-        char16_t previous_high_surrogate = high_surrogate;
-        high_surrogate = 0;
-
-        if (pdfium::IsLowSurrogate(unicode)) {
-          dest_buf[dest_pos++] =
-              pdfium::SurrogatePair(previous_high_surrogate, unicode)
-                  .ToCodePoint();
-          continue;
-        }
-        dest_buf[dest_pos++] = previous_high_surrogate;
-      }
-
-      if (pdfium::IsHighSurrogate(unicode)) {
-        high_surrogate = unicode;
-        continue;
-      }
-#endif  // defined(WCHAR_T_IS_UTF32)
-      dest_buf[dest_pos++] = unicode;
+    if (span[0] == 0xfe) {
+      result = WideString::FromUTF16BE(span.subspan(2));
+    } else {
+      result = WideString::FromUTF16LE(span.subspan(2));
     }
-
-#if defined(WCHAR_T_IS_UTF32)
-    if (high_surrogate) {
-      dest_buf[dest_pos++] = high_surrogate;
-    }
-#endif  // defined(WCHAR_T_IS_UTF32)
+    pdfium::span<wchar_t> dest_buf = result.GetBuffer(result.GetLength());
+    dest_pos = StripLanguageCodes(dest_buf, result.GetLength());
+  } else if (span.size() >= 3 && span[0] == 0xef && span[1] == 0xbb &&
+             span[2] == 0xbf) {
+    result = WideString::FromUTF8(span.subspan(3));
+    pdfium::span<wchar_t> dest_buf = result.GetBuffer(result.GetLength());
+    dest_pos = StripLanguageCodes(dest_buf, result.GetLength());
   } else {
     pdfium::span<wchar_t> dest_buf = result.GetBuffer(span.size());
     for (size_t i = 0; i < span.size(); ++i)
@@ -579,7 +538,7 @@ ByteString PDF_EncodeText(WideStringView str) {
 
   size_t dest_index = 0;
   {
-#if defined(WCHAR_T_IS_UTF32)
+#if defined(WCHAR_T_IS_32_BIT)
     // 2 or 4 bytes required per UTF-32 code unit.
     pdfium::span<uint8_t> dest_buf =
         pdfium::as_writable_bytes(result.GetBuffer(len * 4 + 2));
@@ -587,12 +546,12 @@ ByteString PDF_EncodeText(WideStringView str) {
     // 2 bytes required per UTF-16 code unit.
     pdfium::span<uint8_t> dest_buf =
         pdfium::as_writable_bytes(result.GetBuffer(len * 2 + 2));
-#endif  // defined(WCHAR_T_IS_UTF32)
+#endif  // defined(WCHAR_T_IS_32_BIT)
 
     dest_buf[dest_index++] = 0xfe;
     dest_buf[dest_index++] = 0xff;
     for (size_t j = 0; j < len; ++j) {
-#if defined(WCHAR_T_IS_UTF32)
+#if defined(WCHAR_T_IS_32_BIT)
       if (pdfium::IsSupplementary(str[j])) {
         pdfium::SurrogatePair pair(str[j]);
         dest_buf[dest_index++] = pair.high() >> 8;
@@ -601,7 +560,7 @@ ByteString PDF_EncodeText(WideStringView str) {
         dest_buf[dest_index++] = static_cast<uint8_t>(pair.low());
         continue;
       }
-#endif  // defined(WCHAR_T_IS_UTF32)
+#endif  // defined(WCHAR_T_IS_32_BIT)
       dest_buf[dest_index++] = str[j] >> 8;
       dest_buf[dest_index++] = static_cast<uint8_t>(str[j]);
     }
@@ -644,15 +603,4 @@ ByteString PDF_HexEncodeString(ByteStringView src) {
   }
   result += '>';
   return result;
-}
-
-DataVector<uint8_t> FlateEncode(pdfium::span<const uint8_t> src_span) {
-  return FlateModule::Encode(src_span);
-}
-
-uint32_t FlateDecode(pdfium::span<const uint8_t> src_span,
-                     std::unique_ptr<uint8_t, FxFreeDeleter>* dest_buf,
-                     uint32_t* dest_size) {
-  return FlateModule::FlateOrLZWDecode(false, src_span, false, 0, 0, 0, 0, 0,
-                                       dest_buf, dest_size);
 }

@@ -35,6 +35,7 @@ const char NotesCodec::kTypeKey[] = "type";
 const char NotesCodec::kSubjectKey[] = "subject";
 const char NotesCodec::kGuidKey[] = "guid";
 const char NotesCodec::kDateAddedKey[] = "date_added";
+const char NotesCodec::kDateModifiedKey[] = "last_modified";
 const char NotesCodec::kURLKey[] = "url";
 const char NotesCodec::kChildrenKey[] = "children";
 const char NotesCodec::kContentKey[] = "content";
@@ -168,6 +169,9 @@ base::Value NotesCodec::EncodeNode(
   value.GetDict().Set(
       kDateAddedKey,
       base::NumberToString(node->GetCreationTime().ToInternalValue()));
+  value.GetDict().Set(
+      kDateModifiedKey,
+      base::NumberToString(node->GetLastModificationTime().ToInternalValue()));
 
   if (node->type() == NoteNode::NOTE || node->type() == NoteNode::ATTACHMENT) {
     value.GetDict().Set(kContentKey, node->GetContent());
@@ -302,14 +306,18 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     uuids_.insert(uuid);
   }
 
-  base::Time creation_time = base::Time::Now();
-  string_value = value.GetDict().FindString(kDateAddedKey);
-  if (string_value) {
-    int64_t internal_time;
-    if (base::StringToInt64(*string_value, &internal_time)) {
-      creation_time = base::Time::FromInternalValue(internal_time);
+  const auto getTimeFromKey = [&value](const auto& key) {
+    const std::string* string_value = value.GetDict().FindString(key);
+    if (string_value) {
+      int64_t internal_time;
+      if (base::StringToInt64(*string_value, &internal_time)) {
+        return base::Time::FromInternalValue(internal_time);
+      }
     }
-  }
+    return base::Time::Now();
+  };
+  base::Time creation_time = getTimeFromKey(kDateAddedKey);
+  base::Time last_modification_time = getTimeFromKey(kDateModifiedKey);
 
   const std::string* type_string = value.GetDict().FindString(kTypeKey);
   if (!type_string)
@@ -420,6 +428,7 @@ bool NotesCodec::DecodeNode(const base::Value& value,
     parent->Add(base::WrapUnique(node));
   node->SetTitle(title);
   node->SetCreationTime(creation_time);
+  node->SetLastModificationTime(last_modification_time);
 
   return true;
 }

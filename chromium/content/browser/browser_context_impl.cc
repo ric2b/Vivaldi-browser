@@ -105,6 +105,11 @@ BrowserContextImpl::~BrowserContextImpl() {
 
   TtsControllerImpl::GetInstance()->OnBrowserContextDestroyed(self_);
 
+  if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
+    GetIOThreadTaskRunner({})->DeleteSoon(FROM_HERE,
+                                          std::move(resource_context_));
+  }
+
   TRACE_EVENT_NESTABLE_ASYNC_END1(
       "shutdown", "BrowserContextImpl::NotifyWillBeDestroyed() called.", this,
       "browser_context_impl", static_cast<void*>(this));
@@ -127,8 +132,7 @@ void BrowserContextImpl::NotifyWillBeDestroyed() {
     return;
   will_be_destroyed_soon_ = true;
 
-  self_->ForEachLoadedStoragePartition(
-      base::BindRepeating(NotifyContextWillBeDestroyed));
+  self_->ForEachLoadedStoragePartition(&NotifyContextWillBeDestroyed);
 
   // Also forcibly release keep alive refcounts on RenderProcessHosts, to ensure
   // they destruct before the BrowserContext does.

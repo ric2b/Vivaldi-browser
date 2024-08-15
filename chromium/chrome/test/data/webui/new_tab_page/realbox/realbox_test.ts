@@ -9,7 +9,7 @@ import {AutocompleteMatch, NavigationPredictor, SideType} from 'chrome://resourc
 import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PageMetricsCallbackRouter} from 'chrome://resources/js/metrics_reporter.mojom-webui.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -235,17 +235,38 @@ suite('NewTabPageRealboxTest', () => {
     });
   });
 
-  test('Single colored voice search icon has masked image', async () => {
+  test('Color source baseline search icon has background image', async () => {
     // Arrange.
+    loadTimeData.overrideValues({realboxCr23Theming: true});
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     realbox = document.createElement('ntp-realbox');
-    realbox.singleColoredIcons = true;
+    realbox.colorSourceIsBaseline = true;
+    document.body.appendChild(realbox);
+
+    // Assert.
+    assertStyle(
+        realbox.$.voiceSearchButton, 'background-image',
+        'url("chrome://new-tab-page/icons/googlemic_clr_24px.svg")');
+
+    // Restore.
+    loadTimeData.overrideValues({realboxCr23Theming: false});
+  });
+
+  test('Color source not baseline search icon has mask image', async () => {
+    // Arrange.
+    loadTimeData.overrideValues({realboxCr23Theming: true});
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    realbox = document.createElement('ntp-realbox');
+    realbox.colorSourceIsBaseline = false;
     document.body.appendChild(realbox);
 
     // Assert.
     assertStyle(
         realbox.$.voiceSearchButton, '-webkit-mask-image',
         'url("chrome://new-tab-page/icons/googlemic_clr_24px.svg")');
+
+    // Restore.
+    loadTimeData.overrideValues({realboxCr23Theming: false});
   });
 
   //============================================================================

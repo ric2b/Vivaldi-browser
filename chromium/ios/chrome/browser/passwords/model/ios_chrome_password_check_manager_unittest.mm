@@ -25,7 +25,7 @@
 #import "components/password_manager/core/browser/leak_detection/mock_bulk_leak_check_service.h"
 #import "components/password_manager/core/browser/password_form.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
-#import "components/password_manager/core/browser/test_password_store.h"
+#import "components/password_manager/core/browser/password_store/test_password_store.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/pref_registry_simple.h"
@@ -235,7 +235,8 @@ TEST_F(IOSChromePasswordCheckManagerTest,
 TEST_F(IOSChromePasswordCheckManagerTest, LastTimePasswordCheckCompletedReset) {
   FastForwardBy(base::Days(1));
 
-  manager().StartPasswordCheck();
+  manager().StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kIosProactivePasswordCheckup);
   RunUntilIdle();
 
   static_cast<BulkLeakCheckServiceInterface::Observer*>(&manager())
@@ -274,7 +275,8 @@ TEST_F(IOSChromePasswordCheckManagerTest, InsecureCredentialCountsMetrics) {
                  /*is_muted=*/true);
   store().AddLogin(muted_form);
 
-  manager().StartPasswordCheck();
+  manager().StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kIosProactivePasswordCheckup);
   RunUntilIdle();
 
   static_cast<BulkLeakCheckServiceInterface::Observer*>(&manager())
@@ -338,10 +340,6 @@ TEST_F(IOSChromePasswordCheckManagerTest, NotifyObserversAboutStateChanges) {
 
 // Tests expected delay is being added.
 TEST_F(IOSChromePasswordCheckManagerTest, CheckFinishedWithDelay) {
-  // Enable weak and reuse checks.
-  base::test::ScopedFeatureList feature_list(
-      password_manager::features::kIOSPasswordCheckup);
-
   store().AddLogin(MakeSavedPassword(kExampleCom1, kUsername116));
 
   RunUntilIdle();
@@ -351,7 +349,8 @@ TEST_F(IOSChromePasswordCheckManagerTest, CheckFinishedWithDelay) {
   EXPECT_CALL(observer, InsecureCredentialsChanged).Times(2);
   EXPECT_CALL(observer, PasswordCheckStatusChanged(PasswordCheckState::kIdle))
       .Times(2);
-  manager().StartPasswordCheck();
+  manager().StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kIosProactivePasswordCheckup);
   RunUntilIdle();
 
   static_cast<BulkLeakCheckServiceInterface::Observer*>(&manager())
@@ -372,16 +371,13 @@ TEST_F(IOSChromePasswordCheckManagerTest, CheckFinishedWithDelay) {
 
 // Verify that GetInsecureCredentials returns weak credentials.
 TEST_F(IOSChromePasswordCheckManagerTest, WeakCredentialsAreReturned) {
-  // Enable weak and reuse checks.
-  base::test::ScopedFeatureList feature_list(
-      password_manager::features::kIOSPasswordCheckup);
-
   PasswordForm weak_form =
       MakeSavedPassword(kExampleCom1, kUsername116, kWeakPassword);
   store().AddLogin(weak_form);
 
   RunUntilIdle();
-  manager().StartPasswordCheck();
+  manager().StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kIosProactivePasswordCheckup);
   RunUntilIdle();
 
   EXPECT_THAT(manager().GetInsecureCredentials(),
@@ -390,10 +386,6 @@ TEST_F(IOSChromePasswordCheckManagerTest, WeakCredentialsAreReturned) {
 
 // Verify that GetInsecureCredentials returns reused credentials.
 TEST_F(IOSChromePasswordCheckManagerTest, ReusedCredentialsAreReturned) {
-  // Enable weak and reuse checks.
-  base::test::ScopedFeatureList feature_list(
-      password_manager::features::kIOSPasswordCheckup);
-
   PasswordForm form_with_same_password_1 =
       MakeSavedPassword(kExampleCom1, kUsername116, kPassword116);
   store().AddLogin(form_with_same_password_1);
@@ -403,7 +395,8 @@ TEST_F(IOSChromePasswordCheckManagerTest, ReusedCredentialsAreReturned) {
   store().AddLogin(form_with_same_password_2);
 
   RunUntilIdle();
-  manager().StartPasswordCheck();
+  manager().StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kIosProactivePasswordCheckup);
   RunUntilIdle();
 
   std::vector<CredentialUIEntry> insecure_credentials =

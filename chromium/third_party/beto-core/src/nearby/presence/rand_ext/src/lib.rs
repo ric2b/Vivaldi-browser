@@ -14,8 +14,6 @@
 
 //! Helper functions around `rand`'s offerings for convenient test usage.
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 extern crate alloc;
 

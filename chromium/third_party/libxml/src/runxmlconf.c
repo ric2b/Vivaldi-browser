@@ -6,6 +6,7 @@
  * daniel@veillard.com
  */
 
+#include "config.h"
 #include <stdio.h>
 #include <libxml/xmlversion.h>
 
@@ -121,7 +122,7 @@ static void test_log(const char *msg, ...) {
 }
 
 static void
-testErrorHandler(void *userData ATTRIBUTE_UNUSED, xmlErrorPtr error) {
+testErrorHandler(void *userData ATTRIBUTE_UNUSED, const xmlError *error) {
     int res;
 
     if (testErrorsSize >= 32768)

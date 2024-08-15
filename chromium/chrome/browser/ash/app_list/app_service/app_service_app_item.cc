@@ -10,7 +10,6 @@
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/tablet_mode.h"
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -30,6 +29,7 @@
 #include "chrome/browser/ash/remote_apps/remote_apps_manager_factory.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "ui/display/screen.h"
 
 namespace {
 
@@ -51,9 +51,6 @@ bool IsNewInstall(const apps::AppUpdate& app_update) {
     case apps::AppType::kSystemWeb:
     case apps::AppType::kRemote:
       // Chrome, Lacros, Settings, etc. are built-in.
-      return false;
-    case apps::AppType::kMacOs:
-      NOTREACHED();
       return false;
     case apps::AppType::kArc:
     case apps::AppType::kCrostini:
@@ -124,7 +121,7 @@ AppServiceAppItem::AppServiceAppItem(
     }
   }
 
-  absl::optional<apps::PackageId> package_id =
+  std::optional<apps::PackageId> package_id =
       apps_util::GetPackageIdForApp(profile, app_update);
   if (package_id.has_value()) {
     SetPromisePackageId(package_id.value().ToString());
@@ -148,8 +145,10 @@ void AppServiceAppItem::OnAppUpdate(const apps::AppUpdate& app_update) {
 
 void AppServiceAppItem::OnAppUpdate(const apps::AppUpdate& app_update,
                                     bool in_constructor) {
-  if (in_constructor || app_update.NameChanged()) {
-    SetName(app_update.Name());
+  if (in_constructor || app_update.ShortNameChanged()) {
+    // We display the short name rather than the full name here since
+    // each launcher item only has a limited space.
+    SetName(app_update.ShortName());
   }
 
   if (in_constructor || app_update.IconKeyChanged()) {
@@ -251,8 +250,7 @@ void AppServiceAppItem::ResetIsNewInstall() {
 
   // Record metric for approximate time from installation to launch.
   base::TimeDelta time_since_install = base::TimeTicks::Now() - creation_time_;
-  // TabletMode may be null in unit tests.
-  if (ash::TabletMode::Get() && ash::TabletMode::Get()->InTabletMode()) {
+  if (display::Screen::GetScreen()->InTabletMode()) {
     base::UmaHistogramCustomTimes(
         "Apps.TimeBetweenAppInstallAndLaunch.TabletMode", time_since_install,
         kTimeMetricsMin, kTimeMetricsMax, kTimeMetricsBucketCount);
@@ -274,7 +272,7 @@ void AppServiceAppItem::Launch(int event_flags,
 
 void AppServiceAppItem::CallLoadIcon(bool allow_placeholder_icon) {
   apps::AppServiceProxyFactory::GetForProfile(profile())->LoadIcon(
-      app_type_, id(), apps::IconType::kStandard,
+      id(), apps::IconType::kStandard,
       ash::SharedAppListConfig::instance().default_grid_icon_dimension(),
       allow_placeholder_icon,
       base::BindOnce(&AppServiceAppItem::OnLoadIcon,

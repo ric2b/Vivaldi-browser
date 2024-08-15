@@ -354,16 +354,17 @@ void FeedbackVector::AddToVectorsForProfilingTools(
   isolate->SetFeedbackVectorsForProfilingTools(*list);
 }
 
-void FeedbackVector::SetOptimizedCode(Tagged<Code> code) {
+void FeedbackVector::SetOptimizedCode(IsolateForSandbox isolate,
+                                      Tagged<Code> code) {
   DCHECK(CodeKindIsOptimizedJSFunction(code->kind()));
   int32_t state = flags();
   // Skip setting optimized code if it would cause us to tier down.
   if (!has_optimized_code()) {
     state = MaybeHasTurbofanCodeBit::update(state, false);
-  } else if (!CodeKindCanTierUp(optimized_code()->kind()) ||
-             optimized_code()->kind() > code->kind()) {
+  } else if (!CodeKindCanTierUp(optimized_code(isolate)->kind()) ||
+             optimized_code(isolate)->kind() > code->kind()) {
     if (!v8_flags.stress_concurrent_inlining_attach_code &&
-        !optimized_code()->marked_for_deoptimization()) {
+        !optimized_code(isolate)->marked_for_deoptimization()) {
       return;
     }
     // If we fall through, we may be tiering down. This is fine since we only do
@@ -376,7 +377,7 @@ void FeedbackVector::SetOptimizedCode(Tagged<Code> code) {
   // re-mark the function for non-concurrent optimization after an OSR. We
   // should avoid these cases and also check that marker isn't
   // TieringState::kRequestTurbofan*.
-  set_maybe_optimized_code(HeapObjectReference::Weak(code));
+  set_maybe_optimized_code(HeapObjectReference::Weak(code->wrapper()));
   // TODO(leszeks): Reconsider whether this could clear the tiering state vs.
   // the callers doing so.
   state = TieringStateBits::update(state, TieringState::kNone);
@@ -407,7 +408,7 @@ void FeedbackVector::SetOptimizedOsrCode(Isolate* isolate, FeedbackSlot slot,
   if (V8_UNLIKELY(current && current.value()->kind() > code->kind())) {
     return;
   }
-  Set(slot, HeapObjectReference::Weak(code));
+  Set(slot, HeapObjectReference::Weak(code->wrapper()));
   set_maybe_has_optimized_osr_code(true, code->kind());
 }
 
@@ -453,7 +454,7 @@ void FeedbackVector::EvictOptimizedCodeMarkedForDeoptimization(
     return;
   }
 
-  Tagged<Code> code = Code::cast(slot.GetHeapObject());
+  Tagged<Code> code = CodeWrapper::cast(slot.GetHeapObject())->code(isolate);
   if (code->marked_for_deoptimization()) {
     Deoptimizer::TraceEvictFromOptimizedCodeCache(isolate, shared, reason);
     ClearOptimizedCode();
@@ -1196,23 +1197,26 @@ Tagged<Name> FeedbackNexus::GetName() const {
       return Name::cast(extra.GetHeapObjectAssumeStrong());
     }
   }
-  return Name();
+  return {};
 }
 
 KeyedAccessLoadMode FeedbackNexus::GetKeyedAccessLoadMode() const {
   DCHECK(IsKeyedLoadICKind(kind()) || IsKeyedHasICKind(kind()));
 
-  if (GetKeyType() == IcCheckType::kProperty) return STANDARD_LOAD;
+  // TODO(victorgomes): The KeyedAccessLoadMode::kInBounds is doing double duty
+  // here. It shouldn't be used for property loads.
+  if (GetKeyType() == IcCheckType::kProperty)
+    return KeyedAccessLoadMode::kInBounds;
 
   std::vector<MapAndHandler> maps_and_handlers;
   ExtractMapsAndHandlers(&maps_and_handlers);
   for (MapAndHandler map_and_handler : maps_and_handlers) {
     KeyedAccessLoadMode mode =
         LoadHandler::GetKeyedAccessLoadMode(*map_and_handler.second);
-    if (mode != STANDARD_LOAD) return mode;
+    if (LoadModeHandlesOOB(mode)) return mode;
   }
 
-  return STANDARD_LOAD;
+  return KeyedAccessLoadMode::kInBounds;
 }
 
 namespace {
@@ -1220,17 +1224,17 @@ namespace {
 bool BuiltinHasKeyedAccessStoreMode(Builtin builtin) {
   DCHECK(Builtins::IsBuiltinId(builtin));
   switch (builtin) {
-    case Builtin::kKeyedStoreIC_SloppyArguments_Standard:
-    case Builtin::kKeyedStoreIC_SloppyArguments_GrowNoTransitionHandleCOW:
-    case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionIgnoreOOB:
+    case Builtin::kKeyedStoreIC_SloppyArguments_InBounds:
+    case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionGrowAndHandleCOW:
+    case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionIgnoreTypedArrayOOB:
     case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionHandleCOW:
-    case Builtin::kStoreFastElementIC_Standard:
-    case Builtin::kStoreFastElementIC_GrowNoTransitionHandleCOW:
-    case Builtin::kStoreFastElementIC_NoTransitionIgnoreOOB:
+    case Builtin::kStoreFastElementIC_InBounds:
+    case Builtin::kStoreFastElementIC_NoTransitionGrowAndHandleCOW:
+    case Builtin::kStoreFastElementIC_NoTransitionIgnoreTypedArrayOOB:
     case Builtin::kStoreFastElementIC_NoTransitionHandleCOW:
-    case Builtin::kElementsTransitionAndStore_Standard:
-    case Builtin::kElementsTransitionAndStore_GrowNoTransitionHandleCOW:
-    case Builtin::kElementsTransitionAndStore_NoTransitionIgnoreOOB:
+    case Builtin::kElementsTransitionAndStore_InBounds:
+    case Builtin::kElementsTransitionAndStore_NoTransitionGrowAndHandleCOW:
+    case Builtin::kElementsTransitionAndStore_NoTransitionIgnoreTypedArrayOOB:
     case Builtin::kElementsTransitionAndStore_NoTransitionHandleCOW:
       return true;
     default:
@@ -1242,22 +1246,22 @@ bool BuiltinHasKeyedAccessStoreMode(Builtin builtin) {
 KeyedAccessStoreMode KeyedAccessStoreModeForBuiltin(Builtin builtin) {
   DCHECK(BuiltinHasKeyedAccessStoreMode(builtin));
   switch (builtin) {
-    case Builtin::kKeyedStoreIC_SloppyArguments_Standard:
-    case Builtin::kStoreFastElementIC_Standard:
-    case Builtin::kElementsTransitionAndStore_Standard:
-      return STANDARD_STORE;
-    case Builtin::kKeyedStoreIC_SloppyArguments_GrowNoTransitionHandleCOW:
-    case Builtin::kStoreFastElementIC_GrowNoTransitionHandleCOW:
-    case Builtin::kElementsTransitionAndStore_GrowNoTransitionHandleCOW:
-      return STORE_AND_GROW_HANDLE_COW;
-    case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionIgnoreOOB:
-    case Builtin::kStoreFastElementIC_NoTransitionIgnoreOOB:
-    case Builtin::kElementsTransitionAndStore_NoTransitionIgnoreOOB:
-      return STORE_IGNORE_OUT_OF_BOUNDS;
+    case Builtin::kKeyedStoreIC_SloppyArguments_InBounds:
+    case Builtin::kStoreFastElementIC_InBounds:
+    case Builtin::kElementsTransitionAndStore_InBounds:
+      return KeyedAccessStoreMode::kInBounds;
+    case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionGrowAndHandleCOW:
+    case Builtin::kStoreFastElementIC_NoTransitionGrowAndHandleCOW:
+    case Builtin::kElementsTransitionAndStore_NoTransitionGrowAndHandleCOW:
+      return KeyedAccessStoreMode::kGrowAndHandleCOW;
+    case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionIgnoreTypedArrayOOB:
+    case Builtin::kStoreFastElementIC_NoTransitionIgnoreTypedArrayOOB:
+    case Builtin::kElementsTransitionAndStore_NoTransitionIgnoreTypedArrayOOB:
+      return KeyedAccessStoreMode::kIgnoreTypedArrayOOB;
     case Builtin::kKeyedStoreIC_SloppyArguments_NoTransitionHandleCOW:
     case Builtin::kStoreFastElementIC_NoTransitionHandleCOW:
     case Builtin::kElementsTransitionAndStore_NoTransitionHandleCOW:
-      return STORE_HANDLE_COW;
+      return KeyedAccessStoreMode::kHandleCOW;
     default:
       UNREACHABLE();
   }
@@ -1269,7 +1273,7 @@ KeyedAccessStoreMode FeedbackNexus::GetKeyedAccessStoreMode() const {
   DCHECK(IsKeyedStoreICKind(kind()) || IsStoreInArrayLiteralICKind(kind()) ||
          IsDefineKeyedOwnPropertyInLiteralKind(kind()) ||
          IsDefineKeyedOwnICKind(kind()));
-  KeyedAccessStoreMode mode = STANDARD_STORE;
+  KeyedAccessStoreMode mode = KeyedAccessStoreMode::kInBounds;
 
   if (GetKeyType() == IcCheckType::kProperty) return mode;
 
@@ -1287,7 +1291,7 @@ KeyedAccessStoreMode FeedbackNexus::GetKeyedAccessStoreMode() const {
         // Decode the KeyedAccessStoreMode information from the Handler.
         mode = StoreHandler::GetKeyedAccessStoreMode(
             MaybeObject::FromObject(data_handler->smi_handler()));
-        if (mode != STANDARD_STORE) return mode;
+        if (!StoreModeIsInBounds(mode)) return mode;
         continue;
       } else {
         Tagged<Code> code = Code::cast(data_handler->smi_handler());
@@ -1301,11 +1305,11 @@ KeyedAccessStoreMode FeedbackNexus::GetKeyedAccessStoreMode() const {
       }
       // Decode the KeyedAccessStoreMode information from the Handler.
       mode = StoreHandler::GetKeyedAccessStoreMode(*maybe_code_handler);
-      if (mode != STANDARD_STORE) return mode;
+      if (!StoreModeIsInBounds(mode)) return mode;
       continue;
     } else if (IsDefineKeyedOwnICKind(kind())) {
       mode = StoreHandler::GetKeyedAccessStoreMode(*maybe_code_handler);
-      if (mode != STANDARD_STORE) return mode;
+      if (!StoreModeIsInBounds(mode)) return mode;
       continue;
     } else {
       // Element store without prototype chain check.

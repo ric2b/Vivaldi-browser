@@ -1,12 +1,10 @@
 #include <Eigen/Dense>
 #include <iostream>
 
-int main()
-{
-  Eigen::ArrayXXf a(2,2);
-  
-  a << 1,2,
-       3,4;
+int main() {
+  Eigen::ArrayXXf a(2, 2);
+
+  a << 1, 2, 3, 4;
 
   std::cout << "(a > 0).all()   = " << (a > 0).all() << std::endl;
   std::cout << "(a > 0).any()   = " << (a > 0).any() << std::endl;

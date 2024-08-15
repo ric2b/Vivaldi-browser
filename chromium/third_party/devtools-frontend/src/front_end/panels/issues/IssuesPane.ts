@@ -7,19 +7,19 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as IssueCounter from '../../ui/components/issue_counter/issue_counter.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {HiddenIssuesRow} from './HiddenIssuesRow.js';
-import issuesPaneStyles from './issuesPane.css.js';
-import issuesTreeStyles from './issuesTree.css.js';
-
 import {
-  Events as IssueAggregatorEvents,
-  IssueAggregator,
   type AggregatedIssue,
   type AggregationKey,
+  Events as IssueAggregatorEvents,
+  IssueAggregator,
 } from './IssueAggregator.js';
+import {getGroupIssuesByKindSetting, IssueKindView, issueKindViewSortPriority} from './IssueKindView.js';
+import issuesPaneStyles from './issuesPane.css.js';
+import issuesTreeStyles from './issuesTree.css.js';
 import {IssueView} from './IssueView.js';
-import {IssueKindView, getGroupIssuesByKindSetting, issueKindViewSortPriority} from './IssueKindView.js';
 
 const UIStrings = {
   /**
@@ -168,8 +168,6 @@ export function getGroupIssuesByCategorySetting(): Common.Settings.Setting<boole
   return Common.Settings.Settings.instance().createSetting('groupIssuesByCategory', false);
 }
 
-let issuesPaneInstance: IssuesPane;
-
 export class IssuesPane extends UI.Widget.VBox {
   #categoryViews: Map<IssuesManager.Issue.IssueCategory, IssueCategoryView>;
   #issueViews: Map<AggregationKey, IssueView>;
@@ -182,8 +180,10 @@ export class IssuesPane extends UI.Widget.VBox {
   #aggregator: IssueAggregator;
   #issueViewUpdatePromise: Promise<void> = Promise.resolve();
 
-  private constructor() {
+  constructor() {
     super(true);
+
+    this.element.setAttribute('jslog', `${VisualLogging.panel().context('issues')}`);
 
     this.contentElement.classList.add('issues-pane');
 
@@ -215,15 +215,6 @@ export class IssuesPane extends UI.Widget.VBox {
     this.#onFullUpdate();
     this.#issuesManager.addEventListener(
         IssuesManager.IssuesManager.Events.IssuesCountUpdated, this.#updateCounts, this);
-  }
-
-  static instance(opts: {forceNew: boolean|null} = {forceNew: null}): IssuesPane {
-    const {forceNew} = opts;
-    if (!issuesPaneInstance || forceNew) {
-      issuesPaneInstance = new IssuesPane();
-    }
-
-    return issuesPaneInstance;
   }
 
   override elementsToRestoreScrollPositionsFor(): Element[] {

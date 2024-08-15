@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//printing/buildflags/buildflags.gni")
 import("//third_party/blink/public/public_features.gni")
 import("//third_party/blink/renderer/config.gni")
 
@@ -44,6 +45,7 @@ mojom("mojom_platform") {
     "clipboard/clipboard.mojom",
     "close_watcher/close_listener.mojom",
     "commit_result/commit_result.mojom",
+    "content_extraction/inner_html.mojom",
     "content_extraction/inner_text.mojom",
     "content_index/content_index.mojom",
     "context_menu/context_menu.mojom",
@@ -66,7 +68,6 @@ mojom("mojom_platform") {
     "dom_storage/session_storage_namespace.mojom",
     "dom_storage/storage_area.mojom",
     "drag/drag.mojom",
-    "environment_integrity/environment_integrity_service.mojom",
     "favicon/favicon_url.mojom",
     "feature_observer/feature_observer.mojom",
     "fenced_frame/fenced_frame_config.mojom",
@@ -124,7 +125,6 @@ mojom("mojom_platform") {
     "loader/pause_subresource_loading_handle.mojom",
     "loader/referrer.mojom",
     "loader/request_context_frame_type.mojom",
-    "loader/resource_cache.mojom",
     "loader/resource_load_info.mojom",
     "loader/resource_load_info_notifier.mojom",
     "loader/same_document_navigation_type.mojom",
@@ -146,6 +146,8 @@ mojom("mojom_platform") {
     "mediastream/media_devices.mojom",
     "mediastream/media_stream.mojom",
     "mime/mime_registry.mojom",
+    "model_execution/model_manager.mojom",
+    "model_execution/model_session.mojom",
     "navigation/navigation_api_history_entry_arrays.mojom",
     "navigation/navigation_initiator_activation_and_ad_status.mojom",
     "navigation/navigation_policy.mojom",
@@ -266,13 +268,7 @@ mojom("mojom_platform") {
   }
 
   if (use_blink_extensions_chromeos) {
-    sources += [
-      "chromeos/diagnostics/cros_diagnostics.mojom",
-      "chromeos/system_extensions/hid/cros_hid.mojom",
-      "chromeos/system_extensions/managed_device_health_services/telemetry/cros_telemetry.mojom",
-      "chromeos/system_extensions/managed_device_health_services/telemetry/nullable_primitives.mojom",
-      "chromeos/system_extensions/window_management/cros_window_management.mojom",
-    ]
+    sources += [ "chromeos/diagnostics/cros_diagnostics.mojom" ]
   }
 
   public_deps = [
@@ -318,6 +314,7 @@ mojom("mojom_platform") {
     "//ui/events/mojom",
     "//ui/events/mojom:event_latency_metadata_mojom",
     "//ui/gfx/geometry/mojom",
+    "//ui/gfx/image/mojom",
     "//ui/gfx/mojom",
     "//ui/gfx/range/mojom",
     "//url/mojom:url_mojom_gurl",
@@ -338,6 +335,7 @@ mojom("mojom_platform") {
   } else {
     sources += [
       "direct_sockets/direct_sockets.mojom",
+      "printing/web_printing.mojom",
       "serial/serial.mojom",
     ]
   }
@@ -367,6 +365,9 @@ mojom("mojom_platform") {
   }
   if (is_android || is_apple) {
     enabled_features += [ "is_using_open_color_chooser" ]
+  }
+  if (is_android || is_ios) {
+    enabled_features += [ "is_android_or_ios" ]
   }
 
   shared_cpp_typemaps = [
@@ -514,6 +515,16 @@ mojom("mojom_platform") {
         },
       ]
       traits_headers = [ "//third_party/blink/public/common/web_preferences/web_preferences_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
+          mojom = "blink.mojom.ColorProviderColorMaps"
+          cpp = "::blink::ColorProviderColorMaps"
+        },
+      ]
+      traits_headers = [ "//third_party/blink/public/common/page/color_provider_color_maps_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/color" ]
     },
     {
       types = [
@@ -1007,18 +1018,48 @@ mojom("mojom_platform") {
           mojom = "blink.mojom.UserAgentMetadata"
           cpp = "::blink::UserAgentMetadata"
         },
-
         {
           mojom = "blink.mojom.UserAgentOverride"
           cpp = "::blink::UserAgentOverride"
         },
       ]
       traits_headers = [ "//third_party/blink/public/common/user_agent/user_agent_mojom_traits.h" ]
-
       traits_sources =
           [ "//third_party/blink/common/user_agent/user_agent_mojom_traits.cc" ]
     },
   ]
+  if (is_chromeos && use_cups) {
+    cpp_typemaps += [
+      {
+        types = [
+          {
+            mojom = "blink.mojom.WebPrintJobTemplateAttributes"
+            cpp = "::std::unique_ptr<::printing::PrintSettings>"
+            move_only = true
+            nullable_is_same_type = true
+          },
+          {
+            mojom = "blink.mojom.WebPrintingSides"
+            cpp = "::printing::mojom::DuplexMode"
+          },
+          {
+            mojom = "blink.mojom.WebPrinterState"
+            cpp = "ipp_pstate_t"
+          },
+          {
+            mojom = "blink.mojom.WebPrinterStateReason"
+            cpp = "::printing::PrinterStatus::PrinterReason::Reason"
+          },
+        ]
+        traits_headers =
+            [ "//chrome/browser/printing/web_api/web_printing_mojom_traits.h" ]
+        traits_sources =
+            [ "//chrome/browser/printing/web_api/web_printing_mojom_traits.cc" ]
+        traits_public_deps = [ "//printing" ]
+        traits_deps = [ "//printing/mojom" ]
+      },
+    ]
+  }
   blink_cpp_typemaps = [
     {
       types = [
@@ -1279,12 +1320,12 @@ mojom("mojom_core") {
     "messaging/transferable_message.mojom",
     "messaging/user_activation_snapshot.mojom",
 
+    # Depends on cloneable message.
+    "broadcastchannel/broadcast_channel.mojom",
+
     # Depends on frame_policy.mojom.
     "fenced_frame/fenced_frame.mojom",
     "navigation/navigation_params.mojom",
-
-    # Depends on transferable_message.mojom.
-    "portal/portal.mojom",
 
     # Note that service_worker_object.mojom and service_worker.mojom depend on
     # transferable_message.mojom, and controller_service_worker.mojom and
@@ -1330,8 +1371,10 @@ mojom("mojom_core") {
     "//third_party/blink/public/mojom/storage_key",
     "//ui/base/dragdrop/mojom",
     "//ui/base/mojom",
+    "//ui/color:mojom",
     "//ui/display/mojom",
     "//ui/gfx/geometry/mojom",
+    "//ui/gfx/image/mojom",
     "//ui/gfx/mojom",
     "//ui/gfx/range/mojom",
     "//url/mojom:url_mojom_gurl",
@@ -1766,37 +1809,6 @@ mojom("web_bluetooth_mojo_bindings") {
   export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
   export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
   export_header_blink = "third_party/blink/public/platform/web_common.h"
-}
-
-# The mojom_broadcastchannel_bindings is separated from the rest of mojom files
-# to allow blink/renderer/core to depend on this.
-mojom("mojom_broadcastchannel_bindings") {
-  visibility = [ "//content/*" ]
-  visibility_blink = [ "//third_party/blink/renderer/core/*" ]
-  sources = [ "broadcastchannel/broadcast_channel.mojom" ]
-  public_deps = [
-    ":mojom_core",
-    "//url/mojom:url_mojom_origin",
-  ]
-
-  overridden_deps = [ ":mojom_core" ]
-  component_deps = [ "//third_party/blink/public/common" ]
-  overridden_deps_blink = []
-  component_deps_blink =
-      [ "//third_party/blink/renderer/bindings:generate_bindings_all" ]
-
-  component_output_prefix = "blink_mojom_broadcastchannel_bindings"
-
-  # See comment above.
-  export_class_attribute = "CONTENT_EXPORT"
-  export_define = "CONTENT_IMPLEMENTATION=1"
-  export_header = "content/common/content_export.h"
-
-  # Similarly, the blink variant must be linked with the core component
-  # since it uses types from it in its typemaps.
-  export_class_attribute_blink = "CORE_EXPORT"
-  export_define_blink = "BLINK_CORE_IMPLEMENTATION=1"
-  export_header_blink = "third_party/blink/renderer/core/core_export.h"
 }
 
 mojom("mojom_mhtml_load_result") {

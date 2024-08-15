@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.RecentTabsManager;
 import org.chromium.chrome.browser.ntp.RecentTabsPage;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -74,11 +73,13 @@ public class NativePageFactory {
     private final Supplier<Toolbar> mToolbarSupplier;
     private final HomeSurfaceTracker mHomeSurfaceTracker;
     private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
+    private final ObservableSupplier<Integer> mTabStripHeightSupplier;
     private NewTabPageUma mNewTabPageUma;
 
     private NativePageBuilder mNativePageBuilder;
 
-    public NativePageFactory(@NonNull Activity activity,
+    public NativePageFactory(
+            @NonNull Activity activity,
             @NonNull BottomSheetController sheetController,
             @NonNull BrowserControlsManager browserControlsManager,
             @NonNull Supplier<Tab> currentTabSupplier,
@@ -86,10 +87,12 @@ public class NativePageFactory {
             @NonNull ActivityLifecycleDispatcher lifecycleDispatcher,
             @NonNull TabModelSelector tabModelSelector,
             @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
-            @NonNull WindowAndroid windowAndroid, @NonNull JankTracker jankTracker,
+            @NonNull WindowAndroid windowAndroid,
+            @NonNull JankTracker jankTracker,
             @NonNull Supplier<Toolbar> toolbarSupplier,
             @Nullable HomeSurfaceTracker homeSurfaceTracker,
-            @Nullable ObservableSupplier<TabContentManager> tabContentManagerSupplier) {
+            @Nullable ObservableSupplier<TabContentManager> tabContentManagerSupplier,
+            @NonNull ObservableSupplier<Integer> tabStripHeightSupplier) {
         mActivity = activity;
         mBottomSheetController = sheetController;
         mBrowserControlsManager = browserControlsManager;
@@ -103,15 +106,28 @@ public class NativePageFactory {
         mToolbarSupplier = toolbarSupplier;
         mHomeSurfaceTracker = homeSurfaceTracker;
         mTabContentManagerSupplier = tabContentManagerSupplier;
+        mTabStripHeightSupplier = tabStripHeightSupplier;
     }
 
     private NativePageBuilder getBuilder() {
         if (mNativePageBuilder == null) {
-            mNativePageBuilder = new NativePageBuilder(mActivity, this::getNewTabPageUma,
-                    mBottomSheetController, mBrowserControlsManager, mCurrentTabSupplier,
-                    mSnackbarManagerSupplier, mLifecycleDispatcher, mTabModelSelector,
-                    mShareDelegateSupplier, mWindowAndroid, mJankTracker, mToolbarSupplier,
-                    mHomeSurfaceTracker, mTabContentManagerSupplier);
+            mNativePageBuilder =
+                    new NativePageBuilder(
+                            mActivity,
+                            this::getNewTabPageUma,
+                            mBottomSheetController,
+                            mBrowserControlsManager,
+                            mCurrentTabSupplier,
+                            mSnackbarManagerSupplier,
+                            mLifecycleDispatcher,
+                            mTabModelSelector,
+                            mShareDelegateSupplier,
+                            mWindowAndroid,
+                            mJankTracker,
+                            mToolbarSupplier,
+                            mHomeSurfaceTracker,
+                            mTabContentManagerSupplier,
+                            mTabStripHeightSupplier);
         }
         return mNativePageBuilder;
     }
@@ -119,7 +135,7 @@ public class NativePageFactory {
     private NewTabPageUma getNewTabPageUma() {
         if (mNewTabPageUma == null) {
             mNewTabPageUma = new NewTabPageUma(mTabModelSelector);
-            mNewTabPageUma.monitorNTPCreation();
+            mNewTabPageUma.monitorNtpCreation();
         }
         return mNewTabPageUma;
     }
@@ -140,16 +156,24 @@ public class NativePageFactory {
         private final Supplier<Toolbar> mToolbarSupplier;
         private final HomeSurfaceTracker mHomeSurfaceTracker;
         private final ObservableSupplier<TabContentManager> mTabContentManagerSupplier;
+        private final ObservableSupplier<Integer> mTabStripHeightSupplier;
 
-        public NativePageBuilder(Activity activity, Supplier<NewTabPageUma> uma,
+        public NativePageBuilder(
+                Activity activity,
+                Supplier<NewTabPageUma> uma,
                 BottomSheetController sheetController,
-                BrowserControlsManager browserControlsManager, Supplier<Tab> currentTabSupplier,
+                BrowserControlsManager browserControlsManager,
+                Supplier<Tab> currentTabSupplier,
                 Supplier<SnackbarManager> snackbarManagerSupplier,
-                ActivityLifecycleDispatcher lifecycleDispatcher, TabModelSelector tabModelSelector,
-                Supplier<ShareDelegate> shareDelegateSupplier, WindowAndroid windowAndroid,
-                JankTracker jankTracker, Supplier<Toolbar> toolbarSupplier,
+                ActivityLifecycleDispatcher lifecycleDispatcher,
+                TabModelSelector tabModelSelector,
+                Supplier<ShareDelegate> shareDelegateSupplier,
+                WindowAndroid windowAndroid,
+                JankTracker jankTracker,
+                Supplier<Toolbar> toolbarSupplier,
                 HomeSurfaceTracker homeSurfaceTracker,
-                ObservableSupplier<TabContentManager> tabContentManagerSupplier) {
+                ObservableSupplier<TabContentManager> tabContentManagerSupplier,
+                ObservableSupplier<Integer> tabStripHeightSupplier) {
             mActivity = activity;
             mUma = uma;
             mBottomSheetController = sheetController;
@@ -164,6 +188,7 @@ public class NativePageFactory {
             mToolbarSupplier = toolbarSupplier;
             mHomeSurfaceTracker = homeSurfaceTracker;
             mTabContentManagerSupplier = tabContentManagerSupplier;
+            mTabStripHeightSupplier = tabStripHeightSupplier;
         }
 
         protected NativePage buildNewTabPage(Tab tab, String url) {
@@ -173,27 +198,48 @@ public class NativePageFactory {
 
             NativePageHost nativePageHost =
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector);
-            if (tab.isIncognito()) return new IncognitoNewTabPage(mActivity, nativePageHost);
+            if (tab.isIncognito()) {
+                return new IncognitoNewTabPage(mActivity, nativePageHost, tab.getProfile());
+            }
 
-            return new NewTabPage(mActivity, mBrowserControlsManager, mCurrentTabSupplier,
-                    mSnackbarManagerSupplier.get(), mLifecycleDispatcher, mTabModelSelector,
-                    DeviceFormFactor.isWindowOnTablet(mWindowAndroid), mUma.get(),
-                    ColorUtils.inNightMode(mActivity), nativePageHost, tab, url,
-                    mBottomSheetController, mShareDelegateSupplier, mWindowAndroid, mJankTracker,
-                    mToolbarSupplier, new SettingsLauncherImpl(), mHomeSurfaceTracker,
-                    mTabContentManagerSupplier);
+            return new NewTabPage(
+                    mActivity,
+                    mBrowserControlsManager,
+                    mCurrentTabSupplier,
+                    mSnackbarManagerSupplier.get(),
+                    mLifecycleDispatcher,
+                    mTabModelSelector,
+                    DeviceFormFactor.isWindowOnTablet(mWindowAndroid),
+                    mUma.get(),
+                    ColorUtils.inNightMode(mActivity),
+                    nativePageHost,
+                    tab,
+                    url,
+                    mBottomSheetController,
+                    mShareDelegateSupplier,
+                    mWindowAndroid,
+                    mJankTracker,
+                    mToolbarSupplier,
+                    mHomeSurfaceTracker,
+                    mTabContentManagerSupplier,
+                    mTabStripHeightSupplier);
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
-            return new BookmarkPage(mActivity.getComponentName(), mSnackbarManagerSupplier.get(),
-                    mTabModelSelector.isIncognitoSelected(),
+            return new BookmarkPage(
+                    mActivity.getComponentName(),
+                    mSnackbarManagerSupplier.get(),
+                    tab.getProfile(),
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector));
         }
 
         protected NativePage buildDownloadsPage(Tab tab) {
             Profile profile = tab.getProfile();
-            return new DownloadPage(mActivity, mSnackbarManagerSupplier.get(),
-                    mWindowAndroid.getModalDialogManager(), profile.getOTRProfileID(),
+            return new DownloadPage(
+                    mActivity,
+                    mSnackbarManagerSupplier.get(),
+                    mWindowAndroid.getModalDialogManager(),
+                    profile.getOTRProfileID(),
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector));
         }
 
@@ -219,9 +265,12 @@ public class NativePageFactory {
                                             mActivity,
                                             tab,
                                             mTabModelSelector.isIncognitoSelected()));
-            return new RecentTabsPage(mActivity, recentTabsManager,
+            return new RecentTabsPage(
+                    mActivity,
+                    recentTabsManager,
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
-                    mBrowserControlsManager);
+                    mBrowserControlsManager,
+                    mTabStripHeightSupplier);
         }
 
         protected NativePage buildManagementPage(Tab tab) {
@@ -232,8 +281,9 @@ public class NativePageFactory {
         // Vivaldi
         protected NativePage buildSpeedDialPage(Tab tab) {
             if (tab.isIncognito())
-                return new IncognitoNewTabPage(
-                        mActivity, new TabShim(tab, mBrowserControlsManager, mTabModelSelector));
+                return new IncognitoNewTabPage(mActivity,
+                        new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
+                        tab.getProfile());
             return new SpeedDialPage(mActivity,
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
                     mTabModelSelector, ((ChromeActivity)mActivity).getToolbarManager());
@@ -304,7 +354,9 @@ public class NativePageFactory {
         private final BrowserControlsStateProvider mBrowserControlsStateProvider;
         private final TabModelSelector mTabModelSelector;
 
-        public TabShim(Tab tab, BrowserControlsStateProvider browserControlsStateProvider,
+        public TabShim(
+                Tab tab,
+                BrowserControlsStateProvider browserControlsStateProvider,
                 TabModelSelector tabModelSelector) {
             mTab = tab;
             mBrowserControlsStateProvider = browserControlsStateProvider;
@@ -319,8 +371,11 @@ public class NativePageFactory {
         @Override
         public void loadUrl(LoadUrlParams urlParams, boolean incognito) {
             if (incognito && !mTab.isIncognito()) {
-                mTabModelSelector.openNewTab(urlParams, TabLaunchType.FROM_LONGPRESS_FOREGROUND,
-                        mTab, /* incognito = */ true);
+                mTabModelSelector.openNewTab(
+                        urlParams,
+                        TabLaunchType.FROM_LONGPRESS_FOREGROUND,
+                        mTab,
+                        /* incognito= */ true);
                 return;
             }
 

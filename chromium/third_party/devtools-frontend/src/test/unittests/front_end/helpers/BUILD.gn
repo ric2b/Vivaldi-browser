@@ -7,6 +7,7 @@ import("../../../../third_party/typescript/typescript.gni")
 ts_library("helpers") {
   testonly = true
   sources = [
+    "ConsoleHelpers.ts",
     "Cookies.ts",
     "DOMHelpers.ts",
     "EnvironmentHelpers.ts",
@@ -21,7 +22,6 @@ ts_library("helpers") {
     "OverridesHelpers.ts",
     "PersistenceHelpers.ts",
     "RealConnection.ts",
-    "RevealerHelpers.ts",
     "SourceMapEncoder.ts",
     "SourceMapEncoder_test.ts",
     "SourceMapHelpers.ts",
@@ -30,6 +30,7 @@ ts_library("helpers") {
     "TrackAsyncOperations.ts",
     "UISourceCodeHelpers.ts",
     "UserMetricsHelpers.ts",
+    "VisualLoggingHelpers.ts",
   ]
 
   deps = [

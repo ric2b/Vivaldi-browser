@@ -1,4 +1,5 @@
 /*
+ *  Copyright (c) 2015 The WebM project authors. All Rights Reserved.
  *  Copyright (c) 2019, Alliance for Open Media. All Rights Reserved.
  *
  *  Use of this source code is governed by a BSD-style license
@@ -15,73 +16,80 @@
 
 #include "aom_dsp/aom_dsp_common.h"
 #include "aom_dsp/arm/mem_neon.h"
+#include "aom_dsp/arm/sum_neon.h"
 
 int64_t av1_block_error_neon(const tran_low_t *coeff, const tran_low_t *dqcoeff,
                              intptr_t block_size, int64_t *ssz) {
-  int64x2_t error = vdupq_n_s64(0);
-  int64x2_t sqcoeff = vdupq_n_s64(0);
+  uint64x2_t err_u64 = vdupq_n_u64(0);
+  int64x2_t ssz_s64 = vdupq_n_s64(0);
 
-  assert(block_size >= 8);
-  assert((block_size % 8) == 0);
+  assert(block_size >= 16);
+  assert((block_size % 16) == 0);
 
   do {
-    const int16x8_t c = load_tran_low_to_s16q(coeff);
-    const int16x8_t d = load_tran_low_to_s16q(dqcoeff);
-    const int16x8_t diff = vsubq_s16(c, d);
-    const int16x4_t diff_lo = vget_low_s16(diff);
-    const int16x4_t diff_hi = vget_high_s16(diff);
-    // diff is 15-bits, the squares 30, so we can store 2 in 31-bits before
-    // accumulating them in 64-bits.
-    const int32x4_t err0 = vmull_s16(diff_lo, diff_lo);
-    const int32x4_t err1 = vmlal_s16(err0, diff_hi, diff_hi);
-    const int64x2_t err2 = vaddl_s32(vget_low_s32(err1), vget_high_s32(err1));
-    error = vaddq_s64(error, err2);
+    const int16x8_t c0 = load_tran_low_to_s16q(coeff);
+    const int16x8_t c1 = load_tran_low_to_s16q(coeff + 8);
+    const int16x8_t d0 = load_tran_low_to_s16q(dqcoeff);
+    const int16x8_t d1 = load_tran_low_to_s16q(dqcoeff + 8);
 
-    const int16x4_t coeff_lo = vget_low_s16(c);
-    const int16x4_t coeff_hi = vget_high_s16(c);
-    const int32x4_t sqcoeff0 = vmull_s16(coeff_lo, coeff_lo);
-    const int32x4_t sqcoeff1 = vmlal_s16(sqcoeff0, coeff_hi, coeff_hi);
-    const int64x2_t sqcoeff2 =
-        vaddl_s32(vget_low_s32(sqcoeff1), vget_high_s32(sqcoeff1));
-    sqcoeff = vaddq_s64(sqcoeff, sqcoeff2);
+    const uint16x8_t diff0 = vreinterpretq_u16_s16(vabdq_s16(c0, d0));
+    const uint16x8_t diff1 = vreinterpretq_u16_s16(vabdq_s16(c1, d1));
 
-    coeff += 8;
-    dqcoeff += 8;
-    block_size -= 8;
+    // By operating on unsigned integers we can store up to 4 squared diff in a
+    // 32-bit element before having to widen to 64 bits.
+    uint32x4_t err = vmull_u16(vget_low_u16(diff0), vget_low_u16(diff0));
+    err = vmlal_u16(err, vget_high_u16(diff0), vget_high_u16(diff0));
+    err = vmlal_u16(err, vget_low_u16(diff1), vget_low_u16(diff1));
+    err = vmlal_u16(err, vget_high_u16(diff1), vget_high_u16(diff1));
+    err_u64 = vpadalq_u32(err_u64, err);
+
+    // We can't do the same here as we're operating on signed integers, so we
+    // can only accumulate 2 squares.
+    int32x4_t ssz0 = vmull_s16(vget_low_s16(c0), vget_low_s16(c0));
+    ssz0 = vmlal_s16(ssz0, vget_high_s16(c0), vget_high_s16(c0));
+    ssz_s64 = vpadalq_s32(ssz_s64, ssz0);
+
+    int32x4_t ssz1 = vmull_s16(vget_low_s16(c1), vget_low_s16(c1));
+    ssz1 = vmlal_s16(ssz1, vget_high_s16(c1), vget_high_s16(c1));
+    ssz_s64 = vpadalq_s32(ssz_s64, ssz1);
+
+    coeff += 16;
+    dqcoeff += 16;
+    block_size -= 16;
   } while (block_size != 0);
 
-#if AOM_ARCH_AARCH64
-  *ssz = vaddvq_s64(sqcoeff);
-  return vaddvq_s64(error);
-#else
-  *ssz = vgetq_lane_s64(sqcoeff, 0) + vgetq_lane_s64(sqcoeff, 1);
-  return vgetq_lane_s64(error, 0) + vgetq_lane_s64(error, 1);
-#endif
+  *ssz = horizontal_add_s64x2(ssz_s64);
+  return (int64_t)horizontal_add_u64x2(err_u64);
 }
 
 int64_t av1_block_error_lp_neon(const int16_t *coeff, const int16_t *dqcoeff,
                                 int block_size) {
-  int64x2_t error = vdupq_n_s64(0);
+  uint64x2_t err_u64 = vdupq_n_u64(0);
 
-  assert(block_size >= 8);
-  assert((block_size % 8) == 0);
+  assert(block_size >= 16);
+  assert((block_size % 16) == 0);
 
   do {
-    const int16x8_t c = vld1q_s16(coeff);
-    const int16x8_t d = vld1q_s16(dqcoeff);
-    const int16x8_t diff = vsubq_s16(c, d);
-    const int16x4_t diff_lo = vget_low_s16(diff);
-    const int16x4_t diff_hi = vget_high_s16(diff);
-    // diff is 15-bits, the squares 30, so we can store 2 in 31-bits before
-    // accumulating them in 64-bits.
-    const int32x4_t err0 = vmull_s16(diff_lo, diff_lo);
-    const int32x4_t err1 = vmlal_s16(err0, diff_hi, diff_hi);
-    const int64x2_t err2 = vaddl_s32(vget_low_s32(err1), vget_high_s32(err1));
-    error = vaddq_s64(error, err2);
-    coeff += 8;
-    dqcoeff += 8;
-    block_size -= 8;
+    const int16x8_t c0 = vld1q_s16(coeff);
+    const int16x8_t c1 = vld1q_s16(coeff + 8);
+    const int16x8_t d0 = vld1q_s16(dqcoeff);
+    const int16x8_t d1 = vld1q_s16(dqcoeff + 8);
+
+    const uint16x8_t diff0 = vreinterpretq_u16_s16(vabdq_s16(c0, d0));
+    const uint16x8_t diff1 = vreinterpretq_u16_s16(vabdq_s16(c1, d1));
+
+    // By operating on unsigned integers we can store up to 4 squared diff in a
+    // 32-bit element before having to widen to 64 bits.
+    uint32x4_t err = vmull_u16(vget_low_u16(diff0), vget_low_u16(diff0));
+    err = vmlal_u16(err, vget_high_u16(diff0), vget_high_u16(diff0));
+    err = vmlal_u16(err, vget_low_u16(diff1), vget_low_u16(diff1));
+    err = vmlal_u16(err, vget_high_u16(diff1), vget_high_u16(diff1));
+    err_u64 = vpadalq_u32(err_u64, err);
+
+    coeff += 16;
+    dqcoeff += 16;
+    block_size -= 16;
   } while (block_size != 0);
 
-  return vgetq_lane_s64(error, 0) + vgetq_lane_s64(error, 1);
+  return (int64_t)horizontal_add_u64x2(err_u64);
 }

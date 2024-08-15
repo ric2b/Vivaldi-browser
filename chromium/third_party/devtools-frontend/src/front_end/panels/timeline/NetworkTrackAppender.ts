@@ -4,13 +4,12 @@
 import * as i18n from '../../core/i18n/i18n.js';
 import * as TraceEngine from '../../models/trace/trace.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
-
-import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
-
-import {type HighlightedEntryInfo, type TrackAppender, type TrackAppenderName} from './CompatibilityTracksAppender.js';
-import {TimelineUIUtils} from './TimelineUIUtils.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
+
+import {buildGroupStyle, buildTrackHeader, getEventLevel, getFormattedTime} from './AppenderUtils.js';
+import {type HighlightedEntryInfo, type TrackAppender, type TrackAppenderName} from './CompatibilityTracksAppender.js';
 import {InstantEventVisibleDurationMs} from './TimelineFlameChartDataProvider.js';
+import {TimelineUIUtils} from './TimelineUIUtils.js';
 
 const UIStrings = {
   /**
@@ -25,14 +24,14 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class NetworkTrackAppender implements TrackAppender {
   readonly appenderName: TrackAppenderName = 'Network';
 
-  #traceParsedData: Readonly<TraceEngine.Handlers.Migration.PartialTraceData>;
+  #traceParsedData: Readonly<TraceEngine.Handlers.Types.TraceParseData>;
   #flameChartData: PerfUI.FlameChart.FlameChartTimelineData;
 
   #font: string;
   #group?: PerfUI.FlameChart.Group;
 
   constructor(
-      traceParsedData: TraceEngine.Handlers.Migration.PartialTraceData,
+      traceParsedData: TraceEngine.Handlers.Types.TraceParseData,
       flameChartData: PerfUI.FlameChart.FlameChartTimelineData) {
     this.#traceParsedData = traceParsedData;
     this.#flameChartData = flameChartData;
@@ -104,37 +103,24 @@ export class NetworkTrackAppender implements TrackAppender {
    * child.
    * @param trackStartLevel the flame chart level from which the events will
    * be appended.
-   * @param appender the track that the trace events belong to.
    * @returns the next level after the last occupied by the appended these
    * trace events (the first available level to append next track).
    */
   #appendEventsAtLevel(events: readonly TraceEngine.Types.TraceEvents.TraceEventData[], trackStartLevel: number):
       number {
-    if (events.length === 0) {
-      return trackStartLevel;
-    }
-    const lastTimeByLevel = [];
-    let maxLevel = 0;
+    const lastUsedTimeByLevel: number[] = [];
     for (let i = 0; i < events.length; ++i) {
       const event = events[i];
-      const startTime = event.ts;
-      const endTime = event.ts + (event.dur || 0);
-      while (lastTimeByLevel.length && lastTimeByLevel[lastTimeByLevel.length - 1] <= startTime) {
-        lastTimeByLevel.pop();
-      }
-      const level = lastTimeByLevel.length;
+      const level = getEventLevel(event, lastUsedTimeByLevel);
       this.#appendEventAtLevel(event, trackStartLevel + level);
-      lastTimeByLevel.push(endTime);
-      maxLevel = Math.max(maxLevel, lastTimeByLevel.length);
     }
-    return trackStartLevel + maxLevel;
+    return trackStartLevel + lastUsedTimeByLevel.length;
   }
 
   /**
    * Adds an event to the flame chart data at a defined level.
    * @param event the event to be appended,
    * @param level the level to append the event,
-   * @param appender the track which the event belongs to.
    * @returns the index of the event in all events to be rendered in the flamechart.
    */
   #appendEventAtLevel(event: TraceEngine.Types.TraceEvents.TraceEventData, level: number): number {
@@ -161,23 +147,20 @@ export class NetworkTrackAppender implements TrackAppender {
     if (!this.#flameChartData || events.length === 0) {
       return 0;
     }
-    const lastTimeByLevel = [];
+    const lastTimeByLevel: number[] = [];
     let maxLevel = 0;
     for (let i = 0; i < events.length; ++i) {
       const event = events[i];
       const beginTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(event.ts);
       const eventEndTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(
           (event.ts + event.dur) as TraceEngine.Types.Timing.MicroSeconds);
-      const visible = beginTime < endTime && eventEndTime > startTime;
-      if (!visible) {
+      const isBetweenTimes = beginTime < endTime && eventEndTime > startTime;
+      if (!isBetweenTimes) {
         this.#flameChartData.entryLevels[i] = -1;
         continue;
       }
-      while (lastTimeByLevel.length && lastTimeByLevel[lastTimeByLevel.length - 1] <= beginTime) {
-        lastTimeByLevel.pop();
-      }
-      this.#flameChartData.entryLevels[i] = lastTimeByLevel.length;
-      lastTimeByLevel.push(eventEndTime);
+      const level = getEventLevel(event, lastTimeByLevel);
+      this.#flameChartData.entryLevels[i] = level;
       maxLevel = Math.max(maxLevel, lastTimeByLevel.length);
     }
     for (let i = 0; i < events.length; ++i) {

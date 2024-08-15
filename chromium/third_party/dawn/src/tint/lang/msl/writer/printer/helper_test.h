@@ -39,10 +39,12 @@
 
 namespace tint::msl::writer {
 
+/// Metal header declaration
 constexpr auto kMetalHeader = R"(#include <metal_stdlib>
 using namespace metal;
 )";
 
+/// Metal array declaration
 constexpr auto kMetalArray = R"(template<typename T, size_t N>
 struct tint_array {
   const constant T& operator[](size_t i) const constant { return elements[i]; }
@@ -78,13 +80,13 @@ class MslPrinterTestHelperBase : public BASE {
     /// Run the writer on the IR module and validate the result.
     /// @returns true if generation and validation succeeded
     bool Generate() {
-        if (auto raised = raise::Raise(mod); !raised) {
+        if (auto raised = Raise(mod, {}); raised != Success) {
             err_ = raised.Failure().reason.str();
             return false;
         }
 
         auto result = Print(mod);
-        if (!result) {
+        if (result != Success) {
             err_ = result.Failure().reason.str();
             return false;
         }
@@ -99,8 +101,10 @@ class MslPrinterTestHelperBase : public BASE {
     std::string MetalArray() const { return kMetalArray; }
 };
 
+/// Printer tests
 using MslPrinterTest = MslPrinterTestHelperBase<testing::Test>;
 
+/// Printer param tests
 template <typename T>
 using MslPrinterTestWithParam = MslPrinterTestHelperBase<testing::TestWithParam<T>>;
 

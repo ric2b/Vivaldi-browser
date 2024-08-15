@@ -5,14 +5,13 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_MEMORY_SCOPED_REFPTR_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_MEMORY_SCOPED_REFPTR_H_
 
-#include <stddef.h>
-
+#include <cstddef>
 #include <iosfwd>
 #include <type_traits>
 #include <utility>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/check.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
 
 namespace partition_alloc::internal {
 

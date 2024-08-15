@@ -6,8 +6,7 @@
 <translation id="1110994991967754504">Izaberite dozvolu za <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> je neočekivano prekinuo vezu.</translation>
 <translation id="1161325031994447685">da se ponovo povežete na Wi-Fi mrežu</translation>
-<translation id="1175364870820465910">Odštampaj...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Pokušajte da obrišete kolačiće<ph name="END_LINK" /></translation>
+<translation id="1175364870820465910">&amp;Odštampaj...</translation>
 <translation id="1375198122581997741">Osnovni podaci</translation>
 <translation id="139305205187523129">Host <ph name="HOST_NAME" /> nije poslao nikakve podatke.</translation>
 <translation id="1559528461873125649">Nema takve datoteke ili direktorijuma</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Obratite se administratoru sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Pokušajte da pokrenete Windows dijagnostiku mreže<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Ovaj sajt sadrži štetne programe</translation>
-<translation id="1916770123977586577">Da bi se primenila nova podešavanja na ovom sajtu, učitajte stranicu ponovo</translation>
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />da proverite proksi i zaštitni zid<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Izdato za: <ph name="ORGANIZATION" /> <ph name="JURISDICTION" /></translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Napadači će moći da vide slike koje gledate na ovom sajtu i da ih izmene kako bi vas prevarili.</translation>
 <translation id="2356070529366658676">Pitaj</translation>
 <translation id="2359808026110333948">Nastavi</translation>
+<translation id="2388886110302389394">Otvori stranicu u novom privatnom prozoru (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />da pokrenete dijagnostiku mreže<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Ovu stranicu je blokiralo proširenje</translation>
 <translation id="2501278716633472235">Idi nazad</translation>
@@ -80,6 +79,7 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="3950820424414687140">Prijavi se</translation>
 <translation id="3973234410852337861">Host <ph name="HOST_NAME" /> je blokiran</translation>
 <translation id="3987940399970879459">Manje od 1 MB</translation>
+<translation id="4075123085690634698">Otvori stranicu u novom privatnom prozoru (⇧⌘N)</translation>
 <translation id="4075732493274867456">Klijent i server ne podržavaju istu verziju SSL protokola ili paket za šifrovanje.</translation>
 <translation id="4116663294526079822">Uvek dozvoli na ovom sajtu</translation>
 <translation id="4130226655945681476">da proverite mrežne kablove, modem i ruter</translation>
@@ -156,6 +156,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="6757797048963528358">Vaš uređaj je prešao u stanje mirovanja.</translation>
 <translation id="6890956352250146925">Opcije za kolačiće i podatke o sajtovima</translation>
 <translation id="6897140037006041989">Korisnički agent</translation>
+<translation id="6957624206566198865">Otvori stranicu u novoj privatnoj kartici</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7079718277001814089">Ovaj sajt sadrži malver</translation>
 <translation id="7096937462164235847">Identitet ovog veb sajta nije verifikovan.</translation>
@@ -184,6 +185,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> obično koristi šifrovanje da bi zaštitio vaše informacije. Kada je Vivaldi ovog puta pokušao da se poveže sa <ph name="SITE" />, veb sajt je vratio neuobičajene i netačne podatke za prijavljivanje. Ovo se može dogoditi kada napadač pokušava da se predstavi kao <ph name="SITE" /> ili je ekran za prijavljivanje na Wi-Fi prekinuo vezu. Vaše informacije su i dalje bezbedne zato što je Vivaldi prekinuo vezu pre nego što su razmenjeni bilo kakvi podaci.</translation>
 <translation id="7878562273885520351">Vaša lozinka je možda ugrožena</translation>
 <translation id="7951415247503192394">(32 bita)</translation>
+<translation id="7953236668995583915">Ponovo učitajte ovu stranicu da bi se primenila vaša ažurirana podešavanja na ovaj sajt</translation>
 <translation id="8025119109950072390">Napadači na ovom sajtu mogu da vas prevare da biste uradili nešto opasno, na primer, da instalirate softver ili otkrijete lične podatke (poput lozinki, brojeva telefona ili brojeva kreditnih kartica).</translation>
 <translation id="8037357227543935929">Pitaj (podrazumevano)</translation>
 <translation id="8041940743680923270">Koristi globalnu podrazumevanu vrednost (Pitaj)</translation>

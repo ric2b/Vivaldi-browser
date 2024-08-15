@@ -43,6 +43,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_service.h"
+#include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #include "components/supervised_user/core/common/buildflags.h"
 #include "components/sync/base/command_line_switches.h"
 #include "content/public/browser/browser_context.h"
@@ -219,6 +220,9 @@ VivaldiSyncServiceFactory::BuildServiceInstanceForBrowserContext(
   if (password_store) {
     password_store->OnSyncServiceInitialized(sync_service.get());
   }
+
+  SendTabToSelfSyncServiceFactory::GetForProfile(profile)
+      ->OnSyncServiceInitialized(sync_service.get());
 
   return sync_service;
 }

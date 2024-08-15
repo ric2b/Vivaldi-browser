@@ -272,6 +272,16 @@ class NET_EXPORT CookieMonster : public CookieStore {
   FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest,
                            FilterCookiesWithOptionsWarnShadowingDomains);
 
+  // For StoreLoadedCookies behavior with origin-bound cookies.
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest_StoreLoadedCookies,
+                           NoSchemeNoPort);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest_StoreLoadedCookies,
+                           YesSchemeNoPort);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest_StoreLoadedCookies,
+                           NoSchemeYesPort);
+  FRIEND_TEST_ALL_PREFIXES(CookieMonsterTest_StoreLoadedCookies,
+                           YesSchemeYesPort);
+
   // Internal reasons for deletion, used to populate informative histograms
   // and to provide a public cause for onCookieChange notifications.
   //
@@ -733,6 +743,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Number of bytes used by partitioned cookies whose partition key has a
   // nonce.
   size_t num_nonced_partitioned_cookie_bytes_ = 0u;
+  // Cookie jar sizes per partition.
+  std::map<CookiePartitionKey, size_t> bytes_per_cookie_partition_;
 
   CookieMonsterChangeDispatcher change_dispatcher_;
 

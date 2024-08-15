@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/layout/inline/inline_item_result.h"
 
 #include "third_party/blink/renderer/core/layout/inline/inline_item.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
+#include "third_party/blink/renderer/core/layout/layout_result.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/harfbuzz_shaper.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 
@@ -54,6 +54,7 @@ void InlineItemResult::CheckConsistency(bool allow_null_shape_result) const {
 #endif
 
 void InlineItemResult::Trace(Visitor* visitor) const {
+  visitor->Trace(shape_result);
   visitor->Trace(layout_result);
   if (positioned_float)
     visitor->Trace(positioned_float.value());

@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> missti óvænt samband.</translation>
 <translation id="1161325031994447685">Endurtengjast þráðlausu neti</translation>
 <translation id="1175364870820465910">&amp;Prenta...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Reyndu að eyða kökunum þínum<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Um útgáfu</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> sendi engin gögn.</translation>
 <translation id="1559528461873125649">Ekkert slíkt skjal né staðsetning</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Reyndu að hafa samband við kerfisstjóra.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Reyndu að keyra Windows villugreiningu á neti<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Þessi síða inniheldur hættuleg forrit</translation>
-<translation id="1916770123977586577">Til þess að uppfæra stillingar á þessari síðu þarftu að endurhlaða henni</translation>
 <translation id="1974060860693918893">Nánar</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Athuga proxy og eldvegginn<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Útgefið af: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Tölvuþrjótar gætu hugsanlega séð myndirnar sem þú ert að horfa á á þessari síðu og platað þig með því að breyta þeim.</translation>
 <translation id="2356070529366658676">Spyrja</translation>
 <translation id="2359808026110333948">Halda áfram</translation>
+<translation id="2388886110302389394">Opna síðu í nýjum einkaglugga (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Keyri villugreiningu á nettengingu<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Viðbót setti þessa síðu á bannlista</translation>
 <translation id="2501278716633472235">Farðu tilbaka</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Skráðu þig inn</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> er lokað á</translation>
 <translation id="3987940399970879459">Minna en 1 MB</translation>
+<translation id="4075123085690634698">Opna síðu í nýjum einkaglugga (⇧⌘N)</translation>
 <translation id="4075732493274867456">Biðillinn (e. client) og þjónninn styðja ekki almenna SSL samskiptaregluútgáfu eða dulritunaraðferðarpakka (e. cipher suite).</translation>
 <translation id="4116663294526079822">Leyfa alltaf á þessari síðu</translation>
 <translation id="4130226655945681476">Athuga netsnúrur, mótald og beini</translation>
@@ -156,6 +156,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="6757797048963528358">Tækið þitt sofnaði.</translation>
 <translation id="6890956352250146925">Valkostir fyrir kökur og vefsvæðagögn</translation>
 <translation id="6897140037006041989">Kennistrengur</translation>
+<translation id="6957624206566198865">Opna síðu í nýjum einkaflipa</translation>
 <translation id="7053983685419859001">Hamla</translation>
 <translation id="7079718277001814089">Þessi síða inniheldur spilliforrit</translation>
 <translation id="7096937462164235847">Auðkenni þessa vefsvæðis er óstaðfest.</translation>
@@ -184,6 +185,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> notar yfirleitt dulkóðun til þess að vernda persónuupplýsingar. Þegar Vivaldi reyndi að tengjast <ph name="SITE" /> í þetta sinn, sendi vefsíðan óvenjuleg eða röng skilríki. Þetta getur gerst þegar hakkari reynir að þykjast vera <ph name="SITE" />, eða þegar innskráningargluggi fyrir þráðlaust netsamband truflar tenginguna. Þínar persónuupplýsingar eru samt sem áður öruggar því Vivaldi stöðvaði tenginuna áður en gögn voru send.</translation>
 <translation id="7878562273885520351">Lykilorðinu þínu gæti hafa verið lekið</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">Endurnýjaðu þessa síðu til að nota uppfærðar stillingar á þessu vefsvæði</translation>
 <translation id="8025119109950072390">Tölvuþrjótar á þessari síðu gætu platað þig í að gera eitthvað hættulegt eins og að setja upp forrit eða gefa upp persónulegar upplýsingar (til dæmis lykilorð, símanúmer eða kortanúmer).</translation>
 <translation id="8037357227543935929">Spyrja (sjálfgefið)</translation>
 <translation id="8041940743680923270">Nota algilda sjálfgefna stillingu (Spyrja)</translation>

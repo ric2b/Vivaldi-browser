@@ -8,8 +8,10 @@
 #include <stdint.h>
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -23,7 +25,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -41,7 +42,6 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/strings/grit/extensions_strings.h"
 #include "net/base/filename_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -247,7 +247,7 @@ scoped_refptr<Extension> LoadExtension(
     ManifestLocation location,
     int flags,
     std::string* error) {
-  absl::optional<base::Value::Dict> manifest;
+  std::optional<base::Value::Dict> manifest;
   if (!manifest_file) {
     manifest = LoadManifest(extension_path, error);
   } else {
@@ -277,20 +277,20 @@ scoped_refptr<Extension> LoadExtension(
   return extension;
 }
 
-absl::optional<base::Value::Dict> LoadManifest(
+std::optional<base::Value::Dict> LoadManifest(
     const base::FilePath& extension_path,
     std::string* error) {
   return LoadManifest(extension_path, kManifestFilename, error);
 }
 
-absl::optional<base::Value::Dict> LoadManifest(
+std::optional<base::Value::Dict> LoadManifest(
     const base::FilePath& extension_path,
     const base::FilePath::CharType* manifest_filename,
     std::string* error) {
   base::FilePath manifest_path = extension_path.Append(manifest_filename);
   if (!base::PathExists(manifest_path)) {
     *error = l10n_util::GetStringUTF8(IDS_EXTENSION_MANIFEST_UNREADABLE);
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   JSONFileValueDeserializer deserializer(manifest_path);
@@ -306,12 +306,12 @@ absl::optional<base::Value::Dict> LoadManifest(
       *error = base::StringPrintf(
           "%s  %s", manifest_errors::kManifestParseError, error->c_str());
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   if (!root->is_dict()) {
     *error = l10n_util::GetStringUTF8(IDS_EXTENSION_MANIFEST_INVALID);
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return std::move(*root).TakeDict();
@@ -474,7 +474,7 @@ base::FilePath GetInstallTempDir(const base::FilePath& extensions_dir) {
 }
 
 base::FilePath ExtensionURLToRelativeFilePath(const GURL& url) {
-  base::StringPiece url_path = url.path_piece();
+  std::string_view url_path = url.path_piece();
   if (url_path.empty() || url_path[0] != '/')
     return base::FilePath();
 

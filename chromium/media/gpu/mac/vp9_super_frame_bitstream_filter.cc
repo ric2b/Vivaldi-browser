@@ -117,7 +117,7 @@ bool VP9SuperFrameBitstreamFilter::ShouldShowFrame(Vp9RawBitsReader* reader) {
 bool VP9SuperFrameBitstreamFilter::PreparePassthroughBuffer(
     scoped_refptr<DecoderBuffer> buffer) {
   data_ = CreatePassthroughBuffer(std::move(buffer));
-  return data_;
+  return !!data_;
 }
 
 bool VP9SuperFrameBitstreamFilter::AllocateCombinedBlock(size_t total_size) {
@@ -167,7 +167,7 @@ bool VP9SuperFrameBitstreamFilter::BuildSuperFrame() {
   }
 
   const uint8_t bytes_per_frame_size =
-      base::bits::AlignUp(
+      base::bits::AlignUpDeprecatedDoNotUse(
           base::bits::Log2Ceiling(base::checked_cast<uint32_t>(max_size)), 8) /
       8;
   DCHECK_GT(bytes_per_frame_size, 0);

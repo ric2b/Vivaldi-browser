@@ -24,6 +24,7 @@
 #include "chrome/browser/media/router/test/media_router_mojo_test.h"
 #include "chrome/browser/media/router/test/mock_mojo_media_router.h"
 #include "components/media_router/common/mojom/debugger.mojom.h"
+#include "components/media_router/common/providers/cast/channel/cast_device_capability.h"
 #include "components/media_router/common/providers/cast/channel/cast_test_util.h"
 #include "components/mirroring/mojom/session_parameters.mojom.h"
 #include "media/base/media_switches.h"
@@ -104,7 +105,7 @@ class MockMirroringServiceHostFactory
               (int32_t frame_tree_node_id));
   MOCK_METHOD(std::unique_ptr<mirroring::MirroringServiceHost>,
               GetForDesktop,
-              (const absl::optional<std::string>& media_id));
+              (const std::optional<std::string>& media_id));
   MOCK_METHOD(std::unique_ptr<mirroring::MirroringServiceHost>,
               GetForOffscreenTab,
               (const GURL& presentation_url,
@@ -175,7 +176,8 @@ class MirroringActivityTest
                     bool enable_rtcp_reporting = false) {
     CastSinkExtraData cast_data;
     cast_data.cast_channel_id = kChannelId;
-    cast_data.capabilities = cast_channel::AUDIO_OUT | cast_channel::VIDEO_OUT;
+    cast_data.capabilities = {cast_channel::CastDeviceCapability::kAudioOut,
+                              cast_channel::CastDeviceCapability::kVideoOut};
     cast_data.discovery_type = discovery_type;
     MediaRoute route(kRouteId, source, kSinkId, kDescription, route_is_local_);
     route.set_presentation_id(kPresentationId);
@@ -241,7 +243,7 @@ INSTANTIATE_TEST_SUITE_P(Namespaces,
 TEST_F(MirroringActivityTest, MirrorDesktop) {
   base::HistogramTester uma_recorder;
   EXPECT_CALL(mirroring_service_host_factory_,
-              GetForDesktop(absl::optional<std::string>(kDesktopMediaId)));
+              GetForDesktop(std::optional<std::string>(kDesktopMediaId)));
   MediaSource source = MediaSource::ForDesktop(kDesktopMediaId, true);
   ASSERT_TRUE(source.IsDesktopMirroringSource());
   MakeActivity(source);
@@ -501,7 +503,7 @@ TEST_F(MirroringActivityTest, GetScrubbedLogMessage) {
       "type": "OFFER"
     })";
 
-  absl::optional<base::Value> message_json = base::JSONReader::Read(message);
+  std::optional<base::Value> message_json = base::JSONReader::Read(message);
   EXPECT_TRUE(message_json);
   EXPECT_TRUE(message_json.value().is_dict());
   EXPECT_THAT(scrubbed_message,
@@ -545,7 +547,7 @@ TEST_F(MirroringActivityTest, OnSourceChanged) {
 
   // Nothing should happen as no value was returned for tab source.
   EXPECT_CALL(*mirroring_service_, GetTabSourceId())
-      .WillOnce(testing::Return(absl::nullopt));
+      .WillOnce(testing::Return(std::nullopt));
   activity_->OnSourceChanged();
   EXPECT_EQ(activity_->frame_tree_node_id_, new_tab_source);
   testing::Mock::VerifyAndClearExpectations(mirroring_service_);
@@ -558,9 +560,8 @@ TEST_F(MirroringActivityTest, OnSourceChangedNotifiesMediaStatusObserver) {
       NiceMock<MockMediaStatusObserver>(
           observer_pending_remote.InitWithNewPipeAndPassReceiver());
   mojo::Remote<mojom::MediaController> media_controller;
-  activity_->CreateMediaController(
-      media_controller.BindNewPipeAndPassReceiver(),
-      std::move(observer_pending_remote));
+  activity_->BindMediaController(media_controller.BindNewPipeAndPassReceiver(),
+                                 std::move(observer_pending_remote));
   RunUntilIdle();
 
   // A random int indicating the new tab source.
@@ -618,9 +619,8 @@ TEST_F(MirroringActivityTest, Pause) {
       NiceMock<MockMediaStatusObserver>(
           observer_pending_remote.InitWithNewPipeAndPassReceiver());
   mojo::Remote<mojom::MediaController> media_controller;
-  activity_->CreateMediaController(
-      media_controller.BindNewPipeAndPassReceiver(),
-      std::move(observer_pending_remote));
+  activity_->BindMediaController(media_controller.BindNewPipeAndPassReceiver(),
+                                 std::move(observer_pending_remote));
   RunUntilIdle();
 
   mojom::MediaStatusPtr expected_status = mojom::MediaStatus::New();
@@ -644,9 +644,8 @@ TEST_F(MirroringActivityTest, Play) {
       NiceMock<MockMediaStatusObserver>(
           observer_pending_remote.InitWithNewPipeAndPassReceiver());
   mojo::Remote<mojom::MediaController> media_controller;
-  activity_->CreateMediaController(
-      media_controller.BindNewPipeAndPassReceiver(),
-      std::move(observer_pending_remote));
+  activity_->BindMediaController(media_controller.BindNewPipeAndPassReceiver(),
+                                 std::move(observer_pending_remote));
   RunUntilIdle();
 
   mojom::MediaStatusPtr expected_status = mojom::MediaStatus::New();
@@ -711,9 +710,8 @@ TEST_F(MirroringActivityTest, OnRemotingStateChanged) {
       NiceMock<MockMediaStatusObserver>(
           observer_pending_remote.InitWithNewPipeAndPassReceiver());
   mojo::Remote<mojom::MediaController> media_controller;
-  activity_->CreateMediaController(
-      media_controller.BindNewPipeAndPassReceiver(),
-      std::move(observer_pending_remote));
+  activity_->BindMediaController(media_controller.BindNewPipeAndPassReceiver(),
+                                 std::move(observer_pending_remote));
   RunUntilIdle();
 
   mojom::MediaStatusPtr expected_status = mojom::MediaStatus::New();
@@ -750,7 +748,7 @@ TEST_F(MirroringActivityTest, MultipleMediaControllersNotified) {
       NiceMock<MockMediaStatusObserver>(
           observer_pending_remote_1.InitWithNewPipeAndPassReceiver());
   mojo::Remote<mojom::MediaController> media_controller_1;
-  activity_->CreateMediaController(
+  activity_->BindMediaController(
       media_controller_1.BindNewPipeAndPassReceiver(),
       std::move(observer_pending_remote_1));
 
@@ -760,7 +758,7 @@ TEST_F(MirroringActivityTest, MultipleMediaControllersNotified) {
       NiceMock<MockMediaStatusObserver>(
           observer_pending_remote_2.InitWithNewPipeAndPassReceiver());
   mojo::Remote<mojom::MediaController> media_controller_2;
-  activity_->CreateMediaController(
+  activity_->BindMediaController(
       media_controller_2.BindNewPipeAndPassReceiver(),
       std::move(observer_pending_remote_2));
 
@@ -867,7 +865,7 @@ TEST_F(MirroringActivityTest, CastStreamingSenderUma) {
       ]
     }
     })";
-  absl::optional<base::Value> stats = base::JSONReader::Read(kJsonStats);
+  std::optional<base::Value> stats = base::JSONReader::Read(kJsonStats);
   ASSERT_TRUE(stats.has_value());
 
   MediaSource source = MediaSource::ForDesktop(kDesktopMediaId, true);

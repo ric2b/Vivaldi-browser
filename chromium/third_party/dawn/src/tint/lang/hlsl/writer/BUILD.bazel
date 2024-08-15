@@ -56,6 +56,7 @@ cc_library(
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
     "//src/tint/lang/wgsl/ast/transform",
+    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",
     "//src/tint/lang/wgsl/sem",
     "//src/tint/utils/containers",
@@ -127,5 +128,10 @@ cc_library(
 alias(
   name = "tint_build_hlsl_writer",
   actual = "//src/tint:tint_build_hlsl_writer_true",
+)
+
+alias(
+  name = "tint_build_wgsl_reader",
+  actual = "//src/tint:tint_build_wgsl_reader_true",
 )
 

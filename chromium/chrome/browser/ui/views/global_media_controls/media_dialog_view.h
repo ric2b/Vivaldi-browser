@@ -47,8 +47,8 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
                         public global_media_controls::MediaDialogDelegate,
                         public global_media_controls::MediaItemUIObserver,
                         public speech::SodaInstaller::Observer {
+  METADATA_HEADER(MediaDialogView, views::BubbleDialogDelegateView)
  public:
-  METADATA_HEADER(MediaDialogView);
 
   MediaDialogView(const MediaDialogView&) = delete;
   MediaDialogView& operator=(const MediaDialogView&) = delete;
@@ -94,8 +94,6 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   void OnMediaItemUISizeChanged() override;
   void OnMediaItemUIMetadataChanged() override;
   void OnMediaItemUIActionsChanged() override;
-  void OnMediaItemUIClicked(const std::string& id) override {}
-  void OnMediaItemUIDismissed(const std::string& id) override {}
   void OnMediaItemUIDestroyed(const std::string& id) override;
 
   void AddObserver(MediaDialogViewObserver* observer);

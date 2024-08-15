@@ -51,12 +51,12 @@ ReservedSwapChain WireClient::ReserveSwapChain(WGPUDevice device,
     return mImpl->ReserveSwapChain(device, descriptor);
 }
 
-ReservedDevice WireClient::ReserveDevice() {
-    return mImpl->ReserveDevice();
+ReservedDevice WireClient::ReserveDevice(WGPUInstance instance) {
+    return mImpl->ReserveDevice(instance);
 }
 
-ReservedInstance WireClient::ReserveInstance() {
-    return mImpl->ReserveInstance();
+ReservedInstance WireClient::ReserveInstance(const WGPUInstanceDescriptor* descriptor) {
+    return mImpl->ReserveInstance(descriptor);
 }
 
 void WireClient::ReclaimTextureReservation(const ReservedTexture& reservation) {

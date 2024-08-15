@@ -6,13 +6,13 @@
 #define CHROME_UPDATER_TAG_H_
 
 #include <cstdint>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 namespace tagging {
@@ -69,7 +69,7 @@ struct AppArgs {
   std::string install_data_index;
   std::string experiment_labels;
   std::string untrusted_data;
-  absl::optional<NeedsAdmin> needs_admin;
+  std::optional<NeedsAdmin> needs_admin;
 };
 
 std::ostream& operator<<(std::ostream&, const AppArgs::NeedsAdmin&);
@@ -105,9 +105,9 @@ struct TagArgs {
   std::string experiment_labels;
   std::string referral_id;
   std::string language;
-  absl::optional<BrowserType> browser_type;
-  absl::optional<bool> flighting = false;
-  absl::optional<bool> usage_stats_enable;
+  std::optional<BrowserType> browser_type;
+  std::optional<bool> flighting = false;
+  std::optional<bool> usage_stats_enable;
 
   // List of apps to install.
   std::vector<AppArgs> apps;
@@ -242,22 +242,17 @@ std::ostream& operator<<(std::ostream&, const ErrorCode&);
 //
 // Note: This method assumes all attribute names are ASCII.
 ErrorCode Parse(base::StringPiece tag,
-                absl::optional<base::StringPiece> app_installer_data_args,
+                std::optional<base::StringPiece> app_installer_data_args,
                 TagArgs* args);
 
 std::string ReadTag(std::vector<uint8_t>::const_iterator begin,
                     std::vector<uint8_t>::const_iterator end);
 std::vector<uint8_t> GetTagFromTagString(const std::string& tag_string);
-std::string ExeReadTag(const base::FilePath& file);
-bool ExeWriteTag(const base::FilePath& in_file,
-                 const std::string& tag_string,
-                 int padded_length,
-                 const base::FilePath& out_file);
 
-// Utilities for reading and writing tags to MSI files.
+// Utilities for reading and writing tags to Windows PE and MSI files.
 //
 //
-// The tag specification for MSI files is as follows:
+// The tag specification is as follows:
 //   - The tag area begins with a magic signature 'Gact2.0Omaha'.
 //   - The next 2 bytes are the tag string length in big endian.
 //   - Then comes the tag string in the format "key1=value1&key2=value2".
@@ -267,7 +262,7 @@ bool ExeWriteTag(const base::FilePath& in_file,
 // +-------------------------------------+
 // ~    ..............................   ~
 // |    ..............................   |
-// |    Other parts of the MSI file      |
+// |    Other parts of the file          |
 // +-------------------------------------+
 // | Start of the certificate            |
 // ~    ..............................   ~
@@ -283,14 +278,16 @@ bool ExeWriteTag(const base::FilePath& in_file,
 // |  a   n   d   =   C   D   C   D   &   k   e   y   2   =   T   e  |
 // |  s   t                                                          |
 // +-----------------------------------------------------------------+
-// Extracts a tag from the end of the MSI `filename`.
-absl::optional<tagging::TagArgs> MsiReadTag(const base::FilePath& filename);
+// Extracts a tag from `filename`.
+std::string BinaryReadTagString(const base::FilePath& file);
+std::optional<tagging::TagArgs> BinaryReadTag(const base::FilePath& file);
 
 // Tags `file` with `tag_string` and writes the result to `file` by default, or
 // to `out_file` if `out_file` is provided.
-bool MsiWriteTag(const base::FilePath& file,
-                 const std::string& tag_string,
-                 base::FilePath out_file = {});
+bool BinaryWriteTag(const base::FilePath& in_file,
+                    const std::string& tag_string,
+                    int padded_length,
+                    base::FilePath out_file);
 
 }  // namespace tagging
 }  // namespace updater

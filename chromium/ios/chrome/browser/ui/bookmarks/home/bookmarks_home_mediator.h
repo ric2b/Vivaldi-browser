@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 #import <set>
+#import <string>
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 
 @protocol BookmarksHomeConsumer;
@@ -19,6 +20,10 @@ namespace bookmarks {
 class BookmarkModel;
 class BookmarkNode;
 }  // namespace bookmarks
+
+namespace user_prefs {
+class PrefRegistrySyncable;
+}  // namespace user_prefs
 
 typedef NS_ENUM(NSInteger, BookmarksHomeSectionIdentifier) {
   // Section to invite the user to sign in and sync.
@@ -33,6 +38,8 @@ typedef NS_ENUM(NSInteger, BookmarksHomeSectionIdentifier) {
   BookmarksHomeSectionIdentifierRootLocalOrSyncable,
   // Section to display a message, such as "no result" for a search.
   BookmarksHomeSectionIdentifierMessages,
+  // Section to display the batch upload option.
+  BookmarksBatchUploadSectionIdentifier,
 };
 
 // Whether this section contains bookmarks nodes.
@@ -46,6 +53,8 @@ typedef NS_ENUM(NSInteger, BookmarksHomeItemType) {
   BookmarksHomeItemTypePromo,
   BookmarksHomeItemTypeBookmark,
   BookmarksHomeItemTypeMessage,
+  BookmarksHomeItemTypeBatchUploadButton,
+  BookmarksHomeItemTypeBatchUploadRecommendation,
 };
 
 namespace bookmarks {
@@ -86,6 +95,9 @@ class BookmarkModel;
 @property(nonatomic, assign, readonly)
     bookmarks::BookmarkModel* displayedBookmarkModel;
 
+// Registers the feature preferences.
++ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
+
 // Designated initializer.
 // `localOrSyncableBookmarkModel` must not be `nullptr`. It should also be
 // loaded.
@@ -119,10 +131,20 @@ class BookmarkModel;
 // Updates promo cell based on its current visibility.
 - (void)computePromoTableViewData;
 
+// Triggers batch upload of local bookmarks using the sync service.
+- (void)triggerBatchUpload;
+
+// Queries the sync service for the count of local bookmarks.
+- (void)queryLocalBookmarks:(void (^)(int local_bookmarks_count,
+                                      std::string user_email))completion;
+
 // Returns weather the slashed cloud icon should be displayed for
 // `bookmarkModel`.
 - (BOOL)shouldDisplayCloudSlashIconWithBookmarkModel:
     (bookmarks::BookmarkModel*)bookmarkModel;
+
+// Called to update the promo after account settings is closed.
+- (void)updateReviewSettingsPromo;
 
 @end
 

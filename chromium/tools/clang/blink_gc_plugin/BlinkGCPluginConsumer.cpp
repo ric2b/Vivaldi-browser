@@ -202,7 +202,11 @@ void BlinkGCPluginConsumer::CheckClass(RecordInfo* info) {
   if (CXXMethodDecl* trace = info->GetTraceMethod()) {
     if (info->IsStackAllocated())
       reporter_.TraceMethodForStackAllocatedClass(info, trace);
+#if defined(LLVM_FORCE_HEAD_REVISION)
+    if (trace->isPureVirtual())
+#else
     if (trace->isPure())
+#endif
       reporter_.ClassDeclaresPureVirtualTrace(info, trace);
   } else if (info->RequiresTraceMethod()) {
     reporter_.ClassRequiresTraceMethod(info);
@@ -272,7 +276,7 @@ void BlinkGCPluginConsumer::CheckClass(RecordInfo* info) {
       reporter_.ClassContainsGCRootRefs(info, visitor.gc_root_refs());
     }
 
-    CheckForbiddenFieldsVisitor visitor(options_);
+    CheckForbiddenFieldsVisitor visitor;
     if (visitor.ContainsForbiddenFields(info)) {
       reporter_.ClassContainsForbiddenFields(info, visitor.forbidden_fields());
     }
@@ -399,7 +403,11 @@ CXXRecordDecl* BlinkGCPluginConsumer::GetLeftMostBase(
 bool BlinkGCPluginConsumer::DeclaresVirtualMethods(CXXRecordDecl* decl) {
   CXXRecordDecl::method_iterator it = decl->method_begin();
   for (; it != decl->method_end(); ++it)
+#if defined(LLVM_FORCE_HEAD_REVISION)
+    if (it->isVirtual() && !it->isPureVirtual())
+#else
     if (it->isVirtual() && !it->isPure())
+#endif
       return true;
   return false;
 }

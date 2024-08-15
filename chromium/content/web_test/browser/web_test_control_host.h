@@ -31,6 +31,7 @@
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/web_test/browser/leak_detector.h"
+#include "content/web_test/browser/web_test_tracing_controller.h"
 #include "content/web_test/common/web_test.mojom.h"
 #include "content/web_test/common/web_test_runtime_flags.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
@@ -124,10 +125,8 @@ class WebTestControlHost : public WebContentsObserver,
   WebTestControlHost(const WebTestControlHost&) = delete;
   WebTestControlHost& operator=(const WebTestControlHost&) = delete;
 
-  // True if the controller is ready for testing.
-  bool PrepareForWebTest(const TestInfo& test_info);
-  // True if the controller was reset successfully.
-  bool ResetBrowserAfterWebTest();
+  void PrepareForWebTest(const TestInfo& test_info);
+  void ResetBrowserAfterWebTest();
 
   // Allows WebTestControlHost to track all WebContents created by tests, either
   // by Javascript or by C++ code in the browser.
@@ -174,7 +173,7 @@ class WebTestControlHost : public WebContentsObserver,
     raw_ptr<RenderFrameHost, AcrossTasksDanglingUntriaged> render_frame_host =
         nullptr;
     GlobalRenderFrameHostId render_frame_host_id;
-    std::vector<Node*> children;
+    std::vector<raw_ptr<Node, VectorExperimental>> children;
   };
 
   class WebTestWindowObserver;
@@ -227,7 +226,7 @@ class WebTestControlHost : public WebContentsObserver,
       GetBluetoothManualChooserEventsCallback reply) override;
   void SetPopupBlockingEnabled(bool block_popups) override;
   void LoadURLForFrame(const GURL& url, const std::string& frame_name) override;
-  void SetScreenOrientationChanged() override;
+  void SimulateScreenOrientationChanged() override;
   void SetPermission(const std::string& name,
                      blink::mojom::PermissionStatus status,
                      const GURL& origin,
@@ -244,7 +243,7 @@ class WebTestControlHost : public WebContentsObserver,
   void SimulateWebNotificationClick(
       const std::string& title,
       int32_t action_index,
-      const absl::optional<std::u16string>& reply) override;
+      const std::optional<std::u16string>& reply) override;
   void SimulateWebNotificationClose(const std::string& title,
                                     bool by_user) override;
   void SimulateWebContentIndexDelete(const std::string& id) override;
@@ -308,10 +307,7 @@ class WebTestControlHost : public WebContentsObserver,
 
   mojo::AssociatedRemote<mojom::WebTestRenderFrame>&
   GetWebTestRenderFrameRemote(RenderFrameHost* frame);
-  mojo::AssociatedRemote<mojom::WebTestRenderThread>&
-  GetWebTestRenderThreadRemote(RenderProcessHost* process);
   void HandleWebTestRenderFrameRemoteError(const GlobalRenderFrameHostId& key);
-  void HandleWebTestRenderThreadRemoteError(RenderProcessHost* key);
 
   // CompositeAllFramesThen() first builds a frame tree based on
   // frame->GetParent(). Then, it builds a queue of frames in depth-first order,
@@ -371,7 +367,7 @@ class WebTestControlHost : public WebContentsObserver,
   // This is set by the LCPP web_tests via
   // NonAssociatedWebTestControlHost::SetLCPPNavigationHint mojom interface.
   // This is reset before switching to the next test page.
-  absl::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
+  std::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
       lcpp_hint_;
 
   bool crash_when_leak_found_ = false;
@@ -408,8 +404,8 @@ class WebTestControlHost : public WebContentsObserver,
 
   mojom::WebTestRendererDumpResultPtr renderer_dump_result_;
   std::string navigation_history_dump_;
-  absl::optional<SkBitmap> pixel_dump_;
-  absl::optional<std::string> layout_dump_;
+  std::optional<SkBitmap> pixel_dump_;
+  std::optional<std::string> layout_dump_;
   std::string actual_pixel_hash_;
   // By default a test that opens other windows will have them closed at the end
   // of the test before checking for leaks. It may specify that it has closed
@@ -430,10 +426,6 @@ class WebTestControlHost : public WebContentsObserver,
            mojo::AssociatedRemote<mojom::WebTestRenderFrame>>
       web_test_render_frame_map_;
 
-  std::map<RenderProcessHost*,
-           mojo::AssociatedRemote<mojom::WebTestRenderThread>>
-      web_test_render_thread_map_;
-
   // The set of bindings that receive messages on the mojom::WebTestControlHost
   // interface from renderer processes. There should be one per renderer
   // process, and we store it with the |render_process_id| attached to it
@@ -446,6 +438,8 @@ class WebTestControlHost : public WebContentsObserver,
       non_associated_receiver_bindings_;
 
   base::ScopedTempDir writable_directory_for_tests_;
+
+  std::optional<WebTestTracingController> tracing_controller_;
 
   enum class NextPointerLockAction {
     kWillSucceed,

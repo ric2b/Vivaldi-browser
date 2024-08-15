@@ -41,7 +41,7 @@ constexpr const base::TimeDelta kIdleTimeDelta = base::Minutes(3);
 
 // These values should not be renumbered and numeric values should never
 // be reused. This must be kept in sync with ChromeOSHiddenUserPodsOfflineLogin
-// in tools/metrics/histogram/enums.xml
+// in tools/metrics/histograms/enums.xml
 enum class OfflineLoginEvent {
   kOfflineLoginEnabled = 0,
   kOfflineLoginBlockedByTimeLimit = 1,
@@ -177,7 +177,7 @@ void OfflineLoginScreen::HandleEmailSubmitted(const std::string& email) {
   user_manager::KnownUser known_user(g_browser_process->local_state());
   const AccountId account_id = known_user.GetAccountId(
       sanitized_email, std::string(), AccountType::UNKNOWN);
-  const absl::optional<base::TimeDelta> offline_signin_interval =
+  const std::optional<base::TimeDelta> offline_signin_interval =
       known_user.GetOfflineSigninLimit(account_id);
 
   // Further checks only if the limit is set.

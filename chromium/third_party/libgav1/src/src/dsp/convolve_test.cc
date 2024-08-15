@@ -624,13 +624,11 @@ class ConvolveTest : public testing::TestWithParam<
     if (absl::StartsWith(test_case, "C/")) {
       base_convolve_func_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        ConvolveInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      ConvolveInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "AVX2/")) {
-      if ((GetCpuInfo() & kAVX2) != 0) {
-        ConvolveInit_AVX2();
-      }
+      if ((GetCpuInfo() & kAVX2) == 0) GTEST_SKIP() << "No AVX2 support!";
+      ConvolveInit_AVX2();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       ConvolveInit_NEON();
 #if LIBGAV1_MAX_BITDEPTH >= 10
@@ -1084,13 +1082,11 @@ class ConvolveScaleTest
     if (absl::StartsWith(test_case, "C/")) {
       base_convolve_scale_func_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        ConvolveInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      ConvolveInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "AVX2/")) {
-      if ((GetCpuInfo() & kAVX2) != 0) {
-        ConvolveInit_AVX2();
-      }
+      if ((GetCpuInfo() & kAVX2) == 0) GTEST_SKIP() << "No AVX2 support!";
+      ConvolveInit_AVX2();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       ConvolveInit_NEON();
 #if LIBGAV1_MAX_BITDEPTH >= 10

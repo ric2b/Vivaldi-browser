@@ -32,8 +32,11 @@ using namespace tint::core::number_suffixes;  // NOLINT
 namespace tint::msl::writer {
 namespace {
 
+// All ported to IR tests
+
 using MslASTPrinterTest = TestHelper;
 
+// MslPrinterTest.Return
 TEST_F(MslASTPrinterTest, Emit_Return) {
     auto* r = Return();
     WrapInFunction(r);
@@ -46,6 +49,7 @@ TEST_F(MslASTPrinterTest, Emit_Return) {
     EXPECT_EQ(gen.Result(), "  return;\n");
 }
 
+// MslPrinterTest.ReturnWithValue
 TEST_F(MslASTPrinterTest, Emit_ReturnWithValue) {
     auto* r = Return(123_i);
     Func("f", tint::Empty, ty.i32(), Vector{r});

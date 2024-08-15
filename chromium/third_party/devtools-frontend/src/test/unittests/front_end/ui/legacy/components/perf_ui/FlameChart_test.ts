@@ -14,13 +14,13 @@ const {assert} = chai;
 describeWithEnvironment('FlameChart', () => {
   it('sorts decorations, putting candy striping before warning triangles', async () => {
     const decorations: PerfUI.FlameChart.FlameChartDecoration[] = [
-      {type: 'WARNING_TRIANGLE'},
-      {type: 'CANDY', startAtTime: TraceEngine.Types.Timing.MicroSeconds(10)},
+      {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+      {type: PerfUI.FlameChart.FlameChartDecorationType.CANDY, startAtTime: TraceEngine.Types.Timing.MicroSeconds(10)},
     ];
     PerfUI.FlameChart.sortDecorationsForRenderingOrder(decorations);
     assert.deepEqual(decorations, [
-      {type: 'CANDY', startAtTime: TraceEngine.Types.Timing.MicroSeconds(10)},
-      {type: 'WARNING_TRIANGLE'},
+      {type: PerfUI.FlameChart.FlameChartDecorationType.CANDY, startAtTime: TraceEngine.Types.Timing.MicroSeconds(10)},
+      {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
     ]);
   });
 
@@ -830,6 +830,111 @@ describeWithEnvironment('FlameChart', () => {
         children: [groupNode0, groupNode1, groupNode5],
       };
 
+      assert.deepEqual(root, expectedGroupNodeRoot);
+    });
+  });
+
+  describe('updateGroupTree', () => {
+    class UpdateGroupTreeTestProvider extends FakeFlameChartProvider {
+      override maxStackDepth(): number {
+        return 6;
+      }
+      override timelineData(): PerfUI.FlameChart.FlameChartTimelineData {
+        return PerfUI.FlameChart.FlameChartTimelineData.create({
+          entryLevels: [],
+          entryStartTimes: [],
+          entryTotalTimes: [],
+          groups: [
+            {
+              name: 'Test Group 0' as Platform.UIString.LocalizedString,
+              startLevel: 0,
+              style: defaultGroupStyle,
+            },
+            {
+              name: 'Test Group 1' as Platform.UIString.LocalizedString,
+              startLevel: 1,
+              style: defaultGroupStyle,
+            },
+            {
+              name: 'Test Group 2' as Platform.UIString.LocalizedString,
+              startLevel: 2,
+              style: {...defaultGroupStyle, collapsible: true, nestingLevel: 1},
+            },
+          ],
+        });
+      }
+    }
+
+    it('builds the group tree correctly', async () => {
+      const provider = new UpdateGroupTreeTestProvider();
+      const delegate = new MockFlameChartDelegate();
+      chartInstance = new PerfUI.FlameChart.FlameChart(provider, delegate);
+      const root = chartInstance.buildGroupTree(provider.timelineData().groups);
+
+      // The built tree should be
+      //        Root
+      //      /      \
+      // Group0      Group1
+      //                |
+      //             Group2
+      const groupNode2 = {
+        index: 2,
+        nestingLevel: 1,
+        startLevel: 2,
+        // The next group is 'Test Group 3', its start level is 3.
+        endLevel: 6,
+        children: [],
+      };
+      const groupNode1 = {
+        index: 1,
+        nestingLevel: 0,
+        startLevel: 1,
+        // The next group is 'Test Group 2', its start level is 2.
+        endLevel: 2,
+        children: [groupNode2],
+      };
+      const groupNode0 = {
+        index: 0,
+        nestingLevel: 0,
+        startLevel: 0,
+        // The next group is 'Test Group 1', its start level is 1.
+        endLevel: 1,
+        children: [],
+      };
+      const expectedGroupNodeRoot = {
+        index: -1,
+        nestingLevel: -1,
+        startLevel: 0,
+        // The next group is 'Test Group 0', its start level is 0.
+        endLevel: 0,
+        children: [groupNode0, groupNode1],
+      };
+
+      assert.deepEqual(root, expectedGroupNodeRoot);
+
+      const newGroups = [
+        {
+          name: 'Test Group 0' as Platform.UIString.LocalizedString,
+          startLevel: 0,
+          style: defaultGroupStyle,
+        },
+        {
+          name: 'Test Group 1' as Platform.UIString.LocalizedString,
+          startLevel: 2,
+          style: defaultGroupStyle,
+        },
+        {
+          name: 'Test Group 2' as Platform.UIString.LocalizedString,
+          startLevel: 3,
+          style: {...defaultGroupStyle, collapsible: true, nestingLevel: 1},
+        },
+      ];
+
+      chartInstance.updateGroupTree(newGroups, root);
+      groupNode0.endLevel = 2;
+      groupNode1.startLevel = 2;
+      groupNode1.endLevel = 3;
+      groupNode2.startLevel = 3;
       assert.deepEqual(root, expectedGroupNodeRoot);
     });
   });

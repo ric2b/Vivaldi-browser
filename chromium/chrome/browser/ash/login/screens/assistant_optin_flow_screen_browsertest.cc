@@ -426,7 +426,7 @@ class AssistantOptInFlowBaseTest : public OobeBaseTest {
 
   std::unique_ptr<ScopedAssistantSettings> assistant_settings_;
 
-  absl::optional<AssistantOptInFlowScreen::Result> screen_result_;
+  std::optional<AssistantOptInFlowScreen::Result> screen_result_;
   base::HistogramTester histogram_tester_;
 
   // If set, HandleRequest will return an error for the next value prop URL
@@ -582,7 +582,9 @@ IN_PROC_BROWSER_TEST_F(AssistantOptInFlowTest, AssistantStateUpdateAfterShow) {
                                      1);
 }
 
-IN_PROC_BROWSER_TEST_F(AssistantOptInFlowTest, RetryOnWebviewLoadFail) {
+// TODO(crbug.com/1513726): Flaky on ChromeOS.
+IN_PROC_BROWSER_TEST_F(AssistantOptInFlowTest,
+                       DISABLED_RetryOnWebviewLoadFail) {
   auto force_lib_assistant_enabled =
       AssistantOptInFlowScreen::ForceLibAssistantEnabledForTesting(true);
   SetUpAssistantScreensForTest();

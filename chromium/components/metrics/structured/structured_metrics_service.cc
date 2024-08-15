@@ -8,19 +8,53 @@
 #include "components/metrics/metrics_service_client.h"
 #include "components/metrics/structured/reporting/structured_metrics_reporting_service.h"
 #include "components/metrics/structured/structured_metrics_features.h"
-#include "structured_metrics_service.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
 namespace metrics::structured {
 
 StructuredMetricsService::StructuredMetricsService(
-    MetricsProvider* system_profile_provider,
     MetricsServiceClient* client,
-    PrefService* local_state)
-    : StructuredMetricsService(client,
-                               local_state,
-                               std::make_unique<StructuredMetricsRecorder>(
-                                   system_profile_provider)) {}
+    PrefService* local_state,
+    std::unique_ptr<StructuredMetricsRecorder> recorder)
+    : recorder_(std::move(recorder)),
+      // This service is only enabled if both structured metrics and the service
+      // flags are enabled.
+      structured_metrics_enabled_(
+          base::FeatureList::IsEnabled(metrics::features::kStructuredMetrics) &&
+          base::FeatureList::IsEnabled(kEnabledStructuredMetricsService)),
+      client_(client) {
+  CHECK(client_);
+  CHECK(local_state);
+  CHECK(recorder_);
+
+  // If the StructuredMetricsService is not enabled then return early. The
+  // recorder needs to be initialized, but not the reporting service or
+  // scheduler.
+  if (!structured_metrics_enabled_) {
+    return;
+  }
+
+  // Setup the reporting service.
+  const UnsentLogStore::UnsentLogStoreLimits storage_limits =
+      GetLogStoreLimits();
+
+  reporting_service_ =
+      std::make_unique<reporting::StructuredMetricsReportingService>(
+          client_, local_state, storage_limits);
+
+  reporting_service_->Initialize();
+
+  // Setup the log rotation scheduler.
+  base::RepeatingClosure rotate_callback = base::BindRepeating(
+      &StructuredMetricsService::RotateLogsAndSend, weak_factory_.GetWeakPtr());
+  base::RepeatingCallback<base::TimeDelta(void)> get_upload_interval_callback =
+      base::BindRepeating(&StructuredMetricsService::GetUploadTimeInterval,
+                          base::Unretained(this));
+
+  const bool fast_startup_for_test = client->ShouldStartUpFastForTesting();
+  scheduler_ = std::make_unique<StructuredMetricsScheduler>(
+      rotate_callback, get_upload_interval_callback, fast_startup_for_test);
+}
 
 StructuredMetricsService::~StructuredMetricsService() = default;
 
@@ -68,7 +102,7 @@ void StructuredMetricsService::Flush(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // The log should not be built if there aren't any events to log.
   // This is mirroring a check in RotateLogsAndSend.
-  if (recorder_->events()->non_uma_events_size() == 0) {
+  if (!recorder_->event_storage()->HasEvents()) {
     return;
   }
   BuildAndStoreLog(reason);
@@ -84,49 +118,6 @@ void StructuredMetricsService::Purge() {
   reporting_service_->Purge();
 }
 
-StructuredMetricsService::StructuredMetricsService(
-    MetricsServiceClient* client,
-    PrefService* local_state,
-    std::unique_ptr<StructuredMetricsRecorder> recorder)
-    : recorder_(std::move(recorder)),
-      // This service is only enabled if both structured metrics and the service
-      // flags are enabled.
-      structured_metrics_enabled_(
-          base::FeatureList::IsEnabled(metrics::features::kStructuredMetrics) &&
-          base::FeatureList::IsEnabled(kEnabledStructuredMetricsService)),
-      client_(client) {
-  DCHECK(client);
-  DCHECK(local_state);
-
-  // If the StructuredMetricsService is not enabled then return early. The
-  // recorder needs to be initialized, but not the reporting service or
-  // scheduler.
-  if (!structured_metrics_enabled_) {
-    return;
-  }
-
-  // Setup the reporting service.
-  const UnsentLogStore::UnsentLogStoreLimits storage_limits =
-      GetLogStoreLimits();
-
-  reporting_service_ =
-      std::make_unique<reporting::StructuredMetricsReportingService>(
-          client, local_state, storage_limits);
-
-  reporting_service_->Initialize();
-
-  // Setup the log rotation scheduler.
-  base::RepeatingClosure rotate_callback = base::BindRepeating(
-      &StructuredMetricsService::RotateLogsAndSend, weak_factory_.GetWeakPtr());
-  base::RepeatingCallback<base::TimeDelta(void)> get_upload_interval_callback =
-      base::BindRepeating(&StructuredMetricsService::GetUploadTimeInterval,
-                          base::Unretained(this));
-
-  const bool fast_startup_for_test = client->ShouldStartUpFastForTesting();
-  scheduler_ = std::make_unique<StructuredMetricsScheduler>(
-      rotate_callback, get_upload_interval_callback, fast_startup_for_test);
-}
-
 base::TimeDelta StructuredMetricsService::GetUploadTimeInterval() {
   return base::Seconds(GetUploadInterval());
 }
@@ -136,8 +127,8 @@ void StructuredMetricsService::RotateLogsAndSend() {
 
   // Verify that the recorder has been initialized and can be providing metrics.
   // And if it is, then see if there are any events ready to be uploaded.
-  if (!recorder_->can_provide_metrics() ||
-      recorder_->events()->non_uma_events_size() == 0) {
+  if (!recorder_->CanProvideMetrics() ||
+      !recorder_->event_storage()->HasEvents()) {
     return;
   }
 
@@ -214,8 +205,8 @@ MetricsServiceClient* StructuredMetricsService::GetMetricsServiceClient()
 void StructuredMetricsService::ManualUpload() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!recorder_->can_provide_metrics() ||
-      recorder_->events()->non_uma_events_size() == 0) {
+  if (!recorder_->CanProvideMetrics() ||
+      !recorder_->event_storage()->HasEvents()) {
     return;
   }
 

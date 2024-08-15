@@ -20,6 +20,7 @@
 #include <memory>
 
 class SkStreamAsset;
+class SkFontationsScalerContext;
 
 namespace sk_fontations {
 
@@ -61,6 +62,108 @@ private:
     size_t fAxisCount;
 };
 
+class ColorPainter : public fontations_ffi::ColorPainterWrapper {
+public:
+    ColorPainter() = delete;
+    ColorPainter(SkFontationsScalerContext& scaler_context,
+                 SkCanvas& canvas,
+                 SkSpan<SkColor> palette,
+                 SkColor foregroundColor,
+                 uint16_t upem);
+
+    // fontations_ffi::ColorPainter interface.
+    virtual void push_transform(
+            float xx, float xy, float yx, float yy, float dx, float dy) override;
+    virtual void pop_transform() override;
+    virtual void push_clip_glyph(uint16_t glyph_id) override;
+    virtual void push_clip_rectangle(float x_min, float y_min, float x_max, float y_max) override;
+    virtual void pop_clip() override;
+
+    // Paint*Gradient equivalents:
+    virtual void fill_solid(uint16_t palette_index, float alpha) override;
+    virtual void fill_radial(float x0,
+                             float y0,
+                             float r0,
+                             float x1,
+                             float y1,
+                             float r1,
+                             fontations_ffi::BridgeColorStops&,
+                             uint8_t extend_mode) override;
+    virtual void fill_linear(float x0,
+                             float y0,
+                             float x1,
+                             float y1,
+                             fontations_ffi::BridgeColorStops&,
+                             uint8_t extend_mode) override;
+    virtual void fill_sweep(float x0,
+                            float y0,
+                            float startAngle,
+                            float endAngle,
+                            fontations_ffi::BridgeColorStops&,
+                            uint8_t extend_mode) override;
+
+    // compositeMode arg matches composite mode values from the OpenType COLR table spec.
+    virtual void push_layer(uint8_t compositeMode) override;
+    virtual void pop_layer() override;
+
+private:
+    SkFontationsScalerContext& fScalerContext;
+    SkCanvas& fCanvas;
+    SkSpan<SkColor> fPalette;
+    SkColor fForegroundColor;
+    uint16_t fUpem;
+};
+
+/** Tracks transforms and clips to compute a bounding box without drawing pixels. */
+class BoundsPainter : public fontations_ffi::ColorPainterWrapper {
+public:
+    BoundsPainter() = delete;
+    BoundsPainter(SkFontationsScalerContext& scaler_context,
+                  SkMatrix initialTransfom,
+                  uint16_t upem);
+
+    SkRect getBoundingBox();
+
+    // fontations_ffi::ColorPainter interface.
+    virtual void push_transform(
+            float xx, float xy, float yx, float yy, float dx, float dy) override;
+    virtual void pop_transform() override;
+    virtual void push_clip_glyph(uint16_t glyph_id) override;
+    virtual void push_clip_rectangle(float x_min, float y_min, float x_max, float y_max) override;
+    virtual void pop_clip() override {}
+
+    // Paint*Gradient equivalents:
+    virtual void fill_solid(uint16_t palette_index, float alpha) override {}
+    virtual void fill_radial(float,
+                             float,
+                             float,
+                             float,
+                             float,
+                             float,
+                             fontations_ffi::BridgeColorStops& stops,
+                             uint8_t) override {}
+    virtual void fill_linear(
+            float, float, float, float, fontations_ffi::BridgeColorStops& stops, uint8_t) override {
+    }
+    virtual void fill_sweep(float x0,
+                            float y0,
+                            float startAngle,
+                            float endAngle,
+                            fontations_ffi::BridgeColorStops& stops,
+                            uint8_t extend_mode) override {}
+
+    virtual void push_layer(uint8_t) override {}
+    virtual void pop_layer() override {}
+
+private:
+    SkFontationsScalerContext& fScalerContext;
+    SkMatrix fCurrentTransform;
+    SkMatrix fStackTopTransformInverse;
+
+    uint16_t fUpem;
+    SkRect fBounds;
+};
+
 }  // namespace sk_fontations
 
 /** SkTypeface implementation based on Google Fonts Fontations Rust libraries. */
@@ -72,6 +175,9 @@ public:
     const fontations_ffi::BridgeFontRef& getBridgeFontRef() { return *fBridgeFontRef; }
     const fontations_ffi::BridgeNormalizedCoords& getBridgeNormalizedCoords() {
         return *fBridgeNormalizedCoords;
+    }
+    SkSpan<SkColor> getPalette() {
+        return SkSpan<SkColor>(reinterpret_cast<SkColor*>(fPalette.data()), fPalette.size());
     }
 
     static constexpr SkTypeface::FactoryId FactoryId = SkSetFourByteTag('f', 'n', 't', 'a');
@@ -113,6 +219,7 @@ private:
     // lifetime of fBridgeFontRef to safely request parsed data.
     rust::Box<fontations_ffi::BridgeFontRef> fBridgeFontRef;
     rust::Box<fontations_ffi::BridgeNormalizedCoords> fBridgeNormalizedCoords;
+    rust::Vec<uint32_t> fPalette;
 
     mutable SkOnce fGlyphMasksMayNeedCurrentColorOnce;
     mutable bool fGlyphMasksMayNeedCurrentColor;

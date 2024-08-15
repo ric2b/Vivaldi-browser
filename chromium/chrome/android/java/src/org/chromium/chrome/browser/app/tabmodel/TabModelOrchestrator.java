@@ -29,6 +29,7 @@ public abstract class TabModelOrchestrator {
 
     // TabModelStartupInfo variables
     private ObservableSupplierImpl<TabModelStartupInfo> mTabModelStartupInfoSupplier;
+    private boolean mIgnoreIncognitoFiles;
     private int mStandardCount;
     private int mIncognitoCount;
     private int mStandardActiveIndex = TabModel.INVALID_TAB_INDEX;
@@ -63,9 +64,7 @@ public abstract class TabModelOrchestrator {
         return mTabPersistentStore;
     }
 
-    /**
-     * Destroy the {@link TabPersistentStore} and {@link TabModelSelectorImpl} members.
-     */
+    /** Destroy the {@link TabPersistentStore} and {@link TabModelSelectorImpl} members. */
     public void destroy() {
         if (!mTabModelsInitialized) {
             return;
@@ -108,6 +107,7 @@ public abstract class TabModelOrchestrator {
      */
     public void loadState(
             boolean ignoreIncognitoFiles, Callback<String> onStandardActiveIndexRead) {
+        mIgnoreIncognitoFiles = ignoreIncognitoFiles;
         mOnStandardActiveIndexRead = onStandardActiveIndexRead;
         mTabPersistentStore.loadState(ignoreIncognitoFiles);
     }
@@ -125,15 +125,31 @@ public abstract class TabModelOrchestrator {
             boolean createdIncognitoTabOnStartup =
                     getTabModelSelector().getModel(true).getCount() > 0;
 
-            int standardActiveIndex = mStandardActiveIndex != TabModel.INVALID_TAB_INDEX
-                    ? mStandardActiveIndex - mIncognitoCount
-                    : TabModel.INVALID_TAB_INDEX;
+            // Incognito tabs are read first, so we have to adjust to find the real active index in
+            // the standard model.
+            int standardActiveIndex =
+                    mStandardActiveIndex != TabModel.INVALID_TAB_INDEX
+                            ? mStandardActiveIndex - mIncognitoCount
+                            : TabModel.INVALID_TAB_INDEX;
+
+            // If we're going to cull the Incognito tabs, reset the startup state.
+            if (mIgnoreIncognitoFiles) {
+                mIncognitoCount = 0;
+                mIncognitoActiveIndex = TabModel.INVALID_TAB_INDEX;
+            }
+
+            // Account for tabs created on startup (e.g. through intents).
             if (createdStandardTabOnStartup) mStandardCount++;
             if (createdIncognitoTabOnStartup) mIncognitoCount++;
 
-            mTabModelStartupInfoSupplier.set(new TabModelStartupInfo(mStandardCount,
-                    mIncognitoCount, standardActiveIndex, mIncognitoActiveIndex,
-                    createdStandardTabOnStartup, createdIncognitoTabOnStartup));
+            mTabModelStartupInfoSupplier.set(
+                    new TabModelStartupInfo(
+                            mStandardCount,
+                            mIncognitoCount,
+                            standardActiveIndex,
+                            mIncognitoActiveIndex,
+                            createdStandardTabOnStartup,
+                            createdIncognitoTabOnStartup));
         }
         mTabPersistentStore.restoreTabs(setActiveTab);
     }
@@ -209,9 +225,14 @@ public abstract class TabModelOrchestrator {
                     }
 
                     @Override
-                    public void onDetailsRead(int index, int id, String url,
-                            boolean isStandardActiveIndex, boolean isIncognitoActiveIndex,
-                            Boolean isIncognito, boolean fromMerge) {
+                    public void onDetailsRead(
+                            int index,
+                            int id,
+                            String url,
+                            boolean isStandardActiveIndex,
+                            boolean isIncognitoActiveIndex,
+                            Boolean isIncognito,
+                            boolean fromMerge) {
                         if (isIncognito == null || !isIncognito.booleanValue()) {
                             mStandardCount++;
                         } else {

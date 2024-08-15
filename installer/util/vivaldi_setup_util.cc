@@ -96,7 +96,7 @@ void EnableDebugPrivileges() {
 // installer\util\google_chrome_distribution.cc
 std::wstring LocalizeUrl(const wchar_t* url) {
   std::wstring lang = installer::GetCurrentTranslation();
-  return base::ReplaceStringPlaceholders(base::WStringPiece(url), {lang}, NULL);
+  return base::ReplaceStringPlaceholders(std::wstring_view(url), {lang}, NULL);
 }
 
 std::wstring GetUninstallSurveyUrl() {

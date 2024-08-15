@@ -21,6 +21,7 @@ interface InputDeviceSettingsType {
   fakeGraphicsTablets: GraphicsTablet[];
   fakeMouseButtonActions: {options: ActionChoice[]};
   fakeGraphicsTabletButtonActions: {options: ActionChoice[]};
+  fakeHasLauncherButton: {hasLauncherButton: boolean};
 }
 
 class FakeMethodState {
@@ -102,6 +103,7 @@ export class FakeInputDeviceSettingsProvider implements
     this.methods.register('fakeGraphicsTablets');
     this.methods.register('fakeMouseButtonActions');
     this.methods.register('fakeGraphicsTabletButtonActions');
+    this.methods.register('fakeHasLauncherButton');
   }
 
   setFakeKeyboards(keyboards: Keyboard[]): void {
@@ -247,8 +249,7 @@ export class FakeInputDeviceSettingsProvider implements
   notifyKeboardListUpdated(): void {
     const keyboards = this.methods.getResult('fakeKeyboards');
     // Make a deep copy to notify the functions observing keyboard settings.
-    const keyboardsClone =
-        !keyboards ? keyboards : JSON.parse(JSON.stringify(keyboards));
+    const keyboardsClone = !keyboards ? keyboards : structuredClone(keyboards);
     for (const observer of this.keyboardObservers) {
       observer.onKeyboardListUpdated(keyboardsClone);
     }
@@ -363,5 +364,14 @@ export class FakeInputDeviceSettingsProvider implements
     for (const observer of this.buttonPressObservers) {
       observer.onButtonPressed(button);
     }
+  }
+
+  hasLauncherButton(): Promise<{hasLauncherButton: boolean}> {
+    return this.methods.resolveMethod('fakeHasLauncherButton');
+  }
+
+  setFakeHasLauncherButton(hasLauncherButton: boolean): void {
+    this.methods.setResult(
+        'fakeHasLauncherButton', {hasLauncherButton: hasLauncherButton});
   }
 }

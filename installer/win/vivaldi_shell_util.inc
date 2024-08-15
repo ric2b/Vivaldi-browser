@@ -53,8 +53,7 @@ void GetPathSpecificSuffix(const base::FilePath& path, std::wstring* suffix) {
   std::string path_utf8(base::WideToUTF8(path.value()));
   base::MD5Sum(path_utf8.c_str(), strlen(path_utf8.c_str()), &md5_digest);
   const std::string base32_md5(base32::Base32Encode(
-      base::StringPiece(reinterpret_cast<char*>(md5_digest.a),
-                        std::size(md5_digest.a)),
+      md5_digest.a,
       base32::Base32EncodePolicy::OMIT_PADDING));
   DCHECK_EQ(base32_md5.length(), 26U);
   suffix->reserve(base32_md5.length() + 1);

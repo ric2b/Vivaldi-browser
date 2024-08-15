@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_GLOBAL_MEDIA_CONTROLS_MEDIA_NOTIFICATION_SERVICE_H_
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,10 +27,8 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
-class StartPresentationContext;
 class WebContents;
 }  // namespace content
 
@@ -40,6 +39,7 @@ class MediaItemManager;
 
 namespace media_router {
 class CastDialogController;
+class StartPresentationContext;
 }  // namespace media_router
 
 class MediaNotificationService
@@ -147,7 +147,7 @@ class MediaNotificationService
           host_receiver,
       mojo::PendingRemote<global_media_controls::mojom::DeviceListClient>
           client_remote,
-      absl::optional<std::string> remoting_session_id);
+      std::optional<std::string> remoting_session_id);
 
   // True if there are cast notifications associated with |web_contents|.
   bool HasCastNotificationsForWebContents(

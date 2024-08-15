@@ -40,18 +40,6 @@ BASE_FEATURE(kBlockRepeatedNotificationPermissionPrompts,
              "BlockRepeatedNotificationPermissionPrompts",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kConfirmationChip,
-             "ConfirmationChip",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kChipLocationBarIconOverride,
-             "ChipLocationIconOverride",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kPermissionElement,
-             "PermissionElement",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kNotificationInteractionHistory,
              "NotificationInteractionHistory",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -88,16 +76,6 @@ BASE_FEATURE(kPermissionPredictionsV2,
              "PermissionPredictionsV2",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_ANDROID)
-
-// When enabled, blocks notifications permission prompt when Chrome doesn't
-// have app level Notification permission.
-BASE_FEATURE(kBlockNotificationPromptsIfDisabledOnAppLevel,
-             "BlockNotificationPromptsIfDisabledOnAppLevel",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-#else
-
 // Controls whether to trigger showing a HaTS survey, with the given
 // `probability` and `trigger_id`. The `probability` parameter is defined and
 // handled by the HatsService itself. If the parameter
@@ -114,12 +92,22 @@ BASE_FEATURE(kPermissionsPromptSurvey,
              "PermissionsPromptSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, permissions grants with a durable session model will have
-// an expiration date set. The interpretation of the expiration date
-// is not handled by this component, but left to the embedding browser.
-BASE_FEATURE(kRecordPermissionExpirationTimestamps,
-             "RecordPermissionExpirationTimestamps",
+#if BUILDFLAG(IS_ANDROID)
+
+// When enabled, blocks notifications permission prompt when Chrome doesn't
+// have app level Notification permission.
+BASE_FEATURE(kBlockNotificationPromptsIfDisabledOnAppLevel,
+             "BlockNotificationPromptsIfDisabledOnAppLevel",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#else
+
+// When enabled, chooser permissions grants will have a last visited timestamp
+// date set. The timestamp will be later used to auto-revoke the permission,
+// if eligible.
+BASE_FEATURE(kRecordChooserPermissionLastVisitedTimestamps,
+             "RecordChooserPermissionLastVisitedTimestamps",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Kill switch for the mitigation for https://crbug.com/1462709
 BASE_FEATURE(kMitigateUnpartitionedWebviewPermissions,
@@ -152,11 +140,6 @@ BASE_FEATURE(kWindowPlacementPermissionAlias,
 // visible in the Embedded content settings page.
 BASE_FEATURE(kShowRelatedWebsiteSetsPermissionGrants,
              "ShowRelatedWebsiteSetsPermissionGrants",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables disallowing MIDI permission by default.
-BASE_FEATURE(kBlockMidiByDefault,
-             "BlockMidiByDefault",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
@@ -194,7 +177,6 @@ const base::FeatureParam<double> kPermissionPredictionsV2HoldbackChance(
     "holdback_chance",
     0.3);
 
-#if !BUILDFLAG(IS_ANDROID)
 // Specifies the `trigger_id` of the HaTS survey to trigger immediately after
 // the user has interacted with a permission prompt. Multiple values can be
 // configured by providing a comma separated list. If this is done, a
@@ -206,6 +188,23 @@ const base::FeatureParam<double> kPermissionPredictionsV2HoldbackChance(
 // probability configured for the HaTS survey.
 const base::FeatureParam<std::string> kPermissionsPromptSurveyTriggerId{
     &permissions::features::kPermissionsPromptSurvey, "trigger_id", ""};
+
+// WARNING: This parameter is intended only for a one-off A/B experiment on
+// Clank (see crbug.com/1502780) and will be removed thereafter.
+// The experiment is active iff |experimental_custom_invitation_arm_trigger_id|
+// is configured. If it is active, a coin flip determines whether the generic or
+// a custom invitation is shown. These two cases will use distinct trigger IDs
+// in order to properly convey the survey context to the user in both cases. The
+// parameter specifies the alternate set of trigger IDs for the HaTS surveys
+// that should be shown after a customized invitation was shown. The triggerIds
+// configured in |trigger_id| are used if a generic invitation was shown. The
+// configuration of |experimental_custom_invitation_arm_trigger_id| is analogous
+// to that of |trigger_id|. Custom invitations are hardcoded and only supported
+// for the request types geolocation, camera, and microphone.
+const base::FeatureParam<std::string>
+    kPermissionsPromptSurveyCustomInvitationTriggerId{
+        &permissions::features::kPermissionsPromptSurvey,
+        "experimental_custom_invitation_arm_trigger_id", ""};
 
 // If multiple trigger ids are configured, the trigger id at position p only
 // triggers for the request type at position p of the request type filter,
@@ -307,7 +306,6 @@ const base::FeatureParam<std::string>
     kPermissionPromptSurveyOneTimePromptsDecidedBucket{
         &permissions::features::kPermissionsPromptSurvey,
         "one_time_prompts_decided_bucket", ""};
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace feature_params
 }  // namespace permissions

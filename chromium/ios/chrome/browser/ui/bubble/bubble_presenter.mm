@@ -18,30 +18,27 @@
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/iph_for_new_chrome_user/model/utils.h"
-#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer.h"
-#import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/bubble/bubble_constants.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter_delegate.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
-#import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
-#import "ios/chrome/browser/url_loading/model/url_loading_observer_bridge.h"
+#import "ios/chrome/browser/ui/bubble/side_swipe_bubble/side_swipe_bubble_view.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -51,7 +48,23 @@
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
-@interface BubblePresenter () <SceneStateObserver, URLLoadingObserver>
+namespace {
+
+// Returns whether `view` could display and animate correctly within `guide`. If
+// NO, elements in `view` may be hidden or overlap with each other during the
+// animation.
+BOOL CanSideSwipeBubbleViewFitInGuide(SideSwipeBubbleView* view,
+                                      UILayoutGuide* guide) {
+  CGSize guide_size = guide.layoutFrame.size;
+  CGSize view_fitting_size =
+      [view systemLayoutSizeFittingSize:UILayoutFittingCompressedSize];
+  return view_fitting_size.width <= guide_size.width &&
+         view_fitting_size.height <= guide_size.height;
+}
+
+}  // namespace
+
+@interface BubblePresenter ()
 
 // Used to display the bottom toolbar tip in-product help promotion bubble.
 // `nil` if the tip bubble has not yet been presented. Once the bubble is
@@ -83,6 +96,7 @@
     BubbleViewControllerPresenter* lensKeyboardPresenter;
 @property(nonatomic, strong)
     BubbleViewControllerPresenter* parcelTrackingTipBubblePresenter;
+@property(nonatomic, strong) SideSwipeBubbleView* pullToRefreshSideSwipeBubble;
 @property(nonatomic, assign) WebStateList* webStateList;
 @property(nonatomic, assign) feature_engagement::Tracker* engagementTracker;
 @property(nonatomic, assign) HostContentSettingsMap* settingsMap;
@@ -92,9 +106,6 @@
 @end
 
 @implementation BubblePresenter {
-  std::unique_ptr<UrlLoadingObserverBridge> _loadingObserverBridge;
-  UrlLoadingNotifierBrowserAgent* _loadingNotifier;
-
   segmentation_platform::DeviceSwitcherResultDispatcher*
       _deviceSwitcherResultDispatcher;
 
@@ -110,10 +121,7 @@
         (segmentation_platform::DeviceSwitcherResultDispatcher*)
             deviceSwitcherResultDispatcher
                     hostContentSettingsMap:(HostContentSettingsMap*)settingsMap
-                           loadingNotifier:(UrlLoadingNotifierBrowserAgent*)
-                                               urlLoadingNotifier
                                prefService:(PrefService*)prefService
-                                sceneState:(SceneState*)sceneState
                    tabStripCommandsHandler:
                        (id<TabStripCommands>)tabStripCommandsHandler
                                    tracker:(feature_engagement::Tracker*)
@@ -123,7 +131,6 @@
   if (self) {
     CHECK(prefService);
     DCHECK(webStateList);
-    DCHECK(urlLoadingNotifier);
 
     _webStateList = webStateList;
     _engagementTracker = engagementTracker;
@@ -132,24 +139,16 @@
     _prefService = prefService;
     _tabStripCommandsHandler = tabStripCommandsHandler;
     self.started = YES;
-
-    _loadingObserverBridge = std::make_unique<UrlLoadingObserverBridge>(self);
-    _loadingNotifier = urlLoadingNotifier;
-    _loadingNotifier->AddObserver(_loadingObserverBridge.get());
-
-    [sceneState addObserver:self];
   }
   return self;
 }
 
 - (void)stop {
+  [self hideAllHelpBubbles];
   self.started = NO;
   self.webStateList = nullptr;
   self.engagementTracker = nullptr;
   self.settingsMap = nullptr;
-
-  _loadingNotifier->RemoveObserver(_loadingObserverBridge.get());
-  _loadingObserverBridge.reset();
 }
 
 - (void)hideAllHelpBubbles {
@@ -164,10 +163,12 @@
   [self.lensKeyboardPresenter dismissAnimated:NO];
   [self.defaultPageModeTipBubblePresenter dismissAnimated:NO];
   [self.parcelTrackingTipBubblePresenter dismissAnimated:NO];
+  [self.pullToRefreshSideSwipeBubble
+      dismissWithReason:IPHDismissalReasonType::kUnknown];
 }
 
 - (void)presentShareButtonHelpBubbleIfEligible {
-  if (!iph_for_new_chrome_user::IsUserEligible(
+  if (!iph_for_new_chrome_user::IsUserNewSafariSwitcher(
           _deviceSwitcherResultDispatcher)) {
     return;
   }
@@ -415,69 +416,8 @@
   self.parcelTrackingTipBubblePresenter = presenter;
 }
 
-#pragma mark - Private
-
-// Convenience method that calls -presentBubbleForFeature with default param
-// values for `alignment`, `presentAction`, and `dismissAction`.
-- (BubbleViewControllerPresenter*)
-    presentBubbleForFeature:(const base::Feature&)feature
-                  direction:(BubbleArrowDirection)direction
-                       text:(NSString*)text
-      voiceOverAnnouncement:(NSString*)voiceOverAnnouncement
-                anchorPoint:(CGPoint)anchorPoint {
-  return [self presentBubbleForFeature:feature
-                             direction:direction
-                             alignment:BubbleAlignmentBottomOrTrailing
-                                  text:text
-                 voiceOverAnnouncement:voiceOverAnnouncement
-                           anchorPoint:anchorPoint
-                         presentAction:nil
-                         dismissAction:nil];
-}
-
-// Presents and returns a bubble view controller for the `feature` with an arrow
-// `direction`, an arrow `alignment` and a `text` on an `anchorPoint`.
-- (BubbleViewControllerPresenter*)
-    presentBubbleForFeature:(const base::Feature&)feature
-                  direction:(BubbleArrowDirection)direction
-                  alignment:(BubbleAlignment)alignment
-                       text:(NSString*)text
-      voiceOverAnnouncement:(NSString*)voiceOverAnnouncement
-                anchorPoint:(CGPoint)anchorPoint
-              presentAction:(ProceduralBlock)presentAction
-              dismissAction:(ProceduralBlock)dismissAction {
-  DCHECK(self.engagementTracker);
-  BubbleViewControllerPresenter* presenter =
-      [self bubblePresenterForFeature:feature
-                            direction:direction
-                            alignment:alignment
-                                 text:text
-                        dismissAction:dismissAction];
-  if (!presenter)
-    return nil;
-  presenter.voiceOverAnnouncement = voiceOverAnnouncement;
-  if ([presenter canPresentInView:self.rootViewController.view
-                      anchorPoint:anchorPoint] &&
-      ([self shouldForcePresentBubbleForFeature:feature] ||
-       self.engagementTracker->ShouldTriggerHelpUI(feature))) {
-    [presenter presentInViewController:self.rootViewController
-                                  view:self.rootViewController.view
-                           anchorPoint:anchorPoint];
-    if (presentAction) {
-      presentAction();
-    }
-  }
-  return presenter;
-}
-
-// Optionally presents a bubble associated with the new tab iph. If the feature
-// engagement tracker determines it is valid to show the new tab tip, then it
-// initializes `openNewTabIPHBubblePresenter` and presents the bubble. If it is
-// not valid to show the new tab tip, `openNewTabIPHBubblePresenter` is set to
-// `nil` and no bubble is shown. This method requires that `self.browserState`
-// is not NULL.
 - (void)presentNewTabToolbarItemBubble {
-  if (!iph_for_new_chrome_user::IsUserEligible(
+  if (!iph_for_new_chrome_user::IsUserNewSafariSwitcher(
           _deviceSwitcherResultDispatcher)) {
     return;
   }
@@ -539,8 +479,9 @@
                         anchorPoint:newTabButtonAnchor
                       presentAction:presentAction
                       dismissAction:dismissAction];
-  if (!presenter)
+  if (!presenter) {
     return;
+  }
 
   self.openNewTabIPHBubblePresenter = presenter;
 }
@@ -552,7 +493,7 @@
 // `nil` and no bubble is shown. This method requires that `self.browserState`
 // is not NULL.
 - (void)presentTabGridToolbarItemBubble {
-  if (!iph_for_new_chrome_user::IsUserEligible(
+  if (!iph_for_new_chrome_user::IsUserNewSafariSwitcher(
           _deviceSwitcherResultDispatcher)) {
     return;
   }
@@ -610,6 +551,88 @@
   }
 
   self.tabGridIPHBubblePresenter = presenter;
+}
+
+- (void)presentPullToRefreshSideSwipeBubble {
+  if (UIAccessibilityIsVoiceOverRunning() || (![self canPresentBubble])) {
+    return;
+  }
+  __weak BubblePresenter* weakSelf = self;
+  NamedGuide* guide = [NamedGuide guideWithName:kContentAreaGuide
+                                           view:self.rootViewController.view];
+  NSString* text = l10n_util::GetNSString(IDS_IOS_PULL_TO_REFRESH_IPH);
+  ProceduralBlock resetPullToRefreshSideSwipeBubble = ^{
+    weakSelf.pullToRefreshSideSwipeBubble = nil;
+  };
+  self.pullToRefreshSideSwipeBubble =
+      [self presentSideSwipeBubbleForFeature:feature_engagement::
+                                                 kIPHiOSPullToRefreshFeature
+                                   direction:BubbleArrowDirectionUp
+                                        text:text
+                               dismissAction:resetPullToRefreshSideSwipeBubble
+                                     toGuide:guide];
+}
+
+- (void)removePullToRefreshSideSwipeBubble {
+  // TODO(crbug.com/1467873): Add a new reason type and use that.
+  [self.pullToRefreshSideSwipeBubble
+      dismissWithReason:IPHDismissalReasonType::kUnknown];
+}
+
+#pragma mark - Private
+
+// Convenience method that calls -presentBubbleForFeature with default param
+// values for `alignment`, `presentAction`, and `dismissAction`.
+- (BubbleViewControllerPresenter*)
+    presentBubbleForFeature:(const base::Feature&)feature
+                  direction:(BubbleArrowDirection)direction
+                       text:(NSString*)text
+      voiceOverAnnouncement:(NSString*)voiceOverAnnouncement
+                anchorPoint:(CGPoint)anchorPoint {
+  return [self presentBubbleForFeature:feature
+                             direction:direction
+                             alignment:BubbleAlignmentBottomOrTrailing
+                                  text:text
+                 voiceOverAnnouncement:voiceOverAnnouncement
+                           anchorPoint:anchorPoint
+                         presentAction:nil
+                         dismissAction:nil];
+}
+
+// Presents and returns a bubble view controller for the `feature` with an arrow
+// `direction`, an arrow `alignment` and a `text` on an `anchorPoint`.
+- (BubbleViewControllerPresenter*)
+    presentBubbleForFeature:(const base::Feature&)feature
+                  direction:(BubbleArrowDirection)direction
+                  alignment:(BubbleAlignment)alignment
+                       text:(NSString*)text
+      voiceOverAnnouncement:(NSString*)voiceOverAnnouncement
+                anchorPoint:(CGPoint)anchorPoint
+              presentAction:(ProceduralBlock)presentAction
+              dismissAction:(ProceduralBlock)dismissAction {
+  DCHECK(self.engagementTracker);
+  BubbleViewControllerPresenter* presenter =
+      [self bubblePresenterForFeature:feature
+                            direction:direction
+                            alignment:alignment
+                                 text:text
+                        dismissAction:dismissAction];
+  if (!presenter) {
+    return nil;
+  }
+  presenter.voiceOverAnnouncement = voiceOverAnnouncement;
+  if ([presenter canPresentInView:self.rootViewController.view
+                      anchorPoint:anchorPoint] &&
+      ([self shouldForcePresentBubbleForFeature:feature] ||
+       self.engagementTracker->ShouldTriggerHelpUI(feature))) {
+    [presenter presentInViewController:self.rootViewController
+                                  view:self.rootViewController.view
+                           anchorPoint:anchorPoint];
+    if (presentAction) {
+      presentAction();
+    }
+  }
+  return presenter;
 }
 
 #pragma mark - Private Utils
@@ -715,6 +738,49 @@
   return nil;
 }
 
+//
+// TODO(crbug.com/1450600): Once kContentAreaGuide is moved to
+// LayoutGuideCenter, replace the parameter `guide` with a string `guideName`.
+- (SideSwipeBubbleView*)
+    presentSideSwipeBubbleForFeature:(const base::Feature&)feature
+                           direction:(BubbleArrowDirection)direction
+                                text:(NSString*)text
+                       dismissAction:(ProceduralBlock)dismissAction
+                             toGuide:(UILayoutGuide*)guide {
+  DCHECK(self.engagementTracker);
+  BOOL userEligibleForPullToRefreshIPH =
+      iph_for_new_chrome_user::IsUserNewSafariSwitcher(
+          _deviceSwitcherResultDispatcher) &&
+      self.engagementTracker->WouldTriggerHelpUI(
+          feature_engagement::kIPHiOSPullToRefreshFeature);
+  if (!(userEligibleForPullToRefreshIPH && guide)) {
+    return nil;
+  }
+  SideSwipeBubbleView* sideSwipeBubbleView =
+      [[SideSwipeBubbleView alloc] initWithText:text
+                             bubbleBoundingSize:guide.layoutFrame.size
+                                 arrowDirection:direction];
+  [sideSwipeBubbleView setTranslatesAutoresizingMaskIntoConstraints:NO];
+  if (CanSideSwipeBubbleViewFitInGuide(sideSwipeBubbleView, guide) &&
+      self.engagementTracker->ShouldTriggerHelpUI(feature)) {
+    __weak BubblePresenter* weakSelf = self;
+    CallbackWithIPHDismissalReasonType dismissalCallbackWithSnoozeAction =
+        ^(IPHDismissalReasonType IPHDismissalReasonType,
+          feature_engagement::Tracker::SnoozeAction snoozeAction) {
+          if (dismissAction) {
+            dismissAction();
+          }
+          [weakSelf featureDismissed:feature withSnooze:snoozeAction];
+        };
+    sideSwipeBubbleView.dismissCallback = dismissalCallbackWithSnoozeAction;
+    [self.rootViewController.view addSubview:sideSwipeBubbleView];
+    AddSameConstraints(sideSwipeBubbleView, guide);
+    [sideSwipeBubbleView startAnimation];
+    return sideSwipeBubbleView;
+  }
+  return nil;
+}
+
 - (void)featureDismissed:(const base::Feature&)feature
               withSnooze:
                   (feature_engagement::Tracker::SnoozeAction)snoozeAction {
@@ -744,30 +810,4 @@
   return NO;
 }
 
-#pragma mark - SceneStateObserver
-
-- (void)sceneState:(SceneState*)sceneState
-    transitionedToActivationLevel:(SceneActivationLevel)level {
-  if (level >= SceneActivationLevelForegroundActive) {
-    [self presentTabGridToolbarItemBubble];
-  }
-}
-
-#pragma mark - URLLoadingObserver
-
-- (void)tabDidLoadURL:(GURL)URL
-       transitionType:(ui::PageTransition)transitionType {
-  web::WebState* currentWebState = _webStateList->GetActiveWebState();
-  if (currentWebState &&
-      ((transitionType & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) ||
-       (transitionType & ui::PAGE_TRANSITION_FORWARD_BACK))) {
-    [self presentNewTabToolbarItemBubble];
-  }
-}
-
-- (void)newTabDidLoadURL:(GURL)URL isUserInitiated:(BOOL)isUserInitiated {
-  if (isUserInitiated) {
-    [self presentTabGridToolbarItemBubble];
-  }
-}
 @end

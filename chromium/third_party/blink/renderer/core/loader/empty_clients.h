@@ -96,6 +96,9 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   WebViewImpl* GetWebView() const override { return nullptr; }
   void ChromeDestroyed() override {}
   void SetWindowRect(const gfx::Rect&, LocalFrame&) override {}
+  void Minimize(LocalFrame&) override {}
+  void Maximize(LocalFrame&) override {}
+  void Restore(LocalFrame&) override {}
   void SetResizable(bool resizable, LocalFrame&) override {}
   gfx::Rect RootWindowRect(LocalFrame&) override { return gfx::Rect(); }
   void DidAccessInitialMainDocument() override {}
@@ -103,6 +106,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void DidFocusPage() override {}
   bool CanTakeFocus(mojom::blink::FocusType) override { return false; }
   void TakeFocus(mojom::blink::FocusType) override {}
+  bool SupportsAppRegion() override { return false; }
   void Show(LocalFrame& frame,
             LocalFrame& opener_frame,
             NavigationPolicy navigation_policy,
@@ -150,7 +154,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   bool OpenBeforeUnloadConfirmPanelDelegate(LocalFrame*, bool) override {
     return true;
   }
-  void CloseWindowSoon() override {}
+  void CloseWindow() override {}
   Page* CreateWindowDelegate(LocalFrame*,
                              const FrameLoadRequest&,
                              const AtomicString&,
@@ -239,7 +243,10 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void RequestUnbufferedInputEvents(LocalFrame*) override {}
   void SetTouchAction(LocalFrame*, TouchAction) override {}
   void SetPanAction(LocalFrame*, mojom::blink::PanAction pan_action) override {}
-  void DidAddOrRemoveFormRelatedElementsAfterLoad(LocalFrame*) override {}
+  void DidChangeFormRelatedElementDynamically(
+      LocalFrame*,
+      HTMLElement*,
+      WebFormRelatedChangeType) override {}
   String AcceptLanguages() override;
   void RegisterPopupOpeningObserver(PopupOpeningObserver*) override {}
   void UnregisterPopupOpeningObserver(PopupOpeningObserver*) override {}
@@ -268,7 +275,7 @@ class EmptyWebWorkerFetchContext : public WebWorkerFetchContext {
   }
   void WillSendRequest(WebURLRequest&) override {}
   WebVector<std::unique_ptr<URLLoaderThrottle>> CreateThrottles(
-      const WebURLRequest&) override {
+      const network::ResourceRequest&) override {
     return {};
   }
   blink::mojom::ControllerServiceWorkerMode GetControllerServiceWorkerMode()
@@ -373,11 +380,6 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   void SelectorMatchChanged(const Vector<String>&,
                             const Vector<String>&) override {}
   LocalFrame* CreateFrame(const AtomicString&, HTMLFrameOwnerElement*) override;
-  std::pair<RemoteFrame*, PortalToken> CreatePortal(
-      HTMLPortalElement*,
-      mojo::PendingAssociatedReceiver<mojom::blink::Portal>,
-      mojo::PendingAssociatedRemote<mojom::blink::PortalClient>) override;
-  RemoteFrame* AdoptPortal(HTMLPortalElement*) override;
 
   RemoteFrame* CreateFencedFrame(
       HTMLFencedFrameElement*,

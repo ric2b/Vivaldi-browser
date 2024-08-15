@@ -4,7 +4,9 @@
 
 #include "chromeos/ash/components/dbus/fwupd/fwupd_client.h"
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "ash/constants/ash_features.h"
@@ -13,10 +15,12 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/no_destructor.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/fwupd/dbus_constants.h"
 #include "chromeos/ash/components/dbus/fwupd/fake_fwupd_client.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_properties.h"
+#include "chromeos/ash/components/dbus/fwupd/fwupd_request.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
@@ -41,6 +45,9 @@ const uint64_t kInternalDeviceFlag = 1;
 // "100000000"(9th bit) is the bit release flag for a trusted report.
 // Defined here: https://github.com/fwupd/fwupd/blob/main/libfwupd/fwupd-enums.h
 const uint64_t kTrustedReportsReleaseFlag = 1llu << 8;
+// "10000"(5th bit) is the fwupd feature flag to allow interactive requests.
+// Defined here: https://github.com/fwupd/fwupd/blob/main/libfwupd/fwupd-enums.h
+const uint64_t kRequestsFeatureFlag = 1llu << 4;
 
 base::FilePath GetFilePathFromUri(const GURL uri) {
   const std::string filepath = uri.spec();
@@ -91,6 +98,29 @@ std::string ParseCheckSum(const std::string& raw_sum) {
   return raw_sum;
 }
 
+std::optional<DeviceRequestId> GetDeviceRequestIdFromFwupdString(
+    std::string fwupd_device_id_string) {
+  static base::NoDestructor<FwupdStringToRequestIdMap>
+      fwupdStringToRequestIdMap(
+          {{kFwupdDeviceRequestId_DoNotPowerOff,
+            DeviceRequestId::kDoNotPowerOff},
+           {kFwupdDeviceRequestId_ReplugInstall,
+            DeviceRequestId::kReplugInstall},
+           {kFwupdDeviceRequestId_InsertUSBCable,
+            DeviceRequestId::kInsertUSBCable},
+           {kFwupdDeviceRequestId_RemoveUSBCable,
+            DeviceRequestId::kRemoveUSBCable},
+           {kFwupdDeviceRequestId_PressUnlock, DeviceRequestId::kPressUnlock},
+           {kFwupdDeviceRequestId_RemoveReplug,
+            DeviceRequestId::kRemoveReplug}});
+
+  if (fwupdStringToRequestIdMap->contains(fwupd_device_id_string)) {
+    return fwupdStringToRequestIdMap->at(fwupd_device_id_string);
+  } else {
+    return std::nullopt;
+  }
+}
+
 class FwupdClientImpl : public FwupdClient {
  public:
   FwupdClientImpl() = default;
@@ -110,12 +140,36 @@ class FwupdClientImpl : public FwupdClient {
                             weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&FwupdClientImpl::OnSignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
+    proxy_->ConnectToSignal(
+        kFwupdServiceInterface, kFwupdDeviceRequestReceivedSignalName,
+        base::BindRepeating(&FwupdClientImpl::OnDeviceRequestReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&FwupdClientImpl::OnSignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
 
     properties_ = std::make_unique<FwupdProperties>(
         proxy_, base::BindRepeating(&FwupdClientImpl::OnPropertyChanged,
                                     weak_ptr_factory_.GetWeakPtr()));
     properties_->ConnectSignals();
     properties_->GetAll();
+
+    SetFwupdFeatureFlags();
+  }
+
+  void SetFwupdFeatureFlags() override {
+    // Enable interactive updates in fwupd by setting the "requests"
+    // FwupdFeatureFlag when the Firmware Updates v2 feature flag is enabled.
+    if (base::FeatureList::IsEnabled(features::kFirmwareUpdateUIV2)) {
+      dbus::MethodCall method_call(kFwupdServiceInterface,
+                                   kFwupdSetFeatureFlagsMethodName);
+      dbus::MessageWriter writer(&method_call);
+      writer.AppendUint64(kRequestsFeatureFlag);
+
+      proxy_->CallMethodWithErrorResponse(
+          &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+          base::BindOnce(&FwupdClientImpl::SetFeatureFlagsCallback,
+                         weak_ptr_factory_.GetWeakPtr()));
+    }
   }
 
   void RequestUpdates(const std::string& device_id) override {
@@ -265,11 +319,11 @@ class FwupdClientImpl : public FwupdClient {
 
       const std::string* version = dict.FindString("Version");
       const std::string* description = dict.FindString("Description");
-      absl::optional<int> priority = dict.FindInt("Urgency");
+      std::optional<int> priority = dict.FindInt("Urgency");
       const std::string* uri = dict.FindString("Uri");
       const std::string* checksum = dict.FindString("Checksum");
       const std::string* remote_id = dict.FindString("RemoteId");
-      absl::optional<bool> trusted_report = dict.FindBool("TrustFlags");
+      std::optional<bool> trusted_report = dict.FindBool("TrustFlags");
       bool has_trusted_report =
           !base::FeatureList::IsEnabled(
               features::kUpstreamTrustedReportsFirmware) ||
@@ -361,7 +415,7 @@ class FwupdClientImpl : public FwupdClient {
         return;
       }
 
-      absl::optional<bool> flags = dict.FindBool("Flags");
+      std::optional<bool> flags = dict.FindBool("Flags");
       const std::string* name = dict.FindString("Name");
       if (flags.has_value() && flags.value()) {
         if (name) {
@@ -418,12 +472,78 @@ class FwupdClientImpl : public FwupdClient {
     }
   }
 
+  void OnDeviceRequestReceived(dbus::Signal* signal) {
+    VLOG(1) << "fwupd: Received device request";
+    dbus::MessageReader signal_reader(signal);
+    dbus::MessageReader array_reader(nullptr);
+
+    if (!signal_reader.PopArray(&array_reader)) {
+      LOG(ERROR) << "Failed to pop array into the array reader.";
+      return;
+    }
+
+    std::string request_id_string;
+    uint32_t request_kind;
+
+    while (array_reader.HasMoreData()) {
+      dbus::MessageReader dict_entry_reader(nullptr);
+      dbus::MessageReader value_reader(nullptr);
+      std::string key;
+      if (!array_reader.PopDictEntry(&dict_entry_reader) ||
+          !dict_entry_reader.PopString(&key) ||
+          !dict_entry_reader.PopVariant(&value_reader)) {
+        LOG(ERROR) << "Failed to pop dict entry into the entry reader.";
+        return;
+      }
+      if (key == kFwupdDeviceRequestKey_AppstreamId) {
+        if (!value_reader.PopString(&request_id_string)) {
+          LOG(ERROR)
+              << "Failed to pop string for AppstreamId (DeviceRequestId).";
+          return;
+        }
+      } else if (key == kFwupdDeviceRequestKey_RequestKind) {
+        if (!value_reader.PopUint32(&request_kind)) {
+          LOG(ERROR) << "Failed to pop uint32 for RequestKind";
+          return;
+        }
+      }
+    }
+
+    if (request_id_string.empty()) {
+      LOG(ERROR) << "Could not parse request_id from DeviceRequest signal.";
+      return;
+    }
+
+    std::optional<DeviceRequestId> request_id =
+        GetDeviceRequestIdFromFwupdString(request_id_string);
+
+    if (!request_id.has_value()) {
+      LOG(ERROR) << "Could not get DeviceRequestId for string "
+                 << request_id_string;
+      return;
+    }
+
+    for (auto& observer : observers_) {
+      observer.OnDeviceRequestResponse(FwupdRequest(
+          static_cast<uint32_t>(request_id.value()), request_kind));
+    }
+  }
+
   void OnPropertyChanged(const std::string& name) {
     for (auto& observer : observers_)
       observer.OnPropertiesChangedResponse(properties_.get());
   }
 
-  raw_ptr<dbus::ObjectProxy, ExperimentalAsh> proxy_ = nullptr;
+  void SetFeatureFlagsCallback(dbus::Response* response,
+                               dbus::ErrorResponse* error_response) {
+    // No need to take any specific action here.
+    if (!response) {
+      LOG(ERROR) << "No D-Bus response received from fwupd.";
+      return;
+    }
+  }
+
+  raw_ptr<dbus::ObjectProxy> proxy_ = nullptr;
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

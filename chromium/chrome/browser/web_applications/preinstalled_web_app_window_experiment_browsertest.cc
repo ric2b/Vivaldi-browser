@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -58,7 +59,6 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -240,8 +240,7 @@ class PreinstalledWebAppWindowExperimentBrowserTest
         .WillByDefault(testing::Return(false));
 
     provider->SetSynchronizePreinstalledAppsOnStartup(true);
-
-    provider->Start();
+    provider->StartWithSubsystems();
     registrar_observation_.Observe(&provider->registrar_unsafe());
     return provider;
   }
@@ -261,11 +260,11 @@ class PreinstalledWebAppWindowExperimentBrowserTest
 };
 
 namespace {
-absl::optional<UserDisplayMode> ToDisplayMode(UserGroup user_group) {
+std::optional<UserDisplayMode> ToDisplayMode(UserGroup user_group) {
   switch (user_group) {
     case UserGroup::kUnknown:
     case UserGroup::kControl:
-      return absl::nullopt;
+      return std::nullopt;
     case UserGroup::kWindow:
       return UserDisplayMode::kStandalone;
     case UserGroup::kTab:
@@ -334,8 +333,9 @@ class PreinstalledWebAppWindowExperimentBrowserTestWindowGuest
   }
 };
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindowGuest,
-                       IneligibleDueToGuestProfile) {
+                       DISABLED_IneligibleDueToGuestProfile) {
   Profile& guest_profile = *browser()->profile();
   EXPECT_TRUE(guest_profile.IsGuestSession());
 
@@ -350,8 +350,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindowGuest,
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
-                       IneligibleDueToNonRecentApp) {
+                       DISABLED_IneligibleDueToNonRecentApp) {
   // Install an app and set install time as if installed a long time ago.
   webapps::AppId app_id = test::InstallDummyWebApp(
       browser()->profile(), "non-recent app", GURL("https://example.com"));
@@ -370,8 +371,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
             UserGroup::kUnknown);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
-                       IneligibleDueToSyncInstalledApp) {
+                       DISABLED_IneligibleDueToSyncInstalledApp) {
   // Install an app as if it came from sync.
   webapps::AppId app_id = test::InstallDummyWebApp(
       browser()->profile(), "app from sync", GURL("https://example.com"),
@@ -387,8 +389,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
             UserGroup::kUnknown);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
-                       IneligibleDueToPendingSyncInstalledApp) {
+                       DISABLED_IneligibleDueToPendingSyncInstalledApp) {
   // Install an app and set as if just received from sync.
   webapps::AppId app_id = test::InstallDummyWebApp(
       browser()->profile(), "non-recent app", GURL("https://example.com"));
@@ -407,8 +410,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
             UserGroup::kUnknown);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
-                       PreinstalledAppLaunchedBeforeExperiment) {
+                       DISABLED_PreinstalledAppLaunchedBeforeExperiment) {
   // Set preinstalled apps before the test apps so they aren't removed.
   AwaitPreinstalledAppsInstalled();
 
@@ -440,8 +444,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
                        kGoogleDriveAppId, browser()->profile()->GetPrefs()));
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
-                       IgnoreOnPreferredAppChangedCallFromSetup) {
+                       DISABLED_IgnoreOnPreferredAppChangedCallFromSetup) {
   base::HistogramTester histogram_tester;
 
   // Set preinstalled apps before the test app so it isn't removed.
@@ -490,8 +495,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
       "WebApp.Preinstalled.WindowExperiment.Window.LinkCapturingDisabled", 1);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTestWindow,
-                       NoIgnoreOnPreferredAppChangedCallFromUser) {
+                       DISABLED_NoIgnoreOnPreferredAppChangedCallFromUser) {
   base::HistogramTester histogram_tester;
 
   // Set preinstalled apps before the test app so it isn't removed.
@@ -556,8 +562,9 @@ class PreinstalledWebAppWindowExperimentBrowserTestAll
   base::test::ScopedFeatureList features_;
 };
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_P(PreinstalledWebAppWindowExperimentBrowserTestAll,
-                       EligibleUserSetsOverrides) {
+                       DISABLED_EligibleUserSetsOverrides) {
   const WebAppRegistrar& registrar = provider().registrar_unsafe();
 
   SimulateSyncReady();
@@ -603,7 +610,7 @@ IN_PROC_BROWSER_TEST_P(PreinstalledWebAppWindowExperimentBrowserTestAll,
     EXPECT_THAT(recorded_link_capturing_changes_, IsEmpty());
   }
 
-  absl::optional<UserDisplayMode> expected =
+  std::optional<UserDisplayMode> expected =
       ToDisplayMode(GetUserGroupTestParam());
 
   // Check some arbitrary preinstalled apps have display mode overridden on
@@ -694,8 +701,9 @@ IN_PROC_BROWSER_TEST_P(PreinstalledWebAppWindowExperimentBrowserTestAll,
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_P(PreinstalledWebAppWindowExperimentBrowserTestAll,
-                       RecordsHistograms) {
+                       DISABLED_RecordsHistograms) {
   base::HistogramTester histogram_tester;
   std::string user_group = UserGroupToTitleCaseString(GetUserGroupTestParam());
 
@@ -793,8 +801,9 @@ INSTANTIATE_TEST_SUITE_P(/*no prefix*/,
                          &ParamToString);
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
-                       PRE_PersistStateWhenExperimentEnds_Window) {
+                       DISABLED_PRE_PersistStateWhenExperimentEnds_Window) {
   AwaitExperimentSetup();
   AwaitPreinstalledAppsInstalled();
 
@@ -810,8 +819,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
       pref_service, kYoutubeAppId);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
-                       PersistStateWhenExperimentEnds_Window) {
+                       DISABLED_PersistStateWhenExperimentEnds_Window) {
   AwaitExperimentSetup();
 
   const WebAppRegistrar& registrar = provider().registrar_unsafe();
@@ -851,8 +861,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
           .empty());
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
-                       PRE_PersistStateWhenExperimentEnds_Tab) {
+                       DISABLED_PRE_PersistStateWhenExperimentEnds_Tab) {
   AwaitExperimentSetup();
   AwaitPreinstalledAppsInstalled();
 
@@ -868,8 +879,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
       pref_service, kYoutubeAppId);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest,
-                       PersistStateWhenExperimentEnds_Tab) {
+                       DISABLED_PersistStateWhenExperimentEnds_Tab) {
   AwaitExperimentSetup();
 
   const WebAppRegistrar& registrar = provider().registrar_unsafe();
@@ -921,8 +933,9 @@ class PreinstalledWebAppWindowExperimentBrowserTest_NoCleanup
   base::test::ScopedFeatureList features_;
 };
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest_NoCleanup,
-                       PRE_NoPersistStateWhenExperimentEnds) {
+                       DISABLED_PRE_NoPersistStateWhenExperimentEnds) {
   AwaitExperimentSetup();
   AwaitPreinstalledAppsInstalled();
 
@@ -938,8 +951,9 @@ IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest_NoCleanup,
       pref_service, kYoutubeAppId);
 }
 
+// TODO(crbug.com/1499749): Experiment has completed, clean up experiment code.
 IN_PROC_BROWSER_TEST_F(PreinstalledWebAppWindowExperimentBrowserTest_NoCleanup,
-                       NoPersistStateWhenExperimentEnds) {
+                       DISABLED_NoPersistStateWhenExperimentEnds) {
   AwaitExperimentSetup();
 
   const WebAppRegistrar& registrar = provider().registrar_unsafe();

@@ -773,6 +773,8 @@ smv_out:
                 goto smv_retry;
             return AVERROR_EOF;
         }
+        if (INT64_MAX - left < avio_tell(s->pb))
+            return AVERROR_INVALIDDATA;
         wav->data_end = avio_tell(s->pb) + left;
     }
 
@@ -891,8 +893,11 @@ static int w64_read_header(AVFormatContext *s)
         if (avio_read(pb, guid, 16) != 16)
             break;
         size = avio_rl64(pb);
-        if (size <= 24 || INT64_MAX - size < avio_tell(pb))
+        if (size <= 24 || INT64_MAX - size < avio_tell(pb)) {
+            if (data_ofs)
+                break;
             return AVERROR_INVALIDDATA;
+        }
 
         if (!memcmp(guid, ff_w64_guid_fmt, 16)) {
             /* subtract chunk header size - normal wav file doesn't count it */
@@ -900,7 +905,18 @@ static int w64_read_header(AVFormatContext *s)
             if (ret < 0)
                 return ret;
             avio_skip(pb, FFALIGN(size, INT64_C(8)) - size);
+            if (st->codecpar->block_align) {
+                int block_align = st->codecpar->block_align;
 
+                block_align = FFMAX(block_align,
+                                    ((st->codecpar->bits_per_coded_sample + 7) / 8) *
+                                    st->codecpar->ch_layout.nb_channels);
+                if (block_align > st->codecpar->block_align) {
+                    av_log(s, AV_LOG_WARNING, "invalid block_align: %d, broken file.\n",
+                           st->codecpar->block_align);
+                    st->codecpar->block_align = block_align;
+                }
+            }
             avpriv_set_pts_info(st, 64, 1, st->codecpar->sample_rate);
         } else if (!memcmp(guid, ff_w64_guid_fact, 16)) {
             int64_t samples;

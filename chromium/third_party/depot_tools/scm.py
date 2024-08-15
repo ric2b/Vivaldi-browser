@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 """SCM-specific utility classes."""
 
-import distutils.version
 import glob
 import io
 import os
@@ -73,8 +72,8 @@ def GenFakeDiff(filename):
 def determine_scm(root):
     """Similar to upload.py's version but much simpler.
 
-  Returns 'git' or None.
-  """
+    Returns 'git' or None.
+    """
     if os.path.isdir(os.path.join(root, '.git')):
         return 'git'
 
@@ -97,6 +96,7 @@ def only_int(val):
 
 class GIT(object):
     current_version = None
+    rev_parse_cache = {}
 
     @staticmethod
     def ApplyEnvVars(kwargs):
@@ -127,22 +127,29 @@ class GIT(object):
         return output.strip() if strip_out else output
 
     @staticmethod
-    def CaptureStatus(cwd, upstream_branch, end_commit=None):
+    def CaptureStatus(cwd,
+                      upstream_branch,
+                      end_commit=None,
+                      ignore_submodules=True):
         # type: (str, str, Optional[str]) -> Sequence[Tuple[str, str]]
         """Returns git status.
 
-    Returns an array of (status, file) tuples."""
+        Returns an array of (status, file) tuples."""
         if end_commit is None:
             end_commit = ''
         if upstream_branch is None:
             upstream_branch = GIT.GetUpstreamBranch(cwd)
             if upstream_branch is None:
                 raise gclient_utils.Error('Cannot determine upstream branch')
+
         command = [
             '-c', 'core.quotePath=false', 'diff', '--name-status',
-            '--no-renames', '--ignore-submodules=all', '-r',
-            '%s...%s' % (upstream_branch, end_commit)
+            '--no-renames'
         ]
+        if ignore_submodules:
+            command.append('--ignore-submodules=all')
+        command.extend(['-r', '%s...%s' % (upstream_branch, end_commit)])
+
         status = GIT.Capture(command, cwd)
         results = []
         if status:
@@ -210,7 +217,7 @@ class GIT(object):
     @staticmethod
     def GetRemoteHeadRef(cwd, url, remote):
         """Returns the full default remote branch reference, e.g.
-    'refs/remotes/origin/main'."""
+        'refs/remotes/origin/main'."""
         if os.path.exists(cwd):
             try:
                 # Try using local git copy first
@@ -253,8 +260,8 @@ class GIT(object):
     @staticmethod
     def FetchUpstreamTuple(cwd, branch=None):
         """Returns a tuple containing remote and remote ref,
-       e.g. 'origin', 'refs/heads/main'
-    """
+        e.g. 'origin', 'refs/heads/main'
+        """
         try:
             branch = branch or GIT.GetBranch(cwd)
         except subprocess2.CalledProcessError:
@@ -286,10 +293,10 @@ class GIT(object):
     def RefToRemoteRef(ref, remote):
         """Convert a checkout ref to the equivalent remote ref.
 
-    Returns:
-      A tuple of the remote ref's (common prefix, unique suffix), or None if it
-      doesn't appear to refer to a remote ref (e.g. it's a commit hash).
-    """
+        Returns:
+            A tuple of the remote ref's (common prefix, unique suffix), or None if it
+            doesn't appear to refer to a remote ref (e.g. it's a commit hash).
+        """
         # TODO(mmoss): This is just a brute-force mapping based of the expected
         # git config. It's a bit better than the even more brute-force
         # replace('heads', ...), but could still be smarter (like maybe actually
@@ -360,8 +367,8 @@ class GIT(object):
                      files=None):
         """Diffs against the upstream branch or optionally another branch.
 
-    full_move means that move or copy operations should completely recreate the
-    files, usually in the prospect to apply the patch for a try job."""
+        full_move means that move or copy operations should completely recreate the
+        files, usually in the prospect to apply the patch for a try job."""
         if not branch:
             branch = GIT.GetUpstreamBranch(cwd)
         command = [
@@ -398,10 +405,8 @@ class GIT(object):
     @staticmethod
     def GetAllFiles(cwd):
         """Returns the list of all files under revision control."""
-        command = ['-c', 'core.quotePath=false', 'ls-files', '-s', '--', '.']
-        files = GIT.Capture(command, cwd=cwd).splitlines(False)
-        # return only files
-        return [f.split(maxsplit=3)[-1] for f in files if f.startswith('100')]
+        command = ['-c', 'core.quotePath=false', 'ls-files', '--', '.']
+        return GIT.Capture(command, cwd=cwd).splitlines(False)
 
     @staticmethod
     def GetSubmoduleCommits(cwd, submodules):
@@ -429,7 +434,7 @@ class GIT(object):
     @staticmethod
     def GetCheckoutRoot(cwd):
         """Returns the top level directory of a git checkout as an absolute path.
-    """
+        """
         root = GIT.Capture(['rev-parse', '--show-cdup'], cwd=cwd)
         return os.path.abspath(os.path.join(cwd, root))
 
@@ -456,47 +461,56 @@ class GIT(object):
         return VERSIONED_DIR
 
     @staticmethod
+    def ListSubmodules(repo_root):
+        # type: (str) -> Collection[str]
+        """Returns the list of submodule paths for the given repo."""
+        if not os.path.exists(os.path.join(repo_root, '.gitmodules')):
+            return []
+        config_output = GIT.Capture(
+            ['config', '--file', '.gitmodules', '--get-regexp', 'path'],
+            cwd=repo_root)
+        return [line.split()[-1] for line in config_output.splitlines()]
+
+    @staticmethod
     def CleanupDir(cwd, relative_dir):
         """Cleans up untracked file inside |relative_dir|."""
         return bool(GIT.Capture(['clean', '-df', relative_dir], cwd=cwd))
 
     @staticmethod
     def ResolveCommit(cwd, rev):
+        cache_key = None
         # We do this instead of rev-parse --verify rev^{commit}, since on
         # Windows git can be either an executable or batch script, each of which
         # requires escaping the caret (^) a different way.
         if gclient_utils.IsFullGitSha(rev):
+            # Only cache full SHAs
+            cache_key = hash(cwd + rev)
+            if val := GIT.rev_parse_cache.get(cache_key):
+                return val
+
             # git-rev parse --verify FULL_GIT_SHA always succeeds, even if we
             # don't have FULL_GIT_SHA locally. Removing the last character
             # forces git to check if FULL_GIT_SHA refers to an object in the
             # local database.
             rev = rev[:-1]
-        try:
-            return GIT.Capture(['rev-parse', '--quiet', '--verify', rev],
-                               cwd=cwd)
-        except subprocess2.CalledProcessError:
-            return None
+        res = GIT.Capture(['rev-parse', '--quiet', '--verify', rev], cwd=cwd)
+        if cache_key:
+            # We don't expect concurrent execution, so we don't lock anything.
+            GIT.rev_parse_cache[cache_key] = res
+
+        return res
 
     @staticmethod
     def IsValidRevision(cwd, rev, sha_only=False):
         """Verifies the revision is a proper git revision.
 
-    sha_only: Fail unless rev is a sha hash.
-    """
-        sha = GIT.ResolveCommit(cwd, rev)
-        if sha is None:
-            return False
+        sha_only: Fail unless rev is a sha hash.
+        """
+        try:
+            sha = GIT.ResolveCommit(cwd, rev)
+        except subprocess2.CalledProcessError:
+            return None
+
         if sha_only:
             return sha == rev.lower()
         return True
-
-    @classmethod
-    def AssertVersion(cls, min_version):
-        """Asserts git's version is at least min_version."""
-        if cls.current_version is None:
-            current_version = cls.Capture(['--version'], '.')
-            matched = re.search(r'git version (.+)', current_version)
-            cls.current_version = distutils.version.LooseVersion(
-                matched.group(1))
-        min_version = distutils.version.LooseVersion(min_version)
-        return (min_version <= cls.current_version, cls.current_version)

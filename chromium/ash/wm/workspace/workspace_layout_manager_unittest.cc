@@ -4,10 +4,11 @@
 
 #include "ash/wm/workspace/workspace_layout_manager.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/constants/app_types.h"
@@ -34,8 +35,9 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
-#include "ash/system/message_center/ash_message_popup_collection.h"
-#include "ash/system/message_center/message_popup_animation_waiter.h"
+#include "ash/system/notification_center/ash_message_popup_collection.h"
+#include "ash/system/notification_center/message_popup_animation_waiter.h"
+#include "ash/system/notification_center/notification_center_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_window_builder.h"
@@ -63,7 +65,6 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/ash/components/audio/sounds.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/client/window_parenting_client.h"
@@ -150,6 +151,11 @@ display::ManagedDisplayInfo CreateDisplayInfo(int64_t id, gfx::Rect bounds) {
   display::ManagedDisplayInfo info = display::CreateDisplayInfo(id, bounds);
   info.SetRotation(display::Display::ROTATE_0,
                    display::Display::RotationSource::ACTIVE);
+  // Each display should have at least one native mode.
+  display::ManagedDisplayMode mode(bounds.size(), /*refresh_rate=*/60.f,
+                                   /*is_interlaced=*/true,
+                                   /*native=*/true);
+  info.SetManagedDisplayModes({mode});
   return info;
 }
 
@@ -170,8 +176,7 @@ class ScopedStickyKeyboardEnabler {
   }
 
  private:
-  raw_ptr<AccessibilityControllerImpl, ExperimentalAsh>
-      accessibility_controller_;
+  raw_ptr<AccessibilityController> accessibility_controller_;
   const bool enabled_;
 };
 
@@ -259,7 +264,7 @@ TEST_F(WorkspaceLayoutManagerTest, KeepRestoredWindowInDisplay) {
   EXPECT_GE(window->bounds().y(), 0);
 
   // Minimized -> Normal transition.
-  window->SetBounds(gfx::Rect(-100, -100, 130, 40));
+  window_state->SetBoundsDirectForTesting(gfx::Rect(-100, -100, 130, 40));
   window_state->Minimize();
   EXPECT_FALSE(
       Shell::GetPrimaryRootWindow()->bounds().Intersects(window->bounds()));
@@ -406,7 +411,7 @@ class DontClobberRestoreBoundsWindowObserver : public aura::WindowObserver {
   }
 
  private:
-  raw_ptr<aura::Window, ExperimentalAsh> window_;
+  raw_ptr<aura::Window> window_;
 };
 
 // Creates a window, maximized the window and from within the maximized
@@ -490,7 +495,7 @@ TEST_F(WorkspaceLayoutManagerTest, WindowShouldBeOnScreenWhenAdded) {
   parent->RemoveChild(out_window.get());
   out_window->SetBounds(gfx::Rect(-200, -200, 200, 200));
   // UserHasChangedWindowPositionOrSize flag shouldn't turn off this behavior.
-  WindowState::Get(window.get())->set_bounds_changed_by_user(true);
+  WindowState::Get(window.get())->SetBoundsChangedByUser(true);
   parent->AddChild(out_window.get());
   EXPECT_GT(bounds.width(), out_window->bounds().width() * 0.29);
   EXPECT_GT(bounds.height(), out_window->bounds().height() * 0.29);
@@ -1051,7 +1056,7 @@ TEST_F(WorkspaceLayoutManagerTest,
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));
   MessagePopupAnimationWaiter(
-      GetPrimaryUnifiedSystemTray()->GetMessagePopupCollection())
+      GetPrimaryNotificationCenterTray()->popup_collection())
       .Wait();
 
   // PiP window has moved due to the popup notification window.
@@ -1061,7 +1066,7 @@ TEST_F(WorkspaceLayoutManagerTest,
   message_center::MessageCenter::Get()->RemoveNotification(notification_id,
                                                            /*by_user=*/true);
   MessagePopupAnimationWaiter(
-      GetPrimaryUnifiedSystemTray()->GetMessagePopupCollection())
+      GetPrimaryNotificationCenterTray()->popup_collection())
       .Wait();
 
   // Now, the PiP window has returned to its original position.
@@ -1199,7 +1204,7 @@ class FocusDuringUnminimizeWindowObserver : public aura::WindowObserver {
   }
 
  private:
-  raw_ptr<aura::Window, ExperimentalAsh> window_;
+  raw_ptr<aura::Window> window_;
   ui::WindowShowState show_state_;
 };
 
@@ -1586,7 +1591,7 @@ class WorkspaceLayoutManagerBackdropTest : public AshTestBase {
   // Turn tablet mode on / off.
   void SetTabletModeEnabled(bool enabled) {
     Shell::Get()->tablet_mode_controller()->SetEnabledForTest(enabled);
-    ASSERT_EQ(enabled, Shell::Get()->tablet_mode_controller()->InTabletMode());
+    ASSERT_EQ(enabled, display::Screen::GetScreen()->InTabletMode());
   }
 
   aura::Window* CreateTestWindowInParent(aura::Window* root_window) {
@@ -1635,10 +1640,10 @@ class WorkspaceLayoutManagerBackdropTest : public AshTestBase {
 
  private:
   // The default container.
-  raw_ptr<aura::Window, DanglingUntriaged | ExperimentalAsh> default_container_;
+  raw_ptr<aura::Window, DanglingUntriaged> default_container_;
 };
 
-constexpr absl::optional<Sound> kNoSoundKey = absl::nullopt;
+constexpr std::optional<Sound> kNoSoundKey = std::nullopt;
 
 }  // namespace
 
@@ -1971,7 +1976,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest,
 TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
   WorkspaceController* wc = ShellTestApi().workspace_controller();
   WorkspaceControllerTestApi test_helper(wc);
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   TestAccessibilityControllerClient client;
 
@@ -2083,8 +2088,7 @@ class WorkspaceLayoutManagerKeyboardTest : public AshTestBase {
  private:
   gfx::Insets restore_work_area_insets_;
   gfx::Rect keyboard_bounds_;
-  raw_ptr<WorkspaceLayoutManager, DanglingUntriaged | ExperimentalAsh>
-      layout_manager_;
+  raw_ptr<WorkspaceLayoutManager, DanglingUntriaged> layout_manager_;
 };
 
 // Tests that when a child window gains focus the top level window containing it
@@ -2249,7 +2253,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitViewTest) {
   // Test that backdrop window is visible and is the second child in the
   // container. Its bounds should be the same as the container bounds.
   EXPECT_EQ(2U, default_container()->children().size());
-  for (auto* child : default_container()->children()) {
+  for (aura::Window* child : default_container()->children()) {
     EXPECT_TRUE(child->IsVisible());
   }
 
@@ -2267,8 +2271,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitViewTest) {
   // Snap the window to left. Test that the backdrop window is still visible
   // and is the third child (split view divider as one of the children) in the
   // container. Its bounds should be the same as the snapped window's bounds.
-  split_view_controller()->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
+  split_view_controller()->SnapWindow(window1.get(), SnapPosition::kPrimary);
 
   EXPECT_TRUE(OverviewController::Get()->InOverviewSession());
   // One of the windows in the default container is the overview
@@ -2296,11 +2299,10 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitViewTest) {
   // visible but is now the fourth window in the container. Its bounds should
   // still be the same as the container bounds.
   std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
-  split_view_controller()->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller()->SnapWindow(window2.get(), SnapPosition::kSecondary);
 
   EXPECT_EQ(4U, default_container()->children().size());
-  for (auto* child : default_container()->children()) {
+  for (aura::Window* child : default_container()->children()) {
     EXPECT_TRUE(child->IsVisible());
   }
 

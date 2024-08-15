@@ -246,7 +246,7 @@ gfx::Size BrowserViewLayout::GetMinimumSize(const views::View* host) const {
 }
 
 void BrowserViewLayout::SetContentBorderBounds(
-    const absl::optional<gfx::Rect>& region_capture_rect) {
+    const std::optional<gfx::Rect>& region_capture_rect) {
   dynamic_content_border_bounds_ = region_capture_rect;
   LayoutContentBorder();
 }
@@ -462,9 +462,9 @@ gfx::Size BrowserViewLayout::GetPreferredSize(const views::View* host) const {
   return gfx::Size();
 }
 
-std::vector<views::View*> BrowserViewLayout::GetChildViewsInPaintOrder(
-    const views::View* host) const {
-  std::vector<views::View*> result =
+std::vector<raw_ptr<views::View, VectorExperimental>>
+BrowserViewLayout::GetChildViewsInPaintOrder(const views::View* host) const {
+  std::vector<raw_ptr<views::View, VectorExperimental>> result =
       views::LayoutManager::GetChildViewsInPaintOrder(host);
   // Make sure `top_container_` is after `contents_container_` in paint order
   // when this is a window using WindowControlsOverlay, to make sure the window
@@ -532,8 +532,12 @@ int BrowserViewLayout::LayoutTitleBarForWebApp(int top) {
       web_app_frame_toolbar_->LayoutInContainer(toolbar_bounds);
 
   if (web_app_window_title_) {
-    delegate_->LayoutWebAppWindowTitle(window_title_bounds,
-                                       *web_app_window_title_);
+    if (delegate_->ShouldDrawTabStrip()) {
+      web_app_window_title_->SetVisible(false);
+    } else {
+      delegate_->LayoutWebAppWindowTitle(window_title_bounds,
+                                         *web_app_window_title_);
+    }
   }
 
   return toolbar_bounds.bottom();

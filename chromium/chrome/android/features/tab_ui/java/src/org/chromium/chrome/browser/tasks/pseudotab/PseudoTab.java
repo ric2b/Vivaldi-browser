@@ -42,9 +42,7 @@ import javax.annotation.concurrent.GuardedBy;
 // Vivaldi
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
-/**
- * Representation of a Tab-like card in the Grid Tab Switcher.
- */
+/** Representation of a Tab-like card in the Grid Tab Switcher. */
 public class PseudoTab {
     private static final String TAG = "PseudoTab";
 
@@ -53,21 +51,18 @@ public class PseudoTab {
 
     @GuardedBy("sLock")
     private static final Map<Integer, PseudoTab> sAllTabs = new LinkedHashMap<>();
+
     private static final Object sLock = new Object();
     private static boolean sReadStateFile;
     private static List<PseudoTab> sAllTabsFromStateFile;
     private static PseudoTab sActiveTabFromStateFile;
 
-    /**
-     * An interface to get the title to be used for a tab.
-     */
+    /** An interface to get the title to be used for a tab. */
     public interface TitleProvider {
         String getTitle(Context context, PseudoTab tab);
     }
 
-    /**
-     * Construct from a tab ID. An earlier instance with the same ID can be returned.
-     */
+    /** Construct from a tab ID. An earlier instance with the same ID can be returned. */
     public static PseudoTab fromTabId(int tabId) {
         synchronized (sLock) {
             PseudoTab cached = sAllTabs.get(tabId);
@@ -92,7 +87,8 @@ public class PseudoTab {
                 if (cached.getTab() == tab) {
                     return cached;
                 } else {
-                    assert tab.getWebContents() == null || cached.getTab().getWebContents() == null
+                    assert tab.getWebContents() == null
+                            || cached.getTab().getWebContents() == null
                             || cached.getTab().getWebContents().getTopLevelNativeWindow() == null;
                     return new PseudoTab(tab);
                 }
@@ -292,10 +288,26 @@ public class PseudoTab {
         }
     }
 
+    /**
+     * Get related tabs of a certain {@link PseudoTab}, through {@link TabModelFilter}s if
+     * available.
+     *
+     * @param context The activity context.
+     * @param member The {@link PseudoTab} related to
+     * @param tabModelFilter The {@link TabModelFilter} to query the tab relation
+     * @return Related {@link PseudoTab}s
+     */
+    public static @NonNull List<PseudoTab> getRelatedTabs(
+            Context context, PseudoTab member, @NonNull TabModelFilter filter) {
+        assert filter.isTabModelRestored() : "Trying to get related tabs for uninitialized filter.";
+        synchronized (sLock) {
+            List<Tab> relatedTabs = filter.getRelatedTabList(member.getId());
+            return getListOfPseudoTab(relatedTabs);
+        }
+    }
+
     private static @Nullable List<Tab> getRelatedTabList(
             @NonNull TabModelSelector tabModelSelector, int tabId) {
-        // Vivaldi: This is needed when turning off tab stacks.
-        if (!TabUiFeatureUtilities.isTabGroupsAndroidEnabled()) return null;
         if (!tabModelSelector.isTabStateInitialized()) {
             if (!ChromeFeatureList.sInstantStart.isEnabled()) throw new IllegalStateException();
             return null;
@@ -335,20 +347,22 @@ public class PseudoTab {
         sReadStateFile = true;
 
         long startMs = SystemClock.elapsedRealtime();
-        File stateFile = new File(TabStateDirectory.getOrCreateTabbedModeStateDirectory(),
-                TabbedModeTabPersistencePolicy.getStateFileName(0));
-        if (!stateFile.exists()) {
-            Log.i(TAG, "State file does not exist.");
+        File metadataFile =
+                new File(
+                        TabStateDirectory.getOrCreateTabbedModeStateDirectory(),
+                        TabbedModeTabPersistencePolicy.getMetadataFileNameForIndex(0));
+        if (!metadataFile.exists()) {
+            Log.i(TAG, "Metadata file does not exist.");
             return;
         }
         FileInputStream stream = null;
         byte[] data;
         try {
-            stream = new FileInputStream(stateFile);
-            data = new byte[(int) stateFile.length()];
+            stream = new FileInputStream(metadataFile);
+            data = new byte[(int) metadataFile.length()];
             stream.read(data);
         } catch (IOException exception) {
-            Log.e(TAG, "Could not read state file.", exception);
+            Log.e(TAG, "Could not read metadata file.", exception);
             return;
         } finally {
             StreamUtil.closeQuietly(stream);
@@ -359,11 +373,16 @@ public class PseudoTab {
         Set<Integer> seenRootId = new HashSet<>();
         sAllTabsFromStateFile = new ArrayList<>();
         try {
-            TabPersistentStore.readSavedStateFile(dataStream,
-                    (index, id, url, isIncognito, isStandardActiveIndex, isIncognitoActiveIndex)
-                            -> {
+            TabPersistentStore.readSavedMetadataFile(
+                    dataStream,
+                    (index,
+                            id,
+                            url,
+                            isIncognito,
+                            isStandardActiveIndex,
+                            isIncognitoActiveIndex) -> {
                         // Skip restoring of non-selected NTP to match the real restoration logic.
-                        if (UrlUtilities.isCanonicalizedNTPUrl(url) && !isStandardActiveIndex) {
+                        if (UrlUtilities.isCanonicalizedNtpUrl(url) && !isStandardActiveIndex) {
                             return;
                         }
                         PseudoTab tab = PseudoTab.fromTabId(id);
@@ -385,7 +404,9 @@ public class PseudoTab {
         }
 
         Log.d(TAG, "All pre-native tabs: " + sAllTabsFromStateFile);
-        Log.i(TAG, "readAllPseudoTabsFromStateFile() took %dms",
+        Log.i(
+                TAG,
+                "readAllPseudoTabsFromStateFile() took %dms",
                 SystemClock.elapsedRealtime() - startMs);
     }
 }

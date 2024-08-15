@@ -51,6 +51,11 @@ class COMPONENT_EXPORT(NETWORK_CPP) NetToMojoPendingBuffer
   char* buffer() { return buffer_.data(); }
   uint32_t size() const { return static_cast<uint32_t>(buffer_.size()); }
 
+  // Equivalent of buffer(), but allows the class to satisfy the requirements
+  // of std::ranges::contiguous_range, and hence allows a span, for example,
+  // to be implicitly constructed from a it.
+  char* data() { return buffer_.data(); }
+
  private:
   friend class base::RefCountedThreadSafe<NetToMojoPendingBuffer>;
   // Takes ownership of the handle.
@@ -72,7 +77,9 @@ class COMPONENT_EXPORT(NETWORK_CPP) NetToMojoIOBuffer
  public:
   // If |offset| is specified then the memory buffer passed to the Net layer
   // will be offset by that many bytes.
-  NetToMojoIOBuffer(NetToMojoPendingBuffer* pending_buffer, int offset = 0);
+  explicit NetToMojoIOBuffer(
+      scoped_refptr<NetToMojoPendingBuffer> pending_buffer,
+      int offset = 0);
 
   NetToMojoIOBuffer(const NetToMojoIOBuffer&) = delete;
   NetToMojoIOBuffer& operator=(const NetToMojoIOBuffer&) = delete;
@@ -114,6 +121,9 @@ class COMPONENT_EXPORT(NETWORK_CPP) MojoToNetPendingBuffer
   const char* buffer() const { return buffer_.data(); }
   uint32_t size() const { return static_cast<uint32_t>(buffer_.size()); }
 
+  // Equivalent of buffer(), allows conversion to span.
+  const char* data() { return buffer_.data(); }
+
  private:
   friend class base::RefCountedThreadSafe<MojoToNetPendingBuffer>;
 
@@ -137,7 +147,7 @@ class COMPONENT_EXPORT(NETWORK_CPP) MojoToNetIOBuffer
  public:
   // |bytes_to_be_read| contains the number of bytes expected to be read by
   // the consumer.
-  MojoToNetIOBuffer(MojoToNetPendingBuffer* pending_buffer,
+  MojoToNetIOBuffer(scoped_refptr<MojoToNetPendingBuffer> pending_buffer,
                     int bytes_to_be_read);
 
  private:

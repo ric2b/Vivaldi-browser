@@ -30,6 +30,8 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -46,8 +48,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
@@ -975,6 +975,29 @@ public class BottomSheetControllerTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mTestSupport.unsuppressSheet(mSuppressionToken));
+
+        assertEquals(
+                "The high priority content should be shown.",
+                mHighPriorityContent,
+                mSheetController.getCurrentSheetContent());
+    }
+
+    @Test
+    @MediumTest
+    public void testReplaceLowPriorityContentWhileOpen() throws ExecutionException {
+        // Allow the content to be replaced without first closing the sheet.
+        mLowPriorityContent.setCanSuppressInAnyState(true);
+        requestContentInSheet(mLowPriorityContent, true);
+
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mSheetController.expandSheet();
+                    mTestSupport.endAllAnimations();
+                });
+
+        assertTrue("The sheet should be open.", mSheetController.isSheetOpen());
+
+        requestContentInSheet(mHighPriorityContent, true);
 
         assertEquals(
                 "The high priority content should be shown.",

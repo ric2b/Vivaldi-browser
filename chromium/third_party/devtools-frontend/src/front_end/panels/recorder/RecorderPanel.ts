@@ -4,7 +4,7 @@
 
 import * as UI from '../../ui/legacy/legacy.js';
 
-import type * as Actions from './recorder-actions.js';
+import type * as Actions from './recorder-actions/recorder-actions.js';
 import {RecorderController} from './RecorderController.js';
 
 let recorderPanelInstance: RecorderPanel;
@@ -51,18 +51,7 @@ export class RecorderPanel extends UI.Panel.Panel {
   }
 }
 
-let recorderActionDelegateInstance: ActionDelegate;
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  static instance(
-      opts: {forceNew: boolean|null} = {forceNew: null},
-      ): ActionDelegate {
-    const {forceNew} = opts;
-    if (!recorderActionDelegateInstance || forceNew) {
-      recorderActionDelegateInstance = new ActionDelegate();
-    }
-    return recorderActionDelegateInstance;
-  }
-
   handleAction(
       _context: UI.Context.Context,
       actionId: Actions.RecorderActions,

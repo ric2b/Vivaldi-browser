@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,7 +44,6 @@
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/util/mac_util.h"
 #include "chrome/updater/util/util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 
@@ -70,8 +70,9 @@ std::map<std::string, std::string> ParseCommandLine(int argc,
         result[key] = "";
       }
     } else {
-      if (!key.empty())
+      if (!key.empty()) {
         result[key] = arg;
+      }
       key = "";
     }
   }
@@ -104,8 +105,9 @@ constexpr char kCommandXCPath[] = "xcpath";
 
 bool HasSwitch(const std::string& arg,
                const std::map<std::string, std::string>& switches) {
-  if (base::Contains(switches, arg))
+  if (base::Contains(switches, arg)) {
     return true;
+  }
   static const base::NoDestructor<
       std::map<std::string, std::vector<std::string>>>
       aliases{{
@@ -120,8 +122,9 @@ bool HasSwitch(const std::string& arg,
           {kCommandUserInitiated, {"F"}},
           {kCommandUserStore, {"U"}},
       }};
-  if (!base::Contains(*aliases, arg))
+  if (!base::Contains(*aliases, arg)) {
     return false;
+  }
   for (const auto& alias : aliases->at(arg)) {
     if (base::Contains(switches, alias)) {
       return true;
@@ -132,8 +135,9 @@ bool HasSwitch(const std::string& arg,
 
 std::string SwitchValue(const std::string& arg,
                         const std::map<std::string, std::string>& switches) {
-  if (base::Contains(switches, arg))
+  if (base::Contains(switches, arg)) {
     return switches.at(arg);
+  }
   static const base::NoDestructor<std::map<std::string, std::string>> aliases{{
       {kCommandBrandKey, "b"},
       {kCommandBrandPath, "B"},
@@ -146,8 +150,9 @@ std::string SwitchValue(const std::string& arg,
       {kCommandVersionPath, "a"},
       {kCommandXCPath, "x"},
   }};
-  if (!base::Contains(*aliases, arg))
+  if (!base::Contains(*aliases, arg)) {
     return "";
+  }
   const std::string& alias = aliases->at(arg);
   return base::Contains(switches, alias) ? switches.at(alias) : "";
 }
@@ -161,8 +166,9 @@ std::string KeystoneTicketStorePath(UpdaterScope scope) {
 
 bool IsSystemShim() {
   base::FilePath executable_path;
-  if (!base::PathService::Get(base::FILE_EXE, &executable_path))
+  if (!base::PathService::Get(base::FILE_EXE, &executable_path)) {
     return false;
+  }
 
   return base::StartsWith(
       executable_path.value(),
@@ -170,10 +176,12 @@ bool IsSystemShim() {
 }
 
 UpdaterScope Scope(const std::map<std::string, std::string>& switches) {
-  if (HasSwitch(kCommandSystemStore, switches))
+  if (HasSwitch(kCommandSystemStore, switches)) {
     return UpdaterScope::kSystem;
-  if (HasSwitch(kCommandUserStore, switches))
+  }
+  if (HasSwitch(kCommandUserStore, switches)) {
     return UpdaterScope::kUser;
+  }
 
   if (HasSwitch(kCommandStorePath, switches)) {
     return SwitchValue(kCommandStorePath, switches) ==
@@ -185,7 +193,7 @@ UpdaterScope Scope(const std::map<std::string, std::string>& switches) {
 }
 
 void MaybeInstallUpdater(UpdaterScope scope) {
-  const absl::optional<base::FilePath> path = GetUpdaterExecutablePath(scope);
+  const std::optional<base::FilePath> path = GetUpdaterExecutablePath(scope);
 
   if (path &&
       [NSFileManager.defaultManager
@@ -198,12 +206,12 @@ void MaybeInstallUpdater(UpdaterScope scope) {
     return;
   }
 
-  const absl::optional<base::FilePath> setup_path = GetUpdaterExecutablePath(
+  const std::optional<base::FilePath> setup_path = GetUpdaterExecutablePath(
       IsSystemShim() ? UpdaterScope::kSystem : UpdaterScope::kUser);
   if (!setup_path || ![NSFileManager.defaultManager
                          fileExistsAtPath:base::apple::FilePathToNSString(
                                               setup_path.value())]) {
-    VLOG(2) << "No existing updater to install from.";
+    VLOG(0) << "No existing updater to install from.";
     return;
   }
 
@@ -317,23 +325,24 @@ void KSAdminApp::ChooseService(
   //   3. Choose system updater if user is root.
   //   4. Prefer system updater if app ID is given and is a system app.
   //   5. Otherwise choose user updater.
-  absl::optional<UpdaterScope> scope = absl::nullopt;
+  std::optional<UpdaterScope> scope = std::nullopt;
   if (HasSwitch(kCommandSystemStore)) {
-    scope = absl::make_optional(UpdaterScope::kSystem);
+    scope = std::make_optional(UpdaterScope::kSystem);
   } else if (HasSwitch(kCommandUserStore) || !IsSystemShim()) {
-    scope = absl::make_optional(UpdaterScope::kUser);
+    scope = std::make_optional(UpdaterScope::kUser);
   } else if (HasSwitch(kCommandStorePath)) {
-    scope = absl::make_optional(
+    scope = std::make_optional(
         SwitchValue(kCommandStorePath) ==
                 KeystoneTicketStorePath(UpdaterScope::kSystem)
             ? UpdaterScope::kSystem
             : UpdaterScope::kUser);
   } else if (geteuid() == 0) {
-    scope = absl::make_optional(UpdaterScope::kSystem);
+    scope = std::make_optional(UpdaterScope::kSystem);
   } else {
     const std::string app_id = SwitchValue(kCommandProductId);
-    if (app_id.empty())
-      scope = absl::make_optional(UpdaterScope::kSystem);
+    if (app_id.empty()) {
+      scope = std::make_optional(UpdaterScope::kSystem);
+    }
   }
 
   if (scope) {
@@ -358,8 +367,9 @@ void KSAdminApp::ChooseService(
 }
 
 void KSAdminApp::PrintUsage(const std::string& error_message) {
-  if (!error_message.empty())
+  if (!error_message.empty()) {
     LOG(ERROR) << error_message;
+  }
   const std::string usage_message =
       "Usage: ksadmin [action...] [option...]\n"
       "Actions:\n"
@@ -401,8 +411,7 @@ void KSAdminApp::Register() {
   const std::string brand_key = SwitchValue(kCommandBrandKey);
   if (!brand_key.empty() &&
       brand_key != base::SysNSStringToUTF8(kCRUTicketBrandKey)) {
-    PrintUsage("Unsupported brand key.");
-    return;
+    LOG(WARNING) << "Ignoring unsupported brand key (use KSBrandID).";
   }
 
   const std::string tag_key = SwitchValue(kCommandTagKey);
@@ -740,8 +749,11 @@ int KSAdminAppMain(int argc, const char* argv[]) {
   // base::CommandLine may reorder arguments and switches, this is not the exact
   // command line.
   VLOG(0) << base::CommandLine::ForCurrentProcess()->GetCommandLineString();
+  VLOG(0) << "ksadmin version: " << kUpdaterVersion;
 
-  return base::MakeRefCounted<KSAdminApp>(command_line)->Run();
+  int exit = base::MakeRefCounted<KSAdminApp>(command_line)->Run();
+  VLOG(0) << "Exiting " << exit;
+  return exit;
 }
 
 }  // namespace updater

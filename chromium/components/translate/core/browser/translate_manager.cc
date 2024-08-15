@@ -225,17 +225,6 @@ bool TranslateManager::CanManuallyTranslate(bool menuLogging) {
   }
 #endif
 
-  bool unknown_source_supported = translate::IsForceTranslateEnabled();
-  if (!unknown_source_supported &&
-      source_language == translate::kUnknownLanguageCode) {
-    if (!menuLogging)
-      return false;
-    TranslateBrowserMetrics::ReportMenuTranslationUnavailableReason(
-        TranslateBrowserMetrics::MenuTranslationUnavailableReason::
-            kSourceLangUnknown);
-    can_translate = false;
-  }
-
   std::unique_ptr<TranslatePrefs> translate_prefs(
       translate_client_->GetTranslatePrefs());
   if (!translate_prefs->IsTranslateAllowedByPolicy()) {
@@ -264,6 +253,21 @@ bool TranslateManager::CanManuallyTranslate(bool menuLogging) {
                           can_translate);
 
   return can_translate;
+}
+
+bool TranslateManager::CanPartiallyTranslateTargetLanguage() {
+  std::unique_ptr<TranslatePrefs> translate_prefs(
+      translate_client_->GetTranslatePrefs());
+  const std::string& source_language = language_state_.source_language();
+  const std::string target_lang = GetTargetLanguage(
+      translate_prefs.get(), language_model_,
+      TranslateDownloadManager::GetLanguageCode(source_language));
+
+  if (target_lang.empty()) {
+    return false;
+  }
+  return TranslateLanguageList::IsSupportedPartialTranslateLanguage(
+      target_lang);
 }
 
 bool TranslateManager::IsMimeTypeSupported(const std::string& mime_type) {
@@ -366,20 +370,18 @@ void TranslateManager::TranslatePage(const std::string& original_source_lang,
     RecordTranslateEvent(
         metrics::TranslateEventProto::USER_CONTEXT_MENU_TRANSLATE);
   }
-
+#if !BUILDFLAG(IS_ANDROID) // ref VAB-7372
   if (source_lang == target_lang) {
     // If the languages are the same, try the translation using the unknown
-    // language code on Desktop and Android. The source and target languages
-    // should only be equal if the translation was manually triggered by the
-    // user. Rather than show them the error, we should attempt to send th
-    // page for translation. For page with multiple languages we often detect
-    // same language, but the Translation service is able to translate the
-    // various languages using it's own language detection.
-    if (translate::IsForceTranslateEnabled()) {
-      source_lang = translate::kUnknownLanguageCode;
-    }
+    // language code. The source and target languages should only be equal if
+    // the translation was manually triggered by the user. Rather than show
+    // them the error, we should attempt to send the page for translation. For
+    // page with multiple languages we often detect same language, but the
+    // Translation service is able to translate the various languages using it's
+    // own language detection.
+    source_lang = translate::kUnknownLanguageCode;
   }
-
+#endif
   // Trigger the "translating now" UI.
   translate_client_->ShowTranslateUI(
       translate::TRANSLATE_STEP_TRANSLATING, source_lang, target_lang,

@@ -2,10 +2,6 @@
 
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 #pragma mark - SIZE AND PADDINGS
 // Vivaldi location bar leading padding
 const CGFloat vLocationBarLeadingPadding = 16.0;
@@ -44,6 +40,9 @@ NSString* const vPrivateNTPBackgroundColor =
 // Color for the search bar background
 NSString* const vSearchbarBackgroundColor =
     @"vivaldi_ntp_searchbar_background_color";
+// Color for regular tab toolbar background
+NSString* const vRegularToolbarBackgroundColor =
+    @"vivaldi_regular_toolbar_background_color";
 // Color for private mode toolbar background
 NSString* const vPrivateModeToolbarBackgroundColor =
     @"vivaldi_private_toolbar_background_color";

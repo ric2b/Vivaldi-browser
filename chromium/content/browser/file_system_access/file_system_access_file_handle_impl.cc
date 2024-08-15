@@ -160,9 +160,10 @@ void FileSystemAccessFileHandleImpl::AsBlob(AsBlobCallback callback) {
       base::BindOnce(&FileSystemAccessFileHandleImpl::DidGetMetaDataForBlob,
                      weak_factory_.GetWeakPtr(), std::move(callback)),
       url(),
-      FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY |
-          FileSystemOperation::GET_METADATA_FIELD_SIZE |
-          FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED);
+      FileSystemOperation::GetMetadataFieldSet(
+          {FileSystemOperation::GetMetadataField::kIsDirectory,
+           FileSystemOperation::GetMetadataField::kSize,
+           FileSystemOperation::GetMetadataField::kLastModified}));
 }
 
 void FileSystemAccessFileHandleImpl::CreateFileWriter(
@@ -266,7 +267,7 @@ void FileSystemAccessFileHandleImpl::OpenAccessHandle(
   }
 
   manager()->TakeLock(
-      url(), lock_type,
+      context(), url(), lock_type,
       base::BindOnce(&FileSystemAccessFileHandleImpl::DidTakeAccessHandleLock,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -552,7 +553,7 @@ void FileSystemAccessFileHandleImpl::DidVerifyHasWritePermissions(
           : manager()->GetExclusiveLockType();
 
   manager()->TakeLock(
-      url(), lock_type,
+      context(), url(), lock_type,
       base::BindOnce(&FileSystemAccessFileHandleImpl::StartCreateSwapFile,
                      weak_factory_.GetWeakPtr(), 0, keep_existing_data,
                      auto_close, std::move(callback)));
@@ -597,7 +598,7 @@ void FileSystemAccessFileHandleImpl::StartCreateSwapFile(
 
     // First attempt to just create the swap file in the same directory (and
     // file system) as this file.
-    absl::optional<base::SafeBaseName> opt_swap_name =
+    std::optional<base::SafeBaseName> opt_swap_name =
         base::SafeBaseName::Create(swap_name);
     CHECK(opt_swap_name.has_value());
     storage::FileSystemURL swap_url = url().CreateSibling(*opt_swap_name);
@@ -607,7 +608,7 @@ void FileSystemAccessFileHandleImpl::StartCreateSwapFile(
     if (!manager()->IsContentious(swap_url,
                                   manager()->GetExclusiveLockType())) {
       manager()->TakeLock(
-          swap_url, manager()->GetExclusiveLockType(),
+          context(), swap_url, manager()->GetExclusiveLockType(),
           base::BindOnce(&FileSystemAccessFileHandleImpl::DidTakeSwapLock,
                          weak_factory_.GetWeakPtr(), count, swap_url,
                          keep_existing_data, auto_close, std::move(lock),
@@ -847,8 +848,7 @@ void FileSystemAccessFileHandleImpl::GetUniqueId(GetUniqueIdCallback callback) {
 
 #if BUILDFLAG(IS_MAC)
 bool FileSystemAccessFileHandleImpl::CanUseCowSwapFile() const {
-  return base::FeatureList::IsEnabled(features::kFileSystemAccessCowSwapFile) &&
-         url().type() == storage::kFileSystemTypeLocal;
+  return url().type() == storage::kFileSystemTypeLocal;
 }
 #endif  // BUILDFLAG(IS_MAC)
 

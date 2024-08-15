@@ -7,7 +7,7 @@
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/paint/line_relative_rect.h"
 
 namespace blink {
@@ -28,17 +28,18 @@ class CORE_EXPORT LayoutTextCombine final : public LayoutNGBlockFlow {
   LayoutTextCombine();
   ~LayoutTextCombine() override;
 
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(compressed_font_);
+    LayoutNGBlockFlow::Trace(visitor);
+  }
+
   float DesiredWidth() const;
   String GetTextContent() const;
 
   // Compressed font
-  const Font& CompressedFont() const {
+  const Font* CompressedFont() const {
     NOT_DESTROYED();
-    return compressed_font_.value();
-  }
-  bool UsesCompressedFont() const {
-    NOT_DESTROYED();
-    return compressed_font_.has_value();
+    return has_compressed_font_ ? &compressed_font_ : nullptr;
   }
   void SetCompressedFont(const Font& font);
 
@@ -58,9 +59,9 @@ class CORE_EXPORT LayoutTextCombine final : public LayoutNGBlockFlow {
   //  * |LayoutText::PhysicalLinesBoundingBox()| used by
   //    |LayoutObject::DebugRect()|, intersection observer, and scroll anchor.
   //  * |FragmentItem::RecalcInkOverflow()| for line box
-  //  * |NGLayoutOverflowCalculator::AddItemsInternal()| for line box.
-  //  * |NGPhysicalFragment::AddOutlineRectsForCursor()|
-  //  * |NGPhysicalFragment::AddScrollableOverflowForInlineChild()|
+  //  * |ScrollableOverflowCalculator::AddItemsInternal()| for line box.
+  //  * |PhysicalFragment::AddOutlineRectsForCursor()|
+  //  * |PhysicalFragment::AddScrollableOverflowForInlineChild()|
   PhysicalRect AdjustRectForBoundingBox(const PhysicalRect& rect) const;
 
   PhysicalRect ComputeTextBoundsRectForHitTest(
@@ -92,7 +93,7 @@ class CORE_EXPORT LayoutTextCombine final : public LayoutNGBlockFlow {
       const PhysicalOffset paint_offset) const;
 
   // Returns visual rect for painting emphasis mark and text decoration for
-  // |NGBoxFragmentPainter|.
+  // |BoxFragmentPainter|.
   gfx::Rect VisualRectForPaint(const PhysicalOffset& paint_offset) const;
 
   static void AssertStyleIsValid(const ComputedStyle& style);
@@ -104,7 +105,10 @@ class CORE_EXPORT LayoutTextCombine final : public LayoutNGBlockFlow {
   static bool ShouldBeParentOf(const LayoutObject& layout_object);
 
  private:
-  bool IsOfType(LayoutObjectType) const override;
+  bool IsLayoutTextCombine() const final {
+    NOT_DESTROYED();
+    return true;
+  }
   const char* GetName() const override {
     NOT_DESTROYED();
     return "LayoutTextCombine";
@@ -119,12 +123,16 @@ class CORE_EXPORT LayoutTextCombine final : public LayoutNGBlockFlow {
   float ComputeInlineSpacing() const;
   bool UsingSyntheticOblique() const;
 
-  // |compressed_font_| hold width variant of |StyleRef().GetFont()|.
-  absl::optional<Font> compressed_font_;
-
   // |scale_x_| holds scale factor to width of text content to 1em. When we
   // use |scale_x_|, we use |StyleRef().GetFont()| instead of compressed font.
   absl::optional<float> scale_x_;
+
+  // |compressed_font_| hold width variant of |StyleRef().GetFont()|.
+  //
+  // NOTE: This doesn't use a std::optional to avoid a potentially racy branch
+  // within the Trace method.
+  Font compressed_font_;
+  bool has_compressed_font_ = false;
 };
 
 // static

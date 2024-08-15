@@ -14,7 +14,9 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "components/sync/engine/model_type_processor.h"
+#include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/model_type_controller_delegate.h"
 #include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "sync/notes/synced_note_tracker.h"
@@ -65,7 +67,8 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
       base::OnceCallback<void(const syncer::TypeEntitiesCount&)> callback)
       const override;
   void RecordMemoryUsageAndCountsHistograms() override;
-  void ClearMetadataWhileStopped() override;
+  void ClearMetadataIfStopped() override;
+  void ReportBridgeErrorForTest() override;
 
   // Encodes all sync metadata into a string, representing a state that can be
   // restored via ModelReadyToSync() below.
@@ -144,10 +147,13 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // ModelReadyToSync().
   StartCallback start_callback_;
 
+  // The request context passed in as part of OnSyncStarting().
+  syncer::DataTypeActivationRequest activation_request_;
+
   // The note model we are processing local changes from and forwarding
   // remote changes to. It is set during ModelReadyToSync(), which is called
   // during startup, as part of the note-loading process.
-  raw_ptr<NoteModelView, AcrossTasksDanglingUntriaged> notes_model_ = nullptr;
+  raw_ptr<NoteModelView> notes_model_ = nullptr;
 
   // Controls whether notes should be wiped when sync is stopped. Not actually
   // used in Vivaldi
@@ -188,15 +194,13 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // engine.
   std::string cache_uuid_;
 
-  syncer::ModelErrorHandler error_handler_;
-
   std::unique_ptr<NotesModelObserverImpl> notes_model_observer_;
 
   // This member variable exists only to allow tests to override the limit.
   size_t max_notes_till_sync_enabled_;
 
   // Marks whether metadata should be cleared upon ModelReadyToSync(). True if
-  // ClearMetadataWhileStopped() is called before ModelReadyToSync().
+  // ClearMetadataIfStopped() is called before ModelReadyToSync().
   bool pending_clear_metadata_ = false;
 
   // WeakPtrFactory for this processor for ModelTypeController.

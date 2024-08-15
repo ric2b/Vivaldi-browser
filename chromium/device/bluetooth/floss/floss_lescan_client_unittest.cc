@@ -151,7 +151,7 @@ class FlossLEScanClientTest : public testing::Test,
     method_call.SetSender(kTestSender);
     method_call.SetSerial(kTestSerial);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendArrayOfBytes(kTestUuidByteArray, sizeof(kTestUuidByteArray));
+    writer.AppendArrayOfBytes(kTestUuidByteArray);
     writer.AppendByte(kTestScannerId);
     writer.AppendUint32(static_cast<uint32_t>(kTestStatus));
 
@@ -252,6 +252,14 @@ class FlossLEScanClientTest : public testing::Test,
   base::WeakPtrFactory<FlossLEScanClientTest> weak_ptr_factory_{this};
 };
 
+static bool ReadNullOptDBusParam(dbus::MessageReader* reader) {
+  absl::optional<int32_t> param;
+  if (!FlossDBusClient::ReadDBusParam(reader, &param)) {
+    return false;
+  }
+  return param == absl::nullopt;
+}
+
 TEST_F(FlossLEScanClientTest, TestInitExportRegisterScanner) {
   scoped_refptr<::dbus::MockExportedObject> exported_callback =
       base::MakeRefCounted<::dbus::MockExportedObject>(bus_.get(),
@@ -339,8 +347,7 @@ TEST_F(FlossLEScanClientTest, TestInitExportRegisterScanner) {
         // Create a fake response with UUID return value.
         auto response = ::dbus::Response::CreateEmpty();
         dbus::MessageWriter writer(response.get());
-        writer.AppendArrayOfBytes(kTestUuidByteArray,
-                                  sizeof(kTestUuidByteArray));
+        writer.AppendArrayOfBytes(kTestUuidByteArray);
         std::move(*cb).Run(response.get(), /*err=*/nullptr);
       });
   client_->RegisterScanner(
@@ -400,12 +407,12 @@ TEST_F(FlossLEScanClientTest, TestStartStopScan) {
       .WillOnce([](::dbus::MethodCall* method_call, int timeout_ms,
                    ::dbus::ObjectProxy::ResponseOrErrorCallback* cb) {
         dbus::MessageReader msg(method_call);
-        // D-Bus method call should have 3 parameters.
-        // TODO(b/217274013): ScanSettings and ScanFilter currently being
-        // ignored
         uint8_t param1;
         ASSERT_TRUE(FlossDBusClient::ReadDBusParam(&msg, &param1));
         EXPECT_EQ(kTestScannerId, param1);
+        ASSERT_TRUE(ReadNullOptDBusParam(&msg));  // ScanSettings
+        ASSERT_TRUE(ReadNullOptDBusParam(&msg));  // ScanFilter
+
         // Create a fake response with BtifStatus return value.
         auto response = ::dbus::Response::CreateEmpty();
         dbus::MessageWriter writer(response.get());
@@ -421,7 +428,8 @@ TEST_F(FlossLEScanClientTest, TestStartStopScan) {
                            EXPECT_EQ(ret.value(),
                                      FlossDBusClient::BtifStatus::kSuccess);
                          }),
-                     kTestScannerId, ScanSettings{}, ScanFilter{});
+                     kTestScannerId, absl::nullopt /* ScanSettings */,
+                     absl::nullopt /* ScanFilter*/);
 
   // Method of 1 parameter with no return.
   EXPECT_CALL(*object_proxy_.get(), DoCallMethodWithErrorResponse(

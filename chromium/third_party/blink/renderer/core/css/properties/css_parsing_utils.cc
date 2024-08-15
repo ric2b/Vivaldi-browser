@@ -76,6 +76,8 @@
 #include "third_party/blink/renderer/core/frame/deprecation/deprecation.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/core/svg/svg_parsing_error.h"
 #include "third_party/blink/renderer/core/svg/svg_path_utilities.h"
@@ -860,6 +862,7 @@ bool IsGeneratedImage(const CSSValueID id) {
     case CSSValueID::kWebkitGradient:
     case CSSValueID::kWebkitCrossFade:
     case CSSValueID::kPaint:
+    case CSSValueID::kCrossFade:
       return true;
 
     default:
@@ -868,13 +871,7 @@ bool IsGeneratedImage(const CSSValueID id) {
 }
 
 bool IsImageSet(const CSSValueID id) {
-  if (id == CSSValueID::kWebkitImageSet) {
-    return true;
-  }
-  if (id == CSSValueID::kImageSet) {
-    return RuntimeEnabledFeatures::CSSImageSetEnabled();
-  }
-  return false;
+  return id == CSSValueID::kWebkitImageSet || id == CSSValueID::kImageSet;
 }
 
 }  // namespace
@@ -1586,6 +1583,16 @@ StringView ApplyFetchRestrictions(StringView url,
   return url;
 }
 
+CSSUrlData CollectUrlData(const StringView& url,
+                          const CSSParserContext& context) {
+  AtomicString url_string = url.ToAtomicString();
+  return CSSUrlData(
+      url_string, context.CompleteNonEmptyURL(url_string),
+      context.GetReferrer(),
+      context.IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse,
+      context.IsAdRelated());
+}
+
 }  // namespace
 
 StringView ConsumeUrlAsStringView(CSSParserTokenRange& range,
@@ -1616,9 +1623,8 @@ cssvalue::CSSURIValue* ConsumeUrl(CSSParserTokenRange& range,
   if (url.IsNull()) {
     return nullptr;
   }
-  AtomicString url_string = url.ToAtomicString();
   return MakeGarbageCollected<cssvalue::CSSURIValue>(
-      CSSUrlData(url_string, context.CompleteNonEmptyURL(url_string)));
+      CollectUrlData(url, context));
 }
 
 static bool ConsumeColorInterpolationSpace(
@@ -1828,15 +1834,13 @@ Color ResolveColor(CSSValue* value) {
 }  // namespace
 
 CSSValue* ConsumeColorContrast(CSSParserTokenRange& range,
-                               const CSSParserContext& context,
-                               bool accept_quirky_colors) {
+                               const CSSParserContext& context) {
   DCHECK_EQ(range.Peek().FunctionId(), CSSValueID::kColorContrast);
 
   CSSParserTokenRange range_copy = range;
   CSSParserTokenRange args = ConsumeFunction(range_copy);
 
-  CSSValue* background_color =
-      ConsumeColor(args, context, accept_quirky_colors);
+  CSSValue* background_color = ConsumeColor(args, context);
   if (!background_color) {
     return nullptr;
   }
@@ -1847,7 +1851,7 @@ CSSValue* ConsumeColorContrast(CSSParserTokenRange& range,
 
   VectorOf<CSSValue> colors_to_compare_against;
   do {
-    CSSValue* color = ConsumeColor(args, context, accept_quirky_colors);
+    CSSValue* color = ConsumeColor(args, context);
     if (!color) {
       return nullptr;
     }
@@ -1924,13 +1928,33 @@ CSSValue* ConsumeColorContrast(CSSParserTokenRange& range,
       ResolveColor(colors_to_compare_against[highest_contrast_index]));
 }
 
+namespace {
+
+bool SystemAccentColorAllowed(const CSSParserContext& context) {
+  if (!RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()) {
+    return false;
+  }
+
+  if (RuntimeEnabledFeatures::PreventReadingSystemAccentColorEnabled()) {
+    if (const auto* document = context.GetDocument()) {
+      if (document->GetPage()->GetChromeClient().IsSVGImageChromeClient()) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+}  // namespace
+
 CSSValue* ConsumeColor(CSSParserTokenRange& range,
                        const CSSParserContext& context,
                        bool accept_quirky_colors,
                        AllowedColorKeywords allowed_keywords) {
   if (RuntimeEnabledFeatures::CSSColorContrastEnabled() &&
       range.Peek().FunctionId() == CSSValueID::kColorContrast) {
-    return ConsumeColorContrast(range, context, accept_quirky_colors);
+    return ConsumeColorContrast(range, context);
   }
 
   if (range.Peek().FunctionId() == CSSValueID::kColorMix) {
@@ -1940,7 +1964,7 @@ CSSValue* ConsumeColor(CSSParserTokenRange& range,
 
   CSSValueID id = range.Peek().Id();
   if ((id == CSSValueID::kAccentcolor || id == CSSValueID::kAccentcolortext) &&
-      !RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()) {
+      !SystemAccentColorAllowed(context)) {
     return nullptr;
   }
   if (StyleColor::IsColorKeyword(id)) {
@@ -2841,8 +2865,7 @@ CSSValue* ConsumeIntrinsicSizeLonghand(CSSParserTokenRange& range,
   if (css_parsing_utils::IdentMatches<CSSValueID::kAuto>(range.Peek().Id())) {
     list->Append(*css_parsing_utils::ConsumeIdent(range));
   }
-  if (RuntimeEnabledFeatures::CSSContainIntrinsicSizeAutoNoneEnabled() &&
-      css_parsing_utils::IdentMatches<CSSValueID::kNone>(range.Peek().Id())) {
+  if (css_parsing_utils::IdentMatches<CSSValueID::kNone>(range.Peek().Id())) {
     list->Append(*css_parsing_utils::ConsumeIdent(range));
   } else {
     CSSValue* length = css_parsing_utils::ConsumeLength(
@@ -2855,8 +2878,9 @@ CSSValue* ConsumeIntrinsicSizeLonghand(CSSParserTokenRange& range,
   return list;
 }
 
-static CSSValue* ConsumeCrossFade(CSSParserTokenRange& args,
-                                  const CSSParserContext& context) {
+static CSSValue* ConsumeDeprecatedWebkitCrossFade(
+    CSSParserTokenRange& args,
+    const CSSParserContext& context) {
   CSSValue* from_image_value = ConsumeImageOrNone(args, context);
   if (!from_image_value || !ConsumeCommaIncludingWhitespace(args)) {
     return nullptr;
@@ -2883,7 +2907,67 @@ static CSSValue* ConsumeCrossFade(CSSParserTokenRange& args,
     return nullptr;
   }
   return MakeGarbageCollected<cssvalue::CSSCrossfadeValue>(
-      from_image_value, to_image_value, percentage);
+      /*is_legacy_variant=*/true,
+      HeapVector<std::pair<Member<CSSValue>, Member<CSSPrimitiveValue>>>{
+          {from_image_value, nullptr}, {to_image_value, percentage}});
+}
+
+// https://drafts.csswg.org/css-images-4/#cross-fade-function
+static CSSValue* ConsumeCrossFade(CSSParserTokenRange& args,
+                                  const CSSParserContext& context) {
+  // Parse an arbitrary comma-separated image|color values,
+  // where each image may have a percentage before or after it.
+  HeapVector<std::pair<Member<CSSValue>, Member<CSSPrimitiveValue>>>
+      image_and_percentages;
+  CSSValue* image = nullptr;
+  CSSPrimitiveValue* percentage = nullptr;
+  for (;;) {
+    if (CSSPrimitiveValue* percent_value = ConsumePercent(
+            args, context, CSSPrimitiveValue::ValueRange::kAll)) {
+      if (percentage) {
+        return nullptr;
+      }
+      if (percent_value->IsNumericLiteralValue()) {
+        double val = percent_value->GetDoubleValue();
+        if (!(val >= 0.0 &&
+              val <= 100.0)) {  // Includes checks for NaN and infinities.
+          return nullptr;
+        }
+      }
+      percentage = percent_value;
+      continue;
+    } else if (CSSValue* image_value = ConsumeImage(args, context)) {
+      if (image) {
+        return nullptr;
+      }
+      image = image_value;
+    } else if (CSSValue* color_value = ConsumeColor(args, context)) {
+      if (image) {
+        return nullptr;
+      }
+
+      // Wrap the color in a constant gradient, so that we can treat it as a
+      // gradient in nearly all the remaining code.
+      image =
+          MakeGarbageCollected<cssvalue::CSSConstantGradientValue>(color_value);
+    } else {
+      if (!image) {
+        return nullptr;
+      }
+      image_and_percentages.emplace_back(image, percentage);
+      image = nullptr;
+      percentage = nullptr;
+      if (!ConsumeCommaIncludingWhitespace(args)) {
+        break;
+      }
+    }
+  }
+  if (image_and_percentages.empty()) {
+    return nullptr;
+  }
+
+  return MakeGarbageCollected<cssvalue::CSSCrossfadeValue>(
+      /*is_legacy_variant=*/false, image_and_percentages);
 }
 
 static CSSValue* ConsumePaint(CSSParserTokenRange& args,
@@ -2976,6 +3060,9 @@ static CSSValue* ConsumeGeneratedImage(CSSParserTokenRange& range,
   } else if (id == CSSValueID::kRepeatingConicGradient) {
     result = ConsumeConicGradient(args, context, cssvalue::kRepeating);
   } else if (id == CSSValueID::kWebkitCrossFade) {
+    result = ConsumeDeprecatedWebkitCrossFade(args, context);
+  } else if (RuntimeEnabledFeatures::CSSCrossFadeEnabled() &&
+             id == CSSValueID::kCrossFade) {
     result = ConsumeCrossFade(args, context);
   } else if (id == CSSValueID::kPaint) {
     result = context.IsSecureContext() ? ConsumePaint(args, context) : nullptr;
@@ -3001,12 +3088,8 @@ static CSSValue* ConsumeGeneratedImage(CSSParserTokenRange& range,
 static CSSImageValue* CreateCSSImageValueWithReferrer(
     const StringView& uri,
     const CSSParserContext& context) {
-  AtomicString raw_value = uri.ToAtomicString();
-  auto* image_value = MakeGarbageCollected<CSSImageValue>(
-      CSSUrlData(raw_value, context.CompleteNonEmptyURL(raw_value)),
-      context.GetReferrer(),
-      context.IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse,
-      context.IsAdRelated());
+  auto* image_value =
+      MakeGarbageCollected<CSSImageValue>(CollectUrlData(uri, context));
   if (context.Mode() == kUASheetMode) {
     image_value->SetInitiator(fetch_initiator_type_names::kUacss);
   }
@@ -3014,8 +3097,7 @@ static CSSImageValue* CreateCSSImageValueWithReferrer(
 }
 
 static CSSImageSetTypeValue* ConsumeImageSetType(CSSParserTokenRange& range) {
-  if (!RuntimeEnabledFeatures::CSSImageSetEnabled() ||
-      range.Peek().FunctionId() != CSSValueID::kType) {
+  if (range.Peek().FunctionId() != CSSValueID::kType) {
     return nullptr;
   }
 
@@ -3035,33 +3117,16 @@ static CSSImageSetOptionValue* ConsumeImageSetOption(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     ConsumeGeneratedImagePolicy generated_image_policy) {
-  const ConsumeStringUrlImagePolicy string_url_image_policy =
-      RuntimeEnabledFeatures::CSSImageSetEnabled()
-          ? ConsumeStringUrlImagePolicy::kAllow
-          : ConsumeStringUrlImagePolicy::kForbid;
-  const ConsumeGeneratedImagePolicy image_set_generated_image_policy =
-      RuntimeEnabledFeatures::CSSImageSetEnabled()
-          ? generated_image_policy
-          : ConsumeGeneratedImagePolicy::kForbid;
-
-  const CSSValue* image = ConsumeImage(
-      range, context, image_set_generated_image_policy, string_url_image_policy,
-      ConsumeImageSetImagePolicy::kForbid);
+  const CSSValue* image = ConsumeImage(range, context, generated_image_policy,
+                                       ConsumeStringUrlImagePolicy::kAllow,
+                                       ConsumeImageSetImagePolicy::kForbid);
   if (!image) {
     return nullptr;
   }
 
   // Type could appear before or after resolution
   CSSImageSetTypeValue* type = ConsumeImageSetType(range);
-
-  if (!RuntimeEnabledFeatures::CSSImageSetEnabled() &&
-      range.Peek().GetType() != kDimensionToken &&
-      range.Peek().GetUnitType() != CSSPrimitiveValue::UnitType::kX) {
-    return nullptr;
-  }
-
   CSSPrimitiveValue* resolution = ConsumeResolution(range, context);
-
   if (!type) {
     type = ConsumeImageSetType(range);
   }
@@ -3266,15 +3331,13 @@ void CountKeywordOnlyPropertyUsage(CSSPropertyID property,
               NonStandardAppearanceValueSliderVerticalEnabled() &&
           value_id == CSSValueID::kSliderVertical) {
         if (const auto* document = context.GetDocument()) {
-          // TODO(crbug.com/681917): Remove "currently experimental" note when
-          // feature FormControlsVerticalWritingModeSupport is in stable.
           document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
               mojom::blink::ConsoleMessageSource::kDeprecation,
               mojom::blink::ConsoleMessageLevel::kWarning,
               "The keyword 'slider-vertical' specified to an 'appearance' "
-              "property is not standardized. It will be removed in the future "
-              "and replaced by vertical writing-mode (currently "
-              "experimental)."));
+              "property is not standardized. It will be removed in the future. "
+              "Use <input type=range style=\"writing-mode: vertical-lr\"> "
+              "instead."));
           Deprecation::CountDeprecation(
               document->GetExecutionContext(),
               WebFeature::kCSSValueAppearanceSliderVertical);
@@ -4084,18 +4147,13 @@ CSSValue* ConsumeSingleTimelineInset(CSSParserTokenRange& range,
                                             CSSValuePair::kDropIdenticalValues);
 }
 
-void AddBackgroundValue(CSSValue*& list, CSSValue* value) {
-  if (list) {
-    if (!list->IsBaseValueList()) {
-      CSSValue* first_value = list;
-      list = CSSValueList::CreateCommaSeparated();
-      To<CSSValueList>(list)->Append(*first_value);
-    }
-    To<CSSValueList>(list)->Append(*value);
-  } else {
-    // To conserve memory we don't actually wrap a single value in a list.
-    list = value;
+const CSSValue* GetSingleValueOrMakeList(
+    CSSValue::ValueListSeparator list_separator,
+    HeapVector<Member<const CSSValue>, 4> values) {
+  if (values.size() == 1u) {
+    return values.front().Get();
   }
+  return MakeGarbageCollected<CSSValueList>(list_separator, std::move(values));
 }
 
 CSSValue* ConsumeBackgroundAttachment(CSSParserTokenRange& range) {
@@ -4197,8 +4255,11 @@ bool ConsumeBackgroundPosition(CSSParserTokenRange& range,
                                const CSSParserContext& context,
                                UnitlessQuirk unitless,
                                absl::optional<WebFeature> three_value_position,
-                               CSSValue*& result_x,
-                               CSSValue*& result_y) {
+                               const CSSValue*& result_x,
+                               const CSSValue*& result_y) {
+  HeapVector<Member<const CSSValue>, 4> values_x;
+  HeapVector<Member<const CSSValue>, 4> values_y;
+
   do {
     CSSValue* position_x = nullptr;
     CSSValue* position_y = nullptr;
@@ -4212,9 +4273,16 @@ bool ConsumeBackgroundPosition(CSSParserTokenRange& range,
     // argument to ask the parser to set this flag.
     SetAllowsNegativePercentageReference(position_x);
     SetAllowsNegativePercentageReference(position_y);
-    AddBackgroundValue(result_x, position_x);
-    AddBackgroundValue(result_y, position_y);
+    values_x.push_back(position_x);
+    values_y.push_back(position_y);
   } while (ConsumeCommaIncludingWhitespace(range));
+
+  // To conserve memory we don't wrap single values in lists.
+  result_x =
+      GetSingleValueOrMakeList(CSSValue::kCommaSeparator, std::move(values_x));
+  result_y =
+      GetSingleValueOrMakeList(CSSValue::kCommaSeparator, std::move(values_y));
+
   return true;
 }
 
@@ -4361,8 +4429,8 @@ bool ParseBackgroundOrMask(bool important,
           : WebkitMaskShorthand(shorthand_id);
 
   const unsigned longhand_count = shorthand.length();
-  CSSValue* longhands[10] = {nullptr};
-  DCHECK_LE(longhand_count, 10u);
+  HeapVector<Member<const CSSValue>, 4> longhands[10];
+  CHECK_LE(longhand_count, 10u);
 
   bool implicit = false;
   do {
@@ -4419,10 +4487,10 @@ bool ParseBackgroundOrMask(bool important,
           }
           parsed_longhand[i] = true;
           found_property = true;
-          AddBackgroundValue(longhands[i], value);
+          longhands[i].push_back(value);
           if (value_y) {
             parsed_longhand[i + 1] = true;
-            AddBackgroundValue(longhands[i + 1], value_y);
+            longhands[i + 1].push_back(value_y);
           }
         }
       }
@@ -4448,11 +4516,15 @@ bool ParseBackgroundOrMask(bool important,
              property.IDEquals(CSSPropertyID::kMaskClip) ||
              property.IDEquals(CSSPropertyID::kWebkitMaskClip)) &&
             origin_value) {
-          AddBackgroundValue(longhands[i], origin_value);
+          longhands[i].push_back(origin_value);
           continue;
         }
 
-        AddBackgroundValue(longhands[i], CSSInitialValue::Create());
+        if (shorthand_id == CSSPropertyID::kAlternativeMask) {
+          longhands[i].push_back(To<Longhand>(property).InitialValue());
+        } else {
+          longhands[i].push_back(CSSInitialValue::Create());
+        }
       }
     }
   } while (ConsumeCommaIncludingWhitespace(range));
@@ -4462,11 +4534,12 @@ bool ParseBackgroundOrMask(bool important,
 
   for (unsigned i = 0; i < longhand_count; ++i) {
     const CSSProperty& property = *shorthand.properties()[i];
-    if (property.IDEquals(CSSPropertyID::kBackgroundSize) && longhands[i] &&
-        context.UseLegacyBackgroundSizeShorthandBehavior()) {
-      continue;
-    }
-    AddProperty(property.PropertyID(), shorthand.id(), *longhands[i], important,
+
+    // To conserve memory we don't wrap a single value in a list.
+    const CSSValue* longhand = GetSingleValueOrMakeList(
+        CSSValue::kCommaSeparator, std::move(longhands[i]));
+
+    AddProperty(property.PropertyID(), shorthand.id(), *longhand, important,
                 implicit ? IsImplicitProperty::kImplicit
                          : IsImplicitProperty::kNotImplicit,
                 properties);
@@ -5104,8 +5177,7 @@ CSSValue* ConsumeFontStyle(CSSParserTokenRange& range,
     return ConsumeIdent(range);
   }
 
-  if (RuntimeEnabledFeatures::CSSFontFaceAutoVariableRangeEnabled() &&
-      range.Peek().Id() == CSSValueID::kAuto &&
+  if (range.Peek().Id() == CSSValueID::kAuto &&
       context.Mode() == kCSSFontFaceRuleMode) {
     return ConsumeIdent(range);
   }
@@ -5156,8 +5228,7 @@ CSSIdentifierValue* ConsumeFontStretchKeywordOnly(
        token.Id() <= CSSValueID::kUltraExpanded)) {
     return ConsumeIdent(range);
   }
-  if (RuntimeEnabledFeatures::CSSFontFaceAutoVariableRangeEnabled() &&
-      token.Id() == CSSValueID::kAuto &&
+  if (token.Id() == CSSValueID::kAuto &&
       context.Mode() == kCSSFontFaceRuleMode) {
     return ConsumeIdent(range);
   }
@@ -5201,10 +5272,8 @@ CSSValue* ConsumeFontWeight(CSSParserTokenRange& range,
       return ConsumeIdent(range);
     }
   } else {
-    if ((token.Id() == CSSValueID::kNormal ||
-         token.Id() == CSSValueID::kBold) ||
-        (RuntimeEnabledFeatures::CSSFontFaceAutoVariableRangeEnabled() &&
-         token.Id() == CSSValueID::kAuto)) {
+    if (token.Id() == CSSValueID::kNormal || token.Id() == CSSValueID::kBold ||
+        token.Id() == CSSValueID::kAuto) {
       return ConsumeIdent(range);
     }
   }
@@ -5571,6 +5640,13 @@ bool ConsumeGridTrackRepeatFunction(CSSParserTokenRange& range,
                                     bool& is_auto_repeat,
                                     bool& all_tracks_are_fixed_sized) {
   CSSParserTokenRange args = ConsumeFunction(range);
+
+  // <name-repeat> syntax for subgrids only supports `auto-fill`.
+  if (is_subgrid_track_list &&
+      IdentMatches<CSSValueID::kAutoFit>(args.Peek().Id())) {
+    return false;
+  }
+
   is_auto_repeat = IdentMatches<CSSValueID::kAutoFill, CSSValueID::kAutoFit>(
       args.Peek().Id());
   CSSValueList* repeated_values;
@@ -5777,7 +5853,9 @@ CSSValue* ConsumeGridLine(CSSParserTokenRange& range,
   if (span_value) {
     values->Append(*span_value);
   }
-  if (numeric_value) {
+  // If span is present, omit `1` if there's a trailing identifier.
+  if (numeric_value &&
+      (!span_value || !grid_line_name || numeric_value->GetIntValue() != 1)) {
     values->Append(*numeric_value);
   }
   if (grid_line_name) {
@@ -5796,7 +5874,6 @@ CSSValue* ConsumeGridTrackList(CSSParserTokenRange& range,
   }
 
   bool is_subgrid_track_list =
-      RuntimeEnabledFeatures::LayoutNGSubgridEnabled() &&
       track_list_type == TrackListType::kGridTemplateSubgrid;
 
   CSSValueList* values = CSSValueList::CreateSpaceSeparated();
@@ -6899,8 +6976,7 @@ CSSValue* ConsumeContainerType(CSSParserTokenRange& range) {
   }
 
   CSSValue* size_value = nullptr;
-  CSSValue* sticky_value = nullptr;
-  CSSValue* snap_value = nullptr;
+  CSSValue* scroll_state_value = nullptr;
 
   do {
     if (!size_value) {
@@ -6910,17 +6986,10 @@ CSSValue* ConsumeContainerType(CSSParserTokenRange& range) {
         continue;
       }
     }
-    if (!sticky_value &&
-        RuntimeEnabledFeatures::CSSStickyContainerQueriesEnabled()) {
-      sticky_value = ConsumeIdent<CSSValueID::kSticky>(range);
-      if (sticky_value) {
-        continue;
-      }
-    }
-    if (!snap_value &&
-        RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled()) {
-      snap_value = ConsumeIdent<CSSValueID::kSnap>(range);
-      if (snap_value) {
+    if (!scroll_state_value &&
+        RuntimeEnabledFeatures::CSSScrollStateContainerQueriesEnabled()) {
+      scroll_state_value = ConsumeIdent<CSSValueID::kScrollState>(range);
+      if (scroll_state_value) {
         continue;
       }
     }
@@ -6931,11 +7000,8 @@ CSSValue* ConsumeContainerType(CSSParserTokenRange& range) {
   if (size_value) {
     list->Append(*size_value);
   }
-  if (sticky_value) {
-    list->Append(*sticky_value);
-  }
-  if (snap_value) {
-    list->Append(*snap_value);
+  if (scroll_state_value) {
+    list->Append(*scroll_state_value);
   }
   return list;
 }

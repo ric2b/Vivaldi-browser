@@ -17,6 +17,7 @@
 //! performing signatures and signature verification.
 
 use crate::extended::deserialize::EncryptionInfo;
+use crate::MetadataKey;
 use crate::NP_SVC_UUID;
 use crypto_provider::{aes::ctr::AesCtrNonce, CryptoProvider};
 use sink::{Sink, SinkWriter};
@@ -45,10 +46,10 @@ enum AfterIVInfo<'a> {
     /// to be included in the signature payload after the derived salt,
     /// and before the signature itself.
     Raw(&'a [u8]),
-    /// References to the plaintext identity DE header and the rest
-    /// of the section plaintext after that (includes the plaintext
-    /// identity DE payload).
-    IdentityHeaderThenRaw([u8; 2], &'a [u8]),
+    /// Plaintext identity DE header followed by the metadata key,
+    /// then the rest of the section plaintext (including
+    /// the plaintext identity DE payload).
+    IdentityHeaderMetadataKeyAndRemainder([u8; 2], MetadataKey, &'a [u8]),
 }
 
 const ADV_SIGNATURE_CONTEXT: np_ed25519::SignatureContext = {
@@ -59,6 +60,30 @@ const ADV_SIGNATURE_CONTEXT: np_ed25519::SignatureContext = {
 };
 
 impl<'a> SectionSignaturePayload<'a> {
+    /// Construct a section signature payload using parts typically found during
+    /// deserialization of advertisements.
+    pub(crate) fn from_deserialized_parts(
+        adv_header_byte: u8,
+        section_header: u8,
+        encryption_info: &'a [u8; EncryptionInfo::TOTAL_DE_LEN],
+        nonce_ref: &'a AesCtrNonce,
+        identity_header: [u8; 2],
+        plaintext_metadata_key: MetadataKey,
+        raw_plaintext_remainder: &'a [u8],
+    ) -> Self {
+        Self {
+            adv_header_byte,
+            section_header,
+            encryption_info,
+            nonce_ref,
+            after_iv_info: AfterIVInfo::IdentityHeaderMetadataKeyAndRemainder(
+                identity_header,
+                plaintext_metadata_key,
+                raw_plaintext_remainder,
+            ),
+        }
+    }
+
     /// Construct a section signature payload using parts typically found during
     /// serialization of advertisements.
     pub(crate) fn from_serialized_parts(
@@ -74,28 +99,6 @@ impl<'a> SectionSignaturePayload<'a> {
             encryption_info,
             nonce_ref,
             after_iv_info: AfterIVInfo::Raw(raw_after_iv_info),
-        }
-    }
-
-    /// Construct a section signature payload using parts typically found during
-    /// deserialization of advertisements.
-    pub(crate) fn from_deserialized_parts(
-        adv_header_byte: u8,
-        section_header: u8,
-        encryption_info: &'a [u8; EncryptionInfo::TOTAL_DE_LEN],
-        nonce_ref: &'a AesCtrNonce,
-        identity_header: [u8; 2],
-        raw_after_identity_header_info: &'a [u8],
-    ) -> Self {
-        Self {
-            adv_header_byte,
-            section_header,
-            encryption_info,
-            nonce_ref,
-            after_iv_info: AfterIVInfo::IdentityHeaderThenRaw(
-                identity_header,
-                raw_after_identity_header_info,
-            ),
         }
     }
 
@@ -133,9 +136,14 @@ impl<'a> SinkWriter for SectionSignaturePayload<'a> {
         // identity DE and the rest of the DEs except for the suffix
         match self.after_iv_info {
             AfterIVInfo::Raw(s) => sink.try_extend_from_slice(s),
-            AfterIVInfo::IdentityHeaderThenRaw(identity_header, s) => {
+            AfterIVInfo::IdentityHeaderMetadataKeyAndRemainder(
+                identity_header,
+                metadata_key,
+                remainder,
+            ) => {
                 sink.try_extend_from_slice(&identity_header)?;
-                sink.try_extend_from_slice(s)
+                sink.try_extend_from_slice(&metadata_key.0)?;
+                sink.try_extend_from_slice(remainder)
             }
         }
     }

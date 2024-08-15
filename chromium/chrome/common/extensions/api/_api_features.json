@@ -279,6 +279,9 @@
     "dependencies": ["permission:contentSettings"],
     "contexts": ["blessed_extension"]
   },
+  "contentSettings.clipboard": {
+    "feature_flag": "ApiContentSettingsClipboard"
+  },
   "contextMenus": {
     "dependencies": ["permission:contextMenus"],
     "contexts": ["blessed_extension"]
@@ -360,6 +363,30 @@
     "dependencies": ["permission:documentScan"],
     "contexts": ["blessed_extension"]
   },
+  "documentScan.getScannerList": {
+    "channel": "dev"
+  },
+  "documentScan.openScanner": {
+    "channel": "dev"
+  },
+  "documentScan.getOptionGroups": {
+    "channel": "dev"
+  },
+  "documentScan.closeScanner": {
+    "channel": "dev"
+  },
+  "documentScan.setOptions": {
+    "channel": "dev"
+  },
+  "documentScan.startScan": {
+    "channel": "dev"
+  },
+  "documentScan.cancelScan": {
+    "channel": "dev"
+  },
+  "documentScan.readScanData": {
+    "channel": "dev"
+  },
   "dom": {
     "channel": "stable",
     "contexts": ["blessed_extension", "content_script"]
@@ -399,6 +426,10 @@
   },
   "enterprise.deviceAttributes": {
     "dependencies": ["permission:enterprise.deviceAttributes"],
+    "contexts": ["blessed_extension"]
+  },
+  "enterprise.kioskInput": {
+    "dependencies": ["permission:enterprise.kioskInput"],
     "contexts": ["blessed_extension"]
   },
   "enterprise.networkingAttributes": {
@@ -743,11 +774,13 @@
   },
   "printing": {
     "dependencies": ["permission:printing"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension"],
+    "required_buildflags": ["use_cups"]
   },
   "printingMetrics": {
     "dependencies": ["permission:printingMetrics"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension"],
+    "required_buildflags": ["use_cups"]
   },
   "privacy": {
     "dependencies": ["permission:privacy"],
@@ -840,15 +873,6 @@
     "dependencies": ["permission:sidePanel"],
     "contexts": ["blessed_extension"]
   },
-  "sidePanel.open": [{
-    "feature_flag": "ApiSidePanelOpen"
-  }, {
-    "allowlist": [
-      // Note: this list is also enforced in the sidePanel.open() implementation
-      // as a sanity check.
-      "3CEFE7915CDBD48D769E214807ACAA51581724A0"  // https://crbug.com/1446731
-    ]
-  }],
   "smartCardProviderPrivate": {
     "dependencies": ["permission:smartCardProviderPrivate"],
     "contexts": ["blessed_extension"]

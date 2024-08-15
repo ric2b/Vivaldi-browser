@@ -26,6 +26,8 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
   readonly rootTarget: SDK.Target.Target;
   private tracingManager: TraceEngine.TracingManager.TracingManager|null;
   private performanceModel: PerformanceModel;
+  #collectedEvents: TraceEngine.Types.TraceEvents.TraceEventData[] = [];
+  #recordingStartTime: number|null = null;
   private readonly client: Client;
   private readonly tracingModel: TraceEngine.Legacy.TracingModel;
   // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
@@ -65,7 +67,6 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
     // primaryPageTarget, as that is the one we have to invoke tracing against.
     this.tracingManager = rootTarget.model(TraceEngine.TracingManager.TracingManager);
     this.performanceModel = new PerformanceModel();
-    this.performanceModel.setMainTarget(rootTarget);
     this.client = client;
     this.tracingModel = new TraceEngine.Legacy.TracingModel();
   }
@@ -103,6 +104,7 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
       disabledByDefault('lighthouse'),
       'v8.execute',
       'v8',
+      'cppgc',
     ];
 
     if (Root.Runtime.experiments.isEnabled('timelineV8RuntimeCallStats') && options.enableJSSampling) {
@@ -123,7 +125,7 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
       categoriesArray.push(disabledByDefault('devtools.screenshot'));
     }
 
-    this.performanceModel.setRecordStartTime(Date.now());
+    this.#recordingStartTime = Date.now();
     const response = await this.startRecordingWithCategories(categoriesArray.join(','));
     if (response.getError()) {
       await this.waitForTracingToStop(false);
@@ -170,6 +172,8 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
   }
 
   traceEventsCollected(events: TraceEngine.TracingManager.EventPayload[]): void {
+    this.#collectedEvents =
+        this.#collectedEvents.concat(events as unknown as TraceEngine.Types.TraceEvents.TraceEventData[]);
     this.tracingModel.addEvents(events);
   }
 
@@ -189,7 +193,9 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
   private async finalizeTrace(): Promise<void> {
     await SDK.TargetManager.TargetManager.instance().resumeAllTargets();
     this.tracingModel.tracingComplete();
-    await this.client.loadingComplete(this.tracingModel, /* exclusiveFilter= */ null, /* isCpuProfile= */ false);
+    await this.client.loadingComplete(
+        this.#collectedEvents, this.tracingModel, /* exclusiveFilter= */ null, /* isCpuProfile= */ false,
+        this.#recordingStartTime);
     this.client.loadingCompleteForTest();
   }
 
@@ -208,9 +214,10 @@ export interface Client {
   processingStarted(): void;
   loadingProgress(progress?: number): void;
   loadingComplete(
+      collectedEvents: TraceEngine.Types.TraceEvents.TraceEventData[],
       tracingModel: TraceEngine.Legacy.TracingModel|null,
-      exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null,
-      isCpuProfile: boolean): Promise<void>;
+      exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null, isCpuProfile: boolean,
+      recordingStartTime: number|null): Promise<void>;
   loadingCompleteForTest(): void;
 }
 export interface RecordingOptions {

@@ -4,7 +4,7 @@ import("//build/config/ios/asset_catalog.gni")
 
 group("resources") {
   deps = [
-    ":vivaldi_overflow_menu_site_info",
+    ":vivaldi_overflow_menu_share",
     ":vivaldi_overflow_menu_recent_tabs",
     ":vivaldi_overflow_menu_passwords",
     ":vivaldi_overflow_menu_settings",
@@ -25,6 +25,7 @@ group("resources") {
     ":vivaldi_overflow_mobile_site",
     ":vivaldi_overflow_find_in_page",
     ":vivaldi_overflow_zoom",
+    ":vivaldi_overflow_menu_site_info",
 
     ":vivaldi_overflow_bookmarks",
     ":vivaldi_overflow_notes",
@@ -38,11 +39,11 @@ group("resources") {
 }
 
 # Top common section
-imageset("vivaldi_overflow_menu_site_info") {
+imageset("vivaldi_overflow_menu_share") {
   sources = [
-    "vivaldi_overflow_menu_site_info.imageset/Contents.json",
-    "vivaldi_overflow_menu_site_info.imageset/vivaldi_overflow_menu_site_info.pdf",
-    "vivaldi_overflow_menu_site_info.imageset/vivaldi_overflow_menu_site_info_dark.pdf",
+    "vivaldi_overflow_menu_share.imageset/Contents.json",
+    "vivaldi_overflow_menu_share.imageset/vivaldi_overflow_menu_share.pdf",
+    "vivaldi_overflow_menu_share.imageset/vivaldi_overflow_menu_share_dark.pdf",
   ]
 }
 
@@ -191,6 +192,14 @@ imageset("vivaldi_overflow_zoom") {
     "vivaldi_overflow_zoom.imageset/Contents.json",
     "vivaldi_overflow_zoom.imageset/vivaldi_overflow_zoom.pdf",
     "vivaldi_overflow_zoom.imageset/vivaldi_overflow_zoom_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_menu_site_info") {
+  sources = [
+    "vivaldi_overflow_menu_site_info.imageset/Contents.json",
+    "vivaldi_overflow_menu_site_info.imageset/vivaldi_overflow_menu_site_info.pdf",
+    "vivaldi_overflow_menu_site_info.imageset/vivaldi_overflow_menu_site_info_dark.pdf",
   ]
 }
 

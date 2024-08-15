@@ -7,10 +7,10 @@
 
 #include <cstdint>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
 #include "build/build_config.h"
+#include "partition_alloc/page_allocator_constants.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
 
 namespace partition_alloc {
 
@@ -117,10 +117,12 @@ AslrMask(uintptr_t bits) {
 
       // Restrict the address range on Android to avoid a large performance
       // regression in single-process WebViews. See https://crbug.com/837640.
-      PA_ALWAYS_INLINE constexpr uintptr_t ASLRMask() {
+      PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR uintptr_t
+      ASLRMask() {
         return AslrMask(30);
       }
-      PA_ALWAYS_INLINE constexpr uintptr_t ASLROffset() {
+      PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR uintptr_t
+      ASLROffset() {
         return AslrAddress(0x20000000ULL);
       }
 

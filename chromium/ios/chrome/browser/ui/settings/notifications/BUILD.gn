@@ -16,15 +16,22 @@ source_set("notifications") {
     "//base",
     "//components/prefs",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/push_notification:push_notification_client",
+    "//ios/chrome/browser/push_notification/model:browser_state_service",
+    "//ios/chrome/browser/push_notification/model:browser_state_service_factory",
+    "//ios/chrome/browser/push_notification/model:push_notification_client",
+    "//ios/chrome/browser/push_notification/model:push_notification_service",
+    "//ios/chrome/browser/shared/coordinator/alert",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/public/features:features",
     "//ios/chrome/browser/shared/ui/list_model",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/table_view:utils",
     "//ios/chrome/browser/shared/ui/table_view/cells",
-    "//ios/chrome/browser/signin",
+    "//ios/chrome/browser/signin/model",
+    "//ios/chrome/browser/ui/push_notification:presenters",
     "//ios/chrome/browser/ui/settings/notifications/tracking_price",
     "//ios/chrome/common/ui/colors",
     "//ui/base",
@@ -42,6 +49,7 @@ source_set("notifications_ui") {
   deps = [
     ":constants",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/shared/public/features:features",
     "//ios/chrome/browser/shared/ui/table_view",
     "//ios/chrome/browser/shared/ui/table_view:utils",
     "//ios/chrome/browser/ui/settings:settings_root",
@@ -60,19 +68,36 @@ source_set("utils") {
   sources = [
     "notifications_settings_observer.h",
     "notifications_settings_observer.mm",
-    "notifications_settings_util.h",
-    "notifications_settings_util.mm",
   ]
   deps = [
     "//components/commerce/core:pref_names",
     "//components/prefs",
     "//components/prefs/ios:ios",
-    "//ios/chrome/browser/push_notification:push_notification_client",
-    "//ios/chrome/browser/push_notification:push_notification_service",
+    "//ios/chrome/browser/push_notification/model:constants",
+    "//ios/chrome/browser/push_notification/model:push_notification_client",
+    "//ios/chrome/browser/push_notification/model:push_notification_service",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
   ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "notifications_settings_observer_unittest.mm" ]
+  deps = [
+    ":notifications_ui",
+    ":utils",
+    "//base/test:test_support",
+    "//components/commerce/core:pref_names",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//ios/chrome/browser/push_notification/model:constants",
+    "//ios/chrome/browser/push_notification/model:push_notification_client",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//third_party/ocmock",
+  ]
+  frameworks = [ "UIKit.framework" ]
 }
 
 source_set("eg2_tests") {

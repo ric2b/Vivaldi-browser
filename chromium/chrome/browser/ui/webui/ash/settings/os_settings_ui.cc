@@ -17,6 +17,7 @@
 #include "ash/webui/personalization_app/search/search.mojom.h"
 #include "ash/webui/personalization_app/search/search_handler.h"
 #include "base/metrics/histogram_functions.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_manager_factory.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
 #include "chrome/browser/nearby_sharing/nearby_receive_manager.h"
 #include "chrome/browser/nearby_sharing/nearby_share_settings.h"
@@ -47,7 +49,6 @@
 #include "chromeos/ash/services/auth_factor_config/in_process_instances.h"
 #include "chromeos/ash/services/cellular_setup/cellular_setup_impl.h"
 #include "chromeos/ash/services/cellular_setup/public/mojom/esim_manager.mojom.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
@@ -63,9 +64,13 @@
 #include "chrome/grit/settings_shared_resources_map.h"
 #endif
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chrome/browser/nearby_sharing/internal/icons/grit/nearby_share_internal_icons.h"
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
 namespace {
 
-class AppManagementDelegate : public AppManagementPageHandler::Delegate {
+class AppManagementDelegate : public AppManagementPageHandlerBase::Delegate {
  public:
   AppManagementDelegate() = default;
   ~AppManagementDelegate() override = default;
@@ -116,6 +121,21 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
       base::make_span(kSettingsSharedResources, kSettingsSharedResourcesSize));
 #endif
 
+  // Flag for using updated icons in search results and pages.
+  html_source->AddBoolean("isNameEnabled", ::features::IsNameEnabled());
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  html_source->AddResourcePath("nearby/nearby-share-internal-icons.html",
+                               IDR_NEARBY_SHARE_INTERNAL_ICONS);
+  html_source->AddResourcePath("nearby/nearby-share-internal-icons.m.js",
+                               IDR_NEARBY_SHARE_INTERNAL_ICONS_M_JS);
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+  // To use lottie, the worker-src CSP needs to be updated for the web ui that
+  // is using it. Since as of now there are only a couple of webuis using
+  // lottie animations, this update has to be performed manually. As the usage
+  // increases, set this as the default so manual override is no longer
+  // required.
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::WorkerSrc,
       "worker-src blob: chrome://resources 'self';");
@@ -307,11 +327,6 @@ void OSSettingsUI::BindInterface(
 
 void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<color_change_listener::mojom::PageHandler> receiver) {
-  if (!chromeos::features::IsJellyEnabled()) {
-    mojo::ReportBadMessage(
-        "Jelly not enabled: OSSettingsUI should not listen to color changes.");
-    return;
-  }
   color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
       web_ui()->GetWebContents(), std::move(receiver));
 }

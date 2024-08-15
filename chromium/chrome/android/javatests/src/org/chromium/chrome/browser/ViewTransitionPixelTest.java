@@ -26,12 +26,12 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Coordinates;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -426,6 +426,38 @@ public class ViewTransitionPixelTest {
 
         Bitmap newState = takeScreenshot();
         mRenderTestRule.compareForResult(newState, "incoming_dialog_element");
+
+        finishAnimations();
+    }
+
+    /**
+     * Test view transitions in a page wider than the initial containing block.
+     *
+     * <p>Tests that a view-transition fills the viewport when the fixed-containing-block is larger
+     * than the initial-containing-block. This happens when an element on the page horizontally
+     * overflows the initial-containing-block, increasing how much the page can be zoomed out.
+     */
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    // TODO(crbug.com/1453741): Fix test with CREATE_NEW_TAB_INITIALIZE_RENDERER.
+    @DisableFeatures(ChromeFeatureList.CREATE_NEW_TAB_INITIALIZE_RENDERER)
+    public void testPageWiderThanICB() throws Throwable {
+        String url = "/chrome/test/data/android/view_transition_wider_than_icb.html";
+        mActivityTestRule.startMainActivityWithURL(mTestServer.getURL(url));
+        mActivityTestRule.waitForActivityNativeInitializationComplete();
+
+        createTransitionAndWaitUntilDomUpdateDispatched();
+
+        // Start the animation. The "animation" simply displays the old transition for the full
+        // duration of the test. This test is interested in how the <dialog> element is positioned.
+        // Since that's in the end-state, skip straight to that.
+        startTransitionAnimation();
+        animateToEndState();
+        waitForFramePresented();
+
+        Bitmap newState = takeScreenshot();
+        mRenderTestRule.compareForResult(newState, "wider-than-icb");
 
         finishAnimations();
     }

@@ -16,6 +16,7 @@ cmake_minimum_required(VERSION 3.0)
 
 # libfuzzer needs clang
 SET(CMAKE_C_COMPILER "clang")
+SET(CMAKE_CXX_COMPILER "clang++")
 
 add_compile_definitions("CORPUS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/corpus")
 file(COPY corpus DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")

@@ -13,6 +13,7 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
+import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -21,6 +22,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.features.start_surface.StartSurface;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
@@ -37,7 +39,7 @@ import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperMa
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
-import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,42 +55,59 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     // Vivaldi
     private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
     private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
-    private boolean mTabStripAdded;
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
     protected LayerTitleCache mLayerTitleCache;
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
-     * @param host         A {@link LayoutManagerHost} instance.
+     *
+     * @param host A {@link LayoutManagerHost} instance.
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
      * @param startSurfaceSupplier Supplier for an interface to talk to the Grid Tab Switcher when
-     *         Start surface refactor is disabled. Used to create overviewLayout if it has value,
-     *         otherwise will use the accessibility overview layout.
+     *     Start surface refactor is disabled. Used to create overviewLayout if it has value,
+     *     otherwise will use the accessibility overview layout.
      * @param tabSwitcherSupplier Supplier for an interface to talk to the Grid Tab Switcher when
-     *         Start surface refactor is enabled. Used to create overviewLayout if it has value,
-     *         otherwise will use the accessibility overview layout.
+     *     Start surface refactor is enabled. Used to create overviewLayout if it has value,
+     *     otherwise will use the accessibility overview layout.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for top
-     *         controls.
+     *     controls.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      * @param delayedTabSwitcherCallable Callable to create GTS view if Start Surface refactor and
-     *         DeferCreateTabSwitcherLayout are enabled.
+     *     DeferCreateTabSwitcherLayout are enabled.
+     * @param hubLayoutDependencyHolder The dependency holder for creating {@link HubLayout}.
      */
-    public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
-            Supplier<StartSurface> startSurfaceSupplier, Supplier<TabSwitcher> tabSwitcherSupplier,
+    public LayoutManagerChromePhone(
+            LayoutManagerHost host,
+            ViewGroup contentContainer,
+            Supplier<StartSurface> startSurfaceSupplier,
+            Supplier<TabSwitcher> tabSwitcherSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
             Callable<ViewGroup> delayedTabSwitcherCallable,
+            HubLayoutDependencyHolder hubLayoutDependencyHolder,
             ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>  // Vivaldi
                     tabModelStartupInfoSupplier,  // Vivaldi
             ActivityLifecycleDispatcher lifecycleDispatcher, // Vivaldi
-            MultiInstanceManager multiInstanceManager,
-            DragAndDropDelegate dragAndDropDelegate, View toolbarContainerView, // Vivaldi
-            ViewStub tabHoverCardViewStub) { //vivaldi
-        super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
-                browserControlsStateProvider, tabContentManagerSupplier, topUiThemeColorProvider,
-                null, null, delayedTabSwitcherCallable);
+            MultiInstanceManager multiInstanceManager,  // Vivaldi
+            DragAndDropDelegate dragAndDropDelegate, // Vivaldi
+            View toolbarContainerView, //Vivaldi
+            ViewStub tabHoverCardViewStub, // Vivaldi
+            WindowAndroid windowAndroid, // Vivaldi
+            ToolbarManager toolbarManager) { //Vivaldi
+        super(
+                host,
+                contentContainer,
+                startSurfaceSupplier,
+                tabSwitcherSupplier,
+                browserControlsStateProvider,
+                tabContentManagerSupplier,
+                topUiThemeColorProvider,
+                null,
+                null,
+                delayedTabSwitcherCallable,
+                hubLayoutDependencyHolder);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -99,27 +118,21 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                             -> mLayerTitleCache,
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
                     dragAndDropDelegate, toolbarContainerView, tabHoverCardViewStub,
-                    tabContentManagerSupplier));
+                    tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
+                    toolbarManager));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
-
-        mTabStripAdded = false;
-        mPrefsListener = (sharedPrefs, key) -> {
-            if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)
-                    || VivaldiPreferences.ADDRESS_BAR_TO_BOTTOM.equals(key)) {
-                updateGlobalSceneOverlay();
-            }
-        };
-        ContextUtils.getAppSharedPreferences()
-                .registerOnSharedPreferenceChangeListener(mPrefsListener);
         updateGlobalSceneOverlay();
         // End Vivaldi
     }
 
     @Override
-    public void init(TabModelSelector selector, TabCreatorManager creator,
-            ControlContainer controlContainer, DynamicResourceLoader dynamicResourceLoader,
+    public void init(
+            TabModelSelector selector,
+            TabCreatorManager creator,
+            ControlContainer controlContainer,
+            DynamicResourceLoader dynamicResourceLoader,
             TopUiThemeColorProvider topUiColorProvider) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
@@ -172,7 +185,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             showOverview = false;
 
         if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
-                && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview) {
+                && getActiveLayoutType() != LayoutType.START_SURFACE
+                && showOverview) {
             // Since there will be no 'next' tab to display, switch to
             // overview mode when the animation is finished.
             if (getActiveLayoutType() == LayoutType.SIMPLE_ANIMATION) {
@@ -186,8 +200,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     @Override
     protected void tabCreating(int sourceId, boolean isIncognito) {
-        if (getActiveLayout() != null && !getActiveLayout().isStartingToHide()
-                && overlaysHandleTabCreating() && getActiveLayout().handlesTabCreating()) {
+        if (getActiveLayout() != null
+                && !getActiveLayout().isStartingToHide()
+                && overlaysHandleTabCreating()
+                && getActiveLayout().handlesTabCreating()) {
             // If the current layout in the foreground, let it handle the tab creation animation.
             // This check allows us to switch from the StackLayout to the SimpleAnimationLayout
             // smoothly.
@@ -212,7 +228,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     /** @return Whether the {@link SceneOverlay}s handle tab creation. */
     private boolean overlaysHandleTabCreating() {
         Layout layout = getActiveLayout();
-        if (layout == null || layout.getLayoutTabsToRender() == null
+        if (layout == null
+                || layout.getLayoutTabsToRender() == null
                 || layout.getLayoutTabsToRender().length != 1) {
             return false;
         }
@@ -220,7 +237,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
             if (mSceneOverlays.get(i).handlesTabCreating()) {
                 // Prevent animation from happening if the overlay handles creation.
-                startHiding(layout.getLayoutTabsToRender()[0].getId(), false);
+                startHiding();
                 doneHiding();
                 return true;
             }
@@ -230,12 +247,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     // Vivaldi: Update the {@link SceneOverlay} according to the tab strip setting.
     private void updateGlobalSceneOverlay() {
-            if(!mTabStripAdded) {
-                for (int i = 0; i < 2; i++) addSceneOverlay(mTabStrips.get(i));
-                if (getTabModelSelector() != null)
-                    tabModelSwitched(getTabModelSelector().isIncognitoSelected()); //!! TODO(jarle): CHECK IF THIS IS CORRECT
-                mTabStripAdded = true;
-            }
+        for (int i = 0; i < 2; i++) addSceneOverlay(mTabStrips.get(i));
+        if (getTabModelSelector() != null)
+            tabModelSwitched(getTabModelSelector().isIncognitoSelected());
     }
 
     // Vivaldi

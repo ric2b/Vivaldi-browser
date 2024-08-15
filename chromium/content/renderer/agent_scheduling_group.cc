@@ -7,6 +7,7 @@
 #include <map>
 #include <utility>
 
+#include "base/containers/map_util.h"
 #include "base/feature_list.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
@@ -163,6 +164,7 @@ AgentSchedulingGroup::AgentSchedulingGroup(
 AgentSchedulingGroup::~AgentSchedulingGroup() = default;
 
 bool AgentSchedulingGroup::OnMessageReceived(const IPC::Message& message) {
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
   DCHECK_NE(message.routing_id(), MSG_ROUTING_CONTROL);
 
   auto* listener = GetListener(message.routing_id());
@@ -170,6 +172,9 @@ bool AgentSchedulingGroup::OnMessageReceived(const IPC::Message& message) {
     return false;
 
   return listener->OnMessageReceived(message);
+#else
+  return false;
+#endif
 }
 
 void AgentSchedulingGroup::OnBadMessageReceived(const IPC::Message& message) {
@@ -191,6 +196,7 @@ void AgentSchedulingGroup::OnAssociatedInterfaceRequest(
                  agent_group_scheduler_->DefaultTaskRunner());
 }
 
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
 bool AgentSchedulingGroup::Send(IPC::Message* message) {
   std::unique_ptr<IPC::Message> msg(message);
 
@@ -208,35 +214,51 @@ bool AgentSchedulingGroup::Send(IPC::Message* message) {
   DCHECK(channel_);
   return channel_->Send(msg.release());
 }
+#endif
 
-void AgentSchedulingGroup::AddRoute(int32_t routing_id, Listener* listener) {
-  DCHECK(!listener_map_.Lookup(routing_id));
-  listener_map_.AddWithID(listener, routing_id);
-  render_thread_->AddRoute(routing_id, listener);
+void AgentSchedulingGroup::AddFrameRoute(
+    const blink::LocalFrameToken& frame_token,
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
+    int routing_id,
+#endif
+    RenderFrameImpl* render_frame,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  DCHECK(!base::Contains(listener_map_, frame_token));
+  listener_map_.insert({frame_token, render_frame});
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
+  DCHECK(!base::Contains(routing_id_map_, routing_id));
+  routing_id_map_.insert({routing_id, render_frame});
+  render_thread_->AddRoute(routing_id, render_frame);
+#endif
 
   // See warning in `GetAssociatedInterface`.
   // Replay any `GetAssociatedInterface` calls for this route.
-  auto range = pending_receivers_.equal_range(routing_id);
+  auto range = pending_receivers_.equal_range(frame_token);
   for (auto iter = range.first; iter != range.second; ++iter) {
     ReceiverData& data = iter->second;
-    listener->OnAssociatedInterfaceRequest(data.name,
-                                           data.receiver.PassHandle());
+    render_frame->OnAssociatedInterfaceRequest(data.name,
+                                               data.receiver.PassHandle());
   }
   pending_receivers_.erase(range.first, range.second);
-}
-
-void AgentSchedulingGroup::AddFrameRoute(
-    int32_t routing_id,
-    IPC::Listener* listener,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  AddRoute(routing_id, listener);
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
   render_thread_->AttachTaskRunnerToRoute(routing_id, std::move(task_runner));
+#endif
 }
 
-void AgentSchedulingGroup::RemoveRoute(int32_t routing_id) {
-  DCHECK(listener_map_.Lookup(routing_id));
-  listener_map_.Remove(routing_id);
+void AgentSchedulingGroup::RemoveFrameRoute(
+    const blink::LocalFrameToken& frame_token
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
+    ,
+    int routing_id
+#endif
+) {
+  DCHECK(base::Contains(listener_map_, frame_token));
+  listener_map_.erase(frame_token);
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
+  DCHECK(base::Contains(routing_id_map_, routing_id));
+  routing_id_map_.erase(routing_id);
   render_thread_->RemoveRoute(routing_id);
+#endif
 }
 
 void AgentSchedulingGroup::DidUnloadRenderFrame(
@@ -267,10 +289,10 @@ blink::WebView* AgentSchedulingGroup::CreateWebView(
 
   blink::WebView* web_view = blink::WebView::Create(
       new SelfOwnedWebViewClient(), params->hidden, params->is_prerendering,
-      params->type == mojom::ViewWidgetType::kPortal ? true : false,
+      /*is_inside_portal=*/false,
       params->type == mojom::ViewWidgetType::kFencedFrame
-          ? absl::make_optional(params->fenced_frame_mode)
-          : absl::nullopt,
+          ? std::make_optional(params->fenced_frame_mode)
+          : std::nullopt,
       /*compositing_enabled=*/true, params->never_composited,
       opener_frame ? opener_frame->View() : nullptr,
       std::move(params->blink_page_broadcast), agent_group_scheduler(),
@@ -282,6 +304,10 @@ blink::WebView* AgentSchedulingGroup::CreateWebView(
   web_view->SetRendererPreferences(params->renderer_preferences);
   web_view->SetWebPreferences(params->web_preferences);
   web_view->SetPageAttributionSupport(params->attribution_support);
+  web_view->SetColorProviders(params->color_provider_colors);
+
+  const bool is_for_nested_main_frame =
+      params->type != mojom::ViewWidgetType::kTopLevel;
 
   if (!local_main_frame) {
     // Create a remote main frame.
@@ -300,9 +326,7 @@ blink::WebView* AgentSchedulingGroup::CreateWebView(
     if (!local_params->previous_frame_token) {
       // Create a local non-provisional main frame.
       RenderFrameImpl::CreateMainFrame(
-          *this, web_view, opener_frame,
-          /*is_for_nested_main_frame=*/params->type !=
-              mojom::ViewWidgetType::kTopLevel,
+          *this, web_view, opener_frame, is_for_nested_main_frame,
           /*is_for_scalable_page=*/params->type !=
               mojom::ViewWidgetType::kFencedFrame,
           std::move(params->replication_state),
@@ -370,8 +394,8 @@ blink::WebView* AgentSchedulingGroup::CreateWebView(
           std::move(local_params->associated_interface_provider_remote),
           web_view, local_params->previous_frame_token,
           params->opener_frame_token,
-          /*parent_frame_token=*/absl::nullopt,
-          /*previous_sibling_frame_token=*/absl::nullopt,
+          /*parent_frame_token=*/std::nullopt,
+          /*previous_sibling_frame_token=*/std::nullopt,
           params->devtools_main_frame_token,
           blink::mojom::TreeScopeType::kDocument,
           std::move(params->replication_state),
@@ -379,7 +403,7 @@ blink::WebView* AgentSchedulingGroup::CreateWebView(
           /*frame_owner_properties=*/nullptr,
           local_params->is_on_initial_empty_document,
           local_params->document_token,
-          std::move(local_params->policy_container));
+          std::move(local_params->policy_container), is_for_nested_main_frame);
     }
   }
 
@@ -405,7 +429,7 @@ void AgentSchedulingGroup::CreateFrame(mojom::CreateFrameParamsPtr params) {
       std::move(params->widget_params),
       std::move(params->frame_owner_properties),
       params->is_on_initial_empty_document, params->document_token,
-      std::move(params->policy_container));
+      std::move(params->policy_container), params->is_for_nested_main_frame);
 }
 
 void AgentSchedulingGroup::CreateSharedStorageWorkletService(
@@ -428,12 +452,12 @@ void AgentSchedulingGroup::BindAssociatedInterfaces(
 }
 
 void AgentSchedulingGroup::GetRoute(
-    int32_t routing_id,
+    const blink::LocalFrameToken& frame_token,
     mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
         receiver) {
   DCHECK(receiver.is_valid());
   associated_interface_provider_receivers_.Add(
-      this, std::move(receiver), routing_id,
+      this, std::move(receiver), frame_token,
       agent_group_scheduler_->DefaultTaskRunner());
 }
 
@@ -441,10 +465,10 @@ void AgentSchedulingGroup::GetAssociatedInterface(
     const std::string& name,
     mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
         receiver) {
-  int32_t routing_id =
+  const auto& frame_token =
       associated_interface_provider_receivers_.current_context();
 
-  if (auto* listener = GetListener(routing_id)) {
+  if (auto* listener = GetListener(frame_token)) {
     listener->OnAssociatedInterfaceRequest(name, receiver.PassHandle());
   } else {
     // THIS IS UNSAFE!
@@ -453,15 +477,20 @@ void AgentSchedulingGroup::GetAssociatedInterface(
     // broken even after the corresponding `AddRoute` happens. Browser should
     // avoid calling this before the corresponding `AddRoute`, but this is a
     // short term workaround until that happens.
-    pending_receivers_.emplace(routing_id,
+    pending_receivers_.emplace(frame_token,
                                ReceiverData(name, std::move(receiver)));
   }
 }
 
-Listener* AgentSchedulingGroup::GetListener(int32_t routing_id) {
-  DCHECK_NE(routing_id, MSG_ROUTING_CONTROL);
-
-  return listener_map_.Lookup(routing_id);
+RenderFrameImpl* AgentSchedulingGroup::GetListener(
+    const blink::LocalFrameToken& frame_token) {
+  return base::FindPtrOrNull(listener_map_, frame_token);
 }
+
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
+RenderFrameImpl* AgentSchedulingGroup::GetListener(int32_t routing_id) {
+  return base::FindPtrOrNull(routing_id_map_, routing_id);
+}
+#endif
 
 }  // namespace content

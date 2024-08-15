@@ -1075,7 +1075,7 @@ class MockDelegatedInkPointRenderer
 
  private:
   mojo::Receiver<gfx::mojom::DelegatedInkPointRenderer> receiver_;
-  absl::optional<gfx::DelegatedInkPoint> delegated_ink_point_;
+  std::optional<gfx::DelegatedInkPoint> delegated_ink_point_;
   bool prediction_reset_ = false;
 };
 
@@ -1552,6 +1552,7 @@ TEST_P(DelegatedInkPointTest, MAYBE_ForwardPointsToChildFrame) {
   // Reset's the hit test result on the root so that we don't crash on
   // destruction.
   rwhier()->OnRenderWidgetHostViewBaseDestroyed(child.view.get());
+  view_root_->GetCursorManager()->ViewBeingDestroyed(child.view.get());
 }
 
 #endif  // defined(USE_AURA)

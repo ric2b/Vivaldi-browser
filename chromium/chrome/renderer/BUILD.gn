@@ -119,10 +119,10 @@ static_library("renderer") {
 
   if (enable_bound_session_credentials) {
     sources += [
+      "bound_session_credentials/bound_session_request_throttled_handler_renderer_impl.cc",
+      "bound_session_credentials/bound_session_request_throttled_handler_renderer_impl.h",
       "bound_session_credentials/bound_session_request_throttled_in_renderer_manager.cc",
       "bound_session_credentials/bound_session_request_throttled_in_renderer_manager.h",
-      "bound_session_credentials/bound_session_request_throttled_listener_renderer_impl.cc",
-      "bound_session_credentials/bound_session_request_throttled_listener_renderer_impl.h",
     ]
   }
 
@@ -143,12 +143,13 @@ static_library("renderer") {
     "//chrome/common/cart:mojo_bindings",
     "//chrome/common/net",
     "//chrome/common/search:mojo_bindings",
-    "//chrome/renderer/companion/visual_search",
+    "//chrome/renderer/companion/visual_query",
     "//chrome/services/speech/buildflags",
     "//components/autofill/content/renderer",
     "//components/autofill/core/common:features",
     "//components/base32",
     "//components/cdm/renderer",
+    "//components/commerce/content/renderer",
     "//components/commerce/core:commerce_heuristics_data",
     "//components/commerce/core:feature_list",
     "//components/commerce/core:heuristics_provider",
@@ -158,9 +159,12 @@ static_library("renderer") {
     "//components/content_settings/renderer",
     "//components/continuous_search/renderer",
     "//components/dom_distiller/content/renderer",
+    "//components/facilitated_payments/content/renderer",
+    "//components/facilitated_payments/core/features",
     "//components/feed:buildflags",
     "//components/feed:feature_list",
     "//components/feed/content/renderer:feed_renderer",
+    "//components/google/core/common",
     "//components/heap_profiling/in_process",
     "//components/history_clusters/core",
     "//components/language/core/common",
@@ -290,11 +294,8 @@ static_library("renderer") {
     deps += [
       "//components/pdf/common",
       "//components/pdf/renderer",
+      "//pdf:features",
     ]
-
-    if (is_linux || is_chromeos) {
-      deps += [ "//pdf:font_table_linux" ]
-    }
   }
 
   if (is_chromeos_ash) {
@@ -355,6 +356,7 @@ static_library("renderer") {
     ]
     deps += [
       "//chrome/common/extensions/api",
+      "//chrome/renderer/controlled_frame",
       "//components/guest_view/renderer",
       "//extensions:extensions_resources",
       "//extensions/common:mojom",
@@ -448,7 +450,10 @@ static_library("renderer") {
       "net/page_auto_fetcher_helper_android.h",
       "sandbox_status_extension_android.cc",
       "sandbox_status_extension_android.h",
+      "wallet/boarding_pass_extractor.cc",
+      "wallet/boarding_pass_extractor.h",
     ]
+    deps += [ "//chrome/common/wallet:mojo_bindings" ]
   }
 
   if (is_chromeos_ash) {

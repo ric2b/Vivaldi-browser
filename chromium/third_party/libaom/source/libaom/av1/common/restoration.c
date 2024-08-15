@@ -90,7 +90,7 @@ void av1_free_restoration_struct(RestorationInfo *rst_info) {
 // Index 1 corresponds to r[1], e[1]
 int sgrproj_mtable[SGRPROJ_PARAMS][2];
 
-static void GenSgrprojVtable() {
+static void GenSgrprojVtable(void) {
   for (int i = 0; i < SGRPROJ_PARAMS; ++i) {
     const sgr_params_type *const params = &av1_sgr_params[i];
     for (int j = 0; j < 2; ++j) {
@@ -109,7 +109,7 @@ static void GenSgrprojVtable() {
 }
 #endif
 
-void av1_loop_restoration_precal() {
+void av1_loop_restoration_precal(void) {
 #if 0
   GenSgrprojVtable();
 #endif
@@ -384,11 +384,13 @@ static void wiener_filter_stripe(const RestorationUnitInfo *rui,
                                  int stripe_width, int stripe_height,
                                  int procunit_width, const uint8_t *src,
                                  int src_stride, uint8_t *dst, int dst_stride,
-                                 int32_t *tmpbuf, int bit_depth) {
+                                 int32_t *tmpbuf, int bit_depth,
+                                 struct aom_internal_error_info *error_info) {
   (void)tmpbuf;
   (void)bit_depth;
+  (void)error_info;
   assert(bit_depth == 8);
-  const ConvolveParams conv_params = get_conv_params_wiener(8);
+  const WienerConvolveParams conv_params = get_conv_params_wiener(8);
 
   for (int j = 0; j < stripe_width; j += procunit_width) {
     int w = AOMMIN(procunit_width, (stripe_width - j + 15) & ~15);
@@ -852,19 +854,18 @@ int av1_selfguided_restoration_c(const uint8_t *dgd8, int width, int height,
   return 0;
 }
 
-void av1_apply_selfguided_restoration_c(const uint8_t *dat8, int width,
-                                        int height, int stride, int eps,
-                                        const int *xqd, uint8_t *dst8,
-                                        int dst_stride, int32_t *tmpbuf,
-                                        int bit_depth, int highbd) {
+int av1_apply_selfguided_restoration_c(const uint8_t *dat8, int width,
+                                       int height, int stride, int eps,
+                                       const int *xqd, uint8_t *dst8,
+                                       int dst_stride, int32_t *tmpbuf,
+                                       int bit_depth, int highbd) {
   int32_t *flt0 = tmpbuf;
   int32_t *flt1 = flt0 + RESTORATION_UNITPELS_MAX;
   assert(width * height <= RESTORATION_UNITPELS_MAX);
 
   const int ret = av1_selfguided_restoration_c(
       dat8, width, height, stride, flt0, flt1, width, eps, bit_depth, highbd);
-  (void)ret;
-  assert(!ret);
+  if (ret != 0) return ret;
   const sgr_params_type *const params = &av1_sgr_params[eps];
   int xq[2];
   av1_decode_xq(xqd, xq, params);
@@ -891,33 +892,40 @@ void av1_apply_selfguided_restoration_c(const uint8_t *dat8, int width,
         *dst8ij = (uint8_t)out;
     }
   }
+  return 0;
 }
 
 static void sgrproj_filter_stripe(const RestorationUnitInfo *rui,
                                   int stripe_width, int stripe_height,
                                   int procunit_width, const uint8_t *src,
                                   int src_stride, uint8_t *dst, int dst_stride,
-                                  int32_t *tmpbuf, int bit_depth) {
+                                  int32_t *tmpbuf, int bit_depth,
+                                  struct aom_internal_error_info *error_info) {
   (void)bit_depth;
   assert(bit_depth == 8);
 
   for (int j = 0; j < stripe_width; j += procunit_width) {
     int w = AOMMIN(procunit_width, stripe_width - j);
-    av1_apply_selfguided_restoration(
-        src + j, w, stripe_height, src_stride, rui->sgrproj_info.ep,
-        rui->sgrproj_info.xqd, dst + j, dst_stride, tmpbuf, bit_depth, 0);
+    if (av1_apply_selfguided_restoration(
+            src + j, w, stripe_height, src_stride, rui->sgrproj_info.ep,
+            rui->sgrproj_info.xqd, dst + j, dst_stride, tmpbuf, bit_depth,
+            0) != 0) {
+      aom_internal_error(
+          error_info, AOM_CODEC_MEM_ERROR,
+          "Error allocating buffer in av1_apply_selfguided_restoration");
+    }
   }
 }
 
 #if CONFIG_AV1_HIGHBITDEPTH
-static void wiener_filter_stripe_highbd(const RestorationUnitInfo *rui,
-                                        int stripe_width, int stripe_height,
-                                        int procunit_width, const uint8_t *src8,
-                                        int src_stride, uint8_t *dst8,
-                                        int dst_stride, int32_t *tmpbuf,
-                                        int bit_depth) {
+static void wiener_filter_stripe_highbd(
+    const RestorationUnitInfo *rui, int stripe_width, int stripe_height,
+    int procunit_width, const uint8_t *src8, int src_stride, uint8_t *dst8,
+    int dst_stride, int32_t *tmpbuf, int bit_depth,
+    struct aom_internal_error_info *error_info) {
   (void)tmpbuf;
-  const ConvolveParams conv_params = get_conv_params_wiener(bit_depth);
+  (void)error_info;
+  const WienerConvolveParams conv_params = get_conv_params_wiener(bit_depth);
 
   for (int j = 0; j < stripe_width; j += procunit_width) {
     int w = AOMMIN(procunit_width, (stripe_width - j + 15) & ~15);
@@ -930,17 +938,21 @@ static void wiener_filter_stripe_highbd(const RestorationUnitInfo *rui,
   }
 }
 
-static void sgrproj_filter_stripe_highbd(const RestorationUnitInfo *rui,
-                                         int stripe_width, int stripe_height,
-                                         int procunit_width,
-                                         const uint8_t *src8, int src_stride,
-                                         uint8_t *dst8, int dst_stride,
-                                         int32_t *tmpbuf, int bit_depth) {
+static void sgrproj_filter_stripe_highbd(
+    const RestorationUnitInfo *rui, int stripe_width, int stripe_height,
+    int procunit_width, const uint8_t *src8, int src_stride, uint8_t *dst8,
+    int dst_stride, int32_t *tmpbuf, int bit_depth,
+    struct aom_internal_error_info *error_info) {
   for (int j = 0; j < stripe_width; j += procunit_width) {
     int w = AOMMIN(procunit_width, stripe_width - j);
-    av1_apply_selfguided_restoration(
-        src8 + j, w, stripe_height, src_stride, rui->sgrproj_info.ep,
-        rui->sgrproj_info.xqd, dst8 + j, dst_stride, tmpbuf, bit_depth, 1);
+    if (av1_apply_selfguided_restoration(
+            src8 + j, w, stripe_height, src_stride, rui->sgrproj_info.ep,
+            rui->sgrproj_info.xqd, dst8 + j, dst_stride, tmpbuf, bit_depth,
+            1) != 0) {
+      aom_internal_error(
+          error_info, AOM_CODEC_MEM_ERROR,
+          "Error allocating buffer in av1_apply_selfguided_restoration");
+    }
   }
 }
 #endif  // CONFIG_AV1_HIGHBITDEPTH
@@ -949,7 +961,8 @@ typedef void (*stripe_filter_fun)(const RestorationUnitInfo *rui,
                                   int stripe_width, int stripe_height,
                                   int procunit_width, const uint8_t *src,
                                   int src_stride, uint8_t *dst, int dst_stride,
-                                  int32_t *tmpbuf, int bit_depth);
+                                  int32_t *tmpbuf, int bit_depth,
+                                  struct aom_internal_error_info *error_info);
 
 #if CONFIG_AV1_HIGHBITDEPTH
 #define NUM_STRIPE_FILTERS 4
@@ -965,14 +978,12 @@ static const stripe_filter_fun stripe_filters[NUM_STRIPE_FILTERS] = {
 #endif  // CONFIG_AV1_HIGHBITDEPTH
 
 // Filter one restoration unit
-void av1_loop_restoration_filter_unit(const RestorationTileLimits *limits,
-                                      const RestorationUnitInfo *rui,
-                                      const RestorationStripeBoundaries *rsb,
-                                      RestorationLineBuffers *rlbs, int plane_w,
-                                      int plane_h, int ss_x, int ss_y,
-                                      int highbd, int bit_depth, uint8_t *data8,
-                                      int stride, uint8_t *dst8, int dst_stride,
-                                      int32_t *tmpbuf, int optimized_lr) {
+void av1_loop_restoration_filter_unit(
+    const RestorationTileLimits *limits, const RestorationUnitInfo *rui,
+    const RestorationStripeBoundaries *rsb, RestorationLineBuffers *rlbs,
+    int plane_w, int plane_h, int ss_x, int ss_y, int highbd, int bit_depth,
+    uint8_t *data8, int stride, uint8_t *dst8, int dst_stride, int32_t *tmpbuf,
+    int optimized_lr, struct aom_internal_error_info *error_info) {
   RestorationType unit_rtype = rui->restoration_type;
 
   int unit_h = limits->v_end - limits->v_start;
@@ -1024,7 +1035,8 @@ void av1_loop_restoration_filter_unit(const RestorationTileLimits *limits,
                                      copy_below, optimized_lr);
 
     stripe_filter(rui, unit_w, h, procunit_width, data8_tl + i * stride, stride,
-                  dst8_tl + i * dst_stride, dst_stride, tmpbuf, bit_depth);
+                  dst8_tl + i * dst_stride, dst_stride, tmpbuf, bit_depth,
+                  error_info);
 
     restore_processing_stripe_boundary(&remaining_stripes, rlbs, highbd, h,
                                        data8, stride, copy_above, copy_below,
@@ -1036,7 +1048,8 @@ void av1_loop_restoration_filter_unit(const RestorationTileLimits *limits,
 
 static void filter_frame_on_unit(const RestorationTileLimits *limits,
                                  int rest_unit_idx, void *priv, int32_t *tmpbuf,
-                                 RestorationLineBuffers *rlbs) {
+                                 RestorationLineBuffers *rlbs,
+                                 struct aom_internal_error_info *error_info) {
   FilterFrameCtxt *ctxt = (FilterFrameCtxt *)priv;
   const RestorationInfo *rsi = ctxt->rsi;
 
@@ -1044,7 +1057,7 @@ static void filter_frame_on_unit(const RestorationTileLimits *limits,
       limits, &rsi->unit_info[rest_unit_idx], &rsi->boundaries, rlbs,
       ctxt->plane_w, ctxt->plane_h, ctxt->ss_x, ctxt->ss_y, ctxt->highbd,
       ctxt->bit_depth, ctxt->data8, ctxt->data_stride, ctxt->dst8,
-      ctxt->dst_stride, tmpbuf, rsi->optimized_lr);
+      ctxt->dst_stride, tmpbuf, rsi->optimized_lr, error_info);
 }
 
 void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
@@ -1155,9 +1168,6 @@ void av1_foreach_rest_unit_in_row(
     int32_t *tmpbuf, RestorationLineBuffers *rlbs, sync_read_fn_t on_sync_read,
     sync_write_fn_t on_sync_write, struct AV1LrSyncData *const lr_sync,
     struct aom_internal_error_info *error_info) {
-  // TODO(aomedia:3276): Pass error_info to the low-level functions as required
-  // in future to handle error propagation.
-  (void)error_info;
   const int ext_size = unit_size * 3 / 2;
   int x0 = 0, j = 0;
   while (x0 < plane_w) {
@@ -1190,7 +1200,7 @@ void av1_foreach_rest_unit_in_row(
     }
 #endif
 
-    on_rest_unit(limits, unit_idx, priv, tmpbuf, rlbs);
+    on_rest_unit(limits, unit_idx, priv, tmpbuf, rlbs, error_info);
 
     on_sync_write(lr_sync, row_number, j, hnum_rest_units, plane);
 

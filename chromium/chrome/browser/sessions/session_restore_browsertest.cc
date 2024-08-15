@@ -125,6 +125,12 @@
 #include "ui/aura/window.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "base/json/json_reader.h"
+#include "chrome/browser/web_applications/test/web_app_test_observers.h"
+#include "chrome/browser/web_applications/web_app_id_constants.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 using sessions::ContentTestHelper;
 using sessions::SerializedNavigationEntry;
 using sessions::SerializedNavigationEntryTestHelper;
@@ -983,7 +989,7 @@ namespace {
 
 // Groups the tabs in |model| according to |specified_groups|.
 void CreateTabGroups(TabStripModel* model,
-                     base::span<const absl::optional<int>> specified_groups) {
+                     base::span<const std::optional<int>> specified_groups) {
   ASSERT_TRUE(model->SupportsTabGroups());
   ASSERT_EQ(model->count(), static_cast<int>(specified_groups.size()));
 
@@ -991,8 +997,9 @@ void CreateTabGroups(TabStripModel* model,
   base::flat_map<int, tab_groups::TabGroupId> group_map;
 
   for (int i = 0; i < model->count(); ++i) {
-    if (specified_groups[i] == absl::nullopt)
+    if (specified_groups[i] == std::nullopt) {
       continue;
+    }
 
     const int specified_group = specified_groups[i].value();
     auto match = group_map.find(specified_group);
@@ -1014,7 +1021,7 @@ void CreateTabGroups(TabStripModel* model,
 // Checks that the grouping of tabs in |model| is equivalent to that specified
 // in |specified_groups| up to relabeling of the group IDs.
 void CheckTabGrouping(TabStripModel* model,
-                      base::span<const absl::optional<int>> specified_groups) {
+                      base::span<const std::optional<int>> specified_groups) {
   ASSERT_EQ(model->count(), static_cast<int>(specified_groups.size()));
 
   // Maps |specified_groups| IDs to actual group IDs in |model|.
@@ -1023,8 +1030,8 @@ void CheckTabGrouping(TabStripModel* model,
   for (int i = 0; i < model->count(); ++i) {
     SCOPED_TRACE(i);
 
-    const absl::optional<int> specified_group = specified_groups[i];
-    const absl::optional<tab_groups::TabGroupId> actual_group =
+    const std::optional<int> specified_group = specified_groups[i];
+    const std::optional<tab_groups::TabGroupId> actual_group =
         model->GetTabGroupForTab(i);
 
     // The tab should be grouped iff it's grouped in |specified_groups|.
@@ -1043,9 +1050,9 @@ void CheckTabGrouping(TabStripModel* model,
 }
 
 // Returns the optional group ID for each tab in a vector.
-std::vector<absl::optional<tab_groups::TabGroupId>> GetTabGroups(
+std::vector<std::optional<tab_groups::TabGroupId>> GetTabGroups(
     const TabStripModel* model) {
-  std::vector<absl::optional<tab_groups::TabGroupId>> result(model->count());
+  std::vector<std::optional<tab_groups::TabGroupId>> result(model->count());
   for (int i = 0; i < model->count(); ++i)
     result[i] = model->GetTabGroupForTab(i);
   return result;
@@ -1084,8 +1091,8 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest, TabsWithGroups) {
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   constexpr int kNumTabs = 6;
-  const std::array<absl::optional<int>, kNumTabs> group_spec = {
-      0, 0, absl::nullopt, absl::nullopt, 1, 1};
+  const std::array<std::optional<int>, kNumTabs> group_spec = {
+      0, 0, std::nullopt, std::nullopt, 1, 1};
 
   // Open |kNumTabs| tabs.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl1()));
@@ -1137,9 +1144,9 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest, GroupMetadataRestored) {
   TabStripModel* const new_tsm = new_browser->tab_strip_model();
   ASSERT_EQ(5, new_tsm->count());
 
-  const absl::optional<tab_groups::TabGroupId> new_group1 =
+  const std::optional<tab_groups::TabGroupId> new_group1 =
       new_tsm->GetTabGroupForTab(0);
-  const absl::optional<tab_groups::TabGroupId> new_group2 =
+  const std::optional<tab_groups::TabGroupId> new_group2 =
       new_tsm->GetTabGroupForTab(2);
 
   ASSERT_TRUE(new_group1);
@@ -1164,7 +1171,7 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest,
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   constexpr int kNumTabs = 3;
-  const std::array<absl::optional<int>, kNumTabs> group_spec = {0, 0, 1};
+  const std::array<std::optional<int>, kNumTabs> group_spec = {0, 0, 1};
 
   // Open |kNumTabs| tabs.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl1()));
@@ -1202,7 +1209,7 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreTabGroupsTest, MAYBE_RecentlyClosedGroup) {
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
 
   constexpr int kNumTabs = 2;
-  const std::array<absl::optional<int>, kNumTabs> group_spec = {0, 0};
+  const std::array<std::optional<int>, kNumTabs> group_spec = {0, 0};
 
   // Open |kNumTabs| tabs.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl1()));
@@ -2140,7 +2147,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
     // the new one that we initiated. This would be true iff the DownloadManager
     // has exactly two downloads and they correspond to |first_download_url| and
     // |second_download_url|.
-    std::vector<download::DownloadItem*> downloads;
+    std::vector<raw_ptr<download::DownloadItem, VectorExperimental>> downloads;
     download_manager->GetAllDownloads(&downloads);
     ASSERT_EQ(2u, downloads.size());
     std::set<GURL> download_urls{downloads[0]->GetURL(),
@@ -2172,7 +2179,7 @@ class MultiBrowserObserver : public BrowserListObserver {
 
   // Note that the returned pointers might no longer be valid (because the
   // Browser objects were closed).
-  std::vector<Browser*> Wait() {
+  std::vector<raw_ptr<Browser, VectorExperimental>> Wait() {
     run_loop_.Run();
     return browsers_;
   }
@@ -2196,7 +2203,7 @@ class MultiBrowserObserver : public BrowserListObserver {
  private:
   size_t num_expected_;
   Event event_;
-  std::vector<Browser*> browsers_;
+  std::vector<raw_ptr<Browser, VectorExperimental>> browsers_;
   base::RunLoop run_loop_;
 };
 
@@ -2258,7 +2265,8 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAllBrowsers) {
   // Reopen the second profile and trigger session restore.
   MultiBrowserObserver added_observer(2, MultiBrowserObserver::Event::kAdded);
   profiles::SwitchToProfile(second_profile_path, false, {});
-  std::vector<Browser*> browsers = added_observer.Wait();
+  std::vector<raw_ptr<Browser, VectorExperimental>> browsers =
+      added_observer.Wait();
 
   // Verify that the correct URLs where restored.
   std::set<GURL> expected_urls;
@@ -2297,7 +2305,8 @@ class LoadOrderObserver : public BrowserListObserver,
 
   void WaitForAllTabsToStartLoading() { run_loop_.Run(); }
 
-  const std::vector<content::WebContents*>& web_contents() const {
+  const std::vector<raw_ptr<content::WebContents, VectorExperimental>>&
+  web_contents() const {
     return web_contents_;
   }
 
@@ -2339,7 +2348,7 @@ class LoadOrderObserver : public BrowserListObserver,
   base::RunLoop run_loop_;
   WebContentsCollection web_contents_collection_{this};
   // Ordered by load start order.
-  std::vector<content::WebContents*> web_contents_;
+  std::vector<raw_ptr<content::WebContents, VectorExperimental>> web_contents_;
 };
 
 // PRE_CorrectLoadingOrder is flaky on ChromeOS MSAN and Mac.
@@ -3087,8 +3096,17 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreWithIncompleteFileTest, LogsReadError) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
-                       SameDocumentNavigationWithNothingCommittedAfterRestore) {
+// TODO(crbug.com/1515868): Test fails on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_SameDocumentNavigationWithNothingCommittedAfterRestore \
+  DISABLED_SameDocumentNavigationWithNothingCommittedAfterRestore
+#else
+#define MAYBE_SameDocumentNavigationWithNothingCommittedAfterRestore \
+  SameDocumentNavigationWithNothingCommittedAfterRestore
+#endif
+IN_PROC_BROWSER_TEST_F(
+    SessionRestoreTest,
+    MAYBE_SameDocumentNavigationWithNothingCommittedAfterRestore) {
   // The test sets this closure before each navigation to /sometimes-slow in
   // order to control the response for that navigation.
   content::SlowHttpResponse::GotRequestCallback got_slow_request;
@@ -3169,9 +3187,17 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
   EXPECT_FALSE(nav_observer.was_same_document());
 }
 
+// TODO(crbug.com/1515868): Test fails on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_SameDocumentHistoryNavigationWithNothingCommittedAfterRestore \
+  DISABLED_SameDocumentHistoryNavigationWithNothingCommittedAfterRestore
+#else
+#define MAYBE_SameDocumentHistoryNavigationWithNothingCommittedAfterRestore \
+  SameDocumentHistoryNavigationWithNothingCommittedAfterRestore
+#endif
 IN_PROC_BROWSER_TEST_F(
     SessionRestoreTest,
-    SameDocumentHistoryNavigationWithNothingCommittedAfterRestore) {
+    MAYBE_SameDocumentHistoryNavigationWithNothingCommittedAfterRestore) {
   // The test sets this closure before each navigation to /sometimes-slow in
   // order to control the response for that navigation.
   content::SlowHttpResponse::GotRequestCallback got_slow_request;
@@ -3477,6 +3503,163 @@ IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, MAYBE_BasicAppSessionRestore) {
   EXPECT_EQ(browsers, 2);
   EXPECT_EQ(apps, 2);
 }
+
+// This feature is only available on ChromeOS.
+// This test opens an unclosable app and ensures that it is not restored.
+#if BUILDFLAG(IS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, DontTrackUnclosableApp) {
+  Profile* profile = browser()->profile();
+
+  // Make sure the app is unclosable when before it is launched to influence the
+  // tracking for session restore.
+  {
+    web_app::WebAppTestInstallObserver observer(profile);
+    observer.BeginListening({web_app::kCalculatorAppId});
+
+    base::Value::List web_app_settings = base::JSONReader::Read(R"([
+    {
+      "manifest_id": "https://calculator.apps.chrome/",
+      "run_on_os_login": "run_windowed",
+      "prevent_close_after_run_on_os_login": true
+    }
+    ])")
+                                             ->GetList()
+                                             .Clone();
+    profile->GetPrefs()->SetList(prefs::kWebAppSettings,
+                                 std::move(web_app_settings));
+
+    base::Value::List web_app_install_list = base::JSONReader::Read(R"([
+    {
+      "url": "https://calculator.apps.chrome/",
+      "default_launch_container": "window"
+    }
+    ])")
+                                                 ->GetList()
+                                                 .Clone();
+    profile->GetPrefs()->SetList(prefs::kWebAppInstallForceList,
+                                 std::move(web_app_install_list));
+
+    observer.Wait();
+  }
+
+  // Open a PWA.
+  Browser* app_browser =
+      web_app::LaunchWebAppBrowserAndWait(profile, web_app::kCalculatorAppId);
+
+  // Pretend to 'close the browser'.
+  // Just shutdown the services as we would if the browser is shutting down for
+  // real.
+  ShutdownServices(profile);
+
+  auto keep_alive = std::make_unique<ScopedKeepAlive>(
+      KeepAliveOrigin::SESSION_RESTORE, KeepAliveRestartOption::DISABLED);
+  auto profile_keep_alive = std::make_unique<ScopedProfileKeepAlive>(
+      profile, ProfileKeepAliveOrigin::kBrowserWindow);
+
+  // Remove unclosability setting. The browser should still not be restored
+  // because the app window was not tracked when the browser was closed.
+  profile->GetPrefs()->SetList(prefs::kWebAppSettings, base::Value::List());
+
+  // Now that SessionServices are off, we can close stuff to simulate a closure.
+  CloseBrowserSynchronously(app_browser);
+  CloseBrowserSynchronously(browser());
+
+  ASSERT_EQ(0u, BrowserList::GetInstance()->size());
+
+  // Now trigger a restore.
+  // We need to start up the services again before restoring.
+  StartupServices(profile);
+
+  SessionRestore::RestoreSession(profile, nullptr,
+                                 SessionRestore::SYNCHRONOUS |
+                                     SessionRestore::RESTORE_APPS |
+                                     SessionRestore::RESTORE_BROWSER,
+                                 {});
+
+  for (Browser* browser : *(BrowserList::GetInstance())) {
+    EXPECT_NE(browser->type(), Browser::Type::TYPE_APP);
+  }
+  EXPECT_EQ(1u, BrowserList::GetInstance()->size());
+
+  keep_alive.reset();
+  profile_keep_alive.reset();
+}
+
+IN_PROC_BROWSER_TEST_F(AppSessionRestoreTest, DontRestoreUnclosableApp) {
+  Profile* profile = browser()->profile();
+
+  {
+    web_app::WebAppTestInstallObserver observer(profile);
+    observer.BeginListening({web_app::kCalculatorAppId});
+
+    base::Value::List web_app_install_list = base::JSONReader::Read(R"([
+    {
+      "url": "https://calculator.apps.chrome/",
+      "default_launch_container": "window"
+    }
+    ])")
+                                                 ->GetList()
+                                                 .Clone();
+
+    profile->GetPrefs()->SetList(prefs::kWebAppInstallForceList,
+                                 std::move(web_app_install_list));
+
+    observer.Wait();
+  }
+
+  // Open a PWA.
+  Browser* app_browser =
+      web_app::LaunchWebAppBrowserAndWait(profile, web_app::kCalculatorAppId);
+
+  // Pretend to 'close the browser'.
+  // Just shutdown the services as we would if the browser is shutting down for
+  // real.
+  ShutdownServices(profile);
+
+  auto keep_alive = std::make_unique<ScopedKeepAlive>(
+      KeepAliveOrigin::SESSION_RESTORE, KeepAliveRestartOption::DISABLED);
+  auto profile_keep_alive = std::make_unique<ScopedProfileKeepAlive>(
+      profile, ProfileKeepAliveOrigin::kBrowserWindow);
+
+  // Now that SessionServices are off, we can close stuff to simulate a closure.
+  CloseBrowserSynchronously(app_browser);
+  CloseBrowserSynchronously(browser());
+
+  ASSERT_EQ(0u, BrowserList::GetInstance()->size());
+
+  // Now trigger a restore.
+  // We need to start up the services again before restoring.
+  StartupServices(profile);
+
+  {
+    base::Value::List web_app_settings = base::JSONReader::Read(R"([
+    {
+      "manifest_id": "https://calculator.apps.chrome/",
+      "run_on_os_login": "run_windowed",
+      "prevent_close_after_run_on_os_login": true
+    }
+    ])")
+                                             ->GetList()
+                                             .Clone();
+    profile->GetPrefs()->SetList(prefs::kWebAppSettings,
+                                 std::move(web_app_settings));
+  }
+
+  SessionRestore::RestoreSession(profile, nullptr,
+                                 SessionRestore::SYNCHRONOUS |
+                                     SessionRestore::RESTORE_APPS |
+                                     SessionRestore::RESTORE_BROWSER,
+                                 {});
+
+  for (Browser* browser : *(BrowserList::GetInstance())) {
+    EXPECT_NE(browser->type(), Browser::Type::TYPE_APP);
+  }
+  EXPECT_EQ(1u, BrowserList::GetInstance()->size());
+
+  keep_alive.reset();
+  profile_keep_alive.reset();
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // This is disabled on mac pending http://crbug.com/1194201
 #if BUILDFLAG(IS_MAC)

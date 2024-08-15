@@ -7,7 +7,7 @@
 
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
-#import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 
 // The cell that renders the speed dial URL items for layout style 'Large' and
 // 'Medium'
@@ -21,6 +21,7 @@
               layoutStyle:(VivaldiStartPageLayoutStyle)style;
 - (void)configureCellWithAttributes:(const FaviconAttributes*)attributes
                                item:(VivaldiSpeedDialItem*)item;
+- (void)setActivityIndicatorLoading:(BOOL)isLoading;
 - (void)configurePreview;
 
 @end

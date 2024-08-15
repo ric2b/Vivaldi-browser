@@ -73,45 +73,45 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
 
   ::vivaldi::BookmarkSorter::SortField sortField;
   switch (params_->properties.sort_field) {
-    case vivaldi::bookmark_context_menu::SORT_FIELD_NONE:
+    case vivaldi::bookmark_context_menu::SortField::kNone:
       sortField = ::vivaldi::BookmarkSorter::FIELD_NONE;
       break;
-    case vivaldi::bookmark_context_menu::SORT_FIELD_TITLE:
+    case vivaldi::bookmark_context_menu::SortField::kTitle:
       sortField = ::vivaldi::BookmarkSorter::FIELD_TITLE;
       break;
-    case vivaldi::bookmark_context_menu::SORT_FIELD_URL:
+    case vivaldi::bookmark_context_menu::SortField::kUrl:
       sortField = ::vivaldi::BookmarkSorter::FIELD_URL;
       break;
-    case vivaldi::bookmark_context_menu::SORT_FIELD_NICKNAME:
+    case vivaldi::bookmark_context_menu::SortField::kNickname:
       sortField = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
       break;
-    case vivaldi::bookmark_context_menu::SORT_FIELD_DESCRIPTION:
+    case vivaldi::bookmark_context_menu::SortField::kDescription:
       sortField = ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
       break;
-    case vivaldi::bookmark_context_menu::SORT_FIELD_DATEADDED:
+    case vivaldi::bookmark_context_menu::SortField::kDateadded:
       sortField = ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
       break;
   }
 
   ::vivaldi::BookmarkSorter::SortOrder sortOrder;
   switch (params_->properties.sort_order) {
-    case vivaldi::bookmark_context_menu::SORT_ORDER_NONE:
+    case vivaldi::bookmark_context_menu::SortOrder::kNone:
       sortOrder = ::vivaldi::BookmarkSorter::ORDER_NONE;
       break;
-    case vivaldi::bookmark_context_menu::SORT_ORDER_ASCENDING:
+    case vivaldi::bookmark_context_menu::SortOrder::kAscending:
       sortOrder = ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
       break;
-    case vivaldi::bookmark_context_menu::SORT_ORDER_DESCENDING:
+    case vivaldi::bookmark_context_menu::SortOrder::kDescending:
       sortOrder = ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
       break;
   }
 
   bookmark_menu_container_.reset(new ::vivaldi::BookmarkMenuContainer(this));
   switch (params_->properties.edge) {
-    case vivaldi::bookmark_context_menu::EDGE_ABOVE:
+    case vivaldi::bookmark_context_menu::Edge::kAbove:
       bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Above;
       break;
-    case vivaldi::bookmark_context_menu::EDGE_BELOW:
+    case vivaldi::bookmark_context_menu::Edge::kBelow:
       bookmark_menu_container_->edge = ::vivaldi::BookmarkMenuContainer::Below;
       break;
     default:

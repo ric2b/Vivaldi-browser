@@ -47,8 +47,6 @@ devtools_entrypoint("bundle") {
     ":*",
     "../../../test/unittests/front_end/entrypoints/missing_entrypoints/*",
     "../../entrypoints/*",
-
-    # TODO(crbug.com/1202788): Remove invalid dependents
     "../layers/*",
     "../timeline/*",
   ]
@@ -59,7 +57,11 @@ devtools_entrypoint("bundle") {
 devtools_entrypoint("meta") {
   entrypoint = "layer_viewer-meta.ts"
 
-  deps = [ ":bundle" ]
+  deps = [
+    ":bundle",
+    "../../core/i18n:bundle",
+    "../../ui/legacy:bundle",
+  ]
 
   visibility = [ "../../entrypoints/*" ]
 }

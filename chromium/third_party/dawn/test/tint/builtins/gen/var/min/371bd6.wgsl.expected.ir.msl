@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void min_371bd6() {
+  int3 res = int3(1);
+}
+vertex float4 vertex_main() {
+  min_371bd6();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  min_371bd6();
+}
+kernel void compute_main() {
+  min_371bd6();
+}

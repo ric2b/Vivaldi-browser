@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> katkaisi yhteyden yllättäen.</translation>
 <translation id="1161325031994447685">yhdistämistä langattomaan verkkoon uudelleen</translation>
 <translation id="1175364870820465910">Tulo&amp;sta…</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Kokeile evästeiden poistoa<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Tietoja versiosta</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ei lähettänyt tietoa.</translation>
 <translation id="1559528461873125649">Tiedostoa tai hakemistoa ei ole olemassa</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">ottaa yhteyttä järjestelmän ylläpitoon.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Kokeile Windowsin verrkodiagnostiikan suoritusta<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Sivustolla on haittaa aiheuttavia ohjelmia</translation>
-<translation id="1916770123977586577">Päivitä tämä sivu, niin uudet asetukset otetaan käyttöön</translation>
 <translation id="1974060860693918893">Lisäasetukset</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />tarkistaa välityspalvelin ja palomuuri<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Myönnetty: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Hyökkääjät saattavat nähdä kuvat, joita katselet sivustolla ja huijata sinua muokkaamalla niitä.</translation>
 <translation id="2356070529366658676">Kysy</translation>
 <translation id="2359808026110333948">Jatka</translation>
+<translation id="2388886110302389394">Avaa sivu uudessa yksityisikkunassa (Ctrl–Shift–N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Diagnosoidaan verkkoa<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Laajennus on estänyt sivun</translation>
 <translation id="2501278716633472235">Palaa takaisin</translation>
@@ -80,6 +79,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="3950820424414687140">Kirjaudu</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
+<translation id="4075123085690634698">Avaa sivu uudessa yksityisikkunassa (⇧⌘N)</translation>
 <translation id="4075732493274867456">Asiakassovellus ja palvelin eivät tue samaa SSL-yhteyskäytäntöversiota tai salaustekniikkaa.</translation>
 <translation id="4116663294526079822">Salli aina tällä sivustolla</translation>
 <translation id="4130226655945681476">tarkistaa verkkokaapelit, modeemi ja reititin</translation>
@@ -156,6 +156,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="6757797048963528358">Laitteesi siirtyi nukkumaan.</translation>
 <translation id="6890956352250146925">Eväste- ja sivustotietoasetukset</translation>
 <translation id="6897140037006041989">User agent</translation>
+<translation id="6957624206566198865">Avaa sivu uudessa yksityisvälilehdessä</translation>
 <translation id="7053983685419859001">Estä</translation>
 <translation id="7079718277001814089">Sivustolla on haittaohjelmia</translation>
 <translation id="7096937462164235847">Sivuston identiteettiä ei ole tarkistettu.</translation>
@@ -184,6 +185,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> suojaa tietosi normaalisti salaamalla ne. Kuitenkin, kun Vivaldi tällä kertaa muodosti yhteyttä sivustoon <ph name="SITE" />, palautti sivusto epätavalliset ja virheelliset tunnistautumistiedot. Näin voi tapahtua, jos hyökkääjä pyrkii esiintymään sivustona <ph name="SITE" /> tai langattoman verkon kirjautumisruutu on keskeyttänyt yhteyden. Tietosi ovat edelleen turvassa, koska Vivaldi katkaisi yhteyden ennen kuin tietoja vaihdettiin.</translation>
 <translation id="7878562273885520351">Salasanasi on voinut vaarantua</translation>
 <translation id="7951415247503192394">(32-bittinen)</translation>
+<translation id="7953236668995583915">Ota päivitetyt sivustoasetukset käyttöön päivittämällä sivu</translation>
 <translation id="8025119109950072390">Sivustolle hyökännyt taho saattaa pyrkiä huijaamaan sinua tekemään jotakin vaarallista, kuten asentamaan ohjelmistoja tai paljastamaan henkilötietojasi (esimerkiksi salasanoja, puhelinnumeroita tai maksukorttien tietoja).</translation>
 <translation id="8037357227543935929">Kysy (oletus)</translation>
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>

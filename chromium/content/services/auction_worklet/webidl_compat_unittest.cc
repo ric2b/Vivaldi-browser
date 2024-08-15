@@ -16,6 +16,7 @@
 #include "gin/converter.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "v8/include/v8-context.h"
 #include "v8/include/v8-exception.h"
 #include "v8/include/v8-external.h"
 #include "v8/include/v8-function.h"
@@ -37,7 +38,7 @@ class WebIDLCompatTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
     v8_scope_ =
         std::make_unique<AuctionV8Helper::FullIsolateScope>(v8_helper_.get());
-    time_limit_ = v8_helper_->CreateTimeLimit(/*script_timeout=*/absl::nullopt);
+    time_limit_ = v8_helper_->CreateTimeLimit(/*script_timeout=*/std::nullopt);
     time_limit_scope_ =
         std::make_unique<AuctionV8Helper::TimeLimitScope>(time_limit_.get());
   }
@@ -54,7 +55,7 @@ class WebIDLCompatTest : public testing::Test {
   std::vector<std::string> RunScript(v8::Local<v8::Context> context,
                                      const std::string& script_source,
                                      bool expect_success) {
-    absl::optional<std::string> error;
+    std::optional<std::string> error;
     v8::MaybeLocal<v8::UnboundScript> maybe_script =
         v8_helper_->Compile(script_source, GURL("https://example.org"),
                             /*debug_id=*/nullptr, error);
@@ -1079,7 +1080,7 @@ TEST_F(WebIDLCompatTest, UndefinedEmptyDict) {
 
   auto converter = MakeFromScript(context, kScript);
 
-  absl::optional<std::string> out;
+  std::optional<std::string> out;
   EXPECT_TRUE(converter->GetOptional("a", out));
   EXPECT_FALSE(out.has_value());
 
@@ -1101,7 +1102,7 @@ TEST_F(WebIDLCompatTest, NullEmptyDict) {
 
   auto converter = MakeFromScript(context, kScript);
 
-  absl::optional<std::string> out;
+  std::optional<std::string> out;
   EXPECT_TRUE(converter->GetOptional("a", out));
   EXPECT_FALSE(out.has_value());
 
@@ -1122,7 +1123,7 @@ TEST_F(WebIDLCompatTest, OptionalOrRequired) {
 
   auto converter = MakeFromScript(context, kScript);
 
-  absl::optional<std::string> out;
+  std::optional<std::string> out;
   std::string out_required;
 
   EXPECT_TRUE(converter->GetOptional("a", out));
@@ -1151,7 +1152,7 @@ TEST_F(WebIDLCompatTest, NullUndefinedValues) {
 
   auto converter = MakeFromScript(context, kScript);
 
-  absl::optional<std::string> out;
+  std::optional<std::string> out;
   EXPECT_TRUE(converter->GetOptional("a", out));
   EXPECT_FALSE(out.has_value());
 
@@ -1170,7 +1171,7 @@ TEST_F(WebIDLCompatTest, NotDict) {
 
   auto converter = MakeFromScript(context, kScript);
 
-  absl::optional<std::string> out;
+  std::optional<std::string> out;
   EXPECT_FALSE(converter->GetOptional("a", out));
   EXPECT_EQ(
       "<error prefix> Value passed as dictionary is neither object, null, nor "
@@ -1189,7 +1190,7 @@ TEST_F(WebIDLCompatTest, ErrorLatch) {
 
   auto converter = MakeFromScript(context, kScript);
 
-  absl::optional<std::string> out;
+  std::optional<std::string> out;
   std::string out_required;
   EXPECT_TRUE(converter->GetOptional("b", out));
   ASSERT_TRUE(out.has_value());

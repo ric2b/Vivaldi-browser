@@ -11,11 +11,10 @@ title: Chrome Root Program Policy Archive - Version 1.3
 
 ## Archive Notice 
 
-<p><strong><span style="color:#FF0000">IMPORTANT:</span></strong> This page is
- retained for historical purposes only. 
+<p><strong><span style="color:#FF0000">IMPORTANT:</span></strong> This page is retained for historical purposes only. 
  
-Version 1.3 of the Chrome Root Program Policy was superseded by Version <a href=/Home/chromium-security/root-ca-policy/>1.4</a> on March 3, 2023.
- 
+Version 1.3 of the Chrome Root Program Policy was superseded by Version <a href=/Home/chromium-security/root-ca-policy/policy-archive/version-1-4/>1.4</a> on March 3, 2023.
+
 For the latest version of the Chrome Root Program Policy, see <a href="https://g.co/chrome/root-policy">https://g.co/chrome/root-policy</a>.</p>
 
 ## Introduction

@@ -572,7 +572,6 @@ void SerializeContextState(JsonSerializer *json, const gl::State &state)
     json->addScalar("StencilBackRef", state.getStencilBackRef());
     json->addScalar("LineWidth", state.getLineWidth());
     json->addScalar("GenerateMipmapHint", state.getGenerateMipmapHint());
-    json->addScalar("TextureFilteringHint", state.getTextureFilteringHint());
     json->addScalar("FragmentShaderDerivativeHint", state.getFragmentShaderDerivativeHint());
     json->addScalar("BindGeneratesResourceEnabled", state.isBindGeneratesResourceEnabled());
     json->addScalar("ClientArraysEnabled", state.areClientArraysEnabled());
@@ -932,17 +931,19 @@ void SerializeCompiledShaderState(JsonSerializer *json, const gl::SharedCompiled
     SerializeShaderVariablesVector(json, state->activeOutputVariables);
     json->addScalar("NumViews", state->numViews);
     json->addScalar("SpecConstUsageBits", state->specConstUsageBits.bits());
-    if (state->geometryShaderInputPrimitiveType.valid())
-    {
-        json->addString("GeometryShaderInputPrimitiveType",
-                        ToString(state->geometryShaderInputPrimitiveType.value()));
-    }
-    if (state->geometryShaderOutputPrimitiveType.valid())
-    {
-        json->addString("GeometryShaderOutputPrimitiveType",
-                        ToString(state->geometryShaderOutputPrimitiveType.value()));
-    }
+    json->addScalar("MetadataFlags", state->metadataFlags.bits());
+    json->addScalar("AdvancedBlendEquations", state->advancedBlendEquations.bits());
+    json->addString("GeometryShaderInputPrimitiveType",
+                    ToString(state->geometryShaderInputPrimitiveType));
+    json->addString("GeometryShaderOutputPrimitiveType",
+                    ToString(state->geometryShaderOutputPrimitiveType));
+    json->addScalar("GeometryShaderMaxVertices", state->geometryShaderMaxVertices);
     json->addScalar("GeometryShaderInvocations", state->geometryShaderInvocations);
+    json->addScalar("TessControlShaderVertices", state->tessControlShaderVertices);
+    json->addScalar("TessGenMode", state->tessGenMode);
+    json->addScalar("TessGenSpacing", state->tessGenSpacing);
+    json->addScalar("TessGenVertexOrder", state->tessGenVertexOrder);
+    json->addScalar("TessGenPointMode", state->tessGenPointMode);
 }
 
 void SerializeShaderState(JsonSerializer *json, const gl::ShaderState &shaderState)
@@ -972,9 +973,6 @@ void SerializeShader(const gl::Context *context,
     // Do not serialize mType because it is already serialized in SerializeCompiledShaderState.
     json->addString("InfoLogString", shader->getInfoLogString());
     // Do not serialize compiler resources string because it can vary between test modes.
-    json->addScalar("CurrentMaxComputeWorkGroupInvocations",
-                    shader->getCurrentMaxComputeWorkGroupInvocations());
-    json->addScalar("MaxComputeSharedMemory", shader->getMaxComputeSharedMemory());
 }
 
 void SerializeVariableLocationsVector(JsonSerializer *json,

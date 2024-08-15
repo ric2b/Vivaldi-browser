@@ -153,13 +153,6 @@ bool SpdyProxyClientSocket::WasEverUsed() const {
   return was_ever_used_ || (spdy_stream_.get() && spdy_stream_->WasEverUsed());
 }
 
-bool SpdyProxyClientSocket::WasAlpnNegotiated() const {
-  // Do not delegate to `spdy_stream_`. While `spdy_stream_` negotiated ALPN
-  // with the proxy, this object represents the tunneled TCP connection to the
-  // origin.
-  return false;
-}
-
 NextProto SpdyProxyClientSocket::GetNegotiatedProtocol() const {
   // Do not delegate to `spdy_stream_`. While `spdy_stream_` negotiated ALPN
   // with the proxy, this object represents the tunneled TCP connection to the
@@ -379,8 +372,8 @@ int SpdyProxyClientSocket::DoSendRequest() {
 
   if (proxy_delegate_) {
     HttpRequestHeaders proxy_delegate_headers;
-    proxy_delegate_->OnBeforeTunnelRequestServerOnly(
-        proxy_chain_, proxy_chain_index_, &proxy_delegate_headers);
+    proxy_delegate_->OnBeforeTunnelRequest(proxy_chain_, proxy_chain_index_,
+                                           &proxy_delegate_headers);
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
 
@@ -425,7 +418,7 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
       response_.headers.get());
 
   if (proxy_delegate_) {
-    int rv = proxy_delegate_->OnTunnelHeadersReceivedServerOnly(
+    int rv = proxy_delegate_->OnTunnelHeadersReceived(
         proxy_chain_, proxy_chain_index_, *response_.headers);
     if (rv != OK) {
       DCHECK_NE(ERR_IO_PENDING, rv);
@@ -584,7 +577,7 @@ void SpdyProxyClientSocket::MaybeSendEndStream() {
   if (write_callback_)
     return;
 
-  auto buffer = base::MakeRefCounted<IOBuffer>(/*buffer_size=*/0);
+  auto buffer = base::MakeRefCounted<IOBufferWithSize>(/*buffer_size=*/0);
   spdy_stream_->SendData(buffer.get(), /*length=*/0, NO_MORE_DATA_TO_SEND);
   end_stream_state_ = EndStreamState::kEndStreamSent;
 }

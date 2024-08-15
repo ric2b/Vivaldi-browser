@@ -30,6 +30,7 @@
 
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
@@ -49,6 +50,7 @@
 #include "third_party/blink/public/mojom/gpu/gpu.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlcanvaselement_offscreencanvas.h"
 #include "third_party/blink/renderer/bindings/modules/v8/webgl_any.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -168,6 +170,43 @@ unsigned WebGLRenderingContextBase::max_active_webgl_contexts_ = 0;
 unsigned WebGLRenderingContextBase::max_active_webgl_contexts_on_worker_ = 0;
 
 namespace {
+
+enum class WebGLANGLEImplementation {
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+
+  // vWebGL = 0 (for WebGL1) or 2 (for WebGL2).
+  // vWebGLANGLEImplementation = vWebGL * 10 + vANGLEImplementation
+  // where vANGLEImplementation is aligned with ANGLEImplementation enum
+  // values defined in ui/gl/gl_implementation.h.
+
+  kWebGL1_None = 0,
+  kWebGL1_D3D9 = 1,
+  kWebGL1_D3D11 = 2,
+  kWebGL1_OpenGL = 3,
+  kWebGL1_OpenGLES = 4,
+  kWebGL1_Null = 5,
+  kWebGL1_Vulkan = 6,
+  kWebGL1_SwiftShader = 7,
+  kWebGL1_Metal = 8,
+  kWebGL1_Default = 9,
+
+  // Leave some space between WebGL1 and WebGL2 enums in case ANGLE has
+  // new implementations, say ANGLE/Dawn.
+
+  kWebGL2_None = 20,
+  kWebGL2_D3D9 = 21,  // Should never happen
+  kWebGL2_D3D11 = 22,
+  kWebGL2_OpenGL = 23,
+  kWebGL2_OpenGLES = 24,
+  kWebGL2_Null = 25,
+  kWebGL2_Vulkan = 26,
+  kWebGL2_SwiftShader = 27,
+  kWebGL2_Metal = 28,
+  kWebGL2_Default = 29,
+
+  kMaxValue = kWebGL2_Default,
+};
 
 constexpr base::TimeDelta kDurationBetweenRestoreAttempts = base::Seconds(1);
 const int kMaxGLErrorsAllowedToConsole = 256;
@@ -2251,6 +2290,12 @@ void WebGLRenderingContextBase::blendFuncSeparate(GLenum src_rgb,
   if (isContextLost() ||
       !ValidateBlendFuncFactors("blendFuncSeparate", src_rgb, dst_rgb))
     return;
+
+  if (!ValidateBlendFuncExtendedFactors("blendFuncSeparate", src_alpha,
+                                        dst_alpha)) {
+    return;
+  }
+
   ContextGL()->BlendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha);
 }
 
@@ -3394,12 +3439,9 @@ ScriptValue WebGLRenderingContextBase::getExtension(ScriptState* script_state,
   }
 
   WebGLExtension* extension = EnableExtensionIfSupported(name);
-
-  v8::Local<v8::Value> wrapped_extension =
-      ToV8(extension, script_state->GetContext()->Global(),
-           script_state->GetIsolate());
-
-  return ScriptValue(script_state->GetIsolate(), wrapped_extension);
+  return ScriptValue(
+      script_state->GetIsolate(),
+      ToV8Traits<IDLNullable<WebGLExtension>>::ToV8(script_state, extension));
 }
 
 ScriptValue WebGLRenderingContextBase::getFramebufferAttachmentParameter(
@@ -3575,11 +3617,19 @@ void WebGLRenderingContextBase::RecordShaderPrecisionFormatForStudy(
       .Record(ukm_params.ukm_recorder);
 }
 
-void WebGLRenderingContextBase::RecordUKMCanvasDrawnToAtFirstDrawCall() {
-  if (!has_been_drawn_to_) {
-    has_been_drawn_to_ = true;
-    RecordUKMCanvasDrawnToRenderingAPI();
-  }
+void WebGLRenderingContextBase::RecordANGLEImplementation() {
+  DCHECK(drawing_buffer_.get());
+  const Platform::GraphicsInfo& graphics_info =
+      drawing_buffer_->GetGraphicsInfo();
+  // For mapping mathematics, see WebGLANGLEImplementation definition above.
+  int webgl_version_multiplier =
+      (context_type_ == Platform::kWebGL2ContextType ? 2 : 0);
+  WebGLANGLEImplementation webgl_angle_implementation =
+      static_cast<WebGLANGLEImplementation>(
+          webgl_version_multiplier * 10 +
+          static_cast<int>(graphics_info.angle_implementation));
+  UMA_HISTOGRAM_ENUMERATION("Blink.Canvas.WebGLANGLEImplementation",
+                            webgl_angle_implementation);
 }
 
 ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
@@ -3892,13 +3942,13 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
       SynthesizeGLError(GL_INVALID_ENUM, "getParameter",
                         "invalid parameter name, EXT_clip_control not enabled");
       return ScriptValue::CreateNull(script_state->GetIsolate());
-    case GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT:  // EXT_blend_func_extended
-      if (ExtensionEnabled(kEXTBlendFuncExtendedName)) {
+    case GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT:  // WEBGL_blend_func_extended
+      if (ExtensionEnabled(kWebGLBlendFuncExtendedName)) {
         return GetUnsignedIntParameter(script_state, pname);
       }
       SynthesizeGLError(
           GL_INVALID_ENUM, "getParameter",
-          "invalid parameter name, EXT_blend_func_extended not enabled");
+          "invalid parameter name, WEBGL_blend_func_extended not enabled");
       return ScriptValue::CreateNull(script_state->GetIsolate());
     case GL_MAX_COLOR_ATTACHMENTS_EXT:  // EXT_draw_buffers BEGIN
       if (ExtensionEnabled(kWebGLDrawBuffersName) || IsWebGL2())
@@ -8427,6 +8477,31 @@ bool WebGLRenderingContextBase::ValidateBlendFuncFactors(
                       "incompatible src and dst");
     return false;
   }
+
+  return ValidateBlendFuncExtendedFactors(function_name, src, dst);
+}
+
+bool WebGLRenderingContextBase::ValidateBlendFuncExtendedFactors(
+    const char* function_name,
+    GLenum src,
+    GLenum dst) {
+  // TODO(crbug.com/882580): this validation is done in the
+  // passthrough command decoder; this helper can be removed once the
+  // validating command decoder is completely unshipped.
+  if (src == GL_SRC1_COLOR_EXT || dst == GL_SRC1_COLOR_EXT ||
+      src == GL_SRC1_ALPHA_EXT || dst == GL_SRC1_ALPHA_EXT ||
+      src == GL_ONE_MINUS_SRC1_COLOR_EXT ||
+      dst == GL_ONE_MINUS_SRC1_COLOR_EXT ||
+      src == GL_ONE_MINUS_SRC1_ALPHA_EXT ||
+      dst == GL_ONE_MINUS_SRC1_ALPHA_EXT ||
+      (dst == GL_SRC_ALPHA_SATURATE && !IsWebGL2())) {
+    if (!ExtensionEnabled(kWebGLBlendFuncExtendedName)) {
+      SynthesizeGLError(GL_INVALID_ENUM, function_name,
+                        "invalid value, WEBGL_blend_func_extended not enabled");
+      return false;
+    }
+  }
+
   return true;
 }
 

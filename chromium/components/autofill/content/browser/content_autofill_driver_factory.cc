@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "content/public/browser/global_routing_id.h"
@@ -64,8 +65,8 @@ ContentAutofillDriverFactory* ContentAutofillDriverFactory::FromWebContents(
 
 // static
 void ContentAutofillDriverFactory::BindAutofillDriver(
-    mojo::PendingAssociatedReceiver<mojom::AutofillDriver> pending_receiver,
-    content::RenderFrameHost* render_frame_host) {
+    content::RenderFrameHost* render_frame_host,
+    mojo::PendingAssociatedReceiver<mojom::AutofillDriver> pending_receiver) {
   DCHECK(render_frame_host);
 
   content::WebContents* web_contents =
@@ -131,9 +132,11 @@ ContentAutofillDriver* ContentAutofillDriverFactory::DriverForFrame(
     // 5. `render_frame_host->~RenderFrameHostImpl()` finishes.
     if (render_frame_host->IsRenderFrameLive()) {
       driver = CreateDriver(render_frame_host);
+      // DO NOT REMOVE. Breaks desktop
       for (Observer& observer : observers_) {
         observer.OnContentAutofillDriverCreated(*this, *driver);
       }
+      // DO NOT REMOVE ABOVE THIS LINE. Breaks desktop
       DCHECK_EQ(driver_map_.find(render_frame_host)->second.get(),
                 driver.get());
     } else {
@@ -189,22 +192,12 @@ void ContentAutofillDriverFactory::DidStartNavigation(
 
 void ContentAutofillDriverFactory::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->HasCommitted()) {
+  if (!navigation_handle->HasCommitted() ||
+      navigation_handle->IsSameDocument()) {
     return;
   }
   auto* driver = DriverForFrame(navigation_handle->GetRenderFrameHost());
   if (!driver) {
-    return;
-  }
-  if (!navigation_handle->IsInPrerenderedMainFrame() &&
-      (navigation_handle->IsInMainFrame() ||
-       navigation_handle->HasSubframeNavigationEntryCommitted())) {
-    if (client_->IsTouchToFillCreditCardSupported()) {
-      client_->HideTouchToFillCreditCard();
-    }
-  }
-
-  if (navigation_handle->IsSameDocument()) {
     return;
   }
 

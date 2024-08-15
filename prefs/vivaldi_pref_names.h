@@ -10,7 +10,8 @@ namespace vivaldiprefs {
 // Profile prefs go here.
 extern const char kAutoUpdateEnabled[];
 extern const char kVivaldiAccountPendingRegistration[];
-extern const char kVivaldiAddressBarSearchDirectMatchEnabled[];
+constexpr char kVivaldiAddressBarSearchDirectMatchEnabled[] =
+    "vivaldi.address_bar.search.direct_match_enabled";
 extern const char kVivaldiExperiments[];
 extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiPIPPlacement[];
@@ -40,35 +41,56 @@ extern const char kVivaldiClientHintsBrandAppendVivaldi[];
 extern const char kVivaldiClientHintsBrandCustomBrand[];
 extern const char kVivaldiClientHintsBrandCustomBrandVersion[];
 
+extern const char kVivaldiCrashReportingConsentGranted[];
+
 #if BUILDFLAG(IS_IOS)
 extern const char kVivaldiNoteFolderDefault[];
 extern const char kVivaldiNoteCachedTopMostRow[];
 extern const char kVivaldiNoteCachedFolderId[];
 
-// Speed dial sorting mode
-extern const char kVivaldiSpeedDialSortingMode[];
-// Start page layout
-extern const char kVivaldiStartPageLayoutStyle[];
 // Setting for folder visiblity on bookmark folder page
 extern const char kVivaldiBookmarkFoldersViewMode[];
 
 // Tabs
 // Desktop style tabs enabled status
 extern const char kVivaldiDesktopTabsEnabled[];
+// Reverse search suggestion results order state for bottom address bar
+extern const char kVivaldiReverseSearchResultsEnabled[];
 // Tab stack use status
 extern const char kVivaldiTabStackEnabled[];
 
 // Apearance
-// Startup wallpaper name
-extern const char kVivaldiStartupWallpaper[];
-// Selected Appearance Mode
+// Selected browser theme i.e. Light, Dark, System
 extern const char kVivaldiAppearanceMode[];
+// Selected website appearance style i.e. Light, Dark, Auto
+extern const char kVivaldiWebsiteAppearanceStyle[];
+// Force dark theme on website
+extern const char kVivaldiWebsiteAppearanceForceDarkTheme[];
+// Custom accent color selected either from preloaded colors or manual entry
+extern const char kVivaldiCustomAccentColor[];
+// Dynamic accent color from webpage
+extern const char kVivaldiDynamicAccentColorEnabled[];
+
+// Start page Custom background Image
+extern const char kVivaldiStartpagePortraitImage[];
+extern const char kVivaldiStartpageLandscapeImage[];
+// Start page
+// Speed dial sorting mode
+extern const char kVivaldiSpeedDialSortingMode[];
+// Start page layout
+extern const char kVivaldiStartPageLayoutStyle[];
+// Start page Custom background Image
+extern const char kVivaldiStartpagePortraitImage[];
+extern const char kVivaldiStartpageLandscapeImage[];
+// Preloaded selected wallpaper name
+extern const char kVivaldiStartupWallpaper[];
 
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
 // Background media playback for YouTube.
 extern const char kBackgroundMediaPlaybackAllowed[];
+extern const char kPWADisabled[];
 #endif
 }  // namespace vivaldiprefs
 

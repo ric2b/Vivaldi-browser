@@ -26,8 +26,8 @@ namespace {
 constexpr base::TimeDelta kDefaultExtendedAccountInfoTimeout =
     base::Seconds(10);
 
-absl::optional<base::TimeDelta> g_extended_account_info_timeout_for_testing =
-    absl::nullopt;
+std::optional<base::TimeDelta> g_extended_account_info_timeout_for_testing =
+    std::nullopt;
 
 }  // namespace
 
@@ -52,6 +52,20 @@ void FinalizeNewProfileSetup(Profile* profile,
 
   entry->SetLocalProfileName(profile_name, is_default_name);
 
+  if (signin_util::IsForceSigninEnabled() &&
+      base::FeatureList::IsEnabled(kForceSigninFlowInProfilePicker)) {
+    // Managed accounts do not need to have Sync consent set.
+    // TODO(https://crbug.com/1478102): Align Managed and Consumer accounts.
+    if (!entry->CanBeManaged()) {
+      signin::IdentityManager* identity_manager =
+          IdentityManagerFactory::GetForProfile(profile);
+      CHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync))
+          << "A non syncing account should not be able to finalize the "
+             "profile.";
+    }
+    entry->LockForceSigninProfile(/*is_lock=*/false);
+  }
+
   if (!entry->IsOmitted()) {
     // The profile has already been created outside of the classic "profile
     // creation" flow and did not start as omitted. The rest of the finalization
@@ -74,20 +88,6 @@ void FinalizeNewProfileSetup(Profile* profile,
     // setup experience.
     profile->GetPrefs()->SetBoolean(prefs::kHasSeenWelcomePage, true);
   }
-
-  if (signin_util::IsForceSigninEnabled() &&
-      base::FeatureList::IsEnabled(kForceSigninFlowInProfilePicker)) {
-    // Managed accounts do not need to have Sync consent set.
-    // TODO(https://crbug.com/1478102): Align Managed and Consumer accounts.
-    if (!entry->CanBeManaged()) {
-      signin::IdentityManager* identity_manager =
-          IdentityManagerFactory::GetForProfile(profile);
-      CHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync))
-          << "A non syncing account should not be able to finalize the "
-             "profile.";
-    }
-    entry->LockForceSigninProfile(/*is_lock=*/false);
-  }
 }
 
 // -- ProfileNameResolver ------------------------------------------------------
@@ -96,7 +96,7 @@ void FinalizeNewProfileSetup(Profile* profile,
 ProfileNameResolver::ScopedInfoFetchTimeoutOverride
 ProfileNameResolver::CreateScopedInfoFetchTimeoutOverrideForTesting(
     base::TimeDelta timeout) {
-  return base::AutoReset<absl::optional<base::TimeDelta>>(
+  return base::AutoReset<std::optional<base::TimeDelta>>(
       &g_extended_account_info_timeout_for_testing, timeout);
 }
 

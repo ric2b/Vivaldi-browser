@@ -40,15 +40,11 @@ class AllocatorPolicy {
 
   virtual bool SupportsExtendingLAB() const { return false; }
 
-  virtual CompactionSpaceKind GetCompactionSpaceKind() const {
-    return CompactionSpaceKind::kNone;
-  }
-
  protected:
-  Heap* heap() const { return heap_; }
+  Heap* space_heap() const;
+  Heap* isolate_heap() const;
 
   MainAllocator* const allocator_;
-  Heap* const heap_;
 };
 
 class SemiSpaceNewSpaceAllocatorPolicy final : public AllocatorPolicy {
@@ -62,6 +58,10 @@ class SemiSpaceNewSpaceAllocatorPolicy final : public AllocatorPolicy {
   void FreeLinearAllocationArea() final;
 
  private:
+  static constexpr int kLabSizeInGC = 32 * KB;
+
+  void FreeLinearAllocationAreaUnsynchronized();
+
   SemiSpaceNewSpace* const space_;
 };
 
@@ -74,24 +74,18 @@ class PagedSpaceAllocatorPolicy final : public AllocatorPolicy {
                         AllocationOrigin origin) final;
   void FreeLinearAllocationArea() final;
 
-  CompactionSpaceKind GetCompactionSpaceKind() const final;
-
  private:
-  bool RefillLabMain(int size_in_bytes, AllocationOrigin origin);
-  bool RawRefillLabMain(int size_in_bytes, AllocationOrigin origin);
+  bool RefillLab(int size_in_bytes, AllocationOrigin origin);
 
-  bool ContributeToSweepingMain(int required_freed_bytes, int max_pages,
-                                int size_in_bytes, AllocationOrigin origin,
-                                GCTracer::Scope::ScopeId sweeping_scope_id,
-                                ThreadKind sweeping_scope_kind);
+  void ContributeToSweeping(int max_pages);
 
-  bool TryAllocationFromFreeListMain(size_t size_in_bytes,
-                                     AllocationOrigin origin);
+  bool TryAllocationFromFreeList(size_t size_in_bytes, AllocationOrigin origin);
+
+  bool TryExpandAndAllocate(size_t size_in_bytes, AllocationOrigin origin);
 
   V8_WARN_UNUSED_RESULT bool TryExtendLAB(int size_in_bytes);
 
   void SetLinearAllocationArea(Address top, Address limit, Address end);
-  void DecreaseLimit(Address new_limit);
 
   void FreeLinearAllocationAreaUnsynchronized();
 
@@ -111,7 +105,7 @@ class PagedNewSpaceAllocatorPolicy final : public AllocatorPolicy {
   bool SupportsExtendingLAB() const final { return true; }
 
  private:
-  bool AddPageBeyondCapacity(int size_in_bytes, AllocationOrigin origin);
+  bool TryAllocatePage(int size_in_bytes, AllocationOrigin origin);
   bool WaitForSweepingForAllocation(int size_in_bytes, AllocationOrigin origin);
 
   PagedNewSpace* const space_;
@@ -149,51 +143,60 @@ class LinearAreaOriginalData {
 
 class MainAllocator {
  public:
-  V8_EXPORT_PRIVATE MainAllocator(Heap* heap, SpaceWithLinearArea* space);
+  struct InGCTag {};
+  static constexpr InGCTag kInGC{};
 
-  // This constructor allows to pass in the address of a LinearAllocationArea.
+  // Use this constructor on main/background threads. `allocation_info` can be
+  // used for allocation support in generated code (currently new and old
+  // space).
+  V8_EXPORT_PRIVATE MainAllocator(
+      LocalHeap* heap, SpaceWithLinearArea* space,
+      LinearAllocationArea* allocation_info = nullptr);
+
+  // Use this constructor for GC LABs/allocations.
   V8_EXPORT_PRIVATE MainAllocator(Heap* heap, SpaceWithLinearArea* space,
-                                  LinearAllocationArea& allocation_info);
+                                  InGCTag);
 
   // Returns the allocation pointer in this space.
-  Address start() const { return allocation_info_.start(); }
-  Address top() const { return allocation_info_.top(); }
-  Address limit() const { return allocation_info_.limit(); }
+  Address start() const { return allocation_info_->start(); }
+  Address top() const { return allocation_info_->top(); }
+  Address limit() const { return allocation_info_->limit(); }
 
   // The allocation top address.
   Address* allocation_top_address() const {
-    return allocation_info_.top_address();
+    return allocation_info_->top_address();
   }
 
   // The allocation limit address.
   Address* allocation_limit_address() const {
-    return allocation_info_.limit_address();
+    return allocation_info_->limit_address();
   }
 
   Address original_top_acquire() const {
-    return linear_area_original_data_.get_original_top_acquire();
+    return linear_area_original_data().get_original_top_acquire();
   }
 
   Address original_limit_relaxed() const {
-    return linear_area_original_data_.get_original_limit_relaxed();
+    return linear_area_original_data().get_original_limit_relaxed();
   }
 
   void MoveOriginalTopForward();
   V8_EXPORT_PRIVATE void ResetLab(Address start, Address end,
                                   Address extended_end);
   V8_EXPORT_PRIVATE bool IsPendingAllocation(Address object_address);
-  void MaybeFreeUnusedLab(LinearAllocationArea lab);
 
-  LinearAllocationArea& allocation_info() { return allocation_info_; }
+  LinearAllocationArea& allocation_info() { return *allocation_info_; }
 
   const LinearAllocationArea& allocation_info() const {
-    return allocation_info_;
+    return *allocation_info_;
   }
 
-  AllocationCounter& allocation_counter() { return allocation_counter_; }
+  AllocationCounter& allocation_counter() {
+    return allocation_counter_.value();
+  }
 
   const AllocationCounter& allocation_counter() const {
-    return allocation_counter_;
+    return allocation_counter_.value();
   }
 
   V8_WARN_UNUSED_RESULT V8_INLINE AllocationResult
@@ -215,8 +218,6 @@ class MainAllocator {
                                                    size_t size_in_bytes,
                                                    size_t aligned_size_in_bytes,
                                                    size_t allocation_size);
-
-  void MarkLabStartInitialized();
 
   V8_EXPORT_PRIVATE void MakeLinearAllocationAreaIterable();
 
@@ -240,7 +241,9 @@ class MainAllocator {
 #endif  // DEBUG
 
   // Checks whether the LAB is currently in use.
-  V8_INLINE bool IsLabValid() { return allocation_info_.top() != kNullAddress; }
+  V8_INLINE bool IsLabValid() {
+    return allocation_info_->top() != kNullAddress;
+  }
 
   V8_EXPORT_PRIVATE void FreeLinearAllocationArea();
 
@@ -283,43 +286,70 @@ class MainAllocator {
   bool EnsureAllocation(int size_in_bytes, AllocationAlignment alignment,
                         AllocationOrigin origin);
 
+  void MarkLabStartInitialized();
+
+  bool IsBlackAllocationEnabled() const;
+
   LinearAreaOriginalData& linear_area_original_data() {
-    return linear_area_original_data_;
+    return linear_area_original_data_.value();
   }
 
   const LinearAreaOriginalData& linear_area_original_data() const {
-    return linear_area_original_data_;
+    return linear_area_original_data_.value();
   }
 
   int ObjectAlignment() const;
 
   AllocationSpace identity() const;
 
-  bool SupportsAllocationObserver() const { return !is_compaction_space(); }
-
-  bool is_compaction_space() const {
-    return compaction_space_kind_ != CompactionSpaceKind::kNone;
+  bool SupportsAllocationObserver() const {
+    return allocation_counter_.has_value();
   }
+
+  bool SupportsPendingAllocation() const {
+    return linear_area_original_data_.has_value();
+  }
+
+  // Returns true when this LAB is used during GC.
+  bool in_gc() const { return local_heap_ == nullptr; }
+
+  // Returns true when this LAB is used during GC and the space is in the heap
+  // that is currently collected. This is needed because a GC can directly
+  // promote new space objects into shared space (which might not be currently
+  // collected in worker isolates).
+  bool in_gc_for_space() const;
 
   bool supports_extending_lab() const { return supports_extending_lab_; }
 
-  Heap* heap() const { return heap_; }
+  bool is_main_thread() const;
 
-  Heap* const heap_;
+  LocalHeap* local_heap() const { return local_heap_; }
+
+  // The heap for the current thread (respectively LocalHeap). See comment for
+  // `space_heap()` as well.
+  Heap* isolate_heap() const { return isolate_heap_; }
+
+  // Returns the space's heap. Note that this might differ from `isolate_heap()`
+  // for shared space in worker isolates.
+  Heap* space_heap() const;
+
+  // The current main or background thread's LocalHeap. nullptr for GC threads.
+  LocalHeap* const local_heap_;
+  Heap* const isolate_heap_;
   SpaceWithLinearArea* const space_;
 
-  AllocationCounter allocation_counter_;
-  LinearAllocationArea& allocation_info_;
+  base::Optional<AllocationCounter> allocation_counter_;
+  LinearAllocationArea* const allocation_info_;
   // This memory is used if no LinearAllocationArea& is passed in as argument.
   LinearAllocationArea owned_allocation_info_;
-  LinearAreaOriginalData linear_area_original_data_;
+  base::Optional<LinearAreaOriginalData> linear_area_original_data_;
   std::unique_ptr<AllocatorPolicy> allocator_policy_;
 
-  const CompactionSpaceKind compaction_space_kind_;
   const bool supports_extending_lab_;
 
   friend class AllocatorPolicy;
   friend class PagedSpaceAllocatorPolicy;
+  friend class SemiSpaceNewSpaceAllocatorPolicy;
 };
 
 }  // namespace internal

@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/functional/callback_helpers.h"
+#include "build/build_config.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
@@ -312,6 +313,28 @@ void TransferredMediaStreamTrack::UnregisterMediaStream(MediaStream* stream) {
   // TODO(https://crbug.com/1288839): Save and forward to track_ once it's
   // initialized.
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void TransferredMediaStreamTrack::SendWheel(
+    double relative_x,
+    double relative_y,
+    int wheel_delta_x,
+    int wheel_delta_y,
+    base::OnceCallback<void(bool, const String&)> callback) {
+  NOTREACHED_NORETURN();
+}
+
+void TransferredMediaStreamTrack::GetZoomLevel(
+    base::OnceCallback<void(absl::optional<int>, const String&)> callback) {
+  NOTREACHED_NORETURN();
+}
+
+void TransferredMediaStreamTrack::SetZoomLevel(
+    int zoom_level,
+    base::OnceCallback<void(bool, const String&)> callback) {
+  std::move(callback).Run(false, "Unsupported.");
+}
+#endif
 
 // EventTarget
 const AtomicString& TransferredMediaStreamTrack::InterfaceName() const {

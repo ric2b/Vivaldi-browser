@@ -172,6 +172,8 @@ export interface OsSettingsRoutes extends MinimumRoutes {
   KNOWN_NETWORKS: Route;
   LOCK_SCREEN: Route;
   MANAGE_ACCESSIBILITY: Route;
+  MANAGE_FACEGAZE_CURSOR_SETTINGS: Route;
+  MANAGE_FACEGAZE_FACIAL_EXPRESSIONS_SETTINGS: Route;
   MANAGE_ISOLATED_WEB_APPS: Route;
   MANAGE_SWITCH_ACCESS_SETTINGS: Route;
   MANAGE_TTS_SETTINGS: Route;
@@ -184,6 +186,7 @@ export interface OsSettingsRoutes extends MinimumRoutes {
   ONE_DRIVE: Route;
   OS_ACCESSIBILITY: Route;
   OS_LANGUAGES: Route;
+  OS_LANGUAGES_APP_LANGUAGES: Route;
   OS_LANGUAGES_EDIT_DICTIONARY: Route;
   OS_LANGUAGES_JAPANESE_MANAGE_USER_DICTIONARY: Route;
   OS_LANGUAGES_INPUT: Route;
@@ -206,6 +209,7 @@ export interface OsSettingsRoutes extends MinimumRoutes {
   POWER: Route;
   PRIVACY: Route;
   PRIVACY_HUB: Route;
+  PRIVACY_HUB_CAMERA: Route;
   PRIVACY_HUB_GEOLOCATION: Route;
   PRIVACY_HUB_MICROPHONE: Route;
   SEARCH: Route;
@@ -464,6 +468,14 @@ export function createRoutes(): OsSettingsRoutes {
       r.A11Y_KEYBOARD_AND_TEXT_INPUT,
       routesMojom.SWITCH_ACCESS_OPTIONS_SUBPAGE_PATH,
       Subpage.kSwitchAccessOptions);
+  r.MANAGE_FACEGAZE_CURSOR_SETTINGS = createSubpage(
+      r.A11Y_CURSOR_AND_TOUCHPAD,
+      routesMojom.FACE_GAZE_CURSOR_SETTINGS_SUBPAGE_PATH,
+      Subpage.kFaceGazeCursorSettings);
+  r.MANAGE_FACEGAZE_FACIAL_EXPRESSIONS_SETTINGS = createSubpage(
+      r.A11Y_CURSOR_AND_TOUCHPAD,
+      routesMojom.FACE_GAZE_FACIAL_EXPRESSIONS_SETTINGS_SUBPAGE_PATH,
+      Subpage.kFaceGazeFacialExpressionsSettings);
 
   // Privacy and Security section.
   r.OS_PRIVACY = createSection(
@@ -489,6 +501,9 @@ export function createRoutes(): OsSettingsRoutes {
   r.PRIVACY_HUB_GEOLOCATION = createSubpage(
       r.OS_PRIVACY, routesMojom.PRIVACY_HUB_GEOLOCATION_SUBPAGE_PATH,
       Subpage.kPrivacyHubGeolocation);
+  r.PRIVACY_HUB_CAMERA = createSubpage(
+      r.OS_PRIVACY, routesMojom.PRIVACY_HUB_CAMERA_SUBPAGE_PATH,
+      Subpage.kPrivacyHubCamera);
 
   // About section.
   r.ABOUT = createSection(
@@ -529,12 +544,9 @@ export function createRoutes(): OsSettingsRoutes {
 
     // Files subpages.
     if (!isGuest()) {
-      if (loadTimeData.getBoolean('showGoogleDriveSettingsPage') ||
-          loadTimeData.getBoolean('enableDriveFsBulkPinning')) {
-        r.GOOGLE_DRIVE = createSubpage(
-            r.SYSTEM_PREFERENCES, routesMojom.GOOGLE_DRIVE_SUBPAGE_PATH,
-            Subpage.kGoogleDrive);
-      }
+      r.GOOGLE_DRIVE = createSubpage(
+          r.SYSTEM_PREFERENCES, routesMojom.GOOGLE_DRIVE_SUBPAGE_PATH,
+          Subpage.kGoogleDrive);
       if (loadTimeData.getBoolean('showOfficeSettings')) {
         r.OFFICE = createSubpage(
             r.SYSTEM_PREFERENCES, routesMojom.OFFICE_FILES_SUBPAGE_PATH,
@@ -552,6 +564,11 @@ export function createRoutes(): OsSettingsRoutes {
     r.OS_LANGUAGES_LANGUAGES = createSubpage(
         r.SYSTEM_PREFERENCES, routesMojom.LANGUAGES_SUBPAGE_PATH,
         Subpage.kLanguages);
+    if (loadTimeData.getBoolean('isPerAppLanguageEnabled')) {
+      r.OS_LANGUAGES_APP_LANGUAGES = createSubpage(
+          r.OS_LANGUAGES_LANGUAGES, routesMojom.APP_LANGUAGES_SUBPAGE_PATH,
+          Subpage.kAppLanguages);
+    }
 
     // Search and Assistant subpages.
     r.SEARCH_SUBPAGE = createSubpage(
@@ -617,12 +634,8 @@ export function createRoutes(): OsSettingsRoutes {
     if (!isGuest()) {
       r.FILES = createSection(
           r.ADVANCED, routesMojom.FILES_SECTION_PATH, Section.kFiles);
-      if (loadTimeData.getBoolean('showGoogleDriveSettingsPage') ||
-          loadTimeData.getBoolean('enableDriveFsBulkPinning')) {
-        r.GOOGLE_DRIVE = createSubpage(
-            r.FILES, routesMojom.GOOGLE_DRIVE_SUBPAGE_PATH,
-            Subpage.kGoogleDrive);
-      }
+      r.GOOGLE_DRIVE = createSubpage(
+          r.FILES, routesMojom.GOOGLE_DRIVE_SUBPAGE_PATH, Subpage.kGoogleDrive);
       if (loadTimeData.getBoolean('showOfficeSettings')) {
         r.OFFICE = createSubpage(
             r.FILES, routesMojom.OFFICE_FILES_SUBPAGE_PATH,
@@ -653,6 +666,11 @@ export function createRoutes(): OsSettingsRoutes {
         r.OS_LANGUAGES_INPUT,
         routesMojom.JAPANESE_MANAGE_USER_DICTIONARY_SUBPAGE_PATH,
         Subpage.kJapaneseManageUserDictionary);
+    if (loadTimeData.getBoolean('isPerAppLanguageEnabled')) {
+      r.OS_LANGUAGES_APP_LANGUAGES = createSubpage(
+          r.OS_LANGUAGES_LANGUAGES, routesMojom.APP_LANGUAGES_SUBPAGE_PATH,
+          Subpage.kAppLanguages);
+    }
 
     // Reset section.
     if (isPowerwashAllowed()) {

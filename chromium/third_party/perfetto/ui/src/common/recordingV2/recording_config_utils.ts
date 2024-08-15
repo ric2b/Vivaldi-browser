@@ -15,6 +15,7 @@
 
 import {isString} from '../../base/object_utils';
 import {base64Encode} from '../../base/string_utils';
+import {exists} from '../../base/utils';
 import {RecordConfig} from '../../controller/record_config_types';
 import {
   AndroidLogConfig,
@@ -154,12 +155,14 @@ export function genTraceConfig(
     protoCfg.dataSources.push(ds);
   }
 
+  let ftrace = false;
+  let symbolizeKsyms = false;
   if (uiCfg.cpuSched) {
     procThreadAssociationPolling = true;
     procThreadAssociationFtrace = true;
-    uiCfg.ftrace = true;
+    ftrace = true;
     if (enableSchedBlockedReason(androidApiLevel)) {
-      uiCfg.symbolizeKsyms = true;
+      symbolizeKsyms = true;
     }
     ftraceEvents.add('sched/sched_switch');
     ftraceEvents.add('power/suspend_resume');
@@ -193,6 +196,10 @@ export function genTraceConfig(
       ds.config.name = 'android.gpu.memory';
       protoCfg.dataSources.push(ds);
     }
+  }
+
+  if (uiCfg.gpuWorkPeriod) {
+    ftraceEvents.add('power/gpu_work_period');
   }
 
   if (uiCfg.cpuSyscall) {
@@ -262,6 +269,7 @@ export function genTraceConfig(
     if (sysStatsCfg === undefined) sysStatsCfg = new SysStatsConfig();
     sysStatsCfg.meminfoPeriodMs = uiCfg.meminfoPeriodMs;
     sysStatsCfg.meminfoCounters = uiCfg.meminfoCounters.map((name) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return MeminfoCounters[name as any as number] as any as number;
     });
   }
@@ -270,6 +278,7 @@ export function genTraceConfig(
     if (sysStatsCfg === undefined) sysStatsCfg = new SysStatsConfig();
     sysStatsCfg.vmstatPeriodMs = uiCfg.vmstatPeriodMs;
     sysStatsCfg.vmstatCounters = uiCfg.vmstatCounters.map((name) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return VmstatCounters[name as any as number] as any as number;
     });
   }
@@ -366,6 +375,7 @@ export function genTraceConfig(
     ds.config.name = 'android.log';
     ds.config.androidLogConfig = new AndroidLogConfig();
     ds.config.androidLogConfig.logIds = uiCfg.androidLogBuffers.map((name) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return AndroidLogId[name as any as number] as any as number;
     });
 
@@ -465,6 +475,42 @@ export function genTraceConfig(
     chromeCategories.add('netlog');
     chromeCategories.add('navigation');
     chromeCategories.add('browser');
+  }
+
+  if (uiCfg.audio) {
+    function addCategoryAndDisabledByDefault(category: string) {
+      chromeCategories.add(category);
+      chromeCategories.add('disabled-by-default-' + category);
+    }
+
+    addCategoryAndDisabledByDefault('audio');
+    addCategoryAndDisabledByDefault('webaudio');
+    addCategoryAndDisabledByDefault('webaudio.audionode');
+    addCategoryAndDisabledByDefault('webrtc');
+    addCategoryAndDisabledByDefault('audio-worklet');
+    addCategoryAndDisabledByDefault('mediastream');
+    addCategoryAndDisabledByDefault('v8.gc');
+    addCategoryAndDisabledByDefault('toplevel');
+    addCategoryAndDisabledByDefault('toplevel.flow');
+    addCategoryAndDisabledByDefault('wakeup.flow');
+    addCategoryAndDisabledByDefault('cpu_profiler');
+    addCategoryAndDisabledByDefault('scheduler');
+    addCategoryAndDisabledByDefault('p2p');
+    addCategoryAndDisabledByDefault('net');
+  }
+
+  if (uiCfg.video) {
+    chromeCategories.add('base');
+    chromeCategories.add('gpu');
+    chromeCategories.add('gpu.capture');
+    chromeCategories.add('media');
+    chromeCategories.add('toplevel');
+    chromeCategories.add('toplevel.flow');
+    chromeCategories.add('scheduler');
+    chromeCategories.add('wakeup.flow');
+    chromeCategories.add('webrtc');
+    chromeCategories.add('disabled-by-default-video_and_image_capture');
+    chromeCategories.add('disabled-by-default-webrtc');
   }
 
   // linux.perf stack sampling
@@ -609,7 +655,7 @@ export function genTraceConfig(
     protoCfg.dataSources.push(ds);
   }
 
-  if (uiCfg.ftrace || uiCfg.atrace || ftraceEvents.size > 0 ||
+  if (uiCfg.ftrace || ftrace || uiCfg.atrace || ftraceEvents.size > 0 ||
       atraceCats.size > 0 || atraceApps.size > 0) {
     const ds = new TraceConfig.DataSource();
     ds.config = new DataSourceConfig();
@@ -617,14 +663,14 @@ export function genTraceConfig(
     ds.config.ftraceConfig = new FtraceConfig();
     // Override the advanced ftrace parameters only if the user has ticked the
     // "Advanced ftrace config" tab.
-    if (uiCfg.ftrace) {
+    if (uiCfg.ftrace || ftrace) {
       if (uiCfg.ftraceBufferSizeKb) {
         ds.config.ftraceConfig.bufferSizeKb = uiCfg.ftraceBufferSizeKb;
       }
       if (uiCfg.ftraceDrainPeriodMs) {
         ds.config.ftraceConfig.drainPeriodMs = uiCfg.ftraceDrainPeriodMs;
       }
-      if (uiCfg.symbolizeKsyms) {
+      if (uiCfg.symbolizeKsyms || symbolizeKsyms) {
         ds.config.ftraceConfig.symbolizeKsyms = true;
         ftraceEvents.add('sched/sched_blocked_reason');
       }
@@ -649,7 +695,7 @@ export function genTraceConfig(
     }
 
     let ftraceEventsArray: string[] = [];
-    if (androidApiLevel && androidApiLevel === 28) {
+    if (exists(androidApiLevel) && androidApiLevel === 28) {
       for (const ftraceEvent of ftraceEvents) {
         // On P, we don't support groups so strip all group names from ftrace
         // events.

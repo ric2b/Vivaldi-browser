@@ -13,7 +13,13 @@ bool LcppEnabled() {
   return base::FeatureList::IsEnabled(
              blink::features::kLCPCriticalPathPredictor) ||
          base::FeatureList::IsEnabled(blink::features::kLCPScriptObserver) ||
-         base::FeatureList::IsEnabled(blink::features::kLCPPFontURLPredictor);
+         base::FeatureList::IsEnabled(blink::features::kLCPPFontURLPredictor) ||
+         base::FeatureList::IsEnabled(
+             blink::features::kLCPPLazyLoadImagePreload) ||
+         base::FeatureList::IsEnabled(
+             blink::features::kDelayAsyncScriptExecution) ||
+         base::FeatureList::IsEnabled(
+             blink::features::kHttpDiskCachePrewarming);
 }
 
 }  // namespace blink

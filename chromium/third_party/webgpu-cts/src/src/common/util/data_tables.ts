@@ -3,11 +3,11 @@ import { ResolveType, ZipKeysWithValues } from './types.js';
 export type valueof<K> = K[keyof K];
 
 export function keysOf<T extends string>(obj: { [k in T]: unknown }): readonly T[] {
-  return (Object.keys(obj) as unknown[]) as T[];
+  return Object.keys(obj) as unknown[] as T[];
 }
 
 export function numericKeysOf<T>(obj: object): readonly T[] {
-  return (Object.keys(obj).map(n => Number(n)) as unknown[]) as T[];
+  return Object.keys(obj).map(n => Number(n)) as unknown[] as T[];
 }
 
 /**
@@ -32,7 +32,7 @@ export function objectsToRecord<T extends Object>(objects: readonly T[]): Record
 export function makeTable<
   Members extends readonly string[],
   Defaults extends readonly unknown[],
-  Table extends { readonly [k: string]: readonly unknown[] }
+  Table extends { readonly [k: string]: readonly unknown[] },
 >(
   members: Members,
   defaults: Defaults,
@@ -99,7 +99,7 @@ export function makeTableRenameAndFilter<
   Members extends readonly string[],
   DataMembers extends readonly string[],
   Defaults extends readonly unknown[],
-  Table extends { readonly [k: string]: readonly unknown[] }
+  Table extends { readonly [k: string]: readonly unknown[] },
 >(
   columnRenames: { [key: string]: string },
   columnsKept: Members,

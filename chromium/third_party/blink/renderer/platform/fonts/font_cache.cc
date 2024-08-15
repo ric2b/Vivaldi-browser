@@ -38,6 +38,7 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "skia/ext/font_utils.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/font_family_names.h"
 #include "third_party/blink/renderer/platform/fonts/alternate_font_family.h"
@@ -112,6 +113,11 @@ FontCache::FontCache()
 }
 
 FontCache::~FontCache() = default;
+
+void FontCache::Trace(Visitor* visitor) const {
+  visitor->Trace(font_cache_clients_);
+  visitor->Trace(font_fallback_map_);
+}
 
 #if !BUILDFLAG(IS_MAC)
 FontPlatformData* FontCache::SystemFontPlatformData(
@@ -310,13 +316,8 @@ void FontCache::Purge(PurgeSeverity purge_severity) {
 
 void FontCache::AddClient(FontCacheClient* client) {
   CHECK(client);
-  if (!font_cache_clients_) {
-    font_cache_clients_ =
-        MakeGarbageCollected<HeapHashSet<WeakMember<FontCacheClient>>>();
-    LEAK_SANITIZER_IGNORE_OBJECT(&font_cache_clients_);
-  }
-  DCHECK(!font_cache_clients_->Contains(client));
-  font_cache_clients_->insert(client);
+  DCHECK(!font_cache_clients_.Contains(client));
+  font_cache_clients_.insert(client);
 }
 
 uint16_t FontCache::Generation() {
@@ -328,9 +329,8 @@ void FontCache::Invalidate() {
   font_platform_data_cache_->Clear();
   generation_++;
 
-  if (font_cache_clients_) {
-    for (const auto& client : *font_cache_clients_)
-      client->FontCacheInvalidated();
+  for (const auto& client : font_cache_clients_) {
+    client->FontCacheInvalidated();
   }
 
   Purge(kForcePurge);
@@ -353,7 +353,7 @@ void FontCache::CrashWithFontInfo(const FontDescription* font_description) {
   // In production, these 3 font managers must match.
   // They don't match in unit tests or in single process mode.
   SkFontMgr* static_font_mgr = static_font_manager_;
-  SkFontMgr* skia_default_font_mgr = SkFontMgr::RefDefault().get();
+  SkFontMgr* skia_default_font_mgr = skia::DefaultFontMgr().get();
   base::debug::Alias(&font_mgr);
   base::debug::Alias(&static_font_mgr);
   base::debug::Alias(&skia_default_font_mgr);

@@ -33,7 +33,7 @@ void CertVerifyResult::Reset() {
   is_issued_by_additional_trust_anchor = false;
 
   public_key_hashes.clear();
-  ocsp_result = OCSPVerifyResult();
+  ocsp_result = bssl::OCSPVerifyResult();
 
   scts.clear();
   policy_compliance =
@@ -63,6 +63,8 @@ base::Value::Dict CertVerifyResult::NetLogParams(int net_error) const {
   dict.Set("public_key_hashes", std::move(hashes));
 
   dict.Set("scts", net::NetLogSignedCertificateTimestampParams(&scts));
+  dict.Set("ct_compliance_status",
+           CTPolicyComplianceToString(policy_compliance));
 
   return dict;
 }

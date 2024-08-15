@@ -10,10 +10,10 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
 
 @protocol ContentSuggestionsCommands;
+@protocol ContentSuggestionsImageDataSource;
 @protocol ContentSuggestionsMenuProvider;
 @protocol ContentSuggestionsViewControllerAudience;
 @protocol ParcelTrackingOptInCommands;
-@protocol SafetyCheckViewDelegate;
 @protocol SetUpListViewDelegate;
 @class ContentSuggestionsMetricsRecorder;
 @class LayoutGuideCenter;
@@ -30,14 +30,13 @@ class UrlLoadingBrowserAgent;
                          bundle:(NSBundle*)bundle NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
 
-// Returns the vertical space taken up by the Content Suggestions.
-- (CGFloat)contentSuggestionsHeight;
-
 // Handler for the commands sent by the ContentSuggestionsViewController.
 @property(nonatomic, weak) id<ContentSuggestionsCommands>
     suggestionCommandHandler;
+// Datasource to fetch favicons.
+@property(nonatomic, weak) id<ContentSuggestionsImageDataSource>
+    imageDataSource;
 @property(nonatomic, weak) id<ContentSuggestionsViewControllerAudience,
-                              SafetyCheckViewDelegate,
                               SetUpListViewDelegate>
     audience;
 // Provider of menu configurations for the contentSuggestions component.
@@ -57,6 +56,9 @@ class UrlLoadingBrowserAgent;
 
 // The layout guide center to use to refer to the Magic Stack.
 @property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
+
+// Called when the module width has changed.
+- (void)moduleWidthDidUpdate;
 
 @end
 

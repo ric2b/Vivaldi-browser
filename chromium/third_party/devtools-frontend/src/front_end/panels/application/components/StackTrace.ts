@@ -4,14 +4,15 @@
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
+import type * as Protocol from '../../../generated/protocol.js';
 import * as ExpandableList from '../../../ui/components/expandable_list/expandable_list.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as Components from '../../../ui/legacy/components/utils/utils.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
-import type * as Protocol from '../../../generated/protocol.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import stackTraceRowStyles from './stackTraceRow.css.js';
 import stackTraceLinkButtonStyles from './stackTraceLinkButton.css.js';
+import stackTraceRowStyles from './stackTraceRow.css.js';
 
 const UIStrings = {
   /**
@@ -26,6 +27,11 @@ const UIStrings = {
    *@description A link to rehide frames that are by default hidden.
    */
   showLess: 'Show less',
+  /**
+   *@description Label for a stack trace. If a frame is created programmatically (i.e. via JavaScript), there is a
+   * stack trace for the line of code which caused the creation of the iframe. This is the stack trace we are showing here.
+   */
+  creationStackTrace: 'Frame Creation `Stack Trace`',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/application/components/StackTrace.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -201,12 +207,14 @@ export class StackTrace extends HTMLElement {
         this.#shadow, {host: this});
       return;
     }
+
     const expandableRows = this.createRowTemplates();
     LitHtml.render(
       LitHtml.html`
         <${ExpandableList.ExpandableList.ExpandableList.litTagName} .data=${{
-          rows: expandableRows,
+          rows: expandableRows, title: i18nString(UIStrings.creationStackTrace),
         } as ExpandableList.ExpandableList.ExpandableListData}>
+        jslog=${VisualLogging.tree()}>
         </${ExpandableList.ExpandableList.ExpandableList.litTagName}>
       `,
       this.#shadow, {host: this});

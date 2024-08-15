@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_LOGIN_SCREENS_CONSUMER_UPDATE_SCREEN_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback.h"
@@ -19,7 +20,6 @@
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/version_updater/version_updater.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 
@@ -41,6 +41,7 @@ class ConsumerUpdateScreen : public BaseScreen,
     UPDATE_NOT_REQUIRED,
     UPDATE_ERROR,
     NOT_APPLICABLE,
+    CHECK_TIMEOUT,
   };
 
   // This enum is tied directly to the OobeConsumerUpdateScreenSkippedReason UMA
@@ -93,6 +94,14 @@ class ConsumerUpdateScreen : public BaseScreen,
 
   void set_delay_for_exit_no_update_for_testing(base::TimeDelta delay) {
     exit_delay_ = delay;
+  }
+
+  void set_delay_for_show_skip_button_for_testing(base::TimeDelta delay) {
+    delay_skip_button_time_ = delay;
+  }
+
+  void set_maximum_time_force_update_for_testing(base::TimeDelta delay) {
+    maximum_time_force_update_ = delay;
   }
 
   const ScreenExitCallback& get_exit_callback_for_testing() {
@@ -155,7 +164,7 @@ class ConsumerUpdateScreen : public BaseScreen,
 
   bool update_available = false;
 
-  absl::optional<bool> is_mandatory_update_;
+  std::optional<bool> is_mandatory_update_;
 
   // True if there was no notification about captive portal state for
   // the default network.

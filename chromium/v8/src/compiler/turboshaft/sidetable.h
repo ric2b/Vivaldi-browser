@@ -20,7 +20,8 @@
 namespace v8::internal::compiler::turboshaft {
 
 #ifdef DEBUG
-bool OpIndexBelongsToTableGraph(const Graph* graph, OpIndex index);
+V8_EXPORT_PRIVATE bool OpIndexBelongsToTableGraph(const Graph* graph,
+                                                  OpIndex index);
 #endif
 
 namespace detail {
@@ -184,7 +185,7 @@ class FixedOpIndexSidetable : public detail::FixedSidetable<T, OpIndex> {
   using Base = detail::FixedSidetable<T, OpIndex>;
 
  public:
-  explicit FixedOpIndexSidetable(size_t size, Zone* zone, const Graph* graph)
+  FixedOpIndexSidetable(size_t size, Zone* zone, const Graph* graph)
       : Base(size, zone)
 #ifdef DEBUG
         ,

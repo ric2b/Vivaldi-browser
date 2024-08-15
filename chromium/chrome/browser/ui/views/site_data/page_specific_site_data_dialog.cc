@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/site_data/page_specific_site_data_dialog_controller.h"
 #include "chrome/browser/ui/views/site_data/site_data_row_view.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browsing_data/content/browsing_data_model.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
@@ -661,7 +662,7 @@ views::Widget* ShowPageSpecificSiteDataDialog(
           base::BindRepeating(&PageSpecificSiteDataDialogModelDelegate::
                                   OnDialogExplicitlyClosed,
                               base::Unretained(delegate)),
-          ui::DialogModelButton::Params().SetLabel(
+          ui::DialogModel::Button::Params().SetLabel(
               l10n_util::GetStringUTF16(IDS_DONE)))
       .SetCloseActionCallback(base::BindOnce(
           &PageSpecificSiteDataDialogModelDelegate::OnDialogExplicitlyClosed,

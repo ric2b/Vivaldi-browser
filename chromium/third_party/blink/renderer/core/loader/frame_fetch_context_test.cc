@@ -580,7 +580,6 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest,
  public:
   FrameFetchContextHintsTest() {
     std::vector<base::test::FeatureRef> enabled_features = {
-        blink::features::kUserAgentClientHint,
         blink::features::kClientHintsPrefersReducedTransparency,
     };
     std::vector<base::test::FeatureRef> disabled_features = {};
@@ -955,7 +954,7 @@ TEST_P(FrameFetchContextHintsTest, MonitorUAHints) {
                  false, "");
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", false, "");
     ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", true,
-                 EmptyString());
+                 "");
 
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Arch", false, "");
     ExpectHeader("http://www.example.com/1.gif", "Sec-CH-UA-Platform-Version",
@@ -1118,7 +1117,7 @@ TEST_P(FrameFetchContextHintsTest, MonitorAllHints) {
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Model", true,
                EmptyString());
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-UA-Form-Factor", true,
-               EmptyString());
+               "");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Prefers-Color-Scheme",
                true, "light");
   ExpectHeader("https://www.example.com/1.gif", "Sec-CH-Prefers-Reduced-Motion",

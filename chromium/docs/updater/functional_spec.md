@@ -152,7 +152,7 @@ directory at `out\ChromeBrandedDebug`:
 New-SelfSignedCertificate -DnsName id@domain.tld -Type CodeSigning
  -CertStoreLocation cert:\CurrentUser\My
 ```
-* Note: all the steps below are run from a medium cmd prompt.
+* Note: **all the steps below are run from a medium cmd prompt.**
 * One-time step: `python3 -m pip install pypiwin32`
 * One-time step:
 ```
@@ -169,17 +169,16 @@ python3 chrome/updater/win/signing/sign.py                                     ^
   --manifest_path out/ChromeBrandedDebug/UpdaterSigning/OfflineManifest.gup    ^
   --lzma_7z "C:/Program Files/7-Zip/7z.exe"                                    ^
   --signtool ../../fig/google3/third_party/windows_sdk/windows_sdk_10/files/bin/10.0.22000.0/x86/signtool.exe ^
-  --certificate_tag out/ChromeBrandedDebug/UpdaterSigning/certificate_tag.exe  ^
+  --tagging_exe out/ChromeBrandedDebug/UpdaterSigning/tag.exe  ^
   --manifest_dict_replacements "{'${INSTALLER_VERSION}':'110.0.5478.0', '${ARCH_REQUIREMENT}':'x86'}"
 ```
 * tag the offline installer and save the result as
 `Signed_ChromeBetaOfflineSetup.exe`:
 ```
-python3 chrome/updater/tools/tag.py                                            ^
-  --certificate_tag=out/ChromeBrandedDebug/UpdaterSigning/certificate_tag.exe  ^
-  --in_file=out/ChromeBrandedDebug/UpdaterSigning/ChromeBetaOfflineSetup.exe   ^
-  --out_file=out/ChromeBrandedDebug/UpdaterSigning/Signed_ChromeBetaOfflineSetup.exe ^
-  --tag="appguid={8237E44A-0054-442C-B6B6-EA0509993955}&appname=Google%20Chrome%20Beta&needsadmin=Prefers"
+out/ChromeBrandedDebug/UpdaterSigning/tag.exe                                                                   ^
+  --set-tag="appguid={8237E44A-0054-442C-B6B6-EA0509993955}&appname=Google%20Chrome%20Beta&needsadmin=Prefers"  ^
+  --out=out/ChromeBrandedDebug/UpdaterSigning/Signed_ChromeBetaOfflineSetup.exe                                 ^
+  out/ChromeBrandedDebug/UpdaterSigning/ChromeBetaOfflineSetup.exe
 ```
 * Now you can run the final signed offline installer:
 `Signed_ChromeBetaOfflineSetup.exe`!
@@ -349,7 +348,9 @@ installs small versions of those programs that implement a subset of their APIs.
 
 The updater also imports the properties and state of the apps that have been
 registered with Omaha and Keystone, so they show up as registered with the
-updater.
+updater. This import is repeated periodically, so long as the updater is
+installed, but these properties do not override any existing properties the
+updater already tracks for each app.
 
 #### Keystone Shims
 The updater installs a Keystone-like application that contains these shims:
@@ -455,7 +456,12 @@ the server indicating an installation failure.
 
 The user interface is localized in the same languages as the Chromium project.
 
-TODO(crbug.com/1286580): Implement and document silent mode.
+No UI will be shown if the `--silent` switch is specified on the command line.
+
+The launch command provided by the application installer via the
+[installer result API](#installer-result-api)
+will be run unconditionally, even for silent modes, if the `--alwayslaunchcmd`
+switch is specified on the command line.
 
 #### Help Button
 If the installation fails, the updater shows an error message with a "Help"
@@ -524,7 +530,7 @@ subsequent update checks.
 All application installs and user-initiated application updates are processed
 as foreground operations and with an `installsource` set to "ondemand".
 
-### Installer APIs
+### Installer Result API
 As part of installing or updating an application, the updater executes the
 application's installer. The API for the application installer is platform-
 specific.
@@ -1112,6 +1118,9 @@ millisecond of each second).
 
 Background updates can be disabled entirely through policy.
 
+Users can trigger an immediate run of the periodic tasks by calling the
+RunPeriodicTasks RPC, even for a system updater.
+
 #### Windows Scheduling of Updates
 The update wake task is scheduled using the OS task scheduler.
 
@@ -1181,6 +1190,11 @@ System-scope updaters will update any application registered with them. On
 POSIX platforms, they will additionally lchown the existence checker path
 registered by the application to be owned by the root user. User-scope updaters
 use this as a signal that the application is managed by a system-scope updater.
+
+For backwards compatibility with third party software, on Windows, after a
+successful registration and on each update, the updater will set
+[HKCU or HKLM]\SOFTWARE\{Company}\Update\ClientState\{AppID} → pv to the
+version of the application.
 
 ### App Activity Reporting
 Applications can report whether they are actively used or not through the
@@ -1431,8 +1445,8 @@ checker and no file at that path exists, the updater considers the application
 uninstalled, sends the ping, and stops trying to keep it up to date. User-scope
 updaters will also do this if the file is owned by the root user.
 
-On Windows, if the ClientState entry for for the application is deleted, the
-app is considered uninstalled.
+On Windows, if the Clients entry for for the application is deleted, the app is
+considered uninstalled.
 
 On Windows, the updater registers a "UninstallCmdLine" under the `Software\
 {Company}\Updater` key. This command line can be invoked by application
@@ -1444,8 +1458,9 @@ itself immediately. The updater also uninstalls itself if it has started
 24 times but never had a product (besides itself) registered for updates.
 
 The updater uninstaller removes all updater files, registry keys, RPC hooks,
-scheduled tasks, and so forth from the file system, except that it leaves a
-small log file in its data directory.
+scheduled tasks, and so forth from the system, except that:
+*   it leaves a small log file in its data directory.
+*   it leaves the Clients registry key in Windows registry.
 
 ## Associated Tools
 
@@ -1477,8 +1492,8 @@ Overrides are specified in an overrides.json file placed in the updater data
 directory.
 
 ### Tagging Tools
-The project contains a helper tool for tagging called `certificate_tag.exe`.
+The project contains a helper tool for tagging called `tag.exe`.
 This tool can be
-[used](https://chromium.googlesource.com/chromium/src/+/main/chrome/updater/tools/main.cc#59)
+[used](https://source.chromium.org/chromium/chromium/src/+/main:chrome/updater/tools/tag_main.cc)
 to inject a superfluous certificate into a signed binary to support the
 creation of tagged binaries.

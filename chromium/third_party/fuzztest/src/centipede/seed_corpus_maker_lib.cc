@@ -17,37 +17,45 @@
 // Centipede workdirs and writes them out to a new set of Centipede corpus file
 // shards.
 
+#include "./centipede/seed_corpus_maker_lib.h"
+
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <functional>
 #include <iterator>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/random/random.h"
-#include "absl/status/status.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
-#include "absl/types/span.h"
+#include "absl/time/time.h"
 #include "./centipede/blob_file.h"
 #include "./centipede/defs.h"
+#include "./centipede/feature.h"
 #include "./centipede/logging.h"
 #include "./centipede/remote_file.h"
+#include "./centipede/rusage_profiler.h"
 #include "./centipede/seed_corpus_config.pb.h"
+#include "./centipede/shard_reader.h"
+#include "./centipede/thread_pool.h"
+#include "./centipede/util.h"
+#include "./centipede/workdir.h"
 #include "google/protobuf/text_format.h"
 
-// TODO(ussuri): Add unit tests.
-// TODO(ussuri): Parallelize I/O where possible.
 // TODO(ussuri): Implement a smarter on-the-fly sampling to avoid having to
 //  load all of a source's elements into RAM only to pick some of them. That
 //  would be trivial if the number of elements in a corpus file could be
@@ -58,6 +66,19 @@
 namespace centipede {
 
 namespace fs = std::filesystem;
+
+namespace {
+
+std::string ShardPathsForLogging(  //
+    const std::string& corpus_fname, const std::string& features_fname) {
+  if (VLOG_IS_ON(3)) {
+    return absl::StrCat(  //
+        ":\nCorpus:  ", corpus_fname, "\nFeatures:", features_fname);
+  }
+  return "";
+}
+
+}  // namespace
 
 SeedCorpusConfig ResolveSeedCorpusConfig(  //
     std::string_view config_spec,          //
@@ -110,84 +131,149 @@ SeedCorpusConfig ResolveSeedCorpusConfig(  //
     }
   }
 
+  if (config.destination().shard_index_digits() == 0) {
+    config.mutable_destination()->set_shard_index_digits(
+        WorkDir::kDigitsInShardIndex);
+  }
+
   LOG(INFO) << "Resolved config:\n" << config.DebugString();
 
   return config;
 }
 
-void SampleSeedCorpusElementsFromSource(  //
-    const SeedCorpusSource& source,       //
-    std::vector<centipede::ByteArray>& elements) {
+// TODO(ussuri): Refactor into smaller functions.
+void SampleSeedCorpusElementsFromSource(    //
+    const SeedCorpusSource& source,         //
+    std::string_view coverage_binary_name,  //
+    std::string_view coverage_binary_hash,  //
+    InputAndFeaturesVec& elements) {
+  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                 //
+      /*enable=*/VLOG_IS_ON(1),                                       //
+      /*timelapse_interval=*/absl::Seconds(VLOG_IS_ON(2) ? 10 : 60),  //
+      /*also_log_timelapses=*/VLOG_IS_ON(10));
+
   LOG(INFO) << "Reading/sampling seed corpus elements from source:\n"
             << source.DebugString();
 
-  // Find `source.dir_blog()`-matching dirs and pick at most
+  // Find `source.dir_glob()`-matching dirs and pick at most
   // `source.num_recent_dirs()` most recent ones.
 
-  std::vector<std::string> corpus_dirs;
-  RemoteGlobMatch(source.dir_glob(), corpus_dirs);
-  LOG(INFO) << "Found " << corpus_dirs.size() << " corpus dirs matching "
+  std::vector<std::string> src_dirs;
+  RemoteGlobMatch(source.dir_glob(), src_dirs);
+  LOG(INFO) << "Found " << src_dirs.size() << " corpus dir(s) matching "
             << source.dir_glob();
   // Sort in the ascending lexicographical order. We expect that dir names
   // contain timestamps and therefore will be sorted from oldest to newest.
-  std::sort(corpus_dirs.begin(), corpus_dirs.end(), std::less<std::string>());
-  if (source.num_recent_dirs() < corpus_dirs.size()) {
-    corpus_dirs.erase(  //
-        corpus_dirs.begin(), corpus_dirs.end() - source.num_recent_dirs());
-    LOG(INFO) << "Selected " << corpus_dirs.size() << " corpus dirs";
+  std::sort(src_dirs.begin(), src_dirs.end(), std::less<std::string>());
+  if (source.num_recent_dirs() < src_dirs.size()) {
+    src_dirs.erase(src_dirs.begin(), src_dirs.end() - source.num_recent_dirs());
+    LOG(INFO) << "Selected " << src_dirs.size() << " corpus dir(s)";
   }
 
   // Find all the corpus shard files in the found dirs.
 
-  std::vector<std::string> shard_fnames;
-  for (const auto& dir : corpus_dirs) {
+  std::vector<std::string> corpus_shard_fnames;
+  for (const auto& dir : src_dirs) {
     const std::string shards_glob = fs::path{dir} / source.shard_rel_glob();
     // NOTE: `RemoteGlobMatch` appends to the output list.
-    const auto prev_num_shards = shard_fnames.size();
-    RemoteGlobMatch(shards_glob, shard_fnames);
-    LOG(INFO) << "Found " << (shard_fnames.size() - prev_num_shards)
-              << " shards matching " << shards_glob;
+    const auto prev_num_shards = corpus_shard_fnames.size();
+    RemoteGlobMatch(shards_glob, corpus_shard_fnames);
+    LOG(INFO) << "Found " << (corpus_shard_fnames.size() - prev_num_shards)
+              << " shard(s) matching " << shards_glob;
   }
-  LOG(INFO) << "Found " << shard_fnames.size() << " shards total in source "
-            << source.dir_glob();
+  LOG(INFO) << "Found " << corpus_shard_fnames.size()
+            << " shard(s) total in source " << source.dir_glob();
 
-  if (shard_fnames.empty()) {
+  if (corpus_shard_fnames.empty()) {
     LOG(WARNING) << "Skipping empty source " << source.dir_glob();
     return;
   }
 
-  // Read all the elements from the found corpus shard files.
+  // Read all the elements from the found corpus shard files using parallel I/O
+  // threads.
 
-  std::vector<centipede::ByteArray> src_elts;
+  const auto num_shards = corpus_shard_fnames.size();
+  std::vector<InputAndFeaturesVec> src_elts_per_shard(num_shards);
+  std::vector<size_t> src_elts_with_features_per_shard(num_shards, 0);
 
-  for (const auto& shard_fname : shard_fnames) {
-    std::unique_ptr<centipede::BlobFileReader> corpus_reader =
-        centipede::DefaultBlobFileReaderFactory();
-    CHECK(corpus_reader != nullptr);
-    CHECK_OK(corpus_reader->Open(shard_fname)) << VV(shard_fname);
+  {
+    constexpr int kMaxReadThreads = 32;
+    ThreadPool threads{std::min<int>(kMaxReadThreads, num_shards)};
 
-    absl::Status read_status;
-    size_t num_read_elts = 0;
-    while (true) {
-      absl::Span<uint8_t> elt;
-      read_status = corpus_reader->Read(elt);
-      // Reached EOF - done with this shard.
-      if (absl::IsOutOfRange(read_status)) break;
-      CHECK_OK(read_status)
-          << "Failure reading elements from shard " << shard_fname;
-      // TODO(b/302558385): Replace with a CHECK.
-      LOG_IF(ERROR, elt.empty()) << "Read empty element: " << VV(shard_fname);
-      src_elts.emplace_back(elt.begin(), elt.end());
-      ++num_read_elts;
+    for (int shard = 0; shard < num_shards; ++shard) {
+      const auto& corpus_fname = corpus_shard_fnames[shard];
+      auto& shard_elts = src_elts_per_shard[shard];
+      auto& shard_elts_with_features = src_elts_with_features_per_shard[shard];
+
+      const auto read_shard = [shard, corpus_fname, coverage_binary_name,
+                               coverage_binary_hash, &shard_elts,
+                               &shard_elts_with_features]() {
+        // NOTE: The deduced matching `features_fname` may not exist if the
+        // source corpus was generated for a coverage binary that is different
+        // from the one we need, but `ReadShard()` can tolerate that, passing
+        // empty `FeatureVec`s to the callback if that's the case.
+        const auto work_dir = WorkDir::FromCorpusShardPath(  //
+            corpus_fname, coverage_binary_name, coverage_binary_hash);
+        const std::string features_fname =
+            work_dir.CorpusFiles().IsShardPath(corpus_fname)
+                ? work_dir.FeaturesFiles().MyShardPath()
+            : work_dir.DistilledCorpusFiles().IsShardPath(corpus_fname)
+                ? work_dir.DistilledFeaturesFiles().MyShardPath()
+                : "";
+
+        VLOG(2) << "Reading elements from source shard " << shard
+                << ShardPathsForLogging(corpus_fname, features_fname);
+
+        ReadShard(corpus_fname, features_fname,
+                  [shard, &shard_elts, &shard_elts_with_features](  //
+                      const ByteArray& input, FeatureVec& features) {
+                    // `ReadShard()` indicates "features not computed/found" as
+                    // `{}` and "features computed/found, but empty" as
+                    // `{feature_domains::kNoFeature}`. We're interested in how
+                    // many precomputed features we find, even if empty.
+                    if (!features.empty()) {
+                      ++shard_elts_with_features;
+                    }
+                    shard_elts.emplace_back(input, std::move(features));
+                    VLOG_EVERY_N(10, 100000)
+                        << "Read " << shard_elts.size()
+                        << " elements from shard " << shard << " so far";
+                  });
+
+        LOG(INFO) << "Read " << shard_elts.size() << " elements ("
+                  << shard_elts_with_features
+                  << " with computed features) from source shard " << shard
+                  << ShardPathsForLogging(corpus_fname, features_fname);
+      };
+
+      threads.Schedule(read_shard);
     }
-
-    corpus_reader->Close().IgnoreError();
-
-    LOG(INFO) << "Read " << num_read_elts << " elements from shard "
-              << shard_fname;
   }
 
-  LOG(INFO) << "Read " << src_elts.size() << " elements total from source "
+  RPROF_SNAPSHOT_AND_LOG("Done reading");
+
+  InputAndFeaturesVec src_elts;
+  size_t src_num_features = 0;
+
+  for (int s = 0; s < num_shards; ++s) {
+    auto& shard_elts = src_elts_per_shard[s];
+    for (auto& elt : shard_elts) {
+      src_elts.emplace_back(std::move(elt));
+    }
+    shard_elts.clear();
+    shard_elts.shrink_to_fit();
+    src_num_features += src_elts_with_features_per_shard[s];
+  }
+
+  src_elts_per_shard.clear();
+  src_elts_per_shard.shrink_to_fit();
+  src_elts_with_features_per_shard.clear();
+  src_elts_with_features_per_shard.shrink_to_fit();
+
+  RPROF_SNAPSHOT_AND_LOG("Done merging");
+
+  LOG(INFO) << "Read total of " << src_elts.size() << " elements ("
+            << src_num_features << " with features) from source "
             << source.dir_glob();
 
   // Extract a sample of the elements of the size specified in
@@ -211,20 +297,48 @@ void SampleSeedCorpusElementsFromSource(  //
   if (sample_size < src_elts.size()) {
     LOG(INFO) << "Sampling " << sample_size << " elements out of "
               << src_elts.size();
-    std::sample(  //
-        src_elts.cbegin(), src_elts.cend(), std::back_inserter(elements),
-        sample_size, absl::BitGen{});
   } else {
     LOG(INFO) << "Using all " << src_elts.size() << " elements";
-    // TODO(ussuri): Should we still use std::sample() to randomize the order?
-    elements.insert(elements.end(), src_elts.cbegin(), src_elts.cend());
   }
+
+  // Extract a sample by shuffling the elements' indices and resizing to the
+  // requested sample size. We do this, rather than std::sampling the elements
+  // themselves and associated inserting into `elements`, to avoid a spike in
+  // peak RAM usage.
+  std::vector<size_t> src_sample_idxs(src_elts.size());
+  std::iota(src_sample_idxs.begin(), src_sample_idxs.end(), 0);
+  std::shuffle(src_sample_idxs.begin(), src_sample_idxs.end(), absl::BitGen{});
+  src_sample_idxs.resize(sample_size);
+
+  RPROF_SNAPSHOT_AND_LOG("Done sampling");
+
+  // Now move each sampled element from `src_elts` to `elements`.
+  elements.reserve(elements.size() + sample_size);
+  for (size_t idx : src_sample_idxs) {
+    elements.emplace_back(std::move(src_elts[idx]));
+  }
+
+  RPROF_SNAPSHOT_AND_LOG("Done appending");
 }
 
-void WriteSeedCorpusElementsToDestination(              //
-    const std::vector<centipede::ByteArray>& elements,  //
+// TODO(ussuri): Refactor into smaller functions.
+void WriteSeedCorpusElementsToDestination(  //
+    const InputAndFeaturesVec& elements,    //
+    std::string_view coverage_binary_name,  //
+    std::string_view coverage_binary_hash,  //
     const SeedCorpusDestination& destination) {
-  LOG(INFO) << "Writing seed corpus elements to destination:\n"
+  CHECK(!elements.empty());
+  CHECK(!coverage_binary_name.empty());
+  CHECK(!coverage_binary_hash.empty());
+  CHECK(!destination.dir_path().empty());
+
+  RPROF_THIS_FUNCTION_WITH_TIMELAPSE(                                 //
+      /*enable=*/VLOG_IS_ON(1),                                       //
+      /*timelapse_interval=*/absl::Seconds(VLOG_IS_ON(2) ? 10 : 60),  //
+      /*also_log_timelapses=*/VLOG_IS_ON(10));
+
+  LOG(INFO) << "Writing " << elements.size()
+            << " seed corpus elements to destination:\n"
             << destination.DebugString();
 
   CHECK_GT(destination.num_shards(), 0)
@@ -235,71 +349,183 @@ void WriteSeedCorpusElementsToDestination(              //
   // Compute shard sizes. If the elements can't be evenly divided between the
   // requested number of shards, distribute the N excess elements between the
   // first N shards.
-  const size_t shard_size = elements.size() / destination.num_shards();
-  std::vector<size_t> shard_sizes(destination.num_shards(), shard_size);
-  const size_t excess_elts = elements.size() % destination.num_shards();
+  const size_t num_shards =
+      std::min<size_t>(destination.num_shards(), elements.size());
+  CHECK_GT(num_shards, 0);
+  const size_t shard_size = elements.size() / num_shards;
+  std::vector<size_t> shard_sizes(num_shards, shard_size);
+  const size_t excess_elts = elements.size() % num_shards;
   for (size_t i = 0; i < excess_elts; ++i) {
     ++shard_sizes[i];
   }
+  std::atomic<size_t> dst_elts_with_features = 0;
 
-  // Write the elements to the shard files.
-  // TODO(b/295978603): Replace the 6 with `WorkdirMgr::kDigitsInShardIndex`.
-  const auto shard_index_digits = destination.shard_index_digits() > 0
-                                      ? destination.shard_index_digits()
-                                      : 6;
-  auto elt_it = elements.cbegin();
-  for (size_t s = 0; s < shard_sizes.size(); ++s) {
-    // Generate the output shard's filename.
-    const std::string shard_idx =
-        absl::StrFormat("%0*d", shard_index_digits, s);
-    const std::string shard_rel_fname =
-        absl::StrReplaceAll(destination.shard_rel_glob(), {{"*", shard_idx}});
-    const std::string shard_fname =
-        fs::path{destination.dir_path()} / shard_rel_fname;
+  // Write the elements to the shard files using parallel I/O threads.
+  {
+    constexpr int kMaxWriteThreads = 1000;
+    ThreadPool threads{std::min<int>(kMaxWriteThreads, num_shards)};
 
-    LOG(INFO) << "Writing " << shard_sizes[s] << " elements to " << shard_fname;
+    auto shard_elt_it = elements.cbegin();
 
-    // Open the shard's file.
-    std::unique_ptr<centipede::BlobFileWriter> corpus_writer =
-        centipede::DefaultBlobFileWriterFactory();
-    CHECK(corpus_writer != nullptr);
-    CHECK_OK(corpus_writer->Open(shard_fname, "w")) << VV(shard_fname);
+    for (size_t shard = 0; shard < shard_sizes.size(); ++shard) {
+      // Compute this shard's range of the input elements to write.
+      const auto shard_size = shard_sizes[shard];
+      const auto elt_range_begin = shard_elt_it;
+      std::advance(shard_elt_it, shard_size);
+      const auto elt_range_end = shard_elt_it;
+      CHECK(shard_elt_it <= elements.cend()) << VV(shard);
 
-    // Write the shard's elements to the file.
-    for (size_t e = 0, ee = shard_sizes[s]; e < ee; ++e) {
-      CHECK(elt_it != elements.cend());
-      CHECK_OK(corpus_writer->Write(*elt_it)) << VV(shard_fname);
-      ++elt_it;
+      const auto write_shard = [shard, elt_range_begin, elt_range_end,
+                                coverage_binary_name, coverage_binary_hash,
+                                &destination, &dst_elts_with_features]() {
+        // Generate the output shard's filename.
+        // TODO(ussuri): Use more of `WorkDir` APIs here (possibly extend
+        // them, and possibly retire
+        // `SeedCorpusDestination::shard_index_digits`).
+        const std::string shard_idx =
+            absl::StrFormat("%0*d", destination.shard_index_digits(), shard);
+        const std::string corpus_rel_fname = absl::StrReplaceAll(
+            destination.shard_rel_glob(), {{"*", shard_idx}});
+        const std::string corpus_fname =
+            fs::path{destination.dir_path()} / corpus_rel_fname;
+
+        const auto work_dir = WorkDir::FromCorpusShardPath(  //
+            corpus_fname, coverage_binary_name, coverage_binary_hash);
+
+        CHECK(corpus_fname == work_dir.CorpusFiles().MyShardPath() ||
+              corpus_fname == work_dir.DistilledCorpusFiles().MyShardPath())
+            << "Bad config: generated destination corpus filename '"
+            << corpus_fname << "' doesn't match one of two expected forms '"
+            << work_dir.CorpusFiles().MyShardPath() << "' or '"
+            << work_dir.DistilledCorpusFiles().MyShardPath()
+            << "'; make sure binary name in config matches explicitly passed '"
+            << coverage_binary_name << "'";
+
+        const std::string features_fname =
+            work_dir.CorpusFiles().IsShardPath(corpus_fname)
+                ? work_dir.FeaturesFiles().MyShardPath()
+                : work_dir.DistilledFeaturesFiles().MyShardPath();
+        CHECK(!features_fname.empty());
+
+        VLOG(2) << "Writing " << std::distance(elt_range_begin, elt_range_end)
+                << " elements to destination shard " << shard
+                << ShardPathsForLogging(corpus_fname, features_fname);
+
+        // Features files are always saved in a subdir of the workdir
+        // (== `destination.dir_path()` here), which might not exist yet, so we
+        // create it. Corpus files are saved in the workdir directly, but we
+        // also create it in case `destination.shard_rel_glob()` contains some
+        // dirs (not really intended for that, but the end-user may do that).
+        for (const auto& fname : {corpus_fname, features_fname}) {
+          if (!fname.empty()) {
+            const auto dir = fs::path{fname}.parent_path().string();
+            if (!RemotePathExists(dir)) RemoteMkdir(dir);
+          }
+        }
+
+        // Create writers for the corpus and features shard files.
+
+        // TODO(ussuri): Wrap corpus/features writing in a similar API to
+        // `ReadShard()`.
+
+        const std::unique_ptr<BlobFileWriter> corpus_writer =
+            DefaultBlobFileWriterFactory();
+        CHECK(corpus_writer != nullptr);
+        CHECK_OK(corpus_writer->Open(corpus_fname, "w")) << VV(corpus_fname);
+
+        const std::unique_ptr<BlobFileWriter> features_writer =
+            DefaultBlobFileWriterFactory();
+        CHECK(features_writer != nullptr);
+        CHECK_OK(features_writer->Open(features_fname, "w"))
+            << VV(features_fname);
+
+        // Write the shard's elements to the corpus and features shard files.
+
+        size_t shard_elts_with_features = 0;
+        for (auto elt_it = elt_range_begin; elt_it != elt_range_end; ++elt_it) {
+          const ByteArray& input = elt_it->first;
+          CHECK_OK(corpus_writer->Write(input)) << VV(corpus_fname);
+          const FeatureVec& features = elt_it->second;
+          if (!features.empty()) {
+            ++shard_elts_with_features;
+            const ByteArray packed_features =
+                PackFeaturesAndHash(input, features);
+            CHECK_OK(features_writer->Write(packed_features))
+                << VV(features_fname);
+          }
+        }
+
+        LOG(INFO) << "Wrote " << std::distance(elt_range_begin, elt_range_end)
+                  << " elements (" << shard_elts_with_features
+                  << " with features) to destination shard " << shard
+                  << ShardPathsForLogging(corpus_fname, features_fname);
+
+        dst_elts_with_features += shard_elts_with_features;
+
+        CHECK_OK(corpus_writer->Close()) << VV(corpus_fname);
+        CHECK_OK(features_writer->Close()) << VV(features_fname);
+      };
+
+      threads.Schedule(write_shard);
     }
-
-    CHECK_OK(corpus_writer->Close()) << VV(shard_fname);
   }
+
+  LOG(INFO) << "Wrote total of " << elements.size() << " elements ("
+            << dst_elts_with_features
+            << " with precomputed features) to destination "
+            << destination.dir_path();
 }
 
-void GenerateSeedCorpusFromConfig(  //
-    std::string_view config_spec,   //
+void GenerateSeedCorpusFromConfig(          //
+    std::string_view config_spec,           //
+    std::string_view coverage_binary_name,  //
+    std::string_view coverage_binary_hash,  //
     std::string_view override_out_dir) {
+  // Resolve the config.
   const SeedCorpusConfig config =
       ResolveSeedCorpusConfig(config_spec, override_out_dir);
-
   if (config.sources_size() == 0 || !config.has_destination()) {
     LOG(WARNING) << "Config is empty: skipping seed corpus generation";
     return;
   }
 
   // Pre-create the destination dir early to catch possible misspellings etc.
-  RemoteMkdir(config.destination().dir_path());
+  if (!RemotePathExists(config.destination().dir_path())) {
+    RemoteMkdir(config.destination().dir_path());
+  }
 
-  std::vector<centipede::ByteArray> elements;
+  // Dump the config to the debug info dir in the destination.
+  const WorkDir workdir{
+      config.destination().dir_path(),
+      coverage_binary_name,
+      coverage_binary_hash,
+      /*my_shard_index=*/0,
+  };
+  const std::filesystem::path debug_info_dir = workdir.DebugInfoDirPath();
+  RemoteMkdir(debug_info_dir.string());
+  RemoteFileSetContents(debug_info_dir / "seeding.cfg", config.DebugString());
+
+  InputAndFeaturesVec elements;
+
+  // Read and sample elements from the sources.
   for (const auto& source : config.sources()) {
-    SampleSeedCorpusElementsFromSource(source, elements);
+    SampleSeedCorpusElementsFromSource(  //
+        source, coverage_binary_name, coverage_binary_hash, elements);
   }
   LOG(INFO) << "Sampled " << elements.size() << " elements from "
             << config.sources_size() << " seed corpus source(s)";
 
-  WriteSeedCorpusElementsToDestination(elements, config.destination());
-  LOG(INFO) << "Wrote " << elements.size()
-            << " elements to seed corpus destination";
+  // Write the sampled elements to the destination.
+  if (elements.empty()) {
+    LOG(WARNING)
+        << "No elements to write to seed corpus destination - doing nothing";
+  } else {
+    WriteSeedCorpusElementsToDestination(  //
+        elements, coverage_binary_name, coverage_binary_hash,
+        config.destination());
+    LOG(INFO) << "Wrote " << elements.size()
+              << " elements to seed corpus destination";
+  }
 }
 
 }  // namespace centipede

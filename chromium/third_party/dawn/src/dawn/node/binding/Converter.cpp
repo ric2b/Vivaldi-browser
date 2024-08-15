@@ -75,8 +75,7 @@ bool Converter::Convert(wgpu::Extent3D& out, const interop::GPUExtent3D& in) {
                 break;
         }
     }
-    Napi::Error::New(env, "invalid value for GPUExtent3D").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUExtent3D");
 }
 
 bool Converter::Convert(wgpu::Origin3D& out, const interop::GPUOrigin3DDict& in) {
@@ -112,8 +111,7 @@ bool Converter::Convert(wgpu::Color& out, const interop::GPUColor& in) {
                 break;
         }
     }
-    Napi::Error::New(env, "invalid value for GPUColor").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUColor");
 }
 
 bool Converter::Convert(wgpu::Origin3D& out, const std::vector<interop::GPUIntegerCoordinate>& in) {
@@ -145,8 +143,7 @@ bool Converter::Convert(wgpu::TextureAspect& out, const interop::GPUTextureAspec
             out = wgpu::TextureAspect::DepthOnly;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUTextureAspect").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUTextureAspect");
 }
 
 bool Converter::Convert(wgpu::ImageCopyTexture& out, const interop::GPUImageCopyTexture& in) {
@@ -182,8 +179,7 @@ bool Converter::Convert(BufferSource& out, interop::BufferSource in) {
         out.bytesPerElement = 1;
         return true;
     }
-    Napi::Error::New(env, "invalid value for BufferSource").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for BufferSource");
 }
 
 bool Converter::Convert(wgpu::TextureDataLayout& out, const interop::GPUImageDataLayout& in) {
@@ -537,16 +533,12 @@ bool Converter::Convert(wgpu::TextureFormat& out, const interop::GPUTextureForma
             break;
 
         default:
-            Napi::Error::New(env, "invalid value for GPUTextureFormat")
-                .ThrowAsJavaScriptException();
-            return false;
+            return Throw("invalid value for GPUTextureFormat");
     }
 
     assert(requiredFeature != wgpu::FeatureName::Undefined);
     if (!HasFeature(requiredFeature)) {
-        Napi::TypeError::New(env, "invalid value for GPUTextureFormat")
-            .ThrowAsJavaScriptException();
-        return false;
+        return Throw(Napi::TypeError::New(env, "invalid value for GPUTextureFormat"));
     }
 
     return true;
@@ -660,6 +652,7 @@ bool Converter::Convert(interop::GPUTextureFormat& out, wgpu::TextureFormat in) 
         case wgpu::TextureFormat::R16Snorm:
         case wgpu::TextureFormat::R16Unorm:
         case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
+        case wgpu::TextureFormat::R8BG8A8Triplanar420Unorm:
         case wgpu::TextureFormat::RG16Snorm:
         case wgpu::TextureFormat::RG16Unorm:
         case wgpu::TextureFormat::RGBA16Snorm:
@@ -678,7 +671,7 @@ bool Converter::Convert(wgpu::TextureUsage& out, const interop::GPUTextureUsageF
 }
 
 bool Converter::Convert(interop::GPUTextureUsageFlags& out, wgpu::TextureUsage in) {
-    out = interop::GPUTextureUsageFlags(static_cast<uint32_t>(out));
+    out = interop::GPUTextureUsageFlags(static_cast<uint32_t>(in));
     return true;
 }
 
@@ -693,7 +686,7 @@ bool Converter::Convert(wgpu::BufferUsage& out, const interop::GPUBufferUsageFla
 }
 
 bool Converter::Convert(interop::GPUBufferUsageFlags& out, wgpu::BufferUsage in) {
-    out = interop::GPUBufferUsageFlags(static_cast<uint32_t>(out));
+    out = interop::GPUBufferUsageFlags(static_cast<uint32_t>(in));
     return true;
 }
 
@@ -720,8 +713,7 @@ bool Converter::Convert(wgpu::TextureDimension& out, const interop::GPUTextureDi
             out = wgpu::TextureDimension::e3D;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUTextureDimension").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUTextureDimension");
 }
 
 bool Converter::Convert(interop::GPUTextureDimension& out, wgpu::TextureDimension in) {
@@ -735,6 +727,8 @@ bool Converter::Convert(interop::GPUTextureDimension& out, wgpu::TextureDimensio
         case wgpu::TextureDimension::e3D:
             out = interop::GPUTextureDimension::k3D;
             return true;
+        case wgpu::TextureDimension::Undefined:
+            break;
     }
     return false;
 }
@@ -764,8 +758,7 @@ bool Converter::Convert(wgpu::TextureViewDimension& out,
         default:
             break;
     }
-    Napi::Error::New(env, "invalid value for GPUTextureViewDimension").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUTextureViewDimension");
 }
 
 bool Converter::Convert(wgpu::ProgrammableStageDescriptor& out,
@@ -773,19 +766,9 @@ bool Converter::Convert(wgpu::ProgrammableStageDescriptor& out,
     out = {};
     out.module = *in.module.As<GPUShaderModule>();
 
-    // Replace nulls in the entryPoint name with another character that's disallowed in
+    // Replace nulls in the entryPoint name with another character that's disallowed in WGSL
     // identifiers. This is so that using "main\0" doesn't match an entryPoint named "main".
-    // TODO(dawn:1345): Replace with a way to size strings explicitly in webgpu.h
-    char* entryPoint = Allocate<char>(in.entryPoint.size() + 1);
-    entryPoint[in.entryPoint.size()] = '\0';
-    for (size_t i = 0; i < in.entryPoint.size(); i++) {
-        if (in.entryPoint[i] == '\0') {
-            entryPoint[i] = '#';
-        } else {
-            entryPoint[i] = in.entryPoint[i];
-        }
-    }
-    out.entryPoint = entryPoint;
+    out.entryPoint = in.entryPoint ? ConvertStringReplacingNull(in.entryPoint.value()) : nullptr;
 
     return Convert(out.constants, out.constantCount, in.constants);
 }
@@ -793,9 +776,11 @@ bool Converter::Convert(wgpu::ProgrammableStageDescriptor& out,
 bool Converter::Convert(wgpu::ConstantEntry& out,
                         const std::string& in_name,
                         wgpu::interop::GPUPipelineConstantValue in_value) {
-    out.key = in_name.c_str();
-    out.value = in_value;
-    return true;
+    // Replace nulls in the key with another character that's disallowed in WGSL identifiers.
+    // This is so that using "c\0" doesn't match a constant named "c".
+    out.key = ConvertStringReplacingNull(in_name);
+
+    return Convert(out.value, in_value);
 }
 
 bool Converter::Convert(wgpu::BlendComponent& out, const interop::GPUBlendComponent& in) {
@@ -849,8 +834,7 @@ bool Converter::Convert(wgpu::BlendFactor& out, const interop::GPUBlendFactor& i
         default:
             break;
     }
-    Napi::Error::New(env, "invalid value for GPUBlendFactor").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUBlendFactor");
 }
 
 bool Converter::Convert(wgpu::BlendOperation& out, const interop::GPUBlendOperation& in) {
@@ -874,8 +858,7 @@ bool Converter::Convert(wgpu::BlendOperation& out, const interop::GPUBlendOperat
         default:
             break;
     }
-    Napi::Error::New(env, "invalid value for GPUBlendOperation").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUBlendOperation");
 }
 
 bool Converter::Convert(wgpu::BlendState& out, const interop::GPUBlendState& in) {
@@ -905,6 +888,11 @@ bool Converter::Convert(wgpu::ColorTargetState& out, const interop::GPUColorTarg
 
 bool Converter::Convert(wgpu::DepthStencilState& out, const interop::GPUDepthStencilState& in) {
     out = {};
+
+    auto depthWriteDefined = Allocate<wgpu::DepthStencilStateDepthWriteDefinedDawn>();
+    depthWriteDefined->depthWriteDefined = in.depthWriteEnabled.has_value();
+    out.nextInChain = depthWriteDefined;
+
     return Convert(out.format, in.format) && Convert(out.depthWriteEnabled, in.depthWriteEnabled) &&
            Convert(out.depthCompare, in.depthCompare) &&
            Convert(out.stencilFront, in.stencilFront) && Convert(out.stencilBack, in.stencilBack) &&
@@ -923,9 +911,13 @@ bool Converter::Convert(wgpu::MultisampleState& out, const interop::GPUMultisamp
 
 bool Converter::Convert(wgpu::FragmentState& out, const interop::GPUFragmentState& in) {
     out = {};
+
+    // Replace nulls in the entryPoint name with another character that's disallowed in WGSL
+    // identifiers. This is so that using "main\0" doesn't match an entryPoint named "main".
+    out.entryPoint = in.entryPoint ? ConvertStringReplacingNull(in.entryPoint.value()) : nullptr;
+
     return Convert(out.targets, out.targetCount, in.targets) &&  //
            Convert(out.module, in.module) &&                     //
-           Convert(out.entryPoint, in.entryPoint) &&             //
            Convert(out.constants, out.constantCount, in.constants);
 }
 
@@ -948,8 +940,7 @@ bool Converter::Convert(wgpu::PrimitiveTopology& out, const interop::GPUPrimitiv
             out = wgpu::PrimitiveTopology::TriangleStrip;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUPrimitiveTopology").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUPrimitiveTopology");
 }
 
 bool Converter::Convert(wgpu::FrontFace& out, const interop::GPUFrontFace& in) {
@@ -962,8 +953,7 @@ bool Converter::Convert(wgpu::FrontFace& out, const interop::GPUFrontFace& in) {
             out = wgpu::FrontFace::CCW;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUFrontFace").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUFrontFace");
 }
 
 bool Converter::Convert(wgpu::CullMode& out, const interop::GPUCullMode& in) {
@@ -979,8 +969,7 @@ bool Converter::Convert(wgpu::CullMode& out, const interop::GPUCullMode& in) {
             out = wgpu::CullMode::Back;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUCullMode").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUCullMode");
 }
 
 bool Converter::Convert(wgpu::CompareFunction& out, const interop::GPUCompareFunction& in) {
@@ -1011,8 +1000,7 @@ bool Converter::Convert(wgpu::CompareFunction& out, const interop::GPUCompareFun
             out = wgpu::CompareFunction::Always;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUCompareFunction").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUCompareFunction");
 }
 
 bool Converter::Convert(wgpu::IndexFormat& out, const interop::GPUIndexFormat& in) {
@@ -1025,8 +1013,7 @@ bool Converter::Convert(wgpu::IndexFormat& out, const interop::GPUIndexFormat& i
             out = wgpu::IndexFormat::Uint32;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUIndexFormat").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUIndexFormat");
 }
 
 bool Converter::Convert(wgpu::StencilOperation& out, const interop::GPUStencilOperation& in) {
@@ -1057,8 +1044,7 @@ bool Converter::Convert(wgpu::StencilOperation& out, const interop::GPUStencilOp
             out = wgpu::StencilOperation::DecrementWrap;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUStencilOperation").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUStencilOperation");
 }
 
 bool Converter::Convert(wgpu::StencilFaceState& out, const interop::GPUStencilFaceState& in) {
@@ -1074,10 +1060,14 @@ bool Converter::Convert(wgpu::VertexBufferLayout& out, const interop::GPUVertexB
 
 bool Converter::Convert(wgpu::VertexState& out, const interop::GPUVertexState& in) {
     out = {};
+
+    // Replace nulls in the entryPoint name with another character that's disallowed in WGSL
+    // identifiers. This is so that using "main\0" doesn't match an entryPoint named "main".
+    out.entryPoint = in.entryPoint ? ConvertStringReplacingNull(in.entryPoint.value()) : nullptr;
+
     wgpu::VertexBufferLayout* outBuffers = nullptr;
     if (!Convert(out.module, in.module) ||                    //
         !Convert(outBuffers, out.bufferCount, in.buffers) ||  //
-        !Convert(out.entryPoint, in.entryPoint) ||            //
         !Convert(out.constants, out.constantCount, in.constants)) {
         return false;
     }
@@ -1107,8 +1097,7 @@ bool Converter::Convert(wgpu::VertexStepMode& out, const interop::GPUVertexStepM
         default:
             break;
     }
-    Napi::Error::New(env, "invalid value for GPUVertexStepMode").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUVertexStepMode");
 }
 
 bool Converter::Convert(wgpu::VertexAttribute& out, const interop::GPUVertexAttribute& in) {
@@ -1215,14 +1204,14 @@ bool Converter::Convert(wgpu::VertexFormat& out, const interop::GPUVertexFormat&
         default:
             break;
     }
-    Napi::Error::New(env, "invalid value for GPUVertexFormat").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUVertexFormat");
 }
 
 bool Converter::Convert(wgpu::RenderPassColorAttachment& out,
                         const interop::GPURenderPassColorAttachment& in) {
     out = {};
     return Convert(out.view, in.view) &&                    //
+           Convert(out.depthSlice, in.depthSlice) &&        //
            Convert(out.resolveTarget, in.resolveTarget) &&  //
            Convert(out.clearValue, in.clearValue) &&        //
            Convert(out.loadOp, in.loadOp) &&                //
@@ -1267,8 +1256,7 @@ bool Converter::Convert(wgpu::LoadOp& out, const interop::GPULoadOp& in) {
             out = wgpu::LoadOp::Clear;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPULoadOp").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPULoadOp");
 }
 
 bool Converter::Convert(wgpu::StoreOp& out, const interop::GPUStoreOp& in) {
@@ -1281,8 +1269,7 @@ bool Converter::Convert(wgpu::StoreOp& out, const interop::GPUStoreOp& in) {
             out = wgpu::StoreOp::Discard;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUStoreOp").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUStoreOp");
 }
 
 bool Converter::Convert(wgpu::BindGroupEntry& out, const interop::GPUBindGroupEntry& in) {
@@ -1310,9 +1297,7 @@ bool Converter::Convert(wgpu::BindGroupEntry& out, const interop::GPUBindGroupEn
         // TODO(crbug.com/dawn/1129): External textures
         UNIMPLEMENTED(env, {});
     }
-    Napi::Error::New(env, "invalid value for GPUBindGroupEntry.resource")
-        .ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUBindGroupEntry.resource");
 }
 
 bool Converter::Convert(wgpu::BindGroupLayoutEntry& out,
@@ -1358,8 +1343,7 @@ bool Converter::Convert(wgpu::BufferBindingType& out, const interop::GPUBufferBi
             out = wgpu::BufferBindingType::ReadOnlyStorage;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUBufferBindingType").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUBufferBindingType");
 }
 
 bool Converter::Convert(wgpu::TextureSampleType& out, const interop::GPUTextureSampleType& in) {
@@ -1381,8 +1365,7 @@ bool Converter::Convert(wgpu::TextureSampleType& out, const interop::GPUTextureS
             out = wgpu::TextureSampleType::Uint;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUTextureSampleType").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUTextureSampleType");
 }
 
 bool Converter::Convert(wgpu::SamplerBindingType& out, const interop::GPUSamplerBindingType& in) {
@@ -1398,8 +1381,7 @@ bool Converter::Convert(wgpu::SamplerBindingType& out, const interop::GPUSampler
             out = wgpu::SamplerBindingType::Comparison;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUSamplerBindingType").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUSamplerBindingType");
 }
 
 bool Converter::Convert(wgpu::StorageTextureAccess& out,
@@ -1409,9 +1391,14 @@ bool Converter::Convert(wgpu::StorageTextureAccess& out,
         case interop::GPUStorageTextureAccess::kWriteOnly:
             out = wgpu::StorageTextureAccess::WriteOnly;
             return true;
+        case interop::GPUStorageTextureAccess::kReadOnly:
+            out = wgpu::StorageTextureAccess::ReadOnly;
+            return true;
+        case interop::GPUStorageTextureAccess::kReadWrite:
+            out = wgpu::StorageTextureAccess::ReadWrite;
+            return true;
     }
-    Napi::Error::New(env, "invalid value for GPUStorageTextureAccess").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUStorageTextureAccess");
 }
 
 bool Converter::Convert(wgpu::QueryType& out, const interop::GPUQueryType& in) {
@@ -1425,13 +1412,10 @@ bool Converter::Convert(wgpu::QueryType& out, const interop::GPUQueryType& in) {
                 out = wgpu::QueryType::Timestamp;
                 return true;
             } else {
-                Napi::TypeError::New(env, "invalid value for GPUQueryType")
-                    .ThrowAsJavaScriptException();
-                return false;
+                return Throw(Napi::TypeError::New(env, "invalid value for GPUQueryType"));
             }
     }
-    Napi::Error::New(env, "invalid value for GPUQueryType").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUQueryType");
 }
 
 bool Converter::Convert(wgpu::FeatureName& out, interop::GPUFeatureName in) {
@@ -1447,8 +1431,7 @@ bool Converter::Convert(wgpu::FeatureName& out, interop::GPUFeatureName in) {
             return true;
         case interop::GPUFeatureName::kTimestampQuery:
             out = wgpu::FeatureName::TimestampQuery;
-            // TODO(dawn:1800): Reenable once Dawn's interface is updated.
-            return false;
+            return true;
         case interop::GPUFeatureName::kDepth32FloatStencil8:
             out = wgpu::FeatureName::Depth32FloatStencil8;
             return true;
@@ -1505,8 +1488,6 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
 #undef CASE
 
         case wgpu::FeatureName::ANGLETextureSharing:
-        case wgpu::FeatureName::ChromiumExperimentalDp4a:
-        case wgpu::FeatureName::ChromiumExperimentalReadWriteStorageTexture:
         case wgpu::FeatureName::D3D11MultithreadProtected:
         case wgpu::FeatureName::DawnInternalUsages:
         case wgpu::FeatureName::DawnMultiPlanarFormats:
@@ -1516,6 +1497,7 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
         case wgpu::FeatureName::MSAARenderToSingleSampled:
         case wgpu::FeatureName::MultiPlanarFormatExtendedUsages:
         case wgpu::FeatureName::MultiPlanarFormatP010:
+        case wgpu::FeatureName::MultiPlanarFormatNv12a:
         case wgpu::FeatureName::Norm16TextureFormats:
         case wgpu::FeatureName::PixelLocalStorageCoherent:
         case wgpu::FeatureName::PixelLocalStorageNonCoherent:
@@ -1538,12 +1520,58 @@ bool Converter::Convert(interop::GPUFeatureName& out, wgpu::FeatureName in) {
         case wgpu::FeatureName::TransientAttachments:
         case wgpu::FeatureName::HostMappedPointer:
         case wgpu::FeatureName::MultiPlanarRenderTargets:
+        case wgpu::FeatureName::FramebufferFetch:
+        case wgpu::FeatureName::BufferMapExtendedUsages:
+        case wgpu::FeatureName::AdapterPropertiesMemoryHeaps:
         case wgpu::FeatureName::Undefined:
             return false;
     }
     return false;
 }
 
+bool Converter::Convert(wgpu::WGSLFeatureName& out, interop::WGSLFeatureName in) {
+    switch (in) {
+        case interop::WGSLFeatureName::kReadonlyAndReadwriteStorageTextures:
+            out = wgpu::WGSLFeatureName::ReadonlyAndReadwriteStorageTextures;
+            return true;
+        case interop::WGSLFeatureName::kPacked4X8IntegerDotProduct:
+            out = wgpu::WGSLFeatureName::Packed4x8IntegerDotProduct;
+            return true;
+        case interop::WGSLFeatureName::kUnrestrictedPointerParameters:
+            out = wgpu::WGSLFeatureName::UnrestrictedPointerParameters;
+            return true;
+        case interop::WGSLFeatureName::kPointerCompositeAccess:
+            out = wgpu::WGSLFeatureName::PointerCompositeAccess;
+            return true;
+    }
+    return false;
+}
+
+bool Converter::Convert(interop::WGSLFeatureName& out, wgpu::WGSLFeatureName in) {
+    switch (in) {
+        case wgpu::WGSLFeatureName::ReadonlyAndReadwriteStorageTextures:
+            out = interop::WGSLFeatureName::kReadonlyAndReadwriteStorageTextures;
+            return true;
+        case wgpu::WGSLFeatureName::Packed4x8IntegerDotProduct:
+            out = interop::WGSLFeatureName::kPacked4X8IntegerDotProduct;
+            return true;
+        case wgpu::WGSLFeatureName::UnrestrictedPointerParameters:
+            out = interop::WGSLFeatureName::kUnrestrictedPointerParameters;
+            return true;
+        case wgpu::WGSLFeatureName::PointerCompositeAccess:
+            out = interop::WGSLFeatureName::kPointerCompositeAccess;
+            return true;
+
+        case wgpu::WGSLFeatureName::Undefined:
+        case wgpu::WGSLFeatureName::ChromiumTestingUnimplemented:
+        case wgpu::WGSLFeatureName::ChromiumTestingUnsafeExperimental:
+        case wgpu::WGSLFeatureName::ChromiumTestingExperimental:
+        case wgpu::WGSLFeatureName::ChromiumTestingShippedWithKillswitch:
+        case wgpu::WGSLFeatureName::ChromiumTestingShipped:
+            return false;
+    }
+    return false;
+}
 bool Converter::Convert(interop::GPUQueryType& out, wgpu::QueryType in) {
     switch (in) {
         case wgpu::QueryType::Occlusion:
@@ -1584,8 +1612,7 @@ bool Converter::Convert(wgpu::AddressMode& out, const interop::GPUAddressMode& i
             out = wgpu::AddressMode::MirrorRepeat;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUAddressMode").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUAddressMode");
 }
 
 bool Converter::Convert(wgpu::FilterMode& out, const interop::GPUFilterMode& in) {
@@ -1598,8 +1625,7 @@ bool Converter::Convert(wgpu::FilterMode& out, const interop::GPUFilterMode& in)
             out = wgpu::FilterMode::Linear;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUFilterMode").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUFilterMode");
 }
 
 bool Converter::Convert(wgpu::MipmapFilterMode& out, const interop::GPUMipmapFilterMode& in) {
@@ -1612,8 +1638,7 @@ bool Converter::Convert(wgpu::MipmapFilterMode& out, const interop::GPUMipmapFil
             out = wgpu::MipmapFilterMode::Linear;
             return true;
     }
-    Napi::Error::New(env, "invalid value for GPUMipmapFilterMode").ThrowAsJavaScriptException();
-    return false;
+    return Throw("invalid value for GPUMipmapFilterMode");
 }
 
 bool Converter::Convert(wgpu::ComputePipelineDescriptor& out,
@@ -1642,6 +1667,30 @@ bool Converter::Convert(wgpu::PipelineLayout& out, const interop::GPUAutoLayoutM
 bool Converter::Convert(wgpu::Bool& out, const bool& in) {
     out = in;
     return true;
+}
+
+char* Converter::ConvertStringReplacingNull(std::string_view in) {
+    char* out = Allocate<char>(in.size() + 1);
+    out[in.size()] = '\0';
+
+    for (size_t i = 0; i < in.size(); i++) {
+        if (in[i] == '\0') {
+            out[i] = '#';
+        } else {
+            out[i] = in[i];
+        }
+    }
+
+    return out;
+}
+
+bool Converter::Throw(std::string&& message) {
+    return Throw(Napi::Error::New(env, message));
+}
+
+bool Converter::Throw(Napi::Error&& error) {
+    error.ThrowAsJavaScriptException();
+    return false;
 }
 
 }  // namespace wgpu::binding

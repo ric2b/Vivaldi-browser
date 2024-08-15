@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker_impl.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/base64.h"
@@ -23,7 +24,6 @@
 #include "chromeos/ash/components/quick_start/quick_start_metrics.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/chromeos/devicetype_utils.h"
 
 namespace ash::quick_start {
@@ -91,8 +91,7 @@ std::vector<uint8_t> GetEndpointInfoDisplayNameBytes(
 std::vector<uint8_t> Base64EncodeOmitPadding(
     const std::vector<uint8_t>& bytes) {
   std::string input(bytes.begin(), bytes.end());
-  std::string output;
-  base::Base64Encode(input, &output);
+  std::string output = base::Base64Encode(input);
 
   // Strip padding characters from end.
   const size_t last_non_padding_pos =
@@ -402,7 +401,7 @@ void TargetDeviceConnectionBrokerImpl::OnIncomingConnectionInitiated(
 
   CHECK(connection_lifecycle_listener_);
   if (use_pin_authentication_) {
-    absl::optional<std::string> auth_token =
+    std::optional<std::string> auth_token =
         quick_start_connectivity_service_->GetNearbyConnectionsManager()
             ->GetAuthenticationToken(endpoint_id);
     CHECK(auth_token);
@@ -438,15 +437,14 @@ void TargetDeviceConnectionBrokerImpl::OnIncomingConnectionAccepted(
 
   if (use_pin_authentication_ && !is_resume_after_update_) {
     QS_LOG(INFO) << "Pin authentication completed!";
-    QuickStartMetrics::RecordHandshakeStarted(/*handshake_started=*/false);
-    connection_->MarkConnectionAuthenticated();
+    connection_->MarkConnectionAuthenticated(
+        Connection::AuthenticationMethod::kPin);
   } else {
     QS_LOG(INFO) << "Initiating cryptographic handshake.";
-    absl::optional<std::string> auth_token =
+    std::optional<std::string> auth_token =
         quick_start_connectivity_service_->GetNearbyConnectionsManager()
             ->GetAuthenticationToken(endpoint_id);
     CHECK(auth_token);
-    QuickStartMetrics::RecordHandshakeStarted(/*handshake_started=*/true);
     connection_->InitiateHandshake(
         *auth_token,
         base::BindOnce(&TargetDeviceConnectionBrokerImpl::OnHandshakeCompleted,
@@ -463,7 +461,10 @@ void TargetDeviceConnectionBrokerImpl::OnHandshakeCompleted(bool success) {
   }
 
   QS_LOG(INFO) << "Handshake succeeded!";
-  connection_->MarkConnectionAuthenticated();
+  connection_->MarkConnectionAuthenticated(
+      is_resume_after_update_
+          ? Connection::AuthenticationMethod::kResumeAfterUpdate
+          : Connection::AuthenticationMethod::kQR);
 }
 
 void TargetDeviceConnectionBrokerImpl::

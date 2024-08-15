@@ -16,6 +16,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "chrome/browser/ash/printing/fake_cups_printers_manager.h"
@@ -24,10 +25,11 @@
 #include "chrome/browser/download/download_core_service_impl.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
-#include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
-#include "chromeos/ash/components/dbus/debug_daemon/fake_debug_daemon_client.h"
+#include "chromeos/ash/components/dbus/printscanmgr/fake_printscanmgr_client.h"
+#include "chromeos/ash/components/dbus/printscanmgr/printscanmgr_client.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
 #include "printing/backend/test_print_backend.h"
@@ -155,8 +157,7 @@ class FakeSelectFileDialog : public ui::SelectFileDialog {
  private:
   ~FakeSelectFileDialog() override = default;
 
-  raw_ptr<ui::SelectFileDialog::FileTypeInfo, ExperimentalAsh>
-      expected_file_type_info_;
+  raw_ptr<ui::SelectFileDialog::FileTypeInfo> expected_file_type_info_;
 };
 
 // A factory associated with the artificial file picker.
@@ -181,8 +182,7 @@ class TestSelectFileDialogFactory : public ui::SelectFileDialogFactory {
       delete;
 
  private:
-  raw_ptr<ui::SelectFileDialog::FileTypeInfo, ExperimentalAsh>
-      expected_file_type_info_;
+  raw_ptr<ui::SelectFileDialog::FileTypeInfo> expected_file_type_info_;
 };
 
 class MockNewWindowDelegate : public testing::NiceMock<TestNewWindowDelegate> {
@@ -204,6 +204,7 @@ class CupsPrintersHandlerTest : public testing::Test {
   ~CupsPrintersHandlerTest() override = default;
 
   void SetUp() override {
+    feature_list_.InitAndEnableFeature(::features::kLocalPrinterObserving);
     printers_handler_ = CupsPrintersHandler::CreateForTesting(
         profile_.get(), base::MakeRefCounted<FakePpdProvider>(),
         &printers_manager_);
@@ -211,7 +212,7 @@ class CupsPrintersHandlerTest : public testing::Test {
     printers_handler_->RegisterMessages();
     printers_handler_->AllowJavascriptForTesting();
     printing::PrintBackend::SetPrintBackendForTesting(print_backend_.get());
-    DebugDaemonClient::InitializeFake();
+    PrintscanmgrClient::InitializeFake();
     // Initialize NewWindowDelegate things.
     auto instance = std::make_unique<MockNewWindowDelegate>();
     auto primary = std::make_unique<MockNewWindowDelegate>();
@@ -232,7 +233,7 @@ class CupsPrintersHandlerTest : public testing::Test {
 
   void TearDown() override {
     new_window_provider_.reset();
-    DebugDaemonClient::Shutdown();
+    PrintscanmgrClient::Shutdown();
     printing::PrintBackend::SetPrintBackendForTesting(nullptr);
   }
 
@@ -268,13 +269,14 @@ class CupsPrintersHandlerTest : public testing::Test {
   // Must outlive |profile_|.
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
+  base::test::ScopedFeatureList feature_list_;
   content::TestWebUI web_ui_;
   std::unique_ptr<CupsPrintersHandler> printers_handler_;
   FakeCupsPrintersManager printers_manager_;
   base::RunLoop run_loop_;
   scoped_refptr<printing::TestPrintBackend> print_backend_ =
       base::MakeRefCounted<printing::TestPrintBackend>();
-  raw_ptr<MockNewWindowDelegate, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<MockNewWindowDelegate, DanglingUntriaged>
       new_window_delegate_primary_;
   std::unique_ptr<TestNewWindowDelegateProvider> new_window_provider_;
   base::ScopedTempDir download_dir_;
@@ -332,7 +334,7 @@ TEST_F(CupsPrintersHandlerTest, VerifyOnlyPpdFilesAllowed) {
 TEST_F(CupsPrintersHandlerTest, ViewPPD) {
   // Test the nominal case where everything works and the PPD gets downloaded.
 
-  static_cast<FakeDebugDaemonClient*>(DebugDaemonClient::Get())
+  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
       ->SetPpdDataForTesting(kPpdData);
 
   Printer printer("id");
@@ -361,7 +363,7 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDWithLicense) {
   // Test the nominal case where everything works and the PPD (with a license)
   // gets returned.
 
-  static_cast<FakeDebugDaemonClient*>(DebugDaemonClient::Get())
+  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
       ->SetPpdDataForTesting(kPpdDataWithHeader);
 
   Printer printer("id");
@@ -393,7 +395,7 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDWithLicenseBadPpd) {
   // the expected PPD string, so the license can't be inserted, and the PPD
   // can't be downloaded.
 
-  static_cast<FakeDebugDaemonClient*>(DebugDaemonClient::Get())
+  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
       ->SetPpdDataForTesting(kPpdData);
 
   Printer printer("id");
@@ -441,7 +443,7 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDPrinterNotFound) {
 TEST_F(CupsPrintersHandlerTest, ViewPPDPrinterNotSetup) {
   // Test the case where the printer is known but not setup.
 
-  static_cast<FakeDebugDaemonClient*>(DebugDaemonClient::Get())
+  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
       ->SetPpdDataForTesting(kPpdData);
 
   Printer printer("id");
@@ -467,9 +469,9 @@ TEST_F(CupsPrintersHandlerTest, ViewPPDPrinterNotSetup) {
 }
 
 TEST_F(CupsPrintersHandlerTest, ViewPPDEmptyPPD) {
-  // Test the case where an empty PPD is returned from debugd.
+  // Test the case where an empty PPD is returned from printscanmgr.
 
-  static_cast<FakeDebugDaemonClient*>(DebugDaemonClient::Get())
+  static_cast<FakePrintscanmgrClient*>(PrintscanmgrClient::Get())
       ->SetPpdDataForTesting({});
 
   Printer printer("id");
@@ -509,6 +511,21 @@ TEST_F(CupsPrintersHandlerTest, GetSavedPrinters) {
   histogram_tester_.ExpectBucketCount(kSavedPrintersCountHistogramName,
                                       /*sample=*/2,
                                       /*expected_count=*/1);
+}
+
+// Verify the saved printers are sent to the "local-printers-updated" event when
+// the LocalPrintersObserver is triggered.
+TEST_F(CupsPrintersHandlerTest, LocalPrintersObserver) {
+  Printer printer1("id1");
+  Printer printer2("id2");
+  printers_manager_.SavePrinter(printer1);
+  printers_manager_.SavePrinter(printer2);
+  printers_manager_.TriggerLocalPrintersObserver();
+  const content::TestWebUI::CallData& data = *web_ui_.call_data().back();
+  ASSERT_TRUE(data.arg1()->is_string());
+  EXPECT_EQ("local-printers-updated", data.arg1()->GetString());
+  ASSERT_TRUE(data.arg2()->is_list());
+  EXPECT_EQ(2u, data.arg2()->GetList().size());
 }
 
 }  // namespace ash::settings

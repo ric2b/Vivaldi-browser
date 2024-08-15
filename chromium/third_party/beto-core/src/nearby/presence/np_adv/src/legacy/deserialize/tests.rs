@@ -12,60 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(unused_results, clippy::unwrap_used)]
+
+extern crate alloc;
 extern crate std;
 
 use super::*;
-use crate::legacy::actions::{ActionBits, ActionsDataElement};
-use crate::shared_data::TxPower;
 use crate::{
+    credential::{v0::V0, SimpleBroadcastCryptoMaterial},
     de_type::IdentityDataElementType,
     legacy::{
-        actions,
+        actions::{self, ActionBits, ActionsDataElement, Finder, NearbyShare},
         de_type::DeActualLength,
         random_data_elements::{random_de_ciphertext, random_de_plaintext},
         serialize::{
             encode_de_header_actual_len, id_de_type_as_generic_de_type, AdvBuilder,
-            DataElementBundle, Identity, LdtIdentity, ToDataElementBundle as _,
+            DataElementBundle, Identity, LdtIdentity, ToDataElementBundle,
         },
         PacketFlavorEnum, BLE_ADV_SVC_CONTENT_LEN,
     },
-    parse_adv_header, shared_data, AdvHeader, NoIdentity, PublicIdentity,
+    parse_adv_header, shared_data,
+    shared_data::TxPower,
+    AdvHeader, PublicIdentity,
 };
+use alloc::vec::Vec;
 use array_view::ArrayView;
 use crypto_provider_default::CryptoProviderImpl;
-use init_with::InitWith as _;
 use ldt_np_adv::LdtEncrypterXtsAes128;
-use nom::error;
+use nom::error::{self, ErrorKind};
 use rand_ext::rand::{prelude::SliceRandom, Rng as _};
 use std::vec;
 use strum::IntoEnumIterator as _;
 
 #[test]
 fn parse_empty_raw_adv() {
-    let data_elements = parse_raw_adv_contents::<CryptoProviderImpl>(&[]).unwrap();
-    assert_eq!(
-        RawAdvertisement::Plaintext(PlaintextAdvRawContents {
-            identity_type: PlaintextIdentityMode::None,
-            data_elements: Vec::new()
-        }),
-        data_elements
-    );
-}
-
-#[test]
-fn parse_raw_adv_1_de_short_no_identity() {
-    // battery uses the header length as is
-    let adv = parse_raw_adv_contents::<CryptoProviderImpl>(&[0x36, 0x01, 0x02, 0x03]).unwrap();
-    assert_eq!(
-        RawAdvertisement::Plaintext(PlaintextAdvRawContents {
-            identity_type: PlaintextIdentityMode::None,
-            data_elements: vec![RawPlainDataElement {
-                de_type: PlainDataElementType::Actions,
-                contents: &[0x01, 0x02, 0x03]
-            }],
-        }),
-        adv
-    );
+    let adv_data = parse_raw_adv_contents::<CryptoProviderImpl>(&[]);
+    assert_eq!(AdvDeserializeError::MissingIdentity, adv_data.unwrap_err());
 }
 
 #[test]
@@ -97,22 +79,27 @@ fn parse_raw_adv_3_de_public_identity() {
     let adv = parse_raw_adv_contents::<CryptoProviderImpl>(&[
         0x03, // public identity
         0x15, 0x05, // tx power 5
-        0x36, 0x11, 0x12, 0x13, // actions
+        0x26, 0x00, 0x44, // actions
     ])
     .unwrap();
-    assert_eq!(
-        RawAdvertisement::Plaintext(PlaintextAdvRawContents {
-            identity_type: PlaintextIdentityMode::Public,
-            data_elements: vec![
-                RawPlainDataElement { de_type: PlainDataElementType::TxPower, contents: &[0x05] },
-                RawPlainDataElement {
-                    de_type: PlainDataElementType::Actions,
-                    contents: &[0x11, 0x12, 0x13]
-                }
-            ],
-        }),
-        adv
-    );
+    match adv {
+        RawAdvertisement::Plaintext(plaintext) => {
+            assert_eq!(PlaintextIdentityMode::Public, plaintext.identity_type);
+            let mut action_bits = ActionBits::default();
+            action_bits.set_action(NearbyShare::from(true));
+            action_bits.set_action(Finder::from(true));
+            assert_eq!(
+                vec![
+                    PlainDataElement::<Plaintext>::TxPower(TxPowerDataElement::from(
+                        TxPower::try_from(5).unwrap()
+                    )),
+                    PlainDataElement::Actions(ActionsDataElement::from(action_bits)),
+                ],
+                plaintext.data_elements().collect::<Result<Vec<_>, _>>().unwrap(),
+            );
+        }
+        RawAdvertisement::Ciphertext(_) => panic!("adv should be plaintext"),
+    }
 }
 
 #[test]
@@ -121,13 +108,16 @@ fn parse_raw_adv_0_de_public_identity() {
         0x03, // public identity
     ])
     .unwrap();
-    assert_eq!(
-        RawAdvertisement::Plaintext(PlaintextAdvRawContents {
-            identity_type: PlaintextIdentityMode::Public,
-            data_elements: vec![],
-        }),
-        adv
-    );
+    match adv {
+        RawAdvertisement::Plaintext(plaintext) => {
+            assert_eq!(PlaintextIdentityMode::Public, plaintext.identity_type);
+            assert_eq!(
+                Vec::<PlainDataElement<Plaintext>>::new(),
+                plaintext.data_elements().collect::<Result<Vec<_>, _>>().unwrap()
+            );
+        }
+        RawAdvertisement::Ciphertext(_) => panic!("adv should be plaintext"),
+    }
 }
 
 #[test]
@@ -135,8 +125,8 @@ fn parse_raw_adv_1_de_length_overrun() {
     // battery uses the header length as is
     let input = &[0xFB, 0x01, 0x02, 0x03];
     assert_eq!(
-        nom::Err::Error(error::Error { input: input.as_slice(), code: error::ErrorKind::Eof }),
-        parse_data_elements(input).unwrap_err()
+        nom::Err::Error(DataElementDeserializeError::NomError(ErrorKind::MapOpt)),
+        parse_de(input).unwrap_err(),
     );
 }
 
@@ -147,10 +137,15 @@ fn parse_raw_adv_public_identity_containing_public_identity() {
         0x03, // another public identity
         0x15, 0x03, // tx power de
     ];
-    assert_eq!(
-        AdvDeserializeError::InvalidDataElementHierarchy,
-        parse_raw_adv_contents::<CryptoProviderImpl>(input).unwrap_err()
-    );
+    match parse_raw_adv_contents::<CryptoProviderImpl>(input).unwrap() {
+        RawAdvertisement::Plaintext(content) => {
+            assert_eq!(
+                DataElementDeserializeError::DuplicateIdentityDataElement,
+                content.data_elements().collect::<Result<Vec<_>, _>>().unwrap_err(),
+            );
+        }
+        RawAdvertisement::Ciphertext(_) => panic!("Adv should be plaintext"),
+    }
 }
 
 #[test]
@@ -161,7 +156,7 @@ fn parse_raw_adv_no_identity_containing_public_identity() {
         0x15, 0x03, // tx power de
     ];
     assert_eq!(
-        AdvDeserializeError::InvalidDataElementHierarchy,
+        AdvDeserializeError::MissingIdentity,
         parse_raw_adv_contents::<CryptoProviderImpl>(input).unwrap_err()
     );
 }
@@ -318,35 +313,42 @@ fn parse_de_invalid_de_len_error() {
     ];
 
     assert_eq!(
-        nom::Err::Error(error::Error { input: input.as_slice(), code: error::ErrorKind::MapOpt }),
+        nom::Err::Error(DataElementDeserializeError::NomError(ErrorKind::MapOpt)),
         parse_de(&input[..]).unwrap_err()
     );
 }
 
 #[test]
-fn plain_data_elements_matches_plain_des() {
+fn raw_de_to_plain_de_matches_plain_des() {
     assert_eq!(
-        vec![
-            RawPlainDataElement { de_type: PlainDataElementType::TxPower, contents: &[0x01] },
-            RawPlainDataElement { de_type: PlainDataElementType::Actions, contents: &[0x02] }
-        ],
-        plain_data_elements(&[
-            RawDataElement { de_type: DataElementType::TxPower, contents: &[0x01] },
-            RawDataElement { de_type: DataElementType::Actions, contents: &[0x02] }
-        ])
-        .unwrap()
+        PlainDataElement::TxPower(TxPowerDataElement::from(TxPower::try_from(1).unwrap())),
+        PlainDeIterator::<Plaintext>::raw_de_to_plain_de(RawDataElement {
+            de_type: DataElementType::TxPower,
+            contents: &[0x01]
+        })
+        .unwrap(),
+    );
+    assert_eq!(
+        PlainDataElement::Actions(ActionsDataElement::from(
+            ActionBits::try_from(0x00400000).unwrap()
+        )),
+        PlainDeIterator::<Plaintext>::raw_de_to_plain_de(RawDataElement {
+            de_type: DataElementType::Actions,
+            contents: &[0x00, 0x40]
+        })
+        .unwrap(),
     );
 }
 
 #[test]
-fn plain_data_elements_rejects_identity_de_error() {
+fn raw_de_to_plain_de_rejects_identity_de_error() {
     for idet in IdentityDataElementType::iter() {
         assert_eq!(
-            AdvDeserializeError::InvalidDataElementHierarchy,
-            plain_data_elements(&[
-                RawDataElement { de_type: DataElementType::TxPower, contents: &[0x01] },
-                RawDataElement { de_type: id_de_type_as_generic_de_type(idet), contents: &[0x02] }
-            ])
+            DataElementDeserializeError::DuplicateIdentityDataElement,
+            PlainDeIterator::<Plaintext>::raw_de_to_plain_de(RawDataElement {
+                de_type: id_de_type_as_generic_de_type(idet),
+                contents: &[0x02],
+            })
             .unwrap_err()
         );
     }
@@ -355,7 +357,10 @@ fn plain_data_elements_rejects_identity_de_error() {
 #[test]
 fn parse_encrypted_identity_contents_too_short_error() {
     // 2 byte salt + 15 byte ciphertext: 1 too short
-    let input = <[u8; 17]>::init_with_indices(|i| i as u8);
+    let mut input = [0u8; 17];
+    for (pos, e) in input.iter_mut().enumerate() {
+        *e = pos as u8
+    }
     assert_eq!(
         nom::Err::Error(error::Error { input: &input[2..], code: error::ErrorKind::TakeWhileMN }),
         parse_encrypted_identity_de_contents(&input).unwrap_err()
@@ -365,7 +370,10 @@ fn parse_encrypted_identity_contents_too_short_error() {
 #[test]
 fn parse_encrypted_identity_contents_ok() {
     // 2 byte salt + minimum 16 byte ciphertext
-    let input = <[u8; 18]>::init_with_indices(|i| i as u8);
+    let mut input = [0u8; 18];
+    for (pos, e) in input.iter_mut().enumerate() {
+        *e = pos as u8
+    }
     assert_eq!(
         ([].as_slice(), (ldt_np_adv::LegacySalt::from([0, 1]), &input[2..])),
         parse_encrypted_identity_de_contents(&input).unwrap()
@@ -373,13 +381,19 @@ fn parse_encrypted_identity_contents_ok() {
 }
 
 #[test]
-fn plaintext_random_adv_contents_round_trip_public() {
-    plaintext_random_adv_contents_round_trip(PublicIdentity::default, PlaintextIdentityMode::Public)
+fn deserialize_adv_public_identity_empty_des() {
+    let input = &[
+        0x03, // public identity
+    ];
+    assert_eq!(
+        AdvDeserializeError::NoPublicDataElements,
+        deserialize_adv_contents::<CryptoProviderImpl>(input).unwrap_err()
+    );
 }
 
 #[test]
-fn plaintext_random_adv_contents_round_trip_no_identity() {
-    plaintext_random_adv_contents_round_trip(NoIdentity::default, PlaintextIdentityMode::None)
+fn plaintext_random_adv_contents_round_trip_public() {
+    plaintext_random_adv_contents_round_trip(PublicIdentity::default, PlaintextIdentityMode::Public)
 }
 
 #[test]
@@ -399,15 +413,17 @@ fn ciphertext_random_adv_contents_round_trip() {
         let salt: ldt_np_adv::LegacySalt = rng.gen::<[u8; 2]>().into();
         let metadata_key: [u8; NP_LEGACY_METADATA_KEY_LEN] = rng.gen();
         let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-        let ldt_key = hkdf.legacy_ldt_key();
         let metadata_key_hmac: [u8; 32] =
             hkdf.legacy_metadata_key_hmac_key().calculate_hmac(&metadata_key);
         let cipher = ldt_np_adv::build_np_adv_decrypter_from_key_seed(&hkdf, metadata_key_hmac);
+
+        let metadata_key = ShortMetadataKey(metadata_key);
+        let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, metadata_key);
+
         let mut builder = AdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
             identity_type,
             salt,
-            metadata_key,
-            LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(&ldt_key),
+            &broadcast_cm,
         ));
 
         loop {
@@ -445,10 +461,11 @@ fn ciphertext_random_adv_contents_round_trip() {
                 eac
             );
 
-            assert_eq!(
-                DecryptedAdvContents { identity_type, metadata_key, salt, data_elements: des },
-                eac.try_decrypt(&cipher).unwrap()
-            )
+            let contents = eac.try_decrypt(&cipher).unwrap();
+            assert_eq!(identity_type, contents.identity_type);
+            assert_eq!(metadata_key, contents.metadata_key);
+            assert_eq!(salt, contents.salt);
+            assert_eq!(des, contents.data_elements().collect::<Result<Vec<_>, _>>().unwrap());
         } else {
             panic!("Unexpected variant: {:?}", parsed_adv);
         }
@@ -462,15 +479,18 @@ fn decrypt_and_deserialize_ciphertext_adv_canned() {
     let metadata_key: [u8; NP_LEGACY_METADATA_KEY_LEN] = [0x33; NP_LEGACY_METADATA_KEY_LEN];
 
     let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
-    let ldt_key = hkdf.legacy_ldt_key();
     let metadata_key_hmac: [u8; 32] =
         hkdf.legacy_metadata_key_hmac_key().calculate_hmac(&metadata_key);
     let cipher = ldt_np_adv::build_np_adv_decrypter_from_key_seed(&hkdf, metadata_key_hmac);
+
+    let metadata_key = ShortMetadataKey(metadata_key);
+
+    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, metadata_key);
+
     let mut builder = AdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
         EncryptedIdentityDataElementType::Private,
         salt,
-        metadata_key,
-        LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(&ldt_key),
+        &broadcast_cm,
     ));
 
     let tx = shared_data::TxPower::try_from(3).unwrap();
@@ -506,17 +526,16 @@ fn decrypt_and_deserialize_ciphertext_adv_canned() {
             eac
         );
 
+        let decrypted = eac.try_decrypt(&cipher).unwrap();
+        assert_eq!(EncryptedIdentityDataElementType::Private, decrypted.identity_type);
+        assert_eq!(metadata_key, decrypted.metadata_key);
+        assert_eq!(salt, decrypted.salt);
         assert_eq!(
-            DecryptedAdvContents {
-                identity_type: EncryptedIdentityDataElementType::Private,
-                metadata_key,
-                salt,
-                data_elements: vec![PlainDataElement::TxPower(TxPowerDataElement::from(
-                    TxPower::try_from(3).unwrap()
-                ))],
-            },
-            eac.try_decrypt(&cipher).unwrap()
-        )
+            vec![PlainDataElement::TxPower(TxPowerDataElement::from(
+                TxPower::try_from(3).unwrap()
+            ))],
+            decrypted.data_elements().collect::<Result<Vec<_>, _>>().unwrap()
+        );
     } else {
         panic!("Unexpected variant: {:?}", parsed_adv);
     }
@@ -524,7 +543,7 @@ fn decrypt_and_deserialize_ciphertext_adv_canned() {
 
 #[test]
 fn decrypt_and_deserialize_plaintext_adv_canned() {
-    let mut builder = AdvBuilder::new(PublicIdentity::default());
+    let mut builder = AdvBuilder::new(PublicIdentity);
 
     let actions = ActionBits::default();
     builder.add_data_element(ActionsDataElement::from(actions)).unwrap();
@@ -544,16 +563,14 @@ fn decrypt_and_deserialize_plaintext_adv_canned() {
     assert_eq!(AdvHeader::V0, header);
 
     let parsed_adv = deserialize_adv_contents::<CryptoProviderImpl>(remaining).unwrap();
-    if let IntermediateAdvContents::Plaintext(parc) = parsed_adv {
+    if let IntermediateAdvContents::Plaintext(adv_contents) = parsed_adv {
+        assert_eq!(PlaintextIdentityMode::Public, adv_contents.identity());
         assert_eq!(
-            PlaintextAdvContents {
-                identity_type: PlaintextIdentityMode::Public,
-                data_elements: vec![PlainDataElement::Actions(ActionsDataElement::from(
-                    ActionBits::default()
-                ))],
-            },
-            parc
-        )
+            vec![PlainDataElement::<Plaintext>::Actions(ActionsDataElement::from(
+                ActionBits::default()
+            ))],
+            adv_contents.data_elements().collect::<Result<Vec<_>, _>>().unwrap()
+        );
     } else {
         panic!("Unexpected variant: {:?}", parsed_adv);
     }
@@ -680,8 +697,12 @@ fn decrypt_and_deserialize_ciphertext_with_public_adv_inside_error() {
     let parsed_adv = deserialize_adv_contents::<CryptoProviderImpl>(&adv[1..]).unwrap();
     if let IntermediateAdvContents::Ciphertext(eac) = parsed_adv {
         assert_eq!(
-            DecryptError::DeserializeError(AdvDeserializeError::InvalidDataElementHierarchy),
-            eac.try_decrypt(&cipher).unwrap_err()
+            DataElementDeserializeError::DuplicateIdentityDataElement,
+            eac.try_decrypt(&cipher)
+                .unwrap()
+                .data_elements()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap_err()
         )
     } else {
         panic!("Unexpected variant: {:?}", parsed_adv);
@@ -694,18 +715,19 @@ fn build_ciphertext_adv_contents<C: CryptoProvider>(
     correct_key_seed: [u8; 32],
 ) -> (ArrayView<u8, { BLE_ADV_SVC_CONTENT_LEN }>, ldt_np_adv::LdtNpAdvDecrypterXtsAes128<C>) {
     let hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&correct_key_seed);
-    let ldt_key = hkdf.legacy_ldt_key();
 
     let metadata_key_hmac: [u8; 32] =
         hkdf.legacy_metadata_key_hmac_key().calculate_hmac(metadata_key.as_slice());
 
     let correct_cipher = ldt_np_adv::build_np_adv_decrypter_from_key_seed(&hkdf, metadata_key_hmac);
 
+    let broadcast_cm =
+        SimpleBroadcastCryptoMaterial::<V0>::new(correct_key_seed, ShortMetadataKey(*metadata_key));
+
     let mut builder = AdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
         EncryptedIdentityDataElementType::Private,
         salt,
-        *metadata_key,
-        LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(&ldt_key),
+        &broadcast_cm,
     ));
     builder.add_data_element(TxPowerDataElement::from(TxPower::try_from(3).unwrap())).unwrap();
     (builder.into_advertisement().unwrap(), correct_cipher)
@@ -743,11 +765,11 @@ where
     );
     buf.extend_from_slice(contents);
 
-    let raw_de = combinator::all_consuming(parse_de)(&buf).map(|(_remaining, de)| de).unwrap();
-
-    let plain_des = plain_data_elements(&[raw_de]).unwrap();
+    let mut plain_des = PlainDeIterator { data: &buf, _marker: PhantomData }
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
     assert_eq!(1, plain_des.len());
-    plain_des.first().unwrap().try_deserialize().unwrap()
+    plain_des.swap_remove(0)
 }
 
 fn plaintext_random_adv_contents_round_trip<I: Identity<Flavor = Plaintext>, F: Fn() -> I>(
@@ -783,31 +805,12 @@ fn plaintext_random_adv_contents_round_trip<I: Identity<Flavor = Plaintext>, F: 
             parse_raw_adv_contents::<CryptoProviderImpl>(&serialized.as_slice()[1..]).unwrap();
 
         assert_eq!(AdvHeader::V0, header);
-        if let RawAdvertisement::Plaintext(parc) = parsed_adv {
+        if let RawAdvertisement::Plaintext(adv_contents) = parsed_adv {
+            assert_eq!(identity_type, adv_contents.identity_type);
             assert_eq!(
-                PlaintextAdvRawContents {
-                    identity_type,
-                    data_elements: de_tuples
-                        .iter()
-                        .map(|(_de, de_type, bundle)| RawPlainDataElement {
-                            de_type: *de_type,
-                            contents: bundle.contents_as_slice(),
-                        })
-                        .collect()
-                },
-                parc
+                de_tuples.into_iter().map(|(de, _de_type, _bundle)| de).collect::<Vec<_>>(),
+                adv_contents.data_elements().collect::<Result<Vec<_>, _>>().unwrap(),
             );
-
-            assert_eq!(
-                PlaintextAdvContents {
-                    identity_type,
-                    data_elements: de_tuples
-                        .into_iter()
-                        .map(|(de, _de_type, _bundle)| de)
-                        .collect(),
-                },
-                parc.try_deserialize().unwrap()
-            )
         } else {
             panic!("Unexpected variant: {:?}", parsed_adv);
         }

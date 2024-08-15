@@ -6,16 +6,15 @@
 
 #include "ash/shell.h"
 #include "ash/system/toast/toast_manager_impl.h"
-#include "ash/wm/desks/cros_next_desk_icon_button.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desk_action_context_menu.h"
 #include "ash/wm/desks/desk_bar_controller.h"
 #include "ash/wm/desks/desk_bar_view_base.h"
+#include "ash/wm/desks/desk_icon_button.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_restore_util.h"
-#include "ash/wm/desks/expanded_desks_bar_button.h"
 #include "ash/wm/desks/legacy_desk_bar_view.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -113,7 +112,7 @@ ui::LayerTreeOwner* DesksTestApi::GetMirroredContentsLayerTreeForRootAndDesk(
                          ->GetGridWithRootWindow(root)
                          ->desks_bar_view()
                          ->mini_views();
-  for (auto* mini_view : mini_views) {
+  for (ash::DeskMiniView* mini_view : mini_views) {
     if (mini_view->desk() == desk) {
       return mini_view->desk_preview()
           ->desk_mirrored_contents_layer_tree_owner_.get();
@@ -181,6 +180,12 @@ void DesksTestApi::WaitForDeskBarUiUpdate(DeskBarViewBase* desk_bar_view) {
   base::RunLoop run_loop;
   desk_bar_view->on_update_ui_closure_for_testing_ = run_loop.QuitClosure();
   run_loop.Run();
+}
+
+// static
+void DesksTestApi::SetDeskBarUiUpdateCallback(DeskBarViewBase* desk_bar_view,
+                                              base::OnceClosure done) {
+  desk_bar_view->on_update_ui_closure_for_testing_ = std::move(done);
 }
 
 }  // namespace ash

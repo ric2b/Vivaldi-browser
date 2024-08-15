@@ -12,9 +12,9 @@
 #include <string_view>
 #include <utility>
 
-#include "absl/strings/match.h"
 #include "platform/base/error.h"
 #include "util/osp_logging.h"
+#include "util/stringutil.h"
 
 namespace openscreen {
 
@@ -40,7 +40,7 @@ template <typename Enum, size_t Size>
 ErrorOr<Enum> GetEnum(const EnumNameTable<Enum, Size>& map,
                       std::string_view name) {
   for (auto pair : map) {
-    if (absl::EqualsIgnoreCase(pair.first, name)) {
+    if (::openscreen::stringutil::EqualsIgnoreCase(pair.first, name)) {
       return pair.second;
     }
   }

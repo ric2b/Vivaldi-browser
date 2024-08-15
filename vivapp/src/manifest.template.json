@@ -31,7 +31,6 @@
       "richtexteditor-bundle.js",
       "components/notes/richtexteditor/md.css",
       "rss/showfeed.html",
-      "rss/showopml.html",
       "rss/hidepage.css"
     ],
     "matches": [],

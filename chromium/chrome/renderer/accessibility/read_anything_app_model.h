@@ -58,6 +58,7 @@ class ReadAnythingAppModel {
   // Theme
   const std::string& font_name() const { return font_name_; }
   float font_size() const { return font_size_; }
+  bool links_enabled() const { return links_enabled_; }
   float letter_spacing() const { return letter_spacing_; }
   float line_spacing() const { return line_spacing_; }
   int color_theme() const { return color_theme_; }
@@ -122,6 +123,7 @@ class ReadAnythingAppModel {
       read_anything::mojom::LetterSpacing letter_spacing,
       const std::string& font,
       double font_size,
+      bool links_enabled,
       read_anything::mojom::Colors color,
       double speech_rate,
       base::Value::Dict* voices,
@@ -191,6 +193,10 @@ class ReadAnythingAppModel {
   // be ran again to check for the correct structure.
   bool IsPDFFormatted() const;
 
+  // Google Docs need special handling.
+  void set_is_google_docs(bool is_google_docs) { is_docs_ = is_google_docs; }
+  bool is_docs() const { return is_docs_; }
+
  private:
   void EraseTree(ui::AXTreeID tree_id);
 
@@ -211,7 +217,12 @@ class ReadAnythingAppModel {
       ui::AXTreeID tree_id);
 
   void ProcessNonGeneratedEvents(const std::vector<ui::AXEvent>& events);
-  void ProcessGeneratedEvents(const ui::AXEventGenerator& event_generator);
+
+  // The tree size arguments are used to determine if distillation of a PDF is
+  // necessary.
+  void ProcessGeneratedEvents(const ui::AXEventGenerator& event_generator,
+                              size_t prev_tree_size,
+                              size_t tree_size);
 
   ui::AXNode* GetParentForSelection(ui::AXNode* node);
 
@@ -272,6 +283,7 @@ class ReadAnythingAppModel {
   // Theme information.
   std::string font_name_ = string_constants::kReadAnythingPlaceholderFontName;
   float font_size_ = kReadAnythingDefaultFontScale;
+  bool links_enabled_ = kReadAnythingDefaultLinksEnabled;
   float letter_spacing_ =
       (int)read_anything::mojom::LetterSpacing::kDefaultValue;
   float line_spacing_ = (int)read_anything::mojom::LineSpacing::kDefaultValue;
@@ -304,6 +316,10 @@ class ReadAnythingAppModel {
   // webpage. We record the result of the distill() call for this entire
   // webpage, so we only make the call once the webpage finished loading.
   bool page_finished_loading_for_data_collection_ = false;
+
+  // Google Docs are different from regular webpages. We want to distill content
+  // from the annotated canvas elements, not the main tree.
+  bool is_docs_ = false;
 };
 
 #endif  // CHROME_RENDERER_ACCESSIBILITY_READ_ANYTHING_APP_MODEL_H_

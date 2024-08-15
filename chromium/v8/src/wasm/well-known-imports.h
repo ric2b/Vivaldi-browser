@@ -24,6 +24,36 @@ enum class WellKnownImport : uint8_t {
   kGeneric,
   kLinkError,
 
+  ////////////////////////////////////////////////////////
+  // Compile-time "builtin" imports:
+  ////////////////////////////////////////////////////////
+  kFirstCompileTimeImport,
+
+  // JS String Builtins
+  // https://github.com/WebAssembly/js-string-builtins
+  // TODO(14179): Rename some of these to reflect the new import names.
+  kStringCast = kFirstCompileTimeImport,
+  kStringCharCodeAt,
+  kStringCodePointAt,
+  kStringCompare,
+  kStringConcat,
+  kStringEquals,
+  kStringFromCharCode,
+  kStringFromCodePoint,
+  kStringFromUtf8Array,
+  kStringFromWtf16Array,
+  kStringIntoUtf8Array,
+  kStringLength,
+  kStringMeasureUtf8,
+  kStringSubstring,
+  kStringTest,
+  kStringToWtf16Array,
+
+  kLastCompileTimeImport = kStringToWtf16Array,
+  ////////////////////////////////////////////////////////
+  // End of compile-time "builtin" imports.
+  ////////////////////////////////////////////////////////
+
   // DataView methods:
   kDataViewGetBigInt64,
   kDataViewGetBigUint64,
@@ -45,35 +75,32 @@ enum class WellKnownImport : uint8_t {
   kDataViewSetUint8,
   kDataViewSetUint16,
   kDataViewSetUint32,
+  kDataViewByteLength,
 
   // String-related functions:
   kDoubleToString,
   kIntToString,
   kParseFloat,
 
-  // JS String Builtins
-  // https://github.com/WebAssembly/js-string-builtins
-  kStringCharCodeAt,
-  kStringCodePointAt,
-  kStringCompare,
-  kStringConcat,
-  kStringEquals,
-  kStringFromCharCode,
-  kStringFromCodePoint,
-  kStringFromWtf16Array,
-  kStringFromWtf8Array,
   kStringIndexOf,
-  kStringLength,
-  kStringSubstring,
+  kStringIndexOfImported,
   kStringToLocaleLowerCaseStringref,
   kStringToLowerCaseStringref,
-  kStringToWtf16Array,
+  kStringToLowerCaseImported,
 };
 
 class NativeModule;
 
 // For debugging/tracing.
 const char* WellKnownImportName(WellKnownImport wki);
+
+inline bool IsCompileTimeImport(WellKnownImport wki) {
+  using T = std::underlying_type_t<WellKnownImport>;
+  T num = static_cast<T>(wki);
+  constexpr T kFirst = static_cast<T>(WellKnownImport::kFirstCompileTimeImport);
+  constexpr T kLast = static_cast<T>(WellKnownImport::kLastCompileTimeImport);
+  return kFirst <= num && num <= kLast;
+}
 
 class WellKnownImportsList {
  public:

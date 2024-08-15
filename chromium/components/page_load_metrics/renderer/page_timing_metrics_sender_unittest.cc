@@ -30,7 +30,8 @@ class TestPageTimingMetricsSender : public PageTimingMetricsSender {
                                 std::make_unique<base::MockOneShotTimer>(),
                                 std::move(initial_timing),
                                 monotonic_timing,
-                                /* initial_request=*/nullptr) {}
+                                /* initial_request=*/nullptr,
+                                /*is_main_frame=*/true) {}
 
   base::MockOneShotTimer* mock_timer() const {
     return static_cast<base::MockOneShotTimer*>(timer());
@@ -371,15 +372,17 @@ TEST_F(PageTimingMetricsSenderTest, SendInteractions) {
 
   metrics_sender_->DidObserveUserInteraction(
       interaction_start_1, interaction_end_1,
-      blink::UserInteractionType::kKeyboard);
+      blink::UserInteractionType::kKeyboard, 0);
   validator_.UpdateExpectedInteractionTiming(
-      interaction_duration_1, mojom::UserInteractionType::kKeyboard);
+      interaction_duration_1, mojom::UserInteractionType::kKeyboard, 0,
+      interaction_start_1);
 
   metrics_sender_->DidObserveUserInteraction(
       interaction_start_2, interaction_end_2,
-      blink::UserInteractionType::kTapOrClick);
+      blink::UserInteractionType::kTapOrClick, 1);
   validator_.UpdateExpectedInteractionTiming(
-      interaction_duration_2, mojom::UserInteractionType::kTapOrClick);
+      interaction_duration_2, mojom::UserInteractionType::kTapOrClick, 1,
+      interaction_start_2);
 
   // Fire the timer to trigger sending of features via an SendTiming call.
   metrics_sender_->mock_timer()->Fire();

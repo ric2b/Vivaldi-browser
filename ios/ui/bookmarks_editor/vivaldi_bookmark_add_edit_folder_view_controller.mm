@@ -345,9 +345,13 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
     return;
   DCHECK(self.editingExistingFolder);
   DCHECK(self.editingItem);
-  std::set<const BookmarkNode*> editedNodes;
-  editedNodes.insert(self.editingItem.bookmarkNode);
-  bookmark_utils_ios::DeleteBookmarks(editedNodes, self.bookmarks);
+  std::vector<const bookmarks::BookmarkNode*> nodes;
+  nodes.push_back(self.editingItem.bookmarkNode);
+  const BookmarkNode* trashFolder = _bookmarks->trash_node();
+  bookmark_utils_ios::MoveBookmarks(nodes,
+                                    self.bookmarks,
+                                    self.bookmarks,
+                                    trashFolder);
   [self notifyDelegateWithFolder:nil];
 }
 

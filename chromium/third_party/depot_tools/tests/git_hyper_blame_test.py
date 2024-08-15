@@ -47,12 +47,12 @@ class GitHyperBlameTestBase(git_test_utils.GitRepoReadOnlyTestBase):
     def blame_line(self, commit_name, rest, author=None, filename=None):
         """Generate a blame line from a commit.
 
-    Args:
-      commit_name: The commit's schema name.
-      rest: The blame line after the timestamp. e.g., '2) file2 - merged'.
-      author: The author's name. If omitted, reads the name out of the commit.
-      filename: The filename. If omitted, not shown in the blame line.
-    """
+        Args:
+            commit_name: The commit's schema name.
+            rest: The blame line after the timestamp. e.g., '2) file2 - merged'.
+            author: The author's name. If omitted, reads the name out of the commit.
+            filename: The filename. If omitted, not shown in the blame line.
+        """
         short = self.repo[commit_name][:8]
         start = '%s %s' % (short, filename) if filename else short
         if author is None:
@@ -647,10 +647,10 @@ class GitHyperBlameLineNumberTest(GitHyperBlameTestBase):
     def testTwoChangesWithAddedLines(self):
         """Regression test for https://crbug.com/709831.
 
-    Tests a line with multiple ignored edits, and a line number change in
-    between (such that the line number in the current revision is bigger than
-    the file's line count at the older ignored revision).
-    """
+        Tests a line with multiple ignored edits, and a line number change in
+        between (such that the line number in the current revision is bigger than
+        the file's line count at the older ignored revision).
+        """
         expected_output = [
             self.blame_line('C', ' 1) '),
             self.blame_line('C', ' 2) '),
@@ -698,9 +698,9 @@ class GitHyperBlameUnicodeTest(GitHyperBlameTestBase):
     def testNonUTF8Data(self):
         """Ensures correct behaviour even if author or file data is not UTF-8.
 
-    There is no guarantee that a file will be UTF-8-encoded, so this is
-    realistic.
-    """
+        There is no guarantee that a file will be UTF-8-encoded, so this is
+        realistic.
+        """
         expected_output = [
             self.blame_line('A', '1) red', author='ASCII Author  '),
             # The Author has been re-encoded as UTF-8. The file data is

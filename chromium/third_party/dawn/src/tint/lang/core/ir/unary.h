@@ -31,21 +31,23 @@
 #include <string>
 
 #include "src/tint/lang/core/ir/operand_instruction.h"
-#include "src/tint/utils/rtti/castable.h"
+#include "src/tint/lang/core/unary_op.h"
+
+// Forward declarations
+namespace tint::core::intrinsic {
+struct TableData;
+}
 
 namespace tint::core::ir {
 
-/// A unary operator.
-enum class UnaryOp {
-    kComplement,
-    kNegation,
-};
-
-/// A unary instruction in the IR.
-class Unary final : public Castable<Unary, OperandInstruction<1, 1>> {
+/// The abstract base class for dialect-specific unary-op instructions in the IR.
+class Unary : public Castable<Unary, OperandInstruction<1, 1>> {
   public:
     /// The offset in Operands() for the value
     static constexpr size_t kValueOperandOffset = 0;
+
+    /// Constructor (no results, no operands)
+    Unary();
 
     /// Constructor
     /// @param result the result value
@@ -54,20 +56,26 @@ class Unary final : public Castable<Unary, OperandInstruction<1, 1>> {
     Unary(InstructionResult* result, UnaryOp op, Value* val);
     ~Unary() override;
 
-    /// @copydoc Instruction::Clone()
-    Unary* Clone(CloneContext& ctx) override;
-
     /// @returns the value for the instruction
     Value* Val() { return operands_[kValueOperandOffset]; }
 
+    /// @returns the value for the instruction
+    const Value* Val() const { return operands_[kValueOperandOffset]; }
+
     /// @returns the unary operator
-    UnaryOp Op() { return op_; }
+    UnaryOp Op() const { return op_; }
+
+    /// @param op the new unary operator
+    void SetOp(UnaryOp op) { op_ = op; }
 
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "unary"; }
+    std::string FriendlyName() const override { return "unary"; }
+
+    /// @returns the table data to validate this builtin
+    virtual const core::intrinsic::TableData& TableData() const = 0;
 
   private:
-    UnaryOp op_;
+    UnaryOp op_ = UnaryOp::kComplement;
 };
 
 }  // namespace tint::core::ir

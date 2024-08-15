@@ -54,10 +54,11 @@ ClipboardIOS::~ClipboardIOS() {
 void ClipboardIOS::OnPreShutdown() {}
 
 // DataTransferEndpoint is not used on this platform.
-DataTransferEndpoint* ClipboardIOS::GetSource(ClipboardBuffer buffer) const {
+absl::optional<DataTransferEndpoint> ClipboardIOS::GetSource(
+    ClipboardBuffer buffer) const {
   DCHECK(CalledOnValidThread());
   DCHECK_EQ(buffer, ClipboardBuffer::kCopyPaste);
-  return nullptr;
+  return absl::nullopt;
 }
 
 const ClipboardSequenceNumberToken& ClipboardIOS::GetSequenceNumber(
@@ -377,7 +378,8 @@ void ClipboardIOS::WriteText(base::StringPiece text) {
 }
 
 void ClipboardIOS::WriteHTML(base::StringPiece markup,
-                             absl::optional<base::StringPiece> source_url) {
+                             absl::optional<base::StringPiece> /* source_url */,
+                             ClipboardContentType /* content_type */) {
   // We need to mark it as utf-8. (see crbug.com/11957)
   std::string html_fragment_str("<meta charset='utf-8'>");
   html_fragment_str += markup;
@@ -386,12 +388,6 @@ void ClipboardIOS::WriteHTML(base::StringPiece markup,
   NSDictionary<NSString*, id>* html_item =
       @{ClipboardFormatType::HtmlType().ToNSString() : html};
   [GetPasteboard() addItems:@[ html_item ]];
-}
-
-void ClipboardIOS::WriteUnsanitizedHTML(
-    base::StringPiece markup,
-    absl::optional<base::StringPiece> source_url) {
-  WriteHTML(markup, source_url);
 }
 
 void ClipboardIOS::WriteSvg(base::StringPiece markup) {
@@ -452,7 +448,7 @@ void ClipboardIOS::WriteBitmap(const SkBitmap& bitmap) {
   base::apple::ScopedCFTypeRef<CGColorSpaceRef> color_space(
       CGColorSpaceCreateDeviceRGB());
   UIImage* image =
-      skia::SkBitmapToUIImageWithColorSpace(bitmap, 1.0f, color_space);
+      skia::SkBitmapToUIImageWithColorSpace(bitmap, 1.0f, color_space.get());
   if (!image) {
     NOTREACHED() << "SkBitmapToUIImageWithColorSpace failed";
     return;

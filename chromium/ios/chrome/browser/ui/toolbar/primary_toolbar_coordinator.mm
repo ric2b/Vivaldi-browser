@@ -26,33 +26,19 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 @interface PrimaryToolbarCoordinator ()
-
-// Vivaldi
-<VivaldiATBConsumer> {}
-// End Vivaldi
-
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
 // Redefined as PrimaryToolbarViewController.
 @property(nonatomic, strong) PrimaryToolbarViewController* viewController;
 
-// Vivaldi
-@property(nonatomic, strong) VivaldiATBManager* adblockManager;
-// End Vivaldi
-
 @end
 
 @implementation PrimaryToolbarCoordinator
-
-// Vivaldi
-@synthesize adblockManager = _adblockManager;
-// End Vivaldi
 
 @dynamic viewController;
 
@@ -86,10 +72,6 @@ using vivaldi::IsVivaldiRunning;
   self.viewController.buttonFactory =
       [self buttonFactoryWithType:ToolbarType::kPrimary];
 
-  // Vivaldi
-  [self initialiseAdblockManager];
-  // End Vivaldi
-
   [super start];
   self.started = YES;
 }
@@ -99,14 +81,6 @@ using vivaldi::IsVivaldiRunning;
     return;
   [super stop];
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
-
-  // Vivaldi
-  if (!self.adblockManager)
-    return;
-  self.adblockManager.consumer = nil;
-  [self.adblockManager disconnect];
-  // End Vivaldi
-
   self.started = NO;
 }
 
@@ -125,32 +99,6 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)triggerToolbarSlideInAnimation {
   [self.viewController triggerToolbarSlideInAnimationFromBelow:NO];
-}
-
-#pragma mark - VIVALDI
-
-- (void)initialiseAdblockManager {
-  if (!self.browser)
-    return;
-  self.adblockManager =
-      [[VivaldiATBManager alloc] initWithBrowser:self.browser];
-  self.adblockManager.consumer = self;
-  [self updateVivaldiShieldState];
-}
-
-- (void)updateVivaldiShieldState {
-  [self.viewController
-      updateVivaldiShieldState:[self.adblockManager globalBlockingSetting]];
-}
-
-#pragma mark: - VivaldiATBConsumer
-- (void)didRefreshSettingOptions:(NSArray*)options {
-  if (options.count > 0)
-    [self updateVivaldiShieldState];
-}
-
-- (void)ruleServiceStateDidLoad {
-  [self updateVivaldiShieldState];
 }
 
 @end

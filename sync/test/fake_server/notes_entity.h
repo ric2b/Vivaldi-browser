@@ -53,7 +53,7 @@ class PersistentNotesEntity : public LoopbackServerEntity {
                         bool is_folder,
                         const std::string& parent_id,
                         int64_t creation_time,
-                        int64_t last_modified_time);
+                        int64_t last_modification_time);
 
   // LoopbackServerEntity implementation.
   bool RequiresParentId() const override;
@@ -72,7 +72,7 @@ class PersistentNotesEntity : public LoopbackServerEntity {
   bool is_folder_;
   std::string parent_id_;
   int64_t creation_time_;
-  int64_t last_modified_time_;
+  int64_t last_modification_time_;
 };
 
 }  // namespace syncer

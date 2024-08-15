@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void acosh_3433e8() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  acosh_3433e8();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  acosh_3433e8();
+}
+kernel void compute_main() {
+  acosh_3433e8();
+}

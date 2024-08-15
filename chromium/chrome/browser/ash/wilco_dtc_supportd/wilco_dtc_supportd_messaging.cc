@@ -12,7 +12,6 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
@@ -204,9 +203,7 @@ class WilcoDtcSupportdExtensionOwnedMessageHost final
       base::SingleThreadTaskRunner::GetCurrentDefault();
 
   // Unowned.
-  // This field is not a raw_ptr<> because it was filtered by the rewriter
-  // for: #constexpr-ctor-field-initializer
-  RAW_PTR_EXCLUSION Client* client_ = nullptr;
+  raw_ptr<Client> client_ = nullptr;
 
   // Whether a message has already been received from the extension.
   bool message_from_extension_received_ = false;
@@ -285,7 +282,7 @@ class WilcoDtcSupportdDaemonOwnedMessageHost final
   const std::string json_message_to_send_;
   base::OnceCallback<void(const std::string& response)> send_response_callback_;
   // Unowned.
-  raw_ptr<Client, ExperimentalAsh> client_ = nullptr;
+  raw_ptr<Client> client_ = nullptr;
 };
 
 // Helper that wraps the specified OnceCallback and encapsulates logic that

@@ -2,32 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type {EntryLocation} from '../../background/js/entry_location_impl.js';
 import {getParentEntry} from '../../common/js/api.js';
-import {DialogType} from '../../common/js/dialog_type.js';
-import {isDriveRootEntryList, isFakeEntryInDrives, isGrandRootEntryInDrives, isSameEntry, isVolumeEntry, sortEntries} from '../../common/js/entry_utils.js';
-import {FileType} from '../../common/js/file_type.js';
-import {EntryList, VolumeEntry} from '../../common/js/files_app_entry_types.js';
-import {isSinglePartitionFormatEnabled} from '../../common/js/flags.js';
+import {isDriveRootEntryList, isEntryInsideDrive, isEntryScannable, isEntrySupportUiChildren, isFakeEntryInDrives, isGrandRootEntryInDrives, isVolumeEntry, readEntries, shouldSupportDriveSpecificIcons, sortEntries} from '../../common/js/entry_utils.js';
+import {getIcon} from '../../common/js/file_type.js';
+import {EntryList, FilesAppDirEntry, FilesAppEntry, VolumeEntry} from '../../common/js/files_app_entry_types.js';
 import {recordInterval, recordSmallCount, startInterval} from '../../common/js/metrics.js';
 import {getEntryLabel, str} from '../../common/js/translations.js';
 import {iconSetToCSSBackgroundImageValue} from '../../common/js/util.js';
-import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
-import {EntryLocation} from '../../externs/entry_location.js';
-import {FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
-import {CurrentDirectory, EntryType, FileData, State, Volume, VolumeMap} from '../../externs/ts/state.js';
-import type {VolumeInfo} from '../../externs/volume_info.js';
-import {constants} from '../../foreground/js/constants.js';
+import {COMPUTERS_DIRECTORY_PATH, RootType, SHARED_DRIVES_DIRECTORY_PATH, shouldProvideIcons, Source, VolumeType} from '../../common/js/volume_manager_types.js';
+import {ACTIONS_MODEL_METADATA_PREFETCH_PROPERTY_NAMES, DLP_METADATA_PREFETCH_PROPERTY_NAMES, FILE_SELECTION_METADATA_PREFETCH_PROPERTY_NAMES, ICON_TYPES, LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES} from '../../foreground/js/constants.js';
 import {MetadataItem} from '../../foreground/js/metadata/metadata_item.js';
 import type {ActionsProducerGen} from '../../lib/actions_producer.js';
-import {Slice} from '../../lib/base_store.js';
-import {hasDlpDisabledFiles} from '../ducks/current_directory.js';
-import {driveRootEntryListKey, getVolumeTypesNestedInMyFiles, makeRemovableParentKey, myFilesEntryListKey, recentRootKey, removableGroupKey} from '../ducks/volumes.js';
+import {isDebugStoreEnabled, Slice} from '../../lib/base_store.js';
+import {keepLatest, keyedKeepLatest} from '../../lib/concurrency_models.js';
+import {type CurrentDirectory, DialogType, EntryType, type FileData, type State, type Volume, type VolumeMap} from '../../state/state.js';
 import type {FileKey} from '../file_key.js';
-import {getEntry, getFileData, getStore} from '../store.js';
+import {getEntry, getFileData, getStore, getVolume} from '../store.js';
+
+import {hasDlpDisabledFiles} from './current_directory.js';
+import {driveRootEntryListKey, myFilesEntryListKey, recentRootKey} from './volumes.js';
 
 /**
  * @fileoverview Entries slice of the store.
- * @suppress {checkTypes} TS already checks this file.
  */
 
 const slice = new Slice<State, State['allEntries']>('allEntries');
@@ -86,8 +83,7 @@ function clearCachedEntriesReducer(state: State): State {
 
   // For all expanded entries, we need to keep them and all their direct
   // children.
-  for (const key of Object.keys(entries)) {
-    const fileData = entries[key];
+  for (const [key, fileData] of Object.entries(entries)) {
     if (fileData.expanded) {
       entriesToKeep.add(key);
       if (fileData.children) {
@@ -109,12 +105,16 @@ function clearCachedEntriesReducer(state: State): State {
     }
   }
 
+  const isDebugStore = isDebugStoreEnabled();
   for (const key of Object.keys(entries)) {
     if (entriesToKeep.has(key)) {
       continue;
     }
 
     delete entries[key];
+    if (isDebugStore) {
+      console.log(`Clear entry: ${key}`);
+    }
   }
 
   return state;
@@ -140,23 +140,23 @@ function startClearCache() {
 }
 
 const prefetchPropertyNames = Array.from(new Set([
-  ...constants.LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES,
-  ...constants.ACTIONS_MODEL_METADATA_PREFETCH_PROPERTY_NAMES,
-  ...constants.FILE_SELECTION_METADATA_PREFETCH_PROPERTY_NAMES,
-  ...constants.DLP_METADATA_PREFETCH_PROPERTY_NAMES,
+  ...LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES,
+  ...ACTIONS_MODEL_METADATA_PREFETCH_PROPERTY_NAMES,
+  ...FILE_SELECTION_METADATA_PREFETCH_PROPERTY_NAMES,
+  ...DLP_METADATA_PREFETCH_PROPERTY_NAMES,
 ]));
 
 /** Get the icon for an entry. */
 function getEntryIcon(
     entry: Entry|FilesAppEntry, locationInfo: EntryLocation|null,
-    volumeType: VolumeManagerCommon.VolumeType|null): FileData['icon'] {
+    volumeType: VolumeType|null): FileData['icon'] {
   const url = entry.toURL();
 
   // Pre-defined icons based on the URL.
-  const urlToIconPath = {
-    [recentRootKey]: constants.ICON_TYPES.RECENT,
-    [myFilesEntryListKey]: constants.ICON_TYPES.MY_FILES,
-    [driveRootEntryListKey]: constants.ICON_TYPES.SERVICE_DRIVE,
+  const urlToIconPath: Record<FileKey, string> = {
+    [recentRootKey]: ICON_TYPES.RECENT,
+    [myFilesEntryListKey]: ICON_TYPES.MY_FILES,
+    [driveRootEntryListKey]: ICON_TYPES.SERVICE_DRIVE,
   };
 
   if (urlToIconPath[url]) {
@@ -168,32 +168,29 @@ function getEntryIcon(
   // not, because normal directory can also have the same full path. We also
   // need to check if the entry is a direct child of the drive root entry list.
   const grandRootPathToIconMap = {
-    [VolumeManagerCommon.COMPUTERS_DIRECTORY_PATH]:
-        constants.ICON_TYPES.COMPUTERS_GRAND_ROOT,
-    [VolumeManagerCommon.SHARED_DRIVES_DIRECTORY_PATH]:
-        constants.ICON_TYPES.SHARED_DRIVES_GRAND_ROOT,
+    [COMPUTERS_DIRECTORY_PATH]: ICON_TYPES.COMPUTERS_GRAND_ROOT,
+    [SHARED_DRIVES_DIRECTORY_PATH]: ICON_TYPES.SHARED_DRIVES_GRAND_ROOT,
   };
-  if (volumeType === VolumeManagerCommon.VolumeType.DRIVE &&
+  if (volumeType === VolumeType.DRIVE &&
       grandRootPathToIconMap[entry.fullPath]) {
     return grandRootPathToIconMap[entry.fullPath]!;
   }
 
   // For grouped removable devices, its parent folder is an entry list, we
   // should use USB icon for it.
-  if ('rootType' in entry &&
-      entry.rootType === VolumeManagerCommon.VolumeType.REMOVABLE) {
-    return constants.ICON_TYPES.USB;
+  if ('rootType' in entry && entry.rootType === RootType.REMOVABLE) {
+    return ICON_TYPES.USB;
   }
 
   if (isVolumeEntry(entry) && entry.volumeInfo) {
     switch (entry.volumeInfo.volumeType) {
-      case VolumeManagerCommon.VolumeType.DOWNLOADS:
-        return constants.ICON_TYPES.MY_FILES;
-      case VolumeManagerCommon.VolumeType.SMB:
-        return constants.ICON_TYPES.SMB;
-      case VolumeManagerCommon.VolumeType.PROVIDED:
+      case VolumeType.DOWNLOADS:
+        return ICON_TYPES.MY_FILES;
+      case VolumeType.SMB:
+        return ICON_TYPES.SMB;
+      case VolumeType.PROVIDED:
       // Fallthrough
-      case VolumeManagerCommon.VolumeType.DOCUMENTS_PROVIDER: {
+      case VolumeType.DOCUMENTS_PROVIDER: {
         // Only return IconSet if there's valid background image generated.
         const iconSet = entry.volumeInfo.iconSet;
         if (iconSet) {
@@ -205,39 +202,43 @@ function getEntryIcon(
         }
         // If no background is generated from IconSet, set the icon to the
         // generic one for certain volume type.
-        if (volumeType && VolumeManagerCommon.shouldProvideIcons(volumeType)) {
-          return constants.ICON_TYPES.GENERIC;
+        if (volumeType && shouldProvideIcons(volumeType)) {
+          return ICON_TYPES.GENERIC;
         }
         return '';
       }
-      case VolumeManagerCommon.VolumeType.MTP:
-        return constants.ICON_TYPES.MTP;
-      case VolumeManagerCommon.VolumeType.ARCHIVE:
-        return constants.ICON_TYPES.ARCHIVE;
-      case VolumeManagerCommon.VolumeType.REMOVABLE:
+      case VolumeType.MTP:
+        return ICON_TYPES.MTP;
+      case VolumeType.ARCHIVE:
+        return ICON_TYPES.ARCHIVE;
+      case VolumeType.REMOVABLE:
         // For sub-partition from a removable volume, its children icon should
         // be UNKNOWN_REMOVABLE.
-        return entry.volumeInfo.prefixEntry ?
-            constants.ICON_TYPES.UNKNOWN_REMOVABLE :
-            constants.ICON_TYPES.USB;
-      case VolumeManagerCommon.VolumeType.DRIVE:
-        return constants.ICON_TYPES.DRIVE;
+        return entry.volumeInfo.prefixEntry ? ICON_TYPES.UNKNOWN_REMOVABLE :
+                                              ICON_TYPES.USB;
+      case VolumeType.DRIVE:
+        return ICON_TYPES.DRIVE;
     }
   }
 
-  return FileType.getIcon(entry as Entry, undefined, locationInfo?.rootType);
+  return getIcon(entry as Entry, undefined, locationInfo?.rootType);
 }
 
-function appendChildIfNotExisted(
-    parentEntry: VolumeEntry|EntryList,
-    childEntry: Entry|FilesAppEntry): boolean {
-  if (!parentEntry.getUIChildren().find(
-          (entry) => isSameEntry(entry, childEntry))) {
-    parentEntry.addEntry(childEntry);
-    return true;
-  }
-
-  return false;
+/**
+ * Given an entry, check if its loading children should be delayed.
+ * We are doing this for SMB to avoid potentially hanging whilst scanning a
+ * large SMB file share and causing performance issues.
+ */
+export function shouldDelayLoadingChildren(entry: Entry|
+                                           FilesAppEntry): boolean {
+  const {volumeManager} = window.fileManager;
+  // When this function is triggered when mounting new volumes, volumeInfo is
+  // not available in the VolumeManager yet, we need to get volumeInfo from the
+  // entry itself.
+  const volumeInfo = isVolumeEntry(entry) ? entry.volumeInfo :
+                                            volumeManager.getVolumeInfo(entry);
+  return volumeInfo?.source === Source.NETWORK &&
+      volumeInfo.volumeType === VolumeType.SMB;
 }
 
 /**
@@ -248,14 +249,14 @@ export function convertEntryToFileData(entry: Entry|FilesAppEntry): FileData {
   // When this function is triggered when mounting new volumes, volumeInfo is
   // not available in the VolumeManager yet, we need to get volumeInfo from the
   // entry itself.
-  const volumeInfo = 'volumeInfo' in entry ? entry.volumeInfo as VolumeInfo :
-                                             volumeManager.getVolumeInfo(entry);
+  const volumeInfo = isVolumeEntry(entry) ? entry.volumeInfo :
+                                            volumeManager.getVolumeInfo(entry);
   const locationInfo = volumeManager.getLocationInfo(entry);
   const label = getEntryLabel(locationInfo, entry);
   // For FakeEntry, we need to read from entry.volumeType because it doesn't
   // have volumeInfo in the volume manager.
   const volumeType = 'volumeType' in entry && entry.volumeType ?
-      entry.volumeType as VolumeManagerCommon.VolumeType :
+      entry.volumeType as VolumeType :
       (volumeInfo?.volumeType || null);
   const volumeId = volumeInfo?.volumeId || null;
   const icon = getEntryIcon(entry, locationInfo, volumeType);
@@ -284,10 +285,10 @@ export function convertEntryToFileData(entry: Entry|FilesAppEntry): FileData {
     expanded: false,
     disabled: 'disabled' in entry ? entry.disabled as boolean : false,
     isRootEntry: !!locationInfo?.isRootEntry,
-    // `isEjectable/shouldDelayLoadingChildren` is determined by its
-    // corresponding volume, will be updated when volume is added.
+    // `isEjectable` is determined by its corresponding volume, will be updated
+    // when volume is added.
     isEjectable: false,
-    shouldDelayLoadingChildren: false,
+    canExpand: shouldDelayLoadingChildren(entry),
     children: [],
   };
 }
@@ -298,7 +299,7 @@ export function convertEntryToFileData(entry: Entry|FilesAppEntry): FileData {
 function appendEntry(state: State, entry: Entry|FilesAppEntry) {
   const allEntries = state.allEntries || {};
   const key = entry.toURL();
-  const existingFileData = allEntries[key] || {};
+  const existingFileData: Partial<FileData> = allEntries[key] || {};
 
   // Some client code might dispatch actions based on
   // `volume.resolveDisplayRoot()` which is a DirectoryEntry instead of a
@@ -310,7 +311,7 @@ function appendEntry(state: State, entry: Entry|FilesAppEntry) {
     return;
   }
 
-  const fileData = convertEntryToFileData(entry);
+  const fileData = convertEntryToFileData(entry)!;
 
   allEntries[key] = {
     ...fileData,
@@ -318,12 +319,11 @@ function appendEntry(state: State, entry: Entry|FilesAppEntry) {
     // value for the following fields. For example, for "expanded" entries with
     // expanded=true, we don't want to override it with expanded=false derived
     // from `convertEntryToFileData` function above.
-    expanded: existingFileData.expanded || fileData.expanded,
-    isEjectable: existingFileData.isEjectable || fileData.isEjectable,
-    shouldDelayLoadingChildren: existingFileData.shouldDelayLoadingChildren ||
-        fileData.shouldDelayLoadingChildren,
+    expanded: existingFileData.expanded ?? fileData.expanded,
+    isEjectable: existingFileData.isEjectable ?? fileData.isEjectable,
+    canExpand: existingFileData.canExpand ?? fileData.canExpand,
     // Keep children to prevent sudden removal of the children items on the UI.
-    children: existingFileData.children || fileData.children,
+    children: existingFileData.children ?? fileData.children,
   };
 
   state.allEntries = allEntries;
@@ -331,8 +331,10 @@ function appendEntry(state: State, entry: Entry|FilesAppEntry) {
 
 /**
  * Updates `FileData` from a `FileKey`.
+ *
+ * Note: the state will be updated in place.
  */
-export function updateFileData(
+export function updateFileDataInPlace(
     state: State, key: FileKey, changes: Partial<FileData>): FileData|
     undefined {
   if (!state.allEntries[key]) {
@@ -340,7 +342,7 @@ export function updateFileData(
     return;
   }
   const newFileData = {
-    ...state.allEntries[key],
+    ...state.allEntries[key]!,
     ...changes,
   };
   state.allEntries[key] = newFileData;
@@ -357,29 +359,29 @@ export function cacheEntries(
 }
 
 function getEntryType(entry: Entry|FilesAppEntry): EntryType {
-  // Entries from FilesAppEntry have the `type_name` property.
-  if (!('type_name' in entry)) {
+  // Entries from FilesAppEntry have the `typeName` property.
+  if (!('typeName' in entry)) {
     return EntryType.FS_API;
   }
 
-  switch (entry.type_name) {
+  switch (entry.typeName) {
     case 'EntryList':
       return EntryType.ENTRY_LIST;
     case 'VolumeEntry':
       return EntryType.VOLUME_ROOT;
     case 'FakeEntry':
       switch (entry.rootType) {
-        case VolumeManagerCommon.RootType.RECENT:
+        case RootType.RECENT:
           return EntryType.RECENT;
-        case VolumeManagerCommon.RootType.TRASH:
+        case RootType.TRASH:
           return EntryType.TRASH;
-        case VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT:
+        case RootType.DRIVE_FAKE_ROOT:
           return EntryType.ENTRY_LIST;
-        case VolumeManagerCommon.RootType.CROSTINI:
-        case VolumeManagerCommon.RootType.ANDROID_FILES:
+        case RootType.CROSTINI:
+        case RootType.ANDROID_FILES:
           return EntryType.PLACEHOLDER;
-        case VolumeManagerCommon.RootType.DRIVE_OFFLINE:
-        case VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME:
+        case RootType.DRIVE_OFFLINE:
+        case RootType.DRIVE_SHARED_WITH_ME:
           // TODO(lucmult): This isn't really Recent but it's the closest.
           return EntryType.RECENT;
       }
@@ -390,7 +392,7 @@ function getEntryType(entry: Entry|FilesAppEntry): EntryType {
     case 'TrashEntry':
       return EntryType.TRASH;
     default:
-      console.warn(`Invalid entry.type_name='${entry.type_name}`);
+      console.warn(`Invalid entry.typeName='${entry.typeName}`);
       return EntryType.FS_API;
   }
 }
@@ -412,7 +414,7 @@ function updateMetadataReducer(currentState: State, payload: {
 
   for (const entryMetadata of payload.metadata) {
     const key = entryMetadata.entry.toURL();
-    const fileData = currentState.allEntries[key];
+    const fileData = currentState.allEntries[key]!;
     const metadata = {...fileData.metadata, ...entryMetadata.metadata};
     currentState.allEntries[key] = {
       ...fileData,
@@ -434,8 +436,7 @@ function updateMetadataReducer(currentState: State, payload: {
   };
 }
 
-function findVolumeByType(
-    volumes: VolumeMap, volumeType: VolumeManagerCommon.VolumeType): Volume|
+function findVolumeByType(volumes: VolumeMap, volumeType: VolumeType): Volume|
     null {
   return Object.values<Volume>(volumes).find(v => {
     // If the volume isn't resolved yet, we just ignore here.
@@ -454,16 +455,15 @@ function findVolumeByType(
 export function getMyFiles(state: State):
     {myFilesVolume: null|Volume, myFilesEntry: VolumeEntry|EntryList} {
   const {volumes} = state;
-  const myFilesVolume =
-      findVolumeByType(volumes, VolumeManagerCommon.VolumeType.DOWNLOADS);
+  const myFilesVolume = findVolumeByType(volumes, VolumeType.DOWNLOADS);
   const myFilesVolumeEntry = myFilesVolume ?
       getEntry(state, myFilesVolume.rootKey!) as VolumeEntry | null :
       null;
   let myFilesEntryList =
       getEntry(state, myFilesEntryListKey) as EntryList | null;
   if (!myFilesVolumeEntry && !myFilesEntryList) {
-    myFilesEntryList = new EntryList(
-        str('MY_FILES_ROOT_LABEL'), VolumeManagerCommon.RootType.MY_FILES);
+    myFilesEntryList =
+        new EntryList(str('MY_FILES_ROOT_LABEL'), RootType.MY_FILES);
     appendEntry(state, myFilesEntryList);
     state.uiEntries = [...state.uiEntries, myFilesEntryList.toURL()];
   }
@@ -472,216 +472,6 @@ export function getMyFiles(state: State):
     myFilesEntry: myFilesVolumeEntry || myFilesEntryList!,
     myFilesVolume,
   };
-}
-
-/**
- * It nests the Android, Crostini & GuestOSes inside MyFiles.
- * It creates a placeholder for MyFiles if MyFiles volume isn't mounted yet.
- *
- * It nests the Drive root (aka MyDrive) inside a EntryList for "Google Drive".
- * It nests the fake entries for "Offline" and "Shared with me" in "Google
- * Drive".
- *
- * For removables, it may nest in a EntryList if one device has multiple
- * partitions.
- */
-export function volumeNestingEntries(
-    state: State, volumeInfo: VolumeInfo,
-    volumeMetadata: chrome.fileManagerPrivate.VolumeMetadata) {
-  const VolumeType = VolumeManagerCommon.VolumeType;
-  const myFilesNestedVolumeTypes = getVolumeTypesNestedInMyFiles();
-
-  const volumeRootKey = volumeInfo.displayRoot?.toURL();
-  const newVolumeEntry = getEntry(state, volumeRootKey) as VolumeEntry | null;
-
-  // Do nothing if the volume is not resolved.
-  if (!volumeInfo || !newVolumeEntry) {
-    return;
-  }
-
-  // For volumes which are supposed to be nested inside MyFiles (e.g. Android,
-  // Crostini, GuestOS), we need to nest them into MyFiles and remove the
-  // placeholder fake entry if existed.
-  const {myFilesEntry} = getMyFiles(state);
-  if (myFilesNestedVolumeTypes.has(volumeInfo.volumeType)) {
-    const myFilesEntryKey = myFilesEntry.toURL();
-    // Shallow copy here because we will update this object directly below, and
-    // the same object might be referenced in the UI.
-    const myFilesFileData = {...getFileData(state, myFilesEntryKey)!};
-    // Nest the entry for the new volume info in MyFiles.
-    const uiEntryPlaceholder = myFilesEntry.getUIChildren().find(
-        childEntry => childEntry.name === newVolumeEntry.name);
-    // Remove a placeholder for the currently mounting volume.
-    if (uiEntryPlaceholder) {
-      myFilesEntry.removeChildEntry(uiEntryPlaceholder);
-      // Also remove it from the children field.
-      myFilesFileData.children = myFilesFileData.children.filter(
-          childKey => childKey !== uiEntryPlaceholder.toURL());
-      // Do not remove the placeholder ui entry from the store. Removing it from
-      // the MyFiles is sufficient to prevent it from showing in the directory
-      // tree. We keep it in the store (`state["uiEntries"]`) because when
-      // the corresponding volume unmounts, we need to use its existence to
-      // decide if we need to re-add the placeholder back to MyFiles.
-    }
-    appendChildIfNotExisted(myFilesEntry, newVolumeEntry);
-    // Push the new entry to the children of FileData and sort them.
-    if (!myFilesFileData.children.find(
-            childKey => childKey === volumeRootKey)) {
-      const newChildren = [...myFilesFileData.children, volumeRootKey];
-      const childEntries =
-          newChildren.map(childKey => getEntry(state, childKey)!);
-      myFilesFileData.children =
-          sortEntries(myFilesEntry, childEntries).map(entry => entry.toURL());
-    }
-    state.allEntries[myFilesEntryKey] = myFilesFileData;
-  }
-
-  // When mounting MyFiles replace the temporary placeholder entry.
-  if (volumeInfo.volumeType === VolumeType.DOWNLOADS) {
-    // Do not use myFilesEntry above, because at this moment both fake MyFiles
-    // and real MyFiles are in the store.
-    const myFilesEntryList = getEntry(state, myFilesEntryListKey) as EntryList;
-    const myFilesVolumeEntry = newVolumeEntry;
-    if (myFilesEntryList) {
-      // We need to copy the children of the entry list to the real volume
-      // entry.
-      const uiChildren = [...myFilesEntryList.getUIChildren()];
-      for (const childEntry of uiChildren) {
-        appendChildIfNotExisted(myFilesVolumeEntry!, childEntry);
-        myFilesEntryList.removeChildEntry(childEntry);
-      }
-      // Remove MyFiles entry list from the uiEntries.
-      state.uiEntries = state.uiEntries.filter(
-          uiEntryKey => uiEntryKey !== myFilesEntryListKey);
-    }
-  }
-
-  // Drive fake entries for root for: Shared Drives, Computers and the parent
-  // Google Drive.
-  if (volumeInfo.volumeType === VolumeType.DRIVE) {
-    const myDrive = newVolumeEntry;
-    let googleDrive: EntryList|null =
-        getEntry(state, driveRootEntryListKey) as EntryList;
-    if (!googleDrive) {
-      googleDrive = new EntryList(
-          str('DRIVE_DIRECTORY_LABEL'),
-          VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT);
-      appendEntry(state, googleDrive);
-      state.uiEntries = [...state.uiEntries, googleDrive.toURL()];
-    }
-    appendChildIfNotExisted(googleDrive, myDrive!);
-
-    // We want the order to be
-    // - My Drive
-    // - Shared Drives (if the user has any)
-    // - Computers (if the user has any)
-    // - Shared with me
-    // - Offline
-    const {sharedDriveDisplayRoot, computersDisplayRoot, fakeEntries} =
-        volumeInfo;
-    // Add "Shared drives" (team drives) grand root into Drive. It's guaranteed
-    // to be resolved at this moment because ADD_VOLUME action will only be
-    // triggered after resolving all roots.
-    if (sharedDriveDisplayRoot) {
-      appendEntry(state, sharedDriveDisplayRoot);
-      appendChildIfNotExisted(googleDrive, sharedDriveDisplayRoot);
-    }
-
-    // Add "Computer" grand root into Drive. It's guaranteed to be resolved at
-    // this moment because ADD_VOLUME action will only be triggered after
-    // resolving all roots.
-    if (computersDisplayRoot) {
-      appendEntry(state, computersDisplayRoot);
-      appendChildIfNotExisted(googleDrive, computersDisplayRoot);
-    }
-
-    // Add "Shared with me" into Drive.
-    const fakeSharedWithMe =
-        fakeEntries[VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME];
-    if (fakeSharedWithMe) {
-      appendEntry(state, fakeSharedWithMe);
-      state.uiEntries = [...state.uiEntries, fakeSharedWithMe.toURL()];
-      appendChildIfNotExisted(googleDrive, fakeSharedWithMe);
-    }
-
-    // Add "Offline" into Drive.
-    const fakeOffline = fakeEntries[VolumeManagerCommon.RootType.DRIVE_OFFLINE];
-    if (fakeOffline) {
-      appendEntry(state, fakeOffline);
-      state.uiEntries = [...state.uiEntries, fakeOffline.toURL()];
-      appendChildIfNotExisted(googleDrive, fakeOffline);
-    }
-  }
-
-  state.allEntries[volumeRootKey].isEjectable =
-      (volumeInfo.source === VolumeManagerCommon.Source.DEVICE &&
-       volumeInfo.volumeType !== VolumeManagerCommon.VolumeType.MTP) ||
-      volumeInfo.source === VolumeManagerCommon.Source.FILE;
-
-  if (volumeInfo.volumeType === VolumeType.REMOVABLE) {
-    const groupingKey = removableGroupKey(volumeMetadata);
-    // When the flag is on, we always group removable volume even there's only 1
-    // partition, otherwise the group only happens when there are more than 1
-    // partition in the same device.
-    const shouldGroup = isSinglePartitionFormatEnabled() ?
-        true :
-        Object.values<Volume>(state.volumes).some(v => {
-          return (
-              v.volumeType === VolumeType.REMOVABLE &&
-              removableGroupKey(v) === groupingKey &&
-              v.volumeId != volumeInfo.volumeId);
-        });
-
-    if (shouldGroup) {
-      const parentKey = makeRemovableParentKey(volumeMetadata);
-      let parentEntry = getEntry(state, parentKey) as EntryList | null;
-      if (!parentEntry) {
-        parentEntry = new EntryList(
-            volumeMetadata.driveLabel || '',
-            VolumeManagerCommon.RootType.REMOVABLE, volumeMetadata.devicePath);
-        appendEntry(state, parentEntry);
-        state.uiEntries = [...state.uiEntries, parentEntry.toURL()];
-        // Removable devices with group, its parent should always be ejectable.
-        state.allEntries[parentKey].isEjectable = true;
-      }
-      // Update the siblings too.
-      for (const v of Object.values<Volume>(state.volumes)) {
-        // Ignore the partitions that are already nested via `prefixKey`. Note:
-        // `prefixKey` field is handled by `addVolumeReducer`.
-        if (v.volumeType === VolumeType.REMOVABLE &&
-            removableGroupKey(v) === groupingKey && !v.prefixKey) {
-          const fileData = getFileData(state, v.rootKey!);
-          if (fileData?.entry) {
-            appendChildIfNotExisted(parentEntry, fileData.entry);
-            // For sub-partition from a removable volume, its children icon
-            // should be UNKNOWN_REMOVABLE, and it shouldn't be ejectable.
-            state.allEntries[v.rootKey!] = {
-              ...fileData,
-              icon: constants.ICON_TYPES.UNKNOWN_REMOVABLE,
-              isEjectable: false,
-            };
-          }
-        }
-      }
-      // At this point the current `newVolumeEntry` is not in state.volumes,
-      // we need to add that to that group.
-      appendChildIfNotExisted(parentEntry, newVolumeEntry);
-      // For sub-partition from a removable volume, its children icon should be
-      // UNKNOWN_REMOVABLE, and it shouldn't be ejectable.
-      const fileData = getFileData(state, volumeRootKey);
-      state.allEntries[volumeRootKey] = {
-        ...fileData,
-        icon: constants.ICON_TYPES.UNKNOWN_REMOVABLE,
-        isEjectable: false,
-      };
-    }
-  }
-
-  // Update the shouldDelayLoadingChildren field in the FileData.
-  state.allEntries[volumeRootKey].shouldDelayLoadingChildren =
-      volumeInfo.source === VolumeManagerCommon.Source.NETWORK &&
-      (volumeInfo.volumeType === VolumeManagerCommon.VolumeType.PROVIDED ||
-       volumeInfo.volumeType === VolumeManagerCommon.VolumeType.SMB);
 }
 
 
@@ -706,19 +496,9 @@ function addChildEntriesReducer(currentState: State, payload: {
   const newEntryKeys = entries.map(entry => entry.toURL());
   // Add children to the parent entry item.
   const parentFileData: FileData = {
-    ...allEntries[parentKey],
+    ...allEntries[parentKey]!,
     children: newEntryKeys,
   };
-  // We mark all the children's shouldDelayLoadingChildren if the parent entry
-  // has been delayed.
-  if (parentFileData.shouldDelayLoadingChildren) {
-    for (const entryKey of newEntryKeys) {
-      allEntries[entryKey] = {
-        ...allEntries[entryKey],
-        shouldDelayLoadingChildren: true,
-      };
-    }
-  }
 
   return {
     ...currentState,
@@ -731,13 +511,12 @@ function addChildEntriesReducer(currentState: State, payload: {
 
 /**
  * Read sub directories for a given entry.
- * TODO(b/271485133): Remove successCallback/errorCallback.
  */
 export async function*
-    readSubDirectories(
+    readSubDirectoriesInternal(
         entry: Entry|FilesAppEntry|null, recursive: boolean = false,
         metricNameForTracking: string = ''): ActionsProducerGen {
-  if (!entry || !entry.isDirectory || ('disabled' in entry && entry.disabled)) {
+  if (!isEntryScannable(entry)) {
     return;
   }
 
@@ -746,25 +525,36 @@ export async function*
     startInterval(metricNameForTracking);
   }
 
-  // Type casting here because TS can't exclude the invalid entry types via the
-  // above if checks.
-  const validEntry = entry as DirectoryEntry | FilesAppDirEntry;
   const childEntriesToReadDeeper: Array<Entry|FilesAppEntry> = [];
-  if (isDriveRootEntryList(validEntry)) {
-    for await (
-        const action of readSubDirectoriesForDriveRootEntryList(validEntry)) {
+  if (isDriveRootEntryList(entry)) {
+    for await (const action of readSubDirectoriesForDriveRootEntryList(entry)) {
       yield action;
       if (action) {
         childEntriesToReadDeeper.push(...action.payload.entries);
       }
     }
   } else {
-    const childEntries = await readChildEntriesForDirectoryEntry(validEntry);
+    const childEntries = await readChildEntriesByFullScan(entry);
     // Only dispatch directories.
     const subDirectories =
         childEntries.filter(childEntry => childEntry.isDirectory);
     yield addChildEntries({parentKey: entry.toURL(), entries: subDirectories});
     childEntriesToReadDeeper.push(...subDirectories);
+    // Fetch metadata if the entry supports Drive specific share icon.
+    const state = getStore().getState();
+    const parentFileData = getFileData(state, entry.toURL());
+    if (parentFileData && isEntryInsideDrive(parentFileData)) {
+      const entriesNeedMetadata = subDirectories.filter(subDirectory => {
+        const fileData = getFileData(state, subDirectory.toURL());
+        return fileData && shouldSupportDriveSpecificIcons(fileData);
+      });
+      if (entriesNeedMetadata.length > 0) {
+        window.fileManager.metadataModel.get(entriesNeedMetadata, [
+          ...LIST_CONTAINER_METADATA_PREFETCH_PROPERTY_NAMES,
+          ...DLP_METADATA_PREFETCH_PROPERTY_NAMES,
+        ]);
+      }
+    }
   }
 
   // Track time for reading sub directories if metric for tracking is passed.
@@ -774,12 +564,30 @@ export async function*
 
   // Read sub directories for children when recursive is true.
   if (recursive) {
+    const state = getStore().getState();
     // We only read deeper if the parent entry is expanded in the tree.
-    const fileData = getFileData(getStore().getState(), entry.toURL());
-    if (fileData?.expanded) {
-      for (const childEntry of childEntriesToReadDeeper) {
+    const fileData = getFileData(state, entry.toURL());
+    if (!fileData?.expanded) {
+      return;
+    }
+    for (const childEntry of childEntriesToReadDeeper) {
+      const childFileData = getFileData(state, childEntry.toURL());
+      if (childFileData?.expanded) {
+        // If child item is expanded, we need to do a full scan for it.
         for await (const action of readSubDirectories(
-            childEntry, /* recursive */ true)) {
+            childEntry, /* recursive= */ true)) {
+          yield action;
+        }
+      } else if (childFileData?.canExpand) {
+        // If we already know the child item can be expanded, no partial scan is
+        // required.
+        continue;
+      } else {
+        // If the child item is not expanded, we do a partial scan to check if
+        // it has children or not (so we know if we need to show expand icon
+        // or not).
+        for await (const action of readSubDirectoriesToCheckDirectoryChildren(
+            childEntry)) {
           yield action;
         }
       }
@@ -788,10 +596,19 @@ export async function*
 }
 
 /**
+ * When there are multiple `readSubDirectories` actions with the same key being
+ * dispatched at the same time, we only keep the latest one.
+ */
+export const readSubDirectories = keyedKeepLatest(
+    readSubDirectoriesInternal,
+    (entry, recursive?, _metricNameForTracking?) =>
+        entry ? `${entry.toURL()}${recursive ? '-recursive' : ''}` : '');
+
+/**
  * Read entries for Drive root entry list (aka "Google Drive"), there are some
  * differences compared to the `readSubDirectoriesForDirectoryEntry`:
  * * We don't need to call readEntries to get its child entries. Instead, all
- * its children are from its entry.getUIChildren().
+ * its children are from its entry.getUiChildren().
  * * For fake entries children (e.g. Shared with me and Offline), we only show
  * them based on the dialog type.
  * * For curtain children (e.g. team drives and computers grand root), we only
@@ -803,11 +620,11 @@ async function*
     readSubDirectoriesForDriveRootEntryList(entry: EntryList):
         ActionsProducerGen {
   const metricNameMap = {
-    [VolumeManagerCommon.SHARED_DRIVES_DIRECTORY_PATH]: 'TeamDrivesCount',
-    [VolumeManagerCommon.COMPUTERS_DIRECTORY_PATH]: 'ComputerCount',
+    [SHARED_DRIVES_DIRECTORY_PATH]: 'TeamDrivesCount',
+    [COMPUTERS_DIRECTORY_PATH]: 'ComputerCount',
   };
 
-  const driveChildren = entry.getUIChildren();
+  const driveChildren = entry.getUiChildren();
   /**
    * Store the filtered children, for fake entries or grand roots we might need
    * to hide them based on curtain conditions.
@@ -833,8 +650,7 @@ async function*
     }
     // For grand roots ("Shared drives" and "Computers") inside Drive, we only
     // show them when there's at least one child entries inside.
-    const grandChildEntries =
-        await readChildEntriesForDirectoryEntry(childEntry);
+    const grandChildEntries = await readChildEntriesByFullScan(childEntry);
     recordSmallCount(
         metricNameMap[childEntry.fullPath]!, grandChildEntries.length);
     if (grandChildEntries.length > 0) {
@@ -845,37 +661,99 @@ async function*
 }
 
 /**
- * Read child entries for a given directory entry.
+ * Read a given directory entry to get all child entries.
+ *
+ * @param entry The parent directory entry to read.
  */
-async function readChildEntriesForDirectoryEntry(
+async function readChildEntriesByFullScan(
     entry: DirectoryEntry|
     FilesAppDirEntry): Promise<Array<Entry|FilesAppEntry>> {
-  return new Promise<Array<Entry|FilesAppEntry>>(resolve => {
-    const reader = entry.createReader();
-    const subEntries: Array<Entry|FilesAppEntry> = [];
-    const readEntry = () => {
-      reader.readEntries((entries) => {
-        if (entries.length === 0) {
-          resolve(sortEntries(entry, subEntries));
-          return;
-        }
-        for (const subEntry of entries) {
-          subEntries.push(subEntry);
-        }
-        readEntry();
-      });
-    };
-    readEntry();
-  });
+  const childEntries = [];
+  for await (const partialEntries of readEntries(entry)) {
+    childEntries.push(...partialEntries);
+  }
+  return sortEntries(entry, childEntries);
 }
 
 /**
+ * Read a given directory entry to check if it has directory child entries or
+ * not. It won't do full scanning, the scan stops immediately after finding a
+ * child directory entry.
+ *
+ * @param entry The parent directory entry to read.
+ */
+async function checkDirectoryChildByPartialScan(
+    entry: DirectoryEntry|FilesAppDirEntry): Promise<boolean> {
+  const {directoryModel} = window.fileManager;
+  const fileFilter = directoryModel.getFileFilter();
+  const isDirectoryChild = (childEntry: Entry|FilesAppEntry): boolean =>
+      childEntry.isDirectory && fileFilter.filter(childEntry);
+  for await (const partialEntries of readEntries(entry)) {
+    if (partialEntries.some(isDirectoryChild)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Read sub directories for a given entry to check if it has directory children
+ * or not.
+ */
+async function*
+    readSubDirectoriesToCheckDirectoryChildrenInternal(
+        entry: Entry|FilesAppEntry|null): ActionsProducerGen {
+  if (!isEntryScannable(entry)) {
+    return;
+  }
+
+  const state = getStore().getState();
+  const fileData = getFileData(state, entry.toURL());
+  // Do nothing because we already know it has children.
+  if (fileData && (fileData.children.length > 0 || fileData.canExpand)) {
+    return;
+  }
+  const {directoryModel} = window.fileManager;
+  const fileFilter = directoryModel.getFileFilter();
+  const isDirectoryChild = (childEntry: Entry|FilesAppEntry): boolean =>
+      childEntry.isDirectory && fileFilter.filter(childEntry);
+  // The entry has UIChildren but has no FileData.children, we know it can be
+  // expanded.
+  if (isEntrySupportUiChildren(entry) && entry.getUiChildren().length > 0) {
+    const uiChildrenDirectories =
+        entry.getUiChildren().filter(isDirectoryChild);
+    if (uiChildrenDirectories.length > 0) {
+      yield updateFileData(
+          {key: entry.toURL(), partialFileData: {canExpand: true}});
+    }
+    return;
+  }
+
+  const hasDirectoryChild = await checkDirectoryChildByPartialScan(entry);
+  if (hasDirectoryChild) {
+    yield updateFileData(
+        {key: entry.toURL(), partialFileData: {canExpand: true}});
+  }
+}
+
+/**
+ * When there are multiple `readSubDirectoriesToCheckDirectoryChildren`
+ * actions with the same key being dispatched at the same time, we only keep
+ * the latest one.
+ */
+export const readSubDirectoriesToCheckDirectoryChildren = keyedKeepLatest(
+    readSubDirectoriesToCheckDirectoryChildrenInternal,
+    (entry) => entry ? entry.toURL() : '');
+
+/**
  * Read child entries for the newly renamed directory entry.
- * We need to read its parent's children first before reading its own children,
- * because the newly renamed entry might not be in the store yet after renaming.
+ * We need to read its parent's children first before reading its own
+ * children, because the newly renamed entry might not be in the store yet
+ * after renaming.
  */
 export async function*
-    readSubDirectoriesForRenamedEntry(newEntry: Entry): ActionsProducerGen {
+    readSubDirectoriesForRenamedEntry(newEntry: Entry|FilesAppEntry):
+        ActionsProducerGen {
   const parentDirectory = await getParentEntry(newEntry);
   // Read the children of the parent first to make sure the newly added entry
   // appears in the store.
@@ -887,4 +765,108 @@ export async function*
       const action of readSubDirectories(newEntry, /* recursive= */ true)) {
     yield action;
   }
+}
+
+/**
+ * Traverse each entry in the `pathEntryKeys`: if the entry doesn't exist in
+ * the store, read sub directories for its parent. After all entries exist in
+ * the store, expand all parent entries.
+ *
+ * @param pathEntryKeys An array of FileKey starts from ancestor to child,
+ *     e.g. [A, B, C] A is the parent entry of B, B is the parent entry of C.
+ */
+export async function*
+    traverseAndExpandPathEntriesInternal(pathEntryKeys: FileKey[]):
+        ActionsProducerGen {
+  if (pathEntryKeys.length === 0) {
+    return;
+  }
+  const childEntryKey = pathEntryKeys[pathEntryKeys.length - 1]!;
+  const state = getStore().getState();
+  const childEntryFileData = getFileData(state, childEntryKey);
+  if (!childEntryFileData) {
+    console.warn(`Can not find the child entry: ${childEntryKey}`);
+    return;
+  }
+  const volume = getVolume(state, childEntryFileData);
+  if (!volume) {
+    console.warn(
+        `Can not find the volume root for the child entry: ${childEntryKey}`);
+    return;
+  }
+  const volumeEntry = getEntry(state, volume.rootKey!);
+  if (!volumeEntry) {
+    console.warn(`Can not find the volume root entry: ${volume.rootKey}`);
+    return;
+  }
+
+  for (let i = 1; i < pathEntryKeys.length; i++) {
+    // We need to getStore() for each loop because the below `yield action`
+    // will add new entries to the store.
+    const state = getStore().getState();
+    const currentEntryKey = pathEntryKeys[i]!;
+    const parentEntryKey = pathEntryKeys[i - 1]!;
+    const parentEntry = getEntry(state, parentEntryKey)!;
+    const parentFileData = getFileData(state, parentEntryKey)!;
+    const fileData = getFileData(state, currentEntryKey);
+    // Read sub directories if the child entry doesn't exist or it's not in
+    // parent entry's children.
+    if (!fileData || !parentFileData.children.includes(currentEntryKey)) {
+      let foundCurrentEntry = false;
+      for await (const action of readSubDirectories(parentEntry)) {
+        yield action;
+        const childEntries: Array<Entry|FilesAppEntry> =
+            action?.payload.entries || [];
+        foundCurrentEntry =
+            !!childEntries.find(entry => entry.toURL() === currentEntryKey);
+        if (foundCurrentEntry) {
+          break;
+        }
+      }
+      if (!foundCurrentEntry) {
+        console.warn(`Failed to find entry "${
+            currentEntryKey}" from its parent "${parentEntryKey}"`);
+        return;
+      }
+    }
+  }
+  // Now all entries on `pathEntryKeys` are found, we can expand all of them
+  // now. Note: if any entry on the path can't be found, we don't expand
+  // anything because we don't want to expand half-way, e.g. if `pathEntryKeys
+  // = [entryA, entryB, entryC]` but somehow entryB doesn't exist, we don't
+  // want to expand `entryA`.
+  for (let i = 0; i < pathEntryKeys.length - 1; i++) {
+    yield updateFileData(
+        {key: pathEntryKeys[i]!, partialFileData: {expanded: true}});
+  }
+}
+
+/**
+ * `traverseAndExpandPathEntries` is mainly used to traverse and expand the
+ * `pathComponent` for current directory, if concurrent requests happen (e.g.
+ * current directory changes too quickly while we are still resolving the
+ * previous one), we just ditch the previous request and only keep the latest.
+ */
+export const traverseAndExpandPathEntries =
+    keepLatest(traverseAndExpandPathEntriesInternal);
+
+/** Create action to update FileData for a given entry. */
+export const updateFileData =
+    slice.addReducer('update-file-data', updateFileDataReducer);
+
+function updateFileDataReducer(currentState: State, payload: {
+  key: FileKey,
+  partialFileData: Partial<FileData>,
+}): State {
+  const {key, partialFileData} = payload;
+  const fileData = getFileData(currentState, key);
+  if (!fileData) {
+    return currentState;
+  }
+
+  currentState.allEntries[key] = {
+    ...fileData,
+    ...partialFileData,
+  };
+  return {...currentState};
 }

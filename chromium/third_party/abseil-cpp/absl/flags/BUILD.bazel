@@ -190,6 +190,7 @@ cc_library(
         ":private_handle_accessor",
         "//absl/base:config",
         "//absl/base:core_headers",
+        "//absl/base:no_destructor",
         "//absl/container:flat_hash_map",
         "//absl/strings",
         "//absl/synchronization",
@@ -228,10 +229,6 @@ cc_library(
 
 cc_library(
     name = "flag",
-    srcs = [
-        "flag.cc",
-        "internal/flag_msvc.inc",
-    ],
     hdrs = [
         "declare.h",
         "flag.h",
@@ -448,6 +445,7 @@ cc_test(
 cc_test(
     name = "parse_test",
     size = "small",
+    timeout = "moderate",
     srcs = [
         "parse_test.cc",
     ],

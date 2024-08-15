@@ -37,9 +37,7 @@ std::string CreateRandomSalt() {
 
 MediaDeviceSaltDatabase::MediaDeviceSaltDatabase(const base::FilePath& db_path)
     : db_path_(db_path),
-      db_(sql::DatabaseOptions{.exclusive_locking = true,
-                               .page_size = 4096,
-                               .cache_size = 16}) {}
+      db_(sql::DatabaseOptions{.page_size = 4096, .cache_size = 16}) {}
 
 absl::optional<std::string> MediaDeviceSaltDatabase::GetOrInsertSalt(
     const blink::StorageKey& storage_key,
@@ -189,7 +187,7 @@ bool MediaDeviceSaltDatabase::EnsureOpen(bool is_retry) {
     return false;
   }
 
-  db_.set_histogram_tag("Media Device Salts");
+  db_.set_histogram_tag("MediaDeviceSalts");
   // base::Unretained() is safe here because `this` owns `db`.
   db_.set_error_callback(base::BindRepeating(
       &MediaDeviceSaltDatabase::OnDatabaseError, base::Unretained(this)));

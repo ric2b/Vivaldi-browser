@@ -40,24 +40,29 @@
 //! Serializing an encrypted advertisement:
 //!
 //! ```
-//! use np_adv::{shared_data::*, de_type::*, legacy::{de_type::*, data_elements::*, serialize::*}};
+//! use np_adv::{shared_data::*, de_type::*, legacy::{de_type::*, data_elements::*, serialize::*, *}};
+//! use np_adv::credential::{v0::V0, SimpleBroadcastCryptoMaterial};
 //! use crypto_provider::CryptoProvider;
 //! use crypto_provider_default::CryptoProviderImpl;
 //! use ldt_np_adv::{salt_padder, LegacySalt, LdtEncrypterXtsAes128};
 //!
 //! // Generate these from proper CSPRNGs -- using fixed data here
-//! let metadata_key = [0x33; 14];
+//! let metadata_key = ShortMetadataKey([0x33; 14]);
 //! let salt = LegacySalt::from([0x01, 0x02]);
 //! let key_seed = [0x44; 32];
 //! let ldt_enc = LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(
 //!     &np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed).legacy_ldt_key()
 //! );
 //!
+//! let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(
+//!     key_seed,
+//!     metadata_key,
+//! );
+//!
 //! let mut builder = AdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
 //!     EncryptedIdentityDataElementType::Private,
 //!     salt,
-//!     metadata_key,
-//!     ldt_enc,
+//!     &broadcast_cm,
 //! ));
 //!
 //! builder
@@ -66,18 +71,19 @@
 //!
 //! let packet = builder.into_advertisement().unwrap();
 //! ```
+use crate::credential::{v0::V0, BroadcastCryptoMaterial};
 use crate::{
     de_type::{EncryptedIdentityDataElementType, IdentityDataElementType},
     legacy::{
         de_type::{DataElementType, DeActualLength, DeEncodedLength, PlainDataElementType},
-        Ciphertext, PacketFlavor, Plaintext, BLE_ADV_SVC_CONTENT_LEN, NP_MAX_DE_CONTENT_LEN,
+        Ciphertext, PacketFlavor, Plaintext, ShortMetadataKey, BLE_ADV_SVC_CONTENT_LEN,
+        NP_MAX_DE_CONTENT_LEN,
     },
-    DeLengthOutOfRange, NoIdentity, PublicIdentity,
+    DeLengthOutOfRange, PublicIdentity,
 };
 use array_view::ArrayView;
 use core::{convert, fmt, marker};
 use crypto_provider::CryptoProvider;
-use ldt_np_adv::NP_LEGACY_METADATA_KEY_LEN;
 
 #[cfg(test)]
 mod tests;
@@ -105,7 +111,7 @@ pub trait Identity: fmt::Debug {
 lazy_static::lazy_static! {
     // Avoid either a panic-able code path or an error case that never happens by precalculating.
     static ref PUBLIC_IDENTITY_DE_HEADER: u8 =
-        encode_de_header_actual_len(DataElementType::PublicIdentity, DeActualLength::ZERO).unwrap();
+        encode_de_header_actual_len(DataElementType::PublicIdentity, DeActualLength::ZERO).expect("de length is in range");
 }
 
 impl Identity for PublicIdentity {
@@ -121,26 +127,13 @@ impl Identity for PublicIdentity {
     }
 }
 
-impl Identity for NoIdentity {
-    type Flavor = Plaintext;
-    type Error = convert::Infallible;
-    // No DE header
-    const OVERHEAD_LEN: usize = 0;
-
-    fn postprocess(&self, _buf: &mut [u8]) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
 /// Identity used for encrypted packets (private, trusted, provisioned) that encrypts other DEs
 /// (as well as the metadata key).
 pub struct LdtIdentity<C: CryptoProvider> {
     de_type: EncryptedIdentityDataElementType,
     salt: ldt_np_adv::LegacySalt,
-    metadata_key: [u8; NP_LEGACY_METADATA_KEY_LEN],
+    metadata_key: ShortMetadataKey,
     ldt_enc: ldt_np_adv::LdtEncrypterXtsAes128<C>,
-    // keep C parameter alive for when A disappears into it
-    _crypto_provider: marker::PhantomData<C>,
 }
 
 // Exclude sensitive members
@@ -151,14 +144,20 @@ impl<C: CryptoProvider> fmt::Debug for LdtIdentity<C> {
 }
 
 impl<C: CryptoProvider> LdtIdentity<C> {
-    /// Build an `LdtIdentity` for the provided identity, salt, metadata key, and ldt.
-    pub fn new(
+    /// Build an `LdtIdentity` for the provided identity type, salt, and
+    /// broadcast crypto-materials.
+    pub fn new<B: BroadcastCryptoMaterial<V0>>(
         de_type: EncryptedIdentityDataElementType,
         salt: ldt_np_adv::LegacySalt,
-        metadata_key: [u8; NP_LEGACY_METADATA_KEY_LEN],
-        ldt_enc: ldt_np_adv::LdtEncrypterXtsAes128<C>,
-    ) -> LdtIdentity<C> {
-        LdtIdentity { de_type, salt, metadata_key, ldt_enc, _crypto_provider: marker::PhantomData }
+        crypto_material: &B,
+    ) -> Self {
+        let metadata_key = crypto_material.metadata_key();
+        let key_seed = crypto_material.key_seed();
+        let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&key_seed);
+        let ldt_key = key_seed_hkdf.legacy_ldt_key();
+        let ldt_enc = ldt_np_adv::LdtEncrypterXtsAes128::<C>::new(&ldt_key);
+
+        Self { de_type, salt, metadata_key, ldt_enc }
     }
 }
 
@@ -180,7 +179,7 @@ impl<C: CryptoProvider> Identity for LdtIdentity<C> {
         buf[0] = encode_de_header_actual_len(id_de_type_as_generic_de_type(de_type), actual_len)
             .map_err(|_e| LdtPostprocessError::InvalidLength)?;
         buf[1..3].copy_from_slice(self.salt.bytes().as_slice());
-        buf[3..17].copy_from_slice(&self.metadata_key);
+        buf[3..17].copy_from_slice(&self.metadata_key.0);
 
         // encrypt everything after DE header and salt
         self.ldt_enc.encrypt(&mut buf[3..], &ldt_np_adv::salt_padder::<16, C>(self.salt)).map_err(

@@ -15,8 +15,6 @@
 //! Provides an implementation of [LDT](https://eprint.iacr.org/2017/841.pdf).
 
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(clippy::indexing_slicing, clippy::unwrap_used, clippy::panic, clippy::expect_used)]
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -31,7 +29,6 @@ use ldt_tbc::{TweakableBlockCipherDecrypter, TweakableBlockCipherEncrypter};
 /// `B` is the block size.
 /// `T` is the provided implementation of a Tweakable Block Cipher
 /// `M` is the implementation of a [pure mix function](https://eprint.iacr.org/2017/841.pdf)
-#[repr(C)]
 pub struct LdtEncryptCipher<const B: usize, T: TweakableBlockCipher<B>, M: Mix> {
     cipher_1: T::EncryptionCipher,
     cipher_2: T::EncryptionCipher,
@@ -124,7 +121,7 @@ where
     // Encrypt or decrypt in place with a tweak
     O: Fn(&C, T::Tweak, &mut [u8; B]),
     // Mix a/b into block-sized chunks
-    X: Fn(&[u8], &[u8]) -> ([u8; B], [u8; B]),
+    X: for<'a, 'b> Fn(&'a [u8], &'b [u8]) -> (&'b [u8], &'a [u8]),
     P: Padder<B, T>,
 {
     if data.len() < B || data.len() >= B * 2 {
@@ -147,20 +144,23 @@ where
     // |z| = B - s, |m3| = s
     let (z, m3) = m1_ciphertext.split_at(B - s);
     debug_assert_eq!(s, m3.len());
+
     // c3 and c2 are the last s bytes of their size-B arrays, respectively
-    let (mut c3, c2) = mix(m3, m2);
+    let (c3, c2) = mix(m3, m2);
+
     let c1 = {
-        // constructing z || c3 is easy since c3 is already the last s bytes
-        c3[0..(B - s)].copy_from_slice(z);
-        let mut z_c3 = c3;
-        let tweak = padder.pad_tweak(&c2[B - s..]);
+        let mut z_c3 = [0; B];
+        z_c3[(B - s)..].copy_from_slice(c3);
+        z_c3[0..(B - s)].copy_from_slice(z);
+
+        let tweak = padder.pad_tweak(c2);
         cipher_op(second_cipher, tweak, &mut z_c3);
         z_c3
     };
-    let len = data.len();
-    data.get_mut(0..B).ok_or(LdtError::InvalidLength(len))?.copy_from_slice(&c1);
-    data.get_mut(B..).ok_or(LdtError::InvalidLength(len))?.copy_from_slice(&c2[B - s..]);
 
+    let (left, right) = data.split_at_mut(B);
+    left.copy_from_slice(&c1);
+    right.copy_from_slice(c2);
     Ok(())
 }
 
@@ -219,31 +219,23 @@ pub trait Mix {
     /// Mix `a` and `b`, writing into the last `s` bytes of the output arrays.
     /// `a` and `b` must be the same length `s`, and no longer than the block size `B`.
     /// Must be the inverse of [Mix::backwards].
-    fn forwards<const B: usize>(a: &[u8], b: &[u8]) -> ([u8; B], [u8; B]);
+    fn forwards<'a, 'b>(a: &'a [u8], b: &'b [u8]) -> (&'b [u8], &'a [u8]);
 
     /// Mix `a` and `b`, writing into the last `s` bytes of the output arrays.
     /// `a` and `b` must be the same length, and no longer than the block size `B`.
     /// Must be the inverse of [Mix::forwards].
-    fn backwards<const B: usize>(a: &[u8], b: &[u8]) -> ([u8; B], [u8; B]);
+    fn backwards<'a, 'b>(a: &'a [u8], b: &'b [u8]) -> (&'b [u8], &'a [u8]);
 }
 
 /// Per section 2.4, swapping `a` and `b` is a valid mix function
 pub struct Swap {}
 impl Mix for Swap {
-    fn forwards<const B: usize>(a: &[u8], b: &[u8]) -> ([u8; B], [u8; B]) {
+    fn forwards<'a, 'b>(a: &'a [u8], b: &'b [u8]) -> (&'b [u8], &'a [u8]) {
         debug_assert_eq!(a.len(), b.len());
-        // implies b length as well
-        debug_assert!(a.len() <= B);
-        let mut out1 = [0; B];
-        let mut out2 = [0; B];
-
-        let start = B - a.len();
-        out1[start..].copy_from_slice(b);
-        out2[start..].copy_from_slice(a);
-        (out1, out2)
+        (b, a)
     }
 
-    fn backwards<const B: usize>(a: &[u8], b: &[u8]) -> ([u8; B], [u8; B]) {
+    fn backwards<'a, 'b>(a: &'a [u8], b: &'b [u8]) -> (&'b [u8], &'a [u8]) {
         // backwards is the same as forwards.
         Self::forwards(a, b)
     }
@@ -262,7 +254,7 @@ pub trait Padder<const B: usize, T: TweakableBlockCipher<B>> {
     fn pad_tweak(&self, data: &[u8]) -> T::Tweak;
 }
 
-/// The default padding algorithm per section 2 of LDT paper.
+/// The default padding algorithm per section 2 of [LDT paper](https://eprint.iacr.org/2017/841.pdf)
 #[derive(Default)]
 pub struct DefaultPadder;
 

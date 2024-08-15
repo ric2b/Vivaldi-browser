@@ -13,6 +13,8 @@
 #include "base/version.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "components/version_info/channel.h"
+#include "extensions/common/features/feature_channel.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/window_open_disposition.h"
@@ -62,6 +64,10 @@ class IsolatedWebAppBrowserTestHarness : public WebAppControllerBrowserTest {
 
  private:
   base::test::ScopedFeatureList iwa_scoped_feature_list_;
+  // Various IsolatedWebAppBrowsing tests fail on official builds because
+  // stable channel doesn't enable a required feature.
+  // TODO(b/309153867): Remove this when underlying issue is figured out.
+  extensions::ScopedCurrentChannel channel_{version_info::Channel::CANARY};
 };
 
 std::unique_ptr<net::EmbeddedTestServer> CreateAndStartDevServer(
@@ -93,12 +99,14 @@ webapps::AppId AddDummyIsolatedAppToRegistry(
 // TODO(cmfcmf): Move more test utils into this `test` namespace
 namespace test {
 
+namespace {
 using ::testing::AllOf;
 using ::testing::ExplainMatchResult;
 using ::testing::Field;
 using ::testing::Optional;
 using ::testing::Pointee;
 using ::testing::Property;
+}  // namespace
 
 MATCHER_P(IsInIwaRandomDir, profile_directory, "") {
   *result_listener << "where the profile directory is " << profile_directory;

@@ -70,7 +70,8 @@ fn normal_pad_max_len() {
 fn normal_pad_too_big_panics() {
     let padder = DefaultPadder;
     let input = [0x99; 16];
-    <DefaultPadder as Padder<16, XtsAes128<CryptoProviderImpl>>>::pad_tweak(&padder, &input);
+    let _ =
+        <DefaultPadder as Padder<16, XtsAes128<CryptoProviderImpl>>>::pad_tweak(&padder, &input);
 }
 
 #[test]
@@ -129,7 +130,7 @@ fn xor_pad_too_big_panics() {
     let padder = [0x24; BLOCK_SIZE].into();
     // need 1 byte for padding, and 2 more for salt
     let input = [0x99; 16];
-    <XorPadder<BLOCK_SIZE> as Padder<BLOCK_SIZE, XtsAes128<CryptoProviderImpl>>>::pad_tweak(
+    let _ = <XorPadder<BLOCK_SIZE> as Padder<BLOCK_SIZE, XtsAes128<CryptoProviderImpl>>>::pad_tweak(
         &padder, &input,
     );
 }

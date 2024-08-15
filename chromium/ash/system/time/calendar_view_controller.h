@@ -9,6 +9,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 
 #include "ash/ash_export.h"
@@ -18,7 +19,6 @@
 #include "base/time/time.h"
 #include "google_apis/calendar/calendar_api_response_types.h"
 #include "google_apis/common/api_error_codes.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/events/event.h"
 
 namespace ash {
@@ -156,7 +156,7 @@ class ASH_EXPORT CalendarViewController {
   base::Time currently_shown_date() { return currently_shown_date_; }
 
   // The currently selected date to show the event list.
-  absl::optional<base::Time> selected_date() { return selected_date_; }
+  std::optional<base::Time> selected_date() { return selected_date_; }
 
   // The midnight of the currently selected date adjusted to the local timezone.
   base::Time selected_date_midnight() { return selected_date_midnight_; }
@@ -194,6 +194,13 @@ class ASH_EXPORT CalendarViewController {
   void set_todays_date_cell_view(CalendarDateCellView* todays_date_cell_view) {
     todays_date_cell_view_ = todays_date_cell_view;
   }
+
+  bool is_date_cell_clickable() const { return is_date_cell_clickable_; }
+  void set_is_date_cell_clickable(bool is_clickable) {
+    is_date_cell_clickable_ = is_clickable;
+  }
+
+  bool is_event_list_showing() const { return is_event_list_showing_; }
 
   // Returns whether the events for `start_of_month` have been successfully
   // fetched. The `FetchingStatus` should be either `kSuccess` or `kRefetching`.
@@ -244,16 +251,18 @@ class ASH_EXPORT CalendarViewController {
   // screen to the user.
   bool events_shown_to_user_recorded_ = false;
 
+  // Whether date cells are clickable. When the event list animation is running,
+  // date cells should become unclickable until the animation completes.
+  bool is_date_cell_clickable_ = true;
+
   // The currently selected date.
-  absl::optional<base::Time> selected_date_;
+  std::optional<base::Time> selected_date_;
 
   // The currently selected CalendarDateCellView
-  raw_ptr<CalendarDateCellView, ExperimentalAsh> selected_date_cell_view_ =
-      nullptr;
+  raw_ptr<CalendarDateCellView> selected_date_cell_view_ = nullptr;
 
   // The CalendarDateCellView which represents today.
-  raw_ptr<CalendarDateCellView, ExperimentalAsh> todays_date_cell_view_ =
-      nullptr;
+  raw_ptr<CalendarDateCellView> todays_date_cell_view_ = nullptr;
 
   // The midnight of the currently selected date adjusted to the local timezone.
   base::Time selected_date_midnight_;

@@ -5,13 +5,13 @@
 #ifndef IOS_CHROME_BROWSER_PASSWORDS_MODEL_IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE_H_
 #define IOS_CHROME_BROWSER_PASSWORDS_MODEL_IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE_H_
 
-#include <memory>
-#include <string>
+#import <memory>
+#import <optional>
+#import <string>
 
-#include "components/infobars/core/confirm_infobar_delegate.h"
-#include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
-
+#import "base/time/time.h"
+#import "components/infobars/core/confirm_infobar_delegate.h"
+#import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_infobar_metrics_recorder.h"
 
 @class CommandDispatcher;
@@ -29,7 +29,7 @@ class PasswordFormManagerForUI;
 class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
  public:
   IOSChromeSavePasswordInfoBarDelegate(
-      absl::optional<std::string> account_to_store_password,
+      std::optional<std::string> account_to_store_password,
       bool password_update,
       password_manager::features_util::PasswordAccountStorageUserState
           account_storage_user_state,
@@ -60,9 +60,9 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
   // Gets the command dispatcher.
   CommandDispatcher* GetDispatcher() const { return dispatcher_; }
 
-  // The account where the password will be saved, or absl::nullopt if it's
+  // The account where the password will be saved, or std::nullopt if it's
   // saved locally.
-  absl::optional<std::string> GetAccountToStorePassword() const;
+  std::optional<std::string> GetAccountToStorePassword() const;
 
   // InfoBarDelegate implementation.
   bool ShouldExpire(const NavigationDetails& details) const override;
@@ -88,12 +88,12 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
   // refactored for testability.
   virtual void InfobarPresenting(bool automatic);
 
-  // Informs the delegate that the Infobar has been dismissed.
+  // Informs the delegate that the Infobar view is gone.
   // TODO(crbug.com/1040653): This function is only virtual so it can be mocked
   // for testing purposes.  It should become non-virtual once this test is
   // refactored for testability.
   // TODO(crbug.com/1394793): Fix dismissal handlers.
-  virtual void InfobarDismissed();
+  virtual void InfobarGone();
 
   // True if password is being updated at the moment the InfobarModal is
   // created.
@@ -107,6 +107,12 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
   // ConfirmInfoBarDelegate implementation.
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
 
+  // Records the duration of the infobar.
+  void RecordInfobarDuration(bool on_dismiss);
+
+  // Returns true if the infobar is currently presenting.
+  bool IsPresenting() const;
+
   // CommandDispatcher for dispatching commands.
   CommandDispatcher* dispatcher_ = nullptr;
 
@@ -118,9 +124,9 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
   // The PasswordInfobarType for this delegate.
   const PasswordInfobarType infobar_type_;
 
-  // The account where the password will be stored, or absl::nullopt if the
+  // The account where the password will be stored, or std::nullopt if the
   // password will only be stored on this device.
-  const absl::optional<std::string> account_to_store_password_;
+  const std::optional<std::string> account_to_store_password_;
 
   // Used to record metrics related to passwords account storage.
   const password_manager::features_util::PasswordAccountStorageUserState
@@ -138,8 +144,8 @@ class IOSChromeSavePasswordInfoBarDelegate : public ConfirmInfoBarDelegate {
   // the InfobarModal is created.
   bool current_password_saved_ = false;
 
-  // True if an Infobar is being presented by this delegate.
-  bool infobar_presenting_ = false;
+  // Timestamp when the Infobar started presenting.
+  std::optional<base::TimeTicks> start_timestamp_;
 };
 
 #endif  // IOS_CHROME_BROWSER_PASSWORDS_MODEL_IOS_CHROME_SAVE_PASSWORD_INFOBAR_DELEGATE_H_

@@ -110,8 +110,20 @@ bool ContainsEmailFormWithSignature(
 }
 
 FastCheckoutDelegateImpl* GetDelegate(autofill::AutofillManager& manager) {
+  #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+  // NOTE(jarle@vivaldi.com): In Vivaldi for Android the BrowserAutofillManager
+  // is coexisting in the AutofillManager. Due to that we need to access it
+  // differently.
+  autofill::ContentAutofillDriver& contentAutofillDriver =
+      static_cast<autofill::ContentAutofillDriver&>(manager.driver());
+  autofill::BrowserAutofillManager* browser =
+      contentAutofillDriver.android_browser_autofill_manager();
+  return static_cast<FastCheckoutDelegateImpl*>(
+      browser->fast_checkout_delegate());
+  #else
   auto& bam = static_cast<autofill::BrowserAutofillManager&>(manager);
   return static_cast<FastCheckoutDelegateImpl*>(bam.fast_checkout_delegate());
+  #endif // BUILDFLAG(IS_ANDROID) && VIVALDI_BUILD
 }
 }  // namespace
 
@@ -159,10 +171,21 @@ void FastCheckoutClientImpl::OnContentAutofillDriverFactoryDestroyed(
 void FastCheckoutClientImpl::OnContentAutofillDriverCreated(
     autofill::ContentAutofillDriverFactory& factory,
     autofill::ContentAutofillDriver& driver) {
+  #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+  // NOTE(david@vivaldi.com): In Vivaldi for Android the BrowserAutofillManager
+  // is coexisting in the AutofillManager. Due to that we need to access it
+  // differently.
+  autofill::BrowserAutofillManager* browser =
+      driver.android_browser_autofill_manager();
+  browser->set_fast_checkout_delegate(
+      std::make_unique<FastCheckoutDelegateImpl>(
+          &autofill_client_->GetWebContents(), this, browser));
+  #else
   auto& manager = static_cast<autofill::BrowserAutofillManager&>(
       driver.GetAutofillManager());
   manager.set_fast_checkout_delegate(std::make_unique<FastCheckoutDelegateImpl>(
       &autofill_client_->GetWebContents(), this, &manager));
+  #endif // BUILDFLAG(IS_ANDROID) && VIVALDI_BUILD
 }
 
 bool FastCheckoutClientImpl::TryToStart(
@@ -259,10 +282,10 @@ void FastCheckoutClientImpl::InternalStop(bool allow_further_runs) {
   is_running_ = false;
   form_filling_states_.clear();
   form_signatures_to_fill_.clear();
-  selected_autofill_profile_guid_ = absl::nullopt;
-  selected_credit_card_id_ = absl::nullopt;
+  selected_autofill_profile_guid_ = std::nullopt;
+  selected_credit_card_id_ = std::nullopt;
   timeout_timer_.AbandonAndStop();
-  credit_card_form_global_id_ = absl::nullopt;
+  credit_card_form_global_id_ = std::nullopt;
   run_id_ = 0;
   // Reset UI related state.
   fast_checkout_controller_.reset();
@@ -521,7 +544,7 @@ void FastCheckoutClientImpl::OnFullCardRequestSucceeded(
   }
   if (!autofill_manager_->form_structures().contains(
           credit_card_form_global_id_.value())) {
-    credit_card_form_global_id_ = absl::nullopt;
+    credit_card_form_global_id_ = std::nullopt;
     return;
   }
   const std::unique_ptr<autofill::FormStructure>& form =
@@ -531,7 +554,7 @@ void FastCheckoutClientImpl::OnFullCardRequestSucceeded(
           GetFieldToFill(form->fields(), /*is_credit_card_form=*/true)) {
     FillCreditCardForm(*form, *field, card, cvc);
   }
-  credit_card_form_global_id_ = absl::nullopt;
+  credit_card_form_global_id_ = std::nullopt;
 }
 
 void FastCheckoutClientImpl::OnFullCardRequestFailed(

@@ -15,21 +15,28 @@
 import {
   Plugin,
   PluginContext,
+  PluginContextTrace,
   PluginDescriptor,
 } from '../../public';
 
 class LargeScreensPerf implements Plugin {
-  onActivate(ctx: PluginContext): void {
-    ctx.addCommand({
+  onActivate(_ctx: PluginContext): void {}
+
+  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
+    ctx.registerCommand({
       id: 'dev.perfetto.LargeScreensPerf#PinUnfoldLatencyTracks',
       name: 'Pin: Unfold latency tracks',
       callback: () => {
-        ctx.viewer.tracks.pin((tags) => {
-          return !!tags.name?.includes('UNFOLD') ||
+        ctx.timeline.pinTracksByPredicate((tags) => {
+          return !!tags.name?.includes('UnfoldTransition') ||
               tags.name?.includes('Screen on blocked') ||
+              tags.name?.includes('hingeAngle') ||
+              tags.name?.includes('UnfoldLightRevealOverlayAnimation') ||
               tags.name?.startsWith('waitForAllWindowsDrawn') ||
-              tags.name?.endsWith('FoldUnfoldTransitionInProgress') ||
-              tags.name == 'Waiting for KeyguardDrawnCallback#onDrawn';
+              tags.name?.endsWith('UNFOLD_ANIM>') ||
+              tags.name?.endsWith('UNFOLD>') ||
+              tags.name == 'Waiting for KeyguardDrawnCallback#onDrawn' ||
+              tags.name == 'FoldedState' || tags.name == 'FoldUpdate';
         });
       },
     });

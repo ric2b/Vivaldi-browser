@@ -44,7 +44,7 @@ enum class ShillConnectResult {
   kErrorOutOfRange = 20,
   kErrorPinMissing = 21,
   kErrorPppAuthFailed = 22,
-  kErrorSimLocked = 23,
+  kErrorSimPinPukLocked = 23,
   kErrorNotRegistered = 24,
   kErrorTooManySTAs = 25,
   kErrorDisconnect = 26,
@@ -88,8 +88,9 @@ enum class ShillConnectResult {
   // Flimflam error options.
   kErrorInvalidAPN = 59,
   kErrorSimCarrierLocked = 60,
+  kErrorDelayedConnectSetup = 61,
 
-  kMaxValue = kErrorSimCarrierLocked,
+  kMaxValue = kErrorDelayedConnectSetup,
 };
 
 // This enum is used to track user-initiated connection results from
@@ -123,7 +124,7 @@ enum class UserInitiatedConnectResult {
   kErrorCellularInhibitFailure = 21,
   kErrorCellularOutOfCredits = 22,
   kErrorESimProfileIssue = 23,
-  kErrorSimLocked = 24,
+  kErrorSimPinPukLocked = 24,
   kErrorCellularDeviceBusy = 25,
   kErrorConnectTimeout = 26,
   kConnectableCellularTimeout = 27,
@@ -157,8 +158,9 @@ enum class UserInitiatedConnectResult {
   kErrorEapLocalTlsFailed = 53,
   kErrorEapRemoteTlsFailed = 54,
   kErrorResultWepNotSupported = 55,
+  kErrorDelayedConnectSetup = 56,
 
-  kMaxValue = kErrorResultWepNotSupported,
+  kMaxValue = kErrorDelayedConnectSetup,
 };
 
 COMPONENT_EXPORT(CHROMEOS_NETWORK)

@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">貼り付け</translation>
 <translation id="4005270918754737597">このバージョンをスキップする</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">今後表示しない (&amp;D)</translation>
 <translation id="4074744496918018786">プライベートウィンドウで画像を開く</translation>
 <translation id="410351446219883937">自動再生</translation>
 <translation id="4281844954008187215">利用規約</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera バージョン 15 以上（ベータ）</translation>
 <translation id="5648110075441906505">新しいウィンドウで画像を開く</translation>
 <translation id="5656371807944747581">アップデートエラー！</translation>
-<translation id="5716238312826274098">通知を無効にする</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> があります（現在使用中のものは <ph name="OLD_VERSION" />）。ダウンロードしますか？</translation>
 <translation id="5770433027661640693">風景１０</translation>
 <translation id="5857090052475505287">新しいフォルダー</translation>
@@ -128,7 +126,7 @@
 <translation id="6477028720702061455">インポートする Opera のプロファイルフォルダーを選択してください</translation>
 <translation id="6510706699590490869">Vivaldi を更新 (&amp;U)</translation>
 <translation id="6538338088414940408">バックグラウンドタブでリンクを開く</translation>
-<translation id="6551219277044048123">検索エンジンに追加... (&amp;G)</translation>
+<translation id="6551219277044048123">検索エンジンに追加...</translation>
 <translation id="6630781781151951863">風景１８</translation>
 <translation id="6635049669875534328">リリースノート:</translation>
 <translation id="6693585104974197539">インポートする Edge プロファイルフォルダーを選択してください</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">更新インストーラーの起動に失敗しました。お使いのコンピューターに十分なメモリーとストレージの空き容量があることをご確認の上、後ほどもう一度お試しください。</translation>
 <translation id="7658239707568436148">キャンセル</translation>
-<translation id="7715497554424665066">更新を無視 (&amp;I)</translation>
 <translation id="7724603315864178912">切り取り</translation>
 <translation id="7727481996062361502">更新を検証中...</translation>
 <translation id="7793738202466490491">カレンダーイベントとして追加</translation>

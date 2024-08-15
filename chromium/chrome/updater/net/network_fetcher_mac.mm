@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/updater/net/network.h"
-
 #import <Foundation/Foundation.h>
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -29,7 +28,6 @@
 #include "chrome/updater/util/util.h"
 #include "components/update_client/network.h"
 #import "net/base/mac/url_conversions.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 using ResponseStartedCallback =
@@ -228,8 +226,9 @@ using DownloadToFileCompleteCallback =
 - (void)URLSession:(NSURLSession*)session
                  downloadTask:(NSURLSessionDownloadTask*)downloadTask
     didFinishDownloadingToURL:(NSURL*)location {
-  if (!location)
+  if (!location) {
     return;
+  }
 
   const base::FilePath tempPath =
       base::apple::NSStringToFilePath([location path]);
@@ -399,7 +398,7 @@ base::OnceClosure NetworkFetcher::DownloadToFile(
 class NetworkFetcherFactory::Impl {};
 
 NetworkFetcherFactory::NetworkFetcherFactory(
-    absl::optional<PolicyServiceProxyConfiguration>) {}
+    std::optional<PolicyServiceProxyConfiguration>) {}
 NetworkFetcherFactory::~NetworkFetcherFactory() = default;
 
 std::unique_ptr<update_client::NetworkFetcher> NetworkFetcherFactory::Create()

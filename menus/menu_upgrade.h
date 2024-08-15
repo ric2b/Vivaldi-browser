@@ -65,8 +65,8 @@ class MenuUpgrade {
                     base::Value::List& profile_root,
                     const std::string& menu_action);
 
-  // Returns true if the guid is registered as a deleted or modified element.
-  bool IsDeletedOrModified(const std::string& guid);
+  // Returns true if the guid is registered as a deleted element.
+  bool IsDeleted(const std::string& guid);
   // Adds the 'bundle_dict' to the profile tree as a child of the node using
   // 'parent_guid' at the given index or at the end if the child list.
   bool Insert(const base::Value::Dict& bundle_dict,

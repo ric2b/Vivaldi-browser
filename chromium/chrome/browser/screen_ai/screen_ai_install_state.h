@@ -10,7 +10,9 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list_types.h"
+#include "base/version.h"
 
 class PrefService;
 
@@ -48,14 +50,19 @@ class ScreenAIInstallState {
 
   static ScreenAIInstallState* GetInstance();
 
-  // This function is implemented in `ScreenAIDownloaderChromeOS` and
+  // These functions are implemented in `ScreenAIDownloaderChromeOS` and
   // `ScreenAIDownloaderNonChromeOS`.
   static std::unique_ptr<ScreenAIInstallState> Create();
+  static ScreenAIInstallState* CreateForTesting();
 
   // Verifies that the library version is compatible with current Chromium
   // version. Will be used to avoid accepting the library if a newer version is
   // expected.
-  static bool VerifyLibraryVersion(const std::string& version);
+  static bool VerifyLibraryVersion(const base::Version& version);
+
+  // Verifies that the library is in the expected folder. On Windows, it is
+  // also checked that the library is loadable.
+  static bool VerifyLibraryAvailablity(const base::FilePath& install_dir);
 
   // Returns true if the library is used recently and we need to keep it on
   // device and updated.
@@ -97,6 +104,7 @@ class ScreenAIInstallState {
   State get_state() { return state_; }
 
   void ResetForTesting();
+  void SetComponentFolderForTesting();
   void SetStateForTesting(State state);
 
  private:
@@ -108,7 +116,7 @@ class ScreenAIInstallState {
   base::FilePath component_binary_path_;
   State state_ = State::kNotDownloaded;
 
-  std::vector<Observer*> observers_;
+  std::vector<raw_ptr<Observer, VectorExperimental>> observers_;
 };
 
 }  // namespace screen_ai

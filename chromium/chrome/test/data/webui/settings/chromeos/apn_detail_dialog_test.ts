@@ -13,7 +13,6 @@ import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_con
 import {assertEquals, assertFalse, assertNull, assertStringContains, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
-import {disableAnimationsAndTransitions} from 'chrome://webui-test/test_api.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 const TEST_APN: ApnProperties = {
@@ -62,7 +61,6 @@ suite('<apn-detail-dialog>', () => {
   }
 
   suiteSetup(() => {
-    disableAnimationsAndTransitions();
     mojoApi = new FakeNetworkConfig();
     MojoInterfaceProviderImpl.getInstance().setMojoServiceRemoteForTest(
         mojoApi);
@@ -420,12 +418,18 @@ suite('<apn-detail-dialog>', () => {
     assertTrue(apnInputField.invalid);
     assertTrue(actionButton.disabled);
     assertStringContains(apnInputField.value, 'μ');
+    assertEquals(
+        apnDetailDialog.i18n('apnDetailApnErrorInvalidChar'),
+        apnInputField.errorMessage);
 
     // Case : longer than 63 characters then removing one character
     apnInputField.value = 'a'.repeat(64);
     assertTrue(apnInputField.invalid);
     assertTrue(actionButton.disabled);
     assertEquals(63, apnInputField.value.length);
+    assertEquals(
+        apnDetailDialog.i18n('apnDetailApnErrorMaxChars', 63),
+        apnInputField.errorMessage);
     apnInputField.value = apnInputField.value.slice(0, -1);
     assertFalse(apnInputField.invalid);
     assertFalse(actionButton.disabled);
@@ -434,6 +438,9 @@ suite('<apn-detail-dialog>', () => {
     apnInputField.value = 'μ'.repeat(64);
     assertTrue(apnInputField.invalid);
     assertTrue(actionButton.disabled);
+    assertEquals(
+        apnDetailDialog.i18n('apnDetailApnErrorMaxChars', 63),
+        apnInputField.errorMessage);
   });
 
   test('Apn types are correctly validated in all modes', async () => {

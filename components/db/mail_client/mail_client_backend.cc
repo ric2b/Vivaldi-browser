@@ -21,6 +21,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -44,7 +45,7 @@ using base::TimeTicks;
 namespace mail_client {
 
 const base::FilePath::CharType kMailClientFilename[] =
-    FILE_PATH_LITERAL("MailDB");
+    FILE_PATH_LITERAL("MailSearchDB");
 
 MailClientBackend::MailClientBackend(
     MailClientDelegate* delegate,
@@ -54,6 +55,18 @@ MailClientBackend::MailClientBackend(
 MailClientBackend::MailClientBackend(MailClientDelegate* delegate) {}
 
 MailClientBackend::~MailClientBackend() {}
+
+void MailClientBackend::NotifyMigrationProgress(int progress,
+                                                int total,
+                                                std::string msg) {
+  if (delegate_)
+    delegate_->NotifyMigrationProgress(progress, total, msg);
+}
+
+void MailClientBackend::NotifyDeleteMessages(int total) {
+  if (delegate_)
+    delegate_->NotifyDeleteMessages(total);
+}
 
 void MailClientBackend::Init(
     bool force_fail,
@@ -151,55 +164,109 @@ void MailClientBackend::Commit() {
   db_->BeginTransaction();
 }
 
-void MailClientBackend::CreateMessages(
-    std::vector<mail_client::MessageRow> messages,
-    std::shared_ptr<bool> result) {
-  bool res = db_->CreateMessages(messages);
-  *result = res;
+bool MailClientBackend::CreateMessages(
+    std::vector<mail_client::MessageRow> messages) {
+  return db_->CreateMessages(messages);
 }
 
-void MailClientBackend::DeleteMessages(
-    std::vector<SearchListID> search_list_ids,
-    std::shared_ptr<bool> result) {
-  *result = db_->DeleteMessages(search_list_ids);
+bool MailClientBackend::DeleteMessages(SearchListIDs ids) {
+  bool success = db_->DeleteMessages(ids);
+  if (success) {
+    NotifyDeleteMessages(ids.size());
+  }
+
+  return success;
 }
 
-void MailClientBackend::AddMessageBody(SearchListID search_list_id,
-                                       std::u16string body,
-                                       std::shared_ptr<MessageResult> result) {
+MessageResult MailClientBackend::UpdateMessage(
+    mail_client::MessageRow message) {
+  MessageResult result;
   if (!db_) {
-    result->success = false;
-    result->message = "Database error";
-    return;
+    result.success = false;
+    result.message = "Database error";
+    return result;
   }
 
-  result->success = db_->AddMessageBody(search_list_id, body);
-  if (!result->success) {
-    result->message = "Error adding message body";
+  result.success = db_->UpdateMessage(message);
+  if (!result.success) {
+    result.message = "Error adding message body";
   }
+  return result;
 }
 
-void MailClientBackend::EmailSearch(std::u16string searchValue,
-                                    std::shared_ptr<SearchListIdRows> results) {
-  SearchListIdRows rows;
+SearchListIDs MailClientBackend::EmailSearch(std::u16string searchValue) {
+  SearchListIDs rows;
   db_->SearchMessages(searchValue, &rows);
 
-  for (SearchListIdRows::iterator it = rows.begin(); it != rows.end(); ++it) {
-    results->push_back(*it);
+  return rows;
+}
+
+bool MailClientBackend::MatchMessage(SearchListID search_list_id,
+                                     std::u16string searchValue) {
+  return db_->MatchMessage(search_list_id, searchValue);
+}
+
+Migration MailClientBackend::GetDBVersion() {
+  Migration res;
+  res.db_version = MailClientDatabase::GetCurrentVersion();
+  bool mail_db_file_exists = base::PathExists(
+      mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailDB")));
+  res.migration_needed = mail_db_file_exists;
+  return res;
+}
+
+void MailClientBackend::DeleteMailDB() {
+  base::DeleteFile(
+      mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailDB")));
+  base::DeleteFile(
+      mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailDB-journal")));
+}
+
+bool MailClientBackend::MigrateSearchDB() {
+  bool mail_db_exists = base::PathExists(
+      mail_client_database_dir_.Append(FILE_PATH_LITERAL("MailDB")));
+  if (!mail_db_exists) {
+    return true;
   }
-}
+  db_->AttachDBForMigrate(mail_client_database_dir_);
 
-void MailClientBackend::MatchMessage(SearchListID search_list_id,
-                                     std::u16string searchValue,
-                                     std::shared_ptr<bool> results) {
-  bool found = db_->MatchMessage(search_list_id, searchValue);
-  *results = found;
-}
+  if (!db_->DoesAttachedMessageTableExists()) {
+    DeleteMailDB();
+    return false;
+  }
 
-void MailClientBackend::RebuildAndVacuumDatabase(std::shared_ptr<bool> result) {
-  bool rebuilt = db_->RebuildDatabase();
-  db_->Vacuum();
-  *result = rebuilt;
+  NotifyMigrationProgress(0, 0, "Migration starting...");
+
+  const int messagesTotalCount = db_->CountRows("old.messages");
+
+  if (messagesTotalCount == -1) {
+    return false;
+  }
+
+  NotifyMigrationProgress(0, 0, "Creating table...");
+  bool migration_table = db_->CreateMigrationTable();
+  if (!migration_table) {
+    return false;
+  }
+
+  const int BATCH_SIZE = 5000;
+  int offset = db_->SelectMaxOffsetFromMigration();
+
+  while (messagesTotalCount >= offset) {
+    NotifyMigrationProgress(std::min(offset, messagesTotalCount),
+                            messagesTotalCount, "Migrating search database...");
+    db_->CopyMessagesToContentless(BATCH_SIZE, offset);
+    offset = offset + BATCH_SIZE;
+  }
+
+  NotifyMigrationProgress(0, 0, "Starting cleanup...");
+  bool detached = db_->DetachDBAfterMigrate();
+
+  if (detached) {
+    DeleteMailDB();
+  }
+  NotifyMigrationProgress(0, 0, "Migration finished");
+  return true;
 }
 
 }  // namespace mail_client

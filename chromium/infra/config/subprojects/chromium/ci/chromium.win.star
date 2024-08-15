@@ -6,9 +6,11 @@
 load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
+load("//lib/builder_health_indicators.star", "health_spec")
 load("//lib/builders.star", "os", "reclient", "sheriff_rotations")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
+load("//lib/gn_args.star", "gn_args")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -21,6 +23,7 @@ ci.defaults.set(
     main_console_view = "main",
     contact_team_email = "chrome-desktop-engprod@google.com",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
+    health_spec = health_spec.DEFAULT,
     reclient_instance = reclient.instance.DEFAULT_TRUSTED,
     reclient_jobs = reclient.jobs.DEFAULT,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
@@ -55,9 +58,11 @@ ci.builder(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 32,
+            target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-win-archive",
     ),
+    builderless = False,
     console_view_entry = consoles.console_view_entry(
         category = "misc",
         short_name = "wbk",
@@ -78,9 +83,20 @@ ci.builder(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 32,
+            target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-win-archive",
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "reclient",
+            "x86",
+            "no_symbols",
+        ],
+    ),
+    builderless = False,
     cores = 32,
     os = os.WINDOWS_ANY,
     console_view_entry = consoles.console_view_entry(
@@ -102,8 +118,16 @@ ci.builder(
             ],
             build_config = builder_config.build_config.DEBUG,
             target_bits = 64,
+            target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-win-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "debug_builder",
+            "reclient",
+        ],
     ),
     builderless = True,
     cores = 32,
@@ -129,6 +153,7 @@ ci.builder(
             ],
             build_config = builder_config.build_config.DEBUG,
             target_bits = 64,
+            target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-win-archive",
     ),
@@ -155,9 +180,20 @@ ci.builder(
             ],
             build_config = builder_config.build_config.DEBUG,
             target_bits = 32,
+            target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-win-archive",
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "debug_builder",
+            "reclient",
+            "x86",
+            "no_symbols",
+        ],
+    ),
+    builderless = False,
     cores = 32,
     os = os.WINDOWS_ANY,
     console_view_entry = consoles.console_view_entry(
@@ -192,6 +228,15 @@ ci.builder(
         ),
         build_gs_bucket = "chromium-win-archive",
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "reclient",
+            "minimal_symbols",
+        ],
+    ),
+    builderless = False,
     cores = 32,
     os = os.WINDOWS_ANY,
     console_view_entry = consoles.console_view_entry(
@@ -224,6 +269,7 @@ ci.builder(
         ),
         build_gs_bucket = "chromium-win-archive",
     ),
+    builderless = False,
     console_view_entry = consoles.console_view_entry(
         category = "release|tester",
         short_name = "w10",
@@ -265,6 +311,16 @@ ci.thin_tester(
 ci.builder(
     name = "Windows deterministic",
     executable = "recipe:swarming/deterministic_build",
+    gn_args = gn_args.config(
+        configs = [
+            "release_builder",
+            "reclient",
+            "x86",
+            "minimal_symbols",
+        ],
+    ),
+    builderless = False,
+    cores = 32,
     console_view_entry = consoles.console_view_entry(
         category = "misc",
         short_name = "det",

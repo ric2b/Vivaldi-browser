@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_NET_SYSTEM_NETWORK_CONTEXT_MANAGER_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -25,7 +26,10 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/ssl_config.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/net/cookie_encryption_provider_impl.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 class PrefRegistrySimple;
 class PrefService;
@@ -116,6 +120,13 @@ class SystemNetworkContextManager {
   mojo::PendingReceiver<network::mojom::SSLConfigClient>
   GetSSLConfigClientReceiver();
 
+#if BUILDFLAG(IS_WIN)
+  // Adds a CookieEncryptionManager mojo remote to the specified
+  // `network_context_params`.
+  void AddCookieEncryptionManagerToNetworkContextParams(
+      network::mojom::NetworkContextParams* network_context_params);
+#endif  // BUILDFLAG(IS_WIN)
+
   // Populates |initial_ssl_config| and |ssl_config_client_receiver| members of
   // |network_context_params|. As long as the SystemNetworkContextManager
   // exists, any NetworkContext created with the params will continue to get
@@ -161,10 +172,14 @@ class SystemNetworkContextManager {
   GetHttpAuthDynamicParamsForTesting();
 
   // Enables Certificate Transparency and enforcing the Chrome Certificate
-  // Transparency Policy. For test use only. Use absl::nullopt_t to reset to
+  // Transparency Policy. For test use only. Use std::nullopt_t to reset to
   // the default state.
   static void SetEnableCertificateTransparencyForTesting(
-      absl::optional<bool> enabled);
+      std::optional<bool> enabled);
+
+  // Reloads the static CT log lists but overriding the log list update time
+  // with the current time. For test use only.
+  void SetCTLogListTimelyForTesting();
 
   static bool IsCertificateTransparencyEnabled();
 
@@ -220,14 +235,6 @@ class SystemNetworkContextManager {
   // the network process.
   void UpdateExplicitlyAllowedNetworkPorts();
 
-#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
-  static bool IsUsingChromeRootStoreImpl(PrefService* local_state);
-#endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
-
-#if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
-  void UpdateChromeRootStoreEnabled();
-#endif  // BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
-
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
   // Applies the current value of the kEnforceLocalAnchorConstraintsEnabled
@@ -275,11 +282,15 @@ class SystemNetworkContextManager {
   StubResolverConfigReader stub_resolver_config_reader_;
   static StubResolverConfigReader* stub_resolver_config_reader_for_testing_;
 
-  static absl::optional<bool> certificate_transparency_enabled_for_testing_;
+  static std::optional<bool> certificate_transparency_enabled_for_testing_;
 
 #if BUILDFLAG(IS_LINUX)
   GssapiLibraryLoadObserver gssapi_library_loader_observer_{this};
 #endif  // BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(IS_WIN)
+  CookieEncryptionProviderImpl cookie_encryption_provider_;
+#endif  // BUILDFLAG(IS_WIN)
 };
 
 #endif  // CHROME_BROWSER_NET_SYSTEM_NETWORK_CONTEXT_MANAGER_H_

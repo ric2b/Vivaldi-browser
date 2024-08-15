@@ -35,6 +35,7 @@
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
+#include "ui/display/screen.h"
 #include "ui/events/event_constants.h"
 
 using web_app::test::CrosapiParam;
@@ -59,12 +60,12 @@ void UpdateAppRegistryCache(Profile* profile,
       false /* should_notify_initialized */);
 }
 
-void UpdateAppNameInRegistryCache(Profile* profile,
-                                  const std::string& app_id,
-                                  const std::string& app_name) {
+void UpdateShortNameInRegistryCache(Profile* profile,
+                                    const std::string& app_id,
+                                    const std::string& short_name) {
   apps::AppPtr app =
       std::make_unique<apps::App>(apps::AppType::kChromeApp, app_id);
-  app->name = app_name;
+  app->short_name = short_name;
 
   std::vector<apps::AppPtr> apps;
   apps.push_back(std::move(app));
@@ -201,7 +202,8 @@ IN_PROC_BROWSER_TEST_F(AppServiceAppItemBrowserTest, UpdateAppNameInLauncher) {
   ash::AppListTestApi app_list_test_api;
   app_list_test_api.WaitForBubbleWindow(/*wait_for_opening_animation=*/false);
 
-  UpdateAppNameInRegistryCache(profile(), extension_app->id(), "Updated Name");
+  UpdateShortNameInRegistryCache(profile(), extension_app->id(),
+                                 "Updated Name");
 
   EXPECT_EQ(u"Updated Name",
             app_list_test_api.GetAppListItemViewName(extension_app->id()));
@@ -211,7 +213,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceAppItemBrowserTest,
                        ActivateAppRecordsNewInstallHistogram) {
   base::HistogramTester histograms;
   {
-    ASSERT_FALSE(ash::TabletMode::Get()->InTabletMode());
+    ASSERT_FALSE(display::Screen::GetScreen()->InTabletMode());
 
     // Simulate a user-installed chrome app item.
     std::unique_ptr<AppServiceAppItem> app_item =

@@ -6,7 +6,7 @@
 
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/a11y_feature_type.h"
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/autoclick/autoclick_controller.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/public/cpp/ime_info.h"
@@ -45,7 +45,7 @@ class FloatingAccessibilityControllerTest : public AshTestBase {
     SetTwoAvailableImes();
   }
 
-  AccessibilityControllerImpl* accessibility_controller() {
+  AccessibilityController* accessibility_controller() {
     return Shell::Get()->accessibility_controller();
   }
 
@@ -57,6 +57,8 @@ class FloatingAccessibilityControllerTest : public AshTestBase {
   FloatingAccessibilityController* controller() {
     return accessibility_controller()->GetFloatingMenuController();
   }
+
+  bool IsFloatingMenuVisible() { return controller() != nullptr; }
 
   FloatingMenuPosition menu_position() { return controller()->position_; }
 
@@ -91,8 +93,9 @@ class FloatingAccessibilityControllerTest : public AshTestBase {
 
   views::View* GetMenuButton(FloatingAccessibilityView::ButtonId button_id) {
     FloatingAccessibilityView* view = menu_view();
-    if (!view)
+    if (!view) {
       return nullptr;
+    }
     return view->GetViewByID(static_cast<int>(button_id));
   }
 
@@ -262,7 +265,7 @@ TEST_F(FloatingAccessibilityControllerTest,
 
 TEST_F(FloatingAccessibilityControllerTest, MenuIsNotShownWhenNotEnabled) {
   accessibility_controller()->ShowFloatingMenuIfEnabled();
-  EXPECT_EQ(controller(), nullptr);
+  EXPECT_FALSE(IsFloatingMenuVisible());
 }
 
 TEST_F(FloatingAccessibilityControllerTest,
@@ -296,7 +299,7 @@ TEST_F(FloatingAccessibilityControllerTest, ShowingMenu) {
   accessibility_controller()->floating_menu().SetEnabled(true);
   accessibility_controller()->ShowFloatingMenuIfEnabled();
 
-  EXPECT_TRUE(controller());
+  EXPECT_TRUE(IsFloatingMenuVisible());
   EXPECT_EQ(menu_position(),
             accessibility_controller()->GetFloatingMenuPosition());
 }
@@ -306,22 +309,22 @@ TEST_F(FloatingAccessibilityControllerTest, ShowingMenuAfterPrefUpdate) {
 
   // If we try to show the floating menu before it is enabled, nothing happens.
   accessibility_controller()->ShowFloatingMenuIfEnabled();
-  EXPECT_TRUE(controller() == nullptr);
+  EXPECT_FALSE(IsFloatingMenuVisible());
 
   // As soon as we enable the floating menu, it will show the floating menu
   // because we tried to show it earlier.
   accessibility_controller()->floating_menu().SetEnabled(true);
-  EXPECT_FALSE(controller() == nullptr);
+  EXPECT_TRUE(IsFloatingMenuVisible());
 
   // Disable the floating menu, which should cause it to be hidden.
   accessibility_controller()->floating_menu().SetEnabled(false);
-  EXPECT_TRUE(controller() == nullptr);
+  EXPECT_FALSE(IsFloatingMenuVisible());
 
   // Enabling it again will show the menu since we already tried to show
   // it earlier. As soon as it we request it to be shown at least once, it
   // should show/hide on enabled state change.
   accessibility_controller()->floating_menu().SetEnabled(true);
-  EXPECT_FALSE(controller() == nullptr);
+  EXPECT_TRUE(IsFloatingMenuVisible());
 }
 
 TEST_F(FloatingAccessibilityControllerTest,
@@ -454,7 +457,9 @@ TEST_F(FloatingAccessibilityControllerTest, DetailedViewPosition) {
 
   ClickOnAccessibilityTrayButton();
 
-  const struct { bool is_RTL; } kTestCases[] = {{true}, {false}};
+  const struct {
+    bool is_RTL;
+  } kTestCases[] = {{true}, {false}};
   for (auto& test : kTestCases) {
     SCOPED_TRACE(base::StringPrintf("Testing rtl=#[%d]", test.is_RTL));
     // These positions should be relative to the corners of the screen
@@ -610,10 +615,11 @@ TEST_F(FloatingAccessibilityControllerTest, ActiveFeaturesButtons) {
     SetOnLayoutCallback(base::BarrierClosure(std::size(kFeatureButtons),
                                              loop_enable.QuitClosure()));
     // Enable all features.
-    for (FeatureWithButton feature : kFeatureButtons)
+    for (FeatureWithButton feature : kFeatureButtons) {
       accessibility_controller()
           ->GetFeature(feature.feature_type)
           .SetEnabled(true);
+    }
     loop_enable.Run();
   }
   gfx::Rect window_bounds = Shell::GetPrimaryRootWindow()->bounds();
@@ -625,10 +631,11 @@ TEST_F(FloatingAccessibilityControllerTest, ActiveFeaturesButtons) {
                                              loop_disable.QuitClosure()));
     // Enable all features.
     // Dicable all features.
-    for (FeatureWithButton feature : kFeatureButtons)
+    for (FeatureWithButton feature : kFeatureButtons) {
       accessibility_controller()
           ->GetFeature(feature.feature_type)
           .SetEnabled(false);
+    }
     loop_disable.Run();
   }
   EXPECT_EQ(GetMenuViewBounds(), original_bounds);
@@ -684,6 +691,70 @@ TEST_F(FloatingAccessibilityControllerTest, ShowingAlreadyEnabledFeatures) {
   EXPECT_TRUE(
       GetMenuButton(FloatingAccessibilityView::ButtonId::kVirtualKeyboard)
           ->GetVisible());
+}
+
+TEST_F(FloatingAccessibilityControllerTest,
+       MenuPositionChangedOnDisplayUpdate) {
+  SetUpKioskSession();
+  accessibility_controller()->floating_menu().SetEnabled(true);
+  accessibility_controller()->ShowFloatingMenuIfEnabled();
+  EXPECT_TRUE(IsFloatingMenuVisible());
+
+  auto old_location = GetMenuViewBounds();
+  UpdateDisplay("1300x800");
+
+  gfx::Rect window_bounds = Shell::GetPrimaryRootWindow()->bounds();
+  gfx::Point expected_location =
+      gfx::Point(window_bounds.right(), window_bounds.bottom());
+  EXPECT_NE(old_location, GetMenuViewBounds());
+
+  EXPECT_LT(GetMenuViewBounds().ManhattanDistanceToPoint(expected_location),
+            kMenuViewBoundsBuffer);
+}
+
+TEST_F(FloatingAccessibilityControllerTest,
+       OnDisplayUpdateDoesNotChangeMenuVisibility) {
+  SetUpKioskSession();
+  accessibility_controller()->floating_menu().SetEnabled(true);
+  EXPECT_FALSE(IsFloatingMenuVisible());
+
+  UpdateDisplay("1300x800");
+
+  EXPECT_FALSE(IsFloatingMenuVisible());
+}
+
+TEST_F(FloatingAccessibilityControllerTest, DictationButtonFocus) {
+  accessibility_controller()->dictation().SetEnabled(true);
+  SetSingleAvailableIme();
+  SetUpVisibleMenu();
+
+  EXPECT_TRUE(IsFloatingMenuVisible());
+
+  ASSERT_TRUE(widget());
+  views::FocusManager* focus_manager = widget()->GetFocusManager();
+
+  views::View* settings_button =
+      GetMenuButton(FloatingAccessibilityView::ButtonId::kSettingsList);
+  ASSERT_TRUE(settings_button) << "No settings list button found.";
+  EXPECT_TRUE(settings_button->GetVisible());
+
+  views::View* dictation_button =
+      GetMenuButton(FloatingAccessibilityView::ButtonId::kDictation);
+  ASSERT_TRUE(dictation_button) << "No dictation button found.";
+  EXPECT_TRUE(dictation_button->GetVisible());
+
+  // The floating menu stays inactive during touches/clicks.
+  // Dictation button click shouldn't take the focus.
+  GestureTapOn(dictation_button);
+  EXPECT_EQ(focus_manager->GetFocusedView(), nullptr);
+
+  // The floating menu should activate for a 'focus on shelf' keyboard shortcut
+  // and take the focus.
+  // Dictation button is visible but disabled when we are not in text input.
+  dictation_button->SetEnabled(false);
+  Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
+      AcceleratorAction::kFocusShelf, {});
+  EXPECT_EQ(focus_manager->GetFocusedView(), settings_button);
 }
 
 }  // namespace ash

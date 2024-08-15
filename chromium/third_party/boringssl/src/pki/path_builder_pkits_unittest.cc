@@ -6,20 +6,17 @@
 
 #include <cstdint>
 
-#include "fillins/log.h"
-#include "fillins/net_errors.h"
-
+#include <openssl/pool.h>
 #include "cert_issuer_source_static.h"
 #include "common_cert_errors.h"
 #include "crl.h"
+#include "encode_values.h"
+#include "input.h"
 #include "parse_certificate.h"
 #include "parsed_certificate.h"
 #include "simple_path_builder_delegate.h"
 #include "trust_store_in_memory.h"
 #include "verify_certificate_chain.h"
-#include "encode_values.h"
-#include "input.h"
-#include <openssl/pool.h>
 
 #include "nist_pkits_unittest.h"
 
@@ -31,9 +28,8 @@ namespace {
 
 class CrlCheckingPathBuilderDelegate : public SimplePathBuilderDelegate {
  public:
-  CrlCheckingPathBuilderDelegate(const std::vector<std::string>& der_crls,
-                                 int64_t verify_time,
-                                 int64_t max_age,
+  CrlCheckingPathBuilderDelegate(const std::vector<std::string> &der_crls,
+                                 int64_t verify_time, int64_t max_age,
                                  size_t min_rsa_modulus_length_bits,
                                  DigestPolicy digest_policy)
       : SimplePathBuilderDelegate(min_rsa_modulus_length_bits, digest_policy),
@@ -41,25 +37,27 @@ class CrlCheckingPathBuilderDelegate : public SimplePathBuilderDelegate {
         verify_time_(verify_time),
         max_age_(max_age) {}
 
-  void CheckPathAfterVerification(const CertPathBuilder& path_builder,
-                                  CertPathBuilderResultPath* path) override {
+  void CheckPathAfterVerification(const CertPathBuilder &path_builder,
+                                  CertPathBuilderResultPath *path) override {
     SimplePathBuilderDelegate::CheckPathAfterVerification(path_builder, path);
 
-    if (!path->IsValid())
+    if (!path->IsValid()) {
       return;
+    }
 
     // It would be preferable if this test could use
     // CheckValidatedChainRevocation somehow, but that only supports getting
     // CRLs by http distributionPoints. So this just settles for writing a
     // little bit of wrapper code to test CheckCRL directly.
-    const ParsedCertificateList& certs = path->certs;
+    const ParsedCertificateList &certs = path->certs;
     for (size_t reverse_i = 0; reverse_i < certs.size(); ++reverse_i) {
       size_t i = certs.size() - reverse_i - 1;
 
       // Trust anchors bypass OCSP/CRL revocation checks. (The only way to
       // revoke trust anchors is via CRLSet or the built-in SPKI block list).
-      if (reverse_i == 0 && path->last_cert_trust.IsTrustAnchor())
+      if (reverse_i == 0 && path->last_cert_trust.IsTrustAnchor()) {
         continue;
+      }
 
       // RFC 5280 6.3.3.  [If the CRL was not specified in a distribution
       //                  point], assume a DP with both the reasons and the
@@ -69,7 +67,7 @@ class CrlCheckingPathBuilderDelegate : public SimplePathBuilderDelegate {
       // points, this means a default-initialized ParsedDistributionPoint is
       // sufficient.
       ParsedDistributionPoint fake_cert_dp;
-      const ParsedDistributionPoint* cert_dp = &fake_cert_dp;
+      const ParsedDistributionPoint *cert_dp = &fake_cert_dp;
 
       // If the target cert does have a distribution point, use it.
       std::vector<ParsedDistributionPoint> distribution_points;
@@ -85,7 +83,7 @@ class CrlCheckingPathBuilderDelegate : public SimplePathBuilderDelegate {
         // reasons.)
 
         // Look for a DistributionPoint without reasons.
-        for (const auto& dp : distribution_points) {
+        for (const auto &dp : distribution_points) {
           if (!dp.reasons) {
             cert_dp = &dp;
             break;
@@ -93,13 +91,14 @@ class CrlCheckingPathBuilderDelegate : public SimplePathBuilderDelegate {
         }
         // If there were only DistributionPoints with reasons, just use the
         // first one.
-        if (cert_dp == &fake_cert_dp && !distribution_points.empty())
+        if (cert_dp == &fake_cert_dp && !distribution_points.empty()) {
           cert_dp = &distribution_points[0];
+        }
       }
 
       bool cert_good = false;
 
-      for (const auto& der_crl : der_crls_) {
+      for (const auto &der_crl : der_crls_) {
         CRLRevocationStatus crl_status =
             CheckCRL(der_crl, certs, i, *cert_dp, verify_time_, max_age_);
         if (crl_status == CRLRevocationStatus::REVOKED) {
@@ -134,16 +133,16 @@ class PathBuilderPkitsTestDelegate {
  public:
   static void RunTest(std::vector<std::string> cert_ders,
                       std::vector<std::string> crl_ders,
-                      const PkitsTestInfo& orig_info) {
+                      const PkitsTestInfo &orig_info) {
     PkitsTestInfo info = orig_info;
 
     ASSERT_FALSE(cert_ders.empty());
     ParsedCertificateList certs;
-    for (const std::string& der : cert_ders) {
+    for (const std::string &der : cert_ders) {
       CertErrors errors;
       ASSERT_TRUE(ParsedCertificate::CreateAndAddToVector(
           bssl::UniquePtr<CRYPTO_BUFFER>(
-              CRYPTO_BUFFER_new(reinterpret_cast<const uint8_t*>(der.data()),
+              CRYPTO_BUFFER_new(reinterpret_cast<const uint8_t *>(der.data()),
                                 der.size(), nullptr)),
           {}, &certs, &errors))
           << errors.ToDebugString();
@@ -156,8 +155,9 @@ class PathBuilderPkitsTestDelegate {
 
     // TODO(mattm): test with other irrelevant certs in cert_issuer_sources?
     CertIssuerSourceStatic cert_issuer_source;
-    for (size_t i = 1; i < cert_ders.size() - 1; ++i)
+    for (size_t i = 1; i < cert_ders.size() - 1; ++i) {
       cert_issuer_source.AddCert(certs[i]);
+    }
 
     std::shared_ptr<const ParsedCertificate> target_cert(certs.back());
 
@@ -233,15 +233,16 @@ class PathBuilderPkitsTestDelegate {
     CertPathBuilder::Result result = path_builder.Run();
 
     if (info.should_validate != result.HasValidPath()) {
+      testing::Message msg;
       for (size_t i = 0; i < result.paths.size(); ++i) {
-        const bssl::CertPathBuilderResultPath* result_path =
+        const bssl::CertPathBuilderResultPath *result_path =
             result.paths[i].get();
-        LOG(ERROR) << "path " << i << " errors:\n"
-                   << result_path->errors.ToDebugString(result_path->certs);
+        msg << "path " << i << " errors:\n"
+            << result_path->errors.ToDebugString(result_path->certs)
+            << "\n";
       }
+      ASSERT_EQ(info.should_validate, result.HasValidPath()) << msg;
     }
-
-    ASSERT_EQ(info.should_validate, result.HasValidPath());
 
     if (result.HasValidPath()) {
       EXPECT_EQ(info.user_constrained_policy_set,
@@ -252,54 +253,41 @@ class PathBuilderPkitsTestDelegate {
 
 }  // namespace
 
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest01SignatureVerification,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest01SignatureVerification,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest02ValidityPeriods,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest02ValidityPeriods,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest03VerifyingNameChaining,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest03VerifyingNameChaining,
                                PathBuilderPkitsTestDelegate);
 INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
                                PkitsTest04BasicCertificateRevocationTests,
                                PathBuilderPkitsTestDelegate);
 INSTANTIATE_TYPED_TEST_SUITE_P(
-    PathBuilder,
-    PkitsTest05VerifyingPathswithSelfIssuedCertificates,
+    PathBuilder, PkitsTest05VerifyingPathswithSelfIssuedCertificates,
     PathBuilderPkitsTestDelegate);
 INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
                                PkitsTest06VerifyingBasicConstraints,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest07KeyUsage,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest07KeyUsage,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest08CertificatePolicies,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest08CertificatePolicies,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest09RequireExplicitPolicy,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest09RequireExplicitPolicy,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest10PolicyMappings,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest10PolicyMappings,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest11InhibitPolicyMapping,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest11InhibitPolicyMapping,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest12InhibitAnyPolicy,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest12InhibitAnyPolicy,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest13NameConstraints,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest13NameConstraints,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest14DistributionPoints,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest14DistributionPoints,
                                PathBuilderPkitsTestDelegate);
-INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
-                               PkitsTest15DeltaCRLs,
+INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder, PkitsTest15DeltaCRLs,
                                PathBuilderPkitsTestDelegate);
 INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
                                PkitsTest16PrivateCertificateExtensions,
                                PathBuilderPkitsTestDelegate);
 
-}  // namespace net
+}  // namespace bssl

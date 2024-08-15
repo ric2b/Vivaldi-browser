@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+include(utils/bytes/BUILD.cmake)
 include(utils/cli/BUILD.cmake)
 include(utils/command/BUILD.cmake)
 include(utils/containers/BUILD.cmake)

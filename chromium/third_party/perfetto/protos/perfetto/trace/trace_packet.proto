@@ -20,6 +20,7 @@ import "protos/perfetto/common/trace_stats.proto";
 import "protos/perfetto/config/trace_config.proto";
 import "protos/perfetto/trace/extension_descriptor.proto";
 import "protos/perfetto/trace/android/android_game_intervention_list.proto";
+import "protos/perfetto/trace/android/android_input_event.proto";
 import "protos/perfetto/trace/android/android_log.proto";
 import "protos/perfetto/trace/android/android_system_property.proto";
 import "protos/perfetto/trace/android/camera_event.proto";
@@ -29,11 +30,14 @@ import "protos/perfetto/trace/android/graphics_frame_event.proto";
 import "protos/perfetto/trace/android/initial_display_state.proto";
 import "protos/perfetto/trace/android/network_trace.proto";
 import "protos/perfetto/trace/android/packages_list.proto";
+import "protos/perfetto/trace/android/protolog.proto";
+import "protos/perfetto/trace/android/shell_transition.proto";
 import "protos/perfetto/trace/android/surfaceflinger_layers.proto";
 import "protos/perfetto/trace/android/surfaceflinger_transactions.proto";
 import "protos/perfetto/trace/chrome/chrome_benchmark_metadata.proto";
 import "protos/perfetto/trace/chrome/chrome_metadata.proto";
 import "protos/perfetto/trace/chrome/chrome_trace_event.proto";
+import "protos/perfetto/trace/chrome/v8.proto";
 import "protos/perfetto/trace/clock_snapshot.proto";
 import "protos/perfetto/trace/etw/etw_event_bundle.proto";
 import "protos/perfetto/trace/filesystem/inode_file_map.proto";
@@ -97,7 +101,7 @@ package perfetto.protos;
 // See the [Buffers and Dataflow](/docs/concepts/buffers.md) doc for details.
 //
 // Next reserved id: 14 (up to 15).
-// Next id: 96.
+// Next id: 107.
 message TracePacket {
   // The timestamp of the TracePacket.
   // By default this timestamps refers to the trace clock (CLOCK_BOOTTIME on
@@ -216,9 +220,22 @@ message TracePacket {
     // Winscope traces
     LayersSnapshotProto surfaceflinger_layers_snapshot = 93;
     TransactionTraceEntry surfaceflinger_transactions = 94;
+    ShellTransition shell_transition = 96;
+    ShellHandlerMappings shell_handler_mappings = 97;
+    ProtoLogMessage protolog_message = 104;
+    ProtoLogViewerConfig protolog_viewer_config = 105;
 
     // Events from the Windows etw infrastructure.
     EtwTraceEventBundle etw_events = 95;
+
+    V8JsCode v8_js_code = 99;
+    V8InternalCode v8_internal_code = 100;
+    V8WasmCode v8_wasm_code = 101;
+    V8RegExpCode v8_reg_exp_code = 102;
+    V8CodeMove v8_code_move = 103;
+
+    // InputFlinger traces
+    AndroidInputEvent android_input_event = 106;
 
     // This field is only used for testing.
     // In previous versions of this proto this field had the id 268435455
@@ -317,10 +334,15 @@ message TracePacket {
   // 1. There are no prior events for the sequence because of data loss, e.g.
   //    due to ring buffer wrapping.
   // 2. There are no prior events for the sequence because it didn't start
-  //    before this packet (= there's definitely no preceeding data loss).
+  //    before this packet (= there's definitely no preceding data loss).
   //
   // Given that older SDK versions do not support this flag, this flag not
   // being present for a particular sequence does not necessarily imply data
   // loss.
   optional bool first_packet_on_sequence = 87;
+
+  // The machine ID for identifying trace packets in a multi-machine tracing
+  // session. Is emitted by the tracing service for producers running on a
+  // remote host (e.g. a VM guest). For more context: go/crosetto-vm-tracing.
+  optional uint32 machine_id = 98;
 }

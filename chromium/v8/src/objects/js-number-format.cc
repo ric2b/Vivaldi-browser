@@ -786,7 +786,7 @@ std::string UnitFromSkeleton(const icu::UnicodeString& skeleton) {
     return "";
   }
   // Find the end of the subtype.
-  size_t end = str.find(" ", begin);
+  size_t end = str.find(' ', begin);
   // Ex:
   // "unit/acre .### rounding-mode-half-up"
   //       b   e
@@ -1744,7 +1744,7 @@ Maybe<IntlMathematicalValue> IntlMathematicalValue::From(Isolate* isolate,
       MaybeHandle<BigInt> maybe_bigint = StringToBigInt(isolate, string);
       // If the parsing of BigInt fail, return nan
       if (maybe_bigint.is_null()) {
-        isolate->clear_pending_exception();
+        isolate->clear_exception();
         result.value_ = factory->nan_value();
         return Just(result);
       }

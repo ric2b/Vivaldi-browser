@@ -49,7 +49,7 @@ namespace {
 // this callback. See `LacrosWebAppsController::ReturnLaunchResults()` for more
 // details.
 using CommandFinishedCallback =
-    base::OnceCallback<void(const std::vector<content::WebContents*>&)>;
+    base::OnceCallback<void(std::vector<content::WebContents*>)>;
 
 // Helper to run `execute_command_callback`, with the option to bypass it if
 // `proceed` is false by running `command_finished_callback` right away and
@@ -177,6 +177,10 @@ void LacrosWebAppsController::OpenNativeSettings(const std::string& app_id) {
   publisher_helper().OpenNativeSettings(app_id);
 }
 
+void LacrosWebAppsController::UpdateAppSize(const std::string& app_id) {
+  return publisher_helper().UpdateAppSize(app_id);
+}
+
 void LacrosWebAppsController::SetWindowMode(const std::string& app_id,
                                             apps::WindowMode window_mode) {
   return publisher_helper().SetWindowMode(app_id, window_mode);
@@ -237,10 +241,18 @@ void LacrosWebAppsController::ExecuteContextMenuCommandInternal(
   publisher_helper().ExecuteContextMenuCommand(
       app_id, id, display::kDefaultDisplayId,
       base::BindOnce(
-          [](base::OnceCallback<void(const std::vector<content::WebContents*>&)>
+          [](base::OnceCallback<void(std::vector<content::WebContents*>)>
                  callback,
              content::WebContents* contents) {
-            std::move(callback).Run({contents});
+            // These calls are piped through LaunchWebAppCommand and can end
+            // early during an Abort due to various reasons (like
+            // FirstRunService not completed), in which case there will be no
+            // web contents.
+            if (contents) {
+              std::move(callback).Run({contents});
+            } else {
+              std::move(callback).Run({});
+            }
           },
           std::move(callback)));
 }
@@ -305,24 +317,34 @@ void LacrosWebAppsController::LaunchInternal(const std::string& app_id,
   publisher_helper().LaunchAppWithParams(
       std::move(params),
       base::BindOnce(
-          [](base::OnceCallback<void(const std::vector<content::WebContents*>&)>
+          [](base::OnceCallback<void(std::vector<content::WebContents*>)>
                  callback,
              content::WebContents* contents) {
-            std::move(callback).Run({contents});
+            // These calls are piped through LaunchWebAppCommand and can end
+            // early during an Abort due to various reasons (like
+            // FirstRunService not completed), in which case there will be no
+            // web contents.
+            if (contents) {
+              std::move(callback).Run({contents});
+            } else {
+              std::move(callback).Run({});
+            }
           },
           std::move(callback)));
 }
 
 void LacrosWebAppsController::ReturnLaunchResults(
     base::OnceCallback<void(crosapi::mojom::LaunchResultPtr)> callback,
-    const std::vector<content::WebContents*>& web_contentses) {
+    std::vector<content::WebContents*> web_contentses) {
   auto* app_instance_tracker =
       apps::AppServiceProxyFactory::GetForProfile(profile_)
           ->BrowserAppInstanceTracker();
   auto launch_result = crosapi::mojom::LaunchResult::New();
   launch_result->instance_id = base::UnguessableToken::Create();
   launch_result->instance_ids = std::vector<base::UnguessableToken>();
-  launch_result->state = crosapi::mojom::LaunchResultState::kSuccess;
+  launch_result->state = web_contentses.size()
+                             ? crosapi::mojom::LaunchResultState::kSuccess
+                             : crosapi::mojom::LaunchResultState::kFailed;
 
   // TODO(crbug.com/1144877): Replaced with DCHECK when the app instance tracker
   // flag is turned on.
@@ -418,8 +440,8 @@ void LacrosWebAppsController::PublishWebApp(apps::AppPtr app) {
 
 void LacrosWebAppsController::ModifyWebAppCapabilityAccess(
     const std::string& app_id,
-    absl::optional<bool> accessing_camera,
-    absl::optional<bool> accessing_microphone) {
+    std::optional<bool> accessing_camera,
+    std::optional<bool> accessing_microphone) {
   if (!remote_publisher_) {
     return;
   }

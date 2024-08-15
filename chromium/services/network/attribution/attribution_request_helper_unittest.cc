@@ -153,6 +153,8 @@ class AttributionRequestHelperTest : public testing::Test {
 
   base::test::TaskEnvironment task_environment_;
   base::HistogramTester histograms_;
+  // `trust_token_key_commitments_` must outlive `helper_`.
+  std::unique_ptr<TrustTokenKeyCommitments> trust_token_key_commitments_;
   std::unique_ptr<AttributionRequestHelper> helper_;
   GURL example_valid_request_url_ =
       GURL("https://reporting-origin.example/test/path/#123");
@@ -161,7 +163,6 @@ class AttributionRequestHelperTest : public testing::Test {
 
  private:
   std::unique_ptr<net::URLRequestContext> context_;
-  std::unique_ptr<TrustTokenKeyCommitments> trust_token_key_commitments_;
   net::TestDelegate delegate_;
 
   void CheckVerifications(const std::vector<TriggerVerification>& verifications,
@@ -498,6 +499,55 @@ TEST_F(AttributionRequestHelperTest, SetAttributionReportingHeaders) {
     for (const auto& key : test_case.prohibited_keys) {
       EXPECT_FALSE(dict->contains(key)) << key;
     }
+  }
+}
+
+class AttributionCrossAppWebRequestHelperTest
+    : public AttributionRequestHelperTest {
+ public:
+  AttributionCrossAppWebRequestHelperTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{network::features::
+                                  kAttributionReportingCrossAppWeb},
+        /*disabled_features=*/{});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AttributionCrossAppWebRequestHelperTest,
+       SetAttributionReportingSupportHeaders) {
+  const struct {
+    mojom::AttributionSupport support;
+  } kTestCases[] = {
+      {mojom::AttributionSupport::kWeb},
+      {mojom::AttributionSupport::kWebAndOs},
+      {mojom::AttributionSupport::kOs},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    std::unique_ptr<net::URLRequest> request =
+        CreateTestUrlRequest(/*to_url=*/example_valid_request_url_);
+
+    ResourceRequest resource_request;
+    resource_request.attribution_reporting_eligibility =
+        AttributionReportingEligibility::kEventSource;
+    resource_request.attribution_reporting_support = test_case.support;
+    resource_request.attribution_reporting_runtime_features.Put(
+        AttributionReportingRuntimeFeature::kCrossAppWeb);
+    SetAttributionReportingHeaders(*request, resource_request);
+
+    std::string actual;
+    request->extra_request_headers().GetHeader(kAttributionReportingEligible,
+                                               &actual);
+
+    auto dict = net::structured_headers::ParseDictionary(actual);
+    EXPECT_TRUE(dict.has_value());
+
+    histograms_.ExpectBucketCount("Conversions.RequestSupportHeader",
+                                  test_case.support,
+                                  /*expected_bucket_count=*/1);
   }
 }
 

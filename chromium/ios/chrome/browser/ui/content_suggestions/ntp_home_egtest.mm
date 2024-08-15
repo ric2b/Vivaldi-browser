@@ -5,18 +5,19 @@
 #import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
+#import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "build/branding_buildflags.h"
+#import "components/feature_engagement/public/feature_constants.h"
 #import "components/feed/core/v2/public/ios/pref_names.h"
+#import "components/search_engines/search_engines_switches.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/flags/chrome_switches.h"
-#import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_app_interface.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/signin/capabilities_types.h"
-#import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/signin/model/capabilities_types.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
@@ -109,6 +110,11 @@ id<GREYMatcher> OmniboxWidthBetween(CGFloat width, CGFloat margin) {
 id<GREYMatcher> notPracticallyVisible() {
   return grey_not(grey_minimumVisiblePercent(0.01));
 }
+
+// Returns a matcher which is true if the view is mostly not visible.
+id<GREYMatcher> mostlyNotVisible() {
+  return grey_not(grey_minimumVisiblePercent(0.33));
+}
 }
 
 // Test case for the NTP home UI. More precisely, this tests the positions of
@@ -123,9 +129,7 @@ id<GREYMatcher> notPracticallyVisible() {
 
 + (void)setUpForTestCase {
   [super setUpForTestCase];
-  // Mark What's New as already-seen so it does not override Bookmarks.
-  [ChromeEarlGrey setUserDefaultsObject:@YES forKey:kWhatsNewUsageEntryKey];
-  [ChromeEarlGrey setUserDefaultsObject:@YES forKey:kWhatsNewM116UsageEntryKey];
+
   [NTPHomeTestCase setUpHelper];
 }
 
@@ -140,9 +144,6 @@ id<GREYMatcher> notPracticallyVisible() {
 
 + (void)tearDown {
   [self closeAllTabs];
-  // Clean up What's New already-seen.
-  [ChromeEarlGrey removeUserDefaultsObjectForKey:kWhatsNewUsageEntryKey];
-  [ChromeEarlGrey setUserDefaultsObject:@YES forKey:kWhatsNewM116UsageEntryKey];
 
   [super tearDown];
 }
@@ -160,11 +161,21 @@ id<GREYMatcher> notPracticallyVisible() {
   config.features_disabled.push_back(kEnableFeedAblation);
   // TODO(crbug.com/1403077): Scrolling issues when promo is enabled.
   config.features_disabled.push_back(kEnableDiscoverFeedTopSyncPromo);
-  config.features_disabled.push_back(kIOSSetUpList);
 
   if ([self isRunningTest:@selector(testLargeFakeboxFocus)]) {
     config.features_enabled.push_back(kIOSLargeFakebox);
   }
+  if ([self isRunningTest:@selector(testMinimumHeight)]) {
+    config.features_enabled.push_back(kMagicStack);
+  }
+
+  if ([self isRunningTest:@selector(testCollectionShortcuts)]) {
+    // This ensures that the test will not fail when What's New is updated.
+    config.additional_args.push_back(base::StringPrintf(
+        "--disable-features=%s",
+        feature_engagement::kIPHWhatsNewUpdatedFeature.name));
+  }
+
   return config;
 }
 
@@ -178,6 +189,7 @@ id<GREYMatcher> notPracticallyVisible() {
        forUserPref:base::SysUTF8ToNSString(feed::prefs::kArticlesListVisible)];
 
   self.defaultSearchEngine = [SearchEnginesAppInterface defaultSearchEngine];
+  [NewTabPageAppInterface disableSetUpList];
 }
 
 - (void)tearDown {
@@ -200,6 +212,10 @@ id<GREYMatcher> notPracticallyVisible() {
   AppLaunchConfiguration config = self.appConfigurationForTestCase;
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
+
+  // Close NTP and reopen.
+  [ChromeEarlGrey closeAllTabs];
+  [ChromeEarlGrey openNewTab];
 
   // Check the Bookmarks.
   [[EarlGrey
@@ -266,9 +282,19 @@ id<GREYMatcher> notPracticallyVisible() {
 - (void)MAYBE_testCollectionShortcutsWithWhatsNew {
   AppLaunchConfiguration config = self.appConfigurationForTestCase;
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
-  [ChromeEarlGrey setUserDefaultsObject:@NO forKey:kWhatsNewM116UsageEntryKey];
-
+  // This ensures that the test will not fail when What's New has already been
+  // opened during testing.
+  config.additional_args.push_back(
+      base::StringPrintf("--enable-features=%s:chosen_feature/%s",
+                         feature_engagement::kIPHDemoMode.name,
+                         feature_engagement::kIPHWhatsNewUpdatedFeature.name));
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
+
+  // Navigate
+  // TODO(crbug.com/1510484): The FET is not ready upon app launch in the NTP.
+  // Consequently, close NTP and reopen the NTP where the FET becomes ready.
+  [ChromeEarlGrey closeAllTabs];
+  [ChromeEarlGrey openNewTab];
 
   // Check the What's New.
   [[EarlGrey
@@ -360,8 +386,9 @@ id<GREYMatcher> notPracticallyVisible() {
   [ChromeEarlGrey sceneOpenURL:GURL("chromewidgetkit://search-widget/search")];
   [ChromeEarlGrey
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
+  // Fakebox should be mostly covered.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
-      assertWithMatcher:grey_notVisible()];
+      assertWithMatcher:mostlyNotVisible()];
 }
 
 // Tests that the fake omnibox width is correctly updated after a rotation.
@@ -754,9 +781,9 @@ id<GREYMatcher> notPracticallyVisible() {
   // page.
   [self focusFakebox];
 
-  // Check the fake omnibox is not visible.
+  // Check the fake omnibox is mostly not visible.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
-      assertWithMatcher:grey_notVisible()];
+      assertWithMatcher:mostlyNotVisible()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
@@ -820,9 +847,11 @@ id<GREYMatcher> notPracticallyVisible() {
   // Offset after the fake omnibox has been tapped.
   CGPoint offsetAfterTap = collectionView.contentOffset;
 
-  // Make sure the fake omnibox has been hidden and the collection has moved.
+  // Make sure the fake omnibox has been mostly covered and the collection has
+  // moved.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
-      assertWithMatcher:grey_notVisible()];
+      assertWithMatcher:mostlyNotVisible()];
+
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       assertWithMatcher:grey_sufficientlyVisible()];
   GREYAssertTrue(offsetAfterTap.y >= origin.y,
@@ -991,11 +1020,6 @@ id<GREYMatcher> notPracticallyVisible() {
 }
 
 - (void)testMinimumHeight {
-  // TODO(crbug.com/1493412): Re-enable on iPad
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_DISABLED(@"Test disabled on iPad.");
-  }
-
   [ChromeEarlGreyAppInterface
       setBoolValue:NO
        forUserPref:base::SysUTF8ToNSString(prefs::kArticlesForYouEnabled)];
@@ -1017,24 +1041,13 @@ id<GREYMatcher> notPracticallyVisible() {
                     kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix,
                     index])] assertWithMatcher:grey_sufficientlyVisible()];
   }
-  if (IsMagicStackEnabled()) {
-    // Just check for Magic Stack visibility since the top module shown may
-    // vary.
-    [[EarlGrey
-        selectElementWithMatcher:grey_accessibilityID(
-                                     kMagicStackViewAccessibilityIdentifier)]
-        assertWithMatcher:grey_sufficientlyVisible()];
-  } else {
-    for (NSInteger index = 0; index < 4; index++) {
-      [[EarlGrey
-          selectElementWithMatcher:
-              grey_accessibilityID([NSString
-                  stringWithFormat:
-                      @"%@%li",
-                      kContentSuggestionsShortcutsAccessibilityIdentifierPrefix,
-                      index])] assertWithMatcher:grey_sufficientlyVisible()];
-    }
-  }
+
+  // Just check for Magic Stack visibility since the top module shown may
+  // vary.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kMagicStackViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Ensures that fake omnibox visibility is correct.
   // On iPads, fake omnibox disappears and becomes real omnibox. On other
@@ -1196,12 +1209,14 @@ id<GREYMatcher> notPracticallyVisible() {
 
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
-  if (![ChromeEarlGrey isIPadIdiom]) {
-    [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationLandscapeLeft
-                                  error:nil];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::NTPCollectionView()]
-        performAction:grey_scrollInDirection(kGREYDirectionDown, 100)];
-  }
+  id<GREYMatcher> magicStackScrollView =
+      grey_accessibilityID(kMagicStackScrollViewAccessibilityIdentifier);
+
+  // Scroll down to find the MagicStack.
+  [[[EarlGrey selectElementWithMatcher:magicStackScrollView]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 100.0f)
+      onElementWithMatcher:chrome_test_util::NTPCollectionView()]
+      assertWithMatcher:grey_notNil()];
 
   // Verify Most Visited Tiles module title is visible.
   [[EarlGrey selectElementWithMatcher:
@@ -1210,10 +1225,11 @@ id<GREYMatcher> notPracticallyVisible() {
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Swipe to next module
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_accessibilityID(kMagicStackScrollViewAccessibilityIdentifier)]
-      performAction:grey_scrollInDirection(kGREYDirectionRight, 343)];
+  // Need to swipe at least half of the widest a module can be.
+  CGFloat moduleSwipeAmount = 250;
+  [[EarlGrey selectElementWithMatcher:magicStackScrollView]
+      performAction:GREYScrollInDirectionWithStartPoint(
+                        kGREYDirectionRight, moduleSwipeAmount, 0.9, 0.5)];
 
   // Verify Shortcuts module title is visible.
   [[EarlGrey selectElementWithMatcher:
@@ -1246,10 +1262,9 @@ id<GREYMatcher> notPracticallyVisible() {
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Swipe back to first module
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_accessibilityID(kMagicStackScrollViewAccessibilityIdentifier)]
-      performAction:grey_swipeFastInDirection(kGREYDirectionRight)];
+  [[EarlGrey selectElementWithMatcher:magicStackScrollView]
+      performAction:GREYScrollInDirectionWithStartPoint(
+                        kGREYDirectionLeft, moduleSwipeAmount, 0.10, 0.5)];
 
   // Verify Most Visited Tiles module title is visible.
   [[EarlGrey selectElementWithMatcher:
@@ -1260,9 +1275,13 @@ id<GREYMatcher> notPracticallyVisible() {
 
 // Test that signing in and signing out results in the NTP scrolled to the top
 // and not in some unexpected layout state.
-// TODO(crbug.com/1433014): Non-stop animation on discover feed after signing
-// out.
-- (void)FLAKY_testSignInSignOutScrolledToTop {
+- (void)testSignInSignOutScrolledToTop {
+// TODO(crbug.com/1433014): test failing on ipad device
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"This test doesn't pass on iPad device.");
+  }
+#endif
   [[EarlGrey selectElementWithMatcher:chrome_test_util::NTPLogo()]
       assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
@@ -1288,9 +1307,7 @@ id<GREYMatcher> notPracticallyVisible() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  // Sign out
-  [SigninEarlGreyUI
-      signOutWithConfirmationChoice:SignOutConfirmationChoiceClearData];
+  [SigninEarlGreyUI signOut];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::NTPLogo()]
       assertWithMatcher:grey_sufficientlyVisible()];
@@ -1360,9 +1377,9 @@ id<GREYMatcher> notPracticallyVisible() {
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::DefocusedLocationView()]
       assertWithMatcher:grey_notVisible()];
-  // Fakebox should be covered.
+  // Fakebox should be mostly covered.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
-      assertWithMatcher:grey_notVisible()];
+      assertWithMatcher:mostlyNotVisible()];
   GREYWaitForAppToIdle(@"App failed to idle");
 }
 
@@ -1395,9 +1412,9 @@ id<GREYMatcher> notPracticallyVisible() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::DefocusedLocationView()]
       assertWithMatcher:grey_notVisible()];
 
-  // Fakebox should be covered.
+  // Fakebox should be mostly covered.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
-      assertWithMatcher:grey_notVisible()];
+      assertWithMatcher:mostlyNotVisible()];
   GREYWaitForAppToIdle(@"App failed to idle");
 }
 
@@ -1518,6 +1535,8 @@ id<GREYMatcher> notPracticallyVisible() {
   // TODO(crbug.com/1350826): Adapt the test with launch of trending queries.
   AppLaunchConfiguration config = [self appConfigurationForTestCase];
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
+  config.additional_args.push_back(std::string("--") +
+                                   switches::kDisableSearchEngineChoiceScreen);
   // TODO(crbug.com/1403077): Reenable the discover feed sync promo feature
   config.features_disabled.push_back(kEnableDiscoverFeedTopSyncPromo);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
@@ -1553,8 +1572,7 @@ id<GREYMatcher> notPracticallyVisible() {
   // Opens settings menu and ensures that Discover setting is not present.
   [self checkDiscoverSettingsToggleVisible:NO];
 
-  [SigninEarlGreyUI
-      signOutWithConfirmationChoice:SignOutConfirmationChoiceClearData];
+  [SigninEarlGreyUI signOut];
 
   // The feed label should be visible on sign-out.
   [self checkFeedLabelForFeedVisible:YES];

@@ -23,6 +23,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -37,6 +38,8 @@
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
@@ -126,8 +129,10 @@ class TextfieldDestroyerController : public TextfieldController {
 
 // Class that focuses a textfield when it sees a KeyDown event.
 class TextfieldFocuser : public View {
+  METADATA_HEADER(TextfieldFocuser, View)
+
  public:
-  explicit TextfieldFocuser(Textfield* textfield) : textfield_(textfield) {
+  explicit TextfieldFocuser(Textfield* textfield) : textfield_(*textfield) {
     SetFocusBehavior(FocusBehavior::ALWAYS);
   }
 
@@ -144,8 +149,11 @@ class TextfieldFocuser : public View {
 
  private:
   bool consume_ = true;
-  raw_ptr<Textfield, DanglingUntriaged> textfield_;
+  const raw_ref<Textfield> textfield_;
 };
+
+BEGIN_METADATA(TextfieldFocuser)
+END_METADATA
 
 class MockInputMethod : public ui::InputMethodBase {
  public:
@@ -340,6 +348,8 @@ void MockInputMethod::ClearComposition() {
 
 // A Textfield wrapper to intercept OnKey[Pressed|Released]() results.
 class TestTextfield : public views::Textfield {
+  METADATA_HEADER(TestTextfield, views::Textfield)
+
  public:
   TestTextfield() = default;
 
@@ -404,6 +414,9 @@ class TestTextfield : public views::Textfield {
 
   base::WeakPtrFactory<TestTextfield> weak_ptr_factory_{this};
 };
+
+BEGIN_METADATA(TestTextfield)
+END_METADATA
 
 TextfieldTest::TextfieldTest() {
   ui::SetUpInputMethodForTesting(new MockInputMethod());
@@ -3360,75 +3373,6 @@ TEST_F(TextfieldTest, GetCompositionCharacterBounds_ComplexText) {
   // - rects[6] == rects[7]
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-TEST_F(TextfieldTest, SetAutocorrectRange) {
-  InitTextfield();
-
-  textfield_->SetText(u"abc def ghi");
-  textfield_->SetAutocorrectRange(gfx::Range(4, 7));
-
-  gfx::Range autocorrect_range = textfield_->GetAutocorrectRange();
-  EXPECT_EQ(autocorrect_range, gfx::Range(4, 7));
-}
-
-TEST_F(TextfieldTest, DoesNotSetAutocorrectRangeWhenRangeGivenIsInvalid) {
-  InitTextfield();
-
-  textfield_->SetText(u"abc");
-
-  EXPECT_FALSE(textfield_->SetAutocorrectRange(gfx::Range(8, 11)));
-  EXPECT_TRUE(textfield_->GetAutocorrectRange().is_empty());
-}
-
-TEST_F(TextfieldTest,
-       ClearsAutocorrectRangeWhenSetAutocorrectRangeWithEmptyRange) {
-  InitTextfield();
-
-  textfield_->SetText(u"abc");
-
-  // TODO(b/161490813): Change to EXPECT_TRUE after fixing set range.
-  EXPECT_FALSE(textfield_->SetAutocorrectRange(gfx::Range()));
-  EXPECT_TRUE(textfield_->GetAutocorrectRange().is_empty());
-}
-
-TEST_F(TextfieldTest, GetAutocorrectCharacterBoundsTest) {
-  InitTextfield();
-
-  textfield_->InsertText(
-      u"hello placeholder text",
-      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
-  textfield_->SetAutocorrectRange(gfx::Range(3, 10));
-
-  EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range(3, 10));
-
-  gfx::Rect rect_for_long_text = textfield_->GetAutocorrectCharacterBounds();
-
-  textfield_->clear();
-
-  textfield_->InsertText(
-      u"hello placeholder text",
-      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
-  textfield_->SetAutocorrectRange(gfx::Range(3, 8));
-
-  EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range(3, 8));
-
-  gfx::Rect rect_for_short_text = textfield_->GetAutocorrectCharacterBounds();
-
-  EXPECT_LT(rect_for_short_text.x(), rect_for_long_text.x());
-  EXPECT_EQ(rect_for_short_text.y(), rect_for_long_text.y());
-  EXPECT_EQ(rect_for_short_text.height(), rect_for_long_text.height());
-  // TODO(crbug.com/1108170): Investigate why the rectangle width is wrong.
-  // The value seems to be wrong due to the incorrect value being returned from
-  // RenderText::GetCursorBounds(). Unfortuantly, that is tricky to fix, since
-  // RenderText is used in other parts of the codebase.
-  // When fixed, the following EXPECT statement should pass.
-  // EXPECT_LT(rect_for_short_text.width(), rect_for_long_text.width());
-}
-
-// TODO(crbug.com/1108170): Add a test to check that when the composition /
-// surrounding text is updated, the AutocorrectRange is updated accordingly.
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 // The word we select by double clicking should remain selected regardless of
 // where we drag the mouse afterwards without releasing the left button.
 TEST_F(TextfieldTest, KeepInitiallySelectedWord) {
@@ -3493,7 +3437,7 @@ TEST_F(TextfieldTest, SelectionClipboard) {
   ui::MouseEvent press_2(ui::ET_MOUSE_PRESSED, point_2, point_2,
                          ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
                          ui::EF_LEFT_MOUSE_BUTTON);
-  press_2.set_flags(press_2.flags() | ui::EF_SHIFT_DOWN);
+  press_2.SetFlags(press_2.flags() | ui::EF_SHIFT_DOWN);
   textfield_->OnMousePressed(press_2);
   ui::MouseEvent release_2(ui::ET_MOUSE_RELEASED, point_2, point_2,
                            ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
@@ -4749,8 +4693,8 @@ TEST_F(TextfieldTest, TextfieldInitialization) {
 // command only results when the event is not consumed.
 TEST_F(TextfieldTest, SwitchFocusInKeyDown) {
   InitTextfield();
-  TextfieldFocuser* focuser = new TextfieldFocuser(textfield_);
-  widget_->GetContentsView()->AddChildView(focuser);
+  TextfieldFocuser* focuser = widget_->GetContentsView()->AddChildView(
+      std::make_unique<TextfieldFocuser>(textfield_));
 
   focuser->RequestFocus();
   EXPECT_EQ(focuser, GetFocusedView());
@@ -4764,6 +4708,8 @@ TEST_F(TextfieldTest, SwitchFocusInKeyDown) {
   SendKeyPress(ui::VKEY_SPACE, 0);
   EXPECT_EQ(textfield_, GetFocusedView());
   EXPECT_EQ(u" ", textfield_->GetText());
+  // Remove to ensure that the pointer in the focuser does not become dangling.
+  widget_->GetContentsView()->RemoveChildViewT(std::exchange(focuser, nullptr));
 }
 
 TEST_F(TextfieldTest, SendingDeletePreservesShiftFlag) {
@@ -5142,5 +5088,120 @@ TEST_F(TextfieldTest, AccessibleTextDirectionRTL) {
   EXPECT_EQ(node_data.GetIntAttribute(ax::mojom::IntAttribute::kTextDirection),
             static_cast<int32_t>(ax::mojom::WritingDirection::kRtl));
 }
+
+#if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+TEST_F(TextfieldTest, WordOffsets) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kUiaProvider);
+  InitTextfield();
+  ui::AXNodeData node_data;
+  textfield_->SetText(u"abc 12 34 def hij :' $*() ");
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  std::vector<int32_t> expected_starts = {0, 4, 7, 10, 14};
+  std::vector<int32_t> expected_ends = {3, 6, 9, 13, 17};
+  EXPECT_EQ(
+      node_data.GetIntListAttribute(ax::mojom::IntListAttribute::kWordStarts),
+      expected_starts);
+  EXPECT_EQ(
+      node_data.GetIntListAttribute(ax::mojom::IntListAttribute::kWordEnds),
+      expected_ends);
+}
+
+TEST_F(TextfieldTest, AccessibleGraphemeOffsets) {
+  struct {
+    std::u16string text;
+    std::vector<int32_t> expected_offsets;
+  } cases[] = {
+      {std::u16string(), {}},
+      // LTR.
+      {u"asdfghkl:/", {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}},
+      // RTL: should render left-to-right as "<space>43210 \n cba9876".
+      // Note this used to say "Arabic language", in Arabic, but the last
+      // character in the string (\u0629) got fancy in an updated Mac font, so
+      // now the penultimate character repeats.
+      //
+      // TODO(accessibility): This is not the correct order of grapheme offsets.
+      // Blink returns the offsets from the right boundary when in RTL and so
+      // should we for Views.
+      {u"اللغة العربيي",
+       {120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0, 10}},
+      // LTR कि (DEVANAGARI KA with VOWEL I) (2-char grapheme), LTR abc, and LTR
+      // कि.
+      {u"\u0915\u093fabc\u0915\u093f", {0, 20, 30, 40, 50, 70}},
+      // LTR ab, LTR कि (DEVANAGARI KA with VOWEL I) (2-char grapheme), LTR cd.
+      {u"ab\u0915\u093fcd", {0, 10, 20, 40, 50, 60}},
+      // LTR ab, 𝄞 'MUSICAL SYMBOL G CLEF' U+1D11E (surrogate pair), LTR cd.
+      // Windows requires wide strings for \Unnnnnnnn universal character names.
+      {u"ab\U0001D11Ecd", {0, 10, 20, 30, 40, 50}},
+  };
+
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kUiaProvider);
+
+  InitTextfield();
+
+  // Set the glyph width to a fixed value to avoid flakiness and dependency on
+  // each platform's default font size.
+  constexpr int kGlyphWidth = 10;
+  gfx::test::RenderTextTestApi(GetTextfieldTestApi().GetRenderText())
+      .SetGlyphWidth(kGlyphWidth);
+  GetTextfieldTestApi().GetRenderText()->SetDisplayRect(
+      gfx::Rect(0, 0, 20 * kGlyphWidth, 100));
+
+  for (size_t i = 0; i < std::size(cases); i++) {
+    SCOPED_TRACE(base::StringPrintf("Testing cases[%" PRIuS "]", i));
+    textfield_->SetText(cases[i].text);
+
+    ui::AXNodeData node_data;
+    textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+    EXPECT_EQ(node_data.GetIntListAttribute(
+                  ax::mojom::IntListAttribute::kCharacterOffsets),
+              cases[i].expected_offsets);
+  }
+}
+
+TEST_F(TextfieldTest, AccessibleGraphemeOffsetsObscured) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kUiaProvider);
+  InitTextfield();
+  textfield_->SetText(u"abcdef");
+
+  ASSERT_FALSE(GetTextfieldTestApi().GetRenderText()->obscured());
+
+  ui::AXNodeData node_data;
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  std::vector<int32_t> non_obscured_offsets = node_data.GetIntListAttribute(
+      ax::mojom::IntListAttribute::kCharacterOffsets);
+
+  textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_NE(node_data.GetIntListAttribute(
+                ax::mojom::IntListAttribute::kCharacterOffsets),
+            non_obscured_offsets);
+}
+
+TEST_F(TextfieldTest, AccessibleGraphemeOffsetsElidedTail) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kUiaProvider);
+  InitTextfield();
+
+  constexpr int kGlyphWidth = 10;
+
+  GetTextfieldTestApi().GetRenderText()->SetDisplayRect(
+      gfx::Rect(0, 0, 5 * kGlyphWidth, 100));
+  GetTextfieldTestApi().GetRenderText()->SetElideBehavior(gfx::ELIDE_TAIL);
+  gfx::test::RenderTextTestApi(GetTextfieldTestApi().GetRenderText())
+      .SetGlyphWidth(kGlyphWidth);
+
+  textfield_->SetText(u"abcdef");
+
+  ui::AXNodeData node_data;
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  std::vector<int32_t> expected_offsets = {0, 10, 20, 30, 40, 40, 40};
+  EXPECT_EQ(node_data.GetIntListAttribute(
+                ax::mojom::IntListAttribute::kCharacterOffsets),
+            expected_offsets);
+}
+#endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 
 }  // namespace views::test

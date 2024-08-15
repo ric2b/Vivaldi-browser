@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/magnifier/magnifier_glass.h"
 #include "ash/capture_mode/capture_label_view.h"
 #include "ash/capture_mode/capture_mode_behavior.h"
@@ -464,11 +464,11 @@ class CaptureModeSession::ParentContainerObserver
             capture_mode_session_->weak_ptr_factory_.GetWeakPtr()));
   }
 
-  raw_ptr<aura::Window, ExperimentalAsh> parent_container_;
+  raw_ptr<aura::Window> parent_container_;
 
   // Pointer to current capture session. Not nullptr during this lifecycle.
   // Capture session owns `this`.
-  const raw_ptr<CaptureModeSession, ExperimentalAsh> capture_mode_session_;
+  const raw_ptr<CaptureModeSession> capture_mode_session_;
 };
 
 // -----------------------------------------------------------------------------
@@ -609,10 +609,9 @@ void CaptureModeSession::UpdateCursor(const gfx::Point& location_in_screen,
     return;
   }
 
-  // Hide mouse cursor in tablet mode.
-  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
-  if (tablet_mode_controller->InTabletMode() &&
-      !tablet_mode_controller->IsInDevTabletMode()) {
+  // Hide mouse cursor in tablet mode except for the dev tablet mode.
+  if (display::Screen::GetScreen()->InTabletMode() &&
+      !Shell::Get()->tablet_mode_controller()->IsInDevTabletMode()) {
     cursor_setter_->HideCursor();
     return;
   }
@@ -720,7 +719,7 @@ void CaptureModeSession::MaybeUpdateSettingsBounds() {
 }
 
 void CaptureModeSession::MaybeUpdateCaptureUisOpacity(
-    absl::optional<gfx::Point> cursor_screen_location) {
+    std::optional<gfx::Point> cursor_screen_location) {
   if (is_shutting_down_) {
     return;
   }
@@ -1399,22 +1398,22 @@ void CaptureModeSession::OnTouchEvent(ui::TouchEvent* event) {
   OnLocatedEvent(event, /*is_touch=*/true);
 }
 
-void CaptureModeSession::OnTabletModeStarted() {
-  UpdateCaptureLabelWidget(CaptureLabelAnimation::kNone);
-  UpdateCursor(display::Screen::GetScreen()->GetCursorScreenPoint(),
-               /*is_touch=*/false);
-}
-
-void CaptureModeSession::OnTabletModeEnded() {
-  UpdateCaptureLabelWidget(CaptureLabelAnimation::kNone);
-  UpdateCursor(display::Screen::GetScreen()->GetCursorScreenPoint(),
-               /*is_touch=*/false);
-}
-
 void CaptureModeSession::OnWindowDestroying(aura::Window* window) {
   DCHECK_EQ(window, input_capture_window_);
   input_capture_window_->RemoveObserver(this);
   input_capture_window_ = nullptr;
+}
+
+void CaptureModeSession::OnDisplayTabletStateChanged(
+    display::TabletState state) {
+  if (display::IsTabletStateChanging(state)) {
+    // Do nothing when tablet state is still in the process of transition.
+    return;
+  }
+
+  UpdateCaptureLabelWidget(CaptureLabelAnimation::kNone);
+  UpdateCursor(display::Screen::GetScreen()->GetCursorScreenPoint(),
+               /*is_touch=*/false);
 }
 
 void CaptureModeSession::OnDisplayMetricsChanged(
@@ -2594,7 +2593,7 @@ void CaptureModeSession::ClampCaptureRegionToRootWindowSize() {
 }
 
 void CaptureModeSession::EndSelection(
-    absl::optional<gfx::Point> cursor_screen_location) {
+    std::optional<gfx::Point> cursor_screen_location) {
   fine_tune_position_ = FineTunePosition::kNone;
   anchor_points_.clear();
 
@@ -2833,7 +2832,7 @@ void CaptureModeSession::InitInternal() {
   if (auto* capture_client = aura::client::GetCaptureClient(current_root_)) {
     input_capture_window_ = capture_client->GetCaptureWindow();
     if (input_capture_window_) {
-      aura::WindowTracker tracker({input_capture_window_});
+      aura::WindowTracker tracker({input_capture_window_.get()});
       capture_client->ReleaseCapture(input_capture_window_);
       if (tracker.windows().empty()) {
         input_capture_window_ = nullptr;
@@ -2876,7 +2875,6 @@ void CaptureModeSession::InitInternal() {
 
   Observe(ColorUtil::GetColorProviderSourceForWindow(current_root_));
 
-  TabletModeController::Get()->AddObserver(this);
   display_observer_.emplace(this);
   // Our event handling code assumes the capture bar widget has been initialized
   // already. So we start handling events after everything has been setup.
@@ -2902,7 +2900,6 @@ void CaptureModeSession::ShutdownInternal() {
   display_observer_.reset();
   user_nudge_controller_.reset();
   capture_window_observer_.reset();
-  TabletModeController::Get()->RemoveObserver(this);
 
   Observe(nullptr);
 

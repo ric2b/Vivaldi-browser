@@ -137,10 +137,7 @@ bool IsValidStorageTextureTexelFormat(core::TexelFormat format) {
 
 // Helper to stringify a pipeline IO attribute.
 std::string AttrToStr(const ast::Attribute* attr) {
-    return Switch(
-        attr,  //
-        [&](const ast::BuiltinAttribute*) { return "@builtin"; },
-        [&](const ast::LocationAttribute*) { return "@location"; });
+    return "@" + attr->Name();
 }
 
 template <typename CALLBACK>
@@ -165,12 +162,14 @@ Validator::Validator(
     ProgramBuilder* builder,
     SemHelper& sem,
     const wgsl::Extensions& enabled_extensions,
+    const wgsl::AllowedFeatures& allowed_features,
     const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info,
     Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts)
     : symbols_(builder->Symbols()),
       diagnostics_(builder->Diagnostics()),
       sem_(sem),
       enabled_extensions_(enabled_extensions),
+      allowed_features_(allowed_features),
       atomic_composite_info_(atomic_composite_info),
       valid_type_storage_layouts_(valid_type_storage_layouts) {
     // Set default severities for filterable diagnostic rules.
@@ -292,6 +291,40 @@ const ast::Statement* Validator::ClosestContinuing(bool stop_at_loop,
     return nullptr;
 }
 
+bool Validator::Enables(VectorRef<const ast::Enable*> enables) const {
+    auto source_of = [&](wgsl::Extension ext) {
+        for (auto* enable : enables) {
+            for (auto* extension : enable->extensions) {
+                if (extension->name == ext) {
+                    return extension->source;
+                }
+            }
+        }
+        return Source{};
+    };
+
+    // List of extensions that cannot be used together.
+    std::pair<wgsl::Extension, wgsl::Extension> incompatible[] = {
+        {
+            wgsl::Extension::kChromiumExperimentalPixelLocal,
+            wgsl::Extension::kChromiumExperimentalFramebufferFetch,
+        },
+    };
+
+    for (auto pair : incompatible) {
+        if (enabled_extensions_.Contains(pair.first) && enabled_extensions_.Contains(pair.second)) {
+            std::string a{ToString(pair.first)};
+            std::string b{ToString(pair.second)};
+            AddError("extension '" + a + "' cannot be used with extension '" + b + "'",
+                     source_of(pair.first));
+            AddNote("'" + b + "' enabled here", source_of(pair.second));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool Validator::Atomic(const ast::TemplatedIdentifier* a, const core::type::Atomic* s) const {
     // https://gpuweb.github.io/gpuweb/wgsl/#atomic-types
     // T must be either u32 or i32.
@@ -333,21 +366,23 @@ bool Validator::Pointer(const ast::TemplatedIdentifier* a, const core::type::Poi
 bool Validator::StorageTexture(const core::type::StorageTexture* t, const Source& source) const {
     switch (t->access()) {
         case core::Access::kRead:
-            if (!enabled_extensions_.Contains(
-                    wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture)) {
+            if (!allowed_features_.features.count(
+                    wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures)) {
                 AddError(
                     "read-only storage textures require the "
-                    "chromium_experimental_read_write_storage_texture extension to be enabled",
+                    "readonly_and_readwrite_storage_textures language feature, which is not "
+                    "allowed in the current environment",
                     source);
                 return false;
             }
             break;
         case core::Access::kReadWrite:
-            if (!enabled_extensions_.Contains(
-                    wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture)) {
+            if (!allowed_features_.features.count(
+                    wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures)) {
                 AddError(
                     "read-write storage textures require the "
-                    "chromium_experimental_read_write_storage_texture extension to be enabled",
+                    "readonly_and_readwrite_storage_textures language feature, which is not "
+                    "allowed in the current environment",
                     source);
                 return false;
             }
@@ -766,17 +801,14 @@ bool Validator::Override(const sem::GlobalVariable* v,
         return false;
     }
 
-    for (auto* attr : decl->attributes) {
-        if (attr->Is<ast::IdAttribute>()) {
-            auto id = v->OverrideId();
-            if (auto var = override_ids.Find(id); var && *var != v) {
-                AddError("@id values must be unique", attr->source);
-                AddNote(
-                    "a override with an ID of " + std::to_string(id.value) +
+    if (auto id = v->Attributes().override_id) {
+        if (auto var = override_ids.Find(*id); var && *var != v) {
+            auto* attr = ast::GetAttribute<ast::IdAttribute>(v->Declaration()->attributes);
+            AddError("@id values must be unique", attr->source);
+            AddNote("a override with an ID of " + std::to_string(id->value) +
                         " was previously declared here:",
                     ast::GetAttribute<ast::IdAttribute>((*var)->Declaration()->attributes)->source);
-                return false;
-            }
+            return false;
         }
     }
 
@@ -813,8 +845,8 @@ bool Validator::Parameter(const sem::Variable* var) const {
                 case core::AddressSpace::kStorage:
                 case core::AddressSpace::kUniform:
                 case core::AddressSpace::kWorkgroup:
-                    ok = enabled_extensions_.Contains(
-                        wgsl::Extension::kChromiumExperimentalFullPtrParameters);
+                    ok = allowed_features_.features.count(
+                             wgsl::LanguageFeature::kUnrestrictedPointerParameters) != 0;
                     break;
                 default:
                     break;
@@ -986,8 +1018,8 @@ bool Validator::BuiltinAttribute(const ast::BuiltinAttribute* attr,
 
     if (is_stage_mismatch) {
         StringStream err;
-        err << "@builtin(" << builtin << ") cannot be used in "
-            << (is_input ? "input of " : "output of ") << stage_name.str() << " pipeline stage";
+        err << "@builtin(" << builtin << ") cannot be used for " << stage_name.str() << " shader "
+            << (is_input ? "input" : "output");
         AddError(err.str(), attr->source);
         return false;
     }
@@ -996,7 +1028,13 @@ bool Validator::BuiltinAttribute(const ast::BuiltinAttribute* attr,
 }
 
 bool Validator::InterpolateAttribute(const ast::InterpolateAttribute* attr,
-                                     const core::type::Type* storage_ty) const {
+                                     const core::type::Type* storage_ty,
+                                     const ast::PipelineStage stage) const {
+    if (stage == ast::PipelineStage::kCompute) {
+        AddError(AttrToStr(attr) + " cannot be used by compute shaders", attr->source);
+        return false;
+    }
+
     auto* type = storage_ty->UnwrapRef();
 
     auto i_type = sem_.AsInterpolationType(sem_.Get(attr->type));
@@ -1015,6 +1053,15 @@ bool Validator::InterpolateAttribute(const ast::InterpolateAttribute* attr,
         return false;
     }
 
+    return true;
+}
+
+bool Validator::InvariantAttribute(const ast::InvariantAttribute* attr,
+                                   const ast::PipelineStage stage) const {
+    if (stage == ast::PipelineStage::kCompute) {
+        AddError(AttrToStr(attr) + " cannot be used by compute shaders", attr->source);
+        return false;
+    }
     return true;
 }
 
@@ -1100,7 +1147,10 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
     // TODO(jrprice): This state could be stored in sem::Function instead, and then passed to
     // sem::Function since it would be useful there too.
     Hashset<core::BuiltinValue, 4> builtins;
-    Hashset<std::pair<uint32_t, uint32_t>, 8> locationsAndIndexes;
+    Hashset<std::pair<uint32_t, uint32_t>, 8> locations_and_indices;
+    const ast::LocationAttribute* first_nonzero_location = nullptr;
+    const ast::IndexAttribute* first_nonzero_index = nullptr;
+    Hashset<uint32_t, 4> colors;
     enum class ParamOrRetType {
         kParameter,
         kReturnType,
@@ -1112,82 +1162,103 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
                                                      ParamOrRetType param_or_ret,
                                                      bool is_struct_member,
                                                      std::optional<uint32_t> location,
-                                                     std::optional<uint32_t> index) {
+                                                     std::optional<uint32_t> index,
+                                                     std::optional<uint32_t> color) {
         // Scan attributes for pipeline IO attributes.
         // Check for overlap with attributes that have been seen previously.
         const ast::Attribute* pipeline_io_attribute = nullptr;
         const ast::LocationAttribute* location_attribute = nullptr;
+        const ast::ColorAttribute* color_attribute = nullptr;
         const ast::IndexAttribute* index_attribute = nullptr;
         const ast::InterpolateAttribute* interpolate_attribute = nullptr;
         const ast::InvariantAttribute* invariant_attribute = nullptr;
         for (auto* attr : attrs) {
-            auto is_invalid_compute_shader_attribute = false;
+            bool ok = Switch(
+                attr,  //
+                [&](const ast::BuiltinAttribute* builtin_attr) {
+                    auto builtin = sem_.Get(builtin_attr)->Value();
 
-            if (auto* builtin_attr = attr->As<ast::BuiltinAttribute>()) {
-                auto builtin = sem_.Get(builtin_attr)->Value();
+                    if (pipeline_io_attribute) {
+                        AddError("multiple entry point IO attributes", attr->source);
+                        AddNote("previously consumed " + AttrToStr(pipeline_io_attribute),
+                                pipeline_io_attribute->source);
+                        return false;
+                    }
+                    pipeline_io_attribute = attr;
 
-                if (pipeline_io_attribute) {
-                    AddError("multiple entry point IO attributes", attr->source);
-                    AddNote("previously consumed " + AttrToStr(pipeline_io_attribute),
-                            pipeline_io_attribute->source);
-                    return false;
-                }
-                pipeline_io_attribute = attr;
+                    if (builtins.Contains(builtin)) {
+                        StringStream err;
+                        err << "@builtin(" << builtin << ") appears multiple times as pipeline "
+                            << (param_or_ret == ParamOrRetType::kParameter ? "input" : "output");
+                        AddError(err.str(), decl->source);
+                        return false;
+                    }
 
-                if (builtins.Contains(builtin)) {
-                    StringStream err;
-                    err << "@builtin(" << builtin << ") appears multiple times as pipeline "
-                        << (param_or_ret == ParamOrRetType::kParameter ? "input" : "output");
-                    AddError(err.str(), decl->source);
-                    return false;
-                }
+                    if (!BuiltinAttribute(
+                            builtin_attr, ty, stage,
+                            /* is_input */ param_or_ret == ParamOrRetType::kParameter)) {
+                        return false;
+                    }
+                    builtins.Add(builtin);
+                    return true;
+                },
+                [&](const ast::LocationAttribute* loc_attr) {
+                    location_attribute = loc_attr;
+                    if (pipeline_io_attribute) {
+                        AddError("multiple entry point IO attributes", attr->source);
+                        AddNote("previously consumed " + AttrToStr(pipeline_io_attribute),
+                                pipeline_io_attribute->source);
+                        return false;
+                    }
+                    pipeline_io_attribute = attr;
 
-                if (!BuiltinAttribute(builtin_attr, ty, stage,
-                                      /* is_input */ param_or_ret == ParamOrRetType::kParameter)) {
-                    return false;
-                }
-                builtins.Add(builtin);
-            } else if (auto* loc_attr = attr->As<ast::LocationAttribute>()) {
-                location_attribute = loc_attr;
-                if (pipeline_io_attribute) {
-                    AddError("multiple entry point IO attributes", attr->source);
-                    AddNote("previously consumed " + AttrToStr(pipeline_io_attribute),
-                            pipeline_io_attribute->source);
-                    return false;
-                }
-                pipeline_io_attribute = attr;
+                    if (TINT_UNLIKELY(!location.has_value())) {
+                        TINT_ICE() << "@location has no value";
+                        return false;
+                    }
 
-                bool is_input = param_or_ret == ParamOrRetType::kParameter;
+                    return LocationAttribute(loc_attr, ty, stage, source);
+                },
+                [&](const ast::IndexAttribute* index_attr) {
+                    index_attribute = index_attr;
 
-                if (TINT_UNLIKELY(!location.has_value())) {
-                    TINT_ICE() << "Location has no value";
-                    return false;
-                }
+                    if (TINT_UNLIKELY(!index.has_value())) {
+                        TINT_ICE() << "@index has no value";
+                        return false;
+                    }
 
-                if (!LocationAttribute(loc_attr, ty, stage, source, is_input)) {
-                    return false;
-                }
-            } else if (auto* index_attr = attr->As<ast::IndexAttribute>()) {
-                index_attribute = index_attr;
-                return IndexAttribute(index_attr, stage);
-            } else if (auto* interpolate = attr->As<ast::InterpolateAttribute>()) {
-                if (decl->PipelineStage() == ast::PipelineStage::kCompute) {
-                    is_invalid_compute_shader_attribute = true;
-                } else if (!InterpolateAttribute(interpolate, ty)) {
-                    return false;
-                }
-                interpolate_attribute = interpolate;
-            } else if (auto* invariant = attr->As<ast::InvariantAttribute>()) {
-                if (decl->PipelineStage() == ast::PipelineStage::kCompute) {
-                    is_invalid_compute_shader_attribute = true;
-                }
-                invariant_attribute = invariant;
-            }
-            if (is_invalid_compute_shader_attribute) {
-                std::string input_or_output =
-                    param_or_ret == ParamOrRetType::kParameter ? "inputs" : "output";
-                AddError("@" + attr->Name() + " is not valid for compute shader " + input_or_output,
-                         attr->source);
+                    return IndexAttribute(index_attr, stage);
+                },
+                [&](const ast::ColorAttribute* col_attr) {
+                    color_attribute = col_attr;
+                    if (pipeline_io_attribute) {
+                        AddError("multiple entry point IO attributes", attr->source);
+                        AddNote("previously consumed " + AttrToStr(pipeline_io_attribute),
+                                pipeline_io_attribute->source);
+                        return false;
+                    }
+                    pipeline_io_attribute = attr;
+
+                    bool is_input = param_or_ret == ParamOrRetType::kParameter;
+
+                    if (TINT_UNLIKELY(!color.has_value())) {
+                        TINT_ICE() << "@color has no value";
+                        return false;
+                    }
+
+                    return ColorAttribute(col_attr, ty, stage, source, is_input);
+                },
+                [&](const ast::InterpolateAttribute* interpolate) {
+                    interpolate_attribute = interpolate;
+                    return InterpolateAttribute(interpolate, ty, stage);
+                },
+                [&](const ast::InvariantAttribute* invariant) {
+                    invariant_attribute = invariant;
+                    return InvariantAttribute(invariant, stage);
+                },
+                [&](Default) { return true; });
+
+            if (!ok) {
                 return false;
             }
         }
@@ -1230,46 +1301,54 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
             }
 
             if (index_attribute) {
-                if (Is<ast::LocationAttribute>(pipeline_io_attribute)) {
-                    AddError("index attribute must only be used with @location",
-                             index_attribute->source);
-                    return false;
-                }
-
                 // Because HLSL specifies dual source blending targets with SV_Target0 and 1, we
-                // should restrict targets with index attributes to location 0 for easy translation
+                // should restrict targets with @index to location 0 for easy translation
                 // in the backend writers.
-                if (location.value() != 0) {
-                    AddError("index attribute must only be used with @location(0)",
-                             index_attribute->source);
+                if (location.value_or(1) != 0) {
+                    AddError("@index can only be used with @location(0)", index_attribute->source);
                     return false;
                 }
             }
 
             if (location_attribute) {
-                uint32_t idx = 0xffffffff;
-                if (index_attribute) {
-                    idx = index.value();
+                if (!first_nonzero_location && location > 0u) {
+                    first_nonzero_location = location_attribute;
+                }
+                if (!first_nonzero_index && index > 0u) {
+                    first_nonzero_index = index_attribute;
+                }
+                if (first_nonzero_location && first_nonzero_index) {
+                    AddError("pipeline cannot use both non-zero @index and non-zero @location",
+                             first_nonzero_index->source);
+                    AddNote("non-zero @location declared here", first_nonzero_location->source);
+                    return false;
                 }
 
-                std::pair<uint32_t, uint32_t> locationAndIndex(location.value(), idx);
-                if (!locationsAndIndexes.Add(locationAndIndex)) {
+                std::pair<uint32_t, uint32_t> location_and_index(location.value(),
+                                                                 index.value_or(0));
+                if (!locations_and_indices.Add(location_and_index)) {
                     StringStream err;
-                    if (!index_attribute) {
-                        err << "@location(" << location.value() << ") appears multiple times";
-                    } else {
-                        err << "@location(" << location.value() << ") @index(" << index.value()
-                            << ") appears multiple times";
+                    err << "@location(" << location.value() << ") ";
+                    if (index_attribute) {
+                        err << "@index(" << index.value() << ") ";
                     }
+                    err << "appears multiple times";
                     AddError(err.str(), location_attribute->source);
                     return false;
                 }
             }
 
+            if (color_attribute && !colors.Add(color.value())) {
+                StringStream err;
+                err << "@color(" << color.value() << ") appears multiple times";
+                AddError(err.str(), color_attribute->source);
+                return false;
+            }
+
             if (interpolate_attribute) {
                 if (!pipeline_io_attribute ||
                     !pipeline_io_attribute->Is<ast::LocationAttribute>()) {
-                    AddError("interpolate attribute must only be used with @location",
+                    AddError("@interpolate can only be used with @location",
                              interpolate_attribute->source);
                     return false;
                 }
@@ -1284,7 +1363,7 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
                     }
                 }
                 if (!has_position) {
-                    AddError("invariant attribute must only be applied to a position builtin",
+                    AddError("@invariant must be applied to a position builtin",
                              invariant_attribute->source);
                     return false;
                 }
@@ -1294,38 +1373,39 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
     };
 
     // Outer lambda for validating the entry point attributes for a type.
-    auto validate_entry_point_attributes = [&](VectorRef<const ast::Attribute*> attrs,
-                                               const core::type::Type* ty, Source source,
-                                               ParamOrRetType param_or_ret,
-                                               std::optional<uint32_t> location,
-                                               std::optional<uint32_t> index) {
-        if (!validate_entry_point_attributes_inner(attrs, ty, source, param_or_ret,
-                                                   /*is_struct_member*/ false, location, index)) {
-            return false;
-        }
+    auto validate_entry_point_attributes =
+        [&](VectorRef<const ast::Attribute*> attrs, const core::type::Type* ty, Source source,
+            ParamOrRetType param_or_ret, std::optional<uint32_t> location,
+            std::optional<uint32_t> index, std::optional<uint32_t> color) {
+            if (!validate_entry_point_attributes_inner(attrs, ty, source, param_or_ret,
+                                                       /*is_struct_member*/ false, location, index,
+                                                       color)) {
+                return false;
+            }
 
-        if (auto* str = ty->As<sem::Struct>()) {
-            for (auto* member : str->Members()) {
-                if (!validate_entry_point_attributes_inner(
-                        member->Declaration()->attributes, member->Type(),
-                        member->Declaration()->source, param_or_ret,
-                        /*is_struct_member*/ true, member->Attributes().location,
-                        member->Attributes().index)) {
-                    AddNote("while analyzing entry point '" + decl->name->symbol.Name() + "'",
-                            decl->source);
-                    return false;
+            if (auto* str = ty->As<sem::Struct>()) {
+                for (auto* member : str->Members()) {
+                    if (!validate_entry_point_attributes_inner(
+                            member->Declaration()->attributes, member->Type(),
+                            member->Declaration()->source, param_or_ret,
+                            /*is_struct_member*/ true, member->Attributes().location,
+                            member->Attributes().index, member->Attributes().color)) {
+                        AddNote("while analyzing entry point '" + decl->name->symbol.Name() + "'",
+                                decl->source);
+                        return false;
+                    }
                 }
             }
-        }
 
-        return true;
-    };
+            return true;
+        };
 
     for (auto* param : func->Parameters()) {
         auto* param_decl = param->Declaration();
+        auto& attrs = param->Attributes();
         if (!validate_entry_point_attributes(param_decl->attributes, param->Type(),
                                              param_decl->source, ParamOrRetType::kParameter,
-                                             param->Location(), std::nullopt)) {
+                                             attrs.location, attrs.index, attrs.color)) {
             return false;
         }
     }
@@ -1333,12 +1413,15 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
     // Clear IO sets after parameter validation. Builtin and location attributes in return types
     // should be validated independently from those used in parameters.
     builtins.Clear();
-    locationsAndIndexes.Clear();
+    locations_and_indices.Clear();
+    first_nonzero_location = nullptr;
+    first_nonzero_index = nullptr;
 
     if (!func->ReturnType()->Is<core::type::Void>()) {
         if (!validate_entry_point_attributes(decl->return_type_attributes, func->ReturnType(),
                                              decl->source, ParamOrRetType::kReturnType,
-                                             func->ReturnLocation(), func->ReturnIndex())) {
+                                             func->ReturnLocation(), func->ReturnIndex(),
+                                             /* color */ std::nullopt)) {
             return false;
         }
     }
@@ -1379,7 +1462,7 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
         if (!var_decl) {
             continue;
         }
-        auto bp = global->BindingPoint();
+        auto bp = global->Attributes().binding_point;
         if (!bp) {
             continue;
         }
@@ -1747,22 +1830,31 @@ bool Validator::SubgroupBroadcast(const sem::Call* call) const {
     return true;
 }
 
-bool Validator::RequiredExtensionForBuiltinFn(const sem::Call* call) const {
+bool Validator::RequiredFeaturesForBuiltinFn(const sem::Call* call) const {
     const auto* builtin = call->Target()->As<sem::BuiltinFn>();
     if (!builtin) {
         return true;
     }
 
     const auto extension = builtin->RequiredExtension();
-    if (extension == wgsl::Extension::kUndefined) {
-        return true;
+    if (extension != wgsl::Extension::kUndefined) {
+        if (!enabled_extensions_.Contains(extension)) {
+            AddError("cannot call built-in function '" + std::string(builtin->str()) +
+                         "' without extension " + tint::ToString(extension),
+                     call->Declaration()->source);
+            return false;
+        }
     }
 
-    if (!enabled_extensions_.Contains(extension)) {
-        AddError("cannot call built-in function '" + std::string(builtin->str()) +
-                     "' without extension " + tint::ToString(extension),
-                 call->Declaration()->source);
-        return false;
+    const auto feature = builtin->RequiredLanguageFeature();
+    if (feature != wgsl::LanguageFeature::kUndefined) {
+        if (!allowed_features_.features.count(feature)) {
+            AddError("built-in function '" + std::string(builtin->str()) + "' requires the " +
+                         std::string(wgsl::ToString(feature)) +
+                         " language feature, which is not allowed in the current environment",
+                     call->Declaration()->source);
+            return false;
+        }
     }
 
     return true;
@@ -1820,8 +1912,8 @@ bool Validator::FunctionCall(const sem::Call* call, sem::Statement* current_stat
         }
 
         if (param_type->Is<core::type::Pointer>() &&
-            !enabled_extensions_.Contains(
-                wgsl::Extension::kChromiumExperimentalFullPtrParameters)) {
+            !allowed_features_.features.count(
+                wgsl::LanguageFeature::kUnrestrictedPointerParameters)) {
             // https://gpuweb.github.io/gpuweb/wgsl/#function-restriction
             // Each argument of pointer type to a user-defined function must have the same memory
             // view as its root identifier.
@@ -2133,8 +2225,8 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
         return false;
     }
 
-    auto has_index = false;
-    Hashset<std::pair<uint32_t, uint32_t>, 8> locationsAndIndexes;
+    Hashset<std::pair<uint32_t, uint32_t>, 8> locations_and_indices;
+    Hashset<uint32_t, 4> colors;
     for (auto* member : str->Members()) {
         if (auto* r = member->Type()->As<sem::Array>()) {
             if (r->Count()->Is<core::type::RuntimeArrayCount>()) {
@@ -2159,6 +2251,7 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
         auto has_position = false;
         const ast::IndexAttribute* index_attribute = nullptr;
         const ast::LocationAttribute* location_attribute = nullptr;
+        const ast::ColorAttribute* color_attribute = nullptr;
         const ast::InvariantAttribute* invariant_attribute = nullptr;
         const ast::InterpolateAttribute* interpolate_attribute = nullptr;
         for (auto* attr : member->Declaration()->attributes) {
@@ -2166,21 +2259,22 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
                 attr,  //
                 [&](const ast::InvariantAttribute* invariant) {
                     invariant_attribute = invariant;
-                    return true;
+                    return InvariantAttribute(invariant, stage);
                 },
                 [&](const ast::LocationAttribute* location) {
                     location_attribute = location;
                     TINT_ASSERT(member->Attributes().location.has_value());
-                    if (!LocationAttribute(location, member->Type(), stage,
-                                           member->Declaration()->source)) {
-                        return false;
-                    }
-                    return true;
+                    return LocationAttribute(location, member->Type(), stage,
+                                             member->Declaration()->source);
                 },
                 [&](const ast::IndexAttribute* index) {
                     index_attribute = index;
-                    has_index = true;
                     return IndexAttribute(index, stage);
+                },
+                [&](const ast::ColorAttribute* color) {
+                    color_attribute = color;
+                    return ColorAttribute(color, member->Type(), stage,
+                                          member->Declaration()->source);
                 },
                 [&](const ast::BuiltinAttribute* builtin_attr) {
                     if (!BuiltinAttribute(builtin_attr, member->Type(), stage,
@@ -2195,16 +2289,13 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
                 },
                 [&](const ast::InterpolateAttribute* interpolate) {
                     interpolate_attribute = interpolate;
-                    if (!InterpolateAttribute(interpolate, member->Type())) {
-                        return false;
-                    }
-                    return true;
+                    return InterpolateAttribute(interpolate, member->Type(), stage);
                 },
                 [&](const ast::StructMemberSizeAttribute*) {
                     if (!member->Type()->HasCreationFixedFootprint()) {
                         AddError(
-                            "@size can only be applied to members where the member's type size "
-                            "can be fully determined at shader creation time",
+                            "@size can only be applied to members where the member's type size can "
+                            "be fully determined at shader creation time",
                             attr->source);
                         return false;
                     }
@@ -2217,62 +2308,50 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
         }
 
         if (invariant_attribute && !has_position) {
-            AddError("invariant attribute must only be applied to a position builtin",
+            AddError("@invariant must be applied to a position builtin",
                      invariant_attribute->source);
             return false;
         }
 
         if (index_attribute) {
-            if (!location_attribute) {
-                AddError("index attribute must only be used with @location",
-                         index_attribute->source);
-                return false;
-            }
-
             // Because HLSL specifies dual source blending targets with SV_Target0 and 1, we should
             // restrict targets with index attributes to location 0 for easy translation in the
             // backend writers.
-            if (member->Attributes().location.value() != 0) {
-                AddError("index attribute must only be used with @location(0)",
-                         index_attribute->source);
+            if (member->Attributes().location.value_or(1) != 0) {
+                AddError("@index can only be used with @location(0)", index_attribute->source);
                 return false;
             }
         }
 
         if (interpolate_attribute && !location_attribute) {
-            AddError("interpolate attribute must only be used with @location",
-                     interpolate_attribute->source);
+            AddError("@interpolate can only be used with @location", interpolate_attribute->source);
             return false;
         }
 
         // Ensure all locations and index pairs are unique
         if (location_attribute) {
-            uint32_t index = 0xffffffff;
-            if (index_attribute) {
-                index = member->Attributes().index.value();
-            }
             uint32_t location = member->Attributes().location.value();
-            if (has_index && location != 0) {
+            uint32_t index = member->Attributes().index.value_or(0);
+
+            std::pair<uint32_t, uint32_t> location_and_index(location, index);
+            if (!locations_and_indices.Add(location_and_index)) {
                 StringStream err;
-                err << "Multiple render targets are not allowed when using dual source blending. "
-                       "The output @location("
-                    << location << ") is not allowed as a render target.";
+                err << "@location(" << location << ") ";
+                if (index_attribute) {
+                    err << "@index(" << index << ") ";
+                }
+                err << "appears multiple times";
                 AddError(err.str(), location_attribute->source);
                 return false;
             }
+        }
 
-            std::pair<uint32_t, uint32_t> locationAndIndex(location, index);
-            if (!locationsAndIndexes.Add(locationAndIndex)) {
+        if (color_attribute) {
+            uint32_t color = member->Attributes().color.value();
+            if (!colors.Add(color)) {
                 StringStream err;
-                if (!index_attribute) {
-                    err << "@location(" << location << ") appears multiple times";
-                    AddError(err.str(), location_attribute->source);
-                } else {
-                    err << "@location(" << location << ") @index(" << index
-                        << ") appears multiple times";
-                    AddError(err.str(), index_attribute->source);
-                }
-
+                err << "@color(" << color << ") appears multiple times";
+                AddError(err.str(), color_attribute->source);
                 return false;
             }
         }
@@ -2281,15 +2360,12 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
     return true;
 }
 
-bool Validator::LocationAttribute(const ast::LocationAttribute* loc_attr,
+bool Validator::LocationAttribute(const ast::LocationAttribute* attr,
                                   const core::type::Type* type,
                                   ast::PipelineStage stage,
-                                  const Source& source,
-                                  const bool is_input) const {
-    std::string inputs_or_output = is_input ? "inputs" : "output";
+                                  const Source& source) const {
     if (stage == ast::PipelineStage::kCompute) {
-        AddError("@" + loc_attr->Name() + " is not valid for compute shader " + inputs_or_output,
-                 loc_attr->source);
+        AddError(AttrToStr(attr) + " cannot be used by compute shaders", attr->source);
         return false;
     }
 
@@ -2299,32 +2375,60 @@ bool Validator::LocationAttribute(const ast::LocationAttribute* loc_attr,
         AddNote(
             "@location must only be applied to declarations of numeric scalar or numeric vector "
             "type",
-            loc_attr->source);
+            attr->source);
         return false;
     }
 
     return true;
 }
 
-bool Validator::IndexAttribute(const ast::IndexAttribute* index_attr,
-                               ast::PipelineStage stage) const {
+bool Validator::ColorAttribute(const ast::ColorAttribute* attr,
+                               const core::type::Type* type,
+                               ast::PipelineStage stage,
+                               const Source& source,
+                               const std::optional<bool> is_input) const {
+    if (!enabled_extensions_.Contains(wgsl::Extension::kChromiumExperimentalFramebufferFetch)) {
+        AddError(
+            "use of @color requires enabling extension 'chromium_experimental_framebuffer_fetch'",
+            attr->source);
+        return false;
+    }
+
+    bool is_stage_non_fragment =
+        stage != ast::PipelineStage::kNone && stage != ast::PipelineStage::kFragment;
+    bool is_output = !is_input.value_or(true);
+    if (is_stage_non_fragment || is_output) {
+        AddError("@color can only be used for fragment shader input", attr->source);
+        return false;
+    }
+
+    if (!type->is_numeric_scalar_or_vector()) {
+        std::string invalid_type = sem_.TypeNameOf(type);
+        AddError("cannot apply @color to declaration of type '" + invalid_type + "'", source);
+        AddNote(
+            "@color must only be applied to declarations of numeric scalar or numeric vector type",
+            attr->source);
+        return false;
+    }
+
+    return true;
+}
+
+bool Validator::IndexAttribute(const ast::IndexAttribute* attr,
+                               ast::PipelineStage stage,
+                               const std::optional<bool> is_input) const {
     if (!enabled_extensions_.Contains(wgsl::Extension::kChromiumInternalDualSourceBlending)) {
         AddError(
-            "use of '@index' attribute requires enabling extension "
-            "'chromium_internal_dual_source_blending'",
-            index_attr->source);
+            "use of @index requires enabling extension 'chromium_internal_dual_source_blending'",
+            attr->source);
         return false;
     }
 
-    if (stage == ast::PipelineStage::kCompute) {
-        AddError("@" + index_attr->Name() + " is not valid for compute shader output",
-                 index_attr->source);
-        return false;
-    }
-
-    if (stage == ast::PipelineStage::kVertex) {
-        AddError("@" + index_attr->Name() + " is not valid for vertex shader output",
-                 index_attr->source);
+    bool is_stage_non_fragment =
+        stage != ast::PipelineStage::kNone && stage != ast::PipelineStage::kFragment;
+    bool is_output = is_input.value_or(false);
+    if (is_stage_non_fragment || is_output) {
+        AddError(AttrToStr(attr) + " can only be used for fragment shader output", attr->source);
         return false;
     }
 

@@ -20,10 +20,10 @@
 
 #include <vector>
 
+#include "modules/video_capture/linux/pipewire_session.h"
 #include "modules/video_capture/video_capture.h"
 #include "modules/video_capture/video_capture_defines.h"
 #include "modules/video_capture/video_capture_impl.h"
-#include "modules/video_capture/video_capture_options.h"
 #include "rtc_base/logging.h"
 
 namespace webrtc {
@@ -38,6 +38,8 @@ int32_t DeviceInfoPipeWire::Init() {
 DeviceInfoPipeWire::~DeviceInfoPipeWire() = default;
 
 uint32_t DeviceInfoPipeWire::NumberOfDevices() {
+  RTC_CHECK(pipewire_session_);
+
   return pipewire_session_->nodes().size();
 }
 
@@ -48,6 +50,8 @@ int32_t DeviceInfoPipeWire::GetDeviceName(uint32_t deviceNumber,
                                           uint32_t deviceUniqueIdUTF8Length,
                                           char* productUniqueIdUTF8,
                                           uint32_t productUniqueIdUTF8Length) {
+  RTC_CHECK(pipewire_session_);
+
   if (deviceNumber >= NumberOfDevices())
     return -1;
 
@@ -83,6 +87,8 @@ int32_t DeviceInfoPipeWire::GetDeviceName(uint32_t deviceNumber,
 
 int32_t DeviceInfoPipeWire::CreateCapabilityMap(
     const char* deviceUniqueIdUTF8) {
+  RTC_CHECK(pipewire_session_);
+
   for (auto& node : pipewire_session_->nodes()) {
     if (node.unique_id().compare(deviceUniqueIdUTF8) != 0)
       continue;

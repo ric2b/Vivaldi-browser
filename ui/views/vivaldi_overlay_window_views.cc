@@ -16,6 +16,7 @@
 #include "ui/views/controls/video_progress.h"
 
 #include "prefs/vivaldi_pref_names.h"
+#include "app/vivaldi_apptools.h"
 
 // The file contains the vivaldi specific code for the VideoOverlayWindowViews class
 // used for the Picture-in-Picture window.
@@ -79,6 +80,8 @@ void VideoOverlayWindowViews::HandleVivaldiMuteButton() {
 }
 
 void VideoOverlayWindowViews::InitVivaldiControls() {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
 
   auto progress_view = std::make_unique<vivaldi::VideoProgress>();
   progress_view->SetForegroundColor(kProgressBarForeground);
@@ -141,6 +144,9 @@ void VideoOverlayWindowViews::UpdateVivaldiControlsVisibility(bool is_visible) {
 
 void VideoOverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
                                                           int margin) {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
 //  #############################progress#############################
 //
 //  <MUTE> #######volume####### <Prev>[<PLAY/PAUSE>]
@@ -176,6 +182,9 @@ void VideoOverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
 }
 
 void VideoOverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
   int seek_seconds = 0;
   if (event->type() == ui::ET_KEY_PRESSED) {
     if (event->key_code() == ui::VKEY_RIGHT) {
@@ -220,6 +229,9 @@ constexpr char kPipHeight[] = "height";
 
 // OverlayWindowViews implementation
 gfx::Rect VideoOverlayWindowViews::GetStoredBoundsFromPrefs() {
+  if (!vivaldi::IsVivaldiRunning())
+    return GetBounds();
+
   Browser* browser =
       chrome::FindBrowserWithTab(GetController()->GetWebContents());
   if (browser) {
@@ -244,6 +256,9 @@ gfx::Rect VideoOverlayWindowViews::GetStoredBoundsFromPrefs() {
 }
 
 void VideoOverlayWindowViews::UpdateStoredBounds() {
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
   gfx::Rect bounds = GetRestoredBounds();
   gfx::Size size = bounds.size();
   if (size.width() == min_size_.width() ||

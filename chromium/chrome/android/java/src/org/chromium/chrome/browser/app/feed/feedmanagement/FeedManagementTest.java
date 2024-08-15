@@ -24,6 +24,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.FirstRunUtils;
@@ -31,7 +32,6 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -77,7 +77,7 @@ public final class FeedManagementTest {
 
     @Test
     @MediumTest
-    public void launchNTP_launchFeedManagement() throws IOException, InterruptedException {
+    public void launchNtp_launchFeedManagement() throws IOException, InterruptedException {
         // The web feed requires login to enable, so we must log in first.
         mSigninTestRule.addTestAccountThenSigninAndEnableSync();
         // Load the NTP.
@@ -90,7 +90,7 @@ public final class FeedManagementTest {
 
     @Test
     @MediumTest
-    public void launchNTP_launchActivitySettings() throws IOException, InterruptedException {
+    public void launchNtp_launchActivitySettings() throws IOException, InterruptedException {
         // The web feed requires login to enable, so we must log in first.
         mSigninTestRule.addTestAccountThenSigninAndEnableSync();
         // Load the NTP.

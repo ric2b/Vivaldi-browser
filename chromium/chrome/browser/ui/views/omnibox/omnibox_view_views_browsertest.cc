@@ -56,6 +56,7 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
@@ -156,6 +157,11 @@ class OmniboxViewViewsTest : public InProcessBrowserTest {
 
  private:
   // InProcessBrowserTest:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Some of these tests assume a 1.0 device scale factor.
+    command_line->AppendSwitchASCII(::switches::kForceDeviceScaleFactor, "1");
+  }
+
   void SetUpOnMainThread() override {
     ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
     chrome::FocusLocationBar(browser());
@@ -931,9 +937,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsIMETest, TextInputTypeInitRespectsIME) {
 // Looks like the same problem as in the SelectAllOnClick().
 // Tracked in: https://crbug.com/915591
 // Test is also flaky on Linux: https://crbug.com/1157250
-// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
-// complete.
-#if BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #define MAYBE_HandleExternalProtocolURLs DISABLED_HandleExternalProtocolURLs
 #else
 #define MAYBE_HandleExternalProtocolURLs HandleExternalProtocolURLs

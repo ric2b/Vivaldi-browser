@@ -6,6 +6,7 @@ licenses(["notice"])
 exports_files_legacy()
 
 VK_FILES = [
+    "GrVkBackendSemaphore.cpp",
     "GrVkBackendSurface.cpp",
     "GrVkBackendSurfacePriv.h",
     "GrVkBuffer.cpp",
@@ -16,6 +17,8 @@ VK_FILES = [
     "GrVkCommandBuffer.h",
     "GrVkCommandPool.cpp",
     "GrVkCommandPool.h",
+    "GrVkContextThreadSafeProxy.cpp",
+    "GrVkContextThreadSafeProxy.h",
     "GrVkDescriptorPool.cpp",
     "GrVkDescriptorPool.h",
     "GrVkDescriptorSet.cpp",
@@ -32,9 +35,9 @@ VK_FILES = [
     "GrVkImageLayout.h",
     "GrVkImageView.cpp",
     "GrVkImageView.h",
+    "GrVkManagedResource.h",
     "GrVkMSAALoadManager.cpp",
     "GrVkMSAALoadManager.h",
-    "GrVkManagedResource.h",
     "GrVkOpsRenderPass.cpp",
     "GrVkOpsRenderPass.h",
     "GrVkPipeline.cpp",

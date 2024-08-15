@@ -73,10 +73,10 @@ constexpr const size_t kNumOfWorlds = 2;
 
 inline scoped_refptr<DOMWrapperWorld> IndexToWorld(v8::Isolate* isolate,
                                                    size_t index) {
-  return index == 0
-             ? scoped_refptr<DOMWrapperWorld>(&DOMWrapperWorld::MainWorld())
-             : DOMWrapperWorld::EnsureIsolatedWorld(
-                   isolate, DOMWrapperWorld::WorldId::kMainWorldId + 1);
+  return index == 0 ? scoped_refptr<DOMWrapperWorld>(
+                          &DOMWrapperWorld::MainWorld(isolate))
+                    : DOMWrapperWorld::EnsureIsolatedWorld(
+                          isolate, DOMWrapperWorld::WorldId::kMainWorldId + 1);
 }
 
 inline int WorldToIndex(const DOMWrapperWorld& world) {
@@ -86,7 +86,6 @@ inline int WorldToIndex(const DOMWrapperWorld& world) {
     return 1;
   } else {
     LOG(FATAL) << "Unknown DOMWrapperWorld";
-    return 1;
   }
 }
 
@@ -208,7 +207,6 @@ v8::StartupData SerializeInternalFieldCallback(v8::Local<v8::Object> object,
       value = InternalFieldSerializedValue::kSwWindow;
     } else {
       LOG(FATAL) << "Unknown WrapperTypeInfo";
-      return {nullptr, 0};
     }
   } else if (index == kV8DOMWrapperTypeIndex) {
     if (wrapper_type_info == V8HTMLDocument::GetWrapperTypeInfo()) {
@@ -217,11 +215,9 @@ v8::StartupData SerializeInternalFieldCallback(v8::Local<v8::Object> object,
       value = InternalFieldSerializedValue::kWtiWindow;
     } else {
       LOG(FATAL) << "Unknown WrapperTypeInfo";
-      return {nullptr, 0};
     }
   } else {
     LOG(FATAL) << "Unknown internal field";
-    return {nullptr, 0};
   }
 
   int size = 1;  // No endian support
@@ -422,8 +418,7 @@ void V8ContextSnapshotImpl::InstallInterfaceTemplates(v8::Isolate* isolate) {
   }
 }
 
-v8::StartupData V8ContextSnapshotImpl::TakeSnapshot() {
-  v8::Isolate* isolate = V8PerIsolateData::MainThreadIsolate();
+v8::StartupData V8ContextSnapshotImpl::TakeSnapshot(v8::Isolate* isolate) {
   CHECK(isolate);
   CHECK(isolate->IsCurrent());
   V8PerIsolateData* per_isolate_data = V8PerIsolateData::From(isolate);

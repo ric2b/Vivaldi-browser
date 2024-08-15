@@ -10,14 +10,13 @@ ts_library("ui") {
     "Context_test.ts",
     "Fragment_test.ts",
     "Geometry_test.ts",
-    "Icon_test.ts",
     "KeyboardShortcut_test.ts",
     "ListModel_test.ts",
     "ListWidget_test.ts",
     "ShortcutRegistry_test.ts",
-    "Treeoutline-keyboard_test.ts",
     "UIUtils_test.ts",
     "ViewLocation_test.ts",
+    "utils/DynamicTheming_test.ts",
     "utils/measured-scrollbar-width_test.ts",
   ]
 

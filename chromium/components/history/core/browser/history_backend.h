@@ -847,6 +847,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   //
   // This does not schedule database commits, it is intended to be used as a
   // subroutine for AddPage only. It also assumes the database is valid.
+  // Note that |app_is| is used for mobile only; |nullopt| on other platforms.
   std::pair<URLID, VisitID> AddPageVisit(
       const GURL& url,
       base::Time time,
@@ -862,6 +863,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       absl::optional<std::u16string> title = absl::nullopt,
       absl::optional<GURL> top_level_url = absl::nullopt,
       absl::optional<GURL> frame_url = absl::nullopt,
+      absl::optional<std::string> app_id = absl::nullopt,
       absl::optional<base::TimeDelta> visit_duration = absl::nullopt,
       absl::optional<std::string> originator_cache_guid = absl::nullopt,
       absl::optional<VisitID> originator_visit_id = absl::nullopt,
@@ -1061,9 +1063,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   bool scheduled_kill_db_ = false;  // Database is being killed due to error.
   std::unique_ptr<favicon::FaviconBackend> favicon_backend_;
 
-  // Manages expiration between the various databases.
-  ExpireHistoryBackend expirer_;
-
   // A commit has been scheduled to occur sometime in the future. We can check
   // !IsCancelled() to see if there is a commit scheduled in the future (note
   // that CancelableOnceClosure starts cancelled with the default constructor),
@@ -1098,6 +1097,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Used to determine if a URL is bookmarked; may be null.
   std::unique_ptr<HistoryBackendClient> backend_client_;
+
+  // Manages expiration between the various databases.
+  ExpireHistoryBackend expirer_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

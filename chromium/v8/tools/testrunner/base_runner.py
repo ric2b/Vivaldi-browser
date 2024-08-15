@@ -437,6 +437,7 @@ class BaseTestRunner(object):
 
     self.options.command_prefix = shlex.split(self.options.command_prefix)
     self.options.extra_flags = sum(list(map(shlex.split, self.options.extra_flags)), [])
+    self.options.extra_d8_flags = []
 
   def _process_options(self):
     pass # pragma: no cover
@@ -456,6 +457,10 @@ class BaseTestRunner(object):
           'allow_user_segv_handler=1',
           'allocator_may_return_null=1',
       ]
+      if self.build_config.component_build:
+        # Some abseil symbols are observed as defined more than once in
+        # component builds.
+        asan_options += ['detect_odr_violation=0']
       if not utils.GuessOS() in ['macos', 'windows']:
         # LSAN is not available on mac and windows.
         asan_options.append('detect_leaks=1')
@@ -533,7 +538,7 @@ class BaseTestRunner(object):
     variables = self._get_statusfile_variables()
 
     # Head generator with no elements
-    test_chain = testsuite.TestGenerator(0, [], [])
+    test_chain = testsuite.TestGenerator(0, [], [], [])
     for name in names:
       if self.options.verbose:
         print('>>> Loading test suite: %s' % name)
@@ -620,6 +625,7 @@ class BaseTestRunner(object):
     return TestConfig(
         command_prefix=self.options.command_prefix,
         extra_flags=self.options.extra_flags,
+        extra_d8_flags=self.options.extra_d8_flags,
         framework_name=self.framework_name,
         isolates=self.options.isolates,
         log_process_stats=self.options.json_test_results,

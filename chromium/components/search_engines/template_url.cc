@@ -39,6 +39,7 @@
 #include "components/search_engines/search_engine_utils.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/search_terms_data.h"
+#include "components/search_engines/template_url_data.h"
 #include "components/url_formatter/url_formatter.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/mime_util.h"
@@ -47,12 +48,6 @@
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/device_form_factor.h"
 #include "url/gurl.h"
-
-// Vivaldi
-#include "base/big_endian.h"
-#include "components/base32/base32.h"
-// End Vivaldi
-
 
 namespace {
 
@@ -215,6 +210,30 @@ std::string YandexSearchPathFromDeviceFormFactor() {
   return std::string();
 }
 
+// Returns true if `enterprise_engine` is strictly better than `other_engine`,
+// where `enterprise_engine` is a search engine created by the
+// `SiteSearchSettings` policy, and `other_engine` is a search engine not
+// created by Enterprise policy.
+bool IsEnterpriseSideSearchEngineBetterThanEngine(
+    const TemplateURL* enterprise_engine,
+    const TemplateURL* other_engine) {
+  // Keyword conflicts between search engines set by policy are handled when the
+  // policies are processed. At this point, `enterprise_engine` is created by
+  // the `SiteSearchSettings` policy, `other_engine` should have been created by
+  // something else, but not via policy.
+  CHECK_EQ(enterprise_engine->created_by_policy(),
+           TemplateURLData::CreatedByPolicy::kSiteSearch);
+  CHECK_EQ(other_engine->created_by_policy(),
+           TemplateURLData::CreatedByPolicy::kNoPolicy);
+
+  const std::u16string& keyword = enterprise_engine->keyword();
+  // Prefer `enterprise_engine` if the `keyword` starts with the "@" symbol.
+  // Otherwise, prefer `other_engine` if it has been manually edited by the
+  // user.
+  return (!keyword.empty() && keyword[0] == u'@') ||
+         other_engine->safe_for_autoreplace();
+}
+
 }  // namespace
 
 // TemplateURLRef::SearchTermsArgs --------------------------------------------
@@ -236,7 +255,6 @@ size_t TemplateURLRef::SearchTermsArgs::EstimateMemoryUsage() const {
 
   res += base::trace_event::EstimateMemoryUsage(search_terms);
   res += base::trace_event::EstimateMemoryUsage(original_query);
-  res += base::trace_event::EstimateMemoryUsage(assisted_query_stats);
   res += base::trace_event::EstimateMemoryUsage(current_page_url);
   res += base::trace_event::EstimateMemoryUsage(session_token);
   res += base::trace_event::EstimateMemoryUsage(prefetch_query);
@@ -813,16 +831,6 @@ bool TemplateURLRef::ParseParameter(size_t start,
     // We don't support these.
     if (!optional)
       url->insert(start, "1");
-  } else if (parameter == "bing:Referral") {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-    url->insert(start, "PC=ATVE&FORM=VEVA03");
-#elif BUILDFLAG(IS_WIN)
-    url->insert(start, "PC=ATVB&FORM=VRBO01");
-    replacements->push_back(Replacement(VIVALDI_BING_PTAG, start));
-#else  // Linux, Mac
-    url->insert(start, "PC=ATVB&FORM=VRBO02");
-    replacements->push_back(Replacement(VIVALDI_BING_PTAG, start));
-#endif
   } else if (parameter == "ddg:Referral") {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
     url->insert(start, "t=vivaldim");
@@ -1140,48 +1148,17 @@ std::string TemplateURLRef::HandleReplacements(
         DCHECK(!replacement.is_post_param);
         const size_t searchbox_stats_size =
             search_terms_args.searchbox_stats.ByteSizeLong();
-        if (!search_terms_args.assisted_query_stats.empty()) {
-          DCHECK(searchbox_stats_size > 0)
-              << "searchbox_stats must be set when assisted_query_stats is.";
-          // Get the base URL without substituting AQS and gs_lcrp to avoid
-          // infinite recursion and unwanted replacement respectively. We need
-          // the URL to find out if it meets all AQS requirements (e.g. HTTPS
-          // protocol check). See TemplateURLRef::SearchTermsArgs for more
-          // details.
-          SearchTermsArgs sanitized_search_terms_args(search_terms_args);
-          sanitized_search_terms_args.assisted_query_stats.clear();
-          // Clear the proto. Its empty state has a serialized size of zero.
-          sanitized_search_terms_args.searchbox_stats.Clear();
-          GURL base_url(ReplaceSearchTerms(sanitized_search_terms_args,
-                                           search_terms_data, nullptr));
-          if (base_url.SchemeIsCryptographic() &&
-              base::FeatureList::IsEnabled(
-                  omnibox::kReportAssistedQueryStats)) {
-            HandleReplacement("aqs", search_terms_args.assisted_query_stats,
-                              replacement, &url);
-            base::UmaHistogramCounts1000(
-                "Omnibox.AssistedQueryStats.Length",
-                static_cast<int>(
-                    search_terms_args.assisted_query_stats.length()));
-          }
-        }
-
         if (searchbox_stats_size > 0) {
-          DCHECK(!search_terms_args.assisted_query_stats.empty())
-              << "assisted_query_stats must be set when searchbox_stats is.";
-          // Get the base URL without substituting gs_lcrp and AQS to avoid
-          // infinite recursion and unwanted replacement respectively. We need
-          // the URL to find out if it meets all gs_lcrp requirements (e.g.
-          // HTTPS protocol check). See TemplateURLRef::SearchTermsArgs for more
-          // details.
+          // Get the base URL without substituting gs_lcrp to avoid infinite
+          // recursion and unwanted replacement respectively. We need the URL to
+          // find out if it meets all gs_lcrp requirements (e.g. HTTPS protocol
+          // check). See TemplateURLRef::SearchTermsArgs for more details.
           SearchTermsArgs sanitized_search_terms_args(search_terms_args);
-          sanitized_search_terms_args.assisted_query_stats.clear();
           // Clear the proto. Its empty state has a serialized size of zero.
           sanitized_search_terms_args.searchbox_stats.Clear();
           GURL base_url(ReplaceSearchTerms(sanitized_search_terms_args,
                                            search_terms_data, nullptr));
-          if (base_url.SchemeIsCryptographic() &&
-              base::FeatureList::IsEnabled(omnibox::kReportSearchboxStats)) {
+          if (base_url.SchemeIsCryptographic()) {
             TRACE_EVENT0(
                 "omnibox",
                 "TemplateURLRef::HandleReplacement:serialize_searchbox_stats");
@@ -1263,7 +1240,7 @@ std::string TemplateURLRef::HandleReplacements(
       case GOOGLE_ORIGINAL_QUERY_FOR_SUGGESTION:
         DCHECK(!replacement.is_post_param);
         if (search_terms_args.accepted_suggestion >= 0 ||
-            !search_terms_args.assisted_query_stats.empty()) {
+            search_terms_args.searchbox_stats.ByteSizeLong() > 0) {
           HandleReplacement("oq", base::UTF16ToUTF8(encoded_original_query),
                             replacement, &url);
         }
@@ -1499,28 +1476,6 @@ std::string TemplateURLRef::HandleReplacements(
         break;
       }
 
-      case VIVALDI_BING_PTAG: {
-        std::bitset<40> ptag_value;
-        /* /!\ These bits were used in previous versions with and are now
-               reserved with the following meanings:
-
-          0: PTAG has data about the adblocker state (bit 1-3 are valid)
-          1: The tracker blocker is enabled.
-          2: The adblocker is enabled.
-          3: Some extensions are installed.
-        */
-
-        char ptag_bytes[8];
-        base::WriteBigEndian(ptag_bytes, ptag_value.to_ullong());
-        std::string ptag = "ATVB";
-        ptag.append(
-            base32::Base32Encode(std::string_view(ptag_bytes + 3, 5),
-                                 base32::Base32EncodePolicy::OMIT_PADDING));
-
-        HandleReplacement("PTAG", ptag, replacement, &url);
-        break;
-      }
-
       default:
         NOTREACHED();
         break;
@@ -1581,14 +1536,43 @@ TemplateURL::TemplateURL(const TemplateURLData& data,
 TemplateURL::~TemplateURL() {
 }
 
-bool TemplateURL::IsBetterThanEngineWithConflictingKeyword(
+bool TemplateURL::IsBetterThanConflictingEngine(
     const TemplateURL* other) const {
   DCHECK(other);
+
+  auto is_ssp = [](const TemplateURL* turl) {
+    return turl->created_by_policy() ==
+           TemplateURLData::CreatedByPolicy::kSiteSearch;
+  };
+  auto no_policy = [](const TemplateURL* turl) {
+    return turl->created_by_policy() ==
+           TemplateURLData::CreatedByPolicy::kNoPolicy;
+  };
+
+  // Site search engines set by enterprise policy have different priority over
+  // existing search engines because we don't want to break current workflows
+  // for power users.
+  if (is_ssp(this) && no_policy(other)) {
+    return IsEnterpriseSideSearchEngineBetterThanEngine(this, other);
+  } else if (no_policy(this) && is_ssp(other)) {
+    return !IsEnterpriseSideSearchEngineBetterThanEngine(other, this);
+  } else if (is_ssp(this) && is_ssp(other)) {
+    // If both engines are created by the SiteSearchSettings policy, prefer the
+    // one that is featured. Otherwise, fallback to the comparison based on
+    // the signals below.
+    if (this->featured_by_policy() && !other->featured_by_policy()) {
+      return true;
+    } else if (!this->featured_by_policy() && other->featured_by_policy()) {
+      return false;
+    }
+  }
 
   auto get_sort_key = [](const TemplateURL* engine) {
     return std::make_tuple(
         // Policy-created engines always win over non-policy created engines.
-        engine->created_by_policy(),
+        // At this point, managed search engine should be created by DSP policy.
+        engine->created_by_policy() ==
+            TemplateURLData::CreatedByPolicy::kDefaultSearchProvider,
         // Policy-enforced engines always win over policy-recommended engines.
         engine->enforced_by_policy(),
         // The integral value of the type enum is used to sort next.
@@ -1742,7 +1726,13 @@ BuiltinEngineType TemplateURL::GetBuiltinEngineType() const {
       case TemplateURLStarterPackData::kTabs:
         return KEYWORD_MODE_STARTER_PACK_TABS;
       default:
-        NOTREACHED();
+        // In theory, this code path should never be reached.  However, it's
+        // possible that when expanding the starter pack, a new entry may
+        // persist in the database that does not yet exist in this version of
+        // chrome. (e.g. a user runs a newer version with the new starter pack
+        // entry, has sync on, which syncs to another login instance running an
+        // older version that hasn't received the new starter pack update yet).
+        // Realistically, this is not catastrophic.
         return KEYWORD_MODE_NON_BUILT_IN;
     }
   } else {

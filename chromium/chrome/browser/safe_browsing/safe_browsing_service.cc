@@ -29,6 +29,7 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service_factory.h"
 #include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
@@ -48,7 +49,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/safe_browsing/content/browser/client_side_phishing_model.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
 #include "components/safe_browsing/content/browser/triggers/trigger_manager.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
@@ -90,6 +90,10 @@
 #include "chrome/browser/safe_browsing/incident_reporting/binary_integrity_analyzer.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#endif
+
 using content::BrowserThread;
 
 namespace safe_browsing {
@@ -109,6 +113,21 @@ void PopulateDownloadWarningActions(download::DownloadItem* download,
       report->download_warning_actions_size());
 }
 #endif
+
+void OnGotCookies(
+    std::unique_ptr<mojo::Remote<network::mojom::CookieManager>> remote,
+    const std::vector<net::CanonicalCookie>& cookies) {
+  base::UmaHistogramBoolean("SafeBrowsing.HasCookieAtStartup2",
+                            !cookies.empty());
+  if (!cookies.empty()) {
+    base::TimeDelta age = base::Time::Now() - cookies.front().CreationDate();
+    // Cookies can be up to 6 months old. Using millisecond precision over such
+    // a long time period overflows numeric limits. Instead, use a counts
+    // histogram and lower granularity.
+    base::UmaHistogramCounts10000("SafeBrowsing.CookieAgeHours2",
+                                  age.InHours());
+  }
+}
 
 }  // namespace
 
@@ -425,12 +444,22 @@ void SafeBrowsingService::OnProfileAdded(Profile* profile) {
   // should always be more than the count of enhanced protection.
   UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Enhanced",
                         pref_service->GetBoolean(prefs::kSafeBrowsingEnhanced));
+
+  // Record the current enhanced protection pref state for regular profiles only
+  if (profiles::IsRegularUserProfile(profile)) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "SafeBrowsing.Pref.Enhanced.RegularProfile",
+        pref_service->GetBoolean(prefs::kSafeBrowsingEnhanced));
+  }
+
   // Extended Reporting metrics are handled together elsewhere.
   RecordExtendedReportingMetrics(*pref_service);
 
   SafeBrowsingMetricsCollectorFactory::GetForProfile(profile)->StartLogging();
 
   CreateServicesForProfile(profile);
+
+  RecordStartupCookieMetrics(profile);
 }
 
 void SafeBrowsingService::OnOffTheRecordProfileCreated(
@@ -476,6 +505,17 @@ void SafeBrowsingService::RefreshState() {
         estimated_extended_reporting_by_prefs_ = erl;
       }
     }
+
+    if (IsEnhancedProtectionEnabled(*pref.first)) {
+      if (pref.first->GetTime(prefs::kSafeBrowsingEsbEnabledTimestamp)
+              .is_null()) {
+        pref.first->SetTime(prefs::kSafeBrowsingEsbEnabledTimestamp,
+                            base::Time::Now());
+      }
+    } else {
+      pref.first->SetTime(prefs::kSafeBrowsingEsbEnabledTimestamp,
+                          base::Time());
+    }
   }
 
   if (enabled_by_prefs_) {
@@ -494,7 +534,7 @@ bool SafeBrowsingService::SendDownloadReport(
     download::DownloadItem* download,
     ClientSafeBrowsingReportRequest::ReportType report_type,
     bool did_proceed,
-    absl::optional<bool> show_download_in_folder) {
+    std::optional<bool> show_download_in_folder) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   Profile* profile = Profile::FromBrowserContext(
       content::DownloadItemUtils::GetBrowserContext(download));
@@ -511,8 +551,7 @@ bool SafeBrowsingService::SendDownloadReport(
   if (!token.empty()) {
     report->set_token(token);
   }
-  if (IsExtendedReportingEnabled(*profile->GetPrefs()) &&
-      base::FeatureList::IsEnabled(kSafeBrowsingCsbrrNewDownloadTrigger)) {
+  if (IsExtendedReportingEnabled(*profile->GetPrefs())) {
     PopulateDownloadWarningActions(download, report.get());
   }
   return ChromePingManagerFactory::GetForBrowserContext(profile)
@@ -525,8 +564,7 @@ bool SafeBrowsingService::SendPhishyInteractionsReport(
     const GURL& url,
     const GURL& page_url,
     const PhishySiteInteractionMap& phishy_interaction_data) {
-  if (!base::FeatureList::IsEnabled(kAntiPhishingTelemetry) || !profile ||
-      !IsExtendedReportingEnabled(*profile->GetPrefs())) {
+  if (!profile || !IsExtendedReportingEnabled(*profile->GetPrefs())) {
     return false;
   }
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -578,6 +616,27 @@ SafeBrowsingService::CreateNetworkContextParams() {
   }
   proxy_config_monitor_->AddToNetworkContextParams(params.get());
   return params;
+}
+
+void SafeBrowsingService::RecordStartupCookieMetrics(Profile* profile) {
+  // Exclude system profiles.
+  if (!profile->IsRegularProfile() && !profile->IsIncognitoProfile()) {
+    return;
+  }
+  network::mojom::NetworkContext* network_context = GetNetworkContext(profile);
+  if (!network_context) {
+    return;
+  }
+  auto cookie_manager_remote =
+      std::make_unique<mojo::Remote<network::mojom::CookieManager>>();
+  network_context->GetCookieManager(
+      cookie_manager_remote->BindNewPipeAndPassReceiver());
+
+  mojo::Remote<network::mojom::CookieManager>* cookie_manager_raw =
+      cookie_manager_remote.get();
+  (*cookie_manager_raw)
+      ->GetAllCookies(
+          base::BindOnce(&OnGotCookies, std::move(cookie_manager_remote)));
 }
 
 // The default SafeBrowsingServiceFactory.  Global, made a singleton so we

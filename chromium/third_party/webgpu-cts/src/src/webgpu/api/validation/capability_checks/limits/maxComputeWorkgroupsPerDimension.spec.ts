@@ -7,7 +7,7 @@ const kCreateComputePipelineTypes = [
   'createComputePipeline',
   'createComputePipelineAsync',
 ] as const;
-type CreateComputePipelineType = typeof kCreateComputePipelineTypes[number];
+type CreateComputePipelineType = (typeof kCreateComputePipelineTypes)[number];
 
 async function createComputePipeline(
   device: GPUDevice,

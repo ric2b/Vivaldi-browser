@@ -20,7 +20,7 @@ namespace autofill {
 class Iban : public AutofillDataModel {
  public:
   using Guid = base::StrongAlias<class GuidTag, std::string>;
-  using InstrumentId = base::StrongAlias<class InstrumentIdTag, std::string>;
+  using InstrumentId = base::StrongAlias<class InstrumentIdTag, int64_t>;
 
   enum RecordType {
     // An IBAN extracted from a submitted form, whose record type is currently
@@ -76,11 +76,11 @@ class Iban : public AutofillDataModel {
   AutofillMetadata GetMetadata() const override;
   bool SetMetadata(const AutofillMetadata& metadata) override;
 
-  std::u16string GetRawInfo(ServerFieldType type) const override;
-  void SetRawInfoWithVerificationStatus(ServerFieldType type,
+  std::u16string GetRawInfo(FieldType type) const override;
+  void SetRawInfoWithVerificationStatus(FieldType type,
                                         const std::u16string& value,
                                         VerificationStatus status) override;
-  void GetSupportedTypes(ServerFieldTypeSet* supported_types) const override;
+  void GetSupportedTypes(FieldTypeSet* supported_types) const override;
 
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
@@ -93,12 +93,11 @@ class Iban : public AutofillDataModel {
 
   // Equality operators compare GUIDs, origins, |value_| and |nickname_|.
   bool operator==(const Iban& iban) const;
-  bool operator!=(const Iban& iban) const;
 
   void set_identifier(const absl::variant<Guid, InstrumentId>& identifier);
 
   const std::string& guid() const;
-  const std::string& instrument_id() const;
+  int64_t instrument_id() const;
 
   // Returns the value (the actual bank account number) of IBAN.
   const std::u16string& value() const { return value_; }
@@ -125,6 +124,10 @@ class Iban : public AutofillDataModel {
   // For local IBANs, checks on `IsValid(value_)`. Always returns true for
   // server-based IBANs because server-based IBANs don't store the full `value`.
   bool IsValid();
+
+  // Logs the number of days since this IBAN was last used, increments its use
+  // count, and updates its last used date to today.
+  void RecordAndLogUse();
 
   // Construct an IBAN identifier from `prefix_`, `suffix_`, `length_` (and
   // `value_` if it's a local-based IBAN) by the following rules:
@@ -178,6 +181,8 @@ class Iban : public AutofillDataModel {
   std::u16string suffix_;
   int length_ = 0;
 };
+
+std::ostream& operator<<(std::ostream& os, const Iban& iban);
 
 }  // namespace autofill
 

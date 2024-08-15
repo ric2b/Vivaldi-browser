@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "base/files/file.h"
@@ -48,7 +49,7 @@ namespace flat_rule = url_pattern_index::flat;
 // url_pattern_index.fbs. Whenever an extension with an indexed ruleset format
 // version different from the one currently used by Chrome is loaded, the
 // extension ruleset will be reindexed.
-constexpr int kIndexedRulesetFormatVersion = 29;
+constexpr int kIndexedRulesetFormatVersion = 30;
 
 // This static assert is meant to catch cases where
 // url_pattern_index::kUrlPatternIndexFormatVersion is incremented without
@@ -91,7 +92,7 @@ std::string GetVersionHeader() {
 // Helper to ensure pointers to string literals can be used with
 // base::JoinString.
 std::string JoinString(base::span<const char* const> parts) {
-  std::vector<base::StringPiece> parts_piece;
+  std::vector<std::string_view> parts_piece;
   for (const char* part : parts)
     parts_piece.push_back(part);
   return base::JoinString(parts_piece, ", ");
@@ -144,8 +145,8 @@ void OverrideGetChecksumForTest(int checksum) {
 std::string GetIndexedRulesetData(base::span<const uint8_t> data) {
   return base::StrCat(
       {GetVersionHeader(),
-       base::StringPiece(reinterpret_cast<const char*>(data.data()),
-                         data.size())});
+       std::string_view(reinterpret_cast<const char*>(data.data()),
+                        data.size())});
 }
 
 bool PersistIndexedRuleset(const base::FilePath& path,
@@ -316,9 +317,8 @@ re2::RE2::Options CreateRE2Options(bool is_case_sensitive,
 
   options.set_log_errors(false);
 
-  // Limit the maximum memory per regex to 2 Kb. This means given 1024 rules,
-  // the total usage would be 2 Mb.
-  options.set_max_mem(2 << 10);
+  // Limit the maximum memory per regex.
+  options.set_max_mem(kRegexMaxMemKb << 10);
 
   return options;
 }
@@ -490,7 +490,7 @@ size_t GetEnabledStaticRuleCount(const CompositeMatcher* composite_matcher) {
 }
 
 bool HasDNRFeedbackPermission(const Extension* extension,
-                              const absl::optional<int>& tab_id) {
+                              const std::optional<int>& tab_id) {
   const PermissionsData* permissions_data = extension->permissions_data();
   return tab_id.has_value()
              ? permissions_data->HasAPIPermissionForTab(
@@ -681,6 +681,33 @@ std::string GetParseError(ParseResult error_reason, int rule_id) {
     case ParseResult::ERROR_TAB_ID_DUPLICATED:
       return ErrorUtils::FormatErrorMessage(kErrorTabIdDuplicated,
                                             base::NumberToString(rule_id));
+    case ParseResult::ERROR_EMPTY_RESPONSE_HEADER_MATCHING_LIST:
+      return ErrorUtils::FormatErrorMessage(kErrorEmptyList,
+                                            base::NumberToString(rule_id),
+                                            kMatchResponseHeadersPath);
+    case ParseResult::ERROR_EMPTY_EXCLUDED_RESPONSE_HEADER_MATCHING_LIST:
+      return ErrorUtils::FormatErrorMessage(kErrorEmptyList,
+                                            base::NumberToString(rule_id),
+                                            kMatchExcludedResponseHeadersPath);
+    case ParseResult::ERROR_INVALID_MATCHING_RESPONSE_HEADER_NAME:
+      return ErrorUtils::FormatErrorMessage(kErrorInvalidMatchingHeaderName,
+                                            base::NumberToString(rule_id),
+                                            kMatchResponseHeadersPath);
+    case ParseResult::ERROR_INVALID_MATCHING_EXCLUDED_RESPONSE_HEADER_NAME:
+      return ErrorUtils::FormatErrorMessage(kErrorInvalidMatchingHeaderName,
+                                            base::NumberToString(rule_id),
+                                            kMatchExcludedResponseHeadersPath);
+    case ParseResult::ERROR_INVALID_MATCHING_RESPONSE_HEADER_VALUE:
+      return ErrorUtils::FormatErrorMessage(kErrorInvalidMatchingHeaderValue,
+                                            base::NumberToString(rule_id),
+                                            kMatchResponseHeadersPath);
+    case ParseResult::ERROR_MATCHING_RESPONSE_HEADER_DUPLICATED:
+      return ErrorUtils::FormatErrorMessage(kErrorResponseHeaderDuplicated,
+                                            base::NumberToString(rule_id));
+    case ParseResult::ERROR_RESPONSE_HEADER_RULE_CANNOT_MODIFY_REQUEST_HEADERS:
+      return ErrorUtils::FormatErrorMessage(
+          kErrorResponseHeaderRuleCannotModifyRequestHeaders,
+          base::NumberToString(rule_id));
   }
   NOTREACHED();
   return std::string();
@@ -773,7 +800,7 @@ flat_rule::RequestMethod GetRequestMethod(bool http_or_https,
 
   using net::HttpRequestHeaders;
   static const base::NoDestructor<
-      base::flat_map<base::StringPiece, flat_rule::RequestMethod>>
+      base::flat_map<std::string_view, flat_rule::RequestMethod>>
       kRequestMethods(
           {{HttpRequestHeaders::kDeleteMethod, flat_rule::RequestMethod_DELETE},
            {HttpRequestHeaders::kGetMethod, flat_rule::RequestMethod_GET},

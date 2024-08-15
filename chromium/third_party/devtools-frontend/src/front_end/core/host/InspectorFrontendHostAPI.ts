@@ -4,11 +4,10 @@
 
 import type * as Platform from '../../core/platform/platform.js';
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   AppendedToURL = 'appendedToURL',
   CanceledSaveURL = 'canceledSaveURL',
+  ColorThemeChanged = 'colorThemeChanged',
   ContextMenuCleared = 'contextMenuCleared',
   ContextMenuItemSelected = 'contextMenuItemSelected',
   DeviceCountUpdated = 'deviceCountUpdated',
@@ -37,11 +36,10 @@ export enum Events {
   ShowPanel = 'showPanel',
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export const EventDescriptors = [
   [Events.AppendedToURL, 'appendedToURL', ['url']],
   [Events.CanceledSaveURL, 'canceledSaveURL', ['url']],
+  [Events.ColorThemeChanged, 'colorThemeChanged', []],
   [Events.ContextMenuCleared, 'contextMenuCleared', []],
   [Events.ContextMenuItemSelected, 'contextMenuItemSelected', ['id']],
   [Events.DeviceCountUpdated, 'deviceCountUpdated', ['count']],
@@ -187,6 +185,7 @@ export interface KeyDownEvent {
 export type EventTypes = {
   [Events.AppendedToURL]: Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString,
   [Events.CanceledSaveURL]: Platform.DevToolsPath.UrlString,
+  [Events.ColorThemeChanged]: void,
   [Events.ContextMenuCleared]: void,
   [Events.ContextMenuItemSelected]: number,
   [Events.DeviceCountUpdated]: number,
@@ -361,6 +360,7 @@ export interface ContextMenuDescriptor {
   enabled?: boolean;
   checked?: boolean;
   subItems?: ContextMenuDescriptor[];
+  jslogContext?: string;
 }
 export interface LoadNetworkResourceResult {
   statusCode: number;
@@ -407,14 +407,13 @@ export interface SyncInformation {
  * front_end/devtools_compatibility.js
  * @readonly
  */
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum EnumeratedHistogram {
+export const enum EnumeratedHistogram {
   ActionTaken = 'DevTools.ActionTaken',
   BreakpointWithConditionAdded = 'DevTools.BreakpointWithConditionAdded',
   BreakpointEditDialogRevealedFrom = 'DevTools.BreakpointEditDialogRevealedFrom',
   PanelClosed = 'DevTools.PanelClosed',
   PanelShown = 'DevTools.PanelShown',
+  PanelShownInLocation = 'DevTools.PanelShownInLocation',
   SidebarPaneShown = 'DevTools.SidebarPaneShown',
   KeyboardShortcutFired = 'DevTools.KeyboardShortcutFired',
   IssueCreated = 'DevTools.IssueCreated',
@@ -463,4 +462,8 @@ export enum EnumeratedHistogram {
   AnimationPointDragged = 'DevTools.AnimationPointDragged',
   LegacyResourceTypeFilterNumberOfSelectedChanged = 'DevTools.LegacyResourceTypeFilterNumberOfSelectedChanged',
   LegacyResourceTypeFilterItemSelected = 'DevTools.LegacyResourceTypeFilterItemSelected',
+  ResourceTypeFilterNumberOfSelectedChanged = 'DevTools.ResourceTypeFilterNumberOfSelectedChanged',
+  ResourceTypeFilterItemSelected = 'DevTools.ResourceTypeFilterItemSelected',
+  NetworkPanelMoreFiltersNumberOfSelectedChanged = 'DevTools.NetworkPanelMoreFiltersNumberOfSelectedChanged',
+  NetworkPanelMoreFiltersItemSelected = 'DevTools.NetworkPanelMoreFiltersItemSelected',
 }

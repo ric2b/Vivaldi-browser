@@ -799,6 +799,7 @@ static int mov_read_esds(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
+    AVPacketSideData *sd;
     enum AVAudioServiceType *ast;
     int ac3info, acmod, lfeon, bsmod;
     uint64_t mask;
@@ -807,11 +808,14 @@ static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    ast = (enum AVAudioServiceType*)av_stream_new_side_data(st, AV_PKT_DATA_AUDIO_SERVICE_TYPE,
-                                                            sizeof(*ast));
-    if (!ast)
+    sd = av_packet_side_data_new(&st->codecpar->coded_side_data,
+                                 &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_AUDIO_SERVICE_TYPE,
+                                 sizeof(*ast), 0);
+    if (!sd)
         return AVERROR(ENOMEM);
 
+    ast = (enum AVAudioServiceType*)sd->data;
     ac3info = avio_rb24(pb);
     bsmod = (ac3info >> 14) & 0x7;
     acmod = (ac3info >> 11) & 0x7;
@@ -833,6 +837,7 @@ static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 static int mov_read_dec3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
+    AVPacketSideData *sd;
     enum AVAudioServiceType *ast;
     int eac3info, acmod, lfeon, bsmod;
     uint64_t mask;
@@ -841,10 +846,14 @@ static int mov_read_dec3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    ast = (enum AVAudioServiceType*)av_stream_new_side_data(st, AV_PKT_DATA_AUDIO_SERVICE_TYPE,
-                                                            sizeof(*ast));
-    if (!ast)
+    sd = av_packet_side_data_new(&st->codecpar->coded_side_data,
+                                 &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_AUDIO_SERVICE_TYPE,
+                                 sizeof(*ast), 0);
+    if (!sd)
         return AVERROR(ENOMEM);
+
+    ast = (enum AVAudioServiceType*)sd->data;
 
     /* No need to parse fields for additional independent substreams and its
      * associated dependent substreams since libavcodec's E-AC-3 decoder
@@ -1213,6 +1222,10 @@ static int mov_read_ftyp(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     int ret = ffio_read_size(pb, type, 4);
     if (ret < 0)
         return ret;
+    if (c->fc->nb_streams) {
+        av_log(c->fc, AV_LOG_DEBUG, "Ignoring duplicate FTYP\n");
+        return 0;
+    }
 
     if (strcmp(type, "qt  "))
         c->isom = 1;
@@ -1747,7 +1760,6 @@ static int mov_read_pcmc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 static int mov_read_colr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
-    uint8_t *icc_profile;
     char color_parameter_type[5] = { 0 };
     uint16_t color_primaries, color_trc, color_matrix;
     int ret;
@@ -1768,10 +1780,13 @@ static int mov_read_colr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     }
 
     if (!strncmp(color_parameter_type, "prof", 4)) {
-        icc_profile = av_stream_new_side_data(st, AV_PKT_DATA_ICC_PROFILE, atom.size - 4);
-        if (!icc_profile)
+        AVPacketSideData *sd = av_packet_side_data_new(&st->codecpar->coded_side_data,
+                                                       &st->codecpar->nb_coded_side_data,
+                                                       AV_PKT_DATA_ICC_PROFILE,
+                                                       atom.size - 4, 0);
+        if (!sd)
             return AVERROR(ENOMEM);
-        ret = ffio_read_size(pb, icc_profile, atom.size - 4);
+        ret = ffio_read_size(pb, sd->data, atom.size - 4);
         if (ret < 0)
             return ret;
     } else {
@@ -4634,6 +4649,10 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     MOVStreamContext *sc;
     int ret;
 
+    if (c->is_still_picture_avif) {
+        return AVERROR_INVALIDDATA;
+    }
+
     st = avformat_new_stream(c->fc, NULL);
     if (!st) return AVERROR(ENOMEM);
     st->id = -1;
@@ -4910,6 +4929,8 @@ static int avif_add_stream(MOVContext *c, int item_id)
     MOVStreamContext *sc;
     AVStream *st;
     int item_index = -1;
+    if (c->fc->nb_streams)
+        return AVERROR_INVALIDDATA;
     for (int i = 0; i < c->avif_info_size; i++)
         if (c->avif_info[i].item_id == item_id) {
             item_index = i;
@@ -6858,8 +6879,9 @@ static int mov_read_pssh(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     AVEncryptionInitInfo *info, *old_init_info;
     uint8_t **key_ids;
     AVStream *st;
-    uint8_t *side_data, *extra_data, *old_side_data;
-    size_t side_data_size, old_side_data_size;
+    const AVPacketSideData *old_side_data;
+    uint8_t *side_data, *extra_data;
+    size_t side_data_size;
     int ret = 0;
     unsigned int version, kid_count, extra_data_size, alloc_size = 0;
 
@@ -6937,9 +6959,10 @@ static int mov_read_pssh(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     info->data_size = extra_data_size;
 
     // If there is existing initialization data, append to the list.
-    old_side_data = av_stream_get_side_data(st, AV_PKT_DATA_ENCRYPTION_INIT_INFO, &old_side_data_size);
+    old_side_data = av_packet_side_data_get(st->codecpar->coded_side_data, st->codecpar->nb_coded_side_data,
+                                            AV_PKT_DATA_ENCRYPTION_INIT_INFO);
     if (old_side_data) {
-        old_init_info = av_encryption_init_info_get_side_data(old_side_data, old_side_data_size);
+        old_init_info = av_encryption_init_info_get_side_data(old_side_data->data, old_side_data->size);
         if (old_init_info) {
             // Append to the end of the list.
             for (AVEncryptionInitInfo *cur = old_init_info;; cur = cur->next) {
@@ -6961,9 +6984,10 @@ static int mov_read_pssh(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         ret = AVERROR(ENOMEM);
         goto finish;
     }
-    ret = av_stream_add_side_data(st, AV_PKT_DATA_ENCRYPTION_INIT_INFO,
-                                  side_data, side_data_size);
-    if (ret < 0)
+    if (!av_packet_side_data_add(&st->codecpar->coded_side_data,
+                                 &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_ENCRYPTION_INIT_INFO,
+                                 side_data, side_data_size, 0))
         av_free(side_data);
 
 finish:
@@ -8743,46 +8767,42 @@ static int mov_read_header(AVFormatContext *s)
             break;
         case AVMEDIA_TYPE_VIDEO:
             if (sc->display_matrix) {
-                err = av_stream_add_side_data(st, AV_PKT_DATA_DISPLAYMATRIX, (uint8_t*)sc->display_matrix,
-                                              sizeof(int32_t) * 9);
-                if (err < 0)
-                    return err;
+                if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                             AV_PKT_DATA_DISPLAYMATRIX,
+                                             (uint8_t*)sc->display_matrix, sizeof(int32_t) * 9, 0))
+                    return AVERROR(ENOMEM);
 
                 sc->display_matrix = NULL;
             }
             if (sc->stereo3d) {
-                err = av_stream_add_side_data(st, AV_PKT_DATA_STEREO3D,
-                                              (uint8_t *)sc->stereo3d,
-                                              sizeof(*sc->stereo3d));
-                if (err < 0)
-                    return err;
+                if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                             AV_PKT_DATA_STEREO3D,
+                                             (uint8_t *)sc->stereo3d, sizeof(*sc->stereo3d), 0))
+                    return AVERROR(ENOMEM);
 
                 sc->stereo3d = NULL;
             }
             if (sc->spherical) {
-                err = av_stream_add_side_data(st, AV_PKT_DATA_SPHERICAL,
-                                              (uint8_t *)sc->spherical,
-                                              sc->spherical_size);
-                if (err < 0)
-                    return err;
+                if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                             AV_PKT_DATA_SPHERICAL,
+                                                 (uint8_t *)sc->spherical, sc->spherical_size, 0))
+                    return AVERROR(ENOMEM);
 
                 sc->spherical = NULL;
             }
             if (sc->mastering) {
-                err = av_stream_add_side_data(st, AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
-                                              (uint8_t *)sc->mastering,
-                                              sizeof(*sc->mastering));
-                if (err < 0)
-                    return err;
+                if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                             AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
+                                             (uint8_t *)sc->mastering, sizeof(*sc->mastering), 0))
+                    return AVERROR(ENOMEM);
 
                 sc->mastering = NULL;
             }
             if (sc->coll) {
-                err = av_stream_add_side_data(st, AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
-                                              (uint8_t *)sc->coll,
-                                              sc->coll_size);
-                if (err < 0)
-                    return err;
+                if (!av_packet_side_data_add(&st->codecpar->coded_side_data, &st->codecpar->nb_coded_side_data,
+                                             AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
+                                             (uint8_t *)sc->coll, sc->coll_size, 0))
+                    return AVERROR(ENOMEM);
 
                 sc->coll = NULL;
             }
@@ -8812,12 +8832,13 @@ static AVIndexEntry *mov_find_next_sample(AVFormatContext *s, AVStream **st)
         if (msc->pb && msc->current_sample < avsti->nb_index_entries) {
             AVIndexEntry *current_sample = &avsti->index_entries[msc->current_sample];
             int64_t dts = av_rescale(current_sample->timestamp, AV_TIME_BASE, msc->time_scale);
+            uint64_t dtsdiff = best_dts > dts ? best_dts - (uint64_t)dts : ((uint64_t)dts - best_dts);
             av_log(s, AV_LOG_TRACE, "stream %d, sample %d, dts %"PRId64"\n", i, msc->current_sample, dts);
             if (!sample || (no_interleave && current_sample->pos < sample->pos) ||
                 ((s->pb->seekable & AVIO_SEEKABLE_NORMAL) &&
                  ((msc->pb != s->pb && dts < best_dts) || (msc->pb == s->pb && dts != AV_NOPTS_VALUE &&
-                 ((FFABS(best_dts - dts) <= AV_TIME_BASE && current_sample->pos < sample->pos) ||
-                  (FFABS(best_dts - dts) > AV_TIME_BASE && dts < best_dts)))))) {
+                 ((dtsdiff <= AV_TIME_BASE && current_sample->pos < sample->pos) ||
+                  (dtsdiff > AV_TIME_BASE && dts < best_dts)))))) {
                 sample = current_sample;
                 best_dts = dts;
                 *st = avst;
@@ -9004,7 +9025,7 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
         pkt->flags |= AV_PKT_FLAG_DISCARD;
     }
     if (sc->ctts_data && sc->ctts_index < sc->ctts_count) {
-        pkt->pts = pkt->dts + sc->dts_shift + sc->ctts_data[sc->ctts_index].duration;
+        pkt->pts = av_sat_add64(pkt->dts, av_sat_add64(sc->dts_shift, sc->ctts_data[sc->ctts_index].duration));
         /* update ctts context */
         sc->ctts_sample++;
         if (sc->ctts_index < sc->ctts_count &&

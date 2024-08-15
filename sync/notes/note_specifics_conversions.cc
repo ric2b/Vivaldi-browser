@@ -109,6 +109,17 @@ std::u16string NodeTitleFromSpecifics(
   return base::UTF8ToUTF16(node_title);
 }
 
+absl::optional<base::Time> NodeLastModificationTimeFromSpecifics(
+    const sync_pb::NotesSpecifics& specifics) {
+  if (specifics.has_last_modification_time_us()) {
+    return base::Time::FromDeltaSinceWindowsEpoch(
+        // Use FromDeltaSinceWindowsEpoch because last_modification_time_us
+        // has always used the Windows epoch.
+        base::Microseconds(specifics.last_modification_time_us()));
+  }
+  return absl::nullopt;
+}
+
 void MoveAllChildren(NoteModelView* model,
                      const vivaldi::NoteNode* old_parent,
                      const vivaldi::NoteNode* new_parent) {
@@ -194,6 +205,8 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
   notes_specifics->set_full_title(node_title);
   notes_specifics->set_creation_time_us(
       node->GetCreationTime().ToDeltaSinceWindowsEpoch().InMicroseconds());
+  notes_specifics->set_last_modification_time_us(
+      node->GetLastModificationTime().ToDeltaSinceWindowsEpoch().InMicroseconds());
   *notes_specifics->mutable_unique_position() = unique_position;
 
   return specifics;
@@ -222,13 +235,19 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
       // always used the Windows epoch.
       base::Microseconds(creation_time_us));
 
+  auto last_modification_time =
+      NodeLastModificationTimeFromSpecifics(specifics);
+  if (!last_modification_time) {
+    last_modification_time = creation_time;
+  }
+
   const vivaldi::NoteNode* node;
   switch (specifics.special_node_type()) {
     case sync_pb::NotesSpecifics::NORMAL:
       node = model->AddNote(parent, index, NodeTitleFromSpecifics(specifics),
                             GURL(specifics.url()),
                             base::UTF8ToUTF16(specifics.content()),
-                            creation_time, guid);
+                            creation_time, last_modification_time, guid);
       return node;
     case sync_pb::NotesSpecifics::SEPARATOR:
       return model->AddSeparator(parent, index,
@@ -240,7 +259,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
           GURL(specifics.url()), specifics.content(), creation_time, guid);
     case sync_pb::NotesSpecifics::FOLDER:
       return model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
-                              creation_time, guid);
+                              creation_time, last_modification_time, guid);
   }
 
   NOTREACHED();
@@ -264,6 +283,10 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   }
 
   model->SetTitle(node, NodeTitleFromSpecifics(specifics));
+  if (const auto last_modification_time =
+          NodeLastModificationTimeFromSpecifics(specifics)) {
+    model->SetLastModificationTime(node, *last_modification_time);
+  }
 }
 
 sync_pb::NotesSpecifics::VivaldiSpecialNotesType GetProtoTypeFromNoteNode(
@@ -301,9 +324,10 @@ const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
 
   const vivaldi::NoteNode* new_node = nullptr;
   if (node->is_folder()) {
-    new_node = model->AddFolder(
-        node->parent(), node->parent()->GetIndexOf(node).value(),
-        node->GetTitle(), node->GetCreationTime(), guid);
+    new_node = model->AddFolder(node->parent(),
+                                node->parent()->GetIndexOf(node).value(),
+                                node->GetTitle(), node->GetCreationTime(),
+                                node->GetLastModificationTime(), guid);
     MoveAllChildren(model, node, new_node);
   } else if (node->is_separator()) {
     new_node = model->AddSeparator(
@@ -315,10 +339,10 @@ const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
         node->GetTitle(), node->GetURL(),
         base::UTF16ToASCII(node->GetContent()), node->GetCreationTime(), guid);
   } else {
-    new_node =
-        model->AddNote(node->parent(), node->parent()->GetIndexOf(node).value(),
-                       node->GetTitle(), node->GetURL(), node->GetContent(),
-                       node->GetCreationTime(), guid);
+    new_node = model->AddNote(
+        node->parent(), node->parent()->GetIndexOf(node).value(),
+        node->GetTitle(), node->GetURL(), node->GetContent(),
+        node->GetCreationTime(), node->GetLastModificationTime(), guid);
     MoveAllChildren(model, node, new_node);
   }
   model->Remove(node);

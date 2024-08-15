@@ -7,7 +7,8 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
-#include "chrome/services/sharing/nearby/platform/ble_v2_peripheral.h"
+#include "chrome/services/sharing/nearby/common/nearby_features.h"
+#include "chrome/services/sharing/nearby/platform/ble_v2_remote_peripheral.h"
 #include "third_party/nearby/src/internal/platform/byte_array.h"
 #include "third_party/nearby/src/internal/platform/implementation/ble_v2.h"
 
@@ -205,8 +206,10 @@ std::unique_ptr<api::ble_v2::BleSocket> BleV2Medium::Connect(
 }
 
 bool BleV2Medium::IsExtendedAdvertisementsAvailable() {
-  NOTIMPLEMENTED();
-  return false;
+  // TODO(b/310269227): Also check hardware/chipset support for extended
+  // advertising; both the feature flag AND hardware support must be true to
+  // return true.
+  return features::IsNearbyBleV2ExtendedAdvertisingEnabled();
 }
 
 bool BleV2Medium::GetRemotePeripheral(const std::string& mac_address,
@@ -273,16 +276,16 @@ void BleV2Medium::DeviceAdded(bluetooth::mojom::DeviceInfoPtr device) {
   }
 
   // Add a new or update the existing discovered peripheral. Note: Because
-  // BleV2Peripherals are passed by reference to NearbyConnections, if a
-  // BleV2Peripheral already exists with the given address, the reference should
-  // not be invalidated, the update functions should be called instead.
+  // BleV2RemotePeripherals are passed by reference to NearbyConnections, if a
+  // BleV2RemotePeripheral already exists with the given address, the reference
+  // should not be invalidated, the update functions should be called instead.
   const std::string& address = device->address;
   auto* existing_ble_peripheral = GetDiscoveredBlePeripheral(address);
   if (existing_ble_peripheral) {
     existing_ble_peripheral->UpdateDeviceInfo(std::move(device));
   } else {
     discovered_ble_peripherals_map_.emplace(
-        address, chrome::BleV2Peripheral(std::move(device)));
+        address, chrome::BleV2RemotePeripheral(std::move(device)));
   }
 
   for (const auto& service_uuid : bluetooth_service_set) {
@@ -298,7 +301,7 @@ void BleV2Medium::DeviceAdded(bluetooth::mojom::DeviceInfoPtr device) {
           session_id_to_scanning_callback_map_.end()) {
         continue;
       }
-      // Fetch the BleV2Peripheral with the same `address` again because
+      // Fetch the BleV2RemotePeripheral with the same `address` again because
       // previously fetched pointers may have been invalidated while iterating
       // through the IDs.
       auto* ble_peripheral = GetDiscoveredBlePeripheral(address);
@@ -330,7 +333,7 @@ bool BleV2Medium::IsScanning() {
          !session_id_to_scanning_callback_map_.empty();
 }
 
-chrome::BleV2Peripheral* BleV2Medium::GetDiscoveredBlePeripheral(
+chrome::BleV2RemotePeripheral* BleV2Medium::GetDiscoveredBlePeripheral(
     const std::string& address) {
   auto it = discovered_ble_peripherals_map_.find(address);
   return it == discovered_ble_peripherals_map_.end() ? nullptr : &it->second;

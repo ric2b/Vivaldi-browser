@@ -6,8 +6,7 @@
 <translation id="1110994991967754504">Selecione uma permissão para <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> encerrou a conexão inesperadamente.</translation>
 <translation id="1161325031994447685">Conectar-se à rede Wi-Fi novamente</translation>
-<translation id="1175364870820465910">&amp;Imprimir...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Excluir os cookies<ph name="END_LINK" /></translation>
+<translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1375198122581997741">Sobre a Versão</translation>
 <translation id="139305205187523129">Nenhum dado foi enviado por <ph name="HOST_NAME" />.</translation>
 <translation id="1559528461873125649">Arquivo ou diretório não encontrado</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Tente entrar em contato com o administrador do sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este site contém programas perigosos</translation>
-<translation id="1916770123977586577">Para aplicar as configurações atualizadas a este site, recarregue a página</translation>
 <translation id="1974060860693918893">Avançado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificar o proxy e o firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> (<ph name="JURISDICTION" />)</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">É possível que invasores consigam ver as imagens que você está olhando nesse site e as modifiquem para enganar você.</translation>
 <translation id="2356070529366658676">Perguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
+<translation id="2388886110302389394">Abrir página em uma nova janela privada (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Esta página foi bloqueada por uma extensão</translation>
 <translation id="2501278716633472235">Voltar</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Fazer login</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
+<translation id="4075123085690634698">Abrir página numa nova janela privada (⇧⌘N)</translation>
 <translation id="4075732493274867456">O cliente e o servidor não são compatíveis com uma versão do protocolo SSL comum ou com o pacote de criptografia.</translation>
 <translation id="4116663294526079822">Sempre permitir neste site</translation>
 <translation id="4130226655945681476">Verificar o modem, o roteador e os cabos da rede</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Seu dispositivo entrou em suspensão.</translation>
 <translation id="6890956352250146925">Opções para cookies e dados do site</translation>
 <translation id="6897140037006041989">User-Agent</translation>
+<translation id="6957624206566198865">Abra a página em uma nova aba privada</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este site contém malware</translation>
 <translation id="7096937462164235847">A identidade deste site não foi verificada.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676">O site <ph name="SITE" /> geralmente usa criptografia para proteger suas informações. Quando o Vivaldi tentou se conectar a <ph name="SITE" /> dessa vez, o website retornou credenciais incomuns e incorretas. Isso pode acontecer quando um invasor está fingindo ser <ph name="SITE" /> ou quando uma tela de login por Wi-Fi interrompeu a conexão. Suas informações ainda estão protegidas, porque o Vivaldi interrompeu a conexão antes que os dados fossem trocados.</translation>
 <translation id="7878562273885520351">Sua senha pode estar comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
+<translation id="7953236668995583915">Recarregue a página para aplicar as configurações atualizadas ao site</translation>
 <translation id="8025119109950072390">Este site foi denunciado por tentar induzir os usuários a fazer algo perigoso, como instalar um software ou revelar suas informações pessoais (como senhas e números de telefone ou cartão de crédito).</translation>
 <translation id="8037357227543935929">Perguntar (padrão)</translation>
 <translation id="8041940743680923270">Usar padrão global (Perguntar)</translation>
@@ -202,8 +204,8 @@
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> demorou muito para responder.</translation>
 <translation id="8503813439785031346">Nome de usuário</translation>
 <translation id="8703575177326907206">Sua conexão com <ph name="DOMAIN" /> não está criptografada.</translation>
-<translation id="8740359287975076522">Não foi possível encontrar um &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; para <ph name="HOST_NAME" />. Diagnosticando o problema...</translation>
-<translation id="8820817407110198400">Favoritos</translation>
+<translation id="8740359287975076522">Não foi possível encontrar o &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Diagnosticando o problema.</translation>
+<translation id="8820817407110198400">Marcadores</translation>
 <translation id="8940028675168378100">Bloqueado pelo <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir para configurações do site</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> exige um nome de usuário e uma senha.</translation>

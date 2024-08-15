@@ -12,20 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![no_std]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used,
-    clippy::indexing_slicing
-)]
-
 //! Implementation of the XTS-AES tweakable block cipher.
 //!
 //! See NIST docs [here](https://luca-giuzzi.unibs.it/corsi/Support/papers-cryptography/1619-2007-NIST-Submission.pdf)
 //! and [here](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38e.pdf).
+
+#![no_std]
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -34,7 +26,7 @@ use array_ref::{array_mut_ref, array_ref};
 use core::fmt;
 use core::marker::PhantomData;
 
-use crypto_provider::aes::{Aes, AesCipher, AesDecryptCipher, AesEncryptCipher};
+use crypto_provider::aes::{Aes, AesBlock, AesCipher, AesDecryptCipher, AesEncryptCipher};
 use crypto_provider::{
     aes::{AesKey, BLOCK_SIZE},
     CryptoProvider,
@@ -58,7 +50,7 @@ mod tweak_tests;
 /// little endian bytes (e.g. with `u128::to_le_bytes()`).
 ///
 /// Inside each data unit, there are one or more 16-byte blocks. The length of a data unit SHOULD
-/// not to exceed 2^20 blocks (16GiB) in order to maintain security properties; see
+/// not to exceed 2^20 blocks (16MB) in order to maintain security properties; see
 /// [appendix D](https://luca-giuzzi.unibs.it/corsi/Support/papers-cryptography/1619-2007-NIST-Submission.pdf).
 /// The last block (if there is more than one block) may have fewer than 16 bytes, in which case
 /// ciphertext stealing will be applied.
@@ -104,7 +96,6 @@ pub struct XtsDecrypter<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> {
 }
 
 #[allow(clippy::expect_used)]
-#[allow(clippy::indexing_slicing)]
 impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsEncrypter<A, K> {
     /// Encrypt a data unit in place, using sequential block numbers for each block.
     /// `data_unit` must be at least [BLOCK_SIZE] bytes, and fewer than
@@ -118,20 +109,24 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsEncrypter<A, K> {
         standalone_blocks.chunks_mut(BLOCK_SIZE).for_each(|block| {
             // Until array_chunks is stabilized, using a macro to get array refs out of slice chunks
             // Won't panic because we are only processing complete blocks
+            #[allow(clippy::indexing_slicing)]
             tweaked_xts.encrypt_block(array_mut_ref!(block, 0, BLOCK_SIZE));
             tweaked_xts.advance_to_next_block_num();
         });
 
         if partial_last_block.is_empty() {
+            #[allow(clippy::indexing_slicing)]
             tweaked_xts.encrypt_block(array_mut_ref!(last_complete_block, 0, BLOCK_SIZE));
             // nothing to do for the last block since it's empty
         } else {
+            // This implements ciphertext stealing for the last two blocks which allows processing
+            // of a message length not divisible by block size without any expansion or padding.
             // b is in bytes not bits; we do not consider partial bytes
             let b = partial_last_block.len();
 
             // Per spec: CC = encrypt P_{m-1} (the last complete block)
             let cc = {
-                let mut last_complete_block_plaintext: crypto_provider::aes::AesBlock =
+                let mut last_complete_block_plaintext: AesBlock =
                     last_complete_block.try_into().expect("complete block");
                 tweaked_xts.encrypt_block(&mut last_complete_block_plaintext);
                 tweaked_xts.advance_to_next_block_num();
@@ -139,7 +134,7 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsEncrypter<A, K> {
             };
 
             // Copy b bytes of P_m before we overwrite them with C_m
-            let mut partial_last_block_plaintext: crypto_provider::aes::AesBlock = [0; BLOCK_SIZE];
+            let mut partial_last_block_plaintext: AesBlock = [0; BLOCK_SIZE];
             partial_last_block_plaintext
                 .get_mut(0..b)
                 .expect("this should never be hit, since a partial block is always smaller than a complete block")
@@ -148,7 +143,7 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsEncrypter<A, K> {
             // C_m = first b bytes of CC
             partial_last_block.copy_from_slice(
                 cc.get(0..b)
-                    .expect("partial block len should always be less than a complete block"),
+                    .expect("b is the len of partial_last_block so it will always be in bounds"),
             );
 
             // PP = P_m || last (16 - b) bytes of CC
@@ -173,7 +168,7 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsEncrypter<A, K> {
         Ok(())
     }
 
-    /// Returns an [XtsTweaked] configured with the specified tweak and a block number of 0.
+    /// Returns an [`XtsEncrypterTweaked`] configured with the specified tweak and a block number of 0.
     fn tweaked(&self, tweak: Tweak) -> XtsEncrypterTweaked<A> {
         let mut bytes = tweak.bytes;
         self.tweak_encryption_cipher.encrypt(&mut bytes);
@@ -186,7 +181,6 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsEncrypter<A, K> {
 }
 
 #[allow(clippy::expect_used)]
-#[allow(clippy::indexing_slicing)]
 impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsDecrypter<A, K> {
     /// Decrypt a data unit in place, using sequential block numbers for each block.
     /// `data_unit` must be at least [BLOCK_SIZE] bytes, and fewer than
@@ -198,11 +192,13 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsDecrypter<A, K> {
         let mut tweaked_xts = self.tweaked(tweak);
 
         standalone_blocks.chunks_mut(BLOCK_SIZE).for_each(|block| {
+            #[allow(clippy::indexing_slicing)]
             tweaked_xts.decrypt_block(array_mut_ref!(block, 0, BLOCK_SIZE));
             tweaked_xts.advance_to_next_block_num();
         });
 
         if partial_last_block.is_empty() {
+            #[allow(clippy::indexing_slicing)]
             tweaked_xts.decrypt_block(array_mut_ref!(last_complete_block, 0, BLOCK_SIZE));
         } else {
             let b = partial_last_block.len();
@@ -215,7 +211,7 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsDecrypter<A, K> {
                 tweaked_xts.advance_to_next_block_num();
                 // Block num is now at m
                 // We need C_m later, so make a copy to avoid overwriting
-                let mut last_complete_block_ciphertext: crypto_provider::aes::AesBlock =
+                let mut last_complete_block_ciphertext: AesBlock =
                     last_complete_block.try_into().expect("complete block");
                 tweaked_xts.decrypt_block(&mut last_complete_block_ciphertext);
                 tweaked_xts.set_tweak(tweak_state_m_1);
@@ -223,28 +219,47 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey> XtsDecrypter<A, K> {
             };
 
             // Copy b bytes of C_m before we overwrite them with P_m
-            let mut partial_last_block_ciphertext: crypto_provider::aes::AesBlock = [0; BLOCK_SIZE];
-            partial_last_block_ciphertext[0..b].copy_from_slice(partial_last_block);
+            let mut partial_last_block_ciphertext: AesBlock = [0; BLOCK_SIZE];
+            partial_last_block_ciphertext
+                .get_mut(0..b)
+                .expect("this should never be hit, since a partial block is always smaller than a complete block")
+                .copy_from_slice(partial_last_block);
 
             // P_m = first b bytes of PP
-            partial_last_block.copy_from_slice(&pp[0..b]);
+            partial_last_block.copy_from_slice(
+                pp.get(0..b)
+                    .expect("b is the len of partial_last_block so it will always be in bounds"),
+            );
 
             // CC = C_m | CP (last 16-b bytes of PP)
             let cc = {
-                let cp = &pp[b..];
-                last_complete_block[0..b].copy_from_slice(&partial_last_block_ciphertext[0..b]);
-                last_complete_block[b..].copy_from_slice(cp);
+                let cp = pp.get(b..).expect(
+                    "b is in bounds since a partial block is always smaller than a complete block",
+                );
+                last_complete_block
+                    .get_mut(0..b)
+                    .expect("partial block length within bounds of complete block")
+                    .copy_from_slice(
+                        partial_last_block_ciphertext
+                            .get(0..b)
+                            .expect("partial block length within bounds of complete block"),
+                    );
+                last_complete_block
+                    .get_mut(b..)
+                    .expect("partial block length within bounds of complete block")
+                    .copy_from_slice(cp);
                 last_complete_block
             };
 
             // decrypting at block num = m -1
+            #[allow(clippy::indexing_slicing)]
             tweaked_xts.decrypt_block(array_mut_ref!(cc, 0, BLOCK_SIZE));
         }
 
         Ok(())
     }
 
-    /// Returns an [XtsTweaked] configured with the specified tweak and a block number of 0.
+    /// Returns an [`XtsDecrypterTweaked`] configured with the specified tweak and a block number of 0.
     fn tweaked(&self, tweak: Tweak) -> XtsDecrypterTweaked<A> {
         let mut bytes = tweak.bytes;
         self.tweak_encryption_cipher.encrypt(&mut bytes);
@@ -289,10 +304,10 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey + TweakableBlockCipherKey>
     }
 
     #[allow(clippy::expect_used)]
-    fn encrypt(&self, tweak: Self::Tweak, block: &mut [u8; 16]) {
-        // we're encrypting precisely one block, so the block number won't advance, and ciphertext
-        // stealing will not be applied.
-        self.encrypt_data_unit(tweak, block).expect("One block is a valid size");
+    fn encrypt(&self, tweak: Self::Tweak, block: &mut [u8; BLOCK_SIZE]) {
+        // We're encrypting precisely one block, so the block number won't advance, and there is no
+        // need to apply ciphertext stealing
+        self.tweaked(tweak).encrypt_block(block)
     }
 }
 
@@ -311,8 +326,9 @@ impl<A: Aes<Key = K::BlockCipherKey>, K: XtsKey + TweakableBlockCipherKey>
     }
 
     #[allow(clippy::expect_used)]
-    fn decrypt(&self, tweak: Self::Tweak, block: &mut [u8; 16]) {
-        self.decrypt_data_unit(tweak, block).expect("One block is a valid size");
+    fn decrypt(&self, tweak: Self::Tweak, block: &mut [u8; BLOCK_SIZE]) {
+        // We don't need the ciphertext stealing here since the input size is always exactly one block
+        self.tweaked(tweak).decrypt_block(block)
     }
 }
 
@@ -341,6 +357,8 @@ pub trait XtsKey: for<'a> TryFrom<&'a [u8], Error = Self::TryFromError> {
     fn key_2(&self) -> &Self::BlockCipherKey;
 }
 
+const AES_128_KEY_SIZE: usize = 16;
+
 /// An XTS-AES-128 key.
 pub struct XtsAes128Key {
     key_1: <Self as XtsKey>::BlockCipherKey,
@@ -364,7 +382,7 @@ impl TryFrom<&[u8]> for XtsAes128Key {
     type Error = XtsKeyTryFromSliceError;
 
     fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
-        try_split_concat_key::<16>(slice)
+        try_split_concat_key::<AES_128_KEY_SIZE>(slice)
             .map(|(key_1, key_2)| Self { key_1: key_1.into(), key_2: key_2.into() })
             .ok_or_else(XtsKeyTryFromSliceError::new)
     }
@@ -373,8 +391,10 @@ impl TryFrom<&[u8]> for XtsAes128Key {
 #[allow(clippy::expect_used)]
 impl From<&[u8; 32]> for XtsAes128Key {
     fn from(array: &[u8; 32]) -> Self {
-        let arr1: [u8; 16] = array[..16].try_into().expect("array is correctly sized");
-        let arr2: [u8; 16] = array[16..].try_into().expect("array is correctly sized");
+        let arr1: [u8; AES_128_KEY_SIZE] =
+            array[..AES_128_KEY_SIZE].try_into().expect("array is correctly sized");
+        let arr2: [u8; AES_128_KEY_SIZE] =
+            array[AES_128_KEY_SIZE..].try_into().expect("array is correctly sized");
         Self {
             key_1: crypto_provider::aes::Aes128Key::from(arr1),
             key_2: crypto_provider::aes::Aes128Key::from(arr2),
@@ -402,6 +422,8 @@ impl TweakableBlockCipherKey for XtsAes128Key {
     }
 }
 
+const AES_256_KEY_SIZE: usize = 32;
+
 /// An XTS-AES-256 key.
 pub struct XtsAes256Key {
     key_1: <Self as XtsKey>::BlockCipherKey,
@@ -425,7 +447,7 @@ impl TryFrom<&[u8]> for XtsAes256Key {
     type Error = XtsKeyTryFromSliceError;
 
     fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
-        try_split_concat_key::<32>(slice)
+        try_split_concat_key::<AES_256_KEY_SIZE>(slice)
             .map(|(key_1, key_2)| Self { key_1: key_1.into(), key_2: key_2.into() })
             .ok_or_else(XtsKeyTryFromSliceError::new)
     }
@@ -434,8 +456,10 @@ impl TryFrom<&[u8]> for XtsAes256Key {
 #[allow(clippy::expect_used)]
 impl From<&[u8; 64]> for XtsAes256Key {
     fn from(array: &[u8; 64]) -> Self {
-        let arr1: [u8; 32] = array[..32].try_into().expect("array is correctly sized");
-        let arr2: [u8; 32] = array[32..].try_into().expect("array is correctly sized");
+        let arr1: [u8; AES_256_KEY_SIZE] =
+            array[..AES_256_KEY_SIZE].try_into().expect("array is correctly sized");
+        let arr2: [u8; AES_256_KEY_SIZE] =
+            array[AES_256_KEY_SIZE..].try_into().expect("array is correctly sized");
         Self {
             key_1: crypto_provider::aes::Aes256Key::from(arr1),
             key_2: crypto_provider::aes::Aes256Key::from(arr2),
@@ -478,18 +502,18 @@ impl XtsKeyTryFromSliceError {
 /// The tweak for an XTS-AES cipher.
 #[derive(Clone)]
 pub struct Tweak {
-    bytes: crypto_provider::aes::AesBlock,
+    bytes: AesBlock,
 }
 
 impl Tweak {
     /// Little-endian content of the tweak.
-    pub fn le_bytes(&self) -> crypto_provider::aes::AesBlock {
+    pub fn le_bytes(&self) -> AesBlock {
         self.bytes
     }
 }
 
-impl From<crypto_provider::aes::AesBlock> for Tweak {
-    fn from(bytes: crypto_provider::aes::AesBlock) -> Self {
+impl From<AesBlock> for Tweak {
+    fn from(bytes: AesBlock) -> Self {
         Self { bytes }
     }
 }
@@ -506,13 +530,29 @@ pub(crate) struct TweakState {
     /// The block number inside the data unit. Should not exceed 2^20.
     block_num: u32,
     /// Original tweak multiplied by the primitive polynomial `block_num` times as per section 5.2
-    tweak: crypto_provider::aes::AesBlock,
+    tweak: AesBlock,
 }
 
 impl TweakState {
     /// Create a TweakState from the provided state with block_num = 0.
-    fn new(tweak: [u8; 16]) -> TweakState {
+    fn new(tweak: [u8; BLOCK_SIZE]) -> TweakState {
         TweakState { block_num: 0, tweak }
+    }
+
+    /// Advance the tweak state in the data unit to the next block without encrypting
+    /// or decrypting the intermediate blocks.
+    #[allow(clippy::indexing_slicing)]
+    fn advance_to_next_block(&mut self) {
+        // Conceptual left shift across the bytes.
+        // Most significant byte: if shift would carry, XOR in the coefficients of primitive
+        // polynomial in F_2^128 (x^128 = x^7 + x^2 + x + 1) =>  0b1000_0111 in binary.
+        let mut target = [0_u8; BLOCK_SIZE];
+        target[0] = (self.tweak[0] << 1) ^ ((self.tweak[BLOCK_SIZE - 1] >> 7) * 0b1000_0111);
+        for (j, byte) in target.iter_mut().enumerate().skip(1) {
+            *byte = (self.tweak[j] << 1) ^ (self.tweak[j - 1] >> 7);
+        }
+        self.tweak = target;
+        self.block_num += 1;
     }
 
     /// Advance the tweak state in the data unit to the `block_num`'th block without encrypting
@@ -522,39 +562,17 @@ impl TweakState {
     ///
     /// # Panics
     /// - If `block_num` is less than the current block num
+    #[cfg(test)]
     fn advance_to_block(&mut self, block_num: u32) {
         // It's a programmer error; nothing to recover from
         assert!(self.block_num <= block_num);
 
-        let mut target = [0_u8; BLOCK_SIZE];
-
         // Multiply by the primitive polynomial as many times as needed, as per section 5.2
         // of IEEE spec
-        #[allow(clippy::expect_used)]
+        #[allow(clippy::indexing_slicing)]
         for _ in 0..(block_num - self.block_num) {
-            // Conceptual left shift across the bytes.
-            // Most significant byte: if shift would carry, XOR in the coefficients of primitive
-            // polynomial in F_2^128 (x^128 = x^7 + x^2 + x + 1 = 0) = 135 decimal.
-            // % 128 is compiled as & !128 (i.e. fast).
-            target[0] = (2
-                * (self.tweak.first().expect("aes block must have non zero length") % 128))
-                ^ (135
-                    * select_hi_bit(
-                        *self.tweak.get(15).expect("15 is a valid index in an aes block"),
-                    ));
-            // Remaining bytes
-            for (j, byte) in target.iter_mut().enumerate().skip(1) {
-                *byte = (2
-                    * (self.tweak.get(j).expect("j is always in range of block size") % 128))
-                    ^ select_hi_bit(
-                        *self.tweak.get(j - 1).expect("j > 0 always because of the .skip(1)"),
-                    );
-            }
-            self.tweak = target;
-            // no need to zero target as it will be overwritten completely next iteration
+            self.advance_to_next_block()
         }
-
-        self.block_num = block_num;
     }
 }
 
@@ -570,11 +588,11 @@ struct XtsEncrypterTweaked<'a, A: Aes> {
 
 impl<'a, A: Aes> XtsEncrypterTweaked<'a, A> {
     fn advance_to_next_block_num(&mut self) {
-        self.tweak_state.advance_to_block(self.tweak_state.block_num + 1)
+        self.tweak_state.advance_to_next_block()
     }
 
     /// Encrypt a block in place using the configured tweak and current block number.
-    fn encrypt_block(&self, block: &mut crypto_provider::aes::AesBlock) {
+    fn encrypt_block(&self, block: &mut AesBlock) {
         array_xor(block, &self.tweak_state.tweak);
         self.enc_cipher.encrypt(block);
         array_xor(block, &self.tweak_state.tweak);
@@ -593,7 +611,7 @@ struct XtsDecrypterTweaked<'a, A: Aes> {
 
 impl<'a, A: Aes> XtsDecrypterTweaked<'a, A> {
     fn advance_to_next_block_num(&mut self) {
-        self.tweak_state.advance_to_block(self.tweak_state.block_num + 1)
+        self.tweak_state.advance_to_next_block()
     }
 
     /// Get the current tweak state -- useful if needed to reset to an earlier block num.
@@ -601,11 +619,11 @@ impl<'a, A: Aes> XtsDecrypterTweaked<'a, A> {
         self.tweak_state.clone()
     }
 
-    /// Set the tweak to a state captured via [current_tweak].
+    /// Set the tweak to a state captured via [`current_tweak`](XtsDecrypterTweaked::current_tweak).
     fn set_tweak(&mut self, tweak_state: TweakState) {
         self.tweak_state = tweak_state;
     }
-    fn decrypt_block(&self, block: &mut crypto_provider::aes::AesBlock) {
+    fn decrypt_block(&self, block: &mut AesBlock) {
         // CC = C ^ T
         array_xor(block, &self.tweak_state.tweak);
         // PP = decrypt CC
@@ -617,19 +635,13 @@ impl<'a, A: Aes> XtsDecrypterTweaked<'a, A> {
 
 /// Calculate `base = base ^ rhs` for each byte.
 #[allow(clippy::expect_used)]
-fn array_xor(base: &mut crypto_provider::aes::AesBlock, rhs: &crypto_provider::aes::AesBlock) {
+fn array_xor(base: &mut AesBlock, rhs: &AesBlock) {
     // hopefully this gets done smartly by the compiler (intel pxor, arm veorq, or equivalent).
     // This seems to happen in practice at opt level 3: https://gcc.godbolt.org/z/qvjE8joMv
     for i in 0..BLOCK_SIZE {
         *base.get_mut(i).expect("i is always a valid index for an AesBlock") ^=
             rhs.get(i).expect("i is always a valid index for an AesBlock");
     }
-}
-
-/// 1 if hi bit set, 0 if not.
-fn select_hi_bit(byte: u8) -> u8 {
-    // compiled as shr 7: https://gcc.godbolt.org/z/1rzvfshnx
-    byte / 128
 }
 
 fn try_split_concat_key<const N: usize>(slice: &[u8]) -> Option<([u8; N], [u8; N])> {

@@ -23,18 +23,19 @@ class DawnTestContext : public GraphiteTestContext {
 public:
     ~DawnTestContext() override {}
 
-    static std::unique_ptr<GraphiteTestContext> Make(std::optional<wgpu::BackendType> backend);
+    static std::unique_ptr<GraphiteTestContext> Make(wgpu::BackendType backend);
 
     skgpu::BackendApi backend() override { return skgpu::BackendApi::kDawn; }
 
     skgpu::ContextType contextType() override;
 
-    std::unique_ptr<skgpu::graphite::Context> makeContext(
-            const skgpu::graphite::ContextOptions&) override;
+    std::unique_ptr<skgpu::graphite::Context> makeContext(const TestOptions&) override;
 
     const skgpu::graphite::DawnBackendContext& getBackendContext() const {
         return fBackendContext;
     }
+
+    void tick() override;
 
 protected:
     DawnTestContext(const skgpu::graphite::DawnBackendContext& backendContext)

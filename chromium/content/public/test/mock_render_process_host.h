@@ -157,7 +157,9 @@ class MockRenderProcessHost : public RenderProcessHost {
   BrowserContext* GetBrowserContext() override;
   bool InSameStoragePartition(StoragePartition* partition) override;
   IPC::ChannelProxy* GetChannel() override;
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
   void AddFilter(BrowserMessageFilter* filter) override;
+#endif
   base::TimeDelta GetChildProcessIdleTime() override;
   FilterURLResult FilterURL(bool empty_allowed, GURL* url) override;
   void EnableAudioDebugRecordings(const base::FilePath& file) override;
@@ -179,8 +181,8 @@ class MockRenderProcessHost : public RenderProcessHost {
   size_t GetShutdownDelayRefCount() const override;
   int GetRenderFrameHostCount() const override;
   void DisableRefCounts() override;
-  void ForEachRenderFrameHost(base::RepeatingCallback<void(RenderFrameHost*)>
-                                  on_render_frame_host) override;
+  void ForEachRenderFrameHost(
+      base::FunctionRef<void(RenderFrameHost*)> on_render_frame_host) override;
   void RegisterRenderFrameHost(
       const GlobalRenderFrameHostId& render_frame_host_id) override;
   void UnregisterRenderFrameHost(
@@ -200,6 +202,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void SetIsUsed() override;
 
   bool HostHasNotBeenUsed() override;
+  bool IsSpare() const override;
   void SetProcessLock(const IsolationContext& isolation_context,
                       const ProcessLock& process_lock) override;
   ProcessLock GetProcessLock() const override;
@@ -291,6 +294,8 @@ class MockRenderProcessHost : public RenderProcessHost {
   void ReinitializeLogging(uint32_t logging_dest,
                            base::ScopedFD log_file_descriptor) override;
 #endif
+
+  void SetBatterySaverMode(bool battery_saver_mode_enabled) override {}
 
   void PauseSocketManagerForRenderFrameHost(
       const GlobalRenderFrameHostId& render_frame_host_id) override {}

@@ -54,8 +54,8 @@ if (tint_build_spv_writer) {
       "module.h",
       "operand.cc",
       "operand.h",
-      "option_builder.cc",
-      "option_builder.h",
+      "option_helper.cc",
+      "option_helpers.h",
       "options.h",
     ]
     deps = [
@@ -68,6 +68,7 @@ if (tint_build_spv_writer) {
       "${tint_src_dir}/utils/math",
       "${tint_src_dir}/utils/memory",
       "${tint_src_dir}/utils/reflection",
+      "${tint_src_dir}/utils/result",
       "${tint_src_dir}/utils/rtti",
       "${tint_src_dir}/utils/text",
       "${tint_src_dir}/utils/traits",

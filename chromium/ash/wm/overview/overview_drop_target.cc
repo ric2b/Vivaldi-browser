@@ -7,17 +7,17 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/style/ash_color_id.h"
 #include "ash/wm/desks/desks_util.h"
-#include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_utils.h"
-#include "ash/wm/window_properties.h"
-#include "chromeos/constants/chromeos_features.h"
+#include "ash/wm/wm_constants.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/background.h"
 #include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -34,18 +34,13 @@ class OverviewDropTargetView : public views::View {
   OverviewDropTargetView() {
     SetUseDefaultFillLayout(true);
 
-    const int corner_radius =
-        chromeos::features::IsJellyrollEnabled()
-            ? kOverviewItemCornerRadius
-            : views::LayoutProvider::Get()->GetCornerRadiusMetric(
-                  views::Emphasis::kLow);
-
     background_view_ = AddChildView(std::make_unique<views::View>());
     background_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-        kColorAshShieldAndBase20, corner_radius, /*for_border_thickness=*/0));
+        kColorAshShieldAndBase20, kWindowMiniViewCornerRadius,
+        /*for_border_thickness=*/0));
 
     SetBorder(views::CreateThemedRoundedRectBorder(
-        kDropTargetBorderThickness, corner_radius,
+        kDropTargetBorderThickness, kWindowMiniViewCornerRadius,
         cros_tokens::kCrosSysSystemBaseElevated));
   }
   OverviewDropTargetView(const OverviewDropTargetView&) = delete;
@@ -75,8 +70,9 @@ OverviewDropTarget::~OverviewDropTarget() = default;
 
 void OverviewDropTarget::UpdateBackgroundVisibility(
     const gfx::Point& location_in_screen) {
-  OverviewDropTargetView* drop_target_view =
-      static_cast<OverviewDropTargetView*>(item_widget_->GetContentsView());
+  auto* drop_target_view = views::AsViewClass<OverviewDropTargetView>(
+      item_widget_->GetContentsView());
+  CHECK(drop_target_view);
   drop_target_view->UpdateBackgroundVisibility(
       item_widget_->GetWindowBoundsInScreen().Contains(location_in_screen));
 }
@@ -85,7 +81,8 @@ aura::Window* OverviewDropTarget::GetWindow() {
   return nullptr;
 }
 
-std::vector<aura::Window*> OverviewDropTarget::GetWindows() {
+std::vector<raw_ptr<aura::Window, VectorExperimental>>
+OverviewDropTarget::GetWindows() {
   return {};
 }
 
@@ -135,8 +132,9 @@ void OverviewDropTarget::ScaleUpSelectedItem(
 
 void OverviewDropTarget::EnsureVisible() {}
 
-OverviewFocusableView* OverviewDropTarget::GetFocusableView() const {
-  return nullptr;
+std::vector<OverviewFocusableView*> OverviewDropTarget::GetFocusableViews()
+    const {
+  return {};
 }
 
 views::View* OverviewDropTarget::GetBackDropView() const {

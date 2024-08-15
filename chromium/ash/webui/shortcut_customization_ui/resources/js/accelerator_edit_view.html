@@ -11,7 +11,7 @@
     --button-fill-color: var(--cros-sys-on_surface);
   }
 
-  :host(:not([is-edit-view])) #container {
+  #container {
     padding-block: 8px;
   }
 
@@ -62,11 +62,7 @@
     flex: 1;
   }
 
-  #acceleratorInfoText {
-    padding-block-start: 8px
-  }
-
-  :host([has-error]) #acceleratorInfoText {
+  :host([has-error]:not([has-warning])) #acceleratorInfoText {
     color: var(--error-info-text-color);
   }
 
@@ -99,7 +95,7 @@
     padding-inline: 10px;
   }
 
-  :host([is-edit-view][has-error]) #acceleratorView {
+  :host([is-edit-view][has-error]:not([has-warning])) #acceleratorView {
     border-color: var(--edit-border-error-color);
   }
 </style>

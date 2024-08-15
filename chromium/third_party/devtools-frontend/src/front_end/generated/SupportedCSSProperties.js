@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors. All rights reserved.
+// Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,23 +45,25 @@ export const generatedProperties = [
  },
  {
   "longhands": [
-   "view-timeline-name",
-   "view-timeline-axis",
-   "view-timeline-inset"
-  ],
-  "name": "-alternative-view-timeline-with-inset"
- },
- {
-  "longhands": [
    "mask-image",
    "-webkit-mask-position-x",
    "-webkit-mask-position-y",
    "mask-size",
    "mask-repeat",
    "mask-origin",
-   "mask-clip"
+   "mask-clip",
+   "mask-composite",
+   "mask-mode"
   ],
-  "name": "-webkit-alternative-mask"
+  "name": "-alternative-mask"
+ },
+ {
+  "longhands": [
+   "view-timeline-name",
+   "view-timeline-axis",
+   "view-timeline-inset"
+  ],
+  "name": "-alternative-view-timeline-with-inset"
  },
  {
   "inherited": true,
@@ -92,19 +94,11 @@ export const generatedProperties = [
   "name": "-webkit-box-decoration-break"
  },
  {
-  "inherited": true,
   "keywords": [
    "normal",
    "reverse"
   ],
   "name": "-webkit-box-direction"
- },
- {
-  "keywords": [
-   "normal",
-   "reverse"
-  ],
-  "name": "-webkit-box-direction-alternative"
  },
  {
   "name": "-webkit-box-flex"
@@ -1368,8 +1362,7 @@ export const generatedProperties = [
    "normal",
    "inline-size",
    "size",
-   "sticky",
-   "snap"
+   "scroll-state"
   ],
   "name": "container-type"
  },
@@ -1493,7 +1486,9 @@ export const generatedProperties = [
    "flow-root",
    "none",
    "flow",
-   "math"
+   "math",
+   "ruby",
+   "ruby-text"
   ],
   "name": "display"
  },
@@ -2102,6 +2097,26 @@ export const generatedProperties = [
   "name": "inset"
  },
  {
+  "keywords": [
+   "none",
+   "top",
+   "bottom",
+   "center",
+   "left",
+   "right",
+   "x-start",
+   "x-end",
+   "y-start",
+   "y-end",
+   "start",
+   "end",
+   "self-start",
+   "self-end",
+   "all"
+  ],
+  "name": "inset-area"
+ },
+ {
   "longhands": [
    "inset-block-start",
    "inset-block-end"
@@ -2334,6 +2349,9 @@ export const generatedProperties = [
   "name": "mask-image"
  },
  {
+  "name": "mask-mode"
+ },
+ {
   "name": "mask-origin"
  },
  {
@@ -2435,7 +2453,7 @@ export const generatedProperties = [
   "name": "mix-blend-mode"
  },
  {
-  "name": "navigation-trigger"
+  "name": "navigation"
  },
  {
   "name": "negative"
@@ -3465,8 +3483,10 @@ export const generatedProperties = [
  {
   "inherited": true,
   "keywords": [
+   "normal",
+   "space-all",
    "space-first",
-   "space-all"
+   "trim-start"
   ],
   "name": "text-spacing-trim"
  },
@@ -3511,37 +3531,6 @@ export const generatedProperties = [
  },
  {
   "name": "timeline-scope"
- },
- {
-  "longhands": [
-   "toggle-root",
-   "toggle-trigger"
-  ],
-  "name": "toggle"
- },
- {
-  "keywords": [
-   "none"
-  ],
-  "name": "toggle-group"
- },
- {
-  "keywords": [
-   "none"
-  ],
-  "name": "toggle-root"
- },
- {
-  "keywords": [
-   "none"
-  ],
-  "name": "toggle-trigger"
- },
- {
-  "keywords": [
-   "normal"
-  ],
-  "name": "toggle-visibility"
  },
  {
   "keywords": [
@@ -3805,12 +3794,6 @@ export const generatedPropertyValues = {
   ]
  },
  "-webkit-box-direction": {
-  "values": [
-   "normal",
-   "reverse"
-  ]
- },
- "-webkit-box-direction-alternative": {
   "values": [
    "normal",
    "reverse"
@@ -4423,8 +4406,7 @@ export const generatedPropertyValues = {
    "normal",
    "inline-size",
    "size",
-   "sticky",
-   "snap"
+   "scroll-state"
   ]
  },
  "content-visibility": {
@@ -4526,7 +4508,9 @@ export const generatedPropertyValues = {
    "flow-root",
    "none",
    "flow",
-   "math"
+   "math",
+   "ruby",
+   "ruby-text"
   ]
  },
  "dominant-baseline": {
@@ -4879,6 +4863,25 @@ export const generatedPropertyValues = {
  "inline-size": {
   "values": [
    "auto"
+  ]
+ },
+ "inset-area": {
+  "values": [
+   "none",
+   "top",
+   "bottom",
+   "center",
+   "left",
+   "right",
+   "x-start",
+   "x-end",
+   "y-start",
+   "y-end",
+   "start",
+   "end",
+   "self-start",
+   "self-end",
+   "all"
   ]
  },
  "isolation": {
@@ -5593,8 +5596,10 @@ export const generatedPropertyValues = {
  },
  "text-spacing-trim": {
   "values": [
+   "normal",
+   "space-all",
    "space-first",
-   "space-all"
+   "trim-start"
   ]
  },
  "text-transform": {
@@ -5626,26 +5631,6 @@ export const generatedPropertyValues = {
    "nowrap",
    "balance",
    "pretty"
-  ]
- },
- "toggle-group": {
-  "values": [
-   "none"
-  ]
- },
- "toggle-root": {
-  "values": [
-   "none"
-  ]
- },
- "toggle-trigger": {
-  "values": [
-   "none"
-  ]
- },
- "toggle-visibility": {
-  "values": [
-   "normal"
   ]
  },
  "top": {
@@ -5862,6 +5847,10 @@ export const generatedAliasesFor = new Map([
  [
   "-webkit-alternative-animation-with-timeline",
   "-alternative-animation-with-timeline"
+ ],
+ [
+  "-webkit-alternative-mask",
+  "-alternative-mask"
  ],
  [
   "-webkit-alternative-mask-clip",

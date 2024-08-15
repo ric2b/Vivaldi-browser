@@ -191,6 +191,9 @@ message LocalData {
   // This value should be reset after the TPM had been cleared and only
   // applicable on TPM1.2 devices.
   optional bool no_srk_auth = 8;
+  // Whether the reset DA lock failed with the wrong auth happened or not.
+  // If this kind of failure happened before, we should prevent resetting DA.
+  optional bool reset_da_lock_auth_failure = 9;
 }
 
 // The format of the ownership taken signal payload.
@@ -364,6 +367,12 @@ message GetSupportedFeaturesReply {
 
   // Whether the TPM is allowed to use or not.
   optional bool is_allowed = 5;
+
+  // Whether the TPM request can be triggered in the userland or not.
+  optional bool support_clear_request = 6;
+
+  // Whether the TPM is allowed to clear without user prompts or not.
+  optional bool support_clear_without_prompt = 7;
 }
 
 message GetDictionaryAttackInfoRequest {}
@@ -423,5 +432,11 @@ message RemoveOwnerDependencyReply {
 message ClearStoredOwnerPasswordRequest {}
 
 message ClearStoredOwnerPasswordReply {
+  optional TpmManagerStatus status = 1;
+}
+
+message ClearTpmRequest {}
+
+message ClearTpmReply {
   optional TpmManagerStatus status = 1;
 }

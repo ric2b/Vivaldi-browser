@@ -70,20 +70,16 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService {
   bool IsPromptOpenForBrowser(Browser* browser) override;
 #endif  // !BUILDFLAG(IS_ANDROID)
   void ForceChromeBuildForTests(bool force_chrome_build) override;
-  void SetPrivacySandboxEnabled(bool enabled) override;
-  bool IsPrivacySandboxEnabled() override;
-  bool IsPrivacySandboxManaged() override;
   bool IsPrivacySandboxRestricted() override;
-  void OnPrivacySandboxV2PrefChanged() override;
   bool IsRestrictedNoticeEnabled() override;
   void SetFirstPartySetsDataAccessEnabled(bool enabled) override;
   bool IsFirstPartySetsDataAccessEnabled() const override;
   bool IsFirstPartySetsDataAccessManaged() const override;
   base::flat_map<net::SchemefulSite, net::SchemefulSite>
   GetSampleFirstPartySets() const override;
-  absl::optional<net::SchemefulSite> GetFirstPartySetOwner(
+  std::optional<net::SchemefulSite> GetFirstPartySetOwner(
       const GURL& site_url) const override;
-  absl::optional<std::u16string> GetFirstPartySetOwnerForDisplay(
+  std::optional<std::u16string> GetFirstPartySetOwnerForDisplay(
       const GURL& site_url) const override;
   bool IsPartOfManagedFirstPartySet(
       const net::SchemefulSite& site) const override;
@@ -97,6 +93,10 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService {
       const override;
   std::vector<privacy_sandbox::CanonicalTopic> GetBlockedTopics()
       const override;
+  std::vector<privacy_sandbox::CanonicalTopic> GetFirstLevelTopics()
+      const override;
+  std::vector<privacy_sandbox::CanonicalTopic> GetChildTopicsCurrentlyAssigned(
+      const privacy_sandbox::CanonicalTopic& topic) const override;
   void SetTopicAllowed(privacy_sandbox::CanonicalTopic topic,
                        bool allowed) override;
   void TopicsToggleChanged(bool new_value) const override;
@@ -162,18 +162,18 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService {
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceTest,
                            FirstPartySetsDisabledMetric);
   FRIEND_TEST_ALL_PREFIXES(
-      PrivacySandboxServiceM1Test,
+      PrivacySandboxServiceTest,
       RecordPrivacySandbox4StartupMetrics_PromptSuppressed_Explicitly);
   FRIEND_TEST_ALL_PREFIXES(
-      PrivacySandboxServiceM1Test,
+      PrivacySandboxServiceTest,
       RecordPrivacySandbox4StartupMetrics_PromptSuppressed_Implicitly);
   FRIEND_TEST_ALL_PREFIXES(
-      PrivacySandboxServiceM1Test,
+      PrivacySandboxServiceTest,
       RecordPrivacySandbox4StartupMetrics_PromptNotSuppressed_EEA);
   FRIEND_TEST_ALL_PREFIXES(
-      PrivacySandboxServiceM1Test,
+      PrivacySandboxServiceTest,
       RecordPrivacySandbox4StartupMetrics_PromptNotSuppressed_ROW);
-  FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceM1Test,
+  FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceTest,
                            RecordPrivacySandbox4StartupMetrics_APIs);
   FRIEND_TEST_ALL_PREFIXES(
       PrivacySandboxServiceM1RestrictedNoticePromptTest,
@@ -292,10 +292,6 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService {
   // profile startup.
   void LogPrivacySandboxState();
 
-  // Logs the state of privacy sandbox 3 in regards to prompts. Called once per
-  // profile startup.
-  void RecordPrivacySandbox3StartupMetrics();
-
   // Logs the state of privacy sandbox 4 in regards to prompts. Called once per
   // profile startup.
   void RecordPrivacySandbox4StartupMetrics();
@@ -316,25 +312,12 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService {
       PrefService* pref_service,
       profile_metrics::BrowserProfileType profile_type,
       privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
-      bool third_party_cookies_blocked);
-
-  // Equivalent of PrivacySandboxService::GetRequiredPromptTypeInternal, but for
-  // PrivacySandboxSettings4.
-  static PrivacySandboxService::PromptType GetRequiredPromptTypeInternalM1(
-      PrefService* pref_service,
-      profile_metrics::BrowserProfileType profile_type,
-      privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
       bool third_party_cookies_blocked,
       bool is_chrome_build);
 
   // Checks to see if initialization of the user's FPS pref is required, and if
   // so, sets the default value based on the user's current cookie settings.
   void MaybeInitializeFirstPartySetsPref();
-
-  // Checks to see if initialization of the user's anti-abuse content setting is
-  // required, and if so, sets the default value based on the user's current
-  // cookie settings.
-  void MaybeInitializeAntiAbuseContentSetting();
 
   // Updates the preferences which store the current Topics consent information.
   void RecordUpdatedTopicsConsent(
@@ -381,17 +364,9 @@ class PrivacySandboxServiceImpl : public PrivacySandboxService {
       {browsing_topics::Topic(4), kFakeTaxonomyVersion}};
 
   // Informs the TrustSafetySentimentService, if it exists, that a
-  // Privacy Sandbox 3 interaction for an area has occurred The area is
+  // Privacy Sandbox interaction for an area has occurred The area is
   // determined by |action|. Only a subset of actions has a corresponding area.
   void InformSentimentService(PrivacySandboxService::PromptAction action);
-
-  // Equivalent of PrivacySandboxService::InformSentimentService, but for
-  // PrivacySandboxSettings4.
-  void InformSentimentServiceM1(PrivacySandboxService::PromptAction action);
-
-  // Implementation of PrivacySandboxService::PromptActionOccurred, but for
-  // PrivacySandboxSettings4.
-  virtual void PromptActionOccurredM1(PromptAction action);
 
   // Record user action metrics based on the |action|.
   void RecordPromptActionMetrics(PrivacySandboxService::PromptAction action);

@@ -11,10 +11,10 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/search_engines/template_url_service.h"
-#import "ios/chrome/browser/ntp/new_tab_page_util.h"
-#import "ios/chrome/browser/overlays/public/overlay_presenter.h"
-#import "ios/chrome/browser/overlays/public/overlay_presenter_observer_bridge.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
+#import "ios/chrome/browser/overlays/model/public/overlay_presenter_observer_bridge.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -30,7 +30,7 @@
 #import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
-#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
+#import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
@@ -46,9 +46,20 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs_helper.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_swift.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "ios/website_dark_mode/website_dark_mode_java_script_feature.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -56,7 +67,30 @@ using vivaldi::IsVivaldiRunning;
 
 @interface AdaptiveToolbarMediator () <CRWWebStateObserver,
                                        OverlayPresenterObserving,
+
+                                      // Vivaldi
+                                      BooleanObserver,
+                                      PrefObserverDelegate,
+                                      // End Vivaldi
+
                                        WebStateListObserving>
+
+// Vivaldi
+{
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  PrefChangeRegistrar _prefChangeRegistrar;
+  // Pref tracking if dynamic accent color is enabled.
+  PrefBackedBoolean* _dynamicAccentColorEnabled;
+  // Pref tracking if bottom omnibox is enabled.
+  PrefBackedBoolean* _bottomOmniboxEnabled;
+  // Pref tracking if tab bar is enabled.
+  PrefBackedBoolean* _tabBarEnabled;
+  // Pref tracking if force dark pages is enabled.
+  PrefBackedBoolean* _forceDarkWebPagesEnabled;
+}
+// End Vivaldi
 
 /// The current web state associated with the toolbar.
 @property(nonatomic, assign) web::WebState* webState;
@@ -117,6 +151,32 @@ using vivaldi::IsVivaldiRunning;
     _webStateObserver.reset();
     _webState = nullptr;
   }
+
+  // Vivaldi
+  if (_tabBarEnabled) {
+    [_tabBarEnabled stop];
+    [_tabBarEnabled setObserver:nil];
+    _tabBarEnabled = nil;
+  }
+  if (_bottomOmniboxEnabled) {
+    [_bottomOmniboxEnabled stop];
+    [_bottomOmniboxEnabled setObserver:nil];
+    _bottomOmniboxEnabled = nil;
+  }
+  if (_dynamicAccentColorEnabled) {
+    [_dynamicAccentColorEnabled stop];
+    [_dynamicAccentColorEnabled setObserver:nil];
+    _dynamicAccentColorEnabled = nil;
+  }
+  if (_forceDarkWebPagesEnabled) {
+    [_forceDarkWebPagesEnabled stop];
+    [_forceDarkWebPagesEnabled setObserver:nil];
+    _forceDarkWebPagesEnabled = nil;
+  }
+  _prefChangeRegistrar.RemoveAll();
+  _prefObserverBridge.reset();
+  // End Vivaldi
+
 }
 
 #pragma mark - CRWWebStateObserver
@@ -256,6 +316,10 @@ using vivaldi::IsVivaldiRunning;
   if (_webState) {
     _webState->AddObserver(_webStateObserver.get());
 
+    // Vivaldi
+    [self setUpVivaldiObservers];
+    // End Vivaldi
+
     if (self.consumer) {
       [self updateConsumer];
     }
@@ -341,6 +405,16 @@ using vivaldi::IsVivaldiRunning;
         setUnderPageBackgroundColor:self.webState
                                         ->GetUnderPageBackgroundColor()];
   }
+
+  // Vivaldi
+  [self.consumer setIsTabBarEnabled:[_tabBarEnabled value]];
+  [self.consumer setIsBottomOmniboxEnabled:[_bottomOmniboxEnabled value]];
+  [self.consumer setPageThemeColor:self.webState->GetThemeColor()];
+  [self.consumer
+      setIsDynamicAccentColorEnabled:[_dynamicAccentColorEnabled value]];
+  [self.consumer setCustomAccentColor:[self customAccentColor]];
+  // End Vivaldi
+
 }
 
 /// Updates the consumer with the new forward and back states.
@@ -371,7 +445,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Vivaldi
   [self.consumer reloadButtonsWithNewTabPage:!shareMenuEnabled
-                           desktopTabEnabled:self.isDesktopTabBarEnabled];
+                           desktopTabEnabled:[_tabBarEnabled value]];
   // End Vivaldi
 
 }
@@ -387,6 +461,10 @@ using vivaldi::IsVivaldiRunning;
 - (void)overlayPresenter:(OverlayPresenter*)presenter
     didHideOverlayForRequest:(OverlayRequest*)request {
   self.webContentAreaShowingOverlay = NO;
+}
+
+- (void)overlayPresenterDestroyed:(OverlayPresenter*)presenter {
+  self.webContentAreaOverlayPresenter = nullptr;
 }
 
 #pragma mark - Private
@@ -508,7 +586,7 @@ using vivaldi::IsVivaldiRunning;
 
 /// Returns the UIMenuElement for the content of the pasteboard. Can return nil.
 - (UIMenuElement*)menuElementForPasteboard {
-  absl::optional<std::set<ClipboardContentType>> clipboardContentType =
+  std::optional<std::set<ClipboardContentType>> clipboardContentType =
       ClipboardRecentContent::GetInstance()->GetCachedClipboardContentTypes();
 
   if (clipboardContentType.has_value()) {
@@ -553,17 +631,121 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - VIVALDI
-- (BOOL)isDesktopTabBarEnabled {
-  if (!self.webState)
-    return NO;
-
+- (void)setUpVivaldiObservers {
   ChromeBrowserState* browserState =
       ChromeBrowserState::FromBrowserState(self.webState->GetBrowserState());
-  if (!browserState)
-    return NO;
+  PrefService* prefService = browserState->GetPrefs();
+  if (prefService) {
+    [self startObservingBottomOmniboxStateChange:prefService];
+    [self startObservingTabBarStyleChange:prefService];
+    [self startObservingAccentColorChange:prefService];
+    [self startObservingWebsiteAppearanceChange:prefService];
+  }
+}
 
-  return [VivaldiTabSettingPrefs
-           getDesktopTabsModeWithPrefService:browserState->GetPrefs()];
+- (void)startObservingBottomOmniboxStateChange:(PrefService*)prefService {
+  _bottomOmniboxEnabled =
+      [[PrefBackedBoolean alloc] initWithPrefService:prefService
+                                            prefName:prefs::kBottomOmnibox];
+  [_bottomOmniboxEnabled setObserver:self];
+}
+
+- (void)startObservingTabBarStyleChange:(PrefService*)prefService {
+  _tabBarEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:prefService
+                     prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
+  [_tabBarEnabled setObserver:self];
+}
+
+- (void)startObservingAccentColorChange:(PrefService*)prefService {
+  // Dynamic accent color toggle
+  _dynamicAccentColorEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:prefService
+                     prefName:vivaldiprefs::kVivaldiDynamicAccentColorEnabled];
+  [_dynamicAccentColorEnabled setObserver:self];
+  [self booleanDidChange:_dynamicAccentColorEnabled];
+
+  // Custom accent color
+  _prefChangeRegistrar.RemoveAll();
+  _prefChangeRegistrar.Init(prefService);
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+
+  _prefObserverBridge->ObserveChangesForPreference(
+      vivaldiprefs::kVivaldiCustomAccentColor, &_prefChangeRegistrar);
+  [self onPreferenceChanged:vivaldiprefs::kVivaldiCustomAccentColor];
+}
+
+- (void)startObservingWebsiteAppearanceChange:(PrefService*)prefService {
+  _forceDarkWebPagesEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:prefService
+              prefName:vivaldiprefs::kVivaldiWebsiteAppearanceForceDarkTheme];
+  [_forceDarkWebPagesEnabled setObserver:self];
+  [self booleanDidChange:_forceDarkWebPagesEnabled];
+
+  _prefObserverBridge->ObserveChangesForPreference(
+      vivaldiprefs::kVivaldiWebsiteAppearanceStyle, &_prefChangeRegistrar);
+  [self onPreferenceChanged:vivaldiprefs::kVivaldiWebsiteAppearanceStyle];
+}
+
+#pragma mark - Helpers
+- (UIColor*)customAccentColor {
+  NSString* color = [VivaldiAppearanceSettingsPrefsHelper getCustomAccentColor];
+  return [VivaldiGlobalHelpers colorWithHexString:color];
+}
+
+- (BOOL)forceDarkWebPages {
+  if (!_forceDarkWebPagesEnabled)
+    return NO;
+  return [_forceDarkWebPagesEnabled value] &&
+      [self websiteAppearanceStyle] == VivaldiWebsiteAppearanceStyleDark;
+}
+
+- (VivaldiWebsiteAppearanceStyle)websiteAppearanceStyle {
+  int style = [VivaldiAppearanceSettingsPrefsHelper getWebsiteAppearanceStyle];
+  switch (style) {
+    case 0:
+      return VivaldiWebsiteAppearanceStyleLight;
+    case 1:
+      return VivaldiWebsiteAppearanceStyleDark;
+    case 2:
+      return VivaldiWebsiteAppearanceStyleAuto;
+    default:
+      return VivaldiWebsiteAppearanceStyleAuto;
+  }
+}
+
+- (void)forceReloadWebpageIfNeeded {
+  for (int i = 0; i < self.webStateList->count(); i++) {
+    web::WebState* webState = self.webStateList->GetWebStateAt(i);
+    WebsiteDarkModeJavaScriptFeature::GetInstance()->ToggleDarkMode(
+        webState, [self forceDarkWebPages]);
+  }
+}
+
+#pragma mark - Boolean Observer
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _tabBarEnabled) {
+    [self.consumer setIsTabBarEnabled:[observableBoolean value]];
+  } else if (observableBoolean == _bottomOmniboxEnabled) {
+    [self.consumer setIsBottomOmniboxEnabled:[observableBoolean value]];
+  } else if (observableBoolean == _dynamicAccentColorEnabled) {
+    [self.consumer setPageThemeColor:self.webState->GetThemeColor()];
+    [self.consumer setIsDynamicAccentColorEnabled:[observableBoolean value]];
+  } else if (observableBoolean == _forceDarkWebPagesEnabled) {
+    [self forceReloadWebpageIfNeeded];
+  }
+}
+
+#pragma mark - PrefObserverDelegate
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == vivaldiprefs::kVivaldiCustomAccentColor) {
+    [self.consumer setCustomAccentColor:[self customAccentColor]];
+  } else if (preferenceName == vivaldiprefs::kVivaldiWebsiteAppearanceStyle) {
+    [self forceReloadWebpageIfNeeded];
+  }
 }
 
 @end

@@ -29,7 +29,6 @@ constexpr BinaryUploadService::Result kAllBinaryUploadServiceResults[]{
     BinaryUploadService::Result::FAILED_TO_GET_TOKEN,
     BinaryUploadService::Result::UNAUTHORIZED,
     BinaryUploadService::Result::FILE_ENCRYPTED,
-    BinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE,
 };
 
 #if !BUILDFLAG(USE_CRASH_KEY_STUBS)
@@ -111,7 +110,7 @@ TEST_P(DeepScanningUtilsUMATest, SuccessfulScanVerdicts) {
                         result(),
                         SimpleContentAnalysisResponseForTesting(
                             /*dlp_success*/ true,
-                            /*malware_success*/ absl::nullopt));
+                            /*malware_success*/ std::nullopt));
   for (const std::string& verdict : {"malware", "uws", "safe"}) {
     enterprise_connectors::ContentAnalysisResponse response;
     auto* malware_result = response.add_results();

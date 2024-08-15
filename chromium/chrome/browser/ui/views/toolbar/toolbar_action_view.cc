@@ -80,6 +80,7 @@ ToolbarActionView::ToolbarActionView(
 }
 
 ToolbarActionView::~ToolbarActionView() {
+  set_context_menu_controller(nullptr);
   view_controller_->SetDelegate(nullptr);
 }
 
@@ -247,10 +248,6 @@ void ToolbarActionView::RemovedFromWidget() {
   MenuButton::RemovedFromWidget();
 }
 
-views::View* ToolbarActionView::GetAsView() {
-  return this;
-}
-
 views::FocusManager* ToolbarActionView::GetFocusManagerForAccelerator() {
   return GetFocusManager();
 }
@@ -297,5 +294,5 @@ void ToolbarActionView::ButtonPressed() {
   }
 }
 
-BEGIN_METADATA(ToolbarActionView, views::MenuButton)
+BEGIN_METADATA(ToolbarActionView)
 END_METADATA

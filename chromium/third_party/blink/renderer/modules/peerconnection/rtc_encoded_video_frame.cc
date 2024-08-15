@@ -131,10 +131,13 @@ RTCEncodedVideoFrameMetadata* RTCEncodedVideoFrame::getMetadata() const {
   if (delegate_->PayloadType()) {
     metadata->setPayloadType(*delegate_->PayloadType());
   }
+  if (delegate_->MimeType()) {
+    metadata->setMimeType(WTF::String::FromUTF8(*delegate_->MimeType()));
+  }
 
   if (RuntimeEnabledFeatures::RTCEncodedVideoFrameAdditionalMetadataEnabled()) {
-    if (delegate_->CaptureTimeIdentifier()) {
-      metadata->setCaptureTimestamp(delegate_->CaptureTimeIdentifier()->us());
+    if (delegate_->PresentationTimestamp()) {
+      metadata->setTimestamp(delegate_->PresentationTimestamp()->us());
     }
   }
 

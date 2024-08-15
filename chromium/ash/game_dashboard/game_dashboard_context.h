@@ -97,6 +97,10 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // if the recording session was aborted.
   void OnRecordingEnded();
 
+  // Called when a recorded file has been finalized and fully saved, at which
+  // point a new recording is allowed to be started.
+  void OnVideoFileFinalized();
+
   // views::ViewObserver:
   void OnViewPreferredSizeChanged(views::View* observed_view) override;
 
@@ -129,7 +133,7 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
   // recording session duration.
   void OnUpdateRecordingTimer();
 
-  const raw_ptr<aura::Window, ExperimentalAsh> game_window_;
+  const raw_ptr<aura::Window> game_window_;
 
   // Game Dashboard button widget for the Game Dashboard.
   std::unique_ptr<GameDashboardWidget> game_dashboard_button_widget_;
@@ -145,18 +149,17 @@ class ASH_EXPORT GameDashboardContext : public views::ViewObserver,
 
   // The `GameDashboardButton` view in the `game_dashboard_button_widget_`.
   // Owned by the views hierarchy.
-  raw_ptr<GameDashboardButton, ExperimentalAsh> game_dashboard_button_ =
-      nullptr;
+  raw_ptr<GameDashboardButton> game_dashboard_button_ = nullptr;
 
   // The `GameDashboardMainMenuView` when the user presses the Game Dashboard
   // button.
   // Owned by the views hierarchy.
-  raw_ptr<GameDashboardMainMenuView, DanglingUntriaged | ExperimentalAsh>
-      main_menu_view_ = nullptr;
+  raw_ptr<GameDashboardMainMenuView, DanglingUntriaged> main_menu_view_ =
+      nullptr;
 
   // The `GameDashboardToolbarView` when the user makes the toolbar visible.
   // Owned by the views hierarchy.
-  raw_ptr<GameDashboardToolbarView, ExperimentalAsh> toolbar_view_ = nullptr;
+  raw_ptr<GameDashboardToolbarView> toolbar_view_ = nullptr;
 
   // A repeating timer to keep track of the recording session duration.
   base::RepeatingTimer recording_timer_;

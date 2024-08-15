@@ -119,9 +119,10 @@ class MockH264Accelerator : public H264Decoder::H264Accelerator {
   MOCK_METHOD0(CreateH264Picture, scoped_refptr<H264Picture>());
 
   MOCK_METHOD1(SubmitDecode, Status(scoped_refptr<H264Picture> pic));
-  MOCK_METHOD3(ParseEncryptedSliceHeader,
+  MOCK_METHOD4(ParseEncryptedSliceHeader,
                Status(const std::vector<base::span<const uint8_t>>& data,
                       const std::vector<SubsampleEntry>& subsamples,
+                      uint64_t secure_handle,
                       H264SliceHeader* slice_hdr_out));
   MOCK_METHOD7(SubmitFrameMetadata,
                Status(const H264SPS* sps,
@@ -141,10 +142,9 @@ class MockH264Accelerator : public H264Decoder::H264Accelerator {
                       size_t size,
                       const std::vector<SubsampleEntry>& subsamples));
   MOCK_METHOD1(OutputPicture, bool(scoped_refptr<H264Picture> pic));
-  MOCK_METHOD3(SetStream,
+  MOCK_METHOD2(SetStream,
                Status(base::span<const uint8_t> stream,
-                      const DecryptConfig* decrypt_config,
-                      uint64_t secure_handle));
+                      const DecryptConfig* decrypt_config));
 
   void Reset() override {}
 
@@ -210,7 +210,7 @@ void H264DecoderTest::SetUp() {
   ON_CALL(*accelerator_, SubmitSlice(_, _, _, _, _, _, _, _))
       .With(Args<6, 7>(SubsampleSizeMatches()))
       .WillByDefault(Return(H264Decoder::H264Accelerator::Status::kOk));
-  ON_CALL(*accelerator_, SetStream(_, _, _))
+  ON_CALL(*accelerator_, SetStream(_, _))
       .WillByDefault(
           Return(H264Decoder::H264Accelerator::Status::kNotSupported));
 }
@@ -309,9 +309,10 @@ TEST_F(H264DecoderTest, DecodeSingleEncryptedFrame) {
 
   {
     InSequence sequence;
-    EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _))
+    EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
         .WillOnce([this](const std::vector<base::span<const uint8_t>>& data,
                          const std::vector<SubsampleEntry>& subsamples,
+                         uint64_t /*secure_handle*/,
                          H264SliceHeader* slice_hdr_out) {
           return ParseSliceHeader(
               data, subsamples, accelerator_->last_sps_nalu_data,
@@ -624,22 +625,23 @@ TEST_F(H264DecoderTest, ParseEncryptedSliceHeaderRetry) {
   EXPECT_EQ(H264PROFILE_BASELINE, decoder_->GetProfile());
   EXPECT_LE(9u, decoder_->GetRequiredNumOfPictures());
 
-  EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _))
+  EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
       .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
   ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode(true));
 
   // Try again, assuming key still not set. Only ParseEncryptedSliceHeader()
   // should be called again.
-  EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _))
+  EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
       .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain));
   ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode(true));
 
   // Assume key has been provided now, next call to Decode() should proceed.
   {
     InSequence sequence;
-    EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _))
+    EXPECT_CALL(*accelerator_, ParseEncryptedSliceHeader(_, _, _, _))
         .WillOnce([this](const std::vector<base::span<const uint8_t>>& data,
                          const std::vector<SubsampleEntry>& subsamples,
+                         uint64_t /*secure_handle*/,
                          H264SliceHeader* slice_hdr_out) {
           return ParseSliceHeader(
               data, subsamples, accelerator_->last_sps_nalu_data,
@@ -774,7 +776,7 @@ TEST_F(H264DecoderTest, SubmitDecodeRetry) {
 TEST_F(H264DecoderTest, SetStreamRetry) {
   SetInputFrameFiles({kBaselineFrame0});
 
-  EXPECT_CALL(*accelerator_, SetStream(_, _, _))
+  EXPECT_CALL(*accelerator_, SetStream(_, _))
       .WillOnce(Return(H264Decoder::H264Accelerator::Status::kTryAgain))
       .WillOnce(Return(H264Decoder::H264Accelerator::Status::kOk));
   ASSERT_EQ(AcceleratedVideoDecoder::kTryAgain, Decode());

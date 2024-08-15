@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider.h"
+#import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider+Testing.h"
 
 #import "base/ios/ios_util.h"
 #import "base/metrics/histogram_functions.h"
@@ -11,14 +12,14 @@
 #import "components/search_engines/template_url_service.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/photos/photos_availability.h"
-#import "ios/chrome/browser/photos/photos_metrics.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/photos/model/photos_availability.h"
+#import "ios/chrome/browser/photos/model/photos_metrics.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -35,7 +36,6 @@
 #import "ios/chrome/browser/shared/ui/util/image/image_saver.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
-#import "ios/chrome/browser/ui/context_menu/context_menu_configuration_provider+private.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_utils.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_commands.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
@@ -46,8 +46,8 @@
 #import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
-#import "ios/chrome/browser/web/image_fetch/image_fetch_tab_helper.h"
-#import "ios/chrome/browser/web/web_navigation_util.h"
+#import "ios/chrome/browser/web/model/image_fetch/image_fetch_tab_helper.h"
+#import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/context_menu/context_menu_api.h"
@@ -62,6 +62,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
@@ -170,9 +172,9 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   NSMutableArray<UIMenuElement*>* menuElements = [[NSMutableArray alloc] init];
   // TODO(crbug.com/1299758) add scenario for not a link and not an image.
   MenuScenarioHistogram menuScenario =
-      isImage && isLink ? MenuScenarioHistogram::kContextMenuImageLink
-      : isImage         ? MenuScenarioHistogram::kContextMenuImage
-                        : MenuScenarioHistogram::kContextMenuLink;
+      isImage && isLink ? kMenuScenarioHistogramContextMenuImageLink
+      : isImage         ? kMenuScenarioHistogramContextMenuImage
+                        : kMenuScenarioHistogramContextMenuLink;
 
   BrowserActionFactory* actionFactory =
       [[BrowserActionFactory alloc] initWithBrowser:self.browser
@@ -197,10 +199,41 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
         ContextMenuConfigurationProvider* strongSelf = weakSelf;
         if (!strongSelf)
           return;
+
+        // Note(prio@vivaldi.com) - By default make the new tab active and
+        // foreground.
+        if (IsVivaldiRunning()) {
+          UrlLoadParams tabParams = [self urlLoadParamsForNewTab:NO
+                                                         linkURL:linkURL
+                                                  isOffTheRecord:isOffTheRecord
+                                                        referrer:referrer
+                                                          params:params];
+          UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
+              ->Load(tabParams);
+        } else {
         UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
             ->Load(loadParams);
+        } // End Vivaldi
+
       }];
       [menuElements addObject:openNewTab];
+
+      // Vivaldi: Option for open tab in background.
+      UIAction* openNewBackgroundTab =
+          [actionFactory actionToOpenInNewBackgroundTabWithBlock:^{
+        ContextMenuConfigurationProvider* strongSelf = weakSelf;
+        if (!strongSelf)
+          return;
+        UrlLoadParams tabParams = [self urlLoadParamsForNewTab:YES
+                                                       linkURL:linkURL
+                                                isOffTheRecord:isOffTheRecord
+                                                      referrer:referrer
+                                                        params:params];
+        UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
+            ->Load(tabParams);
+      }];
+      [menuElements addObject:openNewBackgroundTab];
+      // End Vivaldi
 
       if (!isOffTheRecord) {
         // Open in Incognito Tab.
@@ -245,7 +278,8 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
     }
 
     // Copy Link.
-    UIAction* copyLink = [actionFactory actionToCopyURL:linkURL];
+    UIAction* copyLink =
+        [actionFactory actionToCopyURL:[[CrURL alloc] initWithGURL:linkURL]];
     [menuElements addObject:copyLink];
   }
 
@@ -331,7 +365,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
     if (useLens) {
 
       // Vivaldi: Disable Google Lens
-      if (!vivaldi::IsVivaldiRunning()) {
+      if (!IsVivaldiRunning()) {
       UIAction* searchImageWithLensAction =
           [actionFactory actionToSearchImageUsingLensWithBlock:^{
             [weakSelf searchImageWithURL:imageURL
@@ -453,6 +487,22 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       initWithImage:image
          entryPoint:LensEntrypoint::ContextMenu];
   [handler searchImageWithLens:command];
+}
+
+#pragma mark - Vivaldi
+- (UrlLoadParams)urlLoadParamsForNewTab:(BOOL)isBackgroundTab
+                                linkURL:(GURL)linkURL
+                         isOffTheRecord:(BOOL)isOffTheRecord
+                               referrer:(web::Referrer)referrer
+                                 params:(web::ContextMenuParams)params {
+  UrlLoadParams loadParams = UrlLoadParams::InNewTab(linkURL);
+  loadParams.SetInBackground(isBackgroundTab);
+  loadParams.in_incognito = isOffTheRecord;
+  loadParams.append_to = OpenPosition::kCurrentTab;
+  loadParams.web_params.referrer = referrer;
+  loadParams.origin_point = [params.view convertPoint:params.location
+                                               toView:nil];
+  return loadParams;
 }
 
 @end

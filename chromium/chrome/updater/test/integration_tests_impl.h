@@ -5,6 +5,7 @@
 #ifndef CHROME_UPDATER_TEST_INTEGRATION_TESTS_IMPL_H_
 #define CHROME_UPDATER_TEST_INTEGRATION_TESTS_IMPL_H_
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -16,7 +17,6 @@
 #include "build/build_config.h"
 #include "chrome/updater/test/server.h"
 #include "chrome/updater/update_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 
@@ -58,7 +58,8 @@ struct AppUpdateExpectation {
                        const int error_code = static_cast<int>(
                            UpdateService::Result::kUpdateCanceled),
                        const int event_type = /*EVENT_UPDATE_COMPLETE=*/3,
-                       const std::string& custom_app_response = {});
+                       const std::string& custom_app_response = {},
+                       const std::string& response_status = {});
   AppUpdateExpectation(const AppUpdateExpectation&);
   ~AppUpdateExpectation();
 
@@ -77,6 +78,7 @@ struct AppUpdateExpectation {
   const int error_code;
   const int event_type;
   const std::string custom_app_response;
+  const std::string response_status;
 };
 
 // Returns the path to the updater installer program (in the build output
@@ -143,9 +145,10 @@ void Install(UpdaterScope scope);
 // Installs the updater and an app via the command line.
 void InstallUpdaterAndApp(UpdaterScope scope,
                           const std::string& app_id,
-                          const bool is_silent_install,
+                          bool is_silent_install,
                           const std::string& tag,
-                          const std::string& child_window_text_to_find);
+                          const std::string& child_window_text_to_find,
+                          bool always_launch_cmd);
 
 // Expects that the updater is installed on the system and the specified
 // version is active.
@@ -218,7 +221,7 @@ void Run(UpdaterScope scope,
          int* exit_code = nullptr);
 
 // Returns the path of the Updater executable.
-absl::optional<base::FilePath> GetInstalledExecutablePath(UpdaterScope scope);
+std::optional<base::FilePath> GetInstalledExecutablePath(UpdaterScope scope);
 
 // Sets up a fake updater on the system at a version lower than the test.
 void SetupFakeUpdaterLowerVersion(UpdaterScope scope);
@@ -364,7 +367,9 @@ void CloseInstallCompleteDialog(const std::wstring& child_window_text_to_find);
 
 #if BUILDFLAG(IS_MAC)
 void PrivilegedHelperInstall(UpdaterScope scope);
-#endif  // BUILDFLAG(IS_WIN)
+void DeleteLegacyUpdater(UpdaterScope scope);
+void ExpectPrepareToRunBundleSuccess(const base::FilePath& bundle_path);
+#endif  // BUILDFLAG(IS_MAC)
 
 void ExpectLegacyUpdaterMigrated(UpdaterScope scope);
 

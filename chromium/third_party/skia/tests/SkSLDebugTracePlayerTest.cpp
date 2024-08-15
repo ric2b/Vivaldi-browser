@@ -37,8 +37,7 @@ static sk_sp<SkSL::DebugTracePriv> make_trace(skiatest::Reporter* r,
                                               std::string src) {
     auto debugTrace = sk_make_sp<SkSL::DebugTracePriv>();
 
-    SkSL::ShaderCaps caps;
-    SkSL::Compiler compiler(&caps);
+    SkSL::Compiler compiler;
     SkSL::ProgramSettings settings;
     settings.fOptimize = false;
 
@@ -61,7 +60,7 @@ static sk_sp<SkSL::DebugTracePriv> make_trace(skiatest::Reporter* r,
             if (rasterProg) {
                 // Append the SkSL program to the raster pipeline, and run it at xy=(0.5, 0.5).
                 static constexpr float kCoordinates[4] = {0.5f, 0.5f, 0.0f, 1.0f};
-                pipeline.append_constant_color(&alloc, kCoordinates);
+                pipeline.appendConstantColor(&alloc, kCoordinates);
                 rasterProg->appendStages(&pipeline,
                                          &alloc,
                                          /*callbacks=*/nullptr,

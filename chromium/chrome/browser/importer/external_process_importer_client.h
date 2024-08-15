@@ -24,6 +24,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 
 class ExternalProcessImporterHost;
+struct ImporterAutofillFormDataEntry;
 struct ImportedBookmarkEntry;
 class InProcessImporterBridge;
 
@@ -33,7 +34,6 @@ struct ImportedFaviconUsage;
 struct ImportedSpeedDialEntry;
 
 namespace importer {
-struct ImporterAutofillFormDataEntry;
 struct ImportedPasswordForm;
 struct SearchEngineInfo;
 }

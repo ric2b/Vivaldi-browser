@@ -5,8 +5,8 @@
 #import "ios/chrome/browser/ui/browser_view/tab_events_mediator.h"
 
 #import "ios/chrome/browser/feature_engagement/model/tracker_util.h"
-#import "ios/chrome/browser/metrics/new_tab_page_uma.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -21,14 +21,14 @@
 #import "ios/chrome/browser/url_loading/model/new_tab_animation_tab_helper.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_observer_bridge.h"
-#import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
+#import "ios/chrome/browser/web/model/page_placeholder_tab_helper.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 
 @interface TabEventsMediator () <CRWWebStateObserver,
                                  WebStateListObserving,
-                                 URLLoadingObserver>
+                                 URLLoadingObserving>
 
 @end
 
@@ -287,9 +287,10 @@
   }
 }
 
-#pragma mark - URLLoadingObserver
+#pragma mark - URLLoadingObserving
 
-- (void)newTabWillLoadURL:(GURL)URL isUserInitiated:(BOOL)isUserInitiated {
+- (void)newTabWillLoadURL:(const GURL&)URL
+          isUserInitiated:(BOOL)isUserInitiated {
   if (isUserInitiated) {
     // Send either the "New Tab Opened" or "New Incognito Tab" opened to the
     // feature_engagement::Tracker based on `inIncognito`.
@@ -298,7 +299,7 @@
   }
 }
 
-- (void)tabWillLoadURL:(GURL)URL
+- (void)tabWillLoadURL:(const GURL&)URL
         transitionType:(ui::PageTransition)transitionType {
   [self.consumer dismissBookmarkModalController];
 
@@ -309,7 +310,7 @@
         _browserState->IsOffTheRecord(), currentWebState, URL, transitionType);
   }
 }
-- (void)willSwitchToTabWithURL:(GURL)URL
+- (void)willSwitchToTabWithURL:(const GURL&)URL
               newWebStateIndex:(NSInteger)newWebStateIndex {
   base::WeakPtr<web::WebState> weakWebStateBeingActivated =
       _webStateList->GetWebStateAt(newWebStateIndex)->GetWeakPtr();

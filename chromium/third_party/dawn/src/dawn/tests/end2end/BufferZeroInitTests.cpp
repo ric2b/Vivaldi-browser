@@ -184,7 +184,6 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::ComputePipelineDescriptor pipelineDescriptor;
         pipelineDescriptor.layout = nullptr;
         pipelineDescriptor.compute.module = module;
-        pipelineDescriptor.compute.entryPoint = "main";
         wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDescriptor);
 
         const uint64_t bufferSize = expectedBufferData.size() * sizeof(uint32_t);
@@ -451,7 +450,6 @@ class BufferZeroInitTest : public DawnTest {
         wgpu::ComputePipelineDescriptor pipelineDescriptor;
         pipelineDescriptor.layout = nullptr;
         pipelineDescriptor.compute.module = utils::CreateShaderModule(device, computeShader);
-        pipelineDescriptor.compute.entryPoint = "main";
         wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDescriptor);
 
         // Clear the color of outputTexture to green.
@@ -939,6 +937,9 @@ TEST_P(BufferZeroInitTest, CopyBufferToTexture) {
 TEST_P(BufferZeroInitTest, Copy2DTextureToBuffer) {
     constexpr wgpu::Extent3D kTextureSize = {64u, 8u, 1u};
 
+    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
+
     // bytesPerRow == texelBlockSizeInBytes * copySize.width && bytesPerRow * copySize.height ==
     // buffer.size
     {
@@ -1150,6 +1151,9 @@ TEST_P(BufferZeroInitTest, SetVertexBuffer) {
 TEST_P(BufferZeroInitTest, PaddingInitialized) {
     DAWN_SUPPRESS_TEST_IF(IsANGLE());                              // TODO(crbug.com/dawn/1084)
     DAWN_SUPPRESS_TEST_IF(IsLinux() && IsVulkan() && IsNvidia());  // TODO(crbug.com/dawn/1214)
+
+    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
+    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
 
     constexpr wgpu::TextureFormat kColorAttachmentFormat = wgpu::TextureFormat::RGBA8Unorm;
     // A small sub-4-byte format means a single vertex can fit entirely within the padded buffer,

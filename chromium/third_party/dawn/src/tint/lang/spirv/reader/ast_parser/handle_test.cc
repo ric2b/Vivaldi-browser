@@ -4233,7 +4233,8 @@ TEST_F(SpvParserHandleTest, ReadWriteStorageTexture) {
 
     EXPECT_TRUE(p->error().empty()) << p->error();
     const auto got = test::ToString(p->program());
-    auto* expect = R"(enable chromium_experimental_read_write_storage_texture;
+    auto* expect =
+        R"(requires readonly_and_readwrite_storage_textures;
 
 @group(0) @binding(0) var RWTexture2D : texture_storage_2d<rgba32float, read_write>;
 

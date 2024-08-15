@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/ranges/ranges.h"
@@ -442,6 +442,11 @@ struct AutocompleteMatch {
   // mix well with Pedals or other actions (e.g. entities).
   bool IsActionCompatible() const;
 
+  // Returns true if this match has a keyword that puts the omnibox instantly
+  // into keyword mode when the match is focused via keyboard, instead of
+  // the usual waiting for activation of a visible keyword button.
+  bool HasInstantKeyword(TemplateURLService* template_url_service) const;
+
   // Gets data relevant to whether there should be any special keyword-related
   // UI shown for this match.  If this match represents a selected keyword, i.e.
   // the UI should be "in keyword mode", |keyword_out| will be set to the
@@ -635,9 +640,7 @@ struct AutocompleteMatch {
   // The provider of this match, used to remember which provider the user had
   // selected when the input changes. This may be NULL, in which case there is
   // no provider (or memory of the user's selection).
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #union
-  RAW_PTR_EXCLUSION AutocompleteProvider* provider = nullptr;
+  raw_ptr<AutocompleteProvider> provider = nullptr;
 
   // The relevance of this match. See table in autocomplete.h for scores
   // returned by various providers. This is used to rank matches among all
@@ -842,8 +845,8 @@ struct AutocompleteMatch {
   bool from_previous = false;
 
   // Optional search terms args.  If present,
-  // AutocompleteController::UpdateAssistedQueryStats() will incorporate this
-  // data with additional data it calculates and pass the completed struct to
+  // AutocompleteController::UpdateSearchboxStats() will incorporate this data
+  // with additional data it calculates and pass the completed struct to
   // TemplateURLRef::ReplaceSearchTerms() to reset the match's |destination_url|
   // after the complete set of matches in the AutocompleteResult has been chosen
   // and sorted.  Most providers will leave this as NULL, which will cause the
@@ -881,6 +884,8 @@ struct AutocompleteMatch {
   // however, providers pass ALL suggestion candidates to the controller. When
   // this flag is true, this match is an "extra" suggestion that would've
   // originally been culled by the provider.
+  // TODO(yoangela|manukh): Currently unused except in tests. Remove if not
+  //   needed. Might be needed when increasing the max provider limit?
   bool culled_by_provider = false;
 
   // True for shortcut suggestions that were boosted. Used for grouping logic.

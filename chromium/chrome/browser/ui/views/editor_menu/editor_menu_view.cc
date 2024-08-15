@@ -13,12 +13,12 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
-#include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/ui/views/editor_menu/editor_menu_badge_view.h"
 #include "chrome/browser/ui/views/editor_menu/editor_menu_chip_view.h"
-#include "chrome/browser/ui/views/editor_menu/editor_menu_gradient_badge.h"
 #include "chrome/browser/ui/views/editor_menu/editor_menu_textfield_view.h"
 #include "chrome/browser/ui/views/editor_menu/editor_menu_view_delegate.h"
 #include "chrome/browser/ui/views/editor_menu/utils/pre_target_handler.h"
+#include "chrome/browser/ui/views/editor_menu/utils/pre_target_handler_view.h"
 #include "chrome/browser/ui/views/editor_menu/utils/preset_text_query.h"
 #include "chrome/browser/ui/views/editor_menu/utils/utils.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -31,7 +31,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
-#include "ui/views/badge_painter.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -57,6 +56,8 @@ constexpr gfx::Insets kTitleContainerInsets = gfx::Insets::TLBR(12, 16, 12, 14);
 // Min width in rewrite mode to ensure there is space for the chips.
 constexpr int kEditorMenuRewriteModeMinWidth = 288;
 
+constexpr int kBadgeHorizontalPadding = 8;
+
 // Spacing to apply between and around chips.
 constexpr int kChipsHorizontalPadding = 8;
 constexpr int kChipsVerticalPadding = 12;
@@ -71,9 +72,8 @@ EditorMenuView::EditorMenuView(EditorMenuMode editor_menu_mode,
                                const PresetTextQueries& preset_text_queries,
                                const gfx::Rect& anchor_view_bounds,
                                EditorMenuViewDelegate* delegate)
-    : editor_menu_mode_(editor_menu_mode),
-      pre_target_handler_(
-          std::make_unique<PreTargetHandler>(this, CardType::kEditorMenu)),
+    : PreTargetHandlerView(CardType::kEditorMenu),
+      editor_menu_mode_(editor_menu_mode),
       delegate_(delegate) {
   CHECK(delegate_);
   InitLayout(preset_text_queries);
@@ -107,7 +107,7 @@ views::UniqueWidgetPtr EditorMenuView::CreateWidget(
 }
 
 void EditorMenuView::AddedToWidget() {
-  widget_observation_.Observe(GetWidget());
+  PreTargetHandlerView::AddedToWidget();
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 }
 
@@ -130,26 +130,6 @@ bool EditorMenuView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   return true;
 }
 
-void EditorMenuView::OnWidgetDestroying(views::Widget* widget) {
-  widget_observation_.Reset();
-}
-
-void EditorMenuView::OnWidgetActivationChanged(views::Widget* widget,
-                                               bool active) {
-  // When the widget is active, will use default focus behavior.
-  if (active) {
-    // Reset `pre_target_handler_` immediately causes problems if the events are
-    // not all precessed. Reset it asynchronously.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&EditorMenuView::ResetPreTargetHandler,
-                                  weak_factory_.GetWeakPtr()));
-    return;
-  }
-
-  // Close widget When it is deactivated.
-  GetWidget()->Close();
-}
-
 void EditorMenuView::OnWidgetVisibilityChanged(views::Widget* widget,
                                                bool visible) {
   CHECK(delegate_);
@@ -166,6 +146,19 @@ void EditorMenuView::UpdateBounds(const gfx::Rect& anchor_view_bounds) {
   GetWidget()->SetBounds(GetEditorMenuBounds(
       anchor_view_bounds,
       gfx::Size(editor_menu_width, GetHeightForWidth(editor_menu_width))));
+}
+
+void EditorMenuView::DisableMenu() {
+  settings_button_->SetEnabled(false);
+
+  for (views::View* row : chips_container_->children()) {
+    for (views::View* chip : row->children()) {
+      chip->SetEnabled(false);
+    }
+  }
+
+  textfield_->textfield()->SetEnabled(false);
+  textfield_->arrow_button()->SetEnabled(false);
 }
 
 void EditorMenuView::InitLayout(const PresetTextQueries& preset_text_queries) {
@@ -197,11 +190,10 @@ void EditorMenuView::AddTitleContainer() {
       views::style::CONTEXT_DIALOG_TITLE, views::style::STYLE_HEADLINE_5));
   title->SetEnabledColorId(ui::kColorSysOnSurface);
 
-  auto* badge = title_container_->AddChildView(
-      std::make_unique<EditorMenuGradientBadge>());
-  badge->SetProperty(
-      views::kMarginsKey,
-      gfx::Insets::VH(0, views::BadgePainter::kBadgeHorizontalMargin));
+  auto* badge =
+      title_container_->AddChildView(std::make_unique<EditorMenuBadgeView>());
+  badge->SetProperty(views::kMarginsKey,
+                     gfx::Insets::VH(0, kBadgeHorizontalPadding));
 
   auto* spacer =
       title_container_->AddChildView(std::make_unique<views::View>());
@@ -250,7 +242,7 @@ void EditorMenuView::UpdateChipsContainer(int editor_menu_width) {
   // Remove chips from their current rows and transfer ownership since we want
   // to add the chips to new rows.
   std::vector<std::unique_ptr<EditorMenuChipView>> chips;
-  for (auto* row : chips_container_->children()) {
+  for (views::View* row : chips_container_->children()) {
     while (!row->children().empty()) {
       chips.push_back(row->RemoveChildViewT(
           views::AsViewClass<EditorMenuChipView>(row->children()[0])));
@@ -305,11 +297,7 @@ void EditorMenuView::OnChipButtonPressed(const std::string& text_query_id) {
   delegate_->OnChipButtonPressed(text_query_id);
 }
 
-void EditorMenuView::ResetPreTargetHandler() {
-  pre_target_handler_.reset();
-}
-
-BEGIN_METADATA(EditorMenuView, views::View)
+BEGIN_METADATA(EditorMenuView)
 END_METADATA
 
 }  // namespace chromeos::editor_menu

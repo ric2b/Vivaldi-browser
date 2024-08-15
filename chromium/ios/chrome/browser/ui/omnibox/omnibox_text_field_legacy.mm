@@ -15,7 +15,6 @@
 #import "components/grit/components_scaled_resources.h"
 #import "components/omnibox/browser/autocomplete_input.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
-#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/animation_util.h"
@@ -121,6 +120,9 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     self.textAlignment = NSTextAlignmentNatural;
     self.keyboardType = UIKeyboardTypeWebSearch;
     self.smartQuotesType = UITextSmartQuotesTypeNo;
+    // Prevent the text from overlapping the clear text button.
+    // (crbug.com/1403031)
+    self.textInputView.clipsToBounds = YES;
 
     // Disable drag on iPhone because there's nowhere to drag to
     if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {

@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {State} from '../../externs/ts/state.js';
 import {Slice} from '../../lib/base_store.js';
+import type {State} from '../../state/state.js';
 
 /**
  * @fileoverview Bulk pinning slice of the store.
- * @suppress {checkTypes}
  *
  * BulkPinProgress is the current state of files that are being pinned when the
  * BulkPinning feature is enabled. During bulk pinning, all the users items in

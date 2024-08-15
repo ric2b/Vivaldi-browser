@@ -24,11 +24,11 @@ STARTING_WORKDIR_KEY = 'depot-tools.rebase-update.starting-workdir'
 
 def find_return_branch_workdir():
     """Finds the branch and working directory which we should return to after
-  rebase-update completes.
+    rebase-update completes.
 
-  These values may persist across multiple invocations of rebase-update, if
-  rebase-update runs into a conflict mid-way.
-  """
+    These values may persist across multiple invocations of rebase-update, if
+    rebase-update runs into a conflict mid-way.
+    """
     return_branch = git.get_config(STARTING_BRANCH_KEY)
     workdir = git.get_config(STARTING_WORKDIR_KEY)
     if not return_branch:
@@ -161,9 +161,24 @@ def rebase_branch(branch, parent, start_hash):
     if git.hash_one(parent) != start_hash:
         # Try a plain rebase first
         print('Rebasing:', branch)
-        rebase_ret = git.rebase(parent, start_hash, branch, abort=True)
+        consider_squashing = git.get_num_commits(branch) != 1
+        rebase_ret = git.rebase(parent,
+                                start_hash,
+                                branch,
+                                abort=consider_squashing)
         if not rebase_ret.success:
-            # TODO(iannucci): Find collapsible branches in a smarter way?
+            mid_rebase_message = textwrap.dedent("""\
+                Your working copy is in mid-rebase. Either:
+                 * completely resolve like a normal git-rebase; OR
+                 * abort the rebase and mark this branch as dormant:
+                       git rebase --abort && \\
+                       git config branch.%s.dormant true
+
+                And then run `git rebase-update -n` to resume.
+                """ % branch)
+            if not consider_squashing:
+                print(mid_rebase_message)
+                return False
             print("Failed! Attempting to squash", branch, "...", end=' ')
             sys.stdout.flush()
             squash_branch = branch + "_squash_attempt"
@@ -205,15 +220,8 @@ def rebase_branch(branch, parent, start_hash):
                     print(
                         textwrap.dedent("""\
           Squashing failed. You probably have a real merge conflict.
-
-          Your working copy is in mid-rebase. Either:
-           * completely resolve like a normal git-rebase; OR
-           * abort the rebase and mark this branch as dormant:
-                 git rebase --abort && \\
-                 git config branch.%s.dormant true
-
-          And then run `git rebase-update -n` to resume.
-          """ % branch))
+          """))
+                    print(mid_rebase_message)
                     return False
     else:
         print('%s up-to-date' % branch)

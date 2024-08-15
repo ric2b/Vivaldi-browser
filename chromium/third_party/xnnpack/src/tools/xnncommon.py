@@ -4,6 +4,9 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import codecs
+import os
+
 
 def _indent(text):
   return "\n".join(map(lambda t: "  " + t if t else t, text.splitlines()))
@@ -42,8 +45,10 @@ _ISA_TO_MACRO_MAP = {
   "neonfp16arith": "XNN_ENABLE_ARM_FP16_VECTOR",
   "neonbf16": "XNN_ENABLE_ARM_BF16",
   "neondot": "XNN_ENABLE_ARM_DOTPROD",
+  "neondotfp16arith": "XNN_ENABLE_ARM_DOTPROD && XNN_ENABLE_ARM_FP16_VECTOR",
   "neoni8mm": "XNN_ENABLE_ARM_I8MM",
   "rvv": "XNN_ENABLE_RISCV_VECTOR",
+  "avxvnni": "XNN_ENABLE_AVXVNNI",
 }
 
 _ISA_TO_ARCH_MAP = {
@@ -56,6 +61,7 @@ _ISA_TO_ARCH_MAP = {
   "neonfp16arith": ["aarch32", "aarch64"],
   "neonbf16": ["aarch32", "aarch64"],
   "neondot": ["aarch32", "aarch64"],
+  "neondotfp16arith": ["aarch32", "aarch64"],
   "neoni8mm": ["aarch32", "aarch64"],
   "sse": ["x86-32", "x86-64"],
   "sse2": ["x86-32", "x86-64"],
@@ -69,6 +75,8 @@ _ISA_TO_ARCH_MAP = {
   "avx512f": ["x86-32", "x86-64"],
   "avx512skx": ["x86-32", "x86-64"],
   "avx512vbmi": ["x86-32", "x86-64"],
+  "avx512vnni": ["x86-32", "x86-64"],
+  "avxvnni": ["x86-32", "x86-64"],
   "rvv": ["riscv"],
   "wasm32": ["wasm", "wasmsimd"],
   "wasm": ["wasm", "wasmsimd", "wasmrelaxedsimd"],
@@ -89,6 +97,7 @@ _ISA_TO_UTILCHECK_MAP = {
   "neonfp16arith": "CheckNEONFP16ARITH",
   "neonbf16": "CheckNEONBF16",
   "neondot": "CheckNEONDOT",
+  "neondotfp16arith": "CheckNEONDOT",
   "neoni8mm": "CheckNEONI8MM",
   "ssse3": "CheckSSSE3",
   "sse41": "CheckSSE41",
@@ -100,6 +109,8 @@ _ISA_TO_UTILCHECK_MAP = {
   "avx512f": "CheckAVX512F",
   "avx512skx": "CheckAVX512SKX",
   "avx512vbmi": "CheckAVX512VBMI",
+  "avx512vnni": "CheckAVX512VNNI",
+  "avxvnni": "CheckAVXVNNI",
   "rvv": "CheckRVV",
   "wasmpshufb": "CheckWAsmPSHUFB",
   "wasmsdot": "CheckWAsmSDOT",
@@ -116,6 +127,7 @@ _ISA_TO_CHECK_MAP = {
   "neonfp16arith": "TEST_REQUIRES_ARM_NEON_FP16_ARITH",
   "neonbf16": "TEST_REQUIRES_ARM_NEON_BF16",
   "neondot": "TEST_REQUIRES_ARM_NEON_DOT",
+  "neondotfp16arith": "TEST_REQUIRES_ARM_NEON_DOT_FP16_ARITH",
   "neoni8mm": "TEST_REQUIRES_ARM_NEON_I8MM",
   "sse": "TEST_REQUIRES_X86_SSE",
   "sse2": "TEST_REQUIRES_X86_SSE2",
@@ -129,6 +141,8 @@ _ISA_TO_CHECK_MAP = {
   "avx512f": "TEST_REQUIRES_X86_AVX512F",
   "avx512skx": "TEST_REQUIRES_X86_AVX512SKX",
   "avx512vbmi": "TEST_REQUIRES_X86_AVX512VBMI",
+  "avx512vnni": "TEST_REQUIRES_X86_AVX512VNNI",
+  "avxvnni": "TEST_REQUIRES_X86_AVXVNNI",
   "rvv": "TEST_REQUIRES_RISCV_VECTOR",
   "wasmpshufb": "TEST_REQUIRES_WASM_PSHUFB",
   "wasmsdot": "TEST_REQUIRES_WASM_SDOT",
@@ -197,11 +211,24 @@ _ISA_HIERARCHY = [
   "avx512f",
   "avx512skx",
   "avx512vbmi",
+  "avx512vnni",
+  "avxvnni",
   "armsimd32",
   "neon",
   "neonv8",
   "neondot",
+  "neondotfp16",
   "neoni8mm",
 ]
 
 _ISA_HIERARCHY_MAP = {isa: v for v, isa in enumerate(_ISA_HIERARCHY)}
+
+
+def overwrite_if_changed(filepath, content):
+  txt_changed = True
+  if os.path.exists(filepath):
+    with codecs.open(filepath, "r", encoding="utf-8") as output_file:
+      txt_changed = output_file.read() != content
+  if txt_changed:
+    with codecs.open(filepath, "w", encoding="utf-8") as output_file:
+      output_file.write(content)

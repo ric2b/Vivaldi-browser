@@ -5,6 +5,7 @@
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
 
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/model_type_store_service_factory.h"
@@ -15,9 +16,10 @@
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
 #include "chrome/browser/web_applications/user_uninstalled_preinstalled_web_app_prefs.h"
-#include "chrome/browser/web_applications/web_app_prefs_utils.h"
+#include "chrome/browser/web_applications/web_app_pref_guardrails.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 
@@ -52,6 +54,8 @@ WebAppProviderFactory::WebAppProviderFactory()
   // `WebAppInstallFinalizer::OnContentSettingChanged()`
   DependsOn(HostContentSettingsMapFactory::GetInstance());
   DependsOn(ExtensionsManager::GetExtensionSystemSharedFactory());
+  // Required to use different preinstalled app configs for managed devices.
+  DependsOn(policy::ManagementServiceFactory::GetInstance());
 }
 
 WebAppProviderFactory::~WebAppProviderFactory() = default;
@@ -79,8 +83,10 @@ void WebAppProviderFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   UserUninstalledPreinstalledWebAppPrefs::RegisterProfilePrefs(registry);
   PreinstalledWebAppManager::RegisterProfilePrefs(registry);
+  WebAppPrefGuardrails::RegisterProfilePrefs(registry);
   WebAppPolicyManager::RegisterProfilePrefs(registry);
-  WebAppPrefsUtilsRegisterProfilePrefs(registry);
+  registry->RegisterBooleanPref(prefs::kShouldGarbageCollectStoragePartitions,
+                                false);
   RegisterInstallBounceMetricProfilePrefs(registry);
   RegisterDailyWebAppMetricsProfilePrefs(registry);
   WebAppShortcutManager::RegisterProfilePrefs(registry);

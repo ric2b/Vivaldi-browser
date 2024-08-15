@@ -38,7 +38,7 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 68;
+const int kCurrentVersionNumber = 69;
 const int kCompatibleVersionNumber = 16;
 
 const char kEarlyExpirationThresholdKey[] = "early_expiration_threshold";
@@ -132,9 +132,6 @@ sql::InitStatus HistoryDatabase::Init(const base::FilePath& history_name) {
     return LogInitFailure(InitStep::CREATE_TABLES);
   }
   CreateMainURLIndex();
-
-  // TODO(benjhayden) Remove at some point.
-  meta_table_.DeleteKey("next_download_id");
 
   // Version check.
   sql::InitStatus version_status = EnsureCurrentVersion();
@@ -296,7 +293,6 @@ void HistoryDatabase::ComputeDatabaseMetrics(
 }
 
 int HistoryDatabase::CountUniqueHostsVisitedLastMonth() {
-  base::TimeTicks start_time = base::TimeTicks::Now();
   // Collect all URLs visited within the last month.
   base::Time one_month_ago = base::Time::Now() - base::Days(30);
 
@@ -313,8 +309,6 @@ int HistoryDatabase::CountUniqueHostsVisitedLastMonth() {
     hosts.insert(url.host());
   }
 
-  UMA_HISTOGRAM_TIMES("History.DatabaseMonthlyHostCountTime",
-                      base::TimeTicks::Now() - start_time);
   return hosts.size();
 }
 
@@ -986,6 +980,15 @@ sql::InitStatus HistoryDatabase::EnsureCurrentVersion() {
   if (cur_version == 67) {
     if (!MigrateRemoveTypedUrlMetadata()) {
       return LogMigrationFailure(67);
+    }
+    cur_version++;
+    // TODO(crbug.com/1414092): Handle failure instead of ignoring it.
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+  }
+
+  if (cur_version == 68) {
+    if (!MigrateVisitsAddAppId()) {
+      return LogMigrationFailure(68);
     }
     cur_version++;
     // TODO(crbug.com/1414092): Handle failure instead of ignoring it.

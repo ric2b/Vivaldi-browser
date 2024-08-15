@@ -197,6 +197,21 @@ message Storage {
     string ufs_vendor = 16;
     // Model name.
     string ufs_model = 17;
+
+    // The following are fields for mmc_host. Every field name comes with prefix
+    // "mmc_host_".
+    // The bus type, could be pci / usb / sdio / uninterested.
+    string mmc_host_bus_type = 18;
+    // Vendor ID, 16 bits hex string
+    string mmc_host_pci_vendor_id = 19;
+    // Device ID, 16 bits hex string
+    string mmc_host_pci_device_id = 20;
+    // Device revision, 8 bits hex string
+    string mmc_host_pci_revision = 21;
+    // Subsystem ID, 16 bits hex string
+    string mmc_host_pci_subsystem = 22;
+    // Device class indicator, 32 bits
+    string mmc_host_pci_class = 23;
   }
   // Component alias.
   string name = 1;
@@ -650,4 +665,5 @@ message ProbeSsfcComponentsResponse {
   repeated ApI2c ap_i2c = 11;
   repeated EcI2c ec_i2c = 12;
   repeated Tcpc tcpc = 13;
+  repeated InputDevice touchscreen = 14;
 }

@@ -22,7 +22,6 @@
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/cursor_manager.h"
-#include "content/browser/renderer_host/input/synthetic_gesture_target.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_child_frame.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -30,12 +29,12 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
 #include "content/browser/renderer_host/text_input_manager.h"
+#include "content/common/input/synthetic_gesture_target.h"
 #include "content/public/browser/render_process_host.h"
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom.h"
-#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/display/display_util.h"
@@ -369,10 +368,10 @@ void RenderWidgetHostViewChildFrame::UpdateBackgroundColor() {
   }
 }
 
-absl::optional<DisplayFeature>
+std::optional<DisplayFeature>
 RenderWidgetHostViewChildFrame::GetDisplayFeature() {
   NOTREACHED();
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void RenderWidgetHostViewChildFrame::SetDisplayFeatureForTesting(
@@ -428,7 +427,7 @@ void RenderWidgetHostViewChildFrame::SendInitialPropertiesIfNeeded() {
   if (initial_properties_sent_ || !frame_connector_)
     return;
   UpdateViewportIntersection(frame_connector_->intersection_state(),
-                             absl::nullopt);
+                             std::nullopt);
   SetIsInert();
   UpdateInheritedEffectiveTouchAction();
   UpdateRenderThrottlingStatus();
@@ -535,7 +534,7 @@ void RenderWidgetHostViewChildFrame::UnregisterFrameSinkId() {
 
 void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
     const blink::mojom::ViewportIntersectionState& intersection_state,
-    const absl::optional<blink::VisualProperties>& visual_properties) {
+    const std::optional<blink::VisualProperties>& visual_properties) {
   if (host()) {
     host()->SetIntersectsViewport(
         !intersection_state.viewport_intersection.IsEmpty());
@@ -591,8 +590,7 @@ void RenderWidgetHostViewChildFrame::StopFlingingIfNecessary(
 
 void RenderWidgetHostViewChildFrame::GestureEventAck(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result,
-    blink::mojom::ScrollResultDataPtr scroll_result_data) {
+    blink::mojom::InputEventResultState ack_result) {
   // Stop flinging if a GSU event with momentum phase is sent to the renderer
   // but not consumed.
   StopFlingingIfNecessary(event, ack_result);
@@ -603,9 +601,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     return;
 
   if (event.IsTouchpadZoomEvent())
-    ProcessTouchpadZoomEventAckInRoot(
-        event, ack_result,
-        scroll_result_data ? scroll_result_data.Clone() : nullptr);
+    ProcessTouchpadZoomEventAckInRoot(event, ack_result);
 
 #if BUILDFLAG(IS_MAC)
   // NOTE(espen@vivladi.com): We must forward the ack to the root view right
@@ -622,8 +618,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
   // ForwardAckedTouchpadPinchGestureEvent is a genretic function for all
   // gesture events, not just pinch events (badly named),  so I reuse it.
   if (vivaldi::IsVivaldiRunning()) {
-    frame_connector_->ForwardAckedTouchpadZoomEvent(
-        event, ack_result, std::move(scroll_result_data));
+    frame_connector_->ForwardAckedTouchpadZoomEvent(event, ack_result);
   }
 #endif
 
@@ -667,15 +662,14 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     }
   }
 
-  frame_connector_->DidAckGestureEvent(event, ack_result,
-                                       std::move(scroll_result_data));
+  frame_connector_->DidAckGestureEvent(event, ack_result);
 }
 
 void RenderWidgetHostViewChildFrame::ProcessTouchpadZoomEventAckInRoot(
     const blink::WebGestureEvent& event,
-    blink::mojom::InputEventResultState ack_result,
-    blink::mojom::ScrollResultDataPtr scroll_result_data) {
+    blink::mojom::InputEventResultState ack_result) {
   DCHECK(event.IsTouchpadZoomEvent());
+
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // NOTE(espen@vivaldi.com): We run the pinch sequence/protocol in a child
   // frame from the start. The acks need to be sent to same view. Regular chrome
@@ -686,8 +680,8 @@ void RenderWidgetHostViewChildFrame::ProcessTouchpadZoomEventAckInRoot(
     return;
   }
 #endif // !IS_ANDROID && !IS_IOS
-  frame_connector_->ForwardAckedTouchpadZoomEvent(
-      event, ack_result, std::move(scroll_result_data));
+
+  frame_connector_->ForwardAckedTouchpadZoomEvent(event, ack_result);
 }
 
 void RenderWidgetHostViewChildFrame::ForwardTouchpadZoomEventIfNecessary(
@@ -796,7 +790,7 @@ void RenderWidgetHostViewChildFrame::NotifyHitTestRegionUpdated(
     selection_controller_client_->OnHitTestRegionUpdated();
   }
 
-  absl::optional<gfx::RectF> screen_rect =
+  std::optional<gfx::RectF> screen_rect =
       region.transform.InverseMapRect(gfx::RectF(region.rect));
   if (!screen_rect) {
     last_stable_screen_rect_ = gfx::RectF();

@@ -21,6 +21,7 @@
           <ph name="PROXIES_TITLE" />
           ning vaata, et seal oleks määratud „Puhverserver puudub” või „Otse”.</translation>
 <translation id="5248344925342018662">See on turvaline Vivaldi-sisene leht</translation>
+<translation id="6690242244468452299">Kui lubad krahhiteadete automaatse edastamise, näidatakse sellel lehel teavet viimatiste krahhide kohta.</translation>
 <translation id="7023871570427738255">Ava
           Vivaldi menüü &gt;
           <ph name="SETTINGS_TITLE" />
@@ -31,7 +32,6 @@
           ruut taas märkida.</translation>
 <translation id="7496505986576158197">Vivaldi on loodud avatud lähtekoodiga <ph name="BEGIN_LINK_CHROMIUM" />Chromiumi projekti<ph name="END_LINK_CHROMIUM" /> ja hulga <ph name="BEGIN_LINK_OSS" />muu avatud lähtekoodiga tarkvara<ph name="END_LINK_OSS" /> põhjal.</translation>
 <translation id="8187289872471304532">ava
-          Rakendused &gt; Süsteemi eelistused &gt; Võrk &gt; Täpsemalt &gt; Puhverserverid
-          (Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies)
+          Applications &gt; System Settings &gt; Network &gt; Wi-Fi (või asjakohane muu võrguliides) &gt; Details &gt; Proxies
           ning eemalda märgistus kõigi hetkel valitud puhverserverite eest.</translation>
 </translationbundle>

@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">アイテム更新されたで</translation>
 <translation id="1041637248958093184">プライベートタブ使ってるときは、検索、訪問サイト、Cookie、一時ファイルはVivaldiに保存されへんで。</translation>
 <translation id="1066692930984703744">トラッカー・広告ブロッカー有効にしたら、ブラウジング速なるしもっと安全やで</translation>
-<translation id="1076258485383101882">入力したURL同期</translation>
 <translation id="1116694919640316211">アバウト</translation>
 <translation id="1123707809902612118">トラッカーと広告ブロック</translation>
 <translation id="1151972924205500581">パスワード要るで</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">利用規約</translation>
 <translation id="1771413903824396513">ニックネーム順</translation>
 <translation id="1804522390855853698">中国語 (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">ライト</translation>
 <translation id="1809939268435598390">フォルダーほかす</translation>
 <translation id="1813686536470127172">他のフォルダー</translation>
 <translation id="1828800626900562968">さらのタブ開くんやったら、下のプラスアイコンをタップして。</translation>
@@ -71,12 +71,17 @@
 <translation id="2388224692799337242">ブラウジングしたら、ここに履歴出るで</translation>
 <translation id="2391028308389203648">トルコ語 (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">有効化</translation>
+<translation id="2414886740292270097">ダーク</translation>
+<translation id="2433507940547922241">見た目</translation>
 <translation id="2434910957904013691">全部同期</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />ユーザーネーム<ph name="END_LINK" /> か <ph name="BEGIN_LINK" />パスワード<ph name="END_LINK" />忘れた？</translation>
 <translation id="2536780277491102902">例外</translation>
 <translation id="2558801801411970131">トラッカーブロックしてるで</translation>
+<translation id="2562040727226360285">イライラさいなら、サイト正常に読み込まんかもしれんけど (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">さらのメモ</translation>
 <translation id="2619628557366098325">ポルトガル語 (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">システム</translation>
+<translation id="2666092431469916601">上</translation>
 <translation id="2677862276555105603">広告
 ブロック数</translation>
 <translation id="2678542925523700624">エストニア (<ph name="ORIGIN" />)</translation>
@@ -85,6 +90,7 @@
 <translation id="2745324713975967671">暗号化パスワード</translation>
 <translation id="276436995507680929">リーディングリスト同期</translation>
 <translation id="2765217105034171413">小</translation>
+<translation id="2767124759205735526">履歴とURL同期</translation>
 <translation id="2825232297853754349">利用規約に同意せなあかんで。</translation>
 <translation id="2842985007712546952">親フォルダー</translation>
 <translation id="2843343418360315034">ハンガリー語 (<ph name="ORIGIN" />)</translation>
@@ -98,6 +104,7 @@
 <translation id="3073196329485613487">アカウントにログイン</translation>
 <translation id="307859903981308731">続けることで、以下の規約に同意したことになるで</translation>
 <translation id="3086746722712840547">メモ</translation>
+<translation id="3087734570205094154">下</translation>
 <translation id="3091563570137981919">トラッカー・広告ブロック</translation>
 <translation id="3134385238404760368">最近開いたタブなし</translation>
 <translation id="3157931365184549694">復元</translation>
@@ -127,12 +134,14 @@
 <translation id="3699026013955941879">コードの期限切れてるわ。コード再発行リクエストして。</translation>
 <translation id="3700829948786686853">Vivaldiにおこしやす</translation>
 <translation id="3766350025418769949">iPadの他のアプリでも、Vivaldiパスワードマネージャーに保存したパスワード使えるで。</translation>
+<translation id="3842727926262967527">タブバーとアドレス欄を出す場所選んで。</translation>
 <translation id="3845564230651302310">さらのブロッカー設定適用中や...</translation>
 <translation id="3858860766373142691">名前</translation>
 <translation id="3866249974567520381">説明</translation>
 <translation id="3872195896030547485">有効なメールアドレス入れて。</translation>
 <translation id="3894427358181296146">フォルダー追加</translation>
 <translation id="3897092660631435901">メニュー</translation>
+<translation id="3921585859122905677">アドレスバーの位置</translation>
 <translation id="3953599441418463312">日本語 (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">ブロックしたトラッカー</translation>
 <translation id="3958433364221339259"><ph name="SEARCH_ENGINE" />で検索</translation>
@@ -163,7 +172,9 @@
 <translation id="4394049700291259645">無効にする</translation>
 <translation id="4413780690230851155">ブラウジング履歴ほかす</translation>
 <translation id="4452878871193896747">インドネシア語 (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">タブスタイル</translation>
 <translation id="4474581062946673155">他のデバイスから同期されたタブ今ないわ。</translation>
+<translation id="4488900295693536220">候補に届きやすなるよう、アドレスバーが下にある時に適用できるで。</translation>
 <translation id="4493850495402472953">と</translation>
 <translation id="4497115807425788318">ロケーション</translation>
 <translation id="4507213865286211606">サイズプレビュー</translation>
@@ -207,6 +218,7 @@
 <translation id="5238642303473095117">データほかす</translation>
 <translation id="5245732982828228444">メモここに出るで</translation>
 <translation id="5249199221558969362">そんな数字ありえへんやろ。</translation>
+<translation id="5271549068863921519">パスワード保存</translation>
 <translation id="5290452628447338707">メモなし</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5349678548463426691">説明順</translation>
@@ -240,6 +252,7 @@
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件のアイテム移したわ</translation>
 <translation id="6147094071357011481">最近閉じたタブないわ</translation>
 <translation id="6193995664633100765">インド (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">テーマ</translation>
 <translation id="6365929278691047681">ドイツ語 (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">ブックマーク編集</translation>
 <translation id="6406506848690869874">同期</translation>
@@ -278,7 +291,6 @@
 <translation id="7041964446309059643">手動</translation>
 <translation id="7110758301321962823">ユーザーネーム回復</translation>
 <translation id="7194677467200983873">最後の同期：</translation>
-<translation id="7196846668589096106">デスクトップタブ</translation>
 <translation id="7210372243397300116">フォルダー検索</translation>
 <translation id="7215420652436283416">アドレス順</translation>
 <translation id="7229439505896086266">メモ作成</translation>
@@ -318,6 +330,7 @@
 <translation id="8076492880354921740">タブ</translation>
 <translation id="8112996065264879835">送ったコードとちゃうで。
         入力回数の上限に達したわ。下の再送信オプションから、さらのコード発行リクエストして。</translation>
+<translation id="8142291334394582384">検索候補の並び順、逆にする</translation>
 <translation id="8147118677117542370">歳いくつか書いて。</translation>
 <translation id="8165573437634525334">データは暗号化パスワードで保護されてるで</translation>
 <translation id="8182979418912184986">さらのプライベートタブ</translation>
@@ -326,6 +339,8 @@
 <translation id="8273666073173891138">メモが <ph name="FOLDER_TITLE" /> に保存されたわ</translation>
 <translation id="8275038454117074363">インポート</translation>
 <translation id="8284356787013856231">ファイル開くん拒否されたわ</translation>
+<translation id="8289933454364510719">上か下</translation>
+<translation id="8326104954595890674">さらのプライベートタブ</translation>
 <translation id="8329813750766387010">更新したで: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Cookie同意のポップアップ消す (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">他のデバイスにあるタブ出すんやったら、同期有効にせなあかんで。</translation>
@@ -348,6 +363,8 @@
 <translation id="8684294196284714094">Vivaldiデフォルトブラウザにする？</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 件のアイテムほかしたわ</translation>
 <translation id="8763006697839582351">Vivaldiのプライベートタブで開く</translation>
+<translation id="8765173886020357878">検索候補</translation>
+<translation id="8786689981011401964">壁紙</translation>
 <translation id="8804164990146287819">プライバシーポリシー</translation>
 <translation id="8819841443522803117">デフォルトブラウザ変える？Vivaldiにしとき。</translation>
 <translation id="8820817407110198400">ブックマーク</translation>

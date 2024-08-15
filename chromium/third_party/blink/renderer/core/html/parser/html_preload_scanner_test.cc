@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_feature_list.h"
 #include "services/network/public/mojom/attribution.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -113,6 +114,7 @@ struct TokenStreamMatcherTestCase {
   ElementLocator locator;
   const char* input_html;
   const char* potentially_lcp_preload_url;
+  bool should_preload;
 };
 
 struct SharedStorageWritableTestCase {
@@ -498,7 +500,8 @@ class HTMLPreloadScannerTest : public PageTestBase {
         count++;
       }
     }
-    EXPECT_EQ(1, count);
+
+    EXPECT_EQ(test_case.should_preload ? 1 : 0, count);
   }
 
   void Test(SharedStorageWritableTestCase test_case) {
@@ -1677,7 +1680,7 @@ TEST_F(HTMLPreloadScannerTest, TokenStreamMatcher) {
       <img src="not-interesting2.jpg">
     </div>
     )HTML",
-                                          "super-interesting.jpg"};
+                                          "super-interesting.jpg", true};
   Test(test_case);
 }
 
@@ -1718,6 +1721,123 @@ TEST_F(HTMLPreloadScannerTest, testSharedStorageWritable) {
              network::mojom::ReferrerPolicy::kDefault,
              /*use_secure_document_url=*/test_case.use_secure_document_url);
     Test(test_case);
+  }
+}
+
+enum class LcppPreloadLazyLoadImageType {
+  kNativeLazyLoad,
+  kCustomLazyLoad,
+  kAll,
+};
+
+class HTMLPreloadScannerLCPPLazyLoadImageTest
+    : public HTMLPreloadScannerTest,
+      public testing::WithParamInterface<LcppPreloadLazyLoadImageType> {
+ public:
+  HTMLPreloadScannerLCPPLazyLoadImageTest() {
+    switch (GetParam()) {
+      case LcppPreloadLazyLoadImageType::kNativeLazyLoad:
+        scoped_feature_list_.InitAndEnableFeatureWithParameters(
+            blink::features::kLCPPLazyLoadImagePreload,
+            {{blink::features::kLCPCriticalPathPredictorPreloadLazyLoadImageType
+                  .name,
+              "native_lazy_loading"}});
+        break;
+      case LcppPreloadLazyLoadImageType::kCustomLazyLoad:
+        scoped_feature_list_.InitAndEnableFeatureWithParameters(
+            blink::features::kLCPPLazyLoadImagePreload,
+            {{blink::features::kLCPCriticalPathPredictorPreloadLazyLoadImageType
+                  .name,
+              "custom_lazy_loading"}});
+        break;
+      case LcppPreloadLazyLoadImageType::kAll:
+        scoped_feature_list_.InitAndEnableFeatureWithParameters(
+            blink::features::kLCPPLazyLoadImagePreload,
+            {{blink::features::kLCPCriticalPathPredictorPreloadLazyLoadImageType
+                  .name,
+              "all"}});
+        break;
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    HTMLPreloadScannerLCPPLazyLoadImageTest,
+    ::testing::Values(LcppPreloadLazyLoadImageType::kNativeLazyLoad,
+                      LcppPreloadLazyLoadImageType::kCustomLazyLoad,
+                      LcppPreloadLazyLoadImageType::kAll));
+
+TEST_P(HTMLPreloadScannerLCPPLazyLoadImageTest,
+       TokenStreamMatcherWithLoadingLazy) {
+  ElementLocator locator;
+  auto* c = locator.add_components()->mutable_id();
+  c->set_id_attr("target");
+
+  switch (GetParam()) {
+    case LcppPreloadLazyLoadImageType::kNativeLazyLoad:
+      Test(TokenStreamMatcherTestCase{locator, R"HTML(
+        <div>
+          <img src="not-interesting.jpg">
+          <img src="super-interesting.jpg" id="target" loading="lazy">
+          <img src="not-interesting2.jpg">
+        </div>
+        )HTML",
+                                      "super-interesting.jpg", true});
+      break;
+    case LcppPreloadLazyLoadImageType::kCustomLazyLoad:
+      Test(TokenStreamMatcherTestCase{locator, R"HTML(
+        <div>
+          <img src="not-interesting.jpg">
+          <img data-src="super-interesting.jpg" id="target">
+          <img src="not-interesting2.jpg">
+        </div>
+        )HTML",
+                                      "super-interesting.jpg", true});
+      break;
+    case LcppPreloadLazyLoadImageType::kAll:
+      Test(TokenStreamMatcherTestCase{locator, R"HTML(
+        <div>
+          <img src="not-interesting.jpg">
+          <img src="super-interesting.jpg" id="target" loading="lazy">
+          <img src="not-interesting2.jpg">
+        </div>
+        )HTML",
+                                      "super-interesting.jpg", true});
+      Test(TokenStreamMatcherTestCase{locator, R"HTML(
+        <div>
+          <img src="not-interesting.jpg">
+          <img data-src="super-interesting.jpg" id="target">
+          <img src="not-interesting2.jpg">
+        </div>
+        )HTML",
+                                      "super-interesting.jpg", true});
+      break;
+  }
+}
+
+TEST_P(HTMLPreloadScannerLCPPLazyLoadImageTest,
+       TokenStreamMatcherWithLoadingLazyAutoSizes) {
+  ElementLocator locator;
+  auto* c = locator.add_components()->mutable_id();
+  c->set_id_attr("target");
+
+  switch (GetParam()) {
+    case LcppPreloadLazyLoadImageType::kNativeLazyLoad:
+    case LcppPreloadLazyLoadImageType::kCustomLazyLoad:
+    case LcppPreloadLazyLoadImageType::kAll:
+      Test(TokenStreamMatcherTestCase{locator, R"HTML(
+        <div>
+          <img src="not-interesting.jpg">
+          <img src="super-interesting.jpg" id="target" loading="lazy" sizes="auto">
+          <img src="not-interesting2.jpg">
+        </div>
+        )HTML",
+                                      nullptr, false});
+      break;
   }
 }
 

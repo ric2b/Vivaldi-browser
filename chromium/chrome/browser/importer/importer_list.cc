@@ -17,6 +17,7 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "base/strings/utf_string_conversions.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "base/apple/foundation_util.h"
@@ -66,7 +67,6 @@ void DetectBuiltinWindowsProfiles(
     DetectEdgeProfiles(profiles);
   } else {
     DetectEdgeProfiles(profiles);
-    DetectIEProfiles(profiles);
   }
 }
 
@@ -90,6 +90,12 @@ void DetectSafariProfiles(std::vector<importer::SourceProfile>* profiles) {
 }
 #endif  // BUILDFLAG(IS_MAC)
 
+bool EndsWith(const std::string& s, const std::string& suffix) {
+  if (suffix.size() > s.size())
+    return false;
+  return s.rfind(suffix) == s.size() - suffix.size();
+}
+
 // |locale|: The application locale used for lookups in Firefox's
 // locale-specific search engines feature (see firefox_importer.cc for
 // details).
@@ -107,10 +113,23 @@ void DetectFirefoxProfiles(const std::string locale,
   if (details.empty())
     return;
 
+  bool filter_default = false;
+  for (const auto& detail : details) {
+    if (EndsWith(base::UTF16ToUTF8(detail.name),
+                 std::string("default release"))) {
+      filter_default = true;
+      break;
+    }
+  }
+
   for (const auto& detail : details) {
     base::FilePath app_path;
     if (detail.path.empty())
       continue;
+
+    if (filter_default && base::UTF16ToUTF8(detail.name) == "default") {
+      continue;
+    }
 
     int version = 0;
 #if BUILDFLAG(IS_WIN)
@@ -170,53 +189,51 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
 #if BUILDFLAG(IS_WIN)
   if (vivaldi::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
+    chromiumImporter->DetectChromiumProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     DetectBuiltinWindowsProfiles(&profiles);
-    chromiumImporter->DetectChromiumProfiles(&profiles);
-  } else
-  if (shell_integration::IsFirefoxDefaultBrowser()) {
+  } else if (shell_integration::IsFirefoxDefaultBrowser()) {
     DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
-    DetectBuiltinWindowsProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
+    DetectBuiltinWindowsProfiles(&profiles);
   } else if (vivaldi::IsChromeDefaultBrowser()) {
-    DetectFirefoxProfiles(locale, &profiles);
-    viv_importer::DetectOperaProfiles(&profiles);
-    DetectBuiltinWindowsProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
+    viv_importer::DetectOperaProfiles(&profiles);
+    DetectFirefoxProfiles(locale, &profiles);
+    DetectBuiltinWindowsProfiles(&profiles);
   } else {
     DetectBuiltinWindowsProfiles(&profiles);
     viv_importer::DetectOperaProfiles(&profiles);
-    DetectFirefoxProfiles(locale, &profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
+    DetectFirefoxProfiles(locale, &profiles);
   }
 #elif BUILDFLAG(IS_MAC)
   if (vivaldi::IsOperaDefaultBrowser()) {
     viv_importer::DetectOperaProfiles(&profiles);
+    chromiumImporter->DetectChromiumProfiles(&profiles);
     DetectFirefoxProfiles(locale, &profiles);
     DetectSafariProfiles(&profiles);
-    chromiumImporter->DetectChromiumProfiles(&profiles);
-  } else
-  if (shell_integration::IsFirefoxDefaultBrowser()) {
+  } else if (shell_integration::IsFirefoxDefaultBrowser()) {
     DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
-    DetectSafariProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
+    DetectSafariProfiles(&profiles);
   } else if (vivaldi::IsChromeDefaultBrowser()) {
     chromiumImporter->DetectChromiumProfiles(&profiles);
-    DetectFirefoxProfiles(locale, &profiles);
     viv_importer::DetectOperaProfiles(&profiles);
+    DetectFirefoxProfiles(locale, &profiles);
     DetectSafariProfiles(&profiles);
   } else {
     DetectSafariProfiles(&profiles);
     viv_importer::DetectOperaProfiles(&profiles);
-    DetectFirefoxProfiles(locale, &profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
+    DetectFirefoxProfiles(locale, &profiles);
   }
 #else // linux
   viv_importer::DetectOperaProfiles(&profiles);
-  DetectFirefoxProfiles(locale, &profiles);
   chromiumImporter->DetectChromiumProfiles(&profiles);
+  DetectFirefoxProfiles(locale, &profiles);
 #endif
   if (include_interactive_profiles) {
     importer::SourceProfile bookmarks_profile;

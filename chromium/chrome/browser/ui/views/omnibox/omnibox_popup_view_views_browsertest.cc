@@ -29,10 +29,13 @@
 #include "components/omnibox/browser/fake_autocomplete_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_provider_utils.h"
@@ -57,6 +60,8 @@ bool contains(std::string str, std::string substr) {
 
 // A View that positions itself over another View to intercept clicks.
 class ClickTrackingOverlayView : public views::View {
+  METADATA_HEADER(ClickTrackingOverlayView, views::View)
+
  public:
   explicit ClickTrackingOverlayView(OmniboxResultView* result) {
     // |result|'s parent is the OmniboxPopupViewViews, which expects that all
@@ -72,11 +77,14 @@ class ClickTrackingOverlayView : public views::View {
     last_click_ = event->location();
   }
 
-  absl::optional<gfx::Point> last_click() const { return last_click_; }
+  std::optional<gfx::Point> last_click() const { return last_click_; }
 
  private:
-  absl::optional<gfx::Point> last_click_;
+  std::optional<gfx::Point> last_click_;
 };
+
+BEGIN_METADATA(ClickTrackingOverlayView)
+END_METADATA
 
 class TestAXEventObserver : public views::AXEventObserver {
  public:
@@ -343,11 +351,13 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   ACMatches matches;
   AutocompleteMatch match(nullptr, 500, false,
                           AutocompleteMatchType::HISTORY_TITLE);
+  match.destination_url = GURL("https://foobar.com");
   match.contents = u"https://foobar.com";
   match.description = u"FooBarCom";
   match.contents_class = {{0, 0}};
   match.description_class = {{0, 0}};
   matches.push_back(match);
+  match.destination_url = GURL("https://foobarbaz.com");
   match.contents = u"https://foobarbaz.com";
   match.description = u"FooBarBazCom";
   match.contents_class = {{0, 0}};
@@ -619,7 +629,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest, DeleteSuggestion) {
   // Make sure the deleted match's OmniboxResultView was hidden.
   // (OmniboxResultViews are never deleted.)
   int visible_children = 0;
-  for (auto* child : popup_view()->children()) {
+  for (views::View* child : popup_view()->children()) {
     if (child->GetVisible()) {
       visible_children++;
     }
@@ -628,4 +638,27 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest, DeleteSuggestion) {
   EXPECT_EQ(u"foo", popup_view()->result_view_at(0)->match_.contents);
   EXPECT_EQ(u"Other Match", popup_view()->result_view_at(1)->match_.contents);
   EXPECT_EQ(OmniboxPopupSelection(1), edit_model()->GetPopupSelection());
+}
+
+// Flaky on Mac: https://crbug.com/1511356
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_SpaceEntersKeywordMode DISABLED_SpaceEntersKeywordMode
+#else
+#define MAYBE_SpaceEntersKeywordMode SpaceEntersKeywordMode
+#endif
+IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
+                       MAYBE_SpaceEntersKeywordMode) {
+  CreatePopupForTestQuery();
+  EXPECT_TRUE(popup_view()->IsOpen());
+
+  omnibox_view()->controller()->client()->GetPrefs()->SetBoolean(
+      omnibox::kKeywordSpaceTriggeringEnabled, true);
+  omnibox_view()->SetUserText(u"@bookmarks");
+  edit_model()->StartAutocomplete(false, false);
+  popup_view()->UpdatePopupAppearance();
+
+  EXPECT_FALSE(edit_model()->is_keyword_selected());
+  ui::KeyEvent space(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, 0);
+  omnibox_view()->OnKeyEvent(&space);
+  EXPECT_TRUE(edit_model()->is_keyword_selected());
 }

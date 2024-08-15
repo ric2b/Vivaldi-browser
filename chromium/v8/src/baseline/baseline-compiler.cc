@@ -342,9 +342,9 @@ MaybeHandle<Code> BaselineCompiler::Build(LocalIsolate* local_isolate) {
 
   Factory::CodeBuilder code_builder(local_isolate, desc, CodeKind::BASELINE);
   code_builder.set_bytecode_offset_table(bytecode_offset_table);
-  if (shared_function_info_->HasInterpreterData()) {
-    code_builder.set_interpreter_data(
-        handle(shared_function_info_->interpreter_data(), local_isolate));
+  if (shared_function_info_->HasInterpreterData(local_isolate)) {
+    code_builder.set_interpreter_data(handle(
+        shared_function_info_->interpreter_data(local_isolate), local_isolate));
   } else {
     code_builder.set_interpreter_data(bytecode_);
   }
@@ -1497,6 +1497,19 @@ void BaselineCompiler::VisitConstructWithSpread() {
       spread_register,             // kSpread
       RootIndex::kUndefinedValue,  // kReceiver
       args);
+}
+
+void BaselineCompiler::VisitConstructForwardAllArgs() {
+  using Descriptor = CallInterfaceDescriptorFor<
+      Builtin::kConstructForwardAllArgs_Baseline>::type;
+  Register new_target =
+      Descriptor::GetRegisterParameter(Descriptor::kNewTarget);
+  __ Move(new_target, kInterpreterAccumulatorRegister);
+
+  CallBuiltin<Builtin::kConstructForwardAllArgs_Baseline>(
+      RegisterOperand(0),  // kFunction
+      new_target,          // kNewTarget
+      Index(1));           // kSlot
 }
 
 void BaselineCompiler::VisitTestEqual() {

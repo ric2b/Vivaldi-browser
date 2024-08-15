@@ -8,7 +8,6 @@
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/numerics/math_constants.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
@@ -110,9 +109,7 @@ class TestScreenCapturer : public DesktopCapturer {
   void FailNthFrame(int n) { capture_request_index_to_fail_ = n; }
 
  private:
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #constexpr-ctor-field-initializer
-  RAW_PTR_EXCLUSION Callback* callback_ = nullptr;
+  raw_ptr<Callback> callback_ = nullptr;
   int frame_index_ = 0;
 
   int capture_request_index_to_fail_ = -1;
@@ -672,10 +669,10 @@ TEST_P(ConnectionTest, DISABLED_VideoStats) {
 }
 
 // Slow/fails on Linux ASan/TSan (crbug.com/1045344) and flaky on Mac
-// (crbug.com/1237376).
+// (crbug.com/1237376) and Windows (crbug.com/1503680).
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) &&               \
         (defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)) || \
-    BUILDFLAG(IS_MAC)
+    BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 #define MAYBE_Audio DISABLED_Audio
 #else
 #define MAYBE_Audio Audio

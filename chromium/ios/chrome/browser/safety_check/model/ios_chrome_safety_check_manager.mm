@@ -9,11 +9,12 @@
 #import "base/functional/bind.h"
 #import "base/location.h"
 #import "base/time/time.h"
+#import "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/prefs/pref_service.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/version_info/version_info.h"
-#import "ios/chrome/browser/omaha/omaha_service.h"
+#import "ios/chrome/browser/omaha/model/omaha_service.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_utils.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
@@ -110,7 +111,7 @@ void IOSChromeSafetyCheckManager::RestorePreviousSafetyCheckState() {
   last_safety_check_run_time_ =
       local_pref_service_->GetTime(prefs::kIosSafetyCheckManagerLastRunTime);
 
-  absl::optional<SafeBrowsingSafetyCheckState> safe_browsing_check_state =
+  std::optional<SafeBrowsingSafetyCheckState> safe_browsing_check_state =
       SafeBrowsingSafetyCheckStateForName(local_pref_service_->GetString(
           prefs::kIosSafetyCheckManagerSafeBrowsingCheckResult));
 
@@ -120,7 +121,7 @@ void IOSChromeSafetyCheckManager::RestorePreviousSafetyCheckState() {
     SetSafeBrowsingCheckState(safe_browsing_check_state.value());
   }
 
-  absl::optional<PasswordSafetyCheckState> password_check_state =
+  std::optional<PasswordSafetyCheckState> password_check_state =
       PasswordSafetyCheckStateForName(local_pref_service_->GetString(
           prefs::kIosSafetyCheckManagerPasswordCheckResult));
 
@@ -129,7 +130,7 @@ void IOSChromeSafetyCheckManager::RestorePreviousSafetyCheckState() {
     SetPasswordCheckState(password_check_state.value());
   }
 
-  absl::optional<UpdateChromeSafetyCheckState> update_chrome_check_state =
+  std::optional<UpdateChromeSafetyCheckState> update_chrome_check_state =
       UpdateChromeSafetyCheckStateForName(local_pref_service_->GetString(
           prefs::kIosSafetyCheckManagerUpdateCheckResult));
 
@@ -152,7 +153,8 @@ void IOSChromeSafetyCheckManager::StartPasswordCheck() {
 
   previous_password_check_state_ = password_check_state_;
 
-  password_check_manager_->StartPasswordCheck();
+  password_check_manager_->StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kIosProactivePasswordCheckup);
 
   // NOTE: There's no need to explicitly set `password_check_state_` to
   // `kRunning` here because this class conforms to

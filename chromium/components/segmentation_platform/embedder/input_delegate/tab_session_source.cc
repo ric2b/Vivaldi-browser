@@ -5,6 +5,7 @@
 #include "components/segmentation_platform/embedder/input_delegate/tab_session_source.h"
 #include <math.h>
 
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/segmentation_platform/embedder/tab_fetcher.h"
 #include "components/segmentation_platform/internal/execution/processing/feature_processor_state.h"
@@ -45,10 +46,9 @@ TabSessionSource::TabSessionSource(
 
 TabSessionSource::~TabSessionSource() = default;
 
-void TabSessionSource::Process(
-    const proto::CustomInput& input,
-    const FeatureProcessorState& feature_processor_state,
-    ProcessedCallback callback) {
+void TabSessionSource::Process(const proto::CustomInput& input,
+                               FeatureProcessorState& feature_processor_state,
+                               ProcessedCallback callback) {
   auto tab_id_val =
       feature_processor_state.input_context()->GetMetadataArgument("tab_id");
   auto session_tag_val =
@@ -127,21 +127,21 @@ void TabSessionSource::AddTabRanks(const std::string& session_tag,
                                    Tensor& inputs) {
   sync_sessions::OpenTabsUIDelegate* open_tab_delegate =
       session_sync_service_->GetOpenTabsUIDelegate();
-  std::vector<const sessions::SessionWindow*> windows;
   int tab_rank_in_session = 0;
-  if (open_tab_delegate->GetForeignSession(session_tag, &windows)) {
-    for (const auto* window : windows) {
-      for (const auto& tab : window->tabs) {
-        if (tab->timestamp > session_tab->timestamp) {
-          tab_rank_in_session++;
-        }
+  std::vector<const sessions::SessionWindow*> windows =
+      open_tab_delegate->GetForeignSession(session_tag);
+  for (const auto* window : windows) {
+    for (const auto& tab : window->tabs) {
+      if (tab->timestamp > session_tab->timestamp) {
+        tab_rank_in_session++;
       }
     }
   }
-  std::vector<const sync_sessions::SyncedSession*> sessions;
+  std::vector<raw_ptr<const sync_sessions::SyncedSession, VectorExperimental>>
+      sessions;
   int session_rank_overall = 0;
   if (open_tab_delegate->GetAllForeignSessions(&sessions)) {
-    for (const auto* session : sessions) {
+    for (const sync_sessions::SyncedSession* session : sessions) {
       if (session->GetModifiedTime() > session_tab->timestamp) {
         session_rank_overall++;
       }
@@ -156,7 +156,7 @@ void TabSessionSource::AddTabRanks(const std::string& session_tag,
 
 void TabSessionSource::AddLocalTabInfo(
     const TabFetcher::Tab& tab,
-    const FeatureProcessorState& feature_processor_state,
+    FeatureProcessorState& feature_processor_state,
     Tensor& inputs) {}
 
 }  // namespace segmentation_platform::processing

@@ -16,6 +16,7 @@
 
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -185,7 +186,10 @@ class V4L2CaptureDelegate::BufferTracker
   virtual ~BufferTracker();
 
   const raw_ptr<V4L2CaptureDevice> v4l2_;
-  raw_ptr<uint8_t> start_;
+
+  // RAW_PTR_EXCLUSION: Never allocated by PartitionAlloc (always mmap'ed), so
+  // there is no benefit to using a raw_ptr, only cost.
+  RAW_PTR_EXCLUSION uint8_t* start_ = nullptr;
   size_t length_;
   size_t payload_size_;
 };

@@ -73,11 +73,11 @@ TEST_F(IR_FromProgramTest, Func) {
     Func("f", tint::Empty, ty.void_(), tint::Empty);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     ASSERT_EQ(1u, m->functions.Length());
 
-    auto* f = m->functions[0];
+    core::ir::Function* f = m->functions[0];
     ASSERT_NE(f->Block(), nullptr);
 
     EXPECT_EQ(m->functions[0]->Stage(), core::ir::Function::PipelineStage::kUndefined);
@@ -94,11 +94,11 @@ TEST_F(IR_FromProgramTest, Func_WithParam) {
     Func("f", Vector{Param("a", ty.u32())}, ty.u32(), Vector{Return("a")});
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     ASSERT_EQ(1u, m->functions.Length());
 
-    auto* f = m->functions[0];
+    core::ir::Function* f = m->functions[0];
     ASSERT_NE(f->Block(), nullptr);
 
     EXPECT_EQ(m->functions[0]->Stage(), core::ir::Function::PipelineStage::kUndefined);
@@ -116,11 +116,11 @@ TEST_F(IR_FromProgramTest, Func_WithMultipleParam) {
          ty.void_(), tint::Empty);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     ASSERT_EQ(1u, m->functions.Length());
 
-    auto* f = m->functions[0];
+    core::ir::Function* f = m->functions[0];
     ASSERT_NE(f->Block(), nullptr);
 
     EXPECT_EQ(m->functions[0]->Stage(), core::ir::Function::PipelineStage::kUndefined);
@@ -137,7 +137,7 @@ TEST_F(IR_FromProgramTest, EntryPoint) {
     Func("f", tint::Empty, ty.void_(), tint::Empty, Vector{Stage(ast::PipelineStage::kFragment)});
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(m->functions[0]->Stage(), core::ir::Function::PipelineStage::kFragment);
 }
@@ -147,7 +147,7 @@ TEST_F(IR_FromProgramTest, IfStatement) {
     WrapInFunction(ast_if);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
 
@@ -175,7 +175,7 @@ TEST_F(IR_FromProgramTest, IfStatement_TrueReturns) {
     WrapInFunction(ast_if);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
 
@@ -200,7 +200,7 @@ TEST_F(IR_FromProgramTest, IfStatement_FalseReturns) {
     WrapInFunction(ast_if);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
 
@@ -228,7 +228,7 @@ TEST_F(IR_FromProgramTest, IfStatement_BothReturn) {
     WrapInFunction(ast_if);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
 
@@ -257,7 +257,7 @@ TEST_F(IR_FromProgramTest, IfStatement_JumpChainToMerge) {
     WrapInFunction(ast_if);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
 
@@ -288,7 +288,7 @@ TEST_F(IR_FromProgramTest, Loop_WithBreak) {
     WrapInFunction(ast_loop);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -321,7 +321,7 @@ TEST_F(IR_FromProgramTest, Loop_WithContinue) {
     WrapInFunction(ast_loop);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -359,7 +359,7 @@ TEST_F(IR_FromProgramTest, Loop_WithContinuing_BreakIf) {
     WrapInFunction(ast_loop);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -393,7 +393,7 @@ TEST_F(IR_FromProgramTest, Loop_Continuing_Body_Scope) {
     WrapInFunction(ast_loop);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     EXPECT_EQ(Disassemble(m),
@@ -420,7 +420,7 @@ TEST_F(IR_FromProgramTest, Loop_WithReturn) {
     WrapInFunction(ast_loop);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -457,7 +457,7 @@ TEST_F(IR_FromProgramTest, Loop_WithOnlyReturn) {
     WrapInFunction(ast_loop, If(true, Block(Return())));
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -498,7 +498,7 @@ TEST_F(IR_FromProgramTest, Loop_WithOnlyReturn_ContinuingBreakIf) {
     WrapInFunction(Block(ast_loop, ast_if));
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -536,7 +536,7 @@ TEST_F(IR_FromProgramTest, Loop_WithIf_BothBranchesBreak) {
     WrapInFunction(ast_loop);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -586,7 +586,7 @@ TEST_F(IR_FromProgramTest, Loop_Nested) {
     WrapInFunction(ast_loop_a);
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()),
               R"(%test_function = @compute @workgroup_size(1, 1, 1) func():void -> %b1 {
@@ -649,7 +649,7 @@ TEST_F(IR_FromProgramTest, While) {
     WrapInFunction(ast_while);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -689,7 +689,7 @@ TEST_F(IR_FromProgramTest, While_Return) {
     WrapInFunction(ast_while);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -729,7 +729,7 @@ TEST_F(IR_FromProgramTest, For) {
     WrapInFunction(ast_for);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -778,7 +778,7 @@ TEST_F(IR_FromProgramTest, For_Init_NoCondOrContinuing) {
     WrapInFunction(ast_for);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -811,7 +811,7 @@ TEST_F(IR_FromProgramTest, For_NoInitCondOrContinuing) {
     WrapInFunction(ast_for);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* loop = FindSingleInstruction<core::ir::Loop>(m);
@@ -843,14 +843,14 @@ TEST_F(IR_FromProgramTest, Switch) {
     WrapInFunction(ast_switch);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* swtch = FindSingleInstruction<core::ir::Switch>(m);
 
     ASSERT_EQ(1u, m.functions.Length());
 
-    auto cases = swtch->Cases();
+    auto& cases = swtch->Cases();
     ASSERT_EQ(3u, cases.Length());
 
     ASSERT_EQ(1u, cases[0].selectors.Length());
@@ -894,14 +894,14 @@ TEST_F(IR_FromProgramTest, Switch_MultiSelector) {
     WrapInFunction(ast_switch);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* swtch = FindSingleInstruction<core::ir::Switch>(m);
 
     ASSERT_EQ(1u, m.functions.Length());
 
-    auto cases = swtch->Cases();
+    auto& cases = swtch->Cases();
     ASSERT_EQ(1u, cases.Length());
     ASSERT_EQ(3u, cases[0].selectors.Length());
     ASSERT_TRUE(cases[0].selectors[0].val->Value()->Is<core::constant::Scalar<i32>>());
@@ -933,14 +933,14 @@ TEST_F(IR_FromProgramTest, Switch_OnlyDefault) {
     WrapInFunction(ast_switch);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* swtch = FindSingleInstruction<core::ir::Switch>(m);
 
     ASSERT_EQ(1u, m.functions.Length());
 
-    auto cases = swtch->Cases();
+    auto& cases = swtch->Cases();
     ASSERT_EQ(1u, cases.Length());
     ASSERT_EQ(1u, cases[0].selectors.Length());
     EXPECT_TRUE(cases[0].selectors[0].IsDefault());
@@ -966,14 +966,14 @@ TEST_F(IR_FromProgramTest, Switch_WithBreak) {
     WrapInFunction(ast_switch);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
     auto* swtch = FindSingleInstruction<core::ir::Switch>(m);
 
     ASSERT_EQ(1u, m.functions.Length());
 
-    auto cases = swtch->Cases();
+    auto& cases = swtch->Cases();
     ASSERT_EQ(2u, cases.Length());
     ASSERT_EQ(1u, cases[0].selectors.Length());
     ASSERT_TRUE(cases[0].selectors[0].val->Value()->Is<core::constant::Scalar<i32>>());
@@ -1009,7 +1009,7 @@ TEST_F(IR_FromProgramTest, Switch_AllReturn) {
     WrapInFunction(ast_switch, ast_if);
 
     auto res = Build();
-    ASSERT_TRUE(res) << (!res ? res.Failure() : Failure{});
+    ASSERT_EQ(res, Success);
 
     auto m = res.Move();
 
@@ -1017,7 +1017,7 @@ TEST_F(IR_FromProgramTest, Switch_AllReturn) {
 
     ASSERT_EQ(1u, m.functions.Length());
 
-    auto cases = swtch->Cases();
+    auto& cases = swtch->Cases();
     ASSERT_EQ(2u, cases.Length());
     ASSERT_EQ(1u, cases[0].selectors.Length());
     ASSERT_TRUE(cases[0].selectors[0].val->Value()->Is<core::constant::Scalar<i32>>());
@@ -1049,7 +1049,7 @@ TEST_F(IR_FromProgramTest, Emit_Phony) {
     WrapInFunction(Ignore(Call("b")));
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()),
               R"(%b = func():i32 -> %b1 {
@@ -1073,7 +1073,7 @@ TEST_F(IR_FromProgramTest, Func_WithParam_WithAttribute_Invariant) {
          ty.vec4<f32>(), Vector{Return("a")}, Vector{Stage(ast::PipelineStage::kFragment)},
          Vector{Location(1_i)});
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(
         Disassemble(m.Get()),
@@ -1090,7 +1090,7 @@ TEST_F(IR_FromProgramTest, Func_WithParam_WithAttribute_Location) {
          Vector{Stage(ast::PipelineStage::kFragment)}, Vector{Location(1_i)});
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(Disassemble(m.Get()),
               R"(%f = @fragment func(%a:f32 [@location(2)]):f32 [@location(1)] -> %b1 {
@@ -1110,7 +1110,7 @@ TEST_F(IR_FromProgramTest, Func_WithParam_WithAttribute_Location_WithInterpolati
          Vector{Location(1_i)});
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(
         Disassemble(m.Get()),
@@ -1130,13 +1130,35 @@ TEST_F(IR_FromProgramTest, Func_WithParam_WithAttribute_Location_WithInterpolati
          Vector{Location(1_i)});
 
     auto m = Build();
-    ASSERT_TRUE(m) << m;
+    ASSERT_EQ(m, Success);
 
     EXPECT_EQ(
         Disassemble(m.Get()),
         R"(%f = @fragment func(%a:f32 [@location(2), @interpolate(flat)]):f32 [@location(1)] -> %b1 {
   %b1 = block {
     ret %a
+  }
+}
+)");
+}
+
+TEST_F(IR_FromProgramTest, Requires) {
+    Require(wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures);
+    Func("f", tint::Empty, ty.void_(), tint::Empty);
+
+    auto m = Build();
+    ASSERT_EQ(m, Success);
+
+    ASSERT_EQ(1u, m->functions.Length());
+
+    core::ir::Function* f = m->functions[0];
+    ASSERT_NE(f->Block(), nullptr);
+
+    EXPECT_EQ(m->functions[0]->Stage(), core::ir::Function::PipelineStage::kUndefined);
+
+    EXPECT_EQ(Disassemble(m.Get()), R"(%f = func():void -> %b1 {
+  %b1 = block {
+    ret
   }
 }
 )");

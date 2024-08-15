@@ -284,6 +284,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   void UpdateMaximizeButtonPosition(const gfx::Rect& rect);
 
+  // Getter for the `window.setResizable(bool)` state.
+  std::optional<bool> GetCanResizeFromWebAPI() const;
+
   //
   // BrowserWindow overrides
   //
@@ -440,7 +443,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
   void ShowCaretBrowsingDialog() override {}
-  void CreateTabSearchBubble() override {}
+  void CreateTabSearchBubble(int tab_index) override {}
   void CloseTabSearchBubble() override {}
   user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(
@@ -453,8 +456,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       user_education::FeaturePromoParams params) override;
   bool CloseFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoCloseReason close_reason =
-          user_education::FeaturePromoCloseReason::kFeatureEngaged) override;
+      user_education::EndFeaturePromoReason close_reason =
+          user_education::EndFeaturePromoReason::kFeatureEngaged) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
@@ -467,8 +470,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsBorderlessModeEnabled() const override;
   void ShowChromeLabs() override {}
 
-  void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) override {}
+  // Notifies `BrowserView` about the resizable boolean having been set vith
+  // `window.setResizable(bool)` API.
+  void OnCanResizeFromWebAPIChanged() override;
   bool GetCanResize() override;
+  ui::WindowShowState GetWindowShowState() const override;
 
   // BrowserWindow overrides end
 
@@ -489,10 +495,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // windows and close the one with pinned/workspace tabs.
   void MovePersistentTabsToOtherWindowIfNeeded();
 
-  // Instructs window to show a dialog on quit (if other requirements are
-  // fullfilled.
-  static void SetPromptOnQuit(bool prompt);
-
   // Called from unload handler during the close sequence if the sequence is
   // aborted.
   static void CancelWindowClose();
@@ -502,6 +504,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   }
 
  private:
+  enum QuitAction { ShowDialogOnQuit = 0, SaveSessionOnQuit,  DoNothingOnQuit };
   enum class CloseDialogMode { CloseWindow = 0, QuitApplication };
 
   // Ensures only one window can display a quit dialog on exit.
@@ -510,8 +513,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void AcceptQuitForAllWindows();
   // Sets the owner of the quit dialog (the window that shows the dialog).
   void SetQuitDialogOwner(VivaldiBrowserWindow* owner);
-  // Determines if a quit confirmation dialog should be shown on exit.
-  bool ShouldShowDialogOnQuit();
+  // Determines what to do on exit.
+  QuitAction GetQuitAction();
   // Determines if a window close confirmation dialog should be shown.
   bool ShouldShowDialogOnCloseWindow();
   // Determines if a session of persistent tabs should be saved.
@@ -600,7 +603,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   bool quit_dialog_shown_ = false;
   bool close_dialog_shown_ = false;
-  bool prompt_on_quit_ = true;
   // Only the owner can show a dialog.
   raw_ptr<VivaldiBrowserWindow> quit_dialog_owner_ = nullptr;
 
@@ -621,6 +623,10 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   // The window type for this window.
   WindowType window_type_ = NORMAL;
+
+  // Caching the last value of `PageData::can_resize_` that has been notified to
+  // the WidgetObservers to avoid notifying them when nothing has changed.
+  std::optional<bool> cached_can_resize_from_web_api_;
 
   // Reference to the Vivaldi extension.
   raw_ptr<extensions::Extension> extension_ = nullptr;

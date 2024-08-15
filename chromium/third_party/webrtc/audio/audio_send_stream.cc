@@ -355,6 +355,7 @@ void AudioSendStream::Start() {
   if (sending_) {
     return;
   }
+  RTC_LOG(LS_INFO) << "AudioSendStream::Start: " << config_.rtp.ssrc;
   if (!config_.has_dscp && config_.min_bitrate_bps != -1 &&
       config_.max_bitrate_bps != -1 &&
       (allocate_audio_without_feedback_ || TransportSeqNumId(config_) != 0)) {
@@ -376,7 +377,7 @@ void AudioSendStream::Stop() {
   if (!sending_) {
     return;
   }
-
+  RTC_LOG(LS_INFO) << "AudioSendStream::Stop: " << config_.rtp.ssrc;
   RemoveBitrateObserver();
   channel_send_->StopSend();
   sending_ = false;
@@ -636,12 +637,14 @@ bool AudioSendStream::SetupSendCodec(const Config& new_config) {
   }
 
   // Wrap the encoder in a RED encoder, if RED is enabled.
+  SdpAudioFormat format = spec.format;
   if (spec.red_payload_type) {
     AudioEncoderCopyRed::Config red_config;
     red_config.payload_type = *spec.red_payload_type;
     red_config.speech_encoder = std::move(encoder);
     encoder = std::make_unique<AudioEncoderCopyRed>(std::move(red_config),
                                                     field_trials_);
+    format.name = cricket::kRedCodecName;
   }
 
   // Set currently known overhead (used in ANA, opus only).
@@ -655,7 +658,7 @@ bool AudioSendStream::SetupSendCodec(const Config& new_config) {
   }
 
   StoreEncoderProperties(encoder->SampleRateHz(), encoder->NumChannels());
-  channel_send_->SetEncoder(new_config.send_codec_spec->payload_type,
+  channel_send_->SetEncoder(new_config.send_codec_spec->payload_type, format,
                             std::move(encoder));
 
   return true;

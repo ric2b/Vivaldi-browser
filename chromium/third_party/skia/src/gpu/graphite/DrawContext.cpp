@@ -46,8 +46,11 @@ sk_sp<DrawContext> DrawContext::Make(sk_sp<TextureProxy> target,
         return nullptr;
     }
 
+    // Accept an approximate-fit texture, but make sure it's at least as large as the device's
+    // logical size.
     // TODO: validate that the color type and alpha type are compatible with the target's info
-    SkASSERT(!target->isInstantiated() || target->dimensions() == deviceSize);
+    SkASSERT(target->isFullyLazy() || (target->dimensions().width() >= deviceSize.width() &&
+                                       target->dimensions().height() >= deviceSize.height()));
     SkImageInfo imageInfo = SkImageInfo::Make(deviceSize, colorInfo);
     return sk_sp<DrawContext>(new DrawContext(std::move(target), imageInfo, props));
 }
@@ -110,7 +113,7 @@ void DrawContext::recordDraw(const Renderer* renderer,
 }
 
 bool DrawContext::recordTextUploads(TextAtlasManager* am) {
-    return am->recordUploads(fPendingUploads.get(), /*useCachedUploads=*/false);
+    return am->recordUploads(fPendingUploads.get());
 }
 
 bool DrawContext::recordUpload(Recorder* recorder,
@@ -219,7 +222,7 @@ RenderPassDesc RenderPassDesc::Make(const Caps* caps,
 
     if (depthStencilFlags != DepthStencilFlags::kNone) {
         desc.fDepthStencilAttachment.fTextureInfo = caps->getDefaultDepthStencilTextureInfo(
-                depthStencilFlags, desc.fSampleCount, Protected::kNo);
+                depthStencilFlags, desc.fSampleCount, targetInfo.isProtected());
         // Always clear the depth and stencil to 0 at the start of a DrawPass, but discard at the
         // end since their contents do not affect the next frame.
         desc.fDepthStencilAttachment.fLoadOp = LoadOp::kClear;

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/predictors/lcp_critical_path_predictor/lcp_critical_path_predictor_util.h"
 
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor_tables.h"
 #include "third_party/blink/public/common/features.h"
@@ -438,6 +439,38 @@ bool RecordFetchedFontUrlsHistogram(const LoadingPredictorConfig& config,
   return updater->has_updated();
 }
 
+bool RecordFetchedSubresourceUrlsHistogram(
+    const LoadingPredictorConfig& config,
+    const std::map<GURL, base::TimeDelta>& fetched_subresource_urls,
+    LcppData& data) {
+  // `time_and_urls` keeps URLs (and its fetch timings) in a reversed
+  // event order. The URL count that can be stored in the database is
+  // limited. By processing recently fetched URLs first, we can keep the
+  // URLs that were fetched in the beginning of navigation.
+  std::vector<std::pair<base::TimeDelta, std::string>> time_and_urls;
+  time_and_urls.reserve(fetched_subresource_urls.size());
+  for (const auto& [subresource_url, resource_load_start] :
+       fetched_subresource_urls) {
+    time_and_urls.emplace_back(resource_load_start, subresource_url.spec());
+  }
+  // Reverse sort `time_and_urls`. That is why `rbegin` and `rend`
+  // instead of `begin` and `end`.
+  std::sort(time_and_urls.rbegin(), time_and_urls.rend());
+
+  std::unique_ptr<LcppFrequencyStatDataUpdater> updater =
+      LcppFrequencyStatDataUpdater::FromLcppStringFrequencyStatData(
+          config, data.mutable_lcpp_stat()->fetched_subresource_url_stat());
+  for (const auto& [resource_load_start, subresource_url] : time_and_urls) {
+    if (!IsValidUrlInLcppStringFrequencyStatData(subresource_url)) {
+      continue;
+    }
+    updater->Update(subresource_url);
+  }
+  *data.mutable_lcpp_stat()->mutable_fetched_subresource_url_stat() =
+      updater->ToLcppStringFrequencyStatData();
+  return updater->has_updated();
+}
+
 bool IsValidLcpElementLocatorHistogram(
     const LcpElementLocatorStat& lcp_element_locator_stat) {
   if (lcp_element_locator_stat.other_bucket_frequency() < 0.0) {
@@ -471,7 +504,7 @@ bool IsValidLcpUrlsHistogram(
 
 }  // namespace
 
-absl::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
+std::optional<blink::mojom::LCPCriticalPathPredictorNavigationTimeHint>
 ConvertLcppDataToLCPCriticalPathPredictorNavigationTimeHint(
     const LcppData& lcpp_data) {
   std::vector<std::string> lcp_element_locators =
@@ -486,7 +519,7 @@ ConvertLcppDataToLCPCriticalPathPredictorNavigationTimeHint(
         std::move(lcp_element_locators), std::move(lcp_influencer_scripts),
         std::move(fetched_fonts));
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 std::vector<GURL> PredictFetchedFontUrls(const LcppData& data) {
@@ -501,7 +534,7 @@ std::vector<GURL> PredictFetchedFontUrls(const LcppData& data) {
     return std::vector<GURL>();
   }
 
-  std::set<GURL> font_urls;  // Use std::set for deduplicate.
+  std::vector<GURL> font_urls;
   for (const auto& [frequency, font_url] : font_urls_with_frequency) {
     // The frequencies are reverse sorted by `ConvertToFrequencyStringPair`.
     // No need to see later frequencies if the frequency is smaller than the
@@ -513,14 +546,25 @@ std::vector<GURL> PredictFetchedFontUrls(const LcppData& data) {
     if (!parsed_url.is_valid() || !parsed_url.SchemeIsHTTPOrHTTPS()) {
       continue;
     }
-    if (!font_urls.insert(std::move(parsed_url)).second) {
-      continue;
-    }
+    font_urls.emplace_back(std::move(parsed_url));
     if (--num_open_spots <= 0) {
       break;
     }
   }
-  return std::vector(font_urls.begin(), font_urls.end());
+  return font_urls;
+}
+
+std::vector<GURL> PredictFetchedSubresourceUrls(const LcppData& data) {
+  std::vector<GURL> subresource_urls;
+  for (const auto& [frequency, subresource_url] : ConvertToFrequencyStringPair(
+           data.lcpp_stat().fetched_subresource_url_stat())) {
+    GURL parsed_url(subresource_url);
+    if (!parsed_url.is_valid() || !parsed_url.SchemeIsHTTPOrHTTPS()) {
+      continue;
+    }
+    subresource_urls.push_back(std::move(parsed_url));
+  }
+  return subresource_urls;
 }
 
 LcppDataInputs::LcppDataInputs() = default;
@@ -536,6 +580,8 @@ bool UpdateLcppDataWithLcppDataInputs(const LoadingPredictorConfig& config,
       config, inputs.lcp_influencer_scripts, data);
   data_updated |=
       RecordFetchedFontUrlsHistogram(config, inputs.font_urls, data);
+  data_updated |= RecordFetchedSubresourceUrlsHistogram(
+      config, inputs.subresource_urls, data);
   base::UmaHistogramCounts10000("Blink.LCPP.ReportedFontCount",
                                 base::checked_cast<int>(inputs.font_url_count));
   return data_updated;
@@ -553,6 +599,10 @@ bool IsValidLcppStat(const LcppStat& lcpp_stat) {
   }
   if (lcpp_stat.has_fetched_font_url_stat() &&
       !IsValidLcpUrlsHistogram(lcpp_stat.fetched_font_url_stat())) {
+    return false;
+  }
+  if (lcpp_stat.has_fetched_subresource_url_stat() &&
+      !IsValidLcpUrlsHistogram(lcpp_stat.fetched_subresource_url_stat())) {
     return false;
   }
   return true;

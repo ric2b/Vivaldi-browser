@@ -50,6 +50,7 @@ const char kStartPluginVmMethod[] = "StartPluginVm";
 const char kStartVmMethod[] = "StartVm";
 const char kStopAllVmsMethod[] = "StopAllVms";
 const char kStopVmMethod[] = "StopVm";
+const char kStopVmWithoutOwnerIdMethod[] = "StopVmWithoutOwnerId";
 const char kSuspendVmMethod[] = "SuspendVm";
 const char kSwapVmMethod[] = "SwapVm";
 const char kSyncVmTimesMethod[] = "SyncVmTimes";

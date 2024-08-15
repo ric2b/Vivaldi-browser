@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "perfetto/ext/tracing/ipc/default_socket.h"
+#include "perfetto/tracing/default_socket.h"
 
 #include "perfetto/base/build_config.h"
 #include "perfetto/base/logging.h"
@@ -66,8 +66,6 @@ bool UseRunPerfettoBaseDir() {
 }
 
 }  // anonymous namespace
-
-static_assert(kInvalidUid == ipc::kInvalidUid, "kInvalidUid mismatching");
 
 const char* GetProducerSocket() {
   const char* name = getenv("PERFETTO_PRODUCER_SOCK_NAME");

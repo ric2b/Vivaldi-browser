@@ -134,6 +134,16 @@ class ValidationError : public interop::GPUValidationError {
     std::string message_;
 };
 
+class InternalError : public interop::GPUInternalError {
+  public:
+    explicit InternalError(std::string message) : message_(std::move(message)) {}
+
+    std::string getMessage(Napi::Env) override { return message_; };
+
+  private:
+    std::string message_;
+};
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,6 +199,14 @@ GPUDevice::~GPUDevice() {
         device_.Destroy();
         destroyed_ = true;
     }
+}
+
+void GPUDevice::ForceLoss(interop::GPUDeviceLostReason reason, const char* message) {
+    if (lost_promise_.GetState() == interop::PromiseState::Pending) {
+        lost_promise_.Resolve(
+            interop::GPUDeviceLostInfo::Create<DeviceLostInfo>(env_, reason, message));
+    }
+    device_.InjectError(wgpu::ErrorType::DeviceLost, message);
 }
 
 interop::Interface<interop::GPUSupportedFeatures> GPUDevice::getFeatures(Napi::Env env) {
@@ -252,6 +270,17 @@ interop::Interface<interop::GPUTexture> GPUDevice::createTexture(
         !conv(desc.viewFormats, desc.viewFormatCount, descriptor.viewFormats)) {
         return {};
     }
+
+    wgpu::TextureBindingViewDimensionDescriptor texture_binding_view_dimension_desc{};
+    wgpu::TextureViewDimension texture_binding_view_dimension;
+    if (descriptor.textureBindingViewDimension.has_value() &&
+        conv(texture_binding_view_dimension, descriptor.textureBindingViewDimension)) {
+        texture_binding_view_dimension_desc.textureBindingViewDimension =
+            texture_binding_view_dimension;
+        desc.nextInChain =
+            reinterpret_cast<wgpu::ChainedStruct*>(&texture_binding_view_dimension_desc);
+    }
+
     return interop::GPUTexture::Create<GPUTexture>(env, device_, desc,
                                                    device_.CreateTexture(&desc));
 }
@@ -377,13 +406,11 @@ GPUDevice::createComputePipelineAsync(Napi::Env env,
                                       interop::GPUComputePipelineDescriptor descriptor) {
     using Promise = interop::Promise<interop::Interface<interop::GPUComputePipeline>>;
 
-    Converter conv(env);
+    Converter conv(env, device_);
 
     wgpu::ComputePipelineDescriptor desc{};
     if (!conv(desc, descriptor)) {
-        Promise promise(env, PROMISE_INFO);
-        promise.Reject(Errors::OperationError(env));
-        return promise;
+        return {env, interop::kUnusedPromise};
     }
 
     struct Context {
@@ -426,9 +453,7 @@ GPUDevice::createRenderPipelineAsync(Napi::Env env,
 
     wgpu::RenderPipelineDescriptor desc{};
     if (!conv(desc, descriptor)) {
-        Promise promise(env, PROMISE_INFO);
-        promise.Reject(Errors::OperationError(env));
-        return promise;
+        return {env, interop::kUnusedPromise};
     }
 
     struct Context {
@@ -561,12 +586,18 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
                     c->promise.Resolve(err);
                     break;
                 }
+                case WGPUErrorType::WGPUErrorType_Internal: {
+                    interop::Interface<interop::GPUError> err{
+                        interop::GPUInternalError::Create<InternalError>(env, message)};
+                    c->promise.Resolve(err);
+                    break;
+                }
                 case WGPUErrorType::WGPUErrorType_Unknown:
                 case WGPUErrorType::WGPUErrorType_DeviceLost:
                     c->promise.Reject(Errors::OperationError(env, message));
                     break;
                 default:
-                    c->promise.Reject("unhandled error type");
+                    c->promise.Reject("unhandled error type (" + std::to_string(type) + ")");
                     break;
             }
         },

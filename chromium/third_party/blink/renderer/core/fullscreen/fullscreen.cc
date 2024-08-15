@@ -82,7 +82,9 @@ void FullscreenElementChanged(Document& document,
                               const FullscreenOptions* new_options) {
   DCHECK_NE(old_element, new_element);
 
-  document.GetStyleEngine().EnsureUAStyleForFullscreen(*new_element);
+  if (new_element) {
+    document.GetStyleEngine().EnsureUAStyleForFullscreen(*new_element);
+  }
 
   if (old_element) {
     DCHECK_NE(old_element, Fullscreen::FullscreenElementFrom(document));
@@ -226,8 +228,7 @@ void GoFullscreen(Element& element,
   // If there are any open popovers, close them.
   HTMLElement::HideAllPopoversUntil(
       nullptr, document, HidePopoverFocusBehavior::kNone,
-      HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
-      HidePopoverIndependence::kHideUnrelated);
+      HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions);
 
   // To fullscreen an |element| within a |document|, set the |element|'s
   // fullscreen flag and add it to |document|'s top layer.
@@ -351,9 +352,7 @@ bool AllowedToRequestFullscreen(Document& document) {
     return true;
 
   // The algorithm is triggered by a fullscreen request capability delegation.
-  if (RuntimeEnabledFeatures::CapabilityDelegationFullscreenRequestEnabled(
-          document.GetExecutionContext()) &&
-      document.domWindow()->IsFullscreenRequestTokenActive()) {
+  if (document.domWindow()->IsFullscreenRequestTokenActive()) {
     return true;
   }
 

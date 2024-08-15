@@ -109,6 +109,11 @@ bool GetChromeOsCrdDataDirInternal(base::FilePath* result,
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+const base::FilePath::CharType kLacrosLogDirectory[] =
+    FILE_PATH_LITERAL("/var/log/lacros");
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 base::FilePath& GetInvalidSpecifiedUserDataDirInternal() {
   static base::NoDestructor<base::FilePath> s;
   return *s;
@@ -241,10 +246,21 @@ bool PathProvider(int key, base::FilePath* result) {
       // and annoyed a lot of users.
 #endif
       break;
+    case chrome::DIR_CRASH_METRICS:
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      cur = base::FilePath(kLacrosLogDirectory);
+#else
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur)) {
+        return false;
+      }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+      break;
     case chrome::DIR_CRASH_DUMPS:
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       // ChromeOS uses a separate directory. See http://crosbug.com/25089
       cur = base::FilePath("/var/log/chrome");
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+      cur = base::FilePath(kLacrosLogDirectory);
 #elif BUILDFLAG(IS_ANDROID)
       if (!base::android::GetCacheDirectory(&cur)) {
         return false;
@@ -590,7 +606,8 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
 #endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(ENABLE_EXTENSIONS) && \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC))
     case chrome::DIR_NATIVE_MESSAGING:
 #if BUILDFLAG(IS_MAC)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

@@ -110,7 +110,7 @@
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontTypes.h"
-#include "src/ports/SkFontHost_FreeType_common.h"
+#include "src/ports/SkTypeface_FreeType.h"
 #ifdef CK_INCLUDE_PARAGRAPH
 #include "modules/skparagraph/include/Paragraph.h"
 #endif // CK_INCLUDE_PARAGRAPH
@@ -134,7 +134,7 @@ struct SkEmbeddedResourceHeader { const SkEmbeddedResource* entries; int count; 
 extern "C" const SkEmbeddedResourceHeader SK_EMBEDDED_FONTS;
 #endif
 
-#if GR_TEST_UTILS
+#if defined(GR_TEST_UTILS)
 #error "This define should not be set, as it brings in test-only things and bloats codesize."
 #endif
 

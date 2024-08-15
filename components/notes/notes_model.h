@@ -94,18 +94,21 @@ class NotesModel : public KeyedService {
   }
 
   // Adds a new folder node at the specified position with the given
-  // |creation_time| and |uuid|. If no UUID is provided (i.e. nullopt), then a
-  // random one will be generated. If a UUID is provided, it must be valid.
+  // |creation_time|, |last_modification_time|, and |uuid|. If no UUID is provided
+  // (i.e. nullopt), then a random one will be generated. If a UUID is provided,
+  // it must be valid.
   const NoteNode* AddFolder(
       const NoteNode* parent,
       size_t index,
       const std::u16string& name,
       absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::Time> last_modification_time = absl::nullopt,
       absl::optional<base::Uuid> uuid = absl::nullopt);
 
-  // Adds a note at the specified position with the given |creation_time| and
-  // |uuid|. If no UUID is provided (i.e. nullopt), then a random one will be
-  // generated. If a UUID is provided, it must be valid.
+  // Adds a note at the specified position with the given |creation_time|,
+  // |last_modification_time|, and |uuid|. If no UUID is provided (i.e. nullopt),
+  // then a random one will be generated. If a UUID is provided, it must be
+  // valid.
   const NoteNode* AddNote(
       const NoteNode* parent,
       size_t index,
@@ -113,6 +116,7 @@ class NotesModel : public KeyedService {
       const GURL& url,
       const std::u16string& content,
       absl::optional<base::Time> creation_time = absl::nullopt,
+      absl::optional<base::Time> last_modification_time = absl::nullopt,
       absl::optional<base::Uuid> uuid = absl::nullopt);
 
   // Adds a separator at the specified position with the given |creation_time|
@@ -166,14 +170,21 @@ class NotesModel : public KeyedService {
   // Moves |node| to |new_parent| and inserts it at the given |index|.
   void Move(const NoteNode* node, const NoteNode* new_parent, size_t index);
 
-  void SetURL(const NoteNode* node, const GURL& url);
-  void SetTitle(const NoteNode* node, const std::u16string& title);
+  void SetURL(const NoteNode* node,
+              const GURL& url,
+              bool updateLastModificationTime = true);
+  void SetTitle(const NoteNode* node,
+                const std::u16string& title,
+                bool updateLastModificationTime = true);
 
   // Sets the date added time of |node|.
   void SetDateAdded(const NoteNode* node, base::Time date_added);
-  void SetDateFolderModified(const NoteNode* parent, const base::Time time);
+  void SetLastModificationTime(const NoteNode* node,
+                               const base::Time time = base::Time::Now());
 
-  void SetContent(const NoteNode* node, const std::u16string& content);
+  void SetContent(const NoteNode* node,
+                  const std::u16string& content,
+                  bool updateLastModificationTime = true);
 
   // Returns, by reference in |notes|, the set of notes urls and their titles
   // and content. This returns the unique set of URLs. For example, if two notes
@@ -264,6 +275,9 @@ class NotesModel : public KeyedService {
   NoteNode* AddNode(NoteNode* parent,
                     int index,
                     std::unique_ptr<NoteNode> node);
+
+  // Update |node| lastModificationTime to base::Time::Now()
+  void UpdateLastModificationTime(const NoteNode* node);
 
   std::unique_ptr<NoteNode> root_;
 

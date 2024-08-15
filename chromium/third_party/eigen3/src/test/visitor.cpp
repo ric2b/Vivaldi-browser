@@ -9,8 +9,8 @@
 
 #include "main.h"
 
-template<typename MatrixType> void matrixVisitor(const MatrixType& p)
-{
+template <typename MatrixType>
+void matrixVisitor(const MatrixType& p) {
   typedef typename MatrixType::Scalar Scalar;
 
   Index rows = p.rows();
@@ -19,33 +19,30 @@ template<typename MatrixType> void matrixVisitor(const MatrixType& p)
   // construct a random matrix where all coefficients are different
   MatrixType m;
   m = MatrixType::Random(rows, cols);
-  for(Index i = 0; i < m.size(); i++)
-    for(Index i2 = 0; i2 < i; i2++)
-      while(numext::equal_strict(m(i), m(i2))) // yes, strict equality
+  for (Index i = 0; i < m.size(); i++)
+    for (Index i2 = 0; i2 < i; i2++)
+      while (numext::equal_strict(m(i), m(i2)))  // yes, strict equality
         m(i) = internal::random<Scalar>();
-  
+
   Scalar minc = Scalar(1000), maxc = Scalar(-1000);
-  Index minrow=0,mincol=0,maxrow=0,maxcol=0;
-  for(Index j = 0; j < cols; j++)
-  for(Index i = 0; i < rows; i++)
-  {
-    if(m(i,j) < minc)
-    {
-      minc = m(i,j);
-      minrow = i;
-      mincol = j;
+  Index minrow = 0, mincol = 0, maxrow = 0, maxcol = 0;
+  for (Index j = 0; j < cols; j++)
+    for (Index i = 0; i < rows; i++) {
+      if (m(i, j) < minc) {
+        minc = m(i, j);
+        minrow = i;
+        mincol = j;
+      }
+      if (m(i, j) > maxc) {
+        maxc = m(i, j);
+        maxrow = i;
+        maxcol = j;
+      }
     }
-    if(m(i,j) > maxc)
-    {
-      maxc = m(i,j);
-      maxrow = i;
-      maxcol = j;
-    }
-  }
   Index eigen_minrow, eigen_mincol, eigen_maxrow, eigen_maxcol;
   Scalar eigen_minc, eigen_maxc;
-  eigen_minc = m.minCoeff(&eigen_minrow,&eigen_mincol);
-  eigen_maxc = m.maxCoeff(&eigen_maxrow,&eigen_maxcol);
+  eigen_minc = m.minCoeff(&eigen_minrow, &eigen_mincol);
+  eigen_maxc = m.maxCoeff(&eigen_maxrow, &eigen_maxcol);
   VERIFY(minrow == eigen_minrow);
   VERIFY(maxrow == eigen_maxrow);
   VERIFY(mincol == eigen_mincol);
@@ -55,9 +52,9 @@ template<typename MatrixType> void matrixVisitor(const MatrixType& p)
   VERIFY_IS_APPROX(minc, m.minCoeff());
   VERIFY_IS_APPROX(maxc, m.maxCoeff());
 
-  eigen_maxc = (m.adjoint()*m).maxCoeff(&eigen_maxrow,&eigen_maxcol);
-  Index maxrow2=0,maxcol2=0;
-  eigen_maxc = (m.adjoint()*m).eval().maxCoeff(&maxrow2,&maxcol2);
+  eigen_maxc = (m.adjoint() * m).maxCoeff(&eigen_maxrow, &eigen_maxcol);
+  Index maxrow2 = 0, maxcol2 = 0;
+  eigen_maxc = (m.adjoint() * m).eval().maxCoeff(&maxrow2, &maxcol2);
   VERIFY(maxrow2 == eigen_maxrow);
   VERIFY(maxcol2 == eigen_maxcol);
 
@@ -66,9 +63,8 @@ template<typename MatrixType> void matrixVisitor(const MatrixType& p)
     bool stop = false;
     for (Index j = 0; j < cols && !stop; ++j) {
       for (Index i = 0; i < rows && !stop; ++i) {
-        if (!(j == mincol && i == minrow) &&
-            !(j == maxcol && i == maxrow)) {
-          m(i,j) = NumTraits<Scalar>::quiet_NaN();
+        if (!(j == mincol && i == minrow) && !(j == maxcol && i == maxrow)) {
+          m(i, j) = NumTraits<Scalar>::quiet_NaN();
           stop = true;
           break;
         }
@@ -124,8 +120,8 @@ template<typename MatrixType> void matrixVisitor(const MatrixType& p)
   }
 }
 
-template<typename VectorType> void vectorVisitor(const VectorType& w)
-{
+template <typename VectorType>
+void vectorVisitor(const VectorType& w) {
   typedef typename VectorType::Scalar Scalar;
 
   Index size = w.size();
@@ -133,22 +129,19 @@ template<typename VectorType> void vectorVisitor(const VectorType& w)
   // construct a random vector where all coefficients are different
   VectorType v;
   v = VectorType::Random(size);
-  for(Index i = 0; i < size; i++)
-    for(Index i2 = 0; i2 < i; i2++)
-      while(v(i) == v(i2)) // yes, ==
+  for (Index i = 0; i < size; i++)
+    for (Index i2 = 0; i2 < i; i2++)
+      while (v(i) == v(i2))  // yes, ==
         v(i) = internal::random<Scalar>();
-  
+
   Scalar minc = v(0), maxc = v(0);
-  Index minidx=0, maxidx=0;
-  for(Index i = 0; i < size; i++)
-  {
-    if(v(i) < minc)
-    {
+  Index minidx = 0, maxidx = 0;
+  for (Index i = 0; i < size; i++) {
+    if (v(i) < minc) {
       minc = v(i);
       minidx = i;
     }
-    if(v(i) > maxc)
-    {
+    if (v(i) > maxc) {
       maxc = v(i);
       maxidx = i;
     }
@@ -163,8 +156,8 @@ template<typename VectorType> void vectorVisitor(const VectorType& w)
   VERIFY_IS_APPROX(maxc, eigen_maxc);
   VERIFY_IS_APPROX(minc, v.minCoeff());
   VERIFY_IS_APPROX(maxc, v.maxCoeff());
-  
-  Index idx0 = internal::random<Index>(0,size-1);
+
+  Index idx0 = internal::random<Index>(0, size - 1);
   Index idx1 = eigen_minidx;
   Index idx2 = eigen_maxidx;
   VectorType v1(v), v2(v);
@@ -172,8 +165,8 @@ template<typename VectorType> void vectorVisitor(const VectorType& w)
   v2(idx0) = v2(idx2);
   v1.minCoeff(&eigen_minidx);
   v2.maxCoeff(&eigen_maxidx);
-  VERIFY(eigen_minidx == (std::min)(idx0,idx1));
-  VERIFY(eigen_maxidx == (std::min)(idx0,idx2));
+  VERIFY(eigen_minidx == (std::min)(idx0, idx1));
+  VERIFY(eigen_maxidx == (std::min)(idx0, idx2));
 
   if (!NumTraits<Scalar>::IsInteger && size > 2) {
     // Test NaN propagation by replacing an element with NaN.
@@ -236,8 +229,8 @@ struct TrackedVisitor {
 namespace Eigen {
 namespace internal {
 
-template<typename T, bool Vectorizable>
-struct functor_traits<TrackedVisitor<T, Vectorizable> > {
+template <typename T, bool Vectorizable>
+struct functor_traits<TrackedVisitor<T, Vectorizable>> {
   enum { PacketAccess = Vectorizable, LinearAccess = false, Cost = 1 };
 };
 
@@ -271,7 +264,6 @@ void checkOptimalTraversal_impl(const DenseBase<Derived>& mat) {
 }
 
 void checkOptimalTraversal() {
-    
   using Scalar = float;
   constexpr int PacketSize = Eigen::internal::packet_traits<Scalar>::size;
   // use sizes that mix vector and scalar ops
@@ -286,7 +278,7 @@ void checkOptimalTraversal() {
   using DynamicRowMajor = Matrix<Scalar, Dynamic, Dynamic, RowMajor>;
 
   // Scalar-only visitors
-  checkOptimalTraversal_impl<UnrollColMajor, false>(UnrollColMajor(Rows,Cols));
+  checkOptimalTraversal_impl<UnrollColMajor, false>(UnrollColMajor(Rows, Cols));
   checkOptimalTraversal_impl<UnrollRowMajor, false>(UnrollRowMajor(Rows, Cols));
   checkOptimalTraversal_impl<DynamicColMajor, false>(DynamicColMajor(rows, cols));
   checkOptimalTraversal_impl<DynamicRowMajor, false>(DynamicRowMajor(rows, cols));
@@ -298,22 +290,21 @@ void checkOptimalTraversal() {
   checkOptimalTraversal_impl<DynamicRowMajor, true>(DynamicRowMajor(rows, cols));
 }
 
-EIGEN_DECLARE_TEST(visitor)
-{
-  for(int i = 0; i < g_repeat; i++) {
-    CALL_SUBTEST_1( matrixVisitor(Matrix<float, 1, 1>()) );
-    CALL_SUBTEST_2( matrixVisitor(Matrix2f()) );
-    CALL_SUBTEST_3( matrixVisitor(Matrix4d()) );
-    CALL_SUBTEST_4( matrixVisitor(MatrixXd(8, 12)) );
-    CALL_SUBTEST_5( matrixVisitor(Matrix<double,Dynamic,Dynamic,RowMajor>(20, 20)) );
-    CALL_SUBTEST_6( matrixVisitor(MatrixXi(8, 12)) );
+EIGEN_DECLARE_TEST(visitor) {
+  for (int i = 0; i < g_repeat; i++) {
+    CALL_SUBTEST_1(matrixVisitor(Matrix<float, 1, 1>()));
+    CALL_SUBTEST_2(matrixVisitor(Matrix2f()));
+    CALL_SUBTEST_3(matrixVisitor(Matrix4d()));
+    CALL_SUBTEST_4(matrixVisitor(MatrixXd(8, 12)));
+    CALL_SUBTEST_5(matrixVisitor(Matrix<double, Dynamic, Dynamic, RowMajor>(20, 20)));
+    CALL_SUBTEST_6(matrixVisitor(MatrixXi(8, 12)));
   }
-  for(int i = 0; i < g_repeat; i++) {
-    CALL_SUBTEST_7( vectorVisitor(Vector4f()) );
-    CALL_SUBTEST_7( vectorVisitor(Matrix<int,12,1>()) );
-    CALL_SUBTEST_8( vectorVisitor(VectorXd(10)) );
-    CALL_SUBTEST_9( vectorVisitor(RowVectorXd(10)) );
-    CALL_SUBTEST_10( vectorVisitor(VectorXf(33)) );
+  for (int i = 0; i < g_repeat; i++) {
+    CALL_SUBTEST_7(vectorVisitor(Vector4f()));
+    CALL_SUBTEST_7(vectorVisitor(Matrix<int, 12, 1>()));
+    CALL_SUBTEST_8(vectorVisitor(VectorXd(10)));
+    CALL_SUBTEST_9(vectorVisitor(RowVectorXd(10)));
+    CALL_SUBTEST_10(vectorVisitor(VectorXf(33)));
   }
   CALL_SUBTEST_11(checkOptimalTraversal());
 }

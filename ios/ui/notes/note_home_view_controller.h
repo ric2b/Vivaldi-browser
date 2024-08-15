@@ -8,7 +8,7 @@
 #import <set>
 #import <vector>
 
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller.h"
 #import "ios/panel/panel_interaction_controller.h"
 
 @protocol ApplicationCommands;
@@ -40,7 +40,7 @@ class GURL;
 
 // Class to navigate the note hierarchy.
 @interface NoteHomeViewController
-    : ChromeTableViewController <UIAdaptivePresentationControllerDelegate>
+    : LegacyChromeTableViewController <UIAdaptivePresentationControllerDelegate>
 
 // Delegate for presenters. Note that this delegate is currently being set only
 // in case of handset, and not tablet. In the future it will be used by both

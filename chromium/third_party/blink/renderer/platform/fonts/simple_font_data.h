@@ -25,6 +25,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_SIMPLE_FONT_DATA_H_
 
 #include <memory>
+#include <mutex>
 #include <utility>
 
 #include "build/build_config.h"
@@ -105,6 +106,12 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
     return GetFontMetrics().FloatHeight() - PlatformData().size();
   }
 
+  // The approximated advance of fullwidth ideographic characters in the inline
+  // axis. This is currently used to support the `ic` unit.
+  // https://drafts.csswg.org/css-values-4/#ic
+  const absl::optional<float>& IdeographicInlineSize() const;
+  absl::optional<float> IdeographicAdvanceWidth() const;
+
   // |sTypoAscender| and |sTypoDescender| in |OS/2| table, normalized to 1em.
   // This metrics can simulate ideographics em-box when the font doesn't have
   // better ways to compute it.
@@ -133,7 +140,6 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
   void BoundsForGlyphs(const Vector<Glyph, 256>&, Vector<SkRect, 256>*) const;
   gfx::RectF PlatformBoundsForGlyph(Glyph) const;
   float WidthForGlyph(Glyph) const;
-  float PlatformWidthForGlyph(Glyph) const;
 
   float SpaceWidth() const { return space_width_; }
   void SetSpaceWidth(float space_width) { space_width_ = space_width; }
@@ -164,13 +170,6 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
 
   CustomFontData* GetCustomFontData() const { return custom_font_data_.get(); }
 
-  unsigned VisualOverflowInflationForAscent() const {
-    return visual_overflow_inflation_for_ascent_;
-  }
-  unsigned VisualOverflowInflationForDescent() const {
-    return visual_overflow_inflation_for_descent_;
-  }
-
  private:
   SimpleFontData(
       const FontPlatformData&,
@@ -180,7 +179,6 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
 
   void PlatformInit(bool subpixel_ascent_descent, const FontMetricsOverride&);
   void PlatformGlyphInit();
-  void PlatformGlyphInitVerticalUpright(Glyph cjk_water_glyph);
 
   scoped_refptr<SimpleFontData> CreateScaledFontData(const FontDescription&,
                                               float scale_factor) const;
@@ -217,6 +215,11 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
 
   const scoped_refptr<CustomFontData> custom_font_data_;
 
+  mutable std::once_flag ideographic_inline_size_once_;
+  mutable std::once_flag ideographic_advance_width_once_;
+  mutable absl::optional<float> ideographic_inline_size_;
+  mutable absl::optional<float> ideographic_advance_width_;
+
   // Simple LRU cache for `HanKerning::FontData`. The cache has 2 entries
   // because one additional language or horizontal/vertical mixed document is
   // possible, but more than that are very unlikely.
@@ -227,12 +230,6 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
   };
   mutable HanKerningCacheEntry han_kerning_cache_[2];
 
-  // These are set to non-zero when ascent or descent is rounded or shifted
-  // to be smaller than the actual ascent or descent. When calculating visual
-  // overflows, we should add the inflations.
-  unsigned visual_overflow_inflation_for_ascent_ = 0;
-  unsigned visual_overflow_inflation_for_descent_ = 0;
-
   mutable FontHeight normalized_typo_ascent_descent_;
 
 // See discussion on crbug.com/631032 and Skia issue
@@ -241,7 +238,6 @@ class PLATFORM_EXPORT SimpleFontData final : public FontData {
 // too slow to be able to remove the caching layer we have here.
 #if BUILDFLAG(IS_APPLE)
   mutable std::unique_ptr<GlyphMetricsMap<gfx::RectF>> glyph_to_bounds_map_;
-  mutable GlyphMetricsMap<float> glyph_to_width_map_;
 #endif
 };
 
@@ -262,20 +258,6 @@ ALWAYS_INLINE gfx::RectF SimpleFontData::BoundsForGlyph(Glyph glyph) const {
   glyph_to_bounds_map_->SetMetricsForGlyph(glyph, bounds_result);
 
   return bounds_result;
-#endif
-}
-
-ALWAYS_INLINE float SimpleFontData::WidthForGlyph(Glyph glyph) const {
-#if !BUILDFLAG(IS_APPLE)
-  return PlatformWidthForGlyph(glyph);
-#else
-  if (absl::optional<float> width = glyph_to_width_map_.MetricsForGlyph(glyph))
-    return *width;
-
-  float width = PlatformWidthForGlyph(glyph);
-
-  glyph_to_width_map_.SetMetricsForGlyph(glyph, width);
-  return width;
 #endif
 }
 

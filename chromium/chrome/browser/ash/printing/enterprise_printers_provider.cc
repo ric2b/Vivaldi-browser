@@ -131,7 +131,7 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
     recommended_printers_.clear();
     std::vector<std::string> data = FromPrefs(prefs::kRecommendedPrinters);
     for (const auto& printer_json : data) {
-      absl::optional<base::Value> printer_value = base::JSONReader::Read(
+      std::optional<base::Value> printer_value = base::JSONReader::Read(
           printer_json, base::JSON_ALLOW_TRAILING_COMMAS);
       if (!printer_value.has_value() || !printer_value.value().is_dict()) {
         LOG(WARNING) << "Ignoring invalid printer.  Invalid JSON object: "
@@ -280,7 +280,7 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
   std::unique_ptr<CalculatorsPoliciesBinder> profile_binder_;
 
   // Profile (user) settings.
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   AccountId account_id_;
   PrefChangeRegistrar pref_change_registrar_;
 

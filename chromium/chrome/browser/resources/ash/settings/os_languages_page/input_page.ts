@@ -33,10 +33,10 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../assert_extras.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {hasOptionsPageInSettings} from './input_method_util.js';
@@ -651,7 +651,13 @@ export class OsSettingsInputPageElement extends OsSettingsInputPageElementBase {
     const status = this.languageHelper.getImeLanguagePackStatus(imeId);
     switch (status) {
       case chrome.inputMethodPrivate.LanguagePackStatus.ERROR_NEEDS_REBOOT:
-        return this.i18n('inputMethodLanguagePacksNeedsRebootError');
+      // We currently have a string - `inputMethodLanguagePacksNeedsRebootError`
+      // in WebUI,
+      // `IDS_OS_SETTINGS_INPUT_METHOD_LANGUAGE_PACKS_NEEDS_REBOOT_ERROR` in the
+      // GRD file - to special case the `ERROR_NEEDS_REBOOT` case. However, the
+      // string is not finalised, and therefore should not be shown to the user.
+      // TODO: b/315725816 - Either finalise the string and add it here, or
+      // remove the string altogether.
       case chrome.inputMethodPrivate.LanguagePackStatus.ERROR_OTHER:
         return this.i18n('inputMethodLanguagePacksGeneralError');
       default:

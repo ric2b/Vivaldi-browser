@@ -21,6 +21,8 @@
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
+
+class BackForwardTransitionAnimationManagerAndroid;
 class ContentUiEventHandler;
 class RenderWidgetHostViewAndroid;
 class SelectPopup;
@@ -45,10 +47,6 @@ class WebContentsViewAndroid : public WebContentsView,
 
   void set_synchronous_compositor_client(SynchronousCompositorClient* client) {
     synchronous_compositor_client_ = client;
-  }
-
-  void set_selection_popup_controller(SelectionPopupController* controller) {
-    selection_popup_controller_ = controller;
   }
 
   SynchronousCompositorClient* synchronous_compositor_client() const {
@@ -133,7 +131,7 @@ class WebContentsViewAndroid : public WebContentsView,
   bool ScrollTo(float x, float y) override;
   void OnSizeChanged() override;
   void OnPhysicalBackingSizeChanged(
-      absl::optional<base::TimeDelta> deadline_override) override;
+      std::optional<base::TimeDelta> deadline_override) override;
   void OnBrowserControlsHeightChanged() override;
   void OnControlsResizeViewChanged() override;
   void NotifyVirtualKeyboardOverlayRect(
@@ -143,6 +141,33 @@ class WebContentsViewAndroid : public WebContentsView,
   void set_device_orientation(int orientation) {
     device_orientation_ = orientation;
   }
+
+  // Insert `screenshot_layer` into the layer tree, as a *direct* sibling of
+  // `parent_for_web_page_widgets_`.
+  //
+  // `screenshot_layer_on_top` controls the position of `screenshot_layer`:
+  // `true` means the screenshot will be placed right above
+  // `parent_for_web_page_widgets_`; `false` means right below it.
+  //
+  // TODO(crbug/1488075): The boolean might not be enough if
+  // `parent_for_web_page_widgets_` has more siblings, and we need finer control
+  // of the position.
+  void AddScreenshotLayerForNavigationTransitions(
+      scoped_refptr<cc::slim::Layer> screenshot_layer,
+      bool screenshot_layer_on_top);
+
+  // See the block comments above `parent_for_web_page_widgets_` for the
+  // hierarchies of layers and native views. The callers can operate upon all
+  // the web widgets and the web page via this getter.
+  cc::slim::Layer* parent_for_web_page_widgets() const {
+    return parent_for_web_page_widgets_.get();
+  }
+
+  WebContentsImpl* web_contents() { return web_contents_; }
+
+  // Guaranteed non-null if `features::kBackForwardTransitions` is enabled.
+  BackForwardTransitionAnimationManagerAndroid*
+  back_forward_animation_manager();
 
  private:
   void OnDragEntered(const std::vector<DropData::Metadata>& metadata,
@@ -158,6 +183,10 @@ class WebContentsViewAndroid : public WebContentsView,
   void OnSystemDragEnded();
 
   SelectPopup* GetSelectPopup();
+
+  // Returns the current `SelectionPopupController` from the current
+  // `RenderWidgetHostViewAndroid`.
+  SelectionPopupController* GetSelectionPopupController();
 
   // The WebContents whose contents we display.
   raw_ptr<WebContentsImpl> web_contents_;
@@ -176,7 +205,7 @@ class WebContentsViewAndroid : public WebContentsView,
 
   // A common parent to all the native widgets as part of a web page.
   //
-  // Layer layout:
+  // Layer hierarchy:
   // `view_`
   //   |
   //   |- `parent_for_web_page_widgets_`
@@ -185,9 +214,9 @@ class WebContentsViewAndroid : public WebContentsView,
   //   |                |- Overscroll
   //   |                |- SelectionHandle
   //   |
-  //   |- `NavigationEntryScreenshot`  // TODO(https://crbug.com/1420783)
+  //   |- `NavigationEntryScreenshot`  // TODO(https://crbug.com/1509888)
   //
-  // ViewAndroid layout:
+  // ViewAndroid hierarchy:
   // `view_`
   //   |
   //   |- `RenderWidgetHostViewAndroid`
@@ -195,9 +224,6 @@ class WebContentsViewAndroid : public WebContentsView,
 
   // Interface used to get notified of events from the synchronous compositor.
   raw_ptr<SynchronousCompositorClient> synchronous_compositor_client_;
-
-  raw_ptr<SelectionPopupController, AcrossTasksDanglingUntriaged>
-      selection_popup_controller_ = nullptr;
 
   int device_orientation_ = 0;
 
@@ -219,6 +245,10 @@ class WebContentsViewAndroid : public WebContentsView,
   // the document has registeted interest in the dropped data and the
   // renderer process should pass the data to the document on drop.
   bool document_is_handling_drag_ = false;
+
+  // Manages the animation during a session history navigation.
+  std::unique_ptr<BackForwardTransitionAnimationManagerAndroid>
+      back_forward_animation_manager_;
 };
 
 } // namespace content

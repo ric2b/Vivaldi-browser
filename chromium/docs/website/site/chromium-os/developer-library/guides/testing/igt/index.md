@@ -30,7 +30,7 @@ Source code and everything in between to run, develop and test IGT.
 
 ### ChromiumOS Internal
 - [Local Source](https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/igt-gpu-tools/)
-- [ChromiumOS Git](https://chromium.googlesource.com/chromiumos/third_party/igt-gpu-tools/+/refs/heads/master)
+- [ChromiumOS Git](https://chromium.googlesource.com/chromiumos/third_party/igt-gpu-tools/)
 
 ### Google lab links
 - [Everything IGT](http://goto.google.com/igtlab)

@@ -8,7 +8,9 @@
 #include <cstring>
 #include <limits>
 
+#include "base/trace_event/typed_macros.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_arraybuffer_arraybufferview.h"
@@ -19,7 +21,6 @@
 #include "third_party/blink/renderer/modules/compression/compression_format.h"
 #include "third_party/blink/renderer/modules/compression/zlib_partition_alloc.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -93,6 +94,7 @@ void DeflateTransformer::Deflate(const uint8_t* start,
                                  IsFinished finished,
                                  TransformStreamDefaultController* controller,
                                  ExceptionState& exception_state) {
+  TRACE_EVENT("blink,devtools.timeline", "CompressionStream Deflate");
   stream_.avail_in = length;
   // Zlib treats this pointer as const, so this cast is safe.
   stream_.next_in = const_cast<uint8_t*>(start);

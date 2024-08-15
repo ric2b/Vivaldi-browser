@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_AUTOFILL_POPUP_POPUP_VIEW_VIEWS_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,7 +19,6 @@
 #include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
 #include "components/autofill/core/common/aliases.h"
 #include "content/public/common/input/native_web_keyboard_event.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -56,9 +56,9 @@ class PopupViewViews : public PopupBaseView,
                        public AutofillPopupView,
                        public PopupRowView::SelectionDelegate,
                        public ExpandablePopupParentView {
- public:
-  METADATA_HEADER(PopupViewViews);
+  METADATA_HEADER(PopupViewViews, PopupBaseView)
 
+ public:
   using RowPointer =
       absl::variant<PopupRowView*, PopupSeparatorView*, PopupWarningView*>;
 
@@ -83,9 +83,9 @@ class PopupViewViews : public PopupBaseView,
 
   base::WeakPtr<AutofillPopupController> controller() { return controller_; }
   // Gets and sets the currently selected cell. If an invalid `cell_index` is
-  // passed, `GetSelectedCell()` will return `absl::nullopt` afterwards.
-  absl::optional<CellIndex> GetSelectedCell() const override;
-  void SetSelectedCell(absl::optional<CellIndex> cell_index,
+  // passed, `GetSelectedCell()` will return `std::nullopt` afterwards.
+  std::optional<CellIndex> GetSelectedCell() const override;
+  void SetSelectedCell(std::optional<CellIndex> cell_index,
                        PopupCellSelectionSource source) override;
 
   // views::View:
@@ -97,7 +97,7 @@ class PopupViewViews : public PopupBaseView,
   bool Show(AutoselectFirstSuggestion autoselect_first_suggestion) override;
   void Hide() override;
   bool OverlapsWithPictureInPictureWindow() const override;
-  absl::optional<int32_t> GetAxUniqueId() override;
+  std::optional<int32_t> GetAxUniqueId() override;
   void AxAnnounce(const std::u16string& text) override;
   base::WeakPtr<AutofillPopupView> CreateSubPopupView(
       base::WeakPtr<AutofillPopupController> controller) override;
@@ -110,6 +110,22 @@ class PopupViewViews : public PopupBaseView,
 
  private:
   friend class PopupViewViewsTestApi;
+
+  // Sets the `cell_index` cell as selected (or just unselects the selected
+  // cell if `nullopt` is passed). Only one cell can be selected at a time.
+  // Depending on the cell type and the suggestion, it makes the cell or
+  // the whole row highlighted. It may also trigger the form preview or
+  // a sub-popup to open, which depends on the suggestion acceptability, whether
+  // it has children children and the cell type. `autoselect_first_suggestion`
+  // and `suppress_popup` are relevant for cases when setting the cell triggers
+  // a sub-popup to open. Setting `suppress_popup` to `true` prevents
+  // the sub-popup from opening in such cases. `autoselect_first_suggestion`
+  // controls whether the first suggestion in the sub-popup will be selected,
+  // also capturing the keyboard focus if it is `true`.
+  void SetSelectedCell(std::optional<CellIndex> cell_index,
+                       PopupCellSelectionSource source,
+                       AutoselectFirstSuggestion autoselect_first_suggestion,
+                       bool suppress_popup = false);
 
   // Returns the `PopupRowView` at line number `index`. Assumes that there is
   // such a view at that line number - otherwise the underlying variant will
@@ -165,6 +181,11 @@ class PopupViewViews : public PopupBaseView,
   // selected.
   bool RemoveSelectedCell();
 
+  // Reacts to key events under the assumption that the currently shown popup
+  // contains Compose content.
+  bool HandleKeyPressEventForCompose(
+      const content::NativeWebKeyboardEvent& event);
+
   // AutofillPopupView:
   bool HandleKeyPressEvent(
       const content::NativeWebKeyboardEvent& event) override;
@@ -177,25 +198,32 @@ class PopupViewViews : public PopupBaseView,
   void OnMouseEnteredInChildren() override;
   void OnMouseExitedInChildren() override;
 
+  // Returns whether the footer container is scrollable with other suggestions
+  // or it is "sticky" (i.e. it has a fixed position, always visible and
+  // the non-footer suggestions are scrolled independently).
+  bool IsFooterScrollable() const;
+
   bool CanShowDropdownInBounds(const gfx::Rect& bounds) const;
 
-  // Opens a sub-popup on a new cell (and closes the open one if any), or just
-  // closes the existing if `absl::nullopt` is passed.
-  void SetCellWithOpenSubPopup(absl::optional<CellIndex> cell_index,
-                               PopupCellSelectionSource selection_source);
+  // Opens a sub-popup on a new row (and closes the open one if any), or just
+  // closes the existing if `std::nullopt` is passed.
+  void SetRowWithOpenSubPopup(
+      std::optional<size_t> row_index,
+      AutoselectFirstSuggestion autoselect_first_suggestion =
+          AutoselectFirstSuggestion(false));
 
   // Controller for this view.
   base::WeakPtr<AutofillPopupController> controller_ = nullptr;
 
   // Parent's popup view. Present in sub-popups (non-root) only.
-  absl::optional<base::WeakPtr<ExpandablePopupParentView>> parent_;
+  std::optional<base::WeakPtr<ExpandablePopupParentView>> parent_;
 
   // The index of the row with a selected cell.
-  absl::optional<size_t> row_with_selected_cell_;
+  std::optional<size_t> row_with_selected_cell_;
 
-  // The latest cell which was set as having a sub-popup open. Storing it
-  // is required to maintain the invariant of at most one such a cell.
-  absl::optional<CellIndex> open_sub_popup_cell_;
+  // The latest row which was set as having a sub-popup open. Storing it
+  // is required to maintain the invariant of at most one such a row.
+  std::optional<size_t> row_with_open_sub_popup_;
 
   std::vector<RowPointer> rows_;
   raw_ptr<views::ScrollView> scroll_view_ = nullptr;
@@ -204,6 +232,16 @@ class PopupViewViews : public PopupBaseView,
 
   base::OneShotTimer open_sub_popup_timer_;
   base::OneShotTimer no_selection_sub_popup_close_timer_;
+
+  // Defines whether the popup handles keyboard events like UP/DOWN/ESC/etc.
+  // This value is important for defining which popup handles the event when
+  // a chain of (sub-)popups is open: having no focus for a sub-popup means
+  // that its parent will take care of handling it.
+  // It's automatically set `true` for the root popup (so that it always handles
+  // events) and when something is selected in sub-popups. The initial value is
+  // set in `Show()`, but after that once it is `true` the value never gets back
+  // to `false.`
+  bool has_keyboard_focus_ = false;
 
   base::WeakPtrFactory<PopupViewViews> weak_ptr_factory_{this};
 };

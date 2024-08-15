@@ -84,6 +84,8 @@ std::u16string GetGhostWindowAppLaunchAodString() {
 }
 
 class Throbber : public views::View {
+  METADATA_HEADER(Throbber, views::View)
+
  public:
   explicit Throbber(uint32_t color) : color_(color) {
     start_time_ = base::TimeTicks::Now();
@@ -110,6 +112,9 @@ class Throbber : public views::View {
   base::TimeTicks start_time_;  // Time when Start was called.
   base::RepeatingTimer timer_;  // Used to schedule Run calls.
 };
+
+BEGIN_METADATA(Throbber)
+END_METADATA
 
 }  // namespace
 
@@ -212,7 +217,7 @@ void ArcGhostWindowView::LoadIcon(const std::string& app_id) {
       apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile));
 
   apps::AppServiceProxyFactory::GetForProfile(profile)->LoadIcon(
-      apps::AppType::kArc, app_id, apps::IconType::kStandard,
+      app_id, apps::IconType::kStandard,
       SharedAppListConfig::instance().default_grid_icon_dimension(),
       /*allow_placeholder_icon=*/false,
       icon_loaded_cb_for_testing_.is_null()

@@ -14,6 +14,7 @@
 #include "extensions/common/mojom/guest_view.mojom.h"
 #include "extensions/renderer/guest_view/mime_handler_view/post_message_support.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -49,7 +50,7 @@ class MimeHandlerViewContainerManager
       public PostMessageSupport::Delegate {
  public:
   static void BindReceiver(
-      int32_t routing_id,
+      content::RenderFrame* render_frame,
       mojo::PendingAssociatedReceiver<mojom::MimeHandlerViewContainerManager>
           receiver);
   // Returns the container manager associated with |render_frame|. If none
@@ -99,7 +100,7 @@ class MimeHandlerViewContainerManager
   void ReadyToCommitNavigation(
       blink::WebDocumentLoader* document_loader) override;
   void OnDestruct() override;
-  void WillDetach() override;
+  void WillDetach(blink::DetachReason detach_reason) override;
 
   // mojom::MimeHandlerViewContainerManager overrides.
   void SetInternalId(const std::string& token_id) override;
@@ -151,11 +152,13 @@ class MimeHandlerViewContainerManager
   std::string internal_id_;
   // The plugin element that is managed by MimeHandlerViewContainerManager.
   blink::WebElement plugin_element_;
+  blink::LocalFrameToken frame_token_;
 
   mojo::AssociatedReceiverSet<mojom::MimeHandlerViewContainerManager>
       receivers_;
   mojo::Receiver<mime_handler::BeforeUnloadControl>
       before_unload_control_receiver_{this};
+  mojo::AssociatedRemote<mojom::GuestView> remote_;
 };
 
 }  // namespace extensions

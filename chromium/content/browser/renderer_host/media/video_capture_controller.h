@@ -104,7 +104,7 @@ class CONTENT_EXPORT VideoCaptureController
                     int buffer_id,
                     const media::VideoCaptureFeedback& feedback);
 
-  const absl::optional<media::VideoCaptureFormat> GetVideoCaptureFormat() const;
+  const std::optional<media::VideoCaptureFormat> GetVideoCaptureFormat() const;
 
   bool has_received_frames() const { return has_received_frames_; }
 
@@ -148,10 +148,12 @@ class CONTENT_EXPORT VideoCaptureController
   void TakePhoto(media::VideoCaptureDevice::TakePhotoCallback callback);
   void MaybeSuspend();
   void Resume();
-  void Crop(const base::Token& crop_id,
-            uint32_t sub_capture_target_version,
-            base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
-                callback);
+  void ApplySubCaptureTarget(
+      media::mojom::SubCaptureTargetType type,
+      const base::Token& target,
+      uint32_t sub_capture_target_version,
+      base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
+          callback);
   void RequestRefreshFrame();
   void SetDesktopCaptureWindowIdAsync(gfx::NativeViewId window_id,
                                       base::OnceClosure done_cb);
@@ -280,7 +282,7 @@ class CONTENT_EXPORT VideoCaptureController
   bool has_received_frames_;
   base::TimeTicks time_of_start_request_;
 
-  absl::optional<media::VideoCaptureFormat> video_capture_format_;
+  std::optional<media::VideoCaptureFormat> video_capture_format_;
 
   // As a work-around to technical limitations, we don't allow multiple
   // captures of the same tab, by the same capturer, if the first capturer

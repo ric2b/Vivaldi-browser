@@ -21,7 +21,7 @@ class PrefService;
 namespace network {
 class SimpleURLLoader;
 class SharedURLLoaderFactory;
-}
+}  // namespace network
 
 namespace vivaldi {
 
@@ -64,6 +64,7 @@ class StatsReporterImpl : public StatsReporter {
       const std::string& architecture,
       const std::string& vivaldi_version,
       const std::string& user_agent,
+      const std::string& client_hints,
       ReportingData& local_state_reporting_data,
       absl::optional<base::Value>& os_profile_reporting_data_json,
       std::string& request_url,
@@ -92,6 +93,7 @@ class StatsReporterImpl : public StatsReporter {
   static PrefService* GetLocalState();
   static scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory();
   static std::string GetUserAgent();
+  static std::string GetClientHints();
 
   void OnLegacyUserIdGot(const std::string& legacy_user_id);
   void StartReporting();

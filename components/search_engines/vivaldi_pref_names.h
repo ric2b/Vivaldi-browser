@@ -5,14 +5,20 @@
 
 namespace prefs {
 
-extern const char kLanguageAtInstall[];
+constexpr char kLanguageAtInstall[] = "vivaldi.language_at_install";
 
-extern const char kSyncedDefaultPrivateSearchProviderGUID[];
-extern const char kSyncedDefaultSearchFieldProviderGUID[];
-extern const char kSyncedDefaultPrivateSearchFieldProviderGUID[];
-extern const char kSyncedDefaultSpeedDialsSearchProviderGUID[];
-extern const char kSyncedDefaultSpeedDialsPrivateSearchProviderGUID[];
-extern const char kSyncedDefaultImageSearchProviderGUID[];
+constexpr char kSyncedDefaultPrivateSearchProviderGUID[] =
+    "default_search_provider.synced_guid_private";
+constexpr char kSyncedDefaultSearchFieldProviderGUID[] =
+    "default_search_provider.synced_guid_search_field";
+constexpr char kSyncedDefaultPrivateSearchFieldProviderGUID[] =
+    "default_search_provider.synced_guid_search_field_private";
+constexpr char kSyncedDefaultSpeedDialsSearchProviderGUID[] =
+    "default_search_provider.synced_guid_speeddials";
+constexpr char kSyncedDefaultSpeedDialsPrivateSearchProviderGUID[] =
+    "default_search_provider.synced_guid_speeddials_private";
+constexpr char kSyncedDefaultImageSearchProviderGUID[] =
+    "default_search_provider.synced_guid_image";
 }  // namespace prefs
 
 #endif  // COMPONENTS_SEARCH_ENGINES_VIVALDI_PREF_NAMES_H_

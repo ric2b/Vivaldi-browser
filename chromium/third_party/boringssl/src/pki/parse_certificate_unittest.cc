@@ -4,13 +4,13 @@
 
 #include "parse_certificate.h"
 
-#include "cert_errors.h"
-#include "general_names.h"
-#include "parsed_certificate.h"
-#include "test_helpers.h"
-#include "input.h"
 #include <gtest/gtest.h>
 #include <openssl/pool.h>
+#include "cert_errors.h"
+#include "general_names.h"
+#include "input.h"
+#include "parsed_certificate.h"
+#include "test_helpers.h"
 
 namespace bssl {
 
@@ -19,7 +19,7 @@ namespace {
 // Pretty-prints a GeneralizedTime as a human-readable string for use in test
 // expectations (it is more readable to specify the expected results as a
 // string).
-std::string ToString(const der::GeneralizedTime& time) {
+std::string ToString(const der::GeneralizedTime &time) {
   std::ostringstream pretty_time;
   pretty_time << "year=" << int{time.year} << ", month=" << int{time.month}
               << ", day=" << int{time.day} << ", hours=" << int{time.hours}
@@ -28,7 +28,7 @@ std::string ToString(const der::GeneralizedTime& time) {
   return pretty_time.str();
 }
 
-std::string GetFilePath(const std::string& file_name) {
+std::string GetFilePath(const std::string &file_name) {
   return std::string("testdata/parse_certificate_unittest/") + file_name;
 }
 
@@ -36,7 +36,7 @@ std::string GetFilePath(const std::string& file_name) {
 // Verifies that parsing the Certificate matches expectations:
 //   * If expected to fail, emits the expected errors
 //   * If expected to succeeds, the parsed fields match expectations
-void RunCertificateTest(const std::string& file_name) {
+void RunCertificateTest(const std::string &file_name) {
   std::string data;
   std::string expected_errors;
   std::string expected_tbs_certificate;
@@ -129,7 +129,7 @@ TEST(ParseCertificateTest, AlgorithmNotSequence) {
 //
 // TODO(eroman): Get rid of the |expected_version| parameter -- this should be
 // encoded in the test expectations file.
-void RunTbsCertificateTestGivenVersion(const std::string& file_name,
+void RunTbsCertificateTestGivenVersion(const std::string &file_name,
                                        CertificateVersion expected_version) {
   std::string data;
   std::string expected_serial_number;
@@ -172,8 +172,9 @@ void RunTbsCertificateTestGivenVersion(const std::string& file_name,
   EXPECT_EQ(expected_result, actual_result);
   VerifyCertErrors(expected_errors, errors, test_file_path);
 
-  if (!expected_result || !actual_result)
+  if (!expected_result || !actual_result) {
     return;
+  }
 
   // Ensure that the ParsedTbsCertificate matches expectations.
   EXPECT_EQ(expected_version, parsed.version);
@@ -211,7 +212,7 @@ void RunTbsCertificateTestGivenVersion(const std::string& file_name,
   }
 }
 
-void RunTbsCertificateTest(const std::string& file_name) {
+void RunTbsCertificateTest(const std::string &file_name) {
   RunTbsCertificateTestGivenVersion(file_name, CertificateVersion::V3);
 }
 
@@ -271,9 +272,7 @@ TEST(ParseTbsCertificateTest, Version3AllOptionals) {
 }
 
 // The version was set to v4, which is unrecognized.
-TEST(ParseTbsCertificateTest, Version4) {
-  RunTbsCertificateTest("tbs_v4.pem");
-}
+TEST(ParseTbsCertificateTest, Version4) { RunTbsCertificateTest("tbs_v4.pem"); }
 
 // Tests that extraneous data after extensions in a v3 is rejected.
 TEST(ParseTbsCertificateTest, Version3DataAfterExtensions) {
@@ -491,7 +490,7 @@ TEST(ParseAuthorityInfoAccess, BasicTests) {
   ASSERT_TRUE(ParseAuthorityInfoAccess(der::Input(der), &access_descriptions));
   ASSERT_EQ(5u, access_descriptions.size());
   {
-    const auto& desc = access_descriptions[0];
+    const auto &desc = access_descriptions[0];
     EXPECT_EQ(der::Input(kAdOcspOid), desc.access_method_oid);
     const uint8_t location_der[] = {0xa4, 0x11, 0x30, 0x0f, 0x31, 0x0d, 0x30,
                                     0x0b, 0x06, 0x03, 0x55, 0x04, 0x03, 0x13,
@@ -499,7 +498,7 @@ TEST(ParseAuthorityInfoAccess, BasicTests) {
     EXPECT_EQ(der::Input(location_der), desc.access_location);
   }
   {
-    const auto& desc = access_descriptions[1];
+    const auto &desc = access_descriptions[1];
     EXPECT_EQ(der::Input(kAdCaIssuersOid), desc.access_method_oid);
     const uint8_t location_der[] = {
         0xa4, 0x16, 0x30, 0x14, 0x31, 0x12, 0x30, 0x10, 0x06, 0x03, 0x55, 0x04,
@@ -507,7 +506,7 @@ TEST(ParseAuthorityInfoAccess, BasicTests) {
     EXPECT_EQ(der::Input(location_der), desc.access_location);
   }
   {
-    const auto& desc = access_descriptions[2];
+    const auto &desc = access_descriptions[2];
     const uint8_t method_oid[] = {0x2b, 0x06, 0x01, 0x05,
                                   0x05, 0x07, 0x30, 0x03};
     EXPECT_EQ(der::Input(method_oid), desc.access_method_oid);
@@ -518,7 +517,7 @@ TEST(ParseAuthorityInfoAccess, BasicTests) {
     EXPECT_EQ(der::Input(location_der), desc.access_location);
   }
   {
-    const auto& desc = access_descriptions[3];
+    const auto &desc = access_descriptions[3];
     EXPECT_EQ(der::Input(kAdOcspOid), desc.access_method_oid);
     const uint8_t location_der[] = {0x86, 0x17, 0x68, 0x74, 0x74, 0x70, 0x3a,
                                     0x2f, 0x2f, 0x6f, 0x63, 0x73, 0x70, 0x2e,
@@ -527,7 +526,7 @@ TEST(ParseAuthorityInfoAccess, BasicTests) {
     EXPECT_EQ(der::Input(location_der), desc.access_location);
   }
   {
-    const auto& desc = access_descriptions[4];
+    const auto &desc = access_descriptions[4];
     EXPECT_EQ(der::Input(kAdCaIssuersOid), desc.access_method_oid);
     const uint8_t location_der[] = {
         0x86, 0x21, 0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x77, 0x77, 0x77,
@@ -570,7 +569,7 @@ TEST(ParseAuthorityInfoAccess, NoOcspOrCaIssuersURIs) {
   std::vector<AuthorityInfoAccessDescription> access_descriptions;
   ASSERT_TRUE(ParseAuthorityInfoAccess(der::Input(der), &access_descriptions));
   ASSERT_EQ(1u, access_descriptions.size());
-  const auto& desc = access_descriptions[0];
+  const auto &desc = access_descriptions[0];
   const uint8_t method_oid[] = {0x2a, 0x03};
   EXPECT_EQ(der::Input(method_oid), desc.access_method_oid);
   const uint8_t location_der[] = {0xa4, 0x10, 0x30, 0x0e, 0x31, 0x0c,
@@ -657,8 +656,8 @@ TEST(ParseAuthorityInfoAccess, EmptySequence) {
 class ParseCrlDistributionPointsTest : public ::testing::Test {
  public:
  protected:
-  bool GetCrlDps(const char* file_name,
-                 std::vector<ParsedDistributionPoint>* dps) {
+  bool GetCrlDps(const char *file_name,
+                 std::vector<ParsedDistributionPoint> *dps) {
     std::string cert_bytes;
     // Read the test certificate file.
     const PemBlockMapping mappings[] = {
@@ -671,16 +670,18 @@ class ParseCrlDistributionPointsTest : public ::testing::Test {
     CertErrors errors;
     std::shared_ptr<const ParsedCertificate> cert = ParsedCertificate::Create(
         bssl::UniquePtr<CRYPTO_BUFFER>(CRYPTO_BUFFER_new(
-            reinterpret_cast<const uint8_t*>(cert_bytes.data()),
+            reinterpret_cast<const uint8_t *>(cert_bytes.data()),
             cert_bytes.size(), nullptr)),
         {}, &errors);
 
-    if (!cert)
+    if (!cert) {
       return false;
+    }
 
     auto it = cert->extensions().find(der::Input(kCrlDistributionPointsOid));
-    if (it == cert->extensions().end())
+    if (it == cert->extensions().end()) {
       return false;
+    }
 
     der::Input crl_dp_tlv = it->second.value;
 
@@ -703,10 +704,10 @@ TEST_F(ParseCrlDistributionPointsTest, OneUriNoIssuer) {
   ASSERT_TRUE(GetCrlDps("crldp_1uri_noissuer.pem", &dps));
 
   ASSERT_EQ(1u, dps.size());
-  const ParsedDistributionPoint& dp1 = dps.front();
+  const ParsedDistributionPoint &dp1 = dps.front();
 
   ASSERT_TRUE(dp1.distribution_point_fullname);
-  const GeneralNames& fullname = *dp1.distribution_point_fullname;
+  const GeneralNames &fullname = *dp1.distribution_point_fullname;
   EXPECT_EQ(GENERAL_NAME_UNIFORM_RESOURCE_IDENTIFIER,
             fullname.present_name_types);
   ASSERT_EQ(1u, fullname.uniform_resource_identifiers.size());
@@ -723,10 +724,10 @@ TEST_F(ParseCrlDistributionPointsTest, ThreeUrisNoIssuer) {
   ASSERT_TRUE(GetCrlDps("crldp_3uri_noissuer.pem", &dps));
 
   ASSERT_EQ(1u, dps.size());
-  const ParsedDistributionPoint& dp1 = dps.front();
+  const ParsedDistributionPoint &dp1 = dps.front();
 
   ASSERT_TRUE(dp1.distribution_point_fullname);
-  const GeneralNames& fullname = *dp1.distribution_point_fullname;
+  const GeneralNames &fullname = *dp1.distribution_point_fullname;
   EXPECT_EQ(GENERAL_NAME_UNIFORM_RESOURCE_IDENTIFIER,
             fullname.present_name_types);
   ASSERT_EQ(3u, fullname.uniform_resource_identifiers.size());
@@ -747,9 +748,9 @@ TEST_F(ParseCrlDistributionPointsTest, CrlIssuerAsDirname) {
   ASSERT_TRUE(GetCrlDps("crldp_issuer_as_dirname.pem", &dps));
 
   ASSERT_EQ(1u, dps.size());
-  const ParsedDistributionPoint& dp1 = dps.front();
+  const ParsedDistributionPoint &dp1 = dps.front();
   ASSERT_TRUE(dp1.distribution_point_fullname);
-  const GeneralNames& fullname = *dp1.distribution_point_fullname;
+  const GeneralNames &fullname = *dp1.distribution_point_fullname;
   EXPECT_EQ(GENERAL_NAME_DIRECTORY_NAME, fullname.present_name_types);
   // Generated by `ascii2der | xxd -i` from the Name value in
   // crldp_issuer_as_dirname.pem.
@@ -791,10 +792,10 @@ TEST_F(ParseCrlDistributionPointsTest, FullnameAsDirname) {
   ASSERT_TRUE(GetCrlDps("crldp_full_name_as_dirname.pem", &dps));
 
   ASSERT_EQ(1u, dps.size());
-  const ParsedDistributionPoint& dp1 = dps.front();
+  const ParsedDistributionPoint &dp1 = dps.front();
 
   ASSERT_TRUE(dp1.distribution_point_fullname);
-  const GeneralNames& fullname = *dp1.distribution_point_fullname;
+  const GeneralNames &fullname = *dp1.distribution_point_fullname;
   EXPECT_EQ(GENERAL_NAME_DIRECTORY_NAME, fullname.present_name_types);
   // Generated by `ascii2der | xxd -i` from the Name value in
   // crldp_full_name_as_dirname.pem.
@@ -869,7 +870,7 @@ TEST_F(ParseCrlDistributionPointsTest, RelativeNameAndReasonsAndMultipleDPs) {
   ASSERT_TRUE(ParseCrlDistributionPoints(der::Input(kInputDer), &dps));
   ASSERT_EQ(2u, dps.size());
   {
-    const ParsedDistributionPoint& dp = dps[0];
+    const ParsedDistributionPoint &dp = dps[0];
     EXPECT_FALSE(dp.distribution_point_fullname);
 
     ASSERT_TRUE(dp.distribution_point_name_relative_to_crl_issuer);
@@ -893,9 +894,9 @@ TEST_F(ParseCrlDistributionPointsTest, RelativeNameAndReasonsAndMultipleDPs) {
     EXPECT_FALSE(dp.crl_issuer);
   }
   {
-    const ParsedDistributionPoint& dp = dps[1];
+    const ParsedDistributionPoint &dp = dps[1];
     ASSERT_TRUE(dp.distribution_point_fullname);
-    const GeneralNames& fullname = *dp.distribution_point_fullname;
+    const GeneralNames &fullname = *dp.distribution_point_fullname;
     EXPECT_EQ(GENERAL_NAME_DIRECTORY_NAME, fullname.present_name_types);
     // SET {
     //   SEQUENCE {
@@ -947,7 +948,7 @@ TEST_F(ParseCrlDistributionPointsTest, NoDistributionPointName) {
   std::vector<ParsedDistributionPoint> dps;
   ASSERT_TRUE(ParseCrlDistributionPoints(der::Input(kInputDer), &dps));
   ASSERT_EQ(1u, dps.size());
-  const ParsedDistributionPoint& dp = dps[0];
+  const ParsedDistributionPoint &dp = dps[0];
   EXPECT_FALSE(dp.distribution_point_fullname);
 
   EXPECT_FALSE(dp.distribution_point_name_relative_to_crl_issuer);
@@ -995,9 +996,8 @@ TEST_F(ParseCrlDistributionPointsTest, EmptyDistributionPoints) {
 }
 
 bool ParseAuthorityKeyIdentifierTestData(
-    const char* file_name,
-    std::string* backing_bytes,
-    ParsedAuthorityKeyIdentifier* authority_key_identifier) {
+    const char *file_name, std::string *backing_bytes,
+    ParsedAuthorityKeyIdentifier *authority_key_identifier) {
   // Read the test file.
   const PemBlockMapping mappings[] = {
       {"AUTHORITY_KEY_IDENTIFIER", backing_bytes},
@@ -1173,4 +1173,4 @@ TEST(ParseSubjectKeyIdentifierTest, ExtraData) {
 
 }  // namespace
 
-}  // namespace net
+}  // namespace bssl

@@ -289,13 +289,6 @@
 6466 MAC METAL INTEL : dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linear* = FAIL
 6466 MAC METAL INTEL : dEQP-GLES2.functional.texture.vertex.cube.wrap.* = FAIL
 7451 MAC METAL INTEL : dEQP-GLES2.functional.shaders.builtin_variable.pointcoord = FAIL
-7838 MAC METAL INTEL : dEQP-GLES2.functional.shaders.function.global_variable_aliasing_* = FAIL
-
-6297 MAC METAL : dEQP-GLES2.functional.attribute_location.bind_aliasing.cond* = FAIL
-
-// New failures on MacBook Pro 2019 macOS 13.2.1
-8091 MAC METAL AMD : dEQP-GLES2.functional.shaders.function.global_variable_aliasing_fragment = FAIL
-8091 MAC METAL AMD : dEQP-GLES2.functional.shaders.function.global_variable_aliasing_vertex = FAIL
 
 // Test bug - fails in ASAN.
 6678 ASAN : dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d* = SKIP
@@ -332,13 +325,3 @@
 8157 GALAXYS23 VULKAN : dEQP-GLES2.functional.polygon_offset.* = SKIP
 8157 GALAXYS23 VULKAN : dEQP-GLES2.functional.rasterization.primitives.* = SKIP
 8157 GALAXYS23 VULKAN : dEQP-GLES2.functional.shaders.random.* = SKIP
-
-// Undefined behavior in dEQP framework due to NaN
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.1 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.6 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.18 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.19 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.23 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.29 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.texture.vertex.34 = SKIP
-b/307584642 ANDROID : dEQP-GLES2.functional.shaders.random.all_features.fragment.6 = SKIP

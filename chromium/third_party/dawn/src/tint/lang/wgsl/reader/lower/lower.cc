@@ -105,6 +105,10 @@ core::BuiltinFn Convert(wgsl::BuiltinFn fn) {
         CASE(kPack2X16Unorm)
         CASE(kPack4X8Snorm)
         CASE(kPack4X8Unorm)
+        CASE(kPack4XI8)
+        CASE(kPack4XU8)
+        CASE(kPack4XI8Clamp)
+        CASE(kPack4XU8Clamp)
         CASE(kPow)
         CASE(kQuantizeToF16)
         CASE(kRadians)
@@ -130,6 +134,8 @@ core::BuiltinFn Convert(wgsl::BuiltinFn fn) {
         CASE(kUnpack2X16Unorm)
         CASE(kUnpack4X8Snorm)
         CASE(kUnpack4X8Unorm)
+        CASE(kUnpack4XI8)
+        CASE(kUnpack4XU8)
         CASE(kWorkgroupBarrier)
         CASE(kTextureBarrier)
         CASE(kTextureDimensions)
@@ -169,13 +175,16 @@ core::BuiltinFn Convert(wgsl::BuiltinFn fn) {
 }  // namespace
 
 Result<SuccessType> Lower(core::ir::Module& mod) {
-    if (auto res = core::ir::ValidateAndDumpIfNeeded(mod, "lowering from WGSL"); !res) {
+    if (auto res = core::ir::ValidateAndDumpIfNeeded(mod, "lowering from WGSL"); res != Success) {
         return res.Failure();
     }
 
     core::ir::Builder b{mod};
     core::type::Manager& ty{mod.Types()};
     for (auto* inst : mod.instructions.Objects()) {
+        if (!inst->Alive()) {
+            continue;
+        }
         if (auto* call = inst->As<wgsl::ir::BuiltinCall>()) {
             switch (call->Func()) {
                 case BuiltinFn::kWorkgroupUniformLoad: {
@@ -188,7 +197,7 @@ Result<SuccessType> Lower(core::ir::Module& mod) {
                     b.InsertBefore(call, [&] {
                         b.Call(ty.void_(), core::BuiltinFn::kWorkgroupBarrier);
                         auto* load = b.Load(call->Args()[0]);
-                        call->Result()->ReplaceAllUsesWith(load->Result());
+                        call->Result(0)->ReplaceAllUsesWith(load->Result(0));
                         b.Call(ty.void_(), core::BuiltinFn::kWorkgroupBarrier);
                     });
                     break;
@@ -196,7 +205,7 @@ Result<SuccessType> Lower(core::ir::Module& mod) {
                 default: {
                     Vector<core::ir::Value*, 8> args(call->Args());
                     auto* replacement = mod.instructions.Create<core::ir::CoreBuiltinCall>(
-                        call->Result(), Convert(call->Func()), std::move(args));
+                        call->Result(0), Convert(call->Func()), std::move(args));
                     call->ReplaceWith(replacement);
                     call->ClearResults();
                     break;

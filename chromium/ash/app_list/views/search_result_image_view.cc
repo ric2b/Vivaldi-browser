@@ -81,7 +81,8 @@ END_METADATA
 
 SearchResultImageView::SearchResultImageView(
     int index,
-    SearchResultImageListView* list_view)
+    SearchResultImageListView* list_view,
+    SearchResultImageViewDelegate* image_view_delegate)
     : index_(index), list_view_(list_view) {
   SetLayoutManager(std::make_unique<views::FillLayout>());
   result_image_ = AddChildView(std::make_unique<ImagePreviewView>());
@@ -106,7 +107,7 @@ SearchResultImageView::SearchResultImageView(
   SetCallback(base::BindRepeating(&SearchResultImageView::OnImageViewPressed,
                                   base::Unretained(this)));
 
-  set_drag_controller(SearchResultImageViewDelegate::Get());
+  set_drag_controller(image_view_delegate);
 }
 
 void SearchResultImageView::OnImageViewPressed(const ui::Event& event) {
@@ -167,7 +168,7 @@ void SearchResultImageView::OnMetadataChanged() {
   UpdateAccessibleName();
   // By default, the description will be set to the tooltip text, but the title
   // is already announced in the accessible name.
-  SetAccessibleDescription(
+  GetViewAccessibility().OverrideDescription(
       u"", ax::mojom::DescriptionFrom::kAttributeExplicitlyEmpty);
 
   if (!result() || result()->icon().icon.IsEmpty()) {
@@ -191,7 +192,8 @@ void SearchResultImageView::OnMetadataChanged() {
         image, skia::ImageOperations::RESIZE_BEST, GetContentsBounds().size());
   }
 
-  result_image_->SetImage(views::Button::STATE_NORMAL, image);
+  result_image_->SetImageModel(views::Button::STATE_NORMAL,
+                               ui::ImageModel::FromImageSkia(image));
   SetTooltipText(result()->title());
 }
 

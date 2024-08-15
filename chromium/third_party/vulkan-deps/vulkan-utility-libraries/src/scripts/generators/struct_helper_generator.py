@@ -41,6 +41,8 @@ class StructHelperOutputGenerator(BaseGenerator):
 #pragma once
 #include <vulkan/vulkan.h>
 
+// clang-format off
+
 namespace vku {
 
 template <typename T>
@@ -139,4 +141,5 @@ template<typename T> VkObjectType GetObjectType() {
 \n''')
 
         out.append('// NOLINTEND') # Wrap for clang-tidy to ignore
+        out.append('// clang-format on')
         self.write("".join(out))

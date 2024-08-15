@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader_factory.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/test/fake_task_runner.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_loader_mock_factory.h"
@@ -88,7 +89,7 @@ class FakeURLLoader final : public URLLoader {
       client->DidReceiveResponse(response,
                                  /*body=*/mojo::ScopedDataPipeConsumerHandle(),
                                  /*cached_metadata=*/absl::nullopt);
-      client->DidFinishLoading(base::TimeTicks(), 0, 0, 0, false);
+      client->DidFinishLoading(base::TimeTicks(), 0, 0, 0);
       return;
     }
     // Don't handle other requests intentionally to emulate ongoing load.
@@ -106,7 +107,7 @@ class FakeURLLoader final : public URLLoader {
 class FakeURLLoaderFactory final : public URLLoaderFactory {
  public:
   std::unique_ptr<URLLoader> CreateURLLoader(
-      const WebURLRequest&,
+      const network::ResourceRequest&,
       scoped_refptr<base::SingleThreadTaskRunner>,
       scoped_refptr<base::SingleThreadTaskRunner>,
       mojo::PendingRemote<mojom::blink::KeepAliveHandle>,
@@ -133,7 +134,7 @@ class FakeWebServiceWorkerFetchContext final
   }
   void WillSendRequest(WebURLRequest&) override {}
   WebVector<std::unique_ptr<URLLoaderThrottle>> CreateThrottles(
-      const WebURLRequest& request) override {
+      const network::ResourceRequest& request) override {
     return {};
   }
 
@@ -331,6 +332,7 @@ class WebEmbeddedWorkerImplTest : public testing::Test {
     url_test_helpers::UnregisterAllURLsAndClearMemoryCache();
   }
 
+  test::TaskEnvironment task_environment_;
   WebURL script_url_;
   std::unique_ptr<MockServiceWorkerContextClient> mock_client_;
   std::unique_ptr<WebEmbeddedWorkerImpl> worker_;

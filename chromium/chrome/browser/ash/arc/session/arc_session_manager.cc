@@ -379,7 +379,7 @@ ArcSessionManager::ExpansionResult ReadSaltInternal() {
   DCHECK(arc::IsArcVmEnabled());
 
   // For ARCVM, read |kArcSaltPath| if that exists.
-  absl::optional<std::string> salt =
+  std::optional<std::string> salt =
       ReadSaltOnDisk(base::FilePath(kArcSaltPath));
   if (!salt) {
     return ArcSessionManager::ExpansionResult{{}, false};
@@ -513,6 +513,7 @@ ArcSessionManager::~ArcSessionManager() {
   }
 
   Shutdown();
+  DCHECK(arc_session_runner_);
   arc_session_runner_->RemoveObserver(this);
 
   DCHECK_EQ(this, g_arc_session_manager);
@@ -632,6 +633,7 @@ void ArcSessionManager::OnProvisioningFinished(
     // CHROME_SERVER_COMMUNICATION_ERROR case.
     UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
   } else if (!sign_in_start_time_.is_null()) {
+    DCHECK(profile_);
     arc_sign_in_timer_.Stop();
 
     UpdateProvisioningTiming(base::TimeTicks::Now() - sign_in_start_time_,
@@ -652,6 +654,8 @@ void ArcSessionManager::OnProvisioningFinished(
     }
   }
 
+  PrefService* const prefs = profile_->GetPrefs();
+  CHECK(prefs);
   if (provisioning_successful) {
     if (support_host_) {
       support_host_->Close();
@@ -662,12 +666,11 @@ void ArcSessionManager::OnProvisioningFinished(
       scoped_opt_in_tracker_.reset();
     }
 
-    PrefService* const prefs = profile_->GetPrefs();
-
     prefs->SetBoolean(prefs::kArcIsManaged,
                       policy_util::IsAccountManaged(profile_));
 
-    if (prefs->GetBoolean(prefs::kArcSignedIn)) {
+    if (prefs->HasPrefPath(prefs::kArcSignedIn) &&
+        prefs->GetBoolean(prefs::kArcSignedIn)) {
       return;
     }
 
@@ -695,8 +698,8 @@ void ArcSessionManager::OnProvisioningFinished(
   VLOG(1) << "ARC provisioning failed: " << result << ".";
 
   if (result.stop_reason()) {
-    if (profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn)) {
-      profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
+    if (prefs->HasPrefPath(prefs::kArcSignedIn)) {
+      prefs->SetBoolean(prefs::kArcSignedIn, false);
     }
     VLOG(1) << "ARC stopped unexpectedly";
     ShutdownSession();
@@ -712,7 +715,7 @@ void ArcSessionManager::OnProvisioningFinished(
     RequestArcDataRemoval();
   }
 
-  absl::optional<int> error_code;
+  std::optional<int> error_code;
   ArcSupportHost::Error support_error = GetSupportHostError(result);
   if (support_error == ArcSupportHost::Error::SIGN_IN_UNKNOWN_ERROR) {
     error_code = static_cast<std::underlying_type_t<ProvisioningStatus>>(
@@ -735,8 +738,9 @@ void ArcSessionManager::SetProfile(Profile* profile) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!profile_);
   DCHECK(IsArcAllowedForProfile(profile));
-  profile_ = profile;
+  DCHECK(adb_sideloading_availability_delegate_);
   adb_sideloading_availability_delegate_->SetProfile(profile);
+  profile_ = profile;
   // RequestEnable() requires |profile_| set, therefore shouldn't have been
   // called at this point.
   SetArcEnabledStateMetric(false);
@@ -744,6 +748,7 @@ void ArcSessionManager::SetProfile(Profile* profile) {
 
 void ArcSessionManager::SetUserInfo() {
   DCHECK(profile_);
+  DCHECK(arc_session_runner_);
 
   const AccountId account(multi_user_util::GetAccountIdFromProfile(profile_));
   const cryptohome::Identification cryptohome_id(account);
@@ -901,7 +906,6 @@ void ArcSessionManager::ShutdownSession() {
 void ArcSessionManager::ResetArcState() {
   pre_start_time_ = base::TimeTicks();
   start_time_ = base::TimeTicks();
-  activation_delay_elapsed_timer_.reset();
   arc_sign_in_timer_.Stop();
   playstore_launcher_.reset();
   requirement_checker_.reset();
@@ -978,10 +982,11 @@ void ArcSessionManager::RequestEnable() {
   if (IsDlcRequired()) {
     arc_dlc_installer_->RequestEnable();
   }
-  // |skipped_terms_of_service_negotiation_| flag must be preserved during the
-  // internal ARC restart. So set it only when ARC is externally requested to
-  // start.
-  skipped_terms_of_service_negotiation_ = RequestEnableImpl();
+
+  // |skipped_terms_of_service_negotiation_| is reset only in case terms are shown.
+  // In all other cases it is conidered as skipped.
+  skipped_terms_of_service_negotiation_ = true;
+  RequestEnableImpl();
 }
 
 void ArcSessionManager::AllowActivation() {
@@ -1012,7 +1017,7 @@ void ArcSessionManager::OnVmStarted(
           ->Unregister(*arcvm_mount_provider_id_);
     }
     arcvm_mount_provider_id_ =
-        absl::optional<guest_os::GuestOsMountProviderRegistry::Id>(
+        std::optional<guest_os::GuestOsMountProviderRegistry::Id>(
             guest_os::GuestOsService::GetForProfile(profile())
                 ->MountProviderRegistry()
                 ->Register(std::make_unique<ArcMountProvider>(
@@ -1033,7 +1038,7 @@ void ArcSessionManager::OnVmStopped(
   }
 }
 
-bool ArcSessionManager::RequestEnableImpl() {
+void ArcSessionManager::RequestEnableImpl() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
   DCHECK(enable_requested_);
@@ -1047,7 +1052,7 @@ bool ArcSessionManager::RequestEnableImpl() {
     // stopped) or ARC data removal is in progress, postpone the enabling
     // procedure.
     reenable_arc_ = true;
-    return false;
+    return;
   }
 
   PrefService* const prefs = profile_->GetPrefs();
@@ -1064,7 +1069,7 @@ bool ArcSessionManager::RequestEnableImpl() {
   // |prefs::kArcProvisioningInitiatedFromOobe| is reset when provisioning is
   // done or ARC is opted out.
   const bool opt_in_start = IsArcOobeOptInActive();
-  const bool signed_in = prefs->GetBoolean(prefs::kArcSignedIn);
+  const bool signed_in = IsArcProvisioned(profile_);
   if (opt_in_start) {
     prefs->SetBoolean(prefs::kArcProvisioningInitiatedFromOobe, true);
   }
@@ -1089,7 +1094,7 @@ bool ArcSessionManager::RequestEnableImpl() {
     if (!skip_terms_of_service_negotiation && g_ui_enabled) {
       arc::ShowArcMigrationGuideNotification(profile_);
     }
-    return false;
+    return;
   }
 
   if (ArcVmDataMigrationIsInProgress(prefs)) {
@@ -1105,7 +1110,7 @@ bool ArcSessionManager::RequestEnableImpl() {
     for (auto& observer : observer_list_) {
       observer.OnArcSessionBlockedByArcVmDataMigration(auto_resume_enabled);
     }
-    return false;
+    return;
   }
 
   // ARC might be re-enabled and in this case |arc_ui_availability_reporter_| is
@@ -1144,25 +1149,21 @@ bool ArcSessionManager::RequestEnableImpl() {
           base::BindOnce(&ArcSessionManager::OnActivationNecessityChecked,
                          weak_ptr_factory_.GetWeakPtr()));
     }
-    return true;
+    return;
   }
 
   MaybeStartTermsOfServiceNegotiation();
-  return false;
 }
 
 void ArcSessionManager::OnActivationNecessityChecked(bool result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(activation_necessity_checker_);
 
-  base::UmaHistogramBoolean("Arc.DelayedActivation.ActivationIsDelayed",
-                            !result);
-
   activation_necessity_checker_.reset();
   if (result) {
     AllowActivation();
   } else {
-    activation_delay_elapsed_timer_ = std::make_unique<base::ElapsedTimer>();
+    activation_is_delayed = true;
     VLOG(1) << "Activation is not allowed yet. Not starting ARC for now.";
     for (auto& observer : observer_list_) {
       observer.OnArcStartDelayed();
@@ -1277,6 +1278,10 @@ void ArcSessionManager::MaybeStartTermsOfServiceNegotiation() {
     }
     is_terms_of_service_negotiation_needed = false;
   } else {
+    DCHECK(arc_session_runner_);
+    // Only set ARC signed in status here before calling StartMiniArc() since
+    // we have valid profile available with cryptohome mounted.
+    arc_session_runner_->set_arc_signed_in(IsArcProvisioned(profile_));
     // Start the mini-container (or mini-VM) here to save time starting the OS
     // if the user decides to opt-in. Unlike calling StartMiniArc() for ARCVM on
     // login screen, doing so on ToS screen is safe and desirable. The user has
@@ -1287,6 +1292,9 @@ void ArcSessionManager::MaybeStartTermsOfServiceNegotiation() {
     // faster.
     StartMiniArc();
   }
+
+  skipped_terms_of_service_negotiation_ =
+      !is_terms_of_service_negotiation_needed;
   requirement_checker_ = std::make_unique<ArcRequirementChecker>(
       profile_, support_host_.get(), android_management_checker_factory_);
   requirement_checker_->AddObserver(this);
@@ -1409,6 +1417,7 @@ void ArcSessionManager::StartArc() {
   MaybeStartTimer();
 
   // ARC must be started only if no pending data removal request exists.
+  DCHECK(profile_);
   DCHECK(!profile_->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
 
   for (auto& observer : observer_list_) {
@@ -1434,6 +1443,7 @@ void ArcSessionManager::StartArc() {
     GetLocaleAndPreferredLanguages(profile_, &locale, &preferred_languages);
   }
 
+  DCHECK(arc_session_runner_);
   arc_session_runner_->set_default_device_scale_factor(
       exo::GetDefaultDeviceScaleFactor());
 
@@ -1462,6 +1472,7 @@ void ArcSessionManager::StartArc() {
   params.is_account_managed =
       profile_->GetProfilePolicyConnector()->IsManaged();
 
+  arc_session_runner_->set_arc_signed_in(IsArcProvisioned(profile_));
   arc_session_runner_->RequestUpgrade(std::move(params));
 }
 
@@ -1469,11 +1480,6 @@ void ArcSessionManager::StartArcForRegularBoot() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_EQ(state_, State::READY);
   DCHECK(activation_is_allowed_);
-
-  if (activation_delay_elapsed_timer_) {
-    base::UmaHistogramLongTimes("Arc.DelayedActivation.Delay",
-                                activation_delay_elapsed_timer_->Elapsed());
-  }
 
   VLOG(1) << "Starting ARC for a regular boot.";
   StartArc();
@@ -1525,7 +1531,7 @@ void ArcSessionManager::MaybeStartArcDataRemoval() {
                                     weak_ptr_factory_.GetWeakPtr()));
 }
 
-void ArcSessionManager::OnArcDataRemoved(absl::optional<bool> result) {
+void ArcSessionManager::OnArcDataRemoved(std::optional<bool> result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_EQ(state_, State::REMOVING_DATA_DIR);
   DCHECK(profile_);
@@ -1572,7 +1578,7 @@ void ArcSessionManager::CheckArcVmDataMigrationNecessity(
 
 void ArcSessionManager::OnArcVmDataMigrationNecessityChecked(
     base::OnceClosure callback,
-    absl::optional<bool> result) {
+    std::optional<bool> result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   DCHECK_EQ(state_, State::CHECKING_DATA_MIGRATION_NECESSITY);
@@ -1600,6 +1606,7 @@ void ArcSessionManager::OnArcVmDataMigrationNecessityChecked(
 void ArcSessionManager::MaybeReenableArc() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK_EQ(state_, State::STOPPED);
+  DCHECK(arc_session_runner_);
   DCHECK(profile_);
 
   // Whether to use virtio-blk for /data depends on the status of ARCVM /data
@@ -1638,6 +1645,7 @@ void ArcSessionManager::MaybeStartTimer() {
 }
 
 void ArcSessionManager::StartMiniArc() {
+  DCHECK(arc_session_runner_);
   pre_start_time_ = base::TimeTicks::Now();
   arc_session_runner_->set_default_device_scale_factor(
       exo::GetDefaultDeviceScaleFactor());
@@ -1694,6 +1702,13 @@ void ArcSessionManager::OnRetryClicked() {
   // If network-related error occurred, collect UMA stats on user action.
   if (support_host_ && support_host_->GetShouldShowRunNetworkTests()) {
     UpdateOptInNetworkErrorActionUMA(arc::OptInNetworkErrorActionType::RETRY);
+  }
+}
+
+void ArcSessionManager::OnErrorPageShown(bool network_tests_shown) {
+  if (network_tests_shown) {
+    UpdateOptInNetworkErrorActionUMA(
+        arc::OptInNetworkErrorActionType::ERROR_SHOWN);
   }
 }
 
@@ -1841,6 +1856,8 @@ void ArcSessionManager::OnExpandPropertyFilesAndReadSalt(
   }
 
   if (result.second) {
+    DCHECK(arc_session_runner_);
+    arc_session_runner_->set_arc_signed_in(IsArcProvisioned(profile_));
     arc_session_runner_->ResumeRunner();
   }
   for (auto& observer : observer_list_) {
@@ -1851,6 +1868,7 @@ void ArcSessionManager::OnExpandPropertyFilesAndReadSalt(
 void ArcSessionManager::StopMiniArcIfNecessary() {
   // This method should only be called before login.
   DCHECK(!profile_);
+  DCHECK(arc_session_runner_);
   pre_start_time_ = base::TimeTicks();
   VLOG(1) << "Stopping mini-ARC instance (if any)";
   arc_session_runner_->RequestStop();

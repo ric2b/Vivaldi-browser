@@ -2190,8 +2190,10 @@ class BlendNoiseTest : public testing::TestWithParam<std::tuple<int, int>> {
   static_assert(bitdepth >= kBitdepth8 && bitdepth <= LIBGAV1_MAX_BITDEPTH, "");
   using GrainType =
       typename std::conditional<bitdepth == 8, int8_t, int16_t>::type;
+  ~BlendNoiseTest() override = default;
 
-  BlendNoiseTest() {
+ protected:
+  void SetUp() override {
     test_utils::ResetDspTable(bitdepth);
     FilmGrainInit_C();
     const dsp::Dsp* const dsp = dsp::GetDspTable(bitdepth);
@@ -2204,6 +2206,7 @@ class BlendNoiseTest : public testing::TestWithParam<std::tuple<int, int>> {
       FilmGrainInit_NEON();
 #endif
     } else if (absl::StartsWith(test_case, "SSE41/")) {
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
       FilmGrainInit_SSE4_1();
     }
     const BlendNoiseTestParam test_param(GetParam());
@@ -2236,9 +2239,7 @@ class BlendNoiseTest : public testing::TestWithParam<std::tuple<int, int>> {
     dest_plane_v_ =
         dest_plane_u_ + uv_stride_ * uv_height_ + kBorderPixelsFilmGrain;
   }
-  ~BlendNoiseTest() override = default;
 
- protected:
   void TestSpeed(int num_runs);
 
  private:
@@ -2533,7 +2534,10 @@ template <int bitdepth, typename Pixel>
 class FilmGrainSpeedTest : public testing::TestWithParam<int> {
  public:
   static_assert(bitdepth >= kBitdepth8 && bitdepth <= LIBGAV1_MAX_BITDEPTH, "");
-  FilmGrainSpeedTest() {
+  ~FilmGrainSpeedTest() override = default;
+
+ protected:
+  void SetUp() override {
     test_utils::ResetDspTable(bitdepth);
     FilmGrainInit_C();
 
@@ -2545,6 +2549,7 @@ class FilmGrainSpeedTest : public testing::TestWithParam<int> {
       FilmGrainInit_NEON();
 #endif
     } else if (absl::StartsWith(test_case, "SSE41/")) {
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
       FilmGrainInit_SSE4_1();
     }
     uv_width_ = (width_ + subsampling_x_) >> subsampling_x_;
@@ -2566,9 +2571,7 @@ class FilmGrainSpeedTest : public testing::TestWithParam<int> {
     const int num_threads = GetParam();
     thread_pool_ = ThreadPool::Create(num_threads);
   }
-  ~FilmGrainSpeedTest() override = default;
 
- protected:
   void TestSpeed(int num_runs);
 
  private:

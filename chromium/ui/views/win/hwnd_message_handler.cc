@@ -577,6 +577,26 @@ void HWNDMessageHandler::SetBounds(const gfx::Rect& bounds_in_pixels,
   SetBoundsInternal(bounds_in_pixels, force_size_changed);
 }
 
+void HWNDMessageHandler::SetParentOrOwner(HWND new_parent) {
+  HWND parent = GetParent(hwnd());
+  HWND owner = GetWindow(hwnd(), GW_OWNER);
+  // A hwnd cannot be a child window and an owned window at the same time.
+  DCHECK(!(parent && owner));
+
+  if (parent) {
+    // This is a child window.
+    // TODO(crbug.com/1490267): allows setting NULL parent since WinAPI permits
+    // it. It will require updating window styles. See
+    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setparent#remarks.
+    DCHECK(new_parent);
+    SetParent(hwnd(), new_parent);
+  } else {
+    // This is either an owned window or an un-owned window.
+    SetWindowLongPtr(hwnd(), GWLP_HWNDPARENT,
+                     reinterpret_cast<LONG_PTR>(new_parent));
+  }
+}
+
 void HWNDMessageHandler::SetDwmFrameExtension(DwmFrameState state) {
   if (!delegate_->HasFrame() && !is_translucent_) {
     MARGINS m = {0, 0, 0, 0};
@@ -855,8 +875,9 @@ bool HWNDMessageHandler::SetTitle(const std::u16string& title) {
   if (len_with_null - 1 == title.length() &&
       GetWindowText(hwnd(), base::WriteInto(&current_title, len_with_null),
                     len_with_null) &&
-      current_title == base::AsWStringPiece(title))
+      current_title == base::AsWStringView(title)) {
     return false;
+  }
   SetWindowText(hwnd(), base::as_wcstr(title));
   return true;
 }
@@ -3170,7 +3191,7 @@ LRESULT HWNDMessageHandler::HandleMouseEventInternal(UINT message,
                     {CR_GET_X_LPARAM(l_param), CR_GET_Y_LPARAM(l_param)}};
   ui::MouseEvent event(msg);
   if (IsSynthesizedMouseMessage(message, message_time, l_param))
-    event.set_flags(event.flags() | ui::EF_FROM_TOUCH);
+    event.SetFlags(event.flags() | ui::EF_FROM_TOUCH);
 
   if (event.type() == ui::ET_MOUSE_MOVED && !HasCapture() && track_mouse) {
     // Windows only fires WM_MOUSELEAVE events if the application begins
@@ -3479,7 +3500,7 @@ void HWNDMessageHandler::GenerateTouchEvent(ui::EventType event_type,
   ui::TouchEvent event(event_type, point, time_stamp,
                        ui::PointerDetails(ui::EventPointerType::kTouch, id));
 
-  event.set_flags(ui::GetModifiersFromKeyState());
+  event.SetFlags(ui::GetModifiersFromKeyState());
 
   event.latency()->AddLatencyNumberWithTimestamp(
       ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, time_stamp);

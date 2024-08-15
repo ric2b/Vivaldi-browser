@@ -60,6 +60,7 @@ class SESSIONS_EXPORT TabRestoreServiceImpl : public TabRestoreService {
   void DeleteLastSession() override;
   bool IsRestoring() const override;
   void Shutdown() override;
+  void VivaldiRequestSave(int num_removed) override;
 
   void CreateRestoredEntryCommandForTest(SessionID id);
 

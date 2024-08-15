@@ -54,12 +54,15 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout.LayoutState;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
@@ -82,8 +85,6 @@ import org.chromium.chrome.features.start_surface.StartSurface.TabSwitcherViewOb
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel.MockTabModelDelegate;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
@@ -108,6 +109,8 @@ public class LayoutManagerTest implements MockTabModelDelegate {
     @Mock private StartSurface mStartSurface;
 
     @Mock private TabSwitcher mTabSwitcher;
+
+    @Mock private HubLayoutDependencyHolder mHubLayoutDependencyHolder;
 
     @Mock private TabSwitcher.TabListDelegate mTabListDelegate;
     @Mock private TabSwitcher.Controller mTabSwitcherController;
@@ -256,7 +259,8 @@ public class LayoutManagerTest implements MockTabModelDelegate {
                         () -> {
                             mTabSwitcherSupplier.set(mTabSwitcher);
                             return container;
-                        });
+                        },
+                        mHubLayoutDependencyHolder);
 
         setUpLayouts();
 
@@ -422,6 +426,7 @@ public class LayoutManagerTest implements MockTabModelDelegate {
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"Android-TabSwitcher"})
     @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+    @DisableFeatures({ChromeFeatureList.ANDROID_HUB})
     public void testTabSwitcherLayout_Enabled_HighEndPhone() throws Exception {
         verifyTabSwitcherLayoutEnable(TabListCoordinator.TabListMode.GRID);
     }
@@ -431,9 +436,26 @@ public class LayoutManagerTest implements MockTabModelDelegate {
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
     @Feature({"Android-TabSwitcher"})
     @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-    @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
+    @DisableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION, ChromeFeatureList.ANDROID_HUB})
     public void testTabSwitcherLayout_Enabled_LowEndPhone() throws Exception {
         verifyTabSwitcherLayoutEnable(TabListCoordinator.TabListMode.LIST);
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Feature({"Android-TabSwitcher"})
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+    @EnableFeatures({ChromeFeatureList.ANDROID_HUB})
+    public void testHubTabSwitcherLayout_Enabled() throws Exception {
+        launchedChromeAndEnterTabSwitcher();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Assert.assertEquals(LayoutType.TAB_SWITCHER, getActiveLayout().getLayoutType());
+                });
+
+        // See https://crbug.com/1522983 this shouldn't crash.
+        showTabSwitcherLayout();
     }
 
     // TODO(crbug.com/1108496): Update the test to use assertThat for better failure message.
@@ -689,43 +711,6 @@ public class LayoutManagerTest implements MockTabModelDelegate {
             startedShowingCallback.waitForCallback(0);
         }
         Assert.assertEquals(LayoutType.BROWSING, startedShowingCallback.layoutType);
-    }
-
-    @Test
-    @MediumTest
-    @DisableIf.Build(sdk_is_greater_than = N_MR1, message = "crbug.com/1139943")
-    public void testLayoutObserverNotification_TabSelectionHinted() throws TimeoutException {
-        CallbackHelper tabSelectionHintedCallback = new CallbackHelper();
-
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    initializeLayoutManagerPhone(2, 0);
-                    mManager.addObserver(
-                            new LayoutStateProvider.LayoutStateObserver() {
-                                @Override
-                                public void onTabSelectionHinted(int tabId) {
-                                    Log.d(TAG, "onTabSelectionHinted");
-                                    tabSelectionHintedCallback.notifyCalled();
-                                }
-                            });
-
-                    mManager.showLayout(LayoutType.TAB_SWITCHER, true);
-                    Assert.assertTrue(
-                            "layoutManager is way too long to end motion",
-                            simulateTime(mManager, 1000));
-                    Assert.assertEquals(
-                            LayoutType.TAB_SWITCHER, mManager.getActiveLayout().getLayoutType());
-
-                    mManager.showLayout(LayoutType.BROWSING, true);
-                    Assert.assertTrue(
-                            "layoutManager is way too long to end motion",
-                            simulateTime(mManager, 1000));
-
-                    Assert.assertEquals(
-                            LayoutType.BROWSING, mManager.getActiveLayout().getLayoutType());
-                });
-
-        tabSelectionHintedCallback.waitForCallback(0);
     }
 
     @Before

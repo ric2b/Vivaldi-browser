@@ -352,7 +352,7 @@ class QUICHE_EXPORT QuicSentPacketManager {
   AckResult OnAckFrameEnd(QuicTime ack_receive_time,
                           QuicPacketNumber ack_packet_number,
                           EncryptionLevel ack_decrypted_level,
-                          const absl::optional<QuicEcnCounts>& ecn_counts);
+                          const std::optional<QuicEcnCounts>& ecn_counts);
 
   void EnableMultiplePacketNumberSpacesSupport();
 
@@ -397,6 +397,11 @@ class QUICHE_EXPORT QuicSentPacketManager {
   const SendAlgorithmInterface* GetSendAlgorithm() const {
     return send_algorithm_.get();
   }
+
+  // Wrapper for SendAlgorithmInterface functions, since these functions are
+  // not const.
+  bool EnableECT0() { return send_algorithm_->EnableECT0(); }
+  bool EnableECT1() { return send_algorithm_->EnableECT1(); }
 
   void SetSessionNotifier(SessionNotifierInterface* session_notifier) {
     unacked_packets_.SetSessionNotifier(session_notifier);
@@ -523,7 +528,7 @@ class QUICHE_EXPORT QuicSentPacketManager {
   void MaybeInvokeCongestionEvent(bool rtt_updated,
                                   QuicByteCount prior_in_flight,
                                   QuicTime event_time,
-                                  absl::optional<QuicEcnCounts> ecn_counts,
+                                  std::optional<QuicEcnCounts> ecn_counts,
                                   const QuicEcnCounts& previous_counts);
 
   // Removes the retransmittability and in flight properties from the packet at
@@ -546,7 +551,7 @@ class QUICHE_EXPORT QuicSentPacketManager {
                                     const QuicAckFrame& ack_frame,
                                     QuicTime ack_receive_time, bool rtt_updated,
                                     QuicByteCount prior_bytes_in_flight,
-                                    absl::optional<QuicEcnCounts> ecn_counts);
+                                    std::optional<QuicEcnCounts> ecn_counts);
 
   // Notify observers that packet with QuicTransmissionInfo |info| is a spurious
   // retransmission. It is caller's responsibility to guarantee the packet with
@@ -587,7 +592,7 @@ class QUICHE_EXPORT QuicSentPacketManager {
   // |newly_acked_ect1| count the number of previously unacked packets with
   // those markings that appeared in an ack block for the first time.
   bool IsEcnFeedbackValid(PacketNumberSpace space,
-                          const absl::optional<QuicEcnCounts>& ecn_counts,
+                          const std::optional<QuicEcnCounts>& ecn_counts,
                           QuicPacketCount newly_acked_ect0,
                           QuicPacketCount newly_acked_ect1);
 
@@ -718,7 +723,7 @@ class QUICHE_EXPORT QuicSentPacketManager {
   // Most recent ECN codepoint counts received in an ACK frame sent by the peer.
   QuicEcnCounts peer_ack_ecn_counts_[NUM_PACKET_NUMBER_SPACES];
 
-  absl::optional<QuicTime::Delta> deferred_send_alarm_delay_;
+  std::optional<QuicTime::Delta> deferred_send_alarm_delay_;
 };
 
 }  // namespace quic

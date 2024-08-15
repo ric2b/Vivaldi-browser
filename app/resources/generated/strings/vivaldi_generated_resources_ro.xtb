@@ -7,7 +7,6 @@
 <translation id="1056898198331236512">Avertisment</translation>
 <translation id="1163931534039071049">&amp;Vizualizează sursa cadrului</translation>
 <translation id="1165039591588034296">Eroare</translation>
-<translation id="1175364870820465910">Ti&amp;părește...</translation>
 <translation id="1181037720776840403">Elimină</translation>
 <translation id="1221825588892235038">Numai selecția</translation>
 <translation id="1244303850296295656">Eroare de extensie</translation>
@@ -18,7 +17,6 @@
 <translation id="1451375123200651445">Pagină web, un singur fișier</translation>
 <translation id="1465176863081977902">C&amp;opiază adresa audioului</translation>
 <translation id="1476607407192946488">Setări de &amp;limbă</translation>
-<translation id="150411034776756821">Elimină <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Această extensie a modificat pagina care este afișată la clic pe butonul Pagina inițială.</translation>
 <translation id="15662109988763471">Imprimanta selectată nu este disponibilă sau nu este instalată corect. Verificați imprimanta sau încercați să selectați altă imprimantă.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -69,7 +67,6 @@
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nu a putut comunica cu imprimanta. Asigurați-vă că imprimanta este conectată și încercați din nou.</translation>
 <translation id="2932883381142163287">Raportați un abuz</translation>
 <translation id="2941112035454246133">Redus</translation>
-<translation id="2972581237482394796">&amp;Repetă</translation>
 <translation id="3003623123441819449">Memorie cache CSS</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">&amp;Vizualizează sursa cadrului</translation>
@@ -95,17 +92,14 @@
 <translation id="3587482841069643663">Toate</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitare de partajare a ecranului de către <ph name="APP_NAME" /></translation>
-<translation id="3797900183766075808">&amp;Caută „<ph name="SEARCH_TERMS" />” pe <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3810973564298564668">Gestionare</translation>
 <translation id="3838085852053358637">Încărcarea extensiei a eșuat</translation>
 <translation id="383891835335927981">Nu a fost mărit sau micșorat niciun site web</translation>
 <translation id="385051799172605136">Înapoi</translation>
 <translation id="3905761538810670789">Repară aplicația</translation>
 <translation id="3908501907586732282">Activează extensia</translation>
-<translation id="3909791450649380159">&amp;Taie</translation>
 <translation id="3927932062596804919">Refuză</translation>
 <translation id="3936390757709632190">Deschide audi&amp;oul într-o filă nouă</translation>
-<translation id="3943582379552582368">&amp;Înapoi</translation>
 <translation id="3948116654032448504">&amp;Caută imaginea cu <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">A fost adăugată o extensie nouă (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -117,7 +111,6 @@
 <translation id="4096508467498758490">Dezactivați extensiile care rulează în modul pentru dezvoltatori</translation>
 <translation id="4100839878934973028">Un alt program de pe calculator a adăugat o aplicație care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="4109898769411476438">Închide browserul înainte de a importa</translation>
-<translation id="4130207949184424187">Această extensie a modificat pagina care este afișată la căutarea din Omnibox.</translation>
 <translation id="4131410914670010031">Alb-negru</translation>
 <translation id="4165986682804962316">Setări pentru site-ul web</translation>
 <translation id="4176463684765177261">Dezactivat</translation>
@@ -126,10 +119,8 @@
 <translation id="4348766275249686434">Colectează erorile</translation>
 <translation id="4363771538994847871">Nu s-a găsit nicio destinație Google Cast. Aveți nevoie de ajutor?</translation>
 <translation id="4384652540891215547">Activați extensia</translation>
-<translation id="4394049700291259645">Dezactivează</translation>
 <translation id="4409697491990005945">Margini</translation>
 <translation id="4423376891418188461">Restaurează setările</translation>
-<translation id="4593021220803146968">&amp;Accesează <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">O extensie a modificat pagina care este afișată la deschiderea unei file noi.</translation>
 <translation id="4643612240819915418">Deschide vide&amp;oul într-o filă nouă</translation>
@@ -150,11 +141,9 @@
 <translation id="52912272896845572">Fișierul cu cheia privată este nevalid.</translation>
 <translation id="5301954838959518834">OK, am înțeles</translation>
 <translation id="5317780077021120954">Salvează</translation>
-<translation id="5355926466126177564">Extensia „<ph name="EXTENSION_NAME" />” a modificat pagina care este afișată la căutarea din Omnibox.</translation>
 <translation id="5360150013186312835">Arată în bara de instrumente</translation>
 <translation id="5362741141255528695">Selectați fișierul cu cheia privată.</translation>
 <translation id="536638840841140142">Fără</translation>
-<translation id="5370819323174483825">&amp;Reîncarcă</translation>
 <translation id="5398572795982417028">Referința paginii este în afara limitelor, limita este <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5431318178759467895">Color</translation>
 <translation id="5485102783864353244">Adaugă o aplicație</translation>
@@ -164,7 +153,6 @@
 <translation id="5575473780076478375">Extensie incognito: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5614553682702429503">Salvați parola ?</translation>
 <translation id="5623842676595125836">Jurnal</translation>
-<translation id="5627086634964711283">De asemenea controlează ce pagină să fie afișată la clic pe butonul Pagina inițială.</translation>
 <translation id="5677928146339483299">Blocat</translation>
 <translation id="5707185214361380026">Extensia nu a putut fi încărcată de la:</translation>
 <translation id="5715711091495208045">Broker de plugin-uri: <ph name="PLUGIN_NAME" /></translation>
@@ -173,14 +161,10 @@
 <translation id="5804241973901381774">Permisiuni</translation>
 <translation id="5828633471261496623">Se tipărește...</translation>
 <translation id="583281660410589416">Necunoscut</translation>
-<translation id="5956585768868398362">Aceasta este pagina de căutare la care vă așteptați?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maximum <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">De asemenea controlează ce pagină să fie afișată la clic pe butonul Pagina inițială sau la căutare din Omnibox.</translation>
 <translation id="5978277834170881274">Folosește verificarea de bază a ortografiei</translation>
-<translation id="5979421442488174909">&amp;Tradu în <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Mai multe</translation>
 <translation id="6101226222197207147">A fost adăugată o aplicație nouă (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">Conexiunea la internet este controlată</translation>
 <translation id="6147020289383635445">Previzualizarea tipăririi a eșuat.</translation>
 <translation id="6196854373336333322">Extensia „<ph name="EXTENSION_NAME" />” a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu este ceea ce vreți.</translation>
 <translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -190,6 +174,7 @@
 <translation id="6295158916970320988">Toate site-urile web</translation>
 <translation id="6295855836753816081">Se salvează...</translation>
 <translation id="6315493146179903667">Aduce toate în față</translation>
+<translation id="6374469231428023295">Încercați din nou</translation>
 <translation id="6398765197997659313">Ieșire din modul ecran complet</translation>
 <translation id="6445450263907939268">Dacă nu vreți aceste modificări, puteți restaura setările precedente.</translation>
 <translation id="6447842834002726250">Cookie-uri</translation>
@@ -198,7 +183,6 @@
 <translation id="6508261954199872201">Aplicație: <ph name="APP_NAME" /></translation>
 <translation id="6550675742724504774">Opțiuni</translation>
 <translation id="6686817083349815241">Salvați parola</translation>
-<translation id="6691936601825168937">&amp;Înainte</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6840155290835956714">Întreabă înainte de a trimite</translation>
 <translation id="6900284862687837908">Aplicație de fundal: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -217,23 +201,18 @@
 <translation id="7421925624202799674">&amp;Vizualizează sursa paginii</translation>
 <translation id="7427348830195639090">Pagină de fundal: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Selectând această imprimantă, acordați următoarei extensii permisiunea de a accesa imprimanta:</translation>
-<translation id="749028671485790643">Persoana <ph name="VALUE" /></translation>
 <translation id="7576690715254076113">Colaționează</translation>
 <translation id="7629827748548208700">Filă: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Anulează</translation>
 <translation id="7661259717474717992">Permite site-urilor web să salveze și să citească datele asociate cookie-urilor</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Activitate</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
-<translation id="7760004034676677601">Aceasta este pagina de pornire la care vă așteptați?</translation>
 <translation id="7771452384635174008">Aspect</translation>
 <translation id="7782102568078991263">Nu mai există sugestii de la Google</translation>
 <translation id="7786889348652477777">&amp;Reîncarcă aplicația</translation>
 <translation id="7791543448312431591">Adaugă</translation>
-<translation id="7814458197256864873">&amp;Copiază</translation>
 <translation id="7818135753970109980">A fost adăugată o temă nouă (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opiază adresa videoului</translation>
-<translation id="7857949311770343000">Aceasta este pagina Filă nouă pe care o așteptați?</translation>
 <translation id="786073089922909430">Serviciu: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Utilitar: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">C&amp;opiază adresa videoului</translation>
@@ -271,14 +250,11 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8916476537757519021">Subcadru incognito: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Ascunde detaliile</translation>
 <translation id="8973557916016709913">Elimină nivelul de zoom</translation>
-<translation id="897939795688207351">Pe <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Permite pe toate site-urile web</translation>
 <translation id="9056810968620647706">Nu s-a găsit nicio potrivire.</translation>
-<translation id="9170848237812810038">&amp;Anulează</translation>
 <translation id="9215293857209265904">S-a adăugat „<ph name="EXTENSION_NAME" />”</translation>
 <translation id="9218430445555521422">Setează ca implicit</translation>
 <translation id="93766956588638423">Repară extensia</translation>
 <translation id="98515147261107953">Peisaj</translation>
-<translation id="994289308992179865">&amp;Redă în buclă</translation>
 <translation id="998747458861718449">I&amp;nspectează</translation>
 </translationbundle>

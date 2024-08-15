@@ -6,6 +6,7 @@
 
 #include <linux/videodev2.h>
 
+#include "base/posix/eintr_wrapper.h"
 #include "media/gpu/macros.h"
 
 namespace media {

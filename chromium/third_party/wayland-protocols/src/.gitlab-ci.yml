@@ -1,4 +1,4 @@
-.templates_sha: &template_sha 290b79e0e78eab67a83766f4e9691be554fc4afd
+.templates_sha: &template_sha fb33e1b244ec2a0b8edf8ee5590a96369c3b4666
 
 include:
   - project: 'freedesktop/ci-templates'
@@ -16,6 +16,11 @@ stages:
 variables:
   FDO_UPSTREAM_REPO: wayland/wayland-protocols
 
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'push'
+
 .debian:
   variables:
     FDO_DISTRIBUTION_VERSION: bullseye
@@ -31,6 +36,10 @@ check-commit:
     - ci-fairy check-commits --signed-off-by --junit-xml=results.xml
   variables:
     GIT_DEPTH: 100
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+    - when: never
   artifacts:
     reports:
       junit: results.xml

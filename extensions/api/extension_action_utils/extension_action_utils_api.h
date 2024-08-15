@@ -33,6 +33,7 @@ typedef std::vector<vivaldi::extension_action_utils::ExtensionInfo>
 
 class ExtensionActionUtil;
 class ExtensionService;
+class VivaldiExtensionDisabledGlobalError;
 
 using ExtensionToIdMap = base::flat_map<std::string, int>;
 
@@ -108,6 +109,18 @@ class ExtensionActionUtil : public KeyedService,
 
   ExtensionToIdProvider& GetExtensionToIdProvider() { return id_provider_; }
 
+  void AddGlobalError(
+      std::unique_ptr<VivaldiExtensionDisabledGlobalError> error);
+
+  void RemoveGlobalError(VivaldiExtensionDisabledGlobalError* error);
+
+  raw_ptr<VivaldiExtensionDisabledGlobalError>
+  GetGlobalErrorByMenuItemCommandID(int commandid);
+
+  std::vector<std::unique_ptr<VivaldiExtensionDisabledGlobalError>>& errors() {
+    return errors_;
+  }
+
  private:
   ~ExtensionActionUtil() override;
 
@@ -151,6 +164,8 @@ class ExtensionActionUtil : public KeyedService,
   // Lookup between extension id and command-id.
   ExtensionToIdProvider id_provider_;
 
+  // Owned global errors.
+  std::vector<std::unique_ptr<VivaldiExtensionDisabledGlobalError>> errors_;
 };
 
 class ExtensionActionUtilsGetToolbarExtensionsFunction
@@ -286,13 +301,15 @@ class VivaldiExtensionDisabledGlobalError
       public ExtensionUninstallDialog::Delegate,
       public ExtensionRegistryObserver {
  public:
-  // ExternalInstallBubbleAlert
-  VivaldiExtensionDisabledGlobalError(ExtensionService* service,
-                               const Extension* extension);
+  // ExtensionDisabledGlobalError
+  VivaldiExtensionDisabledGlobalError(
+      ExtensionService* service,
+      const Extension* extension,
+      base::WeakPtr<GlobalErrorWithStandardBubble> disabled_upgrade_error);
 
   // ExtensionDisabledGlobalError
   VivaldiExtensionDisabledGlobalError(content::BrowserContext* context,
-                                      ExternalInstallError* error);
+                                      base::WeakPtr<ExternalInstallError> error);
 
   ~VivaldiExtensionDisabledGlobalError() override;
 
@@ -300,17 +317,29 @@ class VivaldiExtensionDisabledGlobalError
   const std::string& GetExtensionId() { return extension_id_; }
   const std::string& GetExtensionName() { return extension_name_; }
 
+  void SendGlobalErrorRemoved(
+      vivaldi::extension_action_utils::ExtensionInstallError* jserror);
+
+  static void SendGlobalErrorRemoved(
+      content::BrowserContext* browser_context,
+      vivaldi::extension_action_utils::ExtensionInstallError* jserror);
+
+  // GlobalError implementation.
+  int MenuItemCommandID() override;
+
  private:
   // GlobalError implementation.
   Severity GetSeverity() override;
   bool HasMenuItem() override;
-  int MenuItemCommandID() override;
   std::u16string MenuItemLabel() override;
   void ExecuteMenuItem(Browser* browser) override;
   bool HasBubbleView() override;
   bool HasShownBubbleView() override;
   void ShowBubbleView(Browser* browser) override;
+
   GlobalErrorBubbleViewBase* GetBubbleView() override;
+  void SendGlobalErrorAdded(
+      vivaldi::extension_action_utils::ExtensionInstallError* jserror);
 
   // ExtensionRegistryObserver:
   void OnExtensionLoaded(content::BrowserContext* browser_context,
@@ -326,13 +355,15 @@ class VivaldiExtensionDisabledGlobalError
   raw_ptr<ExtensionService, DanglingUntriaged> service_;
   scoped_refptr<const Extension> extension_;
 
-  raw_ptr<ExternalInstallError> error_;
-  //raw_ptr<ExtensionInstallPrompt::Prompt> prompt_;
-  //ExternalInstallError::AlertType alert_type_;
+  // ExtensionDisabledGlobalError, owned by GlobalErrorService.
+  base::WeakPtr<GlobalErrorWithStandardBubble> disabled_upgrade_error_;
+
+  base::WeakPtr<ExternalInstallError> external_install_error_;
+
   // Copy of the Extension values in case we delete the extension.
   std::string extension_id_;
   std::string extension_name_;
-  int command_id_; // Used to lookup error via errorservice.
+  int command_id_; // Used to lookup error via errorservice or utils.
 
   std::unique_ptr<ExtensionUninstallDialog> uninstall_dialog_;
 

@@ -4,8 +4,11 @@
 
 #include "chrome/browser/password_manager/web_app_profile_switcher.h"
 
+#include <optional>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_window.h"
@@ -24,7 +27,6 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -87,21 +89,24 @@ void WebAppProfileSwitcher::QueryProfileWebAppRegistryToOpenWebApp(
 
   auto* provider = web_app::WebAppProvider::GetForWebApps(new_profile);
   CHECK(provider);
-  provider->scheduler().ScheduleCallbackWithLock<web_app::AppLock>(
+  provider->scheduler().ScheduleCallback(
       "QueryProfileWebAppRegistryToOpenWebApp",
-      std::make_unique<web_app::AppLockDescription>(app_id_),
+      web_app::AppLockDescription(app_id_),
       base::BindOnce(
           &WebAppProfileSwitcher::InstallOrOpenWebAppWindowForProfile,
-          weak_factory_.GetWeakPtr()));
+          weak_factory_.GetWeakPtr()),
+      /*on_complete=*/base::DoNothing());
 }
 
 void WebAppProfileSwitcher::InstallOrOpenWebAppWindowForProfile(
-    web_app::AppLock& new_profile_lock) {
+    web_app::AppLock& new_profile_lock,
+    base::Value::Dict& debug_value) {
   if (new_profile_lock.registrar().IsInstalled(app_id_)) {
     // The web app is already installed and can be launched, or foregrounded,
     // if it's already launched.
     Browser* launched_app =
         web_app::AppBrowserController::FindForWebApp(*new_profile_, app_id_);
+    debug_value.Set("launched_app", launched_app ? true : false);
     if (launched_app) {
       launched_app->window()->Activate();
       RunCompletionCallback();
@@ -168,9 +173,9 @@ void WebAppProfileSwitcher::LaunchAppWithId(
       ->scheduler()
       .LaunchApp(app_id, *base::CommandLine::ForCurrentProcess(),
                  /*current_directory=*/base::FilePath(),
-                 /*url_handler_launch_url=*/absl::nullopt,
-                 /*protocol_handler_launch_url=*/absl::nullopt,
-                 /*file_launch_url=*/absl::nullopt, /*launch_files=*/{},
+                 /*url_handler_launch_url=*/std::nullopt,
+                 /*protocol_handler_launch_url=*/std::nullopt,
+                 /*file_launch_url=*/std::nullopt, /*launch_files=*/{},
                  base::IgnoreArgs<base::WeakPtr<Browser>,
                                   base::WeakPtr<content::WebContents>,
                                   apps::LaunchContainer>(base::BindOnce(

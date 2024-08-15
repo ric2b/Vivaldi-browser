@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">已更新笔记</translation>
 <translation id="1041637248958093184">使用隐身标签时，Vivaldi 不会存储搜索、访问过的网站、cookie 和临时文件。</translation>
 <translation id="1066692930984703744">启用对跟踪器和广告的屏蔽功能以实现更快、更安全的浏览</translation>
-<translation id="1076258485383101882">同步输入的URL</translation>
 <translation id="1116694919640316211">关于</translation>
 <translation id="1123707809902612118">屏蔽跟踪器和广告</translation>
 <translation id="1151972924205500581">需要密码</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">使用条款</translation>
 <translation id="1771413903824396513">按昵称</translation>
 <translation id="1804522390855853698">中文(<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">明亮</translation>
 <translation id="1809939268435598390">删除文件夹</translation>
 <translation id="1813686536470127172">其他文件夹</translation>
 <translation id="1828800626900562968">点下面的 + 号图标新建标签。</translation>
@@ -71,12 +71,17 @@
 <translation id="2388224692799337242">一旦您开始浏览，您的历史记录就会出现在这里</translation>
 <translation id="2391028308389203648">土耳其语(<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">激活</translation>
+<translation id="2414886740292270097">昏暗</translation>
+<translation id="2433507940547922241">外观</translation>
 <translation id="2434910957904013691">全部同步</translation>
 <translation id="2448144008809286557">忘记了<ph name="BEGIN_LINK" />用户名<ph name="END_LINK" />或<ph name="BEGIN_LINK" />密码<ph name="END_LINK" />？</translation>
 <translation id="2536780277491102902">例外</translation>
 <translation id="2558801801411970131">正在屏蔽跟踪器</translation>
+<translation id="2562040727226360285">消除烦恼，可能会破坏网站 (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">新笔记</translation>
 <translation id="2619628557366098325">葡萄牙语 (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">系统</translation>
+<translation id="2666092431469916601">顶部</translation>
 <translation id="2677862276555105603">广告
 被屏蔽</translation>
 <translation id="2678542925523700624">爱沙尼亚语 (<ph name="ORIGIN" />)</translation>
@@ -85,6 +90,7 @@
 <translation id="2745324713975967671">加密密码</translation>
 <translation id="276436995507680929">同步阅读清单</translation>
 <translation id="2765217105034171413">小</translation>
+<translation id="2767124759205735526">同步历史记录和输入的 URL</translation>
 <translation id="2825232297853754349">您需要同意这些条款和条件。</translation>
 <translation id="2842985007712546952">上级文件夹</translation>
 <translation id="2843343418360315034">匈牙利语 (<ph name="ORIGIN" />)</translation>
@@ -98,6 +104,7 @@
 <translation id="3073196329485613487">登录您的账号</translation>
 <translation id="307859903981308731">若继续，即表示您同意 Vivaldi 的</translation>
 <translation id="3086746722712840547">笔记</translation>
+<translation id="3087734570205094154">底部</translation>
 <translation id="3091563570137981919">屏蔽跟踪器和广告</translation>
 <translation id="3134385238404760368">没有最近的标签</translation>
 <translation id="3157931365184549694">还原</translation>
@@ -127,12 +134,14 @@
 <translation id="3699026013955941879">该验证码已过期，请获取新的验证码。</translation>
 <translation id="3700829948786686853">欢迎使用 Vivaldi</translation>
 <translation id="3766350025418769949">您可以在 iPad 上的其他应用程序中使用保存到 Vivaldi 密码管理器的密码。</translation>
+<translation id="3842727926262967527">选择您希望放置标签栏和地址字段的位置。</translation>
 <translation id="3845564230651302310">正在应用新的阻止程序设置...</translation>
 <translation id="3858860766373142691">名称</translation>
 <translation id="3866249974567520381">描述</translation>
 <translation id="3872195896030547485">请输入有效的邮件地址。</translation>
 <translation id="3894427358181296146">添加文件夹</translation>
 <translation id="3897092660631435901">菜单</translation>
+<translation id="3921585859122905677">地址栏位置</translation>
 <translation id="3953599441418463312">日语 (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">跟踪器已屏蔽</translation>
 <translation id="3958433364221339259">用<ph name="SEARCH_ENGINE" />搜索</translation>
@@ -163,7 +172,9 @@
 <translation id="4394049700291259645">禁用</translation>
 <translation id="4413780690230851155">删除浏览历史</translation>
 <translation id="4452878871193896747">印度尼西亚语 (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">标签风格</translation>
 <translation id="4474581062946673155">您目前没有从其他设备同步标签页。</translation>
+<translation id="4488900295693536220">当地址栏位于底部时适用，可以更轻松地到达顶部建议。</translation>
 <translation id="4493850495402472953">和</translation>
 <translation id="4497115807425788318">地点</translation>
 <translation id="4507213865286211606">尺寸预览</translation>
@@ -207,6 +218,7 @@
 <translation id="5238642303473095117">删除数据</translation>
 <translation id="5245732982828228444">你会在这里找到你的笔记</translation>
 <translation id="5249199221558969362">请输入真实年龄。</translation>
+<translation id="5271549068863921519">保存口令</translation>
 <translation id="5290452628447338707">无笔记</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5349678548463426691">按描述</translation>
@@ -240,6 +252,7 @@
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个项目已移动</translation>
 <translation id="6147094071357011481">最近关闭的标签不可用</translation>
 <translation id="6193995664633100765">印地语 (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">主题</translation>
 <translation id="6365929278691047681">德语 (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">编辑书签</translation>
 <translation id="6406506848690869874">同步</translation>
@@ -278,7 +291,6 @@
 <translation id="7041964446309059643">手动</translation>
 <translation id="7110758301321962823">找回用户名</translation>
 <translation id="7194677467200983873">上次同步时间:</translation>
-<translation id="7196846668589096106">桌面标签</translation>
 <translation id="7210372243397300116">搜索文件夹</translation>
 <translation id="7215420652436283416">按地址</translation>
 <translation id="7229439505896086266">创建笔记</translation>
@@ -318,6 +330,7 @@
 <translation id="8076492880354921740">标签</translation>
 <translation id="8112996065264879835">此代码与我们发送的代码不符。
         您已达到最多错误尝试次数限制。请使用下方的“重新发送”选项申请新代码。</translation>
+<translation id="8142291334394582384">反转搜索建议顺序</translation>
 <translation id="8147118677117542370">请提供您的年龄。</translation>
 <translation id="8165573437634525334">数据已被加密口令保护</translation>
 <translation id="8182979418912184986">新隐身标签</translation>
@@ -326,6 +339,7 @@
 <translation id="8273666073173891138">笔记已保存至<ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">导入</translation>
 <translation id="8284356787013856231">打开文件的权限被拒绝</translation>
+<translation id="8289933454364510719">顶部或底部</translation>
 <translation id="8326104954595890674">新隐身标签</translation>
 <translation id="8329813750766387010">更新于：<ph name="DATE" /></translation>
 <translation id="8347535536909603600">移除 cookie 警告 <ph name="TYPE" />)</translation>
@@ -349,6 +363,8 @@
 <translation id="8684294196284714094">准备好将 Vivaldi 设置为默认浏览器了吗？</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个项目已删除</translation>
 <translation id="8763006697839582351">以Vivaldi隐身模式打开</translation>
+<translation id="8765173886020357878">搜索建议</translation>
+<translation id="8786689981011401964">壁纸</translation>
 <translation id="8804164990146287819">隐私政策</translation>
 <translation id="8819841443522803117">是时候切换您的默认浏览器了吧？就选 Vivaldi。</translation>
 <translation id="8820817407110198400">书签</translation>

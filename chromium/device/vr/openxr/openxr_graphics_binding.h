@@ -10,6 +10,7 @@
 
 #include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "third_party/openxr/src/include/openxr/openxr.h"
 #include "ui/gfx/geometry/size.h"
@@ -20,6 +21,7 @@
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/scoped_hardware_buffer_handle.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_android_hardware_buffer.h"
 #include "ui/gl/scoped_egl_image.h"
 #endif
@@ -53,8 +55,10 @@ struct SwapChainInfo {
   SwapChainInfo& operator=(SwapChainInfo&&);
 
   void Clear();
+  gpu::MailboxHolder GetMailboxHolder() const;
 
-  gpu::MailboxHolder mailbox_holder;
+  scoped_refptr<gpu::ClientSharedImage> shared_image;
+  gpu::SyncToken sync_token;
 
 #if BUILDFLAG(IS_WIN)
   // When shared images are being used, there is a corresponding MailboxHolder
@@ -74,8 +78,8 @@ struct SwapChainInfo {
   // This property isn't android-specific but it is currently unused on Windows.
   gfx::Size shared_buffer_size{0, 0};
 
-  // Shared GpuMemoryBuffer
-  std::unique_ptr<gpu::GpuMemoryBufferImplAndroidHardwareBuffer> gmb;
+  // This owns a single reference to an AHardwareBuffer object.
+  base::android::ScopedHardwareBufferHandle scoped_ahb_handle;
 
   // This object keeps the image alive while processing a frame. That's
   // required because it owns underlying resources, and must still be

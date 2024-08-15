@@ -24,8 +24,8 @@ class CFX_ImageRenderer {
  public:
   CFX_ImageRenderer(const RetainPtr<CFX_DIBitmap>& pDevice,
                     const CFX_ClipRgn* pClipRgn,
-                    const RetainPtr<CFX_DIBBase>& pSource,
-                    int bitmap_alpha,
+                    RetainPtr<const CFX_DIBBase> source,
+                    float alpha,
                     uint32_t mask_color,
                     const CFX_Matrix& matrix,
                     const FXDIB_ResampleOptions& options,
@@ -44,7 +44,7 @@ class CFX_ImageRenderer {
   std::unique_ptr<CFX_ImageStretcher> m_Stretcher;
   CFX_BitmapComposer m_Composer;
   FX_RECT m_ClipBox;
-  const int m_BitmapAlpha;
+  const float m_Alpha;
   uint32_t m_MaskColor;
   State m_State = State::kInitial;
   const bool m_bRgbByteOrder;

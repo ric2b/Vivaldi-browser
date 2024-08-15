@@ -40,7 +40,7 @@ update_target("//base:base_static") {
   ]
 }
 
-update_target("//components/version_info:version_info") {
+update_target("//base/version_info:version_info") {
   sources += [
     "//vivaldi/app/vivaldi_version_info.cc",
     "//vivaldi/app/vivaldi_version_info.h",

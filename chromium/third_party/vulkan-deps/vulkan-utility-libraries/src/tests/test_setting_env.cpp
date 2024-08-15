@@ -17,7 +17,7 @@ static void SetEnv(const char* value) {
 #ifdef _WIN32
     _putenv(value);
 #else
-    putenv(const_cast<char *>(value));
+    putenv(const_cast<char*>(value));
 #endif
 }
 

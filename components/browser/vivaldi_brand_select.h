@@ -21,9 +21,21 @@ enum class BrandSelection {
 
 struct BrandConfiguration {
   BrandSelection brand;
-  bool SpecifyVivaldiBrand;
-  std::string customBrand;
-  std::string customBrandVersion;
+  bool specify_vivaldi_brand;
+  std::string custom_brand;
+  std::string custom_brand_version;
+};
+
+class BrandOverride {
+ public:
+  BrandOverride(BrandConfiguration brand_config);
+  ~BrandOverride();
+
+  BrandOverride(const BrandOverride&) = delete;
+  BrandOverride& operator=(const BrandOverride&) = delete;
+
+ private:
+  BrandConfiguration brand_config_;
 };
 
 void ClientHintsBrandRegisterProfilePrefs(PrefService*);
@@ -37,7 +49,6 @@ void UpdateBrands(int seed, blink::UserAgentBrandList& brands);
 void ConfigureClientHintsOverrides();
 
 std::string GetBrandFullVersion();
-
 }  // namespace vivaldi
 
 #endif  // COMPONENTS_BROWSER_VIVALDI_BRAND_SELECT_H_

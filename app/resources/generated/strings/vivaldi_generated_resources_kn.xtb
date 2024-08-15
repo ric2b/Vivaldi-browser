@@ -3,7 +3,6 @@
 <translationbundle lang="kn">
 <translation id="1056898198331236512">ಎಚ್ಚರಿಕೆ</translation>
 <translation id="1165039591588034296">ದೋಷ</translation>
-<translation id="1175364870820465910">&amp;ಮುದ್ರಿಸಿ...</translation>
 <translation id="1244303850296295656">ವಿಸ್ತರಣೆ ದೋಷ</translation>
 <translation id="1546280085599573572">ನೀವು ಮುಖಪುಟದ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="1588438908519853928">ಸಾಮಾನ್ಯ</translation>
@@ -27,7 +26,6 @@
 <translation id="2861941300086904918">ಮೂಲ ಕ್ಲೈಂಟ್ ಭದ್ರತೆ ನಿರ್ವಾಹಕ</translation>
 <translation id="2932883381142163287">ನಿಂದನೆ ವರದಿ ಮಾಡಿ</translation>
 <translation id="2941112035454246133">ಕಡಿಮೆ</translation>
-<translation id="2972581237482394796">&amp;ಮತ್ತೆಮಾಡು</translation>
 <translation id="3080207940057008665">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಥೀಮ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">ಪ್ರೀರೆಂಡರ್: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -37,9 +35,7 @@
 <translation id="3678156199662914018">ವಿಸ್ತರಣೆ: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ಅಪ್ಲಿಕೇಶನ್ ಸರಿಪಡಿಸು</translation>
 <translation id="3908501907586732282">ವಿಸ್ತರಣೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸು</translation>
-<translation id="3909791450649380159">ಕತ್ತರಿ&amp;ಸು</translation>
 <translation id="3927932062596804919">ನಿರಾಕರಿಸು</translation>
-<translation id="3943582379552582368">&amp;ಹಿಂದೆ</translation>
 <translation id="3979395879372752341">ಹೊಸ ವಿಸ್ತರಣೆಯನ್ನು ಸೇರಿಸಲಾಗಿದೆ (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">ವಿಸ್ತರಣೆಯನ್ನು ರಚಿಸಲಾಗಿದೆ:
@@ -47,12 +43,9 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">ವಿಸ್ತರಣೆಗಳ ಡೆವೆಲಪರ್ ಮೋಡ್ ಅನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4100839878934973028">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
-<translation id="4130207949184424187">ಆಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="4176463684765177261">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K ಲೈವ್)</translation>
 <translation id="4384652540891215547">ವಿಸ್ತರಣೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
-<translation id="4394049700291259645">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
-<translation id="4593021220803146968"><ph name="URL" /> ಗೆ &amp;ಹೋಗಿ</translation>
 <translation id="4595560905247879544">ಅಪ್ಲಿಕೇಶನ್‌ಗಳು ಮತ್ತು ವಿಸ್ತರಣೆಗಳನ್ನು ಮ್ಯಾನೇಜರ್ (<ph name="CUSTODIAN_NAME" />) ರಿಂದ ಮಾತ್ರ ಮಾರ್ಪಡಿಸಬಹುದು.</translation>
 <translation id="4613271546271159013">ನೀವು ಹೊಸ ಟ್ಯಾಬ್ ತೆರೆದಿರುವಾಗ ಯಾವ ಪುಟವನ್ನು ತೋರಿಸಲಾಗಿದೆ ಎಂಬುದರ ವಿಸ್ತರಣೆ ಬದಲಾಗಿದೆ.</translation>
 <translation id="488785315393301722">ವಿವರಗಳನ್ನು ತೋರಿಸಿ</translation>
@@ -62,22 +55,16 @@
 <translation id="5233231016133573565">ಪ್ರಗತಿ ID</translation>
 <translation id="52912272896845572">ಖಾಸಗಿ ಕೀಲಿ ಫೈಲ್ ಅಮಾನ್ಯವಾಗಿದೆ.</translation>
 <translation id="5301954838959518834">ಸರಿ, ಅರ್ಥವಾಯಿತು</translation>
-<translation id="5355926466126177564">ಓಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು "<ph name="EXTENSION_NAME" />" ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="5362741141255528695">ಖಾಸಗಿ ಕೀಲಿ ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ.</translation>
-<translation id="5370819323174483825">&amp;ಮರುಲೋಡ್</translation>
 <translation id="5485102783864353244">ಅಪ್ಲಿಕೇಶನ್‌ ಸೇರಿಸು</translation>
 <translation id="5521078259930077036">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿದ್ದ ಮುಖಪುಟವೇ?</translation>
 <translation id="5542132724887566711">ಪ್ರೊಫೈಲ್</translation>
 <translation id="5556459405103347317">ಮರುಲೋಡ್‌</translation>
 <translation id="5575473780076478375">ಅದೃಶ್ಯ ವಿಸ್ತರಣೆ: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5627086634964711283">ನೀವು ಮುಖಪುಟ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ಕಾಣಿಸಿಕೊಳ್ಳುವ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
 <translation id="5715711091495208045">ಪ್ಲಗಿನ್ ಬ್ರೋಕರ್: <ph name="PLUGIN_NAME" /></translation>
 <translation id="583281660410589416">ಅಪರಿಚಿತ</translation>
-<translation id="5956585768868398362">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವ ಹುಡುಕಾಟ ಪುಟವೇ?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> ಪೀಕ್)</translation>
-<translation id="5965661248935608907">ನೀವು ಮುಖಪುಟ ಬಟನ್ ಕ್ಲಿಕ್ ಮಾಡಿದಾಗ ಅಥವಾ ಓಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಕೂಡಾ ಇದು ನಿಯಂತ್ರಿಸುತ್ತದೆ.</translation>
 <translation id="6101226222197207147">ಹೊಸ ಅಪ್ಲಿಕೇಶನ್ ಸೇರಿಸಲಾಗಿದೆ (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವನ್ನು ನಿಯಂತ್ರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="6196854373336333322">ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು "<ph name="EXTENSION_NAME" />" ವಿಸ್ತರಣೆಯು ನಿಯಂತ್ರಣಕ್ಕೆ ತೆಗೆದುಕೊಂಡಿದೆ. ಅಂದರೆ, ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಮಾಡುವ ಯಾವುದೇ ಕಾರ್ಯವನ್ನು ಇದು ಬದಲಾಯಿಸಬಹುದು, ಒಳನುಸುಳಬಹುದು ಅಥವಾ ಕದ್ದಾಲಿಸಬಹುದು ಎಂದರ್ಥ. ಇದು ಹೇಗೆ ಸಂಭವಿಸಿದೆ ಎಂಬುದೇ ನಿಮಗೆ ಖಚಿತವಿಲ್ಲದಿದ್ದರೆ, ನಿಮಗೆ ಬಹುಶಃ ಇದು ಬೇಕಾಗಿಲ್ಲ.</translation>
 <translation id="6247802389331535091">ಸಿಸ್ಟಮ್: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6445450263907939268">ನಿಮಗೆ ಈ ಬದಲಾವಣೆಗಳು ಅಗತ್ಯವಿಲ್ಲದಿದ್ದರೆ, ನಿಮ್ಮ ಹಿಂದಿನ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ನೀವು ಪುನಃಸ್ಥಾಪಿಸಬಹುದು.</translation>
@@ -85,7 +72,6 @@
 <translation id="6498249116389603658">&amp;ನಿಮ್ಮ ಎಲ್ಲಾ ಭಾಷೆಗಳು</translation>
 <translation id="6503077044568424649">ಅತಿಹೆಚ್ಚು ಬಾರಿ ಸಂದರ್ಶಿಸಿರುವುದು</translation>
 <translation id="6508261954199872201">ಅಪ್ಲಿಕೇಶನ್: <ph name="APP_NAME" /></translation>
-<translation id="6691936601825168937">&amp;ಮುಂದೆ ತನ್ನಿ</translation>
 <translation id="6798954102094737107">ಪ್ಲಗಿನ್: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">ಹಿನ್ನೆಲೆ ಅಪ್ಲಿಕೇಶನ್: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">ಪ್ರವೇಶ ನೀರಾಕರಿಸಲಾಗಿದೆ.</translation>
@@ -93,10 +79,8 @@
 <translation id="7629827748548208700">ಟ್ಯಾಬ್: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">ರಿಸೀವರ್: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">ಕಾರ್ಯ</translation>
-<translation id="7760004034676677601">ಇದು ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವ ಆರಂಭಿಕ ಪುಟವೇ?</translation>
 <translation id="7791543448312431591">ಸೇರಿಸು</translation>
 <translation id="7818135753970109980">ಹೊಸ ಥೀಮ್ ಸೇರಿಸಲಾಗಿದೆ (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="7857949311770343000">ನೀವು ನಿರೀಕ್ಷಿಸುತ್ತಿರುವುದು ಈ ಹೊಸ ಟ್ಯಾಬ್ ಪುಟವೇ?</translation>
 <translation id="786073089922909430">ಸೇವೆ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">ಉಪಯುಕ್ತತೆ: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7978412674231730200">ಖಾಸಗಿ ಕೀಲಿ</translation>
@@ -113,9 +97,7 @@
 <translation id="8859174528519900719">ಉಪಫ್ರೇಮ್‌: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8916476537757519021">ಅದೃಶ್ಯ ಉಪಫ್ರೇಮ್: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">ವಿವರಗಳನ್ನು ಮರೆಮಾಡಿ</translation>
-<translation id="9170848237812810038">&amp;ರದ್ದುಮಾಡು</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ಸೇರಿಸಲಾಗಿದೆ</translation>
 <translation id="93766956588638423">ವಿಸ್ತರಣೆ ದುರಸ್ತಿಪಡಿಸಿ</translation>
-<translation id="994289308992179865">&amp;ಲೂಪ್</translation>
 <translation id="998747458861718449">ಪ&amp;ರಿಶೀಲಿಸಿ</translation>
 </translationbundle>

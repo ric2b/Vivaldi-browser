@@ -34,7 +34,6 @@
 #include "src/tint/lang/core/constant/scalar.h"
 #include "src/tint/lang/core/constant/splat.h"
 #include "src/tint/lang/core/ir/access.h"
-#include "src/tint/lang/core/ir/binary.h"
 #include "src/tint/lang/core/ir/bitcast.h"
 #include "src/tint/lang/core/ir/block_param.h"
 #include "src/tint/lang/core/ir/break_if.h"
@@ -42,7 +41,9 @@
 #include "src/tint/lang/core/ir/construct.h"
 #include "src/tint/lang/core/ir/continue.h"
 #include "src/tint/lang/core/ir/convert.h"
+#include "src/tint/lang/core/ir/core_binary.h"
 #include "src/tint/lang/core/ir/core_builtin_call.h"
+#include "src/tint/lang/core/ir/core_unary.h"
 #include "src/tint/lang/core/ir/discard.h"
 #include "src/tint/lang/core/ir/exit_if.h"
 #include "src/tint/lang/core/ir/exit_loop.h"
@@ -64,7 +65,6 @@
 #include "src/tint/lang/core/ir/switch.h"
 #include "src/tint/lang/core/ir/swizzle.h"
 #include "src/tint/lang/core/ir/terminate_invocation.h"
-#include "src/tint/lang/core/ir/unary.h"
 #include "src/tint/lang/core/ir/unreachable.h"
 #include "src/tint/lang/core/ir/user_call.h"
 #include "src/tint/lang/core/ir/value.h"
@@ -235,12 +235,21 @@ class Builder {
     /// @returns a new multi-in block
     ir::MultiInBlock* MultiInBlock();
 
-    /// Creates a function instruction
+    /// Creates an unnamed function
+    /// @param return_type the function return type
+    /// @param stage the function stage
+    /// @param wg_size the workgroup_size
+    /// @returns the function
+    ir::Function* Function(const core::type::Type* return_type,
+                           Function::PipelineStage stage = Function::PipelineStage::kUndefined,
+                           std::optional<std::array<uint32_t, 3>> wg_size = {});
+
+    /// Creates a function
     /// @param name the function name
     /// @param return_type the function return type
     /// @param stage the function stage
     /// @param wg_size the workgroup_size
-    /// @returns the instruction
+    /// @returns the function
     ir::Function* Function(std::string_view name,
                            const core::type::Type* return_type,
                            Function::PipelineStage stage = Function::PipelineStage::kUndefined,
@@ -268,17 +277,22 @@ class Builder {
         return Append(ir.instructions.Create<ir::Switch>(cond_val));
     }
 
-    /// Creates a case for the switch @p s with the given selectors
+    /// Creates a default case for the switch @p s
     /// @param s the switch to create the case into
-    /// @param selectors the case selectors for the case statement
     /// @returns the start block for the case instruction
-    ir::Block* Case(ir::Switch* s, VectorRef<Switch::CaseSelector> selectors);
+    ir::Block* DefaultCase(ir::Switch* s);
 
     /// Creates a case for the switch @p s with the given selectors
     /// @param s the switch to create the case into
-    /// @param selectors the case selectors for the case statement
+    /// @param values the case selector values for the case statement
     /// @returns the start block for the case instruction
-    ir::Block* Case(ir::Switch* s, std::initializer_list<Switch::CaseSelector> selectors);
+    ir::Block* Case(ir::Switch* s, VectorRef<ir::Constant*> values);
+
+    /// Creates a case for the switch @p s with the given selectors
+    /// @param s the switch to create the case into
+    /// @param values the case selector values for the case statement
+    /// @returns the start block for the case instruction
+    ir::Block* Case(ir::Switch* s, std::initializer_list<ir::Constant*> values);
 
     /// Creates a new ir::Constant
     /// @param val the constant value
@@ -360,6 +374,17 @@ class Builder {
     }
 
     /// Creates a new ir::Constant
+    /// @tparam TYPE the splat type
+    /// @param value the splat value
+    /// @param size the number of items
+    /// @returns the new constant
+    template <typename TYPE, typename ARG>
+    ir::Constant* Splat(ARG&& value, size_t size) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Splat(type, std::forward<ARG>(value), size);
+    }
+
+    /// Creates a new ir::Constant
     /// @param ty the constant type
     /// @param values the composite values
     /// @returns the new constant
@@ -367,6 +392,16 @@ class Builder {
     ir::Constant* Composite(const core::type::Type* ty, ARGS&&... values) {
         return Constant(
             ir.constant_values.Composite(ty, Vector{ConstantValue(std::forward<ARGS>(values))...}));
+    }
+
+    /// Creates a new ir::Constant
+    /// @tparam TYPE the constant type
+    /// @param values the composite values
+    /// @returns the new constant
+    template <typename TYPE, typename... ARGS, typename = DisableIfVectorLike<ARGS...>>
+    ir::Constant* Composite(ARGS&&... values) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Composite(type, std::forward<ARGS>(values)...);
     }
 
     /// Creates a new zero-value ir::Constant
@@ -396,8 +431,9 @@ class Builder {
                 return in;  /// Pass-through
             } else if constexpr (is_instruction) {
                 /// Extract the first result from the instruction
-                TINT_ASSERT(in->HasResults() && !in->HasMultiResults());
-                return in->Result();
+                auto results = in->Results();
+                TINT_ASSERT(results.Length() == 1);
+                return results[0];
             }
         } else if constexpr (is_numeric) {
             /// Creates a value from the given number
@@ -436,12 +472,12 @@ class Builder {
     /// @param rhs the right-hand-side of the operation
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Binary(BinaryOp op, const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Binary(BinaryOp op, const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         CheckForNonDeterministicEvaluation<LHS, RHS>();
         auto* lhs_val = Value(std::forward<LHS>(lhs));
         auto* rhs_val = Value(std::forward<RHS>(rhs));
         return Append(
-            ir.instructions.Create<ir::Binary>(InstructionResult(type), op, lhs_val, rhs_val));
+            ir.instructions.Create<ir::CoreBinary>(InstructionResult(type), op, lhs_val, rhs_val));
     }
 
     /// Creates an And operation
@@ -450,8 +486,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* And(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* And(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kAnd, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an And operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* And(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return And(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Or operation
@@ -460,8 +507,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Or(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Or(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kOr, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Or operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Or(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Or(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Xor operation
@@ -470,8 +528,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Xor(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Xor(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kXor, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Xor operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Xor(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Xor(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Equal operation
@@ -480,8 +549,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Equal(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Equal(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kEqual, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Equal operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Equal(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Equal(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an NotEqual operation
@@ -490,8 +570,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* NotEqual(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* NotEqual(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kNotEqual, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an NotEqual operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* NotEqual(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return NotEqual(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an LessThan operation
@@ -500,8 +591,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* LessThan(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* LessThan(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kLessThan, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an LessThan operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* LessThan(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return LessThan(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an GreaterThan operation
@@ -510,8 +612,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* GreaterThan(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* GreaterThan(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kGreaterThan, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an GreaterThan operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* GreaterThan(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return GreaterThan(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an LessThanEqual operation
@@ -520,9 +633,20 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* LessThanEqual(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* LessThanEqual(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kLessThanEqual, type, std::forward<LHS>(lhs),
                       std::forward<RHS>(rhs));
+    }
+
+    /// Creates an LessThanEqual operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* LessThanEqual(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return LessThanEqual(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an GreaterThanEqual operation
@@ -531,9 +655,20 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* GreaterThanEqual(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* GreaterThanEqual(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kGreaterThanEqual, type, std::forward<LHS>(lhs),
                       std::forward<RHS>(rhs));
+    }
+
+    /// Creates an GreaterThanEqual operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* GreaterThanEqual(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return GreaterThanEqual(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an ShiftLeft operation
@@ -542,8 +677,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* ShiftLeft(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* ShiftLeft(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kShiftLeft, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an ShiftLeft operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* ShiftLeft(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return ShiftLeft(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an ShiftRight operation
@@ -552,8 +698,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* ShiftRight(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* ShiftRight(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kShiftRight, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an ShiftRight operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* ShiftRight(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return ShiftRight(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Add operation
@@ -562,8 +719,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Add(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Add(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kAdd, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Add operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Add(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Add(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Subtract operation
@@ -572,8 +740,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Subtract(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Subtract(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kSubtract, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Subtract operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Subtract(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Subtract(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Multiply operation
@@ -582,8 +761,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Multiply(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Multiply(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kMultiply, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Multiply operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Multiply(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Multiply(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Divide operation
@@ -592,8 +782,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Divide(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Divide(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kDivide, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Divide operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Divide(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Divide(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an Modulo operation
@@ -602,8 +803,19 @@ class Builder {
     /// @param rhs the rhs of the add
     /// @returns the operation
     template <typename LHS, typename RHS>
-    ir::Binary* Modulo(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+    ir::CoreBinary* Modulo(const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
         return Binary(BinaryOp::kModulo, type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
+    }
+
+    /// Creates an Modulo operation
+    /// @tparam TYPE the result type of the expression
+    /// @param lhs the lhs of the add
+    /// @param rhs the rhs of the add
+    /// @returns the operation
+    template <typename TYPE, typename LHS, typename RHS>
+    ir::CoreBinary* Modulo(LHS&& lhs, RHS&& rhs) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Modulo(type, std::forward<LHS>(lhs), std::forward<RHS>(rhs));
     }
 
     /// Creates an op for `op val`
@@ -612,9 +824,20 @@ class Builder {
     /// @param val the value of the operation
     /// @returns the operation
     template <typename VAL>
-    ir::Unary* Unary(UnaryOp op, const core::type::Type* type, VAL&& val) {
+    ir::CoreUnary* Unary(UnaryOp op, const core::type::Type* type, VAL&& val) {
         auto* value = Value(std::forward<VAL>(val));
-        return Append(ir.instructions.Create<ir::Unary>(InstructionResult(type), op, value));
+        return Append(ir.instructions.Create<ir::CoreUnary>(InstructionResult(type), op, value));
+    }
+
+    /// Creates an op for `op val`
+    /// @param op the unary operator
+    /// @tparam TYPE the result type of the binary expression
+    /// @param val the value of the operation
+    /// @returns the operation
+    template <typename TYPE, typename VAL>
+    ir::CoreUnary* Unary(UnaryOp op, VAL&& val) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Unary(op, type, std::forward<VAL>(val));
     }
 
     /// Creates a Complement operation
@@ -622,8 +845,18 @@ class Builder {
     /// @param val the value
     /// @returns the operation
     template <typename VAL>
-    ir::Unary* Complement(const core::type::Type* type, VAL&& val) {
-        return Unary(ir::UnaryOp::kComplement, type, std::forward<VAL>(val));
+    ir::CoreUnary* Complement(const core::type::Type* type, VAL&& val) {
+        return Unary(UnaryOp::kComplement, type, std::forward<VAL>(val));
+    }
+
+    /// Creates a Complement operation
+    /// @tparam TYPE the result type of the expression
+    /// @param val the value
+    /// @returns the operation
+    template <typename TYPE, typename VAL>
+    ir::CoreUnary* Complement(VAL&& val) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Complement(type, std::forward<VAL>(val));
     }
 
     /// Creates a Negation operation
@@ -631,8 +864,18 @@ class Builder {
     /// @param val the value
     /// @returns the operation
     template <typename VAL>
-    ir::Unary* Negation(const core::type::Type* type, VAL&& val) {
-        return Unary(ir::UnaryOp::kNegation, type, std::forward<VAL>(val));
+    ir::CoreUnary* Negation(const core::type::Type* type, VAL&& val) {
+        return Unary(UnaryOp::kNegation, type, std::forward<VAL>(val));
+    }
+
+    /// Creates a Negation operation
+    /// @tparam TYPE the result type of the expression
+    /// @param val the value
+    /// @returns the operation
+    template <typename TYPE, typename VAL>
+    ir::CoreUnary* Negation(VAL&& val) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Negation(type, std::forward<VAL>(val));
     }
 
     /// Creates a Not operation
@@ -640,12 +883,22 @@ class Builder {
     /// @param val the value
     /// @returns the operation
     template <typename VAL>
-    ir::Binary* Not(const core::type::Type* type, VAL&& val) {
+    ir::CoreBinary* Not(const core::type::Type* type, VAL&& val) {
         if (auto* vec = type->As<core::type::Vector>()) {
             return Equal(type, std::forward<VAL>(val), Splat(vec, false, vec->Width()));
         } else {
             return Equal(type, std::forward<VAL>(val), Constant(false));
         }
+    }
+
+    /// Creates a Not operation
+    /// @tparam TYPE the result type of the expression
+    /// @param val the value
+    /// @returns the operation
+    template <typename TYPE, typename VAL>
+    ir::CoreBinary* Not(VAL&& val) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Not(type, std::forward<VAL>(val));
     }
 
     /// Creates a bitcast instruction
@@ -656,6 +909,17 @@ class Builder {
     ir::Bitcast* Bitcast(const core::type::Type* type, VAL&& val) {
         auto* value = Value(std::forward<VAL>(val));
         return Append(ir.instructions.Create<ir::Bitcast>(InstructionResult(type), value));
+    }
+
+    /// Creates a bitcast instruction
+    /// @tparam TYPE the result type of the bitcast
+    /// @param val the value being bitcast
+    /// @returns the instruction
+    template <typename TYPE, typename VAL>
+    ir::Bitcast* Bitcast(VAL&& val) {
+        auto* type = ir.Types().Get<TYPE>();
+        auto* value = Value(std::forward<VAL>(val));
+        return Bitcast(type, value);
     }
 
     /// Creates a discard instruction
@@ -682,6 +946,18 @@ class Builder {
                                                            Values(std::forward<ARGS>(args)...)));
     }
 
+    /// Creates a user function call instruction
+    /// @tparam TYPE the return type of the call
+    /// @param func the function to call
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename TYPE, typename... ARGS>
+    ir::UserCall* Call(ir::Function* func, ARGS&&... args) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Append(ir.instructions.Create<ir::UserCall>(InstructionResult(type), func,
+                                                           Values(std::forward<ARGS>(args)...)));
+    }
+
     /// Creates a core builtin call instruction
     /// @param type the return type of the call
     /// @param func the builtin function to call
@@ -689,6 +965,18 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::CoreBuiltinCall* Call(const core::type::Type* type, core::BuiltinFn func, ARGS&&... args) {
+        return Append(ir.instructions.Create<ir::CoreBuiltinCall>(
+            InstructionResult(type), func, Values(std::forward<ARGS>(args)...)));
+    }
+
+    /// Creates a core builtin call instruction
+    /// @tparam TYPE the return type of the call
+    /// @param func the builtin function to call
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename TYPE, typename... ARGS>
+    ir::CoreBuiltinCall* Call(core::BuiltinFn func, ARGS&&... args) {
+        auto* type = ir.Types().Get<TYPE>();
         return Append(ir.instructions.Create<ir::CoreBuiltinCall>(
             InstructionResult(type), func, Values(std::forward<ARGS>(args)...)));
     }
@@ -810,7 +1098,7 @@ class Builder {
     /// @param init the var initializer
     /// @returns the instruction
     template <core::AddressSpace SPACE = core::AddressSpace::kFunction,
-              core::Access ACCESS = core::Access::kReadWrite,
+              core::Access ACCESS = core::type::DefaultAccessFor(SPACE),
               typename VALUE = void>
     ir::Var* Var(std::string_view name, VALUE&& init) {
         auto* val = Value(std::forward<VALUE>(init));
@@ -820,7 +1108,7 @@ class Builder {
         }
         auto* var = Var(name, ir.Types().ptr(SPACE, val->Type(), ACCESS));
         var->SetInitializer(val);
-        ir.SetName(var->Result(), name);
+        ir.SetName(var->Result(0), name);
         return var;
     }
 
@@ -829,7 +1117,9 @@ class Builder {
     /// @tparam T the storage pointer's element type
     /// @tparam ACCESS the var's access mode
     /// @returns the instruction
-    template <core::AddressSpace SPACE, typename T, core::Access ACCESS = core::Access::kReadWrite>
+    template <core::AddressSpace SPACE,
+              typename T,
+              core::Access ACCESS = core::type::DefaultAccessFor(SPACE)>
     ir::Var* Var() {
         return Var(ir.Types().ptr<SPACE, T, ACCESS>());
     }
@@ -840,7 +1130,9 @@ class Builder {
     /// @tparam ACCESS the var's access mode
     /// @param name the var name
     /// @returns the instruction
-    template <core::AddressSpace SPACE, typename T, core::Access ACCESS = core::Access::kReadWrite>
+    template <core::AddressSpace SPACE,
+              typename T,
+              core::Access ACCESS = core::type::DefaultAccessFor(SPACE)>
     ir::Var* Var(std::string_view name) {
         return Var(name, ir.Types().ptr<SPACE, T, ACCESS>());
     }
@@ -857,7 +1149,16 @@ class Builder {
             return nullptr;
         }
         auto* let = Append(ir.instructions.Create<ir::Let>(InstructionResult(val->Type()), val));
-        ir.SetName(let->Result(), name);
+        ir.SetName(let->Result(0), name);
+        return let;
+    }
+
+    /// Creates a new `let` declaration, with an unassigned value
+    /// @param type the let type
+    /// @returns the instruction
+    ir::Let* Let(const type::Type* type) {
+        auto* let = ir.instructions.Create<ir::Let>(InstructionResult(type), nullptr);
+        Append(let);
         return let;
     }
 
@@ -969,6 +1270,16 @@ class Builder {
     /// @returns the value
     ir::BlockParam* BlockParam(std::string_view name, const core::type::Type* type);
 
+    /// Creates a new `BlockParam` with a name.
+    /// @tparam TYPE the parameter type
+    /// @param name the parameter name
+    /// @returns the value
+    template <typename TYPE>
+    ir::BlockParam* BlockParam(std::string_view name) {
+        auto* type = ir.Types().Get<TYPE>();
+        return BlockParam(name, type);
+    }
+
     /// Creates a new `FunctionParam`
     /// @param type the parameter type
     /// @returns the value
@@ -979,6 +1290,25 @@ class Builder {
     /// @param type the parameter type
     /// @returns the value
     ir::FunctionParam* FunctionParam(std::string_view name, const core::type::Type* type);
+
+    /// Creates a new `FunctionParam` with a name.
+    /// @tparam TYPE the parameter type
+    /// @param name the parameter name
+    /// @returns the value
+    template <typename TYPE>
+    ir::FunctionParam* FunctionParam(std::string_view name) {
+        auto* type = ir.Types().Get<TYPE>();
+        return FunctionParam(name, type);
+    }
+
+    /// Creates a new `FunctionParam`
+    /// @tparam TYPE the parameter type
+    /// @returns the value
+    template <typename TYPE>
+    ir::FunctionParam* FunctionParam() {
+        auto* type = ir.Types().Get<TYPE>();
+        return FunctionParam(type);
+    }
 
     /// Creates a new `Access`
     /// @param type the return type
@@ -993,6 +1323,17 @@ class Builder {
                                                          Values(std::forward<ARGS>(indices)...)));
     }
 
+    /// Creates a new `Access`
+    /// @tparam TYPE the return type
+    /// @param object the object being accessed
+    /// @param indices the access indices
+    /// @returns the instruction
+    template <typename TYPE, typename OBJ, typename... ARGS>
+    ir::Access* Access(OBJ&& object, ARGS&&... indices) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Access(type, std::forward<OBJ>(object), std::forward<ARGS>(indices)...);
+    }
+
     /// Creates a new `Swizzle`
     /// @param type the return type
     /// @param object the object being swizzled
@@ -1003,6 +1344,17 @@ class Builder {
         auto* obj_val = Value(std::forward<OBJ>(object));
         return Append(ir.instructions.Create<ir::Swizzle>(InstructionResult(type), obj_val,
                                                           std::move(indices)));
+    }
+
+    /// Creates a new `Swizzle`
+    /// @tparam TYPE the return type
+    /// @param object the object being swizzled
+    /// @param indices the swizzle indices
+    /// @returns the instruction
+    template <typename TYPE, typename OBJ>
+    ir::Swizzle* Swizzle(OBJ&& object, VectorRef<uint32_t> indices) {
+        auto* type = ir.Types().Get<TYPE>();
+        return Swizzle(type, std::forward<OBJ>(object), std::move(indices));
     }
 
     /// Creates a new `Swizzle`
@@ -1019,6 +1371,16 @@ class Builder {
                                                           Vector<uint32_t, 4>(indices)));
     }
 
+    /// Name names the value or instruction with @p name
+    /// @param name the new name for the value or instruction
+    /// @param object the value or instruction
+    /// @return @p object
+    template <typename OBJECT>
+    OBJECT* Name(std::string_view name, OBJECT* object) {
+        ir.SetName(object, name);
+        return object;
+    }
+
     /// Creates a terminate invocation instruction
     /// @returns the instruction
     ir::TerminateInvocation* TerminateInvocation();
@@ -1032,6 +1394,15 @@ class Builder {
     /// @returns the value
     ir::InstructionResult* InstructionResult(const core::type::Type* type) {
         return ir.values.Create<ir::InstructionResult>(type);
+    }
+
+    /// Creates a new runtime value
+    /// @tparam TYPE the return type
+    /// @returns the value
+    template <typename TYPE>
+    ir::InstructionResult* InstructionResult() {
+        auto* type = ir.Types().Get<TYPE>();
+        return InstructionResult(type);
     }
 
     /// Create a ranged loop with a callback to build the loop body.

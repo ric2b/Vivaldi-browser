@@ -94,6 +94,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   std::string GetWorkspace() const override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
   void SetShape(std::unique_ptr<Widget::ShapeRects> native_shape) override;
+  void SetParent(gfx::AcceleratedWidget parent) override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
@@ -132,7 +133,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   void InitModalType(ui::ModalType modal_type) override;
   void FlashFrame(bool flash_frame) override;
   bool IsAnimatingClosed() const override;
-  bool IsTranslucentWindowOpacitySupported() const override;
   void SizeConstraintsChanged() override;
   bool ShouldUpdateWindowTransparency() const override;
   bool ShouldUseDesktopNativeCursorManager() const override;

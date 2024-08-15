@@ -134,7 +134,7 @@ class NET_EXPORT ConfiguredProxyResolutionService
   bool MarkProxiesAsBadUntil(
       const ProxyInfo& results,
       base::TimeDelta retry_delay,
-      const std::vector<ProxyServer>& additional_bad_proxies,
+      const std::vector<ProxyChain>& additional_bad_proxies,
       const NetLogWithSource& net_log) override;
 
   // ProxyResolutionService
@@ -224,6 +224,13 @@ class NET_EXPORT ConfiguredProxyResolutionService
   static std::unique_ptr<ConfiguredProxyResolutionService>
   CreateFixedFromAutoDetectedPacResultForTest(
       const std::string& pac_string,
+      const NetworkTrafficAnnotationTag& traffic_annotation);
+
+  // This method is used by tests to create a ConfiguredProxyResolutionService
+  // that returns a proxy fallback list (|proxy_chain|) for every URL.
+  static std::unique_ptr<ConfiguredProxyResolutionService>
+  CreateFixedFromProxyChainsForTest(
+      const std::vector<ProxyChain>& proxy_chains,
       const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // This method should only be used by unit tests.
@@ -405,7 +412,7 @@ class NET_EXPORT ConfiguredProxyResolutionService
 
   THREAD_CHECKER(thread_checker_);
 
-  raw_ptr<ProxyDelegate, DanglingUntriaged> proxy_delegate_ = nullptr;
+  raw_ptr<ProxyDelegate> proxy_delegate_ = nullptr;
 
   // Flag used by |SetReady()| to check if |this| has been deleted by a
   // synchronous callback.

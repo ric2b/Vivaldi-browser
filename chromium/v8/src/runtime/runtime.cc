@@ -186,6 +186,7 @@ bool Runtime::MayAllocate(FunctionId id) {
   switch (id) {
     case Runtime::kCompleteInobjectSlackTracking:
     case Runtime::kCompleteInobjectSlackTrackingForMap:
+    case Runtime::kGlobalPrint:
       return false;
     default:
       return true;
@@ -214,6 +215,10 @@ bool Runtime::IsAllowListedForFuzzing(FunctionId id) {
     case Runtime::kSetForceSlowPath:
     case Runtime::kSimulateNewspaceFull:
     case Runtime::kWaitForBackgroundOptimization:
+    case Runtime::kSetBatterySaverMode:
+    case Runtime::kNotifyIsolateForeground:
+    case Runtime::kNotifyIsolateBackground:
+    case Runtime::kIsEfficiencyModeEnabled:
       return true;
     // Runtime functions only permitted for non-differential fuzzers.
     // This list may contain functions performing extra checks or returning
@@ -233,21 +238,6 @@ bool Runtime::IsAllowListedForFuzzing(FunctionId id) {
       return true;
 #endif
       // Fallthrough.
-    default:
-      return false;
-  }
-}
-
-bool Runtime::SwitchToTheCentralStackForTarget(FunctionId id) {
-  // Runtime functions called from Wasm directly or
-  // from Wasm runtime stubs should execute on the central stack.
-  switch (id) {
-#if V8_ENABLE_WEBASSEMBLY
-#define WASM_CASE(Name, ...) case Runtime::k##Name:
-    FOR_EACH_INTRINSIC_WASM(WASM_CASE, WASM_CASE)
-#undef WASM_CASE
-    return true;
-#endif  // V8_ENABLE_WEBASSEMBLY
     default:
       return false;
   }

@@ -95,10 +95,78 @@ fn tint_symbol_2(@builtin(vertex_index) tint_symbol_1 : u32) -> @builtin(positio
     auto* data = got.data.Get<Renamer::Data>();
 
     ASSERT_NE(data, nullptr);
-    Renamer::Data::Remappings expected_remappings = {
+    Renamer::Remappings expected_remappings = {
         {"vert_idx", "tint_symbol_1"},
         {"test", "tint_symbol"},
         {"entry", "tint_symbol_2"},
+    };
+    EXPECT_THAT(data->remappings, ContainerEq(expected_remappings));
+}
+
+TEST_F(RenamerTest, RequestedNames) {
+    auto* src = R"(
+struct ShaderIO {
+    @location(1) var1: f32,
+    @location(3) @interpolate(flat) var3: u32,
+    @builtin(position) pos: vec4f,
+}
+
+@vertex fn main(@builtin(vertex_index) vert_idx : u32)
+     -> ShaderIO {
+  var pos = array(
+      vec2f(-1.0, 3.0),
+      vec2f(-1.0, -3.0),
+      vec2f(3.0, 0.0));
+
+  var shaderIO: ShaderIO;
+  shaderIO.var1 = 0.0;
+  shaderIO.var3 = 1u;
+  shaderIO.pos = vec4f(pos[vert_idx], 0.0, 1.0);
+
+  return shaderIO;
+}
+)";
+
+    auto* expect = R"(
+struct tint_symbol {
+  @location(1)
+  user_var1 : f32,
+  @location(3) @interpolate(flat)
+  user_var3 : u32,
+  @builtin(position)
+  tint_symbol_1 : vec4f,
+}
+
+@vertex
+fn tint_symbol_2(@builtin(vertex_index) tint_symbol_3 : u32) -> tint_symbol {
+  var tint_symbol_1 = array(vec2f(-(1.0), 3.0), vec2f(-(1.0), -(3.0)), vec2f(3.0, 0.0));
+  var tint_symbol_4 : tint_symbol;
+  tint_symbol_4.user_var1 = 0.0;
+  tint_symbol_4.user_var3 = 1u;
+  tint_symbol_4.tint_symbol_1 = vec4f(tint_symbol_1[tint_symbol_3], 0.0, 1.0);
+  return tint_symbol_4;
+}
+)";
+
+    DataMap inputs;
+    inputs.Add<Renamer::Config>(Renamer::Target::kAll,
+                                /* preserve_unicode */ false,
+                                /* remappings */
+                                Renamer::Remappings{
+                                    {"var1", "user_var1"},
+                                    {"var3", "user_var3"},
+                                });
+    auto got = Run<Renamer>(src, inputs);
+
+    EXPECT_EQ(expect, str(got));
+
+    auto* data = got.data.Get<Renamer::Data>();
+
+    ASSERT_NE(data, nullptr);
+    Renamer::Remappings expected_remappings = {
+        {"pos", "tint_symbol_1"},      {"vert_idx", "tint_symbol_3"}, {"ShaderIO", "tint_symbol"},
+        {"shaderIO", "tint_symbol_4"}, {"main", "tint_symbol_2"},     {"var1", "user_var1"},
+        {"var3", "user_var3"},
     };
     EXPECT_THAT(data->remappings, ContainerEq(expected_remappings));
 }
@@ -133,7 +201,7 @@ fn tint_symbol() -> @builtin(position) vec4<f32> {
     auto* data = got.data.Get<Renamer::Data>();
 
     ASSERT_NE(data, nullptr);
-    Renamer::Data::Remappings expected_remappings = {
+    Renamer::Remappings expected_remappings = {
         {"entry", "tint_symbol"},  {"v", "tint_symbol_1"}, {"rgba", "tint_symbol_2"},
         {"xyzw", "tint_symbol_3"}, {"z", "tint_symbol_4"},
     };
@@ -164,7 +232,7 @@ fn tint_symbol() -> @builtin(position) vec4<f32> {
     auto* data = got.data.Get<Renamer::Data>();
 
     ASSERT_NE(data, nullptr);
-    Renamer::Data::Remappings expected_remappings = {
+    Renamer::Remappings expected_remappings = {
         {"entry", "tint_symbol"},
         {"blah", "tint_symbol_1"},
     };
@@ -199,9 +267,54 @@ fn tint_symbol() {
     auto* data = got.data.Get<Renamer::Data>();
 
     ASSERT_NE(data, nullptr);
-    Renamer::Data::Remappings expected_remappings = {
+    Renamer::Remappings expected_remappings = {
         {"entry", "tint_symbol"}, {"a", "tint_symbol_1"}, {"b", "tint_symbol_2"},
         {"c", "tint_symbol_3"},   {"d", "tint_symbol_4"},
+    };
+    EXPECT_THAT(data->remappings, ContainerEq(expected_remappings));
+}
+
+TEST_F(RenamerTest, PreserveBuiltinTypes_ViaPointerDot) {
+    auto* src = R"(
+@compute @workgroup_size(1)
+fn entry() {
+  var m = modf(1.0);
+  let p1 = &m;
+  var f = frexp(1.0);
+  let p2 = &f;
+
+  var a = p1.whole;
+  var b = p1.fract;
+  var c = p2.fract;
+  var d = p2.exp;
+}
+)";
+
+    auto* expect = R"(
+@compute @workgroup_size(1)
+fn tint_symbol() {
+  var tint_symbol_1 = modf(1.0);
+  let tint_symbol_2 = &(tint_symbol_1);
+  var tint_symbol_3 = frexp(1.0);
+  let tint_symbol_4 = &(tint_symbol_3);
+  var tint_symbol_5 = tint_symbol_2.whole;
+  var tint_symbol_6 = tint_symbol_2.fract;
+  var tint_symbol_7 = tint_symbol_4.fract;
+  var tint_symbol_8 = tint_symbol_4.exp;
+}
+)";
+
+    auto got = Run<Renamer>(src);
+
+    EXPECT_EQ(expect, str(got));
+
+    auto* data = got.data.Get<Renamer::Data>();
+
+    ASSERT_NE(data, nullptr);
+    Renamer::Remappings expected_remappings = {
+        {"entry", "tint_symbol"}, {"m", "tint_symbol_1"},  {"p1", "tint_symbol_2"},
+        {"f", "tint_symbol_3"},   {"p2", "tint_symbol_4"}, {"a", "tint_symbol_5"},
+        {"b", "tint_symbol_6"},   {"c", "tint_symbol_7"},  {"d", "tint_symbol_8"},
     };
     EXPECT_THAT(data->remappings, ContainerEq(expected_remappings));
 }
@@ -241,7 +354,7 @@ fn tint_symbol(@location(0) tint_symbol_1 : f32) -> @location(0) f32 {
     auto* data = got.data.Get<Renamer::Data>();
 
     ASSERT_NE(data, nullptr);
-    Renamer::Data::Remappings expected_remappings = {
+    Renamer::Remappings expected_remappings = {
         {"entry", "tint_symbol"},
         {"value", "tint_symbol_1"},
     };
@@ -319,7 +432,7 @@ fn tint_symbol() -> @builtin(position) vec4<f32> {
     auto* data = got.data.Get<Renamer::Data>();
 
     ASSERT_NE(data, nullptr);
-    Renamer::Data::Remappings expected_remappings = {
+    Renamer::Remappings expected_remappings = {
         {"entry", "tint_symbol"},
         {"tint_symbol", "tint_symbol_1"},
         {"tint_symbol_2", "tint_symbol_2"},
@@ -1723,22 +1836,21 @@ std::string ExpandBuiltinType(std::string_view name) {
     return std::string(name);
 }
 
-std::vector<const char*> ConstructableTypes() {
-    std::vector<const char*> out;
-    for (auto* ty : core::kBuiltinTypeStrings) {
-        std::string_view type(ty);
+std::vector<std::string_view> ConstructableTypes() {
+    std::vector<std::string_view> out;
+    for (auto type : core::kBuiltinTypeStrings) {
         if (type != "ptr" && type != "atomic" && !tint::HasPrefix(type, "sampler") &&
             !tint::HasPrefix(type, "texture") && !tint::HasPrefix(type, "__")) {
-            out.push_back(ty);
+            out.push_back(type);
         }
     }
     return out;
 }
 
-using RenamerBuiltinTypeTest = TransformTestWithParam<const char*>;
+using RenamerBuiltinTypeTest = TransformTestWithParam<std::string_view>;
 
 TEST_P(RenamerBuiltinTypeTest, PreserveTypeUsage) {
-    auto expand = [&](const char* source) {
+    auto expand = [&](std::string_view source) {
         return tint::ReplaceAll(source, "$type", ExpandBuiltinType(GetParam()));
     };
 
@@ -1777,7 +1889,7 @@ struct tint_symbol_5 {
     EXPECT_EQ(expect, str(got));
 }
 TEST_P(RenamerBuiltinTypeTest, PreserveTypeInitializer) {
-    auto expand = [&](const char* source) {
+    auto expand = [&](std::string_view source) {
         return tint::ReplaceAll(source, "$type", ExpandBuiltinType(GetParam()));
     };
 
@@ -1809,7 +1921,7 @@ TEST_P(RenamerBuiltinTypeTest, PreserveTypeConversion) {
         return;  // Cannot value convert arrays.
     }
 
-    auto expand = [&](const char* source) {
+    auto expand = [&](std::string_view source) {
         return tint::ReplaceAll(source, "$type", ExpandBuiltinType(GetParam()));
     };
 
@@ -1861,7 +1973,7 @@ fn tint_symbol() {
 }
 
 TEST_P(RenamerBuiltinTypeTest, RenameShadowedByAlias) {
-    auto expand = [&](const char* source) {
+    auto expand = [&](std::string_view source) {
         std::string_view ty = GetParam();
         auto out = tint::ReplaceAll(source, "$name", ty);
         out = tint::ReplaceAll(out, "$type", ExpandBuiltinType(ty));
@@ -1893,7 +2005,7 @@ fn tint_symbol_1() {
 }
 
 TEST_P(RenamerBuiltinTypeTest, RenameShadowedByStruct) {
-    auto expand = [&](const char* source) {
+    auto expand = [&](std::string_view source) {
         std::string_view ty = GetParam();
         auto out = tint::ReplaceAll(source, "$name", ty);
         out = tint::ReplaceAll(out, "$type", ExpandBuiltinType(ty));
@@ -1935,31 +2047,33 @@ INSTANTIATE_TEST_SUITE_P(RenamerBuiltinTypeTest,
                          testing::ValuesIn(ConstructableTypes()));
 
 /// @return WGSL builtin identifier keywords
-std::vector<const char*> Identifiers() {
-    std::vector<const char*> out;
-    for (auto* ident : core::kBuiltinTypeStrings) {
+std::vector<std::string_view> Identifiers() {
+    std::vector<std::string_view> out;
+    for (auto ident : core::kBuiltinTypeStrings) {
         if (!tint::HasPrefix(ident, "__")) {
             out.push_back(ident);
         }
     }
-    for (auto* ident : core::kAddressSpaceStrings) {
+    for (auto ident : core::kAddressSpaceStrings) {
         if (!tint::HasPrefix(ident, "_")) {
             out.push_back(ident);
         }
     }
-    for (auto* ident : core::kTexelFormatStrings) {
+    for (auto ident : core::kTexelFormatStrings) {
         out.push_back(ident);
     }
-    for (auto* ident : core::kAccessStrings) {
+    for (auto ident : core::kAccessStrings) {
         out.push_back(ident);
     }
     return out;
 }
 
-using RenamerBuiltinIdentifierTest = TransformTestWithParam<const char*>;
+using RenamerBuiltinIdentifierTest = TransformTestWithParam<std::string_view>;
 
 TEST_P(RenamerBuiltinIdentifierTest, GlobalConstName) {
-    auto expand = [&](const char* source) { return tint::ReplaceAll(source, "$name", GetParam()); };
+    auto expand = [&](std::string_view source) {
+        return tint::ReplaceAll(source, "$name", GetParam());
+    };
 
     auto src = expand(R"(
 const $name = 42;
@@ -1983,7 +2097,9 @@ fn tint_symbol_1() {
 }
 
 TEST_P(RenamerBuiltinIdentifierTest, LocalVarName) {
-    auto expand = [&](const char* source) { return tint::ReplaceAll(source, "$name", GetParam()); };
+    auto expand = [&](std::string_view source) {
+        return tint::ReplaceAll(source, "$name", GetParam());
+    };
 
     auto src = expand(R"(
 fn f() {
@@ -2003,7 +2119,9 @@ fn tint_symbol() {
 }
 
 TEST_P(RenamerBuiltinIdentifierTest, FunctionName) {
-    auto expand = [&](const char* source) { return tint::ReplaceAll(source, "$name", GetParam()); };
+    auto expand = [&](std::string_view source) {
+        return tint::ReplaceAll(source, "$name", GetParam());
+    };
 
     auto src = expand(R"(
 fn $name() {
@@ -2029,7 +2147,7 @@ fn tint_symbol_1() {
 }
 
 TEST_P(RenamerBuiltinIdentifierTest, StructName) {
-    auto expand = [&](const char* source) {
+    auto expand = [&](std::string_view source) {
         std::string_view name = GetParam();
         auto out = tint::ReplaceAll(source, "$name", name);
         return tint::ReplaceAll(out, "$other_type", name == "i32" ? "u32" : "i32");

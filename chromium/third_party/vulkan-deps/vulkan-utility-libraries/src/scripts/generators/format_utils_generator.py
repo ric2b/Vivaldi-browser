@@ -81,6 +81,8 @@ class FormatUtilsOutputGenerator(BaseGenerator):
         out.append('''
 #pragma once
 
+// clang-format off
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -293,7 +295,6 @@ struct VKU_FORMAT_INFO {
     struct VKU_FORMAT_COMPONENT_INFO components[VKU_FORMAT_MAX_COMPONENTS];
 };
 ''')
-        out.append('// clang-format off\n')
         out.append('inline const struct VKU_FORMAT_INFO vkuGetFormatInfo(VkFormat format) {\n')
         out.append('    switch (format) {\n')
         for f in self.vk.formats.values():
@@ -316,7 +317,6 @@ struct VKU_FORMAT_INFO {
         }
     };
 }
-// clang-format on
 
 struct VKU_FORMAT_PER_PLANE_COMPATIBILITY {
     uint32_t width_divisor;
@@ -331,7 +331,6 @@ struct VKU_FORMAT_MULTIPLANE_COMPATIBILITY {
 
 ''')
         out.append('// Source: Vulkan spec Table 47. Plane Format Compatibility Table\n')
-        out.append('// clang-format off\n')
         out.append('inline const struct VKU_FORMAT_MULTIPLANE_COMPATIBILITY vkuGetFormatCompatibility(VkFormat format) {\n')
         out.append('    switch (format) {\n')
         for format in [x for x in self.vk.formats.values() if x.planes]:
@@ -356,7 +355,6 @@ struct VKU_FORMAT_MULTIPLANE_COMPATIBILITY {
         out.append('            return out; }\n')
         out.append('    };\n')
         out.append('}\n')
-        out.append('// clang-format on\n')
 
         for numericFormat in sorted(self.numericFormats):
             out.append(f'\n// Return true if all components in a format are an {numericFormat}\n')
@@ -383,7 +381,6 @@ inline bool vkuFormatIsSampledFloat(VkFormat format) {
                 out.append(f'        case {f}:\n')
             out.append(self.commonBoolSwitch)
 
-        out.append('\n// clang-format off\n')
         out.append('// Return true if a format is any compressed image format\n')
         out.append('bool vkuFormatIsCompressed(VkFormat format) {\n')
         out.append('    return\n')
@@ -393,7 +390,6 @@ inline bool vkuFormatIsSampledFloat(VkFormat format) {
                 out.append(' ||\n')
         out.append(';\n')
         out.append('}\n')
-        out.append('// clang-format on\n')
 
         out.append('\n// Return true if format is a depth OR stencil format\n')
         out.append('bool vkuFormatIsDepthOrStencil(VkFormat format) {\n')
@@ -656,7 +652,9 @@ inline uint32_t vkuGetPlaneIndex(VkImageAspectFlagBits aspect) {
 
 #ifdef __cplusplus
 }
-#endif''')
+#endif
+
+// clang-format off''')
 
         self.write("".join(out))
 

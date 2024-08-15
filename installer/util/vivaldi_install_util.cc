@@ -360,7 +360,7 @@ int RunNotifierSubaction(const base::CommandLine& cmdline) {
 }
 
 std::wstring GetUpdateNotifierEventName(
-    base::WStringPiece event_prefix,
+    std::wstring_view event_prefix,
     const base::FilePath& install_binary_dir) {
   const base::FilePath& exe_dir_ref = !install_binary_dir.empty()
                                           ? install_binary_dir

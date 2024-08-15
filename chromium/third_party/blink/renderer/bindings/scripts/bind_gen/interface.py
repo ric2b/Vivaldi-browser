@@ -21,6 +21,7 @@ from .code_node import SequenceNode
 from .code_node import SymbolDefinitionNode
 from .code_node import SymbolNode
 from .code_node import SymbolScopeNode
+from .code_node import SymbolSensitiveSelectionNode
 from .code_node import TextNode
 from .code_node import WeakDependencyNode
 from .code_node_cxx import CxxBlockNode
@@ -299,7 +300,7 @@ def bind_callback_local_vars(code_node, cg_context):
     local_vars.extend([
         S("blink_property_name",
           ("const AtomicString& ${blink_property_name} = "
-           "ToCoreAtomicString(${v8_property_name});")),
+           "ToCoreAtomicString(${isolate}, ${v8_property_name});")),
         S("blink_property_index",
           ("const AtomicString& ${blink_property_index} = "
            "AtomicString::Number(${index});")),
@@ -319,12 +320,6 @@ def bind_callback_local_vars(code_node, cg_context):
                                "V8PerIsolateData::From(${isolate});")),
         S("property_name",
           "const char* const ${property_name} = \"${property.identifier}\";"),
-        S("receiver_context",
-          ("v8::Local<v8::Context> ${receiver_context} = "
-           "${v8_receiver}->GetCreationContextChecked();")),
-        S("receiver_script_state",
-          ("ScriptState* ${receiver_script_state} = "
-           "ScriptState::From(${receiver_context});")),
     ])
 
     is_receiver_context = not (
@@ -335,11 +330,6 @@ def bind_callback_local_vars(code_node, cg_context):
     pattern = "const v8::Local<v8::Context>& ${creation_context} = {_1};"
     _1 = "${receiver_context}" if is_receiver_context else "${current_context}"
     local_vars.append(S("creation_context", _format(pattern, _1=_1)))
-
-    # creation_context_object
-    text = ("${v8_receiver}"
-            if is_receiver_context else "${current_context}->Global()")
-    template_vars["creation_context_object"] = T(text)
 
     # script_state
     pattern = "ScriptState* ${script_state} = {_1};"
@@ -354,7 +344,7 @@ def bind_callback_local_vars(code_node, cg_context):
     local_vars.append(S("execution_context", _format(pattern, _1=_1)))
     node = S("current_execution_context",
              ("ExecutionContext* ${current_execution_context} = "
-              "ExecutionContext::From(${current_context});"))
+              "ToExecutionContext(${current_script_state});"))
     node.accumulate(
         CodeGenAccumulator.require_include_headers([
             "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -362,7 +352,7 @@ def bind_callback_local_vars(code_node, cg_context):
     local_vars.append(node)
     node = S("receiver_execution_context",
              ("ExecutionContext* ${receiver_execution_context} = "
-              "ExecutionContext::From(${receiver_context});"))
+              "ToExecutionContext(${receiver_script_state});"))
     node.accumulate(
         CodeGenAccumulator.require_include_headers([
             "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -442,6 +432,70 @@ def bind_callback_local_vars(code_node, cg_context):
     local_vars.append(
         S("exception_state", definition_constructor=create_exception_state))
 
+    # receiver_context
+    def create_receiver_context(symbol_node):
+        node = SymbolDefinitionNode(symbol_node)
+        # tl;dr: This is an optimization to leverage
+        # `v8::Object::GetAlignedPointerFromEmbedderDataInCreationContext`.
+        # See also the comment in `create_receiver_script_state`.
+        #
+        # When ${receiver_script_state} is already defined,
+        #     ${receiver_script_state}->GetContext()
+        # is faster than
+        #     ${v8_receiver}->GetCreationContextChecked()
+        node.append(
+            SymbolSensitiveSelectionNode([
+                SymbolSensitiveSelectionNode.Choice(
+                    ["receiver_script_state"],
+                    T("v8::Local<v8::Context> ${receiver_context} = "
+                      "${receiver_script_state}->GetContext();")),
+                SymbolSensitiveSelectionNode.Choice(
+                    [],
+                    T("v8::Local<v8::Context> ${receiver_context} = "
+                      "${v8_receiver}->GetCreationContextChecked();")),
+            ]))
+        return node
+
+    local_vars.append(
+        S("receiver_context", definition_constructor=create_receiver_context))
+
+    # receiver_script_state
+    def create_receiver_script_state(symbol_node):
+        node = SymbolDefinitionNode(symbol_node)
+        # tl;dr: This is an optimization to leverage
+        # `v8::Object::GetAlignedPointerFromEmbedderDataInCreationContext`.
+        #
+        # If ${receiver_context} is not used at all, or if
+        # ${receiver_script_state} is used before ${receiver_context} is used,
+        # then
+        #     v8::Object::GetAlignedPointerFromEmbedderDataInCreationContext
+        #   + ScriptState::GetContext
+        # i.e.
+        #     ScriptState::ForRelevantRealm(v8::Local<v8::Object>)
+        #   + ScriptState::GetContext
+        # is faster than
+        #     v8::Object::GetCreationContextChecked
+        #   + ScriptState::From(v8::Local<v8::Context>)
+        # Depending on already-defined symbols, select the best way to get
+        # ${receiver_script_state}.
+        node.append(
+            SymbolSensitiveSelectionNode([
+                SymbolSensitiveSelectionNode.Choice(
+                    ["receiver_context"],
+                    T("ScriptState* ${receiver_script_state} = "
+                      "ScriptState::From(${receiver_context});")),
+                SymbolSensitiveSelectionNode.Choice(
+                    [],
+                    T("ScriptState* ${receiver_script_state} = "
+                      "ScriptState::ForRelevantRealm(${v8_receiver});")),
+            ]))
+        return node
+
+    local_vars.append(
+        S("receiver_script_state",
+          definition_constructor=create_receiver_script_state))
+
+
     # blink_receiver
     if cg_context.class_like.identifier == "Window":
         # TODO(yukishiino): Window interface should be
@@ -459,8 +513,9 @@ def bind_callback_local_vars(code_node, cg_context):
                 "LocalDOMWindow* ${blink_receiver} = &UnsafeTo<LocalDOMWindow>("
                 "*${class_name}::ToWrappableUnsafe(${v8_receiver}));")
     else:
-        pattern = ("{_1}* ${blink_receiver} = "
-                   "${class_name}::ToWrappableUnsafe(${v8_receiver});")
+        pattern = (
+            "{_1}* ${blink_receiver} = "
+            "${class_name}::ToWrappableUnsafe(${isolate}, ${v8_receiver});")
         _1 = blink_class_name(cg_context.class_like)
         text = _format(pattern, _1=_1)
     local_vars.append(S("blink_receiver", text))
@@ -489,18 +544,13 @@ def bind_callback_local_vars(code_node, cg_context):
 
     # v8_return_value
     def create_v8_return_value(symbol_node):
-        return SymbolDefinitionNode(
-            symbol_node,
-            [
-                T("v8::Local<v8::Value> ${v8_return_value};"),
-                CxxUnlikelyIfNode(  #
-                    cond=F(
-                        "!ToV8Traits<{}>::ToV8"
-                        "(${script_state}, ${return_value})"
-                        ".ToLocal(&${v8_return_value})",
-                        native_value_tag(cg_context.return_type)),
-                    body=T("return;")),
-            ])
+        return SymbolDefinitionNode(symbol_node, [
+            F(
+                "v8::Local<v8::Value> ${v8_return_value} = "
+                "ToV8Traits<{}>::ToV8"
+                "(${script_state}, ${return_value})"
+                ";", native_value_tag(cg_context.return_type)),
+        ])
 
     local_vars.append(
         S("v8_return_value", definition_constructor=create_v8_return_value))
@@ -585,15 +635,6 @@ def _make_reflect_accessor_func_name(cg_context):
             return "GetElementAttribute"
         else:
             return "SetElementAttribute"
-
-    if idl_type.element_type:
-        element_type = idl_type.element_type.unwrap()
-        if (element_type.is_interface and
-                element_type.type_definition_object.does_implement("Element")):
-            if cg_context.attribute_get:
-                return "GetElementArrayAttribute"
-            else:
-                return "SetElementArrayAttribute"
 
     if cg_context.attribute_get:
         return "FastGetAttribute"
@@ -806,9 +847,10 @@ def bind_return_value(code_node, cg_context, overriding_args=None):
                                   overriding_args=overriding_args)))
 
         nodes = []
-        is_return_type_void = ((not cg_context.return_type
-                                or cg_context.return_type.unwrap().is_void) and
-                               not cg_context.does_override_idl_return_type)
+        is_return_type_void = (
+            (not cg_context.return_type
+             or cg_context.return_type.unwrap().is_undefined)
+            and not cg_context.does_override_idl_return_type)
         if not (is_return_type_void
                 or cg_context.does_override_idl_return_type):
             return_type = blink_type_info(cg_context.return_type).value_t
@@ -1097,7 +1139,8 @@ def make_log_activity(cg_context):
         _1 = "${script_state}->World().IsIsolatedWorld() && "
     cond = _format(pattern, _1=_1)
 
-    pattern = "${per_context_data}->ActivityLogger()->{_1}(\"{_2}.{_3}\"{_4});"
+    pattern = ("${per_context_data}->ActivityLogger()->{_1}(${script_state}, "
+               "\"{_2}.{_3}\"{_4});")
     _2 = cg_context.class_like.identifier
     _3 = cg_context.property_.identifier
     if cg_context.attribute_get:
@@ -1111,7 +1154,8 @@ def make_log_activity(cg_context):
         _4 = ", ${info}"
     body = _format(pattern, _1=_1, _2=_2, _3=_3, _4=_4)
 
-    pattern = ("// [LogActivity], [LogAllWorlds]\n" "if ({_1}) {{ {_2} }}")
+    pattern = ("// [LogActivity], [LogAllWorlds]\n"
+               "if (UNLIKELY({_1})) {{ {_2} }}")
     node = TextNode(_format(pattern, _1=cond, _2=body))
     node.accumulate(
         CodeGenAccumulator.require_include_headers([
@@ -1692,7 +1736,8 @@ def make_v8_set_return_value(cg_context):
     if cg_context.does_override_idl_return_type:
         return T("bindings::V8SetReturnValue(${info}, ${return_value});")
 
-    if not cg_context.return_type or cg_context.return_type.unwrap().is_void:
+    if (not cg_context.return_type
+            or cg_context.return_type.unwrap().is_undefined):
         # Request a SymbolNode |return_value| to define itself without
         # rendering any text.
         return T("<% return_value.request_symbol_definition() %>")
@@ -1746,14 +1791,12 @@ def make_v8_set_return_value(cg_context):
                     T("bindings::V8SetReturnValue(${info}, nullptr);"),
                     T("return;")
                 ]),
-            T("v8::Local<v8::Value> v8_value;"),
-            CxxUnlikelyIfNode(cond=F(
-                "!ToV8Traits<{}>::ToV8("
+            F(
+                "v8::Local<v8::Value> v8_value = "
+                "ToV8Traits<{}>::ToV8("
                 "ToScriptState(To<LocalFrame>(blink_frame), "
                 "${script_state}->World()),"
-                "${return_value}).ToLocal(&v8_value)",
-                native_value_tag(return_type)),
-                              body=T("return;")),
+                "${return_value});", native_value_tag(return_type)),
             T("bindings::V8SetReturnValue(${info}, v8_value);"),
         ])
         node.accumulate(
@@ -2348,9 +2391,10 @@ def list_no_alloc_direct_call_callbacks(cg_context):
 
     Example:
       Given the following Web IDL fragments,
-        void f(DOMString);                                             // (a)
-        [NoAllocDirectCall] void f(Node node);                         // (b)
-        [NoAllocDirectCall] void f(optional long a, optional long b);  // (c)
+        undefined f(DOMString);                            // (a)
+        [NoAllocDirectCall] undefined f(Node node);        // (b)
+        [NoAllocDirectCall] undefined f(optional long a,
+                                        optional long b);  // (c)
       the following callback functions should be generated,
         void F(v8::Local<v8::Value> node);  // (b)
         void F();                           // (c)
@@ -2527,7 +2571,7 @@ def make_no_alloc_direct_call_callback_def(cg_context, function_name,
         map(lambda arg: "{} {}".format(arg.v8_type, arg.v8_arg_name),
             arg_list)) +
                  ["v8::FastApiCallbackOptions& v8_arg_callback_options"])
-    return_type = ("void" if function_like.return_type.is_void else
+    return_type = ("void" if function_like.return_type.is_undefined else
                    blink_type_info(function_like.return_type).value_t)
 
     func_def = CxxFuncDefNode(name=function_name,
@@ -3718,7 +3762,9 @@ def make_named_property_enumerator_callback(cg_context, function_name):
         TextNode("""\
 bindings::V8SetReturnValue(
     ${info},
-    ToV8(blink_property_names, ${creation_context_object}, ${isolate}));
+    ToV8Traits<IDLSequence<IDLString>>::ToV8(${script_state},
+                                             blink_property_names)
+         .As<v8::Array>());
 """)
     ])
 
@@ -4284,7 +4330,7 @@ def bind_installer_local_vars(code_node, cg_context):
 
     # execution_context
     node = S("execution_context", ("ExecutionContext* ${execution_context} = "
-                                   "ExecutionContext::From(${script_state});"))
+                                   "ToExecutionContext(${script_state});"))
     node.accumulate(
         CodeGenAccumulator.require_include_headers([
             "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -4681,7 +4727,7 @@ def _make_operation_registration_table(table_name, operation_entries):
             T("};"),
             T("// Disable compiler warnings for unused functions."),
             ListNode([
-                F("(void){};", nadc_entry.callback_name)
+                F("std::ignore = {};", nadc_entry.callback_name)
                 for entry in operation_entries
                 for nadc_entry in entry.no_alloc_direct_call_callbacks
             ]),
@@ -6383,11 +6429,6 @@ const WrapperTypeInfo& {blink_class}::wrapper_type_info_ =
 static_assert(
     std::is_base_of<ActiveScriptWrappableBase, {blink_class}>::value,
     "{blink_class} does not inherit from ActiveScriptWrappable<> despite "
-    "the IDL has [ActiveScriptWrappable] extended attribute.");
-static_assert(
-    !std::is_same<decltype(&{blink_class}::HasPendingActivity),
-                  decltype(&ScriptWrappable::HasPendingActivity)>::value,
-    "{blink_class} is not overriding hasPendingActivity() despite "
     "the IDL has [ActiveScriptWrappable] extended attribute.");"""
     else:
         pattern = """\
@@ -6395,11 +6436,6 @@ static_assert(
 static_assert(
     !std::is_base_of<ActiveScriptWrappableBase, {blink_class}>::value,
     "{blink_class} inherits from ActiveScriptWrappable<> without "
-    "[ActiveScriptWrappable] extended attribute.");
-static_assert(
-    std::is_same<decltype(&{blink_class}::HasPendingActivity),
-                 decltype(&ScriptWrappable::HasPendingActivity)>::value,
-    "{blink_class} is overriding hasPendingActivity() without "
     "[ActiveScriptWrappable] extended attribute.");"""
     if class_like.is_interface:
         wrapper_type_info_def.append(F(pattern, blink_class=blink_class))
@@ -6631,6 +6667,11 @@ def _collect_include_headers(class_like):
         union_def_obj = idl_type.union_definition_object
         if union_def_obj is not None:
             headers.add(PathManager(union_def_obj).api_path(ext="h"))
+            return
+
+        if idl_type.is_frozen_array:
+            headers.add(
+                "third_party/blink/renderer/bindings/core/v8/frozen_array.h")
 
     for attribute in class_like.attributes:
         collect_from_idl_type(attribute.idl_type)

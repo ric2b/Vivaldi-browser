@@ -4,6 +4,7 @@
 
 #include <sstream>
 
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/to_vector.h"
@@ -11,6 +12,7 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_selections.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/profile_waiter.h"
@@ -20,14 +22,17 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #include "components/supervised_user/core/common/buildflags.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/buildflags/buildflags.h"
+#include "net/base/features.h"
 #include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/base/ui_base_features.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/common/companion/visual_search/features.h"
+#include "chrome/common/companion/visual_query/features.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace {
@@ -52,7 +57,7 @@ std::vector<KeyedServiceBaseFactory*> GetKeyedServiceBaseFactories() {
       BrowserContextDependencyManager::GetInstance();
   DependencyGraph& dependency_graph =
       dependency_manager->GetDependencyGraphForTesting();
-  std::vector<DependencyNode*> nodes;
+  std::vector<raw_ptr<DependencyNode, VectorExperimental>> nodes;
   bool success = dependency_graph.GetConstructionOrder(&nodes);
   DCHECK(success);
 
@@ -155,18 +160,25 @@ class ProfileKeyedServiceBrowserTest : public InProcessBrowserTest {
   ProfileKeyedServiceBrowserTest() {
     // Force features activation to make sure the test is accurate as possible.
     // Also removes differences between official and non official run of the
-    // tests. If a feature is integrated in the fieldtrial_testing_config.json,
-    // it might not be considered under an official build. Adding it under a
-    // InitWithFeatures to activate it would neglect that difference.
+    // tests.
+    //
+    // If a feature is integrated in the fieldtrial_testing_config.json,
+    // it might not be considered under an official build. Adding it under the
+    // InitWithFeatures below, to activate it, will solve that difference.
 
     // clang-format off
     feature_list_.InitWithFeatures(
         {
 #if !BUILDFLAG(IS_ANDROID)
           features::kTrustSafetySentimentSurvey,
-          companion::visual_search::features::kVisualSearchSuggestions,
+          companion::visual_query::features::kVisualQuerySuggestions,
 #endif  // !BUILDFLAG(IS_ANDROID)
           blink::features::kBrowsingTopics,
+          net::features::kTpcdMetadataGrants,
+          net::features::kTpcdTrialSettings,
+          features::kPersistentOriginTrials,
+          features::kSidePanelPinning,
+          features::kChromeRefresh2023,
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
           omnibox::kOnDeviceTailModel,
           omnibox::kOnDeviceHeadProviderNonIncognito,
@@ -228,6 +240,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "ExtensionURLLoaderFactory::BrowserContextShutdownNotifierFactory",
     "FederatedIdentityPermissionContext",
     "FeedbackPrivateAPI",
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    "FileChangeServiceBridge",
+#endif // BUILDFLAG(IS_CHROMEOS_LACROS)
     "FileSystemAccessPermissionContext",
     "GeneratedPrefs",
     "HeavyAdService",
@@ -247,6 +262,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
 #if BUILDFLAG(ENABLE_PDF)
     "PdfViewerPrivateEventRouter",
 #endif  // BUILDFLAG(ENABLE_PDF)
+    "PinnedToolbarActionsModel",
     "PlatformNotificationService",
     "PredictionModelHandlerProvider",
     "PrefWatcher",
@@ -274,6 +290,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "TrackingProtectionSettings",
     "UDPSocketEventDispatcher",
     "UkmBackgroundRecorderService",
+    "UpdaterService",
     "UsbDeviceManager",
     "UsbDeviceResourceManager",
     "sct_reporting::Factory"
@@ -301,7 +318,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     "ImageWriterControllerLacros",
 #endif
-    "ManualTestHeartbeatEvent",
     "MediaNotificationService",
     "SessionStateChangedEventDispatcher",
 #else // !BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -324,6 +340,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
     "AppShortcutManager",
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)|| BUILDFLAG(IS_WIN)
+    "ManualTestHeartbeatEvent",
+#endif // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)|| BUILDFLAG(IS_WIN)
     "AppTerminationObserver",
     "AppWindowRegistry",
     "AudioAPI",
@@ -386,6 +405,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "ExtensionWebUIOverrideRegistrar",
     "FederatedIdentityPermissionContext",
     "FeedbackPrivateAPI",
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    "FileChangeServiceBridge",
+#endif // BUILDFLAG(IS_CHROMEOS_LACROS)
     "FileSystemAccessPermissionContext",
     "FirstPartySetsPolicyService",
     "FontPrefChangeNotifier",
@@ -410,9 +432,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "InstallVerifier",
     "InstanceIDProfileService",
     "InvalidationService",
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    "KidsChromeManagementClient",
-#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
     "LanguageSettingsPrivateDelegate",
     "LazyBackgroundTaskQueue",
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -449,6 +468,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "PermissionsUpdaterShutdownFactory",
     "PersonalDataManager",
     "PinnedTabService",
+    "PinnedToolbarActionsModel",
     "PlatformNotificationService",
     "PluginManager",
     "PluginPrefs",
@@ -466,7 +486,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "ProcessMap",
     "ProcessesAPI",
     "ProfileNetworkContextService",
-    "ProfileThemeUpdateServiceFactory",
     "ProtocolHandlerRegistry",
     "RealtimeReportingClient",
     "RendererStartupHelper",
@@ -480,6 +499,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "SafeBrowsingMetricsCollector",
     "SafeBrowsingPrivateEventRouter",
     "SafeBrowsingTailoredSecurityService",
+    "SearchEngineChoiceServiceFactory",
     "SendTabToSelfClientService",
     "SendTabToSelfSyncService",
     "SerialConnectionManager",
@@ -508,18 +528,20 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "TemplateURLServiceFactory",
     "ThemeService",
     "ToolbarActionsModel",
+    "TpcdTrialService",
     "TrackingProtectionSettings",
     "TranslateRanker",
     "TriggeredProfileResetter",
     "TtsAPI",
     "UDPSocketEventDispatcher",
     "UkmBackgroundRecorderService",
+    "UpdaterService",
     "UsbDeviceManager",
     "UsbDeviceResourceManager",
     "UserCloudPolicyInvalidator",
     "UserPolicySigninService",
 #if !BUILDFLAG(IS_ANDROID)
-    "VisualSearchSuggestionsService",
+    "VisualQuerySuggestionsService",
 #endif  // !BUILDFLAG(IS_ANDROID)
     "WarningBadgeService",
     "WarningService",
@@ -559,11 +581,10 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "AutocompleteControllerEmitter",
     "AutofillInternalsService",
     "CanMakePaymentQuery",
+    "DataControlsRulesService",
     "LocalPresentationManager",
-    "MediaRouter",
     "OmniboxInputWatcher",
     "OmniboxSuggestionsWatcher",
-    "PasswordChangeSuccessTracker",
     "PasswordManagerInternalsService",
     "PasswordRequirementsServiceFactory",
     "PolicyBlocklist",
@@ -604,10 +625,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     // default, however their creation is still possible.
     "AutocompleteControllerEmitter",
     "CanMakePaymentQuery",
-    "MediaRouter",
+    "DataControlsRulesService",
     "OmniboxInputWatcher",
     "OmniboxSuggestionsWatcher",
-    "PasswordChangeSuccessTracker",
     "PolicyBlocklist",
     "PolicyClipboardRestriction",
     "SafeSearch",

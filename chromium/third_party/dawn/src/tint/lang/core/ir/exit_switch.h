@@ -46,6 +46,9 @@ class ExitSwitch final : public Castable<ExitSwitch, Exit> {
     /// The base offset in Operands() for the args
     static constexpr size_t kArgsOperandOffset = 0;
 
+    /// Constructor (no operands, no switch)
+    ExitSwitch();
+
     /// Constructor
     /// @param sw the switch being exited
     /// @param args the target MultiInBlock arguments
@@ -62,8 +65,11 @@ class ExitSwitch final : public Castable<ExitSwitch, Exit> {
     /// @returns the switch being exited
     ir::Switch* Switch();
 
+    /// @returns the switch being exited
+    const ir::Switch* Switch() const;
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "exit_switch"; }
+    std::string FriendlyName() const override { return "exit_switch"; }
 };
 
 }  // namespace tint::core::ir

@@ -8,6 +8,8 @@ import("//rlz/buildflags/buildflags.gni")
 
 source_set("model") {
   sources = [
+    "search_engine_choice_service_factory.cc",
+    "search_engine_choice_service_factory.h",
     "search_engine_java_script_feature.h",
     "search_engine_java_script_feature.mm",
     "search_engine_observer_bridge.h",
@@ -39,8 +41,8 @@ source_set("model") {
     "//components/search",
     "//components/search_engines",
     "//components/version_info",
-    "//ios/chrome/browser/google",
-    "//ios/chrome/browser/history",
+    "//ios/chrome/browser/google/model",
+    "//ios/chrome/browser/history/model",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/public/features:system_flags",
@@ -84,19 +86,22 @@ source_set("unit_tests") {
     "extension_search_engine_data_updater_unittest.mm",
     "search_engine_js_unittest.mm",
     "search_engine_tab_helper_unittest.mm",
+    "search_engines_util_unittest.cc",
   ]
   deps = [
     ":extension_search_engine_data_updater",
     ":model",
+    ":search_engines_util",
     "//base:base",
     "//base/test:test_support",
+    "//components/country_codes",
     "//components/favicon/core",
     "//components/favicon/ios",
     "//components/search_engines",
     "//ios/chrome/browser/favicon:favicon",
     "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/browser_state:test_support",
-    "//ios/chrome/browser/web:web_internal",
+    "//ios/chrome/browser/web/model:web_internal",
     "//ios/chrome/common/app_group",
     "//ios/web",
     "//ios/web/public/test",

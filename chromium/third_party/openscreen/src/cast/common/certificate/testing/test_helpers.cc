@@ -9,7 +9,8 @@
 #include <openssl/rsa.h>
 #include <stdio.h>
 
-#include "absl/strings/match.h"
+#include <cstring>
+
 #include "util/osp_logging.h"
 
 namespace openscreen::cast {
@@ -32,13 +33,13 @@ SignatureTestData ReadSignatureTestData(std::string_view filename) {
   unsigned char* data;
   long length;  // NOLINT
   while (PEM_read(fp, &name, &header, &data, &length) == 1) {
-    if (strcmp(name, "MESSAGE") == 0) {
+    if (std::strcmp(name, "MESSAGE") == 0) {
       OSP_DCHECK(result.message.empty());
       result.message = ByteBuffer(data, length);
-    } else if (strcmp(name, "SIGNATURE SHA1") == 0) {
+    } else if (std::strcmp(name, "SIGNATURE SHA1") == 0) {
       OSP_DCHECK(result.sha1.empty());
       result.sha1 = ByteBuffer(data, length);
-    } else if (strcmp(name, "SIGNATURE SHA256") == 0) {
+    } else if (std::strcmp(name, "SIGNATURE SHA256") == 0) {
       OSP_DCHECK(result.sha256.empty());
       result.sha256 = ByteBuffer(data, length);
     } else {

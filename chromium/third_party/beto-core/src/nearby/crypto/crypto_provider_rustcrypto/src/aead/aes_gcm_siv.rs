@@ -12,74 +12,118 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use aes_gcm_siv::{AeadInPlace, Aes128GcmSiv, Aes256GcmSiv, KeyInit, Nonce};
+#[cfg(feature = "alloc")]
 extern crate alloc;
+#[cfg(feature = "alloc")]
+use aead::Payload;
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use crypto_provider::aead::{Aead, AeadError};
 
-use crypto_provider::aead::aes_gcm_siv::AesGcmSiv;
-use crypto_provider::aes::{Aes128Key, Aes256Key, AesKey};
+// RustCrypto defined traits and types
+use aes::cipher::typenum::consts::U16;
+use aes::cipher::BlockCipher;
+use aes::cipher::BlockEncrypt;
+#[cfg(feature = "alloc")]
+use aes_gcm_siv::aead::Aead as _;
+use aes_gcm_siv::aead::KeyInit;
+use aes_gcm_siv::AeadInPlace as _;
 
-pub struct AesGcmSiv128(Aes128GcmSiv);
+// CryptoProvider traits and types
+use crypto_provider::aead::{Aead, AeadError, AeadInit};
 
-impl AesGcmSiv for AesGcmSiv128 {}
+pub struct AesGcmSiv<A: BlockCipher<BlockSize = U16> + BlockEncrypt + KeyInit>(
+    aes_gcm_siv::AesGcmSiv<A>,
+);
 
-impl Aead for AesGcmSiv128 {
-    const TAG_SIZE: usize = 16;
-    type Nonce = [u8; 12];
-    type Key = Aes128Key;
+impl<A: BlockCipher<BlockSize = U16> + BlockEncrypt + KeyInit> crypto_provider::aead::AesGcmSiv
+    for AesGcmSiv<A>
+{
+}
 
-    fn new(key: &Self::Key) -> Self {
-        Self(Aes128GcmSiv::new(key.as_slice().into()))
-    }
-
-    fn encrypt(&self, msg: &mut Vec<u8>, aad: &[u8], nonce: &[u8; 12]) -> Result<(), AeadError> {
-        self.0.encrypt_in_place(Nonce::from_slice(nonce), aad, msg).map_err(|_| AeadError)
-    }
-
-    fn decrypt(&self, msg: &mut Vec<u8>, aad: &[u8], nonce: &[u8; 12]) -> Result<(), AeadError> {
-        self.0.decrypt_in_place(Nonce::from_slice(nonce), aad, msg).map_err(|_| AeadError)
+impl<K: crypto_provider::aes::AesKey, A: BlockCipher<BlockSize = U16> + BlockEncrypt + KeyInit>
+    AeadInit<K> for AesGcmSiv<A>
+{
+    fn new(key: &K) -> Self {
+        Self(aes_gcm_siv::AesGcmSiv::<A>::new(key.as_slice().into()))
     }
 }
 
-pub struct AesGcmSiv256(Aes256GcmSiv);
-
-impl AesGcmSiv for AesGcmSiv256 {}
-
-impl Aead for AesGcmSiv256 {
+impl<A: aes::cipher::BlockCipher<BlockSize = U16> + BlockEncrypt + KeyInit> Aead for AesGcmSiv<A> {
     const TAG_SIZE: usize = 16;
     type Nonce = [u8; 12];
-    type Key = Aes256Key;
+    type Tag = [u8; 16];
 
-    fn new(key: &Self::Key) -> Self {
-        Self(Aes256GcmSiv::new(key.as_slice().into()))
+    #[cfg(feature = "alloc")]
+    fn encrypt(&self, msg: &[u8], aad: &[u8], nonce: &Self::Nonce) -> Result<Vec<u8>, AeadError> {
+        self.0
+            .encrypt(aes_gcm_siv::Nonce::from_slice(nonce), Payload { msg, aad })
+            .map_err(|_| AeadError)
     }
 
-    fn encrypt(&self, msg: &mut Vec<u8>, aad: &[u8], nonce: &[u8; 12]) -> Result<(), AeadError> {
-        self.0.encrypt_in_place(Nonce::from_slice(nonce), aad, msg).map_err(|_| AeadError)
+    fn encrypt_detached(
+        &self,
+        msg: &mut [u8],
+        aad: &[u8],
+        nonce: &Self::Nonce,
+    ) -> Result<Self::Tag, AeadError> {
+        self.0
+            .encrypt_in_place_detached(aes_gcm_siv::Nonce::from_slice(nonce), aad, msg)
+            .map(|arr| arr.into())
+            .map_err(|_| AeadError)
     }
 
-    fn decrypt(&self, msg: &mut Vec<u8>, aad: &[u8], nonce: &[u8; 12]) -> Result<(), AeadError> {
-        self.0.decrypt_in_place(Nonce::from_slice(nonce), aad, msg).map_err(|_| AeadError)
+    #[cfg(feature = "alloc")]
+    fn decrypt(&self, msg: &[u8], aad: &[u8], nonce: &Self::Nonce) -> Result<Vec<u8>, AeadError> {
+        self.0
+            .decrypt(aes_gcm_siv::Nonce::from_slice(nonce), Payload { msg, aad })
+            .map_err(|_| AeadError)
+    }
+
+    fn decrypt_detached(
+        &self,
+        msg: &mut [u8],
+        aad: &[u8],
+        nonce: &Self::Nonce,
+        tag: &Self::Tag,
+    ) -> Result<(), AeadError> {
+        self.0
+            .decrypt_in_place_detached(aes_gcm_siv::Nonce::from_slice(nonce), aad, msg, tag.into())
+            .map_err(|_| AeadError)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use core::marker::PhantomData;
-
     use crypto_provider_test::aead::aes_gcm_siv::*;
     use crypto_provider_test::aes::*;
-
-    use super::*;
+    use crypto_provider_test::prelude::apply;
 
     #[apply(aes_128_gcm_siv_test_cases)]
-    fn aes_gcm_siv_128_test(testcase: CryptoProviderTestCase<AesGcmSiv128>) {
+    fn aes_gcm_siv_128_test(
+        testcase: CryptoProviderTestCase<crate::aead::aes_gcm_siv::AesGcmSiv<aes::Aes128>>,
+    ) {
+        testcase(PhantomData);
+    }
+
+    #[apply(aes_128_gcm_siv_test_cases_detached)]
+    fn aes_gcm_siv_128_test_detached(
+        testcase: CryptoProviderTestCase<crate::aead::aes_gcm_siv::AesGcmSiv<aes::Aes128>>,
+    ) {
         testcase(PhantomData);
     }
 
     #[apply(aes_256_gcm_siv_test_cases)]
-    fn aes_gcm_siv_256_test(testcase: CryptoProviderTestCase<AesGcmSiv256>) {
+    fn aes_gcm_siv_256_test(
+        testcase: CryptoProviderTestCase<crate::aead::aes_gcm_siv::AesGcmSiv<aes::Aes256>>,
+    ) {
+        testcase(PhantomData);
+    }
+
+    #[apply(aes_256_gcm_siv_test_cases_detached)]
+    fn aes_gcm_siv_256_test_detached(
+        testcase: CryptoProviderTestCase<crate::aead::aes_gcm_siv::AesGcmSiv<aes::Aes256>>,
+    ) {
         testcase(PhantomData);
     }
 }

@@ -6,13 +6,12 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import type * as Protocol from '../../generated/protocol.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import liveHeapProfileStyles from './liveHeapProfile.css.js';
-
-import type * as Protocol from '../../generated/protocol.js';
 
 const UIStrings = {
   /**
@@ -72,8 +71,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
     this.setting = Common.Settings.Settings.instance().moduleSetting('memoryLiveHeapProfile');
     const toolbar = new UI.Toolbar.Toolbar('live-heap-profile-toolbar', this.contentElement);
     this.toggleRecordAction =
-        (UI.ActionRegistry.ActionRegistry.instance().action('live-heap-profile.toggle-recording') as
-         UI.ActionRegistration.Action);
+        UI.ActionRegistry.ActionRegistry.instance().getAction('live-heap-profile.toggle-recording');
     this.toggleRecordButton =
         (UI.Toolbar.Toolbar.createActionButton(this.toggleRecordAction) as UI.Toolbar.ToolbarToggle);
     this.toggleRecordButton.setToggled(this.setting.get());
@@ -82,8 +80,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
     const mainTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
     if (mainTarget && mainTarget.model(SDK.ResourceTreeModel.ResourceTreeModel)) {
       const startWithReloadAction =
-          (UI.ActionRegistry.ActionRegistry.instance().action('live-heap-profile.start-with-reload') as
-           UI.ActionRegistration.Action);
+          UI.ActionRegistry.ActionRegistry.instance().getAction('live-heap-profile.start-with-reload');
       this.startWithReloadButton = UI.Toolbar.Toolbar.createActionButton(startWithReloadAction);
       toolbar.appendToolbarItem(this.startWithReloadButton);
     }
@@ -102,8 +99,9 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
   }
 
   createDataGrid(): DataGrid.SortableDataGrid.SortableDataGrid<GridNode> {
+    const k = Platform.StringUtilities.kebab;
     const defaultColumnConfig: DataGrid.DataGrid.ColumnDescriptor = {
-      id: '',
+      id: k(''),
       title: Common.UIString.LocalizedEmptyString,
       width: undefined,
       fixedWidth: true,
@@ -123,7 +121,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
     const columns = [
       {
         ...defaultColumnConfig,
-        id: 'size',
+        id: k('size'),
         title: i18nString(UIStrings.jsHeap),
         width: '72px',
         fixedWidth: true,
@@ -134,7 +132,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
       },
       {
         ...defaultColumnConfig,
-        id: 'isolates',
+        id: k('isolates'),
         title: i18nString(UIStrings.vms),
         width: '40px',
         fixedWidth: true,
@@ -143,7 +141,7 @@ export class LiveHeapProfileView extends UI.Widget.VBox {
       },
       {
         ...defaultColumnConfig,
-        id: 'url',
+        id: k('url'),
         title: i18nString(UIStrings.scriptUrl),
         fixedWidth: false,
         sortable: true,
@@ -390,19 +388,7 @@ export class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<unk
   }
 }
 
-let profilerActionDelegateInstance: ActionDelegate;
-
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  static instance(opts: {
-    forceNew: boolean|null,
-  } = {forceNew: null}): ActionDelegate {
-    const {forceNew} = opts;
-    if (!profilerActionDelegateInstance || forceNew) {
-      profilerActionDelegateInstance = new ActionDelegate();
-    }
-    return profilerActionDelegateInstance;
-  }
-
   handleAction(_context: UI.Context.Context, actionId: string): boolean {
     void (async(): Promise<void> => {
       const profileViewId = 'live_heap_profile';

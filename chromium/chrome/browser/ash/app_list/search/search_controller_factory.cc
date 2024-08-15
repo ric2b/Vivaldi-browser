@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/app_list/search/app_search_provider.h"
+#include "chrome/browser/ash/app_list/search/app_shortcuts_search_provider.h"
 #include "chrome/browser/ash/app_list/search/app_zero_state_provider.h"
 #include "chrome/browser/ash/app_list/search/arc/arc_app_shortcuts_search_provider.h"
 #include "chrome/browser/ash/app_list/search/arc/arc_playstore_search_provider.h"
@@ -45,6 +46,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/settings/services/settings_manager/os_settings_manager.h"
 #include "chrome/browser/ui/webui/ash/settings/services/settings_manager/os_settings_manager_factory.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/session_manager/core/session_manager.h"
 
 namespace app_list {
@@ -97,6 +99,10 @@ std::unique_ptr<SearchController> CreateSearchController(
       controller->AddProvider(
           std::make_unique<LocalImageSearchProvider>(profile));
     }
+    if (chromeos::features::IsCrosWebAppShortcutUiUpdateEnabled()) {
+      controller->AddProvider(std::make_unique<AppShortcutsSearchProvider>(
+          profile, list_controller));
+    }
   }
 
   if (app_list_features::IsLauncherPlayStoreSearchEnabled()) {
@@ -109,7 +115,8 @@ std::unique_ptr<SearchController> CreateSearchController(
         kMaxAppShortcutResults, profile, list_controller));
   }
 
-  if (base::GetFieldTrialParamByFeatureAsBool(
+  if (ash::features::IsLauncherContinueSectionWithRecentsEnabled() ||
+      base::GetFieldTrialParamByFeatureAsBool(
           ash::features::kProductivityLauncher, "enable_continue", false)) {
     controller->AddProvider(std::make_unique<ZeroStateFileProvider>(profile));
 
@@ -129,7 +136,10 @@ std::unique_ptr<SearchController> CreateSearchController(
         os_settings_manager->hierarchy()));
   }
 
-  controller->AddProvider(std::make_unique<KeyboardShortcutProvider>(profile));
+  controller->AddProvider(std::make_unique<KeyboardShortcutProvider>(
+      profile, std::make_unique<ManateeCache>(
+                   profile, profile->GetDefaultStoragePartition()
+                                ->GetURLLoaderFactoryForBrowserProcess())));
 
   if (base::FeatureList::IsEnabled(ash::features::kHelpAppLauncherSearch)) {
     controller->AddProvider(std::make_unique<HelpAppProvider>(
@@ -141,10 +151,8 @@ std::unique_ptr<SearchController> CreateSearchController(
   controller->AddProvider(
       std::make_unique<HelpAppZeroStateProvider>(profile, notifier));
 
-  if (base::FeatureList::IsEnabled(ash::features::kAppLaunchAutomation)) {
-    controller->AddProvider(
-        std::make_unique<DesksAdminTemplateProvider>(profile, list_controller));
-  }
+  controller->AddProvider(
+      std::make_unique<DesksAdminTemplateProvider>(profile, list_controller));
 
   if (search_features::IsLauncherGameSearchEnabled()) {
     controller->AddProvider(

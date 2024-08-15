@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_STORE_ANDROID_BACKEND_H_
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include "base/containers/small_map.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -21,12 +23,15 @@
 #include "chrome/browser/password_manager/android/password_store_android_backend_bridge_helper.h"
 #include "chrome/browser/password_manager/android/password_store_android_backend_dispatcher_bridge.h"
 #include "chrome/browser/password_manager/android/password_sync_controller_delegate_android.h"
-#include "components/password_manager/core/browser/password_store_backend.h"
-#include "components/password_manager/core/browser/password_store_backend_metrics_recorder.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend_metrics_recorder.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
+class PrefService;
+
 namespace password_manager {
+
+class AffiliationsPrefetcher;
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused. Update enums.xml whenever updating
@@ -62,7 +67,10 @@ enum class PasswordStoreOperation {
   // Operations that are not safe to retry because they are modifying.
   kAddLoginAsync = 4,
   kUpdateLoginAsync = 5,
-  kRemoveLoginForAccount = 6,
+
+  // Obsolete
+  // kRemoveLoginForAccount = 6,
+
   kRemoveLoginAsync = 7,
   kRemoveLoginsByURLAndTimeAsync = 8,
   kRemoveLoginsCreatedBetweenAsync = 9,
@@ -73,8 +81,9 @@ enum class PasswordStoreOperation {
   // Operation that is non-modifying, but not safe to retry because it is
   // user-visible.
   kGetGroupedMatchingLoginsAsync = 12,
+  kGetAllLoginsWithBrandingInfoAsync = 13,
 
-  kMaxValue = kGetGroupedMatchingLoginsAsync,
+  kMaxValue = kGetAllLoginsWithBrandingInfoAsync,
 };
 
 // Android-specific password store backend that delegates every request to
@@ -89,14 +98,23 @@ class PasswordStoreAndroidBackend
     : public PasswordStoreBackend,
       public PasswordStoreAndroidBackendReceiverBridge::Consumer {
  public:
-  explicit PasswordStoreAndroidBackend(PrefService* prefs);
+  // Can be invoked upon AndroidBackendAPIErrorCode::kPassphraseRequired errors
+  // to attempt to resolve the error.
+  using TryFixPassphraseErrorCb =
+      base::RepeatingCallback<void(const syncer::SyncService*)>;
+
+  PasswordStoreAndroidBackend(
+      PrefService* prefs,
+      AffiliationsPrefetcher* affiliations_prefetcher);
   PasswordStoreAndroidBackend(
       base::PassKey<class PasswordStoreAndroidBackendTest>,
       std::unique_ptr<PasswordStoreAndroidBackendBridgeHelper> bridge_helper,
       std::unique_ptr<PasswordManagerLifecycleHelper> lifecycle_helper,
       std::unique_ptr<PasswordSyncControllerDelegateAndroid>
           sync_controller_delegate,
-      PrefService* prefs);
+      PrefService* prefs,
+      const TryFixPassphraseErrorCb& try_fix_passphrase_error_cb,
+      AffiliationsPrefetcher* affiliations_prefetcher);
   ~PasswordStoreAndroidBackend() override;
 
  private:
@@ -138,7 +156,7 @@ class PasswordStoreAndroidBackend
       return std::move(absl::get<T>(success_callback_));
     }
 
-    void RecordMetrics(absl::optional<AndroidBackendError> error) const;
+    void RecordMetrics(std::optional<AndroidBackendError> error) const;
     base::TimeDelta GetElapsedTimeSinceStart() const;
 
     base::TimeDelta GetDelay();
@@ -168,7 +186,7 @@ class PasswordStoreAndroidBackend
   void GetAllLoginsWithAffiliationAndBrandingAsync(
       LoginsOrErrorReply callback) override;
   void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) override;
-  void GetAllLoginsForAccountAsync(absl::optional<std::string> account,
+  void GetAllLoginsForAccountAsync(std::string account,
                                    LoginsOrErrorReply callback) override;
   void FillMatchingLoginsAsync(
       LoginsOrErrorReply callback,
@@ -199,36 +217,48 @@ class PasswordStoreAndroidBackend
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
+  base::WeakPtr<PasswordStoreBackend> AsWeakPtr() override;
 
   // Internal method used for implementing the GetAutofillableLoginsAsync method
   // from the PasswordStoreBackend interface. |operation| is the
   // PasswordStoreOperation that invoked this method and |delay| is the amount
   // of time by which the call to this method was delayed. Calls
   // GetAutofillableLogins from the PasswordStoreAndroidBackendDispatcherBridge.
-  void GetAutofillableLoginsAsyncInternal(LoginsOrErrorReply callback,
-                                          PasswordStoreOperation operation,
-                                          base::TimeDelta delay);
+  void GetAutofillableLoginsInternal(std::string account,
+                                     LoginsOrErrorReply callback,
+                                     PasswordStoreOperation operation,
+                                     base::TimeDelta delay);
 
   // Internal method used for implementing the methods from the
   // PasswordStoreBackend interface. |operation| is the PasswordStoreOperation
   // that invoked this method and |delay| is the amount of time by which the
   // call to this method was delayed. Returns the complete list of PasswordForms
   // (regardless of their blocklist status) for |account| with a |delay|.
-  void GetAllLoginsForAccountInternal(
-      PasswordStoreAndroidBackendDispatcherBridge::Account account,
-      LoginsOrErrorReply callback,
-      PasswordStoreOperation operation,
-      base::TimeDelta delay);
+  void GetAllLoginsForAccountInternal(std::string account,
+                                      LoginsOrErrorReply callback,
+                                      PasswordStoreOperation operation,
+                                      base::TimeDelta delay);
 
-  // Removes |form| from |account|.
+  // Gets logins matching |form|.
+  void GetLoginsInternal(std::string account,
+                         const PasswordFormDigest& form,
+                         bool include_psl,
+                         LoginsOrErrorReply callback,
+                         PasswordStoreOperation operation);
+
+  // Updates the form in storage with |form|.
+  void UpdateLoginInternal(std::string account,
+                           const PasswordForm& form,
+                           PasswordChangesOrErrorReply callback);
+
+  // Removes |form|.
   // |operation| is the PasswordStoreOperation  that invoked this method and
   // |delay| is the amount of time by which the call to this method was delayed.
-  void RemoveLoginForAccountInternal(
-      const PasswordForm& form,
-      PasswordStoreAndroidBackendDispatcherBridge::Account account,
-      PasswordChangesOrErrorReply callback,
-      PasswordStoreOperation operation,
-      base::TimeDelta delay);
+  void RemoveLoginInternal(std::string account,
+                           const PasswordForm& form,
+                           PasswordChangesOrErrorReply callback,
+                           PasswordStoreOperation operation,
+                           base::TimeDelta delay);
 
   // Implements the retry mechanism for the operations that are safe to retry.
   // The given |delay| comes from the previous attempt to run the operation.
@@ -258,19 +288,14 @@ class PasswordStoreAndroidBackend
                    MetricInfix metric_infix,
                    PasswordStoreOperation operation,
                    base::TimeDelta delay);
-  absl::optional<JobReturnHandler> GetAndEraseJob(JobId job_id);
-
-  // Gets logins matching |form|.
-  void GetLoginsAsync(const PasswordFormDigest& form,
-                      bool include_psl,
-                      LoginsOrErrorReply callback,
-                      PasswordStoreOperation operation);
+  std::optional<JobReturnHandler> GetAndEraseJob(JobId job_id);
 
   // Filters |logins| created between |delete_begin| and |delete_end| time
   // that match |url_filer| and asynchronously removes them.
   // |operation| is the PasswordStoreOperation  that invoked this method and
   // |delay| is the amount of time by which the call to this method was delayed.
   void FilterAndRemoveLogins(
+      std::string account,
       const base::RepeatingCallback<bool(const GURL&)>& url_filter,
       base::Time delete_begin,
       base::Time delete_end,
@@ -282,6 +307,7 @@ class PasswordStoreAndroidBackend
   // Filters logins that match |origin_filer| and asynchronously disables
   // autosignin by updating stored logins.
   void FilterAndDisableAutoSignIn(
+      std::string account,
       const base::RepeatingCallback<bool(const GURL&)>& origin_filter,
       PasswordChangesOrErrorReply completion,
       LoginsResultOrError result);
@@ -299,18 +325,6 @@ class PasswordStoreAndroidBackend
   static PasswordChangesOrErrorReply
   ReportMetricsAndInvokeCallbackForStoreModifications(
       const MetricInfix& metric_infix,
-      PasswordChangesOrErrorReply callback);
-
-  // Returns the complete list of PasswordForms (regardless of their blocklist
-  // status) for |account|.
-  void GetAllLoginsForAccount(
-      PasswordStoreAndroidBackendDispatcherBridge::Account account,
-      LoginsOrErrorReply callback);
-
-  // Removes |form| from |account|.
-  void RemoveLoginForAccount(
-      const PasswordForm& form,
-      PasswordStoreAndroidBackendDispatcherBridge::Account account,
       PasswordChangesOrErrorReply callback);
 
   // Invoked synchronously by `lifecycle_helper_` when Chrome is foregrounded.
@@ -355,6 +369,10 @@ class PasswordStoreAndroidBackend
   // requests.
   std::unique_ptr<PasswordStoreAndroidBackendBridgeHelper> bridge_helper_;
 
+  // Callback to be invoked when the backend finished initializing with
+  // the success status of the initialization.
+  base::OnceCallback<void(bool)> init_completion_callback_;
+
   raw_ptr<const syncer::SyncService> sync_service_ = nullptr;
 
   raw_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
@@ -364,6 +382,11 @@ class PasswordStoreAndroidBackend
       sync_controller_delegate_;
 
   raw_ptr<PrefService> prefs_ = nullptr;
+
+  // Nullable.
+  const TryFixPassphraseErrorCb try_fix_passphrase_error_cb_;
+
+  raw_ptr<AffiliationsPrefetcher> affiliations_prefetcher_ = nullptr;
 
   base::Time initialized_at_ = base::Time::Now();
 

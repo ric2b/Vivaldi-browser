@@ -6,8 +6,6 @@
 <translation id="1110994991967754504">Абраць правы доступу для <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885">Сервер <ph name="HOST_NAME" /> нечакана разарваў злучэнне.</translation>
 <translation id="1161325031994447685">Падлучыцеся да WI-FI яшчэ раз</translation>
-<translation id="1175364870820465910">&amp;Друк...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Паспрабуйце выдаліць файлы cookie <ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Звесткі пра версію</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не адправіў даных.</translation>
 <translation id="1559528461873125649">Такога файла або каталога няма</translation>
@@ -18,7 +16,6 @@
 <translation id="1734878702283171397">Звярніцеся да сістэмнага адміністратара.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Паспрабуйце запусціць дыягностыку сеткі Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Гэты сайт змяшчае шкоднаснае праграмнае забеспячэнне</translation>
-<translation id="1916770123977586577">Каб налады ўжыліся, перазагрузіце старонку</translation>
 <translation id="1974060860693918893">Падрабязней</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Праверце налады проксі-сервера і брандмаўэра<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Выдадзена: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -207,7 +204,6 @@
 <translation id="8940028675168378100">Заблакавана <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Перайсці да налад сайта</translation>
 <translation id="9001074447101275817">Проксі-сервер <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
-<translation id="9008201768610948239">Не зважаць</translation>
 <translation id="9025348182339809926">(хібны)</translation>
 <translation id="9039213469156557790">Таксама на старонцы выяўлена небяспечнае змесціва. Гэтае змесціва падчас перадачы могуць праглядаць іншыя, а злачынцы могуць мадыфікаваць яго, каб змяніць паводзіны старонкі.</translation>
 <translation id="9062620674789239642">Магчыма, ён быў перамешчаны, зменены або выдалены.</translation>

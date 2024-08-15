@@ -25,6 +25,7 @@
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/style/mojom/color_scheme.mojom-shared.h"
 #include "ash/style/style_viewer/system_ui_components_style_viewer_view.h"
+#include "ash/system/focus_mode/focus_mode_controller.h"
 #include "ash/system/power/power_button_controller.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
@@ -50,6 +51,7 @@
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia.h"
@@ -213,8 +215,8 @@ void HandleToggleTouchscreen() {
 }
 
 void HandleToggleTabletMode() {
-  TabletModeController* controller = Shell::Get()->tablet_mode_controller();
-  controller->SetEnabledForDev(!controller->InTabletMode());
+  Shell::Get()->tablet_mode_controller()->SetEnabledForDev(
+      !display::Screen::GetScreen()->InTabletMode());
 }
 
 void HandleToggleVideoConferenceCameraTrayIcon() {
@@ -250,7 +252,7 @@ void HandleToggleVirtualTrackpad() {
 }
 
 void HandleShowInformedRestore() {
-  Shell::Get()->window_restore_controller()->MaybeStartInformedRestore();
+  Shell::Get()->window_restore_controller()->MaybeStartPineOverviewSession();
 }
 
 // Toast debug shortcut constants.
@@ -298,7 +300,7 @@ void HandleShowSystemNudge() {
   const std::u16string title_text = u"Title text";
   const std::u16string short_body_text = u"Nudge body text";
   const std::u16string long_body_text =
-      u"Nudge body text should be clear, short and succint (80 characters "
+      u"Nudge body text should be clear, short and succinct (80 characters "
       u"recommended)";
 
   AnchoredNudgeData nudge_data(
@@ -316,11 +318,27 @@ void HandleShowSystemNudge() {
   }
 
   if (has_buttons) {
-    nudge_data.first_button_text = u"First";
-    nudge_data.second_button_text = u"Second";
+    nudge_data.primary_button_text = u"Primary";
+    nudge_data.secondary_button_text = u"Secondary";
   }
 
   Shell::Get()->anchored_nudge_manager()->Show(nudge_data);
+}
+
+// TODO(b/318897434): Remove this shortcut after testing is complete.
+void HandleToggleFocusModeState() {
+  auto* controller = FocusModeController::Get();
+  switch (controller->GetSnapshot(base::Time::Now()).state) {
+    case FocusModeSession::State::kOn:
+      controller->TriggerEndingMomentImmediately();
+      return;
+    case FocusModeSession::State::kEnding:
+      controller->ResetFocusSession();
+      return;
+    default:
+      controller->ToggleFocusMode();
+      return;
+  }
 }
 
 }  // namespace
@@ -384,6 +402,9 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
       break;
     case AcceleratorAction::kDebugClearUseKMeansPref:
       HandleClearKMeansPref();
+      break;
+    case AcceleratorAction::kDebugToggleFocusModeState:
+      HandleToggleFocusModeState();
       break;
     case AcceleratorAction::kDebugTogglePowerButtonMenu:
       HandleTogglePowerButtonMenu();

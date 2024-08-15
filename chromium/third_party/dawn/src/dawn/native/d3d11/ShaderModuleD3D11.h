@@ -48,10 +48,11 @@ class PipelineLayout;
 
 class ShaderModule final : public ShaderModuleBase {
   public:
-    static ResultOrError<Ref<ShaderModule>> Create(Device* device,
-                                                   const ShaderModuleDescriptor* descriptor,
-                                                   ShaderModuleParseResult* parseResult,
-                                                   OwnedCompilationMessages* compilationMessages);
+    static ResultOrError<Ref<ShaderModule>> Create(
+        Device* device,
+        const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
+        ShaderModuleParseResult* parseResult,
+        OwnedCompilationMessages* compilationMessages);
 
     ResultOrError<d3d::CompiledShader> Compile(
         const ProgrammableStage& programmableStage,
@@ -59,10 +60,11 @@ class ShaderModule final : public ShaderModuleBase {
         const PipelineLayout* layout,
         uint32_t compileFlags,
         const std::optional<dawn::native::d3d::InterStageShaderVariablesMask>&
-            usedInterstageVariables = {});
+            usedInterstageVariables = {},
+        const std::optional<tint::PixelLocalOptions>& pixelLocalOptions = {});
 
   private:
-    ShaderModule(Device* device, const ShaderModuleDescriptor* descriptor);
+    ShaderModule(Device* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor);
     ~ShaderModule() override = default;
     MaybeError Initialize(ShaderModuleParseResult* parseResult,
                           OwnedCompilationMessages* compilationMessages);

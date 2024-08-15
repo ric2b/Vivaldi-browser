@@ -73,6 +73,7 @@ class FilmGrain {
   FilmGrain(const FilmGrainParams& params, bool is_monochrome,
             bool color_matrix_is_identity, int subsampling_x, int subsampling_y,
             int width, int height, ThreadPool* thread_pool);
+  ~FilmGrain();
 
   // Note: These static methods are declared public so that the unit tests can
   // call them.

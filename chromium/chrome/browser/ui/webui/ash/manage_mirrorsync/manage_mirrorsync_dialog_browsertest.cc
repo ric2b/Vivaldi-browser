@@ -60,7 +60,7 @@ MATCHER_P(MojoFilePaths, matcher, "") {
 // the "error" key. The value of this is cast into a `GetSyncPathError` to
 // compare.
 MATCHER_P(SyncPathError, matcher, "") {
-  absl::optional<int> error = arg.FindInt("error");
+  std::optional<int> error = arg.FindInt("error");
   EXPECT_TRUE(error.has_value());
   auto get_sync_path_error =
       static_cast<manage_mirrorsync::mojom::PageHandler::GetSyncPathError>(
@@ -260,8 +260,7 @@ class ManageMirrorSyncDialogTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList feature_list_;
   base::ScopedTempDir temp_dir_;
   base::FilePath my_files_dir_;
-  raw_ptr<content::WebContents, DanglingUntriaged | ExperimentalAsh>
-      dialog_contents_;
+  raw_ptr<content::WebContents, DanglingUntriaged> dialog_contents_;
 
   drive::DriveIntegrationServiceFactory::FactoryCallback
       create_drive_integration_service_;

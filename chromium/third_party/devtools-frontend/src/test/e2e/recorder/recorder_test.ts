@@ -8,7 +8,7 @@ import {assert} from 'chai';
 
 import {type StepChanged} from '../../../front_end/panels/recorder/components/StepView.js';
 import {type UserFlow} from '../../../front_end/panels/recorder/models/Schema.js';
-import {type RecorderActions} from '../../../front_end/panels/recorder/recorder-actions.js';
+import {type RecorderActions} from '../../../front_end/panels/recorder/recorder-actions/recorder-actions.js';
 import {
   assertNotNullOrUndefined,
   getBrowserAndPages,
@@ -641,7 +641,7 @@ describe('Recorder', function() {
       const controller = await getRecordingController();
       await controller.evaluate(element => {
         return element.handleActions(
-            'chrome_recorder.create-recording' as RecorderActions.CreateRecording,
+            'chrome-recorder.create-recording' as RecorderActions.CreateRecording,
         );
       });
       const page = await controller.evaluate(element => {

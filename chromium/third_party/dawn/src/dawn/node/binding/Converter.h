@@ -281,64 +281,72 @@ class Converter {
 
     [[nodiscard]] bool Convert(interop::GPUBufferMapState& out, wgpu::BufferMapState in);
 
-    // The two conversion methods don't generate an error when false is returned. That
+    // These conversion methods don't generate an error when false is returned. That
     // responsibility is left to the caller if it is needed (it isn't always needed, see
     // https://gpuweb.github.io/gpuweb/#gpu-supportedfeatures)
     [[nodiscard]] bool Convert(wgpu::FeatureName& out, interop::GPUFeatureName in);
     [[nodiscard]] bool Convert(interop::GPUFeatureName& out, wgpu::FeatureName in);
+    [[nodiscard]] bool Convert(wgpu::WGSLFeatureName& out, interop::WGSLFeatureName in);
+    [[nodiscard]] bool Convert(interop::WGSLFeatureName& out, wgpu::WGSLFeatureName in);
 
     // std::string to C string
-    inline bool Convert(const char*& out, const std::string& in) {
+    [[nodiscard]] inline bool Convert(const char*& out, const std::string& in) {
         out = in.c_str();
         return true;
     }
 
-    // Pass-through (no conversion)
-    template <typename T>
-    inline bool Convert(T& out, const T& in) {
+    // Floating point number conversion. IDL rules are that double/float that isn't "unrestricted"
+    // must be finite.
+    template <typename OUT,
+              typename IN,
+              std::enable_if_t<std::is_floating_point_v<IN> && std::is_floating_point_v<OUT>,
+                               bool> = true>
+    [[nodiscard]] inline bool Convert(OUT& out, const IN& in) {
         out = in;
+        if (!std::isfinite(out)) {
+            return Throw(Napi::TypeError::New(
+                env, "Floating-point value (" + std::to_string(out) + ") is not finite"));
+        }
         return true;
     }
 
     // Integral number conversion, with dynamic limit checking
     template <typename OUT,
               typename IN,
-              typename = std::enable_if_t<std::is_integral_v<IN> && std::is_integral_v<OUT>>>
-    inline bool Convert(OUT& out, const IN& in) {
+              std::enable_if_t<std::is_integral_v<IN> && std::is_integral_v<OUT>, bool> = true>
+    [[nodiscard]] inline bool Convert(OUT& out, const IN& in) {
         out = static_cast<OUT>(in);
         if (static_cast<IN>(out) != in) {
-            Napi::Error::New(env, "Integer value (" + std::to_string(in) +
-                                      ") cannot be converted to the Dawn data type without "
-                                      "truncation of the value")
-                .ThrowAsJavaScriptException();
-            return false;
+            return Throw("Integer value (" + std::to_string(in) +
+                         ") cannot be converted to the Dawn data type without "
+                         "truncation of the value");
         }
         return true;
     }
 
     // ClampedInteger<T>
     template <typename T>
-    inline bool Convert(T& out, const interop::ClampedInteger<T>& in) {
+    [[nodiscard]] inline bool Convert(T& out, const interop::ClampedInteger<T>& in) {
         out = in;
         return true;
     }
 
     // EnforceRangeInteger<T>
     template <typename T>
-    inline bool Convert(T& out, const interop::EnforceRangeInteger<T>& in) {
+    [[nodiscard]] inline bool Convert(T& out, const interop::EnforceRangeInteger<T>& in) {
         out = in;
         return true;
     }
 
     template <typename OUT, typename... IN_TYPES>
-    inline bool Convert(OUT& out, const std::variant<IN_TYPES...>& in) {
+    [[nodiscard]] inline bool Convert(OUT& out, const std::variant<IN_TYPES...>& in) {
         return std::visit([&](auto&& i) { return Convert(out, i); }, in);
     }
 
     // If the std::optional does not have a value, then Convert() simply returns true and 'out'
     // is not assigned a new value.
     template <typename OUT, typename IN>
-    inline bool Convert(OUT& out, const std::optional<IN>& in) {
+    [[nodiscard]] inline bool Convert(OUT& out, const std::optional<IN>& in) {
         if (in.has_value()) {
             return Convert(out, in.value());
         }
@@ -351,7 +359,7 @@ class Converter {
     template <typename OUT,
               typename IN,
               typename _ = std::enable_if_t<!std::is_same_v<IN, std::string>>>
-    inline bool Convert(OUT*& out, const std::optional<IN>& in) {
+    [[nodiscard]] inline bool Convert(OUT*& out, const std::optional<IN>& in) {
         if (in.has_value()) {
             auto* el = Allocate<std::remove_const_t<OUT>>();
             if (!Convert(*el, in.value())) {
@@ -366,7 +374,7 @@ class Converter {
 
     // interop::Interface -> Dawn object
     template <typename OUT, typename IN>
-    inline bool Convert(OUT& out, const interop::Interface<IN>& in) {
+    [[nodiscard]] inline bool Convert(OUT& out, const interop::Interface<IN>& in) {
         using Impl = ImplOf<IN>;
         out = *in.template As<Impl>();
         if (!out) {
@@ -378,7 +386,7 @@ class Converter {
 
     // vector -> raw pointer + count
     template <typename OUT, typename IN>
-    inline bool Convert(OUT*& out_els, size_t& out_count, const std::vector<IN>& in) {
+    [[nodiscard]] inline bool Convert(OUT*& out_els, size_t& out_count, const std::vector<IN>& in) {
         if (in.size() == 0) {
             out_els = nullptr;
             out_count = 0;
@@ -396,9 +404,9 @@ class Converter {
 
     // unordered_map -> raw pointer + count
     template <typename OUT, typename IN_KEY, typename IN_VALUE>
-    inline bool Convert(OUT*& out_els,
-                        size_t& out_count,
-                        const std::unordered_map<IN_KEY, IN_VALUE>& in) {
+    [[nodiscard]] inline bool Convert(OUT*& out_els,
+                                      size_t& out_count,
+                                      const std::unordered_map<IN_KEY, IN_VALUE>& in) {
         if (in.size() == 0) {
             out_els = nullptr;
             out_count = 0;
@@ -417,7 +425,9 @@ class Converter {
 
     // std::optional<T> -> raw pointer + count
     template <typename OUT, typename IN>
-    inline bool Convert(OUT*& out_els, size_t& out_count, const std::optional<IN>& in) {
+    [[nodiscard]] inline bool Convert(OUT*& out_els,
+                                      size_t& out_count,
+                                      const std::optional<IN>& in) {
         if (!in.has_value()) {
             out_els = nullptr;
             out_count = 0;
@@ -426,10 +436,24 @@ class Converter {
         return Convert(out_els, out_count, in.value());
     }
 
+    // JS strings can contain the null character, replace it with some other invalid character
+    // to preserve the creation of errors in this case.
+    char* ConvertStringReplacingNull(std::string_view in);
+
     Napi::Env env;
     wgpu::Device device = nullptr;
 
     bool HasFeature(wgpu::FeatureName feature);
+
+    // Function to be used when throwing a JavaScript exception because of issues during the
+    // conversion. Because the conversion should stop immediately, this method returns false,
+    // so the pattern is:
+    //
+    //    if (some error case) {
+    //        return Throw("Some error case description");
+    //    }
+    [[nodiscard]] bool Throw(std::string&& message);
+    [[nodiscard]] bool Throw(Napi::Error&& error);
 
     // Allocate() allocates and constructs an array of 'n' elements, and returns a pointer to
     // the first element. The array is freed when the Converter is destructed.

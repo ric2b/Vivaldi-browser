@@ -7,10 +7,8 @@ import("../../../../../third_party/typescript/typescript.gni")
 ts_library("timeline_model") {
   testonly = true
   sources = [
-    "PerformanceModel_test.ts",
+    "Initiators_test.ts",
     "TimelineFrameBeginFrameQueue_test.ts",
-    "TimelineFrameModel_test.ts",
-    "TimelineJSProfile_test.ts",
     "TimelineModelFilter_test.ts",
     "TimelineModel_test.ts",
     "TimelineProfileTree_test.ts",

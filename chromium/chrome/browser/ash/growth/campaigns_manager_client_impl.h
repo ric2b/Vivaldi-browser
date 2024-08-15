@@ -35,6 +35,9 @@ class CampaignsManagerClientImpl : public growth::CampaignsManagerClient {
   bool IsFeatureAwareDevice() const override;
   const std::string& GetApplicationLocale() const override;
   const base::Version& GetDemoModeAppVersion() const override;
+  growth::ActionMap GetCampaignsActions() const override;
+  void RegisterSyntheticFieldTrial(const std::optional<int> study_id,
+                                   const int campaign_id) const override;
 
  private:
   void OnComponentDownloaded(

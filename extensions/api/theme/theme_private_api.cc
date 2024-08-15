@@ -164,13 +164,13 @@ ImportResult CreateImportResult(
 
     switch (error->kind) {
       case vivaldi_theme_io::ImportError::kIO:
-        result.error->kind = ImportErrorKind::IMPORT_ERROR_KIND_IO;
+        result.error->kind = ImportErrorKind::kIo;
         break;
       case vivaldi_theme_io::ImportError::kBadArchive:
-        result.error->kind = ImportErrorKind::IMPORT_ERROR_KIND_BADARCHIVE;
+        result.error->kind = ImportErrorKind::kBadArchive;
         break;
       case vivaldi_theme_io::ImportError::kBadSettings:
-        result.error->kind = ImportErrorKind::IMPORT_ERROR_KIND_BADSETTINGS;
+        result.error->kind = ImportErrorKind::kBadSettings;
         break;
     }
     result.error->details = std::move(error->details);

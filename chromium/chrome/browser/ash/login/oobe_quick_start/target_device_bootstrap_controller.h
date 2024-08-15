@@ -46,6 +46,7 @@ class TargetDeviceBootstrapController
     GOOGLE_ACCOUNT_INFO_RECEIVED,
     TRANSFERRING_GOOGLE_ACCOUNT_DETAILS,
     TRANSFERRED_GOOGLE_ACCOUNT_DETAILS,
+    SETUP_COMPLETE,
   };
 
   enum class ErrorCode {
@@ -55,19 +56,42 @@ class TargetDeviceBootstrapController
     USER_VERIFICATION_FAILED,
     GAIA_ASSERTION_NOT_RECEIVED,
     FETCHING_CHALLENGE_BYTES_FAILED,
+    FETCHING_ATTESTATION_CERTIFICATE_FAILED,
+    FETCHING_REFRESH_TOKEN_FAILED,
   };
 
-  using Payload = absl::
-      variant<absl::monostate, ErrorCode, QRCode::PixelData, FidoAssertionInfo>;
+  // Result of the exchange between ChromeOS, Android and the SecondDevice API.
+  // It contains the user's email and an OAuth authorization code that can be
+  // exchanged for a access/refresh token.
+  struct GaiaCredentials {
+    GaiaCredentials();
+    GaiaCredentials(const GaiaCredentials&);
+    ~GaiaCredentials();
 
-  // TODO(b/288054370) - Consolidate fields.
+    std::string email;
+    std::string auth_code;
+    std::string gaia_id;
+    // TODO(b/318664950) - Remove once the server starts sending the gaia_id.
+    std::string access_token;
+    std::string refresh_token;
+  };
+
+  using ConnectionClosedReason =
+      TargetDeviceConnectionBroker::ConnectionClosedReason;
+
+  using Payload = absl::variant<absl::monostate,
+                                ErrorCode,
+                                QRCode::PixelData,
+                                PinString,
+                                EmailString,
+                                mojom::WifiCredentials,
+                                GaiaCredentials>;
+
   struct Status {
     Status();
     ~Status();
     Step step = Step::NONE;
     Payload payload;
-    mojom::WifiCredentials wifi_credentials;
-    std::string pin;
   };
 
   class AccessibilityManagerWrapper {
@@ -124,7 +148,7 @@ class TargetDeviceBootstrapController
   void StartAdvertisingAndMaybeGetQRCode();
 
   void StopAdvertising();
-  void CloseOpenConnections();
+  void CloseOpenConnections(ConnectionClosedReason reason);
 
   // A user may initiate Quick Start then have to download an update and reboot.
   // This function persists necessary data and notifies the source device so
@@ -137,8 +161,7 @@ class TargetDeviceBootstrapController
       base::WeakPtr<TargetDeviceConnectionBroker::AuthenticatedConnection>
           authenticated_connection) override;
   void OnConnectionRejected() override;
-  void OnConnectionClosed(
-      TargetDeviceConnectionBroker::ConnectionClosedReason reason) override;
+  void OnConnectionClosed(ConnectionClosedReason reason) override;
 
   std::string GetDiscoverableName();
   void AttemptWifiCredentialTransfer();
@@ -155,16 +178,19 @@ class TargetDeviceBootstrapController
   // Called when the flow is aborted due to an error, or cancelled by the user.
   void Cleanup();
 
+  // Called when account transfer is complete.
+  void OnSetupComplete();
+
  private:
   friend class TargetDeviceBootstrapControllerTest;
 
+  void UpdateStatus(Step step, Payload payload);
   void NotifyObservers();
   void OnStartAdvertisingResult(bool success);
   void OnStopAdvertising();
 
-  void WaitForUserVerification(base::OnceClosure on_verification);
-  void OnUserVerificationResult(base::OnceClosure on_verification,
-                                absl::optional<mojom::UserVerificationResponse>
+  void WaitForUserVerification();
+  void OnUserVerificationResult(std::optional<mojom::UserVerificationResponse>
                                     user_verification_response);
 
   // If the target device successfully receives an ack message, it prepares to
@@ -174,15 +200,21 @@ class TargetDeviceBootstrapController
   void OnNotifySourceOfUpdateResponse(bool ack_successful);
 
   void OnWifiCredentialsReceived(
-      absl::optional<mojom::WifiCredentials> credentials);
-  void OnGoogleAccountInfoReceived();
-  void OnFidoAssertionReceived(absl::optional<FidoAssertionInfo> assertion);
+      std::optional<mojom::WifiCredentials> credentials);
+  void OnGoogleAccountInfoReceived(std::string account_email);
+  void OnFidoAssertionReceived(std::optional<FidoAssertionInfo> assertion);
 
   void OnChallengeBytesReceived(
       quick_start::SecondDeviceAuthBroker::ChallengeBytesOrError);
 
   // If we're not advertising, connecting, or connected, perform cleanup.
   void CleanupIfNeeded();
+
+  void OnAttestationCertificateReceived(
+      quick_start::SecondDeviceAuthBroker::AttestationCertificateOrError);
+
+  void OnAuthCodeReceived(
+      const quick_start::SecondDeviceAuthBroker::AuthCodeResponse&);
 
   void set_connection_broker_for_testing(
       std::unique_ptr<TargetDeviceConnectionBroker> connection_broker) {
@@ -191,7 +223,6 @@ class TargetDeviceBootstrapController
 
   std::unique_ptr<TargetDeviceConnectionBroker> connection_broker_;
 
-  std::string pin_;
   // TODO: Should we enforce one observer at a time here too?
   base::ObserverList<Observer> observers_;
 
@@ -202,6 +233,7 @@ class TargetDeviceBootstrapController
 
   // Challenge bytes to be sent to the Android device for the FIDO assertion.
   Base64UrlString challenge_bytes_;
+  FidoAssertionInfo fido_assertion_;
 
   std::unique_ptr<quick_start::SecondDeviceAuthBroker> auth_broker_;
   // During this instantiation of SessionContext, if resuming Quick Start after
@@ -223,6 +255,10 @@ class TargetDeviceBootstrapController
 
 std::ostream& operator<<(std::ostream& stream,
                          const TargetDeviceBootstrapController::Step& step);
+
+std::ostream& operator<<(
+    std::ostream& stream,
+    const TargetDeviceBootstrapController::ErrorCode& error_code);
 
 }  // namespace ash::quick_start
 

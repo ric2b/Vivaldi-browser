@@ -46,7 +46,8 @@ class GaiaScreen : public BaseScreen, public ScreenBacklightObserver {
     CANCEL,
     ENTERPRISE_ENROLL,
     START_CONSUMER_KIOSK,
-    QUICK_START,
+    ENTER_QUICK_START,
+    QUICK_START_ONGOING,
   };
 
   static std::string GetResultString(Result result);
@@ -82,7 +83,7 @@ class GaiaScreen : public BaseScreen, public ScreenBacklightObserver {
   void HandleIdentifierEntered(const std::string& account_identifier);
 
   void OnGetAuthFactorsConfiguration(std::unique_ptr<UserContext> user_context,
-                                     absl::optional<AuthenticationError> error);
+                                     std::optional<AuthenticationError> error);
   // Fetch Gaia reauth request token from the recovery service.
   void FetchGaiaReauthToken(const AccountId& account);
   void OnGaiaReauthTokenFetched(const AccountId& account,

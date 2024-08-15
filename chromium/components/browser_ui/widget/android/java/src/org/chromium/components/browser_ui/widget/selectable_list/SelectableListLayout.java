@@ -38,7 +38,9 @@ import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
 import org.chromium.ui.widget.LoadingView;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -47,10 +49,10 @@ import org.chromium.build.BuildConfig;
  * Contains UI elements common to selectable list views: a loading view, empty view, selection
  * toolbar, shadow, and RecyclerView.
  *
- * After the SelectableListLayout is inflated, it should be initialized through calls to
- * #initializeRecyclerView(), #initializeToolbar(), and #initializeEmptyView().
+ * <p>After the SelectableListLayout is inflated, it should be initialized through calls to
+ * #initializeRecyclerView(), #initializeToolbar(), and #initializeEmptyStateView().
  *
- * Must call #onDestroyed() to destroy SelectableListLayout properly, otherwise this would cause
+ * <p>Must call #onDestroyed() to destroy SelectableListLayout properly, otherwise this would cause
  * memory leak consistently.
  *
  * @param <E> The type of the selectable items this layout holds.
@@ -76,37 +78,41 @@ public class SelectableListLayout<E> extends FrameLayout
 
     private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
             new ObservableSupplierImpl<>();
+    private final Set<Integer> mIgnoredTypesForEmptyState = new HashSet<>();
 
     // Vivaldi
     private boolean mIsNotes;
     public static final int TAG_SEARCH = 1;
     public static final int TAG_NORMAL = 2;
 
-    private final AdapterDataObserver mAdapterObserver = new AdapterDataObserver() {
-        @Override
-        public void onChanged() {
-            super.onChanged();
-            updateLayout();
-            // At inflation, the RecyclerView is set to gone, and the loading view is visible. As
-            // long as the adapter data changes, we show the recycler view, and hide loading view.
-            mLoadingView.hideLoadingUI();
-        }
+    private final AdapterDataObserver mAdapterObserver =
+            new AdapterDataObserver() {
+                @Override
+                public void onChanged() {
+                    super.onChanged();
+                    updateLayout();
+                    // At inflation, the RecyclerView is set to gone, and the loading view is
+                    // visible. As long as the adapter data changes, we show the recycler view,
+                    // and hide loading view.
+                    mLoadingView.hideLoadingUI();
+                }
 
-        @Override
-        public void onItemRangeInserted(int positionStart, int itemCount) {
-            super.onItemRangeInserted(positionStart, itemCount);
-            updateLayout();
-            // At inflation, the RecyclerView is set to gone, and the loading view is visible. As
-            // long as the adapter data changes, we show the recycler view, and hide loading view.
-            mLoadingView.hideLoadingUI();
-        }
+                @Override
+                public void onItemRangeInserted(int positionStart, int itemCount) {
+                    super.onItemRangeInserted(positionStart, itemCount);
+                    updateLayout();
+                    // At inflation, the RecyclerView is set to gone, and the loading view is
+                    // visible. As long as the adapter data changes, we show the recycler view,
+                    // and hide loading view.
+                    mLoadingView.hideLoadingUI();
+                }
 
-        @Override
-        public void onItemRangeRemoved(int positionStart, int itemCount) {
-            super.onItemRangeRemoved(positionStart, itemCount);
-            updateLayout();
-        }
-    };
+                @Override
+                public void onItemRangeRemoved(int positionStart, int itemCount) {
+                    super.onItemRangeRemoved(positionStart, itemCount);
+                    updateLayout();
+                }
+            };
 
     public SelectableListLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -182,15 +188,25 @@ public class SelectableListLayout<E> extends FrameLayout
         mAdapter.registerAdapterDataObserver(mAdapterObserver);
 
         mRecyclerView.setHasFixedSize(true);
-        mRecyclerView.addOnScrollListener(new OnScrollListener() {
-            @Override
-            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-                setToolbarShadowVisibility();
-            }
-        });
+        mRecyclerView.addOnScrollListener(
+                new OnScrollListener() {
+                    @Override
+                    public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                        setToolbarShadowVisibility();
+                    }
+                });
         mRecyclerView.addOnLayoutChangeListener(
-                (View v, int left, int top, int right, int bottom, int oldLeft, int oldTop,
-                        int oldRight, int oldBottom) -> { setToolbarShadowVisibility(); });
+                (View v,
+                        int left,
+                        int top,
+                        int right,
+                        int bottom,
+                        int oldLeft,
+                        int oldTop,
+                        int oldRight,
+                        int oldBottom) -> {
+                    setToolbarShadowVisibility();
+                });
 
         mItemAnimator = mRecyclerView.getItemAnimator();
     }
@@ -213,9 +229,13 @@ public class SelectableListLayout<E> extends FrameLayout
      *                             the current device fully supports theming and is on Android M+.
      * @return The initialized SelectionToolbar.
      */
-    public SelectableListToolbar<E> initializeToolbar(int toolbarLayoutId,
-            SelectionDelegate<E> delegate, int titleResId, int normalGroupResId,
-            int selectedGroupResId, @Nullable OnMenuItemClickListener listener,
+    public SelectableListToolbar<E> initializeToolbar(
+            int toolbarLayoutId,
+            SelectionDelegate<E> delegate,
+            int titleResId,
+            int normalGroupResId,
+            int selectedGroupResId,
+            @Nullable OnMenuItemClickListener listener,
             boolean updateStatusBarColor) {
         mToolbarStub.setLayoutResource(toolbarLayoutId);
         @SuppressWarnings("unchecked")
@@ -314,8 +334,14 @@ public class SelectableListLayout<E> extends FrameLayout
     }
 
     /**
-     * Called when the view that owns the SelectableListLayout is destroyed.
+     * Adds the given type to the set of ignored item types. Items of this type in the adapter won't
+     * be counted when deciding to show the empty state view.
      */
+    public void ignoreItemTypeForEmptyState(int type) {
+        mIgnoredTypesForEmptyState.add(type);
+    }
+
+    /** Called when the view that owns the SelectableListLayout is destroyed. */
     public void onDestroyed() {
         mAdapter.unregisterAdapterDataObserver(mAdapterObserver);
         mToolbar.getSelectionDelegate().removeObserver(this);
@@ -338,9 +364,7 @@ public class SelectableListLayout<E> extends FrameLayout
         mUiConfig.addObserver(this);
     }
 
-    /**
-     * @return The {@link UiConfig} associated with this View if one has been created, or null.
-     */
+    /** @return The {@link UiConfig} associated with this View if one has been created, or null. */
     @Nullable
     public UiConfig getUiConfig() {
         return mUiConfig;
@@ -350,8 +374,12 @@ public class SelectableListLayout<E> extends FrameLayout
     public void onDisplayStyleChanged(DisplayStyle newDisplayStyle) {
         int padding = getPaddingForDisplayStyle(newDisplayStyle, getResources());
 
-        ViewCompat.setPaddingRelative(mRecyclerView, padding, mRecyclerView.getPaddingTop(),
-                padding, mRecyclerView.getPaddingBottom());
+        ViewCompat.setPaddingRelative(
+                mRecyclerView,
+                padding,
+                mRecyclerView.getPaddingTop(),
+                padding,
+                mRecyclerView.getPaddingBottom());
     }
 
     @Override
@@ -384,9 +412,7 @@ public class SelectableListLayout<E> extends FrameLayout
             mEmptyView.setTag(TAG_SEARCH);
     }
 
-    /**
-     * Called when a search has ended.
-     */
+    /** Called when a search has ended. */
     public void onEndSearch() {
         mRecyclerView.setItemAnimator(mItemAnimator);
         setToolbarShadowVisibility();
@@ -408,8 +434,10 @@ public class SelectableListLayout<E> extends FrameLayout
         if (displayStyle.horizontal == HorizontalDisplayStyle.WIDE) {
             int screenWidthDp = resources.getConfiguration().screenWidthDp;
             float dpToPx = resources.getDisplayMetrics().density;
-            padding = (int) (((screenWidthDp - UiConfig.WIDE_DISPLAY_STYLE_MIN_WIDTH_DP) / 2.f)
-                    * dpToPx);
+            padding =
+                    (int)
+                            (((screenWidthDp - UiConfig.WIDE_DISPLAY_STYLE_MIN_WIDTH_DP) / 2.f)
+                                    * dpToPx);
             padding = (int) Math.max(WIDE_DISPLAY_MIN_PADDING_DP * dpToPx, padding);
         }
         return padding;
@@ -429,9 +457,27 @@ public class SelectableListLayout<E> extends FrameLayout
      */
     private void updateEmptyViewVisibility() {
         if (mIsNotes) return; // Vivaldi
-        int visible = mAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE;
+        int visible = isListEffectivelyEmpty() ? View.VISIBLE : View.GONE;
         mEmptyView.setVisibility(visible);
         mEmptyViewWrapper.setVisibility(visible);
+    }
+
+    /**
+     * For efficiency, only loop over the items if there are ignored types present in the set and
+     * bail on the loop as soon as one is detected.
+     */
+    private boolean isListEffectivelyEmpty() {
+        if (mIgnoredTypesForEmptyState.isEmpty()) {
+            return mAdapter.getItemCount() == 0;
+        }
+
+        for (int i = 0; i < mAdapter.getItemCount(); i++) {
+            if (!mIgnoredTypesForEmptyState.contains(mAdapter.getItemViewType(i))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void updateLayout() {

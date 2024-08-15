@@ -5,71 +5,12 @@ Execution Tests for non-matrix f32 division expression
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
 import { TypeF32, TypeVec } from '../../../../util/conversion.js';
-import { FP, FPVector } from '../../../../util/floating_point.js';
-import { sparseF32Range, sparseVectorF32Range } from '../../../../util/math.js';
-import { makeCaseCache } from '../case_cache.js';
 import { allInputSources, run } from '../expression.js';
 
 import { binary, compoundBinary } from './binary.js';
-
-const divisionVectorScalarInterval = (v: readonly number[], s: number): FPVector => {
-  return FP.f32.toVector(v.map(e => FP.f32.divisionInterval(e, s)));
-};
-
-const divisionScalarVectorInterval = (s: number, v: readonly number[]): FPVector => {
-  return FP.f32.toVector(v.map(e => FP.f32.divisionInterval(s, e)));
-};
+import { d } from './f32_division.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-const scalar_cases = ([true, false] as const)
-  .map(nonConst => ({
-    [`scalar_${nonConst ? 'non_const' : 'const'}`]: () => {
-      return FP.f32.generateScalarPairToIntervalCases(
-        sparseF32Range(),
-        sparseF32Range(),
-        nonConst ? 'unfiltered' : 'finite',
-        FP.f32.divisionInterval
-      );
-    },
-  }))
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-const vector_scalar_cases = ([2, 3, 4] as const)
-  .flatMap(dim =>
-    ([true, false] as const).map(nonConst => ({
-      [`vec${dim}_scalar_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f32.generateVectorScalarToVectorCases(
-          sparseVectorF32Range(dim),
-          sparseF32Range(),
-          nonConst ? 'unfiltered' : 'finite',
-          divisionVectorScalarInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-const scalar_vector_cases = ([2, 3, 4] as const)
-  .flatMap(dim =>
-    ([true, false] as const).map(nonConst => ({
-      [`scalar_vec${dim}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return FP.f32.generateScalarVectorToVectorCases(
-          sparseF32Range(),
-          sparseVectorF32Range(dim),
-          nonConst ? 'unfiltered' : 'finite',
-          divisionScalarVectorInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('binary/f32_division', {
-  ...scalar_cases,
-  ...vector_scalar_cases,
-  ...scalar_vector_cases,
-});
 
 g.test('scalar')
   .specURL('https://www.w3.org/TR/WGSL/#floating-point-evaluation')

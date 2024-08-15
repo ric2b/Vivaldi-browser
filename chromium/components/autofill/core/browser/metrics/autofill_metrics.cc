@@ -15,7 +15,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
@@ -33,7 +32,6 @@
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
-#include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_interactions_flow.h"
 #include "components/language/core/browser/language_usage_metrics.h"
@@ -57,7 +55,7 @@ using autofill_metrics::FormGroupFillingStats;
 // Translates structured name types into simple names that are used for
 // naming histograms.
 constexpr auto kStructuredNameTypeToNameMap =
-    base::MakeFixedFlatMap<ServerFieldType, base::StringPiece>(
+    base::MakeFixedFlatMap<FieldType, std::string_view>(
         {{NAME_FULL, "Full"},
          {NAME_FIRST, "First"},
          {NAME_MIDDLE, "Middle"},
@@ -68,7 +66,7 @@ constexpr auto kStructuredNameTypeToNameMap =
 // Translates structured address types into simple names that are used for
 // naming histograms.
 constexpr auto kStructuredAddressTypeToNameMap =
-    base::MakeFixedFlatMap<ServerFieldType, base::StringPiece>(
+    base::MakeFixedFlatMap<FieldType, std::string_view>(
         {{ADDRESS_HOME_STREET_ADDRESS, "StreetAddress"},
          {ADDRESS_HOME_STREET_NAME, "StreetName"},
          {ADDRESS_HOME_HOUSE_NUMBER, "HouseNumber"},
@@ -76,54 +74,53 @@ constexpr auto kStructuredAddressTypeToNameMap =
          {ADDRESS_HOME_APT_NUM, "ApartmentNumber"},
          {ADDRESS_HOME_SUBPREMISE, "SubPremise"}});
 
-// Note: if adding an enum value here, update the corresponding description for
-// AutofillFieldPredictionQualityByFieldType in
-// tools/metrics/histograms/enums.xml.
+// Don't change the enum values because they are recorded in metrics.
 enum FieldTypeGroupForMetrics {
   GROUP_AMBIGUOUS = 0,
-  GROUP_NAME,
-  GROUP_COMPANY,
-  GROUP_ADDRESS_LINE_1,
-  GROUP_ADDRESS_LINE_2,
-  GROUP_ADDRESS_CITY,
-  GROUP_ADDRESS_STATE,
-  GROUP_ADDRESS_ZIP,
-  GROUP_ADDRESS_COUNTRY,
-  GROUP_ADDRESS_HOME_STREET_NAME,
-  GROUP_ADDRESS_HOME_HOUSE_NUMBER,
-  GROUP_ADDRESS_HOME_SUBPREMISE,
-  GROUP_PHONE,
-  GROUP_FAX,  // Deprecated.
-  GROUP_EMAIL,
-  GROUP_CREDIT_CARD_NAME,
-  GROUP_CREDIT_CARD_NUMBER,
-  GROUP_CREDIT_CARD_DATE,
-  GROUP_CREDIT_CARD_TYPE,
-  GROUP_PASSWORD,
-  GROUP_ADDRESS_LINE_3,
-  GROUP_USERNAME,
-  GROUP_STREET_ADDRESS,
-  GROUP_CREDIT_CARD_VERIFICATION,
-  GROUP_UNFILLABLE,
-  GROUP_ADDRESS_HOME_APT_NUM,
-  GROUP_ADDRESS_HOME_SORTING_CODE,
-  GROUP_ADDRESS_HOME_DEPENDENT_LOCALITY,
-  GROUP_ADDRESS_HOME_OTHER_SUBUNIT,
-  GROUP_ADDRESS_HOME_ADDRESS,
-  GROUP_ADDRESS_HOME_ADDRESS_WITH_NAME,
-  GROUP_ADDRESS_HOME_FLOOR,
-  GROUP_UNKNOWN_TYPE,
-  GROUP_BIRTHDATE,
-  GROUP_IBAN,
-  GROUP_ADDRESS_HOME_LANDMARK,
-  GROUP_ADDRESS_HOME_BETWEEN_STREETS,
-  GROUP_ADDRESS_HOME_ADMIN_LEVEL2,
-  GROUP_ADDRESS_HOME_STREET_LOCATION,
-  GROUP_ADDRESS_HOME_OVERFLOW,
-  GROUP_DELIVERY_INSTRUCTIONS,
-  GROUP_ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
-  GROUP_ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
-  // Add new entries here and update enums.xml.
+  GROUP_NAME = 1,
+  GROUP_COMPANY = 2,
+  GROUP_ADDRESS_LINE_1 = 3,
+  GROUP_ADDRESS_LINE_2 = 4,
+  GROUP_ADDRESS_CITY = 5,
+  GROUP_ADDRESS_STATE = 6,
+  GROUP_ADDRESS_ZIP = 7,
+  GROUP_ADDRESS_COUNTRY = 8,
+  GROUP_ADDRESS_HOME_STREET_NAME = 9,
+  GROUP_ADDRESS_HOME_HOUSE_NUMBER = 10,
+  GROUP_ADDRESS_HOME_SUBPREMISE = 11,
+  GROUP_PHONE = 12,
+  GROUP_FAX = 13,  // Deprecated.
+  GROUP_EMAIL = 14,
+  GROUP_CREDIT_CARD_NAME = 15,
+  GROUP_CREDIT_CARD_NUMBER = 16,
+  GROUP_CREDIT_CARD_DATE = 17,
+  GROUP_CREDIT_CARD_TYPE = 18,
+  GROUP_PASSWORD = 19,
+  GROUP_ADDRESS_LINE_3 = 20,
+  GROUP_USERNAME = 21,
+  GROUP_STREET_ADDRESS = 22,
+  GROUP_CREDIT_CARD_VERIFICATION = 23,
+  GROUP_UNFILLABLE = 24,
+  GROUP_ADDRESS_HOME_APT_NUM = 25,
+  GROUP_ADDRESS_HOME_SORTING_CODE = 26,
+  GROUP_ADDRESS_HOME_DEPENDENT_LOCALITY = 27,
+  GROUP_ADDRESS_HOME_OTHER_SUBUNIT = 28,
+  GROUP_ADDRESS_HOME_ADDRESS = 29,
+  GROUP_ADDRESS_HOME_ADDRESS_WITH_NAME = 30,
+  GROUP_ADDRESS_HOME_FLOOR = 31,
+  GROUP_UNKNOWN_TYPE = 32,
+  GROUP_BIRTHDATE = 33,
+  GROUP_IBAN = 34,
+  GROUP_ADDRESS_HOME_LANDMARK = 35,
+  GROUP_ADDRESS_HOME_BETWEEN_STREETS = 36,
+  GROUP_ADDRESS_HOME_ADMIN_LEVEL2 = 37,
+  GROUP_ADDRESS_HOME_STREET_LOCATION = 38,
+  GROUP_ADDRESS_HOME_OVERFLOW = 39,
+  GROUP_DELIVERY_INSTRUCTIONS = 40,
+  GROUP_ADDRESS_HOME_OVERFLOW_AND_LANDMARK = 41,
+  GROUP_ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK = 42,
+  // Note: if adding an enum value here, run
+  // tools/metrics/histograms/update_autofill_enums.py
   NUM_FIELD_TYPE_GROUPS_FOR_METRICS
 };
 
@@ -155,12 +152,12 @@ enum FieldTypeGroupForMetrics {
 // however, because it is not intended for consumption outside of the metrics
 // implementation.
 int GetFieldTypeGroupPredictionQualityMetric(
-    ServerFieldType field_type,
+    FieldType field_type,
     AutofillMetrics::FieldTypeQualityMetric metric) {
   DCHECK_LT(metric, AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
 
   FieldTypeGroupForMetrics group = GROUP_AMBIGUOUS;
-  switch (GroupTypeOfServerFieldType(field_type)) {
+  switch (GroupTypeOfFieldType(field_type)) {
     case FieldTypeGroup::kNoGroup:
       group = GROUP_AMBIGUOUS;
       break;
@@ -188,7 +185,9 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case ADDRESS_HOME_LINE3:
           group = GROUP_ADDRESS_LINE_3;
           break;
+        case ADDRESS_HOME_APT:
         case ADDRESS_HOME_APT_NUM:
+        case ADDRESS_HOME_APT_TYPE:
           group = GROUP_ADDRESS_HOME_APT_NUM;
           break;
         case ADDRESS_HOME_STREET_ADDRESS:
@@ -325,6 +324,7 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case MAX_VALID_FIELD_TYPE:
         case CREDIT_CARD_STANDALONE_VERIFICATION_CODE:
         case SINGLE_USERNAME_FORGOT_PASSWORD:
+        case SINGLE_USERNAME_WITH_INTERMEDIATE_VALUES:
           NOTREACHED() << field_type << " type is not in that group.";
           group = GROUP_AMBIGUOUS;
           break;
@@ -399,14 +399,14 @@ int GetFieldTypeGroupPredictionQualityMetric(
   return (group << 8) | metric;
 }
 
-// This function encodes the integer value of a |ServerFieldType| and the
+// This function encodes the integer value of a |FieldType| and the
 // metric value of an |AutofilledFieldUserEditingStatus| into a 16 bit integer.
 // The lower four bits are used to encode the editing status and the higher
 // 12 bits are used to encode the field type.
 int GetFieldTypeUserEditStatusMetric(
-    ServerFieldType server_type,
+    FieldType server_type,
     AutofillMetrics::AutofilledFieldUserEditingStatusMetric metric) {
-  static_assert(ServerFieldType::MAX_VALID_FIELD_TYPE <= (UINT16_MAX >> 4),
+  static_assert(FieldType::MAX_VALID_FIELD_TYPE <= (UINT16_MAX >> 4),
                 "Autofill::ServerTypes value needs more than 12 bits.");
 
   static_assert(
@@ -457,8 +457,8 @@ const char* GetQualityMetricTypeSuffix(
 // the "actual" field type when calculating metrics. If the |predicted_type| is
 // among the |possible_types] then use that as the best type (i.e., the
 // prediction is deemed to have been correct).
-ServerFieldType GetActualFieldType(const ServerFieldTypeSet& possible_types,
-                                   ServerFieldType predicted_type) {
+FieldType GetActualFieldType(const FieldTypeSet& possible_types,
+                             FieldType predicted_type) {
   DCHECK_NE(possible_types.size(), 0u);
 
   if (possible_types.count(EMPTY_TYPE)) {
@@ -476,7 +476,7 @@ ServerFieldType GetActualFieldType(const ServerFieldTypeSet& possible_types,
 
   // Collapse field types that Chrome treats as identical, e.g. home and
   // billing address fields.
-  ServerFieldTypeSet collapsed_field_types;
+  FieldTypeSet collapsed_field_types;
   for (auto type : possible_types) {
     DCHECK_NE(type, EMPTY_TYPE);
     DCHECK_NE(type, UNKNOWN_TYPE);
@@ -490,7 +490,7 @@ ServerFieldType GetActualFieldType(const ServerFieldTypeSet& possible_types,
   }
 
   // Capture the field's type, if it is unambiguous.
-  ServerFieldType actual_type = AMBIGUOUS_TYPE;
+  FieldType actual_type = AMBIGUOUS_TYPE;
   if (collapsed_field_types.size() == 1)
     actual_type = *collapsed_field_types.begin();
 
@@ -513,8 +513,8 @@ void LogPredictionQualityMetricsForFieldsOnlyFilledWhenFocused(
     const std::string& aggregate_histogram,
     const std::string& type_specific_histogram,
     const std::string& rationalization_quality_histogram,
-    ServerFieldType predicted_type,
-    ServerFieldType actual_type,
+    FieldType predicted_type,
+    FieldType actual_type,
     bool is_empty,
     bool is_ambiguous,
     bool log_rationalization_metrics,
@@ -585,8 +585,8 @@ void LogPredictionQualityMetricsForFieldsOnlyFilledWhenFocused(
 void LogPredictionQualityMetricsForCommonFields(
     const std::string& aggregate_histogram,
     const std::string& type_specific_histogram,
-    ServerFieldType predicted_type,
-    ServerFieldType actual_type,
+    FieldType predicted_type,
+    FieldType actual_type,
     bool is_empty,
     bool is_ambiguous) {
   // If the predicted and actual types match then it's either a true positive
@@ -672,7 +672,7 @@ void LogPredictionQualityMetricsForCommonFields(
 // be appended to the metric name, depending on |metric_type|.
 void LogPredictionQualityMetrics(
     AutofillMetrics::QualityMetricPredictionSource prediction_source,
-    ServerFieldType predicted_type,
+    FieldType predicted_type,
     AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
     const FormStructure& form,
     const AutofillField& field,
@@ -690,15 +690,13 @@ void LogPredictionQualityMetrics(
   std::string rationalization_quality_histogram = base::JoinString(
       {"Autofill.RationalizationQuality.PhoneNumber", suffix}, "");
 
-  const ServerFieldTypeSet& possible_types =
+  const FieldTypeSet& possible_types =
       metric_type == AutofillMetrics::TYPE_AUTOCOMPLETE_BASED
-          ? ServerFieldTypeSet{AutofillType(field.html_type())
-                                   .GetStorableType()}
+          ? FieldTypeSet{AutofillType(field.html_type()).GetStorableType()}
           : field.possible_types();
 
   // Get the best type classification we can for the field.
-  ServerFieldType actual_type =
-      GetActualFieldType(possible_types, predicted_type);
+  FieldType actual_type = GetActualFieldType(possible_types, predicted_type);
 
   DVLOG(2) << "Predicted: " << FieldTypeToStringView(predicted_type) << "; "
            << "Actual: " << FieldTypeToStringView(actual_type);
@@ -745,13 +743,6 @@ void LogPredictionQualityMetrics(
 }  // namespace
 
 const int kMaxBucketsCount = 50;
-
-// static
-void AutofillMetrics::LogProfileSuggestionsMadeWithFormatter(
-    bool made_with_formatter) {
-  UMA_HISTOGRAM_BOOLEAN("Autofill.ProfileSuggestionsMadeWithFormatter",
-                        made_with_formatter);
-}
 
 // static
 void AutofillMetrics::LogSubmittedCardStateMetric(
@@ -843,6 +834,13 @@ void AutofillMetrics::LogCreditCardInfoBarMetric(
                                       ".WithSameLastFourButDifferentExpiration",
                                   metric, NUM_INFO_BAR_METRICS);
   }
+
+  if (options.card_save_type ==
+      AutofillClient::CardSaveType::kCardSaveWithCvc) {
+    base::UmaHistogramEnumeration(base::StrCat({"Autofill.CreditCardInfoBar",
+                                                destination, ".SavingWithCvc"}),
+                                  metric, NUM_INFO_BAR_METRICS);
+  }
 }
 
 // static
@@ -899,6 +897,8 @@ std::string_view AutofillMetrics::GetDialogTypeStringForLogging(
       return "VirtualCardUnmask";
     case AutofillProgressDialogType::kServerCardUnmaskProgressDialog:
       return "ServerCardUnmask";
+    case AutofillProgressDialogType::kServerIbanUnmaskProgressDialog:
+      return "ServerIbanUnmask";
     default:
       NOTREACHED_NORETURN();
   }
@@ -1673,11 +1673,6 @@ void AutofillMetrics::LogAutofillFormCleared() {
 }
 
 // static
-void AutofillMetrics::LogAutofillUndo() {
-  base::RecordAction(base::UserMetricsAction("Autofill_UndoFilling"));
-}
-
-// static
 void AutofillMetrics::LogNumberOfEditedAutofilledFields(
     size_t num_edited_autofilled_fields,
     bool observed_submission) {
@@ -1694,7 +1689,7 @@ void AutofillMetrics::LogNumberOfEditedAutofilledFields(
 
 void AutofillMetrics::LogSectioningMetrics(
     const base::flat_map<Section, size_t>& fields_per_section) {
-  constexpr base::StringPiece kBaseHistogramName = "Autofill.Sectioning.";
+  constexpr std::string_view kBaseHistogramName = "Autofill.Sectioning.";
   UMA_HISTOGRAM_COUNTS_100(
       base::StrCat({kBaseHistogramName, "NumberOfSections"}),
       fields_per_section.size());
@@ -1776,7 +1771,7 @@ void AutofillMetrics::LogAutofillPerfectFilling(bool is_address,
 }
 
 AutofillMetrics::CreditCardSeamlessness::CreditCardSeamlessness(
-    const ServerFieldTypeSet& filled_types)
+    const FieldTypeSet& filled_types)
     : name_(filled_types.contains(CREDIT_CARD_NAME_FULL) ||
             (filled_types.contains(CREDIT_CARD_NAME_FIRST) &&
              filled_types.contains(CREDIT_CARD_NAME_LAST))),
@@ -1874,7 +1869,7 @@ void AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
   auto GetSeamlessness = [&p](bool only_newly_filled_fields,
                               bool only_after_security_policy,
                               bool only_visible_fields) {
-    ServerFieldTypeSet autofilled_types;
+    FieldTypeSet autofilled_types;
     for (const auto& field : *p.form) {
       FieldGlobalId id = field->global_id();
       if (only_newly_filled_fields && !p.newly_filled_fields->contains(id))
@@ -1888,7 +1883,7 @@ void AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
     return CreditCardSeamlessness(autofilled_types);
   };
 
-  auto RecordUma = [](base::StringPiece infix, CreditCardSeamlessness s) {
+  auto RecordUma = [](std::string_view infix, CreditCardSeamlessness s) {
     std::string prefix = base::StrCat({"Autofill.CreditCard.Seamless", infix});
     base::UmaHistogramEnumeration(prefix, s.QualitativeMetric());
     base::UmaHistogramExactLinear(prefix + ".Bitmask", s.BitmaskMetric(),
@@ -1960,7 +1955,7 @@ void AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
   // <iframe allow="shared-autofill">. Whether it's enabled in the main frame is
   // controller by an HTTP header; by default, it is.
   auto RequiresSharedAutofill = [&](const AutofillField& field) {
-    auto IsSensitiveFieldType = [](ServerFieldType field_type) {
+    auto IsSensitiveFieldType = [](FieldType field_type) {
       switch (field_type) {
         case CREDIT_CARD_TYPE:
         case CREDIT_CARD_NAME_FULL:
@@ -2011,7 +2006,7 @@ void AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
 
 // static
 void AutofillMetrics::LogCreditCardSeamlessnessAtSubmissionTime(
-    const ServerFieldTypeSet& autofilled_types) {
+    const FieldTypeSet& autofilled_types) {
   CreditCardSeamlessness seamlessness(autofilled_types);
   if (seamlessness.is_valid()) {
     base::UmaHistogramExactLinear(
@@ -2076,7 +2071,7 @@ void AutofillMetrics::OnAutocompleteSuggestionsShown() {
 
 // static
 void AutofillMetrics::OnAutocompleteSuggestionDeleted(
-    AutocompleteSingleEntryRemovalMethod removal_method) {
+    SingleEntryRemovalMethod removal_method) {
   AutofillMetrics::Log(AutocompleteEvent::AUTOCOMPLETE_SUGGESTION_DELETED);
   base::UmaHistogramEnumeration(
       "Autofill.Autocomplete.SingleEntryRemovalMethod", removal_method);
@@ -2085,7 +2080,7 @@ void AutofillMetrics::OnAutocompleteSuggestionDeleted(
 // static
 void AutofillMetrics::Log(AutocompleteEvent event) {
   DCHECK_LT(event, AutocompleteEvent::NUM_AUTOCOMPLETE_EVENTS);
-  base::UmaHistogramEnumeration("Autocomplete.Events", event,
+  base::UmaHistogramEnumeration("Autocomplete.Events2", event,
                                 NUM_AUTOCOMPLETE_EVENTS);
 }
 
@@ -2101,12 +2096,12 @@ const char* AutofillMetrics::SubmissionSourceToUploadEventMetric(
       return "Autofill.UploadEvent.XhrSucceeded";
     case SubmissionSource::FRAME_DETACHED:
       return "Autofill.UploadEvent.FrameDetached";
-    case SubmissionSource::DOM_MUTATION_AFTER_XHR:
-      return "Autofill.UploadEvent.DomMutationAfterXhr";
     case SubmissionSource::PROBABLY_FORM_SUBMITTED:
       return "Autofill.UploadEvent.ProbablyFormSubmitted";
     case SubmissionSource::FORM_SUBMISSION:
       return "Autofill.UploadEvent.FormSubmission";
+    case SubmissionSource::DOM_MUTATION_AFTER_AUTOFILL:
+      return "Autofill.UploadEvent.DomMutationAfterAutofill";
   }
   // Unit tests exercise this path, so do not put NOTREACHED() here.
   return "Autofill.UploadEvent.Unknown";
@@ -2207,22 +2202,17 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogSuggestionsShown(
 }
 
 void AutofillMetrics::FormInteractionsUkmLogger::LogDidFillSuggestion(
-    absl::variant<AutofillProfile::RecordType, CreditCard::RecordType>
-        record_type,
     const FormStructure& form,
-    const AutofillField& field) {
+    const AutofillField& field,
+    std::optional<CreditCard::RecordType> record_type) {
   if (!CanLog())
     return;
 
-  bool is_for_credit_card =
-      absl::holds_alternative<CreditCard::RecordType>(record_type);
-
-  ukm::builders::Autofill_SuggestionFilled(GetSourceId())
-      .SetRecordType(is_for_credit_card
-                         ? base::to_underlying(
-                               absl::get<CreditCard::RecordType>(record_type))
-                         : absl::get<AutofillProfile::RecordType>(record_type))
-      .SetIsForCreditCard(is_for_credit_card)
+  auto metric = ukm::builders::Autofill_SuggestionFilled(GetSourceId());
+  if (record_type) {
+    metric.SetRecordType(base::to_underlying(*record_type));
+  }
+  metric.SetIsForCreditCard(record_type.has_value())
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form.form_parsed_timestamp()))
       .SetFormSignature(HashFormSignature(form.form_signature()))
@@ -2291,8 +2281,8 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFieldType(
     FieldSignature field_signature,
     QualityMetricPredictionSource prediction_source,
     QualityMetricType metric_type,
-    ServerFieldType predicted_type,
-    ServerFieldType actual_type) {
+    FieldType predicted_type,
+    FieldType actual_type) {
   if (!CanLog())
     return;
 
@@ -2331,7 +2321,10 @@ void AutofillMetrics::FormInteractionsUkmLogger::
   OptionalBoolean suggestion_was_shown = OptionalBoolean::kUndefined;
   OptionalBoolean suggestion_was_accepted = OptionalBoolean::kUndefined;
 
-  OptionalBoolean was_autofilled = OptionalBoolean::kUndefined;
+  // Records whether this field was autofilled before checking the iframe
+  // security policy.
+  OptionalBoolean was_autofilled_before_security_policy =
+      OptionalBoolean::kUndefined;
   OptionalBoolean had_value_before_filling = OptionalBoolean::kUndefined;
   DenseSet<FieldFillingSkipReason> autofill_skipped_status;
   size_t autofill_count = 0;
@@ -2343,6 +2336,15 @@ void AutofillMetrics::FormInteractionsUkmLogger::
   OptionalBoolean had_value_after_filling = OptionalBoolean::kUndefined;
   OptionalBoolean has_value_after_typing = OptionalBoolean::kUndefined;
 
+  // Records whether filling was ever prevented because of the cross iframe
+  // autofill security policy that applies to credit cards.
+  OptionalBoolean filling_prevented_by_iframe_security_policy =
+      OptionalBoolean::kUndefined;
+  // Records whether this field was actually safely autofilled after checking
+  // the iframe security policy.
+  OptionalBoolean was_autofilled_after_security_policy =
+      OptionalBoolean::kUndefined;
+
   // TODO(crbug.com/1325851): Add a metric in |FieldInfo| UKM event to indicate
   // whether the user had any data available for the respective field type.
 
@@ -2353,19 +2355,19 @@ void AutofillMetrics::FormInteractionsUkmLogger::
 
   // Field types from local heuristics prediction.
   // The field type from the active local heuristic pattern.
-  ServerFieldType heuristic_type = UNKNOWN_TYPE;
+  FieldType heuristic_type = UNKNOWN_TYPE;
   // The type of the field predicted from patterns whose stability is above
   // suspicion.
-  ServerFieldType heuristic_legacy_type = UNKNOWN_TYPE;
+  FieldType heuristic_legacy_type = UNKNOWN_TYPE;
   // The type of the field predicted from the source of local heuristics on
   // the client, which uses patterns applied for most users.
-  ServerFieldType heuristic_default_type = UNKNOWN_TYPE;
+  FieldType heuristic_default_type = UNKNOWN_TYPE;
   // The type of the field predicted from the heuristics that uses experimental
   // patterns.
-  ServerFieldType heuristic_experimental_type = UNKNOWN_TYPE;
+  FieldType heuristic_experimental_type = UNKNOWN_TYPE;
   // The type of the field predicted from the heuristics that uses patterns
   // only for non-user-visible metrics, one step before experimental.
-  ServerFieldType heuristic_next_gen_type = UNKNOWN_TYPE;
+  FieldType heuristic_next_gen_type = UNKNOWN_TYPE;
 
   // Field types from Autocomplete attribute.
   // Information of the HTML autocomplete attribute, see
@@ -2375,20 +2377,20 @@ void AutofillMetrics::FormInteractionsUkmLogger::
 
   // The field type predicted by the Autofill crowdsourced server from
   // majority voting.
-  ServerFieldType server_type1 = NO_SERVER_DATA;
+  FieldType server_type1 = NO_SERVER_DATA;
   FieldPrediction::Source prediction_source1 =
       FieldPrediction::SOURCE_UNSPECIFIED;
-  ServerFieldType server_type2 = NO_SERVER_DATA;
+  FieldType server_type2 = NO_SERVER_DATA;
   FieldPrediction::Source prediction_source2 =
       FieldPrediction::SOURCE_UNSPECIFIED;
   // This is an annotation for server predicted field types which indicates
   // that a manual override defines the server type.
   bool server_type_is_override = false;
 
-  // The final field type from the list of |autofill::ServerFieldType| that we
+  // The final field type from the list of |autofill::FieldType| that we
   // choose after rationalization, which is used to determine
   // the autofill suggestion when the user triggers autofilling.
-  ServerFieldType overall_type = NO_SERVER_DATA;
+  FieldType overall_type = NO_SERVER_DATA;
   // The sections are mapped to consecutive natural numbers starting at 1,
   // numbered according to the ordering of their first fields.
   size_t section_id = 0;
@@ -2436,22 +2438,30 @@ void AutofillMetrics::FormInteractionsUkmLogger::
     }
 
     if (auto* event = absl::get_if<FillFieldLogEvent>(&log_event)) {
-      was_autofilled |= event->was_autofilled;
+      was_autofilled_before_security_policy |=
+          event->was_autofilled_before_security_policy;
       had_value_before_filling |= event->had_value_before_filling;
       autofill_skipped_status.insert(event->autofill_skipped_status);
       had_value_after_filling = event->had_value_after_filling;
-      if (was_autofilled == OptionalBoolean::kTrue &&
+      if (was_autofilled_before_security_policy == OptionalBoolean::kTrue &&
           filled_value_was_modified == OptionalBoolean::kUndefined) {
         // Initialize filled_value_was_modified to a defined value when the
         // field is filled for the first time.
         filled_value_was_modified = OptionalBoolean::kFalse;
       }
+
+      filling_prevented_by_iframe_security_policy |=
+          OptionalBoolean(event->filling_prevented_by_iframe_security_policy ==
+                          OptionalBoolean::kTrue);
+      was_autofilled_after_security_policy |=
+          OptionalBoolean(event->filling_prevented_by_iframe_security_policy ==
+                          OptionalBoolean::kFalse);
       ++autofill_count;
     }
 
     if (auto* event = absl::get_if<TypingFieldLogEvent>(&log_event)) {
       user_typed_into_field = OptionalBoolean::kTrue;
-      if (was_autofilled == OptionalBoolean::kTrue) {
+      if (was_autofilled_after_security_policy == OptionalBoolean::kTrue) {
         filled_value_was_modified = OptionalBoolean::kTrue;
       }
       has_value_after_typing = event->has_value_after_typing;
@@ -2529,9 +2539,9 @@ void AutofillMetrics::FormInteractionsUkmLogger::
       .SetFieldSessionIdentifier(
           AutofillMetrics::FieldGlobalIdToHash64Bit(field.global_id()))
       .SetFieldSignature(HashFieldSignature(field.GetFieldSignature()))
-      .SetFormControlType(base::to_underlying(field.FormControlType()))
       .SetFormControlType2(base::to_underlying(field.form_control_type))
-      .SetAutocompleteState(base::to_underlying(autocomplete_state));
+      .SetAutocompleteState(base::to_underlying(autocomplete_state))
+      .SetFieldLogEventCount(field_log_events.size());
 
   SetStatusVector(AutofillStatus::kIsFocusable, field.IsFocusable());
   SetStatusVector(AutofillStatus::kUserTypedIntoField,
@@ -2540,6 +2550,13 @@ void AutofillMetrics::FormInteractionsUkmLogger::
                   OptionalBooleanToBool(was_focused));
   SetStatusVector(AutofillStatus::kIsInSubFrame,
                   form.ToFormData().host_frame != field.host_frame);
+
+  if (filling_prevented_by_iframe_security_policy !=
+      OptionalBoolean::kUndefined) {
+    SetStatusVector(
+        AutofillStatus::kFillingPreventedByIframeSecurityPolicy,
+        OptionalBooleanToBool(filling_prevented_by_iframe_security_policy));
+  }
 
   if (was_focused == OptionalBoolean::kTrue) {
     SetStatusVector(AutofillStatus::kSuggestionWasAvailable,
@@ -2555,11 +2572,17 @@ void AutofillMetrics::FormInteractionsUkmLogger::
 
   SetStatusVector(AutofillStatus::kWasAutofillTriggered, autofill_count > 0);
   if (autofill_count > 0) {
-    SetStatusVector(AutofillStatus::kWasAutofilled,
-                    OptionalBooleanToBool(was_autofilled));
+    SetStatusVector(
+        AutofillStatus::kWasAutofilledBeforeSecurityPolicy,
+        OptionalBooleanToBool(was_autofilled_before_security_policy));
     SetStatusVector(AutofillStatus::kHadValueBeforeFilling,
                     OptionalBooleanToBool(had_value_before_filling));
     SetStatusVector(AutofillStatus::kWasRefill, autofill_count > 1);
+    if (was_autofilled_after_security_policy != OptionalBoolean::kUndefined) {
+      SetStatusVector(
+          AutofillStatus::kWasAutofilledAfterSecurityPolicy,
+          OptionalBooleanToBool(was_autofilled_after_security_policy));
+    }
 
     static_assert(autofill_skipped_status.data().size() == 1);
     builder.SetAutofillSkippedStatus(autofill_skipped_status.data()[0]);
@@ -2624,7 +2647,7 @@ void AutofillMetrics::LogAutofillFieldInfoAfterSubmission(
     // The possible field submitted types determined by comparing the submitted
     // value in the field with the data stored in the Autofill server. We will
     // have at most three possible field submitted types.
-    ServerFieldType submitted_type1 = UNKNOWN_TYPE;
+    FieldType submitted_type1 = UNKNOWN_TYPE;
 
     ukm::builders::Autofill2_FieldInfoAfterSubmission builder(source_id);
     builder
@@ -2633,7 +2656,7 @@ void AutofillMetrics::LogAutofillFieldInfoAfterSubmission(
         .SetFieldSessionIdentifier(
             AutofillMetrics::FieldGlobalIdToHash64Bit(field->global_id()));
 
-    const ServerFieldTypeSet& type_set = field->possible_types();
+    const FieldTypeSet& type_set = field->possible_types();
     if (!type_set.empty()) {
       auto type = type_set.begin();
       submitted_type1 = *type;
@@ -2724,7 +2747,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::
     LogRepeatedServerTypePredictionRationalized(
         const FormSignature form_signature,
         const AutofillField& field,
-        ServerFieldType old_type) {
+        FieldType old_type) {
   if (!CanLog())
     return;
 
@@ -2832,7 +2855,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogKeyMetrics(
     bool suggestion_filled,
     const FormInteractionCounts& form_interaction_counts,
     const FormInteractionsFlowId& flow_id,
-    absl::optional<int64_t> fast_checkout_run_id) {
+    std::optional<int64_t> fast_checkout_run_id) {
   if (!CanLog())
     return;
 
@@ -2882,9 +2905,8 @@ int64_t AutofillMetrics::FormInteractionsUkmLogger::MillisecondsSinceFormParsed(
     const base::TimeTicks& form_parsed_timestamp) const {
   DCHECK(!form_parsed_timestamp.is_null());
   // Use the pinned timestamp as the current time if it's set.
-  base::TimeTicks now = pinned_timestamp_.is_null()
-                            ? AutofillTickClock::NowTicks()
-                            : pinned_timestamp_;
+  base::TimeTicks now =
+      pinned_timestamp_.is_null() ? base::TimeTicks::Now() : pinned_timestamp_;
 
   return ukm::GetExponentialBucketMin(
       (now - form_parsed_timestamp).InMilliseconds(),
@@ -2896,7 +2918,7 @@ AutofillMetrics::UkmTimestampPin::UkmTimestampPin(
     : logger_(logger) {
   DCHECK(logger_);
   DCHECK(!logger_->has_pinned_timestamp());
-  logger_->set_pinned_timestamp(AutofillTickClock::NowTicks());
+  logger_->set_pinned_timestamp(base::TimeTicks::Now());
 }
 
 AutofillMetrics::UkmTimestampPin::~UkmTimestampPin() {
@@ -2912,7 +2934,7 @@ void AutofillMetrics::LogFieldParsingPageTranslationStatusMetric(bool metric) {
 
 // static
 void AutofillMetrics::LogFieldParsingTranslatedFormLanguageMetric(
-    base::StringPiece locale) {
+    std::string_view locale) {
   base::UmaHistogramSparse(
       "Autofill.ParsedFieldTypesUsingTranslatedPageLanguage",
       language::LanguageUsageMetrics::ToLanguageCodeHash(locale));
@@ -2983,7 +3005,7 @@ void AutofillMetrics::LogPhoneNumberGrammarMatched(int grammar_id,
 
 void AutofillMetrics::LogVerificationStatusOfNameTokensOnProfileUsage(
     const AutofillProfile& profile) {
-  constexpr base::StringPiece base_histogram_name =
+  constexpr std::string_view base_histogram_name =
       "Autofill.NameTokenVerificationStatusAtProfileUsage.";
 
   for (const auto& [type, name] : kStructuredNameTypeToNameMap) {
@@ -3002,7 +3024,7 @@ void AutofillMetrics::LogVerificationStatusOfNameTokensOnProfileUsage(
 
 void AutofillMetrics::LogVerificationStatusOfAddressTokensOnProfileUsage(
     const AutofillProfile& profile) {
-  constexpr base::StringPiece base_histogram_name =
+  constexpr std::string_view base_histogram_name =
       "Autofill.AddressTokenVerificationStatusAtProfileUsage.";
 
   for (const auto& [type, name] : kStructuredAddressTypeToNameMap) {
@@ -3037,14 +3059,6 @@ void AutofillMetrics::LogImageFetcherRequestLatency(
 }
 
 // static
-void AutofillMetrics::
-    LogIsValueNotAutofilledOverExistingValueSameAsSubmittedValue(bool is_same) {
-  base::UmaHistogramBoolean(
-      "Autofill.IsValueNotAutofilledOverExistingValueSameAsSubmittedValue2",
-      is_same);
-}
-
-// static
 void AutofillMetrics::LogAutocompletePredictionCollisionState(
     PredictionState prediction_state,
     AutocompleteState autocomplete_state) {
@@ -3067,8 +3081,8 @@ void AutofillMetrics::LogAutocompletePredictionCollisionState(
 // static
 void AutofillMetrics::LogAutocompletePredictionCollisionTypes(
     AutocompleteState autocomplete_state,
-    ServerFieldType server_type,
-    ServerFieldType heuristic_type) {
+    FieldType server_type,
+    FieldType heuristic_type) {
   // Convert `autocomplete_state` to a string for the metric's name.
   std::string autocomplete_suffix;
   switch (autocomplete_state) {
@@ -3084,6 +3098,9 @@ void AutofillMetrics::LogAutocompletePredictionCollisionTypes(
     case AutocompleteState::kOff:
       autocomplete_suffix = "Off";
       break;
+    case AutocompleteState::kPassword:
+      autocomplete_suffix = "Password";
+      break;
     default:
       NOTREACHED();
   }
@@ -3094,20 +3111,20 @@ void AutofillMetrics::LogAutocompletePredictionCollisionTypes(
   if (server_type != NO_SERVER_DATA) {
     base::UmaHistogramEnumeration(
         kHistogramName + "Server." + autocomplete_suffix, server_type,
-        ServerFieldType::MAX_VALID_FIELD_TYPE);
+        FieldType::MAX_VALID_FIELD_TYPE);
   }
   base::UmaHistogramEnumeration(
       kHistogramName + "Heuristics." + autocomplete_suffix, heuristic_type,
-      ServerFieldType::MAX_VALID_FIELD_TYPE);
+      FieldType::MAX_VALID_FIELD_TYPE);
   base::UmaHistogramEnumeration(
       kHistogramName + "ServerOrHeuristics." + autocomplete_suffix,
       server_type != NO_SERVER_DATA ? server_type : heuristic_type,
-      ServerFieldType::MAX_VALID_FIELD_TYPE);
+      FieldType::MAX_VALID_FIELD_TYPE);
 }
 
 // static
 void AutofillMetrics::LogContextMenuImpressionsForField(
-    ServerFieldType field_type,
+    FieldType field_type,
     AutocompleteState autocomplete_state) {
   base::UmaHistogramEnumeration(
       "Autofill.FieldContextMenuImpressions.ByAutocomplete",
@@ -3194,6 +3211,26 @@ std::string AutofillMetrics::GetHistogramStringForCardType(
   }
 
   return "";
+}
+
+// static
+void AutofillMetrics::LogDeleteAddressProfileFromPopup() {
+  // Only the "confirmed" bucket can be recorded, as the user cannot cancel this
+  // type of deletion.
+  base::UmaHistogramBoolean("Autofill.ProfileDeleted.Popup",
+                            /*delete_confirmed=*/true);
+  base::UmaHistogramBoolean("Autofill.ProfileDeleted.Any",
+                            /*delete_confirmed=*/true);
+}
+
+// static
+void AutofillMetrics::LogDeleteAddressProfileFromKeyboardAccessory() {
+  // Only the "confirmed" bucket is recorded here, as the cancelation can only
+  // be recorded from Java.
+  base::UmaHistogramBoolean("Autofill.ProfileDeleted.KeyboardAccessory",
+                            /*delete_confirmed=*/true);
+  base::UmaHistogramBoolean("Autofill.ProfileDeleted.Any",
+                            /*delete_confirmed=*/true);
 }
 
 // static

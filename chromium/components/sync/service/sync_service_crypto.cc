@@ -160,16 +160,12 @@ std::string SerializeNigoriAsBootstrapToken(const Nigori& nigori) {
     return std::string();
   }
 
-  std::string encoded_key;
-  base::Base64Encode(encrypted_key, &encoded_key);
-  return encoded_key;
+  return base::Base64Encode(encrypted_key);
 }
 
 }  // namespace
 
-SyncServiceCrypto::State::State()
-    : passphrase_key_derivation_params(KeyDerivationParams::CreateForPbkdf2()) {
-}
+SyncServiceCrypto::State::State() = default;
 
 SyncServiceCrypto::State::~State() = default;
 
@@ -311,7 +307,8 @@ bool SyncServiceCrypto::SetDecryptionPassphrase(const std::string& passphrase) {
   return SetDecryptionKeyWithoutUpdatingBootstrapToken(std::move(nigori));
 }
 
-void SyncServiceCrypto::SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori) {
+void SyncServiceCrypto::SetExplicitPassphraseDecryptionNigoriKey(
+    std::unique_ptr<Nigori> nigori) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DCHECK(nigori);
@@ -333,7 +330,8 @@ void SyncServiceCrypto::SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori) {
   }
 }
 
-std::unique_ptr<Nigori> SyncServiceCrypto::GetDecryptionNigoriKey() const {
+std::unique_ptr<Nigori>
+SyncServiceCrypto::GetExplicitPassphraseDecryptionNigoriKey() const {
   return ReadNigoriFromBootstrapToken(delegate_->GetEncryptionBootstrapToken());
 }
 

@@ -16,12 +16,15 @@
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/app_constants/constants.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -46,15 +49,8 @@ std::unique_ptr<apps::IconKey> CreateIconKey(bool is_browser_load_success) {
   }
 #endif
 
-  auto icon_key = std::make_unique<apps::IconKey>(
-      apps::IconKey::kDoesNotChangeOverTime, resource_id, icon_effects);
+  auto icon_key = std::make_unique<apps::IconKey>(resource_id, icon_effects);
   return icon_key;
-}
-
-std::string GetStandaloneBrowserName() {
-  // "Chrome" is hard-coded to be consistent with
-  // chrome/browser/resources/chrome_app/manifest.json.
-  return crosapi::browser_util::IsAshWebBrowserEnabled() ? "Lacros" : "Chrome";
 }
 
 }  // namespace
@@ -81,13 +77,24 @@ void StandaloneBrowserApps::RegisterCrosapiHost(
 }
 
 AppPtr StandaloneBrowserApps::CreateStandaloneBrowserApp() {
+  std::string full_name;
+  std::string short_name;
+  if (crosapi::browser_util::IsAshWebBrowserEnabled()) {
+    full_name = short_name = "Lacros";
+  } else {
+    full_name = l10n_util::GetStringUTF8(IDS_PRODUCT_NAME);
+    short_name = l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME);
+  }
+
   auto app = apps::AppPublisher::MakeApp(
       AppType::kStandaloneBrowser, app_constants::kLacrosAppId,
-      Readiness::kReady, GetStandaloneBrowserName(), InstallReason::kSystem,
+      Readiness::kReady, full_name, InstallReason::kSystem,
       InstallSource::kSystem);
+  app->short_name = short_name;
 
-  if (crosapi::browser_util::IsAshWebBrowserEnabled())
+  if (crosapi::browser_util::IsAshWebBrowserEnabled()) {
     app->additional_search_terms.push_back("chrome");
+  }
 
   app->icon_key = std::move(*CreateIconKey(/*is_browser_load_success=*/true));
   app->searchable = true;
@@ -97,14 +104,16 @@ AppPtr StandaloneBrowserApps::CreateStandaloneBrowserApp() {
   app->show_in_management = true;
   app->handles_intents = true;
   app->allow_uninstall = false;
+  app->allow_close = true;
   return app;
 }
 
 void StandaloneBrowserApps::Initialize() {
   auto* browser_manager = crosapi::BrowserManager::Get();
   // |browser_manager| may be null in tests. For tests, assume Lacros is ready.
-  if (browser_manager && !observation_.IsObserving())
+  if (browser_manager && !observation_.IsObserving()) {
     observation_.Observe(browser_manager);
+  }
 
   RegisterPublisher(AppType::kStandaloneBrowser);
 
@@ -141,10 +150,12 @@ void StandaloneBrowserApps::GetMenuModel(
 void StandaloneBrowserApps::OpenNativeSettings(const std::string& app_id) {
   auto* browser_manager = crosapi::BrowserManager::Get();
   // `browser_manager` may be null in tests.
-  if (!browser_manager)
+  if (!browser_manager) {
     return;
-  browser_manager->SwitchToTab(GURL(chrome::kChromeUIContentSettingsURL),
-                               /*path_behavior=*/NavigateParams::RESPECT);
+  }
+  browser_manager->SwitchToTab(
+      chrome::GetSettingsUrl(chrome::kContentSettingsSubPage),
+      /*path_behavior=*/NavigateParams::RESPECT);
 }
 
 void StandaloneBrowserApps::StopApp(const std::string& app_id) {

@@ -4,21 +4,61 @@
 
 #include "chrome/browser/ui/views/web_apps/isolated_web_apps/isolated_web_app_installer_model.h"
 
+#include <optional>
 #include <string>
 
 #include "base/files/file_path.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "base/version.h"
+#include "chrome/browser/web_applications/isolated_web_apps/signed_web_bundle_metadata.h"
 
 namespace web_app {
+
+IsolatedWebAppInstallerModel::BundleOutdatedDialog::BundleOutdatedDialog(
+    const std::u16string& bundle_name,
+    const base::Version& bundle_version,
+    const base::Version& installed_version)
+    : bundle_name(bundle_name),
+      bundle_version(bundle_version),
+      installed_version(installed_version) {}
+IsolatedWebAppInstallerModel::BundleOutdatedDialog::BundleOutdatedDialog(
+    const BundleOutdatedDialog&) = default;
+IsolatedWebAppInstallerModel::BundleOutdatedDialog&
+IsolatedWebAppInstallerModel::BundleOutdatedDialog::operator=(
+    const IsolatedWebAppInstallerModel::BundleOutdatedDialog&) = default;
+IsolatedWebAppInstallerModel::BundleOutdatedDialog::~BundleOutdatedDialog() =
+    default;
+
+IsolatedWebAppInstallerModel::ConfirmInstallationDialog::
+    ConfirmInstallationDialog(const base::RepeatingClosure& learn_more_callback)
+    : learn_more_callback(learn_more_callback) {}
+IsolatedWebAppInstallerModel::ConfirmInstallationDialog::
+    ConfirmInstallationDialog(const ConfirmInstallationDialog&) = default;
+IsolatedWebAppInstallerModel::ConfirmInstallationDialog&
+IsolatedWebAppInstallerModel::ConfirmInstallationDialog::operator=(
+    const IsolatedWebAppInstallerModel::ConfirmInstallationDialog&) = default;
+IsolatedWebAppInstallerModel::ConfirmInstallationDialog::
+    ~ConfirmInstallationDialog() = default;
 
 IsolatedWebAppInstallerModel::IsolatedWebAppInstallerModel(
     const base::FilePath& bundle_path)
     : bundle_path_(bundle_path), step_(Step::kDisabled) {}
 
+void IsolatedWebAppInstallerModel::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void IsolatedWebAppInstallerModel::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 IsolatedWebAppInstallerModel::~IsolatedWebAppInstallerModel() = default;
 
 void IsolatedWebAppInstallerModel::SetStep(Step step) {
   step_ = step;
+
+  for (Observer& observer : observers_) {
+    observer.OnStepChanged();
+  }
 }
 
 void IsolatedWebAppInstallerModel::SetSignedWebBundleMetadata(
@@ -26,9 +66,12 @@ void IsolatedWebAppInstallerModel::SetSignedWebBundleMetadata(
   bundle_metadata_ = bundle_metadata;
 }
 
-void IsolatedWebAppInstallerModel::SetDialogContent(
-    absl::optional<DialogContent> dialog_content) {
-  dialog_content_ = dialog_content;
+void IsolatedWebAppInstallerModel::SetDialog(std::optional<Dialog> dialog) {
+  dialog_ = dialog;
+
+  for (Observer& observer : observers_) {
+    observer.OnChildDialogChanged();
+  }
 }
 
 }  // namespace web_app

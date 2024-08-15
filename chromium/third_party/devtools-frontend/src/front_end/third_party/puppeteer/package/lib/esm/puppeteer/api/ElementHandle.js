@@ -1,17 +1,7 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 var __runInitializers = (this && this.__runInitializers) || function (thisArg, initializers, value) {
     var useValue = arguments.length > 2;
@@ -457,7 +447,7 @@ let ElementHandle = (() => {
          *
          * JavaScript:
          *
-         * ```js
+         * ```ts
          * const feedHandle = await page.$('.feed');
          * expect(
          *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText))
@@ -848,9 +838,6 @@ let ElementHandle = (() => {
                 return [...selectedValues.values()];
             }, values);
         }
-        async uploadFile() {
-            throw new Error('Not implemented');
-        }
         /**
          * This method scrolls element into view if needed, and then uses
          * {@link Touchscreen.tap} to tap in the center of the element.
@@ -1017,7 +1004,8 @@ let ElementHandle = (() => {
         }
         /**
          * This method returns the bounding box of the element (relative to the main frame),
-         * or `null` if the element is not visible.
+         * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+         * (example: `display: none`).
          */
         async boundingBox() {
             const box = await this.evaluate(element => {
@@ -1046,7 +1034,9 @@ let ElementHandle = (() => {
             };
         }
         /**
-         * This method returns boxes of the element, or `null` if the element is not visible.
+         * This method returns boxes of the element,
+         * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+         * (example: `display: none`).
          *
          * @remarks
          *
@@ -1186,52 +1176,27 @@ let ElementHandle = (() => {
             }
             return point;
         }
-        /**
-         * This method scrolls element into view if needed, and then uses
-         * {@link Page.(screenshot:2) } to take a screenshot of the element.
-         * If the element is detached from DOM, the method throws an error.
-         */
         async screenshot(options = {}) {
-            const env_6 = { stack: [], error: void 0, hasError: false };
-            try {
-                const { scrollIntoView = true, captureBeyondViewport = true, allowViewportExpansion = captureBeyondViewport, } = options;
-                let clip = await this.#nonEmptyVisibleBoundingBox();
-                const page = this.frame.page();
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const _ = __addDisposableResource(env_6, allowViewportExpansion && clip
-                    ? await page._createTemporaryViewportContainingBox(clip)
-                    : null, true);
-                if (scrollIntoView) {
-                    await this.scrollIntoViewIfNeeded();
-                    // We measure again just in case.
-                    clip = await this.#nonEmptyVisibleBoundingBox();
+            const { scrollIntoView = true } = options;
+            let clip = await this.#nonEmptyVisibleBoundingBox();
+            const page = this.frame.page();
+            if (scrollIntoView) {
+                await this.scrollIntoViewIfNeeded();
+                // We measure again just in case.
+                clip = await this.#nonEmptyVisibleBoundingBox();
+            }
+            const [pageLeft, pageTop] = await this.evaluate(() => {
+                if (!window.visualViewport) {
+                    throw new Error('window.visualViewport is not supported.');
                 }
-                const [pageLeft, pageTop] = await this.evaluate(() => {
-                    if (!window.visualViewport) {
-                        throw new Error('window.visualViewport is not supported.');
-                    }
-                    return [
-                        window.visualViewport.pageLeft,
-                        window.visualViewport.pageTop,
-                    ];
-                });
-                clip.x += pageLeft;
-                clip.y += pageTop;
-                return await page.screenshot({
-                    ...options,
-                    captureBeyondViewport: false,
-                    clip,
-                });
-            }
-            catch (e_6) {
-                env_6.error = e_6;
-                env_6.hasError = true;
-            }
-            finally {
-                const result_1 = __disposeResources(env_6);
-                if (result_1)
-                    await result_1;
-            }
+                return [
+                    window.visualViewport.pageLeft,
+                    window.visualViewport.pageTop,
+                ];
+            });
+            clip.x += pageLeft;
+            clip.y += pageTop;
+            return await page.screenshot({ ...options, clip });
         }
         async #nonEmptyVisibleBoundingBox() {
             const box = await this.boundingBox();
@@ -1277,12 +1242,12 @@ let ElementHandle = (() => {
          * (full intersection). Defaults to 1.
          */
         async isIntersectingViewport(options = {}) {
-            const env_7 = { stack: [], error: void 0, hasError: false };
+            const env_6 = { stack: [], error: void 0, hasError: false };
             try {
                 await this.assertConnectedElement();
                 // eslint-disable-next-line rulesdir/use-using -- Returns `this`.
                 const handle = await this.#asSVGElementHandle();
-                const target = __addDisposableResource(env_7, handle && (await handle.#getOwnerSVGElement()), false);
+                const target = __addDisposableResource(env_6, handle && (await handle.#getOwnerSVGElement()), false);
                 return await (target ?? this).evaluate(async (element, threshold) => {
                     const visibleRatio = await new Promise(resolve => {
                         const observer = new IntersectionObserver(entries => {
@@ -1294,12 +1259,12 @@ let ElementHandle = (() => {
                     return threshold === 1 ? visibleRatio === 1 : visibleRatio > threshold;
                 }, options.threshold ?? 0);
             }
-            catch (e_7) {
-                env_7.error = e_7;
-                env_7.hasError = true;
+            catch (e_6) {
+                env_6.error = e_6;
+                env_6.hasError = true;
             }
             finally {
-                __disposeResources(env_7);
+                __disposeResources(env_6);
             }
         }
         /**

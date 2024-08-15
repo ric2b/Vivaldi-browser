@@ -15,37 +15,40 @@
 // only reason to intercept these calls is to re-label OOM crashes with slightly
 // more details.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_interception_apple.h"
+#include "partition_alloc/shim/allocator_interception_apple.h"
 
+#include "partition_alloc/partition_alloc_buildflags.h"
+
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
 #include <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
-#include <errno.h>
 #include <mach/mach.h>
 #import <objc/runtime.h>
-#include <stddef.h>
 
 #include <algorithm>
+#include <bit>
+#include <cerrno>
+#include <cstddef>
 #include <new>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/apple/mach_logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/bits.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/shim/malloc_zone_functions_apple.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/third_party/apple_apsl/CFBase.h"
 #include "build/build_config.h"
+#include "partition_alloc/oom.h"
+#include "partition_alloc/partition_alloc_base/apple/mach_logging.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/logging.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/shim/malloc_zone_functions_apple.h"
+#include "partition_alloc/third_party/apple_apsl/CFBase.h"
 
 #if BUILDFLAG(IS_IOS)
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/ios/ios_util.h"
+#include "partition_alloc/partition_alloc_base/ios/ios_util.h"
 #else
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/mac/mac_util.h"
+#include "partition_alloc/partition_alloc_base/mac/mac_util.h"
 #endif
 
 // The patching of Objective-C runtime bits must be done without any
 // interference from the ARC machinery.
-#if defined(__has_feature) && __has_feature(objc_arc)
+#if PA_HAS_FEATURE(objc_arc)
 #error "This file must not be compiled with ARC."
 #endif
 
@@ -180,7 +183,7 @@ void* oom_killer_memalign(struct _malloc_zone_t* zone,
   // other reasons why null might be returned. See posix_memalign() in 10.15's
   // https://opensource.apple.com/source/libmalloc/libmalloc-283/src/malloc.c .
   if (!result && size && alignment >= sizeof(void*) &&
-      partition_alloc::internal::base::bits::IsPowerOfTwo(alignment)) {
+      std::has_single_bit(alignment)) {
     partition_alloc::TerminateBecauseOutOfMemory(size);
   }
   return result;
@@ -236,7 +239,7 @@ void* oom_killer_memalign_purgeable(struct _malloc_zone_t* zone,
   // other reasons why null might be returned. See posix_memalign() in 10.15's
   // https://opensource.apple.com/source/libmalloc/libmalloc-283/src/malloc.c .
   if (!result && size && alignment >= sizeof(void*) &&
-      partition_alloc::internal::base::bits::IsPowerOfTwo(alignment)) {
+      std::has_single_bit(alignment)) {
     partition_alloc::TerminateBecauseOutOfMemory(size);
   }
   return result;
@@ -626,3 +629,5 @@ void ReplaceZoneFunctions(ChromeMallocZone* zone,
 }
 
 }  // namespace allocator_shim
+
+#endif  // BUILDFLAG(USE_ALLOCATOR_SHIM)

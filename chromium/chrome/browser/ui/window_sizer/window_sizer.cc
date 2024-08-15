@@ -73,11 +73,11 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
         chrome::GetWindowPlacementDictionaryReadOnly(
             chrome::GetWindowName(browser_), browser_->profile()->GetPrefs());
 
-    absl::optional<gfx::Rect> pref_bounds = RectFromPrefixedPref(pref, "");
-    absl::optional<gfx::Rect> pref_area =
+    std::optional<gfx::Rect> pref_bounds = RectFromPrefixedPref(pref, "");
+    std::optional<gfx::Rect> pref_area =
         RectFromPrefixedPref(pref, "work_area_");
-    absl::optional<bool> maximized =
-        pref ? pref->FindBool("maximized") : absl::nullopt;
+    std::optional<bool> maximized =
+        pref ? pref->FindBool("maximized") : std::nullopt;
 
     if (!pref_bounds || !maximized)
       return false;
@@ -164,13 +164,13 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
   }
 
  private:
-  static absl::optional<gfx::Rect> RectFromPrefixedPref(
+  static std::optional<gfx::Rect> RectFromPrefixedPref(
       const base::Value::Dict* pref,
       const std::string& prefix) {
     if (!pref)
-      return absl::nullopt;
+      return std::nullopt;
 
-    absl::optional<int> top, left, bottom, right;
+    std::optional<int> top, left, bottom, right;
 
     top = pref->FindInt(prefix + "top");
     left = pref->FindInt(prefix + "left");
@@ -178,7 +178,7 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
     right = pref->FindInt(prefix + "right");
 
     if (!top || !left || !bottom || !right)
-      return absl::nullopt;
+      return std::nullopt;
 
     return gfx::Rect(left.value(), top.value(),
                      std::max(0, right.value() - left.value()),
@@ -351,7 +351,6 @@ void WindowSizer::AdjustBoundsToBeVisibleOnDisplay(
     const gfx::Rect& saved_work_area,
     gfx::Rect* bounds) const {
   DCHECK(bounds);
-
   // If |bounds| is empty, reset to the default size.
   if (bounds->IsEmpty()) {
     gfx::Rect default_bounds = GetDefaultWindowBounds(display);
@@ -393,6 +392,8 @@ void WindowSizer::AdjustBoundsToBeVisibleOnDisplay(
   // to shrink it again.  Windows does not have this limitation
   // (e.g. can be resized from the top).
   bounds->set_height(std::min(work_area.height(), bounds->height()));
+  if (vivaldi::IsVivaldiRunning())
+    bounds->set_width(std::min(work_area.width(), bounds->width()));
 
   // On mac, we want to be aggressive about repositioning windows that are
   // partially offscreen.  If the window is partially offscreen horizontally,

@@ -182,27 +182,22 @@ void OpenXrGraphicsBindingD3D11::CreateSharedImages(
     gfx::Size buffer_size =
         gfx::Size(texture2d_desc.Width, texture2d_desc.Height);
 
-    std::unique_ptr<gpu::GpuMemoryBufferImplDXGI> gpu_memory_buffer =
-        gpu::GpuMemoryBufferImplDXGI::CreateFromHandle(
-            std::move(gpu_memory_buffer_handle), buffer_size,
-            gfx::BufferFormat::RGBA_8888, gfx::BufferUsage::GPU_READ,
-            base::DoNothing(), nullptr, nullptr);
-
+    // The SharedImages created here will eventually be transferred to other
+    // processes to have their contents written by WebGL and read via GL by
+    // OpenXR.
     const uint32_t shared_image_usage = gpu::SHARED_IMAGE_USAGE_SCANOUT |
                                         gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-                                        gpu::SHARED_IMAGE_USAGE_GLES2;
+                                        gpu::SHARED_IMAGE_USAGE_GLES2_READ |
+                                        gpu::SHARED_IMAGE_USAGE_GLES2_WRITE;
 
-    gpu::MailboxHolder& mailbox_holder = swap_chain_info.mailbox_holder;
-    auto client_shared_image = sii->CreateSharedImage(
+    swap_chain_info.shared_image = sii->CreateSharedImage(
         viz::SinglePlaneFormat::kRGBA_8888, buffer_size,
         gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
                         gfx::ColorSpace::TransferID::LINEAR),
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, shared_image_usage,
-        "OpenXrSwapChain", gpu_memory_buffer->CloneHandle());
-    CHECK(client_shared_image);
-    mailbox_holder.mailbox = client_shared_image->mailbox();
-    mailbox_holder.sync_token = sii->GenVerifiedSyncToken();
-    mailbox_holder.texture_target = GL_TEXTURE_2D;
+        "OpenXrSwapChain", std::move(gpu_memory_buffer_handle));
+    CHECK(swap_chain_info.shared_image);
+    swap_chain_info.sync_token = sii->GenVerifiedSyncToken();
   }
 }
 

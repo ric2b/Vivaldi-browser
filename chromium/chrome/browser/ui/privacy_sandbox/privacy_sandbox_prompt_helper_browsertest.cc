@@ -8,8 +8,8 @@
 #include "chrome/browser/privacy_sandbox/mock_privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/privacy_sandbox/privacy_sandbox_prompt_helper.h"
@@ -20,7 +20,6 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/search_engines/search_engines_switches.h"
-#include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/sync/test/test_sync_service.h"
 #include "content/public/common/url_constants.h"
@@ -149,26 +148,19 @@ class PrivacySandboxPromptHelperTestWithParam
  public:
   void SetUpInProcessBrowserTestFixture() override {
     // Not setting
-    // `SearchEngineChoiceServiceFactory::ScopedChromeBuildOverrideForTesting`
-    // will not initialize the `SearchEngineChoiceService` in
+    // `SearchEngineChoiceDialogServiceFactory::ScopedChromeBuildOverrideForTesting`
+    // will not initialize the `SearchEngineChoiceDialogService` in
     // tests thus simulating the fact that the user is not eligible for the
     // search engine choice or has already made a choice in a previous Chrome
     // run.
     std::vector<base::test::FeatureRef> enabled_features = {
-        switches::kSearchEngineChoice};
+        switches::kSearchEngineChoiceTrigger};
     std::vector<base::test::FeatureRef> disabled_features;
 
     test_prompt_type_ = GetParam();
     switch (test_prompt_type_) {
       case PrivacySandboxService::PromptType::kNone:
         [[fallthrough]];
-      case PrivacySandboxService::PromptType::kNotice:
-        [[fallthrough]];
-      case PrivacySandboxService::PromptType::kConsent: {
-        enabled_features.push_back(privacy_sandbox::kPrivacySandboxSettings3);
-        disabled_features.push_back(privacy_sandbox::kPrivacySandboxSettings4);
-        break;
-      }
       case PrivacySandboxService::PromptType::kM1Consent:
         [[fallthrough]];
       case PrivacySandboxService::PromptType::kM1NoticeROW:
@@ -177,7 +169,6 @@ class PrivacySandboxPromptHelperTestWithParam
         [[fallthrough]];
       case PrivacySandboxService::PromptType::kM1NoticeRestricted: {
         enabled_features.push_back(privacy_sandbox::kPrivacySandboxSettings4);
-        disabled_features.push_back(privacy_sandbox::kPrivacySandboxSettings3);
         break;
       }
     }
@@ -514,9 +505,7 @@ INSTANTIATE_TEST_SUITE_P(
     PrivacySandboxPromptHelperTestWithParam,
     testing::Values(PrivacySandboxService::PromptType::kM1Consent,
                     PrivacySandboxService::PromptType::kM1NoticeEEA,
-                    PrivacySandboxService::PromptType::kM1NoticeROW,
-                    PrivacySandboxService::PromptType::kConsent,
-                    PrivacySandboxService::PromptType::kNotice));
+                    PrivacySandboxService::PromptType::kM1NoticeROW));
 
 struct PrivacySandboxNonNormalBrowserTestData {
   const PrivacySandboxService::PromptType prompt_type;
@@ -668,15 +657,12 @@ INSTANTIATE_TEST_SUITE_P(
                     PrivacySandboxService::PromptType::kM1NoticeROW,
                     PrivacySandboxService::PromptType::kM1NoticeRestricted));
 
-// Checking the  `ENABLE_SEARCH_ENGINE_CHOICE` build flag is needed because the
-// test runs on Fuchsia while the search engine choice code doesn't.
-#if BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
 class PrivacySandboxPromptHelperTestWithSearchEngineChoiceEnabled
     : public PrivacySandboxPromptHelperTestWithParam {
  public:
   void SetUpOnMainThread() override {
     PrivacySandboxPromptHelperTestWithParam::SetUpOnMainThread();
-    SearchEngineChoiceService::SetDialogDisabledForTests(
+    SearchEngineChoiceDialogService::SetDialogDisabledForTests(
         /*dialog_disabled=*/false);
   }
 
@@ -688,8 +674,9 @@ class PrivacySandboxPromptHelperTestWithSearchEngineChoiceEnabled
 
  private:
   base::AutoReset<bool> scoped_chrome_build_override_ =
-      SearchEngineChoiceServiceFactory::ScopedChromeBuildOverrideForTesting(
-          /*force_chrome_build=*/true);
+      SearchEngineChoiceDialogServiceFactory::
+          ScopedChromeBuildOverrideForTesting(
+              /*force_chrome_build=*/true);
 };
 
 IN_PROC_BROWSER_TEST_P(
@@ -719,10 +706,12 @@ IN_PROC_BROWSER_TEST_P(
         1}});
 
   // Make a search engine choice to close the dialog.
-  SearchEngineChoiceService* search_engine_choice_service =
-      SearchEngineChoiceServiceFactory::GetForProfile(browser()->profile());
-  search_engine_choice_service->NotifyChoiceMade(
-      /*prepopulate_id=*/1, SearchEngineChoiceService::EntryPoint::kDialog);
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(
+          browser()->profile());
+  search_engine_choice_dialog_service->NotifyChoiceMade(
+      /*prepopulate_id=*/1,
+      SearchEngineChoiceDialogService::EntryPoint::kDialog);
 
   // Make sure that the Privacy Sandbox prompt doesn't get displayed on the next
   // navigation.
@@ -739,7 +728,4 @@ INSTANTIATE_TEST_SUITE_P(
     PrivacySandboxPromptHelperTestWithSearchEngineChoiceEnabled,
     testing::Values(PrivacySandboxService::PromptType::kM1Consent,
                     PrivacySandboxService::PromptType::kM1NoticeEEA,
-                    PrivacySandboxService::PromptType::kM1NoticeROW,
-                    PrivacySandboxService::PromptType::kConsent,
-                    PrivacySandboxService::PromptType::kNotice));
-#endif  // BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
+                    PrivacySandboxService::PromptType::kM1NoticeROW));

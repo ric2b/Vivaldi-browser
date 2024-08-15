@@ -49,15 +49,15 @@ pub extern "C" fn np_ffi_LegibleDeserializedV0Advertisement_get_num_des(
 pub extern "C" fn np_ffi_LegibleDeserializedV0Advertisement_into_payload(
     adv: LegibleDeserializedV0Advertisement,
 ) -> V0Payload {
-    adv.into_payload()
+    adv.payload()
 }
 
-/// Gets just the identity information associated with a `LegibleDeserializedV0Advertisement`.
+/// Gets just the identity kind associated with a `LegibleDeserializedV0Advertisement`.
 #[no_mangle]
-pub extern "C" fn np_ffi_LegibleDeserializedV0Advertisement_into_identity(
+pub extern "C" fn np_ffi_LegibleDeserializedV0Advertisement_get_identity_kind(
     adv: LegibleDeserializedV0Advertisement,
-) -> DeserializedV0Identity {
-    adv.into_identity()
+) -> DeserializedV0IdentityKind {
+    adv.identity_kind()
 }
 
 /// Deallocates any internal data of a `LegibleDeserializedV0Advertisement`
@@ -66,14 +66,6 @@ pub extern "C" fn np_ffi_deallocate_legible_v0_advertisement(
     adv: LegibleDeserializedV0Advertisement,
 ) -> DeallocateResult {
     adv.deallocate()
-}
-
-/// Gets the tag of the `DeserializedV0Identity` tagged-union.
-#[no_mangle]
-pub extern "C" fn np_ffi_DeserializedV0Identity_kind(
-    identity: DeserializedV0Identity,
-) -> DeserializedV0IdentityKind {
-    identity.kind()
 }
 
 /// Attempts to get the data-element with the given index in the passed v0 adv payload

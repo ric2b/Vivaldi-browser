@@ -13,7 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "content/browser/indexed_db/indexed_db_bucket_context.h"
+#include "content/browser/indexed_db/indexed_db_bucket_context_handle.h"
 #include "content/browser/indexed_db/indexed_db_database.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -23,17 +23,17 @@ namespace content {
 class IndexedDBDatabaseCallbacks;
 class IndexedDBDatabaseError;
 class IndexedDBTransaction;
-class IndexedDBBucketContextHandle;
+class IndexedDBBucketContext;
 
 class CONTENT_EXPORT IndexedDBConnection {
  public:
-  IndexedDBConnection(
-      IndexedDBBucketContext& bucket_context,
-      base::WeakPtr<IndexedDBDatabase> database,
-      base::RepeatingClosure on_version_change_ignored,
-      base::OnceCallback<void(IndexedDBConnection*)> on_close,
-      scoped_refptr<IndexedDBDatabaseCallbacks> callbacks,
-      scoped_refptr<IndexedDBClientStateCheckerWrapper> client_state_checker);
+  IndexedDBConnection(IndexedDBBucketContext& bucket_context,
+                      base::WeakPtr<IndexedDBDatabase> database,
+                      base::RepeatingClosure on_version_change_ignored,
+                      base::OnceCallback<void(IndexedDBConnection*)> on_close,
+                      std::unique_ptr<IndexedDBDatabaseCallbacks> callbacks,
+                      mojo::Remote<storage::mojom::IndexedDBClientStateChecker>
+                          client_state_checker);
 
   IndexedDBConnection(const IndexedDBConnection&) = delete;
   IndexedDBConnection& operator=(const IndexedDBConnection&) = delete;
@@ -48,7 +48,9 @@ class CONTENT_EXPORT IndexedDBConnection {
     kAbortAllReturnLastError,
   };
 
-  void AbortTransactionsAndClose(CloseErrorHandling error_handling);
+  // The return value is `callbacks_`, passing ownership.
+  std::unique_ptr<IndexedDBDatabaseCallbacks> AbortTransactionsAndClose(
+      CloseErrorHandling error_handling);
 
   void CloseAndReportForceClose();
   bool IsConnected();
@@ -124,11 +126,12 @@ class CONTENT_EXPORT IndexedDBConnection {
 
   // The callbacks_ member is cleared when the connection is closed.
   // May be nullptr in unit tests.
-  scoped_refptr<IndexedDBDatabaseCallbacks> callbacks_;
+  std::unique_ptr<IndexedDBDatabaseCallbacks> callbacks_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 
-  scoped_refptr<IndexedDBClientStateCheckerWrapper> client_state_checker_;
+  mojo::Remote<storage::mojom::IndexedDBClientStateChecker>
+      client_state_checker_;
   mojo::RemoteSet<storage::mojom::IndexedDBClientKeepActive>
       client_keep_active_remotes_;
 

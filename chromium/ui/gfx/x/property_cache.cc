@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "base/check_op.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/xproto.h"
 
@@ -18,7 +19,8 @@ PropertyCache::PropertyCache(Connection* connection,
                              OnChangeCallback on_change)
     : connection_(connection),
       window_(window),
-      event_selector_(window_, EventMask::PropertyChange),
+      event_selector_(
+          connection->ScopedSelectEvent(window_, EventMask::PropertyChange)),
       on_change_(std::move(on_change)) {
   connection_->AddEventObserver(this);
 
@@ -38,12 +40,12 @@ PropertyCache::~PropertyCache() {
 
 const GetPropertyResponse& PropertyCache::Get(Atom atom) {
   auto it = properties_.find(atom);
-  DUMP_WILL_BE_CHECK(it != properties_.end());
+  CHECK(it != properties_.end());
 
   if (!it->second.response.has_value()) {
     it->second.future.DispatchNow();
   }
-  DUMP_WILL_BE_CHECK(it->second.response.has_value());
+  CHECK(it->second.response.has_value());
 
   return it->second.response.value();
 }
@@ -63,7 +65,7 @@ void PropertyCache::OnEvent(const Event& xev) {
   if (prop->state == Property::NewValue) {
     FetchProperty(it);
   } else {
-    DUMP_WILL_BE_CHECK_EQ(prop->state, Property::Delete);
+    CHECK_EQ(prop->state, Property::Delete);
     // When the property is deleted, a GetPropertyRequest will result in a
     // zeroed GetPropertyReply, so set the reply state now to avoid making an
     // unnecessary request.
@@ -73,11 +75,13 @@ void PropertyCache::OnEvent(const Event& xev) {
 }
 
 void PropertyCache::FetchProperty(PropertiesIterator it) {
-  it->second.future = connection_->GetProperty({
-      .window = window_,
-      .property = it->first,
-      .long_length = std::numeric_limits<uint32_t>::max(),
-  });
+  it->second.future =
+      static_cast<XProto*>(connection_)
+          ->GetProperty({
+              .window = window_,
+              .property = it->first,
+              .long_length = std::numeric_limits<uint32_t>::max(),
+          });
   it->second.future.OnResponse(base::BindOnce(
       &PropertyCache::OnGetPropertyResponse, weak_factory_.GetWeakPtr(), it));
 }

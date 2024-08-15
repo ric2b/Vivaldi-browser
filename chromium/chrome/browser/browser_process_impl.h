@@ -50,6 +50,7 @@ class ChromeMetricsServicesManagerClient;
 class DevToolsAutoOpener;
 class RemoteDebuggingServer;
 class PrefRegistrySimple;
+class SearchEngineChoiceProfileTagger;
 class SecureOriginPrefsObserver;
 class SiteIsolationPrefsObserver;
 class SystemNotificationHelper;
@@ -321,7 +322,7 @@ class BrowserProcessImpl : public BrowserProcess,
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  scoped_refptr<printing::PrintPreviewDialogController>
+  std::unique_ptr<printing::PrintPreviewDialogController>
       print_preview_dialog_controller_;
 
   std::unique_ptr<printing::BackgroundPrintingManager>
@@ -454,6 +455,9 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<UsbSystemTrayIcon> usb_system_tray_icon_;
 
   BuildState build_state_;
+
+  std::unique_ptr<SearchEngineChoiceProfileTagger>
+      search_engine_choice_profile_tagger_;
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

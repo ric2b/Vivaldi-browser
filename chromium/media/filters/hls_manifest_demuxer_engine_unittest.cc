@@ -128,6 +128,16 @@ MATCHER_P2(CloseTo,
   return (arg - Target <= Radius) || (Target - arg <= Radius);
 }
 
+MATCHER_P2(SingleSegmentQueue,
+           urlstr,
+           range,
+           "Segment Queue matcher for HlsDataSourceProvider") {
+  if (arg.size() != 1) {
+    return false;
+  }
+  auto first = arg.front();
+  return first.uri == GURL(urlstr) && first.range == range;
+}
 
 class FakeHlsDataSourceProvider : public HlsDataSourceProvider {
  private:
@@ -136,10 +146,10 @@ class FakeHlsDataSourceProvider : public HlsDataSourceProvider {
  public:
   FakeHlsDataSourceProvider(HlsDataSourceProvider* mock) : mock_(mock) {}
 
-  void ReadFromUrl(GURL url,
-                   absl::optional<hls::types::ByteRange> range,
-                   HlsDataSourceProvider::ReadCb request) override {
-    mock_->ReadFromUrl(url, range, std::move(request));
+  void ReadFromCombinedUrlQueue(
+      SegmentQueue segments,
+      HlsDataSourceProvider::ReadCb callback) override {
+    mock_->ReadFromCombinedUrlQueue(std::move(segments), std::move(callback));
   }
 
   void ReadFromExistingStream(std::unique_ptr<HlsDataSourceStream> stream,
@@ -166,9 +176,10 @@ class HlsManifestDemuxerEngineTest : public testing::Test {
 
   template <typename T>
   void BindUrlToDataSource(std::string url, std::string value) {
-    EXPECT_CALL(*mock_dsp_, ReadFromUrl(GURL(url), _, _))
+    EXPECT_CALL(*mock_dsp_, ReadFromCombinedUrlQueue(
+                                SingleSegmentQueue(url, absl::nullopt), _))
         .Times(1)
-        .WillOnce(RunOnceCallback<2>(T::CreateStream(value)));
+        .WillOnce(RunOnceCallback<1>(T::CreateStream(value)));
   }
 
  public:
@@ -317,7 +328,7 @@ TEST_F(HlsManifestDemuxerEngineTest, TestAsyncSeek) {
   auto rendition = std::make_unique<StrictMock<MockHlsRendition>>();
   EXPECT_CALL(*rendition, GetDuration()).WillOnce(Return(base::Seconds(30)));
   auto* rendition_ptr = rendition.get();
-  engine_->AddRenditionForTesting(std::move(rendition));
+  engine_->AddRenditionForTesting("primary", std::move(rendition));
   // Set up rendition state and run, expecting no other callbacks.
   task_environment_.RunUntilIdle();
 
@@ -350,7 +361,7 @@ TEST_F(HlsManifestDemuxerEngineTest, TestMultiRenditionCheckState) {
 
   auto* rend1 = rendition1.get();
   auto* rend2 = rendition2.get();
-  engine_->AddRenditionForTesting(std::move(rendition1));
+  engine_->AddRenditionForTesting("primary", std::move(rendition1));
 
   // While there is only one rendition, the response from |OnTimeUpdate| is
   // whatever that rendition wants.
@@ -370,7 +381,7 @@ TEST_F(HlsManifestDemuxerEngineTest, TestMultiRenditionCheckState) {
   // After adding the second rendition, the response from OnTimeUpdate is now
   // the lesser of (rend1.response - (calc time of rend2)) and
   // (rend2.response)
-  engine_->AddRenditionForTesting(std::move(rendition2));
+  engine_->AddRenditionForTesting("audio-override", std::move(rendition2));
 
   // Both renditions request time, so pick the lesser.
   EXPECT_CALL(*rend1, CheckState(_, _, _))
@@ -444,16 +455,22 @@ TEST_F(HlsManifestDemuxerEngineTest, TestEndOfStreamAfterAllFetched) {
   // - first.ts      - request for the first few bytes to do codec detection
   // - first.ts      - request for chunks of data to add to ChunkDemuxer
   EXPECT_CALL(*mock_dsp_,
-              ReadFromUrl(GURL("http://media.example.com/manifest.m3u8"), _, _))
-      .WillOnce(RunOnceCallback<2>(
+              ReadFromCombinedUrlQueue(
+                  SingleSegmentQueue("http://media.example.com/manifest.m3u8",
+                                     absl::nullopt),
+                  _))
+      .WillOnce(RunOnceCallback<1>(
           StringHlsDataSourceStreamFactory::CreateStream(kShortMediaPlaylist)));
   EXPECT_CALL(*mock_dsp_,
-              ReadFromUrl(GURL("http://media.example.com/first.ts"), _, _))
+              ReadFromCombinedUrlQueue(
+                  SingleSegmentQueue("http://media.example.com/first.ts",
+                                     absl::nullopt),
+                  _))
       .WillOnce(
-          RunOnceCallback<2>(StringHlsDataSourceStreamFactory::CreateStream(
+          RunOnceCallback<1>(StringHlsDataSourceStreamFactory::CreateStream(
               "hey, this isn't a bitstream!")))
       .WillOnce(
-          RunOnceCallback<2>(StringHlsDataSourceStreamFactory::CreateStream(
+          RunOnceCallback<1>(StringHlsDataSourceStreamFactory::CreateStream(
               "do I look like a video to you?")));
 
   // `GetBufferedRanges` gets called many times during this process:

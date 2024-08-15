@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Item diperbarui</translation>
 <translation id="1041637248958093184">Telusuran, situs yang dikunjungi, kuki, dan berkas temporer tidak akan disimpan Vivaldi saat menggunakan Tab Pribadi.</translation>
 <translation id="1066692930984703744">Aktifkan pemblokir pelacak dan iklan untuk penjelajahan yang lebih cepat dan aman</translation>
-<translation id="1076258485383101882">Sinkronkan URL terketik</translation>
 <translation id="1116694919640316211">Tentang</translation>
 <translation id="1123707809902612118">Blokir Pelacak dan Iklan</translation>
 <translation id="1151972924205500581">Sandi wajib diisi</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">Syarat Penggunaan</translation>
 <translation id="1771413903824396513">Berdasar Nama Panggilan</translation>
 <translation id="1804522390855853698">Cina (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Terang</translation>
 <translation id="1809939268435598390">Hapus Folder</translation>
 <translation id="1813686536470127172">Folder lain</translation>
 <translation id="1828800626900562968">Ketuk ikon plus di bawah ini untuk membuka tab baru.</translation>
@@ -71,12 +71,15 @@
 <translation id="2388224692799337242">Saat Anda mulai menjelajah, riwayat Anda akan tampil di sini</translation>
 <translation id="2391028308389203648">Turki (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Aktifkan</translation>
+<translation id="2414886740292270097">Gelap</translation>
+<translation id="2433507940547922241">Tampilan</translation>
 <translation id="2434910957904013691">Sinkronkan Semua</translation>
 <translation id="2448144008809286557">Lupakan <ph name="BEGIN_LINK" />Nama pengguna<ph name="END_LINK" /> atau <ph name="BEGIN_LINK" />Sandi<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">PENGECUALIAN</translation>
 <translation id="2558801801411970131">Memblokir Pelacak</translation>
 <translation id="2577446409661931381">Catatan Baru</translation>
 <translation id="2619628557366098325">Portugis (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Sistem</translation>
 <translation id="2677862276555105603">Iklan
 diblokir</translation>
 <translation id="2678542925523700624">Estonia (<ph name="ORIGIN" />)</translation>
@@ -207,6 +210,7 @@ diblokir</translation>
 <translation id="5238642303473095117">Hapus Data</translation>
 <translation id="5245732982828228444">Anda akan menemukan catatan Anda di sini</translation>
 <translation id="5249199221558969362">Silakan masukkan angka usia yang realistis.</translation>
+<translation id="5271549068863921519">Simpan sandi</translation>
 <translation id="5290452628447338707">Tidak ada catatan</translation>
 <translation id="5317780077021120954">Simpan</translation>
 <translation id="5349678548463426691">Berdasar Deskripsi</translation>
@@ -240,6 +244,7 @@ diblokir</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> item dipindahkan</translation>
 <translation id="6147094071357011481">Tab yang Baru Saja Ditutup Tidak Tersedia</translation>
 <translation id="6193995664633100765">India (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">Tema</translation>
 <translation id="6365929278691047681">Jerman (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Edit penanda</translation>
 <translation id="6406506848690869874">Sinkronisasi</translation>
@@ -278,7 +283,6 @@ diblokir</translation>
 <translation id="7041964446309059643">Manual</translation>
 <translation id="7110758301321962823">Pulihkan Nama Pengguna</translation>
 <translation id="7194677467200983873">Sinkronisasi terakhir:</translation>
-<translation id="7196846668589096106">Tab desktop</translation>
 <translation id="7210372243397300116">Folder Telusur</translation>
 <translation id="7215420652436283416">Berdasar Alamat</translation>
 <translation id="7229439505896086266">Buat catatan</translation>
@@ -349,6 +353,7 @@ diblokir</translation>
 <translation id="8684294196284714094">Siap mengatur Vivaldi sebagai peramban standar?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> item dihapus</translation>
 <translation id="8763006697839582351">Buka di Vivaldi Pribadi</translation>
+<translation id="8786689981011401964">Wallpaper</translation>
 <translation id="8804164990146287819">Kebijakan Privasi</translation>
 <translation id="8819841443522803117">Waktunya mengganti peramban standar Anda? Pilih Vivaldi.</translation>
 <translation id="8820817407110198400">Bookmark</translation>

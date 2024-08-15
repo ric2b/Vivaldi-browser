@@ -40,15 +40,15 @@ SettingsSetContentSettingFunction::~SettingsSetContentSettingFunction() {}
 ContentSetting ConvertToContentSetting(
     vivaldi::settings::ContentSettingEnum setting) {
   switch (setting) {
-    case vivaldi::settings::CONTENT_SETTING_ENUM_ALLOW:
+    case vivaldi::settings::ContentSettingEnum::kAllow:
       return CONTENT_SETTING_ALLOW;
-    case vivaldi::settings::CONTENT_SETTING_ENUM_BLOCK:
+    case vivaldi::settings::ContentSettingEnum::kBlock:
       return CONTENT_SETTING_BLOCK;
-    case vivaldi::settings::CONTENT_SETTING_ENUM_ASK:
+    case vivaldi::settings::ContentSettingEnum::kAsk:
       return CONTENT_SETTING_ASK;
-    case vivaldi::settings::CONTENT_SETTING_ENUM_SESSION_ONLY:
+    case vivaldi::settings::ContentSettingEnum::kSessionOnly:
       return CONTENT_SETTING_SESSION_ONLY;
-    case vivaldi::settings::CONTENT_SETTING_ENUM_DETECT_IMPORTANT_CONTENT:
+    case vivaldi::settings::ContentSettingEnum::kDetectImportantContent:
       return CONTENT_SETTING_DETECT_IMPORTANT_CONTENT;
     default: {
       NOTREACHED();
@@ -61,11 +61,11 @@ ContentSetting ConvertToContentSetting(
 ContentSettingsType ConvertToContentSettingsType(
     vivaldi::settings::ContentSettingsTypeEnum type) {
   switch (type) {
-    case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_POPUPS:
+    case vivaldi::settings::ContentSettingsTypeEnum::kPopups:
       return ContentSettingsType::POPUPS;
-    case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_GEOLOCATION:
+    case vivaldi::settings::ContentSettingsTypeEnum::kGeolocation:
       return ContentSettingsType::GEOLOCATION;
-    case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_NOTIFICATIONS:
+    case vivaldi::settings::ContentSettingsTypeEnum::kNotifications:
       return ContentSettingsType::NOTIFICATIONS;
     default: {
       NOTREACHED();

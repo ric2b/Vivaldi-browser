@@ -8,6 +8,7 @@
 #include <memory>
 #include <tuple>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/values_util.h"
@@ -337,7 +338,7 @@ std::vector<base::UnguessableToken> ClearMatchingLicenseData(
     base::Value::Dict& storage_dict,
     base::Time start,
     base::Time end,
-    const base::RepeatingCallback<bool(const GURL&)>& filter) {
+    const MediaDrmStorageImpl::ClearMatchingLicensesFilterCB& filter) {
   std::vector<std::string> origins_to_delete;
   std::vector<base::UnguessableToken> origin_ids_to_unprovision;
 
@@ -406,9 +407,11 @@ void ClearMediaDrmLicensesBlocking(
             media::MediaDrmBridge::SECURITY_LEVEL_DEFAULT,
             base::NullCallback());
 
-    DCHECK(media_drm_bridge);
-
-    media_drm_bridge->Unprovision();
+    if (media_drm_bridge) {
+      media_drm_bridge->Unprovision();
+    } else {
+      base::debug::DumpWithoutCrashing();
+    }
   }
 }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -661,7 +664,7 @@ void MediaDrmStorageImpl::ClearMatchingLicenses(
     PrefService* pref_service,
     base::Time start,
     base::Time end,
-    const base::RepeatingCallback<bool(const GURL&)>& filter,
+    const MediaDrmStorageImpl::ClearMatchingLicensesFilterCB& filter,
     base::OnceClosure complete_cb) {
   DVLOG(1) << __func__ << ": Clear licenses [" << start << ", " << end << "]";
 

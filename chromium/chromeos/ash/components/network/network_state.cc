@@ -43,7 +43,7 @@ constexpr char kPaymentPortalMethodPost[] = "POST";
 
 // |dict| may be an empty value, in which case return an empty string.
 std::string GetStringFromDictionary(
-    const absl::optional<base::Value::Dict>& dict,
+    const std::optional<base::Value::Dict>& dict,
     const char* key) {
   const std::string* stringp =
       dict.has_value() ? dict->FindString(key) : nullptr;
@@ -195,7 +195,7 @@ bool NetworkState::PropertyChanged(const std::string& key,
       proxy_config_.reset();
       return true;
     }
-    absl::optional<base::Value::Dict> proxy_config =
+    std::optional<base::Value::Dict> proxy_config =
         chromeos::onc::ReadDictionaryFromJson(*proxy_config_str);
     if (!proxy_config.has_value()) {
       NET_LOG(ERROR) << "Failed to parse " << path() << "." << key;
@@ -460,6 +460,7 @@ void NetworkState::SetConnectionState(const std::string& connection_state) {
       connection_state_ == shill::kStateOnline) {
     shill_portal_state_ = PortalState::kOnline;
   }
+  chrome_portal_state_ = PortalState::kUnknown;
 }
 
 bool NetworkState::IsManagedByPolicy() const {
@@ -713,21 +714,12 @@ void NetworkState::UpdateCaptivePortalState(
     return;
   }
 
-  int status_code =
-      properties.FindInt(shill::kPortalDetectionFailedStatusCodeProperty)
-          .value_or(0);
   if (connection_state_ == shill::kStateNoConnectivity) {
     shill_portal_state_ = PortalState::kNoInternet;
   } else if (connection_state_ == shill::kStateRedirectFound) {
     shill_portal_state_ = PortalState::kPortal;
   } else if (connection_state_ == shill::kStatePortalSuspected) {
-    if (status_code == net::HTTP_PROXY_AUTHENTICATION_REQUIRED) {
-      // If Shill's portal detection HTTP probe returns a 407 response, Shill
-      // will treat that as a portal-suspected state.
-      shill_portal_state_ = PortalState::kProxyAuthRequired;
-    } else {
-      shill_portal_state_ = PortalState::kPortalSuspected;
-    }
+    shill_portal_state_ = PortalState::kPortalSuspected;
   } else if (connection_state_ == shill::kStateOnline) {
     shill_portal_state_ = PortalState::kOnline;
   } else {
@@ -738,10 +730,7 @@ void NetworkState::UpdateCaptivePortalState(
                                 shill_portal_state_);
   if (shill_portal_state_ != PortalState::kOnline) {
     NET_LOG(EVENT) << "Shill captive portal state for: " << NetworkId(this)
-                   << " = " << shill_portal_state_
-                   << " ,status_code=" << status_code;
-    base::UmaHistogramSparse("Network.CaptivePortalStatusCode",
-                             std::abs(status_code));
+                   << " = " << shill_portal_state_;
   }
 }
 

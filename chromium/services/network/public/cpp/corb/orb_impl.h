@@ -5,6 +5,8 @@
 #ifndef SERVICES_NETWORK_PUBLIC_CPP_CORB_ORB_IMPL_H_
 #define SERVICES_NETWORK_PUBLIC_CPP_CORB_ORB_IMPL_H_
 
+#include <string_view>
+
 #include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
 #include "services/network/public/cpp/corb/corb_api.h"
@@ -38,14 +40,10 @@ class COMPONENT_EXPORT(NETWORK_CPP) OpaqueResponseBlockingAnalyzer final
                 mojom::RequestMode request_mode,
                 mojom::RequestDestination request_destination_from_renderer,
                 const network::mojom::URLResponseHead& response) override;
-  Decision Sniff(base::StringPiece data) override;
+  Decision Sniff(std::string_view data) override;
   Decision HandleEndOfSniffableResponseBody() override;
   bool ShouldReportBlockedResponse() const override;
   BlockedResponseHandling ShouldHandleBlockedResponseAs() const override;
-
-  // TODO(https://crbug.com/1178928): Remove this once we gather enough
-  // DumpWithoutCrashing data.
-  void ReportOrbBlockedAndCorbDidnt() const;
 
   // Each `return Decision::kBlock` in the implementation of
   // OpaqueResponseBlockingAnalyzer has a corresponding enum value below.

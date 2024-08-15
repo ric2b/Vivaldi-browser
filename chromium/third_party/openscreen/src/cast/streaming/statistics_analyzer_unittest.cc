@@ -4,6 +4,7 @@
 
 #include "cast/streaming/statistics_analyzer.h"
 
+#include <cstdint>
 #include <numeric>
 
 #include "cast/streaming/statistics.h"
@@ -122,6 +123,27 @@ class StatisticsAnalyzerTest : public ::testing::Test {
     collector_ = analyzer_->statistics_collector();
   }
 
+  FrameEvent MakeFrameEvent(int frame_id, RtpTimeTicks rtp_timestamp) {
+    FrameEvent event = kDefaultFrameEvent;
+    event.frame_id = FrameId(frame_id);
+    event.rtp_timestamp = rtp_timestamp;
+    event.timestamp = fake_clock_.now();
+    event.received_timestamp = event.timestamp;
+    return event;
+  }
+
+  PacketEvent MakePacketEvent(int frame_and_packet_id,
+                              RtpTimeTicks rtp_timestamp) {
+    OSP_CHECK_LT(frame_and_packet_id, static_cast<int>(UINT16_MAX));
+    PacketEvent event = kDefaultPacketEvent;
+    event.packet_id = static_cast<uint16_t>(frame_and_packet_id);
+    event.rtp_timestamp = rtp_timestamp;
+    event.frame_id = FrameId(frame_and_packet_id);
+    event.timestamp = fake_clock_.now();
+    event.received_timestamp = event.timestamp;
+    return event;
+  }
+
  protected:
   NiceMock<FakeClockOffsetEstimator>* fake_estimator_;
   StrictMock<FakeSenderStatsClient> stats_client_;
@@ -139,11 +161,7 @@ TEST_F(StatisticsAnalyzerTest, FrameEncoded) {
   RtpTimeTicks rtp_timestamp;
 
   for (int i = 0; i < kDefaultNumEvents; i++) {
-    FrameEvent event(kDefaultFrameEvent);
-    event.frame_id = FrameId(i);
-    event.rtp_timestamp = rtp_timestamp;
-    event.timestamp = fake_clock_.now();
-
+    FrameEvent event = MakeFrameEvent(i, rtp_timestamp);
     collector_->CollectFrameEvent(event);
     last_event_time = fake_clock_.now();
     fake_clock_.Advance(milliseconds(kDefaultStatIntervalMs));
@@ -185,21 +203,16 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedAndAckSent) {
   RtpTimeTicks rtp_timestamp;
 
   for (int i = 0; i < kDefaultNumEvents; i++) {
-    FrameEvent event1(kDefaultFrameEvent);
-    event1.frame_id = FrameId(i);
-    event1.rtp_timestamp = rtp_timestamp;
-    event1.timestamp = fake_clock_.now();
+    FrameEvent event1 = MakeFrameEvent(i, rtp_timestamp);
 
     // Let random frame delay be anywhere from 20 - 39 ms
     Clock::duration random_latency = milliseconds(20 + (rand() % 20));
     total_frame_latency += random_latency;
 
-    FrameEvent event2(kDefaultFrameEvent);
-    event2.frame_id = FrameId(i);
+    FrameEvent event2 = MakeFrameEvent(i, rtp_timestamp);
     event2.type = StatisticsEventType::kFrameAckSent;
-    event2.rtp_timestamp = rtp_timestamp;
-    event2.timestamp = fake_clock_.now() + random_latency;
-    event2.received_timestamp = fake_clock_.now() + random_latency * 2;
+    event2.timestamp += random_latency;
+    event2.received_timestamp += random_latency * 2;
 
     collector_->CollectFrameEvent(event1);
     collector_->CollectFrameEvent(event2);
@@ -228,10 +241,7 @@ TEST_F(StatisticsAnalyzerTest, FramePlayedOut) {
   int total_late_frames = 0;
 
   for (int i = 0; i < kDefaultNumEvents; i++) {
-    FrameEvent event1(kDefaultFrameEvent);
-    event1.frame_id = FrameId(i);
-    event1.rtp_timestamp = rtp_timestamp;
-    event1.timestamp = fake_clock_.now();
+    FrameEvent event1 = MakeFrameEvent(i, rtp_timestamp);
 
     // Let random frame delay be anywhere from 20 - 39 ms.
     Clock::duration random_latency = milliseconds(20 + (rand() % 20));
@@ -239,12 +249,10 @@ TEST_F(StatisticsAnalyzerTest, FramePlayedOut) {
     // Frames will have delay_deltas of -20, 0, 20, 40, or 60 ms.
     auto delay_delta = milliseconds(60 - (20 * (i % 5)));
 
-    FrameEvent event2(kDefaultFrameEvent);
-    event2.frame_id = FrameId(i);
+    FrameEvent event2 = MakeFrameEvent(i, rtp_timestamp);
     event2.type = StatisticsEventType::kFramePlayedOut;
-    event2.rtp_timestamp = rtp_timestamp;
-    event2.timestamp = fake_clock_.now() + random_latency;
-    event2.received_timestamp = fake_clock_.now() + random_latency * 2;
+    event2.timestamp += random_latency;
+    event2.received_timestamp += random_latency * 2;
     event2.delay_delta = delay_delta;
 
     if (delay_delta > milliseconds(0)) {
@@ -301,12 +309,9 @@ TEST_F(StatisticsAnalyzerTest, AllFrameEvents) {
   int current_event = 0;
   for (int frame_id = 0; frame_id < kNumFrames; frame_id++) {
     for (StatisticsEventType event_type : kEventsToReport) {
-      FrameEvent event(kDefaultFrameEvent);
+      FrameEvent event = MakeFrameEvent(frame_id, rtp_timestamp);
       event.type = event_type;
-      event.frame_id = FrameId(frame_id);
-      event.rtp_timestamp = rtp_timestamp;
-      event.timestamp =
-          fake_clock_.now() + milliseconds(kTimestampOffsetsMs[current_event]);
+      event.timestamp += milliseconds(kTimestampOffsetsMs[current_event]);
       event.delay_delta = milliseconds(kFramePlayoutDelayDeltasMs[frame_id]);
       collector_->CollectFrameEvent(std::move(event));
 
@@ -360,20 +365,14 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedAndPacketSent) {
   RtpTimeTicks rtp_timestamp;
 
   for (int i = 0; i < kDefaultNumEvents; i++) {
-    FrameEvent event1(kDefaultFrameEvent);
-    event1.frame_id = FrameId(i);
-    event1.rtp_timestamp = rtp_timestamp;
-    event1.timestamp = fake_clock_.now();
+    FrameEvent event1 = MakeFrameEvent(i, rtp_timestamp);
 
     // Let queueing latency be either 0, 20, 40, 60, or 80 ms.
     const Clock::duration queueing_latency = milliseconds(80 - (20 * (i % 5)));
     total_queueing_latency += queueing_latency;
 
-    PacketEvent event2(kDefaultPacketEvent);
-    event2.packet_id = static_cast<uint16_t>(i);
-    event2.rtp_timestamp = rtp_timestamp;
-    event2.frame_id = FrameId(i);
-    event2.timestamp = fake_clock_.now() + queueing_latency;
+    PacketEvent event2 = MakePacketEvent(i, rtp_timestamp);
+    event2.timestamp += queueing_latency;
 
     collector_->CollectFrameEvent(event1);
     collector_->CollectPacketEvent(event2);
@@ -420,22 +419,16 @@ TEST_F(StatisticsAnalyzerTest, PacketSentAndReceived) {
   RtpTimeTicks rtp_timestamp;
 
   for (int i = 0; i < kDefaultNumEvents; i++) {
-    PacketEvent event1(kDefaultPacketEvent);
-    event1.packet_id = static_cast<uint16_t>(i);
-    event1.rtp_timestamp = rtp_timestamp;
-    event1.frame_id = FrameId(i);
-    event1.timestamp = fake_clock_.now();
+    PacketEvent event1 = MakePacketEvent(i, rtp_timestamp);
 
     // Let network latency be either 0, 20, 40, 60, or 80 ms.
     Clock::duration network_latency = milliseconds(80 - (20 * (i % 5)));
     total_network_latency += network_latency;
 
-    PacketEvent event2(kDefaultPacketEvent);
-    event2.packet_id = static_cast<uint16_t>(i);
-    event2.rtp_timestamp = rtp_timestamp;
+    PacketEvent event2 = MakePacketEvent(i, rtp_timestamp);
     event2.frame_id = FrameId(i);
-    event2.timestamp = fake_clock_.now() + network_latency;
-    event2.received_timestamp = fake_clock_.now() + network_latency * 2;
+    event2.timestamp += network_latency;
+    event2.received_timestamp += network_latency * 2;
     event2.type = StatisticsEventType::kPacketReceived;
 
     collector_->CollectPacketEvent(event1);
@@ -478,16 +471,9 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedPacketSentAndReceived) {
   Clock::time_point last_event_time;
 
   for (int i = 0; i < kDefaultNumEvents; i++) {
-    FrameEvent event1(kDefaultFrameEvent);
-    event1.frame_id = FrameId(i);
-    event1.rtp_timestamp = rtp_timestamp;
-    event1.timestamp = fake_clock_.now();
+    FrameEvent event1 = MakeFrameEvent(i, rtp_timestamp);
 
-    PacketEvent event2(kDefaultPacketEvent);
-    event2.packet_id = static_cast<uint16_t>(i);
-    event2.rtp_timestamp = rtp_timestamp;
-    event2.frame_id = FrameId(i);
-    event2.timestamp = fake_clock_.now();
+    PacketEvent event2 = MakePacketEvent(i, rtp_timestamp);
 
     // Let packet latency be either 20, 40, 60, 80, or 100 ms.
     Clock::duration packet_latency = milliseconds(100 - (20 * (i % 5)));
@@ -496,12 +482,9 @@ TEST_F(StatisticsAnalyzerTest, FrameEncodedPacketSentAndReceived) {
       last_event_time = fake_clock_.now() + packet_latency;
     }
 
-    PacketEvent event3(kDefaultPacketEvent);
-    event3.packet_id = static_cast<uint16_t>(i);
-    event3.rtp_timestamp = rtp_timestamp;
-    event3.frame_id = FrameId(i);
-    event3.timestamp = fake_clock_.now() + packet_latency;
-    event3.received_timestamp = fake_clock_.now() + packet_latency * 2;
+    PacketEvent event3 = MakePacketEvent(i, rtp_timestamp);
+    event3.timestamp += packet_latency;
+    event3.received_timestamp += packet_latency * 2;
     event3.type = StatisticsEventType::kPacketReceived;
 
     collector_->CollectFrameEvent(event1);
@@ -568,17 +551,11 @@ TEST_F(StatisticsAnalyzerTest, AudioAndVideoFrameEncodedPacketSentAndReceived) {
       media_type = StatisticsEventMediaType::kAudio;
     }
 
-    FrameEvent event1(kDefaultFrameEvent);
-    event1.frame_id = FrameId(i);
+    FrameEvent event1 = MakeFrameEvent(i, rtp_timestamp);
     event1.media_type = media_type;
-    event1.rtp_timestamp = rtp_timestamp;
-    event1.timestamp = fake_clock_.now();
 
-    PacketEvent event2(kDefaultPacketEvent);
-    event2.packet_id = static_cast<uint16_t>(i);
-    event2.rtp_timestamp = rtp_timestamp;
-    event2.frame_id = FrameId(i);
-    event2.timestamp = fake_clock_.now() + milliseconds(5);
+    PacketEvent event2 = MakePacketEvent(i, rtp_timestamp);
+    event2.timestamp += milliseconds(5);
     event2.media_type = media_type;
 
     // Let packet latency be either 20, 40, 60, 80, or 100 ms.
@@ -591,11 +568,8 @@ TEST_F(StatisticsAnalyzerTest, AudioAndVideoFrameEncodedPacketSentAndReceived) {
       total_video_packet_latency += packet_latency;
     }
 
-    PacketEvent event3(kDefaultPacketEvent);
-    event3.packet_id = static_cast<uint16_t>(i);
-    event3.rtp_timestamp = rtp_timestamp;
-    event3.frame_id = FrameId(i);
-    event3.timestamp = fake_clock_.now() + packet_latency;
+    PacketEvent event3 = MakePacketEvent(i, rtp_timestamp);
+    event3.timestamp += packet_latency;
     event3.type = StatisticsEventType::kPacketReceived;
     event3.media_type = media_type;
 
@@ -697,14 +671,10 @@ TEST_F(StatisticsAnalyzerTest, LotsOfEventsStillWorksProperly) {
   int current_event = 0;
   for (int frame_id = 0; frame_id < kNumFrames; frame_id++) {
     for (StatisticsEventType event_type : kEventsToReport) {
-      FrameEvent event(kDefaultFrameEvent);
+      FrameEvent event = MakeFrameEvent(frame_id, rtp_timestamp);
       event.type = event_type;
-      event.frame_id = FrameId(frame_id);
-      event.rtp_timestamp = rtp_timestamp;
-      event.timestamp =
-          fake_clock_.now() +
-          milliseconds(
-              kTimestampOffsetsMs[current_event % kTimestampOffsetsMs.size()]);
+      event.timestamp += milliseconds(
+          kTimestampOffsetsMs[current_event % kTimestampOffsetsMs.size()]);
       event.delay_delta = milliseconds(
           kFramePlayoutDelayDeltasMs[frame_id %
                                      kFramePlayoutDelayDeltasMs.size()]);

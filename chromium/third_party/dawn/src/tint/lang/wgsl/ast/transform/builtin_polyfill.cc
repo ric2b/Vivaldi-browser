@@ -61,15 +61,7 @@ struct BuiltinPolyfill::State {
     /// Constructor
     /// @param program the source program
     /// @param config the transform config
-    State(const Program& program, const Config& config) : src(program), cfg(config) {
-        has_full_ptr_params = false;
-        for (auto* enable : src.AST().Enables()) {
-            if (enable->HasExtension(wgsl::Extension::kChromiumExperimentalFullPtrParameters)) {
-                has_full_ptr_params = true;
-                break;
-            }
-        }
-    }
+    State(const Program& program, const Config& config) : src(program), cfg(config) {}
 
     /// Runs the transform
     /// @returns the new program or SkipTransform if the transform is not required
@@ -171,8 +163,6 @@ struct BuiltinPolyfill::State {
     Hashmap<const sem::BuiltinFn*, Symbol, 8> builtin_polyfills;
     /// Polyfill f32 conversion to i32 or u32 (or vectors of)
     Hashmap<const core::type::Type*, Symbol, 2> f32_conv_polyfills;
-    // Tracks whether the chromium_experimental_full_ptr_parameters extension has been enabled.
-    bool has_full_ptr_params = false;
     /// True if the transform has made changes (i.e. the program needs cloning)
     bool made_changes = false;
 
@@ -823,10 +813,6 @@ struct BuiltinPolyfill::State {
     /// @param type the type being loaded
     /// @return the polyfill function name
     Symbol workgroupUniformLoad(const core::type::Type* type) {
-        if (!has_full_ptr_params) {
-            b.Enable(wgsl::Extension::kChromiumExperimentalFullPtrParameters);
-            has_full_ptr_params = true;
-        }
         auto name = b.Symbols().New("tint_workgroupUniformLoad");
         b.Func(name,
                tint::Vector{
@@ -885,6 +871,220 @@ struct BuiltinPolyfill::State {
         auto name = b.Symbols().New(is_signed ? "tint_ftoi" : "tint_ftou");
         b.Func(name, tint::Vector{b.Param("v", T(source))}, T(target),
                tint::Vector{b.Return(select_high)});
+        return name;
+    }
+
+    /// Builds the polyfill function for the `dot4I8Packed` builtin
+    /// @return the polyfill function name
+    Symbol Dot4I8Packed() {
+        using vec4i = vec4<i32>;
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_dot4_i8_packed");
+
+        auto body = tint::Vector{
+            // const n = vec4u(24, 16, 8, 0);
+            // let a_i8 = bitcast<vec4i>(vec4u(a) << n) >> vec4u(24);
+            // let b_i8 = bitcast<vec4i>(vec4u(b) << n) >> vec4u(24);
+            // return dot(a_i8, b_i8);
+            b.Decl(b.Const("n", b.Call<vec4u>(24_a, 16_a, 8_a, 0_a))),
+            b.Decl(b.Let("a_i8", b.Shr(b.Bitcast<vec4i>(b.Shl(b.Call<vec4u>("a"), "n")),
+                                       b.Call<vec4u>(24_a)))),
+            b.Decl(b.Let("b_i8", b.Shr(b.Bitcast<vec4i>(b.Shl(b.Call<vec4u>("b"), "n")),
+                                       b.Call<vec4u>(24_a)))),
+            b.Return(b.Call("dot", "a_i8", "b_i8")),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.u32()),
+                   b.Param("b", b.ty.u32()),
+               },
+               b.ty.i32(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `dot4U8Packed` builtin
+    /// @return the polyfill function name
+    Symbol Dot4U8Packed() {
+        using vec4u = vec4<u32>;
+        auto name = b.Symbols().New("tint_dot4_u8_packed");
+
+        auto body = tint::Vector{
+            // const n = vec4u(24, 16, 8, 0);
+            // let a_u8 = (vec4u(a) >> n) & vec4u(0xff);
+            // let b_u8 = (vec4u(b) >> n) & vec4u(0xff);
+            // return dot(a_u8, b_u8);
+            b.Decl(b.Const("n", b.Call<vec4u>(24_a, 16_a, 8_a, 0_a))),
+            b.Decl(b.Let("a_u8", b.And(b.Shr(b.Call<vec4u>("a"), "n"), b.Call<vec4u>(0xff_a)))),
+            b.Decl(b.Let("b_u8", b.And(b.Shr(b.Call<vec4u>("b"), "n"), b.Call<vec4u>(0xff_a)))),
+            b.Return(b.Call("dot", "a_u8", "b_u8")),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.u32()),
+                   b.Param("b", b.ty.u32()),
+               },
+               b.ty.u32(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `pack4xI8` builtin
+    /// @return the polyfill function name
+    Symbol Pack4xI8() {
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_pack_4xi8");
+
+        auto body = tint::Vector{
+            // const n = vec4u(0, 8, 16, 24);
+            // let a_u32 = bitcast<vec4u>(a);
+            // let a_u8 = (a_u32 & vec4u(0xff)) << n;
+            // return dot(a_u8, vec4u(1));
+            b.Decl(b.Const("n", b.Call<vec4u>(0_a, 8_a, 16_a, 24_a))),
+            b.Decl(b.Let("a_u32", b.Bitcast<vec4u>("a"))),
+            b.Decl(b.Let("a_u8", b.Shl(b.And("a_u32", b.Call<vec4u>(0xff_a)), "n"))),
+            b.Return(b.Call("dot", "a_u8", b.Call<vec4u>(1_a))),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.vec4<i32>()),
+               },
+               b.ty.u32(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `pack4xU8` builtin
+    /// @return the polyfill function name
+    Symbol Pack4xU8() {
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_pack_4xu8");
+
+        auto body = tint::Vector{
+            // const n = vec4u(0, 8, 16, 24);
+            // let a_u8 = (a & vec4u(0xff)) << n;
+            // return dot(a_u8, vec4u(1));
+            b.Decl(b.Const("n", b.Call<vec4u>(0_a, 8_a, 16_a, 24_a))),
+            b.Decl(b.Let("a_u8", b.Shl(b.And("a", b.Call<vec4u>(0xff_a)), "n"))),
+            b.Return(b.Call("dot", "a_u8", b.Call<vec4u>(1_a))),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.vec4<u32>()),
+               },
+               b.ty.u32(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `pack4xI8Clamp` builtin
+    /// @return the polyfill function name
+    Symbol Pack4xI8Clamp() {
+        using vec4i = vec4<i32>;
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_pack_4xi8_clamp");
+
+        auto body = tint::Vector{
+            // const n = vec4u(0, 8, 16, 24);
+            // let a_clamp = clamp(a, vec4i(-128), vec4i(127));
+            // let a_u32 = bitcast<vec4u>(a_clamp);
+            // let a_u8 = (a_u32 & vec4u(0xff)) << n;
+            // return dot(a_u8, vec4u(1));
+            b.Decl(b.Const("n", b.Call<vec4u>(0_a, 8_a, 16_a, 24_a))),
+            b.Decl(b.Let("a_clamp",
+                         b.Call("clamp", "a", b.Call<vec4i>(-128_a), b.Call<vec4i>(127_a)))),
+            b.Decl(b.Let("a_u32", b.Bitcast<vec4u>("a_clamp"))),
+            b.Decl(b.Let("a_u8", b.Shl(b.And("a_u32", b.Call<vec4u>(0xff_a)), "n"))),
+            b.Return(b.Call("dot", "a_u8", b.Call<vec4u>(1_a))),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.vec4<i32>()),
+               },
+               b.ty.u32(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `pack4xU8Clamp` builtin
+    /// @return the polyfill function name
+    Symbol Pack4xU8Clamp() {
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_pack_4xu8_clamp");
+
+        auto body = tint::Vector{
+            // const n = vec4u(0, 8, 16, 24);
+            // let a_clamp = clamp(a, vec4u(0), vec4u(255));
+            // let a_u8 = a_clamp << n;
+            // return dot(a_u8, vec4u(1));
+            b.Decl(b.Const("n", b.Call<vec4u>(0_a, 8_a, 16_a, 24_a))),
+            b.Decl(
+                b.Let("a_clamp", b.Call("clamp", "a", b.Call<vec4u>(0_a), b.Call<vec4u>(255_a)))),
+            b.Decl(b.Let("a_u8", b.Call<vec4u>(b.Shl("a_clamp", "n")))),
+            b.Return(b.Call("dot", "a_u8", b.Call<vec4u>(1_a))),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.vec4<u32>()),
+               },
+               b.ty.u32(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `unpack4xI8` builtin
+    /// @return the polyfill function name
+    Symbol Unpack4xI8() {
+        using vec4i = vec4<i32>;
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_unpack_4xi8");
+
+        auto body = tint::Vector{
+            // const n = vec4u(24, 16, 8, 0);
+            // let a_vec4u = vec4u(a);
+            // let a_vec4i = bitcast<vec4i>(a_vec4u << n);
+            // return a_vec4i >> vec4u(24);
+            b.Decl(b.Const("n", b.Call<vec4u>(24_a, 16_a, 8_a, 0_a))),
+            b.Decl(b.Let("a_vec4u", b.Call<vec4u>("a"))),
+            b.Decl(b.Let("a_vec4i", b.Bitcast<vec4i>(b.Shl("a_vec4u", "n")))),
+            b.Return(b.Shr("a_vec4i", b.Call<vec4u>(24_a))),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.u32()),
+               },
+               b.ty.vec4<i32>(), body);
+
+        return name;
+    }
+
+    /// Builds the polyfill function for the `unpack4xU8` builtin
+    /// @return the polyfill function name
+    Symbol Unpack4xU8() {
+        using vec4u = vec4<u32>;
+
+        auto name = b.Symbols().New("tint_unpack_4xu8");
+
+        auto body = tint::Vector{
+            // const n = vec4u(0, 8, 16, 24);
+            // const a_vec4u = vec4u(a) >> n;
+            // return a_vec4u & vec4u(0xff);
+            b.Decl(b.Const("n", b.Call<vec4u>(0_a, 8_a, 16_a, 24_a))),
+            b.Decl(b.Let("a_vec4u", b.Shr(b.Call<vec4u>("a"), "n"))),
+            b.Return(b.And("a_vec4u", b.Call<vec4u>(0xff_a))),
+        };
+        b.Func(name,
+               tint::Vector{
+                   b.Param("a", b.ty.u32()),
+               },
+               b.ty.vec4<u32>(), body);
+
         return name;
     }
 
@@ -1269,6 +1469,70 @@ struct BuiltinPolyfill::State {
                             });
                         }
                         return Symbol{};
+
+                    case wgsl::BuiltinFn::kDot4I8Packed: {
+                        if (cfg.builtins.dot_4x8_packed) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Dot4I8Packed(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kDot4U8Packed: {
+                        if (cfg.builtins.dot_4x8_packed) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Dot4U8Packed(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kPack4XI8: {
+                        if (cfg.builtins.pack_unpack_4x8) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Pack4xI8(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kPack4XU8: {
+                        if (cfg.builtins.pack_unpack_4x8) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Pack4xU8(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kPack4XI8Clamp: {
+                        if (cfg.builtins.pack_unpack_4x8) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Pack4xI8Clamp(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kPack4XU8Clamp: {
+                        if (cfg.builtins.pack_4xu8_clamp) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Pack4xU8Clamp(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kUnpack4XI8: {
+                        if (cfg.builtins.pack_unpack_4x8) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Unpack4xI8(); });
+                        }
+                        return Symbol{};
+                    }
+
+                    case wgsl::BuiltinFn::kUnpack4XU8: {
+                        if (cfg.builtins.pack_unpack_4x8) {
+                            return builtin_polyfills.GetOrCreate(builtin,
+                                                                 [&] { return Unpack4xU8(); });
+                        }
+                        return Symbol{};
+                    }
 
                     default:
                         return Symbol{};

@@ -26,7 +26,7 @@
 
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 class BoundSessionRequestThrottledInRendererManager;
-class BoundSessionRequestThrottledListener;
+class BoundSessionRequestThrottledHandler;
 #endif
 
 namespace visitedlink {
@@ -55,21 +55,24 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
     ChromeOSListener& operator=(const ChromeOSListener&) = delete;
 
     // Is the merge session still running?
-    bool IsMergeSessionRunning() const;
+    // Virtual for testing.
+    virtual bool IsMergeSessionRunning() const;
 
     // Run |callback| on the calling sequence when the merge session has
     // finished (or timed out).
-    void RunWhenMergeSessionFinished(DelayedCallbackGroup::Callback callback);
+    // Virtual for testing.
+    virtual void RunWhenMergeSessionFinished(
+        DelayedCallbackGroup::Callback callback);
 
    protected:
     // chrome::mojom::ChromeOSListener:
     void MergeSessionComplete() override;
 
-   private:
-    friend class base::RefCountedThreadSafe<ChromeOSListener>;
-
     ChromeOSListener();
     ~ChromeOSListener() override;
+
+   private:
+    friend class base::RefCountedThreadSafe<ChromeOSListener>;
 
     void BindOnIOThread(mojo::PendingReceiver<chrome::mojom::ChromeOSListener>
                             chromeos_listener_receiver);
@@ -96,8 +99,8 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
   chrome::mojom::DynamicParamsPtr GetDynamicParams() const;
 
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-  std::unique_ptr<BoundSessionRequestThrottledListener>
-  CreateBoundSessionRequestThrottledListener() const;
+  std::unique_ptr<BoundSessionRequestThrottledHandler>
+  CreateBoundSessionRequestThrottledHandler() const;
 #endif
 
   visitedlink::VisitedLinkReader* visited_link_reader() {
@@ -130,8 +133,8 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
           chromeos_listener_receiver,
       mojo::PendingRemote<content_settings::mojom::ContentSettingsManager>
           content_settings_manager,
-      mojo::PendingRemote<chrome::mojom::BoundSessionRequestThrottledListener>
-          bound_session_request_throttled_listener) override;
+      mojo::PendingRemote<chrome::mojom::BoundSessionRequestThrottledHandler>
+          bound_session_request_throttled_handler) override;
   void SetConfiguration(chrome::mojom::DynamicParamsPtr params) override;
   void OnRendererConfigurationAssociatedRequest(
       mojo::PendingAssociatedReceiver<chrome::mojom::RendererConfiguration>

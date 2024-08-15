@@ -213,18 +213,6 @@ class GitWrapper(SCMWrapper):
     name = 'git'
     remote = 'origin'
 
-    _is_env_cog = None
-
-    @staticmethod
-    def _IsCog():
-        """Returns true if the env is cog"""
-        if not GitWrapper._is_env_cog:
-            GitWrapper._is_env_cog = any(
-                os.getcwd().startswith(x)
-                for x in ['/google/cog/cloud', '/google/src/cloud'])
-
-        return GitWrapper._is_env_cog
-
     @property
     def cache_dir(self):
         try:
@@ -319,6 +307,7 @@ class GitWrapper(SCMWrapper):
         self._SetFetchConfig(options)
 
         self._Fetch(options, prune=True, quiet=options.verbose)
+        revision = self._AutoFetchRef(options, revision)
         self._Scrub(revision, options)
         if file_list is not None:
             files = self._Capture(['-c', 'core.quotePath=false',
@@ -639,8 +628,6 @@ class GitWrapper(SCMWrapper):
         if args:
             raise gclient_utils.Error("Unsupported argument(s): %s" %
                                       ",".join(args))
-
-        self._CheckMinVersion("1.6.6")
 
         url, deps_revision = gclient_utils.SplitUrlRevision(self.url)
         revision = deps_revision
@@ -1050,11 +1037,6 @@ class GitWrapper(SCMWrapper):
                 'Fix the conflict and run gclient again.\n'
                 'See man git-rebase for details.\n' % (self.relpath, revision))
 
-        if verbose:
-            self.Print('Checked out revision %s' %
-                       self.revinfo(options, (), None),
-                       timestamp=False)
-
         # If --reset and --delete_unversioned_trees are specified, remove any
         # untracked directories.
         if options.reset and options.delete_unversioned_trees:
@@ -1072,7 +1054,10 @@ class GitWrapper(SCMWrapper):
                     self.Print('_____ removing unversioned directory %s' % path)
                     gclient_utils.rmtree(full_path)
 
-        return self._Capture(['rev-parse', '--verify', 'HEAD'])
+        rev_hash = self._Capture(['rev-parse', '--verify', 'HEAD'])
+        if verbose:
+            self.Print(f'Checked out revision {rev_hash}', timestamp=False)
+        return rev_hash
 
     def revert(self, options, _args, file_list):
         """Reverts local modifications.
@@ -1220,12 +1205,11 @@ class GitWrapper(SCMWrapper):
     def _Clone(self, revision, url, options):
         """Clone a git repository from the given URL.
 
-    Once we've cloned the repo, we checkout a working branch if the specified
-    revision is a branch head. If it is a tag or a specific commit, then we
-    leave HEAD detached as it makes future updates simpler -- in this case the
-    user should first create a new branch or switch to an existing branch before
-    making changes in the repo."""
-        in_cog_workspace = self._IsCog()
+        Once we've cloned the repo, we checkout a working branch if the
+        specified revision is a branch head. If it is a tag or a specific
+        commit, then we leave HEAD detached as it makes future updates simpler
+        -- in this case the user should first create a new branch or switch to
+        an existing branch before making changes in the repo."""
 
         if self.print_outbuf:
             print_stdout = True
@@ -1244,22 +1228,7 @@ class GitWrapper(SCMWrapper):
         parent_dir = os.path.dirname(self.checkout_path)
         gclient_utils.safe_makedirs(parent_dir)
 
-        if in_cog_workspace:
-            clone_cmd = ['citc', 'clone-repo', url, self.checkout_path]
-            clone_cmd.append(
-                gclient_utils.ExtractRefName(self.remote, revision) or revision)
-            try:
-                self._Run(clone_cmd,
-                          options,
-                          cwd=self._root_dir,
-                          retry=True,
-                          print_stdout=print_stdout,
-                          filter_fn=filter_fn)
-            except:
-                traceback.print_exc(file=self.out_fh)
-                raise
-            self._SetFetchConfig(options)
-        elif hasattr(options, 'no_history') and options.no_history:
+        if hasattr(options, 'no_history') and options.no_history:
             self._Run(['init', self.checkout_path], options, cwd=self._root_dir)
             self._Run(['remote', 'add', 'origin', url], options)
             revision = self._AutoFetchRef(options, revision, depth=1)
@@ -1413,13 +1382,6 @@ class GitWrapper(SCMWrapper):
             # whitespace between projects when syncing.
             self.Print('')
 
-    @staticmethod
-    def _CheckMinVersion(min_version):
-        (ok, current_version) = scm.GIT.AssertVersion(min_version)
-        if not ok:
-            raise gclient_utils.Error('git version %s < minimum required %s' %
-                                      (current_version, min_version))
-
     def _EnsureValidHeadObjectOrCheckout(self, revision, options, url):
         # Special case handling if all 3 conditions are met:
         # * the mirros have recently changed, but deps destination remains same,
@@ -1459,28 +1421,15 @@ class GitWrapper(SCMWrapper):
                 '\tIf no git executable is running, then clean up %r and try again.\n'
                 % (self.relpath, revision, lockfile))
 
-        # Make sure the tree is clean; see git-rebase.sh for reference
-        try:
-            scm.GIT.Capture(
-                ['update-index', '--ignore-submodules', '--refresh'],
-                cwd=self.checkout_path)
-        except subprocess2.CalledProcessError:
+        # Ensure that the tree is clean.
+        if scm.GIT.Capture([
+                'status', '--porcelain', '--untracked-files=no',
+                '--ignore-submodules'
+        ],
+                           cwd=self.checkout_path):
             raise gclient_utils.Error(
                 '\n____ %s at %s\n'
-                '\tYou have unstaged changes.\n'
-                '\tcd into %s, run git status to see changes,\n'
-                '\tand commit, stash, or reset.\n' %
-                (self.relpath, revision, self.relpath))
-        try:
-            scm.GIT.Capture([
-                'diff-index', '--cached', '--name-status', '-r',
-                '--ignore-submodules', 'HEAD', '--'
-            ],
-                            cwd=self.checkout_path)
-        except subprocess2.CalledProcessError:
-            raise gclient_utils.Error(
-                '\n____ %s at %s\n'
-                '\tYour index contains uncommitted changes\n'
+                '\tYou have uncommitted changes.\n'
                 '\tcd into %s, run git status to see changes,\n'
                 '\tand commit, stash, or reset.\n' %
                 (self.relpath, revision, self.relpath))
@@ -1636,7 +1585,7 @@ class GitWrapper(SCMWrapper):
     def _AutoFetchRef(self, options, revision, depth=None):
         """Attempts to fetch |revision| if not available in local repo.
 
-    Returns possibly updated revision."""
+        Returns possibly updated revision."""
         if not scm.GIT.IsValidRevision(self.checkout_path, revision):
             self._Fetch(options, refspec=revision, depth=depth)
             revision = self._Capture(['rev-parse', 'FETCH_HEAD'])
@@ -1960,3 +1909,42 @@ class CipdWrapper(SCMWrapper):
     CIPD packages should be updated at the root by running
     `CipdRoot.run('update')`.
     """
+
+
+class CogWrapper(SCMWrapper):
+    """Wrapper for Cog, all no-op."""
+    name = 'cog'
+
+    def __init__(self):
+        super(CogWrapper, self).__init__()
+
+    #override
+    def GetCacheMirror(self):
+        return None
+
+    #override
+    def GetActualRemoteURL(self, options):
+        return None
+
+    #override
+    def DoesRemoteURLMatch(self, options):
+        del options
+        return True
+
+    def revert(self, options, args, file_list):
+        pass
+
+    def diff(self, options, args, file_list):
+        pass
+
+    def pack(self, options, args, file_list):
+        pass
+
+    def revinfo(self, options, args, file_list):
+        pass
+
+    def status(self, options, args, file_list):
+        pass
+
+    def update(self, options, args, file_list):
+        pass

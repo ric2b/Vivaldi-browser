@@ -5,8 +5,9 @@
 #ifndef SERVICES_NETWORK_PUBLIC_CPP_CONTENT_SECURITY_POLICY_CONTENT_SECURITY_POLICY_H_
 #define SERVICES_NETWORK_PUBLIC_CPP_CONTENT_SECURITY_POLICY_CONTENT_SECURITY_POLICY_H_
 
+#include <string_view>
+
 #include "base/component_export.h"
-#include "base/strings/string_piece_forward.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 
 class GURL;
@@ -21,6 +22,12 @@ class HttpResponseHeaders;
 
 namespace network {
 class CSPContext;
+
+namespace features {
+// TODO(https://crbug.com/1477193): This feature flag can be removed after M126.
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kCspStopMatchingWildcardDirectivesToFtp);
+}  // namespace features
 
 // The field |allowed_if_wildcard_does_not_match_ws| is the result assuming '*'
 // doesn't match ws or wss, and |allowed_if_wildcard_does_not_match_ftp| is the
@@ -76,7 +83,7 @@ void AddContentSecurityPolicyFromHeaders(
 
 COMPONENT_EXPORT(NETWORK_CPP)
 std::vector<mojom::ContentSecurityPolicyPtr> ParseContentSecurityPolicies(
-    base::StringPiece header,
+    std::string_view header,
     mojom::ContentSecurityPolicyType type,
     mojom::ContentSecurityPolicySource source,
     const GURL& base_url);
@@ -95,7 +102,7 @@ mojom::AllowCSPFromHeaderValuePtr ParseAllowCSPFromHeader(
 // (for example, if there is a url with a non-empty query part).
 COMPONENT_EXPORT(NETWORK_CPP)
 bool ParseSource(mojom::CSPDirectiveName directive_name,
-                 base::StringPiece expression,
+                 std::string_view expression,
                  mojom::CSPSource* csp_source,
                  std::vector<std::string>& parsing_errors);
 

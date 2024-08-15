@@ -15,8 +15,8 @@ namespace {
 
 class PathBuilderTestDelegate {
  public:
-  static void Verify(const VerifyCertChainTest& test,
-                     const std::string& test_file_path) {
+  static void Verify(const VerifyCertChainTest &test,
+                     const std::string &test_file_path) {
     SimplePathBuilderDelegate path_builder_delegate(1024, test.digest_policy);
     ASSERT_FALSE(test.chain.empty());
 
@@ -24,8 +24,9 @@ class PathBuilderTestDelegate {
     trust_store.AddCertificate(test.chain.back(), test.last_cert_trust);
 
     CertIssuerSourceStatic intermediate_cert_issuer_source;
-    for (size_t i = 1; i < test.chain.size(); ++i)
+    for (size_t i = 1; i < test.chain.size(); ++i) {
       intermediate_cert_issuer_source.AddCert(test.chain[i]);
+    }
 
     // First cert in the |chain| is the target.
     CertPathBuilder path_builder(
@@ -52,4 +53,4 @@ INSTANTIATE_TYPED_TEST_SUITE_P(PathBuilder,
                                VerifyCertificateChainSingleRootTest,
                                PathBuilderTestDelegate);
 
-}  // namespace net
+}  // namespace bssl

@@ -11,8 +11,9 @@
 #include "src/base/platform/mutex.h"
 #include "src/common/globals.h"
 #include "src/sandbox/external-entity-table.h"
+#include "src/sandbox/indirect-pointer-tag.h"
 
-#ifdef V8_COMPRESS_POINTERS
+#ifdef V8_ENABLE_SANDBOX
 
 namespace v8 {
 namespace internal {
@@ -26,8 +27,9 @@ class Counters;
  * Each entry contains an (absolute) pointer to a TrustedObject.
  */
 struct TrustedPointerTableEntry {
-  // Make this entry a "regular" entry, containing an absolute pointer to a TrustedObject.
-  inline void MakeTrustedPointerEntry(Address value);
+  // Make this entry a "regular" entry, containing an absolute pointer to a
+  // TrustedObject.
+  inline void MakeTrustedPointerEntry(Address value, bool mark_as_alive);
 
   // Make this entry a freelist entry, containing the index of the next entry
   // on the freelist.
@@ -111,9 +113,9 @@ class V8_EXPORT_PRIVATE TrustedPointerTable
   TrustedPointerTable& operator=(const TrustedPointerTable&) = delete;
 
   // The Spaces used by a TrustedPointerTable.
-  using Space =
-      ExternalEntityTable<TrustedPointerTableEntry,
-                          kTrustedPointerTableReservationSize>::Space;
+  using Space = ExternalEntityTable<
+      TrustedPointerTableEntry,
+      kTrustedPointerTableReservationSize>::SpaceWithBlackAllocationSupport;
 
   // Retrieves the content of the entry referenced by the given handle.
   //
@@ -123,13 +125,14 @@ class V8_EXPORT_PRIVATE TrustedPointerTable
   // Sets the content of the entry referenced by the given handle.
   //
   // This method is atomic and can be called from background threads.
-  inline void Set(TrustedPointerHandle handle, Address value);
+  inline void Set(TrustedPointerHandle handle, Address pointer,
+                  IndirectPointerTag tag);
 
   // Allocates a new entry in the table and initialize it.
   //
   // This method is atomic and can be called from background threads.
-  inline TrustedPointerHandle AllocateAndInitializeEntry(Space* space,
-                                                          Address value);
+  inline TrustedPointerHandle AllocateAndInitializeEntry(
+      Space* space, Address pointer, IndirectPointerTag tag);
 
   // Marks the specified entry as alive.
   //
@@ -144,12 +147,23 @@ class V8_EXPORT_PRIVATE TrustedPointerTable
   // Returns the number of live entries after sweeping.
   uint32_t Sweep(Space* space, Counters* counters);
 
+  // Iterate over all active entries in the given space.
+  //
+  // The callback function will be invoked once for every entry that is
+  // currently in use, i.e. has been allocated and not yet freed, and will
+  // receive the handle and content of that entry.
+  template <typename Callback>
+  void IterateActiveEntriesIn(Space* space, Callback callback);
+
   // The base address of this table, for use in JIT compilers.
   Address base_address() const { return base(); }
 
  private:
   inline uint32_t HandleToIndex(TrustedPointerHandle handle) const;
   inline TrustedPointerHandle IndexToHandle(uint32_t index) const;
+
+  // Ensure that the value is valid before storing it into this table.
+  inline void Validate(Address pointer, IndirectPointerTag tag);
 };
 
 static_assert(sizeof(TrustedPointerTable) == TrustedPointerTable::kSize);
@@ -157,6 +171,6 @@ static_assert(sizeof(TrustedPointerTable) == TrustedPointerTable::kSize);
 }  // namespace internal
 }  // namespace v8
 
-#endif  // V8_COMPRESS_POINTERS
+#endif  // V8_ENABLE_SANDBOX
 
 #endif  // V8_SANDBOX_TRUSTED_POINTER_TABLE_H_

@@ -4,19 +4,20 @@
 
 #include <algorithm>
 
+#include <gtest/gtest.h>
 #include "extended_key_usage.h"
 #include "input.h"
-#include <gtest/gtest.h>
 
 namespace bssl {
 
 namespace {
 
 // Helper method to check if an EKU is present in a std::vector of EKUs.
-bool HasEKU(const std::vector<der::Input>& list, const der::Input& eku) {
-  for (const auto& oid : list) {
-    if (oid == eku)
+bool HasEKU(const std::vector<der::Input> &list, const der::Input &eku) {
+  for (const auto &oid : list) {
+    if (oid == eku) {
       return true;
+    }
   }
   return false;
 }
@@ -60,7 +61,7 @@ TEST(ExtendedKeyUsageTest, RepeatedOid) {
   std::vector<der::Input> ekus;
   EXPECT_TRUE(ParseEKUExtension(extension, &ekus));
   EXPECT_EQ(2u, ekus.size());
-  for (const auto& eku : ekus) {
+  for (const auto &eku : ekus) {
     EXPECT_EQ(der::Input(kServerAuth), eku);
   }
 }
@@ -163,4 +164,4 @@ TEST(ExtendedKeyUsageTest, EmptyExtension) {
 
 }  // namespace
 
-}  // namespace net
+}  // namespace bssl

@@ -40,18 +40,28 @@ TEST_F(HlslASTPrinterTest, InvalidProgram) {
     auto program = resolver::Resolve(*this);
     ASSERT_FALSE(program.IsValid());
     auto result = Generate(program, Options{});
-    EXPECT_FALSE(result);
+    EXPECT_NE(result, Success);
     EXPECT_EQ(result.Failure().reason.str(), "error: make the program invalid");
 }
 
 TEST_F(HlslASTPrinterTest, UnsupportedExtension) {
-    Enable(Source{{12, 34}}, wgsl::Extension::kUndefined);
+    Enable(Source{{12, 34}}, wgsl::Extension::kChromiumInternalRelaxedUniformLayout);
 
     ASTPrinter& gen = Build();
 
     ASSERT_FALSE(gen.Generate());
-    EXPECT_EQ(gen.Diagnostics().str(),
-              R"(12:34 error: HLSL backend does not support extension 'undefined')");
+    EXPECT_EQ(
+        gen.Diagnostics().str(),
+        R"(12:34 error: HLSL backend does not support extension 'chromium_internal_relaxed_uniform_layout')");
+}
+
+TEST_F(HlslASTPrinterTest, RequiresDirective) {
+    Require(wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures);
+
+    ASTPrinter& gen = Build();
+
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
+    EXPECT_EQ(gen.Result(), "");
 }
 
 TEST_F(HlslASTPrinterTest, Generate) {

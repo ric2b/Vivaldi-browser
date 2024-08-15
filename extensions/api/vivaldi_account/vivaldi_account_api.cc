@@ -20,17 +20,13 @@ vivaldi::vivaldi_account::FetchErrorType ToVivaldiAccountAPIFetchErrorType(
     ::vivaldi::VivaldiAccountManager::FetchErrorType error) {
   switch (error) {
     case ::vivaldi::VivaldiAccountManager::NONE:
-      return vivaldi::vivaldi_account::FetchErrorType::
-          FETCH_ERROR_TYPE_NO_ERROR;
+      return vivaldi::vivaldi_account::FetchErrorType::kNoError;
     case ::vivaldi::VivaldiAccountManager::NETWORK_ERROR:
-      return vivaldi::vivaldi_account::FetchErrorType::
-          FETCH_ERROR_TYPE_NETWORK_ERROR;
+      return vivaldi::vivaldi_account::FetchErrorType::kNetworkError;
     case ::vivaldi::VivaldiAccountManager::SERVER_ERROR:
-      return vivaldi::vivaldi_account::FetchErrorType::
-          FETCH_ERROR_TYPE_SERVER_ERROR;
+      return vivaldi::vivaldi_account::FetchErrorType::kServerError;
     case ::vivaldi::VivaldiAccountManager::INVALID_CREDENTIALS:
-      return vivaldi::vivaldi_account::FetchErrorType::
-          FETCH_ERROR_TYPE_INVALID_CREDENTIALS;
+      return vivaldi::vivaldi_account::FetchErrorType::kInvalidCredentials;
   }
 }
 

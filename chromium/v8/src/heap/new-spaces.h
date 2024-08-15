@@ -9,6 +9,7 @@
 #include <memory>
 #include <numeric>
 
+#include "include/v8-internal.h"
 #include "src/base/logging.h"
 #include "src/base/macros.h"
 #include "src/base/platform/mutex.h"
@@ -19,7 +20,6 @@
 #include "src/heap/paged-spaces.h"
 #include "src/heap/spaces.h"
 #include "src/objects/heap-object.h"
-#include "v8-internal.h"
 
 namespace v8 {
 namespace internal {
@@ -441,8 +441,7 @@ class V8_EXPORT_PRIVATE SemiSpaceNewSpace final : public NewSpace {
   AllocatorPolicy* CreateAllocatorPolicy(MainAllocator* allocator) final;
 
   int GetSpaceRemainingOnCurrentPageForTesting();
-
-  bool AddFreshPageForTesting();
+  void FillCurrentPageForTesting();
 
  private:
   bool IsFromSpaceCommitted() const { return from_space_.IsCommitted(); }
@@ -539,12 +538,6 @@ class V8_EXPORT_PRIVATE PagedSpaceForNewSpace final : public PagedSpaceBase {
     last_lab_page_ = nullptr;
   }
 
-  // Try to switch the active semispace to a new, empty, page.
-  // Returns false if this isn't possible or reasonable (i.e., there
-  // are no pages, or the current page is already empty), or true
-  // if successful.
-  bool AddFreshPage();
-
   bool EnsureCurrentCapacity() { return true; }
 
   Page* InitializePage(MemoryChunk* chunk) final;
@@ -567,7 +560,12 @@ class V8_EXPORT_PRIVATE PagedSpaceForNewSpace final : public PagedSpaceBase {
 
   bool ShouldReleaseEmptyPage() const;
 
-  bool AddPageBeyondCapacity(int size_in_bytes, AllocationOrigin origin);
+  // Tries to allocate a new page. This method is allowed to exceed
+  // `target_capacity_` is certain cases.
+  bool TryAllocatePage();
+
+  // Allocates pages as long as current capacity is below the target capacity.
+  void AllocatePageUpToCapacityForTesting();
 
   void ForceAllocationSuccessUntilNextGC() { force_allocation_success_ = true; }
 
@@ -586,6 +584,7 @@ class V8_EXPORT_PRIVATE PagedSpaceForNewSpace final : public PagedSpaceBase {
   }
 
  private:
+  bool ShouldAllocatedPage() const;
   bool AllocatePage();
 
   const size_t initial_capacity_;
@@ -596,7 +595,6 @@ class V8_EXPORT_PRIVATE PagedSpaceForNewSpace final : public PagedSpaceBase {
   Page* last_lab_page_ = nullptr;
 
   bool force_allocation_success_ = false;
-  bool should_exceed_target_capacity_ = false;
 
   friend class PagedNewSpaceAllocatorPolicy;
 };

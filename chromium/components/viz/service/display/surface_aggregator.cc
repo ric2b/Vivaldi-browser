@@ -9,11 +9,11 @@
 #include <algorithm>
 #include <map>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/containers/adapters.h"
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -733,13 +733,18 @@ ResolvedFrameData* SurfaceAggregator::GetResolvedFrame(
     // Mark the frame as used this aggregation so it persists.
     resolved_frame.MarkAsUsedInAggregation();
 
-    // If there is a new CompositorFrame for `surface` compute resolved frame
-    // data for the new resolved CompositorFrame.
     if (resolved_frame.previous_frame_index() !=
         surface->GetActiveFrameIndex()) {
+      // If there is a new CompositorFrame for `surface` compute resolved frame
+      // data.
       base::ElapsedTimer timer;
       ProcessResolvedFrame(resolved_frame);
       stats_->declare_resources_time += timer.Elapsed();
+    } else if (resolved_frame.is_valid()) {
+      // The same `CompositorFrame` since last aggregation. Set the
+      // `CompositorRenderPass` pointer back to `ResolvedPassData`. Only
+      // applicable to valid `ResolvedFrameData`.
+      resolved_frame.SetRenderPassPointers();
     }
   }
 
@@ -812,7 +817,7 @@ void SurfaceAggregator::HandleSurfaceQuad(
   if (resolved_frame->surface_id() != primary_surface_id &&
       !surface_quad->stretch_content_to_fill_bounds) {
     const CompositorFrame& fallback_frame =
-        resolved_frame->surface()->GetActiveOrInterpolatedFrame();
+        resolved_frame->surface()->GetActiveFrame();
 
     gfx::Rect fallback_rect(fallback_frame.size_in_pixels());
 
@@ -862,7 +867,7 @@ void SurfaceAggregator::EmitSurfaceContent(
 
   ++stats_->copied_surface_count;
 
-  const CompositorFrame& frame = surface->GetActiveOrInterpolatedFrame();
+  const CompositorFrame& frame = surface->GetActiveFrame();
 
   // If we are stretching content to fill the SurfaceDrawQuad, or if the device
   // scale factor mismatches between content and SurfaceDrawQuad, we appply an
@@ -1115,7 +1120,7 @@ void SurfaceAggregator::EmitSurfaceContent(
     quad_visible_rect.Intersect(quad_rect);
     auto remapped_pass_id = resolved_root_pass.remapped_id();
     if (quad_visible_rect.IsEmpty()) {
-      base::EraseIf(*dest_pass_list_,
+      std::erase_if(*dest_pass_list_,
                     [&remapped_pass_id](
                         const std::unique_ptr<AggregatedRenderPass>& pass) {
                       return pass->id == remapped_pass_id;
@@ -1593,7 +1598,7 @@ void SurfaceAggregator::CopyQuadsToPass(
 
 void SurfaceAggregator::CopyPasses(ResolvedFrameData& resolved_frame) {
   Surface* surface = resolved_frame.surface();
-  const CompositorFrame& frame = surface->GetActiveOrInterpolatedFrame();
+  const CompositorFrame& frame = surface->GetActiveFrame();
 
   // The root surface is allowed to have copy output requests, so grab them
   // off its render passes. This map contains a set of CopyOutputRequests
@@ -1629,6 +1634,13 @@ void SurfaceAggregator::CopyPasses(ResolvedFrameData& resolved_frame) {
 
   bool apply_surface_transform_to_root_pass = true;
   for (auto& resolved_pass : resolved_frame.GetResolvedPasses()) {
+    if (!resolved_pass.aggregation().will_draw &&
+        !resolved_pass.aggregation().in_copy_request_pass) {
+      // If the render pass isn't contributing pixels to the framebuffer or
+      // a CopyOutputRequest we should be able to skip it.
+      stats_->orphaned_render_pass++;
+    }
+
     const auto& source = resolved_pass.render_pass();
 
     size_t sqs_size = source.shared_quad_state_list.size();
@@ -1724,7 +1736,7 @@ void SurfaceAggregator::SetRenderPassDamageRect(
 void SurfaceAggregator::ProcessAddedAndRemovedSurfaces() {
   // Delete resolved frame data that wasn't used this aggregation. This releases
   // resources associated with those resolved frames.
-  base::EraseIf(resolved_frames_, [](auto& entry) {
+  std::erase_if(resolved_frames_, [](auto& entry) {
     return !entry.second.WasUsedInAggregation();
   });
 }
@@ -2025,8 +2037,7 @@ gfx::Rect SurfaceAggregator::PrewalkRenderPass(
 void SurfaceAggregator::ProcessResolvedFrame(
     ResolvedFrameData& resolved_frame) {
   Surface* surface = resolved_frame.surface();
-  const CompositorFrame& compositor_frame =
-      surface->GetActiveOrInterpolatedFrame();
+  const CompositorFrame& compositor_frame = surface->GetActiveFrame();
 
   // Ref the resources in the surface, and let the provider know we've received
   // new resources from the compositor frame.
@@ -2124,7 +2135,7 @@ gfx::Rect SurfaceAggregator::PrewalkSurface(ResolvedFrameData& resolved_frame,
   if (root_resolved_pass.aggregation().will_draw)
     surface->OnWillBeDrawn();
 
-  const CompositorFrame& frame = surface->GetActiveOrInterpolatedFrame();
+  const CompositorFrame& frame = surface->GetActiveFrame();
   for (const SurfaceRange& surface_range : frame.metadata.referenced_surfaces) {
     damage_ranges_[surface_range.end().frame_sink_id()].push_back(
         surface_range);
@@ -2244,8 +2255,7 @@ AggregatedFrame SurfaceAggregator::Aggregate(
   display_trace_id_ = display_trace_id;
   expected_display_time_ = expected_display_time;
 
-  const CompositorFrame& root_surface_frame =
-      surface->GetActiveOrInterpolatedFrame();
+  const CompositorFrame& root_surface_frame = surface->GetActiveFrame();
   TRACE_EVENT(
       "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
       perfetto::TerminatingFlow::Global(
@@ -2408,6 +2418,9 @@ void SurfaceAggregator::RecordStatHistograms() {
   UMA_HISTOGRAM_BOOLEAN(
       "Compositing.SurfaceAggregator.HasUnembeddedRenderPassesPerFrame",
       stats_->has_unembedded_pass);
+  UMA_HISTOGRAM_COUNTS_100(
+      "Compositing.SurfaceAggregator.OrphanedRenderPassCount",
+      stats_->orphaned_render_pass);
 
   stats_.reset();
 }
@@ -2454,9 +2467,7 @@ bool SurfaceAggregator::NotifySurfaceDamageAndCheckForDisplayDamage(
   if (iter != resolved_frames_.end()) {
     auto& resolved_frame = iter->second;
     DCHECK(resolved_frame.surface()->HasActiveFrame());
-    if (resolved_frame.surface()
-            ->GetActiveOrInterpolatedFrame()
-            .resource_list.empty()) {
+    if (resolved_frame.surface()->GetActiveFrame().resource_list.empty()) {
       // When a client submits a CompositorFrame without resources it's
       // typically done to force return of existing resources to the client.
       resolved_frame.ForceReleaseResource();

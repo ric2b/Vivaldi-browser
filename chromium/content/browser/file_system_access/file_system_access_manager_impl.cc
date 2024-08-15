@@ -5,6 +5,7 @@
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/check_op.h"
@@ -56,7 +57,6 @@
 #include "storage/browser/file_system/file_system_util.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/common/file_system/file_system_types.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_capacity_allocation_host.mojom.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_data_transfer_token.mojom.h"
@@ -355,12 +355,12 @@ void FileSystemAccessManagerImpl::GetSandboxedFileSystem(
     GetSandboxedFileSystemCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   GetSandboxedFileSystem(receivers_.current_context(),
-                         /*bucket=*/absl::nullopt, std::move(callback));
+                         /*bucket=*/std::nullopt, std::move(callback));
 }
 
 void FileSystemAccessManagerImpl::GetSandboxedFileSystem(
     const BindingContext& binding_context,
-    const absl::optional<storage::BucketLocator>& bucket,
+    const std::optional<storage::BucketLocator>& bucket,
     GetSandboxedFileSystemCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -397,7 +397,7 @@ void FileSystemAccessManagerImpl::ChooseEntries(
 
   // ChooseEntries API is only available to windows, as we need a frame to
   // anchor the picker to.
-  if (context.is_worker()) {
+  if (context.is_worker) {
     receivers_.ReportBadMessage("ChooseEntries called from a worker");
     return;
   }
@@ -678,7 +678,9 @@ void FileSystemAccessManagerImpl::ResolveDataTransferToken(
                                weak_factory_.GetWeakPtr(), binding_context,
                                data_transfer_token_impl->second->file_path(),
                                fs_url, std::move(token_resolved_callback))),
-      fs_url, storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY);
+      fs_url,
+      storage::FileSystemOperation::GetMetadataFieldSet(
+          {storage::FileSystemOperation::GetMetadataField::kIsDirectory}));
 }
 
 void FileSystemAccessManagerImpl::ResolveDataTransferTokenWithFileType(
@@ -1092,11 +1094,13 @@ FileSystemAccessManagerImpl::CreateDirectoryHandle(
   return result;
 }
 void FileSystemAccessManagerImpl::TakeLock(
+    const BindingContext& binding_context,
     const storage::FileSystemURL& url,
     FileSystemAccessLockManager::LockType lock_type,
     FileSystemAccessLockManager::TakeLockCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  lock_manager_->TakeLock(url, lock_type, std::move(callback));
+  lock_manager_->TakeLock(binding_context.frame_id, url, lock_type,
+                          std::move(callback));
 }
 bool FileSystemAccessManagerImpl::IsContentious(
     const storage::FileSystemURL& url,
@@ -1476,6 +1480,11 @@ void FileSystemAccessManagerImpl::DidCreateAndTruncateSaveFile(
     return;
   }
 
+  if (permission_context_) {
+    permission_context_->OnFileCreatedFromShowSaveFilePicker(
+        /*file_picker_binding_context=*/binding_context.url, url);
+  }
+
   SharedHandleState shared_handle_state =
       GetSharedHandleStateForPath(entry.path, binding_context.storage_key,
                                   HandleType::kFile, UserAction::kSave);
@@ -1692,7 +1701,9 @@ void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocation(
                          CleanupAccessHandleCapacityAllocationImpl,
                      weak_factory_.GetWeakPtr(), url, allocated_file_size,
                      std::move(callback)),
-      url, storage::FileSystemOperation::GET_METADATA_FIELD_SIZE);
+      url,
+      storage::FileSystemOperation::GetMetadataFieldSet(
+          {storage::FileSystemOperation::GetMetadataField::kSize}));
 }
 
 void FileSystemAccessManagerImpl::CleanupAccessHandleCapacityAllocationImpl(
@@ -1731,8 +1742,24 @@ void FileSystemAccessManagerImpl::DidCleanupAccessHandleCapacityAllocation(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(access_handle_host);
 
-  size_t count_removed =
-      access_handle_host_receivers_.erase(access_handle_host);
+  // We cannot destroy `access_handle_host` by erasing it from the
+  // `access_handle_host_receivers_` set.
+  //
+  // The destruction of a `FileSystemAccessAccessHandleHostImpl` can trigger the
+  // creation of another. This means that if we directly erase
+  // `access_handle_host` from the set, `access_handle_host_receivers_` `erase`
+  // could call into `access_handle_host_receivers_` `insert` (in
+  // `CreateAccessHandleHost`) which is undefined behavior. Instead, we'll move
+  // it out of the set before erasing and then destroying.
+  size_t initial_size = access_handle_host_receivers_.size();
+
+  auto iter = access_handle_host_receivers_.find(access_handle_host);
+  CHECK(iter != access_handle_host_receivers_.end());
+
+  auto access_handle_host_receiver = std::move(*iter);
+  access_handle_host_receivers_.erase(iter);
+
+  size_t count_removed = initial_size - access_handle_host_receivers_.size();
   DCHECK_EQ(1u, count_removed);
 }
 
@@ -1746,7 +1773,7 @@ void FileSystemAccessManagerImpl::ResolveTransferToken(
                            [](ResolveTransferTokenCallback callback,
                               FileSystemAccessTransferTokenImpl* token) {
                              if (!token) {
-                               std::move(callback).Run(absl::nullopt);
+                               std::move(callback).Run(std::nullopt);
                                return;
                              }
                              std::move(callback).Run(token->url());

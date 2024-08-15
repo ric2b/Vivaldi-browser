@@ -277,10 +277,7 @@ bool Builder::Build() {
             "SPIR-V", builder_.AST(), builder_.Diagnostics(),
             Vector{
                 wgsl::Extension::kChromiumDisableUniformityAnalysis,
-                wgsl::Extension::kChromiumExperimentalDp4A,
-                wgsl::Extension::kChromiumExperimentalFullPtrParameters,
                 wgsl::Extension::kChromiumExperimentalPushConstant,
-                wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture,
                 wgsl::Extension::kChromiumExperimentalSubgroups,
                 wgsl::Extension::kF16,
                 wgsl::Extension::kChromiumInternalDualSourceBlending,
@@ -349,11 +346,6 @@ Operand Builder::result_op() {
 
 bool Builder::GenerateExtension(wgsl::Extension extension) {
     switch (extension) {
-        case wgsl::Extension::kChromiumExperimentalDp4A:
-            module_.PushExtension("SPV_KHR_integer_dot_product");
-            module_.PushCapability(SpvCapabilityDotProductKHR);
-            module_.PushCapability(SpvCapabilityDotProductInput4x8BitPackedKHR);
-            break;
         case wgsl::Extension::kF16:
             module_.PushCapability(SpvCapabilityFloat16);
             module_.PushCapability(SpvCapabilityUniformAndStorageBuffer16BitAccess);
@@ -806,13 +798,13 @@ bool Builder::GenerateGlobalVariable(const ast::Variable* v) {
             [&](const ast::LocationAttribute*) {
                 module_.PushAnnot(spv::Op::OpDecorate,
                                   {Operand(var_id), U32Operand(SpvDecorationLocation),
-                                   Operand(sem->Location().value())});
+                                   Operand(sem->Attributes().location.value())});
                 return true;
             },
             [&](const ast::IndexAttribute*) {
                 module_.PushAnnot(spv::Op::OpDecorate,
                                   {Operand(var_id), U32Operand(SpvDecorationIndex),
-                                   Operand(sem->Index().value())});
+                                   Operand(sem->Attributes().index.value())});
                 return true;
             },
             [&](const ast::InterpolateAttribute* interpolate) {
@@ -837,14 +829,14 @@ bool Builder::GenerateGlobalVariable(const ast::Variable* v) {
                 return true;
             },
             [&](const ast::BindingAttribute*) {
-                auto bp = sem->BindingPoint();
+                auto bp = sem->Attributes().binding_point;
                 module_.PushAnnot(
                     spv::Op::OpDecorate,
                     {Operand(var_id), U32Operand(SpvDecorationBinding), Operand(bp->binding)});
                 return true;
             },
             [&](const ast::GroupAttribute*) {
-                auto bp = sem->BindingPoint();
+                auto bp = sem->Attributes().binding_point;
                 module_.PushAnnot(
                     spv::Op::OpDecorate,
                     {Operand(var_id), U32Operand(SpvDecorationDescriptorSet), Operand(bp->group)});
@@ -873,12 +865,14 @@ bool Builder::GenerateIndexAccessor(const ast::IndexAccessorExpression* expr, Ac
     }
 
     // If the source is a reference, we access chain into it.
-    // In the future, pointers may support access-chaining.
-    // See https://github.com/gpuweb/gpuweb/pull/1580
     if (info->source_type->Is<core::type::Reference>()) {
         info->access_chain_indices.push_back(idx_id);
         info->source_type = builder_.Sem().Get(expr)->UnwrapLoad()->Type();
         return true;
+    } else if (TINT_UNLIKELY(info->source_type->Is<core::type::Pointer>())) {
+        TINT_ICE() << "lhs of index accesor expression should not be a pointer. These should have "
+                      "been removed by the SimplifyPointers transform";
+        return false;
     }
 
     auto result_type_id = GenerateTypeIfNeeded(TypeOf(expr));
@@ -2535,6 +2529,7 @@ uint32_t Builder::GenerateBuiltinCall(const sem::Call* call, const sem::BuiltinF
             }
             break;
         case wgsl::BuiltinFn::kDot4I8Packed: {
+            DeclarePacked4x8IntegerDotProductCapabilitiesAndExtensions();
             auto first_param_id = get_arg_as_value_id(0);
             auto second_param_id = get_arg_as_value_id(1);
             if (!push_function_inst(spv::Op::OpSDotKHR,
@@ -2547,6 +2542,7 @@ uint32_t Builder::GenerateBuiltinCall(const sem::Call* call, const sem::BuiltinF
             return result_id;
         }
         case wgsl::BuiltinFn::kDot4U8Packed: {
+            DeclarePacked4x8IntegerDotProductCapabilitiesAndExtensions();
             auto first_param_id = get_arg_as_value_id(0);
             auto second_param_id = get_arg_as_value_id(1);
             if (!push_function_inst(spv::Op::OpUDotKHR,
@@ -3002,8 +2998,10 @@ bool Builder::GenerateTextureBuiltin(const sem::Call* call,
     }
 
     if (!image_operands.empty()) {
-        std::sort(image_operands.begin(), image_operands.end(),
-                  [](auto& a, auto& b) { return a.mask < b.mask; });
+        // Use a stable sort to preserve the order of the Grad dpdx and dpdy
+        // operands.
+        std::stable_sort(image_operands.begin(), image_operands.end(),
+                         [](auto& a, auto& b) { return a.mask < b.mask; });
         uint32_t mask = 0;
         for (auto& image_operand : image_operands) {
             mask |= image_operand.mask;
@@ -4179,6 +4177,12 @@ bool Builder::InsideBasicBlock() const {
             break;
     }
     return true;
+}
+
+void Builder::DeclarePacked4x8IntegerDotProductCapabilitiesAndExtensions() {
+    module_.PushExtension("SPV_KHR_integer_dot_product");
+    module_.PushCapability(SpvCapabilityDotProductKHR);
+    module_.PushCapability(SpvCapabilityDotProductInput4x8BitPackedKHR);
 }
 
 Builder::ContinuingInfo::ContinuingInfo(const ast::Statement* the_last_statement,

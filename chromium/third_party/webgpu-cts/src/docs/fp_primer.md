@@ -39,7 +39,8 @@ A floating point number system defines
 - Arithmetic operations on those representatives, trying to approximate the
   ideal operations on real numbers.
 
-The cardinality mismatch alone implies that any floating point number system necessarily loses information.
+The cardinality mismatch alone implies that any floating point number system
+necessarily loses information.
 
 This means that not all numbers in the bounds can be exactly represented as a
 floating point value.
@@ -114,7 +115,7 @@ Implementations may assume that infinities are not present. When an evaluation
 at runtime would produce an infinity, an indeterminate value is produced
 instead.
 
-When a value goes out of bounds for a specific precision there are special
+When a value goes out-of-bounds for a specific precision there are special
 rounding rules that apply. If it is 'near' the edge of finite values for that
 precision, it is considered to be near-overflowing, and the implementation may
 choose to round it to the edge value or the appropriate infinity. If it is not
@@ -163,7 +164,7 @@ the rules for compile time execution will be discussed below.)
 
 Signaling NaNs are treated as quiet NaNs in the WGSL spec. And quiet NaNs have
 the same "may-convert-to-indeterminate-value" behaviour that infinities have, so
-for the purpose of the CTS they are handled by the infinite/out of bounds logic
+for the purpose of the CTS they are handled by the infinite/out-of-bounds logic
 normally.
 
 ## Notation/Terminology
@@ -231,14 +232,20 @@ referred to as the beginning of the interval and `b` as the end of the interval.
 
 When talking about intervals, this doc and the code endeavours to avoid using
 the term **range** to refer to the span of values that an interval covers,
-instead using the term bounds to avoid confusion of terminology around output of
-operations.
+instead using the term **endpoints** to avoid confusion of terminology around
+output of operations.
+
+The term **endpoints** is generally used to refer to the conceptual numeric
+spaces, i.e. f32 or abstract float.
+
+Thus a specific interval can have **endpoints** that are either in or out of
+bounds for a specific floating point precision.
 
 ## Accuracy
 
 As mentioned above floating point numbers are not able to represent all the
-possible values over their bounds, but instead represent discrete values in that
-interval, and approximate the remainder.
+possible values over their range, but instead represent discrete values in that
+space, and approximate the remainder.
 
 Additionally, floating point numbers are not evenly distributed over the real
 number line, but instead are more densely clustered around zero, with the space
@@ -398,7 +405,7 @@ That would be very inefficient though and make your reviewer sad to read.
 
 For mapping intervals to intervals the key insight is that we only need to be
 concerned with the extrema of the operation in the interval, since the
-acceptance interval is the bounds of the possible outputs.
+acceptance interval is defined by largest and smallest of the possible outputs.
 
 In more precise terms:
 ```
@@ -538,6 +545,65 @@ This algorithmically looks something like this:
     Return division result
 ```
 
+### Out of Bounds
+When calculating inherited intervals, if a intermediate calculation goes out of
+bounds this will flow through to later calculations, even if a later calculation
+would pull the result back inbounds.
+
+For example, `fp.positive.max + fp.positive.max - fp.positive.max` could be
+simplified to just `fp.positive.max` before execution, but it would also be
+valid for an implementation to naively perform left to right evaluation. Thus
+the addition would produce an intermediate value of `2 * fp.positive.max`. Again
+the implementation may hoist intermediate calculation to a higher precision to
+avoid overflow here, but is not required to. So a conforming implementation at
+this point may just return any value since the calculation when out of bounds.
+Thus the execution tests in the CTS should accept any value returned, so the
+case is just effectively confirming the computation completes.
+
+When looking at validation tests there is some subtleties about out of bounds
+behaviour, specifically how far out of bounds the value went that will influence
+the expected results, which will be discussed in more detail below.
+
+#### Vectors and Matrices
+The above discussion about inheritance of out of bounds intervals assumed scalar
+calculations, so all the result intervals were dependent on the input intervals,
+so if an out-of-bounds input occurred naturally all the output values were
+effectively out of bounds.
+
+For vector and matrix operations, this is not always true. Operations on these
+data structures can either define an element-wise mapping, where for each output
+element the result is calculated by executing a scalar operation on a input
+element (sometimes referred to as component-wise), or where the operation is
+defined such the output elements are dependent on the entire input.
+
+For concrete examples, constant scaling (`c * vec` of `c * mat`) is an
+element-wise operation, because one can define a simple mapping
+`o[i]` = `c * i[i]`, where the ith output only depends on the ith input.
+
+A non-element-wise operation would be something like cross product of vectors
+or the determinant of a matrix, where each output element is dependent on
+multiple input elements.
+
+For component-wise operations, out of bounds-ness flows through per element,
+i.e. if the ith input element was considered to be have gone out of bounds, then
+the ith output is considered to have too also regardless of the operation
+performed. Thus an input may be a mixture of out of bounds elements & inbounds
+elements, and produce another mixture, assuming the operation being performed
+itself does not push elements out of bounds.
+
+For non-component-wise operations, out of bounds-ness flows through the entire
+operation, i.e. if any of the input elements is out of bounds, then all the
+output elements are considered to be out of bounds. Additionally, if the
+calculation for any of the elements in output goes out of bounds, then the
+entire output is considered to have gone out of bounds, even if other individual
+elements stayed inbounds.
+
+For some non-element-wise operations one could define mappings for individual
+output elements that do not depend on all the input elements and consider only
+if those inputs that are used, but for the purposes of WGSL and the CTS, OOB
+inheritance is not so finely defined as to consider the difference between using
+some and all the input elements for non-element-wise operations.
+
 ## Compile vs Run Time Evaluation
 
 The above discussions have been primarily agnostic to when and where a
@@ -553,14 +619,14 @@ These are compile vs run time, and CPU vs GPU. Broadly speaking compile time
 execution happens on the host CPU, and run time evaluation occurs on a dedicated
 GPU.
 
-(Software graphics implementations like WARP and SwiftShader technically break this by
-being a software emulation of a GPU that runs on the CPU, but conceptually one can
-think of these implementations being a type of GPU in this context, since it has 
-similar constraints when it comes to precision, etc.)
+(Software graphics implementations like WARP and SwiftShader technically break
+this by being a software emulation of a GPU that runs on the CPU, but
+conceptually one can think of these implementations being a type of GPU in this
+context, since it has similar constraints when it comes to precision, etc.)
 
 Compile time evaluation is execution that occurs when setting up a shader
 module, i.e. when compiling WGSL to a platform specific shading language. It is
-part of resolving values for things like constants, and occurs once before the
+part of resolving values for things like constants, and occurs once, before the
 shader is run by the caller. It includes constant evaluation and override
 evaluation. All AbstractFloat operations are compile time evaluated.
 
@@ -623,7 +689,7 @@ near-overflow vs far-overflow behaviour. Thankfully this can be broken down into
 a case by case basis based on where an interval falls.
 
 Assuming `X`, is the well-defined result of an operation, i.e. not indeterminate
-due to the operation isn't defined for the inputs:
+due to the operation not being defined for the inputs:
 
 | Region                       |                                                      | Result                         |
 |------------------------------|------------------------------------------------------|--------------------------------|
@@ -643,7 +709,9 @@ behaviour in this region as rigorously defined nor tested, so fully testing
 here would likely find lots of issues that would just need to be mitigated in
 the CTS.
 
-Currently, we choose to avoid testing validation of near-overflow scenarios.
+Currently, we have chosen to not test validation of near-overflow scenarios to
+avoid this complexity. If this becomes a significant source of bugs and/or
+incompatibility between implementations this can be revisited in the future.
 
 ### Additional Technical Limitations
 
@@ -652,7 +720,7 @@ the theoretical world that the intervals being used for testing are infinitely
 precise, when in actuality they are implemented by the ECMAScript `number` type,
 which is implemented as a f64 value.
 
-For the vast majority of cases, even out of bounds and overflow, this is
+For the vast majority of cases, even out-of-bounds and overflow, this is
 sufficient. There is one small slice where this breaks down. Specifically if
 the result just outside the finite range by less than 1 f64 ULP of the edge
 value. An example of this is `2 ** -11 + f32.max`. This will be between `f32.max`
@@ -690,6 +758,42 @@ library, or if this turns out to be a significant issue in the future, this
 decision can be revisited.
 
 ## Abstract Float
+
+### Accuracy
+
+For the concrete floating point types (f32 & f16) the accuracy of operations are
+defined in terms of their own type. Specifically for f32, correctly rounded
+refers to the nearest f32 values, and ULP is in terms of the distance between
+f32 values.
+
+AbstractFloat internally is defined as a f64, and this applies for exact and
+correctly rounded accuracies. Thus, correctly rounded refers to the nearest f64
+values. However, AbstractFloat differs for ULP and absolute errors. Reading
+the spec strictly, these all have unbounded accuracies, but it is recommended
+that their accuracies be at least as good as the f32 equivalent.
+
+The difference between f32 and f64 ULP at a specific value X are significant, so
+at least as good as f32 requirement is always less strict than if it was
+calculated in terms of f64. Similarly, for absolute accuracies the interval
+`[x - epsilon, x + epsilon]` is always equal or wider if calculated as f32s
+vs f64s.
+
+If an inherited accuracy is only defined in terms of correctly rounded
+accuracies, then the interval is calculated in terms of f64s. If any of the
+defining accuracies are ULP or absolute errors, then the result falls into the
+unbounded accuracy, but recommended to be at least as good as f32 bucket.
+
+What this means from a CTS implementation is that for these "at least as good as
+f32" error intervals, if the infinitely accurate result is finite for f32, then
+the error interval for f64 is just the f32 interval. If the result is not finite
+for f32, then the accuracy interval is just the unbounded interval.
+
+How this is implemented in the CTS is by having the FPTraits for AbstractFloat
+forward to the f32 implementation for the operations that are tested to be as
+good as f32.
+
+### Implementation
+
 AbstractFloats are a compile time construct that exist in WGSL. They are
 expressible as literal values or the result of operations that return them, but
 a variable cannot be typed as an AbstractFloat. Instead, the variable needs be a
@@ -703,17 +807,20 @@ operations that return AbstractFloats.
 As of the writing of this doc, this second option for testing AbstractFloats
 is the one being pursued in the CTS.
 
-### const_assert
+#### const_assert
+
 The first proposal is to lean on the `const_assert` statement that exists in
 WGSL. For each test case a snippet of code would be written out that has a form
 something like this
+
 ```
 // foo(x) is the operation under test
 const_assert lower < foo(x) // Result was below the acceptance interval
 const_assert upper > foo(x) // Result was above the acceptance interval
 ```
+
 where lower and upper would actually be string replaced with literals for the
-bounds of the acceptance interval when generating the shader text.
+endpoints of the acceptance interval when generating the shader text.
 
 This approach has a number of limitations that made it unacceptable for the CTS.
 First, how errors are reported is a pain to debug. Someone working with the CTS
@@ -733,7 +840,8 @@ indicate something is working, we would be depending on a signal that it isn't
 working, and assuming if we don't receive that signal everything is good, not
 that our signal mechanism was broken.
 
-### Extracting Bits
+#### Extracting Bits
+
 The other proposal that was developed depends on the fact that AbstractFloat is
 spec'd to be a f64 internally. So the CTS could store the result of an operation
 as two 32-bit unsigned integers (or broken up into sign, exponent, and
@@ -827,6 +935,5 @@ shader being run.
 - [binary16 on Wikipedia](https://en.wikipedia.org/wiki/Half-precision_floating-point_format)
 - [IEEE-754 Floating Point Converter](https://www.h-schmidt.net/FloatConverter/IEEE754.html)
 - [IEEE 754 Calculator](http://weitz.de/ieee/)
-- [Keisan High Precision Calculator](https://keisan.casio.com/calculator)
 - [On the definition of ulp(x)](https://hal.inria.fr/inria-00070503/document)
 - [Float Exposed](https://float.exposed/)

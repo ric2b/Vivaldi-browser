@@ -152,7 +152,8 @@ class ChromeShelfController
   void LaunchApp(const ash::ShelfID& id,
                  ash::ShelfLaunchSource source,
                  int event_flags,
-                 int64_t display_id);
+                 int64_t display_id,
+                 bool new_window = false);
 
   // Set the image for a specific shelf item (e.g. when set by the app).
   void SetItemImage(const ash::ShelfID& shelf_id, const gfx::ImageSkia& image);
@@ -286,8 +287,11 @@ class ChromeShelfController
   void OnShortcutRemoved(const apps::ShortcutId& id) override;
 
   // AppIconLoaderDelegate:
-  void OnAppImageUpdated(const std::string& app_id,
-                         const gfx::ImageSkia& image) override;
+  void OnAppImageUpdated(
+      const std::string& app_id,
+      const gfx::ImageSkia& image,
+      bool is_placeholder_icon,
+      const std::optional<gfx::ImageSkia>& badge_image) override;
 
   // Inserts a shelf item for an app at |index|. Note that |index| may be
   // adjusted by the model to meet ordering constraints.
@@ -309,7 +313,10 @@ class ChromeShelfController
   using WebContentsToAppIDMap = std::map<content::WebContents*, std::string>;
 
   // Updates images of shelf items representing the app.
-  void UpdateAppImage(const std::string& app_id, const gfx::ImageSkia& image);
+  void UpdateAppImage(const std::string& app_id,
+                      const std::optional<gfx::ImageSkia>& badge_image,
+                      bool is_placeholder_icon,
+                      const gfx::ImageSkia& image);
 
   // Remembers / restores list of running applications.
   // Note that this order will neither be stored in the preference nor will it
@@ -420,21 +427,21 @@ class ChromeShelfController
   // The currently loaded profile used for prefs and loading extensions. This is
   // NOT necessarily the profile new windows are created with. Note that in
   // multi-profile use cases this might change over time.
-  raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
 
   // The profile used to load icons and get the app update information. This is
   // the latest active user's profile when switch users in multi-profile use
   // cases.
-  raw_ptr<Profile, ExperimentalAsh> latest_active_profile_ = nullptr;
+  raw_ptr<Profile> latest_active_profile_ = nullptr;
 
   // The ShelfModel instance owned by ash::Shell's ShelfController.
-  const raw_ptr<ash::ShelfModel, ExperimentalAsh> model_;
+  const raw_ptr<ash::ShelfModel> model_;
 
   // The central authority to create ShelfItems from app_ids.
   std::unique_ptr<ChromeShelfItemFactory> shelf_item_factory_;
 
   // The AppService app window shelf controller.
-  raw_ptr<AppServiceAppWindowShelfController, ExperimentalAsh>
+  raw_ptr<AppServiceAppWindowShelfController>
       app_service_app_window_controller_ = nullptr;
 
   // When true, changes to pinned shelf items should update the sync model.

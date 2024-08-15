@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_INTEGRATION_TESTS_METRIC_INTEGRATION_TEST_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_INTEGRATION_TESTS_METRIC_INTEGRATION_TEST_H_
 
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "chrome/test/base/in_process_browser_test.h"
 
 #include "base/test/metrics/histogram_tester.h"
@@ -171,8 +171,8 @@ class MetricIntegrationTest : public InProcessBrowserTest {
   const ukm::mojom::UkmEntryPtr GetEntry();
 
   base::test::ScopedFeatureList feature_list_;
-  absl::optional<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
-  absl::optional<base::HistogramTester> histogram_tester_;
+  std::optional<ukm::TestAutoSetUkmRecorder> ukm_recorder_;
+  std::optional<base::HistogramTester> histogram_tester_;
 };
 
 #endif  // CHROME_BROWSER_PAGE_LOAD_METRICS_INTEGRATION_TESTS_METRIC_INTEGRATION_TEST_H_

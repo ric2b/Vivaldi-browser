@@ -132,15 +132,35 @@ static void avifImageDumpInternal(const avifImage * avif,
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
     printf(" * Gain map       : ");
-    avifImage * gainMap = avif->gainMap.image;
-    if (gainMap != NULL) {
-        printf("%ux%u pixels, %u bit, %s, %s Range, Matrix Coeffs. %u \n",
-               gainMap->width,
-               gainMap->height,
-               gainMap->depth,
-               avifPixelFormatToString(gainMap->yuvFormat),
-               (gainMap->yuvRange == AVIF_RANGE_FULL) ? "Full" : "Limited",
-               gainMap->matrixCoefficients);
+    avifImage * gainMapImage = avif->gainMap ? avif->gainMap->image : NULL;
+    if (gainMapImage != NULL) {
+        printf("%ux%u pixels, %u bit, %s, %s Range, Matrix Coeffs. %u, Base Image is %s\n",
+               gainMapImage->width,
+               gainMapImage->height,
+               gainMapImage->depth,
+               avifPixelFormatToString(gainMapImage->yuvFormat),
+               (gainMapImage->yuvRange == AVIF_RANGE_FULL) ? "Full" : "Limited",
+               gainMapImage->matrixCoefficients,
+               (avif->gainMap->metadata.baseHdrHeadroomN == 0) ? "SDR" : "HDR");
+        printf(" * Alternate image:\n");
+        printf("    * Color Primaries: %u\n", avif->gainMap->altColorPrimaries);
+        printf("    * Transfer Char. : %u\n", avif->gainMap->altTransferCharacteristics);
+        printf("    * Matrix Coeffs. : %u\n", avif->gainMap->altMatrixCoefficients);
+        if (avif->gainMap->altICC.size != 0) {
+            printf("    * ICC Profile    : Present (%" AVIF_FMT_ZU " bytes)\n", avif->gainMap->altICC.size);
+        } else {
+            printf("    * ICC Profile    : Absent\n");
+        }
+        if (avif->gainMap->altDepth) {
+            printf("    * Bit Depth      : %u\n", avif->gainMap->altDepth);
+        }
+        if (avif->gainMap->altPlaneCount) {
+            printf("    * Planes         : %u\n", avif->gainMap->altPlaneCount);
+        }
+        if (gainMapImage->clli.maxCLL > 0 || gainMapImage->clli.maxPALL > 0) {
+            printf("    * CLLI           : %hu, %hu\n", gainMapImage->clli.maxCLL, gainMapImage->clli.maxPALL);
+        }
+        printf("\n");
     } else if (gainMapPresent) {
         printf("Present (but ignored)\n");
     } else {
@@ -286,6 +306,7 @@ avifAppFileFormat avifReadImage(const char * filename,
                                 avifBool ignoreXMP,
                                 avifBool allowChangingCicp,
                                 avifBool ignoreGainMap,
+                                uint32_t imageSizeLimit,
                                 avifImage * image,
                                 uint32_t * outDepth,
                                 avifAppSourceTiming * sourceTiming,
@@ -293,21 +314,31 @@ avifAppFileFormat avifReadImage(const char * filename,
 {
     const avifAppFileFormat format = avifGuessFileFormat(filename);
     if (format == AVIF_APP_FILE_FORMAT_Y4M) {
-        if (!y4mRead(filename, image, sourceTiming, frameIter)) {
+        if (!y4mRead(filename, imageSizeLimit, image, sourceTiming, frameIter)) {
             return AVIF_APP_FILE_FORMAT_UNKNOWN;
         }
         if (outDepth) {
             *outDepth = image->depth;
         }
     } else if (format == AVIF_APP_FILE_FORMAT_JPEG) {
-        if (!avifJPEGRead(filename, image, requestedFormat, requestedDepth, chromaDownsampling, ignoreColorProfile, ignoreExif, ignoreXMP, ignoreGainMap)) {
+        if (!avifJPEGRead(filename, image, requestedFormat, requestedDepth, chromaDownsampling, ignoreColorProfile, ignoreExif, ignoreXMP, ignoreGainMap, imageSizeLimit)) {
             return AVIF_APP_FILE_FORMAT_UNKNOWN;
         }
         if (outDepth) {
             *outDepth = 8;
         }
     } else if (format == AVIF_APP_FILE_FORMAT_PNG) {
-        if (!avifPNGRead(filename, image, requestedFormat, requestedDepth, chromaDownsampling, ignoreColorProfile, ignoreExif, ignoreXMP, allowChangingCicp, outDepth)) {
+        if (!avifPNGRead(filename,
+                         image,
+                         requestedFormat,
+                         requestedDepth,
+                         chromaDownsampling,
+                         ignoreColorProfile,
+                         ignoreExif,
+                         ignoreXMP,
+                         allowChangingCicp,
+                         imageSizeLimit,
+                         outDepth)) {
             return AVIF_APP_FILE_FORMAT_UNKNOWN;
         }
     } else {

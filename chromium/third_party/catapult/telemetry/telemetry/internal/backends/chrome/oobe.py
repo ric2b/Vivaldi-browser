@@ -100,20 +100,15 @@ class Oobe(web_contents.WebContents):
     # TODO(achuith): Get rid of this call. crbug.com/804216.
     self._ExecuteOobeApi('OobeAPI.skipToLoginForTesting')
     if for_user_triggered_enrollment:
-      self._ExecuteOobeApi('Oobe.switchToEnterpriseEnrollmentForTesting')
+      self._ExecuteOobeApi('OobeAPI.advanceToScreen', 'enterprise-enrollment')
 
     url = self.EvaluateJavaScript("window.location.href")
     if url.startswith('chrome://oobe/gaia-signin'):
-      self.ExecuteJavaScript('Oobe.showAddUserForTesting()')
+      self._ExecuteOobeApi('OobeAPI.showGaiaDialog')
 
     py_utils.WaitFor(self._GaiaWebviewContext, 20)
     self._NavigateWebviewLogin(username, password,
                                wait_for_close=not enterprise_enroll)
-
-    if enterprise_enroll:
-      self.WaitForJavaScriptCondition(
-          'Oobe.isEnrollmentSuccessfulForTest()', timeout=120)
-      self._ExecuteOobeApi('Oobe.enterpriseEnrollmentDone')
 
   def _UnicornObfuscated(self, text):
     """Converts an email into an obfuscated email.

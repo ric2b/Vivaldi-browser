@@ -43,8 +43,10 @@
 #include "base/time/default_tick_clock.h"
 #include "base/types/optional_util.h"
 #include "build/chromeos_buildflags.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/client_hints.h"
 #include "services/network/public/cpp/header_util.h"
+#include "services/network/public/cpp/shared_dictionary_encoding_names.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/url_response_head.mojom-shared.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
@@ -138,6 +140,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_performance.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
+#include "third_party/blink/renderer/platform/loader/fetch/background_code_cache_host.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/loader_freeze_mode.h"
@@ -317,7 +320,10 @@ struct SameSizeAsDocumentLoader
   bool is_cross_site_cross_browsing_context_group;
   WebVector<WebHistoryItem> navigation_api_back_entries;
   WebVector<WebHistoryItem> navigation_api_forward_entries;
+  Member<HistoryItem> navigation_api_previous_entry;
   std::unique_ptr<CodeCacheHost> code_cache_host;
+  mojo::PendingRemote<mojom::blink::CodeCacheHost>
+      pending_code_cache_host_for_background;
   HashMap<KURL, EarlyHintsPreloadEntry> early_hints_preloaded_resources;
   absl::optional<Vector<KURL>> ad_auction_components;
   std::unique_ptr<ExtraData> extra_data;
@@ -332,6 +338,7 @@ struct SameSizeAsDocumentLoader
   const base::flat_map<mojom::blink::RuntimeFeature, bool>
       modified_runtime_features;
   AtomicString cookie_deprecation_label;
+  mojom::RendererContentSettingsPtr content_settings;
 };
 
 // Asserts size of DocumentLoader, so that whenever a new attribute is added to
@@ -341,9 +348,6 @@ struct SameSizeAsDocumentLoader
 ASSERT_SIZE(DocumentLoader, SameSizeAsDocumentLoader);
 
 void WarnIfSandboxIneffective(LocalDOMWindow* window) {
-  if (!RuntimeEnabledFeatures::WarnSandboxIneffectiveEnabled())
-    return;
-
   if (window->document()->IsInitialEmptyDocument())
     return;
 
@@ -474,9 +478,7 @@ DocumentLoader::DocumentLoader(
       // at commit time in |params_|. Set it as the current history item of this
       // DocumentLoader. For other navigations, |history_item_| will be created
       // when the FrameLoader calls SetHistoryItemStateForCommit.
-      history_item_(IsBackForwardLoadType(params_->frame_load_type)
-                        ? params_->history_item
-                        : nullptr),
+      history_item_(params_->history_item),
       original_referrer_(referrer_),
       response_(params_->response.ToResourceResponse()),
       response_wrapper_(response_),
@@ -527,6 +529,7 @@ DocumentLoader::DocumentLoader(
           params_->is_cross_site_cross_browsing_context_group),
       navigation_api_back_entries_(params_->navigation_api_back_entries),
       navigation_api_forward_entries_(params_->navigation_api_forward_entries),
+      navigation_api_previous_entry_(params_->navigation_api_previous_entry),
       extra_data_(std::move(extra_data)),
       reduced_accept_language_(params_->reduced_accept_language),
       navigation_delivery_type_(params_->navigation_delivery_type),
@@ -534,7 +537,8 @@ DocumentLoader::DocumentLoader(
       load_with_storage_access_(params_->load_with_storage_access),
       browsing_context_group_info_(params_->browsing_context_group_info),
       modified_runtime_features_(std::move(params_->modified_runtime_features)),
-      cookie_deprecation_label_(params_->cookie_deprecation_label) {
+      cookie_deprecation_label_(params_->cookie_deprecation_label),
+      content_settings_(std::move(params_->content_settings)) {
   DCHECK(frame_);
   DCHECK(params_);
 
@@ -585,8 +589,7 @@ DocumentLoader::DocumentLoader(
   for (const auto& resource : params_->early_hints_preloaded_resources)
     early_hints_preloaded_resources_.insert(resource, EarlyHintsPreloadEntry());
 
-  if (IsBackForwardLoadType(params_->frame_load_type))
-    DCHECK(history_item_);
+  CHECK_EQ(IsBackForwardOrRestore(params_->frame_load_type), !!history_item_);
 
   if (params_->ad_auction_components) {
     ad_auction_components_.emplace();
@@ -685,6 +688,7 @@ DocumentLoader::CreateWebNavigationParamsToCloneDocument() {
   params->load_with_storage_access = load_with_storage_access_;
   params->modified_runtime_features = modified_runtime_features_;
   params->cookie_deprecation_label = cookie_deprecation_label_;
+  params->content_settings = content_settings_->Clone();
   return params;
 }
 
@@ -719,6 +723,7 @@ void DocumentLoader::Trace(Visitor* visitor) const {
   visitor->Trace(document_load_timing_);
   visitor->Trace(prefetched_signed_exchange_manager_);
   visitor->Trace(use_counter_);
+  visitor->Trace(navigation_api_previous_entry_);
 }
 
 uint64_t DocumentLoader::MainResourceIdentifier() const {
@@ -846,6 +851,7 @@ WebHistoryCommitType LoadTypeToCommitType(WebFrameLoadType type) {
     case WebFrameLoadType::kStandard:
       return kWebStandardCommit;
     case WebFrameLoadType::kBackForward:
+    case WebFrameLoadType::kRestore:
       return kWebBackForwardCommit;
     case WebFrameLoadType::kReload:
     case WebFrameLoadType::kReplaceCurrentItem:
@@ -886,7 +892,7 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
     bool is_synchronously_committed,
     absl::optional<scheduler::TaskAttributionId>
         soft_navigation_heuristics_task_id) {
-  DCHECK_EQ(IsBackForwardLoadType(type), !!history_item);
+  CHECK_EQ(IsBackForwardOrRestore(type), !!history_item);
 
   TRACE_EVENT1("blink", "FrameLoader::updateForSameDocumentNavigation", "url",
                new_url.GetString().Ascii());
@@ -994,7 +1000,8 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
   std::unique_ptr<SoftNavigationEventScope> soft_navigation_event_scope;
   SoftNavigationHeuristics* heuristics = nullptr;
   ScriptState* script_state = nullptr;
-  if (frame_->IsMainFrame()) {
+  if (frame_->IsMainFrame() &&
+      base::FeatureList::IsEnabled(features::kSoftNavigationDetection)) {
     script_state = ToScriptStateForMainWorld(frame_);
     if (script_state) {
       CHECK(frame_->DomWindow());
@@ -1005,7 +1012,7 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
         // need to do that now.
         soft_navigation_event_scope =
             std::make_unique<SoftNavigationEventScope>(
-                heuristics, script_state, /*is_unfocused_keydown=*/false,
+                heuristics, SoftNavigationHeuristics::EventScopeType::kNavigate,
                 /*is_new_interaction=*/true);
         heuristics->SameDocumentNavigationStarted(script_state);
       }
@@ -1070,8 +1077,9 @@ void DocumentLoader::SetHistoryItemStateForCommit(
     WebFrameLoadType load_type,
     HistoryNavigationType navigation_type,
     CommitReason commit_reason) {
-  if (!history_item_ || !IsBackForwardLoadType(load_type))
+  if (!history_item_ || !IsBackForwardOrRestore(load_type)) {
     history_item_ = MakeGarbageCollected<HistoryItem>();
+  }
 
   history_item_->SetURL(UrlForHistory());
   history_item_->SetReferrer(referrer_.GetString());
@@ -1089,8 +1097,9 @@ void DocumentLoader::SetHistoryItemStateForCommit(
   // Don't propagate state from the old item to the new item if there isn't an
   // old item (obviously), or if this is a back/forward navigation, since we
   // explicitly want to restore the state we just committed.
-  if (!old_item || IsBackForwardLoadType(load_type))
+  if (!old_item || IsBackForwardOrRestore(load_type)) {
     return;
+  }
 
   // The navigation API key corresponds to a "slot" in the back/forward list,
   // and should be shared for all replacing navigations so long as the
@@ -1491,7 +1500,7 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
     return mojom::blink::CommitResult::RestartCrossDocument;
   }
 
-  if (!IsBackForwardLoadType(frame_load_type)) {
+  if (!IsBackForwardOrRestore(frame_load_type)) {
     // For the browser to send a same-document navigation, it will always have a
     // fragment. When no fragment is present, the browser loads a new document.
     CHECK(url.HasFragmentIdentifier());
@@ -1596,7 +1605,7 @@ void DocumentLoader::CommitSameDocumentNavigationInternal(
   if (!frame_)
     return;
 
-  if (!IsBackForwardLoadType(frame_load_type)) {
+  if (!IsBackForwardOrRestore(frame_load_type)) {
     SetNavigationType(triggering_event_info !=
                               mojom::blink::TriggeringEventInfo::kNotFromEvent
                           ? kWebNavigationTypeLinkClicked
@@ -1952,8 +1961,9 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
 
   frame_->DomWindow()->BindContentSecurityPolicy();
 
-  if (history_item_ && IsBackForwardLoadType(load_type_))
+  if (history_item_ && IsBackForwardOrRestore(load_type_)) {
     document->SetStateForNewControls(history_item_->GetDocumentState());
+  }
 
   DCHECK(document->GetFrame());
   // TODO(dgozman): modify frame's client hints directly once we commit
@@ -2189,14 +2199,29 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     //
     // Note: Sandboxed about:srcdoc iframe without "allow-same-origin" aren't
     // allowed to load user's file, even if its parent can.
-    if (owner_document) {
+    if (url_.IsAboutSrcdocURL()) {
+      // We should only have a sandboxed, srcdoc frame without an owner document
+      // if isolated-sandboxed-iframes is enabled. Only cases that would
+      // normally inherit the origin need to be handled here, and a sandboxed
+      // about:blank document won't be moved out of process. Also, data: urls
+      // don't get secure contexts, so needn't be considered here.
+      CHECK(owner_document ||
+            base::FeatureList::IsEnabled(features::kIsolateSandboxedIframes));
+
+      bool is_potentially_trustworthy =
+          origin->GetOriginOrPrecursorOriginIfOpaque()
+              ->IsPotentiallyTrustworthy();
+      if (is_potentially_trustworthy) {
+        sandbox_origin->SetOpaqueOriginIsPotentiallyTrustworthy(true);
+        debug_info_builder.Append(", _potentially_trustworthy");
+      }
+    } else if (owner_document) {
       if (origin->IsPotentiallyTrustworthy()) {
         sandbox_origin->SetOpaqueOriginIsPotentiallyTrustworthy(true);
         debug_info_builder.Append(", _potentially_trustworthy");
       }
-      if (origin->CanLoadLocalResources() && !loading_srcdoc_) {
+      if (origin->CanLoadLocalResources()) {
         sandbox_origin->GrantLoadLocalResources();
-
         debug_info_builder.Append(", _load_local");
       }
     }
@@ -2617,14 +2642,9 @@ void DocumentLoader::CommitNavigation() {
     // PermissionsPolicy and DocumentPolicy require SecurityOrigin and origin
     // trials to be initialized.
     // TODO(iclelland): Add Permissions-Policy-Report-Only to Origin Policy.
-    auto required_permissions_for_fenced_frames =
-        FencedFrameProperties()
-            ? base::make_span(
-                  FencedFrameProperties()->effective_enabled_permissions())
-            : base::span<const mojom::blink::PermissionsPolicyFeature>();
     security_init.ApplyPermissionsPolicy(
         *frame_.Get(), response_, frame_policy_, initial_permissions_policy_,
-        required_permissions_for_fenced_frames);
+        FencedFrameProperties());
 
     // |document_policy_| is parsed in document loader because it is
     // compared with |frame_policy.required_document_policy| to decide
@@ -2660,10 +2680,6 @@ void DocumentLoader::CommitNavigation() {
 
   RecordUseCountersForCommit();
   RecordConsoleMessagesForCommit();
-  if (!response_.HttpHeaderField(http_names::kExpectCT).empty()) {
-    Deprecation::CountDeprecation(frame_->DomWindow(),
-                                  mojom::blink::WebFeature::kExpectCTHeader);
-  }
   for (const auto& policy : security_init.PermissionsPolicyHeader()) {
     if (policy.deprecated_feature.has_value()) {
       Deprecation::CountDeprecation(frame_->DomWindow(),
@@ -2734,11 +2750,12 @@ void DocumentLoader::CommitNavigation() {
     frame_->DomWindow()->navigation()->InitializeForNewWindow(
         *history_item_, load_type_, commit_reason_,
         previous_window->navigation(), navigation_api_back_entries_,
-        navigation_api_forward_entries_);
+        navigation_api_forward_entries_, navigation_api_previous_entry_);
     // Now that the navigation API's entries array is initialized, we don't need
     // to retain the state from which it was initialized.
-    navigation_api_back_entries_.Clear();
-    navigation_api_forward_entries_.Clear();
+    navigation_api_back_entries_.clear();
+    navigation_api_forward_entries_.clear();
+    navigation_api_previous_entry_ = WebHistoryItem();
   }
 
   if (commit_reason_ == CommitReason::kXSLT)
@@ -2856,7 +2873,7 @@ void DocumentLoader::CommitNavigation() {
   // metrics to be correctly sent to the browser process.
   if (commit_reason_ != CommitReason::kInitialization)
     use_counter_.DidCommitLoad(frame_);
-  if (load_type_ == WebFrameLoadType::kBackForward) {
+  if (IsBackForwardOrRestore(load_type_)) {
     if (Page* page = frame_->GetPage())
       page->HistoryNavigationVirtualTimePauser().UnpauseVirtualTime();
   }
@@ -3107,6 +3124,12 @@ void DocumentLoader::RecordUseCountersForCommit() {
       response_.HttpHeaderField(http_names::kContentEncoding);
   if (content_encoding.LowerASCII() == "zstd") {
     CountUse(WebFeature::kZstdContentEncoding);
+    if (frame_->IsOutermostMainFrame()) {
+      ukm::builders::MainFrameNavigation_ZstdContentEncoding builder(
+          ukm_source_id_);
+      builder.SetUsedZstd(true);
+      builder.Record(frame_->GetDocument()->UkmRecorder());
+    }
   }
   if (response_.DidUseSharedDictionary()) {
     CountUse(WebFeature::kSharedDictionaryUsed);
@@ -3114,9 +3137,11 @@ void DocumentLoader::RecordUseCountersForCommit() {
     CountUse(frame_->IsOutermostMainFrame()
                  ? WebFeature::kSharedDictionaryUsedForMainFrameNavigation
                  : WebFeature::kSharedDictionaryUsedForSubFrameNavigation);
-    if (content_encoding.LowerASCII() == "sbr") {
+    if (content_encoding.LowerASCII() ==
+        network::GetSharedBrotliContentEncodingName()) {
       CountUse(WebFeature::kSharedDictionaryUsedWithSharedBrotli);
-    } else if (content_encoding.LowerASCII() == "zstd-d") {
+    } else if (content_encoding.LowerASCII() ==
+               network::GetSharedZstdContentEncodingName()) {
       CountUse(WebFeature::kSharedDictionaryUsedWithSharedZstd);
     }
   }
@@ -3148,9 +3173,7 @@ void DocumentLoader::RecordUseCountersForCommit() {
       hints_context.CountClientHints(type);
   }
 
-  if (RuntimeEnabledFeatures::EarlyHintsPreloadForNavigationOptInEnabled(
-          frame_->DomWindow()) &&
-      !early_hints_preloaded_resources_.empty()) {
+  if (!early_hints_preloaded_resources_.empty()) {
     CountUse(WebFeature::kEarlyHintsPreload);
   }
 
@@ -3411,6 +3434,15 @@ CodeCacheHost* DocumentLoader::GetCodeCacheHost() {
   return code_cache_host_.get();
 }
 
+scoped_refptr<BackgroundCodeCacheHost>
+DocumentLoader::CreateBackgroundCodeCacheHost() {
+  if (!pending_code_cache_host_for_background_) {
+    return nullptr;
+  }
+  return base::MakeRefCounted<BackgroundCodeCacheHost>(
+      std::move(pending_code_cache_host_for_background_));
+}
+
 mojo::PendingRemote<mojom::blink::CodeCacheHost>
 DocumentLoader::CreateWorkerCodeCacheHost() {
   if (GetDisableCodeCacheForTesting())
@@ -3423,7 +3455,9 @@ DocumentLoader::CreateWorkerCodeCacheHost() {
 
 void DocumentLoader::SetCodeCacheHost(
     CrossVariantMojoRemote<mojom::blink::CodeCacheHostInterfaceBase>
-        code_cache_host) {
+        code_cache_host,
+    CrossVariantMojoRemote<mojom::blink::CodeCacheHostInterfaceBase>
+        code_cache_host_for_background) {
   code_cache_host_.reset();
   // When NavigationThreadingOptimizations feature is disabled, code_cache_host
   // can be a nullptr. When this feature is turned off the CodeCacheHost
@@ -3432,6 +3466,10 @@ void DocumentLoader::SetCodeCacheHost(
     code_cache_host_ = std::make_unique<CodeCacheHost>(
         mojo::Remote<mojom::blink::CodeCacheHost>(std::move(code_cache_host)));
   }
+
+  pending_code_cache_host_for_background_ =
+      mojo::PendingRemote<mojom::blink::CodeCacheHost>(
+          std::move(code_cache_host_for_background));
 }
 
 void DocumentLoader::SetSubresourceFilter(
@@ -3494,6 +3532,10 @@ void DocumentLoader::DisableCodeCacheForTesting() {
 void DocumentLoader::UpdateSubresourceLoadMetrics(
     const SubresourceLoadMetrics& subresource_load_metrics) {
   GetLocalFrameClient().DidObserveSubresourceLoad(subresource_load_metrics);
+}
+
+const mojom::RendererContentSettingsPtr& DocumentLoader::GetContentSettings() {
+  return content_settings_;
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(DocumentLoader)

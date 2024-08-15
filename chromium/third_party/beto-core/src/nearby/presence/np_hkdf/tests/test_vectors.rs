@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::indexing_slicing, clippy::unwrap_used)]
+
 use anyhow::anyhow;
 use crypto_provider::aes::AesKey;
 use crypto_provider_default::CryptoProviderImpl;
@@ -28,7 +30,7 @@ fn hkdf_test_vectors() -> Result<(), anyhow::Error> {
         test_helper::get_data_file("presence/np_hkdf/resources/test/hkdf-test-vectors.json");
     let mut file = fs::File::open(full_path)?;
     let mut data = String::new();
-    file.read_to_string(&mut data)?;
+    let _ = file.read_to_string(&mut data)?;
     let test_cases = match serde_json::de::from_str(&data)? {
         serde_json::Value::Array(a) => a,
         _ => return Err(anyhow!("bad json")),

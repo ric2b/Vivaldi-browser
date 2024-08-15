@@ -8,11 +8,11 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
-
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
@@ -37,8 +37,8 @@
 #include "extensions/common/api/printer_provider_internal.h"
 #include "extensions/common/api/usb.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/event_dispatcher.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace extensions {
 
@@ -304,10 +304,10 @@ class PrinterProviderAPIImpl : public PrinterProviderAPI,
   bool WillRequestPrinters(
       int request_id,
       content::BrowserContext* browser_context,
-      Feature::Context target_context,
+      mojom::ContextType target_context,
       const Extension* extension,
       const base::Value::Dict* listener_filter,
-      absl::optional<base::Value::List>& event_args_out,
+      std::optional<base::Value::List>& event_args_out,
       mojom::EventFilteringInfoPtr& event_filtering_info_out);
 
   raw_ptr<content::BrowserContext> browser_context_;
@@ -623,11 +623,14 @@ void PrinterProviderAPIImpl::DispatchPrintRequested(PrinterProviderPrintJob job,
   api::printer_provider::PrintJob print_job;
   print_job.printer_id = internal_printer_id;
 
-  if (!api::printer_provider::PrintJob::Ticket::Populate(job.ticket,
-                                                         print_job.ticket)) {
+  if (auto ticket =
+          api::printer_provider::PrintJob::Ticket::FromValue(job.ticket);
+      !ticket) {
     std::move(callback).Run(base::Value(api::printer_provider::ToString(
         api::printer_provider::PrintError::kInvalidTicket)));
     return;
+  } else {
+    print_job.ticket = std::move(ticket).value();
   }
 
   print_job.content_type = job.content_type;
@@ -781,10 +784,10 @@ void PrinterProviderAPIImpl::OnExtensionUnloaded(
 bool PrinterProviderAPIImpl::WillRequestPrinters(
     int request_id,
     content::BrowserContext* browser_context,
-    Feature::Context target_context,
+    mojom::ContextType target_context,
     const Extension* extension,
     const base::Value::Dict* listener_filter,
-    absl::optional<base::Value::List>& event_args_out,
+    std::optional<base::Value::List>& event_args_out,
     mojom::EventFilteringInfoPtr& event_filtering_info_out) {
   if (!extension)
     return false;

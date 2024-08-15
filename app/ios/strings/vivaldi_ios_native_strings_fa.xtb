@@ -92,6 +92,7 @@
 <translation id="3073196329485613487">به حساب کاربری خود وارد شوید</translation>
 <translation id="307859903981308731">چنانچه ادامه دهید، با ویوالدی موافقت می‌کنید</translation>
 <translation id="3086746722712840547">یادداشت</translation>
+<translation id="3134385238404760368">اخیرا هیچ زبانه‌ی وجود ندارد</translation>
 <translation id="3177673846235066154">سرور اعتبارنامه‌‌های شما را نپذیرفت.</translation>
 <translation id="3229182533910980085">برای افزودن اولین نشانک خود، آیکون مثبت زیر را فشار دهید</translation>
 <translation id="3236835587712044564">از ویوالدی راضی هستید؟ آن را به‌عنوان مرورگر پیش‌فرض تنظیم کنید.</translation>
@@ -257,6 +258,7 @@
 <translation id="6937750621455385628">برای ورود باید از حساب ویوالدی استفاده کنید.</translation>
 <translation id="6945221475159498467">انتخاب</translation>
 <translation id="6946395294519639514">با پنل‌ها می‌توانید ابزارهای مفید خود را در نوار کناری مرورگر، در دسترس داشته باشید.</translation>
+<translation id="6951435330868954105">مدیریت تنظیمات پیش‌فرض</translation>
 <translation id="6967884871145366229">مدیریت تنظیمات حریم خصوصی</translation>
 <translation id="6973630695168034713">پوشه‌ها</translation>
 <translation id="7006864796794806241">بازیابی رمز عبور</translation>
@@ -264,7 +266,6 @@
 <translation id="7041964446309059643">به صورت دستی</translation>
 <translation id="7110758301321962823">بازیابی نام کاربری</translation>
 <translation id="7194677467200983873">آخرین همگام‌سازی:</translation>
-<translation id="7196846668589096106">زبانه‌های دسکتاپ</translation>
 <translation id="7210372243397300116">جستجوی پوشه</translation>
 <translation id="7215420652436283416">بر اساس آدرس</translation>
 <translation id="7229439505896086266">ایجاد یادداشت</translation>
@@ -310,6 +311,7 @@
 <translation id="8261506727792406068">حذف</translation>
 <translation id="8273666073173891138">یادداشت داخل <ph name="FOLDER_TITLE" /> ذخیره شد</translation>
 <translation id="8275038454117074363">وارد کردن</translation>
+<translation id="8326104954595890674">زبانه‌ی خصوصی جدید</translation>
 <translation id="8329813750766387010">به‌روز شده: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">حذف هشدارهای کوکی (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">برای دیدن زبانه‌های سایر دستگاه‌ها، باید همگام‌سازی را فعال کنید.</translation>

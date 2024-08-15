@@ -32,6 +32,11 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
               controller->GetBrowserContext(),
               nullptr /* blob_url_loader_factory */, rewrite_virtual_urls));
 
+  if (params->post_data) {
+      entry->SetHasPostData(true);
+      entry->SetPostData(params->post_data);
+  }
+
   controller->SetPendingEntry(std::move(entry));
   controller->SetNeedsReload();
 }

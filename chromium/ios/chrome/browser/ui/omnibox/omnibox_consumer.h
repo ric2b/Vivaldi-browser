@@ -35,11 +35,13 @@
 
 // Vivaldi
 @optional
-- (void)updateSearchEngineList:(std::vector<TemplateURL*>)templateURLs;
-// Notifies the consumer to update the omnibox placeholder to default
-// immediately.
+- (void)updateSearchEngineList:
+        (std::vector<raw_ptr<TemplateURL, VectorExperimental>>)templateURLs
+    currentDefaultSearchEngine:(const TemplateURL*)defaultSearchEngine;
+// Notifies the consumer to update UI accordingly when search engine override
+// resets.
 @optional
-- (void)restorePlaceholderToDefault;
+- (void)resetOverriddenSearchEngine;
 // End Vivaldi
 
 @end

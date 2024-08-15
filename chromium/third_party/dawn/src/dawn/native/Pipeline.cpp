@@ -28,9 +28,10 @@
 #include "dawn/native/Pipeline.h"
 
 #include <algorithm>
-#include <unordered_set>
 #include <utility>
 
+#include "absl/container/flat_hash_set.h"
+#include "dawn/common/Enumerator.h"
 #include "dawn/native/BindGroupLayout.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/ObjectBase.h"
@@ -47,33 +48,47 @@ bool IsDoubleValueRepresentableAsF16(double value) {
 }  // namespace
 
 namespace dawn::native {
-MaybeError ValidateProgrammableStage(DeviceBase* device,
-                                     const ShaderModuleBase* module,
-                                     const std::string& entryPoint,
-                                     uint32_t constantCount,
-                                     const ConstantEntry* constants,
-                                     const PipelineLayoutBase* layout,
-                                     SingleShaderStage stage) {
+ResultOrError<ShaderModuleEntryPoint> ValidateProgrammableStage(DeviceBase* device,
+                                                                const ShaderModuleBase* module,
+                                                                const char* entryPointName,
+                                                                uint32_t constantCount,
+                                                                const ConstantEntry* constants,
+                                                                const PipelineLayoutBase* layout,
+                                                                SingleShaderStage stage) {
     DAWN_TRY(device->ValidateObject(module));
 
-    DAWN_INVALID_IF(!module->HasEntryPoint(entryPoint),
-                    "Entry point \"%s\" doesn't exist in the shader module %s.", entryPoint,
-                    module);
+    if (entryPointName) {
+        DAWN_INVALID_IF(!module->HasEntryPoint(entryPointName),
+                        "Entry point \"%s\" doesn't exist in the shader module %s.", entryPointName,
+                        module);
+    } else {
+        size_t entryPointCount = module->GetEntryPointCount(stage);
+        if (entryPointCount == 0) {
+            return DAWN_VALIDATION_ERROR(
+                "Compatible entry point for stage (%s) doesn't exist in the shader module %s.",
+                stage, module);
+        } else if (entryPointCount > 1) {
+            return DAWN_VALIDATION_ERROR(
+                "The entry-point is defaulted but multiple entry points for stage (%s) exist in "
+                "the shader module %s.",
+                stage, module);
+        }
+    }
 
-    const EntryPointMetadata& metadata = module->GetEntryPoint(entryPoint);
+    ShaderModuleEntryPoint entryPoint = module->ReifyEntryPointName(entryPointName, stage);
+    const EntryPointMetadata& metadata = module->GetEntryPoint(entryPoint.name);
 
     if (!metadata.infringedLimitErrors.empty()) {
         std::ostringstream limitList;
         for (const std::string& limit : metadata.infringedLimitErrors) {
             limitList << " - " << limit << "\n";
         }
-        return DAWN_VALIDATION_ERROR("Entry point \"%s\" infringes limits:\n%s", entryPoint,
-                                     limitList.str());
+        return DAWN_VALIDATION_ERROR("%s infringes limits:\n%s", &entryPoint, limitList.str());
     }
 
     DAWN_INVALID_IF(metadata.stage != stage,
                     "The stage (%s) of the entry point \"%s\" isn't the expected one (%s).",
-                    metadata.stage, entryPoint, stage);
+                    metadata.stage, entryPoint.name, stage);
 
     if (layout != nullptr) {
         DAWN_TRY(ValidateCompatibilityWithPipelineLayout(device, metadata, layout));
@@ -83,7 +98,7 @@ MaybeError ValidateProgrammableStage(DeviceBase* device,
     // pipelineBase is not yet constructed at this moment so iterate constants from descriptor
     size_t numUninitializedConstants = metadata.uninitializedOverrides.size();
     // Keep an initialized constants sets to handle duplicate initialization cases
-    std::unordered_set<std::string> stageInitializedConstantIdentifiers;
+    absl::flat_hash_set<std::string> stageInitializedConstantIdentifiers;
     for (uint32_t i = 0; i < constantCount; i++) {
         DAWN_INVALID_IF(metadata.overrides.count(constants[i].key) == 0,
                         "Pipeline overridable constant \"%s\" not found in %s.", constants[i].key,
@@ -128,8 +143,8 @@ MaybeError ValidateProgrammableStage(DeviceBase* device,
                 DAWN_UNREACHABLE();
         }
 
-        if (stageInitializedConstantIdentifiers.count(constants[i].key) == 0) {
-            if (metadata.uninitializedOverrides.count(constants[i].key) > 0) {
+        if (!stageInitializedConstantIdentifiers.contains(constants[i].key)) {
+            if (metadata.uninitializedOverrides.contains(constants[i].key)) {
                 numUninitializedConstants--;
             }
             stageInitializedConstantIdentifiers.insert(constants[i].key);
@@ -145,7 +160,7 @@ MaybeError ValidateProgrammableStage(DeviceBase* device,
         std::string uninitializedConstantsArray;
         bool isFirst = true;
         for (std::string identifier : metadata.uninitializedOverrides) {
-            if (stageInitializedConstantIdentifiers.count(identifier) > 0) {
+            if (stageInitializedConstantIdentifiers.contains(identifier)) {
                 continue;
             }
 
@@ -163,7 +178,7 @@ MaybeError ValidateProgrammableStage(DeviceBase* device,
             uninitializedConstantsArray);
     }
 
-    return {};
+    return entryPoint;
 }
 
 WGPUCreatePipelineAsyncStatus CreatePipelineAsyncStatusFromErrorType(InternalErrorType error) {
@@ -217,12 +232,11 @@ PipelineBase::PipelineBase(DeviceBase* device,
         if (isFirstStage) {
             mMinBufferSizes = std::move(stageMinBufferSizes);
         } else {
-            for (BindGroupIndex group(0); group < mMinBufferSizes.size(); ++group) {
-                DAWN_ASSERT(stageMinBufferSizes[group].size() == mMinBufferSizes[group].size());
+            for (auto [group, minBufferSize] : Enumerate(mMinBufferSizes)) {
+                DAWN_ASSERT(stageMinBufferSizes[group].size() == minBufferSize.size());
 
                 for (size_t i = 0; i < stageMinBufferSizes[group].size(); ++i) {
-                    mMinBufferSizes[group][i] =
-                        std::max(mMinBufferSizes[group][i], stageMinBufferSizes[group][i]);
+                    minBufferSize[i] = std::max(minBufferSize[i], stageMinBufferSizes[group][i]);
                 }
             }
         }
@@ -272,11 +286,11 @@ MaybeError PipelineBase::ValidateGetBindGroupLayout(BindGroupIndex groupIndex) {
     DAWN_TRY(GetDevice()->ValidateObject(mLayout.Get()));
     DAWN_INVALID_IF(groupIndex >= kMaxBindGroupsTyped,
                     "Bind group layout index (%u) exceeds the maximum number of bind groups (%u).",
-                    static_cast<uint32_t>(groupIndex), kMaxBindGroups);
+                    groupIndex, kMaxBindGroups);
     DAWN_INVALID_IF(
         !mLayout->GetBindGroupLayoutsMask()[groupIndex],
         "Bind group layout index (%u) doesn't correspond to a bind group for this pipeline.",
-        static_cast<uint32_t>(groupIndex));
+        groupIndex);
     return {};
 }
 
@@ -292,9 +306,9 @@ BindGroupLayoutBase* PipelineBase::APIGetBindGroupLayout(uint32_t groupIndexIn) 
     if (GetDevice()->ConsumedError(GetBindGroupLayout(groupIndexIn), &result,
                                    "Validating GetBindGroupLayout (%u) on %s", groupIndexIn,
                                    this)) {
-        return BindGroupLayoutBase::MakeError(GetDevice());
+        result = BindGroupLayoutBase::MakeError(GetDevice());
     }
-    return result.Detach();
+    return ReturnToAPI(std::move(result));
 }
 
 size_t PipelineBase::ComputeContentHash() {

@@ -3,11 +3,16 @@
 #ifndef IOS_UI_NTP_VIVALDI_SPEED_DIAL_HOME_CONSUMER_H_
 #define IOS_UI_NTP_VIVALDI_SPEED_DIAL_HOME_CONSUMER_H_
 
+using bookmarks::BookmarkNode;
+
 // SpeedDialHomeConsumer provides methods that allow mediators to update the UI.
 @protocol SpeedDialHomeConsumer
 
 /// Notifies the subscriber to refresh the laid out contents.
 - (void)refreshContents;
+
+/// Notifies the subscriber to refresh the changed node.
+- (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode;
 
 /// Notifies the subscriber to refresh the top menu items.
 - (void)refreshMenuItems:(NSArray*)items;

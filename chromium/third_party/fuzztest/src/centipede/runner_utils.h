@@ -29,6 +29,10 @@ inline void RunnerCheck(bool condition, const char *error) {
   PrintErrorAndExitIf(!condition, error);
 }
 
+// Returns the lower bound of the stack region for the current thread. 0 will be
+// returned on failures.
+uintptr_t GetCurrentThreadStackRegionLow();
+
 }  // namespace centipede
 
 #endif  // THIRD_PARTY_CENTIPEDE_RUNNER_UTILS_H_

@@ -4,6 +4,7 @@
 
 #include "components/autofill/content/renderer/form_autofill_issues.h"
 
+#include <string_view>
 #include <vector>
 
 #include "base/check_op.h"
@@ -11,6 +12,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
@@ -20,13 +22,16 @@
 #include "third_party/blink/public/web/web_form_control_element.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_label_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 using blink::WebDocument;
 using blink::WebElement;
 using blink::WebElementCollection;
 using blink::WebFormControlElement;
+using blink::WebFormElement;
 using blink::WebInputElement;
 using blink::WebLabelElement;
+using blink::WebLocalFrame;
 using blink::WebString;
 using blink::WebVector;
 using blink::mojom::GenericIssueErrorType;
@@ -37,15 +42,17 @@ using form_util::IsAutofillableElement;
 
 namespace {
 
-constexpr base::StringPiece kFor = "for";
-constexpr base::StringPiece kAriaLabelledBy = "aria-labelledby";
-constexpr base::StringPiece kName = "name";
-constexpr base::StringPiece kId = "id";
-constexpr base::StringPiece kLabel = "label";
-constexpr base::StringPiece kAutocomplete = "autocomplete";
+constexpr size_t kMaxNumberOfDevtoolsIssuesEmitted = 100;
+
+constexpr std::string_view kFor = "for";
+constexpr std::string_view kAriaLabelledBy = "aria-labelledby";
+constexpr std::string_view kName = "name";
+constexpr std::string_view kId = "id";
+constexpr std::string_view kLabel = "label";
+constexpr std::string_view kAutocomplete = "autocomplete";
 
 // Wrapper for frequently used WebString constants.
-template <const base::StringPiece& string>
+template <const std::string_view& string>
 const WebString& GetWebString() {
   static const base::NoDestructor<WebString> web_string(
       WebString::FromUTF8(string));
@@ -97,6 +104,14 @@ void MaybeAppendInputWithEmptyIdAndNameDevtoolsIssue(
   }
 }
 
+int GetShadowHostDOMNodeId(const WebFormControlElement& element) {
+  WebElement host = element.OwnerShadowHost();
+  if (host.IsNull()) {
+    return /*blink::kInvalidDOMNodeId*/ 0;
+  }
+  return host.GetDomNodeId();
+}
+
 void MaybeAppendDuplicateIdForInputDevtoolsIssue(
     const WebVector<WebFormControlElement>& elements,
     std::vector<blink::WebAutofillClient::FormIssue>& form_issues) {
@@ -110,14 +125,20 @@ void MaybeAppendDuplicateIdForInputDevtoolsIssue(
       elements_with_id_attr.push_back(element);
     }
   }
-  base::ranges::sort(elements_with_id_attr, {},
-                     &WebFormControlElement::GetIdAttribute);
+  base::ranges::sort(elements_with_id_attr, [](const WebFormControlElement& a,
+                                               const WebFormControlElement& b) {
+    return std::forward_as_tuple(a.GetIdAttribute(),
+                                 GetShadowHostDOMNodeId(a)) <
+           std::forward_as_tuple(b.GetIdAttribute(), GetShadowHostDOMNodeId(b));
+  });
 
   for (auto it = elements_with_id_attr.begin();
        (it = base::ranges::adjacent_find(
-            it, elements_with_id_attr.end(), {},
-            &WebFormControlElement::GetIdAttribute)) !=
-       elements_with_id_attr.end();
+            it, elements_with_id_attr.end(),
+            [](const WebFormControlElement& a, const WebFormControlElement& b) {
+              return a.GetIdAttribute() == b.GetIdAttribute() &&
+                     GetShadowHostDOMNodeId(a) == GetShadowHostDOMNodeId(b);
+            })) != elements_with_id_attr.end();
        it++) {
     bool current_element_not_added =
         form_issues.empty() ||
@@ -167,7 +188,7 @@ void MaybeAppendInputAssignedAutocompleteValueToIdOrNameAttributesDevtoolsIssue(
 
   auto ParsedHtmlAttributeValueToAutocompleteHasFieldType =
       [](const std::string& attribute_value) {
-        absl::optional<AutocompleteParsingResult>
+        std::optional<AutocompleteParsingResult>
             parsed_attribute_to_autocomplete =
                 ParseAutocompleteAttribute(attribute_value);
         if (!parsed_attribute_to_autocomplete) {
@@ -284,6 +305,42 @@ CheckForLabelsWithIncorrectForAttribute(
     }
   }
   return form_issues;
+}
+
+void MaybeEmitFormIssuesToDevtools(blink::WebLocalFrame& web_local_frame,
+                                   base::span<const FormData> forms) {
+  // TODO(crbug.com/1399414): Only calculate and emit these issues if devtools
+  // is open.
+  if (!base::FeatureList::IsEnabled(features::kAutofillEnableDevtoolsIssues)) {
+    return;
+  }
+
+  WebDocument document = web_local_frame.GetDocument();
+  std::vector<blink::WebAutofillClient::FormIssue> form_issues;
+  // Get issues from forms input elements.
+  for (const WebFormElement& form_element : document.Forms()) {
+    form_issues = form_issues::GetFormIssues(
+        form_element.GetFormControlElements(), std::move(form_issues));
+  }
+  // Get issues from input elements that belong to no form.
+  form_issues = form_issues::GetFormIssues(
+      form_util::GetAutofillableFormControlElements(document, WebFormElement()),
+      std::move(form_issues));
+  // Look for fields that after parsed were found to have labels incorrectly
+  // used.
+  for (const FormData& form : forms) {
+    form_issues = form_issues::CheckForLabelsWithIncorrectForAttribute(
+        document, form.fields, std::move(form_issues));
+  }
+  if (form_issues.size() > kMaxNumberOfDevtoolsIssuesEmitted) {
+    form_issues.erase(form_issues.begin() + kMaxNumberOfDevtoolsIssuesEmitted,
+                      form_issues.end());
+  }
+  for (const blink::WebAutofillClient::FormIssue& form_issue : form_issues) {
+    web_local_frame.AddGenericIssue(form_issue.issue_type,
+                                    form_issue.violating_node,
+                                    form_issue.violating_node_attribute);
+  }
 }
 
 }  // namespace autofill::form_issues

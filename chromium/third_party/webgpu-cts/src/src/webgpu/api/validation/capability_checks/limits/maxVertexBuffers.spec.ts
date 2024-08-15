@@ -3,7 +3,7 @@ import { range } from '../../../../../common/util/util.js';
 import { kRenderEncoderTypes, kMaximumLimitBaseParams, makeLimitTestGroup } from './limit_utils.js';
 
 const kPipelineTypes = ['withoutLocations', 'withLocations'] as const;
-type PipelineType = typeof kPipelineTypes[number];
+type PipelineType = (typeof kPipelineTypes)[number];
 
 function getPipelineDescriptor(
   device: GPUDevice,

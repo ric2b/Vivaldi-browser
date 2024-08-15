@@ -35,6 +35,7 @@ import unittest  # Exposed through the API.
 import urllib.parse as urlparse
 import urllib.request as urllib_request
 import urllib.error as urllib_error
+from typing import Mapping
 from warnings import warn
 
 # Local imports.
@@ -217,9 +218,9 @@ class ThreadPool(object):
     def CallCommand(self, test, show_callstack=None):
         """Runs an external program.
 
-    This function converts invocation of .py files and invocations of 'python'
-    to vpython invocations.
-    """
+        This function converts invocation of .py files and invocations of 'python'
+        to vpython invocations.
+        """
         cmd = self._GetCommand(test)
         try:
             start = time_time()
@@ -285,9 +286,9 @@ class ThreadPool(object):
 
 
 def normpath(path):
-    '''Version of os.path.normpath that also changes backward slashes to
-  forward slashes when not running on Windows.
-  '''
+    """Version of os.path.normpath that also changes backward slashes to
+    forward slashes when not running on Windows.
+    """
     # This is safe to always do because the Windows version of os.path.normpath
     # will replace forward slashes with backward slashes.
     path = path.replace(os.sep, '/')
@@ -318,10 +319,10 @@ class _PresubmitResult(object):
 
     def __init__(self, message, items=None, long_text='', show_callstack=None):
         """
-    message: A short one-line message to indicate errors.
-    items: A list of short strings to indicate where errors occurred.
-    long_text: multi-line text output, e.g. from another tool
-    """
+        message: A short one-line message to indicate errors.
+        items: A list of short strings to indicate where errors occurred.
+        long_text: multi-line text output, e.g. from another tool
+        """
         self._message = _PresubmitResult._ensure_str(message)
         self._items = items or []
         self._long_text = _PresubmitResult._ensure_str(long_text.rstrip())
@@ -334,10 +335,10 @@ class _PresubmitResult(object):
     @staticmethod
     def _ensure_str(val):
         """
-    val: A "stringish" value. Can be any of str or bytes.
-    returns: A str after applying encoding/decoding as needed.
-    Assumes/uses UTF-8 for relevant inputs/outputs.
-    """
+        val: A "stringish" value. Can be any of str or bytes.
+        returns: A str after applying encoding/decoding as needed.
+        Assumes/uses UTF-8 for relevant inputs/outputs.
+        """
         if isinstance(val, str):
             return val
         if isinstance(val, bytes):
@@ -399,8 +400,8 @@ class _MailTextResult(_PresubmitResult):
 class GerritAccessor(object):
     """Limited Gerrit functionality for canned presubmit checks to work.
 
-  To avoid excessive Gerrit calls, caches the results.
-  """
+    To avoid excessive Gerrit calls, caches the results.
+    """
     def __init__(self, url=None, project=None, branch=None):
         self.host = urlparse.urlparse(url).netloc if url else None
         self.project = project
@@ -423,11 +424,11 @@ class GerritAccessor(object):
     def GetChangeInfo(self, issue):
         """Returns labels and all revisions (patchsets) for this issue.
 
-    The result is a dictionary according to Gerrit REST Api.
-    https://gerrit-review.googlesource.com/Documentation/rest-api.html
+        The result is a dictionary according to Gerrit REST Api.
+        https://gerrit-review.googlesource.com/Documentation/rest-api.html
 
-    However, API isn't very clear what's inside, so see tests for example.
-    """
+        However, API isn't very clear what's inside, so see tests for example.
+        """
         assert issue
         cache_key = int(issue)
         if cache_key not in self.cache:
@@ -506,8 +507,8 @@ class GerritAccessor(object):
 
 class OutputApi(object):
     """An instance of OutputApi gets passed to presubmit scripts so that they
-  can output various types of results.
-  """
+    can output various types of results.
+    """
     PresubmitResult = _PresubmitResult
     PresubmitError = _PresubmitError
     PresubmitPromptWarning = _PresubmitPromptWarning
@@ -531,8 +532,8 @@ class OutputApi(object):
 
 class InputApi(object):
     """An instance of this object is passed to presubmit scripts so they can
-  know stuff about the change they're looking at.
-  """
+    know stuff about the change they're looking at.
+    """
     # Method could be a function
     # pylint: disable=no-self-use
 
@@ -609,17 +610,17 @@ class InputApi(object):
                  no_diffs=False):
         """Builds an InputApi object.
 
-    Args:
-      change: A presubmit.Change object.
-      presubmit_path: The path to the presubmit script being processed.
-      is_committing: True if the change is about to be committed.
-      gerrit_obj: provides basic Gerrit codereview functionality.
-      dry_run: if true, some Checks will be skipped.
-      parallel: if true, all tests reported via input_api.RunTests for all
+        Args:
+            change: A presubmit.Change object.
+            presubmit_path: The path to the presubmit script being processed.
+            is_committing: True if the change is about to be committed.
+            gerrit_obj: provides basic Gerrit codereview functionality.
+            dry_run: if true, some Checks will be skipped.
+            parallel: if true, all tests reported via input_api.RunTests for all
                 PRESUBMIT files will be run in parallel.
-      no_diffs: if true, implies that --files or --all was specified so some
+            no_diffs: if true, implies that --files or --all was specified so some
                 checks can be skipped, and some errors will be messages.
-    """
+        """
         # Version number of the presubmit_support script.
         self.version = [int(x) for x in __version__.split('.')]
         self.change = change
@@ -713,19 +714,19 @@ class InputApi(object):
     def PresubmitLocalPath(self):
         """Returns the local path of the presubmit script currently being run.
 
-    This is useful if you don't want to hard-code absolute paths in the
-    presubmit script.  For example, It can be used to find another file
-    relative to the PRESUBMIT.py script, so the whole tree can be branched and
-    the presubmit script still works, without editing its content.
-    """
+        This is useful if you don't want to hard-code absolute paths in the
+        presubmit script.  For example, It can be used to find another file
+        relative to the PRESUBMIT.py script, so the whole tree can be branched and
+        the presubmit script still works, without editing its content.
+        """
         return self._current_presubmit_path
 
     def AffectedFiles(self, include_deletes=True, file_filter=None):
         """Same as input_api.change.AffectedFiles() except only lists files
-    (and optionally directories) in the same directory as the current presubmit
-    script, or subdirectories thereof. Note that files are listed using the OS
-    path separator, so backslashes are used as separators on Windows.
-    """
+        (and optionally directories) in the same directory as the current presubmit
+        script, or subdirectories thereof. Note that files are listed using the OS
+        path separator, so backslashes are used as separators on Windows.
+        """
         dir_with_slash = normpath(self.PresubmitLocalPath())
         # normpath strips trailing path separators, so the trailing separator
         # has to be added after the normpath call.
@@ -750,9 +751,9 @@ class InputApi(object):
 
     def AffectedTestableFiles(self, include_deletes=None, **kwargs):
         """Same as input_api.change.AffectedTestableFiles() except only lists files
-    in the same directory as the current presubmit script, or subdirectories
-    thereof.
-    """
+        in the same directory as the current presubmit script, or subdirectories
+        thereof.
+        """
         if include_deletes is not None:
             warn('AffectedTestableFiles(include_deletes=%s)'
                  ' is deprecated and ignored' % str(include_deletes),
@@ -771,21 +772,19 @@ class InputApi(object):
     def FilterSourceFile(self,
                          affected_file,
                          files_to_check=None,
-                         files_to_skip=None,
-                         allow_list=None,
-                         block_list=None):
+                         files_to_skip=None):
         """Filters out files that aren't considered 'source file'.
 
-    If files_to_check or files_to_skip is None, InputApi.DEFAULT_FILES_TO_CHECK
-    and InputApi.DEFAULT_FILES_TO_SKIP is used respectively.
+        If files_to_check or files_to_skip is None, InputApi.DEFAULT_FILES_TO_CHECK
+        and InputApi.DEFAULT_FILES_TO_SKIP is used respectively.
 
-    affected_file.LocalPath() needs to re.match an entry in the files_to_check
-    list and not re.match any entries in the files_to_skip list.
-    '/' path separators should be used in the regular expressions and will work
-    on Windows as well as other platforms.
+        affected_file.LocalPath() needs to re.match an entry in the files_to_check
+        list and not re.match any entries in the files_to_skip list.
+        '/' path separators should be used in the regular expressions and will work
+        on Windows as well as other platforms.
 
-    Note: Copy-paste this function to suit your needs or use a lambda function.
-    """
+        Note: Copy-paste this function to suit your needs or use a lambda function.
+        """
         if files_to_check is None:
             files_to_check = self.DEFAULT_FILES_TO_CHECK
         if files_to_skip is None:
@@ -809,8 +808,8 @@ class InputApi(object):
     def AffectedSourceFiles(self, source_file):
         """Filter the list of AffectedTestableFiles by the function source_file.
 
-    If source_file is None, InputApi.FilterSourceFile() is used.
-    """
+        If source_file is None, InputApi.FilterSourceFile() is used.
+        """
         if not source_file:
             source_file = self.FilterSourceFile
         return list(filter(source_file, self.AffectedTestableFiles()))
@@ -818,28 +817,28 @@ class InputApi(object):
     def RightHandSideLines(self, source_file_filter=None):
         """An iterator over all text lines in 'new' version of changed files.
 
-    Only lists lines from new or modified text files in the change that are
-    contained by the directory of the currently executing presubmit script.
+        Only lists lines from new or modified text files in the change that are
+        contained by the directory of the currently executing presubmit script.
 
-    This is useful for doing line-by-line regex checks, like checking for
-    trailing whitespace.
+        This is useful for doing line-by-line regex checks, like checking for
+        trailing whitespace.
 
-    Yields:
-      a 3 tuple:
-        the AffectedFile instance of the current file;
-        integer line number (1-based); and
-        the contents of the line as a string.
+        Yields:
+            a 3 tuple:
+                the AffectedFile instance of the current file;
+                integer line number (1-based); and
+                the contents of the line as a string.
 
-    Note: The carriage return (LF or CR) is stripped off.
-    """
+        Note: The carriage return (LF or CR) is stripped off.
+        """
         files = self.AffectedSourceFiles(source_file_filter)
         return _RightHandSideLinesImpl(files)
 
     def ReadFile(self, file_item, mode='r'):
         """Reads an arbitrary file.
 
-    Deny reading anything outside the repository.
-    """
+        Deny reading anything outside the repository.
+        """
         if isinstance(file_item, AffectedFile):
             file_item = file_item.AbsoluteLocalPath()
         if not file_item.startswith(self.change.RepositoryRoot()):
@@ -848,25 +847,25 @@ class InputApi(object):
 
     def CreateTemporaryFile(self, **kwargs):
         """Returns a named temporary file that must be removed with a call to
-    RemoveTemporaryFiles().
+        RemoveTemporaryFiles().
 
-    All keyword arguments are forwarded to tempfile.NamedTemporaryFile(),
-    except for |delete|, which is always set to False.
+        All keyword arguments are forwarded to tempfile.NamedTemporaryFile(),
+        except for |delete|, which is always set to False.
 
-    Presubmit checks that need to create a temporary file and pass it for
-    reading should use this function instead of NamedTemporaryFile(), as
-    Windows fails to open a file that is already open for writing.
+        Presubmit checks that need to create a temporary file and pass it for
+        reading should use this function instead of NamedTemporaryFile(), as
+        Windows fails to open a file that is already open for writing.
 
-      with input_api.CreateTemporaryFile() as f:
-        f.write('xyz')
-        input_api.subprocess.check_output(['script-that', '--reads-from',
-                                           f.name])
+        with input_api.CreateTemporaryFile() as f:
+            f.write('xyz')
+            input_api.subprocess.check_output(['script-that', '--reads-from',
+                                            f.name])
 
 
-    Note that callers of CreateTemporaryFile() should not worry about removing
-    any temporary file; this is done transparently by the presubmit handling
-    code.
-    """
+        Note that callers of CreateTemporaryFile() should not worry about removing
+        any temporary file; this is done transparently by the presubmit handling
+        code.
+        """
         if 'delete' in kwargs:
             # Prevent users from passing |delete|; we take care of file deletion
             # ourselves and this prevents unintuitive error messages when we
@@ -879,6 +878,10 @@ class InputApi(object):
         temp_file = self.tempfile.NamedTemporaryFile(delete=False, **kwargs)
         self._named_temporary_files.append(temp_file.name)
         return temp_file
+
+    def ListSubmodules(self):
+        """Returns submodule paths for current change's repo."""
+        return scm.GIT.ListSubmodules(self.change.RepositoryRoot())
 
     @property
     def tbr(self):
@@ -997,15 +1000,14 @@ class AffectedFile(object):
     def LocalPath(self):
         """Returns the path of this file on the local disk relative to client root.
 
-    This should be used for error messages but not for accessing files,
-    because presubmit checks are run with CWD=PresubmitLocalPath() (which is
-    often != client root).
-    """
+        This should be used for error messages but not for accessing files,
+        because presubmit checks are run with CWD=PresubmitLocalPath() (which is
+        often != client root).
+        """
         return normpath(self._path)
 
     def AbsoluteLocalPath(self):
-        """Returns the absolute path of this file on the local disk.
-    """
+        """Returns the absolute path of this file on the local disk."""
         return os.path.abspath(os.path.join(self._local_root, self.LocalPath()))
 
     def Action(self):
@@ -1015,7 +1017,7 @@ class AffectedFile(object):
     def IsTestableFile(self):
         """Returns True if the file is a text file and not a binary file.
 
-    Deleted files are not text file."""
+        Deleted files are not text file."""
         raise NotImplementedError()  # Implement when needed
 
     def IsTextFile(self):
@@ -1025,24 +1027,24 @@ class AffectedFile(object):
     def OldContents(self):
         """Returns an iterator over the lines in the old version of file.
 
-    The old version is the file before any modifications in the user's
-    workspace, i.e. the 'left hand side'.
+        The old version is the file before any modifications in the user's
+        workspace, i.e. the 'left hand side'.
 
-    Contents will be empty if the file is a directory or does not exist.
-    Note: The carriage returns (LF or CR) are stripped off.
-    """
+        Contents will be empty if the file is a directory or does not exist.
+        Note: The carriage returns (LF or CR) are stripped off.
+        """
         return self._diff_cache.GetOldContents(self.LocalPath(),
                                                self._local_root).splitlines()
 
     def NewContents(self):
         """Returns an iterator over the lines in the new version of file.
 
-    The new version is the file in the user's workspace, i.e. the 'right hand
-    side'.
+        The new version is the file in the user's workspace, i.e. the 'right hand
+        side'.
 
-    Contents will be empty if the file is a directory or does not exist.
-    Note: The carriage returns (LF or CR) are stripped off.
-    """
+        Contents will be empty if the file is a directory or does not exist.
+        Note: The carriage returns (LF or CR) are stripped off.
+        """
         if self._cached_new_contents is None:
             self._cached_new_contents = []
             try:
@@ -1061,11 +1063,11 @@ class AffectedFile(object):
     def ChangedContents(self, keeplinebreaks=False):
         """Returns a list of tuples (line number, line text) of all new lines.
 
-     This relies on the scm diff output describing each changed code section
-     with a line of the form
+        This relies on the scm diff output describing each changed code section
+        with a line of the form
 
-     ^@@ <old line num>,<old size> <new line num>,<new size> @@$
-    """
+        ^@@ <old line num>,<old size> <new line num>,<new size> @@$
+        """
         # Don't return cached results when line breaks are requested.
         if not keeplinebreaks and self._cached_changed_contents is not None:
             return self._cached_changed_contents[:]
@@ -1122,13 +1124,13 @@ class GitAffectedFile(AffectedFile):
 class Change(object):
     """Describe a change.
 
-  Used directly by the presubmit scripts to query the current change being
-  tested.
+    Used directly by the presubmit scripts to query the current change being
+    tested.
 
-  Instance members:
-    tags: Dictionary of KEY=VALUE pairs found in the change description.
-    self.KEY: equivalent to tags['KEY']
-  """
+    Instance members:
+        tags: Dictionary of KEY=VALUE pairs found in the change description.
+        self.KEY: equivalent to tags['KEY']
+    """
 
     _AFFECTED_FILES = AffectedFile
 
@@ -1181,10 +1183,10 @@ class Change(object):
     def DescriptionText(self):
         """Returns the user-entered changelist description, minus tags.
 
-    Any line in the user-provided description starting with e.g. 'FOO='
-    (whitespace permitted before and around) is considered a tag line.  Such
-    lines are stripped out of the description this function returns.
-    """
+        Any line in the user-provided description starting with e.g. 'FOO='
+        (whitespace permitted before and around) is considered a tag line.  Such
+        lines are stripped out of the description this function returns.
+        """
         return self._description_without_tags
 
     def FullDescriptionText(self):
@@ -1194,7 +1196,7 @@ class Change(object):
     def SetDescriptionText(self, description):
         """Sets the full description text (including tags) to |description|.
 
-    Also updates the list of tags."""
+        Also updates the list of tags."""
         self._full_description = description
 
         # From the description text, build up a dictionary of key/value pairs
@@ -1215,12 +1217,12 @@ class Change(object):
     def AddDescriptionFooter(self, key, value):
         """Adds the given footer to the change description.
 
-    Args:
-      key: A string with the key for the git footer. It must conform to
-        the git footers format (i.e. 'List-Of-Tokens') and will be case
-        normalized so that each token is title-cased.
-      value: A string with the value for the git footer.
-    """
+        Args:
+            key: A string with the key for the git footer. It must conform to
+                the git footers format (i.e. 'List-Of-Tokens') and will be case
+                normalized so that each token is title-cased.
+            value: A string with the value for the git footer.
+        """
         description = git_footers.add_footer(self.FullDescriptionText(),
                                              git_footers.normalize_name(key),
                                              value)
@@ -1228,8 +1230,8 @@ class Change(object):
 
     def RepositoryRoot(self):
         """Returns the repository (checkout) root directory for this change,
-    as an absolute path.
-    """
+        as an absolute path.
+        """
         return self._local_root
 
     def __getattr__(self, attr):
@@ -1241,10 +1243,10 @@ class Change(object):
     def GitFootersFromDescription(self):
         """Return the git footers present in the description.
 
-    Returns:
-      footers: A dict of {footer: [values]} containing a multimap of the footers
-        in the change description.
-    """
+        Returns:
+            footers: A dict of {footer: [values]} containing a multimap of the footers
+                in the change description.
+        """
         return git_footers.parse_footers(self.FullDescriptionText())
 
     def BugsFromDescription(self):
@@ -1302,18 +1304,31 @@ class Change(object):
     def AffectedFiles(self, include_deletes=True, file_filter=None):
         """Returns a list of AffectedFile instances for all files in the change.
 
-    Args:
-      include_deletes: If false, deleted files will be filtered out.
-      file_filter: An additional filter to apply.
+        Args:
+            include_deletes: If false, deleted files will be filtered out.
+            file_filter: An additional filter to apply.
 
-    Returns:
-      [AffectedFile(path, action), AffectedFile(path, action)]
-    """
-        affected = list(filter(file_filter, self._affected_files))
+        Returns:
+            [AffectedFile(path, action), AffectedFile(path, action)]
+        """
+        submodule_list = scm.GIT.ListSubmodules(self.RepositoryRoot())
+        files = [
+            af for af in self._affected_files
+            if af.LocalPath() not in submodule_list
+        ]
+        affected = list(filter(file_filter, files))
 
         if include_deletes:
             return affected
         return list(filter(lambda x: x.Action() != 'D', affected))
+
+    def AffectedSubmodules(self):
+        """Returns a list of AffectedFile instances for submodules in the change."""
+        submodule_list = scm.GIT.ListSubmodules(self.RepositoryRoot())
+        return [
+            af for af in self._affected_files
+            if af.LocalPath() in submodule_list
+        ]
 
     def AffectedTestableFiles(self, include_deletes=None, **kwargs):
         """Return a list of the existing text files in a change."""
@@ -1334,24 +1349,32 @@ class Change(object):
         """Convenience function."""
         return [af.LocalPath() for af in self.AffectedFiles()]
 
+    def LocalSubmodules(self):
+        """Returns local paths for affected submodules."""
+        return [af.LocalPath() for af in self.AffectedSubmodules()]
+
     def AbsoluteLocalPaths(self):
         """Convenience function."""
         return [af.AbsoluteLocalPath() for af in self.AffectedFiles()]
 
+    def AbsoluteLocalSubmodules(self):
+        """Returns absolute local paths for affected submodules"""
+        return [af.AbsoluteLocalPath() for af in self.AffectedSubmodules()]
+
     def RightHandSideLines(self):
         """An iterator over all text lines in 'new' version of changed files.
 
-    Lists lines from new or modified text files in the change.
+        Lists lines from new or modified text files in the change.
 
-    This is useful for doing line-by-line regex checks, like checking for
-    trailing whitespace.
+        This is useful for doing line-by-line regex checks, like checking for
+        trailing whitespace.
 
-    Yields:
-      a 3 tuple:
-        the AffectedFile instance of the current file;
-        integer line number (1-based); and
-        the contents of the line as a string.
-    """
+        Yields:
+            a 3 tuple:
+                the AffectedFile instance of the current file;
+                integer line number (1-based); and
+                the contents of the line as a string.
+        """
         return _RightHandSideLinesImpl(
             x for x in self.AffectedFiles(include_deletes=False)
             if x.IsTestableFile())
@@ -1380,16 +1403,16 @@ class GitChange(Change):
 def ListRelevantPresubmitFiles(files, root):
     """Finds all presubmit files that apply to a given set of source files.
 
-  If inherit-review-settings-ok is present right under root, looks for
-  PRESUBMIT.py in directories enclosing root.
+    If inherit-review-settings-ok is present right under root, looks for
+    PRESUBMIT.py in directories enclosing root.
 
-  Args:
-    files: An iterable container containing file paths.
-    root: Path where to stop searching.
+    Args:
+        files: An iterable container containing file paths.
+        root: Path where to stop searching.
 
-  Return:
-    List of absolute paths of the existing PRESUBMIT.py scripts.
-  """
+    Return:
+        List of absolute paths of the existing PRESUBMIT.py scripts.
+    """
     files = [normpath(os.path.join(root, f)) for f in files]
 
     # List all the individual directories containing files.
@@ -1434,25 +1457,25 @@ def ListRelevantPresubmitFiles(files, root):
 class GetPostUploadExecuter(object):
     def __init__(self, change, gerrit_obj):
         """
-    Args:
-      change: The Change object.
-      gerrit_obj: provides basic Gerrit codereview functionality.
-    """
+        Args:
+            change: The Change object.
+            gerrit_obj: provides basic Gerrit codereview functionality.
+            """
         self.change = change
         self.gerrit = gerrit_obj
 
     def ExecPresubmitScript(self, script_text, presubmit_path):
         """Executes PostUploadHook() from a single presubmit script.
-    Caller is responsible for validating whether the hook should be executed
-    and should only call this function if it should be.
+        Caller is responsible for validating whether the hook should be executed
+        and should only call this function if it should be.
 
-    Args:
-      script_text: The text of the presubmit script.
-      presubmit_path: Project script to run.
+        Args:
+            script_text: The text of the presubmit script.
+            presubmit_path: Project script to run.
 
-    Return:
-      A list of results objects.
-    """
+        Return:
+            A list of results objects.
+        """
         # Change to the presubmit file's directory to support local imports.
         presubmit_dir = os.path.dirname(presubmit_path)
         main_path = os.getcwd()
@@ -1499,15 +1522,15 @@ def _MergeMasters(masters1, masters2):
 def DoPostUploadExecuter(change, gerrit_obj, verbose):
     """Execute the post upload hook.
 
-  Args:
-    change: The Change object.
-    gerrit_obj: The GerritAccessor object.
-    verbose: Prints debug info.
-  """
+    Args:
+        change: The Change object.
+        gerrit_obj: The GerritAccessor object.
+        verbose: Prints debug info.
+    """
     python_version = 'Python %s' % sys.version_info.major
     sys.stdout.write('Running %s post upload checks ...\n' % python_version)
-    presubmit_files = ListRelevantPresubmitFiles(change.LocalPaths(),
-                                                 change.RepositoryRoot())
+    presubmit_files = ListRelevantPresubmitFiles(
+        change.LocalPaths() + change.LocalSubmodules(), change.RepositoryRoot())
     if not presubmit_files and verbose:
         sys.stdout.write('Warning, no PRESUBMIT.py found.\n')
     results = []
@@ -1554,16 +1577,17 @@ class PresubmitExecuter(object):
                  parallel=False,
                  no_diffs=False):
         """
-    Args:
-      change: The Change object.
-      committing: True if 'git cl land' is running, False if 'git cl upload' is.
-      gerrit_obj: provides basic Gerrit codereview functionality.
-      dry_run: if true, some Checks will be skipped.
-      parallel: if true, all tests reported via input_api.RunTests for all
+        Args:
+            change: The Change object.
+            committing: True if 'git cl land' is running, False if
+                'git cl upload' is.
+            gerrit_obj: provides basic Gerrit codereview functionality.
+            dry_run: if true, some Checks will be skipped.
+            parallel: if true, all tests reported via input_api.RunTests for all
                 PRESUBMIT files will be run in parallel.
-      no_diffs: if true, implies that --files or --all was specified so some
+            no_diffs: if true, implies that --files or --all was specified so some
                 checks can be skipped, and some errors will be messages.
-    """
+        """
         self.change = change
         self.committing = committing
         self.gerrit = gerrit_obj
@@ -1576,17 +1600,17 @@ class PresubmitExecuter(object):
 
     def ExecPresubmitScript(self, script_text, presubmit_path):
         """Executes a single presubmit script.
-    Caller is responsible for validating whether the hook should be executed
-    and should only call this function if it should be.
+        Caller is responsible for validating whether the hook should be executed
+        and should only call this function if it should be.
 
-    Args:
-      script_text: The text of the presubmit script.
-      presubmit_path: The path to the presubmit file (this will be reported via
-        input_api.PresubmitLocalPath()).
+        Args:
+            script_text: The text of the presubmit script.
+            presubmit_path: The path to the presubmit file (this will be
+                reported via input_api.PresubmitLocalPath()).
 
-    Return:
-      A list of result objects, empty if no problems.
-    """
+        Return:
+            A list of result objects, empty if no problems.
+        """
         # Change to the presubmit file's directory to support local imports.
         presubmit_dir = os.path.dirname(presubmit_path)
         main_path = os.getcwd()
@@ -1701,16 +1725,16 @@ class PresubmitExecuter(object):
     def _run_check_function(self, function_name, context, sink, presubmit_path):
         """Evaluates and returns the result of a given presubmit function.
 
-    If sink is given, the result of the presubmit function will be reported
-    to the ResultSink.
+        If sink is given, the result of the presubmit function will be reported
+        to the ResultSink.
 
-    Args:
-      function_name: the name of the presubmit function to evaluate
-      context: a context dictionary in which the function will be evaluated
-      sink: an instance of ResultSink. None, by default.
-    Returns:
-      the result of the presubmit function call.
-    """
+        Args:
+            function_name: the name of the presubmit function to evaluate
+            context: a context dictionary in which the function will be evaluated
+            sink: an instance of ResultSink. None, by default.
+        Returns:
+            the result of the presubmit function call.
+        """
         start_time = time_time()
         try:
             result = eval(function_name + '(*__args)', context)
@@ -1728,25 +1752,14 @@ class PresubmitExecuter(object):
             sys.stdout.write('%6.1fs to run %s from %s.\n' %
                              (elapsed_time, function_name, presubmit_path))
         if sink:
-            failure_reason = None
-            status = rdb_wrapper.STATUS_PASS
-            if any(r.fatal for r in result):
-                status = rdb_wrapper.STATUS_FAIL
-                failure_reasons = []
-                for r in result:
-                    fields = r.json_format()
-                    message = fields['message']
-                    items = '\n'.join('  %s' % item for item in fields['items'])
-                    failure_reasons.append('\n'.join([message, items]))
-                if failure_reasons:
-                    failure_reason = '\n'.join(failure_reasons)
+            status, failure_reason = RDBStatusFrom(result)
             sink.report(function_name, status, elapsed_time, failure_reason)
 
         return result
 
     def _check_result_type(self, result):
         """Helper function which ensures result is a list, and all elements are
-    instances of OutputApi.PresubmitResult"""
+        instances of OutputApi.PresubmitResult"""
         if not isinstance(result, (tuple, list)):
             raise PresubmitFailure(
                 'Presubmit functions must return a tuple or list')
@@ -1755,6 +1768,23 @@ class PresubmitExecuter(object):
             raise PresubmitFailure(
                 'All presubmit results must be of types derived from '
                 'output_api.PresubmitResult')
+
+
+def RDBStatusFrom(result):
+    """Returns the status and failure reason for a PresubmitResult."""
+    failure_reason = None
+    status = rdb_wrapper.STATUS_PASS
+    if any(r.fatal for r in result):
+        status = rdb_wrapper.STATUS_FAIL
+        failure_reasons = []
+        for r in result:
+            fields = r.json_format()
+            message = fields['message']
+            items = '\n'.join('  %s' % item for item in fields['items'])
+            failure_reasons.append('\n'.join([message, items]))
+        if failure_reasons:
+            failure_reason = '\n'.join(failure_reasons)
+    return status, failure_reason
 
 
 def DoPresubmitChecks(change,
@@ -1769,35 +1799,30 @@ def DoPresubmitChecks(change,
                       no_diffs=False):
     """Runs all presubmit checks that apply to the files in the change.
 
-  This finds all PRESUBMIT.py files in directories enclosing the files in the
-  change (up to the repository root) and calls the relevant entrypoint function
-  depending on whether the change is being committed or uploaded.
+    This finds all PRESUBMIT.py files in directories enclosing the files in the
+    change (up to the repository root) and calls the relevant entrypoint function
+    depending on whether the change is being committed or uploaded.
 
-  Prints errors, warnings and notifications.  Prompts the user for warnings
-  when needed.
+    Prints errors, warnings and notifications.  Prompts the user for warnings
+    when needed.
 
-  Args:
-    change: The Change object.
-    committing: True if 'git cl land' is running, False if 'git cl upload' is.
-    verbose: Prints debug info.
-    default_presubmit: A default presubmit script to execute in any case.
-    may_prompt: Enable (y/n) questions on warning or error. If False,
-                any questions are answered with yes by default.
-    gerrit_obj: provides basic Gerrit codereview functionality.
-    dry_run: if true, some Checks will be skipped.
-    parallel: if true, all tests specified by input_api.RunTests in all
-              PRESUBMIT files will be run in parallel.
-    no_diffs: if true, implies that --files or --all was specified so some
-              checks can be skipped, and some errors will be messages.
-  Return:
-    1 if presubmit checks failed or 0 otherwise.
-  """
-    old_environ = os.environ
-    try:
-        # Make sure python subprocesses won't generate .pyc files.
-        os.environ = os.environ.copy()
-        os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
-
+    Args:
+        change: The Change object.
+        committing: True if 'git cl land' is running, False if 'git cl upload' is.
+        verbose: Prints debug info.
+        default_presubmit: A default presubmit script to execute in any case.
+        may_prompt: Enable (y/n) questions on warning or error. If False,
+            any questions are answered with yes by default.
+        gerrit_obj: provides basic Gerrit codereview functionality.
+        dry_run: if true, some Checks will be skipped.
+        parallel: if true, all tests specified by input_api.RunTests in all
+            PRESUBMIT files will be run in parallel.
+        no_diffs: if true, implies that --files or --all was specified so some
+            checks can be skipped, and some errors will be messages.
+    Return:
+        1 if presubmit checks failed or 0 otherwise.
+    """
+    with setup_environ({'PYTHONDONTWRITEBYTECODE': '1'}):
         python_version = 'Python %s' % sys.version_info.major
         if committing:
             sys.stdout.write('Running %s presubmit commit checks ...\n' %
@@ -1807,7 +1832,8 @@ def DoPresubmitChecks(change,
                              python_version)
         start_time = time_time()
         presubmit_files = ListRelevantPresubmitFiles(
-            change.AbsoluteLocalPaths(), change.RepositoryRoot())
+            change.AbsoluteLocalPaths() + change.AbsoluteLocalSubmodules(),
+            change.RepositoryRoot())
         if not presubmit_files and verbose:
             sys.stdout.write('Warning, no PRESUBMIT.py found.\n')
         results = []
@@ -1904,8 +1930,6 @@ def DoPresubmitChecks(change,
             _ASKED_FOR_FEEDBACK = True
 
         return 1 if presubmits_failed else 0
-    finally:
-        os.environ = old_environ
 
 
 def _scan_sub_dirs(mask, recursive):
@@ -1935,12 +1959,12 @@ def _parse_files(args, recursive):
 def _parse_change(parser, options):
     """Process change options.
 
-  Args:
-    parser: The parser used to parse the arguments from command line.
-    options: The arguments parsed from command line.
-  Returns:
-    A GitChange if the change root is a git repository, or a Change otherwise.
-  """
+    Args:
+        parser: The parser used to parse the arguments from command line.
+        options: The arguments parsed from command line.
+    Returns:
+        A GitChange if the change root is a git repository, or a Change otherwise.
+    """
     if options.files and options.all_files:
         parser.error('<files> cannot be specified when --all-files is set.')
 
@@ -1963,9 +1987,9 @@ def _parse_change(parser, options):
     elif options.all_files:
         change_files = [('M', f) for f in scm.GIT.GetAllFiles(options.root)]
     else:
-        change_files = scm.GIT.CaptureStatus(options.root, options.upstream
-                                             or None)
-
+        change_files = scm.GIT.CaptureStatus(options.root,
+                                             options.upstream or None,
+                                             ignore_submodules=False)
     logging.info('Found %d file(s).', len(change_files))
 
     change_class = GitChange if change_scm == 'git' else Change
@@ -1982,15 +2006,15 @@ def _parse_change(parser, options):
 def _parse_gerrit_options(parser, options):
     """Process gerrit options.
 
-  SIDE EFFECTS: Modifies options.author and options.description from Gerrit if
-  options.gerrit_fetch is set.
+    SIDE EFFECTS: Modifies options.author and options.description from Gerrit if
+    options.gerrit_fetch is set.
 
-  Args:
-    parser: The parser used to parse the arguments from command line.
-    options: The arguments parsed from command line.
-  Returns:
-    A GerritAccessor object if options.gerrit_url is set, or None otherwise.
-  """
+    Args:
+        parser: The parser used to parse the arguments from command line.
+        options: The arguments parsed from command line.
+    Returns:
+        A GerritAccessor object if options.gerrit_url is set, or None otherwise.
+    """
     gerrit_obj = None
     if options.gerrit_url:
         gerrit_obj = GerritAccessor(url=options.gerrit_url,
@@ -2012,6 +2036,27 @@ def _parse_gerrit_options(parser, options):
     logging.info('Got description: """\n%s\n"""', options.description)
 
     return gerrit_obj
+
+
+@contextlib.contextmanager
+def setup_environ(kv: Mapping[str, str]):
+    """Update environment while in context, and reset back to original on exit.
+
+    Example usage:
+    with setup_environ({"key": "value"}):
+        # os.environ now has key set to value.
+        pass
+    """
+    old_kv = {}
+    for k, v in kv.items():
+        old_kv[k] = os.environ.get(k, None)
+        os.environ[k] = v
+    yield
+    for k, v in old_kv.items():
+        if v:
+            os.environ[k] = v
+        else:
+            os.environ.pop(k, None)
 
 
 @contextlib.contextmanager

@@ -5,6 +5,7 @@
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
 
 #include <memory>
+#include <optional>
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -53,7 +54,6 @@
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -131,7 +131,7 @@ class MediatorTest : public AshTestBase {
           // |FastPairPairerImpl::FastPairPairerImpl(...)|.
           if (device->protocol() != Protocol::kFastPairSubsequent &&
               device->version() != DeviceFastPairVersion::kV1) {
-            mock_pairer_broker_->NotifyAccountKeyWrite(device, absl::nullopt);
+            mock_pairer_broker_->NotifyAccountKeyWrite(device, std::nullopt);
           }
         });
 
@@ -197,19 +197,14 @@ class MediatorTest : public AshTestBase {
   scoped_refptr<Device> subsequent_device_;
   scoped_refptr<Device> retroactive_device_;
   scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>> adapter_;
-  raw_ptr<FakeFeatureStatusTracker, DanglingUntriaged | ExperimentalAsh>
-      feature_status_tracker_;
-  raw_ptr<MockScannerBroker, DanglingUntriaged | ExperimentalAsh>
-      mock_scanner_broker_;
-  raw_ptr<FakeRetroactivePairingDetector, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<FakeFeatureStatusTracker, DanglingUntriaged> feature_status_tracker_;
+  raw_ptr<MockScannerBroker, DanglingUntriaged> mock_scanner_broker_;
+  raw_ptr<FakeRetroactivePairingDetector, DanglingUntriaged>
       fake_retroactive_pairing_detector_;
-  raw_ptr<MockPairerBroker, DanglingUntriaged | ExperimentalAsh>
-      mock_pairer_broker_;
-  raw_ptr<MockUIBroker, DanglingUntriaged | ExperimentalAsh> mock_ui_broker_;
-  raw_ptr<MockCompanionAppBroker, DanglingUntriaged | ExperimentalAsh>
-      mock_companion_app_broker_;
-  raw_ptr<MockFastPairRepository, DanglingUntriaged | ExperimentalAsh>
-      mock_fast_pair_repository_;
+  raw_ptr<MockPairerBroker, DanglingUntriaged> mock_pairer_broker_;
+  raw_ptr<MockUIBroker, DanglingUntriaged> mock_ui_broker_;
+  raw_ptr<MockCompanionAppBroker, DanglingUntriaged> mock_companion_app_broker_;
+  raw_ptr<MockFastPairRepository, DanglingUntriaged> mock_fast_pair_repository_;
   bluetooth_config::FakeAdapterStateController fake_adapter_state_controller_;
   std::unique_ptr<Mediator> mediator_;
 };
@@ -763,7 +758,7 @@ TEST_F(MediatorTest, FastPairBluetoothConfigDelegate) {
   delegate->SetDeviceNameManager(nullptr);
   delegate->SetAdapterStateController(nullptr);
   EXPECT_TRUE(delegate);
-  EXPECT_EQ(delegate->GetDeviceImageInfo(kTestAddress), absl::nullopt);
+  EXPECT_EQ(delegate->GetDeviceImageInfo(kTestAddress), std::nullopt);
 }
 
 TEST_F(MediatorTest,
@@ -1037,7 +1032,7 @@ TEST_F(MediatorTest,
   retroactive_device_->set_account_key(kAccountKey1);
   EXPECT_CALL(*mock_ui_broker_, ShowAssociateAccount);
   mock_pairer_broker_->NotifyAccountKeyWrite(retroactive_device_,
-                                             /*error=*/absl::nullopt);
+                                             /*error=*/std::nullopt);
 }
 
 TEST_F(MediatorTest, NoShowAssociateAccount_OnInitialPairAccountKeyWrite) {
@@ -1045,7 +1040,7 @@ TEST_F(MediatorTest, NoShowAssociateAccount_OnInitialPairAccountKeyWrite) {
   initial_device_->set_account_key(kAccountKey1);
   EXPECT_CALL(*mock_ui_broker_, ShowAssociateAccount).Times(0);
   mock_pairer_broker_->NotifyAccountKeyWrite(initial_device_,
-                                             /*error=*/absl::nullopt);
+                                             /*error=*/std::nullopt);
 }
 
 TEST_F(MediatorTest, ShowCompanionApp_OnDevicePaired_Disabled) {

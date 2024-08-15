@@ -34,6 +34,7 @@
 
 #include "dawn/common/Numeric.h"
 #include "dawn/common/PlacementAllocated.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn {
 
@@ -90,19 +91,21 @@ class SlabAllocatorImpl {
 
     struct Slab : PlacementAllocated {
         // A slab is placement-allocated into an aligned pointer from a separate allocation.
-        // Ownership of the allocation is transferred to the slab on creation.
         // | ---------- allocation --------- |
         // | pad | Slab | data ------------> |
+        Slab();
         Slab(char allocation[], IndexLinkNode* head);
         Slab(Slab&& rhs);
 
+        // Extract the Slab from the linked list.
         void Splice();
 
-        char* allocation;
-        IndexLinkNode* freeList;
-        Slab* prev;
-        Slab* next;
-        Index blocksInUse;
+        raw_ptr<char> allocation = nullptr;
+        raw_ptr<IndexLinkNode> freeList = nullptr;
+
+        raw_ptr<Slab> prev = nullptr;
+        raw_ptr<Slab> next = nullptr;
+        Index blocksInUse = 0;
     };
 
     SlabAllocatorImpl(Index blocksPerSlab, uint32_t objectSize, uint32_t objectAlignment);

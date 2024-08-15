@@ -165,7 +165,7 @@ if (!is_android) {
 
 update_target("//chrome/common:non_code_constants") {
   deps += [
-    "//components/version_info:generate_version_info",
+    "//base/version_info:generate_version_info",
   ]
 }
 

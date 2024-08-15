@@ -6,40 +6,82 @@ package org.chromium.chrome.browser.ui.plus_addresses;
 
 import android.app.Activity;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.chrome.browser.layouts.LayoutManagerProvider;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
+import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorSupplier;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
-import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
-import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.GURL;
 
 /** JNI wrapper for C++ PlusAddressCreationViewAndroid. */
 @JNINamespace("plus_addresses")
-public class PlusAddressCreationViewBridge extends EmptyBottomSheetObserver
-        implements PlusAddressCreationDelegate {
+public class PlusAddressCreationViewBridge {
     private long mNativePlusAddressCreationPromptAndroid;
     private Activity mActivity;
     private BottomSheetController mBottomSheetController;
-    private PlusAddressCreationBottomSheetContent mBottomSheetContent;
+    private LayoutStateProvider mLayoutStateProvider;
+    private final TabModel mTabModel;
+    private final TabModelSelector mTabModelSelector;
+    private CoordinatorFactory mCoordinatorFactory;
+    @Nullable private PlusAddressCreationCoordinator mCoordinator;
 
-    private PlusAddressCreationViewBridge(
-            long nativePlusAddressCreationPromptAndroid, WindowAndroid window) {
+    @VisibleForTesting
+    /*package*/ PlusAddressCreationViewBridge(
+            long nativePlusAddressCreationPromptAndroid,
+            WindowAndroid window,
+            TabModel tabModel,
+            TabModelSelector tabModelSelector,
+            CoordinatorFactory coordinatorFactory) {
         mNativePlusAddressCreationPromptAndroid = nativePlusAddressCreationPromptAndroid;
         mActivity = window.getActivity().get();
         mBottomSheetController = BottomSheetControllerProvider.from(window);
-        mBottomSheetController.addObserver(this);
+        mLayoutStateProvider = LayoutManagerProvider.from(window);
+        mTabModel = tabModel;
+        mTabModelSelector = tabModelSelector;
+        mCoordinatorFactory = coordinatorFactory;
+    }
+
+    @VisibleForTesting
+    /*package*/ static interface CoordinatorFactory {
+        PlusAddressCreationCoordinator create(
+                Activity activity,
+                BottomSheetController bottomSheetController,
+                LayoutStateProvider layoutStateProvider,
+                TabModel tabModel,
+                TabModelSelector tabModelSelector,
+                PlusAddressCreationViewBridge bridge,
+                String modalTitle,
+                String plusAddressDescription,
+                String proposedPlusAddressPlaceholder,
+                String plusAddressModalOkText,
+                String plusAddressModalCancelText,
+                String errorReportInstruction,
+                GURL manageUrl,
+                GURL errorReportUrl);
     }
 
     @CalledByNative
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     static PlusAddressCreationViewBridge create(
-            long nativePlusAddressCreationPromptAndroid, WindowAndroid window) {
-        return new PlusAddressCreationViewBridge(nativePlusAddressCreationPromptAndroid, window);
+            long nativePlusAddressCreationPromptAndroid, WindowAndroid window, TabModel tabModel) {
+        var tabModelSelector = TabModelSelectorSupplier.getValueOrNullFrom(window);
+        assert tabModelSelector != null : "No TabModelSelector available.";
+        return new PlusAddressCreationViewBridge(
+                nativePlusAddressCreationPromptAndroid,
+                window,
+                tabModel,
+                tabModelSelector,
+                PlusAddressCreationCoordinator::new);
     }
 
     @CalledByNative
@@ -48,53 +90,72 @@ public class PlusAddressCreationViewBridge extends EmptyBottomSheetObserver
             String plusAddressDescription,
             String proposedPlusAddressPlaceholder,
             String plusAddressModalOkText,
-            String plusAddressModalCancelText) {
+            String plusAddressModalCancelText,
+            String errorReportInstruction,
+            String manageUrl,
+            String errorReportUrl) {
         if (mNativePlusAddressCreationPromptAndroid != 0) {
-            mBottomSheetContent =
-                    new PlusAddressCreationBottomSheetContent(
-                            this,
+            mCoordinator =
+                    mCoordinatorFactory.create(
                             mActivity,
+                            mBottomSheetController,
+                            mLayoutStateProvider,
+                            mTabModel,
+                            mTabModelSelector,
+                            this,
                             modalTitle,
                             plusAddressDescription,
                             proposedPlusAddressPlaceholder,
                             plusAddressModalOkText,
-                            plusAddressModalCancelText);
+                            plusAddressModalCancelText,
+                            errorReportInstruction,
+                            new GURL(manageUrl),
+                            new GURL(errorReportUrl));
+            mCoordinator.requestShowContent();
+        }
+    }
 
-            mBottomSheetController.requestShowContent(mBottomSheetContent, /* animate= */ true);
+    @CalledByNative
+    void updateProposedPlusAddress(String plusAddress) {
+        if (mNativePlusAddressCreationPromptAndroid != 0 && mCoordinator != null) {
+            mCoordinator.updateProposedPlusAddress(plusAddress);
+        }
+    }
+
+    @CalledByNative
+    void finishConfirm() {
+        if (mNativePlusAddressCreationPromptAndroid != 0 && mCoordinator != null) {
+            mCoordinator.finishConfirm();
+        }
+    }
+
+    @CalledByNative
+    void showError() {
+        if (mNativePlusAddressCreationPromptAndroid != 0 && mCoordinator != null) {
+            mCoordinator.showError();
         }
     }
 
     // Hide the bottom sheet (if showing) and clean up observers.
     @CalledByNative
     void destroy() {
-        mBottomSheetController.hideContent(mBottomSheetContent, /* animate= */ false);
-        mBottomSheetController.removeObserver(this);
+        if (mCoordinator != null) {
+            mCoordinator.destroy();
+            mCoordinator = null;
+        }
         mNativePlusAddressCreationPromptAndroid = 0;
     }
 
-    // EmptyBottomSheetObserver overridden methods:
-    @Override
-    public void onSheetClosed(@StateChangeReason int reason) {
-        this.onPromptDismissed();
-    }
-
-    // PlusAddressCreationDelegate implementation:
-    @Override
-    public void onConfirmed() {
-        mBottomSheetController.hideContent(
-                mBottomSheetContent, /* animate= */ true, StateChangeReason.INTERACTION_COMPLETE);
+    public void onConfirmRequested() {
         if (mNativePlusAddressCreationPromptAndroid != 0) {
             PlusAddressCreationViewBridgeJni.get()
-                    .onConfirmed(
+                    .onConfirmRequested(
                             mNativePlusAddressCreationPromptAndroid,
                             PlusAddressCreationViewBridge.this);
         }
     }
 
-    @Override
     public void onCanceled() {
-        mBottomSheetController.hideContent(
-                mBottomSheetContent, /* animate= */ true, StateChangeReason.INTERACTION_COMPLETE);
         if (mNativePlusAddressCreationPromptAndroid != 0) {
             PlusAddressCreationViewBridgeJni.get()
                     .onCanceled(
@@ -103,7 +164,6 @@ public class PlusAddressCreationViewBridge extends EmptyBottomSheetObserver
         }
     }
 
-    @Override
     public void onPromptDismissed() {
         if (mNativePlusAddressCreationPromptAndroid != 0) {
             PlusAddressCreationViewBridgeJni.get()
@@ -114,21 +174,18 @@ public class PlusAddressCreationViewBridge extends EmptyBottomSheetObserver
         }
     }
 
-    @VisibleForTesting
-    public PlusAddressCreationBottomSheetContent getBottomSheetContent() {
-        return mBottomSheetContent;
-    }
-
     public void setActivityForTesting(Activity activity) {
         mActivity = activity;
     }
 
     @NativeMethods
     interface Natives {
-        void onConfirmed(
+        void onConfirmRequested(
                 long nativePlusAddressCreationViewAndroid, PlusAddressCreationViewBridge caller);
+
         void onCanceled(
                 long nativePlusAddressCreationViewAndroid, PlusAddressCreationViewBridge caller);
+
         void promptDismissed(
                 long nativePlusAddressCreationViewAndroid, PlusAddressCreationViewBridge caller);
     }

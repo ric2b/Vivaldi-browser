@@ -7,14 +7,15 @@
 #include <windows.h>
 
 #include <shellapi.h>
+
 #include <memory>
+#include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/strcat_win.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -35,7 +36,7 @@ namespace installer {
 
 namespace {
 
-constexpr base::WStringPiece kUninstallSurveyUrl(
+constexpr std::wstring_view kUninstallSurveyUrl(
     L"https://support.google.com/chrome?p=chrome_uninstall_survey");
 
 bool NavigateToUrlWithEdge(const std::wstring& url) {
@@ -82,7 +83,7 @@ bool IsMetricsEnabled(const base::FilePath& file_path) {
   if (!root || !root->is_dict())
     return false;
 
-  const absl::optional<bool> value = root->GetDict().FindBoolByDottedPath(
+  const std::optional<bool> value = root->GetDict().FindBoolByDottedPath(
       metrics::prefs::kMetricsReportingEnabled);
 
   return value.value_or(false);

@@ -13,30 +13,28 @@
 #include "fuzztest/fuzztest.h"
 #include "gtest/gtest.h"
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 namespace {
 
-::testing::Environment* const stack_limit_env =
-    ::testing::AddGlobalTestEnvironment(
-        new FuzztestStackLimitEnvironment("524288"));  // 512 * 1024
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo512x1024Bytes();
 
 void CheckGainMapMetadataMatches(const avifGainMapMetadata& actual,
                                  const avifGainMapMetadata& expected) {
   // 'expecteed' is the source struct which has arbitrary data and booleans
   // values can contain any value, but the decoded ('actual') struct should
   // be 0 or 1.
-  EXPECT_EQ(actual.baseRenditionIsHDR, expected.baseRenditionIsHDR ? 1 : 0);
-  EXPECT_EQ(actual.hdrCapacityMinN, expected.hdrCapacityMinN);
-  EXPECT_EQ(actual.hdrCapacityMinD, expected.hdrCapacityMinD);
-  EXPECT_EQ(actual.hdrCapacityMaxN, expected.hdrCapacityMaxN);
-  EXPECT_EQ(actual.hdrCapacityMaxD, expected.hdrCapacityMaxD);
+  EXPECT_EQ(actual.backwardDirection, expected.backwardDirection ? 1 : 0);
+  EXPECT_EQ(actual.baseHdrHeadroomN, expected.baseHdrHeadroomN);
+  EXPECT_EQ(actual.baseHdrHeadroomD, expected.baseHdrHeadroomD);
+  EXPECT_EQ(actual.alternateHdrHeadroomN, expected.alternateHdrHeadroomN);
+  EXPECT_EQ(actual.alternateHdrHeadroomD, expected.alternateHdrHeadroomD);
   for (int c = 0; c < 3; ++c) {
     SCOPED_TRACE(c);
-    EXPECT_EQ(actual.offsetSdrN[c], expected.offsetSdrN[c]);
-    EXPECT_EQ(actual.offsetSdrD[c], expected.offsetSdrD[c]);
-    EXPECT_EQ(actual.offsetHdrN[c], expected.offsetHdrN[c]);
-    EXPECT_EQ(actual.offsetHdrD[c], expected.offsetHdrD[c]);
+    EXPECT_EQ(actual.baseOffsetN[c], expected.baseOffsetN[c]);
+    EXPECT_EQ(actual.baseOffsetD[c], expected.baseOffsetD[c]);
+    EXPECT_EQ(actual.alternateOffsetN[c], expected.alternateOffsetN[c]);
+    EXPECT_EQ(actual.alternateOffsetD[c], expected.alternateOffsetD[c]);
     EXPECT_EQ(actual.gainMapGammaN[c], expected.gainMapGammaN[c]);
     EXPECT_EQ(actual.gainMapGammaD[c], expected.gainMapGammaD[c]);
     EXPECT_EQ(actual.gainMapMinN[c], expected.gainMapMinN[c]);
@@ -46,17 +44,12 @@ void CheckGainMapMetadataMatches(const avifGainMapMetadata& actual,
   }
 }
 
-void EncodeDecodeValid(AvifImagePtr image, AvifEncoderPtr encoder,
-                       AvifDecoderPtr decoder) {
-  AvifImagePtr decoded_image(avifImageCreateEmpty(), avifImageDestroy);
+void EncodeDecodeValid(ImagePtr image, EncoderPtr encoder, DecoderPtr decoder) {
+  ImagePtr decoded_image(avifImageCreateEmpty());
   ASSERT_NE(image.get(), nullptr);
   ASSERT_NE(encoder.get(), nullptr);
   ASSERT_NE(decoder.get(), nullptr);
   ASSERT_NE(decoded_image.get(), nullptr);
-
-  // TODO(maryla): fuzz with different settings.
-  decoder->enableDecodingGainMap = true;
-  decoder->enableParsingGainMapMetadata = true;
 
   AvifRwData encoded_data;
   const avifResult encoder_result =
@@ -74,20 +67,32 @@ void EncodeDecodeValid(AvifImagePtr image, AvifEncoderPtr encoder,
   EXPECT_EQ(decoded_image->depth, image->depth);
   EXPECT_EQ(decoded_image->yuvFormat, image->yuvFormat);
 
-  EXPECT_EQ(image->gainMap.image != nullptr,
-            decoded_image->gainMap.image != nullptr);
-  if (image->gainMap.image != nullptr) {
-    EXPECT_EQ(decoded_image->gainMap.image->width, image->gainMap.image->width);
-    EXPECT_EQ(decoded_image->gainMap.image->height,
-              image->gainMap.image->height);
-    EXPECT_EQ(decoded_image->gainMap.image->depth, image->gainMap.image->depth);
-    EXPECT_EQ(decoded_image->gainMap.image->yuvFormat,
-              image->gainMap.image->yuvFormat);
-    EXPECT_EQ(image->gainMap.image->gainMap.image, nullptr);
-    EXPECT_EQ(decoded_image->gainMap.image->alphaPlane, nullptr);
+  EXPECT_EQ(decoder->gainMapPresent,
+            image->gainMap != nullptr && image->gainMap->image != nullptr);
+  ASSERT_EQ(decoded_image->gainMap != nullptr,
+            decoder->gainMapPresent && (decoder->enableDecodingGainMap ||
+                                        decoder->enableParsingGainMapMetadata));
+  ASSERT_EQ(decoded_image->gainMap != nullptr &&
+                decoded_image->gainMap->image != nullptr,
+            decoder->gainMapPresent && decoder->enableDecodingGainMap);
+  if (decoder->gainMapPresent && decoder->enableDecodingGainMap) {
+    ASSERT_NE(decoded_image->gainMap, nullptr);
+    ASSERT_NE(decoded_image->gainMap->image, nullptr);
+    EXPECT_EQ(decoded_image->gainMap->image->width,
+              image->gainMap->image->width);
+    EXPECT_EQ(decoded_image->gainMap->image->height,
+              image->gainMap->image->height);
+    EXPECT_EQ(decoded_image->gainMap->image->depth,
+              image->gainMap->image->depth);
+    EXPECT_EQ(decoded_image->gainMap->image->yuvFormat,
+              image->gainMap->image->yuvFormat);
+    EXPECT_EQ(image->gainMap->image->gainMap, nullptr);
+    EXPECT_EQ(decoded_image->gainMap->image->alphaPlane, nullptr);
 
-    CheckGainMapMetadataMatches(decoded_image->gainMap.metadata,
-                                image->gainMap.metadata);
+    if (decoder->enableParsingGainMapMetadata) {
+      CheckGainMapMetadataMatches(decoded_image->gainMap->metadata,
+                                  image->gainMap->metadata);
+    }
   }
 
   // Verify that an opaque input leads to an opaque output.
@@ -101,11 +106,12 @@ void EncodeDecodeValid(AvifImagePtr image, AvifEncoderPtr encoder,
 // Note that avifGainMapMetadata is passed as a byte array
 // because the C array fields in the struct seem to prevent fuzztest from
 // handling it natively.
-AvifImagePtr AddGainMapToImage(
-    AvifImagePtr image, AvifImagePtr gainMap,
+ImagePtr AddGainMapToImage(
+    ImagePtr image, ImagePtr gain_map,
     const std::array<uint8_t, sizeof(avifGainMapMetadata)>& metadata) {
-  image->gainMap.image = gainMap.release();
-  std::memcpy(&image->gainMap.metadata, metadata.data(), metadata.size());
+  image->gainMap = avifGainMapCreate();
+  image->gainMap->image = gain_map.release();
+  std::memcpy(&image->gainMap->metadata, metadata.data(), metadata.size());
   return image;
 }
 
@@ -118,9 +124,8 @@ inline auto ArbitraryAvifImageWithGainMap() {
 FUZZ_TEST(EncodeDecodeAvifFuzzTest, EncodeDecodeValid)
     .WithDomains(fuzztest::OneOf(ArbitraryAvifImage(),
                                  ArbitraryAvifImageWithGainMap()),
-                 ArbitraryAvifEncoder(),
-                 ArbitraryAvifDecoder({AVIF_CODEC_CHOICE_AUTO}));
+                 ArbitraryAvifEncoder(), ArbitraryAvifDecoder());
 
 }  // namespace
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif

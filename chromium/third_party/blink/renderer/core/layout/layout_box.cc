@@ -59,13 +59,18 @@
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/anchor_position_scroll_data.h"
+#include "third_party/blink/renderer/core/layout/box_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/constraint_space.h"
+#include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/custom/custom_layout_child.h"
 #include "third_party/blink/renderer/core/layout/custom/layout_custom.h"
 #include "third_party/blink/renderer/core/layout/custom/layout_worklet.h"
 #include "third_party/blink/renderer/core/layout/custom/layout_worklet_global_scope_proxy.h"
 #include "third_party/blink/renderer/core/layout/custom_scrollbar.h"
+#include "third_party/blink/renderer/core/layout/disable_layout_side_effects_scope.h"
 #include "third_party/blink/renderer/core/layout/forms/layout_fieldset.h"
 #include "third_party/blink/renderer/core/layout/forms/layout_text_control.h"
+#include "third_party/blink/renderer/core/layout/fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
@@ -76,17 +81,13 @@
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
+#include "third_party/blink/renderer/core/layout/layout_result.h"
+#include "third_party/blink/renderer/core/layout/layout_utils.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_box_fragment.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_disable_side_effects_scope.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_layout_utils.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
+#include "third_party/blink/renderer/core/layout/legacy_layout_tree_walking.h"
+#include "third_party/blink/renderer/core/layout/length_utils.h"
+#include "third_party/blink/renderer/core/layout/logical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/measure_cache.h"
 #include "third_party/blink/renderer/core/layout/shapes/shape_outside_info.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_cell.h"
@@ -95,7 +96,6 @@
 #include "third_party/blink/renderer/core/page/autoscroll_controller.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/page/scrolling/snap_coordinator.h"
 #include "third_party/blink/renderer/core/paint/box_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/outline_painter.h"
@@ -134,11 +134,12 @@ static const unsigned kBackgroundObscurationTestMaxDepth = 4;
 struct SameSizeAsLayoutBox : public LayoutBoxModelObject {
   DeprecatedLayoutRect frame_rect;
   PhysicalSize previous_size;
-  PhysicalBoxStrut margin_box_outsets;
   MinMaxSizes intrinsic_logical_widths;
   LayoutUnit intrinsic_logical_widths_initial_block_size;
+  Member<void*> min_max_sizes_cache;
   Member<void*> result;
-  HeapVector<Member<const NGLayoutResult>, 1> layout_results;
+  Member<void*> cache;
+  HeapVector<Member<const LayoutResult>, 1> layout_results;
   wtf_size_t first_fragment_item_index_;
   Member<void*> members[2];
 };
@@ -256,10 +257,10 @@ LayoutUnit FileUploadControlIntrinsicInlineSize(const HTMLInputElement& input,
     if (auto* button_box = button->GetLayoutBox()) {
       const ComputedStyle& button_style = button_box->StyleRef();
       WritingMode mode = button_style.GetWritingMode();
-      NGConstraintSpaceBuilder builder(mode, button_style.GetWritingDirection(),
-                                       /* is_new_fc */ true);
+      ConstraintSpaceBuilder builder(mode, button_style.GetWritingDirection(),
+                                     /* is_new_fc */ true);
       LayoutUnit max =
-          NGBlockNode(button_box)
+          BlockNode(button_box)
               .ComputeMinMaxSizes(mode, MinMaxSizesType::kIntrinsic,
                                   builder.ToConstraintSpace())
               .sizes.max_size;
@@ -327,8 +328,8 @@ LayoutUnit MenuListIntrinsicInlineSize(const HTMLSelectElement& select,
   float max_option_width = 0;
   if (!box.ShouldApplySizeContainment()) {
     for (auto* const option : select.GetOptionList()) {
-      String text = option->TextIndentedToRespectGroupLabel();
-      style.ApplyTextTransform(&text);
+      String text =
+          style.ApplyTextTransform(option->TextIndentedToRespectGroupLabel());
       // We apply SELECT's style, not OPTION's style because max_option_width is
       // used to determine intrinsic width of the menulist box.
       max_option_width =
@@ -356,7 +357,7 @@ LayoutUnit MenuListIntrinsicBlockSize(const HTMLSelectElement& select,
 
 #if DCHECK_IS_ON()
 void CheckDidAddFragment(const LayoutBox& box,
-                         const NGPhysicalBoxFragment& new_fragment,
+                         const PhysicalBoxFragment& new_fragment,
                          wtf_size_t new_fragment_index = kNotFound) {
   // If |HasFragmentItems|, |ChildrenInline()| should be true.
   // |HasFragmentItems| uses this condition to optimize .
@@ -364,7 +365,7 @@ void CheckDidAddFragment(const LayoutBox& box,
     DCHECK(box.ChildrenInline());
 
   wtf_size_t index = 0;
-  for (const NGPhysicalBoxFragment& fragment : box.PhysicalFragments()) {
+  for (const PhysicalBoxFragment& fragment : box.PhysicalFragments()) {
     DCHECK_EQ(fragment.IsFirstForNode(), index == 0);
     if (const FragmentItems* fragment_items = fragment.Items()) {
       fragment_items->CheckAllItemsAreValid();
@@ -378,7 +379,7 @@ void CheckDidAddFragment(const LayoutBox& box,
 }
 #else
 inline void CheckDidAddFragment(const LayoutBox& box,
-                                const NGPhysicalBoxFragment& fragment,
+                                const PhysicalBoxFragment& fragment,
                                 wtf_size_t new_fragment_index = kNotFound) {}
 #endif
 
@@ -423,17 +424,17 @@ int HypotheticalScrollbarThickness(const LayoutBox& box,
   }
 }
 
-void RecalcFragmentLayoutOverflow(RecalcLayoutOverflowResult& result,
-                                  const NGPhysicalFragment& fragment) {
+void RecalcFragmentScrollableOverflow(RecalcScrollableOverflowResult& result,
+                                      const PhysicalFragment& fragment) {
   for (const auto& child : fragment.PostLayoutChildren()) {
     if (child->GetLayoutObject()) {
-      if (const auto* box = DynamicTo<NGPhysicalBoxFragment>(child.get())) {
+      if (const auto* box = DynamicTo<PhysicalBoxFragment>(child.get())) {
         if (LayoutBox* owner_box = box->MutableOwnerLayoutBox())
-          result.Unite(owner_box->RecalcLayoutOverflow());
+          result.Unite(owner_box->RecalcScrollableOverflow());
       }
     } else {
       // We enter this branch when the |child| is a fragmentainer.
-      RecalcFragmentLayoutOverflow(result, *child.get());
+      RecalcFragmentScrollableOverflow(result, *child.get());
     }
   }
 }
@@ -455,26 +456,24 @@ LayoutBoxRareData::LayoutBoxRareData()
     : spanner_placeholder_(nullptr),
       // TODO(rego): We should store these based on physical direction.
       has_override_containing_block_content_logical_width_(false),
-      has_previous_content_box_rect_(false),
-      snap_container_(nullptr) {}
+      has_previous_content_box_rect_(false) {}
 
 void LayoutBoxRareData::Trace(Visitor* visitor) const {
   visitor->Trace(spanner_placeholder_);
-  visitor->Trace(snap_container_);
-  visitor->Trace(snap_areas_);
   visitor->Trace(layout_child_);
 }
 
 LayoutBox::LayoutBox(ContainerNode* node)
     : LayoutBoxModelObject(node),
       intrinsic_logical_widths_initial_block_size_(LayoutUnit::Min()) {
-  SetIsBox();
   if (blink::IsA<HTMLLegendElement>(node))
     SetIsHTMLLegendElement();
 }
 
 void LayoutBox::Trace(Visitor* visitor) const {
+  visitor->Trace(min_max_sizes_cache_);
   visitor->Trace(measure_result_);
+  visitor->Trace(measure_cache_);
   visitor->Trace(layout_results_);
   visitor->Trace(overflow_);
   visitor->Trace(rare_data_);
@@ -506,7 +505,6 @@ void LayoutBox::WillBeDestroyed() {
     DisassociatePhysicalFragments();
   }
 
-  SetSnapContainer(nullptr);
   LayoutBoxModelObject::WillBeDestroyed();
 }
 
@@ -516,26 +514,23 @@ void LayoutBox::DisassociatePhysicalFragments() {
     ClearFirstInlineFragmentItemIndex();
   }
   if (measure_result_)
-    measure_result_->PhysicalFragment().LayoutObjectWillBeDestroyed();
+    measure_result_->GetPhysicalFragment().LayoutObjectWillBeDestroyed();
+  if (measure_cache_) {
+    measure_cache_->LayoutObjectWillBeDestroyed();
+  }
   for (auto result : layout_results_)
-    result->PhysicalFragment().LayoutObjectWillBeDestroyed();
+    result->GetPhysicalFragment().LayoutObjectWillBeDestroyed();
 }
 
 void LayoutBox::InsertedIntoTree() {
   NOT_DESTROYED();
   LayoutBoxModelObject::InsertedIntoTree();
-  if (!RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-    AddScrollSnapMapping();
-  }
   AddCustomLayoutChildIfNeeded();
 }
 
 void LayoutBox::WillBeRemovedFromTree() {
   NOT_DESTROYED();
   ClearCustomLayoutChild();
-  if (!RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-    ClearScrollSnapMapping();
-  }
   LayoutBoxModelObject::WillBeRemovedFromTree();
 }
 
@@ -544,10 +539,6 @@ void LayoutBox::StyleWillChange(StyleDifference diff,
   NOT_DESTROYED();
   const ComputedStyle* old_style = Style();
   if (old_style) {
-    LayoutFlowThread* flow_thread = FlowThreadContainingBlock();
-    if (flow_thread && flow_thread != this)
-      flow_thread->FlowThreadDescendantStyleWillChange(this, diff, new_style);
-
     if (IsDocumentElement() || IsBody()) {
       // The background of the root element or the body element could propagate
       // up to the canvas. Just dirty the entire canvas when our style changes
@@ -679,9 +670,6 @@ void LayoutBox::StyleDidChange(StyleDifference diff,
     if (LayoutMultiColumnSpannerPlaceholder* placeholder =
             SpannerPlaceholder()) {
       placeholder->LayoutObjectInFlowThreadStyleDidChange(old_style);
-    } else if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock()) {
-      if (flow_thread != this)
-        flow_thread->FlowThreadDescendantStyleDidChange(this, diff, *old_style);
     }
 
     UpdateScrollSnapMappingAfterStyleChange(*old_style);
@@ -717,7 +705,7 @@ void LayoutBox::StyleDidChange(StyleDifference diff,
       SetNeedsCollectInlines();
     }
 
-    if (CanCompositeBackgroundAttachmentFixed() &&
+    if (IsBackgroundAttachmentFixedObject() &&
         new_style.BackgroundLayers().Clip() !=
             old_style->BackgroundLayers().Clip()) {
       SetNeedsPaintPropertyUpdate();
@@ -845,42 +833,32 @@ void LayoutBox::UpdateScrollSnapMappingAfterStyleChange(
     const ComputedStyle& old_style) {
   NOT_DESTROYED();
   DCHECK(Style());
-  SnapCoordinator& snap_coordinator = GetDocument().GetSnapCoordinator();
   // scroll-snap-type and scroll-padding invalidate the snap container.
   if (old_style.GetScrollSnapType() != StyleRef().GetScrollSnapType() ||
       old_style.ScrollPaddingBottom() != StyleRef().ScrollPaddingBottom() ||
       old_style.ScrollPaddingLeft() != StyleRef().ScrollPaddingLeft() ||
       old_style.ScrollPaddingTop() != StyleRef().ScrollPaddingTop() ||
       old_style.ScrollPaddingRight() != StyleRef().ScrollPaddingRight()) {
-    if (RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-      if (!NeedsLayout() && IsScrollContainer()) {
-        GetScrollableArea()->EnqueueForSnapUpdateIfNeeded();
-      }
-    } else {
-      snap_coordinator.SnapContainerDidChange(*this);
+    if (!NeedsLayout() && IsScrollContainer()) {
+      GetScrollableArea()->EnqueueForSnapUpdateIfNeeded();
+    }
+  }
+
+  // scroll-snap-align invalidates layout as we need to propagate the
+  // snap-areas up the fragment-tree.
+  if (old_style.GetScrollSnapAlign() != StyleRef().GetScrollSnapAlign()) {
+    if (auto* containing_block = ContainingBlock()) {
+      containing_block->SetNeedsLayout(layout_invalidation_reason::kStyleChange,
+                                       kMarkContainerChain);
     }
   }
 
   auto SnapAreaDidChange = [&]() {
-    if (RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-      auto* snap_container = ContainingScrollContainer();
-      if (snap_container && !snap_container->NeedsLayout()) {
-        snap_container->GetScrollableArea()->EnqueueForSnapUpdateIfNeeded();
-      }
-    } else {
-      snap_coordinator.SnapAreaDidChange(*this,
-                                         StyleRef().GetScrollSnapAlign());
+    auto* snap_container = ContainingScrollContainer();
+    if (snap_container && !snap_container->NeedsLayout()) {
+      snap_container->GetScrollableArea()->EnqueueForSnapUpdateIfNeeded();
     }
   };
-
-  if (old_style.GetScrollSnapAlign() != StyleRef().GetScrollSnapAlign()) {
-    if (RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-      ContainingBlock()->SetNeedsLayout(
-          layout_invalidation_reason::kStyleChange, kMarkContainerChain);
-    } else {
-      SnapAreaDidChange();
-    }
-  }
 
   // scroll-snap-stop and scroll-margin invalidate the snap area.
   if (old_style.ScrollSnapStop() != StyleRef().ScrollSnapStop() ||
@@ -894,18 +872,6 @@ void LayoutBox::UpdateScrollSnapMappingAfterStyleChange(
   // Transform invalidates the snap area.
   if (old_style.Transform() != StyleRef().Transform())
     SnapAreaDidChange();
-}
-
-void LayoutBox::AddScrollSnapMapping() {
-  NOT_DESTROYED();
-  SnapCoordinator& snap_coordinator = GetDocument().GetSnapCoordinator();
-  snap_coordinator.SnapAreaDidChange(*this, Style()->GetScrollSnapAlign());
-}
-
-void LayoutBox::ClearScrollSnapMapping() {
-  NOT_DESTROYED();
-  SnapCoordinator& snap_coordinator = GetDocument().GetSnapCoordinator();
-  snap_coordinator.SnapAreaDidChange(*this, cc::ScrollSnapAlign());
 }
 
 void LayoutBox::UpdateFromStyle() {
@@ -948,7 +914,7 @@ void LayoutBox::LayoutSubtreeRoot() {
   DCHECK(previous_result);
   auto space = previous_result->GetConstraintSpaceForCaching();
   DCHECK_EQ(space.GetWritingMode(), StyleRef().GetWritingMode());
-  const NGLayoutResult* result = NGBlockNode(this).Layout(space);
+  const LayoutResult* result = BlockNode(this).Layout(space);
   GetDocument().GetFrame()->GetInputMethodController().DidLayoutSubtree(*this);
 
   if (IsOutOfFlowPositioned()) {
@@ -964,8 +930,8 @@ void LayoutBox::LayoutSubtreeRoot() {
   // this technique to detect size-changes, etc if we wanted to expand this
   // optimization.
   const auto& previous_fragment =
-      To<NGPhysicalBoxFragment>(previous_result->PhysicalFragment());
-  const auto& fragment = To<NGPhysicalBoxFragment>(result->PhysicalFragment());
+      To<PhysicalBoxFragment>(previous_result->GetPhysicalFragment());
+  const auto& fragment = To<PhysicalBoxFragment>(result->GetPhysicalFragment());
   if (previous_fragment.FirstBaseline() != fragment.FirstBaseline() ||
       previous_fragment.LastBaseline() != fragment.LastBaseline() ||
       fragment.HasPropagatedLayoutObjects()) {
@@ -1037,19 +1003,6 @@ LayoutUnit LayoutBox::ClientHeightFrom(LayoutUnit height) const {
   }
 }
 
-int LayoutBox::PixelSnappedClientWidth() const {
-  NOT_DESTROYED();
-  DCHECK(!RuntimeEnabledFeatures::LayoutNewOverflowLogicEnabled());
-  return SnapSizeToPixel(ClientWidth(), PhysicalLocation().left + ClientLeft());
-}
-
-DISABLE_CFI_PERF
-int LayoutBox::PixelSnappedClientHeight() const {
-  NOT_DESTROYED();
-  DCHECK(!RuntimeEnabledFeatures::LayoutNewOverflowLogicEnabled());
-  return SnapSizeToPixel(ClientHeight(), PhysicalLocation().top + ClientTop());
-}
-
 LayoutUnit LayoutBox::ClientWidthWithTableSpecialBehavior() const {
   NOT_DESTROYED();
   // clientWidth/Height is the visual portion of the box content, not including
@@ -1102,10 +1055,10 @@ LayoutUnit LayoutBox::ScrollWidth() const {
     if (auto* scrollable_area = GetScrollableArea())
       return scrollable_area->ScrollWidth();
     else
-      return PhysicalLayoutOverflowRect().Width();
+      return ScrollableOverflowRect().Width();
   }
   // For objects with scrollable overflow, this matches IE.
-  PhysicalRect overflow_rect = PhysicalLayoutOverflowRect();
+  PhysicalRect overflow_rect = ScrollableOverflowRect();
   if (!StyleRef().GetWritingDirection().IsFlippedX()) {
     return std::max(ClientWidth(), overflow_rect.Right() - BorderLeft());
   }
@@ -1122,44 +1075,16 @@ LayoutUnit LayoutBox::ScrollHeight() const {
     if (auto* scrollable_area = GetScrollableArea())
       return scrollable_area->ScrollHeight();
     else
-      return PhysicalLayoutOverflowRect().Height();
+      return ScrollableOverflowRect().Height();
   }
   // For objects with visible overflow, this matches IE.
   // FIXME: Need to work right with writing modes.
   return std::max(ClientHeight(),
-                  PhysicalLayoutOverflowRect().Bottom() - BorderTop());
-}
-
-int LayoutBox::PixelSnappedScrollWidth() const {
-  NOT_DESTROYED();
-  DCHECK(!RuntimeEnabledFeatures::LayoutNewOverflowLogicEnabled());
-  return SnapSizeToPixel(ScrollWidth(), PhysicalLocation().left + ClientLeft());
-}
-
-int LayoutBox::PixelSnappedScrollHeight() const {
-  NOT_DESTROYED();
-  DCHECK(!RuntimeEnabledFeatures::LayoutNewOverflowLogicEnabled());
-  LayoutUnit top = PhysicalLocation().top;
-  if (IsScrollContainer()) {
-    return SnapSizeToPixel(GetScrollableArea()->ScrollHeight(),
-                           top + ClientTop());
-  }
-  // For objects with visible overflow, this matches IE.
-  // FIXME: Need to work right with writing modes.
-  return SnapSizeToPixel(ScrollHeight(), top + ClientTop());
-}
-
-void LayoutBox::SetMargin(const PhysicalBoxStrut& box) {
-  NOT_DESTROYED();
-  DCHECK(!RuntimeEnabledFeatures::LayoutNGNoCopyBackEnabled());
-  margin_box_outsets_ = box;
+                  ScrollableOverflowRect().Bottom() - BorderTop());
 }
 
 PhysicalBoxStrut LayoutBox::MarginBoxOutsets() const {
   NOT_DESTROYED();
-  if (!RuntimeEnabledFeatures::LayoutNGNoCopyBackEnabled()) {
-    return margin_box_outsets_;
-  }
   if (PhysicalFragmentCount()) {
     // We get margin data from the first physical fragment. Margins are
     // per-LayoutBox data, and we don't need to take care of block
@@ -1336,7 +1261,7 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentInlineSize() const {
     return kIndefiniteSize;
   const Element& element = *To<Element>(GetNode());
 
-  const bool apply_fixed_size = StyleRef().ApplyControlFixedSize();
+  const bool apply_fixed_size = StyleRef().ApplyControlFixedSize(&element);
   const auto* select = DynamicTo<HTMLSelectElement>(element);
   if (UNLIKELY(select && select->UsesMenuList())) {
     return apply_fixed_size ? MenuListIntrinsicInlineSize(*select, *this)
@@ -1390,7 +1315,7 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentBlockSize() const {
     return ThemePartIntrinsicSize(*this, WebThemeEngine::kPartRadio).block_size;
   }
 
-  if (!StyleRef().ApplyControlFixedSize()) {
+  if (!StyleRef().ApplyControlFixedSize(GetNode())) {
     return kIndefiniteSize;
   }
   if (const auto* select = DynamicTo<HTMLSelectElement>(GetNode())) {
@@ -1531,7 +1456,7 @@ PhysicalRect LayoutBox::PhysicalBackgroundRect(
 void LayoutBox::AddOutlineRects(OutlineRectCollector& collector,
                                 OutlineInfo* info,
                                 const PhysicalOffset& additional_offset,
-                                NGOutlineType) const {
+                                OutlineType) const {
   NOT_DESTROYED();
   collector.AddRect(PhysicalRect(additional_offset, Size()));
   if (info)
@@ -2260,6 +2185,12 @@ void LayoutBox::ImageChanged(WrappedImagePtr image,
       if (layer->GetImage() && image == layer->GetImage()->Data()) {
         SetShouldDoFullPaintInvalidationWithoutLayoutChange(
             PaintInvalidationReason::kImage);
+        if (layer->GetImage()->IsMaskSource() && IsSVGChild()) {
+          // Since an invalid <mask> reference does not yield a paint property
+          // on SVG content (see CSSMaskPainter), we need to update paint
+          // properties when such a reference changes.
+          SetNeedsPaintPropertyUpdate();
+        }
         break;
       }
     }
@@ -2543,16 +2474,15 @@ PhysicalRect LayoutBox::ClipRect(const PhysicalOffset& location) const {
   return clip_rect;
 }
 
-LayoutUnit LayoutBox::ContainingBlockLogicalHeightForGetComputedStyle() const {
+LayoutUnit LayoutBox::ContainingBlockLogicalHeightForRelPositioned() const {
   NOT_DESTROYED();
-  DCHECK(IsPositioned());
+  DCHECK(IsRelPositioned());
 
+  // TODO(ikilpatrick): This is resolving percentages against incorrectly if
+  // the container is an inline.
   auto* cb = To<LayoutBoxModelObject>(Container());
-  LayoutUnit height = ContainingBlockLogicalHeightForPositioned(cb);
-  if (IsRelPositioned() || IsStickyPositioned()) {
-    height -= cb->PaddingLogicalHeight();
-  }
-  return height;
+  return ContainingBlockLogicalHeightForPositioned(cb) -
+         cb->PaddingLogicalHeight();
 }
 
 LayoutUnit LayoutBox::ContainingBlockLogicalWidthForContent() const {
@@ -2612,57 +2542,95 @@ void LayoutBox::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
     ClearFirstInlineFragmentItemIndex();
 }
 
-bool LayoutBox::NGPhysicalFragmentList::MayHaveFragmentItems() const {
+bool LayoutBox::PhysicalFragmentList::MayHaveFragmentItems() const {
   return !IsEmpty() && front().IsInlineFormattingContext();
 }
 
-bool LayoutBox::NGPhysicalFragmentList::SlowHasFragmentItems() const {
-  for (const NGPhysicalBoxFragment& fragment : *this) {
+bool LayoutBox::PhysicalFragmentList::SlowHasFragmentItems() const {
+  for (const PhysicalBoxFragment& fragment : *this) {
     if (fragment.HasItems())
       return true;
   }
   return false;
 }
 
-wtf_size_t LayoutBox::NGPhysicalFragmentList::IndexOf(
-    const NGPhysicalBoxFragment& fragment) const {
+wtf_size_t LayoutBox::PhysicalFragmentList::IndexOf(
+    const PhysicalBoxFragment& fragment) const {
   wtf_size_t index = 0;
   for (const auto& result : layout_results_) {
-    if (&result->PhysicalFragment() == &fragment)
+    if (&result->GetPhysicalFragment() == &fragment) {
       return index;
+    }
     ++index;
   }
   return kNotFound;
 }
 
-bool LayoutBox::NGPhysicalFragmentList::Contains(
-    const NGPhysicalBoxFragment& fragment) const {
+bool LayoutBox::PhysicalFragmentList::Contains(
+    const PhysicalBoxFragment& fragment) const {
   return IndexOf(fragment) != kNotFound;
 }
 
-void LayoutBox::SetCachedLayoutResult(const NGLayoutResult* result,
+void LayoutBox::AddMeasureLayoutResult(const LayoutResult* result) {
+  DCHECK(RuntimeEnabledFeatures::LayoutNewMeasureCacheEnabled());
+
+  // Ensure the given result is valid for the measure cache.
+  if (result->Status() != LayoutResult::kSuccess) {
+    return;
+  }
+  if (result->GetConstraintSpaceForCaching().CacheSlot() !=
+      LayoutResultCacheSlot::kMeasure) {
+    return;
+  }
+  DCHECK(
+      To<PhysicalBoxFragment>(result->GetPhysicalFragment()).IsOnlyForNode());
+
+  if (!measure_cache_) {
+    measure_cache_ = MakeGarbageCollected<MeasureCache>();
+  }
+  // Clear out old measure results if we need non-simplifed layout.
+  if (NeedsLayout() && !NeedsSimplifiedLayoutOnly()) {
+    measure_cache_->Clear();
+  }
+  measure_cache_->Add(result);
+}
+
+void LayoutBox::SetCachedLayoutResult(const LayoutResult* result,
                                       wtf_size_t index) {
   NOT_DESTROYED();
   if (result->GetConstraintSpaceForCaching().CacheSlot() ==
-      NGCacheSlot::kMeasure) {
-    DCHECK(!result->PhysicalFragment().BreakToken());
+      LayoutResultCacheSlot::kMeasure) {
+    DCHECK(!result->GetPhysicalFragment().GetBreakToken());
     DCHECK(
-        To<NGPhysicalBoxFragment>(result->PhysicalFragment()).IsOnlyForNode());
+        To<PhysicalBoxFragment>(result->GetPhysicalFragment()).IsOnlyForNode());
     DCHECK_EQ(index, 0u);
     // We don't early return here, when setting the "measure" result we also
     // set the "layout" result.
-    if (measure_result_)
+    if (measure_result_) {
       InvalidateItems(*measure_result_);
+    }
+    if (measure_cache_) {
+      measure_cache_->InvalidateItems();
+    }
+    if (RuntimeEnabledFeatures::LayoutNewMeasureCacheEnabled()) {
+      AddMeasureLayoutResult(result);
+    } else {
+      measure_result_ = result;
+    }
     if (IsTableCell()) {
       To<LayoutTableCell>(this)->InvalidateLayoutResultCacheAfterMeasure();
     }
-    measure_result_ = result;
   } else {
     // We have a "layout" result, and we may need to clear the old "measure"
     // result if we needed non-simplified layout.
-    if (measure_result_ && NeedsLayout() && !NeedsSimplifiedLayoutOnly()) {
-      InvalidateItems(*measure_result_);
-      measure_result_ = nullptr;
+    if (NeedsLayout() && !NeedsSimplifiedLayoutOnly()) {
+      if (measure_result_) {
+        InvalidateItems(*measure_result_);
+        measure_result_ = nullptr;
+      }
+      if (measure_cache_) {
+        measure_cache_->Clear();
+      }
     }
   }
 
@@ -2675,16 +2643,18 @@ void LayoutBox::SetCachedLayoutResult(const NGLayoutResult* result,
     measure_result_->GetMutableForLayoutBoxCachedResults()
         .SetFragmentChildrenInvalid();
   }
+  if (measure_cache_) {
+    measure_cache_->SetFragmentChildrenInvalid(result);
+  }
 
   SetLayoutResult(result, index);
 }
 
-void LayoutBox::SetLayoutResult(const NGLayoutResult* result,
-                                wtf_size_t index) {
+void LayoutBox::SetLayoutResult(const LayoutResult* result, wtf_size_t index) {
   NOT_DESTROYED();
-  DCHECK_EQ(result->Status(), NGLayoutResult::kSuccess);
+  DCHECK_EQ(result->Status(), LayoutResult::kSuccess);
   const auto& box_fragment =
-      To<NGPhysicalBoxFragment>(result->PhysicalFragment());
+      To<PhysicalBoxFragment>(result->GetPhysicalFragment());
 
   if (index != WTF::kNotFound && layout_results_.size() > index) {
     if (layout_results_.size() > index + 1) {
@@ -2705,8 +2675,8 @@ void LayoutBox::SetLayoutResult(const NGLayoutResult* result,
       //
       // TODO(layout-dev): Other solutions to handling interactions between OOFs
       // and spanner breaks may need to be considered.
-      if (!box_fragment.BreakToken() ||
-          box_fragment.BreakToken()->IsCausedByColumnSpanner() ||
+      if (!box_fragment.GetBreakToken() ||
+          box_fragment.GetBreakToken()->IsCausedByColumnSpanner() ||
           box_fragment.IsFragmentationContextRoot()) {
         // Before forgetting any old fragments and their items, we need to clear
         // associations.
@@ -2722,31 +2692,29 @@ void LayoutBox::SetLayoutResult(const NGLayoutResult* result,
   DCHECK(index == layout_results_.size() || index == kNotFound);
   AppendLayoutResult(result);
 
-  if (!box_fragment.BreakToken())
+  if (!box_fragment.GetBreakToken()) {
     FinalizeLayoutResults();
+  }
 }
 
-void LayoutBox::AppendLayoutResult(const NGLayoutResult* result) {
-  const auto& fragment = To<NGPhysicalBoxFragment>(result->PhysicalFragment());
+void LayoutBox::AppendLayoutResult(const LayoutResult* result) {
+  const auto& fragment = To<PhysicalBoxFragment>(result->GetPhysicalFragment());
   // |layout_results_| is particularly critical when side effects are disabled.
-  DCHECK(!NGDisableSideEffectsScope::IsDisabled());
+  DCHECK(!DisableLayoutSideEffectsScope::IsDisabled());
   layout_results_.push_back(std::move(result));
   InvalidateCachedGeometry();
   CheckDidAddFragment(*this, fragment);
-
-  if (layout_results_.size() > 1)
-    FragmentCountOrSizeDidChange();
 }
 
-void LayoutBox::ReplaceLayoutResult(const NGLayoutResult* result,
+void LayoutBox::ReplaceLayoutResult(const LayoutResult* result,
                                     wtf_size_t index) {
   NOT_DESTROYED();
   DCHECK_LE(index, layout_results_.size());
-  const NGLayoutResult* old_result = layout_results_[index];
+  const LayoutResult* old_result = layout_results_[index];
   if (old_result == result)
     return;
-  const auto& fragment = To<NGPhysicalBoxFragment>(result->PhysicalFragment());
-  const auto& old_fragment = old_result->PhysicalFragment();
+  const auto& fragment = To<PhysicalBoxFragment>(result->GetPhysicalFragment());
+  const auto& old_fragment = old_result->GetPhysicalFragment();
   bool got_new_fragment = &old_fragment != &fragment;
   if (got_new_fragment) {
     if (HasFragmentItems()) {
@@ -2754,18 +2722,26 @@ void LayoutBox::ReplaceLayoutResult(const NGLayoutResult* result,
         InvalidateItems(*old_result);
       FragmentItems::ClearAssociatedFragments(this);
     }
-    if (layout_results_.size() > 1) {
-      if (fragment.Size() != old_fragment.Size())
-        FragmentCountOrSizeDidChange();
+    // We are about to replace a fragment, and the size may have changed. The
+    // inline-size and total stitched block-size may still remain unchanged,
+    // though, and pre-paint can only detect changes in the total stitched
+    // size. So this is our last chance to detect any size changes at the
+    // fragment itself. Only do this if we're fragmented, though. Otherwise
+    // leave it to pre-paint to figure out if invalidation is really required,
+    // since it's fine to just check the stitched sizes when not fragmented.
+    // Unconditionally requiring full paint invalidation at size changes may be
+    // unnecessary and expensive.
+    if (layout_results_.size() > 1 && fragment.Size() != old_fragment.Size()) {
+      SetShouldDoFullPaintInvalidation();
     }
   }
   // |layout_results_| is particularly critical when side effects are disabled.
-  DCHECK(!NGDisableSideEffectsScope::IsDisabled());
+  DCHECK(!DisableLayoutSideEffectsScope::IsDisabled());
   layout_results_[index] = std::move(result);
   InvalidateCachedGeometry();
   CheckDidAddFragment(*this, fragment, index);
 
-  if (got_new_fragment && !fragment.BreakToken()) {
+  if (got_new_fragment && !fragment.GetBreakToken()) {
     // If this is the last result, the results vector better agree on that.
     DCHECK_EQ(index, layout_results_.size() - 1);
 
@@ -2775,7 +2751,7 @@ void LayoutBox::ReplaceLayoutResult(const NGLayoutResult* result,
 
 void LayoutBox::FinalizeLayoutResults() {
   DCHECK(!layout_results_.empty());
-  DCHECK(!layout_results_.back()->PhysicalFragment().BreakToken());
+  DCHECK(!layout_results_.back()->GetPhysicalFragment().GetBreakToken());
 #if EXPENSIVE_DCHECKS_ARE_ON()
   CheckMayHaveFragmentItems();
 #endif
@@ -2797,7 +2773,7 @@ void LayoutBox::RebuildFragmentTreeSpine() {
   while (container && container->PhysicalFragmentCount() &&
          !container->NeedsLayout()) {
     for (auto& result : container->layout_results_)
-      result = NGLayoutResult::CloneWithPostLayoutFragments(*result);
+      result = LayoutResult::CloneWithPostLayoutFragments(*result);
     container = container->ContainingNGBox();
   }
 
@@ -2819,9 +2795,7 @@ void LayoutBox::ShrinkLayoutResults(wtf_size_t results_to_keep) {
   for (wtf_size_t i = results_to_keep; i < layout_results_.size(); i++)
     InvalidateItems(*layout_results_[i]);
   // |layout_results_| is particularly critical when side effects are disabled.
-  DCHECK(!NGDisableSideEffectsScope::IsDisabled());
-  if (layout_results_.size() > 1)
-    FragmentCountOrSizeDidChange();
+  DCHECK(!DisableLayoutSideEffectsScope::IsDisabled());
   layout_results_.Shrink(results_to_keep);
   InvalidateCachedGeometry();
 }
@@ -2837,9 +2811,6 @@ void LayoutBox::CheckMayHaveFragmentItems() const {
 
 void LayoutBox::InvalidateCachedGeometry() {
   NOT_DESTROYED();
-  if (!RuntimeEnabledFeatures::LayoutNGNoCopyBackEnabled()) {
-    return;
-  }
   SetHasValidCachedGeometry(false);
   if (auto* block_flow = DynamicTo<LayoutBlockFlow>(this)) {
     if (auto* flow_thread = block_flow->MultiColumnFlowThread()) {
@@ -2852,40 +2823,36 @@ void LayoutBox::InvalidateCachedGeometry() {
   }
 }
 
-void LayoutBox::InvalidateItems(const NGLayoutResult& result) {
-  NOT_DESTROYED();
+// static
+void LayoutBox::InvalidateItems(const LayoutResult& result) {
   // Invalidate if inline |DisplayItemClient|s will be destroyed.
   const auto& box_fragment =
-      To<NGPhysicalBoxFragment>(result.PhysicalFragment());
+      To<PhysicalBoxFragment>(result.GetPhysicalFragment());
   if (!box_fragment.HasItems())
     return;
-#if DCHECK_IS_ON()
-  // Column fragments are not really associated with a layout object.
-  if (IsLayoutFlowThread()) {
-    DCHECK(box_fragment.IsColumnBox());
-  } else {
-    DCHECK_EQ(this, box_fragment.GetLayoutObject());
-  }
-#endif
-  ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
+  ObjectPaintInvalidator(*box_fragment.GetLayoutObject())
+      .SlowSetPaintingLayerNeedsRepaint();
 }
 
-const NGLayoutResult* LayoutBox::GetCachedLayoutResult(
-    const NGBlockBreakToken* break_token) const {
+const LayoutResult* LayoutBox::GetCachedLayoutResult(
+    const BlockBreakToken* break_token) const {
   NOT_DESTROYED();
   wtf_size_t index = FragmentIndex(break_token);
   if (index >= layout_results_.size())
     return nullptr;
-  const NGLayoutResult* result = layout_results_[index];
-  DCHECK(!result->PhysicalFragment().IsLayoutObjectDestroyedOrMoved() ||
+  const LayoutResult* result = layout_results_[index];
+  DCHECK(!result->GetPhysicalFragment().IsLayoutObjectDestroyedOrMoved() ||
          BeingDestroyed());
   return result;
 }
 
-const NGLayoutResult* LayoutBox::GetCachedMeasureResult() const {
+const LayoutResult* LayoutBox::GetCachedMeasureResult(
+    const ConstraintSpace& space,
+    absl::optional<FragmentGeometry>* fragment_geometry) const {
   NOT_DESTROYED();
-  if (!measure_result_)
+  if (!measure_result_ && !measure_cache_) {
     return nullptr;
+  }
 
   // If we've already had an actual layout pass, and the node fragmented, we
   // cannot reliably re-use the measure result. What we want to avoid here is
@@ -2895,45 +2862,54 @@ const NGLayoutResult* LayoutBox::GetCachedMeasureResult() const {
   // hand out results that may cause problems if we end up with simplified
   // layout inside.
   if (!layout_results_.empty()) {
-    const NGPhysicalBoxFragment* first_fragment = GetPhysicalFragment(0);
-    if (first_fragment->BreakToken())
+    const PhysicalBoxFragment* first_fragment = GetPhysicalFragment(0);
+    if (first_fragment->GetBreakToken()) {
       return nullptr;
+    }
   }
 
-  // TODO(mstensho): Measure-results can never fragment, can they? This check
-  // could probably be removed.
-  if (!To<NGPhysicalBoxFragment>(measure_result_->PhysicalFragment())
-           .IsOnlyForNode())
-    return nullptr;
+  if (measure_cache_) {
+    DCHECK(!measure_result_);
+    return measure_cache_->Find(BlockNode(const_cast<LayoutBox*>(this)), space,
+                                fragment_geometry);
+  }
 
   return measure_result_.Get();
 }
 
-const NGLayoutResult* LayoutBox::GetSingleCachedLayoutResult() const {
+const LayoutResult* LayoutBox::GetSingleCachedLayoutResult() const {
   DCHECK_LE(layout_results_.size(), 1u);
   return GetCachedLayoutResult(nullptr);
 }
 
-const NGLayoutResult* LayoutBox::GetLayoutResult(wtf_size_t i) const {
+const LayoutResult* LayoutBox::GetSingleCachedMeasureResultForTesting() const {
+  if (measure_cache_) {
+    return measure_cache_->GetLastForTesting();
+  }
+  return measure_result_.Get();
+}
+
+const LayoutResult* LayoutBox::GetLayoutResult(wtf_size_t i) const {
   NOT_DESTROYED();
   return layout_results_[i].Get();
 }
 
-const NGPhysicalBoxFragment&
-LayoutBox::NGPhysicalFragmentList::Iterator::operator*() const {
-  return To<NGPhysicalBoxFragment>((*iterator_)->PhysicalFragment());
+const PhysicalBoxFragment&
+LayoutBox::PhysicalFragmentList::Iterator::operator*() const {
+  return To<PhysicalBoxFragment>((*iterator_)->GetPhysicalFragment());
 }
 
-const NGPhysicalBoxFragment& LayoutBox::NGPhysicalFragmentList::front() const {
-  return To<NGPhysicalBoxFragment>(layout_results_.front()->PhysicalFragment());
+const PhysicalBoxFragment& LayoutBox::PhysicalFragmentList::front() const {
+  return To<PhysicalBoxFragment>(
+      layout_results_.front()->GetPhysicalFragment());
 }
 
-const NGPhysicalBoxFragment& LayoutBox::NGPhysicalFragmentList::back() const {
-  return To<NGPhysicalBoxFragment>(layout_results_.back()->PhysicalFragment());
+const PhysicalBoxFragment& LayoutBox::PhysicalFragmentList::back() const {
+  return To<PhysicalBoxFragment>(layout_results_.back()->GetPhysicalFragment());
 }
 
 const FragmentData* LayoutBox::FragmentDataFromPhysicalFragment(
-    const NGPhysicalBoxFragment& physical_fragment) const {
+    const PhysicalBoxFragment& physical_fragment) const {
   NOT_DESTROYED();
   return &FragmentList().at(BoxFragmentIndex(physical_fragment));
 }
@@ -3230,15 +3206,15 @@ PositionWithAffinity LayoutBox::PositionForPointInFragments(
   DCHECK_GT(PhysicalFragmentCount(), 0u);
 
   if (PhysicalFragmentCount() == 1) {
-    const NGPhysicalBoxFragment* fragment = GetPhysicalFragment(0);
+    const PhysicalBoxFragment* fragment = GetPhysicalFragment(0);
     return fragment->PositionForPoint(target);
   }
 
   // When |this| is block fragmented, find the closest fragment.
-  const NGPhysicalBoxFragment* closest_fragment = nullptr;
+  const PhysicalBoxFragment* closest_fragment = nullptr;
   PhysicalOffset closest_fragment_offset;
   LayoutUnit shortest_square_distance = LayoutUnit::Max();
-  for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
+  for (const PhysicalBoxFragment& fragment : PhysicalFragments()) {
     // If |fragment| contains |target|, call its |PositionForPoint|.
     const PhysicalOffset fragment_offset = fragment.OffsetFromOwnerLayoutBox();
     const PhysicalSize distance =
@@ -3305,7 +3281,7 @@ PhysicalBoxStrut LayoutBox::ComputeVisualEffectOverflowOutsets() {
     OutlineInfo info;
     Vector<PhysicalRect> outline_rects =
         OutlineRects(&info, PhysicalOffset(),
-                     style.OutlineRectsShouldIncludeBlockVisualOverflow());
+                     style.OutlineRectsShouldIncludeBlockInkOverflow());
     PhysicalRect rect = UnionRect(outline_rects);
     bool outline_affected = rect.size != Size();
     SetOutlineMayBeAffectedByDescendants(outline_affected);
@@ -3329,25 +3305,25 @@ bool LayoutBox::HasLeftOverflow() const {
   return StyleRef().GetWritingMode() == WritingMode::kVerticalRl;
 }
 
-void LayoutBox::SetLayoutOverflowFromLayoutResults() {
+void LayoutBox::SetScrollableOverflowFromLayoutResults() {
   NOT_DESTROYED();
-  ClearSelfNeedsLayoutOverflowRecalc();
-  ClearChildNeedsLayoutOverflowRecalc();
-  ClearLayoutOverflow();
+  ClearSelfNeedsScrollableOverflowRecalc();
+  ClearChildNeedsScrollableOverflowRecalc();
+  ClearScrollableOverflow();
 
   const WritingMode writing_mode = StyleRef().GetWritingMode();
-  absl::optional<PhysicalRect> layout_overflow;
+  absl::optional<PhysicalRect> scrollable_overflow;
   LayoutUnit consumed_block_size;
   LayoutUnit fragment_width_sum;
 
-  // Iterate over all the fragments and unite their individual layout-overflow
-  // to determine the final layout-overflow.
+  // Iterate over all the fragments and unite their individual
+  // scrollable-overflow to determine the final scrollable-overflow.
   for (const auto& layout_result : layout_results_) {
     const auto& fragment =
-        To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
+        To<PhysicalBoxFragment>(layout_result->GetPhysicalFragment());
 
     // In order to correctly unite the overflow, we need to shift an individual
-    // fragment's layout-overflow by previously consumed block-size so far.
+    // fragment's scrollable-overflow by previously consumed block-size so far.
     PhysicalOffset offset_adjust;
     switch (writing_mode) {
       case WritingMode::kHorizontalTb:
@@ -3372,16 +3348,17 @@ void LayoutBox::SetLayoutOverflowFromLayoutResults() {
         break;
     }
 
-    PhysicalRect fragment_layout_overflow = fragment.LayoutOverflow();
-    fragment_layout_overflow.offset += offset_adjust;
+    PhysicalRect fragment_scrollable_overflow = fragment.ScrollableOverflow();
+    fragment_scrollable_overflow.offset += offset_adjust;
 
-    // If we are the first fragment just set the layout-overflow.
-    if (!layout_overflow)
-      layout_overflow = fragment_layout_overflow;
-    else
-      layout_overflow->UniteEvenIfEmpty(fragment_layout_overflow);
+    // If we are the first fragment just set the scrollable-overflow.
+    if (!scrollable_overflow) {
+      scrollable_overflow = fragment_scrollable_overflow;
+    } else {
+      scrollable_overflow->UniteEvenIfEmpty(fragment_scrollable_overflow);
+    }
 
-    if (const auto* break_token = fragment.BreakToken()) {
+    if (const auto* break_token = fragment.GetBreakToken()) {
       // The legacy engine doesn't understand our concept of repeated
       // fragments. Stop now. The overflow rectangle will represent the
       // fragment(s) generated under the first repeated root.
@@ -3391,113 +3368,123 @@ void LayoutBox::SetLayoutOverflowFromLayoutResults() {
     }
   }
 
-  if (!layout_overflow)
+  if (!scrollable_overflow) {
     return;
-
-  if (IsFlippedBlocksWritingMode(writing_mode)) {
-    layout_overflow->offset.left += fragment_width_sum;
   }
 
-  if (layout_overflow->IsEmpty() ||
-      PhysicalPaddingBoxRect().Contains(*layout_overflow))
-    return;
+  if (IsFlippedBlocksWritingMode(writing_mode)) {
+    scrollable_overflow->offset.left += fragment_width_sum;
+  }
 
-  DCHECK(!LayoutOverflowIsSet());
+  if (scrollable_overflow->IsEmpty() ||
+      PhysicalPaddingBoxRect().Contains(*scrollable_overflow)) {
+    return;
+  }
+
+  DCHECK(!ScrollableOverflowIsSet());
   if (!overflow_)
     overflow_ = MakeGarbageCollected<BoxOverflowModel>();
-  overflow_->layout_overflow.emplace(*layout_overflow);
+  overflow_->scrollable_overflow.emplace(*scrollable_overflow);
 }
 
-RecalcLayoutOverflowResult LayoutBox::RecalcLayoutOverflowNG() {
+RecalcScrollableOverflowResult LayoutBox::RecalcScrollableOverflowNG() {
   NOT_DESTROYED();
 
-  RecalcLayoutOverflowResult child_result;
+  RecalcScrollableOverflowResult child_result;
   // Don't attempt to rebuild the fragment tree or recalculate
   // scrollable-overflow, layout will do this for us.
   if (NeedsLayout())
-    return RecalcLayoutOverflowResult();
+    return RecalcScrollableOverflowResult();
 
-  if (ChildNeedsLayoutOverflowRecalc())
-    child_result = RecalcChildLayoutOverflowNG();
+  if (ChildNeedsScrollableOverflowRecalc()) {
+    child_result = RecalcChildScrollableOverflowNG();
+  }
 
-  bool should_recalculate_layout_overflow =
-      SelfNeedsLayoutOverflowRecalc() || child_result.layout_overflow_changed;
+  bool should_recalculate_scrollable_overflow =
+      SelfNeedsScrollableOverflowRecalc() ||
+      child_result.scrollable_overflow_changed;
   bool rebuild_fragment_tree = child_result.rebuild_fragment_tree;
-  bool layout_overflow_changed = false;
+  bool scrollable_overflow_changed = false;
 
-  if (rebuild_fragment_tree || should_recalculate_layout_overflow) {
+  if (rebuild_fragment_tree || should_recalculate_scrollable_overflow) {
     for (auto& layout_result : layout_results_) {
       const auto& fragment =
-          To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
-      absl::optional<PhysicalRect> layout_overflow;
+          To<PhysicalBoxFragment>(layout_result->GetPhysicalFragment());
+      absl::optional<PhysicalRect> scrollable_overflow;
 
-      // Recalculate our layout-overflow if a child had its layout-overflow
-      // changed, or if we are marked as dirty.
-      if (should_recalculate_layout_overflow) {
-        const PhysicalRect old_layout_overflow = fragment.LayoutOverflow();
+      // Recalculate our scrollable-overflow if a child had its
+      // scrollable-overflow changed, or if we are marked as dirty.
+      if (should_recalculate_scrollable_overflow) {
+        const PhysicalRect old_scrollable_overflow =
+            fragment.ScrollableOverflow();
         const bool has_block_fragmentation =
             layout_result->GetConstraintSpaceForCaching()
                 .HasBlockFragmentation();
 #if DCHECK_IS_ON()
-        NGPhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
+        PhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
 #endif
-        const PhysicalRect new_layout_overflow =
-            NGLayoutOverflowCalculator::RecalculateLayoutOverflowForFragment(
-                fragment, has_block_fragmentation);
+        const PhysicalRect new_scrollable_overflow =
+            ScrollableOverflowCalculator::
+                RecalculateScrollableOverflowForFragment(
+                    fragment, has_block_fragmentation);
 
-        // Set the appropriate flags if the layout-overflow changed.
-        if (old_layout_overflow != new_layout_overflow) {
-          layout_overflow = new_layout_overflow;
-          layout_overflow_changed = true;
+        // Set the appropriate flags if the scrollable-overflow changed.
+        if (old_scrollable_overflow != new_scrollable_overflow) {
+          scrollable_overflow = new_scrollable_overflow;
+          scrollable_overflow_changed = true;
           rebuild_fragment_tree = true;
         }
       }
 
-      if (layout_overflow) {
-        fragment.GetMutableForStyleRecalc().SetLayoutOverflow(*layout_overflow);
+      if (scrollable_overflow) {
+        fragment.GetMutableForStyleRecalc().SetScrollableOverflow(
+            *scrollable_overflow);
       }
     }
-    SetLayoutOverflowFromLayoutResults();
+    SetScrollableOverflowFromLayoutResults();
   }
 
-  if (layout_overflow_changed && IsScrollContainer())
+  if (scrollable_overflow_changed && IsScrollContainer()) {
     Layer()->GetScrollableArea()->UpdateAfterOverflowRecalc();
+  }
 
-  // Only indicate to our parent that our layout overflow changed if we have:
+  // Only indicate to our parent that our scrollable overflow changed if we
+  // have:
   //  - No layout containment applied.
   //  - No clipping (in both axes).
-  layout_overflow_changed = layout_overflow_changed &&
-                            !ShouldApplyLayoutContainment() &&
-                            !ShouldClipOverflowAlongBothAxis();
+  scrollable_overflow_changed = scrollable_overflow_changed &&
+                                !ShouldApplyLayoutContainment() &&
+                                !ShouldClipOverflowAlongBothAxis();
 
-  return {layout_overflow_changed, rebuild_fragment_tree};
+  return {scrollable_overflow_changed, rebuild_fragment_tree};
 }
 
-RecalcLayoutOverflowResult LayoutBox::RecalcChildLayoutOverflowNG() {
+RecalcScrollableOverflowResult LayoutBox::RecalcChildScrollableOverflowNG() {
   NOT_DESTROYED();
-  DCHECK(ChildNeedsLayoutOverflowRecalc());
-  ClearChildNeedsLayoutOverflowRecalc();
+  DCHECK(ChildNeedsScrollableOverflowRecalc());
+  ClearChildNeedsScrollableOverflowRecalc();
 
 #if DCHECK_IS_ON()
   // We use PostLayout methods to navigate the fragment tree and reach the
   // corresponding LayoutObjects, so we need to use AllowPostLayoutScope here.
-  NGPhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
+  PhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
 #endif
-  RecalcLayoutOverflowResult result;
+  RecalcScrollableOverflowResult result;
   for (auto& layout_result : layout_results_) {
     const auto& fragment =
-        To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment());
+        To<PhysicalBoxFragment>(layout_result->GetPhysicalFragment());
     if (fragment.HasItems()) {
       for (InlineCursor cursor(fragment); cursor; cursor.MoveToNext()) {
-        const NGPhysicalBoxFragment* child =
+        const PhysicalBoxFragment* child =
             cursor.Current()->PostLayoutBoxFragment();
         if (!child || !child->GetLayoutObject()->IsBox())
           continue;
-        result.Unite(child->MutableOwnerLayoutBox()->RecalcLayoutOverflow());
+        result.Unite(
+            child->MutableOwnerLayoutBox()->RecalcScrollableOverflow());
       }
     }
 
-    RecalcFragmentLayoutOverflow(result, fragment);
+    RecalcFragmentScrollableOverflow(result, fragment);
   }
 
   return result;
@@ -3583,10 +3570,10 @@ void LayoutBox::SetVisualOverflow(const PhysicalRect& self,
   }
 }
 
-void LayoutBox::ClearLayoutOverflow() {
+void LayoutBox::ClearScrollableOverflow() {
   NOT_DESTROYED();
   if (overflow_)
-    overflow_->layout_overflow.reset();
+    overflow_->scrollable_overflow.reset();
   // overflow_ will be reset by MutableForPainting::ClearPreviousOverflowData()
   // if we don't need it to store previous overflow data.
 }
@@ -3605,7 +3592,7 @@ bool LayoutBox::CanUseFragmentsForVisualOverflow() const {
   // table-column. What to do with them is TBD.
   if (!PhysicalFragmentCount())
     return false;
-  const NGPhysicalBoxFragment& fragment = *GetPhysicalFragment(0);
+  const PhysicalBoxFragment& fragment = *GetPhysicalFragment(0);
   if (!fragment.CanUseFragmentsForInkOverflow())
     return false;
   return true;
@@ -3621,7 +3608,9 @@ void LayoutBox::CopyVisualOverflowFromFragments() {
   const PhysicalRect visual_overflow = VisualOverflowRect();
   if (visual_overflow == previous_visual_overflow)
     return;
-  InvalidateIntersectionObserverCachedRects();
+  if (!RuntimeEnabledFeatures::IntersectionOptimizationEnabled()) {
+    DeprecatedInvalidateIntersectionObserverCachedRects();
+  }
   SetShouldCheckForPaintInvalidation();
 }
 
@@ -3635,14 +3624,14 @@ void LayoutBox::CopyVisualOverflowFromFragmentsWithoutInvalidations() {
   }
 
   if (PhysicalFragmentCount() == 1) {
-    const NGPhysicalBoxFragment& fragment = *GetPhysicalFragment(0);
+    const PhysicalBoxFragment& fragment = *GetPhysicalFragment(0);
     DCHECK(fragment.CanUseFragmentsForInkOverflow());
     if (!fragment.HasInkOverflow()) {
       ClearVisualOverflow();
       return;
     }
-    SetVisualOverflow(fragment.SelfInkOverflow(),
-                      fragment.ContentsInkOverflow());
+    SetVisualOverflow(fragment.SelfInkOverflowRect(),
+                      fragment.ContentsInkOverflowRect());
     return;
   }
 
@@ -3653,8 +3642,8 @@ void LayoutBox::CopyVisualOverflowFromFragmentsWithoutInvalidations() {
   bool has_overflow = false;
   PhysicalRect self_rect;
   PhysicalRect contents_rect;
-  const NGPhysicalBoxFragment* last_fragment = nullptr;
-  for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
+  const PhysicalBoxFragment* last_fragment = nullptr;
+  for (const PhysicalBoxFragment& fragment : PhysicalFragments()) {
     DCHECK(fragment.CanUseFragmentsForInkOverflow());
     if (!fragment.HasInkOverflow()) {
       last_fragment = &fragment;
@@ -3662,14 +3651,14 @@ void LayoutBox::CopyVisualOverflowFromFragmentsWithoutInvalidations() {
     }
     has_overflow = true;
 
-    PhysicalRect fragment_self_rect = fragment.SelfInkOverflow();
-    PhysicalRect fragment_contents_rect = fragment.ContentsInkOverflow();
+    PhysicalRect fragment_self_rect = fragment.SelfInkOverflowRect();
+    PhysicalRect fragment_contents_rect = fragment.ContentsInkOverflowRect();
 
     // Stitch this fragment to the bottom of the last one in horizontal
     // writing mode, or to the right in vertical. Flipped blocks is handled
     // later, after the loop.
     if (last_fragment) {
-      const NGBlockBreakToken* break_token = last_fragment->BreakToken();
+      const BlockBreakToken* break_token = last_fragment->GetBreakToken();
       DCHECK(break_token);
       const LayoutUnit block_offset = break_token->ConsumedBlockSize();
       if (blink::IsHorizontalWritingMode(writing_mode)) {
@@ -3688,8 +3677,9 @@ void LayoutBox::CopyVisualOverflowFromFragmentsWithoutInvalidations() {
     // The legacy engine doesn't understand our concept of repeated
     // fragments. Stop now. The overflow rectangle will represent the
     // fragment(s) generated under the first repeated root.
-    if (fragment.BreakToken() && fragment.BreakToken()->IsRepeated())
+    if (fragment.GetBreakToken() && fragment.GetBreakToken()->IsRepeated()) {
       break;
+    }
   }
 
   if (!has_overflow) {
@@ -3802,7 +3792,7 @@ PhysicalRect LayoutBox::VisualOverflowRect() const {
 #if DCHECK_IS_ON()
 PhysicalRect LayoutBox::VisualOverflowRectAllowingUnset() const {
   NOT_DESTROYED();
-  NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
+  InkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
   return VisualOverflowRect();
 }
 
@@ -3811,14 +3801,14 @@ void LayoutBox::CheckIsVisualOverflowComputed() const {
   // the check for now. Need to investigate the reason.
   return;
   /*
-  if (NGInkOverflow::ReadUnsetAsNoneScope::IsActive())
+  if (InkOverflow::ReadUnsetAsNoneScope::IsActive())
     return;
   if (!CanUseFragmentsForVisualOverflow())
     return;
   // TODO(crbug.com/1203402): MathML needs some more work.
   if (IsMathML())
     return;
-  for (const NGPhysicalBoxFragment& fragment : PhysicalFragments())
+  for (const PhysicalBoxFragment& fragment : PhysicalFragments())
     DCHECK(fragment.IsInkOverflowComputed());
   */
 }
@@ -3841,8 +3831,7 @@ LayoutUnit LayoutBox::OffsetTop(const Element* parent) const {
 
 PhysicalSize LayoutBox::Size() const {
   NOT_DESTROYED();
-  if (RuntimeEnabledFeatures::LayoutNGNoCopyBackEnabled() &&
-      !HasValidCachedGeometry()) {
+  if (!HasValidCachedGeometry()) {
     // const_cast in order to update the cached value.
     const_cast<LayoutBox*>(this)->SetHasValidCachedGeometry(true);
     const_cast<LayoutBox*>(this)->frame_size_ = ComputeSize();
@@ -3856,16 +3845,16 @@ PhysicalSize LayoutBox::ComputeSize() const {
   if (results.size() == 0) {
     return PhysicalSize();
   }
-  const auto& first_fragment = results[0]->PhysicalFragment();
+  const auto& first_fragment = results[0]->GetPhysicalFragment();
   if (results.size() == 1u) {
     return first_fragment.Size();
   }
   WritingModeConverter converter(first_fragment.Style().GetWritingDirection());
-  const NGBlockBreakToken* previous_break_token = nullptr;
+  const BlockBreakToken* previous_break_token = nullptr;
   LogicalSize size;
   for (const auto& result : results) {
     const auto& physical_fragment =
-        To<NGPhysicalBoxFragment>(result->PhysicalFragment());
+        To<PhysicalBoxFragment>(result->GetPhysicalFragment());
     LogicalSize fragment_logical_size =
         converter.ToLogical(physical_fragment.Size());
     if (physical_fragment.IsFirstForNode()) {
@@ -3883,7 +3872,7 @@ PhysicalSize LayoutBox::ComputeSize() const {
       size.block_size = fragment_logical_size.block_size +
                         previous_break_token->ConsumedBlockSizeForLegacy();
     }
-    previous_break_token = physical_fragment.BreakToken();
+    previous_break_token = physical_fragment.GetBreakToken();
     // Continue in order to update logical height, unless this fragment is
     // past the block-end of the generating node (happens with overflow) or
     // is a repeated one.
@@ -3914,50 +3903,6 @@ ShapeOutsideInfo* LayoutBox::GetShapeOutsideInfo() const {
   return ShapeOutsideInfo::Info(*this);
 }
 
-LayoutBox* LayoutBox::SnapContainer() const {
-  NOT_DESTROYED();
-  return rare_data_ ? rare_data_->snap_container_ : nullptr;
-}
-
-void LayoutBox::ClearSnapAreas() {
-  NOT_DESTROYED();
-  if (SnapAreaSet* areas = SnapAreas()) {
-    for (const auto& snap_area : *areas)
-      snap_area->rare_data_->snap_container_ = nullptr;
-    areas->clear();
-  }
-}
-
-void LayoutBox::AddSnapArea(LayoutBox& snap_area) {
-  NOT_DESTROYED();
-  EnsureRareData().snap_areas_.insert(&snap_area);
-}
-
-void LayoutBox::RemoveSnapArea(const LayoutBox& snap_area) {
-  NOT_DESTROYED();
-  // const_cast is safe here because we only need to modify the type to match
-  // the key type, and not actually mutate the object.
-  if (rare_data_)
-    rare_data_->snap_areas_.erase(const_cast<LayoutBox*>(&snap_area));
-}
-
-void LayoutBox::ReassignSnapAreas(LayoutBox& new_container) {
-  NOT_DESTROYED();
-  SnapAreaSet* areas = SnapAreas();
-  if (!areas)
-    return;
-  for (const auto& snap_area : *areas) {
-    snap_area->rare_data_->snap_container_ = &new_container;
-    new_container.AddSnapArea(*snap_area);
-  }
-  areas->clear();
-}
-
-SnapAreaSet* LayoutBox::SnapAreas() const {
-  NOT_DESTROYED();
-  return rare_data_ ? &rare_data_->snap_areas_ : nullptr;
-}
-
 CustomLayoutChild* LayoutBox::GetCustomLayoutChild() const {
   NOT_DESTROYED();
   DCHECK(rare_data_);
@@ -3982,7 +3927,7 @@ void LayoutBox::AddCustomLayoutChildIfNeeded() {
     return;
 
   EnsureRareData().layout_child_ =
-      MakeGarbageCollected<CustomLayoutChild>(*definition, NGBlockNode(this));
+      MakeGarbageCollected<CustomLayoutChild>(*definition, BlockNode(this));
 }
 
 void LayoutBox::ClearCustomLayoutChild() {
@@ -4023,8 +3968,8 @@ void LayoutBox::MutableForPainting::SavePreviousOverflowData() {
   auto& previous_overflow = GetLayoutBox().overflow_->previous_overflow_data;
   if (!previous_overflow)
     previous_overflow.emplace();
-  previous_overflow->previous_physical_layout_overflow_rect =
-      GetLayoutBox().PhysicalLayoutOverflowRect();
+  previous_overflow->previous_scrollable_overflow_rect =
+      GetLayoutBox().ScrollableOverflowRect();
   previous_overflow->previous_visual_overflow_rect =
       GetLayoutBox().VisualOverflowRect();
   previous_overflow->previous_self_visual_overflow_rect =
@@ -4356,9 +4301,9 @@ template <typename Function>
 void ForEachAnchorQueryOnContainer(const LayoutBox& box, Function func) {
   const LayoutObject* container = box.Container();
   if (container->IsLayoutBlock()) {
-    for (const NGPhysicalBoxFragment& fragment :
+    for (const PhysicalBoxFragment& fragment :
          To<LayoutBlock>(container)->PhysicalFragments()) {
-      if (const NGPhysicalAnchorQuery* anchor_query = fragment.AnchorQuery()) {
+      if (const PhysicalAnchorQuery* anchor_query = fragment.AnchorQuery()) {
         func(*anchor_query);
       }
     }
@@ -4374,9 +4319,8 @@ void ForEachAnchorQueryOnContainer(const LayoutBox& box, Function func) {
   InlineCursor cursor;
   cursor.MoveTo(*container);
   for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
-    if (const NGPhysicalBoxFragment* fragment =
-            cursor.Current().BoxFragment()) {
-      if (const NGPhysicalAnchorQuery* anchor_query = fragment->AnchorQuery()) {
+    if (const PhysicalBoxFragment* fragment = cursor.Current().BoxFragment()) {
+      if (const PhysicalAnchorQuery* anchor_query = fragment->AnchorQuery()) {
         func(*anchor_query);
       }
     }
@@ -4386,7 +4330,7 @@ void ForEachAnchorQueryOnContainer(const LayoutBox& box, Function func) {
 #if EXPENSIVE_DCHECKS_ARE_ON()
 template <typename Function>
 void AssertSameDataOnLayoutResults(
-    const LayoutBox::NGLayoutResultList& layout_results,
+    const LayoutBox::LayoutResultList& layout_results,
     Function func) {
   // When an out-of-flow box is fragmented, the position fallback results on all
   // fragments should be the same.
@@ -4405,9 +4349,9 @@ const LayoutObject* LayoutBox::FindTargetAnchor(
     return nullptr;
   }
 
-  // Go through the already built NGPhysicalAnchorQuery to avoid tree traversal.
+  // Go through the already built PhysicalAnchorQuery to avoid tree traversal.
   const LayoutObject* anchor = nullptr;
-  auto search_for_anchor = [&](const NGPhysicalAnchorQuery& anchor_query) {
+  auto search_for_anchor = [&](const PhysicalAnchorQuery& anchor_query) {
     if (const LayoutObject* current =
             anchor_query.AnchorLayoutObject(*this, &anchor_name)) {
       if (!anchor ||
@@ -4432,9 +4376,9 @@ const LayoutObject* LayoutBox::AcceptableImplicitAnchor() const {
   if (!anchor_layout_object) {
     return nullptr;
   }
-  // Go through the already built NGPhysicalAnchorQuery to avoid tree traversal.
+  // Go through the already built PhysicalAnchorQuery to avoid tree traversal.
   bool is_acceptable_anchor = false;
-  auto validate_anchor = [&](const NGPhysicalAnchorQuery& anchor_query) {
+  auto validate_anchor = [&](const PhysicalAnchorQuery& anchor_query) {
     if (anchor_query.AnchorLayoutObject(*this, anchor_layout_object)) {
       is_acceptable_anchor = true;
     }

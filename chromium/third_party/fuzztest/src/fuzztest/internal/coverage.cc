@@ -26,6 +26,7 @@
 #include "absl/base/attributes.h"
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
+#include "./fuzztest/internal/flag_name.h"
 #include "./fuzztest/internal/logging.h"
 #include "./fuzztest/internal/table_of_recent_compares.h"
 
@@ -55,7 +56,28 @@ constexpr uint8_t BitWidth(uint8_t x) {
   ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS \
   ABSL_ATTRIBUTE_NO_SANITIZE_UNDEFINED
 
-ExecutionCoverage* execution_coverage_instance = nullptr;
+// TODO(b/311658540):
+//
+// When integrated with Centipede, the execution coverage is
+// created/used by only the mutators in the engine or runner process
+// (for auto-dictionary mutation). Since each mutator runs in its
+// thread without the need to share the coverage information with
+// others, we can make this singleton thread_local, otherwise there
+// can be data-races when accessing the instance from multiple
+// Centipede shards.
+//
+// When running without Centipede, the singleton instance is updated
+// by test threads during the test execution. Thus we cannot make it
+// thread_local as it would skip coverage information in the threads
+// other than the thread running the property function, but we then
+// suffer from the race conditions.  This issue is hard to fix, but as
+// we are fully switching to the Centipede integration soon, we will
+// leave the issue as-is.
+#ifdef FUZZTEST_USE_CENTIPEDE
+thread_local ExecutionCoverage *execution_coverage_instance = nullptr;
+#else
+ExecutionCoverage *execution_coverage_instance = nullptr;
+#endif
 
 void SetExecutionCoverage(ExecutionCoverage *value) {
   execution_coverage_instance = value;
@@ -139,28 +161,15 @@ void ExecutionCoverage::UpdateMaxStack(uintptr_t PC) {
       max_stack_recorded_ = this_stack;
     }
 
-    if (static_cast<size_t>(this_stack) > MaxAllowedStackUsage()) {
+    if (StackLimit() > 0 && static_cast<size_t>(this_stack) > StackLimit()) {
       absl::FPrintF(GetStderr(),
                     "[!] Code under test used %d bytes of stack. Configured "
                     "limit is %d. You can change the limit by specifying "
-                    "FUZZTEST_STACK_LIMIT environment variable.\n",
-                    this_stack, MaxAllowedStackUsage());
+                    "--" FUZZTEST_FLAG_PREFIX "stack_limit_kb flag.\n",
+                    this_stack, StackLimit());
       std::abort();
     }
   }
-}
-
-size_t ExecutionCoverage::MaxAllowedStackUsage() {
-  static const size_t cached = [] {
-    const char *env = getenv("FUZZTEST_STACK_LIMIT");
-    size_t res;
-    if (env == nullptr || !absl::SimpleAtoi(env, &res)) {
-      static constexpr size_t kDefault = 128 * 1024;
-      res = kDefault;
-    }
-    return res;
-  }();
-  return cached;
 }
 
 // Coverage only available in Clang, but only for Linux.

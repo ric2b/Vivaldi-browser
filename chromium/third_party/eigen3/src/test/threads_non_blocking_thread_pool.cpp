@@ -12,8 +12,7 @@
 #include "main.h"
 #include "Eigen/ThreadPool"
 
-static void test_create_destroy_empty_pool()
-{
+static void test_create_destroy_empty_pool() {
   // Just create and destroy the pool. This will wind up and tear down worker
   // threads. Ensure there are no issues in that logic.
   for (int i = 0; i < 16; ++i) {
@@ -21,9 +20,7 @@ static void test_create_destroy_empty_pool()
   }
 }
 
-
-static void test_parallelism(bool allow_spinning)
-{
+static void test_parallelism(bool allow_spinning) {
   // Test we never-ever fail to match available tasks with idle threads.
   const int kThreads = 16;  // code below expects that this is a multiple of 4
   ThreadPool tp(kThreads, allow_spinning);
@@ -100,17 +97,13 @@ static void test_parallelism(bool allow_spinning)
   }
 }
 
-
-static void test_cancel()
-{
+static void test_cancel() {
   ThreadPool tp(2);
 
   // Schedule a large number of closure that each sleeps for one second. This
   // will keep the thread pool busy for much longer than the default test timeout.
   for (int i = 0; i < 1000; ++i) {
-    tp.Schedule([]() {
-      std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-    });
+    tp.Schedule([]() { std::this_thread::sleep_for(std::chrono::milliseconds(2000)); });
   }
 
   // Cancel the processing of all the closures that are still pending.
@@ -168,9 +161,7 @@ static void test_pool_partitions() {
   phase = 2;
 }
 
-
-EIGEN_DECLARE_TEST(cxx11_non_blocking_thread_pool)
-{
+EIGEN_DECLARE_TEST(cxx11_non_blocking_thread_pool) {
   CALL_SUBTEST(test_create_destroy_empty_pool());
   CALL_SUBTEST(test_parallelism(true));
   CALL_SUBTEST(test_parallelism(false));

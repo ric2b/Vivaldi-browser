@@ -33,14 +33,115 @@ class FederatedProviderFetcherTest : public RenderViewHostImplTestHarness {
   base::test::ScopedFeatureList feature_list_;
 };
 
+TEST_F(FederatedProviderFetcherTest, FailedToFetchWellKnown) {
+  auto network_manager =
+      std::make_unique<StrictMock<MockIdpNetworkRequestManager>>();
+  FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
+
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
+          [](IdpNetworkRequestManager::FetchConfigCallback callback) {
+            IdpNetworkRequestManager::Endpoints endpoints;
+            endpoints.token = GURL("https://idp.example/token.php");
+            endpoints.accounts = GURL("https://idp.example/accounts.php");
+
+            IdentityProviderMetadata metadata;
+            metadata.idp_login_url =
+                GURL("https://idp.example/idp_login_url.php");
+            std::move(callback).Run({ParseStatus::kSuccess, net::HTTP_OK},
+                                    endpoints, metadata);
+          }));
+
+  // Returns a 404 for the fetch of the well-known file.
+  EXPECT_CALL(*network_manager, FetchWellKnown(_, _))
+      .WillOnce(WithArg<1>(
+          [](IdpNetworkRequestManager::FetchWellKnownCallback callback) {
+            IdpNetworkRequestManager::WellKnown well_known;
+            std::move(callback).Run(
+                {ParseStatus::kHttpNotFoundError, net::HTTP_NOT_FOUND},
+                well_known);
+          }));
+
+  base::RunLoop loop;
+
+  // Asserts that we get a kErrorFetchingWellKnownHttpNotFound.
+  fetcher.Start(
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
+      /*icon_ideal_size=*/0,
+      /*icon_minimum_size=*/0,
+      base::BindLambdaForTesting(
+          [&loop](std::vector<FederatedProviderFetcher::FetchResult> result) {
+            EXPECT_EQ(result.size(), 1ul);
+            EXPECT_TRUE(result[0].error);
+            EXPECT_EQ(result[0].error->result,
+                      blink::mojom::FederatedAuthRequestResult::
+                          kErrorFetchingWellKnownHttpNotFound);
+            loop.Quit();
+          }));
+
+  loop.Run();
+}
+
+TEST_F(FederatedProviderFetcherTest, FailedToFetchWellKnownButNoEnforcement) {
+  feature_list_.InitAndEnableFeature(
+      features::kFedCmWithoutWellKnownEnforcement);
+
+  auto network_manager =
+      std::make_unique<StrictMock<MockIdpNetworkRequestManager>>();
+  FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
+
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
+          [](IdpNetworkRequestManager::FetchConfigCallback callback) {
+            IdpNetworkRequestManager::Endpoints endpoints;
+            endpoints.token = GURL("https://idp.example/token.php");
+            endpoints.accounts = GURL("https://idp.example/accounts.php");
+
+            IdentityProviderMetadata metadata;
+            metadata.idp_login_url =
+                GURL("https://idp.example/idp_login_url.php");
+            std::move(callback).Run({ParseStatus::kSuccess, net::HTTP_OK},
+                                    endpoints, metadata);
+          }));
+
+  // Returns a 404 for the fetch of the well-known file.
+  EXPECT_CALL(*network_manager, FetchWellKnown(_, _))
+      .WillOnce(WithArg<1>(
+          [](IdpNetworkRequestManager::FetchWellKnownCallback callback) {
+            IdpNetworkRequestManager::WellKnown well_known;
+            std::move(callback).Run(
+                {ParseStatus::kHttpNotFoundError, net::HTTP_NOT_FOUND},
+                well_known);
+          }));
+
+  base::RunLoop loop;
+
+  // Asserts that we get no error in the result.
+  fetcher.Start(
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
+      /*icon_ideal_size=*/0,
+      /*icon_minimum_size=*/0,
+      base::BindLambdaForTesting(
+          [&loop](std::vector<FederatedProviderFetcher::FetchResult> result) {
+            EXPECT_EQ(result.size(), 1ul);
+            EXPECT_FALSE(result[0].error);
+            EXPECT_TRUE(result[0].wellknown.provider_urls.empty());
+            EXPECT_EQ(result[0].endpoints.token,
+                      GURL("https://idp.example/token.php"));
+            loop.Quit();
+          }));
+
+  loop.Run();
+}
+
 TEST_F(FederatedProviderFetcherTest, FailedToFetchConfig) {
   auto network_manager =
       std::make_unique<StrictMock<MockIdpNetworkRequestManager>>();
   FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
 
   // Returns a 404 for the fetch of the config file.
-  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _))
-      .WillOnce(WithArg<3>(
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
           [](IdpNetworkRequestManager::FetchConfigCallback callback) {
             std::move(callback).Run(
                 {ParseStatus::kHttpNotFoundError, net::HTTP_NOT_FOUND},
@@ -60,7 +161,7 @@ TEST_F(FederatedProviderFetcherTest, FailedToFetchConfig) {
 
   // Asserts that we get a kErrorFetchingConfigHttpNotFound.
   fetcher.Start(
-      {GURL("https://idp.example/fedcm.json")},
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
       /*icon_ideal_size=*/0,
       /*icon_minimum_size=*/0,
       base::BindLambdaForTesting(
@@ -82,8 +183,8 @@ TEST_F(FederatedProviderFetcherTest, SucceedsToFetchConfigButInvalidResponse) {
   FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
 
   // Returns a 200 but with an empty and invalid response.
-  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _))
-      .WillOnce(WithArg<3>(
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
           [](IdpNetworkRequestManager::FetchConfigCallback callback) {
             std::move(callback).Run({ParseStatus::kSuccess, net::HTTP_OK},
                                     /*endpoints=*/{}, /*metadata=*/{});
@@ -102,7 +203,7 @@ TEST_F(FederatedProviderFetcherTest, SucceedsToFetchConfigButInvalidResponse) {
 
   // Asserts that we get a kErrorFetchingConfigHttpNotFound.
   fetcher.Start(
-      {GURL("https://idp.example/fedcm.json")},
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
       /*icon_ideal_size=*/0,
       /*icon_minimum_size=*/0,
       base::BindLambdaForTesting(
@@ -124,8 +225,8 @@ TEST_F(FederatedProviderFetcherTest, SuccessfullAndValidResponse) {
   FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
 
   // Returns a 200 but with an empty and invalid response.
-  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _))
-      .WillOnce(WithArg<3>(
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
           [](IdpNetworkRequestManager::FetchConfigCallback callback) {
             IdpNetworkRequestManager::Endpoints endpoints;
             endpoints.token = GURL("https://idp.example/token.php");
@@ -151,7 +252,7 @@ TEST_F(FederatedProviderFetcherTest, SuccessfullAndValidResponse) {
 
   // Asserts that we get a kErrorFetchingConfigHttpNotFound.
   fetcher.Start(
-      {GURL("https://idp.example/fedcm.json")},
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
       /*icon_ideal_size=*/0,
       /*icon_minimum_size=*/0,
       base::BindLambdaForTesting(
@@ -171,8 +272,8 @@ TEST_F(FederatedProviderFetcherTest,
   FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
 
   // Returns a 200 but with an empty and invalid response.
-  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _))
-      .WillOnce(WithArg<3>(
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
           [](IdpNetworkRequestManager::FetchConfigCallback callback) {
             IdpNetworkRequestManager::Endpoints endpoints;
             endpoints.token = GURL("https://idp.example/token.php");
@@ -200,7 +301,7 @@ TEST_F(FederatedProviderFetcherTest,
 
   // Asserts that we get a kErrorFetchingConfigHttpNotFound.
   fetcher.Start(
-      {GURL("https://idp.example/fedcm.json")},
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
       /*icon_ideal_size=*/0,
       /*icon_minimum_size=*/0,
       base::BindLambdaForTesting(
@@ -227,8 +328,8 @@ TEST_F(FederatedProviderFetcherTest,
   FederatedProviderFetcher fetcher(*main_rfh(), network_manager.get());
 
   // Returns a 200 but with an empty and invalid response.
-  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _))
-      .WillOnce(WithArg<3>(
+  EXPECT_CALL(*network_manager, FetchConfig(_, _, _, _, _))
+      .WillOnce(WithArg<4>(
           [](IdpNetworkRequestManager::FetchConfigCallback callback) {
             IdpNetworkRequestManager::Endpoints endpoints;
             endpoints.token = GURL("https://idp.example/token.php");
@@ -257,7 +358,7 @@ TEST_F(FederatedProviderFetcherTest,
 
   // Asserts that we get a kErrorFetchingConfigHttpNotFound.
   fetcher.Start(
-      {GURL("https://idp.example/fedcm.json")},
+      {GURL("https://idp.example/fedcm.json")}, blink::mojom::RpMode::kWidget,
       /*icon_ideal_size=*/0,
       /*icon_minimum_size=*/0,
       base::BindLambdaForTesting(
@@ -592,7 +693,7 @@ TEST_F(FederatedProviderFetcherTest, InvalidNetworkError) {
       blink::mojom::FederatedAuthRequestResult::
           kErrorFetchingConfigHttpNotFound,
       FedCmRequestIdTokenStatus::kConfigHttpNotFound,
-      /*additional_console_error_message=*/absl::nullopt);
+      /*additional_console_error_message=*/std::nullopt);
 
   auto network_manager =
       std::make_unique<StrictMock<MockIdpNetworkRequestManager>>();

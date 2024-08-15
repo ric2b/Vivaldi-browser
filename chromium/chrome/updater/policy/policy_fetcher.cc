@@ -4,6 +4,7 @@
 
 #include "chrome/updater/policy/policy_fetcher.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -24,15 +25,14 @@
 #include "chrome/updater/policy/dm_policy_manager.h"
 #include "chrome/updater/policy/service.h"
 #include "chrome/updater/util/util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace updater {
 
 PolicyFetcher::PolicyFetcher(
     const GURL& server_url,
-    const absl::optional<PolicyServiceProxyConfiguration>& proxy_configuration,
-    const absl::optional<bool>& override_is_managed_device)
+    const std::optional<PolicyServiceProxyConfiguration>& proxy_configuration,
+    const std::optional<bool>& override_is_managed_device)
     : server_url_(server_url),
       policy_service_proxy_configuration_(proxy_configuration),
       override_is_managed_device_(override_is_managed_device),
@@ -124,8 +124,9 @@ PolicyFetcher::OnFetchPolicyRequestComplete(
     const std::vector<PolicyValidationResult>& validation_results) {
   VLOG(1) << __func__;
 
-  if (result == DMClient::RequestResult::kSuccess)
+  if (result == DMClient::RequestResult::kSuccess) {
     return CreateDMPolicyManager(override_is_managed_device_);
+  }
 
   for (const auto& validation_result : validation_results) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -136,10 +137,11 @@ PolicyFetcher::OnFetchPolicyRequestComplete(
                 server_url_, policy_service_proxy_configuration_),
             GetDefaultDMStorage(), validation_result,
             base::BindOnce([](DMClient::RequestResult result) {
-              if (result != DMClient::RequestResult::kSuccess)
+              if (result != DMClient::RequestResult::kSuccess) {
                 LOG(WARNING)
                     << "DMClient::ReportPolicyValidationErrors failed: "
                     << result;
+              }
             })));
   }
 

@@ -110,15 +110,16 @@ void DispatchOnStartupEventImpl(
     return;
   }
 
+  if (ExtensionsBrowserClient::Get()->IsShuttingDown() ||
+      !ExtensionsBrowserClient::Get()->IsValidContext(browser_context)) {
+    return;
+  }
+
   // Don't send onStartup events to incognito browser contexts.
   if (browser_context->IsOffTheRecord()) {
     return;
   }
 
-  if (ExtensionsBrowserClient::Get()->IsShuttingDown() ||
-      !ExtensionsBrowserClient::Get()->IsValidContext(browser_context)) {
-    return;
-  }
   ExtensionSystem* system = ExtensionSystem::Get(browser_context);
   if (!system) {
     return;
@@ -132,7 +133,8 @@ void DispatchOnStartupEventImpl(
                                    .GetByID(extension_id);
   if (extension && BackgroundInfo::HasPersistentBackgroundPage(extension) &&
       first_call) {
-    const LazyContextId context_id(browser_context, extension_id);
+    const auto context_id =
+        LazyContextId::ForExtension(browser_context, extension);
     LazyContextTaskQueue* task_queue = context_id.GetTaskQueue();
     if (task_queue->ShouldEnqueueTask(browser_context, extension)) {
       task_queue->AddPendingTask(
@@ -639,9 +641,13 @@ void RuntimeAPI::OnExtensionInstalledAndLoaded(
 }
 
 ExtensionFunction::ResponseAction RuntimeGetBackgroundPageFunction::Run() {
+  if (!BackgroundInfo::HasBackgroundPage(extension())) {
+    return RespondNow(Error(kNoBackgroundPageError));
+  }
   ExtensionHost* host = ProcessManager::Get(browser_context())
                             ->GetBackgroundHostForExtension(extension_id());
-  const LazyContextId context_id(browser_context(), extension_id());
+  const auto context_id =
+      LazyContextId::ForExtension(browser_context(), extension());
   LazyContextTaskQueue* task_queue = context_id.GetTaskQueue();
   if (task_queue->ShouldEnqueueTask(browser_context(), extension())) {
     task_queue->AddPendingTask(
@@ -673,7 +679,7 @@ ExtensionFunction::ResponseAction RuntimeOpenOptionsPageFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction RuntimeSetUninstallURLFunction::Run() {
-  absl::optional<api::runtime::SetUninstallURL::Params> params =
+  std::optional<api::runtime::SetUninstallURL::Params> params =
       api::runtime::SetUninstallURL::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   if (!params->url.empty() && !GURL(params->url).SchemeIsHTTPOrHTTPS()) {
@@ -709,7 +715,7 @@ void RuntimeRequestUpdateCheckFunction::CheckComplete(
     const RuntimeAPIDelegate::UpdateCheckResult& result) {
   api::runtime::RequestUpdateCheck::Results::Result return_result;
   return_result.status = result.status;
-  return_result.version = absl::optional<std::string>(result.version);
+  return_result.version = std::optional<std::string>(result.version);
   Respond(WithArguments(return_result.ToValue()));
 }
 
@@ -730,7 +736,7 @@ ExtensionFunction::ResponseAction RuntimeRestartAfterDelayFunction::Run() {
     return RespondNow(Error(kErrorOnlyKioskModeAllowed));
   }
 
-  absl::optional<api::runtime::RestartAfterDelay::Params> params =
+  std::optional<api::runtime::RestartAfterDelay::Params> params =
       api::runtime::RestartAfterDelay::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   int seconds = params->seconds;
@@ -810,7 +816,7 @@ ExtensionFunction::ResponseAction RuntimeGetContextsFunction::Run() {
   if (!filter.context_types ||
       base::Contains(*filter.context_types,
                      api::runtime::ContextType::kBackground)) {
-    if (absl::optional<api::runtime::ExtensionContext> worker =
+    if (std::optional<api::runtime::ExtensionContext> worker =
             GetWorkerContext()) {
       result.push_back(std::move(*worker));
     }
@@ -831,7 +837,7 @@ ExtensionFunction::ResponseAction RuntimeGetContextsFunction::Run() {
       ArgumentList(api::runtime::GetContexts::Results::Create(result)));
 }
 
-absl::optional<api::runtime::ExtensionContext>
+std::optional<api::runtime::ExtensionContext>
 RuntimeGetContextsFunction::GetWorkerContext() {
   ProcessManager* const process_manager =
       ProcessManager::Get(browser_context());
@@ -839,10 +845,12 @@ RuntimeGetContextsFunction::GetWorkerContext() {
 
   std::vector<WorkerId> active_workers =
       process_manager->GetServiceWorkersForExtension(extension()->id());
-  CHECK_LE(active_workers.size(), 1u);
+  // TODO(crbug.com/1493391): Upgrade this to a CHECK once multiple active
+  // workers has been resolved.
+  DCHECK_LE(active_workers.size(), 1u);
 
   if (active_workers.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   api::runtime::ExtensionContext context;

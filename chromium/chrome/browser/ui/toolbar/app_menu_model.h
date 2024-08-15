@@ -172,6 +172,7 @@ class AppMenuModel : public ui::SimpleMenuModel,
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPasswordAndAutofillMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPasswordManagerMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kShowSearchCompanion);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPerformanceMenuItem);
 
   // Number of menus within the app menu with an arbitrarily high (variable)
   // number of menu items. For example, the number of bookmarks menu items
@@ -251,15 +252,19 @@ class AppMenuModel : public ui::SimpleMenuModel,
   // in the menu. When an expected module is provided, the metrics will only be
   // logged when the module matches the one for which there is an active menu
   // notification.
-  void LogSafetyHubInteractionMetrics(
-      absl::optional<safety_hub::SafetyHubModuleType> expected_module =
-          absl::nullopt);
+  static void LogSafetyHubInteractionMetrics(
+      safety_hub::SafetyHubModuleType sh_module,
+      int event_flags);
 
  private:
   // Adds actionable global error menu items to the menu.
   // Examples: Extension permissions and sign in errors.
   // Returns a boolean indicating whether any menu items were added.
   bool AddGlobalErrorMenuItems();
+
+  // Adds the Safety Hub menu notifications to the menu. Returns a boolean
+  // indicating whether any menu items were added.
+  [[nodiscard]] bool AddSafetyHubMenuItem();
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Disables/Enables the settings item based on kSystemFeaturesDisableList

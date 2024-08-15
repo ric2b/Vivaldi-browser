@@ -5,7 +5,7 @@
 """Simple client for the Gerrit REST API.
 
 Example usage:
-  ./gerrit_client.py [command] [args]
+    ./gerrit_client.py [command] [args]
 """
 
 import json
@@ -415,17 +415,18 @@ def CMDabandon(parser, args):
 def CMDmass_abandon(parser, args):
     """Mass abandon changes
 
-  Abandons CLs that match search criteria provided by user. Before any change is
-  actually abandoned, user is presented with a list of CLs that will be affected
-  if user confirms. User can skip confirmation by passing --force parameter.
+    Abandons CLs that match search criteria provided by user. Before any change
+    is actually abandoned, user is presented with a list of CLs that will be
+    affected if user confirms. User can skip confirmation by passing --force
+    parameter.
 
-  The script can abandon up to 100 CLs per invocation.
+    The script can abandon up to 100 CLs per invocation.
 
-  Examples:
-  gerrit_client.py mass-abandon --host https://HOST -p 'project=repo2'
-  gerrit_client.py mass-abandon --host https://HOST -p 'message=testing'
-  gerrit_client.py mass-abandon --host https://HOST -p 'is=wip' -p 'age=1y'
-  """
+    Examples:
+    gerrit_client.py mass-abandon --host https://HOST -p 'project=repo2'
+    gerrit_client.py mass-abandon --host https://HOST -p 'message=testing'
+    gerrit_client.py mass-abandon --host https://HOST -p 'is=wip' -p 'age=1y'
+    """
     parser.add_option('-p',
                       '--param',
                       dest='params',

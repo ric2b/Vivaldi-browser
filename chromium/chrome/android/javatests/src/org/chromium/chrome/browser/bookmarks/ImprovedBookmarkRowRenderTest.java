@@ -8,7 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 
-import static org.chromium.components.browser_ui.widget.listmenu.BasicListMenu.buildMenuListItem;
+import static org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils.buildMenuListItem;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -28,7 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import org.chromium.base.supplier.LazyOneshotSupplierImpl;
+import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterAnnotations.ClassParameter;
@@ -36,20 +36,20 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
+import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.payments.CurrencyFormatter;
 import org.chromium.components.payments.CurrencyFormatterJni;
 import org.chromium.components.power_bookmarks.ProductPrice;
 import org.chromium.components.power_bookmarks.ShoppingSpecifics;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.listmenu.ListMenu;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -88,7 +88,7 @@ public class ImprovedBookmarkRowRenderTest {
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(2)
+                    .setRevision(3)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_BOOKMARKS)
                     .build();
 
@@ -160,17 +160,13 @@ public class ImprovedBookmarkRowRenderTest {
                                             "test description")
                                     .with(
                                             ImprovedBookmarkRowProperties.START_ICON_DRAWABLE,
-                                            new LazyOneshotSupplierImpl<>() {
-                                                @Override
-                                                public void doSet() {
-                                                    set(
+                                            LazyOneshotSupplier.fromSupplier(
+                                                    () ->
                                                             new BitmapDrawable(
                                                                     mActivityTestRule
                                                                             .getActivity()
                                                                             .getResources(),
-                                                                    mBitmap));
-                                                }
-                                            })
+                                                                    mBitmap)))
                                     .with(ImprovedBookmarkRowProperties.SELECTED, false)
                                     .with(
                                             ImprovedBookmarkRowProperties.LIST_MENU_BUTTON_DELEGATE,
@@ -197,7 +193,8 @@ public class ImprovedBookmarkRowRenderTest {
         listItems.add(buildMenuListItem(R.string.bookmark_item_move, 0, 0));
 
         ListMenu.Delegate delegate = item -> {};
-        return new BasicListMenu(mActivityTestRule.getActivity(), listItems, delegate);
+        return BrowserUiListMenuUtils.getBasicListMenu(
+                mActivityTestRule.getActivity(), listItems, delegate);
     }
 
     @Test
@@ -221,6 +218,17 @@ public class ImprovedBookmarkRowRenderTest {
                             R.drawable.outline_chevron_right_24dp);
                 });
         mRenderTestRule.render(mContentView, "end_image_visibility");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testLocalBookmarkItem() throws IOException {
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, true);
+                });
+        mRenderTestRule.render(mContentView, "local_bookmark");
     }
 
     @Test

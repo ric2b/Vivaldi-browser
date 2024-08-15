@@ -7,10 +7,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "base/containers/fixed_flat_map.h"
 #include "base/feature_list.h"
-#include "base/strings/string_piece.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 
 namespace extensions::declarative_net_request {
@@ -77,6 +77,15 @@ enum class ParseResult {
   ERROR_EMPTY_TAB_IDS_LIST,
   ERROR_TAB_IDS_ON_NON_SESSION_RULE,
   ERROR_TAB_ID_DUPLICATED,
+
+  // Parse errors related to matching on response headers.
+  ERROR_EMPTY_RESPONSE_HEADER_MATCHING_LIST,
+  ERROR_EMPTY_EXCLUDED_RESPONSE_HEADER_MATCHING_LIST,
+  ERROR_INVALID_MATCHING_RESPONSE_HEADER_NAME,
+  ERROR_INVALID_MATCHING_EXCLUDED_RESPONSE_HEADER_NAME,
+  ERROR_INVALID_MATCHING_RESPONSE_HEADER_VALUE,
+  ERROR_MATCHING_RESPONSE_HEADER_DUPLICATED,
+  ERROR_RESPONSE_HEADER_RULE_CANNOT_MODIFY_REQUEST_HEADERS,
 };
 
 // Describes the ways in which updating dynamic rules can fail.
@@ -150,7 +159,18 @@ enum class HostPermissionsAlwaysRequired {
   kTrue,
   // In this case, only redirecting (excluding upgrading) requests and modifying
   // headers require host permissions to the request url and initiator.
-  kFalse
+  kFalse,
+};
+
+// Specifies the request stage for which rulesets are to be matched.
+enum class RulesetMatchingStage {
+  // At this stage, the request has been prepared but not sent. Rules with
+  // conditions based only on the request's parameters will be matched.
+  kOnBeforeRequest,
+  // At this stage, the request's headers have been sent and response headers
+  // have been received. Rules with conditions that depend on the request's
+  // response will be matched.
+  kOnHeadersReceived,
 };
 
 // Schemes which can be used as part of url transforms.
@@ -184,6 +204,10 @@ extern const char kErrorHeaderValuePresent[];
 extern const char kErrorAppendInvalidRequestHeader[];
 extern const char kErrorTabIdsOnNonSessionRule[];
 extern const char kErrorTabIdDuplicated[];
+extern const char kErrorInvalidMatchingHeaderName[];
+extern const char kErrorInvalidMatchingHeaderValue[];
+extern const char kErrorResponseHeaderDuplicated[];
+extern const char kErrorResponseHeaderRuleCannotModifyRequestHeaders[];
 
 extern const char kErrorListNotPassed[];
 
@@ -251,6 +275,10 @@ inline constexpr int kMaxStaticRulesPerProfile = 300000;
 // The per-extension maximum amount of disabled static rules.
 inline constexpr int kMaxDisabledStaticRules = 5000;
 
+// Maximum size of a compiled RegEx rule in KB. Limited to 2 KB which means
+// that given 1024 rules, the total usage would be 2 MB.
+inline constexpr int kRegexMaxMemKb = 2;
+
 // Identifier for a Flatbuffer containing `flat::EmbedderConditions` as the
 // root.
 extern const char kEmbedderConditionsBufferIdentifier[];
@@ -260,7 +288,7 @@ extern const char kEmbedderConditionsBufferIdentifier[];
 // HTTP request headers that support multiple values in a single entry. This
 // list may be extended in the future to support custom headers.
 inline constexpr auto kDNRRequestHeaderAppendAllowList =
-    base::MakeFixedFlatMap<base::StringPiece, base::StringPiece>(
+    base::MakeFixedFlatMap<std::string_view, std::string_view>(
         {{"accept", ", "},
          {"accept-encoding", ", "},
          {"accept-language", ", "},

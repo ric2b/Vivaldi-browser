@@ -4,8 +4,8 @@
 #ifndef LIBAVIF_TESTS_OSS_FUZZ_AVIF_FUZZTEST_HELPERS_H_
 #define LIBAVIF_TESTS_OSS_FUZZ_AVIF_FUZZTEST_HELPERS_H_
 
+#include <cstdint>
 #include <cstdlib>
-#include <memory>
 #include <vector>
 
 #include "avif/avif.h"
@@ -14,32 +14,36 @@
 #include "fuzztest/fuzztest.h"
 #include "gtest/gtest.h"
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 
 //------------------------------------------------------------------------------
 // C++ wrapper for scoped memory management of C API objects.
 
 // Exposed for convenient fuzztest reproducer output.
-AvifImagePtr CreateAvifImage8b(size_t width, size_t height,
-                               avifPixelFormat pixel_format, bool has_alpha,
-                               const std::vector<uint8_t>& samples);
-AvifImagePtr CreateAvifImage16b(size_t width, size_t height, int depth,
-                                avifPixelFormat pixel_format, bool has_alpha,
-                                const std::vector<uint16_t>& samples);
-AvifEncoderPtr CreateAvifEncoder(avifCodecChoice codec_choice, int max_threads,
-                                 int min_quantizer, int max_quantizer,
-                                 int min_quantizer_alpha,
-                                 int max_quantizer_alpha, int tile_rows_log2,
-                                 int tile_cols_log2, int speed);
-AvifDecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
-                                 avifDecoderSource requested_source,
-                                 bool allow_progressive, bool allow_incremental,
-                                 bool ignore_exif, bool ignore_xmp,
-                                 uint32_t image_size_limit,
-                                 uint32_t image_dimension_limit,
-                                 uint32_t image_count_limit,
-                                 avifStrictFlags strict_flags);
+ImagePtr CreateAvifImage8b(size_t width, size_t height,
+                           avifPixelFormat pixel_format, bool has_alpha,
+                           const std::vector<uint8_t>& samples);
+ImagePtr CreateAvifImage16b(size_t width, size_t height, int depth,
+                            avifPixelFormat pixel_format, bool has_alpha,
+                            const std::vector<uint16_t>& samples);
+EncoderPtr CreateAvifEncoder(avifCodecChoice codec_choice, int max_threads,
+                             int min_quantizer, int max_quantizer,
+                             int min_quantizer_alpha, int max_quantizer_alpha,
+                             int tile_rows_log2, int tile_cols_log2, int speed);
+DecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
+                             avifDecoderSource requested_source,
+                             bool allow_progressive, bool allow_incremental,
+                             bool ignore_exif, bool ignore_xmp,
+                             uint32_t image_size_limit,
+                             uint32_t image_dimension_limit,
+                             uint32_t image_count_limit,
+                             avifStrictFlags strict_flags);
+#if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
+DecoderPtr AddGainMapOptionsToDecoder(DecoderPtr decoder,
+                                      bool enable_parsing_gain_map_metadata,
+                                      bool enable_decoding_gain_map);
+#endif
 
 //------------------------------------------------------------------------------
 // Custom fuzztest generators.
@@ -97,12 +101,12 @@ inline auto ArbitraryAvifImage16b() {
       fuzztest::Arbitrary<bool>());
 }
 
-// Generator for an arbitrary AvifImagePtr.
+// Generator for an arbitrary ImagePtr.
 inline auto ArbitraryAvifImage() {
   return fuzztest::OneOf(ArbitraryAvifImage8b(), ArbitraryAvifImage16b());
 }
 
-// avifEncoder and avifDecoder generators
+// Generator for an arbitrary EncoderPtr.
 inline auto ArbitraryAvifEncoder() {
   const auto codec_choice = fuzztest::ElementOf<avifCodecChoice>(
       {AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_CHOICE_AOM});
@@ -127,13 +131,17 @@ inline auto ArbitraryAvifEncoder() {
                        speed);
 }
 
-inline auto ArbitraryAvifDecoder(
-    const std::vector<avifCodecChoice>& codec_choices) {
-  const auto codec_choice = fuzztest::ElementOf<avifCodecChoice>(codec_choices);
+// Generator for an arbitrary EncoderPtr with base options fuzzed (i.e.
+// without "experimental" options hidden behind compile flags).
+inline auto ArbitraryBaseAvifDecoder() {
   // MAX_NUM_THREADS from libaom/aom_util/aom_thread.h
   const auto max_threads = fuzztest::InRange(0, 64);
   return fuzztest::Map(
-      CreateAvifDecoder, codec_choice, max_threads,
+      CreateAvifDecoder,
+      fuzztest::ElementOf<avifCodecChoice>({AVIF_CODEC_CHOICE_AUTO,
+                                            AVIF_CODEC_CHOICE_AOM,
+                                            AVIF_CODEC_CHOICE_DAV1D}),
+      max_threads,
       /*requested_source=*/
       fuzztest::ElementOf(
           {AVIF_DECODER_SOURCE_AUTO, AVIF_DECODER_SOURCE_PRIMARY_ITEM}),
@@ -150,38 +158,81 @@ inline auto ArbitraryAvifDecoder(
                                       AVIF_STRICT_ALPHA_ISPE_REQUIRED}));
 }
 
+#if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
+// Generator for an arbitrary EncoderPtr with base options and gain map
+// options fuzzed, with the exception of 'ignoreColorAndAlpha' (because it would
+// break most tests' assumptions).
+inline auto ArbitraryAvifDecoderWithGainMapOptions() {
+  return fuzztest::Map(
+      AddGainMapOptionsToDecoder, ArbitraryBaseAvifDecoder(),
+      /*enable_parsing_gain_map_metadata=*/fuzztest::Arbitrary<bool>(),
+      /*enable_decoding_gain_map=*/fuzztest::Arbitrary<bool>());
+}
+
+// Generator for an arbitrary DecoderPtr.
+inline auto ArbitraryAvifDecoder() {
+  return ArbitraryAvifDecoderWithGainMapOptions();
+}
+#else
+// Generator for an arbitrary DecoderPtr.
+inline auto ArbitraryAvifDecoder() { return ArbitraryBaseAvifDecoder(); }
+#endif  // AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP
+
 //------------------------------------------------------------------------------
 
 // Returns a white pixel compressed with AVIF.
 std::vector<uint8_t> GetWhiteSinglePixelAvif();
 
-// Sets the FUZZTEST_STACK_LIMIT environment variable to the value passed to
-// the constructor.
-class FuzztestStackLimitEnvironment : public ::testing::Environment {
- public:
-  FuzztestStackLimitEnvironment(const char* stack_limit)
-      : stack_limit_(stack_limit) {}
-  ~FuzztestStackLimitEnvironment() override {}
+//------------------------------------------------------------------------------
+// Environment setup
 
-  void SetUp() override { setenv("FUZZTEST_STACK_LIMIT", stack_limit_, 1); }
+// Sets the environment variable 'name' to the 'value' during the setup step.
+::testing::Environment* SetEnv(const char* name, const char* value);
 
- private:
-  const char* stack_limit_;
-};
+inline ::testing::Environment* SetStackLimitTo512x1024Bytes() {
+  return SetEnv("FUZZTEST_STACK_LIMIT", "524288");
+}
 
 //------------------------------------------------------------------------------
 
+// Returns the paths contained in the 'TEST_DATA_DIRS' environment variable.
+// Several paths can be set in the variable, separated by ';'.
+// Returns nullptr if not set.
+// Tests that use ArbitraryImageWithSeeds() should
+// ASSERT_FALSE(GetSeedDataDirs().empty()) if they want to make sure that seeds
+// are actually used.
+std::vector<std::string> GetSeedDataDirs();
+
 // Returns a list of test images contents (not paths) from the directory set in
-// the 'TEST_DATA_DIR' environment variable, that are smaller than
+// the 'TEST_DATA_DIRS' environment variable, that are smaller than
 // 'max_file_size' and have one of the formats in 'image_formats' (or any format
 // if 'image_formats' is empty).
-// Typically used to create image file seeds for fuzzing.
+// If TEST_DATA_DIRS is not set, returns an empty set.
+// Tests that use this should ASSERT_FALSE(GetSeedDataDirs().empty())
+// if they want to make sure that seeds are actually used.
+// Terminates the program with abort() if TEST_DATA_DIRS is set but doesn't
+// contain any matching images.
 std::vector<std::string> GetTestImagesContents(
     size_t max_file_size, const std::vector<avifAppFileFormat>& image_formats);
+
+// Generator for an arbitrary ImagePtr that uses test image files as seeds.
+// Uses the 'TEST_DATA_DIRS' environment variable to load the seeds.
+// If TEST_DATA_DIRS is not set, no seeds are used.
+// Tests that use this should ASSERT_FALSE(GetSeedDataDirs().empty())
+// if they want to make sure that seeds are actually used.
+// Terminates the program with abort() if TEST_DATA_DIRS is set but doesn't
+// contain any matching images.
+inline auto ArbitraryImageWithSeeds(
+    const std::vector<avifAppFileFormat>& image_formats) {
+  constexpr uint32_t kMaxSeedFileSize = 1024 * 1024;  // 1MB.
+  return fuzztest::Arbitrary<std::string>()
+      .WithMaxSize(kMaxSeedFileSize)
+      .WithSeeds(GetTestImagesContents(kMaxSeedFileSize, image_formats));
+}
 
 //------------------------------------------------------------------------------
 
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif
 
 #endif  // LIBAVIF_TESTS_OSS_FUZZ_AVIF_FUZZTEST_HELPERS_H_

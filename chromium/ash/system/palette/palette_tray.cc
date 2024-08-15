@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/tray_background_view_catalog.h"
@@ -45,6 +45,7 @@
 #include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
@@ -95,6 +96,8 @@ bool HasSomeStylusDisplay() {
 }
 
 class BatteryView : public views::View {
+  METADATA_HEADER(BatteryView, views::View)
+
  public:
   BatteryView() {
     SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -113,14 +116,8 @@ class BatteryView : public views::View {
     label_ = AddChildView(std::make_unique<views::Label>(
         l10n_util::GetStringUTF16(IDS_ASH_STYLUS_BATTERY_LOW_LABEL)));
     label_->SetEnabledColor(stylus_battery_delegate_.GetColorForBatteryLevel());
-    if (chromeos::features::IsJellyEnabled()) {
-      label_->SetAutoColorReadabilityEnabled(false);
-      TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosBody2,
-                                            *label_);
-    } else {
-      TrayPopupUtils::SetLabelFontList(label_,
-                                       TrayPopupUtils::FontStyle::kSmallTitle);
-    }
+    label_->SetAutoColorReadabilityEnabled(false);
+    TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosBody2, *label_);
   }
 
   // views::View:
@@ -154,11 +151,16 @@ class BatteryView : public views::View {
 
  private:
   StylusBatteryDelegate stylus_battery_delegate_;
-  raw_ptr<views::ImageView, ExperimentalAsh> icon_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> label_ = nullptr;
+  raw_ptr<views::ImageView> icon_ = nullptr;
+  raw_ptr<views::Label> label_ = nullptr;
 };
 
+BEGIN_METADATA(BatteryView)
+END_METADATA
+
 class TitleView : public views::View {
+  METADATA_HEADER(TitleView, views::View)
+
  public:
   explicit TitleView(PaletteTray* palette_tray) : palette_tray_(palette_tray) {
     // TODO(tdanderson|jdufault): Use TriView to handle the layout of the title.
@@ -174,14 +176,9 @@ class TitleView : public views::View {
         l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE)));
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     title_label->SetEnabledColorId(kColorAshTextColorPrimary);
-    if (chromeos::features::IsJellyEnabled()) {
-      title_label->SetAutoColorReadabilityEnabled(false);
-      TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosTitle1,
-                                            *title_label);
-    } else {
-      TrayPopupUtils::SetLabelFontList(
-          title_label, TrayPopupUtils::FontStyle::kPodMenuHeader);
-    }
+    title_label->SetAutoColorReadabilityEnabled(false);
+    TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosTitle1,
+                                          *title_label);
     layout_ptr->SetFlexForView(title_label, 1);
 
     if (ash::features::IsStylusBatteryStatusEnabled()) {
@@ -217,22 +214,24 @@ class TitleView : public views::View {
 
   ~TitleView() override = default;
 
-  // views::View:
-  const char* GetClassName() const override { return "TitleView"; }
-
  private:
   void ButtonPressed(PaletteTrayOptions option,
                      base::RepeatingClosure callback) {
+    palette_tray_->RecordPaletteOptionsUsage(option,
+                                             PaletteInvocationMethod::MENU);
     std::move(callback).Run();
     palette_tray_->HidePalette();
   }
 
   // Unowned pointers to button views so we can determine which button was
   // clicked.
-  raw_ptr<views::View, ExperimentalAsh> settings_button_;
-  raw_ptr<views::View, ExperimentalAsh> help_button_;
-  raw_ptr<PaletteTray, DanglingUntriaged | ExperimentalAsh> palette_tray_;
+  raw_ptr<views::View> settings_button_;
+  raw_ptr<views::View> help_button_;
+  raw_ptr<PaletteTray, DanglingUntriaged> palette_tray_;
 };
+
+BEGIN_METADATA(TitleView)
+END_METADATA
 
 // Used as a Shell pre-target handler to notify PaletteTray of stylus events.
 class StylusEventHandler : public ui::EventHandler {
@@ -254,7 +253,7 @@ class StylusEventHandler : public ui::EventHandler {
   }
 
  private:
-  raw_ptr<PaletteTray, ExperimentalAsh> palette_tray_;
+  raw_ptr<PaletteTray> palette_tray_;
 };
 
 }  // namespace
@@ -454,6 +453,10 @@ void PaletteTray::OnDisplayConfigurationChanged() {
 }
 
 void PaletteTray::ClickedOutsideBubble() {
+  if (num_actions_in_bubble_ == 0) {
+    RecordPaletteOptionsUsage(PaletteTrayOptions::PALETTE_CLOSED_NO_ACTION,
+                              PaletteInvocationMethod::MENU);
+  }
   HidePalette();
 }
 
@@ -560,6 +563,32 @@ void PaletteTray::HidePaletteImmediately() {
   if (bubble_)
     bubble_->bubble_widget()->SetVisibilityChangedAnimationsEnabled(false);
   HidePalette();
+}
+
+void PaletteTray::RecordPaletteOptionsUsage(PaletteTrayOptions option,
+                                            PaletteInvocationMethod method) {
+  DCHECK_NE(option, PaletteTrayOptions::PALETTE_OPTIONS_COUNT);
+
+  if (method == PaletteInvocationMethod::SHORTCUT) {
+    UMA_HISTOGRAM_ENUMERATION("Ash.Shelf.Palette.Usage.Shortcut", option,
+                              PaletteTrayOptions::PALETTE_OPTIONS_COUNT);
+  } else if (is_bubble_auto_opened_) {
+    UMA_HISTOGRAM_ENUMERATION("Ash.Shelf.Palette.Usage.AutoOpened", option,
+                              PaletteTrayOptions::PALETTE_OPTIONS_COUNT);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("Ash.Shelf.Palette.Usage", option,
+                              PaletteTrayOptions::PALETTE_OPTIONS_COUNT);
+  }
+}
+
+void PaletteTray::RecordPaletteModeCancellation(PaletteModeCancelType type) {
+  if (type == PaletteModeCancelType::PALETTE_MODE_CANCEL_TYPE_COUNT) {
+    return;
+  }
+
+  UMA_HISTOGRAM_ENUMERATION(
+      "Ash.Shelf.Palette.ModeCancellation", type,
+      PaletteModeCancelType::PALETTE_MODE_CANCEL_TYPE_COUNT);
 }
 
 void PaletteTray::OnProjectorSessionActiveStateChanged(bool active) {
@@ -719,6 +748,10 @@ void PaletteTray::OnPaletteEnabledPrefChanged() {
 
 void PaletteTray::OnPaletteTrayPressed(const ui::Event& event) {
   if (bubble_) {
+    if (num_actions_in_bubble_ == 0) {
+      RecordPaletteOptionsUsage(PaletteTrayOptions::PALETTE_CLOSED_NO_ACTION,
+                                PaletteInvocationMethod::MENU);
+    }
     HidePalette();
     return;
   }
@@ -744,6 +777,8 @@ bool PaletteTray::DeactivateActiveTool() {
       palette_tool_manager_->GetActiveTool(PaletteGroup::MODE);
   if (active_tool_id != PaletteToolId::NONE) {
     palette_tool_manager_->DeactivateTool(active_tool_id);
+    RecordPaletteModeCancellation(PaletteToolIdToPaletteModeCancelType(
+        active_tool_id, false /*is_switched*/));
     return true;
   }
 
@@ -795,5 +830,8 @@ void PaletteTray::OnAutoHideStateChanged(ShelfAutoHideState state) {
 
   bubble_->bubble_view()->ChangeAnchorRect(anchor_rect);
 }
+
+BEGIN_METADATA(PaletteTray)
+END_METADATA
 
 }  // namespace ash

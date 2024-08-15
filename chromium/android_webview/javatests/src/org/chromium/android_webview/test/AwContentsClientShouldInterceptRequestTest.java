@@ -20,6 +20,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedErrorHelper;
@@ -46,9 +48,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /** Tests for the WebViewClient.shouldInterceptRequest() method. */
-@RunWith(AwJUnit4ClassRunner.class)
-public class AwContentsClientShouldInterceptRequestTest {
-    @Rule public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
+public class AwContentsClientShouldInterceptRequestTest extends AwParameterizedTest {
+    @Rule public AwActivityTestRule mActivityTestRule;
 
     private static final int TEAPOT_STATUS_CODE = 418;
     private static final String TEAPOT_RESPONSE_PHRASE = "I'm a teapot";
@@ -89,6 +92,10 @@ public class AwContentsClientShouldInterceptRequestTest {
     private AwTestContainerView mTestContainerView;
     private AwContents mAwContents;
     private TestAwContentsClient.ShouldInterceptRequestHelper mShouldInterceptRequestHelper;
+
+    public AwContentsClientShouldInterceptRequestTest(AwSettingsMutation param) {
+        this.mActivityTestRule = new AwActivityTestRule(param.getMutation());
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -213,6 +220,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setImagesEnabled(true)")
     public void testCalledWithCorrectRefererHeader() throws Throwable {
         final String refererHeaderName = "Referer";
         final String imageUrl =
@@ -712,6 +720,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setImagesEnabled(true)")
     public void testCalledForImage() throws Throwable {
         final String imagePath = "/" + CommonResources.FAVICON_FILENAME;
         mWebServer.setResponseBase64(
@@ -752,6 +761,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setImagesEnabled(true)")
     public void testSubresourceError_NullMimeEncodingAndInputStream() throws Throwable {
         final String imagePath = "/" + CommonResources.FAVICON_FILENAME;
         final String imageUrl =
@@ -940,6 +950,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setAllowContentAccess(true)")
     public void testNotCalledForExistingContentUrl() throws Throwable {
         final String contentResourceName = "target";
         final String existingContentUrl = TestContentProvider.createContentUrl(contentResourceName);
@@ -956,6 +967,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setAllowContentAccess(true)")
     public void testCalledForNonexistentContentUrl() throws Throwable {
         calledForUrlTemplate("content://org.chromium.webview.NoSuchProvider/foo");
     }
@@ -963,6 +975,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setImagesEnabled(true)")
     public void testBaseUrlOfLoadDataSentInRefererHeader() throws Throwable {
         final String imageFile = "a.jpg";
         final String pageHtml = "<img src='" + imageFile + "'>";
@@ -1040,6 +1053,7 @@ public class AwContentsClientShouldInterceptRequestTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(reason = "This test depends on AwSettings.setImagesEnabled(true)")
     public void testContentIdImage() throws Throwable {
         final String imageContentIdUrl = "cid://intercept-me";
         final String pageUrl =

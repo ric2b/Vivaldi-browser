@@ -1,9 +1,11 @@
 #include "prefs/vivaldi_local_state_prefs.h"
 
+#include "chrome/installer/util/google_update_settings.h"
 #include "components/browser/vivaldi_brand_select.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/version_info/version_info.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -68,5 +70,12 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
       vivaldiprefs::kVivaldiClientHintsBrandCustomBrand, "");
   registry->RegisterStringPref(
       vivaldiprefs::kVivaldiClientHintsBrandCustomBrandVersion, "");
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiCrashReportingConsentGranted,
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+      GoogleUpdateSettings::GetCollectStatsConsent());
+#else
+      false);
+#endif
 }
 }  // namespace vivaldi

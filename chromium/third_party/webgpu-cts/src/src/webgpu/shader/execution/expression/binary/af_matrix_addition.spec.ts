@@ -5,32 +5,12 @@ Execution Tests for matrix AbstractFloat addition expressions
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
 import { TypeAbstractFloat, TypeMat } from '../../../../util/conversion.js';
-import { FP } from '../../../../util/floating_point.js';
-import { sparseMatrixF64Range } from '../../../../util/math.js';
-import { makeCaseCache } from '../case_cache.js';
 import { onlyConstInputSource, run } from '../expression.js';
 
+import { d } from './af_matrix_addition.cache.js';
 import { abstractBinary } from './binary.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Cases: matCxR
-const mat_cases = ([2, 3, 4] as const)
-  .flatMap(cols =>
-    ([2, 3, 4] as const).map(rows => ({
-      [`mat${cols}x${rows}`]: () => {
-        return FP.abstract.generateMatrixPairToMatrixCases(
-          sparseMatrixF64Range(cols, rows),
-          sparseMatrixF64Range(cols, rows),
-          'finite',
-          FP.abstract.additionMatrixMatrixInterval
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('binary/af_matrix_addition', mat_cases);
 
 g.test('matrix')
   .specURL('https://www.w3.org/TR/WGSL/#floating-point-evaluation')

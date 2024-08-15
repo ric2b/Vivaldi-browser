@@ -106,13 +106,12 @@ class NearbyConnectionManagerImpl : public NearbyConnectionManager,
   // arbitrarily choose the one which was registered first.
   DeviceIdPair ChooseChannelRecipient(const std::string& remote_device_id);
 
-  raw_ptr<BleScanner, ExperimentalAsh> ble_scanner_;
-  raw_ptr<SecureChannelDisconnector, ExperimentalAsh>
-      secure_channel_disconnector_;
+  raw_ptr<BleScanner> ble_scanner_;
+  raw_ptr<SecureChannelDisconnector> secure_channel_disconnector_;
 
   base::flat_map<std::string, std::unique_ptr<SecureChannel>>
       remote_device_id_to_secure_channel_map_;
-  absl::optional<std::string> notifying_remote_device_id_;
+  std::optional<std::string> notifying_remote_device_id_;
 };
 
 }  // namespace ash::secure_channel

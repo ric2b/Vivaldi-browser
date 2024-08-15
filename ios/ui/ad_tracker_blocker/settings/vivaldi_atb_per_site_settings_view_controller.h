@@ -4,10 +4,10 @@
 #define IOS_UI_AD_TRACKER_BLOCKER_SETTINGS_VIVALDI_ATB_PER_SITE_SETTINGS_VIEW_CONTROLLER_H_
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller.h"
 
 @interface VivaldiATBPerSiteSettingsViewController :
-  ChromeTableViewController <UIAdaptivePresentationControllerDelegate>
+  LegacyChromeTableViewController <UIAdaptivePresentationControllerDelegate>
 
 // INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser

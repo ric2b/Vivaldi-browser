@@ -117,7 +117,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/ui/base/tablet_state.h"
+#include "ui/display/screen.h"
 #endif
 
 namespace {
@@ -484,7 +484,7 @@ gfx::Size OmniboxViewViews::GetMinimumSize() const {
   // Toolbar is supposed to fix this. Remove the temporal solution when
   // Responsive Toolbar is launched.
   const int kMinCharacters =
-      chromeos::TabletState::Get()->InTabletMode() &&
+      display::Screen::GetScreen()->InTabletMode() &&
               !base::FeatureList::IsEnabled(features::kResponsiveToolbar)
           ? 8
           : 20;
@@ -852,8 +852,8 @@ void OmniboxViewViews::SetAccessibilityLabel(const std::u16string& display_text,
     // bypass OmniboxPopupModel and get the label from our synthetic |match|.
     friendly_suggestion_text_ = AutocompleteMatchType::ToAccessibilityLabel(
         match, display_text, OmniboxPopupSelection::kNoMatch,
-        controller()->result().size(), std::u16string(),
-        &friendly_suggestion_text_prefix_length_);
+        controller()->autocomplete_controller()->result().size(),
+        std::u16string(), &friendly_suggestion_text_prefix_length_);
   } else {
     friendly_suggestion_text_ =
         model()->GetPopupAccessibilityLabelForCurrentSelection(
@@ -1260,6 +1260,7 @@ bool OmniboxViewViews::SkipDefaultKeyEventProcessing(
 }
 
 void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  Textfield::GetAccessibleNodeData(node_data);
   node_data->role = ax::mojom::Role::kTextField;
   node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACCNAME_LOCATION));
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kAutoComplete,
@@ -1709,9 +1710,12 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
       break;
 
     case ui::VKEY_SPACE: {
-      if (model()->PopupIsOpen()) {
+      if (model()->PopupIsOpen() && !control && !alt && !shift) {
+        if (model()->OnSpacePressed()) {
+          return true;
+        }
         OmniboxPopupSelection selection = model()->GetPopupSelection();
-        if (selection.IsButtonFocused() && !control && !alt && !shift) {
+        if (selection.IsButtonFocused()) {
           model()->OpenSelection(selection, event.time_stamp());
           return true;
         }
@@ -1823,7 +1827,7 @@ views::View::DropCallback OmniboxViewViews::CreateDropCallback(
 void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
   MaybeAddSendTabToSelfItem(menu_contents);
 
-  absl::optional<size_t> paste_position =
+  std::optional<size_t> paste_position =
       menu_contents->GetIndexOfCommandId(Textfield::kPaste);
   DCHECK(paste_position.has_value());
   menu_contents->InsertItemWithStringIdAt(paste_position.value() + 1,
@@ -1950,7 +1954,7 @@ void OmniboxViewViews::MaybeAddSendTabToSelfItem(
   menu_contents->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
 }
 
-BEGIN_METADATA(OmniboxViewViews, views::Textfield)
+BEGIN_METADATA(OmniboxViewViews)
 ADD_READONLY_PROPERTY_METADATA(bool, SelectionAtEnd)
 ADD_READONLY_PROPERTY_METADATA(int, TextWidth)
 ADD_READONLY_PROPERTY_METADATA(int, UnelidedTextWidth)

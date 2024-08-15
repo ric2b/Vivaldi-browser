@@ -20,7 +20,7 @@ std::string NewlineToSpaceReplacer(std::string str) {
 
 }  // namespace
 
-std::string TreeToStringHelper(const AXObject* obj, int indent, bool verbose) {
+std::string TreeToStringHelper(const AXObject* obj, bool verbose) {
   return TreeToStringWithMarkedObjectHelper(obj, nullptr, verbose);
 }
 
@@ -76,17 +76,19 @@ std::string TreeToStringWithMarkedObjectHelper(const AXObject* obj,
 }
 
 std::string ParentChainToStringHelper(const AXObject* obj) {
+  bool cached = !obj->IsDetached() && !obj->AXObjectCache().IsFrozen();
+
   AXObject::AXObjectVector ancestors;
-  for (AXObject::AncestorsIterator iter = obj->UnignoredAncestorsBegin();
-       iter != obj->UnignoredAncestorsEnd(); iter++) {
-    ancestors.push_back(*iter);
+  while (obj) {
+    ancestors.push_back(const_cast<AXObject*>(obj));
+    obj = obj->ParentObject();
   }
 
   size_t indent = 0;
   std::string builder;
   for (auto iter = ancestors.rbegin(); iter != ancestors.rend(); iter++) {
     builder = builder + std::string(2 * indent, ' ') +
-              (*iter)->ToString(true, true).Utf8() + '\n';
+              (*iter)->ToString(true, cached).Utf8() + '\n';
     ++indent;
   }
   return builder;

@@ -42,7 +42,6 @@
 #include "components/autofill/core/browser/personal_data_manager_test_base.h"
 #include "components/autofill/core/browser/profile_token_quality_test_api.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
-#include "components/autofill/core/browser/ui/label_formatter_utils.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -157,7 +156,7 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
   }
 
   AutofillProfile GetDefaultProfile() {
-    AutofillProfile profile;
+    AutofillProfile profile(AddressCountryCode("US"));
     test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
                          "johnwayne@me.xyz", "Fox", "123 Zoo St", "unit 5",
                          "Hollywood", "CA", "91601", "US", "12345678910",
@@ -218,7 +217,7 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
     {
       PersonalDataProfileTaskWaiter waiter(*personal_data_);
       EXPECT_CALL(waiter.mock_observer(), OnPersonalDataChanged());
-      personal_data_->AddFullServerCreditCard(masked_server_card);
+      personal_data_->AddFullServerCreditCardForTesting(masked_server_card);
       std::move(waiter).Wait();
     }
     ASSERT_EQ(1U, personal_data_->GetCreditCards().size());
@@ -234,7 +233,7 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
     full_server_card.set_record_type(CreditCard::RecordType::kFullServerCard);
     full_server_card.set_server_id("full_id");
     full_server_card.set_use_count(10);
-    personal_data_->AddFullServerCreditCard(full_server_card);
+    personal_data_->AddFullServerCreditCardForTesting(full_server_card);
 
     CreditCard local_card;
     test::SetCreditCardInfo(&local_card, "Freddy Mercury",
@@ -279,7 +278,7 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
     EXPECT_EQ(1U, personal_data_->GetProfiles().size());
   }
 
-  AutofillTable* GetServerDataTable() {
+  PaymentsAutofillTable* GetServerDataTable() {
     return personal_data_->IsSyncFeatureEnabledForPaymentsServerMetrics()
                ? profile_autofill_table_.get()
                : account_autofill_table_.get();
@@ -316,7 +315,7 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
   }
 
   void AddLocalIban(Iban& iban) {
-    iban.set_identifier(Iban::Guid(personal_data_->AddIban(iban)));
+    iban.set_identifier(Iban::Guid(personal_data_->AddAsLocalIban(iban)));
     PersonalDataProfileTaskWaiter(*personal_data_).Wait();
     iban.set_record_type(Iban::kLocalIban);
   }
@@ -632,7 +631,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_BasicInformation) {
 // Test filling profiles with unicode strings and crazy characters.
 TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   std::vector<AutofillProfile> profiles;
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile1.SetRawInfo(NAME_FIRST,
                       u"\u0623\u0648\u0628\u0627\u0645\u0627 "
                       u"\u064a\u0639\u062a\u0630\u0631 "
@@ -661,7 +660,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   profile1.FinalizeAfterImport();
   profiles.push_back(profile1);
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile2.SetRawInfo(NAME_FIRST,
                       u"\u4e0a\u6d77\u5e02\u91d1\u5c71\u533a "
                       u"\u677e\u9690\u9547\u4ead\u67ab\u516c"
@@ -671,13 +670,13 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   profile2.FinalizeAfterImport();
   profiles.push_back(profile2);
 
-  AutofillProfile profile3;
+  AutofillProfile profile3(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile3.SetRawInfo(EMAIL_ADDRESS, u"sue@example.com");
   profile3.SetRawInfo(COMPANY_NAME, u"Company X");
   profile3.FinalizeAfterImport();
   profiles.push_back(profile3);
 
-  AutofillProfile profile4;
+  AutofillProfile profile4(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile4.SetRawInfo(NAME_FIRST, u"Joe 3254");
   profile4.SetRawInfo(NAME_LAST, u"\u8bb0\u8d262\u5e74\u591a");
   profile4.SetRawInfo(ADDRESS_HOME_ZIP,
@@ -692,7 +691,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   profile4.FinalizeAfterImport();
   profiles.push_back(profile4);
 
-  AutofillProfile profile5;
+  AutofillProfile profile5(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile5.SetRawInfo(NAME_FIRST, u"Larry");
   profile5.SetRawInfo(NAME_LAST,
                       u"\u0938\u094d\u091f\u093e\u0902\u092a "
@@ -703,7 +702,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   profile5.FinalizeAfterImport();
   profiles.push_back(profile5);
 
-  AutofillProfile profile6;
+  AutofillProfile profile6(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile6.SetRawInfo(NAME_FIRST,
                       u"\u4e0a\u6d77\u5e02\u91d1\u5c71\u533a "
                       u"\u677e\u9690\u9547\u4ead\u67ab\u516c"
@@ -719,7 +718,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
   profile6.FinalizeAfterImport();
   profiles.push_back(profile6);
 
-  AutofillProfile profile7;
+  AutofillProfile profile7(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile7.SetRawInfo(NAME_FIRST, u"&$%$$$ TESTO *&*&^&^& MOKO");
   profile7.SetRawInfo(NAME_MIDDLE, u"WOHOOOO$$$$$$$$****");
   profile7.SetRawInfo(EMAIL_ADDRESS, u"yuvu@example.com");
@@ -747,7 +746,8 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
 // for duplicates.
 TEST_F(PersonalDataManagerTest, AddProfile_Invalid) {
   // First try profiles with invalid ZIP input.
-  AutofillProfile without_invalid;
+  AutofillProfile without_invalid(
+      i18n_model_definition::kLegacyHierarchyCountryCode);
   without_invalid.SetRawInfo(NAME_FIRST, u"Will");
   without_invalid.SetRawInfo(ADDRESS_HOME_CITY, u"Sunnyvale");
   without_invalid.SetRawInfo(ADDRESS_HOME_STATE, u"CA");
@@ -766,17 +766,17 @@ TEST_F(PersonalDataManagerTest, AddProfile_Invalid) {
 }
 
 TEST_F(PersonalDataManagerTest, AddUpdateRemoveProfiles) {
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile0, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
 
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "903 Apple Ct.", nullptr,
                        "Orlando", "FL", "32801", "US", "19482937549");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "1212 Center.", "Bld. 5",
                        "Orlando", "FL", "32801", "US", "19482937549");
@@ -997,6 +997,14 @@ TEST_F(
 // returns that we should not show the promo if the user already opted in.
 TEST_F(PersonalDataManagerTest,
        ShouldShowPaymentMethodsMandatoryReauthPromo_UserOptedInAlready) {
+#if BUILDFLAG(IS_ANDROID)
+  // Opt-in prompts are not shown on automotive as mandatory reauth is always
+  // enabled.
+  if (base::android::BuildInfo::GetInstance()->is_automotive()) {
+    GTEST_SKIP() << "This test should not run on automotive.";
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(
       features::kAutofillEnablePaymentsMandatoryReauth);
@@ -1053,7 +1061,7 @@ TEST_F(PersonalDataManagerTest, AddAndReloadServerIbans) {
   Iban server_iban1 = test::GetServerIban();
   Iban server_iban2 = test::GetServerIban2();
 
-  GetServerDataTable()->SetServerIbans({server_iban1, server_iban2});
+  GetServerDataTable()->SetServerIbansForTesting({server_iban1, server_iban2});
   std::vector<const Iban*> expected_ibans = {&server_iban1, &server_iban2};
   personal_data_->Refresh();
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
@@ -1081,7 +1089,7 @@ TEST_F(PersonalDataManagerTest, GetIbans) {
   AddLocalIban(local_iban1);
   AddLocalIban(local_iban2);
 
-  GetServerDataTable()->SetServerIbans({server_iban1, server_iban2});
+  GetServerDataTable()->SetServerIbansForTesting({server_iban1, server_iban2});
   personal_data_->Refresh();
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
@@ -1102,7 +1110,7 @@ TEST_F(PersonalDataManagerTest, GetIbansToSuggest) {
   local_iban1.set_value(u"FR76 3000 6000 0112 3456 7890 189");
   Iban local_iban2;
   local_iban2.set_value(u"CH56 0483 5012 3456 7800 9");
-  Iban server_iban1(Iban::InstrumentId("1234567"));
+  Iban server_iban1(Iban::InstrumentId(1234567));
   server_iban1.set_prefix(u"FR76");
   server_iban1.set_suffix(u"0189");
   server_iban1.set_length(27);
@@ -1112,7 +1120,7 @@ TEST_F(PersonalDataManagerTest, GetIbansToSuggest) {
   AddLocalIban(local_iban1);
   AddLocalIban(local_iban2);
 
-  GetServerDataTable()->SetServerIbans({server_iban1, server_iban2});
+  GetServerDataTable()->SetServerIbansForTesting({server_iban1, server_iban2});
   personal_data_->Refresh();
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
@@ -1129,8 +1137,8 @@ TEST_F(PersonalDataManagerTest, NoIbansAddedIfDisabled) {
   Iban iban1;
   iban1.set_value(base::UTF8ToUTF16(std::string(test::kIbanValue_1)));
 
-  personal_data_->AddIban(iban);
-  personal_data_->AddIban(iban1);
+  personal_data_->AddAsLocalIban(iban);
+  personal_data_->AddAsLocalIban(iban1);
 
   EXPECT_EQ(0U, personal_data_->GetLocalIbans().size());
 }
@@ -1141,7 +1149,7 @@ TEST_F(PersonalDataManagerTest, AddingIbanUpdatesPref) {
   Iban iban;
   iban.set_value(base::UTF8ToUTF16(std::string(test::kIbanValue)));
 
-  personal_data_->AddIban(iban);
+  personal_data_->AddAsLocalIban(iban);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
   // Adding an IBAN permanently enables the pref.
   EXPECT_TRUE(personal_data_->IsAutofillHasSeenIbanPrefEnabled());
@@ -1165,12 +1173,12 @@ TEST_F(PersonalDataManagerTest, AddLocalIbans) {
   AddLocalIban(iban1);
   AddLocalIban(iban2);
   // Do not add `PersonalDataProfileTaskWaiter(*personal_data_).Wait()` for this
-  // `AddIban` operation, as it will be terminated prematurely for
+  // `AddAsLocalIban` operation, as it will be terminated prematurely for
   // `iban2_with_different_nickname` due to the presence of an IBAN with the
   // same value.
-  personal_data_->AddIban(iban2_with_different_nickname);
+  personal_data_->AddAsLocalIban(iban2_with_different_nickname);
 
-  std::vector<Iban*> ibans = {&iban1, &iban2};
+  std::vector<const Iban*> ibans = {&iban1, &iban2};
   ExpectSameElements(ibans, personal_data_->GetLocalIbans());
 }
 
@@ -1181,7 +1189,7 @@ TEST_F(PersonalDataManagerTest, UpdateLocalIbans) {
   AddLocalIban(iban);
 
   // Verify the `iban` has been added successfully.
-  std::vector<Iban*> ibans = {&iban};
+  std::vector<const Iban*> ibans = {&iban};
   ExpectSameElements(ibans, personal_data_->GetLocalIbans());
 
   // Update the `iban` with new value.
@@ -1208,7 +1216,7 @@ TEST_F(PersonalDataManagerTest, RemoveLocalIbans) {
   AddLocalIban(iban);
 
   // Verify the `iban` has been added successfully.
-  std::vector<Iban*> ibans = {&iban};
+  std::vector<const Iban*> ibans = {&iban};
   ExpectSameElements(ibans, personal_data_->GetLocalIbans());
 
   RemoveByGUIDFromPersonalDataManager(iban.guid());
@@ -1245,7 +1253,7 @@ TEST_F(PersonalDataManagerTest, OnAcceptedLocalIbanSave) {
   // Expect that the new IBAN is added.
   ASSERT_EQ(2U, personal_data_->GetLocalIbans().size());
 
-  std::vector<Iban*> ibans;
+  std::vector<const Iban*> ibans;
   ibans.push_back(&iban0);
   ibans.push_back(&iban1);
   // Verify that we've loaded the IBAN from the web database.
@@ -1281,6 +1289,60 @@ TEST_F(PersonalDataManagerTest, OnAcceptedLocalIbanSave) {
   // the user can load the IBANs from the local web database on browser startup.
   ResetPersonalDataManager();
   ExpectSameElements(ibans, personal_data_->GetLocalIbans());
+}
+
+TEST_F(PersonalDataManagerTest, RecordIbanUsage_LocalIban) {
+  base::HistogramTester histogram_tester;
+  // Create the test clock and set the time to a specific value.
+  TestAutofillClock test_clock;
+  test_clock.SetNow(kArbitraryTime);
+  Iban local_iban;
+  local_iban.set_value(u"FR76 3000 6000 0112 3456 7890 189");
+  EXPECT_EQ(local_iban.use_count(), 1u);
+  EXPECT_EQ(local_iban.use_date(), kArbitraryTime);
+  EXPECT_EQ(local_iban.modification_date(), kArbitraryTime);
+
+  AddLocalIban(local_iban);
+
+  // Set the current time to sometime later.
+  test_clock.SetNow(kSomeLaterTime);
+
+  // Use `local_iban`, then verify usage stats.
+  EXPECT_EQ(personal_data_->GetLocalIbans().size(), 1u);
+  personal_data_->RecordUseOfIban(local_iban);
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+  histogram_tester.ExpectTotalCount(
+      "Autofill.DaysSinceLastUse.StoredIban.Local", 1);
+  EXPECT_EQ(local_iban.use_count(), 2u);
+  EXPECT_EQ(local_iban.use_date(), kSomeLaterTime);
+  EXPECT_EQ(local_iban.modification_date(), kArbitraryTime);
+}
+
+TEST_F(PersonalDataManagerTest, RecordIbanUsage_ServerIban) {
+  base::HistogramTester histogram_tester;
+  // Create the test clock and set the time to a specific value.
+  TestAutofillClock test_clock;
+  test_clock.SetNow(kArbitraryTime);
+  Iban server_iban = test::GetServerIban();
+  EXPECT_EQ(server_iban.use_count(), 1u);
+  EXPECT_EQ(server_iban.use_date(), kArbitraryTime);
+  EXPECT_EQ(server_iban.modification_date(), kArbitraryTime);
+  GetServerDataTable()->SetServerIbansForTesting({server_iban});
+  personal_data_->Refresh();
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+
+  // Set the current time to sometime later.
+  test_clock.SetNow(kSomeLaterTime);
+
+  // Use `server_iban`, then verify usage stats.
+  EXPECT_EQ(personal_data_->GetServerIbans().size(), 1u);
+  personal_data_->RecordUseOfIban(server_iban);
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+  histogram_tester.ExpectTotalCount(
+      "Autofill.DaysSinceLastUse.StoredIban.Server", 1);
+  EXPECT_EQ(server_iban.use_count(), 2u);
+  EXPECT_EQ(server_iban.use_date(), kSomeLaterTime);
+  EXPECT_EQ(server_iban.modification_date(), kArbitraryTime);
 }
 
 TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
@@ -1347,7 +1409,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
   credit_card3.set_record_type(CreditCard::RecordType::kFullServerCard);
   credit_card3.set_server_id("server_id");
 
-  personal_data_->AddFullServerCreditCard(credit_card3);
+  personal_data_->AddFullServerCreditCardForTesting(credit_card3);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   cards.push_back(&credit_card3);
@@ -1356,7 +1418,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
   // Must not add a duplicate server card with same GUID.
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(0);
 
-  personal_data_->AddFullServerCreditCard(credit_card3);
+  personal_data_->AddFullServerCreditCardForTesting(credit_card3);
 
   ExpectSameElements(cards, personal_data_->GetCreditCards());
 
@@ -1367,7 +1429,7 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
 
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(0);
 
-  personal_data_->AddFullServerCreditCard(duplicate_server_card);
+  personal_data_->AddFullServerCreditCardForTesting(duplicate_server_card);
 
   ExpectSameElements(cards, personal_data_->GetCreditCards());
 }
@@ -1542,7 +1604,7 @@ TEST_F(PersonalDataManagerTest, AddCreditCard_Invalid) {
 TEST_F(PersonalDataManagerTest, GetCreditCardByServerId) {
   CreditCard card = test::GetFullServerCard();
   card.set_server_id("server id");
-  personal_data_->AddFullServerCreditCard(card);
+  personal_data_->AddFullServerCreditCardForTesting(card);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   ASSERT_EQ(1u, personal_data_->GetCreditCards().size());
@@ -1589,7 +1651,7 @@ TEST_F(PersonalDataManagerTest,
 TEST_F(PersonalDataManagerMockTest, ProcessCardArtUrlChanges) {
   CreditCard card = test::GetFullServerCard();
   card.set_server_id("card_server_id");
-  personal_data_->AddFullServerCreditCard(card);
+  personal_data_->AddFullServerCreditCardForTesting(card);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   card.set_server_id("card_server_id");
@@ -1597,14 +1659,14 @@ TEST_F(PersonalDataManagerMockTest, ProcessCardArtUrlChanges) {
   std::vector<GURL> updated_urls;
   updated_urls.emplace_back("https://www.example.com/card1");
 
-  personal_data_->AddFullServerCreditCard(card);
+  personal_data_->AddFullServerCreditCardForTesting(card);
   WaitForFetchImagesForUrls();
 
   card.set_card_art_url(GURL("https://www.example.com/card2"));
   updated_urls.clear();
   updated_urls.emplace_back("https://www.example.com/card2");
 
-  personal_data_->AddFullServerCreditCard(card);
+  personal_data_->AddFullServerCreditCardForTesting(card);
   WaitForFetchImagesForUrls();
 }
 #endif
@@ -1681,12 +1743,12 @@ TEST_F(PersonalDataManagerTest, KeepExistingLocalDataOnSignIn) {
 #endif
 
 TEST_F(PersonalDataManagerTest, AddProfilesAndCreditCards) {
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile0, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
 
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "903 Apple Ct.", nullptr,
                        "Orlando", "FL", "32801", "US", "19482937549");
@@ -1735,7 +1797,7 @@ TEST_F(PersonalDataManagerTest, AddProfilesAndCreditCards) {
 // Test for http://crbug.com/50047. Makes sure that guids are populated
 // correctly on load.
 TEST_F(PersonalDataManagerTest, PopulateUniqueIDsOnLoad) {
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile0, "y", "", "", "", "", "", "", "", "", "", "",
                        "");
 
@@ -1748,7 +1810,7 @@ TEST_F(PersonalDataManagerTest, PopulateUniqueIDsOnLoad) {
   EXPECT_EQ(0, profile0.Compare(*results2[0]));
 
   // Add a new profile.
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "z", "", "", "", "", "", "", "", "", "", "",
                        "");
   AddProfileToPersonalDataManager(profile1);
@@ -1805,7 +1867,7 @@ TEST_F(PersonalDataManagerTest, SetUniqueCreditCardLabels) {
 }
 
 TEST_F(PersonalDataManagerTest, SetEmptyProfile) {
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile0, "", "", "", "", "", "", "", "", "", "", "",
                        "");
 
@@ -1841,12 +1903,12 @@ TEST_F(PersonalDataManagerTest, SetEmptyCreditCard) {
 }
 
 TEST_F(PersonalDataManagerTest, Refresh) {
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile0, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
 
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "903 Apple Ct.", nullptr,
                        "Orlando", "FL", "32801", "US", "19482937549");
@@ -1860,7 +1922,7 @@ TEST_F(PersonalDataManagerTest, Refresh) {
   profiles.push_back(&profile1);
   ExpectSameElements(profiles, personal_data_->GetProfiles());
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "1212 Center.", "Bld. 5",
                        "Orlando", "FL", "32801", "US", "19482937549");
@@ -1900,6 +1962,60 @@ TEST_F(PersonalDataManagerTest, Refresh) {
   EXPECT_EQ(profile0, *results[0]);
 }
 
+TEST_F(PersonalDataManagerTest, SaveCardLocallyIfNewWithNewCard) {
+  CreditCard credit_card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                         kSettingsOrigin);
+  test::SetCreditCardInfo(&credit_card, "Sunraku Emul",
+                          "4111 1111 1111 1111" /* Visa */, "01", "2999", "");
+
+  EXPECT_EQ(0U, personal_data_->GetCreditCards().size());
+
+  // Add the credit card to the database.
+  bool is_saved = personal_data_->SaveCardLocallyIfNew(credit_card);
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+
+  // Expect that the credit card was saved.
+  EXPECT_TRUE(is_saved);
+  std::vector<CreditCard> saved_credit_cards;
+  for (auto* result : personal_data_->GetCreditCards()) {
+    saved_credit_cards.push_back(*result);
+  }
+
+  EXPECT_THAT(saved_credit_cards, ElementsAre(credit_card));
+}
+
+TEST_F(PersonalDataManagerTest, SaveCardLocallyIfNewWithExistingCard) {
+  const char* credit_card_number = "4111 1111 1111 1111" /* Visa */;
+  CreditCard credit_card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                         kSettingsOrigin);
+  test::SetCreditCardInfo(&credit_card, "Sunraku Emul", credit_card_number,
+                          "01", "2999", "");
+
+  // Add the credit card to the database.
+  personal_data_->AddCreditCard(credit_card);
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+  EXPECT_EQ(1U, personal_data_->GetCreditCards().size());
+
+  // Create a new credit card with the same card number but different detailed
+  // information.
+  CreditCard similar_credit_card(
+      base::Uuid::GenerateRandomV4().AsLowercaseString(), kSettingsOrigin);
+  test::SetCreditCardInfo(&similar_credit_card, "Sunraku Emul",
+                          credit_card_number, "02", "3999",
+                          "Different billing address");
+  // Try to add the similar credit card to the database.
+  bool is_saved = personal_data_->SaveCardLocallyIfNew(similar_credit_card);
+
+  // Expect that the saved credit card was not updated.
+  EXPECT_FALSE(is_saved);
+  std::vector<CreditCard> saved_credit_cards;
+  for (auto* result : personal_data_->GetCreditCards()) {
+    saved_credit_cards.push_back(*result);
+  }
+
+  EXPECT_THAT(saved_credit_cards, ElementsAre(credit_card));
+}
+
 // Ensure that verified credit cards can be saved via
 // OnAcceptedLocalCreditCardSave.
 TEST_F(PersonalDataManagerTest, OnAcceptedLocalCreditCardSaveWithVerifiedData) {
@@ -1935,12 +2051,12 @@ TEST_F(PersonalDataManagerTest, OnAcceptedLocalCreditCardSaveWithVerifiedData) {
 
 TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   // Check that there are no available types with no profiles stored.
-  ServerFieldTypeSet non_empty_types;
+  FieldTypeSet non_empty_types;
   personal_data_->GetNonEmptyTypes(&non_empty_types);
   EXPECT_EQ(0U, non_empty_types.size());
 
   // Test with one profile stored.
-  AutofillProfile profile0;
+  AutofillProfile profile0(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile0, "Marion", nullptr, "Morrison",
                        "johnwayne@me.xyz", nullptr, "123 Zoo St.", nullptr,
                        "Hollywood", "CA", "91601", "US", "14155678910");
@@ -1950,25 +2066,25 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
   // Make sure everything is set up correctly.
   EXPECT_EQ(1U, personal_data_->GetProfiles().size());
 
-  std::vector<ServerFieldType> expected_types{NAME_FIRST,
-                                              NAME_LAST,
-                                              NAME_FULL,
-                                              EMAIL_ADDRESS,
-                                              ADDRESS_HOME_ADDRESS,
-                                              ADDRESS_HOME_STREET_LOCATION,
-                                              ADDRESS_HOME_LINE1,
-                                              ADDRESS_HOME_STREET_ADDRESS,
-                                              ADDRESS_HOME_CITY,
-                                              ADDRESS_HOME_STATE,
-                                              ADDRESS_HOME_ZIP,
-                                              ADDRESS_HOME_COUNTRY,
-                                              PHONE_HOME_NUMBER,
-                                              PHONE_HOME_NUMBER_PREFIX,
-                                              PHONE_HOME_NUMBER_SUFFIX,
-                                              PHONE_HOME_COUNTRY_CODE,
-                                              PHONE_HOME_CITY_CODE,
-                                              PHONE_HOME_CITY_AND_NUMBER,
-                                              PHONE_HOME_WHOLE_NUMBER};
+  std::vector<FieldType> expected_types{NAME_FIRST,
+                                        NAME_LAST,
+                                        NAME_FULL,
+                                        EMAIL_ADDRESS,
+                                        ADDRESS_HOME_ADDRESS,
+                                        ADDRESS_HOME_STREET_LOCATION,
+                                        ADDRESS_HOME_LINE1,
+                                        ADDRESS_HOME_STREET_ADDRESS,
+                                        ADDRESS_HOME_CITY,
+                                        ADDRESS_HOME_STATE,
+                                        ADDRESS_HOME_ZIP,
+                                        ADDRESS_HOME_COUNTRY,
+                                        PHONE_HOME_NUMBER,
+                                        PHONE_HOME_NUMBER_PREFIX,
+                                        PHONE_HOME_NUMBER_SUFFIX,
+                                        PHONE_HOME_COUNTRY_CODE,
+                                        PHONE_HOME_CITY_CODE,
+                                        PHONE_HOME_CITY_AND_NUMBER,
+                                        PHONE_HOME_WHOLE_NUMBER};
   // For structured names and addresses, there are more non-empty types.
   expected_types.push_back(NAME_LAST_SECOND);
   expected_types.insert(expected_types.end(),
@@ -1979,12 +2095,12 @@ TEST_F(PersonalDataManagerTest, GetNonEmptyTypes) {
               testing::UnorderedElementsAreArray(expected_types));
 
   // Test with multiple profiles stored.
-  AutofillProfile profile1;
+  AutofillProfile profile1(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile1, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "903 Apple Ct.", nullptr,
                        "Orlando", "FL", "32801", "US", "16502937549");
 
-  AutofillProfile profile2;
+  AutofillProfile profile2(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile2, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "1212 Center.", "Bld. 5",
                        "Orlando", "FL", "32801", "US", "16502937549");
@@ -2216,7 +2332,7 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromVariations) {
 }
 
 TEST_F(PersonalDataManagerTest, UpdateLanguageCodeInProfile) {
-  AutofillProfile profile;
+  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
                        "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
                        "Hollywood", "CA", "91601", "US", "12345678910");
@@ -2242,14 +2358,15 @@ TEST_F(PersonalDataManagerTest, GetProfilesToSuggest_ProfileAutofillDisabled) {
   ASSERT_TRUE(TurnOnSyncFeature());
 
   // Add two different profiles, a local and a server one.
-  AutofillProfile local_profile;
+  AutofillProfile local_profile(
+      i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&local_profile, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "1212 Center.", "Bld. 5",
                        "Orlando", "FL", "32801", "US", "19482937549");
   AddProfileToPersonalDataManager(local_profile);
 
   // Disable Profile autofill.
-  prefs::SetAutofillProfileEnabled(personal_data_->pref_service_, false);
+  prefs::SetAutofillProfileEnabled(prefs_.get(), false);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   // Check that profiles were saved.
@@ -2267,7 +2384,8 @@ TEST_F(PersonalDataManagerTest,
   ASSERT_TRUE(TurnOnSyncFeature());
 
   // Add two different profiles, a local and a server one.
-  AutofillProfile local_profile;
+  AutofillProfile local_profile(
+      i18n_model_definition::kLegacyHierarchyCountryCode);
   test::SetProfileInfo(&local_profile, "Josephine", "Alicia", "Saenz",
                        "joewayne@me.xyz", "Fox", "1212 Center.", "Bld. 5",
                        "Orlando", "FL", "32801", "US", "19482937549");
@@ -2282,7 +2400,7 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(expected_profiles, personal_data_->GetProfilesToSuggest().size());
 
   // Disable Profile autofill.
-  prefs::SetAutofillProfileEnabled(personal_data_->pref_service_, false);
+  prefs::SetAutofillProfileEnabled(prefs_.get(), false);
   // Reload the database.
   ResetPersonalDataManager();
 
@@ -2290,22 +2408,13 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(0U, personal_data_->GetProfilesToSuggest().size());
 }
 
-// Test that local profiles are not added if |kAutofillProfileEnabled| is set to
-// |false|.
+// Test that profiles are not added if `kAutofillProfileEnabled` is set to
+// false.
 TEST_F(PersonalDataManagerTest,
        GetProfilesToSuggest_NoProfilesAddedIfDisabled) {
-  // Disable Profile autofill.
-  prefs::SetAutofillProfileEnabled(personal_data_->pref_service_, false);
-
-  // Add a local profile.
-  AutofillProfile local_profile;
-  test::SetProfileInfo(&local_profile, "Josephine", "Alicia", "Saenz",
-                       "joewayne@me.xyz", "Fox", "1212 Center.", "Bld. 5",
-                       "Orlando", "FL", "32801", "US", "19482937549");
-  AddProfileToPersonalDataManager(local_profile);
-
-  // Expect no profile values or suggestions were added.
-  EXPECT_EQ(0U, personal_data_->GetProfiles().size());
+  prefs::SetAutofillProfileEnabled(prefs_.get(), false);
+  AddProfileToPersonalDataManager(test::GetFullProfile());
+  EXPECT_TRUE(personal_data_->GetProfiles().empty());
 }
 
 TEST_F(PersonalDataManagerTest, IsKnownCard_MatchesMaskedServerCard) {
@@ -2586,7 +2695,7 @@ TEST_F(PersonalDataManagerTest,
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   // Disable Credit card autofill.
-  prefs::SetAutofillPaymentMethodsEnabled(personal_data_->pref_service_, false);
+  prefs::SetAutofillPaymentMethodsEnabled(prefs_.get(), false);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   // Check that profiles were saved.
@@ -2629,7 +2738,7 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(5U, personal_data_->GetCreditCards().size());
 
   // Disable Credit card autofill.
-  prefs::SetAutofillPaymentMethodsEnabled(personal_data_->pref_service_, false);
+  prefs::SetAutofillPaymentMethodsEnabled(prefs_.get(), false);
   // Reload the database.
   ResetPersonalDataManager();
 
@@ -2646,7 +2755,7 @@ TEST_F(PersonalDataManagerTest,
 TEST_F(PersonalDataManagerTest,
        GetCreditCardsToSuggest_NoCreditCardsAddedIfDisabled) {
   // Disable Profile autofill.
-  prefs::SetAutofillPaymentMethodsEnabled(personal_data_->pref_service_, false);
+  prefs::SetAutofillPaymentMethodsEnabled(prefs_.get(), false);
 
   // Add a local credit card.
   CreditCard credit_card("002149C1-EE28-4213-A3B9-DA243FFF021B",
@@ -3303,7 +3412,7 @@ TEST_F(PersonalDataManagerSyncTransportModeTest, SwitchServerStorages) {
   server_card.set_guid("00000000-0000-0000-0000-000000000007");
   server_card.set_record_type(CreditCard::RecordType::kFullServerCard);
   server_card.set_server_id("server_id");
-  personal_data_->AddFullServerCreditCard(server_card);
+  personal_data_->AddFullServerCreditCardForTesting(server_card);
   PersonalDataProfileTaskWaiter(*personal_data_).Wait();
 
   EXPECT_EQ(1U, personal_data_->GetServerCreditCards().size());
@@ -3328,7 +3437,7 @@ TEST_F(PersonalDataManagerSyncTransportModeTest,
   server_card.set_guid("00000000-0000-0000-0000-000000000007");
   server_card.set_record_type(CreditCard::RecordType::kFullServerCard);
   server_card.set_server_id("server_id");
-  personal_data_->AddFullServerCreditCard(server_card);
+  personal_data_->AddFullServerCreditCardForTesting(server_card);
 
   // Set server card metadata.
   server_card.set_use_count(15);
@@ -3338,7 +3447,7 @@ TEST_F(PersonalDataManagerSyncTransportModeTest,
 
   // Expect that the server card is stored in the account autofill table.
   std::vector<std::unique_ptr<CreditCard>> cards;
-  account_autofill_table_->GetServerCreditCards(&cards);
+  account_autofill_table_->GetServerCreditCards(cards);
   EXPECT_EQ(1U, cards.size());
   EXPECT_EQ(server_card.LastFourDigits(), cards[0]->LastFourDigits());
 
@@ -3358,20 +3467,6 @@ TEST_F(PersonalDataManagerSyncTransportModeTest,
   profile_autofill_table_->GetCreditCards(&cards);
   EXPECT_EQ(1U, cards.size());
   EXPECT_EQ(local_card.LastFourDigits(), cards[0]->LastFourDigits());
-
-  // Add a local profile
-  AutofillProfile profile;
-  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox", "123 Zoo St", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-  AddProfileToPersonalDataManager(profile);
-
-  std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  // Expect that a profile is stored in the profile autofill table.
-  profile_autofill_table_->GetAutofillProfiles(
-      AutofillProfile::Source::kLocalOrSyncable, &profiles);
-  EXPECT_EQ(1U, profiles.size());
-  EXPECT_EQ(profile, *profiles[0]);
 }
 
 // Tests that the least recently used profile of two existing profiles is
@@ -3974,15 +4069,6 @@ TEST_F(PersonalDataManagerTest, RemoveObserverInOnPersonalDataChanged) {
 }
 
 TEST_F(PersonalDataManagerTest, IsEligibleForAddressAccountStorage) {
-  base::test::ScopedFeatureList features;
-  features.InitWithFeaturesAndParameters(
-      /*enabled_features=*/
-      {{base::test::FeatureRefAndParams(
-           features::kAutofillAccountProfileStorage,
-           {{features::kAutofillAccountProfileStorageFromUnsupportedIPs.name,
-             "false"}})}},
-      /*disabled_features=*/{});
-
   // No Sync, no account storage.
   personal_data_->SetSyncServiceForTest(nullptr);
   EXPECT_FALSE(personal_data_->IsEligibleForAddressAccountStorage());
@@ -3992,10 +4078,6 @@ TEST_F(PersonalDataManagerTest, IsEligibleForAddressAccountStorage) {
   personal_data_->SetSyncServiceForTest(&sync_service);
   EXPECT_TRUE(personal_data_->IsEligibleForAddressAccountStorage());
 
-  // Being located in an unsupported country makes the user ineligible.
-  personal_data_->set_variations_country_code_for_testing("CU");
-  EXPECT_FALSE(personal_data_->IsEligibleForAddressAccountStorage());
-
   // Unregister the Sync observer.
   personal_data_->OnSyncShutdown(&sync_service);
 }
@@ -4003,6 +4085,36 @@ TEST_F(PersonalDataManagerTest, IsEligibleForAddressAccountStorage) {
 TEST_F(PersonalDataManagerTest, IsCountryEligibleForAccountStorage) {
   EXPECT_TRUE(personal_data_->IsCountryEligibleForAccountStorage("AT"));
   EXPECT_FALSE(personal_data_->IsCountryEligibleForAccountStorage("IR"));
+}
+
+TEST_F(PersonalDataManagerTest, ClearAllCvcs) {
+  base::test::ScopedFeatureList features(
+      features::kAutofillEnableCvcStorageAndFilling);
+  // Add a server card and its CVC.
+  CreditCard server_card = test::GetMaskedServerCard();
+  const std::u16string server_cvc = u"111";
+  SetServerCards({server_card});
+  personal_data_->AddServerCvc(server_card.instrument_id(), server_cvc);
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+
+  // Add a local card and its CVC.
+  CreditCard local_card = test::GetCreditCard();
+  const std::u16string local_cvc = u"999";
+  local_card.set_cvc(local_cvc);
+  personal_data_->AddCreditCard(local_card);
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+
+  ASSERT_EQ(personal_data_->GetLocalCreditCards().size(), 1U);
+  ASSERT_EQ(personal_data_->GetServerCreditCards().size(), 1U);
+  EXPECT_EQ(personal_data_->GetServerCreditCards()[0]->cvc(), server_cvc);
+  EXPECT_EQ(personal_data_->GetLocalCreditCards()[0]->cvc(), local_cvc);
+
+  // Clear out all the CVCs (local + server).
+  personal_data_->ClearLocalCvcs();
+  personal_data_->ClearServerCvcs();
+  PersonalDataProfileTaskWaiter(*personal_data_).Wait();
+  EXPECT_TRUE(personal_data_->GetServerCreditCards()[0]->cvc().empty());
+  EXPECT_TRUE(personal_data_->GetLocalCreditCards()[0]->cvc().empty());
 }
 
 }  // namespace autofill

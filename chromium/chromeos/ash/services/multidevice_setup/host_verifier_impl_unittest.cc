@@ -147,7 +147,7 @@ class MultiDeviceSetupHostVerifierImplTest
     }
 
     if (host_state == HostState::kHostNotSet)
-      fake_host_backend_delegate_->NotifyHostChangedOnBackend(absl::nullopt);
+      fake_host_backend_delegate_->NotifyHostChangedOnBackend(std::nullopt);
     else
       fake_host_backend_delegate_->NotifyHostChangedOnBackend(test_device_);
 
@@ -277,10 +277,9 @@ class MultiDeviceSetupHostVerifierImplTest
   std::unique_ptr<sync_preferences::TestingPrefServiceSyncable>
       test_pref_service_;
   std::unique_ptr<base::SimpleTestClock> test_clock_;
-  raw_ptr<base::MockOneShotTimer, DanglingUntriaged | ExperimentalAsh>
-      mock_retry_timer_ = nullptr;
-  raw_ptr<base::MockOneShotTimer, DanglingUntriaged | ExperimentalAsh>
-      mock_sync_timer_ = nullptr;
+  raw_ptr<base::MockOneShotTimer, DanglingUntriaged> mock_retry_timer_ =
+      nullptr;
+  raw_ptr<base::MockOneShotTimer, DanglingUntriaged> mock_sync_timer_ = nullptr;
 
   std::unique_ptr<HostVerifier> host_verifier_;
 
@@ -487,7 +486,7 @@ TEST_P(MultiDeviceSetupHostVerifierImplTest,
               0 /* expected_retry_delta_value */);
 
   fake_host_backend_delegate()->AttemptToSetMultiDeviceHostOnBackend(
-      absl::nullopt /* host_device */);
+      std::nullopt /* host_device */);
   VerifyState(false /* expected_is_verified */,
               0u /* expected_num_verified_events */,
               0 /* expected_retry_timestamp_value */,

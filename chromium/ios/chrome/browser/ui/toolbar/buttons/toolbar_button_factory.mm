@@ -60,7 +60,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
       DefaultSymbolWithPointSize(kBackSymbol, kSymbolToolbarPointSize);
 
   if (IsVivaldiRunning())
-    backImage = [UIImage imageNamed:@"toolbar_back"]; // End Vivaldi
+    backImage = [UIImage imageNamed:vToolbarBackButtonIcon]; // End Vivaldi
 
   ToolbarButton* backButton = [[ToolbarButton alloc]
       initWithImage:[backImage imageFlippedForRightToLeftLayoutDirection]];
@@ -79,7 +79,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
       DefaultSymbolWithPointSize(kForwardSymbol, kSymbolToolbarPointSize);
 
   if (IsVivaldiRunning())
-    forwardImage = [UIImage imageNamed:@"toolbar_forward"]; // End Vivaldi
+    forwardImage = [UIImage imageNamed:vToolbarForwardButtonIcon];
+  // End Vivaldi
 
   ToolbarButton* forwardButton = [[ToolbarButton alloc]
       initWithImage:[forwardImage imageFlippedForRightToLeftLayoutDirection]];
@@ -99,7 +100,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
       CustomSymbolWithPointSize(kSquareNumberSymbol, kSymbolToolbarPointSize);
 
   if (IsVivaldiRunning())
-    tabGridImage = [UIImage imageNamed:@"toolbar_switcher"]; // End Vivaldi
+    tabGridImage = [UIImage imageNamed:vToolbarTabSwitcherButtonIcon];
+  // End Vivaldi
 
   ToolbarTabGridButton* tabGridButton =
       [[ToolbarTabGridButton alloc] initWithImage:tabGridImage];
@@ -123,11 +125,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
                                                kSymbolToolbarPointSize)];
 
   if (IsVivaldiRunning()) {
-    BOOL isIncognito = self.style == ToolbarStyle::kIncognito;
     UIImage *menuImage = [UIImage imageNamed:vToolbarMenu];
-    UIImage *templateImage = [menuImage imageWithRenderingMode:isIncognito ?
-      UIImageRenderingModeAlwaysTemplate : UIImageRenderingModeAlwaysOriginal];
-    toolsMenuButton = [[ToolbarButton alloc] initWithImage:templateImage];
+    toolsMenuButton = [[ToolbarButton alloc] initWithImage:menuImage];
   } // End Vivaldi
 
   SetA11yLabelAndUiAutomationName(toolsMenuButton, IDS_IOS_TOOLBAR_SETTINGS,
@@ -171,8 +170,8 @@ const CGFloat kSymbolToolbarPointSize = 24;
   if (IsVivaldiRunning())
     reloadImage = [UIImage imageNamed:@"toolbar_reload"]; // End Vivaldi
 
-  ToolbarButton* reloadButton = [[ToolbarButton alloc]
-      initWithImage:[reloadImage imageFlippedForRightToLeftLayoutDirection]];
+  ToolbarButton* reloadButton =
+      [[ToolbarButton alloc] initWithImage:reloadImage];
   [self configureButton:reloadButton width:kAdaptiveToolbarButtonWidth];
   reloadButton.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_ACCNAME_RELOAD);
@@ -259,28 +258,18 @@ const CGFloat kSymbolToolbarPointSize = 24;
       setContentCompressionResistancePriority:UILayoutPriorityRequired
                                       forAxis:UILayoutConstraintAxisHorizontal];
 
-  if (IsUIButtonConfigurationEnabled()) {
-    UIButtonConfiguration* buttonConfiguration =
-        [UIButtonConfiguration plainButtonConfiguration];
-    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-        0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
-    UIFont* font = [UIFont systemFontOfSize:kLocationBarFontSize];
-    NSDictionary* attributes = @{NSFontAttributeName : font};
-    NSMutableAttributedString* attributedString =
-        [[NSMutableAttributedString alloc]
-            initWithString:l10n_util::GetNSString(IDS_CANCEL)
-                attributes:attributes];
-    buttonConfiguration.attributedTitle = attributedString;
-    cancelButton.configuration = buttonConfiguration;
-  } else {
-    cancelButton.titleLabel.font =
-        [UIFont systemFontOfSize:kLocationBarFontSize];
-    [cancelButton setTitle:l10n_util::GetNSString(IDS_CANCEL)
-                  forState:UIControlStateNormal];
-    UIEdgeInsets contentInsets = UIEdgeInsetsMake(
-        0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
-    SetContentEdgeInsets(cancelButton, contentInsets);
-  }
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+      0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
+  UIFont* font = [UIFont systemFontOfSize:kLocationBarFontSize];
+  NSDictionary* attributes = @{NSFontAttributeName : font};
+  NSMutableAttributedString* attributedString =
+      [[NSMutableAttributedString alloc]
+          initWithString:l10n_util::GetNSString(IDS_CANCEL)
+              attributes:attributes];
+  buttonConfiguration.attributedTitle = attributedString;
+  cancelButton.configuration = buttonConfiguration;
 
   cancelButton.hidden = YES;
   [cancelButton addTarget:self.actionHandler
@@ -304,7 +293,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
                  action:@selector(panelAction)
        forControlEvents:UIControlEventTouchUpInside];
   panelButton.visibilityMask =
-      self.visibilityConfiguration.newTabButtonVisibility;
+      self.visibilityConfiguration.toolsMenuButtonVisibility;
   return panelButton;
 }
 
@@ -326,7 +315,6 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)shieldButton {
-  BOOL isIncognito = self.style == ToolbarStyle::kIncognito;
   UIImage* shieldImage = [UIImage imageNamed:vATBShieldNone];
   ToolbarButton* shieldButton =
     [[ToolbarButton alloc]
@@ -339,12 +327,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
          forControlEvents:UIControlEventTouchUpInside];
   shieldButton.visibilityMask =
     self.visibilityConfiguration.toolsMenuButtonVisibility;
-  shieldButton.tintColor = isIncognito ?
-    UIColor.whiteColor : UIColor.vTopToolbarTintColor;
   return shieldButton;
 }
 
-// More button -> Visible only in iPhone landscape mode.
+// Visible only in iPhone portrait + Tab bar enabled + bottom omnibox enabled
+// state.
 - (ToolbarButton*)vivaldiMoreButton {
   UIImage* moreImage = [UIImage imageNamed:@"toolbar_more"];
   ToolbarButton* moreButton =
@@ -355,17 +342,44 @@ const CGFloat kSymbolToolbarPointSize = 24;
   moreButton.accessibilityLabel = GetNSString(IDS_ACCNAME_MORE);
   moreButton.visibilityMask =
     self.visibilityConfiguration.toolsMenuButtonVisibility;
-  moreButton.menu =
-    [self contextMenuForMoreWithAllButtons:NO
-                            atbSettingType:ATBSettingNoBlocking];
   moreButton.showsMenuAsPrimaryAction = YES;
   return moreButton;
 }
 
-/// Returns the more button options based on the browsing state.
-- (UIMenu*)contextMenuForMoreWithAllButtons:(BOOL)allButtons
-                             atbSettingType:(ATBSettingType)type {
+- (UIMenu*)overflowMenuWithTrackerBlocker:(BOOL)trackerBlockerEnabled
+                           atbSettingType:(ATBSettingType)type
+                 navigationForwardEnabled:(BOOL)navigationForwardEnabled
+                navigationBackwordEnabled:(BOOL)navigationBackwordEnabled {
 
+  NSMutableArray* overflowActions = [NSMutableArray array];
+
+  // Set correct icon for tracker blocker based on settings before
+  // creating the menu.
+  if (trackerBlockerEnabled) {
+    [overflowActions
+        addObject:[self adAndTrackBlockerActionWithSettingType:type]];
+  }
+
+  // Add common actions
+  [overflowActions addObject:self.tabSwitcherAction];
+  [overflowActions addObject:self.panelAction];
+
+  // Conditionally add navigation actions
+  if (navigationBackwordEnabled) {
+    [overflowActions addObject:self.navigationBackwordAction];
+  }
+
+  if (navigationForwardEnabled) {
+    [overflowActions addObject:self.navigationForwardAction];
+  }
+
+  // Create and return the menu with the actions
+  UIMenu* menu = [UIMenu menuWithTitle:@"" children:overflowActions];
+  return menu;
+}
+
+#pragma mark - Private
+- (UIAction*)adAndTrackBlockerActionWithSettingType:(ATBSettingType)type {
   NSString* shieldIcon = vATBShieldNone;
   switch (type) {
     case ATBSettingNoBlocking:
@@ -380,42 +394,97 @@ const CGFloat kSymbolToolbarPointSize = 24;
     default:
       break;
   }
-
   NSString* atbTitle =
       GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
+  UIImage* buttonIcon =
+      [self toolbarButtonWithImage:shieldIcon];
   UIAction* atbAction =
       [UIAction actionWithTitle:atbTitle
-                          image:[[UIImage imageNamed:shieldIcon]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+                          image:buttonIcon
                      identifier:nil
                         handler:^(__kindof UIAction*_Nonnull
                                   action) {
         [self.actionHandler showTrackerBlockerManager];
       }];
   atbAction.accessibilityLabel = atbTitle;
+  return atbAction;
+}
 
-  NSString* panelTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_PANEL);
+- (UIAction*)panelAction {
+  NSString* buttonTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_PANEL);
+  UIImage* buttonIcon =
+      [self toolbarButtonWithImage:vToolbarPanelButtonIcon];
   UIAction* panelAction =
-      [UIAction actionWithTitle:panelTitle
-                          image:[UIImage imageNamed:vToolbarPanelButtonIcon]
+      [UIAction actionWithTitle:buttonTitle
+                          image:buttonIcon
                      identifier:nil
                         handler:^(__kindof UIAction*_Nonnull
                                   action) {
         [self.actionHandler panelAction];
       }];
-  panelAction.accessibilityLabel = panelTitle;
-
-  NSArray* moreActions = [[NSArray alloc] initWithObjects:@[], nil];
-
-  if (allButtons) {
-    moreActions = @[atbAction, panelAction];
-  } else {
-    moreActions = @[panelAction];
-  }
-
-  UIMenu* menu = [UIMenu menuWithTitle:@"" children:moreActions];
-  return menu;
+  panelAction.accessibilityLabel = buttonTitle;
+  return panelAction;
 }
+
+- (UIAction*)navigationForwardAction {
+  NSString* buttonTitle = GetNSString(IDS_IOS_TOOLBAR_OVERFLOW_FORWARD);
+  UIImage* buttonIcon =
+      [self toolbarButtonWithImage:vToolbarForwardButtonIcon];
+  UIAction* forwardAction =
+      [UIAction actionWithTitle:buttonTitle
+                          image:buttonIcon
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self.actionHandler forwardAction];
+      }];
+  forwardAction.accessibilityLabel = buttonTitle;
+  return forwardAction;
+}
+
+- (UIAction*)navigationBackwordAction {
+  NSString* buttonTitle = GetNSString(IDS_IOS_TOOLBAR_OVERFLOW_BACK);
+  UIImage* buttonIcon =
+      [self toolbarButtonWithImage:vToolbarBackButtonIcon];
+  UIAction* backAction =
+      [UIAction actionWithTitle:buttonTitle
+                          image:buttonIcon
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self.actionHandler backAction];
+      }];
+  backAction.accessibilityLabel = buttonTitle;
+  return backAction;
+}
+
+- (UIAction*)tabSwitcherAction {
+  NSString* buttonTitle = GetNSString(IDS_IOS_TOOLBAR_OVERFLOW_TAB_SWITCHER);
+  UIImage* buttonIcon =
+      [self toolbarButtonWithImage:vToolbarTabSwitcherOveflowButtonIcon];
+  UIAction* tabSwitcherAction =
+      [UIAction actionWithTitle:buttonTitle
+                          image:buttonIcon
+                     identifier:nil
+                        handler:^(__kindof UIAction*_Nonnull
+                                  action) {
+        [self.actionHandler tabGridTouchDown];
+        [self.actionHandler tabGridTouchUp];
+      }];
+  tabSwitcherAction.accessibilityLabel = buttonTitle;
+  return tabSwitcherAction;
+}
+
+// Apply default tint color to the image and return.
+- (UIImage*)toolbarButtonWithImage:(NSString*)image {
+  UIColor* tintColor = [UIColor colorNamed:vToolbarButtonColor];
+  UIImage* buttonIcon =
+      [[UIImage imageNamed:image]
+          imageWithTintColor:tintColor
+               renderingMode:UIImageRenderingModeAlwaysOriginal];
+  return buttonIcon;
+}
+
 // End Vivaldi
 
 #pragma mark - Helpers

@@ -29,12 +29,11 @@ import org.robolectric.annotation.Implements;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.toolbar.R;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
+import org.chromium.ui.listmenu.ListMenuButton;
 import org.chromium.ui.widget.AnchoredPopupWindow;
 
 /** Unit tests for the {@link AdaptiveButtonActionMenuCoordinator}. */
@@ -55,7 +54,6 @@ public class AdaptiveButtonActionMenuCoordinatorTest {
 
     @Test
     @SmallTest
-    @DisableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR)
     @EnableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2)
     public void testCreateOnLongClickListener() {
         AdaptiveButtonActionMenuCoordinator coordinator = new AdaptiveButtonActionMenuCoordinator();
@@ -82,7 +80,6 @@ public class AdaptiveButtonActionMenuCoordinatorTest {
 
     @Test
     @SmallTest
-    @DisableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR)
     @EnableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2)
     public void testCreateOnLongClickListener_clickHandlerIsNotModified() {
         AdaptiveButtonActionMenuCoordinator coordinator = new AdaptiveButtonActionMenuCoordinator();

@@ -14,6 +14,8 @@
 
 //! A manual benchmark for more interactive parameter-twiddling.
 
+#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+
 use clap::Parser as _;
 use crypto_provider_rustcrypto::RustCrypto;
 use ldt::{LdtDecryptCipher, LdtEncryptCipher, LdtKey, Mix, Swap, XorPadder};

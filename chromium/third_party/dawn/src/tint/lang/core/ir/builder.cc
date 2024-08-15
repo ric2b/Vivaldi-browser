@@ -51,14 +51,21 @@ MultiInBlock* Builder::MultiInBlock() {
     return ir.blocks.Create<ir::MultiInBlock>();
 }
 
-Function* Builder::Function(std::string_view name,
-                            const core::type::Type* return_type,
+Function* Builder::Function(const core::type::Type* return_type,
                             Function::PipelineStage stage,
                             std::optional<std::array<uint32_t, 3>> wg_size) {
     auto* ir_func = ir.values.Create<ir::Function>(return_type, stage, wg_size);
     ir_func->SetBlock(Block());
-    ir.SetName(ir_func, name);
     ir.functions.Push(ir_func);
+    return ir_func;
+}
+
+Function* Builder::Function(std::string_view name,
+                            const core::type::Type* return_type,
+                            Function::PipelineStage stage,
+                            std::optional<std::array<uint32_t, 3>> wg_size) {
+    auto* ir_func = Function(return_type, stage, wg_size);
+    ir.SetName(ir_func, name);
     return ir_func;
 }
 
@@ -66,15 +73,25 @@ ir::Loop* Builder::Loop() {
     return Append(ir.instructions.Create<ir::Loop>(Block(), MultiInBlock(), MultiInBlock()));
 }
 
-Block* Builder::Case(ir::Switch* s, VectorRef<Switch::CaseSelector> selectors) {
+Block* Builder::Case(ir::Switch* s, VectorRef<ir::Constant*> values) {
     auto* block = Block();
-    s->Cases().Push(Switch::Case{std::move(selectors), block});
+
+    Switch::Case c;
+    c.block = block;
+    for (auto* value : values) {
+        c.selectors.Push(Switch::CaseSelector{value});
+    }
+    s->Cases().Push(std::move(c));
     block->SetParent(s);
     return block;
 }
 
-Block* Builder::Case(ir::Switch* s, std::initializer_list<Switch::CaseSelector> selectors) {
-    return Case(s, Vector<Switch::CaseSelector, 4>(selectors));
+Block* Builder::DefaultCase(ir::Switch* s) {
+    return Case(s, Vector<ir::Constant*, 1>{nullptr});
+}
+
+Block* Builder::Case(ir::Switch* s, std::initializer_list<ir::Constant*> selectors) {
+    return Case(s, Vector<ir::Constant*, 4>(selectors));
 }
 
 ir::Discard* Builder::Discard() {

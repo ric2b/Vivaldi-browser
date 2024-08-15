@@ -106,16 +106,15 @@ export class Time {
   }
 
   // Find the closest previous midnight for a given time value.
-  static quantWholeDaysUTC(time: time, realtimeOffset: duration): time {
-    const date = Time.toDate(time, realtimeOffset);
-
-    const nearestWholeDay = new Date(Date.UTC(
+  static getLatestMidnight(time: time, offset: duration): time {
+    const date = Time.toDate(time, offset);
+    const floorDay = new Date(Date.UTC(
         date.getUTCFullYear(),
         date.getUTCMonth(),
         date.getUTCDate(),
         ));
 
-    return Time.fromDate(nearestWholeDay, realtimeOffset);
+    return Time.fromDate(floorDay, offset);
   }
 
   static add(t: time, d: duration): time {
@@ -165,6 +164,24 @@ export class Duration {
   static MIN = BigintMath.INT64_MIN;
   static MAX = BigintMath.INT64_MAX;
   static ZERO = 0n;
+
+  // Cast a bigint to a |duration|. Supports potentially |undefined| values.
+  // I.e. it performs the following conversions:
+  // - `bigint` -> `duration`
+  // - `bigint|undefined` -> `duration|undefined`
+  //
+  // Use this function with caution. The function is effectively a no-op in JS,
+  // but using it tells TypeScript that "this value is a duration value". It's
+  // up to the caller to ensure the value is in the correct units.
+  //
+  // If you're reaching for this function after doing some maths on a |duration|
+  // value and it's decayed to a |bigint| consider using the static math methods
+  // in |duration| instead, as they will do the appropriate casting for you.
+  static fromRaw(v: bigint): duration;
+  static fromRaw(v?: bigint): duration|undefined;
+  static fromRaw(v?: bigint): duration|undefined {
+    return v as (duration | undefined);
+  }
 
   static min(a: duration, b: duration): duration {
     return BigintMath.min(a, b);
@@ -225,6 +242,10 @@ export class Duration {
       }
     });
     return result.slice(0, -1);
+  }
+
+  static formatSeconds(dur: duration): string {
+    return Duration.toSeconds(dur).toString() + ' s';
   }
 }
 

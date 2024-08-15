@@ -79,7 +79,6 @@
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/resolve.h"
-#include "src/tint/lang/wgsl/writer/ir_to_program/rename_conflicts.h"
 #include "src/tint/utils/containers/hashmap.h"
 #include "src/tint/utils/containers/predicates.h"
 #include "src/tint/utils/containers/reverse.h"
@@ -102,19 +101,10 @@ namespace {
 
 class State {
   public:
-    explicit State(core::ir::Module& m) : mod(m) {}
+    explicit State(const core::ir::Module& m) : mod(m) {}
 
-    Program Run() {
-        // Run transforms need to sanitize for WGSL.
-        {
-            auto result = RenameConflicts(&mod);
-            if (!result) {
-                b.Diagnostics().add(result.Failure().reason);
-                return Program(std::move(b));
-            }
-        }
-
-        if (auto res = core::ir::Validate(mod); !res) {
+    Program Run(const ProgramOptions& options) {
+        if (auto res = core::ir::Validate(mod); res != Success) {
             // IR module failed validation.
             b.Diagnostics() = res.Failure().reason;
             return Program{resolver::Resolve(b)};
@@ -123,10 +113,17 @@ class State {
         RootBlock(mod.root_block);
 
         // TODO(crbug.com/tint/1902): Emit user-declared types
-        for (auto* fn : mod.functions) {
+        for (auto& fn : mod.functions) {
             Fn(fn);
         }
-        return Program{resolver::Resolve(b)};
+
+        if (options.allow_non_uniform_derivatives) {
+            // Suppress errors regarding non-uniform derivative operations if requested, by adding a
+            // diagnostic directive to the module.
+            b.DiagnosticDirective(wgsl::DiagnosticSeverity::kOff, "derivative_uniformity");
+        }
+
+        return Program{resolver::Resolve(b, options.allowed_features)};
     }
 
   private:
@@ -137,7 +134,7 @@ class State {
     };
 
     /// The source IR module
-    core::ir::Module& mod;
+    const core::ir::Module& mod;
 
     /// The target ProgramBuilder
     ProgramBuilder b;
@@ -162,10 +159,10 @@ class State {
     using ValueBinding = std::variant<VariableValue, InlinedValue, ConsumedValue>;
 
     /// IR values to their representation
-    Hashmap<core::ir::Value*, ValueBinding, 32> bindings_;
+    Hashmap<const core::ir::Value*, ValueBinding, 32> bindings_;
 
     /// Names for values
-    Hashmap<core::ir::Value*, Symbol, 32> names_;
+    Hashmap<const core::ir::Value*, Symbol, 32> names_;
 
     /// The nesting depth of the currently generated AST
     /// 0  is module scope
@@ -178,10 +175,10 @@ class State {
     StatementList* statements_ = nullptr;
 
     /// The current switch case block
-    core::ir::Block* current_switch_case_ = nullptr;
+    const core::ir::Block* current_switch_case_ = nullptr;
 
     /// Values that can be inlined.
-    Hashset<core::ir::Value*, 64> can_inline_;
+    Hashset<const core::ir::Value*, 64> can_inline_;
 
     /// Set of enable directives emitted.
     Hashset<wgsl::Extension, 4> enables_;
@@ -192,28 +189,85 @@ class State {
     /// True if 'diagnostic(off, derivative_uniformity)' has been emitted
     bool disabled_derivative_uniformity_ = false;
 
-    void RootBlock(core::ir::Block* root) {
+    void RootBlock(const core::ir::Block* root) {
         for (auto* inst : *root) {
             tint::Switch(
-                inst,                                   //
-                [&](core::ir::Var* var) { Var(var); },  //
+                inst,                                         //
+                [&](const core::ir::Var* var) { Var(var); },  //
                 TINT_ICE_ON_NO_MATCH);
         }
     }
-    const ast::Function* Fn(core::ir::Function* fn) {
+    const ast::Function* Fn(const core::ir::Function* fn) {
         SCOPED_NESTING();
 
-        // TODO(crbug.com/tint/1915): Properly implement this when we've fleshed out Function
+        // Emit parameters.
         static constexpr size_t N = decltype(ast::Function::params)::static_length;
-        auto params = tint::Transform<N>(fn->Params(), [&](core::ir::FunctionParam* param) {
+        auto params = tint::Transform<N>(fn->Params(), [&](const core::ir::FunctionParam* param) {
             auto ty = Type(param->Type());
             auto name = NameFor(param);
+            Vector<const ast::Attribute*, 1> attrs{};
             Bind(param, name, PtrKind::kPtr);
 
-            if (ParamRequiresFullPtrParameters(param->Type())) {
-                Enable(wgsl::Extension::kChromiumExperimentalFullPtrParameters);
+            // Emit parameter attributes.
+            if (auto builtin = param->Builtin()) {
+                switch (builtin.value()) {
+                    case core::BuiltinValue::kVertexIndex:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kVertexIndex));
+                        break;
+                    case core::BuiltinValue::kInstanceIndex:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kInstanceIndex));
+                        break;
+                    case core::BuiltinValue::kPosition:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kPosition));
+                        break;
+                    case core::BuiltinValue::kFrontFacing:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kFrontFacing));
+                        break;
+                    case core::BuiltinValue::kLocalInvocationId:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kLocalInvocationId));
+                        break;
+                    case core::BuiltinValue::kLocalInvocationIndex:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kLocalInvocationIndex));
+                        break;
+                    case core::BuiltinValue::kGlobalInvocationId:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kGlobalInvocationId));
+                        break;
+                    case core::BuiltinValue::kWorkgroupId:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kWorkgroupId));
+                        break;
+                    case core::BuiltinValue::kNumWorkgroups:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kNumWorkgroups));
+                        break;
+                    case core::BuiltinValue::kSampleIndex:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kSampleIndex));
+                        break;
+                    case core::BuiltinValue::kSampleMask:
+                        attrs.Push(b.Builtin(core::BuiltinValue::kSampleMask));
+                        break;
+                    case core::BuiltinValue::kSubgroupInvocationId:
+                        Enable(wgsl::Extension::kChromiumExperimentalSubgroups);
+                        attrs.Push(b.Builtin(core::BuiltinValue::kSubgroupInvocationId));
+                        break;
+                    case core::BuiltinValue::kSubgroupSize:
+                        Enable(wgsl::Extension::kChromiumExperimentalSubgroups);
+                        attrs.Push(b.Builtin(core::BuiltinValue::kSubgroupSize));
+                        break;
+                    default:
+                        TINT_UNIMPLEMENTED() << builtin.value();
+                        break;
+                }
             }
-            return b.Param(name, ty);
+            if (auto loc = param->Location()) {
+                attrs.Push(b.Location(AInt(loc->value)));
+                if (auto interp = loc->interpolation) {
+                    attrs.Push(b.Interpolate(interp->type, interp->sampling));
+                }
+            }
+            if (param->Invariant()) {
+                attrs.Push(b.Invariant());
+            }
+
+            return b.Param(name, ty, std::move(attrs));
         });
 
         auto name = NameFor(fn);
@@ -221,16 +275,62 @@ class State {
         auto* body = Block(fn->Block());
         Vector<const ast::Attribute*, 1> attrs{};
         Vector<const ast::Attribute*, 1> ret_attrs{};
+
+        // Emit entry point attributes.
+        switch (fn->Stage()) {
+            case core::ir::Function::PipelineStage::kUndefined:
+                break;
+            case core::ir::Function::PipelineStage::kCompute: {
+                auto wgsize = fn->WorkgroupSize().value();
+                attrs.Push(b.Stage(ast::PipelineStage::kCompute));
+                attrs.Push(b.WorkgroupSize(AInt(wgsize[0]), AInt(wgsize[1]), AInt(wgsize[2])));
+                break;
+            }
+            case core::ir::Function::PipelineStage::kFragment:
+                attrs.Push(b.Stage(ast::PipelineStage::kFragment));
+                break;
+            case core::ir::Function::PipelineStage::kVertex:
+                attrs.Push(b.Stage(ast::PipelineStage::kVertex));
+                break;
+        }
+
+        // Emit return type attributes.
+        if (auto builtin = fn->ReturnBuiltin()) {
+            switch (builtin.value()) {
+                case core::BuiltinValue::kPosition:
+                    ret_attrs.Push(b.Builtin(core::BuiltinValue::kPosition));
+                    break;
+                case core::BuiltinValue::kFragDepth:
+                    ret_attrs.Push(b.Builtin(core::BuiltinValue::kFragDepth));
+                    break;
+                case core::BuiltinValue::kSampleMask:
+                    ret_attrs.Push(b.Builtin(core::BuiltinValue::kSampleMask));
+                    break;
+                default:
+                    TINT_UNIMPLEMENTED() << builtin.value();
+                    break;
+            }
+        }
+        if (auto loc = fn->ReturnLocation()) {
+            ret_attrs.Push(b.Location(AInt(loc->value)));
+            if (auto interp = loc->interpolation) {
+                ret_attrs.Push(b.Interpolate(interp->type, interp->sampling));
+            }
+        }
+        if (fn->ReturnInvariant()) {
+            ret_attrs.Push(b.Invariant());
+        }
+
         return b.Func(name, std::move(params), ret_ty, body, std::move(attrs),
                       std::move(ret_attrs));
     }
 
-    const ast::BlockStatement* Block(core::ir::Block* block) {
+    const ast::BlockStatement* Block(const core::ir::Block* block) {
         // TODO(crbug.com/tint/1902): Handle block arguments.
         return b.Block(Statements(block));
     }
 
-    StatementList Statements(core::ir::Block* block) {
+    StatementList Statements(const core::ir::Block* block) {
         StatementList stmts;
         if (block) {
             MarkInlinable(block);
@@ -242,10 +342,10 @@ class State {
         return stmts;
     }
 
-    void MarkInlinable(core::ir::Block* block) {
+    void MarkInlinable(const core::ir::Block* block) {
         // An ordered list of possibly-inlinable values returned by sequenced instructions that have
         // not yet been marked-for or ruled-out-for inlining.
-        UniqueVector<core::ir::Value*, 32> pending_resolution;
+        UniqueVector<const core::ir::Value*, 32> pending_resolution;
 
         // Walk the instructions of the block starting with the first.
         for (auto* inst : *block) {
@@ -283,10 +383,10 @@ class State {
             if (inst->Results().Length() == 1) {
                 // Instruction has a single result value.
                 // Check to see if the result of this instruction is a candidate for inlining.
-                auto* result = inst->Result();
+                auto* result = inst->Result(0);
                 // Only values with a single usage can be inlined.
                 // Named values are not inlined, as we want to emit the name for a let.
-                if (result->Usages().Count() == 1 && !mod.NameOf(result).IsValid()) {
+                if (result->NumUsages() == 1 && !mod.NameOf(result).IsValid()) {
                     if (sequenced) {
                         // The value comes from a sequenced instruction. We need to ensure
                         // instruction ordering so add it to 'pending_resolution'.
@@ -311,35 +411,35 @@ class State {
 
     void Append(const ast::Statement* inst) { statements_->Push(inst); }
 
-    void Instruction(core::ir::Instruction* inst) {
+    void Instruction(const core::ir::Instruction* inst) {
         tint::Switch(
-            inst,                                                             //
-            [&](core::ir::Access* i) { Access(i); },                          //
-            [&](core::ir::Binary* i) { Binary(i); },                          //
-            [&](core::ir::BreakIf* i) { BreakIf(i); },                        //
-            [&](core::ir::Call* i) { Call(i); },                              //
-            [&](core::ir::Continue*) {},                                      //
-            [&](core::ir::ExitIf*) {},                                        //
-            [&](core::ir::ExitLoop* i) { ExitLoop(i); },                      //
-            [&](core::ir::ExitSwitch* i) { ExitSwitch(i); },                  //
-            [&](core::ir::If* i) { If(i); },                                  //
-            [&](core::ir::Let* i) { Let(i); },                                //
-            [&](core::ir::Load* l) { Load(l); },                              //
-            [&](core::ir::LoadVectorElement* i) { LoadVectorElement(i); },    //
-            [&](core::ir::Loop* l) { Loop(l); },                              //
-            [&](core::ir::NextIteration*) {},                                 //
-            [&](core::ir::Return* i) { Return(i); },                          //
-            [&](core::ir::Store* i) { Store(i); },                            //
-            [&](core::ir::StoreVectorElement* i) { StoreVectorElement(i); },  //
-            [&](core::ir::Switch* i) { Switch(i); },                          //
-            [&](core::ir::Swizzle* i) { Swizzle(i); },                        //
-            [&](core::ir::Unary* i) { Unary(i); },                            //
-            [&](core::ir::Unreachable*) {},                                   //
-            [&](core::ir::Var* i) { Var(i); },                                //
+            inst,                                                                   //
+            [&](const core::ir::Access* i) { Access(i); },                          //
+            [&](const core::ir::Binary* i) { Binary(i); },                          //
+            [&](const core::ir::BreakIf* i) { BreakIf(i); },                        //
+            [&](const core::ir::Call* i) { Call(i); },                              //
+            [&](const core::ir::Continue*) {},                                      //
+            [&](const core::ir::ExitIf*) {},                                        //
+            [&](const core::ir::ExitLoop* i) { ExitLoop(i); },                      //
+            [&](const core::ir::ExitSwitch* i) { ExitSwitch(i); },                  //
+            [&](const core::ir::If* i) { If(i); },                                  //
+            [&](const core::ir::Let* i) { Let(i); },                                //
+            [&](const core::ir::Load* l) { Load(l); },                              //
+            [&](const core::ir::LoadVectorElement* i) { LoadVectorElement(i); },    //
+            [&](const core::ir::Loop* l) { Loop(l); },                              //
+            [&](const core::ir::NextIteration*) {},                                 //
+            [&](const core::ir::Return* i) { Return(i); },                          //
+            [&](const core::ir::Store* i) { Store(i); },                            //
+            [&](const core::ir::StoreVectorElement* i) { StoreVectorElement(i); },  //
+            [&](const core::ir::Switch* i) { Switch(i); },                          //
+            [&](const core::ir::Swizzle* i) { Swizzle(i); },                        //
+            [&](const core::ir::Unary* i) { Unary(i); },                            //
+            [&](const core::ir::Unreachable*) {},                                   //
+            [&](const core::ir::Var* i) { Var(i); },                                //
             TINT_ICE_ON_NO_MATCH);
     }
 
-    void If(core::ir::If* if_) {
+    void If(const core::ir::If* if_) {
         SCOPED_NESTING();
 
         auto true_stmts = Statements(if_->True());
@@ -367,7 +467,7 @@ class State {
         Append(b.If(cond, true_block, b.Else(false_block)));
     }
 
-    void Loop(core::ir::Loop* l) {
+    void Loop(const core::ir::Loop* l) {
         SCOPED_NESTING();
 
         // Build all the initializer statements
@@ -398,7 +498,7 @@ class State {
             for (auto* inst : *l->Body()) {
                 if (body_stmts.IsEmpty()) {
                     if (auto* if_ = inst->As<core::ir::If>()) {
-                        if (!if_->HasResults() &&                                //
+                        if (if_->Results().IsEmpty() &&                          //
                             if_->True()->Length() == 1 &&                        //
                             if_->False()->Length() == 1 &&                       //
                             tint::Is<core::ir::ExitIf>(if_->True()->Front()) &&  //
@@ -464,24 +564,24 @@ class State {
         statements_->Push(loop);
     }
 
-    void Switch(core::ir::Switch* s) {
+    void Switch(const core::ir::Switch* s) {
         SCOPED_NESTING();
 
         auto* cond = Expr(s->Condition());
 
-        auto cases = tint::Transform(
+        auto cases = tint::Transform<4>(
             s->Cases(),  //
-            [&](core::ir::Switch::Case c) -> const tint::ast::CaseStatement* {
+            [&](const core::ir::Switch::Case& c) -> const tint::ast::CaseStatement* {
                 SCOPED_NESTING();
 
                 const ast::BlockStatement* body = nullptr;
                 {
-                    TINT_SCOPED_ASSIGNMENT(current_switch_case_, c.Block());
-                    body = Block(c.Block());
+                    TINT_SCOPED_ASSIGNMENT(current_switch_case_, c.block);
+                    body = Block(c.block);
                 }
 
                 auto selectors = tint::Transform(c.selectors,  //
-                                                 [&](core::ir::Switch::CaseSelector cs) {
+                                                 [&](const core::ir::Switch::CaseSelector& cs) {
                                                      return cs.IsDefault()
                                                                 ? b.DefaultCaseSelector()
                                                                 : b.CaseSelector(Expr(cs.val));
@@ -501,9 +601,9 @@ class State {
 
     void ExitLoop(const core::ir::ExitLoop*) { Append(b.Break()); }
 
-    void BreakIf(core::ir::BreakIf* i) { Append(b.BreakIf(Expr(i->Condition()))); }
+    void BreakIf(const core::ir::BreakIf* i) { Append(b.BreakIf(Expr(i->Condition()))); }
 
-    void Return(core::ir::Return* ret) {
+    void Return(const core::ir::Return* ret) {
         if (ret->Args().IsEmpty()) {
             // Return has no arguments.
             // If this block is nested withing some control flow, then we must
@@ -524,12 +624,12 @@ class State {
         Append(b.Return(Expr(ret->Args().Front())));
     }
 
-    void Var(core::ir::Var* var) {
-        auto* val = var->Result();
+    void Var(const core::ir::Var* var) {
+        auto* val = var->Result(0);
         auto* ptr = As<core::type::Pointer>(val->Type());
         auto ty = Type(ptr->StoreType());
-        Symbol name = NameFor(var->Result());
-        Bind(var->Result(), name, PtrKind::kRef);
+        Symbol name = NameFor(var->Result(0));
+        Bind(var->Result(0), name, PtrKind::kRef);
 
         Vector<const ast::Attribute*, 4> attrs;
         if (auto bp = var->BindingPoint()) {
@@ -557,46 +657,40 @@ class State {
         }
     }
 
-    void Let(core::ir::Let* let) {
-        Symbol name = NameFor(let->Result());
+    void Let(const core::ir::Let* let) {
+        Symbol name = NameFor(let->Result(0));
         Append(b.Decl(b.Let(name, Expr(let->Value(), PtrKind::kPtr))));
-        Bind(let->Result(), name, PtrKind::kPtr);
+        Bind(let->Result(0), name, PtrKind::kPtr);
     }
 
-    void Store(core::ir::Store* store) {
+    void Store(const core::ir::Store* store) {
         auto* dst = Expr(store->To());
         auto* src = Expr(store->From());
         Append(b.Assign(dst, src));
     }
 
-    void StoreVectorElement(core::ir::StoreVectorElement* store) {
+    void StoreVectorElement(const core::ir::StoreVectorElement* store) {
         auto* ptr = Expr(store->To());
         auto* val = Expr(store->Value());
         Append(b.Assign(VectorMemberAccess(ptr, store->Index()), val));
     }
 
-    void Call(core::ir::Call* call) {
-        auto args = tint::Transform<4>(call->Args(), [&](core::ir::Value* arg) {
+    void Call(const core::ir::Call* call) {
+        auto args = tint::Transform<4>(call->Args(), [&](const core::ir::Value* arg) {
             // Pointer-like arguments are passed by pointer, never reference.
             return Expr(arg, PtrKind::kPtr);
         });
         tint::Switch(
             call,  //
-            [&](core::ir::UserCall* c) {
-                for (auto* arg : call->Args()) {
-                    if (ArgRequiresFullPtrParameters(arg)) {
-                        Enable(wgsl::Extension::kChromiumExperimentalFullPtrParameters);
-                        break;
-                    }
-                }
+            [&](const core::ir::UserCall* c) {
                 auto* expr = b.Call(NameFor(c->Target()), std::move(args));
-                if (!call->HasResults() || call->Result()->Usages().IsEmpty()) {
+                if (call->Results().IsEmpty() || !call->Result(0)->IsUsed()) {
                     Append(b.CallStmt(expr));
                     return;
                 }
-                Bind(c->Result(), expr, PtrKind::kPtr);
+                Bind(c->Result(0), expr, PtrKind::kPtr);
             },
-            [&](wgsl::ir::BuiltinCall* c) {
+            [&](const wgsl::ir::BuiltinCall* c) {
                 if (!disabled_derivative_uniformity_ && RequiresDerivativeUniformity(c->Func())) {
                     // TODO(crbug.com/tint/1985): Be smarter about disabling derivative uniformity.
                     b.DiagnosticDirective(wgsl::DiagnosticSeverity::kOff,
@@ -605,9 +699,6 @@ class State {
                 }
 
                 switch (c->Func()) {
-                    case wgsl::BuiltinFn::kTextureBarrier:
-                        Enable(wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture);
-                        break;
                     case wgsl::BuiltinFn::kSubgroupBallot:
                     case wgsl::BuiltinFn::kSubgroupBroadcast:
                         Enable(wgsl::Extension::kChromiumExperimentalSubgroups);
@@ -617,49 +708,52 @@ class State {
                 }
 
                 auto* expr = b.Call(c->Func(), std::move(args));
-                if (!call->HasResults() || call->Result()->Type()->Is<core::type::Void>()) {
+                if (call->Results().IsEmpty() || call->Result(0)->Type()->Is<core::type::Void>()) {
                     Append(b.CallStmt(expr));
                     return;
                 }
-                Bind(c->Result(), expr, PtrKind::kPtr);
+                Bind(c->Result(0), expr, PtrKind::kPtr);
             },
-            [&](core::ir::Construct* c) {
-                auto ty = Type(c->Result()->Type());
-                Bind(c->Result(), b.Call(ty, std::move(args)), PtrKind::kPtr);
+            [&](const core::ir::Construct* c) {
+                auto ty = Type(c->Result(0)->Type());
+                Bind(c->Result(0), b.Call(ty, std::move(args)), PtrKind::kPtr);
             },
-            [&](core::ir::Convert* c) {
-                auto ty = Type(c->Result()->Type());
-                Bind(c->Result(), b.Call(ty, std::move(args)), PtrKind::kPtr);
+            [&](const core::ir::Convert* c) {
+                auto ty = Type(c->Result(0)->Type());
+                Bind(c->Result(0), b.Call(ty, std::move(args)), PtrKind::kPtr);
             },
-            [&](core::ir::Bitcast* c) {
-                auto ty = Type(c->Result()->Type());
-                Bind(c->Result(), b.Bitcast(ty, args[0]), PtrKind::kPtr);
+            [&](const core::ir::Bitcast* c) {
+                auto ty = Type(c->Result(0)->Type());
+                Bind(c->Result(0), b.Bitcast(ty, args[0]), PtrKind::kPtr);
             },
-            [&](core::ir::Discard*) { Append(b.Discard()); },  //
+            [&](const core::ir::Discard*) { Append(b.Discard()); },  //
             TINT_ICE_ON_NO_MATCH);
     }
 
-    void Load(core::ir::Load* l) { Bind(l->Result(), Expr(l->From())); }
+    void Load(const core::ir::Load* l) { Bind(l->Result(0), Expr(l->From())); }
 
-    void LoadVectorElement(core::ir::LoadVectorElement* load) {
+    void LoadVectorElement(const core::ir::LoadVectorElement* load) {
         auto* ptr = Expr(load->From());
-        Bind(load->Result(), VectorMemberAccess(ptr, load->Index()));
+        Bind(load->Result(0), VectorMemberAccess(ptr, load->Index()));
     }
 
-    void Unary(core::ir::Unary* u) {
+    void Unary(const core::ir::Unary* u) {
         const ast::Expression* expr = nullptr;
         switch (u->Op()) {
-            case core::ir::UnaryOp::kComplement:
+            case core::UnaryOp::kComplement:
                 expr = b.Complement(Expr(u->Val()));
                 break;
-            case core::ir::UnaryOp::kNegation:
+            case core::UnaryOp::kNegation:
                 expr = b.Negation(Expr(u->Val()));
                 break;
+            default:
+                TINT_UNIMPLEMENTED() << u->Op();
+                break;
         }
-        Bind(u->Result(), expr);
+        Bind(u->Result(0), expr);
     }
 
-    void Access(core::ir::Access* a) {
+    void Access(const core::ir::Access* a) {
         auto* expr = Expr(a->Object());
         auto* obj_ty = a->Object()->Type()->UnwrapPtr();
         for (auto* index : a->Indices()) {
@@ -690,10 +784,10 @@ class State {
                 },  //
                 TINT_ICE_ON_NO_MATCH);
         }
-        Bind(a->Result(), expr);
+        Bind(a->Result(0), expr);
     }
 
-    void Swizzle(core::ir::Swizzle* s) {
+    void Swizzle(const core::ir::Swizzle* s) {
         auto* vec = Expr(s->Object());
         Vector<char, 4> components;
         for (uint32_t i : s->Indices()) {
@@ -705,16 +799,16 @@ class State {
         }
         auto* swizzle =
             b.MemberAccessor(vec, std::string_view(components.begin(), components.Length()));
-        Bind(s->Result(), swizzle);
+        Bind(s->Result(0), swizzle);
     }
 
-    void Binary(core::ir::Binary* e) {
-        if (e->Op() == core::ir::BinaryOp::kEqual) {
+    void Binary(const core::ir::Binary* e) {
+        if (e->Op() == core::BinaryOp::kEqual) {
             auto* rhs = e->RHS()->As<core::ir::Constant>();
             if (rhs && rhs->Type()->Is<core::type::Bool>() &&
                 rhs->Value()->ValueAs<bool>() == false) {
                 // expr == false
-                Bind(e->Result(), b.Not(Expr(e->LHS())));
+                Bind(e->Result(0), b.Not(Expr(e->LHS())));
                 return;
             }
         }
@@ -722,66 +816,73 @@ class State {
         auto* rhs = Expr(e->RHS());
         const ast::Expression* expr = nullptr;
         switch (e->Op()) {
-            case core::ir::BinaryOp::kAdd:
+            case core::BinaryOp::kAdd:
                 expr = b.Add(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kSubtract:
+            case core::BinaryOp::kSubtract:
                 expr = b.Sub(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kMultiply:
+            case core::BinaryOp::kMultiply:
                 expr = b.Mul(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kDivide:
+            case core::BinaryOp::kDivide:
                 expr = b.Div(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kModulo:
+            case core::BinaryOp::kModulo:
                 expr = b.Mod(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kAnd:
+            case core::BinaryOp::kAnd:
                 expr = b.And(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kOr:
+            case core::BinaryOp::kOr:
                 expr = b.Or(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kXor:
+            case core::BinaryOp::kXor:
                 expr = b.Xor(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kEqual:
+            case core::BinaryOp::kEqual:
                 expr = b.Equal(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kNotEqual:
+            case core::BinaryOp::kNotEqual:
                 expr = b.NotEqual(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kLessThan:
+            case core::BinaryOp::kLessThan:
                 expr = b.LessThan(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kGreaterThan:
+            case core::BinaryOp::kGreaterThan:
                 expr = b.GreaterThan(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kLessThanEqual:
+            case core::BinaryOp::kLessThanEqual:
                 expr = b.LessThanEqual(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kGreaterThanEqual:
+            case core::BinaryOp::kGreaterThanEqual:
                 expr = b.GreaterThanEqual(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kShiftLeft:
+            case core::BinaryOp::kShiftLeft:
                 expr = b.Shl(lhs, rhs);
                 break;
-            case core::ir::BinaryOp::kShiftRight:
+            case core::BinaryOp::kShiftRight:
                 expr = b.Shr(lhs, rhs);
                 break;
+            case core::BinaryOp::kLogicalAnd:
+                expr = b.LogicalAnd(lhs, rhs);
+                break;
+            case core::BinaryOp::kLogicalOr:
+                expr = b.LogicalOr(lhs, rhs);
+                break;
         }
-        Bind(e->Result(), expr);
+        Bind(e->Result(0), expr);
     }
 
     TINT_BEGIN_DISABLE_WARNING(UNREACHABLE_CODE);
 
-    const ast::Expression* Expr(core::ir::Value* value, PtrKind want_ptr_kind = PtrKind::kRef) {
+    const ast::Expression* Expr(const core::ir::Value* value,
+                                PtrKind want_ptr_kind = PtrKind::kRef) {
         using ExprAndPtrKind = std::pair<const ast::Expression*, PtrKind>;
 
         auto [expr, got_ptr_kind] = tint::Switch(
             value,
-            [&](core::ir::Constant* c) -> ExprAndPtrKind {
+            [&](const core::ir::Constant* c) -> ExprAndPtrKind {
                 return {Constant(c), PtrKind::kRef};
             },
             [&](Default) -> ExprAndPtrKind {
@@ -832,7 +933,7 @@ class State {
 
     TINT_END_DISABLE_WARNING(UNREACHABLE_CODE);
 
-    const ast::Expression* Constant(core::ir::Constant* c) { return Constant(c->Value()); }
+    const ast::Expression* Constant(const core::ir::Constant* c) { return Constant(c->Value()); }
 
     const ast::Expression* Constant(const core::constant::Value* c) {
         auto composite = [&](bool can_splat) {
@@ -942,9 +1043,6 @@ class State {
                 return b.ty.sampled_texture(t->dim(), el);
             },
             [&](const core::type::StorageTexture* t) {
-                if (t->access() == core::Access::kRead || t->access() == core::Access::kReadWrite) {
-                    Enable(wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture);
-                }
                 return b.ty.storage_texture(t->dim(), t->texel_format(), t->access());
             },
             [&](const core::type::Sampler* s) { return b.ty.sampler(s->kind()); },
@@ -1026,7 +1124,7 @@ class State {
 
     /// @returns the AST name for the given value, creating and returning a new name on the first
     /// call.
-    Symbol NameFor(core::ir::Value* value, std::string_view suggested = {}) {
+    Symbol NameFor(const core::ir::Value* value, std::string_view suggested = {}) {
         return names_.GetOrCreate(value, [&] {
             if (!suggested.empty()) {
                 return b.Symbols().Register(suggested);
@@ -1040,7 +1138,7 @@ class State {
 
     /// Associates the IR value @p value with the AST expression @p expr.
     /// @p ptr_kind defines how pointer values are represented by @p expr.
-    void Bind(core::ir::Value* value,
+    void Bind(const core::ir::Value* value,
               const ast::Expression* expr,
               PtrKind ptr_kind = PtrKind::kRef) {
         TINT_ASSERT(value);
@@ -1054,7 +1152,7 @@ class State {
                 expr = ToPtrKind(expr, ptr_kind, PtrKind::kPtr);
             }
             auto mod_name = mod.NameOf(value);
-            if (value->Usages().IsEmpty() && !mod_name.IsValid()) {
+            if (!value->IsUsed() && !mod_name.IsValid()) {
                 // Value has no usages and no name.
                 // Assign to a phony. These support more data types than a 'let', and avoids
                 // allocation of unused names.
@@ -1073,7 +1171,7 @@ class State {
     /// Associates the IR value @p value with the AST 'var', 'let' or parameter with the name @p
     /// name.
     /// @p ptr_kind defines how pointer values are represented by @p expr.
-    void Bind(core::ir::Value* value, Symbol name, PtrKind ptr_kind) {
+    void Bind(const core::ir::Value* value, Symbol name, PtrKind ptr_kind) {
         TINT_ASSERT(value);
 
         bool added = bindings_.Add(value, VariableValue{name, ptr_kind});
@@ -1085,13 +1183,13 @@ class State {
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Helpers
     ////////////////////////////////////////////////////////////////////////////////////////////////
-    bool AsShortCircuit(core::ir::If* i,
+    bool AsShortCircuit(const core::ir::If* i,
                         const StatementList& true_stmts,
                         const StatementList& false_stmts) {
-        if (!i->HasResults()) {
+        if (i->Results().IsEmpty()) {
             return false;
         }
-        auto* result = i->Result();
+        auto* result = i->Result(0);
         if (!result->Type()->Is<core::type::Bool>()) {
             return false;  // Wrong result type
         }
@@ -1146,7 +1244,7 @@ class State {
         return false;
     }
 
-    bool IsConstant(core::ir::Value* val, bool value) {
+    bool IsConstant(const core::ir::Value* val, bool value) {
         if (auto* c = val->As<core::ir::Constant>()) {
             if (c->Type()->Is<core::type::Bool>()) {
                 return c->Value()->ValueAs<bool>() == value;
@@ -1155,7 +1253,8 @@ class State {
         return false;
     }
 
-    const ast::Expression* VectorMemberAccess(const ast::Expression* expr, core::ir::Value* index) {
+    const ast::Expression* VectorMemberAccess(const ast::Expression* expr,
+                                              const core::ir::Value* index) {
         if (auto* c = index->As<core::ir::Constant>()) {
             switch (c->Value()->ValueAs<int>()) {
                 case 0:
@@ -1202,50 +1301,12 @@ class State {
                 return false;
         }
     }
-
-    /// @returns true if a parameter of the type @p ty requires the
-    /// kChromiumExperimentalFullPtrParameters extension to be enabled.
-    bool ParamRequiresFullPtrParameters(const core::type::Type* ty) {
-        if (auto* ptr = ty->As<core::type::Pointer>()) {
-            switch (ptr->AddressSpace()) {
-                case core::AddressSpace::kUniform:
-                case core::AddressSpace::kStorage:
-                case core::AddressSpace::kWorkgroup:
-                    return true;
-                default:
-                    return false;
-            }
-        }
-        return false;
-    }
-
-    /// @returns true if the argument @p arg requires the kChromiumExperimentalFullPtrParameters
-    /// extension to be enabled.
-    bool ArgRequiresFullPtrParameters(core::ir::Value* arg) {
-        if (!arg->Type()->Is<core::type::Pointer>()) {
-            return false;
-        }
-
-        auto res = arg->As<core::ir::InstructionResult>();
-        while (res) {
-            auto* inst = res->Source();
-            if (inst->Is<core::ir::Access>()) {
-                return true;  // Passing pointer into sub-object
-            }
-            if (auto* let = inst->As<core::ir::Let>()) {
-                res = let->Value()->As<core::ir::InstructionResult>();
-            } else {
-                break;
-            }
-        }
-        return false;
-    }
 };
 
 }  // namespace
 
-Program IRToProgram(core::ir::Module& i) {
-    return State{i}.Run();
+Program IRToProgram(const core::ir::Module& i, const ProgramOptions& options) {
+    return State{i}.Run(options);
 }
 
 }  // namespace tint::wgsl::writer

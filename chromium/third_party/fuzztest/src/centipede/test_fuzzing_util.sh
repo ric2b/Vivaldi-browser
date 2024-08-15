@@ -73,7 +73,7 @@ function centipede::test_crashing_target() {
   # Create a corpus with one crasher and one other input.
   echo -n "${crash_input}" >"${TMPCORPUS}/${crash_input}" # induces abort in the target.
   echo -n "${nice_input}" >"${TMPCORPUS}/${nice_input}"     # just some input.
-  ${target} --workdir="${WD}" --export_corpus_from_local_dir="${TMPCORPUS}"
+  ${target} --workdir="${WD}" --corpus_from_files="${TMPCORPUS}"
 
   # Run fuzzing with num_runs=0, i.e. only run the inputs from the corpus.
   # Expecting a crash to be observed and reported.
@@ -82,5 +82,36 @@ function centipede::test_crashing_target() {
   centipede::assert_regex_in_file "Batch execution failed:" "${LOG}"
 
   # Comes from test_fuzz_target.cc
+  centipede::assert_regex_in_file "${regex}" "${LOG}"
+}
+
+# Replays inputs with the specified target.
+#
+# Arguments:
+#   $1 - The target to replay the tests for.
+#   $2 - The log string regex that should be present in the test results.
+#   $@ - The remaining inputs to be used for the tests.
+function centipede::test_replaying_target() {
+  local -r target="$1"; shift
+  local -r regex="$1"; shift
+  local -ra corpus_elts=("$@")
+
+  FUNC="${FUNCNAME[0]}"
+  WD="${TEST_TMPDIR}/${FUNC}/WD"
+  TMPCORPUS="${TEST_TMPDIR}/${FUNC}/C"
+  LOG="${TEST_TMPDIR}/${FUNC}/log"
+  centipede::ensure_empty_dir "${WD}"
+  centipede::ensure_empty_dir "${TMPCORPUS}"
+
+  local -i n=0
+  for elt in "${corpus_elts[@]}"; do
+    echo -n "${elt}" >"${TMPCORPUS}/corpus.$n"
+    (( ++n ))
+  done
+
+  ${target} --workdir="${WD}" --corpus_from_files="${TMPCORPUS}"
+
+  # Run fuzzing with num_runs=0, i.e. only run the inputs from the corpus.
+  ${target} --workdir="${WD}" --num_runs=0 | tee "${LOG}"
   centipede::assert_regex_in_file "${regex}" "${LOG}"
 }

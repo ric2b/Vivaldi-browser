@@ -1108,7 +1108,8 @@
             "cpu": "x86-64",
             "os": "Windows-10-19045"
           },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 4
         },
         "test": "interactive_ui_tests",
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
@@ -1848,6 +1849,22 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "webkit_unit_tests_v2",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "blink_unittests_v2",
+        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -2011,6 +2028,28 @@
         },
         "test": "chromedriver_py_tests",
         "test_id_prefix": "ninja://chrome/test/chromedriver:chromedriver_py_tests/"
+      },
+      {
+        "args": [
+          "--test-type=integration"
+        ],
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "chromedriver_py_tests_headless_shell",
+        "resultdb": {
+          "enable": true
+        },
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "chromedriver_py_tests_headless_shell",
+        "test_id_prefix": "ninja://chrome/test/chromedriver:chromedriver_py_tests_headless_shell/"
       },
       {
         "isolate_profile_data": true,
@@ -2570,7 +2609,8 @@
             "cpu": "x86-64",
             "os": "Windows-10-19045"
           },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 2
         },
         "test": "components_unittests",
         "test_id_prefix": "ninja://components:components_unittests/"
@@ -3615,6 +3655,21 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "webkit_unit_tests_v2",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "blink_unittests_v2",
+        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
+      },
+      {
+        "merge": {
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -3690,6 +3745,27 @@
         },
         "test": "blink_python_tests",
         "test_id_prefix": "ninja://:blink_python_tests/"
+      },
+      {
+        "args": [
+          "--test-type=integration"
+        ],
+        "merge": {
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "chromedriver_py_tests_headless_shell",
+        "resultdb": {
+          "enable": true
+        },
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "chromedriver_py_tests_headless_shell",
+        "test_id_prefix": "ninja://chrome/test/chromedriver:chromedriver_py_tests_headless_shell/"
       },
       {
         "merge": {
@@ -4293,36 +4369,6 @@
         },
         "test": "courgette_unittests",
         "test_id_prefix": "ninja://courgette:courgette_unittests/"
-      },
-      {
-        "args": [
-          "--browser-ui-tests-verify-pixels",
-          "--enable-pixel-output-in-tests",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/pixel_tests.filter;../../testing/buildbot/filters/cr23.win.cr23_browser_tests.filter",
-          "--test-launcher-jobs=1",
-          "--git-revision=${got_revision}",
-          "--enable-features=ChromeRefresh2023,ChromeRefreshSecondary2023,ChromeWebuiRefresh2023,Cr2023ActionChips,Cr2023ActionChipsIcons,kOmniboxCR23SteadyStateIcons,OmniboxExpandedLayout,OmniboxExpandedStateColors,OmniboxExpandedStateHeight,OmniboxExpandedStateShape,OmniboxExpandedStateSuggestIcons,OmniboxSteadyStateBackgroundColor,OmniboxSteadyStateHeight,OmniboxSteadyStateTextColor,OmniboxSuggestionHoverFillShape,IPH_DesktopCustomizeChromeRefresh"
-        ],
-        "isolate_profile_data": true,
-        "merge": {
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "cr23_pixel_browser_tests",
-        "precommit_args": [
-          "--gerrit-issue=${patch_issue}",
-          "--gerrit-patchset=${patch_set}",
-          "--buildbucket-id=${buildbucket_build_id}"
-        ],
-        "swarming": {
-          "dimensions": {
-            "cpu": "x86-64",
-            "os": "Windows-11-22000"
-          },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
-        },
-        "test": "browser_tests",
-        "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
         "args": [
@@ -5440,6 +5486,22 @@
         "merge": {
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "name": "webkit_unit_tests_v2",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-11-22000"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "blink_unittests_v2",
+        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
         "name": "wm_unittests",
         "swarming": {
           "dimensions": {
@@ -5603,6 +5665,28 @@
         },
         "test": "chromedriver_py_tests",
         "test_id_prefix": "ninja://chrome/test/chromedriver:chromedriver_py_tests/"
+      },
+      {
+        "args": [
+          "--test-type=integration"
+        ],
+        "isolate_profile_data": true,
+        "merge": {
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "chromedriver_py_tests_headless_shell",
+        "resultdb": {
+          "enable": true
+        },
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-11-22000"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "chromedriver_py_tests_headless_shell",
+        "test_id_prefix": "ninja://chrome/test/chromedriver:chromedriver_py_tests_headless_shell/"
       },
       {
         "isolate_profile_data": true,

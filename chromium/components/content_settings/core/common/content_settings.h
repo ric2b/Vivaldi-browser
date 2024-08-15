@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -64,7 +65,14 @@ struct ContentSettingPatternSource {
   bool incognito;
 };
 
+// Formatter method for Google Test.
+std::ostream& operator<<(std::ostream& os,
+                         const ContentSettingPatternSource& source);
+
 typedef std::vector<ContentSettingPatternSource> ContentSettingsForOneType;
+
+typedef std::map<std::string, ContentSettingsForOneType>
+    HostIndexedContentSettings;
 
 struct RendererContentSettingRules {
   // Returns true if |content_type| is a type that is contained in this class.

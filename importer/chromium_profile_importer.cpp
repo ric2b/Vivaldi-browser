@@ -120,8 +120,16 @@ void ChromiumProfileImporter::DetectChromiumProfiles(
           chromeProfiles[i].importer_type ==
               ImporterType::TYPE_OPERA_OPIUM_DEV) {
         ChromeProfileInfo operaprof;
+
         operaprof.profileDisplayName = u"Default";
-        operaprof.profileName = "";
+
+        // VB-98391 - newer Opera browsers have a profile subdirectory.
+        // If Default dir exists, we use it as a profile name. Older Opera
+        // browsers didn't use profiles at all, having the data directly in
+        // profileDirectory with no subdir.
+        bool has_default = PathExists(profileDirectory.AppendASCII("Default"));
+        operaprof.profileName = has_default ? "Default" : "";
+
         prof.push_back(operaprof);
 
       } else {

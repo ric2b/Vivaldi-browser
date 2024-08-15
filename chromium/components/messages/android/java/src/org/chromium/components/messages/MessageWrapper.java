@@ -16,14 +16,12 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
-import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.listmenu.ListMenu;
+import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 
-/**
- * Java side of native MessageWrapper class that represents a message for native features.
- */
+/** Java side of native MessageWrapper class that represents a message for native features. */
 @JNINamespace("messages")
 public final class MessageWrapper implements ListMenu.Delegate {
     private long mNativeMessageWrapper;
@@ -48,7 +46,8 @@ public final class MessageWrapper implements ListMenu.Delegate {
                 new PropertyModel.Builder(MessageBannerProperties.ALL_KEYS)
                         .with(MessageBannerProperties.MESSAGE_IDENTIFIER, messageIdentifier)
                         .with(MessageBannerProperties.ON_PRIMARY_ACTION, this::handleActionClick)
-                        .with(MessageBannerProperties.ON_SECONDARY_ACTION,
+                        .with(
+                                MessageBannerProperties.ON_SECONDARY_ACTION,
                                 this::handleSecondaryActionClick)
                         .with(MessageBannerProperties.ON_DISMISSED, this::handleMessageDismissed)
                         .build();
@@ -121,7 +120,8 @@ public final class MessageWrapper implements ListMenu.Delegate {
         assert context != null;
         if (mMessageSecondaryMenuItems != null) {
             mMessageProperties.set(MessageBannerProperties.SECONDARY_MENU_MAX_SIZE, maxSize);
-            mMessageProperties.set(MessageBannerProperties.SECONDARY_MENU_BUTTON_DELEGATE,
+            mMessageProperties.set(
+                    MessageBannerProperties.SECONDARY_MENU_BUTTON_DELEGATE,
                     () -> mMessageSecondaryMenuItems.createListMenu(context, this));
         }
     }
@@ -251,8 +251,11 @@ public final class MessageWrapper implements ListMenu.Delegate {
     @NativeMethods
     interface Natives {
         void handleActionClick(long nativeMessageWrapper);
+
         void handleSecondaryActionClick(long nativeMessageWrapper);
+
         void handleSecondaryMenuItemSelected(long nativeMessageWrapper, int itemId);
+
         void handleDismissCallback(long nativeMessageWrapper, @DismissReason int dismissReason);
     }
 }

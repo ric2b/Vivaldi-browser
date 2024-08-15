@@ -6,7 +6,7 @@
 
 #include "src/base/utils/random-number-generator.h"
 #include "src/codegen/assembler-inl.h"
-#include "src/codegen/code-stub-assembler.h"
+#include "src/codegen/code-stub-assembler-inl.h"
 #include "src/codegen/machine-type.h"
 #include "src/codegen/macro-assembler-inl.h"
 #include "src/codegen/optimized-compilation-info.h"
@@ -149,6 +149,7 @@ Handle<Code> BuildSetupFunction(Isolate* isolate,
       case MachineRepresentation::kFloat64:
         element = __ LoadHeapNumberValue(__ CAST(element));
         break;
+#if V8_ENABLE_WEBASSEMBLY
       case MachineRepresentation::kSimd128: {
         Node* vector = tester.raw_assembler_for_testing()->AddNode(
             tester.raw_assembler_for_testing()->machine()->I32x4Splat(),
@@ -164,6 +165,7 @@ Handle<Code> BuildSetupFunction(Isolate* isolate,
         element = vector;
         break;
       }
+#endif  // V8_ENABLE_WEBASSEMBLY
       default:
         UNREACHABLE();
     }
@@ -239,11 +241,11 @@ Handle<Code> BuildTeardownFunction(
             tester.raw_assembler_for_testing()->ChangeFloat32ToFloat64(param);
         V8_FALLTHROUGH;
       case MachineRepresentation::kFloat64: {
-        __ StoreObjectFieldNoWriteBarrier(
+        __ StoreHeapNumberValue(
             __ Cast(__ LoadFixedArrayElement(result_array, i)),
-            __ IntPtrConstant(HeapNumber::kValueOffset),
             __ UncheckedCast<Float64T>(param));
       } break;
+#if V8_ENABLE_WEBASSEMBLY
       case MachineRepresentation::kSimd128: {
         TNode<FixedArray> vector =
             __ Cast(__ LoadFixedArrayElement(result_array, i));
@@ -259,6 +261,7 @@ Handle<Code> BuildTeardownFunction(
         }
         break;
       }
+#endif  // V8_ENABLE_WEBASSEMBLY
       default:
         UNREACHABLE();
     }
@@ -1617,7 +1620,8 @@ std::shared_ptr<wasm::NativeModule> AllocateNativeModule(Isolate* isolate,
   // WasmCallDescriptor assumes that code is on the native heap and not
   // within a code object.
   auto native_module = wasm::GetWasmEngine()->NewNativeModule(
-      isolate, wasm::WasmFeatures::All(), std::move(module), code_size);
+      isolate, wasm::WasmFeatures::All(), wasm::CompileTimeImports{},
+      std::move(module), code_size);
   native_module->SetWireBytes({});
   return native_module;
 }

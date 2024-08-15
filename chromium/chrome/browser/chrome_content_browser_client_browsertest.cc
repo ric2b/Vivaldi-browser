@@ -31,6 +31,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/enterprise/buildflags/buildflags.h"
@@ -42,6 +43,7 @@
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/site_isolation/site_isolation_policy.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -61,10 +63,12 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_key.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/color/color_provider_source.h"
+#include "ui/color/color_provider_utils.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/native_theme/test_native_theme.h"
 #include "url/gurl.h"
@@ -90,7 +94,7 @@
 #include "ui/base/clipboard/clipboard_format_type.h"
 
 #if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
-#include "chrome/browser/enterprise/connectors/analysis/fake_content_analysis_sdk_manager.h"  // nogncheck
+#include "chrome/browser/enterprise/connectors/test/fake_content_analysis_sdk_manager.h"  // nogncheck
 #endif  // BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
 
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
@@ -429,6 +433,19 @@ class PrefersColorSchemeTest
     const ui::ColorProvider* GetColorProvider() const override {
       return &provider_;
     }
+
+    const ui::RendererColorMap GetRendererColorMap(
+        ui::ColorProviderKey::ColorMode color_mode,
+        ui::ColorProviderKey::ForcedColors forced_colors) const override {
+      auto key = GetColorProviderKey();
+      key.color_mode = color_mode;
+      key.forced_colors = forced_colors;
+      ui::ColorProvider* color_provider =
+          ui::ColorProviderManager::Get().GetColorProviderFor(key);
+      CHECK(color_provider);
+      return ui::CreateRendererColorMap(*color_provider);
+    }
+
     ui::ColorProviderKey GetColorProviderKey() const override { return key_; }
 
    private:
@@ -777,9 +794,9 @@ class ClipboardTestContentAnalysisDelegate
   }
 };
 
-class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
+class IsClipboardPasteAllowedTest : public InProcessBrowserTest {
  public:
-  IsClipboardPasteContentAllowedTest() {
+  IsClipboardPasteAllowedTest() {
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
   }
 
@@ -834,13 +851,13 @@ class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
  protected:
   ChromeContentBrowserClient* client() const { return client_; }
 
-  std::string CreateTestFile(const base::FilePath::StringType& filename,
-                             const std::string& content) {
+  base::FilePath CreateTestFile(const base::FilePath::StringType& filename,
+                                const std::string& content) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::FilePath path = temp_dir_.GetPath().Append(filename);
     base::File file(path, base::File::FLAG_CREATE | base::File::FLAG_WRITE);
     file.WriteAtCurrentPos(content.data(), content.size());
-    return path.AsUTF8Unsafe();
+    return path;
   }
 
  private:
@@ -879,35 +896,54 @@ class IsClipboardPasteContentAllowedTest : public InProcessBrowserTest {
 #endif
 };
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, TextAllowed) {
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, BitmapAllowed) {
   content::WebContents* contents =
       browser()->tab_strip_model()->GetWebContentsAt(0);
   ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
-      ChromeContentBrowserClient::ClipboardPasteData("allowed", std::string(),
+      ChromeContentBrowserClient::ClipboardPasteData(std::string(), "allowed",
                                                      {});
 
-  client()->IsClipboardPasteContentAllowed(
-      contents, GURL("google.com"), ui::ClipboardFormatType::PlainTextType(),
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .size = clipboard_paste_data.image.size(),
+          .format_type = ui::ClipboardFormatType::BitmapType(),
+      },
       clipboard_paste_data,
       base::BindOnce(
-          [](absl::optional<ChromeContentBrowserClient::ClipboardPasteData>
+          [](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
                  clipboard_paste_data) {
             EXPECT_TRUE(clipboard_paste_data.has_value());
+            EXPECT_EQ(clipboard_paste_data->image, "allowed");
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, TextBlocked) {
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, BitmapBlocked) {
   content::WebContents* contents =
       browser()->tab_strip_model()->GetWebContentsAt(0);
   ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
-      ChromeContentBrowserClient::ClipboardPasteData("blocked", std::string(),
+      ChromeContentBrowserClient::ClipboardPasteData(std::string(), "blocked",
                                                      {});
 
-  client()->IsClipboardPasteContentAllowed(
-      contents, GURL("google.com"), ui::ClipboardFormatType::PlainTextType(),
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .size = clipboard_paste_data.image.size(),
+          .format_type = ui::ClipboardFormatType::BitmapType(),
+      },
       clipboard_paste_data,
       base::BindOnce(
-          [](absl::optional<ChromeContentBrowserClient::ClipboardPasteData>
+          [](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
                  clipboard_paste_data) {
 #if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
             EXPECT_FALSE(clipboard_paste_data.has_value());
@@ -920,8 +956,67 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, TextBlocked) {
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, AllFilesAllowed) {
-  std::vector<std::string> paths;
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, TextAllowed) {
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+  ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
+      ChromeContentBrowserClient::ClipboardPasteData("allowed", std::string(),
+                                                     {});
+
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .size = clipboard_paste_data.text.size(),
+          .format_type = ui::ClipboardFormatType::PlainTextType(),
+      },
+      clipboard_paste_data,
+      base::BindOnce(
+          [](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
+                 clipboard_paste_data) {
+            EXPECT_TRUE(clipboard_paste_data.has_value());
+          }));
+}
+
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, TextBlocked) {
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetWebContentsAt(0);
+  ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
+      ChromeContentBrowserClient::ClipboardPasteData("blocked", std::string(),
+                                                     {});
+
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .size = clipboard_paste_data.text.size(),
+          .format_type = ui::ClipboardFormatType::PlainTextType(),
+      },
+      clipboard_paste_data,
+      base::BindOnce(
+          [](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
+                 clipboard_paste_data) {
+#if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
+            EXPECT_FALSE(clipboard_paste_data.has_value());
+#else
+            // Platforms that don't support local content analysis shouldn't
+            // block anything, even when the policy is set to a local service
+            // provider value.
+            EXPECT_TRUE(clipboard_paste_data.has_value());
+#endif
+          }));
+}
+
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, AllFilesAllowed) {
+  std::vector<base::FilePath> paths;
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("allow0"), "data"));
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("allow1"), "data"));
   ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
@@ -930,11 +1025,19 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, AllFilesAllowed) {
 
   content::WebContents* contents =
       browser()->tab_strip_model()->GetWebContentsAt(0);
-  client()->IsClipboardPasteContentAllowed(
-      contents, GURL("google.com"), ui::ClipboardFormatType::FilenamesType(),
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .format_type = ui::ClipboardFormatType::FilenamesType(),
+      },
       clipboard_paste_data,
       base::BindLambdaForTesting(
-          [paths](absl::optional<ChromeContentBrowserClient::ClipboardPasteData>
+          [paths](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
                       clipboard_paste_data) {
             EXPECT_TRUE(clipboard_paste_data.has_value());
             EXPECT_EQ(paths[0], clipboard_paste_data->file_paths[0]);
@@ -942,8 +1045,8 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, AllFilesAllowed) {
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, AllFilesBlocked) {
-  std::vector<std::string> paths;
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, AllFilesBlocked) {
+  std::vector<base::FilePath> paths;
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("block0"), "data"));
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("block1"), "data"));
 
@@ -953,11 +1056,19 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, AllFilesBlocked) {
 
   content::WebContents* contents =
       browser()->tab_strip_model()->GetWebContentsAt(0);
-  client()->IsClipboardPasteContentAllowed(
-      contents, GURL("google.com"), ui::ClipboardFormatType::FilenamesType(),
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .format_type = ui::ClipboardFormatType::FilenamesType(),
+      },
       clipboard_paste_data,
       base::BindLambdaForTesting(
-          [paths](absl::optional<ChromeContentBrowserClient::ClipboardPasteData>
+          [paths](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
                       clipboard_paste_data) {
 #if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
             EXPECT_FALSE(clipboard_paste_data.has_value());
@@ -972,8 +1083,8 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, AllFilesBlocked) {
           }));
 }
 
-IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, SomeFilesBlocked) {
-  std::vector<std::string> paths;
+IN_PROC_BROWSER_TEST_F(IsClipboardPasteAllowedTest, SomeFilesBlocked) {
+  std::vector<base::FilePath> paths;
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("allow0"), "data"));
   paths.push_back(CreateTestFile(FILE_PATH_LITERAL("block1"), "data"));
   ChromeContentBrowserClient::ClipboardPasteData clipboard_paste_data =
@@ -982,11 +1093,19 @@ IN_PROC_BROWSER_TEST_F(IsClipboardPasteContentAllowedTest, SomeFilesBlocked) {
 
   content::WebContents* contents =
       browser()->tab_strip_model()->GetWebContentsAt(0);
-  client()->IsClipboardPasteContentAllowed(
-      contents, GURL("google.com"), ui::ClipboardFormatType::FilenamesType(),
+  client()->IsClipboardPasteAllowedByPolicy(
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com"))),
+      content::ClipboardEndpoint(ui::DataTransferEndpoint(GURL("google.com")),
+                                 base::BindLambdaForTesting([contents] {
+                                   return contents->GetBrowserContext();
+                                 }),
+                                 *contents->GetPrimaryMainFrame()),
+      {
+          .format_type = ui::ClipboardFormatType::FilenamesType(),
+      },
       clipboard_paste_data,
       base::BindLambdaForTesting(
-          [paths](absl::optional<ChromeContentBrowserClient::ClipboardPasteData>
+          [paths](std::optional<ChromeContentBrowserClient::ClipboardPasteData>
                       clipboard_paste_data) {
             EXPECT_TRUE(clipboard_paste_data.has_value());
             EXPECT_EQ(clipboard_paste_data->file_paths[0], paths[0]);
@@ -1001,7 +1120,8 @@ class AutomaticBeaconCredentialsBrowserTest : public InProcessBrowserTest,
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{privacy_sandbox::
                                   kOverridePrivacySandboxSettingsLocalTesting},
-        /*disabled_features=*/{});
+        /*disabled_features=*/{
+            content_settings::features::kTrackingProtection3pcd});
   }
 
   AutomaticBeaconCredentialsBrowserTest(

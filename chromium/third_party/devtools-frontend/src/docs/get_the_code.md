@@ -33,12 +33,32 @@ autoninja -C out/Default
 
 The resulting build artifacts can be found in `out/Default/gen/front_end`.
 
-If you want to have faster build by disabling typecheck, consider to use
-`devtools_skip_typecheck=true` build args like:
+There are two tips to have a faster development workflow:
+* Disabling type checking for TypeScript.
+* Using watch script for faster incremental builds with CSS hot reload.
 
+#### Disabling type checking
+You can disable type checking for TypeScript by using `devtools_skip_typecheck` argument:
 ```bash
-gn gen out/fast-build --args='devtools_skip_typecheck=true'
+gn gen out/fast-build --args="devtools_skip_typecheck=true"
 ```
+
+#### Faster incremental builds & CSS hot reload
+In addition to that, you can enable CSS hot reload while using `watch` script with `devtools_css_hot_reload_enabled` argument:
+```bash
+gn gen out/fast-build --args="devtools_css_hot_reload_enabled=true"
+```
+
+with this and `devtools_skip_typecheck=true` in place, you can use `watch` script by:
+```bash
+npm run watch -- --target=fast-build
+```
+which will automatically apply CSS changes & instantly build changed TS files.
+
+> Caution! `watch` script is not based on `ninja` thus the build output and behavior
+> might differ with the official ninja build. In addition to that,
+> there might be some cases that `watch` build doesn't reliably handle, so you
+> might need to run `autoninja` and restart the script from time to time.
 
 ### Update to latest
 
@@ -77,19 +97,19 @@ This works with Chromium 79 or later.
 To run on **Mac**:
 
 ```bash
-<path-to-devtools-frontend>./third_party/chrome/chrome-mac/Google\ Chrome\ for\ Testing.app/Contents/Mac OS/Google\ Chrome\ for\ Testing --custom-devtools-frontend=file://$(realpath out/Default/gen/front_end) --use-mock-keychain
+<path-to-devtools-frontend>./third_party/chrome/chrome-mac/Google\ Chrome\ for\ Testing.app/Contents/Mac OS/Google\ Chrome\ for\ Testing --disable-infobars --custom-devtools-frontend=file://$(realpath out/Default/gen/front_end) --use-mock-keychain
 ```
 
 To run on **Linux**:
 
 ```bash
-<path-to-devtools-frontend>./third_party/chrome/chrome-linux/chrome --custom-devtools-frontend=file://$(realpath out/Default/gen/front_end)
+<path-to-devtools-frontend>./third_party/chrome/chrome-linux/chrome --disable-infobars --custom-devtools-frontend=file://$(realpath out/Default/gen/front_end)
 ```
 
 To run on **Windows**:
 
 ```bash
-<path-to-devtools-frontend>./third_party/chrome/chrome-win/chrome.exe --custom-devtools-frontend=file://$(realpath out/Default/gen/front_end)
+<path-to-devtools-frontend>\third_party\chrome\chrome-win\chrome.exe --disable-infobars --custom-devtools-frontend="<path-to-devtools-frontend>\out\Default\gen\front_end"
 ```
 
 Note that `$(realpath out/Default/gen/front_end)` expands to the absolute path to build artifacts for DevTools frontend.
@@ -100,6 +120,8 @@ If you get errors along the line of `Uncaught TypeError: Cannot read property 's
 
 **Tip**: You can inspect DevTools with DevTools by undocking DevTools and then opening a second instance of DevTools (see keyboard shortcut above).
 
+**Tip**: On Windows it is possible the browser will re-attach to an existing session without applying command arguments. Make sure that there are no active Chrome sessions running.
+
 #### Running from remote URL
 
 This works with Chromium 85 or later.
@@ -109,7 +131,7 @@ Serve the content of `out/Default/gen/front_end` on a web server, e.g. via `pyth
 Then point to that web server when starting Chromium, for example:
 
 ```bash
-<path-to-devtools-frontend>/third_party/chromium/chrome-<platform>/chrome --custom-devtools-frontend=http://localhost:8000/
+<path-to-devtools-frontend>/third_party/chrome/chrome-<platform>/chrome --disable-infobars --custom-devtools-frontend=http://localhost:8000/
 ```
 
 Open DevTools via F12 or Ctrl+Shift+J on Windows/Linux or Cmd+Option+I on Mac.
@@ -118,10 +140,10 @@ Open DevTools via F12 or Ctrl+Shift+J on Windows/Linux or Cmd+Option+I on Mac.
 
 Serve the content of `out/Default/gen/front_end` on a web server, e.g. via `python3 -m http.server 8000`.
 
-Then start Chromium, allowing for accesses from the web server:
+Then start Chrome, allowing for accesses from the web server:
 
 ```bash
-<path-to-devtools-frontend>/third_party/chrome/chrome-<platform>/chrome --remote-debugging-port=9222 --remote-allow-origins=http://localhost:8000 about:blank
+<path-to-devtools-frontend>/third_party/chrome/chrome-<platform>/chrome --disable-infobars --remote-debugging-port=9222 --remote-allow-origins=http://localhost:8000 about:blank
 ```
 
 Get the list of pages together with their DevTools frontend URLs:

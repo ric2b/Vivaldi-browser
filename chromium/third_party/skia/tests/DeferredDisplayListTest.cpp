@@ -58,12 +58,63 @@ struct GrContextOptions;
 #endif
 
 #ifdef SK_VULKAN
+#include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
 #include "include/gpu/vk/GrVkTypes.h"
 #include "include/private/chromium/GrVkSecondaryCBDrawContext.h"
 #include "src/gpu/ganesh/vk/GrVkCaps.h"
 #include "tools/gpu/vk/VkTestHelper.h"
 #include <vulkan/vulkan_core.h>
 #endif
+
+static bool is_compatible(const GrSurfaceCharacterization& gsc, const GrBackendTexture& backendTex) {
+    if (!gsc.isValid() || !backendTex.isValid()) {
+        return false;
+    }
+
+    if (gsc.backendFormat() != backendTex.getBackendFormat()) {
+        return false;
+    }
+
+    if (gsc.usesGLFBO0()) {
+        // It is a backend texture so can't be wrapping FBO0
+        return false;
+    }
+
+    if (gsc.vulkanSecondaryCBCompatible()) {
+        return false;
+    }
+
+    if (gsc.vkRTSupportsInputAttachment()) {
+        if (backendTex.backend() != GrBackendApi::kVulkan) {
+            return false;
+        }
+#ifdef SK_VULKAN
+        GrVkImageInfo vkInfo;
+        if (!GrBackendTextures::GetVkImageInfo(backendTex, &vkInfo)) {
+            return false;
+        }
+        if (!SkToBool(vkInfo.fImageUsageFlags & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
+            return false;
+        }
+#endif  // SK_VULKAN
+    }
+
+    if (gsc.isMipMapped() && !backendTex.hasMipmaps()) {
+        // backend texture is allowed to have mipmaps even if the characterization doesn't require
+        // them.
+        return false;
+    }
+
+    if (gsc.width() != backendTex.width() || gsc.height() != backendTex.height()) {
+        return false;
+    }
+
+    if (gsc.isProtected() != skgpu::Protected(backendTex.isProtected())) {
+        return false;
+    }
+
+    return true;
+}
 
 class SurfaceParameters {
 public:
@@ -81,10 +132,10 @@ public:
             , fColorSpace(SkColorSpace::MakeSRGB())
             , fSampleCount(1)
             , fSurfaceProps(0x0, kUnknown_SkPixelGeometry)
-            , fShouldCreateMipMaps(true)
+            , fShouldCreateMipMaps(skgpu::Mipmapped::kYes)
             , fUsesGLFBO0(false)
             , fIsTextureable(true)
-            , fIsProtected(GrProtected::kNo)
+            , fIsProtected(skgpu::Protected::kNo)
             , fVkRTSupportsInputAttachment(false)
             , fForVulkanSecondaryCommandBuffer(false) {
 #ifdef SK_VULKAN
@@ -92,12 +143,12 @@ public:
             auto vkCaps = static_cast<const GrVkCaps*>(rContext->priv().caps());
             fCanBeProtected = vkCaps->supportsProtectedContent();
             if (fCanBeProtected) {
-                fIsProtected = GrProtected::kYes;
+                fIsProtected = skgpu::Protected::kYes;
             }
         }
 #endif
         if (!rContext->priv().caps()->mipmapSupport()) {
-            fShouldCreateMipMaps = false;
+            fShouldCreateMipMaps = skgpu::Mipmapped::kNo;
         }
     }
 
@@ -108,9 +159,9 @@ public:
     void setColorSpace(sk_sp<SkColorSpace> cs) { fColorSpace = std::move(cs); }
     void disableTextureability() {
         fIsTextureable = false;
-        fShouldCreateMipMaps = false;
+        fShouldCreateMipMaps = skgpu::Mipmapped::kNo;
     }
-    void setShouldCreateMipMaps(bool shouldCreateMipMaps) {
+    void setShouldCreateMipMaps(skgpu::Mipmapped shouldCreateMipMaps) {
         fShouldCreateMipMaps = shouldCreateMipMaps;
     }
     void setVkRTInputAttachmentSupport(bool inputSupport) {
@@ -160,29 +211,32 @@ public:
                                               kUnknown_SkPixelGeometry));
             break;
         case 8:
-            set(fShouldCreateMipMaps, false);
+            set(fShouldCreateMipMaps, skgpu::Mipmapped::kNo);
             break;
         case 9:
             if (GrBackendApi::kOpenGL == fBackend) {
                 set(fUsesGLFBO0, true);
-                set(fShouldCreateMipMaps, false);  // needs to changed in tandem w/ textureability
+                set(fShouldCreateMipMaps,
+                    skgpu::Mipmapped::kNo);  // needs to changed in tandem w/ textureability
                 set(fIsTextureable, false);
             }
             break;
         case 10:
-            set(fShouldCreateMipMaps, false);  // needs to changed in tandem w/ textureability
+            set(fShouldCreateMipMaps,
+                skgpu::Mipmapped::kNo);  // needs to changed in tandem w/ textureability
             set(fIsTextureable, false);
             break;
         case 11:
             if (fCanBeProtected) {
-                set(fIsProtected, GrProtected(!static_cast<bool>(fIsProtected)));
+                set(fIsProtected, skgpu::Protected(!static_cast<bool>(fIsProtected)));
             }
             break;
         case 12:
             if (GrBackendApi::kVulkan == fBackend) {
                 set(fForVulkanSecondaryCommandBuffer, true);
                 set(fUsesGLFBO0, false);
-                set(fShouldCreateMipMaps, false);  // needs to changed in tandem w/ textureability
+                set(fShouldCreateMipMaps,
+                    skgpu::Mipmapped::kNo);  // needs to changed in tandem w/ textureability
                 set(fIsTextureable, false);
                 set(fVkRTSupportsInputAttachment, false);
             }
@@ -274,12 +328,12 @@ public:
                                                              fSampleCount,
                                                              fColorType,
                                                              fColorSpace,
-                                                             skgpu::Mipmapped(fShouldCreateMipMaps),
+                                                             fShouldCreateMipMaps,
                                                              fIsProtected,
                                                              &fSurfaceProps);
         } else {
             // Create a surface w/ the current parameters but make it non-textureable
-            SkASSERT(!fShouldCreateMipMaps);
+            SkASSERT(fShouldCreateMipMaps == skgpu::Mipmapped::kNo);
             surface = sk_gpu_test::MakeBackendRenderTargetSurface(dContext,
                                                                   {fWidth, fHeight},
                                                                   fOrigin,
@@ -298,7 +352,7 @@ public:
         GrBackendTexture texture = SkSurfaces::GetBackendTexture(
                 surface.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
         if (texture.isValid()) {
-            SkASSERT(c.isCompatible(texture));
+            SkASSERT(is_compatible(c, texture));
         }
 
         SkASSERT(c.isValid());
@@ -334,10 +388,10 @@ private:
     sk_sp<SkColorSpace> fColorSpace;
     int                 fSampleCount;
     SkSurfaceProps      fSurfaceProps;
-    bool                fShouldCreateMipMaps;
+    skgpu::Mipmapped fShouldCreateMipMaps;
     bool                fUsesGLFBO0;
     bool                fIsTextureable;
-    GrProtected         fIsProtected;
+    skgpu::Protected fIsProtected;
     bool                fVkRTSupportsInputAttachment;
     bool                fForVulkanSecondaryCommandBuffer;
 };
@@ -656,7 +710,6 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(CharacterizationFBO0nessTest,
     SkImageInfo ii = SkImageInfo::Make({ 128, 128 }, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
     static constexpr int kStencilBits = 8;
-    static constexpr bool kNotMipMapped = false;
     static constexpr bool kNotTextureable = false;
     const SkSurfaceProps surfaceProps(0x0, kRGB_H_SkPixelGeometry);
 
@@ -676,10 +729,14 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(CharacterizationFBO0nessTest,
     for (bool isFBO0 : { true, false }) {
         for (int numSamples : { availableSamples, 1 }) {
             characterizations[index] = proxy->createCharacterization(resourceCacheLimit,
-                                                                     ii, format, numSamples,
+                                                                     ii,
+                                                                     format,
+                                                                     numSamples,
                                                                      kTopLeft_GrSurfaceOrigin,
-                                                                     surfaceProps, kNotMipMapped,
-                                                                     isFBO0, kNotTextureable);
+                                                                     surfaceProps,
+                                                                     skgpu::Mipmapped::kNo,
+                                                                     isFBO0,
+                                                                     kNotTextureable);
             SkASSERT(characterizations[index].sampleCount() == numSamples);
             SkASSERT(characterizations[index].usesGLFBO0() == isFBO0);
 
@@ -744,13 +801,15 @@ DEF_GANESH_TEST(VkProtectedContext_DDLSurfaceCharacterizationTest,
                 reporter,
                 ctxInfo,
                 CtsEnforcement::kNever) {
-    auto protectedTestHelper = std::make_unique<VkTestHelper>(true);
-    if (!protectedTestHelper->init()) {
+    std::unique_ptr<VkTestHelper> helper = VkTestHelper::Make(skiatest::TestType::kGanesh,
+                                                              /* isProtected= */ true);
+    if (!helper) {
         return;
     }
-    REPORTER_ASSERT(reporter, protectedTestHelper->directContext() != nullptr);
 
-    DDLSurfaceCharacterizationTestImpl(protectedTestHelper->directContext(), reporter);
+    REPORTER_ASSERT(reporter, helper->isValid());
+
+    DDLSurfaceCharacterizationTestImpl(helper->directContext(), reporter);
 }
 #endif
 
@@ -834,7 +893,7 @@ static void test_make_render_target(skiatest::Reporter* reporter,
         GrBackendTexture backend =
                 SkSurfaces::GetBackendTexture(s.get(), SkSurfaces::BackendHandleAccess::kFlushRead);
         if (backend.isValid()) {
-            REPORTER_ASSERT(reporter, c.isCompatible(backend));
+            REPORTER_ASSERT(reporter, is_compatible(c, backend));
         }
         REPORTER_ASSERT(reporter, s->isCompatible(c));
         // Note that we're leaving 'backend' live here
@@ -883,13 +942,14 @@ DEF_GANESH_TEST(VkProtectedContext_DDLMakeRenderTargetTest,
                 reporter,
                 ctxInfo,
                 CtsEnforcement::kNever) {
-    auto protectedTestHelper = std::make_unique<VkTestHelper>(true);
-    if (!protectedTestHelper->init()) {
+    std::unique_ptr<VkTestHelper> helper = VkTestHelper::Make(skiatest::TestType::kGanesh,
+                                                              /* isProtected= */ true);
+    if (!helper) {
         return;
     }
-    REPORTER_ASSERT(reporter, protectedTestHelper->directContext() != nullptr);
+    REPORTER_ASSERT(reporter, helper->isValid());
 
-    DDLMakeRenderTargetTestImpl(protectedTestHelper->directContext(), reporter);
+    DDLMakeRenderTargetTestImpl(helper->directContext(), reporter);
 }
 #endif
 
@@ -919,7 +979,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLWrapBackendTest,
                                                                     kRGBA_8888_SkColorType,
                                                                     skgpu::Mipmapped::kNo,
                                                                     GrRenderable::kNo,
-                                                                    GrProtected::kNo);
+                                                                    skgpu::Protected::kNo);
     if (!mbet) {
         return;
     }
@@ -993,29 +1053,42 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLCreateCharacterizationFailures,
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kNever) {
+    using namespace skgpu;
+
     auto dContext = ctxInfo.directContext();
     size_t maxResourceBytes = dContext->getResourceCacheLimit();
     auto proxy = dContext->threadSafeProxy().get();
 
-    auto check_create_fails =
-            [proxy, reporter, maxResourceBytes](const GrBackendFormat& backendFormat,
-                                                int width, int height,
-                                                SkColorType ct, bool willUseGLFBO0,
-                                                bool isTextureable,
-                                                GrProtected prot,
-                                                bool vkRTSupportsInputAttachment,
-                                                bool forVulkanSecondaryCommandBuffer) {
+    Protected isProtected = Protected(dContext->priv().caps()->supportsProtectedContent());
+
+    auto check_create_fails = [proxy, reporter, maxResourceBytes](
+                                      const GrBackendFormat& backendFormat,
+                                      int width,
+                                      int height,
+                                      SkColorType ct,
+                                      bool willUseGLFBO0,
+                                      bool isTextureable,
+                                      Protected prot,
+                                      bool vkRTSupportsInputAttachment,
+                                      bool forVulkanSecondaryCommandBuffer) {
         const SkSurfaceProps surfaceProps(0x0, kRGB_H_SkPixelGeometry);
 
         SkImageInfo ii = SkImageInfo::Make(width, height, ct,
                                            kPremul_SkAlphaType, nullptr);
 
-        GrSurfaceCharacterization c = proxy->createCharacterization(
-                                                maxResourceBytes, ii, backendFormat, 1,
-                                                kBottomLeft_GrSurfaceOrigin, surfaceProps, false,
-                                                willUseGLFBO0, isTextureable, prot,
-                                                vkRTSupportsInputAttachment,
-                                                forVulkanSecondaryCommandBuffer);
+        GrSurfaceCharacterization c =
+                proxy->createCharacterization(maxResourceBytes,
+                                              ii,
+                                              backendFormat,
+                                              1,
+                                              kBottomLeft_GrSurfaceOrigin,
+                                              surfaceProps,
+                                              Mipmapped::kNo,
+                                              willUseGLFBO0,
+                                              isTextureable,
+                                              prot,
+                                              vkRTSupportsInputAttachment,
+                                              forVulkanSecondaryCommandBuffer);
         REPORTER_ASSERT(reporter, !c.isValid());
     };
 
@@ -1050,47 +1123,42 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLCreateCharacterizationFailures,
     // In each of the check_create_fails calls there is one bad parameter that should cause the
     // creation of the characterization to fail.
     check_create_fails(goodBackendFormat, goodWidth, badHeights[0], kGoodCT, kGoodUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     check_create_fails(goodBackendFormat, goodWidth, badHeights[1], kGoodCT, kGoodUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     check_create_fails(goodBackendFormat, badWidths[0], goodHeight, kGoodCT, kGoodUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     check_create_fails(goodBackendFormat, badWidths[1], goodHeight, kGoodCT, kGoodUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     check_create_fails(badBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     check_create_fails(goodBackendFormat, goodWidth, goodHeight, kBadCT, kGoodUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     // This fails because we always try to make a characterization that is textureable and we can't
     // have UseFBO0 be true and textureable.
     check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kBadUseFBO0,
-                       kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kGoodForVkSCB);
+                       kIsTextureable, isProtected, kGoodVkInputAttachment, kGoodForVkSCB);
     if (dContext->backend() == GrBackendApi::kVulkan) {
-        // The bad parameter in this case is the GrProtected::kYes since none of our test contexts
-        // are made protected we can't have a protected surface.
-        check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
-                           kIsTextureable, GrProtected::kYes, kGoodVkInputAttachment,
-                           kGoodForVkSCB);
         // The following fails because forVulkanSecondaryCommandBuffer is true and
         // isTextureable is true. This is not a legal combination.
         check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
-                           kIsTextureable, GrProtected::kNo, kGoodVkInputAttachment, kBadForVkSCB);
+                           kIsTextureable, isProtected, kGoodVkInputAttachment, kBadForVkSCB);
         // The following fails because forVulkanSecondaryCommandBuffer is true and
         // vkRTSupportsInputAttachment is true. This is not a legal combination.
         check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
-                           kIsNotTextureable, GrProtected::kNo, kBadVkInputAttachment,
+                           kIsNotTextureable, isProtected, kBadVkInputAttachment,
                            kBadForVkSCB);
         // The following fails because forVulkanSecondaryCommandBuffer is true and
         // willUseGLFBO0 is true. This is not a legal combination.
         check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kBadUseFBO0,
-                           kIsNotTextureable, GrProtected::kNo, kGoodVkInputAttachment,
+                           kIsNotTextureable, isProtected, kGoodVkInputAttachment,
                            kBadForVkSCB);
     } else {
         // The following set vulkan only flags on non vulkan backends.
         check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
-                           kIsTextureable, GrProtected::kNo, kBadVkInputAttachment, kGoodForVkSCB);
+                           kIsTextureable, isProtected, kBadVkInputAttachment, kGoodForVkSCB);
         check_create_fails(goodBackendFormat, goodWidth, goodHeight, kGoodCT, kGoodUseFBO0,
-                           kIsNotTextureable, GrProtected::kNo, kGoodVkInputAttachment,
+                           kIsNotTextureable, isProtected, kGoodVkInputAttachment,
                            kBadForVkSCB);
     }
 }
@@ -1119,15 +1187,22 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(DDLSkSurfaceFlush,
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kNever) {
+    using namespace skgpu;
+
     auto context = ctxInfo.directContext();
 
+    Protected isProtected = Protected(context->priv().caps()->supportsProtectedContent());
+
     SkImageInfo ii = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    sk_sp<SkSurface> s = SkSurfaces::RenderTarget(context, skgpu::Budgeted::kNo, ii);
+    sk_sp<SkSurface> s = SkSurfaces::RenderTarget(context, Budgeted::kNo, ii);
 
     GrSurfaceCharacterization characterization;
     SkAssertResult(s->characterize(&characterization));
 
-    auto mbet = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(context, ii);
+    auto mbet = sk_gpu_test::ManagedBackendTexture::MakeFromInfo(context, ii,
+                                                                 Mipmapped::kNo,
+                                                                 Renderable::kNo,
+                                                                 isProtected);
     if (!mbet) {
         ERRORF(reporter, "Could not make texture.");
         return;

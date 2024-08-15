@@ -5,6 +5,7 @@
 #include "content/test/test_render_view_host.h"
 
 #include <memory>
+#include <optional>
 #include <tuple>
 
 #include "base/strings/utf_string_conversions.h"
@@ -17,10 +18,10 @@
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/renderer_host/data_transfer_util.h"
-#include "content/browser/renderer_host/input/synthetic_gesture_target.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/common/input/synthetic_gesture_target.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -34,7 +35,6 @@
 #include "media/base/video_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/drag/drag.mojom.h"
@@ -260,7 +260,7 @@ void TestRenderWidgetHostView::SetDisplayFeatureForTesting(
   if (display_feature)
     display_feature_ = *display_feature;
   else
-    display_feature_ = absl::nullopt;
+    display_feature_ = std::nullopt;
 }
 
 void TestRenderWidgetHostView::NotifyHostAndDelegateOnWasShown(
@@ -315,7 +315,7 @@ void TestRenderWidgetHostView::
   EXPECT_EQ(page_visibility_, PageVisibilityState::kHiddenButPainting);
 }
 
-absl::optional<DisplayFeature> TestRenderWidgetHostView::GetDisplayFeature() {
+std::optional<DisplayFeature> TestRenderWidgetHostView::GetDisplayFeature() {
   return display_feature_;
 }
 
@@ -375,7 +375,6 @@ TestRenderViewHost::TestRenderViewHost(
                          std::move(main_browsing_context_state),
                          create_case),
       delete_counter_(nullptr) {
-  GetWidget()->SetViewIsFrameSinkIdOwner(true);
   if (frame_tree->is_fenced_frame()) {
     // TestRenderWidgetHostViewChildFrame deletes itself in
     // RenderWidgetHostViewChildFrame::Destroy.
@@ -394,11 +393,11 @@ TestRenderViewHost::~TestRenderViewHost() {
 }
 
 bool TestRenderViewHost::CreateTestRenderView() {
-  return CreateRenderView(absl::nullopt, MSG_ROUTING_NONE, false);
+  return CreateRenderView(std::nullopt, MSG_ROUTING_NONE, false);
 }
 
 bool TestRenderViewHost::CreateRenderView(
-    const absl::optional<blink::FrameToken>& opener_frame_token,
+    const std::optional<blink::FrameToken>& opener_frame_token,
     int proxy_route_id,
     bool window_was_created_with_opener) {
   DCHECK(!IsRenderViewLive());
@@ -417,6 +416,10 @@ bool TestRenderViewHost::CreateRenderView(
   } else {
     proxy_host =
         RenderFrameProxyHost::FromID(GetProcess()->GetID(), proxy_route_id);
+  }
+
+  if (!GetWidget()->view_is_frame_sink_id_owner()) {
+    main_frame->NotifyWillCreateRenderWidgetOnCommit();
   }
 
   DCHECK_EQ(!!main_frame, is_active());

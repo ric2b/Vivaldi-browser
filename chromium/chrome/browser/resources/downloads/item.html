@@ -124,7 +124,7 @@
   }
 
   #content:not(.is-active) .icon {
-    -webkit-filter: grayscale(100%);
+    filter: grayscale(100%);
     opacity: .5;
   }
 
@@ -216,6 +216,9 @@
     text-decoration: none;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* Ellipsize beginning and preserve the end to always display the eTLD+1. */
+    direction: rtl;
+    text-align: left;
   }
 
   .is-active #url {
@@ -271,9 +274,9 @@
   }
 
   cr-icon-button {
-    --cr-icon-button-icon-size: 16px;
-    --cr-icon-button-margin-end: 8px;
-    margin-top: 8px;
+    --cr-icon-button-icon-size: 20px;
+    --cr-icon-button-margin-end: 12px;
+    margin-top: 12px;
   }
 
   #incognito {
@@ -401,7 +404,7 @@
           <span role="gridcell">
             <cr-button on-click="onDeepScanClick_" id="deepScan"
                       class="action-button" focus-row-control focus-type="open">
-              $i18n{controlDeepScan}
+              [[computeDeepScanControlText_(data.state)]]
             </cr-button>
           </span>
           <span role="gridcell">
@@ -436,7 +439,7 @@
           <span role="gridcell">
             <cr-button on-click="onDeepScanClick_" id="deepScan"
                       class="action-button" focus-row-control focus-type="open">
-              $i18n{controlDeepScan}
+              [[computeDeepScanControlText_(data.state)]]
             </cr-button>
           </span>
         </template>

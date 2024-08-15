@@ -39,6 +39,7 @@ interface OmniboxOptionRowAttrs {
   label?: string;
 
   // Additional attrs forwarded to the underlying element.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [htmlAttrs: string]: any;
 }
 
@@ -209,7 +210,13 @@ export class Omnibox implements m.ClassComponent<OmniboxAttrs> {
                       e.preventDefault();
 
                       const option = options[selectedOptionIndex];
+                      // Return values from indexing arrays can be undefined.
+                      // We should enable noUncheckedIndexedAccess in
+                      // tsconfig.json.
+                      /* eslint-disable
+                      @typescript-eslint/strict-boolean-expressions */
                       if (option) {
+                        /* eslint-enable */
                         closeOnSubmit && this.close(attrs);
 
                         const mod = e.metaKey || e.ctrlKey;

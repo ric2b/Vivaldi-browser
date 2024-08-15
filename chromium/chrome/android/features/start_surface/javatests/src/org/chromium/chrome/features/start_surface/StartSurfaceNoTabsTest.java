@@ -38,6 +38,8 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -47,7 +49,6 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 
@@ -65,6 +66,7 @@ import java.util.List;
     Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE
 })
 @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+@DisableFeatures({ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID})
 @DoNotBatch(reason = "StartSurface*Test tests startup behaviours and thus can't be batched.")
 @CommandLineFlags.Add({
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
@@ -109,14 +111,16 @@ public class StartSurfaceNoTabsTest {
         onView(withId(R.id.primary_tasks_surface_view)).check(matches(isDisplayed()));
         onView(withId(R.id.search_box_text)).check(matches(isDisplayed()));
         onView(withId(R.id.mv_tiles_container)).check(matches(isDisplayed()));
-        onView(withId(R.id.tab_switcher_title)).check(matches(withEffectiveVisibility(GONE)));
         onView(withId(R.id.tab_switcher_module_container))
                 .check(matches(withEffectiveVisibility(GONE)));
         onView(withId(R.id.single_tab_view)).check(matches(withEffectiveVisibility(GONE)));
-        onView(withId(R.id.more_tabs)).check(matches(withEffectiveVisibility(GONE)));
         onView(withId(R.id.tasks_surface_body)).check(matches(isDisplayed()));
         onView(withId(R.id.start_tab_switcher_button)).check(matches(isDisplayed()));
-        onViewWaiting(withId(R.id.logo)).check(matches(isDisplayed()));
+        if (ChromeFeatureList.sSurfacePolish.isEnabled()) {
+            onViewWaiting(withId(R.id.search_provider_logo)).check(matches(isDisplayed()));
+        } else {
+            onViewWaiting(withId(R.id.logo)).check(matches(isDisplayed()));
+        }
 
         StartSurfaceTestUtils.launchFirstMVTile(cta, 0);
         TabUiTestHelper.verifyTabModelTabCount(cta, 1, 0);

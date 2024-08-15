@@ -1,4 +1,5 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights
+// reserved
 //
 // Based on code that is:
 //
@@ -42,8 +43,8 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 2;
-const int kCompatibleVersionNumber = 2;
+const int kCurrentVersionNumber = 3;
+const int kCompatibleVersionNumber = 3;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
   LOG(ERROR) << "Mail Client DB failed to migrate from version "
@@ -102,9 +103,6 @@ sql::InitStatus MailClientDatabase::Init(
   // Prime the cache.
   db_.Preload();
 
-  // Create the tables and indices.
-  // NOTE: If you add something here, also add it to
-  //       RecreateAllButStarAndURLTables.
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;
 
@@ -144,12 +142,6 @@ void MailClientDatabase::RollbackTransaction() {
     db_.RollbackTransaction();
 }
 
-void MailClientDatabase::Vacuum() {
-  DCHECK_EQ(0, db_.transaction_nesting())
-      << "Can not have a transaction when vacuuming.";
-  std::ignore = db_.Execute("VACUUM");
-}
-
 void MailClientDatabase::TrimMemory(bool aggressively) {
   db_.TrimMemory();
 }
@@ -176,6 +168,16 @@ sql::InitStatus MailClientDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     cur_version = 2;
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 2) {
+    if (!UpdateToVersion3()) {
+      return LogMigrationFailure(cur_version);
+    }
+    cur_version = 3;
     std::ignore = meta_table_.SetVersionNumber(cur_version);
     std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));

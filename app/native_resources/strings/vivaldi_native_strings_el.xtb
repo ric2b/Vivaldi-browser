@@ -78,12 +78,13 @@
 <translation id="3943857333388298514">Επικόλληση</translation>
 <translation id="4005270918754737597">Παράλειψη αυτής της έκδοσης</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Να μην εμφανιστεί ξανά</translation>
 <translation id="4074744496918018786">Άνοιγμα Εικόνας σε Ιδιωτικό Παράθυρο</translation>
 <translation id="410351446219883937">Αυτόματη αναπαραγωγή</translation>
+<translation id="4281844954008187215">Όροι χρήσης</translation>
 <translation id="4324492550286218827">Τοπίο 2</translation>
 <translation id="4406101500523955324">Άνοιγμα σε Νέο Ιδιωτικό Παράθυρο</translation>
 <translation id="4420816922321010053">Θέλετε πραγματικά να κλείσετε τον Vivaldi;</translation>
+<translation id="4430019312045809116">Ένταση</translation>
 <translation id="443008484043213881">Εργαλεία</translation>
 <translation id="4456211719108566931">Τέρας 6</translation>
 <translation id="4512900838580567989">Άνοιγμα Συνδέσμου σε Νέα Καρτέλα στο Παρασκήνιο</translation>
@@ -111,7 +112,6 @@
 <translation id="5615637589913244581">Opera έκδοση 15+ (Beta)</translation>
 <translation id="5648110075441906505">Άνοιγμα Εικόνας σε Νέο Παράθυρο</translation>
 <translation id="5656371807944747581">Σφάλμα Ενημέρωσης!</translation>
-<translation id="5716238312826274098">Απενεργοποίηση ειδοποιήσεων</translation>
 <translation id="5732584064771442623">Το Vivaldi <ph name="NEW_VERSION" /> είναι τώρα διαθέσιμο (έχετε την έκδοση <ph name="OLD_VERSION" />). Θέλετε να το κατεβάσετε τώρα;</translation>
 <translation id="5770433027661640693">Τοπίο 10</translation>
 <translation id="5857090052475505287">Νέος Φάκελος</translation>
@@ -139,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Αποτυχία εκκίνησης του προγράμματος εγκατάστασης ενημέρωσης. Βεβαιωθείτε ότι ο υπολογιστής διαθέτει αρκετή μνήμη ή χώρο στο δίσκο και δοκιμάστε ξανά αργότερα.</translation>
 <translation id="7658239707568436148">Άκυρο</translation>
-<translation id="7715497554424665066">&amp;Παράβλεψη Ενημέρωσης</translation>
 <translation id="7724603315864178912">Αποκοπή</translation>
 <translation id="7727481996062361502">Επαλήθευση ενημέρωσης...</translation>
 <translation id="7793738202466490491">Προσθήκη ως Συμβάν Ημερολογίου</translation>

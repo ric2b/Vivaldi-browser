@@ -102,6 +102,7 @@ class COMPONENT_EXPORT(MEDIA_SESSION_TEST_SUPPORT_CPP)
 
  private:
   void StartWaiting();
+  void QuitWaitingIfNeeded();
 
   mojom::MediaSessionInfoPtr session_info_;
   absl::optional<absl::optional<MediaMetadata>> session_metadata_;
@@ -158,7 +159,7 @@ class COMPONENT_EXPORT(MEDIA_SESSION_TEST_SUPPORT_CPP) MockMediaSession
   void GetDebugInfo(GetDebugInfoCallback callback) override;
   void PreviousTrack() override;
   void NextTrack() override;
-  void SkipAd() override {}
+  void SkipAd() override;
   void PreviousSlide() override {}
   void NextSlide() override {}
   void Seek(base::TimeDelta seek_time) override;
@@ -216,6 +217,7 @@ class COMPONENT_EXPORT(MEDIA_SESSION_TEST_SUPPORT_CPP) MockMediaSession
   int next_track_count() const { return next_track_count_; }
   int add_observer_count() const { return add_observer_count_; }
   int seek_count() const { return seek_count_; }
+  int skip_ad_count() const { return skip_ad_count_; }
   int seek_to_count() const { return seek_to_count_; }
 
   bool is_scrubbing() const { return is_scrubbing_; }
@@ -245,6 +247,7 @@ class COMPONENT_EXPORT(MEDIA_SESSION_TEST_SUPPORT_CPP) MockMediaSession
   int next_track_count_ = 0;
   int add_observer_count_ = 0;
   int seek_count_ = 0;
+  int skip_ad_count_ = 0;
   int seek_to_count_ = 0;
 
   std::set<mojom::MediaSessionAction> actions_;

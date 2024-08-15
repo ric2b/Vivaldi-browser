@@ -221,7 +221,7 @@ void CFGAS_GEGraphics::RenderDeviceFillPath(
   CFX_Matrix m = m_info.CTM;
   m.Concat(matrix);
 
-  const CFX_FillRenderOptions fill_options = {.fill_type = fill_type};
+  const CFX_FillRenderOptions fill_options(fill_type);
   switch (m_info.fillColor.GetType()) {
     case CFGAS_GEColor::Solid:
       m_renderDevice->DrawPath(path.GetPath(), &m, &m_info.graphState,
@@ -242,7 +242,7 @@ void CFGAS_GEGraphics::FillPathWithPattern(
     const CFGAS_GEPath& path,
     const CFX_FillRenderOptions& fill_options,
     const CFX_Matrix& matrix) {
-  RetainPtr<CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
+  RetainPtr<const CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
   int32_t width = bitmap->GetWidth();
   int32_t height = bitmap->GetHeight();
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
@@ -281,7 +281,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
     const CFGAS_GEPath& path,
     const CFX_FillRenderOptions& fill_options,
     const CFX_Matrix& matrix) {
-  RetainPtr<CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
+  RetainPtr<const CFX_DIBitmap> bitmap = m_renderDevice->GetBitmap();
   int32_t width = bitmap->GetWidth();
   int32_t height = bitmap->GetHeight();
   float start_x = m_info.fillColor.GetShading()->GetBeginPoint().x;
@@ -299,7 +299,8 @@ void CFGAS_GEGraphics::FillPathWithShading(
       float axis_len_square = (x_span * x_span) + (y_span * y_span);
       for (int32_t row = 0; row < height; row++) {
         uint32_t* dib_buf =
-            reinterpret_cast<uint32_t*>(bmp->GetWritableScanline(row).data());
+            fxcrt::reinterpret_span<uint32_t>(bmp->GetWritableScanline(row))
+                .data();
         for (int32_t column = 0; column < width; column++) {
           float scale = 0.0f;
           if (axis_len_square) {
@@ -333,7 +334,8 @@ void CFGAS_GEGraphics::FillPathWithShading(
                 ((start_r - end_r) * (start_r - end_r));
       for (int32_t row = 0; row < height; row++) {
         uint32_t* dib_buf =
-            reinterpret_cast<uint32_t*>(bmp->GetWritableScanline(row).data());
+            fxcrt::reinterpret_span<uint32_t>(bmp->GetWritableScanline(row))
+                .data();
         for (int32_t column = 0; column < width; column++) {
           float x = (float)(column);
           float y = (float)(row);

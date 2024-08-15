@@ -7,7 +7,7 @@
 
 #import <set>
 
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller.h"
 
 @class NoteFolderChooserViewController;
 class Browser;
@@ -35,7 +35,7 @@ class NoteNode;
 // note model can affect this controller's state.
 // The note model is assumed to be loaded, thus also not to be NULL.
 @interface NoteFolderChooserViewController
-    : ChromeTableViewController <UIAdaptivePresentationControllerDelegate>
+    : LegacyChromeTableViewController <UIAdaptivePresentationControllerDelegate>
 
 @property(nonatomic, weak) id<NoteFolderChooserViewControllerDelegate> delegate;
 

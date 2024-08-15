@@ -120,10 +120,7 @@ void ServiceController::Initialize(
 
   auto assistant_manager = libassistant_factory_->CreateAssistantManager(
       ToLibassistantConfig(*config));
-  assistant_client::AssistantManagerInternal* assistant_manager_internal =
-      nullptr;
-  assistant_client_ = AssistantClient::Create(std::move(assistant_manager),
-                                              assistant_manager_internal);
+  assistant_client_ = AssistantClient::Create(std::move(assistant_manager));
 
   DCHECK(settings_controller_);
   settings_controller_->SetAuthenticationTokens(
@@ -295,10 +292,6 @@ void ServiceController::OnServicesBootingUp() {
   // triggered by `ESSENTIAL_SERVICES_AVAILABLE`. After the AssistantManager is
   // started, it will trigger `ALL_SERVICES_AVAILABLE`. Therefore these two
   // signals are generated in order.
-  // For V1, a fake `ESSENTIAL_SERVICES_AVAILABLE` signal is sent in
-  // AssistantClientV1::StartServices(). An equivalent signal of
-  // `ALL_SERVICES_AVAILABLE`, DeviceState::StartupState::finished, is sent
-  // in AssistantManagerImpl::OnBootupCheckinDone().
   assistant_client_->assistant_manager()->Start();
 
   // Notify observer on Libassistant services started.

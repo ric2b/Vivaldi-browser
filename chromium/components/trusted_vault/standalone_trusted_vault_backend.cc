@@ -27,7 +27,6 @@
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
-#include "components/os_crypt/sync/os_crypt.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/trusted_vault/features.h"
 #include "components/trusted_vault/proto/local_trusted_vault.pb.h"
@@ -46,29 +45,8 @@ namespace {
 
 constexpr int kCurrentLocalTrustedVaultVersion = 2;
 constexpr int kCurrentDeviceRegistrationVersion = 1;
-constexpr base::TimeDelta kVerifyDeviceRegistrationDelay = base::Seconds(10);
 
-trusted_vault_pb::LocalTrustedVault ReadEncryptedFile(
-    const base::FilePath& file_path) {
-  trusted_vault_pb::LocalTrustedVault proto;
-  std::string ciphertext;
-  std::string decrypted_content;
-  if (!base::ReadFileToString(file_path, &ciphertext)) {
-    return proto;
-  }
-
-  const bool decryption_success =
-      OSCrypt::DecryptString(ciphertext, &decrypted_content);
-  base::UmaHistogramBoolean("Sync.TrustedVaultLocalDataDecryptionIsSuccessful",
-                            decryption_success);
-  if (decryption_success) {
-    proto.ParseFromString(decrypted_content);
-  }
-
-  return proto;
-}
-
-trusted_vault_pb::LocalTrustedVault ReadMD5HashedFile(
+trusted_vault_pb::LocalTrustedVault ReadDataFromDiskImpl(
     const base::FilePath& file_path) {
   std::string file_content;
 
@@ -107,8 +85,8 @@ trusted_vault_pb::LocalTrustedVault ReadMD5HashedFile(
   return data_proto;
 }
 
-void WriteMD5HashedFileToDisk(const trusted_vault_pb::LocalTrustedVault& data,
-                              const base::FilePath& file_path) {
+void WriteDataToDiskImpl(const trusted_vault_pb::LocalTrustedVault& data,
+                         const base::FilePath& file_path) {
   trusted_vault_pb::LocalTrustedVaultFileContent file_proto;
   file_proto.set_serialized_local_trusted_vault(data.SerializeAsString());
   file_proto.set_md5_digest_hex_string(
@@ -119,23 +97,6 @@ void WriteMD5HashedFileToDisk(const trusted_vault_pb::LocalTrustedVault& data,
     DLOG(ERROR) << "Failed to write trusted vault file.";
   }
   base::UmaHistogramBoolean("Sync.TrustedVaultFileWriteSuccess", success);
-}
-
-void MaybeMigrateDataFile(const base::FilePath& old_file_path,
-                          const base::FilePath& new_file_path) {
-  if (old_file_path.empty() || !base::PathExists(old_file_path)) {
-    return;
-  }
-  if (!base::PathExists(new_file_path)) {
-    // Only write to `new_file_path` if it doesn't exist yet to prevent
-    // overwriting the content with stale data.
-    trusted_vault_pb::LocalTrustedVault proto =
-        ReadEncryptedFile(old_file_path);
-    WriteMD5HashedFileToDisk(proto, new_file_path);
-  }
-  if (base::PathExists(new_file_path)) {
-    base::DeleteFile(old_file_path);
-  }
 }
 
 bool HasNonConstantKey(
@@ -292,6 +253,17 @@ StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded::operator=(
 StandaloneTrustedVaultBackend::PendingGetIsRecoverabilityDegraded::
     ~PendingGetIsRecoverabilityDegraded() = default;
 
+StandaloneTrustedVaultBackend::OngoingFetchKeys::OngoingFetchKeys() = default;
+
+StandaloneTrustedVaultBackend::OngoingFetchKeys::OngoingFetchKeys(
+    OngoingFetchKeys&&) = default;
+
+StandaloneTrustedVaultBackend::OngoingFetchKeys&
+StandaloneTrustedVaultBackend::OngoingFetchKeys::operator=(OngoingFetchKeys&&) =
+    default;
+
+StandaloneTrustedVaultBackend::OngoingFetchKeys::~OngoingFetchKeys() = default;
+
 // static
 TrustedVaultDownloadKeysStatusForUMA
 StandaloneTrustedVaultBackend::GetDownloadKeysStatusForUMAFromResponse(
@@ -324,12 +296,10 @@ StandaloneTrustedVaultBackend::GetDownloadKeysStatusForUMAFromResponse(
 }
 
 StandaloneTrustedVaultBackend::StandaloneTrustedVaultBackend(
-    const base::FilePath& md5_hashed_file_path,
-    const base::FilePath& deprecated_encrypted_file_path,
+    const base::FilePath& file_path,
     std::unique_ptr<Delegate> delegate,
     std::unique_ptr<TrustedVaultConnection> connection)
-    : md5_hashed_file_path_(md5_hashed_file_path),
-      deprecated_encrypted_file_path_(deprecated_encrypted_file_path),
+    : file_path_(file_path),
       delegate_(std::move(delegate)),
       connection_(std::move(connection)),
       clock_(base::DefaultClock::GetInstance()) {}
@@ -352,10 +322,7 @@ void StandaloneTrustedVaultBackend::OnDegradedRecoverabilityChanged() {
 }
 
 void StandaloneTrustedVaultBackend::ReadDataFromDisk() {
-  // TODO(crbug.com/1374650): Migration from legacy file was enabled in M108,
-  // clean it up once at least one year passed.
-  MaybeMigrateDataFile(deprecated_encrypted_file_path_, md5_hashed_file_path_);
-  data_ = ReadMD5HashedFile(md5_hashed_file_path_);
+  data_ = ReadDataFromDiskImpl(file_path_);
 
   if (data_.user_size() == 0) {
     // No data, set the current version and omit writing the file.
@@ -378,12 +345,7 @@ void StandaloneTrustedVaultBackend::ReadDataFromDisk() {
 void StandaloneTrustedVaultBackend::FetchKeys(
     const CoreAccountInfo& account_info,
     FetchKeysCallback callback) {
-  // Concurrent keys fetches aren't supported.
-  DCHECK(ongoing_fetch_keys_callback_.is_null());
   DCHECK(!callback.is_null());
-
-  ongoing_fetch_keys_callback_ = std::move(callback);
-  ongoing_fetch_keys_gaia_id_ = account_info.gaia;
 
   const trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(account_info.gaia);
@@ -392,47 +354,50 @@ void StandaloneTrustedVaultBackend::FetchKeys(
       !per_user_vault->keys_marked_as_stale_by_consumer()) {
     // There are locally available keys, which weren't marked as stale. Keys
     // download attempt is not needed.
-    FulfillOngoingFetchKeys(/*status_for_uma=*/absl::nullopt);
+    FulfillFetchKeys(account_info.gaia, std::move(callback),
+                     /*status_for_uma=*/absl::nullopt);
     return;
   }
   if (!connection_) {
-    // Feature disabled.
-    FulfillOngoingFetchKeys(/*status_for_uma=*/absl::nullopt);
+    // Keys downloading is disabled.
+    FulfillFetchKeys(account_info.gaia, std::move(callback),
+                     /*status_for_uma=*/absl::nullopt);
     return;
   }
-  // TODO(crbug.com/1413179): This check seems redundant with the current
-  // SetPrimaryAccount() logic. Replace with DCHECK() once some confirming UMA
-  // data available.
   if (!primary_account_.has_value() ||
       primary_account_->gaia != account_info.gaia) {
     // Keys download attempt is not possible because there is no primary
     // account.
-    FulfillOngoingFetchKeys(
-        TrustedVaultDownloadKeysStatusForUMA::kNoPrimaryAccount);
+    FulfillFetchKeys(account_info.gaia, std::move(callback),
+                     TrustedVaultDownloadKeysStatusForUMA::kNoPrimaryAccount);
+    return;
+  }
+  if (ongoing_fetch_keys_.has_value()) {
+    // Keys downloading is only supported for primary account, thus gaia_id
+    // should be the same for |ongoing_fetch_keys_| and |account_info|.
+    CHECK_EQ(ongoing_fetch_keys_->gaia_id, primary_account_->gaia);
+    CHECK_EQ(ongoing_fetch_keys_->gaia_id, account_info.gaia);
+    // Download keys request is in progress already, |callback| will be invoked
+    // upon its completion.
+    ongoing_fetch_keys_->callbacks.emplace_back(std::move(callback));
     return;
   }
   DCHECK(per_user_vault);
   if (!per_user_vault->local_device_registration_info().device_registered()) {
     // Keys download attempt is not possible because the device is not
     // registered.
-    FulfillOngoingFetchKeys(
+    FulfillFetchKeys(
+        account_info.gaia, std::move(callback),
         TrustedVaultDownloadKeysStatusForUMA::kDeviceNotRegistered);
     return;
   }
   if (AreConnectionRequestsThrottled()) {
     // Keys download attempt is not possible.
-    FulfillOngoingFetchKeys(
+    FulfillFetchKeys(
+        account_info.gaia, std::move(callback),
         TrustedVaultDownloadKeysStatusForUMA::kThrottledClientSide);
     return;
   }
-
-  // Current state guarantees there is no ongoing keys downloading requests to
-  // the server:
-  // 1. Current |primary_account_| is |account_info|, so there is no ongoing
-  // request for other accounts.
-  // 2. Concurrent FetchKeys() calls aren't supported, so there is no keys
-  // download for |account_info|.
-  DCHECK(!ongoing_keys_downloading_request_);
 
   std::unique_ptr<SecureBoxKeyPair> key_pair =
       SecureBoxKeyPair::CreateByPrivateKeyImport(
@@ -442,16 +407,20 @@ void StandaloneTrustedVaultBackend::FetchKeys(
     // Corrupted state: device is registered, but |key_pair| can't be imported.
     // TODO(crbug.com/1094326): restore from this state (throw away the key and
     // trigger device registration again).
-    FulfillOngoingFetchKeys(TrustedVaultDownloadKeysStatusForUMA::
-                                kCorruptedLocalDeviceRegistration);
+    FulfillFetchKeys(account_info.gaia, std::move(callback),
+                     TrustedVaultDownloadKeysStatusForUMA::
+                         kCorruptedLocalDeviceRegistration);
     return;
   }
 
+  ongoing_fetch_keys_ = OngoingFetchKeys();
+  ongoing_fetch_keys_->gaia_id = account_info.gaia;
+  ongoing_fetch_keys_->callbacks.emplace_back(std::move(callback));
   // Guaranteed by |device_registered| check above.
   DCHECK(!per_user_vault->vault_key().empty());
   // |this| outlives |connection_| and |ongoing_keys_downloading_request_|, so
   // it's safe to use base::Unretained() here.
-  ongoing_keys_downloading_request_ = connection_->DownloadNewKeys(
+  ongoing_fetch_keys_->request = connection_->DownloadNewKeys(
       *primary_account_,
       TrustedVaultKeyAndVersion(
           ProtoStringToBytes(
@@ -460,7 +429,7 @@ void StandaloneTrustedVaultBackend::FetchKeys(
       std::move(key_pair),
       base::BindOnce(&StandaloneTrustedVaultBackend::OnKeysDownloaded,
                      base::Unretained(this)));
-  DCHECK(ongoing_keys_downloading_request_);
+  DCHECK(ongoing_fetch_keys_->request);
 }
 
 void StandaloneTrustedVaultBackend::StoreKeys(
@@ -526,13 +495,10 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
 
   primary_account_ = primary_account;
   ongoing_device_registration_request_ = nullptr;
-  ongoing_keys_downloading_request_ = nullptr;
   degraded_recoverability_handler_ = nullptr;
   ongoing_get_recoverability_request_.reset();
   ongoing_add_recovery_method_request_.reset();
   RemoveNonPrimaryAccountKeysIfMarkedForDeletion();
-  // TODO(crbug.com/1413179): revisit this when supporting FetchKeys() call
-  // before SetPrimaryAccount().
   FulfillOngoingFetchKeys(TrustedVaultDownloadKeysStatusForUMA::kAborted);
 
   if (!primary_account_.has_value()) {
@@ -577,22 +543,6 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
         "Sync.TrustedVaultDeviceRegistered",
         per_user_vault->local_device_registration_info().device_registered());
     RecordTrustedVaultDeviceRegistrationState(*registration_state);
-
-    // If the local state indicates that the device is already registered and
-    // there is no ongoing re-registration attempt, and behind a feature toggle,
-    // trigger a procedure to verify that the server has a consistent state
-    // (i.e. downloading of new keys should succeed but return no new keys).
-    if (*registration_state ==
-            TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1 &&
-        base::FeatureList::IsEnabled(
-            kSyncTrustedVaultVerifyDeviceRegistration)) {
-      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
-          FROM_HERE,
-          base::BindOnce(
-              &StandaloneTrustedVaultBackend::VerifyDeviceRegistrationForUMA,
-              base::WrapRefCounted(this), primary_account->gaia),
-          kVerifyDeviceRegistrationDelay);
-    }
   }
 
   MaybeProcessPendingTrustedRecoveryMethod();
@@ -1048,15 +998,6 @@ void StandaloneTrustedVaultBackend::OnKeysDownloaded(
     const std::vector<std::vector<uint8_t>>& new_vault_keys,
     int last_vault_key_version) {
   DCHECK(primary_account_.has_value());
-  DCHECK(!ongoing_fetch_keys_callback_.is_null());
-  DCHECK_EQ(*ongoing_fetch_keys_gaia_id_, primary_account_->gaia);
-
-  // This method should be called only as a result of
-  // |ongoing_keys_downloading_request_| completion/failure, verify this
-  // condition and destroy |ongoing_keys_downloading_request_| as it's not
-  // needed anymore.
-  DCHECK(ongoing_keys_downloading_request_);
-  ongoing_keys_downloading_request_ = nullptr;
 
   trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(primary_account_->gaia);
@@ -1105,7 +1046,11 @@ void StandaloneTrustedVaultBackend::OnKeysDownloaded(
       break;
   }
 
-  // In all cases the ongoing fetch keys request should be fulfilled.
+  // This method should be called only as a result of keys downloading
+  // attributed to current |ongoing_fetch_keys_|.
+  DCHECK(ongoing_fetch_keys_);
+  DCHECK_EQ(ongoing_fetch_keys_->gaia_id, primary_account_->gaia);
+
   FulfillOngoingFetchKeys(GetDownloadKeysStatusForUMAFromResponse(status));
 }
 
@@ -1128,13 +1073,27 @@ void StandaloneTrustedVaultBackend::OnTrustedRecoveryMethodAdded(
 
 void StandaloneTrustedVaultBackend::FulfillOngoingFetchKeys(
     absl::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma) {
-  if (!ongoing_fetch_keys_gaia_id_.has_value()) {
+  if (!ongoing_fetch_keys_.has_value()) {
     return;
   }
-  DCHECK(!ongoing_fetch_keys_callback_.is_null());
 
+  // Invoking callbacks may in theory cause side effects (like changing
+  // |ongoing_fetch_keys_|), making a local copy to avoid them.
+  auto ongoing_fetch_keys = std::move(*ongoing_fetch_keys_);
+  ongoing_fetch_keys_ = absl::nullopt;
+
+  for (auto& callback : ongoing_fetch_keys.callbacks) {
+    FulfillFetchKeys(ongoing_fetch_keys.gaia_id, std::move(callback),
+                     status_for_uma);
+  }
+}
+
+void StandaloneTrustedVaultBackend::FulfillFetchKeys(
+    const std::string& gaia_id,
+    FetchKeysCallback callback,
+    absl::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma) {
   const trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
-      FindUserVault(*ongoing_fetch_keys_gaia_id_);
+      FindUserVault(gaia_id);
 
   if (status_for_uma.has_value()) {
     const bool also_log_with_v1_suffix =
@@ -1154,9 +1113,7 @@ void StandaloneTrustedVaultBackend::FulfillOngoingFetchKeys(
     });
   }
 
-  std::move(ongoing_fetch_keys_callback_).Run(vault_keys);
-  ongoing_fetch_keys_callback_.Reset();
-  ongoing_fetch_keys_gaia_id_.reset();
+  std::move(callback).Run(vault_keys);
 }
 
 bool StandaloneTrustedVaultBackend::AreConnectionRequestsThrottled() {
@@ -1217,67 +1174,9 @@ StandaloneTrustedVaultBackend::FindUserVault(const std::string& gaia_id) {
   return nullptr;
 }
 
-void StandaloneTrustedVaultBackend::VerifyDeviceRegistrationForUMA(
-    const std::string& gaia_id) {
-  const trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
-      FindUserVault(gaia_id);
-
-  // Ignore call if things have changed since the task was scheduled, although
-  // in normal circumstances it shouldn't happen.
-  if (!connection_ || !primary_account_.has_value() ||
-      primary_account_->gaia != gaia_id || !per_user_vault ||
-      !per_user_vault->local_device_registration_info().device_registered()) {
-    return;
-  }
-
-  static_assert(kCurrentDeviceRegistrationVersion == 1);
-  const bool also_log_with_v1_suffix =
-      per_user_vault->local_device_registration_info()
-          .device_registered_version() == 1;
-
-  if (AreConnectionRequestsThrottled()) {
-    // Keys download attempt is not possible.
-    RecordVerifyRegistrationStatus(
-        TrustedVaultDownloadKeysStatusForUMA::kThrottledClientSide,
-        also_log_with_v1_suffix);
-    return;
-  }
-
-  std::unique_ptr<SecureBoxKeyPair> key_pair =
-      SecureBoxKeyPair::CreateByPrivateKeyImport(
-          ProtoStringToBytes(per_user_vault->local_device_registration_info()
-                                 .private_key_material()));
-  if (!key_pair) {
-    RecordVerifyRegistrationStatus(
-        TrustedVaultDownloadKeysStatusForUMA::kCorruptedLocalDeviceRegistration,
-        also_log_with_v1_suffix);
-    return;
-  }
-
-  // Guaranteed by |device_registered| check above.
-  DCHECK(!per_user_vault->vault_key().empty());
-
-  ongoing_verify_registration_request_ = connection_->DownloadNewKeys(
-      *primary_account_,
-      TrustedVaultKeyAndVersion(
-          ProtoStringToBytes(
-              per_user_vault->vault_key().rbegin()->key_material()),
-          per_user_vault->last_vault_key_version()),
-      std::move(key_pair),
-      base::BindOnce(
-          [](bool also_log_with_v1_suffix,
-             TrustedVaultDownloadKeysStatus status,
-             const std::vector<std::vector<uint8_t>>& new_vault_keys,
-             int last_vault_key_version) {
-            RecordVerifyRegistrationStatus(
-                GetDownloadKeysStatusForUMAFromResponse(status),
-                also_log_with_v1_suffix);
-          },
-          also_log_with_v1_suffix));
-}
-
 void StandaloneTrustedVaultBackend::WriteDataToDisk() {
-  WriteMD5HashedFileToDisk(data_, md5_hashed_file_path_);
+  WriteDataToDiskImpl(data_, file_path_);
+  delegate_->NotifyStateChanged();
 }
 
 }  // namespace trusted_vault

@@ -131,11 +131,6 @@ class NetworkResourcesData final
       text_encoding_name_ = text_encoding_name;
     }
 
-    scoped_refptr<SharedBuffer> Buffer() const { return buffer_; }
-    void SetBuffer(scoped_refptr<SharedBuffer> buffer) {
-      buffer_ = std::move(buffer);
-    }
-
     const Resource* CachedResource() const { return cached_resource_.Get(); }
     void SetResource(const Resource*);
 
@@ -175,6 +170,9 @@ class NetworkResourcesData final
 
     void Trace(Visitor*) const override;
 
+    SharedBuffer* Data() const { return data_buffer_.get(); }
+    void ClearData() { data_buffer_ = nullptr; }
+
    private:
     bool HasData() const { return data_buffer_.get(); }
     void AppendData(const char* data, size_t data_length);
@@ -200,8 +198,6 @@ class NetworkResourcesData final
     String text_encoding_name_;
     int64_t raw_header_size_;
     int64_t pending_encoded_data_length_;
-
-    scoped_refptr<SharedBuffer> buffer_;
 
     // We use UntracedMember<> here to do custom weak processing.
     UntracedMember<const Resource> cached_resource_;
@@ -232,6 +228,7 @@ class NetworkResourcesData final
                             const char* data,
                             uint64_t data_length);
   void MaybeDecodeDataToContent(const String& request_id);
+  void ClearData(const String& request_id);
   void AddResource(const String& request_id, const Resource*);
   ResourceData const* Data(const String& request_id);
   void Clear(const String& preserved_loader_id = String());

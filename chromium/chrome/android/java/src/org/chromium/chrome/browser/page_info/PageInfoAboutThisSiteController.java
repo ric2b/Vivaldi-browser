@@ -21,6 +21,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabObserver;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabSheetContent;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
@@ -37,9 +38,7 @@ import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.url.GURL;
 
-/**
- * Class for controlling the page info 'About This Site' section.
- */
+/** Class for controlling the page info 'About This Site' section. */
 public class PageInfoAboutThisSiteController {
     public static final int ROW_ID = View.generateViewId();
     private static final String TAG = "PageInfo";
@@ -58,9 +57,12 @@ public class PageInfoAboutThisSiteController {
         return PageInfoAboutThisSiteControllerJni.get().isFeatureEnabled();
     }
 
-    public PageInfoAboutThisSiteController(PageInfoMainController mainController,
+    public PageInfoAboutThisSiteController(
+            PageInfoMainController mainController,
             Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
-            PageInfoRowView rowView, PageInfoControllerDelegate delegate, WebContents webContents,
+            PageInfoRowView rowView,
+            PageInfoControllerDelegate delegate,
+            WebContents webContents,
             TabCreator tabCreator) {
         mMainController = mainController;
         mEphemeralTabCoordinatorSupplier = ephemeralTabCoordinatorSupplier;
@@ -81,7 +83,7 @@ public class PageInfoAboutThisSiteController {
             // Append parameter to open the page with reduced UI elements in the bottomsheet.
             Uri.Builder builder = Uri.parse(url).buildUpon();
             if (mSiteInfo.hasMoreAbout() && url.equals(mSiteInfo.getMoreAbout().getUrl())) {
-                    builder.appendQueryParameter("ilrm", "minimal,nohead");
+                builder.appendQueryParameter("ilrm", "minimal,nohead");
             }
             GURL bottomSheetUrl = new GURL(builder.toString());
             GURL fullPageUrl = new GURL(url);
@@ -90,7 +92,7 @@ public class PageInfoAboutThisSiteController {
             mEphemeralTabCoordinator.addObserver(mEphemeralTabObserver);
 
             mEphemeralTabCoordinator.requestOpenSheetWithFullPageUrl(
-                    bottomSheetUrl, fullPageUrl, getTitle(), /* isIncognito= */ false);
+                    bottomSheetUrl, fullPageUrl, getTitle(), Profile.fromWebContents(mWebContents));
 
             mMainController.dismiss();
         } else {
@@ -134,8 +136,10 @@ public class PageInfoAboutThisSiteController {
     }
 
     private void openInNewTab(String url) {
-        mTabCreator.createNewTab(new LoadUrlParams(url, PageTransition.LINK),
-                TabLaunchType.FROM_LINK, TabUtils.fromWebContents(mWebContents));
+        mTabCreator.createNewTab(
+                new LoadUrlParams(url, PageTransition.LINK),
+                TabLaunchType.FROM_LINK,
+                TabUtils.fromWebContents(mWebContents));
     }
 
     private void setupRow() {
@@ -153,9 +157,11 @@ public class PageInfoAboutThisSiteController {
         }
 
         Resources resources = mRowView.getContext().getResources();
-        String subtitle = mSiteInfo.hasDescription()
-                ? mSiteInfo.getDescription().getDescription()
-                : resources.getString(R.string.page_info_about_this_page_description_placeholder);
+        String subtitle =
+                mSiteInfo.hasDescription()
+                        ? mSiteInfo.getDescription().getDescription()
+                        : resources.getString(
+                                R.string.page_info_about_this_page_description_placeholder);
         PageInfoRowView.ViewParams rowParams = new PageInfoRowView.ViewParams();
         rowParams.title = getTitle();
         rowParams.subtitle = subtitle;
@@ -168,13 +174,18 @@ public class PageInfoAboutThisSiteController {
     }
 
     private String getTitle() {
-        return mRowView.getContext().getResources().getString(
-                R.string.page_info_about_this_page_title);
+        return mRowView.getContext()
+                .getResources()
+                .getString(R.string.page_info_about_this_page_title);
     }
 
     private @Nullable SiteInfo getSiteInfo() {
-        byte[] result = PageInfoAboutThisSiteControllerJni.get().getSiteInfo(
-                mMainController.getBrowserContext(), mMainController.getURL(), mWebContents);
+        byte[] result =
+                PageInfoAboutThisSiteControllerJni.get()
+                        .getSiteInfo(
+                                mMainController.getBrowserContext(),
+                                mMainController.getURL(),
+                                mWebContents);
         if (result == null) return null;
         SiteInfo info = null;
         try {
@@ -187,17 +198,21 @@ public class PageInfoAboutThisSiteController {
     }
 
     private void onAboutThisSiteRowClicked() {
-        openUrl(mSiteInfo.getMoreAbout().getUrl(),
+        openUrl(
+                mSiteInfo.getMoreAbout().getUrl(),
                 PageInfoAction.PAGE_INFO_ABOUT_THIS_SITE_PAGE_OPENED);
-        PageInfoAboutThisSiteControllerJni.get().onAboutThisSiteRowClicked(
-                mSiteInfo.hasDescription());
+        PageInfoAboutThisSiteControllerJni.get()
+                .onAboutThisSiteRowClicked(mSiteInfo.hasDescription());
     }
 
     @NativeMethods
     interface Natives {
         boolean isFeatureEnabled();
+
         int getJavaDrawableIconId();
+
         byte[] getSiteInfo(BrowserContextHandle browserContext, GURL url, WebContents webContents);
+
         void onAboutThisSiteRowClicked(boolean withDescription);
     }
 }

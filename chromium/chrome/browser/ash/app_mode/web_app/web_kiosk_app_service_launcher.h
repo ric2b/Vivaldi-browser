@@ -58,7 +58,7 @@ class WebKioskAppServiceLauncher : public KioskAppLauncher {
  private:
   // `KioskAppServiceLauncher` callbacks.
   void OnWebAppInitialized();
-  void NotifyAppPrepared(const absl::optional<webapps::AppId>& app_id);
+  void NotifyAppPrepared(const std::optional<webapps::AppId>& app_id);
   void OnAppLaunched(bool success);
   void OnAppBecomesVisible();
 
@@ -66,15 +66,15 @@ class WebKioskAppServiceLauncher : public KioskAppLauncher {
       const GURL& url,
       chromeos::WebKioskAppInstaller::InstallStateCallback callback);
   void CheckWhetherNetworkIsRequired(crosapi::mojom::WebKioskInstallState state,
-                                     const absl::optional<webapps::AppId>& id);
+                                     const std::optional<webapps::AppId>& id);
   void InstallAppInAsh();
   void InstallAppInLacros();
-  void OnInstallComplete(const absl::optional<webapps::AppId>& app_id);
+  void OnInstallComplete(const std::optional<webapps::AppId>& app_id);
 
   // Get the current web application to be launched in the session.
   const WebKioskAppData* GetCurrentApp() const;
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   const AccountId account_id_;
   std::string app_id_;
   KioskAppLauncher::ObserverList observers_;

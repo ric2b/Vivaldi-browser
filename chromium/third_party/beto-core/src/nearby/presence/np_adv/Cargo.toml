@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 array_view = { path = "../array_view" }
 ldt_np_adv.workspace = true
@@ -14,29 +17,41 @@ xts_aes.workspace = true
 crypto_provider.workspace = true
 strum.workspace = true
 strum_macros.workspace = true
-nom = { version = "7.1.1", features = ["alloc"] }
+nom = { version = "7.1.3", default-features = false }
 lazy_static.workspace = true
 sink.workspace = true
 tinyvec.workspace = true
-rand.workspace = true
 
 [features]
 default = []
 devtools = []
 testing = []
+alloc = ["crypto_provider/alloc"]
 
 [dev-dependencies]
 hex.workspace = true
+rand.workspace = true
 rand_ext = { path = "../rand_ext" }
-init_with = "1.1.0"
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["std"] }
+serde.workspace = true
 anyhow.workspace = true
 test_helper = { path = "../test_helper" }
 criterion.workspace = true
-crypto_provider_default = {workspace = true, features = ["std", "rustcrypto"]}
-np_ed25519 = {workspace = true, features = ["std"]}
-sink = {workspace = true, features = ["std"]}
+crypto_provider_default = { workspace = true, features = ["std", "rustcrypto"] }
+np_ed25519 = { workspace = true, features = ["std"] }
+sink = { workspace = true, features = ["std"] }
 
 [[bench]]
 name = "deser_adv"
 harness = false
+required-features = ["alloc", "devtools"]
+
+[[test]]
+name = "examples_v0"
+path = "tests/examples_v0.rs"
+required-features = ["alloc"]
+
+[[test]]
+name = "examples_v1"
+path = "tests/examples_v1.rs"
+required-features = ["alloc"]

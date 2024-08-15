@@ -5,8 +5,8 @@
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as SDK from '../../../core/sdk/sdk.js';
+import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as NodeText from '../../../ui/components/node_text/node_text.js';
@@ -16,8 +16,8 @@ import inspectorCommonStyles from '../../../ui/legacy/inspectorCommon.css.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
-import layoutPaneStyles from '../layoutPane.css.js';
 
+import layoutPaneStyles from './layoutPane.css.js';
 import {type BooleanSetting, type EnumSetting, type LayoutElement, type Setting} from './LayoutPaneUtils.js';
 
 const UIStrings = {
@@ -189,7 +189,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
     if (!layoutPaneWrapperInstance) {
       layoutPaneWrapperInstance = LegacyWrapper.LegacyWrapper.legacyWrapper(UI.Widget.Widget, new LayoutPane());
     }
-
+    layoutPaneWrapperInstance.element.style.minWidth = 'min-content';
     return layoutPaneWrapperInstance.getComponent();
   }
 
@@ -341,7 +341,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
           <summary class="header" @keydown=${this.#onSummaryKeyDown}>
             ${i18nString(UIStrings.grid)}
           </summary>
-          <div class="content-section" jslog=${VisualLogging.gridSettings()}>
+          <div class="content-section" jslog=${VisualLogging.section().context('grid-settings')}>
             <h3 class="content-section-title">${i18nString(UIStrings.overlayDisplaySettings)}</h3>
             <div class="select-settings">
               ${this.#getEnumSettings().map(setting => this.#renderEnumSetting(setting))}
@@ -351,7 +351,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
             </div>
           </div>
           ${gridElements ?
-            html`<div class="content-section" jslog=${VisualLogging.gridOverlays()}>
+            html`<div class="content-section" jslog=${VisualLogging.section().context('grid-overlays')}>
               <h3 class="content-section-title">
                 ${gridElements.length ? i18nString(UIStrings.gridOverlays) : i18nString(UIStrings.noGridLayoutsFoundOnThisPage)}
               </h3>
@@ -368,7 +368,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
               ${i18nString(UIStrings.flexbox)}
             </summary>
             ${flexContainerElements ?
-              html`<div class="content-section" jslog=${VisualLogging.flexboxOverlays()}>
+              html`<div class="content-section" jslog=${VisualLogging.section().context('flexbox-overlays')}>
                 <h3 class="content-section-title">
                   ${flexContainerElements.length ? i18nString(UIStrings.flexboxOverlays) : i18nString(UIStrings.noFlexboxLayoutsFoundOnThisPage)}
                 </h3>
@@ -470,13 +470,13 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
       <label @keyup=${onColorLabelKeyUp} @keydown=${onColorLabelKeyDown} class="color-picker-label" style="background: ${element.color};" jslog=${VisualLogging.showStyleEditor().track({click: true}).context('color')}>
         <input @change=${onColorChange} @input=${onColorChange} title=${i18nString(UIStrings.chooseElementOverlayColor)} tabindex="0" class="color-picker" type="color" value=${element.color} />
       </label>
-      <${IconButton.Icon.Icon.litTagName} .data=${{
-        iconName: 'select-element',
-        color: 'var(--icon-show-element)',
-        width: '16px',
-      } as IconButton.Icon.IconData} tabindex="0", @click=${onElementClick} title=${i18nString(UIStrings.showElementInTheElementsPanel)} class="show-element" jslog=${VisualLogging.jumpToElement().track({click:true})}>
-      ()
-      </${IconButton.Icon.Icon.litTagName}>
+      <${Buttons.Button.Button.litTagName} class="show-element"
+                                           title=${i18nString(UIStrings.showElementInTheElementsPanel)}
+                                           .iconName=${'select-element'}
+                                           .jslogContext=${'elements.select-element'}
+                                           .size=${Buttons.Button.Size.SMALL}
+                                           .variant=${Buttons.Button.Variant.ROUND}
+                                           @click=${onElementClick}></${Buttons.Button.Button.litTagName}>
     </div>`;
     // clang-format on
   }
@@ -492,9 +492,12 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
 
   #renderEnumSetting(setting: EnumSetting): LitHtml.TemplateResult {
     const onEnumSettingChange = this.#onEnumSettingChange.bind(this, setting);
-    return html`<label data-enum-setting="true" class="select-label" title=${setting.title} jslog=${
-        VisualLogging.dropDown().track({change: true}).context(setting.name)}>
-      <select class="chrome-select" data-input="true" @change=${onEnumSettingChange}>
+    return html`<label data-enum-setting="true" class="select-label" title=${setting.title}>
+      <select
+        class="chrome-select"
+        data-input="true"
+        jslog=${VisualLogging.dropDown().track({change: true}).context(setting.name)}
+        @change=${onEnumSettingChange}>
         ${
         setting.options.map(
             opt => html`<option value=${opt.value} .selected=${setting.value === opt.value}>${opt.title}</option>`)}

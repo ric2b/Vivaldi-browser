@@ -41,7 +41,7 @@
 <translation id="2923448633003185837">粘贴并转到</translation>
 <translation id="2953943267837858202">不允许自动播放视频</translation>
 <translation id="2977472760057091832">在隐身窗口中打开链接</translation>
-<translation id="2989805286512600854">在新标签页打开</translation>
+<translation id="2989805286512600854">在新标签页中打开</translation>
 <translation id="3027988479108856431">很遗憾，你的 Yandex 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Yandex 窗口然后点击继续。</translation>
 <translation id="3084011186245865060">风景 6</translation>
 <translation id="3093931836425623631">Vivaldi 的开发依赖于 Chromium 开源项目及其他开源软件。</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">粘贴</translation>
 <translation id="4005270918754737597">跳过此版本</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">不再显示(&amp;D)</translation>
 <translation id="4074744496918018786">在隐身窗口中打开图片</translation>
 <translation id="410351446219883937">自动播放</translation>
 <translation id="4281844954008187215">服务条款</translation>
@@ -92,7 +91,7 @@
 <translation id="4515472507709384008">Opera 15+ 浏览器</translation>
 <translation id="4545097004879999966">Opera邮件</translation>
 <translation id="4548358047305717967">在后台标签页中打开图片</translation>
-<translation id="4582480609585453144">在后台标签打开链接</translation>
+<translation id="4582480609585453144">在后台标签页中打开链接</translation>
 <translation id="4636708767492582204">使用邮件发送</translation>
 <translation id="4677434526832593569">动物 8</translation>
 <translation id="474217410105706308">使此页面静音</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera 15+ （Beta 版浏览器）</translation>
 <translation id="5648110075441906505">在新窗口中打开图片</translation>
 <translation id="5656371807944747581">更新出错！</translation>
-<translation id="5716238312826274098">关闭通知</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版更新已可用 (当前版本为 <ph name="OLD_VERSION" />)。现在下载吗？</translation>
 <translation id="5770433027661640693">风景 10</translation>
 <translation id="5857090052475505287">新建文件夹</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium 浏览器</translation>
 <translation id="7581266044164103589">启动更新安装器失败。请检查是否有足够的内存或存储空间然后重试。</translation>
 <translation id="7658239707568436148">取消</translation>
-<translation id="7715497554424665066">忽略更新(&amp;I)</translation>
 <translation id="7724603315864178912">剪切</translation>
 <translation id="7727481996062361502">校验更新...</translation>
 <translation id="7793738202466490491">添加到日历事件</translation>
@@ -152,10 +149,10 @@
 <translation id="8027581147000338959">在新窗口中打开</translation>
 <translation id="8044382196220116469">不允许网站自动播放视频</translation>
 <translation id="8099620695029051217">复制页面地址</translation>
-<translation id="8197810018650377191">保存页面为书签</translation>
+<translation id="8197810018650377191">加入书签</translation>
 <translation id="8261506727792406068">删除</translation>
 <translation id="8263047843452521549">检查后台服务</translation>
-<translation id="8331671104904436324">在后台标签页打开</translation>
+<translation id="8331671104904436324">在后台标签页中打开</translation>
 <translation id="8373293945112511707">风景 1</translation>
 <translation id="8388552048012645975">正在下载更新...</translation>
 <translation id="8427094907586191051">风景 17</translation>
@@ -166,7 +163,7 @@
 <translation id="8567452685425968223">正在执行更新...</translation>
 <translation id="8624587806981488221">重新加载图片(&amp;R)</translation>
 <translation id="864444594187862076">Opera 15+ （开发版浏览器）</translation>
-<translation id="8651348004684669199">添加活动标签</translation>
+<translation id="8651348004684669199">添加活动标签页</translation>
 <translation id="8669345741879513971">怪兽 10</translation>
 <translation id="867544375504146191">Yandex 浏览器</translation>
 <translation id="8689295374912158752">检查入口文档</translation>

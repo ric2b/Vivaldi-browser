@@ -5,8 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "skcms.h"  // NO_G3_REWRITE
-#include "skcms_internal.h"  // NO_G3_REWRITE
+#include "src/skcms_public.h"  // NO_G3_REWRITE
+#include "src/skcms_internals.h"  // NO_G3_REWRITE
+#include "src/skcms_Transform.h"  // NO_G3_REWRITE
 #include <assert.h>
 #include <float.h>
 #include <limits.h>
@@ -32,55 +33,25 @@
     #endif
 #endif
 
-static bool runtime_cpu_detection = true;
+using namespace skcms_private;
+
+static bool sAllowRuntimeCPUDetection = true;
+
 void skcms_DisableRuntimeCPUDetection() {
-    runtime_cpu_detection = false;
+    sAllowRuntimeCPUDetection = false;
 }
-
-#if defined(__clang__)
-    #define SKCMS_MAYBE_UNUSED __attribute__((unused))
-    #pragma clang diagnostic ignored "-Wused-but-marked-unused"
-#elif defined(__GNUC__)
-    #define SKCMS_MAYBE_UNUSED __attribute__((unused))
-#elif defined(_MSC_VER)
-    #define SKCMS_MAYBE_UNUSED __pragma(warning(suppress:4100))
-#else
-    #define SKCMS_MAYBE_UNUSED
-#endif
-
-// sizeof(x) will return size_t, which is 32-bit on some machines and 64-bit on others.
-// We have better testing on 64-bit machines, so force 32-bit machines to behave like 64-bit.
-//
-// Please do not use sizeof() directly, and size_t only when required.
-// (We have no way of enforcing these requests...)
-#define SAFE_SIZEOF(x) ((uint64_t)sizeof(x))
-
-// Same sort of thing for _Layout structs with a variable sized array at the end (named "variable").
-#define SAFE_FIXED_SIZE(type) ((uint64_t)offsetof(type, variable))
-
-static const union {
-    uint32_t bits;
-    float    f;
-} inf_ = { 0x7f800000 };
-#define INFINITY_ inf_.f
-
-#if defined(__clang__) || defined(__GNUC__)
-    #define small_memcpy __builtin_memcpy
-#else
-    #define small_memcpy memcpy
-#endif
 
 static float log2f_(float x) {
     // The first approximation of log2(x) is its exponent 'e', minus 127.
     int32_t bits;
-    small_memcpy(&bits, &x, sizeof(bits));
+    memcpy(&bits, &x, sizeof(bits));
 
     float e = (float)bits * (1.0f / (1<<23));
 
     // If we use the mantissa too we can refine the error signficantly.
     int32_t m_bits = (bits & 0x007fffff) | 0x3f000000;
     float m;
-    small_memcpy(&m, &m_bits, sizeof(m));
+    memcpy(&m, &m_bits, sizeof(m));
 
     return (e - 124.225514990f
               -   1.498030302f*m
@@ -114,7 +85,7 @@ static float exp2f_(float x) {
     }
 
     int32_t bits = (int32_t)fbits;
-    small_memcpy(&x, &bits, sizeof(x));
+    memcpy(&x, &bits, sizeof(x));
     return x;
 }
 
@@ -159,20 +130,29 @@ static float TFKind_marker(skcms_TFType kind) {
 
 static skcms_TFType classify(const skcms_TransferFunction& tf, TF_PQish*   pq = nullptr
                                                              , TF_HLGish* hlg = nullptr) {
-    if (tf.g < 0 && static_cast<float>(static_cast<int>(tf.g)) == tf.g) {
+    if (tf.g < 0) {
+        // Negative "g" is mapped to enum values; large negative are for sure invalid.
+        if (tf.g < -128) {
+            return skcms_TFType_Invalid;
+        }
+        int enum_g = -static_cast<int>(tf.g);
+        // Non-whole "g" values are invalid as well.
+        if (static_cast<float>(-enum_g) != tf.g) {
+            return skcms_TFType_Invalid;
+        }
         // TODO: soundness checks for PQ/HLG like we do for sRGBish?
-        switch ((int)tf.g) {
-            case -skcms_TFType_PQish:
+        switch (enum_g) {
+            case skcms_TFType_PQish:
                 if (pq) {
                     memcpy(pq , &tf.a, sizeof(*pq ));
                 }
                 return skcms_TFType_PQish;
-            case -skcms_TFType_HLGish:
+            case skcms_TFType_HLGish:
                 if (hlg) {
                     memcpy(hlg, &tf.a, sizeof(*hlg));
                 }
                 return skcms_TFType_HLGish;
-            case -skcms_TFType_HLGinvish:
+            case skcms_TFType_HLGinvish:
                 if (hlg) {
                     memcpy(hlg, &tf.a, sizeof(*hlg));
                 }
@@ -2313,263 +2293,67 @@ bool skcms_ApproximateCurve(const skcms_Curve* curve,
     return isfinitef_(*max_error);
 }
 
-// ~~~~ Impl. of skcms_Transform() ~~~~
+enum class CpuType { Baseline, HSW, SKX };
 
-#define SKCMS_LOAD_OPS(M) \
-    M(load_a8)            \
-    M(load_g8)            \
-    M(load_4444)          \
-    M(load_565)           \
-    M(load_888)           \
-    M(load_8888)          \
-    M(load_1010102)       \
-    M(load_101010x_XR)    \
-    M(load_161616LE)      \
-    M(load_16161616LE)    \
-    M(load_161616BE)      \
-    M(load_16161616BE)    \
-    M(load_hhh)           \
-    M(load_hhhh)          \
-    M(load_fff)           \
-    M(load_ffff)
+static CpuType cpu_type() {
+    #if defined(SKCMS_PORTABLE) || !defined(__x86_64__) || defined(SKCMS_FORCE_BASELINE)
+        return CpuType::Baseline;
+    #elif defined(SKCMS_FORCE_HSW)
+        return CpuType::HSW;
+    #elif defined(SKCMS_FORCE_SKX)
+        return CpuType::SKX;
+    #else
+        static const CpuType type = []{
+            if (!sAllowRuntimeCPUDetection) {
+                return CpuType::Baseline;
+            }
+            // See http://www.sandpile.org/x86/cpuid.htm
 
-#define SKCMS_WORK_OPS(M) \
-    M(swap_rb)            \
-    M(clamp)              \
-    M(invert)             \
-    M(force_opaque)       \
-    M(premul)             \
-    M(unpremul)           \
-    M(matrix_3x3)         \
-    M(matrix_3x4)         \
-                          \
-    M(lab_to_xyz)         \
-    M(xyz_to_lab)         \
-                          \
-    M(gamma_r)            \
-    M(gamma_g)            \
-    M(gamma_b)            \
-    M(gamma_a)            \
-    M(gamma_rgb)          \
-                          \
-    M(tf_r)               \
-    M(tf_g)               \
-    M(tf_b)               \
-    M(tf_a)               \
-    M(tf_rgb)             \
-                          \
-    M(pq_r)               \
-    M(pq_g)               \
-    M(pq_b)               \
-    M(pq_a)               \
-    M(pq_rgb)             \
-                          \
-    M(hlg_r)              \
-    M(hlg_g)              \
-    M(hlg_b)              \
-    M(hlg_a)              \
-    M(hlg_rgb)            \
-                          \
-    M(hlginv_r)           \
-    M(hlginv_g)           \
-    M(hlginv_b)           \
-    M(hlginv_a)           \
-    M(hlginv_rgb)         \
-                          \
-    M(table_r)            \
-    M(table_g)            \
-    M(table_b)            \
-    M(table_a)            \
-                          \
-    M(clut_A2B)           \
-    M(clut_B2A)
+            // First, a basic cpuid(1) lets us check prerequisites for HSW, SKX.
+            uint32_t eax, ebx, ecx, edx;
+            __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
+                                         : "0"(1), "2"(0));
+            if ((edx & (1u<<25)) &&  // SSE
+                (edx & (1u<<26)) &&  // SSE2
+                (ecx & (1u<< 0)) &&  // SSE3
+                (ecx & (1u<< 9)) &&  // SSSE3
+                (ecx & (1u<<12)) &&  // FMA (N.B. not used, avoided even)
+                (ecx & (1u<<19)) &&  // SSE4.1
+                (ecx & (1u<<20)) &&  // SSE4.2
+                (ecx & (1u<<26)) &&  // XSAVE
+                (ecx & (1u<<27)) &&  // OSXSAVE
+                (ecx & (1u<<28)) &&  // AVX
+                (ecx & (1u<<29))) {  // F16C
 
-#define SKCMS_STORE_OPS(M) \
-    M(store_a8)            \
-    M(store_g8)            \
-    M(store_4444)          \
-    M(store_565)           \
-    M(store_888)           \
-    M(store_8888)          \
-    M(store_1010102)       \
-    M(store_161616LE)      \
-    M(store_16161616LE)    \
-    M(store_161616BE)      \
-    M(store_16161616BE)    \
-    M(store_101010x_XR)    \
-    M(store_hhh)           \
-    M(store_hhhh)          \
-    M(store_fff)           \
-    M(store_ffff)
-
-typedef enum {
-#define M(op) Op_##op,
-    SKCMS_LOAD_OPS(M)
-    SKCMS_WORK_OPS(M)
-    SKCMS_STORE_OPS(M)
-#undef M
-} Op;
-
-#if defined(__clang__)
-    template <int N, typename T> using Vec = T __attribute__((ext_vector_type(N)));
-#elif defined(__GNUC__)
-    // For some reason GCC accepts this nonsense, but not the more straightforward version,
-    //   template <int N, typename T> using Vec = T __attribute__((vector_size(N*sizeof(T))));
-    template <int N, typename T>
-    struct VecHelper { typedef T __attribute__((vector_size(N*sizeof(T)))) V; };
-
-    template <int N, typename T> using Vec = typename VecHelper<N,T>::V;
-#endif
-
-// First, instantiate our default exec_ops() implementation using the default compiliation target.
-
-namespace baseline {
-#if defined(SKCMS_PORTABLE) || !(defined(__clang__) || defined(__GNUC__)) \
-                            || (defined(__EMSCRIPTEN_major__) && !defined(__wasm_simd128__))
-    #define N 1
-    template <typename T> using V = T;
-    using Color = float;
-#elif defined(__AVX512F__) && defined(__AVX512DQ__)
-    #define N 16
-    template <typename T> using V = Vec<N,T>;
-    using Color = float;
-#elif defined(__AVX__)
-    #define N 8
-    template <typename T> using V = Vec<N,T>;
-    using Color = float;
-#else
-    #define N 4
-    template <typename T> using V = Vec<N,T>;
-    using Color = float;
-#endif
-
-    #include "src/Transform_inl.h"
-    #undef N
-}
-
-// Now, instantiate any other versions of run_program() we may want for runtime detection.
-#if !defined(SKCMS_PORTABLE) &&                           \
-    !defined(SKCMS_NO_RUNTIME_CPU_DETECTION) &&           \
-        (( defined(__clang__) && __clang_major__ >= 5) || \
-         (!defined(__clang__) && defined(__GNUC__)))      \
-     && defined(__x86_64__)
-
-    #if !defined(__AVX2__)
-        #if defined(__clang__)
-            #pragma clang attribute push(__attribute__((target("avx2,f16c"))), apply_to=function)
-        #elif defined(__GNUC__)
-            #pragma GCC push_options
-            #pragma GCC target("avx2,f16c")
-        #endif
-
-        namespace hsw {
-            #define USING_AVX
-            #define USING_AVX_F16C
-            #define USING_AVX2
-            #define N 8
-            template <typename T> using V = Vec<N,T>;
-            using Color = float;
-
-            #include "src/Transform_inl.h"
-
-            // src/Transform_inl.h will undefine USING_* for us.
-            #undef N
-        }
-
-        #if defined(__clang__)
-            #pragma clang attribute pop
-        #elif defined(__GNUC__)
-            #pragma GCC pop_options
-        #endif
-
-        #define TEST_FOR_HSW
-    #endif
-
-    #if !defined(__AVX512F__) || !defined(__AVX512DQ__)
-        #if defined(__clang__)
-            #pragma clang attribute push(__attribute__((target("avx512f,avx512dq,avx512cd,avx512bw,avx512vl"))), apply_to=function)
-        #elif defined(__GNUC__)
-            #pragma GCC push_options
-            #pragma GCC target("avx512f,avx512dq,avx512cd,avx512bw,avx512vl")
-        #endif
-
-        namespace skx {
-            #define USING_AVX512F
-            #define N 16
-            template <typename T> using V = Vec<N,T>;
-            using Color = float;
-
-            #include "src/Transform_inl.h"
-
-            // src/Transform_inl.h will undefine USING_* for us.
-            #undef N
-        }
-
-        #if defined(__clang__)
-            #pragma clang attribute pop
-        #elif defined(__GNUC__)
-            #pragma GCC pop_options
-        #endif
-
-        #define TEST_FOR_SKX
-    #endif
-
-    #if defined(TEST_FOR_HSW) || defined(TEST_FOR_SKX)
-        enum class CpuType { None, HSW, SKX };
-        static CpuType cpu_type() {
-            static const CpuType type = []{
-                if (!runtime_cpu_detection) {
-                    return CpuType::None;
-                }
-                // See http://www.sandpile.org/x86/cpuid.htm
-
-                // First, a basic cpuid(1) lets us check prerequisites for HSW, SKX.
-                uint32_t eax, ebx, ecx, edx;
+                // Call cpuid(7) to check for AVX2 and AVX-512 bits.
                 __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                                             : "0"(1), "2"(0));
-                if ((edx & (1u<<25)) &&  // SSE
-                    (edx & (1u<<26)) &&  // SSE2
-                    (ecx & (1u<< 0)) &&  // SSE3
-                    (ecx & (1u<< 9)) &&  // SSSE3
-                    (ecx & (1u<<12)) &&  // FMA (N.B. not used, avoided even)
-                    (ecx & (1u<<19)) &&  // SSE4.1
-                    (ecx & (1u<<20)) &&  // SSE4.2
-                    (ecx & (1u<<26)) &&  // XSAVE
-                    (ecx & (1u<<27)) &&  // OSXSAVE
-                    (ecx & (1u<<28)) &&  // AVX
-                    (ecx & (1u<<29))) {  // F16C
+                                             : "0"(7), "2"(0));
+                // eax from xgetbv(0) will tell us whether XMM, YMM, and ZMM state is saved.
+                uint32_t xcr0, dont_need_edx;
+                __asm__ __volatile__("xgetbv" : "=a"(xcr0), "=d"(dont_need_edx) : "c"(0));
 
-                    // Call cpuid(7) to check for AVX2 and AVX-512 bits.
-                    __asm__ __volatile__("cpuid" : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                                                 : "0"(7), "2"(0));
-                    // eax from xgetbv(0) will tell us whether XMM, YMM, and ZMM state is saved.
-                    uint32_t xcr0, dont_need_edx;
-                    __asm__ __volatile__("xgetbv" : "=a"(xcr0), "=d"(dont_need_edx) : "c"(0));
-
-                    if ((xcr0 & (1u<<1)) &&  // XMM register state saved?
-                        (xcr0 & (1u<<2)) &&  // YMM register state saved?
-                        (ebx  & (1u<<5))) {  // AVX2
-                        // At this point we're at least HSW.  Continue checking for SKX.
-                        if ((xcr0 & (1u<< 5)) && // Opmasks state saved?
-                            (xcr0 & (1u<< 6)) && // First 16 ZMM registers saved?
-                            (xcr0 & (1u<< 7)) && // High 16 ZMM registers saved?
-                            (ebx  & (1u<<16)) && // AVX512F
-                            (ebx  & (1u<<17)) && // AVX512DQ
-                            (ebx  & (1u<<28)) && // AVX512CD
-                            (ebx  & (1u<<30)) && // AVX512BW
-                            (ebx  & (1u<<31))) { // AVX512VL
-                            return CpuType::SKX;
-                        }
-                        return CpuType::HSW;
+                if ((xcr0 & (1u<<1)) &&  // XMM register state saved?
+                    (xcr0 & (1u<<2)) &&  // YMM register state saved?
+                    (ebx  & (1u<<5))) {  // AVX2
+                    // At this point we're at least HSW.  Continue checking for SKX.
+                    if ((xcr0 & (1u<< 5)) && // Opmasks state saved?
+                        (xcr0 & (1u<< 6)) && // First 16 ZMM registers saved?
+                        (xcr0 & (1u<< 7)) && // High 16 ZMM registers saved?
+                        (ebx  & (1u<<16)) && // AVX512F
+                        (ebx  & (1u<<17)) && // AVX512DQ
+                        (ebx  & (1u<<28)) && // AVX512CD
+                        (ebx  & (1u<<30)) && // AVX512BW
+                        (ebx  & (1u<<31))) { // AVX512VL
+                        return CpuType::SKX;
                     }
+                    return CpuType::HSW;
                 }
-                return CpuType::None;
-            }();
-            return type;
-        }
+            }
+            return CpuType::Baseline;
+        }();
+        return type;
     #endif
-
-#endif
+}
 
 static bool tf_is_gamma(const skcms_TransferFunction& tf) {
     return tf.g > 0 && tf.a == 1 &&
@@ -2586,15 +2370,15 @@ static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
         Op sGamma, sRGBish, PQish, HLGish, HLGinvish, table;
     };
     static constexpr OpType kOps[] = {
-        { Op_gamma_r, Op_tf_r, Op_pq_r, Op_hlg_r, Op_hlginv_r, Op_table_r },
-        { Op_gamma_g, Op_tf_g, Op_pq_g, Op_hlg_g, Op_hlginv_g, Op_table_g },
-        { Op_gamma_b, Op_tf_b, Op_pq_b, Op_hlg_b, Op_hlginv_b, Op_table_b },
-        { Op_gamma_a, Op_tf_a, Op_pq_a, Op_hlg_a, Op_hlginv_a, Op_table_a },
+        { Op::gamma_r, Op::tf_r, Op::pq_r, Op::hlg_r, Op::hlginv_r, Op::table_r },
+        { Op::gamma_g, Op::tf_g, Op::pq_g, Op::hlg_g, Op::hlginv_g, Op::table_g },
+        { Op::gamma_b, Op::tf_b, Op::pq_b, Op::hlg_b, Op::hlginv_b, Op::table_b },
+        { Op::gamma_a, Op::tf_a, Op::pq_a, Op::hlg_a, Op::hlginv_a, Op::table_a },
     };
     const auto& op = kOps[channel];
 
     if (curve->table_entries == 0) {
-        const OpAndArg noop = { Op_load_a8/*doesn't matter*/, nullptr };
+        const OpAndArg noop = { Op::load_a8/*doesn't matter*/, nullptr };
 
         const skcms_TransferFunction& tf = curve->parametric;
 
@@ -2615,42 +2399,47 @@ static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
 }
 
 static int select_curve_ops(const skcms_Curve* curves, int numChannels, OpAndArg* ops) {
-    int position = 0;
-    for (int index = 0; index < numChannels; ++index) {
-        ops[position] = select_curve_op(&curves[index], index);
-        if (ops[position].arg) {
-            ++position;
+    // We process the channels in reverse order, yielding ops in ABGR order.
+    // (Working backwards allows us to fuse trailing B+G+R ops into a single RGB op.)
+    int cursor = 0;
+    for (int index = numChannels; index-- > 0; ) {
+        ops[cursor] = select_curve_op(&curves[index], index);
+        if (ops[cursor].arg) {
+            ++cursor;
         }
+    }
 
-        // Identify separate R/G/B functions which can be fused into a single op.
-        // (We do this check inside the loop in order to allow R+G+B+A to be fused into RGB+A.)
-        if (index == 2 && position == 3) {
-            struct FusableOps {
-                Op r, g, b, rgb;
-            };
-            static constexpr FusableOps kFusableOps[] = {
-                {Op_gamma_r,  Op_gamma_g,  Op_gamma_b,  Op_gamma_rgb},
-                {Op_tf_r,     Op_tf_g,     Op_tf_b,     Op_tf_rgb},
-                {Op_pq_r,     Op_pq_g,     Op_pq_b,     Op_pq_rgb},
-                {Op_hlg_r,    Op_hlg_g,    Op_hlg_b,    Op_hlg_rgb},
-                {Op_hlginv_r, Op_hlginv_g, Op_hlginv_b, Op_hlginv_rgb},
-            };
-            for (const FusableOps& fusableOp : kFusableOps) {
-                if (ops[0].op == fusableOp.r &&
-                    ops[1].op == fusableOp.g &&
-                    ops[2].op == fusableOp.b &&
-                    (0 == memcmp(ops[0].arg, ops[1].arg, sizeof(skcms_TransferFunction))) &&
-                    (0 == memcmp(ops[0].arg, ops[2].arg, sizeof(skcms_TransferFunction)))) {
+    // Identify separate B+G+R ops and fuse them into a single RGB op.
+    if (cursor >= 3) {
+        struct FusableOps {
+            Op r, g, b, rgb;
+        };
+        static constexpr FusableOps kFusableOps[] = {
+            {Op::gamma_r,  Op::gamma_g,  Op::gamma_b,  Op::gamma_rgb},
+            {Op::tf_r,     Op::tf_g,     Op::tf_b,     Op::tf_rgb},
+            {Op::pq_r,     Op::pq_g,     Op::pq_b,     Op::pq_rgb},
+            {Op::hlg_r,    Op::hlg_g,    Op::hlg_b,    Op::hlg_rgb},
+            {Op::hlginv_r, Op::hlginv_g, Op::hlginv_b, Op::hlginv_rgb},
+        };
 
-                    ops[0].op = fusableOp.rgb;
-                    position = 1;
-                    break;
-                }
+        int posR = cursor - 1;
+        int posG = cursor - 2;
+        int posB = cursor - 3;
+        for (const FusableOps& fusableOp : kFusableOps) {
+            if (ops[posR].op == fusableOp.r &&
+                ops[posG].op == fusableOp.g &&
+                ops[posB].op == fusableOp.b &&
+                (0 == memcmp(ops[posR].arg, ops[posG].arg, sizeof(skcms_TransferFunction))) &&
+                (0 == memcmp(ops[posR].arg, ops[posB].arg, sizeof(skcms_TransferFunction)))) {
+                // Fuse the three matching ops into one.
+                ops[posB].op = fusableOp.rgb;
+                cursor -= 2;
+                break;
             }
         }
     }
 
-    return position;
+    return cursor;
 }
 
 static size_t bytes_per_pixel(skcms_PixelFormat fmt) {
@@ -2766,36 +2555,36 @@ bool skcms_Transform(const void*             src,
 
     switch (srcFmt >> 1) {
         default: return false;
-        case skcms_PixelFormat_A_8             >> 1: add_op(Op_load_a8);         break;
-        case skcms_PixelFormat_G_8             >> 1: add_op(Op_load_g8);         break;
-        case skcms_PixelFormat_ABGR_4444       >> 1: add_op(Op_load_4444);       break;
-        case skcms_PixelFormat_RGB_565         >> 1: add_op(Op_load_565);        break;
-        case skcms_PixelFormat_RGB_888         >> 1: add_op(Op_load_888);        break;
-        case skcms_PixelFormat_RGBA_8888       >> 1: add_op(Op_load_8888);       break;
-        case skcms_PixelFormat_RGBA_1010102    >> 1: add_op(Op_load_1010102);    break;
-        case skcms_PixelFormat_RGB_101010x_XR  >> 1: add_op(Op_load_101010x_XR); break;
-        case skcms_PixelFormat_RGB_161616LE    >> 1: add_op(Op_load_161616LE);   break;
-        case skcms_PixelFormat_RGBA_16161616LE >> 1: add_op(Op_load_16161616LE); break;
-        case skcms_PixelFormat_RGB_161616BE    >> 1: add_op(Op_load_161616BE);   break;
-        case skcms_PixelFormat_RGBA_16161616BE >> 1: add_op(Op_load_16161616BE); break;
-        case skcms_PixelFormat_RGB_hhh_Norm    >> 1: add_op(Op_load_hhh);        break;
-        case skcms_PixelFormat_RGBA_hhhh_Norm  >> 1: add_op(Op_load_hhhh);       break;
-        case skcms_PixelFormat_RGB_hhh         >> 1: add_op(Op_load_hhh);        break;
-        case skcms_PixelFormat_RGBA_hhhh       >> 1: add_op(Op_load_hhhh);       break;
-        case skcms_PixelFormat_RGB_fff         >> 1: add_op(Op_load_fff);        break;
-        case skcms_PixelFormat_RGBA_ffff       >> 1: add_op(Op_load_ffff);       break;
+        case skcms_PixelFormat_A_8             >> 1: add_op(Op::load_a8);         break;
+        case skcms_PixelFormat_G_8             >> 1: add_op(Op::load_g8);         break;
+        case skcms_PixelFormat_ABGR_4444       >> 1: add_op(Op::load_4444);       break;
+        case skcms_PixelFormat_RGB_565         >> 1: add_op(Op::load_565);        break;
+        case skcms_PixelFormat_RGB_888         >> 1: add_op(Op::load_888);        break;
+        case skcms_PixelFormat_RGBA_8888       >> 1: add_op(Op::load_8888);       break;
+        case skcms_PixelFormat_RGBA_1010102    >> 1: add_op(Op::load_1010102);    break;
+        case skcms_PixelFormat_RGB_101010x_XR  >> 1: add_op(Op::load_101010x_XR); break;
+        case skcms_PixelFormat_RGB_161616LE    >> 1: add_op(Op::load_161616LE);   break;
+        case skcms_PixelFormat_RGBA_16161616LE >> 1: add_op(Op::load_16161616LE); break;
+        case skcms_PixelFormat_RGB_161616BE    >> 1: add_op(Op::load_161616BE);   break;
+        case skcms_PixelFormat_RGBA_16161616BE >> 1: add_op(Op::load_16161616BE); break;
+        case skcms_PixelFormat_RGB_hhh_Norm    >> 1: add_op(Op::load_hhh);        break;
+        case skcms_PixelFormat_RGBA_hhhh_Norm  >> 1: add_op(Op::load_hhhh);       break;
+        case skcms_PixelFormat_RGB_hhh         >> 1: add_op(Op::load_hhh);        break;
+        case skcms_PixelFormat_RGBA_hhhh       >> 1: add_op(Op::load_hhhh);       break;
+        case skcms_PixelFormat_RGB_fff         >> 1: add_op(Op::load_fff);        break;
+        case skcms_PixelFormat_RGBA_ffff       >> 1: add_op(Op::load_ffff);       break;
 
         case skcms_PixelFormat_RGBA_8888_sRGB >> 1:
-            add_op(Op_load_8888);
-            add_op_ctx(Op_tf_rgb, skcms_sRGB_TransferFunction());
+            add_op(Op::load_8888);
+            add_op_ctx(Op::tf_rgb, skcms_sRGB_TransferFunction());
             break;
     }
     if (srcFmt == skcms_PixelFormat_RGB_hhh_Norm ||
         srcFmt == skcms_PixelFormat_RGBA_hhhh_Norm) {
-        add_op(Op_clamp);
+        add_op(Op::clamp);
     }
     if (srcFmt & 1) {
-        add_op(Op_swap_rb);
+        add_op(Op::swap_rb);
     }
     skcms_ICCProfile gray_dst_profile;
     if ((dstFmt >> 1) == (skcms_PixelFormat_G_8 >> 1)) {
@@ -2809,15 +2598,15 @@ bool skcms_Transform(const void*             src,
     if (srcProfile->data_color_space == skcms_Signature_CMYK) {
         // Photoshop creates CMYK images as inverse CMYK.
         // These happen to be the only ones we've _ever_ seen.
-        add_op(Op_invert);
+        add_op(Op::invert);
         // With CMYK, ignore the alpha type, to avoid changing K or conflating CMY with K.
         srcAlpha = skcms_AlphaFormat_Unpremul;
     }
 
     if (srcAlpha == skcms_AlphaFormat_Opaque) {
-        add_op(Op_force_opaque);
+        add_op(Op::force_opaque);
     } else if (srcAlpha == skcms_AlphaFormat_PremulAsEncoded) {
-        add_op(Op_unpremul);
+        add_op(Op::unpremul);
     }
 
     if (dstProfile != srcProfile) {
@@ -2834,8 +2623,8 @@ bool skcms_Transform(const void*             src,
             if (srcProfile->A2B.input_channels) {
                 add_curve_ops(srcProfile->A2B.input_curves,
                               (int)srcProfile->A2B.input_channels);
-                add_op(Op_clamp);
-                add_op_ctx(Op_clut_A2B, &srcProfile->A2B);
+                add_op(Op::clamp);
+                add_op_ctx(Op::clut_A2B, &srcProfile->A2B);
             }
 
             if (srcProfile->A2B.matrix_channels == 3) {
@@ -2847,7 +2636,7 @@ bool skcms_Transform(const void*             src,
                     {0,0,1,0},
                 }};
                 if (0 != memcmp(&I, &srcProfile->A2B.matrix, sizeof(I))) {
-                    add_op_ctx(Op_matrix_3x4, &srcProfile->A2B.matrix);
+                    add_op_ctx(Op::matrix_3x4, &srcProfile->A2B.matrix);
                 }
             }
 
@@ -2856,7 +2645,7 @@ bool skcms_Transform(const void*             src,
             }
 
             if (srcProfile->pcs == skcms_Signature_Lab) {
-                add_op(Op_lab_to_xyz);
+                add_op(Op::lab_to_xyz);
             }
 
         } else if (srcProfile->has_trc && srcProfile->has_toXYZD50) {
@@ -2871,11 +2660,11 @@ bool skcms_Transform(const void*             src,
         if (dstProfile->has_B2A) {
             // B2A needs its input in XYZD50, so transform TRC sources now.
             if (!srcProfile->has_A2B) {
-                add_op_ctx(Op_matrix_3x3, &srcProfile->toXYZD50);
+                add_op_ctx(Op::matrix_3x3, &srcProfile->toXYZD50);
             }
 
             if (dstProfile->pcs == skcms_Signature_Lab) {
-                add_op(Op_xyz_to_lab);
+                add_op(Op::xyz_to_lab);
             }
 
             if (dstProfile->B2A.input_channels == 3) {
@@ -2889,15 +2678,15 @@ bool skcms_Transform(const void*             src,
                     {0,0,1,0},
                 }};
                 if (0 != memcmp(&I, &dstProfile->B2A.matrix, sizeof(I))) {
-                    add_op_ctx(Op_matrix_3x4, &dstProfile->B2A.matrix);
+                    add_op_ctx(Op::matrix_3x4, &dstProfile->B2A.matrix);
                 }
 
                 add_curve_ops(dstProfile->B2A.matrix_curves, /*numChannels=*/3);
             }
 
             if (dstProfile->B2A.output_channels) {
-                add_op(Op_clamp);
-                add_op_ctx(Op_clut_B2A, &dstProfile->B2A);
+                add_op(Op::clamp);
+                add_op_ctx(Op::clut_B2A, &dstProfile->B2A);
 
                 add_curve_ops(dstProfile->B2A.output_curves,
                               (int)dstProfile->B2A.output_channels);
@@ -2919,17 +2708,17 @@ bool skcms_Transform(const void*             src,
                 // Concat the entire gamut transform into from_xyz,
                 // now slightly misnamed but it's a handy spot to stash the result.
                 from_xyz = skcms_Matrix3x3_concat(&from_xyz, to_xyz);
-                add_op_ctx(Op_matrix_3x3, &from_xyz);
+                add_op_ctx(Op::matrix_3x3, &from_xyz);
             }
 
             // Encode back to dst RGB using its parametric transfer functions.
             OpAndArg oa[3];
             int numOps = select_curve_ops(dst_curves, /*numChannels=*/3, oa);
             for (int index = 0; index < numOps; ++index) {
-                assert(oa[index].op != Op_table_r &&
-                       oa[index].op != Op_table_g &&
-                       oa[index].op != Op_table_b &&
-                       oa[index].op != Op_table_a);
+                assert(oa[index].op != Op::table_r &&
+                       oa[index].op != Op::table_g &&
+                       oa[index].op != Op::table_b &&
+                       oa[index].op != Op::table_a);
                 add_op_ctx(oa[index].op, oa[index].arg);
             }
         }
@@ -2941,50 +2730,50 @@ bool skcms_Transform(const void*             src,
     // E.g. r = 1.1, a = 0.5 would fit fine in fixed point after premul (ra=0.55,a=0.5),
     // but would be carrying r > 1, which is really unexpected for downstream consumers.
     if (dstFmt < skcms_PixelFormat_RGB_hhh) {
-        add_op(Op_clamp);
+        add_op(Op::clamp);
     }
 
     if (dstProfile->data_color_space == skcms_Signature_CMYK) {
         // Photoshop creates CMYK images as inverse CMYK.
         // These happen to be the only ones we've _ever_ seen.
-        add_op(Op_invert);
+        add_op(Op::invert);
 
         // CMYK has no alpha channel, so make sure dstAlpha is a no-op.
         dstAlpha = skcms_AlphaFormat_Unpremul;
     }
 
     if (dstAlpha == skcms_AlphaFormat_Opaque) {
-        add_op(Op_force_opaque);
+        add_op(Op::force_opaque);
     } else if (dstAlpha == skcms_AlphaFormat_PremulAsEncoded) {
-        add_op(Op_premul);
+        add_op(Op::premul);
     }
     if (dstFmt & 1) {
-        add_op(Op_swap_rb);
+        add_op(Op::swap_rb);
     }
     switch (dstFmt >> 1) {
         default: return false;
-        case skcms_PixelFormat_A_8             >> 1: add_op(Op_store_a8);         break;
-        case skcms_PixelFormat_G_8             >> 1: add_op(Op_store_g8);         break;
-        case skcms_PixelFormat_ABGR_4444       >> 1: add_op(Op_store_4444);       break;
-        case skcms_PixelFormat_RGB_565         >> 1: add_op(Op_store_565);        break;
-        case skcms_PixelFormat_RGB_888         >> 1: add_op(Op_store_888);        break;
-        case skcms_PixelFormat_RGBA_8888       >> 1: add_op(Op_store_8888);       break;
-        case skcms_PixelFormat_RGBA_1010102    >> 1: add_op(Op_store_1010102);    break;
-        case skcms_PixelFormat_RGB_161616LE    >> 1: add_op(Op_store_161616LE);   break;
-        case skcms_PixelFormat_RGBA_16161616LE >> 1: add_op(Op_store_16161616LE); break;
-        case skcms_PixelFormat_RGB_161616BE    >> 1: add_op(Op_store_161616BE);   break;
-        case skcms_PixelFormat_RGBA_16161616BE >> 1: add_op(Op_store_16161616BE); break;
-        case skcms_PixelFormat_RGB_hhh_Norm    >> 1: add_op(Op_store_hhh);        break;
-        case skcms_PixelFormat_RGBA_hhhh_Norm  >> 1: add_op(Op_store_hhhh);       break;
-        case skcms_PixelFormat_RGB_101010x_XR  >> 1: add_op(Op_store_101010x_XR); break;
-        case skcms_PixelFormat_RGB_hhh         >> 1: add_op(Op_store_hhh);        break;
-        case skcms_PixelFormat_RGBA_hhhh       >> 1: add_op(Op_store_hhhh);       break;
-        case skcms_PixelFormat_RGB_fff         >> 1: add_op(Op_store_fff);        break;
-        case skcms_PixelFormat_RGBA_ffff       >> 1: add_op(Op_store_ffff);       break;
+        case skcms_PixelFormat_A_8             >> 1: add_op(Op::store_a8);         break;
+        case skcms_PixelFormat_G_8             >> 1: add_op(Op::store_g8);         break;
+        case skcms_PixelFormat_ABGR_4444       >> 1: add_op(Op::store_4444);       break;
+        case skcms_PixelFormat_RGB_565         >> 1: add_op(Op::store_565);        break;
+        case skcms_PixelFormat_RGB_888         >> 1: add_op(Op::store_888);        break;
+        case skcms_PixelFormat_RGBA_8888       >> 1: add_op(Op::store_8888);       break;
+        case skcms_PixelFormat_RGBA_1010102    >> 1: add_op(Op::store_1010102);    break;
+        case skcms_PixelFormat_RGB_161616LE    >> 1: add_op(Op::store_161616LE);   break;
+        case skcms_PixelFormat_RGBA_16161616LE >> 1: add_op(Op::store_16161616LE); break;
+        case skcms_PixelFormat_RGB_161616BE    >> 1: add_op(Op::store_161616BE);   break;
+        case skcms_PixelFormat_RGBA_16161616BE >> 1: add_op(Op::store_16161616BE); break;
+        case skcms_PixelFormat_RGB_hhh_Norm    >> 1: add_op(Op::store_hhh);        break;
+        case skcms_PixelFormat_RGBA_hhhh_Norm  >> 1: add_op(Op::store_hhhh);       break;
+        case skcms_PixelFormat_RGB_101010x_XR  >> 1: add_op(Op::store_101010x_XR); break;
+        case skcms_PixelFormat_RGB_hhh         >> 1: add_op(Op::store_hhh);        break;
+        case skcms_PixelFormat_RGBA_hhhh       >> 1: add_op(Op::store_hhhh);       break;
+        case skcms_PixelFormat_RGB_fff         >> 1: add_op(Op::store_fff);        break;
+        case skcms_PixelFormat_RGBA_ffff       >> 1: add_op(Op::store_ffff);       break;
 
         case skcms_PixelFormat_RGBA_8888_sRGB >> 1:
-            add_op_ctx(Op_tf_rgb, skcms_sRGB_Inverse_TransferFunction());
-            add_op(Op_store_8888);
+            add_op_ctx(Op::tf_rgb, skcms_sRGB_Inverse_TransferFunction());
+            add_op(Op::store_8888);
             break;
     }
 
@@ -2992,21 +2781,24 @@ bool skcms_Transform(const void*             src,
     assert(contexts <= context + ARRAY_COUNT(context));
 
     auto run = baseline::run_program;
-#if defined(TEST_FOR_HSW)
     switch (cpu_type()) {
-        case CpuType::None:                        break;
-        case CpuType::HSW: run = hsw::run_program; break;
-        case CpuType::SKX: run = hsw::run_program; break;
+        case CpuType::SKX:
+            #if !defined(SKCMS_DISABLE_SKX)
+                run = skx::run_program;
+                break;
+            #endif
+
+        case CpuType::HSW:
+            #if !defined(SKCMS_DISABLE_HSW)
+                run = hsw::run_program;
+                break;
+            #endif
+
+        case CpuType::Baseline:
+            break;
     }
-#endif
-#if defined(TEST_FOR_SKX)
-    switch (cpu_type()) {
-        case CpuType::None:                        break;
-        case CpuType::HSW:                         break;
-        case CpuType::SKX: run = skx::run_program; break;
-    }
-#endif
-    run(program, context, (const char*)src, (char*)dst, n, src_bpp,dst_bpp);
+
+    run(program, context, ops - program, (const char*)src, (char*)dst, n, src_bpp,dst_bpp);
     return true;
 }
 

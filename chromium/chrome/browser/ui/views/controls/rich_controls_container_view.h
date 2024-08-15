@@ -25,8 +25,9 @@ class Label;
 // |      | Secondary label(s)                   |                           |
 // *-------------------------------------------------------------------------*
 class RichControlsContainerView : public views::FlexLayoutView {
+  METADATA_HEADER(RichControlsContainerView, views::FlexLayoutView)
+
  public:
-  METADATA_HEADER(RichControlsContainerView);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kIcon);
 
   RichControlsContainerView();
@@ -50,6 +51,7 @@ class RichControlsContainerView : public views::FlexLayoutView {
   gfx::Size CalculatePreferredSize() const override;
 
   const std::u16string& GetTitleForTesting();
+  const ui::ImageModel GetIconImageModelForTesting();
 
  private:
   virtual int GetMinBubbleWidth() const;

@@ -51,10 +51,12 @@ from diff_tests.parser.android.tests_bugreport import AndroidBugreport
 from diff_tests.parser.android.tests_games import AndroidGames
 from diff_tests.parser.android.tests_surfaceflinger_layers import SurfaceFlingerLayers
 from diff_tests.parser.android.tests_surfaceflinger_transactions import SurfaceFlingerTransactions
+from diff_tests.parser.android.tests_shell_transitions import ShellTransitions
 from diff_tests.parser.android_fs.tests import AndroidFs
 from diff_tests.parser.atrace.tests import Atrace
 from diff_tests.parser.atrace.tests_error_handling import AtraceErrorHandling
 from diff_tests.parser.chrome.tests import ChromeParser
+from diff_tests.parser.chrome.tests_v8 import ChromeV8Parser
 from diff_tests.parser.chrome.tests_memory_snapshots import ChromeMemorySnapshots
 from diff_tests.parser.cros.tests import Cros
 from diff_tests.parser.fs.tests import Fs
@@ -87,26 +89,39 @@ from diff_tests.parser.track_event.tests import TrackEvent
 from diff_tests.parser.translated_args.tests import TranslatedArgs
 from diff_tests.parser.ufs.tests import Ufs
 from diff_tests.stdlib.android.tests import AndroidStdlib
-from diff_tests.stdlib.common.tests import StdlibCommon
 from diff_tests.stdlib.chrome.tests import ChromeStdlib
 from diff_tests.stdlib.chrome.tests_chrome_interactions import ChromeInteractions
 from diff_tests.stdlib.chrome.tests_scroll_jank import ChromeScrollJankStdlib
+from diff_tests.stdlib.common.tests import StdlibCommon
+from diff_tests.stdlib.common.tests import StdlibCommon
 from diff_tests.stdlib.dynamic_tables.tests import DynamicTables
+from diff_tests.stdlib.intervals.tests import StdlibIntervals
+from diff_tests.stdlib.linux.tests import LinuxStdlib
 from diff_tests.stdlib.pkvm.tests import Pkvm
+from diff_tests.stdlib.prelude.math_functions_tests import PreludeMathFunctions
+from diff_tests.stdlib.prelude.pprof_functions_tests import PreludePprofFunctions
+from diff_tests.stdlib.prelude.window_functions_tests import PreludeWindowFunctions
+from diff_tests.stdlib.prelude.slices_tests import PreludeSlices
+from diff_tests.stdlib.sched.tests import StdlibSched
 from diff_tests.stdlib.slices.tests import Slices
 from diff_tests.stdlib.span_join.tests_left_join import SpanJoinLeftJoin
 from diff_tests.stdlib.span_join.tests_outer_join import SpanJoinOuterJoin
 from diff_tests.stdlib.span_join.tests_regression import SpanJoinRegression
 from diff_tests.stdlib.span_join.tests_smoke import SpanJoinSmoke
+from diff_tests.stdlib.tests import StdlibSmoke
 from diff_tests.stdlib.timestamps.tests import Timestamps
-from diff_tests.syntax.functions.tests import Functions
-from diff_tests.syntax.perfetto_sql.tests import PerfettoSql
+from diff_tests.syntax.filtering_tests import PerfettoFiltering
+from diff_tests.syntax.function_tests import PerfettoFunction
+from diff_tests.syntax.include_tests import PerfettoInclude
+from diff_tests.syntax.macro_tests import PerfettoMacro
+from diff_tests.syntax.table_function_tests import PerfettoTableFunction
+from diff_tests.syntax.table_tests import PerfettoTable
+from diff_tests.syntax.view_tests import PerfettoView
 from diff_tests.tables.tests import Tables
 from diff_tests.tables.tests_counters import TablesCounters
 from diff_tests.tables.tests_sched import TablesSched
 
 sys.path.pop()
-
 
 def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
   parser_tests = [
@@ -121,6 +136,7 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       *ChromeMemorySnapshots(index_path, 'parser/chrome',
                              'ChromeMemorySnapshots').fetch(),
       *ChromeParser(index_path, 'parser/chrome', 'ChromeParser').fetch(),
+      *ChromeV8Parser(index_path, 'parser/chrome', 'ChromeV8Parser').fetch(),
       *Cros(index_path, 'parser/cros', 'Cros').fetch(),
       *Fs(index_path, 'parser/fs', 'Fs').fetch(),
       *Fuchsia(index_path, 'parser/fuchsia', 'Fuchsia').fetch(),
@@ -149,6 +165,7 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       *ProfilingLlvmSymbolizer(index_path, 'parser/profiling',
                                'ProfilingLlvmSymbolizer').fetch(),
       *SchedParser(index_path, 'parser/sched', 'SchedParser').fetch(),
+      *StdlibSched(index_path, 'stdlib/sched', 'StdlibSched').fetch(),
       *Smoke(index_path, 'parser/smoke', 'Smoke').fetch(),
       *SmokeComputeMetrics(index_path, 'parser/smoke',
                            'SmokeComputeMetrics').fetch(),
@@ -158,6 +175,8 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
                             'SurfaceFlingerLayers').fetch(),
       *SurfaceFlingerTransactions(index_path, 'parser/android',
                                   'SurfaceFlingerTransactions').fetch(),
+      *ShellTransitions(index_path, 'parser/android',
+                        'ShellTransitions').fetch(),
       *TrackEvent(index_path, 'parser/track_event', 'TrackEvent').fetch(),
       *TranslatedArgs(index_path, 'parser/translated_args',
                       'TranslatedArgs').fetch(),
@@ -190,7 +209,7 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
                        'GraphicsMetrics').fetch(),
       *IRQ(index_path, 'metrics/irq', 'IRQ').fetch(),
       *MemoryMetrics(index_path, 'metrics/memory', 'MemoryMetrics').fetch(),
-      *NetworkMetrics(index_path, 'metrics/network', 'NetworkMetrics').fetch(),
+      *NetworkMetrics(index_path, 'metrics/network', 'orkMetrics').fetch(),
       *Power(index_path, 'metrics/power', 'Power').fetch(),
       *ProfilingMetrics(index_path, 'metrics/profiling',
                         'ProfilingMetrics').fetch(),
@@ -203,16 +222,32 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       *WebView(index_path, 'metrics/webview', 'WebView').fetch(),
   ]
 
+  chrome_test_dir = os.path.abspath(
+      os.path.join(__file__, '../../../data/chrome'))
+  chrome_stdlib_tests = [
+      *ChromeInteractions(index_path, 'stdlib/chrome', 'ChromeInteractions',
+                          chrome_test_dir).fetch(),
+      *ChromeScrollJankStdlib(index_path, 'stdlib/chrome',
+                              'ChromeScrollJankStdlib',
+                              chrome_test_dir).fetch(),
+      *ChromeStdlib(index_path, 'stdlib/chrome', 'ChromeStdlib',
+                    chrome_test_dir).fetch(),
+  ]
+
   stdlib_tests = [
       *AndroidStdlib(index_path, 'stdlib/android', 'AndroidStdlib').fetch(),
-      *ChromeInteractions(index_path, 'stdlib/chrome',
-                                      'ChromeInteractions').fetch(),
-      *ChromeScrollJankStdlib(index_path, 'stdlib/chrome',
-                              'ChromeScrollJankStdlib').fetch(),
-      *ChromeStdlib(index_path, 'stdlib/chrome', 'ChromeStdlib').fetch(),
       *DynamicTables(index_path, 'stdlib/dynamic_tables',
                      'DynamicTables').fetch(),
+      *LinuxStdlib(index_path, 'stdlib/linux', 'LinuxStdlib').fetch(),
+      *PreludeMathFunctions(index_path, 'stdlib/prelude',
+                            'PreludeMathFunctions').fetch(),
+      *PreludePprofFunctions(index_path, 'stdlib/prelude',
+                             'PreludePprofFunctions').fetch(),
+      *PreludeWindowFunctions(index_path, 'stdlib/prelude',
+                              'PreludeWindowFunctions').fetch(),
       *Pkvm(index_path, 'stdlib/pkvm', 'Pkvm').fetch(),
+      *PreludeSlices(index_path, 'stdlib/prelude', 'PreludeSlices').fetch(),
+      *StdlibSmoke(index_path, 'stdlib', 'StdlibSmoke').fetch(),
       *StdlibCommon(index_path, 'stdlib/common', 'StdlibCommon').fetch(),
       *Slices(index_path, 'stdlib/slices', 'Slices').fetch(),
       *SpanJoinLeftJoin(index_path, 'stdlib/span_join',
@@ -222,12 +257,21 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       *SpanJoinRegression(index_path, 'stdlib/span_join',
                           'SpanJoinRegression').fetch(),
       *SpanJoinSmoke(index_path, 'stdlib/span_join', 'SpanJoinSmoke').fetch(),
+      *StdlibCommon(index_path, 'stdlib/common', 'StdlibCommon').fetch(),
+      *StdlibIntervals(index_path, 'stdlib/intervals',
+                       'StdlibIntervals').fetch(),
       *Timestamps(index_path, 'stdlib/timestamps', 'Timestamps').fetch(),
-  ]
+  ] + chrome_stdlib_tests
 
   syntax_tests = [
-      *Functions(index_path, 'syntax/functions', 'Functions').fetch(),
-      *PerfettoSql(index_path, 'syntax/perfetto_sql', 'PerfettoSql').fetch(),
+      *PerfettoFiltering(index_path, 'syntax', 'PerfettoFiltering').fetch(),
+      *PerfettoFunction(index_path, 'syntax', 'PerfettoFunction').fetch(),
+      *PerfettoInclude(index_path, 'syntax', 'PerfettoInclude').fetch(),
+      *PerfettoMacro(index_path, 'syntax', 'PerfettoMacro').fetch(),
+      *PerfettoTable(index_path, 'syntax', 'PerfettoTable').fetch(),
+      *PerfettoTableFunction(index_path, 'syntax',
+                             'PerfettoTableFunction').fetch(),
+      *PerfettoView(index_path, 'syntax', 'PerfettoView').fetch(),
   ]
 
   return parser_tests + metrics_tests + stdlib_tests + syntax_tests + [

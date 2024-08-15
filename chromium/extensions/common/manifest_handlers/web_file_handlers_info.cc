@@ -4,6 +4,8 @@
 
 #include "extensions/common/manifest_handlers/web_file_handlers_info.h"
 
+#include <string_view>
+
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
@@ -40,7 +42,7 @@ std::unique_ptr<WebFileHandlers> ParseFromList(const Extension& extension,
     return nullptr;
   }
 
-  auto get_error = [](size_t i, base::StringPiece message) {
+  auto get_error = [](size_t i, std::string_view message) {
     return ErrorUtils::FormatErrorMessageUTF16(
         manifest_errors::kInvalidWebFileHandlers, base::NumberToString(i),
         message);
@@ -132,8 +134,13 @@ std::unique_ptr<WebFileHandlers> ParseFromList(const Extension& extension,
     }
 
     // Make the temporary `accept` permanent by assigning to `file_handler`.
-    api::file_handlers::FileHandler::Accept::Populate(
-        accept, web_file_handler.file_handler.accept, *error);
+    if (auto result =
+            api::file_handlers::FileHandler::Accept::FromValue(accept);
+        result.has_value()) {
+      web_file_handler.file_handler.accept = std::move(result).value();
+    } else {
+      *error = result.error();
+    }
 
     // `icon` is an optional array of dictionaries.
     if (manifest_file_handler.icons.has_value()) {

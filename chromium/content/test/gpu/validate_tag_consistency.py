@@ -108,7 +108,9 @@ TAG_SPECIALIZATIONS = {
             'nvidia-0x1cb3',
             'nvidia-0x2184',
         ],
-        'qualcomm': [],
+        'qualcomm': [
+            'qualcomm-0x41333430',
+        ],
     },
 }
 
@@ -172,7 +174,7 @@ TAG_HEADER = """\
 #             android-pixel-6 android-shield-android-tv android-sm-a135m
 #             android-sm-a235m
 #         chromeos-board-amd64-generic chromeos-board-eve chromeos-board-jacuzzi
-#             chromeos-board-octopus
+#             chromeos-board-octopus chromeos-board-volteer
 #         fuchsia-board-astro fuchsia-board-nelson fuchsia-board-sherlock
 #             fuchsia-board-qemu-x64 ]
 # Platform
@@ -202,7 +204,8 @@ TAG_HEADER = """\
 #         renderer-software ]
 # Driver
 # tags: [ mesa_lt_19.1
-#         mesa_ge_21.0 ]
+#         mesa_ge_21.0
+#         nvidia_ge_31.0.15.4601 nvidia_lt_31.0.15.4601 ]
 # ASan
 # tags: [ asan no-asan ]
 # Display Server

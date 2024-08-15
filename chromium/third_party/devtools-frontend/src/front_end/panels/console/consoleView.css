@@ -179,7 +179,7 @@
 
 .console-message-repeat-count .expand-group-icon {
   position: static;
-  background-color: var(--sys-color-cdt-base-container);
+  color: var(--sys-color-cdt-base-container);
   margin-left: -1px;
 }
 
@@ -189,7 +189,7 @@
 
 .console-message-wrapper {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   margin: 4px;
   border-radius: 5px;
 
@@ -218,6 +218,11 @@
       background-color: var(--sys-color-state-focus-select);
     }
   }
+}
+
+.console-row-wrapper {
+  display: flex;
+  flex-direction: row;
 }
 
 .-theme-with-dark-background .console-message-wrapper {
@@ -359,7 +364,7 @@
 }
 
 #console-messages .link,
-#console-messages .devtools-link {
+#console-messages .devtools-link:not(.invalid-link) {
   color: var(--sys-color-primary);
   word-break: break-all;
 }
@@ -469,11 +474,90 @@ devtools-console-insight {
   margin: 9px 22px 11px 24px;
 }
 
+.hover-button {
+  --width: 22px;
+
+  align-items: center;
+  background-color: var(--sys-color-cdt-base-container);
+  border-radius: 50%;
+  border: none;
+  /* todo: extract to global styles and make it work with dark mode. */
+  box-shadow: 0 1px 3px 1px rgb(0 0 0 / 15%), 0 1px 2px 0 rgb(0 0 0 / 30%); /* stylelint-disable-line plugin/use_theme_colors */
+  box-sizing: border-box;
+  color: var(--sys-color-primary);
+  font-family: var(--default-font-family);
+  height: var(--width);
+  justify-content: center;
+  margin: 0;
+  max-height: var(--width);
+  max-width: var(--width);
+  min-height: var(--width);
+  min-width: var(--width);
+  overflow: hidden;
+  padding: 3px;
+  position: absolute;
+  right: 6px;
+  display: none;
+  width: var(--width);
+}
+
+.hover-button span {
+  display: none;
+  white-space: nowrap;
+  padding-right: 3px;
+}
+
+.hover-button:focus,
+.hover-button:hover {
+  border-radius: 100px;
+  max-width: 200px;
+  transition: max-width var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized);
+  width: fit-content;
+  gap: 3px;
+}
+
+.hover-button:focus-visible {
+  outline: 2px solid var(--sys-color-primary);
+  outline-offset: 2px;
+}
+
+.hover-button devtools-icon {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  height: 16px;
+  min-height: 16px;
+  min-width: 16px;
+  width: 16px;
+}
+
+.hover-button:focus span,
+.hover-button:hover span {
+  display: block;
+}
+
+/* It does not look like the linter works with CSS nesting correctly. */
+/* stylelint-disable no-descending-specificity */
+.console-message-wrapper:not(.has-insight) {
+  &:hover,
+  &:focus,
+  &.console-selected {
+    .hover-button {
+      display: block;
+
+      &:focus,
+      &:hover {
+        display: inline-flex;
+      }
+    }
+  }
+}
+/* stylelint-enable no-descending-specificity */
+
 @media (forced-colors: active) {
   .console-message-expand-icon,
-  .console-warning-level [is="ui-icon"].icon-mask.expand-group-icon {
+  .console-warning-level .expand-group-icon {
     forced-color-adjust: none;
-    background-color: ButtonText;
+    color: ButtonText;
   }
 
   .console-message-wrapper:focus,
@@ -502,16 +586,12 @@ devtools-console-insight {
     color: HighlightText;
   }
 
-  .console-message-wrapper:focus [is="ui-icon"].icon-mask {
-    background-color: HighlightText;
+  .console-message-wrapper:focus devtools-icon {
+    color: HighlightText;
   }
 
   .console-message-wrapper.console-error-level:focus,
   .console-message-wrapper.console-error-level:focus:last-of-type {
     --override-error-text-color: HighlightText;
-  }
-
-  .console-message-anchor .resource-links {
-    --icon-color: ButtonText;
   }
 }

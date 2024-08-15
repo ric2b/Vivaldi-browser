@@ -47,15 +47,29 @@ export function assertOK<T>(value: Error | T): T {
   return value;
 }
 
+/** Options for assertReject, shouldReject, and friends. */
+export type ExceptionCheckOptions = { allowMissingStack?: boolean; message?: string };
+
 /**
  * Resolves if the provided promise rejects; rejects if it does not.
  */
-export async function assertReject(p: Promise<unknown>, msg?: string): Promise<void> {
+export async function assertReject(
+  expectedName: string,
+  p: Promise<unknown>,
+  { allowMissingStack = false, message }: ExceptionCheckOptions = {}
+): Promise<void> {
   try {
     await p;
-    unreachable(msg);
+    unreachable(message);
   } catch (ex) {
-    // Assertion OK
+    // Asserted as expected
+    if (!allowMissingStack) {
+      const m = message ? ` (${message})` : '';
+      assert(
+        ex instanceof Error && typeof ex.stack === 'string',
+        'threw as expected, but missing stack' + m
+      );
+    }
   }
 }
 
@@ -146,7 +160,7 @@ export function assertNotSettledWithinTime(
     const handle = timeout(() => {
       resolve(undefined);
     }, ms);
-    p.finally(() => clearTimeout(handle));
+    void p.finally(() => clearTimeout(handle));
   });
   return Promise.race([rejectWhenSettled, timeoutPromise]);
 }
@@ -292,28 +306,27 @@ const TypedArrayBufferViewInstances = [
   new Float64Array(),
 ] as const;
 
-export type TypedArrayBufferView = typeof TypedArrayBufferViewInstances[number];
+export type TypedArrayBufferView = (typeof TypedArrayBufferViewInstances)[number];
 
-export type TypedArrayBufferViewConstructor<
-  A extends TypedArrayBufferView = TypedArrayBufferView
-> = {
-  // Interface copied from Uint8Array, and made generic.
-  readonly prototype: A;
-  readonly BYTES_PER_ELEMENT: number;
+export type TypedArrayBufferViewConstructor<A extends TypedArrayBufferView = TypedArrayBufferView> =
+  {
+    // Interface copied from Uint8Array, and made generic.
+    readonly prototype: A;
+    readonly BYTES_PER_ELEMENT: number;
 
-  new (): A;
-  new (elements: Iterable<number>): A;
-  new (array: ArrayLike<number> | ArrayBufferLike): A;
-  new (buffer: ArrayBufferLike, byteOffset?: number, length?: number): A;
-  new (length: number): A;
+    new (): A;
+    new (elements: Iterable<number>): A;
+    new (array: ArrayLike<number> | ArrayBufferLike): A;
+    new (buffer: ArrayBufferLike, byteOffset?: number, length?: number): A;
+    new (length: number): A;
 
-  from(arrayLike: ArrayLike<number>): A;
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  from(arrayLike: Iterable<number>, mapfn?: (v: number, k: number) => number, thisArg?: any): A;
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): A;
-  of(...items: number[]): A;
-};
+    from(arrayLike: ArrayLike<number>): A;
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    from(arrayLike: Iterable<number>, mapfn?: (v: number, k: number) => number, thisArg?: any): A;
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): A;
+    of(...items: number[]): A;
+  };
 
 export const kTypedArrayBufferViews: {
   readonly [k: string]: TypedArrayBufferViewConstructor;

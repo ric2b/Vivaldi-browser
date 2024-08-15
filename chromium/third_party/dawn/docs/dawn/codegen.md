@@ -6,7 +6,7 @@ Generators are based on [generator_lib.py](../../generator/generator_lib.py) whi
 
 ## Dawn "JSON API" generators
 
-Most of the code generation is done from [`dawn.json`](../../dawn.json) which is a JSON description of the WebGPU API with extra annotation used by some of the generators. The code for all the "Dawn JSON" generators is in [`dawn_json_generator.py`](../../generator/dawn_json_generator.py) (with templates in the regular template dir).
+Most of the code generation is done from [`dawn.json`](../../src/dawn/dawn.json) which is a JSON description of the WebGPU API with extra annotation used by some of the generators. The code for all the "Dawn JSON" generators is in [`dawn_json_generator.py`](../../generator/dawn_json_generator.py) (with templates in the regular template dir).
 
 At this time it is used to generate:
 
@@ -44,6 +44,7 @@ A **record** is a list of **record members**, each of which is a dictionary with
  - `"length"` (default to 1 if not set), a string. Defines length of the array pointed to for pointer arguments. If not set the length is implicitly 1 (so not an array), but otherwise it can be set to the name of another member in the same record that will contain the length of the array (this is heavily used in the `fooCount` `foos` pattern in the API). As a special case `"strlen"` can be used for `const char*` record members to denote that the length should be determined with `strlen`.
  - `"optional"` (default to false) a boolean that says whether this member is optional. Member records can be optional if they are pointers (otherwise dawn_wire will always try to dereference them), objects (otherwise dawn_wire will always try to encode their ID and crash), or if they have a `"default"` key. Optional pointers and objects will always default to `nullptr` (unless `"no_default"` is set to `true`).
  - `"default"` (optional) a number or string. If set the record member will use that value as default value. Depending on the member's category it can be a number, a string containing a number, or the name of an enum/bitmask value.
+   - Dawn implements "trivial defaulting" for enums, similarly to the upstream WebGPU spec's WebIDL: if a zero-valued enum (usually called `Undefined`) is passed in, Dawn applies the default value specified here. See `WithTrivialFrontendDefaults()` in `api_structs.h` for how this works.
  - `"wire_is_data_only"` (default to false) a boolean that says whether it is safe to directly return a pointer of this member that is pointing to a piece of memory in the transfer buffer into dawn_wire. To prevent TOCTOU attacks, by default in dawn_wire we must ensure every single value returned to dawn_native a copy of what's in the wire, so `"wire_is_data_only"` is set to true only when the member is data-only and don't impact control flow.
 
 **`"native"`** native types that can be referenced by name in other things.
@@ -90,7 +91,7 @@ A **record** is a list of **record members**, each of which is a dictionary with
 
 ## Dawn "wire" generators
 
-The generator for the pieces of dawn_wire need additional data which is found in [`dawn_wire_json`](../../dawn_wire.json). Examples of pieces that are generated are:
+The generator for the pieces of dawn_wire need additional data which is found in [`dawn_wire_json`](../../src/dawn/dawn_wire.json). Examples of pieces that are generated are:
 
  - `WireCmd.cpp/.h` the most important piece: the meat of the serialization / deserialization code for WebGPU structures and commands
  - `ServerHandlers/Doers.cpp` that does the complete handling of all regular WebGPU methods in the server

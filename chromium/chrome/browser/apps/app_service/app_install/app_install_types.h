@@ -6,15 +6,25 @@
 #define CHROME_BROWSER_APPS_APP_SERVICE_APP_INSTALL_APP_INSTALL_TYPES_H_
 
 #include <iosfwd>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "components/services/app_service/public/cpp/package_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "url/gurl.h"
 
 namespace apps {
+
+// Additions to this enum must also update the
+// Apps.AppInstallService.AppInstallResult histogram.
+enum class AppInstallSurface {
+  kAppInstallNavigationThrottle,
+  kAppPreloadServiceOem,
+  kAppPreloadServiceDefault,
+};
+
+std::ostream& operator<<(std::ostream& out, AppInstallSurface surface);
 
 // App icons hosted by Almanac for use during app installation.
 struct AppInstallIcon {
@@ -36,6 +46,7 @@ struct AndroidAppInstallData {};
 std::ostream& operator<<(std::ostream& out, const AndroidAppInstallData& data);
 
 // Web app specific data for use during web app installation.
+// AppInstallData::package_id.identifier() holds the manifest identity.
 struct WebAppInstallData {
   WebAppInstallData();
   WebAppInstallData(const WebAppInstallData&);
@@ -43,8 +54,6 @@ struct WebAppInstallData {
   WebAppInstallData& operator=(const WebAppInstallData&);
   WebAppInstallData& operator=(WebAppInstallData&&);
   ~WebAppInstallData();
-
-  GURL manifest_id;
 
   GURL original_manifest_url;
 

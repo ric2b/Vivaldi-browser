@@ -11,17 +11,19 @@ import '../../components/common_styles/oobe_dialog_host_styles.css.js';
 import '../../components/oobe_vars/oobe_shared_vars.css.js';
 import '../../components/buttons/oobe_icon_button.js';
 import '../../components/hd_iron_icon.js';
-import '../../components/quick_start_entry_point.js';
 
 import {assert} from '//resources/ash/common/assert.js';
 import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {OobeDialogHostBehavior} from '../../components/behaviors/oobe_dialog_host_behavior.js';
 import {OobeI18nBehavior} from '../../components/behaviors/oobe_i18n_behavior.js';
 import {OobeModalDialog} from '../../components/dialogs/oobe_modal_dialog.js';
 import {LongTouchDetector} from '../../components/long_touch_detector.js';
 import {OobeCrLottie} from '../../components/oobe_cr_lottie.js';
+import {QuickStartEntryPoint} from '../../components/quick_start_entry_point.js';
+
+import {getTemplate} from './welcome_dialog.html.js';
 
 /**
  * @constructor
@@ -48,7 +50,7 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -87,12 +89,12 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
         readOnly: true,
       },
 
-      isSimon_: {
+      isBootAnimation_: {
         type: Boolean,
         value: function() {
           return (
-              loadTimeData.valueExists('isOobeSimonEnabled') &&
-              loadTimeData.getBoolean('isOobeSimonEnabled'));
+              loadTimeData.valueExists('isBootAnimationEnabled') &&
+              loadTimeData.getBoolean('isBootAnimationEnabled'));
         },
         readOnly: true,
       },
@@ -191,12 +193,6 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
         'next-button-clicked', {bubbles: true, composed: true}));
   }
 
-  onQuickStartClicked_() {
-    assert(this.isQuickStartEnabled);
-    this.dispatchEvent(new CustomEvent(
-        'quick-start-clicked', {bubbles: true, composed: true}));
-  }
-
   onDebuggingLinkClicked_() {
     this.dispatchEvent(new CustomEvent('enable-debugging-clicked', {
       bubbles: true,
@@ -219,7 +215,8 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
   /**
    * @suppress {missingProperties}
    */
-  attached() {
+  connectedCallback() {
+    super.connectedCallback();
     // Allow opening advanced options only if it is a meet device or device
     // requisition is configurable.
     if (this.isMeet_ || this.isDeviceRequisitionConfigurable_) {
@@ -266,7 +263,6 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
    * Play or pause welcome video.
    * @param {boolean} play - whether play or pause welcome video.
    * @private
-   * @suppress {missingProperties}
    */
   setVideoPlay_(play) {
     // Postpone the call until OOBE is loaded, if necessary.
@@ -279,8 +275,9 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
       return;
     }
 
-    if (this.$$('#welcomeAnimation')) {
-      this.$$('#welcomeAnimation').playing = play;
+    const welcomeAnimation = this.shadowRoot.querySelector('#welcomeAnimation');
+    if (welcomeAnimation) {
+      welcomeAnimation.playing = play;
     }
   }
 
@@ -337,7 +334,7 @@ export class OobeWelcomeDialog extends OobeWelcomeDialogBase {
    * Determines if AnimationSlot is needed for specific flow
    */
   showAnimationSlot() {
-    return !this.isSimon_;
+    return !this.isBootAnimation_;
   }
 }
 

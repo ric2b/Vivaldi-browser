@@ -193,9 +193,8 @@ class ObmcBlendTest : public testing::TestWithParam<ObmcTestParam> {
     const absl::string_view test_case = test_info->test_suite_name();
     if (absl::StartsWith(test_case, "C/")) {
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        ObmcInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      ObmcInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       ObmcInit_NEON();
     } else {

@@ -13,10 +13,10 @@
 #import "components/ntp_tiles/ntp_tile_impression.h"
 #import "components/ntp_tiles/tile_visual_type.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/ntp/home/features.h"
-#import "ios/chrome/browser/ntp/set_up_list_item_type.h"
-#import "ios/chrome/browser/ntp/set_up_list_metrics.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_metrics.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
@@ -113,8 +113,10 @@ const float kMaxModuleEngagementIndex = 50;
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
+    case ContentSuggestionsModuleType::kSetUpListContentNotification:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
     case ContentSuggestionsModuleType::kSetUpListAllSet:
+    case ContentSuggestionsModuleType::kPlaceholder:
       break;
   }
   UMA_HISTOGRAM_ENUMERATION(kMagicStackTopModuleImpressionHistogram, type);
@@ -156,11 +158,14 @@ const float kMaxModuleEngagementIndex = 50;
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
+    case ContentSuggestionsModuleType::kSetUpListContentNotification:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
     case ContentSuggestionsModuleType::kSetUpListAllSet:
       UMA_HISTOGRAM_EXACT_LINEAR(
           kMagicStackModuleEngagementSetUpListIndexHistogram, index,
           kMaxModuleEngagementIndex);
+      break;
+    case ContentSuggestionsModuleType::kPlaceholder:
       break;
   }
 }
@@ -241,6 +246,15 @@ const float kMaxModuleEngagementIndex = 50;
 
 - (void)recordSetUpListItemSelected:(SetUpListItemType)type {
   set_up_list_metrics::RecordItemSelected(type);
+}
+
+- (void)recordContentNotificationSnackbarEvent:
+    (ContentNotificationSnackbarEvent)event {
+  UMA_HISTOGRAM_ENUMERATION(kContentNotificationSnackbarEventHistogram, event);
+  if (event == ContentNotificationSnackbarEvent::kActionButtonTapped) {
+    base::RecordAction(
+        base::UserMetricsAction(kContentNotificationSnackbarAction));
+  }
 }
 
 #pragma mark - Private

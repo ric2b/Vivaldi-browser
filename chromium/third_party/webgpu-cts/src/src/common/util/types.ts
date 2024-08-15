@@ -11,7 +11,7 @@ export type TypeEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T 
   : false;
 
 /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-export function assertTypeTrue<T extends true>() {}
+export function assertTypeTrue<_ extends true>() {}
 
 /** `ReadonlyArray` of `ReadonlyArray`s. */
 export type ROArrayArray<T> = ReadonlyArray<ReadonlyArray<T>>;
@@ -80,7 +80,7 @@ type TypeOr<T, Default> = T extends undefined ? Default : T;
 export type ZipKeysWithValues<
   Keys extends readonly string[],
   Values extends readonly unknown[],
-  Defaults extends readonly unknown[]
+  Defaults extends readonly unknown[],
 > =
   //
   Keys extends readonly [infer KHead, ...infer KTail]
@@ -89,10 +89,9 @@ export type ZipKeysWithValues<
           TupleHeadOr<Values, undefined>,
           TupleHeadOr<Defaults, undefined>
         >;
-      } &
-        ZipKeysWithValues<
-          EnsureSubtype<KTail, readonly string[]>,
-          TupleTailOr<Values, []>,
-          TupleTailOr<Defaults, []>
-        >
+      } & ZipKeysWithValues<
+        EnsureSubtype<KTail, readonly string[]>,
+        TupleTailOr<Values, []>,
+        TupleTailOr<Defaults, []>
+      >
     : {}; // K exhausted

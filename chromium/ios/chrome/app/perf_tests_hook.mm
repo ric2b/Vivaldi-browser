@@ -6,6 +6,7 @@
 
 #import <Foundation/Foundation.h>
 
+#import "base/time/time.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
 
 namespace tests_hook {
@@ -29,8 +30,12 @@ bool DisableDiscoverFeed() {
   return [[NSProcessInfo.processInfo.environment
       objectForKey:@"DISABLE_DISCOVER_FEED"] boolValue];
 }
-bool DisableFirstRun() {
+bool DisableDefaultFirstRun() {
   // Always disable FRE for perf tests.
+  return true;
+}
+bool DisableDefaultSearchEngineChoice() {
+  // Always disable search engine selection for perf tests.
   return true;
 }
 bool DisableGeolocation() {
@@ -74,5 +79,14 @@ GetOverriddenRecipientsFetcher() {
 }
 void SetUpTestsIfPresent() {}
 void RunTestsIfPresent() {}
+
+base::TimeDelta PasswordCheckMinimumDuration() {
+  // No artificial delays for perf tests.
+  return base::Seconds(0);
+}
+
+std::unique_ptr<drive::DriveService> GetOverriddenDriveService() {
+  return nullptr;
+}
 
 }  // namespace tests_hook

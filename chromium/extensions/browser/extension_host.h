@@ -111,12 +111,13 @@ class ExtensionHost : public DeferredStartRenderHost,
   void AddObserver(ExtensionHostObserver* observer);
   void RemoveObserver(ExtensionHostObserver* observer);
 
-  // Called when an event is dispatched to the event page associated with this
-  // ExtensionHost.
+  // Called when an event is dispatched to a lazy background page associated
+  // with this ExtensionHost.
   void OnBackgroundEventDispatched(const std::string& event_name,
                                    base::TimeTicks dispatch_start_time,
                                    int event_id,
-                                   EventDispatchSource dispatch_source);
+                                   EventDispatchSource dispatch_source,
+                                   bool lazy_background_active_on_dispatch);
 
   // Called by the ProcessManager when a network request is started by the
   // extension corresponding to this ExtensionHost.
@@ -162,7 +163,7 @@ class ExtensionHost : public DeferredStartRenderHost,
       const content::MediaStreamRequest& request,
       content::MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
-                                  const GURL& security_origin,
+                                  const url::Origin& security_origin,
                                   blink::mojom::MediaStreamType type) override;
   bool IsNeverComposited(content::WebContents* web_contents) override;
   content::PictureInPictureResult EnterPictureInPicture(
@@ -178,7 +179,15 @@ class ExtensionHost : public DeferredStartRenderHost,
                            const Extension* extension,
                            UnloadedExtensionReason reason) override;
 
-  void OnEventAck(int event_id);
+  // Notifies observers when an event has been acknowledged from the renderer to
+  // the browser. `event_has_listener_in_background_context` being set to true
+  // emits histograms for some events that (when dispatched) should have ran in
+  // the extension's background page. Of note:
+  // `event_has_listener_in_background_context` is provided by the renderer when
+  // the event is dispatched and is therefore not a reliable confirmation that
+  // an event ran in the background page, but instead that it should have run in
+  // the background page and is good enough for metrics purposes.
+  void OnEventAck(int event_id, bool event_has_listener_in_background_context);
 
  protected:
   // Called each time this ExtensionHost completes a load finishes loading,
@@ -202,7 +211,16 @@ class ExtensionHost : public DeferredStartRenderHost,
 
     // The event dispatching processing flow that was followed for this event.
     EventDispatchSource dispatch_source;
+
+    // `true` if the event was dispatched to a active/running lazy background.
+    // Used in UMA histograms.
+    bool lazy_background_active_on_dispatch;
   };
+
+  // Emits a stale event ack metric if an event with `event_id` is not present
+  // in `unacked_messages_`. Meaning that the event was not yet acked by the
+  // renderer to the browser.
+  void EmitLateAckedEventTask(int event_id);
 
   // DeferredStartRenderHost:
   void CreateRendererNow() override;

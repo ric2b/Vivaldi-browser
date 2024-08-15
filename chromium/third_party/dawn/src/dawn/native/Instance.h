@@ -31,11 +31,12 @@
 #include <array>
 #include <memory>
 #include <mutex>
-#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
+#include "dawn/common/MutexProtected.h"
 #include "dawn/common/Ref.h"
 #include "dawn/common/ityp_array.h"
 #include "dawn/common/ityp_bitset.h"
@@ -44,9 +45,11 @@
 #include "dawn/native/BlobCache.h"
 #include "dawn/native/EventManager.h"
 #include "dawn/native/Features.h"
+#include "dawn/native/Forward.h"
 #include "dawn/native/RefCountedWithExternalCount.h"
 #include "dawn/native/Toggles.h"
 #include "dawn/native/dawn_platform.h"
+#include "tint/lang/wgsl/features/language_feature.h"
 
 namespace dawn::platform {
 class Platform;
@@ -54,6 +57,7 @@ class Platform;
 
 namespace dawn::native {
 
+class AHBFunctions;
 class CallbackTaskManager;
 class DeviceBase;
 class Surface;
@@ -70,11 +74,13 @@ InstanceBase* APICreateInstance(const InstanceDescriptor* descriptor);
 // specialize this class.
 class InstanceBase final : public RefCountedWithExternalCount {
   public:
-    static Ref<InstanceBase> Create(const InstanceDescriptor* descriptor = nullptr);
+    static ResultOrError<Ref<InstanceBase>> Create(const InstanceDescriptor* descriptor = nullptr);
 
     void APIRequestAdapter(const RequestAdapterOptions* options,
                            WGPURequestAdapterCallback callback,
                            void* userdata);
+    Future APIRequestAdapterF(const RequestAdapterOptions* options,
+                              const RequestAdapterCallbackInfo& callbackInfo);
 
     // Discovers and returns a vector of adapters.
     // All systems adapters that can be found are returned if no options are passed.
@@ -111,6 +117,7 @@ class InstanceBase final : public RefCountedWithExternalCount {
     }
 
     const TogglesState& GetTogglesState() const;
+    const std::unordered_set<tint::wgsl::LanguageFeature>& GetAllowedWGSLLanguageFeatures() const;
 
     // Used to query the details of a toggle. Return nullptr if toggleName is not a valid name
     // of a toggle supported in Dawn.
@@ -152,6 +159,7 @@ class InstanceBase final : public RefCountedWithExternalCount {
 
     // Get backend-independent libraries that need to be loaded dynamically.
     const X11Functions* GetOrLoadX11Functions();
+    const AHBFunctions* GetOrLoadAHBFunctions();
 
     // Dawn API
     Surface* APICreateSurface(const SurfaceDescriptor* descriptor);
@@ -159,17 +167,22 @@ class InstanceBase final : public RefCountedWithExternalCount {
     [[nodiscard]] wgpu::WaitStatus APIWaitAny(size_t count,
                                               FutureWaitInfo* futures,
                                               uint64_t timeoutNS);
+    bool APIHasWGSLLanguageFeature(wgpu::WGSLFeatureName feature) const;
+    // Always writes the full list when features is not nullptr.
+    // TODO(https://github.com/webgpu-native/webgpu-headers/issues/252): Add a count argument.
+    size_t APIEnumerateWGSLLanguageFeatures(wgpu::WGSLFeatureName* features) const;
 
   private:
     explicit InstanceBase(const TogglesState& instanceToggles);
     ~InstanceBase() override;
 
+    void DeleteThis() override;
     void WillDropLastExternalRef() override;
 
     InstanceBase(const InstanceBase& other) = delete;
     InstanceBase& operator=(const InstanceBase& other) = delete;
 
-    MaybeError Initialize(const InstanceDescriptor* descriptor);
+    MaybeError Initialize(const UnpackedPtr<InstanceDescriptor>& descriptor);
     void SetPlatform(dawn::platform::Platform* platform);
 
     // Lazily creates connections to all backends that have been compiled, may return null even for
@@ -178,7 +191,7 @@ class InstanceBase final : public RefCountedWithExternalCount {
 
     // Enumerate physical devices according to options and return them.
     std::vector<Ref<PhysicalDeviceBase>> EnumeratePhysicalDevices(
-        const RequestAdapterOptions* options);
+        const UnpackedPtr<RequestAdapterOptions>& options);
 
     // Helper function that create adapter on given physical device handling required adapter
     // toggles descriptor.
@@ -187,9 +200,10 @@ class InstanceBase final : public RefCountedWithExternalCount {
                                    const DawnTogglesDescriptor* requiredAdapterToggles,
                                    wgpu::PowerPreference powerPreference) const;
 
+    void GatherWGSLFeatures(const DawnWGSLBlocklist* wgslBlocklist);
     void ConsumeError(std::unique_ptr<ErrorData> error);
 
-    std::unordered_set<std::string> warningMessages;
+    absl::flat_hash_set<std::string> mWarningMessages;
 
     std::vector<std::string> mRuntimeSearchPaths;
 
@@ -208,15 +222,21 @@ class InstanceBase final : public RefCountedWithExternalCount {
     TogglesState mToggles;
     TogglesInfo mTogglesInfo;
 
+    absl::flat_hash_set<wgpu::WGSLFeatureName> mWGSLFeatures;
+    // TODO(dawn:1513): Use absl::flat_hash_set after it is supported in Tint.
+    std::unordered_set<tint::wgsl::LanguageFeature> mTintLanguageFeatures;
+
 #if defined(DAWN_USE_X11)
     std::unique_ptr<X11Functions> mX11Functions;
 #endif  // defined(DAWN_USE_X11)
+#if DAWN_PLATFORM_IS(ANDROID)
+    std::unique_ptr<AHBFunctions> mAHBFunctions;
+#endif  // DAWN_PLATFORM_IS(ANDROID)
 
     Ref<CallbackTaskManager> mCallbackTaskManager;
     EventManager mEventManager;
 
-    std::set<DeviceBase*> mDevicesList;
-    mutable std::mutex mDevicesListMutex;
+    MutexProtected<absl::flat_hash_set<DeviceBase*>> mDevicesList;
 };
 
 }  // namespace dawn::native

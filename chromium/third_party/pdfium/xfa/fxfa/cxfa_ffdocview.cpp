@@ -189,17 +189,17 @@ void CXFA_FFDocView::ShowNullTestMsg() {
   CXFA_FFApp* pApp = m_pDoc->GetApp();
   CXFA_FFApp::CallbackIface* pAppProvider = pApp->GetAppProvider();
   if (pAppProvider && iCount) {
-    int32_t iRemain = iCount > 7 ? iCount - 7 : 0;
-    iCount -= iRemain;
+    int32_t remaining = iCount > 7 ? iCount - 7 : 0;
+    iCount -= remaining;
     WideString wsMsg;
     for (int32_t i = 0; i < iCount; i++)
       wsMsg += m_NullTestMsgArray[i] + L"\n";
 
-    if (iRemain > 0) {
+    if (remaining > 0) {
       wsMsg += L"\n" + WideString::Format(
                            L"Message limit exceeded. Remaining %d "
                            L"validation errors not reported.",
-                           iRemain);
+                           remaining);
     }
     pAppProvider->MsgBox(wsMsg, pAppProvider->GetAppTitle(),
                          static_cast<uint32_t>(AlertIcon::kStatus),
@@ -427,8 +427,7 @@ XFA_EventError CXFA_FFDocView::ExecEventActivityByDeepFirst(
     if (!pFormNode->IsWidgetReady())
       return XFA_EventError::kNotExist;
 
-    CXFA_EventParam eParam;
-    eParam.m_eType = eEventType;
+    CXFA_EventParam eParam(eEventType);
     eParam.m_bIsFormReady = bIsFormReady;
     return XFA_ProcessEvent(this, pFormNode, &eParam);
   }
@@ -449,8 +448,7 @@ XFA_EventError CXFA_FFDocView::ExecEventActivityByDeepFirst(
   if (!pFormNode->IsWidgetReady())
     return iRet;
 
-  CXFA_EventParam eParam;
-  eParam.m_eType = eEventType;
+  CXFA_EventParam eParam(eEventType);
   eParam.m_bIsFormReady = bIsFormReady;
 
   XFA_EventErrorAccumulate(&iRet, XFA_ProcessEvent(this, pFormNode, &eParam));
@@ -525,8 +523,7 @@ void CXFA_FFDocView::RunSubformIndexChange() {
     if (!bInserted || !pSubformNode->IsWidgetReady())
       continue;
 
-    CXFA_EventParam eParam;
-    eParam.m_eType = XFA_EVENT_IndexChange;
+    CXFA_EventParam eParam(XFA_EVENT_IndexChange);
     pSubformNode->ProcessEvent(this, XFA_AttributeValue::IndexChange, &eParam);
   }
 }

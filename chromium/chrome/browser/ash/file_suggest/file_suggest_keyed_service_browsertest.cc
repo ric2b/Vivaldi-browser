@@ -30,14 +30,13 @@ class MockObserver : public FileSuggestKeyedService::Observer {
   void WaitUntilFetchingSuggestData() { run_loop_.Run(); }
 
   // Returns the most recently fetched suggest data.
-  const absl::optional<std::vector<FileSuggestData>>& last_fetched_data()
-      const {
+  const std::optional<std::vector<FileSuggestData>>& last_fetched_data() const {
     return last_fetched_data_;
   }
 
  private:
   void OnSuggestFileDataFetched(
-      const absl::optional<std::vector<FileSuggestData>>& suggest_data_array) {
+      const std::optional<std::vector<FileSuggestData>>& suggest_data_array) {
     last_fetched_data_ = suggest_data_array;
     run_loop_.Quit();
   }
@@ -50,9 +49,9 @@ class MockObserver : public FileSuggestKeyedService::Observer {
                              base::Unretained(this)));
   }
 
-  const raw_ptr<FileSuggestKeyedService, ExperimentalAsh> file_suggest_service_;
+  const raw_ptr<FileSuggestKeyedService> file_suggest_service_;
   base::RunLoop run_loop_;
-  absl::optional<std::vector<FileSuggestData>> last_fetched_data_;
+  std::optional<std::vector<FileSuggestData>> last_fetched_data_;
   base::ScopedObservation<FileSuggestKeyedService,
                           FileSuggestKeyedService::Observer>
       file_suggest_service_observation_{this};
@@ -82,7 +81,7 @@ IN_PROC_BROWSER_TEST_F(FileSuggestKeyedServiceBrowserTest,
   service->GetSuggestFileData(
       FileSuggestionType::kDriveFile,
       base::BindOnce(
-          [](const absl::optional<std::vector<FileSuggestData>>& suggest_data) {
+          [](const std::optional<std::vector<FileSuggestData>>& suggest_data) {
             EXPECT_FALSE(suggest_data.has_value());
           }));
   tester.ExpectBucketCount("Ash.Search.DriveFileSuggestDataValidation.Status",
@@ -116,6 +115,9 @@ IN_PROC_BROWSER_TEST_F(FileSuggestKeyedServiceBrowserTest,
       FileSuggestKeyedServiceFactory::GetInstance()->GetService(profile);
   base::HistogramTester tester;
 
+  DriveFileSuggestionProvider* file_suggestion_provider =
+      static_cast<DriveFileSuggestionProvider*>(
+          service->drive_file_suggestion_provider_for_test());
   // Verify in the scenario that all suggested file paths are invalid.
   {
     // Ensure that `observer` exists before updating the suggest cache. Because
@@ -123,8 +125,7 @@ IN_PROC_BROWSER_TEST_F(FileSuggestKeyedServiceBrowserTest,
     MockObserver observer(service);
 
     // Update the item suggest cache with a non-existed file id.
-    service->drive_file_suggestion_provider_for_test()
-        ->item_suggest_cache_for_test()
+    file_suggestion_provider->item_suggest_cache_for_test()
         ->UpdateCacheWithJsonForTest(CreateItemSuggestUpdateJsonString(
             {{non_existed_id, "display text 1", "prediction reason 1"}},
             "suggestion id 0"));
@@ -148,8 +149,7 @@ IN_PROC_BROWSER_TEST_F(FileSuggestKeyedServiceBrowserTest,
         {{"abc123", "display text 1", "prediction reason 1"},
          {non_existed_id, "display text 2", "prediction reason 2"}},
         "suggestion id 1");
-    service->drive_file_suggestion_provider_for_test()
-        ->item_suggest_cache_for_test()
+    file_suggestion_provider->item_suggest_cache_for_test()
         ->UpdateCacheWithJsonForTest(json_string);
 
     observer.WaitUntilFetchingSuggestData();
@@ -172,8 +172,7 @@ IN_PROC_BROWSER_TEST_F(FileSuggestKeyedServiceBrowserTest,
         {{"abc123", "display text 1", "prediction reason 1"},
          {"qwertyqwerty", "display text 2", "prediction reason 2"}},
         "suggestion id 2");
-    service->drive_file_suggestion_provider_for_test()
-        ->item_suggest_cache_for_test()
+    file_suggestion_provider->item_suggest_cache_for_test()
         ->UpdateCacheWithJsonForTest(json_string);
 
     observer.WaitUntilFetchingSuggestData();

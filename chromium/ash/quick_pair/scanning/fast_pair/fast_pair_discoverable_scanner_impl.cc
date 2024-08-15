@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
@@ -28,7 +29,7 @@
 #include "components/cross_device/logging/logging.h"
 #include "device/bluetooth//bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "device/bluetooth/floss/floss_features.h"
 
 namespace {
 
@@ -50,6 +51,8 @@ bool IsMetadataPublished(const nearby::fastpair::Device& device) {
 
 bool IsValidDeviceType(const nearby::fastpair::Device& device) {
   if (ash::features::IsFastPairHIDEnabled() &&
+      // Fast Pair HID only works on Floss.
+      floss::features::IsFlossEnabled() &&
       device.device_type() == nearby::fastpair::DeviceType::INPUT_DEVICE) {
     return true;
   }
@@ -176,7 +179,7 @@ void FastPairDiscoverableScannerImpl::OnDeviceFound(
 
 void FastPairDiscoverableScannerImpl::OnModelIdRetrieved(
     const std::string& address,
-    const absl::optional<std::string>& model_id) {
+    const std::optional<std::string>& model_id) {
   auto it = model_id_parse_attempts_.find(address);
 
   // If there's no entry in the map, the device was lost while parsing.
@@ -393,7 +396,7 @@ void FastPairDiscoverableScannerImpl::DefaultNetworkChanged(
             /*address=*/it->first,
             /*model_id=*/it->second));
 
-    pending_devices_address_to_model_id_.erase(it);
+    it = pending_devices_address_to_model_id_.erase(it);
   }
 }
 

@@ -29,6 +29,7 @@
 
 #include <CoreVideo/CVPixelBuffer.h>
 
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/metal/CommandRecordingContext.h"
 #include "dawn/native/metal/DeviceMTL.h"
 #include "dawn/native/metal/QueueMTL.h"
@@ -62,7 +63,10 @@ ResultOrError<wgpu::TextureFormat> GetFormatEquivalentToIOSurfaceFormat(uint32_t
             return wgpu::TextureFormat::R16Unorm;
         case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
             return wgpu::TextureFormat::R8BG8Biplanar420Unorm;
-        // TODO(dawn:551): Add R10X6BG10X6Biplanar420Unorm support.
+        case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
+            return wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm;
+        case kCVPixelFormatType_420YpCbCr8VideoRange_8A_TriPlanar:
+            return wgpu::TextureFormat::R8BG8A8Triplanar420Unorm;
         default:
             return DAWN_VALIDATION_ERROR("Unsupported IOSurface format (%x).", format);
     }
@@ -82,9 +86,6 @@ ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
     DAWN_TRY_ASSIGN(format,
                     GetFormatEquivalentToIOSurfaceFormat(IOSurfaceGetPixelFormat(ioSurface)));
 
-    const Format* internalFormat = nullptr;
-    DAWN_TRY_ASSIGN(internalFormat, device->GetInternalFormat(format));
-
     size_t width = IOSurfaceGetWidth(ioSurface);
     size_t height = IOSurfaceGetHeight(ioSurface);
 
@@ -97,18 +98,15 @@ ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
                     "IOSurface height (%u) exceeds maxTextureDimension2D (%u).", height,
                     limits.v1.maxTextureDimension2D);
 
+    // IO surfaces support the following usages (the SharedTextureMemory frontend strips
+    // out any usages that are not supported by `format`).
+    const wgpu::TextureUsage kIOSurfaceSupportedUsages =
+        wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
+        wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::StorageBinding |
+        wgpu::TextureUsage::RenderAttachment;
+
     SharedTextureMemoryProperties properties;
-    if (internalFormat->IsMultiPlanar()) {
-        properties.usage = wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::TextureBinding;
-    } else {
-        properties.usage =
-            wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
-            wgpu::TextureUsage::TextureBinding |
-            (internalFormat->supportsStorageUsage ? wgpu::TextureUsage::StorageBinding
-                                                  : wgpu::TextureUsage::None) |
-            (internalFormat->isRenderable ? wgpu::TextureUsage::RenderAttachment
-                                          : wgpu::TextureUsage::None);
-    }
+    properties.usage = kIOSurfaceSupportedUsages;
     properties.format = format;
     properties.size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1};
 
@@ -133,12 +131,14 @@ IOSurfaceRef SharedTextureMemory::GetIOSurface() const {
 }
 
 ResultOrError<Ref<TextureBase>> SharedTextureMemory::CreateTextureImpl(
-    const TextureDescriptor* descriptor) {
+    const UnpackedPtr<TextureDescriptor>& descriptor) {
     return Texture::CreateFromSharedTextureMemory(this, descriptor);
 }
 
-MaybeError SharedTextureMemory::BeginAccessImpl(TextureBase* texture,
-                                                const BeginAccessDescriptor* descriptor) {
+MaybeError SharedTextureMemory::BeginAccessImpl(
+    TextureBase* texture,
+    const UnpackedPtr<BeginAccessDescriptor>& descriptor) {
+    DAWN_TRY(descriptor.ValidateSubset<>());
     for (size_t i = 0; i < descriptor->fenceCount; ++i) {
         SharedFenceBase* fence = descriptor->fences[i];
 
@@ -158,7 +158,10 @@ MaybeError SharedTextureMemory::BeginAccessImpl(TextureBase* texture,
     return {};
 }
 
-ResultOrError<FenceAndSignalValue> SharedTextureMemory::EndAccessImpl(TextureBase* texture) {
+ResultOrError<FenceAndSignalValue> SharedTextureMemory::EndAccessImpl(
+    TextureBase* texture,
+    UnpackedPtr<EndAccessState>& state) {
+    DAWN_TRY(state.ValidateSubset<>());
     DAWN_INVALID_IF(!GetDevice()->HasFeature(Feature::SharedFenceMTLSharedEvent),
                     "Required feature (%s) is missing.",
                     wgpu::FeatureName::SharedFenceMTLSharedEvent);

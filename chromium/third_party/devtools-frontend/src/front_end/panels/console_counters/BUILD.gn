@@ -34,8 +34,6 @@ devtools_entrypoint("bundle") {
     "../../entrypoints/*",
     "../../legacy_test_runner/*",
     "../../ui/components/docs/issue_counter/*",
-
-    # TODO(crbug.com/1202788): Remove invalid dependents
     "../console/*",
     "../issues/*",
     "../sources/*",
@@ -47,7 +45,10 @@ devtools_entrypoint("bundle") {
 devtools_entrypoint("meta") {
   entrypoint = "console_counters-meta.ts"
 
-  deps = [ ":bundle" ]
+  deps = [
+    ":bundle",
+    "../../ui/legacy:bundle",
+  ]
 
   visibility = [ "../../entrypoints/*" ]
 }

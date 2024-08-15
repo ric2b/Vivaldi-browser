@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a mis fin à la connexion de manière inattendue.</translation>
 <translation id="1161325031994447685">Se reconnecter au réseau Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Essayer de supprimer les cookies.<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">À propos de la version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> n’a envoyé aucune donnée.</translation>
 <translation id="1559528461873125649">Fichier ou répertoire inexistant</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Essayer de contacter l’administrateur système.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Essayer de lancer le diagnostic réseau de Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Ce site contient des programmes dangereux</translation>
-<translation id="1916770123977586577">Pour appliquer vos paramètres mis à jour sur ce site, actualisez la page</translation>
 <translation id="1974060860693918893">Paramètres avancés</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Vérifier le proxy et le pare-feu<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Émis pour : <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Il se peut que des pirates informatiques puissent voir les images que vous regardez sur ce site et vous piègent en les modifiant.</translation>
 <translation id="2356070529366658676">Demander</translation>
 <translation id="2359808026110333948">Continuer</translation>
+<translation id="2388886110302389394">Ouvrir la page dans une nouvelle fenêtre privée (Ctrl+Maj+N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Exécution des diagnostics réseau<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Cette page a été bloquée par une extension</translation>
 <translation id="2501278716633472235">Retour</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Ouvrir une session</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> est bloqué</translation>
 <translation id="3987940399970879459">Moins de 1 Mo</translation>
+<translation id="4075123085690634698">Ouvrir la page dans une nouvelle fenêtre privée (⇧⌘N)</translation>
 <translation id="4075732493274867456">Le client et le serveur ne sont pas compatibles avec une version de protocole ou une méthode de chiffrement SSL commune.</translation>
 <translation id="4116663294526079822">Toujours autoriser sur ce site</translation>
 <translation id="4130226655945681476">Vérifier les câbles réseau, le modem et le routeur</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Votre ordinateur s’est mis en veille.</translation>
 <translation id="6890956352250146925">Options pour les cookies et les données des sites</translation>
 <translation id="6897140037006041989">Agent utilisateur</translation>
+<translation id="6957624206566198865">Ouvrir la page dans un nouvel onglet privé</translation>
 <translation id="7053983685419859001">Bloquer</translation>
 <translation id="7079718277001814089">Ce site contient des logiciels malveillants</translation>
 <translation id="7096937462164235847">L’identité de ce site Web n’a pas été vérifiée.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676">Un chiffrement est normalement utilisé sur le site <ph name="SITE" /> pour protéger vos informations. Lors de la dernière tentative de connexion de Vivaldi au site <ph name="SITE" />, des identifiants inhabituels et incorrects ont été retournés. Il est possible qu’un individu malveillant tente de se faire passer pour <ph name="SITE" /> ou qu’un écran de connexion Wi-Fi ait interrompu la connexion. Vos informations restent sécurisées, car nous avons arrêté la connexion avant l’échange des données.</translation>
 <translation id="7878562273885520351">Votre mot de passe a peut-être été compromis</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
+<translation id="7953236668995583915">Actualisez cette page pour appliquer les réglages modifiés pour ce site</translation>
 <translation id="8025119109950072390">Des individus malveillants à l’œuvre sur ce site pourraient vous inciter à effectuer des opérations dangereuses, telles que l’installation d’un logiciel ou la révélation d’informations personnelles (par exemple des mots de passe, des numéros de téléphone ou des numéros de carte de paiement).</translation>
 <translation id="8037357227543935929">Demander (par défaut)</translation>
 <translation id="8041940743680923270">Utiliser le paramètre global par défaut (« Demander »)</translation>

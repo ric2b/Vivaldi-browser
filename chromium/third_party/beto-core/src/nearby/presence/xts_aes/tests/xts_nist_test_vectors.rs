@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate core;
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use anyhow::anyhow;
 use crypto_provider::CryptoProvider;
@@ -225,7 +225,7 @@ impl<I: Iterator<Item = String>> Iterator for TestVectorFileIterator<I> {
 
             // `key = value` in a test case chunk
             if let Some(captures) = regex::Regex::new("^(.*) = (.*)$").unwrap().captures(&line) {
-                map.insert(
+                let _ = map.insert(
                     captures.get(1).unwrap().as_str().to_owned(),
                     captures.get(2).unwrap().as_str().to_owned(),
                 );

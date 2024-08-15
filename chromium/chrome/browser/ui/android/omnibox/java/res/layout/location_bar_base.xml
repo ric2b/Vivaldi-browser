@@ -20,8 +20,7 @@ found in the LICENSE file.
         android:layout_height="match_parent"
         android:focusable="false" />
 
-    <!-- Vivaldi -->
-    <include layout="@layout/tracker_shield_button"/>
+
 
     <include layout="@layout/location_status" />
 

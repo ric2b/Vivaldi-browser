@@ -40,7 +40,8 @@ class GlanceableInfoView : public views::View,
   GlanceableInfoView(
       AmbientViewDelegate* delegate,
       GlanceableInfoView::Delegate* glanceable_info_view_delegate,
-      int time_font_size_dip);
+      int time_font_size_dip,
+      bool add_text_shadow);
   GlanceableInfoView(const GlanceableInfoView&) = delete;
   GlanceableInfoView& operator=(const GlanceableInfoView&) = delete;
   ~GlanceableInfoView() override;
@@ -61,20 +62,21 @@ class GlanceableInfoView : public views::View,
   std::u16string GetTemperatureText() const;
 
   // View for the time info. Owned by the view hierarchy.
-  raw_ptr<TimeView, ExperimentalAsh> time_view_ = nullptr;
+  raw_ptr<TimeView> time_view_ = nullptr;
 
   // Views for weather icon and temperature.
-  raw_ptr<views::ImageView, ExperimentalAsh> weather_condition_icon_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> temperature_ = nullptr;
+  raw_ptr<views::ImageView> weather_condition_icon_ = nullptr;
+  raw_ptr<views::Label> temperature_ = nullptr;
 
   // Owned by |AmbientController|.
-  const raw_ptr<AmbientViewDelegate, ExperimentalAsh> delegate_ = nullptr;
+  const raw_ptr<AmbientViewDelegate> delegate_ = nullptr;
 
   // Unowned. Must out live |GlancealeInfoView|.
   raw_ptr<GlanceableInfoView::Delegate> const glanceable_info_view_delegate_ =
       nullptr;
 
   const int time_font_size_dip_;
+  const bool add_text_shadow_;
 
   base::ScopedObservation<AmbientWeatherModel, AmbientWeatherModelObserver>
       scoped_weather_model_observer_{this};

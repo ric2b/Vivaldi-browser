@@ -213,6 +213,9 @@ class StructTraits<media::mojom::BitstreamBufferMetadataDataView,
   static base::TimeDelta timestamp(const media::BitstreamBufferMetadata& bbm) {
     return bbm.timestamp;
   }
+  static bool end_of_picture(const media::BitstreamBufferMetadata& bbm) {
+    return bbm.end_of_picture;
+  }
   static int32_t qp(const media::BitstreamBufferMetadata& bbm) {
     return bbm.qp;
   }
@@ -293,9 +296,6 @@ class StructTraits<media::mojom::Vp9MetadataDataView, media::Vp9Metadata> {
   }
   static bool reference_lower_spatial_layers(const media::Vp9Metadata& vp9) {
     return vp9.reference_lower_spatial_layers;
-  }
-  static bool end_of_picture(const media::Vp9Metadata& vp9) {
-    return vp9.end_of_picture;
   }
   static uint8_t temporal_idx(const media::Vp9Metadata& vp9) {
     return vp9.temporal_idx;
@@ -512,6 +512,11 @@ struct StructTraits<media::mojom::VideoEncodeAcceleratorConfigDataView,
   static media::VideoEncodeAccelerator::Config::ContentType content_type(
       const media::VideoEncodeAccelerator::Config& input) {
     return input.content_type;
+  }
+
+  static uint8_t drop_frame_thresh_percentage(
+      const media::VideoEncodeAccelerator::Config& input) {
+    return input.drop_frame_thresh_percentage;
   }
 
   static const std::vector<media::VideoEncodeAccelerator::Config::SpatialLayer>&

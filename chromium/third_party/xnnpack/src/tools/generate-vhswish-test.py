@@ -203,10 +203,12 @@ def main(args):
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include <xnnpack/common.h>
 #include <xnnpack/isa-checks.h>
-
 #include <xnnpack/vhswish.h>
+
 #include "vhswish-microkernel-tester.h"
 """.format(specification=options.spec, generator=sys.argv[0])
 
@@ -219,14 +221,7 @@ def main(args):
         name, init_fn, datatype, batch_tile, isa)
       tests += "\n\n" + xnncommon.postprocess_test_case(test_case, arch, isa)
 
-    txt_changed = True
-    if os.path.exists(options.output):
-      with codecs.open(options.output, "r", encoding="utf-8") as output_file:
-        txt_changed = output_file.read() != tests
-
-    if txt_changed:
-      with codecs.open(options.output, "w", encoding="utf-8") as output_file:
-        output_file.write(tests)
+    xnncommon.overwrite_if_changed(options.output, tests)
 
 
 if __name__ == "__main__":

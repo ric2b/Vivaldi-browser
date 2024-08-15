@@ -16,7 +16,7 @@ const int kInactiveTabsDisabledByUser = -1;
 
 BASE_FEATURE(kTabInactivityThreshold,
              "TabInactivityThreshold",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kTabInactivityThresholdParameterName[] = "variant";
 const char kTabInactivityThresholdOneWeekParam[] =
@@ -77,14 +77,5 @@ const base::TimeDelta InactiveTabsTimeThreshold() {
   } else if (feature_param == kTabInactivityThresholdImmediateDemoParam) {
     return base::Seconds(0);
   }
-  return base::Days(14);
-}
-
-BASE_FEATURE(kShowInactiveTabsCount,
-             "ShowInactiveTabsCount",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-bool IsShowInactiveTabsCountEnabled() {
-  CHECK(IsInactiveTabsAvailable());
-  return base::FeatureList::IsEnabled(kShowInactiveTabsCount);
+  return base::Days(21);
 }

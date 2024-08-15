@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/css/style_engine.h"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 
@@ -132,7 +133,7 @@ class StyleEngineTest : public PageTestBase {
 
   String GetListMarkerText(LayoutObject* list_item) {
     LayoutObject* marker = ListMarker::MarkerFromListItem(list_item);
-    return ListMarker::Get(marker)->GetTextChild(*marker).GetText();
+    return ListMarker::Get(marker)->GetTextChild(*marker).TransformedText();
   }
 
   size_t FillOrClipPathCacheSize() {
@@ -2909,8 +2910,10 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
 
   color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
   UpdateAllLifecyclePhases();
+  mojom::blink::ColorScheme color_scheme = mojom::blink::ColorScheme::kLight;
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, mojom::blink::ColorScheme::kLight);
+      CSSValueID::kCanvas, color_scheme,
+      GetDocument().GetColorProviderForPainting(color_scheme));
 
   EXPECT_EQ(system_background_color,
             GetDocument().View()->BaseBackgroundColor());
@@ -4556,9 +4559,10 @@ TEST_F(StyleEngineContainerQueryTest,
   // do a layout upgrade for elements that are 1) in display:none, and 2)
   // inside a container query container.
   //
-  // See implementation of `NodeLayoutUpgrade::ShouldUpgrade` for more
+  // See implementation of `ElementLayoutUpgrade::ShouldUpgrade` for more
   // information.
-  GetDocument().UpdateStyleAndLayoutTreeForNode(a, DocumentUpdateReason::kTest);
+  GetDocument().UpdateStyleAndLayoutTreeForElement(a,
+                                                   DocumentUpdateReason::kTest);
   EXPECT_FALSE(GetStyleEngine().StyleAffectedByLayout());
   EXPECT_FALSE(GetDocument().View()->NeedsLayout());
   EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdateForNode(*a));
@@ -4983,6 +4987,74 @@ TEST_F(StyleEngineTest, NestingUseCount) {
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
 }
 
+TEST_F(StyleEngineTest, NestingUseCountUnsupportedDeclaration) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { unsupported: 100px; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
+TEST_F(StyleEngineTest, NestingUseCountSupportedDeclaration) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { width: 100px; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
+TEST_F(StyleEngineTest, NestingUseCountDimensionToken) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { 500px: 300px; }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
+TEST_F(StyleEngineTest, NestingUseCountInvalidSelector) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { & !!! { color: fuchsia; } }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
+TEST_F(StyleEngineTest, NestingUseCountUnknownAtRule) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body {
+        @unsupported {
+          color: fuchsia;
+        }
+      }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
+TEST_F(StyleEngineTest, NestingUseCountAtRule) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body {
+        @media {
+          color: fuchsia;
+        }
+      }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSNesting));
+}
+
 TEST_F(StyleEngineTest, NestingUseCountNotStartingWithAmpersand) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
@@ -5019,31 +5091,37 @@ TEST_F(StyleEngineTest, SystemFontsObeyDefaultFontSize) {
 
   // Now test degenerate cases
   GetDocument().GetSettings()->SetDefaultFontSize(-1);
+  GetDocument().GetStyleResolver().InvalidateMatchedPropertiesCache();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(1, body->GetComputedStyle()->FontSize());
   EXPECT_EQ(1, input->GetComputedStyle()->FontSize());
 
   GetDocument().GetSettings()->SetDefaultFontSize(0);
+  GetDocument().GetStyleResolver().InvalidateMatchedPropertiesCache();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(1, body->GetComputedStyle()->FontSize());
   EXPECT_EQ(13, input->GetComputedStyle()->FontSize());
 
   GetDocument().GetSettings()->SetDefaultFontSize(1);
+  GetDocument().GetStyleResolver().InvalidateMatchedPropertiesCache();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(1, body->GetComputedStyle()->FontSize());
   EXPECT_EQ(1, input->GetComputedStyle()->FontSize());
 
   GetDocument().GetSettings()->SetDefaultFontSize(2);
+  GetDocument().GetStyleResolver().InvalidateMatchedPropertiesCache();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(2, body->GetComputedStyle()->FontSize());
   EXPECT_EQ(2, input->GetComputedStyle()->FontSize());
 
   GetDocument().GetSettings()->SetDefaultFontSize(3);
+  GetDocument().GetStyleResolver().InvalidateMatchedPropertiesCache();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(3, body->GetComputedStyle()->FontSize());
   EXPECT_EQ(0, input->GetComputedStyle()->FontSize());
 
   GetDocument().GetSettings()->SetDefaultFontSize(12345);
+  GetDocument().GetStyleResolver().InvalidateMatchedPropertiesCache();
   UpdateAllLifecyclePhases();
   EXPECT_EQ(10000, body->GetComputedStyle()->FontSize());
   EXPECT_EQ(10000, input->GetComputedStyle()->FontSize());
@@ -6960,6 +7038,59 @@ TEST_F(StyleEngineTest, UseCountCSSDeclarationAfterNestedRule) {
     </style>
   )HTML");
   EXPECT_TRUE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
+}
+
+TEST_F(StyleEngineTest, EnsureAppRegionTriggersRelayout) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  WebViewImpl* web_view_impl = web_view_helper.Initialize();
+  web_view_impl->SetSupportsAppRegion(true);
+  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
+      DocumentUpdateReason::kTest);
+
+  Document* document =
+      To<LocalFrame>(web_view_impl->GetPage()->MainFrame())->GetDocument();
+  document->body()->setInnerHTML(R"HTML(
+    <head>
+    <style>
+      .drag {
+        app-region: drag
+      }
+      .no-drag {
+        app-region: no-drag
+      }
+    </style>
+    </head>
+    <body>
+       <div id="drag-region"></div>
+    </body>
+  )HTML");
+
+  Element* drag_element = document->getElementById(AtomicString("drag-region"));
+
+  auto regions = document->AnnotatedRegions();
+  auto* it =
+      std::find_if(regions.begin(), regions.end(),
+                   [](blink::AnnotatedRegionValue s) { return s.draggable; });
+  EXPECT_EQ(it, regions.end()) << "There should be no drag regions";
+
+  drag_element->classList().Add(AtomicString("drag"));
+  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
+      DocumentUpdateReason::kTest);
+
+  regions = document->AnnotatedRegions();
+  it = std::find_if(regions.begin(), regions.end(),
+                    [](blink::AnnotatedRegionValue s) { return s.draggable; });
+  EXPECT_NE(it, regions.end()) << "There should be one drag region";
+
+  drag_element->classList().Add(AtomicString("no-drag"));
+  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
+      DocumentUpdateReason::kTest);
+
+  regions = document->AnnotatedRegions();
+  it = std::find_if(regions.begin(), regions.end(),
+                    [](blink::AnnotatedRegionValue s) { return s.draggable; });
+
+  EXPECT_EQ(it, regions.end()) << "There should be no drag regions";
 }
 
 }  // namespace blink

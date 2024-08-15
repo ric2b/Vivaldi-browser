@@ -23,6 +23,15 @@
 // Shows the share sheet for the page and currently highlighted text.
 - (void)shareHighlight:(ShareHighlightCommand*)command;
 
+// Vivaldi
+// Shows the site information for the current page.
+- (void)showSiteInfo;
+// Reload current page from location bar.
+- (void)reloadPage;
+// Stop loading current page from location bar.
+- (void)stopLoadingPage;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_COMMANDS_ACTIVITY_SERVICE_COMMANDS_H_

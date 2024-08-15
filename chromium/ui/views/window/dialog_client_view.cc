@@ -75,8 +75,9 @@ ui::ElementIdentifier GetButtonId(ui::DialogButton type) {
 
 // Simple container to bubble child view changes up the view hierarchy.
 class DialogClientView::ButtonRowContainer : public View {
+  METADATA_HEADER(ButtonRowContainer, View)
+
  public:
-  METADATA_HEADER(ButtonRowContainer);
   explicit ButtonRowContainer(DialogClientView* owner) : owner_(owner) {}
   ButtonRowContainer(const ButtonRowContainer&) = delete;
   ButtonRowContainer& operator=(const ButtonRowContainer&) = delete;
@@ -288,7 +289,7 @@ void DialogClientView::UpdateDialogButtons() {
   InvalidateLayout();
 }
 
-void DialogClientView::UpdateDialogButton(MdTextButton** member,
+void DialogClientView::UpdateDialogButton(raw_ptr<MdTextButton>* member,
                                           ui::DialogButton type) {
   DialogDelegate* const delegate = GetDialogDelegate();
   if (!(delegate->GetDialogButtons() & type)) {
@@ -324,7 +325,6 @@ void DialogClientView::UpdateDialogButton(MdTextButton** member,
               .SetText(title)
               .SetProperty(views::kElementIdentifierKey, GetButtonId(type))
               .SetStyle(style)
-              .SetProminent(is_default)
               .SetIsDefault(is_default)
               .SetEnabled(delegate->IsDialogButtonEnabled(type))
               .SetMinSize(gfx::Size(minimum_width, 0))
@@ -415,12 +415,13 @@ void DialogClientView::SetupLayout() {
   auto* layout = button_row_container_->SetLayoutManager(
       std::make_unique<views::TableLayout>());
   layout->SetMinimumSize(minimum_size_);
-  if (extra_view_ && !extra_view_->GetVisible()) {
+  if (extra_view_) {
     // TableLayout will force its child views to be visible if they aren't
     // explicitly ignored, which will cause the extra view the client supplied
     // to be shown when they don't want it to.
     // TODO(https://crbug.com/1474952): Remove this workaround.
-    layout->SetChildViewIgnoredByLayout(extra_view_, true);
+    extra_view_->SetProperty(kViewIgnoredByLayoutKey,
+                             !extra_view_->GetVisible());
   }
 
   // The |resize_percent| constants. There's only one stretchy column (padding
@@ -518,7 +519,7 @@ void DialogClientView::RemoveFillerView(size_t view_index) {
   }
 }
 
-BEGIN_METADATA(DialogClientView, ClientView)
+BEGIN_METADATA(DialogClientView)
 END_METADATA
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(DialogClientView, kTopViewId);

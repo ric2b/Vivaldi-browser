@@ -22,6 +22,7 @@
 #include "components/segmentation_platform/public/segmentation_platform_service.h"
 
 using base::android::AttachCurrentThread;
+using base::android::ConvertJavaStringToUTF8;
 using base::android::JavaParamRef;
 
 namespace segmentation_platform {
@@ -33,7 +34,7 @@ const char kSegmentationPlatformServiceBridgeKey[] =
 void RunGetSelectedSegmentCallback(const JavaRef<jobject>& j_callback,
                                    const SegmentSelectionResult& result) {
   JNIEnv* env = AttachCurrentThread();
-  RunObjectCallbackAndroid(
+  base::android::RunObjectCallbackAndroid(
       j_callback,
       SegmentationPlatformConversionBridge::CreateJavaSegmentSelectionResult(
           env, result));
@@ -42,7 +43,7 @@ void RunGetSelectedSegmentCallback(const JavaRef<jobject>& j_callback,
 void RunGetClassificationResultCallback(const JavaRef<jobject>& j_callback,
                                         const ClassificationResult& result) {
   JNIEnv* env = AttachCurrentThread();
-  RunObjectCallbackAndroid(
+  base::android::RunObjectCallbackAndroid(
       j_callback,
       SegmentationPlatformConversionBridge::CreateJavaClassificationResult(
           env, result));

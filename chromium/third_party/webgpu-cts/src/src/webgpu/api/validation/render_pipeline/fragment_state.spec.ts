@@ -82,7 +82,7 @@ g.test('limits,maxColorAttachments')
     const targetsLength = t.makeLimitVariant('maxColorAttachments', targetsLengthVariant);
 
     const descriptor = t.getDescriptor({
-      targets: range(targetsLength, i => {
+      targets: range(targetsLength, _i => {
         return { format: 'rg8unorm', writeMask: 0 };
       }),
       fragmentShaderCode: kDefaultFragmentShaderCode,

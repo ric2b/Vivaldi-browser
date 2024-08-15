@@ -83,13 +83,13 @@ class GClientSmokeBase(fake_repos.FakeReposTestBase):
 
     def splitBlock(self, stdout):
         """Split gclient's output into logical execution blocks.
-    ___ running 'foo' at '/bar'
-    (...)
-    ___ running 'baz' at '/bar'
-    (...)
+        ___ running 'foo' at '/bar'
+        (...)
+        ___ running 'baz' at '/bar'
+        (...)
 
-    will result in 2 items of len((...).splitlines()) each.
-    """
+        will result in 2 items of len((...).splitlines()) each.
+        """
         results = []
         for line in stdout.splitlines(False):
             # Intentionally skips empty lines.

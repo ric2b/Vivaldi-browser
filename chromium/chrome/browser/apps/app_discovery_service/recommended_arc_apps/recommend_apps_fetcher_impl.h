@@ -83,7 +83,7 @@ class RecommendAppsFetcherImpl : public RecommendAppsFetcher {
   void Retry() override;
 
   using ArcFeaturesGetter = base::RepeatingCallback<void(
-      base::OnceCallback<void(absl::optional<arc::ArcFeatures> callback)>)>;
+      base::OnceCallback<void(std::optional<arc::ArcFeatures> callback)>)>;
   void set_arc_features_getter_for_testing(const ArcFeaturesGetter& getter) {
     arc_features_getter_ = getter;
   }
@@ -107,7 +107,7 @@ class RecommendAppsFetcherImpl : public RecommendAppsFetcher {
 
   // Callback function called when ARC features are read by the parser.
   // It will populate the device config info related to ARC features.
-  void OnArcFeaturesRead(absl::optional<arc::ArcFeatures> read_result);
+  void OnArcFeaturesRead(std::optional<arc::ArcFeatures> read_result);
 
   // Callback function called when the proto message has been compressed and
   // encoded.
@@ -141,10 +141,9 @@ class RecommendAppsFetcherImpl : public RecommendAppsFetcher {
   bool has_started_proto_processing_ = false;
   bool proto_compressed_and_encoded_ = false;
 
-  raw_ptr<RecommendAppsFetcherDelegate, ExperimentalAsh> delegate_;
+  raw_ptr<RecommendAppsFetcherDelegate> delegate_;
 
-  raw_ptr<network::mojom::URLLoaderFactory, ExperimentalAsh>
-      url_loader_factory_;
+  raw_ptr<network::mojom::URLLoaderFactory> url_loader_factory_;
   std::unique_ptr<network::SimpleURLLoader> app_list_loader_;
 
   // Timer that enforces a custom (shorter) timeout on the attempt to download

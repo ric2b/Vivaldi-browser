@@ -3,18 +3,23 @@
 // found in the LICENSE file.
 
 import './icons.html.js';
-import '//resources/cr_elements/cr_hidden_style.css.js';
+import './strings.m.js';
 import '//resources/cr_elements/cr_shared_vars.css.js';
 import '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 
+import {loadTimeData} from '//resources/js/load_time_data.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {ComposeTextareaAnimator} from './animations/textarea_animator.js';
+import {ConfigurableParams} from './compose.mojom-webui.js';
 import {getTemplate} from './textarea.html.js';
 
 export interface ComposeTextareaElement {
   $: {
     editButtonContainer: HTMLElement,
-    error: HTMLElement,
+    editButton: HTMLElement,
+    tooShortError: HTMLElement,
+    tooLongError: HTMLElement,
     input: HTMLTextAreaElement,
     readonlyText: HTMLElement,
   };
@@ -36,7 +41,13 @@ export class ComposeTextareaElement extends PolymerElement {
         value: false,
         reflectToAttribute: true,
       },
+      inputParams: Object,
       readonly: {
+        type: Boolean,
+        value: false,
+        reflectToAttribute: true,
+      },
+      invalidInput_: {
         type: Boolean,
         value: false,
         reflectToAttribute: true,
@@ -44,7 +55,6 @@ export class ComposeTextareaElement extends PolymerElement {
       tooLong_: {
         type: Boolean,
         value: false,
-        reflectToAttribute: true,
       },
       tooShort_: {
         type: Boolean,
@@ -58,25 +68,63 @@ export class ComposeTextareaElement extends PolymerElement {
   }
 
   allowExitingReadonlyMode: boolean;
+  private animator_: ComposeTextareaAnimator;
+  inputParams: ConfigurableParams;
   readonly: boolean;
+  private invalidInput_: boolean;
   private tooLong_: boolean;
   private tooShort_: boolean;
   value: string;
+
+  constructor() {
+    super();
+    this.animator_ = new ComposeTextareaAnimator(
+        this, loadTimeData.getBoolean('enableAnimations'));
+  }
+
+  focusInput() {
+    this.$.input.focus();
+  }
+
+  focusEditButton() {
+    this.$.editButton.focus();
+  }
 
   private onEditClick_() {
     this.dispatchEvent(
         new CustomEvent('edit-click', {bubbles: true, composed: true}));
   }
 
+  scrollInputToTop() {
+    this.$.input.scrollTop = 0;
+  }
+
   private shouldShowEditIcon_(): boolean {
     return this.allowExitingReadonlyMode && this.readonly;
   }
 
+  transitionToEditable() {
+    this.animator_.transitionToEditable();
+  }
+
+  transitionToReadonly(fromHeight?: number) {
+    this.animator_.transitionToReadonly(fromHeight);
+  }
+
+  transitionToEditing(bodyHeight: number) {
+    this.animator_.transitionToEditing(bodyHeight);
+  }
+
   validate() {
     const value = this.$.input.value;
-    this.tooShort_ = !value || value.length < 10;
-    this.tooLong_ = !!value && value.length > 200;
-    return !this.tooLong_ && !this.tooShort_;
+    const wordCount = value.match(/\S+/g)?.length || 0;
+    this.tooLong_ = value.length > this.inputParams.maxCharacterLimit ||
+        wordCount > this.inputParams.maxWordLimit;
+    // If it's too long, then it can't be too short.
+    this.tooShort_ =
+        wordCount < this.inputParams.minWordLimit && !this.tooLong_;
+    this.invalidInput_ = this.tooLong_ || this.tooShort_;
+    return !this.invalidInput_;
   }
 }
 

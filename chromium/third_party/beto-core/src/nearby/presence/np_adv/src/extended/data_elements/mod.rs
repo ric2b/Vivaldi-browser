@@ -67,8 +67,8 @@ impl WriteDataElement for GenericDataElement {
 }
 
 /// Convert a deserialized DE into one you can serialize
-impl<'a> From<DataElement<'a>> for GenericDataElement {
-    fn from(de: DataElement<'a>) -> Self {
+impl<'a> From<&'a DataElement<'a>> for GenericDataElement {
+    fn from(de: &'a DataElement<'a>) -> Self {
         Self::try_from(de.de_type(), de.contents())
             .expect("Deserialized DE must have a valid length")
     }

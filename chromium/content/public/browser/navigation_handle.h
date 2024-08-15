@@ -16,7 +16,7 @@
 #include "content/public/browser/frame_type.h"
 #include "content/public/browser/navigation_handle_timing.h"
 #include "content/public/browser/navigation_throttle.h"
-#include "content/public/browser/prerender_trigger_type.h"
+#include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/common/referrer.h"
@@ -25,7 +25,8 @@
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
 #include "net/dns/public/resolve_error_info.h"
-#include "net/http/http_response_info.h"
+#include "net/http/http_connection_info.h"
+#include "net/ssl/ssl_info.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-forward.h"
 #include "third_party/blink/public/common/navigation/impression.h"
@@ -48,7 +49,6 @@ class GURL;
 namespace net {
 class HttpRequestHeaders;
 class HttpResponseHeaders;
-class ProxyServer;
 }  // namespace net
 
 namespace perfetto::protos::pbzero {
@@ -426,19 +426,19 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   virtual const net::HttpResponseHeaders* GetResponseHeaders() = 0;
 
   // Returns the connection info for the request, the default value is
-  // CONNECTION_INFO_UNKNOWN if there hasn't been a response (or redirect)
+  // HttpConnectionInfo::kUNKNOWN if there hasn't been a response (or redirect)
   // yet. The connection info may change during the navigation (e.g. after
   // encountering a server redirect).
-  virtual net::HttpResponseInfo::ConnectionInfo GetConnectionInfo() = 0;
+  virtual net::HttpConnectionInfo GetConnectionInfo() = 0;
 
   // Returns the SSLInfo for a request that succeeded or failed due to a
   // certificate error. In the case of other request failures or of a non-secure
   // scheme, returns an empty object.
-  virtual const absl::optional<net::SSLInfo>& GetSSLInfo() = 0;
+  virtual const std::optional<net::SSLInfo>& GetSSLInfo() = 0;
 
   // Returns the AuthChallengeInfo for the request, if the response contained an
   // authentication challenge.
-  virtual const absl::optional<net::AuthChallengeInfo>&
+  virtual const std::optional<net::AuthChallengeInfo>&
   GetAuthChallengeInfo() = 0;
 
   // Returns host resolution error info associated with the request.
@@ -480,9 +480,6 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Returns true if the navigation response was cached.
   virtual bool WasResponseCached() = 0;
 
-  // Returns the proxy server used for this navigation, if any.
-  virtual const net::ProxyServer& GetProxyServer() = 0;
-
   // Returns the value of the hrefTranslate attribute if this navigation was
   // initiated from a link that had that attribute set.
   virtual const std::string& GetHrefTranslate() = 0;
@@ -490,14 +487,14 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Returns, if available, the impression associated with the link clicked to
   // initiate this navigation. The impression is available for the entire
   // lifetime of the navigation.
-  virtual const absl::optional<blink::Impression>& GetImpression() = 0;
+  virtual const std::optional<blink::Impression>& GetImpression() = 0;
 
   // Returns the frame token associated with the frame that initiated the
   // navigation. This can be nullptr if the navigation was not associated with a
   // frame, or may return a valid frame token to a frame that no longer exists
   // because it was deleted before the navigation began. This parameter is
   // defined if and only if GetInitiatorProcessId below is.
-  virtual const absl::optional<blink::LocalFrameToken>&
+  virtual const std::optional<blink::LocalFrameToken>&
   GetInitiatorFrameToken() = 0;
 
   // Return the ID of the renderer process of the frame host that initiated the
@@ -513,12 +510,12 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // original navigation, but the history navigation was initiated by
   // javascript, the initiator origin will be null even though
   // IsRendererInitiated() returns true.
-  virtual const absl::optional<url::Origin>& GetInitiatorOrigin() = 0;
+  virtual const std::optional<url::Origin>& GetInitiatorOrigin() = 0;
 
   // Returns, for renderer-initiated about:blank and about:srcdoc navigations,
   // the base url of the document that has initiated the navigation for this
   // NavigationHandle. The same caveats apply here as for GetInitiatorOrigin().
-  virtual const absl::optional<GURL>& GetInitiatorBaseUrl() = 0;
+  virtual const std::optional<GURL>& GetInitiatorBaseUrl() = 0;
 
   // Retrieves any DNS aliases for the requested URL. Includes all known
   // aliases, e.g. from A, AAAA, or HTTPS, not just from the address used for
@@ -642,7 +639,7 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
 
   // Prerender2:
   // Used for metrics.
-  virtual PrerenderTriggerType GetPrerenderTriggerType() = 0;
+  virtual PreloadingTriggerType GetPrerenderTriggerType() = 0;
   virtual std::string GetPrerenderEmbedderHistogramSuffix() = 0;
 
   // Returns a SafeRef to this handle.

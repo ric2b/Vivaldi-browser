@@ -42,6 +42,9 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -54,9 +57,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
 import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.embedder_support.view.ContentView;
@@ -527,6 +527,26 @@ public class CompositorViewHolderUnitTest {
         verify(mWebContents, times(1)).setSize(fullViewportWidth, adjustedHeight - TOOLBAR_HEIGHT);
         verify(mCompositorViewHolder, times(0))
                 .notifyVirtualKeyboardOverlayRect(mWebContents, 0, 0, 0, 0);
+    }
+
+    @Test
+    public void testWebContentResizeByBottomSheetInset() {
+        var bottomSheetInsetSupplier = new ObservableSupplierImpl<Integer>();
+        mViewportInsets.setBottomSheetInsetSupplier(bottomSheetInsetSupplier);
+        reset(mWebContents);
+
+        int fullViewportHeight = 941;
+        int fullViewportWidth = 1080;
+        int bottomSheetOffset = 420;
+
+        when(mCompositorViewHolder.getWidth()).thenReturn(fullViewportWidth);
+        when(mCompositorViewHolder.getHeight()).thenReturn(fullViewportHeight);
+        bottomSheetInsetSupplier.set(bottomSheetOffset);
+
+        // adjustedHeight is height of the CompositorViewHolder from Android View layout. This
+        // simulates a reduced layout height from bottom sheet taking up the space at the bottom.
+        int adjustedHeight = fullViewportHeight - bottomSheetOffset;
+        verify(mWebContents, times(1)).setSize(fullViewportWidth, adjustedHeight - TOOLBAR_HEIGHT);
     }
 
     @Test

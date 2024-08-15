@@ -18,10 +18,16 @@
         "description": "Regular extension- or componentAction. Component actions will go through ToolbarActionViewController"
       },
       {
-        "id":  "MenuType",
+        "id": "MenuType",
         "type": "string",
-        "enum": ["normal", "checkbox", "radio", "separator"],
+        "enum": [ "normal", "checkbox", "radio", "separator" ],
         "description": "What type of menu item."
+      },
+      {
+        "id": "GlobalErrorType",
+        "type": "string",
+        "enum": [ "installed", "upgrade" ],
+        "description": "Type of global error. Disabled because of permission increase, or installed by third-party."
       },
       {
         "id": "MenuItem",
@@ -56,6 +62,52 @@
             "items": { "$ref": "MenuItem" },
             "optional": true,
             "description": "Sub menu items if the extension supplies a custom menu."
+          }
+        }
+      },
+      {
+        "id": "SidePanelInfo",
+        "type": "object",
+        "description": "Side Panel description (if exists).",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Side Panel URL."
+          },
+          "activeUrl": {
+            "type": "string",
+            "description": "Side Panel URL."
+          }
+        }
+      },
+      {
+        "id": "SidePanelOptions",
+        "type": "object",
+        "properties": {
+          "tabId": {
+            "optional": true,
+            "description": "If specified, the side panel options will only apply to the tab with this id. If omitted, these options set the default behavior (used for any tab that doesn't have specific settings). Note: if the same path is set for this tabId and the default tabId, then the panel for this tabId will be a different instance than the panel for the default tabId.",
+            "type": "integer"
+          },
+          "path": {
+            "optional": true,
+            "description": "The path to the side panel HTML file to use. This must be a local resource within the extension package.",
+            "type": "string"
+          },
+          "extensionId": {
+            "optional": true,
+            "description": "The path to the side panel HTML file to use. This must be a local resource within the extension package.",
+            "type": "string"
+          },
+          "resourceUrl": {
+            "optional": true,
+            "description": "The path to the side panel HTML file to use. This must be a local resource within the extension package.",
+            "type": "string"
+          },
+          "enabled": {
+            "optional": true,
+            "description": "Whether the side panel should be enabled. This is optional. The default value is true.",
+            "type": "boolean"
           }
         }
       },
@@ -146,6 +198,11 @@
             "type": "string",
             "optional": true,
             "description": "Keyboard shortcut to toggle this extension."
+          },
+          "sidePanel": {
+            "$ref": "SidePanelInfo",
+            "optional": true,
+            "description": "contains sidepanel URL."
           }
         }
       },
@@ -161,6 +218,11 @@
           "name": {
             "type": "string",
             "description": "Extension name."
+          },
+          "errorType": {
+            "$ref": "GlobalErrorType",
+            "optional": true,
+            "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
           },
           "commandId": {
             "type": "integer",
@@ -339,7 +401,18 @@
         "name": "triggerGlobalErrors",
         "type": "function",
         "description": "Loop through any pending global extension errors and fire events for the ui.",
-        "parameters": []
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "items",
+              "type": "array",
+              "items": { "$ref": "ExtensionInstallError" },
+              "description": "Errors triggered before the window was shown."
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -441,6 +514,22 @@
           {
             "$ref": "ExtensionInstallError",
             "name": "error"
+          }
+        ]
+      },
+      {
+        "name": "onSidePanelOptionChanged",
+        "type": "function",
+        "description": "Fired when side panel opetion changed",
+        "parameters": [
+          {
+            "name": "extendionId",
+            "type": "string",
+            "description": "The unique extension identifier."
+          },
+          {
+            "$ref": "SidePanelOptions",
+            "name": "options"
           }
         ]
       }

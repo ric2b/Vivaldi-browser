@@ -534,7 +534,6 @@ bool ParseScript(Isolate* isolate, Handle<Script> script, ParseInfo* parse_info,
     }
   }
   if (!success) {
-    isolate->OptionalRescheduleException(false);
     DCHECK(try_catch.HasCaught());
     result->message = try_catch.Message()->Get();
     i::Handle<i::JSMessageObject> msg = Utils::OpenHandle(*try_catch.Message());
@@ -939,7 +938,7 @@ void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
     for (auto& js_function : data->js_functions) {
       js_function->set_raw_feedback_cell(
           *isolate->factory()->many_closures_cell());
-      if (!js_function->is_compiled()) continue;
+      if (!js_function->is_compiled(isolate)) continue;
       IsCompiledScope is_compiled_scope(
           js_function->shared()->is_compiled_scope(isolate));
       JSFunction::EnsureFeedbackVector(isolate, js_function,
@@ -988,7 +987,7 @@ void LiveEdit::PatchScript(Isolate* isolate, Handle<Script> script,
 
       js_function->set_raw_feedback_cell(
           *isolate->factory()->many_closures_cell());
-      if (!js_function->is_compiled()) continue;
+      if (!js_function->is_compiled(isolate)) continue;
       IsCompiledScope is_compiled_scope(
           js_function->shared()->is_compiled_scope(isolate));
       JSFunction::EnsureFeedbackVector(isolate, js_function,

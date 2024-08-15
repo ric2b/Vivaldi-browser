@@ -47,7 +47,9 @@ struct CopyTextureToBufferCmd;
 
 enum class MapType : uint32_t;
 
-MaybeError ValidateBufferDescriptor(DeviceBase* device, const BufferDescriptor* descriptor);
+ResultOrError<UnpackedPtr<BufferDescriptor>> ValidateBufferDescriptor(
+    DeviceBase* device,
+    const BufferDescriptor* descriptor);
 
 static constexpr wgpu::BufferUsage kReadOnlyBufferUsages =
     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Index |
@@ -56,6 +58,13 @@ static constexpr wgpu::BufferUsage kReadOnlyBufferUsages =
 
 static constexpr wgpu::BufferUsage kMappableBufferUsages =
     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::MapWrite;
+
+static constexpr wgpu::BufferUsage kShaderBufferUsages =
+    wgpu::BufferUsage::Uniform | wgpu::BufferUsage::Storage | kInternalStorageBuffer |
+    kReadOnlyStorageBuffer;
+
+static constexpr wgpu::BufferUsage kReadOnlyShaderBufferUsages =
+    kShaderBufferUsages & kReadOnlyBufferUsages;
 
 class BufferBase : public ApiObjectBase {
   public:
@@ -67,7 +76,7 @@ class BufferBase : public ApiObjectBase {
         HostMappedPersistent,
         Destroyed,
     };
-    static BufferBase* MakeError(DeviceBase* device, const BufferDescriptor* descriptor);
+    static Ref<BufferBase> MakeError(DeviceBase* device, const BufferDescriptor* descriptor);
 
     ObjectType GetType() const override;
 
@@ -101,6 +110,10 @@ class BufferBase : public ApiObjectBase {
                      size_t size,
                      WGPUBufferMapCallback callback,
                      void* userdata);
+    Future APIMapAsyncF(wgpu::MapMode mode,
+                        size_t offset,
+                        size_t size,
+                        const BufferMapCallbackInfo& callbackInfo);
     void* APIGetMappedRange(size_t offset, size_t size);
     const void* APIGetConstMappedRange(size_t offset, size_t size);
     void APIUnmap();
@@ -110,7 +123,7 @@ class BufferBase : public ApiObjectBase {
     uint64_t APIGetSize() const;
 
   protected:
-    BufferBase(DeviceBase* device, const BufferDescriptor* descriptor);
+    BufferBase(DeviceBase* device, const UnpackedPtr<BufferDescriptor>& descriptor);
     BufferBase(DeviceBase* device, const BufferDescriptor* descriptor, ObjectBase::ErrorTag tag);
 
     void DestroyImpl() override;
@@ -161,6 +174,9 @@ class BufferBase : public ApiObjectBase {
     wgpu::MapMode mMapMode = wgpu::MapMode::None;
     size_t mMapOffset = 0;
     size_t mMapSize = 0;
+
+    struct MapAsyncEvent;
+    Ref<MapAsyncEvent> mPendingMapEvent;
 };
 
 }  // namespace dawn::native

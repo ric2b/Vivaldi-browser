@@ -12,7 +12,7 @@ import './strings.m.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {addWebUiListener} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {appendParam, getRequiredElement} from 'chrome://resources/js/util_ts.js';
+import {appendParam, getRequiredElement} from 'chrome://resources/js/util.js';
 
 /* Id for tracking automatic refresh of crash list.  */
 let refreshCrashListId: number|undefined = undefined;
@@ -189,7 +189,8 @@ function updateCrashList({
  * @param The OS name.
  * @param The product version.
  */
-function fileBug(crashId: string, os: string, version: string) {
+function fileBug(crashId: string, _os: string, _version: string) {
+  /*
   const commentLines = [
     'IMPORTANT: Your crash has already been automatically reported ' +
         'to our crash system. Please file this bug only if you can provide ' +
@@ -221,9 +222,13 @@ function fileBug(crashId: string, os: string, version: string) {
     labels:
         'Restrict-View-EditIssue,Stability-Crash,User-Submitted,Pri-3,Type-Bug',
   };
-  let href = 'https://bugs.chromium.org/p/chromium/issues/entry';
-  for (const param in params) {
-    href = appendParam(href, param, params[param]!);
+  */
+  const vivParams:  {[key: string]: string} = {
+    summary: 'Crash ID: ' + crashId,
+  };
+  let href = 'https://vivaldi.com/bugreport';
+  for (const param in vivParams) {
+    href = appendParam(href, param, vivParams[param]!);
   }
 
   window.open(href);

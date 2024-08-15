@@ -126,7 +126,10 @@
 - (void)setShareButtonEnabled:(BOOL)enabled;
 
 // Vivaldi
-- (LocationBarSteadyView*)steadyView;
+@property(nonatomic, strong) UIColor* locationBarContainerColor;
+- (LocationBarSteadyView*)sharingSourceView;
+- (void)setLoadingState:(BOOL)loading;
+- (void)updateSteadyViewColorSchemeWithColor:(UIColor*)tintColor;
 // End Vivaldi
 
 @end

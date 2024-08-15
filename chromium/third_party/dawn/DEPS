@@ -24,10 +24,10 @@ vars = {
   'dawn_ninja_version': 'version:2@1.11.1.chromium.6',
   'dawn_go_version': 'version:2@1.21.3',
 
-  'node_darwin_arm64_sha': '31859fc1fa0994a95f44f09c367d6ff63607cfde',
-  'node_darwin_x64_sha': '16dfd094763b71988933a31735f9dea966f9abd6',
-  'node_linux_x64_sha': 'ab9544e24e752d3d17f335fb7b2055062e582d11',
-  'node_win_x64_sha': '5ef847033c517c499f56f9d136d159b663bab717',
+  'node_darwin_arm64_sha': '523ee26632045e664cd0ddd5aef31a378a563025',
+  'node_darwin_x64_sha': 'b930bbfa9f232fe12d5fcf39b38614ae4be99e1a',
+  'node_linux_x64_sha': '179cfb7d2a0d90bbd72271481fd0bda2b297eaa9',
+  'node_win_x64_sha': '9bfd52de11d5bf9645bdabc469bded1da0bf12e7',
 
   # GN variable required by //testing that will be output in the gclient_args.gni
   'generate_location_tags': False,
@@ -62,7 +62,7 @@ vars = {
 
 deps = {
   'buildtools': {
-    'url': '{chromium_git}/chromium/src/buildtools@a9a6f0c49d0e8fa0cda37337430b4736ab3dc944',
+    'url': '{chromium_git}/chromium/src/buildtools@48ab3bd053bfe2fef4635d7cb1861f8923167b96',
     'condition': 'dawn_standalone',
   },
   'third_party/clang-format/script': {
@@ -95,12 +95,12 @@ deps = {
   },
 
   'third_party/libc++/src': {
-    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxx.git@84fb809dd6dae36d556dc0bb702c6cc2ce9d4b80',
+    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxx.git@278060665f956b98b54922e3cb5e38b07884ce7d',
     'condition': 'dawn_standalone',
   },
 
   'third_party/libc++abi/src': {
-    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxxabi.git@d4760c0af99ccc9bce077960d5ddde4d66146c05',
+    'url': '{chromium_git}/external/github.com/llvm/llvm-project/libcxxabi.git@0226cb1cdfe740b173394e1cebbd0dcf293e38ad',
     'condition': 'dawn_standalone',
   },
 
@@ -108,15 +108,15 @@ deps = {
   # The //build, //tools/clang, and //tools/rust deps should all be updated
   # in unison, as there are dependencies between them.
   'build': {
-    'url': '{chromium_git}/chromium/src/build@e2f4d00875f7d00fad39d5af2c6869ac7c7413cc',
+    'url': '{chromium_git}/chromium/src/build@df6338f68f66357d27ea7f0354d50216c8c74473',
     'condition': 'dawn_standalone',
   },
   'tools/clang': {
-    'url': '{chromium_git}/chromium/src/tools/clang@86aed39db276fb876a2b98c93cc6ff8940377903',
+    'url': '{chromium_git}/chromium/src/tools/clang@419fc5706504be3cc8d17cc61bdc6b45226927e9',
     'condition': 'dawn_standalone',
   },
   'tools/rust': {
-    'url': '{chromium_git}/chromium/src/tools/rust@7052bd3aa0eba2d3d701b7a76219e3b04770540e',
+    'url': '{chromium_git}/chromium/src/tools/rust@c2a0e44aaa68e02826feea4a4e152bdd8b897266',
     'condition': 'dawn_standalone and checkout_rust',
   },
   'tools/clang/dsymutil': {
@@ -153,11 +153,11 @@ deps = {
 
   # Jinja2 and MarkupSafe for the code generator
   'third_party/jinja2': {
-    'url': '{chromium_git}/chromium/src/third_party/jinja2@515dd10de9bf63040045902a4a310d2ba25213a0',
+    'url': '{chromium_git}/chromium/src/third_party/jinja2@e2d024354e11cc6b041b0cff032d73f0c7e43a07',
     'condition': 'dawn_standalone',
   },
   'third_party/markupsafe': {
-    'url': '{chromium_git}/chromium/src/third_party/markupsafe@006709ba3ed87660a17bd4548c45663628f5ed85',
+    'url': '{chromium_git}/chromium/src/third_party/markupsafe@0bad08bb207bbfc1d6f3bbc82b9242b0c50e5794',
     'condition': 'dawn_standalone',
   },
 
@@ -167,22 +167,22 @@ deps = {
   },
 
   'third_party/vulkan_memory_allocator': {
-    'url': '{chromium_git}/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@e87036508bb156f9986ea959323de1869e328f58',
+    'url': '{chromium_git}/external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator@52dc220fb326e6ae132b7f262133b37b0dc334a3',
     'condition': 'dawn_standalone',
   },
 
   'third_party/angle': {
-    'url': '{chromium_git}/angle/angle@b56a72045a2b8ca5daf15d8177b462d256fc5181',
+    'url': '{chromium_git}/angle/angle@e27af543b61abb72630516fb778fa5c6cddf2a2a',
     'condition': 'dawn_standalone',
   },
 
   'third_party/swiftshader': {
-    'url': '{swiftshader_git}/SwiftShader@d9ec9befba05a8dfca09c1e88f3f7be0e4b153c6',
+    'url': '{swiftshader_git}/SwiftShader@5ab5177fc72dbb67f7353f1cfeb5ef64d67cfc67',
     'condition': 'dawn_standalone',
   },
 
   'third_party/vulkan-deps': {
-    'url': '{chromium_git}/vulkan-deps@1a99a795c2297084596c89b559c3a3a55bbf7abf',
+    'url': '{chromium_git}/vulkan-deps@167fd9d49add535c5e7fa8d3b632dc3f4dd766cd',
     'condition': 'dawn_standalone',
   },
 
@@ -197,7 +197,7 @@ deps = {
   },
 
   'third_party/dxc': {
-    'url': '{chromium_git}/external/github.com/microsoft/DirectXShaderCompiler@64030a4e01e27c608b6c5f1ab5add43575e086f9',
+    'url': '{chromium_git}/external/github.com/microsoft/DirectXShaderCompiler@00e170f3485dc5a83628f716c0944f2b8cf58028',
   },
 
   'third_party/dxheaders': {
@@ -216,7 +216,7 @@ deps = {
 
   # WebGPU CTS - not used directly by Dawn, only transitively by Chromium.
   'third_party/webgpu-cts': {
-    'url': '{chromium_git}/external/github.com/gpuweb/cts@2ef3f322027bec1bb5572f5083d478148d355d79',
+    'url': '{chromium_git}/external/github.com/gpuweb/cts@dedb6316202c8c55b898e52248f1345241299125',
     'condition': 'build_with_chromium',
   },
 
@@ -230,7 +230,7 @@ deps = {
     'condition': 'dawn_node',
   },
   'third_party/gpuweb': {
-    'url': '{github_git}/gpuweb/gpuweb.git@17f7771857dd6cf0377a99e6a63a723b80485e50',
+    'url': '{github_git}/gpuweb/gpuweb.git@a6805d5298c6979392768ed13f442e35b9a35b22',
     'condition': 'dawn_node',
   },
 
@@ -275,14 +275,19 @@ deps = {
 
   # Misc dependencies inherited from Tint
   'third_party/protobuf': {
-    'url': '{chromium_git}/external/github.com/protocolbuffers/protobuf.git@2b673bbb57e34fe1bd4570f726fc86b769a3a3d2',
+    'url': '{chromium_git}/chromium/src/third_party/protobuf@41759e11ec427e29e1a72b9401d2af3f6e02d839',
+    'condition': 'dawn_standalone',
+  },
+
+  'tools/protoc_wrapper': {
+    'url': '{chromium_git}/chromium/src/tools/protoc_wrapper@b5ea227bd88235ab3ccda964d5f3819c4e2d8032',
     'condition': 'dawn_standalone',
   },
 
   # Dependencies for PartitionAlloc.
   # Doc: https://docs.google.com/document/d/1wz45t0alQthsIU9P7_rQcfQyqnrBMXzrOjSzdQo-V-A
   'third_party/partition_alloc': {
-    'url': '{chromium_git}/chromium/src/base/allocator/partition_allocator.git@6f90cb04abb81942abaab7b63d34c02882208172',
+    'url': '{chromium_git}/chromium/src/base/allocator/partition_allocator.git@67fd2f86eef40b1357387e2b0fc1eaf3c67d6ed7',
     'condition': 'dawn_standalone',
   },
 }
@@ -475,7 +480,7 @@ hooks = [
                 '--no_resume',
                 '--extract',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/16.13.0',
+                '--bucket', 'chromium-nodejs/20.9.0',
                 Var('node_linux_x64_sha'),
                 '-o', 'third_party/node/node-linux-x64.tar.gz',
     ],
@@ -488,7 +493,7 @@ hooks = [
                 '--no_resume',
                 '--extract',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/16.13.0',
+                '--bucket', 'chromium-nodejs/20.9.0',
                 Var('node_darwin_x64_sha'),
                 '-o', 'third_party/node/node-darwin-x64.tar.gz',
     ],
@@ -501,7 +506,7 @@ hooks = [
                 '--no_resume',
                 '--extract',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/16.13.0',
+                '--bucket', 'chromium-nodejs/20.9.0',
                 Var('node_darwin_arm64_sha'),
                 '-o', 'third_party/node/node-darwin-arm64.tar.gz',
     ],
@@ -513,7 +518,7 @@ hooks = [
     'action': [ 'download_from_google_storage',
                 '--no_resume',
                 '--no_auth',
-                '--bucket', 'chromium-nodejs/16.13.0',
+                '--bucket', 'chromium-nodejs/20.9.0',
                 Var('node_win_x64_sha'),
                 '-o', 'third_party/node/node.exe',
     ],

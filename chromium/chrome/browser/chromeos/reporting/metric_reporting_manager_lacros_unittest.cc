@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/reporting/metric_reporting_manager_lacros.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback_helpers.h"
@@ -31,10 +32,10 @@
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
 #include "components/reporting/util/rate_limiter_interface.h"
+#include "components/reporting/util/rate_limiter_slide_window.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using ::testing::_;
 using ::testing::Address;
@@ -98,7 +99,7 @@ class FakeCollector : public CollectorBase {
  protected:
   // CollectorBase:
   void OnMetricDataCollected(bool is_event_driven,
-                             absl::optional<MetricData> metric_data) override {}
+                             std::optional<MetricData> metric_data) override {}
   bool CanCollect() const override { return true; }
 
  private:
@@ -111,6 +112,34 @@ class MockDelegate : public metrics::MetricReportingManagerLacros::Delegate {
   MockDelegate(const MockDelegate& other) = delete;
   MockDelegate& operator=(const MockDelegate& other) = delete;
   ~MockDelegate() override = default;
+
+  // Wraps around the `CreateMetricReportQueueMock` to simplify mocking
+  // `MetricReportQueue` creation for a specific rate limiter.
+  std::unique_ptr<MetricReportQueue> CreateMetricReportQueue(
+      EventType event_type,
+      Destination destination,
+      Priority priority,
+      std::unique_ptr<RateLimiterInterface> rate_limiter,
+      std::optional<SourceInfo> source_info) override {
+    return CreateMetricReportQueueMock(event_type, destination, priority,
+                                       rate_limiter.get(), source_info);
+  }
+
+  MOCK_METHOD(std::unique_ptr<MetricReportQueue>,
+              CreateMetricReportQueueMock,
+              (EventType event_type,
+               Destination destination,
+               Priority priority,
+               RateLimiterInterface* rate_limiter,
+               std::optional<SourceInfo> source_info),
+              ());
+
+  MOCK_METHOD(std::unique_ptr<RateLimiterSlideWindow>,
+              CreateSlidingWindowRateLimiter,
+              (size_t total_size,
+               base::TimeDelta time_window,
+               size_t bucket_count),
+              (override));
 
   MOCK_METHOD(bool, IsUserAffiliated, (Profile & profile), (const, override));
 
@@ -164,16 +193,7 @@ class MockDelegate : public metrics::MetricReportingManagerLacros::Delegate {
                const std::string& rate_setting_path,
                base::TimeDelta default_rate,
                int rate_unit_to_ms,
-               absl::optional<SourceInfo> source_info),
-              (override));
-
-  MOCK_METHOD(std::unique_ptr<MetricReportQueue>,
-              CreateMetricReportQueue,
-              (EventType event_type,
-               Destination destination,
-               Priority priority,
-               std::unique_ptr<RateLimiterInterface> rate_limiter,
-               absl::optional<SourceInfo> source_info),
+               std::optional<SourceInfo> source_info),
               (override));
 };
 
@@ -223,12 +243,23 @@ class MetricReportingManagerLacrosTest
                     Property(&SourceInfo::source_version, Not(IsEmpty()))))))
         .WillByDefault(Return(ByMove(std::move(telemetry_queue))));
 
-    auto event_queue = std::make_unique<test::FakeMetricReportQueue>();
-    event_queue_ptr_ = event_queue.get();
+    auto rate_limiter_slide_window = std::make_unique<RateLimiterSlideWindow>(
+        metrics::kWebsiteEventsTotalSize, metrics::kWebsiteEventsWindow,
+        metrics::kWebsiteEventsBucketCount);
+    auto* const rate_limiter_slide_window_ptr = rate_limiter_slide_window.get();
     ON_CALL(*delegate_,
-            CreateMetricReportQueue(EventType::kUser, Destination::EVENT_METRIC,
-                                    Priority::SLOW_BATCH, IsNull(), _))
-        .WillByDefault(Return(ByMove(std::move(event_queue))));
+            CreateSlidingWindowRateLimiter(metrics::kWebsiteEventsTotalSize,
+                                           metrics::kWebsiteEventsWindow,
+                                           metrics::kWebsiteEventsBucketCount))
+        .WillByDefault(Return(ByMove(std::move(rate_limiter_slide_window))));
+
+    auto website_event_queue = std::make_unique<test::FakeMetricReportQueue>();
+    website_event_queue_ptr_ = website_event_queue.get();
+    ON_CALL(*delegate_,
+            CreateMetricReportQueueMock(
+                EventType::kUser, Destination::EVENT_METRIC,
+                Priority::SLOW_BATCH, rate_limiter_slide_window_ptr, _))
+        .WillByDefault(Return(ByMove(std::move(website_event_queue))));
 
     ON_CALL(*delegate_, RegisterObserverWithCrosApiClient)
         .WillByDefault([]() { /** Do nothing **/ });
@@ -259,7 +290,7 @@ class MetricReportingManagerLacrosTest
   raw_ptr<TestingProfile> profile_;
   std::unique_ptr<MockDelegate> delegate_;
   raw_ptr<test::FakeMetricReportQueue> telemetry_queue_ptr_;
-  raw_ptr<test::FakeMetricReportQueue> event_queue_ptr_;
+  raw_ptr<test::FakeMetricReportQueue> website_event_queue_ptr_;
 };
 
 TEST_F(MetricReportingManagerLacrosTest, InitiallyDeprovisioned) {
@@ -358,7 +389,7 @@ TEST_P(MetricReportingManagerLacrosEventTest, Default) {
   ON_CALL(*delegate_, IsUserAffiliated(Address(profile_)))
       .WillByDefault(Return(test_case.is_affiliated));
   ON_CALL(*delegate_, CreateEventObserverManager(
-                          _, event_queue_ptr_.get(), _,
+                          _, website_event_queue_ptr_.get(), _,
                           test_case.setting_data.enable_setting_path,
                           test_case.setting_data.setting_enabled_default_value,
                           _, base::TimeDelta()))

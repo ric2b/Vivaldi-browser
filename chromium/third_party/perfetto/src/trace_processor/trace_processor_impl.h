@@ -22,6 +22,7 @@
 #include <atomic>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -109,19 +110,15 @@ class TraceProcessorImpl : public TraceProcessor,
 
   template <typename Table>
   void RegisterStaticTable(const Table& table) {
-    engine_.RegisterStaticTable(table, Table::Name());
+    engine_->RegisterStaticTable(table, Table::Name());
   }
-
-  void RegisterStaticTableFunction(std::unique_ptr<StaticTableFunction> fn) {
-    engine_.RegisterStaticTableFunction(std::move(fn));
-  }
-
-  template <typename View>
-  void RegisterView(const View& view);
 
   bool IsRootMetricField(const std::string& metric_name);
 
-  PerfettoSqlEngine engine_;
+  void InitPerfettoSqlEngine();
+
+  const Config config_;
+  std::unique_ptr<PerfettoSqlEngine> engine_;
 
   DescriptorPool pool_;
 
@@ -132,10 +129,8 @@ class TraceProcessorImpl : public TraceProcessor,
   // to prevent single-flow compiler optimizations in ExecuteQuery().
   std::atomic<bool> query_interrupted_{false};
 
-  // Keeps track of the tables created by the ingestion process. This is used
-  // by RestoreInitialTables() to delete all the tables/view that have been
-  // created after that point.
-  std::vector<std::string> initial_tables_;
+  // Track the number of objects registered with SQLite after the constructor.
+  uint64_t sqlite_objects_post_constructor_initialization_ = 0;
 
   std::string current_trace_name_;
   uint64_t bytes_parsed_ = 0;

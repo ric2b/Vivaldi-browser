@@ -25,6 +25,7 @@ import {
 import {MetricResult} from '../common/metric_data';
 import {CurrentSearchResults, SearchSummary} from '../common/search_data';
 import {raf} from '../core/raf_scheduler';
+import {HttpRpcState} from '../trace_processor/http_rpc_engine';
 
 import {
   CounterDetails,
@@ -64,7 +65,8 @@ export function clearOverviewData() {
 export function publishTrackData(args: {id: string, data: {}}) {
   globals.setTrackData(args.id, args.data);
   if ([LogExistsKey, LogBoundsKey, LogEntriesKey].includes(args.id)) {
-    const data = globals.trackDataStore.get(LogExistsKey) as LogExists;
+    const trackDataStore = globals.trackDataStore;
+    const data = trackDataStore.get(LogExistsKey) as LogExists | undefined;
     if (data && data.exists) raf.scheduleFullRedraw();
   } else {
     raf.scheduleRedraw();
@@ -79,6 +81,11 @@ export function publishMetricResult(metricResult: MetricResult) {
 export function publishSelectedFlows(selectedFlows: Flow[]) {
   globals.selectedFlows = selectedFlows;
   globals.publishRedraw();
+}
+
+export function publishHttpRpcState(httpRpcState: HttpRpcState) {
+  globals.httpRpcState = httpRpcState;
+  raf.scheduleFullRedraw();
 }
 
 export function publishCounterDetails(click: CounterDetails) {
@@ -101,9 +108,11 @@ export function publishFtraceCounters(counters: FtraceStat[]) {
   globals.publishRedraw();
 }
 
-export function publishRealtimeOffset(offset: time, utcOffset: time) {
+export function publishRealtimeOffset(
+    offset: time, utcOffset: time, traceTzOffset: time) {
   globals.realtimeOffset = offset;
   globals.utcOffset = utcOffset;
+  globals.traceTzOffset = traceTzOffset;
   globals.publishRedraw();
 }
 
@@ -147,7 +156,6 @@ export function publishTraceErrors(numErrors: number) {
 
 export function publishMetricError(error: string) {
   globals.setMetricError(error);
-  globals.logging.logError(error, false);
   globals.publishRedraw();
 }
 
@@ -214,5 +222,10 @@ export function publishConnectedFlows(connectedFlows: Flow[]) {
 
 export function publishFtracePanelData(data: FtracePanelData) {
   globals.ftracePanelData = data;
+  globals.publishRedraw();
+}
+
+export function publishShowPanningHint() {
+  globals.showPanningHint = true;
   globals.publishRedraw();
 }

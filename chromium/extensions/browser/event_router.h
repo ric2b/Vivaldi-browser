@@ -5,8 +5,10 @@
 #ifndef EXTENSIONS_BROWSER_EVENT_ROUTER_H_
 #define EXTENSIONS_BROWSER_EVENT_ROUTER_H_
 
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -17,7 +19,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
-#include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/render_process_host_observer.h"
@@ -31,13 +32,14 @@
 #include "extensions/browser/service_worker/worker_id.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/mojom/context_type.mojom-forward.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "extensions/common/mojom/event_router.mojom.h"
+#include "extensions/common/mojom/host_id.mojom.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 class GURL;
@@ -68,6 +70,11 @@ enum class EventDispatchSource : int {
   // Event went through EventRouter::DispatchEventToSender() dispatch flow.
   kDispatchEventToSender,
 };
+
+// The upper bound of time allowed for event dispatch histograms. Also used in
+// histograms for determining when an event is "stale" (it has not been acked by
+// the renderer to the browser by this time).
+inline constexpr base::TimeDelta kEventAckMetricTimeLimit = base::Minutes(5);
 
 // TODO(lazyboy): Document how extension events work, including how listeners
 // are registered and how listeners are tracked in renderer and browser process.
@@ -134,7 +141,7 @@ class EventRouter : public KeyedService,
   // `EventRouter` is shared between on- and off-the-record contexts.
   void DispatchEventToSender(content::RenderProcessHost* rph,
                              content::BrowserContext* browser_context,
-                             const std::string& extension_id,
+                             const mojom::HostID& host_id,
                              events::HistogramValue histogram_value,
                              const std::string& event_name,
                              int worker_thread_id,
@@ -382,7 +389,7 @@ class EventRouter : public KeyedService,
       content::RenderProcessHost* rph,
       int worker_thread_id,
       content::BrowserContext* browser_context,
-      const std::string& extension_id,
+      const mojom::HostID& host_id,
       int event_id,
       const std::string& event_name,
       base::Value::List event_args,
@@ -479,13 +486,18 @@ class EventRouter : public KeyedService,
                                const std::string& event_name,
                                base::TimeTicks dispatch_start_time,
                                int64_t service_worker_version_id,
-                               EventDispatchSource dispatch_source);
-  void DecrementInFlightEventsForServiceWorker(const WorkerId& worker_id,
-                                               int event_id);
+                               EventDispatchSource dispatch_source,
+                               bool lazy_background_active_on_dispatch);
+  void DecrementInFlightEventsForServiceWorker(
+      const WorkerId& worker_id,
+      int event_id,
+      // Always false since this is only possibly true for lazy background page.
+      bool event_will_run_in_lazy_background_page_script);
   void DecrementInFlightEventsForRenderFrameHost(
       int render_process_host,
       const ExtensionId& extension_id,
-      int event_id);
+      int event_id,
+      bool event_will_run_in_lazy_background_page_script);
 
   void RouteDispatchEvent(
       content::RenderProcessHost* rph,
@@ -560,10 +572,10 @@ struct Event {
   // given context and extension, and false otherwise.
   using WillDispatchCallback = base::RepeatingCallback<bool(
       content::BrowserContext*,
-      Feature::Context,
+      mojom::ContextType,
       const Extension*,
       const base::Value::Dict*,
-      absl::optional<base::Value::List>& event_args_out,
+      std::optional<base::Value::List>& event_args_out,
       mojom::EventFilteringInfoPtr& event_filtering_info_out)>;
 
   using DidDispatchCallback = base::RepeatingCallback<void(const EventTarget&)>;
@@ -586,6 +598,9 @@ struct Event {
   // tab only works if extension is allowed incognito access).
   const raw_ptr<content::BrowserContext> restrict_to_browser_context;
 
+  // If present, then the event will only be sent to this context type.
+  const absl::optional<mojom::ContextType> restrict_to_context_type;
+
   // If not empty, the event is only sent to extensions with host permissions
   // for this url.
   GURL event_url;
@@ -593,6 +608,12 @@ struct Event {
   // When the event router received the event to be dispatched to the extension.
   // Used in UMA histograms.
   base::TimeTicks dispatch_start_time;
+
+  // `true` if the event was dispatched to a active/running lazy background.
+  // This is only used for lazy background contexts (event pages and service
+  // workers), it is unused for persistent background pages. Used in UMA
+  // histograms.
+  bool lazy_background_active_on_dispatch;
 
   // Whether a user gesture triggered the event.
   EventRouter::UserGestureState user_gesture;
@@ -626,21 +647,25 @@ struct Event {
   // option to a constructor version for clients that need to disptach events to
   // related browser_contexts. See https://crbug.com/726022.
   Event(events::HistogramValue histogram_value,
-        base::StringPiece event_name,
+        std::string_view event_name,
         base::Value::List event_args);
 
   Event(events::HistogramValue histogram_value,
-        base::StringPiece event_name,
-        base::Value::List event_args,
-        content::BrowserContext* restrict_to_browser_context);
-
-  Event(events::HistogramValue histogram_value,
-        base::StringPiece event_name,
+        std::string_view event_name,
         base::Value::List event_args,
         content::BrowserContext* restrict_to_browser_context,
+        absl::optional<mojom::ContextType> restrict_to_context_type =
+            absl::nullopt);
+
+  Event(events::HistogramValue histogram_value,
+        std::string_view event_name,
+        base::Value::List event_args,
+        content::BrowserContext* restrict_to_browser_context,
+        absl::optional<mojom::ContextType> restrict_to_context_type,
         const GURL& event_url,
         EventRouter::UserGestureState user_gesture,
         mojom::EventFilteringInfoPtr info,
+        bool lazy_background_active_on_dispatch = false,
         base::TimeTicks dispatch_start_time = base::TimeTicks{});
 
   ~Event();

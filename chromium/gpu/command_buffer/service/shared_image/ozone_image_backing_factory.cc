@@ -57,11 +57,13 @@ gfx::BufferUsage GetBufferUsage(uint32_t usage) {
 }
 
 constexpr uint32_t kSupportedUsage =
-    SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+    SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
+    SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
-    SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
-    SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_WEBGPU |
-    SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE | SHARED_IMAGE_USAGE_VIDEO_DECODE |
+    SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+    SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_SCANOUT |
+    SHARED_IMAGE_USAGE_WEBGPU | SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE |
+    SHARED_IMAGE_USAGE_VIDEO_DECODE |
     SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_RASTER_DELEGATED_COMPOSITING |
     SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
@@ -91,7 +93,7 @@ OzoneImageBackingFactory::CreateSharedImageInternal(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
-    absl::optional<gfx::BufferUsage> buffer_usage) {
+    std::optional<gfx::BufferUsage> buffer_usage) {
   gfx::BufferFormat buffer_format = ToBufferFormat(format);
   VulkanDeviceQueue* device_queue = nullptr;
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -278,13 +280,14 @@ bool OzoneImageBackingFactory::IsSupported(
     return false;
   }
 
-  bool used_by_skia = (usage & SHARED_IMAGE_USAGE_RASTER) ||
+  bool used_by_skia = (usage & SHARED_IMAGE_USAGE_RASTER_READ) ||
+                      (usage & SHARED_IMAGE_USAGE_RASTER_WRITE) ||
                       (usage & SHARED_IMAGE_USAGE_DISPLAY_READ) ||
                       (usage & SHARED_IMAGE_USAGE_DISPLAY_WRITE);
   bool used_by_vulkan =
       used_by_skia && gr_context_type == GrContextType::kVulkan;
   bool used_by_webgpu = usage & SHARED_IMAGE_USAGE_WEBGPU;
-  bool used_by_gl = (usage & SHARED_IMAGE_USAGE_GLES2) ||
+  bool used_by_gl = (HasGLES2ReadOrWriteUsage(usage)) ||
                     (used_by_skia && gr_context_type == GrContextType::kGL);
   if (used_by_vulkan && !CanImportNativePixmapToVulkan()) {
     return false;
@@ -293,8 +296,10 @@ bool OzoneImageBackingFactory::IsSupported(
     return false;
   }
   auto* factory = ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
-  if (!factory->CanCreateNativePixmapForFormat(ToBufferFormat(format)))
+  if (HasEquivalentBufferFormat(format) &&
+      !factory->CanCreateNativePixmapForFormat(ToBufferFormat(format))) {
     return false;
+  }
 
   ui::GLOzone* gl_ozone = factory->GetCurrentGLOzone();
   if (used_by_gl && (!gl_ozone || !gl_ozone->CanImportNativePixmap())) {

@@ -48,8 +48,8 @@ static void aom_fdct4x4_helper(const int16_t *input, int stride,
     // Must expand all elements to s32. See 'needs32' comment in fwd_txfm.c.
     const int32x4_t s_0_p_s_1 = vaddl_s16(s_0, s_1);
     const int32x4_t s_0_m_s_1 = vsubl_s16(s_0, s_1);
-    const int32x4_t temp1 = vmulq_n_s32(s_0_p_s_1, cospi_16_64);
-    const int32x4_t temp2 = vmulq_n_s32(s_0_m_s_1, cospi_16_64);
+    const int32x4_t temp1 = vmulq_n_s32(s_0_p_s_1, (int32_t)cospi_16_64);
+    const int32x4_t temp2 = vmulq_n_s32(s_0_m_s_1, (int32_t)cospi_16_64);
 
     // fdct_round_shift
     int16x4_t out_0 = vrshrn_n_s32(temp1, DCT_CONST_BITS);
@@ -57,11 +57,13 @@ static void aom_fdct4x4_helper(const int16_t *input, int stride,
 
     // s_3 * cospi_8_64 + s_2 * cospi_24_64
     // s_3 * cospi_24_64 - s_2 * cospi_8_64
-    const int32x4_t s_3_cospi_8_64 = vmull_n_s16(s_3, cospi_8_64);
-    const int32x4_t s_3_cospi_24_64 = vmull_n_s16(s_3, cospi_24_64);
+    const int32x4_t s_3_cospi_8_64 = vmull_n_s16(s_3, (int32_t)cospi_8_64);
+    const int32x4_t s_3_cospi_24_64 = vmull_n_s16(s_3, (int32_t)cospi_24_64);
 
-    const int32x4_t temp3 = vmlal_n_s16(s_3_cospi_8_64, s_2, cospi_24_64);
-    const int32x4_t temp4 = vmlsl_n_s16(s_3_cospi_24_64, s_2, cospi_8_64);
+    const int32x4_t temp3 =
+        vmlal_n_s16(s_3_cospi_8_64, s_2, (int32_t)cospi_24_64);
+    const int32x4_t temp4 =
+        vmlsl_n_s16(s_3_cospi_24_64, s_2, (int32_t)cospi_8_64);
 
     // fdct_round_shift
     int16x4_t out_1 = vrshrn_n_s32(temp3, DCT_CONST_BITS);
@@ -298,22 +300,5 @@ void aom_fdct8x8_neon(const int16_t *input, int16_t *final_output, int stride) {
     vst1q_s16(&final_output[5 * 8], input_5);
     vst1q_s16(&final_output[6 * 8], input_6);
     vst1q_s16(&final_output[7 * 8], input_7);
-  }
-}
-
-void aom_fdct8x8_1_neon(const int16_t *input, int16_t *output, int stride) {
-  int r;
-  int16x8_t sum = vld1q_s16(&input[0]);
-  for (r = 1; r < 8; ++r) {
-    const int16x8_t input_00 = vld1q_s16(&input[r * stride]);
-    sum = vaddq_s16(sum, input_00);
-  }
-  {
-    const int32x4_t a = vpaddlq_s16(sum);
-    const int64x2_t b = vpaddlq_s32(a);
-    const int32x2_t c = vadd_s32(vreinterpret_s32_s64(vget_low_s64(b)),
-                                 vreinterpret_s32_s64(vget_high_s64(b)));
-    output[0] = vget_lane_s16(vreinterpret_s16_s32(c), 0);
-    output[1] = 0;
   }
 }

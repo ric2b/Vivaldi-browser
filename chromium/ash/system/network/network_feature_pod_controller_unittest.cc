@@ -19,7 +19,6 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "ash/system/unified/unified_system_tray_model.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/test/ash_test_base.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -320,10 +319,6 @@ class NetworkFeaturePodControllerTest : public AshTestBase {
         ->unified_system_tray_controller();
   }
 
-  UnifiedSystemTrayView* unified_view() {
-    return GetPrimaryUnifiedSystemTray()->bubble()->unified_view();
-  }
-
   QuickSettingsView* quick_settings_view() {
     return GetPrimaryUnifiedSystemTray()->bubble()->quick_settings_view();
   }
@@ -344,7 +339,7 @@ class NetworkFeaturePodControllerTest : public AshTestBase {
   std::string wifi_path_;
   std::string tether_path_;
   std::string tether_wifi_path_;
-  raw_ptr<FeatureTile, DanglingUntriaged | ExperimentalAsh> feature_tile_;
+  raw_ptr<FeatureTile, DanglingUntriaged> feature_tile_;
   std::unique_ptr<NetworkFeaturePodController> network_feature_pod_controller_;
 };
 

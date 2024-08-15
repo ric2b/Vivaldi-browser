@@ -43,7 +43,7 @@
 <translation id="8106081041558092062">{HOURS, plural, =1 {преди 1 час} one {преди # час} other{преди # часа}}</translation>
 <translation id="8131263257437993507">{SECONDS, plural, =1 {още 1 сек} one {още # сек} other {още # сек}}</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> КБ/сек</translation>
-<translation id="8798099450830957504">По подразбиране</translation>
+<translation id="8798099450830957504">Фабрично</translation>
 <translation id="8901569739625249689"><ph name="QUANTITY" /> КБ</translation>
 <translation id="9044832324875206639">{SECONDS, plural, =1 {1 сек} one {# сек} other {# сек}}</translation>
 </translationbundle>

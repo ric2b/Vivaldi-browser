@@ -34,9 +34,9 @@ const UIStrings = {
    */
   error: 'Error',
   /**
-   *@description Title for the developer resources tab
+   *@description Title for the Developer resources tab
    */
-  developerResources: 'Developer Resources',
+  developerResources: 'Developer resources',
   /**
    *@description Text for a context menu entry
    */
@@ -77,12 +77,13 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
     this.isVisibleFilter = isVisibleFilter;
     this.highlightRegExp = null;
 
+    const k = Platform.StringUtilities.kebab;
     const columns = [
-      {id: 'status', title: i18nString(UIStrings.status), width: '60px', fixedWidth: true, sortable: true},
-      {id: 'url', title: i18nString(UIStrings.url), width: '250px', fixedWidth: false, sortable: true},
-      {id: 'initiator', title: i18nString(UIStrings.initiator), width: '80px', fixedWidth: false, sortable: true},
+      {id: k('status'), title: i18nString(UIStrings.status), width: '60px', fixedWidth: true, sortable: true},
+      {id: k('url'), title: i18nString(UIStrings.url), width: '250px', fixedWidth: false, sortable: true},
+      {id: k('initiator'), title: i18nString(UIStrings.initiator), width: '80px', fixedWidth: false, sortable: true},
       {
-        id: 'size',
+        id: k('size'),
         title: i18nString(UIStrings.totalBytes),
         width: '80px',
         fixedWidth: true,
@@ -90,13 +91,13 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
         align: DataGrid.DataGrid.Align.Right,
       },
       {
-        id: 'errorMessage',
+        id: k('error-message'),
         title: i18nString(UIStrings.error),
         width: '200px',
         fixedWidth: false,
         sortable: true,
       },
-    ] as DataGrid.DataGrid.ColumnDescriptor[];
+    ];
     this.dataGrid = new DataGrid.SortableDataGrid.SortableDataGrid({
       displayName: i18nString(UIStrings.developerResources),
       columns,
@@ -105,6 +106,7 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
       deleteCallback: undefined,
     });
     this.dataGrid.setResizeMethod(DataGrid.DataGrid.ResizeMethod.Last);
+    this.dataGrid.setStriped(true);
     this.dataGrid.element.classList.add('flex-auto');
     this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SortingChanged, this.sortingChanged, this);
     this.dataGrid.setRowContextMenuCallback(this.populateContextMenu.bind(this));
@@ -122,11 +124,11 @@ export class DeveloperResourcesListView extends UI.Widget.VBox {
     const item = (gridNode as GridNode).item;
     contextMenu.clipboardSection().appendItem(i18nString(UIStrings.copyUrl), () => {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(item.url);
-    });
+    }, {jslogContext: 'copyURL'});
     if (item.initiator.initiatorUrl) {
       contextMenu.clipboardSection().appendItem(i18nString(UIStrings.copyInitiatorUrl), () => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(item.initiator.initiatorUrl);
-      });
+      }, {jslogContext: 'copyInitiatorURL'});
     }
   }
 
@@ -274,7 +276,7 @@ class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<GridNode> 
         }
         break;
       }
-      case 'errorMessage': {
+      case 'error-message': {
         cell.classList.add('error-message');
         if (this.item.errorMessage) {
           cell.textContent = this.item.errorMessage;
@@ -314,7 +316,7 @@ class GridNode extends DataGrid.SortableDataGrid.SortableDataGridNode<GridNode> 
       case 'initiator':
         return (a: GridNode, b: GridNode): number =>
                    (a.item.initiator.initiatorUrl || '').localeCompare(b.item.initiator.initiatorUrl || '');
-      case 'errorMessage':
+      case 'error-message':
         return (a: GridNode, b: GridNode): number =>
                    (a.item.errorMessage || '').localeCompare(b.item.errorMessage || '');
       default:

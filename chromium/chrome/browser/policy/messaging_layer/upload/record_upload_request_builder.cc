@@ -4,6 +4,7 @@
 
 #include "chrome/browser/policy/messaging_layer/upload/record_upload_request_builder.h"
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,37 +17,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "components/reporting/proto/synced/record.pb.h"
+#include "components/reporting/util/encrypted_reporting_json_keys.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace reporting {
-
-namespace {
-
-// UploadEncryptedReportingRequestBuilder list key
-constexpr char kEncryptedRecordListKey[] = "encryptedRecord";
-constexpr char kAttachEncryptionSettingsKey[] = "attachEncryptionSettings";
-constexpr std::string_view kConfigurationFileVersion =
-    "configurationFileVersion";
-constexpr char kSourcePath[] = "source";
-
-// EncryptedRecordDictionaryBuilder strings
-constexpr char kEncryptedWrappedRecord[] = "encryptedWrappedRecord";
-constexpr char kSequenceInformationKey[] = "sequenceInformation";
-constexpr char kEncryptionInfoKey[] = "encryptionInfo";
-constexpr char kCompressionInformationKey[] = "compressionInformation";
-
-// SequenceInformationDictionaryBuilder strings located in header file.
-
-// EncryptionInfoDictionaryBuilder strings
-constexpr char kEncryptionKey[] = "encryptionKey";
-constexpr char kPublicKeyId[] = "publicKeyId";
-
-// CompressionInformationDictionaryBuilder strings
-constexpr char kCompressionAlgorithmKey[] = "compressionAlgorithm";
-
-}  // namespace
-
 // Feature that controls if the configuration file should be requested
 // from the server.
 BASE_FEATURE(kShouldRequestConfigurationFile,
@@ -105,7 +79,7 @@ UploadEncryptedReportingRequestBuilder::AddRecord(
           .Build();
   if (!record_result.has_value()) {
     // Record has errors. Stop here.
-    result_ = absl::nullopt;
+    result_ = std::nullopt;
     return *this;
   }
 
@@ -121,22 +95,20 @@ UploadEncryptedReportingRequestBuilder::SetRequestId(
     return *this;
   }
 
-  result_->Set(UploadEncryptedReportingRequestBuilder::kRequestId, request_id);
+  result_->Set(reporting::json_keys::kRequestId, request_id);
 
   return *this;
 }
 
-absl::optional<base::Value::Dict>
+std::optional<base::Value::Dict>
 UploadEncryptedReportingRequestBuilder::Build() {
   // Ensure that if result_ has value, then it must not have a non-string
   // requestId.
   CHECK(!(result_.has_value() &&
-          result_->Find(UploadEncryptedReportingRequestBuilder::kRequestId) &&
-          !result_->FindString(
-              UploadEncryptedReportingRequestBuilder::kRequestId)));
+          result_->Find(reporting::json_keys::kRequestId) &&
+          !result_->FindString(reporting::json_keys::kRequestId)));
   if (result_.has_value() &&
-      result_->FindString(UploadEncryptedReportingRequestBuilder::kRequestId) ==
-          nullptr) {
+      result_->FindString(reporting::json_keys::kRequestId) == nullptr) {
     SetRequestId(base::Token::CreateRandom().ToString());
   }
   return std::move(result_);
@@ -145,24 +117,24 @@ UploadEncryptedReportingRequestBuilder::Build() {
 // static
 std::string_view
 UploadEncryptedReportingRequestBuilder::GetEncryptedRecordListPath() {
-  return kEncryptedRecordListKey;
+  return reporting::json_keys::kEncryptedRecordList;
 }
 
 // static
 std::string_view
 UploadEncryptedReportingRequestBuilder::GetAttachEncryptionSettingsPath() {
-  return kAttachEncryptionSettingsKey;
+  return reporting::json_keys::kAttachEncryptionSettings;
 }
 
 // static
 std::string_view
 UploadEncryptedReportingRequestBuilder::GetConfigurationFileVersionPath() {
-  return kConfigurationFileVersion;
+  return reporting::json_keys::kConfigurationFileVersion;
 }
 
 // static
 std::string_view UploadEncryptedReportingRequestBuilder::GetSourcePath() {
-  return kSourcePath;
+  return reporting::json_keys::kSource;
 }
 
 EncryptedRecordDictionaryBuilder::EncryptedRecordDictionaryBuilder(
@@ -236,44 +208,41 @@ EncryptedRecordDictionaryBuilder::EncryptedRecordDictionaryBuilder(
 
 EncryptedRecordDictionaryBuilder::~EncryptedRecordDictionaryBuilder() = default;
 
-absl::optional<base::Value::Dict> EncryptedRecordDictionaryBuilder::Build() {
+std::optional<base::Value::Dict> EncryptedRecordDictionaryBuilder::Build() {
   return std::move(result_);
 }
 
 // static
 std::string_view
 EncryptedRecordDictionaryBuilder::GetEncryptedWrappedRecordPath() {
-  return kEncryptedWrappedRecord;
+  return json_keys::kEncryptedWrappedRecord;
 }
 
 // static
 std::string_view
 EncryptedRecordDictionaryBuilder::GetSequenceInformationKeyPath() {
-  return kSequenceInformationKey;
+  return reporting::json_keys::kSequenceInformation;
 }
 
 // static
 std::string_view EncryptedRecordDictionaryBuilder::GetEncryptionInfoPath() {
-  return kEncryptionInfoKey;
+  return json_keys::kEncryptionInfo;
 }
 
 // static
 std::string_view
 EncryptedRecordDictionaryBuilder::GetCompressionInformationPath() {
-  return kCompressionInformationKey;
+  return json_keys::kCompressionInformation;
 }
 
 SequenceInformationDictionaryBuilder::SequenceInformationDictionaryBuilder(
     const SequenceInformation& sequence_information) {
   bool generation_guid_is_invalid = false;
 #if BUILDFLAG(IS_CHROMEOS)
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  //  Generation guid is required for unmanaged ChromeOS devices.
-  generation_guid_is_invalid =
-      !policy::ManagementServiceFactory::GetForPlatform()
-           ->HasManagementAuthority(
-               policy::EnterpriseManagementAuthority::CLOUD_DOMAIN) &&
-      !sequence_information.has_generation_guid();
+  if (GenerationGuidIsRequired()) {
+    generation_guid_is_invalid = !sequence_information.has_generation_guid() ||
+                                 sequence_information.generation_guid().empty();
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   // SequenceInformation requires these fields be set. `generation_guid` is
@@ -298,30 +267,41 @@ SequenceInformationDictionaryBuilder::SequenceInformationDictionaryBuilder(
 SequenceInformationDictionaryBuilder::~SequenceInformationDictionaryBuilder() =
     default;
 
-absl::optional<base::Value::Dict>
-SequenceInformationDictionaryBuilder::Build() {
+std::optional<base::Value::Dict> SequenceInformationDictionaryBuilder::Build() {
   return std::move(result_);
 }
 
 // static
 std::string_view SequenceInformationDictionaryBuilder::GetSequencingIdPath() {
-  return UploadEncryptedReportingRequestBuilder::kSequencingId;
+  return reporting::json_keys::kSequencingId;
 }
 
 // static
 std::string_view SequenceInformationDictionaryBuilder::GetGenerationIdPath() {
-  return UploadEncryptedReportingRequestBuilder::kGenerationId;
+  return reporting::json_keys::kGenerationId;
 }
 
 // static
 std::string_view SequenceInformationDictionaryBuilder::GetPriorityPath() {
-  return UploadEncryptedReportingRequestBuilder::kPriority;
+  return reporting::json_keys::kPriority;
+}
+
+#if BUILDFLAG(IS_CHROMEOS)
+// static
+std::string_view SequenceInformationDictionaryBuilder::GetGenerationGuidPath() {
+  return json_keys::kGenerationGuid;
 }
 
 // static
-#if BUILDFLAG(IS_CHROMEOS)
-std::string_view SequenceInformationDictionaryBuilder::GetGenerationGuidPath() {
-  return UploadEncryptedReportingRequestBuilder::kGenerationGuid;
+bool SequenceInformationDictionaryBuilder::GenerationGuidIsRequired() {
+  // Returns true if this is an unmanaged ChromeOS device.
+  // Generation guid is only required for unmanaged ChromeOS devices. Enterprise
+  // managed ChromeOS devices or device with managed browser are not required to
+  // use the version of `Storage` that produces generation guids.
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  return !policy::ManagementServiceFactory::GetForPlatform()
+              ->HasManagementAuthority(
+                  policy::EnterpriseManagementAuthority::CLOUD_DOMAIN);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -346,18 +326,18 @@ EncryptionInfoDictionaryBuilder::EncryptionInfoDictionaryBuilder(
 
 EncryptionInfoDictionaryBuilder::~EncryptionInfoDictionaryBuilder() = default;
 
-absl::optional<base::Value::Dict> EncryptionInfoDictionaryBuilder::Build() {
+std::optional<base::Value::Dict> EncryptionInfoDictionaryBuilder::Build() {
   return std::move(result_);
 }
 
 // static
 std::string_view EncryptionInfoDictionaryBuilder::GetEncryptionKeyPath() {
-  return kEncryptionKey;
+  return json_keys::kEncryptionKey;
 }
 
 // static
 std::string_view EncryptionInfoDictionaryBuilder::GetPublicKeyIdPath() {
-  return kPublicKeyId;
+  return json_keys::kPublicKeyId;
 }
 
 CompressionInformationDictionaryBuilder::
@@ -380,7 +360,7 @@ CompressionInformationDictionaryBuilder::
 CompressionInformationDictionaryBuilder::
     ~CompressionInformationDictionaryBuilder() = default;
 
-absl::optional<base::Value::Dict>
+std::optional<base::Value::Dict>
 CompressionInformationDictionaryBuilder::Build() {
   return std::move(result_);
 }
@@ -388,7 +368,7 @@ CompressionInformationDictionaryBuilder::Build() {
 // static
 std::string_view
 CompressionInformationDictionaryBuilder::GetCompressionAlgorithmPath() {
-  return kCompressionAlgorithmKey;
+  return json_keys::kCompressionAlgorithm;
 }
 
 }  // namespace reporting

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(missing_docs, unused_results)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use crypto_provider::{CryptoProvider, CryptoRng};
 use crypto_provider_default::CryptoProviderImpl;

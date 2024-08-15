@@ -43,6 +43,59 @@ pub type RawPublicKey = [u8; PUBLIC_KEY_LENGTH];
 /// A byte buffer the size of a ed25519 `PrivateKey`.
 pub type RawPrivateKey = [u8; PRIVATE_KEY_LENGTH];
 
+/// A permission token which may be supplied to methods which allow
+/// converting private keys to/from raw bytes.
+///
+/// In general, operations of this kind should only be done in
+/// development-tools, tests, or in credential storage layers
+/// to prevent accidental exposure of the private key.
+pub struct RawPrivateKeyPermit {
+    _marker: (),
+}
+
+impl RawPrivateKeyPermit {
+    pub(crate) fn new() -> Self {
+        Self { _marker: () }
+    }
+}
+
+#[cfg(feature = "raw_private_key_permit")]
+impl core::default::Default for RawPrivateKeyPermit {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A crypto-provider-independent representation of the private
+/// key of an ed25519 key-pair, kept in such a way that
+/// it does not permit de-structuring it into raw bytes,
+/// nor constructing one from raw bytes.
+///
+/// Useful for when you want a data-structure to be
+/// crypto-provider independent and contain a private key.
+#[derive(Clone)]
+pub struct PrivateKey {
+    wrapped: RawPrivateKey,
+}
+
+impl PrivateKey {
+    /// Derives the public key corresponding to this private key.
+    pub fn derive_public_key<E: Ed25519Provider>(&self) -> E::PublicKey {
+        let key_pair = E::KeyPair::from_private_key(self);
+        key_pair.public()
+    }
+    /// Returns the raw bytes of this private key.
+    /// This operation is only possible while holding a [`RawPrivateKeyPermit`].
+    pub fn raw_private_key(&self, _permit: &RawPrivateKeyPermit) -> RawPrivateKey {
+        self.wrapped
+    }
+    /// Constructs a private key from the raw bytes of the key.
+    /// This operation is only possible while holding a [`RawPrivateKeyPermit`].
+    pub fn from_raw_private_key(wrapped: RawPrivateKey, _permit: &RawPrivateKeyPermit) -> Self {
+        Self { wrapped }
+    }
+}
+
 /// The keypair which includes both public and secret halves of an asymmetric key.
 pub trait KeyPair: Sized {
     /// The ed25519 public key, used when verifying a message
@@ -52,14 +105,36 @@ pub trait KeyPair: Sized {
     type Signature: Signature;
 
     /// Returns the private key bytes of the `KeyPair`.
-    /// This method should only ever be called by code which securely stores private credentials.
-    fn private_key(&self) -> RawPrivateKey;
+    /// This operation is only possible while holding a [`RawPrivateKeyPermit`].
+    fn raw_private_key(&self, _permit: &RawPrivateKeyPermit) -> RawPrivateKey;
 
     /// Builds a key-pair from a `RawPrivateKey` array of bytes.
-    /// This should only ever be called by code which securely stores private credentials.
-    fn from_private_key(bytes: &RawPrivateKey) -> Self
+    /// This operation is only possible while holding a [`RawPrivateKeyPermit`].
+    fn from_raw_private_key(bytes: &RawPrivateKey, _permit: &RawPrivateKeyPermit) -> Self
     where
         Self: Sized;
+
+    /// Returns the private key of the `KeyPair` in an opaque form.
+    fn private_key(&self) -> PrivateKey {
+        // We're okay to reach in and grab the bytes of the private key,
+        // since the way that we're exposing it would require a valid
+        // [`RawPrivateKeyPermit`] to extract them again.
+        let wrapped = self.raw_private_key(&RawPrivateKeyPermit::new());
+        PrivateKey { wrapped }
+    }
+
+    /// Builds a key-pair from a [`PrivateKey`], given in an opaque form.
+    fn from_private_key(private_key: &PrivateKey) -> Self
+    where
+        Self: Sized,
+    {
+        // We're okay to reach in and construct an instance from
+        // the bytes of the private key, since the way that they
+        // were originally expressed would still require a valid
+        // [`RawPrivateKeyPermit`] to access them.
+        let raw_private_key = &private_key.wrapped;
+        Self::from_raw_private_key(raw_private_key, &RawPrivateKeyPermit::new())
+    }
 
     /// Sign the given message and return a digital signature
     fn sign(&self, msg: &[u8]) -> Self::Signature;

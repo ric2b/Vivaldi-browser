@@ -15,6 +15,8 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "extensions/buildflags/buildflags.h"
+#include "extensions/common/mojom/automation_registry.mojom.h"
+#include "extensions/common/mojom/event_router.mojom.h"
 #include "extensions/common/mojom/frame.mojom.h"
 #include "extensions/common/mojom/renderer_host.mojom.h"
 #include "extensions/common/mojom/view_type.mojom.h"
@@ -91,6 +93,12 @@ class ExtensionFrameHelper
       content::RenderFrame* relative_to_frame,
       const std::string& name);
 
+  // Parse a `v8_frame_token_string` and find the associated
+  // RenderFrame associated with that token.
+  static content::RenderFrame* FindFrameFromFrameTokenString(
+      v8::Isolate* isolate,
+      v8::Local<v8::Value> v8_frame_token_string);
+
   // Returns true if the given |context| is for any frame in the extension's
   // event page.
   // TODO(devlin): This isn't really used properly, and should probably be
@@ -99,6 +107,7 @@ class ExtensionFrameHelper
 
   mojom::ViewType view_type() const { return view_type_; }
   int tab_id() const { return tab_id_; }
+  bool IsVivaldiPanel() const { return vivaldi_panel_; }
   int browser_window_id() const { return browser_window_id_; }
   bool did_create_current_document_element() const {
     return did_create_current_document_element_;
@@ -108,6 +117,7 @@ class ExtensionFrameHelper
   void SetFrameName(const std::string& name) override;
   void SetSpatialNavigationEnabled(bool enabled) override;
   void SetTabId(int32_t id) override;
+  void SetVivaldiPanelId(int32_t id) override;
   void AppWindowClosed(bool send_onclosed) override;
   void NotifyRenderViewType(mojom::ViewType view_type) override;
   void MessageInvoke(const std::string& extension_id,
@@ -161,6 +171,8 @@ class ExtensionFrameHelper
 
   mojom::LocalFrameHost* GetLocalFrameHost();
   mojom::RendererHost* GetRendererHost();
+  mojom::EventRouter* GetEventRouter();
+  mojom::RendererAutomationRegistry* GetRendererAutomationRegistry();
 
  private:
   void BindLocalFrame(
@@ -203,6 +215,8 @@ class ExtensionFrameHelper
   // The id of the tab the render frame is attached to.
   int tab_id_ = -1;
 
+  bool vivaldi_panel_ = false;
+
   // The id of the browser window the render frame is attached to.
   int browser_window_id_ = -1;
 
@@ -238,6 +252,9 @@ class ExtensionFrameHelper
 
   mojo::AssociatedRemote<mojom::LocalFrameHost> local_frame_host_remote_;
   mojo::AssociatedRemote<mojom::RendererHost> renderer_host_remote_;
+  mojo::AssociatedRemote<mojom::EventRouter> event_router_remote_;
+  mojo::AssociatedRemote<mojom::RendererAutomationRegistry>
+      renderer_automation_registry_remote_;
 
   mojo::AssociatedReceiver<mojom::LocalFrame> local_frame_receiver_{this};
 

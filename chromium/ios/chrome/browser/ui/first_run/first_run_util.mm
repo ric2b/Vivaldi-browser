@@ -16,13 +16,13 @@
 #import "components/startup_metric_utils/browser/startup_metric_utils.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/crash_report/model/crash_helper.h"
-#import "ios/chrome/browser/first_run/first_run.h"
-#import "ios/chrome/browser/first_run/first_run_metrics.h"
+#import "ios/chrome/browser/first_run/model/first_run.h"
+#import "ios/chrome/browser/first_run/model/first_run_metrics.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/web/public/thread/web_thread.h"
 #import "ui/gfx/ios/NSString+CrStringDrawing.h"
 
@@ -94,8 +94,9 @@ bool ShouldPresentFirstRunExperience() {
   if (experimental_flags::AlwaysDisplayFirstRun())
     return true;
 
-  if (tests_hook::DisableFirstRun())
+  if (tests_hook::DisableDefaultFirstRun()) {
     return false;
+  }
 
   if (kFirstRunSentinelCreated)
     return false;
@@ -121,12 +122,4 @@ void RecordMetricsReportingDefaultState() {
             ? metrics::EnableMetricsDefault::OPT_OUT
             : metrics::EnableMetricsDefault::OPT_IN);
   });
-}
-
-absl::optional<base::Time> GetFirstRunTime() {
-  absl::optional<base::File::Info> info = FirstRun::GetSentinelInfo();
-  if (info.has_value()) {
-    return info.value().creation_time;
-  }
-  return absl::nullopt;
 }

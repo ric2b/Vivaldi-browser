@@ -19,6 +19,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/types/expected.h"
+#include "base/types/expected_macros.h"
 #include "components/reporting/client/report_queue.h"
 #include "components/reporting/client/report_queue_configuration.h"
 #include "components/reporting/client/report_queue_impl.h"
@@ -154,7 +155,8 @@ void ReportQueueProvider::CreateNewQueue(
                   // If configuration hit an error, we abort and
                   // report this through the callback
                   if (!config_result.has_value()) {
-                    std::move(cb).Run(base::unexpected(config_result.error()));
+                    std::move(cb).Run(
+                        base::unexpected(std::move(config_result).error()));
                     return;
                   }
 
@@ -174,8 +176,9 @@ void ReportQueueProvider::CreateNewQueue(
 }
 
 StatusOr<std::unique_ptr<ReportQueue, base::OnTaskRunnerDeleter>>
-ReportQueueProvider::CreateNewSpeculativeQueue() {
-  return SpeculativeReportQueueImpl::Create();
+ReportQueueProvider::CreateNewSpeculativeQueue(
+    const ReportQueue::SpeculativeConfigSettings& config_settings) {
+  return SpeculativeReportQueueImpl::Create(config_settings);
 }
 
 void ReportQueueProvider::OnInitCompleted() {}
@@ -206,11 +209,13 @@ ReportQueueProvider::CreateSpeculativeQueue(
         "The Encrypted Reporting Pipeline is not enabled. Please enable it on "
         "the command line using --enable-features=EncryptedReportingPipeline");
     VLOG(1) << not_enabled;
-    return base::unexpected(not_enabled);
+    return base::unexpected(std::move(not_enabled));
   }
   // Instantiate speculative queue, bail out in case of an error.
+  CHECK(config);
   ASSIGN_OR_RETURN(auto speculative_queue,
-                   GetInstance()->CreateNewSpeculativeQueue());
+                   GetInstance()->CreateNewSpeculativeQueue(
+                       {.destination = config->destination()}));
   // Initiate underlying queue creation.
   CreateReportQueueRequest::New(
       std::move(config), speculative_queue->PrepareToAttachActualQueue());

@@ -91,58 +91,38 @@ TEST_F(ParserTest, AllowNonUniformDerivatives_True) {
     EXPECT_EQ(program.Diagnostics().count(), 0u) << errs;
 }
 
-constexpr auto kShaderWithReadWriteStorageTexture = R"(
+TEST_F(ParserTest, WorkgroupIdGuardingBarrier) {
+    auto spv = test::Assemble(R"(
                OpCapability Shader
-               OpCapability StorageImageExtendedFormats
                OpMemoryModel Logical GLSL450
-               OpEntryPoint GLCompute %100 "main"
-               OpExecutionMode %100 LocalSize 8 8 1
-               OpSource HLSL 600
-               OpName %type_2d_image "type.2d.image"
-               OpName %RWTexture2D "RWTexture2D"
-               OpName %100 "main"
-               OpDecorate %RWTexture2D DescriptorSet 0
-               OpDecorate %RWTexture2D Binding 0
-      %float = OpTypeFloat 32
-    %float_0 = OpConstant %float 0
-    %v4float = OpTypeVector %float 4
+               OpEntryPoint GLCompute %foo "foo" %wgid
+               OpExecutionMode %foo LocalSize 1 1 1
+               OpDecorate %wgid BuiltIn WorkgroupId
        %uint = OpTypeInt 32 0
-     %uint_1 = OpConstant %uint 1
-     %v2uint = OpTypeVector %uint 2
-      %coord = OpConstantComposite %v2uint %uint_1 %uint_1
-%type_2d_image = OpTypeImage %float 2D 2 0 0 2 Rgba32f
-%_ptr_UniformConstant_type_2d_image = OpTypePointer UniformConstant %type_2d_image
+      %vec3u = OpTypeVector %uint 3
+%_ptr_Input_vec3u = OpTypePointer Input %vec3u
+     %uint_0 = OpConstant %uint 0
+     %uint_2 = OpConstant %uint 2
+   %uint_264 = OpConstant %uint 264
+       %wgid = OpVariable %_ptr_Input_vec3u Input
        %void = OpTypeVoid
-         %20 = OpTypeFunction %void
-%RWTexture2D = OpVariable %_ptr_UniformConstant_type_2d_image UniformConstant
-        %100 = OpFunction %void None %20
-         %22 = OpLabel
-         %30 = OpLoad %type_2d_image %RWTexture2D
-         %31 = OpImageRead %v4float %30 %coord None
-         %32 = OpFAdd %v4float %31 %31
-               OpImageWrite %30 %coord %32 None
+       %bool = OpTypeBool
+  %func_type = OpTypeFunction %void
+        %foo = OpFunction %void None %func_type
+  %foo_start = OpLabel
+ %wgid_value = OpLoad %vec3u %wgid
+     %wgid_x = OpCompositeExtract %uint %wgid_value 0
+  %condition = OpIEqual %bool %wgid_x %uint_0
+               OpSelectionMerge %merge None
+               OpBranchConditional %condition %true_branch %merge
+%true_branch = OpLabel
+               OpControlBarrier %uint_2 %uint_2 %uint_264
+               OpBranch %merge
+      %merge = OpLabel
                OpReturn
                OpFunctionEnd
-  )";
-
-TEST_F(ParserTest, AllowChromiumExtensions_False) {
-    auto spv = test::Assemble(kShaderWithReadWriteStorageTexture);
-    Options options;
-    options.allow_chromium_extensions = false;
-    auto program = Parse(spv, options);
-    auto errs = program.Diagnostics().str();
-    EXPECT_FALSE(program.IsValid()) << errs;
-    EXPECT_THAT(errs,
-                ::testing::HasSubstr(
-                    "error: module requires chromium_experimental_read_write_storage_texture, but "
-                    "'allow-chromium-extensions' was not passed"));
-}
-
-TEST_F(ParserTest, AllowChromiumExtensions_True) {
-    auto spv = test::Assemble(kShaderWithReadWriteStorageTexture);
-    Options options;
-    options.allow_chromium_extensions = true;
-    auto program = Parse(spv, options);
+)");
+    auto program = Parse(spv, {});
     auto errs = program.Diagnostics().str();
     EXPECT_TRUE(program.IsValid()) << errs;
     EXPECT_EQ(program.Diagnostics().count(), 0u) << errs;

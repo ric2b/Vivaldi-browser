@@ -279,7 +279,6 @@ export class PageResourceLoader extends Common.ObjectWrapper.ObjectWrapper<Event
         }
       }
       Host.userMetrics.developerResourceLoaded(Host.UserMetrics.DeveloperResourceLoaded.LoadThroughPageFallback);
-      console.warn('Fallback triggered', url, initiator);
     } else {
       const code = getLoadThroughTargetSetting().get() ? Host.UserMetrics.DeveloperResourceLoaded.FallbackPerProtocol :
                                                          Host.UserMetrics.DeveloperResourceLoaded.FallbackPerOverride;
@@ -364,9 +363,7 @@ export function getLoadThroughTargetSetting(): Common.Settings.Setting<boolean> 
   return Common.Settings.Settings.instance().createSetting('loadThroughTarget', true);
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   Update = 'Update',
 }
 

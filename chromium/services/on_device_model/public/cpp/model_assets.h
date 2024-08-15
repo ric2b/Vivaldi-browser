@@ -11,22 +11,44 @@
 
 namespace on_device_model {
 
+// A bundle of file paths to use for execution.
+struct COMPONENT_EXPORT(ON_DEVICE_MODEL_ASSETS_CPP) ModelAssetPaths {
+  ModelAssetPaths();
+  ModelAssetPaths(const ModelAssetPaths&);
+  ~ModelAssetPaths();
+
+  // Returns whether the required models to determine text safety are set.
+  bool HasSafetyFiles() const {
+    return !ts_data.empty() && !ts_sp_model.empty();
+  }
+
+  base::FilePath sp_model;
+  base::FilePath model;
+  base::FilePath weights;
+  base::FilePath ts_data;
+  base::FilePath ts_sp_model;
+  base::FilePath language_detection_model;
+};
+
 // A bundle of opened file assets comprising model description to use for
 // execution.
-struct COMPONENT_EXPORT(ON_DEVICE_MODEL_CPP) ModelAssets {
-  ModelAssets() = default;
-  ModelAssets(ModelAssets&&) = default;
-  ModelAssets& operator=(ModelAssets&&) = default;
-  ~ModelAssets() = default;
+struct COMPONENT_EXPORT(ON_DEVICE_MODEL_ASSETS_CPP) ModelAssets {
+  ModelAssets();
+  ModelAssets(ModelAssets&&);
+  ModelAssets& operator=(ModelAssets&&);
+  ~ModelAssets();
 
   base::File sp_model;
   base::File model;
   base::File weights;
+  base::File ts_data;
+  base::File ts_sp_model;
+  base::File language_detection_model;
 };
 
-// Helper to open files for ModelAssets given a base path.
-COMPONENT_EXPORT(ON_DEVICE_MODEL_CPP)
-ModelAssets LoadModelAssets(const base::FilePath& model_path);
+// Helper to open files for ModelAssets given their containing paths.
+COMPONENT_EXPORT(ON_DEVICE_MODEL_ASSETS_CPP)
+ModelAssets LoadModelAssets(const ModelAssetPaths& paths);
 
 }  // namespace on_device_model
 

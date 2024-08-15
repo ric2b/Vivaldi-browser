@@ -14,14 +14,14 @@ import './search_engines_page/search_engines_page.js';
 import './simple_confirmation_dialog.js';
 import './privacy_page/anti_abuse_page.js';
 import './privacy_page/preloading_page.js';
-import './privacy_page/privacy_guide/privacy_guide_description_item.js';
-import './privacy_page/privacy_guide/privacy_guide_dialog.js';
-import './privacy_page/privacy_guide/privacy_guide_page.js';
-import './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
-import './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
-import './privacy_sandbox/privacy_sandbox_interest_item.js';
-import './privacy_sandbox/privacy_sandbox_page.js';
-import './privacy_sandbox/privacy_sandbox_topics_subpage.js';
+//import './privacy_page/privacy_guide/privacy_guide_description_item.js';
+//import './privacy_page/privacy_guide/privacy_guide_dialog.js';
+//import './privacy_page/privacy_guide/privacy_guide_page.js';
+//import './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
+//import './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
+//import './privacy_sandbox/privacy_sandbox_interest_item.js';
+//import './privacy_sandbox/privacy_sandbox_page.js';
+//import './privacy_sandbox/privacy_sandbox_topics_subpage.js';
 import './privacy_page/security_keys_subpage.js';
 import './privacy_page/security_keys_phones_subpage.js';
 import './privacy_page/security_keys_phones_list.js';
@@ -89,7 +89,7 @@ export {ControlledButtonElement} from '/shared/settings/controls/controlled_butt
 export {SettingsRadioGroupElement} from '/shared/settings/controls/settings_radio_group.js';
 export {SettingsSliderElement} from '/shared/settings/controls/settings_slider.js';
 export {SettingsToggleButtonElement} from '/shared/settings/controls/settings_toggle_button.js';
-export {SettingsSecureDnsElement} from '/shared/settings/privacy_page/secure_dns.js';
+export {SecureDnsResolverType, SettingsSecureDnsElement} from '/shared/settings/privacy_page/secure_dns.js';
 // <if expr="chromeos_ash">
 export {SettingsSecureDnsDialogElement} from '/shared/settings/privacy_page/secure_dns_dialog.js';
 // </if>
@@ -105,9 +105,19 @@ export {getToastManager} from 'chrome://resources/cr_elements/cr_toast/cr_toast_
 export {IronCollapseElement} from 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 export {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 export {PaperTooltipElement} from 'chrome://resources/polymer/v3_0/paper-tooltip/paper-tooltip.js';
+export {AccessibilityBrowserProxy, AccessibilityBrowserProxyImpl} from './a11y_page/a11y_browser_proxy.js';
+// clang-format off
+// <if expr="is_win or is_linux or is_macosx">
+export {ScreenAiInstallStatus} from './a11y_page/a11y_browser_proxy.js';
+// </if>
+// clang-format on
+export {SettingsA11yPageElement} from './a11y_page/a11y_page.js';
 // <if expr="not is_chromeos">
 export {SettingsLiveCaptionElement} from './a11y_page/live_caption_section.js';
 export {SettingsLiveTranslateElement} from './a11y_page/live_translate_section.js';
+// </if>
+// <if expr="is_win or is_linux or is_macosx">
+export {SettingsPdfOcrToggleElement} from './a11y_page/pdf_ocr_toggle.js';
 // </if>
 
 export {SettingsAppearanceFontsPageElement} from './appearance_page/appearance_fonts_page.js';
@@ -127,7 +137,7 @@ export {PaymentsManagerImpl, PaymentsManagerProxy} from './autofill_page/payment
 export {SettingsPaymentsSectionElement} from './autofill_page/payments_section.js';
 export {SettingsVirtualCardUnenrollDialogElement} from './autofill_page/virtual_card_unenroll_dialog.js';
 export {ClearBrowsingDataBrowserProxy, ClearBrowsingDataBrowserProxyImpl, ClearBrowsingDataResult, UpdateSyncStateEvent} from './clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
-export {SettingsClearBrowsingDataDialogElement} from './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
+export {SettingsClearBrowsingDataDialogElement, TimePeriod, TimePeriodExperiment} from './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
 export {SettingsHistoryDeletionDialogElement} from './clear_browsing_data_dialog/history_deletion_dialog.js';
 export {SettingsPasswordsDeletionDialogElement} from './clear_browsing_data_dialog/passwords_deletion_dialog.js';
 export {SettingsCheckboxElement} from './controls/settings_checkbox.js';
@@ -172,30 +182,31 @@ export {SettingsCookiesPageElement} from './privacy_page/cookies_page.js';
 export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
 export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
 export {PreloadingPageElement} from './privacy_page/preloading_page.js';
-export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
-export {PrivacyGuideCompletionFragmentElement} from './privacy_page/privacy_guide/privacy_guide_completion_fragment.js';
-export {PrivacyGuideCookiesFragmentElement} from './privacy_page/privacy_guide/privacy_guide_cookies_fragment.js';
-export {PrivacyGuideDescriptionItemElement} from './privacy_page/privacy_guide/privacy_guide_description_item.js';
-export {SettingsPrivacyGuideDialogElement} from './privacy_page/privacy_guide/privacy_guide_dialog.js';
-export {PrivacyGuideHistorySyncFragmentElement} from './privacy_page/privacy_guide/privacy_guide_history_sync_fragment.js';
-export {PrivacyGuideMsbbFragmentElement} from './privacy_page/privacy_guide/privacy_guide_msbb_fragment.js';
-export {SettingsPrivacyGuidePageElement} from './privacy_page/privacy_guide/privacy_guide_page.js';
-export {PrivacyGuidePreloadFragmentElement} from './privacy_page/privacy_guide/privacy_guide_preload_fragment.js';
-export {PrivacyGuideSafeBrowsingFragmentElement} from './privacy_page/privacy_guide/privacy_guide_safe_browsing_fragment.js';
-export {PrivacyGuideSearchSuggestionsFragmentElement} from './privacy_page/privacy_guide/privacy_guide_search_suggestions_fragment.js';
-export {PrivacyGuideWelcomeFragmentElement} from './privacy_page/privacy_guide/privacy_guide_welcome_fragment.js';
+//export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
+//export {PrivacyGuideCompletionFragmentElement} from './privacy_page/privacy_guide/privacy_guide_completion_fragment.js';
+//export {PrivacyGuideCookiesFragmentElement} from './privacy_page/privacy_guide/privacy_guide_cookies_fragment.js';
+//export {PrivacyGuideDescriptionItemElement} from './privacy_page/privacy_guide/privacy_guide_description_item.js';
+//export {SettingsPrivacyGuideDialogElement} from './privacy_page/privacy_guide/privacy_guide_dialog.js';
+//export {PrivacyGuideHistorySyncFragmentElement} from './privacy_page/privacy_guide/privacy_guide_history_sync_fragment.js';
+//export {PrivacyGuideMsbbFragmentElement} from './privacy_page/privacy_guide/privacy_guide_msbb_fragment.js';
+//export {SettingsPrivacyGuidePageElement} from './privacy_page/privacy_guide/privacy_guide_page.js';
+//export {PrivacyGuidePreloadFragmentElement} from './privacy_page/privacy_guide/privacy_guide_preload_fragment.js';
+//export {PrivacyGuideSafeBrowsingFragmentElement} from './privacy_page/privacy_guide/privacy_guide_safe_browsing_fragment.js';
+//export {PrivacyGuideSearchSuggestionsFragmentElement} from './privacy_page/privacy_guide/privacy_guide_search_suggestions_fragment.js';
+//export {PrivacyGuideWelcomeFragmentElement} from './privacy_page/privacy_guide/privacy_guide_welcome_fragment.js';
 export {BioEnrollDialogPage, SettingsSecurityKeysBioEnrollDialogElement} from './privacy_page/security_keys_bio_enroll_dialog.js';
 export {Ctap2Status, SampleStatus, SecurityKeysBioEnrollProxy, SecurityKeysBioEnrollProxyImpl, SecurityKeysCredentialBrowserProxy, SecurityKeysCredentialBrowserProxyImpl, SecurityKeysPhone, SecurityKeysPhonesBrowserProxy, SecurityKeysPhonesBrowserProxyImpl, SecurityKeysPhonesList, SecurityKeysPinBrowserProxy, SecurityKeysPinBrowserProxyImpl, SecurityKeysResetBrowserProxy, SecurityKeysResetBrowserProxyImpl} from './privacy_page/security_keys_browser_proxy.js';
 export {CredentialManagementDialogPage, SettingsSecurityKeysCredentialManagementDialogElement} from './privacy_page/security_keys_credential_management_dialog.js';
 export {SecurityKeysPhonesSubpageElement} from './privacy_page/security_keys_phones_subpage.js';
 export {ResetDialogPage, SettingsSecurityKeysResetDialogElement} from './privacy_page/security_keys_reset_dialog.js';
 export {SetPinDialogPage, SettingsSecurityKeysSetPinDialogElement} from './privacy_page/security_keys_set_pin_dialog.js';
-export {SafeBrowsingSetting, SettingsSecurityPageElement} from './privacy_page/security_page.js';
-export {SettingsPrivacySandboxAdMeasurementSubpageElement} from './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
-export {SettingsPrivacySandboxFledgeSubpageElement} from './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
-export {PrivacySandboxInterestItemElement} from './privacy_sandbox/privacy_sandbox_interest_item.js';
-export {SettingsPrivacySandboxPageElement} from './privacy_sandbox/privacy_sandbox_page.js';
-export {SettingsPrivacySandboxTopicsSubpageElement} from './privacy_sandbox/privacy_sandbox_topics_subpage.js';
+export {HttpsFirstModeSetting, SafeBrowsingSetting, SettingsSecurityPageElement} from './privacy_page/security_page.js';
+//export {SettingsPrivacySandboxAdMeasurementSubpageElement} from './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
+//export {SettingsPrivacySandboxFledgeSubpageElement} from './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
+//export {PrivacySandboxInterestItemElement} from './privacy_sandbox/privacy_sandbox_interest_item.js';
+//export {SettingsPrivacySandboxManageTopicsSubpageElement} from './privacy_sandbox/privacy_sandbox_manage_topics_subpage.js';
+//export {SettingsPrivacySandboxPageElement} from './privacy_sandbox/privacy_sandbox_page.js';
+//export {SettingsPrivacySandboxTopicsSubpageElement} from './privacy_sandbox/privacy_sandbox_topics_subpage.js';
 export {SettingsResetPageElement} from './reset_page/reset_page.js';
 export {SettingsResetProfileDialogElement} from './reset_page/reset_profile_dialog.js';
 export {SettingsSafetyHubExtensionsModuleElement} from './safety_hub/extensions_module.js';

@@ -19,6 +19,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_provider.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/tab_grid_transition_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -65,9 +66,9 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   // Identifier of the selected item.
   web::WebStateID _selectedItemID;
 
-  // Identifier of the lastest dragged item. This property is set when the item
+  // Lastest dragged item. This property is set when the item
   // is long pressed which does not always result in a drag action.
-  web::WebStateID _draggedItemID;
+  TabSwitcherItem* _draggedItem;
 
   // Identifier of the last item to be inserted. This is used to track if the
   // active tab was newly created when building the animation layout for
@@ -255,6 +256,32 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   return [LegacyGridTransitionLayout layoutWithInactiveItems:@[]
                                                   activeItem:activeItem
                                                selectionItem:selectionItem];
+}
+
+- (TabGridTransitionItem*)transitionItemForActiveCell {
+  [self.collectionView layoutIfNeeded];
+
+  NSIndexPath* selectedItemIndexPath =
+      self.collectionView.indexPathsForSelectedItems.firstObject;
+
+  if (![self.collectionView.indexPathsForVisibleItems
+          containsObject:selectedItemIndexPath]) {
+    return nil;
+  }
+
+  PinnedCell* cell = base::apple::ObjCCastStrict<PinnedCell>(
+      [self.collectionView cellForItemAtIndexPath:selectedItemIndexPath]);
+
+  UICollectionViewLayoutAttributes* attributes = [self.collectionView
+      layoutAttributesForItemAtIndexPath:selectedItemIndexPath];
+
+  // Normalize frame to window coordinates. The attributes class applies this
+  // change to the other properties such as center, bounds, etc.
+  attributes.frame = [self.collectionView convertRect:attributes.frame
+                                               toView:nil];
+
+  return [TabGridTransitionItem itemWithView:cell
+                               originalFrame:attributes.frame];
 }
 
 - (BOOL)isCollectionEmpty {
@@ -458,8 +485,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       [self.collectionView cellForItemAtIndexPath:indexPath]);
   return [self.menuProvider
       contextMenuConfigurationForTabCell:cell
-                            menuScenario:MenuScenarioHistogram::
-                                             kPinnedTabsEntry];
+                            menuScenario:kMenuScenarioHistogramPinnedTabsEntry];
 }
 
 - (void)collectionView:(UICollectionView*)collectionView
@@ -478,12 +504,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (void)collectionView:(UICollectionView*)collectionView
     dragSessionWillBegin:(id<UIDragSession>)session {
-  [self.dragDropHandler dragWillBeginForItemWithID:_draggedItemID];
+  [self.dragDropHandler dragWillBeginForItem:_draggedItem];
   _dragEndAtNewIndex = NO;
   _localDragActionInProgress = YES;
   base::UmaHistogramEnumeration(kUmaPinnedViewDragDropTabs,
                                 DragDropTabs::kDragBegin);
-
+  [self.delegate pinnedViewControllerDragSessionWillBegin:self];
   [self dragSessionEnabled:YES];
 }
 
@@ -508,12 +534,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (NSArray<UIDragItem*>*)collectionView:(UICollectionView*)collectionView
            itemsForBeginningDragSession:(id<UIDragSession>)session
                             atIndexPath:(NSIndexPath*)indexPath {
-  TabSwitcherItem* item = _items[indexPath.item];
-  _draggedItemID = item.identifier;
-
-  UIDragItem* dragItem =
-      [self.dragDropHandler dragItemForItemWithID:_draggedItemID];
-  return [NSArray arrayWithObjects:dragItem, nil];
+  _draggedItem = _items[indexPath.item];
+  UIDragItem* dragItem = [self.dragDropHandler dragItemForItem:_draggedItem];
+  if (!dragItem) {
+    return @[];
+  }
+  return @[ dragItem ];
 }
 
 - (NSArray<UIDragItem*>*)collectionView:(UICollectionView*)collectionView

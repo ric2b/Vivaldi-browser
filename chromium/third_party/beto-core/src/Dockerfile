@@ -21,7 +21,7 @@ protobuf-compiler pkg-config libdbus-1-dev libssl-dev ninja-build
 RUN apt upgrade -y
 
 # install cargo with default settings
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain 1.68.1
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain 1.72.0
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install --locked cargo-deny --color never 2>&1
 RUN cargo install cargo-fuzz --color never 2>&1
@@ -36,6 +36,7 @@ RUN cargo install cargo-prefetch \
 RUN cargo install bindgen-cli --version 0.64.0
 RUN cargo install wasm-pack --color never 2>&1
 RUN rustup toolchain add nightly
+RUN rustup target add wasm32-unknown-unknown
 # boringssl build wants go
 RUN curl -L https://go.dev/dl/go1.20.2.linux-amd64.tar.gz | tar -C /usr/local -xz
 ENV PATH="$PATH:/usr/local/go/bin"

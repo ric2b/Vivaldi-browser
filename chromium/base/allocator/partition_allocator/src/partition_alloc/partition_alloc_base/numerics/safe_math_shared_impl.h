@@ -5,18 +5,17 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_NUMERICS_SAFE_MATH_SHARED_IMPL_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_NUMERICS_SAFE_MATH_SHARED_IMPL_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <cassert>
 #include <climits>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
 #include <type_traits>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/numerics/safe_conversions.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/numerics/safe_conversions.h"
 
 #if BUILDFLAG(IS_ASMJS)
 // Optimized safe math instructions are incompatible with asmjs.
@@ -27,7 +26,7 @@
       ((__clang_major__ > 3) ||                            \
        (__clang_major__ == 3 && __clang_minor__ >= 4))) || \
      (defined(__GNUC__) && __GNUC__ >= 5))
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/numerics/safe_math_clang_gcc_impl.h"
+#include "partition_alloc/partition_alloc_base/numerics/safe_math_clang_gcc_impl.h"
 #define PA_BASE_HAS_OPTIMIZED_SAFE_MATH (1)
 #else
 #define PA_BASE_HAS_OPTIMIZED_SAFE_MATH (0)

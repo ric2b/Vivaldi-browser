@@ -67,13 +67,13 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
                  int left,
                  int top) override;
   RetainPtr<CFX_DIBitmap> GetBackDrop() override;
-  bool SetDIBits(const RetainPtr<CFX_DIBBase>& pBitmap,
+  bool SetDIBits(const RetainPtr<const CFX_DIBBase>& pBitmap,
                  uint32_t argb,
                  const FX_RECT& src_rect,
                  int left,
                  int top,
                  BlendMode blend_type) override;
-  bool StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+  bool StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                      uint32_t argb,
                      int dest_left,
                      int dest_top,
@@ -82,8 +82,8 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
                      const FX_RECT* pClipRect,
                      const FXDIB_ResampleOptions& options,
                      BlendMode blend_type) override;
-  bool StartDIBits(const RetainPtr<CFX_DIBBase>& pSource,
-                   int bitmap_alpha,
+  bool StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                   float alpha,
                    uint32_t argb,
                    const CFX_Matrix& matrix,
                    const FXDIB_ResampleOptions& options,
@@ -99,7 +99,9 @@ class CFX_AggDeviceDriver final : public RenderDeviceDriverIface {
                       const CFX_TextRenderOptions& options) override;
   int GetDriverType() const override;
   bool MultiplyAlpha(float alpha) override;
-  bool MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask) override;
+  bool MultiplyAlphaMask(const RetainPtr<const CFX_DIBBase>& mask) override;
+
+  void Clear(uint32_t color);
 
  private:
   void RenderRasterizer(pdfium::agg::rasterizer_scanline_aa& rasterizer,

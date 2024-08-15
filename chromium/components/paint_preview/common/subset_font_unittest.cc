@@ -10,8 +10,10 @@
 #include "base/path_service.h"
 #include "build/build_config.h"
 #include "components/paint_preview/common/glyph_usage.h"
+#include "skia/ext/font_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkData.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkTypeface.h"
@@ -19,7 +21,7 @@
 namespace paint_preview {
 
 TEST(PaintPreviewSubsetFontTest, TestBasicSubset) {
-  auto typeface = SkTypeface::MakeDefault();
+  auto typeface = skia::DefaultTypeface();
   ASSERT_NE(typeface, nullptr);
   SparseGlyphUsage sparse(typeface->countGlyphs());
   sparse.Set(0);
@@ -30,7 +32,8 @@ TEST(PaintPreviewSubsetFontTest, TestBasicSubset) {
   auto subset_data = SubsetFont(typeface.get(), sparse);
   ASSERT_NE(subset_data, nullptr);
   SkMemoryStream stream(subset_data);
-  auto subset_typeface = SkTypeface::MakeDeserialize(&stream);
+  auto subset_typeface =
+      SkTypeface::MakeDeserialize(&stream, skia::DefaultFontMgr());
   ASSERT_NE(subset_typeface, nullptr);
 
   // Subsetting doesn't guarantee all glyphs are removed, so just check that the
@@ -72,7 +75,8 @@ TEST(PaintPreviewSubsetFontTest, TestVariantSubset) {
   ASSERT_GT(data_str.size(), 0U);
   auto data = SkData::MakeWithCopy(data_str.data(), data_str.size());
   ASSERT_NE(data, nullptr);
-  auto base_typeface = SkTypeface::MakeFromData(data);
+  sk_sp<SkFontMgr> mgr = skia::DefaultFontMgr();
+  sk_sp<SkTypeface> base_typeface = mgr->makeFromData(data);
   // Some older OS versions/platforms may not support variation font data.
   if (!base_typeface) {
     return;
@@ -101,7 +105,8 @@ TEST(PaintPreviewSubsetFontTest, TestVariantSubset) {
   auto subset_data = SubsetFont(typeface.get(), sparse);
   ASSERT_NE(subset_data, nullptr);
   SkMemoryStream stream(subset_data);
-  auto subset_typeface = SkTypeface::MakeDeserialize(&stream);
+  auto subset_typeface =
+      SkTypeface::MakeDeserialize(&stream, skia::DefaultFontMgr());
   ASSERT_NE(subset_typeface, nullptr);
 
   // Ensure the variants are the same before and after.

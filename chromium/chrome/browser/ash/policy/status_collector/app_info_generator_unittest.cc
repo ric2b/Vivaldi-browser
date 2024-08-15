@@ -202,8 +202,11 @@ class AppInfoGeneratorTest : public ::testing::Test {
     profile_ = CreateProfile(account_id_);
     test_clock().SetNow(MakeLocalTime("25-MAR-2020 1:30am"));
 
+    // Wait for AppServiceProxy to be ready.
+    app_service_test_.SetUp(profile_.get());
+
     auto* provider = web_app::FakeWebAppProvider::Get(profile_.get());
-    provider->SetRunSubsystemStartupTasks(true);
+    provider->SetStartSystemOnStart(true);
     provider->Start();
 
     app_registrar_ = &provider->GetRegistrarMutable();
@@ -273,15 +276,15 @@ class AppInfoGeneratorTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   AccountId account_id_;
   std::unique_ptr<TestingProfile> profile_;
-  raw_ptr<web_app::WebAppRegistrarMutable, ExperimentalAsh> app_registrar_;
-  raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged | ExperimentalAsh>
-      user_manager_;
+  raw_ptr<web_app::WebAppRegistrarMutable> app_registrar_;
+  raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged> user_manager_;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   TestingPrefServiceSimple pref_service_;
 
   session_manager::SessionManager session_manager_;
 
   base::SimpleTestClock test_clock_;
+  apps::AppServiceTest app_service_test_;
 };
 
 TEST_F(AppInfoGeneratorTest, GenerateInventoryList) {

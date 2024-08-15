@@ -40,7 +40,9 @@ class NpCppBenchmark : public benchmark::Fixture {
 
 BENCHMARK_DEFINE_F(NpCppBenchmark, V0PlaintextAdvertisement)
 (benchmark::State &state) {
-  auto cred_book = nearby_protocol::CredentialBook::TryCreate();
+  auto cred_slab = nearby_protocol::CredentialSlab::TryCreate();
+  assert(cred_slab.ok());
+  auto cred_book = nearby_protocol::CredentialBook::TryCreateFromSlab(cred_slab.value());
   assert(cred_book.ok());
   auto num_ciphers = state.range(0);
 
@@ -68,7 +70,14 @@ class NpCBenchmark : public benchmark::Fixture {
 BENCHMARK_DEFINE_F(NpCBenchmark, V0PlaintextAdvertisement)
 (benchmark::State &state) {
   auto num_ciphers = state.range(0);
-  auto book_result = np_ffi::internal::np_ffi_create_credential_book();
+  auto slab_result = np_ffi::internal::np_ffi_create_credential_slab();
+  assert(
+      np_ffi::internal::np_ffi_CreateCredentialSlabResult_kind(slab_result) ==
+      np_ffi::internal::CreateCredentialSlabResultKind::Success);
+  auto slab = np_ffi::internal::np_ffi_CreateCredentialSlabResult_into_SUCCESS(
+      slab_result);
+
+  auto book_result = np_ffi::internal::np_ffi_create_credential_book_from_slab(slab);
   assert(
       np_ffi::internal::np_ffi_CreateCredentialBookResult_kind(book_result) ==
       np_ffi::internal::CreateCredentialBookResultKind::Success);

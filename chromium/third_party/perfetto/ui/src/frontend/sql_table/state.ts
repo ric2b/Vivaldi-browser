@@ -16,9 +16,9 @@ import {arrayEquals} from '../../base/array_utils';
 import {SortDirection} from '../../base/comparison_utils';
 import {isString} from '../../base/object_utils';
 import {sqliteString} from '../../base/string_utils';
-import {EngineProxy} from '../../common/engine';
-import {NUM, Row} from '../../common/query_result';
 import {raf} from '../../core/raf_scheduler';
+import {EngineProxy} from '../../trace_processor/engine';
+import {NUM, Row} from '../../trace_processor/query_result';
 import {
   constraintsToQueryPrefix,
   constraintsToQuerySuffix,
@@ -274,9 +274,11 @@ export class SqlTableState {
     if ((params?.offset ?? 'reset') === 'reset') {
       this.offset = 0;
     }
-    const updateRowCount = !arrayEquals(this.rowCount?.filters, this.filters);
+
+    const newFilters = this.rowCount?.filters;
+    const filtersMatch = newFilters && arrayEquals(newFilters, this.filters);
     this.data = undefined;
-    if (updateRowCount) {
+    if (!filtersMatch) {
       this.rowCount = undefined;
     }
 
@@ -284,7 +286,7 @@ export class SqlTableState {
     // before the data is loaded.
     setTimeout(() => raf.scheduleFullRedraw(), 50);
 
-    if (updateRowCount) {
+    if (!filtersMatch) {
       this.rowCount = await this.loadRowCount();
     }
     this.data = await this.loadData();
@@ -325,7 +327,6 @@ export class SqlTableState {
   }
 
   sortBy(clause: ColumnOrderClause) {
-    this.orderBy = this.orderBy || [];
     // Remove previous sort by the same column.
     this.orderBy = this.orderBy.filter((c) => c.column !== clause.column);
     // Add the new sort clause to the front, so we effectively stable-sort the
@@ -340,7 +341,6 @@ export class SqlTableState {
   }
 
   isSortedBy(column: Column): SortDirection|undefined {
-    if (!this.orderBy) return undefined;
     if (this.orderBy.length === 0) return undefined;
     if (this.orderBy[0].column !== column) return undefined;
     return this.orderBy[0].direction;

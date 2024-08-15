@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void max_c023dd() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  max_c023dd();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  max_c023dd();
+}
+kernel void compute_main() {
+  max_c023dd();
+}

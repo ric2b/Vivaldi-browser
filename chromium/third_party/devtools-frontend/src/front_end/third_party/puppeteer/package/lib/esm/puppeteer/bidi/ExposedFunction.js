@@ -1,17 +1,7 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 import { debugError } from '../common/util.js';
@@ -29,6 +19,7 @@ export class ExposeableFunction {
     #apply;
     #channels;
     #callerInfos = new Map();
+    #preloadScriptId;
     constructor(frame, name, apply) {
         this.#frame = frame;
         this.name = name;
@@ -60,16 +51,23 @@ export class ExposeableFunction {
                 },
             });
         }, { name: JSON.stringify(name) }));
-        await connection.send('script.addPreloadScript', {
+        const { result } = await connection.send('script.addPreloadScript', {
             functionDeclaration,
             arguments: channelArguments,
+            contexts: [this.#frame.page().mainFrame()._id],
         });
-        await connection.send('script.callFunction', {
-            functionDeclaration,
-            arguments: channelArguments,
-            awaitPromise: false,
-            target: this.#frame.mainRealm().realm.target,
-        });
+        this.#preloadScriptId = result.script;
+        await Promise.all(this.#frame
+            .page()
+            .frames()
+            .map(async (frame) => {
+            return await connection.send('script.callFunction', {
+                functionDeclaration,
+                arguments: channelArguments,
+                awaitPromise: false,
+                target: frame.mainRealm().realm.target,
+            });
+        }));
     }
     #handleArgumentsMessage = async (params) => {
         if (params.channel !== this.#channels.args) {
@@ -199,6 +197,16 @@ export class ExposeableFunction {
             bindingMap.set(callerId, callbacks);
         }
         return { callbacks, remoteValue: data };
+    }
+    [Symbol.dispose]() {
+        void this[Symbol.asyncDispose]().catch(debugError);
+    }
+    async [Symbol.asyncDispose]() {
+        if (this.#preloadScriptId) {
+            await this.#connection.send('script.removePreloadScript', {
+                script: this.#preloadScriptId,
+            });
+        }
     }
 }
 //# sourceMappingURL=ExposedFunction.js.map

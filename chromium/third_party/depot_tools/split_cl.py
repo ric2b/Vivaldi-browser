@@ -39,9 +39,9 @@ def EnsureInGitRepository():
 def CreateBranchForDirectories(prefix, directories, upstream):
     """Creates a branch named |prefix| + "_" + |directories[0]| + "_split".
 
-  Return false if the branch already exists. |upstream| is used as upstream for
-  the created branch.
-  """
+    Return false if the branch already exists. |upstream| is used as upstream
+    for the created branch.
+    """
     existing_branches = set(git.branches(use_limit=False))
     branch_name = prefix + '_' + directories[0] + '_split'
     if branch_name in existing_branches:
@@ -53,7 +53,7 @@ def CreateBranchForDirectories(prefix, directories, upstream):
 def FormatDirectoriesForPrinting(directories, prefix=None):
     """Formats directory list for printing
 
-  Uses dedicated format for single-item list."""
+    Uses dedicated format for single-item list."""
 
     prefixed = directories
     if prefix:
@@ -71,9 +71,9 @@ def FormatDescriptionOrComment(txt, directories):
 def AddUploadedByGitClSplitToDescription(description):
     """Adds a 'This CL was uploaded by git cl split.' line to |description|.
 
-  The line is added before footers, or at the end of |description| if it has no
-  footers.
-  """
+    The line is added before footers, or at the end of |description| if it has
+    no footers.
+    """
     split_footers = git_footers.split_footers(description)
     lines = split_footers[0]
     if lines[-1] and not lines[-1].isspace():
@@ -89,21 +89,21 @@ def UploadCl(refactor_branch, refactor_branch_upstream, directories, files,
              cq_dry_run, enable_auto_submit, topic, repository_root):
     """Uploads a CL with all changes to |files| in |refactor_branch|.
 
-  Args:
-    refactor_branch: Name of the branch that contains the changes to upload.
-    refactor_branch_upstream: Name of the upstream of |refactor_branch|.
-    directories: Paths to the directories that contain the OWNERS files for
-        which to upload a CL.
-    files: List of AffectedFile instances to include in the uploaded CL.
-    description: Description of the uploaded CL.
-    comment: Comment to post on the uploaded CL.
-    reviewers: A set of reviewers for the CL.
-    changelist: The Changelist class.
-    cmd_upload: The function associated with the git cl upload command.
-    cq_dry_run: If CL uploads should also do a cq dry run.
-    enable_auto_submit: If CL uploads should also enable auto submit.
-    topic: Topic to associate with uploaded CLs.
-  """
+    Args:
+        refactor_branch: Name of the branch that contains the changes to upload.
+        refactor_branch_upstream: Name of the upstream of |refactor_branch|.
+        directories: Paths to the directories that contain the OWNERS files for
+            which to upload a CL.
+        files: List of AffectedFile instances to include in the uploaded CL.
+        description: Description of the uploaded CL.
+        comment: Comment to post on the uploaded CL.
+        reviewers: A set of reviewers for the CL.
+        changelist: The Changelist class.
+        cmd_upload: The function associated with the git cl upload command.
+        cq_dry_run: If CL uploads should also do a cq dry run.
+        enable_auto_submit: If CL uploads should also enable auto submit.
+        topic: Topic to associate with uploaded CLs.
+    """
     # Create a branch.
     if not CreateBranchForDirectories(refactor_branch, directories,
                                       refactor_branch_upstream):
@@ -165,10 +165,10 @@ def UploadCl(refactor_branch, refactor_branch_upstream, directories, files,
 def GetFilesSplitByOwners(files, max_depth):
     """Returns a map of files split by OWNERS file.
 
-  Returns:
-    A map where keys are paths to directories containing an OWNERS file and
-    values are lists of files sharing an OWNERS file.
-  """
+    Returns:
+        A map where keys are paths to directories containing an OWNERS file and
+        values are lists of files sharing an OWNERS file.
+    """
     files_split_by_owners = {}
     for action, path in files:
         # normpath() is important to normalize separators here, in prepration
@@ -191,17 +191,17 @@ def PrintClInfo(cl_index, num_cls, directories, file_paths, description,
                 reviewers, enable_auto_submit, topic):
     """Prints info about a CL.
 
-  Args:
-    cl_index: The index of this CL in the list of CLs to upload.
-    num_cls: The total number of CLs that will be uploaded.
-    directories: Paths to directories that contains the OWNERS files for which
-        to upload a CL.
-    file_paths: A list of files in this CL.
-    description: The CL description.
-    reviewers: A set of reviewers for this CL.
-    enable_auto_submit: If the CL should also have auto submit enabled.
-    topic: Topic to set for this CL.
-  """
+    Args:
+        cl_index: The index of this CL in the list of CLs to upload.
+        num_cls: The total number of CLs that will be uploaded.
+        directories: Paths to directories that contains the OWNERS files for
+            which to upload a CL.
+        file_paths: A list of files in this CL.
+        description: The CL description.
+        reviewers: A set of reviewers for this CL.
+        enable_auto_submit: If the CL should also have auto submit enabled.
+        topic: Topic to set for this CL.
+    """
     description_lines = FormatDescriptionOrComment(description,
                                                    directories).splitlines()
     indented_description = '\n'.join(['    ' + l for l in description_lines])
@@ -220,21 +220,21 @@ def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
             cq_dry_run, enable_auto_submit, max_depth, topic, repository_root):
     """"Splits a branch into smaller branches and uploads CLs.
 
-  Args:
-    description_file: File containing the description of uploaded CLs.
-    comment_file: File containing the comment of uploaded CLs.
-    changelist: The Changelist class.
-    cmd_upload: The function associated with the git cl upload command.
-    dry_run: Whether this is a dry run (no branches or CLs created).
-    cq_dry_run: If CL uploads should also do a cq dry run.
-    enable_auto_submit: If CL uploads should also enable auto submit.
-    max_depth: The maximum directory depth to search for OWNERS files. A value
-               less than 1 means no limit.
-    topic: Topic to associate with split CLs.
+    Args:
+        description_file: File containing the description of uploaded CLs.
+        comment_file: File containing the comment of uploaded CLs.
+        changelist: The Changelist class.
+        cmd_upload: The function associated with the git cl upload command.
+        dry_run: Whether this is a dry run (no branches or CLs created).
+        cq_dry_run: If CL uploads should also do a cq dry run.
+        enable_auto_submit: If CL uploads should also enable auto submit.
+        max_depth: The maximum directory depth to search for OWNERS files. A
+            value less than 1 means no limit.
+        topic: Topic to associate with split CLs.
 
-  Returns:
-    0 in case of success. 1 in case of error.
-  """
+    Returns:
+        0 in case of success. 1 in case of error.
+    """
     description = AddUploadedByGitClSplitToDescription(
         gclient_utils.FileRead(description_file))
     comment = gclient_utils.FileRead(comment_file) if comment_file else None
@@ -320,12 +320,12 @@ def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
 def CheckDescriptionBugLink(description):
     """Verifies that the description contains a bug link.
 
-  Examples:
-      Bug: 123
-      Bug: chromium:456
+    Examples:
+        Bug: 123
+        Bug: chromium:456
 
-  Prompts user if the description does not contain a bug link.
-  """
+    Prompts user if the description does not contain a bug link.
+    """
     bug_pattern = re.compile(r"^Bug:\s*(?:[a-zA-Z]+:)?[0-9]+", re.MULTILINE)
     matches = re.findall(bug_pattern, description)
     answer = 'y'
@@ -338,13 +338,13 @@ def CheckDescriptionBugLink(description):
 def SelectReviewersForFiles(cl, author, files, max_depth):
     """Selects reviewers for passed-in files
 
-  Args:
-    cl: Changelist class instance
-    author: Email of person running 'git cl split'
-    files: List of files
-    max_depth: The maximum directory depth to search for OWNERS files. A value
-               less than 1 means no limit.
-  """
+    Args:
+        cl: Changelist class instance
+        author: Email of person running 'git cl split'
+        files: List of files
+        max_depth: The maximum directory depth to search for OWNERS files.
+            A value less than 1 means no limit.
+    """
     info_split_by_owners = GetFilesSplitByOwners(files, max_depth)
 
     info_split_by_reviewers = {}

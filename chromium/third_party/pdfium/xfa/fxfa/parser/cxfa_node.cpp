@@ -1007,9 +1007,9 @@ void CXFA_Node::Trace(cppgc::Visitor* visitor) const {
   CXFA_Object::Trace(visitor);
   GCedTreeNodeMixin<CXFA_Node>::Trace(visitor);
   visitor->Trace(m_pAuxNode);
-  ContainerTrace(visitor, binding_nodes_);
   visitor->Trace(m_pLayoutData);
   visitor->Trace(ui_);
+  ContainerTrace(visitor, binding_nodes_);
 }
 
 CXFA_Node* CXFA_Node::Clone(bool bRecursive) {
@@ -2488,8 +2488,7 @@ XFA_EventError CXFA_Node::ProcessCalculate(CXFA_FFDocView* pDocView) {
   if (IsUserInteractive())
     return XFA_EventError::kDisabled;
 
-  CXFA_EventParam EventParam;
-  EventParam.m_eType = XFA_EVENT_Calculate;
+  CXFA_EventParam EventParam(XFA_EVENT_Calculate);
   EventParam.m_bTargeted = false;
   XFA_EventError iRet =
       ExecuteScript(pDocView, calc->GetScriptIfExists(), &EventParam);
@@ -2676,14 +2675,12 @@ XFA_EventError CXFA_Node::ProcessValidate(CXFA_FFDocView* pDocView,
       pDocView->GetLayoutStatus() != CXFA_FFDocView::LayoutStatus::kEnd;
 
   XFA_EventError iFormat = XFA_EventError::kNotExist;
-  XFA_EventError iRet = XFA_EventError::kNotExist;
   CXFA_Script* script = validate->GetScriptIfExists();
-  bool bRet = false;
   bool hasBoolResult = (bInitDoc || bStatus) && GetRawValue().IsEmpty();
+  CXFA_Node::BoolScriptResult result = {XFA_EventError::kNotExist, false};
   if (script) {
-    CXFA_EventParam eParam;
-    eParam.m_eType = XFA_EVENT_Validate;
-    std::tie(iRet, bRet) = ExecuteBoolScript(pDocView, script, &eParam);
+    CXFA_EventParam eParam(XFA_EVENT_Validate);
+    result = ExecuteBoolScript(pDocView, script, &eParam);
   }
 
   XFA_VERSION version = pDocView->GetDoc()->GetXFADoc()->GetCurVersionMode();
@@ -2696,15 +2693,16 @@ XFA_EventError CXFA_Node::ProcessValidate(CXFA_FFDocView* pDocView,
     if (!bVersionFlag)
       bVersionFlag = pDocView->GetDoc()->GetXFADoc()->is_scripting();
     XFA_EventErrorAccumulate(
-        &iRet,
+        &result.xfa_event_result,
         ProcessNullTestValidate(pDocView, validate, iFlags, bVersionFlag));
   }
-  if (iRet == XFA_EventError::kSuccess && iFormat != XFA_EventError::kSuccess &&
-      hasBoolResult && !bRet) {
+  if (result.xfa_event_result == XFA_EventError::kSuccess &&
+      iFormat != XFA_EventError::kSuccess && hasBoolResult &&
+      !result.script_result) {
     ProcessScriptTestValidate(pDocView, validate, bVersionFlag);
   }
-  XFA_EventErrorAccumulate(&iRet, iFormat);
-  return iRet;
+  XFA_EventErrorAccumulate(&result.xfa_event_result, iFormat);
+  return result.xfa_event_result;
 }
 
 WideString CXFA_Node::GetValidateCaptionName(bool bVersionFlag) {
@@ -2742,10 +2740,10 @@ WideString CXFA_Node::GetValidateMessage(bool bError, bool bVersionFlag) {
 XFA_EventError CXFA_Node::ExecuteScript(CXFA_FFDocView* pDocView,
                                         CXFA_Script* script,
                                         CXFA_EventParam* pEventParam) {
-  return ExecuteBoolScript(pDocView, script, pEventParam).first;
+  return ExecuteBoolScript(pDocView, script, pEventParam).xfa_event_result;
 }
 
-std::pair<XFA_EventError, bool> CXFA_Node::ExecuteBoolScript(
+CXFA_Node::BoolScriptResult CXFA_Node::ExecuteBoolScript(
     CXFA_FFDocView* pDocView,
     CXFA_Script* script,
     CXFA_EventParam* pEventParam) {
@@ -2778,24 +2776,24 @@ std::pair<XFA_EventError, bool> CXFA_Node::ExecuteBoolScript(
     pContext->SetNodesOfRunScript(&refNodes);
   }
 
-  auto pTmpRetValue = std::make_unique<CFXJSE_Value>();
-  bool bRet = false;
+  CFXJSE_Context::ExecutionResult exec_result;
   {
     AutoRestorer<uint8_t> restorer(&m_ExecuteRecursionDepth);
     ++m_ExecuteRecursionDepth;
-    bRet = pContext->RunScript(eScriptType, wsExpression.AsStringView(),
-                               pTmpRetValue.get(), this);
+    exec_result =
+        pContext->RunScript(eScriptType, wsExpression.AsStringView(), this);
   }
 
   XFA_EventError iRet = XFA_EventError::kError;
-  if (bRet) {
+  if (exec_result.status) {
     iRet = XFA_EventError::kSuccess;
     if (pEventParam->m_eType == XFA_EVENT_Calculate ||
         pEventParam->m_eType == XFA_EVENT_InitCalculate) {
-      if (!pTmpRetValue->IsUndefined(pContext->GetIsolate())) {
-        if (!pTmpRetValue->IsNull(pContext->GetIsolate()))
+      if (!exec_result.value->IsUndefined(pContext->GetIsolate())) {
+        if (!exec_result.value->IsNull(pContext->GetIsolate())) {
           pEventParam->m_wsResult =
-              pTmpRetValue->ToWideString(pContext->GetIsolate());
+              exec_result.value->ToWideString(pContext->GetIsolate());
+        }
 
         iRet = XFA_EventError::kSuccess;
       } else {
@@ -2821,8 +2819,8 @@ std::pair<XFA_EventError, bool> CXFA_Node::ExecuteBoolScript(
   }
   pContext->SetNodesOfRunScript(nullptr);
 
-  return {iRet, pTmpRetValue->IsBoolean(pContext->GetIsolate()) &&
-                    pTmpRetValue->ToBoolean(pContext->GetIsolate())};
+  return {iRet, exec_result.value->IsBoolean(pContext->GetIsolate()) &&
+                    exec_result.value->ToBoolean(pContext->GetIsolate())};
 }
 
 std::pair<XFA_FFWidgetType, CXFA_Ui*>

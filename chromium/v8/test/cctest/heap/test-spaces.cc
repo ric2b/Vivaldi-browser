@@ -304,7 +304,8 @@ TEST(SemiSpaceNewSpace) {
 
   auto new_space = std::make_unique<SemiSpaceNewSpace>(
       heap, heap->InitialSemiSpaceSize(), heap->InitialSemiSpaceSize());
-  MainAllocator allocator(heap, new_space.get(), allocation_info);
+  MainAllocator allocator(heap->main_thread_local_heap(), new_space.get(),
+                          &allocation_info);
   CHECK(new_space->MaximumCapacity());
 
   size_t successful_allocations = 0;
@@ -320,7 +321,7 @@ TEST(SemiSpaceNewSpace) {
   CHECK_LT(0, successful_allocations);
 
   new_space.reset();
-  memory_allocator->unmapper()->EnsureUnmappingCompleted();
+  memory_allocator->pool()->ReleasePooledChunks();
 }
 
 TEST(PagedNewSpace) {
@@ -334,7 +335,8 @@ TEST(PagedNewSpace) {
 
   auto new_space = std::make_unique<PagedNewSpace>(
       heap, heap->InitialSemiSpaceSize(), heap->InitialSemiSpaceSize());
-  MainAllocator allocator(heap, new_space.get(), allocation_info);
+  MainAllocator allocator(heap->main_thread_local_heap(), new_space.get(),
+                          &allocation_info);
   CHECK(new_space->MaximumCapacity());
   CHECK(new_space->EnsureCurrentCapacity());
   CHECK_LT(0, new_space->TotalCapacity());
@@ -352,7 +354,7 @@ TEST(PagedNewSpace) {
   CHECK_LT(0, successful_allocations);
 
   new_space.reset();
-  memory_allocator->unmapper()->EnsureUnmappingCompleted();
+  memory_allocator->pool()->ReleasePooledChunks();
 }
 
 TEST(OldSpace) {
@@ -369,7 +371,8 @@ TEST(OldSpace) {
   LinearAllocationArea allocation_info;
 
   auto old_space = std::make_unique<OldSpace>(heap);
-  MainAllocator allocator(heap, old_space.get(), allocation_info);
+  MainAllocator allocator(heap->main_thread_local_heap(), old_space.get(),
+                          &allocation_info);
   const int obj_size = kMaxRegularHeapObjectSize;
 
   size_t successful_allocations = 0;
@@ -406,7 +409,8 @@ TEST(OldLargeObjectSpace) {
   size_t successful_allocations = 0;
 
   while (true) {
-    AllocationResult allocation = lo->AllocateRaw(lo_size);
+    AllocationResult allocation =
+        lo->AllocateRaw(heap->main_thread_local_heap(), lo_size);
     if (allocation.IsFailure()) break;
     successful_allocations++;
     Tagged<Object> obj = allocation.ToObjectChecked();
@@ -424,7 +428,7 @@ TEST(OldLargeObjectSpace) {
   CHECK_LT(0, successful_allocations);
 
   CHECK(!lo->IsEmpty());
-  CHECK(lo->AllocateRaw(lo_size).IsFailure());
+  CHECK(lo->AllocateRaw(heap->main_thread_local_heap(), lo_size).IsFailure());
 }
 
 #ifndef DEBUG

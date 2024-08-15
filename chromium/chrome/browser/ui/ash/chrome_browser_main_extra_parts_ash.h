@@ -17,6 +17,7 @@ namespace ash {
 class ArcWindowWatcher;
 class NetworkPortalNotificationController;
 class NewWindowDelegateProvider;
+class OobeDialogUtil;
 class RefreshRateController;
 class VideoConferenceTrayController;
 }  // namespace ash
@@ -44,6 +45,7 @@ class AppListClientImpl;
 class ArcOpenUrlDelegateImpl;
 class AshShellInit;
 class AshWebViewFactoryImpl;
+class CampaignsManagerClientImpl;
 class CastConfigControllerMediaRouter;
 class DesksClient;
 class ImeControllerClientImpl;
@@ -52,6 +54,7 @@ class LoginScreenClientImpl;
 class MediaClientImpl;
 class MobileDataNotifications;
 class NetworkConnectDelegate;
+class PickerClientImpl;
 class ProjectorAppClientImpl;
 class ProjectorClientImpl;
 class ScreenOrientationDelegateChromeos;
@@ -146,6 +149,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
       chrome_shelf_controller_initializer_;
   std::unique_ptr<DesksClient> desks_client_;
   std::unique_ptr<ash::RefreshRateController> refresh_rate_controller_;
+  std::unique_ptr<CampaignsManagerClientImpl> campaigns_manager_client_;
 
 #if BUILDFLAG(ENABLE_WAYLAND_SERVER)
   std::unique_ptr<ExoParts> exo_parts_;
@@ -157,6 +161,8 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<AppAccessNotifier> app_access_notifier_;
   std::unique_ptr<policy::DisplaySettingsHandler> display_settings_handler_;
   std::unique_ptr<AshWebViewFactoryImpl> ash_web_view_factory_;
+  std::unique_ptr<PickerClientImpl> picker_client_;
+  std::unique_ptr<ash::OobeDialogUtil> oobe_dialog_util_;
   std::unique_ptr<chromeos::ReadWriteCardsManager> read_write_cards_manager_;
 
   // Initialized in PostBrowserStart in all configs:

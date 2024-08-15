@@ -310,6 +310,10 @@ void VivaldiFrameServiceImpl::ResumeParser() {
   loader->ResumeParser();
 }
 
+void VivaldiFrameServiceImpl::SetSupportsAppRegion(bool supports_app_region) {
+  render_frame_->GetWebView()->SetSupportsAppRegion(supports_app_region);
+}
+
 namespace {
 bool CopyBitmapToSharedRegionAsN32(
     const SkBitmap& bitmap,

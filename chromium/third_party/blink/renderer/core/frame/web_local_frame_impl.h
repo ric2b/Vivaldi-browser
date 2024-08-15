@@ -49,6 +49,7 @@
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom-blink.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
@@ -56,7 +57,6 @@
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
-#include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/script/script_evaluation_params.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_file_system_type.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
@@ -80,7 +80,6 @@ namespace blink {
 class ChromePrintContext;
 class FindInPage;
 class HTMLFencedFrameElement;
-class HTMLPortalElement;
 class LocalFrameClientImpl;
 class ResourceError;
 class ScrollableArea;
@@ -116,7 +115,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   // WebFrame overrides:
   void Close() override;
   WebView* View() const override;
-  v8::Local<v8::Object> GlobalProxy() const override;
+  v8::Local<v8::Object> GlobalProxy(v8::Isolate* isolate) const override;
   bool IsLoading() const override;
 
   // WebLocalFrame overrides:
@@ -368,9 +367,6 @@ class CORE_EXPORT WebLocalFrameImpl final
           session_storage_area) override;
   void AddHitTestOnTouchStartCallback(
       base::RepeatingCallback<void(const WebHitTestResult&)> callback) override;
-  void SetResourceCacheRemote(
-      CrossVariantMojoRemote<mojom::blink::ResourceCacheInterfaceBase> remote)
-      override;
   void BlockParserForTesting() override;
   void ResumeParserForTesting() override;
   void FlushInputForTesting(base::OnceClosure done_callback) override;
@@ -466,11 +462,6 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   LocalFrame* CreateChildFrame(const AtomicString& name,
                                HTMLFrameOwnerElement*);
-  std::pair<RemoteFrame*, PortalToken> CreatePortal(
-      HTMLPortalElement*,
-      mojo::PendingAssociatedReceiver<mojom::blink::Portal>,
-      mojo::PendingAssociatedRemote<mojom::blink::PortalClient>);
-  RemoteFrame* AdoptPortal(HTMLPortalElement*);
 
   RemoteFrame* CreateFencedFrame(
       HTMLFencedFrameElement*,

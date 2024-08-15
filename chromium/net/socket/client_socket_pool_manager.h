@@ -74,11 +74,10 @@ class NET_EXPORT_PRIVATE ClientSocketPoolManager {
 
 // A helper method that uses the passed in proxy information to initialize a
 // ClientSocketHandle with the relevant socket pool. Use this method for
-// HTTP/HTTPS requests. |ssl_config_for_origin| is only used if the request
-// uses SSL and |ssl_config_for_proxy| is used if the proxy server is HTTPS.
-// |resolution_callback| will be invoked after the the hostname is
-// resolved.  If |resolution_callback| does not return OK, then the
-// connection will be aborted with that value.
+// HTTP/HTTPS requests. `ssl_config_for_origin` is only used if the request
+// uses SSL. `resolution_callback` will be invoked after the the hostname is
+// resolved. If `resolution_callback` does not return OK, then the connection
+// will be aborted with that value.
 int InitSocketHandleForHttpRequest(
     url::SchemeHostPort endpoint,
     int request_load_flags,
@@ -86,7 +85,6 @@ int InitSocketHandleForHttpRequest(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,
@@ -99,12 +97,10 @@ int InitSocketHandleForHttpRequest(
 // A helper method that uses the passed in proxy information to initialize a
 // ClientSocketHandle with the relevant socket pool. Use this method for
 // HTTP/HTTPS requests for WebSocket handshake.
-// |ssl_config_for_origin| is only used if the request
-// uses SSL and |ssl_config_for_proxy| is used if the proxy server is HTTPS.
-// |resolution_callback| will be invoked after the the hostname is
-// resolved.  If |resolution_callback| does not return OK, then the
-// connection will be aborted with that value.
-// This function uses WEBSOCKET_SOCKET_POOL socket pools.
+// `ssl_config_for_origin` is only used if the request uses SSL.
+// `resolution_callback` will be invoked after the the hostname is resolved. If
+// `resolution_callback` does not return OK, then the connection will be aborted
+// with that value. This function uses WEBSOCKET_SOCKET_POOL socket pools.
 int InitSocketHandleForWebSocketRequest(
     url::SchemeHostPort endpoint,
     int request_load_flags,
@@ -112,7 +108,6 @@ int InitSocketHandleForWebSocketRequest(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     const NetLogWithSource& net_log,
@@ -129,7 +124,6 @@ int PreconnectSocketsForHttpRequest(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,

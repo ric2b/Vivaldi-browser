@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/access_code_cast/access_code_cast_handler.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
@@ -352,7 +353,8 @@ class AccessCodeCastHandlerTest : public ChromeRenderViewHostTestHarness {
   std::unique_ptr<MockCastMediaSinkServiceImpl>
       mock_cast_media_sink_service_impl_;
   std::unique_ptr<MockWebContentsPresentationManager> presentation_manager_;
-  std::vector<MediaSinksObserver*> media_sinks_observers_;
+  std::vector<raw_ptr<MediaSinksObserver, VectorExperimental>>
+      media_sinks_observers_;
   mojom::RouteRequestResultCode result_code_ =
       mojom::RouteRequestResultCode::OK;
   MediaSinkInternal cast_sink_1_;
@@ -369,7 +371,7 @@ TEST_F(AccessCodeCastHandlerTest, OnSinkAddedResult) {
   EXPECT_CALL(mock_callback_failure,
               Run(AddSinkResultCode::CHANNEL_OPEN_ERROR));
   handler()->OnSinkAddedResult(AddSinkResultCode::CHANNEL_OPEN_ERROR,
-                               absl::nullopt);
+                               std::nullopt);
   EXPECT_FALSE(handler()->sink_id_.has_value());
 
   MockAddSinkCallback mock_callback_ok;
@@ -579,7 +581,7 @@ TEST_F(AccessCodeCastHandlerTest, ProfileSyncSuccess) {
           [](const std::string& access_code,
              AccessCodeCastSinkService::AddSinkResultCallback callback) {
             std::move(callback).Run(AddSinkResultCode::UNKNOWN_ERROR,
-                                    absl::nullopt);
+                                    std::nullopt);
           });
   EXPECT_CALL(*access_service(), DiscoverSink(_, _)).Times(1);
   handler()->AddSink(

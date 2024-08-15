@@ -54,26 +54,23 @@ FunctionLiteral* Parser::DefaultConstructor(const AstRawString* name,
   {
     FunctionState function_state(&function_state_, &scope_, function_scope);
 
+    // ES#sec-runtime-semantics-classdefinitionevaluation
+    //
+    // 14.a
+    //  ...
+    //  iv. If F.[[ConstructorKind]] is DERIVED, then
+    //    1. NOTE: This branch behaves similarly to constructor(...args) {
+    //       super(...args); }. The most notable distinction is that while the
+    //       aforementioned ECMAScript source text observably calls the
+    //       @@iterator method on %Array.prototype%, this function does not.
+    //    2. Let func be ! F.[[GetPrototypeOf]]().
+    //    3. If IsConstructor(func) is false, throw a TypeError exception.
+    //    4. Let result be ? Construct(func, args, NewTarget).
+    //  ...
     if (call_super) {
-      // Create a SuperCallReference and handle in BytecodeGenerator.
-      auto constructor_args_name = ast_value_factory()->empty_string();
-      bool is_rest = true;
-      bool is_optional = false;
-      Variable* constructor_args = function_scope->DeclareParameter(
-          constructor_args_name, VariableMode::kTemporary, is_optional, is_rest,
-          ast_value_factory(), pos);
-
-      Expression* call;
-      {
-        ScopedPtrList<Expression> args(pointer_buffer());
-        Spread* spread_args = factory()->NewSpread(
-            factory()->NewVariableProxy(constructor_args), pos, pos);
-
-        args.Add(spread_args);
-        Expression* super_call_ref = NewSuperCallReference(pos);
-        constexpr bool has_spread = true;
-        call = factory()->NewCall(super_call_ref, args, pos, has_spread);
-      }
+      SuperCallReference* super_call_ref = NewSuperCallReference(pos);
+      Expression* call =
+          factory()->NewSuperCallForwardArgs(super_call_ref, pos);
       body.Add(factory()->NewReturnStatement(call, pos));
     }
 
@@ -314,7 +311,7 @@ Expression* Parser::NewSuperPropertyReference(Scope* home_object_scope,
       pos);
 }
 
-Expression* Parser::NewSuperCallReference(int pos) {
+SuperCallReference* Parser::NewSuperCallReference(int pos) {
   VariableProxy* new_target_proxy =
       NewUnresolved(ast_value_factory()->new_target_string(), pos);
   VariableProxy* this_function_proxy =
@@ -821,7 +818,7 @@ Expression* Parser::WrapREPLResult(Expression* value) {
   // object literal:
   //
   //     return %_AsyncFunctionResolve(
-  //                .generator_object, {.repl_result: .result});
+  //               .generator_object, {__proto__: null, .repl_result: .result});
   //
   // Should ".result" be a resolved promise itself, the async return
   // would chain the promises and return the resolve value instead of
@@ -832,8 +829,14 @@ Expression* Parser::WrapREPLResult(Expression* value) {
   ObjectLiteralProperty* property =
       factory()->NewObjectLiteralProperty(property_name, value, true);
 
+  Literal* proto_name = factory()->NewStringLiteral(
+      ast_value_factory()->proto_string(), kNoSourcePosition);
+  ObjectLiteralProperty* prototype = factory()->NewObjectLiteralProperty(
+      proto_name, factory()->NewNullLiteral(kNoSourcePosition), false);
+
   ScopedPtrList<ObjectLiteralProperty> properties(pointer_buffer());
   properties.Add(property);
+  properties.Add(prototype);
   return factory()->NewObjectLiteral(properties, false, kNoSourcePosition,
                                      false);
 }
@@ -1948,38 +1951,6 @@ Block* Parser::IgnoreCompletion(Statement* statement) {
   Block* block = factory()->NewBlock(1, true);
   block->statements()->Add(statement, zone());
   return block;
-}
-
-Expression* Parser::RewriteReturn(Expression* return_value, int pos) {
-  if (IsDerivedConstructor(function_state_->kind())) {
-    // For subclass constructors we need to return this in case of undefined;
-    // other primitive values trigger an exception in the ConstructStub.
-    //
-    //   return expr;
-    //
-    // Is rewritten as:
-    //
-    //   return (temp = expr) === undefined ? this : temp;
-
-    // temp = expr
-    Variable* temp = NewTemporary(ast_value_factory()->empty_string());
-    Assignment* assign = factory()->NewAssignment(
-        Token::ASSIGN, factory()->NewVariableProxy(temp), return_value, pos);
-
-    // temp === undefined
-    Expression* is_undefined = factory()->NewCompareOperation(
-        Token::EQ_STRICT, assign,
-        factory()->NewUndefinedLiteral(kNoSourcePosition), pos);
-
-    // is_undefined ? this : temp
-    // We don't need to call UseThis() since it's guaranteed to be called
-    // for derived constructors after parsing the constructor in
-    // ParseFunctionBody.
-    return_value =
-        factory()->NewConditional(is_undefined, factory()->ThisExpression(),
-                                  factory()->NewVariableProxy(temp), pos);
-  }
-  return return_value;
 }
 
 Statement* Parser::RewriteSwitchStatement(SwitchStatement* switch_statement,

@@ -18,10 +18,9 @@ namespace blink {
 // multicol container.
 class LayoutMultiColumnSpannerPlaceholder final : public LayoutBox {
  public:
-  bool IsOfType(LayoutObjectType type) const override {
+  bool IsLayoutMultiColumnSpannerPlaceholder() const final {
     NOT_DESTROYED();
-    return type == kLayoutObjectMultiColumnSpannerPlaceholder ||
-           LayoutBox::IsOfType(type);
+    return true;
   }
 
   static LayoutMultiColumnSpannerPlaceholder* CreateAnonymous(
@@ -43,15 +42,6 @@ class LayoutMultiColumnSpannerPlaceholder final : public LayoutBox {
   LayoutBox* LayoutObjectInFlowThread() const {
     NOT_DESTROYED();
     return layout_object_in_flow_thread_.Get();
-  }
-  void MarkForLayoutIfObjectInFlowThreadNeedsLayout() {
-    NOT_DESTROYED();
-    if (!layout_object_in_flow_thread_->NeedsLayout())
-      return;
-    // The containing block of a spanner is the multicol container (our parent
-    // here), but the spanner is laid out via its spanner set (us), so we need
-    // to make sure that we enter it.
-    SetChildNeedsLayout(kMarkOnlyThis);
   }
 
   bool AnonymousHasStylePropagationOverride() final {

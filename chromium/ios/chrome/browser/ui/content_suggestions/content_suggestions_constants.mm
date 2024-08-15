@@ -31,6 +31,11 @@ NSString* const kMagicStackEditHalfSheetDoneButtonAccessibilityIdentifier =
 
 NSString* const kMagicStackViewAccessibilityIdentifier = @"kMagicStack";
 
+NSString* const
+    kMagicStackContentSuggestionsModuleTabResumptionAccessibilityIdentifier =
+        @"MagicStackContentSuggestionsModuleTabResumption"
+        @"AccessibilityIdentifier";
+
 const CGFloat kMagicStackWideWidth = 430;
 
 const CGFloat kMostVisitedBottomMargin = 13;
@@ -49,6 +54,8 @@ ContentSuggestionsModuleType SetUpListModuleTypeForSetUpListType(
       return ContentSuggestionsModuleType::kSetUpListAutofill;
     case SetUpListItemType::kAllSet:
       return ContentSuggestionsModuleType::kSetUpListAllSet;
+    case SetUpListItemType::kContentNotification:
+      return ContentSuggestionsModuleType::kSetUpListContentNotification;
     default:
       NOTREACHED_NORETURN();
   }

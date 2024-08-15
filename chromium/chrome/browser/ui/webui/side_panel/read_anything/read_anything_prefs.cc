@@ -14,9 +14,10 @@
 
 void RegisterReadAnythingProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterStringPref(prefs::kAccessibilityReadAnythingFontName,
-                               string_constants::kReadAnythingPlaceholderFontName,
-                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterStringPref(
+      prefs::kAccessibilityReadAnythingFontName,
+      string_constants::kReadAnythingPlaceholderFontName,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterDoublePref(prefs::kAccessibilityReadAnythingFontScale,
                                kReadAnythingDefaultFontScale,
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -54,6 +55,14 @@ void RegisterReadAnythingProfilePrefs(
         prefs::kAccessibilityReadAnythingHighlightColor, 0,
         user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   }
+  if (features::IsReadAnythingOmniboxIconEnabled()) {
+    registry->RegisterIntegerPref(
+        prefs::kAccessibilityReadAnythingOmniboxIconLabelShownCount, 0,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  }
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityReadAnythingLinksEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)

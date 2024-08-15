@@ -6,7 +6,6 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as Persistence from '../../models/persistence/persistence.js';
@@ -38,11 +37,11 @@ const UIStrings = {
   /**
    *@description Text in Sources View of the Sources panel. This sentence follows by a list of actions.
    */
-  workspaceDropInAFolderToSyncSources: 'To sync edits to the workspace, drop a folder with your sources here or:',
+  workspaceDropInAFolderToSyncSources: 'To sync edits to the workspace, drop a folder with your sources here or',
   /**
    *@description Text in Sources View of the Sources panel.
    */
-  selectFolder: 'select folder',
+  selectFolder: 'Select folder',
   /**
    *@description Accessible label for Sources placeholder view actions list
    */
@@ -146,8 +145,8 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
 
   private placeholderElement(): Element {
     const shortcuts = [
-      {actionId: 'quickOpen.show', description: i18nString(UIStrings.openFile)},
-      {actionId: 'commandMenu.show', description: i18nString(UIStrings.runCommand)},
+      {actionId: 'quick-open.show', description: i18nString(UIStrings.openFile)},
+      {actionId: 'quick-open.show-command-menu', description: i18nString(UIStrings.runCommand)},
       {
         actionId: 'sources.add-folder-to-workspace',
         description: i18nString(UIStrings.workspaceDropInAFolderToSyncSources),
@@ -169,8 +168,8 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
 
         const button = listItemElement.createChild('button');
         button.textContent = shortcut.description;
-        const action = UI.ActionRegistry.ActionRegistry.instance().action(shortcut.actionId);
-        button.addEventListener('click', () => action?.execute());
+        const action = UI.ActionRegistry.ActionRegistry.instance().getAction(shortcut.actionId);
+        button.addEventListener('click', () => action.execute());
       }
 
       if (shortcut.isWorkspace) {
@@ -191,7 +190,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     if (!result) {
       return;
     }
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.WorkspaceDropFolder);
+    Host.userMetrics.actionTaken(Host.UserMetrics.Action.WorkspaceSelectFolder);
     void UI.ViewManager.ViewManager.instance().showView('navigator-files');
   }
 
@@ -290,6 +289,9 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   #onScopeChange(): void {
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
     for (const uiSourceCode of workspace.uiSourceCodes()) {
+      if (uiSourceCode.project().type() !== Workspace.Workspace.projectTypes.Network) {
+        continue;
+      }
       const target = Bindings.NetworkProject.NetworkProject.targetForUISourceCode(uiSourceCode);
       if (SDK.TargetManager.TargetManager.instance().isInScope(target)) {
         this.addUISourceCode(uiSourceCode);
@@ -305,17 +307,23 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 
   private addUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
-    if (uiSourceCode.project().isServiceProject()) {
+    const project = uiSourceCode.project();
+    if (project.isServiceProject()) {
       return;
     }
-    if (uiSourceCode.project().type() === Workspace.Workspace.projectTypes.FileSystem &&
-        Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding.fileSystemType(uiSourceCode.project()) ===
-            'overrides') {
-      return;
-    }
-    const target = Bindings.NetworkProject.NetworkProject.targetForUISourceCode(uiSourceCode);
-    if (!SDK.TargetManager.TargetManager.instance().isInScope(target)) {
-      return;
+    switch (project.type()) {
+      case Workspace.Workspace.projectTypes.FileSystem: {
+        if (Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding.fileSystemType(project) === 'overrides') {
+          return;
+        }
+        break;
+      }
+      case Workspace.Workspace.projectTypes.Network: {
+        const target = Bindings.NetworkProject.NetworkProject.targetForUISourceCode(uiSourceCode);
+        if (!SDK.TargetManager.TargetManager.instance().isInScope(target)) {
+          return;
+        }
+      }
     }
     this.editorContainer.addUISourceCode(uiSourceCode);
   }
@@ -372,7 +380,6 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 
   private createSourceView(uiSourceCode: Workspace.UISourceCode.UISourceCode): UI.Widget.Widget {
-    let sourceFrame;
     let sourceView;
     const contentType = uiSourceCode.contentType();
 
@@ -380,23 +387,17 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
       sourceView = new SourceFrame.ImageView.ImageView(uiSourceCode.mimeType(), uiSourceCode);
     } else if (contentType === Common.ResourceType.resourceTypes.Font) {
       sourceView = new SourceFrame.FontView.FontView(uiSourceCode.mimeType(), uiSourceCode);
-    } else if (
-        uiSourceCode.name() === HEADER_OVERRIDES_FILENAME &&
-        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HEADER_OVERRIDES)) {
+    } else if (uiSourceCode.name() === HEADER_OVERRIDES_FILENAME) {
       sourceView = new Components.HeadersView.HeadersView(uiSourceCode);
     } else {
-      sourceFrame = new UISourceCodeFrame(uiSourceCode);
-    }
-
-    if (sourceFrame) {
-      this.historyManager.trackSourceFrameCursorJumps(sourceFrame);
+      sourceView = new UISourceCodeFrame(uiSourceCode);
+      this.historyManager.trackSourceFrameCursorJumps(sourceView);
     }
 
     uiSourceCode.addEventListener(Workspace.UISourceCode.Events.TitleChanged, this.#uiSourceCodeTitleChanged, this);
 
-    const widget = (sourceFrame || sourceView as UI.Widget.Widget);
-    this.sourceViewByUISourceCode.set(uiSourceCode, widget);
-    return widget;
+    this.sourceViewByUISourceCode.set(uiSourceCode, sourceView);
+    return sourceView;
   }
 
   #sourceViewTypeForWidget(widget: UI.Widget.Widget): SourceViewType {
@@ -413,8 +414,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 
   #sourceViewTypeForUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): SourceViewType {
-    if (uiSourceCode.name() === HEADER_OVERRIDES_FILENAME &&
-        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HEADER_OVERRIDES)) {
+    if (uiSourceCode.name() === HEADER_OVERRIDES_FILENAME) {
       return SourceViewType.HeadersView;
     }
     const contentType = uiSourceCode.contentType();
@@ -637,12 +637,10 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   }
 }
 
-export  // TODO(crbug.com/1167717): Make this a const enum again
-    // eslint-disable-next-line rulesdir/const_enum
-    enum Events {
-      EditorClosed = 'EditorClosed',
-      EditorSelected = 'EditorSelected',
-    }
+export const enum Events {
+  EditorClosed = 'EditorClosed',
+  EditorSelected = 'EditorSelected',
+}
 
 export interface EditorClosedEvent {
   uiSourceCode: Workspace.UISourceCode.UISourceCode;
@@ -668,20 +666,7 @@ export function getRegisteredEditorActions(): EditorAction[] {
   return registeredEditorActions.map(editorAction => editorAction());
 }
 
-let switchFileActionDelegateInstance: SwitchFileActionDelegate;
-
 export class SwitchFileActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  static instance(opts: {
-    forceNew: boolean|null,
-  } = {forceNew: null}): SwitchFileActionDelegate {
-    const {forceNew} = opts;
-    if (!switchFileActionDelegateInstance || forceNew) {
-      switchFileActionDelegateInstance = new SwitchFileActionDelegate();
-    }
-
-    return switchFileActionDelegateInstance;
-  }
-
   private static nextFile(currentUISourceCode: Workspace.UISourceCode.UISourceCode): Workspace.UISourceCode.UISourceCode
       |null {
     function fileNamePrefix(name: string): string {
@@ -711,8 +696,8 @@ export class SwitchFileActionDelegate implements UI.ActionRegistration.ActionDel
     return nextUISourceCode !== currentUISourceCode ? nextUISourceCode : null;
   }
 
-  handleAction(_context: UI.Context.Context, _actionId: string): boolean {
-    const sourcesView = UI.Context.Context.instance().flavor(SourcesView);
+  handleAction(context: UI.Context.Context, _actionId: string): boolean {
+    const sourcesView = context.flavor(SourcesView);
     if (!sourcesView) {
       return false;
     }
@@ -729,21 +714,9 @@ export class SwitchFileActionDelegate implements UI.ActionRegistration.ActionDel
   }
 }
 
-let actionDelegateInstance: ActionDelegate;
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
-  static instance(opts: {
-    forceNew: boolean|null,
-  }|undefined = {forceNew: null}): ActionDelegate {
-    const {forceNew} = opts;
-    if (!actionDelegateInstance || forceNew) {
-      actionDelegateInstance = new ActionDelegate();
-    }
-
-    return actionDelegateInstance;
-  }
-
   handleAction(context: UI.Context.Context, actionId: string): boolean {
-    const sourcesView = UI.Context.Context.instance().flavor(SourcesView);
+    const sourcesView = context.flavor(SourcesView);
     if (!sourcesView) {
       return false;
     }
@@ -786,8 +759,7 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
 
 const HEADER_OVERRIDES_FILENAME = '.headers';
 
-// eslint-disable-next-line rulesdir/const_enum
-enum SourceViewType {
+const enum SourceViewType {
   ImageView = 'ImageView',
   FontView = 'FontView',
   HeadersView = 'HeadersView',

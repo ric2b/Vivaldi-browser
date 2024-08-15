@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Element aktualisiert</translation>
 <translation id="1041637248958093184">Suchanfragen, besuchte Websites, Cookies und temporäre Dateien werden von Vivaldi nicht gespeichert, wenn Sie private Tabs verwenden.</translation>
 <translation id="1066692930984703744">Aktivieren Sie Tracker- und Werbeblocker für schnelleres und sichereres Surfen</translation>
-<translation id="1076258485383101882">Eingegebene URLs synchronisieren</translation>
 <translation id="1116694919640316211">Über</translation>
 <translation id="1123707809902612118">Tracker und Werbung blockieren</translation>
 <translation id="1151972924205500581">Passwort erforderlich</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">Nutzungsbedingungen</translation>
 <translation id="1771413903824396513">Mit Spitznamen</translation>
 <translation id="1804522390855853698">Chinesisch (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Hell</translation>
 <translation id="1809939268435598390">Ordner löschen</translation>
 <translation id="1813686536470127172">Sonstige Ordner</translation>
 <translation id="1828800626900562968">Tippen Sie unten auf das Plus-Symbol, um einen neuen Tab zu erstellen.</translation>
@@ -71,12 +71,16 @@
 <translation id="2388224692799337242">Sobald Sie mit dem Surfen beginnen, wird Ihr Verlauf hier angezeigt</translation>
 <translation id="2391028308389203648">Türkisch (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">aktivieren</translation>
+<translation id="2414886740292270097">Dunkel</translation>
+<translation id="2433507940547922241">Darstellung</translation>
 <translation id="2434910957904013691">Alles synchronisieren</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />Benutzername<ph name="END_LINK" /> oder <ph name="BEGIN_LINK" />Passwort<ph name="END_LINK" /> vergessen?</translation>
 <translation id="2536780277491102902">AUSNAHMEN</translation>
 <translation id="2558801801411970131">Tracker blockieren</translation>
 <translation id="2577446409661931381">Neue Notiz</translation>
 <translation id="2619628557366098325">Portugiesisch (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">System</translation>
+<translation id="2666092431469916601">Oben</translation>
 <translation id="2677862276555105603">Anzeige
 blockiert</translation>
 <translation id="2678542925523700624">Estnisch (<ph name="ORIGIN" />)</translation>
@@ -98,6 +102,7 @@ blockiert</translation>
 <translation id="3073196329485613487">Bei Ihrem Konto anmelden</translation>
 <translation id="307859903981308731">Wenn Sie fortfahren, erklären Sie sich mit Vivaldis</translation>
 <translation id="3086746722712840547">Notiz</translation>
+<translation id="3087734570205094154">Unten</translation>
 <translation id="3091563570137981919">Tracker- und Werbeblocker</translation>
 <translation id="3134385238404760368">Keine aktuellen Tabs</translation>
 <translation id="3157931365184549694">Wiederherstellen</translation>
@@ -127,12 +132,14 @@ blockiert</translation>
 <translation id="3699026013955941879">Der Code ist abgelaufen. Bitte fordern Sie einen neuen Aktivierungscode an.</translation>
 <translation id="3700829948786686853">Willkommen bei Vivaldi</translation>
 <translation id="3766350025418769949">Sie können die im Vivaldi Passwort Manager gespeicherten Passwörter in anderen Apps auf Ihrem iPad verwenden.</translation>
+<translation id="3842727926262967527">Wählen Sie aus, wo Sie die Tableiste und das Adressfeld haben möchten.</translation>
 <translation id="3845564230651302310">Neue Blockereinstellungen anwenden...</translation>
 <translation id="3858860766373142691">Name</translation>
 <translation id="3866249974567520381">Beschreibung</translation>
 <translation id="3872195896030547485">Bitte geben Sie eine gültige E-Mail-Adresse ein.</translation>
 <translation id="3894427358181296146">Ordner hinzufügen</translation>
 <translation id="3897092660631435901">Menü</translation>
+<translation id="3921585859122905677">Position der Adressleiste</translation>
 <translation id="3953599441418463312">Japanisch (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Tracker blockiert</translation>
 <translation id="3958433364221339259">Suchen mit <ph name="SEARCH_ENGINE" /></translation>
@@ -163,6 +170,7 @@ blockiert</translation>
 <translation id="4394049700291259645">Deaktivieren</translation>
 <translation id="4413780690230851155">Browserverlauf löschen</translation>
 <translation id="4452878871193896747">Indonesisch (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Tab Stil</translation>
 <translation id="4474581062946673155">Sie haben derzeit keine Tabs von anderen Geräten synchronisiert.</translation>
 <translation id="4493850495402472953">und</translation>
 <translation id="4497115807425788318">Ordner</translation>
@@ -207,6 +215,7 @@ blockiert</translation>
 <translation id="5238642303473095117">Daten löschen</translation>
 <translation id="5245732982828228444">Hier finden Sie Ihre Notizen</translation>
 <translation id="5249199221558969362">Bitte geben Sie eine realistische Altersangabe ein.</translation>
+<translation id="5271549068863921519">Passwort speichern</translation>
 <translation id="5290452628447338707">Keine Notizen</translation>
 <translation id="5317780077021120954">Speichern</translation>
 <translation id="5349678548463426691">Nach Beschreibung</translation>
@@ -240,6 +249,7 @@ blockiert</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> verschobene Einträge</translation>
 <translation id="6147094071357011481">Kürzlich geschlossene Tabs sind nicht verfügbar</translation>
 <translation id="6193995664633100765">Indisch (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">Thema</translation>
 <translation id="6365929278691047681">Deutsch (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Lesezeichen bearbeiten</translation>
 <translation id="6406506848690869874">Synchronisation</translation>
@@ -278,7 +288,6 @@ blockiert</translation>
 <translation id="7041964446309059643">Manuell</translation>
 <translation id="7110758301321962823">Benutzername wiederherstellen</translation>
 <translation id="7194677467200983873">Letzte Synchronisierung:</translation>
-<translation id="7196846668589096106">Desktop Tabs</translation>
 <translation id="7210372243397300116">Ordner suchen</translation>
 <translation id="7215420652436283416">Nach Adresse</translation>
 <translation id="7229439505896086266">Notiz erstellen</translation>
@@ -326,6 +335,7 @@ blockiert</translation>
 <translation id="8273666073173891138">Notiz gespeichert in <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Importieren</translation>
 <translation id="8284356787013856231">Berechtigung zum Öffnen der Datei verweigert</translation>
+<translation id="8289933454364510719">Oben oder unten</translation>
 <translation id="8326104954595890674">Neuer privater Tab</translation>
 <translation id="8329813750766387010">Aktualisiert: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Cookie-Warnungen entfernen (<ph name="TYPE" />)</translation>
@@ -349,10 +359,11 @@ blockiert</translation>
 <translation id="8684294196284714094">Sind Sie bereit, Vivaldi als Ihren Standardbrowser festzulegen?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> Elemente gelöscht</translation>
 <translation id="8763006697839582351">Öffnen im privaten Modus</translation>
+<translation id="8786689981011401964">Hintergrundbilder</translation>
 <translation id="8804164990146287819">Datenschutzerklärung</translation>
 <translation id="8819841443522803117">Ist es an der Zeit, Ihren Standardbrowser zu wechseln? Wählen Sie Vivaldi.</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
-<translation id="8855707633300847215">Tableiste anzeigen</translation>
+<translation id="8855707633300847215">Tableiste einblenden</translation>
 <translation id="8892354889971902600">Kürzlich geschlossene Tabs werden hier angezeigt.</translation>
 <translation id="89390081013973080">Alles bereit! Nun müssen Sie entscheiden, welche Daten zwischen den Geräten synchronisiert werden sollen.</translation>
 <translation id="8965371804397726192">Synchronisierung aller Daten starten</translation>

@@ -9,6 +9,7 @@ from .device_trust_connector.device_trust_connector_windows_enrollment_test impo
 from .local_content_analysis_connector.local_content_analysis_connector_test import *
 from .realtime_reporting_bce.realtime_reporting_bce_test import *
 from .reporting_connector_chronicle.reporting_connector_chronicle_test import *
+from .reporting_connector_client_only.reporting_connector_client_only_test import *
 from .reporting_connector_combined.reporting_connector_combined_test import *
 from .reporting_connector_crowdstrike.reporting_connector_crowdstrike_test import *
 from .reporting_connector_pan.reporting_connector_pan_test import *

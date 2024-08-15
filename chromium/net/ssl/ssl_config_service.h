@@ -22,8 +22,7 @@ struct NET_EXPORT SSLContextConfig {
   SSLContextConfig& operator=(const SSLContextConfig&);
   SSLContextConfig& operator=(SSLContextConfig&&);
 
-  // EncryptedClientHelloEnabled returns whether ECH is enabled.
-  bool EncryptedClientHelloEnabled() const;
+  bool operator==(const SSLContextConfig&) const;
 
   // Returns whether insecure hashes are allowed in TLS handshakes.
   bool InsecureHashesInTLSHandshakesEnabled() const;
@@ -53,9 +52,7 @@ struct NET_EXPORT SSLContextConfig {
   // flags.
   absl::optional<bool> post_quantum_override;
 
-  // If false, disables TLS Encrypted ClientHello (ECH). If true, the feature
-  // may be enabled or disabled, depending on feature flags. If querying whether
-  // ECH is enabled, use `EncryptedClientHelloEnabled` instead.
+  // Controls whether ECH is enabled.
   bool ech_enabled = true;
 
   // If specified, controls whether insecure hashes are allowed in TLS
@@ -72,8 +69,6 @@ struct NET_EXPORT SSLContextConfig {
   //
   // TODO(crbug.com/795089): Enable this unconditionally.
   absl::optional<bool> rsa_key_usage_for_local_anchors_override;
-
-  // ADDING MORE HERE? Don't forget to update `SSLContextConfigsAreEqual`.
 };
 
 // The interface for retrieving global SSL configuration.  This interface
@@ -133,12 +128,6 @@ class NET_EXPORT SSLConfigService {
   // Calls the OnSSLContextConfigChanged method of registered observers. Should
   // only be called on the IO thread.
   void NotifySSLContextConfigChange();
-
-  // Checks if the config-service managed fields in two SSLContextConfigs are
-  // the same.
-  static bool SSLContextConfigsAreEqualForTesting(
-      const SSLContextConfig& config1,
-      const SSLContextConfig& config2);
 
  protected:
   // Process before/after config update. If |force_notification| is true,

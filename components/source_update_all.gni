@@ -55,10 +55,25 @@ if (is_mac || is_ios) {
 
 update_target("//components/search_engines:search_engines") {
   sources += [
-    "//vivaldi/components/search_engines/vivaldi_pref_names.cc",
     "//vivaldi/components/search_engines/vivaldi_pref_names.h",
     "//vivaldi/components/search_engines/vivaldi_keyword_table.cc",
   ]
+  if (!is_android) {
+    sources -= [
+        "generated_marketing_snippets.cc",
+    ]
+    sources += [
+      "//vivaldi/components/search_engines/vivaldi_marketting_snippets_and_engine_resource_ids.cc"
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  update_template_instance("//chrome/test:browser_tests") {
+    sources -= [
+      "../browser/ui/webui/search_engine_choice/search_engine_choice_ui_browsertest.cc",
+    ]
+  }
 }
 
 update_template_instance("//components/search_engines:prepopulated_engines") {

@@ -12,15 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  getColorForSlice,
-} from '../../common/colorizer';
 import {globals} from '../../frontend/globals';
-import {
-  NamedSliceTrackTypes,
-} from '../../frontend/named_slice_track';
-import {NewTrackArgs, TrackBase} from '../../frontend/track';
-import {PrimaryTrackSortKey} from '../../public';
+import {NamedRow, NamedSliceTrackTypes} from '../../frontend/named_slice_track';
+import {NewTrackArgs} from '../../frontend/track';
+import {PrimaryTrackSortKey, Slice} from '../../public';
 import {
   CustomSqlDetailsPanelConfig,
   CustomSqlTableDefConfig,
@@ -33,7 +28,7 @@ import {
   ScrollJankPluginState,
   ScrollJankTracks as DecideTracksResult,
 } from './index';
-import {DEEP_RED_COLOR, RED_COLOR} from './jank_colors';
+import {JANK_COLOR} from './jank_colors';
 
 export const JANKY_LATENCY_NAME = 'Janky EventLatency';
 
@@ -48,11 +43,7 @@ export class EventLatencyTrack extends
     CustomSqlTableSliceTrack<EventLatencyTrackTypes> {
   static readonly kind = CHROME_EVENT_LATENCY_TRACK_KIND;
 
-  static create(args: NewTrackArgs): TrackBase {
-    return new EventLatencyTrack(args);
-  }
-
-  constructor(args: NewTrackArgs) {
+  constructor(args: NewTrackArgs, private baseTable: string) {
     super(args);
     ScrollJankPluginState.getInstance().registerTrack({
       kind: EventLatencyTrack.kind,
@@ -68,7 +59,7 @@ export class EventLatencyTrack extends
   }
 
   getSqlSource(): string {
-    return `SELECT * FROM ${this.config.baseTable}`;
+    return `SELECT * FROM ${this.baseTable}`;
   }
 
   getDetailsPanel(): CustomSqlDetailsPanelConfig {
@@ -80,8 +71,17 @@ export class EventLatencyTrack extends
 
   getSqlDataSource(): CustomSqlTableDefConfig {
     return {
-      sqlTableName: this.config.baseTable,
+      sqlTableName: this.baseTable,
     };
+  }
+
+  rowToSlice(row: NamedRow): Slice {
+    const baseSlice = super.rowToSlice(row);
+    if (baseSlice.title === JANKY_LATENCY_NAME) {
+      return {...baseSlice, colorScheme: JANK_COLOR};
+    } else {
+      return baseSlice;
+    }
   }
 
   onUpdatedSlices(slices: EventLatencyTrackTypes['slice'][]) {
@@ -93,16 +93,7 @@ export class EventLatencyTrack extends
 
       const highlighted = globals.state.highlightedSliceId === slice.id;
       const hasFocus = highlighted || isSelected;
-
-      if (slice.title === JANKY_LATENCY_NAME) {
-        if (hasFocus) {
-          slice.baseColor = DEEP_RED_COLOR;
-        } else {
-          slice.baseColor = RED_COLOR;
-        }
-      } else {
-        slice.baseColor = getColorForSlice(slice.title, hasFocus);
-      }
+      slice.isHighlighted = !!hasFocus;
     }
     super.onUpdatedSlices(slices);
   }

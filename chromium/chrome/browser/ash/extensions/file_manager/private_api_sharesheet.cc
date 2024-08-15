@@ -31,12 +31,12 @@ using extensions::api::file_manager_private::SharesheetLaunchSource;
 
 sharesheet::LaunchSource GetLaunchSource(SharesheetLaunchSource launch_source) {
   switch (launch_source) {
-    case (SharesheetLaunchSource::SHARESHEET_LAUNCH_SOURCE_SHARESHEET_BUTTON):
+    case (SharesheetLaunchSource::kSharesheetButton):
       return sharesheet::LaunchSource::kFilesAppShareButton;
-    case (SharesheetLaunchSource::SHARESHEET_LAUNCH_SOURCE_CONTEXT_MENU):
+    case (SharesheetLaunchSource::kContextMenu):
       return sharesheet::LaunchSource::kFilesAppContextMenu;
-    case (SharesheetLaunchSource::SHARESHEET_LAUNCH_SOURCE_UNKNOWN):
-    case (SharesheetLaunchSource::SHARESHEET_LAUNCH_SOURCE_NONE):
+    case (SharesheetLaunchSource::kUnknown):
+    case (SharesheetLaunchSource::kNone):
       return sharesheet::LaunchSource::kUnknown;
   }
 }
@@ -55,7 +55,7 @@ ExtensionFunction::ResponseAction
 FileManagerPrivateInternalSharesheetHasTargetsFunction::Run() {
   using extensions::api::file_manager_private_internal::SharesheetHasTargets::
       Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->urls.empty()) {
@@ -181,7 +181,7 @@ ExtensionFunction::ResponseAction
 FileManagerPrivateInternalInvokeSharesheetFunction::Run() {
   using extensions::api::file_manager_private_internal::InvokeSharesheet::
       Params;
-  const absl::optional<Params> params = Params::Create(args());
+  const std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->urls.empty()) {
@@ -255,7 +255,7 @@ void FileManagerPrivateInternalInvokeSharesheetFunction::OnMimeTypesCollected(
   sharesheet_service->ShowBubble(
       GetSenderWebContents(),
       apps_util::MakeShareIntent(urls_, *mime_types, dlp_source_urls_),
-      launch_source, base::NullCallback());
+      launch_source, base::DoNothing());
   Respond(NoArguments());
 }
 
@@ -305,7 +305,7 @@ void FileManagerPrivateInternalInvokeSharesheetFunction::OnIsDirectoryCollected(
       GetSenderWebContents(),
       apps_util::MakeShareIntent(urls_[0], (*mime_types)[0], share_url,
                                  is_directory),
-      launch_source, base::NullCallback());
+      launch_source, base::DoNothing());
   Respond(NoArguments());
 }
 

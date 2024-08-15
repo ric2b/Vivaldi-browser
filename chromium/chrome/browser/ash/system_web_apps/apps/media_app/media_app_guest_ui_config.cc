@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/webui/media_app_ui/url_constants.h"
+#include "chrome/browser/accessibility/media_app/ax_media_app_handler_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
@@ -16,7 +17,6 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/types_util.h"
@@ -78,7 +78,6 @@ void ChromeMediaAppGuestUIDelegate::PopulateLoadTimeData(
                      !pref_service->GetBoolean(prefs::kPdfAnnotationsEnabled));
   version_info::Channel channel = chrome::GetChannel();
   source->AddBoolean("colorThemes", true);
-  source->AddBoolean("jelly", chromeos::features::IsJellyEnabled());
   source->AddBoolean("photosAvailableForImage", photos_integration_supported);
   source->AddBoolean("photosAvailableForVideo", photos_integration_supported);
   source->AddBoolean("pdfA11yOcr", base::FeatureList::IsEnabled(
@@ -86,6 +85,17 @@ void ChromeMediaAppGuestUIDelegate::PopulateLoadTimeData(
   source->AddBoolean("flagsMenu", channel != version_info::Channel::BETA &&
                                       channel != version_info::Channel::STABLE);
   source->AddBoolean("isDevChannel", channel == version_info::Channel::DEV);
+}
+
+std::unique_ptr<ash::media_app_ui::mojom::OcrUntrustedPageHandler>
+ChromeMediaAppGuestUIDelegate::CreateAndBindOcrHandler(
+    content::BrowserContext& context,
+    mojo::PendingReceiver<ash::media_app_ui::mojom::OcrUntrustedPageHandler>
+        receiver,
+    mojo::PendingRemote<ash::media_app_ui::mojom::OcrUntrustedPage> page) {
+  return ash::AXMediaAppHandlerFactory::GetInstance()
+      ->CreateAXMediaAppUntrustedHandler(context, std::move(receiver),
+                                         std::move(page));
 }
 
 MediaAppGuestUIConfig::MediaAppGuestUIConfig()
@@ -97,6 +107,6 @@ MediaAppGuestUIConfig::~MediaAppGuestUIConfig() = default;
 std::unique_ptr<content::WebUIController>
 MediaAppGuestUIConfig::CreateWebUIController(content::WebUI* web_ui,
                                              const GURL& url) {
-  ChromeMediaAppGuestUIDelegate delegate;
-  return std::make_unique<ash::MediaAppGuestUI>(web_ui, &delegate);
+  auto delegate = std::make_unique<ChromeMediaAppGuestUIDelegate>();
+  return std::make_unique<ash::MediaAppGuestUI>(web_ui, std::move(delegate));
 }

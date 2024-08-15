@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/wm/desks/templates/saved_desk_icon_view.h"
+
 #include <cstddef>
 #include <utility>
 
@@ -201,7 +202,7 @@ void SavedDeskRegularIconView::CreateChildViews(
   // incognito window. If it is, use the corresponding icon for the special
   // value.
   auto* delegate = Shell::Get()->saved_desk_delegate();
-  absl::optional<gfx::ImageSkia> chrome_icon =
+  std::optional<gfx::ImageSkia> chrome_icon =
       delegate->MaybeRetrieveIconForSpecialIdentifier(
           icon_identifier_, incognito_window_color_provider);
 

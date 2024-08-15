@@ -11,11 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.'
-#![no_std]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 //! Crypto abstraction trait only crate, which provides traits for cryptographic primitives
+
+#![no_std]
 
 use core::fmt::Debug;
 
@@ -47,6 +46,8 @@ pub mod aead;
 
 /// mod containing traits for ed25519 key generation, signing, and verification
 pub mod ed25519;
+
+pub use tinyvec;
 
 /// Uber crypto trait which defines the traits for all crypto primitives as associated types
 pub trait CryptoProvider: Clone + Debug + PartialEq + Eq + Send {
@@ -80,10 +81,13 @@ pub trait CryptoProvider: Clone + Debug + PartialEq + Eq + Send {
     /// using SHA-512 (SHA-2) and Curve25519
     type Ed25519: ed25519::Ed25519Provider;
     /// The trait defining AES-128-GCM-SIV, a nonce-misuse resistant AEAD with a key size of 16 bytes.
-    type Aes128GcmSiv: aead::aes_gcm_siv::AesGcmSiv<Key = Aes128Key>;
+    type Aes128GcmSiv: aead::AesGcmSiv + aead::AeadInit<Aes128Key>;
     /// The trait defining AES-256-GCM-SIV, a nonce-misuse resistant AEAD with a key size of 32 bytes.
-    type Aes256GcmSiv: aead::aes_gcm_siv::AesGcmSiv<Key = Aes256Key>;
-
+    type Aes256GcmSiv: aead::AesGcmSiv + aead::AeadInit<Aes256Key>;
+    /// The trait defining AES-128-GCM, an AEAD with a key size of 16 bytes.
+    type Aes128Gcm: aead::AesGcm + aead::AeadInit<Aes128Key>;
+    /// The trait defining AES-256-GCM, an AEAD with a key size of 32 bytes.
+    type Aes256Gcm: aead::AesGcm + aead::AeadInit<Aes256Key>;
     /// The cryptographically secure random number generator
     type CryptoRng: CryptoRng;
 

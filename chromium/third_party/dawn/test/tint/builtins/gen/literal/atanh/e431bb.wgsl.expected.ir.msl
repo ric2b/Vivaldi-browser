@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void atanh_e431bb() {
+  float4 res = float4(0.54930615425109863281f);
+}
+vertex float4 vertex_main() {
+  atanh_e431bb();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  atanh_e431bb();
+}
+kernel void compute_main() {
+  atanh_e431bb();
+}

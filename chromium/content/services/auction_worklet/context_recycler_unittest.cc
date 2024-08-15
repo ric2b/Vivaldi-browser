@@ -68,7 +68,7 @@ class ContextRecyclerTest : public testing::Test {
   v8::Local<v8::UnboundScript> Compile(const std::string& code) {
     v8::Local<v8::UnboundScript> script;
     v8::Context::Scope ctx(helper_->scratch_context());
-    absl::optional<std::string> error_msg;
+    std::optional<std::string> error_msg;
     EXPECT_TRUE(helper_
                     ->Compile(code, GURL("https://example.org/script.js"),
                               /*debug_id=*/nullptr, error_msg)
@@ -311,11 +311,12 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);  // Initialize context
     context_recycler.AddSetBidBindings();
   }
-
-  base::RepeatingCallback<bool(const GURL&)> matches_ad1 = base::BindRepeating(
-      [](const GURL& url) { return url == GURL("https://example.com/ad1"); });
-  base::RepeatingCallback<bool(const GURL&)> ignore_arg_return_false =
-      base::BindRepeating([](const GURL& ignored) { return false; });
+  base::RepeatingCallback<bool(const std::string&)> matches_ad1 =
+      base::BindRepeating([](const std::string& url) {
+        return url == "https://example.com/ad1";
+      });
+  base::RepeatingCallback<bool(const std::string&)> ignore_arg_return_false =
+      base::BindRepeating([](const std::string& ignored) { return false; });
 
   {
     mojom::BidderWorkletNonSharedParamsPtr params =
@@ -323,11 +324,11 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad1"),
-                                     absl::nullopt);
+                                     std::nullopt);
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/false, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/ignore_arg_return_false,
         /*is_component_ad_excluded=*/ignore_arg_return_false);
 
@@ -359,12 +360,12 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/notad1"),
-                                     absl::nullopt);
+                                     std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/false, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/ignore_arg_return_false,
         /*is_component_ad_excluded=*/ignore_arg_return_false);
 
@@ -395,17 +396,17 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad3"),
-                                     absl::nullopt);
+                                     std::nullopt);
     params->ad_components.emplace();
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion1"), absl::nullopt);
+        GURL("https://example.com/portion1"), std::nullopt);
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion2"), absl::nullopt);
+        GURL("https://example.com/portion2"), std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/true, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/ignore_arg_return_false,
         /*is_component_ad_excluded=*/ignore_arg_return_false);
 
@@ -434,19 +435,19 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad5"),
-                                     absl::nullopt);
+                                     std::nullopt);
     params->ad_components.emplace();
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion3"), absl::nullopt);
+        GURL("https://example.com/portion3"), std::nullopt);
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion4"), absl::nullopt);
+        GURL("https://example.com/portion4"), std::nullopt);
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion5"), absl::nullopt);
+        GURL("https://example.com/portion5"), std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/true, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/ignore_arg_return_false,
         /*is_component_ad_excluded=*/ignore_arg_return_false);
 
@@ -488,19 +489,19 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad5"),
-                                     absl::nullopt);
+                                     std::nullopt);
     params->ad_components.emplace();
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion6"), absl::nullopt);
+        GURL("https://example.com/portion6"), std::nullopt);
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion7"), absl::nullopt);
+        GURL("https://example.com/portion7"), std::nullopt);
     params->ad_components.value().emplace_back(
-        GURL("https://example.com/portion8"), absl::nullopt);
+        GURL("https://example.com/portion8"), std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/false, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/ignore_arg_return_false,
         /*is_component_ad_excluded=*/ignore_arg_return_false);
 
@@ -537,12 +538,12 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad1"),
-                                     absl::nullopt);
+                                     std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/false, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/matches_ad1,
         /*is_component_ad_excluded=*/matches_ad1);
 
@@ -570,12 +571,12 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
-                                     absl::nullopt);
+                                     std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
         /*has_top_level_seller_origin=*/false, params.get(),
-        /*per_buyer_currency=*/absl::nullopt,
+        /*per_buyer_currency=*/std::nullopt,
         /*is_ad_excluded=*/matches_ad1,
         /*is_component_ad_excluded=*/matches_ad1);
 
@@ -605,7 +606,7 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
-                                     absl::nullopt);
+                                     std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
@@ -642,7 +643,7 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
-                                     absl::nullopt);
+                                     std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
@@ -677,7 +678,7 @@ TEST_F(ContextRecyclerTest, SetBidBindings) {
     ContextRecyclerScope scope(context_recycler);
     params->ads.emplace();
     params->ads.value().emplace_back(GURL("https://example.com/ad2"),
-                                     absl::nullopt);
+                                     std::nullopt);
 
     context_recycler.set_bid_bindings()->ReInitialize(
         base::TimeTicks::Now(),
@@ -1395,14 +1396,14 @@ class ContextRecyclerPrivateAggregationEnabledTest
   }
 
   // Expects that pa_requests has one request, and the request has the given
-  // bucket, value and debug_key (or none, if absl::nullopt). Also expects that
-  // debug mode is enabled if debug_key is not absl::nullopt.
+  // bucket, value and debug_key (or none, if std::nullopt). Also expects that
+  // debug mode is enabled if debug_key is not std::nullopt.
   void ExpectOneHistogramRequestEqualTo(
       std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>
           pa_requests,
       absl::uint128 bucket,
       int value,
-      absl::optional<blink::mojom::DebugKeyPtr> debug_key = absl::nullopt) {
+      std::optional<blink::mojom::DebugKeyPtr> debug_key = std::nullopt) {
     blink::mojom::AggregatableReportHistogramContribution expected_contribution(
         bucket, value);
 
@@ -2614,15 +2615,15 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
         gin::ConvertToV8(helper_->isolate(), dict));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.org/script.js:12 Uncaught "
-                            "TypeError: Invalid bucket dictionary."));
+                            "TypeError: Bucket's 'baseValue' is invalid."));
 
     EXPECT_TRUE(context_recycler.private_aggregation_bindings()
                     ->TakePrivateAggregationRequests()
                     .empty());
   }
 
-  // Invalid bucket dictionary, whose scale is not a Number. That's fine since
-  // A string can get turned into a number.
+  // It's fine that a bucket's scale is a string, since a string can get turned
+  // into a Number.
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
@@ -2747,7 +2748,7 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
         gin::ConvertToV8(helper_->isolate(), dict));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.org/script.js:12 Uncaught "
-                            "TypeError: Invalid bucket dictionary."));
+                            "TypeError: Bucket's 'offset' must be BigInt."));
 
     EXPECT_TRUE(context_recycler.private_aggregation_bindings()
                     ->TakePrivateAggregationRequests()
@@ -2793,7 +2794,7 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
         expected_contribution.Clone());
   }
 
-  // Invalid value dictionary, which has no base_value key
+  // Invalid value dictionary, which has no baseValue key
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
@@ -2814,6 +2815,58 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
             "https://example.org/script.js:12 Uncaught TypeError: "
             "privateAggregation.contributeToHistogramOnEvent() 'contribution' "
             "argument: Required field 'baseValue' is undefined."));
+
+    EXPECT_TRUE(context_recycler.private_aggregation_bindings()
+                    ->TakePrivateAggregationRequests()
+                    .empty());
+  }
+
+  // Invalid value dictionary, whose offset is a BigInt, not a 32-bit signed
+  // integer.
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    gin::Dictionary value_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    value_dict.Set("baseValue", std::string("winning-bid"));
+    v8::Local<v8::Value> bigint_offset = v8::BigInt::New(helper_->isolate(), 1);
+    value_dict.Set("offset", bigint_offset);
+
+    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", std::string("1"));
+    dict.Set("value", value_dict);
+
+    Run(scope, script, "test", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), dict));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.org/script.js:12 Uncaught TypeError: "
+                    "Value's 'offset' must be a 32-bit signed integer."));
+
+    EXPECT_TRUE(context_recycler.private_aggregation_bindings()
+                    ->TakePrivateAggregationRequests()
+                    .empty());
+  }
+
+  // Invalid value dictionary, whose baseValue is invalid.
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    gin::Dictionary value_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    value_dict.Set("baseValue", std::string("notValidBaseValue"));
+
+    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
+    dict.Set("bucket", std::string("1"));
+    dict.Set("value", value_dict);
+
+    Run(scope, script, "test", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), dict));
+    EXPECT_THAT(error_msgs,
+                ElementsAre("https://example.org/script.js:12 Uncaught "
+                            "TypeError: Value's 'baseValue' is invalid."));
 
     EXPECT_TRUE(context_recycler.private_aggregation_bindings()
                     ->TakePrivateAggregationRequests()
@@ -2841,7 +2894,8 @@ TEST_F(ContextRecyclerPrivateAggregationExtensionsEnabledTest,
                     .empty());
   }
 
-  // Non Number or dictionary value. That's fine, because JavaScript.
+  // Non Number or dictionary value. It's fine as long as it can get turned into
+  // a Number.
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;

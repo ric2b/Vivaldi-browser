@@ -425,8 +425,9 @@ void RendererVk::ensureCapsInitialized() const
     // Implemented in the translator
     mNativeExtensions.shaderNonConstantGlobalInitializersEXT = true;
 
-    // Implemented in the front end
-    mNativeExtensions.separateShaderObjectsEXT = true;
+    // Implemented in the front end. Enable SSO if not explicitly disabled.
+    mNativeExtensions.separateShaderObjectsEXT =
+        !getFeatures().disableSeparateShaderObjects.enabled;
 
     // Vulkan has no restrictions of the format of cubemaps, so if the proper formats are supported,
     // creating a cube of any of these formats should be implicitly supported.
@@ -447,9 +448,6 @@ void RendererVk::ensureCapsInitialized() const
     mNativeExtensions.shaderIoBlocksEXT = true;
 
     mNativeExtensions.gpuShader5EXT = vk::CanSupportGPUShader5EXT(mPhysicalDeviceFeatures);
-
-    mNativeExtensions.textureFilteringHintCHROMIUM =
-        getFeatures().supportsFilteringPrecision.enabled;
 
     // Only expose texture cubemap array if the physical device supports it.
     mNativeExtensions.textureCubeMapArrayOES = getFeatures().supportsImageCubeArray.enabled;

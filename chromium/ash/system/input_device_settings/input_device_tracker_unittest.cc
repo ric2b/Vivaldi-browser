@@ -11,7 +11,7 @@
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/test/ash_test_base.h"
 #include "base/containers/contains.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
@@ -99,7 +99,7 @@ class InputDeviceTrackerTest
  protected:
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<InputDeviceTracker> tracker_;
-  raw_ptr<PrefService, DanglingUntriaged | ExperimentalAsh> pref_service_;
+  raw_ptr<PrefService, DanglingUntriaged> pref_service_;
 
   InputDeviceCategory category_;
   base::StringPiece pref_path_;

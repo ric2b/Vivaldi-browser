@@ -19,7 +19,7 @@ g.test('createPipelineLayout,at_over')
       limitTest,
       testValueName,
       async ({ device, testValue, shouldError }) => {
-        const bindGroupLayouts = range(testValue, (i: number) =>
+        const bindGroupLayouts = range(testValue, _i =>
           device.createBindGroupLayout({
             entries: [
               {

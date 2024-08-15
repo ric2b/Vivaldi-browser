@@ -60,8 +60,17 @@ export class ColorSwatch extends HTMLElement {
     return element.localName === 'devtools-color-swatch';
   }
 
+  getReadonly(): boolean {
+    return this.readonly;
+  }
+
   setReadonly(readonly: boolean): void {
+    if (this.readonly === readonly) {
+      return;
+    }
+
     this.readonly = readonly;
+    this.render();
   }
 
   getColor(): Common.Color.Color|null {
@@ -90,11 +99,6 @@ export class ColorSwatch extends HTMLElement {
   renderColor(color: Common.Color.Color|string, formatOrUseUserSetting?: string|boolean, tooltip?: string): void {
     if (typeof color === 'string') {
       this.color = Common.Color.parse(color);
-      this.text = color;
-      if (!this.color) {
-        this.renderTextOnly();
-        return;
-      }
     } else {
       this.color = color;
     }
@@ -102,10 +106,14 @@ export class ColorSwatch extends HTMLElement {
     if (typeof formatOrUseUserSetting === 'string') {
       this.format = Common.Color.getFormat(formatOrUseUserSetting);
     } else {
-      this.format = this.color.format();
+      this.format = this.color?.format() ?? null;
     }
 
-    this.text = this.color.getAuthoredText() ?? this.color.asString(this.format ?? undefined);
+    if (this.color) {
+      this.text = this.color.getAuthoredText() ?? this.color.asString(this.format ?? undefined);
+    } else if (typeof color === 'string') {
+      this.text = color;
+    }
 
     if (tooltip) {
       this.tooltip = tooltip;
@@ -120,15 +128,24 @@ export class ColorSwatch extends HTMLElement {
   }
 
   private render(): void {
+    if (!this.color) {
+      this.renderTextOnly();
+      return;
+    }
+
+    const colorSwatchClasses = LitHtml.Directives.classMap({
+      'color-swatch': true,
+      'readonly': this.readonly,
+    });
+
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-
     // Note that we use a <slot> with a default value here to display the color text. Consumers of this component are
     // free to append any content to replace what is being shown here.
     // Note also that whitespace between nodes is removed on purpose to avoid pushing these elements apart. Do not
     // re-format the HTML code.
     LitHtml.render(
-      LitHtml.html`<span class="color-swatch" title=${this.tooltip}><span class="color-swatch-inner"
+      LitHtml.html`<span class=${colorSwatchClasses} title=${this.tooltip}><span class="color-swatch-inner"
         style="background-color: ${this.text};"
         jslog=${VisualLogging.showStyleEditor().track({click: true}).context('color')}
         @click=${this.onClick}

@@ -103,15 +103,18 @@ if (is_linux || is_mac || is_win) {
       ]
     }
 
-    sources += [
-        "//vivaldi/platform_media/ffmpeg/ffviv_audio_kit.c",
-        "//vivaldi/platform_media/ffmpeg/ffviv_audio_kit.h",
-        "//vivaldi/platform_media/ffmpeg/ffviv_log.cc",
-        "//vivaldi/platform_media/ffmpeg/ffviv_log.h",
-    ]
+    if (!is_linux) {
+      # Only used by Mac and Windows codecs
+      sources += [
+          "//vivaldi/platform_media/ffmpeg/ffviv_audio_kit.c",
+          "//vivaldi/platform_media/ffmpeg/ffviv_audio_kit.h",
+          "//vivaldi/platform_media/ffmpeg/ffviv_log.cc",
+          "//vivaldi/platform_media/ffmpeg/ffviv_log.h",
+      ]
 
-    # Allow to call Chromium logging
-    deps += [ "//base" ]
+      # Allow to call Chromium logging
+      deps += [ "//base" ]
+    }
 
     # Use custom generated include files.
     # We should is able to simplify this at some point.

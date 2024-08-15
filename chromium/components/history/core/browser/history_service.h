@@ -206,7 +206,7 @@ class HistoryService : public KeyedService,
   void AddPage(const GURL& url, base::Time time, VisitSource visit_source);
 
   // All AddPage variants end up here.
-  void AddPage(const HistoryAddPageArgs& add_page_args);
+  void AddPage(HistoryAddPageArgs add_page_args);
 
   // Adds an entry for the specified url without creating a visit. This should
   // only be used when bookmarking a page, otherwise the row leaks in the
@@ -602,9 +602,10 @@ class HistoryService : public KeyedService,
   //
   // If `compute_redirect_chain_start_properties` is true, the opener and
   // referring visit IDs for the start of the redirect chain will be computed.
+  // Virtual for testing.
   using GetAnnotatedVisitsCallback =
       base::OnceCallback<void(std::vector<AnnotatedVisit>)>;
-  base::CancelableTaskTracker::TaskId GetAnnotatedVisits(
+  virtual base::CancelableTaskTracker::TaskId GetAnnotatedVisits(
       const QueryOptions& options,
       bool compute_redirect_chain_start_properties,
       GetAnnotatedVisitsCallback callback,

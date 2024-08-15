@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_TELEMETRY_API_DIAGNOSTICS_DIAGNOSTICS_API_H_
 
 #include <memory>
+#include <optional>
 
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/extensions/telemetry/api/common/base_telemetry_extension_api_guard_function.h"
@@ -15,7 +16,6 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_histogram_value.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace chromeos {
 
@@ -28,7 +28,7 @@ class DiagnosticsApiFunctionV1AndV2Base
   // to the `Params` type. If the `Params` can't be created, this resolves the
   // corresponding JavaScript call with an error and returns `nullptr`.
   template <class Params>
-  absl::optional<Params> GetParams();
+  std::optional<Params> GetParams();
 };
 
 class DiagnosticsApiFunctionBase : public DiagnosticsApiFunctionV1AndV2Base {
@@ -458,6 +458,17 @@ class OsDiagnosticsCreateVolumeButtonRoutineFunction
   void RunIfAllowed() override;
 };
 
+class OsDiagnosticsCreateFanRoutineFunction
+    : public DiagnosticsApiFunctionBaseV2 {
+  DECLARE_EXTENSION_FUNCTION("os.diagnostics.createFanRoutine",
+                             OS_DIAGNOSTICS_CREATEFANROUTINE)
+ private:
+  ~OsDiagnosticsCreateFanRoutineFunction() override = default;
+
+  // BaseTelemetryExtensionApiGuardFunction:
+  void RunIfAllowed() override;
+};
+
 class OsDiagnosticsStartRoutineFunction : public DiagnosticsApiFunctionBaseV2 {
   DECLARE_EXTENSION_FUNCTION("os.diagnostics.startRoutine",
                              OS_DIAGNOSTICS_STARTROUTINE)
@@ -499,6 +510,19 @@ class OsDiagnosticsIsVolumeButtonRoutineArgumentSupportedFunction
  private:
   ~OsDiagnosticsIsVolumeButtonRoutineArgumentSupportedFunction() override =
       default;
+
+  // BaseTelemetryExtensionApiGuardFunction:
+  void RunIfAllowed() override;
+
+  void OnResult(crosapi::mojom::TelemetryExtensionSupportStatusPtr result);
+};
+
+class OsDiagnosticsIsFanRoutineArgumentSupportedFunction
+    : public DiagnosticsApiFunctionBaseV2 {
+  DECLARE_EXTENSION_FUNCTION("os.diagnostics.isFanRoutineArgumentSupported",
+                             OS_DIAGNOSTICS_ISFANROUTINEARGUMENTSUPPORTED)
+ private:
+  ~OsDiagnosticsIsFanRoutineArgumentSupportedFunction() override = default;
 
   // BaseTelemetryExtensionApiGuardFunction:
   void RunIfAllowed() override;

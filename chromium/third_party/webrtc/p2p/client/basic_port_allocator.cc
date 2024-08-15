@@ -126,11 +126,15 @@ bool IsAllowedByCandidateFilter(const Candidate& c, uint32_t filter) {
     return false;
   }
 
-  if (c.type() == RELAY_PORT_TYPE) {
+  if (c.is_relay()) {
     return ((filter & CF_RELAY) != 0);
-  } else if (c.type() == STUN_PORT_TYPE) {
+  }
+
+  if (c.is_stun()) {
     return ((filter & CF_REFLEXIVE) != 0);
-  } else if (c.type() == LOCAL_PORT_TYPE) {
+  }
+
+  if (c.is_local()) {
     if ((filter & CF_REFLEXIVE) && !c.address().IsPrivateIP()) {
       // We allow host candidates if the filter allows server-reflexive
       // candidates and the candidate is a public IP. Because we don't generate
@@ -143,6 +147,7 @@ bool IsAllowedByCandidateFilter(const Candidate& c, uint32_t filter) {
 
     return ((filter & CF_HOST) != 0);
   }
+
   return false;
 }
 
@@ -199,21 +204,6 @@ BasicPortAllocator::BasicPortAllocator(
                    webrtc::NO_PRUNE, nullptr);
 }
 
-void BasicPortAllocator::OnIceRegathering(PortAllocatorSession* session,
-                                          IceRegatheringReason reason) {
-  // If the session has not been taken by an active channel, do not report the
-  // metric.
-  for (auto& allocator_session : pooled_sessions()) {
-    if (allocator_session.get() == session) {
-      return;
-    }
-  }
-
-  RTC_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.IceRegatheringReason",
-                            static_cast<int>(reason),
-                            static_cast<int>(IceRegatheringReason::MAX_VALUE));
-}
-
 BasicPortAllocator::~BasicPortAllocator() {
   CheckRunOnValidThreadIfInitialized();
   // Our created port allocator sessions depend on us, so destroy our remaining
@@ -251,12 +241,9 @@ PortAllocatorSession* BasicPortAllocator::CreateSessionInternal(
     absl::string_view ice_ufrag,
     absl::string_view ice_pwd) {
   CheckRunOnValidThreadAndInitialized();
-  PortAllocatorSession* session = new BasicPortAllocatorSession(
-      this, std::string(content_name), component, std::string(ice_ufrag),
-      std::string(ice_pwd));
-  session->SignalIceRegathering.connect(this,
-                                        &BasicPortAllocator::OnIceRegathering);
-  return session;
+  return new BasicPortAllocatorSession(this, std::string(content_name),
+                                       component, std::string(ice_ufrag),
+                                       std::string(ice_pwd));
 }
 
 void BasicPortAllocator::AddTurnServerForTesting(
@@ -1308,8 +1295,11 @@ void AllocationSequence::Init() {
         rtc::SocketAddress(network_->GetBestIP(), 0),
         session_->allocator()->min_port(), session_->allocator()->max_port()));
     if (udp_socket_) {
-      udp_socket_->SignalReadPacket.connect(this,
-                                            &AllocationSequence::OnReadPacket);
+      udp_socket_->RegisterReceivedPacketCallback(
+          [&](rtc::AsyncPacketSocket* socket,
+              const rtc::ReceivedPacket& packet) {
+            OnReadPacket(socket, packet);
+          });
     }
     // Continuing if `udp_socket_` is NULL, as local TCP and RelayPort using TCP
     // are next available options to setup a communication channel.
@@ -1668,10 +1658,7 @@ void AllocationSequence::CreateTurnPort(const RelayServerConfig& config,
 }
 
 void AllocationSequence::OnReadPacket(rtc::AsyncPacketSocket* socket,
-                                      const char* data,
-                                      size_t size,
-                                      const rtc::SocketAddress& remote_addr,
-                                      const int64_t& packet_time_us) {
+                                      const rtc::ReceivedPacket& packet) {
   RTC_DCHECK(socket == udp_socket_.get());
 
   bool turn_port_found = false;
@@ -1683,9 +1670,8 @@ void AllocationSequence::OnReadPacket(rtc::AsyncPacketSocket* socket,
   // the message type. The TurnPort will just ignore the message since it will
   // not find any request by transaction ID.
   for (auto* port : relay_ports_) {
-    if (port->CanHandleIncomingPacketsFrom(remote_addr)) {
-      if (port->HandleIncomingPacket(socket, data, size, remote_addr,
-                                     packet_time_us)) {
+    if (port->CanHandleIncomingPacketsFrom(packet.source_address())) {
+      if (port->HandleIncomingPacket(socket, packet)) {
         return;
       }
       turn_port_found = true;
@@ -1698,10 +1684,9 @@ void AllocationSequence::OnReadPacket(rtc::AsyncPacketSocket* socket,
     // Pass the packet to the UdpPort if there is no matching TurnPort, or if
     // the TURN server is also a STUN server.
     if (!turn_port_found ||
-        stun_servers.find(remote_addr) != stun_servers.end()) {
+        stun_servers.find(packet.source_address()) != stun_servers.end()) {
       RTC_DCHECK(udp_port_->SharedSocket());
-      udp_port_->HandleIncomingPacket(socket, data, size, remote_addr,
-                                      packet_time_us);
+      udp_port_->HandleIncomingPacket(socket, packet);
     }
   }
 }

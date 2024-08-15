@@ -20,7 +20,7 @@ import {DomRepeat, DomRepeatEvent, PolymerElement} from '//resources/polymer/v3_
 import {ReadAnythingElement} from './app.js';
 import {getTemplate} from './read_anything_toolbar.html.js';
 
-export interface ReadAnythingToolbar {
+export interface ReadAnythingToolbarElement {
   $: {
     rateMenu: CrActionMenuElement,
     colorMenu: CrActionMenuElement,
@@ -74,8 +74,8 @@ const SETTINGS_CHANGE_UMA = 'Accessibility.ReadAnything.SettingsChange';
 const moreOptionsClass = '.more-options-icon';
 const activeClass = ' active';
 
-const ReadAnythingToolbarBase = WebUiListenerMixin(PolymerElement);
-export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
+const ReadAnythingToolbarElementBase = WebUiListenerMixin(PolymerElement);
+export class ReadAnythingToolbarElement extends ReadAnythingToolbarElementBase {
   contentPage = document.querySelector('read-anything-app');
   static get is() {
     return 'read-anything-toolbar';
@@ -102,7 +102,7 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
     // Hide the more options button first to calculate if we need it
     const moreOptionsButton = toolbar.querySelector('#more') as HTMLElement;
     assert(moreOptionsButton);
-    ReadAnythingToolbar.hideElement(moreOptionsButton, false);
+    ReadAnythingToolbarElement.hideElement(moreOptionsButton, false);
 
     // Show all the buttons that would go in the overflow menu to see if they
     // fit
@@ -113,16 +113,16 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
     const buttonsOnToolbarToMaybeHide =
         buttons.slice(buttons.length - moreOptionsButtons.length);
     buttonsOnToolbarToMaybeHide.forEach(btn => {
-      ReadAnythingToolbar.showElement(btn as HTMLElement);
+      ReadAnythingToolbarElement.showElement(btn as HTMLElement);
     });
 
     // When scroll width and client width are the different, then the content
     // has overflowed.
     if (toolbar.scrollWidth !== toolbar.clientWidth) {
-      ReadAnythingToolbar.showElement(moreOptionsButton);
+      ReadAnythingToolbarElement.showElement(moreOptionsButton);
       // Hide all the buttons on the toolbar that are in the more options menu
       buttonsOnToolbarToMaybeHide.forEach(btn => {
-        ReadAnythingToolbar.hideElement(btn as HTMLElement, true);
+        ReadAnythingToolbarElement.hideElement(btn as HTMLElement, true);
       });
       toolbar.insertBefore(moreOptionsButton, buttonsOnToolbarToMaybeHide[0]);
       (moreOptionsButtons.item(0) as HTMLElement).style.marginLeft = '16px';
@@ -300,7 +300,7 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
   private onToolbarResize_(entries: ResizeObserverEntry[]) {
     assert(entries.length === 1);
     const toolbar = entries[0].target as HTMLElement;
-    ReadAnythingToolbar.maybeUpdateMoreOptions(toolbar);
+    ReadAnythingToolbarElement.maybeUpdateMoreOptions(toolbar);
   }
 
   private restoreFontMenu_() {
@@ -310,6 +310,21 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
     if (this.isReadAloudEnabled_) {
       fontOptions = Array.from(this.$.fontMenu.children);
       this.setCheckMarkForMenu_(this.$.fontMenu, currentFontIndex);
+
+      // Setting the custom fonts on each of the elements in the dropdown is
+      // technically possible when Read Aloud is disabled, but it can cause
+      // an issue where the first instance of opening the dropdown shows a
+      // scrollbar because the height is calculated before the font is set.
+      // Therefore, only set the custom fonts on the individual items when
+      // Read Aloud is enabled.
+      fontOptions.forEach(element => {
+        assert(element instanceof HTMLElement);
+        if (!element.innerText) {
+          return;
+        }
+        // Update the font of each button to be the same as the font text.
+        element.style.fontFamily = element.innerText;
+      });
     } else {
       const shadowRoot = this.shadowRoot;
       assert(shadowRoot);
@@ -319,15 +334,6 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
       fontOptions = Array.from(select.options);
       select.selectedIndex = currentFontIndex;
     }
-
-    fontOptions.forEach(element => {
-      assert(element instanceof HTMLElement);
-      if (!element.innerText) {
-        return;
-      }
-      // Update the font of each button to be the same as the font text.
-      element.style.fontFamily = element.innerText;
-    });
   }
 
   restoreSettingsFromPrefs(colorSuffix?: string) {
@@ -390,7 +396,7 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
 
     const toolbar = shadowRoot.getElementById('toolbar-container');
     assert(toolbar);
-    ReadAnythingToolbar.maybeUpdateMoreOptions(toolbar);
+    ReadAnythingToolbarElement.maybeUpdateMoreOptions(toolbar);
   }
 
   showVoicePreviewPlaying(voice: SpeechSynthesisVoice|null) {
@@ -437,7 +443,7 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
 
     const toolbar = shadowRoot.getElementById('toolbar-container');
     assert(toolbar);
-    ReadAnythingToolbar.maybeUpdateMoreOptions(toolbar);
+    ReadAnythingToolbarElement.maybeUpdateMoreOptions(toolbar);
   }
 
   private closeMenus_() {
@@ -692,10 +698,10 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
     checkMarks.forEach((element) => {
       assert(element instanceof HTMLElement);
       // TODO(crbug.com/1465029): Ensure this works with screen readers
-      ReadAnythingToolbar.hideElement(element, true);
+      ReadAnythingToolbarElement.hideElement(element, true);
     });
     const checkMark = checkMarks[index] as IronIconElement;
-    ReadAnythingToolbar.showElement(checkMark);
+    ReadAnythingToolbarElement.showElement(checkMark);
   }
 
   private onFontSizeIncreaseClick_() {
@@ -840,4 +846,10 @@ export class ReadAnythingToolbar extends ReadAnythingToolbarBase {
   }
 }
 
-customElements.define('read-anything-toolbar', ReadAnythingToolbar);
+declare global {
+  interface HTMLElementTagNameMap {
+    'read-anything-toolbar': ReadAnythingToolbarElement;
+  }
+}
+
+customElements.define('read-anything-toolbar', ReadAnythingToolbarElement);

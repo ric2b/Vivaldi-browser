@@ -33,7 +33,12 @@ using CBOR = cbor::Value;
 constexpr int kExpectedResponseSize = 2;
 constexpr char kCredentialIdKey[] = "id";
 constexpr char kEntitiyIdMapKey[] = "id";
+constexpr char kBootstrapConfigurationsKey[] = "bootstrapConfigurations";
 constexpr char kDeviceDetailsKey[] = "deviceDetails";
+constexpr char kSecondDeviceAuthPayloadKey[] = "secondDeviceAuthPayload";
+constexpr char kIsTransferUnicornKey[] = "isTransferUnicorn";
+constexpr char kBootstrapAccountsKey[] = "bootstrapAccounts";
+constexpr char kNameKey[] = "name";
 constexpr char kInstanceIdKey[] = "instanceId";
 constexpr uint8_t kCtapDeviceResponseSuccess = 0x00;
 constexpr int kCborDecoderNoError = 0;
@@ -82,20 +87,93 @@ constexpr char kUserVerificationMethodKey[] = "user_verification_method";
 // http://google3/java/com/google/android/gmscore/integ/client/smartdevice/src/com/google/android/gms/smartdevice/d2d/UserVerificationMethod.java;l=15;rcl=557316806
 constexpr int kUserVerificationMethodSourceLockScreenPrompt = 0;
 
-std::pair<int, absl::optional<cbor::Value>> CborDecodeGetAssertionResponse(
+std::pair<int, std::optional<cbor::Value>> CborDecodeGetAssertionResponse(
     base::span<const uint8_t> response) {
   cbor::Reader::DecoderError error;
   cbor::Reader::Config config;
 
   config.error_code_out = &error;
-  absl::optional<cbor::Value> cbor = cbor::Reader::Read(response, config);
+  std::optional<cbor::Value> cbor = cbor::Reader::Read(response, config);
   if (!cbor) {
     int converted_decode_error = static_cast<int>(error);
     LOG(ERROR) << "Error CBOR decoding the response bytes: "
                << cbor::Reader::ErrorCodeToString(error);
-    return std::make_pair(converted_decode_error, absl::nullopt);
+    return std::make_pair(converted_decode_error, std::nullopt);
   }
   return std::make_pair(kCborDecoderNoError, std::move(cbor));
+}
+
+std::string FindInstanceIdInBootstrapConfigurations(
+    const base::Value::Dict& payload) {
+  const base::Value::Dict* bootstrap_configurations =
+      payload.FindDict(kBootstrapConfigurationsKey);
+  CHECK(bootstrap_configurations);
+
+  const base::Value::Dict* device_details =
+      bootstrap_configurations->FindDict(kDeviceDetailsKey);
+  if (!device_details) {
+    LOG(WARNING) << "DeviceDetails not found within BootstrapConfigurations.";
+    return "";
+  }
+
+  const std::string* instance_id_ptr =
+      device_details->FindString(kInstanceIdKey);
+  return instance_id_ptr ? *instance_id_ptr : "";
+}
+
+std::string FindEmailInBootstrapConfigurations(
+    const base::Value::Dict& payload) {
+  const base::Value::Dict* bootstrap_configurations =
+      payload.FindDict(kBootstrapConfigurationsKey);
+  CHECK(bootstrap_configurations);
+
+  const base::Value::List* accounts =
+      bootstrap_configurations->FindList(kBootstrapAccountsKey);
+  if (!accounts) {
+    LOG(WARNING)
+        << "BootstrapAccounts not found within BootstrapConfigurations.";
+    return "";
+  }
+
+  if (accounts->empty()) {
+    LOG(WARNING) << "Empty accounts list received from source device.";
+    return "";
+  }
+
+  const base::Value::Dict* first_account = accounts->front().GetIfDict();
+  if (!first_account) {
+    LOG(WARNING) << "Invalid value for account received from source device.";
+    return "";
+  }
+
+  const std::string* email_ptr = first_account->FindString(kNameKey);
+  if (!email_ptr) {
+    LOG(WARNING) << "Email missing from account received from source device.";
+    return "";
+  }
+
+  return *email_ptr;
+}
+
+bool FindIsSupervisedAccountInBootstrapConfigurations(
+    const base::Value::Dict& payload) {
+  const base::Value::Dict* second_device_auth_payload =
+      payload.FindDict(kSecondDeviceAuthPayloadKey);
+  if (!second_device_auth_payload) {
+    LOG(WARNING) << "SecondDeviceAuthPayload not found in "
+                    "BootstrapConfigurations message.";
+    return false;
+  }
+
+  std::optional<bool> is_supervised_account_optional =
+      second_device_auth_payload->FindBool(kIsTransferUnicornKey);
+  if (!is_supervised_account_optional.has_value()) {
+    LOG(WARNING) << "Supervised account boolean not found in "
+                    "BootstrapConfigurations message.";
+    return false;
+  }
+
+  return is_supervised_account_optional.value();
 }
 
 }  // namespace
@@ -110,7 +188,7 @@ QuickStartDecoder::QuickStartDecoder(
 QuickStartDecoder::~QuickStartDecoder() = default;
 
 void QuickStartDecoder::DecodeQuickStartMessage(
-    const absl::optional<std::vector<uint8_t>>& data,
+    const std::optional<std::vector<uint8_t>>& data,
     DecodeQuickStartMessageCallback callback) {
   if (!data.has_value()) {
     LOG(ERROR) << "No response bytes received.";
@@ -121,7 +199,7 @@ void QuickStartDecoder::DecodeQuickStartMessage(
 
   auto result = DoDecodeQuickStartMessage(data.value());
   if (result.has_value()) {
-    std::move(callback).Run(std::move(result.value()), absl::nullopt);
+    std::move(callback).Run(std::move(result.value()), std::nullopt);
   } else {
     std::move(callback).Run(nullptr, result.error());
   }
@@ -153,6 +231,9 @@ QuickStartDecoder::DoDecodeQuickStartMessage(const std::vector<uint8_t>& data) {
     case QuickStartMessageType::kSecondDeviceAuthPayload:
       return DecodeSecondDeviceAuthPayload(*payload);
     case QuickStartMessageType::kBootstrapOptions:
+      NOTIMPLEMENTED();
+      break;
+    case QuickStartMessageType::kBootstrapState:
       NOTIMPLEMENTED();
       break;
     case QuickStartMessageType::kBootstrapConfigurations:
@@ -201,7 +282,7 @@ QuickStartDecoder::DecodeSecondDeviceAuthPayload(
     return base::unexpected(
         mojom::QuickStartDecoderError::kMessageDoesNotMatchSchema);
   }
-  std::pair<int, absl::optional<cbor::Value>> decoded_values =
+  std::pair<int, std::optional<cbor::Value>> decoded_values =
       CborDecodeGetAssertionResponse(cbor_bytes);
   if (decoded_values.first != kCborDecoderNoError) {
     return base::unexpected(
@@ -292,7 +373,7 @@ QuickStartDecoder::DecodeSecondDeviceAuthPayload(
 base::expected<mojom::QuickStartMessagePtr, mojom::QuickStartDecoderError>
 QuickStartDecoder::DecodeQuickStartPayload(const base::Value::Dict& payload) {
   // user verification requested
-  absl::optional<bool> is_awaiting_user_verification;
+  std::optional<bool> is_awaiting_user_verification;
   if ((is_awaiting_user_verification =
            payload.FindBool(kAwaitingUserVerificationKey))) {
     return mojom::QuickStartMessage::NewUserVerificationRequested(
@@ -301,7 +382,7 @@ QuickStartDecoder::DecodeQuickStartPayload(const base::Value::Dict& payload) {
   }
 
   // user verification method
-  absl::optional<int> user_verification_method;
+  std::optional<int> user_verification_method;
   if ((user_verification_method =
            payload.FindInt(kUserVerificationMethodKey))) {
     return mojom::QuickStartMessage::NewUserVerificationMethod(
@@ -311,7 +392,7 @@ QuickStartDecoder::DecodeQuickStartPayload(const base::Value::Dict& payload) {
   }
 
   // user verification response
-  absl::optional<int> user_verification_result_code;
+  std::optional<int> user_verification_result_code;
   if ((user_verification_result_code =
            payload.FindInt(kUserVerificationResultKey))) {
     mojom::UserVerificationResult user_verification_result =
@@ -324,7 +405,7 @@ QuickStartDecoder::DecodeQuickStartPayload(const base::Value::Dict& payload) {
           mojom::QuickStartDecoderError::kMessageDoesNotMatchSchema);
     }
 
-    absl::optional<bool> is_first_user_verification =
+    std::optional<bool> is_first_user_verification =
         payload.FindBool(kIsFirstUserVerificationKey);
     if (!is_first_user_verification.has_value()) {
       LOG(ERROR) << "Message does not contain key is_first_user_verification";
@@ -344,7 +425,7 @@ QuickStartDecoder::DecodeQuickStartPayload(const base::Value::Dict& payload) {
   }
 
   // notify source of update response
-  absl::optional<bool> notify_source_of_update_ack_received;
+  std::optional<bool> notify_source_of_update_ack_received;
   if ((notify_source_of_update_ack_received =
            payload.FindBool(kNotifySourceOfUpdateAckKey))) {
     return mojom::QuickStartMessage::NewNotifySourceOfUpdateResponse(
@@ -391,7 +472,7 @@ QuickStartDecoder::DecodeWifiCredentials(
         mojom::QuickStartDecoderError::kMessageDoesNotMatchSchema);
   }
 
-  absl::optional<mojom::WifiSecurityType> maybe_security_type =
+  std::optional<mojom::WifiSecurityType> maybe_security_type =
       WifiSecurityTypeFromString(*security_type_string);
 
   if (!maybe_security_type.has_value()) {
@@ -406,7 +487,7 @@ QuickStartDecoder::DecodeWifiCredentials(
   mojom::WifiSecurityType security_type = maybe_security_type.value();
 
   // Password may not be included in payload for passwordless, open networks.
-  absl::optional<std::string> password = absl::nullopt;
+  std::optional<std::string> password = std::nullopt;
   const std::string* password_ptr =
       wifi_network_information.FindString(kWifiNetworkPasswordKey);
 
@@ -435,7 +516,7 @@ QuickStartDecoder::DecodeWifiCredentials(
     password = *password_ptr;
   }
 
-  absl::optional<bool> is_hidden =
+  std::optional<bool> is_hidden =
       wifi_network_information.FindBool(kWifiNetworkIsHiddenKey);
   if (!is_hidden.has_value()) {
     LOG(ERROR)
@@ -455,23 +536,11 @@ QuickStartDecoder::DecodeWifiCredentials(
 base::expected<mojom::QuickStartMessagePtr, mojom::QuickStartDecoderError>
 QuickStartDecoder::DecodeBootstrapConfigurations(
     const base::Value::Dict& payload) {
-  const base::Value::Dict* device_details = payload.FindDict(kDeviceDetailsKey);
-  if (!device_details) {
-    LOG(WARNING)
-        << "DeviceDetails cannot be found within BootstrapConfigurations.";
-    return mojom::QuickStartMessage::NewBootstrapConfigurations(
-        mojom::BootstrapConfigurations::New(/*instance_id=*/""));
-  }
-
-  const std::string* instance_id_ptr =
-      device_details->FindString(kInstanceIdKey);
-  if (!instance_id_ptr) {
-    LOG(WARNING) << "InstanceId for the Android Device could not be found.";
-    return mojom::QuickStartMessage::NewBootstrapConfigurations(
-        mojom::BootstrapConfigurations::New(/*instance_id=*/""));
-  }
   return mojom::QuickStartMessage::NewBootstrapConfigurations(
-      mojom::BootstrapConfigurations::New(*instance_id_ptr));
+      mojom::BootstrapConfigurations::New(
+          FindInstanceIdInBootstrapConfigurations(payload),
+          FindIsSupervisedAccountInBootstrapConfigurations(payload),
+          FindEmailInBootstrapConfigurations(payload)));
 }
 
 }  // namespace ash::quick_start

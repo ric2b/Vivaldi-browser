@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view.h"
+#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view+Testing.h"
 
 #import "base/feature_list.h"
 #import "base/notreached.h"
@@ -10,14 +11,13 @@
 #import "base/time/time.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/sync/base/features.h"
-#import "ios/chrome/browser/ntp/home/features.h"
-#import "ios/chrome/browser/ntp/set_up_list_item_type.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/crossfade_label.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_icon.h"
-#import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view+private.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_item_view_data.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -58,6 +58,7 @@ struct ViewConfig {
   int signin_sync_description;
   int default_browser_description;
   int autofill_description;
+  int content_notification_description;
   NSString* title_font;
   NSString* description_font;
   CGFloat text_spacing;
@@ -93,6 +94,7 @@ struct ViewConfig {
           syncString,
           IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SHORT_DESCRIPTION,
           IDS_IOS_SET_UP_LIST_AUTOFILL_SHORT_DESCRIPTION,
+          IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_SHORT_DESCRIPTION,
           UIFontTextStyleFootnote,
           UIFontTextStyleCaption2,
           kCompactTextSpacing,
@@ -109,6 +111,7 @@ struct ViewConfig {
           syncString,
           IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_MAGIC_STACK_DESCRIPTION,
           IDS_IOS_SET_UP_LIST_AUTOFILL_MAGIC_STACK_DESCRIPTION,
+          IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION,
           UIFontTextStyleSubheadline,
           UIFontTextStyleFootnote,
           kTextSpacing,
@@ -125,6 +128,7 @@ struct ViewConfig {
           syncString,
           IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_DESCRIPTION,
           IDS_IOS_SET_UP_LIST_AUTOFILL_DESCRIPTION,
+          IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION,
           UIFontTextStyleSubheadline,
           UIFontTextStyleFootnote,
           kTextSpacing,
@@ -160,12 +164,6 @@ struct ViewConfig {
 }
 
 #pragma mark - Public methods
-
-- (void)handleTap:(UITapGestureRecognizer*)sender {
-  if (sender.state == UIGestureRecognizerStateEnded && !self.complete) {
-    [self.tapDelegate didTapSetUpListItemView:self];
-  }
-}
 
 - (void)markCompleteWithCompletion:(ProceduralBlock)completion {
   if (_complete) {
@@ -208,6 +206,12 @@ struct ViewConfig {
 }
 
 #pragma mark - Private methods
+
+- (void)handleTap:(UITapGestureRecognizer*)sender {
+  if (sender.state == UIGestureRecognizerStateEnded && !self.complete) {
+    [self.tapDelegate didTapSetUpListItemView:self];
+  }
+}
 
 - (void)createSubviews {
   // Return if the subviews have already been created and added.
@@ -336,6 +340,9 @@ struct ViewConfig {
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_TITLE);
     case SetUpListItemType::kAutofill:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_AUTOFILL_TITLE);
+    case SetUpListItemType::kContentNotification:
+      return l10n_util::GetNSString(
+          IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_TITLE);
     case SetUpListItemType::kAllSet:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_TITLE);
     case SetUpListItemType::kFollow:
@@ -353,6 +360,8 @@ struct ViewConfig {
       return l10n_util::GetNSString(_config.default_browser_description);
     case SetUpListItemType::kAutofill:
       return l10n_util::GetNSString(_config.autofill_description);
+    case SetUpListItemType::kContentNotification:
+      return l10n_util::GetNSString(_config.content_notification_description);
     case SetUpListItemType::kAllSet:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_DESCRIPTION);
     case SetUpListItemType::kFollow:
@@ -369,6 +378,8 @@ struct ViewConfig {
       return set_up_list::kDefaultBrowserItemID;
     case SetUpListItemType::kAutofill:
       return set_up_list::kAutofillItemID;
+    case SetUpListItemType::kContentNotification:
+      return set_up_list::kContentNotificationItemID;
     case SetUpListItemType::kAllSet:
       return set_up_list::kAllSetItemID;
     case SetUpListItemType::kFollow:

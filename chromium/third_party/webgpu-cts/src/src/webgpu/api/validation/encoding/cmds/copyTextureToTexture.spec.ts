@@ -442,14 +442,8 @@ Note: this is only tested for 2D textures as it is the only dimension compatible
     t.selectDeviceOrSkipTestCase(kTextureFormatInfo[format].feature);
   })
   .fn(t => {
-    const {
-      format,
-      copyBoxOffsets,
-      srcTextureSize,
-      dstTextureSize,
-      srcCopyLevel,
-      dstCopyLevel,
-    } = t.params;
+    const { format, copyBoxOffsets, srcTextureSize, dstTextureSize, srcCopyLevel, dstCopyLevel } =
+      t.params;
     const kMipLevelCount = 3;
 
     const srcTexture = t.device.createTexture({

@@ -9,7 +9,7 @@ import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
 // clang-format on
 
-const ServerFieldType = chrome.autofillPrivate.ServerFieldType;
+const FieldType = chrome.autofillPrivate.FieldType;
 
 export const STUB_USER_ACCOUNT_INFO: chrome.autofillPrivate.AccountInfo = {
   email: 'stub-user@example.com',
@@ -35,25 +35,25 @@ export function createAddressEntry(): chrome.autofillPrivate.AddressEntry {
   return {
     guid: makeGuid(),
     fields: [
-      {type: ServerFieldType.NAME_FULL, value: fullName},
-      {type: ServerFieldType.COMPANY_NAME, value: 'Google'},
+      {type: FieldType.NAME_FULL, value: fullName},
+      {type: FieldType.COMPANY_NAME, value: 'Google'},
       {
-        type: ServerFieldType.ADDRESS_HOME_STREET_ADDRESS,
+        type: FieldType.ADDRESS_HOME_STREET_ADDRESS,
         value: addressLines,
       },
-      {type: ServerFieldType.ADDRESS_HOME_STATE, value: 'CA'},
-      {type: ServerFieldType.ADDRESS_HOME_CITY, value: 'Venice'},
+      {type: FieldType.ADDRESS_HOME_STATE, value: 'CA'},
+      {type: FieldType.ADDRESS_HOME_CITY, value: 'Venice'},
       {
-        type: ServerFieldType.ADDRESS_HOME_ZIP,
+        type: FieldType.ADDRESS_HOME_ZIP,
         value: patternMaker('xxxxx', 10),
       },
-      {type: ServerFieldType.ADDRESS_HOME_COUNTRY, value: 'US'},
+      {type: FieldType.ADDRESS_HOME_COUNTRY, value: 'US'},
       {
-        type: ServerFieldType.PHONE_HOME_WHOLE_NUMBER,
+        type: FieldType.PHONE_HOME_WHOLE_NUMBER,
         value: patternMaker('(xxx) xxx-xxxx', 10),
       },
       {
-        type: ServerFieldType.EMAIL_ADDRESS,
+        type: FieldType.EMAIL_ADDRESS,
         value: patternMaker('userxxxx@gmail.com', 16),
       },
     ],
@@ -262,6 +262,7 @@ export class PaymentsManagerExpectations {
   isValidIban: number = 0;
   authenticateUserAndFlipMandatoryAuthToggle: number = 0;
   getLocalCard: number = 0;
+  bulkDeleteAllCvcs: number = 0;
 }
 
 /**
@@ -284,17 +285,18 @@ export class TestPaymentsManager extends TestBrowserProxy implements
 
   constructor() {
     super([
-      'setPersonalDataManagerListener',
-      'removePersonalDataManagerListener',
+      'addVirtualCard',
+      'authenticateUserAndFlipMandatoryAuthToggle',
+      'bulkDeleteAllCvcs',
+      'clearCachedCreditCard',
       'getCreditCardList',
       'getIbanList',
-      'clearCachedCreditCard',
+      'getLocalCard',
+      'isValidIban',
       'removeCreditCard',
       'removeIban',
-      'addVirtualCard',
-      'isValidIban',
-      'authenticateUserAndFlipMandatoryAuthToggle',
-      'getLocalCard',
+      'removePersonalDataManagerListener',
+      'setPersonalDataManagerListener',
     ]);
 
     // Set these to have non-empty data.
@@ -328,6 +330,8 @@ export class TestPaymentsManager extends TestBrowserProxy implements
   }
 
   logServerCardLinkClicked() {}
+
+  logServerIbanLinkClicked() {}
 
   migrateCreditCards() {}
 
@@ -393,6 +397,10 @@ export class TestPaymentsManager extends TestBrowserProxy implements
   }
   // </if>
 
+  bulkDeleteAllCvcs() {
+    this.methodCalled('bulkDeleteAllCvcs');
+  }
+
   /**
    * Verifies expectations.
    */
@@ -428,5 +436,8 @@ export class TestPaymentsManager extends TestBrowserProxy implements
     assertEquals(
         expected.getLocalCard, this.getCallCount('getLocalCard'),
         'getLocalCard mismatch');
+    assertEquals(
+        expected.bulkDeleteAllCvcs, this.getCallCount('bulkDeleteAllCvcs'),
+        'bulkDeleteAllCvcs mismatch');
   }
 }

@@ -150,6 +150,8 @@ V8PerIsolateData::V8PerIsolateData(
   if (IsMainThread()) {
     g_main_thread_per_isolate_data = this;
     GetIsolate()->SetAddCrashKeyCallback(AddCrashKey);
+    main_world_ = DOMWrapperWorld::Create(GetIsolate(),
+                                          DOMWrapperWorld::WorldType::kMain);
   }
 }
 
@@ -196,7 +198,7 @@ void V8PerIsolateData::WillBeDestroyed(v8::Isolate* isolate) {
     data->profiler_group_ = nullptr;
   }
 
-  data->ClearScriptRegexpContext();
+  data->ClearUtilityScriptState();
 
   ThreadState::Current()->DetachFromIsolate();
 
@@ -225,15 +227,17 @@ void V8PerIsolateData::Destroy(v8::Isolate* isolate) {
   V8PerIsolateData* data = From(isolate);
 
   // Clear everything before exiting the Isolate.
-  if (data->script_regexp_script_state_)
-    data->script_regexp_script_state_->DisposePerContextData();
+  if (data->utility_script_state_) {
+    data->utility_script_state_->DisposePerContextData();
+  }
   data->private_property_.reset();
   data->string_cache_->Dispose();
   data->string_cache_.reset();
   data->v8_template_map_for_main_world_.clear();
   data->v8_template_map_for_non_main_worlds_.clear();
-  if (IsMainThread())
+  if (IsMainThread()) {
     g_main_thread_per_isolate_data = nullptr;
+  }
 
   // FIXME: Remove once all v8::Isolate::GetCurrent() calls are gone.
   isolate->Exit();
@@ -342,25 +346,27 @@ V8PerIsolateData::FindOrCreateEternalNameCache(
                                                  vector->size());
 }
 
-v8::Local<v8::Context> V8PerIsolateData::EnsureScriptRegexpContext() {
-  if (!script_regexp_script_state_) {
-    LEAK_SANITIZER_DISABLED_SCOPE;
-    v8::Local<v8::Context> context(v8::Context::New(GetIsolate()));
-    script_regexp_script_state_ = ScriptState::Create(
-        context,
-        DOMWrapperWorld::Create(GetIsolate(),
-                                DOMWrapperWorld::WorldType::kRegExp),
-        /* execution_context = */ nullptr);
-  }
-  return script_regexp_script_state_->GetContext();
+ScriptState* V8PerIsolateData::EnsureUtilityScriptStateSlow() {
+  // This runs at most once per isolate, so the performance impact is
+  // negligible.
+  CHECK(!utility_script_state_);
+  LEAK_SANITIZER_DISABLED_SCOPE;
+  v8::HandleScope handle_scope(GetIsolate());
+  v8::Local<v8::Context> context(v8::Context::New(GetIsolate()));
+  utility_script_state_ = ScriptState::Create(
+      context,
+      DOMWrapperWorld::Create(
+          GetIsolate(), DOMWrapperWorld::WorldType::kBlinkInternalNonJSExposed),
+      /* execution_context = */ nullptr);
+  return utility_script_state_.Get();
 }
 
-void V8PerIsolateData::ClearScriptRegexpContext() {
-  if (script_regexp_script_state_) {
-    script_regexp_script_state_->DisposePerContextData();
-    script_regexp_script_state_->DissociateContext();
+void V8PerIsolateData::ClearUtilityScriptState() {
+  if (utility_script_state_) {
+    utility_script_state_->DisposePerContextData();
+    utility_script_state_->DissociateContext();
   }
-  script_regexp_script_state_ = nullptr;
+  utility_script_state_ = nullptr;
 }
 
 void V8PerIsolateData::SetThreadDebugger(

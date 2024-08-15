@@ -1743,8 +1743,9 @@ base::Optional<Node*> JSCreateLowering::TryAllocateFastLiteral(
                           const_field_info};
 
     // Note: the use of RawInobjectPropertyAt (vs. the higher-level
-    // GetOwnFastDataProperty) here is necessary, since the underlying value
-    // may be `uninitialized`, which the latter explicitly does not support.
+    // GetOwnFastConstantDataProperty) here is necessary, since the underlying
+    // value may be `uninitialized`, which the latter explicitly does not
+    // support.
     OptionalObjectRef maybe_boilerplate_value =
         boilerplate.RawInobjectPropertyAt(broker(), index);
     if (!maybe_boilerplate_value.has_value()) return {};
@@ -1783,7 +1784,7 @@ base::Optional<Node*> JSCreateLowering::TryAllocateFastLiteral(
       double number = boilerplate_value.AsHeapNumber().value();
       // Allocate a mutable HeapNumber box and store the value into it.
       AllocationBuilder builder(jsgraph(), broker(), effect, control);
-      builder.Allocate(HeapNumber::kSize, allocation);
+      builder.Allocate(sizeof(HeapNumber), allocation);
       builder.Store(AccessBuilder::ForMap(), broker()->heap_number_map());
       builder.Store(AccessBuilder::ForHeapNumberValue(),
                     jsgraph()->ConstantNoHole(number));

@@ -191,8 +191,31 @@ TEST_F(RenderPipelineValidationTest, DepthStencilAspectRequirement) {
         device.CreateRenderPipeline(&descriptor);
     }
 
-    // TODO(dawn:666): Add tests for stencil-only format (Stencil8) with depth test or depth write
-    // enabled when Stencil8 format is implemented
+    // It is invalid if the texture format doesn't have depth aspect while depth test is
+    // enabled.
+    {
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        wgpu::DepthStencilState* depthStencil =
+            descriptor.EnableDepthStencil(wgpu::TextureFormat::Stencil8);
+        depthStencil->depthCompare = wgpu::CompareFunction::LessEqual;
+        depthStencil->depthWriteEnabled = false;
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
+
+    // It is invalid if the texture format doesn't have depth aspect while depth write is
+    // enabled.
+    {
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        wgpu::DepthStencilState* depthStencil =
+            descriptor.EnableDepthStencil(wgpu::TextureFormat::Stencil8);
+        depthStencil->depthCompare = wgpu::CompareFunction::Undefined;
+        depthStencil->depthWriteEnabled = true;
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
 }
 
 // Tests that depth attachment is required when frag_depth is written in fragment stage.
@@ -1393,6 +1416,100 @@ TEST_F(RenderPipelineValidationTest, EntryPointNameValidation) {
     }
 }
 
+// Check that entry points are optional.
+TEST_F(RenderPipelineValidationTest, EntryPointNameOptional) {
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        @vertex fn vertex_main() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 1.0);
+        }
+
+        @fragment fn fragment_main() -> @location(0) vec4f {
+            return vec4f(1.0, 0.0, 0.0, 1.0);
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor descriptor;
+    descriptor.vertex.module = module;
+    descriptor.vertex.entryPoint = nullptr;
+    descriptor.cFragment.module = module;
+    descriptor.cFragment.entryPoint = nullptr;
+
+    // Success case.
+    device.CreateRenderPipeline(&descriptor);
+}
+
+// Check that entry points are required if module has multiple entry points.
+TEST_F(RenderPipelineValidationTest, EntryPointNameRequiredIfMultipleEntryPoints) {
+    wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+        @vertex fn vertex1() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 1.0);
+        }
+
+        @vertex fn vertex2() -> @builtin(position) vec4f {
+            return vec4f(0.0, 0.0, 0.0, 1.0);
+        }
+
+        @fragment fn fragment1() -> @location(0) vec4f {
+            return vec4f(1.0, 0.0, 0.0, 1.0);
+        }
+
+        @fragment fn fragment2() -> @location(0) vec4f {
+            return vec4f(1.0, 0.0, 0.0, 1.0);
+        }
+    )");
+
+    utils::ComboRenderPipelineDescriptor descriptor;
+    descriptor.vertex.module = module;
+    descriptor.cFragment.module = module;
+
+    {
+        // The vertex stage has more than one entryPoint.
+        descriptor.vertex.entryPoint = nullptr;
+        descriptor.cFragment.entryPoint = "fragment1";
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
+
+    {
+        // The fragment stage has more than one entryPoint.
+        descriptor.vertex.entryPoint = "vertex1";
+        descriptor.cFragment.entryPoint = nullptr;
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
+}
+
+// Check that entry points are required if module has no compatible entry points.
+TEST_F(RenderPipelineValidationTest, EntryPointNameRequiredIfNoCompatibleEntryPoints) {
+    {
+        wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+            @fragment fn fragment_main() -> @location(0) vec4f {
+                return vec4f(1.0, 0.0, 0.0, 1.0);
+            }
+        )");
+
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = module;
+        descriptor.cFragment.module = module;
+
+        // The vertex stage has no entryPoint.
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
+
+    {
+        wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
+            @vertex fn vertex_main() -> @builtin(position) vec4f {
+                return vec4f(0.0, 0.0, 0.0, 1.0);
+            }
+        )");
+
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = module;
+        descriptor.cFragment.module = module;
+
+        // The fragment stage has no entryPoint.
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+    }
+}
+
 // Test that vertex attrib validation is for the correct entryPoint
 TEST_F(RenderPipelineValidationTest, VertexAttribCorrectEntryPoint) {
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
@@ -1730,9 +1847,7 @@ TEST_F(RenderPipelineValidationTest, RenderPipelineColorAttachmentBytesPerSample
     for (const TestCase& testCase : kTestCases) {
         utils::ComboRenderPipelineDescriptor descriptor;
         descriptor.vertex.module = vsModule;
-        descriptor.vertex.entryPoint = "main";
         descriptor.cFragment.module = CreateShader(testCase.formats);
-        descriptor.cFragment.entryPoint = "main";
         descriptor.cFragment.targetCount = testCase.formats.size();
         for (size_t i = 0; i < testCase.formats.size(); i++) {
             descriptor.cTargets[i].format = testCase.formats.at(i);
@@ -2485,6 +2600,97 @@ TEST_F(DualSourceBlendingFeatureTest, MultipleRenderTargetsNotAllowed) {
                     return output;)";
 
         ASSERT_DEVICE_ERROR(utils::CreateShaderModule(device, sstream.str().c_str()));
+    }
+}
+
+class FramebufferFetchFeatureTest : public RenderPipelineValidationTest {
+  protected:
+    WGPUDevice CreateTestDevice(native::Adapter dawnAdapter,
+                                wgpu::DeviceDescriptor descriptor) override {
+        wgpu::FeatureName requiredFeatures[1] = {wgpu::FeatureName::FramebufferFetch};
+        descriptor.requiredFeatures = requiredFeatures;
+        descriptor.requiredFeatureCount = 1;
+        return dawnAdapter.CreateDevice(&descriptor);
+    }
+};
+
+// Test that the framebuffer input must have a corresponding color target.
+TEST_F(FramebufferFetchFeatureTest, FramebufferInputMustHaveColorTarget) {
+    uint32_t colorIndices[] = {0, 1, 2, kMaxColorAttachments - 1, kMaxColorAttachments};
+    for (uint32_t colorIndex : colorIndices) {
+        std::ostringstream fsStream;
+        fsStream << R"(
+            enable chromium_experimental_framebuffer_fetch;
+            @fragment fn main(@color()"
+                 << colorIndex << R"() in : vec4f) -> @location(1) vec4f {
+                return in;
+            }
+        )";
+
+        utils::ComboRenderPipelineDescriptor desc;
+        desc.vertex.module = vsModule;
+        desc.cFragment.module = utils::CreateShaderModule(device, fsStream.str().c_str());
+        desc.cFragment.targetCount = 2;
+        desc.cTargets[0].format = wgpu::TextureFormat::Undefined;
+        desc.cTargets[1].format = wgpu::TextureFormat::RGBA8Unorm;
+
+        // Only colorIndex 1 should work because it is the only index with a color target.
+        if (colorIndex == 1) {
+            device.CreateRenderPipeline(&desc);
+        } else {
+            ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&desc));
+        }
+    }
+}
+
+// Test that the framebuffer fetch type matches the texture format exactly.
+TEST_F(FramebufferFetchFeatureTest, InputMatchesFormat) {
+    struct ValidPair {
+        const char* type;
+        wgpu::TextureFormat format;
+    };
+
+    std::array<ValidPair, 9> validPairs = {{
+        {"f32", wgpu::TextureFormat::R32Float},
+        {"vec2f", wgpu::TextureFormat::RG16Float},
+        {"vec4f", wgpu::TextureFormat::RGBA8Unorm},
+        {"u32", wgpu::TextureFormat::R32Uint},
+        {"vec2u", wgpu::TextureFormat::RG16Uint},
+        {"vec4u", wgpu::TextureFormat::RGBA8Uint},
+        {"i32", wgpu::TextureFormat::R32Sint},
+        {"vec2i", wgpu::TextureFormat::RG16Sint},
+        {"vec4i", wgpu::TextureFormat::RGBA8Sint},
+    }};
+
+    for (size_t i = 0; i < validPairs.size(); i++) {
+        wgpu::TextureFormat format = validPairs[i].format;
+        const char* outputType = validPairs[i].type;
+
+        for (size_t j = 0; j < validPairs.size(); j++) {
+            const char* inputType = validPairs[j].type;
+
+            std::ostringstream fsStream;
+            fsStream << R"(
+                enable chromium_experimental_framebuffer_fetch;
+                @fragment fn main(@color(0) in : )"
+                     << inputType << R"() -> @location(0) )" << outputType << R"( {
+                    var res : )"
+                     << outputType << R"(;
+                    return res;
+                }
+            )";
+
+            utils::ComboRenderPipelineDescriptor desc;
+            desc.vertex.module = vsModule;
+            desc.cFragment.module = utils::CreateShaderModule(device, fsStream.str().c_str());
+            desc.cTargets[0].format = format;
+
+            if (i == j) {
+                device.CreateRenderPipeline(&desc);
+            } else {
+                ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&desc));
+            }
+        }
     }
 }
 

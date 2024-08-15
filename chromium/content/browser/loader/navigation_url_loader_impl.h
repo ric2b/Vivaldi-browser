@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_H_
 #define CONTENT_BROWSER_LOADER_NAVIGATION_URL_LOADER_IMPL_H_
 
+#include <optional>
+
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -25,11 +27,11 @@
 #include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "services/network/public/mojom/accept_ch_frame_observer.mojom.h"
+#include "services/network/public/mojom/service_worker_router_info.mojom-forward.h"
 #include "services/network/public/mojom/shared_dictionary_access_observer.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/navigation/navigation_policy.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
@@ -154,7 +156,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // and signed exchange (SXG) fallback redirect.
   void FallbackToNonInterceptedRequest(
       bool reset_subresource_loader_params,
-      const net::LoadTimingInfo& timing_info = net::LoadTimingInfo());
+      const ResponseHeadUpdateParams& head_update_params);
 
   scoped_refptr<network::SharedURLLoaderFactory>
   PrepareForNonInterceptedRequest();
@@ -206,7 +208,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr head,
       mojo::ScopedDataPipeConsumerHandle response_body,
-      absl::optional<mojo_base::BigBuffer> cached_metadata) override;
+      std::optional<mojo_base::BigBuffer> cached_metadata) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          network::mojom::URLResponseHeadPtr head) override;
   void OnUploadProgress(int64_t current_position,
@@ -264,7 +266,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   net::HttpRequestHeaders url_loader_modified_headers_;
   net::HttpRequestHeaders url_loader_modified_cors_exempt_headers_;
 
-  absl::optional<SubresourceLoaderParams> subresource_loader_params_;
+  std::optional<SubresourceLoaderParams> subresource_loader_params_;
 
   std::vector<std::unique_ptr<NavigationLoaderInterceptor>> interceptors_;
   size_t interceptor_index_ = 0;
@@ -292,7 +294,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // the case that the response is intercepted by download, and OnComplete()
   // is already called while we are transferring the `url_loader_` and
   // response body to download code.
-  absl::optional<network::URLLoaderCompletionStatus> status_;
+  std::optional<network::URLLoaderCompletionStatus> status_;
 
   // The schemes that this loader can use. For anything else we'll try
   // external protocol handlers.
@@ -303,7 +305,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // (eg: NavigationLoaderInterceptor for loading a local Web Bundle file).
   bool bypass_redirect_checks_ = false;
 
-  network::mojom::URLResponseHeadPtr head_;
   mojo::ScopedDataPipeConsumerHandle response_body_;
 
   // Factories to handle navigation requests for non-network resources.
@@ -351,6 +352,8 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // it, we still expose the worker timing as part of the response.
   base::TimeTicks intercepting_worker_start_time_;
   base::TimeTicks intercepting_worker_ready_time_;
+
+  network::mojom::ServiceWorkerRouterInfoPtr intercepting_worker_router_info_;
 
   base::WeakPtrFactory<NavigationURLLoaderImpl> weak_factory_{this};
 };

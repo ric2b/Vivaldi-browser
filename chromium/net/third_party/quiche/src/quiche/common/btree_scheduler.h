@@ -5,15 +5,19 @@
 #ifndef QUICHE_COMMON_BTREE_SCHEDULER_H_
 #define QUICHE_COMMON_BTREE_SCHEDULER_H_
 
+#include <cstddef>
 #include <limits>
+#include <optional>
+#include <utility>
 
+#include "absl/base/attributes.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/types/optional.h"
 #include "quiche/common/platform/api/quiche_bug_tracker.h"
 #include "quiche/common/platform/api/quiche_export.h"
+#include "quiche/common/platform/api/quiche_logging.h"
 
 namespace quiche {
 
@@ -39,6 +43,8 @@ namespace quiche {
 template <typename Id, typename Priority>
 class QUICHE_EXPORT BTreeScheduler {
  public:
+  // Returns true if there are any streams registered.
+  bool HasRegistered() const { return !streams_.empty(); }
   // Returns true if there are any streams scheduled.
   bool HasScheduled() const { return !schedule_.empty(); }
   // Returns the number of currently scheduled streams.
@@ -46,18 +52,18 @@ class QUICHE_EXPORT BTreeScheduler {
 
   // Counts the number of scheduled entries in the range [min, max].  If either
   // min or max is omitted, negative or positive infinity is assumed.
-  size_t NumScheduledInPriorityRange(absl::optional<Priority> min,
-                                     absl::optional<Priority> max) const;
+  size_t NumScheduledInPriorityRange(std::optional<Priority> min,
+                                     std::optional<Priority> max) const;
 
   // Returns true if there is a stream that would go before `id` in the
   // schedule.
   absl::StatusOr<bool> ShouldYield(Id id) const;
 
   // Returns the priority for `id`, or nullopt if stream is not registered.
-  absl::optional<Priority> GetPriorityFor(Id id) const {
+  std::optional<Priority> GetPriorityFor(Id id) const {
     auto it = streams_.find(id);
     if (it == streams_.end()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     return it->second.priority;
   }
@@ -82,10 +88,10 @@ class QUICHE_EXPORT BTreeScheduler {
   // A record for a registered stream.
   struct StreamEntry {
     // The current priority of the stream.
-    Priority priority;
+    ABSL_ATTRIBUTE_NO_UNIQUE_ADDRESS Priority priority;
     // If present, the sequence number with which the stream is currently
     // scheduled.  If absent, indicates that the stream is not scheduled.
-    absl::optional<int> current_sequence_number;
+    std::optional<int> current_sequence_number;
 
     bool scheduled() const { return current_sequence_number.has_value(); }
   };
@@ -96,7 +102,7 @@ class QUICHE_EXPORT BTreeScheduler {
   // A key that is used to order entities within the schedule.
   struct ScheduleKey {
     // The main order key: the priority of the stream.
-    Priority priority;
+    ABSL_ATTRIBUTE_NO_UNIQUE_ADDRESS Priority priority;
     // The secondary order key: the sequence number.
     int sequence_number;
 
@@ -140,7 +146,7 @@ class QUICHE_EXPORT BTreeScheduler {
 
 template <typename Id, typename Priority>
 size_t BTreeScheduler<Id, Priority>::NumScheduledInPriorityRange(
-    absl::optional<Priority> min, absl::optional<Priority> max) const {
+    std::optional<Priority> min, std::optional<Priority> max) const {
   if (min.has_value() && max.has_value()) {
     QUICHE_DCHECK(*min <= *max);
   }
@@ -210,7 +216,7 @@ absl::Status BTreeScheduler<Id, Priority>::UpdatePriority(
   }
 
   StreamEntry& stream = it->second;
-  absl::optional<int> sequence_number;
+  std::optional<int> sequence_number;
   if (stream.scheduled()) {
     absl::StatusOr<FullScheduleEntry> old_entry = DescheduleStream(stream);
     if (old_entry.ok()) {
@@ -256,7 +262,7 @@ absl::StatusOr<Id> BTreeScheduler<Id, Priority>::PopFront() {
   }
   auto schedule_it = schedule_.begin();
   QUICHE_DCHECK(schedule_it->second->second.scheduled());
-  schedule_it->second->second.current_sequence_number = absl::nullopt;
+  schedule_it->second->second.current_sequence_number = std::nullopt;
 
   Id result = StreamId(*schedule_it);
   schedule_.erase(schedule_it);

@@ -1139,8 +1139,7 @@ void CodeGenerator::BailoutIfDeoptimized() {
                      r0);
   __ LoadU32(ip, FieldMemOperand(ip, Code::kFlagsOffset));
   __ TestBit(ip, Code::kMarkedForDeoptimizationBit);
-  __ Jump(BUILTIN_CODE(isolate(), CompileLazyDeoptimizedCode),
-          RelocInfo::CODE_TARGET, ne);
+  __ TailCallBuiltin(Builtin::kCompileLazyDeoptimizedCode, ne);
 }
 
 // Assembles an instruction after register allocation, producing machine code.
@@ -1152,9 +1151,11 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
   switch (opcode) {
     case kArchComment:
 #ifdef V8_TARGET_ARCH_S390X
-      __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)));
+      __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)),
+                       SourceLocation());
 #else
-      __ RecordComment(reinterpret_cast<const char*>(i.InputInt32(0)));
+      __ RecordComment(reinterpret_cast<const char*>(i.InputInt32(0)),
+                       SourceLocation());
 #endif
       break;
     case kArchCallCodeObject: {
@@ -1354,8 +1355,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         // We don't actually want to generate a pile of code for this, so just
         // claim there is a stack frame, without generating one.
         FrameScope scope(masm(), StackFrame::NO_FRAME_TYPE);
-        __ Call(isolate()->builtins()->code_handle(Builtin::kAbortCSADcheck),
-                RelocInfo::CODE_TARGET);
+        __ CallBuiltin(Builtin::kAbortCSADcheck);
       }
       __ stop();
       break;
@@ -1385,9 +1385,16 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ mov(i.OutputRegister(), fp);
       }
       break;
+#if V8_ENABLE_WEBASSEMBLY
     case kArchStackPointer:
-    case kArchSetStackPointer:
-      UNREACHABLE();
+      __ mov(i.OutputRegister(), sp);
+      break;
+    case kArchSetStackPointer: {
+      DCHECK(instr->InputAt(0)->IsRegister());
+      __ mov(sp, i.InputRegister(0));
+      break;
+    }
+#endif  // V8_ENABLE_WEBASSEMBLY
     case kArchStackPointerGreaterThan: {
       // Potentially apply an offset to the current stack pointer before the
       // comparison to consider the size difference of an optimized frame versus
@@ -3425,7 +3432,18 @@ void CodeGenerator::AssembleConstructFrame() {
         // accessors.
         __ Push(kWasmInstanceRegister);
       }
-      if (call_descriptor->IsWasmCapiFunction()) {
+      if (call_descriptor->IsWasmImportWrapper()) {
+        // If the wrapper is running on a secondary stack, it will switch to the
+        // central stack and fill these slots with the central stack pointer and
+        // secondary stack limit. Otherwise the slots remain empty.
+        static_assert(WasmImportWrapperFrameConstants::kCentralStackSPOffset ==
+                      -24);
+        static_assert(
+            WasmImportWrapperFrameConstants::kSecondaryStackLimitOffset == -32);
+        __ mov(r0, Operand(0));
+        __ push(r0);
+        __ push(r0);
+      } else if (call_descriptor->IsWasmCapiFunction()) {
         // Reserve space for saving the PC later.
         __ lay(sp, MemOperand(sp, -kSystemPointerSize));
       }

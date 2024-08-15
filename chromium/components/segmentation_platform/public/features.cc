@@ -10,11 +10,11 @@ namespace segmentation_platform::features {
 
 BASE_FEATURE(kSegmentationPlatformFeature,
              "SegmentationPlatform",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi - disable UKM
 
 BASE_FEATURE(kSegmentationPlatformUkmEngine,
              "SegmentationPlatformUkmEngine",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi - disable UKM
 
 BASE_FEATURE(kSegmentationPlatformUserVisibleTaskRunner,
              "SegmentationPlatformUserVisibleTaskRunner",
@@ -70,7 +70,11 @@ BASE_FEATURE(kContextualPageActionPriceTracking,
 
 BASE_FEATURE(kContextualPageActionReaderMode,
              "ContextualPageActionReaderMode",
+#if defined(VIVALDI_BUILD)
              base::FEATURE_DISABLED_BY_DEFAULT);
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif // VIVALDI_BUILD
 
 BASE_FEATURE(kContextualPageActionShareModel,
              "ContextualPageActionShareModel",
@@ -115,6 +119,10 @@ BASE_FEATURE(kSegmentationPlatformIosModuleRanker,
 #else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+BASE_FEATURE(kSegmentationPlatformAndroidHomeModuleRanker,
+             "SegmentationPlatformAndroidHomeModuleRanker",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSegmentationPlatformTimeDelaySampling,
              "SegmentationPlatformTimeDelaySampling",

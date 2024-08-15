@@ -13,8 +13,10 @@ import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
-import org.chromium.android_webview.AwBrowserContext;
+import org.chromium.android_webview.AwBrowserContextStore;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwCookieManager;
 import org.chromium.base.FileUtils;
@@ -24,18 +26,22 @@ import org.chromium.net.test.util.TestWebServer;
 import java.io.File;
 
 /** Test suite for files WebView creates on disk. This includes HTTP cache and the cookies file. */
-@RunWith(AwJUnit4ClassRunner.class)
-public class OnDiskFileTest {
-    @Rule
-    public AwActivityTestRule mActivityTestRule =
-            new AwActivityTestRule() {
-                @Override
-                public boolean needsBrowserProcessStarted() {
-                    // We need to control when the browser process starts, so that we can delete the
-                    // file-under-test before the test starts up.
-                    return false;
-                }
-            };
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
+public class OnDiskFileTest extends AwParameterizedTest {
+    @Rule public AwActivityTestRule mActivityTestRule;
+
+    public OnDiskFileTest(AwSettingsMutation param) {
+        mActivityTestRule =
+                new AwActivityTestRule(param.getMutation()) {
+                    @Override
+                    public boolean needsBrowserProcessStarted() {
+                        // We need to control when the browser process starts, so that we can delete
+                        // the file-under-test before the test starts up.
+                        return false;
+                    }
+                };
+    }
 
     @Test
     @SmallTest
@@ -107,7 +113,8 @@ public class OnDiskFileTest {
         mActivityTestRule.runOnUiThread(
                 () -> {
                     Assert.assertEquals(
-                            "Default", AwBrowserContext.getNamedContextPathForTesting("Default"));
+                            "Default",
+                            AwBrowserContextStore.getNamedContextPathForTesting("Default"));
                 });
 
         // Check NonDefaults use "Profile 1", "Profile 2", ...
@@ -128,11 +135,12 @@ public class OnDiskFileTest {
                     () -> {
                         contextPath.delete();
 
-                        AwBrowserContext.getNamedContext(contextName, /* createIfNeeded= */ true);
+                        AwBrowserContextStore.getNamedContext(
+                                contextName, /* createIfNeeded= */ true);
 
                         Assert.assertEquals(
                                 relativePath,
-                                AwBrowserContext.getNamedContextPathForTesting(contextName));
+                                AwBrowserContextStore.getNamedContextPathForTesting(contextName));
                         Assert.assertTrue(contextPath.isDirectory());
                     });
         }

@@ -68,7 +68,8 @@ SupervisedUserContentSettingsProvider::
 std::unique_ptr<content_settings::RuleIterator>
 SupervisedUserContentSettingsProvider::GetRuleIterator(
     ContentSettingsType content_type,
-    bool incognito) const {
+    bool incognito,
+    const content_settings::PartitionKey& partition_key) const {
   base::AutoLock auto_lock(lock_);
   return value_map_.GetRuleIterator(content_type);
 }
@@ -95,7 +96,8 @@ void SupervisedUserContentSettingsProvider::OnSupervisedSettingsAvailable(
   }
   for (ContentSettingsType type : to_notify) {
     NotifyObservers(ContentSettingsPattern::Wildcard(),
-                    ContentSettingsPattern::Wildcard(), type);
+                    ContentSettingsPattern::Wildcard(), type,
+                    /*partition_key=*/nullptr);
   }
 }
 
@@ -107,12 +109,14 @@ bool SupervisedUserContentSettingsProvider::SetWebsiteSetting(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
     base::Value&& value,
-    const content_settings::ContentSettingConstraints& constraints) {
+    const content_settings::ContentSettingConstraints& constraints,
+    const content_settings::PartitionKey& partition_key) {
   return false;
 }
 
 void SupervisedUserContentSettingsProvider::ClearAllContentSettingsRules(
-    ContentSettingsType content_type) {}
+    ContentSettingsType content_type,
+    const content_settings::PartitionKey& partition_key) {}
 
 void SupervisedUserContentSettingsProvider::ShutdownOnUIThread() {
   DCHECK(CalledOnValidThread());

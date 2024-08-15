@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import 'chrome://shortcut-customization/js/search/search_box.js';
-import 'chrome://webui-test/mojo_webui_test_support.js';
+import 'chrome://webui-test/chromeos/mojo_webui_test_support.js';
 
 import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict_query.js';
+import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
 import {CrToolbarSearchFieldElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {IronDropdownElement} from 'chrome://resources/polymer/v3_0/iron-dropdown/iron-dropdown.js';
@@ -102,6 +103,7 @@ suite('searchBoxTest', function() {
 
     // Setting the value of the search field searches for the query after a
     // short period of time.
+    searchFieldElement.$.searchInput.focus();
     searchFieldElement.setValue(query);
 
     if (query) {
@@ -143,9 +145,7 @@ suite('searchBoxTest', function() {
     await flushTasks();
 
     // The search input should be focused after the first render.
-    assertEquals(
-        searchFieldElement.shadowRoot?.activeElement,
-        searchFieldElement.getSearchInput());
+    assertEquals(searchFieldElement.getSearchInput(), getDeepActiveElement());
   });
 
   test('SearchResultsPopulated', async () => {
@@ -393,61 +393,18 @@ suite('searchBoxTest', function() {
   });
 
   test(
-      'Show disabled search results when customization is allowed',
-      async () => {
-        loadTimeData.overrideValues({isCustomizationAllowed: true});
+      'Filter partially disabled search results', async () => {
         [searchBoxElement, searchFieldElement, dropdownElement,
          resultsListElement] = initSearchBoxElement();
 
-        // This SearchResult is of standard layout, and contains two
-        // AcceleratorInfos, one of them is disabled.
-        const disabledAcceleratorInfo =
-            TakeScreenshotSearchResult.acceleratorInfos[0]!;
-        disabledAcceleratorInfo.state =
-            AcceleratorState.kDisabledByUnavailableKeys;
-
-        const partiallyDisabledSearchResult: MojoSearchResult = {
-          ...TakeScreenshotSearchResult,
-          acceleratorInfos: [
-            disabledAcceleratorInfo,
-            TakeScreenshotSearchResult.acceleratorInfos[1]!,
-          ],
-        };
-
-        handler.setFakeSearchResult([partiallyDisabledSearchResult]);
-        await simulateSearch('query');
-
-        assertTrue(dropdownElement.opened);
-        assertEquals(1, searchBoxElement.searchResults.length);
-
-        // Check that the disabled AcceleratorInfo is present in the
-        // acceleratorInfos list of the search result when customization
-        // is allowed.
-        assertEquals(
-            2, searchBoxElement.searchResults[0]?.acceleratorInfos.length);
-        assertEquals(
-            disabledAcceleratorInfo,
-            searchBoxElement.searchResults[0]?.acceleratorInfos[0]);
-        assertEquals(
-            TakeScreenshotSearchResult.acceleratorInfos[1],
-            searchBoxElement.searchResults[0]?.acceleratorInfos[1]);
-      });
-
-  test(
-      'Filter disabled search results when customization is not allowed',
-      async () => {
-        loadTimeData.overrideValues({isCustomizationAllowed: false});
-        [searchBoxElement, searchFieldElement, dropdownElement,
-         resultsListElement] = initSearchBoxElement();
-
-        // This SearchResult is of standard layout, and contains two
-        // AcceleratorInfos. We disable one of them to verify that the disabled
-        // AcceleratorInfo is not shown when customization is not allowed.
         const disabledFirstAcceleratorInfo =
             TakeScreenshotSearchResult.acceleratorInfos[0]!;
         disabledFirstAcceleratorInfo.state =
             AcceleratorState.kDisabledByUnavailableKeys;
 
+        // This SearchResult is of standard layout, and contains two
+        // AcceleratorInfos. We disable one of them to verify that the disabled
+        // AcceleratorInfo is not shown.
         const partiallyDisabledSearchResult: MojoSearchResult = {
           ...TakeScreenshotSearchResult,
           acceleratorInfos: [
@@ -456,6 +413,7 @@ suite('searchBoxTest', function() {
           ],
         };
 
+        // Set search results: one is partially disabled, the other is enabled.
         handler.setFakeSearchResult(
             [partiallyDisabledSearchResult, CycleTabsTextSearchResult]);
 
@@ -465,35 +423,101 @@ suite('searchBoxTest', function() {
         assertEquals(2, searchBoxElement.searchResults.length);
 
         // Check that the disabled AcceleratorInfo is not present in the
-        // acceleratorInfos list of the search result.
+        // acceleratorInfos list of the partially disabled search result.
         assertEquals(
             1, searchBoxElement.searchResults[0]?.acceleratorInfos.length);
         assertEquals(
             TakeScreenshotSearchResult.acceleratorInfos[1],
             searchBoxElement.searchResults[0]?.acceleratorInfos[0]);
+      });
 
-        // Create a SearchResult that doesn't have any enabled AcceleratorInfos.
+  test(
+      'Filter fully disabled search results when customization is allowed',
+      async () => {
+        loadTimeData.overrideValues({isCustomizationAllowed: true});
+
+        [searchBoxElement, searchFieldElement, dropdownElement,
+         resultsListElement] = initSearchBoxElement();
+
+        const disabledFirstAcceleratorInfo =
+            TakeScreenshotSearchResult.acceleratorInfos[0]!;
         const disabledSecondAcceleratorInfo =
             TakeScreenshotSearchResult.acceleratorInfos[1]!;
+        disabledFirstAcceleratorInfo.state =
+            AcceleratorState.kDisabledByUnavailableKeys;
         disabledSecondAcceleratorInfo.state = AcceleratorState.kDisabledByUser;
+
+        // Create a SearchResult that doesn't have any enabled AcceleratorInfos,
+        // one is disabled by unavailable keys, the other is disabled by user.
         const fullyDisabledSearchResult: MojoSearchResult = {
           ...TakeScreenshotSearchResult,
           acceleratorInfos:
               [disabledFirstAcceleratorInfo, disabledSecondAcceleratorInfo],
         };
 
-        handler.setFakeSearchResult(
-            [fullyDisabledSearchResult, CycleTabsTextSearchResult]);
+        handler.setFakeSearchResult([fullyDisabledSearchResult]);
 
         searchBoxElement.onSearchResultsAvailabilityChanged();
         await simulateSearch('query');
 
         assertTrue(dropdownElement.opened);
+        // Verify fully disabled search result is not filtered out.
         assertEquals(1, searchBoxElement.searchResults.length);
+
+        const searchResultRowElement = strictQuery(
+            'search-result-row', searchBoxElement.shadowRoot,
+            SearchResultRowElement);
+        assertTrue(!!searchResultRowElement);
+
+        // Verify description is shown.
         assertEquals(
-            CycleTabsTextSearchResult.acceleratorLayoutInfo.description,
-            searchBoxElement.searchResults[0]
-                ?.acceleratorLayoutInfo.description);
+            'Take full screenshot or screen recording',
+            strictQuery(
+                '#description', searchResultRowElement.shadowRoot,
+                HTMLDivElement)
+                .innerText);
+
+        // Verify 'No shortcut assigned' message is shown.
+        assertEquals(
+            'No shortcut assigned',
+            strictQuery(
+                '#noShortcutAssignedMessage', searchResultRowElement.shadowRoot,
+                HTMLDivElement)
+                .innerText);
+      });
+
+  test(
+      'Filter fully disabled search results when customization is not allowed',
+      async () => {
+        loadTimeData.overrideValues({isCustomizationAllowed: false});
+        [searchBoxElement, searchFieldElement, dropdownElement,
+         resultsListElement] = initSearchBoxElement();
+
+        const disabledFirstAcceleratorInfo =
+            TakeScreenshotSearchResult.acceleratorInfos[0]!;
+        const disabledSecondAcceleratorInfo =
+            TakeScreenshotSearchResult.acceleratorInfos[1]!;
+        disabledFirstAcceleratorInfo.state =
+            AcceleratorState.kDisabledByUnavailableKeys;
+        disabledSecondAcceleratorInfo.state = AcceleratorState.kDisabledByUser;
+
+        // Create a SearchResult that doesn't have any enabled AcceleratorInfos,
+        // one is disabled by unavailable keys, the other is disabled by user.
+        const fullyDisabledSearchResult: MojoSearchResult = {
+          ...TakeScreenshotSearchResult,
+          acceleratorInfos:
+              [disabledFirstAcceleratorInfo, disabledSecondAcceleratorInfo],
+        };
+
+        handler.setFakeSearchResult([fullyDisabledSearchResult]);
+
+        searchBoxElement.onSearchResultsAvailabilityChanged();
+        await simulateSearch('query');
+
+        assertTrue(dropdownElement.opened);
+        // Verify fully disabled search result is hidden when customization is
+        // not allowed.
+        assertEquals(0, searchBoxElement.searchResults.length);
       });
 
   test(

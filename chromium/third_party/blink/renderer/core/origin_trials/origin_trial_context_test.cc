@@ -9,7 +9,6 @@
 
 #include "base/containers/span.h"
 #include "base/ranges/algorithm.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -32,6 +31,7 @@
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -45,16 +45,12 @@ const char kFrobulateThirdPartyTrialName[] = "FrobulateThirdParty";
 const char kFrobulateNavigationTrialName[] = "FrobulateNavigation";
 const char kFrobulateDeprecationTrialName[] = "FrobulateDeprecation";
 const char kFrobulateBrowserReadWriteTrialName[] = "FrobulateBrowserReadWrite";
-const char kPortalsTrialName[] = "Portals";
 const char kFrobulateEnabledOrigin[] = "https://www.example.com";
 const char kFrobulateEnabledOriginInsecure[] = "http://www.example.com";
 const char kUnrelatedSecureOrigin[] = "https://other.example.com";
 
 // The tokens expire in 2033.
 const base::Time kBaseTokenExpiryTime = base::Time::FromTimeT(2000000000);
-
-// Names of UMA histograms
-const char kResultHistogram[] = "OriginTrials.ValidationResult";
 
 // Trial token placeholder for mocked calls to validator
 const char kTokenPlaceholder[] = "The token contents are not used";
@@ -198,32 +194,11 @@ class OriginTrialContextTest : public testing::Test {
         ->IsNavigationFeatureActivated(feature);
   }
 
-  void ExpectStatusCount(OriginTrialTokenStatus status, int count) {
-    histogram_tester_.ExpectBucketCount(kResultHistogram,
-                                        static_cast<int>(status), count);
-  }
-
-  void ExpectStatusTotalMetric(int total) {
-    histogram_tester_.ExpectTotalCount(kResultHistogram, total);
-  }
-
  protected:
+  test::TaskEnvironment task_environment_;
   MockTokenValidator* token_validator_;
   Persistent<NullExecutionContext> execution_context_;
-  base::HistogramTester histogram_tester_;
 };
-
-// Check that validation status gets logged to the histogram
-// on both success and failure
-TEST_F(OriginTrialContextTest, ValidationStatusLoggedInHistogram) {
-  UpdateSecurityOrigin(kFrobulateEnabledOrigin);
-  AddTokenWithResponse(kFrobulateTrialName, OriginTrialTokenStatus::kSuccess);
-  AddTokenWithResponse(kUnknownTrialName,
-                       OriginTrialTokenStatus::kUnknownTrial);
-  ExpectStatusCount(OriginTrialTokenStatus::kSuccess, 1);
-  ExpectStatusCount(OriginTrialTokenStatus::kUnknownTrial, 1);
-  ExpectStatusTotalMetric(2);
-}
 
 // Test that we're passing correct information to the validator
 TEST_F(OriginTrialContextTest, ValidatorGetsCorrectInfo) {
@@ -660,16 +635,19 @@ TEST_F(OriginTrialContextDevtoolsTest, DependentFeatureNotEnabled) {
   UpdateSecurityOrigin(kFrobulateEnabledOrigin);
 
   base::test::ScopedFeatureList feature_list_;
-  feature_list_.InitAndDisableFeature(blink::features::kPortals);
+  feature_list_.InitAndDisableFeature(
+      blink::features::kSpeculationRulesPrefetchFuture);
 
-  AddTokenWithResponse(kPortalsTrialName, OriginTrialTokenStatus::kSuccess);
+  AddTokenWithResponse("SpeculationRulesPrefetchFuture",
+                       OriginTrialTokenStatus::kSuccess);
 
-  EXPECT_FALSE(IsFeatureEnabled(mojom::blink::OriginTrialFeature::kPortals));
+  EXPECT_FALSE(IsFeatureEnabled(
+      mojom::blink::OriginTrialFeature::kSpeculationRulesPrefetchFuture));
   HashMap<String, OriginTrialResult> origin_trial_results =
       GetOriginTrialResultsForDevtools();
   EXPECT_EQ(origin_trial_results.size(), 1u);
   ExpectTrialResultContains(
-      origin_trial_results, kPortalsTrialName,
+      origin_trial_results, "SpeculationRulesPrefetchFuture",
       OriginTrialStatus::kTrialNotAllowed,
       {{OriginTrialTokenStatus::kSuccess, /* token_parsable */ true}});
 }

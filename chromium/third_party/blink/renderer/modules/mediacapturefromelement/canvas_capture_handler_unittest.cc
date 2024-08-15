@@ -8,7 +8,7 @@
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "media/base/limits.h"
-#include "media/base/video_util.h"
+#include "media/base/video_frame_converter.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -19,10 +19,11 @@
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/video_capture/video_capturer_source.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -122,9 +123,7 @@ class CanvasCaptureHandlerTest
       auto i420_frame = media::VideoFrame::CreateFrame(
           converted_format, size, gfx::Rect(size), size,
           video_frame->timestamp());
-      std::vector<uint8_t> tmp_buf;
-      auto status =
-          media::ConvertAndScaleFrame(*video_frame, *i420_frame, tmp_buf);
+      auto status = converter_.ConvertAndScale(*video_frame, *i420_frame);
       EXPECT_TRUE(status.is_ok());
       video_frame = i420_frame;
     }
@@ -153,10 +152,12 @@ class CanvasCaptureHandlerTest
     }
   }
 
+  test::TaskEnvironment task_environment_;
   Persistent<MediaStreamComponent> component_;
   std::unique_ptr<StaticBitmapImageToVideoFrameCopier> copier_;
   // The Class under test. Needs to be scoped_ptr to force its destruction.
   std::unique_ptr<CanvasCaptureHandler> canvas_capture_handler_;
+  media::VideoFrameConverter converter_;
 
  protected:
   VideoCapturerSource* GetVideoCapturerSource(

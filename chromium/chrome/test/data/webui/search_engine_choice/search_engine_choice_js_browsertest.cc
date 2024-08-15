@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/web_ui_mocha_browser_test.h"
 #include "components/search_engines/search_engines_switches.h"
@@ -20,15 +20,16 @@ class SearchEngineChoiceJsBrowserTest : public WebUIMochaBrowserTest {
     command_line->AppendSwitchASCII(switches::kSearchEngineChoiceCountry, "BE");
   }
 
- private:
   base::test::ScopedFeatureList scoped_feature_list_{
-      switches::kSearchEngineChoice};
+      switches::kSearchEngineChoiceTrigger};
   base::AutoReset<bool> scoped_chrome_build_override_ =
-      SearchEngineChoiceServiceFactory::ScopedChromeBuildOverrideForTesting(
-          /*force_chrome_build=*/true);
+      SearchEngineChoiceDialogServiceFactory::
+          ScopedChromeBuildOverrideForTesting(
+              /*force_chrome_build=*/true);
 };
 
+// TODO(https://crbug.com/1521334) Tests are flaky
 IN_PROC_BROWSER_TEST_F(SearchEngineChoiceJsBrowserTest,
-                       SearchEngineChoiceTest) {
+                       DISABLED_SearchEngineChoiceTest) {
   RunTest("search_engine_choice/search_engine_choice_test.js", "mocha.run()");
 }

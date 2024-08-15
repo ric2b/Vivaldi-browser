@@ -130,6 +130,30 @@ Set amount of frame threads to use during decoding. The default value is 0 (auto
 
 @end table
 
+@section libxevd
+
+eXtra-fast Essential Video Decoder (XEVD) MPEG-5 EVC decoder wrapper.
+
+This decoder requires the presence of the libxevd headers and library
+during configuration. You need to explicitly configure the build with
+@option{--enable-libxevd}.
+
+The xevd project website is at @url{https://github.com/mpeg5/xevd}.
+
+@subsection Options
+
+The following options are supported by the libxevd wrapper.
+The xevd-equivalent options or values are listed in parentheses for easy migration.
+
+To get a more accurate and extensive documentation of the libxevd options,
+invoke the command  @code{xevd_app --help} or consult the libxevd documentation.
+
+@table @option
+@item threads (@emph{threads})
+Force to use a specific number of threads
+
+@end table
+
 @section QSV Decoders
 
 The family of Intel QuickSync Video decoders (VC1, MPEG-2, H.264, HEVC,
@@ -391,7 +415,7 @@ Specifies the encoding scheme of input subtitle text.
 
 @table @samp
 @item auto
-Automatically detect text encoding.
+Automatically detect text encoding (default).
 @item jis
 8bit-char JIS encoding defined in ARIB STD B24.
 This encoding used in Japan for ISDB captions.
@@ -402,9 +426,6 @@ This encoding is used in Philippines for ISDB-T captions.
 Latin character encoding defined in ABNT NBR 15606-1.
 This encoding is used in South America for SBTVD / ISDB-Tb captions.
 @end table
-
-The default is @dfn{ass} as same as @dfn{libaribb24} decoder.
-Some present players (e.g., @dfn{mpv}) expect ASS format for ARIB caption.
 
 @item -font @var{font_name[,font_name2,...]}
 Specify comma-separated list of font family names to be used for @dfn{bitmap}
@@ -426,12 +447,6 @@ The default is @var{false}.
 If your player cannot handle AVSubtitles with multiple ASS rectangles properly,
 set this option to @var{true} or define @env{ASS_SINGLE_RECT=1} to change
 default behavior at compilation.
-
-@item -replace_fullwidth_ascii @var{boolean}
-Specify whether to replace MSZ (Middle Size, half width) fullwidth
-alphanumerics with halfwidth alphanumerics.
-
-The default is @var{true}.
 
 @item -force_outline_text @var{boolean}
 Specify whether always render outline text for all characters regardless of
@@ -456,6 +471,28 @@ The default is @var{false}.
 
 @item -replace_drcs @var{boolean}
 Specify whether to render replaced DRCS characters as Unicode characters.
+
+The default is @var{true}.
+
+@item -replace_msz_ascii @var{boolean}
+Specify whether to replace MSZ (Middle Size; half width) fullwidth
+alphanumerics with halfwidth alphanumerics.
+
+The default is @var{true}.
+
+@item -replace_msz_japanese @var{boolean}
+Specify whether to replace some MSZ (Middle Size; half width) fullwidth
+japanese special characters with halfwidth ones.
+
+The default is @var{true}.
+
+@item -replace_msz_glyph @var{boolean}
+Specify whether to replace MSZ (Middle Size; half width) characters
+with halfwidth glyphs if the fonts supports it.
+This option works under FreeType or DirectWrite renderer
+with Adobe-Japan1 compliant fonts.
+e.g., IBM Plex Sans JP, Morisawa BIZ UDGothic, Morisawa BIZ UDMincho,
+Yu Gothic, Yu Mincho, and Meiryo.
 
 The default is @var{true}.
 

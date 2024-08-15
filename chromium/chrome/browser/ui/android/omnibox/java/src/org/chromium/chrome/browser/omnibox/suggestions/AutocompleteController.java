@@ -12,6 +12,7 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.lifetime.Destroyable;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.OmniboxMetrics;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler.VoiceResult;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -77,7 +78,9 @@ public class AutocompleteController implements Destroyable {
     /* package */ AutocompleteController(@NonNull Profile profile) {
         assert profile != null : "AutocompleteController cannot be created for null profile";
         mProfile = profile;
-        mNativeController = AutocompleteControllerJni.get().create(this, profile);
+        mNativeController =
+                AutocompleteControllerJni.get()
+                        .create(this, profile, OmniboxFeatures.isLowMemoryDevice());
         assert mNativeController != 0 : "Failed to instantiate native AutocompleteController";
     }
 
@@ -344,8 +347,8 @@ public class AutocompleteController implements Destroyable {
     }
 
     /**
-     * Updates AQS/SBS parameters on the selected match that we will navigate to and returns the
-     * updated URL.
+     * Updates searchbox stats parameters on the selected match that we will navigate to and
+     * returns the updated URL.
      *
      * @param match the AutocompleteMatch object to get the updated destination URL for
      * @param elapsedTimeSinceInputChange the number of ms between the time the user started typing
@@ -358,7 +361,7 @@ public class AutocompleteController implements Destroyable {
         if (!hasValidNativeObjectRef(match, VerificationPoint.UPDATE_MATCH)) return null;
 
         return AutocompleteControllerJni.get()
-                .updateMatchDestinationURLWithAdditionalAssistedQueryStats(
+                .updateMatchDestinationURLWithAdditionalSearchboxStats(
                         mNativeController, match.getNativeObjectRef(), elapsedTimeSinceInputChange);
     }
 
@@ -428,7 +431,7 @@ public class AutocompleteController implements Destroyable {
 
         void deleteMatch(long nativeAutocompleteControllerAndroid, long nativeAutocompleteMatch);
 
-        GURL updateMatchDestinationURLWithAdditionalAssistedQueryStats(
+        GURL updateMatchDestinationURLWithAdditionalSearchboxStats(
                 long nativeAutocompleteControllerAndroid,
                 long nativeAutocompleteMatch,
                 long elapsedTimeSinceInputChange);
@@ -452,6 +455,6 @@ public class AutocompleteController implements Destroyable {
                 int pageClassification);
 
         // Create an instance of AutocompleteController associated with the supplied profile.
-        long create(AutocompleteController controller, Profile profile);
+        long create(AutocompleteController controller, Profile profile, boolean isLowEndDevice);
     }
 }

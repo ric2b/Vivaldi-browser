@@ -39,6 +39,7 @@ swift_source_set("vivaldi_onboarding_swift") {
     "vivaldi_onboarding_shadow_modifier.swift",
     "vivaldi_onboarding_start_view.swift",
     "vivaldi_onboarding_tab_style_view.swift",
+    "vivaldi_onboarding_omnibox_position_view.swift",
     "vivaldi_onboarding_view_provider.swift",
     "vivaldi_onboarding_view.swift",
   ]

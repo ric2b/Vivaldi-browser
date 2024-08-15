@@ -61,6 +61,29 @@ class Void;
 
 namespace tint::core::type {
 
+/// @param space the address space of the memory view
+/// @returns the default access control for a memory view with the given address space.
+static constexpr inline core::Access DefaultAccessFor(core::AddressSpace space) {
+    switch (space) {
+        case core::AddressSpace::kIn:
+        case core::AddressSpace::kPushConstant:
+        case core::AddressSpace::kUniform:
+        case core::AddressSpace::kHandle:
+            return core::Access::kRead;
+
+        case core::AddressSpace::kUndefined:
+        case core::AddressSpace::kOut:
+        case core::AddressSpace::kFunction:
+        case core::AddressSpace::kPixelLocal:
+        case core::AddressSpace::kPrivate:
+        case core::AddressSpace::kStorage:
+        case core::AddressSpace::kWorkgroup:
+            break;
+    }
+
+    return core::Access::kReadWrite;
+}
+
 /// The type manager holds all the pointers to the known types.
 class Manager final {
   public:
@@ -84,8 +107,8 @@ class Manager final {
     /// Wrap returns a new Manager created with the types of `inner`.
     /// The Manager returned by Wrap is intended to temporarily extend the types
     /// of an existing immutable Manager.
-    /// As the copied types are owned by `inner`, `inner` must not be destructed
-    /// or assigned while using the returned Manager.
+    /// @warning As the copied types are owned by `inner`, `inner` must not be destructed or
+    /// assigned while using the returned Manager.
     /// TODO(bclayton) - Evaluate whether there are safer alternatives to this
     /// function. See crbug.com/tint/460.
     /// @param inner the immutable Manager to extend
@@ -121,6 +144,8 @@ class Manager final {
             return Get<core::type::F16>(std::forward<ARGS>(args)...);
         } else if constexpr (std::is_same_v<T, bool>) {
             return Get<core::type::Bool>(std::forward<ARGS>(args)...);
+        } else if constexpr (std::is_same_v<T, void>) {
+            return Get<core::type::Void>(std::forward<ARGS>(args)...);
         } else if constexpr (core::fluent_types::IsVector<T>) {
             return vec<typename T::type, T::width>(std::forward<ARGS>(args)...);
         } else if constexpr (core::fluent_types::IsMatrix<T>) {
@@ -407,13 +432,13 @@ class Manager final {
     /// @returns the pointer type
     const core::type::Pointer* ptr(core::AddressSpace address_space,
                                    const core::type::Type* subtype,
-                                   core::Access access = core::Access::kReadWrite);
+                                   core::Access access = core::Access::kUndefined);
 
     /// @tparam SPACE the address space
     /// @tparam T the storage type
     /// @tparam ACCESS the access mode
     /// @returns the pointer type with the templated address space, storage type and access.
-    template <core::AddressSpace SPACE, typename T, core::Access ACCESS = core::Access::kReadWrite>
+    template <core::AddressSpace SPACE, typename T, core::Access ACCESS = DefaultAccessFor(SPACE)>
     const core::type::Pointer* ptr() {
         return ptr(SPACE, Get<T>(), ACCESS);
     }
@@ -422,7 +447,7 @@ class Manager final {
     /// @tparam SPACE the address space
     /// @tparam ACCESS the access mode
     /// @returns the pointer type with the templated address space, storage type and access.
-    template <core::AddressSpace SPACE, core::Access ACCESS = core::Access::kReadWrite>
+    template <core::AddressSpace SPACE, core::Access ACCESS = DefaultAccessFor(SPACE)>
     const core::type::Pointer* ptr(const core::type::Type* subtype) {
         return ptr(SPACE, subtype, ACCESS);
     }
@@ -446,6 +471,12 @@ class Manager final {
         /// The optional struct member attributes.
         core::type::StructMemberAttributes attributes = {};
     };
+
+    /// Create a new structure declaration.
+    /// @param name the name of the structure
+    /// @param members the list of structure members
+    /// @returns the structure type
+    core::type::Struct* Struct(Symbol name, VectorRef<const StructMember*> members);
 
     /// Create a new structure declaration.
     /// @param name the name of the structure

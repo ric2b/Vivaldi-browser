@@ -209,7 +209,7 @@ g.test('value').fn(t => {
   ]) {
     const s = new BinaryStream(new Uint8Array(1024).buffer);
     serializeValue(s, value);
-    const d = new BinaryStream(s.buffer());
+    const d = new BinaryStream(s.buffer().buffer);
     const deserialized = deserializeValue(d);
     t.expect(
       objectEquals(value, deserialized),
@@ -246,7 +246,7 @@ g.test('fpinterval_f32').fn(t => {
   ]) {
     const s = new BinaryStream(new Uint8Array(1024).buffer);
     serializeFPInterval(s, interval);
-    const d = new BinaryStream(s.buffer());
+    const d = new BinaryStream(s.buffer().buffer);
     const deserialized = deserializeFPInterval(d);
     t.expect(
       objectEquals(interval, deserialized),
@@ -282,7 +282,7 @@ g.test('fpinterval_f16').fn(t => {
   ]) {
     const s = new BinaryStream(new Uint8Array(1024).buffer);
     serializeFPInterval(s, interval);
-    const d = new BinaryStream(s.buffer());
+    const d = new BinaryStream(s.buffer().buffer);
     const deserialized = deserializeFPInterval(d);
     t.expect(
       objectEquals(interval, deserialized),
@@ -318,7 +318,7 @@ g.test('fpinterval_abstract').fn(t => {
   ]) {
     const s = new BinaryStream(new Uint8Array(1024).buffer);
     serializeFPInterval(s, interval);
-    const d = new BinaryStream(s.buffer());
+    const d = new BinaryStream(s.buffer().buffer);
     const deserialized = deserializeFPInterval(d);
     t.expect(
       objectEquals(interval, deserialized),
@@ -340,7 +340,7 @@ g.test('expression_expectation').fn(t => {
   ]) {
     const s = new BinaryStream(new Uint8Array(1024).buffer);
     serializeExpectation(s, expectation);
-    const d = new BinaryStream(s.buffer());
+    const d = new BinaryStream(s.buffer().buffer);
     const deserialized = deserializeExpectation(d);
     t.expect(
       objectEquals(expectation, deserialized),
@@ -370,7 +370,7 @@ g.test('anyOf').fn(t => {
     ]) {
       const s = new BinaryStream(new Uint8Array(1024).buffer);
       serializeComparator(s, c.comparator);
-      const d = new BinaryStream(s.buffer());
+      const d = new BinaryStream(s.buffer().buffer);
       const deserialized = deserializeComparator(d);
       for (const val of c.testCases) {
         const got = deserialized.compare(val);
@@ -398,7 +398,7 @@ g.test('skipUndefined').fn(t => {
     ]) {
       const s = new BinaryStream(new Uint8Array(1024).buffer);
       serializeComparator(s, c.comparator);
-      const d = new BinaryStream(s.buffer());
+      const d = new BinaryStream(s.buffer().buffer);
       const deserialized = deserializeComparator(d);
       for (const val of c.testCases) {
         const got = deserialized.compare(val);

@@ -95,6 +95,7 @@ java_library_patterns = [
 java_target_patterns = java_library_patterns + java_resource_patterns
 
 _r8_path = "//third_party/r8/lib/r8.jar"
+_custom_r8_path = "//third_party/r8/custom_r8.jar"
 
 # This duplication is intentional, so we avoid updating the r8.jar used by
 # dexing unless necessary, since each update invalidates all incremental dexing
@@ -1074,7 +1075,10 @@ if (enable_java_templates) {
         _lint_jar_path = _default_lint_jar_path
       }
 
-      _cache_dir = "$root_build_dir/android_lint_cache"
+      # It is not safe to run two lint versions concurrently since they will
+      # wipe the cache on version mismatch. When using a non-default lint
+      # version, make each target use their own cache directory.
+      _use_custom_cache_dir = _lint_jar_path != _default_lint_jar_path
 
       # Save generated xml files in a consistent location for debugging.
       if (defined(invoker.lint_gen_dir)) {
@@ -1102,8 +1106,6 @@ if (enable_java_templates) {
         rebase_path(_lint_jar_path, root_build_dir),
         "--custom-lint-jar-path",
         rebase_path(_custom_lint_jar_path, root_build_dir),
-        "--cache-dir",
-        rebase_path(_cache_dir, root_build_dir),
         "--lint-gen-dir",
         rebase_path(_lint_gen_dir, root_build_dir),
         "--android-sdk-version=${lint_android_sdk_version}",
@@ -1113,6 +1115,17 @@ if (enable_java_templates) {
         "--backported-methods",
         rebase_path(_backported_methods, root_build_dir),
       ]
+
+      if (!_use_custom_cache_dir) {
+        _cache_dir = "$root_build_dir/android_lint_cache"
+        _create_cache_stamp_path = "$_cache_dir/build.lint.stamp"
+
+        # By default, lint.py will use "$_lint_gen_dir/cache".
+        args += [
+          "--cache-dir",
+          rebase_path(_cache_dir, root_build_dir),
+        ]
+      }
 
       if (defined(invoker.skip_build_server) && invoker.skip_build_server) {
         # Nocompile tests need lint to fail through ninja.
@@ -1162,14 +1175,15 @@ if (enable_java_templates) {
       if (defined(invoker.create_cache) && invoker.create_cache) {
         # Putting the stamp file in the cache dir allows us to depend on ninja
         # to create the cache dir for us.
-        _stamp_path = "$_cache_dir/build.lint.stamp"
         args += [ "--create-cache" ]
+        _stamp_path = _create_cache_stamp_path
       } else {
         _stamp_path = "$target_out_dir/$target_name/build.lint.stamp"
-        deps += [
-          "//build/android:prepare_android_lint_cache",
-          invoker.build_config_dep,
-        ]
+        deps += [ invoker.build_config_dep ]
+        if (!_use_custom_cache_dir) {
+          deps += [ "//build/android:prepare_android_lint_cache" ]
+          inputs += [ _create_cache_stamp_path ]
+        }
         inputs += [ invoker.build_config ]
         _rebased_build_config =
             rebase_path(invoker.build_config, root_build_dir)
@@ -1208,6 +1222,7 @@ if (enable_java_templates) {
       java_path_for_inputs,
       invoker.build_config,
       _r8_path,
+      _custom_r8_path,
     ]
     if (defined(invoker.inputs)) {
       _inputs += invoker.inputs
@@ -1246,6 +1261,8 @@ if (enable_java_templates) {
       "@FileArg($_rebased_build_config:android:sdk_jars)",
       "--r8-path",
       rebase_path(_r8_path, root_build_dir),
+      "--custom-r8-path",
+      rebase_path(_custom_r8_path, root_build_dir),
       "--package-name=$_package_name",
       "--source-file",
       _source_file_template,
@@ -1623,9 +1640,13 @@ if (enable_java_templates) {
         depfile = "$target_gen_dir/$target_name.d"
         outputs = [ invoker.output ]
         inputs = [
-          java_path_for_inputs,
-          _d8_path,
+          "$android_sdk/optional/android.test.base.jar",
+          "$android_sdk/optional/org.apache.http.legacy.jar",
+          "//third_party/jdk/current/bin/java",
           _custom_d8_path,
+          _d8_path,
+          android_sdk_jar,
+          java_path_for_inputs,
         ]
         if (defined(invoker.inputs)) {
           inputs += invoker.inputs
@@ -2981,8 +3002,13 @@ if (enable_java_templates) {
     action_with_pydeps(target_name) {
       if (invoker.use_turbine) {
         script = "//build/android/gyp/turbine.py"
+        inputs = [
+          "//third_party/jdk/current/bin/java",
+          android_sdk_jar,
+        ]
       } else {
         script = "//build/android/gyp/compile_java.py"
+        inputs = [ "//third_party/jdk/current/bin/javac" ]
       }
 
       if (target_name == "chrome_java__header") {
@@ -3000,10 +3026,13 @@ if (enable_java_templates) {
       if (!invoker.enable_errorprone && !invoker.use_turbine) {
         outputs += [ invoker.output_jar_path + ".info" ]
       }
-      inputs = invoker.source_files + _java_srcjars + [
-                 _build_config,
-                 java_path_for_inputs,
-               ]
+      inputs += invoker.source_files + _java_srcjars + [
+                  "$android_sdk/optional/android.test.base.jar",
+                  "$android_sdk/optional/org.apache.http.legacy.jar",
+                  _build_config,
+                  java_path_for_inputs,
+                ]
+
       if (invoker.source_files != []) {
         inputs += [ invoker.target_sources_file ]
       }

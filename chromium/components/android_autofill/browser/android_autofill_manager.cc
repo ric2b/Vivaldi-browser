@@ -11,6 +11,7 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "components/android_autofill/browser/autofill_provider.h"
 #include "components/android_autofill/browser/form_event_logger_weblayer_android.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
@@ -45,10 +46,6 @@ AndroidAutofillManager::~AndroidAutofillManager() {
 
 base::WeakPtr<AutofillManager> AndroidAutofillManager::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
-}
-
-CreditCardAccessManager* AndroidAutofillManager::GetCreditCardAccessManager() {
-  return nullptr;
 }
 
 bool AndroidAutofillManager::ShouldClearPreviewedForm() {
@@ -166,14 +163,6 @@ void AndroidAutofillManager::OnFormProcessed(
   }
 }
 
-void AndroidAutofillManager::OnServerRequestError(
-    FormSignature form_signature,
-    AutofillDownloadManager::RequestType request_type,
-    int http_error) {
-  if (auto* provider = GetAutofillProvider())
-    provider->OnServerQueryRequestError(this, form_signature);
-}
-
 void AndroidAutofillManager::Reset() {
   // Inform the provider before resetting state in case it needs to access it.
   if (auto* rfh =
@@ -208,7 +197,7 @@ void AndroidAutofillManager::OnFieldTypesDetermined(AutofillManager& manager,
 
   forms_with_server_predictions_.insert(form);
   if (auto* provider = GetAutofillProvider()) {
-    provider->OnServerPredictionsAvailable(this, form);
+    provider->OnServerPredictionsAvailable(*this, form);
   }
 }
 

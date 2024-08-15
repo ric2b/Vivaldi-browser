@@ -1,4 +1,4 @@
-: # If you want to use a local build of libavm, you must clone the avm repo in this directory first, then enable CMake's AVIF_CODEC_AVM and AVIF_LOCAL_AVM options.
+: # If you want to use a local build of libavm, you must clone the avm repo in this directory first, then set CMake's AVIF_CODEC_AVM to LOCAL.
 : # The git SHA below is known to work, and will occasionally be updated. Feel free to use a more recent commit.
 
 : # The odd choice of comment style in this file is to try to share this script between *nix and win32.
@@ -8,7 +8,7 @@
 : # If you're running this on Windows, be sure you've already run this (from your VC2019 install dir):
 : #     "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat"
 
-git clone -b research-v4.0.0 --depth 1 https://gitlab.com/AOMediaCodec/avm.git
+git clone -b research-v6.0.0 --depth 1 https://gitlab.com/AOMediaCodec/avm.git
 
 cd avm
 

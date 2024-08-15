@@ -4,6 +4,7 @@
 
 #include "chrome/browser/reading_list/android/reading_list_manager_impl.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -69,8 +70,10 @@ class ReadingListManagerImplTest : public testing::Test {
     reading_list_model_ = std::make_unique<ReadingListModelImpl>(
         std::move(storage), syncer::StorageType::kUnspecified,
         syncer::WipeModelUponSyncDisabledBehavior::kNever, &clock_);
-    manager_ =
-        std::make_unique<ReadingListManagerImpl>(reading_list_model_.get());
+    manager_ = std::make_unique<ReadingListManagerImpl>(
+        reading_list_model_.get(),
+        base::BindRepeating([](int64_t* id) { return (*id)++; },
+                            base::Owned(std::make_unique<int64_t>(0))));
     manager_->AddObserver(observer());
 
     return storage_ptr;
@@ -360,6 +363,21 @@ TEST_F(ReadingListManagerImplTest, ReadingListWillMoveEntry) {
 
   SetReadStatus(url, true);
   EXPECT_TRUE(manager()->GetReadStatus(node));
+}
+
+TEST_F(ReadingListManagerImplTest, EmptyBatchUpdatesDontTriggerObserver) {
+  // Batch updates that contain an actual write to the model should trigger
+  // the observer.
+  EXPECT_CALL(*observer(), ReadingListChanged());
+  std::unique_ptr<ReadingListModel::ScopedReadingListBatchUpdate> update =
+      reading_list_model()->BeginBatchUpdates();
+  manager()->Add(GURL("https://google.com"), "google");
+  update.reset();
+
+  // Empty batch updates shouldn't trigger the observer.
+  EXPECT_CALL(*observer(), ReadingListChanged()).Times(0);
+  update = reading_list_model()->BeginBatchUpdates();
+  update.reset();
 }
 
 }  // namespace

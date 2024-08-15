@@ -2,8 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(crbug.com/1327384): Make `permissions_common` source_set.
-component("permissions_common") {
+source_set("permissions_common") {
   sources = [
     "constants.cc",
     "constants.h",
@@ -16,7 +15,9 @@ component("permissions_common") {
   deps = [
     "//base",
     "//build:chromeos_buildflags",
+    "//components/content_settings/core/common",
   ]
+  public_deps = [ "//printing/buildflags" ]
 }
 
 source_set("permissions") {
@@ -71,6 +72,8 @@ source_set("permissions") {
     "permission_context_base.h",
     "permission_decision_auto_blocker.cc",
     "permission_decision_auto_blocker.h",
+    "permission_hats_trigger_helper.cc",
+    "permission_hats_trigger_helper.h",
     "permission_manager.cc",
     "permission_manager.h",
     "permission_prompt.h",
@@ -131,6 +134,7 @@ source_set("permissions") {
     "//third_party/blink/public/common",
     "//third_party/sqlite",
     "//ui/base",
+    "//ui/strings:ui_strings_grit",
     "//url",
   ]
   if (is_mac || is_chromeos) {
@@ -139,7 +143,7 @@ source_set("permissions") {
       "contexts/geolocation_permission_context_system.h",
     ]
   }
-  if (!is_android && !is_ios) {
+  if (!is_android) {
     deps += [ "//components/guest_view/browser" ]
   }
   if (is_android) {
@@ -184,9 +188,9 @@ source_set("permissions") {
       "//components/prefs",
       "//components/resources:android_resources",
       "//components/security_state/core:core",
+      "//components/strings:components_strings_grit",
       "//third_party/jni_zero",
       "//ui/android",
-      "//ui/strings:ui_strings_grit",
     ]
   } else {
     sources += [
@@ -198,8 +202,6 @@ source_set("permissions") {
       "bluetooth_scanning_prompt_controller.h",
       "bluetooth_scanning_prompt_desktop.cc",
       "bluetooth_scanning_prompt_desktop.h",
-      "permission_hats_trigger_helper.cc",
-      "permission_hats_trigger_helper.h",
       "permission_prompt_impl.cc",
     ]
   }

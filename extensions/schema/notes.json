@@ -72,6 +72,11 @@
             "optional": true,
             "description": "When this node was created, in milliseconds since the epoch (<code>new Date(dateAdded)</code>)."
           },
+          "dateModified": {
+            "type": "number",
+            "optional": true,
+            "description": "When this node was last modified, in milliseconds since the epoch (<code>new Date(dateModified)</code>)."
+          },
           "children": {
             "type": "array",
             "optional": true,
@@ -115,6 +120,16 @@
           "content": {
             "type": "string",
             "description": "The content of the node. For attachments, this is either a known attachment checksum copied from another attachment or a new base64-encoded attachment content",
+            "optional": true
+          },
+          "date": {
+            "type": "number",
+            "description": "A timestamp of the node's creation.",
+            "optional": true
+          },
+          "lastmod": {
+            "type": "number",
+            "description": "A timestamp of the node's last modification date.",
             "optional": true
           }
         }
@@ -328,6 +343,18 @@
             }
           ]
         }
+      },
+      {
+        "name": "beginImport",
+        "type": "function",
+        "description": "Signal that import has been started.",
+        "parameters": []
+      },
+      {
+        "name": "endImport",
+        "type": "function",
+        "description": "Signal that import has been finished.",
+        "parameters": []
       }
     ],
     "events": [
@@ -387,6 +414,10 @@
               },
               "url": {
                 "type": "string",
+                "optional": true
+              },
+              "dateModified": {
+                "type": "number",
                 "optional": true
               }
             }

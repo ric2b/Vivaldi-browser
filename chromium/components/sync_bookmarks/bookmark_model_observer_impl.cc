@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/check.h"
 #include "base/no_destructor.h"
 #include "base/uuid.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -124,6 +125,26 @@ void BookmarkModelObserverImpl::BookmarkNodeMoved(
 
   // We shouldn't see changes to the top-level nodes.
   DCHECK(!bookmark_model_->is_permanent_node(node));
+
+  // Handle moves that make a node newly syncable.
+  if (!bookmark_model_->IsNodeSyncable(old_parent) &&
+      bookmark_model_->IsNodeSyncable(new_parent)) {
+    BookmarkNodeAdded(nullptr /*unused*/, new_parent, new_index,
+                      false /*unused*/);
+    return;
+  }
+
+  // Handle moves that make a node non-syncable.
+  if (bookmark_model_->IsNodeSyncable(old_parent) &&
+      !bookmark_model_->IsNodeSyncable(new_parent)) {
+    // OnWillRemoveBookmarks() cannot be invoked here because |node| is already
+    // moved and unsyncable, whereas OnWillRemoveBookmarks() assumes the change
+    // hasn't happened yet.
+    ProcessDelete(node);
+    nudge_for_commit_closure_.Run();
+    bookmark_tracker_->CheckAllNodesTracked(bookmark_model_);
+    return;
+  }
 
   // Ignore changes to non-syncable nodes (e.g. managed nodes).
   if (!bookmark_model_->IsNodeSyncable(node)) {

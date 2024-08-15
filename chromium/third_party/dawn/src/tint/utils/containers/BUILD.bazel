@@ -43,6 +43,7 @@ cc_library(
   ],
   hdrs = [
     "bitset.h",
+    "const_propagating_ptr.h",
     "enum_set.h",
     "hashmap.h",
     "hashmap_base.h",
@@ -93,6 +94,7 @@ cc_library(
     "//src/tint/lang/core/type",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
+    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",
     "//src/tint/lang/wgsl/sem",
     "//src/tint/utils/containers",

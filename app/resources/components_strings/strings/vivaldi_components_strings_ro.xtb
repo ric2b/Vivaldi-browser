@@ -5,8 +5,6 @@
 <translation id="1110994991967754504">Selectați permisiunea pentru <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a închis conexiunea în mod neașteptat.</translation>
 <translation id="1161325031994447685">Reconectarea la Wi-Fi</translation>
-<translation id="1175364870820465910">Ti&amp;părește...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Încercați să goliți cookie-urile<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Despre versiune</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nu a trimis date.</translation>
 <translation id="1559528461873125649">Nu există un astfel de fișier sau director</translation>
@@ -17,7 +15,6 @@
 <translation id="1734878702283171397">Încearcați să contactați administratorul de sistem.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticele de rețea Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Acest site web conține programe dăunătoare</translation>
-<translation id="1916770123977586577">Pentru a aplica setările actualizate la acest site web, reîncărcați această pagină</translation>
 <translation id="1974060860693918893">Avansate</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificarea proxy-ul și firewall-ul<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Acest site web nu poate oferi o conexiune securizată</translation>

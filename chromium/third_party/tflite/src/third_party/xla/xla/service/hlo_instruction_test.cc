@@ -26,6 +26,7 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instructions.h"
+#include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/literal.h"
 #include "xla/protobuf_util.h"
 #include "xla/service/gpu/backend_configs.pb.h"
@@ -749,8 +750,12 @@ TEST_F(HloInstructionTest, PreserveMetadataInFusionAndClone) {
   EXPECT_TRUE(protobuf_util::ProtobufEquals(
       metadata, fusion->fused_expression_root()->operand(0)->metadata()));
 
-  auto cloned = fusion->CloneWithNewOperands(fusion->shape(), {});
+  std::string new_name = "foobarfoo";
+  auto cloned = fusion->CloneWithNewOperands(fusion->shape(), {}, new_name);
   EXPECT_TRUE(protobuf_util::ProtobufEquals(metadata, fusion->metadata()));
+
+  size_t index = cloned->name().rfind(new_name);
+  EXPECT_TRUE(index != std::string::npos);
 }
 
 TEST_F(HloInstructionTest, BinaryCallOp) {
@@ -1568,8 +1573,7 @@ TEST_F(HloInstructionTest, CloneSuffixNames) {
   EXPECT_EQ(foo_clone_clone3->Clone()->name(), "foo.clone.clone4");
 }
 
-TEST_F(HloInstructionTest, Stringification) {
-  // Tests stringification of a simple op, fusion, while, and conditional.
+TEST_F(HloInstructionTest, StringifyDot) {
   const Shape s1 = ShapeUtil::MakeShape(F32, {5, 10});
   const Shape s2 = ShapeUtil::MakeShape(F32, {20, 10});
   const Shape s2t = ShapeUtil::MakeShape(F32, {10, 20});
@@ -1603,16 +1607,31 @@ TEST_F(HloInstructionTest, Stringification) {
   EXPECT_EQ(dot->ToString(options2),
             "dot = f32[5,20] dot(x, transpose), "
             "lhs_contracting_dims={1}, rhs_contracting_dims={0}");
+}
+
+TEST_F(HloInstructionTest, StringifyConditional) {
+  const Shape s1 = ShapeUtil::MakeShape(F32, {5, 10});
+  const Shape s2 = ShapeUtil::MakeShape(F32, {20, 10});
+  const Shape s2t = ShapeUtil::MakeShape(F32, {10, 20});
+  const Shape sout = ShapeUtil::MakeShape(F32, {5, 20});
+
+  HloComputation::Builder builder("TransposeDot");
+  HloInstruction* x =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, s1, "x"));
+  HloInstruction* y =
+      builder.AddInstruction(HloInstruction::CreateParameter(1, s2, "y"));
+  HloInstruction* reshape =
+      builder.AddInstruction(HloInstruction::CreateTranspose(s2t, y, {1, 0}));
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  builder.AddInstruction(HloInstruction::CreateDot(sout, x, reshape, dot_dnums,
+                                                   DefaultPrecisionConfig(2)));
 
   auto module = CreateNewVerifiedModule();
   auto* computation = module->AddEntryComputation(builder.Build());
 
-  HloInstruction* loop = builder.AddInstruction(
-      HloInstruction::CreateWhile(sout, computation, computation, x));
-  EXPECT_EQ(loop->ToString(options),
-            "%while = f32[5,20]{1,0} while(f32[5,10]{1,0} %x), "
-            "condition=%TransposeDot, body=%TransposeDot");
-
+  auto options = HloPrintOptions().set_print_metadata(false);
   auto pred = builder.AddInstruction(
       HloInstruction::CreateConstant(LiteralUtil::CreateR0<bool>(true)));
   HloInstruction* conditional =
@@ -1622,6 +1641,36 @@ TEST_F(HloInstructionTest, Stringification) {
             "%conditional = f32[5,20]{1,0} conditional(pred[] %constant, "
             "f32[5,10]{1,0} %x, f32[5,10]{1,0} %x), "
             "true_computation=%TransposeDot, false_computation=%TransposeDot");
+}
+
+TEST_F(HloInstructionTest, StringifyWhile) {
+  const Shape s1 = ShapeUtil::MakeShape(F32, {5, 10});
+  const Shape s2 = ShapeUtil::MakeShape(F32, {20, 10});
+  const Shape s2t = ShapeUtil::MakeShape(F32, {10, 20});
+  const Shape sout = ShapeUtil::MakeShape(F32, {5, 20});
+
+  HloComputation::Builder builder("TransposeDot");
+  HloInstruction* x =
+      builder.AddInstruction(HloInstruction::CreateParameter(0, s1, "x"));
+  HloInstruction* y =
+      builder.AddInstruction(HloInstruction::CreateParameter(1, s2, "y"));
+  HloInstruction* reshape =
+      builder.AddInstruction(HloInstruction::CreateTranspose(s2t, y, {1, 0}));
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  builder.AddInstruction(HloInstruction::CreateDot(sout, x, reshape, dot_dnums,
+                                                   DefaultPrecisionConfig(2)));
+
+  auto module = CreateNewVerifiedModule();
+  auto* computation = module->AddEntryComputation(builder.Build());
+
+  auto options = HloPrintOptions().set_print_metadata(false);
+  HloInstruction* loop = builder.AddInstruction(
+      HloInstruction::CreateWhile(sout, computation, computation, x));
+  EXPECT_EQ(loop->ToString(options),
+            "%while = f32[5,20]{1,0} while(f32[5,10]{1,0} %x), "
+            "condition=%TransposeDot, body=%TransposeDot");
 }
 
 TEST_F(HloInstructionTest, GetSetStatisticsViz) {
@@ -2124,9 +2173,6 @@ TEST_F(HloInstructionTest, CanonicalStringificationConditional) {
   computation->CreateFusionInstruction({dot, reshape},
                                        HloInstruction::FusionKind::kLoop);
 
-  builder.AddInstruction(
-      HloInstruction::CreateWhile(sout, computation, computation, x));
-
   auto pred = builder.AddInstruction(
       HloInstruction::CreateConstant(LiteralUtil::CreateR0<bool>(true)));
   HloInstruction* conditional =
@@ -2535,6 +2581,216 @@ TEST_F(HloInstructionTest, PrintCycle) {
               ::testing::HasSubstr("recv\n send\n send-done\n recv"));
   // Remove the cycle to avoid error when destructing the verified module.
   ASSERT_IS_OK(send_done->DropAllControlDeps());
+}
+
+TEST_F(HloInstructionTest, SetOperationQueueId) {
+  std::unique_ptr<HloComputation> main_computation;
+  HloComputation::Builder main_builder("Entry");
+  const Shape scalar_shape = ShapeUtil::MakeScalarShape(F32);
+  HloInstruction* param0 = main_builder.AddInstruction(
+      HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+  HloInstruction* param1 = main_builder.AddInstruction(
+      HloInstruction::CreateParameter(1, scalar_shape, "p1"));
+
+  HloInstruction* add =
+      main_builder.AddInstruction(HloInstruction::CreateBinary(
+          scalar_shape, HloOpcode::kAdd, param0, param1));
+  add->set_operation_queue_id(3);
+  auto module = CreateNewVerifiedModule();
+  module->AddEntryComputation(main_builder.Build());
+
+  auto options = HloPrintOptions().set_print_metadata(false);
+  EXPECT_EQ(module->entry_computation()->root_instruction()->ToString(options),
+            "%add = f32[] add(f32[] %p0, f32[] %p1), operation_queue_id=3");
+}
+
+TEST_F(HloInstructionTest, ParseOperationQueueId) {
+  constexpr char kHloString[] = R"(
+  ENTRY main {
+    c0 = f32[] constant(0)
+    ROOT add0 = f32[] add(c0, c0), operation_queue_id=2
+  })";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(kHloString));
+  EXPECT_EQ(
+      module->entry_computation()->root_instruction()->operation_queue_id(), 2);
+}
+
+TEST_F(HloInstructionTest, VerifyBodyComputationPointsToWhile) {
+  auto module = CreateNewVerifiedModule();
+  const Shape scalar_shape = ShapeUtil::MakeScalarShape(F32);
+
+  HloComputation::Builder cond_builder("cond");
+  {
+    HloInstruction* param = cond_builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    HloInstruction* constant = cond_builder.AddInstruction(
+        HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(1024.0)));
+    cond_builder.AddInstruction(
+        HloInstruction::CreateCompare(ShapeUtil::MakeShape(PRED, {}), param,
+                                      constant, ComparisonDirection::kLt));
+  }
+  auto cond_computation = module->AddEmbeddedComputation(cond_builder.Build());
+
+  HloComputation::Builder body_builder("body");
+  {
+    HloInstruction* param = body_builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    body_builder.AddInstruction(HloInstruction::CreateBinary(
+        scalar_shape, HloOpcode::kMultiply, param, param));
+  }
+  auto body_computation = module->AddEmbeddedComputation(body_builder.Build());
+
+  std::unique_ptr<HloComputation> main_computation;
+  HloComputation::Builder main_builder("Entry");
+  HloInstruction* param = main_builder.AddInstruction(
+      HloInstruction::CreateParameter(0, scalar_shape, "input"));
+  main_builder.AddInstruction(HloInstruction::CreateWhile(
+      scalar_shape, cond_computation, body_computation, param));
+
+  module->AddEntryComputation(main_builder.Build());
+  // Should find one while body computation in the graph and it should point to
+  // the while instruction.
+  int num_while_body_comp = 0;
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    if (comp->IsWhileBodyComputation()) {
+      num_while_body_comp += 1;
+      EXPECT_EQ(comp->WhileCallInstruction(),
+                module->entry_computation()->root_instruction());
+    }
+  }
+  EXPECT_EQ(num_while_body_comp, 1);
+}
+
+TEST_F(HloInstructionTest,
+       VerifyBranchComputationPointsToConditonal_TrueFalseConstructor) {
+  auto module = CreateNewVerifiedModule();
+  const Shape scalar_shape = ShapeUtil::MakeScalarShape(F32);
+
+  HloComputation::Builder branch_0_builder("branch_0");
+  {
+    HloInstruction* param = branch_0_builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    HloInstruction* constant = branch_0_builder.AddInstruction(
+        HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(1024.0)));
+    branch_0_builder.AddInstruction(HloInstruction::CreateBinary(
+        scalar_shape, HloOpcode::kAdd, param, constant));
+  }
+  auto branch_0_computation =
+      module->AddEmbeddedComputation(branch_0_builder.Build());
+
+  HloComputation::Builder branch_1_builder("branch_1");
+  {
+    HloInstruction* param = branch_1_builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    branch_1_builder.AddInstruction(HloInstruction::CreateBinary(
+        scalar_shape, HloOpcode::kMultiply, param, param));
+  }
+  auto branch_1_computation =
+      module->AddEmbeddedComputation(branch_1_builder.Build());
+
+  std::unique_ptr<HloComputation> main_computation;
+  HloComputation::Builder main_builder("Entry");
+
+  HloInstruction* pred_param =
+      main_builder.AddInstruction(HloInstruction::CreateParameter(
+          0, ShapeUtil::MakeShape(PRED, {}), "pred_param"));
+  HloInstruction* param = main_builder.AddInstruction(
+      HloInstruction::CreateParameter(1, scalar_shape, "input"));
+
+  main_builder.AddInstruction(HloInstruction::CreateConditional(
+      scalar_shape, pred_param, /*true_computation_arg=*/param,
+      /*true_computation=*/branch_0_computation,
+      /*false_computation_arg=*/param,
+      /*false_computation=*/branch_1_computation));
+
+  module->AddEntryComputation(main_builder.Build());
+  // Should find conditional branch computations in the graph and it should
+  // point to the conditonal instruction.
+  int num_conditional_branch_comp = 0;
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    if (comp->IsConditionalBranchComputation()) {
+      num_conditional_branch_comp += 1;
+      EXPECT_EQ(comp->ConditionalCallInstruction(),
+                module->entry_computation()->root_instruction());
+    }
+  }
+  EXPECT_EQ(num_conditional_branch_comp, 2);
+}
+
+TEST_F(HloInstructionTest,
+       VerifyBranchComputationPointsToConditonal_BranchIndexConstructor) {
+  auto module = CreateNewVerifiedModule();
+  const Shape scalar_shape = ShapeUtil::MakeScalarShape(F32);
+
+  std::vector<HloComputation*> branch_computations;
+
+  {
+    HloComputation::Builder builder("branch_0");
+
+    HloInstruction* param = builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    HloInstruction* constant = builder.AddInstruction(
+        HloInstruction::CreateConstant(LiteralUtil::CreateR0<float>(1024.0)));
+    builder.AddInstruction(HloInstruction::CreateBinary(
+        scalar_shape, HloOpcode::kAdd, param, constant));
+
+    branch_computations.push_back(
+        module->AddEmbeddedComputation(builder.Build()));
+  }
+
+  {
+    HloComputation::Builder builder("branch_1");
+
+    HloInstruction* param = builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    builder.AddInstruction(HloInstruction::CreateBinary(
+        scalar_shape, HloOpcode::kMultiply, param, param));
+
+    branch_computations.push_back(
+        module->AddEmbeddedComputation(builder.Build()));
+  }
+
+  {
+    HloComputation::Builder builder("branch_2");
+
+    HloInstruction* param = builder.AddInstruction(
+        HloInstruction::CreateParameter(0, scalar_shape, "p0"));
+    builder.AddInstruction(
+        HloInstruction::CreateUnary(scalar_shape, HloOpcode::kLog, param));
+
+    branch_computations.push_back(
+        module->AddEmbeddedComputation(builder.Build()));
+  }
+
+  std::unique_ptr<HloComputation> main_computation;
+  HloComputation::Builder main_builder("Entry");
+
+  HloInstruction* branch_index =
+      main_builder.AddInstruction(HloInstruction::CreateParameter(
+          0, ShapeUtil::MakeScalarShape(S32), "branch_index_param"));
+  HloInstruction* param = main_builder.AddInstruction(
+      HloInstruction::CreateParameter(1, scalar_shape, "input"));
+
+  std::vector<HloInstruction*> branch_computation_args(
+      branch_computations.size(), param);
+
+  main_builder.AddInstruction(HloInstruction::CreateConditional(
+      scalar_shape, branch_index, branch_computations,
+      branch_computation_args));
+
+  module->AddEntryComputation(main_builder.Build());
+  // Should find conditional branch computations in the graph and it should
+  // point to the conditonal instruction.
+  int num_conditional_branch_comp = 0;
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    if (comp->IsConditionalBranchComputation()) {
+      num_conditional_branch_comp += 1;
+      EXPECT_EQ(comp->ConditionalCallInstruction(),
+                module->entry_computation()->root_instruction());
+    }
+  }
+  EXPECT_EQ(num_conditional_branch_comp, branch_computations.size());
 }
 
 }  // namespace

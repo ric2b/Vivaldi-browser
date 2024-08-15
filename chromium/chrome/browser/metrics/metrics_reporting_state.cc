@@ -33,6 +33,8 @@
 #include "components/policy/core/common/features.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 enum MetricsReportingChangeHistogramValue {
@@ -196,6 +198,11 @@ void UpdateMetricsPrefsOnPermissionChange(
 }
 
 void ApplyMetricsReportingPolicy() {
+  // Because this method is called on the startup and every time
+  // kMetricsReportingEnabled is changed, it would override the state of the
+  // Crash Reporting Consent file, thus we must not let it happen.
+  if (vivaldi::IsVivaldiRunning())
+    return;
   GoogleUpdateSettings::CollectStatsConsentTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(

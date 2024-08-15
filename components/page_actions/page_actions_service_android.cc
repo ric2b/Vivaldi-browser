@@ -52,8 +52,9 @@ jboolean PageActionsServiceAndroid::SetScriptOverrideForTab(
     jint script_override) {
   return service_->SetScriptOverrideForTab(
       content::WebContents::FromJavaWebContents(tab_contents),
-      base::FilePath::FromUTF8Unsafe(ConvertJavaStringToUTF8(env, script)),
-      page_actions::Service::ScriptOverride(script_override));
+      base::FilePath::FromUTF8Unsafe(
+          base::android::ConvertJavaStringToUTF8(env, script)),
+          page_actions::Service::ScriptOverride(script_override));
 }
 
 base::android::ScopedJavaLocalRef<jobjectArray>

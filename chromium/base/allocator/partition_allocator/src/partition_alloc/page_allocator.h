@@ -8,12 +8,12 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.h"
 #include "build/build_config.h"
+#include "partition_alloc/page_allocator_constants.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/thread_isolation/thread_isolation.h"
 
 namespace partition_alloc {
 
@@ -243,14 +243,12 @@ void DecommitSystemPages(
 // In contrast to |DecommitSystemPages|, this API guarantees that the pages are
 // zeroed and will always mark the region as inaccessible (the equivalent of
 // setting them to PageAccessibilityConfiguration::kInaccessible).
-//
-// This API will crash if the operation cannot be performed.
 PA_COMPONENT_EXPORT(PARTITION_ALLOC)
-void DecommitAndZeroSystemPages(uintptr_t address,
+bool DecommitAndZeroSystemPages(uintptr_t address,
                                 size_t length,
                                 PageTag page_tag = PageTag::kChromium);
 PA_COMPONENT_EXPORT(PARTITION_ALLOC)
-void DecommitAndZeroSystemPages(void* address,
+bool DecommitAndZeroSystemPages(void* address,
                                 size_t length,
                                 PageTag page_tag = PageTag::kChromium);
 

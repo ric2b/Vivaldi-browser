@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
@@ -32,7 +33,7 @@ namespace password_manager {
 
 // There is one ContentPasswordManagerDriver per RenderFrameHost.
 // The lifetime is managed by the ContentPasswordManagerDriverFactory.
-class ContentPasswordManagerDriver
+class ContentPasswordManagerDriver final
     : public PasswordManagerDriver,
       public autofill::mojom::PasswordManagerDriver {
  public:
@@ -67,6 +68,7 @@ class ContentPasswordManagerDriver
       const autofill::FormData& form_data,
       autofill::FieldRendererId generation_element_id,
       const std::u16string& password) override;
+  void FocusNextFieldAfterPasswords() override;
   void FillSuggestion(const std::u16string& username,
                       const std::u16string& password) override;
   void FillIntoFocusedField(bool is_password,
@@ -80,9 +82,9 @@ class ContentPasswordManagerDriver
                          const std::u16string& password) override;
   void PreviewGenerationSuggestion(const std::u16string& password) override;
   void ClearPreviewedForm() override;
-  void SetSuggestionAvailability(
-      autofill::FieldRendererId element_id,
-      const autofill::mojom::AutofillState state) override;
+  void SetSuggestionAvailability(autofill::FieldRendererId element_id,
+                                 autofill::mojom::AutofillSuggestionAvailability
+                                     suggestion_availability) override;
   PasswordGenerationFrameHelper* GetPasswordGenerationHelper() override;
   PasswordManager* GetPasswordManager() override;
   PasswordAutofillManager* GetPasswordAutofillManager() override;
@@ -93,6 +95,11 @@ class ContentPasswordManagerDriver
   const GURL& GetLastCommittedURL() const override;
   void AnnotateFieldsWithParsingResult(
       const autofill::ParsingResult& parsing_result) override;
+  base::WeakPtr<password_manager::PasswordManagerDriver> AsWeakPtr() override;
+
+  base::WeakPtr<ContentPasswordManagerDriver> AsWeakPtrImpl() {
+    return weak_factory_.GetWeakPtr();
+  }
 
   // Notify the renderer that the user wants to trigger password generation.
   void GeneratePassword(autofill::mojom::PasswordGenerationAgent::

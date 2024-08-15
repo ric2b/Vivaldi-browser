@@ -27,11 +27,7 @@ message TPMCredentials {
   optional bytes endorsement_credential = 2;
 
   // The DER encoded RSAPublicKey for RSA endorsement key.
-  optional bytes legacy_endorsement_public_key = 1 [deprecated = true];
-  optional EncryptedData default_encrypted_endorsement_credential = 5
-      [deprecated = true];
-  optional EncryptedData test_encrypted_endorsement_credential = 6
-      [deprecated = true];
+  reserved 1, 5, 6;
 
   // Map of |endorsement_credential| encrypted with a public key associated with
   // Chrome OS Privacy CA, by CA.
@@ -49,9 +45,9 @@ message IdentityKey {
   optional bytes identity_key_blob = 2;
   // A credential issued by the attestation server. (Now in
   // IdentityCertificate.)
-  optional bytes identity_credential = 3 [deprecated = true];
+  reserved 3;
   // The computed enrollment ID, present only for enrolled devices.
-  optional bytes enrollment_id = 4 [deprecated = true];
+  reserved 4;
 }
 
 // Holds information required to verify the binding of an AIK to an EK. This
@@ -129,10 +125,7 @@ message AttestationDatabase {
   optional TPMCredentials credentials = 2;
 
   // These deprecated fields are now in identities and identity certificates.
-  optional IdentityBinding identity_binding = 3 [deprecated = true];
-  optional IdentityKey identity_key = 4 [deprecated = true];
-  optional Quote pcr0_quote = 5 [deprecated = true];
-  optional Quote pcr1_quote = 12 [deprecated = true];
+  reserved 3, 4, 5, 12;
 
   optional Delegation delegate = 6;
   repeated CertifiedKey device_keys = 7;

@@ -28,30 +28,44 @@ import time
 import urllib.request
 
 # These build configs affect build performance.
-ALLOWLISTED_CONFIGS = ('symbol_level', 'use_goma', 'is_debug',
-                       'is_component_build', 'enable_nacl', 'host_os',
-                       'host_cpu', 'target_os', 'target_cpu',
-                       'blink_symbol_level', 'is_java_debug',
-                       'treat_warnings_as_errors', 'disable_android_lint',
-                       'use_errorprone_java_compiler', 'incremental_install',
-                       'android_static_analysis')
+ALLOWLISTED_CONFIGS = (
+    "symbol_level",
+    "use_goma",
+    "is_debug",
+    "is_component_build",
+    "enable_nacl",
+    "host_os",
+    "host_cpu",
+    "target_os",
+    "target_cpu",
+    "blink_symbol_level",
+    "is_java_debug",
+    "treat_warnings_as_errors",
+    "disable_android_lint",
+    "use_errorprone_java_compiler",
+    "incremental_install",
+    "android_static_analysis",
+)
 
 
 def IsGoogler():
     """Check whether this user is Googler or not."""
-    p = subprocess.run('goma_auth info',
-                       stdout=subprocess.PIPE,
-                       stderr=subprocess.PIPE,
-                       universal_newlines=True,
-                       shell=True)
+    p = subprocess.run(
+        "cipd auth-info",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        shell=True,
+    )
     if p.returncode != 0:
         return False
     lines = p.stdout.splitlines()
     if len(lines) == 0:
         return False
     l = lines[0]
-    # |l| will be like 'Login as <user>@google.com' for googler using goma.
-    return l.startswith('Login as ') and l.endswith('@google.com')
+    # |l| will be like 'Logged in as <user>@google.com.' for googler using
+    # reclient.
+    return l.startswith("Logged in as ") and l.endswith("@google.com.")
 
 
 def ParseGNArgs(gn_args):
@@ -63,10 +77,10 @@ def ParseGNArgs(gn_args):
         key = config["name"]
         if key not in ALLOWLISTED_CONFIGS:
             continue
-        if 'current' in config:
-            build_configs[key] = config['current']['value']
+        if "current" in config:
+            build_configs[key] = config["current"]["value"]
         else:
-            build_configs[key] = config['default']['value']
+            build_configs[key] = config["default"]["value"]
 
     return build_configs
 
@@ -79,8 +93,8 @@ def GetBuildTargetFromCommandLine(cmdline):
 
     # Skipping all args that involve these flags, and taking all remaining args
     # as targets.
-    onearg_flags = ('-C', '-d', '-f', '-j', '-k', '-l', '-p', '-t', '-w')
-    zeroarg_flags = ('--version', '-n', '-v')
+    onearg_flags = ("-C", "-d", "-f", "-j", "-k", "-l", "-p", "-t", "-w")
+    zeroarg_flags = ("--version", "-n", "-v")
 
     targets = []
 
@@ -90,12 +104,12 @@ def GetBuildTargetFromCommandLine(cmdline):
             idx += 2
             continue
 
-        if (arg[:2] in onearg_flags or arg in zeroarg_flags):
+        if arg[:2] in onearg_flags or arg in zeroarg_flags:
             idx += 1
             continue
 
         # A target doesn't start with '-'.
-        if arg.startswith('-'):
+        if arg.startswith("-"):
             idx += 1
             continue
 
@@ -114,12 +128,12 @@ def GetJflag(cmdline):
     """Parse cmdline to get flag value for -j"""
 
     for i in range(len(cmdline)):
-        if (cmdline[i] == '-j' and i + 1 < len(cmdline)
+        if (cmdline[i] == "-j" and i + 1 < len(cmdline)
                 and cmdline[i + 1].isdigit()):
             return int(cmdline[i + 1])
 
-        if (cmdline[i].startswith('-j') and cmdline[i][len('-j'):].isdigit()):
-            return int(cmdline[i][len('-j'):])
+        if cmdline[i].startswith("-j") and cmdline[i][len("-j"):].isdigit():
+            return int(cmdline[i][len("-j"):])
 
 
 def GetMetadata(cmdline, ninjalog):
@@ -136,10 +150,10 @@ def GetMetadata(cmdline, ninjalog):
     build_configs = {}
 
     try:
-        args = ['gn', 'args', build_dir, '--list', '--short', '--json']
-        if sys.platform == 'win32':
+        args = ["gn", "args", build_dir, "--list", "--short", "--json"]
+        if sys.platform == "win32":
             # gn in PATH is bat file in windows environment (except cygwin).
-            args = ['cmd', '/c'] + args
+            args = ["cmd", "/c"] + args
 
         gn_args = subprocess.check_output(args)
         build_configs = ParseGNArgs(gn_args)
@@ -152,15 +166,15 @@ def GetMetadata(cmdline, ninjalog):
         build_configs[k] = str(build_configs[k])
 
     metadata = {
-        'platform': platform.system(),
-        'cpu_core': multiprocessing.cpu_count(),
-        'build_configs': build_configs,
-        'targets': GetBuildTargetFromCommandLine(cmdline),
+        "platform": platform.system(),
+        "cpu_core": multiprocessing.cpu_count(),
+        "build_configs": build_configs,
+        "targets": GetBuildTargetFromCommandLine(cmdline),
     }
 
     jflag = GetJflag(cmdline)
     if jflag is not None:
-        metadata['jobs'] = jflag
+        metadata["jobs"] = jflag
 
     return metadata
 
@@ -168,36 +182,40 @@ def GetMetadata(cmdline, ninjalog):
 def GetNinjalog(cmdline):
     """GetNinjalog returns the path to ninjalog from cmdline."""
     # ninjalog is in current working directory by default.
-    ninjalog_dir = '.'
+    ninjalog_dir = "."
 
     i = 0
     while i < len(cmdline):
         cmd = cmdline[i]
         i += 1
-        if cmd == '-C' and i < len(cmdline):
+        if cmd == "-C" and i < len(cmdline):
             ninjalog_dir = cmdline[i]
             i += 1
             continue
 
-        if cmd.startswith('-C') and len(cmd) > len('-C'):
-            ninjalog_dir = cmd[len('-C'):]
+        if cmd.startswith("-C") and len(cmd) > len("-C"):
+            ninjalog_dir = cmd[len("-C"):]
 
-    return os.path.join(ninjalog_dir, '.ninja_log')
+    return os.path.join(ninjalog_dir, ".ninja_log")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--server',
-                        default='chromium-build-stats.appspot.com',
-                        help='server to upload ninjalog file.')
-    parser.add_argument('--ninjalog', help='ninjalog file to upload.')
-    parser.add_argument('--verbose',
-                        action='store_true',
-                        help='Enable verbose logging.')
-    parser.add_argument('--cmdline',
-                        required=True,
-                        nargs=argparse.REMAINDER,
-                        help='command line args passed to ninja.')
+    parser.add_argument(
+        "--server",
+        default="chromium-build-stats.appspot.com",
+        help="server to upload ninjalog file.",
+    )
+    parser.add_argument("--ninjalog", help="ninjalog file to upload.")
+    parser.add_argument("--verbose",
+                        action="store_true",
+                        help="Enable verbose logging.")
+    parser.add_argument(
+        "--cmdline",
+        required=True,
+        nargs=argparse.REMAINDER,
+        help="command line args passed to ninja.",
+    )
 
     args = parser.parse_args()
 
@@ -224,27 +242,29 @@ def main():
     output = io.BytesIO()
 
     with open(ninjalog) as f:
-        with gzip.GzipFile(fileobj=output, mode='wb') as g:
+        with gzip.GzipFile(fileobj=output, mode="wb") as g:
             g.write(f.read().encode())
-            g.write(b'# end of ninja log\n')
+            g.write(b"# end of ninja log\n")
 
             metadata = GetMetadata(args.cmdline, ninjalog)
-            logging.info('send metadata: %s', json.dumps(metadata))
+            logging.info("send metadata: %s", json.dumps(metadata))
             g.write(json.dumps(metadata).encode())
 
     resp = urllib.request.urlopen(
-        urllib.request.Request('https://' + args.server + '/upload_ninja_log/',
-                               data=output.getvalue(),
-                               headers={'Content-Encoding': 'gzip'}))
+        urllib.request.Request(
+            "https://" + args.server + "/upload_ninja_log/",
+            data=output.getvalue(),
+            headers={"Content-Encoding": "gzip"},
+        ))
 
     if resp.status != 200:
         logging.warning("unexpected status code for response: %s", resp.status)
         return 1
 
-    logging.info('response header: %s', resp.headers)
-    logging.info('response content: %s', resp.read())
+    logging.info("response header: %s", resp.headers)
+    logging.info("response content: %s", resp.read())
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

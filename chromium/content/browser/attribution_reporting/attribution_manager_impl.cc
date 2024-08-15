@@ -5,6 +5,7 @@
 #include "content/browser/attribution_reporting/attribution_manager_impl.h"
 
 #include <cmath>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -19,6 +20,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/functional/overloaded.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
@@ -26,7 +28,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task/updateable_sequenced_task_runner.h"
@@ -34,8 +35,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "components/attribution_reporting/aggregatable_dedup_key.h"
-#include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
@@ -84,7 +83,6 @@
 #include "services/network/public/mojom/attribution.mojom.h"
 #include "services/network/public/mojom/network_change_manager.mojom-forward.h"
 #include "storage/browser/quota/special_storage_policy.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -100,10 +98,6 @@ namespace {
 using ScopedUseInMemoryStorageForTesting =
     ::content::AttributionManagerImpl::ScopedUseInMemoryStorageForTesting;
 
-using ::attribution_reporting::AggregatableDedupKey;
-using ::attribution_reporting::FilterConfig;
-using ::attribution_reporting::FilterPair;
-using ::attribution_reporting::FilterValues;
 using ::attribution_reporting::mojom::OsRegistrationResult;
 using ::attribution_reporting::mojom::RegistrationType;
 
@@ -156,15 +150,18 @@ class AttributionReportScheduler : public ReportSchedulerTimer::Delegate {
  private:
   // ReportSchedulerTimer::Delegate:
   void GetNextReportTime(
-      base::OnceCallback<void(absl::optional<base::Time>)> callback,
+      base::OnceCallback<void(std::optional<base::Time>)> callback,
       base::Time now) override {
     attribution_storage_->AsyncCall(&AttributionStorage::GetNextReportTime)
         .WithArgs(now)
         .Then(std::move(callback));
   }
-  void OnReportingTimeReached(base::Time now) override { send_reports_.Run(); }
+  void OnReportingTimeReached(base::Time now,
+                              base::Time timer_desired_run_time) override {
+    send_reports_.Run();
+  }
   void AdjustOfflineReportTimes(
-      base::OnceCallback<void(absl::optional<base::Time>)> maybe_set_timer_cb)
+      base::OnceCallback<void(std::optional<base::Time>)> maybe_set_timer_cb)
       override {
     // Add delay to all reports that should have been sent while the browser was
     // offline so they are not temporally joinable. We do this in storage to
@@ -199,15 +196,15 @@ bool IsStorageKeySessionOnly(
   return false;
 }
 
-void RecordStoreSourceStatus(StoreSourceResult result) {
+void RecordStoreSourceStatus(const StoreSourceResult& result) {
   static_assert(StorableSource::Result::kMaxValue ==
                     StorableSource::Result::kExceedsMaxChannelCapacity,
                 "Bump version of Conversions.SourceStoredStatus8 histogram.");
   base::UmaHistogramEnumeration("Conversions.SourceStoredStatus8",
-                                result.status);
+                                result.status());
 }
 
-void RecordCreateReportStatus(CreateReportResult result) {
+void RecordCreateReportStatus(const CreateReportResult& result) {
   static_assert(
       AttributionTrigger::EventLevelResult::kMaxValue ==
           AttributionTrigger::EventLevelResult::kNoMatchingTriggerData,
@@ -435,7 +432,7 @@ struct AttributionManagerImpl::SourceOrTriggerRFH {
   GlobalRenderFrameHostId rfh_id;
 };
 
-absl::optional<base::TimeDelta> GetFailedReportDelay(int failed_send_attempts) {
+std::optional<base::TimeDelta> GetFailedReportDelay(int failed_send_attempts) {
   DCHECK_GT(failed_send_attempts, 0);
 
   const int kMaxFailedSendAttempts = 2;
@@ -443,7 +440,7 @@ absl::optional<base::TimeDelta> GetFailedReportDelay(int failed_send_attempts) {
   const int kDelayFactor = 3;
 
   if (failed_send_attempts > kMaxFailedSendAttempts) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return kInitialReportDelay * std::pow(kDelayFactor, failed_send_attempts - 1);
@@ -606,8 +603,6 @@ AttributionDataHostManager* AttributionManagerImpl::GetDataHostManager() {
 void AttributionManagerImpl::HandleSource(
     StorableSource source,
     GlobalRenderFrameHostId render_frame_id) {
-  RecordReservedKeysUsage(source, render_frame_id);
-
   MaybeEnqueueEvent(SourceOrTriggerRFH{.source_or_trigger = std::move(source),
                                        .rfh_id = render_frame_id});
 }
@@ -630,7 +625,7 @@ void AttributionManagerImpl::RecordPendingAggregatableReportsTimings() {
 
 void AttributionManagerImpl::OnSourceStored(
     const StorableSource& source,
-    absl::optional<uint64_t> cleared_debug_key,
+    std::optional<uint64_t> cleared_debug_key,
     bool is_debug_cookie_set,
     StoreSourceResult result) {
   CHECK(IsReady());
@@ -639,10 +634,14 @@ void AttributionManagerImpl::OnSourceStored(
 
   base::Time now = base::Time::Now();
   for (auto& observer : observers_) {
-    observer.OnSourceHandled(source, now, cleared_debug_key, result.status);
+    observer.OnSourceHandled(source, now, cleared_debug_key, result.status());
   }
 
-  scheduler_timer_->MaybeSet(result.min_fake_report_time);
+  if (const auto* success_noised =
+          absl::get_if<StoreSourceResult::SuccessNoised>(&result.result())) {
+    scheduler_timer_->MaybeSet(success_noised->min_fake_report_time);
+    NotifyReportsChanged();
+  }
 
   NotifySourcesChanged();
 
@@ -652,18 +651,16 @@ void AttributionManagerImpl::OnSourceStored(
 void AttributionManagerImpl::HandleTrigger(
     AttributionTrigger trigger,
     GlobalRenderFrameHostId render_frame_id) {
-  RecordReservedKeysUsage(trigger, render_frame_id);
-
   MaybeEnqueueEvent(SourceOrTriggerRFH{.source_or_trigger = std::move(trigger),
                                        .rfh_id = render_frame_id});
 }
 
 void AttributionManagerImpl::StoreTrigger(AttributionTrigger trigger,
                                           bool is_debug_cookie_set) {
-  absl::optional<uint64_t> cleared_debug_key;
+  std::optional<uint64_t> cleared_debug_key;
   if (!is_debug_cookie_set) {
     cleared_debug_key =
-        std::exchange(trigger.registration().debug_key, absl::nullopt);
+        std::exchange(trigger.registration().debug_key, std::nullopt);
   }
 
   attribution_storage_.AsyncCall(&AttributionStorage::MaybeCreateAndStoreReport)
@@ -671,57 +668,6 @@ void AttributionManagerImpl::StoreTrigger(AttributionTrigger trigger,
       .Then(base::BindOnce(&AttributionManagerImpl::OnReportStored,
                            weak_factory_.GetWeakPtr(), std::move(trigger),
                            cleared_debug_key, is_debug_cookie_set));
-}
-
-void AttributionManagerImpl::RecordReservedKeysUsage(
-    const SourceOrTrigger& event,
-    GlobalRenderFrameHostId render_frame_id) const {
-  const auto check_values = [](const FilterValues& filter_values) {
-    return base::ranges::any_of(filter_values, [](const auto& f) {
-      constexpr char kReservedKeyPrefix[] = "_";
-      return base::StartsWith(f.first, kReservedKeyPrefix);
-    });
-  };
-  bool event_uses_reserved_key = absl::visit(
-      base::Overloaded{
-          [&check_values](const StorableSource& source) {
-            bool source_uses_reserved_keys =
-                check_values(source.registration().filter_data.filter_values());
-            base::UmaHistogramBoolean("Conversions.Source.UsesReservedKeys",
-                                      source_uses_reserved_keys);
-            return source_uses_reserved_keys;
-          },
-          [&check_values](const AttributionTrigger& trigger) {
-            const auto check_config = [&check_values](const FilterConfig& c) {
-              return check_values(c.filter_values());
-            };
-            const auto check_pair = [&check_config](const FilterPair& pair) {
-              return base::ranges::any_of(pair.positive, check_config) ||
-                     base::ranges::any_of(pair.negative, check_config);
-            };
-            const auto check_key =
-                [&check_pair](const AggregatableDedupKey& key) {
-                  return check_pair(key.filters);
-                };
-
-            bool trigger_uses_reserved_keys =
-                check_pair(trigger.registration().filters) ||
-                base::ranges::any_of(
-                    trigger.registration().aggregatable_dedup_keys, check_key);
-            base::UmaHistogramBoolean("Conversions.Trigger.UsesReservedKeys",
-                                      trigger_uses_reserved_keys);
-            return trigger_uses_reserved_keys;
-          },
-      },
-      event);
-  if (!event_uses_reserved_key) {
-    return;
-  }
-  if (auto* rfh = RenderFrameHost::FromID(render_frame_id)) {
-    GetContentClient()->browser()->LogWebFeatureForCurrentPage(
-        rfh, blink::mojom::WebFeature::
-                 kAttributionReportingUnderscorePrefixedFilterKey);
-  }
 }
 
 void AttributionManagerImpl::MaybeEnqueueEvent(SourceOrTriggerRFH event) {
@@ -745,6 +691,7 @@ void AttributionManagerImpl::MaybeEnqueueEvent(SourceOrTriggerRFH event) {
 
 void AttributionManagerImpl::ProcessEvents() {
   if (!IsReady()) {
+    DLOG(WARNING) << "Still waiting for attestations loading";
     return;
   }
 
@@ -828,12 +775,10 @@ void AttributionManagerImpl::ProcessNextEvent(bool registration_allowed,
             if (registration_allowed) {
               StoreSource(std::move(source), is_debug_cookie_set);
             } else {
-              OnSourceStored(
-                  source,
-                  /*cleared_debug_key=*/absl::nullopt,
-                  /*is_debug_cookie_set=*/false,
-                  StoreSourceResult(
-                      StorableSource::Result::kProhibitedByBrowserPolicy));
+              OnSourceStored(source,
+                             /*cleared_debug_key=*/std::nullopt,
+                             /*is_debug_cookie_set=*/false,
+                             StoreSourceResult::ProhibitedByBrowserPolicy());
             }
           },
           [&](AttributionTrigger& trigger) {
@@ -841,7 +786,7 @@ void AttributionManagerImpl::ProcessNextEvent(bool registration_allowed,
               StoreTrigger(std::move(trigger), is_debug_cookie_set);
             } else {
               OnReportStored(trigger,
-                             /*cleared_debug_key=*/absl::nullopt,
+                             /*cleared_debug_key=*/std::nullopt,
                              /*is_debug_cookie_set=*/false,
                              CreateReportResult(
                                  /*trigger_time=*/base::Time::Now(),
@@ -859,10 +804,10 @@ void AttributionManagerImpl::ProcessNextEvent(bool registration_allowed,
 
 void AttributionManagerImpl::StoreSource(StorableSource source,
                                          bool is_debug_cookie_set) {
-  absl::optional<uint64_t> cleared_debug_key;
+  std::optional<uint64_t> cleared_debug_key;
   if (!is_debug_cookie_set) {
     cleared_debug_key =
-        std::exchange(source.registration().debug_key, absl::nullopt);
+        std::exchange(source.registration().debug_key, std::nullopt);
   }
 
   attribution_storage_.AsyncCall(&AttributionStorage::StoreSource)
@@ -894,14 +839,14 @@ void AttributionManagerImpl::AddPendingAggregatableReportTiming(
 
 void AttributionManagerImpl::OnReportStored(
     const AttributionTrigger& trigger,
-    absl::optional<uint64_t> cleared_debug_key,
+    std::optional<uint64_t> cleared_debug_key,
     bool is_debug_cookie_set,
     CreateReportResult result) {
   CHECK(IsReady());
 
   RecordCreateReportStatus(result);
 
-  absl::optional<base::Time> min_new_report_time;
+  std::optional<base::Time> min_new_report_time;
 
   if (auto& report = result.new_event_level_report()) {
     min_new_report_time = report->report_time();
@@ -1207,13 +1152,13 @@ void AttributionManagerImpl::OnReportSent(base::OnceClosure done,
   // update the report's DB state to reflect that. Otherwise, delete the report
   // from storage.
 
-  absl::optional<base::Time> new_report_time;
+  std::optional<base::Time> new_report_time;
   // TODO(linnan): Retry on transient assembly failure isn't privacy sensitive,
   // therefore we could consider subjecting these failures to a different limit.
   if (info.status == SendResult::Status::kTransientFailure ||
       info.status == SendResult::Status::kTransientAssemblyFailure) {
     int retry_attempts = report.failed_send_attempts() + 1;
-    if (absl::optional<base::TimeDelta> delay =
+    if (std::optional<base::TimeDelta> delay =
             GetFailedReportDelay(retry_attempts)) {
       new_report_time = base::Time::Now() + *delay;
     } else {
@@ -1239,7 +1184,7 @@ void AttributionManagerImpl::OnReportSent(base::OnceClosure done,
   base::OnceCallback then = base::BindOnce(
       [](base::OnceClosure done, base::WeakPtr<AttributionManagerImpl> manager,
          AttributionReport::Id report_id,
-         absl::optional<base::Time> new_report_time, bool success) {
+         std::optional<base::Time> new_report_time, bool success) {
         if (done) {
           std::move(done).Run();
         }
@@ -1309,7 +1254,7 @@ void AttributionManagerImpl::AssembleAggregatableReport(
     return;
   }
 
-  absl::optional<AggregatableReportRequest> request =
+  std::optional<AggregatableReportRequest> request =
       CreateAggregatableReportRequest(report);
   if (!request.has_value()) {
     RecordAssembleAggregatableReportStatus(
@@ -1331,7 +1276,7 @@ void AttributionManagerImpl::OnAggregatableReportAssembled(
     bool is_debug_report,
     ReportSentCallback callback,
     AggregatableReportRequest,
-    absl::optional<AggregatableReport> assembled_report,
+    std::optional<AggregatableReport> assembled_report,
     AggregationService::AssemblyStatus) {
   if (!assembled_report.has_value()) {
     RecordAssembleAggregatableReportStatus(
@@ -1393,7 +1338,7 @@ void AttributionManagerImpl::MaybeSendVerboseDebugReport(
     return;
   }
 
-  if (absl::optional<AttributionDebugReport> debug_report =
+  if (std::optional<AttributionDebugReport> debug_report =
           AttributionDebugReport::Create(source, is_debug_cookie_set, result)) {
     report_sender_->SendReport(
         std::move(*debug_report),
@@ -1420,7 +1365,7 @@ void AttributionManagerImpl::MaybeSendVerboseDebugReport(
     return;
   }
 
-  if (absl::optional<AttributionDebugReport> debug_report =
+  if (std::optional<AttributionDebugReport> debug_report =
           AttributionDebugReport::Create(trigger, is_debug_cookie_set,
                                          result)) {
     report_sender_->SendReport(
@@ -1472,6 +1417,7 @@ void AttributionManagerImpl::HandleOsRegistration(OsRegistration registration) {
 
 void AttributionManagerImpl::ProcessOsEvents() {
   if (!IsReady()) {
+    DLOG(WARNING) << "Still waiting for attestations loading";
     return;
   }
 
@@ -1585,7 +1531,7 @@ void AttributionManagerImpl::OnOsRegistration(
                                : OsRegistrationResult::kRejectedByOs);
 }
 
-void AttributionManagerImpl::SetDebugMode(absl::optional<bool> enabled,
+void AttributionManagerImpl::SetDebugMode(std::optional<bool> enabled,
                                           base::OnceClosure done) {
   bool debug_mode =
       enabled.value_or(base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1631,7 +1577,7 @@ void AttributionManagerImpl::MaybeSendVerboseDebugReport(
     return;
   }
 
-  if (absl::optional<AttributionDebugReport> debug_report =
+  if (std::optional<AttributionDebugReport> debug_report =
           AttributionDebugReport::Create(registration)) {
     report_sender_->SendReport(
         std::move(*debug_report),

@@ -38,6 +38,90 @@ namespace compiler {
 
 #define __ masm()->
 
+enum class FirstMacroFusionInstKind {
+  // TEST
+  kTest,
+  // CMP
+  kCmp,
+  // AND
+  kAnd,
+  // ADD, SUB
+  kAddSub,
+  // INC, DEC
+  kIncDec,
+  // Not valid as a first macro fusion instruction.
+  kInvalid
+};
+
+enum class SecondMacroFusionInstKind {
+  // JA, JB and variants.
+  kAB,
+  // JE, JL, JG and variants.
+  kELG,
+  // Not a fusible jump.
+  kInvalid,
+};
+
+bool IsMacroFused(FirstMacroFusionInstKind first_kind,
+                  SecondMacroFusionInstKind second_kind) {
+  switch (first_kind) {
+    case FirstMacroFusionInstKind::kTest:
+    case FirstMacroFusionInstKind::kAnd:
+      return true;
+    case FirstMacroFusionInstKind::kCmp:
+    case FirstMacroFusionInstKind::kAddSub:
+      return second_kind == SecondMacroFusionInstKind::kAB ||
+             second_kind == SecondMacroFusionInstKind::kELG;
+    case FirstMacroFusionInstKind::kIncDec:
+      return second_kind == SecondMacroFusionInstKind::kELG;
+    case FirstMacroFusionInstKind::kInvalid:
+      return false;
+  }
+}
+
+SecondMacroFusionInstKind GetSecondMacroFusionInstKind(
+    FlagsCondition condition) {
+  switch (condition) {
+    // JE,JZ
+    case kEqual:
+      // JNE,JNZ
+    case kNotEqual:
+    // JL,JNGE
+    case kSignedLessThan:
+    // JLE,JNG
+    case kSignedLessThanOrEqual:
+    // JG,JNLE
+    case kSignedGreaterThan:
+    // JGE,JNL
+    case kSignedGreaterThanOrEqual:
+      return SecondMacroFusionInstKind::kELG;
+    // JB,JC
+    case kUnsignedLessThan:
+    // JNA,JBE
+    case kUnsignedLessThanOrEqual:
+    // JA,JNBE
+    case kUnsignedGreaterThan:
+    // JAE,JNC,JNB
+    case kUnsignedGreaterThanOrEqual:
+      return SecondMacroFusionInstKind::kAB;
+    default:
+      return SecondMacroFusionInstKind::kInvalid;
+  }
+}
+
+bool ShouldAlignForJCCErratum(Instruction* instr,
+                              FirstMacroFusionInstKind first_kind) {
+  if (!CpuFeatures::IsSupported(INTEL_JCC_ERRATUM_MITIGATION)) return false;
+  FlagsMode mode = FlagsModeField::decode(instr->opcode());
+  if (mode == kFlags_branch || mode == kFlags_deoptimize) {
+    FlagsCondition condition = FlagsConditionField::decode(instr->opcode());
+    if (IsMacroFused(first_kind, GetSecondMacroFusionInstKind(condition))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Adds X64 specific methods for decoding operands.
 class X64OperandConverter : public InstructionOperandConverter {
  public:
@@ -496,13 +580,6 @@ void RecordTrapInfoIfNeeded(Zone* zone, CodeGenerator* codegen,
   const MemoryAccessMode access_mode = instr->memory_access_mode();
   if (access_mode == kMemoryAccessProtectedMemOutOfBounds ||
       access_mode == kMemoryAccessProtectedNullDereference) {
-    ReferenceMap* reference_map =
-        codegen->zone()->New<ReferenceMap>(codegen->zone());
-    // The safepoint has to be recorded at the return address of a call. Address
-    // we use as the fake return address in the case of the trap handler is the
-    // fault address (here `pc`) + 1. Therefore the safepoint here has to be
-    // recorded at pc + 1;
-    codegen->RecordSafepoint(reference_map, pc + 1);
     codegen->RecordProtectedInstruction(pc);
   }
 }
@@ -1510,7 +1587,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       AssembleArchTableSwitch(instr);
       break;
     case kArchComment:
-      __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)));
+      __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)),
+                       SourceLocation());
       break;
     case kArchAbortCSADcheck:
       DCHECK(i.InputRegister(0) == rdx);
@@ -1518,8 +1596,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         // We don't actually want to generate a pile of code for this, so just
         // claim there is a stack frame, without generating one.
         FrameScope scope(masm(), StackFrame::NO_FRAME_TYPE);
-        __ Call(BUILTIN_CODE(isolate(), AbortCSADcheck),
-                RelocInfo::CODE_TARGET);
+        __ CallBuiltin(Builtin::kAbortCSADcheck);
       }
       __ int3();
       unwinding_info_writer_.MarkBlockWillExit();
@@ -1545,6 +1622,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchFramePointer:
       __ movq(i.OutputRegister(), rbp);
       break;
+#if V8_ENABLE_WEBASSEMBLY
     case kArchStackPointer:
       __ movq(i.OutputRegister(), rsp);
       break;
@@ -1555,6 +1633,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ movq(rsp, i.InputOperand(0));
       }
       break;
+#endif  // V8_ENABLE_WEBASSEMBLY
     case kArchParentFramePointer:
       if (frame_access_state()->has_frame()) {
         __ movq(i.OutputRegister(), Operand(rbp, 0));
@@ -1764,28 +1843,60 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       ASSEMBLE_BINOP(andq);
       break;
     case kX64Cmp8:
-      ASSEMBLE_COMPARE(cmpb, testb);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kCmp)) {
+        ASSEMBLE_COMPARE(aligned_cmpb, aligned_testb);
+      } else {
+        ASSEMBLE_COMPARE(cmpb, testb);
+      }
       break;
     case kX64Cmp16:
-      ASSEMBLE_COMPARE(cmpw, testw);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kCmp)) {
+        ASSEMBLE_COMPARE(aligned_cmpw, aligned_testw);
+      } else {
+        ASSEMBLE_COMPARE(cmpw, testw);
+      }
       break;
     case kX64Cmp32:
-      ASSEMBLE_COMPARE(cmpl, testl);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kCmp)) {
+        ASSEMBLE_COMPARE(aligned_cmpl, aligned_testl);
+      } else {
+        ASSEMBLE_COMPARE(cmpl, testl);
+      }
       break;
     case kX64Cmp:
-      ASSEMBLE_COMPARE(cmpq, testq);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kCmp)) {
+        ASSEMBLE_COMPARE(aligned_cmpq, aligned_testq);
+      } else {
+        ASSEMBLE_COMPARE(cmpq, testq);
+      }
       break;
     case kX64Test8:
-      ASSEMBLE_TEST(testb);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kTest)) {
+        ASSEMBLE_TEST(aligned_testb);
+      } else {
+        ASSEMBLE_TEST(testb);
+      }
       break;
     case kX64Test16:
-      ASSEMBLE_TEST(testw);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kTest)) {
+        ASSEMBLE_TEST(aligned_testw);
+      } else {
+        ASSEMBLE_TEST(testw);
+      }
       break;
     case kX64Test32:
-      ASSEMBLE_TEST(testl);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kTest)) {
+        ASSEMBLE_TEST(aligned_testl);
+      } else {
+        ASSEMBLE_TEST(testl);
+      }
       break;
     case kX64Test:
-      ASSEMBLE_TEST(testq);
+      if (ShouldAlignForJCCErratum(instr, FirstMacroFusionInstKind::kTest)) {
+        ASSEMBLE_TEST(aligned_testq);
+      } else {
+        ASSEMBLE_TEST(testq);
+      }
       break;
     case kX64Imul32:
       ASSEMBLE_MULT(imull);
@@ -2544,17 +2655,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         switch (lane_size) {
           case kL32: {
             // F32x4Abs
-            XMMRegister dst = i.OutputSimd128Register();
-            XMMRegister src = i.InputSimd128Register(0);
-            if (dst == src) {
-              __ Pcmpeqd(kScratchDoubleReg, kScratchDoubleReg);
-              __ Psrld(kScratchDoubleReg, uint8_t{1});
-              __ Andps(dst, kScratchDoubleReg);
-            } else {
-              __ Pcmpeqd(dst, dst);
-              __ Psrld(dst, uint8_t{1});
-              __ Andps(dst, src);
-            }
+            __ Absps(i.OutputSimd128Register(), i.InputSimd128Register(0),
+                     kScratchRegister);
             break;
           }
           case kL64: {
@@ -2609,17 +2711,8 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         switch (lane_size) {
           case kL32: {
             // F32x4Neg
-            XMMRegister dst = i.OutputSimd128Register();
-            XMMRegister src = i.InputSimd128Register(0);
-            if (dst == src) {
-              __ Pcmpeqd(kScratchDoubleReg, kScratchDoubleReg);
-              __ Pslld(kScratchDoubleReg, uint8_t{31});
-              __ Xorps(dst, kScratchDoubleReg);
-            } else {
-              __ Pcmpeqd(dst, dst);
-              __ Pslld(dst, uint8_t{31});
-              __ Xorps(dst, src);
-            }
+            __ Negps(i.OutputSimd128Register(), i.InputSimd128Register(0),
+                     kScratchRegister);
             break;
           }
           case kL64: {
@@ -4972,27 +5065,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       XMMRegister dst = i.OutputSimd128Register();
       XMMRegister tmp = i.TempSimd128Register(0);
       XMMRegister tmp2 = i.TempSimd128Register(1);
-      // NAN->0, negative->0
-      __ Pxor(tmp2, tmp2);
-      __ Maxps(dst, tmp2);
-      // scratch: float representation of max_signed
-      __ Pcmpeqd(tmp2, tmp2);
-      __ Psrld(tmp2, uint8_t{1});  // 0x7fffffff
-      __ Cvtdq2ps(tmp2, tmp2);     // 0x4f000000
-      // tmp: convert (src-max_signed).
-      // Positive overflow lanes -> 0x7FFFFFFF
-      // Negative lanes -> 0
-      __ Movaps(tmp, dst);
-      __ Subps(tmp, tmp2);
-      __ Cmpleps(tmp2, tmp);
-      __ Cvttps2dq(tmp, tmp);
-      __ Pxor(tmp, tmp2);
-      __ Pxor(tmp2, tmp2);
-      __ Pmaxsd(tmp, tmp2);
-      // convert. Overflow lanes above max_signed will be 0x80000000
-      __ Cvttps2dq(dst, dst);
-      // Add (src-max_signed) for overflow lanes.
-      __ Paddd(dst, tmp);
+      __ I32x4TruncF32x4U(dst, dst, tmp, tmp2);
       break;
     }
     case kX64I32x8UConvertF32x8: {
@@ -6249,14 +6322,14 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
     case kX64I32x4TruncF64x2UZero: {
-      __ I32x4TruncF64x2UZero(i.OutputSimd128Register(),
-                              i.InputSimd128Register(0), kScratchRegister,
-                              kScratchDoubleReg);
+      __ I32x4TruncSatF64x2UZero(i.OutputSimd128Register(),
+                                 i.InputSimd128Register(0), kScratchDoubleReg,
+                                 kScratchRegister);
       break;
     }
     case kX64I32x4TruncF32x4U: {
       __ I32x4TruncF32x4U(i.OutputSimd128Register(), i.InputSimd128Register(0),
-                          kScratchRegister, kScratchDoubleReg);
+                          kScratchDoubleReg, i.TempSimd128Register(0));
       break;
     }
     case kX64Cvttps2dq: {
@@ -6694,7 +6767,13 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr, BranchInfo* branch) {
   }
   __ j(FlagsConditionToCondition(branch->condition), tlabel);
 
-  if (!branch->fallthru) __ jmp(flabel, flabel_distance);
+  if (!branch->fallthru) {
+    if (CpuFeatures::IsSupported(INTEL_JCC_ERRATUM_MITIGATION)) {
+      __ aligned_jmp(flabel, flabel_distance);
+    } else {
+      __ jmp(flabel, flabel_distance);
+    }
+  }
 }
 
 void CodeGenerator::AssembleArchDeoptBranch(Instruction* instr,
@@ -6734,7 +6813,11 @@ void CodeGenerator::AssembleArchDeoptBranch(Instruction* instr,
   }
 
   if (!branch->fallthru) {
-    __ jmp(flabel, flabel_distance);
+    if (CpuFeatures::IsSupported(INTEL_JCC_ERRATUM_MITIGATION)) {
+      __ aligned_jmp(flabel, flabel_distance);
+    } else {
+      __ jmp(flabel, flabel_distance);
+    }
   }
 }
 
@@ -6850,11 +6933,20 @@ void CodeGenerator::AssembleArchTableSwitch(Instruction* instr) {
     // target = table + (target - table)
     __ addq(input, kScratchRegister);
     // Jump to the target.
+#ifdef V8_ENABLE_CET_IBT
+    // Add the notrack prefix to disable landing pad enforcement.
+    __ jmp(input, /*notrack=*/true);
+#else
     __ jmp(input);
+#endif
   } else {
     // For non builtins, the value in the table is 'target_address' (8 bytes)
     // jmp [table + index*8]
+#ifdef V8_ENABLE_CET_IBT
+    __ jmp(Operand(kScratchRegister, input, times_8, 0), /*notrack=*/true);
+#else
     __ jmp(Operand(kScratchRegister, input, times_8, 0));
+#endif
   }
 }
 
@@ -6950,7 +7042,18 @@ void CodeGenerator::AssembleConstructFrame() {
         // accessors.
         __ pushq(kWasmInstanceRegister);
       }
-      if (call_descriptor->IsWasmCapiFunction()) {
+      if (call_descriptor->IsWasmImportWrapper()) {
+        // If the wrapper is running on a secondary stack, it will switch to the
+        // central stack and fill these slots with the central stack pointer and
+        // secondary stack limit. Otherwise the slots remain empty.
+        static_assert(WasmImportWrapperFrameConstants::kCentralStackSPOffset ==
+                      -24);
+        static_assert(
+            WasmImportWrapperFrameConstants::kSecondaryStackLimitOffset == -32);
+        __ pushq(Immediate(kNullAddress));
+        __ pushq(Immediate(kNullAddress));
+
+      } else if (call_descriptor->IsWasmCapiFunction()) {
         // Reserve space for saving the PC later.
         __ AllocateStackSpace(kSystemPointerSize);
       }

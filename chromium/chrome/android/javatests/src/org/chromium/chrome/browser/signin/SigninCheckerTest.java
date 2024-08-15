@@ -22,7 +22,9 @@ import org.mockito.quality.Strictness;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.UserActionTester;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -145,6 +147,32 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
+    public void signinWhenChildAccountIsTheOnlyAccount_seedAccountsRevampEnabled() {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        UserActionTester actionTester = new UserActionTester();
+
+        final CoreAccountInfo expectedPrimaryAccount =
+                mSigninTestRule.addAccountAndWaitForSeeding(CHILD_ACCOUNT_NAME);
+
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    return expectedPrimaryAccount.equals(
+                            mSigninTestRule.getPrimaryAccount(ConsentLevel.SIGNIN));
+                });
+        Assert.assertNull(mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
+        Assert.assertEquals(
+                2,
+                SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                        .getNumOfChildAccountChecksDoneForTests());
+        Assert.assertTrue(
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
+        Assert.assertFalse(SyncTestUtil.isSyncFeatureEnabled());
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
     public void signinWhenChildAccountIsTheOnlyAccount() {
         mActivityTestRule.startMainActivityOnBlankPage();
         UserActionTester actionTester = new UserActionTester();
@@ -159,7 +187,9 @@ public class SigninCheckerTest {
                 });
         Assert.assertNull(mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
         Assert.assertEquals(
-                3, SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests());
+                3,
+                SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                        .getNumOfChildAccountChecksDoneForTests());
         Assert.assertTrue(
                 actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
         Assert.assertFalse(SyncTestUtil.isSyncFeatureEnabled());
@@ -167,6 +197,28 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
+    public void
+            noSigninWhenChildAccountIsTheOnlyAccountButSigninIsNotAllowed_seedAccountsRevampEnabled() {
+        mActivityTestRule.startMainActivityOnBlankPage();
+        UserActionTester actionTester = new UserActionTester();
+        when(mExternalAuthUtilsMock.isGooglePlayServicesMissing(any())).thenReturn(true);
+        ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtilsMock);
+
+        mSigninTestRule.addAccountAndWaitForSeeding(CHILD_ACCOUNT_NAME);
+
+        Assert.assertEquals(
+                1,
+                SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                        .getNumOfChildAccountChecksDoneForTests());
+        Assert.assertNull(mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
+        Assert.assertFalse(
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
     public void noSigninWhenChildAccountIsTheOnlyAccountButSigninIsNotAllowed() {
         mActivityTestRule.startMainActivityOnBlankPage();
         UserActionTester actionTester = new UserActionTester();
@@ -179,7 +231,8 @@ public class SigninCheckerTest {
         // is added.
         CriteriaHelper.pollUiThread(
                 () -> {
-                    return SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests()
+                    return SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                                    .getNumOfChildAccountChecksDoneForTests()
                             == 2;
                 });
         Assert.assertNull(mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
@@ -189,6 +242,30 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
+    public void noSigninWhenChildAccountIsTheSecondaryAccount_seedAccountsRevampEnabled() {
+        // If a child account co-exists with another account on the device, then the child account
+        // must be the first device (this is enforced by the Kids Module).  The behaviour in this
+        // test case therefore is not currently hittable on a real device; however it is included
+        // here for completeness.
+        mSigninTestRule.addAccount("the.default.account@gmail.com");
+        mSigninTestRule.addAccount(CHILD_ACCOUNT_NAME);
+
+        mActivityTestRule.startMainActivityOnBlankPage();
+        UserActionTester actionTester = new UserActionTester();
+
+        Assert.assertEquals(
+                0,
+                SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                        .getNumOfChildAccountChecksDoneForTests());
+        Assert.assertNull(mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
+        Assert.assertFalse(
+                actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
     public void noSigninWhenChildAccountIsTheSecondaryAccount() {
         // If a child account co-exists with another account on the device, then the child account
         // must be the first device (this is enforced by the Kids Module).  The behaviour in this
@@ -203,7 +280,8 @@ public class SigninCheckerTest {
         // The check should be done once at activity start-up
         CriteriaHelper.pollUiThread(
                 () -> {
-                    return SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests()
+                    return SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                                    .getNumOfChildAccountChecksDoneForTests()
                             == 1;
                 });
         Assert.assertNull(mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
@@ -213,23 +291,25 @@ public class SigninCheckerTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "https://crbug.com/1293942")
+    @Features.EnableFeatures(ChromeFeatureList.SEED_ACCOUNTS_REVAMP)
     public void signinWhenChildAccountIsFirstAccount() {
+        mActivityTestRule.startMainActivityOnBlankPage();
         final CoreAccountInfo childAccount = mSigninTestRule.addAccount(CHILD_ACCOUNT_NAME);
         mSigninTestRule.addAccount("the.second.account@gmail.com");
 
-        mActivityTestRule.startMainActivityOnBlankPage();
         UserActionTester actionTester = new UserActionTester();
 
         CriteriaHelper.pollUiThread(
                 () -> {
                     return childAccount.equals(
-                            mSigninTestRule.getPrimaryAccount(ConsentLevel.SYNC));
+                            mSigninTestRule.getPrimaryAccount(ConsentLevel.SIGNIN));
                 });
 
-        // The check should be done once at account addition and once at activity start-up.
+        // The check should be done twice at account addition and once during force sign-in.
         Assert.assertEquals(
-                2, SigninCheckerProvider.get().getNumOfChildAccountChecksDoneForTests());
+                3,
+                SigninCheckerProvider.get(mActivityTestRule.getProfile(false))
+                        .getNumOfChildAccountChecksDoneForTests());
         Assert.assertTrue(
                 actionTester.getActions().contains("Signin_Signin_WipeDataOnChildAccountSignin2"));
     }

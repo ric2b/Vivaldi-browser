@@ -10,6 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "chromeos/ash/components/growth/action_performer.h"
 #include "chromeos/ash/components/growth/campaigns_manager_client.h"
 #include "chromeos/ash/components/growth/campaigns_matcher.h"
 #include "chromeos/ash/components/growth/campaigns_model.h"
@@ -50,35 +51,51 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) CampaignsManager {
   // Download and install campaigns. Once installed, trigger the
   // `OnCampaignsLoaded` to install campaigns and notifier observers when
   // complete loading campaigns.
-  void LoadCampaigns();
+  void LoadCampaigns(base::OnceClosure load_callback);
 
-  // Get campaigns by slot. This is used by reactive slots to query campaign
-  // that targets the given `slot`.
+  // Get campaigns by slot and register sythetical trial for current session.
+  // This is used by reactive slots to query campaign that targets the given
+  // `slot`. It a heavy operation which should be called when's necessary.
+  // TODO(b/308684443): Rename this to `GetCampaignBySlotAndRegisterTrial`.
   const Campaign* GetCampaignBySlot(Slot slot) const;
+
+  ActionMap& actions_map() { return actions_map_; }
 
  private:
   // Triggred when campaigns component loaded.
   void OnCampaignsComponentLoaded(
-      const absl::optional<const base::FilePath>& file_path);
+      base::OnceClosure load_callback,
+      const std::optional<const base::FilePath>& file_path);
 
   // Triggered when campaigns are loaded from the campaigns component mounted
   // path.
-  void OnCampaignsLoaded(absl::optional<base::Value::Dict> campaigns);
+  void OnCampaignsLoaded(base::OnceClosure load_callback,
+                         std::optional<base::Value::Dict> campaigns);
 
   // Notify observers that campaigns are loaded and CampaignsManager is ready
   // to query.
   void NotifyCampaignsLoaded();
 
-  raw_ptr<CampaignsManagerClient, ExperimentalAsh> client_ = nullptr;
+  // Register synthetic trial for growth. It will not work if campaign is
+  // incomplete, i.e. missing id.
+  void RegisterTrialForCampaign(const Campaign* campaign) const;
+
+  raw_ptr<CampaignsManagerClient> client_ = nullptr;
 
   // True if campaigns are loaded.
   bool campaigns_loaded_ = false;
 
   // Campaigns store owns all campaigns, including proactive and reactive
   // campaigns.
-  CampaignsStore campaigns_store_;
-  // Campaigns matcher for selecting campaigns based on criterias.
+  CampaignsPerSlot campaigns_;
+  // Campaigns matcher for selecting campaigns based on criteria.
   CampaignsMatcher matcher_;
+
+  // Maps action type to the action.
+  ActionMap actions_map_;
+
+  // Keeps track of when downloading campaigns begins.
+  base::TimeTicks campaigns_download_start_time_;
 
   base::ObserverList<Observer> observers_;
 

@@ -30,7 +30,7 @@ class StringsStorage;
 // generate consistent IDs for moved objects.
 class HeapProfilerNativeMoveListener {
  public:
-  HeapProfilerNativeMoveListener(HeapProfiler* profiler)
+  explicit HeapProfilerNativeMoveListener(HeapProfiler* profiler)
       : profiler_(profiler) {}
   HeapProfilerNativeMoveListener(const HeapProfilerNativeMoveListener& other) =
       delete;
@@ -63,6 +63,9 @@ class HeapProfiler : public HeapObjectAllocationTracker {
 
   // Implementation of --heap-snapshot-on-oom.
   void WriteSnapshotToDiskAfterGC();
+  // Just takes a snapshot performing GC as part of the snapshot.
+  void TakeSnapshotToFile(const v8::HeapProfiler::HeapSnapshotOptions options,
+                          std::string filename);
 
   bool StartSamplingHeapProfiler(uint64_t sample_interval, int stack_depth,
                                  v8::HeapProfiler::SamplingFlags);
@@ -119,8 +122,7 @@ class HeapProfiler : public HeapObjectAllocationTracker {
 
   Isolate* isolate() const;
 
-  void QueryObjects(Handle<Context> context,
-                    debug::QueryObjectPredicate* predicate,
+  void QueryObjects(Handle<Context> context, QueryObjectPredicate* predicate,
                     std::vector<v8::Global<v8::Object>>* objects);
   void set_native_move_listener(
       std::unique_ptr<HeapProfilerNativeMoveListener> listener) {

@@ -9,23 +9,24 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc-inl.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/gtest_prod_util.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/thread_annotations.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_config.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_forward.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_bucket_lookup.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_freelist_entry.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_lock.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_stats.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_tls.h"
 #include "build/build_config.h"
+#include "partition_alloc/lightweight_quarantine.h"
+#include "partition_alloc/partition_alloc-inl.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
+#include "partition_alloc/partition_alloc_base/thread_annotations.h"
+#include "partition_alloc/partition_alloc_base/time/time.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_config.h"
+#include "partition_alloc/partition_alloc_forward.h"
+#include "partition_alloc/partition_bucket_lookup.h"
+#include "partition_alloc/partition_freelist_entry.h"
+#include "partition_alloc/partition_lock.h"
+#include "partition_alloc/partition_stats.h"
+#include "partition_alloc/partition_tls.h"
 
 #if defined(ARCH_CPU_X86_64) && BUILDFLAG(HAS_64_BIT_POINTERS)
 #include <algorithm>
@@ -141,7 +142,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCacheRegistry {
   // Controls the thread cache size, by setting the multiplier to a value above
   // or below |ThreadCache::kDefaultMultiplier|.
   void SetThreadCacheMultiplier(float multiplier);
-  void SetLargestActiveBucketIndex(uint8_t largest_active_bucket_index);
+  void SetLargestActiveBucketIndex(uint16_t largest_active_bucket_index);
 
   // Controls the thread cache purging configuration.
   void SetPurgingConfiguration(
@@ -185,7 +186,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCacheRegistry {
   internal::base::TimeDelta periodic_purge_next_interval_;
   bool is_purging_configured_ = false;
 
-  uint8_t largest_active_bucket_index_ = internal::BucketIndexLookup::GetIndex(
+  uint16_t largest_active_bucket_index_ = internal::BucketIndexLookup::GetIndex(
       ThreadCacheLimits::kDefaultSizeThreshold);
 };
 
@@ -240,6 +241,16 @@ class ReentrancyGuard {
 // thread.
 class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
  public:
+  struct Bucket {
+    internal::PartitionFreelistEntry* freelist_head = nullptr;
+    // Want to keep sizeof(Bucket) small, using small types.
+    uint8_t count = 0;
+    std::atomic<uint8_t> limit{};  // Can be changed from another thread.
+    uint16_t slot_size = 0;
+
+    Bucket();
+  };
+
   // Initializes the thread cache for |root|. May allocate, so should be called
   // with the thread cache disabled on the partition side, and without the
   // partition lock held.
@@ -285,10 +296,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
 
   ~ThreadCache();
 
-  // Force placement new.
-  void* operator new(size_t) = delete;
-  void* operator new(size_t, void* buffer) { return buffer; }
-  void operator delete(void* ptr) = delete;
+  // Disallow copy and move.
   ThreadCache(const ThreadCache&) = delete;
   ThreadCache(const ThreadCache&&) = delete;
   ThreadCache& operator=(const ThreadCache&) = delete;
@@ -367,6 +375,12 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
       ThreadCacheLimits::kDefaultSizeThreshold;
   static constexpr size_t kLargeSizeThreshold =
       ThreadCacheLimits::kLargeSizeThreshold;
+  static constexpr uint16_t kBucketCount =
+      internal::BucketIndexLookup::GetIndex(ThreadCache::kLargeSizeThreshold) +
+      1;
+  static_assert(
+      kBucketCount < internal::kNumBuckets,
+      "Cannot have more cached buckets than what the allocator supports");
 
   const ThreadCache* prev_for_testing() const
       PA_EXCLUSIVE_LOCKS_REQUIRED(ThreadCacheRegistry::GetLock()) {
@@ -377,23 +391,29 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
     return next_;
   }
 
+  ThreadCacheStats& stats_for_testing() { return stats_; }
+
+  Bucket& bucket_for_testing(size_t index) { return buckets_[index]; }
+  void ClearBucketForTesting(Bucket& bucket, size_t limit) {
+    ClearBucket(bucket, limit);
+  }
+
+  internal::LightweightQuarantineBranch& GetSchedulerLoopQuarantineBranch() {
+    PA_DCHECK(scheduler_loop_quarantine_branch_.has_value());
+    return *scheduler_loop_quarantine_branch_;
+  }
+
  private:
   friend class tools::HeapDumper;
   friend class tools::ThreadCacheInspector;
 
-  struct Bucket {
-    internal::EncodedNextFreelistEntry* freelist_head = nullptr;
-    // Want to keep sizeof(Bucket) small, using small types.
-    uint8_t count = 0;
-    std::atomic<uint8_t> limit{};  // Can be changed from another thread.
-    uint16_t slot_size = 0;
-
-    Bucket();
-  };
   static_assert(sizeof(Bucket) <= 2 * sizeof(void*), "Keep Bucket small.");
 
   explicit ThreadCache(PartitionRoot* root);
   static void Delete(void* thread_cache_ptr);
+
+  static void* operator new(size_t count);
+  static void operator delete(void* ptr);
 
   void PurgeInternal();
   template <bool crash_on_corruption>
@@ -409,15 +429,8 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
   void ResetForTesting();
   // Releases the entire freelist starting at |head| to the root.
   template <bool crash_on_corruption>
-  void FreeAfter(internal::EncodedNextFreelistEntry* head, size_t slot_size);
+  void FreeAfter(internal::PartitionFreelistEntry* head, size_t slot_size);
   static void SetGlobalLimits(PartitionRoot* root, float multiplier);
-
-  static constexpr uint16_t kBucketCount =
-      internal::BucketIndexLookup::GetIndex(ThreadCache::kLargeSizeThreshold) +
-      1;
-  static_assert(
-      kBucketCount < internal::kNumBuckets,
-      "Cannot have more cached buckets than what the allocator supports");
 
   // On some architectures, ThreadCache::Get() can be called and return
   // something after the thread cache has been destroyed. In this case, we set
@@ -462,32 +475,12 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) ThreadCache {
   ThreadCache* next_ PA_GUARDED_BY(ThreadCacheRegistry::GetLock());
   ThreadCache* prev_ PA_GUARDED_BY(ThreadCacheRegistry::GetLock());
 
+  std::optional<internal::LightweightQuarantineBranch>
+      scheduler_loop_quarantine_branch_;
+
   friend class ThreadCacheRegistry;
   friend class PartitionAllocThreadCacheTest;
   friend class tools::ThreadCacheInspector;
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest, Simple);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              MultipleObjectsCachedPerBucket);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              LargeAllocationsAreNotCached);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              MultipleThreadCaches);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest, RecordStats);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              ThreadCacheRegistry);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              MultipleThreadCachesAccounting);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              DynamicCountPerBucket);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              DynamicCountPerBucketClamping);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              DynamicCountPerBucketMultipleThreads);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              DynamicSizeThreshold);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest,
-                              DynamicSizeThresholdPurge);
-  PA_FRIEND_TEST_ALL_PREFIXES(PartitionAllocThreadCacheTest, ClearFromTail);
 };
 
 PA_ALWAYS_INLINE bool ThreadCache::MaybePutInCache(uintptr_t slot_start,
@@ -560,7 +553,7 @@ PA_ALWAYS_INLINE uintptr_t ThreadCache::GetFromCache(size_t bucket_index,
   }
 
   PA_DCHECK(bucket.count != 0);
-  internal::EncodedNextFreelistEntry* entry = bucket.freelist_head;
+  internal::PartitionFreelistEntry* entry = bucket.freelist_head;
   // TODO(lizeb): Consider removing once crbug.com/1382658 is fixed.
 #if BUILDFLAG(IS_CHROMEOS) && defined(ARCH_CPU_X86_64) && \
     BUILDFLAG(HAS_64_BIT_POINTERS)
@@ -578,7 +571,7 @@ PA_ALWAYS_INLINE uintptr_t ThreadCache::GetFromCache(size_t bucket_index,
   // corruption, we know the bucket size that lead to the crash, helping to
   // narrow down the search for culprit. |bucket| was touched just now, so this
   // does not introduce another cache miss.
-  internal::EncodedNextFreelistEntry* next =
+  internal::PartitionFreelistEntry* next =
       entry->GetNextForThreadCache<true>(bucket.slot_size);
   PA_DCHECK(entry != next);
   bucket.count--;
@@ -618,28 +611,29 @@ PA_ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket,
       internal::kPartitionCachelineSize == 64,
       "The computation below assumes that cache lines are 64 bytes long.");
   int distance_to_next_cacheline_in_16_bytes = 4 - ((slot_start >> 4) & 3);
+  // When BRP is on in the "previous slot" mode, this slot may have a BRP
+  // ref-count of the next, potentially allocated slot. Make sure we don't
+  // overwrite it.
+  // TODO(bartekn): Ok to overwriter in the "same slot" mode.
   int slot_size_remaining_in_16_bytes =
-#if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
-      // When BRP is on in the "previous slot" mode, this slot may have a BRP
-      // ref-count of the next, potentially allocated slot. Make sure we don't
-      // overwrite it.
-      (bucket.slot_size - sizeof(PartitionRefCount)) / 16;
-#else
-      bucket.slot_size / 16;
-#endif  // BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+      (bucket.slot_size - internal::kInSlotRefCountBufferSize) / 16;
 
   slot_size_remaining_in_16_bytes = std::min(
       slot_size_remaining_in_16_bytes, distance_to_next_cacheline_in_16_bytes);
 
   static const uint32_t poison_16_bytes[4] = {0xbadbad00, 0xbadbad00,
                                               0xbadbad00, 0xbadbad00};
-  // Give a hint to the compiler in hope it'll vectorize the loop.
-#if PA_HAS_BUILTIN(__builtin_assume_aligned)
-  void* slot_start_tagged = __builtin_assume_aligned(
-      internal::SlotStartAddr2Ptr(slot_start), internal::kAlignment);
+
+#if !(BUILDFLAG(IS_WIN) && defined(COMPONENT_BUILD))
+  void* slot_start_tagged = std::assume_aligned<internal::kAlignment>(
+      internal::SlotStartAddr2Ptr(slot_start));
 #else
+  // TODO(crbug.com/1429450): std::assume_aligned introuces an additional
+  // dependency: _libcpp_verbose_abort(const char*, ...).  It will cause
+  // "undefined symbol" error when linking allocator_shim.dll.
   void* slot_start_tagged = internal::SlotStartAddr2Ptr(slot_start);
 #endif
+
   uint32_t* address_aligned = static_cast<uint32_t*>(slot_start_tagged);
   for (int i = 0; i < slot_size_remaining_in_16_bytes; i++) {
     // Clang will expand the memcpy to a 16-byte write (movups on x86).
@@ -649,9 +643,8 @@ PA_ALWAYS_INLINE void ThreadCache::PutInBucket(Bucket& bucket,
 #endif  // PA_CONFIG(HAS_FREELIST_SHADOW_ENTRY) && defined(ARCH_CPU_X86_64) &&
         // BUILDFLAG(HAS_64_BIT_POINTERS)
 
-  auto* entry =
-      internal::EncodedNextFreelistEntry::EmplaceAndInitForThreadCache(
-          slot_start, bucket.freelist_head);
+  auto* entry = internal::PartitionFreelistEntry::EmplaceAndInitForThreadCache(
+      slot_start, bucket.freelist_head);
   bucket.freelist_head = entry;
   bucket.count++;
 }

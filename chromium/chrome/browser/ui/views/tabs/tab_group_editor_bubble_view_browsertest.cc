@@ -27,7 +27,7 @@
 class TabGroupEditorBubbleViewDialogBrowserTest : public DialogBrowserTest {
  protected:
   void ShowUi(const std::string& name) override {
-    absl::optional<tab_groups::TabGroupId> group =
+    std::optional<tab_groups::TabGroupId> group =
         browser()->tab_strip_model()->AddToNewGroup({0});
     browser()->tab_strip_model()->OpenTabGroupEditor(group.value());
 
@@ -117,8 +117,10 @@ IN_PROC_BROWSER_TEST_F(TabGroupEditorBubbleViewDialogBrowserTest, Ungroup) {
   histogram_tester.ExpectTotalCount("TabGroups.TabGroupBubble.TabCount", 0);
 }
 
+// Verify that when a group that holds all of the tabs in a window is closing
+// does not close the browser. Instead it should create a new tab.
 IN_PROC_BROWSER_TEST_F(TabGroupEditorBubbleViewDialogBrowserTest,
-                       CloseGroupClosesBrowser) {
+                       ClosingLastGroupInBrowserSpawnsNewTab) {
   ShowUi("SetUp");
 
   TabGroupModel* group_model = browser()->tab_strip_model()->group_model();
@@ -143,8 +145,8 @@ IN_PROC_BROWSER_TEST_F(TabGroupEditorBubbleViewDialogBrowserTest,
 
   EXPECT_EQ(0u, group_model->ListTabGroups().size());
   EXPECT_FALSE(group_model->ContainsTabGroup(group_list[0]));
-  EXPECT_EQ(0, browser()->tab_strip_model()->count());
-  EXPECT_TRUE(browser()->IsAttemptingToCloseBrowser());
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+  EXPECT_FALSE(browser()->IsAttemptingToCloseBrowser());
 }
 
 IN_PROC_BROWSER_TEST_F(TabGroupEditorBubbleViewDialogBrowserTest,
@@ -206,7 +208,7 @@ IN_PROC_BROWSER_TEST_F(
 
   TabStripModel* tsm = browser()->tab_strip_model();
   ASSERT_EQ(3, tsm->count());
-  absl::optional<tab_groups::TabGroupId> group = tsm->AddToNewGroup({0, 1});
+  std::optional<tab_groups::TabGroupId> group = tsm->AddToNewGroup({0, 1});
 
   ASSERT_FALSE(browser_view->tabstrip()->tab_at(0)->HasFreezingVoteToken());
   ASSERT_FALSE(browser_view->tabstrip()->tab_at(1)->HasFreezingVoteToken());

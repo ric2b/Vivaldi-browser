@@ -46,21 +46,21 @@ vivaldi::sync::CycleStatus ToVivaldiCycleStatus(
     ::vivaldi::VivaldiSyncUIHelper::CycleStatus cycle_status) {
   switch (cycle_status) {
     case ::vivaldi::VivaldiSyncUIHelper::NOT_SYNCED:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
+      return vivaldi::sync::CycleStatus::kNotSynced;
     case ::vivaldi::VivaldiSyncUIHelper::SUCCESS:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_SUCCESS;
+      return vivaldi::sync::CycleStatus::kSuccess;
     case ::vivaldi::VivaldiSyncUIHelper::AUTH_ERROR:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_AUTH_ERROR;
+      return vivaldi::sync::CycleStatus::kAuthError;
     case ::vivaldi::VivaldiSyncUIHelper::SERVER_ERROR:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_SERVER_ERROR;
+      return vivaldi::sync::CycleStatus::kServerError;
     case ::vivaldi::VivaldiSyncUIHelper::NETWORK_ERROR:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_NETWORK_ERROR;
+      return vivaldi::sync::CycleStatus::kNetworkError;
     case ::vivaldi::VivaldiSyncUIHelper::CONFLICT:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_CONFLICT;
+      return vivaldi::sync::CycleStatus::kConflict;
     case ::vivaldi::VivaldiSyncUIHelper::THROTTLED:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_THROTTLED;
+      return vivaldi::sync::CycleStatus::kThrottled;
     case ::vivaldi::VivaldiSyncUIHelper::OTHER_ERROR:
-      return vivaldi::sync::CycleStatus::CYCLE_STATUS_OTHER_ERROR;
+      return vivaldi::sync::CycleStatus::kOtherError;
   }
 }
 
@@ -72,15 +72,15 @@ ToVivaldiSyncDisableReasons(syncer::SyncService::DisableReasonSet reasons) {
     switch (reason) {
       case syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY:
         disable_reasons.push_back(
-            vivaldi::sync::DisableReason::DISABLE_REASON_ENTERPRISE_POLICY);
+            vivaldi::sync::DisableReason::kEnterprisePolicy);
         break;
       case syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN:
         disable_reasons.push_back(
-            vivaldi::sync::DisableReason::DISABLE_REASON_NOT_SIGNED_IN);
+            vivaldi::sync::DisableReason::kNotSignedIn);
         break;
       case syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR:
         disable_reasons.push_back(
-            vivaldi::sync::DisableReason::DISABLE_REASON_UNRECOVERABLE_ERROR);
+            vivaldi::sync::DisableReason::kUnrecoverableError);
         break;
       default:
         break;
@@ -93,37 +93,29 @@ vivaldi::sync::ProtocolErrorType ToVivaldiSyncProtocolErrorType(
     syncer::SyncProtocolErrorType error_type) {
   switch (error_type) {
     case syncer::SYNC_SUCCESS:
-      return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_SUCCESS;
+      return vivaldi::sync::ProtocolErrorType::kSuccess;
     case syncer::NOT_MY_BIRTHDAY:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_NOT_MY_BIRTHDAY;
+      return vivaldi::sync::ProtocolErrorType::kNotMyBirthday;
     case syncer::THROTTLED:
-      return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_THROTTLED;
+      return vivaldi::sync::ProtocolErrorType::kThrottled;
     case syncer::TRANSIENT_ERROR:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_TRANSIENT_ERROR;
+      return vivaldi::sync::ProtocolErrorType::kTransientError;
     case syncer::MIGRATION_DONE:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_MIGRATION_DONE;
+      return vivaldi::sync::ProtocolErrorType::kMigrationDone;
     case syncer::DISABLED_BY_ADMIN:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_DISABLED_BY_ADMIN;
+      return vivaldi::sync::ProtocolErrorType::kDisabledByAdmin;
     case syncer::PARTIAL_FAILURE:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_PARTIAL_FAILURE;
+      return vivaldi::sync::ProtocolErrorType::kPartialFailure;
     case syncer::CLIENT_DATA_OBSOLETE:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_CLIENT_DATA_OBSOLETE;
+      return vivaldi::sync::ProtocolErrorType::kClientDataObsolete;
     case syncer::ENCRYPTION_OBSOLETE:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_ENCRYPTION_OBSOLETE;
+      return vivaldi::sync::ProtocolErrorType::kEncryptionObsolete;
     case syncer::CONFLICT:
-      return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_CONFLICT;
+      return vivaldi::sync::ProtocolErrorType::kConflict;
     case syncer::INVALID_MESSAGE:
-      return vivaldi::sync::ProtocolErrorType::
-          PROTOCOL_ERROR_TYPE_INVALID_MESSAGE;
+      return vivaldi::sync::ProtocolErrorType::kInvalidMessage;
     case syncer::UNKNOWN_ERROR:
-      return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_UNKNOWN;
+      return vivaldi::sync::ProtocolErrorType::kUnknown;
   }
 }
 
@@ -131,16 +123,15 @@ vivaldi::sync::ClientAction ToVivaldiSyncClientAction(
     syncer::ClientAction client_action) {
   switch (client_action) {
     case syncer::UPGRADE_CLIENT:
-      return vivaldi::sync::ClientAction::CLIENT_ACTION_UPGRADE_CLIENT;
+      return vivaldi::sync::ClientAction::kUpgradeClient;
     case syncer::DISABLE_SYNC_ON_CLIENT:
-      return vivaldi::sync::ClientAction::CLIENT_ACTION_DISABLE_SYNC_ON_CLIENT;
+      return vivaldi::sync::ClientAction::kDisableSyncOnClient;
     case syncer::STOP_SYNC_FOR_DISABLED_ACCOUNT:
-      return vivaldi::sync::ClientAction::
-          CLIENT_ACTION_STOP_SYNC_FOR_DISABLED_ACCOUNT;
+      return vivaldi::sync::ClientAction::kStopSyncForDisabledAccount;
     case syncer::RESET_LOCAL_SYNC_DATA:
-      return vivaldi::sync::ClientAction::CLIENT_ACTION_RESET_LOCAL_SYNC_DATA;
+      return vivaldi::sync::ClientAction::kResetLocalSyncData;
     case syncer::UNKNOWN_ACTION:
-      return vivaldi::sync::ClientAction::CLIENT_ACTION_UNKNOWN;
+      return vivaldi::sync::ClientAction::kUnknown;
   }
 }
 
@@ -148,53 +139,53 @@ vivaldi::sync::DataType ToVivaldiSyncDataType(
     syncer::UserSelectableType data_type) {
   switch (data_type) {
     case syncer::UserSelectableType::kBookmarks:
-      return vivaldi::sync::DataType::DATA_TYPE_BOOKMARKS;
+      return vivaldi::sync::DataType::kBookmarks;
     case syncer::UserSelectableType::kPreferences:
-      return vivaldi::sync::DataType::DATA_TYPE_PREFERENCES;
+      return vivaldi::sync::DataType::kPreferences;
     case syncer::UserSelectableType::kPasswords:
-      return vivaldi::sync::DataType::DATA_TYPE_PASSWORDS;
+      return vivaldi::sync::DataType::kPasswords;
     case syncer::UserSelectableType::kAutofill:
-      return vivaldi::sync::DataType::DATA_TYPE_AUTOFILL;
+      return vivaldi::sync::DataType::kAutofill;
     case syncer::UserSelectableType::kHistory:
-      return vivaldi::sync::DataType::DATA_TYPE_HISTORY;
+      return vivaldi::sync::DataType::kHistory;
     case syncer::UserSelectableType::kExtensions:
-      return vivaldi::sync::DataType::DATA_TYPE_EXTENSIONS;
+      return vivaldi::sync::DataType::kExtensions;
     case syncer::UserSelectableType::kApps:
-      return vivaldi::sync::DataType::DATA_TYPE_APPS;
+      return vivaldi::sync::DataType::kApps;
     case syncer::UserSelectableType::kReadingList:
-      return vivaldi::sync::DataType::DATA_TYPE_READING_LIST;
+      return vivaldi::sync::DataType::kReadingList;
     case syncer::UserSelectableType::kTabs:
-      return vivaldi::sync::DataType::DATA_TYPE_TABS;
+      return vivaldi::sync::DataType::kTabs;
     case syncer::UserSelectableType::kNotes:
-      return vivaldi::sync::DataType::DATA_TYPE_NOTES;
+      return vivaldi::sync::DataType::kNotes;
     default:
       NOTREACHED();
-      return vivaldi::sync::DataType::DATA_TYPE_NONE;
+      return vivaldi::sync::DataType::kNone;
   }
 }
 
 absl::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
     vivaldi::sync::DataType data_type) {
   switch (data_type) {
-    case vivaldi::sync::DataType::DATA_TYPE_BOOKMARKS:
+    case vivaldi::sync::DataType::kBookmarks:
       return syncer::UserSelectableType::kBookmarks;
-    case vivaldi::sync::DataType::DATA_TYPE_PREFERENCES:
+    case vivaldi::sync::DataType::kPreferences:
       return syncer::UserSelectableType::kPreferences;
-    case vivaldi::sync::DataType::DATA_TYPE_PASSWORDS:
+    case vivaldi::sync::DataType::kPasswords:
       return syncer::UserSelectableType::kPasswords;
-    case vivaldi::sync::DataType::DATA_TYPE_AUTOFILL:
+    case vivaldi::sync::DataType::kAutofill:
       return syncer::UserSelectableType::kAutofill;
-    case vivaldi::sync::DataType::DATA_TYPE_HISTORY:
+    case vivaldi::sync::DataType::kHistory:
       return syncer::UserSelectableType::kHistory;
-    case vivaldi::sync::DataType::DATA_TYPE_EXTENSIONS:
+    case vivaldi::sync::DataType::kExtensions:
       return syncer::UserSelectableType::kExtensions;
-    case vivaldi::sync::DataType::DATA_TYPE_APPS:
+    case vivaldi::sync::DataType::kApps:
       return syncer::UserSelectableType::kApps;
-    case vivaldi::sync::DataType::DATA_TYPE_READING_LIST:
+    case vivaldi::sync::DataType::kReadingList:
       return syncer::UserSelectableType::kReadingList;
-    case vivaldi::sync::DataType::DATA_TYPE_TABS:
+    case vivaldi::sync::DataType::kTabs:
       return syncer::UserSelectableType::kTabs;
-    case vivaldi::sync::DataType::DATA_TYPE_NOTES:
+    case vivaldi::sync::DataType::kNotes:
       return syncer::UserSelectableType::kNotes;
     default:
       NOTREACHED();
@@ -211,9 +202,9 @@ vivaldi::sync::CycleData GetLastCycleData(Profile* profile) {
   if (!sync_service) {
     cycle_data.cycle_start_time = 0;
     cycle_data.download_updates_status =
-        vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
+        vivaldi::sync::CycleStatus::kNotSynced;
     cycle_data.commit_status =
-        vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
+        vivaldi::sync::CycleStatus::kNotSynced;
     return cycle_data;
   }
 
@@ -240,45 +231,45 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   engine_data.is_ready = true;
 
   if (!sync_service) {
-    engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_FAILED;
+    engine_data.engine_state = vivaldi::sync::EngineState::kFailed;
     if (!syncer::IsSyncAllowedByFlag())
       engine_data.disable_reasons = {
-          vivaldi::sync::DisableReason::DISABLE_REASON_FLAG};
+          vivaldi::sync::DisableReason::kFlag};
     engine_data.protocol_error_type =
-        vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_UNKNOWN;
+        vivaldi::sync::ProtocolErrorType::kUnknown;
     engine_data.protocol_error_client_action =
-        vivaldi::sync::ClientAction::CLIENT_ACTION_UNKNOWN;
+        vivaldi::sync::ClientAction::kUnknown;
 
     return engine_data;
   }
 
   if (sync_service->is_clearing_sync_data()) {
     engine_data.engine_state =
-        vivaldi::sync::EngineState::ENGINE_STATE_CLEARING_DATA;
+        vivaldi::sync::EngineState::kClearingData;
   } else if (!sync_service->HasSyncConsent() ||
              sync_service->GetTransportState() ==
                  syncer::SyncService::TransportState::START_DEFERRED) {
-    engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_STOPPED;
+    engine_data.engine_state = vivaldi::sync::EngineState::kStopped;
   } else if (!sync_service->CanSyncFeatureStart()) {
-    engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_FAILED;
+    engine_data.engine_state = vivaldi::sync::EngineState::kFailed;
   } else if (sync_service->IsEngineInitialized()) {
     if (sync_service->GetTransportState() ==
             syncer::SyncService::TransportState::
                 PENDING_DESIRED_CONFIGURATION ||
         !sync_service->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
       engine_data.engine_state =
-          vivaldi::sync::EngineState::ENGINE_STATE_CONFIGURATION_PENDING;
+          vivaldi::sync::EngineState::kConfigurationPending;
     } else {
       engine_data.engine_state =
-          vivaldi::sync::EngineState::ENGINE_STATE_STARTED;
+          vivaldi::sync::EngineState::kStarted;
     }
   } else if (sync_service->GetSyncTokenStatusForDebugging().connection_status ==
              syncer::CONNECTION_SERVER_ERROR) {
     engine_data.engine_state =
-        vivaldi::sync::EngineState::ENGINE_STATE_STARTING_SERVER_ERROR;
+        vivaldi::sync::EngineState::kStartingServerError;
   } else {
     engine_data.engine_state =
-        vivaldi::sync::EngineState::ENGINE_STATE_STARTING;
+        vivaldi::sync::EngineState::kStarting;
   }
 
   engine_data.disable_reasons =

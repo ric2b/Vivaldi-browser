@@ -19,7 +19,6 @@
 #include "chromeos/ash/services/libassistant/test_support/fake_libassistant_factory.h"
 #include "chromeos/assistant/internal/libassistant/shared_headers.h"
 #include "chromeos/assistant/internal/test_support/fake_assistant_manager.h"
-#include "chromeos/assistant/internal/test_support/fake_assistant_manager_internal.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -36,17 +35,16 @@ using ::testing::StrictMock;
 #define EXPECT_NO_CALLS(args...) EXPECT_CALL(args).Times(0)
 
 // Tests if the JSON string contains the given path with the given value.
-#define EXPECT_HAS_PATH_WITH_VALUE(config_string, path, expected_value)    \
-  ({                                                                       \
-    absl::optional<base::Value> config =                                   \
-        base::JSONReader::Read(config_string);                             \
-    ASSERT_TRUE(config.has_value());                                       \
-    ASSERT_TRUE(config->is_dict());                                        \
-    const base::Value* actual = config->GetDict().FindByDottedPath(path);  \
-    base::Value expected = base::Value(expected_value);                    \
-    ASSERT_NE(actual, nullptr)                                             \
-        << "Path '" << path << "' not found in config: " << config_string; \
-    EXPECT_EQ(*actual, expected);                                          \
+#define EXPECT_HAS_PATH_WITH_VALUE(config_string, path, expected_value)        \
+  ({                                                                           \
+    std::optional<base::Value> config = base::JSONReader::Read(config_string); \
+    ASSERT_TRUE(config.has_value());                                           \
+    ASSERT_TRUE(config->is_dict());                                            \
+    const base::Value* actual = config->GetDict().FindByDottedPath(path);      \
+    base::Value expected = base::Value(expected_value);                        \
+    ASSERT_NE(actual, nullptr)                                                 \
+        << "Path '" << path << "' not found in config: " << config_string;     \
+    EXPECT_EQ(*actual, expected);                                              \
   })
 
 std::vector<mojom::AuthenticationTokenPtr> ToVector(

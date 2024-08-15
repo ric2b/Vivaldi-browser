@@ -12,26 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "src/dsp/x86/common_avx2.h"
+#include "src/dsp/x86/common_avx2_test.h"
 
 #include "gtest/gtest.h"
+#include "src/utils/cpu.h"
 
 #if LIBGAV1_TARGETING_AVX2
 
 #include <cstdint>
 
+#include "src/dsp/x86/common_avx2.h"
 #include "src/utils/common.h"
 
 namespace libgav1 {
 namespace dsp {
-namespace {
 
 // Show that RightShiftWithRounding_S16() is equal to
 // RightShiftWithRounding() only for values less than or equal to
 // INT16_MAX - ((1 << bits) >> 1). In particular, if bits == 16, then
 // RightShiftWithRounding_S16() is equal to RightShiftWithRounding() only for
 // negative values.
-TEST(CommonDspTest, AVX2RightShiftWithRoundingS16) {
+void AVX2RightShiftWithRoundingS16Test() {
   for (int bits = 0; bits < 16; ++bits) {
     const int bias = (1 << bits) >> 1;
     for (int32_t value = INT16_MIN; value <= INT16_MAX; ++value) {
@@ -53,15 +54,20 @@ TEST(CommonDspTest, AVX2RightShiftWithRoundingS16) {
   }
 }
 
-}  // namespace
 }  // namespace dsp
 }  // namespace libgav1
 
 #else  // !LIBGAV1_TARGETING_AVX2
 
-TEST(CommonDspTest, AVX2) {
+namespace libgav1 {
+namespace dsp {
+
+void AVX2RightShiftWithRoundingS16Test() {
   GTEST_SKIP() << "Build this module for x86(-64) with AVX2 enabled to enable "
                   "the tests.";
 }
+
+}  // namespace dsp
+}  // namespace libgav1
 
 #endif  // LIBGAV1_TARGETING_AVX2

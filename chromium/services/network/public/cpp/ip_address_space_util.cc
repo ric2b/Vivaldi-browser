@@ -10,7 +10,6 @@
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -29,7 +28,7 @@ using net::IPAddress;
 using net::IPEndPoint;
 
 // Parses a string of the form "<URL-safe IP address>:<port>".
-absl::optional<IPEndPoint> ParseEndpoint(base::StringPiece str) {
+absl::optional<IPEndPoint> ParseEndpoint(std::string_view str) {
   // Find the last colon character in `str`. We do not use
   // `base::SplitStringPiece()` because IPv6 address literals may contain colon
   // characters too.
@@ -38,13 +37,13 @@ absl::optional<IPEndPoint> ParseEndpoint(base::StringPiece str) {
     return absl::nullopt;
   }
 
-  base::StringPiece address_str = str.substr(0, pos);
+  std::string_view address_str = str.substr(0, pos);
 
   // Skip the colon. Note that this is safe because if `pos` is not `npos`, it
   // is guaranteed to be < `str.size()`, and `substr()` accepts arguments that
   // are <= `str.size()`. In other words, if the colon character is the last in
   // `str`, then `port_str` is assigned "".
-  base::StringPiece port_str = str.substr(pos + 1);
+  std::string_view port_str = str.substr(pos + 1);
 
   IPAddress address;
   if (!net::ParseURLHostnameToAddress(address_str, &address)) {
@@ -68,7 +67,7 @@ absl::optional<IPEndPoint> ParseEndpoint(base::StringPiece str) {
   return IPEndPoint(address, port);
 }
 
-absl::optional<IPAddressSpace> ParseIPAddressSpace(base::StringPiece str) {
+absl::optional<IPAddressSpace> ParseIPAddressSpace(std::string_view str) {
   if (str == "public") {
     return IPAddressSpace::kPublic;
   }
@@ -94,8 +93,8 @@ struct EndpointOverride {
 };
 
 // Parses an override from `str`, of the form "<endpoint>=<space>".
-absl::optional<EndpointOverride> ParseEndpointOverride(base::StringPiece str) {
-  std::vector<base::StringPiece> tokens = base::SplitStringPiece(
+absl::optional<EndpointOverride> ParseEndpointOverride(std::string_view str) {
+  std::vector<std::string_view> tokens = base::SplitStringPiece(
       str, "=", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
 
   // There should be 2 parts: the endpoint and the address space.
@@ -103,8 +102,8 @@ absl::optional<EndpointOverride> ParseEndpointOverride(base::StringPiece str) {
     return absl::nullopt;
   }
 
-  base::StringPiece endpoint = tokens[0];
-  base::StringPiece address_space = tokens[1];
+  std::string_view endpoint = tokens[0];
+  std::string_view address_space = tokens[1];
 
   absl::optional<IPEndPoint> parsed_endpoint = ParseEndpoint(endpoint);
   if (!parsed_endpoint.has_value()) {
@@ -124,14 +123,13 @@ absl::optional<EndpointOverride> ParseEndpointOverride(base::StringPiece str) {
 }
 
 // Parses a comma-separated list of overrides. Ignores invalid entries.
-std::vector<EndpointOverride> ParseEndpointOverrideList(
-    base::StringPiece list) {
+std::vector<EndpointOverride> ParseEndpointOverrideList(std::string_view list) {
   // Since we skip invalid entries anyway, we can skip empty entries.
-  std::vector<base::StringPiece> tokens = base::SplitStringPiece(
+  std::vector<std::string_view> tokens = base::SplitStringPiece(
       list, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
   std::vector<EndpointOverride> endpoint_overrides;
-  for (base::StringPiece token : tokens) {
+  for (std::string_view token : tokens) {
     absl::optional<EndpointOverride> parsed = ParseEndpointOverride(token);
     if (parsed.has_value()) {
       endpoint_overrides.push_back(*std::move(parsed));
@@ -276,7 +274,7 @@ IPAddressSpace IPEndPointToIPAddressSpace(const IPEndPoint& endpoint) {
 
 }  // namespace
 
-base::StringPiece IPAddressSpaceToStringPiece(IPAddressSpace space) {
+std::string_view IPAddressSpaceToStringPiece(IPAddressSpace space) {
   switch (space) {
     case IPAddressSpace::kUnknown:
       return "unknown";
@@ -330,8 +328,8 @@ namespace {
 const GURL& ResponseUrl(
     const GURL& request_url,
     absl::optional<CalculateClientAddressSpaceParams> params) {
-  if (params.has_value() && !params->url_list_via_service_worker.empty()) {
-    return params.value().url_list_via_service_worker.back();
+  if (params.has_value() && !params->url_list_via_service_worker->empty()) {
+    return params.value().url_list_via_service_worker->back();
   }
   return request_url;
 }
@@ -363,15 +361,15 @@ mojom::IPAddressSpace CalculateClientAddressSpace(
 
   // First, check whether the response forces itself into a public address space
   // as per https://wicg.github.io/cors-rfc1918/#csp.
-  DCHECK(params->parsed_headers) << "CalculateIPAddressSpace() called for URL "
-                                 << url << " with null parsed_headers.";
+  DCHECK(*params->parsed_headers) << "CalculateIPAddressSpace() called for URL "
+                                  << url << " with null parsed_headers.";
   if (ShouldTreatAsPublicAddress(
-          params->parsed_headers->content_security_policy)) {
+          (*params->parsed_headers)->content_security_policy)) {
     return mojom::IPAddressSpace::kPublic;
   }
 
   // Otherwise, calculate the address space via the provided IP address.
-  return IPEndPointToIPAddressSpace(params->remote_endpoint);
+  return IPEndPointToIPAddressSpace(*params->remote_endpoint);
 }
 
 mojom::IPAddressSpace CalculateResourceAddressSpace(

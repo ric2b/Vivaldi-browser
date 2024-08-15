@@ -25,13 +25,8 @@ class FilePath;
 }  // namespace base
 
 namespace exo {
-class Surface;
 class WMHelper;
 }  // namespace exo
-
-namespace gfx {
-struct PresentationFeedback;
-}  // namespace gfx
 
 namespace aura {
 class Window;
@@ -47,7 +42,8 @@ class ArcGraphicsTracingHandler : public content::WebUIMessageHandler,
  public:
   struct ActiveTrace;
 
-  base::FilePath GetModelPathFromTitle(std::string_view title);
+  base::FilePath GetModelPathFromTitle(std::string_view title,
+                                       base::Time timestamp);
 
   ArcGraphicsTracingHandler();
 
@@ -114,7 +110,6 @@ class ArcGraphicsTracingHandler : public content::WebUIMessageHandler,
   void OnTracingStarted();
   void OnTracingStopped(std::unique_ptr<ActiveTrace> trace,
                         std::unique_ptr<std::string> trace_data);
-  void RecordPresentedFrame(const gfx::PresentationFeedback& present);
 
   // Called when graphics model is built or load. Extra string parameter
   // contains a status. In case model cannot be built/load empty |base::Value|
@@ -133,9 +128,9 @@ class ArcGraphicsTracingHandler : public content::WebUIMessageHandler,
 
   std::unique_ptr<ActiveTrace> active_trace_;
 
-  const raw_ptr<exo::WMHelper, ExperimentalAsh> wm_helper_;
+  const raw_ptr<exo::WMHelper> wm_helper_;
 
-  raw_ptr<aura::Window, ExperimentalAsh> arc_active_window_ = nullptr;
+  raw_ptr<aura::Window> arc_active_window_ = nullptr;
 
   base::WeakPtrFactory<ArcGraphicsTracingHandler> weak_ptr_factory_{this};
 };

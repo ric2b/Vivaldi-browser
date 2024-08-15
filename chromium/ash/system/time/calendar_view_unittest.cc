@@ -8,36 +8,34 @@
 
 #include "ash/calendar/calendar_client.h"
 #include "ash/calendar/calendar_controller.h"
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/glanceables/common/glanceables_view_id.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/icon_button.h"
-#include "ash/system/message_center/unified_message_center_bubble.h"
-#include "ash/system/notification_center/notification_center_view.h"
+#include "ash/system/notification_center/views/notification_center_view.h"
 #include "ash/system/time/calendar_event_list_view.h"
 #include "ash/system/time/calendar_model.h"
 #include "ash/system/time/calendar_month_view.h"
 #include "ash/system/time/calendar_unittest_utils.h"
 #include "ash/system/time/calendar_utils.h"
 #include "ash/system/time/calendar_view_controller.h"
-#include "ash/system/tray/detailed_view_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/time/time_override.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "chromeos/ash/components/settings/scoped_timezone_settings.h"
 #include "google_apis/common/api_error_codes.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -46,7 +44,6 @@
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/layer_animation_stopped_waiter.h"
 #include "ui/events/base_event_utils.h"
-#include "ui/message_center/message_center.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/focus/focus_manager.h"
@@ -61,7 +58,6 @@ using ::google_apis::calendar::CalendarEvent;
 using ::google_apis::calendar::EventList;
 
 constexpr char kTestUser[] = "user@test";
-constexpr int kLoadingBarIndex = 2;
 
 }  // namespace
 
@@ -95,15 +91,12 @@ class CalendarViewTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
-    delegate_ =
-        std::make_unique<DetailedViewDelegate>(/*tray_controller=*/nullptr);
     widget_ = CreateFramelessTestWidget();
     widget_->SetFullscreen(true);
   }
 
   void TearDown() override {
     widget_.reset();
-    delegate_.reset();
 
     AshTestBase::TearDown();
   }
@@ -112,7 +105,7 @@ class CalendarViewTest : public AshTestBase {
   const views::LabelButton* GetDateCell(CalendarMonthView* month,
                                         std::u16string day) {
     const views::LabelButton* date_cell = nullptr;
-    for (const auto* child_view : month->children()) {
+    for (const views::View* child_view : month->children()) {
       auto* current_date_cell =
           static_cast<const views::LabelButton*>(child_view);
       if (day != current_date_cell->GetText()) {
@@ -140,8 +133,8 @@ class CalendarViewTest : public AshTestBase {
     AccountId user_account = AccountId::FromUserEmail(kTestUser);
     GetSessionControllerClient()->SwitchActiveUser(user_account);
 
-    auto calendar_view = std::make_unique<CalendarView>(
-        delegate_.get(), /*for_glanceables_container=*/false);
+    auto calendar_view =
+        std::make_unique<CalendarView>(/*for_glanceables_container=*/false);
 
     calendar_view_ = widget_->SetContentsView(std::move(calendar_view));
   }
@@ -230,7 +223,7 @@ class CalendarViewTest : public AshTestBase {
   }
   views::View* event_list_view() { return calendar_view_->event_list_view_; }
 
-  absl::optional<base::Time> selected_date() {
+  std::optional<base::Time> selected_date() {
     return calendar_view_->event_list_view_->calendar_view_controller_
         ->selected_date_;
   }
@@ -260,6 +253,12 @@ class CalendarViewTest : public AshTestBase {
   }
   void ScrollDownOneMonth() {
     calendar_view_->ScrollOneMonthAndAutoScroll(/*scroll_up=*/false);
+  }
+  void ScrollUpOneMonthWithAnimation() {
+    calendar_view_->ScrollOneMonthWithAnimation(/*scroll_up=*/true);
+  }
+  void ScrollDownOneMonthWithAnimation() {
+    calendar_view_->ScrollOneMonthWithAnimation(/*scroll_up=*/false);
   }
   void ResetToToday() { calendar_view_->ResetToToday(); }
 
@@ -318,9 +317,7 @@ class CalendarViewTest : public AshTestBase {
  private:
   std::unique_ptr<views::Widget> widget_;
   // Owned by `widget_`.
-  raw_ptr<CalendarView, DanglingUntriaged | ExperimentalAsh> calendar_view_ =
-      nullptr;
-  std::unique_ptr<DetailedViewDelegate> delegate_;
+  raw_ptr<CalendarView, DanglingUntriaged> calendar_view_ = nullptr;
   std::unique_ptr<CalendarEventListView> event_list_view_;
   static base::Time fake_time_;
 };
@@ -780,7 +777,7 @@ class DateCellFocusChangeListener : public views::FocusChangeListener {
   int steps_taken_ = 0;
 
   // Unowned.
-  const raw_ptr<views::FocusManager, ExperimentalAsh> focus_manager_;
+  const raw_ptr<views::FocusManager> focus_manager_;
   // The string being looked for.
   const std::u16string looking_for_;
   // The number of steps it is acceptable to have made before finding the
@@ -1397,8 +1394,6 @@ class CalendarViewAnimationTest : public AshTestBase {
   void SetUp() override {
     AshTestBase::SetUp();
 
-    delegate_ =
-        std::make_unique<DetailedViewDelegate>(/*tray_controller=*/nullptr);
     widget_ = CreateFramelessTestWidget();
     widget_->SetFullscreen(true);
 
@@ -1417,7 +1412,6 @@ class CalendarViewAnimationTest : public AshTestBase {
   }
 
   void TearDown() override {
-    delegate_.reset();
     widget_.reset();
     time_overrides_.reset();
 
@@ -1425,15 +1419,15 @@ class CalendarViewAnimationTest : public AshTestBase {
   }
 
   void CreateCalendarView() {
-    calendar_view_ = widget_->SetContentsView(std::make_unique<CalendarView>(
-        delegate_.get(), /*for_glanceables_container=*/false));
+    calendar_view_ = widget_->SetContentsView(
+        std::make_unique<CalendarView>(/*for_glanceables_container=*/false));
   }
 
   // Gets date cell of a given CalendarMonthView and numerical `day`.
   const views::LabelButton* GetDateCell(CalendarMonthView* month,
                                         std::u16string day) {
     const views::LabelButton* date_cell = nullptr;
-    for (const auto* child_view : month->children()) {
+    for (const views::View* child_view : month->children()) {
       auto* current_date_cell =
           static_cast<const views::LabelButton*>(child_view);
       if (day != current_date_cell->GetText()) {
@@ -1453,7 +1447,7 @@ class CalendarViewAnimationTest : public AshTestBase {
     event_generator->ClickLeftButton();
   }
 
-  absl::optional<base::Time> GetSelectedDate() {
+  std::optional<base::Time> GetSelectedDate() {
     return calendar_view_->calendar_view_controller()->selected_date_;
   }
 
@@ -1466,8 +1460,9 @@ class CalendarViewAnimationTest : public AshTestBase {
         calendar_test_utils::kAnimationSettleDownDuration);
     calendar_view_->content_view_->RemoveAllChildViews();
     calendar_view_->SetMonthViews();
-    scroll_view()->ScrollToPosition(scroll_view()->vertical_scroll_bar(),
-                                    calendar_view_->PositionOfCurrentMonth());
+    scroll_view()->ScrollToPosition(
+        scroll_view()->vertical_scroll_bar(),
+        calendar_view_->GetPositionOfCurrentMonth());
   }
 
   // The position of the `next_month_`.
@@ -1477,6 +1472,11 @@ class CalendarViewAnimationTest : public AshTestBase {
            current_label()->GetPreferredSize().height() +
            calendar_view_->current_month_->GetPreferredSize().height() +
            next_label()->GetPreferredSize().height();
+  }
+
+  // The position of `current_month_`.
+  int CurrentMonthPosition() {
+    return calendar_view_->GetPositionOfCurrentMonth();
   }
 
   void ScrollUpOneMonth() {
@@ -1552,11 +1552,9 @@ class CalendarViewAnimationTest : public AshTestBase {
  private:
   std::unique_ptr<views::Widget> widget_;
   // Owned by `widget_`.
-  raw_ptr<CalendarView, DanglingUntriaged | ExperimentalAsh> calendar_view_ =
-      nullptr;
-  std::unique_ptr<DetailedViewDelegate> delegate_;
+  raw_ptr<CalendarView, DanglingUntriaged> calendar_view_ = nullptr;
   std::unique_ptr<base::subtle::ScopedTimeClockOverrides> time_overrides_;
-  raw_ptr<CalendarModel, DanglingUntriaged | ExperimentalAsh> calendar_model_;
+  raw_ptr<CalendarModel, DanglingUntriaged> calendar_model_;
   std::unique_ptr<calendar_test_utils::CalendarClientTestImpl> calendar_client_;
 };
 
@@ -1983,12 +1981,13 @@ TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForOneMonthOnScreen) {
       calendar_test_utils::kAnimationSettleDownDuration);
 
   EXPECT_EQ(1U, on_screen_month().size());
-
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  const auto* progress_bar = calendar_view()->GetViewByID(
+      base::to_underlying(GlanceablesViewId::kProgressBar));
+  EXPECT_TRUE(progress_bar->GetVisible());
 
   // Waits until the events are fetched, and tests the loading bar is invisible.
   WaitUntilFetched();
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(progress_bar->GetVisible());
 }
 
 TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForTwoMonthsOnScreen) {
@@ -2004,12 +2003,13 @@ TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForTwoMonthsOnScreen) {
       calendar_test_utils::kAnimationSettleDownDuration);
 
   EXPECT_EQ(2U, on_screen_month().size());
-
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  const auto* progress_bar = calendar_view()->GetViewByID(
+      base::to_underlying(GlanceablesViewId::kProgressBar));
+  EXPECT_TRUE(progress_bar->GetVisible());
 
   // Waits until the events are fetched, and tests the loading bar is invisible.
   WaitUntilFetched();
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(progress_bar->GetVisible());
 
   // Resets to today so that a new fetching request will be sent for on-screen
   // months who have cached events(eg. a refetching status). Tests the loading
@@ -2020,7 +2020,7 @@ TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForTwoMonthsOnScreen) {
   // Advances the time to allow `on_screen_month_` to update.
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_TRUE(progress_bar->GetVisible());
 }
 
 TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForThreeMonthsOnScreen) {
@@ -2036,12 +2036,13 @@ TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForThreeMonthsOnScreen) {
       calendar_test_utils::kAnimationSettleDownDuration);
 
   EXPECT_EQ(3U, on_screen_month().size());
-
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  const auto* progress_bar = calendar_view()->GetViewByID(
+      base::to_underlying(GlanceablesViewId::kProgressBar));
+  EXPECT_TRUE(progress_bar->GetVisible());
 
   // Waits until the events are fetched, and tests the loading bar is invisible.
   WaitUntilFetched();
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(progress_bar->GetVisible());
 
   // Resets to today so that a new fetching request will be sent for on-screen
   // months who have cached events(eg. a refetching status). Tests the loading
@@ -2052,7 +2053,7 @@ TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForThreeMonthsOnScreen) {
   // Advances the time to allow `on_screen_month_` to update.
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_TRUE(progress_bar->GetVisible());
 }
 
 // Tests the loading bar visibility for different user sessions.
@@ -2068,8 +2069,10 @@ TEST_F(CalendarViewAnimationTest,
   CreateCalendarView();
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_TRUE(
+      calendar_view()
+          ->GetViewByID(base::to_underlying(GlanceablesViewId::kProgressBar))
+          ->GetVisible());
 
   // Tests when the screen is locked, the loading bar is invisible.
   calendar_model()->ClearAllCachedEvents();
@@ -2080,8 +2083,10 @@ TEST_F(CalendarViewAnimationTest,
   // Advances the time to allow `on_screen_month_` to initialize.
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(
+      calendar_view()
+          ->GetViewByID(base::to_underlying(GlanceablesViewId::kProgressBar))
+          ->GetVisible());
 
   // Tests when the user starts the login process, the loading bar is invisible.
   calendar_model()->ClearAllCachedEvents();
@@ -2090,8 +2095,10 @@ TEST_F(CalendarViewAnimationTest,
   CreateCalendarView();
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(
+      calendar_view()
+          ->GetViewByID(base::to_underlying(GlanceablesViewId::kProgressBar))
+          ->GetVisible());
 }
 
 // Tests the loading bar visibility for when fetching events errors.
@@ -2126,11 +2133,13 @@ TEST_F(CalendarViewAnimationTest, LoadingBarVisibilityForErrorFetchingEvents) {
   calendar_model()->FetchEvents(start_of_current_month);
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  const auto* progress_bar = calendar_view()->GetViewByID(
+      base::to_underlying(GlanceablesViewId::kProgressBar));
+  EXPECT_TRUE(progress_bar->GetVisible());
 
   // Waits until the events are fetched, and tests the loading bar is invisible.
   WaitUntilFetched();
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(progress_bar->GetVisible());
 }
 
 // Tests the loading bar visibility for when fetching events times out.
@@ -2166,11 +2175,13 @@ TEST_F(CalendarViewAnimationTest,
   calendar_model()->FetchEvents(start_of_current_month);
   task_environment()->FastForwardBy(
       calendar_test_utils::kAnimationSettleDownDuration);
-  EXPECT_TRUE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  const auto* progress_bar = calendar_view()->GetViewByID(
+      base::to_underlying(GlanceablesViewId::kProgressBar));
+  EXPECT_TRUE(progress_bar->GetVisible());
 
   // Waits until the events are fetched, and tests the loading bar is invisible.
   WaitUntilFetched();
-  EXPECT_FALSE(calendar_view()->children()[kLoadingBarIndex]->GetVisible());
+  EXPECT_FALSE(progress_bar->GetVisible());
 }
 
 // Tests that the EventListView does not crash if shown during the initial open.
@@ -2226,6 +2237,8 @@ TEST_F(CalendarViewAnimationTest, DontShowEventListDuringMonthAnimation) {
 TEST_F(CalendarViewAnimationTest, OpenAndCloseEventList) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  // Sets the timezone to "America/Los_Angeles".
+  ash::system::ScopedTimezoneSettings timezone_settings(u"America/Los_Angeles");
 
   CreateCalendarView();
   ui::LayerAnimationStoppedWaiter animation_waiter;
@@ -2381,10 +2394,9 @@ TEST_F(
       calendar_utils::GetStartOfMonthUTC(date),
       CreateMockEventListWithEventStartTimeMoreThanTwoHoursAway());
 
-  // When fetched events are more than two hours away, then up next shouldn't
-  // have been created.
+  // Fetch an event starting more than two hours away, up next should show.
   bool is_showing_up_next_view = up_next_view();
-  EXPECT_FALSE(is_showing_up_next_view);
+  EXPECT_TRUE(is_showing_up_next_view);
 }
 
 TEST_F(CalendarViewWithJellyEnabledTest, ShouldShowUpNextView) {
@@ -2434,8 +2446,9 @@ TEST_F(CalendarViewWithJellyEnabledTest,
 
 // If there are upcoming events and the up next view should have been shown but
 // the event list was open, then when it closes we should show the up next view.
-TEST_F(CalendarViewWithJellyEnabledTest,
-       ShouldShowUpNextView_WhenEventListViewHasFinishedClosing) {
+TEST_F(
+    CalendarViewWithJellyEnabledTest,
+    ShouldShowUpNextView_WhenEventListViewHasFinishedClosing_SelectedDateIsToday) {
   base::Time date;
   ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
   // Set time override.
@@ -2445,9 +2458,9 @@ TEST_F(CalendarViewWithJellyEnabledTest,
       /*thread_ticks_override=*/nullptr);
 
   CreateCalendarView();
-  // Open the event list view for any day.
+  // Open the event list view for today.
   GestureTapOn(
-      static_cast<views::LabelButton*>(current_month()->children()[2]));
+      static_cast<views::LabelButton*>(current_month()->children()[18]));
   ASSERT_TRUE(event_list_view());
   // Mock events that start in ten mins coming in.
   MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
@@ -2458,6 +2471,35 @@ TEST_F(CalendarViewWithJellyEnabledTest,
   // shown.
   bool is_showing_up_next_view = up_next_view();
   EXPECT_TRUE(is_showing_up_next_view);
+}
+
+// If there are upcoming events and the event list was open for another day
+// that's not on the same row with today, then when it closes we should not show
+// the up next view.
+TEST_F(
+    CalendarViewWithJellyEnabledTest,
+    ShouldNotShowUpNextView_WhenEventListViewHasFinishedClosing_SelectedDateNotOnTheSameRowWithToday) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  // Open the event list view for a day that's not on the same row with today.
+  GestureTapOn(
+      static_cast<views::LabelButton*>(current_month()->children()[1]));
+  ASSERT_TRUE(event_list_view());
+  // Mock events that start in ten mins coming in.
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithEventStartTimeTenMinsAway());
+  CloseEventList();
+
+  // After closing the event list view, we expect there's no up next view
+  // showing.
+  EXPECT_FALSE(up_next_view());
 }
 
 TEST_F(CalendarViewWithJellyEnabledTest,
@@ -2489,7 +2531,7 @@ TEST_F(CalendarViewWithJellyEnabledTest,
 
 TEST_F(
     CalendarViewWithJellyEnabledTest,
-    GivenUpNextIsShown_WhenNewEventsMoreThanTwoHoursAwayAreFetched_ThenUpNextViewShouldNotBeShown) {
+    GivenUpNextIsShown_WhenNewEventsMoreThanTwoHoursAwayAreFetched_UpNextViewShouldStillBeShown) {
   base::Time date;
   ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
   // Set time override.
@@ -2504,15 +2546,15 @@ TEST_F(
 
   // When fetched events are in the next 10 mins, then up next should have been
   // created.
-  EXPECT_TRUE(up_next_view());
+  EXPECT_TRUE((up_next_view() && up_next_view()->GetVisible()));
 
   MockEventsFetched(
       calendar_utils::GetStartOfMonthUTC(date),
       CreateMockEventListWithEventStartTimeMoreThanTwoHoursAway());
 
-  // When fetched events are now more than two hours away, then up next
-  // should have been destroyed.
-  EXPECT_FALSE(up_next_view());
+  // When fetched events are now more than two hours away, the up next should
+  // still show.
+  EXPECT_TRUE((up_next_view() && up_next_view()->GetVisible()));
 }
 
 // Tests the following:
@@ -2600,12 +2642,12 @@ TEST_F(
   // created.
   EXPECT_TRUE(up_next_view());
 
-  // Open the event list view.
-  ASSERT_EQ(u"2",
-            static_cast<views::LabelButton*>(current_month()->children()[2])
+  // Open the event list view for today.
+  ASSERT_EQ(u"18",
+            static_cast<views::LabelButton*>(current_month()->children()[18])
                 ->GetText());
   GestureTapOn(
-      static_cast<views::LabelButton*>(current_month()->children()[2]));
+      static_cast<views::LabelButton*>(current_month()->children()[18]));
   ASSERT_TRUE(event_list_view());
 
   // Close the event list view.
@@ -2635,14 +2677,14 @@ TEST_F(CalendarViewWithJellyEnabledTest,
       calendar_utils::GetStartOfMonthUTC(date),
       CreateMockEventListWithEventStartTimeMoreThanTwoHoursAway());
 
-  EXPECT_FALSE(up_next_view());
+  EXPECT_TRUE(up_next_view());
 
-  // Open the event list view.
-  ASSERT_EQ(u"2",
-            static_cast<views::LabelButton*>(current_month()->children()[2])
+  // Open the event list view for today.
+  ASSERT_EQ(u"18",
+            static_cast<views::LabelButton*>(current_month()->children()[18])
                 ->GetText());
   GestureTapOn(
-      static_cast<views::LabelButton*>(current_month()->children()[2]));
+      static_cast<views::LabelButton*>(current_month()->children()[18]));
   ASSERT_TRUE(event_list_view());
 
   // Mock upcoming events coming in.
@@ -2664,8 +2706,13 @@ TEST_F(CalendarViewWithJellyEnabledTest,
   EXPECT_EQ(expected_max_height, scroll_view()->GetMaxHeight());
 }
 
+// Tests the following:
+// - 1 upcoming events are displayed in the up next view
+// - Scroll down a couple of months
+// - Up next view should be invisible after scrolling
+// - Scroll back to today's month, and the up next view should remain invisible.
 TEST_F(CalendarViewWithJellyEnabledTest,
-       ShouldResetCalendarMonthsToToday_WhenPressingTheShowTodaysEventsButton) {
+       ShouldNotShowUpNextView_AfterScrolling) {
   base::Time date;
   ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
   // Set time override.
@@ -2684,8 +2731,8 @@ TEST_F(CalendarViewWithJellyEnabledTest,
 
   // Scroll down a couple of months so we're not on today's date or month any
   // more.
-  ScrollDownOneMonth();
-  ScrollDownOneMonth();
+  ScrollDownOneMonthWithAnimation();
+  ScrollDownOneMonthWithAnimation();
 
   EXPECT_EQ(u"December", GetPreviousLabelText());
   EXPECT_EQ(u"January", GetCurrentLabelText());
@@ -2694,26 +2741,162 @@ TEST_F(CalendarViewWithJellyEnabledTest,
   EXPECT_EQ(u"January", month_header()->GetText());
   EXPECT_EQ(u"2022", header_year()->GetText());
 
-  LeftClickOn(up_next_todays_events_button());
+  // `up_next_view()` still exists, just invisible.
+  EXPECT_FALSE(up_next_view()->GetVisible());
 
-  // Calendar should be reset back to "today".
+  // Scroll up back to today's month, and `up_next_view()` should not be visible
+  // after scrolling.
+  ScrollUpOneMonthWithAnimation();
+  ScrollUpOneMonthWithAnimation();
+  EXPECT_EQ(u"November", GetCurrentLabelText());
+  EXPECT_EQ(u"November", month_header()->GetText());
+  EXPECT_EQ(u"2021", header_year()->GetText());
+  EXPECT_FALSE(up_next_view()->GetVisible());
+}
+
+// Tests the following:
+// - 1 upcoming events are displayed in the up next view
+// - Scroll down a couple of months
+// - Up next view should be invisible after scrolling
+// - Clicking the reset to today button
+// - Up next view should be visible
+TEST_F(CalendarViewWithJellyEnabledTest,
+       ShouldShowUpNextView_AfterResettingToToday) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithEventStartTimeTenMinsAway());
+
+  // When fetched events are in the next 10 mins, then up next should have been
+  // created.
+  EXPECT_TRUE(up_next_view());
+
+  // Scroll down a couple of months so we're not on today's date or month any
+  // more.
+  ScrollDownOneMonthWithAnimation();
+  ScrollDownOneMonthWithAnimation();
+
+  EXPECT_EQ(u"December", GetPreviousLabelText());
+  EXPECT_EQ(u"January", GetCurrentLabelText());
+  EXPECT_EQ(u"February", GetNextLabelText());
+  EXPECT_EQ(u"March", GetNextNextLabelText());
+  EXPECT_EQ(u"January", month_header()->GetText());
+  EXPECT_EQ(u"2022", header_year()->GetText());
+
+  // `up_next_view()` still exists, just invisible.
+  EXPECT_FALSE(up_next_view()->GetVisible());
+
+  // Clicks the reset to today button and `up_next_view()` should be visible.
+  GestureTapOn(reset_to_today_button());
+  EXPECT_TRUE(up_next_view()->GetVisible());
+}
+
+// Tests the following:
+// - 1 upcoming events are displayed in the up next view
+// - Open the event list view and scroll down
+// - Close the event list view
+// - Up next view should be invisible
+TEST_F(CalendarViewWithJellyEnabledTest,
+       ShouldNotShowUpNextView_WhenEventListHasClosedAfterScrolling) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithEventStartTimeTenMinsAway());
+
+  // When fetched events are in the next 10 mins, then up next should have been
+  // created.
+  EXPECT_TRUE(up_next_view());
+
+  // Open the event list view.
+  ASSERT_EQ(u"2",
+            static_cast<views::LabelButton*>(current_month()->children()[2])
+                ->GetText());
+  GestureTapOn(
+      static_cast<views::LabelButton*>(current_month()->children()[2]));
+  ASSERT_TRUE(event_list_view());
+
+  // Scroll down one row with the event list open.
+  ScrollDownOneMonthWithAnimation();
+
   EXPECT_EQ(u"October", GetPreviousLabelText());
   EXPECT_EQ(u"November", GetCurrentLabelText());
   EXPECT_EQ(u"December", GetNextLabelText());
   EXPECT_EQ(u"January", GetNextNextLabelText());
   EXPECT_EQ(u"November", month_header()->GetText());
   EXPECT_EQ(u"2021", header_year()->GetText());
+
+  // Close the event list view.
+  GestureTapOn(close_button());
+  ASSERT_FALSE(event_list_view());
+
+  // `up_next_view()` still exists, just invisible.
+  EXPECT_FALSE(up_next_view()->GetVisible());
+}
+
+// Tests the following:
+// - 1 upcoming events are displayed in the up next view
+// - Open the event list view
+// - Close the event list view
+// - Up next view should be visible
+TEST_F(CalendarViewWithJellyEnabledTest,
+       ShouldShowUpNextView_WhenEventListHasClosedWithoutScrolling) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithEventStartTimeTenMinsAway());
+
+  // When fetched events are in the next 10 mins, then up next should have been
+  // created.
+  EXPECT_TRUE(up_next_view());
+
+  // Open the event list view for today.
+  ASSERT_EQ(u"18",
+            static_cast<views::LabelButton*>(current_month()->children()[18])
+                ->GetText());
+  GestureTapOn(
+      static_cast<views::LabelButton*>(current_month()->children()[18]));
+  ASSERT_TRUE(event_list_view());
+
+  // Close the event list view.
+  GestureTapOn(close_button());
+  ASSERT_FALSE(event_list_view());
+
+  // `up_next_view()` should be visible.
+  EXPECT_TRUE(up_next_view()->GetVisible());
 }
 
 // Tests an upcoming event that starts at 00:05 but "now" is 23:55. In this case
-// we should open the event list for the subsequent day if a user presses the
-// show todays events button.
-TEST_F(
-    CalendarViewWithJellyEnabledTest,
-    ShouldShowTheFollowingDay_WhenPressingTheShowTodaysEventsButton_AndUpcomingEventStartsNextDay) {
+// the up next view shouldn't be shown.
+TEST_F(CalendarViewWithJellyEnabledTest,
+       ShouldNotShowUpNextView_WhenNextEventStartsTomorrow) {
   base::Time date;
   ASSERT_TRUE(base::Time::FromString("18 Nov 2021 23:55 GMT", &date));
-  // Set time override.
+
+  // Sets the timezone to GMT.
+  ash::system::ScopedTimezoneSettings timezone_settings(u"GMT");
+
+  // Sets time override.
   SetFakeNow(date);
   base::subtle::ScopedTimeClockOverrides time_override(
       &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
@@ -2724,25 +2907,8 @@ TEST_F(
   MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
                     CreateMockEventListStartingFivePastMidnight());
 
-  // Up next view should be shown.
-  ASSERT_TRUE(up_next_view());
-
-  LeftClickOn(up_next_todays_events_button());
-
-  // Event list should be open with the following day selected.
-  EXPECT_TRUE(event_list_view());
-  base::Time expected_selected_date;
-  ASSERT_TRUE(
-      base::Time::FromString("19 Nov 2021 00:05 GMT", &expected_selected_date));
-  EXPECT_EQ(expected_selected_date, selected_date().value());
-
-  // Calendar should be reset back to today.
-  EXPECT_EQ(u"October", GetPreviousLabelText());
-  EXPECT_EQ(u"November", GetCurrentLabelText());
-  EXPECT_EQ(u"December", GetNextLabelText());
-  EXPECT_EQ(u"January", GetNextNextLabelText());
-  EXPECT_EQ(u"November", month_header()->GetText());
-  EXPECT_EQ(u"2021", header_year()->GetText());
+  // Up next view should not be shown.
+  ASSERT_FALSE(up_next_view());
 }
 
 TEST_F(
@@ -3016,10 +3182,11 @@ TEST_F(
   widget()->SetFullscreen(false);
   widget()->SetSize(gfx::Size(kTrayMenuWidth, 350));
 
-  // Fetch an event that starts in 11 mins so up next isn't showing.
+  // Fetch an event that starts in 11 mins and up next will show.
   MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
                     CreateUpcomingEvents(date + base::Minutes(6)));
-  EXPECT_FALSE(calendar_view()->up_next_view());
+  WaitUntilFetched();
+  EXPECT_TRUE(calendar_view()->up_next_view()->GetVisible());
 
   // Scroll up a bit so that today is off the screen.
   ScrollUpOneMonth();
@@ -3029,14 +3196,46 @@ TEST_F(
   const int initial_scroll_position = scroll_view()->GetVisibleRect().y();
 
   // Now advance time so that our upcoming meeting is about to start and up next
-  // appears.
+  // should be invisible since the user has scrolled.
+  task_environment()->FastForwardBy(base::Minutes(5));
+  EXPECT_FALSE(calendar_view()->up_next_view()->GetVisible());
+
+  // The scroll view should not have moved as the user has previously interacted
+  // with the scroll view.
+  EXPECT_EQ(initial_scroll_position, scroll_view()->GetVisibleRect().y());
+}
+
+TEST_F(CalendarViewAnimationWithJellyEnabledTest,
+       ShouldScrollToShowTodaysCell_WhenAnUpcomingEventAppears) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  base::Time date;
+  // Pick a date towards the end of the month so up next covers the bottom row.
+  ASSERT_TRUE(base::Time::FromString("25 Apr 2023 10:00 GMT", &date));
+  task_environment()->AdvanceClock(date - base::Time::Now());
+  CreateCalendarView();
+  // Force the size of the calendar to be small enough that the bottom row of
+  // date cells will be covered by the up next view.
+  widget()->SetFullscreen(false);
+  widget()->SetSize(gfx::Size(kTrayMenuWidth, 350));
+
+  // Fetch an event that starts in 11 mins and up next will show.
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateUpcomingEvents(date + base::Minutes(6)));
+  EXPECT_TRUE(calendar_view()->up_next_view());
+
+  ui::LayerAnimationStoppedWaiter animation_waiter;
+  animation_waiter.Wait(current_month()->layer());
+  const int initial_scroll_position = scroll_view()->GetVisibleRect().y();
+
+  // Now advance time so that our upcoming meeting is about to start and up next
+  // should not appear since the user has scrolled.
   task_environment()->FastForwardBy(base::Minutes(5));
   EXPECT_TRUE(calendar_view()->up_next_view());
   animation_waiter.Wait(calendar_view()->up_next_view()->layer());
 
-  // After the up next view is shown, the scroll view should not have moved as
-  // the user has previously interacted with the scroll view.
-  EXPECT_EQ(initial_scroll_position, scroll_view()->GetVisibleRect().y());
+  // The scroll view should have moved to show the `up_next_view_`.
+  EXPECT_NE(initial_scroll_position, scroll_view()->GetVisibleRect().y());
 }
 
 TEST_F(CalendarViewAnimationWithJellyEnabledTest,
@@ -3053,26 +3252,85 @@ TEST_F(CalendarViewAnimationWithJellyEnabledTest,
   widget()->SetFullscreen(false);
   widget()->SetSize(gfx::Size(kTrayMenuWidth, 350));
 
-  // Fetch an event that starts in 11 mins so up next isn't showing.
+  // Fetch an event that starts in 11 mins and up next view will be shown.
   MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
                     CreateUpcomingEvents(date + base::Minutes(6)));
-  EXPECT_FALSE(calendar_view()->up_next_view());
+  WaitUntilFetched();
+  EXPECT_TRUE(calendar_view()->up_next_view()->GetVisible());
 
-  // Make todays date cell null. This would be null if the user had scrolled
-  // outside of the 4 months that are on screen.
-  calendar_view()->calendar_view_controller()->set_todays_date_cell_view(
+  // Scrolls 4 months so that todays date cell is null.
+  ScrollUpOneMonth();
+  ScrollUpOneMonth();
+  ScrollUpOneMonth();
+  ScrollUpOneMonth();
+  EXPECT_EQ(
+      calendar_view()->calendar_view_controller()->todays_date_cell_view(),
       nullptr);
 
   const int initial_scroll_position = scroll_view()->GetVisibleRect().y();
 
   // Now advance time so that our upcoming meeting is about to start and up next
-  // appears.
+  // shouldn't show since the user has scrolled, and the scroll view should not
+  // have moved as well.
   task_environment()->FastForwardBy(base::Minutes(5));
-  EXPECT_TRUE(calendar_view()->up_next_view());
-
-  // After the up next view is shown, the scroll view should not have moved as
-  // todays date cell is null.
+  EXPECT_FALSE(calendar_view()->up_next_view()->GetVisible());
   EXPECT_EQ(initial_scroll_position, scroll_view()->GetVisibleRect().y());
 }
 
+// Tests that the scroll view scrolls up when there are not at least 2 weeks
+// visible below todays view without the up-next view.
+TEST_F(CalendarViewAnimationWithJellyEnabledTest,
+       ShouldScrollToShowMoreFutureDates_WithoutUpNextView) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  base::Time date;
+  // Pick a date towards the end of the month so that it has less than two rows
+  // underneath.
+  ASSERT_TRUE(base::Time::FromString("30 Nov 2023 10:00 GMT", &date));
+  task_environment()->AdvanceClock(date - base::Time::Now());
+  SetTodayFromTime(date);
+  CreateCalendarView();
+
+  const auto* controller = calendar_view()->calendar_view_controller();
+  const int space_under_todays_row =
+      scroll_view()->GetVisibleRect().bottom() -
+      (CurrentMonthPosition() + controller->GetTodayRowBottomHeight());
+
+  // After the view is settled, there should be at least 2 rows under today's
+  // row.
+  EXPECT_GE(space_under_todays_row, 2 * controller->row_height());
+}
+
+// Tests that the scroll view scrolls up when there are not at least 2 weeks
+// visible below todays view with the up-next view.
+TEST_F(CalendarViewAnimationWithJellyEnabledTest,
+       ShouldScrollToShowMoreFutureDates_WithUpNextView) {
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  base::Time date;
+  // Pick a date towards the end of the month so that it has less than two rows
+  // underneath.
+  ASSERT_TRUE(base::Time::FromString("30 Nov 2023 10:00 GMT", &date));
+  task_environment()->AdvanceClock(date - base::Time::Now());
+  SetTodayFromTime(date);
+  CreateCalendarView();
+
+  // Fetch an event that starts in 6 mins and up next will show.
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateUpcomingEvents(date + base::Minutes(6)));
+  EXPECT_TRUE(calendar_view()->up_next_view());
+
+  ui::LayerAnimationStoppedWaiter animation_waiter;
+  animation_waiter.Wait(current_month()->layer());
+  animation_waiter.Wait(calendar_view()->up_next_view()->layer());
+
+  const auto* controller = calendar_view()->calendar_view_controller();
+  const int space_under_todays_row =
+      scroll_view()->GetVisibleRect().bottom() -
+      (CurrentMonthPosition() + controller->GetTodayRowBottomHeight());
+
+  // After the view is settled, there should be at least 2 rows under today's
+  // row.
+  EXPECT_GE(space_under_todays_row, 2 * controller->row_height());
+}
 }  // namespace ash

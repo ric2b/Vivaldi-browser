@@ -2,21 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/pkey.h"
+#include "partition_alloc/thread_isolation/pkey.h"
 
 #if BUILDFLAG(ENABLE_PKEYS)
 
-#include <errno.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/cpu.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.h"
+#include <cerrno>
 
-#if !BUILDFLAG(IS_LINUX)
-#error "This pkey code is currently only supported on Linux"
+#include "partition_alloc/partition_alloc_base/cpu.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/thread_isolation/thread_isolation.h"
+
+#if !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
+#error "This pkey code is currently only supported on Linux and ChromeOS"
 #endif
 
 namespace partition_alloc::internal {

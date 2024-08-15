@@ -339,8 +339,19 @@
     void framebufferTextureMultiview(GLenum target, GLenum attachment, TextureID texturePacked,    \
                                      GLint level, GLint baseViewIndex, GLsizei numViews);          \
     /* GL_OVR_multiview2 */                                                                        \
+    /* GL_QCOM_framebuffer_foveated */                                                             \
+    void framebufferFoveationConfig(GLuint framebuffer, GLuint numLayers,                          \
+                                    GLuint focalPointsPerLayer, GLuint requestedFeatures,          \
+                                    GLuint *providedFeatures);                                     \
+    void framebufferFoveationParameters(GLuint framebuffer, GLuint layer, GLuint focalPoint,       \
+                                        GLfloat focalX, GLfloat focalY, GLfloat gainX,             \
+                                        GLfloat gainY, GLfloat foveaArea);                         \
     /* GL_QCOM_render_shared_exponent */                                                           \
     /* GL_QCOM_shading_rate */                                                                     \
+    /* GL_QCOM_texture_foveated */                                                                 \
+    void textureFoveationParameters(GLuint texture, GLuint layer, GLuint focalPoint,               \
+                                    GLfloat focalX, GLfloat focalY, GLfloat gainX, GLfloat gainY,  \
+                                    GLfloat foveaArea);                                            \
     /* GL_WEBGL_video_texture */                                                                   \
                                                                                                    \
     /* ANGLE Extensions */                                                                         \
@@ -633,7 +644,6 @@
     /* GL_CHROMIUM_framebuffer_mixed_samples */                                                    \
     /* GL_CHROMIUM_lose_context */                                                                 \
     void loseContext(GraphicsResetStatus currentPacked, GraphicsResetStatus otherPacked);          \
-    /* GL_CHROMIUM_sync_query */                                                                   \
-    /* GL_CHROMIUM_texture_filtering_hint */
+    /* GL_CHROMIUM_sync_query */
 
 #endif  // ANGLE_CONTEXT_API_EXT_AUTOGEN_H_

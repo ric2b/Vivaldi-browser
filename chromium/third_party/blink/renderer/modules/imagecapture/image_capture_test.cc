@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/modules/mediastream/mock_video_capturer_source.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 
 namespace blink {
 
@@ -85,15 +86,17 @@ class CaptureErrorFunction final : public ScriptFunction::Callable {
 
     v8::Local<v8::Value> name =
         error_object->Get(context, V8String(isolate, "name")).ToLocalChecked();
-    name_ = ToCoreString(name->ToString(context).ToLocalChecked());
+    name_ = ToCoreString(isolate, name->ToString(context).ToLocalChecked());
     v8::Local<v8::Value> message =
         error_object->Get(context, V8String(isolate, "message"))
             .ToLocalChecked();
-    message_ = ToCoreString(message->ToString(context).ToLocalChecked());
+    message_ =
+        ToCoreString(isolate, message->ToString(context).ToLocalChecked());
     v8::Local<v8::Value> constraint =
         error_object->Get(context, V8String(isolate, "constraint"))
             .ToLocalChecked();
-    constraint_ = ToCoreString(constraint->ToString(context).ToLocalChecked());
+    constraint_ =
+        ToCoreString(isolate, constraint->ToString(context).ToLocalChecked());
 
     return ScriptValue();
   }
@@ -349,6 +352,9 @@ void CheckExactValues(
   EXPECT_TRUE(settings->has_background_blur_mode);
   EXPECT_EQ(settings->background_blur_mode,
             media::mojom::blink::BackgroundBlurMode::BLUR);
+  EXPECT_TRUE(settings->eye_gaze_correction_mode.has_value());
+  EXPECT_EQ(settings->eye_gaze_correction_mode.value(),
+            media::mojom::blink::EyeGazeCorrectionMode::OFF);
   EXPECT_TRUE(settings->has_face_framing_mode);
   EXPECT_EQ(settings->face_framing_mode,
             media::mojom::blink::MeteringMode::CONTINUOUS);
@@ -422,6 +428,7 @@ void CheckMaxValues(const media::mojom::blink::PhotoSettingsPtr& settings,
   }
   EXPECT_FALSE(settings->has_torch);
   EXPECT_FALSE(settings->has_background_blur_mode);
+  EXPECT_FALSE(settings->eye_gaze_correction_mode.has_value());
   EXPECT_FALSE(settings->has_face_framing_mode);
 }
 
@@ -493,6 +500,7 @@ void CheckMinValues(const media::mojom::blink::PhotoSettingsPtr& settings,
   }
   EXPECT_FALSE(settings->has_torch);
   EXPECT_FALSE(settings->has_background_blur_mode);
+  EXPECT_FALSE(settings->eye_gaze_correction_mode.has_value());
   EXPECT_FALSE(settings->has_face_framing_mode);
 }
 
@@ -517,6 +525,7 @@ void CheckNoValues(const media::mojom::blink::PhotoSettingsPtr& settings,
   EXPECT_FALSE(settings->has_zoom);
   EXPECT_FALSE(settings->has_torch);
   EXPECT_FALSE(settings->has_background_blur_mode);
+  EXPECT_FALSE(settings->eye_gaze_correction_mode.has_value());
   EXPECT_FALSE(settings->has_face_framing_mode);
 }
 
@@ -601,6 +610,9 @@ void PopulateConstraintSet(
   constraint_set->setBackgroundBlur(
       MakeGarbageCollected<V8UnionBooleanOrConstrainBooleanParameters>(
           ConstraintCreator::Create(all_capabilities->backgroundBlur()[0])));
+  constraint_set->setEyeGazeCorrection(
+      MakeGarbageCollected<V8UnionBooleanOrConstrainBooleanParameters>(
+          ConstraintCreator::Create(all_capabilities->eyeGazeCorrection()[0])));
   constraint_set->setFaceFraming(
       MakeGarbageCollected<V8UnionBooleanOrConstrainBooleanParameters>(
           ConstraintCreator::Create(all_capabilities->faceFraming()[0])));
@@ -688,6 +700,7 @@ class ImageCaptureTest : public testing::Test {
   }
 
  protected:
+  test::TaskEnvironment task_environment_;
   Persistent<MockMediaStreamComponent> component_;
   Persistent<MockMediaStreamTrack> track_;
   Persistent<ImageCapture> image_capture_;
@@ -722,8 +735,10 @@ class ImageCaptureConstraintTest : public ImageCaptureTest {
     all_capabilities_->setZoom(CreateMediaSettingsRange("zo"));
     all_capabilities_->setTorch(true);
     all_capabilities_->setBackgroundBlur({true});
+    all_capabilities_->setEyeGazeCorrection({false});
     all_capabilities_->setFaceFraming({true, false});
     all_non_capabilities_->setBackgroundBlur({false});
+    all_non_capabilities_->setEyeGazeCorrection({true});
     default_settings_ = MediaTrackSettings::Create();
     default_settings_->setWhiteBalanceMode(
         all_capabilities_->whiteBalanceMode()[0]);
@@ -748,7 +763,8 @@ class ImageCaptureConstraintTest : public ImageCaptureTest {
     default_settings_->setTilt(RangeMean(all_capabilities_->tilt()));
     default_settings_->setZoom(RangeMean(all_capabilities_->zoom()));
     default_settings_->setTorch(false);
-    default_settings_->setBackgroundBlur(false);
+    default_settings_->setBackgroundBlur(true);
+    default_settings_->setEyeGazeCorrection(false);
     default_settings_->setFaceFraming(false);
     // Capabilities and default settings must be chosen so that at least
     // the constraint set {exposureCompensation: {max: ...}} with

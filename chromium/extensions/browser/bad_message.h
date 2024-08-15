@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_BROWSER_BAD_MESSAGE_H_
 #define EXTENSIONS_BROWSER_BAD_MESSAGE_H_
 
+#include "extensions/buildflags/buildflags.h"
+
 namespace content {
 class BrowserMessageFilter;
 class RenderProcessHost;
@@ -71,6 +73,7 @@ enum BadMessageReason {
   EMF_INVALID_OPEN_CHANNEL_TO_NATIVE_APP_FROM_NATIVE_HOST = 30,
   EFH_NO_BACKGROUND_HOST_FOR_FRAME = 31,
   LEGACY_IPC_MISMATCH = 32,
+  ER_SW_INVALID_LAZY_BACKGROUND_PARAM = 33,
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. ExtensionHost becomes EH) plus a unique description of the
   // reason. After making changes, you MUST update histograms.xml by running:
@@ -88,11 +91,13 @@ void ReceivedBadMessage(content::RenderProcessHost* host,
 // render process ids are ignored.
 void ReceivedBadMessage(int render_process_id, BadMessageReason reason);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
 // Called when a browser message filter receives a bad IPC message from a
 // renderer or other child process. Logs the event, records a histogram metric
 // for the |reason|, and terminates the process for |filter|.
 void ReceivedBadMessage(content::BrowserMessageFilter* filter,
                         BadMessageReason reason);
+#endif
 
 }  // namespace extensions::bad_message
 

@@ -94,16 +94,10 @@ class SpacingApplier {
     }
     DCHECK(last_item_);
 
-    // TODO(https://crbug.com/1463890): Using `const_cast` does not look good,
-    // consider refactoring.
-    // TODO(https://crbug.com/1463890): Instead of recreating a new
-    // `ShapeResult`, maybe we can reuse the `ShapeResult` and skip the applying
-    // text-space step.
-    ShapeResult* shape_result =
-        const_cast<ShapeResult*>(last_item_->TextShapeResult());
+    InlineItem* item = const_cast<InlineItem*>(last_item_);
+    ShapeResult* shape_result = item->CloneTextShapeResult();
     DCHECK(shape_result);
     shape_result->ApplyTextAutoSpacing(offsets_with_spacing_);
-    InlineItem* item = const_cast<InlineItem*>(last_item_);
     item->SetUnsafeToReuseShapeResult();
   }
 

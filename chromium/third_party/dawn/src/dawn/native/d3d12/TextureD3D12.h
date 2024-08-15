@@ -37,7 +37,6 @@
 #include "dawn/native/DawnNative.h"
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/PassResourceUsage.h"
-#include "dawn/native/d3d12/FenceD3D12.h"
 #include "dawn/native/d3d12/IntegerTypes.h"
 #include "dawn/native/d3d12/ResourceHeapAllocationD3D12.h"
 #include "dawn/native/d3d12/d3d12_platform.h"
@@ -49,24 +48,26 @@ class CommandRecordingContext;
 class Device;
 
 MaybeError ValidateTextureCanBeWrapped(ID3D12Resource* d3d12Resource,
-                                       const TextureDescriptor* descriptor);
+                                       const UnpackedPtr<TextureDescriptor>& descriptor);
 MaybeError ValidateVideoTextureCanBeShared(Device* device, DXGI_FORMAT textureFormat);
 
 class Texture final : public d3d::Texture {
   public:
-    static ResultOrError<Ref<Texture>> Create(Device* device, const TextureDescriptor* descriptor);
-    static ResultOrError<Ref<Texture>> CreateExternalImage(Device* device,
-                                                           const TextureDescriptor* descriptor,
-                                                           ComPtr<IUnknown> d3dTexture,
-                                                           std::vector<Ref<d3d::Fence>> waitFences,
-                                                           bool isSwapChainTexture,
-                                                           bool isInitialized);
     static ResultOrError<Ref<Texture>> Create(Device* device,
-                                              const TextureDescriptor* descriptor,
+                                              const UnpackedPtr<TextureDescriptor>& descriptor);
+    static ResultOrError<Ref<Texture>> CreateExternalImage(
+        Device* device,
+        const UnpackedPtr<TextureDescriptor>& descriptor,
+        ComPtr<IUnknown> d3dTexture,
+        std::vector<FenceAndSignalValue> waitFences,
+        bool isSwapChainTexture,
+        bool isInitialized);
+    static ResultOrError<Ref<Texture>> Create(Device* device,
+                                              const UnpackedPtr<TextureDescriptor>& descriptor,
                                               ComPtr<ID3D12Resource> d3d12Texture);
     static ResultOrError<Ref<Texture>> CreateFromSharedTextureMemory(
         SharedTextureMemory* memory,
-        const TextureDescriptor* descriptor);
+        const UnpackedPtr<TextureDescriptor>& descriptor);
 
     // For external textures, returns the Device internal fence's value associated with the last
     // ExecuteCommandLists that used this texture. If nullopt is returned, the texture wasn't used.
@@ -96,7 +97,7 @@ class Texture final : public d3d::Texture {
 
     void TrackUsageAndGetResourceBarrierForPass(CommandRecordingContext* commandContext,
                                                 std::vector<D3D12_RESOURCE_BARRIER>* barrier,
-                                                const TextureSubresourceUsage& textureUsages);
+                                                const TextureSubresourceSyncInfo& textureSyncInfos);
     void TransitionUsageAndGetResourceBarrier(CommandRecordingContext* commandContext,
                                               std::vector<D3D12_RESOURCE_BARRIER>* barrier,
                                               wgpu::TextureUsage usage,
@@ -114,12 +115,12 @@ class Texture final : public d3d::Texture {
   private:
     using Base = d3d::Texture;
 
-    Texture(Device* device, const TextureDescriptor* descriptor);
+    Texture(Device* device, const UnpackedPtr<TextureDescriptor>& descriptor);
     ~Texture() override;
 
     MaybeError InitializeAsInternalTexture();
     MaybeError InitializeAsExternalTexture(ComPtr<IUnknown> d3dTexture,
-                                           std::vector<Ref<d3d::Fence>> waitFences,
+                                           std::vector<FenceAndSignalValue> waitFences,
                                            bool isSwapChainTexture);
     MaybeError InitializeAsSwapChainTexture(ComPtr<ID3D12Resource> d3d12Texture);
 
@@ -159,7 +160,7 @@ class Texture final : public d3d::Texture {
     ResourceHeapAllocation mResourceAllocation;
 
     // TODO(dawn:1460): Encapsulate imported image fields e.g. std::unique_ptr<ExternalImportInfo>.
-    std::vector<Ref<d3d::Fence>> mWaitFences;
+    std::vector<FenceAndSignalValue> mWaitFences;
     std::optional<ExecutionSerial> mSignalFenceValue;
     bool mSwapChainTexture = false;
 
@@ -173,7 +174,7 @@ class TextureView final : public TextureViewBase {
     DXGI_FORMAT GetD3D12Format() const;
 
     const D3D12_SHADER_RESOURCE_VIEW_DESC& GetSRVDescriptor() const;
-    D3D12_RENDER_TARGET_VIEW_DESC GetRTVDescriptor() const;
+    D3D12_RENDER_TARGET_VIEW_DESC GetRTVDescriptor(uint32_t depthSlice = 0u) const;
     D3D12_DEPTH_STENCIL_VIEW_DESC GetDSVDescriptor(bool depthReadOnly, bool stencilReadOnly) const;
     D3D12_UNORDERED_ACCESS_VIEW_DESC GetUAVDescriptor() const;
 

@@ -76,7 +76,7 @@ static int byte_alignment(AV1_COMMON *const cm,
   return 0;
 }
 
-static uint32_t read_temporal_delimiter_obu() { return 0; }
+static uint32_t read_temporal_delimiter_obu(void) { return 0; }
 
 // Returns a boolean that indicates success.
 static int read_bitstream_level(AV1_LEVEL *seq_level_idx,

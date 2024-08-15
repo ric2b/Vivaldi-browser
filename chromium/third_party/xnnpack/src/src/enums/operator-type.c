@@ -14,15 +14,15 @@
 #include <xnnpack/operator-type.h>
 
 
-static const uint16_t offset[145] = {
-  0, 8, 22, 36, 50, 64, 78, 92, 119, 147, 175, 203, 230, 257, 289, 307, 325, 350, 376, 392, 408, 423, 438, 460, 483,
-  506, 529, 552, 575, 598, 621, 639, 662, 686, 704, 727, 751, 775, 799, 823, 847, 871, 895, 909, 924, 939, 965, 991,
-  1017, 1043, 1075, 1107, 1133, 1160, 1187, 1204, 1221, 1255, 1289, 1303, 1317, 1331, 1347, 1363, 1389, 1415, 1447,
-  1479, 1516, 1542, 1574, 1600, 1634, 1668, 1702, 1736, 1770, 1804, 1834, 1864, 1884, 1904, 1925, 1946, 1967, 1988,
-  2012, 2036, 2059, 2082, 2100, 2118, 2133, 2148, 2166, 2184, 2203, 2222, 2241, 2260, 2277, 2294, 2310, 2326, 2354,
-  2382, 2410, 2438, 2465, 2492, 2509, 2550, 2591, 2609, 2627, 2645, 2663, 2678, 2694, 2710, 2728, 2746, 2764, 2790,
-  2817, 2844, 2861, 2878, 2900, 2922, 2951, 2980, 2999, 3018, 3037, 3056, 3071, 3086, 3101, 3116, 3135, 3155, 3175,
-  3196, 3217
+static const uint16_t offset[155] = {
+  0, 8, 22, 36, 50, 64, 78, 92, 119, 147, 175, 203, 230, 257, 289, 321, 339, 357, 382, 408, 424, 440, 455, 470, 492,
+  515, 538, 561, 584, 607, 630, 653, 676, 694, 717, 740, 764, 782, 805, 829, 853, 877, 901, 936, 971, 995, 1019, 1043,
+  1057, 1072, 1087, 1113, 1139, 1165, 1191, 1223, 1255, 1281, 1308, 1335, 1352, 1369, 1403, 1437, 1451, 1465, 1479,
+  1495, 1511, 1537, 1563, 1595, 1627, 1664, 1701, 1738, 1775, 1801, 1833, 1859, 1893, 1927, 1961, 1995, 2029, 2063,
+  2093, 2123, 2143, 2163, 2184, 2205, 2226, 2247, 2271, 2295, 2318, 2341, 2359, 2377, 2392, 2407, 2425, 2443, 2462,
+  2481, 2500, 2519, 2536, 2553, 2569, 2585, 2613, 2641, 2669, 2697, 2724, 2751, 2768, 2785, 2826, 2867, 2885, 2903,
+  2921, 2939, 2954, 2970, 2986, 3004, 3022, 3040, 3066, 3093, 3120, 3137, 3154, 3176, 3198, 3227, 3256, 3275, 3294,
+  3313, 3332, 3347, 3362, 3377, 3392, 3411, 3431, 3451, 3471, 3492, 3513
 };
 
 static const char data[] =
@@ -39,6 +39,7 @@ static const char data[] =
   "Average Pooling (NHWC, QU8)\0"
   "Bankers Rounding (NC, F16)\0"
   "Bankers Rounding (NC, F32)\0"
+  "Batch Matrix Multiply (NC, F16)\0"
   "Batch Matrix Multiply (NC, F32)\0"
   "Ceiling (NC, F16)\0"
   "Ceiling (NC, F32)\0"
@@ -52,11 +53,13 @@ static const char data[] =
   "Constant Pad (ND, X16)\0"
   "Constant Pad (ND, X32)\0"
   "Convert (NC, F16, F32)\0"
+  "Convert (NC, F16, QD8)\0"
   "Convert (NC, F32, F16)\0"
   "Convert (NC, F32, QD8)\0"
   "Convert (NC, F32, QS8)\0"
   "Convert (NC, F32, QU8)\0"
   "Convert (NC, QS8)\0"
+  "Convert (NC, QS8, F16)\0"
   "Convert (NC, QS8, F32)\0"
   "Convert (NC, QS16, QS8)\0"
   "Convert (NC, QU8)\0"
@@ -65,6 +68,8 @@ static const char data[] =
   "Convolution (NCHW, F32)\0"
   "Convolution (NHWC, F16)\0"
   "Convolution (NHWC, F32)\0"
+  "Convolution (NHWC, QD8, F16, QC8W)\0"
+  "Convolution (NHWC, QD8, F32, QC8W)\0"
   "Convolution (NHWC, QC8)\0"
   "Convolution (NHWC, QS8)\0"
   "Convolution (NHWC, QU8)\0"
@@ -93,6 +98,9 @@ static const char data[] =
   "Fully Connected (NC, F32)\0"
   "Fully Connected (NC, F32, QC4W)\0"
   "Fully Connected (NC, F32, QC8W)\0"
+  "Fully Connected (NC, QD8, F16, QC8W)\0"
+  "Fully Connected (NC, QD8, F16, QC4W)\0"
+  "Fully Connected (NC, QD8, F32, QC4W)\0"
   "Fully Connected (NC, QD8, F32, QC8W)\0"
   "Fully Connected (NC, QS8)\0"
   "Fully Connected (NC, QS8, QC8W)\0"
@@ -135,6 +143,7 @@ static const char data[] =
   "Resize Bilinear (NHWC, F32)\0"
   "Resize Bilinear (NHWC, S8)\0"
   "Resize Bilinear (NHWC, U8)\0"
+  "RoPE (NTHC, F16)\0"
   "RoPE (NTHC, F32)\0"
   "Scaled Dot-Product Attention (NHTC, F16)\0"
   "Scaled Dot-Product Attention (NHTC, F32)\0"
@@ -168,6 +177,7 @@ static const char data[] =
   "Transpose (ND, X8)\0"
   "Transpose (ND, X16)\0"
   "Transpose (ND, X32)\0"
+  "Transpose (ND, X64)\0"
   "Truncation (NC, F16)\0"
   "Truncation (NC, F32)\0"
   "Unpooling (NHWC, X32)";

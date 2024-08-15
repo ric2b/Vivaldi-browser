@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/barrier_closure.h"
@@ -21,7 +22,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
@@ -34,7 +34,6 @@
 #include "components/services/storage/dom_storage/dom_storage_database.h"
 #include "components/services/storage/dom_storage/local_storage_database.pb.h"
 #include "components/services/storage/dom_storage/storage_area_impl.h"
-#include "components/services/storage/filesystem_proxy_factory.h"
 #include "components/services/storage/public/cpp/constants.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "storage/common/database/database_identifier.h"
@@ -66,7 +65,7 @@ namespace {
 // Temporary alias as this code moves incrementally into the storage namespace.
 using StorageAreaImpl = StorageAreaImpl;
 
-constexpr base::StringPiece kVersionKey = "VERSION";
+constexpr std::string_view kVersionKey = "VERSION";
 const uint8_t kMetaPrefix[] = {'M', 'E', 'T', 'A', ':'};
 const int64_t kMinSchemaVersion = 1;
 const int64_t kCurrentLocalStorageSchemaVersion = 1;
@@ -101,8 +100,8 @@ DomStorageDatabase::Key CreateMetaDataKey(
 absl::optional<blink::StorageKey> ExtractStorageKeyFromMetaDataKey(
     const DomStorageDatabase::Key& key) {
   DCHECK_GT(key.size(), std::size(kMetaPrefix));
-  const base::StringPiece key_string(reinterpret_cast<const char*>(key.data()),
-                                     key.size());
+  const std::string_view key_string(reinterpret_cast<const char*>(key.data()),
+                                    key.size());
   return blink::StorageKey::DeserializeForLocalStorage(
       key_string.substr(std::size(kMetaPrefix)));
 }

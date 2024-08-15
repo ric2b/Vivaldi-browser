@@ -3,13 +3,16 @@
 // found in the LICENSE file.
 
 #include "chromeos/ash/components/growth/campaigns_matcher.h"
+#include <memory>
 
 #include "ash/constants/ash_pref_names.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/version.h"
+#include "chromeos/ash/components/demo_mode/utils/dimensions_utils.h"
 #include "chromeos/ash/components/growth/campaigns_manager_client.h"
 #include "chromeos/ash/components/growth/campaigns_model.h"
+#include "chromeos/ash/components/growth/growth_metrics.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 
@@ -20,8 +23,9 @@ bool MatchPref(const base::Value::List* criterias,
                base::StringPiece pref_path,
                const PrefService* pref_service) {
   if (!pref_service) {
-    // TODO(b/299305911): This is unexpected. Add metrics to track this case.
     LOG(ERROR) << "Matching pref before pref service is available";
+    RecordCampaignsManagerError(
+        CampaignsManagerError::kUserPrefUnavailableAtMatching);
     return false;
   }
 
@@ -44,6 +48,31 @@ int GetMilestone() {
   return version_info::GetMajorVersionNumberAsInt();
 }
 
+// Matched if any of the given `scheduling_targetings` is matched.
+bool MatchSchedulings(const std::vector<std::unique_ptr<SchedulingTargeting>>&
+                          scheduling_targetings) {
+  const auto now = base::Time::Now();
+  for (const auto& scheduling_targeting : scheduling_targetings) {
+    if (scheduling_targeting->GetStartTime().ToDeltaSinceWindowsEpoch() <=
+            now.ToDeltaSinceWindowsEpoch() &&
+        scheduling_targeting->GetEndTime().ToDeltaSinceWindowsEpoch() >=
+            now.ToDeltaSinceWindowsEpoch()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool MatchSessionTargeting(const SessionTargeting& targeting) {
+  if (!targeting.IsValid()) {
+    // Campaigns matched if there is no demo mode targeting.
+    return true;
+  }
+
+  return MatchSchedulings(targeting.GetSchedulings());
+}
+
 }  // namespace
 
 CampaignsMatcher::CampaignsMatcher(CampaignsManagerClient* client,
@@ -51,10 +80,8 @@ CampaignsMatcher::CampaignsMatcher(CampaignsManagerClient* client,
     : client_(client), local_state_(local_state) {}
 CampaignsMatcher::~CampaignsMatcher() = default;
 
-void CampaignsMatcher::SetCampaigns(const CampaignsPerSlot* proactiveCampaigns,
-                                    const CampaignsPerSlot* reactiveCampaigns) {
-  proactive_campaigns_ = proactiveCampaigns;
-  reactive_campaigns_ = reactiveCampaigns;
+void CampaignsMatcher::SetCampaigns(const CampaignsPerSlot* campaigns) {
+  campaigns_ = campaigns;
 }
 
 void CampaignsMatcher::SetPrefs(PrefService* prefs) {
@@ -62,7 +89,7 @@ void CampaignsMatcher::SetPrefs(PrefService* prefs) {
 }
 
 const Campaign* CampaignsMatcher::GetCampaignBySlot(Slot slot) const {
-  auto* targeted_campaigns = GetCampaignsBySlot(reactive_campaigns_, slot);
+  auto* targeted_campaigns = GetCampaignsBySlot(campaigns_, slot);
   if (!targeted_campaigns) {
     return nullptr;
   }
@@ -71,6 +98,7 @@ const Campaign* CampaignsMatcher::GetCampaignBySlot(Slot slot) const {
     const auto* campaign = campaign_value.GetIfDict();
     if (!campaign) {
       LOG(ERROR) << "Invalid campaign.";
+      RecordCampaignsManagerError(CampaignsManagerError::kInvalidCampaign);
       continue;
     }
 
@@ -100,6 +128,24 @@ bool CampaignsMatcher::MatchDemoModeTier(
     }
   }
   return true;
+}
+
+bool CampaignsMatcher::MatchRetailers(
+    const base::Value::List* retailers) const {
+  if (!retailers) {
+    return true;
+  }
+
+  base::Value::List canonicalized_retailers;
+  for (auto& retailer : *retailers) {
+    if (retailer.is_string()) {
+      canonicalized_retailers.Append(
+          ash::demo_mode::CanonicalizeDimension(retailer.GetString()));
+    }
+  }
+
+  return MatchPref(&canonicalized_retailers, ash::prefs::kDemoModeRetailerId,
+                   local_state_);
 }
 
 bool CampaignsMatcher::MatchDemoModeAppVersion(
@@ -149,9 +195,8 @@ bool CampaignsMatcher::MaybeMatchDemoModeTargeting(
     return false;
   }
 
-  return MatchPref(targeting.GetStoreIds(), ash::prefs::kDemoModeStoreId,
-                   local_state_) &&
-         MatchPref(targeting.GetRetailers(), ash::prefs::kDemoModeRetailerId,
+  return MatchRetailers(targeting.GetRetailers()) &&
+         MatchPref(targeting.GetStoreIds(), ash::prefs::kDemoModeStoreId,
                    local_state_) &&
          MatchPref(targeting.GetCountries(), ash::prefs::kDemoModeCountry,
                    local_state_);
@@ -200,13 +245,14 @@ bool CampaignsMatcher::Matched(const Targetings* targetings) const {
   const auto* targeting = targetings->front().GetIfDict();
   if (!targeting) {
     // Targeting is invalid. Skip the current campaign.
-    // TODO(b/299305911): Add metrics to track when a targeting is invalid.
     LOG(ERROR) << "Invalid targeting.";
+    RecordCampaignsManagerError(CampaignsManagerError::kInvalidTargeting);
     return false;
   }
 
-  return MaybeMatchDemoModeTargeting(DemoModeTargeting(*targeting)) &&
-         MatchDeviceTargeting(DeviceTargeting(*targeting));
+  return MatchSessionTargeting(SessionTargeting(targeting)) &&
+         MaybeMatchDemoModeTargeting(DemoModeTargeting(targeting)) &&
+         MatchDeviceTargeting(DeviceTargeting(targeting));
 }
 
 }  // namespace growth

@@ -15,7 +15,8 @@ export const g = makeTestGroup(Fixture);
 /** Adapter preference identifier to option. */
 const kAdapterTypeOptions: {
   readonly [k in GPUPowerPreference | 'fallback']: GPURequestAdapterOptions;
-} = /* prettier-ignore */ {
+} =
+  /* prettier-ignore */ {
   'low-power':        { powerPreference:        'low-power', forceFallbackAdapter: false },
   'high-performance': { powerPreference: 'high-performance', forceFallbackAdapter: false },
   'fallback':         { powerPreference:          undefined, forceFallbackAdapter:  true },

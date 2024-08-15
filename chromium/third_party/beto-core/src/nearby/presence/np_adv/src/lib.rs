@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 //! Serialization and deserialization for v0 (legacy) and v1 (extended) Nearby Presence
 //! advertisements.
 //!
@@ -18,45 +19,58 @@
 //! deserialization scenarios.
 
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
+#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 
-extern crate alloc;
-extern crate core;
 use crate::{
     credential::{
-        source::{BothCredentialSource, CredentialSource},
-        v0::V0CryptoMaterial,
-        MatchedCredFromCred, MatchedCredential, V0Credential, V1Credential,
+        book::CredentialBook, v0::V0DiscoveryCryptoMaterial, v0::V0, v1::V1DiscoveryCryptoMaterial,
+        v1::V1, DiscoveryCryptoMaterial, MatchedCredential, ProtocolVersion,
+        ReferencedMatchedCredential,
     },
+    deserialization_arena::ArenaOutOfSpace,
     extended::deserialize::{
-        parse_sections, CiphertextSection, DataElements, DecryptedSection, IntermediateSection,
-        PlaintextSection, Section, SectionDeserializeError,
+        encrypted_section::*, parse_sections, CiphertextSection, DataElementParseError,
+        DataElementParsingIterator, DecryptedSection, IntermediateSection, PlaintextSection,
+        Section, SectionDeserializeError,
     },
     legacy::deserialize::{
         DecryptError, DecryptedAdvContents, IntermediateAdvContents, PlaintextAdvContents,
     },
 };
+
+#[cfg(any(test, feature = "alloc"))]
+extern crate alloc;
+#[cfg(any(test, feature = "alloc"))]
 use alloc::vec::Vec;
+
+use array_vec::ArrayVecOption;
 #[cfg(feature = "devtools")]
 use array_view::ArrayView;
-use core::{fmt::Debug, marker};
+use core::fmt::Debug;
 use crypto_provider::CryptoProvider;
+use deserialization_arena::{DeserializationArena, DeserializationArenaAllocator};
 #[cfg(feature = "devtools")]
 use extended::NP_ADV_MAX_SECTION_LEN;
+use extended::NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT;
 use legacy::{data_elements::DataElementDeserializeError, deserialize::AdvDeserializeError};
 use nom::{combinator, number};
+pub use strum;
+
+mod array_vec;
 pub mod credential;
 pub mod de_type;
 #[cfg(test)]
 mod deser_v0_tests;
 #[cfg(test)]
 mod deser_v1_tests;
+pub mod deserialization_arena;
 pub mod extended;
+pub mod filter;
 #[cfg(test)]
 mod header_parse_tests;
 pub mod legacy;
 pub mod shared_data;
+
 /// Canonical form of NP's service UUID.
 ///
 /// Note that UUIDs are encoded in BT frames in little-endian order, so these bytes may need to be
@@ -65,72 +79,25 @@ pub const NP_SVC_UUID: [u8; 2] = [0xFC, 0xF1];
 
 /// Parse, deserialize, decrypt, and validate a complete NP advertisement (the entire contents of
 /// the service data for the NP UUID).
-pub fn deserialize_advertisement<'s, C0, C1, M, S, P>(
-    adv: &[u8],
-    cred_source: &'s S,
-) -> Result<DeserializedAdvertisement<'s, M>, AdvDeserializationError>
+pub fn deserialize_advertisement<'adv, 'cred, B, P>(
+    arena: DeserializationArena<'adv>,
+    adv: &'adv [u8],
+    cred_book: &'cred B,
+) -> Result<DeserializedAdvertisement<'adv, B::Matched>, AdvDeserializationError>
 where
-    C0: V0Credential<Matched<'s> = M> + 's,
-    C1: V1Credential<Matched<'s> = M> + 's,
-    M: MatchedCredential<'s>,
-    S: BothCredentialSource<C0, C1>,
+    B: CredentialBook<'cred>,
     P: CryptoProvider,
 {
     let (remaining, header) =
         parse_adv_header(adv).map_err(|_e| AdvDeserializationError::HeaderParseError)?;
     match header {
-        AdvHeader::V1(header) => {
-            deser_decrypt_v1::<C1, S::V1Source, P>(cred_source.v1(), remaining, header)
-                .map(DeserializedAdvertisement::V1)
+        AdvHeader::V0 => {
+            deser_decrypt_v0::<B, P>(cred_book, remaining).map(DeserializedAdvertisement::V0)
         }
-        AdvHeader::V0 => deser_decrypt_v0::<C0, S::V0Source, P>(cred_source.v0(), remaining)
-            .map(DeserializedAdvertisement::V0),
+        AdvHeader::V1(header) => deser_decrypt_v1::<B, P>(arena, cred_book, remaining, header)
+            .map(DeserializedAdvertisement::V1),
     }
 }
-
-/// Parse, deserialize, decrypt, and validate a complete V0 NP advertisement (the entire contents
-/// of the service data for the NP UUID). If the advertisement version header does not match V0,
-/// this method will return an [`AdvDeserializationError::HeaderParseError`]
-pub fn deserialize_v0_advertisement<'s, C, S, P>(
-    adv: &[u8],
-    cred_source: &'s S,
-) -> Result<V0AdvertisementContents<'s, C>, AdvDeserializationError>
-where
-    C: V0Credential,
-    S: CredentialSource<C>,
-    P: CryptoProvider,
-{
-    let (remaining, header) =
-        parse_adv_header(adv).map_err(|_e| AdvDeserializationError::HeaderParseError)?;
-
-    match header {
-        AdvHeader::V0 => deser_decrypt_v0::<C, S, P>(cred_source, remaining),
-        AdvHeader::V1(_) => Err(AdvDeserializationError::HeaderParseError),
-    }
-}
-
-/// Parse, deserialize, decrypt, and validate a complete V1 NP advertisement (the entire contents
-/// of the service data for the NP UUID). If the advertisement version header does not match V1,
-/// this method will return an [`AdvDeserializationError::HeaderParseError`]
-pub fn deserialize_v1_advertisement<'s, C, S, P>(
-    adv: &[u8],
-    cred_source: &'s S,
-) -> Result<V1AdvertisementContents<'s, C>, AdvDeserializationError>
-where
-    C: V1Credential,
-    S: CredentialSource<C>,
-    P: CryptoProvider,
-{
-    let (remaining, header) =
-        parse_adv_header(adv).map_err(|_e| AdvDeserializationError::HeaderParseError)?;
-
-    match header {
-        AdvHeader::V0 => Err(AdvDeserializationError::HeaderParseError),
-        AdvHeader::V1(header) => deser_decrypt_v1::<C, S, P>(cred_source, remaining, header),
-    }
-}
-
-type V1AdvertisementContents<'s, C> = V1AdvContents<'s, MatchedCredFromCred<'s, C>>;
 
 /// The encryption scheme used for a V1 advertisement.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,154 +121,281 @@ pub enum AdvDecryptionError {
 }
 
 /// Decrypt, but do not further deserialize the v1 bytes, intended for developer tooling uses only.
-/// Production uses should use [deserialize_v1_advertisement] instead, which deserializes to a
+/// Production uses should use [deserialize_advertisement] instead, which deserializes to a
 /// structured format and provides extra type safety.
 #[cfg(feature = "devtools")]
-pub fn deser_decrypt_v1_section_bytes_for_dev_tools<S, V1, P>(
-    cred_source: &S,
+pub fn deser_decrypt_v1_section_bytes_for_dev_tools<'adv, 'cred, B, P>(
+    arena: DeserializationArena<'adv>,
+    cred_book: &'cred B,
     header_byte: u8,
-    section_bytes: &[u8],
+    section_bytes: &'adv [u8],
 ) -> Result<(ArrayView<u8, NP_ADV_MAX_SECTION_LEN>, V1EncryptionScheme), AdvDecryptionError>
 where
-    S: CredentialSource<V1>,
-    V1: V1Credential,
+    B: CredentialBook<'cred>,
     P: CryptoProvider,
 {
     let header = V1Header { header_byte };
     let int_sections =
-        parse_sections(&header, section_bytes).map_err(|_| AdvDecryptionError::ParseError)?;
+        parse_sections(header, section_bytes).map_err(|_| AdvDecryptionError::ParseError)?;
     let cipher_section = match &int_sections[0] {
         IntermediateSection::Plaintext(_) => Err(AdvDecryptionError::InputNotEncrypted)?,
         IntermediateSection::Ciphertext(section) => section,
     };
 
-    use crate::credential::v1::V1CryptoMaterial;
-    use core::borrow::Borrow;
+    let mut allocator = arena.into_allocator();
+    for (crypto_material, _) in cred_book.v1_iter() {
+        if let Some(plaintext) = cipher_section
+            .try_resolve_identity_and_decrypt::<_, P>(&mut allocator, &crypto_material)
+        {
+            let pt = plaintext.expect(concat!(
+                "Should not run out of space because DeserializationArenaAllocator is big ",
+                "enough to hold a single advertisement, and we exit immediately upon ",
+                "successful decryption",
+            ));
 
-    for cred in cred_source.iter() {
-        let crypto_material = cred.crypto_material();
-
-        match cipher_section {
-            CiphertextSection::SignatureEncryptedIdentity(encrypted_section) => {
-                let identity_resolution_material =
-                    crypto_material.signed_identity_resolution_material::<P>();
-                match encrypted_section.try_decrypt::<P>(identity_resolution_material.borrow()) {
-                    Ok(plaintext) => return Ok((plaintext, V1EncryptionScheme::Signature)),
-                    Err(_) => continue,
-                }
-            }
-            CiphertextSection::MicEncryptedIdentity(encrypted_section) => {
-                let identity_resolution_material =
-                    crypto_material.unsigned_identity_resolution_material::<P>();
-                let verification_material = crypto_material.unsigned_verification_material::<P>();
-                match encrypted_section
-                    .try_decrypt::<P>(identity_resolution_material.borrow(), &verification_material)
-                {
-                    Ok(plaintext) => return Ok((plaintext, V1EncryptionScheme::Mic)),
-                    Err(_) => continue,
-                }
-            }
+            let encryption_scheme = match cipher_section {
+                CiphertextSection::SignatureEncryptedIdentity(_) => V1EncryptionScheme::Signature,
+                CiphertextSection::MicEncryptedIdentity(_) => V1EncryptionScheme::Mic,
+            };
+            return Ok((pt, encryption_scheme));
         }
     }
     Err(AdvDecryptionError::NoMatchingCredentials)
 }
 
-/// Deserialize and decrypt the contents of a v1 adv after the version header
-fn deser_decrypt_v1<'s, C, S, P>(
-    cred_source: &'s S,
-    remaining: &[u8],
-    header: V1Header,
-) -> Result<V1AdvertisementContents<'s, C>, AdvDeserializationError>
-where
-    C: V1Credential,
-    S: CredentialSource<C>,
-    P: CryptoProvider,
-{
-    let int_sections =
-        parse_sections(&header, remaining).map_err(|_| AdvDeserializationError::ParseError {
-            details_hazmat: AdvDeserializationErrorDetailsHazmat::AdvertisementDeserializeError,
-        })?;
-    let mut sections = Vec::new();
-    let mut to_decrypt = Vec::new();
-    // keep track of ordering for later sorting
-    for (idx, s) in int_sections.into_iter().enumerate() {
-        match s {
-            IntermediateSection::Plaintext(p) => {
-                sections.push((idx, V1DeserializedSection::Plaintext(p)))
+/// A ciphertext section which has not yet been
+/// resolved to an identity, but for which some
+/// `SectionIdentityResolutionContents` have been
+/// pre-computed for speedy identity-resolution.
+struct ResolvableCiphertextSection<'a> {
+    identity_resolution_contents: SectionIdentityResolutionContents,
+    ciphertext_section: CiphertextSection<'a>,
+}
+
+/// A collection of possibly-deserialized sections which are separated according
+/// to whether/not they're intermediate encrypted sections (of either type)
+/// or fully-deserialized, with a running count of the number of malformed sections.
+/// Each potentially-valid section is tagged with a 0-based index derived from the original
+/// section ordering as they appeared within the original advertisement to ensure
+/// that the fully-deserialized advertisement may be correctly reconstructed.
+struct SectionsInProcessing<'adv, M: MatchedCredential> {
+    deserialized_sections: ArrayVecOption<
+        (usize, V1DeserializedSection<'adv, M>),
+        { NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT },
+    >,
+    encrypted_sections: ArrayVecOption<
+        (usize, ResolvableCiphertextSection<'adv>),
+        { NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT },
+    >,
+    malformed_sections_count: usize,
+}
+
+impl<'adv, M: MatchedCredential> SectionsInProcessing<'adv, M> {
+    /// Attempts to parse a V1 advertisement's contents after the version header
+    /// into a collection of not-yet-fully-deserialized sections which may
+    /// require credentials to be decrypted.
+    fn from_advertisement_contents<C: CryptoProvider>(
+        header: V1Header,
+        remaining: &'adv [u8],
+    ) -> Result<Self, AdvDeserializationError> {
+        let int_sections =
+            parse_sections(header, remaining).map_err(|_| AdvDeserializationError::ParseError {
+                details_hazmat: AdvDeserializationErrorDetailsHazmat::AdvertisementDeserializeError,
+            })?;
+        let mut deserialized_sections = ArrayVecOption::default();
+        let mut encrypted_sections = ArrayVecOption::default();
+        // keep track of ordering for later sorting during `self.finished_with_decryption_attempts()`.
+        for (idx, s) in int_sections.into_iter().enumerate() {
+            match s {
+                IntermediateSection::Plaintext(p) => {
+                    deserialized_sections.push((idx, V1DeserializedSection::Plaintext(p)))
+                }
+                IntermediateSection::Ciphertext(ciphertext_section) => {
+                    let identity_resolution_contents =
+                        ciphertext_section.contents().compute_identity_resolution_contents::<C>();
+                    let resolvable_ciphertext_section = ResolvableCiphertextSection {
+                        identity_resolution_contents,
+                        ciphertext_section,
+                    };
+                    encrypted_sections.push((idx, resolvable_ciphertext_section));
+                }
             }
-            IntermediateSection::Ciphertext(c) => to_decrypt.push((idx, c)),
         }
+        Ok(Self { deserialized_sections, encrypted_sections, malformed_sections_count: 0 })
     }
-    let mut invalid_sections = 0;
-    // Hot loop
-    // We assume that iterating credentials is more expensive than iterating sections
-    for cred in cred_source.iter() {
+
+    /// Returns true iff we have resolved all sections to identities.
+    fn resolved_all_identities(&self) -> bool {
+        self.encrypted_sections.is_empty()
+    }
+
+    /// Runs through all of the encrypted sections in processing, and attempts
+    /// to use the given credential to decrypt them. Suitable for situations
+    /// where iterating over credentials is relatively slow compared to
+    /// the cost of iterating over sections-in-memory.
+    fn try_decrypt_with_credential<C: V1DiscoveryCryptoMaterial, P: CryptoProvider>(
+        &mut self,
+        arena: &mut DeserializationArenaAllocator<'adv>,
+        crypto_material: C,
+        match_data: M,
+    ) -> Result<(), ArenaOutOfSpace> {
         let mut i = 0;
-        while i < to_decrypt.len() {
-            let (section_idx, c): &(usize, CiphertextSection) = &to_decrypt[i];
-            match c.try_deserialize::<C, P>(cred) {
-                Ok(s) => {
-                    sections.push((
-                        *section_idx,
-                        V1DeserializedSection::Decrypted(WithMatchedCredential::new(
-                            cred.matched(),
-                            s,
-                        )),
-                    ));
-                    // we don't care about maintaining order, so use O(1) remove
-                    to_decrypt.swap_remove(i);
+        while i < self.encrypted_sections.len() {
+            let (section_idx, section): &(usize, ResolvableCiphertextSection) =
+                &self.encrypted_sections[i];
+            // Fast-path: Check for an identity match, ignore if there's no identity match.
+            let identity_resolution_contents = &section.identity_resolution_contents;
+            let identity_resolution_material = match &section.ciphertext_section {
+                CiphertextSection::MicEncryptedIdentity(_) => crypto_material
+                    .unsigned_identity_resolution_material::<P>()
+                    .into_raw_resolution_material(),
+                CiphertextSection::SignatureEncryptedIdentity(_) => crypto_material
+                    .signed_identity_resolution_material::<P>()
+                    .into_raw_resolution_material(),
+            };
+            match identity_resolution_contents.try_match::<P>(&identity_resolution_material) {
+                None => {
+                    // Try again with another section
+                    i += 1;
+                    continue;
+                }
+                Some(identity_match) => {
+                    // The identity matched, so now we need to more closely scrutinize
+                    // the provided ciphertext. Try to decrypt and parse the section.
+                    let metadata_nonce = crypto_material.metadata_nonce::<P>();
+                    let deserialization_result = match &section.ciphertext_section {
+                        CiphertextSection::SignatureEncryptedIdentity(c) => c
+                            .try_deserialize(
+                                arena,
+                                identity_match,
+                                &crypto_material.signed_verification_material::<P>(),
+                            )
+                            .map_err(SectionDeserializeError::from),
+                        CiphertextSection::MicEncryptedIdentity(c) => c
+                            .try_deserialize(
+                                arena,
+                                identity_match,
+                                &crypto_material.unsigned_verification_material::<P>(),
+                            )
+                            .map_err(SectionDeserializeError::from),
+                    };
+                    match deserialization_result {
+                        Ok(s) => {
+                            self.deserialized_sections.push((
+                                *section_idx,
+                                V1DeserializedSection::Decrypted(WithMatchedCredential::new(
+                                    match_data.clone(),
+                                    metadata_nonce,
+                                    s,
+                                )),
+                            ));
+                        }
+                        Err(e) => match e {
+                            SectionDeserializeError::IncorrectCredential => {
+                                // keep it around to try with another credential
+                                i += 1;
+                                continue;
+                            }
+                            SectionDeserializeError::ParseError => {
+                                // the credential worked, but the section itself was bogus
+                                self.malformed_sections_count += 1;
+                            }
+                            SectionDeserializeError::ArenaOutOfSpace => {
+                                return Err(ArenaOutOfSpace)
+                            }
+                        },
+                    }
+                    // By default, if we have an identity match, assume that decrypting the section worked,
+                    // or that the section was somehow invalid.
+                    // We don't care about maintaining order, so use O(1) remove
+                    let _ = self.encrypted_sections.swap_remove(i);
                     // don't advance i -- it now points to a new element
                 }
-                Err(e) => match e {
-                    SectionDeserializeError::IncorrectCredential => {
-                        // keep it around to try with another credential
-                        i += 1;
-                    }
-                    SectionDeserializeError::ParseError => {
-                        // the credential worked, but the section itself was bogus, so drop
-                        // it
-                        invalid_sections += 1;
-                        to_decrypt.swap_remove(i);
-                    }
-                },
             }
         }
-        if to_decrypt.is_empty() {
-            // no need to consider the remaining credentials
+        Ok(())
+    }
+
+    /// Packages the current state of the deserialization process into a
+    /// `V1AdvertisementContents` representing a fully-deserialized V1 advertisement.
+    ///
+    /// This method should only be called after all sections were either successfully
+    /// decrypted or have had all relevant credentials checked against
+    /// them without obtaining a successful identity-match and/or subsequent
+    /// cryptographic verification of the section contents.
+    fn finished_with_decryption_attempts(mut self) -> V1AdvertisementContents<'adv, M> {
+        // Invalid sections = malformed sections + number of encrypted sections
+        // which we could not manage to decrypt with any of our credentials
+        let invalid_sections_count = self.malformed_sections_count + self.encrypted_sections.len();
+
+        // Put the deserialized sections back into the original ordering for
+        // the returned `V1AdvertisementContents`
+        // (Note: idx is unique, so unstable sort is ok)
+        self.deserialized_sections.sort_unstable_by_key(|(idx, _section)| *idx);
+        let ordered_sections = self.deserialized_sections.into_iter().map(|(_idx, s)| s).collect();
+        V1AdvertisementContents::new(ordered_sections, invalid_sections_count)
+    }
+}
+
+/// Deserialize and decrypt the contents of a v1 adv after the version header
+fn deser_decrypt_v1<'adv, 'cred, B, P>(
+    arena: DeserializationArena<'adv>,
+    cred_book: &'cred B,
+    remaining: &'adv [u8],
+    header: V1Header,
+) -> Result<V1AdvertisementContents<'adv, B::Matched>, AdvDeserializationError>
+where
+    B: CredentialBook<'cred>,
+    P: CryptoProvider,
+{
+    let mut sections_in_processing =
+        SectionsInProcessing::<'_, B::Matched>::from_advertisement_contents::<P>(
+            header, remaining,
+        )?;
+
+    let mut allocator = arena.into_allocator();
+
+    // Hot loop
+    // We assume that iterating credentials is more expensive than iterating sections
+    for (crypto_material, match_data) in cred_book.v1_iter() {
+        sections_in_processing
+            .try_decrypt_with_credential::<_, P>(&mut allocator, crypto_material, match_data)
+            .expect(concat!(
+                "Should not run out of space because DeserializationArenaAllocator is big ",
+                "enough to hold a single advertisement, and we exit immediately upon ",
+                "successful decryption",
+            ));
+        if sections_in_processing.resolved_all_identities() {
+            // No need to consider the other credentials
             break;
         }
     }
-    invalid_sections += to_decrypt.len();
-    // decryption may produce sections out of order
-    sections.sort_by_key(|(idx, _section)| *idx);
-    Ok(V1AdvContents::new(sections.into_iter().map(|(_idx, s)| s).collect(), invalid_sections))
+    Ok(sections_in_processing.finished_with_decryption_attempts())
 }
 
-type V0AdvertisementContents<'s, C> = V0AdvContents<'s, MatchedCredFromCred<'s, C>>;
-
 /// Deserialize and decrypt the contents of a v0 adv after the version header
-fn deser_decrypt_v0<'s, C, S, P>(
-    cred_source: &'s S,
-    remaining: &[u8],
-) -> Result<V0AdvertisementContents<'s, C>, AdvDeserializationError>
+fn deser_decrypt_v0<'adv, 'cred, B, P>(
+    cred_book: &'cred B,
+    remaining: &'adv [u8],
+) -> Result<V0AdvertisementContents<'adv, B::Matched>, AdvDeserializationError>
 where
-    C: V0Credential,
-    S: CredentialSource<C>,
+    B: CredentialBook<'cred>,
     P: CryptoProvider,
 {
     let contents = legacy::deserialize::deserialize_adv_contents::<P>(remaining)?;
-    return match contents {
-        IntermediateAdvContents::Plaintext(p) => Ok(V0AdvContents::Plaintext(p)),
+    match contents {
+        IntermediateAdvContents::Plaintext(p) => Ok(V0AdvertisementContents::Plaintext(p)),
         IntermediateAdvContents::Ciphertext(c) => {
-            for cred in cred_source.iter() {
-                let cm = cred.crypto_material();
-                let ldt = cm.ldt_adv_cipher::<P>();
+            for (crypto_material, matched) in cred_book.v0_iter() {
+                let ldt = crypto_material.ldt_adv_cipher::<P>();
                 match c.try_decrypt(&ldt) {
                     Ok(c) => {
-                        return Ok(V0AdvContents::Decrypted(WithMatchedCredential::new(
-                            cred.matched(),
+                        let metadata_nonce = crypto_material.metadata_nonce::<P>();
+                        return Ok(V0AdvertisementContents::Decrypted(WithMatchedCredential::new(
+                            matched,
+                            metadata_nonce,
                             c,
-                        )))
+                        )));
                     }
                     Err(e) => match e {
                         DecryptError::DecryptOrVerifyError => continue,
@@ -311,10 +405,11 @@ where
                     },
                 }
             }
-            Ok(V0AdvContents::NoMatchingCredentials)
+            Ok(V0AdvertisementContents::NoMatchingCredentials)
         }
-    };
+    }
 }
+
 /// Parse a NP advertisement header.
 ///
 /// This can be used on all versions of advertisements since it's the header that determines the
@@ -338,88 +433,204 @@ fn parse_adv_header(adv: &[u8]) -> nom::IResult<&[u8], AdvHeader> {
         _ => unreachable!(),
     }
 }
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum AdvHeader {
     V0,
     V1(V1Header),
 }
+
 /// An NP advertisement with its header parsed.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
-pub enum DeserializedAdvertisement<'m, M: MatchedCredential<'m>> {
+pub enum DeserializedAdvertisement<'adv, M: MatchedCredential> {
     /// V0 header has all reserved bits, so there is no data to represent other than the version
     /// itself.
-    V0(V0AdvContents<'m, M>),
+    V0(V0AdvertisementContents<'adv, M>),
     /// V1 advertisement
-    V1(V1AdvContents<'m, M>),
+    V1(V1AdvertisementContents<'adv, M>),
 }
+
+impl<'adv, M: MatchedCredential> DeserializedAdvertisement<'adv, M> {
+    /// Attempts to cast this deserialized advertisement into the `V0AdvertisementContents`
+    /// variant. If the underlying advertisement is not V0, this will instead return `None`.
+    pub fn into_v0(self) -> Option<V0AdvertisementContents<'adv, M>> {
+        match self {
+            Self::V0(x) => Some(x),
+            _ => None,
+        }
+    }
+    /// Attempts to cast this deserialized advertisement into the `V1AdvertisementContents`
+    /// variant. If the underlying advertisement is not V1, this will instead return `None`.
+    pub fn into_v1(self) -> Option<V1AdvertisementContents<'adv, M>> {
+        match self {
+            Self::V1(x) => Some(x),
+            _ => None,
+        }
+    }
+}
+
 /// The contents of a deserialized and decrypted V1 advertisement.
 #[derive(Debug, PartialEq, Eq)]
-pub struct V1AdvContents<'m, M: MatchedCredential<'m>> {
-    sections: Vec<V1DeserializedSection<'m, M>>,
+pub struct V1AdvertisementContents<'adv, M: MatchedCredential> {
+    sections: ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT>,
     invalid_sections: usize,
 }
-impl<'m, M: MatchedCredential<'m>> V1AdvContents<'m, M> {
-    fn new(sections: Vec<V1DeserializedSection<'m, M>>, invalid_sections: usize) -> Self {
+
+impl<'adv, M: MatchedCredential> V1AdvertisementContents<'adv, M> {
+    fn new(
+        sections: ArrayVecOption<
+            V1DeserializedSection<'adv, M>,
+            NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
+        >,
+        invalid_sections: usize,
+    ) -> Self {
         Self { sections, invalid_sections }
     }
+
     /// Destructures this V1 advertisement into just the sections
     /// which could be successfully deserialized and decrypted
-    pub fn into_valid_sections(self) -> Vec<V1DeserializedSection<'m, M>> {
+    pub fn into_sections(
+        self,
+    ) -> ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT> {
         self.sections
     }
+
     /// The sections that could be successfully deserialized and decrypted
-    pub fn sections(&self) -> impl Iterator<Item = &V1DeserializedSection<M>> {
+    pub fn sections(&self) -> impl ExactSizeIterator<Item = &V1DeserializedSection<M>> {
         self.sections.iter()
     }
+
     /// The number of sections that could not be parsed or decrypted.
     pub fn invalid_sections_count(&self) -> usize {
         self.invalid_sections
     }
 }
+
 /// Advertisement content that was either already plaintext or has been decrypted.
 #[derive(Debug, PartialEq, Eq)]
-pub enum V0AdvContents<'m, M: MatchedCredential<'m>> {
+pub enum V0AdvertisementContents<'adv, M: MatchedCredential> {
     /// Contents of an originally plaintext advertisement
-    Plaintext(PlaintextAdvContents),
+    Plaintext(PlaintextAdvContents<'adv>),
     /// Contents that was ciphertext in the original advertisement, and has been decrypted
     /// with the credential in the [MatchedCredential]
-    Decrypted(WithMatchedCredential<'m, M, DecryptedAdvContents>),
+    Decrypted(WithMatchedCredential<M, DecryptedAdvContents>),
     /// The advertisement was encrypted, but no credentials matched
     NoMatchingCredentials,
 }
+
 /// Advertisement content that was either already plaintext or has been decrypted.
 #[derive(Debug, PartialEq, Eq)]
-pub enum V1DeserializedSection<'m, M: MatchedCredential<'m>> {
+pub enum V1DeserializedSection<'adv, M: MatchedCredential> {
     /// Section that was plaintext in the original advertisement
-    Plaintext(PlaintextSection),
+    Plaintext(PlaintextSection<'adv>),
     /// Section that was ciphertext in the original advertisement, and has been decrypted
     /// with the credential in the [MatchedCredential]
-    Decrypted(WithMatchedCredential<'m, M, DecryptedSection>),
+    Decrypted(WithMatchedCredential<M, DecryptedSection<'adv>>),
 }
-impl<'m, M> Section for V1DeserializedSection<'m, M>
+
+impl<'adv, M> Section<'adv, DataElementParseError> for V1DeserializedSection<'adv, M>
 where
-    M: MatchedCredential<'m>,
+    M: MatchedCredential,
 {
-    type Iterator<'d>  = DataElements<'d> where Self: 'd;
-    fn data_elements(&'_ self) -> Self::Iterator<'_> {
+    type Iterator = DataElementParsingIterator<'adv>;
+
+    fn iter_data_elements(&self) -> Self::Iterator {
         match self {
-            V1DeserializedSection::Plaintext(p) => p.data_elements(),
-            V1DeserializedSection::Decrypted(d) => d.contents.data_elements(),
+            V1DeserializedSection::Plaintext(p) => p.iter_data_elements(),
+            V1DeserializedSection::Decrypted(d) => d.contents.iter_data_elements(),
         }
     }
 }
-/// Decrypted advertisement content with the [MatchedCredential] from the credential that decrypted
-/// it.
-#[derive(Debug, PartialEq, Eq)]
-pub struct WithMatchedCredential<'m, M: MatchedCredential<'m>, T> {
-    matched: M,
-    contents: T,
-    // the compiler sees 'm as unused
-    marker: marker::PhantomData<&'m ()>,
+
+/// 16-byte metadata keys, as employed for metadata decryption.
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+pub struct MetadataKey(pub [u8; 16]);
+
+impl AsRef<[u8]> for MetadataKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
-impl<'m, M: MatchedCredential<'m>, T> WithMatchedCredential<'m, M, T> {
-    fn new(matched: M, contents: T) -> Self {
-        Self { matched, contents, marker: marker::PhantomData }
+
+/// Common trait to deserialized, decrypted V0 advs and V1 sections which
+/// exposes relevant data about matched identities.
+pub trait HasIdentityMatch {
+    /// The protocol version for which this advertisement
+    /// content has an identity-match.
+    type Version: ProtocolVersion;
+
+    /// Gets the decrypted plaintext version-specific
+    /// metadata key for the associated identity.
+    fn metadata_key(&self) -> <Self::Version as ProtocolVersion>::MetadataKey;
+}
+
+impl HasIdentityMatch for legacy::ShortMetadataKey {
+    type Version = V0;
+    fn metadata_key(&self) -> Self {
+        *self
+    }
+}
+
+impl HasIdentityMatch for MetadataKey {
+    type Version = V1;
+    fn metadata_key(&self) -> Self {
+        *self
+    }
+}
+
+#[cfg(any(test, feature = "alloc"))]
+/// Type for errors from [`WithMatchedCredential#decrypt_metadata`]
+#[derive(Debug)]
+pub enum MatchedMetadataDecryptionError<M: MatchedCredential> {
+    /// Retrieving the encrypted metadata failed for one reason
+    /// or another, so we didn't get a chance to try decryption.
+    RetrievalFailed(<M as MatchedCredential>::EncryptedMetadataFetchError),
+    /// The encrypted metadata could be retrieved, but it did
+    /// not successfully decrypt against the matched identity.
+    /// This could be an indication of data corruption or
+    /// of malformed crypto on the sender-side.
+    DecryptionFailed,
+}
+
+/// Decrypted advertisement content with the [MatchedCredential] from the credential that decrypted
+/// it, along with any other information which is relevant to the identity-match.
+#[derive(Debug, PartialEq, Eq)]
+pub struct WithMatchedCredential<M: MatchedCredential, T: HasIdentityMatch> {
+    matched: M,
+    /// The 12-byte metadata nonce as derived from the key-seed HKDF
+    /// to be used for decrypting the encrypted metadata in the attached
+    /// matched-credential.
+    metadata_nonce: [u8; 12],
+    contents: T,
+}
+impl<'a, M: MatchedCredential + Clone, T: HasIdentityMatch>
+    WithMatchedCredential<ReferencedMatchedCredential<'a, M>, T>
+{
+    /// Clones the referenced match-data to update this container
+    /// so that the match-data is owned, rather than borrowed.
+    pub fn clone_match_data(self) -> WithMatchedCredential<M, T> {
+        let matched = self.matched.as_ref().clone();
+        let metadata_nonce = self.metadata_nonce;
+        let contents = self.contents;
+
+        WithMatchedCredential { matched, metadata_nonce, contents }
+    }
+}
+impl<M: MatchedCredential, T: HasIdentityMatch> WithMatchedCredential<M, T> {
+    fn new(matched: M, metadata_nonce: [u8; 12], contents: T) -> Self {
+        Self { matched, metadata_nonce, contents }
+    }
+    /// Applies the given function to the wrapped contents, yielding
+    /// a new instance with the same matched-credential.
+    pub fn map<R: HasIdentityMatch>(
+        self,
+        mapping: impl FnOnce(T) -> R,
+    ) -> WithMatchedCredential<M, R> {
+        let contents = mapping(self.contents);
+        let matched = self.matched;
+        let metadata_nonce = self.metadata_nonce;
+        WithMatchedCredential { matched, metadata_nonce, contents }
     }
     /// Credential data for the credential that decrypted the content.
     pub fn matched_credential(&self) -> &M {
@@ -429,12 +640,41 @@ impl<'m, M: MatchedCredential<'m>, T> WithMatchedCredential<'m, M, T> {
     pub fn contents(&self) -> &T {
         &self.contents
     }
+
+    #[cfg(any(test, feature = "alloc"))]
+    fn decrypt_metadata_from_fetch<C: CryptoProvider>(
+        &self,
+        encrypted_metadata: &[u8],
+    ) -> Result<Vec<u8>, MatchedMetadataDecryptionError<M>> {
+        let metadata_key = self.contents.metadata_key();
+        <<T as HasIdentityMatch>::Version as ProtocolVersion>::decrypt_metadata::<C>(
+            self.metadata_nonce,
+            metadata_key,
+            encrypted_metadata,
+        )
+        .map_err(|_| MatchedMetadataDecryptionError::DecryptionFailed)
+    }
+
+    #[cfg(any(test, feature = "alloc"))]
+    /// Attempts to decrypt the encrypted metadata
+    /// associated with the matched credential
+    /// based on the details of the identity-match.
+    pub fn decrypt_metadata<C: CryptoProvider>(
+        &self,
+    ) -> Result<Vec<u8>, MatchedMetadataDecryptionError<M>> {
+        self.matched
+            .fetch_encrypted_metadata()
+            .map_err(|e| MatchedMetadataDecryptionError::RetrievalFailed(e))
+            .and_then(|x| Self::decrypt_metadata_from_fetch::<C>(self, x.as_ref()))
+    }
 }
+
 /// Data in a V1 advertisement header.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct V1Header {
     header_byte: u8,
 }
+
 const PROTOCOL_VERSION_LEGACY: u8 = 0;
 const PROTOCOL_VERSION_EXTENDED: u8 = 1;
 
@@ -474,6 +714,10 @@ pub enum AdvDeserializationErrorDetailsHazmat {
     TooManyTopLevelDataElements,
     /// Must not have an identity DE inside an identity DE
     InvalidDataElementHierarchy,
+    /// Must have an identity DE
+    MissingIdentity,
+    /// Non-identity DE contents must not be empty
+    NoPublicDataElements,
 }
 
 impl From<AdvDeserializeError> for AdvDeserializationError {
@@ -485,24 +729,18 @@ impl From<AdvDeserializeError> for AdvDeserializationError {
                         AdvDeserializationErrorDetailsHazmat::AdvertisementDeserializeError,
                 }
             }
-            AdvDeserializeError::DataElementDeserializeError(e) => {
-                AdvDeserializationError::ParseError {
-                    details_hazmat:
-                        AdvDeserializationErrorDetailsHazmat::V0DataElementDeserializeError(e),
-                }
-            }
             AdvDeserializeError::TooManyTopLevelDataElements => {
                 AdvDeserializationError::ParseError {
                     details_hazmat:
                         AdvDeserializationErrorDetailsHazmat::TooManyTopLevelDataElements,
                 }
             }
-            AdvDeserializeError::InvalidDataElementHierarchy => {
-                AdvDeserializationError::ParseError {
-                    details_hazmat:
-                        AdvDeserializationErrorDetailsHazmat::InvalidDataElementHierarchy,
-                }
-            }
+            AdvDeserializeError::MissingIdentity => AdvDeserializationError::ParseError {
+                details_hazmat: AdvDeserializationErrorDetailsHazmat::MissingIdentity,
+            },
+            AdvDeserializeError::NoPublicDataElements => AdvDeserializationError::ParseError {
+                details_hazmat: AdvDeserializationErrorDetailsHazmat::NoPublicDataElements,
+            },
         }
     }
 }
@@ -515,8 +753,6 @@ pub struct DeLengthOutOfRange;
 /// The identity mode for a deserialized plaintext section or advertisement.
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum PlaintextIdentityMode {
-    /// No identity DE was present in the section
-    None,
     /// A "Public Identity" DE was present in the section
     Public,
 }
@@ -525,10 +761,4 @@ pub enum PlaintextIdentityMode {
 ///
 /// Used when serializing V0 advertisements or V1 sections.
 #[derive(Default, Debug)]
-pub struct PublicIdentity {}
-
-/// The lack of any identity information whatsoever, which is distinct from [PublicIdentity].
-///
-/// Used when serializing V0 advertisements or V1 sections.
-#[derive(Default, Debug)]
-pub struct NoIdentity {}
+pub struct PublicIdentity;

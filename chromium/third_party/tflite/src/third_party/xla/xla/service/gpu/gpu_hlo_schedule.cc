@@ -45,6 +45,7 @@ limitations under the License.
 #include "xla/service/buffer_value.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/service/gpu/gpu_schedule_postprocessing.h"
 #include "xla/service/gpu/model/analytical_latency_estimator.h"
 #include "xla/service/hlo_memory_scheduler.h"
 #include "xla/service/hlo_pass_pipeline.h"
@@ -59,6 +60,7 @@ limitations under the License.
 #include "xla/util.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
+#include "tsl/platform/path.h"
 #include "tsl/platform/protobuf.h"
 
 namespace xla {
@@ -542,16 +544,27 @@ std::optional<tensorflow::profiler::ProfiledInstructionsProto> ReadPGLEProfile(
                                          const std::string& text_path,
                                          const std::string& binary_path)
       -> std::optional<tensorflow::profiler::ProfiledInstructionsProto> {
-    Status s = tsl::ReadTextProto(env, text_path, &profile);
-    if (s.ok()) {
-      LOG(INFO) << "Using PGLE profile from " << text_path;
-      return GetProfileForFingerprint(profile, fingerprint);
+    if (env->FileExists(text_path).ok()) {
+      Status s = tsl::ReadTextProto(env, text_path, &profile);
+      if (s.ok()) {
+        LOG(INFO) << "Using PGLE profile from " << text_path;
+        return GetProfileForFingerprint(profile, fingerprint);
+      } else {
+        LOG(ERROR) << "Unable to read PGLE text proto from " << text_path
+                   << ": " << s.message();
+      }
+      profile.Clear();
     }
-    profile.Clear();
-    s = tsl::ReadBinaryProto(env, binary_path, &profile);
-    if (s.ok()) {
-      LOG(INFO) << "Using PGLE profile from " << binary_path;
-      return GetProfileForFingerprint(profile, fingerprint);
+    if (env->FileExists(binary_path).ok()) {
+      Status s = tsl::ReadBinaryProto(env, binary_path, &profile);
+      if (s.ok()) {
+        LOG(INFO) << "Using PGLE profile from " << binary_path;
+        return GetProfileForFingerprint(profile, fingerprint);
+      } else {
+        LOG(ERROR) << "Unable to read PGLE binary proto from " << binary_path
+                   << ": " << s.message();
+      }
+      profile.Clear();
     }
     return std::nullopt;
   };
@@ -566,9 +579,17 @@ std::optional<tensorflow::profiler::ProfiledInstructionsProto> ReadPGLEProfile(
   }
 
   // The pgle_profile_file_or_dir is a file. Attempt to read the profile as text
-  // proto or binary proto.
-  return read_text_or_binary_profile(pgle_profile_file_or_dir_path,
-                                     pgle_profile_file_or_dir_path);
+  // proto or binary proto. Attempt to infer the file type based on the
+  // extension.
+  auto extension = tsl::io::Extension(pgle_profile_file_or_dir_path);
+  if (extension == "pbtxt") {
+    return read_text_or_binary_profile(pgle_profile_file_or_dir_path, "");
+  } else if (extension == "pb") {
+    return read_text_or_binary_profile("", pgle_profile_file_or_dir_path);
+  } else {
+    return read_text_or_binary_profile(pgle_profile_file_or_dir_path,
+                                       pgle_profile_file_or_dir_path);
+  }
 }
 
 // Return true if the profile is applicable to the module. That is true if every
@@ -703,6 +724,11 @@ Status ScheduleGpuModule(HloModule* module, int64_t pointer_size,
       std::move(scheduler_core), shape_size_in_bytes);
 
   TF_RETURN_IF_ERROR(pipeline.Run(module).status());
+
+  HloPassPipeline postprocessing_pipeline("gpu-schedule-postprocessing");
+  postprocessing_pipeline.AddPass<GpuSchedulePostprocessing>();
+  TF_RETURN_IF_ERROR(postprocessing_pipeline.Run(module).status());
+
   return OkStatus();
 }
 
@@ -755,7 +781,10 @@ int64_t GetSchedulerMemoryLimit(const HloModule* module,
         total_io_size -= GetSizeOfShape(subshape, pointer_size);
       });
 
-  return (base_limit - total_io_size) * 95 / 100;
+  int64_t limit =
+      (base_limit - total_io_size) *
+      module->config().debug_options().xla_gpu_memory_limit_slop_factor() / 100;
+  return limit;
 }
 
 }  // namespace gpu

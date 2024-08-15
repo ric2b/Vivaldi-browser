@@ -21,11 +21,13 @@ class ImageView;
 
 // Content view used to display the cookie Controls.
 class CookieControlsContentView : public views::View {
+  METADATA_HEADER(CookieControlsContentView, views::View)
+
  public:
-  METADATA_HEADER(CookieControlsContentView);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kTitle);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kDescription);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kToggleButton);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kToggleLabel);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kFeedbackButton);
   CookieControlsContentView();
 

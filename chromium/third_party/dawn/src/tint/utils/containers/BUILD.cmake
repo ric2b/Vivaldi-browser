@@ -40,6 +40,7 @@
 ################################################################################
 tint_add_target(tint_utils_containers lib
   utils/containers/bitset.h
+  utils/containers/const_propagating_ptr.h
   utils/containers/containers.cc
   utils/containers/enum_set.h
   utils/containers/hashmap.h
@@ -92,6 +93,7 @@ tint_target_add_dependencies(tint_utils_containers_test test
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
   tint_utils_containers

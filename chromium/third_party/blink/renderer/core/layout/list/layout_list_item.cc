@@ -5,9 +5,9 @@
 #include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
 
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/list/layout_inline_list_item.h"
 #include "third_party/blink/renderer/core/layout/list/list_marker.h"
-#include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 
 namespace blink {
 
@@ -24,10 +24,6 @@ void LayoutListItem::WillBeDestroyed() {
   if (View())
     View()->RemoveLayoutListItem();
   LayoutNGBlockFlow::WillBeDestroyed();
-}
-
-bool LayoutListItem::IsOfType(LayoutObjectType type) const {
-  return type == kLayoutObjectListItem || LayoutNGBlockFlow::IsOfType(type);
 }
 
 void LayoutListItem::InsertedIntoTree() {

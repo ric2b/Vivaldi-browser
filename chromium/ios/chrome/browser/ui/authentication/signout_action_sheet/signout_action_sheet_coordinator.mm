@@ -12,16 +12,19 @@
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/browser_sync/sync_to_signin_migration.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/base/features.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/enterprise_utils.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
@@ -32,10 +35,14 @@
 // Enum to describe all 5 cases for a user being signed-in. This enum is used
 // internaly by SignoutActionSheetCoordinator().
 typedef NS_ENUM(NSUInteger, SignedInUserState) {
-  // sign-in with UNO. The sign-out needs to ask confirmation to sign out only
+  // Sign-in with UNO. The sign-out needs to ask confirmation to sign out only
   // if there are unsaved data. When signed out, a snackbar needs to be
   // diplayed.
   SignedInUserStateWithNotSyncingAndReplaceSyncWithSignin,
+  // Sign-in with UNO, where the user is managed, and was migrated from the
+  // syncing state. In this state, data needs to be cleared on signout, similar
+  // to SignedInUserStateWithManagedAccountAndSyncing.
+  SignedInUserStateWithManagedAccountAndMigratedFromSyncing,
   // Sign-in with a managed account and sync is turned on.
   SignedInUserStateWithManagedAccountAndSyncing,
   // Sign-in with a managed account and sync is turned off.
@@ -103,6 +110,7 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
     case SignedInUserStateWithNotSyncingAndReplaceSyncWithSignin:
       [self checkForUnsyncedDataAndSignOut];
       break;
+    case SignedInUserStateWithManagedAccountAndMigratedFromSyncing:
     case SignedInUserStateWithManagedAccountAndSyncing:
     case SignedInUserStateWithManagedAccountAndNotSyncing:
     case SignedInUserStateWithNonManagedAccountAndSyncing:
@@ -156,6 +164,16 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
           signin::ConsentLevel::kSync) &&
       base::FeatureList::IsEnabled(
           syncer::kReplaceSyncPromosWithSignInPromos)) {
+    const bool is_migrated_from_syncing =
+        browser_sync::WasPrimaryAccountMigratedFromSyncingToSignedIn(
+            IdentityManagerFactory::GetForBrowserState(
+                self.browser->GetBrowserState()),
+            self.browser->GetBrowserState()->GetPrefs());
+    if (self.authenticationService->HasPrimaryIdentityManaged(
+            signin::ConsentLevel::kSignin) &&
+        is_migrated_from_syncing) {
+      return SignedInUserStateWithManagedAccountAndMigratedFromSyncing;
+    }
     return SignedInUserStateWithNotSyncingAndReplaceSyncWithSignin;
   }
   BOOL syncEnabled =
@@ -188,6 +206,7 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
       title = l10n_util::GetNSString(
           IDS_IOS_SIGNOUT_DIALOG_SIGN_OUT_AND_DELETE_TITLE);
       break;
+    case SignedInUserStateWithManagedAccountAndMigratedFromSyncing:
     case SignedInUserStateWithManagedAccountAndSyncing: {
       std::u16string hostedDomain = HostedDomainForPrimaryAccount(self.browser);
       title = l10n_util::GetNSStringF(
@@ -233,6 +252,7 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
       }
       return nil;
     }
+    case SignedInUserStateWithManagedAccountAndMigratedFromSyncing:
     case SignedInUserStateWithManagedAccountAndSyncing:
     case SignedInUserStateWithNonManagedAccountAndSyncing: {
       return nil;
@@ -267,25 +287,30 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
 // data dialog if needed, and then sign-out).
 - (void)checkForUnsyncedDataAndSignOut {
   [self preventUserInteraction];
+
+  constexpr syncer::ModelTypeSet kDataTypesToQuery = {
+      syncer::BOOKMARKS, syncer::READING_LIST, syncer::PASSWORDS,
+      syncer::CONTACT_INFO};
   syncer::SyncService* syncService =
       SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
   __weak __typeof(self) weakSelf = self;
   auto callback = base::BindOnce(^(syncer::ModelTypeSet set) {
+    CHECK(kDataTypesToQuery.HasAll(set))
+        << "Result: {" << set << "} not a subset of the queried types: {"
+        << kDataTypesToQuery << "}.";
     [weakSelf continueSignOutWithUnsyncedDataModelTypeSet:set];
   });
-  syncService->GetTypesWithUnsyncedData(std::move(callback));
+  syncService->GetTypesWithUnsyncedData(kDataTypesToQuery, std::move(callback));
 }
 
 // Displays the sign-out confirmation dialog if `set` contains an "interesting"
 // data type, otherwise the sign-out is triggered without dialog.
 - (void)continueSignOutWithUnsyncedDataModelTypeSet:(syncer::ModelTypeSet)set {
   [self allowUserInteraction];
-  set.RetainAll({syncer::BOOKMARKS, syncer::READING_LIST, syncer::PASSWORDS,
-                 syncer::CONTACT_INFO});
   if (!set.Empty()) {
     for (syncer::ModelType type : set) {
-      base::UmaHistogramEnumeration("Sync.UnsyncedDataOnSignout",
-                                    syncer::ModelTypeForHistograms(type));
+      base::UmaHistogramEnumeration("Sync.UnsyncedDataOnSignout2",
+                                    syncer::ModelTypeHistogramValue(type));
     }
     [self startActionSheetCoordinatorForSignout];
   } else {
@@ -351,12 +376,17 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
                      style:UIAlertActionStyleDestructive];
       break;
     }
+    case SignedInUserStateWithManagedAccountAndMigratedFromSyncing:
     case SignedInUserStateWithManagedAccountAndSyncing: {
       NSString* const clearFromDeviceTitle =
           l10n_util::GetNSString(IDS_IOS_SIGNOUT_DIALOG_CLEAR_DATA_BUTTON);
       [self.actionSheetCoordinator
           addItemWithTitle:clearFromDeviceTitle
                     action:^{
+                      // Note that it doesn't really make a difference whether
+                      // `forceClearData` is set to YES or NO here - based on
+                      // the account's state, AuthenticationService will decide
+                      // to clear the data anyway.
                       [weakSelf handleSignOutWithForceClearData:YES];
                       [weakSelf dismissActionSheetCoordinator];
                     }
@@ -467,6 +497,7 @@ typedef NS_ENUM(NSUInteger, SignedInUserState) {
 - (MDCSnackbarMessage*)signoutSnackbarMessage {
   switch (self.signedInUserState) {
     case SignedInUserStateWithNotSyncingAndReplaceSyncWithSignin:
+    case SignedInUserStateWithManagedAccountAndMigratedFromSyncing:
       break;
     case SignedInUserStateWithManagedAccountAndSyncing:
     case SignedInUserStateWithManagedAccountAndNotSyncing:

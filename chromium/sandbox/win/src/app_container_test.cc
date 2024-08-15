@@ -51,7 +51,7 @@ const char* TokenTypeToName(bool impersonation) {
   return impersonation ? "Impersonation Token" : "Primary Token";
 }
 
-void CheckToken(const absl::optional<base::win::AccessToken>& token,
+void CheckToken(const std::optional<base::win::AccessToken>& token,
                 bool impersonation,
                 PSECURITY_CAPABILITIES security_capabilities,
                 bool restricted) {
@@ -65,7 +65,7 @@ void CheckToken(const absl::optional<base::win::AccessToken>& token,
     EXPECT_FALSE(token->IsIdentification()) << TokenTypeToName(impersonation);
   }
 
-  absl::optional<base::win::Sid> package_sid = token->AppContainerSid();
+  std::optional<base::win::Sid> package_sid = token->AppContainerSid();
   ASSERT_TRUE(package_sid) << TokenTypeToName(impersonation);
   EXPECT_TRUE(package_sid->Equal(security_capabilities->AppContainerSid))
       << TokenTypeToName(impersonation);
@@ -134,7 +134,7 @@ std::wstring GetAppContainerProfileName() {
   // multiple tests are running concurrently they don't mess with each other's
   // app containers.
   std::string appcontainer_id(
-      testing::UnitTest::GetInstance()->current_test_info()->test_case_name());
+      testing::UnitTest::GetInstance()->current_test_info()->test_suite_name());
   appcontainer_id +=
       testing::UnitTest::GetInstance()->current_test_info()->name();
   auto sha1 = base::SHA1HashString(appcontainer_id);
@@ -237,8 +237,9 @@ SBOX_TESTS_COMMAND int AppContainerEvent_Open(int argc, wchar_t** argv) {
       ::OpenEvent(EVENT_ALL_ACCESS, false, argv[0]));
   DWORD error_open = ::GetLastError();
 
-  if (event_open.IsValid())
+  if (event_open.is_valid()) {
     return SBOX_TEST_SUCCEEDED;
+  }
 
   if (ERROR_ACCESS_DENIED == error_open)
     return SBOX_TEST_DENIED;
@@ -252,7 +253,7 @@ TEST_F(AppContainerTest, DenyOpenEventForLowBox) {
 
   base::win::ScopedHandle event(
       ::CreateEvent(nullptr, false, false, kAppContainerSid));
-  ASSERT_TRUE(event.IsValid());
+  ASSERT_TRUE(event.is_valid());
 
   TestRunner runner(JobLevel::kUnprotected, USER_UNPROTECTED, USER_UNPROTECTED);
   EXPECT_EQ(SBOX_ALL_OK,

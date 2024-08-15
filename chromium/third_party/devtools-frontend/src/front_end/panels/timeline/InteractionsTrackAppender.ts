@@ -1,18 +1,18 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+import type * as Common from '../../core/common/common.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import * as TraceEngine from '../../models/trace/trace.js';
-import type * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
+import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 
+import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
 import {
   type CompatibilityTracksAppender,
-  type TrackAppender,
   type HighlightedEntryInfo,
+  type TrackAppender,
   type TrackAppenderName,
 } from './CompatibilityTracksAppender.js';
-import * as i18n from '../../core/i18n/i18n.js';
-import type * as Common from '../../core/common/common.js';
-import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
 
 const UIStrings = {
   /**
@@ -29,15 +29,13 @@ export class InteractionsTrackAppender implements TrackAppender {
 
   #colorGenerator: Common.Color.Generator;
   #compatibilityBuilder: CompatibilityTracksAppender;
-  #flameChartData: PerfUI.FlameChart.FlameChartTimelineData;
-  #traceParsedData: Readonly<TraceEngine.Handlers.Migration.PartialTraceData>;
+  #traceParsedData: Readonly<TraceEngine.Handlers.Types.TraceParseData>;
 
   constructor(
-      compatibilityBuilder: CompatibilityTracksAppender, flameChartData: PerfUI.FlameChart.FlameChartTimelineData,
-      traceParsedData: TraceEngine.Handlers.Migration.PartialTraceData, colorGenerator: Common.Color.Generator) {
+      compatibilityBuilder: CompatibilityTracksAppender, traceParsedData: TraceEngine.Handlers.Types.TraceParseData,
+      colorGenerator: Common.Color.Generator) {
     this.#compatibilityBuilder = compatibilityBuilder;
     this.#colorGenerator = colorGenerator;
-    this.#flameChartData = flameChartData;
     this.#traceParsedData = traceParsedData;
   }
 
@@ -87,32 +85,43 @@ export class InteractionsTrackAppender implements TrackAppender {
   #appendInteractionsAtLevel(trackStartLevel: number): number {
     const {interactionEventsWithNoNesting, interactionsOverThreshold} = this.#traceParsedData.UserInteractions;
 
+    const addCandyStripeToLongInteraction =
+        (event: TraceEngine.Types.TraceEvents.SyntheticInteractionEvent, index: number): void => {
+          // Each interaction that we drew that is over the INP threshold needs to be
+          // candy-striped.
+          const overThreshold = interactionsOverThreshold.has(event);
+          if (!overThreshold) {
+            return;
+          }
+          if (index !== undefined) {
+            this.#addCandyStripeAndWarningForLongInteraction(event, index);
+          }
+        };
     // Render all top level interactions (see UserInteractionsHandler for an explanation on the nesting) onto the track.
-    const newLevel =
-        this.#compatibilityBuilder.appendEventsAtLevel(interactionEventsWithNoNesting, trackStartLevel, this);
+    const newLevel = this.#compatibilityBuilder.appendEventsAtLevel(
+        interactionEventsWithNoNesting, trackStartLevel, this, addCandyStripeToLongInteraction);
 
-    // Each interaction that we drew that is over the INP threshold needs to be
-    // candy-striped.
-    for (const interaction of interactionEventsWithNoNesting) {
-      const overThreshold = interactionsOverThreshold.has(interaction);
-      if (!overThreshold) {
-        continue;
-      }
-      const index = this.#compatibilityBuilder.indexForEvent(interaction);
-      if (index !== undefined) {
-        this.#addCandyStripingForLongInteraction(index);
-      }
-    }
     return newLevel;
   }
 
-  #addCandyStripingForLongInteraction(eventIndex: number): void {
-    const decorationsForEvent = this.#flameChartData.entryDecorations[eventIndex] || [];
-    decorationsForEvent.push({
-      type: 'CANDY',
-      startAtTime: TraceEngine.Handlers.ModelHandlers.UserInteractions.LONG_INTERACTION_THRESHOLD,
-    });
-    this.#flameChartData.entryDecorations[eventIndex] = decorationsForEvent;
+  #addCandyStripeAndWarningForLongInteraction(
+      entry: TraceEngine.Types.TraceEvents.SyntheticInteractionEvent, eventIndex: number): void {
+    const decorationsForEvent =
+        this.#compatibilityBuilder.getFlameChartTimelineData().entryDecorations[eventIndex] || [];
+    decorationsForEvent.push(
+        {
+          type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+          startAtTime: TraceEngine.Handlers.ModelHandlers.UserInteractions.LONG_INTERACTION_THRESHOLD,
+          // Interaction events have whiskers, so we do not want to candy stripe
+          // the entire duration. The box represents processing time, so we only
+          // candystripe up to the end of processing.
+          endAtTime: entry.processingEnd,
+        },
+        {
+          type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE,
+          customEndTime: entry.processingEnd,
+        });
+    this.#compatibilityBuilder.getFlameChartTimelineData().entryDecorations[eventIndex] = decorationsForEvent;
   }
 
   /*

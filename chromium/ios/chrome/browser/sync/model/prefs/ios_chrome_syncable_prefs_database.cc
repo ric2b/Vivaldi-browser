@@ -51,9 +51,10 @@ enum {
 
 const auto& SyncablePreferences() {
   // iOS specific list of syncable preferences.
+  // TODO(crbug.com/1512537): Convert to MakeFixedFlatMap().
   static const auto kIOSChromeSyncablePrefsAllowlist =
-      base::MakeFixedFlatMap<base::StringPiece,
-                             sync_preferences::SyncablePrefMetadata>({
+      base::MakeFixedFlatMapNonConsteval<
+          base::StringPiece, sync_preferences::SyncablePrefMetadata>({
           {prefs::kArticlesForYouEnabled,
            {syncable_prefs_ids::kArticlesForYouEnabled, syncer::PREFERENCES,
             sync_preferences::PrefSensitivity::kNone,
@@ -103,7 +104,7 @@ const auto& SyncablePreferences() {
 }
 }  // namespace
 
-absl::optional<sync_preferences::SyncablePrefMetadata>
+std::optional<sync_preferences::SyncablePrefMetadata>
 IOSChromeSyncablePrefsDatabase::GetSyncablePrefMetadata(
     const std::string& pref_name) const {
   const auto* it = SyncablePreferences().find(pref_name);
@@ -123,5 +124,17 @@ IOSChromeSyncablePrefsDatabase::GetSyncablePrefMetadata(
 
   // Check in `common_syncable_prefs_database_`.
   return common_syncable_prefs_database_.GetSyncablePrefMetadata(pref_name);
+}
+
+std::map<base::StringPiece, sync_preferences::SyncablePrefMetadata>
+IOSChromeSyncablePrefsDatabase::GetAllSyncablePrefsForTest() const {
+  std::map<base::StringPiece, sync_preferences::SyncablePrefMetadata>
+      syncable_prefs;
+  base::ranges::copy(SyncablePreferences(),
+                     std::inserter(syncable_prefs, syncable_prefs.end()));
+  base::ranges::move(
+      common_syncable_prefs_database_.GetAllSyncablePrefsForTest(),  // IN-TEST
+      std::inserter(syncable_prefs, syncable_prefs.end()));
+  return syncable_prefs;
 }
 }  // namespace browser_sync

@@ -30,6 +30,7 @@
 #include "chromeos/ash/components/dbus/biod/biod_client.h"
 #include "chromeos/ash/components/dbus/cdm_factory_daemon/cdm_factory_daemon_client.h"
 #include "chromeos/ash/components/dbus/cec_service/cec_service_client.h"
+#include "chromeos/ash/components/dbus/chaps/chaps_client.h"
 #include "chromeos/ash/components/dbus/chunneld/chunneld_client.h"
 #include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
@@ -79,6 +80,7 @@
 #include "chromeos/ash/components/dbus/virtual_file_provider/virtual_file_provider_client.h"
 #include "chromeos/ash/components/dbus/vm_plugin_dispatcher/vm_plugin_dispatcher_client.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/language_packs/language_pack_manager.h"
 #include "chromeos/dbus/constants/dbus_paths.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
 #include "chromeos/dbus/init/initialize_dbus_client.h"
@@ -157,6 +159,7 @@ void InitializeDBus() {
   InitializeDBusClient<BiodClient>(bus);  // For device::Fingerprint.
   InitializeDBusClient<CdmFactoryDaemonClient>(bus);
   InitializeDBusClient<CecServiceClient>(bus);
+  InitializeDBusClient<ChapsClient>(bus);
   InitializeDBusClient<ChunneldClient>(bus);
   InitializeDBusClient<CiceroneClient>(bus);
   // ConciergeClient depends on CiceroneClient.
@@ -215,6 +218,9 @@ void InitializeDBus() {
   // g_browser_process initializes BrowserPolicyConnector.
   DeviceSettingsService::Initialize();
   InstallAttributes::Initialize();
+
+  // Depends on `DlcserviceClient`.
+  language_packs::LanguagePackManager::Initialise();
 
   if (g_dbus_helper_observer) {
     g_dbus_helper_observer->PostInitializeDBus();
@@ -294,6 +300,10 @@ void ShutdownDBus() {
   } else {
     bluez::BluezDBusManager::Shutdown();
   }
+
+  // Depends on `DlcserviceClient`.
+  language_packs::LanguagePackManager::Shutdown();
+
   // Other D-Bus clients are shut down, also in reverse order of initialization.
   VmPluginDispatcherClient::Shutdown();
   VirtualFileProviderClient::Shutdown();

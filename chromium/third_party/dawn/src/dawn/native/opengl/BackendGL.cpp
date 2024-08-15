@@ -27,6 +27,8 @@
 
 #include "dawn/native/opengl/BackendGL.h"
 
+#include <string>
+
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/OpenGLBackend.h"
@@ -40,7 +42,7 @@ Backend::Backend(InstanceBase* instance, wgpu::BackendType backendType)
     : BackendConnection(instance, backendType) {}
 
 std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
-    const RequestAdapterOptions* options) {
+    const UnpackedPtr<RequestAdapterOptions>& options) {
     if (options->forceFallbackAdapter) {
         return {};
     }
@@ -52,9 +54,7 @@ std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
     void* (*getProc)(const char* name) = nullptr;
     EGLDisplay display = EGL_NO_DISPLAY;
 
-    const RequestAdapterOptionsGetGLProc* glGetProcOptions = nullptr;
-    FindInChain(options->nextInChain, &glGetProcOptions);
-    if (glGetProcOptions) {
+    if (auto* glGetProcOptions = options.Get<RequestAdapterOptionsGetGLProc>()) {
         getProc = glGetProcOptions->getProc;
         display = glGetProcOptions->display;
     }
@@ -69,9 +69,10 @@ std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
 #else
         const char* eglLib = "libEGL.so";
 #endif
-        if (!mLibEGL.Valid() && !mLibEGL.Open(eglLib)) {
+        std::string err;
+        if (!mLibEGL.Valid() && !mLibEGL.Open(eglLib, &err)) {
             GetInstance()->ConsumedErrorAndWarnOnce(
-                DAWN_VALIDATION_ERROR("Failed to load %s", eglLib));
+                DAWN_VALIDATION_ERROR("Failed to load %s: %s", eglLib, err.c_str()));
             return {};
         }
 

@@ -12,7 +12,6 @@
 #include "include/private/base/SkDeque.h"
 #include "src/gpu/ganesh/mtl/GrMtlTypesPriv.h"
 
-#include "src/gpu/ganesh/GrFinishCallbacks.h"
 #include "src/gpu/ganesh/GrGpu.h"
 #include "src/gpu/ganesh/GrRenderTarget.h"
 #include "src/gpu/ganesh/GrRingBuffer.h"
@@ -97,10 +96,6 @@ public:
 #endif
 
     void submit(GrOpsRenderPass* renderPass) override;
-
-    [[nodiscard]] GrFence insertFence() override;
-    bool waitFence(GrFence) override;
-    void deleteFence(GrFence) override;
 
     [[nodiscard]] std::unique_ptr<GrSemaphore> makeSemaphore(bool isOwned) override;
     std::unique_ptr<GrSemaphore> wrapBackendSemaphore(const GrBackendSemaphore&,

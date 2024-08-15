@@ -44,6 +44,9 @@ class Store final : public Castable<Store, OperandInstruction<2, 0>> {
     /// The offset in Operands() for the `from` value
     static constexpr size_t kFromOperandOffset = 1;
 
+    /// Constructor (no results, no operands)
+    Store();
+
     /// Constructor
     /// @param to the value to store too
     /// @param from the value being stored from
@@ -56,11 +59,17 @@ class Store final : public Castable<Store, OperandInstruction<2, 0>> {
     /// @returns the value being stored too
     Value* To() { return operands_[kToOperandOffset]; }
 
+    /// @returns the value being stored too
+    const Value* To() const { return operands_[kToOperandOffset]; }
+
     /// @returns the value being stored
     Value* From() { return operands_[kFromOperandOffset]; }
 
+    /// @returns the value being stored
+    const Value* From() const { return operands_[kFromOperandOffset]; }
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "store"; }
+    std::string FriendlyName() const override { return "store"; }
 };
 
 }  // namespace tint::core::ir

@@ -6,6 +6,7 @@
 
 #import "base/i18n/rtl.h"
 #import "base/ios/block_types.h"
+#import "base/task/sequenced_task_runner.h"
 #import "base/time/time.h"
 #import "ios/chrome/browser/ui/bubble/bubble_constants.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
@@ -32,9 +33,13 @@ const CGFloat kGestureIndicatorRadius = 33.0f;
 const CGFloat kFadingGestureIndicatorRadius = 46.0f;
 // Initial distance between the bubble and the center of the gesture indicator
 // ellipsis.
-const CGFloat kInitialGestureIndicatorToBubbleSpacing = 62.0f;
+const CGFloat kInitialGestureIndicatorToBubbleSpacingDefault = 62.0f;
+const CGFloat
+    kInitialGestureIndicatorToBubbleSpacingVerticalSwipeInCompactHeight = 52.0f;
 // The distance that the gesture indicator should move during the animation.
-const CGFloat kGestureIndicatorDistanceAnimated = 140.0f;
+const CGFloat kGestureIndicatorDistanceAnimatedDefault = 140.0f;
+const CGFloat kGestureIndicatorDistanceAnimatedVerticalSwipeInCompactHeight =
+    80.0f;
 
 // The distance between the dismiss button and the bottom edge (or the top edge,
 // when the bubble points down.)
@@ -62,7 +67,7 @@ BOOL IsArrowPointingLeft(BubbleArrowDirection direction) {
 // indicator should offset on iPhone portrait mode and iPad split screen. In
 // both cases, the horizontal size class is compact while the vertical size
 // class is regular.
-BOOL GestureIndicatorShouldOffsetFromCenter(
+BOOL ShouldGestureIndicatorOffsetFromCenter(
     UITraitCollection* trait_collection) {
   return trait_collection.horizontalSizeClass ==
              UIUserInterfaceSizeClassCompact &&
@@ -95,14 +100,20 @@ CGRect GetInitialBubbleFrameForView(CGSize bubble_bounding_size,
                                     BubbleView* bubble_view) {
   BubbleArrowDirection direction = bubble_view.direction;
   // Bubble's initial placement should NOT go beyond the middle of the screen.
+  CGFloat shift_distance = 0;
   switch (direction) {
-    case BubbleArrowDirectionUp:
     case BubbleArrowDirectionDown:
+      shift_distance = bubble_bounding_size.height / 2;
+      [[fallthrough]];
+    case BubbleArrowDirectionUp:
       bubble_bounding_size.height = bubble_bounding_size.height / 2 -
                                     kInitialBubbleDistanceToEdgeSpacingVertical;
       break;
     case BubbleArrowDirectionLeading:
     case BubbleArrowDirectionTrailing:
+      if (!IsArrowPointingLeft(direction)) {
+        shift_distance = bubble_bounding_size.width / 2;
+      }
       bubble_bounding_size.width /= 2;
       break;
   }
@@ -111,9 +122,16 @@ CGRect GetInitialBubbleFrameForView(CGSize bubble_bounding_size,
   CGSize max_bubble_size = bubble_util::BubbleMaxSize(
       anchor_pt, 0, direction, BubbleAlignmentCenter, bubble_bounding_size);
   CGSize bubble_size = [bubble_view sizeThatFits:max_bubble_size];
-  return bubble_util::BubbleFrame(anchor_pt, 0, bubble_size, direction,
-                                  BubbleAlignmentCenter,
-                                  bubble_bounding_size.width);
+  CGRect frame = bubble_util::BubbleFrame(anchor_pt, 0, bubble_size, direction,
+                                          BubbleAlignmentCenter,
+                                          bubble_bounding_size.width);
+  if (direction == BubbleArrowDirectionUp ||
+      direction == BubbleArrowDirectionDown) {
+    frame.origin.y += shift_distance;
+  } else {
+    frame.origin.x += shift_distance;
+  }
+  return frame;
 }
 
 // Returns the transparent gesture indicator circle at its initial size and
@@ -181,10 +199,13 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
   NSLayoutConstraint* _gestureIndicatorMarginConstraint;
   NSLayoutConstraint* _gestureIndicatorCenterConstraint;
 
-  // Whether the bubble and the gesture indicator needs to be redrawn; value
-  // would usually be YES right after a size class change, and back to NO after
-  // redrawing completes.
-  BOOL _needsRedrawBubbleAndGestureIndicator;
+  // Animator object that handles the animation.
+  UIViewPropertyAnimator* _animator;
+
+  // Whether the bubble and the gesture indicator needs to be repositioned;
+  // value would usually be YES right after a size class change, and back to NO
+  // after redrawing completes.
+  BOOL _needsRepositionBubbleAndGestureIndicator;
 
   // Number of times the animation has already repeated.
   int _currentAnimationRepeatCount;
@@ -195,7 +216,7 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
               arrowDirection:(BubbleArrowDirection)direction {
   if (self = [super initWithFrame:CGRectZero]) {
     self.isAccessibilityElement = YES;
-    _needsRedrawBubbleAndGestureIndicator = NO;
+    _needsRepositionBubbleAndGestureIndicator = NO;
     _currentAnimationRepeatCount = 0;
     _dismissCallback = ^(IPHDismissalReasonType reason,
                          feature_engagement::Tracker::SnoozeAction action) {
@@ -220,7 +241,8 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
     _bubbleView.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
     _bubbleView.accessibilityIdentifier = kSideSwipeBubbleViewBubbleAXId;
     [self addSubview:_bubbleView];
-    [_bubbleView setArrowHidden:YES animated:NO];
+    [_bubbleView setArrowHidden:!UIAccessibilityIsReduceMotionEnabled()
+                       animated:NO];
 
     // Gesture indicator ellipsis.
     _gestureIndicator = CreateInitialGestureIndicator();
@@ -231,16 +253,7 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
       [_gestureIndicator.widthAnchor
           constraintEqualToConstant:kFadingGestureIndicatorRadius * 2]
     ];
-    _gestureIndicatorMarginConstraint =
-        [self initialGestureIndicatorMarginConstraint];
-    _gestureIndicatorCenterConstraint =
-        [self initialGestureIndicatorCenterConstraint];
-    NSArray<NSLayoutConstraint*>* initialGestureIndicatorConstraints =
-        [_gestureIndicatorSizeConstraints arrayByAddingObjectsFromArray:@[
-          _gestureIndicatorMarginConstraint,
-          _gestureIndicatorCenterConstraint,
-        ]];
-    [NSLayoutConstraint activateConstraints:initialGestureIndicatorConstraints];
+    [NSLayoutConstraint activateConstraints:_gestureIndicatorSizeConstraints];
 
     // Dismiss button.
     __weak SideSwipeBubbleView* weakSelf = self;
@@ -254,22 +267,59 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
   return self;
 }
 
+- (CGSize)systemLayoutSizeFittingSize:(CGSize)targetSize {
+  // Computes the smallest possible size that would fit all the UI elements in
+  // all their animated positions.
+  CGFloat min_width = _bubbleView.frame.size.width;
+  CGFloat min_height = _bubbleView.frame.size.height +
+                       [_dismissButton intrinsicContentSize].height +
+                       kDismissButtonMargin;
+  if (UIAccessibilityIsReduceMotionEnabled()) {
+    return CGSizeMake(min_width, min_height);
+  }
+  switch (_bubbleView.direction) {
+    case BubbleArrowDirectionUp:
+    case BubbleArrowDirectionDown:
+      min_height += kInitialBubbleDistanceToEdgeSpacingVertical +
+                    [self initialGestureIndicatorToBubbleSpacing] +
+                    [self gestureIndicatorAnimatedDistance] +
+                    kFadingGestureIndicatorRadius;
+      min_width = MAX(min_width, kFadingGestureIndicatorRadius * 2);
+      break;
+    case BubbleArrowDirectionLeading:
+    case BubbleArrowDirectionTrailing:
+      if (ShouldGestureIndicatorOffsetFromCenter(self.traitCollection)) {
+        min_width /= 2;
+      } else {
+        min_width += [self initialGestureIndicatorToBubbleSpacing];
+      }
+      min_width += [self gestureIndicatorAnimatedDistance] +
+                   kFadingGestureIndicatorRadius;
+      min_height = MAX(min_height, kFadingGestureIndicatorRadius * 2);
+      break;
+  }
+  // This view can expand as large as needed.
+  return CGSizeMake(MAX(min_width, targetSize.width),
+                    MAX(min_height, targetSize.height));
+}
+
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (GestureIndicatorShouldOffsetFromCenter(previousTraitCollection) !=
-      GestureIndicatorShouldOffsetFromCenter(self.traitCollection)) {
-    // TODO(crbug.com/1467873): Stop animations.
-    _needsRedrawBubbleAndGestureIndicator = YES;
+  if (ShouldGestureIndicatorOffsetFromCenter(previousTraitCollection) !=
+      ShouldGestureIndicatorOffsetFromCenter(self.traitCollection)) {
+    [_animator pauseAnimation];
+    _needsRepositionBubbleAndGestureIndicator = YES;
   }
 }
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-  if (_needsRedrawBubbleAndGestureIndicator) {
-    // TODO(crbug.com/1467873): Reposition bubble and restart
-    // animation. Constraints may need to be deactivated and reactivated as
-    // well.
-    _needsRedrawBubbleAndGestureIndicator = NO;
+  if (_needsRepositionBubbleAndGestureIndicator) {
+    _bubbleView.frame =
+        GetInitialBubbleFrameForView(self.frame.size, _bubbleView);
+    [self repositionGestureIndicator];
+    [_animator startAnimation];
+    _needsRepositionBubbleAndGestureIndicator = NO;
   }
 }
 
@@ -280,10 +330,19 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
 }
 
 - (void)startAnimationAfterDelay:(base::TimeDelta)delay {
+  CHECK(self.superview);
+  __weak SideSwipeBubbleView* weakSelf = self;
+
   if (UIAccessibilityIsReduceMotionEnabled()) {
-    // TODO(crbug.com/1467873): Show static image.
+    // Dismiss after the same timeout as with animation enabled.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(^{
+          [weakSelf dismissWithReason:IPHDismissalReasonType::kTimedOut];
+        }),
+        kAnimationDuration * kMaxAnimationRepeatCount);
     return;
   }
+
   double gestureIndicatorSizeChangeDuration =
       GetRelativeTimeForKeyframeAnimation(kGestureIndicatorShrinkOrExpandTime);
   double startSlidingTime =
@@ -293,7 +352,6 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
   double startShrinkingTime =
       GetRelativeTimeForKeyframeAnimation(kStartShrinkingGestureIndicator);
 
-  __weak SideSwipeBubbleView* weakSelf = self;
   ProceduralBlock keyframes = ^{
     [UIView
         addKeyframeWithRelativeStartTime:0
@@ -315,37 +373,102 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
                                     keyframeThatExpandsAndHidesGestureIndicator];
                               }];
   };
+  ProceduralBlock animationWithKeyframesWithCompletionHandler = ^{
+    [UIView
+        animateKeyframesWithDuration:kAnimationDuration.InSecondsF()
+                               delay:0
+                             options:UIViewKeyframeAnimationOptionLayoutSubviews
+                          animations:keyframes
+                          completion:^(BOOL completed) {
+                            // This block gets invoked earlier than the
+                            // completion block of `_animator`.
+                            if (completed) {
+                              [weakSelf onAnimationCycleComplete];
+                            }
+                          }];
+  };
 
-  // Force layout to set the initial frame of the animation.
-  [self layoutIfNeeded];
-  int remainingAnimationRepeatCount =
-      kMaxAnimationRepeatCount - _currentAnimationRepeatCount;
-  [UIView animateKeyframesWithDuration:kAnimationDuration.InSecondsF()
-      delay:delay.InSecondsF()
-      options:UIViewAnimationOptionRepeat | UIViewAnimationOptionCurveEaseInOut
-      animations:^{
-        [UIView modifyAnimationsWithRepeatCount:remainingAnimationRepeatCount
-                                   autoreverses:NO
-                                     animations:keyframes];
-      }
-      completion:^(BOOL completed) {
-        if (completed) {
-          [weakSelf dismissWithReason:IPHDismissalReasonType::kTimedOut];
-        }
-      }];
+  // Position gesture indicator at the start of each animation cycle, as it
+  // might have been shifted away from its original position at the end of the
+  // last cycle.
+  [self repositionGestureIndicator];
+  _animator = [UIViewPropertyAnimator
+      runningPropertyAnimatorWithDuration:kAnimationDuration.InSecondsF()
+                                    delay:delay.InSecondsF()
+                                  options:UIViewAnimationOptionCurveEaseInOut
+                               animations:
+                                   animationWithKeyframesWithCompletionHandler
+                               completion:nil];
 }
 
-#pragma mark - Private
-
-// Dismiss the view with `reason`.
 - (void)dismissWithReason:(IPHDismissalReasonType)reason {
-  // Only destroy the view after callback executed.
+  if (!self.superview) {
+    return;
+  }
   [self removeFromSuperview];
   self.dismissCallback(reason,
                        feature_engagement::Tracker::SnoozeAction::DISMISSED);
 }
 
-#pragma mark - Initial constraint helpers
+#pragma mark - Private
+
+// Handles the completion of each round of animation.
+- (void)onAnimationCycleComplete {
+  _currentAnimationRepeatCount++;
+  if (_currentAnimationRepeatCount == kMaxAnimationRepeatCount) {
+    [self dismissWithReason:IPHDismissalReasonType::kTimedOut];
+  } else {
+    [self startAnimation];
+  }
+}
+
+#pragma mark - Initial positioning helpers
+
+// Initial distance between the bubble and the center of the gesture indicator
+// ellipsis.
+- (CGFloat)initialGestureIndicatorToBubbleSpacing {
+  BOOL verticalSwipeInCompactHeight =
+      self.traitCollection.verticalSizeClass ==
+          UIUserInterfaceSizeClassCompact &&
+      (_bubbleView.direction == BubbleArrowDirectionUp ||
+       _bubbleView.direction == BubbleArrowDirectionDown);
+  return verticalSwipeInCompactHeight
+             ? kInitialGestureIndicatorToBubbleSpacingVerticalSwipeInCompactHeight
+             : kInitialGestureIndicatorToBubbleSpacingDefault;
+}
+
+// Animated distance of the gesture indicator.
+- (CGFloat)gestureIndicatorAnimatedDistance {
+  BOOL verticalSwipeInCompactHeight =
+      self.traitCollection.verticalSizeClass ==
+          UIUserInterfaceSizeClassCompact &&
+      (_bubbleView.direction == BubbleArrowDirectionUp ||
+       _bubbleView.direction == BubbleArrowDirectionDown);
+  return verticalSwipeInCompactHeight
+             ? kGestureIndicatorDistanceAnimatedVerticalSwipeInCompactHeight
+             : kGestureIndicatorDistanceAnimatedDefault;
+}
+
+// Puts the gesture indicator at its initial position.
+- (void)repositionGestureIndicator {
+  CHECK(self.superview);
+  if (_gestureIndicatorMarginConstraint.active &&
+      _gestureIndicatorCenterConstraint.active) {
+    [NSLayoutConstraint deactivateConstraints:@[
+      _gestureIndicatorMarginConstraint,
+      _gestureIndicatorCenterConstraint,
+    ]];
+  }
+  _gestureIndicatorMarginConstraint =
+      [self initialGestureIndicatorMarginConstraint];
+  _gestureIndicatorCenterConstraint =
+      [self initialGestureIndicatorCenterConstraint];
+  [NSLayoutConstraint activateConstraints:@[
+    _gestureIndicatorMarginConstraint,
+    _gestureIndicatorCenterConstraint,
+  ]];
+  [self.superview layoutIfNeeded];
+}
 
 // Returns the desired value of `_gestureIndicatorMarginConstraint`.
 //
@@ -355,13 +478,14 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
 // animation would NOT be influenced by the bubble's movement.
 - (NSLayoutConstraint*)initialGestureIndicatorMarginConstraint {
   CGSize bubbleSize = _bubbleView.frame.size;
+  CGFloat gestureIndicatorToBubbleSpacing =
+      [self initialGestureIndicatorToBubbleSpacing];
   switch (_bubbleView.direction) {
     case BubbleArrowDirectionUp: {
       // Gesture indicator should be `kInitialGestureIndicatorToBubbleSpacing`
       // away from the bubble's bottom edge.
       CGFloat margin = kInitialBubbleDistanceToEdgeSpacingVertical +
-                       bubbleSize.height +
-                       kInitialGestureIndicatorToBubbleSpacing;
+                       bubbleSize.height + gestureIndicatorToBubbleSpacing;
       return [_gestureIndicator.centerYAnchor
           constraintEqualToAnchor:self.topAnchor
                          constant:margin];
@@ -370,21 +494,20 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
       // Gesture indicator should be `kInitialGestureIndicatorToBubbleSpacing`
       // away from the bubble's top edge.
       CGFloat margin = kInitialBubbleDistanceToEdgeSpacingVertical +
-                       bubbleSize.height +
-                       kInitialGestureIndicatorToBubbleSpacing;
+                       bubbleSize.height + gestureIndicatorToBubbleSpacing;
       return [_gestureIndicator.centerYAnchor
           constraintEqualToAnchor:self.bottomAnchor
                          constant:-margin];
     }
     case BubbleArrowDirectionLeading: {
       CGFloat margin;
-      if (GestureIndicatorShouldOffsetFromCenter(self.traitCollection)) {
+      if (ShouldGestureIndicatorOffsetFromCenter(self.traitCollection)) {
         // Gesture indicator should be center-aligned with the bubble.
         margin = bubbleSize.width / 2;
       } else {
         // Gesture indicator should be `kInitialGestureIndicatorToBubbleSpacing`
         // away from the bubble's trailing edge.
-        margin = bubbleSize.width + kInitialGestureIndicatorToBubbleSpacing;
+        margin = bubbleSize.width + gestureIndicatorToBubbleSpacing;
       }
       return [_gestureIndicator.centerXAnchor
           constraintEqualToAnchor:self.leadingAnchor
@@ -392,13 +515,13 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
     }
     case BubbleArrowDirectionTrailing: {
       CGFloat margin;
-      if (GestureIndicatorShouldOffsetFromCenter(self.traitCollection)) {
+      if (ShouldGestureIndicatorOffsetFromCenter(self.traitCollection)) {
         // Gesture indicator should be center-aligned with the bubble.
         margin = bubbleSize.width / 2;
       } else {
-        // Gesture indicator should be `kInitialGestureIndicatorToBubbleSpacing`
+        // Gesture indicator should be `gestureIndicatorToBubbleSpacing`
         // away from the bubble's leading edge.
-        margin = bubbleSize.width + kInitialGestureIndicatorToBubbleSpacing;
+        margin = bubbleSize.width + gestureIndicatorToBubbleSpacing;
       }
       return [_gestureIndicator.centerXAnchor
           constraintEqualToAnchor:self.trailingAnchor
@@ -418,11 +541,11 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
       break;
     case BubbleArrowDirectionLeading:
     case BubbleArrowDirectionTrailing:
-      CGFloat offset = kInitialGestureIndicatorToBubbleSpacing +
+      CGFloat offset = [self initialGestureIndicatorToBubbleSpacing] +
                        _bubbleView.frame.size.height / 2;
       gestureIndicatorCenterConstraint = [_gestureIndicator.centerYAnchor
           constraintEqualToAnchor:self.centerYAnchor
-                         constant:GestureIndicatorShouldOffsetFromCenter(
+                         constant:ShouldGestureIndicatorOffsetFromCenter(
                                       self.traitCollection)
                                       ? offset
                                       : 0];
@@ -484,10 +607,12 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
   _bubbleView.frame = newFrame;
   [_bubbleView setArrowHidden:NO animated:YES];
 
+  CGFloat gestureIndicatorAnimatedDistance =
+      [self gestureIndicatorAnimatedDistance];
   CGFloat animateDistance = (direction == BubbleArrowDirectionUp ||
                              direction == BubbleArrowDirectionLeading)
-                                ? kGestureIndicatorDistanceAnimated
-                                : -kGestureIndicatorDistanceAnimated;
+                                ? gestureIndicatorAnimatedDistance
+                                : -gestureIndicatorAnimatedDistance;
   _gestureIndicatorMarginConstraint.constant += animateDistance;
   [self layoutIfNeeded];
 }
@@ -520,7 +645,6 @@ double GetRelativeTimeForKeyframeAnimation(base::TimeDelta time) {
   _bubbleView.frame = newFrame;
   [_bubbleView setArrowHidden:YES animated:YES];
   [self layoutIfNeeded];
-  _currentAnimationRepeatCount++;
 }
 
 @end

@@ -97,8 +97,12 @@ class AutoUpdateObserver : public BuildStateObserver {
 
 // static
 void AutoUpdateAPI::InitUpgradeDetection() {
-  g_browser_process->GetBuildState()->AddObserver(
-      &AutoUpdateObserver::GetInstance());
+  // In case of multiple profiles.
+  if (!g_browser_process->GetBuildState()->HasObserver(
+          &AutoUpdateObserver::GetInstance())) {
+    g_browser_process->GetBuildState()->AddObserver(
+        &AutoUpdateObserver::GetInstance());
+  }
 }
 
 // static

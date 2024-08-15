@@ -8,6 +8,7 @@
 
 #include <map>
 #include <numeric>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -39,7 +40,6 @@
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/storage_directory_util.h"
 #include "storage/common/database/database_identifier.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
@@ -165,9 +165,8 @@ base::FilePath ConstructOriginPath(const base::FilePath& profile_path,
   if (owner != storage::mojom::CacheStorageOwner::kCacheAPI) {
     identifier += "-" + base::NumberToString(static_cast<int>(owner));
   }
-  const std::string origin_hash = base::SHA1HashString(identifier);
-  const std::string origin_hash_hex = base::ToLowerASCII(
-      base::HexEncode(origin_hash.c_str(), origin_hash.length()));
+  const std::string origin_hash_hex = base::ToLowerASCII(base::HexEncode(
+      base::SHA1HashSpan(base::as_bytes(base::make_span(identifier)))));
   return first_party_default_root_path.AppendASCII(origin_hash_hex);
 }
 
@@ -205,7 +204,7 @@ void ValidateAndAddUsageFromPath(
 
   blink::StorageKey storage_key;
   if (index.has_storage_key()) {
-    absl::optional<blink::StorageKey> result =
+    std::optional<blink::StorageKey> result =
         blink::StorageKey::Deserialize(index.storage_key());
     if (!result) {
       RecordIndexValidationResult(IndexResult::kInvalidStorageKey);

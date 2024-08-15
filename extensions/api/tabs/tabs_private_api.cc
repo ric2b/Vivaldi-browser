@@ -191,6 +191,13 @@ base::Value::List getLinkRoutes(content::WebContents* contents) {
   return link_routes;
 }
 
+bool IsWorkspacesEnabled(content::WebContents* contents) {
+  Profile* profile =
+        Profile::FromBrowserContext(contents->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
+  return prefs->GetBoolean(vivaldiprefs::kWorkspacesEnabled);
+}
+
 namespace {
 
 class JSDialogObserver : public javascript_dialogs::AppModalDialogObserver {
@@ -234,37 +241,36 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
   for (auto status : states) {
     switch (status) {
       case TabAlertState::MEDIA_RECORDING:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_RECORDING);
+        types.push_back(tabs_private::TabAlertState::kRecording);
         break;
       case TabAlertState::TAB_CAPTURING:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_CAPTURING);
+        types.push_back(tabs_private::TabAlertState::kCapturing);
         break;
       case TabAlertState::AUDIO_PLAYING:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_PLAYING);
+        types.push_back(tabs_private::TabAlertState::kPlaying);
         break;
       case TabAlertState::AUDIO_MUTING:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_MUTING);
+        types.push_back(tabs_private::TabAlertState::kMuting);
         break;
       case TabAlertState::BLUETOOTH_CONNECTED:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_BLUETOOTH);
+        types.push_back(tabs_private::TabAlertState::kBluetooth);
         break;
       case TabAlertState::USB_CONNECTED:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_USB);
+        types.push_back(tabs_private::TabAlertState::kUsb);
         break;
       case TabAlertState::PIP_PLAYING:
-        types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_PIP);
+        types.push_back(tabs_private::TabAlertState::kPip);
         break;
       case TabAlertState::DESKTOP_CAPTURING:
         types.push_back(
-            tabs_private::TabAlertState::TAB_ALERT_STATE_DESKTOP_CAPTURING);
+            tabs_private::TabAlertState::kDesktopCapturing);
         break;
       case TabAlertState::VR_PRESENTING_IN_HEADSET:
-        types.push_back(tabs_private::TabAlertState::
-                            TAB_ALERT_STATE_VR_PRESENTING_IN_HEADSET);
+        types.push_back(tabs_private::TabAlertState::kVrPresentingInHeadset);
         break;
       case TabAlertState::SERIAL_CONNECTED:
         types.push_back(
-            tabs_private::TabAlertState::TAB_ALERT_STATE_SERIAL_CONNECTED);
+            tabs_private::TabAlertState::kSerialConnected);
         break;
       default:
         NOTREACHED() << "Unknown TabAlertState Status:" << (int)status;
@@ -375,7 +381,7 @@ class TabMutingHandler : public content_settings::Observer {
     bool active_is_audible =
         audible_helper ? audible_helper->WasRecentlyAudible() : false;
 
-    for (auto* browser : *BrowserList::GetInstance()) {
+    for (Browser* browser : *BrowserList::GetInstance()) {
       if (browser->profile()->GetOriginalProfile() == profile_) {
         for (int i = 0, tab_count = browser->tab_strip_model()->count();
              i < tab_count; ++i) {
@@ -446,7 +452,7 @@ void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents) {
       ConvertTabAlertState(chrome::GetTabAlertStatesForContents(web_contents));
 
   if (web_contents->IsBeingCaptured()) {
-    states.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_CAPTURING);
+    states.push_back(tabs_private::TabAlertState::kCapturing);
   }
 
   int tabId = extensions::ExtensionTabUtil::GetTabId(web_contents);
@@ -624,10 +630,10 @@ void VivaldiPrivateTabObserver::RenderViewHostChanged(
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
     content::HostZoomMap* host_zoom_map_ =
         content::HostZoomMap::GetForWebContents(web_contents());
-    auto* rvhi = static_cast<content::RenderViewHostImpl*>(new_host);
-    content::RenderFrameHost* rfh = rvhi->GetMainRenderFrameHost();
-    if (rfh) {
-      content::GlobalRenderFrameHostId rfh_id = rfh->GetGlobalId();
+    auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
+        web_contents()->GetPrimaryMainFrame());
+    if (rfhi) {
+      content::GlobalRenderFrameHostId rfh_id = rfhi->GetGlobalId();
       host_zoom_map_->SetTemporaryZoomLevel(rfh_id, tab_zoom_level_);
     }
   }
@@ -1292,16 +1298,16 @@ ExtensionFunction::ResponseAction TabsPrivateMoveSpatnavRectFunction::Run() {
 
   ::vivaldi::mojom::SpatnavDirection dir;
   switch (params->direction) {
-    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_LEFT:
+    case vivaldi::tabs_private::NavigationDirection::kLeft:
       dir = ::vivaldi::mojom::SpatnavDirection::kLeft;
       break;
-    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_RIGHT:
+    case vivaldi::tabs_private::NavigationDirection::kRight:
       dir = ::vivaldi::mojom::SpatnavDirection::kRight;
       break;
-    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_UP:
+    case vivaldi::tabs_private::NavigationDirection::kUp:
       dir = ::vivaldi::mojom::SpatnavDirection::kUp;
       break;
-    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_DOWN:
+    case vivaldi::tabs_private::NavigationDirection::kDown:
       dir = ::vivaldi::mojom::SpatnavDirection::kDown;
       break;
     default:

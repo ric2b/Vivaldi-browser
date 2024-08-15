@@ -70,6 +70,33 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
                 '\turl = /repo_3'
             ], contents)
 
+    def testGitmodules_migration_no_git_suffix(self):
+        self.gclient(['config', self.git_base + 'repo_21', '--name', 'foo'],
+                     cwd=self.git_base + 'repo_21')
+        # We are not running gclient sync since dependencies don't exist
+        self.gclient(['gitmodules'], cwd=self.git_base + 'repo_21')
+
+        gitmodules = os.path.join(self.git_base, 'repo_21', '.gitmodules')
+        with open(gitmodules) as f:
+            contents = f.read().splitlines()
+            self.assertEqual([
+                '[submodule "bar"]',
+                '\tpath = bar',
+                '\turl = https://example.googlesource.com/repo.git',
+            ], contents)
+        # force migration
+        os.remove(gitmodules)
+        self.gclient(['gitmodules'], cwd=self.git_base + 'repo_21')
+
+        gitmodules = os.path.join(self.git_base, 'repo_21', '.gitmodules')
+        with open(gitmodules) as f:
+            contents = f.read().splitlines()
+            self.assertEqual([
+                '[submodule "bar"]',
+                '\tpath = bar',
+                '\turl = https://example.googlesource.com/repo',
+            ], contents)
+
     def testGitmodules_not_in_gclient(self):
         with self.assertRaisesRegex(AssertionError, 'from a gclient workspace'):
             self.gclient(['gitmodules'], cwd=self.root_dir)

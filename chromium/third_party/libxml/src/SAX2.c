@@ -1855,8 +1855,10 @@ decode:
  * The default handling is to convert the attribute into an
  * DOM subtree and past it in a new xmlAttr element added to
  * the element.
+ *
+ * Returns the new attribute or NULL in case of error.
  */
-static void
+static xmlAttrPtr
 xmlSAX2AttributeNs(xmlParserCtxtPtr ctxt,
                    const xmlChar * localname,
                    const xmlChar * prefix,
@@ -1870,8 +1872,12 @@ xmlSAX2AttributeNs(xmlParserCtxtPtr ctxt,
     /*
      * Note: if prefix == NULL, the attribute is not in the default namespace
      */
-    if (prefix != NULL)
-	namespace = xmlSearchNs(ctxt->myDoc, ctxt->node, prefix);
+    if (prefix != NULL) {
+	namespace = xmlParserNsLookupSax(ctxt, prefix);
+	if ((namespace == NULL) && (xmlStrEqual(prefix, BAD_CAST "xml"))) {
+	    namespace = xmlSearchNs(ctxt->myDoc, ctxt->node, prefix);
+	}
+    }
 
     /*
      * allocate the node
@@ -1880,42 +1886,37 @@ xmlSAX2AttributeNs(xmlParserCtxtPtr ctxt,
         ret = ctxt->freeAttrs;
 	ctxt->freeAttrs = ret->next;
 	ctxt->freeAttrsNr--;
-	memset(ret, 0, sizeof(xmlAttr));
-	ret->type = XML_ATTRIBUTE_NODE;
-
-	ret->parent = ctxt->node;
-	ret->doc = ctxt->myDoc;
-	ret->ns = namespace;
-
-	if (ctxt->dictNames)
-	    ret->name = localname;
-	else
-	    ret->name = xmlStrdup(localname);
-
-        /* link at the end to preserve order, TODO speed up with a last */
-	if (ctxt->node->properties == NULL) {
-	    ctxt->node->properties = ret;
-	} else {
-	    xmlAttrPtr prev = ctxt->node->properties;
-
-	    while (prev->next != NULL) prev = prev->next;
-	    prev->next = ret;
-	    ret->prev = prev;
-	}
-
-	if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
-	    xmlRegisterNodeDefaultValue((xmlNodePtr)ret);
     } else {
-	if (ctxt->dictNames)
-	    ret = xmlNewNsPropEatName(ctxt->node, namespace,
-	                              (xmlChar *) localname, NULL);
-	else
-	    ret = xmlNewNsProp(ctxt->node, namespace, localname, NULL);
-	if (ret == NULL) {
-	    xmlErrMemory(ctxt, "xmlSAX2AttributeNs");
-	    return;
-	}
+        ret = xmlMalloc(sizeof(*ret));
+        if (ret == NULL) {
+            xmlSAX2ErrMemory(ctxt, NULL);
+            return(NULL);
+        }
     }
+
+    memset(ret, 0, sizeof(xmlAttr));
+    ret->type = XML_ATTRIBUTE_NODE;
+
+    /*
+     * xmlParseBalancedChunkMemoryRecover had a bug that could result in
+     * a mismatch between ctxt->node->doc and ctxt->myDoc. We use
+     * ctxt->node->doc here, but we should somehow make sure that the
+     * document pointers match.
+     */
+
+    /* assert(ctxt->node->doc == ctxt->myDoc); */
+
+    ret->parent = ctxt->node;
+    ret->doc = ctxt->node->doc;
+    ret->ns = namespace;
+
+    if (ctxt->dictNames)
+        ret->name = localname;
+    else
+        ret->name = xmlStrdup(localname);
+
+    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+        xmlRegisterNodeDefaultValue((xmlNodePtr)ret);
 
     if ((ctxt->replaceEntities == 0) && (!ctxt->html)) {
 	xmlNodePtr tmp;
@@ -2061,6 +2062,8 @@ xmlSAX2AttributeNs(xmlParserCtxtPtr ctxt,
     }
     if (dup != NULL)
 	xmlFree(dup);
+
+    return(ret);
 }
 
 /**
@@ -2201,6 +2204,9 @@ xmlSAX2StartElementNs(void *ctx,
              */
 	    continue;
 	}
+
+        xmlParserNsUpdateSax(ctxt, pref, ns);
+
 #ifdef LIBXML_VALID_ENABLED
 	if ((!ctxt->html) && ctxt->validate && ctxt->wellFormed &&
 	    ctxt->myDoc && ctxt->myDoc->intSubset) {
@@ -2242,7 +2248,7 @@ xmlSAX2StartElementNs(void *ctx,
      * Note that, if prefix is NULL, this searches for the default Ns
      */
     if ((URI != NULL) && (ret->ns == NULL)) {
-        ret->ns = xmlSearchNs(ctxt->myDoc, parent, prefix);
+        ret->ns = xmlParserNsLookupSax(ctxt, prefix);
 	if ((ret->ns == NULL) && (xmlStrEqual(prefix, BAD_CAST "xml"))) {
 	    ret->ns = xmlSearchNs(ctxt->myDoc, ret, prefix);
 	}
@@ -2268,7 +2274,11 @@ xmlSAX2StartElementNs(void *ctx,
      * process all the other attributes
      */
     if (nb_attributes > 0) {
+        xmlAttrPtr prev = NULL;
+
         for (j = 0,i = 0;i < nb_attributes;i++,j+=5) {
+            xmlAttrPtr attr = NULL;
+
 	    /*
 	     * Handle the rare case of an undefined attribute prefix
 	     */
@@ -2279,23 +2289,38 @@ xmlSAX2StartElementNs(void *ctx,
 		    fullname = xmlDictQLookup(ctxt->dict, attributes[j+1],
 		                              attributes[j]);
 		    if (fullname != NULL) {
-			xmlSAX2AttributeNs(ctxt, fullname, NULL,
-			                   attributes[j+3], attributes[j+4]);
-		        continue;
+                        attr = xmlSAX2AttributeNs(ctxt, fullname, NULL,
+                                                  attributes[j+3],
+                                                  attributes[j+4]);
+                        goto have_attr;
 		    }
 		} else {
 		    lname = xmlBuildQName(attributes[j], attributes[j+1],
 		                          NULL, 0);
 		    if (lname != NULL) {
-			xmlSAX2AttributeNs(ctxt, lname, NULL,
-			                   attributes[j+3], attributes[j+4]);
+                        attr = xmlSAX2AttributeNs(ctxt, lname, NULL,
+                                                  attributes[j+3],
+                                                  attributes[j+4]);
 			xmlFree(lname);
-		        continue;
+                        goto have_attr;
 		    }
 		}
 	    }
-	    xmlSAX2AttributeNs(ctxt, attributes[j], attributes[j+1],
-			       attributes[j+3], attributes[j+4]);
+            attr = xmlSAX2AttributeNs(ctxt, attributes[j], attributes[j+1],
+                                      attributes[j+3], attributes[j+4]);
+have_attr:
+            if (attr == NULL)
+                continue;
+
+            /* link at the end to preserve order */
+            if (prev == NULL) {
+                ctxt->node->properties = attr;
+            } else {
+                prev->next = attr;
+                attr->prev = prev;
+            }
+
+            prev = attr;
 	}
     }
 

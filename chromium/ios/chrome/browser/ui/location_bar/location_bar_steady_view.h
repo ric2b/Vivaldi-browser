@@ -74,7 +74,14 @@
 @property(nonatomic, strong) LocationBarSteadyViewColorScheme* colorScheme;
 
 // Vivaldi
+// The button displayed in the leading button view, i.e. site info button.
+@property(nonatomic, strong) UIButton* leadingButton;
+// The view containing the location label, and (sometimes) the site into button
+// view.
+@property(nonatomic, strong) UIView* locationContainerView;
+
 - (void)fadeSteadyViewContentsWithAlpha:(CGFloat)alpha;
+- (void)setLeadingButtonEnabled:(BOOL)enabled;
 // End Vivaldi
 
 @end

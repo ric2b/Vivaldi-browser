@@ -4,10 +4,12 @@
 # found in the LICENSE file.
 """Outputs host CPU architecture in format recognized by gyp."""
 
+from functools import lru_cache
 import platform
 import re
 
 
+@lru_cache(maxsize=None)
 def HostArch():
     """Returns the host architecture with a predictable string."""
     host_arch = platform.machine().lower()
@@ -57,7 +59,7 @@ def HostArch():
 
 def DoMain(_):
     """Hook to be called from gyp without starting a separate python
-  interpreter."""
+    interpreter."""
     return HostArch()
 
 

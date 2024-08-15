@@ -34,7 +34,6 @@
 #include "src/core/SkMipmap.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/core/SkTraceEvent.h"
-#include "src/gpu/PipelineUtils.h"
 #include "src/gpu/SkRenderEngineAbortf.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/ganesh/GrAttachment.h"
@@ -69,7 +68,6 @@
 #include "src/sksl/ir/SkSLProgram.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -410,12 +408,18 @@ private:
 std::unique_ptr<GrGpu> GrGLGpu::Make(sk_sp<const GrGLInterface> interface,
                                      const GrContextOptions& options,
                                      GrDirectContext* direct) {
+#if !defined(SK_DISABLE_LEGACY_GL_MAKE_NATIVE_INTERFACE)
     if (!interface) {
         interface = GrGLMakeNativeInterface();
         if (!interface) {
             return nullptr;
         }
     }
+#else
+    if (!interface) {
+        return nullptr;
+    }
+#endif
 #ifdef USE_NSIGHT
     const_cast<GrContextOptions&>(options).fSuppressPathRendering = true;
 #endif
@@ -441,7 +445,7 @@ GrGLGpu::GrGLGpu(std::unique_ptr<GrGLContext> ctx, GrDirectContext* dContext)
     // Toss out any pre-existing OOM that was hanging around before we got started.
     this->checkAndResetOOMed();
 
-    this->initCapsAndCompiler(sk_ref_sp(fGLContext->caps()));
+    this->initCaps(sk_ref_sp(fGLContext->caps()));
 
     fHWTextureUnitBindings.reset(this->numTextureUnits());
 
@@ -1278,7 +1282,7 @@ bool GrGLGpu::uploadCompressedTexData(SkTextureCompressionType compressionType,
                                                           dimensions.height(),
                                                           internalFormat,
                                                           SkToInt(levelDataSize),
-                                                          &((char*)data)[offset]));
+                                                          &((const char*)data)[offset]));
 
             if (error != GR_GL_NO_ERROR) {
                 return false;
@@ -1294,7 +1298,7 @@ bool GrGLGpu::uploadCompressedTexData(SkTextureCompressionType compressionType,
             size_t levelDataSize = SkCompressedDataSize(compressionType, dimensions,
                                                         nullptr, false);
 
-            const char* rawLevelData = &((char*)data)[offset];
+            const char* rawLevelData = &((const char*)data)[offset];
             GrGLenum error = GL_ALLOC_CALL(CompressedTexImage2D(target,
                                                                 level,
                                                                 internalFormat,
@@ -3341,12 +3345,13 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
     std::string glsl[kGrShaderTypeCount];
     SkSL::ProgramSettings settings;
     SkSL::Program::Interface interface;
-    SkSLToGLSL(this->shaderCompiler(), vertexSkSL, SkSL::ProgramKind::kVertex, settings,
-               &glsl[kVertex_GrShaderType], &interface, errorHandler);
+    skgpu::SkSLToGLSL(shaderCaps, vertexSkSL, SkSL::ProgramKind::kVertex, settings,
+                      &glsl[kVertex_GrShaderType], &interface, errorHandler);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fCopyPrograms[progIdx].fProgram,
                                                   GR_GL_VERTEX_SHADER,
                                                   glsl[kVertex_GrShaderType],
+                                                  /*shaderWasCached=*/false,
                                                   fProgramCache->stats(),
                                                   errorHandler);
     SkASSERT(interface == SkSL::Program::Interface());
@@ -3356,12 +3361,13 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
         return false;
     }
 
-    SkSLToGLSL(this->shaderCompiler(), fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
-               &glsl[kFragment_GrShaderType], &interface, errorHandler);
+    skgpu::SkSLToGLSL(shaderCaps, fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
+                      &glsl[kFragment_GrShaderType], &interface, errorHandler);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fCopyPrograms[progIdx].fProgram,
                                                   GR_GL_FRAGMENT_SHADER,
                                                   glsl[kFragment_GrShaderType],
+                                                  /*shaderWasCached=*/false,
                                                   fProgramCache->stats(),
                                                   errorHandler);
     SkASSERT(interface == SkSL::Program::Interface());
@@ -3373,7 +3379,12 @@ bool GrGLGpu::createCopyProgram(GrTexture* srcTex) {
 
     const std::string* sksl[kGrShaderTypeCount] = {&vertexSkSL, &fragmentSkSL};
     GL_CALL(LinkProgram(fCopyPrograms[progIdx].fProgram));
-    if (!GrGLCheckLinkStatus(this, fCopyPrograms[progIdx].fProgram, errorHandler, sksl, glsl)) {
+    if (!GrGLCheckLinkStatus(this,
+                             fCopyPrograms[progIdx].fProgram,
+                             /*shaderWasCached=*/false,
+                             errorHandler,
+                             sksl,
+                             glsl)) {
         // Failed to link, delete everything
         cleanup_program(this, &fCopyPrograms[progIdx].fProgram, &vshader, &fshader);
         return false;
@@ -3519,12 +3530,13 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
     SkSL::ProgramSettings settings;
     SkSL::Program::Interface interface;
 
-    SkSLToGLSL(this->shaderCompiler(), vertexSkSL, SkSL::ProgramKind::kVertex, settings,
-               &glsl[kVertex_GrShaderType], &interface, errorHandler);
+    skgpu::SkSLToGLSL(shaderCaps, vertexSkSL, SkSL::ProgramKind::kVertex, settings,
+                      &glsl[kVertex_GrShaderType], &interface, errorHandler);
     GrGLuint vshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fMipmapPrograms[progIdx].fProgram,
                                                   GR_GL_VERTEX_SHADER,
                                                   glsl[kVertex_GrShaderType],
+                                                  /*shaderWasCached=*/false,
                                                   fProgramCache->stats(),
                                                   errorHandler);
     SkASSERT(interface == SkSL::Program::Interface());
@@ -3533,12 +3545,13 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
         return false;
     }
 
-    SkSLToGLSL(this->shaderCompiler(), fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
-               &glsl[kFragment_GrShaderType], &interface, errorHandler);
+    skgpu::SkSLToGLSL(shaderCaps, fragmentSkSL, SkSL::ProgramKind::kFragment, settings,
+                      &glsl[kFragment_GrShaderType], &interface, errorHandler);
     GrGLuint fshader = GrGLCompileAndAttachShader(*fGLContext,
                                                   fMipmapPrograms[progIdx].fProgram,
                                                   GR_GL_FRAGMENT_SHADER,
                                                   glsl[kFragment_GrShaderType],
+                                                  /*shaderWasCached=*/false,
                                                   fProgramCache->stats(),
                                                   errorHandler);
     SkASSERT(interface == SkSL::Program::Interface());
@@ -3549,7 +3562,12 @@ bool GrGLGpu::createMipmapProgram(int progIdx) {
 
     const std::string* sksl[kGrShaderTypeCount] = {&vertexSkSL, &fragmentSkSL};
     GL_CALL(LinkProgram(fMipmapPrograms[progIdx].fProgram));
-    if (!GrGLCheckLinkStatus(this, fMipmapPrograms[progIdx].fProgram, errorHandler, sksl, glsl)) {
+    if (!GrGLCheckLinkStatus(this,
+                             fMipmapPrograms[progIdx].fProgram,
+                             /*shaderWasCached=*/false,
+                             errorHandler,
+                             sksl,
+                             glsl)) {
         // Program linking failed, clean up
         cleanup_program(this, &fMipmapPrograms[progIdx].fProgram, &vshader, &fshader);
         return false;
@@ -4237,7 +4255,7 @@ void GrGLGpu::flush(FlushType flushType) {
 
 bool GrGLGpu::onSubmitToGpu(GrSyncCpu sync) {
     if (sync == GrSyncCpu::kYes ||
-        (!fFinishCallbacks.empty() && !this->caps()->fenceSyncSupport())) {
+        (!fFinishCallbacks.empty() && !this->glCaps().fenceSyncSupport())) {
         this->finishOutstandingGpuWork();
         fFinishCallbacks.callAll(true);
     } else {
@@ -4265,9 +4283,9 @@ void GrGLGpu::submit(GrOpsRenderPass* renderPass) {
     fCachedOpsRenderPass->reset();
 }
 
-[[nodiscard]] GrFence GrGLGpu::insertFence() {
-    if (!this->caps()->fenceSyncSupport()) {
-        return 0;
+[[nodiscard]] GrGLsync GrGLGpu::insertFence() {
+    if (!this->glCaps().fenceSyncSupport()) {
+        return nullptr;
     }
     GrGLsync sync;
     if (this->glCaps().fenceType() == GrGLCaps::FenceType::kNVFence) {
@@ -4280,8 +4298,7 @@ void GrGLGpu::submit(GrOpsRenderPass* renderPass) {
         GL_CALL_RET(sync, FenceSync(GR_GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
     }
     this->setNeedsFlush();
-    static_assert(sizeof(GrFence) >= sizeof(GrGLsync));
-    return (GrFence)sync;
+    return sync;
 }
 
 bool GrGLGpu::waitSync(GrGLsync sync, uint64_t timeout, bool flush) {
@@ -4308,16 +4325,16 @@ bool GrGLGpu::waitSync(GrGLsync sync, uint64_t timeout, bool flush) {
     }
 }
 
-bool GrGLGpu::waitFence(GrFence fence) {
-    if (!this->caps()->fenceSyncSupport()) {
+bool GrGLGpu::waitFence(GrGLsync fence) {
+    if (!this->glCaps().fenceSyncSupport()) {
         return true;
     }
-    return this->waitSync(reinterpret_cast<GrGLsync>(fence), 0, false);
+    return this->waitSync(fence, 0, false);
 }
 
-void GrGLGpu::deleteFence(GrFence fence) {
-    if (this->caps()->fenceSyncSupport()) {
-        this->deleteSync(reinterpret_cast<GrGLsync>(fence));
+void GrGLGpu::deleteFence(GrGLsync fence) {
+    if (this->glCaps().fenceSyncSupport()) {
+        this->deleteSync(fence);
     }
 }
 
@@ -4388,7 +4405,7 @@ std::unique_ptr<GrSemaphore> GrGLGpu::prepareTextureForCrossContextUsage(GrTextu
     std::unique_ptr<GrSemaphore> semaphore = this->makeSemaphore(true);
     SkASSERT(semaphore);
     this->insertSemaphore(semaphore.get());
-    // We must call flush here to make sure the GrGLSync object gets created and sent to the gpu.
+    // We must call flush here to make sure the GrGLsync object gets created and sent to the gpu.
     this->flush(FlushType::kForce);
 
     return semaphore;

@@ -36,6 +36,9 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.editors.EditorDialogView;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -45,9 +48,6 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.autofill.AutofillProfile;
 import org.chromium.components.autofill.Source;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -67,10 +67,7 @@ import java.util.concurrent.TimeoutException;
 /** Unit test suite for AutofillProfilesFragment. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(Batch.PER_CLASS)
-@EnableFeatures({
-    ChromeFeatureList.AUTOFILL_ACCOUNT_PROFILE_STORAGE,
-    ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE_IN_TRANSPORT_MODE
-})
+@EnableFeatures({ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE_IN_TRANSPORT_MODE})
 @DisabledTest(message = "https://crbug.com/1496405")
 public class AutofillProfilesFragmentTest {
     private static final AutofillProfile sLocalOrSyncProfile =
@@ -176,7 +173,6 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testAddProfile() throws Exception {
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -218,7 +214,6 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testAddIncompletedProfile() throws Exception {
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -250,7 +245,6 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testAddProfileWithInvalidPhone() throws Exception {
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -392,7 +386,6 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testEditProfile() throws Exception {
         AutofillProfilesFragment autofillProfileFragment = sSettingsActivityTestRule.getFragment();
 
@@ -445,7 +438,6 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testEditAccountProfile() throws Exception {
         String email = "test@account";
         setUpMockPrimaryAccount(email);
@@ -531,7 +523,6 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
     public void testEditInvalidAccountProfile() throws Exception {
         mHelper.setProfile(
                 AutofillProfile.builder()
@@ -706,10 +697,7 @@ public class AutofillProfilesFragmentTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @DisableFeatures({
-        ChromeFeatureList.AUTOFILL_ACCOUNT_PROFILE_STORAGE,
-        ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE_IN_TRANSPORT_MODE
-    })
+    @DisableFeatures({ChromeFeatureList.SYNC_ENABLE_CONTACT_INFO_DATA_TYPE_IN_TRANSPORT_MODE})
     public void testLocalProfiles_NoRequiredFeatureFlags() throws Exception {
         setUpMockPrimaryAccount("test@account.com");
         setUpMockSyncService(false, new HashSet());

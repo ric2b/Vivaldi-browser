@@ -16,9 +16,6 @@ class GURL;
 @class StartVoiceSearchCommand;
 @class UIViewController;
 enum class DefaultBrowserPromoSource;
-namespace syncer {
-enum class TrustedVaultUserActionTriggerForUMA;
-}  // namespace syncer
 namespace autofill {
 class CreditCard;
 }  // namespace autofill
@@ -27,9 +24,13 @@ struct CredentialUIEntry;
 enum class PasswordCheckReferrer;
 enum class WarningType;
 }  // namespace password_manager
+namespace signin_metrics {
+enum class AccessPoint;
+}  // namespace signin_metrics
+namespace syncer {
+enum class TrustedVaultUserActionTriggerForUMA;
+}  // namespace syncer
 
-// This protocol groups commands that are part of ApplicationCommands, but
-// may also be forwarded directly to a settings navigation controller.
 @protocol ApplicationSettingsCommands
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
@@ -59,16 +60,12 @@ enum class WarningType;
 - (void)showSyncPassphraseSettingsFromViewController:
     (UIViewController*)baseViewController;
 
-// TODO(crbug.com/1406871): Remove the `startPasswordCheck` parameter when
-// kIOSPasswordCheckup feature is enabled by default.
 // Shows the list of saved passwords in the settings. `showCancelButton`
 // indicates whether a cancel button should be added as the left navigation item
-// of the saved passwords view. `startPasswordCheck` indicates whether a
-// password check should be started when the saved passwords are shown.
+// of the saved passwords view.
 - (void)showSavedPasswordsSettingsFromViewController:
             (UIViewController*)baseViewController
-                                    showCancelButton:(BOOL)showCancelButton
-                                  startPasswordCheck:(BOOL)startPasswordCheck;
+                                    showCancelButton:(BOOL)showCancelButton;
 
 // Shows the password details page for a credential.
 // `showCancelButton` indicates whether a cancel button should be added as the
@@ -115,16 +112,15 @@ enum class WarningType;
 - (void)showContentsSettingsFromViewController:
     (UIViewController*)baseViewController;
 
+// Shows the Notifications Settings page in the settings.
+- (void)showNotificationsSettings;
+
 @end
 
 // Protocol for commands that will generally be handled by the application,
-// rather than a specific tab; in practice this means the MainController
+// rather than a specific tab; in practice this means the SceneController
 // instance.
-// This protocol includes all of the methods in ApplicationSettingsCommands; an
-// object that implements the methods in this protocol should be able to forward
-// ApplicationSettingsCommands to the settings view controller if necessary.
-
-@protocol ApplicationCommands <NSObject, ApplicationSettingsCommands>
+@protocol ApplicationCommands
 
 // Dismisses all modal dialogs with a completion block that is called when
 // modals are dismissed (animations done).
@@ -154,7 +150,10 @@ enum class WarningType;
                                                  trigger:
                                                      (syncer::
                                                           TrustedVaultUserActionTriggerForUMA)
-                                                         trigger;
+                                                         trigger
+                                             accessPoint:
+                                                 (signin_metrics::AccessPoint)
+                                                     accessPoint;
 
 // Presents the Trusted Vault degraded recoverability (to enroll additional
 // recovery factors).
@@ -166,7 +165,11 @@ enum class WarningType;
                                                               trigger:
                                                                   (syncer::
                                                                        TrustedVaultUserActionTriggerForUMA)
-                                                                      trigger;
+                                                                      trigger
+                                                          accessPoint:
+                                                              (signin_metrics::
+                                                                   AccessPoint)
+                                                                  accessPoint;
 
 // Starts a voice search on the current BVC.
 - (void)startVoiceSearch;

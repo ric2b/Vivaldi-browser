@@ -12,6 +12,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
+#include "components/security_interstitials/content/security_interstitial_page.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "content/public/browser/navigation_handle.h"
 
@@ -31,12 +32,12 @@ namespace safe_browsing {
 
 typedef unsigned ThreatSeverity;
 
-class BaseBlockingPage;
-
 // Construction needs to happen on the main thread.
 class BaseUIManager : public base::RefCountedThreadSafe<BaseUIManager> {
  public:
   typedef security_interstitials::UnsafeResource UnsafeResource;
+  typedef security_interstitials::SecurityInterstitialPage
+      SecurityInterstitialPage;
 
   BaseUIManager();
 
@@ -51,6 +52,16 @@ class BaseUIManager : public base::RefCountedThreadSafe<BaseUIManager> {
   // -For subresources this will cancel the load, then call
   // LoadPostCommitErrorPage, which will show the interstitial.
   virtual void DisplayBlockingPage(const UnsafeResource& resource);
+
+  // Creates a blocking page, used for both pre commit and post commit warnings.
+  // Also forwards an interstitial shown extension event to embedder if
+  // |forward_extension_event| is true. Should be overridden with a blocking
+  // page implementation.
+  virtual SecurityInterstitialPage* CreateBlockingPage(
+      content::WebContents* contents,
+      const GURL& blocked_url,
+      const UnsafeResource& unsafe_resource,
+      bool forward_extension_event);
 
   // This is a no-op in the base class, but should be overridden to send threat
   // details. Called on the UI thread by the ThreatDetails with the report.
@@ -76,6 +87,14 @@ class BaseUIManager : public base::RefCountedThreadSafe<BaseUIManager> {
   // report if the user has enabled SBER and is not currently in incognito mode.
   virtual void MaybeReportSafeBrowsingHit(
       std::unique_ptr<safe_browsing::HitReport> hit_report,
+      content::WebContents* web_contents);
+
+  // This is a no-op in the base class, but should be overridden to send report
+  // about unsafe contents (malware, phishing, unsafe download URL) to the
+  // server. Can only be called on UI thread and only sent for
+  // extended_reporting users who are not in incognito mode.
+  virtual void MaybeSendClientSafeBrowsingWarningShownReport(
+      std::unique_ptr<ClientSafeBrowsingReportRequest> report,
       content::WebContents* web_contents);
 
   // A convenience wrapper method for IsUrlAllowlistedOrPendingForWebContents.
@@ -130,18 +149,26 @@ class BaseUIManager : public base::RefCountedThreadSafe<BaseUIManager> {
   void AddUnsafeResource(GURL url,
                          security_interstitials::UnsafeResource resource);
 
-  // Checks if an UnsafeResource |resource| exists for |url|, if so, it is
-  // removed from the vector, assigned to |resource| and the function returns
-  // true. Otherwise the function returns false and nothing gets assigned to
-  // |resource|.
-  bool PopUnsafeResourceForURL(
+  // Checks if an UnsafeResource |resource| exists for |url| and
+  // |navigation_id|, if so, it is removed from the vector, assigned to
+  // |resource| and the function returns true. Otherwise the function returns
+  // false and nothing gets assigned to |resource|.
+  bool PopUnsafeResourceForNavigation(
       GURL url,
+      int64_t navigation_id,
       security_interstitials::UnsafeResource* resource);
 
   // Goes over the |handle->RedirectChain| and returns the severest threat.
   // The lowest value is 0, which represents the most severe type.
   ThreatSeverity GetSeverestThreatForNavigation(
       content::NavigationHandle* handle,
+      security_interstitials::UnsafeResource& severest_resource);
+
+  // Goes over the |redirect_chain| and returns the severest threat.
+  // The lowest value is 0, which represents the most severe type.
+  ThreatSeverity GetSeverestThreatForRedirectChain(
+      const std::vector<GURL>& redirect_chain,
+      int64_t navigation_id,
       security_interstitials::UnsafeResource& severest_resource);
 
  protected:
@@ -166,15 +193,13 @@ class BaseUIManager : public base::RefCountedThreadSafe<BaseUIManager> {
   // implement the reporting logic themselves if needed.
   virtual void CreateAndSendHitReport(const UnsafeResource& resource);
 
+  // BaseUIManager does not send ClientSafeBrowsingReport. Subclasses should
+  // implement the reporting logic themselves if needed.
+  virtual void CreateAndSendClientSafeBrowsingWarningShownReport(
+      const UnsafeResource& resource);
+
  private:
   friend class base::RefCountedThreadSafe<BaseUIManager>;
-
-  // Creates a blocking page, used for interstitials triggered by subresources.
-  // Should be overridden with a blocking page implementation.
-  virtual BaseBlockingPage* CreateBlockingPageForSubresource(
-      content::WebContents* contents,
-      const GURL& blocked_url,
-      const UnsafeResource& unsafe_resource);
 
   // Stores unsafe resources so they can be fetched from a navigation throttle
   // in the committed interstitials flow. Implemented as a pair vector since

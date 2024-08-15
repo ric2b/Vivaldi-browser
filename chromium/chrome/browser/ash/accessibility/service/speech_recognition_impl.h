@@ -12,6 +12,7 @@
 #include "chrome/browser/speech/speech_recognition_constants.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "services/accessibility/public/mojom/assistive_technology_type.mojom.h"
 #include "services/accessibility/public/mojom/speech_recognition.mojom.h"
 
 namespace content {
@@ -94,16 +95,16 @@ class SpeechRecognitionImpl
   void StartHelper(StartCallback callback,
                    const std::string& key,
                    speech::SpeechRecognitionType type,
-                   absl::optional<std::string> error);
+                   std::optional<std::string> error);
 
   // Called after speech recognition stops. Performs final clean up and notifies
   // the caller using the StopCallback.
   void StopHelper(StopCallback callback,
                   const std::string& key,
-                  absl::optional<std::string> error);
+                  std::optional<std::string> error);
 
   // Creates a key given a client ID.
-  std::string CreateKey(absl::optional<int> client_id);
+  std::string CreateKey(ax::mojom::AssistiveTechnologyType type);
 
   // Returns the speech recognizer associated with the key. Creates one if
   // none exists.
@@ -127,7 +128,7 @@ class SpeechRecognitionImpl
   std::map<std::string, std::unique_ptr<SpeechRecognitionEventObserverWrapper>>
       event_observer_wrappers_;
   mojo::ReceiverSet<ax::mojom::SpeechRecognition> receivers_;
-  raw_ptr<content::BrowserContext, ExperimentalAsh> profile_ = nullptr;
+  raw_ptr<content::BrowserContext> profile_ = nullptr;
   base::WeakPtrFactory<SpeechRecognitionImpl> weak_ptr_factory_{this};
 };
 

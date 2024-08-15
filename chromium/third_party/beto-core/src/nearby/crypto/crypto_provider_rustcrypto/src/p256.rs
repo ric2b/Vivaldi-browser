@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate alloc;
-
 use crate::RcRng;
-use alloc::vec::Vec;
 use core::marker::PhantomData;
 use crypto_provider::{
     elliptic_curve::{EcdhProvider, EphemeralSecret},
-    p256::P256,
+    p256::{PointCompression, P256},
+    tinyvec::ArrayVec,
 };
 use p256::{
     elliptic_curve,
@@ -52,8 +50,12 @@ impl crypto_provider::p256::P256PublicKey for P256PublicKey {
         p256::PublicKey::from_sec1_bytes(bytes).map(Self)
     }
 
-    fn to_sec1_bytes(&self) -> Vec<u8> {
-        self.0.to_encoded_point(true).as_bytes().to_vec()
+    fn to_sec1_bytes(&self, point_compression: PointCompression) -> ArrayVec<[u8; 65]> {
+        let mut bytes = ArrayVec::<[u8; 65]>::new();
+        bytes.extend_from_slice(
+            self.0.to_encoded_point(point_compression == PointCompression::Compressed).as_bytes(),
+        );
+        bytes
     }
 
     #[allow(clippy::expect_used)]
@@ -87,6 +89,7 @@ impl<R: CryptoRng + SeedableRng + RngCore + Send> EphemeralSecret<P256> for P256
     type Impl = P256Ecdh<R>;
     type Error = sec1::Error;
     type Rng = RcRng<R>;
+    type EncodedPublicKey = ArrayVec<[u8; 65]>;
 
     fn generate_random(rng: &mut Self::Rng) -> Self {
         Self {
@@ -95,8 +98,10 @@ impl<R: CryptoRng + SeedableRng + RngCore + Send> EphemeralSecret<P256> for P256
         }
     }
 
-    fn public_key_bytes(&self) -> Vec<u8> {
-        self.secret.public_key().to_encoded_point(false).as_bytes().into()
+    fn public_key_bytes(&self) -> Self::EncodedPublicKey {
+        let mut bytes = Self::EncodedPublicKey::new();
+        bytes.extend_from_slice(self.secret.public_key().to_encoded_point(false).as_bytes());
+        bytes
     }
 
     fn diffie_hellman(
@@ -136,7 +141,7 @@ mod tests {
     use rand::rngs::StdRng;
 
     #[apply(p256_test_cases)]
-    fn p256_tests(testcase: CryptoProviderTestCase<P256Ecdh<StdRng>>) {
+    fn p256_tests(testcase: CryptoProviderTestCase<P256Ecdh<StdRng>>, _name: &str) {
         testcase(PhantomData::<P256Ecdh<StdRng>>)
     }
 }

@@ -165,15 +165,7 @@ label {
 
 .settings-tab .settings-section-title {
   margin-left: -20px;
-  color: var(--sys-color-token-subtle);
-}
-
-.settings-tab .settings-block label:hover {
-  color: var(--sys-color-token-subtle);
-}
-
-.settings-tab .settings-block fieldset:disabled label:hover {
-  color: inherit;
+  color: var(--sys-color-on-surface-subtle);
 }
 
 .settings-tab select {
@@ -183,7 +175,7 @@ label {
 
 .settings-experiment {
   display: grid;
-  grid-template-columns: auto min-content 1fr;
+  grid-template-columns: auto min-content auto 1fr;
 }
 
 .settings-experiment .devtools-link {

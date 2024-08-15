@@ -321,12 +321,6 @@ void ImageResource::DestroyDecodedDataForFailedRevalidation() {
 
 void ImageResource::DestroyDecodedDataIfPossible() {
   GetContent()->DestroyDecodedData();
-  if (GetContent()->HasImage() && !IsUnusedPreload() &&
-      GetContent()->IsRefetchableDataFromDiskCache()) {
-    UMA_HISTOGRAM_MEMORY_KB(
-        "Memory.Renderer.EstimatedDroppableEncodedSize",
-        base::saturated_cast<base::Histogram::Sample>(EncodedSize() / 1024));
-  }
 }
 
 void ImageResource::AllClientsAndObserversRemoved() {
@@ -422,7 +416,7 @@ void ImageResource::DecodeError(bool all_data_received) {
     // Observers are notified via ImageResource::finish().
     // TODO(hiroshige): Do not call didFinishLoading() directly.
     Loader()->AbortResponseBodyLoading();
-    Loader()->DidFinishLoading(base::TimeTicks::Now(), size, size, size, false);
+    Loader()->DidFinishLoading(base::TimeTicks::Now(), size, size, size);
   } else {
     auto result = GetContent()->UpdateImage(
         nullptr, GetStatus(),

@@ -103,25 +103,25 @@ std::vector<RecurrenceException> CreateRecurrenceException(
 int MapAccountType(const AccountType& account_type) {
   int type = 0;
   switch (account_type) {
-    case vivaldi::calendar::ACCOUNT_TYPE_LOCAL:
+    case vivaldi::calendar::AccountType::kLocal:
       type = 0;
       break;
-    case vivaldi::calendar::ACCOUNT_TYPE_VIVALDI:
+    case vivaldi::calendar::AccountType::kVivaldi:
       type = 1;
       break;
-    case vivaldi::calendar::ACCOUNT_TYPE_GOOGLE:
+    case vivaldi::calendar::AccountType::kGoogle:
       type = 2;
       break;
-    case vivaldi::calendar::ACCOUNT_TYPE_CALDAV:
+    case vivaldi::calendar::AccountType::kCaldav:
       type = 3;
       break;
-    case vivaldi::calendar::ACCOUNT_TYPE_ICAL:
+    case vivaldi::calendar::AccountType::kIcal:
       type = 4;
       break;
-    case vivaldi::calendar::ACCOUNT_TYPE_FASTMAIL:
+    case vivaldi::calendar::AccountType::kFastmail:
       type = 5;
       break;
-    case vivaldi::calendar::ACCOUNT_TYPE_NONE:
+    case vivaldi::calendar::AccountType::kNone:
       type = 0;
       break;
   }
@@ -129,25 +129,25 @@ int MapAccountType(const AccountType& account_type) {
 }
 
 AccountType MapAccountTypeFromDb(int type) {
-  AccountType account_type = vivaldi::calendar::ACCOUNT_TYPE_LOCAL;
+  AccountType account_type = vivaldi::calendar::AccountType::kLocal;
   switch (type) {
     case calendar::ACCOUNT_TYPE_LOCAL:
-      account_type = vivaldi::calendar::ACCOUNT_TYPE_LOCAL;
+      account_type = vivaldi::calendar::AccountType::kLocal;
       break;
     case calendar::ACCOUNT_TYPE_VIVALDINET:
-      account_type = vivaldi::calendar::ACCOUNT_TYPE_VIVALDI;
+      account_type = vivaldi::calendar::AccountType::kVivaldi;
       break;
     case calendar::ACCOUNT_TYPE_GOOGLE:
-      account_type = vivaldi::calendar::ACCOUNT_TYPE_GOOGLE;
+      account_type = vivaldi::calendar::AccountType::kGoogle;
       break;
     case calendar::ACCOUNT_TYPE_CALDAV:
-      account_type = vivaldi::calendar::ACCOUNT_TYPE_CALDAV;
+      account_type = vivaldi::calendar::AccountType::kCaldav;
       break;
     case calendar::ACCOUNT_TYPE_FASTMAIL:
-      account_type = vivaldi::calendar::ACCOUNT_TYPE_FASTMAIL;
+      account_type = vivaldi::calendar::AccountType::kFastmail;
       break;
     case calendar::ACCOUNT_TYPE_ICAL:
-      account_type = vivaldi::calendar::ACCOUNT_TYPE_ICAL;
+      account_type = vivaldi::calendar::AccountType::kIcal;
       break;
   }
   return account_type;
@@ -1838,7 +1838,7 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
     row.updateFields |= calendar::ACCOUNT_URL;
   }
 
-  if (params->changes.account_type) {
+  if (params->changes.account_type != vivaldi::calendar::AccountType::kNone) {
     row.account_type = MapAccountType(params->changes.account_type);
     row.updateFields |= calendar::ACCOUNT_TYPE;
   }

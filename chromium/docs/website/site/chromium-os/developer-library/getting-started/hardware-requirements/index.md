@@ -74,9 +74,16 @@ developer mode, the device can be flashed over the network from the workstation.
 The minimum required size of the thumb drive is 8 GB.
 
 Up next you will configure your workstation [development
-environment](/chromium-os/developer-library/development-library) to meet the
-requirements of developing ChromiumOS.
+environment](/chromium-os/developer-library/getting-started/development-environment)
+to meet the requirements of developing ChromiumOS.
 
-[Previous: Getting Started](/chromium-os/developer-library/getting-started)
-
-[Next: Development Environment](/chromium-os/developer-library/development-environment)
+<div style="text-align: center; margin: 3rem 0 1rem 0;">
+  <div style="margin: 0 1rem; display: inline-block;">
+    <span style="margin-right: 0.5rem;"><</span>
+    <a href="/chromium-os/developer-library/getting-started">Getting Started</a>
+  </div>
+  <div style="margin: 0 1rem; display: inline-block;">
+    <a href="/chromium-os/developer-library/getting-started/development-environment">Development Environment</a>
+    <span style="margin-left: 0.5rem;">></span>
+  </div>
+</div>

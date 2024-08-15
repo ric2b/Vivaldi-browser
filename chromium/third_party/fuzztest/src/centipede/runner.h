@@ -26,6 +26,7 @@
 #include <cstdlib>
 
 #include "absl/base/const_init.h"
+#include "absl/numeric/bits.h"
 #include "./centipede/byte_array_mutator.h"
 #include "./centipede/callstack.h"
 #include "./centipede/concurrent_bitset.h"
@@ -33,10 +34,10 @@
 #include "./centipede/feature.h"
 #include "./centipede/hashed_ring_buffer.h"
 #include "./centipede/knobs.h"
-#include "./centipede/pc_info.h"
 #include "./centipede/reverse_pc_table.h"
 #include "./centipede/runner_cmp_trace.h"
 #include "./centipede/runner_dl_info.h"
+#include "./centipede/runner_interface.h"
 #include "./centipede/runner_result.h"
 #include "./centipede/runner_sancov_object.h"
 
@@ -62,10 +63,12 @@ struct RunTimeFlags {
   uint64_t callstack_level : 8;
   uint64_t use_counter_features : 1;
   uint64_t use_auto_dictionary : 1;
-  uint64_t timeout_per_input;
+  std::atomic<uint64_t> timeout_per_input;
   uint64_t timeout_per_batch;
-  uint64_t rss_limit_mb;
+  std::atomic<uint64_t> stack_limit_kb;
+  std::atomic<uint64_t> rss_limit_mb;
   uint64_t crossover_level;
+  uint64_t skip_seen_features : 1;
 };
 
 // One such object is created in runner's TLS.
@@ -83,9 +86,9 @@ struct ThreadLocalRunnerState {
   // Guarded by state.tls_list_mu.
   ThreadLocalRunnerState *next, *prev;
 
-  // The pthread_create() interceptor calls OnThreadStart()/OnThreadStop()
-  // before/after the thread callback.
-  // The main thread calls OnThreadStart().
+  // The pthread_create() interceptor calls OnThreadStart() before the thread
+  // callback. The main thread also calls OnThreadStart(). OnThreadStop() will
+  // be called when thread termination is detected internally - see runner.cc.
   void OnThreadStart();
   void OnThreadStop();
 
@@ -96,6 +99,8 @@ struct ThreadLocalRunnerState {
 
   // Value of SP in the top call frame of the thread, computed in OnThreadStart.
   uintptr_t top_frame_sp;
+  // The lower bound of the stack region of this thread. 0 means unknown.
+  uintptr_t stack_region_low;
   // Lowest observed value of SP.
   uintptr_t lowest_sp;
 
@@ -111,6 +116,7 @@ struct ThreadLocalRunnerState {
   CmpTrace<0, 64> cmp_traceN;
 
   // Set this to true if the thread needs to be ignored in ForEachTLS.
+  // It should be always false if the state is in the global detached_tls_list.
   bool ignore;
 };
 
@@ -127,14 +133,16 @@ struct GlobalRunnerState {
   GlobalRunnerState();
   ~GlobalRunnerState();
 
-  // Runner reads flags from a dedicated env var, CENTIPEDE_RUNNER_FLAGS.
-  // We don't use flags passed via argv so that argv flags can be passed
-  // directly to LLVMFuzzerInitialize, w/o filtering. The flags passed in
-  // CENTIPEDE_RUNNER_FLAGS are separated with ':' on both sides, i.e. like
-  // this: CENTIPEDE_RUNNER_FLAGS=":flag1:flag2:". We do it this way to make the
-  // flag parsing code extremely simple. The interface is private between
-  // Centipede and the runner and may change.
-  const char *centipede_runner_flags = getenv("CENTIPEDE_RUNNER_FLAGS");
+  // Runner reads flags from CentipedeGetRunnerFlags(). We don't use flags
+  // passed via argv so that argv flags can be passed directly to
+  // LLVMFuzzerInitialize, w/o filtering. The flags are separated with
+  // ':' on both sides, i.e. like this: ":flag1:flag2:flag3=value3".
+  // We do it this way to make the flag parsing code extremely simple. The
+  // interface is private between Centipede and the runner and may change.
+  //
+  // Note that this field reflects the initial runner flags. But some
+  // flags can change later (if wrapped with std::atomic).
+  const char *centipede_runner_flags = CentipedeGetRunnerFlags();
   const char *arg1 = GetStringFlag(":arg1=");
   const char *arg2 = GetStringFlag(":arg2=");
   const char *arg3 = GetStringFlag(":arg3=");
@@ -154,8 +162,10 @@ struct GlobalRunnerState {
       .use_auto_dictionary = HasFlag(":use_auto_dictionary:"),
       .timeout_per_input = HasIntFlag(":timeout_per_input=", 0),
       .timeout_per_batch = HasIntFlag(":timeout_per_batch=", 0),
+      .stack_limit_kb = HasIntFlag(":stack_limit_kb=", 0),
       .rss_limit_mb = HasIntFlag(":rss_limit_mb=", 0),
-      .crossover_level = HasIntFlag(":crossover_level=", 50)};
+      .crossover_level = HasIntFlag(":crossover_level=", 50),
+      .skip_seen_features = HasFlag(":skip_seen_features:")};
 
   // Returns true iff `flag` is present.
   // Typical usage: pass ":some_flag:", i.e. the flag name surrounded with ':'.
@@ -191,7 +201,9 @@ struct GlobalRunnerState {
 
   // Doubly linked list of TLSs of all live threads.
   ThreadLocalRunnerState *tls_list;
-  pthread_mutex_t tls_list_mu;  // Guards tls_list.
+  // Doubly linked list of detached TLSs.
+  ThreadLocalRunnerState *detached_tls_list;
+  pthread_mutex_t tls_list_mu;  // Guards tls_list and detached_tls_list.
   // Iterates all TLS objects under tls_list_mu, except those with `ignore` set.
   // Calls `callback()` on every TLS.
   template <typename Callback>
@@ -200,7 +212,13 @@ struct GlobalRunnerState {
     for (auto *it = tls_list; it; it = it->next) {
       if (!it->ignore) callback(*it);
     }
+    for (auto *it = detached_tls_list; it; it = it->next) {
+      callback(*it);
+    }
   }
+
+  // Reclaims all TLSs in detached_tls_list and cleans up the list.
+  void CleanUpDetachedTls();
 
   // Computed by DlInfo().
   // Usually, the main object is the executable binary containing main()
@@ -219,13 +237,16 @@ struct GlobalRunnerState {
   // State for SanitizerCoverage.
   // See https://clang.llvm.org/docs/SanitizerCoverage.html.
   SanCovObjectArray sancov_objects;
-  static const size_t kBitSetSize = 1 << 18;  // Arbitrary large size.
-  ConcurrentBitSet<kBitSetSize> data_flow_feature_set{absl::kConstInit};
+  // An arbitrarily large size.
+  static constexpr size_t kDataFlowFeatureSetSize = 1 << 18;
+  ConcurrentBitSet<kDataFlowFeatureSetSize> data_flow_feature_set{
+      absl::kConstInit};
 
   // Tracing CMP instructions, capture events from these domains:
   // kCMPEq, kCMPModDiff, kCMPHamming, kCMPModDiffLog, kCMPMsbEq.
   // See https://clang.llvm.org/docs/SanitizerCoverage.html#tracing-data-flow.
-  static const size_t kCmpFeatureSetSize = 1 << 18;  // Arbitrary large size.
+  // An arbitrarily large size.
+  static constexpr size_t kCmpFeatureSetSize = 1 << 18;
   // TODO(kcc): remove cmp_feature_set.
   ConcurrentBitSet<kCmpFeatureSetSize> cmp_feature_set{absl::kConstInit};
   ConcurrentBitSet<kCmpFeatureSetSize> cmp_eq_set{absl::kConstInit};
@@ -234,7 +255,7 @@ struct GlobalRunnerState {
   ConcurrentBitSet<kCmpFeatureSetSize> cmp_difflog_set{absl::kConstInit};
 
   // We think that call stack produces rich signal, so we give a few bits to it.
-  static const size_t kCallStackFeatureSetSize = 1 << 24;
+  static constexpr size_t kCallStackFeatureSetSize = 1 << 24;
   ConcurrentBitSet<kCallStackFeatureSetSize> callstack_set{absl::kConstInit};
 
   // kMaxNumPcs is the maximum number of instrumented PCs in the binary.
@@ -265,7 +286,8 @@ struct GlobalRunnerState {
   // * Use call stacks instead of paths (via unwinding or other
   // instrumentation).
 
-  static const size_t kPathBitSetSize = 1 << 25;  // Arbitrary very large size.
+  // An arbitrarily large size.
+  static constexpr size_t kPathBitSetSize = 1 << 25;
   // Observed paths. The total number of observed paths for --path_level=N
   // can be up to NumPCs**N.
   // So, we make the bitset very large, but it may still saturate.
@@ -282,9 +304,8 @@ struct GlobalRunnerState {
 
   // Timeout-related machinery.
 
-  // If the timeout_per_input and/or rss_limit_mb flags are passed, initializes
-  // the watchdog thread that terminates the runner if either of those limits
-  // are exceeded.
+  // Starts the watchdog thread that terminates the runner if any of the
+  // rss/time limits are exceeded.
   void StartWatchdogThread();
   // Resets the per-input timer. Call this before executing every input.
   void ResetTimers();
@@ -299,14 +320,22 @@ struct GlobalRunnerState {
   // The Watchdog thread sets this to true.
   std::atomic<bool> watchdog_thread_started;
 
-  // An arbitrary large size.
+  // An arbitrarily large size.
   static const size_t kMaxFeatures = 1 << 20;
   // FeatureArray used to accumulate features from all sources.
   FeatureArray<kMaxFeatures> g_features;
+
+  // Features that were seen before.
+  static constexpr size_t kSeenFeatureSetSize =
+      absl::bit_ceil(feature_domains::kLastDomain.end());
+  ConcurrentBitSet<kSeenFeatureSetSize> seen_features{absl::kConstInit};
 };
 
 extern GlobalRunnerState state;
 extern __thread ThreadLocalRunnerState tls;
+
+// Check for stack limit for the stack pointer `sp` in the current thread.
+void CheckStackLimit(uintptr_t sp);
 
 }  // namespace centipede
 

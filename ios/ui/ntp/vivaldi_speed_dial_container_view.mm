@@ -5,6 +5,9 @@
 #import "UIKit/UIKit.h"
 
 #import "ios/chrome/browser/favicon/favicon_loader.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -25,10 +28,6 @@
 using ui::GetDeviceFormFactor;
 using ui::DEVICE_FORM_FACTOR_TABLET;
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // NAMESPACE
 namespace {
 // Cell Identifier for the cell types
@@ -37,6 +36,8 @@ NSString* cellIdFolderList = @"cellIdFolderList";
 NSString* cellIdRegular = @"cellIdRegular";
 NSString* cellIdSmall = @"cellIdSmall";
 NSString* cellIdList = @"cellIdList";
+
+NSString* syncedStoreURLKey = @"synced-store";
 }
 
 @interface VivaldiSpeedDialContainerView() <UICollectionViewDataSource,
@@ -68,8 +69,13 @@ NSString* cellIdList = @"cellIdList";
   if (self = [super initWithFrame:CGRectZero]) {
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
+    [self startObservingSDItemPropertyChange];
   }
   return self;
+}
+
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - SET UP UI COMPONENTS
@@ -200,6 +206,8 @@ NSString* cellIdList = @"cellIdList";
           [collectionView dequeueReusableCellWithReuseIdentifier:cellIdRegular
                                                     forIndexPath:indexPath];
         [largeCell configureCellWith:item layoutStyle:self.selectedLayout];
+        [largeCell
+            setActivityIndicatorLoading:item.isThumbnailRefreshing];
         [self loadFaviconForItem:item
                          forCell:largeCell];
         return largeCell;
@@ -437,6 +445,22 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
         }
       }];
 
+    NSString* updateThumbnailActionTitle =
+        l10n_util::GetNSString(IDS_IOS_UPDATE_SPEED_DIAL_THUMBNAIL);
+    UIAction * thumbnailRefreshAction =
+      [UIAction actionWithTitle:updateThumbnailActionTitle
+                          image:[UIImage systemImageNamed:@"arrow.circlepath"]
+                     identifier:nil
+                        handler:^(__kindof UIAction* _Nonnull action) {
+        // Thumbnail refresh button action
+        if (self.delegate) {
+          VivaldiSpeedDialItem* item =
+            [self.speedDialItems objectAtIndex: indexPath.row];
+          [self.delegate didRefreshThumbnailForItem:item
+                                             parent:self.parent];
+        }
+      }];
+
     NSString* moveActionTitle = l10n_util::GetNSString(IDS_IOS_MOVE_ITEM);
     UIAction * moveAction =
       [UIAction actionWithTitle:moveActionTitle
@@ -469,11 +493,28 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
       }];
     deleteAction.attributes = UIMenuElementAttributesDestructive;
 
-    UIMenu* menu = [UIMenu menuWithTitle:@"" children:@[
-      editAction, moveAction, deleteAction
-    ]];
-    return menu;
+    NSMutableArray *actions =
+        [NSMutableArray arrayWithObjects:
+            editAction, moveAction, deleteAction, nil];
 
+    // Refresh is not available when thumbnail url is a synced-store thumbnail,
+    // or if the selected layout is anything other than regular or medium.
+    BOOL layoutHasThumbnail =
+        self.selectedLayout == VivaldiStartPageLayoutStyleLarge ||
+        self.selectedLayout == VivaldiStartPageLayoutStyleMedium;
+
+    VivaldiSpeedDialItem* item =
+      [self.speedDialItems objectAtIndex: indexPath.row];
+
+    BOOL shouldAddThumbnailRefreshAction =
+        layoutHasThumbnail && ![self isSyncedStoreThumbnailURLForItem:item];
+    if (shouldAddThumbnailRefreshAction) {
+      [actions insertObject:thumbnailRefreshAction atIndex:1];
+    }
+
+    // Create the menu with the actions array
+    UIMenu* menu = [UIMenu menuWithTitle:@"" children:actions];
+    return menu;
   }];
 
   return config;
@@ -522,7 +563,52 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
   return config;
 }
 
-#pragma mark - SET UP UI COMPONENTS
+#pragma mark - Private
+
+- (void)startObservingSDItemPropertyChange {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  [[NSNotificationCenter defaultCenter]
+       addObserver:self
+          selector:@selector(handleSDItemPropertyChangeNotification:)
+              name:vSpeedDialPropertyDidChange
+            object:nil];
+}
+
+- (void)handleSDItemPropertyChangeNotification:(NSNotification*)notification {
+  NSDictionary *userInfo = notification.userInfo;
+  NSNumber *bookmarkNodeId = userInfo[vSpeedDialIdentifierKey];
+
+  // Find the index of the SDItem with the matching id
+  NSUInteger index =
+      [_speedDialItems indexOfObjectPassingTest:^BOOL(VivaldiSpeedDialItem *item,
+                                                      NSUInteger idx,
+                                                      BOOL *stop) {
+    return [item.idValue isEqualToNumber:bookmarkNodeId];
+  }];
+
+  if (index != NSNotFound) {
+    // Create the NSIndexPath for the specific item and get the cell.
+    NSIndexPath *indexPath = [NSIndexPath indexPathForItem:index inSection:0];
+    NSNumber* triggeredFromThumbnailRefresh =
+        userInfo[vSpeedDialThumbnailRefreshStateKey];
+    if (triggeredFromThumbnailRefresh) {
+      VivaldiSpeedDialItem* item = [self.speedDialItems objectAtIndex:index];
+      BOOL isCaptureInProgress = ![triggeredFromThumbnailRefresh boolValue];
+      if (item) {
+        item.isThumbnailRefreshing = isCaptureInProgress;
+      }
+    }
+    [_collectionView reloadItemsAtIndexPaths:@[indexPath]];
+  }
+}
+
+/// Whether its a custom thumbnail set on Desktop.
+- (BOOL)isSyncedStoreThumbnailURLForItem:(VivaldiSpeedDialItem*)item {
+  if (!item)
+    return NO;
+  NSRange range = [item.thumbnail rangeOfString:syncedStoreURLKey];
+  return range.location != NSNotFound;
+}
 
 /// Create and return the compositional layout for the collection view
 - (UICollectionViewCompositionalLayout*)createLayout {
@@ -595,10 +681,11 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 
   NSCollectionLayoutSection *section =
     [NSCollectionLayoutSection sectionWithGroup:group];
-  section.contentInsets = NSDirectionalEdgeInsetsMake(vSDContainerTopPadding,
-                                                      sectionPadding,
-                                                      vSDContainerTopPadding,
-                                                      sectionPadding);
+  section.contentInsets =
+      NSDirectionalEdgeInsetsMake(vSDContainerTopPadding,
+                                  sectionPadding,
+                                  [self containerBottomPadding],
+                                  sectionPadding);
   return section;
 }
 
@@ -654,7 +741,6 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
   }
 }
 
-
 /// Return the item padding for iPhone and iPad
 /// Same item padding is used for both portrait and landscape mode.
 - (CGFloat)getItemPadding {
@@ -674,6 +760,21 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 - (CGFloat)getSectionPaddingForPhone {
   return VivaldiGlobalHelpers.isVerticalTraitCompact ?
     vSDSectionPaddingiPhoneLandscape : vSDSectionPaddingiPhonePortrait;
+}
+
+// (Important)VIB-133 Workaround for (ntp + landscape + bottom omnibox) combo
+// Return the bottom padding for the container from the height of secondary
+// toolbar with insets. This avoids jumpy animation for tab switcher on NTP.
+- (CGFloat)containerBottomPadding {
+  CGFloat padding = vSDContainerBottomPadding;
+  if (!IsSplitToolbarMode(self.traitCollection)) {
+    CGFloat toolbarHeight =
+        ToolbarExpandedHeight(
+            self.traitCollection.preferredContentSizeCategory);
+    return toolbarHeight + kSecondaryToolbarWithoutOmniboxHeight +
+        self.safeAreaInsets.bottom + vSDContainerBottomPadding;
+  }
+  return padding;
 }
 
 /// Returns true when app is running on split mode in

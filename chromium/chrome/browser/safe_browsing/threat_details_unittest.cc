@@ -25,11 +25,11 @@
 #include "components/safe_browsing/content/browser/threat_details.h"
 #include "components/safe_browsing/content/browser/threat_details_history.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
+#include "components/safe_browsing/content/browser/unsafe_resource_util.h"
 #include "components/safe_browsing/content/browser/web_contents_key.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "components/safe_browsing/core/browser/referrer_chain_provider.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
-#include "components/security_interstitials/content/unsafe_resource_util.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
@@ -283,8 +283,9 @@ class ThreatDetailsTest : public ChromeRenderViewHostTestHarness {
                     bool is_subresource,
                     const GURL& url,
                     UnsafeResource* resource) {
+    auto* primary_main_frame = web_contents()->GetPrimaryMainFrame();
     const content::GlobalRenderFrameHostId primary_main_frame_id =
-        web_contents()->GetPrimaryMainFrame()->GetGlobalId();
+        primary_main_frame->GetGlobalId();
     resource->url = url;
     resource->is_subresource = is_subresource;
     resource->request_destination =
@@ -293,7 +294,7 @@ class ThreatDetailsTest : public ChromeRenderViewHostTestHarness {
     resource->threat_type = threat_type;
     resource->threat_source = threat_source;
     resource->render_process_id = primary_main_frame_id.child_id;
-    resource->render_frame_id = primary_main_frame_id.frame_routing_id;
+    resource->render_frame_token = primary_main_frame->GetFrameToken().value();
   }
 
   void VerifyResults(const ClientSafeBrowsingReportRequest& report_pb,
@@ -1858,7 +1859,7 @@ TEST_F(ThreatDetailsTest, HTTPCacheNoEntries) {
       ->NavigateAndCommit(GURL(kLandingURL));
 
   UnsafeResource resource;
-  InitResource(SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE,
+  InitResource(SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING,
                ThreatSource::LOCAL_PVER4, true /* is_subresource */,
                GURL(kThreatURL), &resource);
 
@@ -1891,7 +1892,7 @@ TEST_F(ThreatDetailsTest, HTTPCacheNoEntries) {
   actual.ParseFromString(serialized);
 
   ClientSafeBrowsingReportRequest expected;
-  expected.set_type(ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_MALWARE);
+  expected.set_type(ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_PHISHING);
   expected.mutable_client_properties()->set_url_api_type(
       ClientSafeBrowsingReportRequest::PVER4_NATIVE);
   expected.set_url(kThreatURL);

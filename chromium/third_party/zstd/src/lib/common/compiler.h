@@ -11,6 +11,8 @@
 #ifndef ZSTD_COMPILER_H
 #define ZSTD_COMPILER_H
 
+#include <stddef.h>
+
 #include "portability_macros.h"
 
 /*-*******************************************************
@@ -130,8 +132,8 @@
 /* prefetch
  * can be disabled, by declaring NO_PREFETCH build macro */
 #if defined(NO_PREFETCH)
-#  define PREFETCH_L1(ptr)  (void)(ptr)  /* disabled */
-#  define PREFETCH_L2(ptr)  (void)(ptr)  /* disabled */
+#  define PREFETCH_L1(ptr)  do { (void)(ptr); } while (0)  /* disabled */
+#  define PREFETCH_L2(ptr)  do { (void)(ptr); } while (0)  /* disabled */
 #else
 #  if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_I86)) && !defined(_M_ARM64EC)  /* _mm_prefetch() is not defined outside of x86/x64 */
 #    include <mmintrin.h>   /* https://msdn.microsoft.com/fr-fr/library/84szxsww(v=vs.90).aspx */
@@ -141,24 +143,25 @@
 #    define PREFETCH_L1(ptr)  __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
 #    define PREFETCH_L2(ptr)  __builtin_prefetch((ptr), 0 /* rw==read */, 2 /* locality */)
 #  elif defined(__aarch64__)
-#    define PREFETCH_L1(ptr)  __asm__ __volatile__("prfm pldl1keep, %0" ::"Q"(*(ptr)))
-#    define PREFETCH_L2(ptr)  __asm__ __volatile__("prfm pldl2keep, %0" ::"Q"(*(ptr)))
+#    define PREFETCH_L1(ptr)  do { __asm__ __volatile__("prfm pldl1keep, %0" ::"Q"(*(ptr))); } while (0)
+#    define PREFETCH_L2(ptr)  do { __asm__ __volatile__("prfm pldl2keep, %0" ::"Q"(*(ptr))); } while (0)
 #  else
-#    define PREFETCH_L1(ptr) (void)(ptr)  /* disabled */
-#    define PREFETCH_L2(ptr) (void)(ptr)  /* disabled */
+#    define PREFETCH_L1(ptr) do { (void)(ptr); } while (0)  /* disabled */
+#    define PREFETCH_L2(ptr) do { (void)(ptr); } while (0)  /* disabled */
 #  endif
 #endif  /* NO_PREFETCH */
 
 #define CACHELINE_SIZE 64
 
-#define PREFETCH_AREA(p, s)  {            \
-    const char* const _ptr = (const char*)(p);  \
-    size_t const _size = (size_t)(s);     \
-    size_t _pos;                          \
-    for (_pos=0; _pos<_size; _pos+=CACHELINE_SIZE) {  \
-        PREFETCH_L2(_ptr + _pos);         \
-    }                                     \
-}
+#define PREFETCH_AREA(p, s)                              \
+    do {                                                 \
+        const char* const _ptr = (const char*)(p);       \
+        size_t const _size = (size_t)(s);                \
+        size_t _pos;                                     \
+        for (_pos=0; _pos<_size; _pos+=CACHELINE_SIZE) { \
+            PREFETCH_L2(_ptr + _pos);                    \
+        }                                                \
+    } while (0)
 
 /* vectorization
  * older GCC (pre gcc-4.3 picked as the cutoff) uses a different syntax,
@@ -187,9 +190,9 @@
 #endif
 
 #if __has_builtin(__builtin_unreachable) || (defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)))
-#  define ZSTD_UNREACHABLE { assert(0), __builtin_unreachable(); }
+#  define ZSTD_UNREACHABLE do { assert(0), __builtin_unreachable(); } while (0)
 #else
-#  define ZSTD_UNREACHABLE { assert(0); }
+#  define ZSTD_UNREACHABLE do { assert(0); } while (0)
 #endif
 
 /* disable warnings */
@@ -301,6 +304,74 @@
 /*-**************************************************************
 *  Sanitizer
 *****************************************************************/
+
+/**
+ * Zstd relies on pointer overflow in its decompressor.
+ * We add this attribute to functions that rely on pointer overflow.
+ */
+#ifndef ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+#  if __has_attribute(no_sanitize)
+#    if !defined(__clang__) && defined(__GNUC__) && __GNUC__ < 8
+       /* gcc < 8 only has signed-integer-overlow which triggers on pointer overflow */
+#      define ZSTD_ALLOW_POINTER_OVERFLOW_ATTR __attribute__((no_sanitize("signed-integer-overflow")))
+#    else
+       /* older versions of clang [3.7, 5.0) will warn that pointer-overflow is ignored. */
+#      define ZSTD_ALLOW_POINTER_OVERFLOW_ATTR __attribute__((no_sanitize("pointer-overflow")))
+#    endif
+#  else
+#    define ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+#  endif
+#endif
+
+/**
+ * Helper function to perform a wrapped pointer difference without trigging
+ * UBSAN.
+ *
+ * @returns lhs - rhs with wrapping
+ */
+MEM_STATIC
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+ptrdiff_t ZSTD_wrappedPtrDiff(unsigned char const* lhs, unsigned char const* rhs)
+{
+    return lhs - rhs;
+}
+
+/**
+ * Helper function to perform a wrapped pointer add without triggering UBSAN.
+ *
+ * @return ptr + add with wrapping
+ */
+MEM_STATIC
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+unsigned char const* ZSTD_wrappedPtrAdd(unsigned char const* ptr, ptrdiff_t add)
+{
+    return ptr + add;
+}
+
+/**
+ * Helper function to perform a wrapped pointer subtraction without triggering
+ * UBSAN.
+ *
+ * @return ptr - sub with wrapping
+ */
+MEM_STATIC
+ZSTD_ALLOW_POINTER_OVERFLOW_ATTR
+unsigned char const* ZSTD_wrappedPtrSub(unsigned char const* ptr, ptrdiff_t sub)
+{
+    return ptr - sub;
+}
+
+/**
+ * Helper function to add to a pointer that works around C's undefined behavior
+ * of adding 0 to NULL.
+ *
+ * @returns `ptr + add` except it defines `NULL + 0 == NULL`.
+ */
+MEM_STATIC
+unsigned char* ZSTD_maybeNullPtrAdd(unsigned char* ptr, ptrdiff_t add)
+{
+    return add > 0 ? ptr + add : ptr;
+}
 
 /* Issue #3240 reports an ASAN failure on an llvm-mingw build. Out of an
  * abundance of caution, disable our custom poisoning on mingw. */

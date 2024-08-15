@@ -177,8 +177,6 @@ ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
     // Free any open devtools if the user selects Exit from the menu.
     DevtoolsConnectorAPI::CloseAllDevtools();
 
-    VivaldiBrowserWindow::SetPromptOnQuit(params->prompt);
-
     chrome::CloseAllBrowsersAndQuit();
   }
 
@@ -247,7 +245,7 @@ ExtensionFunction::ResponseAction RuntimePrivateHasGuestSessionFunction::Run() {
   namespace Results = vivaldi::runtime_private::HasGuestSession::Results;
 
   bool has_guest = false;
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->profile()->IsGuestSession()) {
       has_guest = true;
       break;
@@ -262,7 +260,7 @@ RuntimePrivateSwitchToGuestSessionFunction::Run() {
 
   // First test available browsers and open a new guest window if we already
   // have a browser for a guest window to allow for multiple guest windows.
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->profile()->IsGuestSession()) {
       chrome::NewWindow(browser);
       return RespondNow(ArgumentList(Results::Create(true)));

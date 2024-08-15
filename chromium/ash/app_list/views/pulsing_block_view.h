@@ -8,6 +8,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace gfx {
@@ -18,6 +19,8 @@ namespace ash {
 
 // PulsingBlockView shows a pulsing white circle via layer animation.
 class PulsingBlockView : public views::View {
+  METADATA_HEADER(PulsingBlockView, views::View)
+
  public:
   // Constructs a PulsingBlockView of |size|. Starts the pulsing animation after
   // a |animation_delay|.
@@ -47,7 +50,7 @@ class PulsingBlockView : public views::View {
 
   base::OneShotTimer start_delay_timer_;
 
-  raw_ptr<views::View, ExperimentalAsh> background_color_view_ = nullptr;
+  raw_ptr<views::View> background_color_view_ = nullptr;
 
   const gfx::Size block_size_;
 };

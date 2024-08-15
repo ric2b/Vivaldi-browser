@@ -93,6 +93,7 @@ class NotesCodec {
   static const char kTypeKey[];
   static const char kSubjectKey[];
   static const char kDateAddedKey[];
+  static const char kDateModifiedKey[];
   static const char kURLKey[];
   static const char kChildrenKey[];
   static const char kContentKey[];

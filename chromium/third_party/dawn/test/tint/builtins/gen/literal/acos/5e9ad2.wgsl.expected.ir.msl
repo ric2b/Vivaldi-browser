@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void acos_5e9ad2() {
+  float res = 0.25f;
+}
+vertex float4 vertex_main() {
+  acos_5e9ad2();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  acos_5e9ad2();
+}
+kernel void compute_main() {
+  acos_5e9ad2();
+}

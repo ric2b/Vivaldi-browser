@@ -88,7 +88,7 @@ The file structure is designed to make this selection manually achievable for an
         For example, advanced API for version `v0.4` is exposed in `lib/legacy/zstd_v04.h` .
 
 - While invoking `make libzstd`, it's possible to define build macros
-        `ZSTD_LIB_COMPRESSION, ZSTD_LIB_DECOMPRESSION`, `ZSTD_LIB_DICTBUILDER`,
+        `ZSTD_LIB_COMPRESSION`, `ZSTD_LIB_DECOMPRESSION`, `ZSTD_LIB_DICTBUILDER`,
         and `ZSTD_LIB_DEPRECATED` as `0` to forgo compilation of the
         corresponding features. This will also disable compilation of all
         dependencies (e.g. `ZSTD_LIB_COMPRESSION=0` will also disable
@@ -177,6 +177,10 @@ The file structure is designed to make this selection manually achievable for an
   from the shared library. These macros default to `ZSTDLIB_VISIBILITY`,
   `ZSTDERRORLIB_VSIBILITY`, and `ZDICTLIB_VISIBILITY` if unset, for backwards compatibility
   with the old macro names.
+
+- The C compiler macro `HUF_DISABLE_FAST_DECODE` disables the newer Huffman fast C
+  and assembly decoding loops. You may want to use this macro if these loops are
+  slower on your platform.
 
 #### Windows : using MinGW+MSYS to create DLL
 

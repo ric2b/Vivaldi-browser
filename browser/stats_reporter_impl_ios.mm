@@ -39,4 +39,9 @@ std::string StatsReporterImpl::GetUserAgent() {
   return web::GetWebClient()->GetUserAgent(web::UserAgentType::MOBILE);
 }
 
+// static
+std::string StatsReporterImpl::GetClientHints() {
+  return "{}";
+}
+
 }  // namespace vivaldi

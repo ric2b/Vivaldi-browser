@@ -16,6 +16,7 @@
 #include "base/files/file.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -240,7 +241,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // Provide a non-null BucketLocator to override the default storage bucket
   // for the root URL (which will be propagated to child URLs).
   void OpenFileSystem(const blink::StorageKey& storage_key,
-                      const absl::optional<storage::BucketLocator>& bucket,
+                      const std::optional<storage::BucketLocator>& bucket,
                       FileSystemType type,
                       OpenFileSystemMode mode,
                       OpenFileSystemCallback callback);
@@ -339,7 +340,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   void ResolveURLOnOpenFileSystemForTesting(
       const blink::StorageKey& storage_key,
-      const absl::optional<storage::BucketLocator>& bucket,
+      const std::optional<storage::BucketLocator>& bucket,
       FileSystemType type,
       OpenFileSystemMode mode,
       OpenFileSystemCallback callback) {
@@ -416,7 +417,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // `bucket` will be populated if the non-default storage bucket was used.
   void ResolveURLOnOpenFileSystem(
       const blink::StorageKey& storage_key,
-      const absl::optional<storage::BucketLocator>& bucket,
+      const std::optional<storage::BucketLocator>& bucket,
       FileSystemType type,
       OpenFileSystemMode mode,
       OpenFileSystemCallback callback);
@@ -466,7 +467,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   // MountPoints used to crack FileSystemURLs. The MountPoints are ordered
   // in order they should try to crack a FileSystemURL.
-  std::vector<MountPoints*> url_crackers_;
+  std::vector<raw_ptr<MountPoints, VectorExperimental>> url_crackers_;
 
   // The base path of the storage partition for this context.
   const base::FilePath partition_path_;

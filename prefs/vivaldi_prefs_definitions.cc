@@ -555,7 +555,6 @@ void VivaldiPrefsDefinitions::AddPropertiesFromDefinition(
     if (!enum_dict) {
       LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
                  << kEnumValuesKey << "'";
-      return;
     }
 
     EnumPrefValues enum_values;
@@ -641,6 +640,8 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(vivaldiprefs::kVivaldiPIPPlacement);
 
 #if BUILDFLAG(IS_ANDROID)
+  registry->RegisterBooleanPref(vivaldiprefs::kPWADisabled,
+                                true);
 #if defined(OEM_MERCEDES_BUILD) || defined(OEM_LYNKCO_BUILD)
   registry->RegisterBooleanPref(vivaldiprefs::kBackgroundMediaPlaybackAllowed,
                                 true);

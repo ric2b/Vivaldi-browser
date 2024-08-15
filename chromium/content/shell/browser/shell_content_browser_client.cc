@@ -24,7 +24,7 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequence_local_storage_slot.h"
@@ -168,7 +168,7 @@ class ShellControllerImpl : public mojom::ShellController {
     if (command_line.HasSwitch(name))
       std::move(callback).Run(command_line.GetSwitchValueASCII(name));
     else
-      std::move(callback).Run(absl::nullopt);
+      std::move(callback).Run(std::nullopt);
   }
 
   void ExecuteJavaScript(const std::u16string& script,
@@ -323,7 +323,7 @@ blink::UserAgentMetadata GetShellUserAgentMetadata() {
 
   metadata.bitness = GetCpuBitness();
   metadata.wow64 = content::IsWoW64();
-  metadata.form_factor = "";  // Empty value signifies desktop.
+  metadata.form_factor = {"Desktop"};
 
   return metadata;
 }
@@ -371,7 +371,8 @@ ShellContentBrowserClient::CreateURLLoaderThrottles(
     BrowserContext* browser_context,
     const base::RepeatingCallback<WebContents*()>& wc_getter,
     NavigationUIData* navigation_ui_data,
-    int frame_tree_node_id) {
+    int frame_tree_node_id,
+    absl::optional<int64_t> navigation_id) {
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>> result;
 
   auto* factory = custom_handlers::SimpleProtocolHandlerRegistryFactory::
@@ -619,6 +620,7 @@ ShellContentBrowserClient::CreateThrottlesForNavigation(
 std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
     const net::AuthChallengeInfo& auth_info,
     content::WebContents* web_contents,
+    content::BrowserContext* browser_context,
     const content::GlobalRequestID& request_id,
     bool is_request_for_primary_main_frame,
     const GURL& url,
@@ -655,7 +657,7 @@ base::FilePath ShellContentBrowserClient::GetFirstPartySetsDirectory() {
   return browser_context()->GetPath();
 }
 
-absl::optional<base::FilePath>
+std::optional<base::FilePath>
 ShellContentBrowserClient::GetLocalTracesDirectory() {
   return browser_context()->GetPath();
 }
@@ -833,7 +835,10 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
           /*signature_verification_enabled=*/true,
           std::make_unique<variations::VariationsSafeSeedStoreLocalState>(
               GetSharedState().local_state.get())),
-      variations::UIStringOverrider());
+      variations::UIStringOverrider(),
+      // The limited entropy synthetic trial will not be registered for this
+      // purpose.
+      /*limited_entropy_synthetic_trial=*/nullptr);
 
   variations::SafeSeedManager safe_seed_manager(
       GetSharedState().local_state.get());
@@ -872,14 +877,14 @@ void ShellContentBrowserClient::SetUpFieldTrials() {
       /*add_entropy_source_to_variations_ids=*/false);
 }
 
-absl::optional<blink::ParsedPermissionsPolicy>
+std::optional<blink::ParsedPermissionsPolicy>
 ShellContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
     content::BrowserContext* browser_context,
     const url::Origin& app_origin) {
   blink::ParsedPermissionsPolicyDeclaration coi_decl(
       blink::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
       /*allowed_origins=*/{},
-      /*self_if_matches=*/absl::nullopt,
+      /*self_if_matches=*/std::nullopt,
       /*matches_all_origins=*/true, /*matches_opaque_src=*/false);
 
   blink::ParsedPermissionsPolicyDeclaration socket_decl(

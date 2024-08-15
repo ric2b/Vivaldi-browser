@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_COMMON_MOJOM_AUTOFILL_TYPES_MOJOM_TRAITS_H_
 
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -209,12 +210,8 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
     return r.value;
   }
 
-  static uint32_t selection_start(const autofill::FormFieldData& r) {
-    return r.selection_start;
-  }
-
-  static uint32_t selection_end(const autofill::FormFieldData& r) {
-    return r.selection_end;
+  static const std::u16string& selected_text(const autofill::FormFieldData& r) {
+    return r.selected_text;
   }
 
   static autofill::mojom::FormControlType form_control_type(
@@ -227,7 +224,7 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
     return r.autocomplete_attribute;
   }
 
-  static const absl::optional<autofill::AutocompleteParsingResult>
+  static const std::optional<autofill::AutocompleteParsingResult>
   parsed_autocomplete(const autofill::FormFieldData& r) {
     return r.parsed_autocomplete;
   }
@@ -269,6 +266,10 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
 
   static uint64_t max_length(const autofill::FormFieldData& r) {
     return r.max_length;
+  }
+
+  static bool is_user_edited(const autofill::FormFieldData& r) {
+    return r.is_user_edited;
   }
 
   static bool is_autofilled(const autofill::FormFieldData& r) {
@@ -440,9 +441,14 @@ struct StructTraits<autofill::mojom::FormFieldDataPredictionsDataView,
     return r.heuristic_type;
   }
 
-  static const std::string& server_type(
+  static const std::optional<std::string>& server_type(
       const autofill::FormFieldDataPredictions& r) {
     return r.server_type;
+  }
+
+  static const std::string& html_type(
+      const autofill::FormFieldDataPredictions& r) {
+    return r.html_type;
   }
 
   static const std::string& overall_type(
@@ -631,6 +637,11 @@ struct StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
   static const autofill::FormData& form_data(
       const autofill::password_generation::PasswordGenerationUIData& r) {
     return r.form_data;
+  }
+
+  static bool input_field_empty(
+      const autofill::password_generation::PasswordGenerationUIData& r) {
+    return r.input_field_empty;
   }
 
   static bool Read(

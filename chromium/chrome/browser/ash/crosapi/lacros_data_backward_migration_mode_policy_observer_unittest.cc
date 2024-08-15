@@ -58,6 +58,7 @@ class LacrosDataBackwardMigrationModePolicyObserverTest : public testing::Test {
   }
 
   void TearDown() override {
+    primary_profile_ = nullptr;
     profile_manager_->DeleteAllTestingProfiles();
     profile_manager_.reset();
     ash::SessionManagerClient::Shutdown();
@@ -86,7 +87,7 @@ class LacrosDataBackwardMigrationModePolicyObserverTest : public testing::Test {
       if (base::StartsWith(flag, prefix)) {
         base::StringPiece flag_value(flag);
         flag_value.remove_prefix(prefix.size());
-        absl::optional<base::Value> parsed = base::JSONReader::Read(flag_value);
+        std::optional<base::Value> parsed = base::JSONReader::Read(flag_value);
         std::vector<std::string> result;
         if (parsed && parsed->is_list()) {
           for (const auto& element : parsed->GetList()) {
@@ -109,9 +110,8 @@ class LacrosDataBackwardMigrationModePolicyObserverTest : public testing::Test {
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  raw_ptr<user_manager::User, ExperimentalAsh> test_user_ = nullptr;
-  raw_ptr<TestingProfile, DanglingUntriaged | ExperimentalAsh>
-      primary_profile_ = nullptr;
+  raw_ptr<user_manager::User> test_user_ = nullptr;
+  raw_ptr<TestingProfile> primary_profile_ = nullptr;
 };
 
 TEST_F(LacrosDataBackwardMigrationModePolicyObserverTest, OnPolicyUpdate) {

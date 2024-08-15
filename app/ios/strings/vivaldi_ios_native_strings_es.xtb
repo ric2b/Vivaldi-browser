@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Nota actualizada</translation>
 <translation id="1041637248958093184">Al usar pestañas privadas, no se almacenarán tus búsquedas, sitios visitados, cookies ni archivos temporales.</translation>
 <translation id="1066692930984703744">Activar bloqueo de rastreadores y anuncios para una navegación más rápida y segura</translation>
-<translation id="1076258485383101882">Sincronizar las URLs que escribas</translation>
 <translation id="1116694919640316211">Acerca de Vivaldi</translation>
 <translation id="1123707809902612118">Bloquear rastreadores y anuncios</translation>
 <translation id="1151972924205500581">Contraseña necesaria</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">Términos y condiciones</translation>
 <translation id="1771413903824396513">Por apodo</translation>
 <translation id="1804522390855853698">Chino (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Claro</translation>
 <translation id="1809939268435598390">Eliminar carpeta</translation>
 <translation id="1813686536470127172">Otras carpetas</translation>
 <translation id="1828800626900562968">Toca el botón "+" para abrir una pestaña nueva.</translation>
@@ -71,12 +71,17 @@
 <translation id="2388224692799337242">Tu historial aparecerá aquí cuando empieces a navegar</translation>
 <translation id="2391028308389203648">Turco (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Activar</translation>
+<translation id="2414886740292270097">Oscuro</translation>
+<translation id="2433507940547922241">Apariencia</translation>
 <translation id="2434910957904013691">Sincronizar todo</translation>
 <translation id="2448144008809286557">¿Has olvidado el<ph name="BEGIN_LINK" />Nombre de usuario<ph name="END_LINK" /> o <ph name="BEGIN_LINK" />Contraseña<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">EXCEPCIONES</translation>
 <translation id="2558801801411970131">Bloqueo de rastreadores activo</translation>
+<translation id="2562040727226360285">Deshazte de las molestias, algunos sitios pueden dar problemas (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">Nueva nota</translation>
 <translation id="2619628557366098325">Portugués (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Sistema</translation>
+<translation id="2666092431469916601">Arriba</translation>
 <translation id="2677862276555105603">Anuncio
 bloqueado</translation>
 <translation id="2678542925523700624">Estonio (<ph name="ORIGIN" />)</translation>
@@ -85,6 +90,7 @@ bloqueado</translation>
 <translation id="2745324713975967671">Contraseña de cifrado</translation>
 <translation id="276436995507680929">Sincronizar la lista de lectura</translation>
 <translation id="2765217105034171413">Pequeño</translation>
+<translation id="2767124759205735526">Sincronizar historial y URLs que se escriban</translation>
 <translation id="2825232297853754349">Tienes que aceptar los términos y condiciones.</translation>
 <translation id="2842985007712546952">Carpeta anterior</translation>
 <translation id="2843343418360315034">Húngaro (<ph name="ORIGIN" />)</translation>
@@ -98,6 +104,7 @@ bloqueado</translation>
 <translation id="3073196329485613487">Inicia sesión en tu cuenta</translation>
 <translation id="307859903981308731">Al continuar, aceptas</translation>
 <translation id="3086746722712840547">nota</translation>
+<translation id="3087734570205094154">Abajo</translation>
 <translation id="3091563570137981919">Bloqueo de rastreadores y anuncios</translation>
 <translation id="3134385238404760368">No hay pestañas recientes</translation>
 <translation id="3157931365184549694">Restablecer</translation>
@@ -127,12 +134,14 @@ bloqueado</translation>
 <translation id="3699026013955941879">El código ha expirado. Solicita un nuevo código de verificación.</translation>
 <translation id="3700829948786686853">Bienvenido a Vivaldi</translation>
 <translation id="3766350025418769949">Las contraseñas guardadas en el gestor de contraseñas de Vivaldi pueden usarse en otras apps de tu iPad.</translation>
+<translation id="3842727926262967527">Elige dónde colocar tu barra de pestañas y barra de direcciones.</translation>
 <translation id="3845564230651302310">Aplicando los nuevos ajustes del bloqueador...</translation>
 <translation id="3858860766373142691">Nombre</translation>
 <translation id="3866249974567520381">Descripción</translation>
 <translation id="3872195896030547485">Por favor, introduce una dirección válida de correo electrónico.</translation>
 <translation id="3894427358181296146">Añadir carpeta</translation>
 <translation id="3897092660631435901">Menú</translation>
+<translation id="3921585859122905677">Posición de la barra de direcciones</translation>
 <translation id="3953599441418463312">Japonés (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Rastreador bloqueado</translation>
 <translation id="3958433364221339259">Busca con <ph name="SEARCH_ENGINE" /></translation>
@@ -163,7 +172,9 @@ bloqueados</translation>
 <translation id="4394049700291259645">Desactivar</translation>
 <translation id="4413780690230851155">Borrar el historial de navegación</translation>
 <translation id="4452878871193896747">Indonesio (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Estilo de pestañas</translation>
 <translation id="4474581062946673155">Ahora mismo no tienes ninguna pestaña sincronizada desde otros dispositivos.</translation>
+<translation id="4488900295693536220">Disponible cuando la barra de direcciones está activada en la parte inferior, para facilitar el acceso a las sugerencias más relevantes.</translation>
 <translation id="4493850495402472953">y</translation>
 <translation id="4497115807425788318">Ubicación</translation>
 <translation id="4507213865286211606">Vista previa del tamaño</translation>
@@ -207,6 +218,7 @@ bloqueado</translation>
 <translation id="5238642303473095117">Borrar datos</translation>
 <translation id="5245732982828228444">Aquí encontrarás tus notas</translation>
 <translation id="5249199221558969362">Por favor, introduce una edad realista.</translation>
+<translation id="5271549068863921519">Guardar contraseña</translation>
 <translation id="5290452628447338707">Sin notas</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5349678548463426691">Por descripción</translation>
@@ -240,6 +252,7 @@ bloqueado</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> notas movidas</translation>
 <translation id="6147094071357011481">Las pestañas cerradas recientemente no están disponibles</translation>
 <translation id="6193995664633100765">Indio (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">Tema</translation>
 <translation id="6365929278691047681">Alemán (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Editar marcador</translation>
 <translation id="6406506848690869874">Sync</translation>
@@ -278,7 +291,6 @@ bloqueado</translation>
 <translation id="7041964446309059643">Manual</translation>
 <translation id="7110758301321962823">Recuperar nombre de usuario</translation>
 <translation id="7194677467200983873">Última sincronización:</translation>
-<translation id="7196846668589096106">Pestañas de escritorio</translation>
 <translation id="7210372243397300116">Carpeta de búsquedas</translation>
 <translation id="7215420652436283416">Por dirección</translation>
 <translation id="7229439505896086266">Crear una nota</translation>
@@ -318,6 +330,7 @@ bloqueado</translation>
 <translation id="8076492880354921740">Pestañas</translation>
 <translation id="8112996065264879835">El código no coincide.
         Has llegado al límite de intentos incorrectos. Por favor, solicita un nuevo código mediante la opción de reenvío.</translation>
+<translation id="8142291334394582384">Invertir el orden de las sugerencias de búsqueda</translation>
 <translation id="8147118677117542370">Por favor, indica tu edad.</translation>
 <translation id="8165573437634525334">Datos protegidos por contraseña de cifrado</translation>
 <translation id="8182979418912184986">Nueva pestaña privada</translation>
@@ -326,6 +339,8 @@ bloqueado</translation>
 <translation id="8273666073173891138">Nota guardada en <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Importar</translation>
 <translation id="8284356787013856231">Permiso denegado para abrir el archivo</translation>
+<translation id="8289933454364510719">Arriba o abajo</translation>
+<translation id="8326104954595890674">Nueva pestaña privada</translation>
 <translation id="8329813750766387010">Actualizada: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Eliminar advertencias de cookies (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Para ver las pestañas de otros dispositivos, debes activar la sincronización.</translation>
@@ -348,6 +363,8 @@ bloqueado</translation>
 <translation id="8684294196284714094">¿Configurar Vivaldi como tu navegador predeterminado?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> notas eliminadas</translation>
 <translation id="8763006697839582351">Abrir en Vivaldi en navegación privada</translation>
+<translation id="8765173886020357878">Sugerencias de búsqueda</translation>
+<translation id="8786689981011401964">Fondos de pantalla</translation>
 <translation id="8804164990146287819">Política de privacidad</translation>
 <translation id="8819841443522803117">¿Hora de cambiar tu navegador predeterminado? Elige Vivaldi.</translation>
 <translation id="8820817407110198400">Marcadores</translation>

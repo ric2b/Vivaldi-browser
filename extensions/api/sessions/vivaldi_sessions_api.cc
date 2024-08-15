@@ -144,11 +144,11 @@ SessionItem MakeAPITreeNode(Index_Node* node, Index_Node* parent) {
 
   api_node.id = id;
   if (node->type() == Index_Node::kFolder) {
-    api_node.type = vivaldi::sessions_private::ITEM_TYPE_FOLDER;
+    api_node.type = vivaldi::sessions_private::ItemType::kFolder;
   } else {
     api_node.type = parent->is_container()
-      ? vivaldi::sessions_private::ITEM_TYPE_HISTORY
-      : vivaldi::sessions_private::ITEM_TYPE_NODE;
+                        ? vivaldi::sessions_private::ItemType::kHistory
+                        : vivaldi::sessions_private::ItemType::kNode;
   }
   api_node.parent_id = parent->id();
   api_node.container_id = -1;
@@ -234,6 +234,30 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
   sessions::SessionContent content;
   sessions::GetContent(path, content);
 
+  for (const auto& elm : node->workspaces()) {
+    const base::Value::Dict* dict = elm.GetIfDict();
+    if (dict) {
+      absl::optional<double> workspace_id = dict->FindDouble("id");
+      if (workspace_id.has_value()) {
+        WorkspaceContent workspace;
+        workspace.id = workspace_id.value();
+        const std::string* name = dict->FindString("name");
+        const std::string* icon = dict->FindString("icon");
+        const std::string* emoji = dict->FindString("emoji");
+        if (name) {
+          workspace.name = *name;
+        }
+        if (icon) {
+          workspace.icon = *icon;
+        }
+        if (emoji) {
+          workspace.emoji = *emoji;
+        }
+        model.workspaces.push_back(std::move(workspace));
+      }
+    }
+  }
+
   for (auto wit = content.windows.begin();
        wit != content.windows.end();
        ++wit) {
@@ -288,30 +312,7 @@ void MakeAPIContentModel(content::BrowserContext* browser_context,
             }
           }
           if (!match) {
-            WorkspaceContent workspace;
-            workspace.id = id.value();
-            workspace.tabs.push_back(std::move(tab));
-            for (const auto& elm : node->workspaces()) {
-              const base::Value::Dict* dict = elm.GetIfDict();
-              if (dict) {
-                absl::optional<double> workspace_id = dict->FindDouble("id");
-                if (workspace_id == id) {
-                  const std::string* name = dict->FindString("name");
-                  const std::string* icon = dict->FindString("icon");
-                  const std::string* emoji = dict->FindString("emoji");
-                  if (name) {
-                    workspace.name = *name;
-                  }
-                  if (icon) {
-                    workspace.icon = *icon;
-                  }
-                  if (emoji) {
-                    workspace.emoji = *emoji;
-                  }
-                }
-              }
-            }
-            model.workspaces.push_back(std::move(workspace));
+            DVLOG(1) << "Content model. No workspace for tab";
           }
         } else {
           window.tabs.push_back(std::move(tab));
@@ -395,8 +396,7 @@ void SessionsPrivateAPI::SendAdded(
   }
   ::vivaldi::BroadcastEvent(vivaldi::sessions_private::OnChanged::kEventName,
                             vivaldi::sessions_private::OnChanged::Create(
-                              node->id(),
-                              vivaldi::sessions_private::SESSION_CHANGE_ADDED,
+                              node->id(), vivaldi::sessions_private::SessionChange::kAdded,
                               data),
                             browser_context);
 }
@@ -410,8 +410,7 @@ void SessionsPrivateAPI::SendDeleted(
   data.index = -1;
   ::vivaldi::BroadcastEvent(vivaldi::sessions_private::OnChanged::kEventName,
                             vivaldi::sessions_private::OnChanged::Create(
-                              id,
-                              vivaldi::sessions_private::SESSION_CHANGE_DELETED,
+                              id, vivaldi::sessions_private::SessionChange::kDeleted,
                               data),
                             browser_context);
 }
@@ -430,8 +429,7 @@ void SessionsPrivateAPI::SendChanged(
   }
   ::vivaldi::BroadcastEvent(vivaldi::sessions_private::OnChanged::kEventName,
                             vivaldi::sessions_private::OnChanged::Create(
-                              node->id(),
-                              vivaldi::sessions_private::SESSION_CHANGE_CHANGED,
+                              node->id(), vivaldi::sessions_private::SessionChange::kChanged,
                               data),
                             browser_context);
 }
@@ -455,8 +453,7 @@ void SessionsPrivateAPI::SendMoved(
 
   ::vivaldi::BroadcastEvent(vivaldi::sessions_private::OnChanged::kEventName,
                             vivaldi::sessions_private::OnChanged::Create(
-                              id,
-                              vivaldi::sessions_private::SESSION_CHANGE_MOVED,
+                              id, vivaldi::sessions_private::SessionChange::kMoved,
                               data),
                             browser_context);
 }
@@ -474,7 +471,7 @@ void SessionsPrivateAPI::SendContentChanged(
   ::vivaldi::BroadcastEvent(vivaldi::sessions_private::OnChanged::kEventName,
                             vivaldi::sessions_private::OnChanged::Create(
                               id,
-                              vivaldi::sessions_private::SESSION_CHANGE_CONTENT,
+                              vivaldi::sessions_private::SessionChange::kContent,
                               data),
                             browser_context);
 }
@@ -503,10 +500,10 @@ ExtensionFunction::ResponseAction SessionsPrivateAddFunction::Run() {
   const SessionAddOptions& options = params->options;
 
   // Special test for backup operation.
-  if (options.backup != vivaldi::sessions_private::BACKUP_TYPE_NONE) {
+  if (options.backup != vivaldi::sessions_private::BackupType::kNone) {
     int error_code = MakeBackup(browser_context());
     if (error_code == sessions::kNoError &&
-        options.backup == vivaldi::sessions_private::BACKUP_TYPE_AUTOSAVE) {
+        options.backup == vivaldi::sessions_private::BackupType::kAutosave) {
       error_code = sessions::AutoSaveFromBackup(browser_context());
     }
     return RespondNow(ArgumentList(Results::Create(error_code)));
@@ -548,7 +545,8 @@ ExtensionFunction::ResponseAction SessionsPrivateAddFunction::Run() {
           base::Uuid::GenerateRandomV4().AsLowercaseString(), id);
       SetNodeState(fn->browser_context(), fn->ctl_.path, true, node.get());
       if (!with_workspaces) {
-        // TODO: Remove ws info from node
+        base::Value::List workspaces;
+        node->SetWorkspaces(std::move(workspaces));
       }
       node->SetTitle(base::UTF8ToUTF16(options.name));
       node->SetFilename(fn->ctl_.filename);
@@ -599,7 +597,7 @@ void SessionsPrivateGetAllFunction::IndexModelLoaded(Index_Model* model) {
 // moment but it may be expanded due to extensions that allow Vivaldi to run in
 // background with not windows for all Linux and Windows as well.
 void SessionsPrivateGetAllFunction::Piggyback() {
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
     if (window && window->type() == VivaldiBrowserWindow::NORMAL) {
       // Open in first browser with correct profile.
@@ -716,7 +714,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
   } else if (params->commands.title.has_value() &&
              params->commands.ids.size() == 1) {
     switch(params->commands.type) {
-      case vivaldi::sessions_private::CONTENT_TYPE_WORKSPACE: {
+      case vivaldi::sessions_private::ContentType::kWorkspace: {
         // Workspace titles are stored in the the session index file.
         // TODO: The primary storage should be the session file itself. We then
         // have to store <id-name> (and possible an icon id) pairs in every
@@ -744,7 +742,7 @@ ExtensionFunction::ResponseAction SessionsPrivateModifyContentFunction::Run() {
         }
         break;
       }
-      case vivaldi::sessions_private::CONTENT_TYPE_GROUP: {
+      case vivaldi::sessions_private::ContentType::kGroup : {
         int error_code = sessions::SetTabStackTitle(browser_context(),
           path, ids[0], params->commands.title.value());
         changed = error_code == sessions::kNoError;

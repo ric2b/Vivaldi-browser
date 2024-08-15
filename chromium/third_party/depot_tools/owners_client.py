@@ -12,17 +12,17 @@ import git_common
 class OwnersClient(object):
     """Interact with OWNERS files in a repository.
 
-  This class allows you to interact with OWNERS files in a repository both the
-  Gerrit Code-Owners plugin REST API, and the owners database implemented by
-  Depot Tools in owners.py:
+    This class allows you to interact with OWNERS files in a repository both the
+    Gerrit Code-Owners plugin REST API, and the owners database implemented by
+    Depot Tools in owners.py:
 
-   - List all the owners for a group of files.
-   - Check if files have been approved.
-   - Suggest owners for a group of files.
+        - List all the owners for a group of files.
+        - Check if files have been approved.
+        - Suggest owners for a group of files.
 
-  All code should use this class to interact with OWNERS files instead of the
-  owners database in owners.py
-  """
+    All code should use this class to interact with OWNERS files instead of the
+    owners database in owners.py
+    """
     # '*' means that everyone can approve.
     EVERYONE = '*'
 
@@ -39,27 +39,30 @@ class OwnersClient(object):
     def ListOwners(self, path):
         """List all owners for a file.
 
-    The returned list is sorted so that better owners appear first.
-    """
+        The returned list is sorted so that better owners appear first.
+        """
         raise Exception('Not implemented')
 
     def BatchListOwners(self, paths):
         """List all owners for a group of files.
 
-    Returns a dictionary {path: [owners]}.
-    """
-        with git_common.ScopedPool(kind='threads') as pool:
+        Returns a dictionary {path: [owners]}.
+        """
+        if not paths:
+            return dict()
+        nproc = min(gerrit_util.MAX_CONCURRENT_CONNECTION, len(paths))
+        with git_common.ScopedPool(nproc, kind='threads') as pool:
             return dict(
                 pool.imap_unordered(lambda p: (p, self.ListOwners(p)), paths))
 
     def GetFilesApprovalStatus(self, paths, approvers, reviewers):
         """Check the approval status for the given paths.
 
-    Utility method to check for approval status when a change has not yet been
-    created, given reviewers and approvers.
+        Utility method to check for approval status when a change has not yet
+        been created, given reviewers and approvers.
 
-    See GetChangeApprovalStatus for description of the returned value.
-    """
+        See GetChangeApprovalStatus for description of the returned value.
+        """
         approvers = set(approvers)
         if approvers:
             approvers.add(self.EVERYONE)
@@ -167,8 +170,8 @@ class GerritClient(OwnersClient):
     def BatchListBestOwners(self, paths):
         """List only the higest-scoring owners for a group of files.
 
-    Returns a dictionary {path: [owners]}.
-    """
+        Returns a dictionary {path: [owners]}.
+        """
         with git_common.ScopedPool(kind='threads') as pool:
             return dict(
                 pool.imap_unordered(lambda p: (p, self.ListBestOwners(p)),
@@ -178,8 +181,8 @@ class GerritClient(OwnersClient):
 def GetCodeOwnersClient(host, project, branch):
     """Get a new OwnersClient.
 
-  Uses GerritClient and raises an exception if code-owners plugin is not
-  available."""
+    Uses GerritClient and raises an exception if code-owners plugin is not
+    available."""
     if gerrit_util.IsCodeOwnersEnabledOnHost(host):
         return GerritClient(host, project, branch)
     raise Exception(

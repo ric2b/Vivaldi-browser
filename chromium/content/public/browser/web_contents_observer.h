@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list_types.h"
 #include "base/process/kill.h"
@@ -22,7 +24,6 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/network/public/mojom/fetch_api.mojom-forward.h"
 #include "services/service_manager/public/cpp/bind_source_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom.h"
@@ -57,6 +58,7 @@ class SharedDictionaryAccessDetails;
 
 namespace content {
 
+class MediaSession;
 class NavigationEntry;
 class NavigationHandle;
 class RenderFrameHost;
@@ -357,13 +359,9 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // DocumentUserData for more details).
   virtual void DidFinishNavigation(NavigationHandle* navigation_handle) {}
 
-  // Called after the contents replaces the |predecessor_contents| in its
-  // container due to portal activation. The |predecessor_contents| is now a
-  // portal pending adoption. |predecessor_contents| is non-null, but may
-  // subsequently be destroyed if it is not adopted.
-  // |activation_time| is the time the activation happened.
-  virtual void DidActivatePortal(WebContents* predecessor_web_contents,
-                                 base::TimeTicks activation_time) {}
+  // Called after the WebContents completes the previewed page activation steps.
+  // `activation_time` is the time the activation happened.
+  virtual void DidActivatePreviewedPage(base::TimeTicks activation_time) {}
 
   // Document load events ------------------------------------------------------
 
@@ -580,7 +578,7 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // WebContents is updated (either because the primary main document's color
   // has been inferred or the primary main document has changed).
   virtual void InferredColorSchemeUpdated(
-      absl::optional<blink::mojom::PreferredColorScheme> color_scheme) {}
+      std::optional<blink::mojom::PreferredColorScheme> color_scheme) {}
 
   // Called when a frame receives user activation. This may be called multiple
   // times for the same frame. This should not be used to determine a
@@ -697,6 +695,14 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
       RenderFrameHost* rfh,
       blink::mojom::FrameVisibility visibility) {}
 
+  // Called when an individual frame starts/stops capturing at least one media
+  // stream (audio or video). For example, the frame could be capturing audio
+  // from the microphone using getUserMedia(), or it could be capturing another
+  // window using getDisplayMedia().
+  virtual void OnFrameIsCapturingMediaStreamChanged(
+      RenderFrameHost* rfh,
+      bool is_capturing_media_stream) {}
+
   // Called when the connected to USB device state changes.
   virtual void OnIsConnectedToUsbDeviceChanged(
       bool is_connected_to_usb_device) {}
@@ -770,7 +776,7 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
       const std::u16string& message,
       int32_t line_no,
       const std::u16string& source_id,
-      const absl::optional<std::u16string>& untrusted_stack_trace) {}
+      const std::optional<std::u16string>& untrusted_stack_trace) {}
 
   // Invoked when media is playing or paused.  |id| is unique per player and per
   // RenderFrameHost.  There may be multiple players within a RenderFrameHost
@@ -809,6 +815,10 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   virtual void MediaPictureInPictureChanged(bool is_picture_in_picture) {}
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
   virtual void MediaDestroyed(const MediaPlayerId& id) {}
+
+  // Invoked when a MediaSession associated with this WebContents has been
+  // created and initialized.
+  virtual void MediaSessionCreated(MediaSession* media_session) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}

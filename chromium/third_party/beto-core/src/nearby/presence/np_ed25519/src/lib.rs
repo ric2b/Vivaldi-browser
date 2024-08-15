@@ -19,15 +19,11 @@
 //! or verified. These "context" bytes allow for usage of the
 //! same base key-pair for different purposes in the protocol.
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(missing_docs, clippy::indexing_slicing)]
-
-extern crate core;
 
 use array_view::ArrayView;
 use crypto_provider::ed25519::{
-    Ed25519Provider, KeyPair as _, PublicKey as _, RawPrivateKey, RawPublicKey, RawSignature,
-    Signature as _, SignatureError,
+    Ed25519Provider, KeyPair as _, PrivateKey, PublicKey as _, RawPrivateKey, RawPrivateKeyPermit,
+    RawPublicKey, RawSignature, Signature as _, SignatureError,
 };
 use crypto_provider::CryptoProvider;
 use sink::{Sink, SinkWriter};
@@ -55,15 +51,30 @@ pub const MAX_SIGNATURE_BUFFER_LEN: usize = 512;
 pub struct KeyPair<C: CryptoProvider>(CpKeyPair<C>);
 
 impl<C: CryptoProvider> KeyPair<C> {
-    /// Returns the `KeyPair`'s private key bytes. This method should only ever be called by code
-    /// which securely stores private credentials.
-    pub fn private_key(&self) -> RawPrivateKey {
+    /// Returns the `KeyPair`'s private key bytes.
+    /// This method is only usable in situations where
+    /// the caller has permission to handle the raw bytes
+    /// of a private key.
+    pub fn raw_private_key(&self, permit: &RawPrivateKeyPermit) -> RawPrivateKey {
+        self.0.raw_private_key(permit)
+    }
+
+    /// Builds this key-pair from an array of its private key bytes in the format
+    /// yielded by `private_key`.
+    /// This method is only usable in situations where
+    /// the caller has permission to handle the raw bytes
+    /// of a private key.
+    pub fn from_raw_private_key(private_key: &RawPrivateKey, permit: &RawPrivateKeyPermit) -> Self {
+        Self(CpKeyPair::<C>::from_raw_private_key(private_key, permit))
+    }
+
+    /// Returns the private key of this key-pair.
+    pub fn private_key(&self) -> PrivateKey {
         self.0.private_key()
     }
 
-    /// Builds this key-pair from an array of its private key bytes in the yielded by `private_key`.
-    /// This method should only ever be called by code which securely stores private credentials.
-    pub fn from_private_key(private_key: &RawPrivateKey) -> Self {
+    /// Builds this key-pair from a private key.
+    pub fn from_private_key(private_key: &PrivateKey) -> Self {
         Self(CpKeyPair::<C>::from_private_key(private_key))
     }
 
@@ -127,6 +138,11 @@ pub struct PublicKey<C: CryptoProvider> {
 }
 
 impl<C: CryptoProvider> PublicKey<C> {
+    /// Constructs a public key for NP adv signature verification
+    /// from a public key under the given crypto-provider
+    pub fn new(public_key: CpPublicKey<C>) -> Self {
+        Self { public_key }
+    }
     /// Succeeds if the signature was a valid signature created via the corresponding
     /// keypair to this public key using the given [`SignatureContext`] on the given
     /// message payload. The message payload is represented
@@ -171,7 +187,8 @@ impl<C: CryptoProvider> PublicKey<C> {
 
 impl<C: CryptoProvider> Clone for PublicKey<C> {
     fn clone(&self) -> Self {
-        Self::from_bytes(&self.to_bytes()).unwrap()
+        #[allow(clippy::expect_used)]
+        Self::from_bytes(&self.to_bytes()).expect("This should always succeed since self will always contain valid public key bytes, which is verified on creation")
     }
 }
 
@@ -230,6 +247,7 @@ impl SignatureContext {
     /// [`SignatureContext#write_length_prefixed`].
     fn create_signature_buffer(&self) -> impl Sink<u8> + AsRef<[u8]> {
         let mut buffer = ArrayVec::<[u8; MAX_SIGNATURE_BUFFER_LEN]>::new();
+        #[allow(clippy::expect_used)]
         self.write_length_prefixed(&mut buffer).expect("Context should always fit into sig buffer");
         buffer
     }

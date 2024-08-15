@@ -24,6 +24,7 @@
 #include "chrome/browser/apps/app_service/promise_apps/promise_app_web_apps_utils.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/services/app_service/public/cpp/crosapi_utils.h"
 #include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/instance_registry.h"
@@ -100,7 +101,7 @@ void WebAppsCrosapi::LaunchAppWithIntent(const std::string& app_id,
                                          WindowInfoPtr window_info,
                                          LaunchCallback callback) {
   if (!LogIfNotConnected(FROM_HERE)) {
-    std::move(callback).Run(LaunchResult(State::FAILED));
+    std::move(callback).Run(LaunchResult(State::kFailed));
     return;
   }
 
@@ -112,7 +113,7 @@ void WebAppsCrosapi::LaunchAppWithIntent(const std::string& app_id,
       apps_util::ConvertAppServiceToCrosapiIntent(intent, proxy_->profile());
   controller_->Launch(std::move(params), base::DoNothing());
   // TODO(crbug/1261263): handle the case where launch fails.
-  std::move(callback).Run(LaunchResult(State::SUCCESS));
+  std::move(callback).Run(LaunchResult(State::kSuccess));
 }
 
 void WebAppsCrosapi::LaunchAppWithParams(AppLaunchParams&& params,
@@ -165,29 +166,34 @@ void WebAppsCrosapi::GetMenuModel(
     base::OnceCallback<void(MenuItems)> callback) {
   bool is_system_web_app = false;
   bool can_use_uninstall = false;
+  bool can_close = true;
   WindowMode display_mode = WindowMode::kUnknown;
 
   proxy_->AppRegistryCache().ForOneApp(
-      app_id, [&is_system_web_app, &can_use_uninstall,
+      app_id, [&is_system_web_app, &can_use_uninstall, &can_close,
                &display_mode](const AppUpdate& update) {
         is_system_web_app = update.InstallReason() == InstallReason::kSystem;
         can_use_uninstall = update.AllowUninstall().value_or(false);
+        can_close = update.AllowClose().value_or(true);
         display_mode = update.WindowMode();
       });
 
   MenuItems menu_items;
 
-  if (display_mode != WindowMode::kUnknown && !is_system_web_app) {
-    CreateOpenNewSubmenu(display_mode == WindowMode::kBrowser
-                             ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
-                             : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
-                         menu_items);
+  if (display_mode != WindowMode::kUnknown && !is_system_web_app && can_close) {
+    if (chromeos::features::IsCrosShortstandEnabled()) {
+      apps::AddCommandItem(ash::LAUNCH_NEW,
+                           IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW, menu_items);
+    } else {
+      CreateOpenNewSubmenu(display_mode == WindowMode::kBrowser
+                               ? IDS_APP_LIST_CONTEXT_MENU_NEW_TAB
+                               : IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW,
+                           menu_items);
+    }
   }
 
-  if (menu_type == MenuType::kShelf) {
-    if (proxy_->InstanceRegistry().ContainsAppId(app_id)) {
-      AddCommandItem(ash::MENU_CLOSE, IDS_SHELF_CONTEXT_MENU_CLOSE, menu_items);
-    }
+  if (ShouldAddCloseItem(app_id, menu_type, proxy_->profile())) {
+    AddCommandItem(ash::MENU_CLOSE, IDS_SHELF_CONTEXT_MENU_CLOSE, menu_items);
   }
 
   if (can_use_uninstall) {
@@ -208,6 +214,13 @@ void WebAppsCrosapi::GetMenuModel(
       app_id, base::BindOnce(&WebAppsCrosapi::OnGetMenuModelFromCrosapi,
                              weak_factory_.GetWeakPtr(), app_id, menu_type,
                              std::move(menu_items), std::move(callback)));
+}
+
+void WebAppsCrosapi::UpdateAppSize(const std::string& app_id) {
+  if (!LogIfNotConnected(FROM_HERE)) {
+    return;
+  }
+  controller_->UpdateAppSize(app_id);
 }
 
 void WebAppsCrosapi::SetWindowMode(const std::string& app_id,
@@ -297,8 +310,9 @@ void WebAppsCrosapi::ExecuteContextMenuCommand(const std::string& app_id,
 }
 
 void WebAppsCrosapi::OnApps(std::vector<AppPtr> deltas) {
-  if (!web_app::IsWebAppsCrosapiEnabled())
+  if (!web_app::IsWebAppsCrosapiEnabled()) {
     return;
+  }
 
   on_initial_apps_received_ = true;
 

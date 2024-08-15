@@ -13,7 +13,7 @@
 #import "base/scoped_multi_source_observation.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
-#import "ios/chrome/browser/main/browser_util.h"
+#import "ios/chrome/browser/main/model/browser_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
@@ -21,7 +21,6 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
-#import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/model/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_metrics.h"
@@ -287,86 +286,20 @@ web::WebStateID GetActivePinnedTabID(WebStateList* web_state_list) {
   [self.consumer replaceItemID:webState->GetUniqueIdentifier() withItem:item];
 }
 
-#pragma mark - TabCollectionCommands
-
-- (void)selectItemWithID:(web::WebStateID)itemID {
-  base::RecordAction(base::UserMetricsAction("MobileTabGridPinnedTabSelected"));
-
-  int index = GetWebStateIndex(self.webStateList,
-                               WebStateSearchCriteria{
-                                   .identifier = itemID,
-                                   .pinned_state = PinnedState::kPinned,
-                               });
-  WebStateList* itemWebStateList = self.webStateList;
-
-  if (index == WebStateList::kInvalidIndex) {
-    return;
-  }
-
-  web::WebState* selectedWebState = itemWebStateList->GetWebStateAt(index);
-
-  base::TimeDelta timeSinceLastActivation =
-      base::Time::Now() - selectedWebState->GetLastActiveTime();
-  base::UmaHistogramCustomTimes(
-      "IOS.TabGrid.TabSelected.TimeSinceLastActivation",
-      timeSinceLastActivation, base::Minutes(1), base::Days(24), 50);
-
-  if (index != itemWebStateList->active_index()) {
-    base::RecordAction(
-        base::UserMetricsAction("MobileTabGridMoveToExistingTab"));
-  }
-
-  itemWebStateList->ActivateWebStateAt(index);
-
-  LogPinnedTabsUsedForDefaultBrowserPromo();
-}
-
-- (void)closeItemWithID:(web::WebStateID)itemID {
-  int index = GetWebStateIndex(self.webStateList,
-                               WebStateSearchCriteria{
-                                   .identifier = itemID,
-                                   .pinned_state = PinnedState::kPinned,
-                               });
-  if (index == WebStateList::kInvalidIndex) {
-    return;
-  }
-
-  self.webStateList->CloseWebStateAt(index, WebStateList::CLOSE_USER_ACTION);
-}
-
-- (void)setPinState:(BOOL)pinState forItemWithID:(web::WebStateID)itemID {
-  SetWebStatePinnedState(self.webStateList, itemID, pinState);
-}
-
-- (void)moveItemWithID:(web::WebStateID)itemID
-               toIndex:(NSUInteger)destinationIndex {
-  int sourceIndex = GetWebStateIndex(self.webStateList,
-                                     WebStateSearchCriteria{
-                                         .identifier = itemID,
-                                         .pinned_state = PinnedState::kPinned,
-                                     });
-  if (sourceIndex != WebStateList::kInvalidIndex) {
-    int destinationWebStateListIndex =
-        [self webStateListIndexFromItemIndex:destinationIndex];
-    self.webStateList->MoveWebStateAt(sourceIndex,
-                                      destinationWebStateListIndex);
-  }
-}
-
 #pragma mark - TabCollectionDragDropHandler
 
-- (UIDragItem*)dragItemForItemWithID:(web::WebStateID)itemID {
+- (UIDragItem*)dragItemForItem:(TabSwitcherItem*)item {
   web::WebState* webState =
       GetWebState(self.webStateList, WebStateSearchCriteria{
-                                         .identifier = itemID,
+                                         .identifier = item.identifier,
                                          .pinned_state = PinnedState::kPinned,
                                      });
 
   return CreateTabDragItem(webState);
 }
 
-- (void)dragWillBeginForItemWithID:(web::WebStateID)itemID {
-  _dragItemID = itemID;
+- (void)dragWillBeginForItem:(TabSwitcherItem*)item {
+  _dragItemID = item.identifier;
 }
 
 - (void)dragSessionDidEnd {
@@ -439,7 +372,17 @@ web::WebStateID GetActivePinnedTabID(WebStateList* web_state_list) {
     }
 
     // Reorder tabs.
-    [self.consumer moveItemWithID:tabInfo.tabID toIndex:destinationIndex];
+    int sourceIndex = GetWebStateIndex(self.webStateList,
+                                       WebStateSearchCriteria{
+                                           .identifier = tabInfo.tabID,
+                                           .pinned_state = PinnedState::kPinned,
+                                       });
+    if (sourceIndex != WebStateList::kInvalidIndex &&
+        destinationIndex != NSNotFound &&
+        static_cast<int>(destinationIndex) <
+            self.webStateList->pinned_tabs_count()) {
+      self.webStateList->MoveWebStateAt(sourceIndex, destinationIndex);
+    }
     return;
   }
   base::UmaHistogramEnumeration(kUmaPinnedViewDragOrigin,
@@ -473,6 +416,11 @@ web::WebStateID GetActivePinnedTabID(WebStateList* web_state_list) {
         });
       };
   [itemProvider loadObjectOfClass:[NSURL class] completionHandler:loadHandler];
+}
+
+- (NSArray<UIDragItem*>*)allSelectedDragItems {
+  NOTREACHED_NORETURN() << "You should not be able to drag and drop multiple "
+                           "items. There is no selection mode in pinned tabs.";
 }
 
 #pragma mark - Private
@@ -541,23 +489,6 @@ web::WebStateID GetActivePinnedTabID(WebStateList* web_state_list) {
       base::checked_cast<int>(index), std::move(webState),
       (WebStateList::INSERT_PINNED | WebStateList::INSERT_ACTIVATE),
       WebStateOpener());
-}
-
-// Converts the collection view's item index to WebStateList index.
-// Returns `kInvalidIndex` if `index` is out of range.
-- (int)webStateListIndexFromItemIndex:(NSUInteger)index {
-  if (index == NSNotFound) {
-    return WebStateList::kInvalidIndex;
-  }
-
-  int webStateListIndex = index;
-  int webStateListLastIndex = self.webStateList->pinned_tabs_count() - 1;
-
-  if (webStateListIndex > webStateListLastIndex) {
-    return WebStateList::kInvalidIndex;
-  }
-
-  return webStateListIndex;
 }
 
 // Inserts/removes a pinned item to/from the collection.

@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <string_view>
 
 #include "base/check.h"
 #include "base/check_op.h"
@@ -421,7 +422,7 @@ std::wstring InstallUtil::GetCurrentDate() {
 }
 
 // static
-absl::optional<base::Version> InstallUtil::GetDowngradeVersion() {
+std::optional<base::Version> InstallUtil::GetDowngradeVersion() {
   RegKey key;
   std::wstring downgrade_version;
   if (key.Open(install_static::IsSystemInstall() ? HKEY_LOCAL_MACHINE
@@ -431,11 +432,11 @@ absl::optional<base::Version> InstallUtil::GetDowngradeVersion() {
       key.ReadValue(installer::kRegDowngradeVersion, &downgrade_version) !=
           ERROR_SUCCESS ||
       downgrade_version.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   base::Version version(base::WideToASCII(downgrade_version));
   if (!version.IsValid())
-    return absl::nullopt;
+    return std::nullopt;
   return version;
 }
 
@@ -598,7 +599,7 @@ std::wstring InstallUtil::GetLongAppDescription() {
 }
 
 // static
-std::wstring InstallUtil::GuidToSquid(base::WStringPiece guid) {
+std::wstring InstallUtil::GuidToSquid(std::wstring_view guid) {
   std::wstring squid;
   squid.reserve(32);
   auto* input = guid.begin();

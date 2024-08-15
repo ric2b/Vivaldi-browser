@@ -4,7 +4,7 @@
 
 #include "ash/system/accessibility/select_to_speak/select_to_speak_menu_bubble_controller.h"
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/bubble/bubble_constants.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -13,7 +13,6 @@
 #include "ash/system/accessibility/select_to_speak/select_to_speak_constants.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/border.h"

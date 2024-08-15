@@ -13,6 +13,7 @@
 #include <math.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -31,6 +32,7 @@
 #include "rtc_base/message_digest.h"
 #include "rtc_base/network.h"
 #include "rtc_base/numerics/safe_minmax.h"
+#include "rtc_base/socket_address.h"
 #include "rtc_base/string_encode.h"
 #include "rtc_base/string_utils.h"
 #include "rtc_base/strings/string_builder.h"
@@ -66,13 +68,6 @@ rtc::PacketInfoProtocolType ConvertProtocolTypeToPacketInfoProtocolType(
 const int kPortTimeoutDelay = cricket::STUN_TOTAL_TIMEOUT + 5000;
 
 }  // namespace
-
-// TODO(ronghuawu): Use "local", "srflx", "prflx" and "relay". But this requires
-// the signaling part be updated correspondingly as well.
-const char LOCAL_PORT_TYPE[] = "local";
-const char STUN_PORT_TYPE[] = "stun";
-const char PRFLX_PORT_TYPE[] = "prflx";
-const char RELAY_PORT_TYPE[] = "relay";
 
 static const char* const PROTO_NAMES[] = {UDP_PROTOCOL_NAME, TCP_PROTOCOL_NAME,
                                           SSLTCP_PROTOCOL_NAME,
@@ -359,10 +354,10 @@ void Port::AddOrReplaceConnection(Connection* conn) {
   }
 }
 
-void Port::OnReadPacket(const char* data,
-                        size_t size,
-                        const rtc::SocketAddress& addr,
-                        ProtocolType proto) {
+void Port::OnReadPacket(const rtc::ReceivedPacket& packet, ProtocolType proto) {
+  const char* data = reinterpret_cast<const char*>(packet.payload().data());
+  size_t size = packet.payload().size();
+  const rtc::SocketAddress& addr = packet.source_address();
   // If the user has enabled port packets, just hand this over.
   if (enable_port_packets_) {
     SignalReadPacket(this, data, size, addr);
@@ -452,7 +447,8 @@ bool Port::GetStunMessage(const char* data,
   // Parse the request message.  If the packet is not a complete and correct
   // STUN message, then ignore it.
   std::unique_ptr<IceMessage> stun_msg(new IceMessage());
-  rtc::ByteBufferReader buf(data, size);
+  rtc::ByteBufferReader buf(
+      rtc::MakeArrayView(reinterpret_cast<const uint8_t*>(data), size));
   if (!stun_msg->Read(&buf) || (buf.Length() > 0)) {
     return false;
   }
@@ -725,10 +721,7 @@ std::string Port::CreateStunUsername(absl::string_view remote_username) const {
 }
 
 bool Port::HandleIncomingPacket(rtc::AsyncPacketSocket* socket,
-                                const char* data,
-                                size_t size,
-                                const rtc::SocketAddress& remote_addr,
-                                int64_t packet_time_us) {
+                                const rtc::ReceivedPacket& packet) {
   RTC_DCHECK_NOTREACHED();
   return false;
 }

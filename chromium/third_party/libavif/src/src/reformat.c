@@ -4,7 +4,7 @@
 #include "avif/internal.h"
 
 #include <assert.h>
-#include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 #if defined(_WIN32)
@@ -21,20 +21,17 @@ struct YUVBlock
     float v;
 };
 
-static avifBool avifGetRGBColorSpaceInfo(const avifRGBImage * rgb, avifRGBColorSpaceInfo * info)
+avifBool avifGetRGBColorSpaceInfo(const avifRGBImage * rgb, avifRGBColorSpaceInfo * info)
 {
-    if ((rgb->depth != 8) && (rgb->depth != 10) && (rgb->depth != 12) && (rgb->depth != 16)) {
-        return AVIF_FALSE;
+    AVIF_CHECK(rgb->depth == 8 || rgb->depth == 10 || rgb->depth == 12 || rgb->depth == 16);
+    if (rgb->isFloat) {
+        AVIF_CHECK(rgb->depth == 16);
     }
-    if (rgb->isFloat && rgb->depth != 16) {
-        return AVIF_FALSE;
+    if (rgb->format == AVIF_RGB_FORMAT_RGB_565) {
+        AVIF_CHECK(rgb->depth == 8);
     }
-    if (rgb->format == AVIF_RGB_FORMAT_RGB_565 && rgb->depth != 8) {
-        return AVIF_FALSE;
-    }
-    if (rgb->format < AVIF_RGB_FORMAT_RGB || rgb->format >= AVIF_RGB_FORMAT_COUNT) {
-        return AVIF_FALSE;
-    }
+    // Cast to silence "comparison of unsigned expression is always true" warning.
+    AVIF_CHECK((int)rgb->format >= AVIF_RGB_FORMAT_RGB && rgb->format < AVIF_RGB_FORMAT_COUNT);
 
     info->channelBytes = (rgb->depth > 8) ? 2 : 1;
     info->pixelBytes = avifRGBImagePixelSize(rgb);
@@ -97,7 +94,7 @@ static avifBool avifGetRGBColorSpaceInfo(const avifRGBImage * rgb, avifRGBColorS
     return AVIF_TRUE;
 }
 
-static avifBool avifGetYUVColorSpaceInfo(const avifImage * image, avifYUVColorSpaceInfo * info)
+avifBool avifGetYUVColorSpaceInfo(const avifImage * image, avifYUVColorSpaceInfo * info)
 {
 #if defined(AVIF_ENABLE_EXPERIMENTAL_YCGCO_R)
     const avifBool useYCgCo = (image->matrixCoefficients == AVIF_MATRIX_COEFFICIENTS_YCGCO_RE) ||
@@ -106,16 +103,9 @@ static avifBool avifGetYUVColorSpaceInfo(const avifImage * image, avifYUVColorSp
     const avifBool useYCgCo = AVIF_FALSE;
 #endif
 
-    if ((image->depth != 8) && (image->depth != 10) && (image->depth != 12) && (image->depth != 16)) {
-        return AVIF_FALSE;
-    }
-
-    if (image->yuvFormat <= AVIF_PIXEL_FORMAT_NONE || image->yuvFormat >= AVIF_PIXEL_FORMAT_COUNT) {
-        return AVIF_FALSE;
-    }
-    if (image->yuvRange != AVIF_RANGE_LIMITED && image->yuvRange != AVIF_RANGE_FULL) {
-        return AVIF_FALSE;
-    }
+    AVIF_CHECK(image->depth == 8 || image->depth == 10 || image->depth == 12 || image->depth == 16);
+    AVIF_CHECK(image->yuvFormat >= AVIF_PIXEL_FORMAT_YUV444 && image->yuvFormat < AVIF_PIXEL_FORMAT_COUNT);
+    AVIF_CHECK(image->yuvRange == AVIF_RANGE_LIMITED || image->yuvRange == AVIF_RANGE_FULL);
 
     // These matrix coefficients values are currently unsupported. Revise this list as more support is added.
     //
@@ -565,6 +555,20 @@ static void avifStoreRGB8Pixel(avifRGBFormat format, uint8_t R, uint8_t G, uint8
     *ptrR = R;
     *ptrG = G;
     *ptrB = B;
+}
+
+static void avifGetRGB565(const uint8_t * ptrR, uint8_t * R, uint8_t * G, uint8_t * B)
+{
+    // References for RGB565 color conversion:
+    // * https://docs.microsoft.com/en-us/windows/win32/directshow/working-with-16-bit-rgb
+    // * https://chromium.googlesource.com/libyuv/libyuv/+/331c361581896292fb46c8c6905e41262b7ca95f/source/row_common.cc#185
+    const uint16_t rgb656 = ((const uint16_t *)ptrR)[0];
+    const uint16_t r5 = (rgb656 & 0xF800) >> 11;
+    const uint16_t g6 = (rgb656 & 0x07E0) >> 5;
+    const uint16_t b5 = (rgb656 & 0x001F);
+    *R = (uint8_t)((r5 << 3) | (r5 >> 2));
+    *G = (uint8_t)((g6 << 2) | (g6 >> 4));
+    *B = (uint8_t)((b5 << 3) | (b5 >> 2));
 }
 
 // Note: This function handles alpha (un)multiply.
@@ -1288,6 +1292,16 @@ static avifResult avifImageYUV8ToRGB8Mono(const avifImage * image, avifRGBImage 
     return AVIF_RESULT_OK;
 }
 
+// This constant comes from libyuv. For details, see here:
+// https://chromium.googlesource.com/libyuv/libyuv/+/2f87e9a7/source/row_common.cc#3537
+#define F16_MULTIPLIER 1.9259299444e-34f
+
+typedef union avifF16
+{
+    float f;
+    uint32_t u32;
+} avifF16;
+
 static avifResult avifRGBImageToF16(avifRGBImage * rgb)
 {
     avifResult libyuvResult = AVIF_RESULT_NOT_IMPLEMENTED;
@@ -1299,19 +1313,13 @@ static avifResult avifRGBImageToF16(avifRGBImage * rgb)
     }
     const uint32_t channelCount = avifRGBFormatChannelCount(rgb->format);
     const float scale = 1.0f / ((1 << rgb->depth) - 1);
-    // This constant comes from libyuv. For details, see here:
-    // https://chromium.googlesource.com/libyuv/libyuv/+/2f87e9a7/source/row_common.cc#3537
-    const float multiplier = 1.9259299444e-34f * scale;
+    const float multiplier = F16_MULTIPLIER * scale;
     uint16_t * pixelRowBase = (uint16_t *)rgb->pixels;
     const uint32_t stride = rgb->rowBytes >> 1;
     for (uint32_t j = 0; j < rgb->height; ++j) {
         uint16_t * pixel = pixelRowBase;
         for (uint32_t i = 0; i < rgb->width * channelCount; ++i, ++pixel) {
-            union
-            {
-                float f;
-                uint32_t u32;
-            } f16;
+            avifF16 f16;
             f16.f = *pixel * multiplier;
             *pixel = (uint16_t)(f16.u32 >> 13);
         }
@@ -1570,20 +1578,22 @@ avifResult avifImageYUVToRGB(const avifImage * image, avifRGBImage * rgb)
         return avifImageYUVToRGBImpl(image, rgb, &state, alphaMultiplyMode);
     }
 
-    AVIF_ARRAY_DECLARE(YUVToRGBThreadDataArray, YUVToRGBThreadData, threadData);
-    YUVToRGBThreadDataArray tdArray;
-    if (!avifArrayCreate(&tdArray, sizeof(YUVToRGBThreadData), jobs)) {
+    const size_t byteCount = sizeof(YUVToRGBThreadData) * jobs;
+    YUVToRGBThreadData * threadData = avifAlloc(byteCount);
+    if (!threadData) {
         return AVIF_RESULT_OUT_OF_MEMORY;
     }
+    memset(threadData, 0, byteCount);
     int rowsPerJob = image->height / jobs;
     if (rowsPerJob % 2) {
         ++rowsPerJob;
+        jobs = (image->height + rowsPerJob - 1) / rowsPerJob; // ceil
     }
     const int rowsForLastJob = image->height - rowsPerJob * (jobs - 1);
     int startRow = 0;
     uint32_t i;
     for (i = 0; i < jobs; ++i, startRow += rowsPerJob) {
-        YUVToRGBThreadData * tdata = &tdArray.threadData[i];
+        YUVToRGBThreadData * tdata = &threadData[i];
         const avifCropRect rect = { .x = 0, .y = startRow, .width = image->width, .height = (i == jobs - 1) ? rowsForLastJob : rowsPerJob };
         if (avifImageSetViewRect(&tdata->image, image, &rect) != AVIF_RESULT_OK) {
             tdata->result = AVIF_RESULT_REFORMAT_FAILED;
@@ -1605,13 +1615,13 @@ avifResult avifImageYUVToRGB(const avifImage * image, avifRGBImage * rgb)
             }
         }
     }
-    // If above loop ran successfully, Run the first job in the current thread.
+    // If above loop ran successfully, run the first job in the current thread.
     if (i == jobs) {
-        avifImageYUVToRGBThreadWorker(&tdArray.threadData[0]);
+        avifImageYUVToRGBThreadWorker(&threadData[0]);
     }
     avifResult result = AVIF_RESULT_OK;
     for (i = 0; i < jobs; ++i) {
-        YUVToRGBThreadData * tdata = &tdArray.threadData[i];
+        YUVToRGBThreadData * tdata = &threadData[i];
         if (tdata->threadCreated && !avifJoinYUVToRGBThread(tdata)) {
             result = AVIF_RESULT_REFORMAT_FAILED;
         }
@@ -1619,7 +1629,7 @@ avifResult avifImageYUVToRGB(const avifImage * image, avifRGBImage * rgb)
             result = tdata->result;
         }
     }
-    avifArrayDestroy(&tdArray);
+    avifFree(threadData);
     return result;
 }
 
@@ -1713,4 +1723,103 @@ int avifFullToLimitedUV(uint32_t depth, int v)
             break;
     }
     return v;
+}
+
+static inline uint16_t avifFloatToF16(float v)
+{
+    avifF16 f16;
+    f16.f = v * F16_MULTIPLIER;
+    return (uint16_t)(f16.u32 >> 13);
+}
+
+static inline float avifF16ToFloat(uint16_t v)
+{
+    avifF16 f16;
+    f16.u32 = v << 13;
+    return f16.f / F16_MULTIPLIER;
+}
+
+void avifGetRGBAPixel(const avifRGBImage * src, uint32_t x, uint32_t y, const avifRGBColorSpaceInfo * info, float rgbaPixel[4])
+{
+    assert(src != NULL);
+    assert(!src->isFloat || src->depth == 16);
+    assert(src->format != AVIF_RGB_FORMAT_RGB_565 || src->depth == 8);
+
+    const uint8_t * const srcPixel = &src->pixels[y * src->rowBytes + x * info->pixelBytes];
+    if (info->channelBytes > 1) {
+        uint16_t r = *((uint16_t *)(&srcPixel[info->offsetBytesR]));
+        uint16_t g = *((uint16_t *)(&srcPixel[info->offsetBytesG]));
+        uint16_t b = *((uint16_t *)(&srcPixel[info->offsetBytesB]));
+        uint16_t a = avifRGBFormatHasAlpha(src->format) ? *((uint16_t *)(&srcPixel[info->offsetBytesA])) : (uint16_t)info->maxChannel;
+        if (src->isFloat) {
+            rgbaPixel[0] = avifF16ToFloat(r);
+            rgbaPixel[1] = avifF16ToFloat(g);
+            rgbaPixel[2] = avifF16ToFloat(b);
+            rgbaPixel[3] = avifRGBFormatHasAlpha(src->format) ? avifF16ToFloat(a) : 1.0f;
+        } else {
+            rgbaPixel[0] = r / info->maxChannelF;
+            rgbaPixel[1] = g / info->maxChannelF;
+            rgbaPixel[2] = b / info->maxChannelF;
+            rgbaPixel[3] = a / info->maxChannelF;
+        }
+    } else {
+        if (src->format == AVIF_RGB_FORMAT_RGB_565) {
+            uint8_t r, g, b;
+            avifGetRGB565(&srcPixel[info->offsetBytesR], &r, &g, &b);
+            rgbaPixel[0] = r / info->maxChannelF;
+            rgbaPixel[1] = g / info->maxChannelF;
+            rgbaPixel[2] = b / info->maxChannelF;
+            rgbaPixel[3] = 1.0f;
+        } else {
+            rgbaPixel[0] = srcPixel[info->offsetBytesR] / info->maxChannelF;
+            rgbaPixel[1] = srcPixel[info->offsetBytesG] / info->maxChannelF;
+            rgbaPixel[2] = srcPixel[info->offsetBytesB] / info->maxChannelF;
+            rgbaPixel[3] = avifRGBFormatHasAlpha(src->format) ? (srcPixel[info->offsetBytesA] / info->maxChannelF) : 1.0f;
+        }
+    }
+}
+
+void avifSetRGBAPixel(const avifRGBImage * dst, uint32_t x, uint32_t y, const avifRGBColorSpaceInfo * info, const float rgbaPixel[4])
+{
+    assert(dst != NULL);
+    assert(!dst->isFloat || dst->depth == 16);
+    assert(dst->format != AVIF_RGB_FORMAT_RGB_565 || dst->depth == 8);
+    assert(rgbaPixel[0] >= 0.0f && rgbaPixel[0] <= 1.0f);
+    assert(rgbaPixel[1] >= 0.0f && rgbaPixel[1] <= 1.0f);
+    assert(rgbaPixel[2] >= 0.0f && rgbaPixel[2] <= 1.0f);
+
+    uint8_t * const dstPixel = &dst->pixels[y * dst->rowBytes + x * info->pixelBytes];
+
+    uint8_t * const ptrR = &dstPixel[info->offsetBytesR];
+    uint8_t * const ptrG = &dstPixel[info->offsetBytesG];
+    uint8_t * const ptrB = &dstPixel[info->offsetBytesB];
+    uint8_t * const ptrA = avifRGBFormatHasAlpha(dst->format) ? &dstPixel[info->offsetBytesA] : NULL;
+    if (dst->depth > 8) {
+        if (dst->isFloat) {
+            *((uint16_t *)ptrR) = avifFloatToF16(rgbaPixel[0]);
+            *((uint16_t *)ptrG) = avifFloatToF16(rgbaPixel[1]);
+            *((uint16_t *)ptrB) = avifFloatToF16(rgbaPixel[2]);
+            if (ptrA) {
+                *((uint16_t *)ptrA) = avifFloatToF16(rgbaPixel[3]);
+            }
+        } else {
+            *((uint16_t *)ptrR) = (uint16_t)(0.5f + (rgbaPixel[0] * info->maxChannelF));
+            *((uint16_t *)ptrG) = (uint16_t)(0.5f + (rgbaPixel[1] * info->maxChannelF));
+            *((uint16_t *)ptrB) = (uint16_t)(0.5f + (rgbaPixel[2] * info->maxChannelF));
+            if (ptrA) {
+                *((uint16_t *)ptrA) = (uint16_t)(0.5f + (rgbaPixel[3] * info->maxChannelF));
+            }
+        }
+    } else {
+        avifStoreRGB8Pixel(dst->format,
+                           (uint8_t)(0.5f + (rgbaPixel[0] * info->maxChannelF)),
+                           (uint8_t)(0.5f + (rgbaPixel[1] * info->maxChannelF)),
+                           (uint8_t)(0.5f + (rgbaPixel[2] * info->maxChannelF)),
+                           ptrR,
+                           ptrG,
+                           ptrB);
+        if (ptrA) {
+            *ptrA = (uint8_t)(0.5f + (rgbaPixel[3] * info->maxChannelF));
+        }
+    }
 }

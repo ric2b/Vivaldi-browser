@@ -47,6 +47,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_DEBUG_POSTFIX "")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
   message(STATUS "No build type selected, default to Debug")
@@ -195,6 +196,7 @@ option_if_not_defined(DAWN_USE_WAYLAND "Enable support for Wayland surface" ${US
 option_if_not_defined(DAWN_USE_X11 "Enable support for X11 surface" ${USE_X11})
 option_if_not_defined(DAWN_USE_GLFW "Enable compilation of the GLFW windowing utils" ${DAWN_SUPPORTS_GLFW_FOR_WINDOWING})
 option_if_not_defined(DAWN_USE_WINDOWS_UI "Enable support for Windows UI surface" ${USE_WINDOWS_UI})
+option_if_not_defined(DAWN_USE_BUILT_DXC "Enable building and using DXC by the D3D12 backend" OFF)
 option_if_not_defined(DAWN_TARGET_MACOS "Manually link Apple core frameworks" ${TARGET_MACOS})
 
 option_if_not_defined(DAWN_BUILD_SAMPLES "Enables building Dawn's samples" ${BUILD_SAMPLES})
@@ -258,6 +260,7 @@ set_if_not_defined(DAWN_JINJA2_DIR "${DAWN_THIRD_PARTY_DIR}/jinja2" "Directory i
 set_if_not_defined(DAWN_MARKUPSAFE_DIR "${DAWN_THIRD_PARTY_DIR}/markupsafe" "Directory in which to find MarkupSafe")
 set_if_not_defined(DAWN_KHRONOS_DIR "${DAWN_THIRD_PARTY_DIR}/khronos" "Directory in which to find Khronos GL headers")
 set_if_not_defined(DAWN_SWIFTSHADER_DIR "${DAWN_THIRD_PARTY_DIR}/swiftshader" "Directory in which to find swiftshader")
+set_if_not_defined(DAWN_PROTOBUF_DIR "${DAWN_THIRD_PARTY_DIR}/protobuf" "Directory in which to find protobuf")
 
 set_if_not_defined(DAWN_SPIRV_TOOLS_DIR "${DAWN_VULKAN_DEPS_DIR}/spirv-tools/src" "Directory in which to find SPIRV-Tools")
 set_if_not_defined(DAWN_SPIRV_HEADERS_DIR "${DAWN_VULKAN_DEPS_DIR}/spirv-headers/src" "Directory in which to find SPIRV-Headers")
@@ -330,6 +333,7 @@ message(STATUS "Dawn build Wayland support: ${DAWN_USE_WAYLAND}")
 message(STATUS "Dawn build X11 support: ${DAWN_USE_X11}")
 message(STATUS "Dawn build GLFW support: ${DAWN_USE_GLFW}")
 message(STATUS "Dawn build Windows UI support: ${DAWN_USE_WINDOWS_UI}")
+message(STATUS "Dawn build and use DXC: ${DAWN_USE_BUILT_DXC}")
 
 message(STATUS "Dawn build samples: ${DAWN_BUILD_SAMPLES}")
 message(STATUS "Dawn build Node bindings: ${DAWN_BUILD_NODE_BINDINGS}")
@@ -497,7 +501,7 @@ set(CMAKE_CXX_STANDARD "17")
 
 set(TINT_LIB_FUZZING_ENGINE_LINK_OPTIONS "" CACHE STRING "Used by OSS-Fuzz to control, via link options, which fuzzing engine should be used")
 
-set(TINT_ROOT_SOURCE_DIR ${PROJECT_SOURCE_DIR})
+set(TINT_ROOT_SOURCE_DIR   ${PROJECT_SOURCE_DIR})
 set(TINT_SPIRV_HEADERS_DIR ${DAWN_SPIRV_HEADERS_DIR})
 set(TINT_SPIRV_TOOLS_DIR   ${DAWN_SPIRV_TOOLS_DIR})
 
@@ -567,6 +571,10 @@ endif()
 ################################################################################
 # Run on all subdirectories
 ################################################################################
+if (EXISTS "${DAWN_PROTOBUF_DIR}/cmake")
+  # Needs to come before SPIR-V Tools
+  include("third_party/protobuf.cmake")
+endif()
 
 add_subdirectory(third_party)
 

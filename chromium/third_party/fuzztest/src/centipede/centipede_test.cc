@@ -17,6 +17,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>  // NOLINT
+#include <iterator>
+#include <limits>
 #include <set>
 #include <string>
 #include <string_view>
@@ -25,6 +27,8 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "./centipede/blob_file.h"
 #include "./centipede/centipede_callbacks.h"
@@ -35,6 +39,7 @@
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
 #include "./centipede/logging.h"
+#include "./centipede/mutation_input.h"
 #include "./centipede/runner_result.h"
 #include "./centipede/shard_reader.h"
 #include "./centipede/test_util.h"
@@ -153,6 +158,90 @@ static size_t CountFilesInDir(std::string_view dir_path) {
   const std::filesystem::directory_iterator dir_iter{dir_path};
   return std::distance(std::filesystem::begin(dir_iter),
                        std::filesystem::end(dir_iter));
+}
+
+TEST(Centipede, ReadFirstCorpusDir) {
+  TempDir workdir_1{test_info_->name(), "workdir_1"};
+  TempDir workdir_2{test_info_->name(), "workdir_2"};
+  TempDir corpus_dir{test_info_->name(), "corpus"};
+  Environment env;
+  env.log_level = 0;  // Disable most of the logging in the test.
+  env.workdir = workdir_1.path();
+  env.num_runs = 100000;  // Enough to run through all 1- and 2-byte inputs.
+  env.batch_size = 7;     // Just some small number.
+  env.require_pc_table = false;  // No PC table here.
+  env.corpus_dir.push_back(corpus_dir.path());
+
+  // First, generate corpus files in corpus_dir.
+  CentipedeMock mock_1(env);
+  MockFactory factory_1(mock_1);
+  CentipedeMain(env, factory_1);
+  ASSERT_EQ(mock_1.observed_1byte_inputs_.size(), 256);    // all 1-byte seqs.
+  ASSERT_EQ(mock_1.observed_2byte_inputs_.size(), 65536);  // all 2-byte seqs.
+  ASSERT_EQ(CountFilesInDir(env.corpus_dir[0]),
+            512);  // All 1-byte and 2-byte inputs.
+
+  // Second, run without fuzzing using the same corpus_dir.
+  env.workdir = workdir_2.path();
+  env.num_runs = 0;
+  CentipedeMock mock_2(env);
+  MockFactory factory_2(mock_2);
+  CentipedeMain(env, factory_2);
+  // Should observe all inputs in corpus_dir.
+  EXPECT_EQ(mock_2.num_inputs_, 512);
+}
+
+TEST(Centipede, DoesNotReadFirstCorpusDirIfOutputOnly) {
+  TempDir workdir_1{test_info_->name(), "workdir_1"};
+  TempDir workdir_2{test_info_->name(), "workdir_2"};
+  TempDir corpus_dir{test_info_->name(), "corpus"};
+  Environment env;
+  env.log_level = 0;  // Disable most of the logging in the test.
+  env.workdir = workdir_1.path();
+  env.num_runs = 100000;  // Enough to run through all 1- and 2-byte inputs.
+  env.batch_size = 7;     // Just some small number.
+  env.require_pc_table = false;  // No PC table here.
+  env.corpus_dir.push_back(corpus_dir.path());
+
+  // First, generate corpus files in corpus_dir.
+  CentipedeMock mock_1(env);
+  MockFactory factory_1(mock_1);
+  CentipedeMain(env, factory_1);
+  ASSERT_EQ(mock_1.observed_1byte_inputs_.size(), 256);    // all 1-byte seqs.
+  ASSERT_EQ(mock_1.observed_2byte_inputs_.size(), 65536);  // all 2-byte seqs.
+  ASSERT_EQ(CountFilesInDir(env.corpus_dir[0]),
+            512);  // All 1-byte and 2-byte inputs.
+
+  // Second, run without fuzzing using the same corpus_dir, but as output-only.
+  env.workdir = workdir_2.path();
+  env.num_runs = 0;
+  env.first_corpus_dir_output_only = true;
+  CentipedeMock mock_2(env);
+  MockFactory factory_2(mock_2);
+  CentipedeMain(env, factory_2);
+  // Should observe no inputs other than the seed input {0}.
+  EXPECT_EQ(mock_2.num_inputs_, 1);
+}
+
+TEST(Centipede, SkipsOutputIfFirstCorpusDirIsEmptyPath) {
+  TempCorpusDir tmp_dir{test_info_->name()};
+  Environment env;
+  env.log_level = 0;  // Disable most of the logging in the test.
+  env.workdir = tmp_dir.path();
+  env.num_runs = 100000;  // Enough to run through all 1- and 2-byte inputs.
+  env.batch_size = 7;     // Just some small number.
+  env.require_pc_table = false;  // No PC table here.
+  // Set the first corpus_dir entry to empty path to skip output.
+  env.corpus_dir.push_back("");
+  env.corpus_dir.push_back(tmp_dir.CreateSubdir("cd"));
+
+  CentipedeMock mock(env);
+  MockFactory factory(mock);
+  CentipedeMain(env, factory);  // Run fuzzing with num_runs inputs.
+  EXPECT_EQ(mock.observed_1byte_inputs_.size(), 256);    // all 1-byte seqs.
+  EXPECT_EQ(mock.observed_2byte_inputs_.size(), 65536);  // all 2-byte seqs.
+  // No output should be in other entires of corpus_dir.
+  EXPECT_EQ(CountFilesInDir(env.corpus_dir[1]), 0);
 }
 
 // Tests fuzzing and distilling in multiple shards.
@@ -478,11 +567,8 @@ static std::vector<ByteArray> RunWithFunctionFilter(
   env.binary = GetDataDependencyFilepath("centipede/testing/test_fuzz_target");
   env.coverage_binary = env.binary;
   // Must symbolize in order for the filter to work.
-  CHECK_EQ(system("which llvm-symbolizer"), EXIT_SUCCESS)
-      << "llvm-symbolizer should be installed and findable via PATH";
-  CHECK_EQ(system("which objdump"), EXIT_SUCCESS)
-      << "odjdump should be installed and findable via PATH";
-  env.objdump_path = "objdump";
+  env.symbolizer_path = GetLLVMSymbolizerPath();
+  env.objdump_path = GetObjDumpPath();
   env.log_level = 0;
   env.function_filter = function_filter;
   FunctionFilterMock mock(env);
@@ -776,6 +862,24 @@ TEST(Centipede, GetsSeedInputs) {
   EXPECT_EQ(callbacks.GetSeeds(100, seeds), 10);
   EXPECT_THAT(seeds, testing::ContainerEq(std::vector<ByteArray>{
                          {0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}}));
+}
+
+TEST(Centipede, CleansUpMetadataAfterStartup) {
+  Environment env;
+  env.binary = GetDataDependencyFilepath(
+      "centipede/testing/expensive_startup_fuzz_target");
+  CentipedeDefaultCallbacks callbacks(env);
+  BatchResult batch_result;
+  const std::vector<ByteArray> inputs = {{0}};
+  ASSERT_TRUE(callbacks.Execute(env.binary, inputs, batch_result));
+  ASSERT_EQ(batch_result.results().size(), 1);
+  bool found_startup_cmp_entry = false;
+  batch_result.results()[0].metadata().ForEachCmpEntry(
+      [&](ByteSpan a, ByteSpan b) {
+        if (a == ByteArray{'F', 'u', 'z', 'z'}) found_startup_cmp_entry = true;
+        if (b == ByteArray{'F', 'u', 'z', 'z'}) found_startup_cmp_entry = true;
+      });
+  EXPECT_FALSE(found_startup_cmp_entry);
 }
 
 }  // namespace centipede

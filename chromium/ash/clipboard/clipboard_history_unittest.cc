@@ -147,9 +147,9 @@ class ClipboardHistoryTest : public AshTestBase {
       return;
     }
 
-    absl::optional<std::unordered_map<std::u16string, std::u16string>>
+    std::optional<std::unordered_map<std::u16string, std::u16string>>
         actual_data = ui::ReadCustomDataIntoMap(base::as_bytes(
-            base::span(items.front().data().custom_data_data())));
+            base::span(items.front().data().GetWebCustomData())));
 
     EXPECT_EQ(expected_data, actual_data);
   }
@@ -159,8 +159,7 @@ class ClipboardHistoryTest : public AshTestBase {
  private:
   std::unique_ptr<ui::test::EventGenerator> event_generator_;
   // Owned by ClipboardHistoryControllerImpl.
-  raw_ptr<ClipboardHistory, DanglingUntriaged | ExperimentalAsh>
-      clipboard_history_ = nullptr;
+  raw_ptr<ClipboardHistory, DanglingUntriaged> clipboard_history_ = nullptr;
 };
 
 // Tests that with nothing copied, nothing is shown.

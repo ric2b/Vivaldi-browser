@@ -100,6 +100,8 @@ ui::ColorId GetSecurityChipColorId(
 // The CustomTabBarView uses a WebAppMenuButton with a custom color. This class
 // overrides the GetForegroundColor method to achieve this effect.
 class CustomTabBarAppMenuButton : public WebAppMenuButton {
+  METADATA_HEADER(CustomTabBarAppMenuButton, WebAppMenuButton)
+
  public:
   using WebAppMenuButton::WebAppMenuButton;
 
@@ -108,6 +110,10 @@ class CustomTabBarAppMenuButton : public WebAppMenuButton {
     return GetColorProvider()->GetColor(kColorPwaMenuButtonIcon);
   }
 };
+
+BEGIN_METADATA(CustomTabBarAppMenuButton)
+END_METADATA
+
 #endif
 
 }  // namespace
@@ -115,8 +121,9 @@ class CustomTabBarAppMenuButton : public WebAppMenuButton {
 // Container view for laying out and rendering the title/origin of the current
 // page.
 class CustomTabBarTitleOriginView : public views::View {
+  METADATA_HEADER(CustomTabBarTitleOriginView, views::View)
+
  public:
-  METADATA_HEADER(CustomTabBarTitleOriginView);
   CustomTabBarTitleOriginView(SkColor background_color,
                               bool should_show_title) {
     auto location_label = std::make_unique<views::Label>(
@@ -212,7 +219,7 @@ class CustomTabBarTitleOriginView : public views::View {
   raw_ptr<views::Label> location_label_ = nullptr;
 };
 
-BEGIN_METADATA(CustomTabBarTitleOriginView, views::View)
+BEGIN_METADATA(CustomTabBarTitleOriginView)
 ADD_READONLY_PROPERTY_METADATA(int, MinimumWidth)
 ADD_READONLY_PROPERTY_METADATA(SkColor,
                                LocationColor,
@@ -414,6 +421,11 @@ SkColor CustomTabBarView::GetIconLabelBubbleBackgroundColor() const {
   return GetColorProvider()->GetColor(kColorPwaToolbarBackground);
 }
 
+std::optional<ui::ColorId>
+CustomTabBarView::GetLocationIconBackgroundColorOverride() const {
+  return kColorPwaToolbarBackground;
+}
+
 content::WebContents* CustomTabBarView::GetWebContents() {
   return delegate_->GetWebContents();
 }
@@ -538,6 +550,6 @@ bool CustomTabBarView::GetShowTitle() const {
   return app_controller() != nullptr;
 }
 
-BEGIN_METADATA(CustomTabBarView, views::AccessiblePaneView)
+BEGIN_METADATA(CustomTabBarView)
 ADD_READONLY_PROPERTY_METADATA(bool, ShowTitle)
 END_METADATA

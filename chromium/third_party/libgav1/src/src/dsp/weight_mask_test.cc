@@ -223,6 +223,7 @@ class WeightMaskTest : public testing::TestWithParam<WeightMaskTestParam>,
     } else if (absl::StartsWith(test_case, "NEON/")) {
       WeightMaskInit_NEON();
     } else if (absl::StartsWith(test_case, "SSE41/")) {
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
       WeightMaskInit_SSE4_1();
     }
     func_ = dsp->weight_mask[width_index][height_index][mask_is_inverse_];

@@ -50,6 +50,7 @@ tests = [
   'cbdt',
   'variable',
   'glyph_names',
+  'glyph_map',
   'post',
   '32bit_var_store',
   'pin_all_at_default',
@@ -65,6 +66,7 @@ tests = [
   'collect_name_ids',
   'instantiate_colrv1',
   'instantiate_cff2_update_metrics',
+  'layout.empty_ligature_offset',
 ]
 
 if get_option('experimental_api')
@@ -72,6 +74,13 @@ if get_option('experimental_api')
     'glyf_partial_instancing',
     'mvar_partial_instance',
     'update_def_wght',
+    'empty_region_vardata',
+    'feature_variations_partial_instance',
+    'gdef_partial_instance',
+    'value_format_partial_instance',
+    'feature_variation_instance_collect_lookups',
+    'iftb_requirements',
+    'sync_vmetrics',
     ]
 endif
 

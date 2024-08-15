@@ -35,6 +35,7 @@ namespace policy {
 //         "sequencingId": 1,
 //         "generationId": 123456789,
 //         "priority": 1
+//         "generation_guid": "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
 //       },
 //       "compressionInformation": {
 //         "compressionAlgorithm": 1
@@ -50,6 +51,7 @@ namespace policy {
 //         "sequencingId": 2,
 //         "generationId": 123456789,
 //         "priority": 1
+//         "generation_guid": "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
 //       },
 //       "compressionInformation": {
 //         "compressionAlgorithm": 1
@@ -137,6 +139,7 @@ class POLICY_EXPORT EncryptedReportingJobConfiguration
   ::reporting::Priority priority_;
   int64_t generation_id_{-1};
   int64_t sequence_id_{-1};
+  size_t record_count_{0u};
 };
 
 }  // namespace policy

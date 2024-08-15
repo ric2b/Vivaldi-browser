@@ -239,11 +239,6 @@ angle::Result HardwareBufferImageSiblingVkAndroid::initImpl(DisplayVk *displayVk
     angle::android::GetANativeWindowBufferProperties(windowBuffer, &mSize.width, &mSize.height,
                                                      &mSize.depth, &pixelFormat, &mUsage);
 
-    // BUG: b/223456677 Android sometimes uses an uninitialized value for layerCount of the
-    // ANativeWindowBuffer. Force depth <= 256 here. If we see a bigger value,
-    // force to 1.
-    mSize.depth = mSize.depth > 256 ? 1 : mSize.depth;
-
     struct AHardwareBuffer *hardwareBuffer =
         angle::android::ANativeWindowBufferToAHardwareBuffer(windowBuffer);
 
@@ -338,7 +333,9 @@ angle::Result HardwareBufferImageSiblingVkAndroid::initImpl(DisplayVk *displayVk
         if (externalFormat.externalFormat != 0 && !externalRenderTargetSupported)
         {
             // Clear all other bits except sampled
-            usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+            usage = (renderer->getFeatures().forceSampleUsageForImageWithExternalFormat.enabled)
+                        ? VK_IMAGE_USAGE_SAMPLED_BIT
+                        : (usage & VK_IMAGE_USAGE_SAMPLED_BIT);
         }
 
         // If the pNext chain includes a VkExternalFormatANDROID structure whose externalFormat

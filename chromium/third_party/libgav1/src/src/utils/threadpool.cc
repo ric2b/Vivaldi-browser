@@ -29,6 +29,7 @@
 #include <cinttypes>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <new>
 #include <utility>

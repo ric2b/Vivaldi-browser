@@ -11,6 +11,7 @@
 
 #include "src/compiler/turboshaft/assembler.h"
 #include "src/compiler/turboshaft/operations.h"
+#include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/snapshot-table-opindex.h"
 #include "src/compiler/wasm-graph-assembler.h"
 #include "src/wasm/wasm-subtyping.h"
@@ -207,7 +208,9 @@ class WasmGCTypeReducer : public Next {
       }
       if (wasm::HeapTypesUnrelated(type.heap_type(),
                                    type_check.config.to.heap_type(), module_,
-                                   module_)) {
+                                   module_) &&
+          !wasm::IsImplicitInternalization(type, type_check.config.to,
+                                           module_)) {
         if (to_nullable && type.is_nullable()) {
           return __ IsNull(__ MapToNewGraph(type_check.object()), type);
         } else {

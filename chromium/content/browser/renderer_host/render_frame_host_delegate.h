@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,7 +38,6 @@
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
@@ -127,16 +127,18 @@ class CreateNewWindowParams;
 // WebContents type (see //renderer_host/DEPS).
 class CONTENT_EXPORT RenderFrameHostDelegate {
  public:
-  // Callback used with HandleClipboardPaste() method.  If the clipboard paste
-  // is allowed to proceed, the callback is called with true.  Otherwise the
-  // callback is called with false.
-  using IsClipboardPasteContentAllowedCallback =
-      RenderFrameHostImpl::IsClipboardPasteContentAllowedCallback;
+  // Callback used with IsClipboardPasteAllowedByPolicy() method.  If the
+  // clipboard paste is allowed to proceed, the callback is called with the data
+  // that's allowed to be pasted.
+  using IsClipboardPasteAllowedCallback =
+      RenderFrameHostImpl::IsClipboardPasteAllowedCallback;
 
   using JavaScriptDialogCallback =
       content::JavaScriptDialogManager::DialogClosedCallback;
 
   using ClipboardPasteData = content::ClipboardPasteData;
+  using ClipboardEndpoint = content::ClipboardEndpoint;
+  using ClipboardMetadata = content::ClipboardMetadata;
 
   // This is used to give the delegate a chance to filter IPC messages.
   virtual bool OnMessageReceived(RenderFrameHostImpl* render_frame_host,
@@ -170,7 +172,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       const std::u16string& message,
       int32_t line_no,
       const std::u16string& source_id,
-      const absl::optional<std::u16string>& untrusted_stack_trace);
+      const std::optional<std::u16string>& untrusted_stack_trace);
 
   // Called when a RenderFrame for |render_frame_host| is created in the
   // renderer process. Use |RenderFrameDeleted| to listen for when this
@@ -253,6 +255,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
                            const std::u16string& title,
                            base::i18n::TextDirection title_direction) {}
 
+  // Update app title.
+  virtual void UpdateAppTitle(RenderFrameHostImpl* render_frame_host,
+                              const std::u16string& app_title) {}
+
   // The destination URL has changed and should be updated.
   virtual void UpdateTargetURL(RenderFrameHostImpl* render_frame_host,
                                const GURL& url) {}
@@ -276,12 +282,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual bool CheckMediaAccessPermission(
       RenderFrameHostImpl* render_frame_host,
       const url::Origin& security_origin,
-      blink::mojom::MediaStreamType type);
-
-  // Returns the ID of the default device for the given media device |type|.
-  // If the returned value is an empty string, it means that there is no
-  // default device for the given |type|.
-  virtual std::string GetDefaultMediaDeviceID(
       blink::mojom::MediaStreamType type);
 
   // Setter for the capture handle config, which allows a captured application
@@ -334,6 +334,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       RenderFrameHostImpl* rfh,
       bool is_fullscreen,
       blink::mojom::FullscreenOptionsPtr options);
+
+  // Returns whether the RFH can use Additional Windowing Controls (AWC) APIs.
+  // https://github.com/ivansandrk/additional-windowing-controls/blob/main/awc-explainer.md
+  virtual bool CanUseWindowingControls(RenderFrameHostImpl* requesting_frame);
 
   // Request to maximize window.
   virtual void Maximize() {}
@@ -487,6 +491,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual const blink::web_pref::WebPreferences&
   GetOrCreateWebPreferences() = 0;
 
+  // Returns the light, dark and forced color maps for the ColorProvider
+  // associated with this RenderFrameHost's WebContents.
+  virtual blink::ColorProviderColorMaps GetColorProviderColorMaps() const = 0;
+
   // Returns the visibility of the delegate.
   virtual Visibility GetVisibility();
 
@@ -505,6 +513,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void OnFrameVisibilityChanged(
       RenderFrameHostImpl* host,
       blink::mojom::FrameVisibility visibility) {}
+
+  // Notifies observers if the frame has started/stopped capturing a media
+  // stream (audio or video).
+  virtual void OnFrameIsCapturingMediaStreamChanged(
+      RenderFrameHostImpl* host,
+      bool is_capturing_media_stream) {}
 
   // Returns FrameTreeNodes that are logically owned by another frame even
   // though this relationship is not yet reflected in their frame trees. This
@@ -528,10 +542,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // the given offset (ie, -1 will return the "back" item).
   virtual bool IsAllowedToGoToEntryAtOffset(int32_t offset);
 
-  virtual media::MediaMetricsProvider::RecordAggregateWatchTimeCallback
-  GetRecordAggregateWatchTimeCallback(
-      const GURL& page_main_frame_last_committed_url);
-
   // Determines if a clipboard paste using |data| of type |data_type| is allowed
   // in this renderer frame.  Possible data types supported for paste can be
   // seen in the ClipboardHostImpl class.  Text based formats will use the
@@ -551,11 +561,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   //
   // The callback is called, possibly asynchronously, with a status indicating
   // whether the operation is allowed or not.
-  virtual void IsClipboardPasteContentAllowed(
-      const GURL& url,
-      const ui::ClipboardFormatType& data_type,
+  virtual void IsClipboardPasteAllowedByPolicy(
+      const ClipboardEndpoint& source,
+      const ClipboardEndpoint& destination,
+      const ClipboardMetadata& metadata,
       ClipboardPasteData clipboard_paste_data,
-      IsClipboardPasteContentAllowedCallback callback);
+      IsClipboardPasteAllowedCallback callback);
 
   // Notified when the main frame of `source` adjusts the page scale.
   virtual void OnPageScaleFactorChanged(PageImpl& source) {}
@@ -566,13 +577,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       mojo::PendingAssociatedReceiver<device::mojom::ScreenOrientation>
           receiver) {}
 
-  // Return true if we have seen a recent orientation change, which is used to
-  // decide if we should consume user activation when entering fullscreen.
-  virtual bool HasSeenRecentScreenOrientationChange();
-
-  // Return true if the page has a transient affordance to enter fullscreen
-  // without consuming user activation.
-  virtual bool IsTransientAllowFullscreenActive() const;
+  // Return whether HTML Fullscreen requires transient activation.
+  virtual bool IsTransientActivationRequiredForHtmlFullscreen();
 
   // Return true if the back forward cache is supported. This is not an
   // indication that the cache will be used.

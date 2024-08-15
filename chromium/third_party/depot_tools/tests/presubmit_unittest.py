@@ -555,8 +555,9 @@ class PresubmitUnittest(PresubmitTestsBase):
                          [mock.call('baz'), mock.call('quux')])
 
     def testExecPresubmitScriptInSourceDirectory(self):
-        """ Tests that the presubmits are executed with the current working
-    directory (CWD) set to the directory of the source presubmit script. """
+        """Tests that the presubmits are executed with the current working
+        directory (CWD) set to the directory of the source presubmit script.
+        """
         orig_dir = os.getcwd()
 
         fake_presubmit_dir = os.path.join(self.fake_root_dir, 'fake_dir')
@@ -576,8 +577,9 @@ class PresubmitUnittest(PresubmitTestsBase):
         ])
 
     def testExecPostUploadHookSourceDirectory(self):
-        """ Tests that the post upload hooks are executed with the current working
-    directory (CWD) set to the directory of the source presubmit script. """
+        """Tests that the post upload hooks are executed with the current working
+        directory (CWD) set to the directory of the source presubmit script.
+        s"""
         orig_dir = os.getcwd()
 
         fake_presubmit_dir = os.path.join(self.fake_root_dir, 'fake_dir')
@@ -1074,7 +1076,8 @@ def CheckChangeOnCommit(input_api, output_api):
                                                     options.author,
                                                     upstream=options.upstream)
         scm.GIT.CaptureStatus.assert_called_once_with(options.root,
-                                                      options.upstream)
+                                                      options.upstream,
+                                                      ignore_submodules=False)
 
     @mock.patch('presubmit_support.GitChange', mock.Mock())
     @mock.patch('scm.GIT.GetAllFiles', mock.Mock())
@@ -1720,11 +1723,22 @@ class AffectedFileUnittest(PresubmitTestsBase):
 
 
 class ChangeUnittest(PresubmitTestsBase):
-    def testAffectedFiles(self):
-        change = presubmit.Change('', '', self.fake_root_dir, [('Y', 'AA')], 3,
+
+    @mock.patch('scm.GIT.ListSubmodules', return_value=['BB'])
+    def testAffectedFiles(self, mockListSubmodules):
+        change = presubmit.Change('', '', self.fake_root_dir, [('Y', 'AA'),
+                                                               ('A', 'BB')], 3,
                                   5, '')
         self.assertEqual(1, len(change.AffectedFiles()))
         self.assertEqual('Y', change.AffectedFiles()[0].Action())
+
+    @mock.patch('scm.GIT.ListSubmodules', return_value=['BB'])
+    def testAffectedSubmodules(self, mockListSubmodules):
+        change = presubmit.Change('', '', self.fake_root_dir, [('Y', 'AA'),
+                                                               ('A', 'BB')], 3,
+                                  5, '')
+        self.assertEqual(1, len(change.AffectedSubmodules()))
+        self.assertEqual('A', change.AffectedSubmodules()[0].Action())
 
     def testSetDescriptionText(self):
         change = presubmit.Change('', 'foo\nDRU=ro', self.fake_root_dir, [], 3,
@@ -1880,14 +1894,14 @@ class CannedChecksUnittest(PresubmitTestsBase):
                     content2_path, error_type):
         """Runs a test of a content-checking rule.
 
-      Args:
-        check: the check to run.
-        content1: content which is expected to pass the check.
-        content1_path: file path for content1.
-        content2: content which is expected to fail the check.
-        content2_path: file path for content2.
-        error_type: the type of the error expected for content2.
-    """
+        Args:
+            check: the check to run.
+            content1: content which is expected to pass the check.
+            content1_path: file path for content1.
+            content2: content which is expected to fail the check.
+            content2_path: file path for content2.
+            error_type: the type of the error expected for content2.
+        """
         change1 = presubmit.Change('foo1', 'foo1\n', self.fake_root_dir, None,
                                    0, 0, None)
         input_api1 = self.MockInputApi(change1, False)
@@ -1927,14 +1941,14 @@ class CannedChecksUnittest(PresubmitTestsBase):
     def PythonLongLineTest(self, maxlen, content, should_pass):
         """Runs a test of Python long-line checking rule.
 
-    Because ContentTest() cannot be used here due to the different code path
-    that the implementation of CheckLongLines() uses for Python files.
+        Because ContentTest() cannot be used here due to the different code path
+        that the implementation of CheckLongLines() uses for Python files.
 
-    Args:
-      maxlen: Maximum line length for content.
-      content: Python source which is expected to pass or fail the test.
-      should_pass: True iff the test should pass, False otherwise.
-    """
+        Args:
+            maxlen: Maximum line length for content.
+            content: Python source which is expected to pass or fail the test.
+            should_pass: True iff the test should pass, False otherwise.
+        """
         change = presubmit.Change('foo1', 'foo1\n', self.fake_root_dir, None, 0,
                                   0, None)
         input_api = self.MockInputApi(change, False)

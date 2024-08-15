@@ -26,10 +26,13 @@
 
 use openssl::symm::{Cipher, Crypter, Mode};
 
-use crypto_provider::aes::{
-    cbc::{AesCbcIv, DecryptionError},
-    ctr::NonceAndCounter,
-    Aes, Aes128Key, Aes256Key, AesBlock, AesCipher, AesDecryptCipher, AesEncryptCipher, AesKey,
+use crypto_provider::{
+    aes::{
+        cbc::{AesCbcIv, DecryptionError, EncryptionError},
+        ctr::NonceAndCounter,
+        Aes, Aes128Key, Aes256Key, AesBlock, AesCipher, AesDecryptCipher, AesEncryptCipher, AesKey,
+    },
+    tinyvec::SliceVec,
 };
 
 /// Uber struct which contains impls for AES-128 fns
@@ -68,7 +71,7 @@ impl AesEncryptCipher for Aes128Cipher {
         let mut crypter =
             Crypter::new(Cipher::aes_128_ecb(), Mode::Encrypt, self.0.as_slice(), None).unwrap();
         crypter.pad(false);
-        crypter.update(block, &mut output).unwrap();
+        let _ = crypter.update(block, &mut output).unwrap();
         block.copy_from_slice(&output[..crypto_provider::aes::BLOCK_SIZE]);
     }
 }
@@ -80,7 +83,7 @@ impl AesDecryptCipher for Aes128Cipher {
         let mut crypter =
             Crypter::new(Cipher::aes_128_ecb(), Mode::Decrypt, self.0.as_slice(), None).unwrap();
         crypter.pad(false);
-        crypter.update(block, &mut output).unwrap();
+        let _ = crypter.update(block, &mut output).unwrap();
         block.copy_from_slice(&output[..crypto_provider::aes::BLOCK_SIZE]);
     }
 }
@@ -103,7 +106,7 @@ impl AesEncryptCipher for Aes256Cipher {
         let mut crypter =
             Crypter::new(Cipher::aes_256_ecb(), Mode::Encrypt, self.0.as_slice(), None).unwrap();
         crypter.pad(false);
-        crypter.update(block, &mut output).unwrap();
+        let _ = crypter.update(block, &mut output).unwrap();
         block.copy_from_slice(&output[..crypto_provider::aes::BLOCK_SIZE]);
     }
 }
@@ -115,7 +118,7 @@ impl AesDecryptCipher for Aes256Cipher {
         let mut crypter =
             Crypter::new(Cipher::aes_256_ecb(), Mode::Decrypt, self.0.as_slice(), None).unwrap();
         crypter.pad(false);
-        crypter.update(block, &mut output).unwrap();
+        let _ = crypter.update(block, &mut output).unwrap();
         block.copy_from_slice(&output[..crypto_provider::aes::BLOCK_SIZE]);
     }
 }
@@ -126,7 +129,23 @@ pub struct OpenSslAesCbcPkcs7;
 impl crypto_provider::aes::cbc::AesCbcPkcs7Padded for OpenSslAesCbcPkcs7 {
     fn encrypt(key: &crypto_provider::aes::Aes256Key, iv: &AesCbcIv, message: &[u8]) -> Vec<u8> {
         openssl::symm::encrypt(Cipher::aes_256_cbc(), key.as_slice(), Some(iv.as_slice()), message)
-            .unwrap()
+            // The output buffer is allocated by the openssl crate and guarantees to have enough
+            // space to hold the output value and does not overlap with the input slice.
+            .expect("encrypt should always succeed")
+    }
+
+    fn encrypt_in_place(
+        key: &Aes256Key,
+        iv: &AesCbcIv,
+        message: &mut SliceVec<u8>,
+    ) -> Result<(), EncryptionError> {
+        let encrypted = Self::encrypt(key, iv, message);
+        if encrypted.len() > message.capacity() {
+            return Err(EncryptionError::PaddingFailed);
+        }
+        message.clear();
+        message.extend_from_slice(&encrypted);
+        Ok(())
     }
 
     fn decrypt(
@@ -142,12 +161,22 @@ impl crypto_provider::aes::cbc::AesCbcPkcs7Padded for OpenSslAesCbcPkcs7 {
         )
         .map_err(|_| DecryptionError::BadPadding)
     }
+
+    fn decrypt_in_place(
+        key: &Aes256Key,
+        iv: &AesCbcIv,
+        ciphertext: &mut SliceVec<u8>,
+    ) -> Result<(), DecryptionError> {
+        Self::decrypt(key, iv, ciphertext).map(|result| {
+            ciphertext.clear();
+            ciphertext.extend_from_slice(&result);
+        })
+    }
 }
 
 /// OpenSSL implementation of AES-CTR-128
 pub struct OpenSslAesCtr128 {
     enc_cipher: Crypter,
-    dec_cipher: Crypter,
 }
 
 impl crypto_provider::aes::ctr::AesCtr for OpenSslAesCtr128 {
@@ -161,33 +190,19 @@ impl crypto_provider::aes::ctr::AesCtr for OpenSslAesCtr128 {
                 Some(&nonce_and_counter.as_block_array()),
             )
             .unwrap(),
-            dec_cipher: Crypter::new(
-                Cipher::aes_128_ctr(),
-                Mode::Decrypt,
-                key.as_slice(),
-                Some(&nonce_and_counter.as_block_array()),
-            )
-            .unwrap(),
         }
     }
 
-    fn encrypt(&mut self, data: &mut [u8]) {
+    fn apply_keystream(&mut self, data: &mut [u8]) {
         let mut in_slice = vec![0u8; data.len()];
         in_slice.copy_from_slice(data);
         let _ = self.enc_cipher.update(&in_slice, data);
-    }
-
-    fn decrypt(&mut self, data: &mut [u8]) {
-        let mut in_slice = vec![0u8; data.len()];
-        in_slice.copy_from_slice(data);
-        let _ = self.dec_cipher.update(&in_slice, data);
     }
 }
 
 /// OpenSSL implementation of AES-CTR-256
 pub struct OpenSslAesCtr256 {
     enc_cipher: Crypter,
-    dec_cipher: Crypter,
 }
 
 impl crypto_provider::aes::ctr::AesCtr for OpenSslAesCtr256 {
@@ -201,26 +216,13 @@ impl crypto_provider::aes::ctr::AesCtr for OpenSslAesCtr256 {
                 Some(&nonce_and_counter.as_block_array()),
             )
             .unwrap(),
-            dec_cipher: Crypter::new(
-                Cipher::aes_256_ctr(),
-                Mode::Decrypt,
-                key.as_slice(),
-                Some(&nonce_and_counter.as_block_array()),
-            )
-            .unwrap(),
         }
     }
 
-    fn encrypt(&mut self, data: &mut [u8]) {
+    fn apply_keystream(&mut self, data: &mut [u8]) {
         let mut in_slice = vec![0u8; data.len()];
         in_slice.copy_from_slice(data);
         let _ = self.enc_cipher.update(&in_slice, data);
-    }
-
-    fn decrypt(&mut self, data: &mut [u8]) {
-        let mut in_slice = vec![0u8; data.len()];
-        in_slice.copy_from_slice(data);
-        let _ = self.dec_cipher.update(&in_slice, data);
     }
 }
 

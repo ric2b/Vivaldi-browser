@@ -33,9 +33,9 @@ export const OobeFocusBehavior = {
     if (!root) {
       return;
     }
-    var focusedElements = root.getElementsByClassName('focus-on-show');
-    var focused = false;
-    for (var i = 0; i < focusedElements.length; ++i) {
+    const focusedElements = root.getElementsByClassName('focus-on-show');
+    let focused = false;
+    for (let i = 0; i < focusedElements.length; ++i) {
       if (focusedElements[i].hidden) {
         continue;
       }
@@ -48,17 +48,10 @@ export const OobeFocusBehavior = {
       afterNextRender(this, () => this.focusOnElement_(focusedElements[0]));
     }
 
-    this.fire('show-dialog');
+    this.dispatchEvent(
+        new CustomEvent('show-dialog', {bubbles: true, composed: true}));
   },
 };
-
-/**
- * TODO: Replace with an interface. b/24294625
- * @typedef {{
- *   focusMarkedElement: function()
- * }}
- */
-OobeFocusBehavior.Proto;
 
 /** @interface */
 export class OobeFocusBehaviorInterface {

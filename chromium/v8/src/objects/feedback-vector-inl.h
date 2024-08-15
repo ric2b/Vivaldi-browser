@@ -115,6 +115,9 @@ void FeedbackVector::clear_invocation_count(RelaxedStoreTag tag) {
   set_invocation_count(0, tag);
 }
 
+UINT8_ACCESSORS(FeedbackVector, invocation_count_before_stable,
+                kInvocationCountBeforeStableOffset)
+
 int FeedbackVector::osr_urgency() const {
   return OsrUrgencyBits::decode(osr_state());
 }
@@ -156,13 +159,13 @@ void FeedbackVector::set_maybe_has_optimized_osr_code(bool value,
   }
 }
 
-Tagged<Code> FeedbackVector::optimized_code() const {
+Tagged<Code> FeedbackVector::optimized_code(IsolateForSandbox isolate) const {
   MaybeObject slot = maybe_optimized_code();
   DCHECK(slot->IsWeakOrCleared());
   Tagged<HeapObject> heap_object;
   Tagged<Code> code;
   if (slot.GetHeapObject(&heap_object)) {
-    code = Code::cast(heap_object);
+    code = CodeWrapper::cast(heap_object)->code(isolate);
   }
   // It is possible that the maybe_optimized_code slot is cleared but the flags
   // haven't been updated yet. We update them when we execute the function next
@@ -181,9 +184,10 @@ TieringState FeedbackVector::tiering_state() const {
 }
 
 bool FeedbackVector::has_optimized_code() const {
-  DCHECK_IMPLIES(!optimized_code().is_null(),
+  bool is_cleared = maybe_optimized_code()->IsCleared();
+  DCHECK_IMPLIES(!is_cleared,
                  maybe_has_maglev_code() || maybe_has_turbofan_code());
-  return !optimized_code().is_null();
+  return !is_cleared;
 }
 
 bool FeedbackVector::maybe_has_maglev_code() const {
@@ -210,12 +214,21 @@ void FeedbackVector::set_log_next_execution(bool value) {
   set_flags(LogNextExecutionBit::update(flags(), value));
 }
 
+bool FeedbackVector::interrupt_budget_reset_by_ic_change() const {
+  return InterruptBudgetResetByIcChangeBit::decode(flags());
+}
+
+void FeedbackVector::set_interrupt_budget_reset_by_ic_change(bool value) {
+  set_flags(InterruptBudgetResetByIcChangeBit::update(flags(), value));
+}
+
 base::Optional<Tagged<Code>> FeedbackVector::GetOptimizedOsrCode(
     Isolate* isolate, FeedbackSlot slot) {
   MaybeObject maybe_code = Get(isolate, slot);
   if (maybe_code->IsCleared()) return {};
 
-  Tagged<Code> code = Code::cast(maybe_code.GetHeapObject());
+  Tagged<Code> code =
+      CodeWrapper::cast(maybe_code.GetHeapObject())->code(isolate);
   if (code->marked_for_deoptimization()) {
     // Clear the cached Code object if deoptimized.
     // TODO(jgruber): Add tracing.

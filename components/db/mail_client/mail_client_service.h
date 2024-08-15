@@ -69,13 +69,12 @@ class MailClientService : public KeyedService {
   // want to check state during their own initializer.
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
-  typedef base::OnceCallback<void(std::shared_ptr<MessageResult>)>
-      MessageCallback;
+  typedef base::OnceCallback<void(MessageResult)> MessageCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<SearchListIdRows>)>
-      EmailSearchCallback;
+  typedef base::OnceCallback<void(SearchListIDs)> EmailSearchCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<bool>)> ResultCallback;
+  typedef base::OnceCallback<void(bool)> ResultCallback;
+  typedef base::OnceCallback<void(Migration)> VersionCallback;
 
   base::CancelableTaskTracker::TaskId CreateMessages(
       mail_client::MessageRows rows,
@@ -83,13 +82,12 @@ class MailClientService : public KeyedService {
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteMessages(
-      std::vector<SearchListID> search_list_ids,
+      mail_client::SearchListIDs ids,
       ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
-  base::CancelableTaskTracker::TaskId AddMessageBody(
-      SearchListID search_list_id,
-      std::u16string body,
+  base::CancelableTaskTracker::TaskId UpdateMessage(
+      MessageRow message,
       MessageCallback callback,
       base::CancelableTaskTracker* tracker);
 
@@ -104,7 +102,11 @@ class MailClientService : public KeyedService {
       ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
-  base::CancelableTaskTracker::TaskId RebuildAndVacuumDatabase(
+  base::CancelableTaskTracker::TaskId GetDBVersion(
+      VersionCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId MigrateSerchDB(
       ResultCallback callback,
       base::CancelableTaskTracker* tracker);
 
@@ -120,6 +122,8 @@ class MailClientService : public KeyedService {
   // MailClientService has finished loading.
   void NotifyMailClientServiceLoaded();
   void NotifyMailClientServiceBeingDeleted();
+  void OnMigrationChanges(int progress, int total, std::string msg);
+  void OnDeleteMessageChange(int delete_progress_count);
 
   void Cleanup();
 

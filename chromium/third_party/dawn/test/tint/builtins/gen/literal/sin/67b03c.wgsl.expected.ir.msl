@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void sin_67b03c() {
+  float3 res = float3(1.0f);
+}
+vertex float4 vertex_main() {
+  sin_67b03c();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  sin_67b03c();
+}
+kernel void compute_main() {
+  sin_67b03c();
+}

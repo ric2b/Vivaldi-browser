@@ -76,9 +76,13 @@ void av1_alloc_txb_buf(AV1_COMP *cpi) {
 void av1_free_txb_buf(AV1_COMP *cpi) {
   CoeffBufferPool *coeff_buf_pool = &cpi->coeff_buffer_pool;
   aom_free(cpi->coeff_buffer_base);
+  cpi->coeff_buffer_base = NULL;
   aom_free(coeff_buf_pool->tcoeff);
+  coeff_buf_pool->tcoeff = NULL;
   aom_free(coeff_buf_pool->eobs);
+  coeff_buf_pool->eobs = NULL;
   aom_free(coeff_buf_pool->entropy_ctx);
+  coeff_buf_pool->entropy_ctx = NULL;
 }
 
 static void write_golomb(aom_writer *w, int level) {

@@ -18,6 +18,8 @@ static_library("browser") {
     "compose_manager.h",
     "compose_manager_impl.cc",
     "compose_manager_impl.h",
+    "compose_metrics.cc",
+    "compose_metrics.h",
     "config.cc",
     "config.h",
   ]
@@ -29,5 +31,25 @@ static_library("browser") {
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/keyed_service/core",
+    "//services/metrics/public/cpp:metrics_cpp",
+    "//services/metrics/public/cpp:ukm_builders",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "compose_manager_impl_unittest.cc" ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//base/test:test_support",
+    "//components/autofill/core/browser",
+    "//components/autofill/core/browser:test_support",
+    "//components/autofill/core/common:test_support",
+    "//components/ukm:test_support",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }

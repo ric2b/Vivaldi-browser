@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_LOGIN_OOBE_QUICK_START_CONNECTIVITY_FAKE_TARGET_DEVICE_CONNECTION_BROKER_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -14,7 +15,6 @@
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/fake_connection.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker_factory.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class FakeNearbyConnection;
 
@@ -34,7 +34,9 @@ class FakeTargetDeviceConnectionBroker : public TargetDeviceConnectionBroker {
 
     // Returns all FakeTargetDeviceConnectionBroker instances created by
     // CreateInstance().
-    const std::vector<FakeTargetDeviceConnectionBroker*>& instances() {
+    const std::vector<
+        raw_ptr<FakeTargetDeviceConnectionBroker, VectorExperimental>>&
+    instances() {
       return instances_;
     }
 
@@ -52,7 +54,8 @@ class FakeTargetDeviceConnectionBroker : public TargetDeviceConnectionBroker {
         QuickStartConnectivityService* quick_start_connectivity_service)
         override;
 
-    std::vector<FakeTargetDeviceConnectionBroker*> instances_;
+    std::vector<raw_ptr<FakeTargetDeviceConnectionBroker, VectorExperimental>>
+        instances_;
   };
 
   explicit FakeTargetDeviceConnectionBroker(
@@ -70,7 +73,8 @@ class FakeTargetDeviceConnectionBroker : public TargetDeviceConnectionBroker {
   void StopAdvertising(base::OnceClosure on_stop_advertising_callback) override;
 
   void InitiateConnection(const std::string& source_device_id);
-  void AuthenticateConnection(const std::string& source_device_id);
+  void AuthenticateConnection(const std::string& source_device_id,
+                              Connection::AuthenticationMethod auth_method);
   void RejectConnection();
   void CloseConnection(ConnectionClosedReason reason);
 
@@ -107,7 +111,7 @@ class FakeTargetDeviceConnectionBroker : public TargetDeviceConnectionBroker {
     return std::move(on_stop_advertising_callback_);
   }
 
-  absl::optional<bool> start_advertising_use_pin_authentication() {
+  std::optional<bool> start_advertising_use_pin_authentication() {
     return start_advertising_use_pin_authentication_;
   }
 
@@ -125,7 +129,7 @@ class FakeTargetDeviceConnectionBroker : public TargetDeviceConnectionBroker {
   std::unique_ptr<FakeConnection> connection_;
 
   AdvertisingId advertising_id_;
-  absl::optional<bool> start_advertising_use_pin_authentication_;
+  std::optional<bool> start_advertising_use_pin_authentication_;
 
   base::WeakPtrFactory<FakeTargetDeviceConnectionBroker> weak_ptr_factory_{
       this};

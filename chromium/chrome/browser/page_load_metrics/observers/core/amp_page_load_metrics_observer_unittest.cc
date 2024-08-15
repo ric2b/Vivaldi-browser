@@ -4,6 +4,7 @@
 
 #include "chrome/browser/page_load_metrics/observers/core/amp_page_load_metrics_observer.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -20,7 +21,6 @@
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 using content::NavigationSimulator;
@@ -67,7 +67,7 @@ class AMPPageLoadMetricsObserverTest
 
   void ValidateHistogramsFor(const std::string& histogram,
                              const char* view_type,
-                             const absl::optional<base::TimeDelta>& event,
+                             const std::optional<base::TimeDelta>& event,
                              bool expect_histograms) {
     const size_t kTypeOffset = strlen("PageLoad.Clients.AMP.");
     std::string view_type_histogram = histogram;
@@ -525,12 +525,16 @@ TEST_P(AMPPageLoadMetricsObserverTest,
       UserInteractionLatencies::NewUserInteractionLatencies({});
   auto& max_event_durations =
       input_timing.max_event_durations->get_user_interaction_latencies();
+  base::TimeTicks current_time = base::TimeTicks::Now();
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(50), UserInteractionType::kKeyboard));
+      base::Milliseconds(50), UserInteractionType::kKeyboard, 0,
+      current_time + base::Milliseconds(1000)));
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(100), UserInteractionType::kTapOrClick));
+      base::Milliseconds(100), UserInteractionType::kTapOrClick, 1,
+      current_time + base::Milliseconds(2000)));
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(150), UserInteractionType::kDrag));
+      base::Milliseconds(150), UserInteractionType::kDrag, 2,
+      current_time + base::Milliseconds(3000)));
 
   tester()->SimulateInputTimingUpdate(input_timing, subframe);
 
@@ -588,14 +592,18 @@ TEST_P(AMPPageLoadMetricsObserverTest,
   input_timing.num_interactions = 3;
   input_timing.max_event_durations =
       UserInteractionLatencies::NewUserInteractionLatencies({});
+  base::TimeTicks current_time = base::TimeTicks::Now();
   auto& max_event_durations =
       input_timing.max_event_durations->get_user_interaction_latencies();
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(50), UserInteractionType::kKeyboard));
+      base::Milliseconds(50), UserInteractionType::kKeyboard, 0,
+      current_time + base::Milliseconds(1000)));
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(100), UserInteractionType::kTapOrClick));
+      base::Milliseconds(100), UserInteractionType::kTapOrClick, 1,
+      current_time + base::Milliseconds(2000)));
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(150), UserInteractionType::kDrag));
+      base::Milliseconds(150), UserInteractionType::kDrag, 2,
+      current_time + base::Milliseconds(3000)));
 
   tester()->SimulateInputTimingUpdate(input_timing, subframe);
 

@@ -29,6 +29,7 @@
 #define SRC_DAWN_NATIVE_D3D_SHARED_FENCE_D3D_H_
 
 #include "dawn/native/SharedFence.h"
+#include "dawn/native/SystemHandle.h"
 #include "dawn/native/d3d/d3d_platform.h"
 
 namespace dawn::native::d3d {
@@ -37,15 +38,16 @@ class Device;
 
 class SharedFence : public SharedFenceBase {
   public:
-    ~SharedFence() override;
+    // TODO(sunnyps): Remove after ExternalImageDXGIImpl is gone.
+    HANDLE GetFenceHandle() const;
 
   protected:
-    SharedFence(Device* device, const char* label, HANDLE ownedHandle);
+    SharedFence(Device* device, const char* label, SystemHandle ownedHandle);
 
   private:
-    MaybeError ExportInfoImpl(SharedFenceExportInfo* info) const override;
+    MaybeError ExportInfoImpl(UnpackedPtr<SharedFenceExportInfo>& info) const override;
 
-    HANDLE mHandle = nullptr;
+    SystemHandle mHandle;
 };
 
 }  // namespace dawn::native::d3d

@@ -5,6 +5,7 @@
 #include "components/search_engines/android/template_url_service_android.h"
 
 #include <stddef.h>
+
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
@@ -21,6 +23,7 @@
 #include "components/google/core/common/google_util.h"
 #include "components/search_engines/android/jni_headers/TemplateUrlService_jni.h"
 #include "components/search_engines/android/template_url_android.h"
+#include "components/search_engines/search_engine_choice_utils.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
@@ -70,12 +73,16 @@ void TemplateUrlServiceAndroid::SetUserSelectedDefaultSearchProvider(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& jkeyword,
+    jint choice_made_location,
     const jint type) {
   std::u16string keyword(
       base::android::ConvertJavaStringToUTF16(env, jkeyword));
   TemplateURL* template_url =
       template_url_service_->GetTemplateURLForKeyword(keyword);
-  template_url_service_->SetUserSelectedDefaultSearchProvider(template_url, TemplateURLService::DefaultSearchType(type));
+  template_url_service_->SetUserSelectedDefaultSearchProvider(
+      template_url,
+      TemplateURLService::DefaultSearchType(type),
+      static_cast<search_engines::ChoiceMadeLocation>(choice_made_location));
 }
 
 jboolean TemplateUrlServiceAndroid::IsLoaded(
@@ -404,7 +411,12 @@ jboolean TemplateUrlServiceAndroid::SetPlayAPISearchEngine(
   // CanMakeDefault() will prevent us from taking over a policy or extension
   // defined default search engine.
   if (set_as_default && template_url_service_->CanMakeDefault(t_url, TemplateURLService::kDefaultSearchMain)) {
-    template_url_service_->SetUserSelectedDefaultSearchProvider(t_url, TemplateURLService::kDefaultSearchMain);
+    template_url_service_->SetUserSelectedDefaultSearchProvider(
+        t_url,
+        TemplateURLService::kDefaultSearchMain,
+        // This method gets eventually called when the user interacts with the
+        // OS-level choice screen, so we use it as the location of the choice.
+        search_engines::ChoiceMadeLocation::kChoiceScreen);
   }
   return true;
 }
@@ -441,7 +453,7 @@ void TemplateUrlServiceAndroid::GetTemplateUrls(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jobject>& template_url_list_obj) {
-  std::vector<TemplateURL*> template_urls =
+  std::vector<raw_ptr<TemplateURL, VectorExperimental>> template_urls =
       template_url_service_->GetTemplateURLs();
 
   // Clean up duplication between a Play API template URL and a corresponding
@@ -452,7 +464,8 @@ void TemplateUrlServiceAndroid::GetTemplateUrls(
       play_api_it != template_urls.end() ? *play_api_it : nullptr;
 
     std::stable_sort(template_urls.begin(), template_urls.end(),
-                     [](const auto* template_url1, const auto* template_url2) {
+                     [](const TemplateURL* template_url1,
+                        const TemplateURL* template_url2) {
                        // Important to have the false-returning test first, so
                        // that if both are invalid, they'll be evaluated as
                        // equal.
@@ -469,7 +482,7 @@ void TemplateUrlServiceAndroid::GetTemplateUrls(
       continue;
     // When Play API template URL supercedes the current template URL, skip it.
     if (play_api_turl && play_api_turl->keyword() == template_url->keyword() &&
-        play_api_turl->IsBetterThanEngineWithConflictingKeyword(template_url)) {
+        play_api_turl->IsBetterThanConflictingEngine(template_url)) {
       continue;
     }
 
@@ -512,6 +525,10 @@ TemplateUrlServiceAndroid::GetImageUrlAndPostContent(
 
 jboolean TemplateUrlServiceAndroid::IsEeaChoiceCountry(JNIEnv* env) {
   return template_url_service_->IsEeaChoiceCountry();
+}
+
+jboolean TemplateUrlServiceAndroid::ShouldShowUpdatedSettings(JNIEnv* env) {
+  return template_url_service_->ShouldShowUpdatedSettings();
 }
 
 void TemplateUrlServiceAndroid::VivaldiSetDefaultOverride(

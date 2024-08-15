@@ -92,7 +92,7 @@ class TestImeSharedLibraryWrapper : public ImeSharedLibraryWrapper {
     return instance.get();
   }
 
-  absl::optional<ImeSharedLibraryWrapper::EntryPoints>
+  std::optional<ImeSharedLibraryWrapper::EntryPoints>
   MaybeLoadThenReturnEntryPoints() override {
     return entry_points_;
   }
@@ -104,21 +104,23 @@ class TestImeSharedLibraryWrapper : public ImeSharedLibraryWrapper {
     entry_points_ = {
         .init_proto_mode = [](ImeCrosPlatform* platform) {},
         .close_proto_mode = []() {},
-        .supports =
+        .proto_mode_supports =
             [](const char* ime_spec) {
               return strcmp(kInvalidImeSpec, ime_spec) != 0;
             },
-        .activate_ime = [](const char* ime_spec,
-                           ImeClientDelegate* delegate) { return true; },
-        .process = [](const uint8_t* data, size_t size) {},
+        .proto_mode_activate_ime =
+            [](const char* ime_spec, ImeClientDelegate* delegate) {
+              return true;
+            },
+        .proto_mode_process = [](const uint8_t* data, size_t size) {},
         .init_mojo_mode = [](ImeCrosPlatform* platform) {},
         .close_mojo_mode = []() {},
-        .initialize_connection_factory =
+        .mojo_mode_initialize_connection_factory =
             [](uint32_t receiver_pipe_handle) {
               return g_test_decoder_state->InitializeConnectionFactory(
                   receiver_pipe_handle);
             },
-        .is_input_method_connected =
+        .mojo_mode_is_input_method_connected =
             []() { return g_test_decoder_state->IsConnected(); },
     };
   }
@@ -130,7 +132,7 @@ class TestImeSharedLibraryWrapper : public ImeSharedLibraryWrapper {
 
   ~TestImeSharedLibraryWrapper() override = default;
 
-  absl::optional<ImeSharedLibraryWrapper::EntryPoints> entry_points_;
+  std::optional<ImeSharedLibraryWrapper::EntryPoints> entry_points_;
 };
 
 struct MockInputMethodHost : public mojom::InputMethodHost {
@@ -160,7 +162,7 @@ struct MockInputMethodHost : public mojom::InputMethodHost {
                           RequestSuggestionsCallback callback) override {}
   void DisplaySuggestions(
       const std::vector<AssistiveSuggestion>& suggestions,
-      const absl::optional<SuggestionsTextContext>& context) override {}
+      const std::optional<SuggestionsTextContext>& context) override {}
   void UpdateCandidatesWindow(mojom::CandidatesWindowPtr window) override {}
   void RecordUkm(mojom::UkmEntryPtr entry) override {}
   void DEPRECATED_ReportKoreanAction(mojom::KoreanAction action) override {}
@@ -221,7 +223,7 @@ class ImeServiceTest : public testing::Test, public mojom::InputMethodHost {
                           RequestSuggestionsCallback callback) override {}
   void DisplaySuggestions(
       const std::vector<AssistiveSuggestion>& suggestions,
-      const absl::optional<SuggestionsTextContext>& context) override {}
+      const std::optional<SuggestionsTextContext>& context) override {}
   void UpdateCandidatesWindow(mojom::CandidatesWindowPtr window) override {}
   void RecordUkm(mojom::UkmEntryPtr entry) override {}
   void DEPRECATED_ReportKoreanAction(mojom::KoreanAction action) override {}

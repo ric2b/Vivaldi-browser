@@ -27,22 +27,22 @@ pub fn aes_128_ctr_test_encrypt<A: AesCtr<Key = Aes128Key>>(_marker: marker::Pha
     let mut cipher = A::new(&key, NonceAndCounter::from_block(iv));
 
     block = hex!("6bc1bee22e409f96e93d7e117393172a");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_1 = hex!("874d6191b620e3261bef6864990db6ce");
     assert_eq!(expected_ciphertext_1, block);
 
     block = hex!("ae2d8a571e03ac9c9eb76fac45af8e51");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_2 = hex!("9806f66b7970fdff8617187bb9fffdff");
     assert_eq!(expected_ciphertext_2, block);
 
     block = hex!("30c81c46a35ce411e5fbc1191a0a52ef");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_3 = hex!("5ae4df3edbd5d35e5b4f09020db03eab");
     assert_eq!(expected_ciphertext_3, block);
 
     block = hex!("f69f2445df4f9b17ad2b417be66c3710");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_3 = hex!("1e031dda2fbe03d1792170a0f3009cee");
     assert_eq!(expected_ciphertext_3, block);
 }
@@ -56,22 +56,22 @@ pub fn aes_128_ctr_test_decrypt<A: AesCtr<Key = Aes128Key>>(_marker: marker::Pha
     let mut cipher = A::new(&key, NonceAndCounter::from_block(iv));
 
     block = hex!("874d6191b620e3261bef6864990db6ce");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_1 = hex!("6bc1bee22e409f96e93d7e117393172a");
     assert_eq!(expected_plaintext_1, block);
 
     block = hex!("9806f66b7970fdff8617187bb9fffdff");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_2 = hex!("ae2d8a571e03ac9c9eb76fac45af8e51");
     assert_eq!(expected_plaintext_2, block);
 
     block = hex!("5ae4df3edbd5d35e5b4f09020db03eab");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_3 = hex!("30c81c46a35ce411e5fbc1191a0a52ef");
     assert_eq!(expected_plaintext_3, block);
 
     block = hex!("1e031dda2fbe03d1792170a0f3009cee");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_3 = hex!("f69f2445df4f9b17ad2b417be66c3710");
     assert_eq!(expected_plaintext_3, block);
 }
@@ -86,22 +86,22 @@ pub fn aes_256_ctr_test_encrypt<A: AesCtr<Key = Aes256Key>>(_marker: marker::Pha
     let mut cipher = A::new(&key, NonceAndCounter::from_block(iv));
 
     block = hex!("6bc1bee22e409f96e93d7e117393172a");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_1 = hex!("601ec313775789a5b7a7f504bbf3d228");
     assert_eq!(expected_ciphertext_1, block);
 
     block = hex!("ae2d8a571e03ac9c9eb76fac45af8e51");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_2 = hex!("f443e3ca4d62b59aca84e990cacaf5c5");
     assert_eq!(expected_ciphertext_2, block);
 
     block = hex!("30c81c46a35ce411e5fbc1191a0a52ef");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_3 = hex!("2b0930daa23de94ce87017ba2d84988d");
     assert_eq!(expected_ciphertext_3, block);
 
     block = hex!("f69f2445df4f9b17ad2b417be66c3710");
-    cipher.encrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_ciphertext_3 = hex!("dfc9c58db67aada613c2dd08457941a6");
     assert_eq!(expected_ciphertext_3, block);
 }
@@ -116,22 +116,22 @@ pub fn aes_256_ctr_test_decrypt<A: AesCtr<Key = Aes256Key>>(_marker: marker::Pha
     let mut cipher = A::new(&key, NonceAndCounter::from_block(iv));
 
     block = hex!("601ec313775789a5b7a7f504bbf3d228");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_1 = hex!("6bc1bee22e409f96e93d7e117393172a");
     assert_eq!(expected_plaintext_1, block);
 
     block = hex!("f443e3ca4d62b59aca84e990cacaf5c5");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_2 = hex!("ae2d8a571e03ac9c9eb76fac45af8e51");
     assert_eq!(expected_plaintext_2, block);
 
     block = hex!("2b0930daa23de94ce87017ba2d84988d");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_3 = hex!("30c81c46a35ce411e5fbc1191a0a52ef");
     assert_eq!(expected_plaintext_3, block);
 
     block = hex!("dfc9c58db67aada613c2dd08457941a6");
-    cipher.decrypt(&mut block);
+    cipher.apply_keystream(&mut block);
     let expected_plaintext_3 = hex!("f69f2445df4f9b17ad2b417be66c3710");
     assert_eq!(expected_plaintext_3, block);
 }

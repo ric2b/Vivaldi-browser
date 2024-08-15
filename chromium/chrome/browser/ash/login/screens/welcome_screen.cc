@@ -90,7 +90,7 @@ constexpr const char kUserActionActivateRemoraRequisition[] =
     "activateRemoraRequisition";
 constexpr const char kUserActionEditDeviceRequisition[] =
     "editDeviceRequisition";
-constexpr const char kUserActionQuickStartClicked[] = "activateQuickStart";
+constexpr const char kUserActionQuickStartClicked[] = "quickStartClicked";
 constexpr const char kWelcomeScreenLocaleChangeMetric[] =
     "OOBE.WelcomeScreen.UserChangedLocale";
 constexpr const char kSetLocaleId[] = "setLocaleId";
@@ -174,15 +174,15 @@ std::string GetApplicationLocale() {
 // static
 std::string WelcomeScreen::GetResultString(Result result) {
   switch (result) {
-    case Result::NEXT:
+    case Result::kNext:
       return "Next";
-    case Result::NEXT_OS_INSTALL:
+    case Result::kNextOSInstall:
       return "StartOsInstall";
-    case Result::SETUP_DEMO:
+    case Result::kSetupDemo:
       return "SetupDemo";
-    case Result::ENABLE_DEBUGGING:
+    case Result::kEnableDebugging:
       return "EnableDebugging";
-    case Result::QUICK_START:
+    case Result::kQuickStart:
       return "QuickStart";
   }
 }
@@ -372,15 +372,6 @@ void WelcomeScreen::ShowImpl() {
     }
   }
 
-  // Skip this screen if this is an automatic enrollment as part of Zero-Touch
-  // hands off flow.
-  // TODO(crbug.com/1295708): Move this check to an implementation of
-  // BaseScreen:MaybeSkip().
-  if (WizardController::IsZeroTouchHandsOffOobeFlow()) {
-    OnContinueButtonPressed();
-    return;
-  }
-
   // TODO(crbug.com/1105387): Part of initial screen logic.
   PrefService* prefs = g_browser_process->local_state();
   if (prefs->GetBoolean(::prefs::kDebuggingFeaturesRequested)) {
@@ -412,8 +403,7 @@ void WelcomeScreen::HideImpl() {
 void WelcomeScreen::OnUserAction(const base::Value::List& args) {
   const std::string& action_id = args[0].GetString();
   if (action_id == kUserActionQuickStartClicked) {
-    CHECK(context()->quick_start_enabled);
-    Exit(Result::QUICK_START);
+    OnQuickStartClicked();
     return;
   }
   if (action_id == kUserActionContinueButtonClicked) {
@@ -598,17 +588,17 @@ void WelcomeScreen::SetQuickStartButtonVisibility(bool visible) {
 
 void WelcomeScreen::OnContinueButtonPressed() {
   if (switches::IsOsInstallAllowed())
-    Exit(Result::NEXT_OS_INSTALL);
+    Exit(Result::kNextOSInstall);
   else
-    Exit(Result::NEXT);
+    Exit(Result::kNext);
 }
 
 void WelcomeScreen::OnSetupDemoMode() {
-  Exit(Result::SETUP_DEMO);
+  Exit(Result::kSetupDemo);
 }
 
 void WelcomeScreen::OnEnableDebugging() {
-  Exit(Result::ENABLE_DEBUGGING);
+  Exit(Result::kEnableDebugging);
 }
 
 void WelcomeScreen::OnLanguageChangedCallback(
@@ -721,6 +711,11 @@ void WelcomeScreen::UpdateA11yState() {
   if (view_) {
     view_->UpdateA11yState(a11y_state);
   }
+}
+
+void WelcomeScreen::OnQuickStartClicked() {
+  CHECK(context()->quick_start_enabled);
+  Exit(Result::kQuickStart);
 }
 
 void WelcomeScreen::Exit(Result result) const {

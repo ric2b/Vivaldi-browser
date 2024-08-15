@@ -135,10 +135,9 @@ class InputMethodManagerImpl : public InputMethodManager,
     const InputMethodDescriptor* LookupInputMethod(
         const std::string& input_method_id);
 
-    const raw_ptr<Profile, DanglingUntriaged | ExperimentalAsh> profile_;
+    const raw_ptr<Profile, DanglingUntriaged> profile_;
 
-    const raw_ptr<InputMethodManagerImpl, DanglingUntriaged | ExperimentalAsh>
-        manager_;
+    const raw_ptr<InputMethodManagerImpl, DanglingUntriaged> manager_;
 
     std::string last_used_input_method_id_;
 
@@ -226,7 +225,10 @@ class InputMethodManagerImpl : public InputMethodManager,
   InputMethodUtil* GetInputMethodUtil() override;
   ComponentExtensionIMEManager* GetComponentExtensionIMEManager() override;
   bool IsLoginKeyboard(const std::string& layout) const override;
-  bool MigrateInputMethods(std::vector<std::string>* input_method_ids) override;
+  std::string GetMigratedInputMethodID(
+      const std::string& input_method_id) override;
+  bool GetMigratedInputMethodIDs(
+      std::vector<std::string>* input_method_ids) override;
   scoped_refptr<InputMethodManager::State> CreateNewState(
       Profile* profile) override;
   scoped_refptr<InputMethodManager::State> GetActiveIMEState() override;

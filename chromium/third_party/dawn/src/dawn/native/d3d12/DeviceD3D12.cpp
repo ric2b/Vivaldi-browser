@@ -45,7 +45,6 @@
 #include "dawn/native/d3d12/CommandAllocatorManager.h"
 #include "dawn/native/d3d12/CommandBufferD3D12.h"
 #include "dawn/native/d3d12/ComputePipelineD3D12.h"
-#include "dawn/native/d3d12/FenceD3D12.h"
 #include "dawn/native/d3d12/PhysicalDeviceD3D12.h"
 #include "dawn/native/d3d12/PipelineLayoutD3D12.h"
 #include "dawn/native/d3d12/PlatformFunctionsD3D12.h"
@@ -79,25 +78,20 @@ static constexpr uint64_t kMaxDebugMessagesToPrint = 5;
 
 // static
 ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
-                                          const DeviceDescriptor* descriptor,
+                                          const UnpackedPtr<DeviceDescriptor>& descriptor,
                                           const TogglesState& deviceToggles) {
     Ref<Device> device = AcquireRef(new Device(adapter, descriptor, deviceToggles));
     DAWN_TRY(device->Initialize(descriptor));
     return device;
 }
 
-MaybeError Device::Initialize(const DeviceDescriptor* descriptor) {
+MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
     mD3d12Device = ToBackend(GetPhysicalDevice())->GetDevice();
 
     DAWN_ASSERT(mD3d12Device != nullptr);
 
-    // Create device-global objects
-    D3D12_COMMAND_QUEUE_DESC queueDesc = {};
-    queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    DAWN_TRY(
-        CheckHRESULT(mD3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&mCommandQueue)),
-                     "D3D12 create command queue"));
+    Ref<Queue> queue;
+    DAWN_TRY_ASSIGN(queue, Queue::Create(this, &descriptor->defaultQueue));
 
     if ((HasFeature(Feature::TimestampQuery) ||
          HasFeature(Feature::ChromiumExperimentalTimestampQueryInsidePasses)) &&
@@ -107,30 +101,13 @@ MaybeError Device::Initialize(const DeviceDescriptor* descriptor) {
         // always support timestamps except where there are bugs in Windows container and vGPU
         // implementations.
         uint64_t frequency;
-        DAWN_TRY(CheckHRESULT(mCommandQueue->GetTimestampFrequency(&frequency),
+        DAWN_TRY(CheckHRESULT(queue->GetCommandQueue()->GetTimestampFrequency(&frequency),
                               "D3D12 get timestamp frequency"));
         // Calculate the period in nanoseconds by the frequency.
         mTimestampPeriod = static_cast<float>(1e9) / frequency;
     }
 
-    // If PIX is not attached, the QueryInterface fails. Hence, no need to check the return
-    // value.
-    mCommandQueue.As(&mD3d12SharingContract);
-
-    DAWN_TRY(CheckHRESULT(mD3d12Device->CreateFence(uint64_t(kBeginningOfGPUTime),
-                                                    D3D12_FENCE_FLAG_SHARED, IID_PPV_ARGS(&mFence)),
-                          "D3D12 create fence"));
-
-    mFenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    DAWN_ASSERT(mFenceEvent != nullptr);
-
-    DAWN_TRY(CheckHRESULT(mD3d12Device->CreateSharedHandle(mFence.Get(), nullptr, GENERIC_ALL,
-                                                           nullptr, &mFenceHandle),
-                          "D3D12 create fence handle"));
-    DAWN_ASSERT(mFenceHandle != nullptr);
-
     // Initialize backend services
-    mCommandAllocatorManager = std::make_unique<CommandAllocatorManager>(this);
 
     // Zero sized allocator is never requested and does not need to exist.
     for (uint32_t countIndex = 0; countIndex < kNumViewDescriptorAllocators; countIndex++) {
@@ -191,10 +168,7 @@ MaybeError Device::Initialize(const DeviceDescriptor* descriptor) {
     GetD3D12Device()->CreateCommandSignature(&programDesc, nullptr,
                                              IID_PPV_ARGS(&mDrawIndexedIndirectSignature));
 
-    DAWN_TRY(DeviceBase::Initialize(Queue::Create(this, &descriptor->defaultQueue)));
-    // Device shouldn't be used until after DeviceBase::Initialize so we must wait until after
-    // device initialization to call NextSerial
-    DAWN_TRY(NextSerial());
+    DAWN_TRY(DeviceBase::Initialize(std::move(queue)));
 
     // Ensure DXC if use_dxc toggle is set.
     DAWN_TRY(EnsureDXCIfRequired());
@@ -207,7 +181,7 @@ MaybeError Device::Initialize(const DeviceDescriptor* descriptor) {
 }
 
 Device::Device(AdapterBase* adapter,
-               const DeviceDescriptor* descriptor,
+               const UnpackedPtr<DeviceDescriptor>& descriptor,
                const TogglesState& deviceToggles)
     : Base(adapter, descriptor, deviceToggles) {}
 
@@ -215,14 +189,6 @@ Device::~Device() = default;
 
 ID3D12Device* Device::GetD3D12Device() const {
     return mD3d12Device.Get();
-}
-
-ComPtr<ID3D12CommandQueue> Device::GetCommandQueue() const {
-    return mCommandQueue;
-}
-
-ID3D12SharingContract* Device::GetSharingContract() const {
-    return mD3d12SharingContract.Get();
 }
 
 ComPtr<ID3D12CommandSignature> Device::GetDispatchIndirectSignature() const {
@@ -253,25 +219,8 @@ const PlatformFunctions* Device::GetFunctions() const {
     return ToBackend(GetPhysicalDevice())->GetBackend()->GetFunctions();
 }
 
-CommandAllocatorManager* Device::GetCommandAllocatorManager() const {
-    return mCommandAllocatorManager.get();
-}
-
 MutexProtected<ResidencyManager>& Device::GetResidencyManager() const {
     return *mResidencyManager;
-}
-
-ResultOrError<CommandRecordingContext*> Device::GetPendingCommandContext(
-    Device::SubmitMode submitMode) {
-    // Callers of GetPendingCommandList do so to record commands. Only reserve a command
-    // allocator when it is needed so we don't submit empty command lists
-    if (!mPendingCommands.IsOpen()) {
-        DAWN_TRY(mPendingCommands.Open(mD3d12Device.Get(), mCommandAllocatorManager.get()));
-    }
-    if (submitMode == Device::SubmitMode::Normal) {
-        mPendingCommands.SetNeedsSubmit();
-    }
-    return &mPendingCommands;
 }
 
 MaybeError Device::CreateZeroBuffer() {
@@ -279,7 +228,7 @@ MaybeError Device::CreateZeroBuffer() {
     zeroBufferDescriptor.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::CopyDst;
     zeroBufferDescriptor.size = kZeroBufferSize;
     zeroBufferDescriptor.label = "ZeroBuffer_Internal";
-    DAWN_TRY_ASSIGN(mZeroBuffer, Buffer::Create(this, &zeroBufferDescriptor));
+    DAWN_TRY_ASSIGN(mZeroBuffer, Buffer::Create(this, Unpack(&zeroBufferDescriptor)));
 
     return {};
 }
@@ -295,8 +244,9 @@ MaybeError Device::ClearBufferToZero(CommandRecordingContext* commandContext,
     if (!mZeroBuffer->IsDataInitialized()) {
         DynamicUploader* uploader = GetDynamicUploader();
         UploadHandle uploadHandle;
-        DAWN_TRY_ASSIGN(uploadHandle, uploader->Allocate(kZeroBufferSize, GetPendingCommandSerial(),
-                                                         kCopyBufferToBufferOffsetAlignment));
+        DAWN_TRY_ASSIGN(uploadHandle,
+                        uploader->Allocate(kZeroBufferSize, GetQueue()->GetPendingCommandSerial(),
+                                           kCopyBufferToBufferOffsetAlignment));
 
         memset(uploadHandle.mappedBuffer, 0u, kZeroBufferSize);
 
@@ -330,81 +280,21 @@ MaybeError Device::TickImpl() {
     ExecutionSerial completedSerial = GetQueue()->GetCompletedCommandSerial();
 
     (*mResourceAllocatorManager)->Tick(completedSerial);
-    DAWN_TRY(mCommandAllocatorManager->Tick(completedSerial));
     (*mViewShaderVisibleDescriptorAllocator)->Tick(completedSerial);
     (*mSamplerShaderVisibleDescriptorAllocator)->Tick(completedSerial);
     (*mRenderTargetViewAllocator)->Tick(completedSerial);
     (*mDepthStencilViewAllocator)->Tick(completedSerial);
     mUsedComObjectRefs->ClearUpTo(completedSerial);
 
-    if (mPendingCommands.IsOpen() && mPendingCommands.NeedsSubmit()) {
-        DAWN_TRY(ExecutePendingCommandContext());
-        DAWN_TRY(NextSerial());
-    }
+    DAWN_TRY(ToBackend(GetQueue())->SubmitPendingCommands());
 
     DAWN_TRY(CheckDebugLayerAndGenerateErrors());
 
     return {};
 }
 
-MaybeError Device::NextSerial() {
-    GetQueue()->IncrementLastSubmittedCommandSerial();
-
-    TRACE_EVENT1(GetPlatform(), General, "D3D12Device::SignalFence", "serial",
-                 uint64_t(GetLastSubmittedCommandSerial()));
-
-    return CheckHRESULT(
-        mCommandQueue->Signal(mFence.Get(), uint64_t(GetLastSubmittedCommandSerial())),
-        "D3D12 command queue signal fence");
-}
-
-MaybeError Device::WaitForSerial(ExecutionSerial serial) {
-    DAWN_TRY(GetQueue()->CheckPassedSerials());
-    if (GetQueue()->GetCompletedCommandSerial() < serial) {
-        DAWN_TRY(CheckHRESULT(mFence->SetEventOnCompletion(uint64_t(serial), mFenceEvent),
-                              "D3D12 set event on completion"));
-        WaitForSingleObject(mFenceEvent, INFINITE);
-        DAWN_TRY(GetQueue()->CheckPassedSerials());
-    }
-    return {};
-}
-
-ResultOrError<ExecutionSerial> Device::CheckAndUpdateCompletedSerials() {
-    ExecutionSerial completedSerial = ExecutionSerial(mFence->GetCompletedValue());
-    if (DAWN_UNLIKELY(completedSerial == ExecutionSerial(UINT64_MAX))) {
-        // GetCompletedValue returns UINT64_MAX if the device was removed.
-        // Try to query the failure reason.
-        DAWN_TRY(CheckHRESULT(mD3d12Device->GetDeviceRemovedReason(),
-                              "ID3D12Device::GetDeviceRemovedReason"));
-        // Otherwise, return a generic device lost error.
-        return DAWN_DEVICE_LOST_ERROR("Device lost");
-    }
-
-    if (completedSerial <= GetQueue()->GetCompletedCommandSerial()) {
-        return ExecutionSerial(0);
-    }
-
-    return completedSerial;
-}
-
 void Device::ReferenceUntilUnused(ComPtr<IUnknown> object) {
-    mUsedComObjectRefs->Enqueue(std::move(object), GetPendingCommandSerial());
-}
-
-bool Device::HasPendingCommands() const {
-    return mPendingCommands.NeedsSubmit();
-}
-
-void Device::ForceEventualFlushOfCommands() {
-    if (mPendingCommands.IsOpen()) {
-        mPendingCommands.SetNeedsSubmit();
-    }
-}
-
-MaybeError Device::ExecutePendingCommandContext() {
-    DAWN_ASSERT(IsLockedByCurrentThreadIfNeeded());
-
-    return mPendingCommands.ExecuteCommandList(this);
+    mUsedComObjectRefs->Enqueue(std::move(object), GetQueue()->GetPendingCommandSerial());
 }
 
 ResultOrError<Ref<BindGroupBase>> Device::CreateBindGroupImpl(
@@ -415,7 +305,8 @@ ResultOrError<Ref<BindGroupLayoutInternalBase>> Device::CreateBindGroupLayoutImp
     const BindGroupLayoutDescriptor* descriptor) {
     return BindGroupLayout::Create(this, descriptor);
 }
-ResultOrError<Ref<BufferBase>> Device::CreateBufferImpl(const BufferDescriptor* descriptor) {
+ResultOrError<Ref<BufferBase>> Device::CreateBufferImpl(
+    const UnpackedPtr<BufferDescriptor>& descriptor) {
     return Buffer::Create(this, descriptor);
 }
 ResultOrError<Ref<CommandBufferBase>> Device::CreateCommandBuffer(
@@ -424,25 +315,25 @@ ResultOrError<Ref<CommandBufferBase>> Device::CreateCommandBuffer(
     return CommandBuffer::Create(encoder, descriptor);
 }
 Ref<ComputePipelineBase> Device::CreateUninitializedComputePipelineImpl(
-    const ComputePipelineDescriptor* descriptor) {
+    const UnpackedPtr<ComputePipelineDescriptor>& descriptor) {
     return ComputePipeline::CreateUninitialized(this, descriptor);
 }
 ResultOrError<Ref<PipelineLayoutBase>> Device::CreatePipelineLayoutImpl(
-    const PipelineLayoutDescriptor* descriptor) {
+    const UnpackedPtr<PipelineLayoutDescriptor>& descriptor) {
     return PipelineLayout::Create(this, descriptor);
 }
 ResultOrError<Ref<QuerySetBase>> Device::CreateQuerySetImpl(const QuerySetDescriptor* descriptor) {
     return QuerySet::Create(this, descriptor);
 }
 Ref<RenderPipelineBase> Device::CreateUninitializedRenderPipelineImpl(
-    const RenderPipelineDescriptor* descriptor) {
+    const UnpackedPtr<RenderPipelineDescriptor>& descriptor) {
     return RenderPipeline::CreateUninitialized(this, descriptor);
 }
 ResultOrError<Ref<SamplerBase>> Device::CreateSamplerImpl(const SamplerDescriptor* descriptor) {
     return Sampler::Create(this, descriptor);
 }
 ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
-    const ShaderModuleDescriptor* descriptor,
+    const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     ShaderModuleParseResult* parseResult,
     OwnedCompilationMessages* compilationMessages) {
     return ShaderModule::Create(this, descriptor, parseResult, compilationMessages);
@@ -453,7 +344,8 @@ ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(
     const SwapChainDescriptor* descriptor) {
     return SwapChain::Create(this, surface, previousSwapChain, descriptor);
 }
-ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(const TextureDescriptor* descriptor) {
+ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(
+    const UnpackedPtr<TextureDescriptor>& descriptor) {
     return Texture::Create(this, descriptor);
 }
 ResultOrError<Ref<TextureViewBase>> Device::CreateTextureViewImpl(
@@ -474,13 +366,12 @@ void Device::InitializeRenderPipelineAsyncImpl(Ref<RenderPipelineBase> renderPip
 
 ResultOrError<Ref<SharedTextureMemoryBase>> Device::ImportSharedTextureMemoryImpl(
     const SharedTextureMemoryDescriptor* descriptor) {
-    UnpackedSharedTextureMemoryDescriptorChain unpacked;
-    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpackChain(descriptor));
+    UnpackedPtr<SharedTextureMemoryDescriptor> unpacked;
+    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(descriptor));
 
     wgpu::SType type;
     DAWN_TRY_ASSIGN(
-        type, (ValidateBranches<BranchList<Branch<SharedTextureMemoryDXGISharedHandleDescriptor>>>(
-                  unpacked)));
+        type, (unpacked.ValidateBranches<Branch<SharedTextureMemoryDXGISharedHandleDescriptor>>()));
 
     switch (type) {
         case wgpu::SType::SharedTextureMemoryDXGISharedHandleDescriptor:
@@ -489,7 +380,7 @@ ResultOrError<Ref<SharedTextureMemoryBase>> Device::ImportSharedTextureMemoryImp
                             wgpu::FeatureName::SharedTextureMemoryDXGISharedHandle);
             return SharedTextureMemory::Create(
                 this, descriptor->label,
-                std::get<const SharedTextureMemoryDXGISharedHandleDescriptor*>(unpacked));
+                unpacked.Get<SharedTextureMemoryDXGISharedHandleDescriptor>());
         default:
             DAWN_UNREACHABLE();
     }
@@ -497,21 +388,19 @@ ResultOrError<Ref<SharedTextureMemoryBase>> Device::ImportSharedTextureMemoryImp
 
 ResultOrError<Ref<SharedFenceBase>> Device::ImportSharedFenceImpl(
     const SharedFenceDescriptor* descriptor) {
-    UnpackedSharedFenceDescriptorChain unpacked;
-    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpackChain(descriptor));
+    UnpackedPtr<SharedFenceDescriptor> unpacked;
+    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(descriptor));
 
     wgpu::SType type;
-    DAWN_TRY_ASSIGN(
-        type,
-        (ValidateBranches<BranchList<Branch<SharedFenceDXGISharedHandleDescriptor>>>(unpacked)));
+    DAWN_TRY_ASSIGN(type,
+                    (unpacked.ValidateBranches<Branch<SharedFenceDXGISharedHandleDescriptor>>()));
 
     switch (type) {
         case wgpu::SType::SharedFenceDXGISharedHandleDescriptor:
             DAWN_INVALID_IF(!HasFeature(Feature::SharedFenceDXGISharedHandle), "%s is not enabled.",
                             wgpu::FeatureName::SharedFenceDXGISharedHandle);
-            return SharedFence::Create(
-                this, descriptor->label,
-                std::get<const SharedFenceDXGISharedHandleDescriptor*>(unpacked));
+            return SharedFence::Create(this, descriptor->label,
+                                       unpacked.Get<SharedFenceDXGISharedHandleDescriptor>());
         default:
             DAWN_UNREACHABLE();
     }
@@ -523,7 +412,9 @@ MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
                                                uint64_t destinationOffset,
                                                uint64_t size) {
     CommandRecordingContext* commandRecordingContext;
-    DAWN_TRY_ASSIGN(commandRecordingContext, GetPendingCommandContext(Device::SubmitMode::Passive));
+    DAWN_TRY_ASSIGN(
+        commandRecordingContext,
+        ToBackend(GetQueue())->GetPendingCommandContext(QueueBase::SubmitMode::Passive));
 
     Buffer* dstBuffer = ToBackend(destination);
 
@@ -559,7 +450,9 @@ MaybeError Device::CopyFromStagingToTextureImpl(const BufferBase* source,
                                                 const TextureCopy& dst,
                                                 const Extent3D& copySizePixels) {
     CommandRecordingContext* commandContext;
-    DAWN_TRY_ASSIGN(commandContext, GetPendingCommandContext(Device::SubmitMode::Passive));
+    DAWN_TRY_ASSIGN(
+        commandContext,
+        ToBackend(GetQueue())->GetPendingCommandContext(QueueBase::SubmitMode::Passive));
     Texture* texture = ToBackend(dst.texture.Get());
 
     SubresourceRange range = GetSubresourcesAffectedByCopy(dst, copySizePixels);
@@ -596,10 +489,15 @@ ResultOrError<ResourceHeapAllocation> Device::AllocateMemory(
                          forceAllocateAsCommittedResource);
 }
 
-ResultOrError<Ref<d3d::Fence>> Device::CreateFence(
-    const d3d::ExternalImageDXGIFenceDescriptor* descriptor) {
-    return Fence::CreateFromHandle(mD3d12Device.Get(), descriptor->fenceHandle,
-                                   descriptor->fenceValue);
+ResultOrError<FenceAndSignalValue> Device::CreateFence(
+    const d3d::ExternalImageDXGIFenceDescriptor* externalImageFenceDesc) {
+    SharedFenceDXGISharedHandleDescriptor sharedFenceDesc;
+    sharedFenceDesc.handle = externalImageFenceDesc->fenceHandle;
+
+    Ref<SharedFence> fence;
+    DAWN_TRY_ASSIGN(fence, SharedFence::Create(this, "Imported DXGI fence", &sharedFenceDesc));
+
+    return FenceAndSignalValue{std::move(fence), externalImageFenceDesc->fenceValue};
 }
 
 ResultOrError<std::unique_ptr<d3d::ExternalImageDXGIImpl>> Device::CreateExternalImageDXGIImplImpl(
@@ -620,9 +518,9 @@ ResultOrError<std::unique_ptr<d3d::ExternalImageDXGIImpl>> Device::CreateExterna
                                                              IID_PPV_ARGS(&d3d12Resource)),
                           "D3D12 opening shared handle"));
 
-    const TextureDescriptor* textureDescriptor =
-        FromAPI(sharedHandleDescriptor->cTextureDescriptor);
-
+    UnpackedPtr<TextureDescriptor> textureDescriptor;
+    DAWN_TRY_ASSIGN(textureDescriptor,
+                    ValidateAndUnpack(FromAPI(sharedHandleDescriptor->cTextureDescriptor)));
     DAWN_TRY(
         ValidateTextureDescriptor(this, textureDescriptor, AllowMultiPlanarTextureFormat::Yes));
 
@@ -644,9 +542,9 @@ ResultOrError<std::unique_ptr<d3d::ExternalImageDXGIImpl>> Device::CreateExterna
                                                         textureDescriptor);
 }
 
-Ref<TextureBase> Device::CreateD3DExternalTexture(const TextureDescriptor* descriptor,
+Ref<TextureBase> Device::CreateD3DExternalTexture(const UnpackedPtr<TextureDescriptor>& descriptor,
                                                   ComPtr<IUnknown> d3dTexture,
-                                                  std::vector<Ref<d3d::Fence>> waitFences,
+                                                  std::vector<FenceAndSignalValue> waitFences,
                                                   bool isSwapChainTexture,
                                                   bool isInitialized) {
     Ref<Texture> dawnTexture;
@@ -661,17 +559,6 @@ Ref<TextureBase> Device::CreateD3DExternalTexture(const TextureDescriptor* descr
 
 const D3D12DeviceInfo& Device::GetDeviceInfo() const {
     return ToBackend(GetPhysicalDevice())->GetDeviceInfo();
-}
-
-MaybeError Device::WaitForIdleForDestruction() {
-    // Immediately forget about all pending commands
-    mPendingCommands.Release();
-
-    DAWN_TRY(NextSerial());
-    // Wait for all in-flight commands to finish executing
-    DAWN_TRY(WaitForSerial(GetLastSubmittedCommandSerial()));
-
-    return {};
 }
 
 void AppendDebugLayerMessagesToError(ID3D12InfoQueue* infoQueue,
@@ -778,14 +665,6 @@ void Device::DestroyImpl() {
 
     mZeroBuffer = nullptr;
 
-    // Immediately forget about all pending commands for the case where device is lost on its
-    // own and WaitForIdleForDestruction isn't called.
-    mPendingCommands.Release();
-
-    if (mFenceEvent != nullptr) {
-        ::CloseHandle(mFenceEvent);
-    }
-
     // Release recycled resource heaps and all other objects waiting for deletion in the resource
     // allocation manager.
     mResourceAllocatorManager.reset();
@@ -794,11 +673,6 @@ void Device::DestroyImpl() {
     mUsedComObjectRefs->ClearUpTo(std::numeric_limits<ExecutionSerial>::max());
 
     DAWN_ASSERT(mUsedComObjectRefs->Empty());
-    DAWN_ASSERT(!mPendingCommands.IsOpen());
-
-    // Now that we've cleared out pending work from the queue, we can safely release it and reclaim
-    // memory.
-    mCommandQueue.Reset();
 }
 
 MutexProtected<ShaderVisibleDescriptorAllocator>& Device::GetViewShaderVisibleDescriptorAllocator()

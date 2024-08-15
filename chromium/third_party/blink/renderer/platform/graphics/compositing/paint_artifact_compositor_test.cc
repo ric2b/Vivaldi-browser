@@ -104,6 +104,7 @@ class PaintArtifactCompositorTest : public testing::Test,
     // Make sure we remove all child layers to satisfy destructor
     // child layer element id DCHECK.
     WillBeRemovedFromFrame();
+    layer_tree_host_client_.SetLayerTreeHost(nullptr);
   }
 
   cc::PropertyTrees& GetPropertyTrees() {
@@ -155,13 +156,6 @@ class PaintArtifactCompositorTest : public testing::Test,
     paint_artifact_compositor_->Update(artifact, viewport_properties,
                                        scroll_translation_nodes, {});
     layer_tree_->layer_tree_host()->LayoutAndUpdateLayers();
-  }
-
-  void ClearPropertyTreeChangedState() {
-    if (!RuntimeEnabledFeatures::SimplifiedClearPropertyTreeChangeEnabled()) {
-      paint_artifact_compositor_->ClearPropertyTreeChangedState();
-    }
-    // Otherwise PaintArtifactCompositor::Update() clears the changed state.
   }
 
   void WillBeRemovedFromFrame() {
@@ -455,8 +449,7 @@ TEST_P(PaintArtifactCompositorTest, FlattensInheritedTransform) {
         CreateTransform(*transform1, MakeRotationMatrix(0, 45, 0));
     TransformPaintPropertyNode::State transform3_state{
         {MakeRotationMatrix(0, 45, 0)}};
-    transform3_state.flags.flattens_inherited_transform =
-        transform_is_flattened;
+    transform3_state.flattens_inherited_transform = transform_is_flattened;
     auto transform3 = TransformPaintPropertyNode::Create(
         *transform2, std::move(transform3_state));
 
@@ -509,8 +502,7 @@ TEST_P(PaintArtifactCompositorTest, FlattensInheritedTransformWithAlias) {
     auto transform2 = TransformPaintPropertyNodeAlias::Create(*real_transform2);
     TransformPaintPropertyNode::State transform3_state{
         {MakeRotationMatrix(0, 45, 0)}};
-    transform3_state.flags.flattens_inherited_transform =
-        transform_is_flattened;
+    transform3_state.flattens_inherited_transform = transform_is_flattened;
     auto real_transform3 = TransformPaintPropertyNode::Create(
         *transform2, std::move(transform3_state));
     auto transform3 = TransformPaintPropertyNodeAlias::Create(*real_transform3);
@@ -2831,9 +2823,7 @@ TEST_P(PaintArtifactCompositorTest, EffectivelyInvisibleSolidColorChunk) {
   Update(artifact.Build());
   ASSERT_EQ(1u, LayerCount());
   EXPECT_EQ(gfx::Size(10, 10), LayerAt(0)->bounds());
-  if (RuntimeEnabledFeatures::SolidColorLayersEnabled()) {
-    EXPECT_TRUE(LayerAt(0)->IsSolidColorLayerForTesting());
-  }
+  EXPECT_TRUE(LayerAt(0)->IsSolidColorLayerForTesting());
   EXPECT_FALSE(LayerAt(0)->draws_content());
   EXPECT_FALSE(LayerAt(0)->GetPicture());
 }
@@ -3890,9 +3880,7 @@ TEST_P(PaintArtifactCompositorTest, SolidColor) {
   EXPECT_EQ(gfx::Vector2dF(100, 200), layer->offset_to_transform_parent());
   EXPECT_EQ(gfx::Size(300, 400), layer->bounds());
   EXPECT_TRUE(layer->draws_content());
-  if (RuntimeEnabledFeatures::SolidColorLayersEnabled()) {
-    EXPECT_TRUE(LayerAt(0)->IsSolidColorLayerForTesting());
-  }
+  EXPECT_TRUE(LayerAt(0)->IsSolidColorLayerForTesting());
   EXPECT_EQ(SkColors::kBlack, layer->background_color());
 }
 
@@ -4120,7 +4108,7 @@ TEST_P(PaintArtifactCompositorTest, LayerRasterInvalidationWithClip) {
 TEST_P(PaintArtifactCompositorTest, CreatesViewportNodes) {
   auto matrix = MakeScaleMatrix(2);
   TransformPaintPropertyNode::State transform_state{{matrix}};
-  transform_state.flags.in_subtree_of_page_scale = false;
+  transform_state.in_subtree_of_page_scale = false;
   const CompositorElementId compositor_element_id =
       CompositorElementIdFromUniqueObjectId(1);
   transform_state.compositor_element_id = compositor_element_id;
@@ -4145,12 +4133,12 @@ TEST_P(PaintArtifactCompositorTest, CreatesViewportNodes) {
 // the page scale transform node or ancestors, and is set on descendants.
 TEST_P(PaintArtifactCompositorTest, InSubtreeOfPageScale) {
   TransformPaintPropertyNode::State ancestor_transform_state;
-  ancestor_transform_state.flags.in_subtree_of_page_scale = false;
+  ancestor_transform_state.in_subtree_of_page_scale = false;
   auto ancestor_transform = TransformPaintPropertyNode::Create(
       TransformPaintPropertyNode::Root(), std::move(ancestor_transform_state));
 
   TransformPaintPropertyNode::State page_scale_transform_state;
-  page_scale_transform_state.flags.in_subtree_of_page_scale = false;
+  page_scale_transform_state.in_subtree_of_page_scale = false;
   const CompositorElementId page_scale_compositor_element_id =
       CompositorElementIdFromUniqueObjectId(1);
   page_scale_transform_state.compositor_element_id =
@@ -4163,7 +4151,7 @@ TEST_P(PaintArtifactCompositorTest, InSubtreeOfPageScale) {
       CompositorElementIdFromUniqueObjectId(2);
   descendant_transform_state.compositor_element_id =
       descendant_compositor_element_id;
-  descendant_transform_state.flags.in_subtree_of_page_scale = true;
+  descendant_transform_state.in_subtree_of_page_scale = true;
   descendant_transform_state.direct_compositing_reasons =
       CompositingReason::kWillChangeTransform;
   auto descendant_transform = TransformPaintPropertyNode::Create(
@@ -4200,7 +4188,7 @@ TEST_P(PaintArtifactCompositorTest, InSubtreeOfPageScale) {
 TEST_P(PaintArtifactCompositorTest, ViewportPageScale) {
   // Create a page scale transform node with a page scale factor of 2.0.
   TransformPaintPropertyNode::State transform_state{{MakeScaleMatrix(2)}};
-  transform_state.flags.in_subtree_of_page_scale = false;
+  transform_state.in_subtree_of_page_scale = false;
   transform_state.compositor_element_id =
       CompositorElementIdFromUniqueObjectId(1);
   auto scale_transform_node = TransformPaintPropertyNode::Create(
@@ -4763,7 +4751,6 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
 
   // Change t1 but not t2.
   layer->ClearSubtreePropertyChangedForTesting();
-  ClearPropertyTreeChangedState();
   t1->Update(
       t0(), TransformPaintPropertyNode::State{{MakeTranslationMatrix(20, 30)}});
   EXPECT_EQ(PaintPropertyChangeType::kChangedOnlySimpleValues,
@@ -4790,7 +4777,6 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
 
   // Change t2 but not t1.
   layer->ClearSubtreePropertyChangedForTesting();
-  ClearPropertyTreeChangedState();
   t2->Update(*t1, Transform3dState(MakeRotationMatrix(135)));
   EXPECT_EQ(PaintPropertyChangeType::kUnchanged, t1->NodeChanged());
   EXPECT_EQ(PaintPropertyChangeType::kChangedOnlySimpleValues,
@@ -4814,7 +4800,6 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
 
   // Change t2 to be 2d translation which will be decomposited.
   layer->ClearSubtreePropertyChangedForTesting();
-  ClearPropertyTreeChangedState();
   t2->Update(*t1, Transform3dState(MakeTranslationMatrix(20, 30)));
   EXPECT_EQ(PaintPropertyChangeType::kUnchanged, t1->NodeChanged());
   EXPECT_EQ(PaintPropertyChangeType::kChangedOnlyValues, t2->NodeChanged());
@@ -4836,7 +4821,6 @@ TEST_P(PaintArtifactCompositorTest, TransformChange) {
 
   // Change no transform nodes, but invalidate client.
   layer->ClearSubtreePropertyChangedForTesting();
-  ClearPropertyTreeChangedState();
   client.Invalidate(PaintInvalidationReason::kBackground);
   Update(TestPaintArtifact()
              .Chunk(1)
@@ -4865,8 +4849,6 @@ TEST_P(PaintArtifactCompositorTest, EffectChange) {
 
   // Change e1 but not e2.
   layer->ClearSubtreePropertyChangedForTesting();
-  ClearPropertyTreeChangedState();
-
   EffectPaintPropertyNode::State e1_state{&t0()};
   e1_state.opacity = 0.8f;
   e1_state.compositor_element_id = e1->GetCompositorElementId();
@@ -4894,7 +4876,6 @@ TEST_P(PaintArtifactCompositorTest, EffectChange) {
 
   // Change e2 but not e1.
   layer->ClearSubtreePropertyChangedForTesting();
-  ClearPropertyTreeChangedState();
   EffectPaintPropertyNode::State e2_state{&t0()};
   e2_state.opacity = 0.9f;
   e2_state.direct_compositing_reasons = CompositingReason::kWillChangeOpacity;
@@ -5018,7 +4999,6 @@ TEST_P(PaintArtifactCompositorTest, RepaintIndirectScrollHitTest) {
   CreateScrollableChunk(test_artifact, scroll_state);
   auto artifact = test_artifact.Build();
   Update(artifact);
-  ClearPropertyTreeChangedState();
 
   GetPaintArtifactCompositor().UpdateRepaintedLayers(artifact);
   // This test passes if no CHECK occurs.
@@ -5042,7 +5022,6 @@ TEST_P(PaintArtifactCompositorTest, ClearChangedStateWithIndirectTransform) {
                       .RectDrawing(gfx::Rect(2, 2, 2, 2), Color::kBlack)
                       .Build();
   Update(artifact);
-  ClearPropertyTreeChangedState();
   EXPECT_EQ(PaintPropertyChangeType::kUnchanged, t1->NodeChanged());
   EXPECT_EQ(PaintPropertyChangeType::kUnchanged, t2->NodeChanged());
   EXPECT_EQ(PaintPropertyChangeType::kUnchanged, c1->NodeChanged());

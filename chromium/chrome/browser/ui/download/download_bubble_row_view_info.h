@@ -8,13 +8,14 @@
 #include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/ui/download/download_bubble_info.h"
+#include "chrome/browser/ui/download/download_bubble_info_utils.h"
 #include "chrome/browser/ui/download/download_item_mode.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/vector_icon_types.h"
 
-namespace offline_item_collection {
-class ContentId;
-}
+namespace offline_items_collection {
+struct ContentId;
+}  // namespace offline_items_collection
 
 // Interface for observers of changes to a download row
 class DownloadBubbleRowViewInfoObserver : public base::CheckedObserver {
@@ -57,17 +58,17 @@ class DownloadBubbleRowViewInfo
   download::DownloadItemMode mode() const {
     return download::GetDesiredDownloadItemMode(model_.get());
   }
-  const gfx::VectorIcon* icon_override() const { return icon_override_; }
-  ui::ColorId secondary_color() const { return secondary_color_; }
+  const gfx::VectorIcon* icon_override() const { return icon_and_color_.icon; }
+  ui::ColorId secondary_color() const { return icon_and_color_.color; }
   ui::ColorId secondary_text_color() const {
-    return secondary_text_color_.value_or(secondary_color_);
+    return secondary_text_color_.value_or(secondary_color());
   }
   const std::vector<QuickAction>& quick_actions() const {
     return quick_actions_;
   }
   bool main_button_enabled() const { return main_button_enabled_; }
   bool has_subpage() const { return has_subpage_; }
-  absl::optional<DownloadCommands::Command> primary_button_command() const {
+  std::optional<DownloadCommands::Command> primary_button_command() const {
     return primary_button_command_;
   }
   bool has_progress_bar() const { return has_progress_bar_; }
@@ -86,8 +87,8 @@ class DownloadBubbleRowViewInfo
   void PopulateFromModel();
   void PopulateForInProgressOrComplete();
   void PopulateForInterrupted(offline_items_collection::FailState fail_state);
-  void PopulateForCancelled();
-  void PopulateForTailoredWarning();
+  void PopulateForTailoredWarning(
+      DownloadUIModel::TailoredWarningType tailored_warning_type);
   void PopulateForFileTypeWarningNoSafeBrowsing();
 
   void PopulateSuspiciousUiPattern();
@@ -103,17 +104,12 @@ class DownloadBubbleRowViewInfo
 
   // Information for displaying the row. This must all be cleared in Reset() or
   // updates will keep attributes of the previously displayed state.
+  IconAndColor icon_and_color_{};
 
-  // This is non-null if the row should display an icon other than the system
-  // icon for the filetype.
-  raw_ptr<const gfx::VectorIcon> icon_override_ = nullptr;
-  // kColorAlertHighSeverity, kColorAlertMediumSeverityIcon, or
-  // kColorSecondaryForeground
-  ui::ColorId secondary_color_ = ui::kColorSecondaryForeground;
   // Color used for alert text, which may be different from |secondary_color|,
   // used for icons. If this is nullopt, |secondary_color| will be used for
   // text.
-  absl::optional<ui::ColorId> secondary_text_color_ = absl::nullopt;
+  std::optional<ui::ColorId> secondary_text_color_ = std::nullopt;
   // List of quick actions
   std::vector<QuickAction> quick_actions_;
   // Whether the main button (clicking the row itself) should be enabled. When
@@ -125,8 +121,8 @@ class DownloadBubbleRowViewInfo
   bool has_subpage_ = false;
   // The command for the primary button (the button always displayed over the
   // row).
-  absl::optional<DownloadCommands::Command> primary_button_command_ =
-      absl::nullopt;
+  std::optional<DownloadCommands::Command> primary_button_command_ =
+      std::nullopt;
   // Whether the row has a progress bar
   bool has_progress_bar_ = false;
   bool is_progress_bar_looping_ = false;

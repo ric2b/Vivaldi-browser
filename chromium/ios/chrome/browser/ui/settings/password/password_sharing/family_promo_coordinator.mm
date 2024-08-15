@@ -17,7 +17,8 @@
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "url/gurl.h"
 
-@interface FamilyPromoCoordinator () <FamilyPromoActionHandler>
+@interface FamilyPromoCoordinator () <FamilyPromoActionHandler,
+                                      UIAdaptivePresentationControllerDelegate>
 
 // Main view controller for this coordinator.
 @property(nonatomic, strong) FamilyPromoViewController* viewController;
@@ -45,11 +46,27 @@
 - (void)start {
   [super start];
 
-  self.viewController =
-      [[FamilyPromoViewController alloc] initWithActionHandler:self];
+  self.viewController = [[FamilyPromoViewController alloc] init];
+  self.viewController.actionHandler = self;
+  self.viewController.presentationController.delegate = self;
   self.mediator = [[FamilyPromoMediator alloc]
       initWithFamilyPromoType:self.familyPromoType];
   self.mediator.consumer = self.viewController;
+
+  UISheetPresentationController* sheetPresentationController =
+      self.viewController.sheetPresentationController;
+  if (@available(iOS 16, *)) {
+    sheetPresentationController.detents = @[
+      self.viewController.preferredHeightDetent,
+      UISheetPresentationControllerDetent.largeDetent,
+    ];
+  } else {
+    sheetPresentationController.detents = @[
+      UISheetPresentationControllerDetent.mediumDetent,
+      UISheetPresentationControllerDetent.largeDetent
+    ];
+  }
+
   [self.baseViewController presentViewController:self.viewController
                                         animated:YES
                                       completion:nil];
@@ -80,9 +97,28 @@
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
   OpenNewTabCommand* command =
-      [OpenNewTabCommand commandWithURLFromChrome:GURL(kFamilyGroupSiteURL)];
+      [OpenNewTabCommand commandWithURLFromChrome:[self familyManagementURL]];
   [handler closeSettingsUIAndOpenURL:command];
   [self.delegate familyPromoCoordinatorWasDismissed:self];
+}
+
+#pragma mark - UIAdaptivePresentationControllerDelegate
+
+- (void)presentationControllerDidDismiss:
+    (UIPresentationController*)presentationController {
+  [self.delegate familyPromoCoordinatorWasDismissed:self];
+}
+
+#pragma mark - Private
+
+// Returns family management url based on the `_familyPromoType`.
+- (GURL)familyManagementURL {
+  switch (_familyPromoType) {
+    case FamilyPromoType::kUserNotInFamilyGroup:
+      return GURL(kCreateFamilyGroupURL);
+    case FamilyPromoType::kUserWithNoOtherFamilyMembers:
+      return GURL(kManageFamilyGroupURL);
+  }
 }
 
 @end

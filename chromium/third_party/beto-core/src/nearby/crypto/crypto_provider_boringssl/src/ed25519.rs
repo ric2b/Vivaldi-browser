@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crypto_provider::ed25519::{
-    InvalidBytes, RawPrivateKey, RawPublicKey, RawSignature, Signature as _, SignatureError,
+    InvalidBytes, RawPrivateKey, RawPrivateKeyPermit, RawPublicKey, RawSignature, Signature as _,
+    SignatureError,
 };
 
 pub struct Ed25519;
@@ -30,11 +31,11 @@ impl crypto_provider::ed25519::KeyPair for KeyPair {
     type PublicKey = PublicKey;
     type Signature = Signature;
 
-    fn private_key(&self) -> RawPrivateKey {
+    fn raw_private_key(&self, _permit: &RawPrivateKeyPermit) -> RawPrivateKey {
         self.0.to_seed()
     }
 
-    fn from_private_key(bytes: &RawPrivateKey) -> Self
+    fn from_raw_private_key(bytes: &RawPrivateKey, _permit: &RawPrivateKeyPermit) -> Self
     where
         Self: Sized,
     {

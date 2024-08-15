@@ -112,18 +112,19 @@ class FuchsiaVideoDecoder::OutputMailbox {
  public:
   OutputMailbox(
       scoped_refptr<viz::RasterContextProvider> raster_context_provider,
-      std::unique_ptr<gfx::GpuMemoryBuffer> gmb,
+      gfx::GpuMemoryBufferHandle gmb_handle,
+      gfx::Size& size,
+      gfx::BufferFormat& buffer_format,
+      gfx::ClientNativePixmapFactory* pixmap_factory,
       const gfx::ColorSpace& color_space)
       : raster_context_provider_(raster_context_provider),
-        size_(gmb->GetSize()),
+        size_(size),
         weak_factory_(this) {
     uint32_t usage = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                      gpu::SHARED_IMAGE_USAGE_SCANOUT |
                      gpu::SHARED_IMAGE_USAGE_VIDEO_DECODE;
 
     if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
-      auto buffer_format = gmb->GetFormat();
-
       // The GMB is either YUV_420_BIPLANAR (SIF kNV12) or YVU_420 (SIF kYV12).
       auto shared_image_format = viz::MultiPlaneFormat::kNV12;
       switch (buffer_format) {
@@ -137,15 +138,21 @@ class FuchsiaVideoDecoder::OutputMailbox {
       }
       shared_image_format.SetPrefersExternalSampler();
 
-      auto client_shared_image =
+      shared_image_ =
           raster_context_provider_->SharedImageInterface()->CreateSharedImage(
-              shared_image_format, gmb->GetSize(), color_space,
-              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
-              "FuchsiaVideoDecoder", gmb->CloneHandle());
-      CHECK(client_shared_image);
-      mailbox_ = client_shared_image->mailbox();
+              shared_image_format, size, color_space, kTopLeft_GrSurfaceOrigin,
+              kPremul_SkAlphaType, usage, "FuchsiaVideoDecoder",
+              std::move(gmb_handle));
     } else {
-      mailbox_ =
+      // Note that we are keeping |gmb| creation intact here for the sake of not
+      // changing this path. This path should anyways go away when we fully move
+      // to supporting MultiPlanarSI above.
+      auto gmb = gpu::GpuMemoryBufferImplNativePixmap::CreateFromHandle(
+          pixmap_factory, std::move(gmb_handle), size, buffer_format,
+          gfx::BufferUsage::GPU_READ,
+          gpu::GpuMemoryBufferImpl::DestructionCallback());
+
+      shared_image_ =
           raster_context_provider_->SharedImageInterface()->CreateSharedImage(
               gmb.get(), nullptr, gfx::BufferPlane::DEFAULT, color_space,
               kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
@@ -161,10 +168,10 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
   ~OutputMailbox() {
     raster_context_provider_->SharedImageInterface()->DestroySharedImage(
-        release_sync_token_, mailbox_);
+        release_sync_token_, std::move(shared_image_));
   }
 
-  const gpu::Mailbox& mailbox() { return mailbox_; }
+  const gpu::Mailbox& mailbox() { return shared_image_->mailbox(); }
 
   const gfx::Size& size() { return size_; }
 
@@ -181,7 +188,7 @@ class FuchsiaVideoDecoder::OutputMailbox {
     reuse_callback_ = std::move(reuse_callback);
 
     gpu::MailboxHolder mailboxes[VideoFrame::kMaxPlanes];
-    mailboxes[0].mailbox = mailbox_;
+    mailboxes[0].mailbox = shared_image_->mailbox();
 
     if (create_sync_token_.HasData()) {
       mailboxes[0].sync_token = create_sync_token_;
@@ -244,7 +251,7 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
   gfx::Size size_;
 
-  gpu::Mailbox mailbox_;
+  scoped_refptr<gpu::ClientSharedImage> shared_image_;
 
   gpu::SyncToken create_sync_token_;
   gpu::SyncToken release_sync_token_;
@@ -636,14 +643,10 @@ void FuchsiaVideoDecoder::OnStreamProcessorOutputPacket(
     ZX_DCHECK(status == ZX_OK, status);
     gmb_handle.native_pixmap_handle.buffer_index = buffer_index;
 
-    auto gmb = gpu::GpuMemoryBufferImplNativePixmap::CreateFromHandle(
-        client_native_pixmap_factory_.get(), std::move(gmb_handle), coded_size,
-        buffer_format, gfx::BufferUsage::GPU_READ,
-        gpu::GpuMemoryBufferImpl::DestructionCallback());
-
-    output_mailboxes_[buffer_index] =
-        new OutputMailbox(raster_context_provider_, std::move(gmb),
-                          current_config_.color_space_info().ToGfxColorSpace());
+    output_mailboxes_[buffer_index] = new OutputMailbox(
+        raster_context_provider_, std::move(gmb_handle), coded_size,
+        buffer_format, client_native_pixmap_factory_.get(),
+        current_config_.color_space_info().ToGfxColorSpace());
   } else {
     raster_context_provider_->SharedImageInterface()->UpdateSharedImage(
         gpu::SyncToken(), output_mailboxes_[buffer_index]->mailbox());

@@ -49,7 +49,7 @@ Guide](http://www.chromium.org/chromium-os/developer-guide) to build your image.
 ### How to set up repo bash completion on Ubuntu
 
 Get a copy of
-[repo_bash_completion](https://chromium.googlesource.com/chromiumos/platform/dev-util/+/refs/heads/master/host/repo_bash_completion)
+[repo_bash_completion](https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/host/repo_bash_completion)
 and copy it to your home directory (e.g., under ~/etc). Then, add the following
 line to your `~/.bashrc`:
 
@@ -297,10 +297,10 @@ instructions show how:
 cd /tmp
 cat > ./sudo_editor <<EOF
 #!/bin/sh
-echo Defaults \!tty_tickets > \$1          # Entering your password in one shell affects all shells 
+echo Defaults \!tty_tickets > \$1          # Entering your password in one shell affects all shells
 echo Defaults timestamp_timeout=180 >> \$1 # Time between re-requesting your password, in minutes
 EOF
-chmod +x ./sudo_editor 
+chmod +x ./sudo_editor
 sudo EDITOR=./sudo_editor visudo -f /etc/sudoers.d/relax_requirements
 ```
 
@@ -560,8 +560,8 @@ the branches and refs reside. You can switch to a branch that has its HEAD
 pointing to a CL, based on just the CL id as follows.
 
 ```none
-# Continuing the previous example, to fetch https://chromium-review.googlesource.com/#/c/344778/ 
-# in the 3.18 kernel repo. 
+# Continuing the previous example, to fetch https://chromium-review.googlesource.com/#/c/344778/
+# in the 3.18 kernel repo.
 ```
 
 ```none
@@ -576,8 +576,8 @@ $ git ls-remote cros | grep 344778
 $ git co -b test-branch
 $ git fetch cros refs/changes/78/344778/2
 $ git reset --hard FETCH_HEAD
-# Remember to set the tracking branch to something meaningful, else git gets confused. 
-# In this case, the default tracking branch is the main kernel branch. 
+# Remember to set the tracking branch to something meaningful, else git gets confused.
+# In this case, the default tracking branch is the main kernel branch.
 $ git branch -u cros/chromeos-3.18
 ```
 

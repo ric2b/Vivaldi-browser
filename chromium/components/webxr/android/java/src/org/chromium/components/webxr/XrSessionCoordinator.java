@@ -119,8 +119,10 @@ public class XrSessionCoordinator {
         mNativeXrSessionCoordinator = nativeXrSessionCoordinator;
     }
 
-    private void startSession(@SessionType int sessionType,
-            XrImmersiveOverlay.Delegate overlayDelegate, final WebContents webContents) {
+    private void startSession(
+            @SessionType int sessionType,
+            XrImmersiveOverlay.Delegate overlayDelegate,
+            final WebContents webContents) {
         assert (sActiveSessionInstance == null);
         assert (sessionType != SessionType.NONE);
 
@@ -134,8 +136,11 @@ public class XrSessionCoordinator {
     }
 
     @CalledByNative
-    private void startArSession(final ArCompositorDelegateProvider compositorDelegateProvider,
-            final WebContents webContents, boolean useOverlay, boolean canRenderDomContent) {
+    private void startArSession(
+            final ArCompositorDelegateProvider compositorDelegateProvider,
+            final WebContents webContents,
+            boolean useOverlay,
+            boolean canRenderDomContent) {
         if (DEBUG_LOGS) Log.i(TAG, "startArSession");
         // The higher levels should have guaranteed that we're only called if there isn't any other
         // active session going on.
@@ -151,15 +156,17 @@ public class XrSessionCoordinator {
     }
 
     @CalledByNative
-    private void startVrSession(final VrCompositorDelegateProvider compositorDelegateProvider,
+    private void startVrSession(
+            final VrCompositorDelegateProvider compositorDelegateProvider,
             final WebContents webContents) {
         if (DEBUG_LOGS) Log.i(TAG, "startVrSession");
         // The higher levels should have guaranteed that we're only called if there isn't any other
         // active session going on.
         assert (sActiveSessionInstance == null);
 
-        XrImmersiveOverlay.Delegate overlayDelegate = CardboardClassProvider.getOverlayDelegate(
-                compositorDelegateProvider.create(webContents), getActivity(webContents));
+        XrImmersiveOverlay.Delegate overlayDelegate =
+                CardboardClassProvider.getOverlayDelegate(
+                        compositorDelegateProvider.create(webContents), getActivity(webContents));
         startSession(SessionType.VR, overlayDelegate, webContents);
     }
 
@@ -190,7 +197,10 @@ public class XrSessionCoordinator {
         if (mImmersiveOverlay != null) {
             mImmersiveOverlay.cleanupAndExit();
             mImmersiveOverlay = null;
+        } else {
+            onJavaShutdown();
         }
+
         mActiveSessionType = SessionType.NONE;
         mWebContents = null;
         sActiveSessionInstance = null;
@@ -229,8 +239,15 @@ public class XrSessionCoordinator {
             Surface surface, WindowAndroid rootWindow, int rotation, int width, int height) {
         if (DEBUG_LOGS) Log.i(TAG, "onDrawingSurfaceReady");
         if (mNativeXrSessionCoordinator == 0) return;
-        XrSessionCoordinatorJni.get().onDrawingSurfaceReady(mNativeXrSessionCoordinator,
-                XrSessionCoordinator.this, surface, rootWindow, rotation, width, height);
+        XrSessionCoordinatorJni.get()
+                .onDrawingSurfaceReady(
+                        mNativeXrSessionCoordinator,
+                        XrSessionCoordinator.this,
+                        surface,
+                        rootWindow,
+                        rotation,
+                        width,
+                        height);
     }
 
     public static XrSessionCoordinator getActiveInstanceForTesting() {
@@ -241,22 +258,34 @@ public class XrSessionCoordinator {
             boolean isPrimary, boolean isTouching, int pointerId, float x, float y) {
         if (DEBUG_LOGS) Log.i(TAG, "onDrawingSurfaceTouch");
         if (mNativeXrSessionCoordinator == 0) return;
-        XrSessionCoordinatorJni.get().onDrawingSurfaceTouch(mNativeXrSessionCoordinator,
-                XrSessionCoordinator.this, isPrimary, isTouching, pointerId, x, y);
+        XrSessionCoordinatorJni.get()
+                .onDrawingSurfaceTouch(
+                        mNativeXrSessionCoordinator,
+                        XrSessionCoordinator.this,
+                        isPrimary,
+                        isTouching,
+                        pointerId,
+                        x,
+                        y);
     }
 
     public void onDrawingSurfaceDestroyed() {
         if (DEBUG_LOGS) Log.i(TAG, "onDrawingSurfaceDestroyed");
+        onJavaShutdown();
+    }
+
+    private void onJavaShutdown() {
+        if (DEBUG_LOGS) Log.i(TAG, "onJavaShutdown");
         if (mNativeXrSessionCoordinator == 0) return;
-        XrSessionCoordinatorJni.get().onDrawingSurfaceDestroyed(
-                mNativeXrSessionCoordinator, XrSessionCoordinator.this);
+        XrSessionCoordinatorJni.get()
+                .onJavaShutdown(mNativeXrSessionCoordinator, XrSessionCoordinator.this);
     }
 
     public void onXrSessionButtonTouched() {
         if (DEBUG_LOGS) Log.i(TAG, "onXrSessionButtonTouched");
         if (mNativeXrSessionCoordinator == 0) return;
-        XrSessionCoordinatorJni.get().onXrSessionButtonTouched(
-                mNativeXrSessionCoordinator, XrSessionCoordinator.this);
+        XrSessionCoordinatorJni.get()
+                .onXrSessionButtonTouched(mNativeXrSessionCoordinator, XrSessionCoordinator.this);
     }
 
     /**
@@ -276,8 +305,9 @@ public class XrSessionCoordinator {
 
     private void handleXrHostActivityReady(Activity activity) {
         if (mNativeXrSessionCoordinator == 0) return;
-        XrSessionCoordinatorJni.get().onXrHostActivityReady(
-                mNativeXrSessionCoordinator, XrSessionCoordinator.this, activity);
+        XrSessionCoordinatorJni.get()
+                .onXrHostActivityReady(
+                        mNativeXrSessionCoordinator, XrSessionCoordinator.this, activity);
     }
 
     @CalledByNative
@@ -291,13 +321,28 @@ public class XrSessionCoordinator {
 
     @NativeMethods
     interface Natives {
-        void onDrawingSurfaceReady(long nativeXrSessionCoordinator, XrSessionCoordinator caller,
-                Surface surface, WindowAndroid rootWindow, int rotation, int width, int height);
-        void onDrawingSurfaceTouch(long nativeXrSessionCoordinator, XrSessionCoordinator caller,
-                boolean primary, boolean touching, int pointerId, float x, float y);
-        void onDrawingSurfaceDestroyed(
-                long nativeXrSessionCoordinator, XrSessionCoordinator caller);
+        void onDrawingSurfaceReady(
+                long nativeXrSessionCoordinator,
+                XrSessionCoordinator caller,
+                Surface surface,
+                WindowAndroid rootWindow,
+                int rotation,
+                int width,
+                int height);
+
+        void onDrawingSurfaceTouch(
+                long nativeXrSessionCoordinator,
+                XrSessionCoordinator caller,
+                boolean primary,
+                boolean touching,
+                int pointerId,
+                float x,
+                float y);
+
+        void onJavaShutdown(long nativeXrSessionCoordinator, XrSessionCoordinator caller);
+
         void onXrSessionButtonTouched(long nativeXrSessionCoordinator, XrSessionCoordinator caller);
+
         void onXrHostActivityReady(
                 long nativeXrSessionCoordinator, XrSessionCoordinator caller, Activity activity);
     }

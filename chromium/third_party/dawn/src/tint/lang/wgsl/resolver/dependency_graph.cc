@@ -40,6 +40,7 @@
 #include "src/tint/lang/wgsl/ast/break_if_statement.h"
 #include "src/tint/lang/wgsl/ast/break_statement.h"
 #include "src/tint/lang/wgsl/ast/call_statement.h"
+#include "src/tint/lang/wgsl/ast/color_attribute.h"
 #include "src/tint/lang/wgsl/ast/compound_assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/const.h"
 #include "src/tint/lang/wgsl/ast/continue_statement.h"
@@ -200,6 +201,9 @@ class DependencyScanner {
             },
             [&](const ast::Enable*) {
                 // Enable directives do not affect the dependency graph.
+            },
+            [&](const ast::Requires*) {
+                // Requires directives do not affect the dependency graph.
             },
             [&](const ast::ConstAssert* assertion) {
                 TraverseExpression(assertion->condition);
@@ -383,6 +387,7 @@ class DependencyScanner {
             attr,  //
             [&](const ast::BindingAttribute* binding) { TraverseExpression(binding->expr); },
             [&](const ast::BuiltinAttribute* builtin) { TraverseExpression(builtin->builtin); },
+            [&](const ast::ColorAttribute* color) { TraverseExpression(color->expr); },
             [&](const ast::GroupAttribute* group) { TraverseExpression(group->expr); },
             [&](const ast::IdAttribute* id) { TraverseExpression(id->expr); },
             [&](const ast::IndexAttribute* index) { TraverseExpression(index->expr); },
@@ -611,6 +616,7 @@ struct DependencyAnalysis {
             [&](const ast::Variable* var) { return var->name->symbol; },
             [&](const ast::DiagnosticDirective*) { return Symbol(); },
             [&](const ast::Enable*) { return Symbol(); },
+            [&](const ast::Requires*) { return Symbol(); },
             [&](const ast::ConstAssert*) { return Symbol(); },  //
             TINT_ICE_ON_NO_MATCH);
     }
@@ -714,13 +720,13 @@ struct DependencyAnalysis {
 
         // Make sure all directives go before any other global declarations.
         for (auto* global : declaration_order_) {
-            if (global->node->IsAnyOf<ast::DiagnosticDirective, ast::Enable>()) {
+            if (global->node->IsAnyOf<ast::DiagnosticDirective, ast::Enable, ast::Requires>()) {
                 sorted_.Add(global->node);
             }
         }
 
         for (auto* global : declaration_order_) {
-            if (global->node->IsAnyOf<ast::DiagnosticDirective, ast::Enable>()) {
+            if (global->node->IsAnyOf<ast::DiagnosticDirective, ast::Enable, ast::Requires>()) {
                 // Skip directives here, as they are already added.
                 continue;
             }

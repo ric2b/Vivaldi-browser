@@ -24,6 +24,8 @@ import {OobeModalDialog} from '../../components/dialogs/oobe_modal_dialog.js';
 import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
 import {addSubmitListener} from '../../login_ui_tools.js';
 
+import {getTemplate} from './saml_confirm_password.html.js';
+
 
 /**
  * UI mode for the dialog.
@@ -54,6 +56,15 @@ const SamlConfirmPasswordBase = mixinBehaviors(
 SamlConfirmPasswordBase.$;
 
 /**
+ * Data that is passed to the screen during onBeforeShow.
+ * @typedef {{
+ *   email: string,
+ *   manualPasswordInput: boolean,
+ * }}
+ */
+let SamlConfirmPasswordScreenData;
+
+/**
  * @polymer
  */
 class SamlConfirmPassword extends SamlConfirmPasswordBase {
@@ -62,7 +73,7 @@ class SamlConfirmPassword extends SamlConfirmPasswordBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -110,7 +121,7 @@ class SamlConfirmPassword extends SamlConfirmPasswordBase {
 
   /**
    * Event handler that is invoked just before the screen is shown.
-   * @param {Object} data Screen init payload
+   * @param {SamlConfirmPasswordScreenData} data Screen init payload
    */
   onBeforeShow(data) {
     this.reset_();
@@ -162,7 +173,8 @@ class SamlConfirmPassword extends SamlConfirmPasswordBase {
     }
     if (this.isManualInput) {
       // When using manual password entry, both passwords must match.
-      var confirmPasswordInput = this.shadowRoot.querySelector('#confirmPasswordInput');
+      const confirmPasswordInput =
+          this.shadowRoot.querySelector('#confirmPasswordInput');
       if (!confirmPasswordInput.validate()) {
         return;
       }

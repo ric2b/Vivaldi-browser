@@ -55,6 +55,7 @@ constexpr int ComputeBestAlignment(size_t bytes_per_pixel, size_t stride) {
 }  // anonymous namespace
 
 // static
+// TODO(hitawala): Check GLFormatCaps for format support.
 viz::SharedImageFormat GLTextureHolder::GetPlaneFormat(
     viz::SharedImageFormat format,
     int plane_index) {
@@ -63,16 +64,21 @@ viz::SharedImageFormat GLTextureHolder::GetPlaneFormat(
     return format;
   }
 
-  if (format == viz::MultiPlaneFormat::kNV12) {
-    return plane_index == 0 ? viz::SinglePlaneFormat::kR_8
-                            : viz::SinglePlaneFormat::kRG_88;
-  } else if (format == viz::MultiPlaneFormat::kYV12 ||
-             format == viz::MultiPlaneFormat::kI420) {
-    return viz::SinglePlaneFormat::kR_8;
+  int num_channels = format.NumChannelsInPlane(plane_index);
+  DCHECK_LE(num_channels, 2);
+  switch (format.channel_format()) {
+    case viz::SharedImageFormat::ChannelFormat::k8:
+      return num_channels == 2 ? viz::SinglePlaneFormat::kRG_88
+                               : viz::SinglePlaneFormat::kR_8;
+    case viz::SharedImageFormat::ChannelFormat::k10:
+    case viz::SharedImageFormat::ChannelFormat::k16:
+      return num_channels == 2 ? viz::SinglePlaneFormat::kRG_1616
+                               : viz::SinglePlaneFormat::kR_16;
+    case viz::SharedImageFormat::ChannelFormat::k16F:
+      CHECK_EQ(num_channels, 1);
+      return viz::SinglePlaneFormat::kLUMINANCE_F16;
   }
-
-  NOTREACHED();
-  return viz::SinglePlaneFormat::kRGBA_8888;
+  NOTREACHED_NORETURN();
 }
 
 GLTextureHolder::GLTextureHolder(viz::SharedImageFormat format,
@@ -156,13 +162,8 @@ void GLTextureHolder::Initialize(
     texture_->SetImmutable(true, format_info.supports_storage);
   }
 
-  // NOTE: We pass `restore_prev_even_if_invalid=true` to maintain behavior
-  // from when this class was using a duplicate-but-not-identical utility.
-  // TODO(crbug.com/1367187): Eliminate this behavior with a Finch
-  // killswitch.
   gl::GLApi* api = gl::g_current_gl_context;
   gl::ScopedRestoreTexture scoped_restore(api, format_desc_.target,
-                                          /*restore_prev_even_if_invalid=*/true,
                                           GetServiceId());
 
   // Initialize the texture storage/image parameters and upload initial pixels

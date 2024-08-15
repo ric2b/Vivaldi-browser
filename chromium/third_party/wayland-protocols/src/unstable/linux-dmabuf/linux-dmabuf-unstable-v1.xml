@@ -344,7 +344,7 @@
         successful. It provides the new wl_buffer referencing the dmabuf(s).
 
         Upon receiving this event, the client should destroy the
-        zlinux_dmabuf_params object.
+        zwp_linux_buffer_params_v1 object.
       </description>
       <arg name="buffer" type="new_id" interface="wl_buffer"
            summary="the newly created wl_buffer"/>
@@ -357,7 +357,7 @@
         has not been fulfilled.
 
         Upon receiving this event, the client should destroy the
-        zlinux_buffer_params object.
+        zwp_linux_buffer_params_v1 object.
       </description>
     </event>
 

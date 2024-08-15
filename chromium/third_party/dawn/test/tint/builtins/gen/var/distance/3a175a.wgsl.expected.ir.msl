@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void distance_3a175a() {
+  float res = 0.0f;
+}
+vertex float4 vertex_main() {
+  distance_3a175a();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  distance_3a175a();
+}
+kernel void compute_main() {
+  distance_3a175a();
+}

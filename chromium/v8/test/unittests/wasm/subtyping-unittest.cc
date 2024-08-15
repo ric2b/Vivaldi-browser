@@ -63,7 +63,6 @@ void DefineSignature(WasmModule* module,
 }
 
 TEST_F(WasmSubtypingTest, Subtyping) {
-  FLAG_SCOPE(experimental_wasm_gc);
   v8::internal::AccountingAllocator allocator;
   WasmModule module1_;
   WasmModule module2_;
@@ -489,6 +488,13 @@ TEST_F(WasmSubtypingTest, Subtyping) {
     INTERSECTION(kWasmFuncRef, struct_type, kWasmBottom);
     INTERSECTION(kWasmFuncRef, array_type, kWasmBottom);
     INTERSECTION_M(kWasmFuncRef, function_type, function_type, module);
+
+    UNION(kWasmExnRef, struct_type, kWasmBottom);
+    UNION(kWasmExnRef, array_type, kWasmBottom);
+    UNION(kWasmExnRef, function_type, kWasmBottom);
+    INTERSECTION(kWasmExnRef, struct_type, kWasmBottom);
+    INTERSECTION(kWasmExnRef, array_type, kWasmBottom);
+    INTERSECTION(kWasmExnRef, function_type, kWasmBottom);
 
     UNION(kWasmNullFuncRef, function_type, function_type.AsNullable());
     UNION(kWasmNullFuncRef, struct_type, kWasmBottom);

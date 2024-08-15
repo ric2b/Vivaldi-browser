@@ -22,7 +22,7 @@
 #include "chromeos/ash/services/secure_channel/pending_connection_manager_impl.h"
 #include "chromeos/ash/services/secure_channel/public/mojom/secure_channel.mojom.h"
 #include "chromeos/ash/services/secure_channel/secure_channel_disconnector_impl.h"
-#include "chromeos/ash/services/secure_channel/timer_factory_impl.h"
+#include "components/cross_device/timer_factory/timer_factory_impl.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 
 namespace ash::secure_channel {
@@ -67,7 +67,7 @@ SecureChannelImpl::ConnectionRequestWaitingForDisconnection::
 SecureChannelImpl::SecureChannelImpl(
     scoped_refptr<device::BluetoothAdapter> bluetooth_adapter)
     : bluetooth_adapter_(std::move(bluetooth_adapter)),
-      timer_factory_(TimerFactoryImpl::Factory::Create()),
+      timer_factory_(cross_device::TimerFactoryImpl::Factory::Create()),
       remote_device_cache_(multidevice::RemoteDeviceCache::Factory::Create()),
       bluetooth_helper_(
           BluetoothHelperImpl::Factory::Create(remote_device_cache_.get())),
@@ -334,7 +334,7 @@ bool SecureChannelImpl::CheckForInvalidInputDevice(
     ClientConnectionParameters* client_connection_parameters,
     ConnectionMedium connection_medium,
     bool is_local_device) {
-  absl::optional<InvalidRemoteDeviceReason> potential_invalid_reason =
+  std::optional<InvalidRemoteDeviceReason> potential_invalid_reason =
       AddDeviceToCacheIfPossible(api_fn_name, device, connection_medium);
   if (!potential_invalid_reason)
     return false;
@@ -415,7 +415,7 @@ bool SecureChannelImpl::CheckIfBluetoothAdapterDisabledOrNotPresent(
   return false;
 }
 
-absl::optional<SecureChannelImpl::InvalidRemoteDeviceReason>
+std::optional<SecureChannelImpl::InvalidRemoteDeviceReason>
 SecureChannelImpl::AddDeviceToCacheIfPossible(
     ApiFunctionName api_fn_name,
     const multidevice::RemoteDevice& device,
@@ -444,7 +444,7 @@ SecureChannelImpl::AddDeviceToCacheIfPossible(
   }
 
   remote_device_cache_->SetRemoteDevices({device});
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 std::ostream& operator<<(std::ostream& stream,

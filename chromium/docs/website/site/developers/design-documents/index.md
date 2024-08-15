@@ -284,8 +284,6 @@ which is the build script generation tool.
 *   [Tabtastic2
             Requirements](/developers/design-documents/tabtastic-2-requirements)
 *   [Temporary downloads](/system/errors/NodeNotFound)
-*   [Time Sources](/developers/design-documents/time-sources):
-            Determining the time on a Chrome OS device
 *   [TimeTicks](https://docs.google.com/document/d/1ypBZPZnshJ612FWAjkkpSBQiII7vYEEDsRkDOkVjQFw/edit?usp=sharing):
             How our monotonic timer, TimeTicks, works on different OSes
 *   [UI Mirroring

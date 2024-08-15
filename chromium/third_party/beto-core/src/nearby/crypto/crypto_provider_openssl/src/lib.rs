@@ -12,9 +12,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![deny(missing_docs, clippy::indexing_slicing, clippy::panic)]
 
 //! Crate which provides impls for CryptoProvider backed by openssl
+
+// This crate treats allocation errors as handleable, which leads to unwraps everywhere, so they
+// have to be allowed here. This will be fixed when we can migrate over to the new boringssl bindings
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use cfg_if::cfg_if;
 pub use openssl;
@@ -82,6 +85,8 @@ impl crypto_provider::CryptoProvider for Openssl {
     type Ed25519 = ed25519::Ed25519;
     type Aes128GcmSiv = crypto_provider_stubs::Aes128Stubs;
     type Aes256GcmSiv = crypto_provider_stubs::Aes256Stubs;
+    type Aes128Gcm = crypto_provider_stubs::Aes128Stubs;
+    type Aes256Gcm = crypto_provider_stubs::Aes256Stubs;
     type CryptoRng = OpenSslRng;
 
     fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -113,7 +118,7 @@ mod tests {
     use core::marker::PhantomData;
 
     use crypto_provider_test::sha2::*;
-    use crypto_provider_test::*;
+    use crypto_provider_test::{prelude::*, *};
 
     use crate::Openssl;
 

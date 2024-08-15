@@ -88,6 +88,7 @@ Verbs fall into a number of different categories:
     - `Check()`
     - `CheckResult()`
     - `CheckElement()`
+    - `CheckVariable()`
     - `CheckView()` [Views]
     - `CheckViewProperty()` [Views]
     - `Screenshot` [Browser] - compares the target against Skia Gold in pixel
@@ -137,7 +138,7 @@ Verbs fall into a number of different categories:
       - ActivateSurface is not always reliable on Linux with the Wayland window
         manager; see [Handling Incompatibilities](#handling-incompatibilities)
         for how to correctly deal with this.
-    - `ScrollToVisible()` [Views, Browser]
+    - `ScrollIntoView()` [Views, Browser]
       - Recommended before doing anything that needs the screen coordinates of
         a UI or DOM element that is in a scrollable container.
 - **Mouse** verbs simulate mouse input to the entire application, and are
@@ -186,6 +187,10 @@ Verbs fall into a number of different categories:
   [Waiting for Asynchronous Events](#waiting-for-asynchronous-events) for more
   information.
    - `ObserveState()`
+   - `PollState()`
+   - `PollElement()`
+   - `PollView()` [Views]
+   - `PollViewProperty()` [Views]
    - `WaitForState()`
    - `PollState()`
    - `PollElement()`

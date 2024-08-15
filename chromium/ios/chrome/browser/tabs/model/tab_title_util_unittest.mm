@@ -9,7 +9,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/download/download_manager_tab_helper.h"
+#import "ios/chrome/browser/download/model/download_manager_tab_helper.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/test/fakes/fake_download_task.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
@@ -42,7 +42,7 @@ TEST_F(TabTitleUtilTest, GetTabTitleWithDownloadTest) {
       DownloadManagerTabHelper::FromWebState(&web_state_);
   auto task = std::make_unique<web::FakeDownloadTask>(
       GURL("https://test.test/"), /*mime_type=*/std::string());
-  tab_helper->Download(std::move(task));
+  tab_helper->SetCurrentDownload(std::move(task));
   std::u16string download_title =
       l10n_util::GetStringUTF16(IDS_DOWNLOAD_TAB_TITLE);
   NSString* ns_download_title = base::SysUTF16ToNSString(download_title);

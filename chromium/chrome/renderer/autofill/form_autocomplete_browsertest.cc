@@ -13,8 +13,10 @@
 #include "build/build_config.h"
 #include "chrome/test/base/chrome_render_view_test.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/autofill_agent_test_api.h"
 #include "components/autofill/content/renderer/focus_test_utils.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
+#include "components/autofill/content/renderer/form_tracker_test_api.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
@@ -69,7 +71,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
  private:
   // mojom::AutofillDriver:
   void SetFormToBeProbablySubmitted(
-      const absl::optional<FormData>& form) override {}
+      const std::optional<FormData>& form) override {}
 
   void FormsSeen(const std::vector<FormData>& updated_forms,
                  const std::vector<FormRendererId>& removed_forms) override {}
@@ -241,8 +243,9 @@ void SimulateFillForm(const FormData& form_data,
   autofill_agent->FormControlElementClicked(
       fname_element.To<WebInputElement>());
 
-  autofill_agent->ApplyFormAction(mojom::ActionType::kFill,
-                                  mojom::ActionPersistence::kFill, form_data);
+  autofill_agent->ApplyFormAction(
+      mojom::ActionType::kFill, mojom::ActionPersistence::kFill,
+      form_data.unique_renderer_id, form_data.fields);
 }
 
 // Simulates receiving a message from the browser to fill a form.
@@ -271,31 +274,31 @@ void SimulateFillFormWithNonFillableFields(
           .To<WebFormControlElement>();
   ASSERT_FALSE(lname_element.IsNull());
 
-  FormData data;
-  data.name = u"name";
-  data.url = GURL("http://example.com/");
-  data.action = GURL("http://example.com/blade.php");
-  data.is_form_tag = true;  // Default value.
+  FormData form;
+  form.name = u"name";
+  form.url = GURL("http://example.com/");
+  form.action = GURL("http://example.com/blade.php");
+  form.is_form_tag = true;  // Default value.
 
-  FormFieldData field_data;
-  field_data.name = u"fname";
-  field_data.value = u"John";
-  field_data.is_autofilled = true;
-  field_data.unique_renderer_id = form_util::GetFieldRendererId(fname_element);
-  data.fields.push_back(field_data);
+  FormFieldData field;
+  field.name = u"fname";
+  field.value = u"John";
+  field.is_autofilled = true;
+  field.unique_renderer_id = form_util::GetFieldRendererId(fname_element);
+  form.fields.push_back(field);
 
-  field_data.name = u"lname";
-  field_data.value = u"Smith";
-  field_data.is_autofilled = true;
-  field_data.unique_renderer_id = form_util::GetFieldRendererId(lname_element);
-  data.fields.push_back(field_data);
+  field.name = u"lname";
+  field.value = u"Smith";
+  field.is_autofilled = true;
+  field.unique_renderer_id = form_util::GetFieldRendererId(lname_element);
+  form.fields.push_back(field);
 
   // Additional non-autofillable field.
-  field_data.name = u"mname";
-  field_data.value = u"James";
-  field_data.is_autofilled = false;
-  field_data.unique_renderer_id = form_util::GetFieldRendererId(mname_element);
-  data.fields.push_back(field_data);
+  field.name = u"mname";
+  field.value = u"James";
+  field.is_autofilled = false;
+  field.unique_renderer_id = form_util::GetFieldRendererId(mname_element);
+  form.fields.push_back(field);
 
   // This call is necessary to setup the autofill agent appropriate for the
   // user selection; simulates the menu actually popping up.
@@ -303,10 +306,9 @@ void SimulateFillFormWithNonFillableFields(
       fname_element.To<WebInputElement>());
 
   autofill_agent->ApplyFormAction(mojom::ActionType::kFill,
-                                  mojom::ActionPersistence::kFill, data);
+                                  mojom::ActionPersistence::kFill,
+                                  form.unique_renderer_id, form.fields);
 }
-
-}  // end namespace
 
 class FormAutocompleteTest : public ChromeRenderViewTest {
  public:
@@ -804,32 +806,6 @@ TEST_F(FormAutocompleteTest, AjaxSucceeded_FormlessElements) {
                                  SubmissionSource::XHR_SUCCEEDED);
 }
 
-// Unit test for CollectFormlessElements.
-TEST_F(FormAutocompleteTest, CollectFormlessElements) {
-  LoadHTML(
-      "<html><title>Checkout</title></head>"
-      "<input type='text' name='text_input'/>"
-      "<input type='checkbox' name='check_input'/>"
-      "<input type='number' name='number_input'/>"
-      "<select name='select_input'/>"
-      "  <option value='option_1'></option>"
-      "  <option value='option_2'></option>"
-      "</select>"
-      "<form><input type='text' name='excluded'/></form>"
-      "</html>");
-
-  FormData result;
-  autofill_agent_->CollectFormlessElements(&result);
-
-  // Asserting size 4 also ensures that 'excluded' field inside <form> is not
-  // collected.
-  ASSERT_EQ(4U, result.fields.size());
-  EXPECT_EQ(u"text_input", result.fields[0].name);
-  EXPECT_EQ(u"check_input", result.fields[1].name);
-  EXPECT_EQ(u"number_input", result.fields[2].name);
-  EXPECT_EQ(u"select_input", result.fields[3].name);
-}
-
 // Unit test for AutofillAgent::AcceptDataListSuggestion.
 TEST_F(FormAutocompleteTest, AcceptDataListSuggestion) {
   LoadHTML(
@@ -1094,9 +1070,9 @@ TEST_F(FormAutocompleteTest, FormSubmittedByDOMMutationAfterXHR) {
   ExecuteJavaScriptForTests(hide_elements.c_str());
   base::RunLoop().RunUntilIdle();
 
-  VerifyReceivedAddressRendererMessages(
-      fake_driver_, "City", true /* expect_known_success */,
-      SubmissionSource::DOM_MUTATION_AFTER_XHR);
+  VerifyReceivedAddressRendererMessages(fake_driver_, "City",
+                                        true /* expect_known_success */,
+                                        SubmissionSource::XHR_SUCCEEDED);
 }
 
 TEST_F(FormAutocompleteTest, FormSubmittedBySameDocumentNavigation) {
@@ -1115,8 +1091,8 @@ TEST_F(FormAutocompleteTest, FormSubmittedBySameDocumentNavigation) {
   ExecuteJavaScriptForTests(hide_elements.c_str());
 
   // Simulate same document navigation.
-  autofill_agent_->form_tracker_for_testing()
-      ->DidFinishSameDocumentNavigation();
+  test_api(test_api(*autofill_agent_).form_tracker())
+      .DidFinishSameDocumentNavigation();
   base::RunLoop().RunUntilIdle();
 
   VerifyReceivedAddressRendererMessages(
@@ -1144,8 +1120,8 @@ TEST_F(FormAutocompleteTest, FormSubmittedByProbablyFormSubmitted) {
   ExecuteJavaScriptForTests(hide_elements.c_str());
 
   // Simulate navigation.
-  autofill_agent_->form_tracker_for_testing()
-      ->FireProbablyFormSubmittedForTesting();
+  test_api(test_api(*autofill_agent_).form_tracker())
+      .FireProbablyFormSubmitted();
 
   base::RunLoop().RunUntilIdle();
 
@@ -1180,5 +1156,7 @@ TEST_F(FormAutocompleteTest, SelectControlChanged) {
   EXPECT_EQ(u"color", field->name);
   EXPECT_EQ(u"blue", field->value);
 }
+
+}  // namespace
 
 }  // namespace autofill

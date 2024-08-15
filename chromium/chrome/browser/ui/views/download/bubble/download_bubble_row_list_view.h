@@ -7,13 +7,13 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/ui/download/download_bubble_row_list_view_info.h"
 #include "components/offline_items_collection/core/offline_item.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/flex_layout_view.h"
 
@@ -23,15 +23,16 @@ class DownloadBubbleNavigationHandler;
 
 class DownloadBubbleRowListView : public views::FlexLayoutView,
                                   public DownloadBubbleRowListViewInfoObserver {
- public:
-  METADATA_HEADER(DownloadBubbleRowListView);
+  METADATA_HEADER(DownloadBubbleRowListView, views::FlexLayoutView)
 
+ public:
   DownloadBubbleRowListView(
       base::WeakPtr<Browser> browser,
       base::WeakPtr<DownloadBubbleUIController> bubble_controller,
       base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler,
       int fixed_width,
-      const DownloadBubbleRowListViewInfo& info);
+      const DownloadBubbleRowListViewInfo& info,
+      bool is_in_partial_view = false);
   ~DownloadBubbleRowListView() override;
   DownloadBubbleRowListView(const DownloadBubbleRowListView&) = delete;
   DownloadBubbleRowListView& operator=(const DownloadBubbleRowListView&) =
@@ -71,6 +72,9 @@ class DownloadBubbleRowListView : public views::FlexLayoutView,
   base::WeakPtr<DownloadBubbleUIController> bubble_controller_;
   base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler_;
   int fixed_width_ = 0;
+
+  // Used for metrics to study clickjacking potential. False in tests.
+  const bool is_in_partial_view_ = false;
 
   // This is owned by the DownloadBubbleContentsView owning `this`.
   raw_ref<const DownloadBubbleRowListViewInfo> info_;

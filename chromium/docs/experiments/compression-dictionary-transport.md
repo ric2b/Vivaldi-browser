@@ -152,6 +152,22 @@ Chrome 117.0.5857.0 introduced support for Shared Brotli, and Chrome
 Shared Zstandard can be enabled/disabled from
 [chrome://flags/#enable-shared-zstd][shared-zstd-flag].
 
+## Supported HTTP protocol
+
+From Chrome 121, Chrome may not use stored shared dictionares when the
+connection is using HTTP/1 for non-localhost requests. Also Chrome may not use
+shared dictionares when the HTTPS connection's certificate is not rooted by a
+well known root CA (eg: using a user installed root certificate). This is for
+an investigation for an issue that some network appliances are interfering with
+HTTPS traffic by inspecting encrypted responses but failing to properly decode
+the shared dictionary encoded content.
+
+If you want to use shared dictionaries with HTTP/1, please enable
+[chrome://flags/#enable-compression-dictionary-transport-over-http1][over-http1-flag].
+Also if you want to use shared dictionaries over the HTTPS connection which
+certificate is not rooted by a well known root CA, please disable
+[chrome://flags/#enable-compression-dictionary-transport-require-known-root-cert][require-known-root-ca-flag].
+
 ## Debugging
 
 ### Managing registered dictionaries
@@ -177,6 +193,30 @@ Developers can check the related HTTP request and response headers
 - [cbrbug.com/1479809](crbug.com/1479809): Can't use large (>8MB) dictionaries
   for Shared Zstd. Fixed in M118.
 
+## Following spec changes
+
+Currently there are two backend implementations, V1 and V2. V2 is under active
+construction to catch up the following spec changes:
+
+- Change Content-Encoding name "br-d" "zstd-d"
+  - Stauts: Implemented by https://crrev.com/c/5185977.
+- Changed match to use URLPattern
+  - Stauts: Not yet implemented.
+- Added support for a server-provided dictionary id
+  - Stauts: Not yet implemented.
+- Updated the default dictionary ttl to 14 days since last fetched
+  - Stauts: Not yet implemented.
+- Removed support for hash negotiation and force use of sha-256
+  - Stauts: Not yet implemented.
+- Added the dictionary hash to the compressed response
+  - Stauts: Not yet implemented.
+- Dictionary hashes changed to sf-binary
+  - Stauts: Not yet implemented.
+
+You can try the experimental V2 implementation by selecting
+"Enabled experimental V2" in
+[chrome://flags/#enable-compression-dictionary-transport-backend][backend-flag].
+
 ## Demo sites
 
 There are a few demo sites that you can use to test the feature:
@@ -190,6 +230,8 @@ There are a few demo sites that you can use to test the feature:
 [flag]: chrome://flags/#enable-compression-dictionary-transport
 [backend-flag]: chrome://flags/#enable-compression-dictionary-transport-backend
 [shared-zstd-flag]: chrome://flags/#enable-shared-zstd
+[over-http1-flag]: chrome://flags/#enable-compression-dictionary-transport-over-http1
+[require-known-root-ca-flag]: chrome://flags/#enable-compression-dictionary-transport-require-known-root-cert
 [shared_dictionary_readme]: ../../services/network/shared_dictionary/README.md#flags
 [ot-blog]: https://developer.chrome.com/blog/origin-trials/
 [ot-console]: https://developer.chrome.com/origintrials/#/trials/active

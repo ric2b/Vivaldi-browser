@@ -773,6 +773,7 @@ export namespace Audits {
     Frame = 'Frame',
     Image = 'Image',
     Import = 'Import',
+    JSON = 'JSON',
     Manifest = 'Manifest',
     Ping = 'Ping',
     PluginData = 'PluginData',
@@ -782,6 +783,7 @@ export namespace Audits {
     Script = 'Script',
     ServiceWorker = 'ServiceWorker',
     SharedWorker = 'SharedWorker',
+    SpeculationRules = 'SpeculationRules',
     Stylesheet = 'Stylesheet',
     Track = 'Track',
     Video = 'Video',
@@ -1100,6 +1102,8 @@ export namespace Audits {
     IdTokenHttpNotFound = 'IdTokenHttpNotFound',
     IdTokenNoResponse = 'IdTokenNoResponse',
     IdTokenInvalidResponse = 'IdTokenInvalidResponse',
+    IdTokenIdpErrorResponse = 'IdTokenIdpErrorResponse',
+    IdTokenCrossSiteIdpErrorResponse = 'IdTokenCrossSiteIdpErrorResponse',
     IdTokenInvalidRequest = 'IdTokenInvalidRequest',
     IdTokenInvalidContentType = 'IdTokenInvalidContentType',
     ErrorIdToken = 'ErrorIdToken',
@@ -1434,6 +1438,10 @@ export namespace Autofill {
      * The filling strategy
      */
     fillingStrategy: FillingStrategy;
+    /**
+     * The form field's DOM node
+     */
+    fieldId: DOM.BackendNodeId;
   }
 
   export interface TriggerRequest {
@@ -1617,6 +1625,7 @@ export namespace Browser {
     AudioCapture = 'audioCapture',
     BackgroundSync = 'backgroundSync',
     BackgroundFetch = 'backgroundFetch',
+    CapturedSurfaceControl = 'capturedSurfaceControl',
     ClipboardReadWrite = 'clipboardReadWrite',
     ClipboardSanitizedWrite = 'clipboardSanitizedWrite',
     DisplayCapture = 'displayCapture',
@@ -1650,7 +1659,7 @@ export namespace Browser {
 
   /**
    * Definition of PermissionDescriptor defined in the Permissions API:
-   * https://w3c.github.io/permissions/#dictdef-permissiondescriptor.
+   * https://w3c.github.io/permissions/#dom-permissiondescriptor.
    */
   export interface PermissionDescriptor {
     /**
@@ -2612,6 +2621,10 @@ export namespace CSS {
      */
     familyName: string;
     /**
+     * Font's PostScript name reported by platform.
+     */
+    postScriptName: string;
+    /**
      * Indicates if the font was downloaded or resolved locally.
      */
     isCustomFont: boolean;
@@ -2749,6 +2762,29 @@ export namespace CSS {
   }
 
   /**
+   * CSS font-palette-values rule representation.
+   */
+  export interface CSSFontPaletteValuesRule {
+    /**
+     * The css style sheet identifier (absent for user agent stylesheet and user-specified
+     * stylesheet rules) this rule came from.
+     */
+    styleSheetId?: StyleSheetId;
+    /**
+     * Parent stylesheet's origin.
+     */
+    origin: StyleSheetOrigin;
+    /**
+     * Associated font palette name.
+     */
+    fontPaletteName: Value;
+    /**
+     * Associated style declaration.
+     */
+    style: CSSStyle;
+  }
+
+  /**
    * CSS property at-rule representation.
    */
   export interface CSSPropertyRule {
@@ -2825,6 +2861,12 @@ export namespace CSS {
      * Text position of a new rule in the target style sheet.
      */
     location: SourceRange;
+    /**
+     * NodeId for the DOM node in whose context custom property declarations for registered properties should be
+     * validated. If omitted, declarations in the new rule text can only be validated statically, which may produce
+     * incorrect results if the declaration contains a var() for example.
+     */
+    nodeForPropertySyntaxValidation?: DOM.NodeId;
   }
 
   export interface AddRuleResponse extends ProtocolResponseWithError {
@@ -2968,6 +3010,10 @@ export namespace CSS {
      * A list of CSS property registrations matching this node.
      */
     cssPropertyRegistrations?: CSSPropertyRegistration[];
+    /**
+     * A font-palette-values rule matching this node.
+     */
+    cssFontPaletteValuesRule?: CSSFontPaletteValuesRule;
     /**
      * Id of the first parent element that does not have display: contents.
      */
@@ -3133,6 +3179,12 @@ export namespace CSS {
 
   export interface SetStyleTextsRequest {
     edits: StyleDeclarationEdit[];
+    /**
+     * NodeId for the DOM node in whose context custom property declarations for registered properties should be
+     * validated. If omitted, declarations in the new rule text can only be validated statically, which may produce
+     * incorrect results if the declaration contains a var() for example.
+     */
+    nodeForPropertySyntaxValidation?: DOM.NodeId;
   }
 
   export interface SetStyleTextsResponse extends ProtocolResponseWithError {
@@ -5615,6 +5667,18 @@ export namespace Emulation {
     maskLength: integer;
   }
 
+  export const enum DevicePostureType {
+    Continuous = 'continuous',
+    Folded = 'folded',
+  }
+
+  export interface DevicePosture {
+    /**
+     * Current posture of the device
+     */
+    type: DevicePostureType;
+  }
+
   export interface MediaFeature {
     name: string;
     value: string;
@@ -5809,6 +5873,11 @@ export namespace Emulation {
      * is turned-off.
      */
     displayFeature?: DisplayFeature;
+    /**
+     * If set, the posture of a foldable device. If not set the posture is set
+     * to continuous.
+     */
+    devicePosture?: DevicePosture;
   }
 
   export interface SetScrollbarsHiddenRequest {
@@ -6019,7 +6088,7 @@ export namespace Emulation {
      */
     userAgent: string;
     /**
-     * Browser langugage to emulate.
+     * Browser language to emulate.
      */
     acceptLanguage?: string;
     /**
@@ -8114,6 +8183,10 @@ export namespace Network {
     UnspecifiedReason = 'unspecifiedReason',
   }
 
+  export interface ServiceWorkerRouterInfo {
+    ruleIdMatched: integer;
+  }
+
   /**
    * HTTP response data.
    */
@@ -8142,6 +8215,10 @@ export namespace Network {
      * Resource mimeType as determined by the browser.
      */
     mimeType: string;
+    /**
+     * Resource charset as determined by the browser (if applicable).
+     */
+    charset: string;
     /**
      * Refined HTTP request headers that were actually transmitted over the network.
      */
@@ -8178,6 +8255,10 @@ export namespace Network {
      * Specifies that the request was served from the prefetch cache.
      */
     fromPrefetchCache?: boolean;
+    /**
+     * Infomation about how Service Worker Static Router was used.
+     */
+    serviceWorkerRouterInfo?: ServiceWorkerRouterInfo;
     /**
      * Total number of bytes received for this request so far.
      */
@@ -9317,7 +9398,7 @@ export namespace Network {
      */
     userAgent: string;
     /**
-     * Browser langugage to emulate.
+     * Browser language to emulate.
      */
     acceptLanguage?: string;
     /**
@@ -9328,6 +9409,20 @@ export namespace Network {
      * To be sent in Sec-CH-UA-* headers and returned in navigator.userAgentData
      */
     userAgentMetadata?: Emulation.UserAgentMetadata;
+  }
+
+  export interface StreamResourceContentRequest {
+    /**
+     * Identifier of the request to stream.
+     */
+    requestId: RequestId;
+  }
+
+  export interface StreamResourceContentResponse extends ProtocolResponseWithError {
+    /**
+     * Data that has been buffered until streaming is enabled.
+     */
+    bufferedData: binary;
   }
 
   export interface GetSecurityIsolationStatusRequest {
@@ -9388,6 +9483,10 @@ export namespace Network {
      * Actual bytes received (might be less than dataLength for compressed encodings).
      */
     encodedDataLength: integer;
+    /**
+     * Data that was received.
+     */
+    data?: binary;
   }
 
   /**
@@ -10896,6 +10995,7 @@ export namespace Page {
     Bluetooth = 'bluetooth',
     BrowsingTopics = 'browsing-topics',
     Camera = 'camera',
+    CapturedSurfaceControl = 'captured-surface-control',
     ChDpr = 'ch-dpr',
     ChDeviceMemory = 'ch-device-memory',
     ChDownlink = 'ch-downlink',
@@ -10951,6 +11051,7 @@ export namespace Page {
     PrivateAggregation = 'private-aggregation',
     PrivateStateTokenIssuance = 'private-state-token-issuance',
     PrivateStateTokenRedemption = 'private-state-token-redemption',
+    PublickeyCredentialsCreate = 'publickey-credentials-create',
     PublickeyCredentialsGet = 'publickey-credentials-get',
     RunAdAuction = 'run-ad-auction',
     ScreenWakeLock = 'screen-wake-lock',
@@ -10960,10 +11061,13 @@ export namespace Page {
     SharedStorageSelectUrl = 'shared-storage-select-url',
     SmartCard = 'smart-card',
     StorageAccess = 'storage-access',
+    SubApps = 'sub-apps',
     SyncXhr = 'sync-xhr',
     Unload = 'unload',
     Usb = 'usb',
+    UsbUnrestricted = 'usb-unrestricted',
     VerticalScroll = 'vertical-scroll',
+    WebPrinting = 'web-printing',
     WebShare = 'web-share',
     WindowManagement = 'window-management',
     WindowPlacement = 'window-placement',
@@ -11652,6 +11756,9 @@ export namespace Page {
     WebRTCSticky = 'WebRTCSticky',
     WebTransportSticky = 'WebTransportSticky',
     WebSocketSticky = 'WebSocketSticky',
+    SmartCard = 'SmartCard',
+    LiveMediaStreamTrack = 'LiveMediaStreamTrack',
+    UnloadHandler = 'UnloadHandler',
     ContentSecurityHandler = 'ContentSecurityHandler',
     ContentWebAuthenticationAPI = 'ContentWebAuthenticationAPI',
     ContentFileChooser = 'ContentFileChooser',
@@ -11917,13 +12024,6 @@ export namespace Page {
     adScriptId?: AdScriptId;
   }
 
-  export interface GetCookiesResponse extends ProtocolResponseWithError {
-    /**
-     * Array of cookie objects.
-     */
-    cookies: Network.Cookie[];
-  }
-
   export interface GetFrameTreeResponse extends ProtocolResponseWithError {
     /**
      * Present frame tree structure.
@@ -12142,6 +12242,10 @@ export namespace Page {
      * Whether or not to generate tagged (accessible) PDF. Defaults to embedder choice.
      */
     generateTaggedPDF?: boolean;
+    /**
+     * Whether or not to embed the document outline into the PDF.
+     */
+    generateDocumentOutline?: boolean;
   }
 
   export interface PrintToPDFResponse extends ProtocolResponseWithError {
@@ -13361,6 +13465,7 @@ export namespace ServiceWorker {
     scriptResponseTime?: number;
     controlledClients?: Target.TargetID[];
     targetId?: Target.TargetID;
+    routerRules?: string;
   }
 
   /**
@@ -13483,6 +13588,11 @@ export namespace Storage {
   }
 
   /**
+   * Protected audience interest group auction identifier.
+   */
+  export type InterestGroupAuctionId = OpaqueIdentifier<string, 'Protocol.Storage.InterestGroupAuctionId'>;
+
+  /**
    * Enum of interest group access types.
    */
   export const enum InterestGroupAccessType {
@@ -13494,7 +13604,17 @@ export namespace Storage {
     Win = 'win',
     AdditionalBid = 'additionalBid',
     AdditionalBidWin = 'additionalBidWin',
+    TopLevelBid = 'topLevelBid',
+    TopLevelAdditionalBid = 'topLevelAdditionalBid',
     Clear = 'clear',
+  }
+
+  /**
+   * Enum of auction events.
+   */
+  export const enum InterestGroupAuctionEventType {
+    Started = 'started',
+    ConfigResolved = 'configResolved',
   }
 
   /**
@@ -13679,6 +13799,19 @@ export namespace Storage {
     values: string[];
   }
 
+  export interface AttributionReportingFilterConfig {
+    filterValues: AttributionReportingFilterDataEntry[];
+    /**
+     * duration in seconds
+     */
+    lookbackWindow?: integer;
+  }
+
+  export interface AttributionReportingFilterPair {
+    filters: AttributionReportingFilterConfig[];
+    notFilters: AttributionReportingFilterConfig[];
+  }
+
   export interface AttributionReportingAggregationKeysEntry {
     key: string;
     value: UnsignedInt128AsBase16;
@@ -13695,6 +13828,15 @@ export namespace Storage {
     ends: integer[];
   }
 
+  export interface AttributionReportingTriggerSpec {
+    /**
+     * number instead of integer because not all uint32 can be represented by
+     * int
+     */
+    triggerData: number[];
+    eventReportWindows: AttributionReportingEventReportWindows;
+  }
+
   export const enum AttributionReportingTriggerDataMatching {
     Exact = 'exact',
     Modulus = 'modulus',
@@ -13706,7 +13848,7 @@ export namespace Storage {
      * duration in seconds
      */
     expiry: integer;
-    eventReportWindows: AttributionReportingEventReportWindows;
+    triggerSpecs: AttributionReportingTriggerSpec[];
     /**
      * duration in seconds
      */
@@ -13736,6 +13878,90 @@ export namespace Storage {
     DestinationBothLimitsReached = 'destinationBothLimitsReached',
     ReportingOriginsPerSiteLimitReached = 'reportingOriginsPerSiteLimitReached',
     ExceedsMaxChannelCapacity = 'exceedsMaxChannelCapacity',
+  }
+
+  export const enum AttributionReportingSourceRegistrationTimeConfig {
+    Include = 'include',
+    Exclude = 'exclude',
+  }
+
+  export interface AttributionReportingAggregatableValueEntry {
+    key: string;
+    /**
+     * number instead of integer because not all uint32 can be represented by
+     * int
+     */
+    value: number;
+  }
+
+  export interface AttributionReportingEventTriggerData {
+    data: UnsignedInt64AsBase10;
+    priority: SignedInt64AsBase10;
+    dedupKey?: UnsignedInt64AsBase10;
+    filters: AttributionReportingFilterPair;
+  }
+
+  export interface AttributionReportingAggregatableTriggerData {
+    keyPiece: UnsignedInt128AsBase16;
+    sourceKeys: string[];
+    filters: AttributionReportingFilterPair;
+  }
+
+  export interface AttributionReportingAggregatableDedupKey {
+    dedupKey?: UnsignedInt64AsBase10;
+    filters: AttributionReportingFilterPair;
+  }
+
+  export interface AttributionReportingTriggerRegistration {
+    filters: AttributionReportingFilterPair;
+    debugKey?: UnsignedInt64AsBase10;
+    aggregatableDedupKeys: AttributionReportingAggregatableDedupKey[];
+    eventTriggerData: AttributionReportingEventTriggerData[];
+    aggregatableTriggerData: AttributionReportingAggregatableTriggerData[];
+    aggregatableValues: AttributionReportingAggregatableValueEntry[];
+    debugReporting: boolean;
+    aggregationCoordinatorOrigin?: string;
+    sourceRegistrationTimeConfig: AttributionReportingSourceRegistrationTimeConfig;
+    triggerContextId?: string;
+  }
+
+  export const enum AttributionReportingEventLevelResult {
+    Success = 'success',
+    SuccessDroppedLowerPriority = 'successDroppedLowerPriority',
+    InternalError = 'internalError',
+    NoCapacityForAttributionDestination = 'noCapacityForAttributionDestination',
+    NoMatchingSources = 'noMatchingSources',
+    Deduplicated = 'deduplicated',
+    ExcessiveAttributions = 'excessiveAttributions',
+    PriorityTooLow = 'priorityTooLow',
+    NeverAttributedSource = 'neverAttributedSource',
+    ExcessiveReportingOrigins = 'excessiveReportingOrigins',
+    NoMatchingSourceFilterData = 'noMatchingSourceFilterData',
+    ProhibitedByBrowserPolicy = 'prohibitedByBrowserPolicy',
+    NoMatchingConfigurations = 'noMatchingConfigurations',
+    ExcessiveReports = 'excessiveReports',
+    FalselyAttributedSource = 'falselyAttributedSource',
+    ReportWindowPassed = 'reportWindowPassed',
+    NotRegistered = 'notRegistered',
+    ReportWindowNotStarted = 'reportWindowNotStarted',
+    NoMatchingTriggerData = 'noMatchingTriggerData',
+  }
+
+  export const enum AttributionReportingAggregatableResult {
+    Success = 'success',
+    InternalError = 'internalError',
+    NoCapacityForAttributionDestination = 'noCapacityForAttributionDestination',
+    NoMatchingSources = 'noMatchingSources',
+    ExcessiveAttributions = 'excessiveAttributions',
+    ExcessiveReportingOrigins = 'excessiveReportingOrigins',
+    NoHistograms = 'noHistograms',
+    InsufficientBudget = 'insufficientBudget',
+    NoMatchingSourceFilterData = 'noMatchingSourceFilterData',
+    NotRegistered = 'notRegistered',
+    ProhibitedByBrowserPolicy = 'prohibitedByBrowserPolicy',
+    Deduplicated = 'deduplicated',
+    ReportWindowPassed = 'reportWindowPassed',
+    ExcessiveReports = 'excessiveReports',
   }
 
   export interface GetStorageKeyForFrameRequest {
@@ -13927,6 +14153,10 @@ export namespace Storage {
     enable: boolean;
   }
 
+  export interface SetInterestGroupAuctionTrackingRequest {
+    enable: boolean;
+  }
+
   export interface GetSharedStorageMetadataRequest {
     ownerOrigin: string;
   }
@@ -14080,13 +14310,46 @@ export namespace Storage {
   }
 
   /**
-   * One of the interest groups was accessed by the associated page.
+   * One of the interest groups was accessed. Note that these events are global
+   * to all targets sharing an interest group store.
    */
   export interface InterestGroupAccessedEvent {
     accessTime: Network.TimeSinceEpoch;
     type: InterestGroupAccessType;
     ownerOrigin: string;
     name: string;
+    /**
+     * For topLevelBid/topLevelAdditionalBid, and when appropriate,
+     * win and additionalBidWin
+     */
+    componentSellerOrigin?: string;
+    /**
+     * For bid or somethingBid event, if done locally and not on a server.
+     */
+    bid?: number;
+    bidCurrency?: string;
+    /**
+     * For non-global events --- links to interestGroupAuctionEvent
+     */
+    uniqueAuctionId?: InterestGroupAuctionId;
+  }
+
+  /**
+   * An auction involving interest groups is taking place. These events are
+   * target-specific.
+   */
+  export interface InterestGroupAuctionEventOccurredEvent {
+    eventTime: Network.TimeSinceEpoch;
+    type: InterestGroupAuctionEventType;
+    uniqueAuctionId: InterestGroupAuctionId;
+    /**
+     * Set for child auctions.
+     */
+    parentAuctionId?: InterestGroupAuctionId;
+    /**
+     * Set for started and configResolved
+     */
+    auctionConfig?: any;
   }
 
   /**
@@ -14125,13 +14388,15 @@ export namespace Storage {
     bucketId: string;
   }
 
-  /**
-   * TODO(crbug.com/1458532): Add other Attribution Reporting events, e.g.
-   * trigger registration.
-   */
   export interface AttributionReportingSourceRegisteredEvent {
     registration: AttributionReportingSourceRegistration;
     result: AttributionReportingSourceRegistrationResult;
+  }
+
+  export interface AttributionReportingTriggerRegisteredEvent {
+    registration: AttributionReportingTriggerRegistration;
+    eventLevel: AttributionReportingEventLevelResult;
+    aggregatable: AttributionReportingAggregatableResult;
   }
 }
 
@@ -15685,6 +15950,18 @@ export namespace WebAuthn {
      * Defaults to false.
      */
     isUserVerified?: boolean;
+    /**
+     * Credentials created by this authenticator will have the backup
+     * eligibility (BE) flag set to this value. Defaults to false.
+     * https://w3c.github.io/webauthn/#sctn-credential-backup
+     */
+    defaultBackupEligibility?: boolean;
+    /**
+     * Credentials created by this authenticator will have the backup state
+     * (BS) flag set to this value. Defaults to false.
+     * https://w3c.github.io/webauthn/#sctn-credential-backup
+     */
+    defaultBackupState?: boolean;
   }
 
   export interface Credential {
@@ -16192,7 +16469,8 @@ export namespace Preload {
     PrefetchFailedNetError = 'PrefetchFailedNetError',
     PrefetchFailedNon2XX = 'PrefetchFailedNon2XX',
     PrefetchFailedPerPageLimitExceeded = 'PrefetchFailedPerPageLimitExceeded',
-    PrefetchEvicted = 'PrefetchEvicted',
+    PrefetchEvictedAfterCandidateRemoved = 'PrefetchEvictedAfterCandidateRemoved',
+    PrefetchEvictedForNewerPrefetch = 'PrefetchEvictedForNewerPrefetch',
     PrefetchHeldback = 'PrefetchHeldback',
     PrefetchIneligibleRetryAfter = 'PrefetchIneligibleRetryAfter',
     PrefetchIsPrivacyDecoy = 'PrefetchIsPrivacyDecoy',
@@ -16215,6 +16493,15 @@ export namespace Preload {
     PrefetchResponseUsed = 'PrefetchResponseUsed',
     PrefetchSuccessfulButNotUsed = 'PrefetchSuccessfulButNotUsed',
     PrefetchNotUsedProbeFailed = 'PrefetchNotUsedProbeFailed',
+  }
+
+  /**
+   * Information of headers to be displayed when the header mismatch occurred.
+   */
+  export interface PrerenderMismatchedHeaders {
+    headerName: string;
+    initialValue?: string;
+    activationValue?: string;
   }
 
   /**
@@ -16266,6 +16553,7 @@ export namespace Preload {
      * that is incompatible with prerender and has caused the cancellation of the attempt.
      */
     disallowedMojoInterface?: string;
+    mismatchedHeaders?: PrerenderMismatchedHeaders[];
   }
 
   /**
@@ -16292,12 +16580,22 @@ export namespace FedCm {
   }
 
   /**
-   * Whether the dialog shown is an account chooser or an auto re-authentication dialog.
+   * The types of FedCM dialogs.
    */
   export const enum DialogType {
     AccountChooser = 'AccountChooser',
     AutoReauthn = 'AutoReauthn',
     ConfirmIdpLogin = 'ConfirmIdpLogin',
+    Error = 'Error',
+  }
+
+  /**
+   * The buttons on the FedCM dialog.
+   */
+  export const enum DialogButton {
+    ConfirmIdpLoginContinue = 'ConfirmIdpLoginContinue',
+    ErrorGotIt = 'ErrorGotIt',
+    ErrorMoreDetails = 'ErrorMoreDetails',
   }
 
   /**
@@ -16333,8 +16631,9 @@ export namespace FedCm {
     accountIndex: integer;
   }
 
-  export interface ConfirmIdpLoginRequest {
+  export interface ClickDialogButtonRequest {
     dialogId: string;
+    dialogButton: DialogButton;
   }
 
   export interface DismissDialogRequest {
@@ -16352,6 +16651,14 @@ export namespace FedCm {
      */
     title: string;
     subtitle?: string;
+  }
+
+  /**
+   * Triggered when a dialog is closed, either by user action, JS abort,
+   * or a command below.
+   */
+  export interface DialogClosedEvent {
+    dialogId: string;
   }
 }
 

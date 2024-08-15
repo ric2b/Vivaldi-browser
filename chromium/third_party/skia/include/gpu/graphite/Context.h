@@ -22,6 +22,7 @@
 
 class SkColorSpace;
 class SkRuntimeEffect;
+class SkTraceMemoryDump;
 
 namespace skgpu::graphite {
 
@@ -54,6 +55,9 @@ public:
 
     bool insertRecording(const InsertRecordingInfo&);
     bool submit(SyncToCpu = SyncToCpu::kNo);
+
+    /** Returns true if there is work that was submitted to the GPU that has not finished. */
+    bool hasUnfinishedGpuWork() const;
 
     void asyncRescaleAndReadPixels(const SkImage* image,
                                    const SkImageInfo& dstImageInfo,
@@ -147,6 +151,17 @@ public:
      */
     size_t currentBudgetedBytes() const;
 
+    /**
+     * Enumerates all cached GPU resources owned by the Context and dumps their memory to
+     * traceMemoryDump.
+     */
+    void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
+
+    /*
+     * Does this context support protected content?
+     */
+    bool supportsProtectedContent() const;
+
     // Provides access to functions that aren't part of the public API.
     ContextPriv priv();
     const ContextPriv priv() const;  // NOLINT(readability-const-return-type)
@@ -176,6 +191,21 @@ protected:
 private:
     friend class ContextPriv;
     friend class ContextCtorAccessor;
+
+    struct PixelTransferResult {
+        using ConversionFn = void(void* dst, const void* mappedBuffer);
+        // If null then the transfer could not be performed. Otherwise this buffer will contain
+        // the pixel data when the transfer is complete.
+        sk_sp<Buffer> fTransferBuffer;
+        // Size of the read.
+        SkISize fSize;
+        // RowBytes for transfer buffer data
+        size_t fRowBytes;
+        // If this is null then the transfer buffer will contain the data in the requested
+        // color type. Otherwise, when the transfer is done this must be called to convert
+        // from the transfer buffer's color type to the requested color type.
+        std::function<ConversionFn> fPixelConverter;
+    };
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
 
@@ -209,19 +239,11 @@ private:
                                SkImage::ReadPixelsCallback callback,
                                SkImage::ReadPixelsContext context);
 
+    void finalizeAsyncReadPixels(SkSpan<PixelTransferResult>,
+                                 SkImage::ReadPixelsCallback callback,
+                                 SkImage::ReadPixelsContext callbackContext);
+
     // Inserts a texture to buffer transfer task, used by asyncReadPixels methods
-    struct PixelTransferResult {
-        using ConversionFn = void(void* dst, const void* mappedBuffer);
-        // If null then the transfer could not be performed. Otherwise this buffer will contain
-        // the pixel data when the transfer is complete.
-        sk_sp<Buffer> fTransferBuffer;
-        // RowBytes for transfer buffer data
-        size_t fRowBytes;
-        // If this is null then the transfer buffer will contain the data in the requested
-        // color type. Otherwise, when the transfer is done this must be called to convert
-        // from the transfer buffer's color type to the requested color type.
-        std::function<ConversionFn> fPixelConverter;
-    };
     PixelTransferResult transferPixels(const TextureProxy*,
                                        const SkImageInfo& srcImageInfo,
                                        const SkColorInfo& dstColorInfo,
@@ -231,7 +253,6 @@ private:
     std::unique_ptr<ResourceProvider> fResourceProvider;
     std::unique_ptr<QueueManager> fQueueManager;
     std::unique_ptr<ClientMappedBufferManager> fMappedBufferManager;
-    std::unique_ptr<PlotUploadTracker> fPlotUploadTracker;
 
     // In debug builds we guard against improper thread handling. This guard is passed to the
     // ResourceCache for the Context.

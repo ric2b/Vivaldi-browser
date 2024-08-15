@@ -18,6 +18,33 @@
 
 #pragma mark - Parent's functions
 
+// Returns a configured header for the given index path.
+- (UICollectionReusableView*)headerForSectionAtIndexPath:
+    (NSIndexPath*)indexPath {
+  if (self.mode == TabGridModeNormal) {
+    return nil;
+  }
+  return [super headerForSectionAtIndexPath:indexPath];
+}
+
+- (UIContextMenuConfiguration*)collectionView:(UICollectionView*)collectionView
+    contextMenuConfigurationForItemAtIndexPaths:
+        (NSArray<NSIndexPath*>*)indexPaths
+                                          point:(CGPoint)point
+    API_AVAILABLE(ios(16)) {
+  // Don't allow long-press previews when the incognito reauth view is blocking
+  // the content.
+  if (self.contentNeedsAuthentication) {
+    return nil;
+  }
+
+  return [super collectionView:collectionView
+      contextMenuConfigurationForItemsAtIndexPaths:indexPaths
+                                             point:point];
+}
+
+#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
+
 - (UIContextMenuConfiguration*)collectionView:(UICollectionView*)collectionView
     contextMenuConfigurationForItemAtIndexPath:(NSIndexPath*)indexPath
                                          point:(CGPoint)point {
@@ -32,12 +59,12 @@
                                            point:point];
 }
 
+#endif
+
 #pragma mark - IncognitoReauthConsumer
 
 - (void)setItemsRequireAuthentication:(BOOL)require {
   self.contentNeedsAuthentication = require;
-  [self.delegate gridViewController:self
-      contentNeedsAuthenticationChanged:require];
 
   if (require) {
     if (!_blockingView) {

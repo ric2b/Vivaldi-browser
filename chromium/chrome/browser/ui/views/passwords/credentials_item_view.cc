@@ -37,8 +37,9 @@
 namespace {
 
 class CircularImageView : public views::ImageView {
+  METADATA_HEADER(CircularImageView, views::ImageView)
+
  public:
-  METADATA_HEADER(CircularImageView);
   CircularImageView() = default;
   CircularImageView(const CircularImageView&) = delete;
   CircularImageView& operator=(const CircularImageView&) = delete;
@@ -60,7 +61,7 @@ void CircularImageView::OnPaint(gfx::Canvas* canvas) {
   ImageView::OnPaint(canvas);
 }
 
-BEGIN_METADATA(CircularImageView, views::ImageView)
+BEGIN_METADATA(CircularImageView)
 END_METADATA
 
 }  // namespace
@@ -185,7 +186,8 @@ void CredentialsItemView::SetStoreIndicatorIcon(
 }
 
 void CredentialsItemView::UpdateAvatar(const gfx::ImageSkia& image) {
-  image_view_->SetImage(ScaleImageForAccountAvatar(image));
+  image_view_->SetImage(
+      ui::ImageModel::FromImageSkia(ScaleImageForAccountAvatar(image)));
 }
 
 int CredentialsItemView::GetPreferredHeight() const {
@@ -199,5 +201,5 @@ void CredentialsItemView::OnPaintBackground(gfx::Canvas* canvas) {
   }
 }
 
-BEGIN_METADATA(CredentialsItemView, views::Button)
+BEGIN_METADATA(CredentialsItemView)
 END_METADATA

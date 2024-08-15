@@ -298,8 +298,7 @@ class RestoreToDestinationIOTaskWithDLPTest
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
-  raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> mock_rules_manager_ =
-      nullptr;
+  raw_ptr<policy::MockDlpRulesManager> mock_rules_manager_ = nullptr;
 };
 
 TEST_F(RestoreToDestinationIOTaskWithDLPTest, PauseResume) {
@@ -341,7 +340,7 @@ TEST_F(RestoreToDestinationIOTaskWithDLPTest, PauseResume) {
   // Set the DLP to warn, which pauses the task, and then resume.
   EXPECT_CALL(*files_controller_, CheckIfTransferAllowed)
       .WillOnce(
-          ([=](absl::optional<file_manager::io_task::IOTaskId> task_id,
+          ([=](std::optional<file_manager::io_task::IOTaskId> task_id,
                const std::vector<storage::FileSystemURL>& transferred_files,
                storage::FileSystemURL destination, bool is_move,
                policy::DlpFilesControllerAsh::CheckIfTransferAllowedCallback

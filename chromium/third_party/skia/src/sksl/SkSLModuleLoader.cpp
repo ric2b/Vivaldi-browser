@@ -23,7 +23,6 @@
 
 #include <algorithm>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -66,6 +65,8 @@
         #if defined(SK_GRAPHITE) || GR_TEST_UTILS
         #include "src/sksl/generated/sksl_graphite_frag.minified.sksl"
         #include "src/sksl/generated/sksl_graphite_vert.minified.sksl"
+        #include "src/sksl/generated/sksl_graphite_frag_es2.minified.sksl"
+        #include "src/sksl/generated/sksl_graphite_vert_es2.minified.sksl"
         #endif
     #else
         #include "src/sksl/generated/sksl_shared.unoptimized.sksl"
@@ -78,6 +79,8 @@
         #if defined(SK_GRAPHITE) || GR_TEST_UTILS
         #include "src/sksl/generated/sksl_graphite_frag.unoptimized.sksl"
         #include "src/sksl/generated/sksl_graphite_vert.unoptimized.sksl"
+        #include "src/sksl/generated/sksl_graphite_frag_es2.unoptimized.sksl"
+        #include "src/sksl/generated/sksl_graphite_vert_es2.unoptimized.sksl"
         #endif
     #endif
 
@@ -162,6 +165,8 @@ struct ModuleLoader::Impl {
     std::unique_ptr<const Module> fComputeModule;           // [GPU] + Compute stage decls
     std::unique_ptr<const Module> fGraphiteVertexModule;    // [Vert] + Graphite vertex helpers
     std::unique_ptr<const Module> fGraphiteFragmentModule;  // [Frag] + Graphite fragment helpers
+    std::unique_ptr<const Module> fGraphiteVertexES2Module; // [Vert] + Graphite vertex ES2 helpers
+    std::unique_ptr<const Module> fGraphiteFragmentES2Module;//[Frag] + Graphite fragment ES2 "  "
 
     std::unique_ptr<const Module> fPublicModule;            // [Shared] minus Private types +
                                                             //     Runtime effect intrinsics
@@ -253,31 +258,31 @@ void ModuleLoader::addPublicTypeAliases(const SkSL::Module* module) {
     SymbolTable* symbols = module->fSymbols.get();
 
     // Add some aliases to the runtime effect modules so that it's friendlier, and more like GLSL.
-    symbols->addWithoutOwnership(types.fVec2.get());
-    symbols->addWithoutOwnership(types.fVec3.get());
-    symbols->addWithoutOwnership(types.fVec4.get());
+    symbols->addWithoutOwnershipOrDie(types.fVec2.get());
+    symbols->addWithoutOwnershipOrDie(types.fVec3.get());
+    symbols->addWithoutOwnershipOrDie(types.fVec4.get());
 
-    symbols->addWithoutOwnership(types.fIVec2.get());
-    symbols->addWithoutOwnership(types.fIVec3.get());
-    symbols->addWithoutOwnership(types.fIVec4.get());
+    symbols->addWithoutOwnershipOrDie(types.fIVec2.get());
+    symbols->addWithoutOwnershipOrDie(types.fIVec3.get());
+    symbols->addWithoutOwnershipOrDie(types.fIVec4.get());
 
-    symbols->addWithoutOwnership(types.fBVec2.get());
-    symbols->addWithoutOwnership(types.fBVec3.get());
-    symbols->addWithoutOwnership(types.fBVec4.get());
+    symbols->addWithoutOwnershipOrDie(types.fBVec2.get());
+    symbols->addWithoutOwnershipOrDie(types.fBVec3.get());
+    symbols->addWithoutOwnershipOrDie(types.fBVec4.get());
 
-    symbols->addWithoutOwnership(types.fMat2.get());
-    symbols->addWithoutOwnership(types.fMat3.get());
-    symbols->addWithoutOwnership(types.fMat4.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat2.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat3.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat4.get());
 
-    symbols->addWithoutOwnership(types.fMat2x2.get());
-    symbols->addWithoutOwnership(types.fMat2x3.get());
-    symbols->addWithoutOwnership(types.fMat2x4.get());
-    symbols->addWithoutOwnership(types.fMat3x2.get());
-    symbols->addWithoutOwnership(types.fMat3x3.get());
-    symbols->addWithoutOwnership(types.fMat3x4.get());
-    symbols->addWithoutOwnership(types.fMat4x2.get());
-    symbols->addWithoutOwnership(types.fMat4x3.get());
-    symbols->addWithoutOwnership(types.fMat4x4.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat2x2.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat2x3.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat2x4.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat3x2.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat3x3.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat3x4.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat4x2.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat4x3.get());
+    symbols->addWithoutOwnershipOrDie(types.fMat4x4.get());
 
     // Hide all the private symbols by aliasing them all to "invalid". This will prevent code from
     // using built-in names like `sampler2D` as variable names.
@@ -379,6 +384,22 @@ const Module* ModuleLoader::loadGraphiteFragmentModule(SkSL::Compiler* compiler)
 #endif
 }
 
+const Module* ModuleLoader::loadGraphiteFragmentES2Module(SkSL::Compiler* compiler) {
+#if defined(SK_GRAPHITE) || GR_TEST_UTILS
+    if (!fModuleLoader.fGraphiteFragmentES2Module) {
+        const Module* fragmentModule = this->loadFragmentModule(compiler);
+        fModuleLoader.fGraphiteFragmentES2Module =
+                compile_and_shrink(compiler,
+                                   ProgramKind::kGraphiteFragmentES2,
+                                   MODULE_DATA(sksl_graphite_frag_es2),
+                                   fragmentModule);
+    }
+    return fModuleLoader.fGraphiteFragmentES2Module.get();
+#else
+    return this->loadFragmentModule(compiler);
+#endif
+}
+
 const Module* ModuleLoader::loadGraphiteVertexModule(SkSL::Compiler* compiler) {
 #if defined(SK_GRAPHITE) || GR_TEST_UTILS
     if (!fModuleLoader.fGraphiteVertexModule) {
@@ -394,29 +415,45 @@ const Module* ModuleLoader::loadGraphiteVertexModule(SkSL::Compiler* compiler) {
 #endif
 }
 
+const Module* ModuleLoader::loadGraphiteVertexES2Module(SkSL::Compiler* compiler) {
+#if defined(SK_GRAPHITE) || GR_TEST_UTILS
+    if (!fModuleLoader.fGraphiteVertexES2Module) {
+        const Module* vertexModule = this->loadVertexModule(compiler);
+        fModuleLoader.fGraphiteVertexES2Module =
+                compile_and_shrink(compiler,
+                                   ProgramKind::kGraphiteVertexES2,
+                                   MODULE_DATA(sksl_graphite_vert_es2),
+                                   vertexModule);
+    }
+    return fModuleLoader.fGraphiteVertexES2Module.get();
+#else
+    return this->loadVertexModule(compiler);
+#endif
+}
+
 void ModuleLoader::Impl::makeRootSymbolTable() {
     auto rootModule = std::make_unique<Module>();
-    rootModule->fSymbols = std::make_shared<SymbolTable>(/*builtin=*/true);
+    rootModule->fSymbols = std::make_unique<SymbolTable>(/*builtin=*/true);
 
     for (BuiltinTypePtr rootType : kRootTypes) {
-        rootModule->fSymbols->addWithoutOwnership((fBuiltinTypes.*rootType).get());
+        rootModule->fSymbols->addWithoutOwnershipOrDie((fBuiltinTypes.*rootType).get());
     }
 
     for (BuiltinTypePtr privateType : kPrivateTypes) {
-        rootModule->fSymbols->addWithoutOwnership((fBuiltinTypes.*privateType).get());
+        rootModule->fSymbols->addWithoutOwnershipOrDie((fBuiltinTypes.*privateType).get());
     }
 
     // sk_Caps is "builtin", but all references to it are resolved to Settings, so we don't need to
     // treat it as builtin (ie, no need to clone it into the Program).
-    rootModule->fSymbols->add(Variable::Make(/*pos=*/Position(),
-                                             /*modifiersPosition=*/Position(),
-                                             Layout{},
-                                             ModifierFlag::kNone,
-                                             fBuiltinTypes.fSkCaps.get(),
-                                             "sk_Caps",
-                                             /*mangledName=*/"",
-                                             /*builtin=*/false,
-                                             Variable::Storage::kGlobal));
+    rootModule->fSymbols->addOrDie(Variable::Make(/*pos=*/Position(),
+                                                  /*modifiersPosition=*/Position(),
+                                                  Layout{},
+                                                  ModifierFlag::kNone,
+                                                  fBuiltinTypes.fSkCaps.get(),
+                                                  "sk_Caps",
+                                                  /*mangledName=*/"",
+                                                  /*builtin=*/false,
+                                                  Variable::Storage::kGlobal));
     fRootModule = std::move(rootModule);
 }
 

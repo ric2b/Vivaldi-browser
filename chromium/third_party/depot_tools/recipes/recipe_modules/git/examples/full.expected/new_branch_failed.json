@@ -182,11 +182,24 @@
       "The recipe has crashed at point 'Uncaught exception'!",
       "",
       "Traceback (most recent call last):",
-      "  File \"RECIPE_REPO[depot_tools]/recipes/recipe_modules/git/examples/full.py\", line 81, in RunSteps",
+      "  File \"RECIPE_REPO[recipe_engine]/recipe_engine/internal/engine.py\", in run_steps",
+      "    raw_result = recipe_obj.run_steps(api, engine)",
+      "                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"RECIPE_REPO[recipe_engine]/recipe_engine/internal/recipe_deps.py\", in run_steps",
+      "    recipe_result = invoke_with_properties(",
+      "                    ^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"RECIPE_REPO[recipe_engine]/recipe_engine/internal/property_invoker.py\", in invoke_with_properties",
+      "    return _invoke_with_properties(callable_obj, all_props, environ, prop_defs,",
+      "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"RECIPE_REPO[recipe_engine]/recipe_engine/internal/property_invoker.py\", in _invoke_with_properties",
+      "    return callable_obj(*props, **additional_args)",
+      "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"RECIPE_REPO[depot_tools]/recipes/recipe_modules/git/examples/full.py\", line 82, in RunSteps",
       "    api.git.new_branch('failed_new_branch', upstream='will_fail', upstream_current=True) #pylint: disable = line-too-long",
-      "  File \"RECIPE_REPO[depot_tools]/recipes/recipe_modules/git/api.py\", line 403, in new_branch",
+      "    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "  File \"RECIPE_REPO[depot_tools]/recipes/recipe_modules/git/api.py\", line 421, in new_branch",
       "    raise ValueError('Can not define both upstream and upstream_current')",
-      "ValueError('Can not define both upstream and upstream_current')"
+      "ValueError: Can not define both upstream and upstream_current"
     ]
   },
   {

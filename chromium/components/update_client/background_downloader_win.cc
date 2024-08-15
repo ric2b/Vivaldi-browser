@@ -6,11 +6,11 @@
 
 #include <objbase.h>
 #include <shlobj_core.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <windows.h>
 #include <winerror.h>
 
-#include <stddef.h>
-#include <stdint.h>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -37,6 +37,7 @@
 #include "base/win/scoped_co_mem.h"
 #include "components/update_client/task_traits.h"
 #include "components/update_client/update_client_errors.h"
+#include "components/update_client/update_client_metrics.h"
 #include "components/update_client/utils.h"
 #include "url/gurl.h"
 
@@ -111,7 +112,7 @@ namespace {
 
 // All jobs created by this module have a specific description so they can
 // be found at run-time or by using system administration tools.
-static constexpr wchar_t kJobName[] = L"Chrome Component Updater";
+constexpr wchar_t kJobName[] = L"Chrome Component Updater";
 
 // How often the code looks for changes in the BITS job state.
 constexpr int kJobPollingIntervalSec = 4;
@@ -141,9 +142,9 @@ constexpr int kPurgeStaleJobsIntervalBetweenChecksDays = 1;
 constexpr int kMaxQueuedJobs = 10;
 
 // Prefix used for naming the temporary directories for downloads.
-static constexpr base::FilePath::CharType kDownloadDirectoryPrefix[] =
+constexpr base::FilePath::CharType kDownloadDirectoryPrefix[] =
     FILE_PATH_LITERAL("chrome_BITS_");
-static constexpr base::FilePath::CharType kDownloadDirectoryPrefixMatcher[] =
+constexpr base::FilePath::CharType kDownloadDirectoryPrefixMatcher[] =
     FILE_PATH_LITERAL("chrome_BITS_*");
 
 // Returns the status code from a given BITS error.
@@ -741,6 +742,7 @@ HRESULT BackgroundDownloader::CreateOrOpenJob(
       },
       bits_manager_, &jobs);
   if (SUCCEEDED(hr) && !jobs.empty()) {
+    metrics::RecordBDWExistingJobUsed(true);
     *job = jobs.front();
     return S_FALSE;
   }
@@ -761,6 +763,7 @@ HRESULT BackgroundDownloader::CreateOrOpenJob(
     return hr;
   }
 
+  metrics::RecordBDWExistingJobUsed(false);
   *job = local_job;
   return S_OK;
 }
@@ -892,6 +895,7 @@ void BackgroundDownloader::CleanupStaleJobs() {
       },
       bits_manager_, &jobs);
 
+  metrics::RecordBDWNumJobsCleaned(jobs.size());
   for (const auto& job : jobs) {
     CleanupJob(job);
   }
@@ -903,10 +907,11 @@ void BackgroundDownloader::CleanupStaleDownloads() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(com_sequence_checker_);
   EnumerateDownloadDirs(
       kDownloadDirectoryPrefixMatcher, [](const base::FilePath& dir) {
+        const base::Time now = base::Time::Now();
         base::File::Info info;
         if (base::GetFileInfo(dir, &info) &&
-            info.creation_time + base::Days(kPurgeStaleJobsAfterDays) <
-                base::Time::Now()) {
+            info.creation_time + base::Days(kPurgeStaleJobsAfterDays) < now) {
+          metrics::RecordBDWStaleDownloadAge(now - info.creation_time);
           base::DeletePathRecursively(dir);
         }
       });

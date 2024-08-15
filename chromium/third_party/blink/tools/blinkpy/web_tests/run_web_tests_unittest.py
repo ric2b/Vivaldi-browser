@@ -885,18 +885,20 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # test that there is no exception when two failure types, FailureTextMismatch and
         # FailureReftestMismatch both have the same stderr to print out.
         host = MockHost()
-        self.assertTrue(
-            logging_run([
-                '--order',
-                'natural',
-                'failures/unexpected/reftest-mismatch-with-text-mismatch-with-stderr.html',
-            ],
-                        tests_included=True,
-                        host=host))
+        _, log_stream, _ = logging_run([
+            '--order',
+            'natural',
+            '--debug-rwt-logging',
+            'failures/unexpected/reftest-mismatch-with-text-mismatch-with-stderr.html',
+        ],
+                                       tests_included=True,
+                                       host=host)
+        matches = re.findall(r' output stderr lines:', log_stream.getvalue())
+        self.assertEqual(len(matches), 1)
 
     @unittest.skip('Need to make subprocesses use mock filesystem')
     def test_crash_log_is_saved_after_delay_using_multiple_jobs(self):
-        # TODO(rmhasan): When web_test_runner.run() spawns multiple jobs it uses
+        # TODO(weizhong): When web_test_runner.run() spawns multiple jobs it uses
         # the non mock file system. We should figure out how to make all subprocesses
         # use the mock file system.
         host = MockHost()

@@ -5,12 +5,11 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_NUMERICS_CHECKED_MATH_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_NUMERICS_CHECKED_MATH_H_
 
-#include <stddef.h>
-
+#include <cstddef>
 #include <limits>
 #include <type_traits>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/numerics/checked_math_impl.h"
+#include "partition_alloc/partition_alloc_base/numerics/checked_math_impl.h"
 
 namespace partition_alloc::internal::base {
 namespace internal {

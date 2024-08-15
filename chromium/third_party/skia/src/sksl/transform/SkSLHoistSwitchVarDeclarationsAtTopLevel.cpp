@@ -18,6 +18,7 @@
 #include "src/sksl/ir/SkSLNop.h"
 #include "src/sksl/ir/SkSLStatement.h"
 #include "src/sksl/ir/SkSLSwitchStatement.h"
+#include "src/sksl/ir/SkSLSymbolTable.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
 #include "src/sksl/ir/SkSLVariable.h"
 #include "src/sksl/transform/SkSLProgramWriter.h"
@@ -88,12 +89,17 @@ std::unique_ptr<Statement> Transform::HoistSwitchVarDeclarationsAtTopLevel(
     }
 
     // Move all of the var-declaration statements into a separate block.
+    SymbolTable* switchSymbols = stmt->caseBlock()->as<Block>().symbolTable();
+    std::unique_ptr<SymbolTable> blockSymbols = switchSymbols->insertNewParent();
+
     StatementArray blockStmts;
     blockStmts.reserve_exact(visitor.fVarDeclarations.size() + 1);
     for (std::unique_ptr<Statement>* innerDeclaration : visitor.fVarDeclarations) {
         VarDeclaration& decl = (*innerDeclaration)->as<VarDeclaration>();
+        Variable* var = decl.var();
+        bool isConst = var->modifierFlags().isConst();
+
         std::unique_ptr<Statement> replacementStmt;
-        bool isConst = decl.var()->modifierFlags().isConst();
         if (decl.value() && !isConst) {
             // The inner variable-declaration has an initial-value; we must replace the declaration
             // with an assignment to the variable. This also has the helpful effect of stripping off
@@ -120,12 +126,17 @@ std::unique_ptr<Statement> Transform::HoistSwitchVarDeclarationsAtTopLevel(
         // an assignment (if there was an initial-value) or a no-op (if there wasn't one).
         blockStmts.push_back(std::move(*innerDeclaration));
         *innerDeclaration = std::move(replacementStmt);
+
+        // Hoist the variable's symbol outside of the switch's symbol table, and into the enclosing
+        // block's symbol table.
+        switchSymbols->moveSymbolTo(blockSymbols.get(), var, context);
     }
 
     // Return a scoped Block holding the switch.
     Position pos = stmt->fPosition;
     blockStmts.push_back(std::move(stmt));
-    return Block::MakeBlock(pos, std::move(blockStmts));
+    return Block::MakeBlock(pos, std::move(blockStmts), Block::Kind::kBracedScope,
+                            std::move(blockSymbols));
 }
 
 }  // namespace SkSL

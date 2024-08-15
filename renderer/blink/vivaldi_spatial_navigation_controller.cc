@@ -556,7 +556,7 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
     yoffset += window->scrollY();
   }
 
-  blink::DOMRect* cr = container->getBoundingClientRect();
+  blink::DOMRect* cr = container->GetBoundingClientRect();
   blink::Node* container_node = container;
   blink::Node* indicator_node = indicator_;
 

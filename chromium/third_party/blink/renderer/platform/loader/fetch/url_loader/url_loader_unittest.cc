@@ -258,8 +258,7 @@ class TestURLLoaderClient : public URLLoaderClient {
   void DidFinishLoading(base::TimeTicks finishTime,
                         int64_t totalEncodedDataLength,
                         uint64_t totalEncodedBodyLength,
-                        int64_t totalDecodedBodyLength,
-                        bool should_report_corb_blocking) override {
+                        int64_t totalDecodedBodyLength) override {
     EXPECT_TRUE(loader_);
     EXPECT_TRUE(did_receive_response_);
     EXPECT_FALSE(did_finish_);
@@ -374,8 +373,7 @@ class URLLoaderTest : public testing::Test {
 
     resource_request_client()->OnReceivedResponse(
         network::mojom::URLResponseHead::New(), std::move(handle_to_pass),
-        /*cached_metadata=*/absl::nullopt,
-        /*response_arrival_at_renderer=*/base::TimeTicks::Now());
+        /*cached_metadata=*/absl::nullopt);
     EXPECT_TRUE(client()->did_receive_response());
   }
 

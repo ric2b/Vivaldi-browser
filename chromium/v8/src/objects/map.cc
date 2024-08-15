@@ -230,6 +230,9 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case SHARED_FUNCTION_INFO_TYPE:
       return kVisitSharedFunctionInfo;
 
+    case INTERPRETER_DATA_TYPE:
+      return kVisitInterpreterData;
+
     case PREPARSE_DATA_TYPE:
       return kVisitPreparseData;
 
@@ -364,6 +367,18 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
       if (instance_type == DEBUG_INFO_TYPE) {
         return kVisitDebugInfo;
       }
+      if (instance_type == CALL_SITE_INFO_TYPE) {
+        return kVisitCallSiteInfo;
+      }
+      if (instance_type == BYTECODE_WRAPPER_TYPE) {
+        return kVisitBytecodeWrapper;
+      }
+      if (instance_type == CODE_WRAPPER_TYPE) {
+        return kVisitCodeWrapper;
+      }
+      if (instance_type == INTERPRETER_DATA_TYPE) {
+        return kVisitInterpreterData;
+      }
 #if V8_ENABLE_WEBASSEMBLY
       if (instance_type == WASM_INDIRECT_FUNCTION_TABLE_TYPE) {
         return kVisitWasmIndirectFunctionTable;
@@ -383,6 +398,8 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
 #if V8_ENABLE_WEBASSEMBLY
     case WASM_INSTANCE_OBJECT_TYPE:
       return kVisitWasmInstanceObject;
+    case WASM_TRUSTED_INSTANCE_DATA_TYPE:
+      return kVisitWasmTrustedInstanceData;
     case WASM_ARRAY_TYPE:
       return kVisitWasmArray;
     case WASM_STRUCT_TYPE:
@@ -879,17 +896,54 @@ Handle<Map> Map::GetObjectCreateMap(Isolate* isolate,
     Handle<PrototypeInfo> info =
         Map::GetOrCreatePrototypeInfo(js_prototype, isolate);
     // TODO(verwaest): Use inobject slack tracking for this map.
-    if (info->HasObjectCreateMap()) {
-      map = handle(info->ObjectCreateMap(), isolate);
+    Tagged<HeapObject> map_obj;
+    if (info->ObjectCreateMap()->GetHeapObjectIfWeak(&map_obj)) {
+      map = handle(Tagged<Map>::cast(map_obj), isolate);
     } else {
       map = Map::CopyInitialMap(isolate, map);
       Map::SetPrototype(isolate, map, prototype);
-      PrototypeInfo::SetObjectCreateMap(info, map);
+      PrototypeInfo::SetObjectCreateMap(info, map, isolate);
     }
     return map;
   }
 
-  return Map::TransitionToPrototype(isolate, map, prototype);
+  return Map::TransitionRootMapToPrototypeForNewObject(isolate, map, prototype);
+}
+
+// static
+Handle<Map> Map::GetDerivedMap(Isolate* isolate, Handle<Map> from,
+                               Handle<JSReceiver> prototype) {
+  auto CreateDerivedMap = [&]() {
+    Handle<Map> map = Map::CopyInitialMap(isolate, from);
+    map->set_new_target_is_base(false);
+    if (map->prototype() != *prototype) {
+      Map::SetPrototype(isolate, map, prototype);
+    }
+    return map;
+  };
+
+  if (IsJSObjectThatCanBeTrackedAsPrototype(*prototype)) {
+    Handle<JSObject> js_prototype = Handle<JSObject>::cast(prototype);
+    if (!js_prototype->map()->is_prototype_map()) {
+      JSObject::OptimizeAsPrototype(js_prototype);
+    }
+    Handle<PrototypeInfo> info =
+        Map::GetOrCreatePrototypeInfo(js_prototype, isolate);
+    Tagged<HeapObject> map_obj;
+    Handle<Map> map;
+    if (info->GetDerivedMap(from).GetHeapObjectIfWeak(&map_obj)) {
+      map = handle(Tagged<Map>::cast(map_obj), isolate);
+    } else {
+      map = CreateDerivedMap();
+      PrototypeInfo::AddDerivedMap(info, map, isolate);
+    }
+    return map;
+  }
+
+  // The TransitionToPrototype map will not have new_target_is_base reset. But
+  // we don't need it to for proxies.
+  return Map::TransitionRootMapToPrototypeForNewObject(isolate, from,
+                                                       prototype);
 }
 
 static bool ContainsMap(MapHandles const& maps, Tagged<Map> map) {
@@ -1136,7 +1190,11 @@ bool Map::OnlyHasSimpleProperties() const {
          !IsSpecialReceiverMap(*this) && !is_dictionary_map();
 }
 
-bool Map::MayHaveReadOnlyElementsInPrototypeChain(Isolate* isolate) {
+bool Map::ShouldCheckForReadOnlyElementsInPrototypeChain(Isolate* isolate) {
+  // If this map has TypedArray elements kind, we won't look at the prototype
+  // chain, so we can return early.
+  if (IsTypedArrayElementsKind(elements_kind())) return false;
+
   for (PrototypeIterator iter(isolate, *this); !iter.IsAtEnd();
        iter.Advance()) {
     // Be conservative, don't look into any JSReceivers that may have custom
@@ -1146,6 +1204,9 @@ bool Map::MayHaveReadOnlyElementsInPrototypeChain(Isolate* isolate) {
 
     Tagged<JSObject> current = iter.GetCurrent<JSObject>();
     ElementsKind elements_kind = current->GetElementsKind(isolate);
+    // If this prototype has TypedArray elements kind, we won't look any further
+    // in the prototype chain, so we can return early.
+    if (IsTypedArrayElementsKind(elements_kind)) return false;
     if (IsFrozenElementsKind(elements_kind)) return true;
 
     if (IsDictionaryElementsKind(elements_kind) &&
@@ -1169,8 +1230,9 @@ bool Map::MayHaveReadOnlyElementsInPrototypeChain(Isolate* isolate) {
 Handle<Map> Map::RawCopy(Isolate* isolate, Handle<Map> src_handle,
                          int instance_size, int inobject_properties) {
   Handle<Map> result = isolate->factory()->NewMap(
-      src_handle->instance_type(), instance_size, TERMINAL_FAST_ELEMENTS_KIND,
-      inobject_properties);
+      src_handle, src_handle->instance_type(), instance_size,
+      TERMINAL_FAST_ELEMENTS_KIND, inobject_properties);
+
   // We have to set the bitfields before any potential GCs could happen because
   // heap verification might fail otherwise.
   {
@@ -1437,6 +1499,7 @@ Handle<Map> Map::ShareDescriptor(Isolate* isolate, Handle<Map> map,
 void Map::ConnectTransition(Isolate* isolate, Handle<Map> parent,
                             Handle<Map> child, Handle<Name> name,
                             SimpleTransitionFlag flag) {
+  DCHECK_EQ(parent->map(), child->map());
   DCHECK_IMPLIES(name->IsInteresting(isolate),
                  child->may_have_interesting_properties());
   DCHECK_IMPLIES(parent->may_have_interesting_properties(),
@@ -2333,7 +2396,7 @@ void Map::SetPrototype(Isolate* isolate, Handle<Map> map,
     JSObject::OptimizeAsPrototype(prototype_jsobj, enable_prototype_setup_mode);
   } else {
     DCHECK(IsNull(*prototype, isolate) || IsJSProxy(*prototype) ||
-           IsWasmObject(*prototype) || prototype->InWritableSharedSpace());
+           IsWasmObject(*prototype) || InWritableSharedSpace(*prototype));
   }
 
   WriteBarrierMode wb_mode =
@@ -2347,8 +2410,24 @@ void Map::StartInobjectSlackTracking() {
   set_construction_counter(Map::kSlackTrackingCounterStart);
 }
 
-Handle<Map> Map::TransitionToPrototype(Isolate* isolate, Handle<Map> map,
-                                       Handle<HeapObject> prototype) {
+Handle<Map> Map::TransitionRootMapToPrototypeForNewObject(
+    Isolate* isolate, Handle<Map> map, Handle<HeapObject> prototype) {
+  DCHECK(IsUndefined(map->GetBackPointer()));
+  Handle<Map> new_map = TransitionToUpdatePrototype(isolate, map, prototype);
+  DCHECK_IMPLIES(map->IsInobjectSlackTrackingInProgress(),
+                 new_map->IsInobjectSlackTrackingInProgress());
+  CHECK_IMPLIES(map->IsInobjectSlackTrackingInProgress(),
+                map->construction_counter() <= new_map->construction_counter());
+  if (map->IsInobjectSlackTrackingInProgress()) {
+    // Advance the construction count on the base map to keep it in sync with
+    // the transitioned map.
+    map->InobjectSlackTrackingStep(isolate);
+  }
+  return new_map;
+}
+
+Handle<Map> Map::TransitionToUpdatePrototype(Isolate* isolate, Handle<Map> map,
+                                             Handle<HeapObject> prototype) {
   Handle<Map> new_map =
       TransitionsAccessor::GetPrototypeTransition(isolate, map, prototype);
   if (new_map.is_null()) {

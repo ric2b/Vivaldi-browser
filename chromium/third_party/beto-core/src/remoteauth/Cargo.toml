@@ -1,0 +1,27 @@
+[workspace]
+members = [
+    "ctap_protocol",
+    "platform",
+    "remote_auth_protocol",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+anyhow = "1.0.72"
+
+[package]
+name = "build-scripts"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4.0.25", features = ["derive"] }
+cmd-runner = { path = "../cmd-runner"  }
+env_logger = "0.10.0"
+log = "0.4.17"

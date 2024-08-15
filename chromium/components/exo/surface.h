@@ -107,6 +107,9 @@ class Surface final : public ui::PropertyHandler {
 
   aura::Window* window() const { return window_.get(); }
 
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> GetChildWindows()
+      const;
+
   void set_leave_enter_callback(LeaveEnterCallback callback) {
     leave_enter_callback_ = callback;
   }
@@ -285,15 +288,6 @@ class Surface final : public ui::PropertyHandler {
   // Returns whether this surface or any of its subsurfaces contains a video.
   bool ContainsVideo();
 
-  // Enable embedding of an arbitrary viz surface in this exo surface.
-  // If the callback is valid, a SurfaceDrawQuad will be emitted targeting
-  // the returned SurfaceId each frame.
-  void SetEmbeddedSurfaceId(
-      base::RepeatingCallback<viz::SurfaceId()> surface_id_callback);
-
-  // Set the size of the embedded surface, to allow proper scaling.
-  void SetEmbeddedSurfaceSize(const gfx::Size& size);
-
   // Request that the attached surface buffer at the next commit is associated
   // with a gpu fence to be signaled when the buffer is ready for use.
   void SetAcquireFence(std::unique_ptr<gfx::GpuFence> gpu_fence);
@@ -329,7 +323,8 @@ class Surface final : public ui::PropertyHandler {
 
   // This will append contents for surface and its descendants to frame.
   void AppendSurfaceHierarchyContentsToFrame(
-      const gfx::PointF& origin,
+      const gfx::PointF& parent_to_root_px,
+      const gfx::PointF& to_parent_dp,
       bool needs_full_damage,
       FrameSinkResourceManager* resource_manager,
       absl::optional<float> device_scale_factor,
@@ -644,7 +639,8 @@ class Surface final : public ui::PropertyHandler {
 
   // Puts the current surface into a draw quad, and appends the draw quads into
   // the |frame|.
-  void AppendContentsToFrame(const gfx::PointF& origin,
+  void AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
+                             const gfx::PointF& to_parent_dp,
                              bool needs_full_damage,
                              absl::optional<float> device_scale_factor,
                              viz::CompositorFrame* frame);
@@ -719,20 +715,12 @@ class Surface final : public ui::PropertyHandler {
   // This can be set to have some functions delegated. E.g. ShellSurface class
   // can set this to handle Commit() and apply any double buffered state it
   // maintains.
-  raw_ptr<SurfaceDelegate, ExperimentalAsh> delegate_ = nullptr;
+  raw_ptr<SurfaceDelegate> delegate_ = nullptr;
 
   // Surface observer list. Surface does not own the observers.
   base::ObserverList<SurfaceObserver, true>::Unchecked observers_;
 
   std::unique_ptr<ash::OutputProtectionDelegate> output_protection_;
-
-  viz::SurfaceId first_embedded_surface_id_;
-  viz::SurfaceId latest_embedded_surface_id_;
-  base::RepeatingCallback<viz::SurfaceId()> get_current_surface_id_;
-
-  // The embedded surface is actually |embedded_surface_size_|. This is used
-  // for calculating clipping and scaling.
-  gfx::Size embedded_surface_size_;
 
   LeaveEnterCallback leave_enter_callback_;
 
@@ -754,8 +742,8 @@ class ScopedSurface {
   Surface* get() { return surface_; }
 
  private:
-  const raw_ptr<Surface, ExperimentalAsh> surface_;
-  const raw_ptr<SurfaceObserver, ExperimentalAsh> observer_;
+  const raw_ptr<Surface> surface_;
+  const raw_ptr<SurfaceObserver> observer_;
 };
 
 }  // namespace exo

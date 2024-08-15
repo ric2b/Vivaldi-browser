@@ -13,6 +13,7 @@
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -217,7 +218,7 @@ bool RenderFrameDevToolsAgentHost::IsDebuggerAttached(
 void RenderFrameDevToolsAgentHost::AddAllAgentHosts(
     DevToolsAgentHost::List* result) {
   for (WebContentsImpl* wc : WebContentsImpl::GetAllWebContents()) {
-    // Inner web contents such as portals or guestviews are already handled by
+    // Inner web contents such as guestviews are already handled by
     // ForEachRenderFrameHost.
     if (wc->GetOutermostWebContents() != wc)
       continue;
@@ -361,7 +362,8 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session,
       base::BindRepeating(
           &RenderFrameDevToolsAgentHost::UpdateResourceLoaderFactories,
           base::Unretained(this)),
-      session->GetClient()->MayReadLocalFiles());
+      session->GetClient()->MayReadLocalFiles(),
+      session->GetClient()->IsTrusted());
   session->CreateAndAddHandler<protocol::FetchHandler>(
       GetIOContext(), base::BindRepeating(
                           [](RenderFrameDevToolsAgentHost* self,
@@ -765,7 +767,7 @@ std::string RenderFrameDevToolsAgentHost::GetOpenerId() {
 std::string RenderFrameDevToolsAgentHost::GetOpenerFrameId() {
   if (!frame_tree_node_)
     return std::string();
-  const absl::optional<base::UnguessableToken>& opener_devtools_frame_token =
+  const std::optional<base::UnguessableToken>& opener_devtools_frame_token =
       frame_tree_node_->opener_devtools_frame_token();
   return opener_devtools_frame_token ? opener_devtools_frame_token->ToString()
                                      : std::string();
@@ -780,15 +782,13 @@ std::string RenderFrameDevToolsAgentHost::GetType() {
     return kTypeFrame;
   if (frame_tree_node_ && frame_tree_node_->IsFencedFrameRoot())
     return kTypeFrame;
-  if (web_contents() &&
-      static_cast<WebContentsImpl*>(web_contents())->IsPortal()) {
-    return kTypePage;
-  }
+
   // NOTE(andre@vivaldi.com) : Bugs VB-82239 and VB-67178 was caused by the
   // hiarchy differences in Vivaldi compared to regular Chrome. So the
   // frametypes would get mixed up causing different behavior in DevTools.
   if (IsChildFrame())
     return kTypeFrame;
+
   if (web_contents() &&
       static_cast<WebContentsImpl*>(web_contents())->GetOuterWebContents()) {
     return VivaldiTabCheck::IsVivaldiTab(web_contents()) ? kTypePage
@@ -913,7 +913,6 @@ protocol::TargetAutoAttacher* RenderFrameDevToolsAgentHost::auto_attacher() {
 namespace {
 
 constexpr char kSubtypeDisconnected[] = "disconnected";
-constexpr char kSubtypePortal[] = "portal";
 constexpr char kSubtypePrerender[] = "prerender";
 constexpr char kSubtypeFenced[] = "fenced";
 
@@ -925,10 +924,6 @@ std::string RenderFrameDevToolsAgentHost::GetSubtype() {
 
   switch (frame_tree_node_->GetFrameType()) {
     case FrameType::kPrimaryMainFrame:
-      if (WebContentsImpl::FromFrameTreeNode(frame_tree_node_)->IsPortal()) {
-        return kSubtypePortal;
-      }
-      [[fallthrough]];
     // TODO(caseq): figure out what's best to return for subframes in a tree
     // other than primary.
     case FrameType::kSubframe:
@@ -1031,45 +1026,45 @@ void RenderFrameDevToolsAgentHost::UpdateResourceLoaderFactories() {
   });
 }
 
-absl::optional<network::CrossOriginEmbedderPolicy>
+std::optional<network::CrossOriginEmbedderPolicy>
 RenderFrameDevToolsAgentHost::cross_origin_embedder_policy(
     const std::string& id) {
   FrameTreeNode* frame_tree_node =
       protocol::FrameTreeNodeFromDevToolsFrameToken(
           frame_host_->frame_tree_node(), id);
   if (!frame_tree_node) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   RenderFrameHostImpl* rfhi = frame_tree_node->current_frame_host();
   return rfhi->cross_origin_embedder_policy();
 }
 
-absl::optional<network::CrossOriginOpenerPolicy>
+std::optional<network::CrossOriginOpenerPolicy>
 RenderFrameDevToolsAgentHost::cross_origin_opener_policy(
     const std::string& id) {
   FrameTreeNode* frame_tree_node =
       protocol::FrameTreeNodeFromDevToolsFrameToken(
           frame_host_->frame_tree_node(), id);
   if (!frame_tree_node) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   RenderFrameHostImpl* rfhi = frame_tree_node->current_frame_host();
   return rfhi->cross_origin_opener_policy();
 }
 
-absl::optional<std::vector<network::mojom::ContentSecurityPolicyHeader>>
+std::optional<std::vector<network::mojom::ContentSecurityPolicyHeader>>
 RenderFrameDevToolsAgentHost::content_security_policy(const std::string& id) {
   FrameTreeNode* frame_tree_node =
       protocol::FrameTreeNodeFromDevToolsFrameToken(
           frame_host_->frame_tree_node(), id);
   if (!frame_tree_node) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   RenderFrameHostImpl* rfhi = frame_tree_node->current_frame_host();
   const PolicyContainerPolicies& policies =
       rfhi->policy_container_host()->policies();
   if (policies.content_security_policies.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   } else {
     std::vector<network::mojom::ContentSecurityPolicyHeader> csp_headers;
     for (const auto& content_security_policy :
@@ -1081,7 +1076,7 @@ RenderFrameDevToolsAgentHost::content_security_policy(const std::string& id) {
 }
 
 bool RenderFrameDevToolsAgentHost::HasSessionsWithoutTabTargetSupport() const {
-  const std::vector<DevToolsSession*>& sessions =
+  const std::vector<raw_ptr<DevToolsSession, VectorExperimental>>& sessions =
       DevToolsAgentHostImpl::sessions();
 
   return std::any_of(sessions.begin(), sessions.end(), [](DevToolsSession* s) {

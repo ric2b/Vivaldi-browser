@@ -8,6 +8,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -31,11 +32,11 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
@@ -148,6 +149,11 @@ public class TabUnitTest {
         mTab =
                 new TabImpl(TAB1_ID, mProfile, null) {
                     @Override
+                    public WindowAndroid getWindowAndroid() {
+                        return mWindowAndroid;
+                    }
+
+                    @Override
                     void updateWindowAndroid(WindowAndroid windowAndroid) {}
 
                     @Override
@@ -170,5 +176,13 @@ public class TabUnitTest {
         assertEquals(mTab.getNativePage(), mNativePage);
         mTab.freezeNativePage();
         assertNotEquals(mTab.getNativePage(), mNativePage);
+    }
+
+    @Test
+    @SmallTest
+    public void testMaybeLoadNativePage_nullOrEmptyUrl() {
+        mTab.updateAttachment(mWindowAndroid, mDelegateFactory);
+        assertFalse(mTab.maybeShowNativePage(null, /* forceReload= */ false));
+        assertFalse(mTab.maybeShowNativePage("", /* forceReload= */ false));
     }
 }

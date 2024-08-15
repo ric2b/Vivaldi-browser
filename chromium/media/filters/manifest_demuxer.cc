@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -67,6 +68,7 @@ ManifestDemuxer::~ManifestDemuxer() {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   impl_->Stop();
   impl_.reset();
+  streams_.clear();
   chunk_demuxer_.reset();
 }
 
@@ -80,7 +82,8 @@ ManifestDemuxer::ManifestDemuxer(
       media_task_runner_(std::move(media_task_runner)),
       impl_(std::move(impl)) {}
 
-std::vector<DemuxerStream*> ManifestDemuxer::GetAllStreams() {
+std::vector<raw_ptr<DemuxerStream, VectorExperimental>>
+ManifestDemuxer::GetAllStreams() {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
   // For each stream that ChunkDemuxer returns, we need to wrap it so that we
@@ -89,7 +92,7 @@ std::vector<DemuxerStream*> ManifestDemuxer::GetAllStreams() {
   // memory.
   // TODO(crbug/1266991): Rearchitect the demuxer stream ownership model to
   // prevent long-lived streams from potentially leaking memory.
-  std::vector<DemuxerStream*> streams;
+  std::vector<raw_ptr<DemuxerStream, VectorExperimental>> streams;
   for (DemuxerStream* chunk_demuxer_stream : chunk_demuxer_->GetAllStreams()) {
     auto it = streams_.find(chunk_demuxer_stream);
     if (it != streams_.end()) {
@@ -223,6 +226,7 @@ void ManifestDemuxer::Stop() {
   cancelable_next_event_.Cancel();
   impl_->Stop();
   chunk_demuxer_->Stop();
+  host_ = nullptr;
 }
 
 base::TimeDelta ManifestDemuxer::GetStartTime() const {

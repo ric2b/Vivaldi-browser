@@ -9,53 +9,13 @@ Returns the floor of e. Component-wise when T is a vector.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16, TypeAbstractFloat } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { fullF32Range, fullF16Range, fullF64Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeAbstractFloat, TypeF16, TypeF32 } from '../../../../../util/conversion.js';
 import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
 import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './floor.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-const kSmallMagnitudeTestValues = [0.1, 0.9, 1.0, 1.1, 1.9, -0.1, -0.9, -1.0, -1.1, -1.9];
-
-export const d = makeCaseCache('floor', {
-  f32: () => {
-    return FP.f32.generateScalarToIntervalCases(
-      [
-        ...kSmallMagnitudeTestValues,
-        ...fullF32Range(),
-        0x8000_0000, // https://github.com/gpuweb/cts/issues/2766
-      ],
-      'unfiltered',
-      FP.f32.floorInterval
-    );
-  },
-  f16: () => {
-    return FP.f16.generateScalarToIntervalCases(
-      [
-        ...kSmallMagnitudeTestValues,
-        ...fullF16Range(),
-        0x8000, // https://github.com/gpuweb/cts/issues/2766
-      ],
-      'unfiltered',
-      FP.f16.floorInterval
-    );
-  },
-  abstract: () => {
-    return FP.abstract.generateScalarToIntervalCases(
-      [
-        ...kSmallMagnitudeTestValues,
-        ...fullF64Range(),
-        0x8000_0000_0000_0000, // https://github.com/gpuweb/cts/issues/2766
-      ],
-      'unfiltered',
-      FP.abstract.floorInterval
-    );
-  },
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

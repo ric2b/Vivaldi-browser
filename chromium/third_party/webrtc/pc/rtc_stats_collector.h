@@ -317,15 +317,10 @@ class RTCStatsCollector : public rtc::RefCountInterface {
     uint32_t data_channels_closed;
     // Identifies channels that have been opened, whose internal id is stored in
     // the set until they have been fully closed.
-    webrtc::flat_set<int> opened_data_channels;
+    flat_set<int> opened_data_channels;
   };
   InternalRecord internal_record_;
 };
-
-const char* CandidateTypeToRTCIceCandidateTypeForTesting(
-    const std::string& type);
-const char* DataStateToRTCDataChannelStateForTesting(
-    DataChannelInterface::DataState state);
 
 }  // namespace webrtc
 

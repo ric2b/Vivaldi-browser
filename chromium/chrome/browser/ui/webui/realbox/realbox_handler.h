@@ -58,8 +58,6 @@ class RealboxHandler : public omnibox::mojom::PageHandler,
 
   static void SetupWebUIDataSource(content::WebUIDataSource* source,
                                    Profile* profile);
-  static void SetupDropdownWebUIDataSource(content::WebUIDataSource* source,
-                                           Profile* profile);
   static std::string AutocompleteMatchVectorIconToResourceName(
       const gfx::VectorIcon& icon);
   static std::string PedalVectorIconToResourceName(const gfx::VectorIcon& icon);
@@ -121,7 +119,9 @@ class RealboxHandler : public omnibox::mojom::PageHandler,
   void OnResultChanged(AutocompleteController* controller,
                        bool default_match_changed) override;
 
-  void UpdateSelection(OmniboxPopupSelection selection);
+  // Invoked by OmniboxEditModel when selection changes.
+  void UpdateSelection(OmniboxPopupSelection old_selection,
+                       OmniboxPopupSelection selection);
 
   // LocationBarModel:
   std::u16string GetFormattedFullURL() const override;

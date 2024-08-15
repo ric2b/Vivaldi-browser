@@ -14,11 +14,14 @@
 #include <utility>
 #include <vector>
 
+#include <optional>
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/lru_cache.h"
 #include "base/functional/callback.h"
 #include "base/memory/memory_pressure_listener.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/rand_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -68,7 +71,6 @@
 #include "components/viz/common/surfaces/region_capture_bounds.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/common/surfaces/surface_range.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace gfx {
@@ -164,6 +166,7 @@ class LayerTreeHostImplClient {
   virtual void NotifyThroughputTrackerResults(CustomTrackerResults results) = 0;
 
   virtual void DidObserveFirstScrollDelay(
+      int source_frame_number,
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) = 0;
 
@@ -214,10 +217,12 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     bool has_missing_content = false;
 
     std::vector<viz::SurfaceId> activation_dependencies;
-    absl::optional<uint32_t> deadline_in_frames;
+    std::optional<uint32_t> deadline_in_frames;
     bool use_default_lower_bound_deadline = false;
     viz::CompositorRenderPassList render_passes;
-    raw_ptr<const RenderSurfaceList> render_surface_list = nullptr;
+    // RAW_PTR_EXCLUSION: Renderer performance: visible in sampling profiler
+    // stacks.
+    RAW_PTR_EXCLUSION const RenderSurfaceList* render_surface_list = nullptr;
     LayerImplList will_draw_layers;
     bool has_no_damage = false;
     bool may_contain_video = false;
@@ -244,13 +249,12 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     UIResourceData& operator=(UIResourceData&&);
 
     bool opaque;
-    viz::SharedImageFormat format;
 
     // Backing for software compositing.
     viz::SharedBitmapId shared_bitmap_id;
     base::WritableSharedMemoryMapping shared_mapping;
     // Backing for gpu compositing.
-    gpu::Mailbox mailbox;
+    scoped_refptr<gpu::ClientSharedImage> shared_image;
 
     // The name with which to refer to the resource in frames submitted to the
     // display compositor.
@@ -302,7 +306,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   float CurrentBottomControlsShownRatio() const override;
   gfx::PointF ViewportScrollOffset() const override;
   void DidChangeBrowserControlsPosition() override;
-  void DidObserveScrollDelay(base::TimeDelta scroll_delay,
+  void DidObserveScrollDelay(int source_frame_number,
+                             base::TimeDelta scroll_delay,
                              base::TimeTicks scroll_timestamp);
   bool OnlyExpandTopControlsAtPageTop() const override;
   bool HaveRootScrollNode() const override;
@@ -469,14 +474,14 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // regardless of whether `DrawLayers()` is called between the two.
   virtual DrawResult PrepareToDraw(FrameData* frame);
 
-  // If there is no damage, returns `absl::nullopt`; otherwise, returns
+  // If there is no damage, returns `std::nullopt`; otherwise, returns
   // information about the submitted frame including submit time and a set of
   // `EventMetrics` for the frame.
   struct SubmitInfo {
     base::TimeTicks time;
     EventMetricsSet events_metrics;
   };
-  virtual absl::optional<SubmitInfo> DrawLayers(FrameData* frame);
+  virtual std::optional<SubmitInfo> DrawLayers(FrameData* frame);
 
   // Must be called if and only if PrepareToDraw was called.
   void DidDrawAllLayers(const FrameData& frame);
@@ -558,7 +563,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   void SetExternalTilePriorityConstraints(
       const gfx::Rect& viewport_rect,
       const gfx::Transform& transform) override;
-  absl::optional<viz::HitTestRegionList> BuildHitTestData() override;
+  std::optional<viz::HitTestRegionList> BuildHitTestData() override;
   void DidLoseLayerTreeFrameSink() override;
   void DidReceiveCompositorFrameAck() override;
   void DidPresentCompositorFrame(
@@ -573,6 +578,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
               bool skip_draw) override;
   void OnCompositorFrameTransitionDirectiveProcessed(
       uint32_t sequence_id) override;
+  void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override;
 
   // EventLatencyTracker implementation.
   void ReportEventLatency(
@@ -714,7 +720,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   MemoryHistory* memory_history() { return memory_history_.get(); }
   DebugRectHistory* debug_rect_history() { return debug_rect_history_.get(); }
   viz::ClientResourceProvider* resource_provider() {
-    return &resource_provider_;
+    return resource_provider_.get();
   }
   BrowserControlsOffsetManager* browser_controls_manager() {
     return browser_controls_offset_manager_.get();
@@ -1066,7 +1072,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // This is usually turned on only in some tests (e.g. web-tests).
   const bool is_synchronous_single_threaded_;
 
-  viz::ClientResourceProvider resource_provider_;
+  std::unique_ptr<viz::ClientResourceProvider> resource_provider_;
 
   std::unordered_map<UIResourceId, UIResourceData> ui_resource_map_;
   // UIResources are held here once requested to be deleted until they are
@@ -1235,9 +1241,10 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
 
   viz::LocalSurfaceId last_draw_local_surface_id_;
   base::flat_set<viz::SurfaceRange> last_draw_referenced_surfaces_;
-  absl::optional<RenderFrameMetadata> last_draw_render_frame_metadata_;
+  std::optional<RenderFrameMetadata> last_draw_render_frame_metadata_;
   // The viz::LocalSurfaceId to unthrottle drawing for.
   viz::LocalSurfaceId target_local_surface_id_;
+  viz::LocalSurfaceId evicted_local_surface_id_;
   viz::ChildLocalSurfaceIdAllocator child_local_surface_id_allocator_;
 
   // Indicates the direction of the last vertical scroll of the root layer.

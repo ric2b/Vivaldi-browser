@@ -84,7 +84,14 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
         mGbmDevice = CreateGbmDevice();
     }
 
-    void OnTearDown() override { gbm_device_destroy(mGbmDevice); }
+    void OnTearDown() override {
+        if (mGbmDevice != nullptr) {
+            gbm_device_destroy(mGbmDevice);
+        }
+        if (mRenderNodeFd >= 0) {
+            close(mRenderNodeFd);
+        }
+    }
 
   private:
     gbm_device* CreateGbmDevice() {
@@ -100,17 +107,17 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
         const uint32_t kRenderNodeEnd = kRenderNodeStart + 16;
         const std::string kRenderNodeTemplate = "/dev/dri/renderD";
 
-        int renderNodeFd = -1;
+        mRenderNodeFd = -1;
         for (uint32_t i = kRenderNodeStart; i < kRenderNodeEnd; i++) {
             std::string renderNode = kRenderNodeTemplate + std::to_string(i);
-            renderNodeFd = open(renderNode.c_str(), O_RDWR);
-            if (renderNodeFd >= 0) {
+            mRenderNodeFd = open(renderNode.c_str(), O_RDWR);
+            if (mRenderNodeFd >= 0) {
                 break;
             }
         }
-        DAWN_ASSERT(renderNodeFd > 0);
+        DAWN_ASSERT(mRenderNodeFd > 0);
 
-        gbm_device* gbmDevice = gbm_create_device(renderNodeFd);
+        gbm_device* gbmDevice = gbm_create_device(mRenderNodeFd);
         DAWN_ASSERT(gbmDevice != nullptr);
         return gbmDevice;
     }
@@ -156,8 +163,8 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
             // of I915_FORMAT_MOD_Y_TILED.
             flags |= GBM_BO_USE_SW_WRITE_RARELY;
         }
-        gbm_bo* gbmBo = gbm_bo_create(mGbmDevice, VideoViewsTestsBase::kYUVImageDataWidthInTexels,
-                                      VideoViewsTestsBase::kYUVImageDataHeightInTexels,
+        gbm_bo* gbmBo = gbm_bo_create(mGbmDevice, VideoViewsTestsBase::kYUVAImageDataWidthInTexels,
+                                      VideoViewsTestsBase::kYUVAImageDataHeightInTexels,
                                       GetGbmBoFormat(format), flags);
         if (gbmBo == nullptr) {
             return nullptr;
@@ -166,18 +173,19 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
         if (initialized) {
             void* mapHandle = nullptr;
             uint32_t strideBytes = 0;
-            void* addr = gbm_bo_map(gbmBo, 0, 0, VideoViewsTestsBase::kYUVImageDataWidthInTexels,
-                                    VideoViewsTestsBase::kYUVImageDataHeightInTexels,
+            void* addr = gbm_bo_map(gbmBo, 0, 0, VideoViewsTestsBase::kYUVAImageDataWidthInTexels,
+                                    VideoViewsTestsBase::kYUVAImageDataHeightInTexels,
                                     GBM_BO_TRANSFER_WRITE, &strideBytes, &mapHandle);
             EXPECT_NE(addr, nullptr);
-            std::vector<uint8_t> initialData =
-                VideoViewsTestsBase::GetTestTextureData<uint8_t>(format, isCheckerboard);
+            std::vector<uint8_t> initialData = VideoViewsTestsBase::GetTestTextureData<uint8_t>(
+                /*isMultiPlane*/ true, isCheckerboard,
+                /*hasAlpha*/ false);
             uint8_t* srcBegin = initialData.data();
             uint8_t* srcEnd = srcBegin + initialData.size();
             uint8_t* dstBegin = static_cast<uint8_t*>(addr);
-            for (; srcBegin < srcEnd; srcBegin += VideoViewsTestsBase::kYUVImageDataWidthInTexels,
+            for (; srcBegin < srcEnd; srcBegin += VideoViewsTestsBase::kYUVAImageDataWidthInTexels,
                                       dstBegin += strideBytes) {
-                std::memcpy(dstBegin, srcBegin, VideoViewsTestsBase::kYUVImageDataWidthInTexels);
+                std::memcpy(dstBegin, srcBegin, VideoViewsTestsBase::kYUVAImageDataWidthInTexels);
             }
 
             gbm_bo_unmap(gbmBo, mapHandle);
@@ -187,8 +195,8 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
         textureDesc.format = format;
         textureDesc.dimension = wgpu::TextureDimension::e2D;
         textureDesc.usage = usage;
-        textureDesc.size = {VideoViewsTestsBase::kYUVImageDataWidthInTexels,
-                            VideoViewsTestsBase::kYUVImageDataHeightInTexels, 1};
+        textureDesc.size = {VideoViewsTestsBase::kYUVAImageDataWidthInTexels,
+                            VideoViewsTestsBase::kYUVAImageDataHeightInTexels, 1};
 
         wgpu::DawnTextureInternalUsageDescriptor internalDesc;
         internalDesc.internalUsage = wgpu::TextureUsage::CopySrc;
@@ -207,8 +215,14 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
         descriptor.drmModifier = gbm_bo_get_modifier(gbmBo);
         descriptor.waitFDs = {};
 
-        return std::make_unique<PlatformTextureGbm>(
+        auto texture = std::make_unique<PlatformTextureGbm>(
             native::vulkan::WrapVulkanImage(mWGPUDevice, &descriptor), gbmBo);
+        // The ownership of FD is only transferred in case of a success import. Otherwise cleanup
+        // is still needed to avoid FD leak.
+        if (!texture->wgpuTexture && descriptor.memoryFD >= 0) {
+            close(descriptor.memoryFD);
+        }
+        return texture;
     }
 
     void DestroyVideoTextureForTest(
@@ -228,6 +242,7 @@ class VideoViewsTestBackendGbm : public VideoViewsTestBackend {
 
     WGPUDevice mWGPUDevice = nullptr;
     gbm_device* mGbmDevice = nullptr;
+    int mRenderNodeFd = -1;
 };
 
 }  // anonymous namespace

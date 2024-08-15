@@ -42,7 +42,7 @@
 namespace variations {
 namespace {
 
-using ::base::EqualsProto;
+using ::base::test::EqualsProto;
 
 // The sentinel value that may be stored as the latest variations seed value in
 // prefs to indicate that the latest seed is identical to the safe seed.
@@ -901,7 +901,7 @@ struct InvalidSafeSeedTestParams {
   const std::string seed;
   const std::string signature;
   StoreSeedResult store_seed_result;
-  absl::optional<VerifySignatureResult> verify_signature_result = absl::nullopt;
+  std::optional<VerifySignatureResult> verify_signature_result = std::nullopt;
 };
 
 using StoreInvalidSafeSeedTest =

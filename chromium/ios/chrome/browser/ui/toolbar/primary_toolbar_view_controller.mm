@@ -11,7 +11,6 @@
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
-#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
@@ -34,12 +33,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
-#import "ui/base/device_form_factor.h"
 
-using ui::GetDeviceFormFactor;
-using ui::DEVICE_FORM_FACTOR_TABLET;
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
@@ -51,20 +48,11 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, assign) CGFloat previousFullscreenProgress;
 // Pan Gesture Recognizer for the view revealing pan gesture handler.
 @property(nonatomic, weak) UIPanGestureRecognizer* panGestureRecognizer;
-
-// Vivaldi
-@property(nonatomic, assign) ATBSettingType atbSettingType;
-// End Vivaldi
-
 @end
 
 @implementation PrimaryToolbarViewController
 
 @dynamic view;
-
-// Vivaldi
-@synthesize atbSettingType = _atbSettingType;
-// End Vivaldi
 
 #pragma mark - AdaptiveToolbarViewController
 
@@ -104,9 +92,26 @@ using vivaldi::IsVivaldiRunning;
 
   self.view.separator.hidden = !self.hasOmnibox;
   [self updateBackgroundColor];
+
+  // Vivaldi
+  self.view.leadingStackView.hidden = !self.hasOmnibox;
+  self.view.trailingStackView.hidden = !self.hasOmnibox;
+  self.view.bottomOmniboxEnabled = self.hasOmnibox;
+  [self updateForFullscreenProgress:1];
+  // End Vivaldi
+
 }
 
 - (void)updateBackgroundColor {
+
+  if (IsVivaldiRunning()) {
+    [UIView animateWithDuration:0.3 animations:^{
+      self.view.backgroundColor =
+          [self toolbarBackgroundColorForType:ToolbarType::kPrimary];
+      [self updateLocationBarBackgroundColor];
+      [self updateToolbarButtonsTintColor];
+    }];
+  } else {
   if (base::FeatureList::IsEnabled(kDynamicThemeColor) ||
       base::FeatureList::IsEnabled(kDynamicBackgroundColor)) {
     [super updateBackgroundColor];
@@ -123,6 +128,8 @@ using vivaldi::IsVivaldiRunning;
     }
   }
   self.view.backgroundColor = backgroundColor;
+  } // End Vivaldi
+
 }
 
 #pragma mark - NewTabPageControllerDelegate
@@ -193,10 +200,8 @@ using vivaldi::IsVivaldiRunning;
       viewControllerTraitCollectionDidChange:previousTraitCollection];
 
   // Vivaldi
-  [self.view redrawToolbarButtons];
-  if (!_atbSettingType)
-    return;
-  [self.view updateVivaldiShieldState:_atbSettingType];
+  [self refreshToolbarButtons];
+  [self updateToolbarButtonsTintColor];
   // End Vivaldi
 }
 
@@ -224,6 +229,11 @@ using vivaldi::IsVivaldiRunning;
     return;
   [super setIsNTP:isNTP];
   _isNTP = isNTP;
+
+  // Vivaldi
+  [self updateBackgroundColor];
+  // End Vivaldi
+
   if (IsSplitToolbarMode(self) || !self.shouldHideOmniboxOnNTP)
     return;
 
@@ -258,7 +268,7 @@ using vivaldi::IsVivaldiRunning;
   CGFloat alphaValue = fmax(progress * 2 - 1, 0);
 
   // Note: (prio@vivaldi.com): We will use the same alpha computation for tab
-  // strip and fake status bar view from BVC so that at the time of scrolling
+  // strip and toolbar from BVC so that at the time of scrolling
   // all the related views fade in sync.
   if (IsVivaldiRunning())
     alphaValue = fmax((progress - 0.85) / 0.15, 0);
@@ -266,17 +276,6 @@ using vivaldi::IsVivaldiRunning;
 
   self.view.leadingStackView.alpha = alphaValue;
   self.view.trailingStackView.alpha = alphaValue;
-
-  if (IsVivaldiRunning()) {
-    self.view.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
-    self.view.locationBarContainer.layer.cornerRadius =
-      vNTPSearchBarCornerRadius;
-    self.view.locationBarContainer.backgroundColor =
-      [[UIColor colorNamed:
-        (self.buttonFactory.style == ToolbarStyle::kIncognito) ?
-          vPrivateNTPBackgroundColor: vSearchbarBackgroundColor]
-            colorWithAlphaComponent: alphaValue];
-  } // End Vivaldi
 
   self.view.locationBarBottomConstraint.constant =
       [self verticalMarginForLocationBarForFullscreenProgress:progress];
@@ -365,6 +364,10 @@ using vivaldi::IsVivaldiRunning;
   // bar looks visually centered. However, the constraints are not geometrically
   // centering the location bar. It is moved by 0pt in iPhone landscape and by
   // 3pt in all other configurations.
+
+  if (IsVivaldiRunning() && !self.hasOmnibox)
+    return 0; // End Vivaldi
+
   CGFloat fullscreenVerticalMargin =
       IsCompactHeight(self) ? 0 : kAdaptiveLocationBarVerticalMarginFullscreen;
   return -AlignValueToPixel((kAdaptiveLocationBarVerticalMargin * progress +
@@ -386,19 +389,100 @@ using vivaldi::IsVivaldiRunning;
 - (void)setLocationBarContainerHeight:(CGFloat)height {
   PrimaryToolbarView* view = self.view;
   view.locationBarContainerHeight.constant = height;
+
+  if (IsVivaldiRunning()) {
+    view.locationBarContainer.layer.cornerRadius =
+        vNTPSearchBarCornerRadius;
+  } else {
   view.locationBarContainer.layer.cornerRadius = height / 2;
+  } // End Vivaldi
+
 }
 
 #pragma mark: - Vivaldi
-#pragma mark: - Toolbar Consumer
-- (void)setShareMenuEnabled:(BOOL)enabled {
-  [self.view setVivaldiMoreActionItemsWithShareState:enabled
-                                      atbSettingType:_atbSettingType];
+
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+           (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+
+  __weak PrimaryToolbarViewController* weakSelf = self;
+
+  [coordinator
+      animateAlongsideTransition:^(
+          id<UIViewControllerTransitionCoordinatorContext>) {
+        // No op.
+      }
+      completion:^(id<UIViewControllerTransitionCoordinatorContext>) {
+        [weakSelf refreshToolbarButtons];
+      }];
 }
 
-- (void)updateVivaldiShieldState:(ATBSettingType)setting {
-  _atbSettingType = setting;
-  [self.view updateVivaldiShieldState:setting];
+- (void)refreshToolbarButtons {
+  [self.view redrawToolbarButtons];
+}
+
+- (void)updateLocationBarBackgroundColor {
+  // Update omnibox background color. When tab bar is enabled its not modified
+  // with accent color and rather follows the prefixed color. However, when tab
+  // bar is disabled the color is calculated from the accent color so that its
+  // visible regardless of the accent color.
+  if (self.isTabBarEnabled || self.isOmniboxFocused) {
+    self.view.locationBarContainer.backgroundColor =
+        [self.buttonFactory.toolbarConfiguration
+         locationBarBackgroundColorWithVisibility:1.0];
+  } else {
+    self.view.locationBarContainer.backgroundColor =
+        [self.buttonFactory.toolbarConfiguration
+            locationBarBackgroundColorForAccentColor:[self finalAccentColor]];
+  }
+}
+
+- (void)updateToolbarButtonsTintColor {
+  // Update toolbar buttons tint color
+  // When tab is enabled we don't need a dynamic tint color for toolbar.
+  UIColor* buttonsTintColor = self.isTabBarEnabled ?
+      [UIColor colorNamed:kToolbarButtonColor] :
+          [self.buttonFactory.toolbarConfiguration
+              buttonsTintColorForAccentColor:[self finalAccentColor]];
+  self.buttonFactory.toolbarConfiguration.buttonsTintColor = buttonsTintColor;
+
+
+  for (ToolbarButton *button in self.view.leadingStackView.arrangedSubviews) {
+    [button updateTintColor];
+  }
+
+  for (ToolbarButton *button in self.view.trailingStackView.arrangedSubviews) {
+    [button updateTintColor];
+  }
+
+  // Update location bar steady view tint color
+  LocationBarViewController* viewController =
+      (LocationBarViewController*)
+          self.locationBarViewController;
+  if (!viewController)
+    return;
+  // When tab is enabled we don't need a dynamic tint color for steady view.
+  UIColor* locationContentsTintColor = self.isTabBarEnabled ?
+      [UIColor colorNamed:kToolbarButtonColor] :
+      [self.buttonFactory.toolbarConfiguration
+          locationBarSteadyViewTintColorForAccentColor:[self finalAccentColor]];
+  [viewController
+      updateSteadyViewColorSchemeWithColor:locationContentsTintColor];
+  // Update the container color which is used address bar context menu preview.
+  viewController.locationBarContainerColor =
+      self.view.locationBarContainer.backgroundColor;
+}
+
+// Returns the accent color to used for primary toolbar type which depends on
+// omnibox position and tab bar style.
+- (UIColor*)finalAccentColor {
+  ToolbarType toolbarType =
+      self.isBottomOmniboxEnabled && !self.isTabBarEnabled ?
+          ToolbarType::kSecondary : ToolbarType::kPrimary;
+  UIColor* accentColor =
+      [self toolbarBackgroundColorForType:toolbarType];
+  return accentColor;
 }
 
 @end

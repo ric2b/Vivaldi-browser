@@ -338,8 +338,7 @@ std::string HashDataToFileName(const uint8_t* data, size_t size) {
   static_assert(kHashBytesToUse <= crypto::kSHA256Length,
                 "cannot use more than hash length");
   return base32::Base32Encode(
-      base::StringPiece(reinterpret_cast<const char*>(hash.data()),
-                        kHashBytesToUse),
+      base::span(hash.data(), kHashBytesToUse),
       base32::Base32EncodePolicy::OMIT_PADDING);
 }
 
@@ -793,8 +792,9 @@ void VivaldiImageStore::FinishCustomBookmarkThumbnailMigrationOnUIThread(
   base::Uuid bookmark_uuid,
     std::vector<uint8_t> content) {
   auto* bookmarks_model = GetBookmarkModel();
-  const bookmarks::BookmarkNode* bookmark =
-      bookmarks_model->GetNodeByUuid(bookmark_uuid);
+  const bookmarks::BookmarkNode* bookmark = bookmarks_model->GetNodeByUuid(
+      bookmark_uuid,
+      bookmarks::BookmarkModel::NodeTypeForUuidLookup::kLocalOrSyncableNodes);
 
   if (!bookmark)
     return;

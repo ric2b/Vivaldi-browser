@@ -30,13 +30,13 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
-import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
@@ -47,7 +47,6 @@ import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.url.GURL;
@@ -289,9 +288,7 @@ public class LocationBarModelTest {
                     context,
                     NewTabPageDelegate.EMPTY,
                     DomDistillerTabUtils::getFormattedUrlFromOriginalDistillerUrl,
-                    window -> null,
-                    new LocationBarModel.OfflineStatus() {},
-                    SearchEngineLogoUtils.getInstance());
+                    new LocationBarModel.OfflineStatus() {});
             initializeWithNative();
 
             Tab tab =
@@ -306,7 +303,7 @@ public class LocationBarModelTest {
                             return false;
                         }
                     };
-            setTab(tab, false);
+            setTab(tab, tab.getProfile());
         }
 
         private void setVisibleGurl(GURL gurl) {

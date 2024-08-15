@@ -140,6 +140,9 @@ class CONTENT_EXPORT InterestGroupUpdateManager {
     // be re-allocated to a new address.
     net::IsolationInfo* GetIsolationInfoByJoiningOrigin(const url::Origin&);
 
+    // Clear `joining_origin_isolation_info_map_`.
+    void ClearJoiningOriginIsolationInfoMap();
+
     // Removes all queued interest group owners.
     void Clear();
 
@@ -187,6 +190,7 @@ class CONTENT_EXPORT InterestGroupUpdateManager {
   void DidUpdateInterestGroupsOfOwnerNetFetch(
       UrlLoadersList::iterator simple_url_loader,
       blink::InterestGroupKey group_key,
+      base::TimeTicks start_time,
       std::unique_ptr<std::string> fetch_body);
   void DidUpdateInterestGroupsOfOwnerJsonParse(
       blink::InterestGroupKey group_key,
@@ -272,6 +276,10 @@ class CONTENT_EXPORT InterestGroupUpdateManager {
   // The last time we started a round of updating; used to cancel long-running
   // updates.
   base::TimeTicks last_update_started_ = base::TimeTicks::Min();
+
+  // Counter used for count how many interest groups are updated in an update
+  // round. This value is only meaningful during an update round.
+  int num_groups_updated_in_current_round_ = 0;
 
   // Used for fetching interest group update JSON over the network.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;

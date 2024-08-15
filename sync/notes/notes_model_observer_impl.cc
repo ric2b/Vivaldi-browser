@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/check.h"
 #include "base/no_destructor.h"
 #include "base/uuid.h"
 #include "components/notes/note_node.h"
@@ -123,6 +124,26 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* /*unused*/,
 
   // We shouldn't see changes to the top-level nodes.
   DCHECK(!note_model_->is_permanent_node(node));
+
+  // Handle moves that make a node newly syncable.
+  if (!note_model_->IsNodeSyncable(old_parent) &&
+      note_model_->IsNodeSyncable(new_parent)) {
+    NotesNodeAdded(nullptr /*unused*/, new_parent, new_index);
+    return;
+  }
+
+  // Handle moves that make a node non-syncable.
+  if (note_model_->IsNodeSyncable(old_parent) &&
+      !note_model_->IsNodeSyncable(new_parent)) {
+    // OnWillRemoveNotes() cannot be invoked here because |node| is already
+    // moved and unsyncable, whereas OnWillRemoveNotes() assumes the change
+    // hasn't happened yet.
+    ProcessDelete(node);
+    nudge_for_commit_closure_.Run();
+    note_tracker_->CheckAllNodesTracked(note_model_);
+    return;
+  }
+
 
   // Ignore changes to non-syncable nodes (e.g. managed nodes).
   if (!note_model_->IsNodeSyncable(node)) {

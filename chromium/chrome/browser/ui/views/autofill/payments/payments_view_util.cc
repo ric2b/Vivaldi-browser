@@ -166,7 +166,7 @@ gfx::Size TitleWithIconAndSeparatorView::GetMinimumSize() const {
   return gfx::Size(0, 0);
 }
 
-BEGIN_METADATA(TitleWithIconAndSeparatorView, views::View)
+BEGIN_METADATA(TitleWithIconAndSeparatorView)
 END_METADATA
 
 TitleWithIconAfterLabelView::TitleWithIconAfterLabelView(
@@ -206,7 +206,7 @@ gfx::Size TitleWithIconAfterLabelView::GetMinimumSize() const {
   return gfx::Size(0, 0);
 }
 
-BEGIN_METADATA(TitleWithIconAfterLabelView, views::View)
+BEGIN_METADATA(TitleWithIconAfterLabelView)
 END_METADATA
 
 std::unique_ptr<views::View> CreateTitleView(
@@ -221,11 +221,10 @@ std::unique_ptr<views::View> CreateTitleView(
                                                          icon_to_show);
 }
 
-LegalMessageView::LegalMessageView(
-    const LegalMessageLines& legal_message_lines,
-    absl::optional<std::u16string> optional_user_email,
-    absl::optional<ui::ImageModel> optional_user_avatar,
-    LinkClickedCallback callback) {
+LegalMessageView::LegalMessageView(const LegalMessageLines& legal_message_lines,
+                                   const std::u16string& user_email,
+                                   const ui::ImageModel& user_avatar,
+                                   LinkClickedCallback callback) {
   SetOrientation(views::BoxLayout::Orientation::kVertical);
   SetBetweenChildSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
@@ -242,13 +241,9 @@ LegalMessageView::LegalMessageView(
     }
   }
 
-  if (!optional_user_email.has_value() && !optional_user_avatar.has_value())
+  if (user_email.empty() || user_avatar.IsEmpty()) {
     return;
-
-  std::u16string user_email = optional_user_email.value();
-  ui::ImageModel user_avatar = optional_user_avatar.value();
-  if (user_email.empty() && user_avatar.IsEmpty())
-    return;
+  }
 
   // Extra child view for user identity information including the avatar and
   // the email.
@@ -274,14 +269,15 @@ LegalMessageView::LegalMessageView(
 
 LegalMessageView::~LegalMessageView() = default;
 
-BEGIN_METADATA(LegalMessageView, views::View)
+BEGIN_METADATA(LegalMessageView)
 END_METADATA
 
 PaymentsBubbleClosedReason GetPaymentsBubbleClosedReasonFromWidget(
     const views::Widget* widget) {
   DCHECK(widget);
-  if (!widget->IsClosed())
+  if (!widget->IsClosed()) {
     return PaymentsBubbleClosedReason::kUnknown;
+  }
 
   switch (widget->closed_reason()) {
     case views::Widget::ClosedReason::kUnspecified:
@@ -324,7 +320,7 @@ void ProgressBarWithTextView::AddedToWidget() {
   progress_throbber_->Start();
 }
 
-BEGIN_METADATA(ProgressBarWithTextView, views::View)
+BEGIN_METADATA(ProgressBarWithTextView)
 END_METADATA
 
 }  // namespace autofill

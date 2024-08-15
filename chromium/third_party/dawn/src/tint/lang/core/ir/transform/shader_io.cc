@@ -41,50 +41,6 @@ namespace tint::core::ir::transform {
 
 namespace {
 
-core::BuiltinValue FunctionParamBuiltin(enum FunctionParam::Builtin builtin) {
-    switch (builtin) {
-        case FunctionParam::Builtin::kVertexIndex:
-            return core::BuiltinValue::kVertexIndex;
-        case FunctionParam::Builtin::kInstanceIndex:
-            return core::BuiltinValue::kInstanceIndex;
-        case FunctionParam::Builtin::kPosition:
-            return core::BuiltinValue::kPosition;
-        case FunctionParam::Builtin::kFrontFacing:
-            return core::BuiltinValue::kFrontFacing;
-        case FunctionParam::Builtin::kLocalInvocationId:
-            return core::BuiltinValue::kLocalInvocationId;
-        case FunctionParam::Builtin::kLocalInvocationIndex:
-            return core::BuiltinValue::kLocalInvocationIndex;
-        case FunctionParam::Builtin::kGlobalInvocationId:
-            return core::BuiltinValue::kGlobalInvocationId;
-        case FunctionParam::Builtin::kWorkgroupId:
-            return core::BuiltinValue::kWorkgroupId;
-        case FunctionParam::Builtin::kNumWorkgroups:
-            return core::BuiltinValue::kNumWorkgroups;
-        case FunctionParam::Builtin::kSampleIndex:
-            return core::BuiltinValue::kSampleIndex;
-        case FunctionParam::Builtin::kSampleMask:
-            return core::BuiltinValue::kSampleMask;
-        case FunctionParam::Builtin::kSubgroupInvocationId:
-            return core::BuiltinValue::kSubgroupInvocationId;
-        case FunctionParam::Builtin::kSubgroupSize:
-            return core::BuiltinValue::kSubgroupSize;
-    }
-    return core::BuiltinValue::kUndefined;
-}
-
-core::BuiltinValue ReturnBuiltin(enum Function::ReturnBuiltin builtin) {
-    switch (builtin) {
-        case Function::ReturnBuiltin::kPosition:
-            return core::BuiltinValue::kPosition;
-        case Function::ReturnBuiltin::kFragDepth:
-            return core::BuiltinValue::kFragDepth;
-        case Function::ReturnBuiltin::kSampleMask:
-            return core::BuiltinValue::kSampleMask;
-    }
-    return core::BuiltinValue::kUndefined;
-}
-
 /// PIMPL state for the transform.
 struct State {
     /// The IR module.
@@ -119,7 +75,14 @@ struct State {
         if (func->Stage() == Function::PipelineStage::kVertex && backend->NeedsVertexPointSize()) {
             vertex_point_size_index =
                 backend->AddOutput(ir.symbols.New("vertex_point_size"), ty.f32(),
-                                   {{}, {}, {BuiltinValue::kPointSize}, {}, false});
+                                   core::type::StructMemberAttributes{
+                                       /* location */ std::nullopt,
+                                       /* index */ std::nullopt,
+                                       /* color */ std::nullopt,
+                                       /* builtin */ core::BuiltinValue::kPointSize,
+                                       /* interpolation */ std::nullopt,
+                                       /* invariant */ false,
+                                   });
         }
 
         auto new_params = backend->FinalizeInputs();
@@ -145,7 +108,7 @@ struct State {
         // Call the original function, passing it the inputs and capturing its return value.
         auto inner_call_args = BuildInnerCallArgs(wrapper);
         auto* inner_result = wrapper.Call(func->ReturnType(), func, std::move(inner_call_args));
-        SetOutputs(wrapper, inner_result->Result());
+        SetOutputs(wrapper, inner_result->Result(0));
         if (vertex_point_size_index) {
             backend->SetOutput(wrapper, vertex_point_size_index.value(), b.Constant(1_f));
         }
@@ -178,7 +141,7 @@ struct State {
                     }
                     param->ClearLocation();
                 } else if (auto builtin = param->Builtin()) {
-                    attributes.builtin = FunctionParamBuiltin(*builtin);
+                    attributes.builtin = *builtin;
                     param->ClearBuiltin();
                 }
                 attributes.invariant = param->Invariant();
@@ -216,7 +179,7 @@ struct State {
                 }
                 func->ClearReturnLocation();
             } else if (auto builtin = func->ReturnBuiltin()) {
-                attributes.builtin = ReturnBuiltin(*builtin);
+                attributes.builtin = *builtin;
                 func->ClearReturnBuiltin();
             }
             attributes.invariant = func->ReturnInvariant();
@@ -238,7 +201,7 @@ struct State {
                 for (uint32_t i = 0; i < str->Members().Length(); i++) {
                     construct_args.Push(backend->GetInput(builder, input_idx++));
                 }
-                args.Push(builder.Construct(param->Type(), construct_args)->Result());
+                args.Push(builder.Construct(param->Type(), construct_args)->Result(0));
             } else {
                 args.Push(backend->GetInput(builder, input_idx++));
             }
@@ -254,7 +217,7 @@ struct State {
         if (auto* str = inner_result->Type()->As<core::type::Struct>()) {
             for (auto* member : str->Members()) {
                 Value* from =
-                    builder.Access(member->Type(), inner_result, u32(member->Index()))->Result();
+                    builder.Access(member->Type(), inner_result, u32(member->Index()))->Result(0);
                 backend->SetOutput(builder, member->Index(), from);
             }
         } else if (!inner_result->Type()->Is<core::type::Void>()) {
@@ -279,7 +242,7 @@ void RunShaderIOBase(Module& module, std::function<MakeBackendStateFunc> make_ba
 
     // Take a copy of the function list since the transform will add new functions to the module.
     auto functions = module.functions;
-    for (auto* func : functions) {
+    for (auto& func : functions) {
         // Only process entry points.
         if (func->Stage() == Function::PipelineStage::kUndefined) {
             continue;

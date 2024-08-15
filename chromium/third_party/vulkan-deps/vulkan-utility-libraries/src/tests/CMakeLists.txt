@@ -37,6 +37,32 @@ target_link_libraries(vul_tests PRIVATE
     Vulkan::CompilerConfiguration
 )
 
+# Test add_subdirectory suppport
+add_test(NAME integration.add_subdirectory
+    COMMAND ${CMAKE_CTEST_COMMAND}
+        --build-and-test ${CMAKE_CURRENT_LIST_DIR}/integration
+                         ${CMAKE_CURRENT_BINARY_DIR}/add_subdirectory
+        --build-generator ${CMAKE_GENERATOR}
+        --build-options -DFIND_PACKAGE_TESTING=OFF -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
+)
+
+set(test_install_dir "${CMAKE_CURRENT_BINARY_DIR}/install")
+add_test(NAME integration.install
+    COMMAND ${CMAKE_COMMAND} --install ${PROJECT_BINARY_DIR} --prefix ${test_install_dir} --config $<CONFIG>
+)
+
+# Test find_package suppport
+add_test(NAME integration.find_package
+    COMMAND ${CMAKE_CTEST_COMMAND}
+        --build-and-test ${CMAKE_CURRENT_LIST_DIR}/integration
+                         ${CMAKE_CURRENT_BINARY_DIR}/find_package
+        --build-generator ${CMAKE_GENERATOR}
+        --build-options -DFIND_PACKAGE_TESTING=ON "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH};${test_install_dir}"
+)
+
+# Installing comes before testing
+set_tests_properties(integration.find_package PROPERTIES DEPENDS integration.install)
+
 if (CMAKE_CROSSCOMPILING)
     return()
 endif()

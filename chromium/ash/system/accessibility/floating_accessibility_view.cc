@@ -4,7 +4,7 @@
 
 #include "ash/system/accessibility/floating_accessibility_view.h"
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
@@ -21,6 +21,7 @@
 #include "ash/system/accessibility/select_to_speak/select_to_speak_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
+#include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "base/functional/bind.h"
@@ -50,7 +51,7 @@ class DynamicRowView : public views::View {
   // views::View:
   void ChildVisibilityChanged(views::View* child) override {
     bool any_visible = false;
-    for (auto* view : children()) {
+    for (views::View* view : children()) {
       any_visible |= view->GetVisible();
     }
     SetVisible(any_visible);
@@ -123,6 +124,14 @@ bool FloatingAccessibilityBubbleView::AcceleratorPressed(
   DCHECK_EQ(accelerator.key_code(), ui::VKEY_ESCAPE);
   GetWidget()->Deactivate();
   return true;
+}
+
+void FloatingAccessibilityBubbleView::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  // Preset values to avoid AccessibilityPaintChecks.
+  node_data->role = ax::mojom::Role::kWindow;
+  node_data->SetNameExplicitlyEmpty();
+  TrayBubbleView::GetAccessibleNodeData(node_data);
 }
 
 BEGIN_METADATA(FloatingAccessibilityBubbleView, TrayBubbleView)

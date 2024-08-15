@@ -24,7 +24,7 @@
 #include <zircon/syscalls.h>
 #include <zircon/types.h>
 #elif PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
-#include <windows.h>
+#include <Windows.h>
 #endif
 
 namespace perfetto {
@@ -56,8 +56,9 @@ typedef HRESULT(WINAPI* GetThreadDescription)(HANDLE hThread,
 bool MaybeSetThreadName(const std::string& name) {
   // The SetThreadDescription API works even if no debugger is attached.
   static auto set_thread_description_func =
-      reinterpret_cast<SetThreadDescription>(::GetProcAddress(
-          ::GetModuleHandle(L"Kernel32.dll"), "SetThreadDescription"));
+      reinterpret_cast<SetThreadDescription>(
+          reinterpret_cast<void*>(::GetProcAddress(
+              ::GetModuleHandleA("Kernel32.dll"), "SetThreadDescription")));
   if (!set_thread_description_func) {
     return false;
   }
@@ -72,8 +73,9 @@ bool MaybeSetThreadName(const std::string& name) {
 
 bool GetThreadName(std::string& out_result) {
   static auto get_thread_description_func =
-      reinterpret_cast<GetThreadDescription>(::GetProcAddress(
-          ::GetModuleHandle(L"Kernel32.dll"), "GetThreadDescription"));
+      reinterpret_cast<GetThreadDescription>(
+          reinterpret_cast<void*>(::GetProcAddress(
+              ::GetModuleHandleA("Kernel32.dll"), "GetThreadDescription")));
   if (!get_thread_description_func) {
     return false;
   }

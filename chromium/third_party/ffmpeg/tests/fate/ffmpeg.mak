@@ -48,6 +48,26 @@ fate-force_key_frames: CMD = enc_dec \
   avi "-c mpeg4 -g 240 -qscale 10 -force_key_frames 0.5,0:00:01.5" \
   framecrc "" "-skip_frame nokey"
 
+# test -force_key_frames source with and without framerate conversion
+# * we don't care about the actual video content, so replace it with
+#   a 2x2 black square to speed up encoding
+# * force mpeg2video to only emit keyframes when explicitly requested
+fate-force_key_frames-source: CMD = framecrc -i $(TARGET_SAMPLES)/h264/intra_refresh.h264 \
+  -vf crop=2:2,drawbox=color=black:t=fill    \
+  -c:v mpeg2video -g 400 -sc_threshold 99999 \
+  -force_key_frames source
+fate-force_key_frames-source-drop: CMD = framecrc -i $(TARGET_SAMPLES)/h264/intra_refresh.h264 \
+  -vf crop=2:2,drawbox=color=black:t=fill    \
+  -c:v mpeg2video -g 400 -sc_threshold 99999 \
+  -force_key_frames source -r 1
+fate-force_key_frames-source-dup: CMD = framecrc -i $(TARGET_SAMPLES)/h264/intra_refresh.h264 \
+  -vf crop=2:2,drawbox=color=black:t=fill    \
+  -c:v mpeg2video -g 400 -sc_threshold 99999 \
+  -force_key_frames source -r 39 -force_fps -strict experimental
+
+FATE_SAMPLES_FFMPEG-$(call ENCDEC, MPEG2VIDEO H264, FRAMECRC H264, CROP_FILTER DRAWBOX_FILTER) += \
+    fate-force_key_frames-source fate-force_key_frames-source-drop fate-force_key_frames-source-dup
+
 # Tests that the video is properly autorotated using the contained
 # display matrix and that the generated file does not contain
 # a display matrix any more.
@@ -67,7 +87,7 @@ fate-sub2video: CMD = framecrc -auto_conversion_filters \
 FATE_SAMPLES_FFMPEG-$(call FRAMECRC, VOBSUB, DVDSUB, SCALE_FILTER) += fate-sub2video_basic
 fate-sub2video_basic: CMD = framecrc -auto_conversion_filters \
   -i $(TARGET_SAMPLES)/sub/vobsub.idx \
-  -vsync passthrough -copyts \
+  -fps_mode passthrough -copyts \
   -filter_complex "sws_flags=+accurate_rnd+bitexact\;[0:s:0]scale" \
   -c:v rawvideo -threads 1
 
@@ -76,7 +96,7 @@ fate-sub2video_basic: CMD = framecrc -auto_conversion_filters \
 FATE_SAMPLES_FFMPEG-$(call FRAMECRC, SUP, PGSSUB, SCALE_FILTER RAWVIDEO_ENCODER) += fate-sub2video_time_limited
 fate-sub2video_time_limited: CMD = framecrc -auto_conversion_filters \
   -i $(TARGET_SAMPLES)/sub/pgs_sub.sup \
-  -vsync passthrough -copyts \
+  -fps_mode passthrough -copyts \
   -t 15 \
   -filter_complex "sws_flags=+accurate_rnd+bitexact\;[0:s:0]scale" \
   -c:v rawvideo -threads 1
@@ -217,11 +237,11 @@ fate-h264_mp4toannexb_ticket5927_2: CMD = transcode "mp4" $(TARGET_SAMPLES)/h264
 
 FATE_SAMPLES_FFMPEG-$(call TRANSCODE, MPEG4 MPEG2VIDEO, AVI, MPEGPS_DEMUXER MPEGVIDEO_DEMUXER MPEGVIDEO_PARSER EXTRACT_EXTRADATA_BSF REMOVE_EXTRADATA_BSF) += fate-ffmpeg-bsf-remove-k fate-ffmpeg-bsf-remove-r fate-ffmpeg-bsf-remove-e
 fate-ffmpeg-bsf-remove-k: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
-                          avi "-vbsf remove_extra=k" "-codec copy"
+                          avi "-bsf:v remove_extra=k" "-codec copy"
 fate-ffmpeg-bsf-remove-r: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
-                          avi "-vbsf remove_extra=keyframe" "-codec copy"
+                          avi "-bsf:v remove_extra=keyframe" "-codec copy"
 fate-ffmpeg-bsf-remove-e: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
-                          avi "-vbsf remove_extra=e" "-codec copy"
+                          avi "-bsf:v remove_extra=e" "-codec copy"
 
 FATE_SAMPLES_FFMPEG-$(call DEMMUX, APNG, FRAMECRC, SETTS_BSF PIPE_PROTOCOL) += fate-ffmpeg-setts-bsf
 fate-ffmpeg-setts-bsf: CMD = framecrc -i $(TARGET_SAMPLES)/apng/clock.png -c:v copy -bsf:v "setts=duration=if(eq(NEXT_PTS\,NOPTS)\,PREV_OUTDURATION\,(NEXT_PTS-PTS)/2):ts=PTS/2" -fflags +bitexact

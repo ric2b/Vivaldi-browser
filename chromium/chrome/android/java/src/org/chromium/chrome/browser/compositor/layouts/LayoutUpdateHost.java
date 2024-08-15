@@ -32,11 +32,8 @@ public interface LayoutUpdateHost {
     /**
      * Tells its host {@link android.view.View} that the hide will be an animation away. This is to
      * be called from a {@link Layout}.
-     *
-     * @param nextTabId The id of the next tab.
-     * @param hintAtTabSelection Whether or not to hint about a new tab being selected.
      */
-    void startHiding(int nextTabId, boolean hintAtTabSelection);
+    void startHiding();
 
     /**
      * Tells its host {@link android.view.View} that the Layout has done all animation so the view
@@ -44,9 +41,7 @@ public interface LayoutUpdateHost {
      */
     void doneHiding();
 
-    /**
-     * Tells its host that the Layout is done it's preliminary showing animation.
-     */
+    /** Tells its host that the Layout is done it's preliminary showing animation. */
     void doneShowing();
 
     /**

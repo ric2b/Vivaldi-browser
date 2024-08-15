@@ -4,7 +4,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 
 import {Context} from './Context.js';
@@ -86,6 +86,14 @@ const UIStrings = {
    *@description Title of the keybind category 'Rendering' in Settings' Shortcuts pannel.
    */
   rendering: 'Rendering',
+  /**
+   *@description Title of the keybind category 'Recorder' in Settings' Shortcuts pannel.
+   */
+  recorder: 'Recorder',
+  /**
+   *@description Title of the keybind category 'Changes' in Settings' Shortcuts pannel.
+   */
+  changes: 'Changes',
 };
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/ActionRegistration.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -220,26 +228,25 @@ export class Action extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   }
 }
 
-const registeredActionExtensions: Array<Action> = [];
-
-const actionIdSet = new Set<string>();
+const registeredActions = new Map<string, Action>();
 
 export function registerActionExtension(registration: ActionRegistration): void {
   const actionId = registration.actionId;
-  if (actionIdSet.has(actionId)) {
-    throw new Error(`Duplicate Action id '${actionId}': ${new Error().stack}`);
+  if (registeredActions.has(actionId)) {
+    throw new Error(`Duplicate action ID '${actionId}'`);
   }
-  actionIdSet.add(actionId);
-  registeredActionExtensions.push(new Action(registration));
+  if (!Platform.StringUtilities.isExtendedKebabCase(actionId)) {
+    throw new Error(`Invalid action ID '${actionId}'`);
+  }
+  registeredActions.set(actionId, new Action(registration));
 }
 
 export function reset(): void {
-  actionIdSet.clear();
-  registeredActionExtensions.length = 0;
+  registeredActions.clear();
 }
 
 export function getRegisteredActionExtensions(): Array<Action> {
-  return registeredActionExtensions
+  return Array.from(registeredActions.values())
       .filter(
           action => Root.Runtime.Runtime.isDescriptorEnabled(
               {experiment: action.experiment(), condition: action.condition()}))
@@ -251,12 +258,7 @@ export function getRegisteredActionExtensions(): Array<Action> {
 }
 
 export function maybeRemoveActionExtension(actionId: string): boolean {
-  const actionIndex = registeredActionExtensions.findIndex(action => action.id() === actionId);
-  if (actionIndex < 0 || !actionIdSet.delete(actionId)) {
-    return false;
-  }
-  registeredActionExtensions.splice(actionIndex, 1);
-  return true;
+  return registeredActions.delete(actionId);
 }
 
 export const enum Platforms {
@@ -277,8 +279,7 @@ export type EventTypes = {
   [Events.Toggled]: boolean,
 };
 
-// eslint-disable-next-line rulesdir/const_enum
-export enum ActionCategory {
+export const enum ActionCategory {
   NONE = '',  // `NONE` must be a falsy value. Legacy code uses if-checks for the category.
   ELEMENTS = 'ELEMENTS',
   SCREENSHOT = 'SCREENSHOT',
@@ -299,7 +300,8 @@ export enum ActionCategory {
   DEBUGGER = 'DEBUGGER',
   SOURCES = 'SOURCES',
   RENDERING = 'RENDERING',
-  EXPLAIN = 'EXPLAIN',
+  RECORDER = 'RECORDER',
+  CHANGES = 'CHANGES',
 }
 
 export function getLocalizedActionCategory(category: ActionCategory): Platform.UIString.LocalizedString {
@@ -342,6 +344,10 @@ export function getLocalizedActionCategory(category: ActionCategory): Platform.U
       return i18nString(UIStrings.sources);
     case ActionCategory.RENDERING:
       return i18nString(UIStrings.rendering);
+    case ActionCategory.RECORDER:
+      return i18nString(UIStrings.recorder);
+    case ActionCategory.CHANGES:
+      return i18nString(UIStrings.changes);
     case ActionCategory.NONE:
       return i18n.i18n.lockedString('');
   }
@@ -361,6 +367,7 @@ export const enum IconClass {
   DOWNLOAD = 'download',
   LARGEICON_PAUSE = 'pause',
   LARGEICON_RESUME = 'resume',
+  MOP = 'mop',
   BIN = 'bin',
   LARGEICON_SETTINGS_GEAR = 'gear',
   LARGEICON_STEP_OVER = 'step-over',
@@ -370,6 +377,9 @@ export const enum IconClass {
   BREAKPOINT_CROSSED_FILLED = 'breakpoint-crossed-filled',
   BREAKPOINT_CROSSED = 'breakpoint-crossed',
   PLUS = 'plus',
+  UNDO = 'undo',
+  COPY = 'copy',
+  IMPORT = 'import',
 }
 
 export const enum KeybindSet {
@@ -442,7 +452,7 @@ export interface ActionRegistration {
    *   <...>
    *    async loadActionDelegate() {
    *      const Elements = await loadElementsModule();
-   *      return Elements.ElementsPanel.ElementsActionDelegate.instance();
+   *      return new Elements.ElementsPanel.ElementsActionDelegate();
    *    },
    *   <...>
    *  });

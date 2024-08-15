@@ -14,14 +14,6 @@
 
 //! A no_std friendly array wrapper to expose a variable length prefix of the array.
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used
-)]
 
 #[cfg(feature = "std")]
 extern crate std;

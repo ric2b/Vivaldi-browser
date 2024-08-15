@@ -29,6 +29,7 @@
 
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/xproto_internal.h"
 
 namespace x11 {
@@ -108,7 +109,7 @@ std::unique_ptr<Test::GetVersionReply> detail::ReadReply<Test::GetVersionReply>(
   Read(&minor_version, &buf);
 
   Align(&buf, 4);
-  DUMP_WILL_BE_CHECK_EQ(buf.offset < 32 ? 0 : buf.offset - 32, 4 * length);
+  CHECK_EQ(buf.offset < 32 ? 0 : buf.offset - 32, 4 * length);
 
   return reply;
 }
@@ -178,7 +179,7 @@ std::unique_ptr<Test::CompareCursorReply> detail::ReadReply<
   Read(&length, &buf);
 
   Align(&buf, 4);
-  DUMP_WILL_BE_CHECK_EQ(buf.offset < 32 ? 0 : buf.offset - 32, 4 * length);
+  CHECK_EQ(buf.offset < 32 ? 0 : buf.offset - 32, 4 * length);
 
   return reply;
 }

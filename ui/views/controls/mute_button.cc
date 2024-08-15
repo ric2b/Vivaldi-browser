@@ -4,6 +4,7 @@
 
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/widget/widget.h"
@@ -12,14 +13,11 @@
 
 namespace vivaldi {
 
-// static
-const char MuteButton::kViewClassName[] = "MuteButton";
-
 const int kMuteIconSize = 20;
 constexpr SkColor kMuteIconColor = SK_ColorWHITE;
 
 MuteButton::MuteButton(PressedCallback callback)
-    : views::ImageButton(callback) {
+    : views::ImageButton(std::move(callback)) {
   SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
 
@@ -41,11 +39,15 @@ void MuteButton::ChangeMode(Mode mode, bool force) {
   const gfx::VectorIcon& icon =
       mode == Mode::kMute ? kVivaldiMuteMutedIcon : kVivaldiMuteIcon;
 
-  SetImage(views::Button::STATE_NORMAL,
-           gfx::CreateVectorIcon(icon, kMuteIconSize, kMuteIconColor));
+  SetImageModel(views::Button::STATE_NORMAL,
+                ui::ImageModel::FromImageSkia(gfx::CreateVectorIcon(
+                    icon, kMuteIconSize, kMuteIconColor)));
 
   muted_mode_ = mode;
   SchedulePaint();
 }
+
+BEGIN_METADATA(MuteButton)
+END_METADATA
 
 }  //  namespace vivaldi

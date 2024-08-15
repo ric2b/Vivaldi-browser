@@ -20,7 +20,7 @@ import sys
 from typing import Any, Dict, List, Optional, Set, Tuple, NamedTuple
 
 from python.generators.sql_processing.docs_extractor import DocsExtractor
-from python.generators.sql_processing.utils import ANY_PATTERN, ARG_DEFINITION_PATTERN, ObjKind
+from python.generators.sql_processing.utils import ALLOWED_PREFIXES, ANY_PATTERN, ARG_DEFINITION_PATTERN, ObjKind
 from python.generators.sql_processing.utils import ARG_ANNOTATION_PATTERN
 from python.generators.sql_processing.utils import NAME_AND_TYPE_PATTERN
 from python.generators.sql_processing.utils import FUNCTION_RETURN_PATTERN
@@ -36,11 +36,39 @@ def is_snake_case(s: str) -> bool:
   return re.fullmatch(r'^[a-z_0-9]*$', s) is not None
 
 
+# Parse a SQL comment (i.e. -- Foo\n -- bar.) into a string (i.e. "Foo bar.").
+def parse_comment(comment: str) -> str:
+  return ' '.join(line.strip().lstrip('--').lstrip()
+                  for line in comment.strip().split('\n'))
+
+
 class Arg(NamedTuple):
   # TODO(b/307926059): the type is missing on old-style documentation for
   # tables. Make it "str" after stdlib is migrated.
   type: Optional[str]
   description: str
+
+
+# Returns: error message if the name is not correct, None otherwise.
+def get_module_prefix_error(name: str, path: str, module: str) -> Optional[str]:
+  prefix = name.lower().split('_')[0]
+  if module == "common" or module == "prelude":
+    if prefix == module:
+      return (f'Names of tables/views/functions in the "{module}" module '
+              f'should not start with {module}')
+    return None
+  if prefix == module:
+    # Module prefix is always allowed.
+    return None
+  allowed_prefixes = [module]
+  for (path_prefix, allowed_name_prefix) in ALLOWED_PREFIXES.items():
+    if path.startswith(path_prefix):
+      if prefix == allowed_name_prefix:
+        return None
+      allowed_prefixes.append(allowed_name_prefix)
+  return (
+      f'Names of tables/views/functions at path "{path}" should be prefixed '
+      f'with one of following names: {", ".join(allowed_prefixes)}')
 
 
 class AbstractDocParser(ABC):
@@ -58,18 +86,10 @@ class AbstractDocParser(ABC):
   def _parse_name(self, upper: bool = False):
     assert self.name
     assert isinstance(self.name, str)
-    module_pattern = f"^{self.module}_.*"
-    if upper:
-      module_pattern = module_pattern.upper()
-    starts_with_module_name = re.match(module_pattern, self.name, re.IGNORECASE)
-    if self.module == "common":
-      if starts_with_module_name:
-        self._error('Names of tables/views/functions in the "common" module '
-                    f'should not start with {module_pattern}')
-      return self.name
-    if not starts_with_module_name:
-      self._error('Names of tables/views/functions should be prefixed with the '
-                  f'module name (i.e. should start with {module_pattern})')
+    module_prefix_error = get_module_prefix_error(self.name, self.path,
+                                                  self.module)
+    if module_prefix_error is not None:
+      self._error(module_prefix_error)
     return self.name.strip()
 
   def _parse_desc_not_empty(self, desc: str):
@@ -161,27 +181,6 @@ class AbstractDocParser(ABC):
             f'Arg "{arg}" is documented but not found in function definition.')
     return args
 
-  def _parse_ret(self, ans: List[DocsExtractor.Annotation],
-                 sql_ret_type: str) -> Tuple[str, str]:
-    rets = [a.value for a in ans if a.key == '@ret']
-    if len(rets) != 1:
-      self._error('Return value is not documentated with @ret')
-      return '', ''
-
-    ret = rets[0]
-    m = re.match(FUNCTION_RETURN_PATTERN, ret)
-    if not m:
-      self._error(
-          f'@ret {ret} does not match pattern {FUNCTION_RETURN_PATTERN}')
-      return '', ''
-
-    ret_type, ret_desc = m.group(1), m.group(2)
-    if ret_type != sql_ret_type:
-      self._error(
-          f'@ret {ret_type} does not match SQL return type {sql_ret_type}')
-      return '', ''
-    return ret_type, ret_desc.strip()
-
   # Parse function argument definition list or a table schema, e.g.
   # arg1 INT, arg2 STRING, including their comments.
   def _parse_args_definition(self, args_str: str) -> Dict[str, Arg]:
@@ -195,8 +194,7 @@ class AbstractDocParser(ABC):
                     '({ARG_DEFINITION_PATTERN})')
         return result
       groups = m.groups()
-      comment = None if groups[0] is None else ' '.join(
-          line.strip().lstrip('--').lstrip() for line in groups[0].split('\n'))
+      comment = None if groups[0] is None else parse_comment(groups[0])
       name = groups[-3]
       type = groups[-2]
       result[name] = Arg(type, comment)
@@ -233,13 +231,20 @@ class TableViewDocParser(AbstractDocParser):
   def parse(self, doc: DocsExtractor.Extract) -> Optional[TableOrView]:
     assert doc.obj_kind == ObjKind.table_view
 
-    or_replace, type, self.name, schema = doc.obj_match
+    or_replace, perfetto_or_virtual, type, self.name, schema = doc.obj_match
 
     if or_replace is not None:
       self._error(
           f'{type} "{self.name}": CREATE OR REPLACE is not allowed in stdlib')
     if is_internal(self.name):
       return None
+
+    is_perfetto_table_or_view = (
+        perfetto_or_virtual and perfetto_or_virtual.lower() == 'perfetto')
+    if not schema and is_perfetto_table_or_view:
+      self._error(
+          f'{type} "{self.name}": schema is missing for a non-internal stdlib'
+          f' perfetto table or view')
 
     self._validate_only_contains_annotations(doc.annotations, {'@column'})
     return TableOrView(
@@ -272,7 +277,7 @@ class FunctionDocParser(AbstractDocParser):
     super().__init__(path, module)
 
   def parse(self, doc: DocsExtractor.Extract) -> Optional[Function]:
-    or_replace, self.name, args, ret = doc.obj_match
+    or_replace, self.name, args, ret_comment, ret_type = doc.obj_match
 
     if or_replace is not None:
       self._error(
@@ -282,14 +287,15 @@ class FunctionDocParser(AbstractDocParser):
     if is_internal(self.name):
       return None
 
-    self._validate_only_contains_annotations(doc.annotations, {'@arg', '@ret'})
-
-    ret_type, ret_desc = self._parse_ret(doc.annotations, ret)
     name = self._parse_name()
 
     if not is_snake_case(name):
       self._error(f'Function name "{name}" is not snake_case'
                   f' (should be {name.casefold()})')
+
+    ret_desc = None if ret_comment is None else parse_comment(ret_comment)
+    if not ret_desc:
+      self._error(f'Function "{name}": return description is missing')
 
     return Function(
         name=name,
@@ -320,7 +326,7 @@ class TableFunctionDocParser(AbstractDocParser):
     super().__init__(path, module)
 
   def parse(self, doc: DocsExtractor.Extract) -> Optional[TableFunction]:
-    or_replace, self.name, args, columns = doc.obj_match
+    or_replace, self.name, args, ret_comment, columns = doc.obj_match
 
     if or_replace is not None:
       self._error(

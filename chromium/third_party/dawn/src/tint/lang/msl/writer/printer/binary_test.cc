@@ -38,7 +38,7 @@ namespace {
 
 struct BinaryData {
     const char* result;
-    core::ir::BinaryOp op;
+    core::BinaryOp op;
 };
 inline std::ostream& operator<<(std::ostream& out, BinaryData data) {
     StringStream str;
@@ -70,19 +70,101 @@ void foo() {
 }
 )");
 }
-INSTANTIATE_TEST_SUITE_P(
-    MslPrinterTest,
-    MslPrinterBinaryTest,
-    testing::Values(BinaryData{"(left + right)", core::ir::BinaryOp::kAdd},
-                    BinaryData{"(left - right)", core::ir::BinaryOp::kSubtract},
-                    BinaryData{"(left * right)", core::ir::BinaryOp::kMultiply},
-                    BinaryData{"(left / right)", core::ir::BinaryOp::kDivide},
-                    BinaryData{"(left % right)", core::ir::BinaryOp::kModulo},
-                    BinaryData{"(left & right)", core::ir::BinaryOp::kAnd},
-                    BinaryData{"(left | right)", core::ir::BinaryOp::kOr},
-                    BinaryData{"(left ^ right)", core::ir::BinaryOp::kXor},
-                    BinaryData{"(left << right)", core::ir::BinaryOp::kShiftLeft},
-                    BinaryData{"(left >> right)", core::ir::BinaryOp::kShiftRight}));
+INSTANTIATE_TEST_SUITE_P(MslPrinterTest,
+                         MslPrinterBinaryTest,
+                         testing::Values(BinaryData{"(left + right)", core::BinaryOp::kAdd},
+                                         BinaryData{"(left - right)", core::BinaryOp::kSubtract},
+                                         BinaryData{"(left * right)", core::BinaryOp::kMultiply},
+                                         BinaryData{"(left & right)", core::BinaryOp::kAnd},
+                                         BinaryData{"(left | right)", core::BinaryOp::kOr},
+                                         BinaryData{"(left ^ right)", core::BinaryOp::kXor}));
+
+TEST_F(MslPrinterTest, BinaryDivU32) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Constant(1_u));
+        auto* r = b.Let("right", b.Constant(2_u));
+        auto* bin = b.Binary(core::BinaryOp::kDivide, ty.u32(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_;
+    EXPECT_EQ(output_, MetalHeader() + R"(
+void foo() {
+  uint const left = 1u;
+  uint const right = 2u;
+  uint const val = tint_div_u32(left, right);
+}
+uint tint_div_u32(uint lhs, uint rhs) {
+  return (lhs / select(rhs, 1u, (rhs == 0u)));
+}
+)");
+}
+
+TEST_F(MslPrinterTest, BinaryModU32) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Constant(1_u));
+        auto* r = b.Let("right", b.Constant(2_u));
+        auto* bin = b.Binary(core::BinaryOp::kModulo, ty.u32(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_;
+    EXPECT_EQ(output_, MetalHeader() + R"(
+void foo() {
+  uint const left = 1u;
+  uint const right = 2u;
+  uint const val = tint_mod_u32(left, right);
+}
+uint tint_mod_u32(uint lhs, uint rhs) {
+  uint const v = select(rhs, 1u, (rhs == 0u));
+  return (lhs - ((lhs / v) * v));
+}
+)");
+}
+
+TEST_F(MslPrinterTest, BinaryShiftLeft) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Constant(1_u));
+        auto* r = b.Let("right", b.Constant(2_u));
+        auto* bin = b.Binary(core::BinaryOp::kShiftLeft, ty.u32(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_;
+    EXPECT_EQ(output_, MetalHeader() + R"(
+void foo() {
+  uint const left = 1u;
+  uint const right = 2u;
+  uint const val = (left << (right & 31u));
+}
+)");
+}
+
+TEST_F(MslPrinterTest, BinaryShiftRight) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Constant(1_u));
+        auto* r = b.Let("right", b.Constant(2_u));
+        auto* bin = b.Binary(core::BinaryOp::kShiftRight, ty.u32(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_;
+    EXPECT_EQ(output_, MetalHeader() + R"(
+void foo() {
+  uint const left = 1u;
+  uint const right = 2u;
+  uint const val = (left >> (right & 31u));
+}
+)");
+}
 
 using MslPrinterBinaryBoolTest = MslPrinterTestWithParam<BinaryData>;
 TEST_P(MslPrinterBinaryBoolTest, Emit) {
@@ -110,12 +192,12 @@ void foo() {
 INSTANTIATE_TEST_SUITE_P(
     MslPrinterTest,
     MslPrinterBinaryBoolTest,
-    testing::Values(BinaryData{"(left == right)", core::ir::BinaryOp::kEqual},
-                    BinaryData{"(left != right)", core::ir::BinaryOp::kNotEqual},
-                    BinaryData{"(left < right)", core::ir::BinaryOp::kLessThan},
-                    BinaryData{"(left > right)", core::ir::BinaryOp::kGreaterThan},
-                    BinaryData{"(left <= right)", core::ir::BinaryOp::kLessThanEqual},
-                    BinaryData{"(left >= right)", core::ir::BinaryOp::kGreaterThanEqual}));
+    testing::Values(BinaryData{"(left == right)", core::BinaryOp::kEqual},
+                    BinaryData{"(left != right)", core::BinaryOp::kNotEqual},
+                    BinaryData{"(left < right)", core::BinaryOp::kLessThan},
+                    BinaryData{"(left > right)", core::BinaryOp::kGreaterThan},
+                    BinaryData{"(left <= right)", core::BinaryOp::kLessThanEqual},
+                    BinaryData{"(left >= right)", core::BinaryOp::kGreaterThanEqual}));
 
 // TODO(dsinclair): Needs transform
 // TODO(dsinclair): Requires `bitcast` support
@@ -145,9 +227,9 @@ void foo() {
 }
 
 constexpr BinaryData signed_overflow_defined_behaviour_cases[] = {
-    {"as_type<int>((as_type<uint>(left) + as_type<uint>(right)))", core::ir::BinaryOp::kAdd},
-    {"as_type<int>((as_type<uint>(left) - as_type<uint>(right)))", core::ir::BinaryOp::kSubtract},
-    {"as_type<int>((as_type<uint>(left) * as_type<uint>(right)))", core::ir::BinaryOp::kMultiply}};
+    {"as_type<int>((as_type<uint>(left) + as_type<uint>(right)))", core::BinaryOp::kAdd},
+    {"as_type<int>((as_type<uint>(left) - as_type<uint>(right)))", core::BinaryOp::kSubtract},
+    {"as_type<int>((as_type<uint>(left) * as_type<uint>(right)))", core::BinaryOp::kMultiply}};
 INSTANTIATE_TEST_SUITE_P(MslPrinterTest,
                          MslPrinterBinaryTest_SignedOverflowDefinedBehaviour,
                          testing::ValuesIn(signed_overflow_defined_behaviour_cases));
@@ -180,8 +262,8 @@ void foo() {
 }
 
 constexpr BinaryData shift_signed_overflow_defined_behaviour_cases[] = {
-    {"as_type<int>((as_type<uint>(left) << right))", core::ir::BinaryOp::kShiftLeft},
-    {"(left >> right)", core::ir::BinaryOp::kShiftRight}};
+    {"as_type<int>((as_type<uint>(left) << right))", core::BinaryOp::kShiftLeft},
+    {"(left >> right)", core::BinaryOp::kShiftRight}};
 INSTANTIATE_TEST_SUITE_P(MslPrinterTest,
                          MslPrinterBinaryTest_ShiftSignedOverflowDefinedBehaviour,
                          testing::ValuesIn(shift_signed_overflow_defined_behaviour_cases));
@@ -216,13 +298,13 @@ void foo() {
 constexpr BinaryData signed_overflow_defined_behaviour_chained_cases[] = {
     {R"(as_type<int>((as_type<uint>(as_type<int>((as_type<uint>(left) + as_type<uint>(right)))) +
     as_type<uint>(right))))",
-     core::ir::BinaryOp::kAdd},
+     core::BinaryOp::kAdd},
     {R"(as_type<int>((as_type<uint>(as_type<int>((as_type<uint>(left) - as_type<uint>(right)))) -
     as_type<uint>(right))))",
-     core::ir::BinaryOp::kSubtract},
+     core::BinaryOp::kSubtract},
     {R"(as_type<int>((as_type<uint>(as_type<int>((as_type<uint>(left) * as_type<uint>(right)))) *
     as_type<uint>(right))))",
-     core::ir::BinaryOp::kMultiply}};
+     core::BinaryOp::kMultiply}};
 INSTANTIATE_TEST_SUITE_P(MslPrinterTest,
                          MslPrinterBinaryTest_SignedOverflowDefinedBehaviour_Chained,
                          testing::ValuesIn(signed_overflow_defined_behaviour_chained_cases));
@@ -256,8 +338,8 @@ void foo() {
 }
 constexpr BinaryData shift_signed_overflow_defined_behaviour_chained_cases[] = {
     {R"(as_type<int>((as_type<uint>(as_type<int>((as_type<uint>(left) << right))) << right)))",
-     core::ir::BinaryOp::kShiftLeft},
-    {R"(((left >> right) >> right))", core::ir::BinaryOp::kShiftRight},
+     core::BinaryOp::kShiftLeft},
+    {R"(((left >> right) >> right))", core::BinaryOp::kShiftRight},
 };
 INSTANTIATE_TEST_SUITE_P(MslPrinterTest,
                          MslPrinterBinaryTest_ShiftSignedOverflowDefinedBehaviour_Chained,
@@ -270,7 +352,7 @@ TEST_F(MslPrinterTest, DISABLED_BinaryModF32) {
         auto* left = b.Var("left", ty.ptr<core::AddressSpace::kFunction, f32>());
         auto* right = b.Var("right", ty.ptr<core::AddressSpace::kFunction, f32>());
 
-        auto* expr1 = b.Binary(core::ir::BinaryOp::kModulo, ty.f32(), left, right);
+        auto* expr1 = b.Binary(core::BinaryOp::kModulo, ty.f32(), left, right);
 
         b.Let("val", expr1);
     });
@@ -293,7 +375,7 @@ TEST_F(MslPrinterTest, DISABLED_BinaryModF16) {
         auto* left = b.Var("left", ty.ptr<core::AddressSpace::kFunction, f16>());
         auto* right = b.Var("right", ty.ptr<core::AddressSpace::kFunction, f16>());
 
-        auto* expr1 = b.Binary(core::ir::BinaryOp::kModulo, ty.f16(), left, right);
+        auto* expr1 = b.Binary(core::BinaryOp::kModulo, ty.f16(), left, right);
 
         b.Let("val", expr1);
     });
@@ -314,7 +396,7 @@ TEST_F(MslPrinterTest, DISABLED_BinaryModVec3F32) {
         auto* left = b.Var("left", ty.ptr(core::AddressSpace::kFunction, ty.vec3<f32>()));
         auto* right = b.Var("right", ty.ptr(core::AddressSpace::kFunction, ty.vec3<f32>()));
 
-        auto* expr1 = b.Binary(core::ir::BinaryOp::kModulo, ty.vec3<f32>(), left, right);
+        auto* expr1 = b.Binary(core::BinaryOp::kModulo, ty.vec3<f32>(), left, right);
 
         b.Let("val", expr1);
     });
@@ -337,7 +419,7 @@ TEST_F(MslPrinterTest, DISABLED_BinaryModVec3F16) {
         auto* left = b.Var("left", ty.ptr(core::AddressSpace::kFunction, ty.vec3<f16>()));
         auto* right = b.Var("right", ty.ptr(core::AddressSpace::kFunction, ty.vec3<f16>()));
 
-        auto* expr1 = b.Binary(core::ir::BinaryOp::kModulo, ty.vec3<f16>(), left, right);
+        auto* expr1 = b.Binary(core::BinaryOp::kModulo, ty.vec3<f16>(), left, right);
 
         b.Let("val", expr1);
     });
@@ -358,7 +440,7 @@ TEST_F(MslPrinterTest, DISABLED_BinaryBoolAnd) {
         auto* left = b.Var("left", ty.ptr(core::AddressSpace::kFunction, ty.bool_()));
         auto* right = b.Var("right", ty.ptr(core::AddressSpace::kFunction, ty.bool_()));
 
-        auto* expr1 = b.Binary(core::ir::BinaryOp::kAdd, ty.bool_(), left, right);
+        auto* expr1 = b.Binary(core::BinaryOp::kAdd, ty.bool_(), left, right);
 
         b.Let("val", expr1);
     });
@@ -379,7 +461,7 @@ TEST_F(MslPrinterTest, DISABLED_BinaryBoolOr) {
         auto* left = b.Var("left", ty.ptr(core::AddressSpace::kFunction, ty.bool_()));
         auto* right = b.Var("right", ty.ptr(core::AddressSpace::kFunction, ty.bool_()));
 
-        auto* expr1 = b.Binary(core::ir::BinaryOp::kOr, ty.bool_(), left, right);
+        auto* expr1 = b.Binary(core::BinaryOp::kOr, ty.bool_(), left, right);
 
         b.Let("val", expr1);
     });

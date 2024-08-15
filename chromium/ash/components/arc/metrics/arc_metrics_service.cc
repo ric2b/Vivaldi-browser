@@ -51,10 +51,6 @@ constexpr int kUmaFixupDirectoriesCountMin = 0;
 constexpr int kUmaFixupDirectoriesCountMax = 5000000;
 constexpr int kUmaFixupAppsCountMin = 0;
 constexpr int kUmaFixupAppsCountMax = 10000;
-constexpr int kUmaDataFilesCountMin = 1;
-constexpr int kUmaDataFilesCountMax = 5000000;
-constexpr int kUmaDataSizeInKiloBytesMin = 1;
-constexpr int kUmaDataSizeInKiloBytesMax = INT_MAX - 1;
 
 constexpr base::TimeDelta kRequestProcessListPeriod = base::Minutes(5);
 constexpr char kArcProcessNamePrefix[] = "org.chromium.arc.";
@@ -115,22 +111,6 @@ const char* DnsQueryToString(mojom::ArcDnsQuery query) {
       return "Other";
     case mojom::ArcDnsQuery::ANDROID_API_HOST_NAME:
       return "AndroidApi";
-  }
-  NOTREACHED();
-  return "";
-}
-
-std::string AndroidDataSubdirectoryToString(
-    mojom::AndroidDataSubdirectory subdirectory) {
-  switch (subdirectory) {
-    case mojom::AndroidDataSubdirectory::kUserInstalledAppDir:
-      return "UserInstalledAppDir";
-    case mojom::AndroidDataSubdirectory::kInternalDataDir:
-      return "InternalDataDir";
-    case mojom::AndroidDataSubdirectory::kExternalDataRootUserDir:
-      return "ExternalDataRootUserDir";
-    case mojom::AndroidDataSubdirectory::kDEStorageRootUserDir:
-      return "DEStorageRootUserDir";
   }
   NOTREACHED();
   return "";
@@ -287,7 +267,7 @@ void ArcMetricsService::OnProcessConnectionReady() {
     prev_logged_memory_kills_.reset();
     // Initialize prev_logged_memory_kills_ by immediately requesting new
     // values. We don't need the VM list to exist to update it, so pass nullopt.
-    OnListVmsResponse(absl::nullopt);
+    OnListVmsResponse(std::nullopt);
     request_kill_count_timer_.Start(
         FROM_HERE, kRequestKillCountPeriod, this,
         &ArcMetricsService::OnRequestKillCountTimer);
@@ -377,7 +357,7 @@ static void LogLowMemoryKillCountsForVm(
 static void LogLowMemoryKillCounts(
     const mojom::LowMemoryKillCountsPtr& prev,
     const mojom::LowMemoryKillCountsPtr& curr,
-    absl::optional<vm_tools::concierge::ListVmsResponse> vms_list) {
+    std::optional<vm_tools::concierge::ListVmsResponse> vms_list) {
   // Only log to the histograms if we have a previous sample to compute deltas
   // from.
   if (!prev)
@@ -448,7 +428,7 @@ void ArcMetricsService::OnRequestKillCountTimer() {
 }
 
 void ArcMetricsService::OnListVmsResponse(
-    absl::optional<vm_tools::concierge::ListVmsResponse> response) {
+    std::optional<vm_tools::concierge::ListVmsResponse> response) {
   mojom::ProcessInstance* process_instance = ARC_GET_INSTANCE_FOR_METHOD(
       arc_bridge_service_->process(), RequestLowMemoryKillCounts);
   if (!process_instance) {
@@ -461,7 +441,7 @@ void ArcMetricsService::OnListVmsResponse(
 }
 
 void ArcMetricsService::OnLowMemoryKillCounts(
-    absl::optional<vm_tools::concierge::ListVmsResponse> vms_list,
+    std::optional<vm_tools::concierge::ListVmsResponse> vms_list,
     mojom::LowMemoryKillCountsPtr counts) {
   DCHECK(daily_);
   if (daily_) {
@@ -495,7 +475,7 @@ void ArcMetricsService::OnLowMemoryKillCounts(
 void ArcMetricsService::OnArcStartTimeRetrieved(
     std::vector<mojom::BootProgressEventPtr> events,
     mojom::BootType boot_type,
-    absl::optional<base::TimeTicks> arc_start_time) {
+    std::optional<base::TimeTicks> arc_start_time) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!arc_start_time.has_value()) {
     LOG(ERROR) << "Failed to retrieve ARC start timeticks.";
@@ -537,7 +517,7 @@ void ArcMetricsService::ReportBootProgress(
     // For VM builds, do not call into session_manager since we don't use it
     // for the builds. The upgrade time is included in the events vector so we
     // can extract it here.
-    absl::optional<base::TimeTicks> arc_start_time =
+    std::optional<base::TimeTicks> arc_start_time =
         GetArcStartTimeFromEvents(events);
     OnArcStartTimeRetrieved(std::move(events), boot_type, arc_start_time);
     return;
@@ -653,7 +633,7 @@ void ArcMetricsService::ReportArcCorePriAbiMigDowngradeDelay(
 
 void ArcMetricsService::OnArcStartTimeForPriAbiMigration(
     base::TimeTicks durationTicks,
-    absl::optional<base::TimeTicks> arc_start_time) {
+    std::optional<base::TimeTicks> arc_start_time) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!arc_start_time.has_value()) {
     LOG(ERROR) << "Failed to retrieve ARC start timeticks.";
@@ -841,88 +821,6 @@ void ArcMetricsService::ReportWaylandLateTimingEvent(
   base::UmaHistogramEnumeration("Arc.Wayland.LateTiming.Event", event);
 }
 
-void ArcMetricsService::ReportNonAndroidPlayFilesCount(
-    uint32_t number_of_directories,
-    uint32_t number_of_non_directories) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::UmaHistogramCustomCounts(
-      "Arc.PlayFilesCount.Files",
-      number_of_directories + number_of_non_directories, kUmaDataFilesCountMin,
-      kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts("Arc.PlayFilesCount.Directories",
-                                 number_of_directories, kUmaDataFilesCountMin,
-                                 kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts(
-      "Arc.PlayFilesCount.NonDirectories", number_of_non_directories,
-      kUmaDataFilesCountMin, kUmaDataFilesCountMax, kUmaNumBuckets);
-}
-
-void ArcMetricsService::ReportPerAppFileStatsOfAndroidDataDirs(
-    uint32_t number_of_directories,
-    uint32_t number_of_non_directories,
-    uint32_t size_in_kilobytes) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.PerApp.Files",
-      number_of_directories + number_of_non_directories, kUmaDataFilesCountMin,
-      kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts("Arc.AndroidData.PerApp.Directories",
-                                 number_of_directories, kUmaDataFilesCountMin,
-                                 kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.PerApp.NonDirectories", number_of_non_directories,
-      kUmaDataFilesCountMin, kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts("Arc.AndroidData.PerApp.Size",
-                                 size_in_kilobytes, kUmaDataSizeInKiloBytesMin,
-                                 kUmaDataSizeInKiloBytesMax, kUmaNumBuckets);
-}
-
-void ArcMetricsService::ReportTotalFileStatsOfAndroidDataDirs(
-    uint32_t number_of_directories,
-    uint32_t number_of_non_directories,
-    uint32_t size_in_kilobytes,
-    base::TimeDelta duration) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.Total.All.Files",
-      number_of_directories + number_of_non_directories, kUmaDataFilesCountMin,
-      kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts("Arc.AndroidData.Total.All.Directories",
-                                 number_of_directories, kUmaDataFilesCountMin,
-                                 kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.Total.All.NonDirectories", number_of_non_directories,
-      kUmaDataFilesCountMin, kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts("Arc.AndroidData.Total.All.Size",
-                                 size_in_kilobytes, kUmaDataSizeInKiloBytesMin,
-                                 kUmaDataSizeInKiloBytesMax, kUmaNumBuckets);
-  base::UmaHistogramLongTimes("Arc.AndroidData.TraversalDuration", duration);
-}
-
-void ArcMetricsService::ReportTotalFileStatsOfAndroidDataSubdir(
-    mojom::AndroidDataSubdirectory target,
-    uint32_t number_of_directories,
-    uint32_t number_of_non_directories,
-    uint32_t size_in_kilobytes) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  const std::string targetName = AndroidDataSubdirectoryToString(target);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.Total." + targetName + ".Files",
-      number_of_directories + number_of_non_directories, kUmaDataFilesCountMin,
-      kUmaDataFilesCountMax, kUmaNumBuckets);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.Total." + targetName + ".Directories",
-      number_of_directories, kUmaDataFilesCountMin, kUmaDataFilesCountMax,
-      kUmaNumBuckets);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.Total." + targetName + ".NonDirectories",
-      number_of_non_directories, kUmaDataFilesCountMin, kUmaDataFilesCountMax,
-      kUmaNumBuckets);
-  base::UmaHistogramCustomCounts(
-      "Arc.AndroidData.Total." + targetName + ".Size", size_in_kilobytes,
-      kUmaDataSizeInKiloBytesMin, kUmaDataSizeInKiloBytesMax, kUmaNumBuckets);
-}
-
 void ArcMetricsService::ReportWebViewProcessStarted() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(prefs_);
@@ -937,6 +835,11 @@ void ArcMetricsService::ReportNewQosSocketCount(int count) {
 void ArcMetricsService::ReportQosSocketPercentage(int perc) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   base::UmaHistogramCounts100("Arc.Qos.QosSocketPercentage", perc);
+}
+
+void ArcMetricsService::ReportArcKeyMintError(mojom::ArcKeyMintError error) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  base::UmaHistogramEnumeration("Arc.KeyMint.KeyMintError", error);
 }
 
 void ArcMetricsService::OnWindowActivated(
@@ -1036,7 +939,7 @@ void ArcMetricsService::RemoveBootTypeObserver(BootTypeObserver* obs) {
   boot_type_observers_.RemoveObserver(obs);
 }
 
-absl::optional<base::TimeTicks> ArcMetricsService::GetArcStartTimeFromEvents(
+std::optional<base::TimeTicks> ArcMetricsService::GetArcStartTimeFromEvents(
     std::vector<mojom::BootProgressEventPtr>& events) {
   mojom::BootProgressEventPtr arc_upgraded_event;
   for (auto it = events.begin(); it != events.end(); ++it) {
@@ -1047,7 +950,7 @@ absl::optional<base::TimeTicks> ArcMetricsService::GetArcStartTimeFromEvents(
              base::TimeTicks();
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void ArcMetricsService::ReportMemoryPressureArcVmKills(int count,

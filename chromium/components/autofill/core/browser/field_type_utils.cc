@@ -9,14 +9,56 @@
 #include "base/notreached.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace autofill {
+
+const FieldTypeSet& GetDatabaseStoredTypesOfAutofillProfile() {
+  static constexpr FieldTypeSet stored_types{
+      COMPANY_NAME,
+      NAME_HONORIFIC_PREFIX,
+      NAME_FIRST,
+      NAME_MIDDLE,
+      NAME_LAST_FIRST,
+      NAME_LAST_CONJUNCTION,
+      NAME_LAST_SECOND,
+      NAME_LAST,
+      NAME_FULL,
+      NAME_FULL_WITH_HONORIFIC_PREFIX,
+      ADDRESS_HOME_STREET_ADDRESS,
+      ADDRESS_HOME_STREET_NAME,
+      ADDRESS_HOME_STREET_LOCATION,
+      ADDRESS_HOME_HOUSE_NUMBER,
+      ADDRESS_HOME_SUBPREMISE,
+      ADDRESS_HOME_DEPENDENT_LOCALITY,
+      ADDRESS_HOME_CITY,
+      ADDRESS_HOME_STATE,
+      ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_SORTING_CODE,
+      ADDRESS_HOME_COUNTRY,
+      ADDRESS_HOME_APT,
+      ADDRESS_HOME_APT_NUM,
+      ADDRESS_HOME_APT_TYPE,
+      ADDRESS_HOME_FLOOR,
+      ADDRESS_HOME_OVERFLOW,
+      ADDRESS_HOME_LANDMARK,
+      ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
+      ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
+      ADDRESS_HOME_BETWEEN_STREETS,
+      ADDRESS_HOME_BETWEEN_STREETS_1,
+      ADDRESS_HOME_BETWEEN_STREETS_2,
+      ADDRESS_HOME_ADMIN_LEVEL2,
+      EMAIL_ADDRESS,
+      PHONE_HOME_WHOLE_NUMBER,
+      BIRTHDATE_DAY,
+      BIRTHDATE_MONTH,
+      BIRTHDATE_4_DIGIT_YEAR};
+  return stored_types;
+}
 
 size_t NumberOfPossibleFieldTypesInGroup(const AutofillField& field,
                                          FieldTypeGroup group) {
   return base::ranges::count(field.possible_types(), group,
-                             GroupTypeOfServerFieldType);
+                             GroupTypeOfFieldType);
 }
 
 bool FieldHasMeaningfulPossibleFieldTypes(const AutofillField& field) {
@@ -37,12 +79,12 @@ bool TypeOfFieldIsPossibleType(const AutofillField& field) {
   return field.possible_types().contains(field.Type().GetStorableType());
 }
 
-bool IsStreetNameOrHouseNumberType(const ServerFieldType type) {
+bool IsStreetNameOrHouseNumberType(const FieldType type) {
   return type == ADDRESS_HOME_STREET_NAME || type == ADDRESS_HOME_HOUSE_NUMBER;
 }
 
-bool IsAddressType(const AutofillType& type) {
-  switch (type.group()) {
+bool IsAddressType(FieldType type) {
+  switch (GroupTypeOfFieldType(type)) {
     case FieldTypeGroup::kName:
     case FieldTypeGroup::kEmail:
     case FieldTypeGroup::kCompany:
@@ -62,19 +104,18 @@ bool IsAddressType(const AutofillType& type) {
   NOTREACHED_NORETURN();
 }
 
-size_t AddressLineIndex(ServerFieldType type) {
+size_t AddressLineIndex(FieldType type) {
   static constexpr auto kAddressLineIndex =
-      base::MakeFixedFlatMap<ServerFieldType, size_t>(
-          {{ADDRESS_HOME_LINE1, 0},
-           {ADDRESS_HOME_LINE2, 1},
-           {ADDRESS_HOME_LINE3, 2}});
+      base::MakeFixedFlatMap<FieldType, size_t>({{ADDRESS_HOME_LINE1, 0},
+                                                 {ADDRESS_HOME_LINE2, 1},
+                                                 {ADDRESS_HOME_LINE3, 2}});
   if (kAddressLineIndex.contains(type)) {
     return kAddressLineIndex.at(type);
   }
   NOTREACHED_NORETURN();
 }
 
-size_t DetermineExpirationYearLength(ServerFieldType assumed_field_type) {
+size_t DetermineExpirationYearLength(FieldType assumed_field_type) {
   switch (assumed_field_type) {
     case CREDIT_CARD_EXP_2_DIGIT_YEAR:
       return 2;

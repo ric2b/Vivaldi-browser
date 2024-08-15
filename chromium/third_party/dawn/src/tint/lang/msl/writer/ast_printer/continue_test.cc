@@ -39,15 +39,25 @@ TEST_F(MslASTPrinterTest, Emit_Continue) {
 
     ASTPrinter& gen = Build();
 
-    gen.IncrementIndent();
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
+    EXPECT_EQ(gen.Result(), R"(#include <metal_stdlib>
 
-    ASSERT_TRUE(gen.EmitStatement(loop)) << gen.Diagnostics();
-    EXPECT_EQ(gen.Result(), R"(  while (true) {
+using namespace metal;
+
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
+kernel void test_function() {
+  TINT_ISOLATE_UB(tint_volatile_true) while(true) {
     if (false) {
       break;
     }
     continue;
   }
+  return;
+}
+
 )");
 }
 

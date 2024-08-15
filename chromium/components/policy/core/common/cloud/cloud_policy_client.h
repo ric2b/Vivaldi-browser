@@ -12,6 +12,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,7 +20,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -83,11 +83,6 @@ class POLICY_EXPORT CloudPolicyClient {
   // Should be called once per registration.
   using DeviceDMTokenCallback = base::RepeatingCallback<std::string(
       const std::vector<std::string>& user_affiliation_ids)>;
-
-  // Callback that processes response value received from the server,
-  // or nullopt, if there was a failure.
-  using ResponseCallback =
-      base::OnceCallback<void(absl::optional<base::Value::Dict>)>;
 
   using ClientCertProvisioningRequestCallback = base::OnceCallback<void(
       DeviceManagementStatus,
@@ -200,13 +195,13 @@ class POLICY_EXPORT CloudPolicyClient {
   // DMToken for affiliated users. Could be null if it's not possible to use
   // device DMToken for user policy fetches.
   CloudPolicyClient(
-      base::StringPiece machine_id,
-      base::StringPiece machine_model,
-      base::StringPiece brand_code,
-      base::StringPiece attested_device_id,
+      std::string_view machine_id,
+      std::string_view machine_model,
+      std::string_view brand_code,
+      std::string_view attested_device_id,
       absl::optional<MacAddress> ethernet_mac_address,
       absl::optional<MacAddress> dock_mac_address,
-      base::StringPiece manufacture_date,
+      std::string_view manufacture_date,
       DeviceManagementService* service,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       DeviceDMTokenCallback device_dm_token_callback);
@@ -260,6 +255,16 @@ class POLICY_EXPORT CloudPolicyClient {
                                  const std::string& client_id,
                                  const ClientDataDelegate& client_data_delegate,
                                  bool is_mandatory);
+
+  // Attempts to register the profile with the device management service using a
+  // OIDC response from a third party IdP's authentication. Results in a
+  // registration change or error notification.
+  virtual void RegisterWithOidcResponse(
+      const RegistrationParameters& parameters,
+      const std::string& oauth_token,
+      const std::string& oidc_id_token,
+      const std::string& profile_id,
+      const std::string& client_id);
 
   // Sets information about a policy invalidation. Subsequent fetch operations
   // will use the given info, and callers can use fetched_invalidation_version
@@ -375,13 +380,6 @@ class POLICY_EXPORT CloudPolicyClient {
                                          base::Value::Dict report,
                                          ResultCallback callback);
 
-  // Uploads a report containing |merging_payload| (merged into the default
-  // payload of the job). The client must be in a registered state. The
-  // |callback| will be called when the operation completes.
-  virtual void UploadEncryptedReport(base::Value::Dict merging_payload,
-                                     absl::optional<base::Value::Dict> context,
-                                     ResponseCallback callback);
-
   // Uploads a report on the status of app push-installs. The client must be in
   // a registered state. The |callback| will be called when the operation
   // completes.
@@ -477,6 +475,11 @@ class POLICY_EXPORT CloudPolicyClient {
   const std::string& manufacture_date() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return manufacture_date_;
+  }
+
+  const std::vector<std::string>& user_affiliation_ids() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return user_affiliation_ids_;
   }
 
   void set_last_policy_timestamp(const base::Time& timestamp) {
@@ -638,14 +641,6 @@ class POLICY_EXPORT CloudPolicyClient {
       int net_error,
       absl::optional<base::Value::Dict> response);
 
-  // Callback for encrypted report upload requests.
-  void OnEncryptedReportUploadCompleted(
-      ResponseCallback callback,
-      DeviceManagementService::Job* job,
-      DeviceManagementStatus status,
-      int net_error,
-      absl::optional<base::Value::Dict> response);
-
   // Callback for remote command fetch requests.
   void OnRemoteCommandsFetched(RemoteCommandCallback callback,
                                DMServerJobResult result);
@@ -700,12 +695,17 @@ class POLICY_EXPORT CloudPolicyClient {
   std::unique_ptr<base::Value::Dict> configuration_seed_;
   DeviceMode device_mode_ = DEVICE_MODE_NOT_SET;
   std::string client_id_;
+  absl::optional<std::string> profile_id_;
   base::Time last_policy_timestamp_;
   int public_key_version_ = -1;
   bool public_key_version_valid_ = false;
   // Device DMToken for affiliated user policy requests.
   // Retrieved from |device_dm_token_callback_| on registration.
   std::string device_dm_token_;
+
+  // A list of user affiliation ids, provided during setup or after
+  // registration.
+  std::vector<std::string> user_affiliation_ids_;
 
   // Information for the latest policy invalidation received.
   int64_t invalidation_version_ = 0;

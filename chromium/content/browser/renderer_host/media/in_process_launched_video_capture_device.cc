@@ -28,7 +28,6 @@ namespace {
 
 void StopAndReleaseDeviceOnDeviceThread(media::VideoCaptureDevice* device,
                                         base::OnceClosure done_cb) {
-  SCOPED_UMA_HISTOGRAM_TIMER("Media.VideoCaptureManager.StopDeviceTime");
   device->StopAndDeAllocate();
   DVLOG(3) << "StopAndReleaseDeviceOnDeviceThread";
   delete device;
@@ -116,8 +115,9 @@ void InProcessLaunchedVideoCaptureDevice::ResumeDevice() {
                                 base::Unretained(device_.get())));
 }
 
-void InProcessLaunchedVideoCaptureDevice::Crop(
-    const base::Token& crop_id,
+void InProcessLaunchedVideoCaptureDevice::ApplySubCaptureTarget(
+    media::mojom::SubCaptureTargetType type,
+    const base::Token& target,
     uint32_t sub_capture_target_version,
     base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
         callback) {
@@ -127,11 +127,11 @@ void InProcessLaunchedVideoCaptureDevice::Crop(
   // guaranteed to run before the task that destroys the |device|.
   //
   // Explicitly bind the callback to the I/O thread since the VideoCaptureDevice
-  // Crop method runs the callback on an unspecified thread.
+  // ApplySubCaptureTarget method runs the callback on an unspecified thread.
   device_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&media::VideoCaptureDevice::Crop,
-                     base::Unretained(device_.get()), crop_id,
+      base::BindOnce(&media::VideoCaptureDevice::ApplySubCaptureTarget,
+                     base::Unretained(device_.get()), type, target,
                      sub_capture_target_version,
                      base::BindPostTask(content::GetIOThreadTaskRunner({}),
                                         std::move(callback))));

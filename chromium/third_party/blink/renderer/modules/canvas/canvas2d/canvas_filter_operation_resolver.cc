@@ -15,8 +15,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_object_objectarray.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_object_objectarray_string.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser.h"
+#include "third_party/blink/renderer/core/css/resolver/filter_operation_resolver.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_color.h"
+#include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/style/filter_operation.h"
@@ -27,6 +31,7 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
+#include "third_party/blink/renderer/platform/geometry/length_point.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/filters/fe_component_transfer.h"
 #include "third_party/blink/renderer/platform/graphics/filters/fe_convolve_matrix.h"
@@ -46,21 +51,6 @@ class ScriptValue;
 
 namespace {
 int num_canvas_filter_errors_to_console_allowed_ = 64;
-
-BlurFilterOperation* ResolveBlur(const Dictionary& blur_dict,
-                                 ExceptionState& exception_state) {
-  absl::optional<double> std_deviation =
-      blur_dict.Get<IDLDouble>("stdDeviation", exception_state);
-  if (!std_deviation.has_value()) {
-    exception_state.ThrowTypeError(
-        "Failed to construct blur filter, 'stdDeviation' required and must be "
-        "a number.");
-    return nullptr;
-  }
-
-  return MakeGarbageCollected<BlurFilterOperation>(
-      Length::Fixed(*std_deviation));
-}
 
 ColorMatrixFilterOperation* ResolveColorMatrix(
     const Dictionary& dict,
@@ -252,11 +242,28 @@ base::expected<gfx::PointF, String> ResolveFloatOrVec2f(
     if (exception_state.HadException() || !two_floats.has_value() ||
         two_floats->size() != 2) {
       return base::unexpected(String::Format(
-          "\"%s\" must either be a number or a array of two numbers",
+          "\"%s\" must either be a number or an array of two numbers",
           property_name.Ascii().c_str()));
     }
     return gfx::PointF(two_floats->at(0), two_floats->at(1));
   }
+}
+
+BlurFilterOperation* ResolveBlur(const Dictionary& blur_dict,
+                                 ExceptionState& exception_state) {
+  base::expected<gfx::PointF, String> blur_xy =
+      ResolveFloatOrVec2f("stdDeviation", blur_dict, exception_state);
+
+  if (exception_state.HadException() || !blur_xy.has_value()) {
+    exception_state.ThrowTypeError(
+        String::Format("Failed to construct blur filter. %s.",
+                       blur_xy.error().Utf8().c_str()));
+    return nullptr;
+  }
+
+  return MakeGarbageCollected<BlurFilterOperation>(
+      Length::Fixed(std::max(0.0f, blur_xy->x())),
+      Length::Fixed(std::max(0.0f, blur_xy->y())));
 }
 
 DropShadowFilterOperation* ResolveDropShadow(
@@ -425,20 +432,10 @@ TurbulenceFilterOperation* ResolveTurbulence(const Dictionary& dict,
 
 }  // namespace
 
-FilterOperations CanvasFilterOperationResolver::CreateFilterOperations(
-    const V8CanvasFilterInput& filter_init,
+FilterOperations CanvasFilterOperationResolver::CreateFilterOperationsFromList(
+    const HeapVector<ScriptValue>& filters,
     ExecutionContext& execution_context,
     ExceptionState& exception_state) {
-  HeapVector<ScriptValue> filters;
-  switch (filter_init.GetContentType()) {
-    case V8CanvasFilterInput::ContentType::kObject:
-      filters.push_back(filter_init.GetAsObject());
-      break;
-    case V8CanvasFilterInput::ContentType::kObjectArray:
-      filters = filter_init.GetAsObjectArray();
-      break;
-  }
-
   FilterOperations operations;
   for (auto filter : filters) {
     Dictionary filter_dict = Dictionary(filter);
@@ -520,6 +517,32 @@ FilterOperations CanvasFilterOperationResolver::CreateFilterOperations(
   }
 
   return operations;
+}
+
+FilterOperations
+CanvasFilterOperationResolver::CreateFilterOperationsFromCSSFilter(
+    const String& filter_string,
+    const ExecutionContext& execution_context,
+    Element* style_resolution_host,
+    const Font& font) {
+  FilterOperations operations;
+  const CSSValue* css_value = CSSParser::ParseSingleValue(
+      CSSPropertyID::kFilter, filter_string,
+      MakeGarbageCollected<CSSParserContext>(
+          kHTMLStandardMode, execution_context.GetSecureContextMode()));
+  if (!css_value || css_value->IsCSSWideKeyword()) {
+    return operations;
+  }
+  // The style resolution for fonts is not available in frame-less documents.
+  if (style_resolution_host != nullptr &&
+      style_resolution_host->GetDocument().GetFrame() != nullptr) {
+    return style_resolution_host->GetDocument()
+        .GetStyleResolver()
+        .ComputeFilterOperations(style_resolution_host, font, *css_value);
+  } else {
+    return FilterOperationResolver::CreateOffscreenFilterOperations(*css_value,
+                                                                    font);
+  }
 }
 
 }  // namespace blink

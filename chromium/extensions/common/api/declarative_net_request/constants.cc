@@ -68,5 +68,12 @@ const char kHeaderValueKey[] = "value";
 const char kTabIdsKey[] = "tabIds";
 const char kExcludedTabIdsKey[] = "excludedTabIds";
 
+const char kMatchResponseHeadersPath[] = "condition.responseHeaders";
+const char kMatchExcludedResponseHeadersPath[] =
+    "condition.excludedResponseHeaders";
+const char kHeaderValuesKey[] = "values";
+const char kHeaderExcludedValuesKey[] = "excludedValues";
+const char kExcludedResponseHeadersKey[] = "excludedResponseHeaders";
+
 }  // namespace declarative_net_request
 }  // namespace extensions

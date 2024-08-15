@@ -31,9 +31,7 @@ import android.graphics.Bitmap;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.favicon.IconType;
 
-/**
- * The SelectableItemView for items displayed in the browsing history UI.
- */
+/** The SelectableItemView for items displayed in the browsing history UI. */
 public class HistoryItemView extends SelectableItemView<HistoryItem> {
     private ImageButton mRemoveButton;
     private VectorDrawableCompat mBlockedVisitDrawable;
@@ -65,17 +63,18 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         mRemoveButton = mEndButtonView;
         mRemoveButton.setImageResource(R.drawable.btn_delete_24dp);
         mRemoveButton.setContentDescription(getContext().getString((R.string.remove)));
-        ImageViewCompat.setImageTintList(mRemoveButton,
+        ImageViewCompat.setImageTintList(
+                mRemoveButton,
                 AppCompatResources.getColorStateList(
                         getContext(), R.color.default_icon_color_secondary_tint_list));
         mRemoveButton.setOnClickListener(v -> remove());
         mRemoveButton.setScaleType(ScaleType.CENTER_INSIDE);
         mRemoveButton.setPaddingRelative(
-                getResources().getDimensionPixelSize(
-                        R.dimen.history_item_remove_button_lateral_padding),
+                getResources()
+                        .getDimensionPixelSize(R.dimen.history_item_remove_button_lateral_padding),
                 getPaddingTop(),
-                getResources().getDimensionPixelSize(
-                        R.dimen.history_item_remove_button_lateral_padding),
+                getResources()
+                        .getDimensionPixelSize(R.dimen.history_item_remove_button_lateral_padding),
                 getPaddingBottom());
     }
 
@@ -87,15 +86,20 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
 
         mTitleView.setText(item.getTitle());
         mDescriptionView.setText(item.getDomain());
-        SelectableListUtils.setContentDescriptionContext(getContext(), mRemoveButton,
-                item.getTitle(), SelectableListUtils.ContentDescriptionSource.REMOVE_BUTTON);
+        SelectableListUtils.setContentDescriptionContext(
+                getContext(),
+                mRemoveButton,
+                item.getTitle(),
+                SelectableListUtils.ContentDescriptionSource.REMOVE_BUTTON);
         mIsItemRemoved = false;
 
         if (item.wasBlockedVisit()) {
             if (mBlockedVisitDrawable == null) {
                 mBlockedVisitDrawable =
-                        TraceEventVectorDrawableCompat.create(getContext().getResources(),
-                                R.drawable.ic_block_red, getContext().getTheme());
+                        TraceEventVectorDrawableCompat.create(
+                                getContext().getResources(),
+                                R.drawable.ic_block_red,
+                                getContext().getTheme());
             }
             setStartIconDrawable(mBlockedVisitDrawable);
             mTitleView.setTextColor(getContext().getColor(R.color.default_red));
@@ -105,8 +109,9 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
             requestIcon();
 
             if (!ChromeApplicationImpl.isVivaldi())
-            mTitleView.setTextColor(AppCompatResources.getColorStateList(
-                    getContext(), R.color.default_text_color_list));
+            mTitleView.setTextColor(
+                    AppCompatResources.getColorStateList(
+                            getContext(), R.color.default_text_color_list));
         }
     }
 
@@ -117,9 +122,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         mFaviconHelper = helper;
     }
 
-    /**
-     * Removes the item associated with this view.
-     */
+    /** Removes the item associated with this view. */
     public void remove() {
         // If the remove button is double tapped, this method may be called twice.
         if (getItem() == null || mIsItemRemoved) return;
@@ -134,8 +137,12 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     public void setRemoveButtonVisiblity(int visibility) {
         mRemoveButton.setVisibility(visibility);
         int endPadding = visibility == View.GONE ? mEndPadding : 0;
-        ViewCompat.setPaddingRelative(mContentView, ViewCompat.getPaddingStart(mContentView),
-                mContentView.getPaddingTop(), endPadding, mContentView.getPaddingBottom());
+        ViewCompat.setPaddingRelative(
+                mContentView,
+                ViewCompat.getPaddingStart(mContentView),
+                mContentView.getPaddingTop(),
+                endPadding,
+                mContentView.getPaddingBottom());
     }
 
     @Override
@@ -148,7 +155,8 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         HistoryItem item = getItem();
         if (item.wasBlockedVisit()) return;
         item.getLargeIconForUrl(
-                mMinIconSize, (icon, fallbackColor, isFallbackColorDefault, iconType) -> {
+                mMinIconSize,
+                (icon, fallbackColor, isFallbackColorDefault, iconType) -> {
                     // Prevent stale icons from making it through to the UI.
                     if (item != getItem()) return;
 
@@ -158,9 +166,14 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
                         return;
                     }
 
-                    Drawable drawable = FaviconUtils.getIconDrawableWithoutFilter(icon,
-                            getItem().getUrl(), fallbackColor, mIconGenerator, getResources(),
-                            mDisplayedIconSize);
+                    Drawable drawable =
+                            FaviconUtils.getIconDrawableWithoutFilter(
+                                    icon,
+                                    getItem().getUrl(),
+                                    fallbackColor,
+                                    mIconGenerator,
+                                    getResources(),
+                                    mDisplayedIconSize);
                     setStartIconDrawable(drawable);
                 });
     }

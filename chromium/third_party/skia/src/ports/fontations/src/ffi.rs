@@ -1,22 +1,22 @@
 // Copyright 2023 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found
 // in the LICENSE file.
-use cxx;
-use font_types::{GlyphId, Pen};
-use read_fonts::{FileRef, FontRef, ReadError, TableProvider};
+use font_types::{BoundingBox, GlyphId, Pen};
+use read_fonts::{tables::colr::CompositeMode, FileRef, FontRef, ReadError, TableProvider};
 use skrifa::{
+    color::{Brush, ColorGlyphFormat, ColorPainter, Transform},
     instance::{Location, Size},
     metrics::{GlyphMetrics, Metrics},
-    scale::Context,
+    outline::DrawSettings,
     setting::VariationSetting,
     string::{LocalizedStrings, StringId},
     MetadataProvider, Tag,
 };
 use std::pin::Pin;
 
-use crate::ffi::AxisWrapper;
-use crate::ffi::BridgeScalerMetrics;
-use crate::ffi::PathWrapper;
+use crate::ffi::{
+    AxisWrapper, BridgeScalerMetrics, ColorPainterWrapper, ColorStop, PaletteOverride, PathWrapper,
+};
 
 fn lookup_glyph_or_zero(font_ref: &BridgeFontRef, codepoint: u32) -> u16 {
     font_ref
@@ -61,6 +61,132 @@ impl<'a> Pen for PathWrapperPen<'a> {
     }
 }
 
+struct ColorPainterImpl<'a> {
+    color_painter_wrapper: Pin<&'a mut ffi::ColorPainterWrapper>,
+}
+
+impl<'a> ColorPainter for ColorPainterImpl<'a> {
+    fn push_transform(&mut self, transform: Transform) {
+        self.color_painter_wrapper.as_mut().push_transform(
+            transform.xx,
+            transform.xy,
+            transform.yx,
+            transform.yy,
+            transform.dx,
+            transform.dy,
+        );
+    }
+
+    fn pop_transform(&mut self) {
+        self.color_painter_wrapper.as_mut().pop_transform();
+    }
+
+    fn push_clip_glyph(&mut self, glyph: GlyphId) {
+        self.color_painter_wrapper
+            .as_mut()
+            .push_clip_glyph(glyph.to_u16());
+    }
+
+    fn push_clip_box(&mut self, clip_box: BoundingBox<f32>) {
+        self.color_painter_wrapper.as_mut().push_clip_rectangle(
+            clip_box.x_min,
+            clip_box.y_min,
+            clip_box.x_max,
+            clip_box.y_max,
+        );
+    }
+
+    fn pop_clip(&mut self) {
+        self.color_painter_wrapper.as_mut().pop_clip();
+    }
+
+    fn fill(&mut self, fill_type: Brush) {
+        let color_painter = self.color_painter_wrapper.as_mut();
+        match fill_type {
+            Brush::Solid {
+                palette_index,
+                alpha,
+            } => {
+                color_painter.fill_solid(palette_index, alpha);
+            }
+
+            Brush::LinearGradient {
+                p0,
+                p1,
+                color_stops,
+                extend,
+            } => {
+                let mut bridge_color_stops = BridgeColorStops {
+                    stops_iterator: Box::new(color_stops.iter()),
+                    num_stops: color_stops.len(),
+                };
+                color_painter.fill_linear(
+                    p0.x,
+                    p0.y,
+                    p1.x,
+                    p1.y,
+                    &mut bridge_color_stops,
+                    extend as u8,
+                );
+            }
+            Brush::RadialGradient {
+                c0,
+                r0,
+                c1,
+                r1,
+                color_stops,
+                extend,
+            } => {
+                let mut bridge_color_stops = BridgeColorStops {
+                    stops_iterator: Box::new(color_stops.iter()),
+                    num_stops: color_stops.len(),
+                };
+                color_painter.fill_radial(
+                    c0.x,
+                    c0.y,
+                    r0,
+                    c1.x,
+                    c1.y,
+                    r1,
+                    &mut bridge_color_stops,
+                    extend as u8,
+                );
+            }
+            Brush::SweepGradient {
+                c0,
+                start_angle,
+                end_angle,
+                color_stops,
+                extend,
+            } => {
+                let mut bridge_color_stops = BridgeColorStops {
+                    stops_iterator: Box::new(color_stops.iter()),
+                    num_stops: color_stops.len(),
+                };
+                color_painter.fill_sweep(
+                    c0.x,
+                    c0.y,
+                    start_angle,
+                    end_angle,
+                    &mut bridge_color_stops,
+                    extend as u8,
+                );
+            }
+        }
+    }
+
+    // TODO(drott): Add here an optimized paint function combining clip and fill.
+
+    fn push_layer(&mut self, composite_mode: CompositeMode) {
+        self.color_painter_wrapper
+            .as_mut()
+            .push_layer(composite_mode as u8);
+    }
+    fn pop_layer(&mut self) {
+        self.color_painter_wrapper.as_mut().pop_layer();
+    }
+}
+
 fn get_path(
     font_ref: &BridgeFontRef,
     glyph_id: u16,
@@ -71,16 +197,15 @@ fn get_path(
 ) -> bool {
     font_ref
         .with_font(|f| {
-            let mut cx = Context::new();
-            let mut scaler = cx
-                .new_scaler()
-                .size(Size::new(size))
-                .normalized_coords(coords.normalized_coords.into_iter())
-                .build(f);
+            // TODO(https://issues.skia.org/issues/317020057): Store OutlineGlyphCollection
+            // at ScalerContext or SkTypeface level.
+            let glyph = f.outline_glyphs().get(GlyphId::new(glyph_id))?;
+            let draw_settings = DrawSettings::unhinted(Size::new(size), &coords.normalized_coords);
+
             let mut pen_dump = PathWrapperPen {
                 path_wrapper: path_wrapper,
             };
-            match scaler.outline(GlyphId::new(glyph_id), &mut pen_dump) {
+            match glyph.draw(draw_settings, &mut pen_dump) {
                 Err(_) => None,
                 Ok(metrics) => {
                     scaler_metrics.has_overlaps = metrics.has_overlaps;
@@ -120,10 +245,10 @@ fn convert_metrics(skrifa_metrics: &Metrics) -> ffi::Metrics {
         ascent: skrifa_metrics.ascent,
         descent: skrifa_metrics.descent,
         leading: skrifa_metrics.leading,
-        avg_char_width: skrifa_metrics.average_width.unwrap_or_else(|| 0.0),
-        max_char_width: skrifa_metrics.max_width.unwrap_or_else(|| 0.0),
-        x_height: skrifa_metrics.x_height.unwrap_or_else(|| 0.0),
-        cap_height: skrifa_metrics.cap_height.unwrap_or_else(|| 0.0),
+        avg_char_width: skrifa_metrics.average_width.unwrap_or(0.0),
+        max_char_width: skrifa_metrics.max_width.unwrap_or(0.0),
+        x_height: skrifa_metrics.x_height.unwrap_or(0.0),
+        cap_height: skrifa_metrics.cap_height.unwrap_or(0.0),
     }
 }
 
@@ -193,84 +318,96 @@ fn postscript_name(font_ref: &BridgeFontRef, out_string: &mut String) -> bool {
     }
 }
 
-use crate::ffi::{ColrV0GlyphLayerRange, ColrV0Layer};
-
-fn num_palettes(font_ref: &BridgeFontRef) -> u16 {
+fn resolve_palette(
+    font_ref: &BridgeFontRef,
+    base_palette: u16,
+    palette_overrides: &[PaletteOverride],
+) -> Vec<u32> {
     font_ref
         .with_font(|f| {
             let cpal = f.cpal().ok()?;
-            Some(cpal.num_palettes())
-        })
-        .unwrap_or_default()
-}
 
-fn num_palette_entries(font_ref: &BridgeFontRef) -> u16 {
-    font_ref
-        .with_font(|f| {
-            let cpal = f.cpal().ok()?;
-            Some(cpal.num_palette_entries())
-        })
-        .unwrap_or_default()
-}
-
-fn palette_colors(font_ref: &BridgeFontRef, palette_index: u16, out_colors: &mut [u32]) -> bool {
-    let num_entries: usize = num_palette_entries(font_ref).into();
-    if out_colors.len() == 0 || num_entries != out_colors.len() {
-        return false;
-    }
-
-    font_ref
-        .with_font(|f| {
-            let cpal_table = f.cpal().ok()?;
-
-            let start_index: usize = cpal_table
+            let start_index: usize = cpal
                 .color_record_indices()
-                .get(usize::from(palette_index))?
+                .get(usize::from(base_palette))?
                 .get()
                 .into();
+            let num_entries: usize = cpal.num_palette_entries().into();
 
-            let color_records = cpal_table.color_records_array()?.ok()?;
-            let palette_slice = color_records.get(start_index..start_index + num_entries)?;
+            let color_records = cpal.color_records_array()?.ok()?;
+            let mut palette: Vec<u32> = color_records
+                .get(start_index..start_index + num_entries)?
+                .iter()
+                .map(|record| {
+                    u32::from_be_bytes([record.alpha, record.red, record.green, record.blue])
+                })
+                .collect();
 
-            for (out_color, palette_color) in out_colors.iter_mut().zip(palette_slice) {
-                *out_color = u32::from_be_bytes([
-                    palette_color.alpha(),
-                    palette_color.red(),
-                    palette_color.green(),
-                    palette_color.blue(),
-                ]);
+            for override_entry in palette_overrides {
+                let index = override_entry.index as usize;
+                if index < palette.len() {
+                    palette[index] = override_entry.color_8888;
+                }
             }
-            Some(true)
+            Some(palette)
         })
         .unwrap_or_default()
 }
 
-fn colrv0_layer_range(font_ref: &BridgeFontRef, glyph_id: u16) -> ColrV0GlyphLayerRange {
+fn has_colr_glyph(font_ref: &BridgeFontRef, format: ColorGlyphFormat, glyph_id: u16) -> bool {
     font_ref
         .with_font(|f| {
-            let layer_range = f.colr().ok()?.v0_base_glyph(GlyphId::new(glyph_id)).ok()?;
-            layer_range.map(|r| ColrV0GlyphLayerRange {
-                has_v0_layers: true,
-                start_index: r.start,
-                end_index: r.end,
-            })
+            let colrv1_paintable = f
+                .color_glyphs()
+                .get_with_format(GlyphId::new(glyph_id), format);
+            Some(colrv1_paintable.is_some())
         })
         .unwrap_or_default()
 }
 
-fn colrv0_glyph_layer(
+fn has_colrv1_glyph(font_ref: &BridgeFontRef, glyph_id: u16) -> bool {
+    has_colr_glyph(font_ref, ColorGlyphFormat::ColrV1, glyph_id)
+}
+
+fn has_colrv0_glyph(font_ref: &BridgeFontRef, glyph_id: u16) -> bool {
+    has_colr_glyph(font_ref, ColorGlyphFormat::ColrV0, glyph_id)
+}
+
+use crate::ffi::ClipBox;
+
+fn get_colrv1_clip_box(
     font_ref: &BridgeFontRef,
-    layer_index: usize,
-    out_layer: &mut ColrV0Layer,
+    coords: &BridgeNormalizedCoords,
+    glyph_id: u16,
+    size: f32,
+    clip_box: &mut ClipBox,
 ) -> bool {
-    match font_ref.with_font(|f| f.colr().ok()?.v0_layer(layer_index).ok()) {
-        Some(t) => {
-            out_layer.glyph_id = t.0.to_u16();
-            out_layer.palette_index = t.1;
-            true
+    let size = match size {
+        x if x == 0.0 => {
+            return false;
         }
-        _ => false,
-    }
+        _ => Size::new(size),
+    };
+    font_ref
+        .with_font(|f| {
+            match f
+                .color_glyphs()
+                .get_with_format(GlyphId::new(glyph_id), ColorGlyphFormat::ColrV1)?
+                .bounding_box(coords.normalized_coords.coords(), size)
+            {
+                Some(bounding_box) => {
+                    *clip_box = ClipBox {
+                        x_min: bounding_box.x_min,
+                        y_min: bounding_box.y_min,
+                        x_max: bounding_box.x_max,
+                        y_max: bounding_box.y_max,
+                    };
+                    Some(true)
+                }
+                _ => None,
+            }
+        })
+        .unwrap_or_default()
 }
 
 /// Implements the behavior expected for `SkTypeface::getTableData`, compare
@@ -324,7 +461,7 @@ fn variation_position(
     coords: &BridgeNormalizedCoords,
     coordinates: &mut [SkiaDesignCoordinate],
 ) -> isize {
-    if coordinates.len() > 0 {
+    if !coordinates.is_empty() {
         if coords.filtered_user_coords.len() > coordinates.len() {
             return -1;
         }
@@ -393,7 +530,7 @@ fn resolve_into_normalized_coords(
     design_coords: &[SkiaDesignCoordinate],
 ) -> Box<BridgeNormalizedCoords> {
     let variation_tuples = design_coords
-        .into_iter()
+        .iter()
         .map(|coord| (Tag::from_be_bytes(coord.axis.to_be_bytes()), coord.value));
     let bridge_normalized_coords = font_ref
         .with_font(|f| {
@@ -404,6 +541,40 @@ fn resolve_into_normalized_coords(
         })
         .unwrap_or_default();
     Box::new(bridge_normalized_coords)
+}
+
+fn draw_colr_glyph(
+    font_ref: &BridgeFontRef,
+    coords: &BridgeNormalizedCoords,
+    glyph_id: u16,
+    color_painter: Pin<&mut ColorPainterWrapper>,
+) -> bool {
+    let mut color_painter_impl = ColorPainterImpl {
+        color_painter_wrapper: color_painter,
+    };
+    font_ref
+        .with_font(|f| {
+            let paintable = f.color_glyphs().get(GlyphId::new(glyph_id))?;
+            paintable
+                .paint(coords.normalized_coords.coords(), &mut color_painter_impl)
+                .ok()
+        })
+        .is_some()
+}
+
+fn next_color_stop(color_stops: &mut BridgeColorStops, out_stop: &mut ColorStop) -> bool {
+    if let Some(color_stop) = color_stops.stops_iterator.next() {
+        out_stop.alpha = color_stop.alpha;
+        out_stop.stop = color_stop.offset;
+        out_stop.palette_index = color_stop.palette_index;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+fn num_color_stops(color_stops: &BridgeColorStops) -> usize {
+    return color_stops.num_stops;
 }
 
 struct BridgeFontRef<'a>(Option<FontRef<'a>>);
@@ -425,8 +596,18 @@ struct BridgeLocalizedStrings<'a> {
     localized_strings: LocalizedStrings<'a>,
 }
 
+struct BridgeColorStops<'a> {
+    pub stops_iterator: Box<dyn Iterator<Item = &'a skrifa::color::ColorStop> + 'a>,
+    pub num_stops: usize,
+}
+
 #[cxx::bridge(namespace = "fontations_ffi")]
 mod ffi {
+    struct ColorStop {
+        stop: f32,
+        palette_index: u16,
+        alpha: f32,
+    }
 
     #[derive(Default)]
     struct Metrics {
@@ -457,25 +638,19 @@ mod ffi {
         has_overlaps: bool,
     }
 
-    #[derive(Default)]
-    /// Information on whether COLRv0 glyph coverage exists for a
-    /// certain glyph and if yes, which layers need to be drawn.
-    struct ColrV0GlyphLayerRange {
-        has_v0_layers: bool,
-        start_index: usize,
-        end_index: usize,
+    struct PaletteOverride {
+        index: u16,
+        color_8888: u32,
     }
 
-    /// Representation of a COLRv0 layer consisting of glyph id
-    /// and palette index.
-    #[derive(Default, PartialEq, Debug)]
-    struct ColrV0Layer {
-        glyph_id: u16,
-        palette_index: u16,
+    struct ClipBox {
+        x_min: f32,
+        y_min: f32,
+        x_max: f32,
+        y_max: f32,
     }
 
     extern "Rust" {
-
         type BridgeFontRef<'a>;
         unsafe fn make_font_ref<'a>(font_data: &'a [u8], index: u32) -> Box<BridgeFontRef<'a>>;
         // Returns whether BridgeFontRef is a valid font containing at
@@ -512,43 +687,24 @@ mod ffi {
         fn family_name(font_ref: &BridgeFontRef) -> String;
         fn postscript_name(font_ref: &BridgeFontRef, out_string: &mut String) -> bool;
 
-        /// Get the number of CPAL palettes.
-        /// # Returns
-        /// * Number of palettes in the font, 0 if there are none or an error occured.
-        fn num_palettes(font_ref: &BridgeFontRef) -> u16;
-        /// Get the number of entries in each CPAL palette.
-        /// # Returns
-        /// * Number of palette entries per palette, 0 if none or an error occured.
-        fn num_palette_entries(font_ref: &BridgeFontRef) -> u16;
-        /// Copies into `colors` slice `SkColor`-compatible uint32_t ARGB color values
-        /// for a specified `palette_index`.
-        /// # Returns
-        /// `true` on success, `false` on failure.
-        fn palette_colors(font_ref: &BridgeFontRef, palette_index: u16, colors: &mut [u32])
-            -> bool;
-
-        /// Provides information on whether the specified glyph can be drawn
-        /// as a COLRv0 colored glyph.
-        ///
-        /// # Arguments
-        ///
-        /// * `font_ref` - font instance as created with `make_font_ref`
-        /// * `glyph_id` - glyph id of the glyph to check for COLRv0 coverage for
-        ///
-        /// # Returns
-        ///
-        /// `ColrV0GlyphLayerRange` - struct containing information on whether COLRv0
-        /// coverage exists, and if yes, start and end layer index.
-        fn colrv0_layer_range(font_ref: &BridgeFontRef, glyph_id: u16) -> ColrV0GlyphLayerRange;
-
-        /// Provides access to COLRv0 layers in the COLR table.
-        /// Using a layer index between start and end index
-        /// retrieved with [colrv0_layer_range], use this method
-        /// to retrieve glyph id and palette index of a specific layer.
-        fn colrv0_glyph_layer(
+        /// Receives a slice of palette overrides that will be merged
+        /// with the specified base palette of the font. The result is a
+        /// palette of RGBA, 8-bit per component, colors, consisting of
+        /// palette entries merged with overrides.
+        fn resolve_palette(
             font_ref: &BridgeFontRef,
-            layer_index: usize,
-            out_layer: &mut ColrV0Layer,
+            base_palette: u16,
+            palette_overrides: &[PaletteOverride],
+        ) -> Vec<u32>;
+
+        fn has_colrv1_glyph(font_ref: &BridgeFontRef, glyph_id: u16) -> bool;
+        fn has_colrv0_glyph(font_ref: &BridgeFontRef, glyph_id: u16) -> bool;
+        fn get_colrv1_clip_box(
+            font_ref: &BridgeFontRef,
+            coords: &BridgeNormalizedCoords,
+            glyph_id: u16,
+            size: f32,
+            clip_box: &mut ClipBox,
         ) -> bool;
 
         fn table_data(font_ref: &BridgeFontRef, tag: u32, offset: usize, data: &mut [u8]) -> usize;
@@ -574,6 +730,17 @@ mod ffi {
             font_ref: &BridgeFontRef,
             design_coords: &[SkiaDesignCoordinate],
         ) -> Box<BridgeNormalizedCoords>;
+
+        fn draw_colr_glyph(
+            font_ref: &BridgeFontRef,
+            coords: &BridgeNormalizedCoords,
+            glyph_id: u16,
+            color_painter: Pin<&mut ColorPainterWrapper>,
+        ) -> bool;
+
+        type BridgeColorStops<'a>;
+        fn next_color_stop(color_stops: &mut BridgeColorStops, stop: &mut ColorStop) -> bool;
+        fn num_color_stops(color_stops: &BridgeColorStops) -> usize;
 
     }
 
@@ -615,150 +782,129 @@ mod ffi {
         ) -> bool;
         fn size(self: Pin<&AxisWrapper>) -> usize;
 
+        type ColorPainterWrapper;
+
+        fn push_transform(
+            self: Pin<&mut ColorPainterWrapper>,
+            xx: f32,
+            xy: f32,
+            yx: f32,
+            yy: f32,
+            dx: f32,
+            dy: f32,
+        );
+        fn pop_transform(self: Pin<&mut ColorPainterWrapper>);
+        fn push_clip_glyph(self: Pin<&mut ColorPainterWrapper>, glyph_id: u16);
+        fn push_clip_rectangle(
+            self: Pin<&mut ColorPainterWrapper>,
+            x_min: f32,
+            y_min: f32,
+            x_max: f32,
+            y_max: f32,
+        );
+        fn pop_clip(self: Pin<&mut ColorPainterWrapper>);
+
+        fn fill_solid(self: Pin<&mut ColorPainterWrapper>, palette_index: u16, alpha: f32);
+        fn fill_radial(
+            self: Pin<&mut ColorPainterWrapper>,
+            x0: f32,
+            y0: f32,
+            r0: f32,
+            x1: f32,
+            y1: f32,
+            r1: f32,
+            color_stops: &mut BridgeColorStops,
+            extend_mode: u8,
+        );
+        fn fill_linear(
+            self: Pin<&mut ColorPainterWrapper>,
+            x0: f32,
+            y0: f32,
+            x1: f32,
+            y1: f32,
+            color_stops: &mut BridgeColorStops,
+            extend_mode: u8,
+        );
+        fn fill_sweep(
+            self: Pin<&mut ColorPainterWrapper>,
+            x0: f32,
+            y0: f32,
+            start_angle: f32,
+            end_angle: f32,
+            color_stops: &mut BridgeColorStops,
+            extend_mode: u8,
+        );
+
+        fn push_layer(self: Pin<&mut ColorPainterWrapper>, colrv1_composite_mode: u8);
+        fn pop_layer(self: Pin<&mut ColorPainterWrapper>);
+
     }
 }
 
 /// Tests to exercise COLR and CPAL parts of the Fontations FFI.
-/// Run using `$ bazel test --with_fontations //src/ports/fontations:test_colr_cpal`
+/// Run using `$ bazel test --with_fontations //src/ports/fontations:test_ffi`
 #[cfg(test)]
 mod test {
 
-    use crate::{
-        colrv0_glyph_layer, colrv0_layer_range, ffi::ColrV0Layer, font_ref_is_valid, make_font_ref,
-        num_palette_entries, num_palettes, palette_colors,
-    };
+    use crate::{ffi::PaletteOverride, font_ref_is_valid, make_font_ref, resolve_palette};
     use std::fs;
 
     const TEST_FONT_FILENAME: &str = "resources/fonts/test_glyphs-glyf_colr_1_variable.ttf";
 
     #[test]
-    fn test_cpal() {
+    fn test_palette_override() {
         let file_buffer =
             fs::read(TEST_FONT_FILENAME).expect("COLRv0/v1 test font could not be opened.");
         let font_ref = make_font_ref(&file_buffer, 0);
         assert_eq!(font_ref_is_valid(&font_ref), true);
 
-        let num_palettes = num_palettes(&font_ref);
-        assert_eq!(num_palettes, 3);
-
-        let num_colors = num_palette_entries(&font_ref);
-        assert_eq!(num_colors, 14);
-
-        let mut colors: Vec<u32> = Vec::new();
-        colors.resize(num_colors.into(), 0);
-
-        for palette_index in 0..num_palettes {
-            assert_eq!(palette_colors(&font_ref, palette_index, &mut colors), true);
-
-            let expected_colors: [[u32; 14]; 3] = [
-                [
-                    0xffff0000, 0xffffa500, 0xffffff00, 0xff008000, 0xff0000ff, 0xff4b0082,
-                    0xffee82ee, 0xfffaf0e6, 0xff2f4f4f, 0xffffffff, 0xff000000, 0xff68c7e8,
-                    0xffffdc01, 0xff808080,
-                ],
-                [
-                    0xff2a294a, 0xff244163, 0xff1b6388, 0xff157da3, 0xff0e9ac2, 0xff05bee8,
-                    0xff00d4ff, 0xff808080, 0xff808080, 0xff808080, 0xff808080, 0xff808080,
-                    0xff808080, 0xff808080,
-                ],
-                [
-                    0xfffc7118, 0xfffb8115, 0xfffa9511, 0xfffaa80d, 0xfff9be09, 0xfff8d304,
-                    0xfff8e700, 0xff808080, 0xff808080, 0xff808080, 0xff808080, 0xff808080,
-                    0xff808080, 0xff808080,
-                ],
-            ];
-
-            let expected = &expected_colors[usize::from(palette_index)];
-            assert_eq!(colors.len(), expected.len());
-
-            for (color, expected_color) in colors.iter().zip(expected) {
-                assert_eq!(*color, *expected_color);
-            }
-        }
-
-        // Out-of-bounds palette index.
-        assert!(!palette_colors(&font_ref, num_palettes, &mut colors));
-
-        // Incorrect `colors` target array size.
-        colors.resize(colors.len() - 1, 0);
-        assert!(!palette_colors(&font_ref, 0, &mut colors));
-    }
-
-    #[test]
-    fn test_colrv0() {
-        let file_buffer =
-            fs::read(TEST_FONT_FILENAME).expect("COLRv0/v1 test font could not be opened.");
-        let font_ref = make_font_ref(&file_buffer, 0);
-        assert_eq!(font_ref_is_valid(&font_ref), true);
-
-        const COLORED_CIRCLE_V0_GID: u16 = 166;
-
-        let layer_range = colrv0_layer_range(&font_ref, COLORED_CIRCLE_V0_GID);
-        assert!(layer_range.has_v0_layers);
-        assert_eq!(layer_range.start_index, 0);
-        assert_eq!(layer_range.end_index, 8);
-
-        let no_layer_range = colrv0_layer_range(&font_ref, 0);
-        assert!(!no_layer_range.has_v0_layers);
-        assert_eq!(no_layer_range.start_index, 0);
-        assert_eq!(no_layer_range.end_index, 0);
-
-        let expected_layers: [ColrV0Layer; 8] = [
-            ColrV0Layer {
-                glyph_id: 174,
-                palette_index: 0,
+        let override_color = 0xFFEEEEEE;
+        let valid_overrides = [
+            PaletteOverride {
+                index: 9,
+                color_8888: override_color,
             },
-            ColrV0Layer {
-                glyph_id: 173,
-                palette_index: 1,
+            PaletteOverride {
+                index: 10,
+                color_8888: override_color,
             },
-            ColrV0Layer {
-                glyph_id: 172,
-                palette_index: 2,
-            },
-            ColrV0Layer {
-                glyph_id: 171,
-                palette_index: 3,
-            },
-            ColrV0Layer {
-                glyph_id: 170,
-                palette_index: 4,
-            },
-            ColrV0Layer {
-                glyph_id: 169,
-                palette_index: 5,
-            },
-            ColrV0Layer {
-                glyph_id: 168,
-                palette_index: 6,
-            },
-            ColrV0Layer {
-                glyph_id: 5,
-                palette_index: 10,
+            PaletteOverride {
+                index: 11,
+                color_8888: override_color,
             },
         ];
 
+        let palette = resolve_palette(&font_ref, 0, &valid_overrides);
+
+        assert_eq!(palette.len(), 14);
+        assert_eq!(palette[9], override_color);
+        assert_eq!(palette[10], override_color);
+        assert_eq!(palette[11], override_color);
+
+        let out_of_bounds_overrides = [
+            PaletteOverride {
+                index: 15,
+                color_8888: override_color,
+            },
+            PaletteOverride {
+                index: 16,
+                color_8888: override_color,
+            },
+            PaletteOverride {
+                index: 17,
+                color_8888: override_color,
+            },
+        ];
+
+        let palette = resolve_palette(&font_ref, 0, &out_of_bounds_overrides);
+
+        assert_eq!(palette.len(), 14);
         assert_eq!(
-            layer_range.end_index - layer_range.start_index,
-            expected_layers.len()
+            (palette[11], palette[12], palette[13],),
+            (0xff68c7e8, 0xffffdc01, 0xff808080)
         );
 
-        for (layer_index, expected_layer) in
-            (layer_range.start_index..layer_range.end_index).zip(expected_layers)
-        {
-            let mut v0_layer = ColrV0Layer::default();
-            assert!(colrv0_glyph_layer(&font_ref, layer_index, &mut v0_layer));
-            assert_eq!(v0_layer, expected_layer);
-        }
-
-        // GID 0 is not a COLRv0 glyph.
-        let mut no_layer = ColrV0Layer::default();
-        assert!(!colrv0_glyph_layer(
-            &font_ref,
-            layer_range.end_index,
-            &mut no_layer
-        ));
-        assert_eq!(no_layer.glyph_id, 0);
-        assert_eq!(no_layer.palette_index, 0);
+        let no_palette = resolve_palette(&font_ref, 10, &out_of_bounds_overrides);
+        assert_eq!(no_palette.len(), 0);
     }
 }

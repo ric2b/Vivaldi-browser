@@ -66,7 +66,7 @@ class BaselineCompilerTask {
 
     shared_function_info_->set_baseline_code(*code, kReleaseStore);
     shared_function_info_->set_age(0);
-    if (v8_flags.trace_baseline_concurrent_compilation) {
+    if (v8_flags.trace_baseline) {
       CodeTracer::Scope scope(isolate->GetCodeTracer());
       std::stringstream ss;
       ss << "[Concurrent Sparkplug Off Thread] Function ";
@@ -112,7 +112,7 @@ class BaselineBatchCompilerJob {
       if (shared->is_sparkplug_compiling()) continue;
       tasks_.emplace_back(isolate, handles_.get(), shared);
     }
-    if (v8_flags.trace_baseline_concurrent_compilation) {
+    if (v8_flags.trace_baseline) {
       CodeTracer::Scope scope(isolate->GetCodeTracer());
       PrintF(scope.file(), "[Concurrent Sparkplug] compiling %zu functions\n",
              tasks_.size());
@@ -246,6 +246,11 @@ BaselineBatchCompiler::~BaselineBatchCompiler() {
   }
 }
 
+bool BaselineBatchCompiler::concurrent() const {
+  return v8_flags.concurrent_sparkplug &&
+         !isolate_->UseEfficiencyModeForTiering();
+}
+
 void BaselineBatchCompiler::EnqueueFunction(Handle<JSFunction> function) {
   Handle<SharedFunctionInfo> shared(function->shared(), isolate_);
   // Immediately compile the function if batch compilation is disabled.
@@ -257,7 +262,7 @@ void BaselineBatchCompiler::EnqueueFunction(Handle<JSFunction> function) {
     return;
   }
   if (ShouldCompileBatch(*shared)) {
-    if (v8_flags.concurrent_sparkplug) {
+    if (concurrent()) {
       CompileBatchConcurrent(*shared);
     } else {
       CompileBatch(function);

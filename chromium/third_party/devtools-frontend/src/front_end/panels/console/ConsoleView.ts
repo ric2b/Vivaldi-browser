@@ -48,6 +48,7 @@ import * as IssueCounter from '../../ui/components/issue_counter/issue_counter.j
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {ConsoleContextSelector} from './ConsoleContextSelector.js';
 import {ConsoleFilter, FilterType, type LevelsMask} from './ConsoleFilter.js';
@@ -395,6 +396,8 @@ export class ConsoleView extends UI.Widget.VBox implements
         Common.Settings.Settings.instance().createSetting('consoleShowSettingsToolbar', false);
     this.showSettingsPaneButton = new UI.Toolbar.ToolbarSettingToggle(
         this.showSettingsPaneSetting, 'gear', i18nString(UIStrings.consoleSettings), 'gear-filled');
+    this.showSettingsPaneButton.element.setAttribute(
+        'jslog', `${VisualLogging.toggleSubpane().track({click: true}).context('console-settings')}`);
     this.progressToolbarItem = new UI.Toolbar.ToolbarItem(document.createElement('div'));
     this.groupSimilarSetting = Common.Settings.Settings.instance().moduleSetting('consoleGroupSimilar');
     this.groupSimilarSetting.addChangeListener(() => this.updateMessageList());
@@ -404,17 +407,14 @@ export class ConsoleView extends UI.Widget.VBox implements
 
     const toolbar = new UI.Toolbar.Toolbar('console-main-toolbar', this.consoleToolbarContainer);
     toolbar.makeWrappable(true);
-    const rightToolbar = new UI.Toolbar.Toolbar('', this.consoleToolbarContainer);
     toolbar.appendToolbarItem(this.splitWidget.createShowHideSidebarButton(
         i18nString(UIStrings.showConsoleSidebar), i18nString(UIStrings.hideConsoleSidebar),
-        i18nString(UIStrings.consoleSidebarShown), i18nString(UIStrings.consoleSidebarHidden)));
-    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButton(
-        (UI.ActionRegistry.ActionRegistry.instance().action('console.clear') as UI.ActionRegistration.Action)));
+        i18nString(UIStrings.consoleSidebarShown), i18nString(UIStrings.consoleSidebarHidden), 'console-sidebar'));
+    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButtonForId('console.clear'));
     toolbar.appendSeparator();
     toolbar.appendToolbarItem(this.consoleContextSelector.toolbarItem());
     toolbar.appendSeparator();
-    const liveExpressionButton = UI.Toolbar.Toolbar.createActionButton(
-        (UI.ActionRegistry.ActionRegistry.instance().action('console.create-pin') as UI.ActionRegistration.Action));
+    const liveExpressionButton = UI.Toolbar.Toolbar.createActionButtonForId('console.create-pin');
     toolbar.appendToolbarItem(liveExpressionButton);
     toolbar.appendSeparator();
     toolbar.appendToolbarItem(this.filter.textFilterUI);
@@ -423,6 +423,8 @@ export class ConsoleView extends UI.Widget.VBox implements
     toolbar.appendSeparator();
     this.issueCounter = new IssueCounter.IssueCounter.IssueCounter();
     this.issueCounter.id = 'console-issues-counter';
+    this.issueCounter.setAttribute(
+        'jslog', `${VisualLogging.action().track({click: true}).context(this.issueCounter.id)}`);
     const issuesToolbarItem = new UI.Toolbar.ToolbarItem(this.issueCounter);
     this.issueCounter.data = {
       clickHandler: (): void => {
@@ -434,9 +436,9 @@ export class ConsoleView extends UI.Widget.VBox implements
       displayMode: IssueCounter.IssueCounter.DisplayMode.OmitEmpty,
     };
     toolbar.appendToolbarItem(issuesToolbarItem);
-    rightToolbar.appendSeparator();
-    rightToolbar.appendToolbarItem(this.filterStatusText);
-    rightToolbar.appendToolbarItem(this.showSettingsPaneButton);
+    toolbar.appendSeparator();
+    toolbar.appendToolbarItem(this.filterStatusText);
+    toolbar.appendToolbarItem(this.showSettingsPaneButton);
 
     const monitoringXHREnabledSetting = Common.Settings.Settings.instance().moduleSetting('monitoringXHREnabled');
     this.timestampsSetting = Common.Settings.Settings.instance().moduleSetting('consoleTimestampsEnabled');
@@ -529,8 +531,8 @@ export class ConsoleView extends UI.Widget.VBox implements
     // the linkifiers live location change event.
     const throttler = new Common.Throttler.Throttler(100);
     const refilterMessages = (): Promise<void> => throttler.schedule(async () => this.onFilterChanged());
-    this.linkifier =
-        new Components.Linkifier.Linkifier(MaxLengthForLinks, /* useLinkDecorator */ undefined, refilterMessages);
+    this.linkifier = new Components.Linkifier.Linkifier(MaxLengthForLinks);
+    this.linkifier.addEventListener(Components.Linkifier.Events.LiveLocationUpdated, refilterMessages);
 
     this.consoleMessages = [];
     this.consoleGroupStarts = [];
@@ -1107,8 +1109,14 @@ export class ConsoleView extends UI.Widget.VBox implements
     const consoleViewMessage = sourceElement && getMessageForElement(sourceElement);
     const consoleMessage = consoleViewMessage ? consoleViewMessage.consoleMessage() : null;
 
-    if (consoleMessage) {
-      contextMenu.headerSection().appendAction('explain.consoleMessage', undefined, /* optional=*/ true);
+    if (consoleViewMessage) {
+      UI.Context.Context.instance().setFlavor(ConsoleViewMessage, consoleViewMessage);
+    }
+
+    if (consoleMessage && !consoleViewMessage?.element()?.matches('.has-insight') &&
+        consoleViewMessage?.shouldShowInsights()) {
+      contextMenu.headerSection().appendAction(
+          consoleViewMessage?.getExplainActionId(), undefined, /* optional=*/ true);
     }
 
     if (consoleMessage && consoleMessage.url) {
@@ -1648,6 +1656,8 @@ export class ConsoleViewFilter {
     this.levelMenuButton.turnIntoSelect();
     this.levelMenuButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.showLevelContextMenu.bind(this));
     UI.ARIAUtils.markAsMenuButton(this.levelMenuButton.element);
+    this.levelMenuButton.element.setAttribute(
+        'jslog', `${VisualLogging.dropDown().track({click: true}).context('log-level')}`);
 
     this.updateLevelMenuButtonText();
     this.messageLevelFiltersSetting.addChangeListener(this.updateLevelMenuButtonText.bind(this));
@@ -1787,12 +1797,14 @@ export class ConsoleViewFilter {
   }
 }
 
-let actionDelegateInstance: ActionDelegate;
-
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
   handleAction(_context: UI.Context.Context, actionId: string): boolean {
     switch (actionId) {
-      case 'console.show':
+      case 'console.toggle':
+        if (ConsoleView.instance().isShowing() && UI.InspectorView.InspectorView.instance().drawerVisible()) {
+          UI.InspectorView.InspectorView.instance().closeDrawer();
+          return true;
+        }
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.bringToFront();
         Common.Console.Console.instance().show();
         ConsoleView.instance().focusPrompt();
@@ -1808,17 +1820,6 @@ export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {
         return true;
     }
     return false;
-  }
-
-  static instance(opts: {
-    forceNew: boolean|null,
-  } = {forceNew: null}): ActionDelegate {
-    const {forceNew} = opts;
-    if (!actionDelegateInstance || forceNew) {
-      actionDelegateInstance = new ActionDelegate();
-    }
-
-    return actionDelegateInstance;
   }
 }
 

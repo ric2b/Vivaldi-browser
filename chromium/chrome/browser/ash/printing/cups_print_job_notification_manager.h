@@ -47,15 +47,15 @@ class CupsPrintJobNotificationManager : public CupsPrintJobManager::Observer {
   void OnPrintJobNotificationRemoved(CupsPrintJobNotification* notification);
 
   // Return the notification for the given print job, or nullptr if not found.
-  absl::optional<CupsPrintJobNotification*> GetNotificationForTesting(
+  std::optional<CupsPrintJobNotification*> GetNotificationForTesting(
       CupsPrintJob* job);
 
  private:
   void UpdateNotification(base::WeakPtr<CupsPrintJob> job);
 
   PrintJobNotificationMap notification_map_;
-  raw_ptr<CupsPrintJobManager, ExperimentalAsh> print_job_manager_;
-  raw_ptr<Profile, DanglingUntriaged | ExperimentalAsh> profile_;
+  raw_ptr<CupsPrintJobManager> print_job_manager_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
 };
 
 }  // namespace ash

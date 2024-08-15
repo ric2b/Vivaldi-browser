@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Copyright 2016 Google Inc.
 #
@@ -77,6 +77,7 @@ license {
 
 cc_defaults {
     name: "skia_arch_defaults",
+    cpp_std: "gnu++17",
     arch: {
         arm: {
             srcs: [],
@@ -352,6 +353,7 @@ cc_defaults {
 
 cc_test {
     name: "skia_dm",
+    cpp_std: "gnu++17",
 
     defaults: [
         "skia_gm_srcs",
@@ -375,6 +377,7 @@ cc_test {
 
 cc_test {
     name: "skia_nanobench",
+    cpp_std: "gnu++17",
 
     defaults: [
         "skia_gm_srcs",
@@ -388,10 +391,6 @@ cc_test {
     srcs: [
         $nanobench_srcs
     ],
-
-    lto: {
-        never: true,
-    },
 }
 
 cc_library_shared {
@@ -786,7 +785,8 @@ with open('Android.bp', 'w') as Android_bp:
     'cflags':          bpfmt(8, cflags, False),
     'cflags_cc':       bpfmt(8, cflags_cc),
 
-    'x86_srcs':      bpfmt(16, strip_headers(defs['hsw'  ])),
+    'x86_srcs':      bpfmt(16, strip_headers(defs['hsw'] +
+                                             defs['skx'])),
 
     'gm_includes'       : bpfmt(8, gm_includes),
     'gm_srcs'           : bpfmt(8, gm_srcs),

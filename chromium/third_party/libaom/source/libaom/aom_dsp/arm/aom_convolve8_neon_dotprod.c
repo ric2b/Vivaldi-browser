@@ -137,10 +137,8 @@ void aom_convolve8_horiz_neon_dotprod(const uint8_t *src, ptrdiff_t src_stride,
       d01 = vqrshrun_n_s16(vcombine_s16(t0, t1), FILTER_BITS);
       d23 = vqrshrun_n_s16(vcombine_s16(t2, t3), FILTER_BITS);
 
-      store_u8_4x1(dst + 0 * dst_stride, d01, 0);
-      store_u8_4x1(dst + 1 * dst_stride, d01, 1);
-      store_u8_4x1(dst + 2 * dst_stride, d23, 0);
-      store_u8_4x1(dst + 3 * dst_stride, d23, 1);
+      store_u8x4_strided_x2(dst + 0 * dst_stride, dst_stride, d01);
+      store_u8x4_strided_x2(dst + 2 * dst_stride, dst_stride, d23);
 
       src += 4 * src_stride;
       dst += 4 * dst_stride;
@@ -340,10 +338,8 @@ void aom_convolve8_vert_neon_dotprod(const uint8_t *src, ptrdiff_t src_stride,
       d01 = vqrshrun_n_s16(vcombine_s16(d0, d1), FILTER_BITS);
       d23 = vqrshrun_n_s16(vcombine_s16(d2, d3), FILTER_BITS);
 
-      store_u8_4x1(dst + 0 * dst_stride, d01, 0);
-      store_u8_4x1(dst + 1 * dst_stride, d01, 1);
-      store_u8_4x1(dst + 2 * dst_stride, d23, 0);
-      store_u8_4x1(dst + 3 * dst_stride, d23, 1);
+      store_u8x4_strided_x2(dst + 0 * dst_stride, dst_stride, d01);
+      store_u8x4_strided_x2(dst + 2 * dst_stride, dst_stride, d23);
 
       /* Prepare block for next iteration - re-using as much as possible. */
       /* Shuffle everything up four rows. */

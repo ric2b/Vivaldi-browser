@@ -6,12 +6,12 @@
 
 #include <utility>
 
-#include "absl/strings/ascii.h"
 #include "cast/streaming/message_fields.h"
 #include "util/base64.h"
 #include "util/enum_name_table.h"
 #include "util/json/json_helpers.h"
 #include "util/json/json_serialization.h"
+#include "util/stringutil.h"
 
 namespace openscreen::cast {
 
@@ -27,8 +27,7 @@ SenderMessage::Type GetMessageType(const Json::Value& root) {
   if (!json::TryParseString(root[kMessageType], &type)) {
     return SenderMessage::Type::kUnknown;
   }
-
-  absl::AsciiStrToUpper(&type);
+  stringutil::AsciiStrToUpper(type);
   ErrorOr<SenderMessage::Type> parsed = GetEnum(kMessageTypeNames, type);
 
   return parsed.value(SenderMessage::Type::kUnknown);

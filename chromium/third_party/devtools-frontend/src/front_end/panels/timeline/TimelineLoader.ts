@@ -59,6 +59,7 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
   private totalSize!: number;
   private readonly jsonTokenizer: TextUtils.TextUtils.BalancedJSONTokenizer;
   private filter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null;
+  #collectedEvents: TraceEngine.Types.TraceEvents.TraceEventData[] = [];
 
   #traceFinalizedCallbackForTest?: () => void;
   #traceFinalizedPromiseForTest: Promise<void>;
@@ -167,6 +168,7 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
     const eventsPerChunk = 15_000;
     for (let i = 0; i < events.length; i += eventsPerChunk) {
       const chunk = events.slice(i, i + eventsPerChunk);
+      this.#collectEvents(chunk);
       (this.tracingModel as TraceEngine.Legacy.TracingModel).addEvents(chunk);
       await this.client?.loadingProgress((i + chunk.length) / events.length);
       await new Promise(r => window.setTimeout(r));  // Yield event loop to paint.
@@ -178,7 +180,8 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
     this.tracingModel = null;
     if (this.client) {
       await this.client.loadingComplete(
-          /* tracingModel= */ null, /* exclusiveFilter= */ null, /* isCpuProfile= */ false);
+          /* collectedEvents */[], /* tracingModel= */ null, /* exclusiveFilter= */ null, /* isCpuProfile= */ false,
+          /* recordingStartTime= */ null);
       this.client = null;
     }
     if (this.canceledCallback) {
@@ -283,6 +286,7 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
 
     try {
       (this.tracingModel as TraceEngine.Legacy.TracingModel).addEvents(items);
+      this.#collectEvents(items);
     } catch (e) {
       this.reportErrorAndCancelLoading(i18nString(UIStrings.malformedTimelineDataS, {PH1: e.toString()}));
     }
@@ -295,9 +299,7 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
     void this.cancel();
   }
 
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private looksLikeAppVersion(item: any): boolean {
+  private looksLikeAppVersion(item: unknown): boolean {
     return typeof item === 'string' && item.indexOf('Chrome') !== -1;
   }
 
@@ -319,7 +321,9 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
       this.buffer = '';
     }
     (this.tracingModel as TraceEngine.Legacy.TracingModel).tracingComplete();
-    await (this.client as Client).loadingComplete(this.tracingModel, this.filter, this.isCpuProfile());
+    await (this.client as Client)
+        .loadingComplete(
+            this.#collectedEvents, this.tracingModel, this.filter, this.isCpuProfile(), /* recordingStartTime=*/ null);
     this.#traceFinalizedCallbackForTest?.();
   }
 
@@ -339,14 +343,19 @@ export class TimelineLoader implements Common.StringOutputStream.OutputStream {
     }
     this.filter = TimelineLoader.getCpuProfileFilter();
     (this.tracingModel as TraceEngine.Legacy.TracingModel).addEvents(traceEvents);
+    this.#collectEvents(traceEvents);
+  }
+
+  #collectEvents(events: TraceEngine.TracingManager.EventPayload[]): void {
+    // Once the old engine is removed, this can be updated to use the types from the new engine and avoid the `as unknown`.
+    this.#collectedEvents =
+        this.#collectedEvents.concat(events as unknown as TraceEngine.Types.TraceEvents.TraceEventData);
   }
 }
 
 export const TransferChunkLengthBytes = 5000000;
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum State {
+export const enum State {
   Initial = 'Initial',
   LookingForEvents = 'LookingForEvents',
   ReadingEvents = 'ReadingEvents',

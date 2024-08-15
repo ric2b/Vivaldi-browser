@@ -13,10 +13,21 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/sync/base/user_selectable_type.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
+
 namespace web_app::integration_tests {
 
 TwoClientWebAppsIntegrationTestBase::TwoClientWebAppsIntegrationTestBase()
-    : WebAppsSyncTestBase(TWO_CLIENT), helper_(this) {}
+    : WebAppsSyncTestBase(TWO_CLIENT), helper_(this) {
+#if BUILDFLAG(IS_CHROMEOS)
+  // TODO(b/321620363): Add two client sync integration for shortcuts with
+  // shortstand enabled.
+  scoped_feature_list_.InitAndDisableFeature(
+      chromeos::features::kCrosShortstand);
+#endif
+}
 
 // WebAppIntegrationTestDriver::TestDelegate
 Browser* TwoClientWebAppsIntegrationTestBase::CreateBrowser(Profile* profile) {
@@ -59,7 +70,7 @@ void TwoClientWebAppsIntegrationTestBase::SyncTurnOff() {
 
 void TwoClientWebAppsIntegrationTestBase::SyncTurnOn() {
   for (SyncServiceImplHarness* client : GetSyncClients()) {
-    ASSERT_TRUE(client->EnableSyncFeature());
+    ASSERT_TRUE(client->SetupSync());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     client->service()->GetUserSettings()->SetSelectedOsTypes(
         /*sync_everything=*/false,

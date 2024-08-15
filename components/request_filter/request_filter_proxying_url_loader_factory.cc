@@ -6,6 +6,7 @@
 
 #include "components/request_filter/request_filter_proxying_url_loader_factory.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/no_destructor.h"
@@ -67,9 +68,9 @@ class ShutdownNotifierFactory
 
 void ForwardOnBeforeSendHeadersCallback(
     network::mojom::TrustedHeaderClient::OnBeforeSendHeadersCallback callback,
-    const absl::optional<::net::HttpRequestHeaders>& initial_headers,
+    const std::optional<::net::HttpRequestHeaders>& initial_headers,
     int32_t error_code,
-    const absl::optional<::net::HttpRequestHeaders>& headers) {
+    const std::optional<::net::HttpRequestHeaders>& headers) {
   if (headers)
     std::move(callback).Run(error_code, headers);
   else
@@ -78,11 +79,11 @@ void ForwardOnBeforeSendHeadersCallback(
 
 void ForwardOnHeaderReceivedCallback(
     network::mojom::TrustedHeaderClient::OnHeadersReceivedCallback callback,
-    const absl::optional<std::string>& initial_headers,
-    const absl::optional<GURL>& initial_preserve_fragment_on_redirect_url,
+    const std::optional<std::string>& initial_headers,
+    const std::optional<GURL>& initial_preserve_fragment_on_redirect_url,
     int32_t error_code,
-    const absl::optional<std::string>& headers,
-    const absl::optional<GURL>& preserve_fragment_on_redirect_url) {
+    const std::optional<std::string>& headers,
+    const std::optional<GURL>& preserve_fragment_on_redirect_url) {
   std::move(callback).Run(error_code, headers ? headers : initial_headers,
                           preserve_fragment_on_redirect_url
                               ? preserve_fragment_on_redirect_url
@@ -95,7 +96,7 @@ net::RedirectInfo CreateRedirectInfo(
     const network::ResourceRequest& original_request,
     const GURL& new_url,
     int response_code,
-    const absl::optional<std::string>& referrer_policy_header) {
+    const std::optional<std::string>& referrer_policy_header) {
   return net::RedirectInfo::ComputeRedirectInfo(
       original_request.method, original_request.url,
       original_request.site_for_cookies,
@@ -182,11 +183,11 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::~InProgressRequest() {
   }
   if (on_before_send_headers_callback_) {
     std::move(on_before_send_headers_callback_)
-        .Run(net::ERR_ABORTED, absl::nullopt);
+        .Run(net::ERR_ABORTED, std::nullopt);
   }
   if (on_headers_received_callback_) {
     std::move(on_headers_received_callback_)
-        .Run(net::ERR_ABORTED, absl::nullopt, absl::nullopt);
+        .Run(net::ERR_ABORTED, std::nullopt, std::nullopt);
   }
 }
 
@@ -285,7 +286,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers,
-    const absl::optional<GURL>& new_url) {
+    const std::optional<GURL>& new_url) {
   if (new_url)
     request_.url = new_url.value();
 
@@ -346,7 +347,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     OnReceiveResponse(network::mojom::URLResponseHeadPtr head,
                       mojo::ScopedDataPipeConsumerHandle body,
-                      absl::optional<::mojo_base::BigBuffer> cached_metadata) {
+                      std::optional<::mojo_base::BigBuffer> cached_metadata) {
   current_body_ = std::move(body);
   current_cached_metadata_ = std::move(cached_metadata);
   if (current_request_uses_header_client_) {
@@ -473,7 +474,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       forwarding_header_client_->OnBeforeSendHeaders(headers,
                                                      std::move(callback));
     } else {
-      std::move(callback).Run(net::OK, absl::nullopt);
+      std::move(callback).Run(net::OK, std::nullopt);
     }
     return;
   }
@@ -494,7 +495,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     } else {
       // Make sure the callback is run, otherwise XHRs would fail when
       // webrequest listeners was set.
-      std::move(callback).Run(net::OK, absl::nullopt, absl::nullopt);
+      std::move(callback).Run(net::OK, std::nullopt, std::nullopt);
     }
     if (for_cors_preflight_) {
       // CORS preflight is supported only when "ExtraHeaders" are requested.
@@ -536,7 +537,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   net::RedirectInfo redirect_info =
       CreateRedirectInfo(request_, redirect_url_, kInternalRedirectStatusCode,
-                         /*referrer_policy_header=*/absl::nullopt);
+                         /*referrer_policy_header=*/std::nullopt);
 
   auto head = network::mojom::URLResponseHead::New();
   std::string headers = base::StringPrintf(
@@ -774,7 +775,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   }
 
   DCHECK(on_headers_received_callback_);
-  absl::optional<std::string> headers;
+  std::optional<std::string> headers;
   if (override_headers_) {
     headers = override_headers_->raw_headers();
     if (current_request_uses_header_client_) {
@@ -1107,7 +1108,7 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
     int view_routing_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
-    absl::optional<int64_t> navigation_id,
+    std::optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
@@ -1162,7 +1163,7 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
     int view_routing_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
-    absl::optional<int64_t> navigation_id,
+    std::optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>

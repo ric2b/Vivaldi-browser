@@ -55,7 +55,7 @@ class PasswordAccessoryControllerImpl
 
   // AccessoryController:
   void RegisterFillingSourceObserver(FillingSourceObserver observer) override;
-  absl::optional<autofill::AccessorySheetData> GetSheetData() const override;
+  std::optional<autofill::AccessorySheetData> GetSheetData() const override;
   void OnFillingTriggered(
       autofill::FieldGlobalId focused_field_id,
       const autofill::AccessorySheetField& selection) override;
@@ -72,6 +72,7 @@ class PasswordAccessoryControllerImpl
       autofill::password_generation::PasswordGenerationType type) override;
   void UpdateCredManReentryUi(
       autofill::mojom::FocusedFieldType focused_field_type) override;
+  base::WeakPtr<PasswordAccessoryController> AsWeakPtr() override;
 
   // Like |CreateForWebContents|, it creates the controller and attaches it to
   // the given |web_contents|. Upon creation, a |credential_cache| is required
@@ -198,9 +199,9 @@ class PasswordAccessoryControllerImpl
 
   // Information about the currently focused field. This is the only place
   // allowed to store frame-specific data. If a new field is focused or focus is
-  // lost, this data needs to be reset to absl::nullopt to make sure that data
+  // lost, this data needs to be reset to std::nullopt to make sure that data
   // related to a former frame isn't displayed incorrectly in a different one.
-  absl::optional<LastFocusedFieldInfo> last_focused_field_info_ = absl::nullopt;
+  std::optional<LastFocusedFieldInfo> last_focused_field_info_ = std::nullopt;
 
   // The observer to notify if available suggestions change.
   FillingSourceObserver source_observer_;
@@ -225,6 +226,8 @@ class PasswordAccessoryControllerImpl
   // Callback attempting to display the migration warning when invoked.
   // Used to facilitate injecting a mock bridge in tests.
   ShowMigrationWarningCallback show_migration_warning_callback_;
+
+  base::WeakPtrFactory<PasswordAccessoryControllerImpl> weak_ptr_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

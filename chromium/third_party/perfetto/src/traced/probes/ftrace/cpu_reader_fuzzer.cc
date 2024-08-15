@@ -19,6 +19,7 @@
 
 #include <algorithm>
 
+#include "perfetto/base/flat_set.h"
 #include "perfetto/base/logging.h"
 #include "perfetto/ext/base/utils.h"
 #include "perfetto/protozero/scattered_stream_null_delegate.h"
@@ -29,17 +30,12 @@
 #include "src/tracing/core/null_trace_writer.h"
 
 #include "protos/perfetto/trace/ftrace/ftrace_event_bundle.pbzero.h"
+#include "protos/perfetto/trace/ftrace/ftrace_stats.pbzero.h"
 
 namespace perfetto {
-namespace {
-
-uint8_t g_page[base::kPageSize];
-
-}  // namespace
 
 using perfetto::protos::pbzero::FtraceEventBundle;
 
-void FuzzCpuReaderParsePage(const uint8_t* data, size_t size);
 void FuzzCpuReaderProcessPagesForDataSource(const uint8_t* data, size_t size);
 
 // TODO(rsavitski): make the fuzzer generate multi-page payloads.
@@ -50,8 +46,10 @@ void FuzzCpuReaderProcessPagesForDataSource(const uint8_t* data, size_t size) {
         "Could not read table. "
         "This fuzzer must be run in the root directory.");
   }
-  memset(g_page, 0, base::kPageSize);
-  memcpy(g_page, data, std::min(base::kPageSize, size));
+
+  static uint8_t* g_page = new uint8_t[base::GetSysPageSize()];
+  memset(g_page, 0, base::GetSysPageSize());
+  memcpy(g_page, data, std::min(size_t(base::GetSysPageSize()), size));
 
   FtraceMetadata metadata{};
   FtraceDataSourceConfig ds_config{/*event_filter=*/EventFilter{},
@@ -70,9 +68,10 @@ void FuzzCpuReaderProcessPagesForDataSource(const uint8_t* data, size_t size) {
 
   NullTraceWriter null_writer;
   auto compact_sched_buf = std::make_unique<CompactSchedBuffer>();
+  base::FlatSet<protos::pbzero::FtraceParseStatus> parse_errors;
   CpuReader::ProcessPagesForDataSource(
-      &null_writer, &metadata, /*cpu=*/0, &ds_config, g_page, /*pages_read=*/1,
-      compact_sched_buf.get(), table, /*symbolizer*/ nullptr,
+      &null_writer, &metadata, /*cpu=*/0, &ds_config, &parse_errors, g_page,
+      /*pages_read=*/1, compact_sched_buf.get(), table, /*symbolizer*/ nullptr,
       /*ftrace_clock_snapshot=*/nullptr,
       protos::pbzero::FTRACE_CLOCK_UNSPECIFIED);
 }

@@ -107,8 +107,9 @@ void LaunchAppUserChoiceDialogView::InitChildViews() {
       vertical_single_distance));
 
   auto above_app_info_view = CreateAboveAppInfoView();
-  if (above_app_info_view)
+  if (above_app_info_view) {
     AddChildView(std::move(above_app_info_view));
+  }
 
   // Add the app info, which will look like:
   // +-------------------------------------------------------------------+
@@ -155,8 +156,9 @@ void LaunchAppUserChoiceDialogView::InitChildViews() {
   }
 
   auto below_app_info_view = CreateBelowAppInfoView();
-  if (below_app_info_view)
+  if (below_app_info_view) {
     AddChildView(std::move(below_app_info_view));
+  }
 
   remember_selection_checkbox_ = AddChildView(
       std::make_unique<views::Checkbox>(GetRememberChoiceString()));
@@ -178,18 +180,19 @@ void LaunchAppUserChoiceDialogView::RunCloseCallback(
 
 void LaunchAppUserChoiceDialogView::OnIconsRead(
     std::map<SquareSizePx, SkBitmap> icon_bitmaps) {
-  if (icon_bitmaps.empty() || !icon_image_view_)
+  if (icon_bitmaps.empty() || !icon_image_view_) {
     return;
+  }
 
   gfx::Size image_size{web_app::kWebAppIconSmall, web_app::kWebAppIconSmall};
-  auto imageSkia =
+  auto image_skia =
       gfx::ImageSkia(std::make_unique<WebAppInfoImageSource>(
                          web_app::kWebAppIconSmall, std::move(icon_bitmaps)),
                      image_size);
-  icon_image_view_->SetImage(imageSkia);
+  icon_image_view_->SetImage(ui::ImageModel::FromImageSkia(image_skia));
 }
 
-BEGIN_METADATA(LaunchAppUserChoiceDialogView, views::DialogDelegateView)
+BEGIN_METADATA(LaunchAppUserChoiceDialogView)
 END_METADATA
 
 }  // namespace web_app

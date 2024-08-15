@@ -30,15 +30,21 @@
 ################################################################################
 if(NOT TINT_BUILD_AS_OTHER_OS)
   if(APPLE)  # Must come before UNIX
-    set(IS_MAC TRUE)
-    set(IS_MAC TRUE)
+    set(TINT_BUILD_IS_MAC TRUE)
+    set(TINT_BUILD_IS_MAC TRUE)
   elseif(UNIX)
-    set(IS_LINUX TRUE)
-    set(IS_LINUX TRUE)
+    set(TINT_BUILD_IS_LINUX TRUE)
+    set(TINT_BUILD_IS_LINUX TRUE)
   elseif(WIN32)
-    set(IS_WIN TRUE)
-    set(IS_WIN TRUE)
+    set(TINT_BUILD_IS_WIN TRUE)
+    set(TINT_BUILD_IS_WIN TRUE)
   endif()
+endif()
+
+if (TARGET libprotobuf)
+  set(TINT_BUILD_IR_BINARY 1)
+else()
+  set(TINT_BUILD_IR_BINARY 0)
 endif()
 
 ################################################################################
@@ -47,15 +53,19 @@ endif()
 function(tint_core_compile_options TARGET)
   target_include_directories(${TARGET} PUBLIC "${TINT_ROOT_SOURCE_DIR}")
   target_include_directories(${TARGET} PUBLIC "${TINT_ROOT_SOURCE_DIR}/include")
-  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_SPV_READER=$<BOOL:${TINT_BUILD_SPV_READER}>)
-  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_WGSL_READER=$<BOOL:${TINT_BUILD_WGSL_READER}>)
-  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_GLSL_WRITER=$<BOOL:${TINT_BUILD_GLSL_WRITER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_GLSL_VALIDATOR=$<BOOL:${TINT_BUILD_GLSL_VALIDATOR}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_GLSL_WRITER=$<BOOL:${TINT_BUILD_GLSL_WRITER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_HLSL_WRITER=$<BOOL:${TINT_BUILD_HLSL_WRITER}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IR_BINARY=$<BOOL:${TINT_BUILD_IR_BINARY}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IS_LINUX=$<BOOL:${TINT_BUILD_IS_LINUX}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IS_MAC=$<BOOL:${TINT_BUILD_IS_MAC}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_IS_WIN=$<BOOL:${TINT_BUILD_IS_WIN}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_MSL_WRITER=$<BOOL:${TINT_BUILD_MSL_WRITER}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_SPV_READER=$<BOOL:${TINT_BUILD_SPV_READER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_SPV_WRITER=$<BOOL:${TINT_BUILD_SPV_WRITER}>)
-  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_WGSL_WRITER=$<BOOL:${TINT_BUILD_WGSL_WRITER}>)
   target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_SYNTAX_TREE_WRITER=$<BOOL:${TINT_BUILD_SYNTAX_TREE_WRITER}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_WGSL_READER=$<BOOL:${TINT_BUILD_WGSL_READER}>)
+  target_compile_definitions(${TARGET} PUBLIC -DTINT_BUILD_WGSL_WRITER=$<BOOL:${TINT_BUILD_WGSL_WRITER}>)
 
   if(TINT_BUILD_FUZZERS)
     target_compile_options(${TARGET} PRIVATE "-fsanitize=fuzzer")
@@ -83,10 +93,11 @@ function(tint_default_compile_options TARGET)
     -Wno-c++98-compat
     -Wno-c++98-compat-pedantic
     -Wno-format-pedantic
+    -Wno-gnu-zero-variadic-macro-arguments
     -Wno-poison-system-directories
     -Wno-return-std-move-in-c++11
-    -Wno-unknown-warning-option
     -Wno-undefined-var-template
+    -Wno-unknown-warning-option
     -Wno-unsafe-buffer-usage
     -Wno-used-but-marked-unused
     -Weverything
@@ -175,6 +186,26 @@ endfunction()
 function(tint_spvtools_compile_options TARGET)
   target_link_libraries(${TARGET} PRIVATE SPIRV-Tools)
   target_include_directories(${TARGET} PRIVATE "${TINT_SPIRV_TOOLS_DIR}/include")
+endfunction()
+
+function(tint_lib_compile_options TARGET)
+  if (TINT_ENABLE_INSTALL)
+    install(TARGETS ${TARGET}
+      LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+      ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+  endif()
+  tint_default_compile_options(${TARGET})
+endfunction()
+
+function(tint_proto_compile_options TARGET)
+  if (TINT_ENABLE_INSTALL)
+    install(TARGETS ${TARGET}
+      LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+      ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+  endif()
+  tint_core_compile_options(${TARGET})
 endfunction()
 
 function(tint_test_compile_options TARGET)
@@ -324,7 +355,7 @@ function(tint_check_target_is_enabled IS_ENABLED KIND)
     if(TINT_BUILD_CMD_TOOLS)
       set(IS_ENABLED TRUE PARENT_SCOPE)
     endif()
-  elseif(${KIND} STREQUAL lib)
+  elseif((${KIND} STREQUAL lib) OR (${KIND} STREQUAL proto))
     set(IS_ENABLED TRUE PARENT_SCOPE)
   elseif((${KIND} STREQUAL test) OR (${KIND} STREQUAL test_cmd))
     if(TINT_BUILD_TESTS)
@@ -363,13 +394,12 @@ function(tint_add_target TARGET KIND)
 
   if(${KIND} STREQUAL lib)
     add_library(${TARGET} STATIC EXCLUDE_FROM_ALL)
-    if (TINT_ENABLE_INSTALL)
-      install(TARGETS ${TARGET}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-      )
-    endif()
-    tint_default_compile_options(${TARGET})
+    tint_lib_compile_options(${TARGET})
+  elseif(${KIND} STREQUAL proto)
+    add_library(${TARGET} STATIC EXCLUDE_FROM_ALL)
+    list(APPEND TINT_PROTO_TARGETS ${TARGET})
+    set(TINT_PROTO_TARGETS ${TINT_PROTO_TARGETS} PARENT_SCOPE)
+    tint_proto_compile_options(${TARGET})
   elseif(${KIND} STREQUAL cmd)
     add_executable(${TARGET})
     tint_default_compile_options(${TARGET})
@@ -608,6 +638,19 @@ else()
   # Fuzzers not enabled. Just include BUILD.cmake with the current flags.
   include("BUILD.cmake")
 endif(TINT_BUILD_FUZZERS)
+
+
+################################################################################
+# Generate protobuf sources
+################################################################################
+foreach(PROTO_TARGET ${TINT_PROTO_TARGETS})
+  generate_protos(
+    TARGET ${PROTO_TARGET}
+    PROTOC_OUT_DIR "${DAWN_BUILD_GEN_DIR}/src/tint/")
+  target_include_directories(${PROTO_TARGET} PRIVATE "${DAWN_BUILD_GEN_DIR}/src/tint/")
+  target_include_directories(${PROTO_TARGET} PUBLIC "${DAWN_BUILD_GEN_DIR}")
+  target_link_libraries(${PROTO_TARGET} libprotobuf)
+endforeach()
 
 
 ################################################################################

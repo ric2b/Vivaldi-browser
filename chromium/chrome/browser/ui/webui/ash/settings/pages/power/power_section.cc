@@ -8,7 +8,9 @@
 #include "ash/shell.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/dbus/power/power_manager_client.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 
@@ -125,7 +127,7 @@ PowerSection::PowerSection(Profile* profile,
   if (power_manager_client) {
     power_manager_client->AddObserver(this);
 
-    const absl::optional<power_manager::PowerSupplyProperties>& last_status =
+    const std::optional<power_manager::PowerSupplyProperties>& last_status =
         power_manager_client->GetLastStatus();
     if (last_status) {
       PowerChanged(*last_status);
@@ -134,22 +136,6 @@ PowerSection::PowerSection(Profile* profile,
     // Determine whether to show laptop lid power settings.
     power_manager_client->GetSwitchStates(base::BindOnce(
         &PowerSection::OnGotSwitchStates, weak_ptr_factory_.GetWeakPtr()));
-
-    // Surface adaptive charging setting in search if the feature is enabled.
-    if (ash::features::IsAdaptiveChargingEnabled() &&
-        Shell::Get()
-            ->adaptive_charging_controller()
-            ->IsAdaptiveChargingSupported()) {
-      updater.AddSearchTags(GetPowerWithAdaptiveChargingSearchConcepts());
-    }
-
-    const auto* battery_saver_controller =
-        Shell::Get()->battery_saver_controller();
-    if (battery_saver_controller != nullptr &&
-        battery_saver_controller->IsBatterySaverSupported() &&
-        ash::features::IsBatterySaverAvailable()) {
-      updater.AddSearchTags(GetPowerWithBatterySaverModeSearchConcepts());
-    }
   }
 }
 
@@ -207,8 +193,8 @@ void PowerSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "powerAdaptiveChargingLearnMoreUrl",
       u"https://support.google.com/chromebook/?p=settings_adaptive_charging");
 
-  // TODO(b:278957245): create and link to real "learn more" webpage.
-  html_source->AddString("powerBatterySaverLearnMoreUrl", "about://blank");
+  html_source->AddString("powerBatterySaverLearnMoreUrl",
+                         chrome::kCrosBatterySaverLearnMoreURL);
 
   html_source->AddBoolean("isAdaptiveChargingEnabled",
                           ash::features::IsAdaptiveChargingEnabled() &&
@@ -275,10 +261,33 @@ void PowerSection::PowerChanged(
       power_manager::PowerSupplyProperties_BatteryState_NOT_PRESENT) {
     updater.AddSearchTags(GetPowerWithBatterySearchConcepts());
   }
+
+  if (!has_observed_power_status_) {
+    // IsAdaptiveChargingSupported and IsBatterySaverSupported both rely on
+    // GetLastStatus, so make sure its not nullopt.
+    DCHECK(chromeos::PowerManagerClient::Get()->GetLastStatus());
+    if (!has_observed_power_status_) {
+      if (ash::features::IsAdaptiveChargingEnabled() &&
+          Shell::Get()
+              ->adaptive_charging_controller()
+              ->IsAdaptiveChargingSupported()) {
+        updater.AddSearchTags(GetPowerWithAdaptiveChargingSearchConcepts());
+      }
+
+      const auto* battery_saver_controller =
+          Shell::Get()->battery_saver_controller();
+      if (battery_saver_controller != nullptr &&
+          battery_saver_controller->IsBatterySaverSupported() &&
+          ash::features::IsBatterySaverAvailable()) {
+        updater.AddSearchTags(GetPowerWithBatterySaverModeSearchConcepts());
+      }
+    }
+    has_observed_power_status_ = true;
+  }
 }
 
 void PowerSection::OnGotSwitchStates(
-    absl::optional<chromeos::PowerManagerClient::SwitchStates> result) {
+    std::optional<chromeos::PowerManagerClient::SwitchStates> result) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
 
   if (result && result->lid_state !=

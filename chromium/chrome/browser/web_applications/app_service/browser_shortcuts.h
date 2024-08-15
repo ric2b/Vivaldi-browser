@@ -6,14 +6,15 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_APP_SERVICE_BROWSER_SHORTCUTS_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/apps/app_service/app_icon/icon_key_util.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_forward.h"
 #include "chrome/browser/apps/app_service/publishers/shortcut_publisher.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager_observer.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_registrar_observer.h"
 #include "components/webapps/common/web_app_id.h"
 
 static_assert(BUILDFLAG(IS_CHROMEOS_ASH), "For ash only");
@@ -30,9 +31,9 @@ class WebAppProvider;
 
 // A shortcut publisher (in the App Service sense) of web app system backed
 // shortcuts where the parent app is the browser.
-class BrowserShortcuts : public apps::ShortcutPublisher,
-                         public base::SupportsWeakPtr<BrowserShortcuts>,
-                         public WebAppInstallManagerObserver {
+class BrowserShortcuts final : public apps::ShortcutPublisher,
+                               public WebAppInstallManagerObserver,
+                               public WebAppRegistrarObserver {
  public:
   explicit BrowserShortcuts(apps::AppServiceProxy* proxy);
   BrowserShortcuts(const BrowserShortcuts&) = delete;
@@ -73,16 +74,25 @@ class BrowserShortcuts : public apps::ShortcutPublisher,
       const webapps::AppId& app_id,
       webapps::WebappUninstallSource uninstall_source) override;
 
+  // WebAppRegistrarObserver:
+  void OnAppRegistrarDestroyed() override;
+  void OnWebAppUserDisplayModeChanged(
+      const webapps::AppId& app_id,
+      mojom::UserDisplayMode user_display_mode) override;
+
   const raw_ptr<Profile> profile_;
 
   const raw_ptr<WebAppProvider> provider_;
 
   raw_ptr<apps::AppServiceProxy> proxy_;
 
-  apps_util::IncrementingIconKeyFactory icon_key_factory_;
-
   base::ScopedObservation<WebAppInstallManager, WebAppInstallManagerObserver>
       install_manager_observation_{this};
+
+  base::ScopedObservation<WebAppRegistrar, WebAppRegistrarObserver>
+      registrar_observation_{this};
+
+  base::WeakPtrFactory<BrowserShortcuts> weak_ptr_factor_{this};
 };
 
 }  // namespace web_app

@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -28,11 +29,13 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/event_dispatcher.mojom-forward.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 
 // Vivaldi
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "app/vivaldi_apptools.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -50,10 +53,10 @@ bool WillDispatchTabUpdatedEvent(
     WebContents* contents,
     const std::set<std::string> changed_property_names,
     content::BrowserContext* browser_context,
-    Feature::Context target_context,
+    mojom::ContextType target_context,
     const Extension* extension,
     const base::Value::Dict* listener_filter,
-    absl::optional<base::Value::List>& event_args_out,
+    std::optional<base::Value::List>& event_args_out,
     mojom::EventFilteringInfoPtr& event_filtering_info_out) {
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
@@ -80,10 +83,10 @@ bool WillDispatchTabCreatedEvent(
     WebContents* contents,
     bool active,
     content::BrowserContext* browser_context,
-    Feature::Context target_context,
+    mojom::ContextType target_context,
     const Extension* extension,
     const base::Value::Dict* listener_filter,
-    absl::optional<base::Value::List>& event_args_out,
+    std::optional<base::Value::List>& event_args_out,
     mojom::EventFilteringInfoPtr& event_filtering_info_out) {
   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
       ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
@@ -154,12 +157,16 @@ void TabsEventRouter::TabEntry::NavigationEntryCommitted(
     changed_property_names.insert(tabs_constants::kUrlKey);
   }
 
-  // VB-97964 Link routing
+  // VB-97964 Link routing (Workspace rules).
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   auto ignoreLinkRouting = web_contents()->GetIgnoreLinkRouting();
+  auto* provider = web_app::WebAppProvider::GetForLocalAppsUnchecked(profile);
+  bool is_in_pwa = provider->ui_manager().IsInAppWindow(web_contents());
 
   if (::vivaldi::IsVivaldiRunning() &&
+    extensions::IsWorkspacesEnabled(web_contents()) &&
+    !is_in_pwa &&
     !ignoreLinkRouting &&
     !profile->IsIncognitoProfile() &&
     !profile->IsGuestSession() &&
@@ -359,7 +366,7 @@ void TabsEventRouter::TabPinnedStateChanged(TabStripModel* tab_strip_model,
 }
 
 void TabsEventRouter::TabGroupedStateChanged(
-    absl::optional<tab_groups::TabGroupId> group,
+    std::optional<tab_groups::TabGroupId> group,
     content::WebContents* contents,
     int index) {
   std::set<std::string> changed_property_names;

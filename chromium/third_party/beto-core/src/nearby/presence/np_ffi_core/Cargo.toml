@@ -4,14 +4,22 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 array_view.workspace = true
-np_adv.workspace = true
+ldt_np_adv.workspace = true
+np_adv = { workspace = true, features = ["alloc"] }
+np_hkdf.workspace = true
 handle_map.workspace = true
 crypto_provider.workspace = true
-#TODO: Allow this to be configurable!
-crypto_provider_default = {workspace = true, features = ["rustcrypto"]}
-spin.workspace = true
+crypto_provider_default = { workspace = true, default-features = false }
+lock_adapter.workspace = true
+lazy_static.workspace = true
 
 [features]
-std = []
+default = ["rustcrypto"]
+rustcrypto = ["crypto_provider_default/rustcrypto", "crypto_provider_default/std"]
+opensslbssl = ["crypto_provider_default/opensslbssl"]
+boringssl = ["crypto_provider_default/boringssl"]

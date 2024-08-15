@@ -362,12 +362,13 @@ class BotUpdateApi(recipe_api.RecipeApi):
 
     # Ah hah! Now that everything is in place, lets run bot_update!
     step_result = None
+    ok_ret = (0, 88)
     try:
       # Error code 88 is the 'patch failure' code for patch apply failure.
       step_result = self(name,
                          cmd,
                          step_test_data=step_test_data,
-                         ok_ret=(0, 88),
+                         ok_ret=ok_ret,
                          **kwargs)
     finally:
       step_result = self.m.step.active_result
@@ -416,7 +417,8 @@ class BotUpdateApi(recipe_api.RecipeApi):
                 'Patch failure: See patch error log attached to bot_update. '
                 'Try rebasing?')
 
-        if (step_result.exc_result.was_cancelled
+        if (step_result.exc_result.retcode not in ok_ret
+            or step_result.exc_result.was_cancelled
             or step_result.exc_result.had_timeout):
           self._upload_traces()
 

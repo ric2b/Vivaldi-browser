@@ -9,7 +9,6 @@
 #include <set>
 #include <vector>
 
-#include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/splitview/split_view_observer.h"
 #include "ash/wm/window_state_observer.h"
@@ -25,6 +24,10 @@
 namespace aura {
 class Window;
 }  //  namespace aura
+
+namespace display {
+enum class TabletState;
+}  // namespace display
 
 namespace ash {
 class SplitViewController;
@@ -58,8 +61,7 @@ constexpr base::TimeDelta kSequentialSnapActionMaxTime = base::Hours(50);
 //        the UMA).
 // End: When no two windows are snapped on both sides or tablet model split view
 //        starts, the clamshell split view ends.
-class SplitViewMetricsController : public TabletModeObserver,
-                                   public SplitViewObserver,
+class SplitViewMetricsController : public SplitViewObserver,
                                    public display::DisplayObserver,
                                    public aura::WindowObserver,
                                    public WindowStateObserver,
@@ -100,11 +102,6 @@ class SplitViewMetricsController : public TabletModeObserver,
 
   ~SplitViewMetricsController() override;
 
-  // TabletModeObserver:
-  void OnTabletModeStarted() override;
-  void OnTabletModeEnded() override;
-  void OnTabletControllerDestroyed() override;
-
   // SplitViewObserver:
   void OnSplitViewStateChanged(SplitViewController::State previous_state,
                                SplitViewController::State state) override;
@@ -114,6 +111,8 @@ class SplitViewMetricsController : public TabletModeObserver,
   // display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override;
+  void OnDisplayTabletStateChanged(display::TabletState state) override;
+
   // aura::WindowObserver:
   void OnWindowParentChanged(aura::Window* window,
                              aura::Window* parent) override;
@@ -211,6 +210,11 @@ class SplitViewMetricsController : public TabletModeObserver,
   // Resets the variables related to time and counter metrics.
   void ResetTimeAndCounter();
 
+  // Called from `OnDisplayTabletStateChanged` when the display tablet state
+  // transition is completed.
+  void OnTabletModeStarted();
+  void OnTabletModeEnded();
+
   // Checks if we are recording clamshell/tablet mode metrics.
   bool IsRecordingClamshellMetrics() const;
   bool IsRecordingTabletMetrics() const;
@@ -244,7 +248,7 @@ class SplitViewMetricsController : public TabletModeObserver,
   // We need to save an ptr of the observed `SplitViewController`. Because the
   // `RootWindowController` will be deconstructed in advance. Then, we cannot
   // use it to get observed `SplitViewController`.
-  const raw_ptr<SplitViewController, ExperimentalAsh> split_view_controller_;
+  const raw_ptr<SplitViewController> split_view_controller_;
 
   // Indicates whether it is recording split view metrics.
   bool in_split_view_recording_ = false;
@@ -253,10 +257,10 @@ class SplitViewMetricsController : public TabletModeObserver,
   DeviceOrientation orientation_ = DeviceOrientation::kLandscape;
 
   // Current observed desk.
-  raw_ptr<const Desk, ExperimentalAsh> current_desk_ = nullptr;
+  raw_ptr<const Desk> current_desk_ = nullptr;
 
   // Observed windows on the active desk.
-  std::vector<aura::Window*> observed_windows_;
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> observed_windows_;
 
   // Windows that recovered by window restore have no parents at the initialize
   // stage, so their window states cannot be observed when are inserted into
@@ -280,11 +284,6 @@ class SplitViewMetricsController : public TabletModeObserver,
   int tablet_resize_count_ = 0;
   int clamshell_resize_count_ = 0;
 
-  // `TabletModeController` is destroyed before `SplitViewMetricsController`.
-  // Sets a `ScopedObservation` to help remove observer.
-  base::ScopedObservation<TabletModeController, TabletModeObserver>
-      tablet_mode_controller_observation_{this};
-
   // Counter of swapping windows in split view.
   int swap_count_ = 0;
 
@@ -306,6 +305,8 @@ class SplitViewMetricsController : public TabletModeObserver,
   chromeos::WindowStateType first_closed_state_type_ =
       chromeos::WindowStateType::kDefault;
   base::TimeTicks first_closed_time_;
+
+  display::ScopedDisplayObserver display_observer_{this};
 };
 
 }  // namespace ash

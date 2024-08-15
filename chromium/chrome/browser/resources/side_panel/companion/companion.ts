@@ -76,6 +76,12 @@ enum ParamType {
 
   // Arguments for sending companion loading state from iframe to browser.
   COMPANION_LOADING_STATE = 'companionLoadingState',
+
+  // Arguments for sending page title from browser to iframe.
+  PAGE_TITLE = 'pageTitle',
+
+  // Arguments for sending innerHtml from browser to iframe.
+  INNER_HTML = 'innerHtml',
 }
 
 const companionProxy: CompanionProxy = CompanionProxyImpl.getInstance();
@@ -104,6 +110,23 @@ function initialize() {
         const message = {
           [ParamType.METHOD_TYPE]: MethodType.kUpdateCompanionPage,
           [ParamType.COMPANION_UPDATE_PARAMS]: companionUpdateProto,
+        };
+
+        const frame = document.body.querySelector('iframe');
+        assert(frame);
+        if (frame.contentWindow) {
+          frame.contentWindow.postMessage(message, companionOrigin);
+        }
+      });
+
+  companionProxy.callbackRouter.updatePageContent.addListener(
+      (pageTitle: string, innerHtml: string) => {
+        const companionOrigin =
+            new URL(loadTimeData.getString('companion_origin')).origin;
+        const message = {
+          [ParamType.METHOD_TYPE]: MethodType.kUpdatePageContent,
+          [ParamType.PAGE_TITLE]: pageTitle,
+          [ParamType.INNER_HTML]: innerHtml,
         };
 
         const frame = document.body.querySelector('iframe');
@@ -288,6 +311,8 @@ function onCompanionMessageEvent(event: MessageEvent) {
         data[ParamType.COMPANION_LOADING_STATE]);
   } else if (methodType === MethodType.kRefreshCompanionPage) {
     companionProxy.handler.refreshCompanionPage();
+  } else if (methodType === MethodType.kServerSideUrlFilterEvent) {
+    companionProxy.handler.onServerSideUrlFilterEvent();
   }
 }
 

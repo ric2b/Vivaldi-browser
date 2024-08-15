@@ -28,13 +28,16 @@ class Size;
 namespace display {
 
 class ContentProtectionManager;
+class DisplayLayoutManager;
 class DisplayMode;
 class DisplaySnapshot;
+class GammaCurve;
 class ManagedDisplayMode;
 class NativeDisplayDelegate;
 class UpdateDisplayConfigurationTask;
 
-struct GammaRampRGBEntry;
+struct ColorTemperatureAdjustment;
+struct ColorCalibration;
 
 namespace test {
 class DisplayManagerTestApi;
@@ -47,7 +50,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   using ConfigurationCallback = base::OnceCallback<void(bool /* success */)>;
   using DisplayControlCallback = base::OnceCallback<void(bool success)>;
 
-  using DisplayStateList = std::vector<DisplaySnapshot*>;
+  using DisplayStateList =
+      std::vector<raw_ptr<DisplaySnapshot, VectorExperimental>>;
 
   class Observer {
    public:
@@ -126,6 +130,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
     // time delta otherwise.
     base::TimeDelta GetConfigureDelay() const;
 
+    DisplayLayoutManager* GetDisplayLayoutManager() const;
+
    private:
     raw_ptr<DisplayConfigurator, DanglingUntriaged> configurator_;  // not owned
   };
@@ -171,7 +177,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   ~DisplayConfigurator() override;
 
   MultipleDisplayState display_state() const { return current_display_state_; }
-  const std::vector<DisplaySnapshot*>& cached_displays() const {
+  const std::vector<raw_ptr<DisplaySnapshot, VectorExperimental>>&
+  cached_displays() const {
     return cached_displays_;
   }
   void set_state_controller(StateController* controller) {
@@ -265,6 +272,14 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // Returns true if there is at least one display on.
   bool IsDisplayOn() const;
 
+  // Sets the color temperature adjustment for the specified display.
+  void SetColorTemperatureAdjustment(int64_t display_id,
+                                     const ColorTemperatureAdjustment& cta);
+
+  // Sets the color calibration for the specified display;
+  void SetColorCalibration(int64_t display_id,
+                           const ColorCalibration& calibration);
+
   // Sets the given 3x3 |color_matrix| on the display with |display_id|.
   // This doesn't affect gamma or degamma. It returns true if the color matrix
   // was sent to the GPU process successfully.
@@ -274,8 +289,8 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // Sets the given |gamma_lut| and |degamma_lut| on the display with
   // |display_id|.
   bool SetGammaCorrection(int64_t display_id,
-                          const std::vector<GammaRampRGBEntry>& degamma_lut,
-                          const std::vector<GammaRampRGBEntry>& gamma_lut);
+                          const GammaCurve& degamma,
+                          const GammaCurve& gamma);
 
   // Enable/disable the privacy screen on display with |display_id|.
   // For this to succeed, privacy screen must be supported by the display.
@@ -337,12 +352,14 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
 
   // Callback for |configuration_task_|. When the configuration process finishes
   // this is called with the result (|success|) and the updated display state.
-  void OnConfigured(bool success,
-                    const std::vector<DisplaySnapshot*>& displays,
-                    const std::vector<DisplaySnapshot*>& unassociated_displays,
-                    MultipleDisplayState new_display_state,
-                    chromeos::DisplayPowerState new_power_state,
-                    bool new_vrr_state);
+  void OnConfigured(
+      bool success,
+      const std::vector<raw_ptr<DisplaySnapshot, VectorExperimental>>& displays,
+      const std::vector<raw_ptr<DisplaySnapshot, VectorExperimental>>&
+          unassociated_displays,
+      MultipleDisplayState new_display_state,
+      chromeos::DisplayPowerState new_power_state,
+      bool new_vrr_state);
 
   // Updates the current and pending power state and notifies observers.
   void UpdatePowerState(chromeos::DisplayPowerState new_power_state);
@@ -389,10 +406,6 @@ class DISPLAY_MANAGER_EXPORT DisplayConfigurator
   // Returns whether a configuration should occur on account of a pending VRR
   // request.
   bool ShouldConfigureVrr() const;
-
-  // Returns whether variable refresh rates are enabled on the internal display
-  // (if there is one).
-  bool IsVrrEnabledOnInternalDisplay() const;
 
   raw_ptr<StateController> state_controller_;
   raw_ptr<SoftwareMirroringController> mirroring_controller_;

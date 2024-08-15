@@ -9,6 +9,7 @@
 #include "base/observer_list.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "content/public/renderer/render_frame.h"
 #include "third_party/blink/public/common/features.h"
@@ -18,6 +19,7 @@
 #include "third_party/blink/public/web/web_form_element.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
 #include "ui/base/page_transition_types.h"
 
 using blink::WebDocumentLoader;
@@ -60,6 +62,7 @@ FormRendererId FormRef::GetId() const {
 
 FieldRef::FieldRef(blink::WebFormControlElement form_control)
     : field_renderer_id_(form_util::GetFieldRendererId(form_control)) {
+  CHECK(!form_control.IsNull());
   if (!ShouldReplaceElementsByRendererIds()) {
     field_ = form_control;
   }
@@ -67,6 +70,7 @@ FieldRef::FieldRef(blink::WebFormControlElement form_control)
 
 FieldRef::FieldRef(blink::WebElement content_editable)
     : field_renderer_id_(content_editable.GetDomNodeId()) {
+  CHECK(!content_editable.IsNull());
   CHECK(content_editable.IsContentEditable());
   CHECK(base::FeatureList::IsEnabled(
       blink::features::kAutofillUseDomNodeIdForRendererId));
@@ -132,17 +136,23 @@ void FormTracker::TextFieldDidChange(const WebFormControlElement& element) {
   DCHECK(!element.DynamicTo<WebInputElement>().IsNull() ||
          form_util::IsTextAreaElement(element));
 
-  if (ignore_control_changes_)
+  if (ignore_control_changes_) {
     return;
+  }
 
   // If the element isn't focused then the changes don't matter. This check is
   // required to properly handle IME interactions.
-  if (!element.Focused())
+  if (!element.Focused()) {
     return;
-
-  const WebInputElement input_element = element.DynamicTo<WebInputElement>();
-  if (input_element.IsNull())
-    return;
+  }
+  // Return early for textarea elements unless kAutofillTextAreaChangeEvents is
+  // enabled.
+  if (!base::FeatureList::IsEnabled(features::kAutofillTextAreaChangeEvents)) {
+    const WebInputElement input_element = element.DynamicTo<WebInputElement>();
+    if (input_element.IsNull()) {
+      return;
+    }
+  }
 
   if (!unsafe_render_frame()) {
     return;
@@ -164,11 +174,10 @@ void FormTracker::TextFieldDidChange(const WebFormControlElement& element) {
   unsafe_render_frame()
       ->GetWebFrame()
       ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
-      ->PostTask(FROM_HERE,
-                 base::BindRepeating(
-                     &FormTracker::FormControlDidChangeImpl,
-                     weak_ptr_factory_.GetWeakPtr(), element,
-                     Observer::ElementChangeSource::TEXTFIELD_CHANGED));
+      ->PostTask(FROM_HERE, base::BindRepeating(
+                                &FormTracker::FormControlDidChangeImpl,
+                                weak_ptr_factory_.GetWeakPtr(), element,
+                                Observer::SaveFormReason::kTextFieldChanged));
 }
 
 void FormTracker::SelectControlDidChange(const WebFormControlElement& element) {
@@ -186,10 +195,14 @@ void FormTracker::SelectControlDidChange(const WebFormControlElement& element) {
   unsafe_render_frame()
       ->GetWebFrame()
       ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
-      ->PostTask(FROM_HERE, base::BindRepeating(
-                                &FormTracker::FormControlDidChangeImpl,
-                                weak_ptr_factory_.GetWeakPtr(), element,
-                                Observer::ElementChangeSource::SELECT_CHANGED));
+      ->PostTask(FROM_HERE,
+                 base::BindRepeating(&FormTracker::FormControlDidChangeImpl,
+                                     weak_ptr_factory_.GetWeakPtr(), element,
+                                     Observer::SaveFormReason::kSelectChanged));
+}
+
+void FormTracker::ElementDisappeared(const blink::WebElement& element) {
+  // TODO(crbug.com/1483242): Implement.
 }
 
 void FormTracker::TrackAutofilledElement(const WebFormControlElement& element) {
@@ -204,16 +217,14 @@ void FormTracker::TrackAutofilledElement(const WebFormControlElement& element) {
     last_interacted_formless_element_ = FieldRef(element);
   else
     last_interacted_form_ = FormRef(element.Form());
-  TrackElement();
-}
-
-void FormTracker::FireProbablyFormSubmittedForTesting() {
-  FireProbablyFormSubmitted();
+  // TODO(crbug.com/1483242): Investigate if this is necessary: if it is,
+  // document the reason, if not, remove.
+  TrackElement(mojom::SubmissionSource::DOM_MUTATION_AFTER_AUTOFILL);
 }
 
 void FormTracker::FormControlDidChangeImpl(
     const WebFormControlElement& element,
-    Observer::ElementChangeSource change_source) {
+    Observer::SaveFormReason change_source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
   // The frame or document could be null because this function is called
   // asynchronously.
@@ -227,7 +238,6 @@ void FormTracker::FormControlDidChangeImpl(
   } else {
     last_interacted_form_ = FormRef(element.Form());
   }
-
   for (auto& observer : observers_) {
     observer.OnProvisionallySaveForm(element.Form(), element, change_source);
   }
@@ -245,7 +255,7 @@ void FormTracker::DidFinishSameDocumentNavigation() {
 
 void FormTracker::DidStartNavigation(
     const GURL& url,
-    absl::optional<blink::WebNavigationType> navigation_type) {
+    std::optional<blink::WebNavigationType> navigation_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
   if (!unsafe_render_frame()) {
     return;
@@ -256,10 +266,6 @@ void FormTracker::DidStartNavigation(
     return;
   }
 
-  // Bug fix for crbug.com/368690. isProcessingUserGesture() is false when
-  // the user is performing actions outside the page (e.g. typed url,
-  // history navigation). We don't want to trigger saving in these cases.
-
   // We are interested only in content-initiated navigations. Explicit browser
   // initiated navigations (e.g. via omnibox) don't have a navigation type
   // and are discarded here.
@@ -269,9 +275,15 @@ void FormTracker::DidStartNavigation(
   }
 }
 
-void FormTracker::WillDetach() {
+void FormTracker::WillDetach(blink::DetachReason detach_reason) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
-  FireInferredFormSubmission(SubmissionSource::FRAME_DETACHED);
+  if (detach_reason == blink::DetachReason::kFrameDeletion) {
+    // Exclude cases where the previous RenderFrame gets deleted only to be
+    // replaced by a new RenderFrame, which happens on navigations. This is so
+    // that we only trigger inferred form submission if the actual frame
+    // (<iframe> element etc) gets detached.
+    FireInferredFormSubmission(SubmissionSource::FRAME_DETACHED);
+  }
 }
 
 void FormTracker::WillSendSubmitEvent(const WebFormElement& form) {
@@ -280,7 +292,7 @@ void FormTracker::WillSendSubmitEvent(const WebFormElement& form) {
   for (auto& observer : observers_) {
     observer.OnProvisionallySaveForm(
         form, blink::WebFormControlElement(),
-        Observer::ElementChangeSource::WILL_SEND_SUBMIT_EVENT);
+        Observer::SaveFormReason::kWillSendSubmitEvent);
   }
 }
 
@@ -339,7 +351,7 @@ void FormTracker::FireSubmissionIfFormDisappear(SubmissionSource source) {
     FireInferredFormSubmission(source);
     return;
   }
-  TrackElement();
+  TrackElement(source);
 }
 
 bool FormTracker::CanInferFormSubmitted() {
@@ -362,12 +374,12 @@ bool FormTracker::CanInferFormSubmitted() {
   return false;
 }
 
-void FormTracker::TrackElement() {
+void FormTracker::TrackElement(mojom::SubmissionSource source) {
   // Already has observer for last interacted element.
   if (form_element_observer_)
     return;
   auto callback = base::BindOnce(&FormTracker::ElementWasHiddenOrRemoved,
-                                 base::Unretained(this));
+                                 base::Unretained(this), source);
 
   if (WebFormElement last_interacted_form = last_interacted_form_.GetForm();
       !last_interacted_form.IsNull()) {
@@ -390,8 +402,8 @@ void FormTracker::ResetLastInteractedElements() {
   }
 }
 
-void FormTracker::ElementWasHiddenOrRemoved() {
-  FireInferredFormSubmission(SubmissionSource::DOM_MUTATION_AFTER_XHR);
+void FormTracker::ElementWasHiddenOrRemoved(mojom::SubmissionSource source) {
+  FireInferredFormSubmission(source);
 }
 
 }  // namespace autofill

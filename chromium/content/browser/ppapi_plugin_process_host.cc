@@ -96,7 +96,7 @@ PpapiPluginProcessHost::~PpapiPluginProcessHost() {
 PpapiPluginProcessHost* PpapiPluginProcessHost::CreatePluginHost(
     const ContentPluginInfo& info,
     const base::FilePath& profile_data_directory,
-    const absl::optional<url::Origin>& origin_lock) {
+    const std::optional<url::Origin>& origin_lock) {
   PpapiPluginProcessHost* plugin_host =
       new PpapiPluginProcessHost(info, profile_data_directory, origin_lock);
   if (plugin_host->Init(info))
@@ -176,7 +176,7 @@ void PpapiPluginProcessHost::OpenChannelToPlugin(Client* client) {
 PpapiPluginProcessHost::PpapiPluginProcessHost(
     const ContentPluginInfo& info,
     const base::FilePath& profile_data_directory,
-    const absl::optional<url::Origin>& origin_lock)
+    const std::optional<url::Origin>& origin_lock)
     : profile_data_directory_(profile_data_directory),
       origin_lock_(origin_lock) {
   uint32_t base_permissions = info.permissions;
@@ -239,7 +239,8 @@ bool PpapiPluginProcessHost::Init(const ContentPluginInfo& info) {
   BrowserChildProcessHostImpl::CopyTraceStartupFlags(cmd_line.get());
 
 #if BUILDFLAG(IS_WIN)
-  cmd_line->AppendArg(switches::kPrefetchArgumentPpapi);
+  cmd_line->AppendArg(internal::ChildProcessLauncherHelper::GetPrefetchSwitch(
+      AppLaunchPrefetchType::kPpapi));
 #endif  // BUILDFLAG(IS_WIN)
 
   if (vivaldi::IsVivaldiRunning())

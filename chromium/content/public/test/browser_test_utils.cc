@@ -20,6 +20,7 @@
 #include "base/json/json_reader.h"
 #include "base/no_destructor.h"
 #include "base/process/kill.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
 #include "base/strings/strcat.h"
@@ -34,6 +35,7 @@
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/trace_event/typed_macros.h"
+#include "base/types/optional_util.h"
 #include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -45,7 +47,7 @@
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
-#include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
+#include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_frame_metadata_provider_impl.h"
@@ -59,6 +61,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/frame.mojom.h"
+#include "content/common/input/synthetic_touchscreen_pinch_gesture.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -132,6 +135,11 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/latency/latency_info.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "content/browser/media/captured_surface_controller.h"
+#include "content/public/test/mock_captured_surface_controller.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/webui/grit/ash_webui_common_resources.h"
@@ -1805,6 +1813,13 @@ bool HasOriginKeyedProcess(RenderFrameHost* frame) {
       .requires_origin_keyed_process();
 }
 
+bool HasSandboxedSiteInstance(RenderFrameHost* frame) {
+  return static_cast<RenderFrameHostImpl*>(frame)
+      ->GetSiteInstance()
+      ->GetSiteInfo()
+      .is_sandboxed();
+}
+
 std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
     RenderFrameHost* starting_rfh) {
   std::vector<RenderFrameHost*> visited_frames;
@@ -1828,8 +1843,8 @@ std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
 std::vector<WebContents*> GetAllWebContents() {
   std::vector<WebContentsImpl*> all_wci = WebContentsImpl::GetAllWebContents();
   std::vector<WebContents*> all_wc;
-  std::transform(all_wci.cbegin(), all_wci.cend(), std::back_inserter(all_wc),
-                 [](WebContentsImpl* wc) { return wc; });
+  base::ranges::transform(all_wci, std::back_inserter(all_wc),
+                          [](WebContentsImpl* wc) { return wc; });
 
   return all_wc;
 }
@@ -1917,14 +1932,18 @@ std::vector<net::CanonicalCookie> GetCanonicalCookies(
 bool SetCookie(BrowserContext* browser_context,
                const GURL& url,
                const std::string& value,
-               net::CookieOptions::SameSiteCookieContext context) {
+               net::CookieOptions::SameSiteCookieContext context,
+               net::CookiePartitionKey* cookie_partition_key) {
+  if (cookie_partition_key) {
+    DCHECK(base::Contains(base::ToLowerASCII(value), ";partitioned"));
+  }
   mojo::Remote<network::mojom::CookieManager> cookie_manager;
   browser_context->GetDefaultStoragePartition()
       ->GetNetworkContext()
       ->GetCookieManager(cookie_manager.BindNewPipeAndPassReceiver());
   std::unique_ptr<net::CanonicalCookie> cc(net::CanonicalCookie::Create(
-      url, value, base::Time::Now(), absl::nullopt /* server_time */,
-      absl::nullopt /* cookie_partition_key */));
+      url, value, base::Time::Now(), std::nullopt /* server_time */,
+      base::OptionalFromPtr(cookie_partition_key)));
   DCHECK(cc.get());
 
   net::CookieOptions options;
@@ -1933,29 +1952,6 @@ bool SetCookie(BrowserContext* browser_context,
   base::test::TestFuture<net::CookieAccessResult> future;
   cookie_manager->SetCanonicalCookie(*cc.get(), url, options,
                                      future.GetCallback());
-  return future.Get().status.IsInclude();
-}
-
-bool SetPartitionedCookie(BrowserContext* browser_context,
-                          const GURL& url,
-                          const std::string& value,
-                          const net::CookiePartitionKey& cookie_partition_key,
-                          net::CookieOptions::SameSiteCookieContext context) {
-  DCHECK(base::Contains(value, ";Partitioned"));
-  mojo::Remote<network::mojom::CookieManager> cookie_manager;
-  browser_context->GetDefaultStoragePartition()
-      ->GetNetworkContext()
-      ->GetCookieManager(cookie_manager.BindNewPipeAndPassReceiver());
-  std::unique_ptr<net::CanonicalCookie> cc(net::CanonicalCookie::Create(
-      url, value, base::Time::Now(), absl::nullopt /* server_time */,
-      cookie_partition_key));
-  DCHECK(cc);
-
-  net::CookieOptions options;
-  options.set_include_httponly();
-  options.set_same_site_cookie_context(context);
-  base::test::TestFuture<net::CookieAccessResult> future;
-  cookie_manager->SetCanonicalCookie(*cc, url, options, future.GetCallback());
   return future.Get().status.IsInclude();
 }
 
@@ -2220,7 +2216,7 @@ RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents) {
 }
 
 bool RequestKeyboardLock(WebContents* web_contents,
-                         absl::optional<base::flat_set<ui::DomCode>> codes) {
+                         std::optional<base::flat_set<ui::DomCode>> codes) {
   DCHECK(!codes.has_value() || !codes.value().empty());
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
@@ -2379,8 +2375,8 @@ RenderProcessHostKillWaiter::RenderProcessHostKillWaiter(
                     RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT),
       uma_name_(uma_name) {}
 
-absl::optional<int> RenderProcessHostKillWaiter::Wait() {
-  absl::optional<bad_message::BadMessageReason> result;
+std::optional<int> RenderProcessHostKillWaiter::Wait() {
+  std::optional<bad_message::BadMessageReason> result;
 
   // Wait for the renderer kill.
   exit_watcher_.Wait();
@@ -2432,14 +2428,14 @@ RenderProcessHostBadMojoMessageWaiter::
       RenderProcessHostImpl::BadMojoMessageCallbackForTesting());
 }
 
-absl::optional<std::string> RenderProcessHostBadMojoMessageWaiter::Wait() {
-  absl::optional<int> bad_message_reason = kill_waiter_.Wait();
+std::optional<std::string> RenderProcessHostBadMojoMessageWaiter::Wait() {
+  std::optional<int> bad_message_reason = kill_waiter_.Wait();
   if (!bad_message_reason.has_value())
-    return absl::nullopt;
+    return std::nullopt;
   if (bad_message_reason.value() != bad_message::RPH_MOJO_PROCESS_ERROR) {
     LOG(ERROR) << "Unexpected |bad_message_reason|: "
                << bad_message_reason.value();
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return observed_mojo_error_;
@@ -2511,8 +2507,9 @@ void DOMMessageQueue::PrimaryMainFrameRenderProcessGone(
       break;
     default:
       renderer_crashed_ = true;
-      if (quit_closure_)
-        std::move(quit_closure_).Run();
+      if (callback_) {
+        std::move(callback_).Run();
+      }
       break;
   }
 }
@@ -2522,8 +2519,9 @@ void DOMMessageQueue::RenderFrameDeleted(RenderFrameHost* render_frame_host) {
     return;
   if (render_frame_host_ != render_frame_host)
     return;
-  if (quit_closure_)
-    std::move(quit_closure_).Run();
+  if (callback_) {
+    std::move(callback_).Run();
+  }
 }
 
 void DOMMessageQueue::ClearQueue() {
@@ -2532,8 +2530,9 @@ void DOMMessageQueue::ClearQueue() {
 
 void DOMMessageQueue::OnDomMessageReceived(const std::string& message) {
   message_queue_.push(message);
-  if (quit_closure_)
-    std::move(quit_closure_).Run();
+  if (callback_) {
+    std::move(callback_).Run();
+  }
 }
 
 void DOMMessageQueue::OnWebContentsCreated(WebContents* contents) {
@@ -2549,12 +2548,23 @@ void DOMMessageQueue::OnBackingWebContentsDestroyed(MessageObserver* observer) {
   }
 }
 
+void DOMMessageQueue::SetOnMessageAvailableCallback(
+    base::OnceClosure callback) {
+  CHECK(!callback_);
+  CHECK(!render_frame_host_);  // Not supported for simplicity.
+  if (!message_queue_.empty() || renderer_crashed_) {
+    std::move(callback).Run();
+  } else {
+    callback_ = std::move(callback);
+  }
+}
+
 bool DOMMessageQueue::WaitForMessage(std::string* message) {
   DCHECK(message);
   if (!renderer_crashed_ && message_queue_.empty()) {
     // This will be quit when a new message comes in.
     base::RunLoop run_loop{base::RunLoop::Type::kNestableTasksAllowed};
-    quit_closure_ = run_loop.QuitClosure();
+    callback_ = run_loop.QuitClosure();
     run_loop.Run();
   }
   return PopMessage(message);
@@ -3463,7 +3473,7 @@ void WebContentsConsoleObserver::OnDidAddMessageToConsole(
     const std::u16string& message_contents,
     int32_t line_no,
     const std::u16string& source_id,
-    const absl::optional<std::u16string>& untrusted_stack_trace) {
+    const std::optional<std::u16string>& untrusted_stack_trace) {
   Message message(
       {source_frame, log_level, message_contents, line_no, source_id});
   if (filter_ && !filter_.Run(message))
@@ -3509,7 +3519,7 @@ void DevToolsInspectorLogWatcher::DispatchProtocolMessage(
                                 message.size());
   auto parsed_message =
       std::move(base::JSONReader::Read(message_str)->GetDict());
-  absl::optional<int> command_id = parsed_message.FindInt("id");
+  std::optional<int> command_id = parsed_message.FindInt("id");
   if (command_id.has_value()) {
     switch (command_id.value()) {
       case kEnableLogMessageId:
@@ -3801,7 +3811,7 @@ void BlobURLStoreInterceptor::Register(
     const GURL& url,
     // TODO(https://crbug.com/1224926): Remove these once experiment is over.
     const base::UnguessableToken& unsafe_agent_cluster_id,
-    const absl::optional<net::SchemefulSite>& unsafe_top_level_site,
+    const std::optional<net::SchemefulSite>& unsafe_top_level_site,
     RegisterCallback callback) {
   GetForwardingInterface()->Register(
       std::move(blob), target_url_, unsafe_agent_cluster_id,
@@ -3818,7 +3828,7 @@ int LoadBasicRequest(
     network::mojom::URLLoaderFactory* url_loader_factory,
     const GURL& url,
     int load_flags,
-    const absl::optional<url::Origin>& request_initiator = absl::nullopt) {
+    const std::optional<url::Origin>& request_initiator = std::nullopt) {
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = url;
   request->load_flags = load_flags;
@@ -3832,7 +3842,7 @@ int LoadBasicRequest(
                                        TRAFFIC_ANNOTATION_FOR_TESTS);
 
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
-      url_loader_factory, simple_loader_helper.GetCallback());
+      url_loader_factory, simple_loader_helper.GetCallbackDeprecated());
   simple_loader_helper.WaitForCallback();
 
   return simple_loader->NetError();
@@ -3873,12 +3883,12 @@ int LoadBasicRequest(RenderFrameHost* frame, const GURL& url) {
 
 void EnsureCookiesFlushed(BrowserContext* browser_context) {
   browser_context->ForEachLoadedStoragePartition(
-      base::BindRepeating([](StoragePartition* partition) {
+      [](StoragePartition* partition) {
         base::RunLoop run_loop;
         partition->GetCookieManagerForBrowserProcess()->FlushCookieStore(
             run_loop.QuitClosure());
         run_loop.Run();
-      }));
+      });
 }
 
 bool TestGuestAutoresize(WebContents* embedder_web_contents,
@@ -4308,5 +4318,34 @@ base::CallbackListSubscription RegisterWebContentsCreationCallback(
     base::RepeatingCallback<void(WebContents*)> callback) {
   return WebContentsImpl::FriendWrapper::AddCreatedCallbackForTesting(callback);
 }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+void SetCapturedSurfaceControllerFactoryForTesting(
+    base::RepeatingCallback<std::unique_ptr<MockCapturedSurfaceController>(
+        GlobalRenderFrameHostId,
+        WebContentsMediaCaptureId)> factory) {
+  using FactoryType =
+      ::base::RepeatingCallback<std::unique_ptr<CapturedSurfaceController>(
+          GlobalRenderFrameHostId, WebContentsMediaCaptureId)>;
+  using MockFactoryType =
+      ::base::RepeatingCallback<std::unique_ptr<MockCapturedSurfaceController>(
+          GlobalRenderFrameHostId, WebContentsMediaCaptureId)>;
+
+  FactoryType wrapped_factory = base::BindRepeating(
+      [](MockFactoryType mock_factory, GlobalRenderFrameHostId rfh_id,
+         WebContentsMediaCaptureId captured_wc_id) {
+        std::unique_ptr<MockCapturedSurfaceController> mock_controller =
+            mock_factory.Run(rfh_id, captured_wc_id);
+        std::unique_ptr<CapturedSurfaceController> wrapped_object =
+            base::WrapUnique<CapturedSurfaceController>(
+                mock_controller.release());
+        return wrapped_object;
+      },
+      factory);
+
+  MediaStreamManager::GetInstance()
+      ->SetCapturedSurfaceControllerFactoryForTesting(wrapped_factory);
+}
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 }  // namespace content

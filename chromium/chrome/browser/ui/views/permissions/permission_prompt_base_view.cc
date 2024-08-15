@@ -52,7 +52,7 @@ bool PermissionPromptBaseView::ShouldIgnoreButtonPressedEventHandling(
     return false;
   }
 
-  absl::optional<gfx::Rect> pip_window_bounds =
+  std::optional<gfx::Rect> pip_window_bounds =
       PictureInPictureWindowManager::GetInstance()
           ->GetPictureInPictureWindowBounds();
 
@@ -96,5 +96,5 @@ UrlIdentity PermissionPromptBaseView::GetUrlIdentity(
   return url_identity;
 }
 
-BEGIN_METADATA(PermissionPromptBaseView, views::BubbleDialogDelegateView)
+BEGIN_METADATA(PermissionPromptBaseView)
 END_METADATA

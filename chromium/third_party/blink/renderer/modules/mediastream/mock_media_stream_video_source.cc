@@ -7,6 +7,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
+#include "build/build_config.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
@@ -32,7 +33,7 @@ MockMediaStreamVideoSource::MockMediaStreamVideoSource(
       respond_to_request_refresh_frame_(respond_to_request_refresh_frame),
       attempted_to_start_(false) {}
 
-MockMediaStreamVideoSource::~MockMediaStreamVideoSource() {}
+MockMediaStreamVideoSource::~MockMediaStreamVideoSource() = default;
 
 void MockMediaStreamVideoSource::StartMockedSource() {
   DCHECK(attempted_to_start_);

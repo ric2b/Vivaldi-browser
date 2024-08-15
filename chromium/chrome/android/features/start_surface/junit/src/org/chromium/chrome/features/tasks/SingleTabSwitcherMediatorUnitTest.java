@@ -11,15 +11,16 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.features.tasks.SingleTabViewProperties.CLICK_LISTENER;
 import static org.chromium.chrome.features.tasks.SingleTabViewProperties.FAVICON;
+import static org.chromium.chrome.features.tasks.SingleTabViewProperties.IS_VISIBLE;
 import static org.chromium.chrome.features.tasks.SingleTabViewProperties.TAB_THUMBNAIL;
 import static org.chromium.chrome.features.tasks.SingleTabViewProperties.TITLE;
 import static org.chromium.chrome.features.tasks.SingleTabViewProperties.URL;
@@ -43,6 +44,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.magic_stack.ModuleDelegate;
+import org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -53,6 +56,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabListFaviconProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher.TabSwitcherViewObserver;
+import org.chromium.chrome.browser.util.BrowserUiUtils.HostSurface;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
@@ -80,6 +84,8 @@ public class SingleTabSwitcherMediatorUnitTest {
     @Mock private TabSwitcher.OnTabSelectingListener mOnTabSelectingListener;
     @Mock private TabSwitcherViewObserver mTabSwitcherViewObserver;
     @Mock private TabContentManager mTabContentManager;
+    @Mock private ModuleDelegate mModuleDelegate;
+    @Mock private Callback<Integer> mSingleTabCardClickedCallback;
     @Captor private ArgumentCaptor<TabModelSelectorObserver> mTabModelSelectorObserverCaptor;
     @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserverCaptor;
     @Captor private ArgumentCaptor<Callback<Drawable>> mFaviconCallbackCaptor;
@@ -113,13 +119,10 @@ public class SingleTabSwitcherMediatorUnitTest {
 
         mPropertyModel = new PropertyModel(SingleTabViewProperties.ALL_KEYS);
         mMediator =
-                new SingleTabSwitcherMediator(
-                        ContextUtils.getApplicationContext(),
-                        mPropertyModel,
-                        mTabModelSelector,
-                        mTabListFaviconProvider,
-                        mTabContentManager,
-                        false);
+                createMediator(
+                        /* singleTabCardClickedCallback= */ null,
+                        /* isSurfacePolishEnabled= */ false,
+                        /* moduleDelegate= */ null);
     }
 
     @After
@@ -131,7 +134,7 @@ public class SingleTabSwitcherMediatorUnitTest {
     public void showAndHide() {
         assertNotNull(mPropertyModel.get(FAVICON));
         assertNotNull(mPropertyModel.get(CLICK_LISTENER));
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         mMediator.setOnTabSelectingListener(mOnTabSelectingListener);
         mMediator.addTabSwitcherViewObserver(mTabSwitcherViewObserver);
 
@@ -142,16 +145,16 @@ public class SingleTabSwitcherMediatorUnitTest {
         verify(mTabListFaviconProvider)
                 .getFaviconDrawableForUrlAsync(
                         eq(mUrl), eq(false), mFaviconCallbackCaptor.capture());
-        assertTrue(mMediator.overviewVisible());
+        assertTrue(mPropertyModel.get(IS_VISIBLE));
         verify(mTabSwitcherViewObserver).startedShowing();
         verify(mTabSwitcherViewObserver).finishedShowing();
         assertEquals(mPropertyModel.get(TITLE), mTitle);
 
         mPropertyModel.get(CLICK_LISTENER).onClick(null);
-        verify(mOnTabSelectingListener).onTabSelecting(anyLong(), eq(mTabId));
+        verify(mOnTabSelectingListener).onTabSelecting(eq(mTabId));
 
         mMediator.hideTabSwitcherView(true);
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         assertEquals(mPropertyModel.get(TITLE), "");
         verify(mTabSwitcherViewObserver).startedHiding();
         verify(mTabSwitcherViewObserver).finishedHiding();
@@ -161,19 +164,57 @@ public class SingleTabSwitcherMediatorUnitTest {
     }
 
     @Test
+    public void showAndHideHomeModule() {
+        when(mModuleDelegate.getHostSurfaceType()).thenReturn(HostSurface.START_SURFACE);
+        mMediator =
+                createMediator(
+                        mSingleTabCardClickedCallback,
+                        /* isSurfacePolishEnabled= */ true,
+                        mModuleDelegate);
+        assertNotNull(mMediator.getTabSelectingListenerForTesting());
+
+        int activeIndex = 1;
+        when(mTabModelSelector.isTabStateInitialized()).thenReturn(true);
+        when(mTabModelSelector.getModel(eq(false))).thenReturn(mNormalTabModel);
+        when(mNormalTabModel.getCount()).thenReturn(3);
+        when(mNormalTabModel.index()).thenReturn(activeIndex);
+        when(mNormalTabModel.getTabAt(activeIndex)).thenReturn(mTab);
+        when(mTab.getUrl()).thenReturn(JUnitTestGURLs.NTP_URL);
+        when(mTab.getId()).thenReturn(1);
+
+        // Verifies that the single tab card won't be shown if the last active Tab is a NTP.
+        mMediator.showModule();
+        verify(mModuleDelegate).onDataFetchFailed(eq(ModuleType.SINGLE_TAB));
+
+        // Verifies that the single tab card will be shown if the last active Tab isn't a NTP.
+        when(mTab.getUrl()).thenReturn(mUrl);
+        mMediator.showModule();
+        verify(mModuleDelegate).onDataReady(eq(ModuleType.SINGLE_TAB), eq(mPropertyModel));
+        verify(mTabListFaviconProvider)
+                .getFaviconDrawableForUrlAsync(
+                        eq(mUrl), eq(false), mFaviconCallbackCaptor.capture());
+        assertEquals(mPropertyModel.get(TITLE), mTitle);
+
+        // Verifies that data is cleaned up after hide.
+        mMediator.hideTabSwitcherView(true);
+        assertEquals(mPropertyModel.get(TITLE), "");
+        mPropertyModel.set(TAB_THUMBNAIL, null);
+        mPropertyModel.set(URL, "");
+
+        mMediator.removeTabSwitcherViewObserver(mTabSwitcherViewObserver);
+    }
+
+    @Test
     public void showAndHide_SurfacePolish() {
         mMediator =
-                new SingleTabSwitcherMediator(
-                        ContextUtils.getApplicationContext(),
-                        mPropertyModel,
-                        mTabModelSelector,
-                        mTabListFaviconProvider,
-                        mTabContentManager,
-                        /* isSurfacePolishEnabled= */ true);
+                createMediator(
+                        /* singleTabCardClickedCallback= */ null,
+                        /* isSurfacePolishEnabled= */ true,
+                        null);
 
         assertNotNull(mPropertyModel.get(FAVICON));
         assertNotNull(mPropertyModel.get(CLICK_LISTENER));
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         mMediator.setOnTabSelectingListener(mOnTabSelectingListener);
         mMediator.addTabSwitcherViewObserver(mTabSwitcherViewObserver);
 
@@ -196,20 +237,20 @@ public class SingleTabSwitcherMediatorUnitTest {
                 .getTabThumbnailWithCallback(
                         eq(mTabId), eq(thumbnailSize), any(), anyBoolean(), anyBoolean());
 
-        assertTrue(mMediator.overviewVisible());
+        assertTrue(mPropertyModel.get(IS_VISIBLE));
         verify(mTabSwitcherViewObserver).startedShowing();
         verify(mTabSwitcherViewObserver).finishedShowing();
         assertEquals(mPropertyModel.get(TITLE), mTitle);
         assertEquals(mPropertyModel.get(URL), mUrl.getHost());
 
         mPropertyModel.get(CLICK_LISTENER).onClick(null);
-        verify(mOnTabSelectingListener).onTabSelecting(anyLong(), eq(mTabId));
+        verify(mOnTabSelectingListener).onTabSelecting(eq(mTabId));
         Bitmap bitmap = Bitmap.createBitmap(300, 400, Bitmap.Config.ALPHA_8);
         mPropertyModel.set(TAB_THUMBNAIL, bitmap);
         assertNotNull(mPropertyModel.get(TAB_THUMBNAIL));
 
         mMediator.hideTabSwitcherView(true);
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         assertEquals(mPropertyModel.get(TITLE), "");
         assertEquals(mPropertyModel.get(URL), "");
         assertEquals(mPropertyModel.get(TAB_THUMBNAIL), null);
@@ -222,7 +263,7 @@ public class SingleTabSwitcherMediatorUnitTest {
 
     @Test
     public void selectTabAfterSwitchingTabModel() {
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         mMediator.setOnTabSelectingListener(mOnTabSelectingListener);
         mMediator.addTabSwitcherViewObserver(mTabSwitcherViewObserver);
 
@@ -233,13 +274,13 @@ public class SingleTabSwitcherMediatorUnitTest {
         verify(mTabListFaviconProvider)
                 .getFaviconDrawableForUrlAsync(
                         eq(mUrl), eq(false), mFaviconCallbackCaptor.capture());
-        assertTrue(mMediator.overviewVisible());
+        assertTrue(mPropertyModel.get(IS_VISIBLE));
         verify(mTabSwitcherViewObserver).startedShowing();
         verify(mTabSwitcherViewObserver).finishedShowing();
         assertEquals(mPropertyModel.get(TITLE), mTitle);
 
         mTabModelObserverCaptor.getValue().didSelectTab(mTab, TabSelectionType.FROM_USER, -1);
-        verify(mOnTabSelectingListener).onTabSelecting(anyLong(), eq(mTabId));
+        verify(mOnTabSelectingListener).onTabSelecting(eq(mTabId));
 
         mTabModelSelectorObserverCaptor
                 .getValue()
@@ -250,13 +291,13 @@ public class SingleTabSwitcherMediatorUnitTest {
 
         // The next tab selecting event should be ignored.
         mTabModelObserverCaptor.getValue().didSelectTab(mTab, TabSelectionType.FROM_USER, mTabId);
-        verify(mOnTabSelectingListener, times(1)).onTabSelecting(anyLong(), eq(mTabId));
+        verify(mOnTabSelectingListener, times(1)).onTabSelecting(eq(mTabId));
 
         mTabModelObserverCaptor.getValue().didSelectTab(mTab, TabSelectionType.FROM_USER, mTabId);
-        verify(mOnTabSelectingListener, times(2)).onTabSelecting(anyLong(), eq(mTabId));
+        verify(mOnTabSelectingListener, times(2)).onTabSelecting(eq(mTabId));
 
         mMediator.hideTabSwitcherView(true);
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         assertEquals(mPropertyModel.get(TITLE), "");
         verify(mTabSwitcherViewObserver).startedHiding();
         verify(mTabSwitcherViewObserver).finishedHiding();
@@ -264,7 +305,7 @@ public class SingleTabSwitcherMediatorUnitTest {
 
     @Test
     public void selectNextTabAfterClosingTheSelectedTab() {
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         mMediator.setOnTabSelectingListener(mOnTabSelectingListener);
         mMediator.addTabSwitcherViewObserver(mTabSwitcherViewObserver);
 
@@ -275,7 +316,7 @@ public class SingleTabSwitcherMediatorUnitTest {
         verify(mTabListFaviconProvider)
                 .getFaviconDrawableForUrlAsync(
                         eq(mUrl), eq(false), mFaviconCallbackCaptor.capture());
-        assertTrue(mMediator.overviewVisible());
+        assertTrue(mPropertyModel.get(IS_VISIBLE));
         verify(mTabSwitcherViewObserver).startedShowing();
         verify(mTabSwitcherViewObserver).finishedShowing();
         assertEquals(mPropertyModel.get(TITLE), mTitle);
@@ -283,11 +324,11 @@ public class SingleTabSwitcherMediatorUnitTest {
         mTabModelObserverCaptor
                 .getValue()
                 .didSelectTab(mTab2, TabSelectionType.FROM_CLOSE, mTabId2);
-        verify(mOnTabSelectingListener, times(0)).onTabSelecting(anyLong(), eq(mTabId2));
+        verify(mOnTabSelectingListener, times(0)).onTabSelecting(eq(mTabId2));
         assertEquals(mPropertyModel.get(TITLE), mTitle2);
 
         mMediator.hideTabSwitcherView(true);
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         assertEquals(mPropertyModel.get(TITLE), "");
         verify(mTabSwitcherViewObserver).startedHiding();
         verify(mTabSwitcherViewObserver).finishedHiding();
@@ -295,7 +336,7 @@ public class SingleTabSwitcherMediatorUnitTest {
 
     @Test
     public void selectTabAfterSwitchingTabModelAndReshown() {
-        assertFalse(mMediator.overviewVisible());
+        assertFalse(mPropertyModel.get(IS_VISIBLE));
         mMediator.setOnTabSelectingListener(mOnTabSelectingListener);
         mMediator.addTabSwitcherViewObserver(mTabSwitcherViewObserver);
 
@@ -319,8 +360,23 @@ public class SingleTabSwitcherMediatorUnitTest {
         // The next tab selecting event should not be ignored after hiding and reshowing.
         mMediator.showTabSwitcherView(true);
         mTabModelObserverCaptor.getValue().didSelectTab(mTab, TabSelectionType.FROM_USER, -1);
-        verify(mOnTabSelectingListener).onTabSelecting(anyLong(), eq(mTabId));
+        verify(mOnTabSelectingListener).onTabSelecting(eq(mTabId));
 
         mMediator.hideTabSwitcherView(true);
+    }
+
+    private SingleTabSwitcherMediator createMediator(
+            Callback<Integer> singleTabCardClickedCallback,
+            boolean isSurfacePolishEnabled,
+            ModuleDelegate moduleDelegate) {
+        return new SingleTabSwitcherMediator(
+                ContextUtils.getApplicationContext(),
+                mPropertyModel,
+                mTabModelSelector,
+                mTabListFaviconProvider,
+                mTabContentManager,
+                singleTabCardClickedCallback,
+                isSurfacePolishEnabled,
+                moduleDelegate);
     }
 }

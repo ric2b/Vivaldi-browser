@@ -38,9 +38,6 @@ WIN_GIT_STUBS = {
 # Accumulated template parameters for generated stubs.
 class Template(
         collections.namedtuple('Template', (
-            'PYTHON_RELDIR',
-            'PYTHON_BIN_RELDIR',
-            'PYTHON_BIN_RELDIR_UNIX',
             'PYTHON3_BIN_RELDIR',
             'PYTHON3_BIN_RELDIR_UNIX',
             'GIT_BIN_RELDIR',
@@ -54,15 +51,15 @@ class Template(
     def maybe_install(self, name, dst_path):
         """Installs template |name| to |dst_path| if it has changed.
 
-    This loads the template |name| from THIS_DIR, resolves template parameters,
-    and installs it to |dst_path|. See `maybe_update` for more information.
+        This loads the template |name| from THIS_DIR, resolves template parameters,
+        and installs it to |dst_path|. See `maybe_update` for more information.
 
-    Args:
-      name (str): The name of the template to install.
-      dst_path (str): The destination filesystem path.
+        Args:
+            name (str): The name of the template to install.
+            dst_path (str): The destination filesystem path.
 
-    Returns (bool): True if |dst_path| was updated, False otherwise.
-    """
+        Returns (bool): True if |dst_path| was updated, False otherwise.
+        """
         template_path = os.path.join(THIS_DIR, name)
         with open(template_path, 'r', encoding='utf8') as fd:
             t = string.Template(fd.read())
@@ -72,17 +69,17 @@ class Template(
 def maybe_update(content, dst_path):
     """Writes |content| to |dst_path| if |dst_path| does not already match.
 
-  This function will ensure that there is a file at |dst_path| containing
-  |content|. If |dst_path| already exists and contains |content|, no operation
-  will be performed, preserving filesystem modification times and avoiding
-  potential write contention.
+    This function will ensure that there is a file at |dst_path| containing
+    |content|. If |dst_path| already exists and contains |content|, no operation
+    will be performed, preserving filesystem modification times and avoiding
+    potential write contention.
 
-  Args:
-    content (str): The file content.
-    dst_path (str): The destination filesystem path.
+    Args:
+        content (str): The file content.
+        dst_path (str): The destination filesystem path.
 
-  Returns (bool): True if |dst_path| was updated, False otherwise.
-  """
+    Returns (bool): True if |dst_path| was updated, False otherwise.
+    """
     # If the path already exists and matches the new content, refrain from
     # writing a new one.
     if os.path.exists(dst_path):
@@ -100,14 +97,14 @@ def maybe_update(content, dst_path):
 def maybe_copy(src_path, dst_path):
     """Writes the content of |src_path| to |dst_path| if needed.
 
-  See `maybe_update` for more information.
+    See `maybe_update` for more information.
 
-  Args:
-    src_path (str): The content source filesystem path.
-    dst_path (str): The destination filesystem path.
+    Args:
+        src_path (str): The content source filesystem path.
+        dst_path (str): The destination filesystem path.
 
-  Returns (bool): True if |dst_path| was updated, False otherwise.
-  """
+    Returns (bool): True if |dst_path| was updated, False otherwise.
+    """
     with open(src_path, 'r', encoding='utf-8') as fd:
         content = fd.read()
     return maybe_update(content, dst_path)
@@ -116,21 +113,21 @@ def maybe_copy(src_path, dst_path):
 def call_if_outdated(stamp_path, stamp_version, fn):
     """Invokes |fn| if the stamp at |stamp_path| doesn't match |stamp_version|.
 
-  This can be used to keep a filesystem record of whether an operation has been
-  performed. The record is stored at |stamp_path|. To invalidate a record,
-  change the value of |stamp_version|.
+    This can be used to keep a filesystem record of whether an operation has been
+    performed. The record is stored at |stamp_path|. To invalidate a record,
+    change the value of |stamp_version|.
 
-  After |fn| completes successfully, |stamp_path| will be updated to match
-  |stamp_version|, preventing the same update from happening in the future.
+    After |fn| completes successfully, |stamp_path| will be updated to match
+    |stamp_version|, preventing the same update from happening in the future.
 
-  Args:
-    stamp_path (str): The filesystem path of the stamp file.
-    stamp_version (str): The desired stamp version.
-    fn (callable): A callable to invoke if the current stamp version doesn't
-        match |stamp_version|.
+    Args:
+        stamp_path (str): The filesystem path of the stamp file.
+        stamp_version (str): The desired stamp version.
+        fn (callable): A callable to invoke if the current stamp version doesn't
+            match |stamp_version|.
 
-  Returns (bool): True if an update occurred.
-  """
+    Returns (bool): True if an update occurred.
+    """
 
     stamp_version = stamp_version.strip()
     if os.path.isfile(stamp_path):
@@ -149,13 +146,13 @@ def call_if_outdated(stamp_path, stamp_version, fn):
 def _in_use(path):
     """Checks if a Windows file is in use.
 
-  When Windows is using an executable, it prevents other writers from
-  modifying or deleting that executable. We can safely test for an in-use
-  file by opening it in write mode and checking whether or not there was
-  an error.
+    When Windows is using an executable, it prevents other writers from
+    modifying or deleting that executable. We can safely test for an in-use
+    file by opening it in write mode and checking whether or not there was
+    an error.
 
-  Returns (bool): True if the file was in use, False if not.
-  """
+    Returns (bool): True if the file was in use, False if not.
+    """
     try:
         with open(path, 'r+'):
             return False
@@ -165,7 +162,7 @@ def _in_use(path):
 
 def _toolchain_in_use(toolchain_path):
     """Returns (bool): True if a toolchain rooted at |path| is in use.
-  """
+    """
     # Look for Python files that may be in use.
     for python_dir in (
             os.path.join(toolchain_path, 'python', 'bin'),  # CIPD
@@ -225,11 +222,11 @@ def _safe_rmtree(path):
 def clean_up_old_installations(skip_dir):
     """Removes Python installations other than |skip_dir|.
 
-  This includes an "in-use" check against the "python.exe" in a given directory
-  to avoid removing Python executables that are currently ruinning. We need
-  this because our Python bootstrap may be run after (and by) other software
-  that is using the bootstrapped Python!
-  """
+    This includes an "in-use" check against the "python.exe" in a given directory
+    to avoid removing Python executables that are currently ruinning. We need
+    this because our Python bootstrap may be run after (and by) other software
+    that is using the bootstrapped Python!
+    """
     root_contents = os.listdir(ROOT_DIR)
     for f in ('win_tools-*_bin', 'python27*_bin', 'git-*_bin',
               'bootstrap-*_bin'):
@@ -307,10 +304,6 @@ def main(argv):
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARN)
 
     template = Template.empty()._replace(
-        PYTHON_RELDIR=os.path.join(args.bootstrap_name, 'python'),
-        PYTHON_BIN_RELDIR=os.path.join(args.bootstrap_name, 'python', 'bin'),
-        PYTHON_BIN_RELDIR_UNIX=posixpath.join(args.bootstrap_name, 'python',
-                                              'bin'),
         PYTHON3_BIN_RELDIR=os.path.join(args.bootstrap_name, 'python3', 'bin'),
         PYTHON3_BIN_RELDIR_UNIX=posixpath.join(args.bootstrap_name, 'python3',
                                                'bin'),
@@ -326,7 +319,6 @@ def main(argv):
         git_postprocess(template, os.path.join(bootstrap_dir, 'git'))
         templates = [
             ('git-bash.template.sh', 'git-bash', ROOT_DIR),
-            ('python27.bat', 'python.bat', ROOT_DIR),
             ('python3.bat', 'python3.bat', ROOT_DIR),
         ]
         for src_name, dst_name, dst_dir in templates:
@@ -334,8 +326,7 @@ def main(argv):
             template.maybe_install(src_name, os.path.join(dst_dir, dst_name))
 
     # Emit our Python bin depot-tools-relative directory. This is read by
-    # python.bat, python3.bat, vpython[.bat] and vpython3[.bat] to identify the
-    # path of the current Python installation.
+    # python3.bat to identify the path of the current Python installation.
     #
     # We use this indirection so that upgrades can change this pointer to
     # redirect "python.bat" to a new Python installation. We can't just update
@@ -345,9 +336,6 @@ def main(argv):
     #
     # The intention is that the batch file itself never needs to change when
     # switching Python versions.
-
-    maybe_update(template.PYTHON_BIN_RELDIR,
-                 os.path.join(ROOT_DIR, 'python_bin_reldir.txt'))
 
     maybe_update(template.PYTHON3_BIN_RELDIR,
                  os.path.join(ROOT_DIR, 'python3_bin_reldir.txt'))

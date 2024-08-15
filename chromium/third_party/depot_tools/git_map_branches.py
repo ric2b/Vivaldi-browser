@@ -77,7 +77,7 @@ class OutputManager(object):
 class OutputLine(object):
     """A single line of data.
 
-  This consists of an equal number of columns, colors and separators."""
+    This consists of an equal number of columns, colors and separators."""
     def __init__(self):
         self.columns = []
         self.separators = []
@@ -90,7 +90,7 @@ class OutputLine(object):
 
     def as_padded_string(self, max_column_lengths):
         """"Returns the data as a string with each column padded to
-    |max_column_lengths|."""
+        |max_column_lengths|."""
         output_string = ''
         for i, (color, data, separator) in enumerate(
                 zip(self.colors, self.columns, self.separators)):
@@ -106,10 +106,11 @@ class OutputLine(object):
 class BranchMapper(object):
     """A class which constructs output representing the tree's branch structure.
 
-  Attributes:
-    __branches_info: a map of branches to their BranchesInfo objects which
-      consist of the branch hash, upstream and ahead/behind status.
-    __gone_branches: a set of upstreams which are not fetchable by git"""
+    Attributes:
+        __branches_info: a map of branches to their BranchesInfo objects which
+            consist of the branch hash, upstream and ahead/behind status.
+        __gone_branches: a set of upstreams which are not fetchable by git
+    """
     def __init__(self):
         self.verbosity = 0
         self.maxjobs = 0
@@ -228,7 +229,7 @@ class BranchMapper(object):
 
     def __append_branch(self, branch, output, depth=0):
         """Recurses through the tree structure and appends an OutputLine to the
-    OutputManager for each branch."""
+        OutputManager for each branch."""
         child_output = OutputManager()
         for child in sorted(self.__parent_map.pop(branch, ())):
             self.__append_branch(child, child_output, depth=depth + 1)

@@ -128,7 +128,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
                                  const gfx::Size& surface_size,
                                  SharedImageFormat format,
                                  RenderPassAlphaType alpha_type,
-                                 bool mipmap,
+                                 skgpu::Mipmapped mipmap,
                                  bool scanout_dcomp_surface,
                                  sk_sp<SkColorSpace> color_space,
                                  bool is_overlay,
@@ -140,7 +140,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       const gfx::Rect& update_rect,
       bool is_overlay) override;
   void MakePromiseSkImage(ImageContext* image_context,
-                          const gfx::ColorSpace& yuv_color_space) override;
+                          const gfx::ColorSpace& color_space,
+                          bool force_rgbx) override;
   sk_sp<SkImage> MakePromiseSkImageFromRenderPass(
       const AggregatedRenderPassId& id,
       const gfx::Size& size,
@@ -174,6 +175,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       const SkColor4f& color,
       const gfx::ColorSpace& color_space) override;
   void DestroySharedImage(const gpu::Mailbox& mailbox) override;
+  void SetSharedImagePurgeable(const gpu::Mailbox& mailbox,
+                               bool purgeable) override;
   bool SupportsBGRA() const override;
 
   // ExternalUseClient implementation:
@@ -210,7 +213,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       const gfx::Size& surface_size,
       SkColorType color_type,
       SkAlphaType alpha_type,
-      bool mipmap,
+      skgpu::Mipmapped mipmap,
       sk_sp<SkColorSpace> color_space,
       bool is_overlay,
       bool scanout_dcomp_surface) const;
@@ -218,7 +221,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       const gfx::Size& surface_size,
       SkColorType color_type,
       SkAlphaType alpha_type,
-      bool mipmap,
+      skgpu::Mipmapped mipmap,
       sk_sp<SkColorSpace> color_space) const;
   void DidSwapBuffersComplete(gpu::SwapBuffersCompleteParams params,
                               const gfx::Size& pixel_size,
@@ -256,9 +259,10 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
       const gfx::ColorSpace& yuv_color_space);
   void MakePromiseSkImageSinglePlane(ImageContextImpl* image_context,
                                      bool mipmapped,
-                                     const gfx::ColorSpace& yuv_color_space);
+                                     const gfx::ColorSpace& color_space,
+                                     bool force_rgbx);
   void MakePromiseSkImageMultiPlane(ImageContextImpl* image_context,
-                                    const gfx::ColorSpace& yuv_color_space);
+                                    const gfx::ColorSpace& color_space);
   void ContextLost();
   void RecreateRootDDLRecorder();
 
@@ -266,7 +270,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurfaceImpl : public SkiaOutputSurface {
   bool needs_swap_size_notifications_ = false;
 
   // Images for current frame or render pass.
-  std::vector<ImageContextImpl*> images_in_current_paint_;
+  std::vector<raw_ptr<ImageContextImpl, VectorExperimental>>
+      images_in_current_paint_;
 
   THREAD_CHECKER(thread_checker_);
 

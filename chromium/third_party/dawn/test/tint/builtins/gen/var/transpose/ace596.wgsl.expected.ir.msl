@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void transpose_ace596() {
+  float2x3 res = float2x3(float3(1.0f), float3(1.0f));
+}
+vertex float4 vertex_main() {
+  transpose_ace596();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  transpose_ace596();
+}
+kernel void compute_main() {
+  transpose_ace596();
+}

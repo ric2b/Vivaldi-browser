@@ -54,6 +54,8 @@ class StandaloneTrustedVaultBackend
     Delegate& operator=(const Delegate&) = delete;
 
     virtual void NotifyRecoverabilityDegradedChanged() = 0;
+    // Called whenever persisted state changes.
+    virtual void NotifyStateChanged() = 0;
   };
 
   enum class RefreshTokenErrorState {
@@ -70,8 +72,7 @@ class StandaloneTrustedVaultBackend
   // interaction with vault service (such as device registration, keys
   // downloading, etc.) will be disabled.
   StandaloneTrustedVaultBackend(
-      const base::FilePath& md5_hashed_file_path,
-      const base::FilePath& deprecated_encrypted_file_path,
+      const base::FilePath& file_path,
       std::unique_ptr<Delegate> delegate,
       std::unique_ptr<TrustedVaultConnection> connection);
   StandaloneTrustedVaultBackend(const StandaloneTrustedVaultBackend& other) =
@@ -94,7 +95,6 @@ class StandaloneTrustedVaultBackend
   // Otherwise, attempts to download new keys from the server. In case of
   // failure or if current state isn't sufficient it will populate locally
   // available keys regardless of their freshness.
-  // Concurrent calls are not supported.
   void FetchKeys(const CoreAccountInfo& account_info,
                  FetchKeysCallback callback);
 
@@ -198,6 +198,14 @@ class StandaloneTrustedVaultBackend
   void OnTrustedRecoveryMethodAdded(base::OnceClosure cb,
                                     TrustedVaultRegistrationStatus status);
 
+  // Invokes |callback| with currently available keys for |gaia_id|.
+  void FulfillFetchKeys(
+      const std::string& gaia_id,
+      FetchKeysCallback callback,
+      absl::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma);
+
+  // Same as above, but takes parameters from |ongoing_fetch_keys|, used when
+  // keys are fetched asynchronously, after keys downloading attempt.
   void FulfillOngoingFetchKeys(
       absl::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma);
 
@@ -215,12 +223,9 @@ class StandaloneTrustedVaultBackend
   // for deletion due to accounts in cookie jar changes.
   void RemoveNonPrimaryAccountKeysIfMarkedForDeletion();
 
-  void VerifyDeviceRegistrationForUMA(const std::string& gaia_id);
-
   void WriteDataToDisk();
 
-  const base::FilePath md5_hashed_file_path_;
-  const base::FilePath deprecated_encrypted_file_path_;
+  const base::FilePath file_path_;
 
   const std::unique_ptr<Delegate> delegate_;
 
@@ -260,21 +265,29 @@ class StandaloneTrustedVaultBackend
   };
   absl::optional<PendingTrustedRecoveryMethod> pending_trusted_recovery_method_;
 
-  // TODO(crbug.com/1413179): introduce a struct for ongoing/deferred
-  // FetchKeys().
-  // Used to plumb FetchKeys() result to the caller.
-  FetchKeysCallback ongoing_fetch_keys_callback_;
+  // Keys fetching is asynchronous when it involves sending request to the
+  // server, this structure encapsulates the data needed to process the response
+  // and allow concurrent key fetches for the same user. Destroying this will
+  // cancel the ongoing request.
+  // Note, that |gaia_id| should match |primary_account_|. It is used only for
+  // verification.
+  struct OngoingFetchKeys {
+    OngoingFetchKeys();
+    OngoingFetchKeys(OngoingFetchKeys&) = delete;
+    OngoingFetchKeys& operator=(OngoingFetchKeys&) = delete;
+    OngoingFetchKeys(OngoingFetchKeys&&);
+    OngoingFetchKeys& operator=(OngoingFetchKeys&&);
+    ~OngoingFetchKeys();
 
-  // Account used in last FetchKeys() call.
-  absl::optional<std::string> ongoing_fetch_keys_gaia_id_;
+    std::string gaia_id;
+    std::vector<FetchKeysCallback> callbacks;
+    std::unique_ptr<TrustedVaultConnection::Request> request;
+  };
+  absl::optional<OngoingFetchKeys> ongoing_fetch_keys_;
 
   // Destroying this will cancel the ongoing request.
   std::unique_ptr<TrustedVaultConnection::Request>
       ongoing_device_registration_request_;
-  std::unique_ptr<TrustedVaultConnection::Request>
-      ongoing_keys_downloading_request_;
-  std::unique_ptr<TrustedVaultConnection::Request>
-      ongoing_verify_registration_request_;
 
   // Same as above, but specifically used for recoverability-related requests.
   // TODO(crbug.com/1201659): Move elsewhere.

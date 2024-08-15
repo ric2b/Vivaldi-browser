@@ -9,17 +9,14 @@
 #include "fuzztest/fuzztest.h"
 #include "gtest/gtest.h"
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 namespace {
 
-::testing::Environment* const stack_limit_env =
-    ::testing::AddGlobalTestEnvironment(
-        new FuzztestStackLimitEnvironment("524288"));  // 512 * 1024
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo512x1024Bytes();
 
-void EncodeDecodeValid(AvifImagePtr image, AvifEncoderPtr encoder,
-                       AvifDecoderPtr decoder) {
-  AvifImagePtr decoded_image(avifImageCreateEmpty(), avifImageDestroy);
+void EncodeDecodeValid(ImagePtr image, EncoderPtr encoder, DecoderPtr decoder) {
+  ImagePtr decoded_image(avifImageCreateEmpty());
   ASSERT_NE(image.get(), nullptr);
   ASSERT_NE(encoder.get(), nullptr);
   ASSERT_NE(decoder.get(), nullptr);
@@ -51,9 +48,8 @@ void EncodeDecodeValid(AvifImagePtr image, AvifEncoderPtr encoder,
 
 FUZZ_TEST(EncodeDecodeAvifFuzzTest, EncodeDecodeValid)
     .WithDomains(ArbitraryAvifImage(), ArbitraryAvifEncoder(),
-                 ArbitraryAvifDecoder({AVIF_CODEC_CHOICE_AUTO,
-                                       AVIF_CODEC_CHOICE_DAV1D}));
+                 ArbitraryAvifDecoder());
 
 }  // namespace
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif

@@ -327,6 +327,7 @@ hb_font_get_glyph_shape_func_t
 hb_font_funcs_set_glyph_shape_func
 hb_font_get_glyph_v_kerning
 hb_font_get_glyph_v_kerning_func_t
+HB_AAT_LAYOUT_FEATURE_TYPE_CURISVE_CONNECTION
 </SECTION>
 
 <SECTION>
@@ -906,6 +907,7 @@ hb_object_t
 hb_subset_repack_or_fail
 hb_subset_input_override_name_table
 hb_subset_input_set_axis_range
+hb_subset_input_get_axis_range
 </SECTION>
 
 <SECTION>

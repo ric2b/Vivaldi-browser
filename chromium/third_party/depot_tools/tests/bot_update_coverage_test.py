@@ -22,8 +22,8 @@ import bot_update
 class MockedPopen(object):
     """A fake instance of a called subprocess.
 
-  This is meant to be used in conjunction with MockedCall.
-  """
+    This is meant to be used in conjunction with MockedCall.
+    """
     def __init__(self, args=None, kwargs=None):
         self.args = args or []
         self.kwargs = kwargs or {}
@@ -33,17 +33,17 @@ class MockedPopen(object):
     def returns(self, rv):
         """Set the return value when this popen is called.
 
-    rv can be a string, or a callable (eg function).
-    """
+        rv can be a string, or a callable (eg function).
+        """
         self.return_value = rv
         return self
 
     def check(self, args, kwargs):
         """Check to see if the given args/kwargs call match this instance.
 
-    This does a partial match, so that a call to "git clone foo" will match
-    this instance if this instance was recorded as "git clone"
-    """
+        This does a partial match, so that a call to "git clone foo" will match
+        this instance if this instance was recorded as "git clone"
+        """
         if any(input_arg != expected_arg
                for (input_arg, expected_arg) in zip(args, self.args)):
             return False
@@ -59,14 +59,14 @@ class MockedPopen(object):
 class MockedCall(object):
     """A fake instance of bot_update.call().
 
-  This object is pre-seeded with "answers" in self.expectations.  The type
-  is a MockedPopen object, or any object with a __call__() and check() method.
-  The check() method is used to check to see if the correct popen object is
-  chosen (can be a partial match, eg a "git clone" popen module would match
-  a "git clone foo" call).
-  By default, if no answers have been pre-seeded, the call() returns successful
-  with an empty string.
-  """
+    This object is pre-seeded with "answers" in self.expectations.  The type
+    is a MockedPopen object, or any object with a __call__() and check() method.
+    The check() method is used to check to see if the correct popen object is
+    chosen (can be a partial match, eg a "git clone" popen module would match
+    a "git clone foo" call).
+    By default, if no answers have been pre-seeded, the call() returns successful
+    with an empty string.
+    """
     def __init__(self, fake_filesystem):
         self.expectations = []
         self.records = []

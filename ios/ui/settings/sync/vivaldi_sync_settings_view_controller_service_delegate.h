@@ -16,6 +16,7 @@
 - (void)startSyncingAllButtonPressed;
 - (void)syncAllOptionChanged:(BOOL)syncAll;
 - (void)updateChosenTypes:(syncer::UserSelectableType)type isOn:(BOOL)isOn;
+- (BOOL)getSyncStatusFor:(NSInteger)type;
 
 @end
 

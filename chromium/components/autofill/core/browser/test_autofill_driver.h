@@ -5,6 +5,11 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_AUTOFILL_DRIVER_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_TEST_AUTOFILL_DRIVER_H_
 
+#include <concepts>
+#include <map>
+#include <string>
+#include <vector>
+
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
@@ -32,11 +37,9 @@ namespace autofill {
 //
 // As a rule of thumb, TestContentAutofillDriver is preferable in tests that
 // have a content::WebContents.
-template <typename T>
+template <std::derived_from<AutofillDriver> T>
 class TestAutofillDriverTemplate : public T {
  public:
-  static_assert(std::is_base_of_v<AutofillDriver, T>);
-
   using T::T;
   TestAutofillDriverTemplate(const TestAutofillDriverTemplate&) = delete;
   TestAutofillDriverTemplate& operator=(const TestAutofillDriverTemplate&) =
@@ -46,7 +49,7 @@ class TestAutofillDriverTemplate : public T {
   // AutofillDriver:
   LocalFrameToken GetFrameToken() const override { return frame_token_; }
   TestAutofillDriverTemplate* GetParent() override { return parent_; }
-  absl::optional<LocalFrameToken> Resolve(FrameToken query) override {
+  std::optional<LocalFrameToken> Resolve(FrameToken query) override {
     if (auto* local_frame_token = absl::get_if<LocalFrameToken>(&query)) {
       return *local_frame_token;
     }
@@ -54,21 +57,21 @@ class TestAutofillDriverTemplate : public T {
     if (it != remote_frame_tokens_.end()) {
       return it->second;
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
   bool IsInActiveFrame() const override { return is_in_active_frame_; }
   bool IsInAnyMainFrame() const override { return is_in_any_main_frame_; }
   bool IsPrerendering() const override { return false; }
   bool HasSharedAutofillPermission() const override { return shared_autofill_; }
   bool CanShowAutofillUi() const override { return true; }
-  bool RendererIsAvailable() override { return true; }
   void ApplyFieldAction(mojom::ActionPersistence action_persistence,
                         mojom::TextReplacement text_replacement,
                         const FieldGlobalId& field,
                         const std::u16string& value) override {}
   void HandleParsedForms(const std::vector<FormData>& forms) override {}
   void SendAutofillTypePredictionsToRenderer(
-      const std::vector<FormStructure*>& forms) override {}
+      const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms)
+      override {}
   void RendererShouldAcceptDataListSuggestion(
       const FieldGlobalId& field,
       const std::u16string& value) override {}
@@ -79,11 +82,9 @@ class TestAutofillDriverTemplate : public T {
       AutofillSuggestionTriggerSource trigger_source) override {}
   void RendererShouldSetSuggestionAvailability(
       const FieldGlobalId& field,
-      const mojom::AutofillState state) override {}
+      mojom::AutofillSuggestionAvailability suggestion_availability) override {}
   void PopupHidden() override {}
   net::IsolationInfo IsolationInfo() override { return isolation_info_; }
-  void SendFieldsEligibleForManualFillingToRenderer(
-      const std::vector<FieldGlobalId>& fields) override {}
   void TriggerFormExtractionInDriverFrame() override {}
   void TriggerFormExtractionInAllFrames(
       base::OnceCallback<void(bool)> form_extraction_finished_callback)
@@ -95,15 +96,15 @@ class TestAutofillDriverTemplate : public T {
       base::OnceCallback<void(const std::vector<std::string>&)>
           potential_matches) override {}
 
-  // The return value contains the members (field, type) of `field_type_map` for
-  // which `field_type_map_filter_.Run(triggered_origin, field, type)` is true.
-  std::vector<FieldGlobalId> ApplyFormAction(
+  // The return value contains the FieldGlobalIds of all elements (field_id,
+  // type) of `field_type_map` for which
+  // `field_type_map_filter_.Run(triggered_origin, field, type)` is true.
+  base::flat_set<FieldGlobalId> ApplyFormAction(
       mojom::ActionType action_type,
       mojom::ActionPersistence action_persistence,
       const FormData& form_data,
       const url::Origin& triggered_origin,
-      const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map)
-      override {
+      const base::flat_map<FieldGlobalId, FieldType>& field_type_map) override {
     if (action_type == mojom::ActionType::kUndo) {
       return {};
     }
@@ -150,7 +151,7 @@ class TestAutofillDriverTemplate : public T {
   // The filter that determines the return value of FillOrPreviewForm().
   void SetFieldTypeMapFilter(
       base::RepeatingCallback<
-          bool(const url::Origin&, FieldGlobalId, ServerFieldType)> callback) {
+          bool(const url::Origin&, FieldGlobalId, FieldType)> callback) {
     field_type_map_filter_ = callback;
   }
 
@@ -171,8 +172,7 @@ class TestAutofillDriverTemplate : public T {
   bool is_in_any_main_frame_ = true;
   bool shared_autofill_ = false;
   net::IsolationInfo isolation_info_;
-  base::RepeatingCallback<
-      bool(const url::Origin&, FieldGlobalId, ServerFieldType)>
+  base::RepeatingCallback<bool(const url::Origin&, FieldGlobalId, FieldType)>
       field_type_map_filter_;
 
 #if !BUILDFLAG(IS_IOS)

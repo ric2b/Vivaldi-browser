@@ -35,3 +35,51 @@ cc_binary(
         "@skia//:png_decode_codec",
     ],
 )
+
+cc_binary(
+    name = "write_text_to_png",
+    srcs = ["src/write_text_to_png.cpp"],
+    copts = ["-std=c++17"],
+    linkopts = [
+        "-fuse-ld=lld",
+        "-lpthread",
+    ],
+    deps = [
+        "@skia//:core",
+        "@skia//:fontmgr_fontconfig_freetype",
+        "@skia//:png_encode_codec",
+    ],
+)
+
+cc_binary(
+    name = "shape_text",
+    srcs = ["src/shape_text.cpp"],
+    copts = ["-std=c++17"],
+    linkopts = [
+        "-fuse-ld=lld",
+        "-lpthread",
+    ],
+    deps = [
+        "@skia//:core",
+        "@skia//:fontmgr_empty_freetype",
+        "@skia//:jpeg_encode_codec",
+        "@skia//:skparagraph_harfbuzz_icu",
+    ],
+)
+
+cc_binary(
+    name = "use_ganesh_gl",
+    srcs = ["src/ganesh_gl.cpp"],
+    copts = ["-std=c++17"],
+    linkopts = [
+        "-lpthread",
+        "-lGL",
+        "-lX11",
+    ],
+    deps = [
+        "@skia//:core",
+        "@skia//:ganesh_gl",
+        "@skia//:ganesh_glx_factory",
+        "@skia//:webp_encode_codec",
+    ],
+)

@@ -49,6 +49,9 @@ MIN_BACKOFF = 1.8
 # This is parameterized primarily to enable GerritTestCase.
 GERRIT_PROTOCOL = 'https'
 
+# Controls how many concurrent Gerrit connections there can be.
+MAX_CONCURRENT_CONNECTION = 20
+
 
 def time_sleep(seconds):
     # Use this so that it can be mocked in tests without interfering with python
@@ -83,8 +86,8 @@ class GerritError(Exception):
 def _QueryString(params, first_param=None):
     """Encodes query parameters in the key:val[+key:val...] format specified here:
 
-  https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
-  """
+    https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
+    """
     q = [urllib.parse.quote(first_param)] if first_param else []
     q.extend(['%s:%s' % (key, val.replace(" ", "+")) for key, val in params])
     return '+'.join(q)
@@ -99,9 +102,9 @@ class Authenticator(object):
     def get():
         """Returns: (Authenticator) The identified Authenticator to use.
 
-    Probes the local system and its environment and identifies the
-    Authenticator instance to use.
-    """
+        Probes the local system and its environment and identifies the
+        Authenticator instance to use.
+        """
         # LUCI Context takes priority since it's normally present only on bots,
         # which then must use it.
         if LuciContextAuthenticator.is_luci():
@@ -116,8 +119,8 @@ class Authenticator(object):
 class CookiesAuthenticator(Authenticator):
     """Authenticator implementation that uses ".netrc" or ".gitcookies" for token.
 
-  Expected case for developer workstations.
-  """
+    Expected case for developer workstations.
+    """
 
     _EMPTY = object()
 
@@ -286,7 +289,7 @@ NetrcAuthenticator = CookiesAuthenticator
 
 class GceAuthenticator(Authenticator):
     """Authenticator implementation that uses GCE metadata service for token.
-  """
+    """
 
     _INFO_URL = 'http://metadata.google.internal'
     _ACQUIRE_URL = ('%s/computeMetadata/v1/instance/'
@@ -361,7 +364,7 @@ class GceAuthenticator(Authenticator):
 
 class LuciContextAuthenticator(Authenticator):
     """Authenticator implementation that uses LUCI_CONTEXT ambient local auth.
-  """
+    """
     @staticmethod
     def is_luci():
         return auth.has_luci_context_local_auth()
@@ -429,12 +432,13 @@ def CreateHttpConn(host,
 def ReadHttpResponse(conn, accept_statuses=frozenset([200])):
     """Reads an HTTP response from a connection into a string buffer.
 
-  Args:
-    conn: An Http object created by CreateHttpConn above.
-    accept_statuses: Treat any of these statuses as success. Default: [200]
-                     Common additions include 204, 400, and 404.
-  Returns: A string buffer containing the connection's reply.
-  """
+    Args:
+        conn: An Http object created by CreateHttpConn above.
+        accept_statuses: Treat any of these statuses as success. Default: [200]
+            Common additions include 204, 400, and 404.
+    Returns:
+        A string buffer containing the connection's reply.
+    """
     sleep_time = SLEEP_TIME
     for idx in range(TRY_LIMIT):
         before_response = time.time()
@@ -534,21 +538,21 @@ def QueryChanges(host,
                  o_params=None,
                  start=None):
     """
-  Queries a gerrit-on-borg server for changes matching query terms.
+    Queries a gerrit-on-borg server for changes matching query terms.
 
-  Args:
-    params: A list of key:value pairs for search parameters, as documented
-        here (e.g. ('is', 'owner') for a parameter 'is:owner'):
-        https://gerrit-review.googlesource.com/Documentation/user-search.html#search-operators
-    first_param: A change identifier
-    limit: Maximum number of results to return.
-    start: how many changes to skip (starting with the most recent)
-    o_params: A list of additional output specifiers, as documented here:
-        https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
+    Args:
+        params: A list of key:value pairs for search parameters, as documented
+            here (e.g. ('is', 'owner') for a parameter 'is:owner'):
+            https://gerrit-review.googlesource.com/Documentation/user-search.html#search-operators
+        first_param: A change identifier
+        limit: Maximum number of results to return.
+        start: how many changes to skip (starting with the most recent)
+        o_params: A list of additional output specifiers, as documented here:
+            https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 
-  Returns:
-    A list of json-decoded query results.
-  """
+    Returns:
+        A list of json-decoded query results.
+    """
     # Note that no attempt is made to escape special characters; YMMV.
     if not params and not first_param:
         raise RuntimeError('QueryChanges requires search parameters')
@@ -569,24 +573,24 @@ def GenerateAllChanges(host,
                        o_params=None,
                        start=None):
     """Queries a gerrit-on-borg server for all the changes matching the query
-  terms.
+    terms.
 
-  WARNING: this is unreliable if a change matching the query is modified while
-  this function is being called.
+    WARNING: this is unreliable if a change matching the query is modified while
+    this function is being called.
 
-  A single query to gerrit-on-borg is limited on the number of results by the
-  limit parameter on the request (see QueryChanges) and the server maximum
-  limit.
+    A single query to gerrit-on-borg is limited on the number of results by the
+    limit parameter on the request (see QueryChanges) and the server maximum
+    limit.
 
-  Args:
-    params, first_param: Refer to QueryChanges().
-    limit: Maximum number of requested changes per query.
-    o_params: Refer to QueryChanges().
-    start: Refer to QueryChanges().
+    Args:
+        params, first_param: Refer to QueryChanges().
+        limit: Maximum number of requested changes per query.
+        o_params: Refer to QueryChanges().
+        start: Refer to QueryChanges().
 
-  Returns:
-    A generator object to the list of returned changes.
-  """
+    Returns:
+        A generator object to the list of returned changes.
+    """
     already_returned = set()
 
     def at_most_once(cls):
@@ -666,7 +670,7 @@ def GetGerritFetchUrl(host):
 
 def GetCodeReviewTbrScore(host, project):
     """Given a Gerrit host name and project, return the Code-Review score for TBR.
-  """
+    """
     conn = CreateHttpConn(host,
                           '/projects/%s' % urllib.parse.quote(project, ''))
     project = ReadHttpJsonResponse(conn)
@@ -836,8 +840,8 @@ def DeletePendingChangeEdit(host, change):
 
 def CherryPick(host, change, destination, revision='current'):
     """Create a cherry-pick commit from the given change, onto the given
-  destination.
-  """
+    destination.
+    """
     path = 'changes/%s/revisions/%s/cherrypick' % (change, revision)
     body = {'destination': destination}
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
@@ -847,9 +851,9 @@ def CherryPick(host, change, destination, revision='current'):
 def GetFileContents(host, change, path):
     """Get the contents of a file with the given path in the given revision.
 
-  Returns:
-    A bytes object with the file's contents.
-  """
+    Returns:
+        A bytes object with the file's contents.
+    """
     path = 'changes/%s/revisions/current/files/%s/content' % (
         change, urllib.parse.quote(path, ''))
     conn = CreateHttpConn(host, path, reqtype='GET')
@@ -874,11 +878,11 @@ def SetCommitMessage(host, change, description, notify='ALL'):
 def GetCommitIncludedIn(host, project, commit):
     """Retrieves the branches and tags for a given commit.
 
-  https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-included-in
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-included-in
 
-  Returns:
-    A JSON object with keys of 'branches' and 'tags'.
-  """
+    Returns:
+        A JSON object with keys of 'branches' and 'tags'.
+    """
     path = 'projects/%s/commits/%s/in' % (urllib.parse.quote(project,
                                                              ''), commit)
     conn = CreateHttpConn(host, path, reqtype='GET')
@@ -1073,16 +1077,16 @@ def ResetReviewLabels(host,
 
 def CreateChange(host, project, branch='main', subject='', params=()):
     """
-  Creates a new change.
+    Creates a new change.
 
-  Args:
-    params: A list of additional ChangeInput specifiers, as documented here:
-        (e.g. ('is_private', 'true') to mark the change private.
-        https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-input
+    Args:
+        params: A list of additional ChangeInput specifiers, as documented here:
+            (e.g. ('is_private', 'true') to mark the change private.
+            https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-input
 
-  Returns:
-    ChangeInfo for the new change.
-  """
+    Returns:
+        ChangeInfo for the new change.
+    """
     path = 'changes/'
     body = {'project': project, 'branch': branch, 'subject': subject}
     body.update(dict(params))
@@ -1097,11 +1101,11 @@ def CreateChange(host, project, branch='main', subject='', params=()):
 def CreateGerritBranch(host, project, branch, commit):
     """Creates a new branch from given project and commit
 
-  https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-branch
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-branch
 
-  Returns:
-    A JSON object with 'ref' key.
-  """
+    Returns:
+        A JSON object with 'ref' key.
+    """
     path = 'projects/%s/branches/%s' % (project, branch)
     body = {'revision': commit}
     conn = CreateHttpConn(host, path, reqtype='PUT', body=body)
@@ -1114,11 +1118,11 @@ def CreateGerritBranch(host, project, branch, commit):
 def CreateGerritTag(host, project, tag, commit):
     """Creates a new tag at the given commit.
 
-  https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-tag
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-tag
 
-  Returns:
-    A JSON object with 'ref' key.
-  """
+    Returns:
+        A JSON object with 'ref' key.
+    """
     path = 'projects/%s/tags/%s' % (project, tag)
     body = {'revision': commit}
     conn = CreateHttpConn(host, path, reqtype='PUT', body=body)
@@ -1131,11 +1135,11 @@ def CreateGerritTag(host, project, tag, commit):
 def GetHead(host, project):
     """Retrieves current HEAD of Gerrit project
 
-  https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-head
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-head
 
-  Returns:
-    A JSON object with 'ref' key.
-  """
+    Returns:
+        A JSON object with 'ref' key.
+    """
     path = 'projects/%s/HEAD' % (project)
     conn = CreateHttpConn(host, path, reqtype='GET')
     response = ReadHttpJsonResponse(conn, accept_statuses=[200])
@@ -1147,11 +1151,11 @@ def GetHead(host, project):
 def UpdateHead(host, project, branch):
     """Updates Gerrit HEAD to point to branch
 
-  https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#set-head
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#set-head
 
-  Returns:
-    A JSON object with 'ref' key.
-  """
+    Returns:
+        A JSON object with 'ref' key.
+    """
     path = 'projects/%s/HEAD' % (project)
     body = {'ref': branch}
     conn = CreateHttpConn(host, path, reqtype='PUT', body=body)
@@ -1164,12 +1168,12 @@ def UpdateHead(host, project, branch):
 def GetGerritBranch(host, project, branch):
     """Gets a branch info from given project and branch name.
 
-  See:
-  https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch
+    See:
+    https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch
 
-  Returns:
-    A JSON object with 'revision' key if the branch exists, otherwise None.
-  """
+    Returns:
+        A JSON object with 'revision' key if the branch exists, otherwise None.
+    """
     path = 'projects/%s/branches/%s' % (project, branch)
     conn = CreateHttpConn(host, path, reqtype='GET')
     return ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
@@ -1184,14 +1188,14 @@ def GetProjectHead(host, project):
 def GetAccountDetails(host, account_id='self'):
     """Returns details of the account.
 
-  If account_id is not given, uses magic value 'self' which corresponds to
-  whichever account user is authenticating as.
+    If account_id is not given, uses magic value 'self' which corresponds to
+    whichever account user is authenticating as.
 
-  Documentation:
-  https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#get-account
+    Documentation:
+    https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#get-account
 
-  Returns None if account is not found (i.e., Gerrit returned 404).
-  """
+    Returns None if account is not found (i.e., Gerrit returned 404).
+    """
     conn = CreateHttpConn(host, '/accounts/%s' % account_id)
     return ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
 
@@ -1199,9 +1203,9 @@ def GetAccountDetails(host, account_id='self'):
 def ValidAccounts(host, accounts, max_threads=10):
     """Returns a mapping from valid account to its details.
 
-  Invalid accounts, either not existing or without unique match,
-  are not present as returned dictionary keys.
-  """
+    Invalid accounts, either not existing or without unique match,
+    are not present as returned dictionary keys.
+    """
     assert not isinstance(accounts, str), type(accounts)
     accounts = list(set(accounts))
     if not accounts:
@@ -1225,14 +1229,14 @@ def ValidAccounts(host, accounts, max_threads=10):
 def PercentEncodeForGitRef(original):
     """Applies percent-encoding for strings sent to Gerrit via git ref metadata.
 
-  The encoding used is based on but stricter than URL encoding (Section 2.1 of
-  RFC 3986). The only non-escaped characters are alphanumerics, and 'SPACE'
-  (U+0020) can be represented as 'LOW LINE' (U+005F) or 'PLUS SIGN' (U+002B).
+    The encoding used is based on but stricter than URL encoding (Section 2.1 of
+    RFC 3986). The only non-escaped characters are alphanumerics, and 'SPACE'
+    (U+0020) can be represented as 'LOW LINE' (U+005F) or 'PLUS SIGN' (U+002B).
 
-  For more information, see the Gerrit docs here:
+    For more information, see the Gerrit docs here:
 
-  https://gerrit-review.googlesource.com/Documentation/user-upload.html#message
-  """
+    https://gerrit-review.googlesource.com/Documentation/user-upload.html#message
+    """
     safe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 '
     encoded = ''.join(c if c in safe else '%%%02X' % ord(c) for c in original)
 
@@ -1255,10 +1259,10 @@ def tempdir():
 
 def ChangeIdentifier(project, change_number):
     """Returns change identifier "project~number" suitable for |change| arg of
-  this module API.
+    this module API.
 
-  Such format is allows for more efficient Gerrit routing of HTTP requests,
-  comparing to specifying just change_number.
-  """
+    Such format is allows for more efficient Gerrit routing of HTTP requests,
+    comparing to specifying just change_number.
+    """
     assert int(change_number)
     return '%s~%s' % (urllib.parse.quote(project, ''), change_number)

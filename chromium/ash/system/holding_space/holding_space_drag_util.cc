@@ -19,6 +19,8 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/compositor.h"
@@ -122,12 +124,12 @@ class DragImageLayoutManager : public views::LayoutManagerBase {
     return proposed_layout;
   }
 
-  std::vector<views::View*> GetChildViewsInPaintOrder(
-      const views::View* host) const override {
+  std::vector<raw_ptr<views::View, VectorExperimental>>
+  GetChildViewsInPaintOrder(const views::View* host) const override {
     // Paint `children` in reverse order so that earlier views paint at a higher
     // z-index than later views, like a deck of cards with the first `child`
     // stacked on top.
-    std::vector<views::View*> children;
+    std::vector<raw_ptr<views::View, VectorExperimental>> children;
     for (views::View* child : base::Reversed(host->children()))
       children.push_back(child);
     return children;
@@ -143,6 +145,8 @@ class DragImageLayoutManager : public views::LayoutManagerBase {
 // this view is to implement the shadow which is intentionally done without use
 // of `ui::Layer`s to accommodate painting to an `SkBitmap`.
 class DragImageItemView : public views::View {
+  METADATA_HEADER(DragImageItemView, views::View)
+
  public:
   DragImageItemView(const DragImageItemView&) = delete;
   DragImageItemView& operator=(const DragImageItemView&) = delete;
@@ -181,14 +185,19 @@ class DragImageItemView : public views::View {
     return drag_drop::GetDragImageShadowDetails(kDragImageItemViewCornerRadius);
   }
 
-  const raw_ptr<const ui::ColorProvider, ExperimentalAsh> color_provider_;
+  const raw_ptr<const ui::ColorProvider> color_provider_;
 };
+
+BEGIN_METADATA(DragImageItemView, views::View)
+END_METADATA
 
 // DragImageItemChipView -------------------------------------------------------
 
 // A `DragImageItemView` which represents a single holding space `item` as a
 // chip in the drag image for a collection of holding space item views.
 class DragImageItemChipView : public DragImageItemView {
+  METADATA_HEADER(DragImageItemChipView, DragImageItemView)
+
  public:
   DragImageItemChipView(const HoldingSpaceItem* item,
                         const ui::ColorProvider* color_provider)
@@ -245,11 +254,16 @@ class DragImageItemChipView : public DragImageItemView {
   }
 };
 
+BEGIN_METADATA(DragImageItemChipView, DragImageItemView)
+END_METADATA
+
 // DragImageItemScreenCaptureView ----------------------------------------------
 
 // A `DragImageItemView` which represents a single holding space screen capture
 // `item` in the drag image for a collection of holding space item views.
 class DragImageItemScreenCaptureView : public DragImageItemView {
+  METADATA_HEADER(DragImageItemScreenCaptureView, DragImageItemView)
+
  public:
   DragImageItemScreenCaptureView(const HoldingSpaceItem* item,
                                  const ui::ColorProvider* color_provider)
@@ -282,12 +296,17 @@ class DragImageItemScreenCaptureView : public DragImageItemView {
   }
 };
 
+BEGIN_METADATA(DragImageItemScreenCaptureView, DragImageItemView)
+END_METADATA
+
 // DragImageOverflowBadge ------------------------------------------------------
 
 // A `views::View` which indicates the number of items being dragged in the
 // drag image for a collection of holding space items. This view is only created
 // if the number of dragged items is > `kDragImageViewMaxItemsToPaint`.
 class DragImageOverflowBadge : public views::View {
+  METADATA_HEADER(DragImageOverflowBadge, views::View)
+
  public:
   DragImageOverflowBadge(size_t count, const ui::ColorProvider* color_provider)
       : color_provider_(color_provider) {
@@ -334,14 +353,19 @@ class DragImageOverflowBadge : public views::View {
     label->SetText(base::UTF8ToUTF16(base::NumberToString(count)));
   }
 
-  const raw_ptr<const ui::ColorProvider, ExperimentalAsh> color_provider_;
+  const raw_ptr<const ui::ColorProvider> color_provider_;
 };
+
+BEGIN_METADATA(DragImageOverflowBadge, views::View)
+END_METADATA
 
 // DragImageView ---------------------------------------------------------------
 
 // A `views::View` for use as a drag image for a collection of holding space
 // item `views`. This view expects to be painted to an `SkBitmap`.
 class DragImageView : public views::View {
+  METADATA_HEADER(DragImageView, views::View)
+
  public:
   DragImageView(const std::vector<const HoldingSpaceItem*>& items,
                 const ui::ColorProvider* color_provider)
@@ -463,7 +487,7 @@ class DragImageView : public views::View {
     // Cache the first `DragImageItemView` so `drag_image_overflow_badge_` can
     // be relatively positioned if `kDragImageViewMaxItemsToPaint` is met.
     DCHECK(!container->children().empty());
-    first_drag_image_item_view_ = container->children()[0];
+    first_drag_image_item_view_ = container->children()[0].get();
   }
 
   void AddDragImageOverflowBadge(views::FillLayout* layout, size_t count) {
@@ -478,10 +502,13 @@ class DragImageView : public views::View {
     layout->SetChildViewIgnoredByLayout(drag_image_overflow_badge_, true);
   }
 
-  const raw_ptr<const ui::ColorProvider, ExperimentalAsh> color_provider_;
-  raw_ptr<views::View, ExperimentalAsh> first_drag_image_item_view_ = nullptr;
-  raw_ptr<views::View, ExperimentalAsh> drag_image_overflow_badge_ = nullptr;
+  const raw_ptr<const ui::ColorProvider> color_provider_;
+  raw_ptr<views::View> first_drag_image_item_view_ = nullptr;
+  raw_ptr<views::View> drag_image_overflow_badge_ = nullptr;
 };
+
+BEGIN_METADATA(DragImageView, views::View)
+END_METADATA
 
 }  // namespace
 

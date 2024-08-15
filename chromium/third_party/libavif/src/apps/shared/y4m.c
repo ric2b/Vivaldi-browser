@@ -7,9 +7,13 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "avif/avif.h"
+#include "avifutil.h"
 
 #define Y4M_MAX_LINE_SIZE 2048 // Arbitrary limit. Y4M headers should be much smaller than this
 
@@ -132,6 +136,21 @@ static avifBool y4mColorSpaceParse(const char * formatString, struct y4mFrameIte
     return AVIF_FALSE;
 }
 
+// Returns an unsigned integer value parsed from [start:end[.
+// Returns -1 in case of failure.
+int y4mReadUnsignedInt(const char * start, const char * end)
+{
+    const char * p = start;
+    int64_t value = 0;
+    while (p < end && *p >= '0' && *p <= '9') {
+        value = value * 10 + (*(p++) - '0');
+        if (value > INT_MAX) {
+            return -1;
+        }
+    }
+    return (p == start) ? -1 : (int)value;
+}
+
 // Note: this modifies framerateString
 static avifBool y4mFramerateParse(char * framerateString, avifAppSourceTiming * sourceTiming)
 {
@@ -243,7 +262,11 @@ static avifBool y4mClampSamples(avifImage * avif)
             goto cleanup; \
     } while (0)
 
-avifBool y4mRead(const char * inputFilename, avifImage * avif, avifAppSourceTiming * sourceTiming, struct y4mFrameIterator ** iter)
+avifBool y4mRead(const char * inputFilename,
+                 uint32_t imageSizeLimit,
+                 avifImage * avif,
+                 avifAppSourceTiming * sourceTiming,
+                 struct y4mFrameIterator ** iter)
 {
     avifBool result = AVIF_FALSE;
 
@@ -307,10 +330,10 @@ avifBool y4mRead(const char * inputFilename, avifImage * avif, avifAppSourceTimi
         while (p != end) {
             switch (*p) {
                 case 'W': // width
-                    frame.width = atoi((const char *)p + 1);
+                    frame.width = y4mReadUnsignedInt((const char *)p + 1, (const char *)end);
                     break;
                 case 'H': // height
-                    frame.height = atoi((const char *)p + 1);
+                    frame.height = y4mReadUnsignedInt((const char *)p + 1, (const char *)end);
                     break;
                 case 'C': // color space
                     if (!getHeaderString(p, end, tmpBuffer, 31)) {
@@ -381,6 +404,10 @@ avifBool y4mRead(const char * inputFilename, avifImage * avif, avifAppSourceTimi
         fprintf(stderr, "Failed to parse y4m header (not enough information): %s\n", frame.displayFilename);
         goto cleanup;
     }
+    if ((uint32_t)frame.width > imageSizeLimit / (uint32_t)frame.height) {
+        fprintf(stderr, "Too big y4m dimensions (%d x %d > %u px): %s\n", frame.width, frame.height, imageSizeLimit, frame.displayFilename);
+        goto cleanup;
+    }
 
     if (sourceTiming) {
         *sourceTiming = frame.sourceTiming;
@@ -438,7 +465,12 @@ cleanup:
             if (!feof(frame.inputFile)) {
                 // Remember y4m state for next time
                 *iter = malloc(sizeof(struct y4mFrameIterator));
-                **iter = frame;
+                if (*iter == NULL) {
+                    fprintf(stderr, "Inter-frame state memory allocation failure\n");
+                    result = AVIF_FALSE;
+                } else {
+                    **iter = frame;
+                }
             }
         }
     }

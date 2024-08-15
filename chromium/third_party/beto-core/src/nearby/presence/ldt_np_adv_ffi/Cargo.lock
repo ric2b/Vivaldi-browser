@@ -25,6 +25,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes-gcm"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "831010a0f742e1209b3bcea8fab6a8e149051ba6099432c8cb2cc117dec3ead1"
+dependencies = [
+ "aead",
+ "aes",
+ "cipher",
+ "ctr",
+ "ghash",
+ "subtle",
+]
+
+[[package]]
 name = "aes-gcm-siv"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -97,6 +111,13 @@ dependencies = [
 
 [[package]]
 name = "bssl-crypto"
+version = "0.1.0"
+dependencies = [
+ "bssl-sys",
+]
+
+[[package]]
+name = "bssl-sys"
 version = "0.1.0"
 
 [[package]]
@@ -177,6 +198,9 @@ dependencies = [
 [[package]]
 name = "crypto_provider"
 version = "0.1.0"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "crypto_provider_boringssl"
@@ -184,7 +208,6 @@ version = "0.1.0"
 dependencies = [
  "bssl-crypto",
  "crypto_provider",
- "crypto_provider_stubs",
 ]
 
 [[package]]
@@ -204,6 +227,7 @@ version = "0.1.0"
 dependencies = [
  "aead",
  "aes",
+ "aes-gcm",
  "aes-gcm-siv",
  "cbc",
  "cfg-if",
@@ -240,9 +264,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.0.0-rc.3"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "436ace70fc06e06f7f689d2624dc4e2f0ea666efb5aa704215f7249ae6e047a7"
+checksum = "f711ade317dd348950a9910f81c5947e3d8907ebd2b83f76203ff1807e6a2bc2"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -299,9 +323,9 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.0.0-rc.3"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faa8e9049d5d72bfc12acbc05914731b5322f79b5e2f195e9f2d705fca22ab4c"
+checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
@@ -381,6 +405,16 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "ghash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d930750de5717d2dd0b8c0d42c076c0e884c81a73e6cab859bbd2339c71e3e40"
+dependencies = [
+ "opaque-debug",
+ "polyval",
 ]
 
 [[package]]
@@ -841,6 +875,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87cc5ceb3875bb20c2890005a4e226a4651264a5c75edb2421b52861a0a0cb50"
+
+[[package]]
 name = "typenum"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -882,9 +922,9 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "x25519-dalek"
-version = "2.0.0-rc.3"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec7fae07da688e17059d5886712c933bb0520f15eff2e09cfa18e30968f4e63a"
+checksum = "fb66477291e7e8d2b0ff1bcb900bf29489a9692816d79874bea351e7a8b6de96"
 dependencies = [
  "curve25519-dalek",
  "rand_core",

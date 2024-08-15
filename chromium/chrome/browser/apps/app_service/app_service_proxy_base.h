@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/services/app_service/public/cpp/app_capability_access_cache.h"
@@ -33,7 +35,6 @@
 #include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/preferred_app.h"
 #include "components/services/app_service/public/cpp/preferred_apps_impl.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/native_widget_types.h"
 
 class Profile;
@@ -49,7 +50,6 @@ class AppPublisher;
 class AppUpdate;
 class BrowserAppLauncher;
 class PreferredAppsListHandle;
-struct AppLaunchParams;
 
 struct IntentLaunchInfo {
   IntentLaunchInfo();
@@ -79,6 +79,19 @@ struct IntentLaunchInfo {
 class AppServiceProxyBase : public KeyedService,
                             public PreferredAppsImpl::Host {
  public:
+  // The parameters of the launch calling.
+  struct LaunchParams {
+    LaunchParams();
+    ~LaunchParams();
+    int32_t event_flags_ = 0;
+    IntentPtr intent_;
+    LaunchSource launch_source_ = LaunchSource::kUnknown;
+    std::vector<base::FilePath> file_paths_;
+    WindowInfoPtr window_info_;
+    std::optional<AppLaunchParams> params_;
+    LaunchCallback call_back_;
+  };
+
   explicit AppServiceProxyBase(Profile* profile);
   AppServiceProxyBase(const AppServiceProxyBase&) = delete;
   AppServiceProxyBase& operator=(const AppServiceProxyBase&) = delete;
@@ -101,7 +114,7 @@ class AppServiceProxyBase : public KeyedService,
   // Registers `publisher` with the App Service as exclusively publishing apps
   // of type `app_type`. `publisher` must have a lifetime equal to or longer
   // than this object.
-  void RegisterPublisher(AppType app_type, AppPublisher* publisher);
+  virtual void RegisterPublisher(AppType app_type, AppPublisher* publisher);
 
   // UnRegisters the publisher for `app_type`, As the publisher(ArcApps) might
   // be destroyed earlier than AppServiceProxy.
@@ -114,9 +127,7 @@ class AppServiceProxyBase : public KeyedService,
   // Convenience method that calls app_icon_loader()->LoadIcon to load app icons
   // with `app_id`. `callback` may be dispatched synchronously if it's possible
   // to quickly return a result.
-  // TODO(crbug.com/1412708): Remove app_type from interface.
   std::unique_ptr<IconLoader::Releaser> LoadIcon(
-      AppType app_type,
       const std::string& app_id,
       const IconType& icon_type,
       int32_t size_hint_in_dip,
@@ -132,9 +143,7 @@ class AppServiceProxyBase : public KeyedService,
   // `allow_placeholder_icon` indicate whether we allow loading placeholder icon
   // from the in memory cache and do not attempt to retry to load the actual
   // icon.
-  // TODO(crbug.com/1412708): Remove app_type from interface.
   std::unique_ptr<IconLoader::Releaser> LoadIconWithIconEffects(
-      AppType app_type,
       const std::string& app_id,
       uint32_t icon_effects,
       IconType icon_type,
@@ -371,7 +380,7 @@ class AppServiceProxyBase : public KeyedService,
     explicit AppInnerIconLoader(AppServiceProxyBase* host);
 
     // apps::IconLoader overrides.
-    absl::optional<IconKey> GetIconKey(const std::string& id) override;
+    std::optional<IconKey> GetIconKey(const std::string& id) override;
     std::unique_ptr<Releaser> LoadIconFromIconKey(
         const std::string& id,
         const IconKey& icon_key,
@@ -398,6 +407,11 @@ class AppServiceProxyBase : public KeyedService,
 
   AppPublisher* GetPublisher(AppType app_type);
 
+  // Called when a publisher is not ready to launch an app.
+  virtual void OnPublisherNotReadyForLaunch(
+      const std::string& app_id,
+      std::unique_ptr<LaunchParams> launch_request);
+
   // Returns true if the app cannot be launched and a launch prevention dialog
   // is shown to the user (e.g. the app is paused or blocked). Returns false
   // otherwise (and the app can be launched).
@@ -419,6 +433,9 @@ class AppServiceProxyBase : public KeyedService,
 
   virtual void OnLaunched(LaunchCallback callback,
                           LaunchResult&& launch_result);
+
+  virtual bool ShouldExcludeBrowserTabApps(bool exclude_browser_tab_apps,
+                                           WindowMode window_mode);
 
   // Returns true if we should read icon image files from the local app_service
   // icon directory on disk, e.g. for ChromeOS. Otherwise, returns false.

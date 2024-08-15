@@ -155,6 +155,7 @@ class CalendarModelTest : public AshTestBase {
  public:
   CalendarModelTest()
       : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+
   CalendarModelTest(const CalendarModelTest& other) = delete;
   CalendarModelTest& operator=(const CalendarModelTest& other) = delete;
   ~CalendarModelTest() override = default;
@@ -1380,8 +1381,10 @@ TEST_F(CalendarModelTest, FindUpcomingEvents_SameDay) {
 }
 
 // If time now is 23:55 and we have an upcoming event starting at 00:05 the
-// following day, then we should also get upcoming events from the next day
-// back.
+// following day, we should only show today's events. This test is needed after
+// we made the change to the logic of showing the up next view. Before the
+// change, we would show the events starting in 10 mins even if it's in the next
+// day. Now it shouldn't be shown.
 TEST_F(CalendarModelTest, FindUpcomingEvents_NextDay) {
   // Set timezone and fake now.
   const char* kNow = "10 Nov 2022 23:55 GMT";
@@ -1411,8 +1414,8 @@ TEST_F(CalendarModelTest, FindUpcomingEvents_NextDay) {
     return base::Contains(event_list, id, &CalendarEvent::id);
   };
 
-  EXPECT_EQ(events.size(), size_t(1));
-  EXPECT_TRUE(event_list_contains(events, kEventStartingInTenMinsTomorrowId));
+  EXPECT_EQ(events.size(), size_t(0));
+  EXPECT_FALSE(event_list_contains(events, kEventStartingInTenMinsTomorrowId));
 }
 
 // If time now is 00:10 and we have an event that started <1 hour ago, then we
@@ -1448,6 +1451,42 @@ TEST_F(CalendarModelTest, FindUpcomingEvents_PreviousDay) {
 
   EXPECT_EQ(events.size(), size_t(1));
   EXPECT_TRUE(event_list_contains(events, kEventInProgressStartedYesterdayId));
+}
+
+// If the next event doesn't start in the next 10 mins, we'll still show it.
+// This is needed after we changed the logic of showing the up next view.
+TEST_F(CalendarModelTest, FindUpcomingEvents_ShowTheNextEvent) {
+  // Set timezone and fake now.
+  const char* kNow = "10 Nov 2022 13:00 GMT";
+  ash::system::ScopedTimezoneSettings timezone_settings(u"GMT");
+  SetTodayFromStr(kNow);
+
+  const char* kSummary = "summary";
+  const char* kEventStartingInThirtyMinsId = "event_starting_in_thirty_mins";
+
+  auto event_starting_in_thirty_mins = calendar_test_utils::CreateEvent(
+      kEventStartingInThirtyMinsId, kSummary, "10 Nov 2022 13:30 GMT",
+      "10 Nov 2022 15:00 GMT");
+
+  // Prepare mock events list.
+  std::unique_ptr<google_apis::calendar::EventList> event_list =
+      std::make_unique<google_apis::calendar::EventList>();
+  event_list->InjectItemForTesting(std::move(event_starting_in_thirty_mins));
+
+  // Mock the events are fetched.
+  MockOnEventsFetched(calendar_utils::GetStartOfMonthUTC(
+                          calendar_test_utils::GetTimeFromString(kNow)),
+                      google_apis::ApiErrorCode::HTTP_SUCCESS,
+                      event_list.get());
+
+  auto events = calendar_model_->FindUpcomingEvents(now_);
+
+  auto event_list_contains = [](auto& event_list, auto& id) {
+    return base::Contains(event_list, id, &CalendarEvent::id);
+  };
+
+  EXPECT_EQ(events.size(), size_t(1));
+  EXPECT_TRUE(event_list_contains(events, kEventStartingInThirtyMinsId));
 }
 
 // If two events start at the same time, show the one finishing earlier first.
@@ -1491,11 +1530,8 @@ TEST_F(CalendarModelTest, EventsSortingWithSameStartTime) {
   EXPECT_EQ(kSecondEventId, events.back().id());
 }
 
-// If one event starts later but finishes earlier than another, show the one
-// that started earlier first.
-// Returns:
-// Second event: 13:00 - 14:00
-// First event: 13:05 - 13:45
+// If one event starts later but finishes earlier than another, only show the
+// kSecondEventId since this one is the next event.
 TEST_F(CalendarModelTest, EventsSortingWithDifferentStartTime) {
   // Set timezone and fake now.
   const char* kNow = "10 Nov 2022 13:00 GMT";
@@ -1528,9 +1564,12 @@ TEST_F(CalendarModelTest, EventsSortingWithDifferentStartTime) {
 
   auto events = calendar_model_->FindUpcomingEvents(now_);
 
-  EXPECT_EQ(events.size(), size_t(2));
-  EXPECT_EQ(kSecondEventId, events.front().id());
-  EXPECT_EQ(kFirstEventId, events.back().id());
+  auto event_list_contains = [](auto& event_list, auto& id) {
+    return base::Contains(event_list, id, &CalendarEvent::id);
+  };
+
+  EXPECT_EQ(events.size(), size_t(1));
+  EXPECT_TRUE(event_list_contains(events, kSecondEventId));
 }
 
 }  // namespace ash

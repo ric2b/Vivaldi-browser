@@ -96,6 +96,8 @@ class ImageAnnotationWorker {
   void OnPerformOcr(ImageInfo image_info,
                     screen_ai::mojom::VisualAnnotationPtr visual_annotation);
 
+  void OnImageProcessTimeout();
+
   std::unique_ptr<base::FilePathWatcher> file_watcher_;
   base::FilePath root_path_;
   // Excludes any path matching the prefixes.
@@ -105,8 +107,7 @@ class ImageAnnotationWorker {
 
   // AnnotationStorage owns this ImageAnnotationWorker. All the methods must
   // be called from the main sequence.
-  raw_ptr<AnnotationStorage, DanglingUntriaged | ExperimentalAsh>
-      annotation_storage_;
+  raw_ptr<AnnotationStorage, DanglingUntriaged> annotation_storage_;
 
   // ML models used as DLCs.
   ImageContentAnnotator image_content_annotator_;
@@ -116,7 +117,9 @@ class ImageAnnotationWorker {
   const bool use_ica_;
   const bool use_ocr_;
   base::queue<base::FilePath> files_to_process_;
+  int num_retries_left_ = 60;
 
+  base::OneShotTimer timeout_timer_;
   // Owned by this class.
   const scoped_refptr<base::SequencedTaskRunner> task_runner_;
   SEQUENCE_CHECKER(sequence_checker_);

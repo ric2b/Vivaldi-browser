@@ -25,26 +25,26 @@ namespace {
 const SavedTabGroup kSavedTabGroup1(std::u16string(u"test_title_1"),
                                     tab_groups::TabGroupColorId::kGrey,
                                     {},
-                                    absl::nullopt);
+                                    std::nullopt);
 
 const SavedTabGroup kSavedTabGroup2(std::u16string(u"test_title_2"),
                                     tab_groups::TabGroupColorId::kGrey,
                                     {},
-                                    absl::nullopt);
+                                    std::nullopt);
 const SavedTabGroup kSavedTabGroup3(std::u16string(u"test_title_3"),
                                     tab_groups::TabGroupColorId::kGrey,
                                     {},
-                                    absl::nullopt);
+                                    std::nullopt);
 
 const SavedTabGroup kSavedTabGroup4(std::u16string(u"test_title_4"),
                                     tab_groups::TabGroupColorId::kGrey,
                                     {},
-                                    absl::nullopt);
+                                    std::nullopt);
 
 const SavedTabGroup kSavedTabGroup5(std::u16string(u"test_title_5"),
                                     tab_groups::TabGroupColorId::kGrey,
                                     {},
-                                    absl::nullopt);
+                                    std::nullopt);
 
 const std::u16string kNewTitle(u"kNewTitle");
 
@@ -99,7 +99,7 @@ class SavedTabGroupBarUnitTest : public ChromeViewsTestBase {
 
     // Iterate through bubble getting size plus button padding calculated
     // button_sizes + extra_padding
-    for (const auto* const button : saved_tab_group_bar_->children()) {
+    for (const views::View* const button : saved_tab_group_bar_->children()) {
       size += button->GetVisible()
                   ? button->GetPreferredSize().width() + button_padding_
                   : 0;

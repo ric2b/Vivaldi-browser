@@ -24,13 +24,20 @@
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "./centipede/environment.h"
+#include "./centipede/logging.h"
 
 namespace centipede {
 
 namespace {
+
+inline constexpr std::string_view kCorpusShardStem = "corpus";
+inline constexpr std::string_view kDistilledCorpusShardStemPrefix =
+    "distilled-";
 
 // If `annotation` is empty, returns an empty string. Otherwise, verifies that
 // it does not start with a dot and returns it with a dot prepended.
@@ -45,10 +52,65 @@ std::string NormalizeAnnotation(std::string_view annotation) {
 
 }  // namespace
 
-WorkDir::WorkDir(             //
-    std::string workdir,      //
-    std::string binary_name,  //
-    std::string binary_hash,  //
+//------------------------------------------------------------------------------
+//                             WorkDir::PathInfo
+
+WorkDir::ShardedFileInfo::ShardedFileInfo(std::string_view base_dir,
+                                          std::string_view rel_prefix,
+                                          size_t my_shard_index)
+    : prefix_{std::filesystem::path(base_dir) / rel_prefix},
+      my_shard_index_{my_shard_index} {}
+
+std::string WorkDir::ShardedFileInfo::ShardPath(size_t shard_index) const {
+  return absl::StrFormat("%s%0*d", prefix_, kDigitsInShardIndex, shard_index);
+}
+
+std::string WorkDir::ShardedFileInfo::MyShardPath() const {
+  return ShardPath(my_shard_index_);
+}
+
+std::string WorkDir::ShardedFileInfo::AllShardsGlob() const {
+  return absl::StrCat(prefix_, "*");
+}
+
+bool WorkDir::ShardedFileInfo::IsShardPath(std::string_view path) const {
+  // TODO(ussuri): This is as barebones as it can be right now. Possible
+  //  improvements: 1. Make `path` & `prefix_` absolute before comparing (or in
+  //  ctor for `prefix_`). 2. Add option to require the actual file's existence.
+  return absl::StartsWith(path, prefix_);
+}
+
+//------------------------------------------------------------------------------
+//                                 WorkDir
+
+WorkDir WorkDir::FromCorpusShardPath(    //
+    std::string_view corpus_shard_path,  //
+    std::string_view binary_name,        //
+    std::string_view binary_hash) {
+  const std::filesystem::path path{corpus_shard_path};
+  const std::string dir = path.parent_path();
+  const std::string stem = path.stem();
+  CHECK(stem == kCorpusShardStem ||
+        absl::StartsWith(stem, kDistilledCorpusShardStemPrefix))
+      << VV(corpus_shard_path);
+  const std::string dot_ext = path.extension();
+  CHECK(!dot_ext.empty() && dot_ext[0] == '.') << VV(corpus_shard_path);
+  const std::string ext = dot_ext.substr(1);
+  CHECK_EQ(ext.size(), kDigitsInShardIndex) << VV(corpus_shard_path);
+  size_t shard_index = -1;
+  CHECK(absl::SimpleAtoi(ext, &shard_index)) << VV(corpus_shard_path);
+  return WorkDir{
+      dir,
+      std::string{binary_name},
+      std::string{binary_hash},
+      shard_index,
+  };
+}
+
+WorkDir::WorkDir(                  //
+    std::string_view workdir,      //
+    std::string_view binary_name,  //
+    std::string_view binary_hash,  //
     size_t my_shard_index)
     : workdir_holder_{std::move(workdir)},
       binary_name_holder_{std::move(binary_name)},
@@ -65,6 +127,10 @@ WorkDir::WorkDir(const centipede::Environment& env)
       binary_hash_{env.binary_hash},
       my_shard_index_{env.my_shard_index} {}
 
+WorkDir::ShardedFileInfo WorkDir::CorpusFiles() const {
+  return {workdir_, absl::StrCat(kCorpusShardStem, "."), my_shard_index_};
+}
+
 std::string WorkDir::CoverageDirPath() const {
   return std::filesystem::path(workdir_) /
          absl::StrCat(binary_name_, "-", binary_hash_);
@@ -78,36 +144,24 @@ std::string WorkDir::BinaryInfoDirPath() const {
   return std::filesystem::path(CoverageDirPath()) / "binary-info";
 }
 
-std::string WorkDir::CorpusPathPrefix() const {
-  return std::filesystem::path(workdir_) / "corpus.";
+std::string WorkDir::DebugInfoDirPath() const {
+  return std::filesystem::path(workdir_) / "debug";
 }
 
-std::string WorkDir::CorpusPath(size_t shard_index) const {
-  return absl::StrCat(
-      CorpusPathPrefix(),
-      absl::StrFormat("%0*d", kDigitsInShardIndex, shard_index));
+WorkDir::ShardedFileInfo WorkDir::DistilledCorpusFiles() const {
+  return {workdir_,
+          absl::StrCat(kDistilledCorpusShardStemPrefix, binary_name_, "."),
+          my_shard_index_};
 }
 
-std::string WorkDir::FeaturesPathPrefix() const {
-  return std::filesystem::path(CoverageDirPath()) / "features.";
+WorkDir::ShardedFileInfo WorkDir::FeaturesFiles() const {
+  return {CoverageDirPath(), "features.", my_shard_index_};
 }
 
-std::string WorkDir::FeaturesPath(size_t shard_index) const {
-  return absl::StrCat(
-      FeaturesPathPrefix(),
-      absl::StrFormat("%0*d", kDigitsInShardIndex, shard_index));
-}
-
-std::string WorkDir::DistilledCorpusPath() const {
-  return std::filesystem::path(workdir_) /
-         absl::StrFormat("distilled-%s.%0*d", binary_name_, kDigitsInShardIndex,
-                         my_shard_index_);
-}
-
-std::string WorkDir::DistilledFeaturesPath() const {
-  return std::filesystem::path(CoverageDirPath())
-      .append(absl::StrFormat("distilled-features-%s.%0*d", binary_name_,
-                              kDigitsInShardIndex, my_shard_index_));
+WorkDir::ShardedFileInfo WorkDir::DistilledFeaturesFiles() const {
+  return {CoverageDirPath(),
+          absl::StrCat("distilled-features-", binary_name_, "."),
+          my_shard_index_};
 }
 
 std::string WorkDir::CoverageReportPath(std::string_view annotation) const {

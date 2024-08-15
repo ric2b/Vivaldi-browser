@@ -12,6 +12,7 @@
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/heap/heap.h"
 #include "src/heap/large-spaces.h"
+#include "src/heap/main-allocator.h"
 #include "src/heap/memory-chunk.h"
 #include "src/heap/spaces-inl.h"
 #include "test/unittests/test-utils.h"
@@ -34,7 +35,8 @@ static Tagged<HeapObject> AllocateUnaligned(MainAllocator* allocator,
 static Tagged<HeapObject> AllocateUnaligned(OldLargeObjectSpace* allocator,
                                             OldLargeObjectSpace* space,
                                             int size) {
-  AllocationResult allocation = allocator->AllocateRaw(size);
+  AllocationResult allocation =
+      allocator->AllocateRaw(space->heap()->main_thread_local_heap(), size);
   CHECK(!allocation.IsFailure());
   Tagged<HeapObject> filler;
   CHECK(allocation.To(&filler));
@@ -49,10 +51,12 @@ TEST_F(SpacesTest, CompactionSpaceMerge) {
   OldSpace* old_space = heap->old_space();
   EXPECT_TRUE(old_space != nullptr);
 
+  heap->SetGCState(Heap::MARK_COMPACT);
+
   CompactionSpace* compaction_space =
       new CompactionSpace(heap, OLD_SPACE, NOT_EXECUTABLE,
                           CompactionSpaceKind::kCompactionSpaceForMarkCompact);
-  MainAllocator allocator(heap, compaction_space);
+  MainAllocator allocator(heap, compaction_space, MainAllocator::kInGC);
   EXPECT_TRUE(compaction_space != nullptr);
 
   for (Page* p : *old_space) {
@@ -72,7 +76,7 @@ TEST_F(SpacesTest, CompactionSpaceMerge) {
     Tagged<HeapObject> object =
         allocator
             .AllocateRaw(kMaxRegularHeapObjectSize, kTaggedAligned,
-                         AllocationOrigin::kRuntime)
+                         AllocationOrigin::kGC)
             .ToObjectChecked();
     heap->CreateFillerObjectAt(object.address(), kMaxRegularHeapObjectSize);
   }
@@ -85,6 +89,8 @@ TEST_F(SpacesTest, CompactionSpaceMerge) {
             old_space->CountTotalPages());
 
   delete compaction_space;
+
+  heap->SetGCState(Heap::NOT_IN_GC);
 }
 
 TEST_F(SpacesTest, WriteBarrierFromHeapObject) {
@@ -231,48 +237,6 @@ TEST_F(SpacesTest, FreeListManySelectFreeListCategoryType) {
         // Otherwise, size should fit in |selected|, but not in |selected+1|.
         EXPECT_LE(free_list.categories_min[selected], size);
         EXPECT_LT(size, free_list.categories_min[selected + 1]);
-      }
-    }
-  }
-}
-
-// Tests that FreeListMany::GuaranteedAllocatable returns what it should.
-TEST_F(SpacesTest, FreeListManyGuaranteedAllocatable) {
-  FreeListMany free_list;
-
-  for (int cat = kFirstCategory; cat < free_list.last_category_; cat++) {
-    std::vector<size_t> sizes;
-    // Adding size less than this category's minimum
-    sizes.push_back(free_list.categories_min[cat] - 8);
-    // Adding size equal to this category's minimum
-    sizes.push_back(free_list.categories_min[cat]);
-    // Adding size greater than this category's minimum
-    sizes.push_back(free_list.categories_min[cat] + 8);
-    if (cat != free_list.last_category_) {
-      // Adding size between this category's minimum and the next category
-      sizes.push_back(
-          (free_list.categories_min[cat] + free_list.categories_min[cat + 1]) /
-          2);
-    }
-
-    for (size_t size : sizes) {
-      FreeListCategoryType cat_free =
-          free_list.SelectFreeListCategoryType(size);
-      size_t guaranteed_allocatable = free_list.GuaranteedAllocatable(size);
-      if (cat_free == free_list.last_category_) {
-        // If |cat_free| == last_category, then guaranteed_allocatable must
-        // return the last category, because when allocating, the last category
-        // is searched entirely.
-        EXPECT_EQ(free_list.SelectFreeListCategoryType(guaranteed_allocatable),
-                  free_list.last_category_);
-      } else if (size < free_list.categories_min[0]) {
-        // If size < free_list.categories_min[0], then the bytes are wasted, and
-        // guaranteed_allocatable should return 0.
-        EXPECT_EQ(guaranteed_allocatable, 0ul);
-      } else {
-        // Otherwise, |guaranteed_allocatable| is equal to the minimum of
-        // |size|'s category (|cat_free|);
-        EXPECT_EQ(free_list.categories_min[cat_free], guaranteed_allocatable);
       }
     }
   }

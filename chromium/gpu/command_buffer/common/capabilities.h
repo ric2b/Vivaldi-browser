@@ -60,9 +60,8 @@ struct GPU_EXPORT Capabilities {
 
   bool disable_2d_canvas_copy_on_write = false;
 
-  bool supports_oop_raster = false;
-
-  bool supports_yuv_rgb_conversion = false;
+  bool supports_yuv_to_rgb_conversion = false;
+  bool supports_rgb_to_yuv_conversion = false;
   bool supports_yuv_readback = false;
 
   bool chromium_gpu_fence = false;
@@ -88,7 +87,7 @@ struct GPU_EXPORT Capabilities {
   std::vector<gfx::BufferUsageAndFormat> texture_target_exception_list;
 
   base::flat_map<uint32_t, std::vector<uint64_t>> drm_formats_and_modifiers;
-  std::string drm_render_node;
+  uint64_t drm_device_id = 0;
 };
 
 struct GPU_EXPORT GLCapabilities {

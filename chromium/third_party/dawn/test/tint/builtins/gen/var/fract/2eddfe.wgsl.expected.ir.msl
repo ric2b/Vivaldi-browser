@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void fract_2eddfe() {
+  float res = 0.25f;
+}
+vertex float4 vertex_main() {
+  fract_2eddfe();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  fract_2eddfe();
+}
+kernel void compute_main() {
+  fract_2eddfe();
+}

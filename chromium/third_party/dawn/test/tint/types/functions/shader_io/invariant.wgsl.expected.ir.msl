@@ -1,0 +1,10 @@
+SKIP: FAILED
+
+### Missing invariant
+
+#include <metal_stdlib>
+using namespace metal;
+
+vertex float4 tint_symbol() {
+  return float4(0.0f);
+}

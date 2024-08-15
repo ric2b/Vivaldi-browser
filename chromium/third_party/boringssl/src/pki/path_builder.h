@@ -5,17 +5,17 @@
 #ifndef BSSL_PKI_PATH_BUILDER_H_
 #define BSSL_PKI_PATH_BUILDER_H_
 
-#include "fillins/openssl_util.h"
 #include <memory>
 #include <vector>
 
+#include <openssl/base.h>
 
 #include "cert_errors.h"
+#include "input.h"
+#include "parse_values.h"
 #include "parsed_certificate.h"
 #include "trust_store.h"
 #include "verify_certificate_chain.h"
-#include "input.h"
-#include "parse_values.h"
 
 namespace bssl {
 
@@ -51,7 +51,7 @@ struct OPENSSL_EXPORT CertPathBuilderResultPath {
 
   // Returns the chain's root certificate or nullptr if the chain doesn't
   // chain to a trust anchor.
-  const ParsedCertificate* GetTrustedCert() const;
+  const ParsedCertificate *GetTrustedCert() const;
 
   // Path in the forward direction:
   //
@@ -88,17 +88,29 @@ struct OPENSSL_EXPORT CertPathBuilderResultPath {
 class OPENSSL_EXPORT CertPathBuilderDelegate
     : public VerifyCertificateChainDelegate {
  public:
-  // This is called during path building on candidate paths which have already
-  // been run through RFC 5280 verification. |path| may already have errors
-  // and warnings set on it. Delegates can "reject" a candidate path from path
-  // building by adding high severity errors.
-  virtual void CheckPathAfterVerification(const CertPathBuilder& path_builder,
-                                          CertPathBuilderResultPath* path) = 0;
+  // This is called during path building on candidate paths. These are either
+  // paths which have already been run through RFC 5280 verification, or
+  // partial paths that the path builder cannot continue either due to not
+  // finding a matching issuer or reaching a configured pathbuilding limit.
+  // |path| may already have errors and warnings set on it. Delegates can
+  // "reject" a candidate path from path building by adding high severity
+  // errors.
+  virtual void CheckPathAfterVerification(const CertPathBuilder &path_builder,
+                                          CertPathBuilderResultPath *path) = 0;
 
   // This is called during path building in between attempts to build candidate
   // paths. Delegates can cause path building to stop and return indicating
   // the deadline was exceeded by returning true from this function.
   virtual bool IsDeadlineExpired() = 0;
+
+  // This is called during path building to decide if debug logs will be
+  // sent to the delegate rom the path builder. No calls to DebugLog (below)
+  // will be made unless this returns true.
+  virtual bool IsDebugLogEnabled() = 0;
+
+  // This is called to send a debug log string |msg| to the delegate. These are
+  // only called if IsDebugLogEnabled (above) returns true.
+  virtual void DebugLog(std::string_view msg) = 0;
 };
 
 // Checks whether a certificate is trusted by building candidate paths to trust
@@ -113,13 +125,13 @@ class OPENSSL_EXPORT CertPathBuilder {
   // were attempted.
   struct OPENSSL_EXPORT Result {
     Result();
-    Result(Result&&);
+    Result(Result &&);
 
-    Result(const Result&) = delete;
-    Result& operator=(const Result&) = delete;
+    Result(const Result &) = delete;
+    Result &operator=(const Result &) = delete;
 
     ~Result();
-    Result& operator=(Result&&);
+    Result &operator=(Result &&);
 
     // Returns true if there was a valid path.
     bool HasValidPath() const;
@@ -129,10 +141,10 @@ class OPENSSL_EXPORT CertPathBuilder {
 
     // Returns the CertPathBuilderResultPath for the best valid path, or nullptr
     // if there was none.
-    const CertPathBuilderResultPath* GetBestValidPath() const;
+    const CertPathBuilderResultPath *GetBestValidPath() const;
 
     // Returns the best CertPathBuilderResultPath or nullptr if there was none.
-    const CertPathBuilderResultPath* GetBestPathPossiblyInvalid() const;
+    const CertPathBuilderResultPath *GetBestPathPossiblyInvalid() const;
 
     // List of paths that were attempted and the result for each.
     std::vector<std::unique_ptr<CertPathBuilderResultPath>> paths;
@@ -171,17 +183,15 @@ class OPENSSL_EXPORT CertPathBuilder {
   //               final chain. See CertPathBuilderDelegate and
   //               VerifyCertificateChainDelegate for more information.
   CertPathBuilder(std::shared_ptr<const ParsedCertificate> cert,
-                  TrustStore* trust_store,
-                  CertPathBuilderDelegate* delegate,
-                  const der::GeneralizedTime& time,
-                  KeyPurpose key_purpose,
+                  TrustStore *trust_store, CertPathBuilderDelegate *delegate,
+                  const der::GeneralizedTime &time, KeyPurpose key_purpose,
                   InitialExplicitPolicy initial_explicit_policy,
-                  const std::set<der::Input>& user_initial_policy_set,
+                  const std::set<der::Input> &user_initial_policy_set,
                   InitialPolicyMappingInhibit initial_policy_mapping_inhibit,
                   InitialAnyPolicyInhibit initial_any_policy_inhibit);
 
-  CertPathBuilder(const CertPathBuilder&) = delete;
-  CertPathBuilder& operator=(const CertPathBuilder&) = delete;
+  CertPathBuilder(const CertPathBuilder &) = delete;
+  CertPathBuilder &operator=(const CertPathBuilder &) = delete;
 
   ~CertPathBuilder();
 
@@ -192,7 +202,7 @@ class OPENSSL_EXPORT CertPathBuilder {
   //
   // (If no issuer sources are added, the target certificate will only verify if
   // it is a trust anchor or is directly signed by a trust anchor.)
-  void AddCertIssuerSource(CertIssuerSource* cert_issuer_source);
+  void AddCertIssuerSource(CertIssuerSource *cert_issuer_source);
 
   // Sets a limit to the number of times to repeat the process of considering a
   // new intermediate over all potential paths. Setting |limit| to 0 disables
@@ -203,10 +213,16 @@ class OPENSSL_EXPORT CertPathBuilder {
   // to root. Setting |limit| to 0 disables this limit, which is the default.
   void SetDepthLimit(uint32_t limit);
 
-  // If |explore_all_paths| is false (the default), path building will stop as
-  // soon as a valid path is found. If |explore_all_paths| is true, path
-  // building will continue until all possible paths have been exhausted (or
-  // iteration limit / deadline is exceeded).
+  // Set the limit of valid paths returned by the path builder to |limit|.  If
+  // |limit| is non zero, path building will stop once |limit| valid paths have
+  // been found. Setting |limit| to 0 disables the limit, meaning path building
+  // will continue until all possible paths have been exhausted (or iteration
+  // limit / deadline is exceeded).  The default limit is 1.
+  void SetValidPathLimit(size_t limit);
+
+  // If |explore_all_paths| is false, this is equivalent to calling
+  // SetValidPathLimit(1). If |explore_all_paths| is true, this is equivalent to
+  // calling SetValidPathLimit(0).
   void SetExploreAllPaths(bool explore_all_paths);
 
   // Executes verification of the target certificate.
@@ -222,7 +238,7 @@ class OPENSSL_EXPORT CertPathBuilder {
   Result out_result_;
 
   std::unique_ptr<CertPathIter> cert_path_iter_;
-  CertPathBuilderDelegate* delegate_;
+  CertPathBuilderDelegate *delegate_;
   const der::GeneralizedTime time_;
   const KeyPurpose key_purpose_;
   const InitialExplicitPolicy initial_explicit_policy_;
@@ -231,9 +247,10 @@ class OPENSSL_EXPORT CertPathBuilder {
   const InitialAnyPolicyInhibit initial_any_policy_inhibit_;
   uint32_t max_iteration_count_ = 0;
   uint32_t max_path_building_depth_ = 0;
-  bool explore_all_paths_ = false;
+  size_t valid_path_limit_ = 1;
+  size_t valid_path_count_ = 0;
 };
 
-}  // namespace net
+}  // namespace bssl
 
 #endif  // BSSL_PKI_PATH_BUILDER_H_

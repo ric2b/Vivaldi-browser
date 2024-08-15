@@ -4,12 +4,13 @@
 
 #include "chromeos/startup/browser_postlogin_params.h"
 
+#include <optional>
 #include <string>
 
 #include "base/check_is_test.h"
 #include "base/files/file_util.h"
+#include "base/process/process.h"
 #include "chromeos/startup/startup.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace chromeos {
 
@@ -18,9 +19,12 @@ namespace {
 // Reads and parses the post-login data to BrowserPostLoginParams.
 // If data is missing, or failed to parse, returns a null StructPtr.
 crosapi::mojom::BrowserPostLoginParamsPtr ReadStartupBrowserPostLoginParams() {
-  absl::optional<std::string> content = ReadPostLoginData();
+  std::optional<std::string> content = ReadPostLoginData();
   if (!content) {
-    return {};
+    // Ash shut down or crashed, so the pipe is broken.
+    // Lacros should shut down gracefully instead of crashing.
+    base::Process::TerminateCurrentProcessImmediately(
+        RESULT_CODE_INVALID_POST_LOGIN_PARAMS);
   }
 
   crosapi::mojom::BrowserPostLoginParamsPtr result;
@@ -51,6 +55,14 @@ void BrowserPostLoginParams::WaitForLogin() {
     // SetPostLoginParamsForTests.
     CHECK_IS_TEST();
   }
+
+  // Signal that the user has logged in.
+  instance->logged_in_ = true;
+}
+
+// static
+bool BrowserPostLoginParams::IsLoggedIn() {
+  return GetInstanceInternal()->logged_in_;
 }
 
 // static

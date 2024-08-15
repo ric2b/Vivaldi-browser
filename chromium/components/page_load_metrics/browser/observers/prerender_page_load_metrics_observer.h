@@ -6,7 +6,7 @@
 #define COMPONENTS_PAGE_LOAD_METRICS_BROWSER_OBSERVERS_PRERENDER_PAGE_LOAD_METRICS_OBSERVER_H_
 
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
-#include "content/public/browser/prerender_trigger_type.h"
+#include "content/public/browser/preloading_trigger_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace internal {
@@ -48,25 +48,6 @@ enum class PageLoadPrerenderObserverEvent {
   kRecordLayoutShiftScoreMetrics = 8,
   kRecordNormalizedResponsivenessMetrics = 9,
   kMaxValue = kRecordNormalizedResponsivenessMetrics,
-};
-
-extern const char kPageLoadPrerenderForegroundCheckResult[];
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class PageLoadPrerenderForegroundCheckResult {
-  kActivatedInBackground = 0,
-  kNoEventTime = 1,
-  kBackgroundedBeforeEvent = 2,
-  kPassed = 3,
-  kMaxValue = kPassed
-};
-
-enum class PageLoadPrerenderForegroundCheckEvent {
-  kFirstPaint,
-  kFirstContentfulPaint,
-  kFirstInputDelay,
-  kLargestContentfulPaint
 };
 
 }  // namespace internal
@@ -138,9 +119,9 @@ class PrerenderPageLoadMetricsObserver
   absl::optional<net::Error> main_resource_load_status_;
 
   // The type to trigger prerendering.
-  absl::optional<content::PrerenderTriggerType> trigger_type_;
+  absl::optional<content::PreloadingTriggerType> trigger_type_;
   // The suffix of a prerender embedder. This value is valid only when
-  // PrerenderTriggerType is kEmbedder. Otherwise, it's an empty string.
+  // PreloadingTriggerType is kEmbedder. Otherwise, it's an empty string.
   std::string embedder_histogram_suffix_;
 };
 

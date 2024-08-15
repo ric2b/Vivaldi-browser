@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/settings/password/passwords_mediator.h"
+#import "ios/chrome/browser/ui/settings/password/passwords_mediator+Testing.h"
 
 #import "base/apple/foundation_util.h"
 #import "base/strings/string_piece.h"
@@ -15,7 +16,7 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/affiliation/fake_affiliation_service.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
-#import "components/password_manager/core/browser/test_password_store.h"
+#import "components/password_manager/core/browser/password_store/test_password_store.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
@@ -30,11 +31,10 @@
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller_test.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_consumer.h"
-#import "ios/chrome/browser/ui/settings/password/passwords_mediator+private.h"
 #import "ios/chrome/browser/ui/settings/utils/password_auto_fill_status_observer.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gmock/include/gmock/gmock.h"
@@ -158,8 +158,7 @@ class PasswordsMediatorTest : public BlockCleanupTest {
                                          GetForBrowserState(
                                              browser_state_.get())
                          syncService:SyncServiceFactory::GetForBrowserState(
-                                         browser_state_.get())
-                         prefService:browser_state_->GetPrefs()];
+                                         browser_state_.get())];
 
     mock_tracker_ = static_cast<feature_engagement::test::MockTracker*>(
         feature_engagement::TrackerFactory::GetForBrowserState(browserState()));

@@ -5,36 +5,12 @@ Execution Tests for matrix-matrix f16 multiplication expression
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
 import { TypeF16, TypeMat } from '../../../../util/conversion.js';
-import { FP } from '../../../../util/floating_point.js';
-import { sparseMatrixF16Range } from '../../../../util/math.js';
-import { makeCaseCache } from '../case_cache.js';
 import { allInputSources, run } from '../expression.js';
 
 import { binary, compoundBinary } from './binary.js';
+import { d } from './f16_matrix_matrix_multiplication.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Cases: matKxR_matCxK_[non_]const
-const mat_mat_cases = ([2, 3, 4] as const)
-  .flatMap(k =>
-    ([2, 3, 4] as const).flatMap(cols =>
-      ([2, 3, 4] as const).flatMap(rows =>
-        ([true, false] as const).map(nonConst => ({
-          [`mat${k}x${rows}_mat${cols}x${k}_${nonConst ? 'non_const' : 'const'}`]: () => {
-            return FP.f16.generateMatrixPairToMatrixCases(
-              sparseMatrixF16Range(k, rows),
-              sparseMatrixF16Range(cols, k),
-              nonConst ? 'unfiltered' : 'finite',
-              FP.f16.multiplicationMatrixMatrixInterval
-            );
-          },
-        }))
-      )
-    )
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('binary/f16_matrix_matrix_multiplication', mat_mat_cases);
 
 g.test('matrix_matrix')
   .specURL('https://www.w3.org/TR/WGSL/#floating-point-evaluation')

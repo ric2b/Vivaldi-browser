@@ -20,6 +20,7 @@
 #include "core/fpdfapi/parser/fpdf_parser_decode.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_stream.h"
+#include "core/fxcrt/span_util.h"
 #include "third_party/base/check.h"
 
 // Indexed by 8-bit character code, contains either:
@@ -38,7 +39,7 @@ const char kPDFCharTypes[256] = {
     'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R',
     'R',
 
-    // SP    !    "    #    $    %    &    ´    (    )    *    +    ,    -    .
+    // SP    !    "    #    $    %    &    '    (    )    *    +    ,    -    .
     // /
     'W', 'R', 'R', 'R', 'R', 'D', 'R', 'R', 'D', 'D', 'R', 'N', 'R', 'N', 'N',
     'D',
@@ -247,8 +248,8 @@ std::ostream& operator<<(std::ostream& buf, const CPDF_Object* pObj) {
       buf << p->GetDict().Get() << "stream\r\n";
       auto pAcc = pdfium::MakeRetain<CPDF_StreamAcc>(std::move(p));
       pAcc->LoadAllDataRaw();
-      pdfium::span<const uint8_t> span = pAcc->GetSpan();
-      buf.write(reinterpret_cast<const char*>(span.data()), span.size());
+      auto span = fxcrt::reinterpret_span<const char>(pAcc->GetSpan());
+      buf.write(span.data(), span.size());
       buf << "\r\nendstream";
       break;
     }

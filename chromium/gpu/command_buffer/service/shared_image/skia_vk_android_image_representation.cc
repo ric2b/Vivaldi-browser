@@ -28,6 +28,7 @@
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/MutableTextureState.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gl/gl_utils.h"
 
@@ -236,12 +237,12 @@ bool SkiaVkAndroidImageRepresentation::BeginAccess(
   }
 
   if (begin_access_semaphore_ != VK_NULL_HANDLE) {
-    begin_semaphores->emplace_back();
-    begin_semaphores->back().initVulkan(begin_access_semaphore_);
+    begin_semaphores->emplace_back(
+        GrBackendSemaphores::MakeVk(begin_access_semaphore_));
   }
   if (end_semaphores) {
-    end_semaphores->emplace_back();
-    end_semaphores->back().initVulkan(end_access_semaphore_);
+    end_semaphores->emplace_back(
+        GrBackendSemaphores::MakeVk(end_access_semaphore_));
   }
 
   mode_ = readonly ? RepresentationAccessMode::kRead
@@ -293,7 +294,8 @@ SkiaVkAndroidImageRepresentation::GetEndAccessState() {
 
   const uint32_t kSingleDeviceUsage =
       SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_DISPLAY_WRITE |
-      SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
+      SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+      SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
 
   // If SharedImage is used outside of current VkDeviceQueue we need to transfer
   // image back to it's original queue. Note, that for multithreading we use

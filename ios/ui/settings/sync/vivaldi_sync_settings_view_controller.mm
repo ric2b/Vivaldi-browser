@@ -17,10 +17,6 @@
 #import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @implementation VivaldiSyncSettingsViewController
 
 - (instancetype)initWithStyle:(UITableViewStyle)style {
@@ -97,6 +93,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(bookmarksSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncSettingsSwitch: {
@@ -105,6 +103,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(settingsSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncPasswordsSwitch: {
@@ -113,6 +113,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(passwordsSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncAutofillSwitch: {
@@ -121,6 +123,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(autofillSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncTabsSwitch: {
@@ -129,6 +133,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(tabsSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncHistorySwitch: {
@@ -137,6 +143,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(historySwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncReadingListSwitch: {
@@ -145,6 +153,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(readingListSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeSyncNotesSwitch: {
@@ -153,6 +163,8 @@
       [switchCell.switchView addTarget:self
                               action:@selector(notesSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
+      switchCell.switchView.on =
+          [self.serviceDelegate getSyncStatusFor:itemType];
       break;
     }
     case ItemTypeStartSyncingButton: {

@@ -6,11 +6,11 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "ash/system/privacy_hub/privacy_hub_controller.h"
-#include "base/containers/fixed_flat_map.h"
 #include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
+#include "chrome/browser/ash/policy/handlers/device_dlc_predownload_list_policy_handler.h"
 #include "chrome/browser/ash/policy/off_hours/off_hours_proto_parser.h"
 #include "chrome/browser/ash/tpm_firmware_update.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -33,7 +34,6 @@
 #include "components/policy/core/common/schema.h"
 #include "components/policy/policy_constants.h"
 #include "components/strings/grit/components_strings.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -61,7 +61,7 @@ void SetJsonDevicePolicy(
     std::unique_ptr<ExternalDataFetcher> external_data_fetcher,
     PolicyMap* policies) {
   std::string error;
-  absl::optional<base::Value> decoded_json =
+  std::optional<base::Value> decoded_json =
       DecodeJsonStringAndNormalize(json_string, policy_name, &error);
   base::Value value_to_set = decoded_json.has_value()
                                  ? std::move(decoded_json.value())
@@ -76,30 +76,20 @@ void SetJsonDevicePolicy(
   }
 }
 
-base::Value::List ProtoToList(const RepeatedPtrField<std::string>& strings) {
-  base::Value::List result = base::Value::List::with_capacity(strings.size());
-  for (const auto& value : strings) {
-    result.Append(value);
-  }
-  return result;
-}
-
 void SetDeviceDlcPredownloadListPolicy(
     const RepeatedPtrField<std::string>& raw_policy_value,
     PolicyMap* policies) {
-  std::string error;
-  absl::optional<base::Value::List> decoded_dlc_list =
-      DecodeDeviceDlcPredownloadListPolicy(raw_policy_value, &error);
-  base::Value::List value_to_set = decoded_dlc_list.has_value()
-                                       ? std::move(decoded_dlc_list.value())
-                                       : ProtoToList(raw_policy_value);
+  std::string warning;
+  base::Value::List decoded_dlc_list =
+      policy::DeviceDlcPredownloadListPolicyHandler::
+          DecodeDeviceDlcPredownloadListPolicy(raw_policy_value, warning);
   policies->Set(key::kDeviceDlcPredownloadList, POLICY_LEVEL_MANDATORY,
                 POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                base::Value(std::move(value_to_set)), nullptr);
-  if (!error.empty()) {
+                base::Value(std::move(decoded_dlc_list)), nullptr);
+  if (!warning.empty()) {
     policies->AddMessage(
-        key::kDeviceDlcPredownloadList, PolicyMap::MessageType::kError,
-        IDS_POLICY_PROTO_PARSING_ERROR, {base::UTF8ToUTF16(error)});
+        key::kDeviceDlcPredownloadList, PolicyMap::MessageType::kWarning,
+        IDS_POLICY_PROTO_PARSING_ERROR, {base::UTF8ToUTF16(warning)});
   }
 }
 
@@ -820,19 +810,6 @@ void DecodeNetworkPolicies(const em::ChromeDeviceSettingsProto& policy,
                   base::Value(hostname), nullptr);
   }
 
-  if (policy.has_device_kerberos_encryption_types()) {
-    const em::DeviceKerberosEncryptionTypesProto& container(
-        policy.device_kerberos_encryption_types());
-    if (container.has_types()) {
-      std::unique_ptr<base::Value> value(DecodeIntegerValue(container.types()));
-      if (value) {
-        policies->Set(key::kDeviceKerberosEncryptionTypes,
-                      POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-                      POLICY_SOURCE_CLOUD, std::move(*value), nullptr);
-      }
-    }
-  }
-
   if (policy.has_system_proxy_settings()) {
     const em::SystemProxySettingsProto& settings_proto(
         policy.system_proxy_settings());
@@ -1244,6 +1221,17 @@ void DecodeAutoUpdatePolicies(const em::ChromeDeviceSettingsProto& policy,
       SetJsonDevicePolicy(key::kDeviceScheduledUpdateCheck,
                           container.device_scheduled_update_check_settings(),
                           policies);
+    }
+  }
+
+  if (policy.has_deviceextendedautoupdateenabled()) {
+    const em::BooleanPolicyProto& container(
+        policy.deviceextendedautoupdateenabled());
+    if (container.has_value()) {
+      policies->Set(key::kDeviceExtendedAutoUpdateEnabled,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD, base::Value(container.value()),
+                    nullptr);
     }
   }
 }
@@ -1685,13 +1673,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
   }
 
   if (policy.has_attestation_settings()) {
-    if (policy.attestation_settings().has_attestation_enabled()) {
-      policies->Set(
-          key::kAttestationEnabledForDevice, POLICY_LEVEL_MANDATORY,
-          POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-          base::Value(policy.attestation_settings().attestation_enabled()),
-          nullptr);
-    }
     if (policy.attestation_settings().has_content_protection_enabled()) {
       policies->Set(
           key::kAttestationForContentProtectionEnabled, POLICY_LEVEL_MANDATORY,
@@ -1897,19 +1878,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
-  if (policy.has_device_user_policy_loopback_processing_mode()) {
-    const em::DeviceUserPolicyLoopbackProcessingModeProto& container(
-        policy.device_user_policy_loopback_processing_mode());
-    if (container.has_mode()) {
-      std::unique_ptr<base::Value> value(DecodeIntegerValue(container.mode()));
-      if (value) {
-        policies->Set(key::kDeviceUserPolicyLoopbackProcessingMode,
-                      POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-                      POLICY_SOURCE_CLOUD, std::move(*value), nullptr);
-      }
-    }
-  }
-
   if (policy.has_virtual_machines_allowed()) {
     const em::VirtualMachinesAllowedProto& container(
         policy.virtual_machines_allowed());
@@ -1917,59 +1885,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
       policies->Set(key::kVirtualMachinesAllowed, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                     base::Value(container.virtual_machines_allowed()), nullptr);
-    }
-  }
-
-  if (policy.has_device_machine_password_change_rate()) {
-    const em::DeviceMachinePasswordChangeRateProto& container(
-        policy.device_machine_password_change_rate());
-    if (container.has_rate_days()) {
-      std::unique_ptr<base::Value> value(
-          DecodeIntegerValue(container.rate_days()));
-      if (value) {
-        policies->Set(key::kDeviceMachinePasswordChangeRate,
-                      POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-                      POLICY_SOURCE_CLOUD, std::move(*value), nullptr);
-      }
-    }
-  }
-
-  if (policy.has_device_gpo_cache_lifetime()) {
-    const em::DeviceGpoCacheLifetimeProto& container(
-        policy.device_gpo_cache_lifetime());
-    if (container.has_lifetime_hours()) {
-      std::unique_ptr<base::Value> value(
-          DecodeIntegerValue(container.lifetime_hours()));
-      if (value) {
-        policies->Set(key::kDeviceGpoCacheLifetime, POLICY_LEVEL_MANDATORY,
-                      POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                      std::move(*value), nullptr);
-      }
-    }
-  }
-
-  if (policy.has_device_auth_data_cache_lifetime()) {
-    const em::DeviceAuthDataCacheLifetimeProto& container(
-        policy.device_auth_data_cache_lifetime());
-    if (container.has_lifetime_hours()) {
-      std::unique_ptr<base::Value> value(
-          DecodeIntegerValue(container.lifetime_hours()));
-      if (value) {
-        policies->Set(key::kDeviceAuthDataCacheLifetime, POLICY_LEVEL_MANDATORY,
-                      POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                      std::move(*value), nullptr);
-      }
-    }
-  }
-
-  if (policy.has_chromad_to_cloud_migration_enabled()) {
-    const em::BooleanPolicyProto& container(
-        policy.chromad_to_cloud_migration_enabled());
-    if (container.has_value()) {
-      policies->Set(key::kChromadToCloudMigrationEnabled,
-                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-                    POLICY_SOURCE_CLOUD, base::Value(container.value()),
-                    nullptr);
     }
   }
 
@@ -2346,11 +2261,32 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                     nullptr);
     }
   }
+
+  if (policy.has_devicehardwarevideodecodingenabled()) {
+    const em::BooleanPolicyProto& container(
+        policy.devicehardwarevideodecodingenabled());
+    if (container.has_value()) {
+      policies->Set(key::kDeviceHardwareVideoDecodingEnabled,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                    POLICY_SOURCE_CLOUD, base::Value(container.value()),
+                    nullptr);
+    }
+  }
+
+  if (policy.has_deviceloginscreentouchvirtualkeyboardenabled()) {
+    if (const em::BooleanPolicyProto &
+            container(policy.deviceloginscreentouchvirtualkeyboardenabled());
+        container.has_value()) {
+      policies->Set(key::kTouchVirtualKeyboardEnabled, POLICY_LEVEL_MANDATORY,
+                    POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                    base::Value(container.value()), nullptr);
+    }
+  }
 }
 
 }  // namespace
 
-absl::optional<base::Value> DecodeJsonStringAndNormalize(
+std::optional<base::Value> DecodeJsonStringAndNormalize(
     const std::string& json_string,
     const std::string& policy_name,
     std::string* error) {
@@ -2358,7 +2294,7 @@ absl::optional<base::Value> DecodeJsonStringAndNormalize(
       json_string, base::JSON_ALLOW_TRAILING_COMMAS);
   if (!value_with_error.has_value()) {
     *error = "Invalid JSON string: " + value_with_error.error().message;
-    return absl::nullopt;
+    return std::nullopt;
   }
   base::Value root = std::move(*value_with_error);
 
@@ -2377,7 +2313,7 @@ absl::optional<base::Value> DecodeJsonStringAndNormalize(
                 : policy::ErrorPathToString(policy_name, error_path))
         << ")";
     *error = msg.str();
-    return absl::nullopt;
+    return std::nullopt;
   }
   if (changed) {
     std::ostringstream msg;
@@ -2390,34 +2326,6 @@ absl::optional<base::Value> DecodeJsonStringAndNormalize(
   }
 
   return root;
-}
-
-// TODO (b/297008279): move this function to the class that will manage pre
-// downloading DLCs.
-absl::optional<base::Value::List> DecodeDeviceDlcPredownloadListPolicy(
-    const RepeatedPtrField<std::string>& raw_policy_value,
-    std::string* error) {
-  constexpr auto policy_value_to_dlc_id =
-      base::MakeFixedFlatMap<absl::string_view, absl::string_view>(
-          {{"scanner_drivers", "sane-backends-extras-dlc"}});
-
-  base::Value::List dlcs_to_predownload =
-      base::Value::List::with_capacity(raw_policy_value.size());
-  for (const auto& dlc_to_predownload : raw_policy_value) {
-    // TODO (b/297008279): handle case when there is an invalid value. In this
-    // case we should return an info message and skip this particular DLC
-    // without failing.
-    if (policy_value_to_dlc_id.contains(dlc_to_predownload)) {
-      const absl::string_view& dlc_id =
-          policy_value_to_dlc_id.at(dlc_to_predownload);
-      if (!base::Contains(dlcs_to_predownload, dlc_id)) {
-        // Silently ignore duplicate values.
-        dlcs_to_predownload.Append(dlc_id);
-      }
-    }
-  }
-
-  return dlcs_to_predownload;
 }
 
 void DecodeDevicePolicy(

@@ -28,6 +28,8 @@ namespace ash {
 
 namespace {
 
+const char kRedactedButtonName[] = "REDACTED";
+
 std::string HexEncode(uint16_t v) {
   // Load the bytes into the bytes array in reverse order as hex number should
   // be read from left to right.
@@ -46,12 +48,55 @@ bool ExistingSettingsHasValue(base::StringPiece setting_key,
   return existing_settings_dict->Find(setting_key) != nullptr;
 }
 
-}  // namespace
-
-constexpr bool VendorProductId::operator<(const VendorProductId& other) const {
-  return vendor_id == other.vendor_id ? product_id < other.product_id
-                                      : vendor_id < other.vendor_id;
+bool IsAlphaKeyboardCode(ui::KeyboardCode key_code) {
+  return key_code >= ui::VKEY_A && key_code <= ui::VKEY_Z;
 }
+
+bool IsNumberKeyboardCode(ui::KeyboardCode key_code) {
+  return key_code >= ui::VKEY_0 && key_code <= ui::VKEY_9;
+}
+
+// Verify if the customization restriction blocks the button remapping.
+// Block button remapping in the following cases:
+// 1. Customization restriction is kAllowCustomizations.
+// 2. Customization restriction is kDisableKeyEventRewrites and button is not
+// a keyboard key.
+// 3. Customization restriction is kAllowAlphabetKeyEventRewrites and button
+// is a mouse button or alphabet keyboard key.
+// 4. Customization restriction is kAllowAlphabetOrNumberKeyEventRewrites and
+// button is a mouse button or alphabet or number keyboard key.
+// In other cases, block button remapping.
+bool RestrictionBlocksRemapping(
+    const mojom::ButtonRemapping& remapping,
+    mojom::CustomizationRestriction customization_restriction) {
+  switch (customization_restriction) {
+    case mojom::CustomizationRestriction::kAllowCustomizations:
+      return false;
+    case mojom::CustomizationRestriction::kDisallowCustomizations:
+      return true;
+    case mojom::CustomizationRestriction::kDisableKeyEventRewrites:
+      if (remapping.button->is_vkey()) {
+        return true;
+      }
+      return false;
+    case mojom::CustomizationRestriction::kAllowAlphabetKeyEventRewrites:
+      if (remapping.button->is_vkey() &&
+          !IsAlphaKeyboardCode(remapping.button->get_vkey())) {
+        return true;
+      }
+      return false;
+    case mojom::CustomizationRestriction::
+        kAllowAlphabetOrNumberKeyEventRewrites:
+      if (remapping.button->is_vkey() &&
+          !IsAlphaKeyboardCode(remapping.button->get_vkey()) &&
+          !IsNumberKeyboardCode(remapping.button->get_vkey())) {
+        return true;
+      }
+      return false;
+  }
+}
+
+}  // namespace
 
 bool VendorProductId::operator==(const VendorProductId& other) const {
   return vendor_id == other.vendor_id && product_id == other.product_id;
@@ -106,7 +151,7 @@ bool ShouldPersistSetting(const mojom::InputDeviceSettingsPolicyPtr& policy,
 bool ShouldPersistFkeySetting(
     const mojom::InputDeviceSettingsFkeyPolicyPtr& policy,
     base::StringPiece setting_key,
-    absl::optional<ui::mojom::ExtendedFkeysModifier> new_value,
+    std::optional<ui::mojom::ExtendedFkeysModifier> new_value,
     ui::mojom::ExtendedFkeysModifier default_value,
     const base::Value::Dict* existing_settings_dict) {
   if (!new_value.has_value()) {
@@ -166,15 +211,6 @@ const base::Value::List* GetLoginScreenButtonRemappingList(
   return &list_value->GetList();
 }
 
-bool IsMouseCustomizable(const ui::InputDevice& device) {
-  // TODO(wangdanny): Update uncustomizable mice set with devices' vid and pid.
-  static constexpr auto kUncustomizableMice =
-      base::MakeFixedFlatSet<VendorProductId>({
-          {0xffff, 0xffff},  // Fake data for testing.
-      });
-  return !kUncustomizableMice.contains({device.vendor_id, device.product_id});
-}
-
 bool IsKeyboardPretendingToBeMouse(const ui::InputDevice& device) {
   static base::NoDestructor<base::flat_set<VendorProductId>> logged_devices;
   static constexpr auto kKeyboardsPretendingToBeMice =
@@ -218,6 +254,7 @@ bool IsKeyboardPretendingToBeMouse(const ui::InputDevice& device) {
           {0x3434, 0x0311},  // Keychron V1
           {0x3496, 0x0006},  // Keyboardio Model 100
           {0x4c44, 0x0040},  // LazyDesigners Dimple
+          {0x594d, 0x4409},  // YMDK YMD09
           {0xfeed, 0x1307},  // ErgoDox EZ
       });
 
@@ -239,18 +276,16 @@ bool IsKeyboardPretendingToBeMouse(const ui::InputDevice& device) {
 
 base::Value::Dict ConvertButtonRemappingToDict(
     const mojom::ButtonRemapping& remapping,
-    mojom::CustomizationRestriction customization_restriction) {
+    mojom::CustomizationRestriction customization_restriction,
+    bool redact_button_names) {
   base::Value::Dict dict;
 
-  if (customization_restriction ==
-          mojom::CustomizationRestriction::kDisallowCustomizations ||
-      (remapping.button->is_vkey() &&
-       customization_restriction ==
-           mojom::CustomizationRestriction::kDisableKeyEventRewrites)) {
+  if (RestrictionBlocksRemapping(remapping, customization_restriction)) {
     return dict;
   }
 
-  dict.Set(prefs::kButtonRemappingName, remapping.name);
+  dict.Set(prefs::kButtonRemappingName,
+           redact_button_names ? kRedactedButtonName : remapping.name);
   if (remapping.button->is_customizable_button()) {
     dict.Set(prefs::kButtonRemappingCustomizableButton,
              static_cast<int>(remapping.button->get_customizable_button()));
@@ -292,11 +327,12 @@ base::Value::Dict ConvertButtonRemappingToDict(
 
 base::Value::List ConvertButtonRemappingArrayToList(
     const std::vector<mojom::ButtonRemappingPtr>& remappings,
-    mojom::CustomizationRestriction customization_restriction) {
+    mojom::CustomizationRestriction customization_restriction,
+    bool redact_button_names) {
   base::Value::List list;
   for (const auto& remapping : remappings) {
-    base::Value::Dict dict =
-        ConvertButtonRemappingToDict(*remapping, customization_restriction);
+    base::Value::Dict dict = ConvertButtonRemappingToDict(
+        *remapping, customization_restriction, redact_button_names);
     // Remove empty dicts.
     if (dict.empty()) {
       continue;
@@ -340,9 +376,9 @@ mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
 
   // button is a union.
   mojom::ButtonPtr button;
-  const absl::optional<int> customizable_button =
+  const std::optional<int> customizable_button =
       dict.FindInt(prefs::kButtonRemappingCustomizableButton);
-  const absl::optional<int> key_code =
+  const std::optional<int> key_code =
       dict.FindInt(prefs::kButtonRemappingKeyboardCode);
   // Button can't be both a keyboard key and a customization button.
   if (customizable_button && key_code) {
@@ -370,9 +406,9 @@ mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
   mojom::RemappingActionPtr remapping_action;
   const base::Value::Dict* key_event =
       dict.FindDict(prefs::kButtonRemappingKeyEvent);
-  const absl::optional<int> accelerator_action =
+  const std::optional<int> accelerator_action =
       dict.FindInt(prefs::kButtonRemappingAcceleratorAction);
-  const absl::optional<int> static_shortcut_action =
+  const std::optional<int> static_shortcut_action =
       dict.FindInt(prefs::kButtonRemappingStaticShortcutAction);
   // Remapping action can only have one value at most.
   if ((key_event && accelerator_action) ||
@@ -383,13 +419,13 @@ mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
   // Remapping action can be either a keyboard event or an accelerator action
   // or static shortcut action or null.
   if (key_event) {
-    const absl::optional<int> dom_code =
+    const std::optional<int> dom_code =
         key_event->FindInt(prefs::kButtonRemappingDomCode);
-    const absl::optional<int> vkey =
+    const std::optional<int> vkey =
         key_event->FindInt(prefs::kButtonRemappingKeyboardCode);
-    const absl::optional<int> dom_key =
+    const std::optional<int> dom_key =
         key_event->FindInt(prefs::kButtonRemappingDomKey);
-    const absl::optional<int> modifiers =
+    const std::optional<int> modifiers =
         key_event->FindInt(prefs::kButtonRemappingModifiers);
     if (!dom_code || !vkey || !dom_key || !modifiers) {
       return nullptr;

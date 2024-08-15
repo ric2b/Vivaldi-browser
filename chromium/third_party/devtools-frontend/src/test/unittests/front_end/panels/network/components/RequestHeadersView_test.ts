@@ -4,7 +4,6 @@
 
 import * as Common from '../../../../../../front_end/core/common/common.js';
 import * as Host from '../../../../../../front_end/core/host/host.js';
-import * as Root from '../../../../../../front_end/core/root/root.js';
 import * as SDK from '../../../../../../front_end/core/sdk/sdk.js';
 import * as Protocol from '../../../../../../front_end/generated/protocol.js';
 import * as Persistence from '../../../../../../front_end/models/persistence/persistence.js';
@@ -108,7 +107,6 @@ describeWithMockConnection('RequestHeadersView', () => {
   let component: NetworkComponents.RequestHeadersView.RequestHeadersView|null|undefined = null;
 
   beforeEach(() => {
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.HEADER_OVERRIDES);
     setUpEnvironment();
     resetRecordedMetrics();
   });
@@ -200,6 +198,7 @@ describeWithMockConnection('RequestHeadersView', () => {
 
     // Switch to viewing source view
     responseHeadersCategory.dispatchEvent(new NetworkComponents.RequestHeadersView.ToggleRawHeadersEvent());
+    await coordinator.done();
 
     const rawHeadersDiv = responseHeadersCategory.querySelector('.raw-headers');
     assertElement(rawHeadersDiv, HTMLDivElement);
@@ -235,6 +234,7 @@ describeWithMockConnection('RequestHeadersView', () => {
 
     // Switch to viewing source view
     responseHeadersCategory.dispatchEvent(new NetworkComponents.RequestHeadersView.ToggleRawHeadersEvent());
+    await coordinator.done();
 
     const rawHeadersDiv = responseHeadersCategory.querySelector('.raw-headers');
     assertElement(rawHeadersDiv, HTMLDivElement);
@@ -245,6 +245,8 @@ describeWithMockConnection('RequestHeadersView', () => {
     assertElement(showMoreButton, HTMLElement);
     assert.strictEqual(showMoreButton.textContent, 'Show more');
     showMoreButton.click();
+    await coordinator.done();
+
     const noMoreShowMoreButton = responseHeadersCategory.querySelector('devtools-button');
     assert.isNull(noMoreShowMoreButton);
 

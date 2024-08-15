@@ -744,6 +744,9 @@ if (vpx_config("CONFIG_ENCODERS") eq "yes") {
 add_proto qw/void vpx_subtract_block/, "int rows, int cols, int16_t *diff_ptr, ptrdiff_t diff_stride, const uint8_t *src_ptr, ptrdiff_t src_stride, const uint8_t *pred_ptr, ptrdiff_t pred_stride";
 specialize qw/vpx_subtract_block neon msa mmi sse2 avx2 vsx lsx/;
 
+add_proto qw/int64_t/, "vpx_sse", "const uint8_t *src, int src_stride, const uint8_t *ref, int ref_stride, int width, int height";
+specialize qw/vpx_sse sse4_1 avx2 neon neon_dotprod/;
+
 #
 # Single block SAD
 #
@@ -1025,6 +1028,9 @@ if (vpx_config("CONFIG_VP9_HIGHBITDEPTH") eq "yes") {
   #
   add_proto qw/void vpx_highbd_subtract_block/, "int rows, int cols, int16_t *diff_ptr, ptrdiff_t diff_stride, const uint8_t *src8_ptr, ptrdiff_t src_stride, const uint8_t *pred8_ptr, ptrdiff_t pred_stride, int bd";
   specialize qw/vpx_highbd_subtract_block neon avx2/;
+
+  add_proto qw/int64_t/, "vpx_highbd_sse", "const uint8_t *a8, int a_stride, const uint8_t *b8,int b_stride, int width, int height";
+  specialize qw/vpx_highbd_sse sse4_1 avx2 neon/;
 
   #
   # Single block SAD
@@ -1534,14 +1540,14 @@ if (vpx_config("CONFIG_VP9_HIGHBITDEPTH") eq "yes") {
   specialize qw/vpx_highbd_12_get8x8var sse2 neon/;
 
   add_proto qw/unsigned int vpx_highbd_8_mse16x16/, "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride, unsigned int *sse";
-  specialize qw/vpx_highbd_8_mse16x16 sse2 neon/;
+  specialize qw/vpx_highbd_8_mse16x16 sse2 neon neon_dotprod/;
 
   add_proto qw/unsigned int vpx_highbd_8_mse16x8/, "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride, unsigned int *sse";
-  specialize qw/vpx_highbd_8_mse16x8 neon/;
+  specialize qw/vpx_highbd_8_mse16x8 neon neon_dotprod/;
   add_proto qw/unsigned int vpx_highbd_8_mse8x16/, "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride, unsigned int *sse";
-  specialize qw/vpx_highbd_8_mse8x16 neon/;
+  specialize qw/vpx_highbd_8_mse8x16 neon neon_dotprod/;
   add_proto qw/unsigned int vpx_highbd_8_mse8x8/, "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride, unsigned int *sse";
-  specialize qw/vpx_highbd_8_mse8x8 sse2 neon/;
+  specialize qw/vpx_highbd_8_mse8x8 sse2 neon neon_dotprod/;
 
   add_proto qw/unsigned int vpx_highbd_10_mse16x16/, "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride, unsigned int *sse";
   specialize qw/vpx_highbd_10_mse16x16 sse2 neon/;

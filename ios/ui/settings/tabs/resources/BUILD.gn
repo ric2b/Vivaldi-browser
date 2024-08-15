@@ -1,0 +1,56 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("resources") {
+  deps = [
+    ":vivaldi_no_tabs_ipad",
+    ":vivaldi_no_tabs_iphone",
+    ":vivaldi_tabs_bottom_ipad",
+    ":vivaldi_tabs_bottom_iphone",
+    ":vivaldi_tabs_top_ipad",
+    ":vivaldi_tabs_top_iphone",
+  ]
+}
+
+imageset("vivaldi_no_tabs_ipad") {
+  sources = [
+    "vivaldi_no_tabs_ipad.imageset/Contents.json",
+    "vivaldi_no_tabs_ipad.imageset/vivaldi_no_tabs_ipad.pdf"
+  ]
+}
+
+imageset("vivaldi_no_tabs_iphone") {
+  sources = [
+    "vivaldi_no_tabs_iphone.imageset/Contents.json",
+    "vivaldi_no_tabs_iphone.imageset/vivaldi_no_tabs_iphone.pdf"
+  ]
+}
+
+imageset("vivaldi_tabs_bottom_ipad") {
+  sources = [
+    "vivaldi_tabs_bottom_ipad.imageset/Contents.json",
+    "vivaldi_tabs_bottom_ipad.imageset/vivaldi_tabs_bottom_ipad.pdf"
+  ]
+}
+
+imageset("vivaldi_tabs_bottom_iphone") {
+  sources = [
+    "vivaldi_tabs_bottom_iphone.imageset/Contents.json",
+    "vivaldi_tabs_bottom_iphone.imageset/vivaldi_tabs_bottom_iphone.pdf"
+  ]
+}
+
+imageset("vivaldi_tabs_top_ipad") {
+  sources = [
+    "vivaldi_tabs_top_ipad.imageset/Contents.json",
+    "vivaldi_tabs_top_ipad.imageset/vivaldi_tabs_top_ipad.pdf"
+  ]
+}
+
+imageset("vivaldi_tabs_top_iphone") {
+  sources = [
+    "vivaldi_tabs_top_iphone.imageset/Contents.json",
+    "vivaldi_tabs_top_iphone.imageset/vivaldi_tabs_top_iphone.pdf"
+  ]
+}

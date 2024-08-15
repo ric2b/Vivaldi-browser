@@ -35,7 +35,7 @@ class SctpUtilsTest : public ::testing::Test {
     uint16_t label_length;
     uint16_t protocol_length;
 
-    rtc::ByteBufferReader buffer(packet.data<char>(), packet.size());
+    rtc::ByteBufferReader buffer(packet);
     ASSERT_TRUE(buffer.ReadUInt8(&message_type));
     EXPECT_EQ(0x03, message_type);
 
@@ -72,11 +72,11 @@ class SctpUtilsTest : public ::testing::Test {
     EXPECT_EQ(label.size(), label_length);
     EXPECT_EQ(config.protocol.size(), protocol_length);
 
-    std::string label_output;
-    ASSERT_TRUE(buffer.ReadString(&label_output, label_length));
+    absl::string_view label_output;
+    ASSERT_TRUE(buffer.ReadStringView(&label_output, label_length));
     EXPECT_EQ(label, label_output);
-    std::string protocol_output;
-    ASSERT_TRUE(buffer.ReadString(&protocol_output, protocol_length));
+    absl::string_view protocol_output;
+    ASSERT_TRUE(buffer.ReadStringView(&protocol_output, protocol_length));
     EXPECT_EQ(config.protocol, protocol_output);
   }
 };
@@ -176,7 +176,7 @@ TEST_F(SctpUtilsTest, WriteParseAckMessage) {
   webrtc::WriteDataChannelOpenAckMessage(&packet);
 
   uint8_t message_type;
-  rtc::ByteBufferReader buffer(packet.data<char>(), packet.size());
+  rtc::ByteBufferReader buffer(packet);
   ASSERT_TRUE(buffer.ReadUInt8(&message_type));
   EXPECT_EQ(0x02, message_type);
 

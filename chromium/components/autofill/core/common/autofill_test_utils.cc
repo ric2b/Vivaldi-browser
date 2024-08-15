@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -312,6 +311,15 @@ FormData CreateTestIbanFormData(std::string_view value) {
   form.url = GURL("https://www.foo.com");
   form.fields = {CreateTestFormField("IBAN Value:", "iban_value", value,
                                      FormControlType::kInputText)};
+  return form;
+}
+
+FormData CreateTestUnclassifiedFormData() {
+  FormData form;
+  form.url = GURL("https://www.foo.com");
+  form.fields = {
+      CreateTestFormField("unclassifiable label", "unclassifiable name",
+                          "unclassifiable value", FormControlType::kInputText)};
   return form;
 }
 

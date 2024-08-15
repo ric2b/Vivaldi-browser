@@ -15,13 +15,13 @@
 import m from 'mithril';
 import {v4 as uuidv4} from 'uuid';
 
-import {Actions} from '../../common/actions';
-import {EngineProxy} from '../../common/engine';
+import {Actions, DeferredAction} from '../../common/actions';
 import {SCROLLING_TRACK_GROUP} from '../../common/state';
 import {BaseCounterTrack} from '../../frontend/base_counter_track';
 import {globals} from '../../frontend/globals';
 import {TrackButton} from '../../frontend/track_panel';
 import {PrimaryTrackSortKey, TrackContext} from '../../public';
+import {EngineProxy} from '../../trace_processor/engine';
 
 import {DEBUG_COUNTER_TRACK_URI} from '.';
 
@@ -34,18 +34,23 @@ export interface CounterColumns {
 export interface CounterDebugTrackConfig {
   sqlTableName: string;
   columns: CounterColumns;
+  closeable: boolean;
 }
 
-export class DebugCounterTrack extends
-    BaseCounterTrack<CounterDebugTrackConfig> {
-  constructor(engine: EngineProxy, trackKey: string) {
+export interface CounterDebugTrackCreateConfig {
+  pinned?: boolean;     // default true
+  closeable?: boolean;  // default true
+}
+
+export class DebugCounterTrack extends BaseCounterTrack {
+  private config: CounterDebugTrackConfig;
+
+  constructor(engine: EngineProxy, ctx: TrackContext) {
     super({
       engine,
-      trackKey,
+      trackKey: ctx.trackKey,
     });
-  }
 
-  onCreate(ctx: TrackContext): void {
     // TODO(stevegolton): Validate params before type asserting.
     // TODO(stevegolton): Avoid just pushing this config up for some base
     // class to use. Be more explicit.
@@ -55,7 +60,7 @@ export class DebugCounterTrack extends
   getTrackShellButtons(): m.Children {
     return [
       this.getCounterContextMenu(),
-      m(TrackButton, {
+      this.config.closeable && m(TrackButton, {
         action: () => {
           globals.dispatch(Actions.removeTracks({trackKeys: [this.trackKey]}));
         },
@@ -66,11 +71,8 @@ export class DebugCounterTrack extends
     ];
   }
 
-  async initSqlTable(tableName: string): Promise<void> {
-    await this.engine.query(`
-      create view ${tableName} as
-      select * from ${this.config.sqlTableName};
-    `);
+  getSqlSource(): string {
+    return `select * from ${this.config.sqlTableName}`;
   }
 }
 
@@ -88,7 +90,8 @@ export async function addDebugCounterTrack(
     engine: EngineProxy,
     data: SqlDataSource,
     trackName: string,
-    columns: CounterColumns) {
+    columns: CounterColumns,
+    config?: CounterDebugTrackCreateConfig) {
   // To prepare displaying the provided data as a track, materialize it and
   // compute depths.
   const debugTrackId = ++debugTrackCount;
@@ -106,8 +109,9 @@ export async function addDebugCounterTrack(
       from data
       order by ts;`);
 
+  const closeable = config?.closeable ?? true;
   const trackKey = uuidv4();
-  globals.dispatchMultiple([
+  const actions: DeferredAction<{}>[] = [
     Actions.addTrack({
       key: trackKey,
       uri: DEBUG_COUNTER_TRACK_URI,
@@ -117,8 +121,12 @@ export async function addDebugCounterTrack(
       params: {
         sqlTableName,
         columns,
+        closeable,
       },
     }),
-    Actions.toggleTrackPinned({trackKey}),
-  ]);
+  ];
+  if (config?.pinned ?? true) {
+    actions.push(Actions.toggleTrackPinned({trackKey}));
+  }
+  globals.dispatchMultiple(actions);
 }

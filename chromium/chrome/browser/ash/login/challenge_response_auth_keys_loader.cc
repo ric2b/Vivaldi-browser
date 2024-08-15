@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/challenge_response_auth_keys_loader.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,7 +39,6 @@
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/process_manager_observer.h"
 #include "extensions/common/manifest_handlers/background_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 namespace {
@@ -121,7 +121,7 @@ std::vector<ChallengeResponseKey::SignatureAlgorithm> MakeAlgorithmListFromSsl(
   std::vector<ChallengeResponseKey::SignatureAlgorithm>
       challenge_response_algorithms;
   for (auto ssl_algorithm : ssl_algorithms) {
-    absl::optional<ChallengeResponseKey::SignatureAlgorithm> algorithm =
+    std::optional<ChallengeResponseKey::SignatureAlgorithm> algorithm =
         GetChallengeResponseKeyAlgorithmFromSsl(ssl_algorithm);
     if (algorithm)
       challenge_response_algorithms.push_back(*algorithm);
@@ -195,8 +195,8 @@ class ExtensionLoadObserver final
     }
 
     // Ensure that the extension's background host is active.
-    const extensions::LazyContextId context_id(browser_context,
-                                               extension->id());
+    const auto context_id =
+        extensions::LazyContextId::ForExtension(browser_context, extension);
     extensions::LazyContextTaskQueue* queue = context_id.GetTaskQueue();
     if (!queue->ShouldEnqueueTask(browser_context, extension)) {
       // The background host already exists.

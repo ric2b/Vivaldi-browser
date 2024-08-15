@@ -5,6 +5,7 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkData.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkFontArguments.h"
 #include "include/core/SkFontMetrics.h"
@@ -17,25 +18,27 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkStream.h"
+#include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
+#include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkMutex.h"
 #include "include/private/base/SkTArray.h"
-#include "include/private/base/SkTFitsIn.h"
+#include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "include/private/base/SkTypeTraits.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/skunicode/include/SkUnicode.h"
-#include "src/base/SkBitmaskEnum.h"
 #include "src/base/SkTDPQueue.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkLRUCache.h"
 
-#include <hb.h>
 #include <hb-ot.h>
+#include <hb.h>
+
+#include <cstdint>
 #include <cstring>
-#include <locale>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -50,10 +53,6 @@ using namespace skia_private;
 #if !defined(HB_FEATURE_GLOBAL_END)
 # define HB_FEATURE_GLOBAL_END ((unsigned int) -1)
 #endif
-
-namespace sknonstd {
-template <> struct is_bitmask_enum<hb_buffer_flags_t> : std::true_type {};
-}  // namespace sknonstd
 
 namespace {
 using HBBlob   = std::unique_ptr<hb_blob_t  , SkFunctionObject<hb_blob_destroy>  >;
@@ -246,7 +245,7 @@ HBBlob stream_to_blob(std::unique_ptr<SkStreamAsset> asset) {
     size_t size = asset->getLength();
     HBBlob blob;
     if (const void* base = asset->getMemoryBase()) {
-        blob.reset(hb_blob_create((char*)base, SkToUInt(size),
+        blob.reset(hb_blob_create((const char*)base, SkToUInt(size),
                                   HB_MEMORY_MODE_READONLY, asset.release(),
                                   [](void* p) { delete (SkStreamAsset*)p; }));
     } else {
@@ -635,7 +634,7 @@ protected:
                     const FontRunIterator&,
                     const Feature*, size_t featuresSize) const;
 private:
-    const sk_sp<SkFontMgr> fFontMgr;
+    const sk_sp<SkFontMgr> fFontMgr; // for fallback
     HBBuffer               fBuffer;
     hb_language_t          fUndefinedLanguage;
 
@@ -718,7 +717,7 @@ private:
               RunHandler*) const override;
 };
 
-static std::unique_ptr<SkShaper> MakeHarfBuzz(sk_sp<SkFontMgr> fontmgr, bool correct) {
+static std::unique_ptr<SkShaper> MakeHarfBuzz(sk_sp<SkFontMgr> fallback, bool correct) {
     HBBuffer buffer(hb_buffer_create());
     if (!buffer) {
         SkDEBUGF("Could not create hb_buffer");
@@ -733,22 +732,21 @@ static std::unique_ptr<SkShaper> MakeHarfBuzz(sk_sp<SkFontMgr> fontmgr, bool cor
     if (correct) {
         return std::make_unique<ShaperDrivenWrapper>(std::move(unicode),
                                                      std::move(buffer),
-                                                     std::move(fontmgr));
-    } else {
-        return std::make_unique<ShapeThenWrap>(std::move(unicode),
-                                               std::move(buffer),
-                                               std::move(fontmgr));
+                                                     std::move(fallback));
     }
+    return std::make_unique<ShapeThenWrap>(std::move(unicode),
+                                           std::move(buffer),
+                                           std::move(fallback));
 }
 
 ShaperHarfBuzz::ShaperHarfBuzz(std::unique_ptr<SkUnicode> unicode,
                                HBBuffer buffer,
-                               sk_sp<SkFontMgr> fontmgr)
+                               sk_sp<SkFontMgr> fallback)
     : fUnicode(std::move(unicode))
-    , fFontMgr(std::move(fontmgr))
+    , fFontMgr(fallback ? std::move(fallback) : SkFontMgr::RefEmpty())
     , fBuffer(std::move(buffer))
-    , fUndefinedLanguage(hb_language_from_string("und", -1))
-{ }
+    , fUndefinedLanguage(hb_language_from_string("und", -1)) {
+}
 
 void ShaperHarfBuzz::shape(const char* utf8, size_t utf8Bytes,
                            const SkFont& srcFont,
@@ -777,8 +775,7 @@ void ShaperHarfBuzz::shape(const char* utf8, size_t utf8Bytes,
     }
 
     std::unique_ptr<FontRunIterator> font(
-                MakeFontMgrRunIterator(utf8, utf8Bytes, srcFont,
-                                       fFontMgr ? fFontMgr : SkFontMgr::RefDefault()));
+                MakeFontMgrRunIterator(utf8, utf8Bytes, srcFont, fFontMgr));
     if (!font) {
         return;
     }

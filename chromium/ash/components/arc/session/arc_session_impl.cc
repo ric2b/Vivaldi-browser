@@ -15,6 +15,7 @@
 #include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_host_impl.h"
+#include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
@@ -123,6 +124,32 @@ void ApplyDalvikMemoryProfile(
           << (mem_info.total / 1024) << "Mb device.";
 }
 
+void ApplyHostUreadaheadMode(StartParams* params) {
+  // Check if deprecated flags are in use, override later if necessary
+  const arc::ArcUreadaheadMode mode =
+      arc::GetArcUreadaheadMode(ash::switches::kArcHostUreadaheadMode);
+  switch (mode) {
+    case arc::ArcUreadaheadMode::READAHEAD: {
+      params->host_ureadahead_mode =
+          StartParams::HostUreadaheadMode::MODE_READAHEAD;
+      break;
+    }
+    case arc::ArcUreadaheadMode::GENERATE: {
+      params->host_ureadahead_mode =
+          StartParams::HostUreadaheadMode::MODE_GENERATE;
+      break;
+    }
+    case arc::ArcUreadaheadMode::DISABLED: {
+      params->host_ureadahead_mode =
+          StartParams::HostUreadaheadMode::MODE_DISABLED;
+      break;
+    }
+    default: {
+      NOTREACHED_NORETURN();
+    }
+  }
+}
+
 void ApplyDisableDownloadProvider(StartParams* params) {
   params->disable_download_provider =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -181,7 +208,7 @@ class ArcSessionDelegateImpl : public ArcSessionImpl::Delegate {
                        mojo::ScopedMessagePipeHandle server_pipe);
 
   // Owned by ArcServiceManager.
-  const raw_ptr<ArcBridgeService, ExperimentalAsh> arc_bridge_service_;
+  const raw_ptr<ArcBridgeService> arc_bridge_service_;
 
   const version_info::Channel channel_;
 
@@ -445,6 +472,7 @@ void ArcSessionImpl::DoStartMiniInstance(size_t num_cores_disabled) {
       base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub);
   params.arc_switch_to_keymint = ShouldUseArcKeyMint();
   params.use_virtio_blk_data = use_virtio_blk_data_;
+  params.arc_signed_in = arc_signed_in_;
 
   // TODO (b/196460968): Remove after CTS run is complete.
   if (params.enable_notifications_refresh) {
@@ -482,13 +510,15 @@ void ArcSessionImpl::DoStartMiniInstance(size_t num_cores_disabled) {
 
   VLOG(1) << "Starting ARC mini instance with lcd_density="
           << params.lcd_density
-          << ", num_cores_disabled=" << params.num_cores_disabled;
+          << ", num_cores_disabled=" << params.num_cores_disabled
+          << ", arc_signed_in=" << params.arc_signed_in;
 
   ApplyDalvikMemoryProfile(system_memory_info_callback_, &params);
   ApplyDisableDownloadProvider(&params);
   ApplyDisableUreadahed(&params);
   ApplyHostUreadahedGeneration(&params);
   ApplyUseDevCaches(&params);
+  ApplyHostUreadaheadMode(&params);
 
   client_->StartMiniArc(std::move(params),
                         base::BindOnce(&ArcSessionImpl::OnMiniInstanceStarted,
@@ -566,7 +596,7 @@ void ArcSessionImpl::DoUpgrade() {
                                              weak_factory_.GetWeakPtr()));
 }
 
-void ArcSessionImpl::OnFreeDiskSpace(absl::optional<int64_t> space) {
+void ArcSessionImpl::OnFreeDiskSpace(std::optional<int64_t> space) {
   // Ensure there's sufficient space on disk for the container.
   if (!space.has_value()) {
     LOG(ERROR) << "Could not determine free disk space";
@@ -846,6 +876,10 @@ void ArcSessionImpl::SetDefaultDeviceScaleFactor(float scale_factor) {
 
 void ArcSessionImpl::SetUseVirtioBlkData(bool use_virtio_blk_data) {
   use_virtio_blk_data_ = use_virtio_blk_data;
+}
+
+void ArcSessionImpl::SetArcSignedIn(bool arc_signed_in) {
+  arc_signed_in_ = arc_signed_in;
 }
 
 void ArcSessionImpl::OnConfigurationSet(bool success,

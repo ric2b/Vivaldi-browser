@@ -20,9 +20,7 @@ import org.chromium.url.GURL;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
-/**
- * Monitor changes that indicate a theme color change may be needed from tab contents.
- */
+/** Monitor changes that indicate a theme color change may be needed from tab contents. */
 public class TabThemeColorHelper extends EmptyTabObserver {
     private final Tab mTab;
     private final Callback mUpdateCallback;
@@ -43,9 +41,7 @@ public class TabThemeColorHelper extends EmptyTabObserver {
                 .registerOnSharedPreferenceChangeListener(mPrefsListener);
     }
 
-    /**
-     * Notifies the listeners of the tab theme color change.
-     */
+    /** Notifies the listeners of the tab theme color change. */
     private void updateIfNeeded(Tab tab, boolean didWebContentsThemeColorChange) {
         // Note(david@vivaldi.com): Calculating the actual theme colour here and don't bother what
         // Chromium is doing.

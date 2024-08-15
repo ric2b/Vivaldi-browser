@@ -6,79 +6,107 @@
 #define COMPONENTS_USER_EDUCATION_COMMON_FEATURE_PROMO_SESSION_POLICY_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/time/time.h"
+#include "components/user_education/common/feature_promo_data.h"
 #include "components/user_education/common/feature_promo_result.h"
-#include "components/user_education/common/feature_promo_session_manager.h"
-#include "components/user_education/common/feature_promo_specification.h"
-#include "components/user_education/common/feature_promo_storage_service.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace user_education {
 
-// Describes how IPH interact with each other inside the same session.
+class FeaturePromoSessionManager;
+class FeaturePromoSpecification;
+class FeaturePromoStorageService;
+
+namespace test {
+class FeaturePromoSessionTestUtil;
+}
+
+// Policy that defines how promos are allowed or disallowed due to the state of
+// the current session.
 class FeaturePromoSessionPolicy {
  public:
+  // Describes whether the promotion is heavyweight (comparable to a non-toast
+  // IPH in interactivity).
+  enum class PromoWeight { kLight, kHeavy };
+
+  // Describes wehter the promotion is high-priority, such as a mandatory
+  // legal or privacy notice.
+  enum class PromoPriority { kLow, kMedium, kHigh };
+
+  // Information about a promo that is either being shown or is trying to show.
+  struct PromoInfo {
+    PromoWeight weight = PromoWeight::kLight;
+    PromoPriority priority = PromoPriority::kLow;
+  };
+
+  // Create a new policy which stores its state in `storage_service` and which
+  // uses `session_manager` to determine the state of the current session.
   FeaturePromoSessionPolicy();
-  virtual ~FeaturePromoSessionPolicy();
   FeaturePromoSessionPolicy(const FeaturePromoSessionPolicy&) = delete;
   void operator=(const FeaturePromoSessionPolicy&) = delete;
+  virtual ~FeaturePromoSessionPolicy();
 
-  // Determines whether a promo can be displayed based on the current session
-  // state. Returns FeaturePromoResult::Success() if the promo is not blocked
-  // by session policy, or a specific failure type if it is blocked.
+  // Sets up the policy with its storage service.
+  virtual void Init(const FeaturePromoSessionManager* session_manager,
+                    FeaturePromoStorageService* storage_service);
+
+  // Indicates that a promo is being shown. Value must not be `NoPromo`.
+  virtual void NotifyPromoShown(const PromoInfo& promo_shown);
+
+  // Indicates that a promo has been dismissed. Value must not be `NoPromo`.
+  virtual void NotifyPromoEnded(const PromoInfo& promo_ended,
+                                FeaturePromoClosedReason close_reason);
+
+  // Gets a promo info from a specification. Different policies might interpret
+  // different specifications differently.
+  virtual PromoInfo SpecificationToPromoInfo(
+      const FeaturePromoSpecification& spec) const;
+
+  // Determines whether `to_show` (which must not be `NoPromo`) can be shown.
+  // The `currently_showing` parameter represents what kind of promo is
+  // currently showing if any. Returns `FeaturePromoResult::Success()` if the
+  // promo is allowed; returns a reason for rejecting the promo otherwise.
   virtual FeaturePromoResult CanShowPromo(
-      const FeaturePromoSpecification& promo_specification) const = 0;
-  
-  // Notifies the policy that a promo with `promo_specification` has shown.
-  // Implementations should update their internal state if this would affect
-  // subsequent IPH.
-  virtual void OnPromoShown(const FeaturePromoSpecification& promo_specification) = 0;
+      PromoInfo to_show,
+      absl::optional<PromoInfo> currently_showing) const;
 
-  void set_session_manager(const FeaturePromoSessionManager* session_manager) {
-    session_manager_ = session_manager;
+ protected:
+  const FeaturePromoSessionManager* session_manager() const {
+    return session_manager_;
   }
-  const FeaturePromoSessionManager* session_manager() const { return session_manager_; }
+  FeaturePromoStorageService* storage_service() { return storage_service_; }
+  const FeaturePromoStorageService* storage_service() const {
+    return storage_service_;
+  }
 
  private:
+  friend test::FeaturePromoSessionTestUtil;
+
   raw_ptr<const FeaturePromoSessionManager> session_manager_ = nullptr;
+  raw_ptr<FeaturePromoStorageService> storage_service_ = nullptr;
+  absl::optional<base::Time> current_promo_shown_time_;
 };
 
-// Implements the legacy session policy, which is to never block a promo due to
-// session state. 
-class FeaturePromoSessionPolicyV1 : public FeaturePromoSessionPolicy {
- public:
-  FeaturePromoSessionPolicyV1();
-  ~FeaturePromoSessionPolicyV1() override;
-
-  // FeaturePromoSessionPolicy:
-  FeaturePromoResult CanShowPromo(
-      const FeaturePromoSpecification& promo_specification) const override;
-  void OnPromoShown(const FeaturePromoSpecification& promo_specification) override;
-};
-
-// Implements the User Education Experience v2.0 session policy, which is to
-// block heavyweight, low-priority promos during the session start grace period
-// as well as during a several-day cooldown after another heavyweight promo.
+// Represents the promo policy for User Education Experience V2, above and
+// beyond the common promo logic.
 class FeaturePromoSessionPolicyV2 : public FeaturePromoSessionPolicy {
  public:
   FeaturePromoSessionPolicyV2();
   ~FeaturePromoSessionPolicyV2() override;
 
-  // FeaturePromoSessionPolicy:
+  // FeaturePromoSessionPolicyCommon:
   FeaturePromoResult CanShowPromo(
-      const FeaturePromoSpecification& promo_specification) const override;
-  void OnPromoShown(const FeaturePromoSpecification& promo_specification) override;
-
-  void set_storage_service(FeaturePromoStorageService* storage_service) {
-    storage_service_ = storage_service;
-  }
-  FeaturePromoStorageService* storage_service() { return storage_service_; }
+      PromoInfo to_show,
+      absl::optional<PromoInfo> currently_showing) const override;
 
  protected:
-  FeaturePromoSessionPolicyV2(base::)
+  FeaturePromoSessionPolicyV2(base::TimeDelta session_start_grace_period,
+                              base::TimeDelta heavyweight_promo_cooldown);
 
  private:
-  raw_ptr<FeaturePromoStorageService> storage_service_ = nullptr;
+  const base::TimeDelta session_start_grace_period_;
+  const base::TimeDelta heavyweight_promo_cooldown_;
 };
-
 
 }  // namespace user_education
 

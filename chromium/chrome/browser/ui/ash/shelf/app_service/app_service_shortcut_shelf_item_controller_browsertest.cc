@@ -25,6 +25,7 @@
 #include "components/services/app_service/public/cpp/shortcut/shortcut_registry_cache.h"
 #include "components/services/app_service/public/cpp/stub_icon_loader.h"
 #include "components/vector_icons/vector_icons.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -43,13 +44,11 @@ class AppServiceShortcutShelfItemControllerBrowserTest
 
   apps::ShortcutId CreateWebAppBasedShortcut(
       const GURL& shortcut_url,
-      const std::u16string& shortcut_name) {
-    // Create web app based shortcut.
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = shortcut_url;
-    web_app_info->title = shortcut_name;
-    auto local_shortcut_id = web_app::test::InstallWebApp(
-        browser()->profile(), std::move(web_app_info));
+      const std::u16string& shortcut_name,
+      bool is_policy_install = false) {
+    webapps::AppId local_shortcut_id = web_app::test::InstallShortcut(
+        browser()->profile(), base::UTF16ToUTF8(shortcut_name), shortcut_url,
+        /*create_default_icon =*/true, is_policy_install);
     return apps::GenerateShortcutId(app_constants::kChromeAppId,
                                     local_shortcut_id);
   }
@@ -208,8 +207,9 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutShelfItemControllerBrowserTest,
       ->OverrideShortcutInnerIconLoaderForTesting(&shortcut_stub_icon_loader);
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->OverrideInnerIconLoaderForTesting(&app_stub_icon_loader);
-  shortcut_stub_icon_loader.timelines_by_app_id_[shortcut_id.value()] = 1;
-  app_stub_icon_loader.timelines_by_app_id_[app_constants::kChromeAppId] = 1;
+  shortcut_stub_icon_loader.update_version_by_app_id_[shortcut_id.value()] = 1;
+  app_stub_icon_loader.update_version_by_app_id_[app_constants::kChromeAppId] =
+      1;
 
   menu_model->ActivatedAt(uninstall_command_index.value());
   ShortcutRemovalDialogView* last_created_dialog =
@@ -223,4 +223,29 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutShelfItemControllerBrowserTest,
                    ->ShortcutRegistryCache()
                    ->HasShortcut(shortcut_id));
   EXPECT_FALSE(controller()->GetItem(ash::ShelfID(shortcut_id.value())));
+}
+
+IN_PROC_BROWSER_TEST_F(AppServiceShortcutShelfItemControllerBrowserTest,
+                       PolicyNoContextMenuRemove) {
+  GURL app_url = GURL("https://example.org/");
+  std::u16string shortcut_name = u"Example";
+  apps::ShortcutId shortcut_id = CreateWebAppBasedShortcut(
+      app_url, shortcut_name, /*is_policy_install = */ true);
+
+  PinAppWithIDToShelf(shortcut_id.value());
+
+  ash::ShelfItemDelegate* delegate =
+      controller()->shelf_model()->GetShelfItemDelegate(
+          ash::ShelfID(shortcut_id.value()));
+
+  ASSERT_TRUE(delegate);
+
+  base::test::TestFuture<std::unique_ptr<ui::SimpleMenuModel>> future;
+  delegate->GetContextMenu(display::kDefaultDisplayId, future.GetCallback());
+
+  std::unique_ptr<ui::SimpleMenuModel> menu_model = future.Take();
+
+  auto uninstall_command_index =
+      menu_model->GetIndexOfCommandId(ash::UNINSTALL);
+  EXPECT_FALSE(uninstall_command_index);
 }

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <vector>
 
 #include "cc/paint/filter_operations.h"
@@ -74,7 +75,7 @@ inline viz::SolidColorDrawQuad* AddTransparentQuad(RenderPassType* pass,
                                                    float opacity) {
   viz::SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), rect, rect, gfx::MaskFilterInfo(),
-                       /*clip=*/absl::nullopt, /*contents_opaque=*/false,
+                       /*clip=*/std::nullopt, /*contents_opaque=*/false,
                        opacity, SkBlendMode::kSrcOver, /*sorting_context=*/0,
                        /*layer_id=*/0u, /*fast_rounded_corner=*/false);
   auto* quad =
@@ -131,6 +132,11 @@ void AddOneOfEveryQuadTypeInDisplayResourceProvider(
     viz::RasterContextProvider* child_context_provider,
     viz::AggregatedRenderPassId child_pass_id,
     gpu::SyncToken* sync_token_for_mailbox_texture);
+
+std::unique_ptr<viz::AggregatedRenderPass> CopyToAggregatedRenderPass(
+    viz::CompositorRenderPass* from_pass,
+    viz::AggregatedRenderPassId to_id,
+    gfx::ContentColorUsage content_usage);
 
 }  // namespace cc
 

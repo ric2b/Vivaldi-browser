@@ -8,16 +8,13 @@
 #include "src/sksl/ir/SkSLBlock.h"
 
 #include "src/sksl/ir/SkSLNop.h"
-#include "src/sksl/ir/SkSLSymbolTable.h"
-
-#include <type_traits>
 
 namespace SkSL {
 
 std::unique_ptr<Statement> Block::Make(Position pos,
                                        StatementArray statements,
                                        Kind kind,
-                                       std::shared_ptr<SymbolTable> symbols) {
+                                       std::unique_ptr<SymbolTable> symbols) {
     // We can't simplify away braces or populated symbol tables.
     if (kind == Kind::kBracedScope || (symbols && symbols->count())) {
         return std::make_unique<Block>(pos, std::move(statements), kind, std::move(symbols));
@@ -62,7 +59,7 @@ std::unique_ptr<Statement> Block::Make(Position pos,
 std::unique_ptr<Block> Block::MakeBlock(Position pos,
                                         StatementArray statements,
                                         Kind kind,
-                                        std::shared_ptr<SymbolTable> symbols) {
+                                        std::unique_ptr<SymbolTable> symbols) {
     // Nothing to optimize here--eliminating empty statements doesn't actually improve the generated
     // code, and we promise to return a Block.
     return std::make_unique<Block>(pos, std::move(statements), kind, std::move(symbols));
@@ -95,18 +92,6 @@ std::unique_ptr<Statement> Block::MakeCompoundStatement(std::unique_ptr<Statemen
     stmts.push_back(std::move(existing));
     stmts.push_back(std::move(additional));
     return Block::Make(pos, std::move(stmts), Block::Kind::kCompoundStatement);
-}
-
-std::unique_ptr<Statement> Block::clone() const {
-    StatementArray cloned;
-    cloned.reserve_exact(this->children().size());
-    for (const std::unique_ptr<Statement>& stmt : this->children()) {
-        cloned.push_back(stmt->clone());
-    }
-    return std::make_unique<Block>(fPosition,
-                                   std::move(cloned),
-                                   fBlockKind,
-                                   SymbolTable::WrapIfBuiltin(this->symbolTable()));
 }
 
 std::string Block::description() const {

@@ -37,6 +37,7 @@
 #include "encode.h"
 #include "h264.h"
 #include "h264_sei.h"
+#include "hwconfig.h"
 #include <dlfcn.h>
 
 #if !HAVE_KCMVIDEOCODECTYPE_HEVC
@@ -893,17 +894,35 @@ static bool get_vt_hevc_profile_level(AVCodecContext *avctx,
 {
     VTEncContext *vtctx = avctx->priv_data;
     int profile = vtctx->profile;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(
+            avctx->pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX ? avctx->sw_pix_fmt
+                                                      : avctx->pix_fmt);
+    int bit_depth = desc ? desc->comp[0].depth : 0;
 
     *profile_level_val = NULL;
 
     switch (profile) {
         case AV_PROFILE_UNKNOWN:
+            // Set profile automatically if user don't specify
+            if (bit_depth == 10) {
+                *profile_level_val =
+                        compat_keys.kVTProfileLevel_HEVC_Main10_AutoLevel;
+                break;
+            }
             return true;
         case AV_PROFILE_HEVC_MAIN:
+            if (bit_depth > 0 && bit_depth != 8)
+                av_log(avctx, AV_LOG_WARNING,
+                       "main profile with %d bit input\n", bit_depth);
             *profile_level_val =
                 compat_keys.kVTProfileLevel_HEVC_Main_AutoLevel;
             break;
         case AV_PROFILE_HEVC_MAIN_10:
+            if (bit_depth > 0 && bit_depth != 10) {
+                av_log(avctx, AV_LOG_ERROR,
+                       "Invalid main10 profile with %d bit input\n", bit_depth);
+                return false;
+            }
             *profile_level_val =
                 compat_keys.kVTProfileLevel_HEVC_Main10_AutoLevel;
             break;
@@ -2830,6 +2849,11 @@ static const enum AVPixelFormat prores_pix_fmts[] = {
         "Sets the maximum number of reference frames. This only has an effect when the value is less than the maximum allowed by the profile/level.", \
         OFFSET(max_ref_frames), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
 
+static const AVCodecHWConfigInternal *const vt_encode_hw_configs[] = {
+        HW_CONFIG_ENCODER_FRAMES(VIDEOTOOLBOX, VIDEOTOOLBOX),
+        NULL,
+};
+
 #define OFFSET(x) offsetof(VTEncContext, x)
 static const AVOption h264_options[] = {
     { "profile", "Profile", OFFSET(profile), AV_OPT_TYPE_INT, { .i64 = AV_PROFILE_UNKNOWN }, AV_PROFILE_UNKNOWN, INT_MAX, VE, "profile" },
@@ -2886,6 +2910,7 @@ const FFCodec ff_h264_videotoolbox_encoder = {
     .close            = vtenc_close,
     .p.priv_class     = &h264_videotoolbox_class,
     .caps_internal    = FF_CODEC_CAP_INIT_CLEANUP,
+    .hw_configs       = vt_encode_hw_configs,
 };
 
 static const AVOption hevc_options[] = {
@@ -2923,6 +2948,7 @@ const FFCodec ff_hevc_videotoolbox_encoder = {
     .p.priv_class     = &hevc_videotoolbox_class,
     .caps_internal    = FF_CODEC_CAP_INIT_CLEANUP,
     .p.wrapper_name   = "videotoolbox",
+    .hw_configs       = vt_encode_hw_configs,
 };
 
 static const AVOption prores_options[] = {
@@ -2961,4 +2987,5 @@ const FFCodec ff_prores_videotoolbox_encoder = {
     .p.priv_class     = &prores_videotoolbox_class,
     .caps_internal    = FF_CODEC_CAP_INIT_CLEANUP,
     .p.wrapper_name   = "videotoolbox",
+    .hw_configs       = vt_encode_hw_configs,
 };

@@ -32,7 +32,7 @@ IntentPickerView::IntentPickerView(
                          "IntentPicker"),
       browser_(browser) {
   SetAccessibilityProperties(
-      /*role*/ absl::nullopt,
+      /*role*/ std::nullopt,
       l10n_util::GetStringUTF16(IDS_TOOLTIP_INTENT_PICKER_ICON));
 }
 
@@ -82,6 +82,6 @@ const gfx::VectorIcon& IntentPickerView::GetVectorIcon() const {
              : kOpenInNewIcon;
 }
 
-BEGIN_METADATA(IntentPickerView, PageActionIconView)
+BEGIN_METADATA(IntentPickerView)
 ADD_READONLY_PROPERTY_METADATA(bool, ShowIcon)
 END_METADATA

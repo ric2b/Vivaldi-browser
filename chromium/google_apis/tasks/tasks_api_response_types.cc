@@ -5,7 +5,9 @@
 #include "google_apis/tasks/tasks_api_response_types.h"
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/json/json_value_converter.h"
 #include "base/logging.h"
@@ -14,7 +16,6 @@
 #include "google_apis/common/parser_util.h"
 #include "google_apis/common/time_util.h"
 #include "google_apis/tasks/tasks_api_task_status.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace google_apis::tasks {
 namespace {
@@ -37,13 +38,13 @@ constexpr char kApiResponseUpdatedKey[] = "updated";
 
 constexpr char kLinkTypeEmail[] = "email";
 
-bool ConvertTaskStatus(base::StringPiece input, TaskStatus* output) {
+bool ConvertTaskStatus(std::string_view input, TaskStatus* output) {
   *output = TaskStatusFromString(input);
   return true;
 }
 
-bool ConvertTaskDueDate(base::StringPiece input,
-                        absl::optional<base::Time>* output) {
+bool ConvertTaskDueDate(std::string_view input,
+                        std::optional<base::Time>* output) {
   base::Time due;
   if (!util::GetTimeFromString(input, &due)) {
     return false;
@@ -52,7 +53,7 @@ bool ConvertTaskDueDate(base::StringPiece input,
   return true;
 }
 
-bool ConvertTaskLinkType(base::StringPiece input, TaskLink::Type* output) {
+bool ConvertTaskLinkType(std::string_view input, TaskLink::Type* output) {
   *output = input == kLinkTypeEmail ? TaskLink::Type::kEmail
                                     : TaskLink::Type::kUnknown;
   return true;
@@ -120,11 +121,13 @@ void Task::RegisterJSONConverter(JSONValueConverter<Task>* converter) {
       kApiResponseStatusKey, &Task::status_, &ConvertTaskStatus);
   converter->RegisterStringField(kApiResponseParentKey, &Task::parent_id_);
   converter->RegisterStringField(kApiResponsePositionKey, &Task::position_);
-  converter->RegisterCustomField<absl::optional<base::Time>>(
+  converter->RegisterCustomField<std::optional<base::Time>>(
       kApiResponseDueKey, &Task::due_, &ConvertTaskDueDate);
   converter->RegisterRepeatedMessage<TaskLink>(kApiResponseLinksKey,
                                                &Task::links_);
   converter->RegisterStringField(kApiResponseNotesKey, &Task::notes_);
+  converter->RegisterCustomField<base::Time>(
+      kApiResponseUpdatedKey, &Task::updated_, &util::GetTimeFromString);
 }
 
 // static

@@ -17,6 +17,7 @@
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/system/sys_info.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -27,6 +28,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/startup_metric_utils/gpu/startup_metric_utils.h"
+#include "components/version_info/version_info.h"
 #include "components/viz/common/features.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/service/dawn_caching_interface.h"
@@ -69,6 +71,7 @@
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
@@ -84,6 +87,7 @@
 #endif  // BUILDFLAG(USE_VAAPI)
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/build_info.h"
 #include "components/viz/service/gl/throw_uncaught_exception.h"
 #include "media/base/android/media_codec_util.h"
 #endif
@@ -107,7 +111,7 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if !BUILDFLAG(IS_CHROMEOS)
-#include "components/ml/webnn/features.h"
+#include "components/ml/webnn/features.mojom-features.h"
 #include "services/webnn/webnn_context_provider_impl.h"
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -303,22 +307,6 @@ bool IsAcceleratedJpegDecodeSupported() {
 #else
   return false;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-}
-
-// Returns a callback which does a PostTask to run |callback| on the |runner|
-// task runner.
-template <typename... Params>
-base::OnceCallback<void(Params&&...)> WrapCallback(
-    scoped_refptr<base::SingleThreadTaskRunner> runner,
-    base::OnceCallback<void(Params...)> callback) {
-  return base::BindOnce(
-      [](base::SingleThreadTaskRunner* runner,
-         base::OnceCallback<void(Params && ...)> callback, Params&&... params) {
-        runner->PostTask(FROM_HERE,
-                         base::BindOnce(std::move(callback),
-                                        std::forward<Params>(params)...));
-      },
-      base::RetainedRef(std::move(runner)), std::move(callback));
 }
 
 bool WillGetGmbConfigFromGpu() {
@@ -610,6 +598,8 @@ void GpuServiceImpl::InitializeWithHost(
 #if BUILDFLAG(IS_OZONE)
     thread_safe_manager |= features::ShouldUseRealBuffersForPageFlipTest();
 #endif
+    thread_safe_manager |=
+        base::FeatureList::IsEnabled(features::kSharedBitmapToSharedImage);
     owned_shared_image_manager_ = std::make_unique<gpu::SharedImageManager>(
         thread_safe_manager, display_context_on_another_thread);
     shared_image_manager = owned_shared_image_manager_.get();
@@ -931,8 +921,6 @@ void GpuServiceImpl::BindClientGmbInterface(
 void GpuServiceImpl::BindWebNNContextProvider(
     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> pending_receiver,
     int client_id) {
-  CHECK(base::FeatureList::IsEnabled(
-      webnn::features::kEnableMachineLearningNeuralNetworkService));
   webnn::WebNNContextProviderImpl::Create(std::move(pending_receiver));
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
@@ -975,7 +963,7 @@ void GpuServiceImpl::CopyGpuMemoryBuffer(
 void GpuServiceImpl::GetVideoMemoryUsageStats(
     GetVideoMemoryUsageStatsCallback callback) {
   if (io_runner_->BelongsToCurrentThread()) {
-    auto wrap_callback = WrapCallback(io_runner_, std::move(callback));
+    auto wrap_callback = base::BindPostTask(io_runner_, std::move(callback));
     main_runner_->PostTask(
         FROM_HERE, base::BindOnce(&GpuServiceImpl::GetVideoMemoryUsageStats,
                                   weak_ptr_, std::move(wrap_callback)));
@@ -1051,16 +1039,77 @@ void GpuServiceImpl::DidDestroyOffscreenContext(const GURL& active_url) {
   gpu_host_->DidDestroyOffscreenContext(active_url);
 }
 
-void GpuServiceImpl::DidLoseContext(bool offscreen,
-                                    gpu::error::ContextLostReason reason,
+void GpuServiceImpl::DidLoseContext(gpu::error::ContextLostReason reason,
                                     const GURL& active_url) {
-  gpu_host_->DidLoseContext(offscreen, reason, active_url);
+  gpu_host_->DidLoseContext(reason, active_url);
+}
+
+std::string GpuServiceImpl::GetShaderPrefixKey() {
+  if (shader_prefix_key_.empty()) {
+    const gpu::GPUInfo::GPUDevice& active_gpu = gpu_info_.active_gpu();
+    std::string product =
+        std::string(version_info::GetProductNameAndVersionForUserAgent());
+
+    shader_prefix_key_ =
+        product + "-" + gpu_info_.gl_vendor + "-" + gpu_info_.gl_renderer +
+        "-" + active_gpu.driver_version + "-" + active_gpu.driver_vendor + "-" +
+        base::SysInfo::ProcessCPUArchitecture();
+
+#if BUILDFLAG(IS_ANDROID)
+    std::string build_fp =
+        base::android::BuildInfo::GetInstance()->android_build_fp();
+    shader_prefix_key_ += "-" + build_fp;
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+    // ChromeOS can update independently of Lacros and the GPU driver
+    // information is not enough to ensure blob compatibility. See
+    // crbug.com/1444684
+    std::string chromeos_version = base::SysInfo::OperatingSystemName() + " " +
+                                   base::SysInfo::OperatingSystemVersion();
+    shader_prefix_key_ += "-" + chromeos_version;
+#endif
+  }
+
+  return shader_prefix_key_;
 }
 
 void GpuServiceImpl::StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                                      const std::string& key,
                                      const std::string& shader) {
-  gpu_host_->StoreBlobToDisk(handle, key, shader);
+  std::string prefix_key = key;
+  if (base::FeatureList::IsEnabled(
+          features::kGenGpuDiskCacheKeyPrefixInGpuService) &&
+      GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
+    std::string prefix = GetShaderPrefixKey();
+    prefix_key = prefix + ":" + key;
+  }
+  gpu_host_->StoreBlobToDisk(handle, prefix_key, shader);
+}
+
+void GpuServiceImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
+                                const std::string& key,
+                                const std::string& data) {
+  if (!main_runner_->BelongsToCurrentThread()) {
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::LoadedBlob, weak_ptr_,
+                                  handle, key, data));
+    return;
+  }
+
+  std::string no_prefix_key = key;
+  if (base::FeatureList::IsEnabled(
+          features::kGenGpuDiskCacheKeyPrefixInGpuService) &&
+      GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
+    std::string prefix = GetShaderPrefixKey();
+    bool prefix_ok = !key.compare(0, prefix.length(), prefix);
+    UMA_HISTOGRAM_BOOLEAN("GPU.ShaderLoadPrefixOK", prefix_ok);
+    if (prefix_ok) {
+      // Remove the prefix from the key before load.
+      no_prefix_key = key.substr(prefix.length() + 1);
+    } else {
+      return;
+    }
+  }
+  gpu_channel_manager_->PopulateCache(handle, no_prefix_key, data);
 }
 
 void GpuServiceImpl::GetIsolationKey(
@@ -1213,18 +1262,6 @@ void GpuServiceImpl::CloseChannel(int32_t client_id) {
     return;
   }
   gpu_channel_manager_->RemoveChannel(client_id);
-}
-
-void GpuServiceImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
-                                const std::string& key,
-                                const std::string& data) {
-  if (!main_runner_->BelongsToCurrentThread()) {
-    main_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&GpuServiceImpl::LoadedBlob, weak_ptr_,
-                                  handle, key, data));
-    return;
-  }
-  gpu_channel_manager_->PopulateCache(handle, key, data);
 }
 
 void GpuServiceImpl::SetWakeUpGpuClosure(base::RepeatingClosure closure) {
@@ -1415,9 +1452,9 @@ void GpuServiceImpl::BeginCATransaction() {
 
 void GpuServiceImpl::CommitCATransaction(CommitCATransactionCallback callback) {
   DCHECK(io_runner_->BelongsToCurrentThread());
-  main_runner_->PostTaskAndReply(FROM_HERE,
-                                 base::BindOnce(&ui::CommitCATransaction),
-                                 WrapCallback(io_runner_, std::move(callback)));
+  main_runner_->PostTaskAndReply(
+      FROM_HERE, base::BindOnce(&ui::CommitCATransaction),
+      base::BindPostTask(io_runner_, std::move(callback)));
 }
 #endif
 
@@ -1502,11 +1539,11 @@ bool GpuServiceImpl::IsNativeBufferSupported(gfx::BufferFormat format,
       // compiled with X11 and Wayland but Wayland can be chosen at runtime.
       // Hence using WillGetGmbConfigFromGpu() which will determine
       // configurations based on actual platform chosen at runtime.
-#if defined(USE_OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_OZONE_X11)
       for (const auto& config : gpu_extra_info_.gpu_memory_buffer_support_x11) {
         supported_gmb_configurations_.emplace(config);
       }
-#endif
+#endif  // BUILDFLAG(IS_OZONE_X11)
     } else {
       supported_gmb_configurations_ =
           gpu::GpuMemoryBufferSupport::GetNativeGpuMemoryBufferConfigurations();

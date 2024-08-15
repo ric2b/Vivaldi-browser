@@ -158,6 +158,9 @@ message VideoDecoderConfig {
 
   // Proto version of Chrome's media::VideoCodecProfile.
   enum Profile {
+    reserved 20;
+    reserved "DOLBYVISION_PROFILE4";
+
     VIDEO_CODEC_PROFILE_UNKNOWN = -1;
     H264PROFILE_BASELINE = 0;
     H264PROFILE_MAIN = 1;
@@ -179,7 +182,6 @@ message VideoDecoderConfig {
     HEVCPROFILE_MAIN10 = 17;
     HEVCPROFILE_MAIN_STILL_PICTURE = 18;
     DOLBYVISION_PROFILE0 = 19;
-    DOLBYVISION_PROFILE4 = 20;
     DOLBYVISION_PROFILE5 = 21;
     DOLBYVISION_PROFILE7 = 22;
     THEORAPROFILE_ANY = 23;

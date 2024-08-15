@@ -31,8 +31,8 @@ class ChromiumDepGraph {
             licenseName: 'MIT License'),
         com_google_android_datatransport_transport_api: new PropertyOverride(
             description: 'Interfaces for data logging in GmsCore SDKs.'),
-        // Exclude androidx_window_window since it currently addes <uses-library>
-        // to our AndroidManfest.xml, which we don't allow. http://crbug.com/1302987
+        // Chrome uses the window APIs directly instead of going through the androidx middleware.
+        // See //third_party/android_sdk/window_extensions/README.md
         androidx_window_window: new PropertyOverride(exclude: true),
         com_google_android_datatransport_transport_backend_cct: new PropertyOverride(
             exclude: true),  // We're not using datatransport functionality.
@@ -58,13 +58,22 @@ class ChromiumDepGraph {
             licenseUrl: 'https://raw.githubusercontent.com/google/gson/master/LICENSE',
             licenseName: 'Apache 2.0'),
         com_google_errorprone_error_prone_annotation: new PropertyOverride(
-            url: 'https://errorprone.info/',
+            url: 'https://github.com/google/error-prone/tree/master/annotation',
             licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
-            licenseName: 'Apache 2.0'),
+            licenseName: 'Apache 2.0',
+            description: 'ErrorProne Annotations.',),
         com_google_errorprone_error_prone_annotations: new PropertyOverride(
-            url: 'https://errorprone.info/',
+            url: 'https://github.com/google/error-prone/tree/master/annotations',
             licenseUrl: 'https://www.apache.org/licenses/LICENSE-2.0.txt',
-            licenseName: 'Apache 2.0'),
+            licenseName: 'Apache 2.0',
+            description: 'ErrorProne Annotations.',),
+        com_google_errorprone_error_prone_type_annotations: new PropertyOverride(
+            url: 'https://github.com/google/error-prone/tree/master/type_annotations',
+            description: 'ErrorProne Annotations.',),
+        com_google_errorprone_error_prone_check_api: new PropertyOverride(
+            url: 'https://github.com/google/error-prone/tree/master/check_api'),
+        com_google_errorprone_error_prone_core: new PropertyOverride(
+            url: 'https://github.com/google/error-prone/tree/master/core'),
         com_google_firebase_firebase_annotations: new PropertyOverride(
             description: 'Common annotations for Firebase SKDs.'),
         com_google_firebase_firebase_common: new PropertyOverride(
@@ -288,12 +297,9 @@ class ChromiumDepGraph {
             licenseName: 'Apache 2.0'),
     ]
 
-    private static final Set<String> ALLOWED_EMPTY_DEPS = [
-        // Bill of materials (BOM) deps are used to specify versions for other dependencies and don't have children or
-        // artifacts of their own. Add other such empty deps here when we encounter them.
-        'org_jetbrains_kotlinx_kotlinx_coroutines_bom',
-        'com_squareup_okio_okio_bom',
-    ] as Set
+    // Bill of materials (BOM) deps are used to specify versions for other dependencies and don't have children or
+    // artifacts of their own. Add other such empty deps here when we encounter them.
+    private static final Set<String> ALLOWED_EMPTY_DEPS = [] as Set
 
     // Local text versions of HTML licenses. This cannot replace PROPERTY_OVERRIDES because some libraries refer to
     // license templates such as https://opensource.org/licenses/MIT.
@@ -478,7 +484,7 @@ class ChromiumDepGraph {
                         childDependenciesWithArtifacts += childDependency.children
                     } else {
                         String childDepId = makeModuleId(childDependency.module)
-                        if (childDepId !in ALLOWED_EMPTY_DEPS) {
+                        if (!childDepId.endsWith("_bom") && childDepId !in ALLOWED_EMPTY_DEPS) {
                             // BOM dependencies are deps that only specify other deps as dependencies but have no
                             // artifact of their own. These typically have _bom at the end of their names but may also
                             // be identified by looking at their pom.xml file. For more context see maven's doc:

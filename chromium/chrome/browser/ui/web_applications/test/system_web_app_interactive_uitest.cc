@@ -62,8 +62,6 @@
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/user_manager/user_manager.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -95,7 +93,7 @@ class SystemWebAppLinkCaptureBrowserTest
     } else {
       // Ash can have ordinary tabbed browser windows.
       GURL kInitiatingChromeUrl = GURL(chrome::kChromeUIAboutURL);
-      NavigateToURLAndWait(browser(), kInitiatingChromeUrl);
+      NavigateViaLinkClickToURLAndWait(browser(), kInitiatingChromeUrl);
       EXPECT_EQ(kInitiatingChromeUrl, browser()
                                           ->tab_strip_model()
                                           ->GetActiveWebContents()
@@ -110,12 +108,10 @@ class SystemWebAppLinkCaptureBrowserTest
         browser()->profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true),
         true));
 
-    content::WindowedNotificationObserver observer(
-        content::NOTIFICATION_LOAD_STOP,
-        content::NotificationService::AllSources());
-    chrome::AddSelectedTabWithURL(incognito, GURL(url::kAboutBlankURL),
-                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
-    observer.Wait();
+    auto* contents =
+        chrome::AddSelectedTabWithURL(incognito, GURL(url::kAboutBlankURL),
+                                      ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    EXPECT_TRUE(content::WaitForLoadStop(contents));
 
     incognito->window()->Show();
     return incognito;
@@ -233,7 +229,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppLinkCaptureBrowserTest,
   WaitForTestSystemAppInstall();
 
   GURL kInitiatingChromeUrl = GURL(chrome::kChromeUIAboutURL);
-  NavigateToURLAndWait(browser(), kInitiatingChromeUrl);
+  NavigateViaLinkClickToURLAndWait(browser(), kInitiatingChromeUrl);
   EXPECT_EQ(kInitiatingChromeUrl, browser()
                                       ->tab_strip_model()
                                       ->GetActiveWebContents()
@@ -285,7 +281,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppLinkCaptureBrowserTest,
   WaitForTestSystemAppInstall();
 
   GURL kInitiatingChromeUrl = GURL(chrome::kChromeUIAboutURL);
-  NavigateToURLAndWait(browser(), kInitiatingChromeUrl);
+  NavigateViaLinkClickToURLAndWait(browser(), kInitiatingChromeUrl);
   EXPECT_EQ(kInitiatingChromeUrl, browser()
                                       ->tab_strip_model()
                                       ->GetActiveWebContents()
@@ -440,7 +436,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppLinkCaptureBrowserTest,
   content::WebContents* web_contents = LaunchApp(GetAppType(), &app_browser);
 
   GURL kInitiatingChromeUrl = GURL(chrome::kChromeUIAboutURL);
-  NavigateToURLAndWait(browser(), kInitiatingChromeUrl);
+  NavigateViaLinkClickToURLAndWait(browser(), kInitiatingChromeUrl);
   EXPECT_EQ(kInitiatingChromeUrl, browser()
                                       ->tab_strip_model()
                                       ->GetActiveWebContents()
@@ -559,7 +555,7 @@ class SystemWebAppManagerMultiDesktopLaunchBrowserTest
   }
 
   webapps::AppId GetAppId(Profile* profile) {
-    absl::optional<webapps::AppId> app_id =
+    std::optional<webapps::AppId> app_id =
         ash::SystemWebAppManager::Get(profile)->GetAppIdForSystemApp(
             installation_->GetType());
     CHECK(app_id.has_value());

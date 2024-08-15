@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/cxx20_erase_vector.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
@@ -409,7 +410,12 @@ class Device final : public ui::GbmDevice {
     fd_data.num_fds = handle.planes.size();
     fd_data.modifier = handle.modifier;
 
-    DCHECK_LE(handle.planes.size(), 3u);
+    // One specific situation where we expect 4 planes is for Intel media
+    // compressed buffers: the number of planes for such buffers and format
+    // NV12/P010 is twice the normal, two for Y and UV and two for auxiliary
+    // compression metadata.
+    DCHECK_LE(handle.planes.size(), 4u);
+
     for (size_t i = 0; i < handle.planes.size(); ++i) {
       fd_data.fds[i] = handle.planes[i < handle.planes.size() ? i : 0].fd.get();
       fd_data.strides[i] = handle.planes[i].stride;
@@ -461,10 +467,7 @@ class Device final : public ui::GbmDevice {
     for (const auto& [entry_format, entry_flags, entry_modifier] :
          modifier_blocklist_) {
       if (entry_format == format && entry_flags == flags) {
-        filtered_modifiers.erase(
-            std::remove(filtered_modifiers.begin(), filtered_modifiers.end(),
-                        entry_modifier),
-            filtered_modifiers.end());
+        base::Erase(filtered_modifiers, entry_modifier);
       }
     }
 

@@ -16,6 +16,7 @@
 #include "src/core/SkResourceCache.h"
 #include "src/core/SkTypefaceCache.h"
 #include "src/ports/SkFontConfigTypeface.h"
+#include "src/ports/SkTypeface_FreeType.h"
 #include <new>
 
 using namespace skia_private;
@@ -143,7 +144,6 @@ static bool find_by_FontIdentity(SkTypeface* cachedTypeface, void* ctx) {
 
 class SkFontMgr_FCI : public SkFontMgr {
     sk_sp<SkFontConfigInterface> fFCI;
-    SkTypeface_FreeType::Scanner fScanner;
 
     mutable SkMutex fMutex;
     mutable SkTypefaceCache fTFCache;

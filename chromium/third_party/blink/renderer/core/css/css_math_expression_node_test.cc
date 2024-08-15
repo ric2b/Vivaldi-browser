@@ -158,7 +158,9 @@ TEST(CSSCalculationValue, AccumulatePixelsAndPercent) {
 
 TEST(CSSCalculationValue, RefCount) {
   scoped_refptr<const CalculationValue> calc = CalculationValue::Create(
-      PixelsAndPercent(1, 2), Length::ValueRange::kAll);
+      PixelsAndPercent(1, 2, /*has_explicit_pixels=*/true,
+                       /*has_explicit_percent=*/true),
+      Length::ValueRange::kAll);
 
   // FIXME: Test the Length construction without using the ref count value.
 
@@ -173,8 +175,10 @@ TEST(CSSCalculationValue, RefCount) {
     Length length_c(calc);
     length_c = length_a;
 
-    Length length_d(CalculationValue::Create(PixelsAndPercent(1, 2),
-                                             Length::ValueRange::kAll));
+    Length length_d(CalculationValue::Create(
+        PixelsAndPercent(1, 2, /*has_explicit_pixels=*/true,
+                         /*has_explicit_percent=*/true),
+        Length::ValueRange::kAll));
     length_d = length_a;
   }
   EXPECT_TRUE(calc->HasOneRef());
@@ -339,7 +343,7 @@ TEST(CSSMathExpressionNode, TestParseDeeplyNestedExpression) {
 
     if (test_case.expected) {
       EXPECT_TRUE(res);
-      EXPECT_TRUE(res->CanBeResolvedWithConversionData());
+      EXPECT_TRUE(!res->HasPercentage());
     } else {
       EXPECT_FALSE(res);
     }
@@ -371,7 +375,7 @@ TEST(CSSMathExpressionNode, TestSteppedValueFunctions) {
     scoped_refptr<const CalculationExpressionNode> node =
         res->ToCalculationExpression(resolver);
     EXPECT_EQ(node->Evaluate(FLT_MAX, nullptr), test_case.output);
-    EXPECT_TRUE(res->CanBeResolvedWithConversionData());
+    EXPECT_TRUE(!res->HasPercentage());
   }
 }
 
@@ -391,7 +395,7 @@ TEST(CSSMathExpressionNode, TestSteppedValueFunctionsToCalculationExpression) {
         CSSMathExpressionNumericLiteral::Create(
             10, CSSPrimitiveValue::UnitType::kNumber)};
     const auto* operation = MakeGarbageCollected<CSSMathExpressionOperation>(
-        kCalcNumber, true, std::move(operands), test_case.op);
+        kCalcNumber, std::move(operands), test_case.op);
     CSSToLengthConversionData resolver{};
     scoped_refptr<const CalculationExpressionNode> node =
         operation->ToCalculationExpression(resolver);
@@ -445,7 +449,7 @@ TEST(CSSMathExpressionNode, TestExponentialFunctions) {
     scoped_refptr<const CalculationExpressionNode> node =
         res->ToCalculationExpression(resolver);
     EXPECT_EQ(node->Evaluate(FLT_MAX, nullptr), test_case.output);
-    EXPECT_TRUE(res->CanBeResolvedWithConversionData());
+    EXPECT_TRUE(!res->HasPercentage());
   }
 }
 
@@ -468,7 +472,7 @@ TEST(CSSMathExpressionNode, TestExponentialFunctionsSerialization) {
     const CSSMathExpressionNode* res = CSSMathExpressionNode::ParseMathFunction(
         CSSValueID::kCalc, range, *context, true, kCSSAnchorQueryTypesNone);
     EXPECT_EQ(res->CustomCSSText(), test_case.input);
-    EXPECT_EQ(res->CanBeResolvedWithConversionData(),
+    EXPECT_EQ(!res->HasPercentage(),
               test_case.can_be_simplified_with_conversion_data);
   }
 }
@@ -486,7 +490,7 @@ TEST(CSSMathExpressionNode, TestExponentialFunctionsToCalculationExpression) {
         CSSMathExpressionNumericLiteral::Create(
             4.0f, CSSPrimitiveValue::UnitType::kNumber)};
     const auto* operation = MakeGarbageCollected<CSSMathExpressionOperation>(
-        kCalcNumber, true, std::move(operands), test_case.op);
+        kCalcNumber, std::move(operands), test_case.op);
     CSSToLengthConversionData resolver{};
     scoped_refptr<const CalculationExpressionNode> node =
         operation->ToCalculationExpression(resolver);
@@ -494,6 +498,127 @@ TEST(CSSMathExpressionNode, TestExponentialFunctionsToCalculationExpression) {
     const CSSMathExpressionNode* css_node =
         CSSMathExpressionOperation::Create(*node);
     EXPECT_NE(css_node, nullptr);
+  }
+}
+
+TEST(CSSMathExpressionNode, IdentifierLiteralConversion) {
+  const CSSMathExpressionIdentifierLiteral* css_node =
+      CSSMathExpressionIdentifierLiteral::Create(AtomicString("test"));
+  EXPECT_TRUE(css_node->IsIdentifierLiteral());
+  EXPECT_EQ(css_node->Category(), kCalcIdent);
+  EXPECT_EQ(css_node->GetValue(), AtomicString("test"));
+  scoped_refptr<const CalculationExpressionNode> calc_node =
+      css_node->ToCalculationExpression(CSSToLengthConversionData());
+  EXPECT_TRUE(calc_node->IsIdentifier());
+  EXPECT_EQ(To<CalculationExpressionIdentifierNode>(*calc_node).Value(),
+            AtomicString("test"));
+  auto* node = CSSMathExpressionNode::Create(*calc_node);
+  EXPECT_TRUE(node->IsIdentifierLiteral());
+  EXPECT_EQ(To<CSSMathExpressionIdentifierLiteral>(node)->GetValue(),
+            AtomicString("test"));
+}
+
+TEST(CSSMathExpressionNode, TestProgressNotation) {
+  const struct TestCase {
+    const std::string input;
+    const double output;
+  } test_cases[] = {
+      {"progress(1px from 0px to 4px)", 0.25f},
+      {"progress(10deg from 0deg to 10deg)", 1.0f},
+      {"progress(progress(10% from 0% to 40%) * 1px from 0.5px to 1px)", -0.5f},
+  };
+
+  for (const auto& test_case : test_cases) {
+    CSSTokenizer tokenizer(String(test_case.input.c_str()));
+    const auto tokens = tokenizer.TokenizeToEOF();
+    const CSSParserTokenRange range(tokens);
+    const CSSParserContext* context = MakeGarbageCollected<CSSParserContext>(
+        kHTMLStandardMode, SecureContextMode::kInsecureContext);
+    const CSSMathExpressionNode* res = CSSMathExpressionNode::ParseMathFunction(
+        CSSValueID::kCalc, range, *context, true, kCSSAnchorQueryTypesNone);
+    EXPECT_EQ(res->DoubleValue(), test_case.output);
+    CSSToLengthConversionData resolver;
+    scoped_refptr<const CalculationExpressionNode> node =
+        res->ToCalculationExpression(resolver);
+    EXPECT_EQ(node->Evaluate(FLT_MAX, nullptr), test_case.output);
+  }
+}
+
+TEST(CSSMathExpressionNode, TestProgressNotationComplex) {
+  const struct TestCase {
+    const std::string input;
+    const double output;
+  } test_cases[] = {
+      {"progress(abs(5%) from hypot(3%, 4%) to 10%)", 0.0f},
+  };
+
+  for (const auto& test_case : test_cases) {
+    CSSTokenizer tokenizer(String(test_case.input.c_str()));
+    const auto tokens = tokenizer.TokenizeToEOF();
+    const CSSParserTokenRange range(tokens);
+    const CSSParserContext* context = MakeGarbageCollected<CSSParserContext>(
+        kHTMLStandardMode, SecureContextMode::kInsecureContext);
+    const CSSMathExpressionNode* res = CSSMathExpressionNode::ParseMathFunction(
+        CSSValueID::kCalc, range, *context, true, kCSSAnchorQueryTypesNone);
+    EXPECT_TRUE(res);
+    EXPECT_TRUE(res->IsOperation());
+    CSSToLengthConversionData resolver;
+    scoped_refptr<const CalculationExpressionNode> node =
+        res->ToCalculationExpression(resolver);
+    // Very close to 0.0f, but not exactly 0.0f for unknown reason.
+    EXPECT_NEAR(node->Evaluate(FLT_MAX, nullptr), test_case.output, 0.001);
+  }
+}
+
+TEST(CSSMathExpressionNode, TestInvalidProgressNotation) {
+  const std::string test_cases[] = {
+      "progress(1% from 0px to 4px)",
+      "progress(1px, 0px, 4px)",
+      "progress(10deg from 0 to 10deg)",
+  };
+
+  for (const auto& test_case : test_cases) {
+    CSSTokenizer tokenizer(String(test_case.c_str()));
+    const auto tokens = tokenizer.TokenizeToEOF();
+    const CSSParserTokenRange range(tokens);
+    const CSSParserContext* context = MakeGarbageCollected<CSSParserContext>(
+        kHTMLStandardMode, SecureContextMode::kInsecureContext);
+    const CSSMathExpressionNode* res = CSSMathExpressionNode::ParseMathFunction(
+        CSSValueID::kCalc, range, *context, true, kCSSAnchorQueryTypesNone);
+    EXPECT_FALSE(res);
+  }
+}
+
+TEST(CSSMathExpressionNode, TestFunctionsWithNumberReturn) {
+  const struct TestCase {
+    const String input;
+    const CalculationResultCategory category;
+    const double output;
+  } test_cases[] = {
+      {"10 * sign(10%)", CalculationResultCategory::kCalcNumber, 10.0},
+      {"10px * sign(10%)", CalculationResultCategory::kCalcLength, 10.0},
+      {"10 + 2 * (1 + sign(10%))", CalculationResultCategory::kCalcNumber,
+       14.0},
+  };
+
+  for (const auto& test_case : test_cases) {
+    CSSTokenizer tokenizer(test_case.input);
+    const auto tokens = tokenizer.TokenizeToEOF();
+    const CSSParserTokenRange range(tokens);
+    const CSSParserContext* context = MakeGarbageCollected<CSSParserContext>(
+        kHTMLStandardMode, SecureContextMode::kInsecureContext);
+    const CSSMathExpressionNode* css_node =
+        CSSMathExpressionNode::ParseMathFunction(
+            CSSValueID::kCalc, range, *context, true, kCSSAnchorQueryTypesNone);
+    EXPECT_EQ(css_node->CustomCSSText(), test_case.input);
+    EXPECT_EQ(css_node->Category(), test_case.category);
+    EXPECT_TRUE(css_node->IsOperation());
+    scoped_refptr<const CalculationExpressionNode> calc_node =
+        css_node->ToCalculationExpression(CSSToLengthConversionData());
+    EXPECT_TRUE(calc_node->IsOperation());
+    EXPECT_EQ(calc_node->Evaluate(100.0, nullptr), test_case.output);
+    css_node = CSSMathExpressionNode::Create(*calc_node);
+    EXPECT_EQ(css_node->CustomCSSText(), test_case.input);
   }
 }
 

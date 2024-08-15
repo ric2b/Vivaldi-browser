@@ -20,39 +20,41 @@
 namespace vivaldi {
 
 namespace {
-PrefService* client_hints_prefs(nullptr);
+PrefService* g_client_hints_prefs(nullptr);
 
-const BrandConfiguration* custom_brand_config(nullptr);
+const BrandConfiguration* g_brand_override(nullptr);
 
 std::string GetVivaldiReleaseVersion() {
   return base::NumberToString(GetVivaldiVersion().components()[0]) + "." +
          base::NumberToString(GetVivaldiVersion().components()[1]);
 }
-
-void ConfigureSpecialBrand(const BrandConfiguration* brand_config) {
-  custom_brand_config = brand_config;
-}
-
-void UnConfigureSpecialBrand() {
-  custom_brand_config = nullptr;
-}
-
 }  // namespace
 
+BrandOverride::BrandOverride(const BrandConfiguration brand_config)
+    : brand_config_(std::move(brand_config)) {
+  DCHECK(g_brand_override == nullptr);
+  g_brand_override = &brand_config_;
+}
+
+BrandOverride::~BrandOverride() {
+  DCHECK(g_brand_override == &brand_config_);
+  g_brand_override = nullptr;
+}
+
 void ClientHintsBrandRegisterProfilePrefs(PrefService* prefs) {
-  client_hints_prefs = prefs;
+  g_client_hints_prefs = prefs;
 }
 
 void SelectClientHintsBrand(absl::optional<std::string>& brand,
                             std::string& major_version,
                             std::string& full_version) {
-  if (!IsVivaldiRunning() || (!client_hints_prefs && !custom_brand_config))
+  if (!IsVivaldiRunning() || (!g_client_hints_prefs && !g_brand_override))
     return;
 
   BrandSelection brand_selection =
-      custom_brand_config ? custom_brand_config->brand
-                          : BrandSelection(client_hints_prefs->GetInteger(
-                                vivaldiprefs::kVivaldiClientHintsBrand));
+      g_brand_override ? g_brand_override->brand
+                       : BrandSelection(g_client_hints_prefs->GetInteger(
+                             vivaldiprefs::kVivaldiClientHintsBrand));
 
   switch (brand_selection) {
     case BrandSelection::kChromeBrand:
@@ -72,14 +74,14 @@ void SelectClientHintsBrand(absl::optional<std::string>& brand,
 
     case BrandSelection::kCustomBrand: {
       std::string custom_brand =
-          custom_brand_config
-              ? custom_brand_config->customBrand
-              : client_hints_prefs->GetString(
+          g_brand_override
+              ? g_brand_override->custom_brand
+              : g_client_hints_prefs->GetString(
                     vivaldiprefs::kVivaldiClientHintsBrandCustomBrand);
       std::string custom_brand_version =
-          custom_brand_config
-              ? custom_brand_config->customBrandVersion
-              : client_hints_prefs->GetString(
+          g_brand_override
+              ? g_brand_override->custom_brand_version
+              : g_client_hints_prefs->GetString(
                     vivaldiprefs::kVivaldiClientHintsBrandCustomBrandVersion);
 
       if (!custom_brand.empty() && !custom_brand_version.empty()) {
@@ -95,68 +97,68 @@ void SelectClientHintsBrand(absl::optional<std::string>& brand,
 }
 
 void UpdateBrands(int seed, blink::UserAgentBrandList& brands) {
-  if (!IsVivaldiRunning() || (!client_hints_prefs && !custom_brand_config))
+  if (!IsVivaldiRunning() || (!g_client_hints_prefs && !g_brand_override))
     return;
 
   BrandSelection brand_selection =
-      custom_brand_config ? custom_brand_config->brand
-                          : BrandSelection(client_hints_prefs->GetInteger(
-                                vivaldiprefs::kVivaldiClientHintsBrand));
+      g_brand_override ? g_brand_override->brand
+                       : BrandSelection(g_client_hints_prefs->GetInteger(
+                             vivaldiprefs::kVivaldiClientHintsBrand));
 
   if (brand_selection == BrandSelection::kVivaldiBrand)
     return;
 
-  if (!(custom_brand_config ? custom_brand_config->SpecifyVivaldiBrand : client_hints_prefs->GetBoolean(
-          vivaldiprefs::kVivaldiClientHintsBrandAppendVivaldi)))
+  if (!(g_brand_override
+            ? g_brand_override->specify_vivaldi_brand
+            : g_client_hints_prefs->GetBoolean(
+                  vivaldiprefs::kVivaldiClientHintsBrandAppendVivaldi)))
     return;
 
   brands.emplace_back("Vivaldi", GetVivaldiReleaseVersion());
 }
 
 std::string GetBrandFullVersion() {
-  if (!IsVivaldiRunning() || (!client_hints_prefs && !custom_brand_config))
+  if (!IsVivaldiRunning() || (!g_client_hints_prefs && !g_brand_override))
     return std::string(version_info::GetVersionNumber());
 
   BrandSelection brand_selection =
-    custom_brand_config ? custom_brand_config->brand
-    : BrandSelection(client_hints_prefs->GetInteger(
-      vivaldiprefs::kVivaldiClientHintsBrand));
+      g_brand_override ? g_brand_override->brand
+                       : BrandSelection(g_client_hints_prefs->GetInteger(
+                             vivaldiprefs::kVivaldiClientHintsBrand));
 
   switch (brand_selection) {
-  case BrandSelection::kEdgeBrand:
-    return EDGE_FULL_VERSION;
-  case BrandSelection::kVivaldiBrand:
-    return GetVivaldiVersionString();
+    case BrandSelection::kEdgeBrand:
+      return EDGE_FULL_VERSION;
+    case BrandSelection::kVivaldiBrand:
+      return GetVivaldiVersionString();
 
-  case BrandSelection::kChromeBrand:
-  case BrandSelection::kCustomBrand:
-  case BrandSelection::kNoBrand:
-    return std::string(version_info::GetVersionNumber());
+    case BrandSelection::kChromeBrand:
+    case BrandSelection::kCustomBrand:
+    case BrandSelection::kNoBrand:
+      return std::string(version_info::GetVersionNumber());
   }
 }
 
 void ConfigureClientHintsOverrides() {
-  BrandConfiguration vivaldi_brand =
-      { BrandSelection::kVivaldiBrand, false, {}, {} };
-  ConfigureSpecialBrand(&vivaldi_brand);
+  {
+    BrandOverride brand_override(
+        BrandConfiguration({BrandSelection::kVivaldiBrand, false, {}, {}}));
 
-  for (auto domain : vivaldi_user_agent::GetVivaldiWhitelist()) {
-    blink::UserAgentOverride::AddGetUaMetaDataOverride(
-      std::string(domain), embedder_support::GetUserAgentMetadata());
+    for (auto domain : vivaldi_user_agent::GetVivaldiWhitelist()) {
+      blink::UserAgentOverride::AddGetUaMetaDataOverride(
+          std::string(domain), embedder_support::GetUserAgentMetadata());
+    }
   }
 
-  UnConfigureSpecialBrand();
+  {
+    BrandOverride brand_override(
+        BrandConfiguration({BrandSelection::kEdgeBrand, false, {}, {}}));
 
-  BrandConfiguration edge_brand =
-     { BrandSelection::kEdgeBrand, false, {}, {} };
-  ConfigureSpecialBrand(&edge_brand);
-
-  for (auto domain : vivaldi_user_agent::GetVivaldiEdgeList()) {
-    blink::UserAgentOverride::AddGetUaMetaDataOverride(
-      domain, embedder_support::GetUserAgentMetadata());
+    for (auto domain : vivaldi_user_agent::GetVivaldiEdgeList()) {
+      blink::UserAgentOverride::AddGetUaMetaDataOverride(
+          domain, embedder_support::GetUserAgentMetadata());
+    }
   }
-
-  UnConfigureSpecialBrand();
 }
 
 }  // namespace vivaldi

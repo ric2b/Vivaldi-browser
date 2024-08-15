@@ -198,13 +198,6 @@ void ProcessClientCommand(const sync_pb::ClientCommand& command,
     }
   }
 
-  if (command.has_sessions_commit_delay_seconds()) {
-    std::map<ModelType, base::TimeDelta> delay_map;
-    delay_map[SESSIONS] =
-        base::Seconds(command.sessions_commit_delay_seconds());
-    cycle->delegate()->OnReceivedCustomNudgeDelays(delay_map);
-  }
-
   if (command.has_gu_retry_delay_seconds() &&
       !base::FeatureList::IsEnabled(syncer::kSyncIgnoreGetUpdatesRetryDelay)) {
     cycle->delegate()->OnReceivedGuRetryDelay(
@@ -212,9 +205,6 @@ void ProcessClientCommand(const sync_pb::ClientCommand& command,
   }
 
   if (command.custom_nudge_delays_size() > 0) {
-    // Note that because this happens after the sessions_commit_delay_seconds
-    // handling, any SESSIONS value in this map will override the one in
-    // sessions_commit_delay_seconds.
     std::map<ModelType, base::TimeDelta> delay_map;
     for (int i = 0; i < command.custom_nudge_delays_size(); ++i) {
       ModelType type = GetModelTypeFromSpecificsFieldNumber(
@@ -256,22 +246,15 @@ ModelTypeSet GetTypesToMigrate(const ClientToServerResponse& response) {
 
 SyncProtocolError ConvertErrorPBToSyncProtocolError(
     const sync_pb::ClientToServerResponse_Error& error) {
-  SyncProtocolError sync_protocol_error;
-  sync_protocol_error.error_type =
-      PBErrorTypeToSyncProtocolErrorType(error.error_type());
-  sync_protocol_error.error_description = error.error_description();
-  sync_protocol_error.action = PBActionToClientAction(error.action());
-
-  if (error.error_data_type_ids_size() > 0) {
-    // THROTTLED and PARTIAL_FAILURE are currently the only error codes
-    // that uses |error_data_types|.
-    // In both cases, |error_data_types| are throttled.
-    sync_protocol_error.error_data_types =
-        GetModelTypeSetFromSpecificsFieldNumberList(
-            error.error_data_type_ids());
-  }
-
-  return sync_protocol_error;
+  return {.error_type = PBErrorTypeToSyncProtocolErrorType(error.error_type()),
+          .error_description = error.error_description(),
+          .action = PBActionToClientAction(error.action()),
+          // THROTTLED and PARTIAL_FAILURE are currently the only error codes
+          // using `error_data_types`. In both cases, the types are throttled.
+          .error_data_types = error.error_data_type_ids_size() > 0
+                                  ? GetModelTypeSetFromSpecificsFieldNumberList(
+                                        error.error_data_type_ids())
+                                  : ModelTypeSet()};
 }
 
 // static

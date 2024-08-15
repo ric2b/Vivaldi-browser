@@ -91,6 +91,7 @@ class PageInfoUI {
   // cookies subpage implementation
   struct CookiesNewInfo {
     CookiesNewInfo();
+    CookiesNewInfo(CookiesNewInfo&&);
     ~CookiesNewInfo();
 
     // The number of third-party sites blocked.
@@ -104,6 +105,12 @@ class PageInfoUI {
 
     // The status of whether third-party cookies are blocked.
     CookieControlsStatus status = CookieControlsStatus::kUninitialized;
+
+    // Whether protections are enabled for the given site.
+    bool protections_on = true;
+
+    // Whether tracking protection controls should be shown.
+    bool controls_visible = true;
 
     // The type of third-party cookie blocking in 3PCD.
     CookieBlocking3pcdStatus blocking_status =
@@ -121,7 +128,7 @@ class PageInfoUI {
     CookieControlsBreakageConfidenceLevel confidence;
 
     // Whether the current profile is "off the record".
-    bool is_otr;
+    bool is_otr = false;
   };
 
   // |ChosenObjectInfo| contains information about a single |chooser_object| of

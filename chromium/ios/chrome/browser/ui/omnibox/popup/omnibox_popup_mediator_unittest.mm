@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator+Testing.h"
 
 #import <memory>
 #import <vector>
@@ -25,7 +26,6 @@
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_suggestion.h"
 #import "ios/chrome/browser/ui/omnibox/popup/favicon_retriever.h"
 #import "ios/chrome/browser/ui/omnibox/popup/image_retriever.h"
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator+private.h"
 #import "ios/chrome/browser/ui/omnibox/popup/pedal_suggestion_wrapper.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_swift.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
@@ -115,7 +115,8 @@ class OmniboxPopupMediatorTest : public PlatformTest {
 
     // Setup for AutocompleteController.
     auto template_url_service = std::make_unique<TemplateURLService>(
-        /*prefs=*/nullptr, std::make_unique<SearchTermsData>(),
+        /*prefs=*/nullptr, /*search_engine_search_service=*/nullptr,
+        std::make_unique<SearchTermsData>(),
         /*web_data_service=*/nullptr,
         std::unique_ptr<TemplateURLServiceClient>(), base::RepeatingClosure());
     auto client = std::make_unique<MockAutocompleteProviderClient>();

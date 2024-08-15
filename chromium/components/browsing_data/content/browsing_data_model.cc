@@ -180,6 +180,15 @@ GetDataOwner::GetOwningOriginOrHost<net::CanonicalCookie>(
   return cookie.DomainWithoutDot();
 }
 
+template <>
+BrowsingDataModel::DataOwner
+GetDataOwner::GetOwningOriginOrHost<webid::FederatedIdentityDataModel::DataKey>(
+    const webid::FederatedIdentityDataModel::DataKey& data_key) const {
+  // Getting owning origin or host also handled by GetDataOwner in
+  // ChromeBrowsingDataModelDelegate.
+  return GetOwnerBasedOnScheme(data_key.relying_party_embedder());
+}
+
 // Helper which allows the lifetime management of a deletion action to occur
 // separately from the BrowsingDataModel itself.
 struct StorageRemoverHelper {
@@ -191,7 +200,7 @@ struct StorageRemoverHelper {
       )
       : storage_partition_(storage_partition),
         quota_helper_(quota_helper),
-        delegate_(delegate) {}
+        delegate_(delegate ? delegate->AsWeakPtr() : nullptr) {}
 
   void RemoveDataKeyEntries(
       const BrowsingDataModel::DataKeyEntries& data_key_entries,
@@ -221,34 +230,9 @@ struct StorageRemoverHelper {
 
   raw_ptr<content::StoragePartition> storage_partition_;
   scoped_refptr<BrowsingDataQuotaHelper> quota_helper_;
-  raw_ptr<BrowsingDataModel::Delegate, AcrossTasksDanglingUntriaged> delegate_;
+  base::WeakPtr<BrowsingDataModel::Delegate> delegate_;
   base::WeakPtrFactory<StorageRemoverHelper> weak_ptr_factory_{this};
 };
-
-void StorageRemoverHelper::RemoveDataKeyEntries(
-    const BrowsingDataModel::DataKeyEntries& data_key_entries,
-    base::OnceClosure completed) {
-  // At a helper level, only a single deletion may occur at a time. However
-  // multiple helpers may be associated with a single model.
-  DCHECK(!removing_);
-  removing_ = true;
-
-  completed_ = std::move(completed);
-
-  // Creating a synchronous callback to hold off running `completed_` callback
-  // until the loop has completed visiting all its entries whether deletion is
-  // synchronous or asynchronous.
-  auto sync_completion = GetCompleteCallback();
-  for (const auto& [key, details] : data_key_entries) {
-    absl::visit(Visitor{this, details.storage_types}, key);
-    if (delegate_) {
-      delegate_->RemoveDataKey(key, details.storage_types,
-                               GetCompleteCallback());
-    }
-  }
-
-  std::move(sync_completion).Run();
-}
 
 template <>
 void StorageRemoverHelper::Visitor::operator()<url::Origin>(
@@ -363,6 +347,12 @@ template <>
 void StorageRemoverHelper::Visitor::operator()<net::CanonicalCookie>(
     const net::CanonicalCookie& cookie) {
   if (types.Has(BrowsingDataModel::StorageType::kCookie)) {
+    if (helper->delegate_ && helper->delegate_->IsCookieDeletionDisabled(
+                                 net::cookie_util::CookieOriginToURL(
+                                     cookie.Domain(), cookie.IsSecure()))) {
+      // TODO(crbug.com/1500256): Expand test coverage for this block.
+      return;
+    }
     helper->storage_partition_->GetCookieManagerForBrowserProcess()
         ->DeleteCanonicalCookie(
             cookie,
@@ -374,20 +364,37 @@ void StorageRemoverHelper::Visitor::operator()<net::CanonicalCookie>(
   }
 }
 
-void RemoveBrowsingDataEntries(
-    const BrowsingDataModel::DataKeyEntries& browsing_data_entries,
-    std::unique_ptr<StorageRemoverHelper> storage_remover_helper,
+template <>
+void StorageRemoverHelper::Visitor::operator()<
+    webid::FederatedIdentityDataModel::DataKey>(
+    const webid::FederatedIdentityDataModel::DataKey& data_key) {
+  // Storage removal handled by RemoveDataKey in
+  // ChromeBrowsingDataModelDelegate.
+}
+
+void StorageRemoverHelper::RemoveDataKeyEntries(
+    const BrowsingDataModel::DataKeyEntries& data_key_entries,
     base::OnceClosure completed) {
-  // Bind the lifetime of the helper to the lifetime of the callback.
-  auto* helper_pointer = storage_remover_helper.get();
+  // At a helper level, only a single deletion may occur at a time. However
+  // multiple helpers may be associated with a single model.
+  DCHECK(!removing_);
+  removing_ = true;
 
-  base::OnceClosure wrapped_completed = base::BindOnce(
-      [](std::unique_ptr<StorageRemoverHelper> storage_remover,
-         base::OnceClosure completed) { std::move(completed).Run(); },
-      std::move(storage_remover_helper), std::move(completed));
+  completed_ = std::move(completed);
 
-  helper_pointer->RemoveDataKeyEntries(browsing_data_entries,
-                                       std::move(wrapped_completed));
+  // Creating a synchronous callback to hold off running `completed_` callback
+  // until the loop has completed visiting all its entries whether deletion is
+  // synchronous or asynchronous.
+  auto sync_completion = GetCompleteCallback();
+  for (const auto& [key, details] : data_key_entries) {
+    absl::visit(Visitor{this, details.storage_types}, key);
+    if (delegate_) {
+      delegate_->RemoveDataKey(key, details.storage_types,
+                               GetCompleteCallback());
+    }
+  }
+
+  std::move(sync_completion).Run();
 }
 
 base::OnceClosure StorageRemoverHelper::GetCompleteCallback() {
@@ -574,6 +581,13 @@ absl::optional<net::SchemefulSite> GetThirdPartyPartitioningSite(
               top_level_site = cookie.PartitionKey()->site();
             }
           },
+          [&](const webid::FederatedIdentityDataModel::DataKey& data_key) {
+            if (data_key.relying_party_requester() !=
+                data_key.relying_party_embedder()) {
+              top_level_site =
+                  net::SchemefulSite(data_key.relying_party_embedder());
+            }
+          },
       },
       data_key);
 
@@ -625,7 +639,7 @@ BrowsingDataModel::BrowsingDataEntryView::GetThirdPartyPartitioningSite()
 }
 
 BrowsingDataModel::Delegate::DelegateEntry::DelegateEntry(
-    DataKey data_key,
+    const DataKey& data_key,
     StorageType storage_type,
     uint64_t storage_size)
     : data_key(data_key),
@@ -734,6 +748,23 @@ void BrowsingDataModel::BuildFromStoragePartition(
   model_pointer->PopulateFromDisk(std::move(completion));
 }
 
+void BrowsingDataModel::RemoveBrowsingDataEntriesFromDisk(
+    const BrowsingDataModel::DataKeyEntries& browsing_data_entries,
+    base::OnceClosure completed) {
+  // Bind the lifetime of the helper to the lifetime of the callback.
+  auto helper = std::make_unique<StorageRemoverHelper>(
+      storage_partition_, quota_helper_, delegate_.get());
+  auto* helper_pointer = helper.get();
+
+  base::OnceClosure wrapped_completed = base::BindOnce(
+      [](std::unique_ptr<StorageRemoverHelper> storage_remover,
+         base::OnceClosure completed) { std::move(completed).Run(); },
+      std::move(helper), std::move(completed));
+
+  helper_pointer->RemoveDataKeyEntries(browsing_data_entries,
+                                       std::move(wrapped_completed));
+}
+
 std::unique_ptr<BrowsingDataModel> BrowsingDataModel::BuildEmpty(
     content::StoragePartition* storage_partition,
     std::unique_ptr<Delegate> delegate) {
@@ -760,10 +791,8 @@ void BrowsingDataModel::RemoveBrowsingData(const DataOwner& data_owner,
                                            base::OnceClosure completed) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  auto helper = std::make_unique<StorageRemoverHelper>(
-      storage_partition_, quota_helper_, delegate_.get());
-  RemoveBrowsingDataEntries(browsing_data_entries_[data_owner],
-                            std::move(helper), std::move(completed));
+  RemoveBrowsingDataEntriesFromDisk(browsing_data_entries_[data_owner],
+                                    std::move(completed));
 
   // Immediately remove the affected entries from the in-memory model. Different
   // UI elements have different sync vs. async expectations. Exposing a
@@ -782,10 +811,8 @@ void BrowsingDataModel::RemovePartitionedBrowsingData(
   GetAffectedDataKeyEntriesForRemovePartitionedBrowsingData(
       data_owner, top_level_site, affected_data_key_entries);
 
-  auto helper = std::make_unique<StorageRemoverHelper>(
-      storage_partition_, quota_helper_, delegate_.get());
-  RemoveBrowsingDataEntries(affected_data_key_entries, std::move(helper),
-                            std::move(completed));
+  RemoveBrowsingDataEntriesFromDisk(affected_data_key_entries,
+                                    std::move(completed));
 
   // Immediately remove the affected entries from the in-memory model.
   // Different UI elements have different sync vs. async expectations.
@@ -811,10 +838,8 @@ void BrowsingDataModel::RemoveUnpartitionedBrowsingData(
     }
   }
 
-  auto helper = std::make_unique<StorageRemoverHelper>(
-      storage_partition_, quota_helper_, delegate_.get());
-  RemoveBrowsingDataEntries(affected_data_key_entries, std::move(helper),
-                            std::move(completed));
+  RemoveBrowsingDataEntriesFromDisk(affected_data_key_entries,
+                                    std::move(completed));
 
   auto& data_owner_entries = browsing_data_entries_[data_owner];
   for (auto& entry : affected_data_key_entries) {
@@ -826,30 +851,31 @@ void BrowsingDataModel::RemoveUnpartitionedBrowsingData(
 }
 
 bool BrowsingDataModel::IsBlockedByThirdPartyCookieBlocking(
+    const DataKey& data_key,
     StorageType type) const {
+  if (GetThirdPartyPartitioningSite(data_key).has_value()) {
+    return false;
+  }
+
   if (delegate_) {
     auto delegate_response =
-        delegate_->IsBlockedByThirdPartyCookieBlocking(type);
+        delegate_->IsBlockedByThirdPartyCookieBlocking(data_key, type);
     if (delegate_response.has_value()) {
       return delegate_response.value();
     }
   }
 
-  // TODO(crbug.com/1469304, 1453783): When CHIPS is represented in the model,
-  // and partitioned storage stops respecting 3PC blocking, these will need to
-  // be accounted for. We will likely need to pass in the data key to
-  // disambiguate these cases from their storage types.
   switch (type) {
     case BrowsingDataModel::StorageType::kTrustTokens:
-    case BrowsingDataModel::StorageType::kSharedStorage:
     case BrowsingDataModel::StorageType::kInterestGroup:
     case BrowsingDataModel::StorageType::kAttributionReporting:
     case BrowsingDataModel::StorageType::kPrivateAggregation:
     case BrowsingDataModel::StorageType::kSharedDictionary:
       return false;
+    case BrowsingDataModel::StorageType::kSharedStorage:
     case BrowsingDataModel::StorageType::kLocalStorage:
-    case BrowsingDataModel::StorageType::kSessionStorage:
     case BrowsingDataModel::StorageType::kQuotaStorage:
+    case BrowsingDataModel::StorageType::kSessionStorage:
     case BrowsingDataModel::StorageType::kSharedWorker:
     case BrowsingDataModel::StorageType::kCookie:
       return true;

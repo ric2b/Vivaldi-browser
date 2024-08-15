@@ -492,13 +492,12 @@ class SurfaceAggregatorTest : public testing::Test, public DisplayTimeSource {
                          SkBlendMode::kSrcOver, /*sorting_context=*/0,
                          /*layer_id=*/0u, /*fast_rounded_corner=*/false);
     auto* quad = pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
-    float vertex_opacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     const gfx::PointF kUVTopLeft(0.1f, 0.2f);
     const gfx::PointF kUVBottomRight(1.0f, 1.0f);
     quad->SetNew(shared_state, output_rect, output_rect,
                  false /*needs_blending*/, ResourceId(1),
                  false /*premultiplied_alpha*/, kUVTopLeft, kUVBottomRight,
-                 SkColors::kTransparent, vertex_opacity, false /*flipped*/,
+                 SkColors::kTransparent, false /*flipped*/,
                  false /*nearest_neighbor*/, false /*secure_output_only*/,
                  gfx::ProtectedVideoType::kClear);
 
@@ -509,9 +508,13 @@ class SurfaceAggregatorTest : public testing::Test, public DisplayTimeSource {
 
  protected:
   ServerSharedBitmapManager shared_bitmap_manager_;
+  gpu::SharedImageManager shared_image_manager_;
+  gpu::SyncPointManager sync_point_manager_;
+
   FrameSinkManagerImpl manager_{
       FrameSinkManagerImpl::InitParams(&shared_bitmap_manager_)};
-  DisplayResourceProviderSoftware resource_provider_{&shared_bitmap_manager_};
+  DisplayResourceProviderSoftware resource_provider_{
+      &shared_bitmap_manager_, &shared_image_manager_, &sync_point_manager_};
   FakeSurfaceObserver observer_{false};
   FakeCompositorFrameSinkClient fake_client_;
   std::unique_ptr<CompositorFrameSinkSupport> root_sink_;
@@ -6853,7 +6856,7 @@ CompositorFrame BuildCompositorFrameWithResources(
 
   for (ResourceId resource_id : resource_ids) {
     auto resource = TransferableResource::MakeSoftware(
-        SharedBitmap::GenerateId(), gfx::Size(1, 1),
+        SharedBitmap::GenerateId(), gpu::SyncToken(), gfx::Size(1, 1),
         SinglePlaneFormat::kRGBA_8888);
     resource.id = resource_id;
     if (!valid) {
@@ -6870,7 +6873,6 @@ CompositorFrame BuildCompositorFrameWithResources(
     const gfx::PointF uv_top_left;
     const gfx::PointF uv_bottom_right;
     SkColor4f background_color = SkColors::kGreen;
-    const float vertex_opacity[4] = {0.f, 0.f, 1.f, 1.f};
     bool flipped = false;
     bool nearest_neighbor = false;
     bool secure_output_only = true;
@@ -6878,7 +6880,7 @@ CompositorFrame BuildCompositorFrameWithResources(
         gfx::ProtectedVideoType::kClear;
     quad->SetAll(sqs, rect, visible_rect, needs_blending, resource_id,
                  gfx::Size(), premultiplied_alpha, uv_top_left, uv_bottom_right,
-                 background_color, vertex_opacity, flipped, nearest_neighbor,
+                 background_color, flipped, nearest_neighbor,
                  secure_output_only, protected_video_type);
   }
   frame.render_pass_list.push_back(std::move(pass));
@@ -8763,15 +8765,14 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, PerQuadDamageSameSharedQuadState) {
   for (int i = 0; i < 2; i++) {
     auto* texure_quad = pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
 
-    float vertex_opacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     const gfx::PointF kUVTopLeft(0.1f, 0.2f);
     const gfx::PointF kUVBottomRight(1.0f, 1.0f);
     texure_quad->SetNew(
         sqs, quad_rects[i], quad_rects[i], false /*needs_blending*/,
         ResourceId(1), false /*premultiplied_alpha*/, kUVTopLeft,
-        kUVBottomRight, SkColors::kTransparent, vertex_opacity,
-        false /*flipped*/, false /*nearest_neighbor*/,
-        false /*secure_output_only*/, gfx::ProtectedVideoType::kClear);
+        kUVBottomRight, SkColors::kTransparent, false /*flipped*/,
+        false /*nearest_neighbor*/, false /*secure_output_only*/,
+        gfx::ProtectedVideoType::kClear);
 
     texure_quad->damage_rect = damage_rects[i];
   }
@@ -9238,7 +9239,7 @@ TEST_F(SurfaceAggregatorValidSurfaceTest, DisplayTransformDamageCallback) {
 
   auto frame =
       aggregator_.Aggregate(root_surface_id_, GetNextDisplayTimeAndIncrement(),
-                            gfx::OVERLAY_TRANSFORM_ROTATE_90);
+                            gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_90);
   gfx::Rect transformed_rect(surface_size.height(), surface_size.width());
   EXPECT_EQ(frame.render_pass_list.back()->output_rect, transformed_rect);
   EXPECT_EQ(frame.render_pass_list.back()->damage_rect, transformed_rect);

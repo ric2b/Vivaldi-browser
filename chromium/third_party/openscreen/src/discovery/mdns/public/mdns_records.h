@@ -15,13 +15,13 @@
 #include <utility>
 #include <vector>
 
-#include "absl/strings/ascii.h"
 #include "absl/types/variant.h"
 #include "discovery/mdns/public/mdns_constants.h"
 #include "platform/base/error.h"
 #include "platform/base/interface_info.h"
 #include "platform/base/ip_address.h"
 #include "util/osp_logging.h"
+#include "util/stringutil.h"
 
 namespace openscreen::discovery {
 
@@ -87,7 +87,7 @@ class DomainName {
   friend H AbslHashValue(H h, const DomainName& domain_name) {
     std::vector<std::string> labels_clone = domain_name.labels_;
     for (auto& label : labels_clone) {
-      absl::AsciiStrToLower(&label);
+      ::openscreen::stringutil::AsciiStrToLower(label);
     }
     return H::combine(std::move(h), std::move(labels_clone));
   }

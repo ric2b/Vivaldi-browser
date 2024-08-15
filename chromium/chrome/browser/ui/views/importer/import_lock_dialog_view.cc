@@ -84,5 +84,5 @@ ImportLockDialogView::ImportLockDialogView(
 
 ImportLockDialogView::~ImportLockDialogView() = default;
 
-BEGIN_METADATA(ImportLockDialogView, views::DialogDelegateView)
+BEGIN_METADATA(ImportLockDialogView)
 END_METADATA

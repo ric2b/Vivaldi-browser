@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = []
 std = []
@@ -13,7 +16,7 @@ crypto_provider.workspace = true
 ldt_tbc.workspace = true
 
 [dev-dependencies]
-crypto_provider_default = {workspace = true}
+crypto_provider_default = { workspace = true, features = ["rustcrypto"] }
 rand_ext.workspace = true
 test_helper.workspace = true
 xts_aes.workspace = true
@@ -21,7 +24,7 @@ xts_aes.workspace = true
 rand.workspace = true
 rand_pcg.workspace = true
 base64.workspace = true
-serde_json = {workspace = true, features = ["std"]}
+serde_json = { workspace = true, features = ["std"] }
 anyhow.workspace = true
 hex.workspace = true
 

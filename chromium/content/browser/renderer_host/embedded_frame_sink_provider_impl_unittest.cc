@@ -38,10 +38,15 @@ using testing::IsEmpty;
 namespace content {
 namespace {
 
+constexpr uint32_t kRendererSinkIdStart =
+    uint32_t{std::numeric_limits<int32_t>::max()} + 1;
 constexpr uint32_t kRendererClientId = 3;
-constexpr viz::FrameSinkId kFrameSinkParent(kRendererClientId, 1);
-constexpr viz::FrameSinkId kFrameSinkA(kRendererClientId, 3);
-constexpr viz::FrameSinkId kFrameSinkB(kRendererClientId, 4);
+constexpr viz::FrameSinkId kFrameSinkParent(kRendererClientId,
+                                            kRendererSinkIdStart);
+constexpr viz::FrameSinkId kFrameSinkA(kRendererClientId,
+                                       kRendererSinkIdStart + 2);
+constexpr viz::FrameSinkId kFrameSinkB(kRendererClientId,
+                                       kRendererSinkIdStart + 4);
 
 // Runs RunLoop until |endpoint| encounters a connection error.
 template <class T>
@@ -198,7 +203,7 @@ TEST_F(EmbeddedFrameSinkProviderImplTest,
   // Renderer submits a CompositorFrame with |local_id|.
   const viz::LocalSurfaceId local_id(1, base::UnguessableToken::Create());
   compositor_frame_sink->SubmitCompositorFrame(
-      local_id, viz::MakeDefaultCompositorFrame(), absl::nullopt, 0);
+      local_id, viz::MakeDefaultCompositorFrame(), std::nullopt, 0);
 
   RunUntilIdle();
 

@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "content/public/renderer/render_frame_observer.h"
@@ -68,10 +69,10 @@ class FormTracker : public content::RenderFrameObserver,
   // and submission.
   class Observer {
    public:
-    enum class ElementChangeSource {
-      TEXTFIELD_CHANGED,
-      WILL_SEND_SUBMIT_EVENT,
-      SELECT_CHANGED,
+    enum class SaveFormReason {
+      kTextFieldChanged,
+      kWillSendSubmitEvent,
+      kSelectChanged,
     };
 
     // TODO(crbug.com/1126017): Find a better name for this method.
@@ -82,7 +83,7 @@ class FormTracker : public content::RenderFrameObserver,
     virtual void OnProvisionallySaveForm(
         const blink::WebFormElement& form,
         const blink::WebFormControlElement& element,
-        ElementChangeSource source) = 0;
+        SaveFormReason source) = 0;
 
     // Invoked when the form is probably submitted, the submitted form could be
     // the one saved in OnProvisionallySaveForm() or others in the page.
@@ -117,6 +118,7 @@ class FormTracker : public content::RenderFrameObserver,
   void AjaxSucceeded();
   void TextFieldDidChange(const blink::WebFormControlElement& element);
   void SelectControlDidChange(const blink::WebFormControlElement& element);
+  virtual void ElementDisappeared(const blink::WebElement& element);
 
   // Tells the tracker to track the autofilled `element`. Since autofilling a
   // form or field won't trigger the regular *DidChange events, the tracker
@@ -131,19 +133,16 @@ class FormTracker : public content::RenderFrameObserver,
     user_gesture_required_ = required;
   }
 
-  void FireProbablyFormSubmittedForTesting();
-
  private:
-  FRIEND_TEST_ALL_PREFIXES(FormAutocompleteTest,
-                           FormSubmittedBySameDocumentNavigation);
+  friend class FormTrackerTestApi;
 
   // content::RenderFrameObserver:
   void DidCommitProvisionalLoad(ui::PageTransition transition) override;
   void DidFinishSameDocumentNavigation() override;
   void DidStartNavigation(
       const GURL& url,
-      absl::optional<blink::WebNavigationType> navigation_type) override;
-  void WillDetach() override;
+      std::optional<blink::WebNavigationType> navigation_type) override;
+  void WillDetach(blink::DetachReason detach_reason) override;
   void WillSubmitForm(const blink::WebFormElement& form) override;
   void OnDestruct() override;
 
@@ -171,7 +170,7 @@ class FormTracker : public content::RenderFrameObserver,
   // http://bugs.webkit.org/show_bug.cgi?id=16976 , we also don't want to
   // process element while it is changing.
   void FormControlDidChangeImpl(const blink::WebFormControlElement& element,
-                                Observer::ElementChangeSource change_source);
+                                Observer::SaveFormReason change_source);
   void FireProbablyFormSubmitted();
   void FireFormSubmitted(const blink::WebFormElement& form);
   void FireInferredFormSubmission(mojom::SubmissionSource source);
@@ -179,20 +178,26 @@ class FormTracker : public content::RenderFrameObserver,
   bool CanInferFormSubmitted();
 
   // Tracks the cached element, as well as its ancestors, until it disappears
-  // (removed or hidden), then directly infers submission.
-  void TrackElement();
+  // (removed or hidden), then directly infers submission. `source` is the type
+  // of submission to fire when the tracked element disappears.
+  // TODO(crbug.com/1483242): Remove.
+  void TrackElement(mojom::SubmissionSource source);
 
   void ResetLastInteractedElements();
 
   // Invoked when the observed element was either removed from the DOM or it's
-  // computed style changed to display: none.
-  void ElementWasHiddenOrRemoved();
+  // computed style changed to display: none. `source` is the type of submission
+  // to be inferred in case this function is called.
+  // TODO(crbug.com/1483242): Remove.
+  void ElementWasHiddenOrRemoved(mojom::SubmissionSource source);
 
   base::ObserverList<Observer>::Unchecked observers_;
   bool ignore_control_changes_ = false;
   bool user_gesture_required_ = true;
   FormRef last_interacted_form_;
   FieldRef last_interacted_formless_element_;
+
+  // TODO(crbug.com/1483242): Remove.
   raw_ptr<blink::WebFormElementObserver, ExperimentalRenderer>
       form_element_observer_ = nullptr;
 

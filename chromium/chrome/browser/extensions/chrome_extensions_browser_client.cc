@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/command_line.h"
@@ -62,6 +63,7 @@
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_loader_factory.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/channel_info.h"
@@ -92,7 +94,7 @@
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/permission_set.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ipc/ipc_message.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -369,6 +371,14 @@ ChromeExtensionsBrowserClient::GetProcessManagerDelegate() const {
   return process_manager_delegate_.get();
 }
 
+mojo::PendingRemote<network::mojom::URLLoaderFactory>
+ChromeExtensionsBrowserClient::GetControlledFrameEmbedderURLLoader(
+    int frame_tree_node_id,
+    content::BrowserContext* browser_context) {
+  return web_app::IsolatedWebAppURLLoaderFactory::Create(frame_tree_node_id,
+                                                         browser_context);
+}
+
 std::unique_ptr<ExtensionHostDelegate>
 ChromeExtensionsBrowserClient::CreateExtensionHostDelegate() {
   return std::unique_ptr<ExtensionHostDelegate>(
@@ -538,16 +548,20 @@ void ChromeExtensionsBrowserClient::CleanUpWebView(
     int embedder_process_id,
     int view_instance_id) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  if (extensions::ChromeContentBrowserClientExtensionsPart::
-          AreExtensionsDisabledForProfile(profile)) {
+  if (ChromeContentBrowserClientExtensionsPart::AreExtensionsDisabledForProfile(
+          profile)) {
     return;
   }
 
   // Clean up context menus for the WebView.
   auto* menu_manager = MenuManager::Get(profile);
   DCHECK(menu_manager);
-  menu_manager->RemoveAllContextItems(
-      MenuItem::ExtensionKey("", embedder_process_id, view_instance_id));
+  // The |webview_embedder_frame_id| parameter of ExtensionKey is not used to
+  // identify the context menu items that belong to a WebView so it is OK for it
+  // to be |MSG_ROUTING_NONE| here.
+  menu_manager->RemoveAllContextItems(MenuItem::ExtensionKey(
+      "", embedder_process_id, /*webview_embedder_frame_id=*/MSG_ROUTING_NONE,
+      view_instance_id));
 }
 
 void ChromeExtensionsBrowserClient::ClearBackForwardCache() {
@@ -574,7 +588,7 @@ void ChromeExtensionsBrowserClient::AttachExtensionTaskManagerTag(
     case mojom::ViewType::kTabContents:
       // Those types are tracked by other tags:
       // BACKGROUND_CONTENTS --> task_manager::BackgroundContentsTag.
-      // GUEST --> extensions::ChromeGuestViewManagerDelegate.
+      // GUEST --> ChromeGuestViewManagerDelegate.
       // PANEL --> task_manager::PanelTag.
       // TAB_CONTENTS --> task_manager::TabContentsTag.
       // These tags are created and attached to the web_contents in other
@@ -590,7 +604,7 @@ void ChromeExtensionsBrowserClient::AttachExtensionTaskManagerTag(
 scoped_refptr<update_client::UpdateClient>
 ChromeExtensionsBrowserClient::CreateUpdateClient(
     content::BrowserContext* context) {
-  absl::optional<GURL> override_url;
+  std::optional<GURL> override_url;
   GURL update_url = extension_urls::GetWebstoreUpdateUrl();
   if (update_url != extension_urls::GetDefaultWebstoreUpdateUrl()) {
     if (update_url.path() == kCrxUrlPath) {
@@ -710,7 +724,7 @@ void ChromeExtensionsBrowserClient::SetLastSaveFilePath(
 bool ChromeExtensionsBrowserClient::HasIsolatedStorage(
     const std::string& extension_id,
     content::BrowserContext* context) {
-  return extensions::util::HasIsolatedStorage(extension_id, context);
+  return util::HasIsolatedStorage(extension_id, context);
 }
 
 bool ChromeExtensionsBrowserClient::IsScreenshotRestricted(
@@ -822,8 +836,7 @@ bool ChromeExtensionsBrowserClient::IsUsbDeviceAllowedByPolicy(
     const ExtensionId& extension_id,
     int vendor_id,
     int product_id) const {
-  url::Origin origin =
-      extensions::Extension::CreateOriginFromExtensionId(extension_id);
+  url::Origin origin = Extension::CreateOriginFromExtensionId(extension_id);
 
   UsbChooserContext* usb_chooser_context =
       UsbChooserContextFactory::GetForProfile(static_cast<Profile*>(context));
@@ -955,7 +968,7 @@ void ChromeExtensionsBrowserClient::GetWebViewStoragePartitionConfig(
     content::SiteInstance* owner_site_instance,
     const std::string& partition_name,
     bool in_memory,
-    base::OnceCallback<void(absl::optional<content::StoragePartitionConfig>)>
+    base::OnceCallback<void(std::optional<content::StoragePartitionConfig>)>
         callback) {
   const GURL& owner_site_url = owner_site_instance->GetSiteURL();
   if (owner_site_url.SchemeIs(chrome::kIsolatedAppScheme)) {

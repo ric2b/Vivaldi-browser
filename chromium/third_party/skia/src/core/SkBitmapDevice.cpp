@@ -571,14 +571,15 @@ void SkBitmapDevice::drawAtlas(const SkRSXform xform[],
 void SkBitmapDevice::drawSpecial(SkSpecialImage* src,
                                  const SkMatrix& localToDevice,
                                  const SkSamplingOptions& sampling,
-                                 const SkPaint& paint) {
+                                 const SkPaint& paint,
+                                 SkCanvas::SrcRectConstraint) {
     SkASSERT(!paint.getImageFilter());
     SkASSERT(!paint.getMaskFilter());
     SkASSERT(!src->isGaneshBacked());
     SkASSERT(!src->isGraphiteBacked());
 
     SkBitmap resultBM;
-    if (src->getROPixels(&resultBM)) {
+    if (SkSpecialImages::AsBitmap(src, &resultBM)) {
         SkDraw draw;
         if (!this->accessPixels(&draw.fDst)) {
           return; // no pixels to draw to so skip it

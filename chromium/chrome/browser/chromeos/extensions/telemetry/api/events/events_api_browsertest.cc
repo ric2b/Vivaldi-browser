@@ -83,11 +83,9 @@ class TelemetryExtensionEventsApiBrowserTest
     fake_events_service_impl_ = nullptr;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    if (IsCloseAndWaitAshBrowserWindowApisSupported()) {
-      // Since one of tests opens browser window UI in Ash, it should close the
-      // UI so that it won't pollute other tests running against the shared Ash.
-      CloseAllAshBrowserWindows();
-    }
+    // Since one of tests opens browser window UI in Ash, it should close the
+    // UI so that it won't pollute other tests running against the shared Ash.
+    CloseAllAshBrowserWindows();
 #endif
     BaseTelemetryExtensionBrowserTest::TearDownOnMainThread();
   }
@@ -673,10 +671,8 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionEventsApiBrowserTest,
   )");
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (IsCloseAndWaitAshBrowserWindowApisSupported()) {
-    // This test opens a browser window UI in Ash.
-    WaitUntilAtLeastOneAshBrowserWindowOpen();
-  }
+  // This test opens a browser window UI in Ash.
+  WaitUntilAtLeastOneAshBrowserWindowOpen();
 #endif
 }
 
@@ -745,7 +741,7 @@ IN_PROC_BROWSER_TEST_F(TelemetryExtensionEventsApiBrowserTest,
 // If we run in Ash however, we can check that the UI was correctly open.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   bool is_diagnostic_app_open = false;
-  for (auto* target_browser : *BrowserList::GetInstance()) {
+  for (Browser* target_browser : *BrowserList::GetInstance()) {
     TabStripModel* target_tab_strip = target_browser->tab_strip_model();
     for (int i = 0; i < target_tab_strip->count(); ++i) {
       content::WebContents* target_contents =

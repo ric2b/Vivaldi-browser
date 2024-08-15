@@ -20,20 +20,24 @@ This will execute cloudbuild.yaml and will deploy the Cloud Workflow and all
 Cloud functions in parallel. The deployed resources will have the "-prod"
 suffix. (e.g. start-pinpoint-job-prod).
 
+# How to Roll Production Back to a Previous Version
+
+You will have to `git checkout` to the previous commit you want to roll back
+to, and run the above deployment command from that commit.
+
 # Test Changes on Staging Version
 
 ## Deploying to Staging
 
-To test local changes on your own version, you can specify a substitution for.
-_VERSION. Example:
+To test local changes on your own version, you can deploy them to staging with:
 
 ```
-gcloud builds submit --region=us-central1 --config=cloudbuild.yaml --substitutions=_VERSION=$USER --project=chromeperf .
+make deploy_staging
 ```
 
 This will deploy the workflows and functions with the provided suffix version
-(e.g. sandwich-verification-workflow-eduardoyap, start-pinpoint-job-eduardoyap). You should be able to see your deployed
-functions in the [Cloud Functions
+(e.g. sandwich-verification-workflow-eduardoyap, start-pinpoint-job-eduardoyap
+etc). You should be able to see your deployed functions in the [Cloud Functions
 dashboard](https://pantheon.corp.google.com/functions/list?referrer=search&project=chromeperf)
 and [Cloud Workflow dashboard](https://pantheon.corp.google.com/workflows?referrer=search&project=chromeperf).
 

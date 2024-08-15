@@ -179,7 +179,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   ResourceFetcher* Fetcher() final;
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
   void ExceptionThrown(ErrorEvent*) final;
-  void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) final;
   void AddInspectorIssue(AuditsIssue) final;
   EventTarget* ErrorEventTarget() final { return this; }
   String OutgoingReferrer() const final;
@@ -332,8 +331,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void moveBy(int x, int y) const;
   void moveTo(int x, int y) const;
 
-  void resizeBy(int x, int y) const;
-  void resizeTo(int width, int height) const;
+  void resizeBy(int x, int y, ExceptionState&) const;
+  void resizeTo(int width, int height, ExceptionState&) const;
 
   MediaQueryList* matchMedia(const String&);
 
@@ -368,7 +367,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void releaseEvents() {}
   External* external();
 
-  bool isSecureContext() const;
+  bool isSecureContext() const;  // NOLINT(bugprone-virtual-near-miss)
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search, kSearch)
 
@@ -506,7 +505,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   // Called when a network request buffered an additional `num_bytes` while this
   // frame is in back-forward cache.
-  void DidBufferLoadWhileInBackForwardCache(size_t num_bytes);
+  void DidBufferLoadWhileInBackForwardCache(bool update_process_wide_count,
+                                            size_t num_bytes);
 
   // Whether the window is credentialless or not.
   bool credentialless() const;
@@ -537,11 +537,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // given window, it cannot be taken away.
   void SetHasStorageAccess();
 
-  void maximize(ExceptionState&);
-  void minimize(ExceptionState&);
-  void restore(ExceptionState&);
-  void setResizable(bool resizable, ExceptionState&);
-
  protected:
   // EventTarget overrides.
   void AddedEventListener(const AtomicString& event_type,
@@ -555,10 +550,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
  private:
   class NetworkStateObserver;
 
-  // Intentionally private to prevent redundant checks when the type is
-  // already LocalDOMWindow.
+  // Intentionally private to prevent redundant checks.
   bool IsLocalDOMWindow() const override { return true; }
-  bool IsRemoteDOMWindow() const override { return false; }
 
   bool HasInsecureContextInAncestors() const override;
 
@@ -571,9 +564,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void DispatchLoadEvent();
 
   void SetIsPictureInPictureWindow();
-
-  bool CanUseWindowingControls(ExceptionState& exception_state);
-  bool CanUseMinMaxRestoreWindowingControls(ExceptionState& exception_state);
 
   // Return the viewport size including scrollbars.
   gfx::Size GetViewportSize() const;

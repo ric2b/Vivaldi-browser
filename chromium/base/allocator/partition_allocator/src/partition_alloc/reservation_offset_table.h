@@ -10,17 +10,17 @@
 #include <limits>
 #include <tuple>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/address_pool_manager.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_address_space.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/tagging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/alignment.h"
 #include "build/build_config.h"
+#include "partition_alloc/address_pool_manager.h"
+#include "partition_alloc/partition_address_space.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/tagging.h"
+#include "partition_alloc/thread_isolation/alignment.h"
 
 namespace partition_alloc::internal {
 
@@ -100,8 +100,16 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC)
   // If thread isolation support is enabled, we need to write-protect the tables
   // of the thread isolated pool. For this, we need to pad the tables so that
   // the thread isolated ones start on a page boundary.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-length-array"
+#endif
   char pad_[PA_THREAD_ISOLATED_ARRAY_PAD_SZ(_ReservationOffsetTable,
                                             kNumPools)] = {};
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
   struct _ReservationOffsetTable tables[kNumPools];
   static PA_CONSTINIT ReservationOffsetTable singleton_;
 #else

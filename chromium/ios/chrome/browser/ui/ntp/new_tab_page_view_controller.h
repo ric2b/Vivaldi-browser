@@ -78,6 +78,9 @@
 // Whether or not the fake omnibox is pinned to the top of the NTP.
 @property(nonatomic, readonly) BOOL isFakeboxPinned;
 
+// Layout guide for NTP modules.
+@property(nonatomic, readonly) UILayoutGuide* moduleLayoutGuide;
+
 // Initializes the new tab page view controller.
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 

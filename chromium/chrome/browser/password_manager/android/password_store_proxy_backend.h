@@ -6,14 +6,17 @@
 #define CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_STORE_PROXY_BACKEND_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/strong_alias.h"
-#include "components/password_manager/core/browser/password_store_backend.h"
-#include "components/password_manager/core/browser/password_store_change.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend.h"
+#include "components/password_manager/core/browser/password_store/password_store_change.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_service_observer.h"
 
 class PrefService;
 
@@ -22,13 +25,15 @@ namespace password_manager {
 // This backend forwards requests to two backends in order to compare and record
 // their results and time differences. The main backend fulfills the  request
 // while the shadow backend is only queried to record shadow traffic.
-class PasswordStoreProxyBackend : public PasswordStoreBackend {
+class PasswordStoreProxyBackend final : public PasswordStoreBackend,
+                                        public syncer::SyncServiceObserver {
  public:
   // `built_in_backend` and `android_backend` must not be null and must outlive
   // this object as long as Shutdown() is not called.
   PasswordStoreProxyBackend(PasswordStoreBackend* built_in_backend,
                             PasswordStoreBackend* android_backend,
-                            PrefService* prefs);
+                            PrefService* prefs,
+                            IsAccountStore is_account_store);
   PasswordStoreProxyBackend(const PasswordStoreProxyBackend&) = delete;
   PasswordStoreProxyBackend(PasswordStoreProxyBackend&&) = delete;
   PasswordStoreProxyBackend& operator=(const PasswordStoreProxyBackend&) =
@@ -50,7 +55,7 @@ class PasswordStoreProxyBackend : public PasswordStoreBackend {
   void GetAllLoginsWithAffiliationAndBrandingAsync(
       LoginsOrErrorReply callback) override;
   void GetAutofillableLoginsAsync(LoginsOrErrorReply callback) override;
-  void GetAllLoginsForAccountAsync(absl::optional<std::string> account,
+  void GetAllLoginsForAccountAsync(std::string account,
                                    LoginsOrErrorReply callback) override;
   void FillMatchingLoginsAsync(
       LoginsOrErrorReply callback,
@@ -81,24 +86,30 @@ class PasswordStoreProxyBackend : public PasswordStoreBackend {
   std::unique_ptr<syncer::ProxyModelTypeControllerDelegate>
   CreateSyncControllerDelegate() override;
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
+  base::WeakPtr<PasswordStoreBackend> AsWeakPtr() override;
+
+  void OnSyncShutdown(syncer::SyncService* sync_service) override;
 
   // Forwards the (possible) forms changes caused by a remote event to the
   // main backend.
   void OnRemoteFormChangesReceived(
       CallbackOriginatesFromAndroidBackend originatesFromAndroid,
       RemoteChangesReceived remote_form_changes_received,
-      absl::optional<PasswordStoreChangeList> changes);
+      std::optional<PasswordStoreChangeList> changes);
 
-  // Forwards sync status changes by the backend facilitating them.
-  void OnSyncEnabledOrDisabled(
-      CallbackOriginatesFromAndroidBackend originatesFromAndroid,
-      base::RepeatingClosure sync_enabled_or_disabled_cb);
-
-  // Helper used to determine main *and* shadow backends. Some UPM experiment
-  // groups use shadow traffic to compare the two backends, other may need it
-  // to execute login deletions on both backends, to avoid recovery of deleted
-  // data.
+  // Helper used to determine main *and* fallback backends.
+  // The account store doesn't use any fallback backend.
+  // The profile store only uses the built-in backend as a fallback
+  // if it's being used for synced passwords (pre store split).
   bool UsesAndroidBackendAsMainBackend();
+
+  // Determines whether the account store should use the Android backend
+  // or the built-in backend as the main backend.
+  bool UsesAndroidBackendAsMainBackendForAccount();
+
+  // Determines whether the profile store should use the Android backend
+  // or the built-in backend as the main backend.
+  bool UsesAndroidBackendAsMainBackendForProfile();
 
   // Retries to execute operation on |built_in_backend| in case of an
   // unrecoverable error inside |android_backend|. |retry_callback| is the
@@ -121,8 +132,9 @@ class PasswordStoreProxyBackend : public PasswordStoreBackend {
   const raw_ptr<PasswordStoreBackend> built_in_backend_;
   const raw_ptr<PasswordStoreBackend> android_backend_;
   raw_ptr<PrefService> const prefs_ = nullptr;
-  raw_ptr<const syncer::SyncService> sync_service_ = nullptr;
+  raw_ptr<syncer::SyncService> sync_service_ = nullptr;
 
+  IsAccountStore is_account_store_;
   base::WeakPtrFactory<PasswordStoreProxyBackend> weak_ptr_factory_{this};
 };
 

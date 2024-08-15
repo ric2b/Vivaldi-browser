@@ -72,9 +72,6 @@
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
-#include "third_party/blink/renderer/core/html/portal/document_portals.h"
-#include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
-#include "third_party/blink/renderer/core/html/portal/portal_contents.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/inspector/dom_editor.h"
 #include "third_party/blink/renderer/core/inspector/dom_patch_support.h"
@@ -1184,6 +1181,21 @@ protocol::Response InspectorDOMAgent::performSearch(
   HeapVector<Member<Document>> docs = Documents();
   HeapLinkedHashSet<Member<Node>> result_collector;
 
+  // Selector evaluation
+  for (Document* document : docs) {
+    DummyExceptionStateForTesting exception_state;
+    StaticElementList* element_list = document->QuerySelectorAll(
+        AtomicString(whitespace_trimmed_query), exception_state);
+    if (exception_state.HadException() || !element_list) {
+      continue;
+    }
+
+    unsigned size = element_list->length();
+    for (unsigned i = 0; i < size; ++i) {
+      result_collector.insert(element_list->item(i));
+    }
+  }
+
   for (Document* document : docs) {
     Node* document_element = document->documentElement();
     Node* node = document_element;
@@ -1264,19 +1276,6 @@ protocol::Response InspectorDOMAgent::performSearch(
         node = To<Attr>(node)->ownerElement();
       result_collector.insert(node);
     }
-  }
-
-  // Selector evaluation
-  for (Document* document : docs) {
-    DummyExceptionStateForTesting exception_state;
-    StaticElementList* element_list = document->QuerySelectorAll(
-        AtomicString(whitespace_trimmed_query), exception_state);
-    if (exception_state.HadException() || !element_list)
-      continue;
-
-    unsigned size = element_list->length();
-    for (unsigned i = 0; i < size; ++i)
-      result_collector.insert(element_list->item(i));
   }
 
   *search_id = IdentifiersFactory::CreateIdentifier();
@@ -1665,7 +1664,7 @@ protocol::Response InspectorDOMAgent::getContainerForNode(
     }
   }
 
-  element->GetDocument().UpdateStyleAndLayoutTreeForNode(
+  element->GetDocument().UpdateStyleAndLayoutTreeForElement(
       element, DocumentUpdateReason::kInspector);
   StyleResolver& style_resolver = element->GetDocument().GetStyleResolver();
   // Container rule origin no longer known at this point, match name from all
@@ -1798,7 +1797,10 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
     bool pierce,
     NodeToIdMap* nodes_map,
     protocol::Array<protocol::DOM::Node>* flatten_result) {
-  int id = Bind(node, nodes_map);
+  // If no `nodes_map` is provided, do the best effort to provide a node id,
+  // but do not create one if it's not there, since absence of the map implies
+  // we're not pushing the node to the front-end at the moment.
+  const int id = nodes_map ? Bind(node, nodes_map) : BoundNodeId(node);
   String local_name;
   String node_value;
 
@@ -1868,12 +1870,9 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
     }
 
     if (auto* template_element = DynamicTo<HTMLTemplateElement>(*element)) {
-      // The inspector should not try to access the .content() property of
-      // declarative Shadow DOM <template> elements, because it will be null.
-      if (!template_element->IsDeclarativeShadowRoot() &&
-          template_element->content()) {
-        value->setTemplateContent(BuildObjectForNode(
-            template_element->content(), 0, pierce, nodes_map, flatten_result));
+      if (DocumentFragment* content = template_element->content()) {
+        value->setTemplateContent(
+            BuildObjectForNode(content, 0, pierce, nodes_map, flatten_result));
         force_push_children = true;
       }
     }
@@ -2445,11 +2444,6 @@ void InspectorDOMAgent::NodeCreated(Node* node) {
   }
 }
 
-void InspectorDOMAgent::PortalRemoteFrameCreated(
-    HTMLPortalElement* portal_element) {
-  InvalidateFrameOwnerElement(portal_element);
-}
-
 static ShadowRoot* ShadowRootForNode(Node* node, const String& type) {
   auto* element = DynamicTo<Element>(node);
   if (!element)
@@ -2664,18 +2658,6 @@ protocol::Response InspectorDOMAgent::getFrameOwner(
     }
   }
 
-  if (!found_frame) {
-    if (auto* portals =
-            DocumentPortals::Get(*inspected_frames_->Root()->GetDocument())) {
-      for (PortalContents* portal : portals->GetPortals()) {
-        Frame* portal_frame = portal->GetFrame();
-        if (IdentifiersFactory::FrameId(portal_frame) == frame_id) {
-          found_frame = portal_frame;
-          break;
-        }
-      }
-    }
-  }
   if (!found_frame) {
     return protocol::Response::ServerError(
         "Frame with the given id was not found.");

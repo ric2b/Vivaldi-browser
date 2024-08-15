@@ -588,13 +588,13 @@ void av1_sum_intra_stats(const AV1_COMMON *const cm, FRAME_COUNTS *counts,
       update_cdf(cdf_v, CFL_IDX_V(idx), CFL_ALPHABET_SIZE);
     }
   }
-  const PREDICTION_MODE equiv_mode = get_uv_mode(uv_mode);
-  if (av1_is_directional_mode(equiv_mode) && av1_use_angle_delta(bsize)) {
+  const PREDICTION_MODE intra_mode = get_uv_mode(uv_mode);
+  if (av1_is_directional_mode(intra_mode) && av1_use_angle_delta(bsize)) {
 #if CONFIG_ENTROPY_STATS
-    ++counts->angle_delta[equiv_mode - V_PRED]
+    ++counts->angle_delta[intra_mode - V_PRED]
                          [mbmi->angle_delta[PLANE_TYPE_UV] + MAX_ANGLE_DELTA];
 #endif
-    update_cdf(fc->angle_delta_cdf[equiv_mode - V_PRED],
+    update_cdf(fc->angle_delta_cdf[intra_mode - V_PRED],
                mbmi->angle_delta[PLANE_TYPE_UV] + MAX_ANGLE_DELTA,
                2 * MAX_ANGLE_DELTA + 1);
   }
@@ -1398,6 +1398,11 @@ void av1_source_content_sb(AV1_COMP *cpi, MACROBLOCK *x, TileDataEnc *tile_data,
                                                36000 };  // ~3*3*(64*64)
 
   uint64_t avg_source_sse_threshold_high = 1000000;  // ~15*15*(64*64)
+  if (cpi->sf.rt_sf.increase_source_sad_thresh) {
+    avg_source_sse_threshold_high = avg_source_sse_threshold_high << 1;
+    avg_source_sse_threshold_low[0] = avg_source_sse_threshold_low[0] << 1;
+    avg_source_sse_threshold_verylow = avg_source_sse_threshold_verylow << 1;
+  }
   uint64_t sum_sq_thresh = 10000;  // sum = sqrt(thresh / 64*64)) ~1.5
   src_y += src_offset;
   last_src_y += last_src_offset;
@@ -1753,6 +1758,11 @@ void av1_dealloc_src_diff_buf(struct macroblock *mb, int num_planes) {
 
 void av1_alloc_src_diff_buf(const struct AV1Common *cm, struct macroblock *mb) {
   const int num_planes = av1_num_planes(cm);
+#ifndef NDEBUG
+  for (int plane = 0; plane < num_planes; ++plane) {
+    assert(!mb->plane[plane].src_diff);
+  }
+#endif
   for (int plane = 0; plane < num_planes; ++plane) {
     const int subsampling_xy =
         plane ? cm->seq_params->subsampling_x + cm->seq_params->subsampling_y

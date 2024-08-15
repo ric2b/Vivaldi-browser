@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void reflect_a8baf2() {
+  float3 res = float3(-5.0f);
+}
+vertex float4 vertex_main() {
+  reflect_a8baf2();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  reflect_a8baf2();
+}
+kernel void compute_main() {
+  reflect_a8baf2();
+}

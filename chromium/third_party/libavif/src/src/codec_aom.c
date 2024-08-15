@@ -748,7 +748,9 @@ static avifResult aomCodecEncodeImage(avifCodec * codec,
             cfg->g_lag_in_frames = 0;
         }
         if (encoder->maxThreads > 1) {
-            cfg->g_threads = encoder->maxThreads;
+            // libaom fails if cfg->g_threads is greater than 64 threads. See MAX_NUM_THREADS in
+            // aom/aom_util/aom_thread.h.
+            cfg->g_threads = AVIF_MIN(encoder->maxThreads, 64);
         }
 
         codec->internal->monochromeEnabled = AVIF_FALSE;
@@ -1091,6 +1093,7 @@ static avifResult aomCodecEncodeImage(avifCodec * codec,
                 size_t monoUVSize = (size_t)monoUVHeight * monoUVRowBytes;
 
                 monoUVPlane = avifAlloc(monoUVSize);
+                AVIF_CHECKERR(monoUVPlane != NULL, AVIF_RESULT_OUT_OF_MEMORY); // No need for aom_img_free() because !aomImageAllocated
                 aomImage.planes[1] = monoUVPlane;
                 aomImage.stride[1] = monoUVRowBytes;
             }
@@ -1216,6 +1219,9 @@ const char * avifCodecVersionAOM(void)
 avifCodec * avifCodecCreateAOM(void)
 {
     avifCodec * codec = (avifCodec *)avifAlloc(sizeof(avifCodec));
+    if (codec == NULL) {
+        return NULL;
+    }
     memset(codec, 0, sizeof(struct avifCodec));
 
 #if defined(AVIF_CODEC_AOM_DECODE)
@@ -1229,6 +1235,10 @@ avifCodec * avifCodecCreateAOM(void)
 
     codec->destroyInternal = aomCodecDestroyInternal;
     codec->internal = (struct avifCodecInternal *)avifAlloc(sizeof(struct avifCodecInternal));
+    if (codec->internal == NULL) {
+        avifFree(codec);
+        return NULL;
+    }
     memset(codec->internal, 0, sizeof(struct avifCodecInternal));
     return codec;
 }

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
-<translation id="3830627370375585318">Надайте Vivaldi доступ до мережі в налаштуваннях брандмауера чи антивіруса.</translation>
+<translation id="3830627370375585318">Надайте Vivaldi доступ до мережі
+в налаштуваннях брандмауера чи антивірусу.</translation>
 <translation id="4200102020577305737">Перейдіть до
           меню Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -21,6 +22,7 @@
           <ph name="PROXIES_TITLE" />
           і переконайтеся, що встановлено значення конфігурації "без проксі" чи "безпосередньо."</translation>
 <translation id="5248344925342018662">Ви переглядаєте безпечну сторінку Vivaldi</translation>
+<translation id="6690242244468452299">Ця сторінка показує інформацію про нещодавні збої, якщо ви ввімкнули звітування про збої.</translation>
 <translation id="7023871570427738255">Перейдіть у
           меню Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -30,5 +32,7 @@
           Якщо проблема не зникне, радимо знову вибрати цю опцію,
           щоб покращити стабільність.</translation>
 <translation id="7496505986576158197">Vivaldi створено на базі відкритого проєкту <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> та іншого <ph name="BEGIN_LINK_OSS" />відкритого програмного забезпечення<ph name="END_LINK_OSS" />.</translation>
-<translation id="8187289872471304532">Перейдіть до Програми &gt; Системні налаштування &gt; Мережа &gt; Розширені &gt; Проксі-сервери і зніміть прапорці біля всіх вибраних проксі-серверів.</translation>
+<translation id="8187289872471304532">Перейдіть до
+Програми &gt; Системні налаштування &gt; Мережа &gt; Розширені &gt; Проксі-сервери
+та зніміть прапорці біля всіх вибраних проксі-серверів.</translation>
 </translationbundle>

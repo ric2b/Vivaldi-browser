@@ -12,46 +12,26 @@ Component-wise when T is a vector.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16 } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { fullF32Range, fullF16Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
-import { allInputSources, run } from '../../expression.js';
+import { TypeAbstractFloat, TypeF16, TypeF32 } from '../../../../../util/conversion.js';
+import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
-import { builtin } from './builtin.js';
+import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './round.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('round', {
-  f32: () => {
-    return FP.f32.generateScalarToIntervalCases(
-      [
-        0x80000000, // https://github.com/gpuweb/cts/issues/2766,
-        ...fullF32Range(),
-      ],
-      'unfiltered',
-      FP.f32.roundInterval
-    );
-  },
-  f16: () => {
-    return FP.f16.generateScalarToIntervalCases(
-      [
-        0x8000, // https://github.com/gpuweb/cts/issues/2766
-        ...fullF16Range(),
-      ],
-      'unfiltered',
-      FP.f16.roundInterval
-    );
-  },
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
   .desc(`abstract float tests`)
   .params(u =>
-    u.combine('inputSource', allInputSources).combine('vectorize', [undefined, 2, 3, 4] as const)
+    u
+      .combine('inputSource', onlyConstInputSource)
+      .combine('vectorize', [undefined, 2, 3, 4] as const)
   )
-  .unimplemented();
+  .fn(async t => {
+    const cases = await d.get('abstract');
+    await run(t, abstractBuiltin('round'), [TypeAbstractFloat], TypeAbstractFloat, t.params, cases);
+  });
 
 g.test('f32')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

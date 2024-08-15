@@ -94,6 +94,12 @@
   WebContentsDelegate* GetDevToolsConnector() override;
 
  private:
+  // Called from WebViewGuest::CanDownload and blocks a download following the
+  // same criteria as InsecureDownloadData. True on block, false on download.
+  void VivaldiCanDownload(const GURL& url,
+                          const std::string& request_method,
+                          base::OnceCallback<void(bool)> callback);
+
   void VisibleSecurityStateChanged(content::WebContents* source) override;
 
   // Parses the user input string for new window creation.

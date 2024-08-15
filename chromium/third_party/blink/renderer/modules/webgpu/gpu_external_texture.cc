@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
 #include "third_party/blink/renderer/modules/webgpu/external_texture_helper.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_queue.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_mailbox_texture.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
@@ -80,6 +81,9 @@ GPUExternalTexture* ExternalTextureCache::Import(
 }
 
 void ExternalTextureCache::Destroy() {
+  // Skip pending expiry tasks to destroy all pending external textures.
+  expire_task_scheduled_ = false;
+
   for (auto& cache : from_html_video_element_) {
     cache.value->Destroy();
   }
@@ -156,6 +160,24 @@ void ExternalTextureCache::ExpireTask() {
   }
 }
 
+void ExternalTextureCache::ReferenceUntilGPUIsFinished(
+    scoped_refptr<WebGPUMailboxTexture> mailbox_texture) {
+  CHECK(mailbox_texture);
+
+  // Keep mailbox texture alive until callback returns.
+  auto* callback = BindWGPUOnceCallback(
+      [](scoped_refptr<WebGPUMailboxTexture> mailbox_texture,
+         WGPUQueueWorkDoneStatus status) {},
+      std::move(mailbox_texture));
+
+  device()->GetProcs().queueOnSubmittedWorkDone(device()->queue()->GetHandle(),
+                                                callback->UnboundCallback(),
+                                                callback->AsUserdata());
+
+  // Ensure commands are flushed.
+  device()->EnsureFlush(ToEventLoop(device()->GetExecutionContext()));
+}
+
 // static
 GPUExternalTexture* GPUExternalTexture::CreateImpl(
     ExternalTextureCache* cache,
@@ -166,14 +188,16 @@ GPUExternalTexture* GPUExternalTexture::CreateImpl(
     ExceptionState& exception_state) {
   CHECK(media_video_frame);
 
-  // TODO(crbug.com/1330250): Support additional color spaces for external
-  // textures.
-  if (webgpu_desc->colorSpace().AsEnum() !=
-      V8PredefinedColorSpace::Enum::kSRGB) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kOperationError,
-        "colorSpace !== 'srgb' isn't supported yet.");
-    return nullptr;
+  switch (webgpu_desc->colorSpace().AsEnum()) {
+    case V8PredefinedColorSpace::Enum::kSRGB:
+    case V8PredefinedColorSpace::Enum::kDisplayP3:
+      break;
+    default:
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kOperationError,
+          "Requested colorSpace '" + webgpu_desc->colorSpace().AsString() +
+              "' is not implemented. Use 'srgb' or 'display-p3'.");
+      return nullptr;
   }
 
   PredefinedColorSpace dst_predefined_color_space;
@@ -213,6 +237,7 @@ GPUExternalTexture* GPUExternalTexture::CreateImpl(
       MakeGarbageCollected<GPUExternalTexture>(
           cache, external_texture.wgpu_external_texture,
           external_texture.mailbox_texture, external_texture.is_zero_copy,
+          media_video_frame->metadata().read_lock_fences_enabled,
           media_video_frame_unique_id);
 
   return gpu_external_texture;
@@ -247,6 +272,7 @@ GPUExternalTexture* GPUExternalTexture::CreateExpired(
           cache->device()->GetProcs().deviceCreateErrorExternalTexture(
               cache->device()->GetHandle()),
           nullptr /*mailbox_texture*/, false /*is_zero_copy*/,
+          false /*read_lock_fences_enabled*/,
           absl::nullopt /*media_video_frame_unique_id*/);
 
   return external_texture;
@@ -322,10 +348,12 @@ GPUExternalTexture::GPUExternalTexture(
     WGPUExternalTexture external_texture,
     scoped_refptr<WebGPUMailboxTexture> mailbox_texture,
     bool is_zero_copy,
+    bool read_lock_fences_enabled,
     absl::optional<media::VideoFrame::ID> media_video_frame_unique_id)
     : DawnObject<WGPUExternalTexture>(cache->device(), external_texture),
-      mailbox_texture_(mailbox_texture),
+      mailbox_texture_(std::move(mailbox_texture)),
       is_zero_copy_(is_zero_copy),
+      read_lock_fences_enabled_(read_lock_fences_enabled),
       media_video_frame_unique_id_(media_video_frame_unique_id),
       cache_(cache) {
   task_runner_ =
@@ -339,6 +367,10 @@ GPUExternalTexture::GPUExternalTexture(
 
 void GPUExternalTexture::Refresh() {
   CHECK(status_ != Status::Destroyed);
+
+  if (active()) {
+    return;
+  }
 
   GetProcs().externalTextureRefresh(GetHandle());
   status_ = Status::Active;
@@ -356,6 +388,13 @@ void GPUExternalTexture::Expire() {
 void GPUExternalTexture::Destroy() {
   DCHECK(!destroyed());
   DCHECK(mailbox_texture_);
+
+  // One copy path finished video frame access after GPUExternalTexture
+  // construction. Zero copy path needs to ensure all gpu commands
+  // execution finished before destroy.
+  if (isZeroCopy() && isReadLockFenceEnabled()) {
+    cache_->ReferenceUntilGPUIsFinished(std::move(mailbox_texture_));
+  }
 
   status_ = Status::Destroyed;
   mailbox_texture_.reset();
@@ -494,6 +533,10 @@ bool GPUExternalTexture::expired() const {
 
 bool GPUExternalTexture::isZeroCopy() const {
   return is_zero_copy_;
+}
+
+bool GPUExternalTexture::isReadLockFenceEnabled() const {
+  return read_lock_fences_enabled_;
 }
 
 bool GPUExternalTexture::destroyed() const {

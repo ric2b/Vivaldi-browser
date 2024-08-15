@@ -162,7 +162,7 @@ void VivaldiUIWebContentsDelegate::RequestMediaAccessPermission(
 
 bool VivaldiUIWebContentsDelegate::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     blink::mojom::MediaStreamType type) {
   return MediaCaptureDevicesDispatcher::GetInstance()
       ->CheckMediaAccessPermission(render_frame_host, security_origin, type,
@@ -216,6 +216,11 @@ void VivaldiUIWebContentsDelegate::RenderFrameCreated(
   content::RenderWidgetHostView* host_view = render_frame_host->GetView();
   DCHECK(host_view);
   host_view->SetBackgroundColor(SK_ColorTRANSPARENT);
+
+  content::RenderFrameHostImpl* host =
+      static_cast<content::RenderFrameHostImpl*>(render_frame_host);
+
+  host->GetVivaldiFrameService()->SetSupportsAppRegion(true);
 
   // An incognito profile is not initialized with the UI zoom value. Set it up
   // here by reading prefs from the regular profile. At this point we do not

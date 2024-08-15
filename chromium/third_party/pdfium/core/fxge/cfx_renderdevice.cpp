@@ -35,7 +35,7 @@
 #include "third_party/base/check_op.h"
 #include "third_party/base/containers/span.h"
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #include "third_party/skia/include/core/SkTypes.h"  // nogncheck
 #endif
 
@@ -533,12 +533,16 @@ int CFX_RenderDevice::GetDeviceCaps(int caps_id) const {
   return m_pDeviceDriver->GetDeviceCaps(caps_id);
 }
 
-RetainPtr<CFX_DIBitmap> CFX_RenderDevice::GetBitmap() const {
+RetainPtr<CFX_DIBitmap> CFX_RenderDevice::GetBitmap() {
   return m_pBitmap;
 }
 
-void CFX_RenderDevice::SetBitmap(const RetainPtr<CFX_DIBitmap>& pBitmap) {
-  m_pBitmap = pBitmap;
+RetainPtr<const CFX_DIBitmap> CFX_RenderDevice::GetBitmap() const {
+  return m_pBitmap;
+}
+
+void CFX_RenderDevice::SetBitmap(RetainPtr<CFX_DIBitmap> bitmap) {
+  m_pBitmap = std::move(bitmap);
 }
 
 bool CFX_RenderDevice::CreateCompatibleBitmap(
@@ -578,11 +582,11 @@ bool CFX_RenderDevice::SetClip_PathStroke(
 bool CFX_RenderDevice::SetClip_Rect(const FX_RECT& rect) {
   CFX_Path path;
   path.AppendRect(rect.left, rect.bottom, rect.right, rect.top);
-  if (!SetClip_PathFill(
-          path, nullptr,
-          {.fill_type = CFX_FillRenderOptions::FillType::kWinding})) {
+  if (!SetClip_PathFill(path, nullptr,
+                        CFX_FillRenderOptions::WindingOptions())) {
     return false;
   }
+
   UpdateClipBox();
   return true;
 }
@@ -712,7 +716,7 @@ bool CFX_RenderDevice::DrawPathWithBlend(
 
   if (fill && fill_alpha && stroke_alpha < 0xff && fill_options.stroke) {
     if (m_RenderCaps & FXRC_FILLSTROKE_PATH) {
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
         m_pDeviceDriver->SetGroupKnockout(true);
       }
@@ -721,7 +725,7 @@ bool CFX_RenderDevice::DrawPathWithBlend(
           path, pObject2Device, pGraphState, fill_color, stroke_color,
           fill_options, blend_type);
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
         // Restore the group knockout status for `m_pDeviceDriver` after
         // finishing painting a fill-and-stroke path.
@@ -789,8 +793,8 @@ bool CFX_RenderDevice::DrawFillStrokePath(
     return false;
   }
   FX_RECT src_rect(0, 0, rect.Width(), rect.Height());
-  return m_pDeviceDriver->SetDIBits(bitmap, 0, src_rect, rect.left, rect.top,
-                                    BlendMode::kNormal);
+  return m_pDeviceDriver->SetDIBits(std::move(bitmap), 0, src_rect, rect.left,
+                                    rect.top, BlendMode::kNormal);
 }
 
 bool CFX_RenderDevice::FillRectWithBlend(const FX_RECT& rect,
@@ -865,10 +869,10 @@ void CFX_RenderDevice::DrawZeroAreaPath(
   if (matrix && !matrix->IsIdentity() && !set_identity)
     new_matrix = matrix;
 
-  const CFX_FillRenderOptions path_options = {
-      .aliased_path = aliased_path,
-      .zero_area = true,
-  };
+  CFX_FillRenderOptions path_options;
+  path_options.zero_area = true;
+  path_options.aliased_path = aliased_path;
+
   m_pDeviceDriver->DrawPath(new_path, new_matrix, &graph_state, 0, stroke_color,
                             path_options, blend_type);
 }
@@ -884,10 +888,11 @@ RetainPtr<CFX_DIBitmap> CFX_RenderDevice::GetBackDrop() {
   return m_pDeviceDriver->GetBackDrop();
 }
 
-bool CFX_RenderDevice::SetDIBitsWithBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
-                                          int left,
-                                          int top,
-                                          BlendMode blend_mode) {
+bool CFX_RenderDevice::SetDIBitsWithBlend(
+    const RetainPtr<const CFX_DIBBase>& pBitmap,
+    int left,
+    int top,
+    BlendMode blend_mode) {
   DCHECK(!pBitmap->IsMaskFormat());
   FX_RECT dest_rect(left, top, left + pBitmap->GetWidth(),
                     top + pBitmap->GetHeight());
@@ -900,8 +905,9 @@ bool CFX_RenderDevice::SetDIBitsWithBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
                    dest_rect.top - top + dest_rect.Height());
   if ((blend_mode == BlendMode::kNormal || (m_RenderCaps & FXRC_BLEND_MODE)) &&
       (!pBitmap->IsAlphaFormat() || (m_RenderCaps & FXRC_ALPHA_IMAGE))) {
-    return m_pDeviceDriver->SetDIBits(pBitmap, 0, src_rect, dest_rect.left,
-                                      dest_rect.top, blend_mode);
+    return m_pDeviceDriver->SetDIBits(std::move(pBitmap), 0, src_rect,
+                                      dest_rect.left, dest_rect.top,
+                                      blend_mode);
   }
   if (!(m_RenderCaps & FXRC_GET_BITS))
     return false;
@@ -917,8 +923,8 @@ bool CFX_RenderDevice::SetDIBitsWithBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
     return false;
 
   if (!background->CompositeBitmap(0, 0, bg_pixel_width, bg_pixel_height,
-                                   pBitmap, src_rect.left, src_rect.top,
-                                   blend_mode, nullptr, false)) {
+                                   std::move(pBitmap), src_rect.left,
+                                   src_rect.top, blend_mode, nullptr, false)) {
     return false;
   }
   FX_RECT rect(0, 0, bg_pixel_width, bg_pixel_height);
@@ -926,8 +932,18 @@ bool CFX_RenderDevice::SetDIBitsWithBlend(const RetainPtr<CFX_DIBBase>& pBitmap,
                                     dest_rect.top, BlendMode::kNormal);
 }
 
+bool CFX_RenderDevice::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                     int left,
+                                     int top,
+                                     int dest_width,
+                                     int dest_height) {
+  return StretchDIBitsWithFlagsAndBlend(
+      std::move(bitmap), left, top, dest_width, dest_height,
+      FXDIB_ResampleOptions(), BlendMode::kNormal);
+}
+
 bool CFX_RenderDevice::StretchDIBitsWithFlagsAndBlend(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
+    RetainPtr<const CFX_DIBBase> bitmap,
     int left,
     int top,
     int dest_width,
@@ -938,7 +954,7 @@ bool CFX_RenderDevice::StretchDIBitsWithFlagsAndBlend(
   FX_RECT clip_box = m_ClipBox;
   clip_box.Intersect(dest_rect);
   return clip_box.IsEmpty() || m_pDeviceDriver->StretchDIBits(
-                                   pBitmap, 0, left, top, dest_width,
+                                   std::move(bitmap), 0, left, top, dest_width,
                                    dest_height, &clip_box, options, blend_mode);
 }
 
@@ -951,18 +967,18 @@ bool CFX_RenderDevice::SetBitMask(const RetainPtr<CFX_DIBBase>& pBitmap,
                                     BlendMode::kNormal);
 }
 
-bool CFX_RenderDevice::StretchBitMask(const RetainPtr<CFX_DIBBase>& pBitmap,
+bool CFX_RenderDevice::StretchBitMask(RetainPtr<CFX_DIBBase> bitmap,
                                       int left,
                                       int top,
                                       int dest_width,
                                       int dest_height,
                                       uint32_t color) {
-  return StretchBitMaskWithFlags(pBitmap, left, top, dest_width, dest_height,
-                                 color, FXDIB_ResampleOptions());
+  return StretchBitMaskWithFlags(std::move(bitmap), left, top, dest_width,
+                                 dest_height, color, FXDIB_ResampleOptions());
 }
 
 bool CFX_RenderDevice::StretchBitMaskWithFlags(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
+    RetainPtr<CFX_DIBBase> bitmap,
     int left,
     int top,
     int dest_width,
@@ -972,20 +988,30 @@ bool CFX_RenderDevice::StretchBitMaskWithFlags(
   FX_RECT dest_rect(left, top, left + dest_width, top + dest_height);
   FX_RECT clip_box = m_ClipBox;
   clip_box.Intersect(dest_rect);
-  return m_pDeviceDriver->StretchDIBits(pBitmap, argb, left, top, dest_width,
-                                        dest_height, &clip_box, options,
-                                        BlendMode::kNormal);
+  return m_pDeviceDriver->StretchDIBits(std::move(bitmap), argb, left, top,
+                                        dest_width, dest_height, &clip_box,
+                                        options, BlendMode::kNormal);
+}
+
+bool CFX_RenderDevice::StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                   float alpha,
+                                   uint32_t argb,
+                                   const CFX_Matrix& matrix,
+                                   const FXDIB_ResampleOptions& options,
+                                   std::unique_ptr<CFX_ImageRenderer>* handle) {
+  return StartDIBitsWithBlend(std::move(bitmap), alpha, argb, matrix, options,
+                              handle, BlendMode::kNormal);
 }
 
 bool CFX_RenderDevice::StartDIBitsWithBlend(
-    const RetainPtr<CFX_DIBBase>& pBitmap,
-    int bitmap_alpha,
+    RetainPtr<const CFX_DIBBase> bitmap,
+    float alpha,
     uint32_t argb,
     const CFX_Matrix& matrix,
     const FXDIB_ResampleOptions& options,
     std::unique_ptr<CFX_ImageRenderer>* handle,
     BlendMode blend_mode) {
-  return m_pDeviceDriver->StartDIBits(pBitmap, bitmap_alpha, argb, matrix,
+  return m_pDeviceDriver->StartDIBits(std::move(bitmap), alpha, argb, matrix,
                                       options, handle, blend_mode);
 }
 
@@ -994,15 +1020,15 @@ bool CFX_RenderDevice::ContinueDIBits(CFX_ImageRenderer* handle,
   return m_pDeviceDriver->ContinueDIBits(handle, pPause);
 }
 
-#if defined(_SKIA_SUPPORT_)
-bool CFX_RenderDevice::SetBitsWithMask(const RetainPtr<CFX_DIBBase>& pBitmap,
-                                       const RetainPtr<CFX_DIBBase>& pMask,
+#if defined(PDF_USE_SKIA)
+bool CFX_RenderDevice::SetBitsWithMask(RetainPtr<const CFX_DIBBase> bitmap,
+                                       RetainPtr<const CFX_DIBBase> mask,
                                        int left,
                                        int top,
-                                       int bitmap_alpha,
+                                       float alpha,
                                        BlendMode blend_type) {
-  return m_pDeviceDriver->SetBitsWithMask(pBitmap, pMask, left, top,
-                                          bitmap_alpha, blend_type);
+  return m_pDeviceDriver->SetBitsWithMask(std::move(bitmap), std::move(mask),
+                                          left, top, alpha, blend_type);
 }
 
 bool CFX_RenderDevice::SyncInternalBitmaps() {
@@ -1081,9 +1107,8 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
   if (fabs(char2device.a) + fabs(char2device.b) > 50 * 1.0f ||
       GetDeviceType() == DeviceType::kPrinter) {
     if (pFont->GetFaceRec()) {
-      const CFX_FillRenderOptions path_options = {
-          .aliased_path = !is_text_smooth,
-      };
+      CFX_FillRenderOptions path_options;
+      path_options.aliased_path = !is_text_smooth;
       return DrawTextPath(pCharPos, pFont, font_size, mtText2Device, nullptr,
                           nullptr, fill_color, 0, nullptr, path_options);
     }
@@ -1224,13 +1249,11 @@ bool CFX_RenderDevice::DrawTextPath(pdfium::span<const TextCharPos> pCharPos,
     CFX_Path transformed_path(*pPath);
     transformed_path.Transform(matrix);
     if (fill_color || stroke_color) {
-      const CFX_FillRenderOptions::FillType fill_type =
-          fill_color ? CFX_FillRenderOptions::FillType::kWinding
-                     : CFX_FillRenderOptions::FillType::kNoFill;
-      const CFX_FillRenderOptions options = {
-          .fill_type = fill_type,
-          .text_mode = true,
-      };
+      CFX_FillRenderOptions options(fill_options);
+      if (fill_color) {
+        options.fill_type = CFX_FillRenderOptions::FillType::kWinding;
+      }
+      options.text_mode = true;
       if (!DrawPathWithBlend(transformed_path, pUser2Device, pGraphState,
                              fill_color, stroke_color, options,
                              BlendMode::kNormal)) {
@@ -1249,7 +1272,7 @@ void CFX_RenderDevice::DrawFillRect(const CFX_Matrix* pUser2Device,
   CFX_Path path;
   path.AppendFloatRect(rect);
   DrawPath(path, pUser2Device, nullptr, color, 0,
-           {.fill_type = CFX_FillRenderOptions::FillType::kWinding});
+           CFX_FillRenderOptions::WindingOptions());
 }
 
 void CFX_RenderDevice::DrawFillArea(const CFX_Matrix& mtUser2Device,
@@ -1262,7 +1285,7 @@ void CFX_RenderDevice::DrawFillArea(const CFX_Matrix& mtUser2Device,
     path.AppendPoint(points[i], CFX_Path::Point::Type::kLine);
 
   DrawPath(path, &mtUser2Device, nullptr, color, 0,
-           {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+           CFX_FillRenderOptions::EvenOddOptions());
 }
 
 void CFX_RenderDevice::DrawStrokeRect(const CFX_Matrix& mtUser2Device,
@@ -1275,7 +1298,7 @@ void CFX_RenderDevice::DrawStrokeRect(const CFX_Matrix& mtUser2Device,
   CFX_Path path;
   path.AppendFloatRect(rect);
   DrawPath(path, &mtUser2Device, &gsd, 0, color,
-           {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+           CFX_FillRenderOptions::EvenOddOptions());
 }
 
 void CFX_RenderDevice::DrawStrokeLine(const CFX_Matrix* pUser2Device,
@@ -1291,7 +1314,7 @@ void CFX_RenderDevice::DrawStrokeLine(const CFX_Matrix* pUser2Device,
   gsd.m_LineWidth = fWidth;
 
   DrawPath(path, pUser2Device, &gsd, 0, color,
-           {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+           CFX_FillRenderOptions::EvenOddOptions());
 }
 
 void CFX_RenderDevice::DrawFillRect(const CFX_Matrix* pUser2Device,
@@ -1357,7 +1380,7 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
       path.AppendRect(fLeft + fWidth, fBottom + fWidth, fRight - fWidth,
                       fTop - fWidth);
       DrawPath(path, pUser2Device, nullptr, color.ToFXColor(nTransparency), 0,
-               {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+               CFX_FillRenderOptions::EvenOddOptions());
       break;
     }
     case BorderStyle::kDash: {
@@ -1378,7 +1401,7 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
       path.AppendPoint(CFX_PointF(fLeft + fHalfWidth, fBottom + fHalfWidth),
                        CFX_Path::Point::Type::kLine);
       DrawPath(path, pUser2Device, &gsd, 0, color.ToFXColor(nTransparency),
-               {.fill_type = CFX_FillRenderOptions::FillType::kWinding});
+               CFX_FillRenderOptions::WindingOptions());
       break;
     }
     case BorderStyle::kBeveled:
@@ -1407,7 +1430,7 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
           CFX_Path::Point::Type::kLine);
       DrawPath(path_left_top, pUser2Device, &gsd,
                crLeftTop.ToFXColor(nTransparency), 0,
-               {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+               CFX_FillRenderOptions::EvenOddOptions());
 
       CFX_Path path_right_bottom;
       path_right_bottom.AppendPoint(
@@ -1432,14 +1455,14 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
           CFX_Path::Point::Type::kLine);
       DrawPath(path_right_bottom, pUser2Device, &gsd,
                crRightBottom.ToFXColor(nTransparency), 0,
-               {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+               CFX_FillRenderOptions::EvenOddOptions());
 
       CFX_Path path;
       path.AppendRect(fLeft, fBottom, fRight, fTop);
       path.AppendRect(fLeft + fHalfWidth, fBottom + fHalfWidth,
                       fRight - fHalfWidth, fTop - fHalfWidth);
       DrawPath(path, pUser2Device, &gsd, color.ToFXColor(nTransparency), 0,
-               {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+               CFX_FillRenderOptions::EvenOddOptions());
       break;
     }
     case BorderStyle::kUnderline: {
@@ -1452,7 +1475,7 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
       path.AppendPoint(CFX_PointF(fRight, fBottom + fHalfWidth),
                        CFX_Path::Point::Type::kLine);
       DrawPath(path, pUser2Device, &gsd, 0, color.ToFXColor(nTransparency),
-               {.fill_type = CFX_FillRenderOptions::FillType::kEvenOdd});
+               CFX_FillRenderOptions::EvenOddOptions());
       break;
     }
   }
@@ -1462,8 +1485,9 @@ bool CFX_RenderDevice::MultiplyAlpha(float alpha) {
   return m_pDeviceDriver->MultiplyAlpha(alpha);
 }
 
-bool CFX_RenderDevice::MultiplyAlpha(const RetainPtr<CFX_DIBBase>& mask) {
-  return m_pDeviceDriver->MultiplyAlpha(mask);
+bool CFX_RenderDevice::MultiplyAlphaMask(
+    const RetainPtr<const CFX_DIBBase>& mask) {
+  return m_pDeviceDriver->MultiplyAlphaMask(mask);
 }
 
 CFX_RenderDevice::StateRestorer::StateRestorer(CFX_RenderDevice* pDevice)

@@ -187,6 +187,13 @@ bool MtlCaps::GetGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* grou
 #endif
 
         // Older Macs
+#if GR_METAL_SDK_VERSION >= 300
+        // TODO: replace with Metal 3 definitions
+        SkASSERT([device supportsFamily:MTLGPUFamilyMac2]);
+        *gpuFamily = GPUFamily::kMac;
+        *group = 2;
+        return true;
+#else
         // At the moment MacCatalyst families have the same features as Mac,
         // so we treat them the same
         if ([device supportsFamily:MTLGPUFamilyMac2] ||
@@ -201,6 +208,7 @@ bool MtlCaps::GetGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* grou
             *group = 1;
             return true;
         }
+#endif
     }
 #endif
 
@@ -1020,9 +1028,10 @@ bool MtlCaps::supportsReadPixels(const TextureInfo& texInfo) const {
     return true;
 }
 
-SkColorType MtlCaps::supportedWritePixelsColorType(SkColorType dstColorType,
-                                                   const TextureInfo& dstTextureInfo,
-                                                   SkColorType srcColorType) const {
+std::pair<SkColorType, bool /*isRGBFormat*/> MtlCaps::supportedWritePixelsColorType(
+        SkColorType dstColorType,
+        const TextureInfo& dstTextureInfo,
+        SkColorType srcColorType) const {
     MtlTextureInfo mtlInfo;
     dstTextureInfo.getMtlTextureInfo(&mtlInfo);
 
@@ -1030,32 +1039,33 @@ SkColorType MtlCaps::supportedWritePixelsColorType(SkColorType dstColorType,
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == dstColorType) {
-            return dstColorType;
+            return {dstColorType, false};
         }
     }
-    return kUnknown_SkColorType;
+    return {kUnknown_SkColorType, false};
 }
 
-SkColorType MtlCaps::supportedReadPixelsColorType(SkColorType srcColorType,
-                                                  const TextureInfo& srcTextureInfo,
-                                                  SkColorType dstColorType) const {
+std::pair<SkColorType, bool /*isRGBFormat*/> MtlCaps::supportedReadPixelsColorType(
+        SkColorType srcColorType,
+        const TextureInfo& srcTextureInfo,
+        SkColorType dstColorType) const {
     MtlTextureInfo mtlInfo;
     srcTextureInfo.getMtlTextureInfo(&mtlInfo);
 
     // TODO: handle compressed formats
     if (MtlFormatIsCompressed((MTLPixelFormat)mtlInfo.fFormat)) {
         SkASSERT(this->isTexturable((MTLPixelFormat)mtlInfo.fFormat));
-        return kUnknown_SkColorType;
+        return {kUnknown_SkColorType, false};
     }
 
     const FormatInfo& info = this->getFormatInfo((MTLPixelFormat)mtlInfo.fFormat);
     for (int i = 0; i < info.fColorTypeInfoCount; ++i) {
         const auto& ctInfo = info.fColorTypeInfos[i];
         if (ctInfo.fColorType == srcColorType) {
-            return srcColorType;
+            return {srcColorType, false};
         }
     }
-    return kUnknown_SkColorType;
+    return {kUnknown_SkColorType, false};
 }
 
 void MtlCaps::buildKeyForTexture(SkISize dimensions,

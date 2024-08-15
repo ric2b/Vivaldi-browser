@@ -42,7 +42,7 @@ AutofillOfferData CreateTestFreeListingCouponOffer(
 
 struct OfferNotificationBubbleViewPixelTestConfig {
   std::string name;
-  absl::optional<std::vector<base::test::FeatureRefAndParams>> enabled_features;
+  std::optional<std::vector<base::test::FeatureRefAndParams>> enabled_features;
 };
 
 std::string GetTestName(
@@ -117,14 +117,9 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(
         OfferNotificationBubbleViewPixelTestConfig{"FreeListingOffer_default"},
         OfferNotificationBubbleViewPixelTestConfig{
-            "FreeListingOffer_on_navigation",
-            absl::make_optional<std::vector<base::test::FeatureRefAndParams>>(
-                {{commerce::kShowDiscountOnNavigation, {}}})},
-        OfferNotificationBubbleViewPixelTestConfig{
-            "FreeListingOffer_on_navigation_chrome_refresh_style",
-            absl::make_optional<std::vector<base::test::FeatureRefAndParams>>(
-                {{commerce::kShowDiscountOnNavigation, {}},
-                 {::features::kChromeRefresh2023, {}}})}),
+            "FreeListingOffer_chrome_refresh_style",
+            std::make_optional<std::vector<base::test::FeatureRefAndParams>>(
+                {{::features::kChromeRefresh2023, {}}})}),
     GetTestName);
 
 // TODO(crbug.com/1473417): Disabled because this is flaky on the bots, but not

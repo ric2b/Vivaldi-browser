@@ -8,6 +8,7 @@
 
 #include "base/check.h"
 #include "base/containers/extend.h"
+#include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
@@ -32,12 +33,14 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_observer.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
+#include "extensions/browser/path_util.h"
 #include "extensions/browser/unloaded_extension_reason.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/manifest_handlers/app_display_info.h"
@@ -295,9 +298,7 @@ class LacrosExtensionAppsPublisher::ProfileTracker
     // This bug is tracked at https://crbug.com/1248499, but given that Chrome
     // Apps is deprecated, it's unclear if we'll ever get around to implementing
     // this functionality.
-    app->icon_key =
-        apps::IconKey(/*timeline=*/0, apps::IconKey::kInvalidResourceId,
-                      apps::IconEffects::kCrOsStandardIcon);
+    app->icon_key = apps::IconKey(apps::IconEffects::kCrOsStandardIcon);
 
     auto* prefs = extensions::ExtensionPrefs::Get(profile_);
     if (prefs) {
@@ -338,6 +339,8 @@ class LacrosExtensionAppsPublisher::ProfileTracker
         extensions::ExtensionSystem::Get(profile_)->management_policy();
     app->allow_uninstall = (policy->UserMayModifySettings(extension, nullptr) &&
                             !policy->MustRemainInstalled(extension, nullptr));
+
+    app->allow_close = true;
 
     // Add file_handlers for either of the following:
     //   a) Chrome Apps and quickoffice.
@@ -522,6 +525,21 @@ void LacrosExtensionAppsPublisher::UpdateAppWindowMode(
   matched->second->Publish(extension, apps::Readiness::kReady);
 }
 
+void LacrosExtensionAppsPublisher::UpdateAppSize(const std::string& app_id) {
+  Profile* profile = nullptr;
+  const extensions::Extension* extension = nullptr;
+  bool success = lacros_extensions_util::GetProfileAndExtension(
+      app_id, &profile, &extension);
+  if (!success) {
+    return;
+  }
+
+  extensions::path_util::CalculateExtensionDirectorySize(
+      extension->path(),
+      base::BindOnce(&LacrosExtensionAppsPublisher::OnSizeCalculated,
+                     weak_ptr_factory_.GetWeakPtr(), extension->id()));
+}
+
 void LacrosExtensionAppsPublisher::OnIsCapturingVideoChanged(
     content::WebContents* web_contents,
     bool is_capturing_video) {
@@ -548,27 +566,39 @@ void LacrosExtensionAppsPublisher::OnIsCapturingAudioChanged(
   ModifyCapabilityAccess(app_id.value(), result.camera, result.microphone);
 }
 
-absl::optional<std::string> LacrosExtensionAppsPublisher::MaybeGetAppId(
+void LacrosExtensionAppsPublisher::OnSizeCalculated(const std::string& app_id,
+                                                    int64_t size) {
+  std::vector<apps::AppPtr> apps;
+  apps::AppType app_type = which_type_.ChooseForChromeAppOrExtension(
+      apps::AppType::kStandaloneBrowserChromeApp,
+      apps::AppType::kStandaloneBrowserExtension);
+  auto app = std::make_unique<apps::App>(app_type, app_id);
+  app->app_size_in_bytes = size;
+  apps.push_back(std::move(app));
+  Publish(std::move(apps));
+}
+
+std::optional<std::string> LacrosExtensionAppsPublisher::MaybeGetAppId(
     content::WebContents* web_contents) {
   // The web app publisher is responsible to handle `web_contents` for web
   // apps.
   const webapps::AppId* web_app_id =
       web_app::WebAppTabHelper::GetAppId(web_contents);
   if (web_app_id) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   const auto* extension =
       lacros_extensions_util::MaybeGetExtension(web_contents);
   return (extension && which_type_.Matches(extension))
-             ? absl::make_optional<std::string>(extension->id())
-             : absl::nullopt;
+             ? std::make_optional<std::string>(extension->id())
+             : std::nullopt;
 }
 
 void LacrosExtensionAppsPublisher::ModifyCapabilityAccess(
     const std::string& app_id,
-    absl::optional<bool> accessing_camera,
-    absl::optional<bool> accessing_microphone) {
+    std::optional<bool> accessing_camera,
+    std::optional<bool> accessing_microphone) {
   if (!accessing_camera.has_value() && !accessing_microphone.has_value()) {
     return;
   }

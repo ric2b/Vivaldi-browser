@@ -9,12 +9,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/timer/timer.h"
-#include "components/global_media_controls/public/views/media_notification_view_ash_impl.h"
+#include "components/global_media_controls/public/views/media_item_ui_detailed_view.h"
 #include "components/media_message_center/media_notification_container.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace ash {
@@ -26,14 +27,15 @@ class DismissButton;
 // View for media controls that appear on the lock screen if it is enabled. This
 // replaces the old LockScreenMediaControlsView if the flag
 // media::kGlobalMediaControlsCrOSUpdatedUI is enabled. It registers for media
-// updates and reuses MediaNotificationViewAshImpl to display the media
-// controls.
+// updates and reuses MediaItemUIDetailedView to display the media controls.
 class ASH_EXPORT LockScreenMediaView
     : public views::View,
       public media_session::mojom::MediaControllerObserver,
       public media_session::mojom::MediaControllerImageObserver,
       public media_message_center::MediaNotificationContainer,
       public base::PowerSuspendObserver {
+  METADATA_HEADER(LockScreenMediaView, views::View)
+
  public:
   using MediaControlsEnabledCallback = const base::RepeatingCallback<bool()>&;
 
@@ -53,14 +55,14 @@ class ASH_EXPORT LockScreenMediaView
   void MediaSessionInfoChanged(
       media_session::mojom::MediaSessionInfoPtr session_info) override;
   void MediaSessionMetadataChanged(
-      const absl::optional<media_session::MediaMetadata>& metadata) override;
+      const std::optional<media_session::MediaMetadata>& metadata) override;
   void MediaSessionActionsChanged(
       const std::vector<media_session::mojom::MediaSessionAction>& actions)
       override;
   void MediaSessionChanged(
-      const absl::optional<base::UnguessableToken>& request_id) override;
+      const std::optional<base::UnguessableToken>& request_id) override;
   void MediaSessionPositionChanged(
-      const absl::optional<media_session::MediaPosition>& position) override;
+      const std::optional<media_session::MediaPosition>& position) override;
 
   // media_session::mojom::MediaControllerImageObserver:
   void MediaControllerImageChanged(
@@ -80,7 +82,7 @@ class ASH_EXPORT LockScreenMediaView
   void OnColorsChanged(SkColor foreground,
                        SkColor foreground_disabled,
                        SkColor background) override {}
-  void OnHeaderClicked() override {}
+  void OnHeaderClicked(bool activate_original_media) override {}
   void OnMediaSessionActionButtonPressed(
       media_session::mojom::MediaSessionAction action) override;
   void SeekTo(base::TimeDelta time) override;
@@ -96,8 +98,7 @@ class ASH_EXPORT LockScreenMediaView
 
   views::Button* GetDismissButtonForTesting();
 
-  global_media_controls::MediaNotificationViewAshImpl*
-  GetMediaNotificationViewForTesting();
+  global_media_controls::MediaItemUIDetailedView* GetDetailedViewForTesting();
 
  private:
   friend class LockScreenMediaViewTest;
@@ -121,7 +122,7 @@ class ASH_EXPORT LockScreenMediaView
 
   // The id of the current media session. It will be null if there is no current
   // session.
-  absl::optional<base::UnguessableToken> media_session_id_;
+  std::optional<base::UnguessableToken> media_session_id_;
 
   // A timer that delays for some time before considering a new media session
   // has started to replace the current one. If a switch has occurred, the media
@@ -134,7 +135,7 @@ class ASH_EXPORT LockScreenMediaView
   const base::RepeatingClosure hide_media_view_callback_;
 
   raw_ptr<DismissButton> dismiss_button_;
-  raw_ptr<global_media_controls::MediaNotificationViewAshImpl> view_;
+  raw_ptr<global_media_controls::MediaItemUIDetailedView> view_;
 
   base::WeakPtrFactory<LockScreenMediaView> weak_ptr_factory_{this};
 };

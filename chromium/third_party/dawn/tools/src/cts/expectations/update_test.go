@@ -147,6 +147,13 @@ some:other,test:* [ Failure ]
 			updated: `
 a:b,c:* [ Failure ]
 `,
+			diagnostics: expectations.Diagnostics{
+				{
+					Severity: expectations.Note,
+					Line:     headerLines + 3,
+					Message:  "expectation is fully covered by previous expectations",
+				},
+			},
 		},
 		{ //////////////////////////////////////////////////////////////////////
 			name: "expectation test now passes",
@@ -169,6 +176,13 @@ crbug.com/a/123 [ gpu-b os-b ] a:b,c:* [ Failure ]
 			updated: `
 crbug.com/a/123 [ os-b ] a:b,c:* [ Failure ]
 `,
+			diagnostics: expectations.Diagnostics{
+				{
+					Severity: expectations.Note,
+					Line:     headerLines + 3,
+					Message:  "expectation is fully covered by previous expectations",
+				},
+			},
 		},
 		{ //////////////////////////////////////////////////////////////////////
 			name: "expectation case now passes",
@@ -191,6 +205,13 @@ crbug.com/a/123 [ gpu-b os-b ] a:b,c:d [ Failure ]
 			updated: `
 crbug.com/a/123 [ os-b ] a:b,c:d: [ Failure ]
 `,
+			diagnostics: expectations.Diagnostics{
+				{
+					Severity: expectations.Note,
+					Line:     headerLines + 3,
+					Message:  "expectation is fully covered by previous expectations",
+				},
+			},
 		},
 		{ //////////////////////////////////////////////////////////////////////
 			name: "expectation case now passes KEEP - single",
@@ -378,8 +399,8 @@ crbug.com/dawn/0000 [ os-b ] a:* [ Failure ]
 ################################################################################
 # New failures. Please triage:
 ################################################################################
-crbug.com/dawn/0000 [ gpu-b os-c ] a:* [ Failure ]
 crbug.com/dawn/0000 [ gpu-c os-b ] a:* [ Failure ]
+crbug.com/dawn/0000 [ gpu-b os-c ] a:* [ Failure ]
 `,
 		},
 		{ //////////////////////////////////////////////////////////////////////
@@ -535,7 +556,7 @@ crbug.com/dawn/0000 a:b,c:29:* [ Failure ]
 		}
 
 		errMsg := ""
-		diagnostics, err := ex.Update(test.results, testList.Values())
+		diagnostics, err := ex.Update(test.results, testList.Values() /* verbose */, false)
 		if err != nil {
 			errMsg = err.Error()
 		}

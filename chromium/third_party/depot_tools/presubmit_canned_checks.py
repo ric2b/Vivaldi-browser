@@ -73,7 +73,7 @@ _CORP_LINK_KEYWORD = '.corp.google'
 
 def CheckChangeHasBugFieldFromChange(change, output_api, show_suggestions=True):
     """Requires that the changelist have a Bug: field. If show_suggestions is
-  False then only report on incorrect tags, not missing tags."""
+    False then only report on incorrect tags, not missing tags."""
     bugs = change.BugsFromDescription()
     results = []
     if bugs:
@@ -122,7 +122,7 @@ def CheckChangeHasNoUnwantedTags(input_api, output_api):
 
 def CheckDoNotSubmitInDescription(input_api, output_api):
     """Checks that the user didn't add 'DO NOT ''SUBMIT' to the CL description.
-  """
+    """
     # Keyword is concatenated to avoid presubmit check rejecting the CL.
     keyword = 'DO NOT ' + 'SUBMIT'
     if keyword in input_api.change.DescriptionText():
@@ -171,11 +171,11 @@ def CheckChangeWasUploaded(input_api, output_api):
 
 def CheckDescriptionUsesColonInsteadOfEquals(input_api, output_api):
     """Checks that the CL description uses a colon after 'Bug' and 'Fixed' tags
-  instead of equals.
+    instead of equals.
 
-  crbug.com only interprets the lines "Bug: xyz" and "Fixed: xyz" but not
-  "Bug=xyz" or "Fixed=xyz".
-  """
+    crbug.com only interprets the lines "Bug: xyz" and "Fixed: xyz" but not
+    "Bug=xyz" or "Fixed=xyz".
+    """
     text = input_api.change.DescriptionText()
     if input_api.re.search(r'^(Bug|Fixed)=',
                            text,
@@ -192,8 +192,8 @@ def CheckDescriptionUsesColonInsteadOfEquals(input_api, output_api):
 
 def CheckAuthorizedAuthor(input_api, output_api, bot_allowlist=None):
     """For non-googler/chromites committers, verify the author's email address is
-  in AUTHORS.
-  """
+    in AUTHORS.
+    """
     if input_api.is_committing or input_api.no_diffs:
         error_type = output_api.PresubmitError
     else:
@@ -376,8 +376,8 @@ def CheckChangeHasNoCrAndHasOnlyOneEol(input_api,
                                        source_file_filter=None):
     """Runs both CheckChangeHasNoCR and CheckChangeHasOnlyOneEOL in one pass.
 
-  It is faster because it is reading the file only once.
-  """
+    It is faster because it is reading the file only once.
+    """
     cr_files = []
     eof_files = []
     for f in input_api.AffectedSourceFiles(source_file_filter):
@@ -403,8 +403,8 @@ def CheckChangeHasNoCrAndHasOnlyOneEol(input_api,
 
 def CheckGenderNeutral(input_api, output_api, source_file_filter=None):
     """Checks that there are no gendered pronouns in any of the text files to be
-  submitted.
-  """
+    submitted.
+    """
     if input_api.no_diffs:
         return []
 
@@ -434,16 +434,16 @@ def _ReportErrorFileAndLine(filename, line_num, dummy_line):
 def _GenerateAffectedFileExtList(input_api, source_file_filter):
     """Generate a list of (file, extension) tuples from affected files.
 
-  The result can be fed to _FindNewViolationsOfRule() directly, or
-  could be filtered before doing that.
+    The result can be fed to _FindNewViolationsOfRule() directly, or
+    could be filtered before doing that.
 
-  Args:
-    input_api: object to enumerate the affected files.
-    source_file_filter: a filter to be passed to the input api.
-  Yields:
-    A list of (file, extension) tuples, where |file| is an affected
-      file, and |extension| its file path extension.
-  """
+    Args:
+        input_api: object to enumerate the affected files.
+        source_file_filter: a filter to be passed to the input api.
+    Yields:
+        A list of (file, extension) tuples, where |file| is an affected
+        file, and |extension| its file path extension.
+    """
     for f in input_api.AffectedFiles(include_deletes=False,
                                      file_filter=source_file_filter):
         extension = str(f.LocalPath()).rsplit('.', 1)[-1]
@@ -456,19 +456,19 @@ def _FindNewViolationsOfRuleForList(callable_rule,
     """Find all newly introduced violations of a per-line rule (a callable).
 
   Prefer calling _FindNewViolationsOfRule() instead of this function, unless
-  the list of affected files need to be filtered in a special way.
+    the list of affected files need to be filtered in a special way.
 
-  Arguments:
-    callable_rule: a callable taking a file extension and line of input and
-      returning True if the rule is satisfied and False if there was a problem.
-    file_ext_list: a list of input (file, extension) tuples, as returned by
-      _GenerateAffectedFileExtList().
-    error_formatter: a callable taking (filename, line_number, line) and
-      returning a formatted error string.
+    Arguments:
+        callable_rule: a callable taking a file extension and line of input and
+            returning True if the rule is satisfied and False if there was a problem.
+        file_ext_list: a list of input (file, extension) tuples, as returned by
+            _GenerateAffectedFileExtList().
+        error_formatter: a callable taking (filename, line_number, line) and
+            returning a formatted error string.
 
-  Returns:
-    A list of the newly-introduced violations reported by the rule.
-  """
+    Returns:
+        A list of the newly-introduced violations reported by the rule.
+    """
     errors = []
     for f, extension in file_ext_list:
         # For speed, we do two passes, checking first the full file.  Shelling
@@ -491,17 +491,17 @@ def _FindNewViolationsOfRule(callable_rule,
                              error_formatter=_ReportErrorFileAndLine):
     """Find all newly introduced violations of a per-line rule (a callable).
 
-  Arguments:
-    callable_rule: a callable taking a file extension and line of input and
-      returning True if the rule is satisfied and False if there was a problem.
-    input_api: object to enumerate the affected files.
-    source_file_filter: a filter to be passed to the input api.
-    error_formatter: a callable taking (filename, line_number, line) and
-      returning a formatted error string.
+    Arguments:
+        callable_rule: a callable taking a file extension and line of input and
+            returning True if the rule is satisfied and False if there was a problem.
+        input_api: object to enumerate the affected files.
+        source_file_filter: a filter to be passed to the input api.
+        error_formatter: a callable taking (filename, line_number, line) and
+            returning a formatted error string.
 
-  Returns:
-    A list of the newly-introduced violations reported by the rule.
-  """
+    Returns:
+        A list of the newly-introduced violations reported by the rule.
+    """
     if input_api.no_diffs:
         return []
     return _FindNewViolationsOfRuleForList(
@@ -512,8 +512,8 @@ def _FindNewViolationsOfRule(callable_rule,
 
 def CheckChangeHasNoTabs(input_api, output_api, source_file_filter=None):
     """Checks that there are no tab characters in any of the text files to be
-  submitted.
-  """
+    submitted.
+    """
     # In addition to the filter, make sure that makefiles are skipped.
     if not source_file_filter:
         # It's the default filter.
@@ -569,8 +569,8 @@ def CheckChangeHasNoStrayWhitespace(input_api,
 
 def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
     """Checks that there aren't any lines longer than maxlen characters in any of
-  the text files to be submitted.
-  """
+    the text files to be submitted.
+    """
     if input_api.no_diffs:
         return []
     maxlens = {
@@ -726,8 +726,7 @@ def CheckLicense(input_api,
                  project_name=None,
                  source_file_filter=None,
                  accept_empty_files=True):
-    """Verifies the license header.
-  """
+    """Verifies the license header."""
 
     # Early-out if the license_re is guaranteed to match everything.
     if license_re_param and license_re_param == '.*':
@@ -851,11 +850,11 @@ def CheckLicense(input_api,
 
 def CheckChromiumDependencyMetadata(input_api, output_api, file_filter=None):
     """Check files for Chromium third party dependency metadata have sufficient
-  information, and are correctly formatted.
+    information, and are correctly formatted.
 
-  See the README.chromium.template at
-  https://chromium.googlesource.com/chromium/src/+/main/third_party/README.chromium.template
-  """
+    See the README.chromium.template at
+    https://chromium.googlesource.com/chromium/src/+/main/third_party/README.chromium.template
+    """
     # If the file filter is unspecified, filter to known Chromium metadata
     # files.
     if file_filter is None:
@@ -901,17 +900,17 @@ def CheckTreeIsOpen(input_api,
                     json_url=None):
     """Check whether to allow commit without prompt.
 
-  Supports two styles:
-    1. Checks that an url's content doesn't match a regexp that would mean that
-       the tree is closed. (old)
-    2. Check the json_url to decide whether to allow commit without prompt.
-  Args:
-    input_api: input related apis.
-    output_api: output related apis.
-    url: url to use for regex based tree status.
-    closed: regex to match for closed status.
-    json_url: url to download json style status.
-  """
+    Supports two styles:
+        1. Checks that an url's content doesn't match a regexp that would mean that
+            the tree is closed. (old)
+        2. Check the json_url to decide whether to allow commit without prompt.
+    Args:
+        input_api: input related apis.
+        output_api: output related apis.
+        url: url to use for regex based tree status.
+        closed: regex to match for closed status.
+        json_url: url to download json style status.
+    """
     if not input_api.is_committing or \
         'PRESUBMIT_SKIP_NETWORK' in _os.environ:
         return []
@@ -958,16 +957,14 @@ def GetUnitTestsInDirectory(input_api,
                             env=None,
                             run_on_python2=False,
                             run_on_python3=True,
-                            skip_shebang_check=True,
-                            allowlist=None,
-                            blocklist=None):
+                            skip_shebang_check=True):
     """Lists all files in a directory and runs them. Doesn't recurse.
 
-  It's mainly a wrapper for RunUnitTests. Use allowlist and blocklist to filter
-  tests accordingly. run_on_python2, run_on_python3, and skip_shebang_check are
-  no longer used but have to be retained because of the many callers in other
-  repos that pass them in.
-  """
+    It's mainly a wrapper for RunUnitTests. Use files_to_check and files_to_skip
+    to filter tests accordingly. run_on_python2, run_on_python3, and
+    skip_shebang_check are no longer used but have to be retained because of the
+    many callers in other repos that pass them in.
+    """
     del run_on_python2
     del run_on_python3
     del skip_shebang_check
@@ -1011,11 +1008,11 @@ def GetUnitTests(input_api,
                  skip_shebang_check=True):
     """Runs all unit tests in a directory.
 
-  On Windows, sys.executable is used for unit tests ending with ".py".
-  run_on_python2, run_on_python3, and skip_shebang_check are no longer used but
-  have to be retained because of the many callers in other repos that pass them
-  in.
-  """
+    On Windows, sys.executable is used for unit tests ending with ".py".
+    run_on_python2, run_on_python3, and skip_shebang_check are no longer used but
+    have to be retained because of the many callers in other repos that pass them
+    in.
+    """
     del run_on_python2
     del run_on_python3
     del skip_shebang_check
@@ -1060,11 +1057,11 @@ def GetUnitTestsRecursively(input_api,
                             skip_shebang_check=True):
     """Gets all files in the directory tree (git repo) that match files_to_check.
 
-  Restricts itself to only find files within the Change's source repo, not
-  dependencies. run_on_python2, run_on_python3, and skip_shebang_check are no
-  longer used but have to be retained because of the many callers in other repos
-  that pass them in.
-  """
+    Restricts itself to only find files within the Change's source repo, not
+    dependencies. run_on_python2, run_on_python3, and skip_shebang_check are no
+    longer used but have to be retained because of the many callers in other repos
+    that pass them in.
+    """
     del run_on_python2
     del run_on_python3
     del skip_shebang_check
@@ -1094,10 +1091,10 @@ def GetUnitTestsRecursively(input_api,
 
 def GetPythonUnitTests(input_api, output_api, unit_tests, python3=False):
     """Run the unit tests out of process, capture the output and use the result
-  code to determine success.
+    code to determine success.
 
-  DEPRECATED.
-  """
+    DEPRECATED.
+    """
     # We don't want to hinder users from uploading incomplete patches.
     if input_api.is_committing or input_api.no_diffs:
         message_type = output_api.PresubmitError
@@ -1144,9 +1141,9 @@ def GetPythonUnitTests(input_api, output_api, unit_tests, python3=False):
 def RunUnitTestsInDirectory(input_api, *args, **kwargs):
     """Run tests in a directory serially.
 
-  For better performance, use GetUnitTestsInDirectory and then
-  pass to input_api.RunTests.
-  """
+    For better performance, use GetUnitTestsInDirectory and then
+    pass to input_api.RunTests.
+    """
     return input_api.RunTests(
         GetUnitTestsInDirectory(input_api, *args, **kwargs), False)
 
@@ -1154,17 +1151,17 @@ def RunUnitTestsInDirectory(input_api, *args, **kwargs):
 def RunUnitTests(input_api, *args, **kwargs):
     """Run tests serially.
 
-  For better performance, use GetUnitTests and then pass to
-  input_api.RunTests.
-  """
+    For better performance, use GetUnitTests and then pass to
+    input_api.RunTests.
+    """
     return input_api.RunTests(GetUnitTests(input_api, *args, **kwargs), False)
 
 
 def RunPythonUnitTests(input_api, *args, **kwargs):
     """Run python tests in a directory serially.
 
-  DEPRECATED
-  """
+    DEPRECATED
+    """
     return input_api.RunTests(GetPythonUnitTests(input_api, *args, **kwargs),
                               False)
 
@@ -1212,16 +1209,17 @@ def GetPylint(input_api,
               version='2.7'):
     """Run pylint on python files.
 
-  The default files_to_check enforces looking only at *.py files.
+    The default files_to_check enforces looking only at *.py files.
 
-  Currently only pylint version '2.6' and '2.7' are supported.
-  """
+    Currently only pylint version '2.6' and '2.7' are supported.
+    """
 
     files_to_check = tuple(files_to_check or (r'.*\.py$', ))
     files_to_skip = tuple(files_to_skip or input_api.DEFAULT_FILES_TO_SKIP)
     extra_paths_list = extra_paths_list or []
 
-    assert version in ('2.6', '2.7'), 'Unsupported pylint version: %s' % version
+    assert version in ('2.6', '2.7', '2.17'), \
+        'Unsupported pylint version: %s' % version
 
     if input_api.is_committing or input_api.no_diffs:
         error_type = output_api.PresubmitError
@@ -1257,6 +1255,8 @@ def GetPylint(input_api,
                                           pylintrc)
     else:
         pylintrc = input_api.os_path.join(_HERE, 'pylintrc')
+        if input_api.os_path.exists(f'{pylintrc}-{version}'):
+            pylintrc += f'-{version}'
     extra_args = ['--rcfile=%s' % pylintrc]
     if disabled_warnings:
         extra_args.extend(['-d', ','.join(disabled_warnings)])
@@ -1341,9 +1341,9 @@ def GetPylint(input_api,
 def RunPylint(input_api, *args, **kwargs):
     """Legacy presubmit function.
 
-  For better performance, get all tests and then pass to
-  input_api.RunTests.
-  """
+    For better performance, get all tests and then pass to
+    input_api.RunTests.
+    """
     return input_api.RunTests(GetPylint(input_api, *args, **kwargs), False)
 
 
@@ -1423,8 +1423,8 @@ def CheckNoNewMetadataInOwners(input_api, output_api):
 
 def CheckOwnersDirMetadataExclusive(input_api, output_api):
     """Check that metadata in OWNERS files and DIR_METADATA files are mutually
-  exclusive.
-  """
+    exclusive.
+    """
     _METADATA_LINE_RE = input_api.re.compile(
         r'^#\s*(TEAM|COMPONENT|OS|WPT-NOTIFY)+\s*:\s*\S+$',
         input_api.re.MULTILINE)
@@ -1495,9 +1495,9 @@ def GetCodereviewOwnerAndReviewers(input_api,
                                    approval_needed=True):
     """Return the owner and reviewers of a change, if any.
 
-  If approval_needed is True, only reviewers who have approved the change
-  will be returned.
-  """
+    If approval_needed is True, only reviewers who have approved the change
+    will be returned.
+    """
     # Recognizes 'X@Y' email addresses. Very simplistic.
     EMAIL_REGEXP = input_api.re.compile(r'^[\w\-\+\%\.]+\@[\w\-\+\%\.]+$')
     issue = input_api.change.issue
@@ -1547,26 +1547,26 @@ def PanProjectChecks(input_api,
                      global_checks=True):
     """Checks that ALL chromium orbit projects should use.
 
-  These are checks to be run on all Chromium orbit project, including:
-    Chromium
-    Native Client
-    V8
-  When you update this function, please take this broad scope into account.
-  Args:
-    input_api: Bag of input related interfaces.
-    output_api: Bag of output related interfaces.
-    excluded_paths: Don't include these paths in common checks.
-    text_files: Which file are to be treated as documentation text files.
-    license_header: What license header should be on files.
-    project_name: What is the name of the project as it appears in the license.
-    global_checks: If True run checks that are unaffected by other options or by
-      the PRESUBMIT script's location, such as CheckChangeHasDescription.
-      global_checks should be passed as False when this function is called from
-      locations other than the project's root PRESUBMIT.py, to avoid redundant
-      checking.
-  Returns:
-    A list of warning or error objects.
-  """
+    These are checks to be run on all Chromium orbit project, including:
+        Chromium
+        Native Client
+        V8
+    When you update this function, please take this broad scope into account.
+    Args:
+        input_api: Bag of input related interfaces.
+        output_api: Bag of output related interfaces.
+        excluded_paths: Don't include these paths in common checks.
+        text_files: Which file are to be treated as documentation text files.
+        license_header: What license header should be on files.
+        project_name: What is the name of the project as it appears in the license.
+        global_checks: If True run checks that are unaffected by other options or by
+            the PRESUBMIT script's location, such as CheckChangeHasDescription.
+            global_checks should be passed as False when this function is called from
+            locations other than the project's root PRESUBMIT.py, to avoid redundant
+            checking.
+    Returns:
+        A list of warning or error objects.
+    """
     excluded_paths = tuple(excluded_paths or [])
     text_files = tuple(text_files or (
         r'.+\.txt$',
@@ -1761,13 +1761,13 @@ def CheckGNFormatted(input_api, output_api):
 def CheckCIPDManifest(input_api, output_api, path=None, content=None):
     """Verifies that a CIPD ensure file manifest is valid against all platforms.
 
-  Exactly one of "path" or "content" must be provided. An assertion will occur
-  if neither or both are provided.
+    Exactly one of "path" or "content" must be provided. An assertion will occur
+    if neither or both are provided.
 
-  Args:
-    path (str): If provided, the filesystem path to the manifest to verify.
-    content (str): If provided, the raw content of the manifest to veirfy.
-  """
+    Args:
+        path (str): If provided, the filesystem path to the manifest to verify.
+        content (str): If provided, the raw content of the manifest to veirfy.
+    """
     cipd_bin = 'cipd' if not input_api.is_windows else 'cipd.bat'
     cmd = [cipd_bin, 'ensure-file-verify']
     kwargs = {}
@@ -1801,12 +1801,12 @@ def CheckCIPDManifest(input_api, output_api, path=None, content=None):
 
 def CheckCIPDPackages(input_api, output_api, platforms, packages):
     """Verifies that all named CIPD packages can be resolved against all supplied
-  platforms.
+    platforms.
 
-  Args:
-    platforms (list): List of CIPD platforms to verify.
-    packages (dict): Mapping of package name to version.
-  """
+    Args:
+        platforms (list): List of CIPD platforms to verify.
+        packages (dict): Mapping of package name to version.
+    """
     manifest = []
     for p in platforms:
         manifest.append('$VerifiedPlatform %s' % (p, ))
@@ -1818,13 +1818,13 @@ def CheckCIPDPackages(input_api, output_api, platforms, packages):
 def CheckCIPDClientDigests(input_api, output_api, client_version_file):
     """Verifies that *.digests file was correctly regenerated.
 
-  <client_version_file>.digests file contains pinned hashes of the CIPD client.
-  It is consulted during CIPD client bootstrap and self-update. It should be
-  regenerated each time CIPD client version file changes.
+    <client_version_file>.digests file contains pinned hashes of the CIPD client.
+    It is consulted during CIPD client bootstrap and self-update. It should be
+    regenerated each time CIPD client version file changes.
 
-  Args:
-    client_version_file (str): Path to a text file with CIPD client version.
-  """
+    Args:
+        client_version_file (str): Path to a text file with CIPD client version.
+    """
     cmd = [
         'cipd' if not input_api.is_windows else 'cipd.bat',
         'selfupdate-roll',
@@ -1844,17 +1844,17 @@ def CheckCIPDClientDigests(input_api, output_api, client_version_file):
 def CheckForCommitObjects(input_api, output_api):
     """Validates that commit objects match DEPS.
 
-  Commit objects are put into the git tree typically by submodule tooling.
-  Because we use gclient to handle external repository references instead,
-  we want to ensure DEPS content and Git are in sync when desired.
+    Commit objects are put into the git tree typically by submodule tooling.
+    Because we use gclient to handle external repository references instead,
+    we want to ensure DEPS content and Git are in sync when desired.
 
-  Args:
-    input_api: Bag of input related interfaces.
-    output_api: Bag of output related interfaces.
+    Args:
+        input_api: Bag of input related interfaces.
+        output_api: Bag of output related interfaces.
 
-  Returns:
-    A presubmit error if a commit object is not expected.
-  """
+    Returns:
+        A presubmit error if a commit object is not expected.
+    """
     # Get DEPS file.
     deps_file = input_api.os_path.join(input_api.PresubmitLocalPath(), 'DEPS')
     if not input_api.os_path.isfile(deps_file):
@@ -1877,12 +1877,12 @@ def CheckForCommitObjects(input_api, output_api):
     def parse_tree_entry(ent):
         """Splits a tree entry into components
 
-    Args:
-      ent: a tree entry in the form "filemode type hash\tname"
+        Args:
+            ent: a tree entry in the form "filemode type hash\tname"
 
-    Returns:
-      The tree entry split into component parts
-    """
+        Returns:
+            The tree entry split into component parts
+        """
         tabparts = ent.split('\t', 1)
         spaceparts = tabparts[0].split(' ', 2)
         return (spaceparts[0], spaceparts[1], spaceparts[2], tabparts[1])
@@ -1999,19 +1999,19 @@ def _ParseDeps(contents):
 
 def CheckVPythonSpec(input_api, output_api, file_filter=None):
     """Validates any changed .vpython and .vpython3 files with vpython
-  verification tool.
+    verification tool.
 
-  Args:
-    input_api: Bag of input related interfaces.
-    output_api: Bag of output related interfaces.
-    file_filter: Custom function that takes a path (relative to client root) and
-      returns boolean, which is used to filter files for which to apply the
-      verification to. Defaults to any path ending with .vpython, which captures
-      both global .vpython and <script>.vpython files.
+    Args:
+        input_api: Bag of input related interfaces.
+        output_api: Bag of output related interfaces.
+        file_filter: Custom function that takes a path (relative to client root) and
+            returns boolean, which is used to filter files for which to apply the
+            verification to. Defaults to any path ending with .vpython, which captures
+            both global .vpython and <script>.vpython files.
 
-  Returns:
-    A list of input_api.Command objects containing verification commands.
-  """
+    Returns:
+        A list of input_api.Command objects containing verification commands.
+    """
     file_filter = file_filter or (lambda f: f.LocalPath().endswith('.vpython')
                                   or f.LocalPath().endswith('.vpython3'))
     affected_files = input_api.AffectedTestableFiles(file_filter=file_filter)
@@ -2032,14 +2032,14 @@ def CheckVPythonSpec(input_api, output_api, file_filter=None):
 def CheckChangedLUCIConfigs(input_api, output_api):
     """Validates the changed config file against LUCI Config.
 
-  Only return the warning and/or error for files in input_api.AffectedFiles().
+    Only return the warning and/or error for files in input_api.AffectedFiles().
 
-  Assumes `lucicfg` binary is in PATH and the user is logged in.
+    Assumes `lucicfg` binary is in PATH and the user is logged in.
 
-  Returns:
-    A list presubmit errors and/or warnings from the validation result of files
-    in input_api.AffectedFiles()
-  """
+    Returns:
+        A list presubmit errors and/or warnings from the validation result of files
+        in input_api.AffectedFiles()
+    """
     import json
     import logging
 
@@ -2113,7 +2113,7 @@ def CheckChangedLUCIConfigs(input_api, output_api):
         return json.loads(res.read().decode('utf-8')[len(")]}'"):].strip())
 
     def format_config_set(cs):
-        """convert luci-config v2 config_set object to v1 format"""
+        """convert luci-config v2 config_set object to v1 format."""
         rev = cs.get('revision', {})
         return {
             'config_set': cs.get('name'),
@@ -2242,20 +2242,20 @@ def CheckChangedLUCIConfigs(input_api, output_api):
 def CheckLucicfgGenOutput(input_api, output_api, entry_script):
     """Verifies configs produced by `lucicfg` are up-to-date and pass validation.
 
-  Runs the check unconditionally, regardless of what files are modified. Examine
-  input_api.AffectedFiles() yourself before using CheckLucicfgGenOutput if this
-  is a concern.
+    Runs the check unconditionally, regardless of what files are modified. Examine
+    input_api.AffectedFiles() yourself before using CheckLucicfgGenOutput if this
+    is a concern.
 
-  Assumes `lucicfg` binary is in PATH and the user is logged in.
+    Assumes `lucicfg` binary is in PATH and the user is logged in.
 
-  Args:
-    entry_script: path to the entry-point *.star script responsible for
-        generating a single config set. Either absolute or relative to the
-        currently running PRESUBMIT.py script.
+    Args:
+        entry_script: path to the entry-point *.star script responsible for
+            generating a single config set. Either absolute or relative to the
+            currently running PRESUBMIT.py script.
 
-  Returns:
-    A list of input_api.Command objects containing verification commands.
-  """
+    Returns:
+        A list of input_api.Command objects containing verification commands.
+    """
     return [
         input_api.Command(
             'lucicfg validate "%s"' % entry_script,
@@ -2277,7 +2277,7 @@ def CheckLucicfgGenOutput(input_api, output_api, entry_script):
 
 def CheckJsonParses(input_api, output_api, file_filter=None):
     """Verifies that all JSON files at least parse as valid JSON. By default,
-  file_filter will look for all files that end with .json"""
+    file_filter will look for all files that end with .json"""
     import json
     if file_filter is None:
         file_filter = lambda x: x.LocalPath().endswith('.json')
@@ -2322,10 +2322,10 @@ def _GetMessageForMatchingTerm(input_api, affected_file, line_number, line,
                                term, message):
     """Helper method for CheckInclusiveLanguage.
 
-  Returns an string composed of the name of the file, the line number where the
-  match has been found and the additional text passed as |message| in case the
-  target type name matches the text inside the line passed as parameter.
-  """
+    Returns an string composed of the name of the file, the line number where the
+    match has been found and the additional text passed as |message| in case the
+    target type name matches the text inside the line passed as parameter.
+    """
     result = []
 
     # A // nocheck comment will bypass this error.

@@ -4,6 +4,7 @@
 
 #include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 
+#include <map>
 #include <ostream>
 
 #include "base/base64.h"
@@ -55,7 +56,7 @@ bool CanonicalizeWebFacetURI(const std::string& input_uri,
   url::StdStringCanonOutput canonical_output(canonical_uri);
 
   bool canonicalization_succeeded = url::CanonicalizeStandardURL(
-      input_uri.c_str(), input_uri.size(), input_parsed,
+      input_uri.c_str(), input_parsed,
       url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION, nullptr,
       &canonical_output, &canonical_parsed);
   canonical_output.Complete();
@@ -304,22 +305,6 @@ FacetURI FacetURI::FromPotentiallyInvalidSpec(const std::string& spec) {
 // static
 FacetURI FacetURI::FromCanonicalSpec(const std::string& canonical_spec) {
   return FacetURI(canonical_spec, true);
-}
-
-bool FacetURI::operator==(const FacetURI& other) const {
-  return canonical_spec_ == other.canonical_spec_;
-}
-
-bool FacetURI::operator!=(const FacetURI& other) const {
-  return canonical_spec_ != other.canonical_spec_;
-}
-
-bool FacetURI::operator<(const FacetURI& other) const {
-  return canonical_spec_ < other.canonical_spec_;
-}
-
-bool FacetURI::operator>(const FacetURI& other) const {
-  return canonical_spec_ > other.canonical_spec_;
 }
 
 bool FacetURI::IsValidWebFacetURI() const {

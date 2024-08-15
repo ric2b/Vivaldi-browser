@@ -198,7 +198,7 @@ void SkConicalGradient::appendGradientStages(SkArenaAlloc* alloc,
         auto scale = std::max(fRadius1, fRadius2) / dRadius;
         auto bias = -fRadius1 / dRadius;
 
-        p->append_matrix(alloc, SkMatrix::Translate(bias, 0) * SkMatrix::Scale(scale, 1));
+        p->appendMatrix(alloc, SkMatrix::Translate(bias, 0) * SkMatrix::Scale(scale, 1));
         return;
     }
 
@@ -324,10 +324,8 @@ sk_sp<SkShader> SkGradientShader::MakeTwoPointConical(const SkPoint& start,
     }
     EXPAND_1_COLOR(colorCount);
 
-    SkGradientBaseShader::ColorStopOptimizer opt(colors, pos, colorCount, mode);
-
     SkGradientBaseShader::Descriptor desc(
-            opt.fColors, std::move(colorSpace), opt.fPos, opt.fCount, mode, interpolation);
+            colors, std::move(colorSpace), pos, colorCount, mode, interpolation);
     return SkConicalGradient::Create(start, startRadius, end, endRadius, desc, localMatrix);
 }
 

@@ -39,6 +39,8 @@ import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
+import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
+import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -68,11 +70,8 @@ import {InterestGroupTreeElement} from './InterestGroupTreeElement.js';
 import {OpenedWindowDetailsView, WorkerDetailsView} from './OpenedWindowDetailsView.js';
 import type * as PreloadingHelper from './preloading/helper/helper.js';
 import {
-  type PreloadingAttemptView,
-  type PreloadingResultView,
-  type PreloadingRuleSetView,
-} from './preloading/PreloadingView.js';
-import {PreloadingTreeElement} from './PreloadingTreeElement.js';
+  PreloadingSummaryTreeElement,
+} from './PreloadingTreeElement.js';
 import {ReportingApiTreeElement} from './ReportingApiTreeElement.js';
 import {type ResourcesPanel} from './ResourcesPanel.js';
 import resourcesSidebarStyles from './resourcesSidebar.css.js';
@@ -118,10 +117,6 @@ const UIStrings = {
    *@description Text in Application Panel Sidebar of the Application panel
    */
   backgroundServices: 'Background services',
-  /**
-   *@description Text in Application Panel Sidebar of the Application panel
-   */
-  preloading: 'Speculative loads',
   /**
    *@description Text for rendering frames
    */
@@ -217,6 +212,11 @@ const UIStrings = {
    * @description Application sidebar panel
    */
   applicationSidebarPanel: 'Application panel sidebar',
+  /**
+   *@description Tooltip in Application Panel Sidebar of the Application panel
+   *@example {https://example.com} PH1
+   */
+  thirdPartyPhaseout: 'Cookies from {PH1} may have been blocked due to third-party cookie phaseout.',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/application/ApplicationPanelSidebar.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -228,9 +228,7 @@ function assertNotMainTarget(targetId: Protocol.Target.TargetID|'main'): asserts
 }
 
 export namespace SharedStorageTreeElementDispatcher {
-  // TODO(crbug.com/1167717): Make this a const enum.
-  // eslint-disable-next-line rulesdir/const_enum
-  export enum Events {
+  export const enum Events {
     SharedStorageTreeElementAdded = 'SharedStorageTreeElementAdded',
   }
 
@@ -267,9 +265,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
   periodicBackgroundSyncTreeElement: BackgroundServiceTreeElement;
   pushMessagingTreeElement: BackgroundServiceTreeElement;
   reportingApiTreeElement: ReportingApiTreeElement;
-  preloadingRuleSetTreeElement: PreloadingTreeElement<PreloadingRuleSetView>|undefined;
-  preloadingAttemptTreeElement: PreloadingTreeElement<PreloadingAttemptView>|undefined;
-  preloadingResultTreeElement: PreloadingTreeElement<PreloadingResultView>|undefined;
+  preloadingSummaryTreeElement: PreloadingSummaryTreeElement|undefined;
   private readonly resourcesSection: ResourcesSection;
   private readonly databaseTableViews: Map<DatabaseModelDatabase, {
     [x: string]: DatabaseTableView,
@@ -323,7 +319,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.localStorageListTreeElement.setLink(
         'https://developer.chrome.com/docs/devtools/storage/localstorage/?utm_source=devtools' as
         Platform.DevToolsPath.UrlString);
-    const localStorageIcon = UI.Icon.Icon.create('table', 'resource-tree-item');
+    const localStorageIcon = IconButton.Icon.create('table');
     this.localStorageListTreeElement.setLeadingIcons([localStorageIcon]);
 
     storageTreeElement.appendChild(this.localStorageListTreeElement);
@@ -332,7 +328,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.sessionStorageListTreeElement.setLink(
         'https://developer.chrome.com/docs/devtools/storage/sessionstorage/?utm_source=devtools' as
         Platform.DevToolsPath.UrlString);
-    const sessionStorageIcon = UI.Icon.Icon.create('table', 'resource-tree-item');
+    const sessionStorageIcon = IconButton.Icon.create('table');
     this.sessionStorageListTreeElement.setLeadingIcons([sessionStorageIcon]);
 
     storageTreeElement.appendChild(this.sessionStorageListTreeElement);
@@ -346,7 +342,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.databasesListTreeElement.setLink(
         'https://developer.chrome.com/docs/devtools/storage/websql/?utm_source=devtools' as
         Platform.DevToolsPath.UrlString);
-    const databaseIcon = UI.Icon.Icon.create('database', 'resource-tree-item');
+    const databaseIcon = IconButton.Icon.create('database');
     this.databasesListTreeElement.setLeadingIcons([databaseIcon]);
 
     storageTreeElement.appendChild(this.databasesListTreeElement);
@@ -355,7 +351,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.cookieListTreeElement.setLink(
         'https://developer.chrome.com/docs/devtools/storage/cookies/?utm_source=devtools' as
         Platform.DevToolsPath.UrlString);
-    const cookieIcon = UI.Icon.Icon.create('cookie', 'resource-tree-item');
+    const cookieIcon = IconButton.Icon.create('cookie');
     this.cookieListTreeElement.setLeadingIcons([cookieIcon]);
     storageTreeElement.appendChild(this.cookieListTreeElement);
 
@@ -400,23 +396,18 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.periodicBackgroundSyncTreeElement =
         new BackgroundServiceTreeElement(panel, Protocol.BackgroundService.ServiceName.PeriodicBackgroundSync);
     backgroundServiceTreeElement.appendChild(this.periodicBackgroundSyncTreeElement);
+
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL)) {
+      this.preloadingSummaryTreeElement = new PreloadingSummaryTreeElement(panel);
+      backgroundServiceTreeElement.appendChild(this.preloadingSummaryTreeElement);
+      this.preloadingSummaryTreeElement.constructChildren(panel);
+    }
+
     this.pushMessagingTreeElement =
         new BackgroundServiceTreeElement(panel, Protocol.BackgroundService.ServiceName.PushMessaging);
     backgroundServiceTreeElement.appendChild(this.pushMessagingTreeElement);
     this.reportingApiTreeElement = new ReportingApiTreeElement(panel);
     backgroundServiceTreeElement.appendChild(this.reportingApiTreeElement);
-
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL)) {
-      const preloadingSectionTitle = i18nString(UIStrings.preloading);
-      const preloadingSectionTreeElement = this.addSidebarSection(preloadingSectionTitle);
-
-      this.preloadingRuleSetTreeElement = PreloadingTreeElement.newForPreloadingRuleSetView(panel);
-      this.preloadingAttemptTreeElement = PreloadingTreeElement.newForPreloadingAttemptView(panel);
-      this.preloadingResultTreeElement = PreloadingTreeElement.newForPreloadingResultView(panel);
-      preloadingSectionTreeElement.appendChild(this.preloadingRuleSetTreeElement);
-      preloadingSectionTreeElement.appendChild(this.preloadingAttemptTreeElement);
-      preloadingSectionTreeElement.appendChild(this.preloadingResultTreeElement);
-    }
 
     const resourcesSectionTitle = i18nString(UIStrings.frames);
     const resourcesTreeElement = this.addSidebarSection(resourcesSectionTitle);
@@ -584,9 +575,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL)) {
       const preloadingModel = this.target?.model(SDK.PreloadingModel.PreloadingModel);
       if (preloadingModel) {
-        this.preloadingRuleSetTreeElement?.initialize(preloadingModel);
-        this.preloadingAttemptTreeElement?.initialize(preloadingModel);
-        this.preloadingResultTreeElement?.initialize(preloadingModel);
+        this.preloadingSummaryTreeElement?.initialize(preloadingModel);
       }
     }
   }
@@ -742,7 +731,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     const domain = parsedURL.securityOrigin();
     if (!this.domains[domain]) {
       this.domains[domain] = true;
-      const cookieDomainTreeElement = new CookieTreeElement(this.panel, frame, domain);
+      const cookieDomainTreeElement = new CookieTreeElement(this.panel, frame, parsedURL);
       this.cookieListTreeElement.appendChild(cookieDomainTreeElement);
     }
   }
@@ -759,9 +748,15 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     const domStorageTreeElement = new DOMStorageTreeElement(this.panel, domStorage);
     this.domStorageTreeElements.set(domStorage, domStorageTreeElement);
     if (domStorage.isLocalStorage) {
-      this.localStorageListTreeElement.appendChild(domStorageTreeElement);
+      this.localStorageListTreeElement.appendChild(domStorageTreeElement, comparator);
     } else {
-      this.sessionStorageListTreeElement.appendChild(domStorageTreeElement);
+      this.sessionStorageListTreeElement.appendChild(domStorageTreeElement, comparator);
+    }
+
+    function comparator(a: UI.TreeOutline.TreeElement, b: UI.TreeOutline.TreeElement): number {
+      const aTitle = a.titleAsText().toLocaleLowerCase();
+      const bTitle = b.titleAsText().toLocaleUpperCase();
+      return aTitle.localeCompare(bTitle);
     }
   }
 
@@ -888,16 +883,14 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
   }
 
   showPreloadingRuleSetView(revealInfo: PreloadingHelper.PreloadingForward.RuleSetView): void {
-    if (this.preloadingRuleSetTreeElement) {
-      this.preloadingRuleSetTreeElement.select();
-      this.preloadingRuleSetTreeElement.revealRuleSet(revealInfo);
+    if (this.preloadingSummaryTreeElement) {
+      this.preloadingSummaryTreeElement.expandAndRevealRuleSet(revealInfo);
     }
   }
 
   showPreloadingAttemptViewWithFilter(filter: PreloadingHelper.PreloadingForward.AttemptViewWithFilter): void {
-    if (this.preloadingAttemptTreeElement) {
-      this.preloadingAttemptTreeElement.select();
-      this.preloadingAttemptTreeElement.setFilter(filter);
+    if (this.preloadingSummaryTreeElement) {
+      this.preloadingSummaryTreeElement.expandAndRevealAttempts(filter);
     }
   }
 
@@ -997,7 +990,7 @@ export class BackgroundServiceTreeElement extends ApplicationPanelTreeElement {
 
     this.model = null;
 
-    const backgroundServiceIcon = UI.Icon.Icon.create(this.getIconType(), 'resource-tree-item');
+    const backgroundServiceIcon = IconButton.Icon.create(this.getIconType());
     this.setLeadingIcons([backgroundServiceIcon]);
   }
 
@@ -1066,7 +1059,7 @@ export class DatabaseTreeElement extends ApplicationPanelTreeElement {
     this.sidebar = sidebar;
     this.database = database;
 
-    const icon = UI.Icon.Icon.create('database', 'resource-tree-item');
+    const icon = IconButton.Icon.create('database');
     this.setLeadingIcons([icon]);
   }
 
@@ -1104,7 +1097,7 @@ export class DatabaseTableTreeElement extends ApplicationPanelTreeElement {
     this.sidebar = sidebar;
     this.database = database;
     this.tableName = tableName;
-    const icon = UI.Icon.Icon.create('table', 'resource-tree-item');
+    const icon = IconButton.Icon.create('table');
     this.setLeadingIcons([icon]);
   }
 
@@ -1126,7 +1119,7 @@ export class ServiceWorkersTreeElement extends ApplicationPanelTreeElement {
 
   constructor(storagePanel: ResourcesPanel) {
     super(storagePanel, i18n.i18n.lockedString('Service workers'), false);
-    const icon = UI.Icon.Icon.create('gears', 'resource-tree-item');
+    const icon = IconButton.Icon.create('gears');
     this.setLeadingIcons([icon]);
   }
 
@@ -1149,7 +1142,7 @@ export class AppManifestTreeElement extends ApplicationPanelTreeElement {
   private view: AppManifestView;
   constructor(storagePanel: ResourcesPanel) {
     super(storagePanel, i18nString(UIStrings.manifest), true);
-    const icon = UI.Icon.Icon.create('document', 'resource-tree-item');
+    const icon = IconButton.Icon.create('document');
     this.setLeadingIcons([icon]);
     self.onInvokeElement(this.listItemElement, this.onInvoke.bind(this));
     const emptyView = new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.noManifestDetected));
@@ -1200,7 +1193,7 @@ export class ManifestChildTreeElement extends ApplicationPanelTreeElement {
   #sectionFieldElement: HTMLElement;
   constructor(storagePanel: ResourcesPanel, element: Element, childTitle: string, fieldElement: HTMLElement) {
     super(storagePanel, childTitle, false);
-    const icon = UI.Icon.Icon.create('document', 'resource-tree-item');
+    const icon = IconButton.Icon.create('document');
     this.setLeadingIcons([icon]);
     this.#sectionElement = element;
     this.#sectionFieldElement = fieldElement;
@@ -1246,7 +1239,7 @@ export class ClearStorageTreeElement extends ApplicationPanelTreeElement {
   private view?: StorageView;
   constructor(storagePanel: ResourcesPanel) {
     super(storagePanel, i18nString(UIStrings.storage), false);
-    const icon = UI.Icon.Icon.create('database', 'resource-tree-item');
+    const icon = IconButton.Icon.create('database');
     this.setLeadingIcons([icon]);
   }
 
@@ -1270,7 +1263,7 @@ export class IndexedDBTreeElement extends ExpandableApplicationPanelTreeElement 
   private storageBucket?: Protocol.Storage.StorageBucket;
   constructor(storagePanel: ResourcesPanel, storageBucket?: Protocol.Storage.StorageBucket) {
     super(storagePanel, i18nString(UIStrings.indexeddb), 'IndexedDB');
-    const icon = UI.Icon.Icon.create('database', 'resource-tree-item');
+    const icon = IconButton.Icon.create('database');
     this.setLeadingIcons([icon]);
     this.idbDatabaseTreeElements = [];
     this.storageBucket = storageBucket;
@@ -1412,7 +1405,7 @@ export class IDBDatabaseTreeElement extends ApplicationPanelTreeElement {
     this.model = model;
     this.databaseId = databaseId;
     this.idbObjectStoreTreeElements = new Map();
-    const icon = UI.Icon.Icon.create('database', 'resource-tree-item');
+    const icon = IconButton.Icon.create('database');
     this.setLeadingIcons([icon]);
     this.model.addEventListener(IndexedDBModelEvents.DatabaseNamesRefreshed, this.refreshIndexedDB, this);
   }
@@ -1496,8 +1489,8 @@ export class IDBDatabaseTreeElement extends ApplicationPanelTreeElement {
       return false;
     }
     if (!this.view) {
-      this.view =
-          LegacyWrapper.LegacyWrapper.legacyWrapper(UI.Widget.VBox, new IDBDatabaseView(this.model, this.database));
+      this.view = LegacyWrapper.LegacyWrapper.legacyWrapper(
+          UI.Widget.VBox, new IDBDatabaseView(this.model, this.database), 'indexeddb-data');
     }
 
     this.showView(this.view);
@@ -1536,7 +1529,7 @@ export class IDBObjectStoreTreeElement extends ApplicationPanelTreeElement {
     this.idbIndexTreeElements = new Map();
     this.objectStore = objectStore;
     this.view = null;
-    const icon = UI.Icon.Icon.create('table', 'resource-tree-item');
+    const icon = IconButton.Icon.create('table');
     this.setLeadingIcons([icon]);
   }
 
@@ -1747,7 +1740,7 @@ export class DOMStorageTreeElement extends ApplicationPanelTreeElement {
                                 i18nString(UIStrings.localFiles),
         false);
     this.domStorage = domStorage;
-    const icon = UI.Icon.Icon.create('table', 'resource-tree-item');
+    const icon = IconButton.Icon.create('table');
     this.setLeadingIcons([icon]);
   }
 
@@ -1779,12 +1772,20 @@ export class CookieTreeElement extends ApplicationPanelTreeElement {
   private readonly target: SDK.Target.Target;
   private readonly cookieDomainInternal: string;
 
-  constructor(storagePanel: ResourcesPanel, frame: SDK.ResourceTreeModel.ResourceTreeFrame, cookieDomain: string) {
-    super(storagePanel, cookieDomain ? cookieDomain : i18nString(UIStrings.localFiles), false);
+  constructor(
+      storagePanel: ResourcesPanel, frame: SDK.ResourceTreeModel.ResourceTreeFrame,
+      cookieUrl: Common.ParsedURL.ParsedURL) {
+    super(storagePanel, cookieUrl.securityOrigin() || i18nString(UIStrings.localFiles), false);
     this.target = frame.resourceTreeModel().target();
-    this.cookieDomainInternal = cookieDomain;
-    this.tooltip = i18nString(UIStrings.cookiesUsedByFramesFromS, {PH1: cookieDomain});
-    const icon = UI.Icon.Icon.create('cookie', 'resource-tree-item');
+    this.cookieDomainInternal = cookieUrl.securityOrigin();
+    this.tooltip = i18nString(UIStrings.cookiesUsedByFramesFromS, {PH1: this.cookieDomainInternal});
+    const icon = IconButton.Icon.create('cookie');
+    // Note that we cannot use `cookieDomainInternal` here since it contains scheme.
+    if (IssuesManager.RelatedIssue.hasThirdPartyPhaseoutCookieIssueForDomain(cookieUrl.domain())) {
+      icon.name = 'warning-filled';
+      icon.classList.add('warn-icon');
+      this.tooltip = i18nString(UIStrings.thirdPartyPhaseout, {PH1: this.cookieDomainInternal});
+    }
     this.setLeadingIcons([icon]);
   }
 
@@ -1847,9 +1848,9 @@ export class StorageCategoryView extends UI.Widget.VBox {
     }
   }
 
-  setWarning(message: string|null, learnMoreLink: Platform.DevToolsPath.UrlString): void {
+  setWarning(message: string|null, learnMoreLink: Platform.DevToolsPath.UrlString, jsLogContext?: string): void {
     if (message && !this.warningBar) {
-      this.warningBar = this.emptyWidget.appendWarning(message, learnMoreLink);
+      this.warningBar = this.emptyWidget.appendWarning(message, learnMoreLink, jsLogContext);
     }
     if (!message && this.warningBar) {
       this.warningBar.element.classList.add('hidden');
@@ -2122,7 +2123,7 @@ export class FrameTreeElement extends ApplicationPanelTreeElement {
   }
 
   async frameNavigated(frame: SDK.ResourceTreeModel.ResourceTreeFrame): Promise<void> {
-    const icon = UI.Icon.Icon.create(this.getIconTypeForFrame(frame));
+    const icon = IconButton.Icon.create(this.getIconTypeForFrame(frame));
     if (frame.unreachableUrl()) {
       icon.classList.add('red-icon');
     }
@@ -2321,7 +2322,7 @@ export class FrameResourceTreeElement extends ApplicationPanelTreeElement {
     this.tooltip = resource.url;
     resourceToFrameResourceTreeElement.set(this.resource, this);
 
-    const icon = UI.Icon.Icon.create('document', 'navigator-file-tree-item');
+    const icon = IconButton.Icon.create('document', 'navigator-file-tree-item');
     icon.classList.add('navigator-' + resource.resourceType().name() + '-tree-item');
     this.setLeadingIcons([icon]);
   }
@@ -2411,7 +2412,7 @@ class FrameWindowTreeElement extends ApplicationPanelTreeElement {
 
   updateIcon(canAccessOpener: boolean): void {
     const iconType = canAccessOpener ? 'popup' : 'frame';
-    const icon = UI.Icon.Icon.create(iconType);
+    const icon = IconButton.Icon.create(iconType);
     this.setLeadingIcons([icon]);
   }
 
@@ -2460,7 +2461,7 @@ class WorkerTreeElement extends ApplicationPanelTreeElement {
     super(storagePanel, targetInfo.title || targetInfo.url || i18nString(UIStrings.worker), false);
     this.targetInfo = targetInfo;
     this.view = null;
-    const icon = UI.Icon.Icon.create('gears', 'navigator-file-tree-item');
+    const icon = IconButton.Icon.create('gears', 'navigator-file-tree-item');
     this.setLeadingIcons([icon]);
   }
 

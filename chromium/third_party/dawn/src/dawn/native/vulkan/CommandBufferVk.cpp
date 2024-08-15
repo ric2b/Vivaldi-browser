@@ -97,6 +97,8 @@ VkImageCopy ComputeImageCopyRegion(const TextureCopy& srcCopy,
     region.srcOffset.x = srcCopy.origin.x;
     region.srcOffset.y = srcCopy.origin.y;
     switch (srcTexture->GetDimension()) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
         case wgpu::TextureDimension::e1D:
             region.srcSubresource.baseArrayLayer = 0;
             region.srcSubresource.layerCount = 1;
@@ -118,6 +120,8 @@ VkImageCopy ComputeImageCopyRegion(const TextureCopy& srcCopy,
     region.dstOffset.x = dstCopy.origin.x;
     region.dstOffset.y = dstCopy.origin.y;
     switch (dstTexture->GetDimension()) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
         case wgpu::TextureDimension::e1D:
             region.dstSubresource.baseArrayLayer = 0;
             region.dstSubresource.layerCount = 1;
@@ -171,46 +175,190 @@ class DescriptorSetTracker : public BindGroupTrackerBase<true, uint32_t> {
 MaybeError TransitionAndClearForSyncScope(Device* device,
                                           CommandRecordingContext* recordingContext,
                                           const SyncScopeResourceUsage& scope) {
-    std::vector<VkBufferMemoryBarrier> bufferBarriers;
-    std::vector<VkImageMemoryBarrier> imageBarriers;
-    VkPipelineStageFlags srcStages = 0;
-    VkPipelineStageFlags dstStages = 0;
+    // Separate barriers with vertex stages in destination stages from all other barriers.
+    // This avoids creating unnecessary fragment->vertex dependencies when merging barriers.
+    // Eg. merging a compute->vertex barrier and a fragment->fragment barrier would create
+    // a compute|fragment->vertex|fragment barrier.
+    const VkPipelineStageFlags vertexStages = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+                                              VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                                              VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+
+    struct Barriers {
+        std::vector<VkBufferMemoryBarrier> bufferBarriers;
+        std::vector<VkImageMemoryBarrier> imageBarriers;
+        VkPipelineStageFlags srcStages = 0;
+        VkPipelineStageFlags dstStages = 0;
+    };
+
+    Barriers vertexBarriers;
+    Barriers nonVertexBarriers;
+
+    auto MergeBufferBarrier = [](Barriers* barriers, VkPipelineStageFlags srcStages,
+                                 VkPipelineStageFlags dstStages,
+                                 const VkBufferMemoryBarrier& bufferBarrier) {
+        barriers->srcStages |= srcStages;
+        barriers->dstStages |= dstStages;
+        barriers->bufferBarriers.push_back(bufferBarrier);
+    };
 
     for (size_t i = 0; i < scope.buffers.size(); ++i) {
         Buffer* buffer = ToBackend(scope.buffers[i]);
         buffer->EnsureDataInitialized(recordingContext);
 
+        VkPipelineStageFlags srcStages = 0;
+        VkPipelineStageFlags dstStages = 0;
+
         VkBufferMemoryBarrier bufferBarrier;
-        if (buffer->TrackUsageAndGetResourceBarrier(recordingContext, scope.bufferUsages[i],
-                                                    &bufferBarrier, &srcStages, &dstStages)) {
-            bufferBarriers.push_back(bufferBarrier);
+        if (buffer->TrackUsageAndGetResourceBarrier(
+                recordingContext, scope.bufferSyncInfos[i].usage,
+                scope.bufferSyncInfos[i].shaderStages, &bufferBarrier, &srcStages, &dstStages)) {
+            MergeBufferBarrier((dstStages & vertexStages) ? &vertexBarriers : &nonVertexBarriers,
+                               srcStages, dstStages, bufferBarrier);
         }
     }
 
+    auto MergeImageBarriers = [](Barriers* barriers, VkPipelineStageFlags srcStages,
+                                 VkPipelineStageFlags dstStages,
+                                 const std::vector<VkImageMemoryBarrier>& imageBarriers) {
+        barriers->srcStages |= srcStages;
+        barriers->dstStages |= dstStages;
+        barriers->imageBarriers.insert(barriers->imageBarriers.end(), imageBarriers.begin(),
+                                       imageBarriers.end());
+    };
+
+    // TODO(crbug.com/dawn/851): Add image barriers directly to the correct vector.
+    std::vector<VkImageMemoryBarrier> imageBarriers;
     for (size_t i = 0; i < scope.textures.size(); ++i) {
         Texture* texture = ToBackend(scope.textures[i]);
+
+        VkPipelineStageFlags srcStages = 0;
+        VkPipelineStageFlags dstStages = 0;
 
         // Clear subresources that are not render attachments. Render attachments will be
         // cleared in RecordBeginRenderPass by setting the loadop to clear when the texture
         // subresource has not been initialized before the render pass.
-        DAWN_TRY(scope.textureUsages[i].Iterate(
-            [&](const SubresourceRange& range, wgpu::TextureUsage usage) -> MaybeError {
-                if (usage & ~wgpu::TextureUsage::RenderAttachment) {
+        DAWN_TRY(scope.textureSyncInfos[i].Iterate(
+            [&](const SubresourceRange& range, const TextureSyncInfo& syncInfo) -> MaybeError {
+                if (syncInfo.usage & ~wgpu::TextureUsage::RenderAttachment) {
                     DAWN_TRY(texture->EnsureSubresourceContentInitialized(recordingContext, range));
                 }
                 return {};
             }));
-        texture->TransitionUsageForPass(recordingContext, scope.textureUsages[i], &imageBarriers,
+        texture->TransitionUsageForPass(recordingContext, scope.textureSyncInfos[i], &imageBarriers,
                                         &srcStages, &dstStages);
+
+        if (!imageBarriers.empty()) {
+            MergeImageBarriers((dstStages & vertexStages) ? &vertexBarriers : &nonVertexBarriers,
+                               srcStages, dstStages, imageBarriers);
+            imageBarriers.clear();
+        }
     }
 
-    if (bufferBarriers.size() || imageBarriers.size()) {
-        device->fn.CmdPipelineBarrier(recordingContext->commandBuffer, srcStages, dstStages, 0, 0,
-                                      nullptr, bufferBarriers.size(), bufferBarriers.data(),
-                                      imageBarriers.size(), imageBarriers.data());
+    for (const Barriers& barriers : {vertexBarriers, nonVertexBarriers}) {
+        if (!barriers.bufferBarriers.empty() || !barriers.imageBarriers.empty()) {
+            device->fn.CmdPipelineBarrier(
+                recordingContext->commandBuffer, barriers.srcStages, barriers.dstStages, 0, 0,
+                nullptr, barriers.bufferBarriers.size(), barriers.bufferBarriers.data(),
+                barriers.imageBarriers.size(), barriers.imageBarriers.data());
+        }
     }
+
     return {};
 }
+
+// Reset the query sets used on render pass because the reset command must be called outside
+// render pass.
+void ResetUsedQuerySetsOnRenderPass(Device* device,
+                                    VkCommandBuffer commands,
+                                    QuerySetBase* querySet,
+                                    const std::vector<bool>& availability) {
+    DAWN_ASSERT(availability.size() == querySet->GetQueryAvailability().size());
+
+    auto currentIt = availability.begin();
+    auto lastIt = availability.end();
+    // Traverse the used queries which availability are true.
+    while (currentIt != lastIt) {
+        auto firstTrueIt = std::find(currentIt, lastIt, true);
+        // No used queries need to be reset
+        if (firstTrueIt == lastIt) {
+            break;
+        }
+
+        auto nextFalseIt = std::find(firstTrueIt, lastIt, false);
+
+        uint32_t queryIndex = std::distance(availability.begin(), firstTrueIt);
+        uint32_t queryCount = std::distance(firstTrueIt, nextFalseIt);
+
+        // Reset the queries between firstTrueIt and nextFalseIt (which is at most
+        // lastIt)
+        device->fn.CmdResetQueryPool(commands, ToBackend(querySet)->GetHandle(), queryIndex,
+                                     queryCount);
+
+        // Set current iterator to next false
+        currentIt = nextFalseIt;
+    }
+}
+
+void RecordWriteTimestampCmd(CommandRecordingContext* recordingContext,
+                             Device* device,
+                             QuerySetBase* querySet,
+                             uint32_t queryIndex,
+                             bool isRenderPass,
+                             VkPipelineStageFlagBits pipelineStage) {
+    VkCommandBuffer commands = recordingContext->commandBuffer;
+
+    // The queries must be reset between uses, and the reset command cannot be called in render
+    // pass.
+    if (!isRenderPass) {
+        device->fn.CmdResetQueryPool(commands, ToBackend(querySet)->GetHandle(), queryIndex, 1);
+    }
+
+    device->fn.CmdWriteTimestamp(commands, pipelineStage, ToBackend(querySet)->GetHandle(),
+                                 queryIndex);
+}
+
+void RecordResolveQuerySetCmd(VkCommandBuffer commands,
+                              Device* device,
+                              QuerySet* querySet,
+                              uint32_t firstQuery,
+                              uint32_t queryCount,
+                              Buffer* destination,
+                              uint64_t destinationOffset) {
+    const std::vector<bool>& availability = querySet->GetQueryAvailability();
+
+    auto currentIt = availability.begin() + firstQuery;
+    auto lastIt = availability.begin() + firstQuery + queryCount;
+
+    // Traverse available queries in the range of [firstQuery, firstQuery +  queryCount - 1]
+    while (currentIt != lastIt) {
+        auto firstTrueIt = std::find(currentIt, lastIt, true);
+        // No available query found for resolving
+        if (firstTrueIt == lastIt) {
+            break;
+        }
+        auto nextFalseIt = std::find(firstTrueIt, lastIt, false);
+
+        // The query index of firstTrueIt where the resolving starts
+        uint32_t resolveQueryIndex = std::distance(availability.begin(), firstTrueIt);
+        // The queries count between firstTrueIt and nextFalseIt need to be resolved
+        uint32_t resolveQueryCount = std::distance(firstTrueIt, nextFalseIt);
+
+        // Calculate destinationOffset based on the current resolveQueryIndex and firstQuery
+        uint32_t resolveDestinationOffset =
+            destinationOffset + (resolveQueryIndex - firstQuery) * sizeof(uint64_t);
+
+        // Resolve the queries between firstTrueIt and nextFalseIt (which is at most lastIt)
+        device->fn.CmdCopyQueryPoolResults(commands, querySet->GetHandle(), resolveQueryIndex,
+                                           resolveQueryCount, destination->GetHandle(),
+                                           resolveDestinationOffset, sizeof(uint64_t),
+                                           VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+
+        // Set current iterator to next false
+        currentIt = nextFalseIt;
+    }
+}
+
+}  // anonymous namespace
 
 MaybeError RecordBeginRenderPass(CommandRecordingContext* recordingContext,
                                  Device* device,
@@ -222,8 +370,7 @@ MaybeError RecordBeginRenderPass(CommandRecordingContext* recordingContext,
     {
         RenderPassCacheQuery query;
 
-        for (ColorAttachmentIndex i :
-             IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
+        for (auto i : IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
             const auto& attachmentInfo = renderPass->colorAttachments[i];
             bool hasResolveTarget = attachmentInfo.resolveTarget != nullptr;
 
@@ -254,15 +401,21 @@ MaybeError RecordBeginRenderPass(CommandRecordingContext* recordingContext,
         // Fill in the attachment info that will be chained in the framebuffer create info.
         std::array<VkImageView, kMaxColorAttachments * 2 + 1> attachments;
 
-        for (ColorAttachmentIndex i :
-             IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
+        for (auto i : IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
             auto& attachmentInfo = renderPass->colorAttachments[i];
             TextureView* view = ToBackend(attachmentInfo.view.Get());
             if (view == nullptr) {
                 continue;
             }
 
-            attachments[attachmentCount] = view->GetHandle();
+            if (view->GetDimension() == wgpu::TextureViewDimension::e3D) {
+                VkImageView handleFor2DViewOn3D;
+                DAWN_TRY_ASSIGN(handleFor2DViewOn3D,
+                                view->GetOrCreate2DViewOn3D(attachmentInfo.depthSlice));
+                attachments[attachmentCount] = handleFor2DViewOn3D;
+            } else {
+                attachments[attachmentCount] = view->GetHandle();
+            }
 
             switch (view->GetFormat().GetAspectInfo(Aspect::Color).baseType) {
                 case TextureComponentType::Float: {
@@ -305,8 +458,7 @@ MaybeError RecordBeginRenderPass(CommandRecordingContext* recordingContext,
             attachmentCount++;
         }
 
-        for (ColorAttachmentIndex i :
-             IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
+        for (auto i : IterateBitSet(renderPass->attachmentState->GetColorAttachmentsMask())) {
             if (renderPass->colorAttachments[i].resolveTarget != nullptr) {
                 TextureView* view = ToBackend(renderPass->colorAttachments[i].resolveTarget.Get());
 
@@ -353,99 +505,6 @@ MaybeError RecordBeginRenderPass(CommandRecordingContext* recordingContext,
 
     return {};
 }
-
-// Reset the query sets used on render pass because the reset command must be called outside
-// render pass.
-void ResetUsedQuerySetsOnRenderPass(Device* device,
-                                    VkCommandBuffer commands,
-                                    QuerySetBase* querySet,
-                                    const std::vector<bool>& availability) {
-    DAWN_ASSERT(availability.size() == querySet->GetQueryAvailability().size());
-
-    auto currentIt = availability.begin();
-    auto lastIt = availability.end();
-    // Traverse the used queries which availability are true.
-    while (currentIt != lastIt) {
-        auto firstTrueIt = std::find(currentIt, lastIt, true);
-        // No used queries need to be reset
-        if (firstTrueIt == lastIt) {
-            break;
-        }
-
-        auto nextFalseIt = std::find(firstTrueIt, lastIt, false);
-
-        uint32_t queryIndex = std::distance(availability.begin(), firstTrueIt);
-        uint32_t queryCount = std::distance(firstTrueIt, nextFalseIt);
-
-        // Reset the queries between firstTrueIt and nextFalseIt (which is at most
-        // lastIt)
-        device->fn.CmdResetQueryPool(commands, ToBackend(querySet)->GetHandle(), queryIndex,
-                                     queryCount);
-
-        // Set current iterator to next false
-        currentIt = nextFalseIt;
-    }
-}
-
-void RecordWriteTimestampCmd(CommandRecordingContext* recordingContext,
-                             Device* device,
-                             QuerySetBase* querySet,
-                             uint32_t queryIndex,
-                             bool isRenderPass) {
-    VkCommandBuffer commands = recordingContext->commandBuffer;
-
-    // The queries must be reset between uses, and the reset command cannot be called in render
-    // pass.
-    if (!isRenderPass) {
-        device->fn.CmdResetQueryPool(commands, ToBackend(querySet)->GetHandle(), queryIndex, 1);
-    }
-
-    device->fn.CmdWriteTimestamp(commands, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                 ToBackend(querySet)->GetHandle(), queryIndex);
-}
-
-void RecordResolveQuerySetCmd(VkCommandBuffer commands,
-                              Device* device,
-                              QuerySet* querySet,
-                              uint32_t firstQuery,
-                              uint32_t queryCount,
-                              Buffer* destination,
-                              uint64_t destinationOffset) {
-    const std::vector<bool>& availability = querySet->GetQueryAvailability();
-
-    auto currentIt = availability.begin() + firstQuery;
-    auto lastIt = availability.begin() + firstQuery + queryCount;
-
-    // Traverse available queries in the range of [firstQuery, firstQuery +  queryCount - 1]
-    while (currentIt != lastIt) {
-        auto firstTrueIt = std::find(currentIt, lastIt, true);
-        // No available query found for resolving
-        if (firstTrueIt == lastIt) {
-            break;
-        }
-        auto nextFalseIt = std::find(firstTrueIt, lastIt, false);
-
-        // The query index of firstTrueIt where the resolving starts
-        uint32_t resolveQueryIndex = std::distance(availability.begin(), firstTrueIt);
-        // The queries count between firstTrueIt and nextFalseIt need to be resolved
-        uint32_t resolveQueryCount = std::distance(firstTrueIt, nextFalseIt);
-
-        // Calculate destinationOffset based on the current resolveQueryIndex and firstQuery
-        uint32_t resolveDestinationOffset =
-            destinationOffset + (resolveQueryIndex - firstQuery) * sizeof(uint64_t);
-
-        // Resolve the queries between firstTrueIt and nextFalseIt (which is at most lastIt)
-        device->fn.CmdCopyQueryPoolResults(commands, querySet->GetHandle(), resolveQueryIndex,
-                                           resolveQueryCount, destination->GetHandle(),
-                                           resolveDestinationOffset, sizeof(uint64_t),
-                                           VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-
-        // Set current iterator to next false
-        currentIt = nextFalseIt;
-    }
-}
-
-}  // anonymous namespace
 
 // static
 Ref<CommandBuffer> CommandBuffer::Create(CommandEncoder* encoder,
@@ -599,7 +658,8 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* recordingConte
                 ToBackend(src.buffer)
                     ->TransitionUsageNow(recordingContext, wgpu::BufferUsage::CopySrc);
                 ToBackend(dst.texture)
-                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopyDst, range);
+                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopyDst,
+                                         wgpu::ShaderStage::None, range);
                 VkBuffer srcBuffer = ToBackend(src.buffer)->GetHandle();
                 VkImage dstImage = ToBackend(dst.texture)->GetHandle();
 
@@ -631,7 +691,8 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* recordingConte
                              ->EnsureSubresourceContentInitialized(recordingContext, range));
 
                 ToBackend(src.texture)
-                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopySrc, range);
+                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopySrc,
+                                         wgpu::ShaderStage::None, range);
                 ToBackend(dst.buffer)
                     ->TransitionUsageNow(recordingContext, wgpu::BufferUsage::CopyDst);
 
@@ -676,9 +737,11 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* recordingConte
                 }
 
                 ToBackend(src.texture)
-                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopySrc, srcRange);
+                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopySrc,
+                                         wgpu::ShaderStage::None, srcRange);
                 ToBackend(dst.texture)
-                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopyDst, dstRange);
+                    ->TransitionUsageNow(recordingContext, wgpu::TextureUsage::CopyDst,
+                                         wgpu::ShaderStage::None, dstRange);
 
                 // In some situations we cannot do texture-to-texture copies with vkCmdCopyImage
                 // because as Vulkan SPEC always validates image copies with the virtual size of
@@ -815,7 +878,7 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* recordingConte
                 WriteTimestampCmd* cmd = mCommands.NextCommand<WriteTimestampCmd>();
 
                 RecordWriteTimestampCmd(recordingContext, device, cmd->querySet.Get(),
-                                        cmd->queryIndex, false);
+                                        cmd->queryIndex, false, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
                 break;
             }
 
@@ -881,9 +944,10 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* recordingConte
                 uint8_t* data = mCommands.NextData<uint8_t>(size);
 
                 UploadHandle uploadHandle;
-                DAWN_TRY_ASSIGN(uploadHandle, device->GetDynamicUploader()->Allocate(
-                                                  size, device->GetPendingCommandSerial(),
-                                                  kCopyBufferToBufferOffsetAlignment));
+                DAWN_TRY_ASSIGN(uploadHandle,
+                                device->GetDynamicUploader()->Allocate(
+                                    size, device->GetQueue()->GetPendingCommandSerial(),
+                                    kCopyBufferToBufferOffsetAlignment));
                 DAWN_ASSERT(uploadHandle.mappedBuffer != nullptr);
                 memcpy(uploadHandle.mappedBuffer, data, size);
 
@@ -920,7 +984,8 @@ MaybeError CommandBuffer::RecordComputePass(CommandRecordingContext* recordingCo
         wgpu::kQuerySetIndexUndefined) {
         RecordWriteTimestampCmd(recordingContext, device,
                                 computePassCmd->timestampWrites.querySet.Get(),
-                                computePassCmd->timestampWrites.beginningOfPassWriteIndex, false);
+                                computePassCmd->timestampWrites.beginningOfPassWriteIndex, false,
+                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
     }
 
     VkCommandBuffer commands = recordingContext->commandBuffer;
@@ -937,9 +1002,10 @@ MaybeError CommandBuffer::RecordComputePass(CommandRecordingContext* recordingCo
                 // Write timestamp at the end of compute pass if it's set.
                 if (computePassCmd->timestampWrites.endOfPassWriteIndex !=
                     wgpu::kQuerySetIndexUndefined) {
-                    RecordWriteTimestampCmd(
-                        recordingContext, device, computePassCmd->timestampWrites.querySet.Get(),
-                        computePassCmd->timestampWrites.endOfPassWriteIndex, false);
+                    RecordWriteTimestampCmd(recordingContext, device,
+                                            computePassCmd->timestampWrites.querySet.Get(),
+                                            computePassCmd->timestampWrites.endOfPassWriteIndex,
+                                            false, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
                 }
                 return {};
             }
@@ -1048,7 +1114,7 @@ MaybeError CommandBuffer::RecordComputePass(CommandRecordingContext* recordingCo
                 WriteTimestampCmd* cmd = mCommands.NextCommand<WriteTimestampCmd>();
 
                 RecordWriteTimestampCmd(recordingContext, device, cmd->querySet.Get(),
-                                        cmd->queryIndex, false);
+                                        cmd->queryIndex, false, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
                 break;
             }
 
@@ -1066,14 +1132,17 @@ MaybeError CommandBuffer::RecordRenderPass(CommandRecordingContext* recordingCon
     Device* device = ToBackend(GetDevice());
     VkCommandBuffer commands = recordingContext->commandBuffer;
 
-    DAWN_TRY(RecordBeginRenderPass(recordingContext, device, renderPassCmd));
-
     // Write timestamp at the beginning of render pass if it's set.
+    // We've observed that this must be called before the render pass or the timestamps produced
+    // are nonsensical on multiple Android devices.
     if (renderPassCmd->timestampWrites.beginningOfPassWriteIndex != wgpu::kQuerySetIndexUndefined) {
         RecordWriteTimestampCmd(recordingContext, device,
                                 renderPassCmd->timestampWrites.querySet.Get(),
-                                renderPassCmd->timestampWrites.beginningOfPassWriteIndex, true);
+                                renderPassCmd->timestampWrites.beginningOfPassWriteIndex, true,
+                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
     }
+
+    DAWN_TRY(RecordBeginRenderPass(recordingContext, device, renderPassCmd));
 
     // Set the default value for the dynamic state
     {
@@ -1279,15 +1348,19 @@ MaybeError CommandBuffer::RecordRenderPass(CommandRecordingContext* recordingCon
             case Command::EndRenderPass: {
                 mCommands.NextCommand<EndRenderPassCmd>();
 
+                device->fn.CmdEndRenderPass(commands);
+
                 // Write timestamp at the end of render pass if it's set.
+                // We've observed that this must be called after the render pass ends or the
+                // timestamps produced are nonsensical on multiple Android devices.
                 if (renderPassCmd->timestampWrites.endOfPassWriteIndex !=
                     wgpu::kQuerySetIndexUndefined) {
-                    RecordWriteTimestampCmd(
-                        recordingContext, device, renderPassCmd->timestampWrites.querySet.Get(),
-                        renderPassCmd->timestampWrites.endOfPassWriteIndex, true);
+                    RecordWriteTimestampCmd(recordingContext, device,
+                                            renderPassCmd->timestampWrites.querySet.Get(),
+                                            renderPassCmd->timestampWrites.endOfPassWriteIndex,
+                                            true, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
                 }
 
-                device->fn.CmdEndRenderPass(commands);
                 return {};
             }
 
@@ -1381,7 +1454,7 @@ MaybeError CommandBuffer::RecordRenderPass(CommandRecordingContext* recordingCon
                 WriteTimestampCmd* cmd = mCommands.NextCommand<WriteTimestampCmd>();
 
                 RecordWriteTimestampCmd(recordingContext, device, cmd->querySet.Get(),
-                                        cmd->queryIndex, true);
+                                        cmd->queryIndex, true, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
                 break;
             }
 

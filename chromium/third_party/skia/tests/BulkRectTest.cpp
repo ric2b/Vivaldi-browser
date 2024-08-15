@@ -66,7 +66,11 @@ static std::unique_ptr<skgpu::ganesh::SurfaceDrawContext> new_SDC(GrRecordingCon
 }
 
 static sk_sp<GrSurfaceProxy> create_proxy(GrRecordingContext* rContext) {
+    using namespace skgpu;
+
     static constexpr SkISize kDimensions = {128, 128};
+
+    Protected isProtected = Protected(rContext->priv().caps()->supportsProtectedContent());
 
     const GrBackendFormat format = rContext->priv().caps()->getDefaultBackendFormat(
                                                                            GrColorType::kRGBA_8888,
@@ -75,10 +79,10 @@ static sk_sp<GrSurfaceProxy> create_proxy(GrRecordingContext* rContext) {
                                                          kDimensions,
                                                          GrRenderable::kYes,
                                                          1,
-                                                         skgpu::Mipmapped::kNo,
+                                                         Mipmapped::kNo,
                                                          SkBackingFit::kExact,
-                                                         skgpu::Budgeted::kNo,
-                                                         GrProtected::kNo,
+                                                         Budgeted::kNo,
+                                                         isProtected,
                                                          /*label=*/"CreateSurfaceProxy",
                                                          GrInternalSurfaceFlags::kNone);
 }
@@ -138,7 +142,7 @@ static void fillrectop_creation_test(skiatest::Reporter* reporter, GrDirectConte
         const GrOp* tmp = opsTask->getChain(i);
         REPORTER_ASSERT(reporter, tmp->classID() == skgpu::ganesh::FillRectOp::ClassID());
         REPORTER_ASSERT(reporter, tmp->isChainTail());
-        actualTotNumQuads += ((GrDrawOp*) tmp)->numQuads();
+        actualTotNumQuads += ((const GrDrawOp*) tmp)->numQuads();
     }
 
     REPORTER_ASSERT(reporter, expectedNumOps == actualNumOps);
@@ -253,7 +257,7 @@ static void textureop_creation_test(skiatest::Reporter* reporter, GrDirectContex
         REPORTER_ASSERT(reporter, allUniqueProxies || tmp->isChainTail());
         while (tmp) {
             REPORTER_ASSERT(reporter, tmp->classID() == expectedOpID);
-            actualTotNumQuads += ((GrDrawOp*) tmp)->numQuads();
+            actualTotNumQuads += ((const GrDrawOp*) tmp)->numQuads();
             tmp = tmp->nextInChain();
         }
     }

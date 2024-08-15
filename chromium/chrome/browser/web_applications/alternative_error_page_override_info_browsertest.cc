@@ -29,8 +29,7 @@ class AlternativeErrorPageOverrideInfoBrowserTest
     : public web_app::WebAppControllerBrowserTest {
  public:
   AlternativeErrorPageOverrideInfoBrowserTest() {
-    feature_list_.InitWithFeatures({features::kPWAsDefaultOfflinePage,
-                                    blink::features::kWebAppEnableDarkMode},
+    feature_list_.InitWithFeatures({blink::features::kWebAppEnableDarkMode},
                                    {});
   }
 
@@ -42,7 +41,7 @@ class AlternativeErrorPageOverrideInfoBrowserTest
     content::ScopedContentBrowserClientSetting setting(&browser_client);
 
     const GURL app_url = embedded_test_server()->GetURL(html);
-    web_app::NavigateToURLAndWait(browser(), app_url);
+    web_app::NavigateViaLinkClickToURLAndWait(browser(), app_url);
     web_app::test::InstallPwaForCurrentUrl(browser());
     content::BrowserContext* context = browser()->profile();
 
@@ -141,7 +140,7 @@ IN_PROC_BROWSER_TEST_F(AlternativeErrorPageOverrideInfoBrowserTest,
 
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL app_url = embedded_test_server()->GetURL("/title1.html");
-  web_app::NavigateToURLAndWait(browser(), app_url);
+  web_app::NavigateViaLinkClickToURLAndWait(browser(), app_url);
   web_app::test::InstallPwaForCurrentUrl(browser());
   content::BrowserContext* context = browser()->profile();
 
@@ -165,12 +164,12 @@ IN_PROC_BROWSER_TEST_F(AlternativeErrorPageOverrideInfoBrowserTest,
   const GURL app_url = embedded_test_server()->GetURL(
       "/banners/"
       "manifest_test_page.html?manifest=manifest_one_icon.json");
-  web_app::NavigateToURLAndWait(browser(), app_url);
+  web_app::NavigateViaLinkClickToURLAndWait(browser(), app_url);
   web_app::test::InstallPwaForCurrentUrl(browser());
   Profile* profile = browser()->profile();
   web_app::WebAppProvider* web_app_provider =
       web_app::WebAppProvider::GetForTest(profile);
-  const absl::optional<webapps::AppId> app_id =
+  const std::optional<webapps::AppId> app_id =
       web_app_provider->registrar_unsafe().FindAppWithUrlInScope(app_url);
   WebAppIconWaiter(profile, app_id.value()).Wait();
   content::mojom::AlternativeErrorPageOverrideInfoPtr info =

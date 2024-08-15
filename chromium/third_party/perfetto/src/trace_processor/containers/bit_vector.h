@@ -23,12 +23,21 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <optional>
 #include <vector>
 
 #include "perfetto/base/logging.h"
 
 namespace perfetto {
+
+namespace protos {
+namespace pbzero {
+class SerializedColumn_BitVector;
+class SerializedColumn_BitVector_Decoder;
+}  // namespace pbzero
+}  // namespace protos
+
 namespace trace_processor {
 
 namespace internal {
@@ -342,8 +351,8 @@ class BitVector {
     return bv;
   }
 
-  // Creates a BitVector of size |end| bit the bits between |start| and |end|
-  // filled with corresponding bits |this| BitVector.
+  // Creates a BitVector of size `min(range_end, size())` with bits between
+  // |start| and |end| filled with corresponding bits from |this| BitVector.
   BitVector IntersectRange(uint32_t range_start, uint32_t range_end) const;
 
   // Requests the removal of unused capacity.
@@ -394,6 +403,13 @@ class BitVector {
     // bits and the cost of the counts vector.
     return BlockCount(n) * Block::kBits + BlockCount(n) * sizeof(uint32_t);
   }
+
+  // Serialize internals of BitVector to proto.
+  void Serialize(protos::pbzero::SerializedColumn_BitVector* msg) const;
+
+  // Deserialize BitVector from proto.
+  void Deserialize(
+      const protos::pbzero::SerializedColumn_BitVector_Decoder& bv_msg);
 
  private:
   friend class internal::BaseIterator;

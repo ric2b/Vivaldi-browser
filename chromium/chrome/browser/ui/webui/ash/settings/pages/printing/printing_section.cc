@@ -85,7 +85,9 @@ const std::vector<SearchConcept>& GetScanningAppSearchConcepts(
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_SCANNING_APP,
        section_path,
-       mojom::SearchResultIcon::kPrinter,
+       ash::features::IsOsSettingsRevampWayfindingEnabled()
+           ? mojom::SearchResultIcon::kScanner
+           : mojom::SearchResultIcon::kPrinter,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kScanningApp}},
@@ -333,6 +335,9 @@ void PrintingSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                           features::IsPrinterSettingsPrinterStatusEnabled());
   html_source->AddBoolean("isPrintPreviewDiscoveredPrintersEnabled",
                           features::IsPrintPreviewDiscoveredPrintersEnabled());
+  html_source->AddBoolean(
+      "isLocalPrinterObservingEnabled",
+      base::FeatureList::IsEnabled(::features::kLocalPrinterObserving));
 }
 
 void PrintingSection::AddHandlers(content::WebUI* web_ui) {

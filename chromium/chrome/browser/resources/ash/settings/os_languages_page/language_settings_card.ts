@@ -15,8 +15,8 @@ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
+import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import {PrefsState} from '../common/types.js';
-import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Router, routes} from '../router.js';
 
 import {getTemplate} from './language_settings_card.html.js';
@@ -48,6 +48,20 @@ export class LanguageSettingsCardElement extends
       languageHelper: Object,
 
       isRevampWayfindingEnabled_: Boolean,
+
+      rowIcons_: {
+        type: Object,
+        value() {
+          if (isRevampWayfindingEnabled()) {
+            return {
+              languages: 'os-settings:language-revamp',
+            };
+          }
+          return {
+            languages: '',
+          };
+        },
+      },
     };
   }
 
@@ -61,6 +75,7 @@ export class LanguageSettingsCardElement extends
 
   // Internal state.
   private isRevampWayfindingEnabled_ = isRevampWayfindingEnabled();
+  private rowIcons_: Record<string, string>;
 
   // Internal properties for mixins.
   // From RouteOriginMixin. This needs to be defined after

@@ -133,7 +133,7 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
           web_contents()->GetPrimaryMainFrame());
 
   // Check that after initializing, nothing is blocked.
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   EXPECT_FALSE(content_settings->IsContentBlocked(ContentSettingsType::IMAGES));
 #endif
   EXPECT_FALSE(
@@ -163,7 +163,7 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
                                   false});
   content_settings = PageSpecificContentSettings::GetForFrame(
       web_contents()->GetPrimaryMainFrame());
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   content_settings->OnContentBlocked(ContentSettingsType::IMAGES);
 #endif
   content_settings->OnContentBlocked(ContentSettingsType::POPUPS);
@@ -173,12 +173,11 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
           PageSpecificContentSettings::kMicrophoneBlocked,
           PageSpecificContentSettings::kCameraAccessed,
           PageSpecificContentSettings::kCameraBlocked};
-  content_settings->OnMediaStreamPermissionSet(
-      GURL("http://google.com"), blocked_microphone_camera_state, std::string(),
-      std::string(), std::string(), std::string());
+  content_settings->OnMediaStreamPermissionSet(GURL("http://google.com"),
+                                               blocked_microphone_camera_state);
 
   // Check that only the respective content types are affected.
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   EXPECT_TRUE(content_settings->IsContentBlocked(ContentSettingsType::IMAGES));
 #endif
   EXPECT_FALSE(
@@ -242,7 +241,7 @@ TEST_F(PageSpecificContentSettingsTest, BlockedContent) {
   NavigateAndCommit(GURL("http://google.com"));
   content_settings = PageSpecificContentSettings::GetForFrame(
       web_contents()->GetPrimaryMainFrame());
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   EXPECT_FALSE(content_settings->IsContentBlocked(ContentSettingsType::IMAGES));
 #endif
   EXPECT_FALSE(
@@ -871,6 +870,7 @@ TEST_F(PageSpecificContentSettingsTest, LocalSharedObjectsContainerHostsCount) {
   EXPECT_EQ(1u, objects.GetHostCountForDomain(GURL("http://a.example.com")));
 }
 
+#if !BUILDFLAG(IS_IOS)
 TEST_F(PageSpecificContentSettingsTest,
        IndicatorChangedOnContentSettingChange) {
   NavigateAndCommit(GURL("http://google.com"));
@@ -913,6 +913,7 @@ TEST_F(PageSpecificContentSettingsTest,
   EXPECT_FALSE(content_settings->IsContentAllowed(
       ContentSettingsType::CLIPBOARD_READ_WRITE));
 }
+#endif
 
 TEST_F(PageSpecificContentSettingsTest, AllowedSitesCountedFromBothModels) {
   // Populate containers with hosts.
@@ -1515,9 +1516,8 @@ TEST_F(PageSpecificContentSettingsTest, MediaBlockedIndicatorsDismissDelay) {
       blocked_microphone_camera_state = {
           PageSpecificContentSettings::kMicrophoneAccessed,
           PageSpecificContentSettings::kMicrophoneBlocked};
-  pscs->OnMediaStreamPermissionSet(
-      GURL("http://google.com"), blocked_microphone_camera_state, std::string(),
-      std::string(), std::string(), std::string());
+  pscs->OnMediaStreamPermissionSet(GURL("http://google.com"),
+                                   blocked_microphone_camera_state);
 
   EXPECT_TRUE(pscs->get_media_blocked_indicator_timer_for_testing().contains(
       ContentSettingsType::MEDIASTREAM_MIC));
@@ -1554,9 +1554,8 @@ TEST_F(PageSpecificContentSettingsTest,
       blocked_microphone_camera_state = {
           PageSpecificContentSettings::kMicrophoneAccessed,
           PageSpecificContentSettings::kMicrophoneBlocked};
-  pscs->OnMediaStreamPermissionSet(
-      GURL("http://google.com"), blocked_microphone_camera_state, std::string(),
-      std::string(), std::string(), std::string());
+  pscs->OnMediaStreamPermissionSet(GURL("http://google.com"),
+                                   blocked_microphone_camera_state);
 
   EXPECT_TRUE(pscs->get_media_blocked_indicator_timer_for_testing().contains(
       ContentSettingsType::MEDIASTREAM_MIC));

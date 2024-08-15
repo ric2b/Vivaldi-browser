@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager.TabModelStartupInfo;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
@@ -27,8 +28,10 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
@@ -76,6 +79,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      * @param lifecycleDispatcher @{@link ActivityLifecycleDispatcher} to be passed to TabStrip
      *     helper.
      * @param delayedTabSwitcherOrStartSurfaceCallable Callable to create StartSurface/GTS views.
+     * @param hubLayoutDependencyHolder The dependency holder for creating {@link HubLayout}.
      * @param multiInstanceManager @{link MultiInstanceManager} passed to @{link StripLayoutHelper}
      *     to support tab drag and drop.
      * @param dragAndDropDelegate @{@link DragAndDropDelegate} passed to {@link
@@ -83,6 +87,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      * @param toolbarContainerView @{link View} passed to @{link StripLayoutHelper} to support tab
      *     drag and drop.
      * @param tabHoverCardViewStub The {@link ViewStub} representing the strip tab hover card.
+     * @param toolbarManager The {@link ToolbarManager} instance.
      */
     public LayoutManagerChromeTablet(
             LayoutManagerHost host,
@@ -97,13 +102,25 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             ScrimCoordinator scrimCoordinator,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             Callable<ViewGroup> delayedTabSwitcherOrStartSurfaceCallable,
+            HubLayoutDependencyHolder hubLayoutDependencyHolder,
             MultiInstanceManager multiInstanceManager,
             DragAndDropDelegate dragAndDropDelegate,
             View toolbarContainerView,
-            @NonNull ViewStub tabHoverCardViewStub) {
-        super(host, contentContainer, startSurfaceSupplier, tabSwitcherSupplier,
-                browserControlsStateProvider, tabContentManagerSupplier, topUiThemeColorProvider,
-                tabSwitcherViewHolder, scrimCoordinator, delayedTabSwitcherOrStartSurfaceCallable);
+            @NonNull ViewStub tabHoverCardViewStub,
+            @NonNull WindowAndroid windowAndroid,
+            @NonNull ToolbarManager toolbarManager) {
+        super(
+                host,
+                contentContainer,
+                startSurfaceSupplier,
+                tabSwitcherSupplier,
+                browserControlsStateProvider,
+                tabContentManagerSupplier,
+                topUiThemeColorProvider,
+                tabSwitcherViewHolder,
+                scrimCoordinator,
+                delayedTabSwitcherOrStartSurfaceCallable,
+                hubLayoutDependencyHolder);
         if (!ChromeApplicationImpl.isVivaldi()) {
         mTabStripLayoutHelperManager =
                 new StripLayoutHelperManager(
@@ -118,7 +135,10 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                         dragAndDropDelegate,
                         toolbarContainerView,
                         tabHoverCardViewStub,
-                        tabContentManagerSupplier);
+                        tabContentManagerSupplier,
+                        browserControlsStateProvider,
+                        windowAndroid,
+                        toolbarManager);
         addSceneOverlay(mTabStripLayoutHelperManager);
         addObserver(mTabStripLayoutHelperManager.getTabSwitcherObserver());
         } // vivaldi
@@ -132,7 +152,8 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                             -> mLayerTitleCache,
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
                     dragAndDropDelegate, toolbarContainerView, tabHoverCardViewStub,
-                    tabContentManagerSupplier));
+                    tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
+                    toolbarManager));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
             addSceneOverlay(mTabStrips.get(i));
@@ -168,8 +189,14 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     }
 
     @Override
-    protected void tabCreated(int id, int sourceId, @TabLaunchType int launchType,
-            boolean incognito, boolean willBeSelected, float originX, float originY) {
+    protected void tabCreated(
+            int id,
+            int sourceId,
+            @TabLaunchType int launchType,
+            boolean incognito,
+            boolean willBeSelected,
+            float originX,
+            float originY) {
         if (getBrowserControlsManager() != null) {
             getBrowserControlsManager().getBrowserVisibilityDelegate().showControlsTransient();
         }
@@ -179,7 +206,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     @Override
     public void onTabsAllClosing(boolean incognito) {
         if (getActiveLayout() == mStaticLayout && !incognito) {
-            showLayout(LayoutType.TAB_SWITCHER, /*animate=*/false);
+            showLayout(LayoutType.TAB_SWITCHER, /* animate= */ false);
         }
         super.onTabsAllClosing(incognito);
     }
@@ -188,15 +215,18 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     protected void tabModelSwitched(boolean incognito) {
         super.tabModelSwitched(incognito);
         getTabModelSelector().commitAllTabClosures();
-        if (getActiveLayout() == mStaticLayout && !incognito
+        if (getActiveLayout() == mStaticLayout
+                && !incognito
                 && getTabModelSelector().getModel(false).getCount() == 0
                 && getNextLayoutType() != LayoutType.TAB_SWITCHER) {
-            showLayout(LayoutType.TAB_SWITCHER, /*animate=*/false);
+            showLayout(LayoutType.TAB_SWITCHER, /* animate= */ false);
         }
     }
 
     @Override
-    public void init(TabModelSelector selector, TabCreatorManager creator,
+    public void init(
+            TabModelSelector selector,
+            TabCreatorManager creator,
             ControlContainer controlContainer,
             DynamicResourceLoader dynamicResourceLoader,
             TopUiThemeColorProvider topUiColorProvider) {

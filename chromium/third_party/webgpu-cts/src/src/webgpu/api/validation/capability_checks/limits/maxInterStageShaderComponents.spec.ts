@@ -41,8 +41,8 @@ function getPipelineDescriptor(
     // maxInterStageShaderComponents     : ${device.limits.maxInterStageShaderComponents}
     // num components in vertex shader   : ${numComponents}${pointList ? ' + point-list' : ''}
     // num components in fragment shader : ${numComponents}${frontFacing ? ' + front-facing' : ''}${
-    sampleIndex ? ' + sample_index' : ''
-  }${sampleMaskIn ? ' + sample_mask' : ''}
+      sampleIndex ? ' + sample_index' : ''
+    }${sampleMaskIn ? ' + sample_mask' : ''}
     // maxVertexShaderOutputComponents   : ${maxVertexShaderOutputComponents}
     // maxFragmentShaderInputComponents  : ${maxFragmentShaderInputComponents}
     // maxInterStageVariables:           : ${maxInterStageVariables}
@@ -111,8 +111,12 @@ g.test('createRenderPipeline,at_over')
       .combine('sampleMaskOut', [false, true])
   )
   .beforeAllSubcases(t => {
-    if (t.isCompatibility && (t.params.sampleMaskIn || t.params.sampleMaskOut)) {
-      t.skip('sample_mask not supported in compatibility mode');
+    if (t.isCompatibility) {
+      t.skipIf(
+        t.params.sampleMaskIn || t.params.sampleMaskOut,
+        'sample_mask not supported in compatibility mode'
+      );
+      t.skipIf(t.params.sampleIndex, 'sample_index not supported in compatibility mode');
     }
   })
   .fn(async t => {

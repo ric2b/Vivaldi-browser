@@ -1,17 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (C) 2023 The Android Open Source Project
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License a
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Copyright 2023 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
 
 from python.generators.diff_tests.testing import Path, DataPath, Metric
 from python.generators.diff_tests.testing import Csv, Json, TextProto
@@ -115,6 +105,99 @@ class ChromeScrollJankStdlib(TestSuite):
         1991,4687329240739,-28.999969,-175.999969
         """))
 
+  def test_chrome_janky_event_latencies_v3(self):
+    return DiffTestBlueprint(
+        trace=DataPath('chrome_input_with_frame_view.pftrace'),
+        query="""
+        INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals;
+
+        SELECT
+          id,
+          ts,
+          dur,
+          track_id,
+          name,
+          cause_of_jank,
+          sub_cause_of_jank,
+          delayed_frame_count,
+          frame_jank_ts,
+          frame_jank_dur
+        FROM chrome_janky_event_latencies_v3
+        ORDER by id;
+        """,
+        out=Csv("""
+        "id","ts","dur","track_id","name","cause_of_jank","sub_cause_of_jank","delayed_frame_count","frame_jank_ts","frame_jank_dur"
+        29926,174795897267797,48088000,1431,"EventLatency","RendererCompositorQueueingDelay","[NULL]",1,174795928261797,17094000
+        38463,174796315541797,131289000,2163,"EventLatency","RendererCompositorFinishedToBeginImplFrame","[NULL]",5,174796362924797,83906000
+        88876,174799556245797,49856000,4329,"EventLatency","RendererCompositorQueueingDelay","[NULL]",1,174799589065797,17036000
+        """))
+
+  def test_chrome_janky_frame_presentation_intervals(self):
+    return DiffTestBlueprint(
+        trace=DataPath('chrome_input_with_frame_view.pftrace'),
+        query="""
+        INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals;
+
+        SELECT
+          id,
+          ts,
+          dur,
+          cause_of_jank,
+          sub_cause_of_jank,
+          delayed_frame_count,
+          event_latency_id
+        FROM chrome_janky_frame_presentation_intervals
+        ORDER by id;
+        """,
+        out=Csv("""
+        "id","ts","dur","cause_of_jank","sub_cause_of_jank","delayed_frame_count","event_latency_id"
+        1,174795928261797,17094000,"RendererCompositorQueueingDelay","[NULL]",1,29926
+        2,174796362924797,83906000,"RendererCompositorFinishedToBeginImplFrame","[NULL]",5,38463
+        3,174799589065797,17036000,"RendererCompositorQueueingDelay","[NULL]",1,88876
+        """))
+
+  def test_chrome_scroll_stats(self):
+    return DiffTestBlueprint(
+        trace=DataPath('chrome_input_with_frame_view.pftrace'),
+        query="""
+        INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals;
+
+        SELECT
+          scroll_id,
+          missed_vsyncs,
+          frame_count,
+          presented_frame_count,
+          janky_frame_count,
+          janky_frame_percent
+        FROM chrome_scroll_stats
+        ORDER by scroll_id;
+        """,
+        out=Csv("""
+        "scroll_id","missed_vsyncs","frame_count","presented_frame_count","janky_frame_count","janky_frame_percent"
+        1186,6,110,105,2,1.900000
+        1889,"[NULL]",101,102,0,0.000000
+        2506,1,84,84,1,1.190000
+        """))
+
+  def test_chrome_scroll_jank_intervals_v3(self):
+    return DiffTestBlueprint(
+        trace=DataPath('chrome_input_with_frame_view.pftrace'),
+        query="""
+        INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_intervals;
+
+        SELECT
+          id,
+          ts,
+          dur
+        FROM chrome_scroll_jank_intervals_v3
+        ORDER by id;
+        """,
+        out=Csv("""
+        "id","ts","dur"
+        1,174795928261797,17094000
+        2,174796362924797,83906000
+        3,174799589065797,17036000
+        """))
   def test_chrome_presented_scroll_offsets(self):
     return DiffTestBlueprint(
         trace=DataPath('scroll_offsets.pftrace'),
@@ -132,9 +215,32 @@ class ChromeScrollJankStdlib(TestSuite):
         """,
         out=Csv("""
         "scroll_update_id","ts","delta_y","offset_y"
-        1983,4687296612739,"[NULL]",0
-        1987,4687313206739,-50,-50
-        1991,4687329240739,-50,-100
-        1993,4687336155739,-81,-181
-        1996,4687346164739,-66,-247
+        1983,4687341817739,"[NULL]",0
+        1987,4687352950739,-50,-50
+        1991,4687364083739,-50,-100
+        1993,4687375224739,-81,-181
+        1996,4687386343739,-66,-247
+        """))
+
+  def test_scroll_jank_cause_map(self):
+    return DiffTestBlueprint(
+        trace=TextProto(''),
+        query="""
+        INCLUDE PERFETTO MODULE chrome.event_latency_description;
+        INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_cause_map;
+
+        SELECT
+          DISTINCT event_latency_stage
+        FROM chrome_scroll_jank_cause_descriptions
+        WHERE event_latency_stage NOT IN
+          (
+            SELECT
+              DISTINCT name
+            FROM chrome_event_latency_stage_descriptions
+          );
+        """,
+        # Empty output is expected to ensure that all scroll jank causes
+        # correspond to a valid EventLatency stage.
+        out=Csv("""
+        "event_latency_stage"
         """))

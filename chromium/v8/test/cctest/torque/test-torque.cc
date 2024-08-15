@@ -8,8 +8,7 @@
 #include "src/base/utils/random-number-generator.h"
 #include "src/builtins/builtins-promise-gen.h"
 #include "src/builtins/builtins-string-gen.h"
-#include "src/codegen/code-factory.h"
-#include "src/codegen/code-stub-assembler.h"
+#include "src/codegen/code-stub-assembler-inl.h"
 #include "src/compiler/node.h"
 #include "src/debug/debug.h"
 #include "src/execution/isolate.h"
@@ -992,7 +991,7 @@ TEST(TestReturnNever_Runtime_Called) {
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
   MaybeHandle<Object> result = ft.Call();
   CHECK(result.is_null());
-  CHECK(isolate->has_pending_exception());
+  CHECK(isolate->has_exception());
 }
 
 // Test calling a builtin that calls another builtin with return type {never}.
@@ -1012,7 +1011,7 @@ TEST(TestReturnNever_Builtin_Called) {
   FunctionTester ft(asm_tester.GenerateCode(), kNumParams);
   MaybeHandle<Object> result = ft.Call();
   CHECK(result.is_null());
-  CHECK(isolate->has_pending_exception());
+  CHECK(isolate->has_exception());
 }
 
 }  // namespace compiler

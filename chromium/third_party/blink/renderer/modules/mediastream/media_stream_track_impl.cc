@@ -27,7 +27,10 @@
 
 #include <memory>
 
+#include "base/check_op.h"
 #include "base/functional/callback_helpers.h"
+#include "build/build_config.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
@@ -87,6 +90,7 @@ bool ConstraintSetHasImageCapture(
          constraint_set->hasFocusDistance() || constraint_set->hasPan() ||
          constraint_set->hasTilt() || constraint_set->hasZoom() ||
          constraint_set->hasTorch() || constraint_set->hasBackgroundBlur() ||
+         constraint_set->hasEyeGazeCorrection() ||
          constraint_set->hasFaceFraming();
 }
 
@@ -99,6 +103,7 @@ bool ConstraintSetHasNonImageCapture(
          constraint_set->hasChannelCount() || constraint_set->hasDeviceId() ||
          constraint_set->hasEchoCancellation() ||
          constraint_set->hasNoiseSuppression() ||
+         constraint_set->hasVoiceIsolation() ||
          constraint_set->hasAutoGainControl() ||
          constraint_set->hasFacingMode() || constraint_set->hasResizeMode() ||
          constraint_set->hasFrameRate() || constraint_set->hasGroupId() ||
@@ -415,6 +420,7 @@ void MediaStreamTrackImpl::stopTrack(ExecutionContext* execution_context) {
 
   setReadyState(MediaStreamSource::kReadyStateEnded);
   feature_handle_for_scheduler_.reset();
+  feature_handle_for_scheduler_on_live_media_stream_track_.reset();
   UserMediaClient* user_media_client =
       UserMediaClient::From(To<LocalDOMWindow>(execution_context));
   if (user_media_client) {
@@ -453,7 +459,8 @@ MediaTrackCapabilities* MediaStreamTrackImpl::getCapabilities() const {
   }
 
   if (component_->GetSourceType() == MediaStreamSource::kTypeAudio) {
-    Vector<bool> echo_cancellation, auto_gain_control, noise_suppression;
+    Vector<bool> echo_cancellation, auto_gain_control, noise_suppression,
+        voice_isolation;
     for (bool value : platform_capabilities.echo_cancellation) {
       echo_cancellation.push_back(value);
     }
@@ -466,6 +473,10 @@ MediaTrackCapabilities* MediaStreamTrackImpl::getCapabilities() const {
       noise_suppression.push_back(value);
     }
     capabilities->setNoiseSuppression(noise_suppression);
+    for (bool value : platform_capabilities.voice_isolation) {
+      voice_isolation.push_back(value);
+    }
+    capabilities->setVoiceIsolation(voice_isolation);
     Vector<String> echo_cancellation_type;
     for (String value : platform_capabilities.echo_cancellation_type) {
       echo_cancellation_type.push_back(value);
@@ -617,7 +628,9 @@ MediaTrackSettings* MediaStreamTrackImpl::getSettings() const {
   if (platform_settings.noise_supression) {
     settings->setNoiseSuppression(*platform_settings.noise_supression);
   }
-
+  if (platform_settings.voice_isolation) {
+    settings->setVoiceIsolation(*platform_settings.voice_isolation);
+  }
   if (platform_settings.HasSampleRate()) {
     settings->setSampleRate(platform_settings.sample_rate);
   }
@@ -856,6 +869,8 @@ void MediaStreamTrackImpl::SourceChangedState() {
       }
       PropagateTrackEnded();
       feature_handle_for_scheduler_.reset();
+      feature_handle_for_scheduler_on_live_media_stream_track_.reset();
+
       break;
   }
   SendLogMessage(String::Format("%s()", __func__));
@@ -905,6 +920,28 @@ void MediaStreamTrackImpl::PropagateTrackEnded() {
   }
   is_iterating_registered_media_streams_ = false;
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void MediaStreamTrackImpl::SendWheel(
+    double relative_x,
+    double relative_y,
+    int wheel_delta_x,
+    int wheel_delta_y,
+    base::OnceCallback<void(bool, const String&)> callback) {
+  std::move(callback).Run(false, "Unsupported.");
+}
+
+void MediaStreamTrackImpl::GetZoomLevel(
+    base::OnceCallback<void(absl::optional<int>, const String&)> callback) {
+  std::move(callback).Run(absl::nullopt, "Unsupported.");
+}
+
+void MediaStreamTrackImpl::SetZoomLevel(
+    int zoom_level,
+    base::OnceCallback<void(bool, const String&)> callback) {
+  std::move(callback).Run(false, "Unsupported.");
+}
+#endif
 
 bool MediaStreamTrackImpl::HasPendingActivity() const {
   // If 'ended' listeners exist and the object hasn't yet reached
@@ -1042,9 +1079,18 @@ void MediaStreamTrackImpl::CloneInternal(MediaStreamTrackImpl* cloned_track) {
 }
 
 void MediaStreamTrackImpl::EnsureFeatureHandleForScheduler() {
+  // The two handlers must be in sync.
+  if (features::IsAllowBFCacheWhenClosedMediaStreamTrackEnabled()) {
+    CHECK_EQ(!!feature_handle_for_scheduler_,
+             !!feature_handle_for_scheduler_on_live_media_stream_track_);
+  } else {
+    CHECK(!feature_handle_for_scheduler_on_live_media_stream_track_);
+  }
+
   if (feature_handle_for_scheduler_) {
     return;
   }
+
   LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(GetExecutionContext());
   // Ideally we'd use To<LocalDOMWindow>, but in unittests the ExecutionContext
   // may not be a LocalDOMWindow.
@@ -1060,6 +1106,12 @@ void MediaStreamTrackImpl::EnsureFeatureHandleForScheduler() {
           SchedulingPolicy::Feature::kWebRTC,
           {SchedulingPolicy::DisableAggressiveThrottling(),
            SchedulingPolicy::DisableAlignWakeUps()});
+  if (features::IsAllowBFCacheWhenClosedMediaStreamTrackEnabled()) {
+    feature_handle_for_scheduler_on_live_media_stream_track_ =
+        GetExecutionContext()->GetScheduler()->RegisterFeature(
+            SchedulingPolicy::Feature::kLiveMediaStreamTrack,
+            {SchedulingPolicy::DisableBackForwardCache()});
+  }
 }
 
 void MediaStreamTrackImpl::AddObserver(MediaStreamTrack::Observer* observer) {

@@ -54,10 +54,11 @@ views::MenuItemView* ToolkitDelegateViews::VivaldiInit(
   // that instance alive when sending a reply after the menu closes. The flag
   // was added with Chrome 55.
   menu_adapter_.reset(new VivaldiMenuModelAdapterViews(menu_model, delegate));
-  menu_view_ = menu_adapter_->CreateMenu();
-  menu_runner_.reset(new views::MenuRunner(
-      menu_view_,
-      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
+  std::unique_ptr<views::MenuItemView> menu_view = menu_adapter_->CreateMenu();
+  menu_view_ = menu_view.get();
+  menu_runner_= std::make_unique<views::MenuRunner>(
+      std::move(menu_view),
+      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU);
 
   // Middle mouse button allows opening bookmarks in background.
   menu_adapter_->set_triggerable_event_flags(

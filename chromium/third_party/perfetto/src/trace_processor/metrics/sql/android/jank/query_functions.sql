@@ -25,7 +25,7 @@
 --
 -- Example usage:
 --
--- CREATE VIEW example_table AS
+-- CREATE PERFETTO VIEW example_table AS
 -- SELECT * FROM android_jank_cuj_slice WHERE name = 'binder transaction';
 -- SELECT android_jank_correlate_frame_slice_impl('MainThread',
 --                                                'example_table',
@@ -44,7 +44,7 @@
 -- table_name_prefix - Running the function will create multiple tables. This
 --                     value will be used as a prefx for their names to avoid
 --                     name collisions with other tables.
-CREATE PERFETTO FUNCTION android_jank_correlate_frame_slice_impl(
+CREATE OR REPLACE PERFETTO FUNCTION android_jank_correlate_frame_slice_impl(
   table_set STRING,
   relevant_slice_table_name STRING,
   table_name_prefix STRING
@@ -66,7 +66,7 @@ SELECT COALESCE(
 -- Provides a default value for table_name_prefix in
 -- android_jank_correlate_frame_slice_impl.
 -- See documentation for android_jank_correlate_frame_slice_impl.
-CREATE PERFETTO FUNCTION android_jank_correlate_frame_slice(
+CREATE OR REPLACE PERFETTO FUNCTION android_jank_correlate_frame_slice(
   table_set STRING,
   relevant_slice_table_name STRING
 )

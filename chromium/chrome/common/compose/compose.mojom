@@ -6,11 +6,11 @@ module compose.mojom;
 
 // Interface for setting up connection to allow calls between the compose dialog
 // web page and native code.
-interface ComposeDialogPageHandlerFactory {
+interface ComposeSessionPageHandlerFactory {
   // Called from dialog compose JS to set up native handler.
-  CreateComposeDialogPageHandler(
-      pending_receiver<ComposeDialogClosePageHandler> close_handler,
-      pending_receiver<ComposeDialogPageHandler> handler,
+  CreateComposeSessionPageHandler(
+      pending_receiver<ComposeClientPageHandler> client_handler,
+      pending_receiver<ComposeSessionPageHandler> handler,
       pending_remote<ComposeDialog> dialog);
 };
 
@@ -29,24 +29,50 @@ enum Length {
 };
 
 // Status code used in compose responses.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Keep in sync with
+// ComposeResponseStatus in tools/metrics/histograms/metadata/compose/enums.xml.
 enum ComposeStatus {
-  kOk,
-  // Generic error, not specified.
-  kError,
-  // Request was unable to be processed.
-  kNotSuccessful,
-  // Server may have not responded.
-  kTryAgain,
-  // Server is likely overloaded, cannot handle a response right now.
-  kTryAgainLater,
+  kOk = 0,
+  // Generic client error, not specified.
+  kClientError = 1,
+
+  // kNotSuccessful = 2,  // no longer used, separated into several errors.
+  // kTryAgain = 3,  // no longer used, separated into several errors.
+  // kTryAgainLater = 4,  // no longer used, separated into several errors.
+
   // If the feature is somehow disabled.
-  kMisconfiguration,
+  kMisconfiguration = 5,
   // If permission is denied (e.g. user is not logged in.)
-  kPermissionDenied,
+  kPermissionDenied = 6,
+  // Generic server error, not specified.
+  kServerError = 7,
+  // Invalid request sent, likely a client issue where ComposeRequest is
+  // incorrect.
+  kInvalidRequest = 8,
+  // Request was throttled.
+  kRequestThrottled = 9,
+  // Retryable error occurred in the server.
+  kRetryableError = 10,
+  // Non-retryable error occurred in the server (eg. server down).
+  kNonRetryableError = 11,
+  // Unsupported language used.
+  kUnsupportedLanguage = 12,
+  // Request was filtered (eg. due to T&S).
+  kFiltered = 13,
+  // Compose service was disabled.
+  kDisabled = 14,
+  // Request was cancelled.
+  kCancelled = 15,
+  // No response received from the server.
+  kNoResponse = 16,
+  // If the user is offline.
+  kOffline = 17,
 };
 
-// Configuration parameters used in compose requests.
-struct StyleModifiers {
+// Configuration parameters used in rewrite requests, specifying how the
+// response should be changed.
+union StyleModifiers {
   Tone tone;
   Length length;
 };
@@ -58,6 +84,14 @@ struct ComposeResponse {
   string result;
   // Whether undo is possible to a prior state before this response.
   bool undo_available;
+  // Whether the response was generated on-device.
+  bool on_device_evaluation_used;
+};
+
+// An intermediate compose response, which is available before the final
+// response is complete.
+struct PartialComposeResponse {
+  string result;
 };
 
 // Snapshot of state that can describe current state or be used to
@@ -68,8 +102,6 @@ struct ComposeState {
   // State for the WebUI session. This should be considered opaque and is
   // unsafe to parse in the browser process.
   string webui_state;
-  // Modifiers used in the response captured in this state.
-  StyleModifiers style;
   // Response from compose service. This is not present if the request
   // has not been completed. The response is present if the request has
   // completed, even if the response status is an error.
@@ -77,30 +109,68 @@ struct ComposeState {
   // Whether a request is pending. False can also mean that the
   // request was not made.
   bool has_pending_request;
+  // Whether the user has pressed the thumbs up/down feedback buttons.
+  UserFeedback feedback;
 };
 
+// Parameters used to configure the WebUI. These params are passed from the
+// browser to the WebUI as part of OpenMetadata when the dialog opens. The
+// values may be configured through Finch.
+struct ConfigurableParams {
+  // Word and character limits on the text input for the request.
+  int32 min_word_limit;
+  int32 max_word_limit;
+  int32 max_character_limit;
+};
 
 // Information needed by the WebUI to show a new or restored
 // compose dialog.
 struct OpenMetadata {
+  bool fre_complete;
+  bool msbb_state;
   // Renderer provided text selection.
   string initial_input;
+  // Whether or not the user selected text when opening the dialog.
+  bool text_selected;
   ComposeState compose_state;
+  ConfigurableParams configurable_params;
 };
 
 // The trigger for dismissing the compose dialog.
 enum CloseReason {
-  // The X button on the upper-right of the dialog.
+  // The X button on the upper-right of the FRE dialog.
+  kFirstRunCloseButton,
+  // The X button on the upper-right of the main app dialog.
   kCloseButton,
   // The Insert button of the dialog.
   kInsertButton,
+  // The MSBB dialog was shown and dismissed.
+  kMSBBCloseButton,
+  // The main app dialog lost focus.
+  kLostFocus,
+};
+
+//TODO(b/311697865) move this to a common location.
+enum UserFeedback {
+  // Unspecified.
+  kUserFeedbackUnspecified,
+  // A thumbs up.
+  kUserFeedbackPositive,
+  // A thumbs down.
+  kUserFeedbackNegative,
 };
 
 // Interface for calls from Compose dialog JS into the Browser process.
-interface ComposeDialogPageHandler {
-  // Asks the Browser to compose `input` with `stye` applied. Response contains
-  // the modified output.
-  Compose(StyleModifiers style, string input);
+interface ComposeSessionPageHandler {
+  // Asks the Browser to compose `input`, informing the Browser if the compose
+  // call was based on the user input being 'edited' in the dialog after the
+  // initial compose response.
+  Compose(string input, bool edited);
+
+  // Asks the Browser to rewrite the last response. `style` specifies how the
+  // response should be changed. A null `style` requests a rewrite without
+  // changes to the tone or length.
+  Rewrite(StyleModifiers? style);
 
   // Asks the native handler to store `webui_state` for the last field the user
   // selected compose on.
@@ -131,13 +201,34 @@ interface ComposeDialogPageHandler {
   // Asks the Browser to open a new tab navigated to the Compose bug report
   // Buganizer.
   OpenBugReportingLink();
+
+  // Asks the Browser to open a new tab navigated to the Compose Learn More
+  // page.
+  OpenComposeLearnMorePage();
+
+  // Asks the Browser to open a new tab navigated to the Dogfood feedback
+  // survey.
+  OpenFeedbackSurveyLink();
+
+  // Asks the Browser to open a new tab navigated to the sign in page.
+  OpenSignInPage();
+
+  // Asks the native handler to store the user feedback supplied by the user.
+  SetUserFeedback(UserFeedback feedback);
 };
 
 // Interface for calls from Compose dialog JS into the Browser process.
-interface ComposeDialogClosePageHandler {
+interface ComposeClientPageHandler {
+  // Asks the receiver to show the compose dialog.
+  ShowUI();
   // Asks the receiver to close the compose dialog. `reason` describes
   // the user action that triggered the close.
   CloseUI(CloseReason reason);
+  // Notifies the browser that the FRE was completed.
+  CompleteFirstRun();
+  // Asks the Browser to open a new tab navigated to the Compose-related Chrome
+  // settings page.
+  OpenComposeSettings();
 };
 
 // Interface for calls from the Browser process into Compose dialog JS.
@@ -147,4 +238,8 @@ interface ComposeDialog {
   // WebUI, this is an event rather than a callback on the original `Compose`
   // call above.
   ResponseReceived(ComposeResponse response);
+
+  // Called when a compose request is not yet fulfilled, but a partial response
+  // is available.
+  PartialResponseReceived(PartialComposeResponse partial_response);
 };

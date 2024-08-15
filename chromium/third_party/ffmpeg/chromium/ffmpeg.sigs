@@ -25,12 +25,6 @@ int avcodec_receive_frame(AVCodecContext *avctx, AVFrame *frame);
 AVPacket *av_packet_alloc(void);
 void av_packet_free(AVPacket **pkt);
 
-// RDFT functions.
-RDFTContext *av_rdft_init(int nbits, enum RDFTransformType trans);
-void av_rdft_calc(RDFTContext *s, FFTSample *data);
-void av_rdft_end(RDFTContext *s);
-
-
 //------------------------------------------------
 // Functions from avformat used in chromium code.
 //------------------------------------------------

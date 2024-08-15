@@ -60,4 +60,11 @@ extern GuideName* const kLensKeyboardButtonGuide;
 // A guide that is constrained to match the frame of the Magic Stack on the NTP.
 extern GuideName* const kMagicStackGuide;
 
+// Vivaldi
+// A guide that is constrained to match the frame of the ToolsMenu button.
+extern GuideName* const vToolsMenuGuide;
+// A guide that is constrained to match the frame of the bottom omnibox.
+extern GuideName* const vivaldiBottomOmniboxGuide;
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_SHARED_UI_UTIL_LAYOUT_GUIDE_NAMES_H_

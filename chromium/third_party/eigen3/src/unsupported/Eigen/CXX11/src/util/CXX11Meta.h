@@ -15,4 +15,4 @@
 
 #include "CXX11Workarounds.h"
 
-#endif // EIGEN_CXX11META_H
+#endif  // EIGEN_CXX11META_H

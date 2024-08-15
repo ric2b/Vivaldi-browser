@@ -7,8 +7,9 @@
         "args": [
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android31.textpb"
+          "--avd-config=../../tools/android/avd/proto/android_31_google_apis_x64.textpb"
         ],
+        "description": "Run with android_31_google_apis_x64",
         "merge": {
           "args": [
             "--bucket",
@@ -30,13 +31,13 @@
           },
           "named_caches": [
             {
-              "name": "generic_android31",
-              "path": ".android_emulator/generic_android31"
+              "name": "android_31_google_apis_x64",
+              "path": ".android_emulator/android_31_google_apis_x64"
             }
           ],
           "optional_dimensions": {
             "60": {
-              "caches": "generic_android31"
+              "caches": "android_31_google_apis_x64"
             }
           },
           "output_links": [
@@ -58,8 +59,9 @@
         "args": [
           "--gs-results-bucket=chromium-result-details",
           "--recover-devices",
-          "--avd-config=../../tools/android/avd/proto/generic_android31.textpb"
+          "--avd-config=../../tools/android/avd/proto/android_31_google_apis_x64.textpb"
         ],
+        "description": "Run with android_31_google_apis_x64",
         "merge": {
           "args": [
             "--bucket",
@@ -81,13 +83,13 @@
           },
           "named_caches": [
             {
-              "name": "generic_android31",
-              "path": ".android_emulator/generic_android31"
+              "name": "android_31_google_apis_x64",
+              "path": ".android_emulator/android_31_google_apis_x64"
             }
           ],
           "optional_dimensions": {
             "60": {
-              "caches": "generic_android31"
+              "caches": "android_31_google_apis_x64"
             }
           },
           "output_links": [
@@ -104,6 +106,58 @@
         },
         "test": "blink_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests/"
+      },
+      {
+        "args": [
+          "--gs-results-bucket=chromium-result-details",
+          "--recover-devices",
+          "--avd-config=../../tools/android/avd/proto/android_31_google_apis_x64.textpb"
+        ],
+        "description": "Run with android_31_google_apis_x64",
+        "merge": {
+          "args": [
+            "--bucket",
+            "chromium-result-details",
+            "--test-name",
+            "webkit_unit_tests_v2"
+          ],
+          "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "name": "webkit_unit_tests_v2",
+        "swarming": {
+          "dimensions": {
+            "cores": "8",
+            "cpu": "x86-64",
+            "device_os": null,
+            "device_type": null,
+            "os": "Ubuntu-22.04",
+            "pool": "chromium.tests.avd"
+          },
+          "named_caches": [
+            {
+              "name": "android_31_google_apis_x64",
+              "path": ".android_emulator/android_31_google_apis_x64"
+            }
+          ],
+          "optional_dimensions": {
+            "60": {
+              "caches": "android_31_google_apis_x64"
+            }
+          },
+          "output_links": [
+            {
+              "link": [
+                "https://luci-logdog.appspot.com/v/?s",
+                "=android%2Fswarming%2Flogcats%2F",
+                "${TASK_ID}%2F%2B%2Funified_logcats"
+              ],
+              "name": "shard #${SHARD_INDEX} logcats"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "blink_unittests_v2",
+        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests_v2/"
       }
     ]
   },
@@ -389,72 +443,6 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "info_collection_tests",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "swarming": {
-          "dimensions": {
-            "device_os": "R",
-            "device_os_type": "userdebug",
-            "device_type": "flame",
-            "os": "Android",
-            "pool": "chromium.tests.gpu"
-          },
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "telemetry_gpu_integration_test_android_chrome",
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_android_chrome/"
-      },
-      {
-        "args": [
-          "mediapipe",
-          "--show-stdout",
-          "--browser=android-chromium",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_higher_performance_gpu --use-cmd-decoder=passthrough --use-gl=angle",
-          "--enforce-browser-version"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "mediapipe_passthrough_tests",
-        "resultdb": {
-          "enable": true,
-          "has_native_resultdb_integration": true
-        },
-        "swarming": {
-          "dimensions": {
-            "device_os": "R",
-            "device_os_type": "userdebug",
-            "device_type": "flame",
-            "os": "Android",
-            "pool": "chromium.tests.gpu"
-          },
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "telemetry_gpu_integration_test_android_chrome",
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test_android_chrome/"
-      },
-      {
-        "args": [
-          "mediapipe",
-          "--show-stdout",
-          "--browser=android-chromium",
-          "--passthrough",
-          "-v",
-          "--stable-jobs",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_higher_performance_gpu --use-cmd-decoder=validating",
-          "--enforce-browser-version"
-        ],
-        "merge": {
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "mediapipe_validating_tests",
         "resultdb": {
           "enable": true,
           "has_native_resultdb_integration": true

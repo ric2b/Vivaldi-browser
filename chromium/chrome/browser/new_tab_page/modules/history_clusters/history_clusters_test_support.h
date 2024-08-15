@@ -12,6 +12,7 @@
 #include "chrome/browser/new_tab_page/modules/history_clusters/history_clusters_module_service.h"
 #include "chrome/browser/ui/side_panel/history_clusters/history_clusters_tab_helper.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/url_row.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -88,6 +89,15 @@ class MockHistoryService : public history::HistoryService {
 
   MOCK_METHOD1(ClearCachedDataForContextID,
                void(history::ContextID context_id));
+
+  MOCK_CONST_METHOD4(
+      GetAnnotatedVisits,
+      base::CancelableTaskTracker::TaskId(
+          const history::QueryOptions& options,
+          bool compute_redirect_chain_start_properties,
+          history::HistoryService::GetAnnotatedVisitsCallback callback,
+          base::CancelableTaskTracker* tracker));
+
   MOCK_METHOD3(HideVisits,
                base::CancelableTaskTracker::TaskId(
                    const std::vector<history::VisitID>& visit_ids,
@@ -106,13 +116,18 @@ history::ClusterVisit SampleVisitForURL(
     history::VisitID id,
     GURL url,
     bool has_url_keyed_image = true,
-    const std::vector<std::string>& related_searches = {});
+    const std::vector<std::string>& related_searches = {},
+    const std::vector<history::VisitContentModelAnnotations::Category>&
+        categories = {});
 
-history::Cluster SampleCluster(int id,
-                               int srp_visits,
-                               int non_srp_visits,
-                               const std::vector<std::string> related_searches =
-                                   {"fruits", "red fruits", "healthy fruits"});
+history::Cluster SampleCluster(
+    int64_t id,
+    int srp_visits,
+    int non_srp_visits,
+    const std::vector<std::string>& related_searches = {"fruits", "red fruits",
+                                                        "healthy fruits"},
+    const std::vector<history::VisitContentModelAnnotations::Category>&
+        categories = {});
 
 history::Cluster SampleCluster(int srp_visits,
                                int non_srp_visits,

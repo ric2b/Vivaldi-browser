@@ -27,8 +27,10 @@
 
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
 
+#include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -46,6 +48,7 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/simulated_event_util.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -221,13 +224,16 @@ DispatchEventResult EventDispatcher::Dispatch() {
   std::unique_ptr<SoftNavigationEventScope> soft_navigation_scope;
   if ((is_click || is_unfocused_keyboard_event) && event_->isTrusted() &&
       frame) {
-    ScriptState* script_state = ToScriptStateForMainWorld(frame);
-    if (window && frame->IsMainFrame() && script_state) {
+    if (window && frame->IsMainFrame() &&
+        base::FeatureList::IsEnabled(features::kSoftNavigationDetection)) {
       bool is_new_interaction =
           is_click || (event_->type() == event_type_names::kKeydown);
       soft_navigation_scope = std::make_unique<SoftNavigationEventScope>(
-          SoftNavigationHeuristics::From(*window), script_state,
-          is_unfocused_keyboard_event, is_new_interaction);
+          SoftNavigationHeuristics::From(*window),
+          is_unfocused_keyboard_event
+              ? SoftNavigationHeuristics::EventScopeType::kKeyboard
+              : SoftNavigationHeuristics::EventScopeType::kClick,
+          is_new_interaction);
     }
     // A genuine mouse click cannot be triggered by script so we don't expect
     // there are any script in the stack.
@@ -269,7 +275,8 @@ DispatchEventResult EventDispatcher::Dispatch() {
 #endif
   DCHECK(event_->target());
   DEVTOOLS_TIMELINE_TRACE_EVENT("EventDispatch",
-                                inspector_event_dispatch_event::Data, *event_);
+                                inspector_event_dispatch_event::Data, *event_,
+                                document.GetAgent().isolate());
   EventDispatchHandlingState* pre_dispatch_event_handler_result = nullptr;
   if (DispatchEventPreProcess(activation_target,
                               pre_dispatch_event_handler_result) ==

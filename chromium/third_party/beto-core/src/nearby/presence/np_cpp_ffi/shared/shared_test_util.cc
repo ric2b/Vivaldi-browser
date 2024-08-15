@@ -14,6 +14,9 @@
 
 #include "nearby_protocol.h"
 
+#include <cstdlib>
+#include <cstddef> // IWYU pragma: keep
+
 std::string PanicReasonToString(nearby_protocol::PanicReason reason) {
   switch (reason) {
   case nearby_protocol::PanicReason::EnumCastFailed: {
@@ -22,7 +25,7 @@ std::string PanicReasonToString(nearby_protocol::PanicReason reason) {
   case nearby_protocol::PanicReason::AssertFailed: {
     return "AssertFailed";
   }
-  case np_ffi::internal::PanicReason::InvalidActionBits: {
+  case nearby_protocol::PanicReason::InvalidActionBits: {
     return "InvalidActionBits";
   }
   }

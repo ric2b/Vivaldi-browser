@@ -17,14 +17,17 @@
 #import "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #import "components/commerce/core/proto/price_tracking.pb.h"
 #import "components/commerce/core/test_utils.h"
+#import "components/optimization_guide/core/hints_manager.h"
+#import "components/optimization_guide/core/optimization_guide_features.h"
 #import "components/optimization_guide/proto/push_notification.pb.h"
 #import "components/session_proto_db/session_proto_db.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/commerce/model/session_proto_db_factory.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
-#import "ios/chrome/browser/shared/coordinator/scene/test/fake_scene_state.h"
+#import "ios/chrome/browser/optimization_guide/model/optimization_guide_service.h"
+#import "ios/chrome/browser/optimization_guide/model/optimization_guide_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -43,6 +46,7 @@ constexpr char kBookmarkFoundHistogramName[] =
     "Commerce.PriceTracking.Untrack.BookmarkFound";
 std::string kBookmarkTitle = "My product title";
 uint64_t kClusterId = 12345L;
+constexpr char kPayloadValue[] = "value";
 NSString* kSerializedPayloadKey = @"op";
 NSString* kVisitSiteActionId = @"visit_site";
 NSString* kVisitSiteTitle = @"Visit site";
@@ -119,13 +123,24 @@ const bookmarks::BookmarkNode* PrepareSubscription(
 
   commerce::ProductInfo product_info;
   product_info.title = kBookmarkTitle;
-  absl::optional<commerce::ProductInfo> optional_product_info;
+  std::optional<commerce::ProductInfo> optional_product_info;
   optional_product_info.emplace(product_info);
   shopping_service->SetResponseForGetProductInfoForUrl(optional_product_info);
   return product;
 }
 
 }  // namespace
+
+class MockDelegate
+    : public optimization_guide::PushNotificationManager::Delegate {
+ public:
+  MOCK_METHOD(void,
+              RemoveFetchedEntriesByHintKeys,
+              (base::OnceClosure,
+               optimization_guide::proto::KeyRepresentation,
+               (const base::flat_set<std::string>&)),
+              (override));
+};
 
 class CommercePushNotificationClientTest : public PlatformTest {
  public:
@@ -151,12 +166,22 @@ class CommercePushNotificationClientTest : public PlatformTest {
         SessionProtoDBFactory<
             commerce_subscription_db::CommerceSubscriptionContentProto>::
             GetDefaultFactory());
+    builder.AddTestingFactory(
+        OptimizationGuideServiceFactory::GetInstance(),
+        OptimizationGuideServiceFactory::GetDefaultFactory());
     chrome_browser_state_ = builder.Build();
     browser_list_ =
         BrowserListFactory::GetForBrowserState(chrome_browser_state_.get());
-    browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
-    background_browser_ =
-        std::make_unique<TestBrowser>(chrome_browser_state_.get());
+    app_state_ = [[AppState alloc] initWithStartupInformation:nil];
+    scene_state_foreground_ = [[SceneState alloc] initWithAppState:app_state_];
+    scene_state_foreground_.activationLevel =
+        SceneActivationLevelForegroundActive;
+    browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get(),
+                                             scene_state_foreground_);
+    scene_state_background_ = [[SceneState alloc] initWithAppState:app_state_];
+    scene_state_background_.activationLevel = SceneActivationLevelBackground;
+    background_browser_ = std::make_unique<TestBrowser>(
+        chrome_browser_state_.get(), scene_state_background_);
     browser_list_->AddBrowser(browser_.get());
     UrlLoadingNotifierBrowserAgent::CreateForBrowser(browser_.get());
     FakeUrlLoadingBrowserAgent::InjectForBrowser(browser_.get());
@@ -169,21 +194,6 @@ class CommercePushNotificationClientTest : public PlatformTest {
     shopping_service_ = static_cast<commerce::MockShoppingService*>(
         commerce::ShoppingServiceFactory::GetForBrowserState(
             chrome_browser_state_.get()));
-    app_state_ = [[AppState alloc] initWithStartupInformation:nil];
-
-    scene_state_foreground_ =
-        [[FakeSceneState alloc] initWithAppState:app_state_
-                                    browserState:chrome_browser_state_.get()];
-    scene_state_foreground_.activationLevel =
-        SceneActivationLevelForegroundActive;
-    SceneStateBrowserAgent::CreateForBrowser(browser_.get(),
-                                             scene_state_foreground_);
-    scene_state_background_ =
-        [[FakeSceneState alloc] initWithAppState:app_state_
-                                    browserState:chrome_browser_state_.get()];
-    scene_state_background_.activationLevel = SceneActivationLevelBackground;
-    SceneStateBrowserAgent::CreateForBrowser(background_browser_.get(),
-                                             scene_state_background_);
   }
 
   CommercePushNotificationClient* GetCommercePushNotificationClient() {
@@ -191,6 +201,8 @@ class CommercePushNotificationClientTest : public PlatformTest {
   }
 
   Browser* GetBrowser() { return browser_.get(); }
+
+  ChromeBrowserState* GetBrowserState() { return chrome_browser_state_.get(); }
 
   Browser* GetBackgroundBrowser() { return background_browser_.get(); }
 
@@ -215,6 +227,12 @@ class CommercePushNotificationClientTest : public PlatformTest {
         .GetSceneLevelForegroundActiveBrowser();
   }
 
+  void SetLastUsedChromeBrowserStateForTesting(
+      CommercePushNotificationClient& push_notification_client) {
+    push_notification_client.SetLastUsedChromeBrowserStateForTesting(
+        chrome_browser_state_.get());
+  }
+
  protected:
   web::WebTaskEnvironment task_environment_;
   CommercePushNotificationClient commerce_push_notification_client_;
@@ -224,10 +242,88 @@ class CommercePushNotificationClientTest : public PlatformTest {
   BrowserList* browser_list_;
   bookmarks::BookmarkModel* bookmark_model_;
   commerce::MockShoppingService* shopping_service_;
-  FakeSceneState* scene_state_foreground_;
-  FakeSceneState* scene_state_background_;
+  SceneState* scene_state_foreground_;
+  SceneState* scene_state_background_;
   AppState* app_state_;
 };
+
+TEST_F(CommercePushNotificationClientTest, TestParsing) {
+  optimization_guide::proto::Any any;
+  optimization_guide::proto::HintNotificationPayload hint_notification_payload;
+  hint_notification_payload.set_hint_key(kHintKey);
+  hint_notification_payload.set_optimization_type(
+      optimization_guide::proto::NOSCRIPT);
+  hint_notification_payload.set_key_representation(
+      optimization_guide::proto::HOST);
+  optimization_guide::proto::Any* payload =
+      hint_notification_payload.mutable_payload();
+  payload->set_type_url(kHintKey);
+  payload->set_value(kPayloadValue);
+
+  std::string serialized_hint_notification_payload;
+  hint_notification_payload.SerializeToString(
+      &serialized_hint_notification_payload);
+  any.set_value(serialized_hint_notification_payload.c_str());
+
+  std::string serialized_any;
+  any.SerializeToString(&serialized_any);
+  std::string serialized_any_escaped;
+  base::Base64Encode(serialized_any, &serialized_any_escaped);
+
+  std::unique_ptr<optimization_guide::proto::HintNotificationPayload> parsed =
+      CommercePushNotificationClient::ParseHintNotificationPayload(
+          base::SysUTF8ToNSString(serialized_any_escaped));
+  EXPECT_EQ(kHintKey, parsed->hint_key());
+  EXPECT_EQ(optimization_guide::proto::NOSCRIPT, parsed->optimization_type());
+  EXPECT_EQ(optimization_guide::proto::HOST, parsed->key_representation());
+  EXPECT_EQ(kHintKey, parsed->payload().type_url());
+  EXPECT_EQ(kPayloadValue, parsed->payload().value());
+}
+
+TEST_F(CommercePushNotificationClientTest, TestHintKeyRemovedUponNotification) {
+  MockDelegate mock_delegate;
+  OptimizationGuideService* optimization_guide_service =
+      OptimizationGuideServiceFactory::GetForBrowserState(GetBrowserState());
+  optimization_guide_service->GetHintsManager()
+      ->push_notification_manager()
+      ->SetDelegate(&mock_delegate);
+
+  optimization_guide::proto::Any any;
+  optimization_guide::proto::HintNotificationPayload hint_notification_payload;
+  hint_notification_payload.set_hint_key(kHintKey);
+  hint_notification_payload.set_key_representation(
+      optimization_guide::proto::HOST);
+  hint_notification_payload.set_optimization_type(
+      optimization_guide::proto::NOSCRIPT);
+
+  optimization_guide::proto::Any* payload =
+      hint_notification_payload.mutable_payload();
+  payload->set_type_url(kHintKey);
+  payload->set_value(kPayloadValue);
+
+  std::string serialized_hint_notification_payload;
+  hint_notification_payload.SerializeToString(
+      &serialized_hint_notification_payload);
+  any.set_value(serialized_hint_notification_payload.c_str());
+
+  std::string serialized_any;
+  any.SerializeToString(&serialized_any);
+  std::string serialized_any_escaped;
+  base::Base64Encode(serialized_any, &serialized_any_escaped);
+
+  NSDictionary* dict = @{
+    kSerializedPayloadKey : base::SysUTF8ToNSString(serialized_any_escaped)
+  };
+
+  CommercePushNotificationClient push_notification_client;
+  SetLastUsedChromeBrowserStateForTesting(push_notification_client);
+
+  EXPECT_CALL(mock_delegate,
+              RemoveFetchedEntriesByHintKeys(
+                  testing::_, testing::Eq(optimization_guide::proto::HOST),
+                  testing::ElementsAreArray({kHintKey})));
+  push_notification_client.HandleNotificationReception(dict);
+}
 
 TEST_F(CommercePushNotificationClientTest, TestNotificationInteraction) {
   NSDictionary* user_info = SerializeOptGuideCommercePayload();
@@ -337,9 +433,7 @@ TEST_F(CommercePushNotificationClientTest,
   // When active foregrounded and active backgrounded browser is availalbe,
   // should choose foregrounded browser.
   EXPECT_EQ(SceneActivationLevelForegroundActive,
-            SceneStateBrowserAgent::FromBrowser(browser)
-                ->GetSceneState()
-                .activationLevel);
+            browser->GetSceneState().activationLevel);
 }
 
 TEST_F(CommercePushNotificationClientTest, TestBackgroundFallback) {

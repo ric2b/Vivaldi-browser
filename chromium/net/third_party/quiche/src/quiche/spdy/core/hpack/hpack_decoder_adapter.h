@@ -18,6 +18,7 @@
 #include "quiche/http2/hpack/decoder/hpack_decoding_error.h"
 #include "quiche/common/platform/api/quiche_export.h"
 #include "quiche/spdy/core/http2_header_block.h"
+#include "quiche/spdy/core/no_op_headers_handler.h"
 #include "quiche/spdy/core/spdy_headers_handler_interface.h"
 
 namespace spdy {
@@ -39,10 +40,10 @@ class QUICHE_EXPORT HpackDecoderAdapter {
   // Returns the most recently applied value of SETTINGS_HEADER_TABLE_SIZE.
   size_t GetCurrentHeaderTableSizeSetting() const;
 
-  // If a SpdyHeadersHandlerInterface is provided, the decoder will emit
-  // headers to it rather than accumulating them in a Http2HeaderBlock.
+  // The decoder will emit headers to the provided SpdyHeadersHandlerInterface.
   // Does not take ownership of the handler, but does use the pointer until
   // the current HPACK block is completely decoded.
+  // `handler` must not be nullptr.
   void HandleControlFrameHeadersStart(SpdyHeadersHandlerInterface* handler);
 
   // Called as HPACK block fragments arrive. Returns false if an error occurred
@@ -57,12 +58,6 @@ class QUICHE_EXPORT HpackDecoderAdapter {
   // to support subsequent calculation of compression percentage.
   // Discards the handler supplied at the start of decoding the block.
   bool HandleControlFrameHeadersComplete();
-
-  // Accessor for the most recently decoded headers block. Valid until the next
-  // call to HandleControlFrameHeadersData().
-  // TODO(birenroy): Remove this method when all users of HpackDecoder specify
-  // a SpdyHeadersHandlerInterface.
-  const Http2HeaderBlock& decoded_block() const;
 
   // Returns the current dynamic table size, including the 32 bytes per entry
   // overhead mentioned in RFC 7541 section 4.1.
@@ -85,24 +80,21 @@ class QUICHE_EXPORT HpackDecoderAdapter {
   // Error code if an error has occurred, Error::kOk otherwise.
   http2::HpackDecodingError error() const { return error_; }
 
-  std::string detailed_error() const { return detailed_error_; }
-
  private:
   class QUICHE_EXPORT ListenerAdapter : public http2::HpackDecoderListener {
    public:
     ListenerAdapter();
     ~ListenerAdapter() override;
 
-    // If a SpdyHeadersHandlerInterface is provided, the decoder will emit
-    // headers to it rather than accumulating them in a Http2HeaderBlock.
+    // Sets the SpdyHeadersHandlerInterface to which headers are emitted.
     // Does not take ownership of the handler, but does use the pointer until
     // the current HPACK block is completely decoded.
+    // `handler` must not be nullptr.
     void set_handler(SpdyHeadersHandlerInterface* handler);
-    const Http2HeaderBlock& decoded_block() const { return decoded_block_; }
 
-    // Override the HpackDecoderListener methods:
+    // From HpackDecoderListener
     void OnHeaderListStart() override;
-    void OnHeader(const std::string& name, const std::string& value) override;
+    void OnHeader(absl::string_view name, absl::string_view value) override;
     void OnHeaderListEnd() override;
     void OnHeaderErrorDetected(absl::string_view error_message) override;
 
@@ -110,11 +102,9 @@ class QUICHE_EXPORT HpackDecoderAdapter {
     size_t total_hpack_bytes() const { return total_hpack_bytes_; }
 
    private:
-    // If the caller doesn't provide a handler, the header list is stored in
-    // this Http2HeaderBlock.
-    Http2HeaderBlock decoded_block_;
+    NoOpHeadersHandler no_op_handler_;
 
-    // If non-NULL, handles decoded headers. Not owned.
+    // Handles decoded headers.
     SpdyHeadersHandlerInterface* handler_;
 
     // Total bytes that have been received as input (i.e. HPACK encoded)
@@ -145,7 +135,6 @@ class QUICHE_EXPORT HpackDecoderAdapter {
 
   // Error code if an error has occurred, Error::kOk otherwise.
   http2::HpackDecodingError error_;
-  std::string detailed_error_;
 };
 
 }  // namespace spdy

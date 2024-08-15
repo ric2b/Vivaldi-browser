@@ -6,15 +6,17 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <string_view>
 
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest-message.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_canon.h"
 #include "url/url_canon_stdstring.h"
+#include "url/url_features.h"
 #include "url/url_test_utils.h"
 
 namespace url {
@@ -589,8 +591,8 @@ TEST_F(URLUtilTest, TestDomainIs) {
 }
 
 namespace {
-absl::optional<std::string> CanonicalizeSpec(std::string_view spec,
-                                             bool trim_path_end) {
+std::optional<std::string> CanonicalizeSpec(std::string_view spec,
+                                            bool trim_path_end) {
   std::string canonicalized;
   StdStringCanonOutput output(&canonicalized);
   Parsed parsed;
@@ -608,10 +610,10 @@ absl::optional<std::string> CanonicalizeSpec(std::string_view spec,
 TEST_F(URLUtilTest, TestCanonicalizeWindowsPathWithLeadingNUL) {
   auto PrefixWithNUL = [](std::string&& s) -> std::string { return '\0' + s; };
   EXPECT_EQ(CanonicalizeSpec(PrefixWithNUL("w:"), /*trim_path_end=*/false),
-            absl::make_optional("file:///W:"));
+            std::make_optional("file:///W:"));
   EXPECT_EQ(CanonicalizeSpec(PrefixWithNUL("\\\\server\\share"),
                              /*trim_path_end=*/false),
-            absl::make_optional("file://server/share"));
+            std::make_optional("file://server/share"));
 }
 #endif
 
@@ -628,7 +630,7 @@ TEST_F(URLUtilTest, TestCanonicalizeIdempotencyWithLeadingControlCharacters) {
     for (bool trim_path_end : {false, true}) {
       SCOPED_TRACE(testing::Message() << "trim_path_end: " << trim_path_end);
 
-      absl::optional<std::string> canonicalized =
+      std::optional<std::string> canonicalized =
           CanonicalizeSpec(spec, trim_path_end);
       ASSERT_TRUE(canonicalized);
       EXPECT_EQ(canonicalized, CanonicalizeSpec(*canonicalized, trim_path_end));
@@ -718,5 +720,75 @@ TEST_F(URLUtilTest, TestHasInvalidURLEscapeSequences) {
         << "Invalid result for '" << input << "'";
   }
 }
+
+class URLUtilTypedTest : public ::testing::TestWithParam<bool> {
+ public:
+  URLUtilTypedTest()
+      : use_standard_compliant_non_special_scheme_url_parsing_(GetParam()) {
+    if (use_standard_compliant_non_special_scheme_url_parsing_) {
+      scoped_feature_list_.InitAndEnableFeature(
+          kStandardCompliantNonSpecialSchemeURLParsing);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          kStandardCompliantNonSpecialSchemeURLParsing);
+    }
+  }
+
+ protected:
+  struct URLCase {
+    const std::string_view input;
+    const std::string_view expected;
+    bool expected_success;
+  };
+
+  void TestCanonicalize(const URLCase& url_case) {
+    std::string canonicalized;
+    StdStringCanonOutput output(&canonicalized);
+    Parsed parsed;
+    bool success =
+        Canonicalize(url_case.input.data(), url_case.input.size(),
+                     /*trim_path_end=*/false,
+                     /*charset_converter=*/nullptr, &output, &parsed);
+    output.Complete();
+    EXPECT_EQ(success, url_case.expected_success);
+    EXPECT_EQ(output.view(), url_case.expected);
+  }
+
+  bool use_standard_compliant_non_special_scheme_url_parsing_;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_P(URLUtilTypedTest, Cannolicalize) {
+  // Verify that the feature flag changes canonicalization behavior,
+  // focusing on key cases here as comprehesive testing is covered in other unit
+  // tests.
+  if (use_standard_compliant_non_special_scheme_url_parsing_) {
+    URLCase cases[] = {
+        {"git://host/..", "git://host/", true},
+        {"git:// /", "git:///", false},
+        {"git:/..", "git:/", true},
+        {"mailto:/..", "mailto:/", true},
+    };
+    for (const auto& i : cases) {
+      TestCanonicalize(i);
+    }
+  } else {
+    // Every non-special URL is considered as an opaque path if the feature is
+    // disabled.
+    URLCase cases[] = {
+        {"git://host/..", "git://host/..", true},
+        {"git:// /", "git:// /", true},
+        {"git:/..", "git:/..", true},
+        {"mailto:/..", "mailto:/..", true},
+    };
+    for (const auto& i : cases) {
+      TestCanonicalize(i);
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(All, URLUtilTypedTest, ::testing::Bool());
 
 }  // namespace url

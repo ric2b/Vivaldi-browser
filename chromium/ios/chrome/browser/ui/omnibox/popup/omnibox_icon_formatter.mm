@@ -6,7 +6,7 @@
 
 #import "base/notreached.h"
 #import "components/omnibox/browser/autocomplete_match.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "url/gurl.h"
@@ -14,14 +14,10 @@
 namespace {
 
 OmniboxSuggestionIconType IconTypeFromMatch(const AutocompleteMatch& match) {
-  absl::optional<int> answerType =
-      match.answer.has_value() ? absl::make_optional<int>(match.answer->type())
-                               : absl::nullopt;
-
   // Some suggestions have custom icons. Others fallback to the icon from the
   // overall match type.
-  if (answerType) {
-    switch (answerType.value()) {
+  if (match.answer.has_value()) {
+    switch (match.answer.value().type()) {
       case SuggestionAnswer::ANSWER_TYPE_DICTIONARY:
         return OmniboxSuggestionIconType::kDictionary;
       case SuggestionAnswer::ANSWER_TYPE_FINANCE:

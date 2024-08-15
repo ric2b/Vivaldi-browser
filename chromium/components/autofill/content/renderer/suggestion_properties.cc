@@ -5,6 +5,7 @@
 #include "components/autofill/content/renderer/suggestion_properties.h"
 
 #include "base/notreached.h"
+#include "components/autofill/core/common/aliases.h"
 
 using blink::WebFormControlElement;
 
@@ -19,9 +20,11 @@ bool ShouldAutofillOnEmptyValues(
     case AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown:
     case AutofillSuggestionTriggerSource::kOpenTextDataListChooser:
     case AutofillSuggestionTriggerSource::kManualFallbackAddress:
+    case AutofillSuggestionTriggerSource::kManualFallbackPayments:
     case AutofillSuggestionTriggerSource::kShowPromptAfterDialogClosed:
-      return true;
+    case AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick:
     case AutofillSuggestionTriggerSource::kContentEditableClicked:
+      return true;
     case AutofillSuggestionTriggerSource::kTextFieldDidChange:
       return false;
     // `kShowCardsFromAccount`, `kPasswordManager`, `kAndroidWebView` and `kiOS`
@@ -29,7 +32,29 @@ bool ShouldAutofillOnEmptyValues(
     // apply to them.
     case AutofillSuggestionTriggerSource::kShowCardsFromAccount:
     case mojom::AutofillSuggestionTriggerSource::kPasswordManager:
-    case mojom::AutofillSuggestionTriggerSource::kAndroidWebView:
+    case mojom::AutofillSuggestionTriggerSource::kiOS:
+    case AutofillSuggestionTriggerSource::kUnspecified:
+      break;
+  }
+  NOTREACHED_NORETURN();
+}
+
+bool ShouldAutofillOnLongValues(
+    AutofillSuggestionTriggerSource trigger_source) {
+  switch (trigger_source) {
+    case AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick:
+    case AutofillSuggestionTriggerSource::kContentEditableClicked:
+      return true;
+    case AutofillSuggestionTriggerSource::kFormControlElementClicked:
+    case AutofillSuggestionTriggerSource::kManualFallbackAddress:
+    case AutofillSuggestionTriggerSource::kManualFallbackPayments:
+    case AutofillSuggestionTriggerSource::kOpenTextDataListChooser:
+    case AutofillSuggestionTriggerSource::kShowPromptAfterDialogClosed:
+    case AutofillSuggestionTriggerSource::kTextFieldDidChange:
+    case AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown:
+      return false;
+    case AutofillSuggestionTriggerSource::kShowCardsFromAccount:
+    case mojom::AutofillSuggestionTriggerSource::kPasswordManager:
     case mojom::AutofillSuggestionTriggerSource::kiOS:
     case AutofillSuggestionTriggerSource::kUnspecified:
       break;
@@ -43,9 +68,11 @@ bool RequiresCaretAtEnd(AutofillSuggestionTriggerSource trigger_source) {
     case AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown:
       return true;
     case AutofillSuggestionTriggerSource::kFormControlElementClicked:
+    case AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick:
     case AutofillSuggestionTriggerSource::kContentEditableClicked:
     case AutofillSuggestionTriggerSource::kOpenTextDataListChooser:
     case AutofillSuggestionTriggerSource::kManualFallbackAddress:
+    case AutofillSuggestionTriggerSource::kManualFallbackPayments:
     case AutofillSuggestionTriggerSource::kShowPromptAfterDialogClosed:
       return false;
     // `kShowCardsFromAccount`, `kPasswordManager`, `kAndroidWebView` and `kiOS`
@@ -53,7 +80,6 @@ bool RequiresCaretAtEnd(AutofillSuggestionTriggerSource trigger_source) {
     // apply to them.
     case AutofillSuggestionTriggerSource::kShowCardsFromAccount:
     case mojom::AutofillSuggestionTriggerSource::kPasswordManager:
-    case mojom::AutofillSuggestionTriggerSource::kAndroidWebView:
     case mojom::AutofillSuggestionTriggerSource::kiOS:
     case AutofillSuggestionTriggerSource::kUnspecified:
       break;
@@ -70,11 +96,13 @@ bool ShouldShowFullSuggestionListForPasswordManager(
       // a default value filled by the website. In that case, don't elide
       // suggestions that don't have a common prefix with the default value.
       return element.IsAutofilled() || !element.UserHasEditedTheField();
+    case AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick:
     case AutofillSuggestionTriggerSource::kContentEditableClicked:
     case AutofillSuggestionTriggerSource::kTextFieldDidChange:
     case AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown:
     case AutofillSuggestionTriggerSource::kOpenTextDataListChooser:
     case AutofillSuggestionTriggerSource::kManualFallbackAddress:
+    case AutofillSuggestionTriggerSource::kManualFallbackPayments:
     case AutofillSuggestionTriggerSource::kShowPromptAfterDialogClosed:
       return false;
     // `kShowCardsFromAccount`, `kPasswordManager`, `kAndroidWebView` and `kiOS`
@@ -87,7 +115,6 @@ bool ShouldShowFullSuggestionListForPasswordManager(
     // renderer.
     case AutofillSuggestionTriggerSource::kShowCardsFromAccount:
     case mojom::AutofillSuggestionTriggerSource::kPasswordManager:
-    case mojom::AutofillSuggestionTriggerSource::kAndroidWebView:
     case mojom::AutofillSuggestionTriggerSource::kiOS:
     case AutofillSuggestionTriggerSource::kUnspecified:
       break;

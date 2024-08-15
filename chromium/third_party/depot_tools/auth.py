@@ -69,11 +69,11 @@ def has_luci_context_local_auth():
 class Authenticator(object):
     """Object that knows how to refresh access tokens or id tokens when needed.
 
-  Args:
-    scopes: space separated oauth scopes. It's used to generate access tokens.
+    Args:
+        scopes: space separated oauth scopes. It's used to generate access tokens.
             Defaults to OAUTH_SCOPE_EMAIL.
-    audience: An audience in ID tokens to claim which clients should accept it.
-  """
+        audience: An audience in ID tokens to claim which clients should accept it.
+    """
     def __init__(self, scopes=OAUTH_SCOPE_EMAIL, audience=None):
         self._access_token = None
         self._scopes = scopes
@@ -83,20 +83,20 @@ class Authenticator(object):
     def has_cached_credentials(self):
         """Returns True if credentials can be obtained.
 
-    If returns False, get_access_token() or get_id_token() later will probably
-    ask for interactive login by raising LoginRequiredError.
+        If returns False, get_access_token() or get_id_token() later will probably
+        ask for interactive login by raising LoginRequiredError.
 
-    If returns True, get_access_token() or get_id_token() won't ask for
-    interactive login.
-    """
+        If returns True, get_access_token() or get_id_token() won't ask for
+        interactive login.
+        """
         return bool(self._get_luci_auth_token())
 
     def get_access_token(self):
         """Returns AccessToken, refreshing it if necessary.
 
-    Raises:
-      LoginRequiredError if user interaction is required.
-    """
+        Raises:
+            LoginRequiredError if user interaction is required.
+        """
         if self._access_token and not self._access_token.needs_refresh():
             return self._access_token
 
@@ -113,12 +113,12 @@ class Authenticator(object):
     def get_id_token(self):
         """Returns id token, refreshing it if necessary.
 
-    Returns:
-       A Token object.
+        Returns:
+            A Token object.
 
-    Raises:
-      LoginRequiredError if user interaction is required.
-    """
+        Raises:
+            LoginRequiredError if user interaction is required.
+        """
         if self._id_token and not self._id_token.needs_refresh():
             return self._id_token
 
@@ -133,15 +133,15 @@ class Authenticator(object):
     def authorize(self, http, use_id_token=False):
         """Monkey patches authentication logic of httplib2.Http instance.
 
-    The modified http.request method will add authentication headers to each
-    request.
+        The modified http.request method will add authentication headers to each
+        request.
 
-    Args:
-       http: An instance of httplib2.Http.
+        Args:
+            http: An instance of httplib2.Http.
 
-    Returns:
-       A modified instance of http that was passed in.
-    """
+        Returns:
+            A modified instance of http that was passed in.
+        """
         # Adapted from oauth2client.OAuth2Credentials.authorize.
         request_orig = http.request
 
@@ -167,9 +167,9 @@ class Authenticator(object):
     def _run_luci_auth_login(self):
         """Run luci-auth login.
 
-    Returns:
-      AccessToken with credentials.
-    """
+        Returns:
+            AccessToken with credentials.
+        """
         logging.debug('Running luci-auth login')
         subprocess2.check_call(['luci-auth', 'login', '-scopes', self._scopes])
         return self._get_luci_auth_token()

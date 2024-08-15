@@ -37,6 +37,7 @@ limitations under the License.
 #include "xla/service/gpu/runtime/gpublas_lt_matmul.h"
 #include "xla/service/gpu/runtime/graph_launch.h"
 #include "xla/service/gpu/runtime/kernel_launch.h"
+#include "xla/service/gpu/runtime/norm.h"
 #include "xla/service/service_executable_run_options.h"
 #include "xla/xla.pb.h"
 
@@ -138,7 +139,11 @@ class GpuRuntimeExecutable {
 
   // Depending on the state of `executable_` returns a reference to active
   // Xla runtime executable.
-  runtime::Executable& executable();
+  runtime::Executable& executable() {
+    return const_cast<runtime::Executable&>(
+        const_cast<const GpuRuntimeExecutable*>(this)->executable());
+  }
+  const runtime::Executable& executable() const;
 
   std::vector<int64_t> buffer_sizes_;
 
@@ -162,6 +167,10 @@ class GpuRuntimeExecutable {
 
   // Keep a cache for conv configs for all conv operations in the program.
   ConvRunners conv_runners_;
+
+  // Keep a cache for fused norm configs for all fused norm operations in the
+  // program.
+  NormRunnerStates norm_runners_;
 
   // Keep a cache for fused_dot_attention configs for all fused_dot_attention
   // operations in the program.

@@ -9,42 +9,45 @@
 
 #include <cstdlib>
 #include <iterator>
+#include <optional>
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "components/attribution_reporting/aggregatable_trigger_config.h"
 #include "components/attribution_reporting/constants.h"
+#include "components/attribution_reporting/event_level_epsilon.h"
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/features.h"
+#include "components/attribution_reporting/max_event_level_reports.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
+#include "components/attribution_reporting/trigger_config.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/aggregatable_attribution_utils.h"
 #include "content/browser/attribution_reporting/attribution_config.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
-#include "content/browser/attribution_reporting/attribution_utils.h"
 #include "content/browser/attribution_reporting/privacy_math.h"
 #include "content/browser/attribution_reporting/stored_source.h"
 #include "services/network/public/cpp/trigger_verification.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 
 namespace {
 
-using ::attribution_reporting::EventReportWindows;
 using ::attribution_reporting::mojom::SourceType;
 
 std::vector<AttributionStorageDelegate::NullAggregatableReport>
 GetNullAggregatableReportsForLookback(
     const AttributionTrigger& trigger,
     base::Time trigger_time,
-    absl::optional<base::Time> attributed_source_time,
+    std::optional<base::Time> attributed_source_time,
     int days_lookback,
     double rate) {
   std::vector<AttributionStorageDelegate::NullAggregatableReport> reports;
@@ -109,7 +112,7 @@ AttributionStorageDelegateImpl::GetDeleteExpiredRateLimitsFrequency() const {
 }
 
 base::Time AttributionStorageDelegateImpl::GetEventLevelReportTime(
-    const EventReportWindows& event_report_windows,
+    const attribution_reporting::EventReportWindows& event_report_windows,
     base::Time source_time,
     base::Time trigger_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -147,7 +150,7 @@ base::Uuid AttributionStorageDelegateImpl::NewReportID() const {
   return base::Uuid::GenerateRandomV4();
 }
 
-absl::optional<AttributionStorageDelegate::OfflineReportDelayConfig>
+std::optional<AttributionStorageDelegate::OfflineReportDelayConfig>
 AttributionStorageDelegateImpl::GetOfflineReportDelayConfig() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -165,7 +168,7 @@ AttributionStorageDelegateImpl::GetOfflineReportDelayConfig() const {
     };
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void AttributionStorageDelegateImpl::ShuffleReports(
@@ -195,28 +198,24 @@ void AttributionStorageDelegateImpl::ShuffleTriggerVerifications(
 }
 
 double AttributionStorageDelegateImpl::GetRandomizedResponseRate(
-    SourceType source_type,
-    const EventReportWindows& event_report_windows,
-    int max_event_level_reports) const {
+    const attribution_reporting::TriggerSpecs& trigger_specs,
+    attribution_reporting::MaxEventLevelReports max_event_level_reports,
+    attribution_reporting::EventLevelEpsilon epsilon) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return content::GetRandomizedResponseRate(
-      GetNumStates(
-          attribution_reporting::DefaultTriggerDataCardinality(source_type),
-          event_report_windows, max_event_level_reports),
-      config_.event_level_limit.randomized_response_epsilon);
+      GetNumStates(trigger_specs, max_event_level_reports), epsilon);
 }
 
 AttributionStorageDelegate::GetRandomizedResponseResult
 AttributionStorageDelegateImpl::GetRandomizedResponse(
     SourceType source_type,
-    const EventReportWindows& event_report_windows,
-    int max_event_level_reports,
+    const attribution_reporting::TriggerSpecs& trigger_specs,
+    attribution_reporting::MaxEventLevelReports max_event_level_reports,
+    attribution_reporting::EventLevelEpsilon epsilon,
     base::Time source_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RandomizedResponseData response = DoRandomizedResponse(
-      attribution_reporting::DefaultTriggerDataCardinality(source_type),
-      event_report_windows, max_event_level_reports,
-      config_.event_level_limit.randomized_response_epsilon);
+  RandomizedResponseData response =
+      DoRandomizedResponse(trigger_specs, max_event_level_reports, epsilon);
 
   if (response.channel_capacity() > GetMaxChannelCapacity(source_type)) {
     return base::unexpected(ExceedsChannelCapacityLimit());
@@ -227,7 +226,7 @@ AttributionStorageDelegateImpl::GetRandomizedResponse(
       return response;
     case AttributionNoiseMode::kNone:
       return RandomizedResponseData(response.rate(),
-                                    response.channel_capacity(), absl::nullopt);
+                                    response.channel_capacity(), std::nullopt);
   }
 }
 
@@ -235,7 +234,7 @@ std::vector<AttributionStorageDelegate::NullAggregatableReport>
 AttributionStorageDelegateImpl::GetNullAggregatableReports(
     const AttributionTrigger& trigger,
     base::Time trigger_time,
-    absl::optional<base::Time> attributed_source_time) const {
+    std::optional<base::Time> attributed_source_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   switch (noise_mode_) {
@@ -251,15 +250,21 @@ std::vector<AttributionStorageDelegate::NullAggregatableReport>
 AttributionStorageDelegateImpl::GetNullAggregatableReportsImpl(
     const AttributionTrigger& trigger,
     base::Time trigger_time,
-    absl::optional<base::Time> attributed_source_time) const {
+    std::optional<base::Time> attributed_source_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // See spec
   // https://wicg.github.io/attribution-reporting-api/#generate-null-reports.
 
-  switch (trigger.registration().source_registration_time_config) {
+  bool has_trigger_context_id =
+      trigger.registration()
+          .aggregatable_trigger_config.trigger_context_id()
+          .has_value();
+
+  switch (trigger.registration()
+              .aggregatable_trigger_config.source_registration_time_config()) {
     case attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude: {
-      absl::optional<base::Time> rounded_attributed_source_time;
+      std::optional<base::Time> rounded_attributed_source_time;
       if (attributed_source_time) {
         rounded_attributed_source_time =
             RoundDownToWholeDaySinceUnixEpoch(*attributed_source_time);
@@ -267,6 +272,8 @@ AttributionStorageDelegateImpl::GetNullAggregatableReportsImpl(
 
       static_assert(attribution_reporting::kMaxSourceExpiry == base::Days(30),
                     "update null reports rate");
+
+      CHECK(!has_trigger_context_id);
 
       return GetNullAggregatableReportsForLookback(
           trigger, trigger_time, rounded_attributed_source_time,
@@ -283,8 +290,10 @@ AttributionStorageDelegateImpl::GetNullAggregatableReportsImpl(
 
       return GetNullAggregatableReportsForLookback(
           trigger, trigger_time, attributed_source_time, /*days_lookback=*/0,
-          config_.aggregate_limit
-              .null_reports_rate_exclude_source_registration_time);
+          has_trigger_context_id
+              ? 1.
+              : config_.aggregate_limit
+                    .null_reports_rate_exclude_source_registration_time);
     }
   }
 }

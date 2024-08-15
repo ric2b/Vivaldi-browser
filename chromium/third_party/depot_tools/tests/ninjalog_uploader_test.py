@@ -19,8 +19,7 @@ class NinjalogUploaderTest(unittest.TestCase):
     def test_IsGoogler(self):
         with unittest.mock.patch('subprocess.run') as run_mock:
             run_mock.return_value.returncode = 0
-            run_mock.return_value.stdout = ('Login as foo@google.com\n'
-                                            'goma is ready to use')
+            run_mock.return_value.stdout = 'Logged in as foo@google.com.\n'
             self.assertTrue(ninjalog_uploader.IsGoogler())
 
         with unittest.mock.patch('subprocess.run') as run_mock:
@@ -34,7 +33,7 @@ class NinjalogUploaderTest(unittest.TestCase):
 
         with unittest.mock.patch('subprocess.run') as run_mock:
             run_mock.return_value.returncode = 0
-            run_mock.return_value.stdout = 'Login as foo@example.com\n'
+            run_mock.return_value.stdout = 'Logged in as foo@example.com.\n'
             self.assertFalse(ninjalog_uploader.IsGoogler())
 
     def test_parse_gn_args(self):

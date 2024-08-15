@@ -42,3 +42,14 @@ message LogManifest {
   // In the future this can be changed to repeated if need be without breakage.
   Entry entry = 1;
 }
+
+// Layout for storing encrypted contents of a file. `iv` and `tag` fields are
+// expected by `libhwsec` AES Encrypt and Decrypt functions.
+message EncryptedLogFile {
+  // Initialization vector, randomly generated at encryption time.
+  bytes iv = 1;
+  // Authentication tag, used to verify integrity of data after decryption.
+  bytes tag = 2;
+  // Encrypted data.
+  bytes ciphertext = 3;
+}

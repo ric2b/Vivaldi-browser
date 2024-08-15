@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
-<translation id="3830627370375585318">Zezwalaj Vivaldi na korzystanie z sieci w ustawieniach zapory sieciowej lub oprogramowania antywirusowego.</translation>
+<translation id="3830627370375585318">Udziel Vivaldi uprawnień do korzystania z sieci w ustawieniach
+          zapory sieciowej lub oprogramowania antywirusowego.</translation>
 <translation id="4200102020577305737">Wybierz
           menu Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -21,6 +22,7 @@
           <ph name="PROXIES_TITLE" />
           i upewnij się, że w konfiguracji wybrano połączenie bez serwera proxy lub bezpośrednie.</translation>
 <translation id="5248344925342018662">Przeglądasz bezpieczną stronę Vivaldi</translation>
+<translation id="6690242244468452299">Ta strona wyświetla informacje o ostatnich awariach, gdy automatyczne raportowanie awarii jest włączone.</translation>
 <translation id="7023871570427738255">Wybierz
         menu Vivaldi &gt;
         <ph name="SETTINGS_TITLE" />

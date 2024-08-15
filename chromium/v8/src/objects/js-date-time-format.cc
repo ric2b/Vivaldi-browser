@@ -1744,7 +1744,7 @@ class CalendarCache {
     if (map_.size() > 8) {  // Cache at most 8 calendars.
       map_.clear();
     }
-    map_[key].reset(calendar.release());
+    map_[key] = std::move(calendar);
     return map_[key]->clone();
   }
 
@@ -1864,7 +1864,7 @@ class DateFormatCache {
     }
     std::unique_ptr<icu::SimpleDateFormat> instance(
         CreateICUDateFormat(icu_locale, skeleton, generator, hc));
-    if (instance.get() == nullptr) return nullptr;
+    if (instance == nullptr) return nullptr;
     map_[key] = std::move(instance);
     return static_cast<icu::SimpleDateFormat*>(map_[key]->clone());
   }
@@ -2037,7 +2037,7 @@ std::unique_ptr<icu::SimpleDateFormat> DateTimeStylePattern(
                                               icu_locale)));
       // For instance without time, we do not need to worry about the hour cycle
       // impact so we can return directly.
-      if (result.get() != nullptr) {
+      if (result != nullptr) {
         return result;
       }
     }

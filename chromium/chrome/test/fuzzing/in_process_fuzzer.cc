@@ -10,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_run_loop_timeout.h"
+#include "base/test/test_timeouts.h"
 #include "chrome/test/base/chrome_test_launcher.h"
 #include "chrome/test/fuzzing/in_process_fuzzer.h"
 #include "chrome/test/fuzzing/in_process_fuzzer_buildflags.h"
@@ -40,10 +41,7 @@ InProcessFuzzer::GetChromiumCommandLineArguments() {
 }
 
 void InProcessFuzzer::SetUp() {
-  absl::optional<base::test::ScopedRunLoopTimeout> scoped_timeout;
-  if (options_.run_loop_timeout) {
-    scoped_timeout.emplace(FROM_HERE, *options_.run_loop_timeout);
-  }
+  std::optional<base::test::ScopedRunLoopTimeout> scoped_timeout;
 
   switch (options_.run_loop_timeout_behavior) {
     case RunLoopTimeoutBehavior::kContinue:
@@ -54,6 +52,10 @@ void InProcessFuzzer::SetUp() {
       break;
     case RunLoopTimeoutBehavior::kDefault:
       break;
+  }
+
+  if (options_.run_loop_timeout) {
+    scoped_timeout.emplace(FROM_HERE, *options_.run_loop_timeout);
   }
 
   // Note that browser tests are being launched by the `SetUp` method.
@@ -204,17 +206,22 @@ int main(int argc, char** argv) {
         fuzzer->GetChromiumCommandLineArguments();
     chromium_arguments.insert(chromium_arguments.begin(), executable_name);
     chromium_arguments.push_back(FILE_PATH_LITERAL("--single-process-tests"));
-#if !BUILDFLAG(AVOID_SINGLE_PROCESS_MODE)
+#if BUILDFLAG(IS_CENTIPEDE)
     // TODO(1038952): make libfuzzer compatible with single-process mode.
     // As it stands, single-process mode works with centipede (and is probably
     // desirable both in terms of fuzzing speed and correctly gathering
     // coverage information) but not yet with libfuzzer.
     chromium_arguments.push_back(FILE_PATH_LITERAL("--single-process"));
-#endif  // BUILDFLAG(AVOID_SINGLE_PROCESS_MODE)
+#endif  // BUILDFLAG(IS_CENTIPEDE)
     chromium_arguments.push_back(FILE_PATH_LITERAL("--no-sandbox"));
     chromium_arguments.push_back(FILE_PATH_LITERAL("--no-zygote"));
     chromium_arguments.push_back(FILE_PATH_LITERAL("--disable-gpu"));
     base::CommandLine::ForCurrentProcess()->InitFromArgv(chromium_arguments);
+
+    // Various bits of setup are done by base::TestSuite::Initialize.
+    // As we're not a functional test suite, most of those things are not
+    // necessary, but at least this is:
+    TestTimeouts::Initialize();
   }
 
   FuzzTestLauncherDelegate* fuzzer_launcher_delegate =

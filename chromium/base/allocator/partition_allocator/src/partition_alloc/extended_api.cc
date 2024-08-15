@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/extended_api.h"
+#include "partition_alloc/extended_api.h"
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_config.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_cache.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_config.h"
+#include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
+#include "partition_alloc/thread_cache.h"
 
 namespace partition_alloc::internal {
 
@@ -40,14 +40,8 @@ void EnablePartitionAllocThreadCacheForRootIfDisabled(PartitionRoot* root) {
 void DisablePartitionAllocThreadCacheForProcess() {
   PA_CHECK(allocator_shim::internal::PartitionAllocMalloc::
                AllocatorConfigurationFinalized());
-  auto* regular_allocator =
-      allocator_shim::internal::PartitionAllocMalloc::Allocator();
-  auto* aligned_allocator =
-      allocator_shim::internal::PartitionAllocMalloc::AlignedAllocator();
-  DisableThreadCacheForRootIfEnabled(regular_allocator);
-  if (aligned_allocator != regular_allocator) {
-    DisableThreadCacheForRootIfEnabled(aligned_allocator);
-  }
+  DisableThreadCacheForRootIfEnabled(
+      allocator_shim::internal::PartitionAllocMalloc::Allocator());
   DisableThreadCacheForRootIfEnabled(
       allocator_shim::internal::PartitionAllocMalloc::OriginalAllocator());
 }

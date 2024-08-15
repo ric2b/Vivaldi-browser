@@ -1,10 +1,12 @@
 # Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
 import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/ios_sdk.gni")
 
 group("resources") {
   deps = [
     ":vivaldi_new_tab",
+    ":vivaldi_new_background_tab",
     ":vivaldi_private_tab",
     ":vivaldi_link",
     ":vivaldi_edit",
@@ -12,6 +14,7 @@ group("resources") {
     ":vivaldi_move",
     ":vivaldi_copy",
     ":vivaldi_save",
+    ":vivaldi_save_to_photos",
     ":vivaldi_close",
     ":vivaldi_pin",
     ":vivaldi_unpin",
@@ -39,6 +42,13 @@ imageset("vivaldi_new_tab") {
     "vivaldi_new_tab.imageset/Contents.json",
     "vivaldi_new_tab.imageset/vivaldi_new_tab.pdf",
     "vivaldi_new_tab.imageset/vivaldi_new_tab_dark.pdf",
+  ]
+}
+
+symbolset("vivaldi_new_background_tab") {
+  sources = [
+    "vivaldi_new_background_tab.symbolset/Contents.json",
+    "vivaldi_new_background_tab.symbolset/vivaldi_new_background_tab.svg",
   ]
 }
 
@@ -95,6 +105,13 @@ imageset("vivaldi_save") {
     "vivaldi_save.imageset/Contents.json",
     "vivaldi_save.imageset/vivaldi_save.pdf",
     "vivaldi_save.imageset/vivaldi_save_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_save_to_photos") {
+  sources = [
+    "vivaldi_save_to_photos.imageset/Contents.json",
+    "vivaldi_save_to_photos.imageset/vivaldi_save_to_photos.pdf",
   ]
 }
 

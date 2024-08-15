@@ -6,6 +6,7 @@
 #define ASH_AMBIENT_UI_AMBIENT_ANIMATION_VIEW_H_
 
 #include <memory>
+#include <optional>
 
 #include "ash/ambient/model/ambient_animation_photo_provider.h"
 #include "ash/ambient/ui/glanceable_info_view.h"
@@ -17,7 +18,6 @@
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/compositor/throughput_tracker.h"
 #include "ui/lottie/animation.h"
 #include "ui/lottie/animation_observer.h"
@@ -84,16 +84,14 @@ class ASH_EXPORT AmbientAnimationView : public views::View,
   const std::unique_ptr<const AmbientAnimationStaticResources>
       static_resources_;
   const raw_ptr<AmbientAnimationFrameRateController> frame_rate_controller_;
+  const bool add_glanceable_info_text_shadow_;
   AmbientAnimationPhotoProvider animation_photo_provider_;
   std::unique_ptr<AmbientAnimationAttributionProvider>
       animation_attribution_provider_;
 
-  raw_ptr<views::AnimatedImageView, ExperimentalAsh> animated_image_view_ =
-      nullptr;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh> glanceable_info_container_ =
-      nullptr;
-  raw_ptr<views::BoxLayoutView, ExperimentalAsh> media_string_container_ =
-      nullptr;
+  raw_ptr<views::AnimatedImageView> animated_image_view_ = nullptr;
+  raw_ptr<views::BoxLayoutView> glanceable_info_container_ = nullptr;
+  raw_ptr<views::BoxLayoutView> media_string_container_ = nullptr;
   std::unique_ptr<AmbientAnimationShieldController> shield_view_controller_;
   std::unique_ptr<AmbientAnimationPlayer> animation_player_;
   base::ScopedObservation<View, ViewObserver> animated_image_view_observer_{
@@ -101,7 +99,7 @@ class ASH_EXPORT AmbientAnimationView : public views::View,
   base::ScopedObservation<lottie::Animation, lottie::AnimationObserver>
       animation_observer_{this};
 
-  absl::optional<ui::ThroughputTracker> throughput_tracker_;
+  std::optional<ui::ThroughputTracker> throughput_tracker_;
   base::RepeatingTimer throughput_tracker_restart_timer_;
 
   JitterCalculator animation_jitter_calculator_;

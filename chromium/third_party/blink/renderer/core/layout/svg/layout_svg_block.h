@@ -20,7 +20,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_SVG_LAYOUT_SVG_BLOCK_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_SVG_LAYOUT_SVG_BLOCK_H_
 
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 
 namespace blink {
 
@@ -76,9 +76,9 @@ class LayoutSVGBlock : public LayoutNGBlockFlow {
   bool needs_transform_update_ : 1;
   bool transform_uses_reference_box_ : 1;
 
-  bool IsOfType(LayoutObjectType type) const override {
+  bool IsSVG() const final {
     NOT_DESTROYED();
-    return type == kLayoutObjectSVG || LayoutNGBlockFlow::IsOfType(type);
+    return true;
   }
 
   bool CheckForImplicitTransformChange(bool bbox_changed) const;

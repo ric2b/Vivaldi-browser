@@ -25,10 +25,8 @@
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/url_drag_drop_handler.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
-#import "ios/chrome/browser/ntp/home/features.h"
-#import "ios/chrome/browser/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
@@ -50,8 +48,6 @@
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/model/tab_title_util.h"
-#import "ios/chrome/browser/ui/bubble/bubble_util.h"
-#import "ios/chrome/browser/ui/bubble/bubble_view.h"
 #import "ios/chrome/browser/ui/fullscreen/scoped_fullscreen_disabler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
@@ -63,7 +59,7 @@
 #import "ios/chrome/browser/ui/tabs/target_frame_cache.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_favicon_driver_observer.h"
+#import "ios/chrome/browser/web_state_list/model/web_state_list_favicon_driver_observer.h"
 #import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
@@ -80,6 +76,7 @@
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
@@ -481,9 +478,7 @@ const CGFloat kSymbolSize = 18;
 
     // `self.view` setup.
     _useTabStacking = [self shouldUseTabStacking];
-    CGRect tabStripFrame = SceneStateBrowserAgent::FromBrowser(browser)
-                               ->GetSceneState()
-                               .window.bounds;
+    CGRect tabStripFrame = browser->GetSceneState().window.bounds;
     tabStripFrame.size.height = kTabStripHeight;
     _view = [[TabStripContainerView alloc] initWithFrame:tabStripFrame];
     _view.autoresizingMask = (UIViewAutoresizingFlexibleWidth |
@@ -544,41 +539,35 @@ const CGFloat kSymbolSize = 18;
       _buttonNewTab.tintColor = UIColor.whiteColor;
       [_buttonNewTab setImage:buttonNewTabImage
                      forState:UIControlStateNormal];
-    } else {
-
-    if (IsUIButtonConfigurationEnabled()) {
-      UIButtonConfiguration* buttonConfiguration =
-          [UIButtonConfiguration plainButtonConfiguration];
-      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
-          0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
-      buttonConfiguration.image = buttonNewTabImage;
-      buttonConfiguration.baseForegroundColor =
-          [UIColor colorNamed:kGrey500Color];
-      _buttonNewTab.configurationUpdateHandler = ^(UIButton* incomingButton) {
-        UIButtonConfiguration* updatedConfig = incomingButton.configuration;
-        switch (incomingButton.state) {
-          case UIControlStateHighlighted: {
-            updatedConfig.baseForegroundColor =
-                [UIColor colorNamed:kGrey700Color];
-            break;
-          }
-          case UIControlStateNormal:
-            updatedConfig.baseForegroundColor =
-                [UIColor colorNamed:kGrey500Color];
-            break;
-          default:
-            break;
+      [_buttonNewTab setImage:buttonNewTabImage
+                     forState:UIControlStateHighlighted];
+    } else { // !vivaldi
+    UIButtonConfiguration* buttonConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+        0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
+    buttonConfiguration.image = buttonNewTabImage;
+    buttonConfiguration.baseForegroundColor =
+        [UIColor colorNamed:kGrey500Color];
+    _buttonNewTab.configurationUpdateHandler = ^(UIButton* incomingButton) {
+      UIButtonConfiguration* updatedConfig = incomingButton.configuration;
+      switch (incomingButton.state) {
+        case UIControlStateHighlighted: {
+          updatedConfig.baseForegroundColor =
+              [UIColor colorNamed:kGrey700Color];
+          break;
         }
-        incomingButton.configuration = updatedConfig;
-      };
-      _buttonNewTab.configuration = buttonConfiguration;
-    } else {
-      UIEdgeInsets imageInsets = UIEdgeInsetsMake(
-          0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
-      SetImageEdgeInsets(_buttonNewTab, imageInsets);
-      [_buttonNewTab setImage:buttonNewTabImage forState:UIControlStateNormal];
-      [_buttonNewTab.imageView setTintColor:[UIColor colorNamed:kGrey500Color]];
-    }
+        case UIControlStateNormal:
+          updatedConfig.baseForegroundColor =
+              [UIColor colorNamed:kGrey500Color];
+          break;
+        default:
+          break;
+      }
+      incomingButton.configuration = updatedConfig;
+    };
+    _buttonNewTab.configuration = buttonConfiguration;
+
     } // End Vivaldi
 
     _buttonNewTabSpotlightView = [[UIView alloc] init];
@@ -615,13 +604,14 @@ const CGFloat kSymbolSize = 18;
 
     if (IsVivaldiRunning()) {
       [_view addSubview:_buttonNewTab];
-      [_buttonNewTab anchorTop:_tabStripView.topAnchor
+      [_buttonNewTab anchorTop:nil
                        leading:_tabStripView.trailingAnchor
-                        bottom:_tabStripView.bottomAnchor
+                        bottom:nil
                       trailing:_view.safeRightAnchor
                        padding:vNewTabButtonPadding
                           size:CGSizeMake(kNewTabButtonWidth,
                                           kNewTabButtonWidth)];
+      [_buttonNewTab centerYInSuperview];
     } else {
     [_tabStripView addSubview:_buttonNewTab];
     } // End Vivaldi
@@ -688,15 +678,9 @@ const CGFloat kSymbolSize = 18;
 #pragma mark - TabStripCommands
 
 - (void)setNewTabButtonOnTabStripIPHHighlighted:(BOOL)IPHHighlighted {
-  if (IsUIButtonConfigurationEnabled()) {
-    _buttonNewTab.tintColor = IPHHighlighted
-                                  ? [UIColor colorNamed:kSolidWhiteColor]
-                                  : [UIColor colorNamed:kGrey500Color];
-  } else {
-    _buttonNewTab.imageView.tintColor =
-        IPHHighlighted ? [UIColor colorNamed:kSolidWhiteColor]
-                       : [UIColor colorNamed:kGrey500Color];
-  }
+  _buttonNewTab.tintColor = IPHHighlighted
+                                ? [UIColor colorNamed:kSolidWhiteColor]
+                                : [UIColor colorNamed:kGrey500Color];
   _buttonNewTabSpotlightView.backgroundColor =
       IPHHighlighted ? [UIColor colorNamed:kBlueColor] : nil;
   _buttonNewTabSpotlightView.hidden = !IPHHighlighted;
@@ -717,6 +701,15 @@ const CGFloat kSymbolSize = 18;
 
 - (TabView*)emptyTabView {
   TabView* view = [[TabView alloc] initWithEmptyView:YES selected:YES];
+
+  if (IsVivaldiRunning()) {
+    view = [[TabView alloc] initWithEmptyView:YES
+                                   isSelected:YES
+                         bottomOmniboxEnabled:[self isBottomOmniboxEnabled]
+                                   themeColor:nil
+                                    tintColor:nil];
+  } // End Vivaldi
+
   [view setIncognitoStyle:(_style == INCOGNITO)];
   [view setContentMode:UIViewContentModeRedraw];
 
@@ -730,6 +723,16 @@ const CGFloat kSymbolSize = 18;
 - (TabView*)createTabViewForWebState:(web::WebState*)webState
                           isSelected:(BOOL)isSelected {
   TabView* view = [[TabView alloc] initWithEmptyView:NO selected:isSelected];
+
+  if (IsVivaldiRunning()) {
+    view = [[TabView alloc] initWithEmptyView:NO
+                                   isSelected:isSelected
+                         bottomOmniboxEnabled:[self isBottomOmniboxEnabled]
+                                   themeColor:
+                                        [self themeColorForWebState:webState]
+                                    tintColor:[self tabViewTintColor]];
+  } // End Vivaldi
+
   if (UseRTLLayout())
     [view setTransform:CGAffineTransformMakeScale(-1, 1)];
   [view setIncognitoStyle:(_style == INCOGNITO)];
@@ -1275,8 +1278,8 @@ const CGFloat kSymbolSize = 18;
   // updated the title here to account for that.
 
   if (IsVivaldiRunning()) {
-    [self updateTabViewTitle:view
-                    webState:webState];
+    [self updateTabViewTitle:view webState:webState];
+    [self updateTabStripViewStyle];
   } else {
   [view setTitle:tab_util::GetTabTitle(webState)];
   } // End Vivaldi
@@ -1296,6 +1299,7 @@ const CGFloat kSymbolSize = 18;
   if (IsVivaldiRunning()) {
     [self updateTabViewTitle:view
                     webState:webState];
+    [self updateTabStripViewStyle];
   } else {
   [view setTitle:tab_util::GetTabTitle(webState)];
   } // End Vivaldi
@@ -1387,6 +1391,15 @@ const CGFloat kSymbolSize = 18;
   }
 
   if (status.active_web_state_change() && status.new_active_web_state) {
+
+    // Note:(prio@vivaldi.com) - When active tab is changed update tab view
+    // styles and scroll to selected tab.
+    if (IsVivaldiRunning()) {
+      NSUInteger index =
+        [self indexForWebStateListIndex:webStateList->active_index()];
+      [self scrollTabToVisible:index];
+      [self updateTabStripViewStyle];
+    } else {
     for (TabView* view in _tabArray) {
       [view setSelected:NO];
     }
@@ -1395,17 +1408,12 @@ const CGFloat kSymbolSize = 18;
         [self indexForWebStateListIndex:webStateList->active_index()];
     TabView* activeView = [_tabArray objectAtIndex:index];
     [activeView setSelected:YES];
+    } // End Vivaldi
 
     // No need to animate this change, as selecting a new tab simply changes the
     // z-ordering of the TabViews.  If a new tab was selected as a result of a
     // tab closure, then the animated layout has already been scheduled.
     [_tabStripView setNeedsLayout];
-
-    // Vivaldi
-    // Note: (prio@vivaldi.com) - When active tab is changed we would prefer
-    // to scroll to that tab.
-    [self scrollTabToVisible:index];
-    // End Vivaldi
   }
 }
 
@@ -1542,6 +1550,11 @@ const CGFloat kSymbolSize = 18;
 }
 
 - (CGFloat)tabOverlap {
+
+  if (IsVivaldiRunning()) {
+    return self.useTabStacking ? kTabOverlapStacked : vTabOverlapUnstacked;
+  } // End Vivaldi
+
   return self.useTabStacking ? kTabOverlapStacked : kTabOverlapUnstacked;
 }
 
@@ -1965,6 +1978,11 @@ const CGFloat kSymbolSize = 18;
   }
   _webStateList->ActivateWebStateAt(static_cast<int>(index));
   [self updateContentOffsetForWebStateIndex:index isNewWebState:NO];
+
+  // Vivaldi
+  [self updateTabStripViewStyle];
+  // End Vivaldi
+
 }
 
 // Called when the TabView's close button was tapped.
@@ -1979,6 +1997,11 @@ const CGFloat kSymbolSize = 18;
   if (webStateListIndex != WebStateList::kInvalidIndex)
     _webStateList->CloseWebStateAt(webStateListIndex,
                                    WebStateList::CLOSE_USER_ACTION);
+
+  // Vivaldi
+  [self updateTabStripViewStyle];
+  // End Vivaldi
+
 }
 
 - (void)tabView:(TabView*)tabView receivedDroppedURL:(GURL)url {
@@ -2027,6 +2050,10 @@ const CGFloat kSymbolSize = 18;
   self.useTabStacking = [self shouldUseTabStacking];
 
   // Vivaldi
+  if (UITraitCollection.currentTraitCollection.userInterfaceStyle
+      != previousTraitCollection.userInterfaceStyle) {
+    [self updateTabStripViewStyle];
+  }
   [self scrollToSelectedTab];
   // End Vivaldi
 
@@ -2037,12 +2064,36 @@ const CGFloat kSymbolSize = 18;
 }
 
 #pragma mark VIVALDI
-- (UIColor*)BackgroundColor {
-  if (_isIncognito) {
-    return [UIColor colorNamed: vPrivateNTPBackgroundColor];
-  } else {
-    return [UIColor colorNamed: vTabStripDefaultBackgroundColor];
+// Setters
+- (void)setToolbarType:(ToolbarType)toolbarType {
+  if (_toolbarType != toolbarType) {
+    _toolbarType = toolbarType;
+
+    for (TabView* tab in _tabArray) {
+      [tab updateTabViewStyleWithBottomOmniboxEnabled:
+          [self isBottomOmniboxEnabled]];
+    }
   }
+}
+
+- (void)setDynamicAccentColorEnabled:(BOOL)dynamicAccentColorEnabled {
+  if (_dynamicAccentColorEnabled != dynamicAccentColorEnabled) {
+    _dynamicAccentColorEnabled = dynamicAccentColorEnabled;
+    [self updateTabStripViewStyle];
+  }
+}
+
+- (void)setCustomAccentColor:(NSString*)customAccentColor {
+  if (_customAccentColor != customAccentColor) {
+    _customAccentColor = customAccentColor;
+    [self updateTabStripViewStyle];
+  }
+}
+
+// End Setter
+
+- (UIColor*)BackgroundColor {
+  return UIColor.clearColor;
 }
 
 - (BOOL)isTabStackEnabled {
@@ -2112,7 +2163,9 @@ const CGFloat kSymbolSize = 18;
                   webState:(web::WebState*)webState {
   GURL tabURL = webState->GetVisibleURL();
   if (tabURL == kChromeUINewTabURL) {
-    [view setFavicon:[UIImage imageNamed:vToolbarMenu]];
+    [view setFavicon:
+        [[UIImage imageNamed:vToolbarMenu]
+           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
   } else {
     [view setFavicon:[UIImage imageNamed:vNTPSDFallbackFavicon]];
   }
@@ -2143,8 +2196,8 @@ const CGFloat kSymbolSize = 18;
   [self updateContentOffsetForWebStateIndex:index
                               isNewWebState:NO
                                    animated:animated];
+  [self updateTabStripViewStyle];
 }
-
 
 - (void)updateContentOffsetForWebStateIndex:(int)webStateIndex
                               isNewWebState:(BOOL)isNewWebState
@@ -2174,6 +2227,83 @@ const CGFloat kSymbolSize = 18;
         [_tabStripView scrollRectToVisible:scrollRect animated:animated];
     }
   }
+}
+
+- (void)updateNewTabButtonTintColor {
+  _buttonNewTab.tintColor = self.tabViewTintColor;
+  [_buttonNewTab.imageView setTintColor: self.tabViewTintColor];
+}
+
+- (UIColor*)tabViewTintColor {
+  if (_isIncognito) {
+    return UIColor.whiteColor;
+  } else if ([self shouldUseDarkTint]) {
+    return UIColor.blackColor;
+  } else {
+    return UIColor.whiteColor;
+  }
+}
+
+- (UIColor*)themeColorForWebState:(web::WebState*)webState {
+  if (_isIncognito) {
+    return [UIColor colorNamed:vPrivateModeTabSelectedBackgroundColor];
+  }
+
+  if (self.dynamicAccentColorEnabled &&
+      [self hasThemeColorForWebState:webState]) {
+    return webState->GetThemeColor();
+  }
+
+  if (self.dynamicAccentColorEnabled) {
+    return [UIColor colorNamed:vTabStripDefaultBackgroundColor];
+  } else {
+    if ([self customAccentColor] != nullptr) {
+      return [VivaldiGlobalHelpers colorWithHexString:[self customAccentColor]];
+    }
+    return [UIColor colorNamed:vTabStripDefaultBackgroundColor];
+  }
+}
+
+- (BOOL)hasThemeColorForWebState:(web::WebState*)webState {
+
+  if (!webState)
+    return NO;
+
+  UIColor* themeColor = webState->GetThemeColor();
+
+  GURL tabURL = webState->GetVisibleURL();
+  BOOL isNTP = tabURL == kChromeUINewTabURL;
+  return !isNTP && themeColor &&
+    ![VivaldiGlobalHelpers
+          shouldUseDefaultThemeColor:themeColor];
+}
+
+- (BOOL)shouldUseDarkTint {
+  web::WebState* activeWebState = _webStateList->GetActiveWebState();
+  UIColor* activeTabThemeColor = [self themeColorForWebState:activeWebState];
+  return [VivaldiGlobalHelpers
+              shouldUseDarkTextForColor:activeTabThemeColor];
+}
+
+- (BOOL)isBottomOmniboxEnabled {
+  return self.toolbarType == ToolbarType::kSecondary;
+}
+
+// Loops through tabs for tab array and updates the style each one of them
+// based on the active and inactive state, also theme color of active web state.
+// Besides, also update the tint color for the new tab button since that also
+// depends on theme color.
+- (void)updateTabStripViewStyle {
+  web::WebState* activeWebState = _webStateList->GetActiveWebState();
+  if (!activeWebState)
+    return;
+  TabView* view = [self tabViewForWebState:activeWebState];
+  for (TabView* tab in _tabArray) {
+    [tab updateTabViewStyleWithThemeColor:[self themeColorForWebState:activeWebState]
+                                tintColor:[self tabViewTintColor]
+                               isSelected:tab == view];
+  }
+  [self updateNewTabButtonTintColor];
 }
 
 @end

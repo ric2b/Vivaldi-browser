@@ -158,11 +158,10 @@ HeapVector<ScriptValue> GetDefaultCallbackArgs(
     const char* type,
     const ExceptionContext& exception_context,
     const String& value = g_empty_string) {
-  ScriptState* script_state = ScriptState::Current(isolate);
   HeapVector<ScriptValue> args;
-  args.push_back(ScriptValue::From(script_state, type));
-  args.push_back(ScriptValue::From(script_state,
-                                   GetSamplePrefix(exception_context, value)));
+  args.push_back(ScriptValue(isolate, V8String(isolate, type)));
+  args.push_back(ScriptValue(
+      isolate, V8String(isolate, GetSamplePrefix(exception_context, value))));
   return args;
 }
 
@@ -268,8 +267,7 @@ String GetStringFromScriptHelper(
   //   we are not executing a source String, but an already compiled callback
   //   function.
   v8::HandleScope handle_scope(context->GetIsolate());
-  ScriptState::Scope script_state_scope(
-      ToScriptState(context, DOMWrapperWorld::MainWorld()));
+  ScriptState::Scope script_state_scope(ToScriptStateForMainWorld(context));
   ExceptionState exception_state(
       context->GetIsolate(), ExceptionContextType::kUnknown,
       element_name_for_exception, attribute_name_for_exception);
@@ -627,7 +625,7 @@ String GetTrustedTypesLiteral(const ScriptValue& script_value,
         first_value->IsString()) {
       v8::Local<v8::String> first_value_as_string =
           v8::Local<v8::String>::Cast(first_value);
-      return ToCoreString(first_value_as_string);
+      return ToCoreString(script_state->GetIsolate(), first_value_as_string);
     }
   }
 

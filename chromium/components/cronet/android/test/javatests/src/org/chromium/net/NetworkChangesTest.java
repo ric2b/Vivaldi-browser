@@ -46,8 +46,8 @@ import java.util.concurrent.CountDownLatch;
 @RunWith(AndroidJUnit4.class)
 @DoNotBatch(reason = "crbug/1459563")
 @IgnoreFor(
-        implementations = {CronetImplementation.FALLBACK},
-        reason = "Tests implementation details of the native implementation")
+        implementations = {CronetImplementation.FALLBACK, CronetImplementation.AOSP_PLATFORM},
+        reason = "Fake network changes are supported only by the native implementation")
 public class NetworkChangesTest {
     @Rule public final CronetTestRule mTestRule = CronetTestRule.withManualEngineStartup();
 
@@ -298,8 +298,7 @@ public class NetworkChangesTest {
                             // This ends up throwing away the experimental options set in setUp.
                             // This is fine as those are related to H/3 tests. This is an H/2 so
                             // that's fine. If this assumption stops being true consider merging
-                            // them or splitting
-                            // NetworkChangeTests in two.
+                            // them or splitting NetworkChangeTests in two.
                             JSONObject experimentalOptions =
                                     new JSONObject().put("spdy_go_away_on_ip_change", false);
                             builder.setExperimentalOptions(experimentalOptions.toString());

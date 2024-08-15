@@ -106,7 +106,7 @@ struct AspectInfo {
 
 // The number of formats Dawn knows about. Asserts in BuildFormatTable ensure that this is the
 // exact number of known format.
-static constexpr uint32_t kKnownFormatCount = 103;
+static constexpr uint32_t kKnownFormatCount = 104;
 
 using FormatIndex = TypedInteger<struct FormatIndexT, uint32_t>;
 
@@ -158,6 +158,10 @@ struct Format {
     // If two formats has the same baseFormat, they could copy to and be viewed as the other
     // format. Currently two formats have the same baseFormat if they differ only in sRGB-ness.
     wgpu::TextureFormat baseFormat = wgpu::TextureFormat::Undefined;
+    // Additional view format a base format is compatible with. Only populated for true base
+    // formats. Only stores a single view format because Dawn currently only supports sRGB format
+    // reinterpretation.
+    wgpu::TextureFormat baseViewFormat = wgpu::TextureFormat::Undefined;
 
     // Returns true if the formats are copy compatible.
     // Currently means they differ only in sRGB-ness.
@@ -202,13 +206,9 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
 
 }  // namespace dawn::native
 
-namespace dawn {
-
 template <>
-struct IsDawnBitmask<dawn::native::SampleTypeBit> {
+struct wgpu::IsWGPUBitmask<dawn::native::SampleTypeBit> {
     static constexpr bool enable = true;
 };
-
-}  // namespace dawn
 
 #endif  // SRC_DAWN_NATIVE_FORMAT_H_

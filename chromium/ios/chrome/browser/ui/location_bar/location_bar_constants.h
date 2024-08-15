@@ -21,4 +21,11 @@ extern NSString* const kOmniboxShareButtonIdentifier;
 // Accessibility identifier of the voice search button.
 extern NSString* const kOmniboxVoiceSearchButtonIdentifier;
 
+// Vivaldi
+// Accessibility identifier of the reload button.
+extern NSString* const kOmniboxReloadButtonIdentifier;
+// Accessibility identifier of the stop loading button.
+extern NSString* const kOmniboxStopLoadingButtonIdentifier;
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_UI_LOCATION_BAR_LOCATION_BAR_CONSTANTS_H_

@@ -19,16 +19,12 @@ import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_INCOG
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_INCOGNITO_DESCRIPTION_INITIALIZED;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_INCOGNITO_DESCRIPTION_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_LENS_BUTTON_VISIBLE;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_TAB_CAROUSEL_TITLE_VISIBLE;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_TAB_CAROUSEL_VISIBLE;
+import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_TAB_CARD_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.IS_VOICE_RECOGNITION_BUTTON_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.LENS_BUTTON_CLICK_LISTENER;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MORE_TABS_CLICK_LISTENER;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MV_TILES_CONTAINER_LEFT_RIGHT_MARGIN;
+import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MAGIC_STACK_VISIBLE;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MV_TILES_CONTAINER_TOP_MARGIN;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.MV_TILES_VISIBLE;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.SINGLE_TAB_TOP_MARGIN;
-import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.TAB_SWITCHER_TITLE_TOP_MARGIN;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.TASKS_SURFACE_BODY_TOP_MARGIN;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.TOP_TOOLBAR_PLACEHOLDER_HEIGHT;
 import static org.chromium.chrome.features.tasks.TasksSurfaceProperties.VOICE_SEARCH_BUTTON_CLICK_LISTENER;
@@ -54,14 +50,14 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.IncognitoCookieControlsManager;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -109,13 +105,7 @@ public class TasksViewBinderUnitTest {
         when(mProfile.getPrimaryOTRProfile(true)).thenReturn(mProfile);
         Profile.setLastUsedProfileForTesting(mProfile);
         when(mUserPrefsJniMock.get(mProfile)).thenReturn(mPrefService);
-        mTasksView =
-                (TasksView) mActivity.getLayoutInflater().inflate(R.layout.tasks_view_layout, null);
-        mActivity.setContentView(mTasksView);
-
-        mTasksViewPropertyModel = new PropertyModel(TasksSurfaceProperties.ALL_KEYS);
-        PropertyModelChangeProcessor.create(
-                mTasksViewPropertyModel, mTasksView, TasksViewBinder::bind);
+        createTasksView(R.layout.tasks_view_layout);
     }
 
     private boolean isViewVisible(int viewId) {
@@ -126,22 +116,12 @@ public class TasksViewBinderUnitTest {
 
     @Test
     @SmallTest
-    public void testSetTabCarouselMode() {
-        mTasksViewPropertyModel.set(IS_TAB_CAROUSEL_VISIBLE, true);
+    public void testSetTabCardVisibilityMode() {
+        mTasksViewPropertyModel.set(IS_TAB_CARD_VISIBLE, true);
         assertTrue(isViewVisible(R.id.tab_switcher_module_container));
 
-        mTasksViewPropertyModel.set(IS_TAB_CAROUSEL_VISIBLE, false);
+        mTasksViewPropertyModel.set(IS_TAB_CARD_VISIBLE, false);
         assertFalse(isViewVisible(R.id.tab_switcher_module_container));
-    }
-
-    @Test
-    @SmallTest
-    public void testSetTabCarouselTitle() {
-        mTasksViewPropertyModel.set(IS_TAB_CAROUSEL_TITLE_VISIBLE, true);
-        assertTrue(isViewVisible(R.id.tab_switcher_title));
-
-        mTasksViewPropertyModel.set(IS_TAB_CAROUSEL_TITLE_VISIBLE, false);
-        assertFalse(isViewVisible(R.id.tab_switcher_title));
     }
 
     @Test
@@ -250,23 +230,6 @@ public class TasksViewBinderUnitTest {
 
     @Test
     @SmallTest
-    public void testSetMoreTabsClickListener() {
-        mTasksViewPropertyModel.set(IS_TAB_CAROUSEL_VISIBLE, true);
-
-        mViewClicked.set(false);
-        // Note that onView(R.id.more_tabs).perform(click()) can not be used since it requires 90
-        // percent of the view's area is displayed to the users. However, this view has negative
-        // margin which makes the percentage is less than 90.
-        // TODO (crbug.com/1186752): Investigate whether this would be a problem for real users.
-        mTasksView.findViewById(R.id.more_tabs).performClick();
-        assertFalse(mViewClicked.get());
-        mTasksViewPropertyModel.set(MORE_TABS_CLICK_LISTENER, mViewOnClickListener);
-        mTasksView.findViewById(R.id.more_tabs).performClick();
-        assertTrue(mViewClicked.get());
-    }
-
-    @Test
-    @SmallTest
     public void testSetIncognitoMode() {
         mTasksViewPropertyModel.set(IS_INCOGNITO, true);
         assertTrue(mTasksView.getSearchBoxCoordinator().getIncognitoModeForTesting());
@@ -357,58 +320,6 @@ public class TasksViewBinderUnitTest {
 
     @Test
     @SmallTest
-    public void testSetMVTilesContainerLeftAndRightMargin() {
-        ViewGroup.MarginLayoutParams params =
-                (ViewGroup.MarginLayoutParams)
-                        mTasksView.findViewById(R.id.mv_tiles_container).getLayoutParams();
-        assertEquals(0, params.leftMargin);
-        assertEquals(0, params.rightMargin);
-
-        mTasksViewPropertyModel.set(MV_TILES_CONTAINER_LEFT_RIGHT_MARGIN, 16);
-
-        assertEquals(16, params.leftMargin);
-        assertEquals(16, params.rightMargin);
-    }
-
-    @Test
-    @SmallTest
-    public void testSetSingleTabTopMargin() {
-        SingleTabView singleTabView =
-                (SingleTabView)
-                        mActivity
-                                .getLayoutInflater()
-                                .inflate(
-                                        R.layout.single_tab_view_layout,
-                                        mTasksView.getCarouselTabSwitcherContainer(),
-                                        false);
-        mTasksView.getCarouselTabSwitcherContainer().addView(singleTabView);
-
-        ViewGroup.MarginLayoutParams params =
-                (ViewGroup.MarginLayoutParams)
-                        mTasksView.findViewById(R.id.single_tab_view).getLayoutParams();
-        // The initial top margin of single_tab_view_layout is 24.
-        assertEquals(24, params.topMargin);
-
-        mTasksViewPropertyModel.set(SINGLE_TAB_TOP_MARGIN, 16);
-
-        assertEquals(16, params.topMargin);
-    }
-
-    @Test
-    @SmallTest
-    public void testSetTabSwitcherTitleTopMargin() {
-        ViewGroup.MarginLayoutParams params =
-                (ViewGroup.MarginLayoutParams)
-                        mTasksView.findViewById(R.id.tab_switcher_title).getLayoutParams();
-        assertEquals(0, params.topMargin);
-
-        mTasksViewPropertyModel.set(TAB_SWITCHER_TITLE_TOP_MARGIN, 16);
-
-        assertEquals(16, params.topMargin);
-    }
-
-    @Test
-    @SmallTest
     public void testSetTopToolbarLayoutHeight() {
         ViewGroup.LayoutParams params =
                 mTasksView.findViewById(R.id.top_toolbar_placeholder).getLayoutParams();
@@ -429,5 +340,25 @@ public class TasksViewBinderUnitTest {
         int newBackgroundColor = ChromeColors.getPrimaryBackgroundColor(mActivity, false);
         mTasksViewPropertyModel.set(BACKGROUND_COLOR, newBackgroundColor);
         assertEquals(newBackgroundColor, ((ColorDrawable) mTasksView.getBackground()).getColor());
+    }
+
+    @Test
+    @SmallTest
+    public void testSetMagicStackVisibility() {
+        createTasksView(R.layout.tasks_view_layout_polish);
+
+        mTasksViewPropertyModel.set(MAGIC_STACK_VISIBLE, true);
+        assertTrue(isViewVisible(R.id.home_modules_recycler_view));
+
+        mTasksViewPropertyModel.set(MAGIC_STACK_VISIBLE, false);
+        assertFalse(isViewVisible(R.id.home_modules_recycler_view));
+    }
+
+    private void createTasksView(int layoutId) {
+        mTasksView = (TasksView) mActivity.getLayoutInflater().inflate(layoutId, null);
+        mActivity.setContentView(mTasksView);
+        mTasksViewPropertyModel = new PropertyModel(TasksSurfaceProperties.ALL_KEYS);
+        PropertyModelChangeProcessor.create(
+                mTasksViewPropertyModel, mTasksView, TasksViewBinder::bind);
     }
 }

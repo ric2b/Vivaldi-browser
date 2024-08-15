@@ -16,6 +16,7 @@ import tempfile
 import unittest
 import zipfile
 import urllib.request
+from unittest import mock
 
 # Add depot_tools to path
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -145,6 +146,16 @@ class GsutilUnitTests(unittest.TestCase):
             f.write('Barbaz')
         self.assertEqual(gsutil.ensure_gsutil(version, self.tempdir, False),
                          gsutil_bin)
+
+
+    @mock.patch('sys.platform', 'linux')
+    def test__is_supported_platform_returns_true_for_supported_platform(self):
+        self.assertTrue(gsutil._is_luci_auth_supported_platform())
+
+    @mock.patch('sys.platform', 'aix')
+    def test__is_supported_platform_returns_false_for_unsupported_platform(
+            self):
+        self.assertFalse(gsutil._is_luci_auth_supported_platform())
 
 
 if __name__ == '__main__':

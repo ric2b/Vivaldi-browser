@@ -7,7 +7,7 @@ import './xf_icon.js';
 
 import {css, customElement, html, ifDefined, property, type PropertyValues, query, state, styleMap, XfBase} from './xf_base.js';
 import type {XfTree} from './xf_tree.js';
-import {handleTreeSlotChange, isTree, isTreeItem} from './xf_tree_util.js';
+import {handleTreeSlotChange, isTreeItem, isXfTree} from './xf_tree_util.js';
 
 /**
  * The number of pixels to indent per level.
@@ -20,15 +20,6 @@ export const TREE_ITEM_INDENT = 20;
  */
 @customElement('xf-tree-item')
 export class XfTreeItem extends XfBase {
-  // "delegatesFocus = true" will make sure when the tree item is focused, <li>
-  // element inside the shadow DOM will get the focus.
-  static override get shadowRootOptions() {
-    return {
-      ...XfBase.shadowRootOptions,
-      delegatesFocus: true,
-    };
-  }
-
   /**
    * `separator` attribute will show a top border for the tree item. It's
    * mainly used to identify this tree item is a start of the new section.
@@ -59,7 +50,7 @@ export class XfTreeItem extends XfBase {
 
   /**
    * The icon of the tree item, will be displayed before the label text.
-   * The icon value should come from `constants.ICON_TYPES`, it will be passed
+   * The icon value should come from `ICON_TYPES`, it will be passed
    * as `type` to a <xf-icon> widget to render an icon element.
    */
   @property({type: String, reflect: true}) icon = '';
@@ -102,7 +93,9 @@ export class XfTreeItem extends XfBase {
   }
 
   /**
-   * Toggle the focusable for the item.
+   * Toggle the focusable for the item. We put the tabindex on the <li> element
+   * instead of the whole <xf-tree-item> because <xf-tree-item> also includes
+   * all children slots.
    *
    * We are delegate the focus to the <li> element in the shadow DOM, to make
    * sure the update is synchronous, we are operating on the DOM directly here
@@ -123,6 +116,23 @@ export class XfTreeItem extends XfBase {
   }
 
   /**
+   * Override focus() so we can manually focus the tree row element inside
+   * shadow DOM.
+   */
+  override focus() {
+    console.assert(
+        !this.disabled,
+        'Called focus() on a disabled XfTreeItem() isn\'t allowed');
+
+    // Make sure this is the only focusable item in the tree before calling
+    // focus().
+    if (this.tree) {
+      this.tree.focusedItem = this;
+    }
+    this.$treeItem_.focus();
+  }
+
+  /**
    * Return the parent XfTreeItem if there is one, for top level XfTreeItem
    * which doesn't have parent XfTreeItem, return null.
    */
@@ -132,7 +142,7 @@ export class XfTreeItem extends XfBase {
       if (isTreeItem(p)) {
         return p;
       }
-      if (isTree(p)) {
+      if (isXfTree(p)) {
         return null;
       }
       p = p.parentElement;
@@ -142,7 +152,7 @@ export class XfTreeItem extends XfBase {
 
   get tree(): XfTree|null {
     let t = this.parentElement;
-    while (t && !isTree(t)) {
+    while (t && !isXfTree(t)) {
       t = t.parentElement;
     }
     return t;

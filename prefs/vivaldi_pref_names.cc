@@ -9,8 +9,6 @@ namespace vivaldiprefs {
 const char kAutoUpdateEnabled[] = "vivaldi.autoupdate_enabled";
 const char kVivaldiAccountPendingRegistration[] =
     "vivaldi.vivaldi_account.pending_registration";
-const char kVivaldiAddressBarSearchDirectMatchEnabled[] =
-    "vivaldi.address_bar.search.direct_match_enabled";
 const char kVivaldiExperiments[] = "vivaldi.experiments";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
@@ -51,6 +49,9 @@ const char kVivaldiClientHintsBrandCustomBrand[] =
 const char kVivaldiClientHintsBrandCustomBrandVersion[] =
     "vivaldi.ClientHintsCustomBrandVersion";
 
+const char kVivaldiCrashReportingConsentGranted[] =
+    "vivaldi.CrashReportingConsentGranted";
+
 #if BUILDFLAG(IS_IOS)
 // Caches the folder id of user's position in the note hierarchy navigator.
 const char kVivaldiNoteCachedFolderId[] = "vivaldi.note.cached_folder_id";
@@ -60,10 +61,6 @@ const char kVivaldiNoteCachedTopMostRow[] = "vivaldi.note.cached_top_most_row";
 
 const char kVivaldiNoteFolderDefault[] = "vivaldi.note.default_folder";
 
-// Speed dial sorting mode
-const char kVivaldiSpeedDialSortingMode[] = "vivaldi.speed_dial.sorting_mode";
-// Start page layout
-const char kVivaldiStartPageLayoutStyle[] = "vivaldi.start_page.layout_style";
 // Setting for folder visiblity on bookmark folder page
 const char kVivaldiBookmarkFoldersViewMode[] =
     "vivaldi.bookmark_folders.view_mode";
@@ -71,18 +68,37 @@ const char kVivaldiBookmarkFoldersViewMode[] =
 // Tabs
 // Desktop style tabs enabled status
 const char kVivaldiDesktopTabsEnabled[] = "vivaldi.desktop_tabs.mode";
+// Reverse search suggestion results order state for bottom address bar
+const char kVivaldiReverseSearchResultsEnabled[] =
+    "vivaldi.tabs.reverse_search_results";
 // Tab stack use status
 const char kVivaldiTabStackEnabled[] = "vivaldi.desktop_tabs.tab_stack";
 
 // Apearance
-// Startup wallpaper name
-const char kVivaldiStartupWallpaper[] = "vivaldi.startup.wallpaper.name";
-// Selected Appearance Mode
 const char kVivaldiAppearanceMode[] = "vivaldi.appearance.selected.mode";
+const char kVivaldiWebsiteAppearanceStyle[] =
+    "vivaldi.appearance.website_appearance.style";
+const char kVivaldiWebsiteAppearanceForceDarkTheme[] =
+    "vivaldi.appearance.website_appearance.force_dark_theme";
+const char kVivaldiCustomAccentColor[] =
+    "vivaldi.appearance.custom.accent_color";
+const char kVivaldiDynamicAccentColorEnabled[] =
+    "vivaldi.appearance.dynamic.accent_color";
+
+// Start page
+const char kVivaldiSpeedDialSortingMode[] = "vivaldi.speed_dial.sorting_mode";
+const char kVivaldiStartPageLayoutStyle[] = "vivaldi.start_page.layout_style";
+const char kVivaldiStartpagePortraitImage[] =
+    "vivaldi.appearance.startpage.image";
+const char kVivaldiStartpageLandscapeImage[] =
+    "vivaldi.appearance.startpage_image.landscape";
+const char kVivaldiStartupWallpaper[] = "vivaldi.startup.wallpaper.name";
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
 const char kBackgroundMediaPlaybackAllowed[] =
     "vivaldi.background.media_playback.allowed";
+const char kPWADisabled[] =
+    "vivaldi.site.PWADisabled.disabled";
 #endif
 }  // namespace vivaldiprefs

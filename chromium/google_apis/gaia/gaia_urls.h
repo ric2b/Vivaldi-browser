@@ -40,6 +40,7 @@ class COMPONENT_EXPORT(GOOGLE_APIS) GaiaUrls {
   const GURL& embedded_setup_chromeos_kid_signin_url() const;
   const GURL& embedded_setup_windows_url() const;
   const GURL& embedded_reauth_chromeos_url() const;
+  const GURL& saml_redirect_chromeos_url() const;
   const GURL& signin_chrome_sync_dice() const;
   const GURL& reauth_chrome_dice() const;
   const GURL& signin_chrome_sync_keys_retrieval_url() const;
@@ -73,6 +74,10 @@ class COMPONENT_EXPORT(GOOGLE_APIS) GaiaUrls {
   GURL LogOutURLWithSource(const std::string& source);
   GURL GetCheckConnectionInfoURLWithSource(const std::string& source);
 
+  // Returns a Logout URL that continues to the given continue_url.
+  // If no continue_url is given, continues to https://accounts.google.com.
+  GURL LogOutURLWithContinueURL(const GURL& contine_url);
+
  private:
   friend struct base::DefaultSingletonTraits<GaiaUrls>;
 
@@ -95,6 +100,7 @@ class COMPONENT_EXPORT(GOOGLE_APIS) GaiaUrls {
   GURL embedded_setup_chromeos_kid_signin_url_;
   GURL embedded_setup_windows_url_;
   GURL embedded_reauth_chromeos_url_;
+  GURL saml_redirect_chromeos_url_;
   GURL signin_chrome_sync_dice_;
   GURL reauth_chrome_dice_;
   GURL signin_chrome_sync_keys_retrieval_url_;

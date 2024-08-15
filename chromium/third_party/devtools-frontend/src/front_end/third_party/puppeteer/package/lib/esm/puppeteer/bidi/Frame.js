@@ -1,17 +1,7 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 var __runInitializers = (this && this.__runInitializers) || function (thisArg, initializers, value) {
     var useValue = arguments.length > 2;
@@ -48,23 +38,15 @@ var __esDecorate = (this && this.__esDecorate) || function (ctor, descriptorIn, 
     done = true;
 };
 import * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
-import { firstValueFrom, from, fromEvent, merge, raceWith, switchMap, forkJoin, first, } from '../../third_party/rxjs/rxjs.js';
+import { from, fromEvent, merge, map, forkJoin, first, firstValueFrom, raceWith, } from '../../third_party/rxjs/rxjs.js';
 import { Frame, throwIfDetached, } from '../api/Frame.js';
-import { ProtocolError, TimeoutError } from '../common/Errors.js';
-import { UTILITY_WORLD_NAME, setPageContent, waitWithTimeout, } from '../common/util.js';
-import { timeout } from '../common/util.js';
+import { UnsupportedOperation } from '../common/Errors.js';
+import { UTILITY_WORLD_NAME, timeout } from '../common/util.js';
 import { Deferred } from '../util/Deferred.js';
 import { disposeSymbol } from '../util/disposable.js';
-import { getWaitUntilSingle, lifeCycleToSubscribedEvent, } from './BrowsingContext.js';
 import { ExposeableFunction } from './ExposedFunction.js';
+import { getBiDiLifecycleEvent, getBiDiReadinessState, rewriteNavigationError, } from './lifecycle.js';
 import { MAIN_SANDBOX, PUPPETEER_SANDBOX, Sandbox, } from './Sandbox.js';
-/**
- * @internal
- */
-export const lifeCycleToReadinessState = new Map([
-    ['load', "complete" /* Bidi.BrowsingContext.ReadinessState.Complete */],
-    ['domcontentloaded', "interactive" /* Bidi.BrowsingContext.ReadinessState.Interactive */],
-]);
 /**
  * Puppeteer's Frame class could be viewed as a BiDi BrowsingContext implementation
  * @internal
@@ -114,6 +96,9 @@ let BidiFrame = (() => {
         page() {
             return this.#page;
         }
+        isOOPFrame() {
+            throw new UnsupportedOperation();
+        }
         url() {
             return this.#context.url;
         }
@@ -124,44 +109,53 @@ let BidiFrame = (() => {
             return this.#page.childFrames(this.#context.id);
         }
         async goto(url, options = {}) {
-            const { waitUntil = 'load', timeout = this.#timeoutSettings.navigationTimeout(), } = options;
-            const readinessState = lifeCycleToReadinessState.get(getWaitUntilSingle(waitUntil));
-            try {
-                const { result } = await waitWithTimeout(this.#context.connection.send('browsingContext.navigate', {
-                    url: url,
-                    context: this._id,
-                    wait: readinessState,
-                }), 'Navigation', timeout);
-                return this.#page.getNavigationResponse(result.navigation);
-            }
-            catch (error) {
-                if (error instanceof ProtocolError) {
-                    error.message += ` at ${url}`;
-                }
-                else if (error instanceof TimeoutError) {
-                    error.message = 'Navigation timeout of ' + timeout + ' ms exceeded';
-                }
-                throw error;
-            }
+            const { waitUntil = 'load', timeout: ms = this.#timeoutSettings.navigationTimeout(), } = options;
+            const [readiness, networkIdle] = getBiDiReadinessState(waitUntil);
+            const response = await firstValueFrom(this.#page
+                ._waitWithNetworkIdle(this.#context.connection.send('browsingContext.navigate', {
+                context: this.#context.id,
+                url,
+                wait: readiness,
+            }), networkIdle)
+                .pipe(raceWith(timeout(ms), from(this.#abortDeferred.valueOrThrow())))
+                .pipe(rewriteNavigationError(url, ms)));
+            return this.#page.getNavigationResponse(response?.result.navigation);
         }
         async setContent(html, options = {}) {
             const { waitUntil = 'load', timeout: ms = this.#timeoutSettings.navigationTimeout(), } = options;
-            const waitUntilEvent = lifeCycleToSubscribedEvent.get(getWaitUntilSingle(waitUntil));
-            await firstValueFrom(forkJoin([
-                fromEvent(this.#context, waitUntilEvent).pipe(first()),
-                from(setPageContent(this, html)),
-            ]).pipe(raceWith(timeout(ms))));
+            const [waitEvent, networkIdle] = getBiDiLifecycleEvent(waitUntil);
+            await firstValueFrom(this.#page
+                ._waitWithNetworkIdle(forkJoin([
+                fromEvent(this.#context, waitEvent).pipe(first()),
+                from(this.setFrameContent(html)),
+            ]).pipe(map(() => {
+                return null;
+            })), networkIdle)
+                .pipe(raceWith(timeout(ms), from(this.#abortDeferred.valueOrThrow())))
+                .pipe(rewriteNavigationError('setContent', ms)));
         }
         context() {
             return this.#context;
         }
         async waitForNavigation(options = {}) {
             const { waitUntil = 'load', timeout: ms = this.#timeoutSettings.navigationTimeout(), } = options;
-            const waitUntilEvent = lifeCycleToSubscribedEvent.get(getWaitUntilSingle(waitUntil));
-            const info = await firstValueFrom(merge(fromEvent(this.#context, Bidi.ChromiumBidi.BrowsingContext.EventNames.NavigationStarted).pipe(switchMap(() => {
-                return fromEvent(this.#context, waitUntilEvent);
-            })), fromEvent(this.#context, Bidi.ChromiumBidi.BrowsingContext.EventNames.FragmentNavigated)).pipe(raceWith(timeout(ms), from(this.#abortDeferred.valueOrThrow()))));
-            return this.#page.getNavigationResponse(info.navigation);
+            const [waitUntilEvent, networkIdle] = getBiDiLifecycleEvent(waitUntil);
+            const navigatedObservable = merge(forkJoin([
+                fromEvent(this.#context, Bidi.ChromiumBidi.BrowsingContext.EventNames.NavigationStarted).pipe(first()),
+                fromEvent(this.#context, waitUntilEvent).pipe(first()),
+            ]), fromEvent(this.#context, Bidi.ChromiumBidi.BrowsingContext.EventNames.FragmentNavigated)).pipe(map(result => {
+                if (Array.isArray(result)) {
+                    return { result: result[1] };
+                }
+                return { result };
+            }));
+            const response = await firstValueFrom(this.#page
+                ._waitWithNetworkIdle(navigatedObservable, networkIdle)
+                .pipe(raceWith(timeout(ms), from(this.#abortDeferred.valueOrThrow()))));
+            return this.#page.getNavigationResponse(response?.result.navigation);
+        }
+        waitForDevicePrompt() {
+            throw new UnsupportedOperation();
         }
         get detached() {
             return this.#disposed;
@@ -190,6 +184,12 @@ let BidiFrame = (() => {
                 this.#exposedFunctions.delete(name);
                 throw error;
             }
+        }
+        waitForSelector(selector, options) {
+            if (selector.startsWith('aria')) {
+                throw new UnsupportedOperation('ARIA selector is not supported for BiDi!');
+            }
+            return super.waitForSelector(selector, options);
         }
     };
 })();

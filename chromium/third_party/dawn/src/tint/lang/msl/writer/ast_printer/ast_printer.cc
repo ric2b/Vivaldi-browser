@@ -59,6 +59,7 @@
 #include "src/tint/lang/msl/writer/ast_raise/packed_vec3.h"
 #include "src/tint/lang/msl/writer/ast_raise/pixel_local.h"
 #include "src/tint/lang/msl/writer/ast_raise/subgroup_ballot.h"
+#include "src/tint/lang/msl/writer/common/option_helpers.h"
 #include "src/tint/lang/msl/writer/common/printer_support.h"
 #include "src/tint/lang/wgsl/ast/alias.h"
 #include "src/tint/lang/wgsl/ast/bool_literal_expression.h"
@@ -183,29 +184,44 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
         polyfills.first_leading_bit = true;
         polyfills.first_trailing_bit = true;
         polyfills.insert_bits = ast::transform::BuiltinPolyfill::Level::kClampParameters;
-        polyfills.int_div_mod = true;
+        polyfills.int_div_mod = !options.disable_polyfill_integer_div_mod;
         polyfills.sign_int = true;
         polyfills.texture_sample_base_clamp_to_edge_2d_f32 = true;
         polyfills.workgroup_uniform_load = true;
+        polyfills.pack_unpack_4x8 = true;
+        polyfills.pack_4xu8_clamp = true;
         data.Add<ast::transform::BuiltinPolyfill::Config>(polyfills);
         manager.Add<ast::transform::BuiltinPolyfill>();
     }
 
-    // Note: it is more efficient for MultiplanarExternalTexture to come after Robustness
-    data.Add<ast::transform::MultiplanarExternalTexture::NewBindingPoints>(
-        options.external_texture_options.bindings_map);
-    manager.Add<ast::transform::MultiplanarExternalTexture>();
+    ExternalTextureOptions external_texture_options{};
+    RemapperData remapper_data{};
+    PopulateRemapperAndMultiplanarOptions(options, remapper_data, external_texture_options);
 
-    // BindingRemapper must come after MultiplanarExternalTexture
     manager.Add<ast::transform::BindingRemapper>();
     data.Add<ast::transform::BindingRemapper::Remappings>(
-        options.binding_remapper_options.binding_points,
-        std::unordered_map<BindingPoint, core::Access>{}, /* allow_collisions */ true);
+        remapper_data, std::unordered_map<BindingPoint, core::Access>{},
+        /* allow_collisions */ true);
+
+    // Note: it is more efficient for MultiplanarExternalTexture to come after Robustness
+    // MultiplanarExternalTexture must come after BindingRemapper
+    data.Add<ast::transform::MultiplanarExternalTexture::NewBindingPoints>(
+        external_texture_options.bindings_map, /* allow_collisions */ true);
+    manager.Add<ast::transform::MultiplanarExternalTexture>();
 
     if (!options.disable_workgroup_init) {
         // ZeroInitWorkgroupMemory must come before CanonicalizeEntryPointIO as
         // ZeroInitWorkgroupMemory may inject new builtin parameters.
         manager.Add<ast::transform::ZeroInitWorkgroupMemory>();
+    }
+
+    {
+        PixelLocal::Config cfg;
+        for (auto it : options.pixel_local_options.attachments) {
+            cfg.attachments.Add(it.first, it.second);
+        }
+        data.Add<PixelLocal::Config>(cfg);
+        manager.Add<PixelLocal>();
     }
 
     // CanonicalizeEntryPointIO must come after Robustness
@@ -224,15 +240,6 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
 
     // SubgroupBallot() must come after CanonicalizeEntryPointIO.
     manager.Add<SubgroupBallot>();
-
-    {
-        PixelLocal::Config cfg;
-        for (auto it : options.pixel_local_options.attachments) {
-            cfg.attachments.Add(it.first, it.second);
-        }
-        data.Add<PixelLocal::Config>(cfg);
-        manager.Add<PixelLocal>();
-    }
 
     // ArrayLengthFromUniform must come after SimplifyPointers, as
     // it assumes that the form of the array length argument is &var.array.
@@ -270,12 +277,9 @@ bool ASTPrinter::Generate() {
             "MSL", builder_.AST(), diagnostics_,
             Vector{
                 wgsl::Extension::kChromiumDisableUniformityAnalysis,
-                wgsl::Extension::kChromiumExperimentalDp4A,
-                wgsl::Extension::kChromiumExperimentalFullPtrParameters,
                 wgsl::Extension::kChromiumExperimentalPixelLocal,
-                wgsl::Extension::kChromiumExperimentalPushConstant,
-                wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture,
                 wgsl::Extension::kChromiumExperimentalSubgroups,
+                wgsl::Extension::kChromiumExperimentalFramebufferFetch,
                 wgsl::Extension::kChromiumInternalDualSourceBlending,
                 wgsl::Extension::kChromiumInternalRelaxedUniformLayout,
                 wgsl::Extension::kF16,
@@ -323,6 +327,10 @@ bool ASTPrinter::Generate() {
             },
             [&](const ast::Enable*) {
                 // Do nothing for enabling extension in MSL
+                return true;
+            },
+            [&](const ast::Requires*) {
+                // Do nothing for requiring language features in MSL.
                 return true;
             },
             [&](const ast::ConstAssert*) {
@@ -1376,8 +1384,8 @@ bool ASTPrinter::EmitDot4I8PackedCall(StringStream& out,
                                       const sem::BuiltinFn* builtin) {
     return CallBuiltinHelper(
         out, expr, builtin, [&](TextBuffer* b, const std::vector<std::string>& params) {
-            Line(b) << "packed_char4 vec1 = as_type<packed_char4>(" << params[0] << ");";
-            Line(b) << "packed_char4 vec2 = as_type<packed_char4>(" << params[1] << ");";
+            Line(b) << "char4 vec1 = as_type<char4>(" << params[0] << ");";
+            Line(b) << "char4 vec2 = as_type<char4>(" << params[1] << ");";
             Line(b) << "return vec1[0] * vec2[0] + vec1[1] * vec2[1] + vec1[2] * vec2[2] + vec1[3] "
                        "* vec2[3];";
             return true;
@@ -1389,8 +1397,8 @@ bool ASTPrinter::EmitDot4U8PackedCall(StringStream& out,
                                       const sem::BuiltinFn* builtin) {
     return CallBuiltinHelper(
         out, expr, builtin, [&](TextBuffer* b, const std::vector<std::string>& params) {
-            Line(b) << "packed_uchar4 vec1 = as_type<packed_uchar4>(" << params[0] << ");";
-            Line(b) << "packed_uchar4 vec2 = as_type<packed_uchar4>(" << params[1] << ");";
+            Line(b) << "uchar4 vec1 = as_type<uchar4>(" << params[0] << ");";
+            Line(b) << "uchar4 vec2 = as_type<uchar4>(" << params[1] << ");";
             Line(b) << "return vec1[0] * vec2[0] + vec1[1] * vec2[1] + vec1[2] * vec2[2] + vec1[3] "
                        "* vec2[3];";
             return true;
@@ -1966,11 +1974,10 @@ bool ASTPrinter::EmitEntryPointFunction(const ast::Function* func) {
             TINT_ICE() << "missing binding attributes for entry point parameter";
             return kInvalidBindingIndex;
         }
-        auto* param_sem = builder_.Sem().Get<sem::Parameter>(param);
-        auto bp = param_sem->BindingPoint();
+        auto* param_sem = builder_.Sem().Get(param);
+        auto bp = param_sem->Attributes().binding_point;
         if (TINT_UNLIKELY(bp->group != 0)) {
-            TINT_ICE() << "encountered non-zero resource group index (use "
-                          "BindingRemapper to fix)";
+            TINT_ICE() << "encountered non-zero resource group index (use BindingRemapper to fix)";
             return kInvalidBindingIndex;
         }
         return bp->binding;
@@ -2003,20 +2010,8 @@ bool ASTPrinter::EmitEntryPointFunction(const ast::Function* func) {
 
             bool ok = Switch(
                 type,  //
-                [&](const core::type::Struct* str) {
-                    bool is_pixel_local = false;
-                    if (auto* sem_str = str->As<sem::Struct>()) {
-                        for (auto* member : sem_str->Members()) {
-                            if (ast::HasAttribute<PixelLocal::Attachment>(
-                                    member->Declaration()->attributes)) {
-                                is_pixel_local = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!is_pixel_local) {
-                        out << " [[stage_in]]";
-                    }
+                [&](const core::type::Struct*) {
+                    out << " [[stage_in]]";
                     return true;
                 },
                 [&](const core::type::Texture*) {
@@ -2127,7 +2122,7 @@ bool ASTPrinter::EmitLoop(const ast::LoopStatement* stmt) {
     };
 
     TINT_SCOPED_ASSIGNMENT(emit_continuing_, emit_continuing);
-    Line() << "while (true) {";
+    Line() << IsolateUB() << " while(true) {";
     {
         ScopedIndent si(this);
         if (!EmitStatements(stmt->body->statements)) {
@@ -2197,7 +2192,7 @@ bool ASTPrinter::EmitForLoop(const ast::ForLoopStatement* stmt) {
         };
 
         TINT_SCOPED_ASSIGNMENT(emit_continuing_, emit_continuing);
-        Line() << "while (true) {";
+        Line() << IsolateUB() << " while(true) {";
         IncrementIndent();
         TINT_DEFER({
             DecrementIndent();
@@ -2220,7 +2215,7 @@ bool ASTPrinter::EmitForLoop(const ast::ForLoopStatement* stmt) {
         // For-loop can be generated.
         {
             auto out = Line();
-            out << "for";
+            out << IsolateUB() << " for";
             {
                 ScopedParen sp(out);
 
@@ -2270,7 +2265,7 @@ bool ASTPrinter::EmitWhile(const ast::WhileStatement* stmt) {
     // as a regular while in MSL. Instead we need to generate a `while(true)` loop.
     bool emit_as_loop = cond_pre.lines.size() > 0;
     if (emit_as_loop) {
-        Line() << "while (true) {";
+        Line() << IsolateUB() << " while(true) {";
         IncrementIndent();
         TINT_DEFER({
             DecrementIndent();
@@ -2284,15 +2279,7 @@ bool ASTPrinter::EmitWhile(const ast::WhileStatement* stmt) {
         }
     } else {
         // While can be generated.
-        {
-            auto out = Line();
-            out << "while";
-            {
-                ScopedParen sp(out);
-                out << cond_buf.str();
-            }
-            out << " {";
-        }
+        Line() << IsolateUB() << " while(" << cond_buf.str() << ") {";
         if (!EmitStatementsWithIndent(stmt->body->statements)) {
             return false;
         }
@@ -2836,6 +2823,10 @@ bool ASTPrinter::EmitStructType(TextBuffer* b, const core::type::Struct* str) {
             }
         }
 
+        if (auto color = attributes.color) {
+            out << " [[color(" + std::to_string(color.value()) + ")]]";
+        }
+
         if (auto interpolation = attributes.interpolation) {
             auto name = InterpolationToAttribute(interpolation->type, interpolation->sampling);
             if (name.empty()) {
@@ -2848,13 +2839,6 @@ bool ASTPrinter::EmitStructType(TextBuffer* b, const core::type::Struct* str) {
         if (attributes.invariant) {
             invariant_define_name_ = UniqueIdentifier("TINT_INVARIANT");
             out << " " << invariant_define_name_;
-        }
-
-        if (auto* sem_mem = mem->As<sem::StructMember>()) {
-            if (auto* attachment =
-                    ast::GetAttribute<PixelLocal::Attachment>(sem_mem->Declaration()->attributes)) {
-                out << " [[color(" << attachment->index << ")]]";
-            }
         }
 
         out << ";";
@@ -3032,6 +3016,19 @@ bool ASTPrinter::EmitLet(const ast::Let* let) {
     out << ";";
 
     return true;
+}
+
+std::string ASTPrinter::IsolateUB() {
+    if (isolate_ub_macro_name_.empty()) {
+        isolate_ub_macro_name_ = UniqueIdentifier("TINT_ISOLATE_UB");
+        Line(&helpers_) << "#define " << isolate_ub_macro_name_ << "(VOLATILE_NAME) \\";
+        Line(&helpers_) << "  volatile bool VOLATILE_NAME = true; \\";
+        Line(&helpers_) << "  if (VOLATILE_NAME)";
+        Line(&helpers_);
+    }
+    StringStream ss;
+    ss << isolate_ub_macro_name_ << "(" << UniqueIdentifier("tint_volatile_true") << ")";
+    return ss.str();
 }
 
 template <typename F>

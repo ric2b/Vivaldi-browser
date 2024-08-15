@@ -644,5 +644,75 @@ fn main() {
     EXPECT_EQ(src, str(got));
 }
 
+TEST_F(SingleEntryPointTest, Requires) {
+    // Make sure that requires are handled (and dropped).
+    auto* src = R"(
+requires readonly_and_readwrite_storage_textures;
+
+@compute @workgroup_size(1)
+fn main() {
+}
+)";
+
+    auto* expect = R"(
+@compute @workgroup_size(1)
+fn main() {
+}
+)";
+
+    SingleEntryPoint::Config cfg("main");
+
+    DataMap data;
+    data.Add<SingleEntryPoint::Config>(cfg);
+    auto got = Run<SingleEntryPoint>(src, data);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(SingleEntryPointTest, ConstAssert_ModuleScope) {
+    // module scope const_assert is preserved
+    auto* src = R"(
+const C = 42;
+
+const_assert (C == 42);
+
+@compute @workgroup_size(1)
+fn main() {
+}
+)";
+
+    auto* expect = src;
+
+    SingleEntryPoint::Config cfg("main");
+
+    DataMap data;
+    data.Add<SingleEntryPoint::Config>(cfg);
+    auto got = Run<SingleEntryPoint>(src, data);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(SingleEntryPointTest, ConstAssert_FnScope) {
+    // function scope const_assert is preserved
+    auto* src = R"(
+const C = 42;
+
+@compute @workgroup_size(1)
+fn main() {
+  const_assert (C == 42);
+}
+)";
+
+    auto* expect = src;
+
+    SingleEntryPoint::Config cfg("main");
+
+    DataMap data;
+    data.Add<SingleEntryPoint::Config>(cfg);
+    auto got = Run<SingleEntryPoint>(src, data);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 }  // namespace
 }  // namespace tint::ast::transform

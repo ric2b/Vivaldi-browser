@@ -42,6 +42,7 @@
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/bubble_histograms_variant.h"
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
@@ -60,6 +61,10 @@
 #else
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
+#endif
+
+#if BUILDFLAG(IS_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -794,6 +799,14 @@ gfx::Size BubbleDialogDelegate::GetMaxAvailableScreenSpaceToPlaceBubble(
   DCHECK_EQ(arrow_adjustment,
             BubbleFrameView::PreferredArrowAdjustment::kMirror);
 
+#if BUILDFLAG(IS_OZONE)
+  // This function should not be called in ozone platforms where global screen
+  // coordinates are not available.
+  DCHECK(ui::OzonePlatform::GetInstance()
+             ->GetPlatformProperties()
+             .supports_global_screen_coordinates);
+#endif
+
   gfx::Rect anchor_rect = anchor_view->GetAnchorBoundsInScreen();
   gfx::Rect screen_rect =
       display::Screen::GetScreen()
@@ -899,16 +912,12 @@ void BubbleDialogDelegate::BubbleUmaLogger::LogMetric(
     return;
   }
 
-  const std::unordered_set<std::string> kAllowedClassNames{
-      "ProfileMenuViewBase", "ExtensionsMenuView", "PageInfoBubbleViewBase",
-      "PermissionPromptBaseView", "DownloadBubbleContentsView"};
-
-  const auto& allowed_class_names =
-      allowed_class_names_for_testing_.has_value()
-          ? allowed_class_names_for_testing_.value()
-          : kAllowedClassNames;
-
-  if (!base::Contains(allowed_class_names, bubble_name.value())) {
+  if (allowed_class_names_for_testing_.has_value()) {
+    if (!base::Contains(allowed_class_names_for_testing_.value(),
+                        bubble_name.value())) {
+      return;
+    }
+  } else if (!views_metrics::IsValidBubbleNameVariant(bubble_name.value())) {
     return;
   }
 
@@ -1041,6 +1050,21 @@ void BubbleDialogDelegate::SetSubtitle(const std::u16string& subtitle) {
     frame_view->UpdateSubtitle();
 }
 
+bool BubbleDialogDelegate::GetSubtitleAllowCharacterBreak() const {
+  return subtitle_allow_character_break_;
+}
+
+void BubbleDialogDelegate::SetSubtitleAllowCharacterBreak(bool allow) {
+  if (subtitle_allow_character_break_ == allow) {
+    return;
+  }
+  subtitle_allow_character_break_ = allow;
+  BubbleFrameView* frame_view = GetBubbleFrameView();
+  if (frame_view) {
+    frame_view->UpdateSubtitle();
+  }
+}
+
 void BubbleDialogDelegate::UpdateColorsFromTheme() {
   View* const contents_view = GetContentsView();
   DCHECK(contents_view);
@@ -1066,6 +1090,9 @@ void BubbleDialogDelegate::OnBubbleWidgetVisibilityChanged(bool visible) {
   // Log time from bubble dialog delegate creation to bubble becoming
   // visible.
   if (visible) {
+    if (GetWidget()->IsClosed()) {
+      return;
+    }
     if (bubble_created_time_.has_value()) {
       GetWidget()
           ->GetCompositor()
@@ -1099,6 +1126,7 @@ void BubbleDialogDelegate::OnBubbleWidgetVisibilityChanged(bool visible) {
   // the bubble in its entirety rather than just its title and initially focused
   // view.  See http://crbug.com/474622 for details.
   if (visible && ui::IsAlert(GetAccessibleWindowRole())) {
+    GetWidget()->GetRootView()->SetAccessibleRole(GetAccessibleWindowRole());
     GetWidget()->GetRootView()->NotifyAccessibilityEvent(
         ax::mojom::Event::kAlert, true);
   }
@@ -1143,7 +1171,7 @@ void BubbleDialogDelegate::UpdateHighlightedButton(bool highlighted) {
   }
 }
 
-BEGIN_METADATA(BubbleDialogDelegateView, View)
+BEGIN_METADATA(BubbleDialogDelegateView)
 END_METADATA
 
 }  // namespace views

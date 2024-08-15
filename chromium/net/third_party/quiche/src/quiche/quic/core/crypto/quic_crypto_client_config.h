@@ -380,7 +380,7 @@ class QUICHE_EXPORT QuicCryptoClientConfig : public QuicCryptoConfig {
     tls_signature_algorithms_ = std::move(signature_algorithms);
   }
 
-  const absl::optional<std::string>& tls_signature_algorithms() const {
+  const std::optional<std::string>& tls_signature_algorithms() const {
     return tls_signature_algorithms_;
   }
 
@@ -402,6 +402,13 @@ class QUICHE_EXPORT QuicCryptoClientConfig : public QuicCryptoConfig {
 
   bool pad_full_hello() const { return pad_full_hello_; }
   void set_pad_full_hello(bool new_value) { pad_full_hello_ = new_value; }
+
+#if BORINGSSL_API_VERSION >= 27
+  bool alps_use_new_codepoint() const { return alps_use_new_codepoint_; }
+  void set_alps_use_new_codepoint(bool new_value) {
+    alps_use_new_codepoint_ = new_value;
+  }
+#endif  // BORINGSSL_API_VERSION
 
  private:
   // Sets the members to reasonable, default values.
@@ -459,7 +466,7 @@ class QUICHE_EXPORT QuicCryptoClientConfig : public QuicCryptoConfig {
 
   // If set, configure the client to use the specified signature algorithms, via
   // SSL_set1_sigalgs_list. TLS only.
-  absl::optional<std::string> tls_signature_algorithms_;
+  std::optional<std::string> tls_signature_algorithms_;
 
   // In QUIC, technically, client hello should be fully padded.
   // However, fully padding on slow network connection (e.g. 50kbps) can add
@@ -474,6 +481,11 @@ class QUICHE_EXPORT QuicCryptoClientConfig : public QuicCryptoConfig {
   // other means of verifying the client.
   bool pad_inchoate_hello_ = true;
   bool pad_full_hello_ = true;
+
+#if BORINGSSL_API_VERSION >= 27
+  // Set whether ALPS uses the new codepoint or not.
+  bool alps_use_new_codepoint_ = false;
+#endif  // BORINGSSL_API_VERSION
 };
 
 }  // namespace quic

@@ -272,7 +272,7 @@ class BLINK_EXPORT WebAXObject {
 
   // Marks ths object as dirty (needing serialization). If subtree is true,
   // the entire AX subtree should be invalidated as well.
-  void MarkAXObjectDirtyWithDetails(
+  void AddDirtyObjectToSerializationQueue(
       bool subtree,
       ax::mojom::EventFrom event_from,
       ax::mojom::Action event_from_action,
@@ -282,7 +282,8 @@ class BLINK_EXPORT WebAXObject {
   // role and name.
   WebString ToString(bool verbose = false) const;
 
-  void HandleAutofillStateChanged(const WebAXAutofillState state) const;
+  void HandleAutofillSuggestionAvailabilityChanged(
+      WebAXAutofillSuggestionAvailability suggestion_availability) const;
 
   // For testing only, returns whether or not we have the permission to
   // call AOM event listeners.

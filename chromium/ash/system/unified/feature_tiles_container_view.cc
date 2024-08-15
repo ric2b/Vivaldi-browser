@@ -20,8 +20,7 @@ namespace ash {
 namespace {
 
 // Size constants
-constexpr gfx::Size kRowContainerSize(kRevampedTrayMenuWidth,
-                                      kFeatureTileHeight);
+constexpr gfx::Size kRowContainerSize(kWideTrayMenuWidth, kFeatureTileHeight);
 constexpr gfx::Insets kFeatureTileContainerInteriorMargin =
     gfx::Insets::VH(16, 0);
 constexpr gfx::Insets kRowContainerInteriorMargin = gfx::Insets::VH(0, 16);
@@ -70,7 +69,7 @@ class FeatureTilesContainerView::RowContainer : public views::FlexLayoutView {
   }
 
  private:
-  const raw_ptr<FeatureTilesContainerView, ExperimentalAsh> container_;
+  const raw_ptr<FeatureTilesContainerView> container_;
 };
 
 BEGIN_METADATA(FeatureTilesContainerView, RowContainer, views::FlexLayoutView)
@@ -158,9 +157,10 @@ void FeatureTilesContainerView::RelayoutTiles() {
   // and rows so we have to rebuild them from scratch.
   std::vector<std::unique_ptr<FeatureTile>> tiles;
   for (PageContainer* page : pages_) {
-    for (auto* row : page->children()) {
+    for (views::View* row : page->children()) {
       // Copy the list of children since it will be modified during iteration.
-      std::vector<views::View*> children = row->children();
+      std::vector<raw_ptr<views::View, VectorExperimental>> children =
+          row->children();
       for (views::View* child : children) {
         DCHECK(views::IsViewClass<FeatureTile>(child));
         FeatureTile* tile = static_cast<FeatureTile*>(child);
@@ -201,12 +201,12 @@ void FeatureTilesContainerView::AdjustRowsForMediaViewVisibility(
 
 void FeatureTilesContainerView::SelectedPageChanged(int old_selected,
                                                     int new_selected) {
-  const int origin = kRevampedTrayMenuWidth * -old_selected;
+  const int origin = kWideTrayMenuWidth * -old_selected;
   const int selection_offset =
-      kRevampedTrayMenuWidth * (old_selected - new_selected);
+      kWideTrayMenuWidth * (old_selected - new_selected);
 
   for (size_t i = 0; i < pages_.size(); ++i) {
-    const int page_offset = i * kRevampedTrayMenuWidth;
+    const int page_offset = i * kWideTrayMenuWidth;
     const int final_x = origin + page_offset + selection_offset;
     pages_[i]->SetX(final_x);
   }
@@ -253,7 +253,7 @@ void FeatureTilesContainerView::UpdateAnimatingPagesBounds(int old_selected,
   // Transition to next page means negative offset.
   const int direction = new_selected > old_selected ? -1 : 1;
 
-  const int page_offset = kRevampedTrayMenuWidth * direction;
+  const int page_offset = kWideTrayMenuWidth * direction;
   const int transition_offset =
       pagination_model_->transition().progress * page_offset;
   pages_[old_selected]->SetX(transition_offset);
@@ -312,7 +312,7 @@ void FeatureTilesContainerView::UpdateTotalPages() {
 int FeatureTilesContainerView::GetVisibleFeatureTileCount() const {
   int count = 0;
   for (PageContainer* page : pages_) {
-    for (auto* row : page->children()) {
+    for (views::View* row : page->children()) {
       for (views::View* child : row->children()) {
         DCHECK(views::IsViewClass<FeatureTile>(child));
         if (child->GetVisible()) {

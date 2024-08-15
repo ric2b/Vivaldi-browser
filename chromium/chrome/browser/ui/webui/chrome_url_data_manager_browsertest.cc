@@ -202,7 +202,6 @@ class ChromeURLDataManagerWebUITrustedTypesTest
 #else
     enabled_features.push_back(kForYouFre);
 #endif
-    enabled_features.push_back(media::kUseMediaHistoryStore);
     feature_list_.InitWithFeatures(enabled_features, {});
   }
 
@@ -332,7 +331,6 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://local-state",
     "chrome://management",
     "chrome://media-engagement",
-    "chrome://media-history",
     "chrome://media-internals",
     "chrome://media-router-internals",
     "chrome://metrics-internals",
@@ -354,7 +352,6 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://privacy-sandbox-dialog/?debug",
     "chrome://process-internals",
     "chrome://quota-internals",
-    "chrome-untrusted://read-anything-side-panel.top-chrome",
     "chrome://read-later.top-chrome",
     "chrome://reset-password",
     "chrome://safe-browsing",
@@ -414,10 +411,15 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://assistant-optin/",
     "chrome://bluetooth-pairing",
     "chrome://certificate-manager/",
+
     // Crashes because message handler is not registered outside of the dialog
     // for confirm password change UI.
     // "chrome://confirm-password-change",
+
+    // TODO(b/300875336): Navigating to chrome://cloud-upload causes an
+    // assertion failure because there are no dialog args.
     "chrome://cloud-upload",
+
     "chrome://connectivity-diagnostics",
     "chrome://crostini-installer",
     "chrome://crostini-upgrader",
@@ -427,7 +429,6 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://emoji-picker",
     "chrome://family-link-user-internals",
     "chrome://file-manager",
-    "chrome://guest-os-installer",
     "chrome://help-app",
     "chrome://linux-proxy-config",
     "chrome://manage-mirrorsync",
@@ -466,7 +467,7 @@ static constexpr const char* const kChromeUrls[] = {
 #endif
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
     // Note: Disabled because a DCHECK fires when directly visiting the URL.
-    // "chrome://enterprise-profile-welcome",
+    // "chrome://managed-user-profile-notice",
     "chrome://intro",
     "chrome://profile-customization/?debug",
     "chrome://signin-email-confirmation",

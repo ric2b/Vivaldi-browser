@@ -2,10 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-if (is_android) {
-  import("//build/config/android/rules.gni")
-}
-
 static_library("supervised_user_preferences") {
   sources = [
     "supervised_user_preferences.cc",
@@ -14,10 +10,13 @@ static_library("supervised_user_preferences") {
 
   deps = [
     "//base",
+    "//components/google/core/common:common",
     "//components/keyed_service/core",
+    "//components/pref_registry:pref_registry",
     "//components/prefs",
     "//components/supervised_user/core/browser/proto",
     "//components/supervised_user/core/common",
+    "//url",
   ]
 
   if (is_android) {
@@ -95,12 +94,8 @@ static_library("browser") {
   sources = [
     "child_account_service.cc",
     "child_account_service.h",
-    "kids_chrome_management_client.cc",
-    "kids_chrome_management_client.h",
-    "kids_management_url_checker_client.cc",
-    "kids_management_url_checker_client.h",
-    "parental_control_metrics.cc",
-    "parental_control_metrics.h",
+    "kids_chrome_management_url_checker_client.cc",
+    "kids_chrome_management_url_checker_client.h",
     "permission_request_creator.h",
     "permission_request_creator_impl.cc",
     "permission_request_creator_impl.h",
@@ -174,10 +169,9 @@ source_set("unit_tests") {
   sources = [
     "api_access_token_fetcher_unittest.cc",
     "child_account_service_unittest.cc",
-    "kids_chrome_management_client_unittest.cc",
-    "kids_management_url_checker_client_unittest.cc",
+    "fetcher_config_unittest.cc",
+    "kids_chrome_management_url_checker_client_unittest.cc",
     "list_family_members_service_unittest.cc",
-    "parental_control_metrics_unittest.cc",
     "proto_fetcher_unittest.cc",
     "remote_web_approvals_manager_unittest.cc",
     "supervised_user_content_settings_provider_unittest.cc",
@@ -219,10 +213,4 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//ui/base",
   ]
-}
-
-if (is_android) {
-  java_cpp_enum("supervised_user_url_filter_enum_javagen") {
-    sources = [ "supervised_user_url_filter.h" ]
-  }
 }

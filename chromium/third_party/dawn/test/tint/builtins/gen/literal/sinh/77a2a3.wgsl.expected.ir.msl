@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void sinh_77a2a3() {
+  float3 res = float3(1.17520117759704589844f);
+}
+vertex float4 vertex_main() {
+  sinh_77a2a3();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  sinh_77a2a3();
+}
+kernel void compute_main() {
+  sinh_77a2a3();
+}

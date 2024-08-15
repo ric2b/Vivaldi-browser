@@ -4,6 +4,8 @@
 
 #include "chrome/browser/devtools/protocol/autofill_handler.h"
 
+#include <optional>
+
 #include "base/check_deref.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -11,6 +13,7 @@
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/content/browser/scoped_autofill_managers_observation.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
@@ -25,7 +28,7 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_frame_host.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 
 using autofill::AutofillField;
 using autofill::AutofillTriggerSource;
@@ -33,18 +36,18 @@ using autofill::CreditCard;
 using autofill::FieldGlobalId;
 using autofill::FormData;
 using autofill::FormFieldData;
-using autofill::HtmlFieldTypeToBestCorrespondingServerFieldType;
+using autofill::HtmlFieldTypeToBestCorrespondingFieldType;
 using autofill::mojom::HtmlFieldType;
 using protocol::Maybe;
 using protocol::Response;
 
 namespace {
 
-absl::optional<std::pair<FormData, FormFieldData>> FindFieldWithFormData(
+std::optional<std::pair<FormData, FormFieldData>> FindFieldWithFormData(
     autofill::ContentAutofillDriver* driver,
     autofill::FieldGlobalId id) {
   if (!driver) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   for (const auto& [key, form] :
        driver->GetAutofillManager().form_structures()) {
@@ -54,7 +57,7 @@ absl::optional<std::pair<FormData, FormFieldData>> FindFieldWithFormData(
       }
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 }  // namespace
@@ -72,11 +75,6 @@ AutofillHandler::AutofillHandler(protocol::UberDispatcher* dispatcher,
 }
 
 AutofillHandler::~AutofillHandler() = default;
-
-void AutofillHandler::OnAutofillManagerDestroyed(
-    autofill::AutofillManager& manager) {
-  observation_.Reset();
-}
 
 void AutofillHandler::Trigger(
     int field_id,
@@ -131,7 +129,7 @@ void AutofillHandler::FinishTrigger(
       frame_token, autofill::FieldRendererId(field_id)};
 
   autofill::ContentAutofillDriver* autofill_driver = nullptr;
-  absl::optional<std::pair<FormData, FormFieldData>> field_data;
+  std::optional<std::pair<FormData, FormFieldData>> field_data;
   while (frame_rfh) {
     autofill_driver =
         autofill::ContentAutofillDriver::GetForRenderFrameHost(frame_rfh);
@@ -140,7 +138,7 @@ void AutofillHandler::FinishTrigger(
     // between the real Autofill flow triggered manually and Autofill triggered
     // over CDP. We should change how we find the form data and use the same
     // logic as used by AutofillDriverRouter.
-    if (absl::optional<std::pair<FormData, FormFieldData>> rfh_field_data =
+    if (std::optional<std::pair<FormData, FormFieldData>> rfh_field_data =
             FindFieldWithFormData(autofill_driver, global_field_id)) {
       field_data = std::move(rfh_field_data);
     }
@@ -200,7 +198,7 @@ void AutofillHandler::SetAddresses(
     profiles.Append(std::move(address_fields));
   }
 
-  absl::optional<std::vector<autofill::AutofillProfile>> autofill_profiles =
+  std::optional<std::vector<autofill::AutofillProfile>> autofill_profiles =
       autofill::AutofillProfilesFromJSON(&profiles);
   if (autofill_profiles) {
     for (const autofill::AutofillProfile& profile : *autofill_profiles) {
@@ -247,15 +245,16 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
   const autofill::AutofillProfile* profile_used_to_fill_form =
       absl::get<const autofill::AutofillProfile*>(profile_or_credit_card);
 
+  auto field_id_to_form_field_data =
+      base::MakeFlatMap<FieldGlobalId, const FormFieldData*>(
+          filled_fields, {}, [](const FormFieldData* field) {
+            return std::make_pair(field->global_id(), field);
+          });
+
   auto filled_fields_to_be_sent_to_devtools =
       std::make_unique<protocol::Array<protocol::Autofill::FilledField>>();
   filled_fields_to_be_sent_to_devtools->reserve(filled_fields.size());
-  for (const FormFieldData* field : filled_fields) {
-    AutofillField* autofill_field =
-        form_structure.GetFieldById(field->global_id());
-    if (!autofill_field) {
-      continue;
-    }
+  for (const auto& autofill_field : form_structure) {
     // Whether the field was classified from the autocomplete attribute or
     // predictions. If no autocomplete attribute exists OR the actual ServerType
     // differs from what it would have been with only autocomplete, autofill
@@ -263,16 +262,22 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
     bool autofill_inferred =
         autofill_field->html_type() == HtmlFieldType::kUnspecified ||
         autofill_field->html_type() == HtmlFieldType::kUnrecognized ||
-        HtmlFieldTypeToBestCorrespondingServerFieldType(
+        HtmlFieldTypeToBestCorrespondingFieldType(
             autofill_field->html_type()) !=
             autofill_field->Type().GetStorableType();
+    auto filled_field_iterator =
+        field_id_to_form_field_data.find(autofill_field->global_id());
+    const std::u16string filled_value =
+        filled_field_iterator != field_id_to_form_field_data.end()
+            ? filled_field_iterator->second->value
+            : u"";
     filled_fields_to_be_sent_to_devtools->push_back(
         protocol::Autofill::FilledField::Create()
-            .SetId(base::UTF16ToASCII(autofill_field->id_attribute))
-            .SetName(base::UTF16ToASCII(autofill_field->name_attribute))
-            .SetValue(base::UTF16ToASCII(field->value))
-            .SetHtmlType(std::string(
-                autofill::FormControlTypeToString(field->form_control_type)))
+            .SetId(base::UTF16ToUTF8(autofill_field->id_attribute))
+            .SetName(base::UTF16ToUTF8(autofill_field->name_attribute))
+            .SetValue(base::UTF16ToUTF8(filled_value))
+            .SetHtmlType(std::string(autofill::FormControlTypeToString(
+                autofill_field->form_control_type)))
             .SetAutofillType(
                 std::string(FieldTypeToDeveloperRepresentationString(
                     autofill_field->Type().GetStorableType())))
@@ -281,6 +286,10 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
                     ? protocol::Autofill::FillingStrategyEnum::AutofillInferred
                     : protocol::Autofill::FillingStrategyEnum::
                           AutocompleteAttribute)
+            .SetFieldId(base::FeatureList::IsEnabled(
+                            blink::features::kAutofillUseDomNodeIdForRendererId)
+                            ? autofill_field->unique_renderer_id.value()
+                            : 0)
             .Build());
   }
 
@@ -290,8 +299,8 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
   // Devtools is already in english, so we can default the local to en-US.
   const std::string locale = "en-US";
   autofill::GetAddressComponents(
-      base::UTF16ToASCII(profile_used_to_fill_form->GetInfo(
-          autofill::ServerFieldType::ADDRESS_HOME_COUNTRY, locale)),
+      base::UTF16ToUTF8(profile_used_to_fill_form->GetInfo(
+          autofill::FieldType::ADDRESS_HOME_COUNTRY, locale)),
       locale,
       /*include_literals=*/false, &components, nullptr);
 
@@ -315,7 +324,7 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
       profile_values->push_back(
           protocol::Autofill::AddressField::Create()
               .SetName(FieldTypeToString(component.field))
-              .SetValue(base::UTF16ToASCII(
+              .SetValue(base::UTF16ToUTF8(
                   profile_used_to_fill_form->GetInfo(component.field, locale)))
               .Build());
     }
@@ -324,6 +333,42 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
             .SetFields(std::move(profile_values))
             .Build());
   }
+  // Insert the country at the end. This is required because it is not part of
+  // `AutofillAddressUIComponent`.
+  auto country_line =
+      std::make_unique<protocol::Array<protocol::Autofill::AddressField>>();
+  country_line->push_back(
+      protocol::Autofill::AddressField::Create()
+          .SetName(FieldTypeToString(autofill::FieldType::ADDRESS_HOME_COUNTRY))
+          .SetValue(base::UTF16ToUTF8(profile_used_to_fill_form->GetInfo(
+              autofill::FieldType::ADDRESS_HOME_COUNTRY, locale)))
+          .Build());
+  profile_address_fields->push_back(protocol::Autofill::AddressFields::Create()
+                                        .SetFields(std::move(country_line))
+                                        .Build());
+  // Similarly to the `ADDRESS_HOME_COUNTRY`, also include
+  // `PHONE_HOME_WHOLE_NUMBER` and `EMAIL_ADDRESS`. However in a single line.
+  auto phone_and_email_line =
+      std::make_unique<protocol::Array<protocol::Autofill::AddressField>>();
+  phone_and_email_line->push_back(
+      protocol::Autofill::AddressField::Create()
+          .SetName(
+              FieldTypeToString(autofill::FieldType::PHONE_HOME_WHOLE_NUMBER))
+          .SetValue(base::UTF16ToUTF8(profile_used_to_fill_form->GetInfo(
+              autofill::FieldType::PHONE_HOME_WHOLE_NUMBER, locale)))
+          .Build());
+  phone_and_email_line->push_back(
+      protocol::Autofill::AddressField::Create()
+          .SetName(FieldTypeToString(autofill::FieldType::EMAIL_ADDRESS))
+          .SetValue(base::UTF16ToUTF8(profile_used_to_fill_form->GetInfo(
+              autofill::FieldType::EMAIL_ADDRESS, locale)))
+          .Build());
+
+  profile_address_fields->push_back(
+      protocol::Autofill::AddressFields::Create()
+          .SetFields(std::move(phone_and_email_line))
+          .Build());
+
   frontend_->AddressFormFilled(
       std::move(filled_fields_to_be_sent_to_devtools),
       protocol::Autofill::AddressUI::Create()
@@ -333,7 +378,7 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
 
 autofill::ContentAutofillDriver* AutofillHandler::GetAutofillDriver() {
   auto host = content::DevToolsAgentHost::GetForId(target_id_);
-  DCHECK(host);
+  CHECK(host);
 
   content::RenderFrameHost* outermost_primary_rfh =
       host->GetWebContents()->GetOutermostWebContents()->GetPrimaryMainFrame();
@@ -343,19 +388,25 @@ autofill::ContentAutofillDriver* AutofillHandler::GetAutofillDriver() {
 }
 
 Response AutofillHandler::Enable() {
+  if (enabled_) {
+    return Response::Success();
+  }
+
   enabled_ = true;
   if (base::FeatureList::IsEnabled(
           autofill::features::kAutofillTestFormWithDevtools)) {
-    autofill::ContentAutofillDriver* autofill_driver = GetAutofillDriver();
-    if (autofill_driver) {
-      observation_.Observe(&autofill_driver->GetAutofillManager());
-    }
+    auto host = content::DevToolsAgentHost::GetForId(target_id_);
+    CHECK(host);
+    autofill_managers_observation_.Observe(
+        host->GetWebContents(),
+        autofill::ScopedAutofillManagersObservation::InitializationPolicy::
+            kObservePreexistingManagers);
   }
   return Response::Success();
 }
 
 Response AutofillHandler::Disable() {
   enabled_ = false;
-  observation_.Reset();
+  autofill_managers_observation_.Reset();
   return Response::Success();
 }

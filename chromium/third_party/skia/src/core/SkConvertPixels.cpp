@@ -219,13 +219,13 @@ static bool convert_to_alpha8(const SkImageInfo& dstInfo,       void* vdst, size
 static void convert_with_pipeline(const SkImageInfo& dstInfo, void* dstRow, int dstStride,
                                   const SkImageInfo& srcInfo, const void* srcRow, int srcStride,
                                   const SkColorSpaceXformSteps& steps) {
-    SkRasterPipeline_MemoryCtx src = { (void*)srcRow, srcStride },
-                               dst = { (void*)dstRow, dstStride };
+    SkRasterPipeline_MemoryCtx src = { const_cast<void*>(srcRow), srcStride },
+                               dst = {                   dstRow,  dstStride };
 
     SkRasterPipeline_<256> pipeline;
-    pipeline.append_load(srcInfo.colorType(), &src);
+    pipeline.appendLoad(srcInfo.colorType(), &src);
     steps.apply(&pipeline);
-    pipeline.append_store(dstInfo.colorType(), &dst);
+    pipeline.appendStore(dstInfo.colorType(), &dst);
     pipeline.run(0,0, srcInfo.width(), srcInfo.height());
 }
 

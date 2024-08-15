@@ -8,6 +8,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "ui/shell_dialogs/select_file_policy.h"
+#include "ui/shell_dialogs/selected_file_info.h"
 
 namespace {
 
@@ -20,7 +21,7 @@ class FileSelectionRunner : private ui::SelectFileDialog::Listener {
   FileSelectionRunner& operator=(const FileSelectionRunner&) = delete;
 
   // ui::SelectFileDialog::Listener:
-  void FileSelected(const base::FilePath& path,
+  void FileSelected(const ui::SelectedFileInfo& path,
                     int index,
                     void* params) override;
   void FileSelectionCanceled(void* params) override;
@@ -38,12 +39,12 @@ FileSelectionRunner::~FileSelectionRunner() {
   select_file_dialog_->ListenerDestroyed();
 }
 
-void FileSelectionRunner::FileSelected(const base::FilePath& path,
+void FileSelectionRunner::FileSelected(const ui::SelectedFileInfo& path,
                                        int index,
                                        void* params) {
   DCHECK(!params);
   FileSelectionOptions::RunDialogResult callback = std::move(callback_);
-  base::FilePath path_copy = path;
+  base::FilePath path_copy = path.file_path;
   delete this;
   std::move(callback).Run(std::move(path_copy), /*cancelled=*/false);
 }

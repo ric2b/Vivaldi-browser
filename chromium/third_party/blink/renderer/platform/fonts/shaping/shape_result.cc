@@ -522,6 +522,48 @@ unsigned ShapeResult::PreviousSafeToBreakOffset(unsigned index) const {
   return StartIndex();
 }
 
+template <typename Iterator>
+void ShapeResult::AddUnsafeToBreak(Iterator offsets_iter,
+                                   const Iterator offsets_end) {
+  CHECK(offsets_iter != offsets_end);
+#if EXPENSIVE_DCHECKS_ARE_ON()
+  DCHECK(!character_position_);
+  DCHECK(std::is_sorted(
+      offsets_iter, offsets_end,
+      IsLtr() ? [](unsigned a, unsigned b) { return a < b; }
+              : [](unsigned a, unsigned b) { return a > b; }));
+  DCHECK_GE(*offsets_iter, StartIndex());
+#endif
+  unsigned offset = *offsets_iter;
+  for (const auto& run : runs_) {
+    unsigned run_offset = offset - run->StartIndex() - StartIndex();
+    if (run_offset >= run->num_characters_) {
+      continue;
+    }
+    for (HarfBuzzRunGlyphData& glyph_data : run->glyph_data_) {
+      if (glyph_data.character_index == run_offset) {
+        glyph_data.safe_to_break_before = false;
+        if (++offsets_iter == offsets_end) {
+          return;
+        }
+        offset = *offsets_iter;
+        run_offset = offset - run->StartIndex() - StartIndex();
+        if (run_offset >= run->num_characters_) {
+          break;
+        }
+      }
+    }
+  }
+}
+
+void ShapeResult::AddUnsafeToBreak(base::span<const unsigned> offsets) {
+  if (IsLtr()) {
+    AddUnsafeToBreak(offsets.begin(), offsets.end());
+  } else {
+    AddUnsafeToBreak(offsets.rbegin(), offsets.rend());
+  }
+}
+
 // If the position is outside of the result, returns the start or the end offset
 // depends on the position.
 void ShapeResult::OffsetForPosition(float target_x,
@@ -633,20 +675,17 @@ float ShapeResult::PositionForOffset(
     unsigned absolute_offset,
     AdjustMidCluster adjust_mid_cluster) const {
   float x = 0;
-  float offset_x = 0;
 
   // The absolute_offset argument represents the offset for the entire
-  // ShapeResult while offset is continuously updated to be relative to the
-  // current run.
+  // ShapeResult while offset counts down the remaining offset as runs are
+  // processed.
   unsigned offset = absolute_offset;
 
   if (IsRtl()) {
     // Convert logical offsets to visual offsets, because results are in
     // logical order while runs are in visual order.
-    x = width_;
     if (offset < NumCharacters())
       offset = NumCharacters() - offset - 1;
-    x -= Width();
   }
 
   for (unsigned i = 0; i < runs_.size(); i++) {
@@ -655,10 +694,8 @@ float ShapeResult::PositionForOffset(
     DCHECK_EQ(IsRtl(), runs_[i]->IsRtl());
     unsigned num_characters = runs_[i]->num_characters_;
 
-    if (!offset_x && offset < num_characters) {
-      offset_x =
-          runs_[i]->XPositionForVisualOffset(offset, adjust_mid_cluster) + x;
-      break;
+    if (offset < num_characters) {
+      return runs_[i]->XPositionForVisualOffset(offset, adjust_mid_cluster) + x;
     }
 
     offset -= num_characters;
@@ -666,10 +703,11 @@ float ShapeResult::PositionForOffset(
   }
 
   // The position in question might be just after the text.
-  if (!offset_x && absolute_offset == NumCharacters())
+  if (absolute_offset == NumCharacters()) {
     return IsRtl() ? 0 : width_;
+  }
 
-  return offset_x;
+  return 0;
 }
 
 float ShapeResult::CaretPositionForOffset(
@@ -1013,7 +1051,6 @@ void ShapeResult::ApplyTextAutoSpacingCore(Iterator offset_begin,
                                            Iterator offset_end) {
   DCHECK(offset_begin != offset_end);
   Iterator current_offset = offset_begin;
-  float total_space = 0.0;
   if (UNLIKELY(current_offset->offset == StartIndex())) {
     // Enter this branch if the previous item's direction is RTL and current
     // item's direction is LTR. In this case, spacing cannot be added to the
@@ -1116,10 +1153,9 @@ void ShapeResult::ApplyTextAutoSpacingCore(Iterator offset_begin,
       }
     }
     run->width_ += total_space_for_run;
-    total_space += total_space_for_run;
   }
   DCHECK(current_offset == offset_end);  // Check if all offsets are consumed.
-  width_ += total_space;
+  // `width_` will be updated in `RecalcCharacterPositions()`.
 }
 
 scoped_refptr<ShapeResult> ShapeResult::UnapplyAutoSpacing(
@@ -1134,15 +1170,20 @@ scoped_refptr<ShapeResult> ShapeResult::UnapplyAutoSpacing(
   scoped_refptr<ShapeResult> sub_range = SubRange(start_offset, break_offset);
 
   // Remove the auto-spacing from the last glyph.
-  RunInfo& last_run = *sub_range->runs_.back();
-  DCHECK(last_run.HasOneRef());  // Ensure it's copied and thus safe to modify.
-  HarfBuzzRunGlyphData& last_glyph = last_run.glyph_data_.back();
-  DCHECK(PrimaryFont());
-  const float width = TextAutoSpace::GetSpacingWidth(*PrimaryFont());
-  DCHECK_GE(last_glyph.advance, width);
-  last_glyph.advance -= width;
-  last_run.width_ -= width;
-  sub_range->width_ -= width;
+  for (const scoped_refptr<RunInfo>& run : base::Reversed(sub_range->runs_)) {
+    if (UNLIKELY(!run->NumGlyphs())) {
+      continue;
+    }
+    DCHECK(run->HasOneRef());  // Ensure it's copied and thus safe to modify.
+    HarfBuzzRunGlyphData& last_glyph = run->glyph_data_.back();
+    DCHECK(PrimaryFont());
+    const float width = TextAutoSpace::GetSpacingWidth(*PrimaryFont());
+    DCHECK_GE(last_glyph.advance, width);
+    last_glyph.advance -= width;
+    run->width_ -= width;
+    sub_range->width_ -= width;
+    break;
+  }
   return sub_range;
 }
 
@@ -1990,6 +2031,7 @@ void ShapeResult::ComputePositionData() const {
   }
 
   character_position_->start_offset_ = start_offset;
+  character_position_->width_ = width_ = run_advance;
 }
 
 void ShapeResult::EnsurePositionData() const {
@@ -1997,7 +2039,7 @@ void ShapeResult::EnsurePositionData() const {
     return;
 
   character_position_ =
-      std::make_unique<CharacterPositionData>(num_characters_, width_);
+      std::make_unique<CharacterPositionData>(num_characters_);
   RecalcCharacterPositions();
 }
 

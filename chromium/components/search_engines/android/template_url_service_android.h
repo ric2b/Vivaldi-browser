@@ -7,6 +7,7 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
+#include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
 
@@ -29,6 +30,7 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jkeyword,
+      jint choice_made_location,
       const jint type);
   jboolean IsLoaded(JNIEnv* env,
                     const base::android::JavaParamRef<jobject>& obj) const;
@@ -156,6 +158,11 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
   // SearchEngineChoiceCountry. It might be different than what LocaleUtils
   // returns.
   jboolean IsEeaChoiceCountry(JNIEnv* env);
+
+  // Returns whether the version of the search engines settings screen showing
+  // additional search engine info should be shown.
+  // TODO(b/318824817): To be removed post-launch.
+  jboolean ShouldShowUpdatedSettings(JNIEnv* env);
 
  private:
   bool IsDefaultSearchEngineGoogle();

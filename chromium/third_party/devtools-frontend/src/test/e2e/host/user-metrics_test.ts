@@ -365,7 +365,7 @@ describe('User Metrics', () => {
     await assertHistogramEventsInclude([
       {
         actionName: 'DevTools.ExperimentEnabledAtLaunch',
-        actionCode: 52,  // Enabled by default: cssTypeComponentLength
+        actionCode: 74,  // Enabled by default: setAllBreakpointsEagerly
       },
       {
         actionName: 'DevTools.ExperimentDisabledAtLaunch',
@@ -407,7 +407,7 @@ describe('User Metrics', () => {
   });
 });
 
-describe('User Metrics for CSS Overview', () => {
+describe('User metrics for CSS overview', () => {
   it('dispatch events when capture overview button hit', async () => {
     await goToResource('css_overview/default.html');
     await navigateToCssOverviewTab();
@@ -513,7 +513,6 @@ describe('User Metrics for Issue Panel', () => {
 
   it('dispatch events when a link to an element is clicked', async () => {
     await goToResource('elements/element-reveal-inline-issue.html');
-    await waitFor('.issue');
     await click('.issue');
 
     await waitFor('.element-reveal-icon');
@@ -540,11 +539,11 @@ describe('User Metrics for Issue Panel', () => {
     ]);
   });
 
-  it('dispatch events when a "Learn More" link is clicked', async () => {
+  // TODO(crbug/1520446): Flaky timeouts
+  it.skipOnPlatforms(['mac'], '[crbug.com/1520446] Learn More" link is clicked', async () => {
     const {browser} = getBrowserAndPages();
 
     await goToResource('elements/element-reveal-inline-issue.html');
-    await waitFor('.issue');
     await click('.issue');
 
     await waitFor('.link-list x-link');

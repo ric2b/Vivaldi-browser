@@ -4,18 +4,19 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions.carousel;
 
-import android.content.res.Configuration;
-import android.content.res.Resources;
+import android.content.Context;
+import android.graphics.Color;
+import android.view.ViewGroup.MarginLayoutParams;
+import android.view.ViewOutlineProvider;
 
-import androidx.annotation.NonNull;
+import androidx.annotation.ColorInt;
+import androidx.annotation.Px;
 
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties.FormFactor;
-import org.chromium.chrome.browser.omnibox.suggestions.base.SpacingRecyclerViewItemDecoration;
-import org.chromium.ui.base.ViewUtils;
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
+import org.chromium.components.browser_ui.widget.RoundedCornerOutlineProvider;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
@@ -35,106 +36,66 @@ public interface BaseCarouselSuggestionViewBinder {
             } else {
                 adapter.getModelList().clear();
             }
-        } else if (key == SuggestionCommonProperties.DEVICE_FORM_FACTOR
-                || key == BaseCarouselSuggestionViewProperties.ITEM_WIDTH) {
-            int itemDecoration = view.getItemDecorationCount();
-            while (itemDecoration > 0) {
-                itemDecoration--;
-                view.removeItemDecorationAt(itemDecoration);
-            }
-
-            var context = view.getContext();
-            // Adjust the initial offset of the MV Carousel to match the offset of the
-            // suggestion header.
-            int tileViewPadding =
-                    view.getResources().getDimensionPixelSize(R.dimen.tile_view_padding);
-            int initialSpacing =
-                    OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
-                            ? OmniboxResourceProvider.getHeaderStartPadding(context)
-                                    - tileViewPadding
-                            : OmniboxResourceProvider.getSideSpacing(context);
-            int itemSpacing =
-                    getItemSpacingPx(
-                            model.get(SuggestionCommonProperties.DEVICE_FORM_FACTOR),
-                            model.get(BaseCarouselSuggestionViewProperties.ITEM_WIDTH),
-                            initialSpacing,
-                            view.getResources());
-            view.addItemDecoration(
-                    new SpacingRecyclerViewItemDecoration(initialSpacing, itemSpacing / 2));
+        } else if (key == BaseCarouselSuggestionViewProperties.ITEM_WIDTH) {
+            view.getItemDecoration()
+                    .setItemWidth(model.get(BaseCarouselSuggestionViewProperties.ITEM_WIDTH));
+        } else if (key == BaseCarouselSuggestionViewProperties.CONTENT_DESCRIPTION) {
+            view.setContentDescription(
+                    model.get(BaseCarouselSuggestionViewProperties.CONTENT_DESCRIPTION));
         } else if (key == BaseCarouselSuggestionViewProperties.HORIZONTAL_FADE) {
             view.setHorizontalFadingEdgeEnabled(
                     model.get(BaseCarouselSuggestionViewProperties.HORIZONTAL_FADE));
+        } else if (key == BaseCarouselSuggestionViewProperties.TOP_PADDING
+                || key == BaseCarouselSuggestionViewProperties.BOTTOM_PADDING) {
+            int top = model.get(BaseCarouselSuggestionViewProperties.TOP_PADDING);
+            int bottom = model.get(BaseCarouselSuggestionViewProperties.BOTTOM_PADDING);
+            view.setPaddingRelative(0, top, 0, bottom);
+        } else if (key == BaseCarouselSuggestionViewProperties.APPLY_BACKGROUND) {
+            boolean useBackground =
+                    model.get(BaseCarouselSuggestionViewProperties.APPLY_BACKGROUND);
+
+            // Default values to be used if background is disabled.
+            @ColorInt int bgColor = Color.TRANSPARENT;
+            @Px int horizontalMargin = 0;
+            ViewOutlineProvider outline = null;
+
+            // Specific values to apply if background is enabled.
+            if (useBackground) {
+                // Note: this assumes carousel is not showing in the incognito mode.
+                bgColor = getSuggestionBackgroundColor(model, view.getContext());
+                horizontalMargin = OmniboxResourceProvider.getSideSpacing(view.getContext());
+                outline =
+                        new RoundedCornerOutlineProvider(
+                                view.getContext()
+                                        .getResources()
+                                        .getDimensionPixelSize(
+                                                R.dimen.omnibox_suggestion_bg_round_corner_radius));
+            }
+
+            // Apply values.
+            view.setBackgroundColor(bgColor);
+            var layoutParams = view.getLayoutParams();
+            if (layoutParams instanceof MarginLayoutParams) {
+                ((MarginLayoutParams) layoutParams)
+                        .setMargins(horizontalMargin, 0, horizontalMargin, 0);
+                view.setLayoutParams(layoutParams);
+            }
+
+            view.setOutlineProvider(outline);
+            view.setClipToOutline(outline != null);
         }
     }
 
     /**
-     * Calculate the margin between tiles based on screen size.
+     * Retrieve the background color to be applied to suggestion.
      *
-     * @param formFactor the form factor of the device, from which we differentiate between PHONE
-     *     and TABLET
-     * @param itemWidth the width of an individual element in the carousel
-     * @param initialSpacing the space between the start edge of the suggestions dropdown and the
-     *     first item on the carousel
-     * @param resources Android resources object, used to read the dimension
-     * @return the requested item spacing, expressed in Pixels
+     * @param model A property model to look up relevant properties.
+     * @param ctx Context used to retrieve appropriate color value.
+     * @return @ColorInt value representing the color to be applied.
      */
-    static int getItemSpacingPx(
-            @FormFactor int formFactor,
-            int itemWidth,
-            int initialSpacing,
-            @NonNull Resources resources) {
-        // Note: Tile suggestions are generated by native code.
-        if (resources.getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            return resources.getDimensionPixelOffset(R.dimen.tile_view_padding_landscape);
-        }
-
-        int baseSpacing = resources.getDimensionPixelSize(R.dimen.tile_view_padding_edge_portrait);
-        switch (formFactor) {
-            case FormFactor.PHONE:
-                // Compute item spacing, guaranteeing exactly 50% exposure of one item
-                // given the carousel width, item width, initial spacing, and base item spacing.
-                // Resulting item spacing must be no smaller than base item spacing.
-                //
-                // Given a carousel entry:
-                //   |__XXXX...XXXX...XXXX...XX|
-                // where:
-                // - '|' marks boundaries of the carousel,
-                // - '_' is the initial spacing,
-                // - 'X' is a carousel element, and
-                // - '.' is the item space
-                // computes the width of item space ('.').
-                int carouselWidth =
-                        ViewUtils.dpToPx(
-                                resources.getDisplayMetrics(),
-                                resources.getConfiguration().screenWidthDp);
-                int adjustedCarouselWidth = carouselWidth - initialSpacing;
-                int itemAndSpaceWidth = itemWidth + baseSpacing;
-                int numberOfFullyVisibleItems = adjustedCarouselWidth / itemAndSpaceWidth;
-
-                // We know the number of items that will be fully visible on screen.
-                // Another item may be partially exposed.
-                // Now we check how much of that item is visible; if it's less than 50% exposed, we
-                // reduce number of fully exposed items to show, and increase padding.
-                if ((adjustedCarouselWidth - numberOfFullyVisibleItems * itemAndSpaceWidth)
-                        < 0.5 * itemWidth) {
-                    numberOfFullyVisibleItems--;
-                }
-
-                // If tiles are too large (i.e. larger than the screen width), just return default
-                // padding. There's nothing we can do.
-                if (numberOfFullyVisibleItems <= 0) {
-                    return baseSpacing;
-                }
-
-                int totalPaddingAreaSize =
-                        adjustedCarouselWidth
-                                - (int) ((numberOfFullyVisibleItems + 0.5) * itemWidth);
-                int itemSpacing = totalPaddingAreaSize / numberOfFullyVisibleItems;
-                return itemSpacing;
-            case FormFactor.TABLET:
-            default:
-                assert formFactor == FormFactor.TABLET : "Unknown device type";
-                return baseSpacing;
-        }
+    public static @ColorInt int getSuggestionBackgroundColor(PropertyModel model, Context ctx) {
+        return model.get(SuggestionCommonProperties.COLOR_SCHEME) == BrandedColorScheme.INCOGNITO
+                ? ctx.getColor(R.color.omnibox_suggestion_bg_incognito)
+                : OmniboxResourceProvider.getStandardSuggestionBackgroundColor(ctx);
     }
 }

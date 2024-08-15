@@ -112,7 +112,7 @@ void SubmenuView::UpdateMenuPartSizes() {
   if (config.reserve_dedicated_arrow_column &&
       base::ranges::any_of(menu_items, &MenuItemView::HasSubmenu)) {
     trailing_padding_ +=
-        kSubmenuArrowSize +
+        config.arrow_size +
         (base::Contains(menu_items, MenuItemView::Type::kActionableSubMenu,
                         &MenuItemView::GetType)
              ? config.actionable_submenu_arrow_to_edge_padding
@@ -714,7 +714,7 @@ void SubmenuView::SetBorderColorId(absl::optional<ui::ColorId> color_id) {
   border_color_id_ = color_id;
 }
 
-BEGIN_METADATA(SubmenuView, View)
+BEGIN_METADATA(SubmenuView)
 END_METADATA
 
 }  // namespace views

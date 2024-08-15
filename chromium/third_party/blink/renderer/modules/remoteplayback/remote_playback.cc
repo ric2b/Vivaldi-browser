@@ -68,8 +68,8 @@ void RunRemotePlaybackTask(
 
 KURL GetAvailabilityUrl(const WebURL& source,
                         bool is_source_supported,
-                        media::VideoCodec video_codec,
-                        media::AudioCodec audio_codec) {
+                        absl::optional<media::VideoCodec> video_codec,
+                        absl::optional<media::AudioCodec> audio_codec) {
   if (source.IsEmpty() || !source.IsValid() || !is_source_supported) {
     return KURL();
   }
@@ -85,10 +85,17 @@ KURL GetAvailabilityUrl(const WebURL& source,
       source_string.data(),
       base::checked_cast<unsigned>(source_string.length()));
 
+  std::string video_codec_str =
+      video_codec.has_value()
+          ? ("&video_codec=" + media::GetCodecName(video_codec.value()))
+          : "";
+  std::string audio_codec_str =
+      audio_codec.has_value()
+          ? ("&audio_codec=" + media::GetCodecName(audio_codec.value()))
+          : "";
   return KURL(StringView(kRemotePlaybackPresentationUrlPath) +
-              "?source=" + encoded_source +
-              "&video_codec=" + media::GetCodecName(video_codec).c_str() +
-              "&audio_codec=" + media::GetCodecName(audio_codec).c_str());
+              "?source=" + encoded_source + video_codec_str.c_str() +
+              audio_codec_str.c_str());
 }
 
 bool IsBackgroundAvailabilityMonitoringDisabled() {
@@ -460,6 +467,15 @@ void RemotePlayback::UpdateAvailabilityUrlsAndStartListening() {
     return;
   }
 
+  // If the video is too short, it's unlikely to be cast. Disable availability
+  // monitoring so that the cast buttons are hidden from the video player.
+  if (!media_element_ || std::isnan(media_element_->duration()) ||
+      media_element_->duration() <= kMinRemotingMediaDurationInSec) {
+    StopListeningForAvailability();
+    availability_urls_.clear();
+    return;
+  }
+
   KURL current_url =
       availability_urls_.empty() ? KURL() : availability_urls_[0];
   KURL new_url = GetAvailabilityUrl(source_, is_source_supported_, video_codec_,
@@ -489,8 +505,9 @@ WebString RemotePlayback::GetPresentationId() {
   return presentation_id_;
 }
 
-void RemotePlayback::MediaMetadataChanged(media::VideoCodec video_codec,
-                                          media::AudioCodec audio_codec) {
+void RemotePlayback::MediaMetadataChanged(
+    absl::optional<media::VideoCodec> video_codec,
+    absl::optional<media::AudioCodec> audio_codec) {
   video_codec_ = video_codec;
   audio_codec_ = audio_codec;
 
@@ -506,11 +523,10 @@ void RemotePlayback::RemoveObserver(RemotePlaybackObserver* observer) {
 }
 
 void RemotePlayback::AvailabilityChangedForTesting(bool screen_is_available) {
-  // AvailabilityChanged() is only normally called when |is_listening_| is true.
-  is_listening_ = true;
   // Disable the background availability monitoring so that the availability
   // won't be overridden later.
   is_background_availability_monitoring_disabled_for_testing_ = true;
+  StopListeningForAvailability();
 
   AvailabilityChanged(screen_is_available
                           ? mojom::blink::ScreenAvailability::AVAILABLE
@@ -564,7 +580,8 @@ void RemotePlayback::CleanupConnections() {
 
 void RemotePlayback::AvailabilityChanged(
     mojom::blink::ScreenAvailability availability) {
-  DCHECK(is_listening_);
+  DCHECK(is_listening_ ||
+         is_background_availability_monitoring_disabled_for_testing_);
   DCHECK_NE(availability, mojom::ScreenAvailability::UNKNOWN);
   DCHECK_NE(availability, mojom::ScreenAvailability::DISABLED);
 

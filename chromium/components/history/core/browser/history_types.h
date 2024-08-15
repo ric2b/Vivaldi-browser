@@ -17,7 +17,6 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
 #include "base/time/time.h"
-#include "base/uuid.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/history/core/browser/history_context.h"
 #include "components/history/core/browser/keyword_search_term.h"
@@ -183,7 +182,10 @@ class VisitRow {
   // many-to-one relationship with the VisitedLinkDatabase. As such, more than
   // one visit may correspond to the same VisitedLinkID.
   VisitedLinkID visited_link_id = kInvalidVisitedLinkID;
-
+  // The package name of the app if this visit takes place in Custom Tab opened
+  // by an app. This is set only on Android if the Custom Tab knows which app
+  // launched it; otherwise remains null.
+  absl::optional<std::string> app_id = absl::nullopt;
   // We allow the implicit copy constructor and operator=.
 };
 
@@ -400,6 +402,9 @@ struct QueryOptions {
   // Whether to prioritize most recent or oldest visits when `max_count` is
   // reached. Will affect visit order as well.
   VisitOrder visit_order = RECENT_FIRST;
+
+  // If nullopt, search doesn't take app_id into consideration.
+  absl::optional<std::string> app_id = absl::nullopt;
 
   // Helpers to get the effective parameters values, since a value of 0 means
   // "unspecified".
@@ -1195,7 +1200,7 @@ struct HistoryAddPageArgs {
   //       RedirectList(), ui::PAGE_TRANSITION_LINK,
   //       false, SOURCE_BROWSED, false, true,
   //       absl::nullopt, absl::nullopt, absl::nullopt, absl::nullopt,
-  //       absl::nullopt)
+  //       absl::nullopt, absl::nullopt)
   HistoryAddPageArgs();
   HistoryAddPageArgs(const GURL& url,
                      base::Time time,
@@ -1212,7 +1217,8 @@ struct HistoryAddPageArgs {
                      absl::optional<std::u16string> title = absl::nullopt,
                      absl::optional<GURL> top_level_url = absl::nullopt,
                      absl::optional<Opener> opener = absl::nullopt,
-                     absl::optional<base::Uuid> bookmark_id = absl::nullopt,
+                     absl::optional<int64_t> bookmark_id = absl::nullopt,
+                     absl::optional<std::string> app_id = absl::nullopt,
                      absl::optional<VisitContextAnnotations::OnVisitFields>
                          context_annotations = absl::nullopt);
   HistoryAddPageArgs(const HistoryAddPageArgs& other);
@@ -1239,7 +1245,8 @@ struct HistoryAddPageArgs {
   // navigation originated from.
   absl::optional<GURL> top_level_url;
   absl::optional<Opener> opener;
-  absl::optional<base::Uuid> bookmark_id;
+  absl::optional<int64_t> bookmark_id;
+  absl::optional<std::string> app_id;
   absl::optional<VisitContextAnnotations::OnVisitFields> context_annotations;
 };
 

@@ -4,12 +4,13 @@
 
 #include "ash/login/ui/local_authentication_request_view.h"
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include <string>
+
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/login/ui/arrow_button_view.h"
 #include "ash/login/ui/local_authentication_request_widget.h"
 #include "ash/login/ui/non_accessible_view.h"
-#include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/login/local_authentication_request_controller.h"
 #include "ash/public/cpp/login/login_utils.h"
 #include "ash/public/cpp/session/user_info.h"
@@ -89,6 +90,17 @@ LocalAuthenticationRequestView::TestApi::~TestApi() {
   view_ = nullptr;
 }
 
+void LocalAuthenticationRequestView::TestApi::Close() {
+  view_->OnClose();
+}
+
+void LocalAuthenticationRequestView::TestApi::SubmitPassword(
+    const std::string& password) {
+  LoginPasswordView::TestApi login_password_view_test_api(
+      login_password_view());
+  login_password_view_test_api.SubmitPassword(password);
+}
+
 LoginButton* LocalAuthenticationRequestView::TestApi::close_button() {
   return view_->close_button_;
 }
@@ -117,13 +129,12 @@ LocalAuthenticationRequestView::TestApi::state() const {
 }
 
 LocalAuthenticationRequestView::LocalAuthenticationRequestView(
-    OnLocalAuthenticationCompleted on_local_authentication_completed,
+    LocalAuthenticationCallback local_authentication_callback,
     const std::u16string& title,
     const std::u16string& description,
     Delegate* delegate,
     std::unique_ptr<UserContext> user_context)
-    : on_local_authentication_completed_(
-          std::move(on_local_authentication_completed)),
+    : local_authentication_callback_(std::move(local_authentication_callback)),
       delegate_(delegate),
       default_title_(title),
       default_description_(description),
@@ -227,8 +238,8 @@ LocalAuthenticationRequestView::LocalAuthenticationRequestView(
                                      kCrossSizeDp));
   close_button_->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   close_button_->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
-  close_button_->SetAccessibleName(
-      l10n_util::GetStringUTF16(IDS_ASH_LOGIN_BACK_BUTTON_ACCESSIBLE_NAME));
+  close_button_->SetAccessibleName(l10n_util::GetStringUTF16(
+      IDS_ASH_LOGIN_LOCAL_AUTHENTICATION_CLOSE_DIALOG_BUTTON));
   close_button_->SetFocusBehavior(FocusBehavior::ALWAYS);
   close_button_view->AddChildView(close_button_.get());
 
@@ -306,6 +317,13 @@ LocalAuthenticationRequestView::LocalAuthenticationRequestView(
 
 LocalAuthenticationRequestView::~LocalAuthenticationRequestView() = default;
 
+void LocalAuthenticationRequestView::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  views::DialogDelegateView::GetAccessibleNodeData(node_data);
+  node_data->role = ax::mojom::Role::kDialog;
+  node_data->SetNameChecked(description_label_->GetText());
+}
+
 void LocalAuthenticationRequestView::RequestFocus() {
   login_password_view_->RequestFocus();
 }
@@ -346,8 +364,10 @@ std::u16string LocalAuthenticationRequestView::GetAccessibleWindowTitle()
 
 void LocalAuthenticationRequestView::OnClose() {
   delegate_->OnClose();
+  auth_performer_.InvalidateCurrentAttempts();
   if (LocalAuthenticationRequestWidget::Get()) {
-    LocalAuthenticationRequestWidget::Get()->Close(false /* success */);
+    LocalAuthenticationRequestWidget::Get()->Close(false /* success */,
+                                                   std::move(user_context_));
   }
 }
 
@@ -380,27 +400,29 @@ void LocalAuthenticationRequestView::OnAuthSubmit(
   // Create a copy of `user_context_` so that we don't lose it to std::move
   // for future auth attempts
   auth_performer_.AuthenticateWithPassword(
-      key_label.value(), base::UTF16ToUTF8(password),
-      std::make_unique<UserContext>(*user_context_),
+      key_label.value(), base::UTF16ToUTF8(password), std::move(user_context_),
       base::BindOnce(&LocalAuthenticationRequestView::OnAuthComplete,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void LocalAuthenticationRequestView::OnAuthComplete(
     std::unique_ptr<UserContext> user_context,
-    absl::optional<AuthenticationError> authentication_error) {
+    std::optional<AuthenticationError> authentication_error) {
   if (authentication_error.has_value()) {
     LOG(ERROR) << "An error happened during the attempt to validate "
                   "the password: "
                << authentication_error.value().get_cryptohome_code();
-
+    user_context_ = std::move(user_context);
     UpdateState(
         LocalAuthenticationRequestViewState::kError, default_title_,
         l10n_util::GetStringUTF16(IDS_ASH_LOGIN_ERROR_AUTHENTICATING_PWD));
     ClearInput();
+    NotifyAccessibilityEvent(ax::mojom::Event::kAlert,
+                             true /*send_native_event*/);
     SetInputEnabled(true);
   } else {
-    LocalAuthenticationRequestWidget::Get()->Close(true /* success */);
+    LocalAuthenticationRequestWidget::Get()->Close(true /* success */,
+                                                   std::move(user_context));
   }
 }
 

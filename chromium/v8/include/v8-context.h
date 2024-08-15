@@ -181,7 +181,7 @@ class V8_EXPORT Context : public Data {
      * also be considered for freezing should be added to the children_out
      * parameter. Returns true if the operation completed successfully.
      */
-    V8_DEPRECATE_SOON("Please use the version that takes a LocalVector&")
+    V8_DEPRECATED("Please use the version that takes a LocalVector&")
     virtual bool FreezeEmbedderObjectAndGetChildren(
         Local<Object> obj, std::vector<Local<Object>>& children_out) {
       // TODO(chromium:1454114): This method is temporarily defined in order to
@@ -332,12 +332,16 @@ class V8_EXPORT Context : public Data {
    * Returns the value that was set or restored by
    * SetContinuationPreservedEmbedderData(), if any.
    */
+  V8_DEPRECATE_SOON(
+      "Use v8::Isolate::GetContinuationPreservedEmbedderData instead")
   Local<Value> GetContinuationPreservedEmbedderData() const;
 
   /**
    * Sets a value that will be stored on continuations and reset while the
    * continuation runs.
    */
+  V8_DEPRECATE_SOON(
+      "Use v8::Isolate::SetContinuationPreservedEmbedderData instead")
   void SetContinuationPreservedEmbedderData(Local<Value> context);
 
   /**

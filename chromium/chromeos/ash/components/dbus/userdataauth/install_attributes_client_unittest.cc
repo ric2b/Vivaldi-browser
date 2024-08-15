@@ -134,7 +134,7 @@ class InstallAttributesClientTest : public testing::Test {
   scoped_refptr<dbus::MockObjectProxy> proxy_;
 
   // Convenience pointer to the global instance.
-  raw_ptr<InstallAttributesClient, DanglingUntriaged | ExperimentalAsh> client_;
+  raw_ptr<InstallAttributesClient, DanglingUntriaged> client_;
 
   // The expected replies to the respective D-Bus calls.
   ::user_data_auth::InstallAttributesGetReply
@@ -179,7 +179,7 @@ class InstallAttributesClientTest : public testing::Test {
       // a very large value so the parsing will fail.
       constexpr uint8_t invalid_protobuf[] = {0x02, 0xFF, 0xFF, 0xFF,
                                               0xFF, 0xFF, 0xFF};
-      writer.AppendArrayOfBytes(invalid_protobuf, sizeof(invalid_protobuf));
+      writer.AppendArrayOfBytes(invalid_protobuf);
     } else if (method_call->GetMember() ==
                ::user_data_auth::kInstallAttributesGet) {
       writer.AppendProtoAsArrayOfBytes(expected_install_attributes_get_reply_);
@@ -222,7 +222,7 @@ class InstallAttributesClientTest : public testing::Test {
       // a very large value so the parsing will fail.
       constexpr uint8_t invalid_protobuf[] = {0x02, 0xFF, 0xFF, 0xFF,
                                               0xFF, 0xFF, 0xFF};
-      writer.AppendArrayOfBytes(invalid_protobuf, sizeof(invalid_protobuf));
+      writer.AppendArrayOfBytes(invalid_protobuf);
     } else if (method_call->GetMember() ==
                ::user_data_auth::kInstallAttributesGet) {
       writer.AppendProtoAsArrayOfBytes(
@@ -241,7 +241,6 @@ class InstallAttributesClientTest : public testing::Test {
           expected_blocking_install_attributes_get_status_reply_);
     } else {
       LOG(FATAL) << "Unrecognized member: " << method_call->GetMember();
-      return nullptr;
     }
     return base::ok(std::move(response));
   }
@@ -250,37 +249,37 @@ class InstallAttributesClientTest : public testing::Test {
 TEST_F(InstallAttributesClientTest, InstallAttributesGet) {
   expected_install_attributes_get_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesGetReply> result_reply;
+  std::optional<::user_data_auth::InstallAttributesGetReply> result_reply;
 
   client_->InstallAttributesGet(::user_data_auth::InstallAttributesGetRequest(),
                                 CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(ProtobufEquals(result_reply.value(),
                              expected_install_attributes_get_reply_));
 }
 
 TEST_F(InstallAttributesClientTest, InstallAttributesGetInvalidProtobuf) {
   shall_message_parsing_fail_ = true;
-  absl::optional<::user_data_auth::InstallAttributesGetReply> result_reply =
+  std::optional<::user_data_auth::InstallAttributesGetReply> result_reply =
       ::user_data_auth::InstallAttributesGetReply();
 
   client_->InstallAttributesGet(::user_data_auth::InstallAttributesGetRequest(),
                                 CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_EQ(result_reply, absl::nullopt);
+  ASSERT_EQ(result_reply, std::nullopt);
 }
 
 TEST_F(InstallAttributesClientTest, InstallAttributesFinalize) {
   expected_install_attributes_finalize_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesFinalizeReply> result_reply;
+  std::optional<::user_data_auth::InstallAttributesFinalizeReply> result_reply;
 
   client_->InstallAttributesFinalize(
       ::user_data_auth::InstallAttributesFinalizeRequest(),
       CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(ProtobufEquals(result_reply.value(),
                              expected_install_attributes_finalize_reply_));
 }
@@ -288,14 +287,13 @@ TEST_F(InstallAttributesClientTest, InstallAttributesFinalize) {
 TEST_F(InstallAttributesClientTest, InstallAttributesGetStatus) {
   expected_install_attributes_get_status_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesGetStatusReply>
-      result_reply;
+  std::optional<::user_data_auth::InstallAttributesGetStatusReply> result_reply;
 
   client_->InstallAttributesGetStatus(
       ::user_data_auth::InstallAttributesGetStatusRequest(),
       CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(ProtobufEquals(result_reply.value(),
                              expected_install_attributes_get_status_reply_));
 }
@@ -303,14 +301,14 @@ TEST_F(InstallAttributesClientTest, InstallAttributesGetStatus) {
 TEST_F(InstallAttributesClientTest, RemoveFirmwareManagementParameters) {
   expected_remove_firmware_management_parameters_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::RemoveFirmwareManagementParametersReply>
+  std::optional<::user_data_auth::RemoveFirmwareManagementParametersReply>
       result_reply;
 
   client_->RemoveFirmwareManagementParameters(
       ::user_data_auth::RemoveFirmwareManagementParametersRequest(),
       CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(
       ProtobufEquals(result_reply.value(),
                      expected_remove_firmware_management_parameters_reply_));
@@ -319,14 +317,14 @@ TEST_F(InstallAttributesClientTest, RemoveFirmwareManagementParameters) {
 TEST_F(InstallAttributesClientTest, SetFirmwareManagementParameters) {
   expected_set_firmware_management_parameters_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::SetFirmwareManagementParametersReply>
+  std::optional<::user_data_auth::SetFirmwareManagementParametersReply>
       result_reply;
 
   client_->SetFirmwareManagementParameters(
       ::user_data_auth::SetFirmwareManagementParametersRequest(),
       CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(
       ProtobufEquals(result_reply.value(),
                      expected_set_firmware_management_parameters_reply_));
@@ -335,14 +333,14 @@ TEST_F(InstallAttributesClientTest, SetFirmwareManagementParameters) {
 TEST_F(InstallAttributesClientTest, GetFirmwareManagementParameters) {
   expected_set_firmware_management_parameters_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::GetFirmwareManagementParametersReply>
+  std::optional<::user_data_auth::GetFirmwareManagementParametersReply>
       result_reply;
 
   client_->GetFirmwareManagementParameters(
       ::user_data_auth::GetFirmwareManagementParametersRequest(),
       CreateCopyCallback(&result_reply));
   base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(
       ProtobufEquals(result_reply.value(),
                      expected_get_firmware_management_parameters_reply_));
@@ -351,7 +349,7 @@ TEST_F(InstallAttributesClientTest, GetFirmwareManagementParameters) {
 TEST_F(InstallAttributesClientTest, BlockingInstallAttributesGet) {
   expected_blocking_install_attributes_get_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesGetReply> result_reply;
+  std::optional<::user_data_auth::InstallAttributesGetReply> result_reply;
 
   scoped_refptr<FakeTaskRunner> runner = new FakeTaskRunner;
   EXPECT_CALL(*bus_.get(), GetDBusTaskRunner())
@@ -360,7 +358,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesGet) {
   result_reply = client_->BlockingInstallAttributesGet(
       ::user_data_auth::InstallAttributesGetRequest());
 
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(ProtobufEquals(result_reply.value(),
                              expected_blocking_install_attributes_get_reply_));
 }
@@ -368,7 +366,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesGet) {
 TEST_F(InstallAttributesClientTest,
        BlockingInstallAttributesGetInvalidProtobuf) {
   shall_message_parsing_fail_ = true;
-  absl::optional<::user_data_auth::InstallAttributesGetReply> result_reply =
+  std::optional<::user_data_auth::InstallAttributesGetReply> result_reply =
       ::user_data_auth::InstallAttributesGetReply();
 
   scoped_refptr<FakeTaskRunner> runner = new FakeTaskRunner;
@@ -378,13 +376,13 @@ TEST_F(InstallAttributesClientTest,
   result_reply = client_->BlockingInstallAttributesGet(
       ::user_data_auth::InstallAttributesGetRequest());
 
-  EXPECT_EQ(result_reply, absl::nullopt);
+  EXPECT_EQ(result_reply, std::nullopt);
 }
 
 TEST_F(InstallAttributesClientTest, BlockingInstallAttributesSet) {
   expected_blocking_install_attributes_set_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesSetReply> result_reply;
+  std::optional<::user_data_auth::InstallAttributesSetReply> result_reply;
 
   scoped_refptr<FakeTaskRunner> runner = new FakeTaskRunner;
   EXPECT_CALL(*bus_.get(), GetDBusTaskRunner())
@@ -393,7 +391,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesSet) {
   result_reply = client_->BlockingInstallAttributesSet(
       ::user_data_auth::InstallAttributesSetRequest());
 
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(ProtobufEquals(result_reply.value(),
                              expected_blocking_install_attributes_set_reply_));
 }
@@ -401,7 +399,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesSet) {
 TEST_F(InstallAttributesClientTest, BlockingInstallAttributesFinalize) {
   expected_blocking_install_attributes_finalize_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesFinalizeReply> result_reply;
+  std::optional<::user_data_auth::InstallAttributesFinalizeReply> result_reply;
 
   scoped_refptr<FakeTaskRunner> runner = new FakeTaskRunner;
   EXPECT_CALL(*bus_.get(), GetDBusTaskRunner())
@@ -410,7 +408,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesFinalize) {
   result_reply = client_->BlockingInstallAttributesFinalize(
       ::user_data_auth::InstallAttributesFinalizeRequest());
 
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(
       ProtobufEquals(result_reply.value(),
                      expected_blocking_install_attributes_finalize_reply_));
@@ -419,8 +417,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesFinalize) {
 TEST_F(InstallAttributesClientTest, BlockingInstallAttributesGetStatus) {
   expected_blocking_install_attributes_get_status_reply_.set_error(
       user_data_auth::CryptohomeErrorCode::CRYPTOHOME_ERROR_TPM_DEFEND_LOCK);
-  absl::optional<::user_data_auth::InstallAttributesGetStatusReply>
-      result_reply;
+  std::optional<::user_data_auth::InstallAttributesGetStatusReply> result_reply;
 
   scoped_refptr<FakeTaskRunner> runner = new FakeTaskRunner;
   EXPECT_CALL(*bus_.get(), GetDBusTaskRunner())
@@ -429,7 +426,7 @@ TEST_F(InstallAttributesClientTest, BlockingInstallAttributesGetStatus) {
   result_reply = client_->BlockingInstallAttributesGetStatus(
       ::user_data_auth::InstallAttributesGetStatusRequest());
 
-  ASSERT_NE(result_reply, absl::nullopt);
+  ASSERT_NE(result_reply, std::nullopt);
   EXPECT_TRUE(
       ProtobufEquals(result_reply.value(),
                      expected_blocking_install_attributes_get_status_reply_));

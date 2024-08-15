@@ -8,12 +8,14 @@
 #include <map>
 #include <set>
 
-#include "base/files/file.h"
+#include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
+#include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "ios/chrome/browser/sessions/session_io_request.h"
 #include "ios/chrome/browser/sessions/session_restoration_observer.h"
 #include "ios/chrome/browser/sessions/session_restoration_service.h"
 
@@ -31,7 +33,7 @@ class SessionRestorationServiceImpl final : public SessionRestorationService {
       base::TimeDelta save_delay,
       bool enable_pinned_web_states,
       const base::FilePath& storage_path,
-      const scoped_refptr<base::SequencedTaskRunner> task_runner);
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   ~SessionRestorationServiceImpl() final;
 
@@ -42,12 +44,23 @@ class SessionRestorationServiceImpl final : public SessionRestorationService {
   void AddObserver(SessionRestorationObserver* observer) final;
   void RemoveObserver(SessionRestorationObserver* observer) final;
   void SaveSessions() final;
+  void ScheduleSaveSessions() final;
   void SetSessionID(Browser* browser, const std::string& identifier) final;
   void LoadSession(Browser* browser) final;
+  void LoadWebStateStorage(Browser* browser,
+                           web::WebState* web_state,
+                           WebStateStorageCallback callback) final;
+  void AttachBackup(Browser* browser, Browser* backup) final;
   void Disconnect(Browser* browser) final;
   std::unique_ptr<web::WebState> CreateUnrealizedWebState(
       Browser* browser,
       web::proto::WebStateStorage storage) final;
+  void DeleteDataForDiscardedSessions(const std::set<std::string>& identifiers,
+                                      base::OnceClosure closure) final;
+  void InvokeClosureWhenBackgroundProcessingDone(
+      base::OnceClosure closure) final;
+  void PurgeUnassociatedData(base::OnceClosure closure) final;
+  bool PlaceholderTabsEnabled() const final;
 
  private:
   // Helper type used to record information about a single WebStateList.
@@ -60,6 +73,9 @@ class SessionRestorationServiceImpl final : public SessionRestorationService {
 
   // Helper method that post a task to save state to storage.
   void SaveDirtySessions();
+
+  // Used to enforce use on the correct sequence.
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Observer list.
   base::ObserverList<SessionRestorationObserver, true> observers_;
@@ -89,6 +105,9 @@ class SessionRestorationServiceImpl final : public SessionRestorationService {
 
   // Used to enforce that the identifier are not shared between Browser.
   std::set<std::string> identifiers_;
+
+  // List of pending requests from CreateUnrealizedWebState(...).
+  ios::sessions::IORequestList pending_requests_;
 
   // Timer used to delay and batch saving data to storage.
   base::OneShotTimer timer_;

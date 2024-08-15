@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void fma_eb25d7() {
+  float3 res = float3(2.0f);
+}
+vertex float4 vertex_main() {
+  fma_eb25d7();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  fma_eb25d7();
+}
+kernel void compute_main() {
+  fma_eb25d7();
+}

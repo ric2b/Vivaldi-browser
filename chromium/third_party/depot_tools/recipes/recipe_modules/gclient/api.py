@@ -211,9 +211,11 @@ class GclientApi(recipe_api.RecipeApi):
         for propname, path in sorted(
             self.got_revision_reverse_mapping(cfg).items()):
           # gclient json paths always end with a slash
-          info = solutions.get(path + '/') or solutions.get(path)
-          if info:
-            result.presentation.properties[propname] = info['revision']
+          sol = solutions.get(path + '/') or solutions.get(path)
+          # solution can exist with `revision == null`. We only want to include
+          # properties that have set revision.
+          if sol and sol['revision']:
+            result.presentation.properties[propname] = sol['revision']
 
     return result
 

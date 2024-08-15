@@ -138,12 +138,10 @@ class LocalTranslator {
                                 const StringTranslationEntry table[],
                                 const std::string& shill_property_name);
 
-  raw_ptr<const chromeos::onc::OncValueSignature, ExperimentalAsh>
-      onc_signature_;
-  raw_ptr<const FieldTranslationEntry, ExperimentalAsh>
-      field_translation_table_;
-  raw_ptr<const base::Value::Dict, ExperimentalAsh> onc_object_;
-  raw_ptr<base::Value::Dict, ExperimentalAsh> shill_dictionary_;
+  raw_ptr<const chromeos::onc::OncValueSignature> onc_signature_;
+  raw_ptr<const FieldTranslationEntry> field_translation_table_;
+  raw_ptr<const base::Value::Dict> onc_object_;
+  raw_ptr<base::Value::Dict> shill_dictionary_;
 };
 
 void LocalTranslator::TranslateFields() {
@@ -351,7 +349,7 @@ void LocalTranslator::TranslateWiFi() {
   // We currently only support managed and no adhoc networks.
   shill_dictionary_->Set(shill::kModeProperty, shill::kModeManaged);
 
-  absl::optional<bool> allow_gateway_arp_polling =
+  std::optional<bool> allow_gateway_arp_polling =
       onc_object_->FindBool(::onc::wifi::kAllowGatewayARPPolling);
   if (allow_gateway_arp_polling) {
     shill_dictionary_->Set(shill::kLinkMonitorDisableProperty,

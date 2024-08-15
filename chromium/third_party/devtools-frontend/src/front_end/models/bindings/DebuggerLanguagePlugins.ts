@@ -6,14 +6,13 @@ import {type Chrome} from '../../../extension-api/ExtensionAPI.js';  // eslint-d
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
+import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
 
 import {ContentProviderBasedProject} from './ContentProviderBasedProject.js';
-
-import {assertNotNullOrUndefined} from '../../core/platform/platform.js';
 import {type DebuggerWorkspaceBinding} from './DebuggerWorkspaceBinding.js';
 import {NetworkProject} from './NetworkProject.js';
 
@@ -378,6 +377,10 @@ export class ExtensionRemoteObject extends SDK.RemoteObject.RemoteObject {
   override runtimeModel(): SDK.RuntimeModel.RuntimeModel {
     return this.callFrame.debuggerModel.runtimeModel();
   }
+
+  override isLinearMemoryInspectable(): boolean {
+    return this.extensionObject.linearMemoryAddress !== undefined;
+  }
 }
 
 export type StopId = bigint;
@@ -480,12 +483,12 @@ export class DebuggerLanguagePluginManager implements
             if ('missingSymbolFiles' in functionInfo && functionInfo.missingSymbolFiles.length) {
               const resources = functionInfo.missingSymbolFiles;
               const details = i18nString(UIStrings.debugSymbolsIncomplete, {PH1: callFrame.functionName});
-              callFrame.setMissingDebugInfoDetails({details, resources});
+              callFrame.missingDebugInfoDetails = {details, resources};
             } else {
-              callFrame.setMissingDebugInfoDetails({
-                resources: [],
+              callFrame.missingDebugInfoDetails = {
                 details: i18nString(UIStrings.failedToLoadDebugSymbolsForFunction, {PH1: callFrame.functionName}),
-              });
+                resources: [],
+              };
             }
           }
           return callFrame;
@@ -782,7 +785,8 @@ export class DebuggerLanguagePluginManager implements
                 console.log(i18nString(UIStrings.loadingDebugSymbolsFor, {PH1: plugin.name, PH2: url}));
               }
               try {
-                const code = (!symbolsUrl && url.startsWith('wasm://')) ? await script.getWasmBytecode() : undefined;
+                const code = (!symbolsUrl && Common.ParsedURL.schemeIs(url, 'wasm:')) ? await script.getWasmBytecode() :
+                                                                                        undefined;
                 const addModuleResult = await plugin.addRawModule(rawModuleId, symbolsUrl, {url, code});
                 // Check that the handle isn't stale by now. This works because the code that assigns to
                 // `rawModuleHandle` below will run before this code because of the `await` in the preceding

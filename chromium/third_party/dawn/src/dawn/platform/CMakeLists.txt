@@ -33,6 +33,10 @@ if(BUILD_SHARED_LIBS)
     target_compile_definitions(dawn_platform PRIVATE "DAWN_PLATFORM_SHARED_LIBRARY")
 endif()
 
+if (DAWN_USE_BUILT_DXC)
+  target_compile_definitions(dawn_platform PRIVATE "DAWN_USE_BUILT_DXC")
+endif()
+
 target_sources(dawn_platform PRIVATE
   PUBLIC
     "${DAWN_INCLUDE_DIR}/dawn/platform/DawnPlatform.h"
@@ -47,6 +51,10 @@ target_sources(dawn_platform PRIVATE
     "tracing/EventTracer.h"
     "tracing/TraceEvent.h"
 )
-target_link_libraries(dawn_platform PUBLIC dawn_headers PRIVATE dawn_internal_config dawn_common)
+target_link_libraries(dawn_platform
+  PUBLIC dawn_headers
+         partition_alloc
+  PRIVATE dawn_internal_config
+          dawn_common)
 
 install_if_enabled(dawn_platform)

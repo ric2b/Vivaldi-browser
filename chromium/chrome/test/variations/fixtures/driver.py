@@ -12,6 +12,7 @@ import pytest
 
 from chrome.test.variations import test_utils
 from chrome.test.variations.drivers import DriverFactory
+from chrome.test.variations.fixtures.test_options import TestOptions
 
 
 _PLATFORM_TO_RELEASE_OS = {
@@ -20,28 +21,10 @@ _PLATFORM_TO_RELEASE_OS = {
   'win': 'win64',
   'android': 'android',
   'webview': 'webview',
+  'android_webview': 'webview',
 }
 
 def pytest_addoption(parser):
-  # By default, running on the hosted platform.
-  parser.addoption('--target-platform',
-                   default=test_utils.get_hosted_platform(),
-                   dest='target_platform',
-                   choices=['linux', 'win', 'mac', 'android', 'webview',
-                            'cros', 'lacros'],
-                   help='If present, run for the target platform, '
-                   'defaults to the host platform.')
-
-  parser.addoption('--channel',
-                   default='dev',
-                   choices=['dev', 'canary', 'beta', 'stable', 'extended'],
-                   help='The channel of Chrome to download.')
-
-  parser.addoption('--chrome-version',
-                   dest='chrome_version',
-                   help='The version of Chrome to download. '
-                   'If this is set, --channel will be ignored.')
-
   parser.addoption('--chromedriver',
                    help='The path to the existing chromedriver. '
                    'This will ignore --channel and skip downloading.')
@@ -83,7 +66,7 @@ def _version_to_download(
 
 # pylint: disable=redefined-outer-name
 @pytest.fixture(scope="session")
-def chromedriver_path(pytestconfig) -> Optional[str]:
+def chromedriver_path(pytestconfig, test_options: TestOptions) -> Optional[str]:
   """Finds the path to the chromedriver.
 
   The fixture downloads the chromedriver from GCS bucket from a given
@@ -106,9 +89,9 @@ def chromedriver_path(pytestconfig) -> Optional[str]:
       f'Given chromedriver doesn\'t exist. ({cd_path})')
     return cd_path
 
-  platform = pytestconfig.getoption('target_platform')
-  channel = pytestconfig.getoption('channel')
-  chrome_version = pytestconfig.getoption('chrome_version')
+  platform = test_options.platform
+  channel = test_options.channel
+  chrome_version = test_options.chrome_version
 
   version = str(_version_to_download(chrome_version, platform, channel))
 
@@ -120,7 +103,7 @@ def chromedriver_path(pytestconfig) -> Optional[str]:
     chrome_dir = test_utils.download_chrome_mac(version=version)
   elif platform == "win":
     chrome_dir = test_utils.download_chrome_win(version=version)
-  elif platform in ('android', 'webview'):
+  elif platform in ('android', 'webview', 'android_webview'):
     # For Android/Webview, we will use install_webview or install_chrome to
     # download and install APKs, however, we will still need the chromedriver
     # binaries for the hosts. Currently we will only run on Linux, so fetching
@@ -171,7 +154,7 @@ def driver_factory(
       channel=pytestconfig.getoption('channel'),
       crash_dump_dir=str(tmp_path_factory.mktemp('crash')),
       chromedriver_path=chromedriver_path)
-  elif target_platform in ('android', 'webview'):
+  elif target_platform in ('android', 'webview', 'android_webview'):
     assert test_utils.get_hosted_platform() == 'linux', (
       f'Only support to run android tests on Linux, but running on '
       f'{test_utils.get_hosted_platform()}'
@@ -180,6 +163,7 @@ def driver_factory(
     factories = {
       'android': android.AndroidDriverFactory,
       'webview': android.WebviewDriverFactory,
+      'android_webview': android.WebviewDriverFactory,
     }
 
     factory = factories[target_platform](

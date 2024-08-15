@@ -152,7 +152,7 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
                                                       "UPDATE calendar SET \
         name=?, description=?, ctag=?, orderindex=?, color=?, hidden=?, \
         active=?, iconindex=?, last_checked=?, \
-        timezone=?, supported_component_set=? WHERE id=?"));
+        timezone=?, supported_component_set=?, last_modified=? WHERE id=?"));
   int column_index = 0;
   statement.BindString16(column_index++, calendar.name());
   statement.BindString16(column_index++, calendar.description());
@@ -166,6 +166,7 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
                       calendar.last_checked().ToInternalValue());
   statement.BindString(column_index++, calendar.timezone());
   statement.BindInt(column_index++, calendar.supported_component_set());
+  statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
 
   statement.BindInt64(column_index++, calendar.id());
 

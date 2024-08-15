@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/picture_in_picture/picture_in_picture_occlusion_tracker.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/ui/browser_content_setting_bubble_model_delegate.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -26,10 +27,12 @@
 #include "content/public/browser/document_picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
+#include "extensions/buildflags/buildflags.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_observer.h"
@@ -74,6 +77,10 @@
 #include "ui/aura/window.h"
 #endif  // RESIZE_DOCUMENT_PICTURE_IN_PICTURE_TO_DIALOG
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/common/constants.h"
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
 namespace {
 
 constexpr int kWindowIconImageSize = 16;
@@ -81,7 +88,7 @@ constexpr int kBackToTabImageSize = 16;
 constexpr int kContentSettingIconSize = 16;
 
 // The height of the controls bar at the top of the window.
-constexpr int kTopControlsHeight = 30;
+constexpr int kTopControlsHeight = 34;
 
 #if BUILDFLAG(IS_LINUX)
 // Frame border when window shadow is not drawn.
@@ -113,9 +120,9 @@ constexpr std::array<base::TimeDelta, 3> kCloseButtonAnimationDurations = {
     kAnimationDuration * 0.4};
 
 class BackToTabButton : public OverlayWindowImageButton {
- public:
-  METADATA_HEADER(BackToTabButton);
+  METADATA_HEADER(BackToTabButton, OverlayWindowImageButton)
 
+ public:
   explicit BackToTabButton(PressedCallback callback)
       : OverlayWindowImageButton(std::move(callback)) {
     auto* icon = &vector_icons::kBackToTabIcon;
@@ -135,7 +142,7 @@ class BackToTabButton : public OverlayWindowImageButton {
   ~BackToTabButton() override = default;
 };
 
-BEGIN_METADATA(BackToTabButton, OverlayWindowImageButton)
+BEGIN_METADATA(BackToTabButton)
 END_METADATA
 
 // Helper class for observing mouse and key events from native window.
@@ -183,17 +190,10 @@ class WindowEventObserver : public ui::EventObserver {
     // is not necessary the same as the local bounds on Linux.
     if (pip_browser_frame_view_->ShouldDrawFrameShadow()) {
       gfx::Insets insets = pip_browser_frame_view_->MirroredFrameBorderInsets();
-      const auto tiled_edges = pip_browser_frame_view_->frame()->tiled_edges();
-      if (tiled_edges.left)
-        insets.set_left(0);
-      if (tiled_edges.right)
-        insets.set_right(0);
-      if (tiled_edges.top)
-        insets.set_top(0);
-      if (tiled_edges.bottom)
-        insets.set_bottom(0);
-
-      input_bounds.Inset(insets + pip_browser_frame_view_->GetInputInsets());
+      if (pip_browser_frame_view_->frame()->tiled()) {
+        insets = gfx::Insets();
+      }
+      input_bounds.Inset(insets - pip_browser_frame_view_->GetInputInsets());
     }
 #endif
 
@@ -468,6 +468,13 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
                             ? gfx::ELIDE_TAIL
                             : gfx::ELIDE_HEAD;
 
+  // Similarly for extension URLs, the tail is more important to elide.
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (location_bar_model_->GetURL().SchemeIs(extensions::kExtensionScheme)) {
+    elide_behavior = gfx::ELIDE_TAIL;
+  }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
   // Creates the window title.
   top_bar_container_view_->AddChildView(
       views::Builder<views::Label>()
@@ -499,6 +506,14 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
     model->SetIconSize(kContentSettingIconSize);
     auto image_view = std::make_unique<ContentSettingImageView>(
         std::move(model), this, this, font_list);
+
+    // The ContentSettingImageView loses 4px of margin in Chrome Refresh that we
+    // don't want to lose in the document picture-in-picture toolbar.
+    if (features::IsChromeRefresh2023()) {
+      image_view->SetProperty(views::kMarginsKey,
+                              gfx::Insets::TLBR(0, 0, 0, 4));
+    }
+
     content_setting_views_.push_back(
         button_container_view_->AddChildView(std::move(image_view)));
   }
@@ -622,8 +637,8 @@ void PictureInPictureBrowserFrameView::OnBrowserViewInitViewsComplete() {
     return;
   }
 
-  const absl::optional<blink::mojom::PictureInPictureWindowOptions>
-      pip_options = browser_view()->GetDocumentPictureInPictureOptions();
+  const std::optional<blink::mojom::PictureInPictureWindowOptions> pip_options =
+      browser_view()->GetDocumentPictureInPictureOptions();
 
   if (!pip_options.has_value()) {
     return;
@@ -788,9 +803,13 @@ void PictureInPictureBrowserFrameView::AddedToWidget() {
 
   // If the AutoPiP setting overlay is set, show the permission settings bubble.
   if (auto_pip_setting_overlay_) {
-    auto_pip_setting_overlay_->ShowBubble(
-        GetWidget()->GetNativeView(),
-        AutoPipSettingOverlayView::PipWindowType::kDocumentPip);
+    auto_pip_setting_overlay_->ShowBubble(GetWidget()->GetNativeView());
+  }
+
+  PictureInPictureOcclusionTracker* tracker =
+      PictureInPictureWindowManager::GetInstance()->GetOcclusionTracker();
+  if (tracker) {
+    tracker->OnPictureInPictureWidgetOpened(GetWidget());
   }
 
   BrowserNonClientFrameView::AddedToWidget();
@@ -821,7 +840,7 @@ gfx::Insets PictureInPictureBrowserFrameView::MirroredFrameBorderInsets()
 }
 
 gfx::Insets PictureInPictureBrowserFrameView::GetInputInsets() const {
-  return gfx::Insets(ShouldDrawFrameShadow() ? -kResizeBorder : 0);
+  return gfx::Insets(ShouldDrawFrameShadow() ? kResizeBorder : 0);
 }
 
 SkRRect PictureInPictureBrowserFrameView::GetRestoredClipRegion() const {
@@ -907,6 +926,13 @@ bool PictureInPictureBrowserFrameView::ShowPageInfoDialog() {
           /*closing_callback=*/base::DoNothing());
   bubble->SetHighlightedButton(location_icon_view_);
   bubble->GetWidget()->Show();
+
+  PictureInPictureOcclusionTracker* tracker =
+      PictureInPictureWindowManager::GetInstance()->GetOcclusionTracker();
+  if (tracker) {
+    tracker->OnPictureInPictureWidgetOpened(bubble->GetWidget());
+  }
+
   return true;
 }
 
@@ -937,7 +963,7 @@ ui::ImageModel PictureInPictureBrowserFrameView::GetLocationIcon(
                                         kWindowIconImageSize);
 }
 
-absl::optional<ui::ColorId>
+std::optional<ui::ColorId>
 PictureInPictureBrowserFrameView::GetLocationIconBackgroundColorOverride()
     const {
   return kColorPipWindowTopBarBackground;
@@ -1010,7 +1036,7 @@ void PictureInPictureBrowserFrameView::OnWidgetBoundsChanged(
 void PictureInPictureBrowserFrameView::AnimationEnded(
     const gfx::Animation* animation) {
   if (animation == &top_bar_color_animation_) {
-    current_foreground_color_ = absl::nullopt;
+    current_foreground_color_ = std::nullopt;
     location_icon_view_->Update(/*suppress_animations=*/false);
   }
 }
@@ -1064,7 +1090,7 @@ void PictureInPictureBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
   if (window_frame_provider_) {
     window_frame_provider_->PaintWindowFrame(
         canvas, GetLocalBounds(), GetTopAreaHeight(), ShouldPaintAsActive(),
-        frame()->tiled_edges());
+        GetInputInsets());
   } else {
     DCHECK(frame_background_);
     frame_background_->set_frame_color(
@@ -1079,8 +1105,8 @@ void PictureInPictureBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
     frame_background_->set_top_area_height(GetTopAreaHeight());
     PaintRestoredFrameBorderLinux(
         *canvas, *this, frame_background_.get(), GetRestoredClipRegion(),
-        ShouldDrawFrameShadow(), MirroredFrameBorderInsets(),
-        GetShadowValues());
+        ShouldDrawFrameShadow(), ShouldPaintAsActive(),
+        MirroredFrameBorderInsets(), GetShadowValues(), frame()->tiled());
   }
 #endif
   BrowserNonClientFrameView::OnPaint(canvas);
@@ -1132,7 +1158,7 @@ void PictureInPictureBrowserFrameView::UpdateContentSettingsIcons() {
   const auto kButtonContainerViewInsets =
       gfx::Insets::VH(0, GetLayoutConstant(TAB_AFTER_TITLE_PADDING));
 
-  for (auto* view : content_setting_views_) {
+  for (ContentSettingImageView* view : content_setting_views_) {
     view->Update();
 
     // Currently the only content setting view we have is for camera and
@@ -1185,18 +1211,15 @@ gfx::Insets PictureInPictureBrowserFrameView::FrameBorderInsets() const {
 #if BUILDFLAG(IS_LINUX)
   if (window_frame_provider_) {
     const auto insets = window_frame_provider_->GetFrameThicknessDip();
-    const auto tiled_edges = frame()->tiled_edges();
+    const bool tiled = frame()->tiled();
 
     // If edges of the window are tiled and snapped to the edges of the desktop,
     // window_frame_provider_ will skip drawing.
-    return gfx::Insets::TLBR(tiled_edges.top ? 0 : insets.top(),
-                             tiled_edges.left ? 0 : insets.left(),
-                             tiled_edges.bottom ? 0 : insets.bottom(),
-                             tiled_edges.right ? 0 : insets.right());
+    return tiled ? gfx::Insets() : insets;
   }
-  return GetRestoredFrameBorderInsetsLinux(
-      ShouldDrawFrameShadow(), gfx::Insets(kFrameBorderThickness),
-      frame()->tiled_edges(), GetShadowValues(), kResizeBorder);
+  return GetRestoredFrameBorderInsetsLinux(ShouldDrawFrameShadow(),
+                                           gfx::Insets(kFrameBorderThickness),
+                                           GetShadowValues(), kResizeBorder);
 #else
   return gfx::Insets();
 #endif
@@ -1300,5 +1323,5 @@ bool PictureInPictureBrowserFrameView::IsOverlayViewVisible() const {
   return auto_pip_setting_overlay_ && auto_pip_setting_overlay_->GetVisible();
 }
 
-BEGIN_METADATA(PictureInPictureBrowserFrameView, BrowserNonClientFrameView)
+BEGIN_METADATA(PictureInPictureBrowserFrameView)
 END_METADATA

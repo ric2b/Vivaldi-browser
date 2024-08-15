@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/public/browser/render_process_host.h"
+
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -36,7 +39,6 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/child_process_launcher_utils.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_creation_observer.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/web_contents.h"
@@ -72,7 +74,6 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -699,7 +700,7 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, SpareVsFastShutdown) {
   spare_renderer->FastShutdownIfPossible();
 
   process_watcher.Wait();
-  EXPECT_FALSE(process_watcher.did_exit_normally());
+  EXPECT_TRUE(process_watcher.did_exit_normally());
 
   // An important part of test verification is that UaF doesn't happen in the
   // next revolution of the message pump - without extra care in the
@@ -842,7 +843,8 @@ class AudioStartObserver : public WebContentsObserver {
         render_frame_host_(
             static_cast<RenderFrameHostImpl*>(render_frame_host)),
         contents_audible_(web_contents->IsCurrentlyAudible()),
-        frame_audible_(render_frame_host_->is_audible()),
+        frame_audible_(render_frame_host_->HasMediaStreams(
+            RenderFrameHostImpl::GetAudibleMediaStreamType())),
         audible_closure_(std::move(audible_closure)) {
     MaybeFireClosure();
   }
@@ -1147,8 +1149,9 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, KeepAliveRendererProcess) {
   EXPECT_LT(base::TimeTicks::Now() - start, base::Seconds(30));
 }
 
+// TODO(crbug.com/1462719): Fix and re-enable.
 IN_PROC_BROWSER_TEST_P(RenderProcessHostTest,
-                       KeepAliveRendererProcessWithServiceWorker) {
+                       DISABLED_KeepAliveRendererProcessWithServiceWorker) {
   if (IsKeepAliveInBrowserMigrationEnabled()) {
     // TODO(crbug.com/1356128): Add keepalive in-browser support for workers.
     return;
@@ -1380,15 +1383,15 @@ class IsProcessBackgroundedObserver : public RenderProcessHostInternalObserver {
 
   // Returns the latest recorded value if there was one and resets the recorded
   // value to |nullopt|.
-  absl::optional<bool> TakeValue() {
+  std::optional<bool> TakeValue() {
     auto value = backgrounded_;
-    backgrounded_ = absl::nullopt;
+    backgrounded_ = std::nullopt;
     return value;
   }
 
  private:
   // Stores the last observed value of IsProcessBackgrounded for a host.
-  absl::optional<bool> backgrounded_;
+  std::optional<bool> backgrounded_;
   base::ScopedObservation<RenderProcessHostImpl,
                           RenderProcessHostInternalObserver>
       host_observation_{this};
@@ -1560,20 +1563,19 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, ForEachRenderFrameHost) {
   EXPECT_EQ(RenderFrameHostImpl::LifecycleStateImpl::kSpeculative,
             rfh_b->lifecycle_state());
 
+  std::vector<RenderFrameHost*> same_process_rfhs;
   auto non_speculative_rfh_collector =
-      [](std::vector<RenderFrameHost*>& results, RenderFrameHost* rfh) {
+      [&same_process_rfhs](RenderFrameHost* rfh) {
         auto* rfhi = static_cast<RenderFrameHostImpl*>(rfh);
         EXPECT_NE(RenderFrameHostImpl::LifecycleStateImpl::kSpeculative,
                   rfhi->lifecycle_state());
-        results.push_back(rfh);
+        same_process_rfhs.push_back(rfh);
       };
 
   // 5. Check all of the a.com RenderFrameHosts are tracked by `rph_a`.
   RenderProcessHostImpl* rph_a =
       static_cast<RenderProcessHostImpl*>(rfh_a->GetProcess());
-  std::vector<RenderFrameHost*> same_process_rfhs;
-  rph_a->ForEachRenderFrameHost(base::BindRepeating(
-      non_speculative_rfh_collector, std::ref(same_process_rfhs)));
+  rph_a->ForEachRenderFrameHost(non_speculative_rfh_collector);
   EXPECT_EQ(5, rph_a->GetRenderFrameHostCount());
   EXPECT_EQ(5u, same_process_rfhs.size());
   EXPECT_THAT(same_process_rfhs,
@@ -1585,8 +1587,7 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, ForEachRenderFrameHost) {
   RenderProcessHostImpl* rph_b =
       static_cast<RenderProcessHostImpl*>(rfh_b->GetProcess());
   ASSERT_NE(rph_a, rph_b);
-  rph_b->ForEachRenderFrameHost(base::BindRepeating(
-      non_speculative_rfh_collector, std::ref(same_process_rfhs)));
+  rph_b->ForEachRenderFrameHost(non_speculative_rfh_collector);
   EXPECT_EQ(1, rph_b->GetRenderFrameHostCount());
   // The speculative RenderFrameHost should be filtered out.
   EXPECT_EQ(same_process_rfhs.size(), 0u);
@@ -1601,8 +1602,7 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, ForEachRenderFrameHost) {
 
   EXPECT_EQ(1, rph_b->GetRenderFrameHostCount());
   same_process_rfhs.clear();
-  rph_b->ForEachRenderFrameHost(base::BindRepeating(
-      non_speculative_rfh_collector, std::ref(same_process_rfhs)));
+  rph_b->ForEachRenderFrameHost(non_speculative_rfh_collector);
   EXPECT_EQ(1, rph_b->GetRenderFrameHostCount());
   EXPECT_EQ(1u, same_process_rfhs.size());
   EXPECT_THAT(same_process_rfhs, testing::ElementsAre(rfh_b));
@@ -1960,13 +1960,10 @@ class RenderFrameDeletionObserver : public WebContentsObserver {
 
     // Find all other RenderFrameHosts in the process, which should exclude the
     // one being deleted.
-    auto rfh_collector = [](std::vector<RenderFrameHost*>& results,
-                            RenderFrameHost* rfh) { results.push_back(rfh); };
-    RenderProcessHostImpl* process =
-        static_cast<RenderProcessHostImpl*>(render_frame_host->GetProcess());
     std::vector<RenderFrameHost*> all_rfhs;
+    RenderProcessHost* process = render_frame_host->GetProcess();
     process->ForEachRenderFrameHost(
-        base::BindRepeating(rfh_collector, std::ref(all_rfhs)));
+        [&all_rfhs](RenderFrameHost* rfh) { all_rfhs.push_back(rfh); });
 
     // Update the cumulative count of other RenderFrameHosts in the process.
     render_frame_host_iterator_count_ += all_rfhs.size();
@@ -2186,7 +2183,7 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest,
 
     base::RunLoop run_loop;
 
-    absl::optional<uint32_t> renderer_result = absl::nullopt;
+    std::optional<uint32_t> renderer_result = std::nullopt;
     service->PseudonymizeString(
         test_string, base::BindLambdaForTesting([&](uint32_t result) {
           renderer_result = result;

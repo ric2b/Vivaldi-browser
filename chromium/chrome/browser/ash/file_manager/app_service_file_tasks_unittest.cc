@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/file_manager/app_service_file_tasks.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,7 +46,6 @@
 #include "storage/browser/file_system/external_mount_points.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
@@ -351,7 +351,7 @@ class AppServiceFileTasksTest : public testing::Test {
   base::test::ScopedFeatureList feature_list_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-  raw_ptr<apps::AppServiceProxy, ExperimentalAsh> app_service_proxy_ = nullptr;
+  raw_ptr<apps::AppServiceProxy> app_service_proxy_ = nullptr;
   apps::AppServiceTest app_service_test_;
 };
 
@@ -1005,8 +1005,7 @@ class AppServiceFileTasksPolicyTest : public AppServiceFileTasksTestEnabled {
 
   void TearDown() override { fake_user_manager_.Reset(); }
 
-  raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> rules_manager_ =
-      nullptr;
+  raw_ptr<policy::MockDlpRulesManager> rules_manager_ = nullptr;
   std::unique_ptr<MockFilesController> mock_files_controller_ = nullptr;
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};

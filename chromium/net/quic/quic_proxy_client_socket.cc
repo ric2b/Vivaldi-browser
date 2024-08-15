@@ -131,12 +131,6 @@ bool QuicProxyClientSocket::WasEverUsed() const {
   return session_->WasEverUsed();
 }
 
-bool QuicProxyClientSocket::WasAlpnNegotiated() const {
-  // Do not delegate to `session_`. While `session_` negotiates ALPN with the
-  // proxy, this object represents the tunneled TCP connection to the origin.
-  return false;
-}
-
 NextProto QuicProxyClientSocket::GetNegotiatedProtocol() const {
   // Do not delegate to `session_`. While `session_` negotiates ALPN with the
   // proxy, this object represents the tunneled TCP connection to the origin.
@@ -347,8 +341,8 @@ int QuicProxyClientSocket::DoSendRequest() {
 
   if (proxy_delegate_) {
     HttpRequestHeaders proxy_delegate_headers;
-    proxy_delegate_->OnBeforeTunnelRequestServerOnly(
-        proxy_chain_, proxy_chain_index_, &proxy_delegate_headers);
+    proxy_delegate_->OnBeforeTunnelRequest(proxy_chain_, proxy_chain_index_,
+                                           &proxy_delegate_headers);
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
 
@@ -410,7 +404,7 @@ int QuicProxyClientSocket::DoReadReplyComplete(int result) {
       response_.headers.get());
 
   if (proxy_delegate_) {
-    int rv = proxy_delegate_->OnTunnelHeadersReceivedServerOnly(
+    int rv = proxy_delegate_->OnTunnelHeadersReceived(
         proxy_chain_, proxy_chain_index_, *response_.headers);
     if (rv != OK) {
       DCHECK_NE(ERR_IO_PENDING, rv);

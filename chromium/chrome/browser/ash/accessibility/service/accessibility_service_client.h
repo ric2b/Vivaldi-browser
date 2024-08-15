@@ -32,6 +32,7 @@ class AutoclickClientImpl;
 class AutomationClientImpl;
 class SpeechRecognitionImpl;
 class TtsClientImpl;
+class UserInputImpl;
 class UserInterfaceImpl;
 
 // The AccessibilityServiceClient in the Browser process interacts with the
@@ -50,14 +51,16 @@ class AccessibilityServiceClient : public ax::mojom::AccessibilityServiceClient,
 
   // ax::mojom::AccessibilityServiceClient:
   void BindAutomation(
-      mojo::PendingAssociatedRemote<ax::mojom::Automation> automation,
-      mojo::PendingReceiver<ax::mojom::AutomationClient> automation_client)
-      override;
+      mojo::PendingAssociatedRemote<ax::mojom::Automation> automation) override;
+  void BindAutomationClient(mojo::PendingReceiver<ax::mojom::AutomationClient>
+                                automation_client) override;
   void BindAutoclickClient(mojo::PendingReceiver<ax::mojom::AutoclickClient>
                                autoclick_receiver) override;
   void BindSpeechRecognition(
       mojo::PendingReceiver<ax::mojom::SpeechRecognition> sr_receiver) override;
   void BindTts(mojo::PendingReceiver<ax::mojom::Tts> tts_receiver) override;
+  void BindUserInput(
+      mojo::PendingReceiver<ax::mojom::UserInput> ui_receiver) override;
   void BindUserInterface(
       mojo::PendingReceiver<ax::mojom::UserInterface> ui_receiver) override;
   void BindAccessibilityFileLoader(
@@ -105,17 +108,18 @@ class AccessibilityServiceClient : public ax::mojom::AccessibilityServiceClient,
   // opened.
   void OnFileLoaded(LoadCallback callback, base::File file);
 
+  std::unique_ptr<AutoclickClientImpl> autoclick_client_;
   std::unique_ptr<AutomationClientImpl> automation_client_;
   std::unique_ptr<SpeechRecognitionImpl> speech_recognition_impl_;
   std::unique_ptr<TtsClientImpl> tts_client_;
+  std::unique_ptr<UserInputImpl> user_input_client_;
   std::unique_ptr<UserInterfaceImpl> user_interface_client_;
-  std::unique_ptr<AutoclickClientImpl> autoclick_client_;
 
   // Track the currently enabled features in case we disconnect from the service
   // and need to reconnect, for example when the profile changes.
   std::vector<ax::mojom::AssistiveTechnologyType> enabled_features_;
 
-  raw_ptr<content::BrowserContext, ExperimentalAsh> profile_ = nullptr;
+  raw_ptr<content::BrowserContext> profile_ = nullptr;
 
   // Here is the remote to the AT Controller, used to toggle features.
   mojo::Remote<ax::mojom::AssistiveTechnologyController> at_controller_;

@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -31,6 +32,7 @@
 #include "content/browser/loader/navigation_early_hints_manager.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/navigation_url_loader_delegate.h"
+#include "content/browser/loader/response_head_update_params.h"
 #include "content/browser/loader/subresource_proxying_url_loader_service.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/preloading/prefetch/prefetch_url_loader_interceptor.h"
@@ -57,6 +59,7 @@
 #include "content/public/browser/frame_accept_header.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/browser/shared_cors_origin_access_list.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/url_loader_request_interceptor.h"
@@ -88,6 +91,7 @@
 #include "services/network/public/cpp/attribution_reporting_runtime_features.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/request_destination.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/url_util.h"
@@ -97,7 +101,6 @@
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/loader/mime_sniffing_throttle.h"
 #include "third_party/blink/public/common/loader/record_load_histograms.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
@@ -116,6 +119,10 @@
 namespace content {
 
 namespace {
+
+BASE_FEATURE(kSkipUnnecessaryThreadHopsForParseHeaders,
+             "SkipUnnecessaryThreadHopsForParseHeaders",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 class NavigationLoaderInterceptorBrowserContainer
     : public NavigationLoaderInterceptor {
@@ -155,11 +162,10 @@ class NavigationLoaderInterceptorBrowserContainer
       mojo::PendingRemote<network::mojom::URLLoader>* loader,
       mojo::PendingReceiver<network::mojom::URLLoaderClient>* client_receiver,
       blink::ThrottlingURLLoader* url_loader,
-      bool* skip_other_interceptors,
-      bool* will_return_unsafe_redirect) override {
+      bool* skip_other_interceptors) override {
     return browser_interceptor_->MaybeCreateLoaderForResponse(
         status, request, response_head, response_body, loader, client_receiver,
-        url_loader, skip_other_interceptors, will_return_unsafe_redirect);
+        url_loader);
   }
 
  private:
@@ -392,38 +398,40 @@ void CheckParsedHeadersEquals(const network::mojom::ParsedHeadersPtr& lhs,
   // because the two parsing results mismatch in this expected way.
   network::mojom::ParsedHeadersPtr adjusted_lhs = lhs->Clone();
   if (rhs->client_hints_ignored_due_to_clear_site_data_header) {
-    DCHECK(!rhs->accept_ch);
-    DCHECK(!rhs->critical_ch);
-    adjusted_lhs->accept_ch = absl::nullopt;
-    adjusted_lhs->critical_ch = absl::nullopt;
+    CHECK(!rhs->accept_ch);
+    CHECK(!rhs->critical_ch);
+    adjusted_lhs->accept_ch = std::nullopt;
+    adjusted_lhs->critical_ch = std::nullopt;
     adjusted_lhs->client_hints_ignored_due_to_clear_site_data_header = true;
   }
   if (mojo::Equals(adjusted_lhs, rhs)) {
     return;
   }
-  DCHECK(mojo::Equals(adjusted_lhs->content_security_policy,
-                      rhs->content_security_policy));
-  DCHECK(mojo::Equals(adjusted_lhs->allow_csp_from, rhs->allow_csp_from));
-  DCHECK(mojo::Equals(adjusted_lhs->cross_origin_embedder_policy,
-                      rhs->cross_origin_embedder_policy));
-  DCHECK(mojo::Equals(adjusted_lhs->cross_origin_opener_policy,
-                      rhs->cross_origin_opener_policy));
-  DCHECK(mojo::Equals(adjusted_lhs->origin_agent_cluster,
-                      rhs->origin_agent_cluster));
-  DCHECK(mojo::Equals(adjusted_lhs->accept_ch, rhs->accept_ch));
-  DCHECK(mojo::Equals(adjusted_lhs->critical_ch, rhs->critical_ch));
+  CHECK(mojo::Equals(adjusted_lhs->content_security_policy,
+                     rhs->content_security_policy));
+  CHECK(mojo::Equals(adjusted_lhs->allow_csp_from, rhs->allow_csp_from));
+  CHECK(mojo::Equals(adjusted_lhs->cross_origin_embedder_policy,
+                     rhs->cross_origin_embedder_policy));
+  CHECK(mojo::Equals(adjusted_lhs->cross_origin_opener_policy,
+                     rhs->cross_origin_opener_policy));
+  CHECK(mojo::Equals(adjusted_lhs->origin_agent_cluster,
+                     rhs->origin_agent_cluster));
+  CHECK(mojo::Equals(adjusted_lhs->accept_ch, rhs->accept_ch));
+  CHECK(mojo::Equals(adjusted_lhs->critical_ch, rhs->critical_ch));
   DCHECK_EQ(adjusted_lhs->xfo, rhs->xfo);
-  DCHECK(mojo::Equals(adjusted_lhs->link_headers, rhs->link_headers));
-  DCHECK(mojo::Equals(adjusted_lhs->supports_loading_mode,
-                      rhs->supports_loading_mode));
-  DCHECK(mojo::Equals(adjusted_lhs->timing_allow_origin,
-                      rhs->timing_allow_origin));
-  DCHECK(mojo::Equals(adjusted_lhs->reporting_endpoints,
-                      rhs->reporting_endpoints));
-  DCHECK(mojo::Equals(adjusted_lhs->variants_headers, rhs->variants_headers));
-  DCHECK(mojo::Equals(adjusted_lhs->content_language, rhs->content_language));
-  DCHECK(mojo::Equals(adjusted_lhs->no_vary_search_with_parse_error,
-                      rhs->no_vary_search_with_parse_error));
+  CHECK(mojo::Equals(adjusted_lhs->link_headers, rhs->link_headers));
+  CHECK(mojo::Equals(adjusted_lhs->timing_allow_origin,
+                     rhs->timing_allow_origin));
+  CHECK(mojo::Equals(adjusted_lhs->supports_loading_mode,
+                     rhs->supports_loading_mode));
+  CHECK(mojo::Equals(adjusted_lhs->reporting_endpoints,
+                     rhs->reporting_endpoints));
+  CHECK(mojo::Equals(adjusted_lhs->variants_headers, rhs->variants_headers));
+  CHECK(mojo::Equals(adjusted_lhs->content_language, rhs->content_language));
+  CHECK(mojo::Equals(adjusted_lhs->no_vary_search_with_parse_error,
+                     rhs->no_vary_search_with_parse_error));
+  CHECK(mojo::Equals(adjusted_lhs->observe_browsing_topics,
+                     rhs->observe_browsing_topics));
   NOTREACHED() << "The parsed headers don't match, but we don't know which "
                   "field does not match. Please add a DCHECK before this one "
                   "checking for the missing field.";
@@ -455,8 +463,6 @@ void NavigationURLLoaderImpl::StartImpl(
     std::string accept_langs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!started_);
-  DCHECK(!head_);
-  head_ = network::mojom::URLResponseHead::New();
   started_ = true;
 
   resource_request_->headers.SetHeader(
@@ -538,12 +544,10 @@ void NavigationURLLoaderImpl::CreateInterceptors(
   }
 
   // Set up an interceptor for prefetch.
-  std::unique_ptr<PrefetchURLLoaderInterceptor> prefetch_interceptor =
-      content::PrefetchURLLoaderInterceptor::MaybeCreateInterceptor(
-          frame_tree_node_id_, request_info_->initiator_document_token);
-  if (prefetch_interceptor) {
-    interceptors_.push_back(std::move(prefetch_interceptor));
-  }
+  interceptors_.push_back(
+      std::make_unique<PrefetchURLLoaderInterceptor>(
+          frame_tree_node_id_, request_info_->initiator_document_token,
+          request_info_->prefetch_serving_page_metrics_container));
 
   // See if embedders want to add interceptors.
   std::vector<std::unique_ptr<URLLoaderRequestInterceptor>>
@@ -592,7 +596,6 @@ void NavigationURLLoaderImpl::Restart() {
   }
   interceptor_index_ = 0;
   received_response_ = false;
-  head_ = network::mojom::URLResponseHead::New();
   MaybeStartLoader(/*interceptor=*/nullptr, /*single_request_factory=*/{});
 }
 
@@ -637,8 +640,6 @@ void NavigationURLLoaderImpl::MaybeStartLoader(
 
     subresource_loader_params_ =
         interceptor->MaybeCreateSubresourceLoaderParams();
-    if (interceptor->ShouldBypassRedirectChecks())
-      bypass_redirect_checks_ = true;
     return;
   }
 
@@ -685,17 +686,20 @@ void NavigationURLLoaderImpl::MaybeStartLoader(
   }
 
   // No interceptors wanted to handle this request.
-  FallbackToNonInterceptedRequest(false);
+  FallbackToNonInterceptedRequest(false, ResponseHeadUpdateParams());
 }
 
 void NavigationURLLoaderImpl::FallbackToNonInterceptedRequest(
     bool reset_subresource_loader_params,
-    const net::LoadTimingInfo& timing_info) {
+    const ResponseHeadUpdateParams& head_update_params) {
   if (reset_subresource_loader_params)
     subresource_loader_params_.reset();
 
-  intercepting_worker_start_time_ = timing_info.service_worker_start_time;
-  intercepting_worker_ready_time_ = timing_info.service_worker_ready_time;
+  intercepting_worker_start_time_ =
+      head_update_params.load_timing_info.service_worker_start_time;
+  intercepting_worker_ready_time_ =
+      head_update_params.load_timing_info.service_worker_ready_time;
+  intercepting_worker_router_info_ = head_update_params.router_info.Clone();
 
   scoped_refptr<network::SharedURLLoaderFactory> factory =
       PrepareForNonInterceptedRequest();
@@ -730,7 +734,7 @@ NavigationURLLoaderImpl::PrepareForNonInterceptedRequest() {
     if (known_schemes_.find(resource_request_->url.scheme()) ==
         known_schemes_.end()) {
       mojo::PendingRemote<network::mojom::URLLoaderFactory> loader_factory;
-      absl::optional<url::Origin> initiating_origin;
+      std::optional<url::Origin> initiating_origin;
       if (url_chain_.size() > 1) {
         initiating_origin =
             url::Origin::Create(url_chain_[url_chain_.size() - 2]);
@@ -817,7 +821,7 @@ void NavigationURLLoaderImpl::OnReceiveEarlyHints(
     return;
 
   if (!early_hints_manager_) {
-    absl::optional<NavigationEarlyHintsManagerParams> params =
+    std::optional<NavigationEarlyHintsManagerParams> params =
         delegate_->CreateNavigationEarlyHintsManagerParams(*early_hints);
     if (!params)
       return;
@@ -833,16 +837,16 @@ void NavigationURLLoaderImpl::OnReceiveEarlyHints(
 void NavigationURLLoaderImpl::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr head,
     mojo::ScopedDataPipeConsumerHandle response_body,
-    absl::optional<mojo_base::BigBuffer> cached_metadata) {
+    std::optional<mojo_base::BigBuffer> cached_metadata) {
   DCHECK(!cached_metadata);
   LogQueueTimeHistogram("Navigation.QueueTime.OnReceiveResponse",
                         resource_request_->is_outermost_main_frame);
-  head_ = std::move(head);
 
   // Early Hints preloads should not be committed for PDF.
   // See https://github.com/whatwg/html/issues/7823
-  if (head_->mime_type == "application/pdf" || head_->mime_type == "text/pdf")
+  if (head->mime_type == "application/pdf" || head->mime_type == "text/pdf") {
     early_hints_manager_.reset();
+  }
 
   if (!response_body)
     return;
@@ -851,10 +855,13 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   received_response_ = true;
 
   if (!intercepting_worker_start_time_.is_null()) {
-    head_->load_timing.service_worker_start_time =
+    head->load_timing.service_worker_start_time =
         intercepting_worker_start_time_;
-    head_->load_timing.service_worker_ready_time =
+    head->load_timing.service_worker_ready_time =
         intercepting_worker_ready_time_;
+  }
+  if (!intercepting_worker_router_info_.is_null()) {
+    head->service_worker_router_info = intercepting_worker_router_info_.Clone();
   }
 
   // If the default loader (network) was used to handle the URL load request
@@ -862,10 +869,10 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   // loader for the response. e.g. service workers.
   //
   // As the navigation request has received a response, the URLLoader has
-  // completed without any network errors. Some interceptors may still wish to
-  // handle the response.
+  // completed without any network errors. Some interceptors may still wish
+  // to handle the response.
   auto status = network::URLLoaderCompletionStatus(net::OK);
-  if (MaybeCreateLoaderForResponse(status, &head_)) {
+  if (MaybeCreateLoaderForResponse(status, &head)) {
     return;
   }
 
@@ -882,8 +889,8 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   // This needs to be after the URLLoader has been moved to
   // `url_loader_client_endpoints` in order to abort the request, to avoid
   // receiving unexpected call.
-  if (head_->headers &&
-      head_->headers->response_code() == net::HTTP_NOT_MODIFIED) {
+  if (head->headers &&
+      head->headers->response_code() == net::HTTP_NOT_MODIFIED) {
     // Call CancelWithError instead of OnComplete so that if there is an
     // intercepting URLLoaderFactory it gets notified.
     url_loader_->CancelWithError(
@@ -893,15 +900,15 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   }
 
   bool must_download = download_utils::MustDownload(
-      browser_context_, url_, head_->headers.get(), head_->mime_type);
-  bool known_mime_type = blink::IsSupportedMimeType(head_->mime_type);
+      browser_context_, url_, head->headers.get(), head->mime_type);
+  bool known_mime_type = blink::IsSupportedMimeType(head->mime_type);
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  if (!head_->intercepted_by_plugin && !must_download && !known_mime_type) {
+  if (!head->intercepted_by_plugin && !must_download && !known_mime_type) {
     // No plugin throttles intercepted the response. Ask if the plugin
     // registered to PluginService wants to handle the request.
     CheckPluginAndContinueOnReceiveResponse(
-        std::move(head_), std::move(url_loader_client_endpoints),
+        std::move(head), std::move(url_loader_client_endpoints),
         /*is_download_if_not_handled_by_plugin=*/true,
         std::vector<WebPluginInfo>());
     return;
@@ -910,9 +917,9 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
 
   // When a plugin intercepted the response, we don't want to download it.
   bool is_download =
-      !head_->intercepted_by_plugin && (must_download || !known_mime_type);
+      !head->intercepted_by_plugin && (must_download || !known_mime_type);
 
-  CallOnReceivedResponse(std::move(head_),
+  CallOnReceivedResponse(std::move(head),
                          std::move(url_loader_client_endpoints), is_download);
 }
 
@@ -1173,13 +1180,10 @@ bool NavigationURLLoaderImpl::MaybeCreateLoaderForResponse(
     mojo::PendingReceiver<network::mojom::URLLoaderClient>
         response_client_receiver;
     bool skip_other_interceptors = false;
-    bool will_return_unsafe_redirect = false;
     if (interceptor->MaybeCreateLoaderForResponse(
             status, *resource_request_, response, &response_body_,
             &response_url_loader_, &response_client_receiver, url_loader_.get(),
-            &skip_other_interceptors, &will_return_unsafe_redirect)) {
-      if (will_return_unsafe_redirect)
-        bypass_redirect_checks_ = true;
+            &skip_other_interceptors)) {
       response_loader_receiver_.reset();
       response_loader_receiver_.Bind(
           std::move(response_client_receiver),
@@ -1205,7 +1209,7 @@ bool NavigationURLLoaderImpl::MaybeCreateLoaderForResponse(
           if (container_host) {
             container_host->SetControllerRegistration(
                 nullptr, /*notify_controllerchange=*/false);
-            container_host->UpdateUrls(GURL(), absl::nullopt,
+            container_host->UpdateUrls(GURL(), std::nullopt,
                                        blink::StorageKey());
           }
         }
@@ -1220,7 +1224,8 @@ std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
 NavigationURLLoaderImpl::CreateURLLoaderThrottles() {
   auto throttles = CreateContentBrowserURLLoaderThrottles(
       *resource_request_, browser_context_, web_contents_getter_,
-      navigation_ui_data_.get(), frame_tree_node_id_);
+      navigation_ui_data_.get(), frame_tree_node_id_,
+      request_info_->navigation_id);
   throttles.push_back(std::make_unique<NavigationTimingThrottle>(
       resource_request_->is_outermost_main_frame, loader_creation_time_));
   return throttles;
@@ -1248,6 +1253,21 @@ void NavigationURLLoaderImpl::ParseHeaders(
     const GURL& url,
     network::mojom::URLResponseHead* head,
     base::OnceClosure continuation) {
+  // As an optimization, when we know the parsed headers will be empty, we can
+  // skip the network process roundtrip.
+  // TODO(arthursonzogni): If there are any performance issues, consider
+  // checking the `head->headers` contains at least one header to be parsed.
+  if (!head->headers) {
+    head->parsed_headers = network::mojom::ParsedHeaders::New();
+  }
+
+  // If the network service is running in process, skip unnecessary thread hops.
+  if (base::FeatureList::IsEnabled(kSkipUnnecessaryThreadHopsForParseHeaders) &&
+      IsInProcessNetworkService() && !head->parsed_headers) {
+    head->parsed_headers =
+        network::PopulateParsedHeaders(head->headers.get(), url);
+  }
+
   // The main path:
   // --------------
   // The ParsedHeaders are already provided. No more work needed.
@@ -1271,16 +1291,6 @@ void NavigationURLLoaderImpl::ParseHeaders(
 #else
     std::move(continuation).Run();
 #endif
-    return;
-  }
-
-  // As an optimization, when we know the parsed headers will be empty, we can
-  // skip the network process roundtrip.
-  // TODO(arthursonzogni): If there are any performance issues, consider
-  // checking the `head->headers` contains at least one header to be parsed.
-  if (!head->headers) {
-    head->parsed_headers = network::mojom::ParsedHeaders::New();
-    std::move(continuation).Run();
     return;
   }
 
@@ -1394,7 +1404,7 @@ NavigationURLLoaderImpl::NavigationURLLoaderImpl(
       &bypass_redirect_checks_);
 
   GetContentClient()->browser()->RegisterNonNetworkNavigationURLLoaderFactories(
-      frame_tree_node_id_, ukm_id, &non_network_url_loader_factories_);
+      frame_tree_node_id_, &non_network_url_loader_factories_);
 
   bool is_nav_allowed =
       base::FeatureList::IsEnabled(

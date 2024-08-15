@@ -12,7 +12,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/open_from_clipboard/fake_clipboard_recent_content.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
@@ -29,7 +29,7 @@
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/toolbar/test/toolbar_test_navigation_manager.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
-#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
+#import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/providers/voice_search/test_voice_search.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
@@ -53,7 +53,7 @@
 
 namespace {
 
-MenuScenarioHistogram kTestMenuScenario = MenuScenarioHistogram::kHistoryEntry;
+MenuScenarioHistogram kTestMenuScenario = kMenuScenarioHistogramHistoryEntry;
 
 static const int kNumberOfWebStates = 3;
 static const char kTestUrl[] = "http://www.chromium.org";

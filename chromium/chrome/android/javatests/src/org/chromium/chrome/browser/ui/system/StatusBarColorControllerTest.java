@@ -33,6 +33,8 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -41,7 +43,6 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_management.TabManagementFieldTrial;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.toolbar.top.ToolbarLayout;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
@@ -52,8 +53,6 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.ThemeTestUtils;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -161,7 +160,10 @@ public class StatusBarColorControllerTest {
     @LargeTest
     @Feature({"StatusBar"})
     @EnableFeatures({ChromeFeatureList.START_SURFACE_REFACTOR})
-    @DisableFeatures({ChromeFeatureList.SURFACE_POLISH})
+    @DisableFeatures({
+        ChromeFeatureList.SURFACE_POLISH,
+        ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID
+    })
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE}) // Status bar is always black on tablets
     public void testBrandColorIgnoredInStartSurface() throws Exception {
         ChromeTabbedActivity activity = sActivityTestRule.getActivity();
@@ -222,6 +224,7 @@ public class StatusBarColorControllerTest {
     @LargeTest
     @Feature({"StatusBar"})
     @EnableFeatures({ChromeFeatureList.START_SURFACE_REFACTOR, ChromeFeatureList.SURFACE_POLISH})
+    @DisableFeatures({ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID})
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE}) // Status bar is always black on tablets
     public void testBrandColorNotIgnoredInStartSurfaceWithSurfacePolishEnabled() throws Exception {
         ChromeTabbedActivity activity = sActivityTestRule.getActivity();
@@ -438,8 +441,10 @@ public class StatusBarColorControllerTest {
     @Test
     @LargeTest
     @Feature({"StatusBar"})
-    @EnableFeatures(ChromeFeatureList.TAB_STRIP_REDESIGN)
-    @Restriction({UiRestriction.RESTRICTION_TYPE_TABLET})
+    @Restriction({
+        UiRestriction.RESTRICTION_TYPE_TABLET,
+        DeviceRestriction.RESTRICTION_TYPE_NON_AUTO
+    })
     public void testStatusBarColorForTabStripRedesignFolioTablet() throws Exception {
         final ChromeActivity activity = sActivityTestRule.getActivity();
         final StatusBarColorController statusBarColorController =
@@ -454,44 +459,10 @@ public class StatusBarColorControllerTest {
                 Color.BLACK,
                 activity.getWindow().getStatusBarColor());
 
-        // Enable Tab strip redesign folio, and status bar color should update to the same as folio
-        // background color.
-        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_FOLIO.setForTesting(true);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> statusBarColorController.updateStatusBarColor());
         assertEquals(
                 "Wrong value returned for Tab Strip Redesign Folio.",
-                TabUiThemeUtil.getTabStripBackgroundColor(activity, false),
-                activity.getWindow().getStatusBarColor());
-    }
-
-    /** Test status bar color for Tab Strip Redesign Detached. */
-    @Test
-    @LargeTest
-    @Feature({"StatusBar"})
-    @EnableFeatures(ChromeFeatureList.TAB_STRIP_REDESIGN)
-    @Restriction({UiRestriction.RESTRICTION_TYPE_TABLET})
-    public void testStatusBarColorForTabStripRedesignDetachedTablet() throws Exception {
-        final ChromeActivity activity = sActivityTestRule.getActivity();
-        final StatusBarColorController statusBarColorController =
-                sActivityTestRule
-                        .getActivity()
-                        .getRootUiCoordinatorForTesting()
-                        .getStatusBarColorController();
-
-        // Before enable tab strip redesign, status bar should be black.
-        assertEquals(
-                "Wrong initial value returned before enable Tab Strip Redesign Detached",
-                Color.BLACK,
-                activity.getWindow().getStatusBarColor());
-
-        // Enable Tab strip redesign detached, and status bar color should update to the same as
-        // detached background color.
-        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_DETACHED.setForTesting(true);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> statusBarColorController.updateStatusBarColor());
-        assertEquals(
-                "Wrong value returned for Tab Strip Redesign Detached.",
                 TabUiThemeUtil.getTabStripBackgroundColor(activity, false),
                 activity.getWindow().getStatusBarColor());
     }
@@ -510,9 +481,7 @@ public class StatusBarColorControllerTest {
     }
 
     private int getScrimmedColor(@ColorInt int color, float fraction) {
-        final float scrimColorAlpha = (mScrimColor >>> 24) / 255f;
-        final int scrimColorOpaque = mScrimColor | 0xFF000000;
-        return ColorUtils.getColorWithOverlay(color, scrimColorOpaque, fraction * scrimColorAlpha);
+        return ColorUtils.overlayColor(color, mScrimColor, fraction);
     }
 
     private void waitForStatusBarColor(Activity activity, int expectedColor)

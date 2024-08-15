@@ -290,14 +290,12 @@ TEST_F(FPDFEditEmbedderTest, EmbedNotoSansSCFont) {
   ASSERT_TRUE(PathService::GetThirdPartyFilePath(
       "NotoSansCJK/NotoSansSC-Regular.subset.otf", &font_path));
 
-  size_t file_length = 0;
-  std::unique_ptr<char, pdfium::FreeDeleter> font_data =
-      GetFileContents(font_path.c_str(), &file_length);
-  ASSERT_TRUE(font_data);
+  std::vector<uint8_t> font_data = GetFileContents(font_path.c_str());
+  ASSERT_FALSE(font_data.empty());
 
-  ScopedFPDFFont font(FPDFText_LoadFont(
-      document(), reinterpret_cast<const uint8_t*>(font_data.get()),
-      file_length, FPDF_FONT_TRUETYPE, /*cid=*/true));
+  ScopedFPDFFont font(FPDFText_LoadFont(document(), font_data.data(),
+                                        font_data.size(), FPDF_FONT_TRUETYPE,
+                                        /*cid=*/true));
   FPDF_PAGEOBJECT text_object =
       FPDFPageObj_CreateTextObj(document(), font.get(), 20.0f);
   EXPECT_TRUE(text_object);
@@ -337,14 +335,12 @@ TEST_F(FPDFEditEmbedderTest, EmbedNotoSansSCFontWithCharcodes) {
   ASSERT_TRUE(PathService::GetThirdPartyFilePath(
       "NotoSansCJK/NotoSansSC-Regular.subset.otf", &font_path));
 
-  size_t file_length = 0;
-  std::unique_ptr<char, pdfium::FreeDeleter> font_data =
-      GetFileContents(font_path.c_str(), &file_length);
-  ASSERT_TRUE(font_data);
+  std::vector<uint8_t> font_data = GetFileContents(font_path.c_str());
+  ASSERT_FALSE(font_data.empty());
 
-  ScopedFPDFFont font(FPDFText_LoadFont(
-      document(), reinterpret_cast<const uint8_t*>(font_data.get()),
-      file_length, FPDF_FONT_TRUETYPE, /*cid=*/true));
+  ScopedFPDFFont font(FPDFText_LoadFont(document(), font_data.data(),
+                                        font_data.size(), FPDF_FONT_TRUETYPE,
+                                        /*cid=*/true));
   FPDF_PAGEOBJECT text_object =
       FPDFPageObj_CreateTextObj(document(), font.get(), 20.0f);
   EXPECT_TRUE(text_object);
@@ -376,6 +372,21 @@ TEST_F(FPDFEditEmbedderTest, EmbedNotoSansSCFontWithCharcodes) {
 
   ASSERT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
   VerifySavedDocument(400, 400, checksum);
+}
+
+TEST_F(FPDFEditEmbedderTest, Bug2094) {
+  CreateEmptyDocument();
+  ScopedFPDFPage page(FPDFPage_New(document(), 0, 400, 400));
+  std::string font_path = PathService::GetTestFilePath("fonts/bug_2094.ttf");
+  ASSERT_FALSE(font_path.empty());
+
+  std::vector<uint8_t> font_data = GetFileContents(font_path.c_str());
+  ASSERT_FALSE(font_data.empty());
+
+  ScopedFPDFFont font(FPDFText_LoadFont(document(), font_data.data(),
+                                        font_data.size(), FPDF_FONT_TRUETYPE,
+                                        /*cid=*/true));
+  EXPECT_TRUE(font);
 }
 
 TEST_F(FPDFEditEmbedderTest, EmptyCreation) {

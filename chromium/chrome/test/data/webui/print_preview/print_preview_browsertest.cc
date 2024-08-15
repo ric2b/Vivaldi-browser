@@ -585,6 +585,11 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationStoreTest, RecentSaveAsPdf) {
   RunTestCase("RecentSaveAsPdf");
 }
 
+IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationStoreTest,
+                       DestinationAlreadySelected) {
+  RunTestCase("DestinationAlreadySelected");
+}
+
 #if BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationStoreTest, LoadSaveToDriveCros) {
   RunTestCase("LoadSaveToDriveCros");
@@ -612,6 +617,11 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationStoreTest,
 IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationStoreTest,
                        LocalPrintersUpdatedEventStatusUpdate) {
   RunTestCase("LocalPrintersUpdatedEventStatusUpdate");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationStoreTest,
+                       PrinterStatusOnlineChange) {
+  RunTestCase("PrinterStatusOnlineChange");
 }
 #endif
 
@@ -734,6 +744,11 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationDialogCrosTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationDialogCrosTest,
+                       PrinterSetupAssistanceHasDestinationsSearching) {
+  RunTestCase("PrinterSetupAssistanceHasDestinationsSearching");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationDialogCrosTest,
                        PrinterSetupAssistanceHasNoDestinations) {
   RunTestCase("PrinterSetupAssistanceHasNoDestinations");
 }
@@ -756,6 +771,11 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationDialogCrosTest,
 IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationDialogCrosTest,
                        CorrectlyDisplaysAndHidesLoadingUI) {
   RunTestCase("CorrectlyDisplaysAndHidesLoadingUI");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewDestinationDialogCrosTest,
+                       NewDestinationsShowsAndResizesList) {
+  RunTestCase("NewDestinationsShowsAndResizesList");
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

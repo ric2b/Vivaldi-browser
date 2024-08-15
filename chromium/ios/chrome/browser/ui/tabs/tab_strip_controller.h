@@ -11,6 +11,7 @@
 
 // Vivaldi
 #import "ios/web/public/web_state.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 // End Vivaldi
 
 @protocol TabStripPresentation;
@@ -55,6 +56,9 @@ class Browser;
 - (void)tabStripSizeDidChange;
 
 // Vivaldi
+@property(nonatomic, assign) ToolbarType toolbarType;
+@property(nonatomic, assign) BOOL dynamicAccentColorEnabled;
+@property(nonatomic, assign) NSString* customAccentColor;
 - (void)scrollToSelectedTab:(web::WebState*)webState animated:(BOOL)animated;
 // End Vivaldi
 

@@ -270,7 +270,9 @@ ASH_EXPORT void RotateScreen();
 ASH_EXPORT void ShiftPrimaryDisplay();
 
 // Opens Emoji Picker.
-ASH_EXPORT void ShowEmojiPicker();
+// `accelerator_timestamp` is the timestamp associated with the accelerator that
+// triggered the emoji picker.
+ASH_EXPORT void ShowEmojiPicker(base::TimeTicks accelerator_timestamp);
 
 // Sees keyboard shortcut helper.
 ASH_EXPORT void ShowKeyboardShortcutViewer();
@@ -289,6 +291,9 @@ ASH_EXPORT void Suspend();
 
 // Switches to next language.
 ASH_EXPORT void SwitchToNextIme();
+
+// Switches to the previous language.
+ASH_EXPORT void SwitchToLastUsedIme(bool key_pressed);
 
 // Takes screenshot.
 ASH_EXPORT void TakeScreenshot(bool from_snapshot_key);

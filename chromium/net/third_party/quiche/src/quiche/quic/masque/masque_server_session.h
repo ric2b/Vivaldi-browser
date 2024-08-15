@@ -5,13 +5,34 @@
 #ifndef QUICHE_QUIC_MASQUE_MASQUE_SERVER_SESSION_H_
 #define QUICHE_QUIC_MASQUE_MASQUE_SERVER_SESSION_H_
 
+#include <list>
+#include <memory>
+
+#include "absl/strings/string_view.h"
+#include "quiche/quic/core/crypto/quic_compressed_certs_cache.h"
+#include "quiche/quic/core/crypto/quic_crypto_server_config.h"
+#include "quiche/quic/core/frames/quic_connection_close_frame.h"
+#include "quiche/quic/core/http/http_frames.h"
+#include "quiche/quic/core/http/quic_spdy_session.h"
+#include "quiche/quic/core/http/quic_spdy_stream.h"
 #include "quiche/quic/core/io/quic_event_loop.h"
+#include "quiche/quic/core/quic_config.h"
+#include "quiche/quic/core/quic_connection.h"
+#include "quiche/quic/core/quic_crypto_server_stream_base.h"
+#include "quiche/quic/core/quic_session.h"
+#include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_udp_socket.h"
+#include "quiche/quic/core/quic_versions.h"
 #include "quiche/quic/masque/masque_server_backend.h"
 #include "quiche/quic/masque/masque_utils.h"
 #include "quiche/quic/platform/api/quic_export.h"
+#include "quiche/quic/platform/api/quic_ip_address.h"
+#include "quiche/quic/platform/api/quic_socket_address.h"
+#include "quiche/quic/tools/quic_backend_response.h"
+#include "quiche/quic/tools/quic_simple_server_backend.h"
 #include "quiche/quic/tools/quic_simple_server_session.h"
+#include "quiche/common/capsule.h"
 #include "quiche/spdy/core/http2_header_block.h"
 
 namespace quic {
@@ -61,6 +82,10 @@ class QUIC_NO_EXPORT MasqueServerSession
                                   QuicSocketEventMask events);
   bool HandleConnectEthernetSocketEvent(QuicUdpSocketFd fd,
                                         QuicSocketEventMask events);
+  std::unique_ptr<QuicBackendResponse> MaybeCheckSignatureAuth(
+      const spdy::Http2HeaderBlock& request_headers,
+      absl::string_view authority, absl::string_view scheme,
+      QuicSimpleServerBackend::RequestHandler* request_handler);
 
   // State that the MasqueServerSession keeps for each CONNECT-UDP request.
   class QUIC_NO_EXPORT ConnectUdpServerState

@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {State} from '../../externs/ts/state.js';
 import {Slice} from '../../lib/base_store.js';
+import type {State} from '../../state/state.js';
 
 /**
  * @fileoverview Chrome preferences slice of the store.
- * @suppress {checkTypes}
  *
  * Chrome preferences store user data that is persisted to disk OR across
  * profiles, this takes care of initially populating these values then keeping

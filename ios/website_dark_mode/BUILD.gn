@@ -1,0 +1,41 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+import("//ios/web/public/js_messaging/optimize_js.gni")
+
+source_set("website_dark_mode") {
+  sources = [
+    "website_dark_mode_java_script_feature.h",
+    "website_dark_mode_java_script_feature.mm",
+    "website_dark_mode_tab_helper.h",
+    "website_dark_mode_tab_helper.mm",
+    "website_dark_mode_agent.h",
+    "website_dark_mode_agent.mm",
+  ]
+
+  deps = [
+    ":website_dark_mode_js",
+    "//base",
+    "//components/prefs:prefs",
+    "//components/prefs/ios",
+    "//ios/web/common",
+    "//ios/web/public",
+    "//ios/web/public/js_messaging",
+    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings"
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+}
+
+optimize_js("website_dark_mode_js") {
+  primary_script = "resources/website_dark_mode.js"
+  sources = [ "resources/website_dark_mode.js" ]
+
+  deps = [
+    "//ios/web/public/js_messaging:gcrweb",
+  ]
+}

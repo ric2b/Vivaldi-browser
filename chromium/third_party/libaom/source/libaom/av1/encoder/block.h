@@ -1394,6 +1394,13 @@ typedef struct macroblock {
    * first-pass when superblock is searched twice consecutively.
    */
   struct SB_FIRST_PASS_STATS *sb_fp_stats;
+
+#if CONFIG_PARTITION_SEARCH_ORDER
+  /*!\brief Pointer to RD_STATS structure to be used in
+   * av1_rd_partition_search().
+   */
+  RD_STATS *rdcost;
+#endif  // CONFIG_PARTITION_SEARCH_ORDER
 } MACROBLOCK;
 #undef SINGLE_REF_MODES
 

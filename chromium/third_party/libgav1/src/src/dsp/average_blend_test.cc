@@ -76,9 +76,8 @@ class AverageBlendTest : public testing::TestWithParam<BlockSize>,
     if (absl::StartsWith(test_case, "C/")) {
       base_func_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        AverageBlendInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      AverageBlendInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       AverageBlendInit_NEON();
     } else {

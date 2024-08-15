@@ -19,12 +19,13 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/user_education/common/feature_promo_data.h"
 #include "components/user_education/common/feature_promo_handle.h"
 #include "components/user_education/common/feature_promo_lifecycle.h"
 #include "components/user_education/common/feature_promo_registry.h"
 #include "components/user_education/common/feature_promo_result.h"
+#include "components/user_education/common/feature_promo_session_policy.h"
 #include "components/user_education/common/feature_promo_specification.h"
-#include "components/user_education/common/feature_promo_storage_service.h"
 #include "components/user_education/common/help_bubble.h"
 #include "components/user_education/common/help_bubble_params.h"
 #include "components/user_education/common/tutorial_identifier.h"
@@ -41,6 +42,8 @@ class FeaturePromoLifecycleUiTest;
 namespace user_education {
 
 class HelpBubbleFactoryRegistry;
+class FeaturePromoStorageService;
+class ProductMessagingController;
 class TutorialService;
 
 // Describes the status of a feature promo.
@@ -51,11 +54,8 @@ enum class FeaturePromoStatus {
   kContinued          // The bubble was closed but the promo is still active.
 };
 
-// Public enum to indicate the reason a FeaturePromo was ended. This
-// is a subset of the FeaturePromoCloseReasonInternal enum. There are no
-// values in this enum because this value only maps to the internal enum
-// which is then used to record metrics.
-enum class FeaturePromoCloseReason {
+// Enum for client code to specify why a promo should be programmatically ended.
+enum class EndFeaturePromoReason {
   // Used to indicate that the user left the flow of the FeaturePromo.
   // For example, this may mean the user ignored a page-specific FeaturePromo
   // by navigating to another page.
@@ -142,9 +142,9 @@ class FeaturePromoController {
   // expensive. If `last_close_reason` is set, and the promo has been
   // dismissed, it wil be populated with the most recent close reason.
   // (The value is undefined if this method returns false.)
-  virtual bool HasPromoBeenDismissed(const base::Feature& iph_feature,
-                                     FeaturePromoStorageService::CloseReason*
-                                         last_close_reason = nullptr) const = 0;
+  virtual bool HasPromoBeenDismissed(
+      const base::Feature& iph_feature,
+      FeaturePromoClosedReason* last_close_reason = nullptr) const = 0;
 
   // Returns whether the promo for `iph_feature` matches kBubbleShowing or any
   // of `additional_status`.
@@ -169,7 +169,7 @@ class FeaturePromoController {
   // Has no effect for promos closed with CloseBubbleAndContinuePromo(); discard
   // or release the FeaturePromoHandle to end those promos.
   virtual bool EndPromo(const base::Feature& iph_feature,
-                        FeaturePromoCloseReason close_reason) = 0;
+                        EndFeaturePromoReason end_promo_reason) = 0;
 
   // Closes the promo for `iph_feature` - which must be showing - but continues
   // the promo via the return value. Dispose or release the resulting handle to
@@ -188,6 +188,11 @@ class FeaturePromoController {
 
   // Called when FeaturePromoHandle is destroyed to finish the promo.
   virtual void FinishContinuedPromo(const base::Feature& iph_feature) = 0;
+
+  // Records when and why an IPH was not shown.
+  virtual void RecordPromoNotShown(
+      const char* feature_name,
+      FeaturePromoResult::Failure failure) const = 0;
 };
 
 // Manages display of in-product help promos. All IPH displays in Top
@@ -201,7 +206,9 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
       FeaturePromoRegistry* registry,
       HelpBubbleFactoryRegistry* help_bubble_registry,
       FeaturePromoStorageService* storage_service,
-      TutorialService* tutorial_service);
+      FeaturePromoSessionPolicy* session_policy,
+      TutorialService* tutorial_service,
+      ProductMessagingController* messaging_controller);
   ~FeaturePromoControllerCommon() override;
 
   // Only for security or privacy critical promos. Immediately shows a
@@ -238,13 +245,13 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
       const base::Feature& iph_feature) const override;
   const FeaturePromoSpecification* GetCurrentPromoSpecificationForAnchor(
       ui::ElementIdentifier menu_element_id) const override;
-  bool HasPromoBeenDismissed(const base::Feature& iph_feature,
-                             FeaturePromoStorageService::CloseReason*
-                                 close_reason = nullptr) const override;
+  bool HasPromoBeenDismissed(
+      const base::Feature& iph_feature,
+      FeaturePromoClosedReason* close_reason = nullptr) const override;
   FeaturePromoResult MaybeShowPromoForDemoPage(
       FeaturePromoParams params) override;
   bool EndPromo(const base::Feature& iph_feature,
-                FeaturePromoCloseReason close_reason) override;
+                EndFeaturePromoReason end_promo_reason) override;
   FeaturePromoHandle CloseBubbleAndContinuePromo(
       const base::Feature& iph_feature) final;
   base::WeakPtr<FeaturePromoController> GetAsWeakPtr() override;
@@ -341,13 +348,16 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
   }
 
  private:
-  using CloseReason = FeaturePromoStorageService::CloseReason;
+  struct ShowPromoBubbleParams;
 
-  bool EndPromo(const base::Feature& iph_feature, CloseReason close_reason);
+  bool EndPromo(const base::Feature& iph_feature,
+                FeaturePromoClosedReason close_reason);
+  void RecordPromoEnded(FeaturePromoClosedReason close_reason,
+                        bool continue_after_close);
 
   FeaturePromoHandle CloseBubbleAndContinuePromoWithReason(
       const base::Feature& iph_action,
-      CloseReason close_reason);
+      FeaturePromoClosedReason close_reason);
 
   // FeaturePromoController:
   void FinishContinuedPromo(const base::Feature& iph_feature) override;
@@ -381,12 +391,7 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
   // Method that creates the bubble for a feature promo. May return null if the
   // bubble cannot be shown.
   std::unique_ptr<HelpBubble> ShowPromoBubbleImpl(
-      const FeaturePromoSpecification& spec,
-      ui::TrackedElement* anchor_element,
-      FeaturePromoSpecification::FormatParameters body_params,
-      FeaturePromoSpecification::FormatParameters title_params,
-      bool screen_reader_prompt_available,
-      bool is_critical_promo);
+      ShowPromoBubbleParams show_params);
 
   // Callback that cleans up a help bubble when it is closed.
   void OnHelpBubbleClosed(HelpBubble* bubble);
@@ -429,7 +434,8 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
 
   // Create appropriate buttons for a snoozeable promo on the current platform.
   std::vector<HelpBubbleButtonParams> CreateSnoozeButtons(
-      const base::Feature& feature);
+      const base::Feature& feature,
+      bool can_snooze);
 
   // Create appropriate buttons for a tutorial promo on the current platform.
   std::vector<HelpBubbleButtonParams> CreateTutorialButtons(
@@ -445,7 +451,11 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
       bool custom_action_is_default,
       int custom_action_dismiss_string_id);
 
-  const base::Feature* GetCurrentPromoFeature() const override;
+  // Records when and why an IPH was not shown.
+  void RecordPromoNotShown(const char* feature_name,
+                           FeaturePromoResult::Failure failure) const final;
+
+  const base::Feature* GetCurrentPromoFeature() const final;
 
   // Whether the IPH Demo Mode flag has been set at startup.
   const bool in_iph_demo_mode_;
@@ -463,6 +473,10 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
   // end.
   raw_ptr<HelpBubble> critical_promo_bubble_ = nullptr;
 
+  // Policy info about the most recent promo that was shown.
+  // Updated when a new promo is shown.
+  FeaturePromoSessionPolicy::PromoInfo last_promo_info_;
+
   // Promo that is being continued during a tutorial launched from the promo
   // bubble.
   FeaturePromoHandle tutorial_promo_handle_;
@@ -473,7 +487,9 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
   const raw_ptr<feature_engagement::Tracker> feature_engagement_tracker_;
   const raw_ptr<HelpBubbleFactoryRegistry> bubble_factory_registry_;
   const raw_ptr<FeaturePromoStorageService> storage_service_;
+  const raw_ptr<FeaturePromoSessionPolicy> session_policy_;
   const raw_ptr<TutorialService> tutorial_service_;
+  const raw_ptr<ProductMessagingController> messaging_controller_;
 
   // Tracks pending startup promos that have not been canceled.
   std::map<const base::Feature*, StartupPromoCallback> startup_promos_;
@@ -493,7 +509,7 @@ class FeaturePromoControllerCommon : public FeaturePromoController {
 struct FeaturePromoParams {
   // NOLINTNEXTLINE(google-explicit-constructor)
   FeaturePromoParams(const base::Feature& iph_feature);
-  FeaturePromoParams(FeaturePromoParams&& other);
+  FeaturePromoParams(FeaturePromoParams&& other) noexcept;
   ~FeaturePromoParams();
 
   // The feature for the IPH to show. Must be an IPH feature defined in

@@ -51,45 +51,45 @@ using vivaldi::window_private::WindowType;
 WindowType ConvertToJSWindowType(VivaldiBrowserWindow::WindowType type) {
   switch (type) {
     case VivaldiBrowserWindow::WindowType::NORMAL:
-      return WindowType::WINDOW_TYPE_NORMAL;
+      return WindowType::kNormal;
     case VivaldiBrowserWindow::WindowType::POPUP:
-      return WindowType::WINDOW_TYPE_POPUP;
+      return WindowType::kPopup;
     case VivaldiBrowserWindow::WindowType::SETTINGS:
-      return WindowType::WINDOW_TYPE_SETTINGS;
+      return WindowType::kSettings;
   }
   NOTREACHED();
-  return WindowType::WINDOW_TYPE_NONE;
+  return WindowType::kNone;
 }
 
 using vivaldi::window_private::WindowState;
 WindowState ConvertToJSWindowState(ui::WindowShowState state) {
   switch (state) {
     case ui::SHOW_STATE_FULLSCREEN:
-      return WindowState::WINDOW_STATE_FULLSCREEN;
+      return WindowState::kFullscreen;
     case ui::SHOW_STATE_MAXIMIZED:
-      return WindowState::WINDOW_STATE_MAXIMIZED;
+      return WindowState::kMaximized;
     case ui::SHOW_STATE_MINIMIZED:
-      return WindowState::WINDOW_STATE_MINIMIZED;
+      return WindowState::kMinimized;
     default:
-      return WindowState::WINDOW_STATE_NORMAL;
+      return WindowState::kNormal;
   }
   NOTREACHED();
-  return WindowState::WINDOW_STATE_NORMAL;
+  return WindowState::kNormal;
 }
 
 ui::WindowShowState ConvertToWindowShowState(
     vivaldi::window_private::WindowState state) {
   using vivaldi::window_private::WindowState;
   switch (state) {
-    case WindowState::WINDOW_STATE_NORMAL:
+    case WindowState::kNormal:
       return ui::SHOW_STATE_NORMAL;
-    case WindowState::WINDOW_STATE_MINIMIZED:
+    case WindowState::kMinimized:
       return ui::SHOW_STATE_MINIMIZED;
-    case WindowState::WINDOW_STATE_MAXIMIZED:
+    case WindowState::kMaximized:
       return ui::SHOW_STATE_MAXIMIZED;
-    case WindowState::WINDOW_STATE_FULLSCREEN:
+    case WindowState::kFullscreen:
       return ui::SHOW_STATE_FULLSCREEN;
-    case WindowState::WINDOW_STATE_NONE:
+    case WindowState::kNone:
       return ui::SHOW_STATE_DEFAULT;
   }
   NOTREACHED();
@@ -151,7 +151,7 @@ void VivaldiBrowserObserver::WindowsForProfileClosing(Profile* profile) {
     // We don't care about guest windows.
     return;
   }
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->profile()->GetOriginalProfile() ==
         profile->GetOriginalProfile()) {
       closing_windows_.push_back(browser);
@@ -345,7 +345,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   VivaldiBrowserWindowParams window_params;
 
   if (params->type ==
-      vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS) {
+      vivaldi::window_private::WindowType::kSettings) {
     window_params.settings_window = true;
   }
   window_params.focused = focused;
@@ -357,7 +357,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
 
   window_params.minimum_size = gfx::Size(min_width, min_height);
-  window_params.state = params->options.state
+  window_params.state =
+      params->options.state != vivaldi::window_private::WindowState::kNone
     ? vivaldi::ConvertToWindowShowState(params->options.state)
     : ui::SHOW_STATE_DEFAULT;
   window_params.resource_relative_url = std::move(params->url);
@@ -393,12 +394,11 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
 
   Browser::Type window_type = Browser::TYPE_NORMAL;
   // Popup and settingswindow should open as popup and not stored in session.
-  if (params->type == vivaldi::window_private::WindowType::WINDOW_TYPE_POPUP ||
-      params->type ==
-          vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS) {
+  if (params->type == vivaldi::window_private::WindowType::kPopup ||
+      params->type == vivaldi::window_private::WindowType::kSettings) {
     window_type = Browser::TYPE_POPUP;
   } else if (params->type ==
-             vivaldi::window_private::WindowType::WINDOW_TYPE_DEVTOOLS) {
+             vivaldi::window_private::WindowType::kDevtools) {
     window_type = Browser::TYPE_DEVTOOLS;
   }
 

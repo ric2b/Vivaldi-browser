@@ -11,9 +11,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "net/cert/pem.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
+#include "third_party/boringssl/src/pki/pem.h"
 
 namespace {
 
@@ -27,7 +27,7 @@ const char kCertificateHeader[] = "CERTIFICATE";
 void ExtractCertificatesFromData(const std::string& data_string,
                                  const base::FilePath& file_path,
                                  std::vector<CertInput>* certs) {
-  net::PEMTokenizer pem_tokenizer(data_string, {kCertificateHeader});
+  bssl::PEMTokenizer pem_tokenizer(data_string, {kCertificateHeader});
   int block = 0;
   while (pem_tokenizer.GetNext()) {
     CertInput cert;
@@ -45,7 +45,7 @@ void ExtractCertificatesFromData(const std::string& data_string,
 
   std::vector<bssl::UniquePtr<CRYPTO_BUFFER>> pkcs7_cert_buffers;
   if (net::x509_util::CreateCertBuffersFromPKCS7Bytes(
-          base::as_bytes(base::make_span(data_string)), &pkcs7_cert_buffers)) {
+          base::as_byte_span(data_string), &pkcs7_cert_buffers)) {
     int n = 0;
     for (const auto& cert_buffer : pkcs7_cert_buffers) {
       CertInput cert;

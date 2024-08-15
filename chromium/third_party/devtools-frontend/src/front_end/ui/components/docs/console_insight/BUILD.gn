@@ -7,19 +7,29 @@ import("../../../../../third_party/typescript/typescript.gni")
 
 ts_library("ts") {
   testonly = true
-  sources = [ "basic.ts" ]
+  sources = [
+    "basic.ts",
+    "error.ts",
+    "loading.ts",
+    "static.ts",
+  ]
 
   deps = [
     "../../../../../test/unittests/front_end/helpers",
+    "../../../../panels/explain:bundle",
     "../../../../third_party/marked:bundle",
     "../../../../ui/components/helpers:bundle",
-    "../../../../panels/explain:bundle",
   ]
 }
 
 copy_to_gen("console_insight") {
   testonly = true
-  sources = [ "basic.html" ]
+  sources = [
+    "basic.html",
+    "error.html",
+    "loading.html",
+    "static.html",
+  ]
 
   deps = [ ":ts" ]
 }

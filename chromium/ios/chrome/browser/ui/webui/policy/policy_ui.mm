@@ -22,7 +22,7 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/version_info/version_info.h"
 #import "components/version_ui/version_handler_helper.h"
-#import "ios/chrome/browser/policy/browser_state_policy_connector.h"
+#import "ios/chrome/browser/policy/model/browser_state_policy_connector.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/ui/webui/policy/policy_ui_handler.h"
@@ -136,10 +136,12 @@ web::WebUIIOSDataSource* CreatePolicyUIHtmlSource(
       {"viewLogs", IDS_VIEW_POLICY_LOGS},
   };
   source->AddLocalizedStrings(kStrings);
+
+  const bool allow_policy_test_page = policy::utils::IsPolicyTestingEnabled(
+      chrome_browser_state->GetPrefs(), GetChannel());
   // Test page should only load if testing is enabled and the profile is not
   // managed by cloud.
-  if (policy::utils::IsPolicyTestingEnabled(chrome_browser_state->GetPrefs(),
-                                            GetChannel())) {
+  if (allow_policy_test_page) {
     // Localized strings for chrome://policy/test.
     static constexpr webui::LocalizedString kPolicyTestStrings[] = {
         {"testTitle", IDS_POLICY_TEST_TITLE},
@@ -202,6 +204,8 @@ web::WebUIIOSDataSource* CreatePolicyUIHtmlSource(
     source->AddLocalizedStrings(kPolicyTestTypes);
   }
 
+  source->AddString("acceptedPaths",
+                    allow_policy_test_page ? "/|/test|/logs" : "/|/logs");
   // Localized strings for chrome://policy/logs.
   static constexpr webui::LocalizedString kPolicyLogsStrings[] = {
       {"browserName", IDS_IOS_PRODUCT_NAME},

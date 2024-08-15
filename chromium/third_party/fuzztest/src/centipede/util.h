@@ -22,20 +22,21 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/log/check.h"
 #include "absl/types/span.h"
 #include "./centipede/defs.h"
 #include "./centipede/feature.h"
-#include "./centipede/logging.h"
 
 namespace centipede {
 
 // Returns a printable hash of a byte array. Currently sha1 is used.
-std::string Hash(absl::Span<const uint8_t> span);
+std::string Hash(ByteSpan span);
 // Same as above, but for std::string_view.
 std::string Hash(std::string_view str);
 // Hashes are always this many bytes.
 inline constexpr size_t kHashLen = 40;
-// Returns the hash of the contents of the file `file_path`.
+// Returns the hash of the contents of the file `file_path`. Supports the file
+// being remote. Returns an empty string if the `file_path` is empty.
 std::string HashOfFileContents(std::string_view file_path);
 // Returns a printable string representing at most `max_len` bytes of `data`.
 std::string AsString(const ByteArray &data, size_t max_len = 16);
@@ -51,15 +52,15 @@ void ReadFromLocalFile(std::string_view file_path, FeatureVec &data);
 void ReadFromLocalFile(std::string_view file_path, std::vector<uint32_t> &data);
 // Writes the contents of `data` to a local file `file_path`.
 // Crashes on any error.
-void WriteToLocalFile(std::string_view file_path,
-                      absl::Span<const uint8_t> data);
+void WriteToLocalFile(std::string_view file_path, ByteSpan data);
 // Same as above.
 void WriteToLocalFile(std::string_view file_path, std::string_view data);
 // Same as above but for FeatureVec.
 void WriteToLocalFile(std::string_view file_path, const FeatureVec &data);
 // Writes `data` to `dir_path`/Hash(`data`). Does nothing if `dir_path.empty()`.
-void WriteToLocalHashedFileInDir(std::string_view dir_path,
-                                 absl::Span<const uint8_t> data);
+void WriteToLocalHashedFileInDir(std::string_view dir_path, ByteSpan data);
+// Same as `WriteToLocalHashedFileInDir` except supports remote files.
+void WriteToRemoteHashedFileInDir(std::string_view dir_path, ByteSpan data);
 // Returns a path string suitable to create a temporary local directory.
 // Will return the same value every time it is called within one thread,
 // but different values for different threads and difference processes.
@@ -84,16 +85,6 @@ class ScopedFile {
  private:
   std::string my_path_;
 };
-
-// Requests that the process exits soon, with `exit_code`.
-// `exit_code` must be non-zero (!= EXIT_SUCCESS).
-// Async-signal-safe.
-void RequestEarlyExit(int exit_code);
-// Returns true iff RequestEarlyExit() was called.
-bool EarlyExitRequested();
-// Returns the value most recently passed to RequestEarlyExit()
-// or 0 if RequestEarlyExit() was not called.
-int ExitCode();
 
 // If `seed` != 0, returns `seed`, otherwise returns a random number
 // based on time, pid, tid, etc.
@@ -166,6 +157,10 @@ std::string ExtractHashFromArray(ByteArray &ba);
 // Pack {features, Hash(data)} into a byte array.
 ByteArray PackFeaturesAndHash(const ByteArray &data,
                               const FeatureVec &features);
+
+// Pack `features` and the hash of `data` directly from their raw data format.
+ByteArray PackFeaturesAndHashAsRawBytes(const ByteArray &data,
+                                        ByteSpan features);
 
 // Given a `blob` created by `PackFeaturesAndHash`, unpack the features into
 // `features` and return the hash.

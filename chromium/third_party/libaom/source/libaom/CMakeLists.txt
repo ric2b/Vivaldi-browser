@@ -58,9 +58,9 @@ endif()
 # passed to libtool.
 #
 # We set SO_FILE_VERSION = [c-a].a.r
-set(LT_CURRENT 10)
-set(LT_REVISION 0)
-set(LT_AGE 7)
+set(LT_CURRENT 11)
+set(LT_REVISION 1)
+set(LT_AGE 8)
 math(EXPR SO_VERSION "${LT_CURRENT} - ${LT_AGE}")
 set(SO_FILE_VERSION "${SO_VERSION}.${LT_AGE}.${LT_REVISION}")
 unset(LT_CURRENT)
@@ -843,6 +843,12 @@ if(BUILD_SHARED_LIBS)
   setup_exports_target()
 endif()
 
+# Do not allow implicit vector type conversions on Clang builds (this is already
+# the default on GCC builds).
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+  append_compiler_flag("-flax-vector-conversions=none")
+endif()
+
 # Handle user supplied compile and link flags last to ensure they're obeyed.
 set_user_flags()
 
@@ -940,7 +946,7 @@ get_cmake_property(all_cmake_vars VARIABLES)
 foreach(var ${all_cmake_vars})
   if("${var}" MATCHES "SOURCES$\|_INTRIN_\|_ASM_"
      AND NOT "${var}" MATCHES "DOXYGEN\|LIBYUV\|_PKG_\|TEST"
-     AND NOT "${var}" MATCHES "_ASM_NASM\|_ASM_COMPILER_")
+     AND NOT "${var}" MATCHES "_ASM_NASM\|_ASM_COMPILER")
     list(APPEND aom_source_vars ${var})
   endif()
 endforeach()

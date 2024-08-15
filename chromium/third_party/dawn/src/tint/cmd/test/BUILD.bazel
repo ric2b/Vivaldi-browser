@@ -50,7 +50,9 @@ cc_binary(
     "//src/tint/lang/core/ir:test",
     "//src/tint/lang/core/type:test",
     "//src/tint/lang/core:test",
+    "//src/tint/lang/msl/ir:test",
     "//src/tint/lang/spirv/ir:test",
+    "//src/tint/lang/spirv/reader/lower:test",
     "//src/tint/lang/wgsl/ast:test",
     "//src/tint/lang/wgsl/helpers:test",
     "//src/tint/lang/wgsl/program:test",
@@ -60,6 +62,7 @@ cc_binary(
     "//src/tint/lang/wgsl/writer/ir_to_program:test",
     "//src/tint/lang/wgsl/writer/raise:test",
     "//src/tint/lang/wgsl:test",
+    "//src/tint/utils/bytes:test",
     "//src/tint/utils/cli:test",
     "//src/tint/utils/command:test",
     "//src/tint/utils/containers:test",
@@ -101,15 +104,28 @@ cc_binary(
     ],
     "//conditions:default": [],
   }) + select({
+    ":tint_build_ir_binary": [
+      "//src/tint/lang/core/ir/binary:test",
+    ],
+    "//conditions:default": [],
+  }) + select({
     ":tint_build_msl_writer": [
       "//src/tint/lang/msl/writer/ast_printer:test",
       "//src/tint/lang/msl/writer/common:test",
       "//src/tint/lang/msl/writer/printer:test",
+      "//src/tint/lang/msl/writer/raise:test",
     ],
     "//conditions:default": [],
   }) + select({
     ":tint_build_msl_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer": [
       "//src/tint/lang/msl/writer/ast_raise:test",
+    ],
+    "//conditions:default": [],
+  }) + select({
+    ":tint_build_spv_reader": [
+      "//src/tint/lang/spirv/reader/common:test",
+      "//src/tint/lang/spirv/reader/parser:test",
+      "//src/tint/lang/spirv/reader:test",
     ],
     "//conditions:default": [],
   }) + select({
@@ -120,6 +136,11 @@ cc_binary(
   }) + select({
     ":tint_build_spv_reader_and_tint_build_wgsl_writer": [
       "//src/tint/lang/spirv/reader/ast_parser:test",
+    ],
+    "//conditions:default": [],
+  }) + select({
+    ":tint_build_spv_reader_or_tint_build_spv_writer": [
+      "//src/tint/lang/spirv/validate:test",
     ],
     "//conditions:default": [],
   }) + select({
@@ -168,6 +189,11 @@ alias(
 )
 
 alias(
+  name = "tint_build_ir_binary",
+  actual = "//src/tint:tint_build_ir_binary_true",
+)
+
+alias(
   name = "tint_build_msl_writer",
   actual = "//src/tint:tint_build_msl_writer_true",
 )
@@ -190,6 +216,14 @@ alias(
 alias(
   name = "tint_build_wgsl_writer",
   actual = "//src/tint:tint_build_wgsl_writer_true",
+)
+
+selects.config_setting_group(
+    name = "tint_build_spv_reader_or_tint_build_spv_writer",
+    match_any = [
+        "tint_build_spv_reader",
+        "tint_build_spv_writer",
+    ],
 )
 
 selects.config_setting_group(

@@ -456,8 +456,6 @@ suite('Performance', () => {
   // TODO(crbug.com/1486635): Remove once preloading subpage in performance
   // settings is launched
   const defaultFeatureValues = {
-    isPerformanceSettingsPreloadingSubpageEnabled: loadTimeData.getBoolean(
-        'isPerformanceSettingsPreloadingSubpageEnabled'),
     isPerformanceSettingsPreloadingSubpageV2Enabled: loadTimeData.getBoolean(
         'isPerformanceSettingsPreloadingSubpageV2Enabled'),
   };
@@ -479,6 +477,24 @@ suite('Performance', () => {
     const sections = page.shadowRoot!.querySelectorAll('settings-section');
     assertTrue(sections.length > 1);
   }
+
+  test('performanceSectionTitlesVisible', async function() {
+    await createNewBasicPage();
+    page.pageVisibility = pageVisibility;
+    flush();
+
+    assertEquals(
+        queryPerformanceSettingsSection()!.shadowRoot!.querySelector('h2')
+            ?.innerText,
+        loadTimeData.getString('memoryPageTitle'));
+    assertEquals(
+        queryBatterySettingsSection()!.shadowRoot!.querySelector('h2')
+            ?.innerText,
+        loadTimeData.getString('batteryPageTitle'));
+    assertEquals(
+        querySpeedSettingsSection()!.shadowRoot!.querySelector('h2')?.innerText,
+        loadTimeData.getString('speedPageTitle'));
+  });
 
   test('performanceVisibilityTestFeaturesAvailable', async function() {
     await createNewBasicPage();
@@ -511,22 +527,6 @@ suite('Performance', () => {
     assertFalse(
         !!queryPerformanceSettingsSection(),
         'Performance section should not exist when visibility is false');
-  });
-
-  // TODO(crbug.com/1486635): Remove once preloading subpage in performance
-  // settings is launched
-  test('performanceVisibilityTestSpeedSectionNotEnabled', async function() {
-    loadTimeData.overrideValues({
-      isPerformanceSettingsPreloadingSubpageEnabled: false,
-    });
-    await createNewBasicPage();
-    // Set the visibility of the pages under test to their default value.
-    page.pageVisibility = pageVisibility;
-    flush();
-
-    assertFalse(
-        !!querySpeedSettingsSection(),
-        'Speed section should not be visible when feature flag is off');
   });
 
   // TODO(crbug.com/1486635): Remove once preloading subpage in performance
@@ -635,5 +635,32 @@ suite('SafetyHubDisabled', () => {
     assertFalse(
         !!querySafetyHubSection(),
         'Safety Hub section should not be visible with default visibility');
+  });
+});
+
+suite('ExperimentalAdvanced', () => {
+  let page: SettingsBasicPageElement;
+
+  function createBasicPage() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    page = document.createElement('settings-basic-page');
+    document.body.appendChild(page);
+    flush();
+  }
+
+  test('sectionNotVisible', function() {
+    loadTimeData.overrideValues({showAdvancedFeaturesMainControl: false});
+    createBasicPage();
+    const sectionElement =
+        page.shadowRoot!.querySelector('settings-section[section=ai]');
+    assertFalse(!!sectionElement);
+  });
+
+  test('sectionVisible', function() {
+    loadTimeData.overrideValues({showAdvancedFeaturesMainControl: true});
+    createBasicPage();
+    const sectionElement =
+        page.shadowRoot!.querySelector('settings-section[section=ai]');
+    assertTrue(!!sectionElement);
   });
 });

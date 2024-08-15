@@ -38,12 +38,15 @@ import * as Common from '../common/common.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
 
-import * as HttpReasonPhraseStrings from './HttpReasonPhraseStrings.js';
+import {ContentData as ContentDataClass, type ContentDataOrError} from './ContentData.js';
 import {Attributes, type Cookie} from './Cookie.js';
+import {CookieModel} from './CookieModel.js';
 import {CookieParser} from './CookieParser.js';
-import {NetworkManager, Events as NetworkManagerEvents} from './NetworkManager.js';
-import {Type} from './Target.js';
+import * as HttpReasonPhraseStrings from './HttpReasonPhraseStrings.js';
+import {parseContentType} from './MimeType.js';
+import {Events as NetworkManagerEvents, NetworkManager} from './NetworkManager.js';
 import {ServerTiming} from './ServerTiming.js';
+import {Type} from './Target.js';
 
 // clang-format off
 const UIStrings = {
@@ -197,21 +200,6 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('core/sdk/NetworkRequest.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum, @typescript-eslint/naming-convention
-export enum MIME_TYPE {
-  HTML = 'text/html',
-  XML = 'text/xml',
-  PLAIN = 'text/plain',
-  XHTML = 'application/xhtml+xml',
-  SVG = 'image/svg+xml',
-  CSS = 'text/css',
-  XSL = 'text/xsl',
-  VTT = 'text/vtt',
-  PDF = 'application/pdf',
-  EVENTSTREAM = 'text/event-stream',
-}
-
 export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventTypes> implements
     TextUtils.ContentProvider.ContentProvider {
   #requestIdInternal: string;
@@ -244,7 +232,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #webBundleInfoInternal: WebBundleInfo|null;
   #webBundleInnerRequestInfoInternal: WebBundleInnerRequestInfo|null;
   #resourceTypeInternal: Common.ResourceType.ResourceType;
-  #contentDataInternal: Promise<ContentData>|null;
+  #contentDataInternal: Promise<ContentDataOrError>|null;
   readonly #framesInternal: WebSocketFrame[];
   readonly #eventSourceMessagesInternal: EventSourceMessage[];
   #responseHeaderValues: {
@@ -288,7 +276,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #failedInternal!: boolean;
   #canceledInternal!: boolean;
   #preservedInternal!: boolean;
-  #mimeTypeInternal!: MIME_TYPE;
+  #mimeTypeInternal!: string;
   #parsedURLInternal!: Common.ParsedURL.ParsedURL;
   #nameInternal!: string|undefined;
   #pathInternal!: string|undefined;
@@ -304,6 +292,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #fromDiskCache?: boolean;
   #fromPrefetchCacheInternal?: boolean;
   #fetchedViaServiceWorkerInternal?: boolean;
+  #serviceWorkerRouterInfoInternal?: Protocol.Network.ServiceWorkerRouterInfo;
   #timingInternal?: Protocol.Network.ResourceTiming;
   #requestHeadersTextInternal?: string;
   #responseHeadersInternal?: NameValue[];
@@ -312,13 +301,14 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #serverTimingsInternal?: ServerTiming[]|null;
   #queryStringInternal?: string|null;
   #parsedQueryParameters?: NameValue[];
-  #contentDataProvider?: (() => Promise<ContentData>);
+  #contentDataProvider?: (() => Promise<ContentDataOrError>);
   #isSameSiteInternal: boolean|null;
   #wasIntercepted: boolean;
   #associatedData = new Map<string, object>();
   #hasOverriddenContent: boolean;
+  #hasThirdPartyCookiePhaseoutIssue: boolean;
 
-  private constructor(
+  constructor(
       requestId: string, backendRequestId: Protocol.Network.RequestId|undefined, url: Platform.DevToolsPath.UrlString,
       documentURL: Platform.DevToolsPath.UrlString, frameId: Protocol.Page.FrameId|null,
       loaderId: Protocol.Network.LoaderId|null, initiator: Protocol.Network.Initiator|null, hasUserGesture?: boolean) {
@@ -400,6 +390,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
 
     this.#wasIntercepted = false;
     this.#hasOverriddenContent = false;
+    this.#hasThirdPartyCookiePhaseoutIssue = false;
   }
 
   static create(
@@ -450,7 +441,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   }
 
   isBlobRequest(): boolean {
-    return this.#urlInternal.startsWith('blob:');
+    return Common.ParsedURL.schemeIs(this.#urlInternal, 'blob:');
   }
 
   setUrl(x: Platform.DevToolsPath.UrlString): void {
@@ -734,6 +725,14 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.#fetchedViaServiceWorkerInternal = x;
   }
 
+  get serviceWorkerRouterInfo(): Protocol.Network.ServiceWorkerRouterInfo|undefined {
+    return this.#serviceWorkerRouterInfoInternal;
+  }
+
+  set serviceWorkerRouterInfo(x: Protocol.Network.ServiceWorkerRouterInfo) {
+    this.#serviceWorkerRouterInfoInternal = x;
+  }
+
   /**
    * Returns true if the request was sent by a service worker.
    */
@@ -773,11 +772,11 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.dispatchEventToListeners(Events.TimingChanged, this);
   }
 
-  get mimeType(): MIME_TYPE {
+  get mimeType(): string {
     return this.#mimeTypeInternal;
   }
 
-  set mimeType(x: MIME_TYPE) {
+  set mimeType(x: string) {
     this.#mimeTypeInternal = x;
   }
 
@@ -1025,8 +1024,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
 
     this.#sortedOriginalResponseHeaders = this.originalResponseHeaders.slice();
     return this.#sortedOriginalResponseHeaders.sort(function(a, b) {
-      return Platform.StringUtilities.compare(a.name.toLowerCase(), b.name.toLowerCase()) ||
-          Platform.StringUtilities.compare(a.value, b.value);
+      return Platform.StringUtilities.compare(a.name.toLowerCase(), b.name.toLowerCase());
     });
   }
 
@@ -1052,20 +1050,32 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.#hasOverriddenContent = value;
   }
 
+  #deduplicateHeaders(sortedHeaders: NameValue[]): NameValue[] {
+    const dedupedHeaders: NameValue[] = [];
+    for (const header of sortedHeaders) {
+      if (dedupedHeaders.length && dedupedHeaders[dedupedHeaders.length - 1].name === header.name) {
+        dedupedHeaders[dedupedHeaders.length - 1].value += `, ${header.value}`;
+      } else {
+        dedupedHeaders.push({name: header.name, value: header.value});
+      }
+    }
+    return dedupedHeaders;
+  }
+
   hasOverriddenHeaders(): boolean {
     if (!this.#originalResponseHeaders.length) {
       return false;
     }
-    const sortedResponseHeaders = this.sortedResponseHeaders;
-    const sortedOriginalResponseHeaders = this.sortedOriginalResponseHeaders;
-    if (sortedOriginalResponseHeaders.length !== sortedResponseHeaders.length) {
+    const responseHeaders = this.#deduplicateHeaders(this.sortedResponseHeaders);
+    const originalResponseHeaders = this.#deduplicateHeaders(this.sortedOriginalResponseHeaders);
+    if (responseHeaders.length !== originalResponseHeaders.length) {
       return true;
     }
-    for (let i = 0; i < sortedResponseHeaders.length; i++) {
-      if (sortedResponseHeaders[i].name.toLowerCase() !== sortedOriginalResponseHeaders[i].name.toLowerCase()) {
+    for (let i = 0; i < responseHeaders.length; i++) {
+      if (responseHeaders[i].name.toLowerCase() !== originalResponseHeaders[i].name.toLowerCase()) {
         return true;
       }
-      if (sortedResponseHeaders[i].value !== sortedOriginalResponseHeaders[i].value) {
+      if (responseHeaders[i].value !== originalResponseHeaders[i].value) {
         return true;
       }
     }
@@ -1094,10 +1104,14 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
           CookieParser.parseSetCookie(this.responseHeaderValue('Set-Cookie'), this.domain) || [];
       if (this.#responseCookiesPartitionKey) {
         for (const cookie of this.#responseCookiesInternal) {
-          cookie.setPartitionKey(this.#responseCookiesPartitionKey);
+          if (cookie.partitioned()) {
+            cookie.setPartitionKey(this.#responseCookiesPartitionKey);
+          }
         }
       } else if (this.#responseCookiesPartitionKeyOpaque) {
         for (const cookie of this.#responseCookiesInternal) {
+          // Do not check cookie.partitioned() since most opaque partitions
+          // are fenced/credentialless frames partitioned by default.
           cookie.setPartitionKeyOpaque();
         }
       }
@@ -1291,7 +1305,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     return values.join(', ');
   }
 
-  contentData(): Promise<ContentData> {
+  contentData(): Promise<ContentDataOrError> {
     if (this.#contentDataInternal) {
       return this.#contentDataInternal;
     }
@@ -1303,7 +1317,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     return this.#contentDataInternal;
   }
 
-  setContentDataProvider(dataProvider: () => Promise<ContentData>): void {
+  setContentDataProvider(dataProvider: () => Promise<ContentDataOrError>): void {
     console.assert(!this.#contentDataInternal, 'contentData can only be set once.');
     this.#contentDataProvider = dataProvider;
   }
@@ -1317,12 +1331,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   }
 
   async requestContent(): Promise<TextUtils.ContentProvider.DeferredContent> {
-    const {content, error, encoded} = await this.contentData();
-    return {
-      content,
-      error,
-      isEncoded: encoded,
-    } as TextUtils.ContentProvider.DeferredContent;
+    return ContentDataClass.asDeferredContent(await this.contentData());
   }
 
   async searchInContent(query: string, caseSensitive: boolean, isRegex: boolean):
@@ -1332,14 +1341,10 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     }
 
     const contentData = await this.contentData();
-    let content: string|(string | null) = contentData.content;
-    if (!content) {
+    if (ContentDataClass.isError(contentData) || !contentData.isTextContent) {
       return [];
     }
-    if (contentData.encoded) {
-      content = window.atob(content);
-    }
-    return TextUtils.TextUtils.performSearchInContent(content, query, caseSensitive, isRegex);
+    return TextUtils.TextUtils.performSearchInContent(contentData.text, query, caseSensitive, isRegex);
   }
 
   isHttpFamily(): boolean {
@@ -1395,8 +1400,11 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   }
 
   async populateImageSource(image: HTMLImageElement): Promise<void> {
-    const {content, encoded} = await this.contentData();
-    let imageSrc = TextUtils.ContentProvider.contentAsDataURL(content, this.#mimeTypeInternal, encoded);
+    const contentData = await this.contentData();
+    if (ContentDataClass.isError(contentData)) {
+      return;
+    }
+    let imageSrc = contentData.asDataUrl();
     if (imageSrc === null && !this.#failedInternal) {
       const cacheControl = this.responseHeaderValue('cache-control') || '';
       if (!cacheControl.includes('no-cache')) {
@@ -1471,15 +1479,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
       return null;
     }
 
-    const responseCharsets = contentTypeHeader.replace(/ /g, '')
-                                 .split(';')
-                                 .filter(parameter => parameter.toLowerCase().startsWith('charset='))
-                                 .map(parameter => parameter.slice('charset='.length));
-    if (responseCharsets.length) {
-      return responseCharsets[0];
-    }
-
-    return null;
+    return parseContentType(contentTypeHeader)?.charset;
   }
 
   addExtraRequestInfo(extraRequestInfo: ExtraRequestInfo): void {
@@ -1491,6 +1491,9 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.#clientSecurityStateInternal = extraRequestInfo.clientSecurityState;
     this.setConnectTimingFromExtraInfo(extraRequestInfo.connectTiming);
     this.#siteHasCookieInOtherPartition = extraRequestInfo.siteHasCookieInOtherPartition ?? false;
+
+    this.#hasThirdPartyCookiePhaseoutIssue = this.#blockedRequestCookiesInternal.some(
+        item => item.blockedReasons.includes(Protocol.Network.CookieBlockedReason.ThirdPartyPhaseout));
   }
 
   hasExtraRequestInfo(): boolean {
@@ -1559,16 +1562,35 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
 
     // TODO(crbug.com/1252463) Explore replacing this with a DevTools Issue.
     const networkManager = NetworkManager.forRequest(this);
-    if (networkManager) {
-      for (const blockedCookie of this.#blockedResponseCookiesInternal) {
-        if (blockedCookie.blockedReasons.includes(
-                Protocol.Network.SetCookieBlockedReason.NameValuePairExceedsMaxSize)) {
-          const message = i18nString(UIStrings.setcookieHeaderIsIgnoredIn, {PH1: this.url()});
-          networkManager.dispatchEventToListeners(
-              NetworkManagerEvents.MessageGenerated,
-              {message: message, requestId: this.#requestIdInternal, warning: true});
-        }
+    if (!networkManager) {
+      return;
+    }
+    for (const blockedCookie of this.#blockedResponseCookiesInternal) {
+      if (blockedCookie.blockedReasons.includes(Protocol.Network.SetCookieBlockedReason.NameValuePairExceedsMaxSize)) {
+        const message = i18nString(UIStrings.setcookieHeaderIsIgnoredIn, {PH1: this.url()});
+        networkManager.dispatchEventToListeners(
+            NetworkManagerEvents.MessageGenerated,
+            {message: message, requestId: this.#requestIdInternal, warning: true});
       }
+    }
+
+    const cookieModel = networkManager.target().model(CookieModel);
+    if (!cookieModel) {
+      return;
+    }
+    for (const blockedCookie of this.#blockedResponseCookiesInternal) {
+      const cookie = blockedCookie.cookie;
+      if (!cookie) {
+        continue;
+      }
+      if (blockedCookie.blockedReasons.includes(Protocol.Network.SetCookieBlockedReason.ThirdPartyPhaseout)) {
+        this.#hasThirdPartyCookiePhaseoutIssue = true;
+      }
+      cookieModel.addBlockedCookie(
+          cookie, blockedCookie.blockedReasons.map(blockedReason => ({
+                                                     attribute: setCookieBlockedReasonToAttribute(blockedReason),
+                                                     uiString: setCookieBlockedReasonToUiString(blockedReason),
+                                                   })));
     }
   }
 
@@ -1650,10 +1672,12 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   deleteAssociatedData(key: string): void {
     this.#associatedData.delete(key);
   }
+
+  hasThirdPartyCookiePhaseoutIssue(): boolean {
+    return this.#hasThirdPartyCookiePhaseoutIssue;
+  }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   FinishedLoading = 'FinishedLoading',
   TimingChanged = 'TimingChanged',
@@ -1676,9 +1700,7 @@ export type EventTypes = {
   [Events.TrustTokenResultAdded]: void,
 };
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum InitiatorType {
+export const enum InitiatorType {
   Other = 'other',
   Parser = 'parser',
   Redirect = 'redirect',
@@ -1688,8 +1710,6 @@ export enum InitiatorType {
   Preflight = 'preflight',
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum WebSocketFrameType {
   Send = 'send',
   Receive = 'receive',

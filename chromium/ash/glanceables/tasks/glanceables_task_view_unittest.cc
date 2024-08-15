@@ -5,8 +5,10 @@
 #include "ash/glanceables/tasks/glanceables_task_view.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 
+#include "ash/api/tasks/tasks_client.h"
 #include "ash/api/tasks/tasks_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/glanceables/common/glanceables_view_id.h"
@@ -20,7 +22,6 @@
 #include "base/time/time_override.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "chromeos/ash/components/settings/scoped_timezone_settings.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/views/controls/button/image_button.h"
@@ -64,10 +65,10 @@ TEST_F(GlanceablesTaskViewTest, FormatsDueDate) {
     const auto task = api::Task("task-id", "Task title", /*completed=*/false,
                                 /*due=*/due,
                                 /*has_subtasks=*/false,
-                                /*has_email_link=*/false, /*has_notes=*/false);
+                                /*has_email_link=*/false, /*has_notes=*/false,
+                                /*updated=*/due);
     const auto view = GlanceablesTaskView(
-        &task, /*mark_as_completed_callback=*/base::DoNothing(),
-        /*save_callback=*/base::DoNothing());
+        &task, /*mark_as_completed_callback=*/base::DoNothing());
 
     const auto* const due_label =
         views::AsViewClass<views::Label>(view.GetViewByID(
@@ -78,84 +79,18 @@ TEST_F(GlanceablesTaskViewTest, FormatsDueDate) {
   }
 }
 
-TEST_F(GlanceablesTaskViewTest, EntersAndExitsEditState) {
-  base::test::ScopedFeatureList features{
-      features::kGlanceablesTimeManagementStableLaunch};
-
-  const auto task = api::Task("task-id", "Task title", /*completed=*/false,
-                              /*due=*/absl::nullopt,
-                              /*has_subtasks=*/false, /*has_email_link=*/false,
-                              /*has_notes=*/false);
-
-  const auto widget = CreateFramelessTestWidget();
-  widget->SetFullscreen(true);
-  const auto* const view =
-      widget->SetContentsView(std::make_unique<GlanceablesTaskView>(
-          &task, /*mark_as_completed_callback=*/base::DoNothing(),
-          /*save_callback=*/base::DoNothing()));
-
-  {
-    const auto* const title_label =
-        views::AsViewClass<views::Label>(view->GetViewByID(
-            base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel)));
-    const auto* const title_text_field =
-        views::AsViewClass<views::Textfield>(view->GetViewByID(
-            base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField)));
-
-    ASSERT_TRUE(title_label);
-    ASSERT_FALSE(title_text_field);
-    EXPECT_EQ(title_label->GetText(), u"Task title");
-
-    LeftClickOn(title_label);
-  }
-
-  {
-    const auto* const title_label =
-        views::AsViewClass<views::Label>(view->GetViewByID(
-            base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel)));
-    const auto* const title_text_field =
-        views::AsViewClass<views::Textfield>(view->GetViewByID(
-            base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField)));
-
-    ASSERT_FALSE(title_label);
-    ASSERT_TRUE(title_text_field);
-    EXPECT_EQ(title_text_field->GetText(), u"Task title");
-
-    PressAndReleaseKey(ui::VKEY_SPACE);
-    PressAndReleaseKey(ui::VKEY_U);
-    PressAndReleaseKey(ui::VKEY_P);
-    PressAndReleaseKey(ui::VKEY_D);
-
-    PressAndReleaseKey(ui::VKEY_ESCAPE);
-  }
-
-  {
-    const auto* const title_label =
-        views::AsViewClass<views::Label>(view->GetViewByID(
-            base::to_underlying(GlanceablesViewId::kTaskItemTitleLabel)));
-    const auto* const title_text_field =
-        views::AsViewClass<views::Textfield>(view->GetViewByID(
-            base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField)));
-
-    ASSERT_TRUE(title_label);
-    ASSERT_FALSE(title_text_field);
-    EXPECT_EQ(title_label->GetText(), u"Task title upd");
-  }
-}
-
 TEST_F(GlanceablesTaskViewTest,
        AppliesStrikeThroughStyleAfterMarkingAsComplete) {
   const auto task = api::Task("task-id", "Task title", /*completed=*/false,
-                              /*due=*/absl::nullopt,
+                              /*due=*/std::nullopt,
                               /*has_subtasks=*/false, /*has_email_link=*/false,
-                              /*has_notes=*/false);
+                              /*has_notes=*/false, /*updated=*/base::Time());
 
   const auto widget = CreateFramelessTestWidget();
   widget->SetFullscreen(true);
   const auto* const view =
       widget->SetContentsView(std::make_unique<GlanceablesTaskView>(
-          &task, /*mark_as_completed_callback=*/base::DoNothing(),
-          /*save_callback=*/base::DoNothing()));
+          &task, /*mark_as_completed_callback=*/base::DoNothing()));
   ASSERT_TRUE(view);
 
   const auto* const checkbox = view->GetButtonForTest();
@@ -181,9 +116,9 @@ TEST_F(GlanceablesTaskViewTest,
 
 TEST_F(GlanceablesTaskViewTest, InvokesMarkAsCompletedCallback) {
   const auto task = api::Task("task-id", "Task title", /*completed=*/false,
-                              /*due=*/absl::nullopt,
+                              /*due=*/std::nullopt,
                               /*has_subtasks=*/false, /*has_email_link=*/false,
-                              /*has_notes=*/false);
+                              /*has_notes=*/false, /*updated=*/base::Time());
 
   base::test::TestFuture<const std::string&, bool> future;
 
@@ -191,8 +126,7 @@ TEST_F(GlanceablesTaskViewTest, InvokesMarkAsCompletedCallback) {
   widget->SetFullscreen(true);
   const auto* const view =
       widget->SetContentsView(std::make_unique<GlanceablesTaskView>(
-          &task, /*mark_as_completed_callback=*/future.GetRepeatingCallback(),
-          /*save_callback=*/base::DoNothing()));
+          &task, /*mark_as_completed_callback=*/future.GetRepeatingCallback()));
   ASSERT_TRUE(view);
 
   EXPECT_FALSE(view->GetCompletedForTest());
@@ -217,58 +151,6 @@ TEST_F(GlanceablesTaskViewTest, InvokesMarkAsCompletedCallback) {
     EXPECT_EQ(task_id, "task-id");
     EXPECT_FALSE(completed);
   }
-}
-
-TEST_F(GlanceablesTaskViewTest, InvokesSaveCallbackAfterAdding) {
-  base::test::TestFuture<const std::string&, const std::string&> future;
-
-  const auto widget = CreateFramelessTestWidget();
-  widget->SetFullscreen(true);
-  auto* const view =
-      widget->SetContentsView(std::make_unique<GlanceablesTaskView>(
-          /*task=*/nullptr, /*mark_as_completed_callback=*/base::DoNothing(),
-          /*save_callback=*/future.GetRepeatingCallback()));
-  ASSERT_TRUE(view);
-
-  view->UpdateTaskTitleViewForState(
-      GlanceablesTaskView::TaskTitleViewState::kEdit);
-  PressAndReleaseKey(ui::VKEY_N, ui::EF_SHIFT_DOWN);
-  PressAndReleaseKey(ui::VKEY_E);
-  PressAndReleaseKey(ui::VKEY_W);
-  PressAndReleaseKey(ui::VKEY_ESCAPE);
-
-  const auto [task_id, title] = future.Take();
-  EXPECT_TRUE(task_id.empty());
-  EXPECT_EQ(title, "New");
-}
-
-TEST_F(GlanceablesTaskViewTest, InvokesSaveCallbackAfterEditing) {
-  const auto task = api::Task("task-id", "Task title", /*completed=*/false,
-                              /*due=*/absl::nullopt,
-                              /*has_subtasks=*/false, /*has_email_link=*/false,
-                              /*has_notes=*/false);
-
-  base::test::TestFuture<const std::string&, const std::string&> future;
-
-  const auto widget = CreateFramelessTestWidget();
-  widget->SetFullscreen(true);
-  auto* const view =
-      widget->SetContentsView(std::make_unique<GlanceablesTaskView>(
-          &task, /*mark_as_completed_callback=*/base::DoNothing(),
-          /*save_callback=*/future.GetRepeatingCallback()));
-  ASSERT_TRUE(view);
-
-  view->UpdateTaskTitleViewForState(
-      GlanceablesTaskView::TaskTitleViewState::kEdit);
-  PressAndReleaseKey(ui::VKEY_SPACE);
-  PressAndReleaseKey(ui::VKEY_U);
-  PressAndReleaseKey(ui::VKEY_P);
-  PressAndReleaseKey(ui::VKEY_D);
-  PressAndReleaseKey(ui::VKEY_ESCAPE);
-
-  const auto [task_id, title] = future.Take();
-  EXPECT_EQ(task_id, "task-id");
-  EXPECT_EQ(title, "Task title upd");
 }
 
 }  // namespace ash

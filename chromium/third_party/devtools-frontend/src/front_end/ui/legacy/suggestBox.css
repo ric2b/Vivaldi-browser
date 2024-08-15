@@ -76,8 +76,7 @@
 }
 
 .suggest-box-content-item devtools-icon {
-  --icon-color: var(--sys-color-on-surface-subtle);
-
+  color: var(--sys-color-on-surface-subtle);
   margin-right: 1px;
 }
 
@@ -100,7 +99,7 @@
 }
 
 .suggest-box-content-item:hover:not(.selected) {
-  background-color: var(--item-hover-color);
+  background-color: var(--sys-color-state-hover-on-subtle);
 }
 
 @media (forced-colors: active) {

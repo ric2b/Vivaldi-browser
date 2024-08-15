@@ -1,17 +1,7 @@
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import type {ChildProcess} from 'child_process';
@@ -53,6 +43,8 @@ import {TargetManagerEvent, type TargetManager} from './TargetManager.js';
  * @internal
  */
 export class CdpBrowser extends BrowserBase {
+  readonly protocol = 'cdp';
+
   static async _create(
     product: 'firefox' | 'chrome' | undefined,
     connection: Connection,
@@ -143,7 +135,7 @@ export class CdpBrowser extends BrowserBase {
     this.emit(BrowserEvent.Disconnected, undefined);
   };
 
-  override async _attach(): Promise<void> {
+  async _attach(): Promise<void> {
     this.#connection.on(CDPSessionEvent.Disconnected, this.#emitDisconnected);
     this.#targetManager.on(
       TargetManagerEvent.TargetAvailable,
@@ -164,7 +156,7 @@ export class CdpBrowser extends BrowserBase {
     await this.#targetManager.initialize();
   }
 
-  override _detach(): void {
+  _detach(): void {
     this.#connection.off(CDPSessionEvent.Disconnected, this.#emitDisconnected);
     this.#targetManager.off(
       TargetManagerEvent.TargetAvailable,
@@ -204,7 +196,7 @@ export class CdpBrowser extends BrowserBase {
       });
   }
 
-  override _getIsPageTargetCallback(): IsPageTargetCallback | undefined {
+  _getIsPageTargetCallback(): IsPageTargetCallback | undefined {
     return this.#isPageTargetCallback;
   }
 
@@ -237,7 +229,7 @@ export class CdpBrowser extends BrowserBase {
     return this.#defaultContext;
   }
 
-  override async _disposeContext(contextId?: string): Promise<void> {
+  async _disposeContext(contextId?: string): Promise<void> {
     if (!contextId) {
       return;
     }
@@ -349,7 +341,7 @@ export class CdpBrowser extends BrowserBase {
     return await this.#defaultContext.newPage();
   }
 
-  override async _createPageInContext(contextId?: string): Promise<Page> {
+  async _createPageInContext(contextId?: string): Promise<Page> {
     const {targetId} = await this.#connection.send('Target.createTarget', {
       url: 'about:blank',
       browserContextId: contextId || undefined,
@@ -408,13 +400,14 @@ export class CdpBrowser extends BrowserBase {
 
   override async close(): Promise<void> {
     await this.#closeCallback.call(null);
-    this.disconnect();
+    await this.disconnect();
   }
 
-  override disconnect(): void {
+  override disconnect(): Promise<void> {
     this.#targetManager.dispose();
     this.#connection.dispose();
     this._detach();
+    return Promise.resolve();
   }
 
   override get connected(): boolean {

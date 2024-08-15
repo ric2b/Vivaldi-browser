@@ -6,7 +6,11 @@ import("../../../../../../third_party/typescript/typescript.gni")
 
 ts_library("components") {
   testonly = true
-  sources = [ "BreadcrumbsUI_test.ts" ]
+  sources = [
+    "BreadcrumbsUI_test.ts",
+    "InteractionBreakdown_test.ts",
+    "Invalidations_test.ts",
+  ]
 
   deps = [
     "../../../../../../front_end/core/sdk:bundle",

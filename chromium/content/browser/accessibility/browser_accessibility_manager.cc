@@ -369,13 +369,6 @@ void BrowserAccessibilityManager::DidStopLoading() {
   FireFocusEventsIfNeeded();
 }
 
-void BrowserAccessibilityManager::DidActivatePortal() {
-  if (GetTreeData().loaded) {
-    FireGeneratedEvent(ui::AXEventGenerator::Event::PORTAL_ACTIVATED,
-                       GetRoot());
-  }
-}
-
 bool BrowserAccessibilityManager::UseRootScrollOffsetsWhenComputingBounds() {
   return use_root_scroll_offsets_when_computing_bounds_;
 }
@@ -389,9 +382,9 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
     const AXEventNotificationDetails& details) {
   TRACE_EVENT0("accessibility",
                "BrowserAccessibilityManager::OnAccessibilityEvents");
-  SCOPED_UMA_HISTOGRAM_TIMER(
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
       "Accessibility.Performance.BrowserAccessibilityManager::"
-      "OnAccessibilityEvents");
+      "OnAccessibilityEvents2");
 
 #if DCHECK_IS_ON()
   base::AutoReset<bool> auto_reset(&in_on_accessibility_events_, true);
@@ -508,7 +501,7 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
 
     // IsDescendantOf() also returns true in the case of equality.
     if (focus && focus != event_target && focus->IsDescendantOf(event_target)) {
-      FireGeneratedEvent(targeted_event.event_params.event,
+      FireGeneratedEvent(targeted_event.event_params->event,
                          event_target->node());
     } else {
       deferred_events.push_back(targeted_event);
@@ -539,7 +532,8 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
     if (!event_target->CanFireEvents())
       continue;
 
-    FireGeneratedEvent(targeted_event.event_params.event, event_target->node());
+    FireGeneratedEvent(targeted_event.event_params->event,
+                       event_target->node());
   }
   event_generator().ClearEvents();
 
@@ -1001,6 +995,9 @@ void BrowserAccessibilityManager::ScrollToMakeVisible(
 
   base::RecordAction(
       base::UserMetricsAction("Accessibility.NativeApi.ScrollToMakeVisible"));
+
+  base::UmaHistogramBoolean("Accessibility.ScreenReader.ScrollToImage",
+                            node.GetRole() == ax::mojom::Role::kImage);
 
   ui::AXActionData action_data;
   action_data.target_node_id = node.GetId();

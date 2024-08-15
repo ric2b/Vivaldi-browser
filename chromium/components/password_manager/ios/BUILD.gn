@@ -79,6 +79,7 @@ source_set("account_select_fill_data") {
     "//base",
     "//components/autofill/core/common",
     "//components/autofill/ios/browser:util",
+    "//components/password_manager/core/browser/features:password_features",
     "//url",
   ]
 
@@ -123,7 +124,9 @@ source_set("unit_tests") {
     "ios_password_manager_driver_factory_unittest.mm",
     "ios_password_manager_driver_unittest.mm",
     "password_controller_driver_helper_unittest.mm",
+    "password_form_helper_unittest.mm",
     "password_suggestion_helper_unittest.mm",
+    "shared_password_controller_unittest.mm",
   ]
   deps = [
     ":account_select_fill_data",
@@ -140,6 +143,7 @@ source_set("unit_tests") {
     "//components/autofill/ios/form_util:test_support",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/browser:test_support",
+    "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/common:features",
     "//components/password_manager/ios:password_manager_feature_header",
     "//components/password_manager/ios:test_support",
@@ -154,17 +158,6 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/ocmock",
   ]
-
-  # TODO(crbug.com/1427365): Test currently fails on iOS blink.
-  if (!use_blink) {
-    sources += [
-      "password_form_helper_unittest.mm",
-
-      # TODO(crbug.com/1481427): SharedPasswordControllerTest fails on iOS
-      # blink.
-      "shared_password_controller_unittest.mm",
-    ]
-  }
 }
 
 source_set("fake_bulk_leak_check_service") {

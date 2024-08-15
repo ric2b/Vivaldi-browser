@@ -33,7 +33,7 @@ fn np_adv_test_vectors() -> Result<(), anyhow::Error> {
         test_helper::get_data_file("presence/ldt_np_adv/resources/test/np_adv_test_vectors.json");
     let mut file = fs::File::open(full_path)?;
     let mut data = String::new();
-    file.read_to_string(&mut data)?;
+    let _ = file.read_to_string(&mut data)?;
     let test_cases = match serde_json::de::from_str(&data)? {
         serde_json::Value::Array(a) => a,
         _ => return Err(anyhow!("bad json")),

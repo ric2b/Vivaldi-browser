@@ -30,11 +30,11 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "dawn/common/TypedInteger.h"
 #include "dawn/native/BackendConnection.h"
 
@@ -92,7 +92,7 @@ class Backend : public BackendConnection {
     const PlatformFunctions* GetFunctions() const;
 
     std::vector<Ref<PhysicalDeviceBase>> DiscoverPhysicalDevices(
-        const RequestAdapterOptions* options) override;
+        const UnpackedPtr<RequestAdapterOptions>& options) override;
     void ClearPhysicalDevices() override;
     size_t GetPhysicalDeviceCountForTesting() const override;
 
@@ -137,7 +137,8 @@ class Backend : public BackendConnection {
     // Map of LUID to physical device.
     // The LUID is guaranteed to be uniquely identify an adapter on the local
     // machine until restart.
-    std::unordered_map<LUID, Ref<PhysicalDeviceBase>, LUIDHashFunc, LUIDEqualFunc> mPhysicalDevices;
+    absl::flat_hash_map<LUID, Ref<PhysicalDeviceBase>, LUIDHashFunc, LUIDEqualFunc>
+        mPhysicalDevices;
 };
 
 }  // namespace dawn::native::d3d

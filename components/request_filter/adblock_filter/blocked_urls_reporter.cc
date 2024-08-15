@@ -34,7 +34,7 @@ void BlockedUrlsReporter::OnTrackerInfosUpdated(
     const RuleSource& source,
     base::Value::Dict new_tracker_infos) {
   auto& tracker_infos = tracker_infos_[static_cast<size_t>(source.group)];
-  base::EraseIf(tracker_infos, [&source](auto& tracker) {
+  std::erase_if(tracker_infos, [&source](auto& tracker) {
     tracker.second.erase(source.id);
     return tracker.second.empty();
   });

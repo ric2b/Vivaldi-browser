@@ -62,13 +62,15 @@ content::WebContents* TestBrowserWindow::TestLocationBar::GetWebContents() {
 
 // TestBrowserWindow ----------------------------------------------------------
 
-TestBrowserWindow::TestBrowserWindow() {}
+TestBrowserWindow::TestBrowserWindow() = default;
 
-TestBrowserWindow::~TestBrowserWindow() {}
+TestBrowserWindow::~TestBrowserWindow() = default;
 
 void TestBrowserWindow::Close() {
-  if (close_callback_)
+  if (close_callback_) {
     std::move(close_callback_).Run();
+  }
+  is_closed_ = true;
 }
 
 bool TestBrowserWindow::IsActive() const {
@@ -156,6 +158,10 @@ bool TestBrowserWindow::ShouldHideUIForFullscreen() const {
 
 bool TestBrowserWindow::GetCanResize() {
   return false;
+}
+
+ui::WindowShowState TestBrowserWindow::GetWindowShowState() const {
+  return ui::SHOW_STATE_DEFAULT;
 }
 
 bool TestBrowserWindow::IsFullscreen() const {
@@ -380,7 +386,7 @@ bool TestBrowserWindow::MaybeShowStartupFeaturePromo(
 
 bool TestBrowserWindow::CloseFeaturePromo(
     const base::Feature& iph_feature,
-    user_education::FeaturePromoCloseReason close_reason) {
+    user_education::EndFeaturePromoReason close_reason) {
   return feature_promo_controller_ &&
          feature_promo_controller_->EndPromo(iph_feature, close_reason);
 }

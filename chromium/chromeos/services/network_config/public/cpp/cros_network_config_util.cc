@@ -8,12 +8,24 @@
 
 namespace chromeos::network_config {
 
+const char kMojoKeySecurity[] = "security";
+const char kMojoKeySsid[] = "ssid";
+const char kMojoKeyPassphrase[] = "passphrase";
+const char kMojoKeyEapInner[] = "inner";
+const char kMojoKeyEapOuter[] = "outer";
+const char kMojoKeyEapIdentity[] = "identity";
+const char kMojoKeyEapAnonymousIdentity[] = "anonymousIdentity";
+const char kMojoKeyEapPassword[] = "password";
+const char kMojoKeyEap[] = "eap";
+const char kMojoKeyWifi[] = "wifi";
+const char kMojoKeyTypeConfig[] = "typeConfig";
+
 namespace {
 
-absl::optional<std::string> GetString(const base::Value::Dict& onc_apn,
-                                      const char* key) {
+std::optional<std::string> GetString(const base::Value::Dict& onc_apn,
+                                     const char* key) {
   const std::string* v = onc_apn.FindString(key);
-  return v ? absl::make_optional<std::string>(*v) : absl::nullopt;
+  return v ? std::make_optional<std::string>(*v) : std::nullopt;
 }
 
 std::string GetRequiredString(const base::Value::Dict& onc_apn,
@@ -46,7 +58,7 @@ std::vector<std::string> GetRequiredStringList(const base::Value::Dict& dict,
 }
 
 mojom::ApnAuthenticationType OncApnAuthenticationTypeToMojo(
-    const absl::optional<std::string>& authentication_type) {
+    const std::optional<std::string>& authentication_type) {
   if (!authentication_type.has_value() || authentication_type->empty() ||
       authentication_type == ::onc::cellular_apn::kAuthenticationAutomatic) {
     return mojom::ApnAuthenticationType::kAutomatic;
@@ -63,8 +75,7 @@ mojom::ApnAuthenticationType OncApnAuthenticationTypeToMojo(
   return mojom::ApnAuthenticationType::kAutomatic;
 }
 
-mojom::ApnIpType OncApnIpTypeToMojo(
-    const absl::optional<std::string>& ip_type) {
+mojom::ApnIpType OncApnIpTypeToMojo(const std::optional<std::string>& ip_type) {
   if (!ip_type.has_value() || ip_type->empty() ||
       ip_type == ::onc::cellular_apn::kIpTypeAutomatic) {
     return mojom::ApnIpType::kAutomatic;
@@ -96,14 +107,14 @@ bool GetBoolean(const base::Value::Dict* dict,
   return v ? v->GetBool() : value_if_key_missing_from_dict;
 }
 
-absl::optional<std::string> GetString(const base::Value::Dict* dict,
-                                      const char* key) {
+std::optional<std::string> GetString(const base::Value::Dict* dict,
+                                     const char* key) {
   const base::Value* v = dict->Find(key);
   if (v && !v->is_string()) {
     NET_LOG(ERROR) << "Expected string, found: " << *v;
-    return absl::nullopt;
+    return std::nullopt;
   }
-  return v ? absl::make_optional(v->GetString()) : absl::nullopt;
+  return v ? std::make_optional(v->GetString()) : std::nullopt;
 }
 
 const base::Value::Dict* GetDictionary(const base::Value::Dict* dict,
@@ -128,7 +139,7 @@ ManagedDictionary GetManagedDictionary(const base::Value::Dict* onc_dict) {
         onc_dict->Find(::onc::kAugmentationActiveSetting)->Clone();
   }
 
-  absl::optional<std::string> effective =
+  std::optional<std::string> effective =
       GetString(onc_dict, ::onc::kAugmentationEffectiveSetting);
   if (!effective) {
     return result;
@@ -427,6 +438,46 @@ mojom::ManagedApnListPtr GetManagedApnList(const base::Value* value,
   }
   NET_LOG(ERROR) << "Expected list or dictionary, found: " << *value;
   return nullptr;
+}
+
+base::Value::Dict WiFiConfigPropertiesToMojoJsValue(
+    const mojo::StructPtr<
+        chromeos::network_config::mojom::WiFiConfigProperties>& wifi_config) {
+  base::Value::Dict prefilled_wifi_config;
+  prefilled_wifi_config.Set(kMojoKeySecurity,
+                            static_cast<int>(wifi_config->security));
+  if (wifi_config->ssid.has_value()) {
+    prefilled_wifi_config.Set(kMojoKeySsid, *(wifi_config->ssid));
+  }
+  if (wifi_config->passphrase.has_value()) {
+    prefilled_wifi_config.Set(kMojoKeyPassphrase, *(wifi_config->passphrase));
+  }
+  if (!wifi_config->eap.is_null()) {
+    auto& eap_config = wifi_config->eap;
+    base::Value::Dict prefilled_eap_config;
+    if (eap_config->inner.has_value()) {
+      prefilled_eap_config.Set(kMojoKeyEapInner, *(eap_config->inner));
+    }
+    if (eap_config->outer.has_value()) {
+      prefilled_eap_config.Set(kMojoKeyEapOuter, *(eap_config->outer));
+    }
+    if (eap_config->identity.has_value()) {
+      prefilled_eap_config.Set(kMojoKeyEapIdentity, *(eap_config->identity));
+    }
+    if (eap_config->anonymous_identity.has_value()) {
+      prefilled_eap_config.Set(kMojoKeyEapAnonymousIdentity,
+                               *(eap_config->anonymous_identity));
+    }
+    if (eap_config->password.has_value()) {
+      prefilled_eap_config.Set(kMojoKeyEapPassword, *(eap_config->password));
+    }
+    prefilled_wifi_config.Set(kMojoKeyEap, prefilled_eap_config.Clone());
+  }
+  base::Value::Dict type_config;
+  type_config.Set(kMojoKeyWifi, prefilled_wifi_config.Clone());
+  base::Value::Dict config;
+  config.Set(kMojoKeyTypeConfig, type_config.Clone());
+  return config;
 }
 
 }  // namespace chromeos::network_config

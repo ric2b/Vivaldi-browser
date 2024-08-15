@@ -79,7 +79,7 @@ static std::ostream& operator<<(std::ostream& o, const Case& c) {
         o << a << ", ";
     }
     o << "expected: ";
-    if (c.expected) {
+    if (c.expected == Success) {
         auto s = c.expected.Get();
         if (s.values.Length() == 1) {
             o << s.values[0];
@@ -168,7 +168,7 @@ TEST_P(ConstEvalBuiltinTest, Test) {
     auto* expr = Call(Source{{12, 34}}, core::str(builtin), std::move(args));
     GlobalConst("C", expr);
 
-    if (c.expected) {
+    if (c.expected == Success) {
         auto expected_case = c.expected.Get();
 
         ASSERT_TRUE(r()->Resolve()) << r()->error();
@@ -2934,5 +2934,172 @@ INSTANTIATE_TEST_SUITE_P(  //
     testing::Combine(testing::Values(core::BuiltinFn::kQuantizeToF16),
                      testing::ValuesIn(QuantizeToF16Cases())));
 
+std::vector<Case> Dot4I8PackedCases() {
+    return {
+        // {-1, -2, -3, -4} . {-5, -6, -7, -8}
+        C({Val(u32(0xFFFEFDFC)), Val(u32(0xFBFAF9F8))}, Val(i32(70))),
+        // {1, 2, 3, 4} . {-1, -2, -3, -4}
+        C({Val(u32(0x01020304)), Val(u32(0xFFFEFDFC))}, Val(i32(-30))),
+        // {-9, -10, -11, -12} . {5, 6, 7, 8}
+        C({Val(u32(0xF7F6F5F4)), Val(u32(0x05060708))}, Val(i32(-278))),
+        // {0, 0, 0, 0} . {0, 0, 0, 0}
+        C({Val(u32(0)), Val(u32(0))}, Val(i32(0))),
+        // {127, 127, 127, 127} . {127, 127, 127, 127}
+        C({Val(u32(0x7F7F7F7F)), Val(u32(0x7F7F7F7F))}, Val(i32(64516))),
+        // {-128, -128, -128, -128} . {-128, -128, -128, -128}
+        C({Val(u32(0x80808080)), Val(u32(0x80808080))}, Val(i32(65536))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Dot4I8Packed,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kDot4I8Packed),
+                     testing::ValuesIn(Dot4I8PackedCases())));
+
+std::vector<Case> Dot4U8PackedCases() {
+    return {
+        // {255, 254, 253, 252} . {251, 250, 249, 248}
+        C({Val(u32(0xFFFEFDFC)), Val(u32(0xFBFAF9F8))}, Val(u32(252998))),
+        // {1, 2, 3, 4} . {255, 254, 253, 252}
+        C({Val(u32(0x01020304)), Val(u32(0xFFFEFDFC))}, Val(u32(2530))),
+        // {0, 0, 0, 0} . {0, 0, 0, 0}
+        C({Val(u32(0)), Val(u32(0))}, Val(u32(0))),
+        // {255, 255, 255, 255} . {255, 255, 255, 255}
+        C({Val(u32(0xFFFFFFFF)), Val(u32(0xFFFFFFFF))}, Val(u32(260100))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Dot4U8Packed,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kDot4U8Packed),
+                     testing::ValuesIn(Dot4U8PackedCases())));
+
+std::vector<Case> Pack4xI8Cases() {
+    return {
+        C({Vec(i32(0), i32(0), i32(0), i32(0))}, Val(u32(0x0000'0000))),
+        C({Vec(i32(1), i32(2), i32(3), i32(4))}, Val(u32(0x0403'0201))),
+        C({Vec(i32(-1), i32(-2), i32(-3), i32(-4))}, Val(u32(0xFCFD'FEFF))),
+        C({Vec(i32(-1), i32(2), i32(3), i32(4))}, Val(u32(0x0403'02FF))),
+        C({Vec(i32(1), i32(-2), i32(3), i32(4))}, Val(u32(0x0403'FE01))),
+        C({Vec(i32(1), i32(2), i32(-3), i32(4))}, Val(u32(0x04FD'0201))),
+        C({Vec(i32(1), i32(2), i32(3), i32(-4))}, Val(u32(0xFC03'0201))),
+        C({Vec(i32(1), i32(-2), i32(-3), i32(-4))}, Val(u32(0xFCFD'FE01))),
+        C({Vec(i32(-1), i32(2), i32(-3), i32(-4))}, Val(u32(0xFCFD'02FF))),
+        C({Vec(i32(-1), i32(-2), i32(3), i32(-4))}, Val(u32(0xFC03'FEFF))),
+        C({Vec(i32(-1), i32(-2), i32(-3), i32(4))}, Val(u32(0x04FD'FEFF))),
+        C({Vec(i32(-1), i32(-2), i32(3), i32(4))}, Val(u32(0x0403'FEFF))),
+        C({Vec(i32(-1), i32(2), i32(-3), i32(4))}, Val(u32(0x04FD'02FF))),
+        C({Vec(i32(-1), i32(2), i32(3), i32(-4))}, Val(u32(0xFC03'02FF))),
+        C({Vec(i32(1), i32(-2), i32(-3), i32(4))}, Val(u32(0x04FD'FE01))),
+        C({Vec(i32(1), i32(-2), i32(3), i32(-4))}, Val(u32(0xFC03'FE01))),
+        C({Vec(i32(1), i32(2), i32(-3), i32(-4))}, Val(u32(0xFCFD'0201))),
+        C({Vec(i32(127), i32(128), i32(-128), i32(-129))}, Val(u32(0x7F80'807F))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Pack4xI8,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kPack4XI8),
+                     testing::ValuesIn(Pack4xI8Cases())));
+
+std::vector<Case> Pack4xU8Cases() {
+    return {
+        C({Vec(u32(0), u32(0), u32(0), u32(0))}, Val(u32(0x0000'0000))),
+        C({Vec(u32(2), u32(4), u32(6), u32(8))}, Val(u32(0x0806'0402))),
+        C({Vec(u32(255), u32(255), u32(255), u32(255))}, Val(u32(0xFFFF'FFFF))),
+        C({Vec(u32(254), u32(255), u32(256), u32(257))}, Val(u32(0x0100'FFFE))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Pack4xU8,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kPack4XU8),
+                     testing::ValuesIn(Pack4xU8Cases())));
+
+std::vector<Case> Pack4xI8ClampCases() {
+    return {
+        C({Vec(i32(0), i32(0), i32(0), i32(0))}, Val(u32(0x0000'0000))),
+        C({Vec(i32(1), i32(2), i32(3), i32(4))}, Val(u32(0x0403'0201))),
+        C({Vec(i32(-1), i32(-2), i32(-3), i32(-4))}, Val(u32(0xFCFD'FEFF))),
+        C({Vec(i32(-1), i32(2), i32(3), i32(4))}, Val(u32(0x0403'02FF))),
+        C({Vec(i32(1), i32(-2), i32(3), i32(4))}, Val(u32(0x0403'FE01))),
+        C({Vec(i32(1), i32(2), i32(-3), i32(4))}, Val(u32(0x04FD'0201))),
+        C({Vec(i32(1), i32(2), i32(3), i32(-4))}, Val(u32(0xFC03'0201))),
+        C({Vec(i32(1), i32(-2), i32(-3), i32(-4))}, Val(u32(0xFCFD'FE01))),
+        C({Vec(i32(-1), i32(2), i32(-3), i32(-4))}, Val(u32(0xFCFD'02FF))),
+        C({Vec(i32(-1), i32(-2), i32(3), i32(-4))}, Val(u32(0xFC03'FEFF))),
+        C({Vec(i32(-1), i32(-2), i32(-3), i32(4))}, Val(u32(0x04FD'FEFF))),
+        C({Vec(i32(-1), i32(-2), i32(3), i32(4))}, Val(u32(0x0403'FEFF))),
+        C({Vec(i32(-1), i32(2), i32(-3), i32(4))}, Val(u32(0x04FD'02FF))),
+        C({Vec(i32(-1), i32(2), i32(3), i32(-4))}, Val(u32(0xFC03'02FF))),
+        C({Vec(i32(1), i32(-2), i32(-3), i32(4))}, Val(u32(0x04FD'FE01))),
+        C({Vec(i32(1), i32(-2), i32(3), i32(-4))}, Val(u32(0xFC03'FE01))),
+        C({Vec(i32(1), i32(2), i32(-3), i32(-4))}, Val(u32(0xFCFD'0201))),
+        C({Vec(i32(127), i32(128), i32(-128), i32(-129))}, Val(u32(0x8080'7F7F))),
+        C({Vec(i32(-32768), i32(-65536), i32(32767), i32(65535))}, Val(u32(0x7F7F'8080))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Pack4xI8Clamp,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kPack4XI8Clamp),
+                     testing::ValuesIn(Pack4xI8ClampCases())));
+
+std::vector<Case> Pack4xU8ClampCases() {
+    return {
+        C({Vec(u32(0), u32(0), u32(0), u32(0))}, Val(u32(0x0000'0000))),
+        C({Vec(u32(2), u32(4), u32(6), u32(8))}, Val(u32(0x0806'0402))),
+        C({Vec(u32(255), u32(255), u32(255), u32(255))}, Val(u32(0xFFFF'FFFF))),
+        C({Vec(u32(254), u32(255), u32(256), u32(257))}, Val(u32(0xFFFF'FFFE))),
+        C({Vec(u32(65535), u32(65536), u32(255), u32(254))}, Val(u32(0xFEFF'FFFF))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Pack4xU8Clamp,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kPack4XU8Clamp),
+                     testing::ValuesIn(Pack4xU8ClampCases())));
+
+std::vector<Case> Unpack4xI8Cases() {
+    return {
+        C({Val(u32(0x0000'0000))}, Vec(i32(0), i32(0), i32(0), i32(0))),
+        C({Val(u32(0x0102'0304))}, Vec(i32(4), i32(3), i32(2), i32(1))),
+        C({Val(u32(0xFCFD'FEFF))}, Vec(i32(-1), i32(-2), i32(-3), i32(-4))),
+        C({Val(u32(0x0403'02FF))}, Vec(i32(-1), i32(2), i32(3), i32(4))),
+        C({Val(u32(0x0403'FE01))}, Vec(i32(1), i32(-2), i32(3), i32(4))),
+        C({Val(u32(0x04FD'0201))}, Vec(i32(1), i32(2), i32(-3), i32(4))),
+        C({Val(u32(0xFC03'0201))}, Vec(i32(1), i32(2), i32(3), i32(-4))),
+        C({Val(u32(0xFCFD'FE01))}, Vec(i32(1), i32(-2), i32(-3), i32(-4))),
+        C({Val(u32(0xFCFD'02FF))}, Vec(i32(-1), i32(2), i32(-3), i32(-4))),
+        C({Val(u32(0xFC03'FEFF))}, Vec(i32(-1), i32(-2), i32(3), i32(-4))),
+        C({Val(u32(0x04FD'FEFF))}, Vec(i32(-1), i32(-2), i32(-3), i32(4))),
+        C({Val(u32(0x0403'FEFF))}, Vec(i32(-1), i32(-2), i32(3), i32(4))),
+        C({Val(u32(0x04FD'02FF))}, Vec(i32(-1), i32(2), i32(-3), i32(4))),
+        C({Val(u32(0xFC03'02FF))}, Vec(i32(-1), i32(2), i32(3), i32(-4))),
+        C({Val(u32(0x04FD'FE01))}, Vec(i32(1), i32(-2), i32(-3), i32(4))),
+        C({Val(u32(0xFC03'FE01))}, Vec(i32(1), i32(-2), i32(3), i32(-4))),
+        C({Val(u32(0xFCFD'0201))}, Vec(i32(1), i32(2), i32(-3), i32(-4))),
+        C({Val(u32(0x8081'7F7E))}, Vec(i32(126), i32(127), i32(-127), i32(-128))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Unpack4xI8,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kUnpack4XI8),
+                     testing::ValuesIn(Unpack4xI8Cases())));
+
+std::vector<Case> Unpack4xU8Cases() {
+    return {
+        C({Val(u32(0x0000'0000))}, Vec(u32(0), u32(0), u32(0), u32(0))),
+        C({Val(u32(0x0806'0402))}, Vec(u32(2), u32(4), u32(6), u32(8))),
+        C({Val(u32(0xFFFF'FFFF))}, Vec(u32(255), u32(255), u32(255), u32(255))),
+        C({Val(u32(0xFFFE'FDFC))}, Vec(u32(252), u32(253), u32(254), u32(255))),
+    };
+}
+INSTANTIATE_TEST_SUITE_P(  //
+    Unpack4xU8,
+    ConstEvalBuiltinTest,
+    testing::Combine(testing::Values(core::BuiltinFn::kUnpack4XU8),
+                     testing::ValuesIn(Unpack4xU8Cases())));
 }  // namespace
 }  // namespace tint::core::constant::test

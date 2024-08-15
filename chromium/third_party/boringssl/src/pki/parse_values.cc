@@ -16,16 +16,18 @@ namespace bssl::der {
 
 namespace {
 
-bool ParseBoolInternal(const Input& in, bool* out, bool relaxed) {
+bool ParseBoolInternal(const Input &in, bool *out, bool relaxed) {
   // According to ITU-T X.690 section 8.2, a bool is encoded as a single octet
   // where the octet of all zeroes is FALSE and a non-zero value for the octet
   // is TRUE.
-  if (in.Length() != 1)
+  if (in.Length() != 1) {
     return false;
+  }
   ByteReader data(in);
   uint8_t byte;
-  if (!data.ReadByte(&byte))
+  if (!data.ReadByte(&byte)) {
     return false;
+  }
   if (byte == 0) {
     *out = false;
     return true;
@@ -44,7 +46,7 @@ bool ParseBoolInternal(const Input& in, bool* out, bool relaxed) {
 // enough to hold 10^digits - 1; the caller must choose an appropriate type
 // based on the number of digits they wish to parse.
 template <typename UINT>
-bool DecimalStringToUint(ByteReader& in, size_t digits, UINT* out) {
+bool DecimalStringToUint(ByteReader &in, size_t digits, UINT *out) {
   UINT value = 0;
   for (size_t i = 0; i < digits; ++i) {
     uint8_t digit;
@@ -66,11 +68,13 @@ bool DecimalStringToUint(ByteReader& in, size_t digits, UINT* out) {
 // hours are between 0 and 23, minutes between 0 and 59, and seconds between
 // 0 and 60 (to allow for leap seconds; no validation is done that a leap
 // second is on a day that could be a leap second).
-bool ValidateGeneralizedTime(const GeneralizedTime& time) {
-  if (time.month < 1 || time.month > 12)
+bool ValidateGeneralizedTime(const GeneralizedTime &time) {
+  if (time.month < 1 || time.month > 12) {
     return false;
-  if (time.day < 1)
+  }
+  if (time.day < 1) {
     return false;
+  }
   if (time.hours > 23) {
     return false;
   }
@@ -88,8 +92,9 @@ bool ValidateGeneralizedTime(const GeneralizedTime& time) {
     case 6:
     case 9:
     case 11:
-      if (time.day > 30)
+      if (time.day > 30) {
         return false;
+      }
       break;
     case 1:
     case 3:
@@ -98,17 +103,20 @@ bool ValidateGeneralizedTime(const GeneralizedTime& time) {
     case 8:
     case 10:
     case 12:
-      if (time.day > 31)
+      if (time.day > 31) {
         return false;
+      }
       break;
     case 2:
       if (time.year % 4 == 0 &&
           (time.year % 100 != 0 || time.year % 400 == 0)) {
-        if (time.day > 29)
+        if (time.day > 29) {
           return false;
+        }
       } else {
-        if (time.day > 28)
+        if (time.day > 28) {
           return false;
+        }
       }
       break;
     default:
@@ -126,20 +134,22 @@ bool ValidateGeneralizedTime(const GeneralizedTime& time) {
 //
 // For instance a 160-bit positive number might take 21 bytes to encode. This
 // function will return 20 in such a case.
-size_t GetUnsignedIntegerLength(const Input& in) {
+size_t GetUnsignedIntegerLength(const Input &in) {
   der::ByteReader reader(in);
   uint8_t first_byte;
-  if (!reader.ReadByte(&first_byte))
+  if (!reader.ReadByte(&first_byte)) {
     return 0;  // Not valid DER  as |in| was empty.
+  }
 
-  if (first_byte == 0 && in.Length() > 1)
+  if (first_byte == 0 && in.Length() > 1) {
     return in.Length() - 1;
+  }
   return in.Length();
 }
 
 }  // namespace
 
-bool ParseBool(const Input& in, bool* out) {
+bool ParseBool(const Input &in, bool *out) {
   return ParseBoolInternal(in, out, false /* relaxed */);
 }
 
@@ -147,7 +157,7 @@ bool ParseBool(const Input& in, bool* out) {
 // have either all bits zero (false) or all bits one (true). To support
 // malformed certs, we recognized the BER encoding instead of failing to
 // parse.
-bool ParseBoolRelaxed(const Input& in, bool* out) {
+bool ParseBoolRelaxed(const Input &in, bool *out) {
   return ParseBoolInternal(in, out, true /* relaxed */);
 }
 
@@ -155,7 +165,7 @@ bool ParseBoolRelaxed(const Input& in, bool* out) {
 // in the smallest number of octets. If the encoding consists of more than
 // one octet, then the bits of the first octet and the most significant bit
 // of the second octet must not be all zeroes or all ones.
-bool IsValidInteger(const Input& in, bool* negative) {
+bool IsValidInteger(const Input &in, bool *negative) {
   CBS cbs;
   CBS_init(&cbs, in.UnsafeData(), in.Length());
   int negative_int;
@@ -167,15 +177,17 @@ bool IsValidInteger(const Input& in, bool* negative) {
   return true;
 }
 
-bool ParseUint64(const Input& in, uint64_t* out) {
+bool ParseUint64(const Input &in, uint64_t *out) {
   // Reject non-minimally encoded numbers and negative numbers.
   bool negative;
-  if (!IsValidInteger(in, &negative) || negative)
+  if (!IsValidInteger(in, &negative) || negative) {
     return false;
+  }
 
   // Reject (non-negative) integers whose value would overflow the output type.
-  if (GetUnsignedIntegerLength(in) > sizeof(*out))
+  if (GetUnsignedIntegerLength(in) > sizeof(*out)) {
     return false;
+  }
 
   ByteReader reader(in);
   uint8_t data;
@@ -189,20 +201,22 @@ bool ParseUint64(const Input& in, uint64_t* out) {
   return true;
 }
 
-bool ParseUint8(const Input& in, uint8_t* out) {
+bool ParseUint8(const Input &in, uint8_t *out) {
   // TODO(eroman): Implement this more directly.
   uint64_t value;
-  if (!ParseUint64(in, &value))
+  if (!ParseUint64(in, &value)) {
     return false;
+  }
 
-  if (value > 0xFF)
+  if (value > 0xFF) {
     return false;
+  }
 
   *out = static_cast<uint8_t>(value);
   return true;
 }
 
-BitString::BitString(const Input& bytes, uint8_t unused_bits)
+BitString::BitString(const Input &bytes, uint8_t unused_bits)
     : bytes_(bytes), unused_bits_(unused_bits) {
   BSSL_CHECK(unused_bits < 8);
   BSSL_CHECK(unused_bits == 0 || bytes.Length() != 0);
@@ -217,8 +231,9 @@ bool BitString::AssertsBit(size_t bit_index) const {
 
   // If the bit is outside of the bitstring, by definition it is not
   // asserted.
-  if (byte_index >= bytes_.Length())
+  if (byte_index >= bytes_.Length()) {
     return false;
+  }
 
   // Within a byte, bits are ordered from most significant to least significant.
   // Convert |bit_index| to an index within the |byte_index| byte, measured from
@@ -232,7 +247,7 @@ bool BitString::AssertsBit(size_t bit_index) const {
   return 0 != (byte & (1 << bit_index_in_byte));
 }
 
-std::optional<BitString> ParseBitString(const Input& in) {
+std::optional<BitString> ParseBitString(const Input &in) {
   ByteReader reader(in);
 
   // From ITU-T X.690, section 8.6.2.2 (applies to BER, CER, DER):
@@ -241,14 +256,17 @@ std::optional<BitString> ParseBitString(const Input& in) {
   // bit 1 as the least significant bit, the number of unused bits in the final
   // subsequent octet. The number shall be in the range zero to seven.
   uint8_t unused_bits;
-  if (!reader.ReadByte(&unused_bits))
+  if (!reader.ReadByte(&unused_bits)) {
     return std::nullopt;
-  if (unused_bits > 7)
+  }
+  if (unused_bits > 7) {
     return std::nullopt;
+  }
 
   Input bytes;
-  if (!reader.ReadBytes(reader.BytesLeft(), &bytes))
+  if (!reader.ReadBytes(reader.BytesLeft(), &bytes)) {
     return std::nullopt;  // Not reachable.
+  }
 
   // Ensure that unused bits in the last byte are set to 0.
   if (unused_bits > 0) {
@@ -256,8 +274,9 @@ std::optional<BitString> ParseBitString(const Input& in) {
     //
     // If the bitstring is empty, there shall be no subsequent octets,
     // and the initial octet shall be zero.
-    if (bytes.Length() == 0)
+    if (bytes.Length() == 0) {
       return std::nullopt;
+    }
     uint8_t last_byte = bytes[bytes.Length() - 1];
 
     // From ITU-T X.690, section 11.2.1 (applies to CER and DER, but not BER):
@@ -265,8 +284,9 @@ std::optional<BitString> ParseBitString(const Input& in) {
     // Each unused bit in the final octet of the encoding of a bit string value
     // shall be set to zero.
     uint8_t mask = 0xFF >> (8 - unused_bits);
-    if ((mask & last_byte) != 0)
+    if ((mask & last_byte) != 0) {
       return std::nullopt;
+    }
   }
 
   return BitString(bytes, unused_bits);
@@ -276,25 +296,25 @@ bool GeneralizedTime::InUTCTimeRange() const {
   return 1950 <= year && year < 2050;
 }
 
-bool operator<(const GeneralizedTime& lhs, const GeneralizedTime& rhs) {
+bool operator<(const GeneralizedTime &lhs, const GeneralizedTime &rhs) {
   return std::tie(lhs.year, lhs.month, lhs.day, lhs.hours, lhs.minutes,
                   lhs.seconds) < std::tie(rhs.year, rhs.month, rhs.day,
                                           rhs.hours, rhs.minutes, rhs.seconds);
 }
 
-bool operator>(const GeneralizedTime& lhs, const GeneralizedTime& rhs) {
+bool operator>(const GeneralizedTime &lhs, const GeneralizedTime &rhs) {
   return rhs < lhs;
 }
 
-bool operator<=(const GeneralizedTime& lhs, const GeneralizedTime& rhs) {
+bool operator<=(const GeneralizedTime &lhs, const GeneralizedTime &rhs) {
   return !(lhs > rhs);
 }
 
-bool operator>=(const GeneralizedTime& lhs, const GeneralizedTime& rhs) {
+bool operator>=(const GeneralizedTime &lhs, const GeneralizedTime &rhs) {
   return !(lhs < rhs);
 }
 
-bool ParseUTCTime(const Input& in, GeneralizedTime* value) {
+bool ParseUTCTime(const Input &in, GeneralizedTime *value) {
   ByteReader reader(in);
   GeneralizedTime time;
   if (!DecimalStringToUint(reader, 2, &time.year) ||
@@ -306,20 +326,22 @@ bool ParseUTCTime(const Input& in, GeneralizedTime* value) {
     return false;
   }
   uint8_t zulu;
-  if (!reader.ReadByte(&zulu) || zulu != 'Z' || reader.HasMore())
+  if (!reader.ReadByte(&zulu) || zulu != 'Z' || reader.HasMore()) {
     return false;
+  }
   if (time.year < 50) {
     time.year += 2000;
   } else {
     time.year += 1900;
   }
-  if (!ValidateGeneralizedTime(time))
+  if (!ValidateGeneralizedTime(time)) {
     return false;
+  }
   *value = time;
   return true;
 }
 
-bool ParseGeneralizedTime(const Input& in, GeneralizedTime* value) {
+bool ParseGeneralizedTime(const Input &in, GeneralizedTime *value) {
   ByteReader reader(in);
   GeneralizedTime time;
   if (!DecimalStringToUint(reader, 4, &time.year) ||
@@ -331,24 +353,27 @@ bool ParseGeneralizedTime(const Input& in, GeneralizedTime* value) {
     return false;
   }
   uint8_t zulu;
-  if (!reader.ReadByte(&zulu) || zulu != 'Z' || reader.HasMore())
+  if (!reader.ReadByte(&zulu) || zulu != 'Z' || reader.HasMore()) {
     return false;
-  if (!ValidateGeneralizedTime(time))
+  }
+  if (!ValidateGeneralizedTime(time)) {
     return false;
+  }
   *value = time;
   return true;
 }
 
-bool ParseIA5String(Input in, std::string* out) {
+bool ParseIA5String(Input in, std::string *out) {
   for (char c : in.AsStringView()) {
-    if (static_cast<uint8_t>(c) > 127)
+    if (static_cast<uint8_t>(c) > 127) {
       return false;
+    }
   }
   *out = in.AsString();
   return true;
 }
 
-bool ParseVisibleString(Input in, std::string* out) {
+bool ParseVisibleString(Input in, std::string *out) {
   // ITU-T X.680:
   // VisibleString : "Defining registration number 6" + SPACE
   // 6 includes all the characters from '!' .. '~' (33 .. 126), space is 32.
@@ -356,14 +381,15 @@ bool ParseVisibleString(Input in, std::string* out) {
   // "for VisibleString [the range] is 32 to 126 ... For VisibleString .. all
   // the values in the range are present."
   for (char c : in.AsStringView()) {
-    if (static_cast<uint8_t>(c) < 32 || static_cast<uint8_t>(c) > 126)
+    if (static_cast<uint8_t>(c) < 32 || static_cast<uint8_t>(c) > 126) {
       return false;
+    }
   }
   *out = in.AsString();
   return true;
 }
 
-bool ParsePrintableString(Input in, std::string* out) {
+bool ParsePrintableString(Input in, std::string *out) {
   for (char c : in.AsStringView()) {
     if (!(OPENSSL_isalpha(c) || c == ' ' || (c >= '\'' && c <= ':') ||
           c == '=' || c == '?')) {
@@ -374,7 +400,7 @@ bool ParsePrintableString(Input in, std::string* out) {
   return true;
 }
 
-bool ParseTeletexStringAsLatin1(Input in, std::string* out) {
+bool ParseTeletexStringAsLatin1(Input in, std::string *out) {
   out->clear();
   // Convert from Latin-1 to UTF-8.
   size_t utf8_length = in.Length();
@@ -397,7 +423,7 @@ bool ParseTeletexStringAsLatin1(Input in, std::string* out) {
   return true;
 }
 
-bool ParseUniversalString(Input in, std::string* out) {
+bool ParseUniversalString(Input in, std::string *out) {
   if (in.Length() % 4 != 0) {
     return false;
   }
@@ -421,7 +447,7 @@ bool ParseUniversalString(Input in, std::string* out) {
   return true;
 }
 
-bool ParseBmpString(Input in, std::string* out) {
+bool ParseBmpString(Input in, std::string *out) {
   if (in.Length() % 2 != 0) {
     return false;
   }

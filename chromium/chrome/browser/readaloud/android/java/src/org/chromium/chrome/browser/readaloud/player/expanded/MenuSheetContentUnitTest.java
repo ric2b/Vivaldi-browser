@@ -57,7 +57,7 @@ public class MenuSheetContentUnitTest {
     @Test
     public void testNotifySheetClosed() {
         when(mBottomSheetController.getCurrentSheetContent()).thenReturn(mContent);
-        mContent.notifySheetClosed();
+        mContent.notifySheetClosed(mContent);
         verify(mBottomSheetController).requestShowContent(mBottomSheetContent, true);
     }
 
@@ -149,5 +149,10 @@ public class MenuSheetContentUnitTest {
     public void testGetBackPressStateChangedSupplier() {
         ObservableSupplierImpl<Boolean> supplier = mContent.getBackPressStateChangedSupplier();
         assertTrue(supplier.get());
+    }
+
+    @Test
+    public void testCanSuppressInAnyState() {
+        assertTrue(mContent.canSuppressInAnyState());
     }
 }

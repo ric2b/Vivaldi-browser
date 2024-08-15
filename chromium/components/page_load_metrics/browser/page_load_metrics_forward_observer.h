@@ -148,22 +148,24 @@ class PageLoadMetricsForwardObserver final
       const GURL& first_party_url,
       bool blocked_by_policy,
       bool is_ad_tagged,
-      const net::CookieSettingOverrides& cookie_setting_overrides) override;
+      const net::CookieSettingOverrides& cookie_setting_overrides,
+      bool is_partitioned_access) override;
   void OnCookieChange(
       const GURL& url,
       const GURL& first_party_url,
       const net::CanonicalCookie& cookie,
       bool blocked_by_policy,
       bool is_ad_tagged,
-      const net::CookieSettingOverrides& cookie_setting_overrides) override;
+      const net::CookieSettingOverrides& cookie_setting_overrides,
+      bool is_partitioned_access) override;
   void OnStorageAccessed(const GURL& url,
                          const GURL& first_party_url,
                          bool blocked_by_policy,
                          StorageType access_type) override;
   void OnPrefetchLikely() override;
-  void DidActivatePortal(base::TimeTicks activation_time) override;
   void DidActivatePrerenderedPage(
       content::NavigationHandle* navigation_handle) override;
+  void DidActivatePreviewedPage(base::TimeTicks activation_time) override;
   void OnV8MemoryChanged(
       const std::vector<MemoryUpdate>& memory_updates) override;
   void OnSharedStorageWorkletHostCreated() override;

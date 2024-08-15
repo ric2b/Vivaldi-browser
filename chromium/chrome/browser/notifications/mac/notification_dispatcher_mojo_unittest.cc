@@ -5,11 +5,13 @@
 #include "chrome/browser/notifications/mac/notification_dispatcher_mojo.h"
 
 #include <memory>
+#include <optional>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -17,6 +19,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/notifications/mac/mac_notification_provider_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/notifications/notification_operation.h"
 #include "chrome/services/mac_notifications/public/mojom/mac_notifications.mojom.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -28,7 +31,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -45,7 +47,7 @@ class MockNotificationService
   MOCK_METHOD(void,
               GetDisplayedNotifications,
               (mac_notifications::mojom::ProfileIdentifierPtr,
-               const absl::optional<GURL>& origin,
+               const std::optional<GURL>& origin,
                GetDisplayedNotificationsCallback),
               (override));
   MOCK_METHOD(void,
@@ -149,9 +151,11 @@ mac_notifications::mojom::NotificationMetadataPtr CreateNotificationMetadata() {
   auto notification_identifier =
       mac_notifications::mojom::NotificationIdentifier::New(
           kNotificationId, std::move(profile_identifier));
+  base::FilePath user_data_dir;
+  EXPECT_TRUE(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
   return mac_notifications::mojom::NotificationMetadata::New(
       std::move(notification_identifier), /*notification_type=*/0,
-      /*origin_url=*/GURL("https://example.com"), base::GetCurrentProcId());
+      /*origin_url=*/GURL("https://example.com"), user_data_dir.value());
 }
 
 mac_notifications::mojom::NotificationActionInfoPtr
@@ -159,7 +163,7 @@ CreateNotificationActionInfo() {
   auto meta = CreateNotificationMetadata();
   return mac_notifications::mojom::NotificationActionInfo::New(
       std::move(meta), NotificationOperation::kClick,
-      /*button_index=*/-1, /*reply=*/absl::nullopt);
+      /*button_index=*/-1, /*reply=*/std::nullopt);
 }
 
 }  // namespace

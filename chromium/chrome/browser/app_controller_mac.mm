@@ -20,7 +20,6 @@
 #include "base/functional/bind.h"
 #include "base/mac/mac_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
@@ -47,7 +46,6 @@
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/mac/auth_session_request.h"
 #include "chrome/browser/mac/key_window_notifier.h"
-#include "chrome/browser/mac/mac_startup_profiler.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -295,8 +293,8 @@ void RecordLastRunAppBundlePath() {
       base::SysUTF8ToCFStringRef(app_bundle_path.value());
   CFPreferencesSetAppValue(
       base::apple::NSToCFPtrCast(app_mode::kLastRunAppBundlePathPrefsKey),
-      app_bundle_path_cfstring,
-      base::SysUTF8ToCFStringRef(base::apple::BaseBundleID()));
+      app_bundle_path_cfstring.get(),
+      base::SysUTF8ToCFStringRef(base::apple::BaseBundleID()).get());
 }
 
 bool IsProfileSignedOut(const base::FilePath& profile_path) {
@@ -320,7 +318,7 @@ void ConfigureNSAppForKioskMode() {
 // apps).
 std::set<gfx::NativeWindow> GetBrowserNativeWindows() {
   std::set<gfx::NativeWindow> result;
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (!browser)
       continue;
     // When focusing Chrome, don't focus any browser windows associated with
@@ -471,6 +469,10 @@ Profile* GetLastProfileMac() {
 // Return false if Chrome startup is paused by dialog and AppController is
 // called without any initialized Profile.
 - (BOOL)isProfileReady;
+
+// Reset `_keepAlive` if Chrome is running in hidden mode, recreating it when
+// Chrome is no longer hidden.
+- (void)resetKeepAliveWhileHidden;
 @end
 
 class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
@@ -647,8 +649,34 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // This will be true after receiving a |-applicationWillTerminate:| event.
   BOOL _isShuttingDown;
 
-  // Request to keep the browser alive during that object's lifetime.
+  // Request to keep the browser alive during that object's lifetime. Every
+  // Browser instance holds a ScopedKeepAlive as well to make sure the browser
+  // stays alive as long as any windows are open, but on macOS we want the
+  // browser process to also stay alive without any windows open. To support
+  // this, this ScopedKeepAlive is created in -applicationDidFinishLaunching.
+  //
+  // When the user launches an app shim while Chrome isn't running, the app shim
+  // launches Chrome with the _kLSOpenOptionBackgroundLaunchKey option. This
+  // causes the activationPolicy to be equal to
+  // NSApplicationActivationPolicyProhibited (i.e. Chrome is not visibly running
+  // in the Dock and task switcher). In this state we don't want to keep the
+  // browser process alive indefinitely (but can't skip creating this
+  // ScopedKeepAlive entirely, as that could result in the  browser process
+  // terminating before it has fully initialized and had a chance to for example
+  // process messages from app shims). Once the app shim launch has been
+  // processed to the point of having created the expected Browser instances or
+  // other ScopedKeepAlive instances, -resetKeepAliveWhileHidden is called to
+  // reset `_keepAlive`.
+  //
+  // When the user explicitly launches Chrome, or when Chrome creates any
+  // windows, the `activationPolicy` is changed by the OS. By observing
+  // `activationPolicy` for `NSRunningApplication.currentApplication` we can
+  // recreate `_keepAlive` if and when the activation policy changes.
   std::unique_ptr<ScopedKeepAlive> _keepAlive;
+
+  // Set to `NSRunningApplication.currentApplication` while we're observing
+  // the `activationPolicy` of ourselves.
+  NSRunningApplication* __strong _runningApplication;
 
   // Remembers whether _lastProfile had TabRestoreService entries. This is saved
   // when _lastProfile is destroyed and Chromium enters the zero-profile state.
@@ -729,8 +757,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 // the profile is loaded or any preferences have been registered). Defer any
 // user-data initialization until -applicationDidFinishLaunching:.
 - (void)mainMenuCreated {
-  MacStartupProfiler::GetInstance()->Profile(
-      MacStartupProfiler::AWAKE_FROM_NIB);
   NSNotificationCenter* notificationCenter = NSNotificationCenter.defaultCenter;
   [notificationCenter
       addObserver:self
@@ -769,9 +795,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 // (NSApplicationDelegate protocol) This is the Apple-approved place to override
 // the default handlers.
 - (void)applicationWillFinishLaunching:(NSNotification*)notification {
-  MacStartupProfiler::GetInstance()->Profile(
-      MacStartupProfiler::WILL_FINISH_LAUNCHING);
-
   NSWindow.allowsAutomaticWindowTabbing = NO;
 
   // initShareMenu is called in vivaldi_main_menu_mac, when the JS menu is ready.
@@ -846,6 +869,12 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   }
 }
 
+- (void)allowApplicationToTerminate {
+  // Tell BrowserList to stop the RunLoop and terminate the application when the
+  // last Browser is closed.
+  _keepAlive.reset();
+}
+
 - (BOOL)runConfirmQuitPanel {
   // If there are no windows, quit immediately.
   if (BrowserList::GetInstance()->empty() &&
@@ -877,10 +906,21 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // browsers get dealloc'd, it will stop the RunLoop and fall back into main().
   _keepAlive.reset();
 
+  // Stop observing NSRunningApplication.
+  if (_runningApplication) {
+    [_runningApplication removeObserver:self
+                             forKeyPath:@"activationPolicy"
+                                context:nullptr];
+  }
+
   // Reset local state watching, as this object outlives the prefs system.
   _localPrefRegistrar.RemoveAll();
 
   _isShuttingDown = true;
+
+  // `_historyMenuBridge` has a dependency on `_lastProfile`, so that’s why it’s
+  // deleted first.
+  _historyMenuBridge.reset();
 
   // It's safe to delete |_lastProfile| now.
   [self setLastProfile:nullptr];
@@ -1009,6 +1049,26 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   OpenUrlsInBrowser(urls);
 }
 
+- (void)resetKeepAliveWhileHidden {
+  NSRunningApplication* app = NSRunningApplication.currentApplication;
+  if (_keepAlive &&
+      app.activationPolicy == NSApplicationActivationPolicyProhibited) {
+    // `_runningApplication` should only be set while `_keepAlive` is not set,
+    // as that is the only time we're observing the activationPolicy.
+    CHECK(!_runningApplication);
+
+    // Don't keep alive if we're in background/hidden mode. Start observing
+    // changes to activationPolicy to re-create `keepAlive_` when chrome stops
+    // being hidden.
+    _runningApplication = app;
+    [_runningApplication addObserver:self
+                          forKeyPath:@"activationPolicy"
+                             options:NSKeyValueObservingOptionNew
+                             context:nullptr];
+    _keepAlive.reset();
+  }
+}
+
 // This is called after profiles have been loaded and preferences registered.
 // It is safe to access the default profile here.
 - (void)applicationDidFinishLaunching:(NSNotification*)notify {
@@ -1032,10 +1092,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
         userDriverDelegate: nil];
   }
 #endif
-
-  MacStartupProfiler::GetInstance()->Profile(
-      MacStartupProfiler::DID_FINISH_LAUNCHING);
-  MacStartupProfiler::GetInstance()->RecordMetrics();
 
   // Notify BrowserList to keep the application running so it doesn't go away
   // when all the browser windows get closed.
@@ -1113,6 +1169,27 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
 
   ASWebAuthenticationSessionWebBrowserSessionManager.sharedManager
       .sessionHandler = self;
+}
+
+- (void)observeValueForKeyPath:(NSString*)keyPath
+                      ofObject:(id)object
+                        change:(NSDictionary*)change
+                       context:(void*)context {
+  if (object != _runningApplication) {
+    return;
+  }
+  // If activationPolicy is no longer set to Prohibited, we can stop observing
+  // changes to activationPolicy and recreate `keepAlive_` to keep the browser
+  // process alive even without windows present.
+  CHECK([keyPath isEqualToString:@"activationPolicy"]);
+  if (![change[@"new"] isEqual:@(NSApplicationActivationPolicyProhibited)]) {
+    [_runningApplication removeObserver:self
+                             forKeyPath:@"activationPolicy"
+                                context:nullptr];
+    _runningApplication = nil;
+    _keepAlive = std::make_unique<ScopedKeepAlive>(
+        KeepAliveOrigin::APP_CONTROLLER, KeepAliveRestartOption::DISABLED);
+  }
 }
 
 // Helper function for populating and displaying the in progress downloads at
@@ -2417,12 +2494,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
     return NO;
   }
 
-  NSString* originString = base::apple::ObjCCast<NSString>(
-      (userActivity.userInfo)[handoff::kOriginKey]);
-  handoff::Origin origin = handoff::OriginFromString(originString);
-  UMA_HISTOGRAM_ENUMERATION(
-      "OSX.Handoff.Origin", origin, handoff::ORIGIN_COUNT);
-
   NSURL* url = userActivity.webpageURL;
   if (!url)
     return NO;
@@ -2695,6 +2766,10 @@ void RunInProfileSafely(const base::FilePath& profile_dir,
       base::BindOnce(&OnProfileLoaded, std::move(callback), on_failure));
 }
 
+void AllowApplicationToTerminate() {
+  [AppController.sharedController allowApplicationToTerminate];
+}
+
 // static
 void TabRestorer::RestoreMostRecent(Profile* profile) {
   RestoreByID(profile, SessionID::InvalidValue());
@@ -2752,6 +2827,10 @@ void TabRestorer::TabRestoreServiceLoaded(
   observation_.Reset();
   DoRestoreTab(profile_, session_id_);
   delete this;
+}
+
+void ResetKeepAliveWhileHidden() {
+  [AppController.sharedController resetKeepAliveWhileHidden];
 }
 
 }  // namespace app_controller_mac

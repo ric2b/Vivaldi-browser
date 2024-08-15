@@ -1,17 +1,6 @@
---
--- Copyright 2022 The Android Open Source Project
---
--- Licensed under the Apache License, Version 2.0 (the "License");
--- you may not use this file except in compliance with the License.
--- You may obtain a copy of the License at
---
---     https://www.apache.org/licenses/LICENSE-2.0
---
--- Unless required by applicable law or agreed to in writing, software
--- distributed under the License is distributed on an "AS IS" BASIS,
--- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--- See the License for the specific language governing permissions and
--- limitations under the License.
+-- Copyright 2023 The Chromium Authors
+-- Use of this source code is governed by a BSD-style license that can be
+-- found in the LICENSE file.
 --
 -- Those are helper functions used in computing jank metrics
 
@@ -89,17 +78,17 @@ SELECT
 -- names. For example, LongTaskTracker slices may have associated IPC
 -- metadata, or InterestingTask slices for input may have associated IPC to
 -- determine whether the task is fling/etc.
---
--- @arg name STRING            The name of slice.
--- @column interface_name      Name of the interface of the IPC call.
--- @column ipc_hash            Hash of the IPC call.
--- @column message_type        Message type (e.g. reply).
--- @column id                  The slice ID.
-CREATE PERFETTO FUNCTION chrome_select_long_task_slices(name STRING)
+CREATE PERFETTO FUNCTION chrome_select_long_task_slices(
+  -- The name of slice.
+  name STRING)
 RETURNS TABLE(
+  -- Name of the interface of the IPC call.
   interface_name STRING,
+  -- Hash of the IPC call.
   ipc_hash INT,
+  -- Message type (e.g. reply).
   message_type STRING,
+  -- The slice id.
   id INT
 ) AS
 SELECT

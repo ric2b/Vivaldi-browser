@@ -68,6 +68,9 @@ class ASH_EXPORT GameDashboardController : public aura::EnvObserver,
   void StartCaptureSession(GameDashboardContext* context,
                            bool record_instantly = false);
 
+  // Shows the compat mode resize toggle menu for the given `window`.
+  void ShowResizeToggleMenu(aura::Window* window);
+
   // aura::EnvObserver:
   void OnWindowInitialized(aura::Window* new_window) override;
 
@@ -136,8 +139,8 @@ class ASH_EXPORT GameDashboardController : public aura::EnvObserver,
   // recording the game window, or has been requested to record it. Resets
   // when the recording session ends or aborted.
   // Owned by `game_window_contexts_`.
-  raw_ptr<GameDashboardContext, DanglingUntriaged | ExperimentalAsh>
-      active_recording_context_ = nullptr;
+  raw_ptr<GameDashboardContext, DanglingUntriaged> active_recording_context_ =
+      nullptr;
 
   base::WeakPtrFactory<GameDashboardController> weak_ptr_factory_{this};
 };

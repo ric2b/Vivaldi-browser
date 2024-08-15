@@ -72,6 +72,7 @@ class BufferBlock final : angle::NonCopyable
     bool hasVirtualBlock() const { return mVirtualBlock.valid(); }
     bool isHostVisible() const;
     bool isCoherent() const;
+    bool isCached() const;
     bool isMapped() const;
     VkResult map(const VkDevice device);
     void unmap(const VkDevice device);
@@ -200,6 +201,7 @@ class BufferSuballocation final : angle::NonCopyable
     VkMemoryMapFlags getMemoryPropertyFlags() const;
     bool isHostVisible() const;
     bool isCoherent() const;
+    bool isCached() const;
     bool isMapped() const;
     uint8_t *getMappedMemory() const;
     void flush(const VkDevice &device);
@@ -288,6 +290,11 @@ ANGLE_INLINE bool BufferBlock::isCoherent() const
     return (mMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
 }
 
+ANGLE_INLINE bool BufferBlock::isCached() const
+{
+    return (mMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) != 0;
+}
+
 ANGLE_INLINE bool BufferBlock::isMapped() const
 {
     return mMappedMemory != nullptr;
@@ -355,9 +362,7 @@ ANGLE_INLINE void BufferSuballocation::init(BufferBlock *block,
 {
     ASSERT(!valid());
     ASSERT(block != nullptr);
-#if ANGLE_VMA_VERSION >= 3000000
     ASSERT(allocation != VK_NULL_HANDLE);
-#endif  // ANGLE_VMA_VERSION >= 3000000
     ASSERT(offset != VK_WHOLE_SIZE);
     mBufferBlock = block;
     mAllocation  = allocation;
@@ -414,6 +419,10 @@ ANGLE_INLINE bool BufferSuballocation::isHostVisible() const
 ANGLE_INLINE bool BufferSuballocation::isCoherent() const
 {
     return mBufferBlock->isCoherent();
+}
+ANGLE_INLINE bool BufferSuballocation::isCached() const
+{
+    return mBufferBlock->isCached();
 }
 ANGLE_INLINE bool BufferSuballocation::isMapped() const
 {

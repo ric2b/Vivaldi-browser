@@ -7,8 +7,11 @@
 #include <utility>
 
 #include "ash/constants/ash_pref_names.h"
+#include "ash/public/cpp/system_tray_client.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/system/model/system_tray_model.h"
+#include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "ash/system/privacy_hub/sensor_disabled_notification_delegate.h"
 #include "base/check.h"
 #include "base/functional/callback_helpers.h"
@@ -46,20 +49,12 @@ void SystemGeolocationSource::RegisterPermissionUpdateCallback(
     PermissionUpdateCallback callback) {
   permission_update_callback_ = std::move(callback);
   if (pref_change_registrar_) {
-    OnPrefChanged(prefs::kUserGeolocationAllowed);
+    OnPrefChanged(prefs::kUserGeolocationAccessLevel);
   }
 }
 
-void SystemGeolocationSource::TrackGeolocationAttempted() {
-  // Use the default name for the browser.
-  ash::privacy_hub_util::TrackGeolocationAttempted(
-      l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME));
-}
-
-void SystemGeolocationSource::TrackGeolocationRelinquished() {
-  // Use the default name for the browser.
-  ash::privacy_hub_util::TrackGeolocationRelinquished(
-      l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME));
+void SystemGeolocationSource::OpenSystemPermissionSetting() {
+  Shell::Get()->system_tray_model()->client()->ShowPrivacyHubSettings();
 }
 
 void SystemGeolocationSource::OnActiveUserPrefServiceChanged(
@@ -68,25 +63,28 @@ void SystemGeolocationSource::OnActiveUserPrefServiceChanged(
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(pref_service);
   // value might have changed, hence we trigger the update function
-  OnPrefChanged(prefs::kUserGeolocationAllowed);
+  OnPrefChanged(prefs::kUserGeolocationAccessLevel);
   pref_change_registrar_->Add(
-      prefs::kUserGeolocationAllowed,
+      prefs::kUserGeolocationAccessLevel,
       base::BindRepeating(&SystemGeolocationSource::OnPrefChanged,
                           base::Unretained(this)));
 }
 
 void SystemGeolocationSource::OnPrefChanged(const std::string& pref_name) {
-  DCHECK_EQ(pref_name, prefs::kUserGeolocationAllowed);
+  DCHECK_EQ(pref_name, prefs::kUserGeolocationAccessLevel);
   DCHECK(pref_change_registrar_);
   // Get the actual permission status from CrOS by directly accessing pref
   // service.
   device::LocationSystemPermissionStatus status =
       device::LocationSystemPermissionStatus::kNotDetermined;
 
-  if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
+  if (ash::features::IsCrosPrivacyHubEnabled() &&
+      ash::features::IsCrosPrivacyHubLocationEnabled()) {
     PrefService* pref_service = pref_change_registrar_->prefs();
     if (pref_service) {
-      status = pref_service->GetBoolean(prefs::kUserGeolocationAllowed)
+      status = (static_cast<GeolocationAccessLevel>(pref_service->GetInteger(
+                    prefs::kUserGeolocationAccessLevel)) ==
+                GeolocationAccessLevel::kAllowed)
                    ? device::LocationSystemPermissionStatus::kAllowed
                    : device::LocationSystemPermissionStatus::kDenied;
     }

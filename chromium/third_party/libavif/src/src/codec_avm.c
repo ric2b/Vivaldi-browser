@@ -173,7 +173,7 @@ static avifBool avmCodecGetNextImage(struct avifCodec * codec,
         // avifImage assumes that a depth of 8 bits means an 8-bit buffer.
         // aom_image does not. The buffer depth depends on fmt|AOM_IMG_FMT_HIGHBITDEPTH, even for 8-bit values.
         if (!avifImageUsesU16(image) && (codec->internal->image->fmt & AOM_IMG_FMT_HIGHBITDEPTH)) {
-            avifImageAllocatePlanes(image, AVIF_PLANES_YUV);
+            AVIF_CHECK(avifImageAllocatePlanes(image, AVIF_PLANES_YUV) == AVIF_RESULT_OK);
             for (int yuvPlane = 0; yuvPlane < yuvPlaneCount; ++yuvPlane) {
                 const uint32_t planeWidth = avifImagePlaneWidth(image, yuvPlane);
                 const uint32_t planeHeight = avifImagePlaneHeight(image, yuvPlane);
@@ -214,7 +214,7 @@ static avifBool avmCodecGetNextImage(struct avifCodec * codec,
         avifImageFreePlanes(image, AVIF_PLANES_A);
 
         if (!avifImageUsesU16(image) && (codec->internal->image->fmt & AOM_IMG_FMT_HIGHBITDEPTH)) {
-            avifImageAllocatePlanes(image, AVIF_PLANES_A);
+            AVIF_CHECK(avifImageAllocatePlanes(image, AVIF_PLANES_A) == AVIF_RESULT_OK);
             const uint8_t * srcRow = codec->internal->image->planes[0];
             uint8_t * dstRow = image->alphaPlane;
             for (uint32_t y = 0; y < image->height; ++y) {
@@ -641,7 +641,9 @@ static avifResult avmCodecEncodeImage(avifCodec * codec,
             cfg->g_lag_in_frames = 0;
         }
         if (encoder->maxThreads > 1) {
-            cfg->g_threads = encoder->maxThreads;
+            // libavm fails if cfg->g_threads is greater than 64 threads. See MAX_NUM_THREADS in
+            // avm/aom_util/aom_thread.h.
+            cfg->g_threads = AVIF_MIN(encoder->maxThreads, 64);
         }
 
         // avm does not handle monochrome as of research-v4.0.0.
@@ -964,6 +966,7 @@ static avifResult avmCodecEncodeImage(avifCodec * codec,
                 size_t monoUVSize = (size_t)monoUVHeight * monoUVRowBytes;
 
                 monoUVPlane = avifAlloc(monoUVSize);
+                AVIF_CHECKERR(monoUVPlane != NULL, AVIF_RESULT_OUT_OF_MEMORY); // No need for aom_img_free() because !aomImageAllocated
                 aomImage.planes[1] = monoUVPlane;
                 aomImage.stride[1] = monoUVRowBytes;
             }
@@ -1086,6 +1089,9 @@ const char * avifCodecVersionAVM(void)
 avifCodec * avifCodecCreateAVM(void)
 {
     avifCodec * codec = (avifCodec *)avifAlloc(sizeof(avifCodec));
+    if (codec == NULL) {
+        return NULL;
+    }
     memset(codec, 0, sizeof(struct avifCodec));
 
     codec->getNextImage = avmCodecGetNextImage;
@@ -1095,6 +1101,10 @@ avifCodec * avifCodecCreateAVM(void)
 
     codec->destroyInternal = avmCodecDestroyInternal;
     codec->internal = (struct avifCodecInternal *)avifAlloc(sizeof(struct avifCodecInternal));
+    if (codec->internal == NULL) {
+        avifFree(codec);
+        return NULL;
+    }
     memset(codec->internal, 0, sizeof(struct avifCodecInternal));
     return codec;
 }

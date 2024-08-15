@@ -17,7 +17,6 @@
 #include "ui/gfx/x/extension_manager.h"
 #include "ui/gfx/x/future.h"
 #include "ui/gfx/x/xproto.h"
-#include "ui/gfx/x/xproto_util.h"
 
 namespace remoting {
 
@@ -34,10 +33,6 @@ void XServerClipboard::Init(x11::Connection* connection,
     HOST_LOG << "X server does not support XFixes.";
     return;
   }
-
-  // Let the server know the client version.
-  connection_->xfixes().QueryVersion(
-      {x11::XFixes::major_version, x11::XFixes::minor_version});
 
   clipboard_window_ = connection_->GenerateId<x11::Window>();
   connection_->CreateWindow({
@@ -173,7 +168,7 @@ void XServerClipboard::OnPropertyNotify(const x11::PropertyNotifyEvent& event) {
   if (large_selection_property_ != x11::Atom::None &&
       event.atom == large_selection_property_ &&
       event.state == x11::Property::NewValue) {
-    auto req = connection_->GetProperty({
+    auto req = connection()->GetProperty({
         .c_delete = true,
         .window = clipboard_window_,
         .property = large_selection_property_,
@@ -197,7 +192,7 @@ void XServerClipboard::OnPropertyNotify(const x11::PropertyNotifyEvent& event) {
 void XServerClipboard::OnSelectionNotify(
     const x11::SelectionNotifyEvent& event) {
   if (event.property != x11::Atom::None) {
-    auto req = connection_->GetProperty({
+    auto req = connection()->GetProperty({
         .c_delete = true,
         .window = clipboard_window_,
         .property = event.property,
@@ -248,8 +243,8 @@ void XServerClipboard::OnSelectionRequest(
                          selection_event.target);
     }
   }
-  x11::SendEvent(selection_event, selection_event.requestor,
-                 x11::EventMask::NoEvent, connection_);
+  connection_->SendEvent(selection_event, selection_event.requestor,
+                         x11::EventMask::NoEvent);
 }
 
 void XServerClipboard::OnSelectionClear(const x11::SelectionClearEvent& event) {

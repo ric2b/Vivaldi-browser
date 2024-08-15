@@ -125,31 +125,44 @@ void UpdateModalDialogPosition(views::Widget* widget,
   position.set_y(position.y() -
                  widget->non_client_view()->frame_view()->GetInsets().top());
 
-  const bool supports_global_screen_coordinates =
-#if !BUILDFLAG(IS_OZONE)
-      true;
-#else
-      ui::OzonePlatform::GetInstance()
-          ->GetPlatformProperties()
-          .supports_global_screen_coordinates;
-#endif
+  gfx::Rect dialog_bounds(position, size);
 
-  if (widget->is_top_level() && supports_global_screen_coordinates) {
-    position += host_widget->GetClientAreaBoundsInScreen().OffsetFromOrigin();
-    // If the dialog extends partially off any display, clamp its position to
-    // be fully visible within that display. If the dialog doesn't intersect
-    // with any display clamp its position to be fully on the nearest display.
-    gfx::Rect display_rect = gfx::Rect(position, size);
-    const display::Display display =
-        display::Screen::GetScreen()->GetDisplayNearestView(
-            dialog_host->GetHostView());
-    const gfx::Rect work_area = display.work_area();
-    if (!work_area.Contains(display_rect))
-      display_rect.AdjustToFit(work_area);
-    position = display_rect.origin();
+  if (widget->is_top_level() && SupportsGlobalScreenCoordinates()) {
+    gfx::Rect dialog_screen_bounds =
+        dialog_bounds +
+        host_widget->GetClientAreaBoundsInScreen().OffsetFromOrigin();
+    const gfx::Rect host_screen_bounds = host_widget->GetWindowBoundsInScreen();
+
+    // TODO(crbug.com/1341530): The requested dialog bounds should never fall
+    // outside the bounds of the transient parent.
+    DCHECK(dialog_screen_bounds.Intersects(host_screen_bounds));
+
+    // Adjust the dialog bound to ensure it remains visible on the display.
+    const gfx::Rect display_work_area =
+        display::Screen::GetScreen()
+            ->GetDisplayNearestView(dialog_host->GetHostView())
+            .work_area();
+    if (!display_work_area.Contains(dialog_screen_bounds)) {
+      dialog_screen_bounds.AdjustToFit(display_work_area);
+    }
+
+    // For platforms that clip transient children to the viewport we must
+    // maximize its bounds on the display whilst keeping it within the host
+    // bounds to avoid viewport clipping.
+    // In the case that the host window bounds do not have sufficient overlap
+    // with the display, and the dialog cannot be shown in its entirety, this is
+    // a recoverable state as users are still able to reposition the host window
+    // back onto the display.
+    if (PlatformClipsChildrenToViewport() &&
+        !host_screen_bounds.Contains(dialog_screen_bounds)) {
+      dialog_screen_bounds.AdjustToFit(host_screen_bounds);
+    }
+
+    // Readjust the position of the dialog.
+    dialog_bounds.set_origin(dialog_screen_bounds.origin());
   }
 
-  widget->SetBounds(gfx::Rect(position, size));
+  widget->SetBounds(dialog_bounds);
 }
 
 }  // namespace
@@ -208,6 +221,16 @@ views::Widget* ShowWebModalDialogViews(
   views::Widget* widget = CreateWebModalDialogViews(dialog, web_contents);
   ShowModalDialog(widget->GetNativeWindow(), web_contents);
   return widget;
+}
+
+std::unique_ptr<views::Widget> ShowWebModalDialogViewsOwned(
+    views::WidgetDelegate* dialog,
+    content::WebContents* initiator_web_contents) {
+  views::Widget* widget =
+      ShowWebModalDialogViews(dialog, initiator_web_contents);
+  CHECK_EQ(widget->ownership(),
+           views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
+  return base::WrapUnique<views::Widget>(widget);
 }
 
 views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
@@ -296,6 +319,24 @@ views::Widget* ShowWebModal(std::unique_ptr<ui::DialogModel> dialog_model,
                                                 ui::MODAL_TYPE_CHILD)
           .release(),
       web_contents);
+}
+
+bool SupportsGlobalScreenCoordinates() {
+#if !BUILDFLAG(IS_OZONE)
+  return true;
+#else
+  return ui::OzonePlatform::GetInstance()
+      ->GetPlatformProperties()
+      .supports_global_screen_coordinates;
+#endif
+}
+
+bool PlatformClipsChildrenToViewport() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_LINUX)
+  return true;
+#else
+  return false;
+#endif
 }
 
 }  // namespace constrained_window

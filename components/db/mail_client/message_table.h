@@ -35,41 +35,26 @@ class MessageTable {
   virtual ~MessageTable();
 
   bool CreateMessageTable();
-  bool CreateMessages(std::vector<mail_client::MessageRow> messages);
-  bool SearchMessages(std::u16string search, SearchListIdRows* out_emails);
+  bool CreateMessages(std::vector<MessageRow> messages);
+  bool SearchMessages(std::u16string search, SearchListIDs* out_ids);
   bool MatchMessage(const SearchListID& search_list_id, std::u16string search);
-  bool AddMessageBody(const SearchListID& sld, std::u16string body);
-  bool DeleteMessages(std::vector<SearchListID> search_list_ids);
-  bool RebuildDatabase();
+  bool UpdateMessage(MessageRow row);
+  bool DeleteMessages(SearchListIDs ids);
+  int CountRows(std::string table);
   bool UpdateToVersion2();
+  bool UpdateToVersion3();
+  bool CreateMigrationTable();
+  bool InsertIntoMigrationTable(int limit, int offset);
+  int SelectMaxOffsetFromMigration();
+  bool DoesTableExist(std::string name);
+  bool CopyMessagesToContentless(int limit, int offs);
+  bool AttachDBForMigrate(base::FilePath db_dir);
+  bool DetachDBAfterMigrate();
+  bool DoesAttachedMessageTableExists();
 
  protected:
   virtual sql::Database& GetDB() = 0;
 };
-
-static const char MESSAGES_TRIGGER_AFTER_DELETE[] =
-    " CREATE TRIGGER messages_ad AFTER DELETE ON messages "
-    " BEGIN "
-    " INSERT INTO messages_fts(messages_fts, rowid, "
-    "   toAddress, fromAddress, cc, replyTo, subject, body) "
-    " VALUES('delete', old.searchListId, "
-    "   old.toAddress, old.fromAddress, old.cc, old.replyTo, old.subject, "
-    "   old.body); "
-    " END;";
-
-static const char MESSAGES_TRIGGER_AFTER_UPDATE[] =
-    " CREATE TRIGGER messages_au AFTER UPDATE ON messages "
-    " BEGIN "
-    " INSERT INTO messages_fts(messages_fts, rowid,  "
-    "   toAddress, fromAddress, cc, replyTo, subject, body) "
-    " VALUES('delete', old.searchListId, "
-    "   old.toAddress, old.fromAddress, old.cc, old.replyTo, old.subject, "
-    "   old.body); "
-    " INSERT INTO messages_fts(rowid, toAddress, fromAddress, cc, replyTo, "
-    "   subject, body) "
-    " VALUES(new.searchListId, new.toAddress, new.fromAddress, new.cc, "
-    "   new.replyTo, new.subject, new.body); "
-    " END; ";
 
 }  // namespace mail_client
 

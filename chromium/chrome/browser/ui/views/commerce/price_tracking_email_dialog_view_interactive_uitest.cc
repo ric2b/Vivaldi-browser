@@ -11,7 +11,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
-#include "chrome/browser/ui/commerce/price_tracking/mock_shopping_list_ui_tab_helper.h"
+#include "chrome/browser/ui/commerce/mock_commerce_ui_tab_helper.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -48,7 +48,6 @@ class PriceTrackingEmailDialogConsentViewInteractiveTest
     : public InteractiveBrowserTest {
  public:
   void SetUp() override {
-    test_features_.InitAndEnableFeature(commerce::kShoppingListTrackByDefault);
     test_iph_features_.InitForDemo(
         feature_engagement::kIPHPriceTrackingEmailConsentFeature);
 
@@ -111,17 +110,15 @@ class PriceTrackingEmailDialogConsentViewInteractiveTest
     auto* mock_shopping_service = static_cast<commerce::MockShoppingService*>(
         commerce::ShoppingServiceFactory::GetForBrowserContext(
             browser()->profile()));
-    MockShoppingListUiTabHelper::CreateForWebContents(
+    MockCommerceUiTabHelper::CreateForWebContents(
         browser()->tab_strip_model()->GetActiveWebContents());
-    MockShoppingListUiTabHelper* mock_tab_helper =
-        static_cast<MockShoppingListUiTabHelper*>(
-            MockShoppingListUiTabHelper::FromWebContents(
+    MockCommerceUiTabHelper* mock_tab_helper =
+        static_cast<MockCommerceUiTabHelper*>(
+            MockCommerceUiTabHelper::FromWebContents(
                 browser()->tab_strip_model()->GetActiveWebContents()));
     ON_CALL(*mock_tab_helper, GetProductImage)
         .WillByDefault(
             testing::ReturnRef(mock_tab_helper->GetValidProductImage()));
-
-    mock_tab_helper->SetShoppingServiceForTesting(mock_shopping_service);
 
     EXPECT_CALL(*mock_shopping_service, GetProductInfoForUrl)
         .Times(testing::AnyNumber());
@@ -130,7 +127,6 @@ class PriceTrackingEmailDialogConsentViewInteractiveTest
     info.product_cluster_id.emplace(kClusterId);
     mock_shopping_service->SetResponseForGetProductInfoForUrl(info);
     mock_shopping_service->SetIsSubscribedCallbackValue(true);
-    mock_shopping_service->SetIsClusterIdTrackedByUserResponse(true);
   }
 
   base::WeakPtrFactory<PriceTrackingEmailDialogConsentViewInteractiveTest>

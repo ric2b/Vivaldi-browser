@@ -19,8 +19,8 @@
 #include "perfetto/base/logging.h"
 #include "perfetto/base/task_runner.h"
 #include "perfetto/ext/tracing/core/tracing_service.h"
-#include "perfetto/ext/tracing/ipc/default_socket.h"
 #include "perfetto/ext/tracing/ipc/producer_ipc_client.h"
+#include "perfetto/tracing/default_socket.h"
 
 #if PERFETTO_BUILDFLAG(PERFETTO_SYSTEM_CONSUMER)
 #include "perfetto/ext/tracing/ipc/consumer_ipc_client.h"
@@ -65,11 +65,12 @@ std::unique_ptr<ProducerEndpoint> SystemProducerTracingBackend::ConnectProducer(
         shm.get(), shmem_page_size_hint, SharedMemoryABI::ShmemMode::kDefault);
   }
 
+  ipc::Client::ConnArgs conn_args(GetProducerSocket(), true);
   auto endpoint = ProducerIPCClient::Connect(
-      GetProducerSocket(), args.producer, args.producer_name, args.task_runner,
+      std::move(conn_args), args.producer, args.producer_name, args.task_runner,
       TracingService::ProducerSMBScrapingMode::kEnabled, shmem_size_hint,
       shmem_page_size_hint, std::move(shm), std::move(arbiter),
-      ProducerIPCClient::ConnectionFlags::kRetryIfUnreachable);
+      args.create_socket_async);
   PERFETTO_CHECK(endpoint);
   return endpoint;
 }

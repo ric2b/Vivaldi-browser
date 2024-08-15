@@ -247,9 +247,9 @@ JNI_BOUNDARY_EXPORT ${RETURN} Java_${CLASS_NAME}_${PROXY_SIGNATURE}(
         switch (switch_num) {
           ${CASES}
           default:
-            CHECK(false) << "JNI multiplexing function Java_\
-${CLASS_NAME}_${PROXY_SIGNATURE} was called with an invalid switch number: "\
- << switch_num;
+            JNI_ZERO_ELOG("${CLASS_NAME}_${PROXY_SIGNATURE} was called with an \
+invalid switch number: %d", switch_num);
+            JNI_ZERO_DCHECK(false);
             return${DEFAULT_RETURN};
         }
 }""")
@@ -289,14 +289,14 @@ namespace {
 JNI_ZERO_COMPONENT_BUILD_EXPORT bool ${REGISTRATION_NAME}(JNIEnv* env) {
   const int number_of_methods = std::size(kMethods_${ESCAPED_PROXY_CLASS});
 
-  base::android::ScopedJavaLocalRef<jclass> native_clazz =
+  jni_zero::ScopedJavaLocalRef<jclass> native_clazz =
       base::android::GetClass(env, "${PROXY_CLASS}");
   if (env->RegisterNatives(
       native_clazz.obj(),
       kMethods_${ESCAPED_PROXY_CLASS},
       number_of_methods) < 0) {
 
-    jni_generator::HandleRegistrationError(env, native_clazz.obj(), __FILE__);
+    jni_zero::HandleRegistrationError(env, native_clazz.obj(), __FILE__);
     return false;
   }
 
@@ -704,7 +704,7 @@ ${NATIVES}\
       ${JAVA_CLASS}_clazz(env),
       ${NAMESPACE}kMethods_${JAVA_CLASS},
       kMethods_${JAVA_CLASS}Size) < 0) {
-    jni_generator::HandleRegistrationError(env,
+    jni_zero::HandleRegistrationError(env,
         ${JAVA_CLASS}_clazz(env),
         __FILE__);
     return false;

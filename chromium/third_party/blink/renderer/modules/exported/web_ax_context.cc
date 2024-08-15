@@ -70,9 +70,11 @@ WebAXObject WebAXContext::GetPluginRoot() {
   return WebAXObject(private_->GetAXObjectCache().GetPluginRoot());
 }
 
-bool WebAXContext::SerializeEntireTree(size_t max_node_count,
-                                       base::TimeDelta timeout,
-                                       ui::AXTreeUpdate* response) {
+bool WebAXContext::SerializeEntireTree(
+    size_t max_node_count,
+    base::TimeDelta timeout,
+    ui::AXTreeUpdate* response,
+    std::set<ui::AXSerializationErrorFlag>* out_error) {
   CHECK(HasActiveDocument());
   CHECK(HasAXObjectCache());
   CHECK(private_->GetDocument()->ExistingAXObjectCache());
@@ -80,8 +82,8 @@ bool WebAXContext::SerializeEntireTree(size_t max_node_count,
   UpdateAXForAllDocuments();
 
   ScopedFreezeAXCache freeze(private_->GetAXObjectCache());
-  return private_->GetAXObjectCache().SerializeEntireTree(max_node_count,
-                                                          timeout, response);
+  return private_->GetAXObjectCache().SerializeEntireTree(
+      max_node_count, timeout, response, out_error);
 }
 
 void WebAXContext::SerializeDirtyObjectsAndEvents(
@@ -129,19 +131,57 @@ void WebAXContext::UpdateAXForAllDocuments() {
   return private_->GetAXObjectCache().UpdateAXForAllDocuments();
 }
 
-void WebAXContext::ScheduleAXUpdate() {
+void WebAXContext::ScheduleImmediateSerialization() {
   if (!HasActiveDocument()) {
     return;
   }
 
-  const auto& cache = private_->GetAXObjectCache();
+  auto& cache = private_->GetAXObjectCache();
+  cache.ScheduleImmediateSerialization();
+}
 
-  // If no dirty objects are queued, it's not necessary to schedule an extra
-  // visual update.
-  if (!cache.HasDirtyObjects())
+void WebAXContext::AddEventToSerializationQueue(const ui::AXEvent& event,
+                                                bool immediate_serialization) {
+  if (!HasActiveDocument()) {
     return;
+  }
 
-  return cache.ScheduleAXUpdate();
+  auto& cache = private_->GetAXObjectCache();
+  cache.AddEventToSerializationQueue(event, immediate_serialization);
+}
+
+void WebAXContext::OnSerializationCancelled() {
+  if (!HasActiveDocument()) {
+    return;
+  }
+
+  auto& cache = private_->GetAXObjectCache();
+  cache.OnSerializationCancelled();
+}
+
+void WebAXContext::OnSerializationStartSend() {
+  if (!HasActiveDocument()) {
+    return;
+  }
+
+  auto& cache = private_->GetAXObjectCache();
+  cache.OnSerializationStartSend();
+}
+
+bool WebAXContext::IsSerializationInFlight() const {
+  if (!HasActiveDocument()) {
+    return false;
+  }
+
+  const auto& cache = private_->GetAXObjectCache();
+  return cache.IsSerializationInFlight();
+}
+
+void WebAXContext::OnSerializationReceived() {
+  if (!HasActiveDocument()) {
+    return;
+  }
+  return private_->GetAXObjectCache().OnSerializationReceived();
 }
 
 void WebAXContext::FireLoadCompleteIfLoaded() {

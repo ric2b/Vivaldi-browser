@@ -43,18 +43,16 @@ const int kCAllFamiliesScanned = -1;
 // FontFallbackList caches FontData from FontSelector and FontCache. If font
 // updates occur (e.g., @font-face rule changes, web font is loaded, etc.),
 // the cached data becomes stale and hence, invalid.
-class PLATFORM_EXPORT FontFallbackList : public RefCounted<FontFallbackList> {
-  USING_FAST_MALLOC(FontFallbackList);
-
+class PLATFORM_EXPORT FontFallbackList
+    : public GarbageCollected<FontFallbackList> {
  public:
-  static scoped_refptr<FontFallbackList> Create(
-      FontFallbackMap& font_fallback_map) {
-    return base::AdoptRef(new FontFallbackList(font_fallback_map));
-  }
+  explicit FontFallbackList(FontSelector* font_selector);
 
   FontFallbackList(const FontFallbackList&) = delete;
   FontFallbackList& operator=(const FontFallbackList&) = delete;
   ~FontFallbackList();
+
+  void Trace(Visitor*) const;
 
   // Returns whether the cached data is valid. We can use a FontFallbackList
   // only when it's valid.
@@ -69,12 +67,7 @@ class PLATFORM_EXPORT FontFallbackList : public RefCounted<FontFallbackList> {
 
   bool ShouldSkipDrawing() const;
 
-  // Returns false only after the WeakPersistent to FontFallbackMap is turned to
-  // nullptr due to GC.
-  bool HasFontFallbackMap() const { return font_fallback_map_; }
-  FontFallbackMap& GetFontFallbackMap() const { return *font_fallback_map_; }
-
-  FontSelector* GetFontSelector() const;
+  FontSelector* GetFontSelector() const { return font_selector_.Get(); }
   uint16_t Generation() const { return generation_; }
 
   NGShapeCache& GetNGShapeCache(const FontDescription& font_description) {
@@ -90,8 +83,9 @@ class PLATFORM_EXPORT FontFallbackList : public RefCounted<FontFallbackList> {
       shape_cache_ = FontCache::Get().GetShapeCache(key)->GetWeakPtr();
     }
     DCHECK(shape_cache_);
-    if (GetFontSelector())
-      shape_cache_->ClearIfVersionChanged(GetFontSelector()->Version());
+    if (font_selector_) {
+      shape_cache_->ClearIfVersionChanged(font_selector_->Version());
+    }
     return shape_cache_.get();
   }
 
@@ -125,8 +119,6 @@ class PLATFORM_EXPORT FontFallbackList : public RefCounted<FontFallbackList> {
   bool HasCustomFont() const { return has_custom_font_; }
 
  private:
-  explicit FontFallbackList(FontFallbackMap& font_fallback_map);
-
   scoped_refptr<FontData> GetFontData(const FontDescription&);
 
   const SimpleFontData* DeterminePrimarySimpleFontData(const FontDescription&);
@@ -138,7 +130,7 @@ class PLATFORM_EXPORT FontFallbackList : public RefCounted<FontFallbackList> {
 
   Vector<scoped_refptr<FontData>, 1> font_list_;
   const SimpleFontData* cached_primary_simple_font_data_ = nullptr;
-  const WeakPersistent<FontFallbackMap> font_fallback_map_;
+  const Member<FontSelector> font_selector_;
   int family_index_ = 0;
   const uint16_t generation_;
   bool has_loading_fallback_ : 1;

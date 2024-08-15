@@ -21,6 +21,8 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
@@ -34,8 +36,6 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ActivityTestUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
@@ -56,6 +56,7 @@ import java.io.IOException;
     ChromeFeatureList.START_SURFACE_ANDROID + "<Study",
     ChromeFeatureList.INSTANT_START
 })
+@DisableFeatures({ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID})
 @Restriction({
     Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE,
     UiRestriction.RESTRICTION_TYPE_PHONE
@@ -112,7 +113,7 @@ public class InstantStartNewTabFromLauncherTest {
     }
 
     private void testNewIncognitoTabFromLauncherImpl() throws IOException {
-        StartSurfaceTestUtils.createTabStateFile(new int[] {0});
+        StartSurfaceTestUtils.createTabStatesAndMetadataFile(new int[] {0});
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0, mBrowserControlsStateProvider);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
@@ -124,12 +125,12 @@ public class InstantStartNewTabFromLauncherTest {
         Assert.assertFalse(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Assert.assertTrue(UrlUtilities.isNTPUrl(cta.getActivityTab().getUrl()));
+                    Assert.assertTrue(UrlUtilities.isNtpUrl(cta.getActivityTab().getUrl()));
                 });
     }
 
     private void testNewTabFromLauncherWithHomepageDisabledImpl() throws IOException {
-        StartSurfaceTestUtils.createTabStateFile(new int[] {0});
+        StartSurfaceTestUtils.createTabStatesAndMetadataFile(new int[] {0});
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0, mBrowserControlsStateProvider);
         TabAttributeCache.setTitleForTesting(0, "Google");
 
@@ -146,7 +147,7 @@ public class InstantStartNewTabFromLauncherTest {
         Assert.assertFalse(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Assert.assertTrue(UrlUtilities.isNTPUrl(cta.getActivityTab().getUrl()));
+                    Assert.assertTrue(UrlUtilities.isNtpUrl(cta.getActivityTab().getUrl()));
                 });
     }
 

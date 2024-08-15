@@ -16,18 +16,20 @@ import org.chromium.ui.modaldialog.DialogDismissalCause;
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
-/**
- * The coordinator responsible for showing the tab-switcher re-auth screen.
- */
+/** The coordinator responsible for showing the tab-switcher re-auth screen. */
 class TabSwitcherIncognitoReauthCoordinator extends IncognitoReauthCoordinatorBase {
     /** A manager which allows to pass the re-auth view to the tab switcher.*/
     private final @NonNull TabSwitcherCustomViewManager mTabSwitcherCustomViewManager;
+
     /** A delegate which allows to disable/enable top toolbar elements when re-auth is shown. */
     private final @NonNull IncognitoReauthTopToolbarDelegate mIncognitoReauthTopToolbarDelegate;
+
     /** The {@link Context} to use for fetching Incognito re-auth resources. */
     private final @NonNull Context mContext;
+
     /** A runnable to handle back presses which shows the regular overview mode. */
     private final @NonNull Runnable mBackPressRunnable;
+
     /**
      * A token returned by {@link IncognitoReauthTopToolbarDelegate} that needs to be used to
      * re-enable the new tab button control state.
@@ -48,10 +50,12 @@ class TabSwitcherIncognitoReauthCoordinator extends IncognitoReauthCoordinatorBa
      *         pass the re-auth view to the tab switcher
      * @param incognitoReauthTopToolbarDelegate A {@link IncognitoReauthTopToolbarDelegate} which
      */
-    public TabSwitcherIncognitoReauthCoordinator(@NonNull Context context,
+    public TabSwitcherIncognitoReauthCoordinator(
+            @NonNull Context context,
             @NonNull IncognitoReauthManager incognitoReauthManager,
             @NonNull IncognitoReauthCallback incognitoReauthCallback,
-            @NonNull Runnable seeOtherTabsRunnable, @NonNull Runnable backPressRunnable,
+            @NonNull Runnable seeOtherTabsRunnable,
+            @NonNull Runnable backPressRunnable,
             @NonNull TabSwitcherCustomViewManager tabSwitcherCustomViewManager,
             @NonNull IncognitoReauthTopToolbarDelegate incognitoReauthTopToolbarDelegate) {
         super(context, incognitoReauthManager, incognitoReauthCallback, seeOtherTabsRunnable);
@@ -61,14 +65,13 @@ class TabSwitcherIncognitoReauthCoordinator extends IncognitoReauthCoordinatorBa
         mBackPressRunnable = backPressRunnable;
     }
 
-    /**
-     * A method to show the Incognito re-auth dialog.
-     */
+    /** A method to show the Incognito re-auth dialog. */
     @Override
     public void show() {
-        prepareToshow(/*menuButtonDelegate= */ null, /*fullscreen= */ false);
-        boolean success = mTabSwitcherCustomViewManager.requestView(
-                getIncognitoReauthView(), mBackPressRunnable, /*clearTabList=*/true);
+        prepareToshow(/* menuButtonDelegate= */ null, /* fullscreen= */ false);
+        boolean success =
+                mTabSwitcherCustomViewManager.requestView(
+                        getIncognitoReauthView(), mBackPressRunnable, /* clearTabList= */ true);
         assert success : "Unable to signal showing the re-auth screen to tab switcher.";
         // Note(david@vivaldi.com): In Vivaldi there is no |IncognitoReauthTopToolbarDelegate|.
         if (!BuildConfig.IS_VIVALDI)
@@ -96,9 +99,7 @@ class TabSwitcherIncognitoReauthCoordinator extends IncognitoReauthCoordinatorBa
         destroy();
     }
 
-    /**
-     * A test-only method for setting the new tab interactability token.
-     */
+    /** A test-only method for setting the new tab interactability token. */
     protected void setNewTabInteractabilityTokenForTesting(@NonNull Integer token) {
         mNewTabInteractabilityToken = token;
     }

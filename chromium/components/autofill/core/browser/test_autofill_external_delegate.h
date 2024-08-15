@@ -29,21 +29,24 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
   void OnPopupHidden() override;
   void OnQuery(const FormData& form,
                const FormFieldData& field,
-               const gfx::RectF& bounds) override;
+               const gfx::RectF& bounds,
+               AutofillSuggestionTriggerSource trigger_source) override;
   void OnSuggestionsReturned(FieldGlobalId field_id,
                              const std::vector<Suggestion>& suggestions,
-                             AutofillSuggestionTriggerSource trigger_source,
                              bool is_all_server_suggestions) override;
   bool HasActiveScreenReader() const override;
-  void OnAutofillAvailabilityEvent(const mojom::AutofillState state) override;
+  void OnAutofillAvailabilityEvent(
+      mojom::AutofillSuggestionAvailability suggestion_availability) override;
 
   // Functions unique to TestAutofillExternalDelegate.
 
   void WaitForPopupHidden();
 
   void CheckSuggestions(FieldGlobalId field_id,
-                        size_t expected_num_suggestions,
-                        const Suggestion expected_suggestions[]);
+                        const std::vector<Suggestion>& expected_sugestions);
+
+  // Check that the autofill suggestions were not sent at all.
+  void CheckSuggestionsNotReturned(FieldGlobalId field_id);
 
   // Check that the autofill suggestions were sent, and that they match a page
   // but contain no results.
@@ -53,6 +56,8 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
   // and contain a specific number of suggestions.
   void CheckSuggestionCount(FieldGlobalId field_id,
                             size_t expected_num_suggestions);
+
+  const std::vector<Suggestion>& suggestions() const;
 
   bool on_query_seen() const;
 

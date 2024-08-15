@@ -41,6 +41,7 @@ ReadAnythingModel::~ReadAnythingModel() = default;
 void ReadAnythingModel::Init(const std::string& lang_code,
                              const std::string& font_name,
                              double font_scale,
+                             bool links_enabled,
                              read_anything::mojom::Colors colors,
                              LineSpacing line_spacing,
                              LetterSpacing letter_spacing) {
@@ -54,6 +55,8 @@ void ReadAnythingModel::Init(const std::string& lang_code,
   }
 
   font_scale_ = GetValidFontScale(font_scale);
+
+  links_enabled_ = links_enabled;
 
   size_t colors_index = static_cast<size_t>(colors);
   if (colors_model_->IsValidIndex(colors_index)) {
@@ -148,27 +151,36 @@ void ReadAnythingModel::SetSelectedLetterSpacingByIndex(size_t new_index) {
 }
 
 double ReadAnythingModel::GetValidFontScale(double font_scale) {
-  if (font_scale < kReadAnythingMinimumFontScale)
+  if (font_scale < kReadAnythingMinimumFontScale) {
     return kReadAnythingMinimumFontScale;
-  if (font_scale > kReadAnythingMaximumFontScale)
+  }
+  if (font_scale > kReadAnythingMaximumFontScale) {
     return kReadAnythingMaximumFontScale;
+  }
   return font_scale;
 }
 
 // TODO(1266555): Update with text scaling approach based on UI/UX feedback.
 void ReadAnythingModel::DecreaseTextSize() {
   font_scale_ -= kReadAnythingFontScaleIncrement;
-  if (font_scale_ < kReadAnythingMinimumFontScale)
+  if (font_scale_ < kReadAnythingMinimumFontScale) {
     font_scale_ = kReadAnythingMinimumFontScale;
+  }
 
   NotifyThemeChanged();
 }
 
 void ReadAnythingModel::IncreaseTextSize() {
   font_scale_ += kReadAnythingFontScaleIncrement;
-  if (font_scale_ > kReadAnythingMaximumFontScale)
+  if (font_scale_ > kReadAnythingMaximumFontScale) {
     font_scale_ = kReadAnythingMaximumFontScale;
+  }
 
+  NotifyThemeChanged();
+}
+
+void ReadAnythingModel::SetLinksEnabled(bool enabled) {
+  links_enabled_ = enabled;
   NotifyThemeChanged();
 }
 
@@ -179,9 +191,10 @@ void ReadAnythingModel::OnSystemThemeChanged() {
 void ReadAnythingModel::NotifyThemeChanged() {
   for (Observer& obs : observers_) {
     obs.OnReadAnythingThemeChanged(
-        font_name_, font_scale_, foreground_color_id_, background_color_id_,
-        separator_color_id_, dropdown_color_id_, selected_dropdown_color_id_,
-        focus_ring_color_id_, line_spacing_, letter_spacing_);
+        font_name_, font_scale_, links_enabled_, foreground_color_id_,
+        background_color_id_, separator_color_id_, dropdown_color_id_,
+        selected_dropdown_color_id_, focus_ring_color_id_, line_spacing_,
+        letter_spacing_);
   }
 }
 
@@ -210,6 +223,9 @@ void ReadAnythingFontModel::SetDefaultLanguage(const std::string& lang) {
   if (base::Contains(kLanguagesSupportedByStixTwoText, lang)) {
     font_choices_.emplace_back(u"STIX Two Text");
   }
+  if (base::Contains(kLanguagesSupportedByAndika, lang)) {
+    font_choices_.emplace_back(u"Andika");
+  }
   font_choices_.shrink_to_fit();
 }
 
@@ -224,11 +240,11 @@ size_t ReadAnythingFontModel::GetFontNameIndex(std::string font_name) {
 
 // ui::Combobox needs a default option to show whenever Read Anything is
 // reopened in the same browser window.
-absl::optional<size_t> ReadAnythingFontModel::GetDefaultIndex() const {
+std::optional<size_t> ReadAnythingFontModel::GetDefaultIndex() const {
   return selected_index_;
 }
 
-absl::optional<size_t> ReadAnythingFontModel::GetDefaultIndexForTesting() {
+std::optional<size_t> ReadAnythingFontModel::GetDefaultIndexForTesting() {
   return selected_index_;
 }
 
@@ -254,17 +270,17 @@ std::string ReadAnythingFontModel::GetFontNameAt(size_t index) {
   return base::UTF16ToUTF8(font_choices_[index]);
 }
 
-absl::optional<ui::ColorId>
+std::optional<ui::ColorId>
 ReadAnythingFontModel::GetDropdownForegroundColorIdAt(size_t index) const {
   return foreground_color_id_;
 }
 
-absl::optional<ui::ColorId>
+std::optional<ui::ColorId>
 ReadAnythingFontModel::GetDropdownBackgroundColorIdAt(size_t index) const {
   return background_color_id_;
 }
 
-absl::optional<ui::ColorId>
+std::optional<ui::ColorId>
 ReadAnythingFontModel::GetDropdownSelectedBackgroundColorIdAt(
     size_t index) const {
   return selected_color_id_;

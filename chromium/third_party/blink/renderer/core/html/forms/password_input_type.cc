@@ -194,7 +194,7 @@ void PasswordInputType::UpdatePasswordRevealButton() {
         0.7;                       // 0.7em which is enough for ~2 chars.
     const int kLeftMarginPx = 3;   // 3px
     const int kRightMarginPx = 3;  // 3px
-    float current_width = GetElement().getBoundingClientRect()->width();
+    float current_width = GetElement().GetBoundingClientRect()->width();
     float width_needed = GetElement().ComputedStyleRef().FontSize() *
                              (kRevealButtonWidthEm + kPasswordMinWidthEm) +
                          kLeftMarginPx + kRightMarginPx;
@@ -276,8 +276,9 @@ bool PasswordInputType::SupportsInputModeAttribute() const {
   return true;
 }
 
-bool PasswordInputType::ShouldAutoDirUseValue() const {
-  return false;
+// TODO: This override function should be removed once the feature is shipped.
+bool PasswordInputType::IsAutoDirectionalityFormAssociated() const {
+  return RuntimeEnabledFeatures::DirnameMoreInputTypesEnabled();
 }
 
 }  // namespace blink

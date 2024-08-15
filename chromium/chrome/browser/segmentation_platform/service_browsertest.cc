@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -18,13 +20,13 @@
 #include "chrome/browser/segmentation_platform/ukm_data_manager_test_utils.h"
 #include "chrome/browser/segmentation_platform/ukm_database_client.h"
 #include "chrome/test/base/chrome_test_utils.h"
-#include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/optimization_guide/core/model_info.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_observer.h"
 #include "components/prefs/pref_service.h"
+#include "components/segmentation_platform/embedder/default_model/database_api_clients.h"
 #include "components/segmentation_platform/embedder/default_model/optimization_target_segmentation_dummy.h"
 #include "components/segmentation_platform/internal/constants.h"
 #include "components/segmentation_platform/internal/database/client_result_prefs.h"
@@ -34,15 +36,14 @@
 #include "components/segmentation_platform/internal/segmentation_platform_service_impl.h"
 #include "components/segmentation_platform/internal/stats.h"
 #include "components/segmentation_platform/internal/ukm_data_manager.h"
-#include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/constants.h"
+#include "components/segmentation_platform/public/database_client.h"
 #include "components/segmentation_platform/public/features.h"
 #include "components/segmentation_platform/public/model_provider.h"
 #include "components/segmentation_platform/public/proto/aggregation.pb.h"
 #include "components/segmentation_platform/public/proto/model_metadata.pb.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
 #include "components/segmentation_platform/public/result.h"
-#include "components/segmentation_platform/public/segment_selection_result.h"
 #include "components/segmentation_platform/public/segmentation_platform_service.h"
 #include "components/ukm/ukm_service.h"
 #include "content/public/test/browser_test.h"
@@ -72,7 +73,10 @@ constexpr char kSqlFeatureQuery[] = "SELECT COUNT(*) from metrics";
 
 class SegmentationPlatformTest : public PlatformBrowserTest {
  public:
-  SegmentationPlatformTest() {
+  explicit SegmentationPlatformTest(bool setup_feature_list = true) {
+    if (!setup_feature_list) {
+      return;
+    }
     // Low Engagement Segment is used to test segmentation service without multi
     // output. Search User Segment supports  multi output path.
     feature_list_.InitWithFeaturesAndParameters(
@@ -97,12 +101,17 @@ class SegmentationPlatformTest : public PlatformBrowserTest {
         "segmentation-platform-disable-model-execution-delay");
   }
 
+  SegmentationPlatformService* GetService() {
+    return segmentation_platform::SegmentationPlatformServiceFactory::
+        GetForProfile(chrome_test_utils::GetProfile(this));
+  }
+
   bool HasClientResultPref(const std::string& segmentation_key) {
     PrefService* pref_service = chrome_test_utils::GetProfile(this)->GetPrefs();
     std::unique_ptr<ClientResultPrefs> result_prefs_ =
         std::make_unique<ClientResultPrefs>(pref_service);
-    return result_prefs_->ReadClientResultFromPrefs(segmentation_key)
-        .has_value();
+    return result_prefs_->ReadClientResultFromPrefs(segmentation_key) !=
+           nullptr;
   }
 
   void OnClientResultPrefUpdated() {
@@ -132,12 +141,58 @@ class SegmentationPlatformTest : public PlatformBrowserTest {
 
   void WaitForPlatformInit() {
     base::RunLoop wait_for_init;
-    SegmentationPlatformService* service =
-        segmentation_platform::SegmentationPlatformServiceFactory::
-            GetForProfile(chrome_test_utils::GetProfile(this));
+    SegmentationPlatformService* service = GetService();
     while (!service->IsPlatformInitialized()) {
       wait_for_init.RunUntilIdle();
     }
+  }
+
+  void ExpectDatabaseQuery(const std::vector<std::string>& metrics,
+                           const ModelProvider::Request& result) {
+    DatabaseClient* client = GetService()->GetDatabaseClient();
+    ASSERT_TRUE(client);
+
+    proto::SegmentationModelMetadata metadata;
+    MetadataWriter writer(&metadata);
+    writer.SetDefaultSegmentationMetadataConfig();
+    for (const std::string& metric : metrics) {
+      DatabaseApiClients::AddSumQuery(writer, metric, /*days=*/1);
+    }
+
+    base::RunLoop wait;
+    client->ProcessFeatures(
+        metadata, base::Time::Now() + base::Minutes(1),
+        base::BindOnce(
+            [](base::OnceClosure quit,
+               const ModelProvider::Request& expected_result,
+               DatabaseClient::ResultStatus status,
+               const ModelProvider::Request& result) {
+              EXPECT_EQ(status, DatabaseClient::ResultStatus::kSuccess);
+              EXPECT_EQ(expected_result, result);
+              std::move(quit).Run();
+            },
+            wait.QuitClosure(), result));
+    wait.Run();
+  }
+
+  void RunProcessFeaturesAndCallback(
+      const proto::SegmentationModelMetadata& metadata,
+      DatabaseClient::FeaturesCallback callback) {
+    DatabaseClient* client = GetService()->GetDatabaseClient();
+    ASSERT_TRUE(client);
+
+    base::RunLoop wait;
+    client->ProcessFeatures(metadata, base::Time::Now() + base::Minutes(1),
+                            base::BindOnce(
+                                [](base::OnceClosure quit,
+                                   DatabaseClient::FeaturesCallback callback,
+                                   DatabaseClient::ResultStatus status,
+                                   const ModelProvider::Request& result) {
+                                  std::move(callback).Run(status, result);
+                                  std::move(quit).Run();
+                                },
+                                wait.QuitClosure(), std::move(callback)));
+    wait.Run();
   }
 
   void WaitForSegmentInfoDatabaseUpdate(
@@ -155,9 +210,7 @@ class SegmentationPlatformTest : public PlatformBrowserTest {
 
   void ExpectClassificationResult(const std::string& segmentation_key,
                                   PredictionStatus expected_prediction_status) {
-    SegmentationPlatformService* service =
-        segmentation_platform::SegmentationPlatformServiceFactory::
-            GetForProfile(chrome_test_utils::GetProfile(this));
+    SegmentationPlatformService* service = GetService();
     PredictionOptions options;
     options.on_demand_execution = false;
     base::RunLoop wait_for_segment;
@@ -182,7 +235,7 @@ class SegmentationPlatformTest : public PlatformBrowserTest {
 
   std::unique_ptr<optimization_guide::ModelInfo>
   CreateOptimizationGuideModelInfo(
-      absl::optional<proto::SegmentationModelMetadata>
+      std::optional<proto::SegmentationModelMetadata>
           segmentation_model_metadata) {
     auto model_info_builder = optimization_guide::TestModelInfoBuilder();
     if (segmentation_model_metadata.has_value()) {
@@ -190,7 +243,7 @@ class SegmentationPlatformTest : public PlatformBrowserTest {
       segmentation_model_metadata.value().SerializeToString(
           &serialized_metadata);
       optimization_guide::proto::Any any_proto;
-      auto any = absl::make_optional(any_proto);
+      auto any = std::make_optional(any_proto);
       any->set_value(serialized_metadata);
       any->set_type_url(
           "type.googleapis.com/"
@@ -475,7 +528,8 @@ IN_PROC_BROWSER_TEST_F(SegmentationPlatformTest,
 
 class SegmentationPlatformUkmModelTest : public SegmentationPlatformTest {
  public:
-  SegmentationPlatformUkmModelTest() : utils_(&ukm_recorder_) {}
+  SegmentationPlatformUkmModelTest()
+      : utils_(&ukm_recorder_, /*owned_db_client=*/false) {}
 
   void CreatedBrowserMainParts(content::BrowserMainParts* parts) override {
     PlatformBrowserTest::CreatedBrowserMainParts(parts);
@@ -500,7 +554,7 @@ class SegmentationPlatformUkmModelTest : public SegmentationPlatformTest {
  protected:
   ukm::TestUkmRecorder ukm_recorder_;
   UkmDataManagerTestUtils utils_;
-  absl::optional<ModelProvider::Request> input_feature_in_last_execution_;
+  std::optional<ModelProvider::Request> input_feature_in_last_execution_;
 };
 
 // This test is disabled in CrOS because CrOS creates a signin profile that uses
@@ -534,7 +588,8 @@ IN_PROC_BROWSER_TEST_F(SegmentationPlatformUkmModelTest,
   while (!utils_.IsUrlInDatabase(kUrl1)) {
     base::RunLoop().RunUntilIdle();
   }
-  UkmDatabaseClient::GetInstance()
+  UkmDatabaseClientHolder::GetClientInstance(
+      chrome_test_utils::GetProfile(this))
       .GetUkmDataManager()
       ->GetUkmDatabase()
       ->CommitTransactionForTesting();
@@ -561,6 +616,86 @@ IN_PROC_BROWSER_TEST_F(SegmentationPlatformUkmModelTest,
 
   // There are 2 UKM metrics written to the database, count = 2.
   EXPECT_EQ(ModelProvider::Request({2}), input_feature_in_last_execution_);
+}
+
+IN_PROC_BROWSER_TEST_F(SegmentationPlatformUkmModelTest, DatabaseApi) {
+  WaitForPlatformInit();
+
+  ExpectDatabaseQuery({}, {});
+  ExpectDatabaseQuery({"test1"}, {0});
+
+  DatabaseClient::StructuredEvent e1("TestEvent", {{"test1", 1}, {"test2", 2}});
+
+  DatabaseClient::StructuredEvent e2("TestEvent",
+                                     {{"test1", 10}, {"test2", 20}});
+
+  SegmentationPlatformService* service = GetService();
+  DatabaseClient* client = service->GetDatabaseClient();
+  client->AddEvent(e1);
+  client->AddEvent(e2);
+  ExpectDatabaseQuery({}, {});
+  ExpectDatabaseQuery({"test1"}, {11});
+  ExpectDatabaseQuery({"test1", "test2"}, {11, 22});
+}
+
+IN_PROC_BROWSER_TEST_F(SegmentationPlatformUkmModelTest, SumGroupDatabaseApi) {
+  WaitForPlatformInit();
+
+  constexpr char kSampleEventName[] = "TestEvent";
+  constexpr char kSampleTestMetric1[] = "test1";
+  constexpr char kSampleTestMetric2[] = "test2";
+  SegmentationPlatformService* service = GetService();
+  DatabaseClient* client = service->GetDatabaseClient();
+  client->AddEvent(
+      {kSampleEventName, {{kSampleTestMetric1, 1}, {kSampleTestMetric2, 2}}});
+  client->AddEvent(
+      {kSampleEventName, {{kSampleTestMetric1, 10}, {kSampleTestMetric2, 20}}});
+
+  constexpr char kSampleTestMetric0[] = "test0";
+  proto::SegmentationModelMetadata metadata;
+  MetadataWriter writer(&metadata);
+  writer.SetDefaultSegmentationMetadataConfig();
+  DatabaseApiClients::AddSumGroupQuery(
+      writer, kSampleEventName,
+      {kSampleTestMetric0, kSampleTestMetric1, kSampleTestMetric2},
+      /*days=*/1);
+  RunProcessFeaturesAndCallback(
+      metadata, base::BindOnce([](DatabaseClient::ResultStatus status,
+                                  const ModelProvider::Request& result) {
+        EXPECT_EQ(status, DatabaseClient::ResultStatus::kSuccess);
+        const std::vector<float> kExpectedResults = {0, 11, 22};
+        EXPECT_EQ(result, kExpectedResults);
+      }));
+}
+
+class SegmentationPlatformUkmDisabledTest : public SegmentationPlatformTest {
+ public:
+  SegmentationPlatformUkmDisabledTest()
+      : SegmentationPlatformTest(/*setup_feature_list=*/false) {
+    feature_list_.InitWithFeaturesAndParameters(
+        {base::test::FeatureRefAndParams(features::kSegmentationPlatformFeature,
+                                         {}),
+         base::test::FeatureRefAndParams(
+             kSegmentationPlatformOptimizationTargetSegmentationDummy, {})},
+        /*disabled_features=*/{
+            features::kSegmentationPlatformUkmEngine,
+        });
+  }
+};
+
+// On Android tests are failing because of unrelated browser tests failures.
+// TODO(ssid): Once the issue is resolved, enable the test on Android.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_DatabaseApi DISABLED_DatabaseApi
+#else
+#define MAYBE_DatabaseApi DatabaseApi
+#endif
+IN_PROC_BROWSER_TEST_F(SegmentationPlatformUkmDisabledTest, MAYBE_DatabaseApi) {
+  WaitForPlatformInit();
+
+  SegmentationPlatformService* service = GetService();
+  DatabaseClient* client = service->GetDatabaseClient();
+  EXPECT_FALSE(client);
 }
 
 }  // namespace segmentation_platform

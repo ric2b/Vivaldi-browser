@@ -1,0 +1,11 @@
+[package]
+name = "cmd-runner"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.64"
+shell-escape = "0.1.5"
+owo-colors = "3.5.0"
+

@@ -114,6 +114,10 @@ target_vendor_available = [
     '//:libperfetto_client_experimental',
 ]
 
+target_product_available = [
+    '//:libperfetto_client_experimental',
+]
+
 # Proto target groups which will be made public.
 proto_groups = {
     'trace': [
@@ -256,8 +260,7 @@ additional_args = {
     ],
     'libperfetto_client_experimental': [
         ('apex_available', {
-            '//apex_available:platform', 'com.android.art',
-            'com.android.art.debug', 'com.android.tethering'
+            '//apex_available:platform', '//apex_available:anyapex'
         }),
         ('min_sdk_version', '30'),
         ('shared_libs', {'liblog'}),
@@ -332,7 +335,7 @@ def enable_libunwind(module):
 
 def enable_sqlite(module):
   if module.type == 'cc_binary_host':
-    module.static_libs.add('libsqlite')
+    module.static_libs.add('libsqlite_static_noicu')
     module.static_libs.add('sqlite_ext_percentile')
   elif module.host_supported:
     # Copy what the sqlite3 command line tool does.
@@ -341,7 +344,7 @@ def enable_sqlite(module):
     module.android.shared_libs.add('liblog')
     module.android.shared_libs.add('libutils')
     module.android.static_libs.add('sqlite_ext_percentile')
-    module.host.static_libs.add('libsqlite')
+    module.host.static_libs.add('libsqlite_static_noicu')
     module.host.static_libs.add('sqlite_ext_percentile')
   else:
     module.shared_libs.add('libsqlite')
@@ -509,6 +512,7 @@ class Module(object):
     self.cmd: Optional[str] = None
     self.host_supported = False
     self.vendor_available = False
+    self.product_available = False
     self.init_rc = set()
     self.out = set()
     self.export_include_dirs = set()
@@ -532,6 +536,7 @@ class Module(object):
     self.apex_available = set()
     self.min_sdk_version = None
     self.proto = dict()
+    self.output_extension: Optional[str] = None
     # The genrule_XXX below are properties that must to be propagated back
     # on the module(s) that depend on the genrule.
     self.genrule_headers = set()
@@ -558,6 +563,8 @@ class Module(object):
       self._output_field(output, 'host_supported')
     if self.vendor_available:
       self._output_field(output, 'vendor_available')
+    if self.product_available:
+      self._output_field(output, 'product_available')
     self._output_field(output, 'init_rc')
     self._output_field(output, 'out')
     self._output_field(output, 'export_include_dirs')
@@ -581,6 +588,7 @@ class Module(object):
     self._output_field(output, 'stubs')
     self._output_field(output, 'proto')
     self._output_field(output, 'main')
+    self._output_field(output, 'output_extension')
 
     target_out = []
     self._output_field(target_out, 'android')
@@ -895,6 +903,12 @@ def create_amalgamated_sql_module(blueprint: Blueprint, gn: GnParser,
   module.out.update(target.outputs)
 
   for dep in target.transitive_deps:
+    # Use globs for the chrome stdlib so the file does not need to be
+    # regenerated in autoroll CLs.
+    if dep.name.startswith(
+          '//src/trace_processor/perfetto_sql/stdlib/chrome:chrome_sql'):
+      module.srcs.add('src/trace_processor/perfetto_sql/stdlib/chrome/**/*.sql')
+      continue
     module.srcs.update(
         [gn_utils.label_to_path(src) for src in gn.get_target(dep.name).inputs])
   blueprint.add_module(module)
@@ -1026,6 +1040,7 @@ def create_modules_from_target(blueprint: Blueprint, gn: GnParser,
   blueprint.add_module(module)
   module.host_supported = (name_without_toolchain in target_host_supported)
   module.vendor_available = (name_without_toolchain in target_vendor_available)
+  module.product_available = (name_without_toolchain in target_product_available)
   module.init_rc.update(target_initrc.get(target.name, []))
   if target.type != 'proto_library':
     # proto_library embeds a "root" filegroup in its srcs.

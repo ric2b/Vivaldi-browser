@@ -60,7 +60,6 @@ TEST(OAuthMultiloginResultTest, TryParseCookiesFromValue) {
               "isHttpOnly":false,
               "priority":"HIGH",
               "maxAge":63070000,
-              "sameParty": "0"
             },
             {
               "name":"HSID",
@@ -80,7 +79,6 @@ TEST(OAuthMultiloginResultTest, TryParseCookiesFromValue) {
               "isHttpOnly": true,
               "maxAge": 63072000,
               "priority": "HIGH",
-              "sameParty": "1"
             }
           ]
         }
@@ -97,25 +95,21 @@ TEST(OAuthMultiloginResultTest, TryParseCookiesFromValue) {
           "SID", "vAlUe1", ".google.ru", "/", time_now, time_now,
           expiration_time, time_now, /*secure=*/true,
           /*httponly=*/false, net::CookieSameSite::UNSPECIFIED,
-          net::CookiePriority::COOKIE_PRIORITY_HIGH,
-          /*same_party=*/false),
+          net::CookiePriority::COOKIE_PRIORITY_HIGH),
       *CanonicalCookie::CreateUnsafeCookieForTesting(
           "SAPISID", "vAlUe2", "google.com", "/", time_now, time_now,
           expiration_time, time_now, /*secure=*/false,
           /*httponly=*/true, net::CookieSameSite::LAX_MODE,
-          net::CookiePriority::COOKIE_PRIORITY_HIGH,
-          /*same_party=*/false),
+          net::CookiePriority::COOKIE_PRIORITY_HIGH),
       *CanonicalCookie::CreateUnsafeCookieForTesting(
           "HSID", "vAlUe4", "", "/", time_now, time_now, time_now, time_now,
           /*secure=*/true, /*httponly=*/true, net::CookieSameSite::STRICT_MODE,
-          net::CookiePriority::COOKIE_PRIORITY_HIGH,
-          /*same_party=*/false),
+          net::CookiePriority::COOKIE_PRIORITY_HIGH),
       *CanonicalCookie::CreateUnsafeCookieForTesting(
           "__Secure-1PSID", "vAlUe4", ".google.fr", "/", time_now, time_now,
           expiration_time, time_now, /*secure=*/true, /*httponly=*/true,
           net::CookieSameSite::UNSPECIFIED,
-          net::CookiePriority::COOKIE_PRIORITY_HIGH,
-          /*same_party=*/true)};
+          net::CookiePriority::COOKIE_PRIORITY_HIGH)};
 
   EXPECT_EQ((int)result.cookies().size(), 4);
 
@@ -169,14 +163,6 @@ TEST(OAuthMultiloginResultTest, TryParseCookiesFromValue) {
                            Eq(net::CookiePriority::COOKIE_PRIORITY_HIGH)),
                   Property(&CanonicalCookie::Priority,
                            Eq(net::CookiePriority::COOKIE_PRIORITY_HIGH))));
-
-  // SameParty is not set, so all these cookies should have IsSameParty() set
-  // to false (the default value).
-  EXPECT_THAT(result.cookies(),
-              ElementsAre(Property(&CanonicalCookie::IsSameParty, Eq(false)),
-                          Property(&CanonicalCookie::IsSameParty, Eq(false)),
-                          Property(&CanonicalCookie::IsSameParty, Eq(false)),
-                          Property(&CanonicalCookie::IsSameParty, Eq(true))));
 
   EXPECT_THAT(result.cookies()[0].CreationDate().InSecondsFSinceUnixEpoch(),
               DoubleNear(now, 0.5));
@@ -419,7 +405,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": true,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Secure-3PSID",
@@ -481,7 +466,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": false,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Secure-3PAPISID",
@@ -513,7 +497,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": true,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Secure-3PSID",
@@ -575,7 +558,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": false,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Secure-3PAPISID",
@@ -607,7 +589,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": true,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Secure-3PSID",
@@ -639,7 +620,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": true,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Host-3PLSID",
@@ -701,7 +681,6 @@ TEST(OAuthMultiloginResultTest, ParseRealResponseFromGaia_2021_10) {
       "isHttpOnly": false,
       "maxAge": 63072000,
       "priority": "HIGH",
-      "sameParty": "1"
     },
     {
       "name": "__Secure-3PAPISID",

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_controller.h"
+#import "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_controller+Testing.h"
 
 #import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
@@ -12,12 +13,11 @@
 #import "components/prefs/testing_pref_service.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_edit_item.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller_test.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_bridge.h"
-#import "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_controller+private.h"
 #import "ios/chrome/browser/ui/autofill/cells/cvc_header_item.h"
-#import "ios/chrome/browser/ui/autofill/cells/expiration_date_edit_item+private.h"
+#import "ios/chrome/browser/ui/autofill/cells/expiration_date_edit_item+Testing.h"
 #import "ios/chrome/browser/ui/autofill/cells/expiration_date_edit_item.h"
 #import "ios/chrome/test/scoped_key_window.h"
 #import "testing/gmock/include/gmock/gmock.h"
@@ -50,7 +50,8 @@ class MockCardUnmaskPromptController
               (const std::u16string& cvc,
                const std::u16string& exp_month,
                const std::u16string& exp_year,
-               bool enable_fido_auth),
+               bool enable_fido_auth,
+               bool was_checkbox_visible),
               (override));
 
   MOCK_METHOD(bool, ShouldRequestExpirationDate, (), (const, override));
@@ -86,12 +87,12 @@ class MockCardUnmaskPromptViewBridge
 };
 
 class CardUnmaskPromptViewControllerTest
-    : public ChromeTableViewControllerTest {
+    : public LegacyChromeTableViewControllerTest {
  protected:
   CardUnmaskPromptViewControllerTest() = default;
 
   void SetUp() override {
-    ChromeTableViewControllerTest::SetUp();
+    LegacyChromeTableViewControllerTest::SetUp();
     root_view_controller_ = [[UIViewController alloc] init];
 
     pref_service_ = std::make_unique<TestingPrefServiceSimple>();
@@ -113,10 +114,10 @@ class CardUnmaskPromptViewControllerTest
     // Delete C++ reference in view controller to prevent UAF error.
     [prompt_controller disconnectFromBridge];
 
-    ChromeTableViewControllerTest::TearDown();
+    LegacyChromeTableViewControllerTest::TearDown();
   }
 
-  ChromeTableViewController* InstantiateController() override {
+  LegacyChromeTableViewController* InstantiateController() override {
     return [[CardUnmaskPromptViewController alloc]
         initWithBridge:(card_unmask_prompt_bridge_.get())];
   }
@@ -252,11 +253,11 @@ class CardUnmaskPromptViewControllerTest
 
     // ViewController should notify its Controller when the CVC form is
     // submitted.
-    EXPECT_CALL(
-        *card_unmask_prompt_controller_,
-        OnUnmaskPromptAccepted(Eq(base::SysNSStringToUTF16(CVC)),
-                               Eq(base::SysNSStringToUTF16(month)),
-                               Eq(base::SysNSStringToUTF16(year)), Eq(false)));
+    EXPECT_CALL(*card_unmask_prompt_controller_,
+                OnUnmaskPromptAccepted(Eq(base::SysNSStringToUTF16(CVC)),
+                                       Eq(base::SysNSStringToUTF16(month)),
+                                       Eq(base::SysNSStringToUTF16(year)),
+                                       Eq(false), Eq(false)));
 
     [prompt_controller onVerifyTapped];
   }

@@ -14,6 +14,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/navigation_metrics/navigation_metrics.h"
 #include "components/prefs/pref_service.h"
 #include "components/site_engagement/content/site_engagement_score.h"
@@ -86,33 +87,6 @@ IN_PROC_BROWSER_TEST_F(NavigationMetricsRecorderBrowserTest,
                                blink::mojom::EngagementLevel::NONE, 1);
   histograms.ExpectBucketCount("Navigation.MainFrame.SiteEngagementLevel",
                                blink::mojom::EngagementLevel::HIGH, 1);
-}
-
-IN_PROC_BROWSER_TEST_F(NavigationMetricsRecorderBrowserTest,
-                       FormSubmission_EngagementLevel) {
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const GURL url(embedded_test_server()->GetURL("/form.html"));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-
-  // Submit a form and check the histograms. Before doing so, we set a high site
-  // engagement score so that a single form submission doesn't affect the score
-  // much.
-  site_engagement::SiteEngagementService::Get(browser()->profile())
-      ->ResetBaseScoreForURL(url, kHighEngagementScore);
-  base::HistogramTester histograms;
-  content::TestNavigationObserver observer(web_contents);
-  const char* const kScript = "document.getElementById('form').submit()";
-  EXPECT_TRUE(content::ExecJs(web_contents, kScript));
-  observer.WaitForNavigationFinished();
-
-  histograms.ExpectTotalCount(
-      "Navigation.MainFrameFormSubmission.SiteEngagementLevel", 1);
-  histograms.ExpectBucketCount(
-      "Navigation.MainFrameFormSubmission.SiteEngagementLevel",
-      blink::mojom::EngagementLevel::HIGH, 1);
 }
 
 class NavigationMetricsRecorderPrerenderBrowserTest
@@ -229,15 +203,18 @@ class
     // When features are disabled, IsForceThirdPartyCookieBlockingEnabled will
     // return false, cookies are allowed.
     if (test_case_.is_third_party_cookies_allowed) {
-      force_3pc_blocking_feature_list_.InitAndDisableFeature(
-          net::features::kForceThirdPartyCookieBlocking);
-      storage_partitioning_3pc_feature_list_.InitAndDisableFeature(
-          net::features::kThirdPartyStoragePartitioning);
+      cookies_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{},
+          /*disabled_features=*/{
+              content_settings::features::kTrackingProtection3pcd,
+              net::features::kForceThirdPartyCookieBlocking,
+              net::features::kThirdPartyStoragePartitioning});
     } else {
-      force_3pc_blocking_feature_list_.InitAndEnableFeature(
-          net::features::kForceThirdPartyCookieBlocking);
-      storage_partitioning_3pc_feature_list_.InitAndEnableFeature(
-          net::features::kThirdPartyStoragePartitioning);
+      cookies_feature_list_.InitWithFeatures(
+          /*enabled_features=*/
+          {net::features::kForceThirdPartyCookieBlocking,
+           net::features::kThirdPartyStoragePartitioning},
+          /*disabled_features=*/{});
     }
   }
 
@@ -259,8 +236,7 @@ class
   const ExperimentVersusActualCookieStatusHistogramBrowserTestCase test_case_ =
       GetParam();
   base::test::ScopedFeatureList tpcd_experiment_feature_list_;
-  base::test::ScopedFeatureList force_3pc_blocking_feature_list_;
-  base::test::ScopedFeatureList storage_partitioning_3pc_feature_list_;
+  base::test::ScopedFeatureList cookies_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_P(

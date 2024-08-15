@@ -12,6 +12,8 @@
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/input_element.h"
 #include "ui/aura/window.h"
+#include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 
@@ -84,11 +86,9 @@ std::string GetCurrentSystemVersion() {
 
 void ResetFocusTo(views::View* view) {
   DCHECK(view);
-  auto* focus_manager = view->GetFocusManager();
-  if (!focus_manager) {
-    return;
+  if (auto* focus_manager = view->GetFocusManager()) {
+    focus_manager->SetFocusedView(view);
   }
-  focus_manager->SetFocusedView(view);
 }
 
 // For the keys that are caught by display overlay, check if they are reserved
@@ -109,6 +109,12 @@ bool IsReservedDomCode(ui::DomCode code) {
     default:
       return false;
   }
+}
+
+bool ContainShortcutEventFlags(const ui::KeyEvent* key_event) {
+  return key_event &&
+         (key_event->flags() & (ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+                                ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN));
 }
 
 void UpdateFlagAndProperty(aura::Window* window,

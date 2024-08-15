@@ -48,6 +48,7 @@ rtc_source_set("audio_device_api") {
     "include/audio_device_defines.h",
   ]
   deps = [
+    "../../api:ref_count",
     "../../api:scoped_refptr",
     "../../api/task_queue",
     "../../rtc_base:checks",
@@ -87,6 +88,7 @@ rtc_library("audio_device_buffer") {
     "../../system_wrappers",
     "../../system_wrappers:metrics",
   ]
+  absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
 }
 
 rtc_library("audio_device_generic") {
@@ -208,7 +210,6 @@ if (!build_with_chromium) {
       "../../rtc_base:platform_thread",
       "../../rtc_base:random",
       "../../rtc_base:rtc_event",
-      "../../rtc_base:rtc_task_queue",
       "../../rtc_base:safe_conversions",
       "../../rtc_base:timeutils",
       "../../rtc_base/synchronization:mutex",
@@ -453,6 +454,7 @@ rtc_source_set("mock_audio_device") {
     "../../api:make_ref_counted",
     "../../test:test_support",
   ]
+  absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
 }
 
 if (rtc_include_tests && !build_with_chromium) {
@@ -481,7 +483,6 @@ if (rtc_include_tests && !build_with_chromium) {
       "../../common_audio",
       "../../rtc_base:buffer",
       "../../rtc_base:checks",
-      "../../rtc_base:ignore_wundef",
       "../../rtc_base:logging",
       "../../rtc_base:macromagic",
       "../../rtc_base:race_checker",

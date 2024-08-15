@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "ukey2_ffi.h"
+
 #include <string>
 
-#include <gtest/gtest.h>
-#include "ukey2_ffi.h"
+#include "gtest/gtest.h"
 
 namespace {
 

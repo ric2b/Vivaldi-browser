@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
@@ -23,9 +24,10 @@
 #include "ui/base/page_transition_types.h"
 
 #if BUILDFLAG(IS_MAC)
+#include <optional>
+
 #include "base/apple/scoped_nsautorelease_pool.h"
 #include "base/memory/stack_allocated.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/test/scoped_fake_full_keyboard_access.h"
 #endif
 
@@ -238,6 +240,9 @@ class InProcessBrowserTest : public content::BrowserTestBase {
       const std::string& bug_number_and_reason);
 #endif
 
+  // Returns true if crosapi is enabled for the test.
+  static bool IsCrosapiEnabled();
+
  protected:
   // Closes the given browser and waits for it to release all its resources.
   void CloseBrowserSynchronously(Browser* browser);
@@ -353,6 +358,42 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // Returns the test data path used by the embedded test server.
   base::FilePath GetChromeTestDataDir() const;
 
+  // Returns the HTTPS embedded test server.
+  // By default, the HTTPS test server is configured to have a valid
+  // certificate for the set of hostnames:
+  //   - [*.]example.com
+  //   - [*.]foo.com
+  //   - [*.]bar.com
+  //   - [*.]a.com
+  //   - [*.]b.com
+  //   - [*.]c.com
+  //
+  // After starting the server, you can get a working HTTPS URL for any of
+  // those hostnames. For example:
+  //
+  //   ```
+  //   ASSERT_TRUE(embedded_https_test_server().Start());
+  //   embedded_https_test_server().GetURL("foo.com", "/simple.html");
+  //   ```
+  //
+  // Tests can override the set of valid hostnames by calling
+  // `net::EmbeddedTestServer::SetCertHostnames()` before starting the test
+  // server, and a valid test certificate will be automatically generated for
+  // the hostnames passed in. For example:
+  //
+  //   ```
+  //   embedded_https_test_server().SetCertHostnames(
+  //       {"example.com", "example.org"});
+  //   ASSERT_TRUE(embedded_https_test_server().Start());
+  //   embedded_https_test_server().GetURL("example.org", "/simple.html");
+  //   ```
+  const net::EmbeddedTestServer& embedded_https_test_server() const {
+    return *embedded_https_test_server_;
+  }
+  net::EmbeddedTestServer& embedded_https_test_server() {
+    return *embedded_https_test_server_;
+  }
+
   void set_exit_when_last_browser_closes(bool value) {
     exit_when_last_browser_closes_ = value;
   }
@@ -390,12 +431,6 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   void VerifyNoAshBrowserWindowOpenRightNow();
   void CloseAllAshBrowserWindows();
   void WaitUntilAtLeastOneAshBrowserWindowOpen();
-  // Returns true if CloseAllAshBrowserWindows and
-  // WaitUntilAtLeaseOneAshBrowserWindowOpen is supported.
-  // TODO(crbug.com/1473375): Remove the following function once Ash stable
-  // channel supports the Ash Browser Window APIs in
-  // crosapi::mojom::TestController needed by the above functions.
-  bool IsCloseAndWaitAshBrowserWindowApisSupported() const;
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -409,6 +444,12 @@ class InProcessBrowserTest : public content::BrowserTestBase {
 
   // Quits all open browsers and waits until there are no more browsers.
   void QuitBrowsers();
+
+  // This is called to set up the test factories for each browser context.
+  // It ensures that ProtocolHandlerRegistry instances use
+  // TestProtocolHandlerRegistryDelegate, which prevents browser tests
+  // from changing the OS integration of protocols.
+  void SetupProtocolHandlerTestFactories(content::BrowserContext* context);
 
   static SetUpBrowserFunction* global_browser_set_up_function_;
 
@@ -449,7 +490,7 @@ class InProcessBrowserTest : public content::BrowserTestBase {
 
 #if BUILDFLAG(IS_MAC)
   STACK_ALLOCATED_IGNORE("https://crbug.com/1424190")
-  absl::optional<base::apple::ScopedNSAutoreleasePool> autorelease_pool_;
+  std::optional<base::apple::ScopedNSAutoreleasePool> autorelease_pool_;
   std::unique_ptr<ScopedBundleSwizzlerMac> bundle_swizzler_;
 
   // Enable fake full keyboard access by default, so that tests don't depend on
@@ -468,6 +509,12 @@ class InProcessBrowserTest : public content::BrowserTestBase {
 #endif
 
   std::unique_ptr<MainThreadStackSamplingProfiler> sampling_profiler_;
+
+  // Used to set up test factories for each browser context.
+  base::CallbackListSubscription create_services_subscription_;
+
+  // Embedded HTTPS test server, cheap to create, started on demand.
+  std::unique_ptr<net::EmbeddedTestServer> embedded_https_test_server_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // ChromeOS does not create a browser by default when the full restore feature

@@ -5,8 +5,8 @@
 #ifndef CONTENT_BROWSER_FIRST_PARTY_SETS_TEST_SCOPED_MOCK_FIRST_PARTY_SETS_HANDLER_H_
 #define CONTENT_BROWSER_FIRST_PARTY_SETS_TEST_SCOPED_MOCK_FIRST_PARTY_SETS_HANDLER_H_
 
+#include <optional>
 #include <string>
-#include <utility>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -15,7 +15,6 @@
 #include "net/first_party_sets/first_party_sets_cache_filter.h"
 #include "net/first_party_sets/first_party_sets_context_config.h"
 #include "net/first_party_sets/global_first_party_sets.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class Version;
@@ -42,7 +41,7 @@ class ScopedMockFirstPartySetsHandler
   bool IsEnabled() const override;
   void SetPublicFirstPartySets(const base::Version& version,
                                base::File sets_file) override;
-  absl::optional<net::FirstPartySetEntry> FindEntry(
+  std::optional<net::FirstPartySetEntry> FindEntry(
       const net::SchemefulSite& site,
       const net::FirstPartySetsContextConfig& config) const override;
   void GetContextConfigForPolicy(
@@ -68,8 +67,8 @@ class ScopedMockFirstPartySetsHandler
                              const net::FirstPartySetEntry&)> f) const override;
   // FirstPartySetsHandlerImpl:
   void Init(const base::FilePath& user_data_dir,
-            const LocalSetDeclaration& local_set) override;
-  [[nodiscard]] absl::optional<net::GlobalFirstPartySets> GetSets(
+            const net::LocalSetDeclaration& local_set) override;
+  [[nodiscard]] std::optional<net::GlobalFirstPartySets> GetSets(
       base::OnceCallback<void(net::GlobalFirstPartySets)> callback) override;
 
   // Helper functions for tests to set up context.
@@ -101,4 +100,4 @@ class ScopedMockFirstPartySetsHandler
 
 }  // namespace content
 
-#endif  // CONTENT_BROWSER_FIRST_PARTY_SETS_SCOPED_MOCK_FIRST_PARTY_SETS_HANDLER_H_
+#endif  // CONTENT_BROWSER_FIRST_PARTY_SETS_TEST_SCOPED_MOCK_FIRST_PARTY_SETS_HANDLER_H_

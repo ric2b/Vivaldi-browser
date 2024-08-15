@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void abs_82ff9d() {
+  float2 res = float2(1.0f);
+}
+vertex float4 vertex_main() {
+  abs_82ff9d();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  abs_82ff9d();
+}
+kernel void compute_main() {
+  abs_82ff9d();
+}

@@ -37,6 +37,9 @@ public interface InteractionHandler {
      */
     void onPreviewVoiceClick(PlaybackVoice voice);
 
+    /** Called when the voice menu is dismissed. */
+    void onVoiceMenuClosed();
+
     /**
      * Called when the "highlighting enabled" toggle switch is changed.
      * @param enabled Value of switch.
@@ -48,6 +51,7 @@ public interface InteractionHandler {
 
     /**
      * Called when the user changes the playback speed.
+     *
      * @param newSpeed New speed.
      */
     void onSpeedChange(float newSpeed);
@@ -60,4 +64,10 @@ public interface InteractionHandler {
 
     /** Called when the user taps somewhere on the mini player to expand it. */
     void onMiniPlayerExpandClick();
+
+    /** Called when the mini player should be hidden, for example when a bottom sheet opens. */
+    void onShouldHideMiniPlayer();
+
+    /** Called when the mini player should be restored. */
+    void onShouldRestoreMiniPlayer();
 }

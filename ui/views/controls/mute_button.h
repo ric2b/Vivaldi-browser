@@ -21,11 +21,9 @@ namespace vivaldi {
 ////////////////////////////////////////////////////////////////////////////////
 
 class VIEWS_EXPORT MuteButton : public views::ImageButton {
+  METADATA_HEADER(MuteButton, views::ImageButton)
  public:
   enum class Mode { kMute = 0, kAudible };
-
-  // The button's class name.
-  static const char kViewClassName[];
 
   MuteButton(PressedCallback callback);
   ~MuteButton() override;

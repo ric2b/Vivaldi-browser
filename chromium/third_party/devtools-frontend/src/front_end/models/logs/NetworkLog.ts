@@ -343,7 +343,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     // If a page resulted in an error, the browser will navigate to an internal error page
     // hosted at 'chrome-error://...'. In this case, skip the frame navigated event to preserve
     // the network log.
-    if (mainFrame.url !== mainFrame.unreachableUrl() && mainFrame.url.startsWith('chrome-error://')) {
+    if (mainFrame.url !== mainFrame.unreachableUrl() && Common.ParsedURL.schemeIs(mainFrame.url, 'chrome-error:')) {
       return;
     }
 
@@ -404,7 +404,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
 
     if (preserveLog) {
       for (const request of oldRequestsSet) {
-        this.addRequest(request);
+        this.addRequest(request, true);
         request.preserved = true;
       }
     }
@@ -414,7 +414,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     }
   }
 
-  private addRequest(request: SDK.NetworkRequest.NetworkRequest): void {
+  private addRequest(request: SDK.NetworkRequest.NetworkRequest, preserveLog?: boolean): void {
     this.requestsInternal.push(request);
     this.requestsSet.add(request);
     const requestList = this.requestsMap.get(request.requestId());
@@ -424,7 +424,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
       requestList.push(request);
     }
     this.tryResolvePreflightRequests(request);
-    this.dispatchEventToListeners(Events.RequestAdded, request);
+    this.dispatchEventToListeners(Events.RequestAdded, {request, preserveLog});
   }
 
   private removeRequest(request: SDK.NetworkRequest.NetworkRequest): void {
@@ -434,7 +434,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     }
     this.requestsSet.delete(request);
     this.requestsMap.delete(request.requestId());
-    this.dispatchEventToListeners(Events.RequestRemoved, request);
+    this.dispatchEventToListeners(Events.RequestRemoved, {request});
   }
 
   private tryResolvePreflightRequests(request: SDK.NetworkRequest.NetworkRequest): void {
@@ -460,7 +460,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
         if (data) {
           data.info = null;
         }
-        this.dispatchEventToListeners(Events.RequestUpdated, preflightRequest);
+        this.dispatchEventToListeners(Events.RequestUpdated, {request: preflightRequest});
       }
     }
   }
@@ -513,7 +513,7 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
       return;
     }
 
-    this.dispatchEventToListeners(Events.RequestUpdated, request);
+    this.dispatchEventToListeners(Events.RequestUpdated, {request});
   }
 
   private onRequestRedirect(event: Common.EventTarget.EventTargetEvent<SDK.NetworkRequest.NetworkRequest>): void {
@@ -602,8 +602,6 @@ export class NetworkLog extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
 
 const consoleMessageToRequest = new WeakMap<SDK.ConsoleModel.ConsoleMessage, SDK.NetworkRequest.NetworkRequest>();
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   Reset = 'Reset',
   RequestAdded = 'RequestAdded',
@@ -617,9 +615,9 @@ export interface ResetEvent {
 
 export type EventTypes = {
   [Events.Reset]: ResetEvent,
-  [Events.RequestAdded]: SDK.NetworkRequest.NetworkRequest,
-  [Events.RequestUpdated]: SDK.NetworkRequest.NetworkRequest,
-  [Events.RequestRemoved]: SDK.NetworkRequest.NetworkRequest,
+  [Events.RequestAdded]: {request: SDK.NetworkRequest.NetworkRequest, preserveLog?: boolean},
+  [Events.RequestUpdated]: {request: SDK.NetworkRequest.NetworkRequest},
+  [Events.RequestRemoved]: {request: SDK.NetworkRequest.NetworkRequest},
 };
 
 export interface InitiatorData {

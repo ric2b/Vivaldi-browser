@@ -16,27 +16,143 @@
 
 package com.google.android.gms.nearby.presence.hazmat
 
-import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+
+const val KEY_SEED = "CCDB2489E9FCAC42B39348B8941ED19A1D360E75E098C8C15E6B1CC2B620CD39"
+const val HMAC_TAG = "DFB90A1F9B1FE28D18BBCCA52240B5CC2CCB5F8D5289A3CB64EB3541CA614BB4"
+const val PLAINTEXT = "CD683FE1A1D1F846543D0A13D4AEA40040C8D67B"
+const val SALT_BYTES = "32EE"
+const val EXPECTED_CIPHER_TEXT = "04344411F1E57C841FE0F7150636BC782455059A"
 
 class LdtNpJniTests {
   @Test
-  fun ldtRoundTripTest() {
+  fun roundTripTest() {
     // Data taken from first test case in ldt_np_adv/resources/test/np_adv_test_vectors.json
-    val key_seed = "CCDB2489E9FCAC42B39348B8941ED19A1D360E75E098C8C15E6B1CC2B620CD39".decodeHex()
-    val hmac_tag = "DFB90A1F9B1FE28D18BBCCA52240B5CC2CCB5F8D5289A3CB64EB3541CA614BB4".decodeHex()
-    val plaintext = "CD683FE1A1D1F846543D0A13D4AEA40040C8D67B".decodeHex()
-    val salt_bytes = "32EE".decodeHex()
-    val expected_ciphertext = "04344411F1E57C841FE0F7150636BC782455059A".decodeHex()
-    val salt = LdtNpCipher.saltAsChar(salt_bytes[0], salt_bytes[1])
+    val keySeed = KEY_SEED.decodeHex()
+    val hmacTag = HMAC_TAG.decodeHex()
+    val plaintext = PLAINTEXT.decodeHex()
+    val saltBytes = SALT_BYTES.decodeHex()
+    val expectedCiphertext = EXPECTED_CIPHER_TEXT.decodeHex()
+    val salt = Salt(saltBytes[0], saltBytes[1])
 
     val data = plaintext.copyOf()
-    val LdtCipher = LdtNpCipher.fromKey(key_seed, hmac_tag)
-    LdtCipher.encrypt(salt, data)
-    Assertions.assertArrayEquals(expected_ciphertext, data)
+    val encryptionCipher = LdtEncryptionCipher(keySeed)
+    encryptionCipher.encrypt(salt, data)
+    assertArrayEquals(expectedCiphertext, data)
+    encryptionCipher.close()
 
-    LdtCipher.decrypt_and_verify(salt, data)
-    Assertions.assertArrayEquals(plaintext, data)
+
+    val decryptionCipher = LdtDecryptionCipher(keySeed, hmacTag)
+    val result = decryptionCipher.decryptAndVerify(salt, data)
+    assertEquals(LdtDecryptionCipher.DecryptAndVerifyResultCode.SUCCESS, result)
+    assertArrayEquals(plaintext, data)
+    decryptionCipher.close()
+  }
+
+  @Test
+  fun createEncryptionCipherInvalidLength() {
+    assertThrows<IllegalArgumentException> {
+      val keySeed = ByteArray(31)
+      LdtEncryptionCipher(keySeed)
+    }
+
+    assertThrows<IllegalArgumentException> {
+      val keySeed = ByteArray(33)
+      LdtEncryptionCipher(keySeed)
+    }
+  }
+
+  @Test
+  fun encryptInvalidLengthData() {
+    val keySeed = KEY_SEED.decodeHex()
+    val cipher = LdtEncryptionCipher(keySeed)
+    assertThrows<IllegalArgumentException> {
+      var data = ByteArray(15)
+      cipher.encrypt(Salt(0x0, 0x0), data)
+    }
+    assertThrows<IllegalArgumentException> {
+      var data = ByteArray(32)
+      cipher.encrypt(Salt(0x0, 0x0), data)
+    }
+  }
+
+  @Test
+  fun encryptUseAfterClose() {
+    val keySeed = KEY_SEED.decodeHex()
+    val cipher = LdtEncryptionCipher(keySeed)
+    val data = ByteArray(20)
+    cipher.close()
+    assertThrows<IllegalStateException> { cipher.encrypt(Salt(0x0, 0x0), data) }
+  }
+
+  @Test
+  fun createDecryptionCipherInvalidLengths() {
+    assertThrows<IllegalArgumentException> {
+      val keySeed = ByteArray(31)
+      val hmacTag = ByteArray(31)
+      LdtDecryptionCipher(keySeed, hmacTag)
+    }
+    assertThrows<IllegalArgumentException> {
+      val keySeed = ByteArray(33)
+      val hmacTag = ByteArray(33)
+      LdtDecryptionCipher(keySeed, hmacTag)
+    }
+    assertThrows<IllegalArgumentException> {
+      val keySeed = ByteArray(32)
+      val hmacTag = ByteArray(33)
+      LdtDecryptionCipher(keySeed, hmacTag)
+    }
+    assertThrows<IllegalArgumentException> {
+      val keySeed = ByteArray(33)
+      val hmacTag = ByteArray(32)
+      LdtDecryptionCipher(keySeed, hmacTag)
+    }
+  }
+
+  @Test
+  fun decryptInvalidLengthData() {
+    val keySeed = KEY_SEED.decodeHex()
+    val hmacTag = HMAC_TAG.decodeHex()
+    val cipher = LdtDecryptionCipher(keySeed, hmacTag)
+    assertThrows<IllegalArgumentException> {
+      var data = ByteArray(15)
+      cipher.decryptAndVerify(Salt(0x0, 0x0), data)
+    }
+    assertThrows<IllegalArgumentException> {
+      var data = ByteArray(32)
+      cipher.decryptAndVerify(Salt(0x0, 0x0), data)
+    }
+  }
+
+  @Test
+  fun decryptMacMismatch() {
+    val keySeed = KEY_SEED.decodeHex()
+    val hmacTag = HMAC_TAG.decodeHex()
+
+    // alter first byte in the hmac tag
+    hmacTag[0] = 0x00
+    val cipher = LdtDecryptionCipher(keySeed, hmacTag)
+
+    val cipherText = EXPECTED_CIPHER_TEXT.decodeHex()
+    val saltBytes = SALT_BYTES.decodeHex()
+    val salt = Salt(saltBytes[0], saltBytes[1])
+
+    val result = cipher.decryptAndVerify(salt, cipherText);
+    assertEquals(LdtDecryptionCipher.DecryptAndVerifyResultCode.MAC_MISMATCH, result)
+  }
+
+  @Test
+  fun decryptUseAfterClose() {
+    val keySeed = KEY_SEED.decodeHex()
+    val hmacTag = HMAC_TAG.decodeHex()
+    val cipher = LdtDecryptionCipher(keySeed, hmacTag)
+    cipher.close()
+
+    val data = ByteArray(20)
+    assertThrows<IllegalStateException> { cipher.decryptAndVerify(Salt(0x0, 0x0), data) }
   }
 }
 

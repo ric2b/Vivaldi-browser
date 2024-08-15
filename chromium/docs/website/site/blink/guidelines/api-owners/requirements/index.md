@@ -28,7 +28,7 @@ title: Blink API owner requirements
                 things like interop, compat were tackled\]
 *   Demonstrated knowledge and ability to review Web Platform features.
             \[Evidence example: Input/guidance on 10+ blink intent threads over
-            the past 6 months\]
+            the past 12 months\]
 
 ### Optional, but desirable qualifications
 

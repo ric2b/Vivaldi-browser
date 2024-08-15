@@ -40,8 +40,8 @@ const uint32_t kDefaultLength = 1000;
 // Stream ID for data sent in CreatePacket().
 const QuicStreamId kStreamId = 7;
 
-// The compiler won't allow absl::nullopt as an argument.
-const absl::optional<QuicEcnCounts> kEmptyCounts = absl::nullopt;
+// The compiler won't allow std::nullopt as an argument.
+const std::optional<QuicEcnCounts> kEmptyCounts = std::nullopt;
 
 // Matcher to check that the packet number matches the second argument.
 MATCHER(PacketNumberEq, "") {
@@ -3195,10 +3195,10 @@ TEST_F(QuicSentPacketManagerTest, GetAvailableCongestionWindow) {
 }
 
 TEST_F(QuicSentPacketManagerTest, EcnCountsAreStored) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
-  absl::optional<QuicEcnCounts> ecn_counts1, ecn_counts2, ecn_counts3;
+  std::optional<QuicEcnCounts> ecn_counts1, ecn_counts2, ecn_counts3;
   ecn_counts1 = {1, 0, 3};
   ecn_counts2 = {0, 3, 1};
   ecn_counts3 = {0, 2, 0};
@@ -3231,7 +3231,7 @@ TEST_F(QuicSentPacketManagerTest, EcnCountsAreStored) {
 }
 
 TEST_F(QuicSentPacketManagerTest, EcnCountsReceived) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   // Basic ECN reporting test. The reported counts are equal to the total sent,
@@ -3249,7 +3249,7 @@ TEST_F(QuicSentPacketManagerTest, EcnCountsReceived) {
                                 IsEmpty(), 2, 1))
       .Times(1);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange()).Times(1);
-  absl::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
+  std::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
   ecn_counts->ect1 = QuicPacketCount(2);
   ecn_counts->ce = QuicPacketCount(1);
   EXPECT_EQ(PACKETS_NEWLY_ACKED,
@@ -3258,7 +3258,7 @@ TEST_F(QuicSentPacketManagerTest, EcnCountsReceived) {
 }
 
 TEST_F(QuicSentPacketManagerTest, PeerDecrementsEcnCounts) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   for (uint64_t i = 1; i <= 5; ++i) {
@@ -3274,7 +3274,7 @@ TEST_F(QuicSentPacketManagerTest, PeerDecrementsEcnCounts) {
                                 IsEmpty(), 2, 1))
       .Times(1);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange()).Times(1);
-  absl::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
+  std::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
   ecn_counts->ect1 = QuicPacketCount(2);
   ecn_counts->ce = QuicPacketCount(1);
   EXPECT_EQ(PACKETS_NEWLY_ACKED,
@@ -3300,7 +3300,7 @@ TEST_F(QuicSentPacketManagerTest, PeerDecrementsEcnCounts) {
 }
 
 TEST_F(QuicSentPacketManagerTest, TooManyEcnCountsReported) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   for (uint64_t i = 1; i <= 3; ++i) {
@@ -3311,7 +3311,7 @@ TEST_F(QuicSentPacketManagerTest, TooManyEcnCountsReported) {
   manager_.OnAckFrameStart(QuicPacketNumber(3), QuicTime::Delta::Infinite(),
                            clock_.Now());
   manager_.OnAckRange(QuicPacketNumber(2), QuicPacketNumber(4));
-  absl::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
+  std::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
   // Report 4 counts, but only 3 packets were sent.
   ecn_counts->ect1 = QuicPacketCount(3);
   ecn_counts->ce = QuicPacketCount(1);
@@ -3328,7 +3328,7 @@ TEST_F(QuicSentPacketManagerTest, TooManyEcnCountsReported) {
 }
 
 TEST_F(QuicSentPacketManagerTest, PeerReportsWrongCodepoint) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   for (uint64_t i = 1; i <= 3; ++i) {
@@ -3339,7 +3339,7 @@ TEST_F(QuicSentPacketManagerTest, PeerReportsWrongCodepoint) {
   manager_.OnAckFrameStart(QuicPacketNumber(3), QuicTime::Delta::Infinite(),
                            clock_.Now());
   manager_.OnAckRange(QuicPacketNumber(2), QuicPacketNumber(4));
-  absl::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
+  std::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
   // Report the wrong codepoint.
   ecn_counts->ect0 = QuicPacketCount(2);
   ecn_counts->ce = QuicPacketCount(1);
@@ -3356,7 +3356,7 @@ TEST_F(QuicSentPacketManagerTest, PeerReportsWrongCodepoint) {
 }
 
 TEST_F(QuicSentPacketManagerTest, TooFewEcnCountsReported) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   for (uint64_t i = 1; i <= 3; ++i) {
@@ -3373,7 +3373,7 @@ TEST_F(QuicSentPacketManagerTest, TooFewEcnCountsReported) {
                                 IsEmpty(), 0, 0))
       .Times(1);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange()).Times(1);
-  absl::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
+  std::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
   // 2 ECN packets were newly acked, but only one count was reported.
   ecn_counts->ect1 = QuicPacketCount(1);
   ecn_counts->ce = QuicPacketCount(0);
@@ -3384,7 +3384,7 @@ TEST_F(QuicSentPacketManagerTest, TooFewEcnCountsReported) {
 
 TEST_F(QuicSentPacketManagerTest,
        EcnCountsNotValidatedIfLargestAckedUnchanged) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   for (uint64_t i = 1; i <= 3; ++i) {
@@ -3400,7 +3400,7 @@ TEST_F(QuicSentPacketManagerTest,
                                 IsEmpty(), 2, 1))
       .Times(1);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange()).Times(1);
-  absl::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
+  std::optional<QuicEcnCounts> ecn_counts = QuicEcnCounts();
   ecn_counts->ect1 = QuicPacketCount(2);
   ecn_counts->ce = QuicPacketCount(1);
   EXPECT_EQ(PACKETS_NEWLY_ACKED,
@@ -3427,7 +3427,7 @@ TEST_F(QuicSentPacketManagerTest,
 }
 
 TEST_F(QuicSentPacketManagerTest, EcnAckedButNoMarksReported) {
-  if (!GetQuicReloadableFlag(quic_send_ect1)) {
+  if (!GetQuicRestartFlag(quic_support_ect1)) {
     return;
   }
   for (uint64_t i = 1; i <= 3; ++i) {
@@ -3444,7 +3444,7 @@ TEST_F(QuicSentPacketManagerTest, EcnAckedButNoMarksReported) {
                                 IsEmpty(), 0, 0))
       .Times(1);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange()).Times(1);
-  absl::optional<QuicEcnCounts> ecn_counts = absl::nullopt;
+  std::optional<QuicEcnCounts> ecn_counts = std::nullopt;
   EXPECT_EQ(PACKETS_NEWLY_ACKED,
             manager_.OnAckFrameEnd(clock_.Now(), QuicPacketNumber(1),
                                    ENCRYPTION_FORWARD_SECURE, ecn_counts));

@@ -114,8 +114,8 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
   using QuietUiReason = permissions::PermissionUiSelector::QuietUiReason;
   using WarningReason = permissions::PermissionUiSelector::WarningReason;
 
-  void SetCannedUiDecision(absl::optional<QuietUiReason> quiet_ui_reason,
-                           absl::optional<WarningReason> warning_reason) {
+  void SetCannedUiDecision(std::optional<QuietUiReason> quiet_ui_reason,
+                           std::optional<WarningReason> warning_reason) {
     GetTestApi().manager()->set_permission_ui_selector_for_testing(
         std::make_unique<TestQuietNotificationPermissionUiSelector>(
             permissions::PermissionUiSelector::Decision(quiet_ui_reason,
@@ -141,7 +141,7 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
   ChipController* GetChipController() {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForBrowser(browser());
-    return browser_view->toolbar()->location_bar()->chip_controller();
+    return browser_view->toolbar()->location_bar()->GetChipController();
   }
 
   ContentSettingImageView& GetContentSettingImageView(
@@ -150,7 +150,7 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
         BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
     return **base::ranges::find(
         location_bar_view->GetContentSettingViewsForTest(), image_type,
-        &ContentSettingImageView::GetTypeForTesting);
+        &ContentSettingImageView::GetType);
   }
 
   test::PermissionRequestManagerTestApi& GetTestApi() { return *test_api_; }
@@ -205,7 +205,7 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
     // always matches with the output of the test.
     if (it->type == ContentSettingsType::STORAGE_ACCESS) {
       test_api_->manager()->set_embedding_origin_for_testing(
-          GURL("https://test.com"));
+          GURL("https://www.origin.test.com"));
     }
 
     switch (it->type) {
@@ -255,8 +255,14 @@ class PermissionPromptBubbleBaseViewBrowserTest : public DialogBrowserTest {
   std::unique_ptr<test::PermissionRequestManagerTestApi> test_api_;
 };
 
+// Flaky on Mac: http://crbug.com/1502621
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_AlertAccessibleEvent DISABLED_AlertAccessibleEvent
+#else
+#define MAYBE_AlertAccessibleEvent AlertAccessibleEvent
+#endif
 IN_PROC_BROWSER_TEST_F(PermissionPromptBubbleBaseViewBrowserTest,
-                       AlertAccessibleEvent) {
+                       MAYBE_AlertAccessibleEvent) {
   views::test::AXEventCounter counter(views::AXEventManager::Get());
   EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kAlert));
   ShowUi("geolocation");
@@ -584,7 +590,7 @@ IN_PROC_BROWSER_TEST_F(PermissionPromptBubbleBaseViewBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(PermissionPromptBubbleBaseViewBrowserTest,
                        LoudChipOrAnchoredBubbleIsShownForNonAbusiveRequests) {
-  SetCannedUiDecision(absl::nullopt, absl::nullopt);
+  SetCannedUiDecision(std::nullopt, std::nullopt);
 
   ShowUi("geolocation");
 
@@ -609,7 +615,7 @@ IN_PROC_BROWSER_TEST_F(PermissionPromptBubbleBaseViewBrowserTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     ShowUi("geolocation");
 

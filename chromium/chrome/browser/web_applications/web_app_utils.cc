@@ -6,6 +6,7 @@
 
 #include <iterator>
 #include <map>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <utility>
@@ -18,11 +19,10 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/functional/identity.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -39,6 +39,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/grit/components_resources.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/run_on_os_login_types.h"
@@ -51,7 +52,6 @@
 #include "content/public/common/alternative_error_page_override_info.mojom.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
@@ -146,8 +146,9 @@ class AppIconFetcherTask : public content::WebContentsObserver {
     // Loading will have started already when the error page is being
     // constructed, so if we receive this event, it means that a new navigation
     // is taking place (so we can drop any remaining work).
-    if (navigation_handle->IsInPrimaryMainFrame())
+    if (navigation_handle->IsInPrimaryMainFrame()) {
       delete this;
+    }
   }
 
   void DocumentOnLoadCompletedInPrimaryMainFrame() override {
@@ -229,24 +230,26 @@ DisplayMode ResolveAppDisplayModeForStandaloneLaunchContainer(
   }
 }
 
-absl::optional<DisplayMode> TryResolveUserDisplayMode(
+std::optional<DisplayMode> TryResolveUserDisplayMode(
     mojom::UserDisplayMode user_display_mode) {
   switch (user_display_mode) {
     case mojom::UserDisplayMode::kBrowser:
       return DisplayMode::kBrowser;
     case mojom::UserDisplayMode::kTabbed:
-      if (base::FeatureList::IsEnabled(features::kDesktopPWAsTabStripSettings))
+      if (base::FeatureList::IsEnabled(
+              features::kDesktopPWAsTabStripSettings)) {
         return DisplayMode::kTabbed;
+      }
       // Treat as standalone.
       [[fallthrough]];
     case mojom::UserDisplayMode::kStandalone:
       break;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
-absl::optional<DisplayMode> TryResolveOverridesDisplayMode(
+std::optional<DisplayMode> TryResolveOverridesDisplayMode(
     const std::vector<DisplayMode>& display_mode_overrides) {
   for (DisplayMode override_display_mode : display_mode_overrides) {
     DisplayMode resolved_display_mode =
@@ -257,25 +260,46 @@ absl::optional<DisplayMode> TryResolveOverridesDisplayMode(
     }
   }
 
-  return absl::nullopt;
+  return std::nullopt;
+}
+
+bool ShouldResolveShortstandDisplayMode(bool ignore_shortstand) {
+#if BUILDFLAG(IS_CHROMEOS)
+  return !ignore_shortstand && chromeos::features::IsCrosShortstandEnabled();
+#else
+  return false;
+#endif
+}
+
+std::optional<DisplayMode> TryResolveShortstandUserDisplayMode(
+    bool is_shortcut_app) {
+  if (is_shortcut_app) {
+    return DisplayMode::kBrowser;
+  } else {
+    return std::nullopt;
+  }
 }
 
 DisplayMode ResolveNonIsolatedEffectiveDisplayMode(
     DisplayMode app_display_mode,
     const std::vector<DisplayMode>& display_mode_overrides,
-    mojom::UserDisplayMode user_display_mode) {
+    mojom::UserDisplayMode user_display_mode,
+    bool is_shortcut_app,
+    bool ignore_shortstand) {
   const absl::optional<DisplayMode> resolved_display_mode =
-      TryResolveUserDisplayMode(user_display_mode);
+      ShouldResolveShortstandDisplayMode(ignore_shortstand)
+          ? TryResolveShortstandUserDisplayMode(is_shortcut_app)
+          : TryResolveUserDisplayMode(user_display_mode);
+
   if (resolved_display_mode.has_value()) {
     return *resolved_display_mode;
   }
 
-  const absl::optional<DisplayMode> resolved_override_display_mode =
+  const std::optional<DisplayMode> resolved_override_display_mode =
       TryResolveOverridesDisplayMode(display_mode_overrides);
   if (resolved_override_display_mode.has_value()) {
     return *resolved_override_display_mode;
   }
-
   return ResolveAppDisplayModeForStandaloneLaunchContainer(app_display_mode);
 }
 
@@ -288,8 +312,9 @@ constexpr base::FilePath::CharType kTempDirectoryName[] =
     FILE_PATH_LITERAL("Temp");
 
 bool AreWebAppsEnabled(Profile* profile) {
-  if (!profile || profile->IsSystemProfile())
+  if (!profile || profile->IsSystemProfile()) {
     return false;
+  }
 
   const Profile* original_profile = profile->GetOriginalProfile();
   DCHECK(!original_profile->IsOffTheRecord());
@@ -314,11 +339,6 @@ bool AreWebAppsEnabled(Profile* profile) {
     if (user_manager && user_manager->IsLoggedInAsKioskApp()) {
       return false;
     }
-    // Don't enable for Web Kiosk if kKioskEnableAppService is disabled.
-    if (user_manager && user_manager->IsLoggedInAsWebKioskApp() &&
-        !base::FeatureList::IsEnabled(features::kKioskEnableAppService)) {
-      return false;
-    }
   }
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   // Disable web apps in the profile unless one of the following is true:
@@ -335,10 +355,12 @@ bool AreWebAppsEnabled(Profile* profile) {
 bool AreWebAppsUserInstallable(Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // With Lacros, web apps are not installed using the Ash browser.
-  if (IsWebAppsCrosapiEnabled())
+  if (IsWebAppsCrosapiEnabled()) {
     return false;
-  if (ash::ProfileHelper::IsLockScreenAppProfile(profile))
+  }
+  if (ash::ProfileHelper::IsLockScreenAppProfile(profile)) {
     return false;
+  }
 #endif
   return AreWebAppsEnabled(profile) && !profile->IsGuestSession() &&
          !profile->IsOffTheRecord();
@@ -352,8 +374,9 @@ content::BrowserContext* GetBrowserContextForWebApps(
     return nullptr;
   }
   Profile* original_profile = profile->GetOriginalProfile();
-  if (!AreWebAppsEnabled(original_profile))
+  if (!AreWebAppsEnabled(original_profile)) {
     return nullptr;
+  }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Use OTR profile for Guest Session.
@@ -368,12 +391,15 @@ content::BrowserContext* GetBrowserContextForWebApps(
 content::BrowserContext* GetBrowserContextForWebAppMetrics(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
-  if (!profile)
+  if (!profile) {
     return nullptr;
-  if (!site_engagement::SiteEngagementService::IsEnabled())
+  }
+  if (!site_engagement::SiteEngagementService::IsEnabled()) {
     return nullptr;
-  if (profile->GetOriginalProfile()->IsGuestSession())
+  }
+  if (profile->GetOriginalProfile()->IsGuestSession()) {
     return nullptr;
+  }
   return GetBrowserContextForWebApps(context);
 }
 
@@ -445,8 +471,9 @@ bool AreAppsLocallyInstalledBySync() {
 
 bool AreNewFileHandlersASubsetOfOld(const apps::FileHandlers& old_handlers,
                                     const apps::FileHandlers& new_handlers) {
-  if (new_handlers.empty())
+  if (new_handlers.empty()) {
     return true;
+  }
 
   const std::set<std::string> mime_types_set =
       apps::GetMimeTypesFromFileHandlers(old_handlers);
@@ -460,8 +487,9 @@ bool AreNewFileHandlersASubsetOfOld(const apps::FileHandlers& old_handlers,
       }
 
       for (const auto& new_extension : new_handler_accept.file_extensions) {
-        if (!base::Contains(extensions_set, new_extension))
+        if (!base::Contains(extensions_set, new_extension)) {
           return false;
+        }
       }
     }
   }
@@ -473,8 +501,9 @@ std::tuple<std::u16string, size_t>
 GetFileTypeAssociationsHandledByWebAppForDisplay(Profile* profile,
                                                  const webapps::AppId& app_id) {
   auto* provider = WebAppProvider::GetForLocalAppsUnchecked(profile);
-  if (!provider)
+  if (!provider) {
     return {};
+  }
 
   const apps::FileHandlers* file_handlers =
       provider->registrar_unsafe().GetAppFileHandlers(app_id);
@@ -519,8 +548,7 @@ bool IsWebAppsCrosapiEnabled() {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   auto* lacros_service = chromeos::LacrosService::Get();
-  return chromeos::BrowserParamsProxy::Get()->WebAppsEnabled() &&
-         lacros_service &&
+  return lacros_service &&
          lacros_service->IsAvailable<crosapi::mojom::AppPublisher>();
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
@@ -554,14 +582,16 @@ webapps::AppId GetAppIdFromAppSettingsUrl(const GURL& url) {
   // App Settings page is served under chrome://app-settings/<app-id>.
   // url.path() returns "/<app-id>" with a leading slash.
   std::string path = url.path();
-  if (path.size() <= 1)
+  if (path.size() <= 1) {
     return webapps::AppId();
+  }
   return path.substr(1);
 }
 
 bool IsInScope(const GURL& url, const GURL& scope) {
-  if (!scope.is_valid())
+  if (!scope.is_valid()) {
     return false;
+  }
 
   return base::StartsWith(url.spec(), scope.spec(),
                           base::CompareCase::SENSITIVE);
@@ -571,10 +601,13 @@ DisplayMode ResolveEffectiveDisplayMode(
     DisplayMode app_display_mode,
     const std::vector<DisplayMode>& app_display_mode_overrides,
     mojom::UserDisplayMode user_display_mode,
-    bool is_isolated) {
+    bool is_isolated,
+    bool is_shortcut_app,
+    bool ignore_shortstand) {
   const DisplayMode resolved_display_mode =
       ResolveNonIsolatedEffectiveDisplayMode(
-          app_display_mode, app_display_mode_overrides, user_display_mode);
+          app_display_mode, app_display_mode_overrides, user_display_mode,
+          is_shortcut_app, ignore_shortstand);
   if (is_isolated && resolved_display_mode == DisplayMode::kBrowser) {
     return DisplayMode::kStandalone;
   }
@@ -634,7 +667,7 @@ content::mojom::AlternativeErrorPageOverrideInfoPtr ConstructWebAppErrorPage(
   }
 
   WebAppRegistrar& web_app_registrar = web_app_provider->registrar_unsafe();
-  const absl::optional<webapps::AppId> app_id =
+  const std::optional<webapps::AppId> app_id =
       web_app_registrar.FindAppWithUrlInScope(url);
   if (!app_id.has_value()) {
     return nullptr;

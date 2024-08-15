@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.tab.state;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
@@ -21,9 +20,7 @@ import com.google.protobuf.ByteString;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.chrome.browser.endpoint_fetcher.EndpointFetcher;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge.OptimizationGuideCallback;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -56,7 +53,8 @@ public abstract class ShoppingPersistedTabDataTestUtils {
         MockPriceTrackingResponse.BUYABLE_PRODUCT_AND_PRODUCT_UPDATE,
         MockPriceTrackingResponse.PRODUCT_PRICE_UPDATE,
         MockPriceTrackingResponse.BUYABLE_PRODUCT_EMPTY,
-        MockPriceTrackingResponse.NONE
+        MockPriceTrackingResponse.NONE,
+        MockPriceTrackingResponse.BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO,
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface MockPriceTrackingResponse {
@@ -67,9 +65,12 @@ public abstract class ShoppingPersistedTabDataTestUtils {
         int BUYABLE_PRODUCT_EMPTY = 4;
         int NONE = 5;
         int UNPARSEABLE = 6;
+        int BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO = 7;
     }
 
     static final GURL DEFAULT_GURL = new GURL("https://www.google.com");
+    static final GURL GURL_FOO = new GURL("https://www.foo.com");
+    static final GURL GURL_BAR = new GURL("https://www.bar.com");
     static final long PRICE_MICROS = 123456789012345L;
     static final long UPDATED_PRICE_MICROS = 287000000L;
     static final long HIGH_PRICE_MICROS = 141000000L;
@@ -82,21 +83,40 @@ public abstract class ShoppingPersistedTabDataTestUtils {
     static final int TAB_ID = 1;
     static final boolean IS_INCOGNITO = false;
     static final String FAKE_OFFER_ID = "100";
+    static final String FAKE_PRODUCT_TITLE = "Product Title";
+    static final String FAKE_PRODUCT_TITLE_TWO = "Product Title Two";
+    static final String FAKE_PRODUCT_IMAGE_URL = "https://www.google.com/image";
+    static final String FAKE_PRODUCT_IMAGE_URL_TWO = "https://www.google.com/image_2";
 
     static final BuyableProduct BUYABLE_PRODUCT_PROTO_INITIAL =
             BuyableProduct.newBuilder()
                     .setCurrentPrice(createProductPrice(PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
+                    .setTitle(FAKE_PRODUCT_TITLE)
+                    .setImageUrl(FAKE_PRODUCT_IMAGE_URL)
+                    .build();
+    static final BuyableProduct BUYABLE_PRODUCT_PROTO_TWO =
+            BuyableProduct.newBuilder()
+                    .setCurrentPrice(createProductPrice(PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
+                    .setTitle(FAKE_PRODUCT_TITLE_TWO)
+                    .setImageUrl(FAKE_PRODUCT_IMAGE_URL_TWO)
                     .build();
     static final BuyableProduct BUYABLE_PRODUCT_PROTO_PRICE_UPDATED =
             BuyableProduct.newBuilder()
                     .setCurrentPrice(
                             createProductPrice(UPDATED_PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
+                    .setTitle(FAKE_PRODUCT_TITLE)
+                    .setImageUrl(FAKE_PRODUCT_IMAGE_URL)
                     .build();
     static final ProductPriceUpdate PRODUCT_UPDATE_PROTO =
             ProductPriceUpdate.newBuilder()
                     .setOldPrice(createProductPrice(PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
                     .setNewPrice(
                             createProductPrice(UPDATED_PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
+                    .build();
+    static final ProductPriceUpdate PRODUCT_UPDATE_PROTO_TWO =
+            ProductPriceUpdate.newBuilder()
+                    .setOldPrice(createProductPrice(HIGH_PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
+                    .setNewPrice(createProductPrice(LOW_PRICE_MICROS, UNITED_STATES_CURRENCY_CODE))
                     .build();
 
     static final PriceTrackingData PRICE_TRACKING_BUYABLE_PRODUCT_INITIAL =
@@ -129,6 +149,18 @@ public abstract class ShoppingPersistedTabDataTestUtils {
                     .setValue(
                             ByteString.copyFrom(
                                     PRICE_TRACKING_BUYABLE_PRODUCT_AND_PRODUCT_UPDATE
+                                            .toByteArray()))
+                    .build();
+    static final PriceTrackingData PRICE_TRACKING_BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO =
+            PriceTrackingData.newBuilder()
+                    .setBuyableProduct(BUYABLE_PRODUCT_PROTO_TWO)
+                    .setProductUpdate(PRODUCT_UPDATE_PROTO_TWO)
+                    .build();
+    static final Any ANY_PRICE_TRACKING_BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO =
+            Any.newBuilder()
+                    .setValue(
+                            ByteString.copyFrom(
+                                    PRICE_TRACKING_BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO
                                             .toByteArray()))
                     .build();
 
@@ -322,6 +354,65 @@ public abstract class ShoppingPersistedTabDataTestUtils {
                         anyLong(), any(GURL.class), anyInt(), any(OptimizationGuideCallback.class));
     }
 
+    static void mockOptimizationGuideResponseForURL(
+            GURL url,
+            OptimizationGuideBridge.Natives optimizationGuideJni,
+            int optimizationType,
+            @MockPriceTrackingResponse int expectedResponse) {
+        doAnswer(
+                        new Answer<Void>() {
+                            @Override
+                            public Void answer(InvocationOnMock invocation) {
+                                OptimizationGuideCallback callback =
+                                        (OptimizationGuideCallback) invocation.getArguments()[3];
+                                switch (expectedResponse) {
+                                    case MockPriceTrackingResponse.BUYABLE_PRODUCT_INITIAL:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.TRUE,
+                                                ANY_BUYABLE_PRODUCT_INITIAL);
+                                        break;
+                                    case MockPriceTrackingResponse.BUYABLE_PRODUCT_PRICE_UPDATED:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.TRUE,
+                                                ANY_BUYABLE_PRODUCT_UPDATE);
+                                        break;
+                                    case MockPriceTrackingResponse
+                                            .BUYABLE_PRODUCT_AND_PRODUCT_UPDATE:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.TRUE,
+                                                ANY_PRICE_TRACKING_BUYABLE_PRODUCT_AND_PRODUCT_UPDATE);
+                                        break;
+                                    case MockPriceTrackingResponse
+                                            .BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.TRUE,
+                                                ANY_PRICE_TRACKING_BUYABLE_PRODUCT_AND_PRODUCT_UPDATE_TWO);
+                                        break;
+                                    case MockPriceTrackingResponse.PRODUCT_PRICE_UPDATE:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.TRUE,
+                                                ANY_PRICE_TRACKING_PRODUCT_UPDATE);
+                                        break;
+                                    case MockPriceTrackingResponse.BUYABLE_PRODUCT_EMPTY:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.TRUE,
+                                                ANY_PRICE_TRACKING_EMPTY);
+                                        break;
+                                    case MockPriceTrackingResponse.NONE:
+                                        callback.onOptimizationGuideDecision(
+                                                OptimizationGuideDecision.FALSE, ANY_EMPTY);
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                return null;
+                            }
+                        })
+                .when(optimizationGuideJni)
+                .canApplyOptimization(
+                        anyLong(), eq(url), anyInt(), any(OptimizationGuideCallback.class));
+    }
+
     static void mockOptimizationGuideResponseAsync(
             OptimizationGuideBridge.Natives optimizationGuideJni,
             int optimizationType,
@@ -376,20 +467,6 @@ public abstract class ShoppingPersistedTabDataTestUtils {
                 .when(optimizationGuideJni)
                 .canApplyOptimization(
                         anyLong(), any(GURL.class), anyInt(), any(OptimizationGuideCallback.class));
-    }
-
-    static void verifyEndpointFetcherCalled(EndpointFetcher.Natives endpointFetcher, int numTimes) {
-        verify(endpointFetcher, times(numTimes))
-                .nativeFetchChromeAPIKey(
-                        any(Profile.class),
-                        anyString(),
-                        anyString(),
-                        anyString(),
-                        anyString(),
-                        anyLong(),
-                        any(String[].class),
-                        anyInt(),
-                        any(Callback.class));
     }
 
     static void verifyPriceTrackingOptimizationTypeCalled(

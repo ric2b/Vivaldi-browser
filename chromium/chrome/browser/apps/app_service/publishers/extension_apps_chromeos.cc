@@ -75,6 +75,7 @@
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "components/policy/core/common/policy_pref_names.h"
+#include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
@@ -169,6 +170,7 @@ ash::ShelfLaunchSource ConvertLaunchSource(apps::LaunchSource launch_source) {
     case apps::LaunchSource::kFromReparenting:
     case apps::LaunchSource::kFromProfileMenu:
     case apps::LaunchSource::kFromSysTrayCalendar:
+    case apps::LaunchSource::kFromInstaller:
       return ash::LAUNCH_FROM_UNKNOWN;
   }
 }
@@ -241,8 +243,11 @@ void ExtensionAppsChromeOs::Initialize() {
                                 ->GetMediaStreamCaptureIndicator()
                                 .get());
 
-  notification_display_service_.Observe(
-      NotificationDisplayServiceFactory::GetForProfile(profile()));
+  // NotificationDisplayService could be null in some tests.
+  if (auto* notification_display_service =
+          NotificationDisplayServiceFactory::GetForProfile(profile())) {
+    notification_display_service_.Observe(notification_display_service);
+  }
 
   profile_pref_change_registrar_.Init(profile()->GetPrefs());
   profile_pref_change_registrar_.Add(
@@ -312,7 +317,7 @@ void ExtensionAppsChromeOs::LaunchAppWithArgumentsCallback(
     bool should_open) {
   // Exit early, while notifying, in case `Don't open` was chosen.
   if (!should_open) {
-    std::move(callback).Run(LaunchResult(State::FAILED));
+    std::move(callback).Run(LaunchResult(State::kFailed));
     return;
   }
 
@@ -331,7 +336,7 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(const std::string& app_id,
   // `extension` is required.
   const auto* extension = MaybeGetExtension(app_id);
   if (!extension) {
-    std::move(callback).Run(LaunchResult(State::FAILED));
+    std::move(callback).Run(LaunchResult(State::kFailed));
     return;
   }
 
@@ -343,7 +348,7 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(const std::string& app_id,
     // This vector cannot be empty because this is reached after explicitly
     // opening one or more files.
     if (base_names.empty()) {
-      std::move(callback).Run(LaunchResult(State::FAILED));
+      std::move(callback).Run(LaunchResult(State::kFailed));
       return;
     }
 
@@ -463,7 +468,7 @@ void ExtensionAppsChromeOs::LaunchExtension(const std::string& app_id,
              std::string error) {
             bool success =
                 result !=
-                extensions::api::file_manager_private::TASK_RESULT_FAILED;
+                extensions::api::file_manager_private::TaskResult::kFailed;
             std::move(callback).Run(ConvertBoolToLaunchResult(success));
           },
           std::move(callback)));
@@ -778,8 +783,9 @@ bool ExtensionAppsChromeOs::IsBlocklisted(const std::string& app_id) {
   // In the App Service world, there should be a unique app publisher for any
   // given app. In this case, the ArcApps publisher publishes the Play Store
   // app, and the ExtensionApps publisher does not.
-  if (app_id == arc::kPlayStoreAppId)
+  if (app_id == arc::kPlayStoreAppId) {
     return true;
+  }
 
   // If lacros chrome apps is enabled, a small list of extension apps or
   // extensions on ash extension keeplist is allowed to run in both ash and
@@ -955,8 +961,7 @@ AppPtr ExtensionAppsChromeOs::CreateApp(const extensions::Extension* extension,
   auto app = CreateAppImpl(
       extension, is_app_disabled ? Readiness::kDisabledByPolicy : readiness);
   bool paused = paused_apps_.IsPaused(extension->id());
-  app->icon_key = std::move(
-      *icon_key_factory().CreateIconKey(GetIconEffects(extension, paused)));
+  app->icon_key = IconKey(GetIconEffects(extension, paused));
 
   if (is_app_disabled && is_disabled_apps_mode_hidden_) {
     app->show_in_launcher = false;
@@ -984,7 +989,7 @@ void ExtensionAppsChromeOs::OnSizeCalculated(const std::string& app_id,
   app->app_size_in_bytes = size;
   apps.push_back(std::move(app));
   AppPublisher::Publish(std::move(apps), app_type(),
-                        /*should_notify_initialized=*/true);
+                        /*should_notify_initialized=*/false);
 }
 
 IconEffects ExtensionAppsChromeOs::GetIconEffects(
@@ -1028,8 +1033,8 @@ void ExtensionAppsChromeOs::SetIconEffect(const std::string& app_id) {
   }
 
   auto app = std::make_unique<App>(app_type(), app_id);
-  app->icon_key = std::move(*icon_key_factory().CreateIconKey(
-      GetIconEffects(extension, paused_apps_.IsPaused(app_id))));
+  app->icon_key =
+      IconKey(GetIconEffects(extension, paused_apps_.IsPaused(app_id)));
   AppPublisher::Publish(std::move(app));
 }
 

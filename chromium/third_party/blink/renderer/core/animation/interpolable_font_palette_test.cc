@@ -3,28 +3,32 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/animation/interpolable_font_palette.h"
+
 #include <memory>
+
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/values_equivalent.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/fonts/font_palette.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 
 namespace blink {
 
 TEST(InterpolableFontPaletteTest, SimpleEndpointsInterpolation) {
+  test::TaskEnvironment task_environment;
   ScopedFontPaletteAnimationForTest scoped_feature(true);
   scoped_refptr<FontPalette> palette1 =
       FontPalette::Create(FontPalette::kLightPalette);
   scoped_refptr<FontPalette> palette2 =
       FontPalette::Create(FontPalette::kDarkPalette);
 
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette_from =
+  InterpolableFontPalette* interpolable_palette_from =
       InterpolableFontPalette::Create(palette1);
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette_to =
+  InterpolableFontPalette* interpolable_palette_to =
       InterpolableFontPalette::Create(palette2);
 
-  std::unique_ptr<InterpolableValue> interpolable_value =
+  InterpolableValue* interpolable_value =
       interpolable_palette_from->CloneAndZero();
   interpolable_palette_from->Interpolate(*interpolable_palette_to, 0.3,
                                          *interpolable_value);
@@ -35,6 +39,7 @@ TEST(InterpolableFontPaletteTest, SimpleEndpointsInterpolation) {
 }
 
 TEST(InterpolableFontPaletteTest, NestedEndpointsInterpolation) {
+  test::TaskEnvironment task_environment;
   ScopedFontPaletteAnimationForTest scoped_feature(true);
   scoped_refptr<FontPalette> palette1 =
       FontPalette::Create(FontPalette::kLightPalette);
@@ -42,12 +47,12 @@ TEST(InterpolableFontPaletteTest, NestedEndpointsInterpolation) {
       FontPalette::Create(), FontPalette::Create(FontPalette::kDarkPalette), 30,
       70, 0.7, 1.0, Color::ColorSpace::kSRGB, absl::nullopt);
 
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette_from =
+  InterpolableFontPalette* interpolable_palette_from =
       InterpolableFontPalette::Create(palette1);
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette_to =
+  InterpolableFontPalette* interpolable_palette_to =
       InterpolableFontPalette::Create(palette2);
 
-  std::unique_ptr<InterpolableValue> interpolable_value =
+  InterpolableValue* interpolable_value =
       interpolable_palette_from->CloneAndZero();
   interpolable_palette_from->Interpolate(*interpolable_palette_to, 0.3,
                                          *interpolable_value);
@@ -62,15 +67,16 @@ TEST(InterpolableFontPaletteTest, NestedEndpointsInterpolation) {
 
 // Scale/Add should have no effect.
 TEST(InterpolableFontPaletteTest, TestScaleAndAdd) {
+  test::TaskEnvironment task_environment;
   ScopedFontPaletteAnimationForTest scoped_feature(true);
   scoped_refptr<FontPalette> palette1 = FontPalette::Mix(
       FontPalette::Create(), FontPalette::Create(FontPalette::kDarkPalette), 30,
       70, 0.7, 1.0, Color::ColorSpace::kOklab, absl::nullopt);
   scoped_refptr<FontPalette> palette2 =
       FontPalette::Create(FontPalette::kLightPalette);
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette1 =
+  InterpolableFontPalette* interpolable_palette1 =
       InterpolableFontPalette::Create(palette1);
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette2 =
+  InterpolableFontPalette* interpolable_palette2 =
       InterpolableFontPalette::Create(palette2);
 
   interpolable_palette1->Scale(0.5);
@@ -84,6 +90,7 @@ TEST(InterpolableFontPaletteTest, TestScaleAndAdd) {
 }
 
 TEST(InterpolableFontPaletteTest, InterpolablePalettesEqual) {
+  test::TaskEnvironment task_environment;
   ScopedFontPaletteAnimationForTest scoped_feature(true);
   scoped_refptr<FontPalette> palette1 = FontPalette::Mix(
       FontPalette::Create(FontPalette::kLightPalette), FontPalette::Create(),
@@ -92,9 +99,9 @@ TEST(InterpolableFontPaletteTest, InterpolablePalettesEqual) {
       FontPalette::Create(FontPalette::kLightPalette), FontPalette::Create(),
       70, 30, 0.3, 1.0, Color::ColorSpace::kOklab, absl::nullopt);
 
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette1 =
+  InterpolableFontPalette* interpolable_palette1 =
       InterpolableFontPalette::Create(palette1);
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette2 =
+  InterpolableFontPalette* interpolable_palette2 =
       InterpolableFontPalette::Create(palette2);
 
   EXPECT_TRUE(interpolable_palette1->Equals(*interpolable_palette2));
@@ -102,6 +109,7 @@ TEST(InterpolableFontPaletteTest, InterpolablePalettesEqual) {
 }
 
 TEST(InterpolableFontPaletteTest, InterpolablePalettesNotEqual) {
+  test::TaskEnvironment task_environment;
   ScopedFontPaletteAnimationForTest scoped_feature(true);
   scoped_refptr<FontPalette> palette1 =
       FontPalette::Mix(FontPalette::Create(FontPalette::kLightPalette),
@@ -112,9 +120,9 @@ TEST(InterpolableFontPaletteTest, InterpolablePalettesNotEqual) {
                        FontPalette::Create(FontPalette::kLightPalette), 70, 30,
                        0.3, 1.0, Color::ColorSpace::kSRGB, absl::nullopt);
 
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette1 =
+  InterpolableFontPalette* interpolable_palette1 =
       InterpolableFontPalette::Create(palette1);
-  std::unique_ptr<InterpolableFontPalette> interpolable_palette2 =
+  InterpolableFontPalette* interpolable_palette2 =
       InterpolableFontPalette::Create(palette2);
 
   EXPECT_FALSE(interpolable_palette1->Equals(*interpolable_palette2));

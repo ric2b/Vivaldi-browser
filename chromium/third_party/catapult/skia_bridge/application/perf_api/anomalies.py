@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import
 import datetime
-
+from dateutil import parser
 from flask import Blueprint, request, make_response
 import logging
 import json
@@ -24,6 +24,12 @@ ALLOWED_CLIENTS = [
     'perf-chrome-internal@skia-infra-corp.iam.gserviceaccount.com',
     # WebRTC (public) skia instance service account
     'perf-webrtc-public@skia-infra-public.iam.gserviceaccount.com',
+    # Widevine CDM (internal) skia instance service account
+    'perf-widevine-cdm@skia-infra-corp.iam.gserviceaccount.com',
+    # Widevine Whitebox (internal) skia instance service account
+    'perf-widevine-whitebox@skia-infra-corp.iam.gserviceaccount.com',
+    # V8 (internal) skia instance service account
+    'perf-v8-internal@skia-infra-corp.iam.gserviceaccount.com',
 ]
 
 DATASTORE_TEST_BATCH_SIZE = 25
@@ -34,6 +40,9 @@ def Serialize(value):
 
   return value.__dict__
 
+class AnomalyUpdateFailedException(Exception):
+  """Raised when the update of anomalies fail."""
+  pass
 
 class AnomalyData:
   test_path:str
@@ -92,19 +101,69 @@ def QueryAnomaliesPostHandler():
     except json.decoder.JSONDecodeError:
       return 'Malformed Json', 400
 
-    is_valid, error = ValidateRequest(
-      data,
-      ['tests', 'min_revision', 'max_revision'])
-    if not is_valid:
-      return error, 400
+    client = datastore_client.DataStoreClient()
+    if data.get('revision', None):
+      anomalies = client.QueryAnomaliesAroundRevision(int(data['revision']))
+    else:
+      is_valid, error = ValidateRequest(
+        data,
+        ['tests', 'min_revision', 'max_revision'])
+      if not is_valid:
+        return error, 400
+
+      batched_tests = list(CreateTestBatches(data['tests']))
+      logging.info('Created %i batches for DataStore query', len(batched_tests))
+      anomalies = []
+      for batch in batched_tests:
+        batch_anomalies = client.QueryAnomalies(
+          batch, data['min_revision'], data['max_revision'])
+        if batch_anomalies and len(batch_anomalies) > 0:
+          anomalies.extend(batch_anomalies)
+
+    logging.info('%i anomalies returned from DataStore', len(anomalies))
+    response = AnomalyResponse()
+    for found_anomaly in anomalies:
+      anomaly_data = GetAnomalyData(found_anomaly)
+      response.AddAnomaly(anomaly_data.test_path, anomaly_data)
+
+    return make_response(response.ToDict())
+  except Exception as e:
+    logging.exception(e)
+    raise
+
+@blueprint.route('/find_time', methods=['POST'],
+                 endpoint='QueryAnomaliesByTimePostHandler')
+@cloud_metric.APIMetric("skia-bridge", "/anomalies/find_time")
+def QueryAnomaliesByTimePostHandler():
+  try:
+    logging.info('Received query request with data %s', request.data)
+    is_authorized, _ = auth_helper.AuthorizeBearerToken(
+      request, ALLOWED_CLIENTS)
+    if not is_authorized:
+      return 'Unauthorized', 401
+    try:
+      data = json.loads(request.data)
+    except json.decoder.JSONDecodeError:
+      return 'Malformed Json', 400
 
     client = datastore_client.DataStoreClient()
+    is_valid, error = ValidateRequest(
+        data,
+        ['tests', 'start_time', 'end_time'])
+    if not is_valid:
+        return error, 400
+
+    start_time = parser.parse(data['start_time'])
+    end_time = parser.parse(data['end_time'])
+    if end_time < start_time:
+      return 'end_time needs to be after start_time', 400
+
     batched_tests = list(CreateTestBatches(data['tests']))
     logging.info('Created %i batches for DataStore query', len(batched_tests))
     anomalies = []
     for batch in batched_tests:
-      batch_anomalies = client.QueryAnomalies(
-        batch, data['min_revision'], data['max_revision'])
+      batch_anomalies = client.QueryAnomaliesTimestamp(
+        batch, start_time, end_time)
       if batch_anomalies and len(batch_anomalies) > 0:
         anomalies.extend(batch_anomalies)
 
@@ -118,6 +177,7 @@ def QueryAnomaliesPostHandler():
   except Exception as e:
     logging.exception(e)
     raise
+
 
 @blueprint.route('/add', methods=['POST'], endpoint='AddAnomalyPostHandler')
 @cloud_metric.APIMetric("skia-bridge", "/anomalies/add")
@@ -143,58 +203,92 @@ def AddAnomalyPostHandler():
     if not is_valid:
       return error, 400
 
-    test_path = data['test_path']
-    # Create the anomaly entity with the required data
-    required_keys.remove('test_path')
-    anomaly_data = {key : data[key] for key in required_keys}
-    anomaly_data.update(GetTestFieldsFromPath(test_path))
-    anomaly_data['timestamp'] = datetime.datetime.utcnow()
-    anomaly_data['source'] = 'skia'
-
-    for optional_key in optional_keys:
-      if data.get(optional_key, None):
-        anomaly_data[optional_key] = data[optional_key]
-
-    _ExtendRevisions(anomaly_data)
     client = datastore_client.DataStoreClient()
-    anomaly = client.CreateEntity(datastore_client.EntityType.Anomaly,
-                                  str(uuid.uuid4()),
-                                  anomaly_data)
+    test_path = data['test_path']
     test_metadata = client.GetEntity(datastore_client.EntityType.TestMetadata,
                                      test_path)
-    anomaly['test'] = test_metadata.key
+    if test_metadata:
+      # Create the anomaly entity with the required data
+      required_keys.remove('test_path')
+      anomaly_data = {key : data[key] for key in required_keys}
+      anomaly_data.update(GetTestFieldsFromPath(test_path))
+      anomaly_data['timestamp'] = datetime.datetime.utcnow()
+      anomaly_data['source'] = 'skia'
 
-    skia_ungrouped_name = 'Ungrouped_Skia'
-    ungrouped_type = 2 # 2 is the type for "ungrouped" groups
-    alert_groups = client.QueryAlertGroups(skia_ungrouped_name, ungrouped_type)
-    if not alert_groups:
-      ungrouped_data = {
-        'project_id': anomaly_data['project_id'],
-        'group_type': ungrouped_type,
-        'active': True,
-        'anomalies': [anomaly.key],
-        'name': skia_ungrouped_name,
-        'created': datetime.datetime.utcnow(),
-        'updated': datetime.datetime.utcnow()
-      }
-      alert_group = client.CreateEntity(datastore_client.EntityType.AlertGroup,
-                                         str(uuid.uuid4()),
-                                         ungrouped_data,
-                                         save=True)
+      for optional_key in optional_keys:
+        if data.get(optional_key, None):
+          anomaly_data[optional_key] = data[optional_key]
+
+      _ExtendRevisions(anomaly_data)
+      # Lets create the anomaly entity and save it in datastore.
+      # The save is required for the entity to have a complete key.
+      # If we do the save in the transaction below, the key is not available
+      # until the transaction is committed (i.e outside the with block) and
+      # the key is required to be added to the ungrouped group
+      anomaly = client.CreateEntity(datastore_client.EntityType.Anomaly,
+                                    str(uuid.uuid4()),
+                                    anomaly_data,
+                                    save=True)
+
+      anomaly['test'] = test_metadata.key
+
+      # The following operations need to happen in a transaction
+      # 1. Read the ungrouped group from datastore.
+      # 2. Add the current anomaly key into the ungrouped group.
+      # 3. Specify the ungrouped group in the anomaly.
+      # 4. Write this update into both the group and the anomaly entities
+      #
+      # We also need optimistic locking on the alert group since multiple
+      # requests can be updating it. We can use the 'updated' field in the
+      # alert group to check if another request updated it before we do the
+      # put calls.
+      # Attempt to retry the failed transaction up to 5 times
+      success: bool = True
+      alert_group = None
+      for i in range(0,5):
+        try:
+          alert_group = _GetOrCreateUngroupedGroup(client)
+          def UpdateAnomalyInDatastore():
+            group_anomalies = alert_group.get('anomalies', [])
+            group_anomalies.append(anomaly.key)
+            alert_group['anomalies'] = group_anomalies
+
+            anomaly['groups'] = [alert_group]
+            latest_alert_group = client.GetEntity(
+              datastore_client.EntityType.AlertGroup,
+              alert_group.key.id_or_name)
+            if alert_group.get('updated') == latest_alert_group.get('updated'):
+              alert_group['updated'] = datetime.datetime.utcnow()
+              client.PutEntities([anomaly, alert_group])
+              return True, alert_group
+            else:
+              raise AnomalyUpdateFailedException
+
+          success, alert_group = client.RunTransaction(UpdateAnomalyInDatastore)
+        except AnomalyUpdateFailedException:
+          logging.warn(
+            '(%i/%i) Transaction failed while committing the anomaly update.',
+            i, 5)
+
+        if success:
+            break
+
+      if success:
+        return {
+          'anomaly_id': anomaly.key.id_or_name,
+          'alert_group_id': alert_group.key.id_or_name
+        }, 200
+      else:
+        return {
+          'anomaly_id': '0',
+          'alert_group_id': '0'
+        }, 409 # Conflict
     else:
-      alert_group = alert_groups[0]
-      group_anomalies = alert_group.get('anomalies', [])
-      group_anomalies.append(anomaly.key)
-      alert_group['anomalies'] = group_anomalies
-      alert_group['updated'] = datetime.datetime.utcnow()
-
-    anomaly['groups'] = [alert_group]
-
-    client.PutEntities([anomaly, alert_group], transaction=True)
-    return {
-      'anomaly_id': anomaly.key.id_or_name,
-      'alert_group_id': alert_group.key.id_or_name
-    }
+      logging.warn('Test Metadata does not exist for path %s', test_path)
+      return {
+        'anomaly_id': '0',
+        'alert_group_id': '0'
+      }, 404 # Not Found
   except Exception as e:
     logging.exception(e)
     raise
@@ -266,3 +360,27 @@ def _ExtendRevisions(anomaly_data):
 
   anomaly_data['start_revision'] = start_revision
   anomaly_data['end_revision'] = end_revision
+
+def _GetOrCreateUngroupedGroup(client: datastore_client.DataStoreClient):
+  skia_ungrouped_name = 'Ungrouped_Skia'
+  ungrouped_type = 2 # 2 is the type for "ungrouped" groups
+  alert_groups = client.QueryAlertGroups(skia_ungrouped_name, ungrouped_type)
+  if not alert_groups:
+    ungrouped_data = {
+      'project_id': anomaly_data['project_id'],
+      'group_type': ungrouped_type,
+      'active': True,
+      'anomalies': [anomaly.key],
+      'name': skia_ungrouped_name,
+      'created': datetime.datetime.utcnow(),
+      'updated': datetime.datetime.utcnow()
+    }
+    alert_group = client.CreateEntity(
+      datastore_client.EntityType.AlertGroup,
+      str(uuid.uuid4()),
+      ungrouped_data,
+      save=True)
+  else:
+    alert_group = alert_groups[0]
+
+  return alert_group

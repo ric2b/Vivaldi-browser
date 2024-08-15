@@ -45,10 +45,7 @@ class SessionContextTest : public testing::Test {
         session_context_->secondary_shared_secret();
     std::string secondary_shared_secret_bytes(secondary_shared_secret.begin(),
                                               secondary_shared_secret.end());
-    std::string secondary_shared_secret_base64;
-    base::Base64Encode(secondary_shared_secret_bytes,
-                       &secondary_shared_secret_base64);
-    return secondary_shared_secret_base64;
+    return base::Base64Encode(secondary_shared_secret_bytes);
   }
 
  protected:
@@ -72,9 +69,8 @@ TEST_F(SessionContextTest, GetPrepareForUpdateInfo) {
 }
 
 TEST_F(SessionContextTest, ResumeAfterUpdate) {
-  // The bootstrap controller expects these prefs to be set if resuming after an
+  // The bootstrap controller expects this pref to be set if resuming after an
   // update.
-  GetLocalState()->SetBoolean(prefs::kShouldResumeQuickStartAfterReboot, true);
   GetLocalState()->SetDict(prefs::kResumeQuickStartAfterRebootInfo,
                            session_context_->GetPrepareForUpdateInfo());
 
@@ -93,9 +89,7 @@ TEST_F(SessionContextTest, ResumeAfterUpdate) {
   ASSERT_EQ(expected_advertising_id,
             session_context_->advertising_id().ToString());
   ASSERT_EQ(expected_shared_secret, session_context_->shared_secret());
-  // Prefs should be cleared after the |bootstrap_controller_| construction.
-  ASSERT_FALSE(
-      GetLocalState()->GetBoolean(prefs::kShouldResumeQuickStartAfterReboot));
+  // Pref should be cleared after the |bootstrap_controller_| construction.
   ASSERT_TRUE(GetLocalState()
                   ->GetDict(prefs::kResumeQuickStartAfterRebootInfo)
                   .empty());

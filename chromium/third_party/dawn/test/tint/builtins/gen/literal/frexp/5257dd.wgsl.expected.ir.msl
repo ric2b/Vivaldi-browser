@@ -1,0 +1,20 @@
+#include <metal_stdlib>
+using namespace metal;
+struct frexp_result_f16 {
+  half fract;
+  int exp;
+};
+
+void frexp_5257dd() {
+  frexp_result_f16 res = frexp_result_f16{.fract=0.5h, .exp=1};
+}
+vertex float4 vertex_main() {
+  frexp_5257dd();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  frexp_5257dd();
+}
+kernel void compute_main() {
+  frexp_5257dd();
+}

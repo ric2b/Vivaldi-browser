@@ -24,6 +24,8 @@
 
 namespace {
 
+// Duration of showing/hiding the identity button.
+constexpr NSTimeInterval kIdentityButtonAnimationDuration = 0.1;
 // Margins for `_contentView` (top, bottom, leading and trailing).
 constexpr CGFloat kContentMargin = 16.;
 // Space between elements in `_contentView`.
@@ -98,8 +100,9 @@ CGFloat GetPixelLength() {
   [_activityIndicatorView startAnimating];
   // Disable buttons.
   _identityButtonControl.enabled = NO;
+  _askEveryTimeSwitch.enabled = NO;
   _primaryButton.enabled = NO;
-  [_primaryButton setTitle:@"" forState:UIControlStateNormal];
+  SetConfigurationTitle(_primaryButton, @" ");
 }
 
 - (void)stopSpinner {
@@ -111,9 +114,23 @@ CGFloat GetPixelLength() {
   _identityButtonControl.hidden = NO;
   // Enable buttons.
   _identityButtonControl.enabled = YES;
+  _askEveryTimeSwitch.enabled = YES;
   _primaryButton.enabled = YES;
   DCHECK(_submitString);
-  [_primaryButton setTitle:_submitString forState:UIControlStateNormal];
+  SetConfigurationTitle(_primaryButton, _submitString);
+}
+
+- (void)setIdentityButtonHidden:(BOOL)hidden animated:(BOOL)animated {
+  if (!animated) {
+    _identityButtonControl.hidden = hidden;
+    return;
+  }
+  __weak __typeof(_identityButtonControl) weakIdentityButton =
+      _identityButtonControl;
+  [UIView animateWithDuration:kIdentityButtonAnimationDuration
+                   animations:^{
+                     weakIdentityButton.hidden = hidden;
+                   }];
 }
 
 #pragma mark - UIViewController
@@ -203,6 +220,20 @@ CGFloat GetPixelLength() {
         .active = YES;
   }
 
+  // Add `childViewController` as a child view controller above the list of
+  // accounts to choose from.
+  UIViewController* childViewController =
+      self.accountConfirmationChildViewController;
+  if (childViewController) {
+    [_contentView addArrangedSubview:childViewController.view];
+    childViewController.view.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addChildViewController:childViewController];
+    [childViewController didMoveToParentViewController:self];
+    [childViewController.view.widthAnchor
+        constraintEqualToAnchor:_contentView.widthAnchor]
+        .active = YES;
+  }
+
   // Add IdentityButtonControl for the default identity.
   _identityButtonControl =
       [[IdentityButtonControl alloc] initWithFrame:CGRectZero];
@@ -243,6 +274,10 @@ CGFloat GetPixelLength() {
                             action:@selector(askEveryTimeSwitchAction:)
                   forControlEvents:UIControlEventValueChanged];
     _askEveryTimeSwitch.on = YES;
+    [_askEveryTimeSwitch
+        setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                        forAxis:
+                                            UILayoutConstraintAxisHorizontal];
     [switchWithLabel addArrangedSubview:askEveryTimeLabel];
     [switchWithLabel addArrangedSubview:_askEveryTimeSwitch];
 
@@ -286,9 +321,11 @@ CGFloat GetPixelLength() {
 
   // Add the primary button (the "Continue as"/"Sign in" button).
   _primaryButton = PrimaryActionButton(/* pointer_interaction_enabled */ YES);
-  SetContentEdgeInsets(_primaryButton,
-                       UIEdgeInsetsMake(kPrimaryButtonVerticalInsets, 0,
-                                        kPrimaryButtonVerticalInsets, 0));
+  UIButtonConfiguration* buttonConfiguration = _primaryButton.configuration;
+  buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+      kPrimaryButtonVerticalInsets, 0, kPrimaryButtonVerticalInsets, 0);
+  _primaryButton.configuration = buttonConfiguration;
+
   _primaryButton.accessibilityIdentifier =
       kAccountPickerPrimaryButtonAccessibilityIdentifier;
   _primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -305,11 +342,18 @@ CGFloat GetPixelLength() {
   // Adjust the identity button control rounded corners to the same value than
   // the "continue as" button.
   _groupedIdentityButtonSection.layer.cornerRadius =
-      _primaryButton.layer.cornerRadius;
+      _primaryButton.configuration.background.cornerRadius;
 
   // Ensure that keyboard is hidden.
   UIResponder* firstResponder = GetFirstResponder();
   [firstResponder resignFirstResponder];
+}
+
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  CGFloat width = self.view.intrinsicContentSize.width;
+  self.preferredContentSize =
+      CGSizeMake(width, [self layoutFittingHeightForWidth:width]);
 }
 
 #pragma mark - UI actions
@@ -379,7 +423,7 @@ CGFloat GetPixelLength() {
 
   // If spinner is active, delay UI updates until stopSpinner() is called.
   if (!_activityIndicatorView) {
-    [_primaryButton setTitle:_submitString forState:UIControlStateNormal];
+    SetConfigurationTitle(_primaryButton, _submitString);
     _identityButtonControl.hidden = NO;
   }
 }
@@ -392,8 +436,7 @@ CGFloat GetPixelLength() {
   // Hide the IdentityButtonControl, and update the primary button to serve as
   // a "Sign in…" button.
   _groupedIdentityButtonSection.hidden = YES;
-  [_primaryButton setTitle:_configuration.submitButtonTitle
-                  forState:UIControlStateNormal];
+  SetConfigurationTitle(_primaryButton, _configuration.submitButtonTitle);
 }
 
 @end

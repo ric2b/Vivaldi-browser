@@ -7,7 +7,7 @@
 #include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/common/service_worker/service_worker_router_rule.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_union_urlpatterninit_usvstring.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_urlpattern_urlpatterninit_usvstring.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_router_condition.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_router_rule.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_router_source.h"
@@ -27,6 +27,7 @@ namespace blink {
 namespace {
 
 absl::optional<ServiceWorkerRouterCondition> RouterConditionToBlink(
+    v8::Isolate* isolate,
     RouterCondition* v8_condition,
     const KURL& url_pattern_base_url,
     ExceptionState& exception_state);
@@ -51,84 +52,33 @@ absl::optional<ServiceWorkerRouterCondition> RouterConditionToBlink(
   return false;
 }
 
-absl::optional<std::vector<liburlpattern::Part>> ToPartList(
-    const String& pattern,
-    const String& field_name,
-    ExceptionState& exception_state) {
-  // This means that the field should not exist.
-  if (pattern.empty()) {
-    return std::vector<liburlpattern::Part>();
-  }
-  // TODO(crbug.com/1371756): unify the code with manifest_parser.cc
-  WTF::StringUTF8Adaptor utf8(pattern);
-  auto parse_result = liburlpattern::Parse(
-      base::StringPiece(utf8.data(), utf8.size()),
-      [](base::StringPiece input) { return std::string(input); });
-  if (!parse_result.ok()) {
-    exception_state.ThrowTypeError("Failed to parse URLPattern '" + pattern +
-                                   "'");
-    return absl::nullopt;
-  }
-  std::vector<liburlpattern::Part> part_list;
-  for (auto& part : parse_result.value().PartList()) {
-    // We don't allow custom regex for security reasons as this will be used
-    // in the browser process.
-    if (part.type == liburlpattern::PartType::kRegex) {
-      DLOG(INFO) << "regex URLPattern is not allowed as Router Condition";
-      exception_state.ThrowTypeError("Used regular expression in '" + pattern +
-                                     "', which is prohibited.");
-      return absl::nullopt;
-    }
-    part_list.push_back(std::move(part));
-  }
-  return part_list;
-}
-
-// TODO(crbug.com/1371756): Make URLPattern has a method to construct the
-// SafeURLPattern and remove the conversion from here.
-// The method should take a exception_state to raise on regex usage.
 absl::optional<SafeUrlPattern> RouterUrlPatternConditionToBlink(
-    const V8URLPatternInput* url_pattern_input,
+    v8::Isolate* isolate,
+    const V8URLPatternCompatible* url_pattern_compatible,
     const KURL& url_pattern_base_url,
     ExceptionState& exception_state) {
-  URLPattern* url_pattern;
-  switch (url_pattern_input->GetContentType()) {
-    case blink::V8URLPatternInput::ContentType::kUSVString:
-      url_pattern = URLPattern::Create(url_pattern_input, url_pattern_base_url,
-                                       exception_state);
-      break;
-    case blink::V8URLPatternInput::ContentType::kURLPatternInit:
-      url_pattern = URLPattern::Create(url_pattern_input, exception_state);
-      break;
-  }
+  // If |url_pattern_compatible| is not a constructed URLPattern,
+  // |url_pattern_base_url| as baseURL will give additional information to
+  // appropriately complement missing fields. For more details, see
+  // https://urlpattern.spec.whatwg.org/#other-specs-javascript.
+  //
+  // note: The empty string passname may result in an unintuitive output,
+  // because the step 17 in 3.2. URLPatternInit processing will make the new
+  // pathname field be a substring from 0 to slash index + 1 within baseURLPath.
+  // https://urlpattern.spec.whatwg.org/#canon-processing-for-init
+  URLPattern* url_pattern = URLPattern::From(
+      isolate, url_pattern_compatible, url_pattern_base_url, exception_state);
   if (!url_pattern) {
     CHECK(exception_state.HadException());
     return absl::nullopt;
   }
 
-  SafeUrlPattern safe_url_pattern;
-#define TO_PART(field)                                             \
-  do {                                                             \
-    auto part_list =                                               \
-        ToPartList(url_pattern->field(), #field, exception_state); \
-    if (!part_list.has_value()) {                                  \
-      CHECK(exception_state.HadException());                       \
-      return absl::nullopt;                                        \
-    }                                                              \
-    safe_url_pattern.field = std::move(*part_list);                \
-  } while (0)
-  TO_PART(protocol);
-  TO_PART(username);
-  TO_PART(password);
-  TO_PART(hostname);
-  TO_PART(port);
-  TO_PART(pathname);
-  TO_PART(search);
-  TO_PART(hash);
-#undef TO_PART
-  // TODO(crbug.com/1371756): support URLPatternOptions.
-  // Currently, URLPatternOptions are not included in URLPatternInit,
-  // and we do not pass the option to the browser side.
+  std::optional<SafeUrlPattern> safe_url_pattern =
+      url_pattern->ToSafeUrlPattern(exception_state);
+  if (!safe_url_pattern) {
+    CHECK(exception_state.HadException());
+    return absl::nullopt;
+  }
   return safe_url_pattern;
 }
 
@@ -186,6 +136,7 @@ RouterRunningStatusConditionToBlink(RouterCondition* v8_condition,
 }
 
 absl::optional<ServiceWorkerRouterOrCondition> RouterOrConditionToBlink(
+    v8::Isolate* isolate,
     RouterCondition* v8_condition,
     const KURL& url_pattern_base_url,
     ExceptionState& exception_state) {
@@ -193,8 +144,8 @@ absl::optional<ServiceWorkerRouterOrCondition> RouterOrConditionToBlink(
   const auto& v8_objects = v8_condition->orConditions();
   or_condition.conditions.reserve(v8_objects.size());
   for (auto&& v8_ob : v8_objects) {
-    absl::optional<ServiceWorkerRouterCondition> c =
-        RouterConditionToBlink(v8_ob, url_pattern_base_url, exception_state);
+    absl::optional<ServiceWorkerRouterCondition> c = RouterConditionToBlink(
+        isolate, v8_ob, url_pattern_base_url, exception_state);
     if (!c) {
       CHECK(exception_state.HadException());
       return absl::nullopt;
@@ -205,13 +156,15 @@ absl::optional<ServiceWorkerRouterOrCondition> RouterOrConditionToBlink(
 }
 
 absl::optional<ServiceWorkerRouterCondition> RouterConditionToBlink(
+    v8::Isolate* isolate,
     RouterCondition* v8_condition,
     const KURL& url_pattern_base_url,
     ExceptionState& exception_state) {
   absl::optional<SafeUrlPattern> url_pattern;
   if (v8_condition->hasUrlPattern()) {
-    url_pattern = RouterUrlPatternConditionToBlink(
-        v8_condition->urlPattern(), url_pattern_base_url, exception_state);
+    url_pattern =
+        RouterUrlPatternConditionToBlink(isolate, v8_condition->urlPattern(),
+                                         url_pattern_base_url, exception_state);
     if (!url_pattern.has_value()) {
       CHECK(exception_state.HadException());
       return absl::nullopt;
@@ -238,8 +191,8 @@ absl::optional<ServiceWorkerRouterCondition> RouterConditionToBlink(
   absl::optional<ServiceWorkerRouterOrCondition> or_condition;
   if (v8_condition->hasOrConditions()) {
     // Not checking here for the `or` is actually exclusive.
-    or_condition = RouterOrConditionToBlink(v8_condition, url_pattern_base_url,
-                                            exception_state);
+    or_condition = RouterOrConditionToBlink(
+        isolate, v8_condition, url_pattern_base_url, exception_state);
     if (!or_condition.has_value()) {
       CHECK(exception_state.HadException());
       return absl::nullopt;
@@ -329,6 +282,7 @@ absl::optional<ServiceWorkerRouterSource> RouterSourceInputToBlink(
 }  // namespace
 
 absl::optional<ServiceWorkerRouterRule> ConvertV8RouterRuleToBlink(
+    v8::Isolate* isolate,
     const RouterRule* input,
     const KURL& url_pattern_base_url,
     ExceptionState& exception_state) {
@@ -348,7 +302,7 @@ absl::optional<ServiceWorkerRouterRule> ConvertV8RouterRuleToBlink(
     return absl::nullopt;
   }
   absl::optional<ServiceWorkerRouterCondition> condition =
-      RouterConditionToBlink(input->condition(), url_pattern_base_url,
+      RouterConditionToBlink(isolate, input->condition(), url_pattern_base_url,
                              exception_state);
   if (!condition.has_value()) {
     return absl::nullopt;

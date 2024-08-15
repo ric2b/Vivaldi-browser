@@ -101,6 +101,7 @@
 #include "chrome/browser/ssl/stateful_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/browser/storage/storage_notification_service_factory.h"
+#include "chrome/browser/tpcd/support/top_level_trial_service_factory.h"
 #include "chrome/browser/tpcd/support/tpcd_support_service_factory.h"
 #include "chrome/browser/transition_manager/full_browser_transition_manager.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
@@ -459,22 +460,9 @@ ProfileImpl::ProfileImpl(
         this, profile_metrics::BrowserProfileType::kRegular);
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  const bool is_user_profile = ash::ProfileHelper::IsUserProfile(this);
-
-  if (is_user_profile) {
-    const user_manager::User* user =
-        ash::ProfileHelper::Get()->GetUserByProfile(this);
-    // A |User| instance should always exist for a profile which is not the
-    // initial, the sign-in or the lock screen app profile.
-    CHECK(user);
-    LOG_IF(FATAL,
-           !session_manager::SessionManager::Get()->HasSessionForAccountId(
-               user->GetAccountId()))
-        << "Attempting to construct the profile before starting the user "
-           "session";
+  if (delegate_) {
+    delegate_->OnProfileCreationStarted(this, create_mode);
   }
-#endif
 
   // The ProfileImpl can be created both synchronously and asynchronously.
   bool async_prefs = create_mode == CREATE_MODE_ASYNCHRONOUS;
@@ -501,7 +489,9 @@ ProfileImpl::ProfileImpl(
   SimpleKeyMap::GetInstance()->Associate(this, key_.get());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (is_user_profile) {
+  // TODO(crbug.com/1325210): Move this into
+  // ChromeUserManager::OnProfileCreationStarted().
+  if (ash::ProfileHelper::IsUserProfile(this)) {
     // |ash::InitializeAccountManager| is called during a User's session
     // initialization but some tests do not properly login to a User Session.
     // This invocation of |ash::InitializeAccountManager| is used only during
@@ -518,9 +508,6 @@ ProfileImpl::ProfileImpl(
     account_manager->SetPrefService(GetPrefs());
   }
 #endif
-
-  if (delegate_)
-    delegate_->OnProfileCreationStarted(this, create_mode);
 
   if (async_prefs) {
     // Wait for the notification that prefs has been loaded
@@ -883,9 +870,11 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
   // as it depends on the default StoragePartition being initialized.
   GetOriginTrialsControllerDelegate();
 
-  // The TpcdSupportService must be created with the profile, but after the
-  // initialization of the OriginTrialsControllerDelegate, as it depends on it.
-  tpcd::support::TpcdSupportServiceFactory::GetForProfile(this);
+  // The TpcdTrialService and TopLevelTrialService must be created with the
+  // profile, but after the initialization of the
+  // OriginTrialsControllerDelegate, as it depends on it.
+  tpcd::trial::TpcdTrialServiceFactory::GetForProfile(this);
+  tpcd::trial::TopLevelTrialServiceFactory::GetForProfile(this);
 }
 
 base::FilePath ProfileImpl::last_selected_directory() {
@@ -1122,7 +1111,7 @@ void ProfileImpl::OnLocaleReady(CreateMode create_mode) {
   TRACE_EVENT0("browser", "ProfileImpl::OnLocaleReady");
 
   // Migrate obsolete prefs.
-  MigrateObsoleteProfilePrefs(GetPrefs());
+  MigrateObsoleteProfilePrefs(GetPrefs(), GetPath());
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // Note: Extension preferences can be keyed off the extension ID, so need to
   // be handled specially (rather than directly as part of

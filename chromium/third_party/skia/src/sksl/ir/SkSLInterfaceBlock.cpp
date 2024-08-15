@@ -12,7 +12,6 @@
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLProgramSettings.h"
 #include "src/sksl/SkSLString.h"
-#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLFieldSymbol.h"
 #include "src/sksl/ir/SkSLInterfaceBlock.h"
 #include "src/sksl/ir/SkSLLayout.h"
@@ -23,6 +22,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <utility>
 
 using namespace skia_private;
 
@@ -71,7 +72,8 @@ std::unique_ptr<InterfaceBlock> InterfaceBlock::Convert(const Context& context,
         }
     }
     // Build a struct type corresponding to the passed-in fields.
-    const Type* baseType = context.fSymbolTable->add(Type::MakeStructType(context,
+    const Type* baseType = context.fSymbolTable->add(context,
+                                                     Type::MakeStructType(context,
                                                                           pos,
                                                                           typeName,
                                                                           std::move(fields),
@@ -108,14 +110,12 @@ std::unique_ptr<InterfaceBlock> InterfaceBlock::Convert(const Context& context,
                                                                   VariableStorage::kGlobal);
     return InterfaceBlock::Make(context,
                                 pos,
-                                context.fSymbolTable->takeOwnershipOfSymbol(std::move(var)),
-                                rtAdjustIndex);
+                                context.fSymbolTable->takeOwnershipOfSymbol(std::move(var)));
 }
 
 std::unique_ptr<InterfaceBlock> InterfaceBlock::Make(const Context& context,
                                                      Position pos,
-                                                     Variable* variable,
-                                                     std::optional<int> rtAdjustIndex) {
+                                                     Variable* variable) {
     SkASSERT(ProgramConfig::IsFragment(context.fConfig->fKind) ||
              ProgramConfig::IsVertex(context.fConfig->fKind) ||
              ProgramConfig::IsCompute(context.fConfig->fKind));
@@ -123,34 +123,18 @@ std::unique_ptr<InterfaceBlock> InterfaceBlock::Make(const Context& context,
     SkASSERT(variable->type().componentType().isInterfaceBlock());
     SkSpan<const Field> fields = variable->type().componentType().fields();
 
-    if (rtAdjustIndex.has_value()) {
-        [[maybe_unused]] const Field& rtAdjustField = fields[*rtAdjustIndex];
-        SkASSERT(rtAdjustField.fName == SkSL::Compiler::RTADJUST_NAME);
-        SkASSERT(rtAdjustField.fType->matches(*context.fTypes.fFloat4));
-
-        ThreadContext::RTAdjustData& rtAdjustData = ThreadContext::RTAdjustState();
-        rtAdjustData.fInterfaceBlock = variable;
-        rtAdjustData.fFieldIndex = *rtAdjustIndex;
-    }
-
     if (variable->name().empty()) {
         // This interface block is anonymous. Add each field to the top-level symbol table.
         for (size_t i = 0; i < fields.size(); ++i) {
-            context.fSymbolTable->add(std::make_unique<SkSL::FieldSymbol>(fields[i].fPosition,
-                                                                          variable, i));
+            context.fSymbolTable->add(
+                    context, std::make_unique<SkSL::FieldSymbol>(fields[i].fPosition, variable, i));
         }
     } else {
         // Add the global variable to the top-level symbol table.
-        context.fSymbolTable->addWithoutOwnership(variable);
+        context.fSymbolTable->addWithoutOwnership(context, variable);
     }
 
-    return std::make_unique<SkSL::InterfaceBlock>(pos, variable, context.fSymbolTable);
-}
-
-std::unique_ptr<ProgramElement> InterfaceBlock::clone() const {
-    return std::make_unique<InterfaceBlock>(fPosition,
-                                            this->var(),
-                                            SymbolTable::WrapIfBuiltin(this->typeOwner()));
+    return std::make_unique<SkSL::InterfaceBlock>(pos, variable);
 }
 
 std::string InterfaceBlock::description() const {

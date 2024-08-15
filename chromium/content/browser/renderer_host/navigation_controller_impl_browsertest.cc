@@ -33,6 +33,7 @@
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/navigation_entry_restore_context_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/navigation_type.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/renderer_cancellation_throttle.h"
@@ -84,6 +85,7 @@
 #include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "ui/display/display_util.h"
+#include "url/url_constants.h"
 
 namespace content {
 namespace {
@@ -116,7 +118,7 @@ class DataURLOriginToCommitObserver : public WebContentsObserver {
   explicit DataURLOriginToCommitObserver(WebContents* web_contents)
       : WebContentsObserver(web_contents) {}
 
-  absl::optional<url::Origin> origin_to_commit() { return origin_to_commit_; }
+  std::optional<url::Origin> origin_to_commit() { return origin_to_commit_; }
 
  private:
   void ReadyToCommitNavigation(NavigationHandle* navigation_handle) override {
@@ -125,7 +127,7 @@ class DataURLOriginToCommitObserver : public WebContentsObserver {
                             .origin_to_commit;
   }
 
-  absl::optional<url::Origin> origin_to_commit_;
+  std::optional<url::Origin> origin_to_commit_;
 };
 
 }  // namespace
@@ -452,8 +454,9 @@ IN_PROC_BROWSER_TEST_P(LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest,
                        LoadDataWithBaseURLThenReload) {
 #if !BUILDFLAG(IS_ANDROID)
   // LoadDataAsStringWithBaseURL is only supported on Android.
-  if (use_load_data_as_string_with_base_url())
+  if (use_load_data_as_string_with_base_url()) {
     return;
+  }
 #endif
   // LoadDataWithBaseURL is never subject to --site-per-process policy today
   // (this API is only used by Android WebView [where OOPIFs have not shipped
@@ -3616,9 +3619,17 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
 // Verify that navigations to the same WebUI URL are correctly classified as
 // EXISTING_ENTRY (it becomes a reload).
+// TODO(crbug.com/1516015): Flaky on Linux.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_NavigationTypeClassification_ExistingEntrySameURL_WebUI \
+  DISABLED_NavigationTypeClassification_ExistingEntrySameURL_WebUI
+#else
+#define MAYBE_NavigationTypeClassification_ExistingEntrySameURL_WebUI \
+  NavigationTypeClassification_ExistingEntrySameURL_WebUI
+#endif
 IN_PROC_BROWSER_TEST_P(
     NavigationControllerBrowserTest,
-    NavigationTypeClassification_ExistingEntrySameURL_WebUI) {
+    MAYBE_NavigationTypeClassification_ExistingEntrySameURL_WebUI) {
   // Navigate to a WebUI page.
   GURL web_ui_url(std::string(kChromeUIScheme) + "://" +
                   std::string(kChromeUIGpuHost));
@@ -4824,6 +4835,42 @@ IN_PROC_BROWSER_TEST_P(InitialEmptyDocNavigationControllerBrowserTest,
     EXPECT_FALSE(new_root->is_on_initial_empty_document());
     EXPECT_FALSE(last_entry->IsInitialEntry());
   }
+}
+
+// Ensure the FrameTreeNode's initial empty document status does not become true
+// again after it becomes false, even temporarily during a navigation after an
+// early RenderFrameHost swap after a renderer crash.
+// TODO(https://crbug.com/1072817): This test may become meaningless if we stop
+// doing early RFH swaps for crashed frames.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       InitialEmptyDocumentStatusAfterCrash) {
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+  EXPECT_TRUE(root->is_on_initial_empty_document());
+
+  // Navigating to a real URL should leave the initial empty document.
+  GURL url_1(embedded_test_server()->GetURL("/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url_1));
+  EXPECT_FALSE(root->is_on_initial_empty_document());
+
+  // Crash the renderer.
+  CrashTab(shell()->web_contents());
+
+  // When starting a new navigation, the early RFH swap should not cause the
+  // FrameTreeNode to think it is back on the initial empty document, even
+  // temporarily before the new navigation commits.
+  GURL url_2(embedded_test_server()->GetURL("/title2.html"));
+  TestNavigationManager navigation_manager(shell()->web_contents(), url_2);
+  controller.LoadURL(url_2, Referrer(), ui::PAGE_TRANSITION_LINK,
+                     std::string());
+  EXPECT_TRUE(navigation_manager.WaitForRequestStart());
+  EXPECT_FALSE(root->is_on_initial_empty_document());
+
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
+  EXPECT_FALSE(root->is_on_initial_empty_document());
 }
 
 // Test a same-document navigation in a new window's initial empty document to
@@ -8074,15 +8121,14 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url_a, Referrer(), /* initiator_origin= */ absl::nullopt,
-              /* initiator_base_url= */ absl::nullopt,
+              main_url_a, Referrer(), /* initiator_origin= */ std::nullopt,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
-  restored_entry->SetPageState(entry2->GetPageState(), context.get());
+  NavigationEntryRestoreContextImpl context;
+  restored_entry->SetPageState(entry2->GetPageState(), &context);
 
   // The entry should have a FrameNavigationEntry for the b.com subframe.
   EXPECT_EQ(main_url_a, restored_entry->root_node()->frame_entry->url());
@@ -8146,15 +8192,14 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url, Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              main_url, Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context;
   restored_entry->SetPageState(blink::PageState::CreateFromURL(main_url),
-                               context.get());
+                               &context);
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
 
   // Restore the new entry in a new tab and verify the iframe loads and has
@@ -8215,15 +8260,14 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              url_1, Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              url_1, Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
-  restored_entry->SetPageState(entry1->GetPageState(), context.get());
+  NavigationEntryRestoreContextImpl context;
+  restored_entry->SetPageState(entry1->GetPageState(), &context);
 
   // 3. Create a new tab with a new NavigationController, and navigate it twice.
   Shell* new_shell = Shell::CreateNewWindow(
@@ -8398,16 +8442,15 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              GURL(), Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              GURL(), Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context;
   entry1->SetURL(GURL());
-  restored_entry->SetPageState(entry1->GetPageState(), context.get());
+  restored_entry->SetPageState(entry1->GetPageState(), &context);
 
   // 3. Restore the empty URL entry in a new tab.
   Shell* new_shell = Shell::CreateNewWindow(
@@ -8461,26 +8504,25 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   EXPECT_EQ(url_2, root->current_url());
 
   // 2. Create NavigationEntries with the same PageState as the current entries.
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context;
   std::unique_ptr<NavigationEntryImpl> restored_entry1 =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              url_1, Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              url_1, Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
-  restored_entry1->SetPageState(entry1->GetPageState(), context.get());
+  restored_entry1->SetPageState(entry1->GetPageState(), &context);
   std::unique_ptr<NavigationEntryImpl> restored_entry2 =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              url_2, Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              url_2, Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
-  restored_entry2->SetPageState(entry2->GetPageState(), context.get());
+  restored_entry2->SetPageState(entry2->GetPageState(), &context);
 
   // 3. Create a new tab and restore the entries.
   Shell* new_shell = Shell::CreateNewWindow(
@@ -10965,15 +11007,14 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url_a, Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              main_url_a, Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
-  restored_entry->SetPageState(entry2->GetPageState(), context.get());
+  NavigationEntryRestoreContextImpl context;
+  restored_entry->SetPageState(entry2->GetPageState(), &context);
 
   // The entry should have no SiteInstance in the FrameNavigationEntry for the
   // b.com subframe.
@@ -11304,7 +11345,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 // Ensure the renderer process does not get killed if the main frame URL's path
 // changes when going back in a subframe, since this was possible after
 // a replaceState in the main frame (thanks to https://crbug.com/373041).
-// See https:///crbug.com/486916.
+// See https://crbug.com/486916.
 IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                        SubframeBackFromReplaceState) {
   // Start at a page with a real iframe.
@@ -11443,6 +11484,234 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
             cloned_previous_entry->root_node()->frame_entry->url());
 }
 
+// Test that location.replace in a subframe correctly replaces a shared
+// FrameNavigationEntry in the current NavigationEntry rather than updating the
+// shared FrameNavigationEntry across multiple NavigationEntries.
+// See https://crbug.com/1515381.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       SubframeBackFromSubframeLocationReplace) {
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // 1. Navigate to A(B(srcdoc_B)).
+  GURL main_url(
+      embedded_test_server()->GetURL("a.com", "/page_with_blank_iframe.html"));
+  GURL middle_frame_url(embedded_test_server()->GetURL(
+      "b.com", "/frame_tree/page_with_srcdoc_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  ASSERT_EQ(1U, root->child_count());
+  FrameTreeNode* child = root->child_at(0);
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    EXPECT_TRUE(NavigateToURLFromRenderer(child, middle_frame_url));
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
+  }
+  // Verify the subframe URLs and srcdoc origin.
+  ASSERT_EQ(1U, child->child_count());
+  FrameTreeNode* grandchild = child->child_at(0);
+  EXPECT_EQ(middle_frame_url,
+            child->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(GURL(url::kAboutSrcdocURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url::Origin::Create(middle_frame_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  NavigationEntryImpl* entry1 = controller.GetLastCommittedEntry();
+
+  // 2. Navigate innermost frame to about:blank_A, from the main frame.
+  {
+    FrameNavigateParamsCapturer capturer(grandchild);
+    EXPECT_TRUE(ExecJs(root, "frames[0][0].location = 'about:blank';"));
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
+  }
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url::Origin::Create(main_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  // The middle frame's FrameNavigationEntry should be shared across the two
+  // NavigationEntries.
+  EXPECT_EQ(2, controller.GetEntryCount());
+  NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
+  EXPECT_NE(entry1, entry2);
+  EXPECT_EQ(entry1->GetFrameEntry(child), entry2->GetFrameEntry(child));
+  EXPECT_NE(entry1->GetFrameEntry(grandchild),
+            entry2->GetFrameEntry(grandchild));
+
+  // 3. Location.replace in middle frame, to A(A(about:blank_A)).
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    EXPECT_TRUE(
+        ExecJs(root, JsReplace("frames[0].location.replace($1)", main_url)));
+    capturer.Wait();
+    EXPECT_TRUE(capturer.did_replace_entry());
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
+  }
+  // There's a new grandchild FrameTreeNode at this point.
+  grandchild = child->child_at(0);
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url::Origin::Create(main_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  // The FrameNavigationEntry in the middle frame should no longer be shared.
+  EXPECT_NE(entry1->GetFrameEntry(child), entry2->GetFrameEntry(child));
+
+  // 4. Go back.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    EXPECT_TRUE(ExecJs(root, "history.back()"));
+    observer.Wait();
+  }
+
+  // There's a new grandchild FrameTreeNode again at this point.
+  grandchild = child->child_at(0);
+
+  // Ensure the middle and innermost frames both navigated.
+  EXPECT_EQ(middle_frame_url,
+            child->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(GURL(url::kAboutSrcdocURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+
+  // Ensure the innermost frame ends up back in B's origin and process.
+  EXPECT_EQ(url::Origin::Create(middle_frame_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  EXPECT_EQ(child->current_frame_host()->GetProcess(),
+            grandchild->current_frame_host()->GetProcess());
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_NE(root->current_frame_host()->GetProcess(),
+              grandchild->current_frame_host()->GetProcess());
+  }
+
+  // Make sure the renderer processes have not been killed.
+  EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
+  EXPECT_TRUE(child->current_frame_host()->IsRenderFrameLive());
+}
+
+// Similar to SubframeBackFromSubframeLocationReplace test, but covers a tricky
+// early RFH swap case if the renderer process crashes before location.replace.
+// See https://crbug.com/1515381.
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
+                       SubframeBackFromSubframeLocationReplaceAfterCrash) {
+  // This tests something that can only happen with out of process iframes.
+  if (!AreAllSitesIsolatedForTesting()) {
+    return;
+  }
+
+  // It is safe to obtain the root frame tree node here, as it doesn't change.
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+
+  // 1. Navigate to A(B(srcdoc_B)).
+  GURL main_url(
+      embedded_test_server()->GetURL("a.com", "/page_with_blank_iframe.html"));
+  GURL middle_frame_url(embedded_test_server()->GetURL(
+      "b.com", "/frame_tree/page_with_srcdoc_frame.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  ASSERT_EQ(1U, root->child_count());
+  FrameTreeNode* child = root->child_at(0);
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    EXPECT_TRUE(NavigateToURLFromRenderer(child, middle_frame_url));
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
+  }
+  // Verify the subframe URLs and srcdoc origin.
+  ASSERT_EQ(1U, child->child_count());
+  FrameTreeNode* grandchild = child->child_at(0);
+  EXPECT_EQ(middle_frame_url,
+            child->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(GURL(url::kAboutSrcdocURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url::Origin::Create(middle_frame_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  NavigationEntryImpl* entry1 = controller.GetLastCommittedEntry();
+
+  // 2. Navigate innermost frame to about:blank_A, from the main frame.
+  {
+    FrameNavigateParamsCapturer capturer(grandchild);
+    EXPECT_TRUE(ExecJs(root, "frames[0][0].location = 'about:blank';"));
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
+  }
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url::Origin::Create(main_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  // The middle frame's FrameNavigationEntry should be shared across the two
+  // NavigationEntries.
+  EXPECT_EQ(2, controller.GetEntryCount());
+  NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
+  EXPECT_NE(entry1, entry2);
+  EXPECT_EQ(entry1->GetFrameEntry(child), entry2->GetFrameEntry(child));
+  EXPECT_NE(entry1->GetFrameEntry(grandchild),
+            entry2->GetFrameEntry(grandchild));
+
+  // Simulate a renderer process crash in the child frame, so that the next
+  // navigation in this frame will trigger an early RFH swap.
+  // TODO(https://crbug.com/1072817): This test may become unnecessary if we
+  // stop doing early RFH swaps for crashed renderer processes.
+  RenderProcessHost* process_b = child->current_frame_host()->GetProcess();
+  RenderProcessHostWatcher crash_observer(
+      process_b, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  EXPECT_TRUE(process_b->Shutdown(RESULT_CODE_KILLED));
+  crash_observer.Wait();
+
+  // 3. Location.replace in middle frame, to A(A(about:blank_A)).
+  {
+    FrameNavigateParamsCapturer capturer(child);
+    EXPECT_TRUE(
+        ExecJs(root, JsReplace("frames[0].location.replace($1)", main_url)));
+    capturer.Wait();
+    EXPECT_TRUE(capturer.did_replace_entry());
+    EXPECT_EQ(NAVIGATION_TYPE_AUTO_SUBFRAME, capturer.navigation_type());
+  }
+  // There's a new grandchild FrameTreeNode at this point.
+  grandchild = child->child_at(0);
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(url::Origin::Create(main_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  // The FrameNavigationEntry in the middle frame should no longer be shared.
+  EXPECT_NE(entry1->GetFrameEntry(child), entry2->GetFrameEntry(child));
+
+  // 4. Go back.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    EXPECT_TRUE(ExecJs(root, "history.back()"));
+    observer.Wait();
+  }
+
+  // There's a new grandchild FrameTreeNode again at this point.
+  grandchild = child->child_at(0);
+
+  // Ensure the middle and innermost frames both navigated.
+  EXPECT_EQ(middle_frame_url,
+            child->current_frame_host()->GetLastCommittedURL());
+  EXPECT_EQ(GURL(url::kAboutSrcdocURL),
+            grandchild->current_frame_host()->GetLastCommittedURL());
+
+  // Ensure the innermost frame ends up back in B's origin and process.
+  EXPECT_EQ(url::Origin::Create(middle_frame_url),
+            grandchild->current_frame_host()->GetLastCommittedOrigin());
+  EXPECT_EQ(child->current_frame_host()->GetProcess(),
+            grandchild->current_frame_host()->GetProcess());
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_NE(root->current_frame_host()->GetProcess(),
+              grandchild->current_frame_host()->GetProcess());
+  }
+
+  // Make sure the renderer processes have not been killed.
+  EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
+  EXPECT_TRUE(child->current_frame_host()->IsRenderFrameLive());
+}
+
 // Test that shared FrameNavigationEntries with opaque initiator origins can be
 // restored in future sessions, even if the internal nonce is not preserved.
 // See https://crbug.com/1354634.
@@ -11475,12 +11744,11 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   // initiator origin of the de-duplicated FrameNavigationEntries should match,
   // because the internal nonce of the opaque origin isn't preserved. See
   // https://crbug.com/1354634.
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context;
   std::unique_ptr<NavigationEntryImpl> restored_entry1 = entry1->Clone();
-  restored_entry1->SetPageState(entry1->GetPageState(), context.get());
+  restored_entry1->SetPageState(entry1->GetPageState(), &context);
   std::unique_ptr<NavigationEntryImpl> restored_entry2 = entry2->Clone();
-  restored_entry2->SetPageState(entry2->GetPageState(), context.get());
+  restored_entry2->SetPageState(entry2->GetPageState(), &context);
   std::vector<std::unique_ptr<NavigationEntry>> restored_entries;
   restored_entries.push_back(std::move(restored_entry1));
   restored_entries.push_back(std::move(restored_entry2));
@@ -11573,14 +11841,13 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   // NavigationEntries but calling SetPageState with the previously saved
   // PageStates, using a shared RestoreContext. This attempts to de-duplicate
   // FNEs if they match by item sequence number, URL, and target.
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context1 =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context1;
   std::unique_ptr<NavigationEntryImpl> restored_entry1 = entry1->Clone();
-  restored_entry1->SetPageState(entry1_state, context1.get());
+  restored_entry1->SetPageState(entry1_state, &context1);
   std::unique_ptr<NavigationEntryImpl> restored_entry2 = entry2->Clone();
-  restored_entry2->SetPageState(entry2_state, context1.get());
+  restored_entry2->SetPageState(entry2_state, &context1);
   std::unique_ptr<NavigationEntryImpl> restored_entry3 = entry3->Clone();
-  restored_entry3->SetPageState(entry3_state, context1.get());
+  restored_entry3->SetPageState(entry3_state, &context1);
 
   // The main frame FNE will not be de-duplicated, because the URL of the two
   // PageStates differs.  See https://crbug.com/1275257.
@@ -11639,14 +11906,13 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   // fully identical. This used to fail a DCHECK that the initiator origin of
   // de-duplicated FrameNavigationEntries should match. See
   // https://crbug.com/1354634.
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context2 =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context2;
   std::unique_ptr<NavigationEntryImpl> restored2_entry1 = new_entry1->Clone();
-  restored2_entry1->SetPageState(new_entry1->GetPageState(), context2.get());
+  restored2_entry1->SetPageState(new_entry1->GetPageState(), &context2);
   std::unique_ptr<NavigationEntryImpl> restored2_entry2 = new_entry2->Clone();
-  restored2_entry2->SetPageState(new_entry2->GetPageState(), context2.get());
+  restored2_entry2->SetPageState(new_entry2->GetPageState(), &context2);
   std::unique_ptr<NavigationEntryImpl> restored2_entry3 = new_entry3->Clone();
-  restored2_entry3->SetPageState(new_entry3->GetPageState(), context2.get());
+  restored2_entry3->SetPageState(new_entry3->GetPageState(), &context2);
 
   // The main frame FrameNavigationEntries should be shared in the new session.
   EXPECT_EQ(restored2_entry2->GetFrameEntry(root2),
@@ -11718,12 +11984,11 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   blink::ExplodedPageState exploded_state;
   ASSERT_FALSE(
       blink::DecodePageState(garbage.ToEncodedData(), &exploded_state));
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context1 =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
+  NavigationEntryRestoreContextImpl context1;
   std::unique_ptr<NavigationEntryImpl> restored_entry1 = entry1->Clone();
-  restored_entry1->SetPageState(garbage, context1.get());
+  restored_entry1->SetPageState(garbage, &context1);
   std::unique_ptr<NavigationEntryImpl> restored_entry2 = entry2->Clone();
-  restored_entry2->SetPageState(garbage, context1.get());
+  restored_entry2->SetPageState(garbage, &context1);
 
   // 3. Actually restore the entries in a new tab.
   std::vector<std::unique_ptr<NavigationEntry>> restored_entries;
@@ -17199,10 +17464,10 @@ IN_PROC_BROWSER_TEST_P(
 
   RenderFrameHost* frame = shell()->web_contents()->GetPrimaryMainFrame();
 
-  // Create an unload handler and force the browser process to wait before
+  // Create a pagehide handler and force the browser process to wait before
   // deleting |frame|.
   EXPECT_TRUE(ExecJs(frame, R"(
-             window.onunload=function(e){
+             window.onpagehide=function(e){
                window.domAutomationController.send('done');
              };)"));
 
@@ -17486,7 +17751,7 @@ class NavigationStarterBeforeDidCommitNavigation
     return true;
   }
 
-  raw_ptr<Shell> shell_;
+  raw_ptr<Shell> shell_ = nullptr;
   const raw_ref<const GURL> url_to_intercept_;
   const raw_ref<const GURL> url_to_start_;
 };
@@ -17853,67 +18118,50 @@ IN_PROC_BROWSER_TEST_P(SandboxedNavigationControllerWithBfcacheBrowserTest,
   EXPECT_EQ(1, controller.GetCurrentEntryIndex());
 }
 
-class SandboxedNavigationControllerPopupBrowserTest
-    : public NavigationControllerBrowserTest {
- protected:
-  void SetupNavigation() {
-    EXPECT_EQ(1u, Shell::windows().size());
-    NavigationControllerImpl& controller =
-        static_cast<NavigationControllerImpl&>(
-            shell()->web_contents()->GetController());
-    GURL preload_url(embedded_test_server()->GetURL(
-        "/navigation_controller/page_with_sandboxed_iframe_popup.html"));
-    EXPECT_TRUE(NavigateToURL(shell(), preload_url));
-    ASSERT_EQ(1, controller.GetEntryCount());
-
-    FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
-                              ->GetPrimaryFrameTree()
-                              .root();
-    ASSERT_EQ(1U, root->child_count());
-    ASSERT_NE(nullptr, root->child_at(0));
-    ShellAddedObserver new_shell_observer;
-    // Click link inside sandboxed iframe, causing popup open.
-    std::string script = "document.getElementById('test_link').click()";
-    EXPECT_TRUE(ExecJs(root->child_at(0), script));
-
-    popup_shell_ = new_shell_observer.GetShell();
-    EXPECT_TRUE(WaitForLoadStop(popup_shell_->web_contents()));
-    FrameTreeNode* popup_root =
-        static_cast<WebContentsImpl*>(popup_shell_->web_contents())
-            ->GetPrimaryFrameTree()
-            .root();
-    // Click link inside sandboxed popup, causing the frame to have an
-    // additional entry in history state.
-    std::string popup_script = "document.getElementById('test_anchor').click()";
-    EXPECT_TRUE(ExecJs(popup_root, popup_script));
-  }
-
- protected:
-  raw_ptr<Shell, DanglingUntriaged> popup_shell_ = nullptr;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
 // Tests navigations that sandboxed top level frames still
 // can navigate.
-IN_PROC_BROWSER_TEST_P(SandboxedNavigationControllerPopupBrowserTest,
-                       NavigateSelf) {
-  SetupNavigation();
+IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, NavigateSelf) {
+  EXPECT_EQ(1u, Shell::windows().size());
+  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
+      shell()->web_contents()->GetController());
+  GURL preload_url(embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_sandboxed_iframe_popup.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), preload_url));
+  ASSERT_EQ(1, controller.GetEntryCount());
 
-  std::string back_script = "history.back();";
-  FrameTreeNode* root =
-      static_cast<WebContentsImpl*>(popup_shell_->web_contents())
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetPrimaryFrameTree()
+                            .root();
+  ASSERT_EQ(1U, root->child_count());
+  ASSERT_NE(nullptr, root->child_at(0));
+  ShellAddedObserver new_shell_observer;
+  // Click link inside sandboxed iframe, causing popup open.
+  std::string script = "document.getElementById('test_link').click()";
+  EXPECT_TRUE(ExecJs(root->child_at(0), script));
+
+  Shell* popup_shell = new_shell_observer.GetShell();
+  EXPECT_TRUE(WaitForLoadStop(popup_shell->web_contents()));
+  FrameTreeNode* popup_root =
+      static_cast<WebContentsImpl*>(popup_shell->web_contents())
           ->GetPrimaryFrameTree()
           .root();
-  NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
-      popup_shell_->web_contents()->GetController());
-  ASSERT_EQ(2, controller.GetEntryCount());
-  EXPECT_EQ(1, controller.GetCurrentEntryIndex());
+
+  // Click link inside sandboxed popup, causing the frame to have an
+  // additional entry in history state.
+  std::string popup_script = "document.getElementById('test_anchor').click()";
+  EXPECT_TRUE(ExecJs(popup_root, popup_script));
+
+  NavigationControllerImpl& popup_controller =
+      static_cast<NavigationControllerImpl&>(
+          popup_shell->web_contents()->GetController());
+  ASSERT_EQ(2, popup_controller.GetEntryCount());
+  EXPECT_EQ(1, popup_controller.GetCurrentEntryIndex());
+
+  std::string back_script = "history.back();";
   // Navigate sandboxed top frame back.
-  EXPECT_TRUE(ExecJs(root, back_script));
-  EXPECT_TRUE(WaitForLoadStop(popup_shell_->web_contents()));
-  EXPECT_EQ(0, controller.GetCurrentEntryIndex());
+  EXPECT_TRUE(ExecJs(popup_root, back_script));
+  EXPECT_TRUE(WaitForLoadStop(popup_shell->web_contents()));
+  EXPECT_EQ(0, popup_controller.GetCurrentEntryIndex());
 }
 
 class NavigationControllerMainDocumentSequenceNumberBrowserTest
@@ -19598,7 +19846,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadFrame) {
   ASSERT_EQ(1U, entry_1->root_node()->children.size());
   scoped_refptr<FrameNavigationEntry> frame_entry_1 =
       entry_1->root_node()->children[0]->frame_entry.get();
-  absl::optional<url::Origin> origin_1 = frame_entry_1->initiator_origin();
+  std::optional<url::Origin> origin_1 = frame_entry_1->initiator_origin();
   ASSERT_TRUE(frame_entry_1->initiator_origin().has_value());
   EXPECT_EQ(url::Origin::Create(main_url),
             frame_entry_1->initiator_origin().value());
@@ -19635,7 +19883,7 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest, ReloadFrame) {
   ASSERT_EQ(1U, entry_1->root_node()->children.size());
   scoped_refptr<FrameNavigationEntry> frame_entry_2 =
       entry_2->root_node()->children[0]->frame_entry.get();
-  absl::optional<url::Origin> origin_2 = frame_entry_2->initiator_origin();
+  std::optional<url::Origin> origin_2 = frame_entry_2->initiator_origin();
   ASSERT_TRUE(frame_entry_2->initiator_origin().has_value());
   EXPECT_EQ(url::Origin::Create(main_url),
             frame_entry_2->initiator_origin().value());
@@ -20166,15 +20414,14 @@ IN_PROC_BROWSER_TEST_P(
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              url_1, Referrer(), absl::nullopt /* initiator_origin= */,
-              /* initiator_base_url= */ absl::nullopt,
+              url_1, Referrer(), std::nullopt /* initiator_origin= */,
+              /* initiator_base_url= */ std::nullopt,
               ui::PAGE_TRANSITION_RELOAD, false, std::string(),
               controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
-  restored_entry->SetPageState(entry1->GetPageState(), context.get());
+  NavigationEntryRestoreContextImpl context;
+  restored_entry->SetPageState(entry1->GetPageState(), &context);
 
   // 3. Create a new tab and don't navigate it anywhere.
   std::vector<std::unique_ptr<NavigationEntry>> entries;
@@ -22093,11 +22340,25 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
 
   // Check that the browser-calculated origin_to_commit is used and matches the
   // committed origin.
-  absl::optional<url::Origin> origin_to_commit = observer.origin_to_commit();
+  std::optional<url::Origin> origin_to_commit = observer.origin_to_commit();
   EXPECT_TRUE(origin_to_commit.has_value());
   url::Origin committed_origin =
       shell()->web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin();
   EXPECT_EQ(origin_to_commit.value(), committed_origin);
+
+  GURL site_url = contents()->GetSiteInstance()->GetSiteURL();
+  if (AreAllSitesIsolatedForTesting()) {
+    if (base::FeatureList::IsEnabled(features::kDataUrlsHaveOriginAsUrl)) {
+      EXPECT_EQ(site_url.spec(),
+                "data:" + origin_to_commit->GetNonceForTesting()->ToString());
+    } else {
+      EXPECT_EQ(site_url, data_url);
+    }
+  } else {
+    // Without site isolation, the data: URL ends up in the default
+    // SiteInstance.
+    EXPECT_EQ(site_url.spec(), "http://unisolated.invalid/");
+  }
 }
 
 // This tests a regression found in https://crbug.com/1487803.
@@ -22184,12 +22445,6 @@ INSTANTIATE_TEST_SUITE_P(
     SandboxedNavigationControllerWithBfcacheBrowserTest,
     testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
                      testing::Values(true)),
-    NavigationControllerBrowserTest::DescribeParams);
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    SandboxedNavigationControllerPopupBrowserTest,
-    testing::Combine(testing::ValuesIn(RenderDocumentFeatureLevelValues()),
-                     testing::Bool()),
     NavigationControllerBrowserTest::DescribeParams);
 INSTANTIATE_TEST_SUITE_P(
     All,

@@ -78,8 +78,6 @@
 #pragma weak pthread_cond_wait
 #pragma weak pthread_equal
 #pragma weak pthread_self
-#pragma weak pthread_key_create
-#pragma weak pthread_key_delete
 #pragma weak pthread_cond_signal
 
 #define XML_PTHREAD_WEAK
@@ -579,6 +577,7 @@ xmlInitParser(void) {
 
     if (xmlParserInnerInitialized == 0) {
 #if defined(_WIN32) && \
+    !defined(LIBXML_THREAD_ALLOC_ENABLED) && \
     (!defined(LIBXML_STATIC) || defined(LIBXML_STATIC_FOR_DLL))
         if (xmlFree == free)
             atexit(xmlCleanupParser);
@@ -586,6 +585,7 @@ xmlInitParser(void) {
 
         xmlInitMemoryInternal(); /* Should come second */
         xmlInitGlobalsInternal();
+        xmlInitRandom();
         xmlInitDictInternal();
         xmlInitEncodingInternal();
 #if defined(LIBXML_XPATH_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
@@ -650,6 +650,7 @@ xmlCleanupParser(void) {
 #endif
 
     xmlCleanupDictInternal();
+    xmlCleanupRandom();
     xmlCleanupGlobalsInternal();
     /*
      * Must come last. On Windows, xmlCleanupGlobalsInternal can call
@@ -663,7 +664,9 @@ xmlCleanupParser(void) {
     xmlParserInnerInitialized = 0;
 }
 
-#if defined(HAVE_ATTRIBUTE_DESTRUCTOR) && !defined(LIBXML_STATIC) && \
+#if defined(HAVE_ATTRIBUTE_DESTRUCTOR) && \
+    !defined(LIBXML_THREAD_ALLOC_ENABLED) && \
+    !defined(LIBXML_STATIC) && \
     !defined(_WIN32)
 static void
 ATTRIBUTE_DESTRUCTOR

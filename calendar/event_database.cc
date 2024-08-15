@@ -183,7 +183,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
         rrule=?, organizer=?, timezone=?, \
         priority=?, status=?, percentage_complete=?,  \
         categories=?, component_class=?, attachment=?, completed=?, \
-        sync_pending=?, delete_pending=?, end_recurring=? \
+        sync_pending=?, delete_pending=?, end_recurring=?, last_modified=? \
         WHERE id=?"));
   int column_index = 0;
   statement.BindInt64(column_index++, event.calendar_id);
@@ -220,6 +220,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   statement.BindInt64(column_index++, event.sync_pending ? 1 : 0);
   statement.BindInt64(column_index++, event.delete_pending ? 1 : 0);
   statement.BindInt64(column_index++, event.end_recurring.ToInternalValue());
+  statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
 
   statement.BindInt64(column_index++, event.id);
 

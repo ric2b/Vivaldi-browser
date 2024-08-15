@@ -1,0 +1,18 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_toolbar") {
+  sources = [
+    "vivaldi_toolbar_constants.h",
+    "vivaldi_toolbar_constants.mm",
+    "vivaldi_sticky_toolbar_view.h",
+    "vivaldi_sticky_toolbar_view.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "resources:resources",
+  ]
+
+ frameworks = [ "UIKit.framework", "Foundation.framework" ]
+}

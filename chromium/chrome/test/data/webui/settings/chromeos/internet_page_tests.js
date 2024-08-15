@@ -5,7 +5,7 @@
 import 'chrome://os-settings/os_settings.js';
 import 'chrome://os-settings/lazy_load.js';
 
-import {Router, routes} from 'chrome://os-settings/os_settings.js';
+import {Router, routes, settingMojom} from 'chrome://os-settings/os_settings.js';
 import {CellularSetupPageName} from 'chrome://resources/ash/common/cellular_setup/cellular_types.js';
 import {setESimManagerRemoteForTesting} from 'chrome://resources/ash/common/cellular_setup/mojo_interface_provider.js';
 import {MojoConnectivityProvider} from 'chrome://resources/ash/common/connectivity/mojo_connectivity_provider.js';
@@ -63,11 +63,6 @@ suite('InternetPage', function() {
       },
     },
   };
-
-  suiteSetup(function() {
-    // Disable animations so sub-pages open within one event loop.
-    testing.Test.disableAnimationsAndTransitions();
-  });
 
   function flushAsync() {
     flush();
@@ -213,7 +208,6 @@ suite('InternetPage', function() {
       internetAddWiFi: 'internetAddWiFi',
       internetDetailPageTitle: 'internetDetailPageTitle',
       internetKnownNetworksPageTitle: 'internetKnownNetworksPageTitle',
-      isApnRevampEnabled: false,
     });
 
     mojoApi_ = new FakeNetworkConfig();
@@ -306,7 +300,7 @@ suite('InternetPage', function() {
       mojoApi_.setNetworkTypeEnabledState(NetworkType.kWiFi, false);
 
       const params = new URLSearchParams();
-      params.append('settingId', '4');
+      params.append('settingId', settingMojom.Setting.kWifiOnOff.toString());
       Router.getInstance().navigateTo(routes.INTERNET, params);
 
       await flushAsync();
@@ -319,6 +313,34 @@ suite('InternetPage', function() {
       assertEquals(
           deepLinkElement, getDeepActiveElement(),
           'Toggle WiFi should be focused for settingId=4.');
+    });
+
+    test('Deep link to + New APN Button', async () => {
+      loadTimeData.overrideValues({isApnRevampEnabled: true});
+      await init();
+
+      const cellularNetwork = OncMojo.getDefaultManagedProperties(
+          NetworkType.kCellular, 'cellular1', 'name1');
+      cellularNetwork.typeProperties.cellular.eid = 'eid';
+      mojoApi_.setManagedPropertiesForTest(cellularNetwork);
+
+      const params = new URLSearchParams();
+      params.append(
+          'settingId', settingMojom.Setting.kCellularAddApn.toString());
+      params.append('guid', cellularNetwork.guid);
+
+      Router.getInstance().navigateTo(routes.APN, params);
+      await flushAsync();
+
+      const deepLinkElement =
+          internetPage.shadowRoot.querySelector('#createCustomApnButton');
+      assertTrue(!!deepLinkElement);
+
+      await waitAfterNextRender(deepLinkElement);
+      assertEquals(
+          deepLinkElement, getDeepActiveElement(),
+          `+ New APN Button be focused for settingId=${
+              settingMojom.Setting.kCellularAddApn.toString()}.`);
     });
 
     suite('VPN', function() {
@@ -522,7 +544,7 @@ suite('InternetPage', function() {
       mojoApi_.setNetworkTypeEnabledState(NetworkType.kCellular, false);
 
       const params = new URLSearchParams();
-      params.append('settingId', '13');
+      params.append('settingId', settingMojom.Setting.kMobileOnOff.toString());
       Router.getInstance().navigateTo(routes.INTERNET, params);
 
       await flushAsync();

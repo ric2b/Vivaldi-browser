@@ -37,7 +37,7 @@
 using content::URLLoaderInterceptor;
 using content::WebContents;
 
-namespace tpcd::support {
+namespace tpcd::trial {
 namespace {
 
 const char kTestTokenPublicKey[] =
@@ -49,9 +49,11 @@ const char kTrialEnabledSubdomain[] = "sub.example.test";
 const char kTrialEnabledIframePath[] = "origin-trial-iframe";
 const char kEmbeddedScriptPagePath[] =
     "tpcd/page_with_cross_site_tpcd_support_ot.html";
+const char kSubdomainMatchingEmbeddedScriptPagePath[] =
+    "tpcd/page_with_cross_site_tpcd_support_ot_with_subdomain_matching.html";
 // Origin Trials token for `kTrialEnabledSite` generated with:
-// tools/origin_trials/generate_token.py --expire-days 5000
-// https://example.test Tpcd
+// tools/origin_trials/generate_token.py  https://example.test Tpcd
+// --expire-days 5000
 const char kTrialToken[] =
     "A1F5vUG256mdaDWxcpAddjWWg7LdOPuoEBswgFVy8b3j0ejT56eJ+e+"
     "IBocST6j2C8nYcnDm6gkd5O7M3FMo4AIAAABPeyJvcmlnaW4iOiAiaHR0cHM6Ly"
@@ -62,12 +64,22 @@ const char kTrialToken[] =
 // generated with:
 // tools/origin_trials/generate_token.py https://example.test Tpcd
 // --is-subdomain --expire-days 5000
-const char kTrialSubdomainToken[] =
+const char kTrialSubdomainMatchingToken[] =
     "AwvUTouERi5ZSbMQGkQhzRCxh3hWd4mu1/"
     "d8CPaQGC3LGmelPVjpqV8VPvKHXNB6ES337b3xvLRsQ6Z/"
     "5TAjdQAAAABkeyJvcmlnaW4iOiAiaHR0cHM6Ly9leGFtcGxlLnRlc3Q6NDQzIiwgImZlYXR1cm"
     "UiOiAiVHBjZCIsICJleHBpcnkiOiAyMTMwODYwOTA1LCAiaXNTdWJkb21haW4iOiB0cnVlfQ="
     "=";
+
+// Origin Trials token for `kTrialEnabledSiteSubdomain` (and all its subdomains)
+// generated with:
+// tools/origin_trials/generate_token.py https://sub.example.test Tpcd
+// --is-subdomain --expire-days 5000
+const char kSubdomainTrialSubdomainMatchingToken[] =
+    "A1XUCMiQfJGkSpeUIg7HmIpY9YtNoANQivDQYA8DLujoJhNovnyi0Fu2huOKeooMwHvfPecmA/"
+    "8uJbrgH28T6A8AAABoeyJvcmlnaW4iOiAiaHR0cHM6Ly9zdWIuZXhhbXBsZS50ZXN0OjQ0MyIs"
+    "ICJmZWF0dXJlIjogIlRwY2QiLCAiZXhwaXJ5IjogMjEzMzk2NzQwOCwgImlzU3ViZG9tYWluIj"
+    "ogdHJ1ZX0=";
 
 class ContentSettingChangeObserver : public content_settings::Observer {
  public:
@@ -112,7 +124,7 @@ class ContentSettingChangeObserver : public content_settings::Observer {
 
 }  // namespace
 
-class TpcdSupportBrowserTest : public PlatformBrowserTest {
+class TpcdTrialBrowserTest : public PlatformBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitchASCII("origin-trial-public-key",
@@ -123,7 +135,7 @@ class TpcdSupportBrowserTest : public PlatformBrowserTest {
   void SetUp() override {
     features_.InitWithFeaturesAndParameters(
         {{::features::kPersistentOriginTrials, {}},
-         {net::features::kTpcdSupportSettings, {}},
+         {net::features::kTpcdTrialSettings, {}},
          {content_settings::features::kTrackingProtection3pcd, {}}},
         {});
 
@@ -177,6 +189,7 @@ class TpcdSupportBrowserTest : public PlatformBrowserTest {
   bool OnRequest(content::URLLoaderInterceptor::RequestParams* params) {
     std::string path = params->url_request.url.path().substr(1);
     std::string host = params->url_request.url.host();
+    std::string query = params->url_request.url.query();
 
     if (path.find("tpcd/") == 0) {
       content::URLLoaderInterceptor::WriteResponse(
@@ -197,9 +210,17 @@ class TpcdSupportBrowserTest : public PlatformBrowserTest {
     if (path == kTrialEnabledIframePath) {
       if (host == kTrialEnabledDomain) {
         base::StrAppend(&headers, {"Origin-Trial: ", kTrialToken, "\n"});
-      } else if (host == kTrialEnabledSubdomain) {
-        base::StrAppend(&headers,
-                        {"Origin-Trial: ", kTrialSubdomainToken, "\n"});
+      }
+
+      if (host == kTrialEnabledSubdomain) {
+        if (query == "etld_plus_1_token") {
+          base::StrAppend(
+              &headers, {"Origin-Trial: ", kTrialSubdomainMatchingToken, "\n"});
+        } else {
+          base::StrAppend(
+              &headers,
+              {"Origin-Trial: ", kSubdomainTrialSubdomainMatchingToken, "\n"});
+        }
       }
     }
 
@@ -217,8 +238,8 @@ class TpcdSupportBrowserTest : public PlatformBrowserTest {
       base::StrCat({"https://", kTrialEnabledSubdomain})};
 };
 
-IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest,
-                       EnabledAfterThirdPartyIframeResponse) {
+IN_PROC_BROWSER_TEST_F(TpcdTrialBrowserTest,
+                       EnabledAfterCrossSiteIframeResponse) {
   content::WebContents* web_contents = GetActiveWebContents();
   GURL embedding_site =
       embedded_test_server()->GetURL("a.test", "/iframe_blank.html");
@@ -240,7 +261,7 @@ IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest,
   {
     ContentSettingChangeObserver setting_observer(
         web_contents->GetBrowserContext(), kTrialEnabledSite, embedding_site,
-        ContentSettingsType::TPCD_SUPPORT);
+        ContentSettingsType::TPCD_TRIAL);
 
     GURL iframe_url = GURL(kTrialEnabledSite.spec() + kTrialEnabledIframePath);
     ASSERT_TRUE(
@@ -267,11 +288,11 @@ IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest,
 
   // Verify that a subsequent load of a resource from `kTrialEnabledSite` on the
   // embedding site without the token (`enabled_site_diff_path`) removes the
-  // `TPCD_SUPPORT` content setting for it it.
+  // `TPCD_TRIAL` content setting for it it.
   {
     ContentSettingChangeObserver setting_observer(
         web_contents->GetBrowserContext(), enabled_site_diff_path,
-        embedding_site, ContentSettingsType::TPCD_SUPPORT);
+        embedding_site, ContentSettingsType::TPCD_TRIAL);
     ASSERT_TRUE(content::NavigateIframeToURL(web_contents, kIframeId,
                                              enabled_site_diff_path));
     setting_observer.Wait();
@@ -286,8 +307,8 @@ IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest,
             CONTENT_SETTING_BLOCK);
 }
 
-IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest,
-                       EnabledAfterThirdPartyIframeResponseWithSubdomainToken) {
+IN_PROC_BROWSER_TEST_F(TpcdTrialBrowserTest,
+                       EnabledAfterCrossSiteIframeResponseWithSubdomainToken) {
   content::WebContents* web_contents = GetActiveWebContents();
   GURL embedding_site =
       embedded_test_server()->GetURL("a.test", "/iframe_blank.html");
@@ -317,65 +338,60 @@ IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest,
   {
     ContentSettingChangeObserver setting_observer(
         web_contents->GetBrowserContext(), kTrialEnabledSiteSubdomain,
-        embedding_site, ContentSettingsType::TPCD_SUPPORT);
+        embedding_site, ContentSettingsType::TPCD_TRIAL);
 
-    GURL iframe_url =
-        GURL(kTrialEnabledSiteSubdomain.spec() + kTrialEnabledIframePath);
+    GURL iframe_url = GURL(kTrialEnabledSiteSubdomain.spec() +
+                           kTrialEnabledIframePath + "?etld_plus_1_token");
     ASSERT_TRUE(
         content::NavigateIframeToURL(web_contents, kIframeId, iframe_url));
     setting_observer.Wait();
   }
 
-  // Check that `kTrialEnabledSiteSubdomain` now has access to cookies as a
-  // third-party when embedded by `embedding_site`.
+  // Check that both `kTrialEnabledSiteSubdomain` and it's eTLD+1
+  // (`kTrialEnabledSite`) now has access to cookies as a third-party when
+  // embedded by `embedding_site`.
   EXPECT_EQ(settings->GetCookieSetting(kTrialEnabledSiteSubdomain,
                                        embedding_site, {}, nullptr),
             CONTENT_SETTING_ALLOW);
-
-  // Verify that the new cookie setting does not also apply to
-  // `kTrialEnabledSite`.
-  //
-  // TODO (crbug.com/1416840): Revisit this once subdomain matching is fully
-  // supported for persistent origin trial tokens and the observer method
-  // signatures have been updated accordingly.
   EXPECT_EQ(settings->GetCookieSetting(kTrialEnabledSite, embedding_site, {},
                                        nullptr),
-            CONTENT_SETTING_BLOCK);
+            CONTENT_SETTING_ALLOW);
 
   // TODO (crbug.com/1466156): Actually attempt to read cookies for
   // `kTrialEnabledSiteSubdomain` as a third-party.
 
   // Check cookie access for `kTrialEnabledSiteSubdomain` with a different path.
-  GURL enabled_site_diff_path =
-      GURL(kTrialEnabledSiteSubdomain.spec() + "iframe_blank.html");
-
-  EXPECT_EQ(settings->GetCookieSetting(enabled_site_diff_path, embedding_site,
-                                       {}, nullptr),
+  EXPECT_EQ(settings->GetCookieSetting(
+                GURL(kTrialEnabledSiteSubdomain.spec() + "iframe_blank.html"),
+                embedding_site, {}, nullptr),
             CONTENT_SETTING_ALLOW);
 
+  GURL enabled_site_no_token =
+      GURL(kTrialEnabledSite.spec() + "iframe_blank.html");
   // Verify that a subsequent load of a resource from
-  // `kTrialEnabledSiteSubdomain` on the embedding site without the token
-  // (`enabled_site_diff_path`) removes the `TPCD_SUPPORT` content setting for
-  // it it.
+  // `kTrialEnabledSiteSubdomain`'s eTLD+1 (`kTrialEnabledSite`) on the
+  // embedding site without the token (`enabled_site_diff_path`) removes the
+  // `TPCD_TRIAL` content setting for it.
   {
     ContentSettingChangeObserver setting_observer(
-        web_contents->GetBrowserContext(), enabled_site_diff_path,
-        embedding_site, ContentSettingsType::TPCD_SUPPORT);
+        web_contents->GetBrowserContext(), enabled_site_no_token,
+        embedding_site, ContentSettingsType::TPCD_TRIAL);
     ASSERT_TRUE(content::NavigateIframeToURL(web_contents, kIframeId,
-                                             enabled_site_diff_path));
+                                             enabled_site_no_token));
     setting_observer.Wait();
   }
 
-  // Verify `kTrialEnabledSiteSubdomain` no longer has cookie access.
+  // Verify `kTrialEnabledSiteSubdomain` and it's eTLD+1 (`kTrialEnabledSite`)
+  // no longer have cookie access.
   EXPECT_EQ(settings->GetCookieSetting(kTrialEnabledSiteSubdomain,
                                        embedding_site, {}, nullptr),
             CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(settings->GetCookieSetting(enabled_site_diff_path, embedding_site,
-                                       {}, nullptr),
+  EXPECT_EQ(settings->GetCookieSetting(kTrialEnabledSite, embedding_site, {},
+                                       nullptr),
             CONTENT_SETTING_BLOCK);
 }
 
-IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest, EnabledAfterMetaTagAppend) {
+IN_PROC_BROWSER_TEST_F(TpcdTrialBrowserTest, EnabledAfterMetaTagAppend) {
   content::WebContents* web_contents = GetActiveWebContents();
   GURL embedding_site{
       base::StrCat({"https://a.test/", kEmbeddedScriptPagePath})};
@@ -387,7 +403,7 @@ IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest, EnabledAfterMetaTagAppend) {
   {
     ContentSettingChangeObserver setting_observer(
         web_contents->GetBrowserContext(), kTrialEnabledSite, embedding_site,
-        ContentSettingsType::TPCD_SUPPORT);
+        ContentSettingsType::TPCD_TRIAL);
 
     ASSERT_TRUE(content::NavigateToURL(web_contents, embedding_site));
     setting_observer.Wait();
@@ -406,4 +422,151 @@ IN_PROC_BROWSER_TEST_F(TpcdSupportBrowserTest, EnabledAfterMetaTagAppend) {
                 ThirdPartyCookieAllowMechanism::kAllowBy3PCD);
 }
 
-}  // namespace tpcd::support
+IN_PROC_BROWSER_TEST_F(TpcdTrialBrowserTest,
+                       EnabledAfterMetaTagAppendWithSubdomainToken) {
+  content::WebContents* web_contents = GetActiveWebContents();
+  GURL embedding_site{base::StrCat(
+      {"https://a.test/", kSubdomainMatchingEmbeddedScriptPagePath})};
+
+  // Navigate to a page with an embedded script (sourced from
+  // `kTrialEnabledSite`), that enables the trial for `kTrialEnabledSite` and
+  // subdomains of it by appending a meta tag containing `kTrialEnabledSite`'s
+  // subdomain-matching third-party origin trial token to the head of the page.
+  {
+    ContentSettingChangeObserver setting_observer(
+        web_contents->GetBrowserContext(), kTrialEnabledSite, embedding_site,
+        ContentSettingsType::TPCD_TRIAL);
+
+    ASSERT_TRUE(content::NavigateToURL(web_contents, embedding_site));
+    setting_observer.Wait();
+  }
+
+  // Verify that `kTrialEnabledSite` and `kTrialEnabledSiteSubdomain` now have
+  // access to cookies as a third-party when embedded by `embedding_site`.
+  content_settings::CookieSettings* settings =
+      CookieSettingsFactory::GetForProfile(GetProfile()).get();
+  EXPECT_EQ(settings->GetCookieSetting(kTrialEnabledSite, embedding_site, {},
+                                       nullptr),
+            CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(settings->GetCookieSetting(kTrialEnabledSiteSubdomain,
+                                       embedding_site, {}, nullptr),
+            CONTENT_SETTING_ALLOW);
+
+  EXPECT_EQ(settings->GetThirdPartyCookieAllowMechanism(
+                kTrialEnabledSite, embedding_site, {}, nullptr),
+            content_settings::CookieSettingsBase::
+                ThirdPartyCookieAllowMechanism::kAllowBy3PCD);
+  EXPECT_EQ(settings->GetThirdPartyCookieAllowMechanism(
+                kTrialEnabledSiteSubdomain, embedding_site, {}, nullptr),
+            content_settings::CookieSettingsBase::
+                ThirdPartyCookieAllowMechanism::kAllowBy3PCD);
+}
+
+// This test verifies that TPCD_TRIAL content settings are scoped to the
+// embedded origin, in the case where a non-subdomain-matching origin trial
+// token is used to enable the trial.
+IN_PROC_BROWSER_TEST_F(TpcdTrialBrowserTest, TrialEnabledForTokenOriginScope) {
+  content::WebContents* web_contents = GetActiveWebContents();
+  GURL embedding_site =
+      embedded_test_server()->GetURL("a.test", "/iframe_blank.html");
+
+  // Navigate the top-level page to `embedding_site` and update it to have an
+  // `kTrialEnabledSite` iframe that returns the origin trial token in it's HTTP
+  // response headers.
+  ASSERT_TRUE(content::NavigateToURL(web_contents, embedding_site));
+  const std::string kIframeId = "test";  // defined in iframe_blank.html
+  {
+    ContentSettingChangeObserver setting_observer(
+        web_contents->GetBrowserContext(), kTrialEnabledSite, embedding_site,
+        ContentSettingsType::TPCD_TRIAL);
+
+    GURL iframe_url = GURL(kTrialEnabledSite.spec() + kTrialEnabledIframePath);
+    ASSERT_TRUE(
+        content::NavigateIframeToURL(web_contents, kIframeId, iframe_url));
+    setting_observer.Wait();
+  }
+
+  // Verify the format of the `TPCD_TRIAL` content setting.
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(
+          GetActiveWebContents()->GetBrowserContext());
+
+  content_settings::SettingInfo setting_info;
+  ASSERT_EQ(settings_map->GetContentSetting(kTrialEnabledSite, embedding_site,
+                                            ContentSettingsType::TPCD_TRIAL,
+                                            &setting_info),
+            CONTENT_SETTING_ALLOW);
+
+  // `setting_info.primary_pattern` should only match
+  // `kTrialEnabledSite`.
+  EXPECT_EQ(setting_info.primary_pattern,
+            ContentSettingsPattern::FromURLNoWildcard(kTrialEnabledSite));
+  EXPECT_TRUE(setting_info.primary_pattern.Matches(kTrialEnabledSite));
+  EXPECT_FALSE(
+      setting_info.primary_pattern.Matches(kTrialEnabledSiteSubdomain));
+
+  // `setting_info.secondary_pattern` should match origins that are
+  // same-site with `embedding_site`.
+  EXPECT_EQ(
+      setting_info.secondary_pattern,
+      ContentSettingsPattern::FromURLToSchemefulSitePattern(embedding_site));
+}
+
+// This test verifies that TPCD_TRIAL content settings are scoped to
+// subdomains of the token origin, when created as a result of a subdomain
+// matching origin trial token being used.
+IN_PROC_BROWSER_TEST_F(
+    TpcdTrialBrowserTest,
+    SubdomainMatchingTokenEnablesTrialOnlyForSubdomainsOfTokenOrigin) {
+  content::WebContents* web_contents = GetActiveWebContents();
+  GURL embedding_site =
+      embedded_test_server()->GetURL("a.test", "/iframe_blank.html");
+
+  // Navigate the top-level page to `embedding_site` and update it to have an
+  // `kTrialEnabledSiteSubdomain` iframe that returns
+  // `kTrialEnabledSiteSubdomain`'s subdomain matching origin trial token in
+  // it's HTTP response headers.
+  ASSERT_TRUE(content::NavigateToURL(web_contents, embedding_site));
+  const std::string kIframeId = "test";  // defined in iframe_blank.html
+  {
+    ContentSettingChangeObserver setting_observer(
+        web_contents->GetBrowserContext(), kTrialEnabledSiteSubdomain,
+        embedding_site, ContentSettingsType::TPCD_TRIAL);
+
+    GURL iframe_url =
+        GURL(kTrialEnabledSiteSubdomain.spec() + kTrialEnabledIframePath);
+    ASSERT_TRUE(
+        content::NavigateIframeToURL(web_contents, kIframeId, iframe_url));
+    setting_observer.Wait();
+  }
+
+  // Verify the format of the `TPCD_TRIAL` content setting.
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(
+          GetActiveWebContents()->GetBrowserContext());
+
+  content_settings::SettingInfo setting_info;
+  ASSERT_EQ(settings_map->GetContentSetting(
+                kTrialEnabledSiteSubdomain, embedding_site,
+                ContentSettingsType::TPCD_TRIAL, &setting_info),
+            CONTENT_SETTING_ALLOW);
+
+  // `setting_info.primary_pattern` should only match
+  // `kTrialEnabledSiteSubdomain` (https://sub.example.test) and subdomains of
+  // it.
+  EXPECT_EQ(setting_info.primary_pattern,
+            ContentSettingsPattern::FromURL(kTrialEnabledSiteSubdomain));
+  EXPECT_TRUE(setting_info.primary_pattern.Matches(
+      GURL("https://foo.sub.example.test")));
+  EXPECT_FALSE(
+      setting_info.primary_pattern.Matches(GURL("https://www.example.test")));
+  EXPECT_FALSE(setting_info.primary_pattern.Matches(kTrialEnabledSite));
+
+  // `setting_info.secondary_pattern` should match origins that are
+  // same-site with `embedding_site`.
+  EXPECT_EQ(
+      setting_info.secondary_pattern,
+      ContentSettingsPattern::FromURLToSchemefulSitePattern(embedding_site));
+}
+
+}  // namespace tpcd::trial

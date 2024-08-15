@@ -17,6 +17,8 @@
                                 NO);
   registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabStackEnabled,
                                 NO);
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiReverseSearchResultsEnabled, NO);
 }
 
 /// Returns the desktop style tab status

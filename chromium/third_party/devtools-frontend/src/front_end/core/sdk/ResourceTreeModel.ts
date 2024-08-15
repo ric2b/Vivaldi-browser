@@ -234,6 +234,9 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
     if (type) {
       frame.backForwardCacheDetails.restoredFromCache = type === Protocol.Page.NavigationType.BackForwardCacheRestore;
     }
+    if (frame.isMainFrame()) {
+      this.target().setInspectedURL(frame.url);
+    }
     this.dispatchEventToListeners(Events.FrameNavigated, frame);
 
     if (frame.isPrimaryFrame()) {
@@ -246,9 +249,6 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
       this.dispatchEventToListeners(Events.ResourceAdded, resources[i]);
     }
 
-    if (frame.isMainFrame()) {
-      this.target().setInspectedURL(frame.url);
-    }
     this.updateSecurityOrigins();
     void this.updateStorageKeys();
 
@@ -436,9 +436,7 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
     void this.agent.invoke_reload({ignoreCache, scriptToEvaluateOnLoad});
   }
 
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  navigate(url: Platform.DevToolsPath.UrlString): Promise<any> {
+  navigate(url: Platform.DevToolsPath.UrlString): Promise<Protocol.Page.NavigateResponse> {
     return this.agent.invoke_navigate({url});
   }
 
@@ -616,8 +614,6 @@ export class ResourceTreeModel extends SDKModel<EventTypes> {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   FrameAdded = 'FrameAdded',
   FrameNavigated = 'FrameNavigated',

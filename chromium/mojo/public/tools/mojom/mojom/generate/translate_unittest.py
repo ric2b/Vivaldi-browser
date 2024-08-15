@@ -63,8 +63,6 @@ class TranslateTest(unittest.TestCase):
   def testAssociatedKinds(self):
     """Tests type spec translation of associated interfaces and requests."""
     # pylint: disable=W0212
-    self.assertEquals(
-        translate._MapKind("asso<SomeInterface>?"), "?asso:x:SomeInterface")
     self.assertEquals(translate._MapKind("rca<SomeInterface>?"),
                       "?rca:x:SomeInterface")
 
@@ -100,3 +98,42 @@ class TranslateTest(unittest.TestCase):
     ])
     with self.assertRaises(Exception):
       translate.OrderedModule(tree, "mojom_tree", [])
+
+  def testEnumWithReservedValues(self):
+    """Verifies that assigning reserved values to enumerators fails."""
+    # -128 is reserved for the empty representation in WTF::HashTraits.
+    tree = ast.Mojom(None, ast.ImportList(), [
+        ast.Enum(
+            "MyEnum", None,
+            ast.EnumValueList([
+                ast.EnumValue('kReserved', None, '-128'),
+            ]))
+    ])
+    with self.assertRaises(Exception) as context:
+      translate.OrderedModule(tree, "mojom_tree", [])
+    self.assertIn("reserved for WTF::HashTrait", str(context.exception))
+
+    # -127 is reserved for the deleted representation in WTF::HashTraits.
+    tree = ast.Mojom(None, ast.ImportList(), [
+        ast.Enum(
+            "MyEnum", None,
+            ast.EnumValueList([
+                ast.EnumValue('kReserved', None, '-127'),
+            ]))
+    ])
+    with self.assertRaises(Exception) as context:
+      translate.OrderedModule(tree, "mojom_tree", [])
+    self.assertIn("reserved for WTF::HashTrait", str(context.exception))
+
+    # Implicitly assigning a reserved value should also fail.
+    tree = ast.Mojom(None, ast.ImportList(), [
+        ast.Enum(
+            "MyEnum", None,
+            ast.EnumValueList([
+                ast.EnumValue('kNotReserved', None, '-129'),
+                ast.EnumValue('kImplicitlyReserved', None, None),
+            ]))
+    ])
+    with self.assertRaises(Exception) as context:
+      translate.OrderedModule(tree, "mojom_tree", [])
+    self.assertIn("reserved for WTF::HashTrait", str(context.exception))

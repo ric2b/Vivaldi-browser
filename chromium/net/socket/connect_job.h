@@ -21,10 +21,13 @@
 #include "net/base/request_priority.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/resolve_error_info.h"
+#include "net/http/http_server_properties.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/connection_attempts.h"
+#include "net/socket/next_proto.h"
 #include "net/socket/socket_tag.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/ssl/ssl_config.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_versions.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -43,7 +46,7 @@ class NetLog;
 class NetLogWithSource;
 class NetworkQualityEstimator;
 class ProxyDelegate;
-class QuicStreamFactory;
+class QuicSessionPool;
 class SocketPerformanceWatcherFactory;
 class SocketTag;
 class SpdySessionPool;
@@ -57,6 +60,8 @@ class WebSocketEndpointLockManager;
 // ConnectJobs that wrap other ConnectJobs typically have different values for
 // those.
 struct NET_EXPORT_PRIVATE CommonConnectJobParams {
+  // TODO(https://crbug.com/1505765): Look into passing in HttpNetworkSession
+  // instead.
   CommonConnectJobParams(
       ClientSocketFactory* client_socket_factory,
       HostResolver* host_resolver,
@@ -64,14 +69,19 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
       HttpAuthHandlerFactory* http_auth_handler_factory,
       SpdySessionPool* spdy_session_pool,
       const quic::ParsedQuicVersionVector* quic_supported_versions,
-      QuicStreamFactory* quic_stream_factory,
+      QuicSessionPool* quic_session_pool,
       ProxyDelegate* proxy_delegate,
       const HttpUserAgentSettings* http_user_agent_settings,
       SSLClientContext* ssl_client_context,
       SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
       NetworkQualityEstimator* network_quality_estimator,
       NetLog* net_log,
-      WebSocketEndpointLockManager* websocket_endpoint_lock_manager);
+      WebSocketEndpointLockManager* websocket_endpoint_lock_manager,
+      HttpServerProperties* http_server_properties,
+      const NextProtoVector* alpn_protos,
+      const SSLConfig::ApplicationSettings* application_settings,
+      const bool* ignore_certificate_errors,
+      const bool* enable_early_data);
   CommonConnectJobParams(const CommonConnectJobParams& other);
   ~CommonConnectJobParams();
 
@@ -83,7 +93,7 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
   raw_ptr<HttpAuthHandlerFactory> http_auth_handler_factory;
   raw_ptr<SpdySessionPool> spdy_session_pool;
   raw_ptr<const quic::ParsedQuicVersionVector> quic_supported_versions;
-  raw_ptr<QuicStreamFactory> quic_stream_factory;
+  raw_ptr<QuicSessionPool> quic_session_pool;
   raw_ptr<ProxyDelegate> proxy_delegate;
   raw_ptr<const HttpUserAgentSettings> http_user_agent_settings;
   raw_ptr<SSLClientContext> ssl_client_context;
@@ -93,6 +103,13 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
 
   // This must only be non-null for WebSockets.
   raw_ptr<WebSocketEndpointLockManager> websocket_endpoint_lock_manager;
+
+  raw_ptr<HttpServerProperties> http_server_properties;
+
+  raw_ptr<const NextProtoVector> alpn_protos;
+  raw_ptr<const SSLConfig::ApplicationSettings> application_settings;
+  raw_ptr<const bool> ignore_certificate_errors;
+  raw_ptr<const bool> enable_early_data;
 };
 
 // When a host resolution completes, OnHostResolutionCallback() is invoked. If
@@ -273,6 +290,9 @@ class NET_EXPORT_PRIVATE ConnectJob {
   }
   WebSocketEndpointLockManager* websocket_endpoint_lock_manager() {
     return common_connect_job_params_->websocket_endpoint_lock_manager;
+  }
+  HttpServerProperties* http_server_properties() {
+    return common_connect_job_params_->http_server_properties;
   }
   const CommonConnectJobParams* common_connect_job_params() const {
     return common_connect_job_params_;

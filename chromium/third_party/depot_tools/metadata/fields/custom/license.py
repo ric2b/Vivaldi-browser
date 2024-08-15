@@ -128,7 +128,7 @@ class LicenseField(field_types.MetadataField):
                 ])
 
         # Suggest using the standard value delimiter when possible.
-        if (re.search(_PATTERN_VERBOSE_DELIMITER, value)
+        if (len(licenses) > 1 and re.search(_PATTERN_VERBOSE_DELIMITER, value)
                 and self.VALUE_DELIMITER not in value):
             return vr.ValidationWarning(
                 reason=f"Separate licenses using a '{self.VALUE_DELIMITER}'.")

@@ -103,6 +103,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 
   cc::PaintCanvas* GetOrCreatePaintCanvas() final;
   cc::PaintCanvas* GetPaintCanvas() final;
+  MemoryManagedPaintRecorder* Recorder() final;
+
   void WillDraw(const SkIRect& dirty_rect,
                 CanvasPerformanceMonitor::DrawType) final;
 
@@ -143,7 +145,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     return identifiability_study_helper_.encountered_partially_digested_image();
   }
 
-  void FlushCanvas(FlushReason) override;
+  absl::optional<cc::PaintRecord> FlushCanvas(FlushReason) override;
 
  protected:
   OffscreenCanvas* HostAsOffscreenCanvas() const final;
@@ -157,7 +159,6 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
                    size_t row_bytes,
                    int x,
                    int y) override;
-  void WillOverwriteCanvas() override;
   void DispatchContextLostEvent(TimerBase*) override;
   void TryRestoreContextEvent(TimerBase*) override;
 

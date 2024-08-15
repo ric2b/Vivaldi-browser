@@ -11,7 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_service.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
+#include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 
 class PasswordStatusCheckResult;
@@ -71,7 +71,7 @@ class PasswordStatusCheckService
 
   // Returns the latest PasswordStatusCheckResult that is available in memory.
   // TODO(crbug.com/1443466): This will be a SafetyHubService implementation.
-  absl::optional<std::unique_ptr<SafetyHubService::Result>> GetCachedResult();
+  std::optional<std::unique_ptr<SafetyHubService::Result>> GetCachedResult();
 
   // Returns if there is any ongoing password check or insecure credential
   // check. Returns true if is_update_credential_count_pending() or

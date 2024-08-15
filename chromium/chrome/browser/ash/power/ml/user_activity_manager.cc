@@ -12,6 +12,7 @@
 #include "ash/shell.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -99,10 +100,10 @@ void LogMetricsToUMA(const UserActivityEvent& event) {
 // True if the first browser window in mru windows list is from Lacros.
 bool ShouldUseLacrosFeatures() {
   if (ash::Shell::HasInstance()) {
-    std::vector<aura::Window*> mru_windows =
+    std::vector<raw_ptr<aura::Window, VectorExperimental>> mru_windows =
         ash::Shell::Get()->mru_window_tracker()->BuildMruWindowList(
             ash::kActiveDesk);
-    for (auto* window : mru_windows) {
+    for (aura::Window* window : mru_windows) {
       if (!window->IsVisible())
         continue;
 
@@ -426,7 +427,7 @@ void UserActivityManager::OnLacrosInstanceDisconnected(
 }
 
 void UserActivityManager::OnReceiveSwitchStates(
-    absl::optional<chromeos::PowerManagerClient::SwitchStates> switch_states) {
+    std::optional<chromeos::PowerManagerClient::SwitchStates> switch_states) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (switch_states.has_value()) {
     lid_state_ = switch_states->lid_state;
@@ -435,7 +436,7 @@ void UserActivityManager::OnReceiveSwitchStates(
 }
 
 void UserActivityManager::OnReceiveInactivityDelays(
-    absl::optional<power_manager::PowerManagementPolicy::Delays> delays) {
+    std::optional<power_manager::PowerManagementPolicy::Delays> delays) {
   if (delays.has_value()) {
     screen_dim_delay_ = base::Milliseconds(delays->screen_dim_ms());
     screen_off_delay_ = base::Milliseconds(delays->screen_off_ms());
@@ -711,9 +712,9 @@ void UserActivityManager::PopulatePreviousEventData(
 
 void UserActivityManager::ResetAfterLogging() {
   features_.Clear();
-  idle_event_start_since_boot_ = absl::nullopt;
+  idle_event_start_since_boot_ = std::nullopt;
   waiting_for_final_action_ = false;
-  model_prediction_ = absl::nullopt;
+  model_prediction_ = std::nullopt;
 
   previous_idle_event_data_.reset();
 }

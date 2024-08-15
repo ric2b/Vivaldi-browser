@@ -14,7 +14,6 @@
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/invalidation/public/invalidator_state.h"
 #include "components/prefs/testing_pref_service.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::IsEmpty;
@@ -30,6 +29,12 @@ void Dispatch(InvalidatorRegistrarWithMemory& registrar, Inv... inv) {
   (registrar.DispatchInvalidationToHandlers(inv), ...);
 }
 
+template <class... Topic>
+void DispatchSuccessfullySubscribed(InvalidatorRegistrarWithMemory& registrar,
+                                    Topic... topics) {
+  (registrar.DispatchSuccessfullySubscribedToHandlers(topics), ...);
+}
+
 template <class... Inv>
 std::map<Topic, Invalidation> ExpectedInvalidations(Inv... inv) {
   std::map<Topic, Invalidation> expected_invalidations;
@@ -41,10 +46,14 @@ constexpr char kTopicsToHandler[] = "invalidation.per_sender_topics_to_handler";
 
 class InvalidatorRegistrarWithMemoryTest : public testing::Test {
  protected:
-  const TopicData kTopic1 = {/*name=*/"topic_1", /*is_public=*/false};
-  const TopicData kTopic2 = {/*name=*/"topic_2", /*is_public=*/false};
-  const TopicData kTopic3 = {/*name=*/"topic_3", /*is_public=*/false};
-  const TopicData kTopic4 = {/*name=*/"topic_4", /*is_public=*/false};
+  const Topic kTopicName1 = "topic_1";
+  const Topic kTopicName2 = "topic_2";
+  const Topic kTopicName3 = "topic_3";
+  const Topic kTopicName4 = "topic_4";
+  const TopicData kTopic1 = {/*name=*/kTopicName1, /*is_public=*/false};
+  const TopicData kTopic2 = {/*name=*/kTopicName2, /*is_public=*/false};
+  const TopicData kTopic3 = {/*name=*/kTopicName3, /*is_public=*/false};
+  const TopicData kTopic4 = {/*name=*/kTopicName4, /*is_public=*/false};
   const Invalidation kInv1 = Invalidation(kTopic1.name, 1, "1");
   const Invalidation kInv2 = Invalidation(kTopic2.name, 2, "2");
   const Invalidation kInv3 = Invalidation(kTopic3.name, 3, "3");
@@ -63,9 +72,14 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, Basic) {
       &pref_service, "sender_id");
 
   FakeInvalidationHandler handler("owner");
-  invalidator->RegisterHandler(&handler);
+  invalidator->AddObserver(&handler);
+  EXPECT_TRUE(invalidator->HasObserver(&handler));
 
   // Should be ignored since no topics are registered to |handler|.
+  DispatchSuccessfullySubscribed(*invalidator, kTopicName1, kTopicName2,
+                                 kTopicName3);
+  EXPECT_THAT(handler.GetSuccessfullySubscribed(), IsEmpty());
+
   Dispatch(*invalidator, kInv1, kInv2, kInv3);
   EXPECT_EQ(0, handler.GetInvalidationCount());
 
@@ -75,22 +89,32 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, Basic) {
   invalidator->UpdateInvalidatorState(INVALIDATIONS_ENABLED);
   EXPECT_EQ(INVALIDATIONS_ENABLED, handler.GetInvalidatorState());
 
+  DispatchSuccessfullySubscribed(*invalidator, kTopicName1, kTopicName2,
+                                 kTopicName3);
+  EXPECT_THAT(handler.GetSuccessfullySubscribed(),
+              UnorderedElementsAre(kTopicName1, kTopicName2));
+
   Dispatch(*invalidator, kInv1, kInv2, kInv3);
   EXPECT_EQ(2, handler.GetInvalidationCount());
   EXPECT_EQ(ExpectedInvalidations(kInv1, kInv2),
             handler.GetReceivedInvalidations());
-  handler.ClearReceivedInvalidations();
+  handler.Clear();
 
   // Remove kTopic1, add kTopic3.
   EXPECT_TRUE(
       invalidator->UpdateRegisteredTopics(&handler, {kTopic2, kTopic3}));
 
   // Removed topic should not be notified, newly-added ones should.
+  DispatchSuccessfullySubscribed(*invalidator, kTopicName1, kTopicName2,
+                                 kTopicName3);
+  EXPECT_THAT(handler.GetSuccessfullySubscribed(),
+              UnorderedElementsAre(kTopicName2, kTopicName3));
+
   Dispatch(*invalidator, kInv1, kInv2, kInv3);
   EXPECT_EQ(2, handler.GetInvalidationCount());
   EXPECT_EQ(ExpectedInvalidations(kInv2, kInv3),
             handler.GetReceivedInvalidations());
-  handler.ClearReceivedInvalidations();
+  handler.Clear();
 
   invalidator->UpdateInvalidatorState(TRANSIENT_INVALIDATION_ERROR);
   EXPECT_EQ(TRANSIENT_INVALIDATION_ERROR, handler.GetInvalidatorState());
@@ -98,9 +122,14 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, Basic) {
   invalidator->UpdateInvalidatorState(INVALIDATION_CREDENTIALS_REJECTED);
   EXPECT_EQ(INVALIDATION_CREDENTIALS_REJECTED, handler.GetInvalidatorState());
 
-  invalidator->UnregisterHandler(&handler);
+  invalidator->RemoveObserver(&handler);
+  EXPECT_FALSE(invalidator->HasObserver(&handler));
 
   // Should be ignored since |handler| isn't registered anymore.
+  DispatchSuccessfullySubscribed(*invalidator, kTopicName1, kTopicName2,
+                                 kTopicName3);
+  EXPECT_THAT(handler.GetSuccessfullySubscribed(), IsEmpty());
+
   Dispatch(*invalidator, kInv1, kInv2, kInv3);
   EXPECT_EQ(0, handler.GetInvalidationCount());
 }
@@ -122,10 +151,10 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, MultipleHandlers) {
   FakeInvalidationHandler handler3("owner_3");
   FakeInvalidationHandler handler4("owner_4");
 
-  invalidator->RegisterHandler(&handler1);
-  invalidator->RegisterHandler(&handler2);
-  invalidator->RegisterHandler(&handler3);
-  invalidator->RegisterHandler(&handler4);
+  invalidator->AddObserver(&handler1);
+  invalidator->AddObserver(&handler2);
+  invalidator->AddObserver(&handler3);
+  invalidator->AddObserver(&handler4);
 
   EXPECT_TRUE(
       invalidator->UpdateRegisteredTopics(&handler1, {kTopic1, kTopic2}));
@@ -133,7 +162,7 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, MultipleHandlers) {
   // Don't register any IDs for handler3.
   EXPECT_TRUE(invalidator->UpdateRegisteredTopics(&handler4, {kTopic4}));
 
-  invalidator->UnregisterHandler(&handler4);
+  invalidator->RemoveObserver(&handler4);
 
   invalidator->UpdateInvalidatorState(INVALIDATIONS_ENABLED);
   EXPECT_EQ(INVALIDATIONS_ENABLED, handler1.GetInvalidatorState());
@@ -162,9 +191,9 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, MultipleHandlers) {
   EXPECT_EQ(TRANSIENT_INVALIDATION_ERROR, handler3.GetInvalidatorState());
   EXPECT_EQ(TRANSIENT_INVALIDATION_ERROR, handler4.GetInvalidatorState());
 
-  invalidator->UnregisterHandler(&handler3);
-  invalidator->UnregisterHandler(&handler2);
-  invalidator->UnregisterHandler(&handler1);
+  invalidator->RemoveObserver(&handler3);
+  invalidator->RemoveObserver(&handler2);
+  invalidator->RemoveObserver(&handler1);
 }
 
 // Multiple registrations by different handlers on the same topic should
@@ -179,8 +208,8 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, MultipleRegistrations) {
   FakeInvalidationHandler handler1("owner1");
   FakeInvalidationHandler handler2("owner2");
 
-  invalidator->RegisterHandler(&handler1);
-  invalidator->RegisterHandler(&handler2);
+  invalidator->AddObserver(&handler1);
+  invalidator->AddObserver(&handler2);
 
   // Registering both handlers for the same topic. First call should succeed,
   // second should fail.
@@ -192,8 +221,8 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, MultipleRegistrations) {
   EXPECT_TRUE(invalidator->UpdateRegisteredTopics(&handler1, /*topics=*/{}));
   EXPECT_TRUE(invalidator->GetAllSubscribedTopics().empty());
 
-  invalidator->UnregisterHandler(&handler2);
-  invalidator->UnregisterHandler(&handler1);
+  invalidator->RemoveObserver(&handler2);
+  invalidator->RemoveObserver(&handler1);
 }
 
 // Make sure that passing an empty set to UpdateRegisteredTopics clears the
@@ -210,8 +239,8 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, EmptySetUnregisters) {
   // Control observer.
   FakeInvalidationHandler handler2("owner_2");
 
-  invalidator->RegisterHandler(&handler1);
-  invalidator->RegisterHandler(&handler2);
+  invalidator->AddObserver(&handler1);
+  invalidator->AddObserver(&handler2);
 
   EXPECT_TRUE(
       invalidator->UpdateRegisteredTopics(&handler1, {kTopic1, kTopic2}));
@@ -236,8 +265,8 @@ TEST_F(InvalidatorRegistrarWithMemoryTest, EmptySetUnregisters) {
   EXPECT_EQ(TRANSIENT_INVALIDATION_ERROR, handler1.GetInvalidatorState());
   EXPECT_EQ(TRANSIENT_INVALIDATION_ERROR, handler2.GetInvalidatorState());
 
-  invalidator->UnregisterHandler(&handler2);
-  invalidator->UnregisterHandler(&handler1);
+  invalidator->RemoveObserver(&handler2);
+  invalidator->RemoveObserver(&handler1);
 }
 
 TEST_F(InvalidatorRegistrarWithMemoryTest, RestoresInterestingTopics) {
@@ -308,7 +337,7 @@ TEST_F(InvalidatorRegistrarWithMemoryTest,
   auto invalidator = std::make_unique<InvalidatorRegistrarWithMemory>(
       &pref_service, "sender_id");
   FakeInvalidationHandler handler("handler");
-  invalidator->RegisterHandler(&handler);
+  invalidator->AddObserver(&handler);
 
   // Verify that all topics are successfully subscribed but not registered by
   // the |handler|.
@@ -341,7 +370,7 @@ TEST_F(InvalidatorRegistrarWithMemoryTest,
               UnorderedElementsAre(
                   Pair(kTopic1.name, TopicMetadata{kTopic1.is_public})));
 
-  invalidator->UnregisterHandler(&handler);
+  invalidator->RemoveObserver(&handler);
 }
 
 }  // namespace

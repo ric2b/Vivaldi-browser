@@ -56,6 +56,7 @@ EXTRA_DIST += \
 	expected/cbdt \
 	expected/variable \
 	expected/glyph_names \
+	expected/glyph_map \
 	expected/math \
 	expected/math_coverage_offset \
 	expected/post \
@@ -72,6 +73,7 @@ EXTRA_DIST += \
 	expected/collect_name_ids \
 	expected/instantiate_colrv1 \
 	expected/instantiate_cff2_update_metrics \
+	expected/layout.empty_ligature_offset \
 	fonts \
 	profiles \
 	$(NULL)

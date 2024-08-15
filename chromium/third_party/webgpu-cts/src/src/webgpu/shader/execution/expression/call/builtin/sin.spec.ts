@@ -9,40 +9,13 @@ Returns the sine of e. Component-wise when T is a vector.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16 } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { fullF32Range, fullF16Range, linearRange } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeF16, TypeF32 } from '../../../../../util/conversion.js';
 import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
+import { d } from './sin.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('sin', {
-  f32: () => {
-    return FP.f32.generateScalarToIntervalCases(
-      [
-        // Well-defined accuracy range
-        ...linearRange(-Math.PI, Math.PI, 1000),
-        ...fullF32Range(),
-      ],
-      'unfiltered',
-      FP.f32.sinInterval
-    );
-  },
-  f16: () => {
-    return FP.f16.generateScalarToIntervalCases(
-      [
-        // Well-defined accuracy range
-        ...linearRange(-Math.PI, Math.PI, 1000),
-        ...fullF16Range(),
-      ],
-      'unfiltered',
-      FP.f16.sinInterval
-    );
-  },
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

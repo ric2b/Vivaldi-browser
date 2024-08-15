@@ -30,9 +30,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -138,7 +136,6 @@ public class BookmarkManagerCoordinator
      * @param context The current {@link Context} used to obtain resources or inflate views.
      * @param openBookmarkComponentName The component to use when opening a bookmark.
      * @param isDialogUi Whether the main bookmarks UI will be shown in a dialog, not a NativePage.
-     * @param isIncognito Whether the tab model loading the bookmark manager is for incognito mode.
      * @param snackbarManager The {@link SnackbarManager} used to display snackbars.
      * @param profile The profile which the manager is running in.
      * @param bookmarkUiPrefs Manages prefs for bookmarks ui.
@@ -147,7 +144,6 @@ public class BookmarkManagerCoordinator
             Context context,
             ComponentName openBookmarkComponentName,
             boolean isDialogUi,
-            boolean isIncognito,
             SnackbarManager snackbarManager,
             Profile profile,
             BookmarkUiPrefs bookmarkUiPrefs) {
@@ -171,18 +167,16 @@ public class BookmarkManagerCoordinator
         SelectableListLayout<BookmarkId> selectableList =
                 mMainView.findViewById(R.id.selectable_list);
         mSelectableListLayout = selectableList;
-        if (!ChromeApplicationImpl.isVivaldi())
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.EMPTY_STATES)) {
-            mSelectableListLayout.initializeEmptyStateView(
-                    R.drawable.bookmark_empty_state_illustration,
-                    R.string.bookmark_manager_empty_state,
-                    R.string.bookmark_manager_back_to_page_by_adding_bookmark);
-        } else {
-            mSelectableListLayout.initializeEmptyView(R.string.bookmarks_folder_empty);
-        }
-        else {
-            mSelectableListLayout.initializeEmptyView(R.string.bookmarks_folder_empty);
+        if (!ChromeApplicationImpl.isVivaldi()) {
+        mSelectableListLayout.initializeEmptyStateView(
+                R.drawable.bookmark_empty_state_illustration,
+                R.string.bookmark_manager_empty_state,
+                R.string.bookmark_manager_back_to_page_by_adding_bookmark);
+        } else { // Vivaldi
+            mSelectableListLayout.initializeEmptyView(R.string.bookmark_folders);
         } // End Vivaldi
+
+        mSelectableListLayout.ignoreItemTypeForEmptyState(ViewType.SEARCH_BOX);
 
         ModelList modelList = new ModelList();
         DragReorderableRecyclerViewAdapter dragReorderableRecyclerViewAdapter =
@@ -234,8 +228,7 @@ public class BookmarkManagerCoordinator
                         largeIconBridge,
                         BookmarkUtils.getRoundedIconGenerator(context, displayPref),
                         BookmarkUtils.getImageIconSize(res, displayPref),
-                        BookmarkUtils.getFaviconDisplaySize(res),
-                        SyncServiceFactory.getForProfile(profile));
+                        BookmarkUtils.getFaviconDisplaySize(res));
 
         BookmarkUndoController bookmarkUndoController =
                 new BookmarkUndoController(context, mBookmarkModel, snackbarManager);
@@ -252,7 +245,6 @@ public class BookmarkManagerCoordinator
                         dragReorderableRecyclerViewAdapter,
                         largeIconBridge,
                         isDialogUi,
-                        isIncognito,
                         mBackPressStateSupplier,
                         mProfile,
                         bookmarkUndoController,
@@ -313,13 +305,13 @@ public class BookmarkManagerCoordinator
                 BookmarkManagerViewBinder::bindShoppingFilterView);
         dragReorderableRecyclerViewAdapter.registerDraggableType(
                 ViewType.IMPROVED_BOOKMARK_VISUAL,
-                this::buildVisualImprovedBookmarkRow,
+                BookmarkManagerCoordinator::buildVisualImprovedBookmarkRow,
                 ImprovedBookmarkRowViewBinder::bind,
                 (viewHolder, itemTouchHelper) -> {},
                 mMediator.getDraggabilityProvider());
         dragReorderableRecyclerViewAdapter.registerDraggableType(
                 ViewType.IMPROVED_BOOKMARK_COMPACT,
-                this::buildCompactImprovedBookmarkRow,
+                BookmarkManagerCoordinator::buildCompactImprovedBookmarkRow,
                 ImprovedBookmarkRowViewBinder::bind,
                 (viewHolder, itemTouchHelper) -> {},
                 mMediator.getDraggabilityProvider());
@@ -336,12 +328,11 @@ public class BookmarkManagerCoordinator
 
     /** Vivaldi **/
     public BookmarkManagerCoordinator(Context context, ComponentName openBookmarkComponentName,
-                                      boolean isDialogUi, boolean isIncognito,
-                                      SnackbarManager snackbarManager, Profile profile,
-                                      BookmarkUiPrefs bookmarkUiPrefs,
-                                      VivaldiBookmarkPanelDelegate dialogDelegate) {
-        this(context, openBookmarkComponentName, isDialogUi, isIncognito,
-                snackbarManager, profile, bookmarkUiPrefs);
+            boolean isDialogUi, boolean isIncognito, SnackbarManager snackbarManager,
+            Profile profile, BookmarkUiPrefs bookmarkUiPrefs,
+            VivaldiBookmarkPanelDelegate dialogDelegate) {
+        this(context, openBookmarkComponentName, isDialogUi, snackbarManager, profile,
+                bookmarkUiPrefs);
         setToolbarDialogDelegate(dialogDelegate);
     }
 
@@ -377,15 +368,6 @@ public class BookmarkManagerCoordinator
      */
     public void updateForUrl(String url) {
         mMediator.updateForUrl(url);
-    }
-
-    /**
-     * Called when the user presses the back key. This is only going to be called on Phone.
-     *
-     * @return True if manager handles this event, false if it decides to ignore.
-     */
-    public boolean onBackPressed() {
-        return mMediator.onBackPressed();
     }
 
     /** Opens the given BookmarkId. */
@@ -430,6 +412,14 @@ public class BookmarkManagerCoordinator
     }
 
     // Private methods.
+    /**
+     * Called when the user presses the back key. This is only going to be called on Phone.
+     *
+     * @return True if manager handles this event, false if it decides to ignore.
+     */
+    private boolean onBackPressed() {
+        return mMediator.onBackPressed();
+    }
 
     private int computeCacheMaxSize() {
         ActivityManager activityManager =
@@ -487,12 +477,12 @@ public class BookmarkManagerCoordinator
         return inflate(parent, R.layout.shopping_filter_row);
     }
 
-    ImprovedBookmarkRow buildCompactImprovedBookmarkRow(ViewGroup parent) {
+    static ImprovedBookmarkRow buildCompactImprovedBookmarkRow(ViewGroup parent) {
         ImprovedBookmarkRow row = ImprovedBookmarkRow.buildView(parent.getContext(), false);
         return row;
     }
 
-    ImprovedBookmarkRow buildVisualImprovedBookmarkRow(ViewGroup parent) {
+    static ImprovedBookmarkRow buildVisualImprovedBookmarkRow(ViewGroup parent) {
         ImprovedBookmarkRow row = ImprovedBookmarkRow.buildView(parent.getContext(), true);
         return row;
     }

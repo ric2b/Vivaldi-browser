@@ -1074,17 +1074,13 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
 
     ub(4, sps_seq_parameter_set_id);
     ub(4, sps_video_parameter_set_id);
-    if (current->sps_video_parameter_set_id == 0 && !h266->vps_ref[0]) {
-        H266RawVPS *vps;
-        AVBufferRef *ref = av_buffer_allocz(sizeof(H266RawVPS));
-        if (!ref) {
+    if (current->sps_video_parameter_set_id == 0 && !h266->vps[0]) {
+        H266RawVPS *vps = ff_refstruct_allocz(sizeof(*vps));
+        if (!vps)
             return AVERROR(ENOMEM);
-        }
-        vps = (H266RawVPS *) ref->data;
         vps->vps_max_layers_minus1 = 0;
         vps->vps_independent_layer_flag[0] = 1;
         vps->vps_layer_id[0] = current->nal_unit_header.nuh_layer_id;
-        h266->vps_ref[0] = ref;
         h266->vps[0] = vps;
     }
 
@@ -3012,7 +3008,6 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
     const H266RefPicLists *ref_pic_lists;
     int err, i;
     uint8_t nal_unit_type, qp_bd_offset;
-    uint16_t curr_subpic_idx;
     uint16_t num_slices_in_subpic;
 
     HEADER("Slice Header");
@@ -3050,7 +3045,7 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
         ub(sps->sps_subpic_id_len_minus1 + 1, sh_subpic_id);
         for (i = 0; i <= sps->sps_num_subpics_minus1; i++) {
             if (pps->sub_pic_id_val[i] == current->sh_subpic_id) {
-                curr_subpic_idx = i;
+                current->curr_subpic_idx = i;
                 break;
             }
         }
@@ -3059,10 +3054,10 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
             return AVERROR_INVALIDDATA;
         }
     } else {
-        curr_subpic_idx = 0;
+        current->curr_subpic_idx = 0;
     }
 
-    num_slices_in_subpic = pps->num_slices_in_subpic[curr_subpic_idx];
+    num_slices_in_subpic = pps->num_slices_in_subpic[current->curr_subpic_idx];
 
     if ((pps->pps_rect_slice_flag && num_slices_in_subpic > 1) ||
         (!pps->pps_rect_slice_flag && pps->num_tiles_in_pic > 1)) {
@@ -3379,7 +3374,7 @@ static int FUNC(slice_header) (CodedBitstreamContext *ctx, RWContext *rw,
         if (pps->pps_rect_slice_flag) {
             int width_in_tiles;
             int slice_idx = current->sh_slice_address;
-            for (i = 0; i < curr_subpic_idx; i++) {
+            for (i = 0; i < current->curr_subpic_idx; i++) {
                 slice_idx += pps->num_slices_in_subpic[i];
             }
             width_in_tiles =

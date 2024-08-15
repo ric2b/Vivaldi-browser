@@ -14,12 +14,14 @@
 #include "ash/events/accessibility_event_rewriter.h"
 #include "ash/events/keyboard_driven_event_rewriter.h"
 #include "ash/events/peripheral_customization_event_rewriter.h"
+#include "ash/events/prerewritten_event_forwarder.h"
 #include "ash/public/cpp/accessibility_event_rewriter_delegate.h"
 #include "ash/shell.h"
 #include "ash/system/input_device_settings/input_device_settings_controller_impl.h"
 #include "base/command_line.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/ash/keyboard_device_id_event_rewriter.h"
 #include "ui/events/event_sink.h"
 #include "ui/events/event_source.h"
@@ -40,7 +42,7 @@ EventRewriterControllerImpl::EventRewriterControllerImpl() {
 EventRewriterControllerImpl::~EventRewriterControllerImpl() {
   aura::Env::GetInstance()->RemoveObserver(this);
   // Remove the rewriters from every root window EventSource.
-  for (auto* window : Shell::GetAllRootWindows()) {
+  for (aura::Window* window : Shell::GetAllRootWindows()) {
     auto* event_source = window->GetHost()->GetEventSource();
     for (const auto& rewriter : rewriters_) {
       event_source->RemoveEventRewriter(rewriter.get());
@@ -74,7 +76,8 @@ void EventRewriterControllerImpl::Initialize(
 
   std::unique_ptr<PeripheralCustomizationEventRewriter>
       peripheral_customization_event_rewriter;
-  if (features::IsPeripheralCustomizationEnabled()) {
+  if (features::IsPeripheralCustomizationEnabled() ||
+      ::features::IsShortcutCustomizationEnabled()) {
     peripheral_customization_event_rewriter =
         std::make_unique<PeripheralCustomizationEventRewriter>(
             Shell::Get()->input_device_settings_controller());
@@ -82,16 +85,22 @@ void EventRewriterControllerImpl::Initialize(
         peripheral_customization_event_rewriter.get();
   }
 
+  std::unique_ptr<PrerewrittenEventForwarder> prerewritten_event_forwarder =
+      std::make_unique<PrerewrittenEventForwarder>();
+  prerewritten_event_forwarder_ = prerewritten_event_forwarder.get();
+
   std::unique_ptr<AccessibilityEventRewriter> accessibility_event_rewriter =
       std::make_unique<AccessibilityEventRewriter>(
           event_rewriter_ash.get(), accessibility_event_rewriter_delegate);
   accessibility_event_rewriter_ = accessibility_event_rewriter.get();
 
   // EventRewriters are notified in the order they are added.
-  AddEventRewriter(std::move(accessibility_event_rewriter));
-  if (features::IsPeripheralCustomizationEnabled()) {
+  if (features::IsPeripheralCustomizationEnabled() ||
+      ::features::IsShortcutCustomizationEnabled()) {
     AddEventRewriter(std::move(peripheral_customization_event_rewriter));
   }
+  AddEventRewriter(std::move(prerewritten_event_forwarder));
+  AddEventRewriter(std::move(accessibility_event_rewriter));
   AddEventRewriter(std::move(keyboard_driven_event_rewriter));
   AddEventRewriter(std::move(keyboard_device_id_event_rewriter));
   AddEventRewriter(std::move(event_rewriter_ash));
@@ -100,15 +109,17 @@ void EventRewriterControllerImpl::Initialize(
 void EventRewriterControllerImpl::AddEventRewriter(
     std::unique_ptr<ui::EventRewriter> rewriter) {
   // Add the rewriters to each existing root window EventSource.
-  for (auto* window : Shell::GetAllRootWindows())
+  for (aura::Window* window : Shell::GetAllRootWindows()) {
     window->GetHost()->GetEventSource()->AddEventRewriter(rewriter.get());
+  }
 
   // In case there are any mirroring displays, their hosts' EventSources won't
   // be included above.
   const auto* mirror_window_controller =
       Shell::Get()->window_tree_host_manager()->mirror_window_controller();
-  for (auto* window : mirror_window_controller->GetAllRootWindows())
+  for (aura::Window* window : mirror_window_controller->GetAllRootWindows()) {
     window->GetHost()->GetEventSource()->AddEventRewriter(rewriter.get());
+  }
 
   rewriters_.push_back(std::move(rewriter));
 }

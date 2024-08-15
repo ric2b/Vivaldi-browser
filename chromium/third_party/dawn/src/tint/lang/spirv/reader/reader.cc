@@ -29,9 +29,27 @@
 
 #include <utility>
 
+#include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/spirv/reader/ast_parser/parse.h"
+#include "src/tint/lang/spirv/reader/lower/lower.h"
+#include "src/tint/lang/spirv/reader/parser/parser.h"
 
 namespace tint::spirv::reader {
+
+Result<core::ir::Module> ReadIR(const std::vector<uint32_t>& input) {
+    // Parse the input SPIR-V to the SPIR-V dialect of the IR.
+    auto mod = Parse(Slice(input.data(), input.size()));
+    if (mod != Success) {
+        return mod.Failure();
+    }
+
+    // Lower the module to the core dialect of the IR.
+    if (auto res = Lower(mod.Get()); res != Success) {
+        return std::move(res.Failure());
+    }
+
+    return mod;
+}
 
 Program Read(const std::vector<uint32_t>& input, const Options& options) {
     return ast_parser::Parse(input, options);

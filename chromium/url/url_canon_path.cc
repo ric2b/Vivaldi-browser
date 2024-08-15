@@ -4,9 +4,9 @@
 
 #include <limits.h>
 
+#include <optional>
 #include "base/check.h"
 #include "base/check_op.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/url_canon.h"
 #include "url/url_canon_internal.h"
 #include "url/url_features.h"
@@ -40,9 +40,8 @@ enum CharacterFlags {
 // only flag that may be combined with others.
 //
 // This table was used to be designed to match exactly what IE did with the
-// characters, however, which doesn't comply with the URL Standard as of Jun
-// 2023. See http://crbug.com/1400251 and http://crbug.com/1252531 for efforts
-// to comply with the URL Standard.
+// characters, however, which doesn't comply with the URL Standard as of Dec
+// 2023. See https://crbug.com/1509295.
 //
 // Dot is even more special, and the escaped version is handled specially by
 // IsDot. Therefore, we don't need the "escape" flag. We just need the "special"
@@ -109,7 +108,7 @@ DotDisposition ClassifyAfterDot(const CHAR* spec,
     *consumed_len = 0;
     return DIRECTORY_CUR;
   }
-  if (IsURLSlash(spec[after_dot])) {
+  if (IsSlashOrBackslash(spec[after_dot])) {
     // Single dot followed by a slash.
     *consumed_len = 1;  // Consume the slash
     return DIRECTORY_CUR;
@@ -123,7 +122,7 @@ DotDisposition ClassifyAfterDot(const CHAR* spec,
       *consumed_len = second_dot_len;
       return DIRECTORY_UP;
     }
-    if (IsURLSlash(spec[after_second_dot])) {
+    if (IsSlashOrBackslash(spec[after_second_dot])) {
       // Double dot followed by a slash.
       *consumed_len = second_dot_len + 1;
       return DIRECTORY_UP;
@@ -181,6 +180,7 @@ template <typename CHAR, typename UCHAR>
 bool DoPartialPathInternal(const CHAR* spec,
                            const Component& path,
                            size_t path_begin_in_output,
+                           CanonMode canon_mode,
                            CanonOutput* output) {
   if (path.is_empty())
     return true;
@@ -238,9 +238,17 @@ bool DoPartialPathInternal(const CHAR* spec,
           }
 
         } else if (out_ch == '\\') {
-          // Convert backslashes to forward slashes
-          output->push_back('/');
-
+          if (canon_mode == CanonMode::kSpecialURL) {
+            // Backslashes are path separators in special URLs.
+            //
+            // URL Standard: https://url.spec.whatwg.org/#path-state
+            // > 1. url is special and c is U+005C (\)
+            //
+            // Convert backslashes to forward slashes.
+            output->push_back('/');
+          } else {
+            output->push_back(out_ch);
+          }
         } else if (out_ch == '%') {
           // Handle escape sequences.
           unsigned char unused_unescaped_value;
@@ -279,17 +287,24 @@ bool DoPartialPath(const CHAR* spec,
                    CanonOutput* output,
                    Component* out_path) {
   out_path->begin = output->length();
-  bool success =
-      DoPartialPathInternal<CHAR, UCHAR>(spec, path, out_path->begin, output);
+  bool success = DoPartialPathInternal<CHAR, UCHAR>(
+      spec, path, out_path->begin,
+      // TODO(crbug.com/1416006): Support Non-special URLs.
+      CanonMode::kSpecialURL, output);
   out_path->len = output->length() - out_path->begin;
   return success;
 }
 
-template<typename CHAR, typename UCHAR>
+template <typename CHAR, typename UCHAR>
 bool DoPath(const CHAR* spec,
             const Component& path,
+            CanonMode canon_mode,
             CanonOutput* output,
             Component* out_path) {
+  // URL Standard:
+  // - https://url.spec.whatwg.org/#path-start-state
+  // - https://url.spec.whatwg.org/#path-state
+
   bool success = true;
   out_path->begin = output->length();
   if (path.is_nonempty()) {
@@ -297,13 +312,23 @@ bool DoPath(const CHAR* spec,
     // and then canonicalize it, it will of course have a slash already. This
     // check is for the replacement and relative URL resolving cases of file
     // URLs.
-    if (!IsURLSlash(spec[path.begin]))
+    if (!IsSlashOrBackslash(spec[path.begin])) {
       output->push_back('/');
+    }
 
-    success =
-        DoPartialPathInternal<CHAR, UCHAR>(spec, path, out_path->begin, output);
-  } else {
-    // No input, canonical path is a slash.
+    success = DoPartialPathInternal<CHAR, UCHAR>(spec, path, out_path->begin,
+                                                 canon_mode, output);
+  } else if (canon_mode == CanonMode::kSpecialURL) {
+    // No input, canonical path is a slash for special URLs, but it is empty for
+    // non-special URLs.
+    //
+    // Implementation note:
+    //
+    // According to the URL Standard, for non-special URLs whose parsed path is
+    // empty, such as "git://host", the state-machine finishes in the
+    // `path-start-state` without entering the `path-state`. As a result, the
+    // url's path remains an empty array. Therefore, no slash should be
+    // appended.
     output->push_back('/');
   }
   out_path->len = output->length() - out_path->begin;
@@ -314,16 +339,34 @@ bool DoPath(const CHAR* spec,
 
 bool CanonicalizePath(const char* spec,
                       const Component& path,
+                      CanonMode canon_mode,
                       CanonOutput* output,
                       Component* out_path) {
-  return DoPath<char, unsigned char>(spec, path, output, out_path);
+  return DoPath<char, unsigned char>(spec, path, canon_mode, output, out_path);
+}
+
+bool CanonicalizePath(const char16_t* spec,
+                      const Component& path,
+                      CanonMode canon_mode,
+                      CanonOutput* output,
+                      Component* out_path) {
+  return DoPath<char16_t, char16_t>(spec, path, canon_mode, output, out_path);
+}
+
+bool CanonicalizePath(const char* spec,
+                      const Component& path,
+                      CanonOutput* output,
+                      Component* out_path) {
+  return DoPath<char, unsigned char>(spec, path, CanonMode::kSpecialURL, output,
+                                     out_path);
 }
 
 bool CanonicalizePath(const char16_t* spec,
                       const Component& path,
                       CanonOutput* output,
                       Component* out_path) {
-  return DoPath<char16_t, char16_t>(spec, path, output, out_path);
+  return DoPath<char16_t, char16_t>(spec, path, CanonMode::kSpecialURL, output,
+                                    out_path);
 }
 
 bool CanonicalizePartialPath(const char* spec,
@@ -343,17 +386,19 @@ bool CanonicalizePartialPath(const char16_t* spec,
 bool CanonicalizePartialPathInternal(const char* spec,
                                      const Component& path,
                                      size_t path_begin_in_output,
+                                     CanonMode canon_mode,
                                      CanonOutput* output) {
   return DoPartialPathInternal<char, unsigned char>(
-      spec, path, path_begin_in_output, output);
+      spec, path, path_begin_in_output, canon_mode, output);
 }
 
 bool CanonicalizePartialPathInternal(const char16_t* spec,
                                      const Component& path,
                                      size_t path_begin_in_output,
+                                     CanonMode canon_mode,
                                      CanonOutput* output) {
   return DoPartialPathInternal<char16_t, char16_t>(
-      spec, path, path_begin_in_output, output);
+      spec, path, path_begin_in_output, canon_mode, output);
 }
 
 }  // namespace url

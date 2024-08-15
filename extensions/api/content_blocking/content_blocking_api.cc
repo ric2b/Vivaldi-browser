@@ -18,9 +18,9 @@ namespace {
 absl::optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
     vivaldi::content_blocking::RuleGroup rule_group) {
   switch (rule_group) {
-    case vivaldi::content_blocking::RuleGroup::RULE_GROUP_TRACKING:
+    case vivaldi::content_blocking::RuleGroup::kTracking:
       return adblock_filter::RuleGroup::kTrackingRules;
-    case vivaldi::content_blocking::RuleGroup::RULE_GROUP_AD_BLOCKING:
+    case vivaldi::content_blocking::RuleGroup::kAdBlocking:
       return adblock_filter::RuleGroup::kAdBlockingRules;
     default:
       NOTREACHED();
@@ -32,9 +32,9 @@ vivaldi::content_blocking::RuleGroup ToVivaldiContentBlockingRuleGroup(
     adblock_filter::RuleGroup rule_group) {
   switch (rule_group) {
     case adblock_filter::RuleGroup::kTrackingRules:
-      return vivaldi::content_blocking::RuleGroup::RULE_GROUP_TRACKING;
+      return vivaldi::content_blocking::RuleGroup::kTracking;
     case adblock_filter::RuleGroup::kAdBlockingRules:
-      return vivaldi::content_blocking::RuleGroup::RULE_GROUP_AD_BLOCKING;
+      return vivaldi::content_blocking::RuleGroup::kAdBlocking;
   }
 }
 
@@ -42,9 +42,9 @@ absl::optional<adblock_filter::RuleManager::ExceptionsList>
 FromVivaldiContentBlockingExceptionList(
     vivaldi::content_blocking::ExceptionList exception_list) {
   switch (exception_list) {
-    case vivaldi::content_blocking::ExceptionList::EXCEPTION_LIST_PROCESS_LIST:
+    case vivaldi::content_blocking::ExceptionList::kProcessList:
       return adblock_filter::RuleManager::kProcessList;
-    case vivaldi::content_blocking::ExceptionList::EXCEPTION_LIST_EXEMPT_LIST:
+    case vivaldi::content_blocking::ExceptionList::kExemptList:
       return adblock_filter::RuleManager::kExemptList;
     default:
       NOTREACHED();
@@ -56,11 +56,9 @@ vivaldi::content_blocking::ExceptionList ToVivaldiContentBlockingExceptionList(
     adblock_filter::RuleManager::ExceptionsList exception_list) {
   switch (exception_list) {
     case adblock_filter::RuleManager::kProcessList:
-      return vivaldi::content_blocking::ExceptionList::
-          EXCEPTION_LIST_PROCESS_LIST;
+      return vivaldi::content_blocking::ExceptionList::kProcessList;
     case adblock_filter::RuleManager::kExemptList:
-      return vivaldi::content_blocking::ExceptionList::
-          EXCEPTION_LIST_EXEMPT_LIST;
+      return vivaldi::content_blocking::ExceptionList::kExemptList;
   }
 }
 
@@ -68,24 +66,19 @@ vivaldi::content_blocking::FetchResult ToVivaldiContentBlockingFetchResult(
     adblock_filter::FetchResult fetch_result) {
   switch (fetch_result) {
     case adblock_filter::FetchResult::kSuccess:
-      return vivaldi::content_blocking::FetchResult::FETCH_RESULT_SUCCESS;
+      return vivaldi::content_blocking::FetchResult::kSuccess;
     case adblock_filter::FetchResult::kDownloadFailed:
-      return vivaldi::content_blocking::FetchResult::
-          FETCH_RESULT_DOWNLOAD_FAILED;
+      return vivaldi::content_blocking::FetchResult::kDownloadFailed;
     case adblock_filter::FetchResult::kFileNotFound:
-      return vivaldi::content_blocking::FetchResult::
-          FETCH_RESULT_FILE_NOT_FOUND;
+      return vivaldi::content_blocking::FetchResult::kFileNotFound;
     case adblock_filter::FetchResult::kFileReadError:
-      return vivaldi::content_blocking::FetchResult::
-          FETCH_RESULT_FILE_READ_ERROR;
+      return vivaldi::content_blocking::FetchResult::kFileReadError;
     case adblock_filter::FetchResult::kFileUnsupported:
-      return vivaldi::content_blocking::FetchResult::
-          FETCH_RESULT_FILE_UNSUPPORTED;
+      return vivaldi::content_blocking::FetchResult::kFileUnsupported;
     case adblock_filter::FetchResult::kFailedSavingParsedRules:
-      return vivaldi::content_blocking::FetchResult::
-          FETCH_RESULT_FAILED_SAVING_PARSED_RULES;
+      return vivaldi::content_blocking::FetchResult::kFailedSavingParsedRules;
     case adblock_filter::FetchResult::kUnknown:
-      return vivaldi::content_blocking::FetchResult::FETCH_RESULT_UNKNOWN;
+      return vivaldi::content_blocking::FetchResult::kUnknown;
   }
 }
 
@@ -112,7 +105,7 @@ ToVivaldiContentBlockingRuleSourceFromBase(
   result.last_update = 0;
   result.next_fetch = 0;
   result.last_fetch_result =
-      vivaldi::content_blocking::FetchResult::FETCH_RESULT_UNKNOWN;
+      vivaldi::content_blocking::FetchResult::kUnknown;
   result.rules_info.valid_rules = 0;
   result.rules_info.unsupported_rules = 0;
   result.rules_info.invalid_rules = 0;

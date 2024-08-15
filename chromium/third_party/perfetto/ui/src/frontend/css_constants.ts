@@ -26,12 +26,14 @@ export let DEFAULT_DETAILS_CONTENT_HEIGHT = 280;
 export const SELECTED_LOG_ROWS_COLOR = '#D2EFE0';
 export let BACKGROUND_COLOR = '#ffffff';
 export let FOREGROUND_COLOR = '#222';
+export let COLLAPSED_BACKGROUND = '#ffffff';
+export let EXPANDED_BACKGROUND = '#ffffff';
 
 export function initCssConstants() {
-  TRACK_SHELL_WIDTH = getCssNum('--track-shell-width') || TRACK_SHELL_WIDTH;
-  SIDEBAR_WIDTH = getCssNum('--sidebar-width') || SIDEBAR_WIDTH;
+  TRACK_SHELL_WIDTH = getCssNum('--track-shell-width') ?? TRACK_SHELL_WIDTH;
+  SIDEBAR_WIDTH = getCssNum('--sidebar-width') ?? SIDEBAR_WIDTH;
   TRACK_BORDER_COLOR = getCssStr('--track-border-color') || TRACK_BORDER_COLOR;
-  TOPBAR_HEIGHT = getCssNum('--topbar-height') || TOPBAR_HEIGHT;
+  TOPBAR_HEIGHT = getCssNum('--topbar-height') ?? TOPBAR_HEIGHT;
   SELECTION_STROKE_COLOR =
       getCssStr('--selection-stroke-color') || SELECTION_STROKE_COLOR;
   SELECTION_FILL_COLOR =
@@ -40,9 +42,13 @@ export function initCssConstants() {
       getCssStr('--overview-timeline-non-visible-color') ||
       OVERVIEW_TIMELINE_NON_VISIBLE_COLOR;
   DEFAULT_DETAILS_CONTENT_HEIGHT =
-      getCssNum('--details-content-height') || DEFAULT_DETAILS_CONTENT_HEIGHT;
+      getCssNum('--details-content-height') ?? DEFAULT_DETAILS_CONTENT_HEIGHT;
   BACKGROUND_COLOR = getCssStr('--main-background-color') || BACKGROUND_COLOR;
   FOREGROUND_COLOR = getCssStr('--main-foreground-color') || FOREGROUND_COLOR;
+  COLLAPSED_BACKGROUND =
+      getCssStr('--collapsed-background') || COLLAPSED_BACKGROUND;
+  EXPANDED_BACKGROUND =
+      getCssStr('--expanded-background') || EXPANDED_BACKGROUND;
 }
 
 function getCssStr(prop: string): string|undefined {

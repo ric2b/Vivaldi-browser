@@ -596,9 +596,10 @@ bool CopyMetafileDataToDidPrintContentParams(
   return true;
 }
 
-// Given the |device| and |canvas| to draw on, prints the appropriate headers
-// and footers using strings from |header_footer_info| on to the canvas.
+// Given the `canvas` to draw on, prints the appropriate headers and footers on
+// the canvas using `frame`, with data from the remaining parameters.
 void PrintHeaderAndFooter(cc::PaintCanvas* canvas,
+                          blink::WebLocalFrame& frame,
                           uint32_t page_index,
                           uint32_t total_pages,
                           const blink::WebLocalFrame& source_frame,
@@ -608,77 +609,17 @@ void PrintHeaderAndFooter(cc::PaintCanvas* canvas,
   DCHECK_LE(total_pages, kMaxPageCount);
   DCHECK_LT(page_index, kMaxPageCount);
 
-  // Scaling has already been applied to the canvas, but headers and footers
-  // should not be affected by that, so cancel it out.
-  cc::PaintCanvasAutoRestore auto_restore(canvas, true);
-  canvas->scale(1 / scale_factor, 1 / scale_factor);
-
-  gfx::SizeF page_size(page_layout.margin_left + page_layout.margin_right +
-                           page_layout.content_width,
-                       page_layout.margin_top + page_layout.margin_bottom +
-                           page_layout.content_height);
-
-  blink::WebView* web_view = blink::WebView::Create(
-      /*client=*/nullptr,
-      /*is_hidden=*/false, /*is_prerendering=*/false,
-      /*is_inside_portal=*/false,
-      /*fenced_frame_mode=*/absl::nullopt,
-      /*compositing_enabled=*/false, /*widgets_never_composited=*/false,
-      /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
-      *source_frame.GetAgentGroupScheduler(),
-      /*session_storage_namespace_id=*/base::EmptyString(),
-      /*page_base_background_color=*/absl::nullopt,
-      blink::BrowsingContextGroupInfo::CreateUnique());
-  web_view->GetSettings()->SetJavaScriptEnabled(true);
-
-  class HeaderAndFooterClient final : public blink::WebLocalFrameClient {
-   public:
-    // WebLocalFrameClient:
-    void BindToFrame(blink::WebNavigationControl* frame) override {
-      frame_ = frame;
-    }
-    void FrameDetached() override {
-      frame_->Close();
-      frame_ = nullptr;
-    }
-
-   private:
-    raw_ptr<blink::WebNavigationControl, ExperimentalRenderer> frame_ = nullptr;
-  };
-
-  HeaderAndFooterClient frame_client;
-  blink::WebLocalFrame* frame = blink::WebLocalFrame::CreateMainFrame(
-      web_view, &frame_client, nullptr, blink::LocalFrameToken(),
-      blink::DocumentToken(), nullptr);
-
-  mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
-  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
-      frame_widget_receiver =
-          frame_widget.BindNewEndpointAndPassDedicatedReceiver();
-
-  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
-  std::ignore = frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
-
-  mojo::AssociatedRemote<blink::mojom::Widget> widget_remote;
-  mojo::PendingAssociatedReceiver<blink::mojom::Widget> widget_receiver =
-      widget_remote.BindNewEndpointAndPassDedicatedReceiver();
-
-  mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host_remote;
-  std::ignore = widget_host_remote.BindNewEndpointAndPassDedicatedReceiver();
-
-  blink::WebNonCompositedWidgetClient client;
-  blink::WebFrameWidget* web_frame_widget = frame->InitializeFrameWidget(
-      frame_widget_host.Unbind(), std::move(frame_widget_receiver),
-      widget_host_remote.Unbind(), std::move(widget_receiver),
-      viz::FrameSinkId());
-  web_frame_widget->InitializeNonCompositing(&client);
-  web_view->DidAttachLocalMainFrame();
-
   base::Value html(
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           IDR_PRINT_HEADER_FOOTER_TEMPLATE_PAGE));
   // Load page with script to avoid async operations.
-  ExecuteScript(frame, kPageLoadScriptFormat, html);
+  ExecuteScript(&frame, kPageLoadScriptFormat, html);
+
+  const gfx::SizeF page_size(
+      page_layout.margin_left + page_layout.margin_right +
+          page_layout.content_width,
+      page_layout.margin_top + page_layout.margin_bottom +
+          page_layout.content_height);
 
   base::Value::Dict options;
   options.Set(kSettingHeaderFooterDate,
@@ -699,16 +640,20 @@ void PrintHeaderAndFooter(cc::PaintCanvas* canvas,
   options.Set("footerTemplate", params.footer_template);
   options.Set("isRtl", base::i18n::IsRTL());
 
-  ExecuteScript(frame, kPageSetupScriptFormat, base::Value(std::move(options)));
+  ExecuteScript(&frame, kPageSetupScriptFormat,
+                base::Value(std::move(options)));
 
   blink::WebPrintParams webkit_params(page_size);
   webkit_params.printer_dpi = GetDPI(params);
 
-  frame->PrintBegin(webkit_params, blink::WebNode());
-  frame->PrintPage(0, canvas);
-  frame->PrintEnd();
+  // Scaling has already been applied to the canvas, but headers and footers
+  // should not be affected by that, so cancel it out.
+  cc::PaintCanvasAutoRestore auto_restore(canvas, true);
+  canvas->scale(1 / scale_factor, 1 / scale_factor);
 
-  web_view->Close();
+  frame.PrintBegin(webkit_params, blink::WebNode());
+  frame.PrintPage(0, canvas);
+  frame.PrintEnd();
 }
 
 // Renders page contents from `frame` to `content_area` of `canvas`.
@@ -728,6 +673,87 @@ void RenderPageContent(blink::WebLocalFrame* frame,
                     (content_area.y() - canvas_area.y()) / scale_factor);
   frame->PrintPage(page_index, canvas);
 }
+
+class HeaderAndFooterContext {
+ public:
+  class HeaderAndFooterClient final : public blink::WebLocalFrameClient {
+   public:
+    // WebLocalFrameClient:
+    void BindToFrame(blink::WebNavigationControl* frame) override {
+      frame_ = frame;
+    }
+    void FrameDetached() override {
+      frame_->Close();
+      frame_ = nullptr;
+    }
+
+   private:
+    raw_ptr<blink::WebNavigationControl, ExperimentalRenderer> frame_ = nullptr;
+  };
+
+  explicit HeaderAndFooterContext(const blink::WebLocalFrame& source_frame)
+      : web_view_(CreateWebView(source_frame)), frame_(CreateFrame()) {
+    CHECK(web_view_);
+    CHECK(frame_);
+    InitWebView();
+  }
+  ~HeaderAndFooterContext() { web_view_->Close(); }
+
+  blink::WebLocalFrame* frame() { return frame_; }
+
+ private:
+  static blink::WebView* CreateWebView(
+      const blink::WebLocalFrame& source_frame) {
+    auto* view = blink::WebView::Create(
+        /*client=*/nullptr,
+        /*is_hidden=*/false, /*is_prerendering=*/false,
+        /*is_inside_portal=*/false,
+        /*fenced_frame_mode=*/absl::nullopt,
+        /*compositing_enabled=*/false, /*widgets_never_composited=*/false,
+        /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
+        *source_frame.GetAgentGroupScheduler(),
+        /*session_storage_namespace_id=*/base::EmptyString(),
+        /*page_base_background_color=*/absl::nullopt,
+        blink::BrowsingContextGroupInfo::CreateUnique());
+    view->GetSettings()->SetJavaScriptEnabled(true);
+    return view;
+  }
+
+  blink::WebLocalFrame* CreateFrame() {
+    return blink::WebLocalFrame::CreateMainFrame(
+        web_view_, &frame_client_, nullptr, blink::LocalFrameToken(),
+        blink::DocumentToken(), nullptr);
+  }
+
+  void InitWebView() {
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+    mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+        frame_widget_receiver =
+            frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+    std::ignore = frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<blink::mojom::Widget> widget_remote;
+    mojo::PendingAssociatedReceiver<blink::mojom::Widget> widget_receiver =
+        widget_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host_remote;
+    std::ignore = widget_host_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+    blink::WebFrameWidget* web_frame_widget = frame_->InitializeFrameWidget(
+        frame_widget_host.Unbind(), std::move(frame_widget_receiver),
+        widget_host_remote.Unbind(), std::move(widget_receiver),
+        viz::FrameSinkId());
+    web_frame_widget->InitializeNonCompositing(&widget_client_);
+    web_view_->DidAttachLocalMainFrame();
+  }
+
+  HeaderAndFooterClient frame_client_;
+  blink::WebNonCompositedWidgetClient widget_client_;
+  blink::WebView* const web_view_;
+  blink::WebLocalFrame* const frame_;
+};
 
 }  // namespace
 
@@ -778,7 +804,6 @@ ClosuresForMojoResponse::ClosuresForMojoResponse() = default;
 
 ClosuresForMojoResponse::~ClosuresForMojoResponse() {
   RunScriptedPrintPreviewQuitClosure();
-  RunPrintSettingFromUserQuitClosure();
 }
 
 void ClosuresForMojoResponse::SetScriptedPrintPreviewQuitClosure(
@@ -797,20 +822,6 @@ void ClosuresForMojoResponse::RunScriptedPrintPreviewQuitClosure() {
   }
 
   std::move(scripted_print_preview_quit_closure_).Run();
-}
-
-void ClosuresForMojoResponse::SetPrintSettingFromUserQuitClosure(
-    base::OnceClosure quit_print_setting) {
-  DCHECK(!get_print_settings_from_user_quit_closure_);
-  get_print_settings_from_user_quit_closure_ = std::move(quit_print_setting);
-}
-
-void ClosuresForMojoResponse::RunPrintSettingFromUserQuitClosure() {
-  if (!get_print_settings_from_user_quit_closure_) {
-    return;
-  }
-
-  std::move(get_print_settings_from_user_quit_closure_).Run();
 }
 
 // Class that calls the Begin and End print functions on the frame and changes
@@ -1142,7 +1153,7 @@ PrintRenderFrameHelper::GetPrintManagerHost() {
     // Makes sure that it quits the runloop that runs while a Mojo call waits
     // for a reply if |print_manager_host_| is disconnected before the reply.
     print_manager_host_.set_disconnect_handler(
-        base::BindOnce(&PrintRenderFrameHelper::QuitActiveRunLoops,
+        base::BindOnce(&PrintRenderFrameHelper::QuitScriptedPrintPreviewRunLoop,
                        weak_ptr_factory_.GetWeakPtr()));
   }
   return print_manager_host_;
@@ -1576,69 +1587,6 @@ void PrintRenderFrameHelper::PrintNodeUnderContextMenu() {
   PrintNode(render_frame()->GetWebFrame()->ContextMenuNode());
 }
 
-#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-void PrintRenderFrameHelper::SnapshotForContentAnalysis(
-    SnapshotForContentAnalysisCallback callback) {
-  // Use default print params to snapshot the page.
-  mojom::PrintPagesParams print_pages_params;
-  GetPrintManagerHost()->GetDefaultPrintSettings(&print_pages_params.params);
-  if (!print_pages_params.params) {
-    LOG(ERROR) << "GetDefaultPrintSettings() failed";
-    std::move(callback).Run(nullptr);
-    return;
-  }
-
-  CHECK(PrintMsgPrintParamsIsValid(*print_pages_params.params));
-  ContentProxySet typeface_content_info;
-  auto metafile = std::make_unique<MetafileSkia>(
-      print_pages_params.params->printed_doc_type,
-      print_pages_params.params->document_cookie);
-  CHECK(metafile->Init());
-  metafile->UtilizeTypefaceContext(&typeface_content_info);
-
-  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  blink::WebNode node = delegate_->GetPdfElement(frame);
-  bool is_pdf = IsPrintingPdfFrame(frame, node);
-  blink::WebPrintParams web_print_params = ComputeWebKitPrintParamsInDesiredDpi(
-      *print_pages_params.params, is_pdf, ignore_css_margins_);
-  uint32_t page_count = frame->PrintBegin(web_print_params, node);
-  if (page_count == 0) {
-    frame->PrintEnd();
-    metafile->FinishDocument();
-    LOG(ERROR) << "PrintBegin() returned 0 pages";
-    std::move(callback).Run(nullptr);
-    return;
-  }
-
-  GetPrintManagerHost()->DidGetPrintedPagesCount(
-      print_pages_params.params->document_cookie, page_count);
-
-  for (size_t page_index = 0; page_index < page_count; ++page_index) {
-    PrintPageInternal(*print_pages_params.params, page_index, page_count, frame,
-                      metafile.get());
-  }
-  frame->PrintEnd();
-  metafile->FinishDocument();
-
-  mojom::DidPrintDocumentParamsPtr page_params =
-      mojom::DidPrintDocumentParams::New();
-  page_params->content = mojom::DidPrintContentParams::New();
-
-  if (!CopyMetafileDataToDidPrintContentParams(*metafile,
-                                               page_params->content.get())) {
-    LOG(ERROR) << "CopyMetafileDataToDidPrintContentParams() failed";
-    std::move(callback).Run(nullptr);
-    return;
-  }
-
-  page_params->document_cookie = print_pages_params.params->document_cookie;
-#if BUILDFLAG(IS_WIN)
-  page_params->physical_offsets = printer_printable_area_.origin();
-#endif
-  std::move(callback).Run(std::move(page_params));
-}
-#endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-
 void PrintRenderFrameHelper::UpdateFrameMarginsCssInfo(
     const base::Value::Dict& settings) {
   constexpr int kDefault = static_cast<int>(mojom::MarginType::kDefaultMargins);
@@ -1798,47 +1746,61 @@ PrintRenderFrameHelper::CreatePreviewDocument() {
         print_params.preview_request_id);
   }
 
-  while (!print_preview_context_.IsFinalPageRendered()) {
-    uint32_t page_index = print_preview_context_.GetNextPageIndex();
-    DCHECK_NE(page_index, kInvalidPageIndex);
-
-    blink::WebLocalFrame* frame = print_preview_context_.source_frame();
-    if (frame) {
-      blink::WebPrintPageDescription description;
-      frame->GetPageDescription(page_index, &description);
-      print_pages_params_->params->page_orientation =
-          FromBlinkPageOrientation(description.orientation);
+  {
+    std::unique_ptr<HeaderAndFooterContext> header_footer_context;
+    blink::WebLocalFrame* header_footer_frame = nullptr;
+    if (print_pages_params_->params->display_header_footer) {
+      header_footer_context = std::make_unique<HeaderAndFooterContext>(
+          *print_preview_context_.prepared_frame());
+      header_footer_frame = header_footer_context->frame();
     }
+    while (!print_preview_context_.IsFinalPageRendered()) {
+      uint32_t page_index = print_preview_context_.GetNextPageIndex();
+      DCHECK_NE(page_index, kInvalidPageIndex);
 
-    if (!RenderPreviewPage(page_index)) {
-      return CreatePreviewDocumentResult::kFail;
-    }
+      blink::WebLocalFrame* frame = print_preview_context_.source_frame();
+      if (frame) {
+        blink::WebPrintPageDescription description;
+        frame->GetPageDescription(page_index, &description);
+        print_pages_params_->params->page_orientation =
+            FromBlinkPageOrientation(description.orientation);
+      }
 
-    if (CheckForCancel())
-      return CreatePreviewDocumentResult::kFail;
-
-    // We must call PrepareFrameAndViewForPrint::FinishPrinting() (by way of
-    // print_preview_context_.AllPagesRendered()) before calling
-    // FinalizePrintReadyDocument() when printing a PDF because the plugin
-    // code does not generate output until we call FinishPrinting().  We do not
-    // generate draft pages for PDFs, so IsFinalPageRendered() and
-    // IsLastPageOfPrintReadyMetafile() will be true in the same iteration of
-    // the loop.
-    if (print_preview_context_.IsFinalPageRendered())
-      print_preview_context_.AllPagesRendered();
-
-    if (print_preview_context_.IsLastPageOfPrintReadyMetafile()) {
-      DCHECK(print_preview_context_.IsModifiable() ||
-             print_preview_context_.IsFinalPageRendered());
-      if (!FinalizePrintReadyDocument())
+      if (!RenderPreviewPage(page_index, header_footer_frame)) {
         return CreatePreviewDocumentResult::kFail;
+      }
+
+      if (CheckForCancel()) {
+        return CreatePreviewDocumentResult::kFail;
+      }
+
+      // This code must call PrepareFrameAndViewForPrint::FinishPrinting() (by
+      // way of print_preview_context_.AllPagesRendered()) before calling
+      // FinalizePrintReadyDocument() when printing a PDF because the plugin
+      // code does not generate output until FinishPrinting() gets called.
+      // Printing PDFs does not generate draft pages, so IsFinalPageRendered()
+      // and IsLastPageOfPrintReadyMetafile() will be true in the same iteration
+      // of the loop.
+      if (print_preview_context_.IsFinalPageRendered()) {
+        print_preview_context_.AllPagesRendered();
+      }
+
+      if (print_preview_context_.IsLastPageOfPrintReadyMetafile()) {
+        DCHECK(print_preview_context_.IsModifiable() ||
+               print_preview_context_.IsFinalPageRendered());
+        if (!FinalizePrintReadyDocument()) {
+          return CreatePreviewDocumentResult::kFail;
+        }
+      }
     }
   }
   print_preview_context_.Finished();
   return CreatePreviewDocumentResult::kSuccess;
 }
 
-bool PrintRenderFrameHelper::RenderPreviewPage(uint32_t page_index) {
+bool PrintRenderFrameHelper::RenderPreviewPage(
+    uint32_t page_index,
+    blink::WebLocalFrame* header_footer_frame) {
   TRACE_EVENT1("print", "PrintRenderFrameHelper::RenderPreviewPage",
                "page_index", page_index);
 
@@ -1858,7 +1820,8 @@ bool PrintRenderFrameHelper::RenderPreviewPage(uint32_t page_index) {
   base::TimeTicks begin_time = base::TimeTicks::Now();
   PrintPageInternal(print_params, page_index,
                     print_preview_context_.total_page_count(),
-                    print_preview_context_.prepared_frame(), render_metafile);
+                    print_preview_context_.prepared_frame(),
+                    header_footer_frame, render_metafile);
   print_preview_context_.RenderedPreviewPage(base::TimeTicks::Now() -
                                              begin_time);
 
@@ -2267,6 +2230,10 @@ bool PrintRenderFrameHelper::PrintPagesNative(
         print_params.printed_doc_type == mojom::SkiaDocumentType::kMSKP
             ? &accessibility_tree
             : &metafile.accessibility_tree());
+    metafile.set_generate_document_outline(
+        print_params.generate_document_outline
+            ? GeneratePdfDocumentOutline::kFromHeaders
+            : GeneratePdfDocumentOutline::kNone);
   }
 
   mojom::DidPrintDocumentParamsPtr page_params =
@@ -2274,8 +2241,18 @@ bool PrintRenderFrameHelper::PrintPagesNative(
   page_params->content = mojom::DidPrintContentParams::New();
   page_params->page_size = ToFlooredSize(print_params.page_size);
   page_params->content_area = gfx::Rect(page_params->page_size);
-  for (uint32_t printed_page : printed_pages) {
-    PrintPageInternal(print_params, printed_page, page_count, frame, &metafile);
+
+  {
+    std::unique_ptr<HeaderAndFooterContext> header_footer_context;
+    blink::WebLocalFrame* header_footer_frame = nullptr;
+    if (print_params.display_header_footer) {
+      header_footer_context = std::make_unique<HeaderAndFooterContext>(*frame);
+      header_footer_frame = header_footer_context->frame();
+    }
+    for (uint32_t printed_page : printed_pages) {
+      PrintPageInternal(print_params, printed_page, page_count, frame,
+                        header_footer_frame, &metafile);
+    }
   }
 
   // blink::printEnd() for PDF should be called before metafile is closed.
@@ -2451,23 +2428,7 @@ mojom::PrintPagesParamsPtr PrintRenderFrameHelper::GetPrintSettingsFromUser(
   print_pages_params_.reset();
 
   mojom::PrintPagesParamsPtr print_settings;
-  base::RunLoop loop{base::RunLoop::Type::kNestableTasksAllowed};
-  closures_for_mojo_responses_->SetPrintSettingFromUserQuitClosure(
-      loop.QuitClosure());
-  GetPrintManagerHost()->ScriptedPrint(
-      std::move(params),
-      base::BindOnce(
-          [](base::OnceClosure quit_closure, mojom::PrintPagesParamsPtr* output,
-             mojom::PrintPagesParamsPtr input) {
-            *output = std::move(input);
-            std::move(quit_closure).Run();
-          },
-          base::BindOnce(
-              &PrintRenderFrameHelper::QuitGetPrintSettingsFromUserRunLoop,
-              weak_ptr_factory_.GetWeakPtr()),
-          &print_settings));
-  // Runs the nested run loop until ScriptedPrint() gets the reply.
-  loop.Run();
+  GetPrintManagerHost()->ScriptedPrint(std::move(params), &print_settings);
   return print_settings;
   // WARNING: `this` may be gone at this point. Do not do any more work here
   // and just return.
@@ -2490,11 +2451,13 @@ bool PrintRenderFrameHelper::RenderPagesForPrint(blink::WebLocalFrame* frame,
   return true;
 }
 
-void PrintRenderFrameHelper::PrintPageInternal(const mojom::PrintParams& params,
-                                               uint32_t page_index,
-                                               uint32_t page_count,
-                                               blink::WebLocalFrame* frame,
-                                               MetafileSkia* metafile) {
+void PrintRenderFrameHelper::PrintPageInternal(
+    const mojom::PrintParams& params,
+    uint32_t page_index,
+    uint32_t page_count,
+    blink::WebLocalFrame* frame,
+    blink::WebLocalFrame* header_footer_frame,
+    MetafileSkia* metafile) {
   ParamWithFitToPageScale<mojom::PageSizeMarginsPtr> layout =
       ComputePageLayoutForCss(frame, page_index, params, ignore_css_margins_);
   auto& page_layout_in_device_pixels = layout.param;
@@ -2540,9 +2503,11 @@ void PrintRenderFrameHelper::PrintPageInternal(const mojom::PrintParams& params,
 
   canvas->SetPrintingMetafile(metafile);
 
-  if (params.display_header_footer) {
-    PrintHeaderAndFooter(canvas, page_index, page_count, *frame,
-                         layout.fit_to_page_scale_factor,
+  CHECK_EQ(params.display_header_footer, !!header_footer_frame);
+  if (header_footer_frame) {
+    HeaderAndFooterContext context(*frame);
+    PrintHeaderAndFooter(canvas, *header_footer_frame, page_index, page_count,
+                         *frame, layout.fit_to_page_scale_factor,
                          *page_layout_in_css_pixels, params);
   }
 
@@ -3023,17 +2988,8 @@ void PrintRenderFrameHelper::SetPrintPagesParams(
   print_pages_params_ = settings.Clone();
 }
 
-void PrintRenderFrameHelper::QuitActiveRunLoops() {
-  QuitScriptedPrintPreviewRunLoop();
-  QuitGetPrintSettingsFromUserRunLoop();
-}
-
 void PrintRenderFrameHelper::QuitScriptedPrintPreviewRunLoop() {
   closures_for_mojo_responses_->RunScriptedPrintPreviewQuitClosure();
-}
-
-void PrintRenderFrameHelper::QuitGetPrintSettingsFromUserRunLoop() {
-  closures_for_mojo_responses_->RunPrintSettingFromUserQuitClosure();
 }
 
 PrintRenderFrameHelper::ScopedIPC::ScopedIPC(

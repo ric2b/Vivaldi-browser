@@ -34,6 +34,7 @@
 #include "dawn/common/BitSetIterator.h"
 #include "dawn/common/Log.h"
 #include "dawn/common/SystemUtils.h"
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/VulkanBackend.h"
 #include "dawn/native/vulkan/DeviceVk.h"
@@ -141,6 +142,19 @@ constexpr SkippedMessage kSkippedMessages[] = {
     // have a corresponding attachment
     {"UNASSIGNED-CoreValidation-Shader-OutputNotConsumed",
      "fragment shader writes to output location 0 with no matching attachment"},
+
+    // http://crbug.com/1499919
+    {"VUID-VkMemoryAllocateInfo-allocationSize-01742",
+     "vkAllocateMemory(): pAllocateInfo->allocationSize allocationSize (4096) "
+     "does not match pAllocateInfo->pNext<VkImportMemoryFdInfoKHR>"},
+    {"VUID-VkMemoryAllocateInfo-allocationSize-01742",
+     "vkAllocateMemory(): pAllocateInfo->allocationSize allocationSize (512) "
+     "does not match pAllocateInfo->pNext<VkImportMemoryFdInfoKHR>"},
+    {"VUID-VkMemoryAllocateInfo-allocationSize-01742",
+     "vkAllocateMemory(): pAllocateInfo->memoryTypeIndex memoryTypeIndex (7) "
+     "does not match pAllocateInfo->pNext<VkImportMemoryFdInfoKHR>"},
+    {"VUID-VkMemoryDedicatedAllocateInfo-image-01878",
+     "vkAllocateMemory(): pAllocateInfo->pNext<VkMemoryDedicatedAllocateInfo>"},
 };
 
 namespace dawn::native::vulkan {
@@ -514,7 +528,7 @@ MaybeError VulkanInstance::RegisterDebugUtils() {
 
 void VulkanInstance::StartListeningForDeviceMessages(Device* device) {
     std::lock_guard<std::mutex> lock(mMessageListenerDevicesMutex);
-    mMessageListenerDevices.insert({device->GetDebugPrefix(), device});
+    mMessageListenerDevices.emplace(device->GetDebugPrefix(), device);
 }
 void VulkanInstance::StopListeningForDeviceMessages(Device* device) {
     std::lock_guard<std::mutex> lock(mMessageListenerDevicesMutex);
@@ -535,7 +549,7 @@ Backend::Backend(InstanceBase* instance) : BackendConnection(instance, wgpu::Bac
 Backend::~Backend() = default;
 
 std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
-    const RequestAdapterOptions* options) {
+    const UnpackedPtr<RequestAdapterOptions>& options) {
     std::vector<Ref<PhysicalDeviceBase>> physicalDevices;
     InstanceBase* instance = GetInstance();
     for (ICD icd : kICDs) {

@@ -20,6 +20,8 @@ DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT,
 DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT,
                                           kBluetoothFeatureTileToggleElementId);
 
+DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT, kCalendarViewElementId);
+
 DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT, kEnterpriseManagedView);
 
 // Uniquely identifies an element corresponding to the Explore app. Note that
@@ -37,6 +39,13 @@ DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT, kHomeButtonElementId);
 
 // Uniquely identifies the `LoginUserView`.
 DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT, kLoginUserViewElementId);
+
+DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(ASH_EXPORT,
+                                          kOverviewDeskBarElementId);
+
+DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(
+    ASH_EXPORT,
+    kOverviewDeskBarNewDeskButtonElementId);
 
 DECLARE_EXPORTED_ELEMENT_IDENTIFIER_VALUE(
     ASH_EXPORT,

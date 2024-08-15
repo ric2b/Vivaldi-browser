@@ -15,6 +15,7 @@
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/compositor.h"
@@ -22,7 +23,6 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/linux/linux_ui.h"
-#include "ui/ozone/buildflags.h"
 #include "ui/platform_window/extensions/desk_extension.h"
 #include "ui/platform_window/extensions/pinned_mode_extension.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
@@ -64,13 +64,14 @@ class SwapWithNewSizeObserverHelper : public ui::CompositorObserver {
 
  private:
   // ui::CompositorObserver:
-#if BUILDFLAG(OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_OZONE_X11)
   void OnCompositingCompleteSwapWithNewSize(ui::Compositor* compositor,
                                             const gfx::Size& size) override {
     DCHECK_EQ(compositor, compositor_);
     callback_.Run(size);
   }
-#endif  // BUILDFLAG(OZONE_PLATFORM_X11)
+#endif  // BUILDFLAG(IS_OZONE_X11)
+
   void OnCompositingShuttingDown(ui::Compositor* compositor) override {
     DCHECK_EQ(compositor, compositor_);
     compositor_->RemoveObserver(this);
@@ -206,7 +207,7 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
           gfx::ToRoundedPoint(location_in_dip));
       if (hit_test_code != HTCLIENT && hit_test_code != HTNOWHERE)
         flags |= ui::EF_IS_NON_CLIENT;
-      located_event->set_flags(flags);
+      located_event->SetFlags(flags);
     }
 
     // While we unset the urgency hint when we gain focus, we also must remove

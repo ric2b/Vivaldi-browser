@@ -34,6 +34,7 @@
 #include "dawn/native/CommandBuffer.h"
 #include "dawn/native/metal/CommandRecordingContext.h"
 #include "dawn/native/metal/DeviceMTL.h"
+#include "dawn/native/metal/QueueMTL.h"
 #include "dawn/native/metal/UtilsMetal.h"
 
 #include <limits>
@@ -44,13 +45,11 @@ namespace dawn::native::metal {
 static constexpr uint32_t kMinUniformOrStorageBufferAlignment = 16u;
 
 // static
-ResultOrError<Ref<Buffer>> Buffer::Create(Device* device, const BufferDescriptor* descriptor) {
+ResultOrError<Ref<Buffer>> Buffer::Create(Device* device,
+                                          const UnpackedPtr<BufferDescriptor>& descriptor) {
     Ref<Buffer> buffer = AcquireRef(new Buffer(device, descriptor));
 
-    const BufferHostMappedPointer* hostMappedDesc = nullptr;
-    FindInChain(descriptor->nextInChain, &hostMappedDesc);
-
-    if (hostMappedDesc != nullptr) {
+    if (auto* hostMappedDesc = descriptor.Get<BufferHostMappedPointer>()) {
         DAWN_TRY(buffer->InitializeHostMapped(hostMappedDesc));
     } else {
         DAWN_TRY(buffer->Initialize(descriptor->mappedAtCreation));
@@ -67,7 +66,8 @@ uint64_t Buffer::QueryMaxBufferLength(id<MTLDevice> mtlDevice) {
     return 256 * 1024 * 1024;
 }
 
-Buffer::Buffer(DeviceBase* dev, const BufferDescriptor* desc) : BufferBase(dev, desc) {}
+Buffer::Buffer(DeviceBase* dev, const UnpackedPtr<BufferDescriptor>& desc)
+    : BufferBase(dev, desc) {}
 
 MaybeError Buffer::Initialize(bool mappedAtCreation) {
     MTLResourceOptions storageMode;
@@ -130,7 +130,7 @@ MaybeError Buffer::Initialize(bool mappedAtCreation) {
     if (GetDevice()->IsToggleEnabled(Toggle::NonzeroClearResourcesOnCreationForTesting) &&
         !mappedAtCreation) {
         CommandRecordingContext* commandContext =
-            ToBackend(GetDevice())->GetPendingCommandContext();
+            ToBackend(GetDevice()->GetQueue())->GetPendingCommandContext();
         ClearBuffer(commandContext, uint8_t(1u));
     }
 
@@ -142,7 +142,7 @@ MaybeError Buffer::Initialize(bool mappedAtCreation) {
             uint64_t clearOffset = GetAllocatedSize() - clearSize;
 
             CommandRecordingContext* commandContext =
-                ToBackend(GetDevice())->GetPendingCommandContext();
+                ToBackend(GetDevice()->GetQueue())->GetPendingCommandContext();
             ClearBuffer(commandContext, 0, clearOffset, clearSize);
         }
     }
@@ -197,7 +197,8 @@ MaybeError Buffer::MapAtCreationImpl() {
 }
 
 MaybeError Buffer::MapAsyncImpl(wgpu::MapMode mode, size_t offset, size_t size) {
-    CommandRecordingContext* commandContext = ToBackend(GetDevice())->GetPendingCommandContext();
+    CommandRecordingContext* commandContext =
+        ToBackend(GetDevice()->GetQueue())->GetPendingCommandContext();
     EnsureDataInitialized(commandContext);
 
     return {};

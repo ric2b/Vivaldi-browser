@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "ash/public/cpp/external_arc/message_center/arc_notification_delegate.h"
@@ -19,7 +20,7 @@
 #include "ash/public/cpp/external_arc/message_center/mock_arc_notification_item.h"
 #include "ash/public/cpp/message_center/arc_notification_constants.h"
 #include "ash/shell.h"
-#include "ash/system/message_center/message_view_factory.h"
+#include "ash/system/notification_center/message_view_factory.h"
 #include "ash/system/notification_center/notification_center_tray.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
@@ -29,7 +30,6 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/exo/buffer.h"
 #include "components/exo/keyboard.h"
 #include "components/exo/keyboard_delegate.h"
@@ -89,7 +89,7 @@ class MockKeyboardDelegate : public exo::KeyboardDelegate {
               OnKeyRepeatSettingsChanged,
               (bool, base::TimeDelta, base::TimeDelta),
               (override));
-  MOCK_METHOD(void, OnKeyboardLayoutUpdated, (base::StringPiece), (override));
+  MOCK_METHOD(void, OnKeyboardLayoutUpdated, (std::string_view), (override));
 };
 
 class FakeNotificationSurface : public exo::NotificationSurface {
@@ -114,8 +114,7 @@ class FakeNotificationSurface : public exo::NotificationSurface {
     // null SharedMainThreadContextProvider in test under mash.
   }
 
-  const raw_ptr<exo::NotificationSurfaceManager, ExperimentalAsh>
-      manager_;  // Not owned.
+  const raw_ptr<exo::NotificationSurfaceManager> manager_;  // Not owned.
 };
 
 aura::Window* GetFocusedWindow() {
@@ -125,17 +124,9 @@ aura::Window* GetFocusedWindow() {
 
 }  // anonymous namespace
 
-class ArcNotificationContentViewTest
-    : public AshTestBase,
-      public testing::WithParamInterface<bool> {
+class ArcNotificationContentViewTest : public AshTestBase {
  public:
-  ArcNotificationContentViewTest() {
-    if (IsQsRevampEnabled()) {
-      feature_list_.InitAndEnableFeature(features::kQsRevamp);
-    } else {
-      feature_list_.InitAndDisableFeature(features::kQsRevamp);
-    }
-  }
+  ArcNotificationContentViewTest() = default;
 
   ArcNotificationContentViewTest(const ArcNotificationContentViewTest&) =
       delete;
@@ -143,9 +134,6 @@ class ArcNotificationContentViewTest
       const ArcNotificationContentViewTest&) = delete;
 
   ~ArcNotificationContentViewTest() override = default;
-
-  // TODO(b/305075031) clean up after the flag is removed.
-  bool IsQsRevampEnabled() const { return true; }
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -285,17 +273,11 @@ class ArcNotificationContentViewTest
   std::unique_ptr<exo::NotificationSurface> notification_surface_;
 
   // owned by the |wrapper_widget_|.
-  raw_ptr<ArcNotificationView, DanglingUntriaged | ExperimentalAsh>
-      notification_view_ = nullptr;
+  raw_ptr<ArcNotificationView, DanglingUntriaged> notification_view_ = nullptr;
   std::unique_ptr<views::Widget> wrapper_widget_;
-  base::test::ScopedFeatureList feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(QsRevamp,
-                         ArcNotificationContentViewTest,
-                         testing::Bool());
-
-TEST_P(ArcNotificationContentViewTest, CreateSurfaceAfterNotification) {
+TEST_F(ArcNotificationContentViewTest, CreateSurfaceAfterNotification) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -308,7 +290,7 @@ TEST_P(ArcNotificationContentViewTest, CreateSurfaceAfterNotification) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, CreateSurfaceBeforeNotification) {
+TEST_F(ArcNotificationContentViewTest, CreateSurfaceBeforeNotification) {
   std::string notification_key("notification id");
 
   PrepareSurface(notification_key);
@@ -321,7 +303,7 @@ TEST_P(ArcNotificationContentViewTest, CreateSurfaceBeforeNotification) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, CreateNotificationWithoutSurface) {
+TEST_F(ArcNotificationContentViewTest, CreateNotificationWithoutSurface) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -332,7 +314,7 @@ TEST_P(ArcNotificationContentViewTest, CreateNotificationWithoutSurface) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, CloseButton) {
+TEST_F(ArcNotificationContentViewTest, CloseButton) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -363,7 +345,7 @@ TEST_P(ArcNotificationContentViewTest, CloseButton) {
 }
 
 // Tests pressing close button when hosted in MessageCenterView.
-TEST_P(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
+TEST_F(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
   std::string notification_key("notification id");
 
   MessageViewFactory::ClearCustomNotificationViewFactory(
@@ -389,17 +371,9 @@ TEST_P(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
           }));
 
   // Show MessageCenterView and activate its widget.
-  if (IsQsRevampEnabled()) {
-    auto* notification_tray = StatusAreaWidgetTestHelper::GetStatusAreaWidget()
-                                  ->notification_center_tray();
-    notification_tray->ShowBubble();
-  } else {
-    auto* unified_system_tray =
-        StatusAreaWidgetTestHelper::GetStatusAreaWidget()
-            ->unified_system_tray();
-    unified_system_tray->ShowBubble();
-    unified_system_tray->ActivateBubble();
-  }
+  auto* notification_tray = StatusAreaWidgetTestHelper::GetStatusAreaWidget()
+                                ->notification_center_tray();
+  notification_tray->ShowBubble();
 
   auto notification_item =
       std::make_unique<MockArcNotificationItem>(notification_key);
@@ -434,7 +408,7 @@ TEST_P(ArcNotificationContentViewTest, CloseButtonInMessageCenterView) {
       MessageCenter::Get()->FindVisibleNotificationById(notification_id));
 }
 
-TEST_P(ArcNotificationContentViewTest, CloseButtonPosition) {
+TEST_F(ArcNotificationContentViewTest, CloseButtonPosition) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -496,7 +470,7 @@ TEST_P(ArcNotificationContentViewTest, CloseButtonPosition) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, ReuseSurfaceAfterClosing) {
+TEST_F(ArcNotificationContentViewTest, ReuseSurfaceAfterClosing) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -518,7 +492,7 @@ TEST_P(ArcNotificationContentViewTest, ReuseSurfaceAfterClosing) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, ReuseAndCloseSurfaceBeforeClosing) {
+TEST_F(ArcNotificationContentViewTest, ReuseAndCloseSurfaceBeforeClosing) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -541,7 +515,7 @@ TEST_P(ArcNotificationContentViewTest, ReuseAndCloseSurfaceBeforeClosing) {
   wrapper_widget.reset();
 }
 
-TEST_P(ArcNotificationContentViewTest, ReuseSurfaceBeforeClosing) {
+TEST_F(ArcNotificationContentViewTest, ReuseSurfaceBeforeClosing) {
   std::string notification_key("notification id");
 
   auto notification_item =
@@ -565,7 +539,7 @@ TEST_P(ArcNotificationContentViewTest, ReuseSurfaceBeforeClosing) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, Activate) {
+TEST_F(ArcNotificationContentViewTest, Activate) {
   std::string key("notification id");
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);
   auto notification = CreateNotification(notification_item.get());
@@ -580,7 +554,7 @@ TEST_P(ArcNotificationContentViewTest, Activate) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, NotActivateOnClick) {
+TEST_F(ArcNotificationContentViewTest, NotActivateOnClick) {
   std::string key("notification id");
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);
   auto notification = CreateNotification(notification_item.get());
@@ -597,7 +571,7 @@ TEST_P(ArcNotificationContentViewTest, NotActivateOnClick) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, ActivateWhenRemoteInputOpens) {
+TEST_F(ArcNotificationContentViewTest, ActivateWhenRemoteInputOpens) {
   std::string key("notification id");
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);
   auto notification = CreateNotification(notification_item.get());
@@ -614,7 +588,7 @@ TEST_P(ArcNotificationContentViewTest, ActivateWhenRemoteInputOpens) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, AcceptInputTextWithActivate) {
+TEST_F(ArcNotificationContentViewTest, AcceptInputTextWithActivate) {
   std::string key("notification id");
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);
   auto notification = CreateNotification(notification_item.get());
@@ -645,7 +619,7 @@ TEST_P(ArcNotificationContentViewTest, AcceptInputTextWithActivate) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, NotAcceptInputTextWithoutActivate) {
+TEST_F(ArcNotificationContentViewTest, NotAcceptInputTextWithoutActivate) {
   std::string key("notification id");
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);
   auto notification = CreateNotification(notification_item.get());
@@ -673,7 +647,7 @@ TEST_P(ArcNotificationContentViewTest, NotAcceptInputTextWithoutActivate) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, TraversalFocus) {
+TEST_F(ArcNotificationContentViewTest, TraversalFocus) {
   const bool reverse = false;
 
   std::string key("notification id");
@@ -700,7 +674,7 @@ TEST_P(ArcNotificationContentViewTest, TraversalFocus) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, TraversalFocusReverse) {
+TEST_F(ArcNotificationContentViewTest, TraversalFocusReverse) {
   const bool reverse = true;
 
   std::string key("notification id");
@@ -727,7 +701,7 @@ TEST_P(ArcNotificationContentViewTest, TraversalFocusReverse) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, TraversalFocusByTabKey) {
+TEST_F(ArcNotificationContentViewTest, TraversalFocusByTabKey) {
   const std::string key("notification id");
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);
   PrepareSurface(key);
@@ -762,7 +736,7 @@ TEST_P(ArcNotificationContentViewTest, TraversalFocusByTabKey) {
   CloseNotificationView();
 }
 
-TEST_P(ArcNotificationContentViewTest, TraversalFocusReverseByShiftTab) {
+TEST_F(ArcNotificationContentViewTest, TraversalFocusReverseByShiftTab) {
   std::string key("notification id");
 
   auto notification_item = std::make_unique<MockArcNotificationItem>(key);

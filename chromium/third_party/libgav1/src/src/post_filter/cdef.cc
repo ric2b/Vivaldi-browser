@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include <cassert>
+
 #include "src/post_filter.h"
 #include "src/utils/blocking_counter.h"
 #include "src/utils/compiler_attributes.h"
@@ -72,10 +74,23 @@ void CopyRowForCdef(const Pixel* src, int block_width, int unit_width,
   }
 }
 
+// GCC 13.x will report a false positive from the call to
+// ApplyCdefForOneSuperBlockRowHelper() with a nullptr in
+// ApplyCdefForOneSuperBlockRow(). The call to CopyPixels() in
+// ApplyCdefForOneUnit() is only made when thread_pool_ != nullptr and
+// border_columns[][] is a valid pointer.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 // For |height| rows, copy |width| pixels of size |pixel_size| from |src| to
 // |dst|.
 void CopyPixels(const uint8_t* src, int src_stride, uint8_t* dst,
                 int dst_stride, int width, int height, size_t pixel_size) {
+  assert(src != nullptr);
+  assert(dst != nullptr);
+  assert(height > 0);
   int y = height;
   do {
     memcpy(dst, src, width * pixel_size);
@@ -83,6 +98,9 @@ void CopyPixels(const uint8_t* src, int src_stride, uint8_t* dst,
     dst += dst_stride;
   } while (--y != 0);
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 }  // namespace
 
@@ -327,6 +345,7 @@ void PostFilter::ApplyCdefForOneUnit(uint16_t* cdef_block, const int index,
         GetSourceBuffer(kPlaneY, row4x4_start,
                         column4x4_start + block_width4x4) -
         kCdefBorder * sizeof(Pixel);
+    assert(border_columns != nullptr);
     CopyPixels(src_line, frame_buffer_.stride(kPlaneY),
                border_columns[border_columns_dst_index][kPlaneY],
                kCdefBorder * sizeof(Pixel), kCdefBorder,

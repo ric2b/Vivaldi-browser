@@ -95,23 +95,25 @@
     color: var(--text-link);
   }
 
-  [is="ui-icon"] {
-    vertical-align: middle;
+  devtools-icon {
+    vertical-align: baseline;
+    color: var(--sys-color-primary);
   }
 
-  [is="ui-icon"].icon-mask {
-    background-color: var(--sys-color-primary);
-  }
-
-  :focus .selected & [is="ui-icon"].icon-mask {
-    background-color: var(--sys-color-tonal-container);
+  :focus .selected & devtools-icon {
+    color: var(--sys-color-tonal-container);
   }
 
   &:focus-visible {
     outline-width: unset;
   }
 
-  &:not(.devtools-link-prevent-click) {
+  &.invalid-link {
+    color: var(--text-disabled);
+    text-decoration: none;
+  }
+
+  &:not(.devtools-link-prevent-click, .invalid-link) {
     cursor: pointer;
   }
 

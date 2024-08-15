@@ -249,6 +249,9 @@ class FeedbackVector
   using TorqueGeneratedFeedbackVector::set_invocation_count;
   DECL_RELAXED_INT32_ACCESSORS(invocation_count)
   inline void clear_invocation_count(RelaxedStoreTag tag);
+  using TorqueGeneratedFeedbackVector::invocation_count_before_stable;
+  using TorqueGeneratedFeedbackVector::set_invocation_count_before_stable;
+  DECL_UINT8_ACCESSORS(invocation_count_before_stable)
 
   // The [osr_urgency] controls when OSR is attempted, and is incremented as
   // the function becomes hotter. When the current loop depth is less than the
@@ -272,7 +275,7 @@ class FeedbackVector
   // The `osr_state` contains the osr_urgency and maybe_has_optimized_osr_code.
   inline void reset_osr_state();
 
-  inline Tagged<Code> optimized_code() const;
+  inline Tagged<Code> optimized_code(IsolateForSandbox isolate) const;
   // Whether maybe_optimized_code contains a cached Code object.
   inline bool has_optimized_code() const;
 
@@ -286,7 +289,7 @@ class FeedbackVector
   inline bool maybe_has_turbofan_code() const;
   inline void set_maybe_has_turbofan_code(bool value);
 
-  void SetOptimizedCode(Tagged<Code> code);
+  void SetOptimizedCode(IsolateForSandbox isolate, Tagged<Code> code);
   void EvictOptimizedCodeMarkedForDeoptimization(
       Isolate* isolate, Tagged<SharedFunctionInfo> shared, const char* reason);
   void ClearOptimizedCode();
@@ -304,6 +307,9 @@ class FeedbackVector
 
   TieringState osr_tiering_state();
   void set_osr_tiering_state(TieringState marker);
+
+  inline bool interrupt_budget_reset_by_ic_change() const;
+  inline void set_interrupt_budget_reset_by_ic_change(bool value);
 
   void reset_flags();
 

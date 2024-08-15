@@ -63,7 +63,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScores) {
   auto page_node1 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node1 =
       CreateFrameNodeAutoId(process_node1.get(), page_node1.get());
-  main_frame_node1->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node1.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node1->SetIsCurrent(false);
@@ -75,7 +74,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScores) {
   auto page_node2 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node2 =
       CreateFrameNodeAutoId(process_node2.get(), page_node2.get());
-  main_frame_node2->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node2.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node2->SetIsCurrent(false);
@@ -87,7 +85,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScores) {
   auto page_node3 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node3 =
       CreateFrameNodeAutoId(process_node3.get(), page_node3.get());
-  main_frame_node3->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node3.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node3->SetIsCurrent(false);
@@ -98,11 +95,11 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScores) {
   const int kMiddleRendererOomScore =
       (content::kHighestRendererOomScore + content::kLowestRendererOomScore) /
       2;
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node1->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node1->GetProcessId()),
             content::kHighestRendererOomScore);
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node2->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node2->GetProcessId()),
             kMiddleRendererOomScore);
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node3->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node3->GetProcessId()),
             content::kLowestRendererOomScore);
   // GetCachedOomScore should return -1 for non-cached pid.
   ASSERT_EQ(policy()->GetCachedOomScore(0), -1);
@@ -120,7 +117,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresWithPriority) {
   auto page_node1 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node1 =
       CreateFrameNodeAutoId(process_node1.get(), page_node1.get());
-  main_frame_node1->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node1.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node1->SetIsCurrent(false);
@@ -134,7 +130,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresWithPriority) {
   auto page_node2 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node2 =
       CreateFrameNodeAutoId(process_node2.get(), page_node2.get());
-  main_frame_node2->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node2.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node2->SetIsCurrent(false);
@@ -146,7 +141,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresWithPriority) {
   auto page_node3 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node3 =
       CreateFrameNodeAutoId(process_node3.get(), page_node3.get());
-  main_frame_node3->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node3.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node3->SetIsCurrent(false);
@@ -160,11 +154,11 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresWithPriority) {
 
   // Because page node 1 is audible, the corresponding process should have
   // lowest oom score adj.
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node2->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node2->GetProcessId()),
             content::kHighestRendererOomScore);
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node3->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node3->GetProcessId()),
             kMiddleRendererOomScore);
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node1->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node1->GetProcessId()),
             content::kLowestRendererOomScore);
 }
 
@@ -195,7 +189,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresSharedPid) {
   auto page_node1 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node1 =
       CreateFrameNodeAutoId(process_node1.get(), page_node1.get());
-  main_frame_node1->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node1.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node1->SetIsCurrent(false);
@@ -209,7 +202,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresSharedPid) {
   auto page_node2 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node2 =
       CreateFrameNodeAutoId(process_node2.get(), page_node2.get());
-  main_frame_node2->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node2.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node2->SetIsCurrent(false);
@@ -222,7 +214,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresSharedPid) {
   auto page_node3 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node3 =
       CreateFrameNodeAutoId(process_node3.get(), page_node3.get());
-  main_frame_node3->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node3.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node3->SetIsCurrent(false);
@@ -231,7 +222,6 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresSharedPid) {
   auto page_node4 = CreateNode<performance_manager::PageNodeImpl>();
   auto main_frame_node4 =
       CreateFrameNodeAutoId(process_node2.get(), page_node4.get());
-  main_frame_node4->SetIsCurrent(true);
   testing::MakePageNodeDiscardable(page_node4.get(), task_env());
   AdvanceClock(base::Minutes(30));
   main_frame_node4->SetIsCurrent(false);
@@ -242,11 +232,11 @@ TEST_F(OomScorePolicyChromeOSTest, DistributeOomScoresSharedPid) {
   const int kMiddleRendererOomScore =
       (content::kHighestRendererOomScore + content::kLowestRendererOomScore) /
       2;
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node1->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node1->GetProcessId()),
             content::kHighestRendererOomScore);
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node3->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node3->GetProcessId()),
             kMiddleRendererOomScore);
-  ASSERT_EQ(policy()->GetCachedOomScore(process_node2->process_id()),
+  ASSERT_EQ(policy()->GetCachedOomScore(process_node2->GetProcessId()),
             content::kLowestRendererOomScore);
 }
 

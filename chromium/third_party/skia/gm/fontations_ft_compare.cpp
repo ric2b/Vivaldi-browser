@@ -8,6 +8,7 @@
 #include "gm/gm.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkColorPriv.h"
 #include "include/core/SkData.h"
 #include "include/core/SkFont.h"
 #include "include/core/SkRefCnt.h"
@@ -16,7 +17,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/ports/SkTypeface_fontations.h"
 #include "modules/skshaper/include/SkShaper.h"
-#include "src/ports/SkFontHost_FreeType_common.h"
+#include "src/ports/SkTypeface_FreeType.h"
 #include "tools/Resources.h"
 #include "tools/TestFontDataProvider.h"
 

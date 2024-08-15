@@ -128,11 +128,6 @@ static INLINE int highbd_error_measure(int err, int bd) {
 }
 #endif  // CONFIG_AV1_HIGHBITDEPTH
 
-// Returns the error between the frame described by 'ref' and the frame
-// described by 'dst'.
-int64_t av1_frame_error(int use_hbd, int bd, const uint8_t *ref, int stride,
-                        uint8_t *dst, int p_width, int p_height, int p_stride);
-
 int64_t av1_segmented_frame_error(int use_hbd, int bd, const uint8_t *ref,
                                   int ref_stride, uint8_t *dst, int dst_stride,
                                   int p_width, int p_height,

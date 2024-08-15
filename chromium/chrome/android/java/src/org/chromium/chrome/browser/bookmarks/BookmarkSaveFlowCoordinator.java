@@ -22,7 +22,6 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayP
 import org.chromium.chrome.browser.commerce.PriceTrackingUtils;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -35,6 +34,7 @@ import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.image_fetcher.ImageFetcherConfig;
 import org.chromium.components.image_fetcher.ImageFetcherFactory;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -64,13 +64,16 @@ public class BookmarkSaveFlowCoordinator {
      * @param bottomSheetController Allows displaying content in the bottom sheet.
      * @param shoppingService Allows un/subscribing for product updates, used for price-tracking.
      * @param userEducationHelper A means of triggering IPH.
+     * @param profile The current chrome profile.
+     * @param identityManager The {@link IdentityManager} which supplies the account data.
      */
     public BookmarkSaveFlowCoordinator(
             @NonNull Context context,
             @NonNull BottomSheetController bottomSheetController,
-            ShoppingService shoppingService,
+            @NonNull ShoppingService shoppingService,
             @NonNull UserEducationHelper userEducationHelper,
-            Profile profile) {
+            @NonNull Profile profile,
+            @NonNull IdentityManager identityManager) {
         mContext = context;
         mBottomSheetController = bottomSheetController;
         mUserEducationHelper = userEducationHelper;
@@ -112,8 +115,7 @@ public class BookmarkSaveFlowCoordinator {
                         BookmarkUtils.getRoundedIconGenerator(
                                 mContext, BookmarkRowDisplayPref.VISUAL),
                         res.getDimensionPixelSize(R.dimen.improved_bookmark_save_flow_image_size),
-                        BookmarkUtils.getFaviconDisplaySize(res),
-                        SyncServiceFactory.getForProfile(profile));
+                        BookmarkUtils.getFaviconDisplaySize(res));
 
         mMediator =
                 new BookmarkSaveFlowMediator(
@@ -123,7 +125,8 @@ public class BookmarkSaveFlowCoordinator {
                         this::close,
                         shoppingService,
                         bookmarkImageFetcher,
-                        mProfile);
+                        mProfile,
+                        identityManager);
     }
 
     /**
@@ -238,7 +241,6 @@ public class BookmarkSaveFlowCoordinator {
     }
 
     private void destroy() {
-        mDestroyChecker.checkNotDestroyed();
         mDestroyChecker.destroy();
 
         // The bottom sheet was closed by a means other than one of the edit actions.

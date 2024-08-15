@@ -5,6 +5,7 @@
 #pragma once
 
 #include <wasm_simd128.h>
+
 #include <xnnpack/log.h>
 #include <xnnpack/microparams.h>
 #include <xnnpack/post-operation.h>
@@ -62,8 +63,8 @@ class GemmIGemmLoadsplatCommons : public GemmIGemmCommons {
       LoadVbs(vb0123, vb4567, w, /*offset=*/(2 * unrolled_iter) * sizeof(v128_t));
       for (size_t i = 0; i < max_mr; i++) {
         const auto va = MakeLocal(V128Load32Splat(as[i]));
-        vacc0123[i] = F32x4Add(vacc0123[i], F32x4Mul(va, vb0123));
-        vacc4567[i] = F32x4Add(vacc4567[i], F32x4Mul(va, vb4567));
+        vacc0123[i] = MultiplyAndAdd(va, vb0123, vacc0123[i]);
+        vacc4567[i] = MultiplyAndAdd(va, vb4567, vacc4567[i]);
         as[i] = I32Add(as[i], I32Const(sizeof(float)));
       }
     }

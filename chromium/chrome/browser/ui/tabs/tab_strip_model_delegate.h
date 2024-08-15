@@ -6,14 +6,15 @@
 #define CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_DELEGATE_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "components/sessions/core/session_id.h"
 #include "components/tab_groups/tab_group_id.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Browser;
 class GURL;
+class TabModel;
 struct DetachedWebContents;
 
 namespace content {
@@ -56,7 +57,7 @@ class TabStripModelDelegate {
       const GURL& url,
       int index,
       bool foreground,
-      absl::optional<tab_groups::TabGroupId> group = absl::nullopt) = 0;
+      std::optional<tab_groups::TabGroupId> group = std::nullopt) = 0;
 
   // Asks for a new TabStripModel to be created and the given web contentses to
   // be added to it. Its size and position are reflected in |window_bounds|.
@@ -72,15 +73,14 @@ class TabStripModelDelegate {
     NewStripContents& operator=(const NewStripContents&) = delete;
     ~NewStripContents();
     NewStripContents(NewStripContents&&);
-    // The WebContents to add.
-    std::unique_ptr<content::WebContents> web_contents;
+    // The TabModel to add.
+    std::unique_ptr<TabModel> tab;
     // A bitmask of TabStripModel::AddTabTypes to apply to the added contents.
     int add_types = 0;
   };
-  virtual Browser* CreateNewStripWithContents(
-      std::vector<NewStripContents> contentses,
-      const gfx::Rect& window_bounds,
-      bool maximize) = 0;
+  virtual Browser* CreateNewStripWithTabs(std::vector<NewStripContents> tabs,
+                                          const gfx::Rect& window_bounds,
+                                          bool maximize) = 0;
 
   // Notifies the delegate that the specified WebContents will be added to the
   // tab strip (via insertion/appending/replacing existing) and allows it to do
@@ -120,7 +120,7 @@ class TabStripModelDelegate {
   // Creates an entry in the historical tab database for the specified
   // WebContents. Returns the tab's unique SessionID if a historical tab was
   // created.
-  virtual absl::optional<SessionID> CreateHistoricalTab(
+  virtual std::optional<SessionID> CreateHistoricalTab(
       content::WebContents* contents) = 0;
 
   // Creates an entry in the historical group database for the specified

@@ -44,6 +44,14 @@ class WebState;
 // Shows the animation when transitioning to a prerendered page.
 - (void)showPrerenderingAnimation;
 
+// Vivaldi
+// Sets whether location bar should show progress bar. For bottom address bar
+// progress bar should be hidden for primary toolbar.
+- (void)setLocationBarShouldShowProgressBar:(BOOL)shouldShowProgressBar;
+// Updates the consumer of current webState.
+- (void)updateConsumerForWebState:(web::WebState*)webState;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_ADAPTIVE_TOOLBAR_COORDINATOR_H_

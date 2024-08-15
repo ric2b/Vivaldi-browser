@@ -50,7 +50,7 @@ impl<const N: usize, H: Hash<N>> crypto_provider::hmac::Hmac<N> for Hmac<H> {
 
     fn finalize(mut self) -> [u8; N] {
         let mut buf = [0_u8; N];
-        self.ctx.finalize(&mut buf).expect("wrong length");
+        let _ = self.ctx.finalize(&mut buf).expect("wrong length");
         buf
     }
 

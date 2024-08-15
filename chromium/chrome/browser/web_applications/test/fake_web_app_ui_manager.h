@@ -5,13 +5,17 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_TEST_FAKE_WEB_APP_UI_MANAGER_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_TEST_FAKE_WEB_APP_UI_MANAGER_H_
 
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
+#include "base/values.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
+#include "components/webapps/common/web_app_id.h"
 
 namespace base {
 class FilePath;
@@ -52,11 +56,11 @@ class FakeWebAppUiManager : public WebAppUiManager {
   bool IsAppInQuickLaunchBar(const webapps::AppId& app_id) const override;
   bool IsInAppWindow(content::WebContents* web_contents) const override;
   const webapps::AppId* GetAppIdForWindow(
-      content::WebContents* web_contents) const override;
+      const content::WebContents* web_contents) const override;
   void NotifyOnAssociatedAppChanged(
       content::WebContents* web_contents,
-      const absl::optional<webapps::AppId>& previous_app_id,
-      const absl::optional<webapps::AppId>& new_app_id) const override {}
+      const std::optional<webapps::AppId>& previous_app_id,
+      const std::optional<webapps::AppId>& new_app_id) const override {}
   bool CanReparentAppTabToWindow(const webapps::AppId& app_id,
                                  bool shortcut_created) const override;
   void ReparentAppTabToWindow(content::WebContents* contents,
@@ -78,20 +82,29 @@ class FakeWebAppUiManager : public WebAppUiManager {
       AppIdentityDialogCallback callback) override;
   void ShowWebAppSettings(const webapps::AppId& app_id) override {}
 
-  void WaitForFirstRunAndLaunchWebApp(apps::AppLaunchParams params,
-                                      LaunchWebAppWindowSetting launch_setting,
-                                      Profile& profile,
-                                      LaunchWebAppCallback callback,
-                                      AppLock& lock) override;
+  void LaunchWebApp(apps::AppLaunchParams params,
+                    LaunchWebAppWindowSetting launch_setting,
+                    Profile& profile,
+                    LaunchWebAppDebugValueCallback callback,
+                    WithAppResources& lock) override;
+  void WaitForFirstRunService(
+      Profile& profile,
+      FirstRunServiceCompletedCallback callback) override;
 #if BUILDFLAG(IS_CHROMEOS)
   void MigrateLauncherState(const webapps::AppId& from_app_id,
                             const webapps::AppId& to_app_id,
                             base::OnceClosure callback) override;
 
   void DisplayRunOnOsLoginNotification(
-      const std::vector<std::string>& app_names,
+      const base::flat_map<webapps::AppId,
+                           WebAppUiManager::RoolNotificationBehavior>& apps,
       base::WeakPtr<Profile> profile) override;
 #endif
+  void NotifyAppRelaunchState(const webapps::AppId& placeholder_app_id,
+                              const webapps::AppId& final_app_id,
+                              const std::u16string& final_app_name,
+                              base::WeakPtr<Profile> profile,
+                              AppRelaunchState relaunch_state) override;
   content::WebContents* CreateNewTab() override;
   bool IsWebContentsActiveTabInBrowser(
       content::WebContents* web_contents) override;
@@ -116,12 +129,17 @@ class FakeWebAppUiManager : public WebAppUiManager {
       UninstallCompleteCallback callback,
       UninstallScheduledCallback scheduled_callback) override;
 
-  void LaunchIsolatedWebAppInstaller(
+  void LaunchOrFocusIsolatedWebAppInstaller(
       const base::FilePath& bundle_path) override;
 
   void MaybeCreateEnableSupportedLinksInfobar(
       content::WebContents* web_contents,
       const std::string& launch_name) override;
+
+  void MaybeShowIPHPromoForAppsLaunchedViaLinkCapturing(
+      content::WebContents* web_contents,
+      Profile* profile,
+      const std::string& app_id) override;
 
  private:
   base::flat_map<webapps::AppId, size_t> app_id_to_num_windows_map_;

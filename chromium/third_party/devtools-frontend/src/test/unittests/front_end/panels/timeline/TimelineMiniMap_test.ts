@@ -2,28 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Root from '../../../../../front_end/core/root/root.js';
-import * as Types from '../../../../../front_end/models/trace/types/types.js';
 import * as TimelineComponents from '../../../../../front_end/panels/timeline/components/components.js';
 import * as Timeline from '../../../../../front_end/panels/timeline/timeline.js';
+import * as TraceBounds from '../../../../../front_end/services/trace_bounds/trace_bounds.js';
 import {raf, renderElementIntoDOM} from '../../helpers/DOMHelpers.js';
 import {describeWithEnvironment} from '../../helpers/EnvironmentHelpers.js';
 import {TraceLoader} from '../../helpers/TraceLoader.js';
 
 describeWithEnvironment('TimelineMiniMap', function() {
   it('always shows the responsiveness, CPU activity and network panel', async function() {
-    const models = await TraceLoader.allModels(this, 'web-dev.json.gz');
+    const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
 
     const container = document.createElement('div');
     renderElementIntoDOM(container);
 
-    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap(Timeline.TimelinePanel.ThreadTracksSource.NEW_ENGINE);
+    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap();
     minimap.markAsRoot();
     minimap.show(container);
 
     minimap.setData({
-      traceParsedData: models.traceParsedData,
-      performanceModel: models.performanceModel,
+      traceParsedData,
       settings: {
         showMemory: false,
         showScreenshots: false,
@@ -40,18 +38,17 @@ describeWithEnvironment('TimelineMiniMap', function() {
   });
 
   it('will show the other panels if they are set to visible', async function() {
-    const models = await TraceLoader.allModels(this, 'web-dev.json.gz');
+    const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
 
     const container = document.createElement('div');
     renderElementIntoDOM(container);
 
-    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap(Timeline.TimelinePanel.ThreadTracksSource.NEW_ENGINE);
+    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap();
     minimap.markAsRoot();
     minimap.show(container);
 
     minimap.setData({
-      traceParsedData: models.traceParsedData,
-      performanceModel: models.performanceModel,
+      traceParsedData,
       settings: {
         showMemory: true,
         showScreenshots: true,
@@ -67,20 +64,20 @@ describeWithEnvironment('TimelineMiniMap', function() {
     minimap.detach();
   });
 
-  it('creates the first breadcrumb when breadcrumbsPerformancePanel experiment is enabled', async function() {
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.BREADCRUMBS_PERFORMANCE_PANEL);
-    const models = await TraceLoader.allModels(this, 'web-dev.json.gz');
+  it('creates the first breadcrumb', async function() {
+    const traceParsedData = await TraceLoader.traceEngine(this, 'web-dev.json.gz');
+
+    TraceBounds.TraceBounds.BoundsManager.instance().resetWithNewBounds(traceParsedData.Meta.traceBounds);
 
     const container = document.createElement('div');
     renderElementIntoDOM(container);
 
-    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap(Timeline.TimelinePanel.ThreadTracksSource.NEW_ENGINE);
+    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap();
     minimap.markAsRoot();
     minimap.show(container);
 
     minimap.setData({
-      traceParsedData: models.traceParsedData,
-      performanceModel: models.performanceModel,
+      traceParsedData,
       settings: {
         showMemory: true,
         showScreenshots: true,
@@ -90,41 +87,12 @@ describeWithEnvironment('TimelineMiniMap', function() {
 
     await raf();
 
-    const initialTraceWindow = {
-      min: Types.Timing.MicroSeconds(-1020034823.047),
-      max: Types.Timing.MicroSeconds(-1020034723.047),
-      range: Types.Timing.MicroSeconds(100),
-    };
-
-    assert.isNotNull(minimap.breadcrumbs);
-    if (minimap.breadcrumbs) {
-      assert.strictEqual(
-          TimelineComponents.Breadcrumbs.flattenBreadcrumbs(minimap.breadcrumbs.initialBreadcrumb).length, 1);
-      assert.deepEqual(minimap.breadcrumbs.initialBreadcrumb, {window: initialTraceWindow, child: null});
+    if (!minimap.breadcrumbs) {
+      throw new Error('The MiniMap unexpectedly did not create any breadcrumbs');
     }
-  });
 
-  it('does not create breadcrumbs when breadcrumbsPerformancePanel experiment is disabled', async function() {
-    const models = await TraceLoader.allModels(this, 'web-dev.json.gz');
-
-    const container = document.createElement('div');
-    renderElementIntoDOM(container);
-
-    const minimap = new Timeline.TimelineMiniMap.TimelineMiniMap(Timeline.TimelinePanel.ThreadTracksSource.NEW_ENGINE);
-    minimap.markAsRoot();
-    minimap.show(container);
-
-    minimap.setData({
-      traceParsedData: models.traceParsedData,
-      performanceModel: models.performanceModel,
-      settings: {
-        showMemory: true,
-        showScreenshots: true,
-      },
-    });
-
-    await raf();
-
-    assert.isNull(minimap.breadcrumbs);
+    assert.strictEqual(
+        TimelineComponents.Breadcrumbs.flattenBreadcrumbs(minimap.breadcrumbs.initialBreadcrumb).length, 1);
+    assert.deepEqual(minimap.breadcrumbs.initialBreadcrumb, {window: traceParsedData.Meta.traceBounds, child: null});
   });
 });

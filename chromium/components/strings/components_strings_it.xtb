@@ -39,8 +39,10 @@
 <translation id="1060136083665017312">Sistemi e console per videogiochi</translation>
 <translation id="1060320201901229167">Busta Kaku 5</translation>
 <translation id="10614374240317010">Mai salvate</translation>
+<translation id="1062407476771304334">Sostituisci</translation>
 <translation id="1064054731605354900">A3x5</translation>
 <translation id="106701514854093668">Preferiti desktop</translation>
+<translation id="1067029985695494416">Dettagli sul motore di ricerca</translation>
 <translation id="1068672505746868501">Non tradurre mai le pagine in <ph name="SOURCE_LANGUAGE" /></translation>
 <translation id="1070333806075222467">Metallo (lucido)</translation>
 <translation id="1070853536588271387">Veicoli ibridi e alternativi</translation>
@@ -50,8 +52,10 @@
 <translation id="1074497978438210769">Non sicuro</translation>
 <translation id="1075079914415273530">Agricoltura e silvicoltura</translation>
 <translation id="1075364221219156102">Usa una passkey</translation>
+<translation id="1078033282564106222">È stata selezionata l'opzione per il numero civico</translation>
 <translation id="1080116354587839789">Adatta in larghezza</translation>
 <translation id="1081061862829655580">Vassoio 19</translation>
+<translation id="1082026381988252344">Scorrimento e zoom dei contenuti della scheda condivisa</translation>
 <translation id="1089439967362294234">Cambia password</translation>
 <translation id="1090629319939036170">Menu VR</translation>
 <translation id="1094777233105318927">Informazioni su browser, sistema operativo, dispositivo, software installato e file</translation>
@@ -75,6 +79,7 @@
 <translation id="1142713751288681188">Tipo di carta</translation>
 <translation id="1142846828089312304">Blocca cookie di terze parti nella modalità di navigazione in incognito</translation>
 <translation id="1147769322402934017">Gallerie di immagini online</translation>
+<translation id="1149617035358809955">verificare la tua identità per poter inserire i tuoi dati di pagamento</translation>
 <translation id="1150565364351027703">Occhiali da sole</translation>
 <translation id="1150979032973867961">Questo server non è riuscito a dimostrare che si tratta di <ph name="DOMAIN" />; il relativo certificato di sicurezza non è considerato attendibile dal sistema operativo del computer. Il problema potrebbe essere dovuto a un'errata configurazione o a un malintenzionato che intercetta la connessione.</translation>
 <translation id="1151972924205500581">Password obbligatoria</translation>
@@ -85,7 +90,9 @@
 <translation id="11635448457105324">Pulsante Gestisci indirizzi, attiva per aggiungere e gestire gli indirizzi nelle impostazioni di Chrome</translation>
 <translation id="1165039591588034296">Errore</translation>
 <translation id="1165174597379888365">Pagina visitata</translation>
+<translation id="1165813024716836071">{COUNT,plural, =0{Nessuno}=1{Da 1 sito (manterrai l'accesso al tuo Account Google)}other{Da # siti (manterrai l'accesso al tuo Account Google)}}</translation>
 <translation id="1165852471352757509">Non fiction e documentari TV</translation>
+<translation id="1167877250265821930">Download di <ph name="LANGUAGE" /> non riuscito</translation>
 <translation id="1174644974616730562">Busta Chinese #1</translation>
 <translation id="1174723505405632867">Vuoi consentire al sito <ph name="EMBEDDED_URL" /> di usare cookie e dati del sito su <ph name="TOP_LEVEL_URL" />?
 
@@ -93,6 +100,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1175364870820465910">&amp;Stampa...</translation>
 <translation id="1175393348063009671">Foto (opaca)</translation>
 <translation id="1175875016430184367">Tripla pinzatura a destra</translation>
+<translation id="1177548198167638471">Non chiedermelo più</translation>
 <translation id="1177802847690410663">Browser web</translation>
 <translation id="1177863135347784049">Personalizzati</translation>
 <translation id="1178581264944972037">Pausa</translation>
@@ -104,7 +112,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1195073053842921378">Questo indirizzo verrà eliminato da questo dispositivo</translation>
 <translation id="1195558154361252544">Le notifiche vengono bloccate automaticamente per tutti i siti, tranne per quelli che consenti tu</translation>
 <translation id="1197088940767939838">Arancione</translation>
-<translation id="1197761954713363183">Foglio di conferma della passkey chiuso</translation>
 <translation id="1201402288615127009">Avanti</translation>
 <translation id="1201895884277373915">Altri dal sito</translation>
 <translation id="1202892408424955784">Prodotti monitorati</translation>
@@ -113,6 +120,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1206967143813997005">Firma iniziale non valida</translation>
 <translation id="1209206284964581585">Nascondi per ora</translation>
 <translation id="121201262018556460">Hai tentato di accedere a <ph name="DOMAIN" /> ma il server ha presentato un certificato contenente una chiave debole. Un utente malitenzionato potrebbe avere decifrato la chiave privata e il server potrebbe non essere quello previsto (è possibile che tu stia comunicando con un utente malintenzionato).</translation>
+<translation id="1212527389003717329">Download iniziato. Per visualizzarlo, tieni premuto |<ph name="ACCELERATOR" />|.</translation>
 <translation id="1219129156119358924">Sicurezza del sistema</translation>
 <translation id="1222060260947439312">Vassoio destro</translation>
 <translation id="1224330468394120478">A3x6</translation>
@@ -128,7 +136,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1240347957665416060">Il nome del tuo dispositivo</translation>
 <translation id="124116460088058876">Altre lingue</translation>
 <translation id="1243027604378859286">Autore:</translation>
-<translation id="1246424317317450637">Grassetto</translation>
 <translation id="1247030632403369975">Alluminio</translation>
 <translation id="1252209483516427155">Capispalla</translation>
 <translation id="1253921432148366685"><ph name="TYPE_1" />, <ph name="TYPE_2" /> (sincronizzati)</translation>
@@ -224,6 +231,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1406812885827747674">Consenti questa volta</translation>
 <translation id="1407135791313364759">Apri tutte</translation>
 <translation id="1408787208417187241">Tripla pinzatura in alto</translation>
+<translation id="1410365862999780287">Le altre persone che usano questo dispositivo non vedranno la tua attività, di conseguenza potrai navigare in modo più privato. La modalità di raccolta dei dati da parte dei siti web visitati e dei servizi utilizzati, incluso Google, rimane invariata. I download, i preferiti e gli elementi dell'elenco di lettura verranno salvati.</translation>
 <translation id="1410941016594047814">Busta Invite</translation>
 <translation id="1413407968866574823">Videogiochi platform e di azione</translation>
 <translation id="1413809658975081374">Errore di privacy</translation>
@@ -245,26 +253,32 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1434317006812369578">Chrome ha funzionalità di sicurezza integrate che ti proteggono durante la navigazione, come Google Navigazione sicura. Navigazione sicura <ph name="BEGIN_LINK" />ha recentemente rilevato malware sul sito <ph name="SITE" /><ph name="END_LINK" />, incorporato nel sito che vuoi visitare.</translation>
 <translation id="1435940442311036198">Usa una passkey su un altro dispositivo</translation>
 <translation id="1436185428532214179">Può chiedere di modificare file o cartelle sul dispositivo</translation>
+<translation id="1441816242347931036">Apri per continuare</translation>
 <translation id="1442386063175183758">Piegatura a finestra a destra</translation>
 <translation id="1442987760062738829">Perforatura</translation>
 <translation id="1446396933673057385">Controllo accuratezza</translation>
 <translation id="1447067628680007684">(x86_64)</translation>
+<translation id="1448166547804028941">Impossibile impostare le chiavi "<ph name="DATA_CONTROLS_FIRST_KEY_SET" />" nello stesso dizionario delle chiavi "<ph name="DATA_CONTROLS_SECOND_KEY_SET" />"</translation>
 <translation id="1452803302401719440">Ora le impostazioni che ha scelto il tuo genitore ti garantiscono maggiore sicurezza online</translation>
 <translation id="1455413310270022028">Gomma</translation>
 <translation id="1458140305240870199">Biancheria intima</translation>
 <translation id="1459693405370120464">Meteo</translation>
+<translation id="1461041542809785877">Prestazioni</translation>
 <translation id="1462245070427461050">JIS B9</translation>
 <translation id="1462951478840426066">Usare i caratteri installati sul computer per consentirti di creare contenuti ad alta fedeltà</translation>
 <translation id="1467432559032391204">Sinistra</translation>
 <translation id="1468653229182955856"><ph name="ONE_TIME_CODE" /> è il tuo codice di <ph name="EMBEDDED_ORIGIN" /> per continuare su <ph name="TOP_ORIGIN" /></translation>
 <translation id="1472675084647422956">Mostra altro</translation>
 <translation id="1473183651233018052">JIS B10</translation>
+<translation id="1473495410389165587">Inserisci 3 o più parole per ricevere aiuto per la scrittura</translation>
 <translation id="147358896496811705">2A0</translation>
 <translation id="1474576429883213321">Servizi di pulizia</translation>
 <translation id="1475299637784133125">Stai cercando la versione del browser? Visita la pagina</translation>
 <translation id="1476595624592550506">Cambia la password</translation>
 <translation id="1482879811280872320">Ciclismo</translation>
 <translation id="1483493594462132177">Invia</translation>
+<translation id="1484449009683144042">Si tratta di un supporto per la scrittura sperimentale basato sull'IA che non funzionerà sempre correttamente.
+    <ph name="BEGIN_LINK" />Scopri di più<ph name="END_LINK" /></translation>
 <translation id="1492194039220927094">Push dei criteri:</translation>
 <translation id="14938948731065592">Periferiche per computer</translation>
 <translation id="1495677929897281669">Torna alla scheda</translation>
@@ -283,6 +297,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1521655867290435174">Fogli Google</translation>
 <translation id="1524669537550112617">Affitti di alloggi arredati</translation>
 <translation id="1527263332363067270">In attesa di connessione…</translation>
+<translation id="1528311629279578926">La connessione è bloccata perché è stata avviata da una pagina pubblica per connettersi a dispositivi o server sulla tua rete privata. Ricarica questa pagina per consentire la connessione.</translation>
 <translation id="1529789484829130889">Vassoio 8</translation>
 <translation id="1530707389502320859">Il sito che stai provando a visitare risulta contraffatto. A volte i malintenzionati imitano i siti modificando leggermente e in modo poco evidente l'URL.</translation>
 <translation id="1532118530259321453">Questa pagina dice</translation>
@@ -304,6 +319,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 
       &lt;p&gt;Regola data e ora nella sezione &lt;strong&gt;Generali&lt;/strong&gt; dell'app &lt;strong&gt;Impostazioni&lt;/strong&gt;.&lt;/p&gt;</translation>
 <translation id="1559839503761818503">L'amministratore riavvierà il tuo dispositivo alle ore <ph name="TIME" /> del giorno <ph name="DATE" /></translation>
+<translation id="1564634006476980707">Schema HTTPS consigliato per l'URL di ricerca: <ph name="SEARCH_URL" /></translation>
 <translation id="156703335097561114">Le informazioni di rete, come indirizzi, configurazione di interfaccia e qualità della connessione</translation>
 <translation id="1567040042588613346">Questo criterio funziona come previsto, ma altrove è impostato lo stesso valore, che viene sostituito da questo criterio.</translation>
 <translation id="1567405528131216114">Aggiungi <ph name="TOPIC" /></translation>
@@ -323,7 +339,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1593359183944365958">270 gradi</translation>
 <translation id="1594030484168838125">Scegli</translation>
 <translation id="1596296697375291157">Film gialli, polizieschi e del mistero</translation>
-<translation id="1597473228022844713">Stai monitorando questo prodotto. Questa pagina è salvata nella cartella <ph name="LAST_BOOKMARKS_FOLDER" /></translation>
 <translation id="1598816256585174656">Passkey di Windows Hello</translation>
 <translation id="1599199147673445968">Nuova carta? <ph name="BEGIN_LINK" />Inserisci i dati della carta<ph name="END_LINK" /></translation>
 <translation id="160851722280695521">Gioca a Dino in Chrome</translation>
@@ -343,7 +358,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1633941398432788136">Pianificazione eventi</translation>
 <translation id="1634828734222219955">Totale</translation>
 <translation id="163669211644121865">Compilazione della dichiarazione dei redditi e pianificazione fiscale</translation>
-<translation id="1638780421120290329">Impossibile salvare la carta</translation>
+<translation id="163826442096818926">Abbrevia</translation>
 <translation id="1639239467298939599">Caricamento</translation>
 <translation id="1640180200866533862">Criteri utente</translation>
 <translation id="1640244768702815859">Prova a <ph name="BEGIN_LINK" />visitare la home page del sito<ph name="END_LINK" />.</translation>
@@ -354,6 +369,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1645368109819982629">Protocollo non supportato</translation>
 <translation id="1650602712345345441">Gestisci le tue impostazioni di Chrome</translation>
 <translation id="1652415888492971589">JIS B8</translation>
+<translation id="1652862280638399816">Per usare Gestore delle password con il Portachiavi di macOS, riavvia Chromium e consenti l'accesso al Portachiavi. Le schede verranno riaperte dopo il riavvio.</translation>
 <translation id="1656024727720460136">Chrome ha semplificato questa pagina per facilitarne la lettura. Chrome ha recuperato la pagina originale tramite una connessione sicura.</translation>
 <translation id="1656489000284462475">Ritiro</translation>
 <translation id="1658111267661135323">TV e video</translation>
@@ -372,6 +388,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1697430960030447570"><ph name="BEGIN_BOLD" />Come puoi gestire i tuoi dati:<ph name="END_BOLD" /> Chrome elimina automaticamente gli argomenti più vecchi di 4 settimane. Mentre continui a navigare, un argomento potrebbe riapparire nell'elenco. Puoi anche bloccare gli argomenti che non vuoi che Chrome condivida con i siti e disattivare gli argomenti degli annunci in qualsiasi momento nelle impostazioni di Chrome.</translation>
 <translation id="1697532407822776718">Ecco fatto!</translation>
 <translation id="1699651774646344471">Ora puoi usare gli indirizzi presenti nel tuo Account Google</translation>
+<translation id="1700542542921501212">Puoi utilizzare <ph name="SEARCH_ENGINE_NAME" /> per eseguire ricerche sul web.</translation>
 <translation id="1702815194757674443">ROC 16K</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706625117072057435">Livelli di zoom</translation>
@@ -393,7 +410,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1725591448053514783">Busta You 6</translation>
 <translation id="1727613060316725209">Il certificato è valido</translation>
 <translation id="1728677426644403582">È visualizzata l'origine di una pagina web</translation>
-<translation id="1728803206919861584">Vuoi salvare la passkey al di fuori della modalità di navigazione in incognito?</translation>
 <translation id="173080396488393970">Questo tipo di carta non è supportato</translation>
 <translation id="1732445923934584865">Chiedi di persona</translation>
 <translation id="1733064249834771892">caratteri</translation>
@@ -408,6 +424,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1745399796851657441"><ph name="BEGIN_BOLD" />Come usiamo questi dati:<ph name="END_BOLD" /> Chrome rileva argomenti di interesse mentre navighi. Le etichette degli argomenti sono predefinite e includono categorie come Arte e spettacolo, Shopping e Sport. In seguito, un sito che visiti può chiedere a Chrome alcuni dei tuoi argomenti (ma non la cronologia di navigazione) per personalizzare gli annunci che vedi.</translation>
 <translation id="1746113442205726301">Spostamento Y immagine</translation>
 <translation id="1746531169546376413">0 gradi</translation>
+<translation id="1748225549612934682">Abbrevia il testo per ricevere aiuto per la scrittura</translation>
+<translation id="1751544761369730824">Elimina sito <ph name="SITE_NAME" /></translation>
 <translation id="1752021286346845558">Mailbox 8</translation>
 <translation id="1753068535428855445">Appuntamenti e annunci personali</translation>
 <translation id="1753706481035618306">Numero di pagina</translation>
@@ -448,6 +466,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1828959155404624835">Autonoleggi</translation>
 <translation id="1834321415901700177">Il sito contiene programmi dannosi.</translation>
 <translation id="1838374766361614909">Cancella ricerca</translation>
+<translation id="1839331950812095887">poche parole che riassumono i tuoi pensieri</translation>
 <translation id="1839551713262164453">Convalida dei valori della norma non riuscita con errori</translation>
 <translation id="1842969606798536927">Paga</translation>
 <translation id="1846432862466000825">Plastica (archivio)</translation>
@@ -491,7 +510,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1939059826036755332">Modalità Picture in picture automatica</translation>
 <translation id="1939175642807587452">Può chiedere di inviare notifiche</translation>
 <translation id="1940441167050915935">Elimina i codici di sicurezza salvati</translation>
-<translation id="194174710521904357">Hai consentito temporaneamente a questo sito di utilizzare i cookie di terze parti, il che comporta una minore protezione della navigazione, ma è più probabile che le funzionalità del sito funzionino come previsto.</translation>
+<translation id="194174710521904357">Hai consentito temporaneamente a questo sito di utilizzare i cookie di terze parti. Ciò comporta una minore protezione della navigazione, ma una maggiore probabilità che le funzionalità del sito operino come previsto.</translation>
 <translation id="1943994668912612445">Design</translation>
 <translation id="1945968466830820669">Potresti perdere l'accesso all'account della tua organizzazione oppure subire un furto d'identità. Chromium ti consiglia di cambiare subito la password.</translation>
 <translation id="1946849748901605102">12 x 15 in</translation>
@@ -500,6 +519,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1956486093533522234">Trova, proteggi o resetta il tuo dispositivo</translation>
 <translation id="1958218078413065209">Il tuo punteggio migliore è <ph name="SCORE" />.</translation>
 <translation id="1959001866257244765">Contribuisci a migliorare la sicurezza sul Web per tutti inviando a Google <ph name="BEGIN_WHITEPAPER_LINK" />gli URL di alcune pagine visitate, informazioni limitate sul sistema e alcuni contenuti delle pagine<ph name="END_WHITEPAPER_LINK" />. <ph name="BEGIN_PRIVACY_PAGE_LINK" />Norme sulla privacy<ph name="END_PRIVACY_PAGE_LINK" /></translation>
+<translation id="1959445535228047762">Il testo e i contenuti delle pagine vengono inviati a Google e potrebbero essere utilizzati per migliorare questa funzionalità.
+  <ph name="BEGIN_LINK" />Scopri di più<ph name="END_LINK" /></translation>
 <translation id="1962204205936693436">Segnalibri di <ph name="DOMAIN" /></translation>
 <translation id="196752089528718902">In genere ti connetti ai siti in modo sicuro, ma questa volta Chrome non ha potuto usare una connessione protetta. Un malintenzionato potrebbe tentare di intercettare o modificare la connessione di rete. <ph name="BEGIN_LEARN_MORE_LINK" />Scopri di più<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="1973335181906896915">Errore di serializzazione</translation>
@@ -508,6 +529,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1975457531113383421">Cassetto di ingresso</translation>
 <translation id="1975584088563498795">Mailbox 10</translation>
 <translation id="1978555033938440688">Versione firmware</translation>
+<translation id="1979156660928743046">Informazioni sui contenuti multimediali</translation>
 <translation id="1988881251331415125">Se l'ortografia è corretta, <ph name="BEGIN_LINK" />prova a eseguire lo strumento Diagnostica della connettività<ph name="END_LINK" />.</translation>
 <translation id="1991453785879639515">Alpinismo e arrampicata</translation>
 <translation id="1991830984769263878">Assicurazione auto</translation>
@@ -516,6 +538,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1997484222658892567"><ph name="URL" /> vuole memorizzare in modo definitivo grandi quantità di dati sul computer locale</translation>
 <translation id="1997774360448418989">Carta (Leggera)</translation>
 <translation id="2001146170449793414">{COUNT,plural, =1{e un'altra}other{e altre #}}</translation>
+<translation id="2001469757375372617">Si è verificato un problema. La modifica non è stata salvata.</translation>
 <translation id="2003709556000175978">Reimposta ora la password</translation>
 <translation id="2003775180883135320">Perforatura quadrupla in alto</translation>
 <translation id="2004697686368036666">Le funzionalità su alcuni siti potrebbero non essere disponibili</translation>
@@ -532,6 +555,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2025891858974379949">Contenuti non sicuri</translation>
 <translation id="2027465737841872819">Plastica</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Controllare il proxy e firewall<ph name="END_LINK" /></translation>
+<translation id="2033900728810589426">La scorciatoia non può essere uguale alla parola chiave del provider di ricerca predefinito definita da <ph name="DEFAULT_SEARCH_PROVIDER_KEYWORD_POLICY_NAME" />: <ph name="SHORTCUT_NAME" /></translation>
 <translation id="2034971124472263449">Salva comunque</translation>
 <translation id="2035400064145347639">Guide turistiche e letteratura di viaggio</translation>
 <translation id="2036514476578229158">Hai chiesto di poter visitare questo sito. I tuoi genitori possono rispondere in Family Link.</translation>
@@ -559,6 +583,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2072275792380684364">Moda e stile</translation>
 <translation id="2075497153347571252">L'amministratore ha bloccato <ph name="PERMISSION" /> su <ph name="ORIGIN" /></translation>
 <translation id="2079545284768500474">Annulla</translation>
+<translation id="2080021694978766903">Questo criterio non deve avere più di <ph name="MAX_ITEMS_LIMIT" /> voci.</translation>
 <translation id="20817612488360358">Devono essere utilizzate le impostazioni del proxy di sistema ma è stata specificata anche una configurazione proxy esplicita.</translation>
 <translation id="2082238445998314030">Risultato <ph name="RESULT_NUMBER" /> di <ph name="TOTAL_RESULTS" /></translation>
 <translation id="2083256696566019397">Consenti a ogni visita</translation>
@@ -586,9 +611,11 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2126374524350484896">App creazione file PDF:</translation>
 <translation id="2130448033692577677">I modelli che hai specificato potrebbero non essere applicati a causa della mancata impostazione del criterio DnsOverHttpsMode.</translation>
 <translation id="2130699163006053678">A3x7</translation>
+<translation id="2131200882015008178">Download del language pack <ph name="LANGUAGE" /> in corso… <ph name="PERCENT" />%</translation>
 <translation id="2135799067377889518">Abbigliamento uomo</translation>
 <translation id="2137891579555018930">In attesa di autorizzazione…</translation>
 <translation id="213826338245044447">Preferiti su disp. mobili</translation>
+<translation id="2141000681034340397">Modifica il tuo input</translation>
 <translation id="214556005048008348">Annulla pagamento</translation>
 <translation id="2148613324460538318">Aggiungi carta</translation>
 <translation id="2148716181193084225">Oggi</translation>
@@ -621,6 +648,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="219906046732893612">Ristrutturazione della casa</translation>
 <translation id="2202627062836089804">parte posteriore della carta</translation>
 <translation id="2204482073374652408">Aggiornamento completato.</translation>
+<translation id="2207770355672215546">Consenti sempre, con qualsiasi smart card</translation>
 <translation id="2208053750671792556">Non hai ricevuto il codice? <ph name="IDS_AUTOFILL_CARD_UNMASK_OTP_INPUT_DIALOG_NEW_CODE_MESSAGE" /></translation>
 <translation id="22081806969704220">Vassoio 3</translation>
 <translation id="2210794033760923560">Carica report</translation>
@@ -638,6 +666,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2225927550500503913">Carta virtuale attivata</translation>
 <translation id="2226636330183131181"><ph name="BEGIN_LINK" />Accesso<ph name="END_LINK" /> alla rete Wi-Fi</translation>
 <translation id="2228057197024893428">Al momento questo indirizzo è salvato su Chrome. Per usarlo su tutti i prodotti Google, salvalo nel tuo Account Google <ph name="ACCOUNT" />.</translation>
+<translation id="2229456043301340598">Scorciatoia non univoca ignorata: <ph name="SHORTCUT_NAME" /></translation>
 <translation id="2233745931693710080">Compact disc</translation>
 <translation id="2235344399760031203">I cookie di terze parti sono bloccati</translation>
 <translation id="2239100178324503013">Invia ora</translation>
@@ -654,6 +683,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2262243747453050782">Errore HTTP</translation>
 <translation id="226481340855943334">Discendenza e genealogia</translation>
 <translation id="2265192657948645752">Offerte di lavoro nel settore della vendita al dettaglio</translation>
+<translation id="2265356434276802347">Questo criterio non deve avere più di <ph name="MAX_ITEMS_LIMIT" /> voci in primo piano.</translation>
 <translation id="2267047181501709434">Verifica della tua identità…</translation>
 <translation id="2268743667444073169">Soap opera TV</translation>
 <translation id="2270484714375784793">Numero di telefono</translation>
@@ -668,7 +698,9 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2289385804009217824">Taglio</translation>
 <translation id="2292556288342944218">L'accesso a Internet è bloccato</translation>
 <translation id="2293443924986248631">Se questa opzione è attiva, i siti non possono utilizzare i cookie per monitorare la tua attività sul Web. Le funzionalità su alcuni siti potrebbero non essere disponibili.</translation>
+<translation id="2295831393422400053">Attiva l'impostazione Migliora le ricerche e le attività di navigazione per usare Aiutami a scrivere</translation>
 <translation id="2300306941146563769">Non caricato</translation>
+<translation id="2301098101308036335">Quali siti web vengono visitati e quando.</translation>
 <translation id="230286397113210245">Pulsante Apri finestra di navigazione in incognito, attiva per aprire una nuova finestra di navigazione in incognito per navigare in privato</translation>
 <translation id="2312234273148520048">Salse e condimenti</translation>
 <translation id="2316087952091171402">Meno di <ph name="UPPER_ESTIMATE" />. Alcuni siti potrebbero caricarsi più lentamente alla prossima visita.</translation>
@@ -680,8 +712,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2324604504973636700">Elettrodomestici</translation>
 <translation id="2328651992442742497">Consentita (opzione predefinita)</translation>
 <translation id="2328955282645810595">Edilizia e utensili elettrici</translation>
-<translation id="2329473609445770916">Questo sito definisce interessi che possono essere usati da altri siti per mostrarti annunci</translation>
 <translation id="2330137317877982892">Scadenza della carta <ph name="CREDIT_CARD" />: <ph name="EXPIRATION_DATE_ABBR" /></translation>
+<translation id="2337044517221264923">Riprendi a scrivere</translation>
 <translation id="2337852623177822836">Impostazione controllata dall'amministratore</translation>
 <translation id="2340263603246777781">Il sito <ph name="ORIGIN" /> desidera accoppiarsi</translation>
 <translation id="2340549657492527534">Rettili e anfibi</translation>
@@ -693,12 +725,13 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2354430244986887761">La funzione Navigazione sicura di Google ha recentemente <ph name="BEGIN_LINK" />rilevato app dannose<ph name="END_LINK" /> sul sito <ph name="SITE" />.</translation>
 <translation id="2355395290879513365">Gli utenti malintenzionati potrebbero riuscire a vedere le immagini che visualizzi in questo sito e ingannarti modificandole.</translation>
 <translation id="2356070529366658676">Chiedi</translation>
+<translation id="2356926036049612643">Strumento per ottimizzare V8</translation>
 <translation id="2357481397660644965">Il tuo dispositivo è gestito da <ph name="DEVICE_MANAGER" /> e il tuo account da <ph name="ACCOUNT_MANAGER" />.</translation>
 <translation id="2359629602545592467">Multiple</translation>
 <translation id="2359808026110333948">Continua</translation>
 <translation id="2361263712565360498">275 x 395 mm</translation>
 <translation id="236340516568226369">Menu di attivazione/disattivazione ridimensionamento</translation>
-<translation id="2365355378251437925">Inserisci un valore <ph name="FIELD" /></translation>
+<translation id="2365355378251437925">Inserisci un valore per <ph name="FIELD" /></translation>
 <translation id="2365382709349300355">È stato bloccato 1 file a causa dei criteri</translation>
 <translation id="2365508935344991784">Arredamento per esterni</translation>
 <translation id="2366689192918515749">Carne e frutti di mare</translation>
@@ -712,12 +745,14 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="238459632961158867">Sito web</translation>
 <translation id="2385809941344967209">Aggiorna Chrome dalle impostazioni di Chrome</translation>
 <translation id="2386255080630008482">Il certificato del server è stato revocato.</translation>
+<translation id="239203817277685015">Elabora</translation>
 <translation id="239293030466334554">Decappottabili</translation>
 <translation id="2392959068659972793">Mostra criteri senza valori</translation>
 <translation id="239429038616798445">Questo metodo di spedizione non è disponibile. Prova un metodo diverso.</translation>
 <translation id="2395840535409704129">Sport acquatici</translation>
 <translation id="2396249848217231973">&amp;Annulla eliminazione</translation>
 <translation id="2397836504670957718">Laptop e notebook</translation>
+<translation id="2399868464369312507">Google Chrome sta tentando di modificare i metodi di pagamento.</translation>
 <translation id="2400600116338235695">Può chiedere di connettersi alle porte seriali</translation>
 <translation id="2404884497378469141">Prova a copiare di nuovo i file</translation>
 <translation id="2413155254802890957">Precedente</translation>
@@ -727,9 +762,17 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2436186046335138073">Consentire a <ph name="HANDLER_HOSTNAME" /> di aprire tutti i link <ph name="PROTOCOL" />?</translation>
 <translation id="2438874542388153331">Perforatura quadrupla a destra</translation>
 <translation id="2441854154602066476">Metodi di pagamento che è possibile compilare tramite tocco. Tastiera nascosta.</translation>
+<translation id="2442865686365739754">Chrome <ph name="BEGIN_EMPHASIS" />non salverà quanto segue<ph name="END_EMPHASIS" />:
+          <ph name="BEGIN_LIST" />
+            <ph name="LIST_ITEM" />Cronologia di navigazione
+            <ph name="LIST_ITEM" />Cookie e dati dei siti
+            <ph name="LIST_ITEM" />Informazioni inserite nei moduli
+          <ph name="END_LIST" /></translation>
 <translation id="2448295565072560657">Periferiche collegate a questo dispositivo mentre hai eseguito l'accesso</translation>
 <translation id="2450021089947420533">Percorsi</translation>
+<translation id="2452837234288608067">Non posso aiutarti. Riprova.</translation>
 <translation id="2456755709261364512">La batteria deve avere una percentuale di carica superiore al <ph name="REQUIRED_BATTERY_PRECENT" />%</translation>
+<translation id="2462599289530201834">Cerca <ph name="KEYWORD_SHORT_NAME" /></translation>
 <translation id="2463739503403862330">Compila</translation>
 <translation id="2465688316154986572">Pinzatura</translation>
 <translation id="2465914000209955735">Gestisci i file che hai scaricato in Chrome</translation>
@@ -739,6 +782,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2469153820345007638">Ordine da 1 a N</translation>
 <translation id="24699311393038040">Carta (patinata)</translation>
 <translation id="2470767536994572628">Quando modifichi le annotazioni, questo documento torna alla visualizzazione a pagina singola e alla sua rotazione originale</translation>
+<translation id="2479148705183875116">Vai a Impostazioni</translation>
 <translation id="2479410451996844060">URL ricerca non valido.</translation>
 <translation id="2480300195898055381">Nel tuo Account Google <ph name="USER_EMAIL" /></translation>
 <translation id="2482878487686419369">Notifiche</translation>
@@ -761,19 +805,21 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2521736961081452453">Crea modulo</translation>
 <translation id="2523886232349826891">Salvataggio effettuato solo su questo dispositivo</translation>
 <translation id="2524461107774643265">Aggiungi altre informazioni</translation>
-<translation id="2526280916094749336">Puoi usare gli indirizzi salvati in tutti i prodotti Google. Questo indirizzo verrà salvato nel tuo Account Google, <ph name="ACCOUNT" />.</translation>
+<translation id="2526280916094749336">Puoi usare gli indirizzi salvati in tutti i prodotti Google. Questo indirizzo verrà salvato nel tuo Account Google <ph name="ACCOUNT" />.</translation>
 <translation id="2527451058878391043">Il CVC si trova sul lato anteriore della tua carta. È il codice di 4 cifre in alto a destra, sopra il numero della carta.</translation>
 <translation id="2529899080962247600">Questo campo non deve avere più di <ph name="MAX_ITEMS_LIMIT" /> voci. Tutte le voci in più verranno ignorate.</translation>
 <translation id="253493526287553278">Visualizza i dettagli del codice promozionale</translation>
 <translation id="2535585790302968248">Apri una nuova scheda di navigazione in incognito per navigare in privato</translation>
 <translation id="2535659140340599600">{COUNT,plural, =1{e 1 altro}other{e altro #}}</translation>
 <translation id="2536110899380797252">Aggiungi indirizzo</translation>
+<translation id="2537931901612099523">Le altre persone che usano questo dispositivo non vedranno la tua attività, di conseguenza potrai navigare in modo più privato. La modalità di raccolta dei dati da parte dei siti web visitati e dei servizi utilizzati, incluso Google, rimane invariata. I download e i preferiti verranno salvati.</translation>
 <translation id="2539524384386349900">Rileva</translation>
 <translation id="2541219929084442027">Le pagine visualizzate nelle schede di navigazione in incognito non vengono memorizzate nella cronologia del browser, nello spazio di archiviazione dei cookie o nella cronologia delle ricerche dopo avere chiuso tutte le schede di navigazione in incognito. I file scaricati o i preferiti creati verranno conservati.</translation>
 <translation id="2542106216580219892">Surf</translation>
 <translation id="2544546346215446551">Il tuo amministratore ha riavviato il dispositivo</translation>
 <translation id="2544644783021658368">Documento singolo</translation>
 <translation id="254524874071906077">Imposta Chrome come browser predefinito</translation>
+<translation id="2545721997179863249">È stata selezionata l'opzione per compilare tutti i campi</translation>
 <translation id="2546283357679194313">Cookie e dati dei siti</translation>
 <translation id="2547466893236767989">Web design e sviluppo di siti web</translation>
 <translation id="254947805923345898">Il valore della norma non è valido.</translation>
@@ -807,12 +853,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2610561535971892504">Fai clic per copiare</translation>
 <translation id="2612993535136743634">Tutti i codici di sicurezza salvati sul dispositivo e nell'Account Google verranno eliminati</translation>
 <translation id="2616412942031748191">Marketing e ottimizzazione per i motori di ricerca</translation>
-<translation id="2617988307566202237">Chrome <ph name="BEGIN_EMPHASIS" />non salverà<ph name="END_EMPHASIS" /> le seguenti informazioni:
-        <ph name="BEGIN_LIST" />
-          <ph name="LIST_ITEM" />Cronologia di navigazione
-          <ph name="LIST_ITEM" />Cookie e dati dei siti
-          <ph name="LIST_ITEM" />Informazioni inserite nei moduli
-        <ph name="END_LIST" /></translation>
+<translation id="2619052155095999743">Inserisci</translation>
 <translation id="2625385379895617796">L'orologio è avanti</translation>
 <translation id="262745152991669301">Può chiedere di connettersi ai dispositivi USB</translation>
 <translation id="2629325967560697240">Per il massimo livello di sicurezza di Chrome, <ph name="BEGIN_ENHANCED_PROTECTION_LINK" />attiva la protezione avanzata<ph name="END_ENHANCED_PROTECTION_LINK" /></translation>
@@ -843,6 +884,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2677696497921480781">Compleanni e onomastici</translation>
 <translation id="2677748264148917807">Esci</translation>
 <translation id="2678468611080193228">Prova a consentire temporaneamente i cookie di terze parti, il che significa meno protezione, ma è più probabile che le funzionalità del sito funzionino.</translation>
+<translation id="2686919536310834199">Invia feedback per Aiutami a scrivere.</translation>
 <translation id="2687555958734450033">Dimensioni predefinite</translation>
 <translation id="2688186765492306706">500 x 760 mm</translation>
 <translation id="2688969097326701645">Sì, continua</translation>
@@ -867,8 +909,10 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2722622039067384533">Arredamento per il soggiorno</translation>
 <translation id="2723669454293168317">Esegui un controllo di sicurezza nelle impostazioni di Chrome</translation>
 <translation id="2725492561136085792">Premi Invio per attivare questa azione.</translation>
+<translation id="2725927759457695883">Inserisci il nome completo</translation>
 <translation id="2726001110728089263">Vassoio laterale</translation>
 <translation id="2728127805433021124">Il certificato del server è stato firmato utilizzando un algoritmo di firma debole.</translation>
+<translation id="272937284275742856">Verifica dei dati di pagamento in sicurezza in corso…</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Eseguire lo strumento Diagnostica della connettività<ph name="END_LINK" /></translation>
 <translation id="2730600605555029057">Musica classica</translation>
 <translation id="2731382536835015353">111,7 × 172,7 cm</translation>
@@ -901,6 +945,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2814184336982254349">Questo PDF è inaccessibile. Premi il tasto per la ricerca più M per aprire il menu contestuale e attiva l'opzione "Estrai testo dal PDF"</translation>
 <translation id="2818338148457093657">Servizi di bellezza e spa</translation>
 <translation id="2820957248982571256">Scansione…</translation>
+<translation id="2824549017793319782">Seleziona per digitare i termini di ricerca direttamente nella barra degli indirizzi</translation>
 <translation id="2824775600643448204">Barra degli indirizzi e di ricerca</translation>
 <translation id="2826760142808435982">La connessione è stata criptata e autenticata utilizzando <ph name="CIPHER" /> e <ph name="KX" /> come meccanismo di scambio delle chiavi.</translation>
 <translation id="2835170189407361413">Cancella modulo</translation>
@@ -913,7 +958,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2858134430383535011">200 x 300 mm</translation>
 <translation id="2859806420264540918">Questo sito mostra annunci invasivi o fuorvianti.</translation>
 <translation id="28618371182701850">Veicoli elettrici e a batterie</translation>
-<translation id="287596039013813457">Amichevole</translation>
 <translation id="28761159517501904">Film</translation>
 <translation id="2876489322757410363">Per procedere al pagamento tramite un'applicazione esterna, uscirai dalla modalità di navigazione in incognito. Continuare?</translation>
 <translation id="2876949457278336305"><ph name="MANAGE_SECURITY_SETTINGS_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per gestire la funzionalità Navigazione sicura e altre opzioni nelle impostazioni di Chrome</translation>
@@ -953,6 +997,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2938225289965773019">Aprire i link <ph name="PROTOCOL" /></translation>
 <translation id="2941878205777356567">Busta 9 x 12 pollici</translation>
 <translation id="2941952326391522266">Questo server non è riuscito a dimostrare che si tratta di <ph name="DOMAIN" />; il relativo certificato di sicurezza proviene da <ph name="DOMAIN2" />. Il problema potrebbe essere dovuto a un'errata configurazione o a un malintenzionato che intercetta la connessione.</translation>
+<translation id="2942492342931589800">Casuale</translation>
 <translation id="2942515540157583425">Offerte di lavoro nel settore tecnico e IT</translation>
 <translation id="2943895734390379394">Ora di caricamento:</translation>
 <translation id="2945026002409061480">Community online</translation>
@@ -967,6 +1012,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2958544468932521864">Cricket</translation>
 <translation id="2959113999220720579">Cura del viso e del corpo</translation>
 <translation id="2962073860865348475">30,4 × 45,7 cm</translation>
+<translation id="2967098518029543669">salvala nel tuo Account Google</translation>
 <translation id="2968103128155246731">Furgoni e minivan</translation>
 <translation id="2972581237482394796">&amp;Ripeti</translation>
 <translation id="2977665033722899841"><ph name="ROW_NAME" />, attualmente selezionata. <ph name="ROW_CONTENT" /></translation>
@@ -982,6 +1028,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2991174974383378012">Condivisione con i siti web</translation>
 <translation id="299122504639061328">Gestisci il motore di ricerca predefinito e la ricerca su siti</translation>
 <translation id="2991571918955627853">Al momento non puoi visitare il sito web <ph name="SITE" /> perché utilizza HSTS. In genere gli errori di rete e gli attacchi sono temporanei, pertanto questa pagina potrebbe funzionare più tardi.</translation>
+<translation id="2991865971341174470">Verifica la tua identità per consentire a Chrome di inserire i tuoi dati di pagamento.</translation>
 <translation id="2995517112308048736">Dimensioni file:</translation>
 <translation id="299990983510665749">Due volumi</translation>
 <translation id="3002501248619246229">Controlla contenuti multimediali cassetto di input</translation>
@@ -990,7 +1037,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3009036448238594149"><ph name="ACTION_IN_SUGGEST_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab per sfogliare le azioni disponibili, quindi Invio per eseguire l'azione selezionata.</translation>
 <translation id="3013291976881901233">Dispositivi MIDI</translation>
 <translation id="3014553260345122294">Notizie di economia</translation>
-<translation id="301521992641321250">Bloccata automaticamente</translation>
+<translation id="3014726756341138577">Funzionalità avanzate della stampante</translation>
+<translation id="301521992641321250">Autorizzazione bloccata automaticamente</translation>
 <translation id="3016780570757425217">Conoscere la tua posizione</translation>
 <translation id="3017086357773116182"><ph name="REMOVE_SUGGESTION_SUFFIX" />, premi Tab e poi Invio per rimuovere il suggerimento.</translation>
 <translation id="3023165109041533893">Gli annunci suggeriti dai siti contribuiscono a proteggere la tua cronologia di navigazione e la tua identità, consentendo ai siti di mostrarti annunci pertinenti. In base alla tua attività, un sito che hai visitato può suggerire annunci correlati mentre continui a navigare. Nelle impostazioni puoi vedere un elenco di questi siti e bloccare quelli che non ti interessano.</translation>
@@ -1044,7 +1092,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3140646734028448730">Servizi per le aziende</translation>
 <translation id="3141093262818886744">Apri comunque</translation>
 <translation id="3141641372357166056">nessuna decisione relativa al consenso</translation>
-<translation id="3142736425087361223">Chrome ha bisogno di <ph name="PERMISSION" /> per utilizzarla su <ph name="ORIGIN" /></translation>
 <translation id="3144458715650412431">I criteri di test sono stati applicati. Controllali e reimpostali all'indirizzo chrome://policy/test. I criteri amministrativi non verranno applicati.</translation>
 <translation id="3145945101586104090">Decodifica della risposta non riuscita</translation>
 <translation id="3150653042067488994">Errore temporaneo del server</translation>
@@ -1052,6 +1099,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3154506275960390542">Questa pagina include un modulo che potrebbe non essere inviato in modo sicuro. I dati inviati possono essere visualizzati da altri durante il transito o potrebbero essere modificati da un utente malintenzionato al fine di modificare i dati ricevuti dal server.</translation>
 <translation id="3154987252551138431">Si è verificato un errore durante l'utilizzo di Condivisione nelle vicinanze</translation>
 <translation id="315504272643575312">Il tuo account è gestito da <ph name="MANAGER" />.</translation>
+<translation id="3155163173539279776">Riavvia Chromium</translation>
 <translation id="3157931365184549694">Ripristina</translation>
 <translation id="3158539265159265653">Disco</translation>
 <translation id="3162559335345991374">La rete Wi-Fi in uso potrebbe richiedere la visita della relativa pagina di accesso.</translation>
@@ -1073,6 +1121,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3195213714973468956"><ph name="PRINTER_NAME" /> su <ph name="SERVER_NAME" /></translation>
 <translation id="3197136577151645743">Può chiedere di sapere quando stai utilizzando attivamente questo dispositivo</translation>
 <translation id="3202497928925179914"><ph name="MANAGE_SYNC_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per gestire le informazioni da sincronizzare nelle impostazioni di Chrome</translation>
+<translation id="3203025201812691413">L'URL non può essere vuoto</translation>
 <translation id="320323717674993345">Annulla pagamento</translation>
 <translation id="3203366800380907218">Dal Web</translation>
 <translation id="3207960819495026254">Aggiunto ai preferiti</translation>
@@ -1099,12 +1148,11 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3240683217920639535"><ph name="MANAGE_CHROME_THEMES_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab poi Invio per personalizzare l'aspetto del browser</translation>
 <translation id="3240791268468473923">Le credenziali per il pagamento sicuro non corrispondono: riquadro inferiore aperto</translation>
 <translation id="324180406144491771">I link "<ph name="HOST_NAME" />" sono bloccati</translation>
-<translation id="3248611290851046188">Questo sito definisce interessi che possono essere usati da altri siti per mostrarti annunci. Questo sito riceve i tuoi interessi anche da Chrome per mostrarti annunci più pertinenti.</translation>
 <translation id="3249151924975132674">Prestiti per studenti e finanziamenti per lo studio</translation>
-<translation id="3249845759089040423">Alla moda</translation>
 <translation id="3250640885957938546">Pubblicità e marketing</translation>
 <translation id="3252772880526154546">Architettura</translation>
 <translation id="3254301855501243548">18 x 22 in</translation>
+<translation id="3255926992597692024">Chromium sta cercando di modificare le impostazioni per la compilazione dei metodi di pagamento.</translation>
 <translation id="3256863843508922226">Pensionamento e pensione</translation>
 <translation id="3259648571731540213"><ph name="CREATE_GOOGLE_CALENDAR_EVENT_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per creare rapidamente un nuovo evento in Google Calendar</translation>
 <translation id="3261488570342242926">Scopri di più sulle carte virtuali</translation>
@@ -1141,16 +1189,18 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3325027355611702542">Camper e caravan</translation>
 <translation id="3329013043687509092">Saturazione</translation>
 <translation id="3333762389743153920">Non idonea per carta virtuale</translation>
+<translation id="3336044043987989409">Premi il pulsante Ricarica per consentire la connessione a dispositivi o server sulla tua rete privata.</translation>
 <translation id="3338095232262050444">Sicuro</translation>
 <translation id="333839153442689579">High Intensity Interval Training</translation>
 <translation id="3339440062908617027">Corsa e camminata</translation>
 <translation id="3339446062576134663">Cloud (Ash)</translation>
 <translation id="3340978935015468852">impostazioni</translation>
-<translation id="3342018947887487892">In seguito, un sito che visiti può chiedere queste informazioni: gli argomenti degli annunci o gli annunci suggeriti dai siti che hai visitato.</translation>
+<translation id="3342018947887487892">In seguito, un sito che visiti può chiedere queste informazioni: gli argomenti degli annunci o gli annunci suggeriti in base ai siti che hai visitato.</translation>
 <translation id="3342366525167526994">Body art</translation>
 <translation id="334438173029876234">Attrezzature e articoli per skateboard</translation>
 <translation id="3349952286488694786">SRA2</translation>
 <translation id="3355823806454867987">Modifica impostazioni proxy...</translation>
+<translation id="335809815767823">Criteri esportati</translation>
 <translation id="3359565626472459400">Matrimonio</translation>
 <translation id="3360103848165129075">Foglio per la gestione dei pagamenti</translation>
 <translation id="3360313521703038580">Ecologia e ambiente</translation>
@@ -1190,10 +1240,12 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3427342743765426898">&amp;Ripeti modifica</translation>
 <translation id="342781501876943858">Chromium ti consiglia di reimpostare la password, se l'hai utilizzata su altri siti.</translation>
 <translation id="3428151540071562330">Uno o più URI del modello server DnsOverHttpsTemplates non sono validi e non verranno utilizzati.</translation>
+<translation id="3428789896412418755">Cronologia raggruppata</translation>
 <translation id="3431216045099978607">Premi |<ph name="ACCELERATOR" />| per uscire dalla modalità a schermo intero e visualizzare il download.</translation>
 <translation id="3432601291244612633">Chiudi pagina</translation>
 <translation id="3433111389595862568">Software di collaborazione e per conferenze</translation>
 <translation id="3433144818443565002">Chat vocali e videochiamate</translation>
+<translation id="3434025015623587566">Gestore delle password di Google richiede un maggiore accesso</translation>
 <translation id="343474037147570563">I file che carichi o alleghi vengono inviati a Google Cloud o a terze parti per essere analizzati. Ad esempio, potrebbero essere analizzati per rilevare dati sensibili o malware, essere archiviati in base ai criteri aziendali ed essere visibili al tuo amministratore.</translation>
 <translation id="3435557549311968410">Continuo (corto)</translation>
 <translation id="3435738964857648380">Sicurezza</translation>
@@ -1222,6 +1274,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3484560055331845446">Potresti non riuscire più ad accedere al tuo Account Google. Chrome consiglia di cambiare subito la password. Ti verrà chiesto di eseguire l'accesso.</translation>
 <translation id="3484861421501147767">Promemoria: codice promozionale salvato disponibile</translation>
 <translation id="3487845404393360112">Vassoio 4</translation>
+<translation id="3492199565975299728">Via</translation>
 <translation id="3493660662684070951">Camion, furgoni e fuoristrada</translation>
 <translation id="3495081129428749620">Trova nella pagina
     <ph name="PAGE_TITLE" /></translation>
@@ -1265,6 +1318,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3575121482199441727">Consenti per questo sito</translation>
 <translation id="3575168918110434329">A4x7</translation>
+<translation id="3575589330755445706">È stata selezionata l'opzione per il nome della via</translation>
 <translation id="3576616784287504635">Una pagina incorporata in <ph name="SITE" /> dice</translation>
 <translation id="3577473026931028326">Si è verificato un errore. Riprova.</translation>
 <translation id="3577902790357386792">Ginnastica</translation>
@@ -1301,6 +1355,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3632892046558972264">Condivisione schermo in pausa</translation>
 <translation id="3634530185120165534">Vassoio 5</translation>
 <translation id="3634567936866541746">Hai appena inserito la tua password su un sito ingannevole. Per proteggere i tuoi account, Chrome ti consiglia di controllare le password salvate.</translation>
+<translation id="3638102297696182302">Riprendi Aiutami a scrivere. Premi Tab e premi Invio per aprire</translation>
 <translation id="3642196846309122856">Riprova a scaricare i file</translation>
 <translation id="3642638418806704195">Applicazione:</translation>
 <translation id="3646643500201740985">Misurazione del rendimento di un annuncio</translation>
@@ -1313,6 +1368,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3655670868607891010">Se questo problema si verifica spesso, prova questi <ph name="HELP_LINK" />.</translation>
 <translation id="365641980390710834">Abbigliamento casual</translation>
 <translation id="3658742229777143148">Revisione</translation>
+<translation id="3659521826520353662">Quali siti web definiti dall'amministratore vengono visitati e quando: <ph name="ALLOWLISTED_WEBSITES" /></translation>
 <translation id="3664782872746246217">Parole chiave:</translation>
 <translation id="3665100783276035932">La maggior parte dei siti dovrebbe funzionare come previsto</translation>
 <translation id="3667704023705708645">Venture capital</translation>
@@ -1328,6 +1384,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3678914302246317895">Inserisci il codice di verifica di <ph name="OTP_LENGTH" /> cifre</translation>
 <translation id="3681007416295224113">Informazioni certificato</translation>
 <translation id="3681421644246505351">Chrome rileva argomenti di interesse in base alla tua cronologia di navigazione recente.</translation>
+<translation id="3682094733650754138">È stata selezionata l'opzione per inserire l'indirizzo</translation>
+<translation id="3689867156802445220">Numero civico</translation>
 <translation id="3693327506115126094">Scegli come verificare la tua identità</translation>
 <translation id="3698629142018988477">Pulsante Crea sito, attiva per creare rapidamente un nuovo sito in Google Sites</translation>
 <translation id="3701325639446035885">Vendita di biglietti per eventi</translation>
@@ -1352,10 +1410,12 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3723663469265383848">Durante l'aggiornamento non potrai utilizzare il dispositivo per un massimo di 10 minuti.</translation>
 <translation id="372429172604983730">Le applicazioni che possono causare questo errore includono software antivirus, firewall e proxy o di filtraggio web.</translation>
 <translation id="3727101516080730231"><ph name="CREATE_GOOGLE_SLIDE_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per creare rapidamente una nuova presentazione Google in Presentazioni</translation>
+<translation id="3727850735097852673">Per usare Gestore delle password di Google con il Portachiavi di macOS, riavvia Chrome e consenti l'accesso al Portachiavi. Le schede verranno riaperte dopo il riavvio.</translation>
 <translation id="3733139489341305600">Veicoli autonomi</translation>
 <translation id="3736520371357197498">Se sei consapevole dei rischi per la tua sicurezza, potresti <ph name="BEGIN_LINK" />visitare questo sito non sicuro<ph name="END_LINK" /> senza aspettare che vengano rimossi i programmi pericolosi.</translation>
 <translation id="3736739313435669994">Hai impedito ai siti di utilizzare i cookie di terze parti per monitorare la tua navigazione. Vai alle impostazioni per <ph name="LINK" />.</translation>
 <translation id="3738166223076830879">Il tuo browser è gestito dal tuo amministratore.</translation>
+<translation id="3739842843727261045">Mi piace invia un feedback positivo relativo a questi risultati</translation>
 <translation id="3740319564441798148">Autobus e treni a lunga percorrenza</translation>
 <translation id="3740447166056383374">La revisione è obbligatoria prima della copia</translation>
 <translation id="374325029554577103">Prodotti tecnologici per il fitness</translation>
@@ -1363,6 +1423,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3744111561329211289">Sincronizzazione in background</translation>
 <translation id="3744212718085287312">Vuoi pagare in modo più sicuro con una carta virtuale la prossima volta?</translation>
 <translation id="3744899669254331632">Al momento non puoi visitare il sito <ph name="SITE" /> perché tale sito web ha inviato credenziali criptate che Chromium non è riuscito a elaborare. Gli attacchi e gli errori di rete in genere sono temporanei, pertanto è possibile che questa pagina funzioni più tardi.</translation>
+<translation id="3745599309295009257">Il testo, i contenuti e l'URL della pagina su cui stai scrivendo verranno inviati a Google, esaminati da persone e utilizzati per migliorare questa funzionalità. Evita di inserire informazioni personali (come dettagli medici o finanziari) o di utilizzare questo strumento su siti che contengono informazioni private o sensibili.</translation>
 <translation id="3748009735914587286">Metallo (lucido)</translation>
 <translation id="3748148204939282805">Gli utenti malintenzionati presenti sul sito <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> potrebbero indurti con l'inganno a effettuare operazioni pericolose, come installare software o rivelare informazioni personali (ad esempio password, numeri di telefono o carte di credito). <ph name="BEGIN_LEARN_MORE_LINK" />Ulteriori informazioni<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3748912308089554501">Industria aerospaziale</translation>
@@ -1394,10 +1455,12 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3807270098669886186">Fornitori di servizi di telefonia</translation>
 <translation id="3807366285948165054">Spostamento X immagine</translation>
 <translation id="3807873520724684969">Contenuti dannosi bloccati.</translation>
+<translation id="3810770279996899697">Gestore delle password richiede l'accesso al Portachiavi di macOS</translation>
 <translation id="3810973564298564668">Gestisci</translation>
 <translation id="3812398568375898177">Si tratta di un aggiornamento critico che migliora le prestazioni delle app per Android su ChromeOS.</translation>
 <translation id="3815434930383843058">8 x 12 in</translation>
 <translation id="3816482573645936981">Valore (sostituito)</translation>
+<translation id="382115839591654906">CVC di <ph name="CARD_NAME" /></translation>
 <translation id="3823019343150397277">IBAN</translation>
 <translation id="3823402221513322552">Il tuo browser è gestito da <ph name="BROWSER_DOMAIN" /> e il tuo profilo è gestito da <ph name="PROFILE_DOMAIN" /></translation>
 <translation id="382518646247711829">Se utilizzi un server proxy...</translation>
@@ -1480,6 +1543,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4014895360827978999">Servizi commerciali e sistemi di pagamento</translation>
 <translation id="4018819349042761761">Chiave pubblica</translation>
 <translation id="4023431997072828269">Le tue informazioni saranno visibili agli altri utenti perché il modulo verrà inviato tramite una connessione non sicura.</translation>
+<translation id="4025325634010721551">Criteri ricaricati</translation>
 <translation id="4030383055268325496">&amp;Annulla aggiunta</translation>
 <translation id="4030545038933060179">Quando l'opzione è attiva, un elenco di argomenti viene visualizzato qui in base alla tua cronologia di navigazione recente</translation>
 <translation id="4031179711345676612">Microfono consentito</translation>
@@ -1487,8 +1551,10 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4047351652147966654">45,7 × 60,9 cm</translation>
 <translation id="404831776305217138">L'URL di aggiornamento per l'estensione con ID "<ph name="EXTENSION_ID" />" non è valido o utilizza uno schema non supportato. Gli schemi supportati sono: <ph name="HTTP_SCHEME" />, <ph name="HTTPS_SCHEME" /> e <ph name="FILE_SCHEME" />.</translation>
 <translation id="4050392779074832022">Potrai usarlo su tutti i prodotti Google</translation>
+<translation id="4050599136622776556">Chromium sta cercando di modificare i metodi di pagamento.</translation>
 <translation id="405399507749852140">Ricevi avvisi se il prezzo cala su qualsiasi sito</translation>
 <translation id="4056223980640387499">Seppia</translation>
+<translation id="4059523390906550209">Scopri di più su Sensitive Data Protection</translation>
 <translation id="4063063121357725926">Consenti a Google di aiutarti a trovare sconti per i tuoi carrelli</translation>
 <translation id="406358100705415968">Equipaggiamento protettivo per la sicurezza sul lavoro</translation>
 <translation id="4063924980214801036">Utilizza lo sblocco con il dispositivo per confermare le carte più rapidamente</translation>
@@ -1496,7 +1562,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4067098466788473230">Borse di studio</translation>
 <translation id="4067947977115446013">Aggiungi un indirizzo valido</translation>
 <translation id="4070790659619547722">La misurazione degli annunci consente di condividere tra i siti tipi di dati limitati, ad esempio l'ora del giorno in cui ti è stato mostrato un annuncio, per misurare il rendimento dei loro annunci.</translation>
-<translation id="4072193657607981494">Caricamento criteri in corso…</translation>
 <translation id="4072486802667267160">Si è verificato un errore durante l'elaborazione dell'ordine. Riprova.</translation>
 <translation id="4073376909608563327">Impossibile usare lo sblocco con il dispositivo</translation>
 <translation id="4073797364926776829">Visualizza carta</translation>
@@ -1559,7 +1624,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4177501066905053472">Argomenti degli annunci</translation>
 <translation id="4179515394835346607"><ph name="ROW_NAME" /> <ph name="ROW_CONTENT" /></translation>
 <translation id="4186035307311647330">Annulla monitoraggio prezzo</translation>
-<translation id="4194250254487269611">Al momento non è possibile salvare la carta</translation>
+<translation id="4191334393248735295">Lunghezza</translation>
 <translation id="4195459680867822611">Pulsante Leggi i suggerimenti di Chrome, attiva per scoprire di più sulle funzionalità di Chrome</translation>
 <translation id="4195643157523330669">Apri in un'altra scheda</translation>
 <translation id="4196861286325780578">&amp;Ripeti spostamento</translation>
@@ -1609,6 +1674,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4250716950689692560">A4x4</translation>
 <translation id="4250937007454749162">T-shirt</translation>
 <translation id="4253168017788158739">Nota</translation>
+<translation id="4255487295905690262">Riceverai avvisi via email se il prezzo calerà su qualsiasi sito.</translation>
 <translation id="425582637250725228">Le modifiche apportate potrebbero non essere salvate.</translation>
 <translation id="4258748452823770588">Firma errata</translation>
 <translation id="4261046003697461417">Non è possibile inserire annotazioni nei documenti protetti</translation>
@@ -1646,6 +1712,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4312613361423056926">B2</translation>
 <translation id="4312866146174492540">Blocca (predefinita)</translation>
 <translation id="4314815835985389558">Gestisci sincronizzazione</translation>
+<translation id="4316057107946726368">Inserisci un messaggio di giustificazione contenente al massimo <ph name="MAX_CHAR_COUNT" /> caratteri. Caratteri usati: <ph name="ACTUAL_CHAR_COUNT" /> su <ph name="MAX_CHAR_COUNT" />.</translation>
 <translation id="4318213823155573975">Copricapi</translation>
 <translation id="4318312030194671742">Servizio compositore dell'anteprima</translation>
 <translation id="4318566738941496689">Il nome e l'indirizzo di rete del dispositivo</translation>
@@ -1660,6 +1727,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4333295216031073611">Lista della spesa</translation>
 <translation id="4333561522337981382">Gestire le finestre su tutti i tuoi schermi</translation>
 <translation id="4336219115486912529">{COUNT,plural, =1{Scade domani}other{Scade tra # giorni}}</translation>
+<translation id="4336913590841287350">Questo criterio non è ancora supportato come criterio relativo agli utenti su iOS.</translation>
 <translation id="4340575312453649552">Questo annuncio usava troppe risorse per il tuo dispositivo, pertanto Chrome l'ha rimosso.</translation>
 <translation id="4340810192899866471">Importa da JSON</translation>
 <translation id="4340982228985273705">Questo computer sembra non essere gestito dall'azienda, pertanto la norma consente di installare automaticamente soltanto le estensioni ospitate sul Chrome Web Store. L'URL di aggiornamento del Chrome Web Store è "<ph name="CWS_UPDATE_URL" />".</translation>
@@ -1686,6 +1754,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4386413576162606861">Giochi di ruolo</translation>
 <translation id="4390472908992056574">Brim</translation>
 <translation id="4393632246160856858">Prodotti per la cura delle unghie</translation>
+<translation id="4397059608630092079">Verifica sempre quando è in uso la compilazione automatica</translation>
 <translation id="4406883609789734330">Sottotitoli in tempo reale</translation>
 <translation id="4406896451731180161">risultati di ricerca</translation>
 <translation id="4408413947728134509">Cookie: <ph name="NUM_COOKIES" /></translation>
@@ -1695,9 +1764,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4415156962929755728">Plastica (lucida)</translation>
 <translation id="4415426530740016218">Indirizzo di ritiro</translation>
 <translation id="4424024547088906515">Questo server non è riuscito a dimostrare che si tratta di <ph name="DOMAIN" />; il relativo certificato di sicurezza non è considerato attendibile da Chrome. Il problema potrebbe essere dovuto a un'errata configurazione o a un malintenzionato che intercetta la connessione.</translation>
-<translation id="4425173294238317796">Foglio di conferma della passkey</translation>
 <translation id="4425750422187370446">Abbigliamento da atletica</translation>
-<translation id="4428065317363009941">Personalizzazione degli annunci</translation>
 <translation id="443121186588148776">Porta seriale</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> non ha accettato il certificato di accesso oppure non ne è stato fornito uno.</translation>
 <translation id="4432792777822557199">Le pagine in <ph name="SOURCE_LANGUAGE" /> verranno tradotte in <ph name="TARGET_LANGUAGE" /> d'ora in poi</translation>
@@ -1707,6 +1774,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="443673843213245140">L'utilizzo di un proxy è stato disattivato ma è stata specificata una configurazione proxy esplicita.</translation>
 <translation id="4438821706955556403">Prezzo tipico</translation>
 <translation id="4441832193888514600">Ignorato perché il criterio può essere impostato solo da un utente cloud.</translation>
+<translation id="4445133368066241428">Argomenti popolari</translation>
 <translation id="4449116177348980384">Pulsante Gestisci impostazioni dei siti, attiva per gestire le autorizzazioni e i dati memorizzati sui siti nelle impostazioni di Chrome</translation>
 <translation id="4451135742916150903">Può chiedere di connettersi ai dispositivi HID</translation>
 <translation id="4451684391620232683">Testo presentato all'utente:</translation>
@@ -1754,7 +1822,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="455113658016510503">A9</translation>
 <translation id="4556069465387849460">Stai usando il blocco schermo per inserire le password</translation>
 <translation id="4558551763791394412">Prova a disattivare le estensioni.</translation>
-<translation id="456043042661026303">Controllo sicuro dei dati di pagamento</translation>
 <translation id="4566017918361049074">Attività all'aria aperta</translation>
 <translation id="4567686777917670400">L'amministratore può modificare da remoto la configurazione del browser. L'attività svolta su questo dispositivo potrebbe essere gestita anche al di fuori di Chromium. <ph name="BEGIN_LINK" />Scopri di più<ph name="END_LINK" /></translation>
 <translation id="4569155249847375786">Verificato</translation>
@@ -1771,7 +1838,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4598556348158889687">Gestione dello spazio di archiviazione</translation>
 <translation id="4600084978141515058">Cucina vegana</translation>
 <translation id="4602465984861132303">Bowling</translation>
-<translation id="4606870351894164739">D'impatto</translation>
 <translation id="4607608436550361748">Leggi i suggerimenti di Chrome</translation>
 <translation id="460848736049414407">Bloccato dall'amministratore</translation>
 <translation id="4610279718074907952">Questo sito fa parte di un gruppo, definito da <ph name="SET_OWNER" />, che può vedere la tua attività</translation>
@@ -1785,6 +1851,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4629370161347991046">A4x6</translation>
 <translation id="4631649115723685955">Rimborso collegato</translation>
 <translation id="4631881646528206880">Registrazione della carta virtuale</translation>
+<translation id="4635278307999235413">Invio dei dati alla Console di amministrazionein corso…</translation>
 <translation id="4636930964841734540">Info</translation>
 <translation id="4638670630777875591">Modalità di navigazione in incognito in Chromium</translation>
 <translation id="464342062220857295">Funzionalità di ricerca</translation>
@@ -1795,7 +1862,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4652440160515225514">La tua organizzazione ha bloccato questo sito perché viola un criterio.</translation>
 <translation id="4653167719759882810">Fusioni e acquisizioni</translation>
 <translation id="4658638640878098064">Pinzatura in alto a sinistra</translation>
-<translation id="4660119392514473465">Ora puoi navigare in privato. Le altre persone che usano questo dispositivo non vedranno le tue attività, ma i download, i preferiti e gli elementi dell'elenco di lettura verranno salvati.</translation>
 <translation id="4660567771874403130">Energia e servizi pubblici</translation>
 <translation id="4663373278480897665">Videocamera consentita</translation>
 <translation id="466561305373967878">Giochi da tavolo</translation>
@@ -1885,12 +1951,11 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4819347708020428563">Vuoi modificare le annotazioni nella visualizzazione predefinita?</translation>
 <translation id="4822493756793346865">I prezzi tipici si basano sui negozi disponibili sul web negli ultimi 90 giorni.</translation>
 <translation id="4825496307559726072"><ph name="CREATE_GOOGLE_SHEET_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per creare rapidamente un nuovo foglio Google</translation>
-<translation id="4825507807291741242">Potente</translation>
 <translation id="4826588772550366629">fotocamera e microfono</translation>
+<translation id="4827283332383516812">Elimina tessera</translation>
 <translation id="4831993743164297314">Carta per imagesetter</translation>
 <translation id="483241715238664915">Attiva gli avvisi</translation>
 <translation id="4834250788637067901">Metodi di pagamento, offerte e indirizzi che utilizzano Google Pay</translation>
-<translation id="4838327282952368871">Surreale</translation>
 <translation id="4839087176073128681">Esegui il pagamento più velocemente la prossima volta e proteggi la tua carta con la sicurezza leader del settore di Google.</translation>
 <translation id="4840250757394056958">Visualizza la tua cronologia di Chrome</translation>
 <translation id="484462545196658690">Automatico</translation>
@@ -1921,6 +1986,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4888600795924685526">Studio delle lingue straniere</translation>
 <translation id="4890070067176768718">L'amministratore ha consentito <ph name="PERMISSION" /> su <ph name="ORIGIN" /></translation>
 <translation id="4892518386797173871">Posteriore</translation>
+<translation id="4895019427244614047">Elimina l'indirizzo</translation>
 <translation id="4895877746940133817"><ph name="TYPE_1" />, <ph name="TYPE_2" />, <ph name="TYPE_3" /></translation>
 <translation id="4896809202198625921">Olimpiadi</translation>
 <translation id="4900217275619098670">Nono rullo</translation>
@@ -1934,6 +2000,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4918221908152712722">Installa <ph name="APP_NAME" /> (non è richiesto alcun download)</translation>
 <translation id="4920457992177678649">Case vacanze e soggiorni di breve durata</translation>
 <translation id="4920710383559189047">Manicotto</translation>
+<translation id="4922104989726031751">Per usare Gestore delle password con il tuo sistema operativo, riavvia Chromium e consenti l'accesso al gestore delle password del tuo computer. Le schede verranno riaperte dopo il riavvio.</translation>
 <translation id="4923459931733593730">Pagamento</translation>
 <translation id="4926049483395192435">Deve essere specificato.</translation>
 <translation id="4926159001844873046"><ph name="SITE" /> dice</translation>
@@ -1953,9 +2020,10 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4953689047182316270">Rispondi agli eventi di accessibilità</translation>
 <translation id="4957080528849277028">Pulsante Visualizza la tua cronologia di Chrome, attiva per visualizzare e gestire la tua cronologia di navigazione nelle impostazioni di Chrome</translation>
 <translation id="4958444002117714549">Espandi elenco</translation>
-<translation id="4960068118612257147">Puoi apportare modifiche nelle impostazioni della privacy per gli annunci di Chrome</translation>
+<translation id="4960068118612257147">Puoi apportare modifiche nelle impostazioni della privacy per gli annunci di Chrome.</translation>
 <translation id="4960203958361543136">Scegli il tuo motore di ricerca</translation>
 <translation id="4964505745997821360">Assicurazione sanitaria</translation>
+<translation id="4967366744630699583">Modifica l'indirizzo</translation>
 <translation id="4968522289500246572">Questa app è stata progettata per dispositivi mobili e il relativo ridimensionamento potrebbe non avvenire correttamente. L'app potrebbe riavviarsi o presentare problemi.</translation>
 <translation id="4968665849807487749">Può chiedere di gestire le finestre su tutti i tuoi schermi</translation>
 <translation id="4969341057194253438">Elimina la registrazione</translation>
@@ -1968,7 +2036,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="4989163558385430922">Mostra tutto</translation>
 <translation id="4989542687859782284">Non disponibili</translation>
 <translation id="4989809363548539747">Questo plug-in non è supportato</translation>
-<translation id="4990226362263043042">Riquadro laterale della cronologia</translation>
 <translation id="4990241977441916452">Busta A2</translation>
 <translation id="4992066212339426712">Riattiva audio</translation>
 <translation id="4995216769782533993">Conferma il codice di sicurezza per condividere i dettagli della carta con questo sito</translation>
@@ -1985,7 +2052,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5018422839182700155">Impossibile aprire questa pagina</translation>
 <translation id="5018802455907704660">16 x 20 in</translation>
 <translation id="5019198164206649151">Archivio di backup in stato non valido</translation>
-<translation id="5019293549442035120">Puoi usare gli indirizzi salvati in tutti i prodotti Google. Questo indirizzo verrà salvato nel tuo Account Google, <ph name="USER_EMAIL" />.</translation>
+<translation id="5019293549442035120">Puoi usare gli indirizzi salvati in tutti i prodotti Google. Questo indirizzo verrà salvato nel tuo Account Google <ph name="USER_EMAIL" />.</translation>
 <translation id="5020776957610079374">World Music</translation>
 <translation id="5021557570875267742">Monitora i prezzi con Chrome</translation>
 <translation id="5023310440958281426">Consulta le norme dell'amministratore</translation>
@@ -2058,7 +2125,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5157504274688344097">Ipermercati e grandi magazzini</translation>
 <translation id="5158275234811857234">Copertina</translation>
 <translation id="5159010409087891077">Apri la pagina in un'altra finestra di navigazione in incognito (⇧⌘N)</translation>
-<translation id="5161262286013276579">Foglio di conferma della passkey aperto</translation>
 <translation id="5161334686036120870">Argomento:</translation>
 <translation id="5161506081086828129">Fascicolatore 9</translation>
 <translation id="5164798890604758545">Viene inserito del testo</translation>
@@ -2125,6 +2191,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5292714443869769806">Vai alle impostazioni di <ph name="OPERATING_SYSTEM" /></translation>
 <translation id="5293919335876685914">Coupé</translation>
 <translation id="5296589789433599000">Cucina e ricette</translation>
+<translation id="5298618990685278995">Una prima bozza</translation>
 <translation id="5299298092464848405">Errore durante l'analisi del criterio</translation>
 <translation id="5299638840995777423">Robotica</translation>
 <translation id="5300062471671636390">Nascondi l'elenco dei dispositivi per la trasmissione</translation>
@@ -2177,7 +2244,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="540969355065856584">Questo server non è riuscito a verificare che si tratta di <ph name="DOMAIN" />; il relativo certificato di sicurezza non è considerato valido in questa fase. Il problema potrebbe essere dovuto a un'errata configurazione o a un malintenzionato che ha intercettato la connessione.</translation>
 <translation id="5411462078004183575">Opzione prezzo basso</translation>
 <translation id="5412040515238827314">Formato non valido: è previsto un elenco di pattern.</translation>
-<translation id="5412236728747081950">Questo sito acquisisce i tuoi interessi da Chrome per mostrarti annunci più pertinenti</translation>
 <translation id="5412245327974352290"><ph name="TRADITIONAL_TEXT" /> - <ph name="ADDITIONAL_TEXT" /></translation>
 <translation id="541416427766103491">Fascicolatore 4</translation>
 <translation id="5414446060143308245">La revisione è obbligatoria prima del trasferimento</translation>
@@ -2187,6 +2253,12 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5425241977284572032">{NUM_COOKIES,plural, =0{Nessun sito bloccato}=1{1 sito bloccato}other{# siti bloccati}}</translation>
 <translation id="5426179911063097041"><ph name="SITE" /> vuole inviarti notifiche</translation>
 <translation id="5430298929874300616">Rimuovi preferito</translation>
+<translation id="5434798570900738152">Chromium <ph name="BEGIN_EMPHASIS" />non salverà quanto segue<ph name="END_EMPHASIS" />:
+          <ph name="BEGIN_LIST" />
+            <ph name="LIST_ITEM" />Cronologia di navigazione
+            <ph name="LIST_ITEM" />Cookie e dati dei siti
+            <ph name="LIST_ITEM" />Informazioni inserite nei moduli
+          <ph name="END_LIST" /></translation>
 <translation id="54430913453805768"><ph name="URL" /> vuole controllare e riprogrammare i tuoi dispositivi MIDI (SysEx)</translation>
 <translation id="5443468954631487277">Ordine inverso a faccia in su</translation>
 <translation id="5447235695608032700">Consenti a <ph name="SITE" /> di utilizzare le informazioni salvate su di te</translation>
@@ -2214,6 +2286,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
     <ph name="LINE_BREAK" />
     Prova a contattare l'amministratore di sistema.</translation>
 <translation id="549333378215107354">Dimensione 3</translation>
+<translation id="550365051221576010">Compila tutti i campi</translation>
 <translation id="5509762909502811065">B0</translation>
 <translation id="5509780412636533143">Preferiti gestiti</translation>
 <translation id="5510481203689988000">È possibile gestire questa impostazione nelle impostazioni Cookie.</translation>
@@ -2241,7 +2314,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5541086400771735334">Mailbox 7</translation>
 <translation id="5541546772353173584">Aggiungi email</translation>
 <translation id="5543722831081909240">180 gradi</translation>
-<translation id="5544512018309093956">Riquadro laterale della cronologia</translation>
+<translation id="555037537507405574">funzionalità avanzate della stampante</translation>
 <translation id="555128936272638662">Accessori per dispositivi mobili e wireless</translation>
 <translation id="5551890439174915351">100 x 200 mm</translation>
 <translation id="5552137475244467770">Chrome confronta periodicamente le tue password con gli elenchi pubblicati online. Durante questa operazione, le tue password e i tuoi nomi utente vengono criptati, quindi non possono essere letti da nessuno, Google compresa.</translation>
@@ -2300,6 +2373,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5651323159439184939">Alimentatore a trattore</translation>
 <translation id="5653432653077411130">Forniture idriche e trattamento dell'acqua</translation>
 <translation id="5654927323611874862">ID del report sugli arresti anomali caricato:</translation>
+<translation id="5654965123204121933">L'URL non include la stringa sostitutiva richiesta <ph name="SEARCH_TERMS_REPLACEMENT" />: <ph name="SEARCH_URL" /></translation>
 <translation id="5659593005791499971">Email</translation>
 <translation id="5660122698869360728">Una nuova cartella intelligente che ti consente di salvare tutte le tue pagine di shopping in un unico posto, monitorare automaticamente i prezzi, ottenere approfondimenti sul prezzo e altro ancora.</translation>
 <translation id="5663955426505430495">L'amministratore di questo dispositivo ha installato estensioni relative a funzioni aggiuntive. Le estensioni hanno accesso ad alcuni tuoi dati.</translation>
@@ -2321,7 +2395,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5699628521141772782">Latticini e uova</translation>
 <translation id="5700761515355162635">Cookie di terze parti consentiti</translation>
 <translation id="5701381305118179107">Centra</translation>
-<translation id="570530837424789914">Gestisci…</translation>
 <translation id="5707154300732650394">Riprendi il percorso</translation>
 <translation id="57094364128775171">Suggerisci password efficace…</translation>
 <translation id="571403275720188526">(arm64)</translation>
@@ -2330,6 +2403,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5720705177508910913">Utente corrente</translation>
 <translation id="572328651809341494">Schede recenti</translation>
 <translation id="5723287205918986743">Settore della difesa</translation>
+<translation id="5725297205162868298">La scorciatoia non può iniziare con il carattere @: "<ph name="SHORTCUT_NAME" />"</translation>
 <translation id="5730040223043577876">Chrome ti consiglia di reimpostare la password, se l'hai utilizzata su altri siti.</translation>
 <translation id="5732392974455271431">I tuoi genitori possono sbloccarlo per te</translation>
 <translation id="573555826359077410">Pulsante Crea modulo, attiva per creare rapidamente un nuovo modulo in Moduli Google</translation>
@@ -2360,6 +2434,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5785756445106461925">Inoltre, questa pagina include altre risorse che non sono sicure. Tali risorse possono essere visualizzate da altri durante il transito dei dati e possono essere modificate da un utente malintenzionato al fine di modificare l'aspetto della pagina.</translation>
 <translation id="5786044859038896871">Vuoi inserire automaticamente i dati della carta?</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5793317771769868848">Questo metodo di pagamento verrà eliminato dal dispositivo</translation>
 <translation id="5793777472500812427">{COUNT,plural, =0{Nessuno}=1{dati di accesso per 1 account}other{dati di accesso per # account}}</translation>
 <translation id="5800727402210090597">Riparazione e assistenza cellulari</translation>
 <translation id="580241730938216256">Avvia aggiornamento</translation>
@@ -2381,6 +2456,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5838732667866024867">Puoi utilizzare la Freccia sinistra/destra per esaminare le variazioni di prezzo nel grafico</translation>
 <translation id="5840318881868981258">Nel tuo Account Google <ph name="ACCOUNT" /></translation>
 <translation id="5841338463993781099">Salvare nell'account?</translation>
+<translation id="5843987376989109187">Questa lingua non è ancora supportata.
+    <ph name="BEGIN_LINK" />Scopri di più<ph name="END_LINK" /></translation>
 <translation id="5847181246682413476">Alimentatori</translation>
 <translation id="5851548754964597211">Elenco schede</translation>
 <translation id="5852909432155870672">RA4</translation>
@@ -2390,11 +2467,10 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5866898949289125849">Stai visualizzando una pagina di strumenti per sviluppatori</translation>
 <translation id="5869405914158311789">Impossibile raggiungere il sito</translation>
 <translation id="5869522115854928033">Password salvate</translation>
-<translation id="5872318519182427835">Sono interessati i siti elencati qui e i relativi sottodomini. Ad esempio, l'aggiunta di "google.com" significa che i cookie di terze parti possono essere attivi anche per mail.google.com, perché fa parte di google.com.</translation>
 <translation id="5872692522325383488">IBAN salvato</translation>
 <translation id="5873297634595728366">Veicoli diesel</translation>
 <translation id="5877831137320480913">Bellezza e fitness</translation>
-<translation id="5879989559903563723">Autorizzazione non consentita in modalità Ospite</translation>
+<translation id="5879989559903563723">Autorizzazione non consentita in modalità ospite</translation>
 <translation id="5880050725127890683">Vai al controllo di sicurezza di Chrome</translation>
 <translation id="5883861433316751031">Vuoi controllare e riprogrammare i dispositivi MIDI?</translation>
 <translation id="5884465125445718607">Busta Chinese #6</translation>
@@ -2424,6 +2500,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="5925040402342933574">Disco ottico (semilucido)</translation>
 <translation id="5926982310317673627">Palestre e centri benessere</translation>
 <translation id="5928444777041341328">Casa e giardino</translation>
+<translation id="5930147475897662863">Attiva questa impostazione per usare Aiutami a scrivere</translation>
 <translation id="5932224571077948991">Il sito mostra annunci invasivi o fuorvianti</translation>
 <translation id="5937560539988385583">Pagina tradotta</translation>
 <translation id="5938153366081463283">Aggiungi carta virtuale</translation>
@@ -2458,7 +2535,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6005659677094197001">Continuo</translation>
 <translation id="6005765687956866568">Le informazioni compilate automaticamente sono state cancellate dal modulo</translation>
 <translation id="6006365096047131769">3 x 5 in</translation>
-<translation id="6006484371116297560">Classico</translation>
 <translation id="6008122969617370890">Ordine da N a 1</translation>
 <translation id="6008256403891681546">JCB</translation>
 <translation id="6014139350017893009">Manutenzione e riparazione veicoli</translation>
@@ -2490,7 +2566,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6051221802930200923">Al momento non puoi visitare il sito web <ph name="SITE" /> perché utilizza il blocco dei certificati. In genere gli errori di rete e gli attacchi sono temporanei, pertanto questa pagina potrebbe funzionare più tardi.</translation>
 <translation id="6051898664905071243">Numero di pagine:</translation>
 <translation id="6052284303005792909">•</translation>
-<translation id="6053584886670442526">Puoi usare gli indirizzi salvati in tutti i prodotti Google. Questo indirizzo viene salvato nel tuo Account Google, <ph name="ACCOUNT" />.</translation>
+<translation id="605237284704429106">Compilazione dell'IBAN in corso…</translation>
+<translation id="6053584886670442526">Puoi usare gli indirizzi salvati in tutti i prodotti Google. Questo indirizzo viene salvato nel tuo Account Google <ph name="ACCOUNT" />.</translation>
 <translation id="6053735090575989697">Scopri di più su come Google protegge i tuoi dati nelle nostre Norme sulla privacy.</translation>
 <translation id="6055888660316801977">Riquadro inferiore per credenziali pagamento sicuro non corrispondenti</translation>
 <translation id="6055982527635883756">Busta (archivio)</translation>
@@ -2512,6 +2589,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6105460996796456817">Crea sito</translation>
 <translation id="6106989379647458772">La pagina web all'indirizzo <ph name="PAGE" /> potrebbe non essere momentaneamente disponibile o potrebbe essere stata trasferita definitivamente a un nuovo indirizzo web.</translation>
 <translation id="6107012941649240045">Rilasciato a</translation>
+<translation id="6107924765192360631">Inizia con poche parole o una prima bozza per ottenere suggerimenti di scrittura.</translation>
 <translation id="610911394827799129">Il tuo Account Google potrebbe avere altre forme di cronologia di navigazione all'indirizzo <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /></translation>
 <translation id="6116338172782435947">Leggere testi e immagini copiati negli appunti</translation>
 <translation id="6117833587752089929">Foto (satinata)</translation>
@@ -2522,6 +2600,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6124432979022149706">Connettori di Chrome Enterprise</translation>
 <translation id="6126565365696310362">Busta Chinese #2</translation>
 <translation id="6127379762771434464">Elemento rimosso</translation>
+<translation id="6131824478727057281">posizione</translation>
 <translation id="6132161237766805930"><ph name="BEGIN_LINK" />Scopri di più sulla modalità di navigazione in incognito in Chrome<ph name="END_LINK" /></translation>
 <translation id="6133320744616005677">Continua a consentire</translation>
 <translation id="6133984428121856852">L'estensione del file è vuota o errata.</translation>
@@ -2534,10 +2613,10 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6157754950574419155">Rimuovi tutto dalla cronologia</translation>
 <translation id="6157877588268064908">Seleziona un indirizzo per conoscere i requisiti e i metodi di spedizione</translation>
 <translation id="6159554577634054750">Disinfestazione</translation>
+<translation id="6159908896951210943">Formale</translation>
 <translation id="6160391204859821737">Attivare una funzionalità di privacy per gli annunci</translation>
 <translation id="6165508094623778733">Scopri di più</translation>
 <translation id="6167577165590485365">Ultimo tentativo di recupero:</translation>
-<translation id="6169916984152623906">Ora puoi navigare in privato. Le altre persone che usano questo dispositivo non vedranno le tue attività, ma i download e i preferiti verranno salvati.</translation>
 <translation id="617256461084925519">Google Chrome sta provando a verificare la tua identità per poter inserire i tuoi dati di pagamento.</translation>
 <translation id="6176387967264100435">Questo prezzo è alto</translation>
 <translation id="6177128806592000436">La tua connessione a questo sito non è sicura</translation>
@@ -2552,7 +2631,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6196640612572343990">Blocca cookie di terze parti</translation>
 <translation id="6197648101609735209">89 x 89 mm</translation>
 <translation id="6198480336395236519">Schede a taglio completo</translation>
-<translation id="6203231073485539293">Controlla la connessione a Internet</translation>
+<translation id="6203231073485539293">Controlla la connessione a internet</translation>
 <translation id="6205314730813004066">Privacy per gli annunci</translation>
 <translation id="6212314149070368045">US Fanfold</translation>
 <translation id="6215936431492593050">Metallo (satinato)</translation>
@@ -2570,7 +2649,9 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6232271601416750929">Prodotti di bellezza ecosostenibili</translation>
 <translation id="6234122620015464377">Taglia le pagine dopo la stampa di ciascun documento</translation>
 <translation id="6236290670123303279">Gestisci impostazioni</translation>
+<translation id="623825323736974198">Gestisci i siti che rimarranno sempre attivi e che non verranno rimossi dalla memoria</translation>
 <translation id="6240447795304464094">Logo Google Pay</translation>
+<translation id="6240964651812394252">Per usare Gestore delle password di Google con il tuo sistema operativo, riavvia Chrome e consenti l'accesso al gestore delle password del tuo computer. Le schede verranno riaperte dopo il riavvio.</translation>
 <translation id="6241121617266208201">Nascondi suggerimenti</translation>
 <translation id="624499991300733384">Servizio compositore di stampa</translation>
 <translation id="6251906504834538140">{0,plural, =1{Spostamento del file bloccato}other{Spostamento di <ph name="FILE_COUNT" /> file bloccato}}</translation>
@@ -2581,6 +2662,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6263376278284652872">Segnalibri di <ph name="DOMAIN" /></translation>
 <translation id="6264376385120300461">Scarica comunque</translation>
 <translation id="6264485186158353794">Torna nell'area protetta</translation>
+<translation id="6264636978858465832">Gestore delle password richiede un maggiore accesso</translation>
 <translation id="6265794661083428563">Copia il valore del criterio <ph name="POLICY_NAME" /></translation>
 <translation id="6266934640124581640">Verde acqua</translation>
 <translation id="6270066318535733958">Nautica</translation>
@@ -2597,6 +2679,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6293309776179964942">JIS B5</translation>
 <translation id="6295618774959045776">CVC:</translation>
 <translation id="6295855836753816081">Salvataggio in corso...</translation>
+<translation id="6298456705131259420">Sono interessati i siti elencati qui. Inserire "[*.]" prima di un nome di dominio crea un'eccezione per l'intero dominio. Ad esempio, aggiungere "[*.]google.com" significa che i cookie di terze parti possono essere attivi anche per mail.google.com, perché fa parte di google.com.</translation>
 <translation id="6300452962057769623">{0,plural, =0{Il tuo dispositivo verrà riavviato adesso}=1{Il tuo dispositivo verrà riavviato tra 1 secondo}other{Il tuo dispositivo verrà riavviato tra # secondi}}</translation>
 <translation id="6301104306974789820">Ricevi notifiche per il monitoraggio dei prezzi</translation>
 <translation id="6304398603974202180">Software multimediale</translation>
@@ -2620,13 +2703,15 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="633770708279464947">Il valore <ph name="SECURE_DNS_SALT" /> non è valido e non verrà utilizzato.</translation>
 <translation id="6340739886198108203">Il criterio dell'amministratore sconsiglia l'acquisizione di screenshot o registrazioni quando sono visibili contenuti riservati:</translation>
 <translation id="6341434961864773665">{0,plural, =1{Il criterio dell'amministratore sconsiglia di caricare questo file su <ph name="DESTINATION_NAME" />}other{Il criterio dell'amministratore sconsiglia di caricare questi file su <ph name="DESTINATION_NAME" />}}</translation>
-<translation id="6344622098450209924">Protezione dal monitoraggio</translation>
+<translation id="6344622098450209924">Protezione antitracciamento</translation>
 <translation id="634500758737709758">Indicazioni stradali</translation>
 <translation id="6348220984832452017">Varianti attive</translation>
 <translation id="6349101878882523185">Installa <ph name="APP_NAME" /></translation>
 <translation id="6353505687280762741">{COUNT,plural, =0{Nessuna}=1{1 password per <ph name="DOMAIN_LIST" /> (sincronizzata)}=2{2 password per <ph name="DOMAIN_LIST" /> (sincronizzate)}other{# password per (<ph name="DOMAIN_LIST" />, sincronizzate)}}</translation>
 <translation id="6355392890578844978">Questo browser non è gestito da un'azienda o da un'altra organizzazione. L'attività svolta su questo dispositivo potrebbe essere gestita al di fuori di Chromium. <ph name="BEGIN_LINK" />Scopri di più<ph name="END_LINK" /></translation>
+<translation id="6358088212770985041">modificare i metodi di pagamento</translation>
 <translation id="6358450015545214790">Che cosa significano?</translation>
+<translation id="6360213755783740931">Scopri di più sulla protezione da malware</translation>
 <translation id="6361757823711327522">B7</translation>
 <translation id="6363786367719063276">Visualizza log</translation>
 <translation id="6364095313648930329"><ph name="BEGIN_LINK" />Controllare la configurazione del proxy, del firewall e del sistema DNS sicuro<ph name="END_LINK" /></translation>
@@ -2672,7 +2757,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6428450836711225518">Verifica il numero di telefono</translation>
 <translation id="6429267199680088961">A4 Tab</translation>
 <translation id="643051589346665201">Cambia la password Google</translation>
-<translation id="6431119592588449664">Report caricato</translation>
 <translation id="6432297414176614592">Scopri di più sugli argomenti degli annunci</translation>
 <translation id="6432831586648556868">Offerte di lavoro nel settore vendite e marketing</translation>
 <translation id="6433490469411711332">Modifica informazioni di contatto</translation>
@@ -2684,6 +2768,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6443406338865242315">Le estensioni e i plug-in che hai installato</translation>
 <translation id="6446608382365791566">Aggiungi altre informazioni</translation>
 <translation id="6447842834002726250">Cookie</translation>
+<translation id="6448371595882710519">Scopri di più sul controllo dei dati</translation>
 <translation id="6450077999570164268">Quarto</translation>
 <translation id="6450212216969386944">Busta Chou 40</translation>
 <translation id="6451458296329894277">Conferma reinvio modulo</translation>
@@ -2708,12 +2793,14 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6491663123807473970"><ph name="URL" /> vuole usare i tuoi dispositivi MIDI</translation>
 <translation id="6493924760403974580">Questa app supporta solo questa dimensione.</translation>
 <translation id="6494750904506170417">popup e reindirizzamenti</translation>
+<translation id="6495664197699704593">La password viene salvata solo su questo dispositivo. Per usarla su altri dispositivi, <ph name="GOOGLE_PASSWORD_MANAGER" />.</translation>
 <translation id="6497295192259406877">Operazioni aziendali</translation>
 <translation id="6499038740797743453">Reimpostare la password?</translation>
 <translation id="6502510275417601303">Avviso relativo a chiusura nuova impostazione di pagamento</translation>
 <translation id="6502626736864595182">Provider di forum e chat</translation>
 <translation id="6502991525169604759">Senza le tue modifiche</translation>
 <translation id="6506959208958864820">Busta</translation>
+<translation id="6507117483253822672">Scrivi in tutta sicurezza ovunque sul web</translation>
 <translation id="6508722015517270189">Riavvia Chrome</translation>
 <translation id="6513005815064132016">Può chiedere di monitorare la posizione della videocamera</translation>
 <translation id="6517596291481585650">Avviso: questo criterio non è stato unito come elenco come specificato dal criterio perché non è un elenco.</translation>
@@ -2726,6 +2813,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6529602333819889595">&amp;Ripeti eliminazione</translation>
 <translation id="6535751101619004418">Valute e cambio valute estere</translation>
 <translation id="6536221421038631327">Se rimuovi un abbonamento Passpoint da <ph name="DEVICE_TYPE" />, verranno rimosse le reti associate. Contatta "<ph name="FRIENDLY_NAME" />" per apportare modifiche al piano di abbonamento. <ph name="LEARN_MORE" /></translation>
+<translation id="6539092367496845964">Si è verificato un problema. Riprova più tardi.</translation>
 <translation id="6540488083026747005">Hai consentito i cookie di terze parti su questo sito</translation>
 <translation id="6540534463546766581">Fondi comuni di investimento</translation>
 <translation id="6545864417968258051">Scansione Bluetooth</translation>
@@ -2758,8 +2846,8 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6612010098632894193">Video online</translation>
 <translation id="6613866251791999074">Scopri di più sul tuo motore di ricerca in Chrome</translation>
 <translation id="6615297766614333076">Fascicolatore 2</translation>
+<translation id="6619496928666593220">IBAN non compilato</translation>
 <translation id="6624427990725312378">Informazioni di contatto</translation>
-<translation id="6627727261837091711">Mostra dettagli sulla personalizzazione degli annunci</translation>
 <translation id="6628463337424475685">Ricerca <ph name="ENGINE" /></translation>
 <translation id="6629652037942826935">Viaggi di lusso</translation>
 <translation id="6630043285902923878">Ricerca di dispositivi USB in corso…</translation>
@@ -2772,7 +2860,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6643016212128521049">Cancella</translation>
 <translation id="6645291930348198241">Accedere a cookie e dati del sito.</translation>
 <translation id="6645478838938543427">Gli avvisi relativi ai cali di prezzo verranno inviati a <ph name="EMAIL_ADDRESS" /></translation>
-<translation id="6646269444027925224">{COUNT,plural, =0{Nessuno}=1{Da 1 sito (non verrai disconnesso dal tuo Account Google)}other{Da # siti (non verrai disconnesso dal tuo Account Google)}}</translation>
 <translation id="6648459603387803038">L'amministratore può modificare da remoto la configurazione del browser. L'attività svolta su questo dispositivo potrebbe essere gestita anche al di fuori di Chrome.</translation>
 <translation id="6648524591329069940">Carattere serif</translation>
 <translation id="6649510485211003056">195 x 270 mm</translation>
@@ -2821,6 +2908,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6732087373923685049">fotocamera</translation>
 <translation id="6737708609449480586">Prodotti da forno</translation>
 <translation id="6738516213925468394">I tuoi dati sono stati criptati con la tua <ph name="BEGIN_LINK" />passphrase di sincronizzazione<ph name="END_LINK" /> in data <ph name="TIME" />. Inseriscila per avviare la sincronizzazione.</translation>
+<translation id="6740851646645036700">Per il momento, hai raggiunto il limite di aiuto per la scrittura. Riprova più tardi.</translation>
 <translation id="674375294223700098">Errore sconosciuto del certificato del server.</translation>
 <translation id="6744009308914054259">In attesa di una connessione, puoi visitare la pagina Download per leggere gli articoli offline.</translation>
 <translation id="6745592621698551453">Aggiorna ora</translation>
@@ -2834,6 +2922,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6767985426384634228">Vuoi aggiornare l'indirizzo?</translation>
 <translation id="6770747695101757579">Carta (cotone)</translation>
 <translation id="6775759552199460396">JIS B2</translation>
+<translation id="6779348349813025131">Gestore delle password di Google richiede l'accesso al Portachiavi di macOS</translation>
 <translation id="6784045420901191374">Prestiti al commercio</translation>
 <translation id="6785990323398321538">Puoi modificare il motore di ricerca in qualsiasi momento nelle impostazioni di Chrome.</translation>
 <translation id="6786145470008421571">Busta 6 x 9 pollici</translation>
@@ -2846,6 +2935,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6793213097893210590">Cartone</translation>
 <translation id="679355240208270552">Ignorato perché la ricerca predefinita non è attiva secondo la norma.</translation>
 <translation id="6794951432696553238">Verifica più velocemente le tue carte usando Windows Hello d'ora in poi</translation>
+<translation id="6798066466127540426">L'elenco non contiene un provider di ricerca valido.</translation>
 <translation id="6798460514924505775">Busta Chou 3</translation>
 <translation id="6799145206637008376">Inserisci il CVC della carta virtuale</translation>
 <translation id="6805030849054648206">Busta B6/C4</translation>
@@ -2875,6 +2965,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6860888819347870819">Può chiedere l'autorizzazione ad attivare la modalità Picture in picture</translation>
 <translation id="6864189428899665393">267 x 389 mm</translation>
 <translation id="686485648936420384">Risorse per i consumatori</translation>
+<translation id="6865166112578825782">Inserisci l'indirizzo</translation>
 <translation id="6865412394715372076">Al momento non è possibile verificare questa carta.</translation>
 <translation id="6868573634057275953">Riprendi aggiornamento</translation>
 <translation id="6869334554832814367">Prestiti personali</translation>
@@ -2958,12 +3049,10 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="6999480632062519056">Lezioni di fitness e personal trainer</translation>
 <translation id="6999969238895751684">Settore dell'intrattenimento</translation>
 <translation id="7003278537452757231">Tappetini e tappeti</translation>
-<translation id="7003335073762455340">Stai monitorando questo prodotto. La pagina è salvata in <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="7004499039102548441">Schede recenti</translation>
 <translation id="7004583254764674281">Usa Windows Hello per verificare più velocemente le carte</translation>
 <translation id="7006930604109697472">Invia comunque</translation>
 <translation id="7012363358306927923">China UnionPay</translation>
-<translation id="7013762323294215682">Questa passkey verrà salvata nel tuo gestore delle password. Chiunque abbia accesso al tuo gestore delle password potrà utilizzare questa passkey.</translation>
 <translation id="7014042602717177828">Autoradio</translation>
 <translation id="7014741021609395734">Livello di zoom</translation>
 <translation id="7016992613359344582">L'addebito potrebbe essere singolo oppure ricorrente e potrebbe non essere evidente.</translation>
@@ -2973,6 +3062,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="7023162328967545559">Avviso dell'amministratore</translation>
 <translation id="7024932305105294144">Chrome è dotato di funzionalità di sicurezza integrate che ti proteggono durante la navigazione, come Google Navigazione sicura, che <ph name="BEGIN_LINK" />di recente ha rilevato phishing<ph name="END_LINK" /> sul sito che vuoi visitare. I siti di phishing si spacciano per altri siti per ingannarti.<ph name="NEW_LINE" />Anche i siti che in genere sono sicuri possono essere compromessi da utenti malintenzionati. <ph name="BEGIN_ERROR_LINK" />Contattaci<ph name="END_ERROR_LINK" /> se ritieni che sia stato commesso un errore e che questo sito non rappresenti un pericolo.</translation>
 <translation id="7029809446516969842">Password</translation>
+<translation id="7030164307377592766">modificare le impostazioni per la compilazione dei metodi di pagamento</translation>
 <translation id="7030436163253143341">ll certificato non è valido</translation>
 <translation id="7031646650991750659">Le app Google Play che hai installato</translation>
 <translation id="7038063300915481831"><ph name="MANAGE_GOOGLE_PRIVACY_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab poi Invio per gestire le impostazioni sulla privacy del tuo Account Google.</translation>
@@ -3014,7 +3104,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="7108819624672055576">Consentita da un'estensione</translation>
 <translation id="7109510814665441393">Giochi di guida e corse</translation>
 <translation id="7110116949943042888">Offerte di lavoro temporaneo e stagionale</translation>
-<translation id="7110553203952632623">Riceverai avvisi via email se il prezzo calerà su qualsiasi sito</translation>
 <translation id="7111012039238467737">(Valido)</translation>
 <translation id="7111507312244504964">Valutazioni e perizie immobiliari</translation>
 <translation id="7112327784801341716">I dati non sono aggiornati? Contatta la banca per aggiornarli.</translation>
@@ -3034,13 +3123,16 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="7140087718106278457">L'elenco dei metodi di pagamento è chiuso.</translation>
 <translation id="714064300541049402">Spostamento X lato 2 immagine</translation>
 <translation id="7143682719845053166">PRC 32K</translation>
+<translation id="7144878232160441200">Riprova</translation>
 <translation id="7153549335910886479">{PAYMENT_METHOD,plural, =0{<ph name="PAYMENT_METHOD_PREVIEW" />}=1{<ph name="PAYMENT_METHOD_PREVIEW" /> e <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" /> altro}other{<ph name="PAYMENT_METHOD_PREVIEW" /> e altri <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS" />}}</translation>
 <translation id="7153618581592392745">Lavanda</translation>
 <translation id="7156870133441232244">È richiesto l'aggiornamento del server a TLS 1.2 o versione successiva.</translation>
+<translation id="715996170234243096">{NUM_FILES,plural, =1{Per inviare questo file usando <ph name="FEATURE_NAME" />, libera spazio (<ph name="DISK_SPACE_SIZE" />) sul tuo dispositivo}other{Per inviare questi file utilizzando <ph name="FEATURE_NAME" />, libera spazio (<ph name="DISK_SPACE_SIZE" />) sul tuo dispositivo}}</translation>
 <translation id="7160999678034985039">Salva il tuo lavoro e avvia l'aggiornamento quando è tutto pronto.</translation>
 <translation id="7163295244162773898">{0,plural, =1{Vuoi copiare il file riservato?}other{Vuoi copiare i file riservati?}}</translation>
 <translation id="717330890047184534">ID GAIA:</translation>
 <translation id="7174545416324379297">Uniti</translation>
+<translation id="7175097078723125014">È stata selezionata l'opzione per modificare l'indirizzo</translation>
 <translation id="7175401108899573750">{SHIPPING_OPTIONS,plural, =0{<ph name="SHIPPING_OPTION_PREVIEW" />}=1{<ph name="SHIPPING_OPTION_PREVIEW" /> e <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" /> altra}other{<ph name="SHIPPING_OPTION_PREVIEW" /> e altre <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS" />}}</translation>
 <translation id="7179323680825933600">Salva e compila i metodi di pagamento</translation>
 <translation id="7180611975245234373">Aggiorna</translation>
@@ -3053,10 +3145,11 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="718872491229180389">Cheerleading</translation>
 <translation id="7188840756966467339">Riavvia e applica criteri</translation>
 <translation id="7192188280913829296">È necessario specificare anche l'attributo "vendor_id".</translation>
-<translation id="7192203810768312527">Consente di liberare <ph name="SIZE" />. Alcuni siti potrebbero caricarsi più lentamente alla prossima visita.</translation>
+<translation id="7192203810768312527">Libera <ph name="SIZE" />. Alcuni siti potrebbero caricarsi più lentamente alla prossima visita.</translation>
 <translation id="7192537357091279678">Unità e dispositivi di archiviazione per computer</translation>
 <translation id="7193661028827781021">Consultazione</translation>
 <translation id="719464814642662924">Visa</translation>
+<translation id="7195852673246414183">Dopo aver attivato questa impostazione, torna in questa scheda per iniziare a scrivere</translation>
 <translation id="7199278868241956094">Oficio</translation>
 <translation id="7201591969684833065">L'amministratore è in grado di vedere:</translation>
 <translation id="7202217080450895452"><ph name="LAUNCH_INCOGNITO_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab poi Invio per aprire una nuova scheda di navigazione in incognito per navigare in privato</translation>
@@ -3120,6 +3213,7 @@ Ulteriori dettagli:
 <translation id="7341357280245177602">Veicoli usati</translation>
 <translation id="7346048084945669753">Con affiliazione:</translation>
 <translation id="7346062987309535530">Vasellame</translation>
+<translation id="7346081071264046066">"rispondi sì a questo invito a nozze con entusiasmo"</translation>
 <translation id="7352651011704765696">Si è verificato un problema</translation>
 <translation id="7353601530677266744">Riga di comando</translation>
 <translation id="7354880545102894991">Viaggi low-cost e last-minute</translation>
@@ -3132,7 +3226,6 @@ Ulteriori dettagli:
 <translation id="7366117520888504990">198 x 275 mm</translation>
 <translation id="7366362069757178916">Gestori dei pagamenti</translation>
 <translation id="7367985555340314048">Gli argomenti di interesse si basano sulla tua recente cronologia di navigazione e sono utilizzati dai siti per mostrarti annunci personalizzati</translation>
-<translation id="7368169244533796604">Elimina sito</translation>
 <translation id="7372526636730851647">Foto (patinata)</translation>
 <translation id="7372973238305370288">risultato della ricerca</translation>
 <translation id="7374461526650987610">Gestori di protocollo</translation>
@@ -3166,7 +3259,6 @@ Ulteriori dettagli:
     &lt;li&gt;Visita il &lt;a href="https://support.google.com/chrome/answer/6098869"&gt;Centro assistenza Chrome&lt;/a&gt; per avere informazioni su come rimuovere definitivamente il software dal computer.
     &lt;/ol&gt;</translation>
 <translation id="7408613996403626141">Giocattoli</translation>
-<translation id="7410471291937727359">Incantevole</translation>
 <translation id="741204030948306876">Sì, accetto</translation>
 <translation id="7416351320495623771">Gestisci password…</translation>
 <translation id="7418620734632363981">Programmazione</translation>
@@ -3174,8 +3266,11 @@ Ulteriori dettagli:
 <translation id="7421067045979951561">gestori di protocollo</translation>
 <translation id="7422347648202898039">Etichette (sicurezza)</translation>
 <translation id="7423283032694727565">Pulsante Gestisci i cookie, attiva per gestire le preferenze relative ai cookie nelle impostazioni di Chrome</translation>
+<translation id="7424421098814895617">È stata selezionata l'opzione per eliminare l'indirizzo</translation>
+<translation id="7425037327577270384">Aiutami a scrivere</translation>
 <translation id="7427366580982928791">Sicurezza dei bambini su Internet</translation>
 <translation id="7429429656042611765">Executive</translation>
+<translation id="7432774160230062882">Verifica la tua identità per consentire a Chromium di inserire i tuoi dati di pagamento.</translation>
 <translation id="7437289804838430631">Aggiungi informazioni di contatto</translation>
 <translation id="7437490109271760224">Giochi di carte</translation>
 <translation id="7438338505272634288">Gli utenti malintenzionati sul sito che stai tentando di visitare potrebbero indurti con l'inganno a installare software dannoso che influisce sulla tua navigazione, ad esempio cambiando la tua home page o mostrando annunci aggiuntivi sui siti che visiti. Chrome consiglia vivamente di tornare indietro per evitare problemi. <ph name="BEGIN_LEARN_MORE_LINK" />Scopri di più<ph name="END_LEARN_MORE_LINK" /></translation>
@@ -3201,7 +3296,7 @@ Ulteriori dettagli:
 <translation id="7469935732330206581">Modulo non sicuro</translation>
 <translation id="7470854469646445678">Specifica il motivo della copia (obbligatorio)</translation>
 <translation id="7471007961486718967">Specifica il motivo del trasferimento (obbligatorio)</translation>
-<translation id="7473891865547856676">No grazie</translation>
+<translation id="7473891865547856676">No, grazie</translation>
 <translation id="7481312909269577407">Avanti</translation>
 <translation id="7481603210197454575">Busta Italian</translation>
 <translation id="7483482939016730822">Forniture per la scuola e attrezzature per le aule</translation>
@@ -3213,12 +3308,6 @@ Ulteriori dettagli:
 <translation id="749865518782565832">Lavori idraulici</translation>
 <translation id="7501663406926337752">Il sito che stai per visitare è stato segnalato dalla tua organizzazione</translation>
 <translation id="7501853161948120656">Risorse didattiche</translation>
-<translation id="7506488012654002225">Chromium <ph name="BEGIN_EMPHASIS" />non salverà<ph name="END_EMPHASIS" /> le seguenti informazioni:
-        <ph name="BEGIN_LIST" />
-          <ph name="LIST_ITEM" />Cronologia di navigazione
-          <ph name="LIST_ITEM" />Cookie e dati dei siti
-          <ph name="LIST_ITEM" />Informazioni inserite nei moduli
-        <ph name="END_LIST" /></translation>
 <translation id="7507075214339298899">Busta #9</translation>
 <translation id="7508255263130623398">L'ID dispositivo della norma restituito è vuoto o non corrisponde all'ID dispositivo corrente</translation>
 <translation id="7508577201115425418">Servizi di stampa e documenti</translation>
@@ -3234,10 +3323,13 @@ Ulteriori dettagli:
 <translation id="7521825010239864438">Sezione "<ph name="SECTION" />" nascosta</translation>
 <translation id="752189128961566325">Puoi utilizzarlo su tutti i prodotti Google</translation>
 <translation id="7523408071729642236">Produzione</translation>
+<translation id="7525067979554623046">Crea</translation>
+<translation id="7525804896095537619">Il nome non può essere vuoto</translation>
 <translation id="7526934274050461096">La connessione a questo sito non è privata</translation>
 <translation id="7529884293139707752">Istruzione domiciliare</translation>
 <translation id="7534987659046836932">Busta C7</translation>
 <translation id="7535087603100972091">Valore</translation>
+<translation id="753556296624075801">Powered by Google</translation>
 <translation id="7537536606612762813">Obbligatorio</translation>
 <translation id="7542995811387359312">La compilazione automatica della carta di credito è disattivata perché questo modulo non utilizza una connessione sicura.</translation>
 <translation id="7543525346216957623">Chiedi a uno dei tuoi genitori</translation>
@@ -3265,7 +3357,6 @@ Ulteriori dettagli:
 <translation id="7574998639136359461">Attrezzature e articoli per sport invernali</translation>
 <translation id="7575207903026901870">Rimuovi il pulsante Suggerimento, premi INVIO per rimuovere questo suggerimento</translation>
 <translation id="7575887283389198269">Cellulari</translation>
-<translation id="7577900504646297215">Gestisci interessi</translation>
 <translation id="7578104083680115302">Paga velocemente su siti e app su più dispositivi utilizzando le carte salvate su Google.</translation>
 <translation id="7579442726219254162">Variabile sconosciuta "<ph name="VARIABLE" />" nella configurazione gestita di "<ph name="APPLICATION_ID" />".</translation>
 <translation id="7581199239021537589">Spostamento Y lato 2 immagine</translation>
@@ -3341,14 +3432,16 @@ Ulteriori dettagli:
 <translation id="7696089921647603491">Rock classico e oldies</translation>
 <translation id="769721561045429135">Al momento hai carte che possono essere utilizzate solo su questo dispositivo. Fai clic su Continua per controllare le carte.</translation>
 <translation id="7698864304447945242">Vuoi aggiornare Google Play Services per AR?</translation>
-<translation id="7701040980221191251">Nulla</translation>
+<translation id="7701040980221191251">Nessun dato</translation>
 <translation id="7701544340847569275">Aggiornamento completato con errori</translation>
 <translation id="7704050614460855821"><ph name="BEGIN_LINK" />Procedi su <ph name="SITE" /> (non sicuro)<ph name="END_LINK" /></translation>
+<translation id="7705085181312584869">Aiutami a scrivere</translation>
 <translation id="7705992072972338699">Disco ottico (lucido)</translation>
 <translation id="770607638235926858">Sci e snowboard</translation>
 <translation id="7706689436519265630">I file copiati o spostati vengono inviati a Google Cloud o a terze parti per essere analizzati. Ad esempio, potrebbero essere sottoposti a scansione per rilevare dati sensibili o malware e archiviati in base ai criteri aziendali.</translation>
 <translation id="7709911732293795808">Assicurazioni</translation>
 <translation id="7714404809393719981">Foto (semilucida)</translation>
+<translation id="7714424966701020172">È stata selezionata l'opzione per inserire il nome completo</translation>
 <translation id="7714464543167945231">Certificato</translation>
 <translation id="7716147886133743102">Bloccata dall'amministratore</translation>
 <translation id="7716375162095500223">Non ancora caricato o ignorato</translation>
@@ -3397,6 +3490,7 @@ Ulteriori dettagli:
 <translation id="7802989406998618639">Inserisci il codice di sicurezza a <ph name="NUMBER_OF_DIGITS" /> cifre che trovi sul <ph name="SIDE_OF_CARD" /> della carta per consentire alla banca di verificare la tua identità</translation>
 <translation id="780301667611848630">No, grazie</translation>
 <translation id="7805768142964895445">Stato</translation>
+<translation id="7805906048382884326">Chiudi suggerimento</translation>
 <translation id="7810410097247356677">Per pagare più velocemente la prossima volta, salva la carta e il codice di sicurezza criptato sul tuo dispositivo</translation>
 <translation id="7812922009395017822">Mir</translation>
 <translation id="7813600968533626083">Rimuovere il suggerimento per i moduli da Chrome?</translation>
@@ -3410,6 +3504,7 @@ Ulteriori dettagli:
 <translation id="7831993212387676366">Che cos'è la lista della spesa?</translation>
 <translation id="7840103971441592723">Rilevamento degli schermi avviato</translation>
 <translation id="784137052867620416">Shopping Insights</translation>
+<translation id="784404208867107517">Cronologia raggruppata</translation>
 <translation id="7844689747373518809">{COUNT,plural, =0{Nessuna}=1{1 app (<ph name="EXAMPLE_APP_1" />)}=2{2 app (<ph name="EXAMPLE_APP_1" />, <ph name="EXAMPLE_APP_2" />)}other{# app (<ph name="EXAMPLE_APP_1" />, <ph name="EXAMPLE_APP_2" />, <ph name="AND_MORE" />)}}</translation>
 <translation id="7855695075675558090"><ph name="TOTAL_LABEL" /> <ph name="CURRENCY_CODE" /> <ph name="FORMATTED_TOTAL_AMOUNT" /></translation>
 <translation id="7857116075376571629">Dopodiché, un sito che visiti può chiedere a Chrome i tuoi argomenti per personalizzare gli annunci che ti vengono mostrati. Chrome condivide fino a 3 argomenti e protegge la cronologia di navigazione e l'identità.</translation>
@@ -3453,6 +3548,7 @@ Ulteriori dettagli:
 <translation id="7950027195171824198">Gestisci le preferenze relative ai cookie nelle impostazioni di Chrome</translation>
 <translation id="7951415247503192394">(a 32 bit)</translation>
 <translation id="7952192831285741665">European EDP</translation>
+<translation id="7952250633095257243">La scorciatoia non può essere vuota</translation>
 <translation id="7952327717479677595">Pulsante Gestisci motori di ricerca, attiva per gestire il motore di ricerca predefinito e la ricerca su siti</translation>
 <translation id="7953236668995583915">Ricarica la pagina per applicare le impostazioni aggiornate a questo sito</translation>
 <translation id="7953569069500808819">Impuntura in alto</translation>
@@ -3511,7 +3607,6 @@ Ulteriori dettagli:
 <translation id="8058009102480785916">Industria alimentare</translation>
 <translation id="8058603697124206642">non richiesto</translation>
 <translation id="8063875539456488183">Salva e monitora i prezzi</translation>
-<translation id="8064892030280197386">verificare la tua identità per poter inserire i tuoi dati di pagamento.</translation>
 <translation id="8066225060526005217">Gestito dalle impostazioni dei cookie</translation>
 <translation id="8067872629359326442">Hai appena inserito la tua password su un sito ingannevole. Chromium può aiutarti. Per cambiare la password e informare Google che il tuo account potrebbe essere a rischio, fai clic su Proteggi account.</translation>
 <translation id="8070439594494267500">Icona dell'app</translation>
@@ -3552,7 +3647,6 @@ Ulteriori dettagli:
 <translation id="8131740175452115882">Conferma</translation>
 <translation id="8134058435519644366">Selezione e assunzione di personale</translation>
 <translation id="8135546115396015134">tasto sinistro</translation>
-<translation id="8144303576836498784">Si è verificato un problema. La modifica non è stata salvata</translation>
 <translation id="8148608574971654810">Versione PDF:</translation>
 <translation id="8149426793427495338">Il computer è entrato in modalità sospensione.</translation>
 <translation id="8150722005171944719">Il file all'indirizzo <ph name="URL" /> non è leggibile. Potrebbe essere stato rimosso, spostato oppure delle autorizzazioni del file potrebbero impedire l'accesso.</translation>
@@ -3561,6 +3655,7 @@ Ulteriori dettagli:
 <translation id="8161095570253161196">Riprendi la navigazione</translation>
 <translation id="8163866351304776260">Perforatura quadrupla a sinistra</translation>
 <translation id="8164078261547504572">Vuoi ricevere email in caso di calo dei prezzo?</translation>
+<translation id="8169175551046720804">Impossibile impostare le chiavi "<ph name="DATA_CONTROLS_KEYS" />" nello stesso dizionario</translation>
 <translation id="8175796834047840627">Chrome chiede se vuoi salvare le tue carte nel tuo Account Google perché hai eseguito l'accesso. Puoi modificare questo comportamento nelle impostazioni.</translation>
 <translation id="8176440868214972690">L'amministratore di questo dispositivo ha inviato alcune informazioni, quali impostazioni o criteri, ai siti web indicati di seguito.</translation>
 <translation id="817820454357658398">Prodotti per l'igiene femminile</translation>
@@ -3635,6 +3730,7 @@ Ulteriori dettagli:
 <translation id="8286036467436129157">Accedi</translation>
 <translation id="8286799286781881307">Le applicazioni autorizzate dall'amministratore possono rilevare tutti gli schermi collegati al tuo dispositivo. Queste informazioni possono essere elaborate in locale o caricate sui server della tua organizzazione.</translation>
 <translation id="8287123726498397887">Busta (prestampata)</translation>
+<translation id="8288320283441806607">Per utilizzare questa funzionalità, attiva Migliora le ricerche e le attività di navigazione</translation>
 <translation id="8288807391153049143">Mostra certificato</translation>
 <translation id="8289355894181816810">Contatta l'amministratore di rete se non sei sicuro del significato.</translation>
 <translation id="8292520987784410870">Verificare sempre?</translation>
@@ -3664,6 +3760,7 @@ Ulteriori dettagli:
 <translation id="8344776605855290140">Registrazione della carta virtuale aperta a schermo intero</translation>
 <translation id="8347658365704983341">Didattica a distanza</translation>
 <translation id="8349305172487531364">Barra dei preferiti</translation>
+<translation id="8350416046273606058">La scorciatoia non può contenere spazi: "<ph name="SHORTCUT_NAME" />"</translation>
 <translation id="8351131234907093545">Crea nota</translation>
 <translation id="8352849934814541340">L'amministratore di questo dispositivo ha installato applicazioni per funzioni aggiuntive. Le applicazioni hanno accesso ad alcuni tuoi dati.</translation>
 <translation id="8355270400102541638">Contesto arresto anomalo locale:</translation>
@@ -3682,6 +3779,7 @@ Ulteriori dettagli:
 <translation id="8381674639488873545">L'addebito potrebbe essere singolo oppure ricorrente e potrebbe non essere evidente. <ph name="BEGIN_LINK" />Mostra comunque<ph name="END_LINK" /></translation>
 <translation id="8389532092404711541">In genere <ph name="LOW_PRICE" /></translation>
 <translation id="8390725133630534698">La possibilità di condivisione da <ph name="ORIGIN_NAME" /> a <ph name="VM_NAME" /> è stata bloccata da un criterio dell'amministratore</translation>
+<translation id="8392783408127179588">Criteri di ricaricamento</translation>
 <translation id="8396522675989118466">È il codice a <ph name="NUMBER_OF_DIGITS" /> cifre indicato sul <ph name="SIDE_OF_CARD" /></translation>
 <translation id="8398335999901363925">Metodi di pagamento che è possibile compilare tramite tocco aperti a schermo intero.</translation>
 <translation id="8398446215576328011">Ripristina criteri applicati</translation>
@@ -3703,7 +3801,7 @@ Ulteriori dettagli:
 <translation id="8425213833346101688">Cambia</translation>
 <translation id="8427848540066057481">500 x 750 mm</translation>
 <translation id="8428213095426709021">Impostazioni</translation>
-<translation id="8428634594422941299">OK</translation>
+<translation id="8428634594422941299">Ok</translation>
 <translation id="8431194080598727332"><ph name="MANAGE_COOKIES_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per gestire le preferenze relative ai cookie nelle impostazioni di Chrome</translation>
 <translation id="8432419784006585012">Può chiedere l'autorizzazione a usare i tuoi dispositivi MIDI</translation>
 <translation id="8433057134996913067">In questo modo uscirai dalla maggior parte dei siti web.</translation>
@@ -3730,12 +3828,13 @@ Ulteriori dettagli:
 <translation id="8473863474539038330">Indirizzi e altro</translation>
 <translation id="8474910779563686872">Mostra i dettagli dello sviluppatore</translation>
 <translation id="8479754468255770962">Pinzatura in basso a sinistra</translation>
-<translation id="8479926481822108747">gestire le protezioni dal monitoraggio</translation>
+<translation id="8479926481822108747">gestire le protezioni antitracciamento</translation>
 <translation id="8483229036294884935">Questo indirizzo verrà eliminato dal tuo Account Google <ph name="ACCOUNT" /></translation>
 <translation id="8488350697529856933">Si applica a</translation>
 <translation id="8490137692873530638">Fascicolatore 10</translation>
 <translation id="8493948351860045254">Libera spazio</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha impiegato troppo tempo a rispondere.</translation>
+<translation id="8502972004418241366">Per usare la tua <ph name="PERMISSION" /> su questo sito, devi consentire l'accesso a Chrome</translation>
 <translation id="8503559462189395349">Password Chrome</translation>
 <translation id="8503813439785031346">Nome utente</translation>
 <translation id="8504928302600319133">Hardware per computer</translation>
@@ -3764,6 +3863,7 @@ Ulteriori dettagli:
 <translation id="8542014550340843547">Tripla pinzatura in basso</translation>
 <translation id="8542617028204211143">SRA0</translation>
 <translation id="8543181531796978784">Puoi <ph name="BEGIN_ERROR_LINK" />segnalare un problema di rilevamento<ph name="END_ERROR_LINK" /> oppure, se sei consapevole dei rischi per la tua sicurezza, <ph name="BEGIN_LINK" />visita questo sito non sicuro<ph name="END_LINK" />.</translation>
+<translation id="8544217240017914508">Google Chrome sta cercando di modificare le impostazioni per la compilazione dei metodi di pagamento.</translation>
 <translation id="8544303911974837265">Poliestere</translation>
 <translation id="854548366864113872">Opzione prezzo alto</translation>
 <translation id="8546254312340305428">Specifica il motivo del caricamento (obbligatorio)</translation>
@@ -3778,6 +3878,7 @@ Ulteriori dettagli:
 <translation id="8555010941760982128">Utilizza questo codice al momento del pagamento</translation>
 <translation id="8556297087315686325">Gestione e monitoraggio di reti</translation>
 <translation id="8557066899867184262">Il codice CVC si trova sul lato posteriore della carta.</translation>
+<translation id="8557412555245662180">Scopri di più sulla Protezione antitracciamento</translation>
 <translation id="8558347880669160417">Fotocamera e microfono consentiti questa volta</translation>
 <translation id="8559762987265718583">Impossibile stabilire una connessione privata con il sito <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> perché data e ora del dispositivo (<ph name="DATE_AND_TIME" />) sono sbagliate.</translation>
 <translation id="8564182942834072828">Documenti separati/Copie non fascicolate</translation>
@@ -3786,6 +3887,7 @@ Ulteriori dettagli:
 <translation id="8576310925653847813">Sistemi home theater</translation>
 <translation id="8577192028579836704">Tutte le opzioni in genere <ph name="TYPICAL_PRICE" /></translation>
 <translation id="8577348305244205642">Carta virtuale non disponibile</translation>
+<translation id="8581064022803799721">La pagina è salvata in <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="8586082901536468629">Attrezzature e articoli per squash e racquetball</translation>
 <translation id="858637041960032120">Aggiungi telefono</translation>
 <translation id="8589998999637048520">Migliore qualità</translation>
@@ -3825,6 +3927,7 @@ Ulteriori dettagli:
 <translation id="8687429322371626002">Il tuo dispositivo e il tuo account sono gestiti da <ph name="MANAGER" />.</translation>
 <translation id="8688672835843460752">Disponibile</translation>
 <translation id="868922510921656628">Pagine per insieme</translation>
+<translation id="8693639060656817812">Scopri di più sulla disponibilità della Protezione antitracciamento</translation>
 <translation id="869891660844655955">Data di scadenza</translation>
 <translation id="8699041776323235191">Dispositivo HID</translation>
 <translation id="8699985386408839112">Busta Kaku 1</translation>
@@ -3833,7 +3936,7 @@ Ulteriori dettagli:
 <translation id="8705331520020532516">Numero di serie</translation>
 <translation id="8708134712139312373">Può chiedere di connettersi ai dispositivi Bluetooth</translation>
 <translation id="8710842507289500830">Stile carattere</translation>
-<translation id="8712637175834984815">Fatto</translation>
+<translation id="8712637175834984815">Ok</translation>
 <translation id="8713438021996895321">Poesia</translation>
 <translation id="8715502133575042727">Letteratura per bambini</translation>
 <translation id="8718314106902482036">Pagamento non completato</translation>
@@ -3919,12 +4022,13 @@ Ulteriori dettagli:
 <translation id="8870494189203302833">Stesso ordine a faccia in giù</translation>
 <translation id="8870700989640064057">Vuoi stampare il file riservato?</translation>
 <translation id="8871553383647848643">Personalizza l'aspetto del browser</translation>
-<translation id="8874790741333031443">Prova a consentire temporaneamente i cookie di terze parti. In questo modo avrai meno protezione durante la navigazione, ma è più probabile che le funzionalità del sito agiscano come previsto.</translation>
+<translation id="8874790741333031443">Prova a consentire temporaneamente i cookie di terze parti. In questo modo avrai meno protezione durante la navigazione, ma è più probabile che le funzionalità del sito operino come previsto.</translation>
 <translation id="8874824191258364635">Inserisci un numero di carta di credito valido</translation>
 <translation id="8876033571432926051">Casual game</translation>
 <translation id="8877780815363510165">Pesca</translation>
 <translation id="8884537526797090108">Impossibile registrare contenuti riservati</translation>
 <translation id="8888187300091017436">Materassi</translation>
+<translation id="8890048757975398817">Vuoi controllare <ph name="READERNAME" /> e ottenere l'accesso alla smart card a cui può accedere?</translation>
 <translation id="8891727572606052622">Modalità proxy non valida.</translation>
 <translation id="8894794286471754040">Prima il lato lungo</translation>
 <translation id="8897428486789851669">Nuoto</translation>
@@ -3932,20 +4036,25 @@ Ulteriori dettagli:
 <translation id="8903921497873541725">Aumenta lo zoom</translation>
 <translation id="890493561996401738">Rimuovi il pulsante Suggerimento, premi INVIO per rimuovere, <ph name="REMOVE_BUTTON_FOCUSED_FRIENDLY_MATCH_TEXT" /></translation>
 <translation id="8910898109640902752">8 x 10 in</translation>
+<translation id="8914504000324227558">Riavvia Chrome</translation>
 <translation id="8918062451146297192">CVC della carta virtuale</translation>
 <translation id="8919740778133505789">Auto sportive</translation>
 <translation id="8919895429178014996">Nascondi tutti gli elementi</translation>
 <translation id="8922013791253848639">Consenti sempre gli annunci su questo sito</translation>
 <translation id="892588693504540538">Perforatura in alto a destra</translation>
+<translation id="8926389886865778422">Non visualizzare più questo avviso</translation>
 <translation id="8930330541574156305">Settore immobiliare</translation>
 <translation id="8932102934695377596">L'orologio è indietro</translation>
 <translation id="893332455753468063">Aggiungi nome</translation>
 <translation id="8942355029279167844">L'amministratore ha autorizzato <ph name="APP_NAME" /> a raccogliere dati diagnostici per migliorare l'esperienza con il prodotto. Per ulteriori informazioni, visita la pagina <ph name="BEGIN_LINK" />https://www.parallels.com/pcep<ph name="END_LINK" />.</translation>
 <translation id="8943282376843390568">Giallo-verde</translation>
 <translation id="8944485226638699751">Limitati</translation>
+<translation id="8949410982325929394">Tono</translation>
 <translation id="8949493680961858543">A1x4</translation>
 <translation id="8951415078585015151">Diritto e pubblica amministrazione</translation>
+<translation id="8952569554322479410">Un sito web ha appena richiesto l'accesso a <ph name="REQUEST_TYPE" />. Partecipa a questo sondaggio di 1 minuto per aiutarci a migliorare la modalità di richiesta di accesso dei siti web.</translation>
 <translation id="8954252855949068147">Abbigliamento</translation>
+<translation id="8956124158020778855">Dopo aver attivato questa impostazione, torna in questa scheda per iniziare a scrivere.</translation>
 <translation id="8957210676456822347">Autorizzazione Captive Portal</translation>
 <translation id="8959282183248574156"><ph name="NICKNAME_COUNT" />/<ph name="NICKNAME_MAX" /></translation>
 <translation id="8963117664422609631">Vai alle Impostazioni sito</translation>
@@ -3984,13 +4093,13 @@ Ulteriori dettagli:
 <translation id="9023536760430404133">Ruote e pneumatici</translation>
 <translation id="9025348182339809926">(Non valido)</translation>
 <translation id="902590795160480390">Caricamento PDF in corso…</translation>
-<translation id="9030265603405983977">In bianco e nero</translation>
 <translation id="9035022520814077154">Errore di sicurezza</translation>
 <translation id="9035824888276246493">Salva i codici di sicurezza</translation>
 <translation id="9036306139374661733">Vuoi consentire l'accesso al microfono?</translation>
 <translation id="9038649477754266430">Utilizza un servizio di previsione per velocizzare il caricamento delle pagine</translation>
 <translation id="9039213469156557790">Inoltre, questa pagina include altre risorse che non sono sicure. Tali risorse possono essere visualizzate da altri durante il transito dei dati e possono essere modificate da un utente malintenzionato al fine di modificare il comportamento della pagina.</translation>
 <translation id="9042617223719777575">Capacità elevata</translation>
+<translation id="9042827002460091668">Controlla la connessione a Internet e riprova</translation>
 <translation id="9044359186343685026">Usa Touch ID</translation>
 <translation id="9045525010788763347"><ph name="RESULT_MODIFIED_DATE" /> - <ph name="RESULT_PRODUCT_SOURCE" /></translation>
 <translation id="9048035366624198823">Per queste azioni è necessario impostare il criterio <ph name="POLICY_NAME" /> su <ph name="POLICY_VALUE" />: <ph name="ACTION_LIST" />.</translation>
@@ -3998,6 +4107,8 @@ Ulteriori dettagli:
 <translation id="9049981332609050619">Hai tentato di connetterti a <ph name="DOMAIN" />, ma il server ha presentato un certificato scaduto.</translation>
 <translation id="9050666287014529139">Passphrase</translation>
 <translation id="9051072642122229460">Macchine da caffè e per il caffè espresso</translation>
+<translation id="9051260467258969162"><ph name="BEGIN_LINK" />Accedi<ph name="END_LINK" /> 
+    di nuovo, quindi torna a questa scheda per ricevere aiuto per la scrittura</translation>
 <translation id="9053840549256861041">Stiamo lanciando una nuova funzionalità per la privacy degli annunci chiamata misurazione degli annunci. Chrome condivide soltanto informazioni molto limitate tra siti, ad esempio quando ti è stato mostrato un annuncio, per aiutare i siti a misurare il rendimento degli annunci.</translation>
 <translation id="9056953843249698117">Store</translation>
 <translation id="9062620674789239642">Potrebbe essere stato spostato, modificato o eliminato.</translation>
@@ -4017,6 +4128,7 @@ Ulteriori dettagli:
 <translation id="9089260154716455634">Criterio Orari di disattivazione:</translation>
 <translation id="9090243919347147717">Allegati</translation>
 <translation id="9093723786115107672">Pigiameria</translation>
+<translation id="9094544726794842788">Non mi piace apre un modulo per inviare un feedback dettagliato sul motivo per cui non ti piacciono questi risultati</translation>
 <translation id="9095388113577226029">Altre lingue</translation>
 <translation id="9096425087209440047"><ph name="SET_CHROME_AS_DEFAULT_BROWSER_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab e poi Invio per impostare Chrome come browser predefinito del sistema nelle impostazioni di iOS</translation>
 <translation id="9096679202588811390">Programmi e spettacoli TV</translation>
@@ -4028,12 +4140,10 @@ Ulteriori dettagli:
 <translation id="9114524666733003316">Conferma della carta...</translation>
 <translation id="9114581008513152754">Questo browser non è gestito da un'azienda o da un'altra organizzazione. L'attività svolta su questo dispositivo potrebbe essere gestita al di fuori di Chrome. <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
 <translation id="9116548361133462832">Scopri di più sugli annunci in Chrome</translation>
-<translation id="9117930699067497412">Vivace</translation>
 <translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />, premi Tab poi Invio per riprendere il percorso e visualizzare le attività pertinenti nella tua cronologia di Chrome</translation>
 <translation id="9119042192571987207">Caricato</translation>
 <translation id="9122954576417194280">Compravendita di future e merci</translation>
 <translation id="912327514020027767">Gonne</translation>
-<translation id="9128016270925453879">I criteri sono stati caricati</translation>
 <translation id="9128870381267983090">Collegati alla rete</translation>
 <translation id="9131119348384879525">Vuoi acquisire contenuti riservati?</translation>
 <translation id="9133985615769429248">Se condividi questo dispositivo con altre persone, puoi usare il blocco schermo per verificare la tua identità ogni volta che usi una password salvata</translation>
@@ -4047,6 +4157,7 @@ Ulteriori dettagli:
 <translation id="9144951720726881238">Data di scadenza:</translation>
 <translation id="9148507642005240123">&amp;Annulla modifica</translation>
 <translation id="9148599396704355100">Prezzo basso</translation>
+<translation id="9150025764986957246">Puoi inserire:</translation>
 <translation id="9150045010208374699">Utilizzare la fotocamera</translation>
 <translation id="9150685862434908345">L'amministratore può modificare da remoto la configurazione del browser. L'attività svolta su questo dispositivo potrebbe essere gestita anche al di fuori di Chrome. <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
 <translation id="9154194610265714752">Aggiornato</translation>
@@ -4055,8 +4166,9 @@ Ulteriori dettagli:
 <translation id="9157595877708044936">Configurazione in corso...</translation>
 <translation id="9161794544616754735">{0,plural, =1{Il file <ph name="FILE_NAME" /> potrebbe includere contenuti sensibili}other{<ph name="FILE_COUNT" /> file potrebbero includere contenuti sensibili}}</translation>
 <translation id="9164742147345933553">os://flags</translation>
-<translation id="9165305804774426672">I siti che visiti possono anche stabilire i tuoi interessi in base alla tua attività sul sito. Ad esempio, se visiti un sito che vende scarpe da corsa a lunga distanza, il sito potrebbe decidere che ti interessa partecipare a maratone.</translation>
+<translation id="9165305804774426672">I siti che visiti possono anche stabilire i tuoi interessi in base alla tua attività sul sito. Ad esempio, se visiti un sito che vende scarpe da corsa per lunghe distanze, il sito potrebbe decidere che ti interessa partecipare a maratone.</translation>
 <translation id="9166851138617700776">Scopri di più sugli annunci suggeriti dai siti e sulla misurazione degli annunci</translation>
+<translation id="9167594211215946097">Avere accesso diretto alle stampanti</translation>
 <translation id="9168814207360376865">Consenti ai siti di controllare se hai metodi di pagamento salvati</translation>
 <translation id="9169664750068251925">Blocca sempre su questo sito</translation>
 <translation id="9169931577761441333">Aggiungi <ph name="APP_NAME" /> alla schermata Home</translation>
@@ -4082,6 +4194,7 @@ Ulteriori dettagli:
 <translation id="9207861905230894330">Impossibile aggiungere l'articolo.</translation>
 <translation id="9213433120051936369">Personalizza aspetto</translation>
 <translation id="9215416866750762878">Un'applicazione sta impedendo a Chrome di connettersi in sicurezza a questo sito.</translation>
+<translation id="92178312226016010">Stai monitorando questo prodotto.</translation>
 <translation id="9218430445555521422">Imposta come predefinito</translation>
 <translation id="9219103736887031265">Immagini</translation>
 <translation id="922152298093051471">Personalizza Chrome</translation>
@@ -4092,6 +4205,7 @@ Ulteriori dettagli:
 <translation id="936602727769022409">Potresti non riuscire più ad accedere al tuo Account Google. Chromium consiglia di cambiare subito la password. Ti verrà chiesto di eseguire l'accesso.</translation>
 <translation id="937457230470581909">Zoo, acquari e riserve</translation>
 <translation id="937804173274050966"><ph name="BEGIN_BOLD" />Quali dati vengono usati:<ph name="END_BOLD" /> gli argomenti degli annunci sono basati sulla tua cronologia di navigazione recente, ossia un elenco di siti che hai visitato usando Chrome su questo dispositivo.</translation>
+<translation id="937885410143139026">Dati inviati alla Console di amministrazione</translation>
 <translation id="939736085109172342">Nuova cartella</translation>
 <translation id="940053046584497293">Viaggi e trasporti</translation>
 <translation id="944540589955480312">Usa password e passkey salvate nel tuo Account Google</translation>

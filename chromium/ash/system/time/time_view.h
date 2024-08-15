@@ -32,6 +32,8 @@ class ClockModel;
 // The Date view, which is a date in a calendar icon, for vertical time view.
 // For horizontal time view, there's no Date Icon View and it shows a text date.
 class VerticalDateView : public views::View {
+  METADATA_HEADER(VerticalDateView, views::View)
+
  public:
   VerticalDateView();
   VerticalDateView(const VerticalDateView& other) = delete;
@@ -50,8 +52,8 @@ class VerticalDateView : public views::View {
  private:
   friend class TimeViewTest;
 
-  raw_ptr<views::ImageView, ExperimentalAsh> icon_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> text_label_ = nullptr;
+  raw_ptr<views::ImageView> icon_ = nullptr;
+  raw_ptr<views::Label> text_label_ = nullptr;
 };
 
 // Tray view used to display the current date or time based on the passed in
@@ -149,15 +151,14 @@ class ASH_EXPORT TimeView : public views::View, public ClockObserver {
   // container views own the associated views for vertical/horizontal, and the
   // container views are owned by this view by the views hierarchy.
   raw_ptr<views::View> horizontal_date_label_container_ = nullptr;
-  raw_ptr<views::Label, DanglingUntriaged | ExperimentalAsh>
-      horizontal_date_label_ = nullptr;
+  raw_ptr<views::Label, DanglingUntriaged> horizontal_date_label_ = nullptr;
   raw_ptr<views::View> vertical_date_view_container_ = nullptr;
   raw_ptr<VerticalDateView> vertical_date_view_ = nullptr;
 
   // Invokes UpdateText() when the displayed time should change.
   base::OneShotTimer timer_;
 
-  const raw_ptr<ClockModel, ExperimentalAsh> model_;
+  const raw_ptr<ClockModel> model_;
 
   // The type (kDate or kTime) of this time view.
   const Type type_;

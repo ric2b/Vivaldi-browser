@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void trunc_7d6ded() {
+  float res = 1.0f;
+}
+vertex float4 vertex_main() {
+  trunc_7d6ded();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  trunc_7d6ded();
+}
+kernel void compute_main() {
+  trunc_7d6ded();
+}

@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::file_header::{self, check_headers_recursively};
+use chrono::Datelike;
+use file_header::{check_headers_recursively, license::spdx::*};
 use std::path;
 
 pub(crate) fn check_license_headers(root: &path::Path) -> anyhow::Result<()> {
@@ -21,11 +22,14 @@ pub(crate) fn check_license_headers(root: &path::Path) -> anyhow::Result<()> {
     let results = check_headers_recursively(
         root,
         |p| !ignore.is_match(p),
-        file_header::license::apache_2("Google LLC"),
+        APACHE_2_0.build_header(YearCopyrightOwnerValue::new(
+            u32::try_from(chrono::Utc::now().year())?,
+            "Google LLC".to_string(),
+        )),
         4,
     )?;
 
-    for path in results.mismatched_files.iter() {
+    for path in results.no_header_files.iter() {
         eprintln!("Header not present: {path:?}");
     }
 
@@ -48,7 +52,10 @@ pub(crate) fn add_license_headers(root: &path::Path) -> anyhow::Result<()> {
     for p in file_header::add_headers_recursively(
         root,
         |p| !ignore.is_match(p),
-        file_header::license::apache_2("Google LLC"),
+        APACHE_2_0.build_header(YearCopyrightOwnerValue::new(
+            u32::try_from(chrono::Utc::now().year())?,
+            "Google LLC".to_string(),
+        )),
     )? {
         println!("Added header: {:?}", p);
     }
@@ -91,7 +98,7 @@ fn license_ignore_dirs() -> Vec<&'static str> {
         "**/.DS_Store",
         "**/fuzz/corpus/**",
         "**/.*.swp",
-        "**/Session.vim",
+        "**/*.vim",
         "**/*.properties",
         "**/third_party/**",
         "**/*.png",
@@ -99,5 +106,8 @@ fn license_ignore_dirs() -> Vec<&'static str> {
         "**/node_modules/**",
         "**/.angular/**",
         "**/.editorconfig",
+        "**/*.class",
+        "**/fuzz/artifacts/**",
+        "**/cmake-build-debug/**",
     ]
 }

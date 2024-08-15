@@ -50,6 +50,13 @@ class ProgramPrelude : public TIntermTraverser
                 break;
             case MetalShaderType::Fragment:
                 functionConstants();
+                mOut << "constant bool " << mtl::kSampleMaskWriteEnabledConstName << " = "
+                     << mtl::kMultisampledRenderingConstName;
+                if (ppc.usesDerivatives)
+                {
+                    mOut << " || " << mtl::kWriteHelperSampleMaskConstName;
+                }
+                mOut << ";\n";
                 break;
             case MetalShaderType::Compute:
                 ASSERT(0 && "compute shaders not currently supported");
@@ -124,13 +131,10 @@ class ProgramPrelude : public TIntermTraverser
     void is_vector();
     void is_matrix();
     void addressof();
-    void distance();
-    void length();
-    void dot();
-    void normalize();
-    void faceforward();
-    void reflect();
-    void refract();
+    void distanceScalar();
+    void faceforwardScalar();
+    void reflectScalar();
+    void refractScalar();
     void degrees();
     void radians();
     void mod();
@@ -141,16 +145,18 @@ class ProgramPrelude : public TIntermTraverser
     void preDecrementMatrix();
     void negateMatrix();
     void matmulAssign();
-    void atan();
     void int_clamp();
     void addMatrixScalarAssign();
     void subMatrixScalarAssign();
     void addMatrixScalar();
+    void addScalarMatrix();
     void subMatrixScalar();
+    void subScalarMatrix();
     void divMatrixScalar();
     void divMatrixScalarFast();
     void divMatrixScalarAssign();
     void divMatrixScalarAssignFast();
+    void divScalarMatrix();
     void tensor();
     void componentWiseDivide();
     void componentWiseDivideAssign();
@@ -432,231 +438,52 @@ ANGLE_ALWAYS_INLINE thread T * ANGLE_addressof(thread T &ref)
 }
 )")
 
-PROGRAM_PRELUDE_DECLARE(distance,
+PROGRAM_PRELUDE_DECLARE(distanceScalar,
                         R"(
-template <typename T, typename Enable = void>
-struct ANGLE_distance_impl
-{
-    static ANGLE_ALWAYS_INLINE ANGLE_scalar_of_t<T> exec(T x, T y)
-    {
-        return metal::distance(x, y);
-    }
-};
 template <typename T>
-struct ANGLE_distance_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
+ANGLE_ALWAYS_INLINE T ANGLE_distance_scalar(T x, T y)
 {
-    static ANGLE_ALWAYS_INLINE T exec(T x, T y)
-    {
-        return metal::abs(x - y);
-    }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE ANGLE_scalar_of_t<T> ANGLE_distance(T x, T y)
-{
-    return ANGLE_distance_impl<T>::exec(x, y);
-};
+    return metal::abs(x - y);
+}
 )",
-                        include_metal_geometric(),
-                        include_metal_math(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix())
+                        include_metal_math())
 
-PROGRAM_PRELUDE_DECLARE(length,
+PROGRAM_PRELUDE_DECLARE(faceforwardScalar,
                         R"(
-template <typename T, typename Enable = void>
-struct ANGLE_length_impl
-{
-    static ANGLE_ALWAYS_INLINE ANGLE_scalar_of_t<T> exec(T x)
-    {
-        return metal::length(x);
-    }
-};
 template <typename T>
-struct ANGLE_length_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
+ANGLE_ALWAYS_INLINE T ANGLE_faceforward_scalar(T n, T i, T nref)
 {
-    static ANGLE_ALWAYS_INLINE T exec(T x)
-    {
-        return metal::abs(x);
-    }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE ANGLE_scalar_of_t<T> ANGLE_length(T x)
-{
-    return ANGLE_length_impl<T>::exec(x);
-};
-)",
-                        include_metal_geometric(),
-                        include_metal_math(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix())
+    return nref * i < T(0) ? n : -n;
+}
+)")
 
-PROGRAM_PRELUDE_DECLARE(dot,
+PROGRAM_PRELUDE_DECLARE(reflectScalar,
                         R"(
-template <typename T, typename Enable = void>
-struct ANGLE_dot_impl
-{
-    static ANGLE_ALWAYS_INLINE ANGLE_scalar_of_t<T> exec(T x, T y)
-    {
-        return metal::dot(x, y);
-    }
-};
 template <typename T>
-struct ANGLE_dot_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
+ANGLE_ALWAYS_INLINE T ANGLE_reflect_scalar(T i, T n)
 {
-    static ANGLE_ALWAYS_INLINE T exec(T x, T y)
-    {
-        return x * y;
-    }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE ANGLE_scalar_of_t<T> ANGLE_dot(T x, T y)
-{
-    return ANGLE_dot_impl<T>::exec(x, y);
-};
-)",
-                        include_metal_geometric(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix())
+    return i - T(2) * (n * i) * n;
+}
+)")
 
-PROGRAM_PRELUDE_DECLARE(normalize,
+PROGRAM_PRELUDE_DECLARE(refractScalar,
                         R"(
-template <typename T, typename Enable = void>
-struct ANGLE_normalize_impl
-{
-    static ANGLE_ALWAYS_INLINE T exec(T x)
-    {
-        return metal::fast::normalize(x);
-    }
-};
 template <typename T>
-struct ANGLE_normalize_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
+ANGLE_ALWAYS_INLINE T ANGLE_refract_scalar(T i, T n, T eta)
 {
-    static ANGLE_ALWAYS_INLINE T exec(T x)
+    auto dotNI = n * i;
+    auto k = T(1) - eta * eta * (T(1) - dotNI * dotNI);
+    if (k < T(0))
     {
-        return ANGLE_sign(x);
+        return T(0);
     }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE T ANGLE_normalize(T x)
-{
-    return ANGLE_normalize_impl<T>::exec(x);
-};
+    else
+    {
+        return eta * i - (eta * dotNI + metal::sqrt(k)) * n;
+    }
+}
 )",
-                        include_metal_common(),
-                        include_metal_geometric(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix(),
-                        sign())
-
-PROGRAM_PRELUDE_DECLARE(faceforward,
-                        R"(
-template <typename T, typename Enable = void>
-struct ANGLE_faceforward_impl
-{
-    static ANGLE_ALWAYS_INLINE T exec(T n, T i, T nref)
-    {
-        return metal::faceforward(n, i, nref);
-    }
-};
-template <typename T>
-struct ANGLE_faceforward_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
-{
-    static ANGLE_ALWAYS_INLINE T exec(T n, T i, T nref)
-    {
-        return ANGLE_dot(nref, i) < T(0) ? n : -n;
-    }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE T ANGLE_faceforward(T n, T i, T nref)
-{
-    return ANGLE_faceforward_impl<T>::exec(n, i, nref);
-};
-)",
-                        include_metal_geometric(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix(),
-                        dot())
-
-PROGRAM_PRELUDE_DECLARE(reflect,
-                        R"(
-template <typename T, typename Enable = void>
-struct ANGLE_reflect_impl
-{
-    static ANGLE_ALWAYS_INLINE T exec(T i, T n)
-    {
-        return metal::reflect(i, n);
-    }
-};
-template <typename T>
-struct ANGLE_reflect_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
-{
-    static ANGLE_ALWAYS_INLINE T exec(T i, T n)
-    {
-        return i - T(2) * ANGLE_dot(n, i) * n;
-    }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE T ANGLE_reflect(T i, T n)
-{
-    return ANGLE_reflect_impl<T>::exec(i, n);
-};
-)",
-                        include_metal_geometric(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix(),
-                        dot())
-
-PROGRAM_PRELUDE_DECLARE(refract,
-                        R"(
-template <typename T, typename Enable = void>
-struct ANGLE_refract_impl
-{
-    static ANGLE_ALWAYS_INLINE T exec(T i, T n, ANGLE_scalar_of_t<T> eta)
-    {
-        return metal::refract(i, n, eta);
-    }
-};
-template <typename T>
-struct ANGLE_refract_impl<T, ANGLE_enable_if_t<ANGLE_is_scalar<T>::value>>
-{
-    static ANGLE_ALWAYS_INLINE T exec(T i, T n, T eta)
-    {
-        auto dotNI = n * i;
-        auto k = T(1) - eta * eta * (T(1) - dotNI * dotNI);
-        if (k < T(0))
-        {
-            return T(0);
-        }
-        else
-        {
-            return eta * i - (eta * dotNI + metal::sqrt(k)) * n;
-        }
-    }
-};
-template <typename T>
-ANGLE_ALWAYS_INLINE T ANGLE_refract(T i, T n, ANGLE_scalar_of_t<T> eta)
-{
-    return ANGLE_refract_impl<T>::exec(i, n, eta);
-};
-)",
-                        include_metal_math(),
-                        include_metal_geometric(),
-                        enable_if(),
-                        is_scalar(),
-                        is_vector(),
-                        is_matrix())
+                        include_metal_math())
 
 PROGRAM_PRELUDE_DECLARE(sign,
                         R"(
@@ -704,21 +531,6 @@ ANGLE_ALWAYS_INLINE int ANGLE_int_clamp(int value, int minValue, int maxValue)
     return ((value < minValue) ?  minValue : ((value > maxValue) ? maxValue : value));
 };
 )")
-
-PROGRAM_PRELUDE_DECLARE(atan,
-                        R"(
-template <typename T>
-ANGLE_ALWAYS_INLINE T ANGLE_atan(T yOverX)
-{
-    return metal::atan(yOverX);
-}
-template <typename T>
-ANGLE_ALWAYS_INLINE T ANGLE_atan(T y, T x)
-{
-    return metal::atan2(y, x);
-}
-)",
-                        include_metal_math())
 
 PROGRAM_PRELUDE_DECLARE(degrees, R"(
 template <typename T>
@@ -864,6 +676,19 @@ ANGLE_ALWAYS_INLINE metal::matrix<T, Cols, Rows> operator+(metal::matrix<T, Cols
 )",
                         addMatrixScalarAssign())
 
+PROGRAM_PRELUDE_DECLARE(addScalarMatrix,
+                        R"(
+template <typename T, int Cols, int Rows>
+ANGLE_ALWAYS_INLINE metal::matrix<T, Cols, Rows> operator+(T x, metal::matrix<T, Cols, Rows> m)
+{
+    for (size_t col = 0; col < Cols; ++col)
+    {
+        m[col] = x + m[col];
+    }
+    return m;
+}
+)")
+
 PROGRAM_PRELUDE_DECLARE(subMatrixScalarAssign,
                         R"(
 template <typename T, int Cols, int Rows>
@@ -887,6 +712,19 @@ ANGLE_ALWAYS_INLINE metal::matrix<T, Cols, Rows> operator-(metal::matrix<T, Cols
 }
 )",
                         subMatrixScalarAssign())
+
+PROGRAM_PRELUDE_DECLARE(subScalarMatrix,
+                        R"(
+template <typename T, int Cols, int Rows>
+ANGLE_ALWAYS_INLINE metal::matrix<T, Cols, Rows> operator-(T x, metal::matrix<T, Cols, Rows> m)
+{
+    for (size_t col = 0; col < Cols; ++col)
+    {
+        m[col] = x - m[col];
+    }
+    return m;
+}
+)")
 
 PROGRAM_PRELUDE_DECLARE(divMatrixScalarAssignFast,
                         R"(
@@ -940,6 +778,19 @@ ANGLE_ALWAYS_INLINE metal::matrix<T, Cols, Rows> operator/(metal::matrix<T, Cols
 #endif
 )",
                         divMatrixScalarAssign())
+
+PROGRAM_PRELUDE_DECLARE(divScalarMatrix,
+                        R"(
+template <typename T, int Cols, int Rows>
+ANGLE_ALWAYS_INLINE metal::matrix<T, Cols, Rows> operator/(T x, metal::matrix<T, Cols, Rows> m)
+{
+    for (size_t col = 0; col < Cols; ++col)
+    {
+        m[col] = x / m[col];
+    }
+    return m;
+}
+)")
 
 PROGRAM_PRELUDE_DECLARE(componentWiseDivide, R"(
 template <typename T, int Cols, int Rows>
@@ -1515,6 +1366,7 @@ PROGRAM_PRELUDE_DECLARE(functionConstants,
 #define ANGLE_MULTISAMPLED_RENDERING_INDEX    3
 #define ANGLE_DEPTH_WRITE_ENABLED_INDEX       4
 #define ANGLE_EMULATE_ALPHA_TO_COVERAGE_INDEX 5
+#define ANGLE_WRITE_HELPER_SAMPLE_MASK_INDEX  6
 
 constant bool ANGLEUseSampleCompareGradient [[function_constant(ANGLE_SAMPLE_COMPARE_GRADIENT_INDEX)]];
 constant bool ANGLEUseSampleCompareLod      [[function_constant(ANGLE_SAMPLE_COMPARE_LOD_INDEX)]];
@@ -1522,6 +1374,7 @@ constant bool ANGLERasterizerDisabled       [[function_constant(ANGLE_RASTERIZAT
 constant bool ANGLEMultisampledRendering    [[function_constant(ANGLE_MULTISAMPLED_RENDERING_INDEX)]];
 constant bool ANGLEDepthWriteEnabled        [[function_constant(ANGLE_DEPTH_WRITE_ENABLED_INDEX)]];
 constant bool ANGLEEmulateAlphaToCoverage   [[function_constant(ANGLE_EMULATE_ALPHA_TO_COVERAGE_INDEX)]];
+constant bool ANGLEWriteHelperSampleMask    [[function_constant(ANGLE_WRITE_HELPER_SAMPLE_MASK_INDEX)]];
 
 #define ANGLE_ALPHA0
 )")
@@ -3641,32 +3494,76 @@ void ProgramPrelude::visitOperator(TOperator op,
         case TOperator::EOpDegrees:
             degrees();
             break;
-        case TOperator::EOpAtan:
-            atan();
-            break;
         case TOperator::EOpMod:
             mod();
             break;
         case TOperator::EOpRefract:
-            refract();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
+            else
+            {
+                refractScalar();
+            }
             break;
         case TOperator::EOpDistance:
-            distance();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
+            else
+            {
+                distanceScalar();
+            }
             break;
         case TOperator::EOpLength:
-            length();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
+            else
+            {
+                // metal::abs
+                include_metal_math();
+            }
             break;
         case TOperator::EOpDot:
-            dot();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
             break;
         case TOperator::EOpNormalize:
-            normalize();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
+            else
+            {
+                // metal::sign
+                include_metal_common();
+            }
             break;
         case TOperator::EOpFaceforward:
-            faceforward();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
+            else
+            {
+                faceforwardScalar();
+            }
             break;
         case TOperator::EOpReflect:
-            reflect();
+            if (argType0->isVector())
+            {
+                include_metal_geometric();
+            }
+            else
+            {
+                reflectScalar();
+            }
             break;
 
         case TOperator::EOpSin:
@@ -3674,6 +3571,7 @@ void ProgramPrelude::visitOperator(TOperator op,
         case TOperator::EOpTan:
         case TOperator::EOpAsin:
         case TOperator::EOpAcos:
+        case TOperator::EOpAtan:
         case TOperator::EOpSinh:
         case TOperator::EOpCosh:
         case TOperator::EOpTanh:
@@ -3794,6 +3692,10 @@ void ProgramPrelude::visitOperator(TOperator op,
             {
                 addMatrixScalar();
             }
+            if (argType0->isScalar() && argType1->isMatrix())
+            {
+                addScalarMatrix();
+            }
             break;
 
         case TOperator::EOpAddAssign:
@@ -3807,6 +3709,10 @@ void ProgramPrelude::visitOperator(TOperator op,
             if (argType0->isMatrix() && argType1->isScalar())
             {
                 subMatrixScalar();
+            }
+            if (argType0->isScalar() && argType1->isMatrix())
+            {
+                subScalarMatrix();
             }
             break;
 
@@ -3828,6 +3734,10 @@ void ProgramPrelude::visitOperator(TOperator op,
                 {
                     divMatrixScalar();
                 }
+            }
+            if (argType0->isScalar() && argType1->isMatrix())
+            {
+                divScalarMatrix();
             }
             break;
 

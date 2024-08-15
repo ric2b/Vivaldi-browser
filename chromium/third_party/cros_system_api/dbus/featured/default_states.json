@@ -1,0 +1,9 @@
+{
+  "CrOSEarlyBootTestFeature" : {
+    "enabled_by_default": "true",
+    "params": {
+      "test_key_1": "test_value_1",
+      "test_key_2": "test_value_2"
+    }
+  }
+}

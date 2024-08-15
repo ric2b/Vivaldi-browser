@@ -50,8 +50,8 @@ ContextMenuController::ContextMenuController(
   // known.
   gfx::Point point(params_->properties.rect.x, params_->properties.rect.y);
   int height = params_->properties.rect.height;
-  if (params_->properties.origin == Origin::ORIGIN_TOPLEFT ||
-      params_->properties.origin == Origin::ORIGIN_TOPRIGHT) {
+  if (params_->properties.origin == Origin::kTopLeft ||
+      params_->properties.origin == Origin::kTopRight) {
     height = 0;
   }
   int width = params_->properties.rect.width;
@@ -177,18 +177,18 @@ void ContextMenuController::PopulateModel(const Element& child,
     }
     const std::u16string label = base::UTF8ToUTF16(item.name);
     switch (item.type) {
-      case context_menu::ITEM_TYPE_COMMAND:
+      case context_menu::ItemType::kCommand:
         menu_model->AddItem(id, label);
         break;
-      case context_menu::ITEM_TYPE_CHECKBOX:
+      case context_menu::ItemType::kCheckbox:
         menu_model->AddCheckItem(id, label);
         id_to_checked_map_[id] = item.checked.value_or(false);
         break;
-      case context_menu::ITEM_TYPE_RADIO:
+      case context_menu::ItemType::kRadio:
         menu_model->AddRadioItem(id, label, item.radiogroup.value_or(0));
         id_to_checked_map_[id] = item.checked.value_or(false);
         break;
-      case context_menu::ITEM_TYPE_FOLDER: {
+      case context_menu::ItemType::kFolder: {
         ui::SimpleMenuModel* child_menu_model;
         if (rv_context_menu_) {
           child_menu_model = new ui::SimpleMenuModel(rv_context_menu_);
@@ -203,7 +203,7 @@ void ContextMenuController::PopulateModel(const Element& child,
         }
         SanitizeModel(child_menu_model);
       } break;
-      case context_menu::ITEM_TYPE_NONE:
+      case context_menu::ItemType::kNone:
         return;
     }
     if (item.shortcut && !item.shortcut->empty()) {
@@ -258,7 +258,7 @@ void ContextMenuController::PopulateModel(const Element& child,
     const Container& container = *child.container;
     int id = container.id + IDC_VIV_MENU_FIRST + 1;
     switch (container.content) {
-      case context_menu::CONTAINER_CONTENT_PWA:
+      case context_menu::ContainerContent::kPwa:
         pwa_controller_ = std::make_unique<PWAMenuController>(
             FindBrowserForEmbedderWebContents(window_web_contents_));
         pwa_controller_->PopulateModel(
@@ -283,7 +283,7 @@ ui::SimpleMenuModel* ContextMenuController::GetContainerModel(
     ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
 
-  if (container.mode == context_menu::CONTAINER_MODE_FOLDER) {
+  if (container.mode == context_menu::ContainerMode::kFolder) {
     const std::u16string label = base::UTF8ToUTF16(container.name);
     ui::SimpleMenuModel* child_menu_model;
     if (rv_context_menu_) {
@@ -321,7 +321,7 @@ void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
                                         const gfx::Rect& anchor_bounds) const {
   using Origin = extensions::vivaldi::context_menu::Origin;
 
-  if (params_->properties.origin == Origin::ORIGIN_TOPRIGHT) {
+  if (params_->properties.origin == Origin::kTopRight) {
     // Place left edge of menu to the right of anchor area. If not enough room
     // to fit inside monitor area move it to the left of the anchor area.
     menu_bounds->set_x(anchor_bounds.right());
@@ -329,7 +329,7 @@ void ContextMenuController::SetPosition(gfx::Rect* menu_bounds,
     if (menu_bounds->right() > monitor_bounds.right()) {
       menu_bounds->set_x(anchor_bounds.x() - menu_bounds->width());
     }
-  } else if (params_->properties.origin == Origin::ORIGIN_TOPLEFT) {
+  } else if (params_->properties.origin == Origin::kTopLeft) {
     // Place right edge of menu to the left of anchor area. If not enough room
     // to fit inside monitor area move it to the right of the anchor area.
     menu_bounds->set_x(anchor_bounds.x() - menu_bounds->width());

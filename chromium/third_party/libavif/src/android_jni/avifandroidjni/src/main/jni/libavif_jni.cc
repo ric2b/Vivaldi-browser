@@ -24,6 +24,10 @@
   JNIEXPORT RETURN_TYPE Java_org_aomedia_avif_android_AvifDecoder_##NAME( \
       JNIEnv* env, jobject thiz, ##__VA_ARGS__)
 
+#define IGNORE_UNUSED_JNI_PARAMETERS \
+  (void) env; \
+  (void) thiz
+
 namespace {
 
 // RAII wrapper class that properly frees the decoder related objects on
@@ -101,16 +105,6 @@ avifResult AvifImageToBitmap(JNIEnv* const env,
     LOGE("AndroidBitmap_getInfo failed.");
     return AVIF_RESULT_UNKNOWN_ERROR;
   }
-  // Ensure that the bitmap is large enough to store the decoded image.
-  if (bitmap_info.width < decoder->crop.width ||
-      bitmap_info.height < decoder->crop.height) {
-    LOGE(
-        "Bitmap is not large enough to fit the image. Bitmap %dx%d Image "
-        "%dx%d.",
-        bitmap_info.width, bitmap_info.height, decoder->decoder->image->width,
-        decoder->decoder->image->height);
-    return AVIF_RESULT_UNKNOWN_ERROR;
-  }
   // Ensure that the bitmap format is RGBA_8888, RGB_565 or RGBA_F16.
   if (bitmap_info.format != ANDROID_BITMAP_FORMAT_RGBA_8888 &&
       bitmap_info.format != ANDROID_BITMAP_FORMAT_RGB_565 &&
@@ -146,6 +140,29 @@ avifResult AvifImageToBitmap(JNIEnv* const env,
     }
     image = cropped_image.get();
   }
+  std::unique_ptr<avifImage, decltype(&avifImageDestroy)> image_copy(
+      nullptr, avifImageDestroy);
+  if (image->width != bitmap_info.width ||
+      image->height != bitmap_info.height) {
+    // If the avifImage does not own the planes, then create a copy for safe
+    // scaling.
+    if (!image->imageOwnsYUVPlanes || !image->imageOwnsAlphaPlane) {
+      image_copy.reset(avifImageCreateEmpty());
+      res = avifImageCopy(image_copy.get(), image, AVIF_PLANES_ALL);
+      if (res != AVIF_RESULT_OK) {
+        LOGE("Failed to make a copy of the image for scaling. Status: %d", res);
+        return res;
+      }
+      image = image_copy.get();
+    }
+    avifDiagnostics diag;
+    res = avifImageScale(image, bitmap_info.width, bitmap_info.height, &diag);
+    if (res != AVIF_RESULT_OK) {
+      LOGE("Failed to scale image. Status: %d", res);
+      return res;
+    }
+  }
+
   avifRGBImage rgb_image;
   avifRGBImageSetDefaults(&rgb_image, image);
   if (bitmap_info.format == ANDROID_BITMAP_FORMAT_RGBA_F16) {
@@ -220,6 +237,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
 }
 
 FUNC(jboolean, isAvifImage, jobject encoded, int length) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   const uint8_t* const buffer =
       static_cast<const uint8_t*>(env->GetDirectBufferAddress(encoded));
   const avifROData avif = {buffer, static_cast<size_t>(length)};
@@ -242,6 +260,7 @@ FUNC(jboolean, isAvifImage, jobject encoded, int length) {
   if (var == nullptr) return ret
 
 FUNC(jboolean, getInfo, jobject encoded, int length, jobject info) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   const uint8_t* const buffer =
       static_cast<const uint8_t*>(env->GetDirectBufferAddress(encoded));
   AvifDecoderWrapper decoder;
@@ -266,6 +285,7 @@ FUNC(jboolean, getInfo, jobject encoded, int length, jobject info) {
 
 FUNC(jboolean, decode, jobject encoded, int length, jobject bitmap,
      jint threads) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   if (threads < 0) {
     LOGE("Invalid value for threads (%d).", threads);
     return false;
@@ -352,28 +372,33 @@ FUNC(jlong, createDecoder, jobject encoded, jint length, jint threads) {
 #undef CHECK_EXCEPTION
 
 FUNC(jint, nextFrame, jlong jdecoder, jobject bitmap) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   AvifDecoderWrapper* const decoder =
       reinterpret_cast<AvifDecoderWrapper*>(jdecoder);
   return DecodeNextImage(env, decoder, bitmap);
 }
 
 FUNC(jint, nextFrameIndex, jlong jdecoder) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   AvifDecoderWrapper* const decoder =
       reinterpret_cast<AvifDecoderWrapper*>(jdecoder);
   return decoder->decoder->imageIndex + 1;
 }
 
 FUNC(jint, nthFrame, jlong jdecoder, jint n, jobject bitmap) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   AvifDecoderWrapper* const decoder =
       reinterpret_cast<AvifDecoderWrapper*>(jdecoder);
   return DecodeNthImage(env, decoder, n, bitmap);
 }
 
 FUNC(jstring, resultToString, jint result) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   return env->NewStringUTF(avifResultToString(static_cast<avifResult>(result)));
 }
 
 FUNC(jstring, versionString) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   char codec_versions[256];
   avifCodecVersions(codec_versions);
   char libyuv_version[64];
@@ -391,6 +416,7 @@ FUNC(jstring, versionString) {
 }
 
 FUNC(void, destroyDecoder, jlong jdecoder) {
+  IGNORE_UNUSED_JNI_PARAMETERS;
   AvifDecoderWrapper* const decoder =
       reinterpret_cast<AvifDecoderWrapper*>(jdecoder);
   delete decoder;

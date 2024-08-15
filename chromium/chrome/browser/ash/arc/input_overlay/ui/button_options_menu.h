@@ -16,6 +16,10 @@ namespace ash {
 class IconButton;
 }  // namespace ash
 
+namespace views {
+class Label;
+}  // namespace views
+
 namespace arc::input_overlay {
 
 class Action;
@@ -29,18 +33,19 @@ class DisplayOverlayController;
 //
 // View looks like this:
 // +----------------------------------+
-// ||icon|  |"Button options"|  |icon||
+// ||"Button options"|          |icon||
 // |----------------------------------|
-// ||"Key assignment"|                |
+// ||"Buttons let..."|                |
 // |----------------------------------|
+// |  |"Choose your button type:"   | |
 // |  |feature_tile|  |feature_title| |
 // |  |            |  |             | |
 // |----------------------------------|
 // ||"Selected key"       |key labels||
 // ||"key"                            |
 // |----------------------------------|
-// ||"Button label"                 > |
-// ||"Unassigned"                     |
+// -----------------------------------|
+// ||           Done button          ||
 // +----------------------------------+
 class ButtonOptionsMenu : public ArrowContainer, public TouchInjectorObserver {
  public:
@@ -50,20 +55,23 @@ class ButtonOptionsMenu : public ArrowContainer, public TouchInjectorObserver {
   ButtonOptionsMenu& operator=(const ButtonOptionsMenu&) = delete;
   ~ButtonOptionsMenu() override;
 
+  void UpdateWidget();
+
   Action* action() const { return action_; }
 
  private:
   friend class ButtonOptionsMenuTest;
   friend class EditLabelTest;
-  friend class EditingListTest;
+  friend class OverlayViewTestBase;
 
   void Init();
 
   // Add UI components.
   void AddHeader();
   void AddEditTitle();
-  void AddActionEdit();
   void AddActionSelection();
+  void AddActionEdit();
+  void AddDoneButton();
 
   // Functions related to buttons.
   void OnTrashButtonPressed();
@@ -81,9 +89,10 @@ class ButtonOptionsMenu : public ArrowContainer, public TouchInjectorObserver {
   const raw_ptr<DisplayOverlayController> controller_ = nullptr;
   raw_ptr<Action, DanglingUntriaged> action_ = nullptr;
 
-  raw_ptr<ash::IconButton> done_button_ = nullptr;
+  raw_ptr<ash::IconButton> trash_button_ = nullptr;
   raw_ptr<ActionTypeButtonGroup> button_group_ = nullptr;
   raw_ptr<ActionEditView, DisableDanglingPtrDetection> action_edit_ = nullptr;
+  raw_ptr<views::Label> action_name_label_ = nullptr;
 };
 
 }  // namespace arc::input_overlay

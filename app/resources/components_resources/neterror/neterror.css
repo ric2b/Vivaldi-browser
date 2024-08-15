@@ -33,26 +33,26 @@ a {
 .icon-generic {
   /* Can't access chrome://theme/IDR_ERROR_NETWORK_GENERIC from an untrusted
    * renderer process, so embed the resource manually. */
-  content: -webkit-image-set(
+  content: image-set(
       url(default_100_percent/vivaldi/error_network_generic.png) 1x,
       url(default_200_percent/vivaldi/error_network_generic.png) 2x);
 }
 
 .icon-info {
-  content: -webkit-image-set(
+  content: image-set(
       url(../../../../chromium/components/security_interstitials/core/browser/resources/images/1x/info.png) 1x,
       url(../../../../chromium/components/security_interstitials/core/browser/resources/images/2x/info.png) 2x);
 }
 
 .icon-offline {
-  content: -webkit-image-set(
+  content: image-set(
       url(default_100_percent/vivaldi/100-error-offline.png) 1x,
       url(default_200_percent/vivaldi/200-error-offline.png) 2x);
   position: relative;
 }
 
 .icon-disabled {
-  content: -webkit-image-set(
+  content: image-set(
       url(../../../../chromium/components/neterror/resources/images/default_100_percent/offline/100-disabled.png) 1x,
       url(../../../../chromium/components/neterror/resources/images/default_200_percent/offline/200-disabled.png) 2x);
   width: 112px;
@@ -661,7 +661,7 @@ html[subframe] body {
 }
 
 #download-button::before {
-  background: -webkit-image-set(
+  background: image-set(
       url(../../../chromium/components/resources/default_100_percent/neterror/download.png) 1x,
       url(../../../chromium/components/resources/default_200_percent/neterror/download.png) 2x)
     no-repeat;
@@ -1058,6 +1058,10 @@ html[dir='rtl'].offline .icon-offline {
   }
 }
 
+#vivaldia {
+  padding-top: 0px;
+}
+
 .vivaldia-section {
   float: left;
   font-size: 16px;
@@ -1083,5 +1087,4 @@ html[dir='rtl'].offline .icon-offline {
   .logo-holder {
     float:right;
   }
-
 }

@@ -125,14 +125,14 @@ class ArcVmDataMigratorClientImpl : public ArcVmDataMigratorClient {
   void OnBoolMethod(chromeos::DBusMethodCallback<bool> callback,
                     dbus::Response* response) {
     if (!response) {
-      std::move(callback).Run(absl::nullopt);
+      std::move(callback).Run(std::nullopt);
       return;
     }
     dbus::MessageReader reader(response);
     bool result = false;
     if (!reader.PopBool(&result)) {
       LOG(ERROR) << "Invalid response: " << response->ToString();
-      std::move(callback).Run(absl::nullopt);
+      std::move(callback).Run(std::nullopt);
       return;
     }
     std::move(callback).Run(result);
@@ -141,21 +141,21 @@ class ArcVmDataMigratorClientImpl : public ArcVmDataMigratorClient {
   void OnGetAndroidDataInfoResponse(GetAndroidDataInfoCallback callback,
                                     dbus::Response* response) {
     if (!response) {
-      std::move(callback).Run(absl::nullopt);
+      std::move(callback).Run(std::nullopt);
       return;
     }
     dbus::MessageReader reader(response);
     arc::data_migrator::GetAndroidDataInfoResponse proto;
     if (!reader.PopArrayOfBytesAsProto(&proto)) {
       LOG(ERROR) << "Invalid response: " << response->ToString();
-      std::move(callback).Run(absl::nullopt);
+      std::move(callback).Run(std::nullopt);
       return;
     }
     std::move(callback).Run(std::move(proto));
   }
 
   base::ObserverList<Observer> observers_;
-  raw_ptr<dbus::ObjectProxy, ExperimentalAsh> proxy_;
+  raw_ptr<dbus::ObjectProxy> proxy_;
   base::WeakPtrFactory<ArcVmDataMigratorClientImpl> weak_ptr_factory_{this};
 };
 

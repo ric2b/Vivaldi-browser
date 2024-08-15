@@ -31,6 +31,8 @@
 #include "ui/android/color_utils_android.h"
 #include "url/gurl.h"
 
+using base::android::ConvertJavaStringToUTF16;
+using base::android::ConvertJavaStringToUTF8;
 using base::android::JavaParamRef;
 using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
@@ -40,7 +42,6 @@ namespace {
 // Called after the update either succeeds or fails.
 void OnUpdated(const JavaRef<jobject>& java_callback,
                webapps::WebApkInstallResult result,
-               std::unique_ptr<std::string> serialized_proto,
                bool relax_updates,
                const std::string& webapk_package) {
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -254,7 +255,6 @@ static void JNI_WebApkUpdateManager_UpdateWebApkFromFile(
         FROM_HERE,
         base::BindOnce(&OnUpdated, callback_ref,
                        webapps::WebApkInstallResult::FAILURE,
-                       nullptr /* serialized_proto */,
                        false /* relax_updates */, "" /* webapk_package */));
     return;
   }

@@ -39,7 +39,7 @@ class CONTENT_EXPORT MojoNetworkEventsDelegate
 
  private:
   mojo::Remote<auction_worklet::mojom::AuctionNetworkEventsHandler> remote_;
-  absl::optional<std::string> request_id_;
+  std::optional<std::string> request_id_;
 };
 // Handles the creation of a new remote and binds it's receiver to
 // the same implementation as the remote passed in.
@@ -50,4 +50,4 @@ CreateNewAuctionNetworkEventsHandlerRemote(
 
 }  // namespace auction_worklet
 
-#endif  // CONTENT_SERVICES_AUCTION_WORKLET_PUBLIC_CPP_AUCTION_DEVTOOLS_DELEGATE_H_
+#endif  // CONTENT_SERVICES_AUCTION_WORKLET_PUBLIC_CPP_AUCTION_NETWORK_EVENTS_DELEGATE_H_

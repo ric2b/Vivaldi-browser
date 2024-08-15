@@ -328,7 +328,10 @@ public:
     /// What type of transfer buffer is supported?
     TransferBufferType transferBufferType() const { return fTransferBufferType; }
 
-    /// How are GrFences implemented?
+    /** Supports using GrGLsync. */
+    bool fenceSyncSupport() const { return fFenceSyncSupport; }
+
+    /// How is GrGLsync implemented?
     FenceType fenceType() const { return fFenceType; }
 
     /// How are multi draws implemented (if at all)?
@@ -622,6 +625,7 @@ private:
     bool fUseSamplerObjects : 1;
     bool fTextureSwizzleSupport : 1;
     bool fTiledRenderingSupport : 1;
+    bool fFenceSyncSupport : 1;
     bool fFBFetchRequiresEnablePerSample : 1;
     bool fSRGBWriteControl : 1;
     bool fSkipErrorChecks : 1;
@@ -645,6 +649,7 @@ private:
     bool fRebindColorAttachmentAfterCheckFramebufferStatus : 1;
     bool fFlushBeforeWritePixels : 1;
     bool fDisableScalingCopyAsDraws : 1;
+    bool fPadRG88TransferAlignment : 1;
     int fMaxInstancesPerDrawWithoutCrashing = 0;
 
     uint32_t fBlitFramebufferFlags = kNoSupport_BlitFramebufferFlag;

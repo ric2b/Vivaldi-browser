@@ -13,15 +13,8 @@
 // limitations under the License.
 
 //! Adapter for using rand_core 0.5 RNGs with code that expects rand_core 0.5 RNGs.
+
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used
-)]
 
 /// A trivial adapter to expose rand 1.0/rand_core 0.6 rngs to ed25519-dalek's rand_core 0.5 types,
 /// which we import under a separate name so there's no clash.

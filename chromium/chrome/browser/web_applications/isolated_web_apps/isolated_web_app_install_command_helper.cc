@@ -5,6 +5,7 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_command_helper.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,7 +44,6 @@
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "crypto/random.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "url/gurl.h"
@@ -61,13 +61,10 @@ constexpr unsigned kRandomDirNameOctetsLength = 10;
 // to the 16 characters long directory name. 80 bits should be long
 // enough not to care about collisions.
 std::string GenerateRandomDirName() {
-  std::array<char, kRandomDirNameOctetsLength> random_array;
-  crypto::RandBytes(random_array.data(), random_array.size());
-  base::StringPiece random_string_piece(random_array.data(),
-                                        random_array.size());
-  std::string dir_name_upper_case = Base32Encode(
-      random_string_piece, base32::Base32EncodePolicy::OMIT_PADDING);
-  return base::ToLowerASCII(dir_name_upper_case);
+  std::array<uint8_t, kRandomDirNameOctetsLength> random_array;
+  crypto::RandBytes(random_array);
+  return base::ToLowerASCII(base32::Base32Encode(
+      random_array, base32::Base32EncodePolicy::OMIT_PADDING));
 }
 
 base::expected<base::FilePath, std::string> CopySwbnToIwaDir(
@@ -424,7 +421,7 @@ void IsolatedWebAppInstallCommandHelper::
 
 base::expected<WebAppInstallInfo, std::string>
 IsolatedWebAppInstallCommandHelper::ValidateManifestAndCreateInstallInfo(
-    const absl::optional<base::Version>& expected_version,
+    const std::optional<base::Version>& expected_version,
     const ManifestAndUrl& manifest_and_url) {
   const blink::mojom::Manifest& manifest = *manifest_and_url.manifest;
   const GURL& manifest_url = manifest_and_url.url;
@@ -511,7 +508,7 @@ void IsolatedWebAppInstallCommandHelper::RetrieveIconsAndPopulateInstallInfo(
     content::WebContents& web_contents,
     base::OnceCallback<void(base::expected<WebAppInstallInfo, std::string>)>
         callback) {
-  base::flat_set<GURL> icon_urls = GetValidIconUrlsToDownload(install_info);
+  IconUrlSizeSet icon_urls = GetValidIconUrlsToDownload(install_info);
   data_retriever_->GetIcons(
       &web_contents, std::move(icon_urls),
       /*skip_page_favicons=*/true,

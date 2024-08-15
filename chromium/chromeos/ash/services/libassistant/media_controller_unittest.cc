@@ -107,7 +107,7 @@ class MediaManagerMock : public assistant_client::MediaManager {
   }
 
  private:
-  raw_ptr<Listener, ExperimentalAsh> listener_ = nullptr;
+  raw_ptr<Listener> listener_ = nullptr;
 };
 
 }  // namespace
@@ -123,9 +123,6 @@ class AssistantMediaControllerTest : public testing::Test {
   void SetUp() override {
     service_tester_.Start();
     service_tester_.assistant_manager().SetMediaManager(&media_manager_);
-    service_tester_.assistant_manager()
-        .device_state_listener()
-        ->OnStartFinished();
     media_controller_->OnAssistantClientRunning(&assistant_client());
   }
 
@@ -337,7 +334,7 @@ TEST_F(AssistantMediaControllerTest, ShouldSupportPlayAndroidMedia) {
   android_app_info->set_app_version(111);
   media_item->set_uri("http://the/uri");
 
-  absl::optional<AndroidAppInfo> actual;
+  std::optional<AndroidAppInfo> actual;
   EXPECT_CALL(delegate(), PlayAndroidMedia)
       .WillOnce([&](const AndroidAppInfo& a) { actual = a; });
 

@@ -5,9 +5,9 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_STRINGS_SAFE_SPRINTF_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_STRINGS_SAFE_SPRINTF_H_
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 
 #include "build/build_config.h"
 
@@ -16,14 +16,14 @@
 #include <unistd.h>
 #endif
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
 
 namespace partition_alloc::internal::base::strings {
 
 #if defined(COMPILER_MSVC)
 // Define ssize_t inside of our namespace.
 #if defined(_WIN64)
-typedef __int64 ssize_t;
+typedef int64_t ssize_t;
 #else
 typedef long ssize_t;
 #endif
@@ -178,18 +178,20 @@ struct Arg {
     integer.width = sizeof(long long);
   }
 
-  // nullptr_t would be ambiguous between char* and const char*; to get
+  // std::nullptr_t would be ambiguous between char* and const char*; to get
   // consistent behavior with NULL, which prints with all three of %d, %p, and
   // %s, treat it as an integer zero internally.
   //
   // Warning: don't just do Arg(NULL) here because in some libcs, NULL is an
-  // alias for nullptr!
-  Arg(nullptr_t p) : type(INT) {
+  // alias for std::nullptr!
+  //
+  // NOLINTNEXTLINE(runtime/explicit)
+  Arg(std::nullptr_t p) : type(INT) {
     integer.i = 0;
     // Internally, SafeSprintf expects to represent nulls as integers whose
     // width is equal to sizeof(NULL), which is not necessarily equal to
-    // sizeof(nullptr_t) - eg, on Windows, NULL is defined to 0 (with size 4)
-    // while nullptr_t is of size 8.
+    // sizeof(std::nullptr_t) - eg, on Windows, NULL is defined to 0 (with size
+    // 4) while std::nullptr_t is of size 8.
     integer.width = sizeof(NULL);
   }
 
@@ -201,12 +203,14 @@ struct Arg {
   template <class T>
   Arg(T* p) : ptr((void*)p), type(POINTER) {}
 
+  struct Integer {
+    int64_t i;
+    unsigned char width;
+  };
+
   union {
     // An integer-like value.
-    struct {
-      int64_t i;
-      unsigned char width;
-    } integer;
+    Integer integer;
 
     // A C-style text string.
     const char* str;
@@ -219,7 +223,7 @@ struct Arg {
 
 // This is the internal function that performs the actual formatting of
 // an snprintf()-style format string.
-PA_COMPONENT_EXPORT(PARTITION_ALLOC)
+PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE)
 ssize_t SafeSNPrintf(char* buf,
                      size_t sz,
                      const char* fmt,
@@ -230,9 +234,10 @@ ssize_t SafeSNPrintf(char* buf,
 // In debug builds, allow unit tests to artificially lower the kSSizeMax
 // constant that is used as a hard upper-bound for all buffers. In normal
 // use, this constant should always be std::numeric_limits<ssize_t>::max().
-PA_COMPONENT_EXPORT(PARTITION_ALLOC)
+PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE)
 void SetSafeSPrintfSSizeMaxForTest(size_t max);
-PA_COMPONENT_EXPORT(PARTITION_ALLOC) size_t GetSafeSPrintfSSizeMaxForTest();
+PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE)
+size_t GetSafeSPrintfSSizeMaxForTest();
 #endif
 
 }  // namespace internal
@@ -254,7 +259,7 @@ ssize_t SafeSPrintf(char (&buf)[N], const char* fmt, Args... args) {
 }
 
 // Fast-path when we don't actually need to substitute any arguments.
-PA_COMPONENT_EXPORT(PARTITION_ALLOC)
+PA_COMPONENT_EXPORT(PARTITION_ALLOC_BASE)
 ssize_t SafeSNPrintf(char* buf, size_t N, const char* fmt);
 template <size_t N>
 inline ssize_t SafeSPrintf(char (&buf)[N], const char* fmt) {

@@ -66,10 +66,6 @@
 #include "extensions/common/extension_set.h"
 #endif
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "components/supervised_user/core/browser/supervised_user_service.h"
-#endif
 namespace {
 
 struct NodeTitleComparator {
@@ -1247,7 +1243,7 @@ void CookiesTreeModel::GetIcons(std::vector<ui::ImageModel>* icons) {
           IDR_COOKIE_STORAGE_ICON)));
 }
 
-absl::optional<size_t> CookiesTreeModel::GetIconIndex(ui::TreeModelNode* node) {
+std::optional<size_t> CookiesTreeModel::GetIconIndex(ui::TreeModelNode* node) {
   CookieTreeNode* ct_node = static_cast<CookieTreeNode*>(node);
   switch (ct_node->GetDetailedInfo().node_type) {
     case CookieTreeNode::DetailedInfo::TYPE_COOKIE:
@@ -1266,7 +1262,7 @@ absl::optional<size_t> CookiesTreeModel::GetIconIndex(ui::TreeModelNode* node) {
     case CookieTreeNode::DetailedInfo::TYPE_HOST:
     case CookieTreeNode::DetailedInfo::TYPE_QUOTA:
     default:
-      return absl::nullopt;
+      return std::nullopt;
   }
 }
 
@@ -1698,27 +1694,7 @@ void CookiesTreeModel::MaybeNotifyBatchesEnded() {
 // static
 browsing_data::CookieHelper::IsDeletionDisabledCallback
 CookiesTreeModel::GetCookieDeletionDisabledCallback(Profile* profile) {
-  if (base::FeatureList::IsEnabled(
-          supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn)) {
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-    return base::BindRepeating(
-        [](content::BrowserContext* browser_context, const GURL& url) {
-          supervised_user::SupervisedUserService* supervised_user_service =
-              SupervisedUserServiceFactory::GetForBrowserContext(
-                  browser_context);
-          if (!supervised_user_service) {
-            // For some Profiles (eg. Incognito), SupervisedUserService is not
-            // created.
-            return false;
-          }
-          return supervised_user_service->IsCookieDeletionDisabled(url);
-        },
-        profile);
-#else
-    return base::NullCallback();
-#endif
-  }
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
   if (profile->IsChild()) {
     return base::BindRepeating(
         [](permissions::PermissionsClient* client,

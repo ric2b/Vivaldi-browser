@@ -73,6 +73,9 @@ if (build_with_chromium) {
       "src/absl/meta/type_traits.h",
       "src/absl/numeric/int128.cc",
       "src/absl/numeric/int128.h",
+
+      # ascii and match are not used by Open Screen code, but are required by
+      # other abseil files.
       "src/absl/strings/ascii.cc",
       "src/absl/strings/ascii.h",
       "src/absl/strings/charconv.cc",

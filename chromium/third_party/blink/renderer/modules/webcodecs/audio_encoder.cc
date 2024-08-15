@@ -8,26 +8,21 @@
 #include <limits>
 
 #include "base/containers/contains.h"
-#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/numerics/safe_conversions.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/audio/audio_opus_encoder.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/limits.h"
-#include "media/base/media_switches.h"
 #include "media/base/mime_util.h"
 #include "media/base/offloading_audio_encoder.h"
 #include "media/mojo/clients/mojo_audio_encoder.h"
-#include "media/mojo/mojom/audio_encoder.mojom-blink.h"
 #include "media/mojo/mojom/interface_factory.mojom.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_aac_encoder_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_data_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_decoder_config.h"
@@ -285,7 +280,7 @@ bool VerifyCodecSupportStatic(AudioEncoderTraits::ParsedConfig* config,
       return true;
     }
     case media::AudioCodec::kAAC: {
-      if (base::FeatureList::IsEnabled(media::kPlatformAudioEncoder)) {
+      if (media::MojoAudioEncoder::IsSupported(media::AudioCodec::kAAC)) {
         if (!VerifyParameterValues(config->options.channels,
                                    "Unsupported number of channels.", {1, 2, 6},
                                    js_error_message)) {
@@ -413,11 +408,12 @@ std::unique_ptr<media::AudioEncoder> AudioEncoder::CreateMediaAudioEncoder(
 void AudioEncoder::ProcessConfigure(Request* request) {
   DCHECK_NE(state_.AsEnum(), V8CodecState::Enum::kClosed);
   DCHECK_EQ(request->type, Request::Type::kConfigure);
-  DCHECK(active_config_);
+  DCHECK(request->config);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   request->StartTracing();
 
+  active_config_ = request->config;
   String js_error_message;
   if (!VerifyCodecSupport(active_config_, &js_error_message)) {
     blocking_request_in_progress_ = request;
@@ -629,8 +625,8 @@ ScriptPromise AudioEncoder::isConfigSupported(ScriptState* script_state,
   support->setConfig(CopyConfig(*config));
 
   return ScriptPromise::Cast(
-      script_state, ToV8Traits<AudioEncoderSupport>::ToV8(script_state, support)
-                        .ToLocalChecked());
+      script_state,
+      ToV8Traits<AudioEncoderSupport>::ToV8(script_state, support));
 }
 
 const AtomicString& AudioEncoder::InterfaceName() const {

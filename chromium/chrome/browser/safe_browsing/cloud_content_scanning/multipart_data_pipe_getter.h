@@ -10,6 +10,7 @@
 
 #include "base/files/file.h"
 #include "base/files/memory_mapped_file.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/time/time.h"
@@ -57,7 +58,10 @@ class MultipartDataPipeGetter : public network::mojom::DataPipeGetter {
     void CloseHandles();
 
     base::File file_;
-    raw_ptr<uint8_t> data_ = nullptr;
+
+    // RAW_PTR_EXCLUSION: Never allocated by PartitionAlloc (always mmap'ed), so
+    // there is no benefit to using a raw_ptr, only cost.
+    RAW_PTR_EXCLUSION uint8_t* data_ = nullptr;
     size_t length_ = 0;
   };
 #else

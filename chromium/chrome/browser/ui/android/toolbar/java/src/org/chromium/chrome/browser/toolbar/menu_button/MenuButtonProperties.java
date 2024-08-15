@@ -18,11 +18,11 @@ import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 
 class MenuButtonProperties {
     static class ThemeProperty {
-        @NonNull
-        public ColorStateList mColorStateList;
+        @NonNull public ColorStateList mColorStateList;
         public @BrandedColorScheme int mBrandedColorScheme;
 
-        public ThemeProperty(@NonNull ColorStateList colorStateList,
+        public ThemeProperty(
+                @NonNull ColorStateList colorStateList,
                 @BrandedColorScheme int brandedColorScheme) {
             mColorStateList = colorStateList;
             mBrandedColorScheme = brandedColorScheme;
@@ -60,7 +60,18 @@ class MenuButtonProperties {
     public static final WritableObjectPropertyKey<ShowBadgeProperty> VIVALDI_ATTENTION_BADGE =
             new WritableObjectPropertyKey(true);
 
-    public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {ALPHA, APP_MENU_BUTTON_HELPER,
-            CONTENT_DESCRIPTION, IS_CLICKABLE, IS_HIGHLIGHTING, IS_VISIBLE, STATE_SUPPLIER,
-            SHOW_UPDATE_BADGE, THEME, TRANSLATION_X, VIVALDI_ATTENTION_BADGE}; // Vivaldi
+    public static final PropertyKey[] ALL_KEYS =
+            new PropertyKey[] {
+                ALPHA,
+                APP_MENU_BUTTON_HELPER,
+                CONTENT_DESCRIPTION,
+                IS_CLICKABLE,
+                IS_HIGHLIGHTING,
+                IS_VISIBLE,
+                STATE_SUPPLIER,
+                SHOW_UPDATE_BADGE,
+                THEME,
+                TRANSLATION_X
+                , VIVALDI_ATTENTION_BADGE // Vivaldi
+            };
 }

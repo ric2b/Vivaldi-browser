@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   add `qualityGainMap` field to `avifEncoder`, add `gainMapPresent`,
   `enableDecodingGainMap`, `enableParsingGainMapMetadata` and 
   `ignoreColorAndAlpha` to `avifDecoder`.
+  Utility functions for working with gain maps are also added.
   Gain maps allow readers that support them to display HDR images that look
   good on both HDR and SDR displays.
   This feature is highly experimental. The API might change or be removed
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Add experimental support for converting jpeg files with gain maps to AVIF
   files with gain maps. Requires libxml2, and the AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP
   compilation flag.
+  Add a --qgain-map flag to control the gain map quality in avifenc.
 * Add the headerFormat member of new type avifHeaderFormat to avifEncoder.
 * Add experimental API for reading and writing "avir"-branded AVIF files
   behind the compilation flag AVIF_ENABLE_EXPERIMENTAL_AVIR.
@@ -39,11 +41,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This part of AV1 encoder is not as thoroughly tested, so there are higher
   possibility encoder may crash when given certain configuration or input.
 * Add imageSequenceTrackPresent flag to the avifDecoder struct.
+* avifImageScale() function was made part of the public ABI.
+* Add avif_cxx.h as a C++ header with basic functionality.
+* Add enum aliases AVIF_COLOR_PRIMARIES_SRGB, AVIF_COLOR_PRIMARIES_BT2100,
+  AVIF_COLOR_PRIMARIES_DCI_P3, AVIF_TRANSFER_CHARACTERISTICS_PQ.
 
 ### Changed
-* Update aom.cmd: v3.7.0
+* Update aom.cmd: v3.8.1
+* Update dav1d.cmd: 1.3.0
+* Update libgav1.cmd: v0.19.0
+* Update rav1e.cmd: v0.7.0
 * Update svt.cmd/svt.sh: v1.7.0
 * Update zlibpng.cmd: zlib 1.3 and libpng 1.6.40
+* AVIF sequences encoded by libavif will now also have the "avio" brand when
+  there is at least one track made only of AV1 keyframes.
+* Fix SVT-AV1 codec interface which was not setting video range at encoding.
+* Any item ID being 0 in an "iref" box with version 0 or 1 is now treated as an
+  error instead of being ignored.
+* API calls now return AVIF_RESULT_OUT_OF_MEMORY instead of aborting on memory
+  allocation failure.
+* avifdec and avifenc: Change the default value of the --jobs option from 1 to
+  "all".
+* Update avifCropRectConvertCleanApertureBox() to the revised requirements in
+  ISO/IEC 23000-22:2019/Amd. 2:2021 Section 7.3.6.7.
+* AVIF files with an exif_tiff_header_offset pointing at another byte than the
+  first II or MM tag in the Exif metadata payload will now fail to be decoded.
+  Set decoder->ignoreExif to true to skip the issue and decode the image.
+* Fix memory errors reported in crbug.com/1501766, crbug.com/1501770, and
+  crbug.com/1504792 by [Fudan University](https://secsys.fudan.edu.cn/).
+* For codecs, AVIF_CODEC_* and AVIF_LOCAL_* are now merged into AVIF_CODEC_*
+  that can only take the values: OFF, LOCAL or SYSTEM.
+* For the libyuv, libsharpyuv, zlibpng and jpeg dependencies, AVIF_LOCAL_* is
+  now replaced by flags AVIF_* that can take the values: OFF, LOCAL or SYSTEM.
+* src/reformat.c: Allocate the threadData array directly.
+* AVIF_ENABLE_WERROR is set to OFF by default.
+
+## [1.0.3] - 2023-12-03
+
+### Changed
+* Rewrite the fix for memory errors reported in crbug.com/1501770.
+* Fix memory errors reported in crbug.com/1504792 by [Fudan
+  University](https://secsys.fudan.edu.cn/).
+* src/reformat.c: Allocate the threadData array directly.
+
+## [1.0.2] - 2023-11-16
+
+### Changed
+* Update avifCropRectConvertCleanApertureBox() to the revised requirements in
+  ISO/IEC 23000-22:2019/Amd. 2:2021 Section 7.3.6.7.
+* Fix memory errors reported in crbug.com/1501766 and crbug.com/1501770 by
+  [Fudan University](https://secsys.fudan.edu.cn/).
 
 ## [1.0.1] - 2023-08-29
 
@@ -1019,6 +1066,8 @@ code.
 - `avifVersion()` function
 
 [Unreleased]: https://github.com/AOMediaCodec/libavif/compare/v1.0.0...HEAD
+[1.0.3]: https://github.com/AOMediaCodec/libavif/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/AOMediaCodec/libavif/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/AOMediaCodec/libavif/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/AOMediaCodec/libavif/compare/v0.11.1...v1.0.0
 [0.11.1]: https://github.com/AOMediaCodec/libavif/compare/v0.11.0...v0.11.1

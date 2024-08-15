@@ -293,10 +293,6 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       return this.status.E_BADARG('command', `expected ${PrivateAPI.Commands.RegisterLanguageExtensionPlugin}`);
     }
     const {pluginManager} = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
-    if (!pluginManager) {
-      return this.status.E_FAILED('WebAssembly DWARF support needs to be enabled to use this extension');
-    }
-
     const {pluginName, port, supportedScriptTypes: {language, symbol_types}} = message;
     const symbol_types_array =
         (Array.isArray(symbol_types) && symbol_types.every(e => typeof e === 'string') ? symbol_types : []);
@@ -307,10 +303,6 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
 
   private async loadWasmValue<T>(expression: string, stopId: unknown): Promise<Record|T> {
     const {pluginManager} = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
-    if (!pluginManager) {
-      return this.status.E_FAILED('WebAssembly DWARF support needs to be enabled to use this extension');
-    }
-
     const callFrame = pluginManager.callFrameForStopId(stopId as Bindings.DebuggerLanguagePlugins.StopId);
     if (!callFrame) {
       return this.status.E_BADARG('stopId', 'Unknown stop id');
@@ -344,7 +336,9 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (message.command !== PrivateAPI.Commands.GetWasmGlobal) {
       return this.status.E_BADARG('command', `expected ${PrivateAPI.Commands.GetWasmGlobal}`);
     }
-    return this.loadWasmValue(`globals[${Number(message.global)}]`, message.stopId);
+    const global = Number(message.global);
+    const result = await this.loadWasmValue<Chrome.DevTools.WasmValue>(`globals[${global}]`, message.stopId);
+    return result ?? this.status.E_BADARG('global', `No global with index ${global}`);
   }
 
   private async onGetWasmLocal(message: PrivateAPI.ExtensionServerRequestMessage):
@@ -352,14 +346,19 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (message.command !== PrivateAPI.Commands.GetWasmLocal) {
       return this.status.E_BADARG('command', `expected ${PrivateAPI.Commands.GetWasmLocal}`);
     }
-    return this.loadWasmValue(`locals[${Number(message.local)}]`, message.stopId);
+    const local = Number(message.local);
+    const result = await this.loadWasmValue<Chrome.DevTools.WasmValue>(`locals[${local}]`, message.stopId);
+    return result ?? this.status.E_BADARG('local', `No local with index ${local}`);
   }
+
   private async onGetWasmOp(message: PrivateAPI.ExtensionServerRequestMessage):
       Promise<Record|Chrome.DevTools.WasmValue> {
     if (message.command !== PrivateAPI.Commands.GetWasmOp) {
       return this.status.E_BADARG('command', `expected ${PrivateAPI.Commands.GetWasmOp}`);
     }
-    return this.loadWasmValue(`stack[${Number(message.op)}]`, message.stopId);
+    const op = Number(message.op);
+    const result = await this.loadWasmValue<Chrome.DevTools.WasmValue>(`stack[${op}]`, message.stopId);
+    return result ?? this.status.E_BADARG('op', `No operand with index ${op}`);
   }
 
   private registerRecorderExtensionEndpoint(
@@ -1333,7 +1332,8 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       return true;
     }
     if (parsedURL.protocol === 'chrome:' || parsedURL.protocol === 'devtools:' ||
-        parsedURL.protocol === 'chrome-untrusted:' || parsedURL.protocol === 'chrome-error:') {
+        parsedURL.protocol === 'chrome-untrusted:' || parsedURL.protocol === 'chrome-error:' ||
+        parsedURL.protocol === 'chrome-search:') {
       return false;
     }
     if (parsedURL.protocol.startsWith('http') && parsedURL.hostname.match(/^chrome\.google\.com\.?$/) &&
@@ -1358,11 +1358,8 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   SidebarPaneAdded = 'SidebarPaneAdded',
-  TraceProviderAdded = 'TraceProviderAdded',
 }
 
 export type EventTypes = {

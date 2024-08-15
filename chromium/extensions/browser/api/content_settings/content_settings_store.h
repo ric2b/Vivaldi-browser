@@ -22,7 +22,7 @@
 #include "extensions/common/api/types.h"
 
 namespace content_settings {
-class OriginIdentifierValueMap;
+class OriginValueMap;
 class RuleIterator;
 }
 
@@ -69,6 +69,8 @@ class ContentSettingsStore
   // incognito mode only.
   // Precondition: the extension must be registered.
   // This method should only be called on the UI thread.
+  // This method is called on startup to load from extension prefs. This method
+  // is called each time an extension changes content settings.
   void SetExtensionContentSetting(
       const std::string& ext_id,
       const ContentSettingsPattern& embedded_pattern,
@@ -130,11 +132,11 @@ class ContentSettingsStore
 
   virtual ~ContentSettingsStore();
 
-  content_settings::OriginIdentifierValueMap* GetValueMap(
-      const std::string& ext_id,
-      ChromeSettingScope scope) EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  content_settings::OriginValueMap* GetValueMap(const std::string& ext_id,
+                                                ChromeSettingScope scope)
+      EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
-  const content_settings::OriginIdentifierValueMap* GetValueMap(
+  const content_settings::OriginValueMap* GetValueMap(
       const std::string& ext_id,
       ChromeSettingScope scope) const EXCLUSIVE_LOCKS_REQUIRED(lock_);
 

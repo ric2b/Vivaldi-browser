@@ -63,12 +63,13 @@ class TestWebSocketHandshakeThrottle
 
   void ThrottleHandshake(const blink::WebURL& url,
                          const blink::WebSecurityOrigin& creator_origin,
+                         const blink::WebSecurityOrigin& isolated_world_origin,
                          CompletionCallback completion_callback) override {
     DCHECK(completion_callback);
 
     auto wrapper = base::BindOnce(
         [](CompletionCallback callback) {
-          std::move(callback).Run(absl::nullopt);
+          std::move(callback).Run(std::nullopt);
         },
         std::move(completion_callback));
 
@@ -89,7 +90,7 @@ TestWebSocketHandshakeThrottleProvider::Clone(
 
 std::unique_ptr<blink::WebSocketHandshakeThrottle>
 TestWebSocketHandshakeThrottleProvider::CreateThrottle(
-    int render_frame_id,
+    base::optional_ref<const blink::LocalFrameToken> local_frame_token,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   return std::make_unique<TestWebSocketHandshakeThrottle>(
       std::move(task_runner));

@@ -6,6 +6,7 @@ package org.chromium.chrome.browser;
 
 import android.app.Activity;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.jank_tracker.JankTracker;
@@ -73,26 +74,35 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
     private final JankTracker mJankTracker;
     private final Supplier<Toolbar> mToolbarSupplier;
     private final HomeSurfaceTracker mHomeSurfaceTracker;
+    private final ObservableSupplier<Integer> mTabStripHeightSupplier;
 
     private NativePageFactory mNativePageFactory;
 
-    public TabbedModeTabDelegateFactory(Activity activity,
+    public TabbedModeTabDelegateFactory(
+            Activity activity,
             BrowserControlsVisibilityDelegate appBrowserControlsVisibilityDelegate,
             Supplier<ShareDelegate> shareDelegateSupplier,
             Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
-            Runnable contextMenuCopyLinkObserver, BottomSheetController sheetController,
-            ChromeActivityNativeDelegate chromeActivityNativeDelegate, boolean isCustomTab,
+            Runnable contextMenuCopyLinkObserver,
+            BottomSheetController sheetController,
+            ChromeActivityNativeDelegate chromeActivityNativeDelegate,
+            boolean isCustomTab,
             BrowserControlsStateProvider browserControlsStateProvider,
-            FullscreenManager fullscreenManager, TabCreatorManager tabCreatorManager,
+            FullscreenManager fullscreenManager,
+            TabCreatorManager tabCreatorManager,
             Supplier<TabModelSelector> tabModelSelectorSupplier,
             Supplier<CompositorViewHolder> compositorViewHolderSupplier,
             Supplier<ModalDialogManager> modalDialogManagerSupplier,
             Supplier<SnackbarManager> snackbarManagerSupplier,
-            BrowserControlsManager browserControlsManager, Supplier<Tab> currentTabSupplier,
-            ActivityLifecycleDispatcher lifecycleDispatcher, WindowAndroid windowAndroid,
-            JankTracker jankTracker, Supplier<Toolbar> toolbarSupplier,
+            BrowserControlsManager browserControlsManager,
+            Supplier<Tab> currentTabSupplier,
+            ActivityLifecycleDispatcher lifecycleDispatcher,
+            WindowAndroid windowAndroid,
+            JankTracker jankTracker,
+            Supplier<Toolbar> toolbarSupplier,
             @Nullable HomeSurfaceTracker homeSurfaceTracker,
-            ObservableSupplier<TabContentManager> tabContentManagerSupplier) {
+            ObservableSupplier<TabContentManager> tabContentManagerSupplier,
+            @NonNull ObservableSupplier<Integer> tabStripHeightSupplier) {
         mActivity = activity;
         mAppBrowserControlsVisibilityDelegate = appBrowserControlsVisibilityDelegate;
         mShareDelegateSupplier = shareDelegateSupplier;
@@ -116,14 +126,21 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
         mToolbarSupplier = toolbarSupplier;
         mHomeSurfaceTracker = homeSurfaceTracker;
         mTabContentManagerSupplier = tabContentManagerSupplier;
+        mTabStripHeightSupplier = tabStripHeightSupplier;
     }
 
     @Override
     public TabWebContentsDelegateAndroid createWebContentsDelegate(Tab tab) {
-        return new ActivityTabWebContentsDelegateAndroid(tab, mActivity,
-                mChromeActivityNativeDelegate, /* isCustomTab= */ false,
-                mBrowserControlsStateProvider, mFullscreenManager, mTabCreatorManager,
-                mTabModelSelectorSupplier, mCompositorViewHolderSupplier,
+        return new ActivityTabWebContentsDelegateAndroid(
+                tab,
+                mActivity,
+                mChromeActivityNativeDelegate,
+                /* isCustomTab= */ false,
+                mBrowserControlsStateProvider,
+                mFullscreenManager,
+                mTabCreatorManager,
+                mTabModelSelectorSupplier,
+                mCompositorViewHolderSupplier,
                 mModalDialogManagerSupplier);
     }
 
@@ -135,10 +152,14 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
     @Override
     public ContextMenuPopulatorFactory createContextMenuPopulatorFactory(Tab tab) {
         return new ChromeContextMenuPopulatorFactory(
-                new TabContextMenuItemDelegate(tab, mTabModelSelectorSupplier.get(),
-                        mEphemeralTabCoordinatorSupplier, mContextMenuCopyLinkObserver,
+                new TabContextMenuItemDelegate(
+                        tab,
+                        mTabModelSelectorSupplier.get(),
+                        mEphemeralTabCoordinatorSupplier,
+                        mContextMenuCopyLinkObserver,
                         mSnackbarManagerSupplier),
-                mShareDelegateSupplier, ChromeContextMenuPopulator.ContextMenuMode.NORMAL,
+                mShareDelegateSupplier,
+                ChromeContextMenuPopulator.ContextMenuMode.NORMAL,
                 ExternalAuthUtils.getInstance());
     }
 
@@ -152,11 +173,22 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
     @Override
     public NativePage createNativePage(String url, NativePage candidatePage, Tab tab) {
         if (mNativePageFactory == null) {
-            mNativePageFactory = new NativePageFactory(mActivity, mBottomSheetController,
-                    mBrowserControlsManager, mCurrentTabSupplier, mSnackbarManagerSupplier,
-                    mLifecycleDispatcher, mTabModelSelectorSupplier.get(), mShareDelegateSupplier,
-                    mWindowAndroid, mJankTracker, mToolbarSupplier, mHomeSurfaceTracker,
-                    mTabContentManagerSupplier);
+            mNativePageFactory =
+                    new NativePageFactory(
+                            mActivity,
+                            mBottomSheetController,
+                            mBrowserControlsManager,
+                            mCurrentTabSupplier,
+                            mSnackbarManagerSupplier,
+                            mLifecycleDispatcher,
+                            mTabModelSelectorSupplier.get(),
+                            mShareDelegateSupplier,
+                            mWindowAndroid,
+                            mJankTracker,
+                            mToolbarSupplier,
+                            mHomeSurfaceTracker,
+                            mTabContentManagerSupplier,
+                            mTabStripHeightSupplier);
         }
         return mNativePageFactory.createNativePage(url, candidatePage, tab);
     }

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -352,10 +353,10 @@ OgHttp2Session::OgHttp2Session(Http2VisitorInterface& visitor, Options options)
   decoder_.set_visitor(&receive_logger_);
   if (options_.max_header_list_bytes) {
     // Limit buffering of encoded HPACK data to 2x the decoded limit.
-    decoder_.GetHpackDecoder()->set_max_decode_buffer_size_bytes(
+    decoder_.GetHpackDecoder().set_max_decode_buffer_size_bytes(
         2 * *options_.max_header_list_bytes);
     // Limit the total bytes accepted for HPACK decoding to 4x the limit.
-    decoder_.GetHpackDecoder()->set_max_header_block_bytes(
+    decoder_.GetHpackDecoder().set_max_header_block_bytes(
         4 * *options_.max_header_list_bytes);
   }
   if (IsServerSession()) {
@@ -441,13 +442,11 @@ int OgHttp2Session::GetHpackEncoderDynamicTableCapacity() const {
 }
 
 int OgHttp2Session::GetHpackDecoderDynamicTableSize() const {
-  const spdy::HpackDecoderAdapter* decoder = decoder_.GetHpackDecoder();
-  return decoder == nullptr ? 0 : decoder->GetDynamicTableSize();
+  return decoder_.GetHpackDecoder().GetDynamicTableSize();
 }
 
 int OgHttp2Session::GetHpackDecoderSizeLimit() const {
-  const spdy::HpackDecoderAdapter* decoder = decoder_.GetHpackDecoder();
-  return decoder == nullptr ? 0 : decoder->GetCurrentHeaderTableSizeSetting();
+  return decoder_.GetHpackDecoder().GetCurrentHeaderTableSizeSetting();
 }
 
 int64_t OgHttp2Session::ProcessBytes(absl::string_view bytes) {
@@ -633,6 +632,7 @@ Http2StreamId OgHttp2Session::GetNextReadyStream() {
     const Http2StreamId stream_id = *trailers_ready_.begin();
     // WriteForStream() will re-mark the stream as ready, if necessary.
     write_scheduler_.MarkStreamNotReady(stream_id);
+    trailers_ready_.erase(trailers_ready_.begin());
     return stream_id;
   }
   return write_scheduler_.PopNextReadyStream();
@@ -657,8 +657,8 @@ OgHttp2Session::SendResult OgHttp2Session::MaybeSendBufferedData() {
 
 OgHttp2Session::SendResult OgHttp2Session::SendQueuedFrames() {
   // Flush any serialized prefix.
-  const SendResult result = MaybeSendBufferedData();
-  if (result != SendResult::SEND_OK) {
+  if (const SendResult result = MaybeSendBufferedData();
+      result != SendResult::SEND_OK) {
     return result;
   }
   // Serialize and send frames in the queue.
@@ -739,7 +739,7 @@ bool OgHttp2Session::AfterFrameSent(uint8_t frame_type_int, uint32_t stream_id,
       if (is_settings_ack && encoder_header_table_capacity_when_acking_) {
         framer_.UpdateHeaderEncoderTableSize(
             *encoder_header_table_capacity_when_acking_);
-        encoder_header_table_capacity_when_acking_ = absl::nullopt;
+        encoder_header_table_capacity_when_acking_ = std::nullopt;
       } else if (!is_settings_ack) {
         sent_non_ack_settings_ = true;
       }
@@ -815,51 +815,50 @@ OgHttp2Session::SendResult OgHttp2Session::WriteForStream(
                 static_cast<int32_t>(max_frame_payload_)});
   while (connection_can_write == SendResult::SEND_OK && available_window > 0 &&
          state.outbound_body != nullptr && !state.data_deferred) {
-    auto [length, end_data] =
-        state.outbound_body->SelectPayloadLength(available_window);
-    QUICHE_VLOG(2) << "WriteForStream | length: " << length
-                   << " end_data: " << end_data
+    DataFrameInfo info = GetDataFrameInfo(stream_id, available_window, state);
+    QUICHE_VLOG(2) << "WriteForStream | length: " << info.payload_length
+                   << " end_data: " << info.end_data
                    << " trailers: " << state.trailers.get();
-    if (length == 0 && !end_data &&
+    if (info.payload_length == 0 && !info.end_data &&
         (options_.trailers_require_end_data || state.trailers == nullptr)) {
       // An unproductive call to SelectPayloadLength() results in this stream
       // entering the "deferred" state only if either no trailers are available
       // to send, or trailers require an explicit end_data before being sent.
       state.data_deferred = true;
       break;
-    } else if (length == DataFrameSource::kError) {
+    } else if (info.payload_length == DataFrameSource::kError) {
       // TODO(birenroy,diannahu): Consider queuing a RST_STREAM INTERNAL_ERROR
       // instead.
       CloseStream(stream_id, Http2ErrorCode::INTERNAL_ERROR);
       // No more work on the stream; it has been closed.
       break;
     }
-    const bool fin = end_data ? state.outbound_body->send_fin() : false;
-    if (length > 0 || fin) {
+    if (info.payload_length > 0 || info.send_fin) {
       spdy::SpdyDataIR data(stream_id);
-      data.set_fin(fin);
-      data.SetDataShallow(length);
+      data.set_fin(info.send_fin);
+      data.SetDataShallow(info.payload_length);
       spdy::SpdySerializedFrame header =
           spdy::SpdyFramer::SerializeDataFrameHeaderWithPaddingLengthField(
               data);
       QUICHE_DCHECK(buffered_data_.empty() && frames_.empty());
       data.Visit(&send_logger_);
-      const bool success =
-          state.outbound_body->Send(absl::string_view(header), length);
+      const bool success = SendDataFrame(stream_id, absl::string_view(header),
+                                         info.payload_length, state);
       if (!success) {
         connection_can_write = SendResult::SEND_BLOCKED;
         break;
       }
-      connection_send_window_ -= length;
-      state.send_window -= length;
+      connection_send_window_ -= info.payload_length;
+      state.send_window -= info.payload_length;
       available_window = std::min({connection_send_window_, state.send_window,
                                    static_cast<int32_t>(max_frame_payload_)});
-      if (fin) {
+      if (info.send_fin) {
         state.half_closed_local = true;
         MaybeFinWithRstStream(it);
       }
-      const bool ok = AfterFrameSent(/* DATA */ 0, stream_id, length,
-                                     fin ? END_STREAM_FLAG : 0x0, 0);
+      const bool ok =
+          AfterFrameSent(/* DATA */ 0, stream_id, info.payload_length,
+                         info.send_fin ? END_STREAM_FLAG : 0x0, 0);
       if (!ok) {
         LatchErrorAndNotify(Http2ErrorCode::INTERNAL_ERROR,
                             ConnectionError::kSendError);
@@ -870,14 +869,15 @@ OgHttp2Session::SendResult OgHttp2Session::WriteForStream(
         break;
       }
     }
-    if (end_data || (length == 0 && state.trailers != nullptr &&
-                     !options_.trailers_require_end_data)) {
+    if (info.end_data ||
+        (info.payload_length == 0 && state.trailers != nullptr &&
+         !options_.trailers_require_end_data)) {
       // If SelectPayloadLength() returned {0, false}, and there are trailers to
       // send, and the safety feature is disabled, it's okay to send the
       // trailers.
       if (state.trailers != nullptr) {
         auto block_ptr = std::move(state.trailers);
-        if (fin) {
+        if (info.send_fin) {
           QUICHE_LOG(ERROR) << "Sent fin; can't send trailers.";
 
           // TODO(birenroy,diannahu): Consider queuing a RST_STREAM
@@ -1697,7 +1697,7 @@ void OgHttp2Session::HandleOutboundSettings(
               max_inbound_concurrent_streams_ = value;
               break;
             case HEADER_TABLE_SIZE:
-              decoder_.GetHpackDecoder()->ApplyHeaderTableSizeSetting(value);
+              decoder_.GetHpackDecoder().ApplyHeaderTableSizeSetting(value);
               break;
             case INITIAL_WINDOW_SIZE:
               UpdateStreamReceiveWindowSizes(value);
@@ -1855,7 +1855,7 @@ bool OgHttp2Session::CanCreateStream() const {
 }
 
 HeaderType OgHttp2Session::NextHeaderType(
-    absl::optional<HeaderType> current_type) {
+    std::optional<HeaderType> current_type) {
   if (IsServerSession()) {
     if (!current_type) {
       return HeaderType::REQUEST;
@@ -2026,6 +2026,24 @@ void OgHttp2Session::UpdateStreamReceiveWindowSizes(uint32_t new_value) {
   for (auto& [stream_id, stream_state] : stream_map_) {
     stream_state.window_manager.OnWindowSizeLimitChange(new_value);
   }
+}
+
+OgHttp2Session::DataFrameInfo OgHttp2Session::GetDataFrameInfo(
+    Http2StreamId /*stream_id*/, size_t flow_control_available,
+    StreamState& stream_state) {
+  DataFrameInfo info;
+  std::tie(info.payload_length, info.end_data) =
+      stream_state.outbound_body->SelectPayloadLength(flow_control_available);
+  info.send_fin =
+      info.end_data ? stream_state.outbound_body->send_fin() : false;
+  return info;
+}
+
+bool OgHttp2Session::SendDataFrame(Http2StreamId /*stream_id*/,
+                                   absl::string_view frame_header,
+                                   size_t payload_length,
+                                   StreamState& stream_state) {
+  return stream_state.outbound_body->Send(frame_header, payload_length);
 }
 
 }  // namespace adapter

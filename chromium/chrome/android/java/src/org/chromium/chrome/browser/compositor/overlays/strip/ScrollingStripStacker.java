@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.compositor.overlays.strip;
 
+import org.chromium.ui.base.LocalizationUtils;
+
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
@@ -14,18 +16,30 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
  */
 public class ScrollingStripStacker extends StripStacker {
     @Override
-    public void setTabOffsets(StripLayoutTab[] indexOrderedTabs, boolean tabClosing,
-            boolean tabCreating, float cachedTabWidth) {
+    public void setTabOffsets(
+            StripLayoutTab[] indexOrderedTabs,
+            boolean tabClosing,
+            boolean tabCreating,
+            float cachedTabWidth) {
+        boolean rtl = LocalizationUtils.isLayoutRtl();
         for (int i = 0; i < indexOrderedTabs.length; i++) {
             StripLayoutTab tab = indexOrderedTabs[i];
             // When a tab is closed, drawX and width update will be animated so skip this.
             if (!tabClosing) {
                 tab.setDrawX(tab.getIdealX() + tab.getOffsetX());
+
+                // Properly animate container slide-out in RTL.
+                if (tabCreating && rtl) {
+                    tab.setDrawX(tab.getDrawX() + cachedTabWidth - tab.getWidth());
+                }
+
                 // Note(david@vivaldi.com): We handle the desired width in |StripLayoutHelper|.
                 if (!ChromeApplicationImpl.isVivaldi()) {
                 // When a tab is being created, all tabs are animating to their desired width.
-                if (!tabCreating) tab.setWidth(cachedTabWidth);
+                if (!tabCreating) {
+                    tab.setWidth(cachedTabWidth);
                 }
+                } // Vivaldi
             }
             tab.setDrawY(tab.getOffsetY());
         }

@@ -13,13 +13,12 @@
 #include "include/core/SkSurface.h"
 #include "include/gpu/GrContextOptions.h"
 #include "include/gpu/GrDirectContext.h"
-#include "src/core/SkFontMgrPriv.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
 #include "tests/Test.h"
 #include "tests/TestHarness.h"
 #include "tools/Resources.h"
-#include "tools/fonts/TestFontMgr.h"
+#include "tools/fonts/FontToolUtils.h"
 #ifdef SK_GL
 #include "tools/gpu/gl/GLTestContext.h"
 #endif
@@ -28,7 +27,7 @@
 #endif
 
 #ifdef SK_GRAPHITE
-#include "include/gpu/graphite/ContextOptions.h"
+#include "tools/graphite/TestOptions.h"
 #endif
 
 #ifdef SK_BUILD_FOR_ANDROID
@@ -123,7 +122,7 @@ void SkQP::init(SkQPAssetManager* assetManager, const char* reportDirectory) {
     fReportDirectory = reportDirectory;
 
     SkGraphics::Init();
-    gSkFontMgr_DefaultFactory = &ToolUtils::MakePortableFontMgr;
+    ToolUtils::UsePortableFontMgr();
 
 #ifdef SK_BUILD_FOR_ANDROID
     // ro.vendor.api_level contains the minAPI level based on the order defined in
@@ -167,13 +166,13 @@ std::vector<std::string> SkQP::executeTest(SkQP::UnitTest test) {
     }
 #ifdef SK_GRAPHITE
     else if (test->fTestType == skiatest::TestType::kGraphite) {
-        skgpu::graphite::ContextOptions options;
+        skiatest::graphite::TestOptions options;
         if (test->fCTSEnforcement.eval(fEnforcedAndroidAPILevel) ==
             CtsEnforcement::RunMode::kRunStrict) {
-            options.fDisableDriverCorrectnessWorkarounds = true;
+            options.fContextOptions.fDisableDriverCorrectnessWorkarounds = true;
         }
         if (test->fGraphiteContextOptionsProc) {
-            test->fGraphiteContextOptionsProc(&options);
+            test->fGraphiteContextOptionsProc(&options.fContextOptions);
         }
         test->graphite(&r, options);
     }

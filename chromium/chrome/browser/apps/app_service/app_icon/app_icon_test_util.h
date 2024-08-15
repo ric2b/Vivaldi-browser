@@ -39,8 +39,6 @@ void VerifyIcon(const gfx::ImageSkia& src, const gfx::ImageSkia& dst);
 void VerifyCompressedIcon(const std::vector<uint8_t>& src_data,
                           const apps::IconValue& icon);
 
-SkBitmap CreateSquareIconBitmap(int size_px, SkColor solid_color);
-
 gfx::ImageSkia CreateSquareIconImageSkia(int size_dp, SkColor solid_color);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -59,7 +57,7 @@ class FakeIconLoader : public apps::IconLoader {
       bool allow_placeholder_icon,
       apps::LoadIconCallback callback) override;
 
-  raw_ptr<apps::AppServiceProxy, ExperimentalAsh> proxy_ = nullptr;
+  raw_ptr<apps::AppServiceProxy> proxy_ = nullptr;
 };
 
 class FakePublisherForIconTest : public apps::AppPublisher {

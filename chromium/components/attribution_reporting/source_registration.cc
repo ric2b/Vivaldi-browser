@@ -13,7 +13,6 @@
 #include "base/check.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
@@ -21,8 +20,10 @@
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/destination_set.h"
+#include "components/attribution_reporting/event_level_epsilon.h"
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/max_event_level_reports.h"
 #include "components/attribution_reporting/parsing_utils.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
@@ -30,6 +31,7 @@
 #include "components/attribution_reporting/trigger_config.h"
 #include "mojo/public/cpp/bindings/default_construct_tag.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace attribution_reporting {
 
@@ -43,32 +45,7 @@ constexpr char kAggregationKeys[] = "aggregation_keys";
 constexpr char kDestination[] = "destination";
 constexpr char kExpiry[] = "expiry";
 constexpr char kFilterData[] = "filter_data";
-constexpr char kMaxEventLevelReports[] = "max_event_level_reports";
 constexpr char kSourceEventId[] = "source_event_id";
-
-bool IsMaxEventLevelReportsValid(int i) {
-  return i >= 0 && i <= kMaxSettableEventLevelAttributions;
-}
-
-base::expected<int, SourceRegistrationError> ParseMaxEventLevelReports(
-    const base::Value& value) {
-  absl::optional<int> i = value.GetIfInt();
-  if (!i.has_value() || !IsMaxEventLevelReportsValid(*i)) {
-    return base::unexpected(
-        SourceRegistrationError::kMaxEventLevelReportsValueInvalid);
-  }
-
-  return *i;
-}
-
-int DefaultMaxEventLevelReports(SourceType source_type) {
-  switch (source_type) {
-    case SourceType::kNavigation:
-      return 3;
-    case SourceType::kEvent:
-      return 1;
-  }
-}
 
 base::TimeDelta AdjustExpiry(base::TimeDelta expiry, SourceType source_type) {
   switch (source_type) {
@@ -84,9 +61,9 @@ base::TimeDelta AdjustExpiry(base::TimeDelta expiry, SourceType source_type) {
 void RecordSourceRegistrationError(SourceRegistrationError error) {
   static_assert(
       SourceRegistrationError::kMaxValue ==
-          SourceRegistrationError::kInvalidTriggerDataForMatchingMode,
-      "Bump version of Conversions.SourceRegistrationError7 histogram.");
-  base::UmaHistogramEnumeration("Conversions.SourceRegistrationError7", error);
+          SourceRegistrationError::kEventLevelEpsilonValueInvalid,
+      "Bump version of Conversions.SourceRegistrationError10 histogram.");
+  base::UmaHistogramEnumeration("Conversions.SourceRegistrationError10", error);
 }
 
 SourceRegistration::SourceRegistration(mojo::DefaultConstruct::Tag tag)
@@ -122,18 +99,17 @@ SourceRegistration::Parse(base::Value::Dict registration,
       result.aggregation_keys,
       AggregationKeys::FromJSON(registration.Find(kAggregationKeys)));
 
-  absl::optional<uint64_t> source_event_id;
-  if (!ParseUint64(registration, kSourceEventId, source_event_id)) {
-    return base::unexpected(
-        SourceRegistrationError::kSourceEventIdValueInvalid);
-  }
-  result.source_event_id = source_event_id.value_or(0);
+  ASSIGN_OR_RETURN(result.source_event_id,
+                   ParseUint64(registration, kSourceEventId)
+                       .transform(&ValueOrZero<uint64_t>),
+                   [](absl::monostate) {
+                     return SourceRegistrationError::kSourceEventIdValueInvalid;
+                   });
 
-  absl::optional<int64_t> priority;
-  if (!ParsePriority(registration, priority)) {
-    return base::unexpected(SourceRegistrationError::kPriorityValueInvalid);
-  }
-  result.priority = priority.value_or(0);
+  ASSIGN_OR_RETURN(result.priority, ParsePriority(registration),
+                   [](absl::monostate) {
+                     return SourceRegistrationError::kPriorityValueInvalid;
+                   });
 
   if (const base::Value* value = registration.Find(kExpiry)) {
     ASSIGN_OR_RETURN(result.expiry,
@@ -163,14 +139,14 @@ SourceRegistration::Parse(base::Value::Dict registration,
       result.event_report_windows,
       EventReportWindows::FromJSON(registration, result.expiry, source_type));
 
-  if (const base::Value* value = registration.Find(kMaxEventLevelReports)) {
-    ASSIGN_OR_RETURN(result.max_event_level_reports,
-                     ParseMaxEventLevelReports(*value));
-  } else {
-    result.max_event_level_reports = DefaultMaxEventLevelReports(source_type);
-  }
+  ASSIGN_OR_RETURN(result.max_event_level_reports,
+                   MaxEventLevelReports::Parse(registration, source_type));
 
-  ASSIGN_OR_RETURN(result.trigger_config, TriggerConfig::Parse(registration));
+  ASSIGN_OR_RETURN(result.trigger_data_matching,
+                   ParseTriggerDataMatching(registration));
+
+  ASSIGN_OR_RETURN(result.event_level_epsilon,
+                   EventLevelEpsilon::Parse(registration));
 
   result.debug_key = ParseDebugKey(registration);
 
@@ -183,7 +159,7 @@ SourceRegistration::Parse(base::Value::Dict registration,
 
 // static
 base::expected<SourceRegistration, SourceRegistrationError>
-SourceRegistration::Parse(base::StringPiece json, SourceType source_type) {
+SourceRegistration::Parse(std::string_view json, SourceType source_type) {
   base::expected<SourceRegistration, SourceRegistrationError> source =
       base::unexpected(SourceRegistrationError::kInvalidJson);
 
@@ -231,9 +207,11 @@ base::Value::Dict SourceRegistration::ToJson() const {
   SerializeDebugKey(dict, debug_key);
   SerializeDebugReporting(dict, debug_reporting);
 
-  dict.Set(kMaxEventLevelReports, max_event_level_reports);
+  max_event_level_reports.Serialize(dict);
 
-  trigger_config.Serialize(dict);
+  Serialize(dict, trigger_data_matching);
+
+  event_level_epsilon.Serialize(dict);
 
   return dict;
 }
@@ -249,10 +227,6 @@ bool SourceRegistration::IsValid() const {
 
   if (aggregatable_report_window < kMinReportWindow ||
       aggregatable_report_window > expiry) {
-    return false;
-  }
-
-  if (!IsMaxEventLevelReportsValid(max_event_level_reports)) {
     return false;
   }
 

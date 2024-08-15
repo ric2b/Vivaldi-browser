@@ -37,6 +37,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.UserActionTester;
@@ -54,7 +55,6 @@ import org.chromium.chrome.browser.signin.SigninCheckerProvider;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -68,6 +68,8 @@ import java.util.concurrent.ExecutionException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @DoNotBatch(reason = "Child account can leak to other tests in the suite.")
+// Disable TrackingProtection3pcd as we use prefs instead of the feature in these tests.
+@DisableFeatures({ChromeFeatureList.TRACKING_PROTECTION_3PCD})
 public class PrivacySettingsFragmentTest {
     // Index of the Privacy Sandbox row entry in the settings list.
     public static final int PRIVACY_SANDBOX_V4_POS_IDX = 4;
@@ -202,7 +204,6 @@ public class PrivacySettingsFragmentTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     public void testRenderWhenPrivacyGuideViewed() throws IOException {
         setPrivacyGuideViewed(true);
         mSettingsActivityTestRule.startSettingsActivity();
@@ -218,7 +219,6 @@ public class PrivacySettingsFragmentTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     public void testRenderWhenPrivacyGuideNotViewed() throws IOException {
         setPrivacyGuideViewed(false);
         mSettingsActivityTestRule.startSettingsActivity();
@@ -334,7 +334,6 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     public void testPrivacyGuideLinkRowEntryPointUserAction() throws IOException {
         mSettingsActivityTestRule.startSettingsActivity();
         mActionTester = new UserActionTester();
@@ -348,7 +347,6 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     public void testPrivacyGuideLinkRowEntryExitHistogram() throws IOException {
         mSettingsActivityTestRule.startSettingsActivity();
 
@@ -365,7 +363,6 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     public void testPrivacyGuideNewLabelVisibility() throws ExecutionException {
         setPrivacyGuideViewed(false);
         mSettingsActivityTestRule.startSettingsActivity();
@@ -379,7 +376,6 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     // A random policy is required to make the device managed
     @Policies.Add({@Policies.Item(key = "RandomPolicy", string = "true")})
     public void testPrivacyGuideNotDisplayedWhenDeviceIsManaged() {
@@ -389,11 +385,11 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @EnableFeatures(ChromeFeatureList.PRIVACY_GUIDE)
     @DisabledTest(message = "crbug.com/1437093")
     public void testPrivacyGuideNotDisplayedWhenUserIsChild() {
         // TODO(crbug.com/1433652): Remove once SigninChecker is automatically created.
-        TestThreadUtils.runOnUiThreadBlockingNoException(SigninCheckerProvider::get);
+        TestThreadUtils.runOnUiThreadBlockingNoException(
+                () -> SigninCheckerProvider.get(Profile.getLastUsedRegularProfile()));
         mSigninTestRule.addChildTestAccountThenWaitForSignin();
         mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(R.string.privacy_guide_pref_summary)).check(doesNotExist());

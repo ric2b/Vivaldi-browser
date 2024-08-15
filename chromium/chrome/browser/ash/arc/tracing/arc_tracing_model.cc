@@ -4,7 +4,8 @@
 
 #include <inttypes.h>
 
-#include "base/strings/string_piece_forward.h"
+#include "base/memory/raw_ptr.h"
+#include "base/strings/string_piece.h"
 #include "chrome/browser/ash/arc/tracing/arc_tracing_model.h"
 
 #include "base/json/json_reader.h"
@@ -110,7 +111,7 @@ struct GraphicsEventsContext {
   // To keep in correct order of creation. This converts pair of 'B' and 'E'
   // events to the completed event, 'X'.
   ArcTracingModel::TracingEvents converted_events;
-  std::map<uint32_t, std::vector<ArcTracingEvent*>>
+  std::map<uint32_t, std::vector<raw_ptr<ArcTracingEvent, VectorExperimental>>>
       per_thread_pending_events_stack;
 
   std::map<std::pair<char, std::string>, std::unique_ptr<ArcTracingEvent>>
@@ -357,7 +358,7 @@ void ArcTracingModel::SetMinMaxTime(uint64_t min_timestamp,
 }
 
 bool ArcTracingModel::Build(const std::string& data) {
-  absl::optional<base::Value> value = base::JSONReader::Read(data);
+  std::optional<base::Value> value = base::JSONReader::Read(data);
   if (!value) {
     LOG(ERROR) << "Cannot parse trace data";
     return false;

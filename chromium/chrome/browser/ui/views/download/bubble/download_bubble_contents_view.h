@@ -35,14 +35,14 @@ class BubbleDialogDelegate;
 // before possibly being switched to the security view.
 class DownloadBubbleContentsView : public views::View,
                                    public DownloadBubbleSecurityView::Delegate {
+  METADATA_HEADER(DownloadBubbleContentsView, views::View)
+
  public:
   // Types of pages that this view can show.
   enum class Page {
     kPrimary,
     kSecurity,
   };
-
-  METADATA_HEADER(DownloadBubbleContentsView);
 
   DownloadBubbleContentsView(
       base::WeakPtr<Browser> browser,
@@ -64,7 +64,7 @@ class DownloadBubbleContentsView : public views::View,
   // returns a pointer to that row. Returns nullptr if the row was not found,
   // or if no id was supplied.
   DownloadBubbleRowView* ShowPrimaryPage(
-      absl::optional<offline_items_collection::ContentId> id = absl::nullopt);
+      std::optional<offline_items_collection::ContentId> id = std::nullopt);
 
   // Initializes security page for the download with the given id, and switches
   // to it. `id` must refer to a valid download with a row in the primary view.
@@ -83,6 +83,12 @@ class DownloadBubbleContentsView : public views::View,
   void ProcessDeepScanPress(
       const ContentId& id,
       base::optional_ref<const std::string> password) override;
+  void ProcessLocalDecryptionPress(
+      const offline_items_collection::ContentId& id,
+      base::optional_ref<const std::string> password) override;
+  void ProcessLocalPasswordInProgressClick(
+      const offline_items_collection::ContentId& id,
+      DownloadCommands::Command command) override;
   bool IsEncryptedArchive(const ContentId& id) override;
   bool HasPreviousIncorrectPassword(const ContentId& id) override;
 
@@ -110,6 +116,12 @@ class DownloadBubbleContentsView : public views::View,
   std::unique_ptr<DownloadBubbleContentsViewInfo> info_;
 
   base::WeakPtr<DownloadBubbleUIController> bubble_controller_;
+  base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler_;
+
+  // TODO(crbug.com/1346369): The delegate should outlive the views.
+  // Currently, the delegate is deleted in OnNativeWidetDestroyed(),
+  // invalidating this pointer before this view is destroyed.
+  raw_ptr<views::BubbleDialogDelegate, DanglingUntriaged> bubble_delegate_;
 
   // May be a DownloadBubblePartialView or a DownloadDialogView (main view).
   raw_ptr<DownloadBubblePrimaryView> primary_view_ = nullptr;

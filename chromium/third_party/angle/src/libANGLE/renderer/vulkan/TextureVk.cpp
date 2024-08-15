@@ -567,6 +567,21 @@ angle::Result TextureVk::setSubImage(const gl::Context *context,
                            vkFormat);
 }
 
+bool TextureVk::isCompressedFormatEmulated(const gl::Context *context,
+                                           gl::TextureTarget target,
+                                           GLint level)
+{
+    const gl::ImageDesc &levelDesc = mState.getImageDesc(target, level);
+    if (!levelDesc.format.info->compressed)
+    {
+        // If it isn't compressed, the remaining logic won't work
+        return false;
+    }
+
+    // Check against the list of formats used to emulate compressed textures
+    return gl::IsEmulatedCompressedFormat(levelDesc.format.info->sizedInternalFormat);
+}
+
 angle::Result TextureVk::setCompressedImage(const gl::Context *context,
                                             const gl::ImageIndex &index,
                                             GLenum internalFormat,
@@ -579,6 +594,14 @@ angle::Result TextureVk::setCompressedImage(const gl::Context *context,
 
     const gl::State &glState = context->getState();
     gl::Buffer *unpackBuffer = glState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
+    if (unpackBuffer &&
+        this->isCompressedFormatEmulated(context, index.getTarget(), index.getLevelIndex()))
+    {
+        // TODO (anglebug.com/7464): Can't populate from a buffer using emulated format
+        UNIMPLEMENTED();
+        return angle::Result::Stop;
+    }
 
     return setImageImpl(context, index, formatInfo, size, GL_UNSIGNED_BYTE, unpack, unpackBuffer,
                         pixels);
@@ -600,6 +623,14 @@ angle::Result TextureVk::setCompressedSubImage(const gl::Context *context,
         contextVk->getRenderer()->getFormat(levelDesc.format.info->sizedInternalFormat);
     const gl::State &glState = contextVk->getState();
     gl::Buffer *unpackBuffer = glState.getTargetBuffer(gl::BufferBinding::PixelUnpack);
+
+    if (unpackBuffer &&
+        this->isCompressedFormatEmulated(context, index.getTarget(), index.getLevelIndex()))
+    {
+        // TODO (anglebug.com/7464): Can't populate from a buffer using emulated format
+        UNIMPLEMENTED();
+        return angle::Result::Stop;
+    }
 
     return setSubImageImpl(context, index, area, formatInfo, GL_UNSIGNED_BYTE, unpack, unpackBuffer,
                            pixels, vkFormat);
@@ -631,7 +662,9 @@ angle::Result TextureVk::setImageImpl(const gl::Context *context,
                            unpackBuffer, pixels, vkFormat);
 }
 
-bool TextureVk::isFastUnpackPossible(const vk::Format &vkFormat, size_t offset) const
+bool TextureVk::isFastUnpackPossible(const vk::Format &vkFormat,
+                                     size_t offset,
+                                     const vk::Format &bufferVkFormat) const
 {
     // Conditions to determine if fast unpacking is possible
     // 1. Image must be well defined to unpack directly to it
@@ -639,20 +672,25 @@ bool TextureVk::isFastUnpackPossible(const vk::Format &vkFormat, size_t offset) 
     // 2. Can't perform a fast copy for depth/stencil, except from non-emulated depth or stencil
     //    to emulated depth/stencil.  GL requires depth and stencil data to be packed, while Vulkan
     //    requires them to be separate.
-    // 2. Can't perform a fast copy for emulated formats, except from non-emulated depth or stencil
+    // 3. Can't perform a fast copy for emulated formats, except from non-emulated depth or stencil
     //    to emulated depth/stencil.
-    // 3. vkCmdCopyBufferToImage requires byte offset to be a multiple of 4.
+    // 4. vkCmdCopyBufferToImage requires byte offset to be a multiple of 4.
+    // 5. Actual texture format and intended buffer format must match for color formats
     const angle::Format &bufferFormat = vkFormat.getActualBufferFormat(false);
     const bool isCombinedDepthStencil = bufferFormat.hasDepthAndStencilBits();
     const bool isDepthXorStencil = bufferFormat.hasDepthOrStencilBits() && !isCombinedDepthStencil;
     const bool isCompatibleDepth = vkFormat.getIntendedFormat().depthBits == bufferFormat.depthBits;
     const VkDeviceSize imageCopyAlignment =
         vk::GetImageCopyBufferAlignment(mImage->getActualFormatID());
+    const bool formatsMatch = bufferFormat.hasDepthOrStencilBits() ||
+                              (vkFormat.getActualImageFormatID(getRequiredImageAccess()) ==
+                               bufferVkFormat.getIntendedFormatID());
+
     return mImage->valid() && !isCombinedDepthStencil &&
            (vkFormat.getIntendedFormatID() ==
                 vkFormat.getActualImageFormatID(getRequiredImageAccess()) ||
             (isDepthXorStencil && isCompatibleDepth)) &&
-           (offset % imageCopyAlignment) == 0;
+           (offset % imageCopyAlignment) == 0 && formatsMatch;
 }
 
 bool TextureVk::isMipImageDescDefined(gl::TextureTarget textureTarget, size_t level)
@@ -850,10 +888,12 @@ angle::Result TextureVk::setSubImageImpl(const gl::Context *context,
         // to be packed, while Vulkan requires them to be separate.
         const VkImageAspectFlags aspectFlags =
             vk::GetFormatAspectFlags(vkFormat.getIntendedFormat());
+        const vk::Format &bufferVkFormat =
+            contextVk->getRenderer()->getFormat(formatInfo.sizedInternalFormat);
 
         if (!shouldUpdateBeStaged(gl::LevelIndex(index.getLevelIndex()),
                                   vkFormat.getActualImageFormatID(getRequiredImageAccess())) &&
-            isFastUnpackPossible(vkFormat, offsetBytes))
+            isFastUnpackPossible(vkFormat, offsetBytes, bufferVkFormat))
         {
             GLuint pixelSize   = formatInfo.pixelBytes;
             GLuint blockWidth  = formatInfo.compressedBlockWidth;
@@ -940,7 +980,27 @@ angle::Result TextureVk::copyImage(const gl::Context *context,
         gl::GetInternalFormatInfo(internalFormat, GL_UNSIGNED_BYTE);
     const vk::Format &vkFormat = renderer->getFormat(internalFormatInfo.sizedInternalFormat);
 
+    // The texture level being redefined might be the same as the one bound to the framebuffer.
+    // This _could_ be supported by using a temp image before redefining the level (and potentially
+    // discarding the image).  However, this is currently unimplemented.
+    FramebufferVk *framebufferVk = vk::GetImpl(source);
+    RenderTargetVk *colorReadRT  = framebufferVk->getColorReadRenderTarget();
+    vk::ImageHelper *srcImage    = &colorReadRT->getImageForCopy();
+    const bool isCubeMap         = index.getType() == gl::TextureType::CubeMap;
+    gl::LevelIndex levelIndex(getNativeImageIndex(index).getLevelIndex());
+    const uint32_t layerIndex    = index.hasLayer() ? index.getLayerIndex() : 0;
+    const uint32_t redefinedFace = isCubeMap ? layerIndex : 0;
+    const uint32_t sourceFace    = isCubeMap ? colorReadRT->getLayerIndex() : 0;
+    const bool isSelfCopy = mImage == srcImage && levelIndex == colorReadRT->getLevelIndex() &&
+                            redefinedFace == sourceFace;
+
     ANGLE_TRY(redefineLevel(context, index, vkFormat, newImageSize));
+
+    if (isSelfCopy)
+    {
+        UNIMPLEMENTED();
+        return angle::Result::Continue;
+    }
 
     return copySubImageImpl(context, index, gl::Offset(0, 0, 0), sourceArea, internalFormatInfo,
                             source);
@@ -1680,12 +1740,26 @@ angle::Result TextureVk::setStorageExternalMemory(const gl::Context *context,
 {
     ContextVk *contextVk           = vk::GetImpl(context);
     MemoryObjectVk *memoryObjectVk = vk::GetImpl(memoryObject);
+    RendererVk *renderer           = contextVk->getRenderer();
+
+    const vk::Format &vkFormat     = renderer->getFormat(internalFormat);
+    angle::FormatID actualFormatID = vkFormat.getActualRenderableImageFormatID();
 
     releaseAndDeleteImageAndViews(contextVk);
 
     setImageHelper(contextVk, new vk::ImageHelper(), gl::TextureType::InvalidEnum, 0, 0, true, {});
 
     mImage->setTilingMode(gl_vk::GetTilingMode(mState.getTilingMode()));
+
+    // EXT_external_objects issue 13 says that all supported usage flags must be specified.
+    // However, ANGLE_external_objects_flags allows these flags to be masked.  Note that the GL enum
+    // values constituting the bits of |usageFlags| are identical to their corresponding Vulkan
+    // value.
+    usageFlags &= vk::GetMaximalImageUsageFlags(renderer, actualFormatID);
+
+    // Similarly, createFlags is restricted to what is valid.
+    createFlags &= vk::GetMinimalImageCreateFlags(renderer, type, usageFlags) |
+                   VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
     ANGLE_TRY(memoryObjectVk->createImage(contextVk, type, levels, internalFormat, size, offset,
                                           mImage, createFlags, usageFlags, imageCreateInfoPNext));
@@ -2017,7 +2091,8 @@ angle::Result TextureVk::redefineLevel(const gl::Context *context,
                 mImage->getLevelCount() == 1 && mImage->getFirstAllocatedLevel() == levelIndexGL;
 
             // If incompatible, and redefining the single-level image, release it so it can be
-            // recreated immediately.  This is an optimization to avoid an extra copy.
+            // recreated immediately.  This is needed so that the texture can be reallocated with
+            // the correct format/size.
             //
             // This is not done for cubemaps because every face may be separately redefined.  Note
             // that this is not possible for texture arrays in general.
@@ -3213,8 +3288,10 @@ angle::Result TextureVk::syncState(const gl::Context *context,
          dirtyBits.test(gl::Texture::DIRTY_BIT_MAG_FILTER)))
     {
         const gl::SamplerState &samplerState = mState.getSamplerState();
-        ASSERT(samplerState.getMinFilter() == samplerState.getMagFilter());
-        if (mImage->updateChromaFilter(renderer, gl_vk::GetFilter(samplerState.getMinFilter())))
+        VkFilter chromaFilter = samplerState.getMinFilter() == samplerState.getMagFilter()
+                                    ? gl_vk::GetFilter(samplerState.getMinFilter())
+                                    : vk::kDefaultYCbCrChromaFilter;
+        if (mImage->updateChromaFilter(renderer, chromaFilter))
         {
             resetSampler();
             ANGLE_TRY(refreshImageViews(contextVk));
@@ -3875,6 +3952,13 @@ angle::Result TextureVk::getTexImage(const gl::Context *context,
                                      GLenum type,
                                      void *pixels)
 {
+    if (packBuffer && this->isCompressedFormatEmulated(context, target, level))
+    {
+        // TODO (anglebug.com/7464): Can't populate from a buffer using emulated format
+        UNIMPLEMENTED();
+        return angle::Result::Stop;
+    }
+
     ContextVk *contextVk = vk::GetImpl(context);
     ANGLE_TRY(ensureImageInitialized(contextVk, ImageMipLevels::EnabledLevels));
 

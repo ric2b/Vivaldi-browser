@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/screens/consumer_update_screen.h"
 
 #include <algorithm>
+#include <optional>
 
 #include "ash/constants/ash_features.h"
 #include "base/functional/bind.h"
@@ -30,7 +31,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "components/prefs/pref_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
@@ -91,6 +91,8 @@ std::string ConsumerUpdateScreen::GetResultString(Result result) {
       return "UpdateSkipped";
     case Result::DECLINE_CELLULAR:
       return "UpdateDeclineCellular";
+    case Result::CHECK_TIMEOUT:
+      return "UpdateCheckTimeout";
     case Result::NOT_APPLICABLE:
       return BaseScreen::kNotApplicable;
   }
@@ -206,12 +208,15 @@ void ConsumerUpdateScreen::OnUserAction(const base::Value::List& args) {
     version_updater_->RejectUpdateOverCellular();
     RecordOobeConsumerUpdateScreenSkippedReasonHistogram(
         OobeConsumerUpdateScreenSkippedReason::kDeclineCellular);
+    version_updater_->StopObserving();
     exit_callback_.Run(Result::DECLINE_CELLULAR);
   } else if (action_id == kUserActionSkipUpdate) {
     RecordIsOptionalUpdateSkipped(/*skipped=*/true);
+    version_updater_->StopObserving();
     exit_callback_.Run(Result::SKIPPED);
   } else if (action_id == kUserActionBackButton) {
     version_updater_->RejectUpdateOverCellular();
+    version_updater_->StopObserving();
     exit_callback_.Run(Result::BACK);
   } else {
     BaseScreen::OnUserAction(args);
@@ -237,6 +242,9 @@ void ConsumerUpdateScreen::FinishExitUpdate(VersionUpdater::Result result) {
       break;
     case VersionUpdater::Result::UPDATE_SKIPPED:
       exit_callback_.Run(Result::NOT_APPLICABLE);
+      break;
+    case VersionUpdater::Result::UPDATE_CHECK_TIMEOUT:
+      exit_callback_.Run(Result::CHECK_TIMEOUT);
       break;
     case VersionUpdater::Result::UPDATE_OPT_OUT_INFO_SHOWN:
       // the opt_out_info_shown is displayed only for FAU
@@ -343,7 +351,7 @@ void ConsumerUpdateScreen::UpdateBatteryWarningVisibility() {
   if (!view_) {
     return;
   }
-  const absl::optional<power_manager::PowerSupplyProperties>& proto =
+  const std::optional<power_manager::PowerSupplyProperties>& proto =
       chromeos::PowerManagerClient::Get()->GetLastStatus();
   if (!proto.has_value()) {
     return;

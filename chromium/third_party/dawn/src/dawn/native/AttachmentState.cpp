@@ -28,7 +28,9 @@
 #include "dawn/native/AttachmentState.h"
 
 #include "dawn/common/BitSetIterator.h"
-#include "dawn/native/ChainUtils_autogen.h"
+#include "dawn/common/Enumerator.h"
+#include "dawn/common/ityp_span.h"
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/ObjectContentHasher.h"
 #include "dawn/native/PipelineLayout.h"
@@ -40,9 +42,10 @@ AttachmentState::AttachmentState(DeviceBase* device,
                                  const RenderBundleEncoderDescriptor* descriptor)
     : ObjectBase(device), mSampleCount(descriptor->sampleCount) {
     DAWN_ASSERT(descriptor->colorFormatCount <= kMaxColorAttachments);
-    for (ColorAttachmentIndex i(uint8_t(0));
-         i < ColorAttachmentIndex(static_cast<uint8_t>(descriptor->colorFormatCount)); ++i) {
-        wgpu::TextureFormat format = descriptor->colorFormats[static_cast<uint8_t>(i)];
+    auto colorFormats = ityp::SpanFromUntyped<ColorAttachmentIndex>(descriptor->colorFormats,
+                                                                    descriptor->colorFormatCount);
+
+    for (auto [i, format] : Enumerate(colorFormats)) {
         if (format != wgpu::TextureFormat::Undefined) {
             mColorAttachmentsSet.set(i);
             mColorFormats[i] = format;
@@ -57,22 +60,22 @@ AttachmentState::AttachmentState(DeviceBase* device,
 }
 
 AttachmentState::AttachmentState(DeviceBase* device,
-                                 const RenderPipelineDescriptor* descriptor,
+                                 const UnpackedPtr<RenderPipelineDescriptor>& descriptor,
                                  const PipelineLayoutBase* layout)
     : ObjectBase(device), mSampleCount(descriptor->multisample.count) {
-    const DawnMultisampleStateRenderToSingleSampled* msaaRenderToSingleSampledDesc = nullptr;
-    FindInChain(descriptor->multisample.nextInChain, &msaaRenderToSingleSampledDesc);
-    if (msaaRenderToSingleSampledDesc != nullptr) {
+    UnpackedPtr<MultisampleState> unpackedMultisampleState = Unpack(&descriptor->multisample);
+    if (auto* msaaRenderToSingleSampledDesc =
+            unpackedMultisampleState.Get<DawnMultisampleStateRenderToSingleSampled>()) {
         mIsMSAARenderToSingleSampledEnabled = msaaRenderToSingleSampledDesc->enabled;
     }
 
     if (descriptor->fragment != nullptr) {
         DAWN_ASSERT(descriptor->fragment->targetCount <= kMaxColorAttachments);
-        for (ColorAttachmentIndex i(uint8_t(0));
-             i < ColorAttachmentIndex(static_cast<uint8_t>(descriptor->fragment->targetCount));
-             ++i) {
-            wgpu::TextureFormat format =
-                descriptor->fragment->targets[static_cast<uint8_t>(i)].format;
+        auto targets = ityp::SpanFromUntyped<ColorAttachmentIndex>(
+            descriptor->fragment->targets, descriptor->fragment->targetCount);
+
+        for (auto [i, target] : Enumerate(targets)) {
+            wgpu::TextureFormat format = target.format;
             if (format != wgpu::TextureFormat::Undefined) {
                 mColorAttachmentsSet.set(i);
                 mColorFormats[i] = format;
@@ -89,12 +92,12 @@ AttachmentState::AttachmentState(DeviceBase* device,
     SetContentHash(ComputeContentHash());
 }
 
-AttachmentState::AttachmentState(DeviceBase* device, const RenderPassDescriptor* descriptor)
+AttachmentState::AttachmentState(DeviceBase* device,
+                                 const UnpackedPtr<RenderPassDescriptor>& descriptor)
     : ObjectBase(device) {
-    for (ColorAttachmentIndex i(uint8_t(0));
-         i < ColorAttachmentIndex(static_cast<uint8_t>(descriptor->colorAttachmentCount)); ++i) {
-        const RenderPassColorAttachment& colorAttachment =
-            descriptor->colorAttachments[static_cast<uint8_t>(i)];
+    auto colorAttachments = ityp::SpanFromUntyped<ColorAttachmentIndex>(
+        descriptor->colorAttachments, descriptor->colorAttachmentCount);
+    for (auto [i, colorAttachment] : Enumerate(colorAttachments)) {
         TextureViewBase* attachment = colorAttachment.view;
         if (attachment == nullptr) {
             continue;
@@ -102,9 +105,9 @@ AttachmentState::AttachmentState(DeviceBase* device, const RenderPassDescriptor*
         mColorAttachmentsSet.set(i);
         mColorFormats[i] = attachment->GetFormat().format;
 
-        const DawnRenderPassColorAttachmentRenderToSingleSampled* msaaRenderToSingleSampledDesc =
-            nullptr;
-        FindInChain(colorAttachment.nextInChain, &msaaRenderToSingleSampledDesc);
+        UnpackedPtr<RenderPassColorAttachment> unpackedColorAttachment = Unpack(&colorAttachment);
+        auto* msaaRenderToSingleSampledDesc =
+            unpackedColorAttachment.Get<DawnRenderPassColorAttachmentRenderToSingleSampled>();
         uint32_t attachmentSampleCount;
         if (msaaRenderToSingleSampledDesc != nullptr &&
             msaaRenderToSingleSampledDesc->implicitSampleCount > 1) {
@@ -133,9 +136,7 @@ AttachmentState::AttachmentState(DeviceBase* device, const RenderPassDescriptor*
     }
 
     // Gather the PLS information.
-    const RenderPassPixelLocalStorage* pls = nullptr;
-    FindInChain(descriptor->nextInChain, &pls);
-    if (pls != nullptr) {
+    if (auto* pls = descriptor.Get<RenderPassPixelLocalStorage>()) {
         mHasPLS = true;
         mStorageAttachmentSlots = std::vector<wgpu::TextureFormat>(
             pls->totalPixelLocalStorageSize / kPLSSlotByteSize, wgpu::TextureFormat::Undefined);
@@ -181,7 +182,7 @@ bool AttachmentState::EqualityFunc::operator()(const AttachmentState* a,
     }
 
     // Check color formats
-    for (ColorAttachmentIndex i : IterateBitSet(a->mColorAttachmentsSet)) {
+    for (auto i : IterateBitSet(a->mColorAttachmentsSet)) {
         if (a->mColorFormats[i] != b->mColorFormats[i]) {
             return false;
         }
@@ -223,7 +224,7 @@ size_t AttachmentState::ComputeContentHash() {
 
     // Hash color formats
     HashCombine(&hash, mColorAttachmentsSet);
-    for (ColorAttachmentIndex i : IterateBitSet(mColorAttachmentsSet)) {
+    for (auto i : IterateBitSet(mColorAttachmentsSet)) {
         HashCombine(&hash, mColorFormats[i]);
     }
 
@@ -245,8 +246,7 @@ size_t AttachmentState::ComputeContentHash() {
     return hash;
 }
 
-ityp::bitset<ColorAttachmentIndex, kMaxColorAttachments> AttachmentState::GetColorAttachmentsMask()
-    const {
+ColorAttachmentMask AttachmentState::GetColorAttachmentsMask() const {
     return mColorAttachmentsSet;
 }
 
@@ -279,4 +279,25 @@ bool AttachmentState::HasPixelLocalStorage() const {
 const std::vector<wgpu::TextureFormat>& AttachmentState::GetStorageAttachmentSlots() const {
     return mStorageAttachmentSlots;
 }
+
+std::vector<ColorAttachmentIndex>
+AttachmentState::ComputeStorageAttachmentPackingInColorAttachments() const {
+    // TODO(dawn:1704): Consider caching this on AttachmentState creation, but does it become part
+    // of the hashing and comparison operators? Fill with garbage data to more easily detect cases
+    // where an incorrect slot is accessed.
+    std::vector<ColorAttachmentIndex> result(mStorageAttachmentSlots.size(),
+                                             ityp::PlusOne(kMaxColorAttachmentsTyped));
+
+    // Iterate over the empty bits of mColorAttachmentsSet to pack storage attachment in them.
+    auto availableSlots = ~mColorAttachmentsSet;
+    for (size_t i = 0; i < mStorageAttachmentSlots.size(); i++) {
+        DAWN_ASSERT(!availableSlots.none());
+        auto slot = ColorAttachmentIndex(uint8_t(ScanForward(availableSlots.to_ulong())));
+        availableSlots.reset(slot);
+        result[i] = slot;
+    }
+
+    return result;
+}
+
 }  // namespace dawn::native

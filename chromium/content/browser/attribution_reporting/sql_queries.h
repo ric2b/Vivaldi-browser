@@ -15,7 +15,7 @@ static_assert(static_cast<int>(
               "update `report_type=0` clause below");
 inline constexpr const char kMinPrioritySql[] =
     "SELECT metadata,report_id FROM reports "
-    "WHERE source_id=? AND report_time=? AND report_type=0";
+    "WHERE source_id=? AND initial_report_time=? AND report_type=0";
 
 // Rows are ordered by source_id instead of source_time because the former is
 // strictly increasing while the latter is subject to clock adjustments. This
@@ -61,7 +61,8 @@ inline constexpr const char kDeleteVestigialConversionSql[] =
 inline constexpr const char kCountActiveSourcesFromSourceOriginSql[] =
     "SELECT COUNT(*)FROM sources "
     "WHERE source_origin=? "
-    "AND(event_level_active=1 OR aggregatable_active=1)";
+    "AND(event_level_active=1 OR aggregatable_active=1)"
+    "AND expiry_time>?";
 
 inline constexpr const char kCountSourcesSql[] = "SELECT COUNT(*)FROM sources";
 
@@ -70,7 +71,7 @@ inline constexpr const char kCountReportsSql[] =
     "WHERE source_id=? AND report_type=? AND dedup_key=?";
 
 inline constexpr const char kDedupKeySql[] =
-    "SELECT dedup_key FROM dedup_keys WHERE source_id=? AND report_type=?";
+    "SELECT dedup_key,report_type FROM dedup_keys WHERE source_id=?";
 
 inline constexpr const char kGetSourcesDataKeysSql[] =
     "SELECT reporting_origin FROM sources";

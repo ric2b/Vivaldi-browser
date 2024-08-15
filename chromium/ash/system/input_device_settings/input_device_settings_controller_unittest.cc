@@ -2,10 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/system/input_device_settings/input_device_settings_controller_impl.h"
-
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -15,6 +14,7 @@
 #include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/system/input_device_settings/input_device_settings_controller_impl.h"
 #include "ash/system/input_device_settings/input_device_settings_defaults.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/system/input_device_settings/input_device_settings_utils.h"
@@ -41,7 +41,6 @@
 #include "device/udev_linux/fake_udev_loader.h"
 #include "mojo/public/cpp/bindings/clone_traits.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/ash/mojom/extended_fkeys_modifier.mojom-shared.h"
@@ -154,14 +153,22 @@ const ui::InputDevice kSampleUncustomizableMouse(5,
                                                  /*vendor=*/0xffff,
                                                  /*product=*/0xffff,
                                                  /*version=*/0x0009);
-const ui::InputDevice kSampleCustomizableMouse(4,
+const ui::InputDevice kSampleCustomizableMouse(6,
                                                ui::INPUT_DEVICE_USB,
                                                "kSampleCustomizableMouse",
                                                /*phys=*/"",
                                                /*sys_path=*/base::FilePath(),
-                                               /*vendor=*/0x0007,
-                                               /*product=*/0x0008,
+                                               /*vendor=*/0xffff,
+                                               /*product=*/0xfffe,
                                                /*version=*/0x0009);
+const ui::InputDevice kSampleKeyboardMouseCombo(7,
+                                                ui::INPUT_DEVICE_USB,
+                                                "kSampleKeyboardMouseCombo",
+                                                /*phys=*/"",
+                                                /*sys_path=*/base::FilePath(),
+                                                /*vendor=*/0x046d,
+                                                /*product=*/0xc548,
+                                                /*version=*/0x0009);
 
 constexpr char kUserEmail1[] = "example1@abc.com";
 constexpr char kUserEmail2[] = "joy@abc.com";
@@ -195,8 +202,8 @@ class FakeDeviceManager {
     std::map<std::string, std::string> sysfs_attributes;
     sysfs_properties[kKbdTopRowPropertyName] = layout;
     fake_udev_.AddFakeDevice(fake_keyboard.name, fake_keyboard.sys_path.value(),
-                             /*subsystem=*/"input", /*devnode=*/absl::nullopt,
-                             /*devtype=*/absl::nullopt,
+                             /*subsystem=*/"input", /*devnode=*/std::nullopt,
+                             /*devtype=*/std::nullopt,
                              std::move(sysfs_attributes),
                              std::move(sysfs_properties));
 
@@ -431,6 +438,7 @@ class InputDeviceSettingsControllerTest : public NoSessionAshTestBase {
         {features::kPeripheralCustomization,
          features::kInputDeviceSettingsSplit,
          features::kAltClickAndSixPackCustomization,
+         features::kPeripheralNotification,
          ::features::kSupportF11AndF12KeyShortcuts},
         {});
     NoSessionAshTestBase::SetUp();
@@ -515,8 +523,8 @@ class InputDeviceSettingsControllerTest : public NoSessionAshTestBase {
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   std::unique_ptr<InputDeviceSettingsController::ScopedResetterForTest>
       scoped_resetter_;
-  raw_ptr<FakeKeyboardPrefHandler, DanglingUntriaged | ExperimentalAsh>
-      keyboard_pref_handler_ = nullptr;
+  raw_ptr<FakeKeyboardPrefHandler, DanglingUntriaged> keyboard_pref_handler_ =
+      nullptr;
 };
 
 TEST_F(InputDeviceSettingsControllerTest, KeyboardAddingOne) {
@@ -768,47 +776,6 @@ TEST_F(InputDeviceSettingsControllerTest, UpdateLoginScreenSettings) {
   // list of keyboards.
   EXPECT_EQ(
       keyboard_pref_handler_->num_login_screen_keyboard_settings_updated(), 3u);
-}
-
-TEST_F(InputDeviceSettingsControllerTest, BlockMouseKeyEventRewrite) {
-  fake_device_manager_->AddFakeKeyboard(kSampleKeyboardInternal2,
-                                        kKbdTopRowLayout1Tag);
-  EXPECT_EQ(true, IsMouseCustomizable(kSampleCustomizableMouse));
-  fake_device_manager_->AddFakeMouse(kSampleCustomizableMouse);
-  EXPECT_EQ(mojom::CustomizationRestriction::kDisableKeyEventRewrites,
-            controller_->GetConnectedMice()[0]->customization_restriction);
-
-  fake_device_manager_->RemoveAllDevices();
-  fake_device_manager_->AddFakeMouse(kSampleCustomizableMouse);
-  EXPECT_EQ(true, IsMouseCustomizable(kSampleCustomizableMouse));
-  EXPECT_EQ(mojom::CustomizationRestriction::kAllowCustomizations,
-            controller_->GetConnectedMice()[0]->customization_restriction);
-  fake_device_manager_->AddFakeKeyboard(kSampleKeyboardInternal2,
-                                        kKbdTopRowLayout1Tag);
-  EXPECT_EQ(mojom::CustomizationRestriction::kDisableKeyEventRewrites,
-            controller_->GetConnectedMice()[0]->customization_restriction);
-}
-
-TEST_F(InputDeviceSettingsControllerTest,
-       BlockMouseKeyEventRewriteRestartObserving) {
-  fake_device_manager_->AddFakeMouse(kSampleCustomizableMouse);
-  EXPECT_EQ(mojom::CustomizationRestriction::kAllowCustomizations,
-            controller_->GetConnectedMice()[0]->customization_restriction);
-
-  controller_->StartObservingButtons(kSampleCustomizableMouse.id);
-  auto* rewriter = Shell::Get()
-                       ->event_rewriter_controller()
-                       ->peripheral_customization_event_rewriter();
-  EXPECT_EQ(1u, rewriter->mice_to_observe().size());
-  EXPECT_EQ(1u, rewriter->mice_to_observe_key_events().size());
-
-  fake_device_manager_->AddFakeKeyboard(kSampleKeyboardInternal2,
-                                        kKbdTopRowLayout1Tag);
-  EXPECT_EQ(mojom::CustomizationRestriction::kDisableKeyEventRewrites,
-            controller_->GetConnectedMice()[0]->customization_restriction);
-
-  EXPECT_EQ(1u, rewriter->mice_to_observe().size());
-  EXPECT_EQ(0u, rewriter->mice_to_observe_key_events().size());
 }
 
 TEST_F(InputDeviceSettingsControllerTest, KeyboardSettingsAreValid) {
@@ -1223,11 +1190,16 @@ TEST_F(InputDeviceSettingsControllerTest, RestoreDefaultKeyboardRemappings) {
 TEST_F(InputDeviceSettingsControllerTest, MouseButtonPressed) {
   ui::DeviceDataManagerTestApi().SetMouseDevices({kSampleMouseUsb});
 
+  base::HistogramTester histogram_tester;
   controller_->OnMouseButtonPressed(kSampleMouseUsb.id,
                                     *mojom::Button::NewCustomizableButton(
                                         mojom::CustomizableButton::kMiddle));
   EXPECT_EQ(1u, observer_->num_mouse_settings_updated());
   EXPECT_EQ(1u, observer_->num_mouse_buttons_pressed());
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.Settings.Device.Mouse.ButtonRemapping.Registered."
+      "CustomizableButton",
+      /*expected_count=*/1u);
 
   controller_->OnMouseButtonPressed(
       kSampleMouseUsb.id,
@@ -1235,11 +1207,19 @@ TEST_F(InputDeviceSettingsControllerTest, MouseButtonPressed) {
   EXPECT_EQ(2u, observer_->num_mouse_settings_updated());
   EXPECT_EQ(2u, observer_->num_mouse_buttons_pressed());
 
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.Settings.Device.Mouse.ButtonRemapping.Registered."
+      "CustomizableButton",
+      /*expected_count=*/2u);
   controller_->OnMouseButtonPressed(
       kSampleMouseUsb.id,
       *mojom::Button::NewCustomizableButton(mojom::CustomizableButton::kExtra));
   EXPECT_EQ(3u, observer_->num_mouse_settings_updated());
   EXPECT_EQ(3u, observer_->num_mouse_buttons_pressed());
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.Settings.Device.Mouse.ButtonRemapping.Registered."
+      "CustomizableButton",
+      /*expected_count=*/3u);
 
   auto* settings = controller_->GetMouseSettings(kSampleMouseUsb.id);
   ASSERT_TRUE(settings);
@@ -1261,31 +1241,59 @@ TEST_F(InputDeviceSettingsControllerTest, MouseButtonPressed) {
       *settings->button_remappings[2]->button);
   EXPECT_EQ("Other Button 2", settings->button_remappings[2]->name);
   EXPECT_EQ(nullptr, settings->button_remappings[2]->remapping_action.get());
+
+  // Press a same button again, the button register metrics should not emit.
+  controller_->OnMouseButtonPressed(kSampleMouseUsb.id,
+                                    *mojom::Button::NewCustomizableButton(
+                                        mojom::CustomizableButton::kMiddle));
+  EXPECT_EQ(3u, observer_->num_mouse_settings_updated());
+  EXPECT_EQ(4u, observer_->num_mouse_buttons_pressed());
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.Settings.Device.Mouse.ButtonRemapping.Registered."
+      "CustomizableButton",
+      /*expected_count=*/3u);
 }
 
 TEST_F(InputDeviceSettingsControllerTest, GraphicsTabletButtonPressed) {
   ui::DeviceDataManagerTestApi().SetGraphicsTabletDevices(
       {kSampleGraphicsTablet});
+  base::HistogramTester histogram_tester;
 
   mojom::ButtonPtr pen_button =
       mojom::Button::NewCustomizableButton(mojom::CustomizableButton::kForward);
+  mojom::ButtonPtr pen_middle_button =
+      mojom::Button::NewCustomizableButton(mojom::CustomizableButton::kMiddle);
   mojom::ButtonPtr tablet_button = mojom::Button::NewVkey(ui::VKEY_A);
   controller_->OnGraphicsTabletButtonPressed(kSampleGraphicsTablet.id,
                                              *pen_button);
   controller_->OnGraphicsTabletButtonPressed(kSampleGraphicsTablet.id,
+                                             *pen_middle_button);
+  controller_->OnGraphicsTabletButtonPressed(kSampleGraphicsTablet.id,
                                              *tablet_button);
-  EXPECT_EQ(2u, observer_->num_graphics_tablets_settings_updated());
+  EXPECT_EQ(3u, observer_->num_graphics_tablets_settings_updated());
   EXPECT_EQ(1u, observer_->num_tablet_buttons_pressed());
-  EXPECT_EQ(1u, observer_->num_pen_buttons_pressed());
+  EXPECT_EQ(2u, observer_->num_pen_buttons_pressed());
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.Settings.Device.GraphicsTablet.ButtonRemapping.Registered."
+      "Vkey",
+      /*expected_count=*/1u);
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.Settings.Device.GraphicsTabletPen.ButtonRemapping.Registered."
+      "CustomizableButton",
+      /*expected_count=*/2u);
 
   auto* settings =
       controller_->GetGraphicsTabletSettings(kSampleGraphicsTablet.id);
   ASSERT_TRUE(settings);
-  ASSERT_EQ(1u, settings->pen_button_remappings.size());
+  ASSERT_EQ(2u, settings->pen_button_remappings.size());
   EXPECT_EQ(*pen_button, *settings->pen_button_remappings[0]->button);
   EXPECT_EQ("Other Button 1", settings->pen_button_remappings[0]->name);
   EXPECT_EQ(nullptr,
             settings->pen_button_remappings[0]->remapping_action.get());
+  EXPECT_EQ(*pen_middle_button, *settings->pen_button_remappings[1]->button);
+  EXPECT_EQ("Other Button 2", settings->pen_button_remappings[1]->name);
+  EXPECT_EQ(nullptr,
+            settings->pen_button_remappings[1]->remapping_action.get());
 
   ASSERT_EQ(1u, settings->tablet_button_remappings.size());
   EXPECT_EQ(*tablet_button, *settings->tablet_button_remappings[0]->button);
@@ -1325,8 +1333,10 @@ TEST_F(InputDeviceSettingsControllerTest, ObservingButtons) {
   ASSERT_EQ(0u, rewriter->graphics_tablets_to_observe().size());
 }
 
-TEST_F(InputDeviceSettingsControllerTest, ObservingUncustomizableMouseButtons) {
-  ui::DeviceDataManagerTestApi().SetMouseDevices({kSampleUncustomizableMouse});
+TEST_F(InputDeviceSettingsControllerTest, ObservingMouseButtons) {
+  ui::DeviceDataManagerTestApi().SetMouseDevices({kSampleUncustomizableMouse,
+                                                  kSampleCustomizableMouse,
+                                                  kSampleKeyboardMouseCombo});
 
   auto* rewriter = Shell::Get()
                        ->event_rewriter_controller()
@@ -1336,6 +1346,22 @@ TEST_F(InputDeviceSettingsControllerTest, ObservingUncustomizableMouseButtons) {
   ASSERT_EQ(0u, rewriter->mice_to_observe().size());
   EXPECT_FALSE(
       rewriter->mice_to_observe().contains(kSampleUncustomizableMouse.id));
+
+  controller_->StartObservingButtons(kSampleCustomizableMouse.id);
+  ASSERT_EQ(1u, rewriter->mice_to_observe().size());
+  EXPECT_TRUE(
+      rewriter->mice_to_observe().contains(kSampleCustomizableMouse.id));
+  EXPECT_EQ(
+      rewriter->mice_to_observe().find(kSampleCustomizableMouse.id)->second,
+      mojom::CustomizationRestriction::kAllowCustomizations);
+
+  controller_->StartObservingButtons(kSampleKeyboardMouseCombo.id);
+  ASSERT_EQ(2u, rewriter->mice_to_observe().size());
+  EXPECT_TRUE(
+      rewriter->mice_to_observe().contains(kSampleCustomizableMouse.id));
+  EXPECT_EQ(
+      rewriter->mice_to_observe().find(kSampleKeyboardMouseCombo.id)->second,
+      mojom::CustomizationRestriction::kDisableKeyEventRewrites);
 }
 
 TEST_F(InputDeviceSettingsControllerTest, ObservingButtonsDuplicateIds) {

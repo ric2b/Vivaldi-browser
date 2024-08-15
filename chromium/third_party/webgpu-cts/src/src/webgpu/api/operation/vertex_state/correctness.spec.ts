@@ -432,9 +432,9 @@ struct VSOutputs {
 
           /* prettier-ignore */
           const data = [
-            [0, 0, 0, 0],
+            [   0,    0,    0, 0],
             [1023, 1023, 1023, 3],
-            [243, 567, 765, 2],
+            [ 243,  567,  765, 2],
           ];
           const vertexData = new Uint32Array(data.map(makeRgb10a2)).buffer;
           const expectedData = new Float32Array(data.flat().map(normalizeRgb10a2)).buffer;
@@ -746,18 +746,16 @@ g.test('non_zero_array_stride_and_attribute_offset')
           { mult: 1, add: 0 },
         ];
       })
-      .expand('offsetVariant', p => {
+      .expand('offsetVariant', function* (p) {
         const formatInfo = kVertexFormatInfo[p.format];
         const formatSize = formatInfo.byteSize;
-        return [
-          { mult: 0, add: 0 },
-          { mult: 0, add: formatSize },
-          { mult: 0, add: 4 },
-          { mult: 0.5, add: 0 },
-          { mult: 1, add: -formatSize * 2 },
-          { mult: 1, add: -formatSize - 4 },
-          { mult: 1, add: -formatSize },
-        ];
+        yield { mult: 0, add: 0 };
+        yield { mult: 0, add: 4 };
+        if (formatSize !== 4) yield { mult: 0, add: formatSize };
+        yield { mult: 0.5, add: 0 };
+        yield { mult: 1, add: -formatSize * 2 };
+        if (formatSize !== 4) yield { mult: 1, add: -formatSize - 4 };
+        yield { mult: 1, add: -formatSize };
       })
   )
   .fn(t => {

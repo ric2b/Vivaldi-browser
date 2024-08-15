@@ -172,20 +172,25 @@ bool MenuUpgrade::AddFromBundle(const base::Value::Dict& bundle_dict,
                                 int bundle_index,
                                 base::Value::List& profile_list) {
   const std::string* guid = bundle_dict.FindString("guid");
-  if (guid) {
+  if (guid && !IsDeleted(*guid)) {
     if (!FindNodeByGuid(profile_list, *guid)) {
-      if (!IsDeletedOrModified(*guid)) {
-        // We will try to insert a new item into the profile based file.
+      // Any children of bundle_dict must be added recursivly so that we can
+      // test if they should be added.
+      if (const base::Value::List* children = bundle_dict.FindList("children")) {
+        base::Value::Dict copy(bundle_dict.Clone());
+        base::Value::List empty;
+        copy.Set("children", std::move(empty));
+        if (!Insert(copy, parent_guid, bundle_index, profile_list)) {
+          return false;
+        }
+      } else {
         if (!Insert(bundle_dict, parent_guid, bundle_index, profile_list)) {
           return false;
         }
       }
     }
+    bundle_index = 0;
     if (const base::Value::List* children = bundle_dict.FindList("children")) {
-      // Try to position the new element at the same location as in the bundle.
-      // We only consider the index, if the user has addeed, moved or removed
-      // many elements in the menu in question the new item can be quite off.
-      bundle_index = 0;
       for (auto& child : *children) {
         if (child.is_dict()) {
           if (!AddFromBundle(child.GetDict(), *guid, bundle_index,
@@ -197,8 +202,10 @@ bool MenuUpgrade::AddFromBundle(const base::Value::Dict& bundle_dict,
       }
     }
   }
+
   return true;
 }
+
 
 bool MenuUpgrade::RemoveFromProfile(const base::Value::Dict& profile_dict,
                                     const std::string& parent_guid,
@@ -214,8 +221,7 @@ bool MenuUpgrade::RemoveFromProfile(const base::Value::Dict& profile_dict,
     if (!FindNodeByGuid(bundle_list, *guid)) {
       return Remove(profile_dict, parent_guid, profile_list);
     }
-  } else if (origin == Menu_Node::MODIFIED_BUNDLE &&
-             !IsDeletedOrModified(*guid)) {
+  } else if (origin == Menu_Node::MODIFIED_BUNDLE && !IsDeleted(*guid)) {
     // This means the item has gotten a new guid (which we did intentionally
     // at an early stage of development). We do not want that.
     needs_fixup_ = true;
@@ -253,7 +259,7 @@ bool MenuUpgrade::FixupProfile(base::Value::Dict& profile_dict,
   }
 
   int origin = profile_dict.FindInt("origin").value_or(Menu_Node::BUNDLE);
-  if (origin == Menu_Node::MODIFIED_BUNDLE && !IsDeletedOrModified(*guid)) {
+  if (origin == Menu_Node::MODIFIED_BUNDLE && !IsDeleted(*guid)) {
     // We used to reassign the guid when modfying an item. We get here because
     // the guid in question is not in the deleted list (which contains guids
     // for modified or deleted bundled items). For sync this is a problem as
@@ -278,7 +284,7 @@ bool MenuUpgrade::FixupProfile(base::Value::Dict& profile_dict,
         base::Value::Dict* match = FindNodeByAction(*children, false, *action);
         if (match) {
           const std::string* match_guid = match->FindString("guid");
-          if (match_guid && IsDeletedOrModified(*match_guid)) {
+          if (match_guid && IsDeleted(*match_guid)) {
             // We now have the bundled guid for the item and we know it is in
             // the modified list. Let the profile cunterpart use this guid
             // once again.
@@ -304,7 +310,7 @@ bool MenuUpgrade::FixupProfile(base::Value::Dict& profile_dict,
   return true;
 }
 
-bool MenuUpgrade::IsDeletedOrModified(const std::string& guid) {
+bool MenuUpgrade::IsDeleted(const std::string& guid) {
   for (int i = deleted_.size() - 1; i >= 0; i--) {
     if (guid == deleted_[i]) {
       return true;
@@ -313,6 +319,8 @@ bool MenuUpgrade::IsDeletedOrModified(const std::string& guid) {
   return false;
 }
 
+// Inserts 'bundle_dict' into the profile list. 'bundle_dict' is assumed to not
+// exist (guid wise) in the profile list.
 bool MenuUpgrade::Insert(const base::Value::Dict& bundle_dict,
                          const std::string& parent_guid,
                          int index,

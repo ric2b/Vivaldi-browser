@@ -40,8 +40,8 @@ import("${tint_src_dir}/tint.gni")
 if (tint_build_msl_writer) {
   libtint_source_set("validate") {
     sources = [
-      "msl.cc",
-      "val.h",
+      "validate.cc",
+      "validate.h",
     ]
     deps = [
       "${tint_src_dir}/lang/core",
@@ -49,6 +49,7 @@ if (tint_build_msl_writer) {
       "${tint_src_dir}/lang/core/type",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
+      "${tint_src_dir}/lang/wgsl/features",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
       "${tint_src_dir}/utils/command",
@@ -60,6 +61,7 @@ if (tint_build_msl_writer) {
       "${tint_src_dir}/utils/macros",
       "${tint_src_dir}/utils/math",
       "${tint_src_dir}/utils/memory",
+      "${tint_src_dir}/utils/reflection",
       "${tint_src_dir}/utils/result",
       "${tint_src_dir}/utils/rtti",
       "${tint_src_dir}/utils/symbol",
@@ -67,8 +69,8 @@ if (tint_build_msl_writer) {
       "${tint_src_dir}/utils/traits",
     ]
 
-    if (is_mac) {
-      sources += [ "msl_metal.mm" ]
+    if (tint_build_is_mac) {
+      sources += [ "validate_metal.mm" ]
       deps += [ "${tint_src_dir}:metal" ]
     }
   }

@@ -16,7 +16,7 @@
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/browser/password_store/test_password_store.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 
 #include "content/public/common/content_client.h"

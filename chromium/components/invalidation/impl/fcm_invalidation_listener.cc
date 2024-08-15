@@ -46,6 +46,12 @@ FCMInvalidationListener::~FCMInvalidationListener() {
   DCHECK(!delegate_);
 }
 
+// static
+std::unique_ptr<FCMInvalidationListener> FCMInvalidationListener::Create(
+    std::unique_ptr<FCMSyncNetworkChannel> network_channel) {
+  return std::make_unique<FCMInvalidationListener>(std::move(network_channel));
+}
+
 void FCMInvalidationListener::Start(
     Delegate* delegate,
     std::unique_ptr<PerUserTopicSubscriptionManager>
@@ -172,10 +178,6 @@ void FCMInvalidationListener::DoSubscriptionUpdate() {
   }
 }
 
-void FCMInvalidationListener::StartForTest(Delegate* delegate) {
-  delegate_ = delegate;
-}
-
 void FCMInvalidationListener::EmitStateChangeForTest(InvalidatorState state) {
   delegate_->OnInvalidatorStateChange(state);
 }
@@ -183,6 +185,11 @@ void FCMInvalidationListener::EmitStateChangeForTest(InvalidatorState state) {
 void FCMInvalidationListener::EmitSavedInvalidationForTest(
     const Invalidation& invalidation) {
   EmitSavedInvalidation(invalidation);
+}
+
+void FCMInvalidationListener::EmitSuccessfullySubscribedForTest(
+    const Topic& topic) {
+  delegate_->OnSuccessfullySubscribed(topic);
 }
 
 void FCMInvalidationListener::Stop() {
@@ -229,8 +236,19 @@ void FCMInvalidationListener::OnSubscriptionChannelStateChanged(
   EmitStateChange();
 }
 
-void FCMInvalidationListener::OnSubscriptionRequestStarted(Topic topic) {}
+void FCMInvalidationListener::OnSubscriptionRequestStarted(
+    Topic topic,
+    PerUserTopicSubscriptionManager::RequestType request_type) {}
 
-void FCMInvalidationListener::OnSubscriptionRequestFinished(Topic topic,
-                                                            Status code) {}
+void FCMInvalidationListener::OnSubscriptionRequestFinished(
+    Topic topic,
+    PerUserTopicSubscriptionManager::RequestType request_type,
+    Status code) {
+  if (request_type ==
+          PerUserTopicSubscriptionManager::RequestType::kSubscribe &&
+      code.IsSuccess()) {
+    delegate_->OnSuccessfullySubscribed(topic);
+  }
+}
+
 }  // namespace invalidation

@@ -10,7 +10,12 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "components/prefs/pref_change_registrar.h"
+
+namespace search_engines {
+class SearchEngineChoiceService;
+}
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -24,13 +29,23 @@ struct TemplateURLData;
 // search engine selection to and from prefs.
 class DefaultSearchManager {
  public:
-  static const char kDefaultSearchProviderDataPrefName[];
-  static const char kDefaultPrivateSearchProviderDataPrefName[];
-  static const char kDefaultSearchFieldProviderDataPrefName[];
-  static const char kDefaultPrivateSearchFieldProviderDataPrefName[];
-  static const char kDefaultSpeeddialsSearchProviderDataPrefName[];
-  static const char kDefaultSpeeddialsPrivateSearchProviderDataPrefName[];
-  static const char kDefaultImageSearchProviderDataPrefName[];
+  // A dictionary to hold all data related to the Default Search Engine.
+  // Eventually, this should replace all the data stored in the
+  // default_search_provider.* prefs.
+  static constexpr char kDefaultSearchProviderDataPrefName[] =
+      "default_search_provider_data.template_url_data";
+  static constexpr char kDefaultPrivateSearchProviderDataPrefName[] =
+      "default_search_provider_data.private_template_url_data";
+  static constexpr char kDefaultSearchFieldProviderDataPrefName[] =
+      "default_search_provider_data.search_field_emplate_url_data";
+  static constexpr char kDefaultPrivateSearchFieldProviderDataPrefName[] =
+      "default_search_provider_data.private_search_field_template_url_data";
+  static constexpr char kDefaultSpeeddialsSearchProviderDataPrefName[] =
+      "default_search_provider_data.speeddials_template_url_data";
+  static constexpr char kDefaultSpeeddialsPrivateSearchProviderDataPrefName[] =
+      "default_search_provider_data.speeddials_private_template_url_data";
+  static constexpr char kDefaultImageSearchProviderDataPrefName[] =
+      "default_search_provider_data.image_template_url_data";
 
   static const char kID[];
   static const char kShortName[];
@@ -71,6 +86,7 @@ class DefaultSearchManager {
   static const char kCreatedByPolicy[];
   static const char kDisabledByPolicy[];
   static const char kCreatedFromPlayAPI[];
+  static const char kFeaturedByPolicy[];
   static const char kPreconnectToSearchUrl[];
   static const char kPrefetchLikelyNavigations[];
   static const char kIsActive[];
@@ -98,12 +114,21 @@ class DefaultSearchManager {
   using ObserverCallback =
       base::RepeatingCallback<void(const TemplateURLData*, Source)>;
 
-  DefaultSearchManager(PrefService* pref_service,
-                       const ObserverCallback& change_observer);
+  DefaultSearchManager(
+      PrefService* pref_service,
+      search_engines::SearchEngineChoiceService* search_engine_choice_service,
+      const ObserverCallback& change_observer
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+      ,
+      bool for_lacros_main_profile
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  );
 
-  DefaultSearchManager(PrefService* pref_service,
-                       const char* vivaldi_default_pref,
-                       const ObserverCallback& change_observer);
+  DefaultSearchManager(
+      PrefService* pref_service,
+      search_engines::SearchEngineChoiceService* search_engine_choice_service,
+      const char* vivaldi_default_pref,
+      const ObserverCallback& change_observer);
 
   DefaultSearchManager(const DefaultSearchManager&) = delete;
   DefaultSearchManager& operator=(const DefaultSearchManager&) = delete;
@@ -175,7 +200,10 @@ class DefaultSearchManager {
   // Invokes |change_observer_| if it is not NULL.
   void NotifyObserver();
 
-  raw_ptr<PrefService> pref_service_;
+  const raw_ptr<PrefService> pref_service_;
+  const raw_ptr<search_engines::SearchEngineChoiceService>
+      search_engine_choice_service_ = nullptr;
+
   const ObserverCallback change_observer_;
   PrefChangeRegistrar pref_change_registrar_;
 
@@ -198,6 +226,11 @@ class DefaultSearchManager {
 
   // True if the default search is currently recommended by policy.
   bool default_search_recommended_by_policy_ = false;
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // True if this instance is used for the Lacros primary profile.
+  bool for_lacros_main_profile_ = false;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   const char* vivaldi_default_pref_;
 };

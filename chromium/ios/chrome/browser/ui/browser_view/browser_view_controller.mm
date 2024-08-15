@@ -10,18 +10,21 @@
 #import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
+#import "components/enterprise/idle/idle_features.h"
+#import "components/enterprise/idle/idle_pref_names.h"
+#import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
-#import "ios/chrome/browser/discover_feed/feed_constants.h"
+#import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
-#import "ios/chrome/browser/metrics/tab_usage_recorder_browser_agent.h"
-#import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -33,13 +36,12 @@
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
-#import "ios/chrome/browser/shared/ui/util/named_guide_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ui/authentication/re_signin_infobar_delegate.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
+#import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
 #import "ios/chrome/browser/ui/browser_view/key_commands_provider.h"
 #import "ios/chrome/browser/ui/browser_view/safe_area_provider.h"
@@ -61,7 +63,7 @@
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_mediator.h"
 #import "ios/chrome/browser/ui/side_swipe/swipe_view.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_coordinator.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_strip/coordinator/tab_strip_coordinator.h"
 #import "ios/chrome/browser/ui/tabs/background_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
@@ -69,20 +71,16 @@
 #import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_presenter.h"
-#import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_coordinator.h"
-#import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/fullscreen/toolbar_ui.h"
 #import "ios/chrome/browser/ui/toolbar/fullscreen/toolbar_ui_broadcasting_util.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
-#import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
-#import "ios/chrome/browser/web/page_placeholder_browser_agent.h"
-#import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
-#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
-#import "ios/chrome/browser/web/web_navigation_util.h"
-#import "ios/chrome/browser/web/web_state_update_browser_agent.h"
-#import "ios/chrome/browser/web_state_list/web_usage_enabler/web_usage_enabler_browser_agent.h"
+#import "ios/chrome/browser/web/model/page_placeholder_browser_agent.h"
+#import "ios/chrome/browser/web/model/page_placeholder_tab_helper.h"
+#import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
+#import "ios/chrome/browser/web/model/web_navigation_util.h"
+#import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent.h"
 #import "ios/chrome/browser/webui/model/show_mail_composer_context.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/promo_style/promo_style_view_controller.h"
@@ -102,9 +100,14 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/url_formatter/url_fixer.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
@@ -112,18 +115,22 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
+#import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view.h"
 #import "ios/panel/panel_interaction_controller.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
-#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs_helper.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
+#import "ios/ui/settings/appearance/vivaldi_appearance_settings_swift.h"
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "ios/ui/toolbar/vivaldi_sticky_toolbar_view.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -203,7 +210,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                                      TabStripPresentation,
                                      UIGestureRecognizerDelegate,
 
-                                     LocationBarSteadyViewConsumer // Vivaldi
+                                     // Vivaldi
+                                     LocationBarSteadyViewConsumer,
+                                     BooleanObserver,
+                                     PrefObserverDelegate
+                                     // End Vivaldi
+
                                      > {
   // Identifier for each animation of an NTP opening.
   NSInteger _NTPAnimationIdentifier;
@@ -264,14 +276,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // The service used to load url parameters in current or new tab.
   UrlLoadingBrowserAgent* _urlLoadingBrowserAgent;
 
-  // Used to notify observers of url loading state change.
-  UrlLoadingNotifierBrowserAgent* _urlLoadingNotifierBrowserAgent;
-
   // Used to report usage of a single Browser's tab.
   TabUsageRecorderBrowserAgent* _tabUsageRecorderBrowserAgent;
-
-  // Used for updates in web state.
-  WebStateUpdateBrowserAgent* _webStateUpdateBrowserAgent;
 
   // Used to get the layout guide center.
   LayoutGuideCenter* _layoutGuideCenter;
@@ -388,6 +394,29 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // Command handler for browser coordinator commands
 @property(nonatomic, weak) id<BrowserCoordinatorCommands>
     browserCoordinatorCommandsHandler;
+// View put underneath tab strip and primary toolbar view to show theme color.
+@property(nonatomic, strong) UIView* tabStripContainer;
+// Constraint for tab strip container top anchor.
+@property(nonatomic, strong) NSLayoutConstraint* tabStripContainerTopConstraint;
+// Constraint for tab strip container bottom anchor.
+@property(nonatomic, strong) NSLayoutConstraint*
+    tabStripContainerBottomConstraint;
+// Constraint for tab strip container height.
+@property(nonatomic, strong) NSLayoutConstraint*
+    tabStripContainerHeightConstraint;
+// Top constraint for steady view when omnibox is at the top.
+@property(nonatomic, strong) NSLayoutConstraint* topOmniboxSteadyViewTopAnchor;
+// Top constraint for steady view when omnibox is at the bottom.
+@property(nonatomic, strong) NSLayoutConstraint*
+    bottomOmniboxSteadyViewTopAnchor;
+// Height constraint for the fake status bar.
+@property(nonatomic, strong) NSLayoutConstraint* fakeStatusBarHeightConstraint;
+// View put underneath tab strip and secondary toolbar view to show theme color
+// when user scrolls.
+@property(nonatomic, strong) UIView* secondaryToolbarAccentColorContainer;
+// Height constraint for the secondaryToolbarAccentColorContainer.
+@property(nonatomic, strong) NSLayoutConstraint*
+    secondaryToolbarAccentColorContainerHeightConstraint;
 // End Vivaldi
 
 @end
@@ -395,6 +424,18 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 @implementation BrowserViewController
 
 // Vivaldi
+{
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  PrefChangeRegistrar _prefChangeRegistrar;
+  // Observer for dynamic accent color state
+  PrefBackedBoolean* _dynamicAccentColorEnabled;
+  // Pref tracking if bottom omnibox is enabled.
+  PrefBackedBoolean* _bottomOmniboxEnabled;
+  // Pref tracking if tab bar is enabled.
+  PrefBackedBoolean* _tabBarEnabled;
+}
 @synthesize vivaldiStickyToolbarView = _vivaldiStickyToolbarView;
 // End Vivaldi
 
@@ -436,15 +477,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     self.findInPageCommandsHandler = dependencies.findInPageCommandsHandler;
     _isOffTheRecord = dependencies.isOffTheRecord;
     _urlLoadingBrowserAgent = dependencies.urlLoadingBrowserAgent;
-    _urlLoadingNotifierBrowserAgent =
-        dependencies.urlLoadingNotifierBrowserAgent;
     _tabUsageRecorderBrowserAgent = dependencies.tabUsageRecorderBrowserAgent;
     _layoutGuideCenter = dependencies.layoutGuideCenter;
     _webStateList = dependencies.webStateList;
     _voiceSearchController = dependencies.voiceSearchController;
     self.safeAreaProvider = dependencies.safeAreaProvider;
     _pagePlaceholderBrowserAgent = dependencies.pagePlaceholderBrowserAgent;
-    _webStateUpdateBrowserAgent = dependencies.webStateUpdateBrowserAgent;
 
     self.inNewTabAnimation = NO;
     self.fullscreenController = dependencies.fullscreenController;
@@ -667,7 +705,16 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   CGFloat headerOffset = self.rootSafeAreaInsets.top;
 
   if (IsVivaldiRunning()) {
-    return [self canShowTabStrip] ? headerOffset : 0.0;
+    // For bottom omnibox tab strip offset is calculated from view height,
+    // bottom safe area and tab strip height.
+    if ([self canShowTabStrip]) {
+      CGFloat bottomSafeArea = self.rootSafeAreaInsets.bottom;
+      CGFloat tabStripHeight = self.tabStripView.frame.size.height;
+      return [self isBottomOmniboxEnabled] ?
+        (self.view.bounds.size.height - bottomSafeArea - tabStripHeight) :
+        headerOffset;
+    }
+    return 0.0;
   } // End Vivaldi
 
   return IsRegularXRegularSizeClass(self) ? headerOffset : 0.0;
@@ -959,6 +1006,23 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   // Vivaldi
   [self shutdownNoteController];
+  if (_bottomOmniboxEnabled) {
+    [_bottomOmniboxEnabled stop];
+    [_bottomOmniboxEnabled setObserver:nil];
+    _bottomOmniboxEnabled = nil;
+  }
+  if (_tabBarEnabled) {
+    [_tabBarEnabled stop];
+    [_tabBarEnabled setObserver:nil];
+    _tabBarEnabled = nil;
+  }
+  if (_dynamicAccentColorEnabled) {
+    [_dynamicAccentColorEnabled stop];
+    [_dynamicAccentColorEnabled setObserver:nil];
+    _dynamicAccentColorEnabled = nil;
+  }
+  _prefChangeRegistrar.RemoveAll();
+  _prefObserverBridge.reset();
   // End Vivaldi
 }
 
@@ -1035,8 +1099,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self.view addSubview:self.typingShield];
   [super viewDidLoad];
 
+  if (!IsVivaldiRunning()) {
   // Install fake status bar for iPad iOS7
   [self installFakeStatusBar];
+  } // End Vivaldi
 
   [self buildToolbarAndTabStrip];
   [self setUpViewLayout:YES];
@@ -1054,40 +1120,39 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self.contentArea addGestureRecognizer:self.contentAreaGestureRecognizer];
 
   if (IsVivaldiRunning()) {
-    self.view.backgroundColor = _isOffTheRecord ?
-        [UIColor colorNamed:vPrivateNTPBackgroundColor] :
-        [UIColor colorNamed:vNTPBackgroundColor];
-
     // Copy to note context menu item
     NSString* text =
       l10n_util::GetNSString(IDS_VIVALDI_COPY_TO_NOTE);
     UIMenuItem* copyToNoteItem = [[UIMenuItem alloc]
                        initWithTitle:text action:@selector(onCopyToNote:)];
 
-    // Search with Vivaldi context menu item
-    NSString* searchWithVivaldi =
-      l10n_util::GetNSString(IDS_IOS_SEARCH_WITH_VIVALDI);
-    UIMenuItem* searchWithVivaldiItem =
-      [[UIMenuItem alloc] initWithTitle:searchWithVivaldi
-                                 action:@selector(onSearchWithVivaldi:)];
-
     // Add to context menu.
     UIMenuController.sharedMenuController.menuItems =
-        [NSArray arrayWithObjects:copyToNoteItem, searchWithVivaldiItem, nil];
+        [NSArray arrayWithObjects:copyToNoteItem, nil];
 
     // Set up the sticky top toolbar view.
     VivaldiStickyToolbarView* vivaldiStickyToolbarView =
       [VivaldiStickyToolbarView new];
     _vivaldiStickyToolbarView = vivaldiStickyToolbarView;
     [self.view addSubview:vivaldiStickyToolbarView];
-    [vivaldiStickyToolbarView anchorTop:self.view.safeTopAnchor
+    [vivaldiStickyToolbarView anchorTop:nil
                                 leading:self.view.safeLeftAnchor
                                  bottom:nil
-                               trailing:self.view.safeRightAnchor
-                            size:CGSizeMake(0, vStickyToolbarViewHeight)];
+                               trailing:self.view.safeRightAnchor];
     vivaldiStickyToolbarView.alpha = 0;
 
-    [vivaldiStickyToolbarView setTintColor:_isOffTheRecord];
+    UIView* primaryToolbarView =
+        self.toolbarCoordinator.primaryToolbarViewController.view;
+    self.topOmniboxSteadyViewTopAnchor =
+        [vivaldiStickyToolbarView.bottomAnchor
+            constraintEqualToAnchor:primaryToolbarView.bottomAnchor];
+
+    UIView* secondaryToolbarView =
+        self.toolbarCoordinator.secondaryToolbarViewController.view;
+    self.bottomOmniboxSteadyViewTopAnchor =
+        [vivaldiStickyToolbarView.topAnchor
+            constraintEqualToAnchor:secondaryToolbarView.topAnchor
+                           constant:vBottomToolbarSteadyViewTopPadding];
 
     // Set up a tap gesture the view.
     UITapGestureRecognizer* tapGesture =
@@ -1137,10 +1202,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   // Vivaldi
   [self startObservingTabSettingChange];
-  _sideSwipeMediator.isDesktopTabBarEnabled = [self isDesktopTabBarEnabled];
-  if (self.currentWebState && self.legacyTabStripCoordinator)
+  [self startObservingOmniboxPositionChange];
+  [self startObservingWebsiteAppearanceAndAccentColorChange];
+  _sideSwipeMediator.isDesktopTabBarEnabled = [self canShowTabStrip];
+  if (self.currentWebState && self.legacyTabStripCoordinator) {
     [self.legacyTabStripCoordinator
         scrollToSelectedTab:self.currentWebState animated:NO];
+    [self updateUIElementsWithThemeColor];
+  }
   [self.browserCoordinatorCommandsHandler showWhatsNew];
   // End Vivaldi
 
@@ -1238,8 +1307,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   BOOL hasUserInterfaceStyleChanged =
     [previousTraitCollection
      hasDifferentColorAppearanceComparedToTraitCollection:self.traitCollection];
-  if (hasUserInterfaceStyleChanged)
+  if (hasUserInterfaceStyleChanged) {
+    [self updateWebsiteAppearance];
+    [self updateUIElementsWithThemeColor];
     return;
+  }
+  [self didUpdateTabSettings];
   // End Vivaldi
 
   self.fullscreenController->BrowserTraitCollectionChangedBegin();
@@ -1304,7 +1377,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
         [self updateForFullscreenProgress:
             self.fullscreenController->GetProgress()];
       }
-      _fakeStatusBarView.hidden = ![self canShowTabStrip];
     } else {
     [self showTabStripView:self.tabStripView];
     [self.tabStripView layoutSubviews];
@@ -1315,9 +1387,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       [self.legacyTabStripCoordinator hideTabStrip:!canShowTabStrip];
     }
     _fakeStatusBarView.hidden = !canShowTabStrip;
+    [self addConstraintsToPrimaryToolbar];
     } // End Vivaldi
 
-    [self addConstraintsToPrimaryToolbar];
     // If tabstrip is coming back due to a window resize or screen rotation,
     // reset the full screen controller to adjust the tabstrip position.
     if (ShouldShowCompactToolbar(previousTraitCollection) &&
@@ -1341,30 +1413,16 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   if (_isShutdown)
     return;
 
-  if (vivaldi::IsVivaldiRunning()) {
-    // Vivaldi: We will change the view background color for landscape mode to
-    // match the tab strip background color.
-    if (VivaldiGlobalHelpers.isVerticalTraitCompact ||
-        VivaldiGlobalHelpers.isHorizontalTraitRegular) {
-      self.view.backgroundColor = _isOffTheRecord ?
-          UIColor.blackColor :
-          [UIColor colorNamed:vNTPBackgroundColor];
-    } else {
-      self.view.backgroundColor = _isOffTheRecord ?
-          [UIColor colorNamed:vPrivateNTPBackgroundColor] :
-          [UIColor colorNamed:vNTPBackgroundColor];
+  if (IsVivaldiRunning()) {
+    if ([self canShowTabStrip]) {
+      // Hide the tab strip when rotation starts to avoid visual movement glitch
+      // of tab strip moving.
+      self.tabStripView.hidden = YES;
     }
-
     // We will close the open panels in case of UI resizes due to rotation or
     // multitasking window.
     // Otherwise iPad multi tasking UI shows inappropriate panels after transition
     [self.browserCoordinatorCommandsHandler dismissPanel];
-
-    if ([self canShowTabStrip]) {
-      self.tabStripView.hidden = NO;
-    } else {
-      self.tabStripView.hidden = YES;
-    }
   } // End Vivaldi
 
   // TODO(crbug.com/522721): Support size changes for all popups and modal
@@ -1384,22 +1442,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       completion:^(id<UIViewControllerTransitionCoordinatorContext>) {
         [weakSelf completedTransition];
 
-    // Vivaldi
-    // Note: (prio@vivaldi.com) - Force tabStripView to update layout
-    // and scroll to correct tab when UI frame size is changed due to rotation
-    // or multitasking mode.
-    if (weakSelf.canShowTabStrip) {
-      [weakSelf.tabStripView setNeedsLayout];
-      if (weakSelf.currentWebState && weakSelf.legacyTabStripCoordinator) {
-        [weakSelf.legacyTabStripCoordinator
-          scrollToSelectedTab:weakSelf.currentWebState animated:NO];
-      }
-    }
-    // Reset the secondary toolbar height when frame is changed by rotation or
-    // iPad multitasking UI transition.
-    self.secondaryToolbarHeightConstraint.constant =
-        [self secondaryToolbarHeightWithInset];
-    // End Vivaldi
+        // Vivaldi
+        [weakSelf didUpdateTabSettings];
+        [weakSelf updateForFullscreenProgress:
+            weakSelf.fullscreenController->GetProgress()];
+        // End Vivaldi
 
       }];
 
@@ -1565,14 +1612,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 - (UIStatusBarStyle)preferredStatusBarStyle {
 
   if (IsVivaldiRunning()) {
-    if ([self canShowTabStrip] && !_isOffTheRecord &&
-        !base::FeatureList::IsEnabled(kModernTabStrip)) {
-      return self.tabStripView.alpha <= 0.3
-                 ? UIStatusBarStyleDefault
-                 : UIStatusBarStyleLightContent;
+    if (_isOffTheRecord) {
+      return UIStatusBarStyleLightContent;
+    } else {
+      // UIStatusBarStyleDefault returns white always for iPads somehow.
+      // Use UIStatusBarStyleLightContent explicitly.
+      return [self shouldUseDarkStatusBarStyle] ?
+        UIStatusBarStyleDarkContent : UIStatusBarStyleLightContent;
     }
-    return _isOffTheRecord ? UIStatusBarStyleLightContent
-                           : UIStatusBarStyleDefault;
   } // End Vivaldi
 
   if (IsRegularXRegularSizeClass(self) && !_isOffTheRecord &&
@@ -1599,25 +1646,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   CGRect statusBarFrame = CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 0);
   _fakeStatusBarView = [[UIView alloc] initWithFrame:statusBarFrame];
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
-
-  if (IsVivaldiRunning()) {
-    if ([self canShowTabStrip]) {
-      _fakeStatusBarView.backgroundColor = _isOffTheRecord ?
-        [UIColor colorNamed:vPrivateNTPBackgroundColor] :
-        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
-      _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-      DCHECK(self.contentArea);
-      [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
-    } else {
-      _fakeStatusBarView.backgroundColor = _isOffTheRecord ?
-        UIColor.blackColor :
-        [UIColor colorNamed: vTabStripDefaultBackgroundColor];
-      [self.view insertSubview:_fakeStatusBarView atIndex:0];
-    }
-  } else {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-
-    _fakeStatusBarView.backgroundColor = UIColor.blackColor;
+    if (base::FeatureList::IsEnabled(kModernTabStrip)) {
+      _fakeStatusBarView.backgroundColor = [UIColor colorNamed:kGrey200Color];
+    } else {
+      _fakeStatusBarView.backgroundColor = UIColor.blackColor;
+    }
     _fakeStatusBarView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     DCHECK(self.contentArea);
     [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
@@ -1627,8 +1661,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     _fakeStatusBarView.backgroundColor = ntp_home::NTPBackgroundColor();
     [self.view insertSubview:_fakeStatusBarView atIndex:0];
   }
-  } // End Vivaldi
-
 }
 
 // Builds the UI parts of tab strip and the toolbar. Does not matter whether
@@ -1681,12 +1713,15 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       self.toolbarCoordinator.primaryToolbarViewController.view;
   UIView* topmostHeader = [self.headerViews firstObject].view;
 
-  if (IsVivaldiRunning()) {
-    if (primaryToolbar != topmostHeader)
-      return height + ((ui::GetDeviceFormFactor() ==
-                       ui::DEVICE_FORM_FACTOR_TABLET ||
-                        !IsSplitToolbarMode(self)) ? 0 :
-                       vLocationBarTopPaddingDesktopTab);
+  if (IsVivaldiRunning() && primaryToolbar != topmostHeader) {
+    BOOL splitToolbarMode = IsSplitToolbarMode(self);
+    BOOL bottomOmniboxEnabled = [self isBottomOmniboxEnabled];
+    BOOL canShowSidePanel = [VivaldiGlobalHelpers canShowSidePanel];
+    if (canShowSidePanel || !splitToolbarMode || bottomOmniboxEnabled) {
+      return height;
+    } else {
+      return height + vLocationBarTopPaddingDesktopTab;
+    }
   } else {
   if (primaryToolbar != topmostHeader)
     return height;
@@ -1705,12 +1740,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // The height of the secondary toolbar with the bottom safe area inset included.
 // Returns 0 if the toolbar should be hidden.
 - (CGFloat)secondaryToolbarHeightWithInset {
-
-  // Vivaldi
-  if (!IsSplitToolbarMode(self))
-    return 0;
-  // End Vivaldi
-
   CGFloat height = self.toolbarCoordinator.expandedSecondaryToolbarHeight;
   if (!height) {
     return 0.0;
@@ -1732,7 +1761,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
         constraintEqualToAnchor:self.tabStripView.leadingAnchor],
     [self.view.safeAreaLayoutGuide.trailingAnchor
         constraintEqualToAnchor:self.tabStripView.trailingAnchor],
-    [self.tabStripView.heightAnchor constraintEqualToConstant:kTabStripHeight],
+    [self.tabStripView.heightAnchor
+        constraintEqualToConstant:kModernTabStripHeight],
   ]];
 }
 
@@ -1742,7 +1772,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   if (IsVivaldiRunning()) {
     if ([self canShowTabStrip]) {
-      topAnchor = self.tabStripView.bottomAnchor;
+      if ([self isBottomOmniboxEnabled]) {
+        topAnchor = self.view.safeTopAnchor;
+      } else {
+        topAnchor = self.tabStripView.bottomAnchor;
+      }
     } else {
       topAnchor = [self view].topAnchor;
     }
@@ -1832,7 +1866,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 - (void)setUpViewLayout:(BOOL)initialLayout {
   DCHECK([self isViewLoaded]);
 
+  if (!IsVivaldiRunning()) {
   [self setupStatusBarLayout];
+  } // End Vivaldi
 
   if (initialLayout) {
     // Add the toolbars as child view controllers.
@@ -1875,12 +1911,10 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                                  .secondaryToolbarViewController.view
                 aboveSubview:primaryToolbarView];
 
-    // Create the NamedGuides and add them to the browser view.
-    NSArray<GuideName*>* guideNames = @[
-      // TODO(crbug.com/1450600): Migrate kContentAreaGuide to LayoutGuideCenter
-      kContentAreaGuide,
-    ];
-    AddNamedGuidesToView(guideNames, self.view);
+    // TODO(crbug.com/1450600): Migrate kContentAreaGuide to LayoutGuideCenter.
+    // Add guide kContentAreaGuide to the browser view.
+    [self.view
+        addLayoutGuide:[[NamedGuide alloc] initWithName:kContentAreaGuide]];
 
     // Configure the content area guide.
     NamedGuide* contentAreaGuide = [NamedGuide guideWithName:kContentAreaGuide
@@ -2038,25 +2072,44 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // Returns the appropriate frame for the NTP.
 - (CGRect)ntpFrameForCurrentWebState {
   DCHECK(self.ntpCoordinator.isNTPActiveForCurrentWebState);
+
+  // Note(prio@vivaldi.com) - NTP is laid out on same bounds as final
+  // content area after toolbars laid out.
+  if (IsVivaldiRunning()) {
+    UIEdgeInsets viewportInsets = UIEdgeInsetsZero;
+    if ([self isBottomOmniboxEnabled]) {
+      viewportInsets.top = self.rootSafeAreaInsets.top;
+      if (!IsSplitToolbarMode(self)) {
+        // (Important) VIB-133 Workaround for (ntp + landscape + bottom omnibox)
+        // combo.
+        // For this state bottom insets would need to be 0, and the padding is
+        // adjusted on the VivaldiSpeedDialContainerView.
+        // Check -containerBottomPadding method of VivaldiSpeedDialContainerView
+        // for rest of the patch.
+        viewportInsets.bottom = 0;
+      } else {
+        viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
+      }
+    } else {
+      viewportInsets.top = [self expandedTopToolbarHeight];
+      viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
+    }
+
+    return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
+  } // End Vivaldi
+
   // NTP is laid out only in the visible part of the screen.
   UIEdgeInsets viewportInsets = UIEdgeInsetsZero;
   if (!IsRegularXRegularSizeClass(self)) {
     viewportInsets.bottom = [self secondaryToolbarHeightWithInset];
   }
 
-  // Vivaldi: We would prefer the expanded top toolbar height in every scenario
-  // since we have the location bar always visible.
-  if (IsVivaldiRunning()) {
-    viewportInsets.top = [self expandedTopToolbarHeight];
-  } else {
   // Add toolbar margin to the frame for every scenario except compact-width
   // non-otr, as that is the only case where there isn't a primary toolbar.
   // (see crbug.com/1063173)
   if (!IsSplitToolbarMode(self) || _isOffTheRecord) {
     viewportInsets.top = [self expandedTopToolbarHeight];
   }
-  } // End Vivaldi
-
   return UIEdgeInsetsInsetRect(self.contentArea.bounds, viewportInsets);
 }
 
@@ -2088,7 +2141,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     CGRect frame = [header.view frame];
 
     // Vivaldi
-    if (![self canShowTabStrip]) {
+    if (header.view == self.tabStripView) {
     frame.origin.y = yOrigin;
     }
     // End Vivaldi
@@ -2115,7 +2168,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     _tabUsageRecorderBrowserAgent->RecordPageLoadStart(webState);
   }
   if (!webState->IsCrashed()) {
-    // Load the page if it was evicted by browsing data clearing logic.
+    // Load the page if it was evicted by browsing data clearing logic or if
+    // page was never loaded yet after launch.
     webState->GetNavigationManager()->LoadIfNecessary();
   }
   return webState->GetView();
@@ -2154,6 +2208,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   _lastTapPoint = [[view superview] convertPoint:viewCoordinate
                                           toView:self.view];
   _lastTapTime = CACurrentMediaTime();
+  if (base::FeatureList::IsEnabled(enterprise_idle::kIdleTimeout)) {
+    // Last tap timestamp will be consumed by `IdleService` if IdleTimeout
+    // policy is set.
+    GetApplicationContext()->GetLocalState()->SetTime(
+        enterprise_idle::prefs::kLastActiveTimestamp, base::Time::Now());
+  }
 }
 
 #pragma mark - ** Protocol Implementations and Helpers **
@@ -2312,9 +2372,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 - (CGFloat)expandedTopToolbarHeight {
 
   if (IsVivaldiRunning()) {
-    return [self primaryToolbarHeightWithInset] +
-           ([self canShowTabStrip] ? self.tabStripView.frame.size.height : 0.0)
-            + self.headerOffset;
+    CGFloat headerOffset =
+        [self canShowTabStrip] ? self.rootSafeAreaInsets.top : 0;
+    CGFloat toolbarHeight = [self primaryToolbarHeightWithInset];
+    CGFloat additionalHeight = 0.0;
+    if (![self isBottomOmniboxEnabled] && [self canShowTabStrip]) {
+        additionalHeight = self.tabStripView.frame.size.height;
+    }
+    return toolbarHeight + additionalHeight + headerOffset;
   } // End Vivaldi
 
   return [self primaryToolbarHeightWithInset] +
@@ -2359,13 +2424,18 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // them.
 - (void)updateHeadersForFullscreenProgress:(CGFloat)progress {
 
+  if (IsVivaldiRunning()) {
+    CGFloat offset =
+        AlignValueToPixel((1.0 - progress) * [self primaryToolbarHeightDelta]);
+    if (![self isBottomOmniboxEnabled]) {
+      [self setFramesForHeaders:[self headerViews] atOffset:offset];
+    }
+    [self updateToolbarViewsStateWithProgress:progress atOffset:offset];
+  } else {
   CGFloat offset =
       AlignValueToPixel((1.0 - progress) * [self primaryToolbarHeightDelta]);
   [self setFramesForHeaders:[self headerViews] atOffset:offset];
-
-  // Vivaldi
-  [self animateStickyViewStateWithProgress:progress];
-  // End Vivaldi
+  } // End Vivaldi
 
 }
 
@@ -2373,6 +2443,15 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // progress of 1.0 fully shows the footer and a progress of 0.0 fully hides it.
 - (void)updateFootersForFullscreenProgress:(CGFloat)progress {
   self.footerFullscreenProgress = progress;
+
+  // Note:(@prio@vivaldi.com) - Skip this since we have the secondary toolbar
+  // on landscape mode and for iPads.
+  if (!IsVivaldiRunning()) {
+  // Don't update the height of the secondary toolbar if it is hidden.
+  if (!IsSplitToolbarMode(self)) {
+    return;
+  }
+  } // End Vivaldi
 
   const CGFloat expandedToolbarHeight =
       self.fullscreenController->GetMaxViewportInsets().bottom;
@@ -2392,6 +2471,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                      height <= (expandedToolbarHeight + FLT_EPSILON));
 
   self.secondaryToolbarHeightConstraint.constant = height;
+
+  // Vivaldi
+  self.secondaryToolbarAccentColorContainerHeightConstraint.constant = height;
+  // End Vivaldi
+
 }
 
 // Updates the browser container view such that its viewport is the space
@@ -2522,12 +2606,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 
 - (void)webStateSelected {
-  if (!self.viewForCurrentWebState) {
-    return;
-  }
   // Ignore changes while the tab stack view is visible (or while suspended).
   // The display will be refreshed when this view becomes active again.
   if (!self.visible || !self.webUsageEnabled) {
+    return;
+  }
+
+  if (!self.viewForCurrentWebState) {
     return;
   }
 
@@ -2622,7 +2707,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // Add animations only if the tab strip isn't shown.
   UIView* snapshotView = [self.view snapshotViewAfterScreenUpdates:NO];
 
-  // TODO(crbug.com/904992): Do not repurpose SnapshotGeneratorDelegate.
   SwipeView* swipeView = [[SwipeView alloc]
       initWithFrame:self.contentArea.frame
           topMargin:[self snapshotEdgeInsetsForNTPHelper:NTPHelper].top];
@@ -2694,31 +2778,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   UIView* toolbarSnapshot;
 
   if (IsVivaldiRunning()) {
-    if (tabURL == kChromeUINewTabURL && !_isOffTheRecord &&
-        ![self canShowTabStrip]) {
-      // Add a snapshot of the primary toolbar to the background as the
-      // animation runs.
-      UIViewController* toolbarViewController =
-          self.toolbarCoordinator.primaryToolbarViewController;
-      toolbarSnapshot =
-          [toolbarViewController.view snapshotViewAfterScreenUpdates:NO];
-      toolbarSnapshot.frame = [self.contentArea convertRect:toolbarSnapshot.frame
-                                                   fromView:self.view];
-      [self.contentArea addSubview:toolbarSnapshot];
-
-      // Vivaldi
-      if (!IsVivaldiRunning()) {
-      newPage.frame = self.view.bounds;
-      } // End Vivaldi
-
-    } else {
-      if (self.ntpCoordinator.isNTPActiveForCurrentWebState &&
-          self.webUsageEnabled) {
-        newPage.frame = [self ntpFrameForCurrentWebState];
-      } else {
-        newPage.frame = self.contentArea.bounds;
-      }
-    }
+    newPage.frame = [self ntpFrameForCurrentWebState];
   } else {
   if (tabURL == kChromeUINewTabURL && !_isOffTheRecord &&
       !IsRegularXRegularSizeClass(self)) {
@@ -2731,12 +2791,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     toolbarSnapshot.frame = [self.contentArea convertRect:toolbarSnapshot.frame
                                                  fromView:self.view];
     [self.contentArea addSubview:toolbarSnapshot];
-
-    // Vivaldi
-    if (!IsVivaldiRunning()) {
     newPage.frame = self.view.bounds;
-    } // End Vivaldi
-
   } else {
     if (self.ntpCoordinator.isNTPActiveForCurrentWebState &&
         self.webUsageEnabled) {
@@ -2907,6 +2962,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 // TODO(crbug.com/1329105): Federate side swipe logic.
 - (BOOL)preventSideSwipe {
+
+  if (IsVivaldiRunning() && ShouldPresentFirstRunExperience()) {
+    return YES;
+  } // End Vivaldi
+
   if ([self.popupMenuCoordinator isShowingPopupMenu])
     return YES;
 
@@ -2939,6 +2999,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 
 - (CGFloat)headerHeightForSideSwipe {
+
+  if (IsVivaldiRunning()) {
+    return [self expandedTopToolbarHeight];
+  } // End Vivaldi
+
   // If the toolbar is hidden, only inset the side swipe navigation view by
   // `safeAreaInsets.top`.  Otherwise insetting by `self.headerHeight` would
   // show a grey strip where the toolbar would normally be.
@@ -2981,6 +3046,12 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // Lower the height constraint priority, allowing UIKeyboardLayoutGuide to
   // move the toolbar above the keyboard.
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityDefaultHigh;
+
+  // Vivaldi
+  self.bottomOmniboxSteadyViewTopAnchor.constant =
+      vBottomToolbarSteadyViewTopPaddingFullScreen;
+  // End Vivaldi
+
 }
 
 - (void)secondaryToolbarRemovedFromKeyboard {
@@ -2988,6 +3059,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // Return to required priority, otherwise UIKeyboardLayoutGuide would set the
   // toolbar minimum height to the bottom safe area.
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityRequired - 1;
+
+  // Vivaldi: Reset toolbar state after keyboard is closed.
+  self.bottomOmniboxSteadyViewTopAnchor.constant =
+    vBottomToolbarSteadyViewTopPadding;
+  [self.view layoutIfNeeded];
+  // End Vivaldi
+
 }
 
 #pragma mark - LogoAnimationControllerOwnerOwner (Public)
@@ -3012,7 +3090,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   // because the CGPointZero above will break reset the offset, but it's not
   // clear what removing that will do.
   tabStripFrame.origin.y = self.headerOffset;
-  tabStripFrame.size.width = CGRectGetWidth([self view].bounds);
+
+  // Vivaldi
+  tabStripFrame.origin.x = self.rootSafeAreaInsets.left;
+  tabStripFrame.size.width = CGRectGetWidth([self view].bounds) -
+      self.rootSafeAreaInsets.left - self.rootSafeAreaInsets.right;
+  // End Vivaldi
+
   [self.tabStripView setFrame:tabStripFrame];
   [[self view] addSubview:tabStripView];
 }
@@ -3062,97 +3146,246 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 
 #pragma mark - VIVALDI
-- (web::WebState*)getCurrentWebState {
-    return self.currentWebState;
-}
+#pragma mark - Observers for various prefs on which the UI depends.
+- (void)startObservingOmniboxPositionChange {
+  if (!self.browserState)
+    return;
 
-- (BOOL)canShowTabStrip {
+  if (!self.browserState->GetPrefs())
+    return;
 
-  // Vivaldi: For iPad form factor we don't support tabs disabling. Hence,
-  // its unnecessary to check the prefs settings whether tabs is enabled or
-  // disabled. The check also comes with an extra operation which can be skipped
-  // for iPads.
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)
-    return YES;
-  else
-    return self.isDesktopTabBarEnabled;
-}
-
-- (CGFloat)headerHeightForOverscroll {
-  if ([self canShowTabStrip])
-    return [self primaryToolbarHeightWithInset];
-  else
-    return self.headerHeight;
+  _bottomOmniboxEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:self.browserState->GetPrefs()
+                     prefName:prefs::kBottomOmnibox];
+  [_bottomOmniboxEnabled setObserver:self];
+  // Initialize to the correct value.
+  [self booleanDidChange:_bottomOmniboxEnabled];
 }
 
 - (void)startObservingTabSettingChange {
-  // Remove the observer if there's any already added.
-  [[NSNotificationCenter defaultCenter]
-    removeObserver:self
-              name:vTabSettingsDidChange
-            object:nil];
+  if (!self.browserState)
+    return;
 
-  [[NSNotificationCenter defaultCenter]
-    addObserver:self
-       selector:@selector(didUpdateTabSettings)
-           name:vTabSettingsDidChange
-         object:nil];
+  if (!self.browserState->GetPrefs())
+    return;
+
+  _tabBarEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:self.browserState->GetPrefs()
+                     prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
+  [_tabBarEnabled setObserver:self];
+  // Initialize to the correct value.
+  [self booleanDidChange:_tabBarEnabled];
 }
 
+- (void)startObservingWebsiteAppearanceAndAccentColorChange {
+  if (!self.browserState)
+    return;
+
+  if (!self.browserState->GetPrefs())
+    return;
+
+  // Dynamic accent color toggle
+  _dynamicAccentColorEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:self.browserState->GetPrefs()
+                     prefName:vivaldiprefs::kVivaldiDynamicAccentColorEnabled];
+  [_dynamicAccentColorEnabled setObserver:self];
+  [self booleanDidChange:_dynamicAccentColorEnabled];
+
+  // Custom accent color
+  _prefChangeRegistrar.Init(self.browserState->GetPrefs());
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+
+  _prefObserverBridge->ObserveChangesForPreference(
+      vivaldiprefs::kVivaldiCustomAccentColor, &_prefChangeRegistrar);
+
+  // Web page appearance settings
+  _prefObserverBridge->ObserveChangesForPreference(
+      vivaldiprefs::kVivaldiWebsiteAppearanceStyle, &_prefChangeRegistrar);
+
+  [VivaldiAppearanceSettingPrefs
+      setPrefService:self.browserState->GetPrefs()];
+}
+
+#pragma mark - Actions that triggers webstate and parent UI updates.
 - (void)didUpdateTabSettings {
-
-  _sideSwipeMediator.isDesktopTabBarEnabled = [self isDesktopTabBarEnabled];
-  if (self.isDesktopTabBarEnabled) {
-    [self showTabStripView:self.tabStripView];
-    [self.tabStripView layoutSubviews];
-    self.tabStripView.hidden = NO;
-    if (self.currentWebState)
-      [self.legacyTabStripCoordinator
-          scrollToSelectedTab:self.currentWebState animated:NO];
-  } else {
-    self.tabStripView.hidden = YES;
-  }
-
-  [self installFakeStatusBar];
-  [self setUpViewLayout:NO];
-  [self addConstraintsToPrimaryToolbar];
+  _sideSwipeMediator.isDesktopTabBarEnabled = [self canShowTabStrip];
+  [self updateNTPFrame];
+  [self updateToolbarType];
+  [self updateTabStripView];
+  [self updateSteadyViewConstraints];
+  [self configureFakeStatusBar];
+  [self configureTabStripContainer];
+  [self updateConstraintsToPrimaryToolbar];
   [self.toolbarCoordinator updateToolbar];
-
-  if (self.currentWebState) {
-    UIEdgeInsets contentPadding =
-        self.currentWebState->GetWebViewProxy().contentInset;
-    contentPadding.bottom = AlignValueToPixel(
-        self.footerFullscreenProgress * [self secondaryToolbarHeightWithInset]);
-    self.currentWebState->GetWebViewProxy().contentInset = contentPadding;
-  }
-
-  [self
-      updateForFullscreenProgress:self.fullscreenController->GetProgress()];
-  [self updateToolbarState];
-  [self setNeedsStatusBarAppearanceUpdate];
-
-  self.view.backgroundColor = _isOffTheRecord ?
-      [UIColor colorNamed:vPrivateNTPBackgroundColor] :
-      [UIColor colorNamed:vNTPBackgroundColor];
-
+  [self toolbarsHeightChanged];
   if (self.currentWebState) {
     [self reloadSecondaryToolbarButtonsWithNewTabPage:
         self.currentWebState->GetVisibleURL() == kChromeUINewTabURL];
   }
+  self.secondaryToolbarAccentColorContainerHeightConstraint.constant =
+      [self secondaryToolbarHeightWithInset];
+  [self updateUIElementsWithThemeColor];
 }
 
-/// Returns the setting from prefs for selected tabs mode
-- (BOOL)isDesktopTabBarEnabled {
-  if (_isShutdown)
-    return NO;
-
-  if (!self.browserState)
-    return NO;
-
-  return [VivaldiTabSettingPrefs
-            getDesktopTabsModeWithPrefService:self.browserState->GetPrefs()];
+- (void)updateToolbarType {
+  self.popupMenuCoordinator.toolbarType =
+      [self isBottomOmniboxEnabled] ? ToolbarType::kSecondary :
+      ToolbarType::kPrimary;
 }
 
+- (void)updateTabStripView {
+  self.tabStripView.hidden = ![self canShowTabStrip];
+
+  // Update tab strip view frame in case the position is changed.
+  if ([self canShowTabStrip]) {
+    CGRect tabStripFrame = [self.tabStripView frame];
+    tabStripFrame.origin = CGPointZero;
+    tabStripFrame.origin.y = self.headerOffset;
+    tabStripFrame.origin.x = self.rootSafeAreaInsets.left;
+    tabStripFrame.size.width = CGRectGetWidth([self view].bounds) -
+    self.rootSafeAreaInsets.left - self.rootSafeAreaInsets.right;
+    [self.tabStripView setFrame:tabStripFrame];
+    [self.tabStripView layoutSubviews];
+
+    if (!IsFirstRun()) {
+      [self.view bringSubviewToFront:self.tabStripView];
+    }
+
+    if (self.currentWebState)
+      [self.legacyTabStripCoordinator
+       scrollToSelectedTab:self.currentWebState animated:NO];
+  }
+}
+
+- (void)updateNTPFrame {
+  if (self.ntpCoordinator.isNTPActiveForCurrentWebState &&
+      self.webUsageEnabled) {
+    self.ntpCoordinator.viewController.view.frame =
+        [self ntpFrameForCurrentWebState];
+  }
+}
+
+- (void)updateSteadyViewConstraints {
+  // Deactive existing constraints before activating new constraints.
+  self.topOmniboxSteadyViewTopAnchor.active = NO;
+  self.bottomOmniboxSteadyViewTopAnchor.active = NO;
+
+  self.topOmniboxSteadyViewTopAnchor.active = ![self isBottomOmniboxEnabled];
+  self.bottomOmniboxSteadyViewTopAnchor.active = [self isBottomOmniboxEnabled];
+}
+
+- (void)updateConstraintsToPrimaryToolbar {
+  NSLayoutYAxisAnchor* topAnchor;
+
+  if ([self canShowTabStrip]) {
+    if ([self isBottomOmniboxEnabled]) {
+      topAnchor = self.view.safeTopAnchor;
+    } else {
+      topAnchor = self.tabStripView.bottomAnchor;
+    }
+  } else {
+    topAnchor = [self view].topAnchor;
+  }
+
+  // Offset can be updated, so reset first.
+  self.primaryToolbarOffsetConstraint.active = NO;
+
+  // Create a constraint for the vertical positioning of the toolbar.
+  UIView* primaryView =
+      self.toolbarCoordinator.primaryToolbarViewController.view;
+  self.primaryToolbarOffsetConstraint =
+      [primaryView.topAnchor constraintEqualToAnchor:topAnchor];
+
+  self.primaryToolbarOffsetConstraint.active = YES;
+}
+
+- (void)configureTabStripContainer {
+  if (_tabStripContainer)
+    [_tabStripContainer removeFromSuperview];
+
+  UIView* tabStripContainer = [UIView new];
+  _tabStripContainer = tabStripContainer;
+
+  if ([self isBottomOmniboxEnabled]) {
+    UIView* toolbarView = [self canShowTabStrip] ?
+        self.toolbarCoordinator.secondaryToolbarViewController.view :
+        self.toolbarCoordinator.primaryToolbarViewController.view;
+    [self.view insertSubview:tabStripContainer aboveSubview:toolbarView];
+  } else {
+    [self.view insertSubview:tabStripContainer aboveSubview:self.contentArea];
+  }
+  [tabStripContainer anchorTop:nil
+                       leading:self.view.leadingAnchor
+                        bottom:nil
+                      trailing:self.view.trailingAnchor];
+
+  // Deactivate all constraints first
+  self.tabStripContainerTopConstraint.active = NO;
+  self.tabStripContainerBottomConstraint.active = NO;
+  self.tabStripContainerHeightConstraint.active = NO;
+
+  // Set Up variable constrints
+  self.tabStripContainerTopConstraint =
+      [tabStripContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor];
+  self.tabStripContainerBottomConstraint =
+      [tabStripContainer.bottomAnchor
+          constraintEqualToAnchor:self.view.bottomAnchor];
+
+  CGFloat tabStripContainerHeight =
+      [self canShowTabStrip] ? kTabStripHeight : 0;
+  if (self.isBottomOmniboxEnabled) {
+    tabStripContainerHeight += [self canShowTabStrip] ?
+        self.rootSafeAreaInsets.bottom : self.rootSafeAreaInsets.top;
+  } else {
+    tabStripContainerHeight += self.rootSafeAreaInsets.top;
+  }
+  self.tabStripContainerHeightConstraint =
+      [tabStripContainer.heightAnchor
+          constraintEqualToConstant:tabStripContainerHeight];
+
+  // Activate/Deactivate constraints
+  self.tabStripContainerTopConstraint.active = !self.isBottomOmniboxEnabled;
+  self.tabStripContainerBottomConstraint.active =
+      self.isBottomOmniboxEnabled && [self canShowTabStrip];
+  self.tabStripContainerHeightConstraint.active = YES;
+}
+
+- (void)configureFakeStatusBar {
+  if (_fakeStatusBarView)
+    [_fakeStatusBarView removeFromSuperview];
+
+  _fakeStatusBarView = [UIView new];
+  [self.view insertSubview:_fakeStatusBarView aboveSubview:self.contentArea];
+  [_fakeStatusBarView anchorTop:nil
+                        leading:self.view.leadingAnchor
+                         bottom:nil
+                       trailing:self.view.trailingAnchor];
+  self.fakeStatusBarHeightConstraint =
+      [_fakeStatusBarView.heightAnchor
+          constraintEqualToConstant:[self expandedTopToolbarHeight]];
+  self.fakeStatusBarHeightConstraint.active = YES;
+
+  if (_secondaryToolbarAccentColorContainer) {
+    [_secondaryToolbarAccentColorContainer removeFromSuperview];
+  }
+
+  _secondaryToolbarAccentColorContainer = [UIView new];
+  [self.view insertSubview:_secondaryToolbarAccentColorContainer
+              aboveSubview:self.contentArea];
+  [_secondaryToolbarAccentColorContainer anchorTop:nil
+                                           leading:self.view.leadingAnchor
+                                            bottom:self.view.bottomAnchor
+                                          trailing:self.view.trailingAnchor];
+  self.secondaryToolbarAccentColorContainerHeightConstraint =
+      [_secondaryToolbarAccentColorContainer.heightAnchor
+          constraintEqualToConstant:[self secondaryToolbarHeightWithInset]];
+  self.secondaryToolbarAccentColorContainerHeightConstraint.active = YES;
+}
+
+// TODO: (@prio@vivaldi.com) - See if this can be moved to ToolbarCoordinator
 - (void)reloadSecondaryToolbarButtonsWithNewTabPage:(BOOL)isNewTabPage {
   if (self.toolbarCoordinator &&
       self.toolbarCoordinator.secondaryToolbarViewController) {
@@ -3160,8 +3393,11 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
         (SecondaryToolbarView*)
             self.toolbarCoordinator.secondaryToolbarViewController.view;
     if (toolbarView)
-      [toolbarView reloadButtonsWithNewTabPage:isNewTabPage
-                             desktopTabEnabled:[self canShowTabStrip]];
+        [toolbarView reloadButtonsWithNewTabPage:isNewTabPage
+                               desktopTabEnabled:[self canShowTabStrip]];
+    toolbarView.buttonStackView.hidden =
+        ([self canShowTabStrip] && [self isBottomOmniboxEnabled]) ||
+            !IsSplitToolbarMode(self);
   }
 }
 
@@ -3175,34 +3411,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   UrlLoadParams params = UrlLoadParams::InNewTab(url);
   params.web_params.transition_type = ui::PAGE_TRANSITION_TYPED;
   _urlLoadingBrowserAgent->Load(params);
-}
-
-- (void)onSearchWithVivaldi:(UIMenuController*)sender {
-  UIResponder* firstResponder = GetFirstResponder();
-
-  if ([firstResponder isKindOfClass:[OmniboxTextFieldIOS class]]) {
-    OmniboxTextFieldIOS* field =
-      base::apple::ObjCCast<OmniboxTextFieldIOS>(firstResponder);
-    NSString* text = [field textInRange:field.selectedTextRange];
-    [self openNewTabWithSearchText:text];
-
-  } else {
-    void (^javascript_completion)(const base::Value*) =
-    ^(const base::Value* value) {
-      NSString *searchText =
-          [NSString stringWithUTF8String:value->GetString().c_str()];
-      [self openNewTabWithSearchText:searchText];
-    };
-
-    web::WebFrame* main_frame =
-        [self getCurrentWebState]->GetPageWorldWebFramesManager()
-                                ->GetMainWebFrame();
-    if (main_frame) {
-      main_frame->ExecuteJavaScript(
-         base::SysNSStringToUTF16(@"window.getSelection().toString()"),
-         base::BindOnce(javascript_completion));
-    }
-  }
 }
 
 - (void)openNewTabWithSearchText:(NSString*)searchText {
@@ -3237,36 +3445,278 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   _urlLoadingBrowserAgent->Load(params);
 }
 
-- (void)animateStickyViewStateWithProgress:(CGFloat)progress {
-
+- (void)updateToolbarViewsStateWithProgress:(CGFloat)progress
+                                   atOffset:(CGFloat)offset {
   // Use the same alpha computation logic as the location bar controller.
   CGFloat alpha = fmax((progress - 0.85) / 0.15, 0);
+  self.vivaldiStickyToolbarView.alpha = 1-alpha;
+
+  // Change fake status bar height with progress.
+  CGFloat expandedToolbarHeight =
+      self.fullscreenController->GetMaxViewportInsets().top;
+  const CGFloat height = expandedToolbarHeight - offset;
+  self.fakeStatusBarHeightConstraint.constant = height;
+
+  // Hide tab strip view and container with progress, if visible.
   if ([self canShowTabStrip]) {
-    _fakeStatusBarView.alpha = progress;
-    self.tabStripView.alpha = progress;
     self.toolbarCoordinator.primaryToolbarViewController.view.alpha = alpha;
+    self.tabStripView.alpha = alpha;
+    self.tabStripContainer.alpha = alpha;
+    if ([self isBottomOmniboxEnabled]) {
+      self.toolbarCoordinator.secondaryToolbarViewController.view.alpha = alpha;
+    }
   }
-
-  CGFloat scaleValue = progress == 0 ?
-    vStickyToolbarExpandedScale : vStickyToolbarCollapsedScale;
-  CGFloat alphaValue = progress == 0 ?
-    vStickyToolbarExpandedAlpha : vStickyToolbarCollapsedAlpha;
-
-  [UIView animateWithDuration:vStickyToolbarAnimationDuration
-                        delay:0
-       usingSpringWithDamping:vStickyToolbarAnimationDamping
-        initialSpringVelocity:vStickyToolbarAnimationSpringVelocity
-                      options:UIViewAnimationOptionAllowUserInteraction |
-   UIViewAnimationOptionBeginFromCurrentState
-                   animations:^{
-    self.vivaldiStickyToolbarView.transform =
-      CGAffineTransformMakeScale(scaleValue, scaleValue);
-    self.vivaldiStickyToolbarView.alpha = alphaValue;
-  } completion:nil];
 }
 
 - (void)handleStickyViewTap {
   _fullscreenController->ExitFullscreen();
+}
+
+- (void)updateUIElementsWithThemeColor {
+  if (![self isViewLoaded])
+    return;
+  [UIView animateWithDuration:0.2 animations:^{
+    [self applyColorToUIElements];
+  }];
+}
+
+- (void)applyColorToUIElements {
+  [self.vivaldiStickyToolbarView setTintColor:[self steadyViewTintColor]];
+  self.tabStripContainer.backgroundColor = [self accentColor];
+  _fakeStatusBarView.backgroundColor = [self fakeStatusBarViewColor];
+  _secondaryToolbarAccentColorContainer.backgroundColor = [self accentColor];
+  [self setNeedsStatusBarAppearanceUpdate];
+}
+
+- (void)updateWebsiteAppearance {
+  if (_isShutdown)
+    return;
+
+  if (![self isViewLoaded] || !self.currentWebState ||
+      !self.browserContainerViewController)
+    return;
+
+  UITraitCollection *superTraitCollection = [super traitCollection];
+  UITraitCollection *expectedTraitCollection = superTraitCollection;
+  if (!self.isNTP) {
+    UIUserInterfaceStyle expectedStyle = UIUserInterfaceStyleUnspecified;
+    switch ([self websiteAppearanceStyle]) {
+      case VivaldiWebsiteAppearanceStyleLight:
+        expectedStyle = UIUserInterfaceStyleLight;
+        break;
+      case VivaldiWebsiteAppearanceStyleDark:
+        expectedStyle = UIUserInterfaceStyleDark;
+        break;
+      case VivaldiWebsiteAppearanceStyleAuto:
+        expectedStyle = UIUserInterfaceStyleUnspecified;
+        break;
+      default:
+        break;
+    }
+
+    UITraitCollection *traitCollectionWithStyle =
+        [UITraitCollection traitCollectionWithUserInterfaceStyle:expectedStyle];
+    expectedTraitCollection =
+        [UITraitCollection
+            traitCollectionWithTraitsFromCollections:@[
+              superTraitCollection, traitCollectionWithStyle]];
+  }
+  [self.browserContainerViewController
+      setOverrideTraitCollection:
+          expectedTraitCollection ?: [super traitCollection]
+              forChildViewController:self.browserContainerViewController];
+}
+
+#pragma mark - Helper methods on which the webstates actively depend on
+- (web::WebState*)getCurrentWebState {
+    return self.currentWebState;
+}
+
+- (BOOL)canShowTabStrip {
+  // Vivaldi: For iPad form factor we don't support tabs disabling. Hence,
+  // its unnecessary to check the prefs settings whether tabs is enabled or
+  // disabled. The check also comes with an extra operation which can be skipped
+  // for iPads.
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)
+    return YES;
+  else
+    return self.isDesktopTabBarEnabled;
+}
+
+- (CGFloat)headerHeightForOverscroll {
+  if ([self canShowTabStrip])
+    return [self primaryToolbarHeightWithInset];
+  else
+    return self.headerHeight;
+}
+
+- (BOOL)isDesktopTabBarEnabled {
+  return _tabBarEnabled.value;
+}
+
+- (BOOL)isBottomOmniboxEnabled {
+  return _bottomOmniboxEnabled.value;
+}
+
+- (BOOL)showDynamicAccentColor {
+  if (!_dynamicAccentColorEnabled)
+    return YES;
+
+  return [_dynamicAccentColorEnabled value];
+}
+
+- (VivaldiWebsiteAppearanceStyle)websiteAppearanceStyle {
+  int style = [VivaldiAppearanceSettingsPrefsHelper getWebsiteAppearanceStyle];
+  switch (style) {
+    case 0:
+      return VivaldiWebsiteAppearanceStyleLight;
+    case 1:
+      return VivaldiWebsiteAppearanceStyleDark;
+    case 2:
+      return VivaldiWebsiteAppearanceStyleAuto;
+    default:
+      return VivaldiWebsiteAppearanceStyleAuto;
+  }
+}
+
+// Returns the appropriate theme color based on the current state.
+- (UIColor*)accentColor {
+  if (_isOffTheRecord) {
+    return [UIColor colorNamed:vPrivateNTPBackgroundColor];
+  }
+
+  if (self.showDynamicAccentColor && self.hasThemeColor) {
+    return self.activeWebStateThemeColor;
+  }
+  return [self defaultBackgroundColor];
+}
+
+// Returns the appropriate theme color based on the current state. Visible
+// behind status bar and toolbar when bottom omnibox is enabled.
+- (UIColor*)fakeStatusBarViewColor {
+  if (_isOffTheRecord) {
+    return [UIColor colorNamed:vPrivateNTPBackgroundColor];
+  }
+
+  if (self.showDynamicAccentColor && self.hasThemeColor) {
+    return self.activeWebStateThemeColor;
+  }
+
+  if ([self isBottomOmniboxEnabled] ||
+      ([self canShowTabStrip] &&
+       [self isBottomOmniboxEnabled])) {
+    return [UIColor colorNamed:vNTPBackgroundColor];
+  }
+
+  return [self defaultBackgroundColor];
+}
+
+- (UIColor*)defaultBackgroundColor {
+  if ([self canShowTabStrip]) {
+    if ([self showDynamicAccentColor] || ![self customAccentColor]) {
+      return [UIColor colorNamed:vTabStripDefaultBackgroundColor];
+    } else {
+      return [self customAccentColor];
+    }
+  } else {
+    if ([self isBottomOmniboxEnabled]) {
+      return [UIColor colorNamed:vNTPBackgroundColor];
+    } else {
+      if ([self showDynamicAccentColor] || ![self customAccentColor]) {
+        return [UIColor colorNamed:vRegularToolbarBackgroundColor];
+      } else {
+        return [self customAccentColor];
+      }
+    }
+  }
+}
+
+// Returns tint color for the text of steady view on full screen mode.
+- (UIColor*)steadyViewTintColor {
+  UIColor* tintColor;
+  if (_isOffTheRecord) {
+    tintColor = UIColor.whiteColor;
+  } else {
+    tintColor = [self shouldUseDarkTintColorForSteadyView] ?
+        UIColor.blackColor : UIColor.whiteColor;
+  }
+  return tintColor;
+}
+
+- (BOOL)hasThemeColor {
+  if (!self.currentWebState)
+    return NO;
+
+  BOOL hasValidWebStateThemeColor = self.activeWebStateThemeColor;
+  BOOL shouldUseDefaultThemeColor =
+      [VivaldiGlobalHelpers
+       shouldUseDefaultThemeColor:self.activeWebStateThemeColor];
+
+  return !self.isNTP && hasValidWebStateThemeColor &&
+      !shouldUseDefaultThemeColor;
+}
+
+- (BOOL)isNTP {
+  if (!self.currentWebState)
+    return NO;
+
+  NewTabPageTabHelper* NTPHelper =
+      NewTabPageTabHelper::FromWebState(self.currentWebState);
+  BOOL isNTP = NTPHelper && NTPHelper->IsActive();
+  return isNTP;
+}
+
+- (UIColor*)activeWebStateThemeColor {
+  return self.currentWebState->GetThemeColor();
+}
+
+- (UIColor*)customAccentColor {
+  NSString* accentColorString =
+      [VivaldiAppearanceSettingsPrefsHelper getCustomAccentColor];
+  return [VivaldiGlobalHelpers colorWithHexString:accentColorString];
+}
+
+- (BOOL)shouldUseDarkTintColorForSteadyView {
+  UIColor* colorToConsider = self.accentColor;
+  // If custom accent color is set return the text tint color based on
+  // custom accent color.
+  if (![self showDynamicAccentColor]) {
+    colorToConsider = [self customAccentColor];
+  } else {
+    if ([self isBottomOmniboxEnabled]) {
+      if ([self hasThemeColor]) {
+        colorToConsider = self.fakeStatusBarViewColor;
+      } else {
+        return NO;
+      }
+    }
+  }
+  return [VivaldiGlobalHelpers shouldUseDarkTextForColor:colorToConsider];
+}
+
+- (BOOL)shouldUseDarkStatusBarStyle {
+  // Depending on omnibox position, either one of accentColor or
+  // fakeStatusBarViewColor could be visible behind toolbar and and status bar.
+  // We have to calculate luminance of that color and decide what the content
+  // type(light/dark) of the status bar.
+  UIColor* colorToConsider = self.accentColor;
+  if (![self showDynamicAccentColor] && ![self isBottomOmniboxEnabled]) {
+    colorToConsider = [self customAccentColor];
+  } else {
+    if ([self isBottomOmniboxEnabled]) {
+      if ([self hasThemeColor]) {
+        colorToConsider = self.fakeStatusBarViewColor;
+      } else {
+        return [self isLightScheme];
+      }
+    }
+  }
+  return [VivaldiGlobalHelpers shouldUseDarkTextForColor:colorToConsider];
+}
+
+- (BOOL)isLightScheme {
+  return [VivaldiGlobalHelpers keyWindow].traitCollection.userInterfaceStyle
+      == UIUserInterfaceStyleLight;
 }
 
 #pragma mark - LocationBarSteadyViewConsumer
@@ -3279,15 +3729,41 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [self.vivaldiStickyToolbarView setLocationImage:icon];
   [self.vivaldiStickyToolbarView
     setSecurityLevelAccessibilityString:statusText];
+  [self updateUIElementsWithThemeColor];
+  [self updateWebsiteAppearance];
 }
 
 - (void)updateAfterNavigatingToNTP {
-  // no op.
+  [self updateUIElementsWithThemeColor];
+  [self updateWebsiteAppearance];
 }
 
 - (void)updateLocationShareable:(BOOL)shareable {
   // no op.
 }
 
+#pragma mark - Boolean Observer
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _bottomOmniboxEnabled ||
+      observableBoolean == _tabBarEnabled) {
+    [self didUpdateTabSettings];
+  } else if (observableBoolean == _dynamicAccentColorEnabled) {
+    [self updateUIElementsWithThemeColor];
+  }
+}
+
+#pragma mark - PrefObserverDelegate
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == vivaldiprefs::kVivaldiCustomAccentColor) {
+    [self updateUIElementsWithThemeColor];
+  } else if (preferenceName == vivaldiprefs::kVivaldiWebsiteAppearanceStyle) {
+    [self updateWebsiteAppearance];
+  }
+}
+
+#pragma mark - SideSwipeMediatorDelegate(Vivaldi)
+- (void)didFinishSideSwipeNavigation {
+  [self updateUIElementsWithThemeColor];
+}
 
 @end

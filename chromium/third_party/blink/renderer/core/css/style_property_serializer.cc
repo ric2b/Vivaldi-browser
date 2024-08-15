@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/css/css_markup.h"
 #include "third_party/blink/renderer/core/css/css_pending_substitution_value.h"
 #include "third_party/blink/renderer/core/css/css_pending_system_font_value.h"
+#include "third_party/blink/renderer/core/css/css_repeat_style_value.h"
 #include "third_party/blink/renderer/core/css/css_value_pair.h"
 #include "third_party/blink/renderer/core/css/css_value_pool.h"
 #include "third_party/blink/renderer/core/css/cssom_utils.h"
@@ -71,6 +72,14 @@ inline WhiteSpaceCollapse ToWhiteSpaceCollapse(const CSSValue* value) {
 inline TextWrap ToTextWrap(const CSSValue* value) {
   return ConvertIdentifierTo<TextWrap>(
       value, ComputedStyleInitialValues::InitialTextWrap());
+}
+
+bool IsZeroPercent(const CSSValue* value) {
+  if (const auto* num = DynamicTo<CSSNumericLiteralValue>(value)) {
+    return num->IsZero() && num->IsPercentage();
+  }
+
+  return false;
 }
 
 }  // namespace
@@ -117,24 +126,32 @@ void StylePropertySerializer::CSSPropertyValueSetForSerializer::Trace(
 unsigned
 StylePropertySerializer::CSSPropertyValueSetForSerializer::PropertyCount()
     const {
-  if (!HasExpandedAllProperty()) {
-    return property_set_->PropertyCount();
+  unsigned count = property_set_->PropertyCount();
+  if (HasExpandedAllProperty()) {
+    // When expanding all:* we need to serialize all properties set by the "all"
+    // property, but also still walk the actual property set to include any
+    // custom property declarations.
+    count += kIntLastCSSProperty - kIntFirstCSSProperty + 1;
   }
-  return kIntLastCSSProperty - kIntFirstCSSProperty + 1;
+  return count;
 }
 
 StylePropertySerializer::PropertyValueForSerializer
 StylePropertySerializer::CSSPropertyValueSetForSerializer::PropertyAt(
     unsigned index) const {
-  if (!HasExpandedAllProperty()) {
+  if (IsIndexInPropertySet(index)) {
     return StylePropertySerializer::PropertyValueForSerializer(
         property_set_->PropertyAt(index));
   }
 
-  CSSPropertyID property_id =
-      static_cast<CSSPropertyID>(index + kIntFirstCSSProperty);
+  // When expanding "all" into longhands, PropertyAt() is called with indices
+  // outside the size of the property_set_ to serialize all longshands.
+  DCHECK(HasExpandedAllProperty());
+  CSSPropertyID property_id = IndexToPropertyID(index);
   DCHECK(IsCSSPropertyIDWithName(property_id));
-  if (longhand_property_used_.test(index)) {
+  if (longhand_property_used_.test(GetCSSPropertyIDIndex(property_id))) {
+    // A property declaration for property_id overrides the "all" declaration.
+    // Access that declaration from the property set.
     int real_index = property_set_->FindPropertyIndex(property_id);
     DCHECK_NE(real_index, -1);
     return StylePropertySerializer::PropertyValueForSerializer(
@@ -169,8 +186,13 @@ bool StylePropertySerializer::CSSPropertyValueSetForSerializer::
     return longhand_property_used_.test(GetCSSPropertyIDIndex(property.Id()));
   }
 
-  CSSPropertyID property_id =
-      static_cast<CSSPropertyID>(index + kIntFirstCSSProperty);
+  // Custom property declarations are never overridden by "all" and are only
+  // traversed for the indices into the property set.
+  if (IsIndexInPropertySet(index)) {
+    return property_set_->PropertyAt(index).Id() == CSSPropertyID::kVariable;
+  }
+
+  CSSPropertyID property_id = IndexToPropertyID(index);
   DCHECK(IsCSSPropertyIDWithName(property_id));
   const CSSProperty& property_class =
       CSSProperty::Get(ResolveCSSPropertyID(property_id));
@@ -187,7 +209,7 @@ bool StylePropertySerializer::CSSPropertyValueSetForSerializer::
   // direction and unicode-bidi. It only accepts the CSS-wide keywords.
   // c.f. https://drafts.csswg.org/css-cascade/#all-shorthand
   if (!property_class.IsAffectedByAll()) {
-    return longhand_property_used_.test(index);
+    return longhand_property_used_.test(GetCSSPropertyIDIndex(property_id));
   }
 
   return true;
@@ -199,7 +221,7 @@ int StylePropertySerializer::CSSPropertyValueSetForSerializer::
   if (!HasExpandedAllProperty()) {
     return property_set_->FindPropertyIndex(property_id);
   }
-  return GetCSSPropertyIDIndex(property_id);
+  return GetCSSPropertyIDIndex(property_id) + property_set_->PropertyCount();
 }
 
 const CSSValue*
@@ -1185,16 +1207,14 @@ String StylePropertySerializer::FontValue() const {
     return g_empty_string;
   }
 
-  if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
-    int font_variant_position_property_index =
-        property_set_.FindPropertyIndex(GetCSSPropertyFontVariantPosition());
-    DCHECK_NE(font_variant_position_property_index, -1);
-    PropertyValueForSerializer font_variant_position_property =
-        property_set_.PropertyAt(font_variant_position_property_index);
-    if (IsPropertyNonInitial(*font_variant_position_property.Value(),
-                             CSSValueID::kNormal)) {
-      return g_empty_string;
-    }
+  int font_variant_position_property_index =
+      property_set_.FindPropertyIndex(GetCSSPropertyFontVariantPosition());
+  DCHECK_NE(font_variant_position_property_index, -1);
+  PropertyValueForSerializer font_variant_position_property =
+      property_set_.PropertyAt(font_variant_position_property_index);
+  if (IsPropertyNonInitial(*font_variant_position_property.Value(),
+                           CSSValueID::kNormal)) {
+    return g_empty_string;
   }
 
   if (RuntimeEnabledFeatures::CSSFontSizeAdjustEnabled()) {
@@ -1280,10 +1300,8 @@ String StylePropertySerializer::FontVariantValue() const {
                                      result);
   AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantEastAsian(),
                                      result);
-  if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
-    AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantPosition(),
-                                       result);
-  }
+  AppendFontLonghandValueIfNotNormal(GetCSSPropertyFontVariantPosition(),
+                                     result);
 
   // The font-variant shorthand should return an empty string where
   // it cannot represent "font-variant-ligatures: none" along
@@ -1618,8 +1636,9 @@ String StylePropertySerializer::GetLayeredShorthandValue(
   // Now stitch the properties together.
   for (wtf_size_t layer = 0; layer < num_layers; layer++) {
     StringBuilder layer_result;
-    bool found_position_x_css_property = false;
-    bool found_position_y_css_property = false;
+    bool is_position_x_serialized = false;
+    bool is_position_y_serialized = false;
+    const CSSValue* mask_position_x = nullptr;
     CSSValueID mask_origin_value = CSSValueID::kBorderBox;
 
     for (unsigned property_index = 0; property_index < size; property_index++) {
@@ -1706,8 +1725,15 @@ String StylePropertySerializer::GetLayeredShorthandValue(
           omit_value = true;
         }
       }
+
       if (shorthand.id() == CSSPropertyID::kAlternativeMask) {
-        if (property->IDEquals(CSSPropertyID::kMaskOrigin)) {
+        if (property->IDEquals(CSSPropertyID::kMaskImage)) {
+          if (auto* image_value = DynamicTo<CSSIdentifierValue>(value)) {
+            if (image_value->GetValueID() == CSSValueID::kNone) {
+              omit_value = true;
+            }
+          }
+        } else if (property->IDEquals(CSSPropertyID::kMaskOrigin)) {
           if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
             mask_origin_value = ident->GetValueID();
           }
@@ -1716,34 +1742,60 @@ String StylePropertySerializer::GetLayeredShorthandValue(
         } else if (property->IDEquals(CSSPropertyID::kMaskClip)) {
           CSSValueID mask_clip_id = CSSValueID::kBorderBox;
           if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
-            mask_clip_id = To<CSSIdentifierValue>(ident)->GetValueID();
+            mask_clip_id = ident->GetValueID();
           }
           SerializeMaskOriginAndClip(layer_result, mask_origin_value,
                                      mask_clip_id);
           omit_value = true;
         } else if (property->IDEquals(CSSPropertyID::kMaskComposite)) {
           if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
-            if (To<CSSIdentifierValue>(ident)->GetValueID() ==
-                CSSValueID::kAdd) {
+            if (ident->GetValueID() == CSSValueID::kAdd) {
               omit_value = true;
             }
           }
         } else if (property->IDEquals(CSSPropertyID::kMaskMode)) {
           if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
-            if (To<CSSIdentifierValue>(ident)->GetValueID() ==
-                CSSValueID::kMatchSource) {
+            if (ident->GetValueID() == CSSValueID::kMatchSource) {
               omit_value = true;
             }
           }
+        } else if (property->IDEquals(CSSPropertyID::kMaskRepeat)) {
+          if (auto* repeat = DynamicTo<CSSRepeatStyleValue>(value)) {
+            if (repeat->IsRepeat()) {
+              omit_value = true;
+            }
+          }
+        } else if (property->IDEquals(CSSPropertyID::kMaskSize)) {
+          if (auto* size_value = DynamicTo<CSSIdentifierValue>(value)) {
+            if (size_value->GetValueID() == CSSValueID::kAuto) {
+              omit_value = true;
+            }
+          }
+        } else if (property->IDEquals(CSSPropertyID::kWebkitMaskPositionX)) {
+          omit_value = true;
+          mask_position_x = value;
+        } else if (property->IDEquals(CSSPropertyID::kWebkitMaskPositionY)) {
+          omit_value = true;
+
+          if (!IsZeroPercent(mask_position_x) || !IsZeroPercent(value)) {
+            is_position_x_serialized = true;
+            is_position_y_serialized = true;
+
+            if (!layer_result.empty()) {
+              layer_result.Append(' ');
+            }
+            layer_result.Append(mask_position_x->CssText());
+            layer_result.Append(' ');
+            layer_result.Append(value->CssText());
+          }
         }
-        // TODO(pdr): Omit default values for mask properties.
       }
 
       if (!omit_value) {
         if (property->IDEquals(CSSPropertyID::kBackgroundSize) ||
             property->IDEquals(CSSPropertyID::kWebkitMaskSize) ||
             property->IDEquals(CSSPropertyID::kMaskSize)) {
-          if (found_position_y_css_property || found_position_x_css_property) {
+          if (is_position_y_serialized || is_position_x_serialized) {
             layer_result.Append(" / ");
           } else {
             layer_result.Append(" 0% 0% / ");
@@ -1756,13 +1808,11 @@ String StylePropertySerializer::GetLayeredShorthandValue(
 
         layer_result.Append(value->CssText());
 
-        if (property->IDEquals(CSSPropertyID::kBackgroundPositionX) ||
-            property->IDEquals(CSSPropertyID::kWebkitMaskPositionX)) {
-          found_position_x_css_property = true;
+        if (property->IDEquals(CSSPropertyID::kBackgroundPositionX)) {
+          is_position_x_serialized = true;
         }
-        if (property->IDEquals(CSSPropertyID::kBackgroundPositionY) ||
-            property->IDEquals(CSSPropertyID::kWebkitMaskPositionY)) {
-          found_position_y_css_property = true;
+        if (property->IDEquals(CSSPropertyID::kBackgroundPositionY)) {
+          is_position_y_serialized = true;
           // background-position is a special case. If only the first offset is
           // specified, the second one defaults to "center", not the same value.
         }
@@ -1770,7 +1820,7 @@ String StylePropertySerializer::GetLayeredShorthandValue(
     }
     if (shorthand.id() == CSSPropertyID::kAlternativeMask &&
         layer_result.empty()) {
-      result.Append(getValueName(CSSValueID::kNone));
+      layer_result.Append(getValueName(CSSValueID::kNone));
     }
     if (!layer_result.empty()) {
       if (!result.empty()) {

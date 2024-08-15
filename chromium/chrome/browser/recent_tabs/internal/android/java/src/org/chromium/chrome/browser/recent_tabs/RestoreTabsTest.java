@@ -8,9 +8,9 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
-import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.CoreMatchers.allOf;
@@ -46,6 +46,7 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -57,7 +58,6 @@ import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSessi
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -221,13 +221,13 @@ public class RestoreTabsTest {
         Assert.assertEquals(7, mActivityTestRule.tabsCount(false));
         Assert.assertFalse(mBottomSheetController.isSheetOpen());
 
-        int tabSwitcherParentViewId =
-                TabUiTestHelper.getTabSwitcherParentId(mActivityTestRule.getActivity());
+        int tabSwitcherAncestorViewId =
+                TabUiTestHelper.getTabSwitcherAncestorId(mActivityTestRule.getActivity());
         // Make sure the grid tab switcher is scrolled down to show the selected tab.
         onView(
                         allOf(
                                 withId(org.chromium.chrome.test.R.id.tab_list_recycler_view),
-                                withParent(withId(tabSwitcherParentViewId))))
+                                isDescendantOfA(withId(tabSwitcherAncestorViewId))))
                 .check(
                         (v, noMatchException) -> {
                             if (noMatchException != null) throw noMatchException;

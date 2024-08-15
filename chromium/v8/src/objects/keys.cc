@@ -155,7 +155,7 @@ ExceptionStatus KeyAccumulator::AddKey(Handle<Object> key,
       OrderedHashSet::Add(isolate(), keys(), key);
   Handle<OrderedHashSet> new_set;
   if (!new_set_candidate.ToHandle(&new_set)) {
-    CHECK(isolate_->has_pending_exception());
+    CHECK(isolate_->has_exception());
     return ExceptionStatus::kException;
   }
   if (*new_set != *keys_) {
@@ -279,8 +279,8 @@ Maybe<bool> KeyAccumulator::CollectKeys(Handle<JSReceiver> receiver,
     }
     MAYBE_RETURN(result, Nothing<bool>());
     if (!result.FromJust()) break;  // |false| means "stop iterating".
-    // Iterate through proxies but ignore access checks for the ALL_CAN_READ
-    // case on API objects for OWN_ONLY keys handled in CollectOwnKeys.
+    // Iterate through proxies but ignore access checks case on API objects for
+    // OWN_ONLY keys handled in CollectOwnKeys.
     if (!iter.AdvanceFollowingProxiesIgnoringAccessChecks()) {
       return Nothing<bool>();
     }
@@ -457,7 +457,7 @@ MaybeHandle<FixedArray> FastKeyAccumulator::GetKeys(
     if (GetKeysFast(keys_conversion).ToHandle(&keys)) {
       return keys;
     }
-    if (isolate_->has_pending_exception()) return MaybeHandle<FixedArray>();
+    if (isolate_->has_exception()) return MaybeHandle<FixedArray>();
   }
 
   if (try_prototype_info_cache_) {
@@ -742,8 +742,7 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeysInternal(
       result = enum_args.CallNamedEnumerator(interceptor);
     }
   }
-  RETURN_VALUE_IF_SCHEDULED_EXCEPTION_DETECTOR(isolate_, enum_args,
-                                               Nothing<bool>());
+  RETURN_VALUE_IF_EXCEPTION_DETECTOR(isolate_, enum_args, Nothing<bool>());
   if (result.is_null()) return Just(true);
 
   // Request was successfully intercepted, so accept potential side effects
@@ -773,9 +772,6 @@ Maybe<bool> KeyAccumulator::CollectInterceptorKeys(Handle<JSReceiver> receiver,
                                           ? object->GetIndexedInterceptor()
                                           : object->GetNamedInterceptor(),
                                       isolate_);
-  if ((filter() & ONLY_ALL_CAN_READ) && !interceptor->all_can_read()) {
-    return Just(true);
-  }
   return CollectInterceptorKeysInternal(receiver, object, interceptor, type);
 }
 
@@ -809,13 +805,6 @@ base::Optional<int> CollectOwnPropertyNamesInternal(
       } else {
         continue;
       }
-    }
-
-    if (filter & ONLY_ALL_CAN_READ) {
-      if (details.kind() != PropertyKind::kAccessor) continue;
-      Tagged<Object> accessors = descs->GetStrongValue(i);
-      if (!IsAccessorInfo(accessors)) continue;
-      if (!AccessorInfo::cast(accessors)->all_can_read()) continue;
     }
 
     Tagged<Name> key = descs->GetKey(i);
@@ -968,12 +957,6 @@ ExceptionStatus CollectKeysFromDictionary(Handle<Dictionary> dictionary,
         // This might allocate, but {key} is not used afterwards.
         keys->AddShadowingKey(key, &gc);
         continue;
-      }
-      if (filter & ONLY_ALL_CAN_READ) {
-        if (details.kind() != PropertyKind::kAccessor) continue;
-        Tagged<Object> accessors = raw_dictionary->ValueAt(i);
-        if (!IsAccessorInfo(accessors)) continue;
-        if (!AccessorInfo::cast(accessors)->all_can_read()) continue;
       }
       // TODO(emrich): consider storing keys instead of indices into the array
       // in case of ordered dictionary type.
@@ -1167,9 +1150,8 @@ Maybe<bool> KeyAccumulator::CollectOwnKeys(Handle<JSReceiver> receiver,
       MAYBE_RETURN(CollectAccessCheckInterceptorKeys(access_check_info,
                                                      receiver, object),
                    Nothing<bool>());
-      return Just(false);
     }
-    filter_ = static_cast<PropertyFilter>(filter_ | ONLY_ALL_CAN_READ);
+    return Just(false);
   }
   if (filter_ & PRIVATE_NAMES_ONLY) {
     RETURN_NOTHING_IF_NOT_SUCCESSFUL(CollectPrivateNames(receiver, object));

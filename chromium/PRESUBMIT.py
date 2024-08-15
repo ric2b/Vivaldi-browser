@@ -315,7 +315,7 @@ _BANNED_JAVASCRIPT_FUNCTIONS : Sequence [BanRule] = (
           'ash/webui/common/resources/multidevice_setup/multidevice_setup_browser_proxy.js',
           'ash/webui/common/resources/quick_unlock/lock_screen_constants.ts',
           'ash/webui/common/resources/smb_shares/smb_browser_proxy.js',
-          'ash/webui/connectivity_diagnostics/resources/connectivity_diagnostics.js',
+          'ash/webui/connectivity_diagnostics/resources/connectivity_diagnostics.ts',
           'ash/webui/diagnostics_ui/resources/diagnostics_browser_proxy.ts',
           'ash/webui/multidevice_debug/resources/logs.js',
           'ash/webui/multidevice_debug/resources/webui.js',
@@ -891,7 +891,6 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         r'chrome/browser/web_applications/test/web_app_test_utils\.cc',
         r'chrome/browser/web_applications/test/web_app_test_utils\.cc',
         r'chrome/browser/win/conflicts/module_blocklist_cache_util_unittest\.cc',
-        r'chrome/chrome_cleaner/logging/detailed_info_sampler\.cc',
         r'chromeos/ash/components/memory/userspace_swap/swap_storage_unittest\.cc',
         r'chromeos/ash/components/memory/userspace_swap/userspace_swap\.cc',
         r'components/metrics/metrics_state_manager\.cc',
@@ -1090,6 +1089,11 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
           'fuchsia_web/webengine/browser/context_impl_browsertest\.cc',
           'fuchsia_web/webengine/browser/cookie_manager_impl_unittest\.cc',
           'fuchsia_web/webengine/browser/media_player_impl_unittest\.cc',
+          # Required to interop with interfaces from the third-party ChromeML
+          # library API.
+          'services/on_device_model/ml/chrome_ml_api\.h',
+          'services/on_device_model/ml/on_device_model_executor\.cc',
+          'services/on_device_model/ml/on_device_model_executor\.h',
           # Required to interop with interfaces from the third-party perfetto
           # library.
           'services/tracing/public/cpp/perfetto/custom_event_recorder\.cc',
@@ -1103,9 +1107,6 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
           # Required for interop with the third-party webrtc library.
           'third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl\.cc',
           'third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl\.h',
-          # This code is in the process of being extracted into a third-party library.
-          # See https://crbug.com/1322914
-          '^net/cert/pki/path_builder_unittest\.cc',
           # TODO(https://crbug.com/1364577): Various uses that should be
           # migrated to something else.
           # Should use base::OnceCallback or base::RepeatingCallback.
@@ -1188,6 +1189,15 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
     ),
     BanRule(
+      r'/\bstd::bit_cast\b',
+      (
+        'std::bit_cast is banned; use base::bit_cast instead for values and '
+        'standard C++ casting when pointers are involved.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
+    ),
+    BanRule(
       r'/\bstd::(c8rtomb|mbrtoc8)\b',
       (
         'std::c8rtomb() and std::mbrtoc8() are banned.',
@@ -1233,6 +1243,21 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ),
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
+    ),
+    BanRule(
+      r'/\[\[(\w*::)?no_unique_address\]\]',
+      (
+        '[[no_unique_address]] does not work as expected on Windows ',
+        '(https://crbug.com/1414621). Use NO_UNIQUE_ADDRESS instead.',
+      ),
+      True,
+      [
+        # NO_UNIQUE_ADDRESS / PA_NO_UNIQUE_ADDRESS provide canonical access.
+        r'^base/compiler_specific\.h',
+        r'^base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific\.h',
+        # Not an error in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK,
+      ],
     ),
     BanRule(
       r'/#include <format>',
@@ -1563,7 +1588,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ),
       True,
       [
-        _THIRD_PARTY_EXCEPT_BLINK,
+          # Implements BASE_DECLARE_FEATURE().
+          r'^base/feature_list\.h',
       ],
     ),
     BanRule(
@@ -1882,6 +1908,8 @@ _GENERIC_PYDEPS_FILES = [
     'chrome/test/chromedriver/log_replay/client_replay_unittest.pydeps',
     'chrome/test/chromedriver/test/run_py_tests.pydeps',
     'chromecast/resource_sizes/chromecast_resource_sizes.pydeps',
+    'components/cronet/tools/check_combined_proguard_file.pydeps',
+    'components/cronet/tools/generate_proguard_file.pydeps',
     'components/cronet/tools/generate_javadoc.pydeps',
     'components/cronet/tools/jar_src.pydeps',
     'components/module_installer/android/module_desc_java.pydeps',
@@ -3207,7 +3235,6 @@ def CheckSpamLogging(input_api, output_api):
             r"^chrome/browser/ui/startup/startup_browser_creator\.cc$",
             r"^chrome/browser/browser_switcher/bho/.*",
             r"^chrome/browser/diagnostics/diagnostics_writer\.cc$",
-            r"^chrome/chrome_cleaner/.*",
             r"^chrome/chrome_elf/dll_hash/dll_hash_main\.cc$",
             r"^chrome/installer/setup/.*",
             r"^chromecast/",
@@ -5520,7 +5547,7 @@ _NON_INCLUSIVE_TERMS = (
         # ...' will not. This may require some tweaking to catch these cases
         # without triggering a lot of false positives. Leaving it naive and
         # less matchy for now.
-        r'/\b(?i)((black|white)list|master|slave)\b',  # nocheck
+        r'/(?i)\b((black|white)list|master|slave)\b',  # nocheck
         (
             'Please don\'t use blacklist, whitelist, '  # nocheck
             'or slave in your',  # nocheck
@@ -7163,7 +7190,7 @@ def CheckDanglingUntriaged(input_api, output_api):
     # `win-presubmit` are particularly sensitive to reading the files. Adding
     # this check caused the bot to run 2x longer. See https://crbug.com/1486612.
     if input_api.no_diffs:
-      return []
+        return []
 
     def FilterFile(file):
         return input_api.FilterSourceFile(
@@ -7174,8 +7201,8 @@ def CheckDanglingUntriaged(input_api, output_api):
 
     count = 0
     for f in input_api.AffectedSourceFiles(FilterFile):
-        count -= f.OldContents().count("DanglingUntriaged")
-        count += f.NewContents().count("DanglingUntriaged")
+        count -= sum([l.count("DanglingUntriaged") for l in f.OldContents()])
+        count += sum([l.count("DanglingUntriaged") for l in f.NewContents()])
 
     # Most likely, nothing changed:
     if count == 0:
@@ -7183,10 +7210,7 @@ def CheckDanglingUntriaged(input_api, output_api):
 
     # Congrats developers for improving it:
     if count < 0:
-        message = (
-            f"DanglingUntriaged pointers removed: {-count}",
-            f"Thank you!",
-        )
+        message = f"DanglingUntriaged pointers removed: {-count}\nThank you!"
         return [output_api.PresubmitNotifyResult(message)]
 
     # Check for 'DanglingUntriaged-notes' in the description:
@@ -7202,18 +7226,18 @@ def CheckDanglingUntriaged(input_api, output_api):
         return []
 
     message = (
-        "Unexpected new occurrences of `DanglingUntriaged` detected. Please",
-        "avoid adding new ones",
-        "",
-        "See documentation:",
-        "https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_ptr.md",
-        "",
-        "See also the guide to fix dangling pointers:",
-        "https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_ptr_guide.md",
-        "",
-        "To disable this warning, please add in the commit description:",
-        "DanglingUntriaged-notes: <rational for new untriaged dangling "
-        "pointers>",
+        "Unexpected new occurrences of `DanglingUntriaged` detected. Please\n" +
+        "avoid adding new ones\n" +
+        "\n" +
+        "See documentation:\n" +
+        "https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_ptr.md\n" +
+        "\n" +
+        "See also the guide to fix dangling pointers:\n" +
+        "https://chromium.googlesource.com/chromium/src/+/main/docs/dangling_ptr_guide.md\n" +
+        "\n" +
+        "To disable this warning, please add in the commit description:\n" +
+        "DanglingUntriaged-notes: <rationale for new untriaged dangling " +
+        "pointers>"
     )
     return [output_api.PresubmitPromptWarning(message)]
 

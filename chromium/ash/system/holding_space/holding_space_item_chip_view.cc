@@ -78,6 +78,8 @@ void ToCenteredSize(gfx::Rect* rect, const gfx::Size& size) {
 // ObservableRoundedImageView --------------------------------------------------
 
 class ObservableRoundedImageView : public RoundedImageView {
+  METADATA_HEADER(ObservableRoundedImageView, RoundedImageView)
+
  public:
   ObservableRoundedImageView() = default;
   ObservableRoundedImageView(const ObservableRoundedImageView&) = delete;
@@ -101,6 +103,9 @@ class ObservableRoundedImageView : public RoundedImageView {
   BoundsChangedCallback bounds_changed_callback_;
 };
 
+BEGIN_METADATA(ObservableRoundedImageView, RoundedImageView)
+END_METADATA
+
 BEGIN_VIEW_BUILDER(/*no export*/, ObservableRoundedImageView, RoundedImageView)
 VIEW_BUILDER_PROPERTY(ObservableRoundedImageView::BoundsChangedCallback,
                       BoundsChangedCallback)
@@ -109,6 +114,8 @@ END_VIEW_BUILDER
 // PaintCallbackLabel ----------------------------------------------------------
 
 class PaintCallbackLabel : public views::Label {
+  METADATA_HEADER(PaintCallbackLabel, views::Label)
+
  public:
   PaintCallbackLabel() = default;
   PaintCallbackLabel(const PaintCallbackLabel&) = delete;
@@ -142,6 +149,9 @@ class PaintCallbackLabel : public views::Label {
   Callback callback_;
 };
 
+BEGIN_METADATA(PaintCallbackLabel, views::Label)
+END_METADATA
+
 BEGIN_VIEW_BUILDER(/*no export*/, PaintCallbackLabel, views::Label)
 VIEW_BUILDER_PROPERTY(PaintCallbackLabel::Callback, Callback)
 VIEW_BUILDER_PROPERTY(TypographyToken, Style)
@@ -152,6 +162,8 @@ END_VIEW_BUILDER
 // ProgressIndicatorView -------------------------------------------------------
 
 class ProgressIndicatorView : public views::View {
+  METADATA_HEADER(ProgressIndicatorView, views::View)
+
  public:
   ProgressIndicatorView() = default;
   ProgressIndicatorView(const ProgressIndicatorView&) = delete;
@@ -160,8 +172,7 @@ class ProgressIndicatorView : public views::View {
 
   // Copies the address of `progress_indicator_` to the specified `ptr`.
   // NOTE: This method should only be invoked after `SetHoldingSpaceItem()`.
-  void CopyProgressIndicatorAddressTo(
-      raw_ptr<ProgressIndicator, ExperimentalAsh>* ptr) {
+  void CopyProgressIndicatorAddressTo(raw_ptr<ProgressIndicator>* ptr) {
     DCHECK(progress_indicator_);
     *ptr = progress_indicator_.get();
   }
@@ -202,9 +213,11 @@ class ProgressIndicatorView : public views::View {
   std::unique_ptr<ProgressIndicator> progress_indicator_;
 };
 
+BEGIN_METADATA(ProgressIndicatorView, views::View)
+END_METADATA
+
 BEGIN_VIEW_BUILDER(/*no export*/, ProgressIndicatorView, views::View)
-VIEW_BUILDER_METHOD(CopyProgressIndicatorAddressTo,
-                    raw_ptr<ProgressIndicator, ExperimentalAsh>*)
+VIEW_BUILDER_METHOD(CopyProgressIndicatorAddressTo, raw_ptr<ProgressIndicator>*)
 VIEW_BUILDER_PROPERTY(const HoldingSpaceItem*, HoldingSpaceItem)
 END_VIEW_BUILDER
 
@@ -418,7 +431,7 @@ std::u16string HoldingSpaceItemChipView::GetTooltipText(
 
 void HoldingSpaceItemChipView::OnHoldingSpaceItemUpdated(
     const HoldingSpaceItem* item,
-    uint32_t updated_fields) {
+    const HoldingSpaceItemUpdatedFields& updated_fields) {
   HoldingSpaceItemView::OnHoldingSpaceItemUpdated(item, updated_fields);
   if (this->item() == item) {
     UpdateImage();

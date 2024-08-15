@@ -2,21 +2,9 @@
 
 #import "ios/ui/ntp/vivaldi_speed_dial_base_controller.h"
 
-#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
 #import "base/strings/sys_string_conversions.h"
-#import "chromium/base/containers/stack.h"
-#import "components/bookmarks/browser/base_bookmark_model_observer.h"
-#import "components/bookmarks/browser/bookmark_model_observer.h"
-#import "components/bookmarks/browser/bookmark_model.h"
-#import "components/bookmarks/browser/bookmark_storage.h"
-#import "components/bookmarks/browser/bookmark_utils.h"
-#import "components/bookmarks/browser/titled_url_index.h"
-#import "components/bookmarks/managed/managed_bookmark_service.h"
-#import "components/bookmarks/vivaldi_bookmark_kit.h"
-#import "components/pref_registry/pref_registry_syncable.h"
-#import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_model_factory.h"
@@ -24,7 +12,6 @@
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
@@ -43,21 +30,19 @@
 #import "ios/ui/ntp/top_menu/vivaldi_ntp_top_menu.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
-#import "ios/ui/ntp/vivaldi_speed_dial_empty_view.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_home_mediator.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_shared_state.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_view_controller.h"
-#import "ios/ui/ntp/vivaldi_start_page_prefs.h"
-#import "ios/ui/settings/appearance/vivaldi_theme_setting_prefs_helper.h"
-#import "ios/ui/settings/appearance/vivaldi_theme_setting_prefs.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
+#import "ios/ui/thumbnail/thumbnail_capturer_swift.h"
 #import "ios/ui/thumbnail/vivaldi_thumbnail_service.h"
-#import "ios/web/public/web_state_observer_bridge.h"
-#import "ios/web/public/web_state.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
 using bookmarks::BookmarkModel;
 
 // Namespace
@@ -81,12 +66,9 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                                         VivaldiSpeedDialContainerDelegate,
                                   VivaldiBookmarkAddEditControllerDelegate,
                                               BookmarkModelBridgeObserver,
-                                                    SpeedDialHomeConsumer,
-                                                      CRWWebStateObserver> {
+                                                    SpeedDialHomeConsumer> {
   // Bridge to register for bookmark changes.
   std::unique_ptr<BookmarkModelBridge> _bridge;
-  // Bridges C++ WebStateObserver methods to this new tab page coordinator.
-  std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
 }
 // Collection view that holds the children of speed dial folder.
 @property (weak, nonatomic) UICollectionView *collectionView;
@@ -96,8 +78,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @property(nonatomic, weak) VivaldiNTPTopMenuView* topScrollMenu;
 // Sort button
 @property(nonatomic, weak) UIButton* sortButton;
-// The view to show when there's no speed dial folder available
-@property(nonatomic, weak) VivaldiSpeedDialEmptyView* emptySpeedDialView;
 // The view controller to present when pushing to new view controller
 @property(nonatomic, strong)
   VivaldiSpeedDialViewController* speedDialViewController;
@@ -121,10 +101,12 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   VivaldiSpeedDialSharedState* speedDialSharedState;
 // The user's browser state model used.
 @property(nonatomic, assign) ChromeBrowserState* browserState;
-// The Webstate associated with this coordinator.
-@property(nonatomic, assign) web::WebState* webState;
-// Thumbnail service to download and update SD item thumbnail if needed
+// The service class that manages the speed dial thumbnail locally such as
+// store/remove or fetch.
 @property(nonatomic, strong) VivaldiThumbnailService* vivaldiThumbnailService;
+// The capturer that captures the thumbnail and pass the image through a
+// a callback which is consumed by VivaldiThumbnailService.
+@property(nonatomic, strong) VivaldiThumbnailCapturer* thumbnailCapturer;
 // The mediator that provides data for this view controller.
 @property(nonatomic, strong) VivaldiSpeedDialHomeMediator* mediator;
 
@@ -134,8 +116,8 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @property (strong, nonatomic) NSMutableArray *speedDialChildItems;
 // Array to hold the sort button context menu options
 @property (strong, nonatomic) NSMutableArray *speedDialSortActions;
-// Speed dial item to observe to download and update thumbnail.
-@property(nonatomic, assign) VivaldiSpeedDialItem* itemToObserve;
+// Parent to pass for new speed dial/folder item.
+@property(nonatomic, strong) VivaldiSpeedDialItem* bookmarkBarItem;
 // A boolean to keep track when the scrolling is taking place due to tap in the
 // top menu item. There are two types of scroll event. One happens when user
 // swipes the collection view left or right by pan/swipe gesture. The other one
@@ -173,8 +155,8 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 @synthesize nicknameSortAction = _nicknameSortAction;
 @synthesize descriptionSortAction = _descriptionSortAction;
 @synthesize dateSortAction = _dateSortAction;
-@synthesize emptySpeedDialView = _emptySpeedDialView;
 @synthesize backgroundImageView = _backgroundImageView;
+@synthesize bookmarkBarItem = _bookmarkBarItem;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -188,18 +170,20 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
     _bookmarks = ios::LocalOrSyncableBookmarkModelFactory::
                       GetForBrowserState(_browserState);
     _vivaldiThumbnailService = [VivaldiThumbnailService new];
+    _thumbnailCapturer = [[VivaldiThumbnailCapturer alloc] init];
+    [VivaldiStartPagePrefs setPrefService:self.browserState->GetPrefs()];
     _bridge.reset(new BookmarkModelBridge(self, _bookmarks));
   }
   return self;
 }
 
 - (void)dealloc {
+  _bookmarkBarItem = nil;
+  _thumbnailCapturer = nil;
   _speedDialViewController.delegate = nil;
   _bookmarkFolderAddEditorController.delegate = nil;
   _bookmarkURLAddEditorController.delegate = nil;
   _topScrollMenu.delegate = nil;
-  _webState = nullptr;
-  _webStateObserverBridge = nullptr;
   _vivaldiThumbnailService = nullptr;
   self.mediator.consumer = nil;
   [self.mediator disconnect];
@@ -226,21 +210,31 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 }
 
 - (void)updateWallpaper {
-  //settting pref
-  [VivaldiThemeSettingPrefs setPrefService: _browserState->GetPrefs()];
-  //loading imagename from prefs
-  NSString *wallpaper = [VivaldiThemeSettingPrefsHelper getWallpaperName];
-  // Create and set the background image
-  UIImage *wallpaperImage = wallpaper ? [UIImage imageNamed: wallpaper] : nil;
-  if (wallpaperImage) {
     __weak __typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
       __strong __typeof(weakSelf) strongSelf = weakSelf;
       if (strongSelf) {
-        strongSelf.backgroundImageView.image = wallpaperImage;
+        strongSelf.backgroundImageView.image = [strongSelf getWallpaperImage];
       }
     });
+}
+
+- (UIImage *)getWallpaperImage {
+  // Loading the image name from preferences
+  NSString *wallpaper = [self selectedDefaultWallpaper];
+
+  // setting it to nil if string is empty
+  // so that we don't get warning : Invalid asset name supplied
+  if ([wallpaper isEqualToString:@""]) {
+    wallpaper = nil;
   }
+  // Create and set the background image
+  UIImage *wallpaperImage = wallpaper ? [UIImage imageNamed:wallpaper] : nil;
+  // Check if the wallpaper name is nil and get custom wallpaper
+  if (wallpaper == nil) {
+    wallpaperImage = [self selectedCustomWallpaper];
+  }
+  return wallpaperImage;
 }
 
 -(void)viewWillAppear:(BOOL)animated {
@@ -277,6 +271,25 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   [self scrollToItemWithIndex:self.selectedMenuItemIndex];
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size
+    withTransitionCoordinator:
+      (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  // Determine the target background image based on the new orientation
+  UIImage *targetImage = [self getWallpaperImage];
+  // Animate the transition
+  [coordinator animateAlongsideTransition:
+    ^(id<UIViewControllerTransitionCoordinatorContext> context) {
+      [UIView
+        transitionWithView:self.backgroundImageView
+        duration:0.5
+        options:UIViewAnimationOptionTransitionCrossDissolve
+        animations:^{
+          self.backgroundImageView.image = targetImage;
+        } completion:nil];
+  } completion:nil];
+}
+
 #pragma mark - PRIVATE
 #pragma mark - SET UP UI COMPONENTS
 
@@ -284,9 +297,19 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 - (void)setUpUI {
   self.view.backgroundColor =
     [UIColor colorNamed:vNTPSpeedDialContainerbackgroundColor];
+  [self setupSpeedDialBackground];
   [self setUpHeaderView];
   [self setupSpeedDialView];
-  [self setupEmptySpeedDialView];
+}
+
+-(void)setupSpeedDialBackground {
+  UIImageView* backgroundImageView =
+      [[UIImageView alloc] initWithImage:[self getWallpaperImage]];
+  backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
+  backgroundImageView.clipsToBounds = YES;
+  self.backgroundImageView = backgroundImageView;
+  [self.view addSubview:backgroundImageView];
+  [self.backgroundImageView fillSuperview];
 }
 
 /// Set up the header view
@@ -364,10 +387,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                        leading:self.view.safeLeftAnchor
                         bottom:self.view.bottomAnchor
                       trailing:self.view.safeRightAnchor];
-  [self setupSpeedDialBackground];
-  self.backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
-  [bodyContainerView addSubview:self.backgroundImageView];
-  [self.backgroundImageView fillSuperview];
+
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
                          collectionViewLayout:[self createLayout]];
@@ -388,19 +408,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
   [bodyContainerView addSubview:_collectionView];
   [_collectionView fillSuperview];
-}
-
--(void)setupSpeedDialBackground {
-  // setting prefs
-  [VivaldiThemeSettingPrefs setPrefService: _browserState->GetPrefs()];
-  // Check for selected wallpaper in prefs
-  NSString *wallpaper = [VivaldiThemeSettingPrefsHelper getWallpaperName];
-  // Create and set the background image
-  UIImage *wallpaperImage = wallpaper ? [UIImage imageNamed:wallpaper] : nil;
-  self.backgroundImageView =
-        [[UIImageView alloc] initWithImage:wallpaperImage];
-  self.backgroundImageView.contentMode = UIViewContentModeScaleAspectFill;
-  [self.backgroundImageView fillSuperview];
 }
 
 - (UICollectionViewLayout*)createLayout {
@@ -442,17 +449,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
         [[UICollectionViewCompositionalLayout alloc]
           initWithSectionProvider:sectionProvider configuration:config];
     return layout;
-}
-
--(void)setupEmptySpeedDialView {
-  // Empty speed dial view. Set its alpha to 0 initially. This will be
-  // toggled based on response from the mediator.
-  VivaldiSpeedDialEmptyView* emptySpeedDialView =
-    [VivaldiSpeedDialEmptyView new];
-  _emptySpeedDialView = emptySpeedDialView;
-  [self.view addSubview:emptySpeedDialView];
-  [emptySpeedDialView fillSuperview];
-  emptySpeedDialView.alpha = 0;
 }
 
 // Returns the context menu actions for speed dial sort button action
@@ -546,6 +542,12 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                              bookmarkModel:self.bookmarks];
   self.mediator.consumer = self;
   [self.mediator startMediating];
+
+  // Parent bookmark bar node item
+  VivaldiSpeedDialItem* bookmarkBarItem =
+      [[VivaldiSpeedDialItem alloc]
+          initWithBookmark:self.bookmarks->bookmark_bar_node()];
+  _bookmarkBarItem = bookmarkBarItem;
 }
 
 - (void)refreshTopMenuLayout {
@@ -644,20 +646,32 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
 /// Returns current sorting mode
 - (SpeedDialSortingMode)currentSortingMode {
-  return [VivaldiStartPagePrefs
-            getSDSortingModeWithPrefService:self.browserState->GetPrefs()];
+  return [VivaldiStartPagePrefsHelper getSDSortingMode];
 }
 
 /// Sets the user selected sorting mode on the prefs
 - (void)setCurrentSortingMode:(SpeedDialSortingMode)mode {
-  [VivaldiStartPagePrefs setSDSortingMode:mode
-                           inPrefServices:self.browserState->GetPrefs()];
+  [VivaldiStartPagePrefsHelper setSDSortingMode:mode];
 }
 
 /// Returns current layout style for start page
 - (VivaldiStartPageLayoutStyle)currentLayoutStyle {
-  return [VivaldiStartPagePrefs
-          getStartPageLayoutStyleWithPrefService:self.browserState->GetPrefs()];
+  return [VivaldiStartPagePrefsHelper getStartPageLayoutStyle];
+}
+
+/// Returns preloaded wallpaper name
+- (NSString*)selectedDefaultWallpaper {
+  return [VivaldiStartPagePrefsHelper getWallpaperName];
+}
+
+/// Returns custom wallpaper name
+- (UIImage*)selectedCustomWallpaper {
+  // It doesn't require size traits, image contentMode is aspect fill
+  UIImage *wallpaper =
+    UIDeviceOrientationIsLandscape([UIDevice currentDevice].orientation)
+      ? [VivaldiStartPagePrefsHelper getLandscapeWallpaper] :
+          [VivaldiStartPagePrefsHelper getPortraitWallpaper];
+  return wallpaper;
 }
 
 /// Refresh sort button context menu options
@@ -732,101 +746,63 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   self.bookmarkURLAddEditorController = controller;
 }
 
-- (void)showEmptySpeedDialView {
-  if (self.emptySpeedDialView.alpha == 1)
-    return;
-  self.emptySpeedDialView.alpha = 1;
-  [self.navigationController setNavigationBarHidden:YES
-                                           animated:YES];
+- (void)captureThumbnailForItem:(VivaldiSpeedDialItem*)item
+                    isMigrating:(BOOL)isMigrating
+                  shouldReplace:(BOOL)shouldReplace {
+  NSNumber *bookmarkNodeId = @(item.bookmarkNode->id());
+  [self notifyUpdateForItemWithID:bookmarkNodeId
+                 captureThumbnail:YES
+                  finishedCapture:NO];
+
+  NSURL *url = [NSURL URLWithString:item.urlString];
+  [self.thumbnailCapturer captureSnapshotWithURL:url
+                              completion:^(UIImage *image, NSError *error) {
+    [self notifyUpdateForItemWithID:bookmarkNodeId
+                   captureThumbnail:YES
+                    finishedCapture:YES];
+    if (image) {
+      [self.vivaldiThumbnailService
+           storeThumbnailForSDItem:item
+                          snapshot:image
+                           replace:shouldReplace
+                       isMigrating:isMigrating
+                         bookmarks:self.bookmarks];
+    }
+  }];
 }
 
-- (void)hideEmptySpeedDialView {
-  if (self.emptySpeedDialView.alpha == 0)
-    return;
-  self.emptySpeedDialView.alpha = 0;
-  [self.navigationController setNavigationBarHidden:NO
-                                           animated:YES];
-}
+/// Notifies the listeners that the speed dial item property
+/// has been updated. This can be triggered when a thumbnail capture
+/// event happens whether refresh starts or ends, also when other
+/// properties like title, url etc changes from other actions.
+/// Thumbnail capture object will be added only if this method is
+/// triggered by any thumbnail capture event.
+- (void)notifyUpdateForItemWithID:(NSNumber*)itemID
+                 captureThumbnail:(BOOL)captureThumbnail
+                  finishedCapture:(BOOL)finishedCapture {
+  NSMutableDictionary *userInfo =
+      [NSMutableDictionary dictionaryWithObject:itemID
+                                         forKey:vSpeedDialIdentifierKey];
 
-- (void)didTapSpeedDialWithItem:(VivaldiSpeedDialItem*)item
-                captureSnapshot:(BOOL)captureSnapshot {
-
-  if (captureSnapshot) {
-    [self stopObservingWebState];
-
-    _itemToObserve = item;
-
-    // Observe the active web state
-    _webState = _browser->GetWebStateList()->GetActiveWebState();
-    _webStateObserverBridge =
-        std::make_unique<web::WebStateObserverBridge>(self);
-    _webState->AddObserver(_webStateObserverBridge.get());
+  if (captureThumbnail) {
+    NSNumber *finishedCaptureThumbnail =
+        [NSNumber numberWithBool:finishedCapture];
+    [userInfo setObject:finishedCaptureThumbnail
+                 forKey:vSpeedDialThumbnailRefreshStateKey];
   }
 
-  // Resign the edit mode of omnibox
-  id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), OmniboxCommands);
-  [omniboxCommandHandler cancelOmniboxEdit];
-
-  // Go to the website
-  UrlLoadParams params = UrlLoadParams::InCurrentTab(item.url);
-  params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-  UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
-}
-
-- (void)stopObservingWebState {
-  if (_webState && _webStateObserverBridge) {
-    _webState->RemoveObserver(_webStateObserverBridge.get());
-    _webStateObserverBridge.reset();
-  }
-}
-
-#pragma mark - CRWWebStateObserver methods.
-- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
-  if (!success || webState != _webState ||
-      !_itemToObserve || !_itemToObserve.bookmarkNode)
-    return;
-
-  // Extract the host from URLs and compare them
-  NSURL *intentedPageURL = [NSURL URLWithString:_itemToObserve.urlString];
-  NSString* lastCommittedURLString =
-      base::SysUTF8ToNSString(webState->GetLastCommittedURL().spec());
-  NSURL *webStateCommittedURL = [NSURL URLWithString:lastCommittedURLString];
-
-  if (!intentedPageURL || !webStateCommittedURL)
-    return;
-
-  if (![VivaldiGlobalHelpers
-          areHostsEquivalentForURL:intentedPageURL
-                              bURL:webStateCommittedURL]) {
-    // Hosts do not match, return early.
-    // This means user moved to a different host before page is loaded.
-    return;
-  }
-
-  // Usually this stored correct thumbnails pretty much correctly.
-  // But, sometimes this method returns success although page rendering did not
-  // finish visibly on the screen. And, that leads to capture incorrect
-  // thumbnail (speed dial page) for the URL. Therefore, we will wait a second
-  // before triggering the snapshot.
-  dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW,
-                    (int64_t)(1.0 * NSEC_PER_SEC)),
-      dispatch_get_main_queue(), ^{
-        [self.vivaldiThumbnailService
-            generateAndStoreThumbnailForSDItem:self.itemToObserve
-                                      webState:webState
-                                     bookmarks:self.bookmarks];
-      });
-
-  // Stop observing the webstate after thumbnail is stored for the webstate.
-  [self stopObservingWebState];
+  [[NSNotificationCenter defaultCenter]
+       postNotificationName:vSpeedDialPropertyDidChange
+                     object:nil
+                   userInfo:userInfo];
 }
 
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section{
-    return self.speedDialMenuItems.count;
+  // Return 1 item when speed dial menu items count is empty to show + button
+  // that allows adding folder or item.
+  return self.speedDialMenuItems.count ?: 1;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView *)collectionView
@@ -835,15 +811,24 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
     [collectionView dequeueReusableCellWithReuseIdentifier:cellId
                                             forIndexPath:indexPath];
   NSInteger index = indexPath.row;
-  cell.delegate = self;
-  VivaldiSpeedDialItem* parent =
-    [self.speedDialMenuItems objectAtIndex:index];
-  NSArray* childItems = [self.speedDialChildItems objectAtIndex:index];
-  [cell configureWith:childItems
-               parent:parent
-        faviconLoader:self.faviconLoader
-          layoutStyle:[self currentLayoutStyle]];
   [cell setCurrentPage: index];
+  cell.delegate = self;
+
+  if (self.speedDialMenuItems.count <= 0) {
+    [cell configureWith:@[]
+                 parent:_bookmarkBarItem
+          faviconLoader:self.faviconLoader
+            layoutStyle:[self currentLayoutStyle]];
+  } else {
+    VivaldiSpeedDialItem* parent =
+      [self.speedDialMenuItems objectAtIndex:index];
+    NSArray* childItems = [self.speedDialChildItems objectAtIndex:index];
+    [cell configureWith:childItems
+                 parent:parent
+          faviconLoader:self.faviconLoader
+            layoutStyle:[self currentLayoutStyle]];
+  }
+
   return cell;
 }
 
@@ -894,26 +879,28 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   [self.mediator computeSpeedDialFolders];
 }
 
+- (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+  NSNumber *bookmarkNodeId = @(bookmarkNode->id());
+  [self notifyUpdateForItemWithID:bookmarkNodeId
+                 captureThumbnail:NO
+                  finishedCapture:NO];
+}
+
 - (void)refreshMenuItems:(NSArray*)items {
+  [self.navigationController setNavigationBarHidden:items.count == 0
+                                           animated:NO];
   if (items.count <= 0) {
     [self.speedDialMenuItems removeAllObjects];
     [self.topScrollMenu removeAllItems];
-    [self showEmptySpeedDialView];
     return;
   }
 
-  [self hideEmptySpeedDialView];
   self.speedDialMenuItems = [[NSMutableArray alloc] initWithArray:items];
   [self.topScrollMenu setMenuItemsWithSDFolders:items
                                   selectedIndex:self.selectedMenuItemIndex];
 }
 
 - (void)refreshChildItems:(NSArray*)items {
-  BOOL refreshable =
-    self.speedDialMenuItems && self.speedDialMenuItems.count > 0;
-  if (!refreshable)
-    return;
-
   self.speedDialChildItems = [[NSMutableArray alloc] initWithArray:items];
   [CATransaction begin];
   [CATransaction setValue:(id)kCFBooleanTrue
@@ -954,16 +941,34 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                                             parent:parent
                                          bookmarks:self.bookmarks
                                            browser:self.browser
-                                     faviconLoader:self.faviconLoader];
+                                     faviconLoader:self.faviconLoader
+                                   backgroundImage:[self getWallpaperImage]];
     controller.delegate = self;
     [self.navigationController pushViewController:controller
                                          animated:YES];
     self.speedDialViewController = controller;
   } else {
     BOOL isOffTheRecord = _browserState->IsOffTheRecord();
-    BOOL captureSnapshot = item.thumbnail.length == 0 && !isOffTheRecord;
-    [self didTapSpeedDialWithItem:item
-                  captureSnapshot:captureSnapshot];
+    BOOL hasThumbnail = item.thumbnail.length != 0;
+    BOOL shouldMigate =
+        [self.vivaldiThumbnailService shouldMigrateForSDItem:item];
+
+    BOOL captureThumbnail = (shouldMigate || !hasThumbnail) && !isOffTheRecord;
+    if (captureThumbnail) {
+      [self captureThumbnailForItem:item
+                        isMigrating:shouldMigate
+                      shouldReplace:NO];
+    }
+
+    // Resign the edit mode of omnibox
+    id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), OmniboxCommands);
+    [omniboxCommandHandler cancelOmniboxEdit];
+
+    // Go to the website
+    UrlLoadParams params = UrlLoadParams::InCurrentTab(item.url);
+    params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+    UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
   }
 }
 
@@ -1030,22 +1035,40 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                      parent:(VivaldiSpeedDialItem*)parent {
 
   if (self.bookmarks->loaded() && item.bookmarkNode) {
-    std::set<const BookmarkNode*> nodes;
-    nodes.insert(item.bookmarkNode);
-    bookmark_utils_ios::DeleteBookmarks(nodes, self.bookmarks);
+    std::vector<const bookmarks::BookmarkNode*> nodes;
+    nodes.push_back(item.bookmarkNode);
+    const BookmarkNode* trashFolder = _bookmarks->trash_node();
+    bookmark_utils_ios::MoveBookmarks(nodes,
+                                      self.bookmarks,
+                                      self.bookmarks,
+                                      trashFolder);
     [_vivaldiThumbnailService removeThumbnailForSDItem:item];
   }
 }
 
+- (void)didRefreshThumbnailForItem:(VivaldiSpeedDialItem*)item
+                            parent:(VivaldiSpeedDialItem*)parent {
+  BOOL shouldMigate =
+      [self.vivaldiThumbnailService shouldMigrateForSDItem:item];
+  [self captureThumbnailForItem:item
+                    isMigrating:shouldMigate
+                  shouldReplace:YES];
+}
+
 - (void)didSelectAddNewSpeedDial:(BOOL)isFolder
                           parent:(VivaldiSpeedDialItem*)parent {
+  // When there's no speed dial items, bookmark bar node is passed as the parent
+  // Otherwise, pass the parent node of the selected item.
+  VivaldiSpeedDialItem* parentItem =
+      self.speedDialMenuItems.count == 0 ? _bookmarkBarItem : parent;
+
   if (isFolder) {
     [self presentBookmarkFolderEditor:nil
-                               parent:parent
+                               parent:parentItem
                             isEditing:NO];
   } else {
     [self presentBookmarkURLEditor:nil
-                            parent:parent
+                            parent:parentItem
                          isEditing:NO];
   }
 }

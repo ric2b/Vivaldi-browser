@@ -14,9 +14,11 @@
 //! Common externally-accessible FFI constructs which are needed
 //! in order to define the interfaces in this crate's various modules.
 
-use alloc::string::String;
 use array_view::ArrayView;
 use handle_map::HandleNotPresentError;
+use lock_adapter::std::RwLock;
+use lock_adapter::RwLock as _;
+use std::string::String;
 
 const DEFAULT_MAX_HANDLES: u32 = u32::MAX - 1;
 
@@ -37,6 +39,11 @@ pub struct CommonConfig {
     ///   assuming that that call completes successfully.
     /// - In all other cases, 16 shards will be used by default.
     num_shards: u8,
+
+    /// The maximum number of credential slabs which may be active
+    /// at any one time. By default, this value will be set to
+    /// `u32::MAX - 1`, which is the upper-bound on this value.
+    max_num_credential_slabs: u32,
 
     /// The maximum number of credential books which may be active
     /// at any one time. By default, this value will be set to
@@ -66,6 +73,7 @@ impl CommonConfig {
     pub(crate) const fn new() -> Self {
         Self {
             num_shards: 0,
+            max_num_credential_slabs: DEFAULT_MAX_HANDLES,
             max_num_credential_books: DEFAULT_MAX_HANDLES,
             max_num_deserialized_v0_advertisements: DEFAULT_MAX_HANDLES,
             max_num_deserialized_v1_advertisements: DEFAULT_MAX_HANDLES,
@@ -90,6 +98,9 @@ impl CommonConfig {
             self.num_shards
         }
     }
+    pub(crate) fn max_num_credential_slabs(&self) -> u32 {
+        self.max_num_credential_slabs
+    }
     pub(crate) fn max_num_credential_books(&self) -> u32 {
         self.max_num_credential_books
     }
@@ -108,6 +119,13 @@ impl CommonConfig {
     /// Max value: `u32::MAX - 1`.
     pub fn set_max_num_credential_books(&mut self, max_num_credential_books: u32) {
         self.max_num_credential_books = DEFAULT_MAX_HANDLES.min(max_num_credential_books)
+    }
+
+    /// Sets the maximum number of active handles to credential-slabs
+    /// which may be active at any one time.
+    /// Max value: `u32::MAX - 1`.
+    pub fn set_max_num_credential_slabs(&mut self, max_num_credential_slabs: u32) {
+        self.max_num_credential_slabs = DEFAULT_MAX_HANDLES.min(max_num_credential_slabs)
     }
 
     /// Sets the maximum number of active handles to deserialized v0
@@ -133,10 +151,13 @@ impl CommonConfig {
     }
 }
 
-static COMMON_CONFIG: spin::RwLock<CommonConfig> = spin::RwLock::new(CommonConfig::new());
+static COMMON_CONFIG: RwLock<CommonConfig> = RwLock::new(CommonConfig::new());
 
 pub(crate) fn global_num_shards() -> u8 {
     COMMON_CONFIG.read().num_shards()
+}
+pub(crate) fn global_max_num_credential_slabs() -> u32 {
+    COMMON_CONFIG.read().max_num_credential_slabs()
 }
 pub(crate) fn global_max_num_credential_books() -> u32 {
     COMMON_CONFIG.read().max_num_credential_books()
@@ -167,6 +188,17 @@ pub fn global_config_set_num_shards(num_shards: u8) {
     config.set_num_shards(num_shards);
 }
 
+/// Sets the maximum number of active handles to credential slabs
+/// which may be active at any one time. Max value: `u32::MAX - 1`.
+///
+/// Setting this value will have no effect if the handle-maps for the
+/// API have already begun being used by the client code, and any
+/// values set will take effect upon the first usage of any API
+/// call utilizing credential slabs.
+pub fn global_config_set_max_num_credential_slabs(max_num_credential_slabs: u32) {
+    let mut config = COMMON_CONFIG.write();
+    config.set_max_num_credential_slabs(max_num_credential_slabs);
+}
 /// Sets the maximum number of active handles to credential books
 /// which may be active at any one time. Max value: `u32::MAX - 1`.
 ///
@@ -270,6 +302,32 @@ impl<const N: usize> ByteBuffer<N> {
     /// Yields a slice of the first `self.len` bytes of `self.bytes`.
     pub fn as_slice(&self) -> &[u8] {
         &self.bytes[..(self.len as usize)]
+    }
+}
+
+/// The DE type for an encrypted identity
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum EncryptedIdentityType {
+    /// Identity for broadcasts to nearby devices with the same
+    /// logged-in-account (for some account).
+    Private = 1,
+    /// Identity for broadcasts to nearby devices which this
+    /// device has declared to trust.
+    Trusted = 2,
+    /// Identity for broadcasts to devices which have been provisioned
+    /// offline with this device.
+    Provisioned = 4,
+}
+
+impl From<np_adv::de_type::EncryptedIdentityDataElementType> for EncryptedIdentityType {
+    fn from(value: np_adv::de_type::EncryptedIdentityDataElementType) -> Self {
+        use np_adv::de_type::EncryptedIdentityDataElementType;
+        match value {
+            EncryptedIdentityDataElementType::Private => Self::Private,
+            EncryptedIdentityDataElementType::Trusted => Self::Trusted,
+            EncryptedIdentityDataElementType::Provisioned => Self::Provisioned,
+        }
     }
 }
 

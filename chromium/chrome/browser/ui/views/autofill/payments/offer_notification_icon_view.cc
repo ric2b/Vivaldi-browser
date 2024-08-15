@@ -41,7 +41,7 @@ OfferNotificationIconView::OfferNotificationIconView(
   SetUpForInOutAnimation();
   SetProperty(views::kElementIdentifierKey, kOfferNotificationChipElementId);
   SetAccessibilityProperties(
-      /*role*/ absl::nullopt,
+      /*role*/ std::nullopt,
       l10n_util::GetStringUTF16(
           IDS_AUTOFILL_OFFERS_REMINDER_ICON_TOOLTIP_TEXT));
 }
@@ -50,16 +50,18 @@ OfferNotificationIconView::~OfferNotificationIconView() = default;
 
 views::BubbleDialogDelegate* OfferNotificationIconView::GetBubble() const {
   OfferNotificationBubbleController* controller = GetController();
-  if (!controller)
+  if (!controller) {
     return nullptr;
+  }
 
   return static_cast<autofill::OfferNotificationBubbleViews*>(
       controller->GetOfferNotificationBubbleView());
 }
 
 void OfferNotificationIconView::UpdateImpl() {
-  if (!GetWebContents())
+  if (!GetWebContents()) {
     return;
+  }
 
   // |controller| may be nullptr due to lazy initialization.
   OfferNotificationBubbleController* controller = GetController();
@@ -91,7 +93,7 @@ void OfferNotificationIconView::MaybeShowPageActionLabel() {
   AnimateIn(IDS_DISCOUNT_ICON_EXPANDED_TEXT);
   controller->OnIconExpanded();
   SetAccessibilityProperties(
-      /*role*/ absl::nullopt,
+      /*role*/ std::nullopt,
       l10n_util::GetStringUTF16(
           IDS_AUTOFILL_OFFERS_REMINDER_ICON_TOOLTIP_TEXT));
 }
@@ -177,7 +179,7 @@ OfferNotificationBubbleController* OfferNotificationIconView::GetController()
   return OfferNotificationBubbleController::Get(GetWebContents());
 }
 
-BEGIN_METADATA(OfferNotificationIconView, PageActionIconView)
+BEGIN_METADATA(OfferNotificationIconView)
 END_METADATA
 
 }  // namespace autofill

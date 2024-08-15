@@ -32,8 +32,7 @@ class PasswordManagerInterface;
 
 // Interface that allows PasswordManager core code to interact with its driver
 // (i.e., obtain information from it and give information to it).
-class PasswordManagerDriver
-    : public base::SupportsWeakPtr<PasswordManagerDriver> {
+class PasswordManagerDriver {
  public:
 #if BUILDFLAG(IS_ANDROID)
   using ToShowVirtualKeyboard =
@@ -81,6 +80,11 @@ class PasswordManagerDriver
       autofill::FieldRendererId generation_element_id,
       const std::u16string& password) {}
 
+  // Notifies the driver that the focus should be advanced to the next input
+  // field after password fields (assuming that password fields are adjacent
+  // in account creation).
+  virtual void FocusNextFieldAfterPasswords() {}
+
   // Tells the driver to fill the form with the |username| and |password|.
   virtual void FillSuggestion(const std::u16string& username,
                               const std::u16string& password) = 0;
@@ -113,12 +117,13 @@ class PasswordManagerDriver
   // Tells the driver to clear previewed password and username fields.
   virtual void ClearPreviewedForm() = 0;
 
-  // Updates the autofill availability state of the DOM node with
+  // Updates the autofill suggestion availability of the DOM node with
   // |generation_element_id|. It is critical for a11y to keep it updated
   // to make proper announcements.
   virtual void SetSuggestionAvailability(
       autofill::FieldRendererId element_id,
-      const autofill::mojom::AutofillState state) = 0;
+      autofill::mojom::AutofillSuggestionAvailability
+          suggestion_availability) = 0;
 
   // Returns the PasswordGenerationFrameHelper associated with this instance.
   virtual PasswordGenerationFrameHelper* GetPasswordGenerationHelper() = 0;
@@ -150,6 +155,9 @@ class PasswordManagerDriver
   // corresponding HTML attributes. It is used only for debugging.
   virtual void AnnotateFieldsWithParsingResult(
       const autofill::ParsingResult& parsing_result) {}
+
+  // Get a WeakPtr to the instance.
+  virtual base::WeakPtr<PasswordManagerDriver> AsWeakPtr() = 0;
 };
 
 }  // namespace password_manager

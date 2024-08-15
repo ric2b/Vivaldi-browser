@@ -6,7 +6,7 @@
 #import <UIKit/UIKit.h>
 
 #import "components/notes/notes_model.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller.h"
 
 @class NoteAddEditViewController;
 @class NoteFolderChooserViewController;

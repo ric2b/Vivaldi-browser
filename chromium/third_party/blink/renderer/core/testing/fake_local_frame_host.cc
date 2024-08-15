@@ -35,10 +35,6 @@ void FakeLocalFrameHost::FullscreenStateChanged(
     bool is_fullscreen,
     mojom::blink::FullscreenOptionsPtr options) {}
 
-void FakeLocalFrameHost::Maximize() {}
-void FakeLocalFrameHost::Minimize() {}
-void FakeLocalFrameHost::Restore() {}
-
 void FakeLocalFrameHost::RegisterProtocolHandler(const WTF::String& scheme,
                                                  const ::blink::KURL& url,
                                                  bool user_gesture) {}
@@ -115,6 +111,8 @@ void FakeLocalFrameHost::GoToEntryAtOffset(
 void FakeLocalFrameHost::UpdateTitle(
     const WTF::String& title,
     base::i18n::TextDirection title_direction) {}
+
+void FakeLocalFrameHost::UpdateAppTitle(const WTF::String& app_title) {}
 
 void FakeLocalFrameHost::UpdateUserActivationState(
     mojom::blink::UserActivationUpdateType update_type,
@@ -258,22 +256,23 @@ void FakeLocalFrameHost::ReceivedDelegatedCapability(
 void FakeLocalFrameHost::SendFencedFrameReportingBeacon(
     const WTF::String& event_data,
     const WTF::String& event_type,
-    const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations,
-    network::AttributionReportingRuntimeFeatures
-        attribution_reporting_runtime_features) {}
+    const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations) {
+}
 
 void FakeLocalFrameHost::SendFencedFrameReportingBeaconToCustomURL(
-    const blink::KURL& destination_url,
-    network::AttributionReportingRuntimeFeatures
-        attribution_reporting_runtime_features) {}
+    const blink::KURL& destination_url) {}
 
 void FakeLocalFrameHost::SetFencedFrameAutomaticBeaconReportEventData(
     blink::mojom::AutomaticBeaconType event_type,
     const WTF::String& event_data,
     const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations,
-    network::AttributionReportingRuntimeFeatures
-        attribution_reporting_runtime_features,
-    bool once) {}
+    bool once,
+    bool cross_origin_exposed) {}
+
+void FakeLocalFrameHost::DisableUntrustedNetworkInFencedFrame(
+    DisableUntrustedNetworkInFencedFrameCallback callback) {
+  std::move(callback).Run();
+}
 
 void FakeLocalFrameHost::SendLegacyTechEvent(
     const WTF::String& type,
@@ -282,23 +281,8 @@ void FakeLocalFrameHost::SendLegacyTechEvent(
 void FakeLocalFrameHost::SendPrivateAggregationRequestsForFencedFrameEvent(
     const WTF::String& event_type) {}
 
-void FakeLocalFrameHost::CreatePortal(
-    mojo::PendingAssociatedReceiver<mojom::blink::Portal> portal,
-    mojo::PendingAssociatedRemote<mojom::blink::PortalClient> client,
-    mojom::blink::RemoteFrameInterfacesFromRendererPtr remote_frame_interfaces,
-    CreatePortalCallback callback) {
-  std::move(callback).Run(mojom::blink::FrameReplicationState::New(),
-                          PortalToken(), RemoteFrameToken(),
-                          base::UnguessableToken());
-}
-
-void FakeLocalFrameHost::AdoptPortal(
-    const PortalToken& portal_token,
-    mojom::blink::RemoteFrameInterfacesFromRendererPtr remote_frame_interfaces,
-    AdoptPortalCallback callback) {
-  std::move(callback).Run(mojom::blink::FrameReplicationState::New(),
-                          RemoteFrameToken(), base::UnguessableToken());
-}
+void FakeLocalFrameHost::SetAttributionReportingRuntimeFeatures(
+    network::AttributionReportingRuntimeFeatures features) {}
 
 void FakeLocalFrameHost::CreateFencedFrame(
     mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>,

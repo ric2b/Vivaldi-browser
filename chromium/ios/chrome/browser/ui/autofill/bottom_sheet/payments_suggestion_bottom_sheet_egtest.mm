@@ -9,7 +9,7 @@
 #import "base/test/ios/wait_util.h"
 #import "components/autofill/core/browser/autofill_test_utils.h"
 #import "components/url_formatter/elide_url.h"
-#import "ios/chrome/browser/metrics/metrics_app_interface.h"
+#import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/autofill/autofill_app_interface.h"
 #import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
@@ -62,6 +62,11 @@ BOOL WaitForKeyboardToAppear() {
   net::test_server::RegisterDefaultHandlers(self.testServer);
   GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
 
+  [AutofillAppInterface setUpMockReauthenticationModule];
+  [AutofillAppInterface mockReauthenticationModuleCanAttempt:YES];
+  [AutofillAppInterface mockReauthenticationModuleExpectedResult:
+                            ReauthenticationResult::kSuccess];
+
   [AutofillAppInterface clearCreditCardStore];
   _lastDigits = [AutofillAppInterface saveLocalCreditCard];
 
@@ -73,6 +78,7 @@ BOOL WaitForKeyboardToAppear() {
 
 - (void)tearDown {
   [AutofillAppInterface clearCreditCardStore];
+  [AutofillAppInterface clearMockReauthenticationModule];
 
   [MetricsAppInterface stopOverridingMetricsAndCrashReportingForTesting];
   GREYAssertNil([MetricsAppInterface releaseHistogramTester],
@@ -88,8 +94,8 @@ BOOL WaitForKeyboardToAppear() {
 
 // Matcher for the bottom sheet's "Continue" button.
 id<GREYMatcher> ContinueButton() {
-  return grey_accessibilityLabel(
-      l10n_util::GetNSString(IDS_IOS_PAYMENT_BOTTOM_SHEET_CONTINUE));
+  return chrome_test_util::StaticTextWithAccessibilityLabelId(
+      IDS_IOS_PAYMENT_BOTTOM_SHEET_CONTINUE);
 }
 
 // Matcher for the bottom sheet's "Use Keyboard" button.

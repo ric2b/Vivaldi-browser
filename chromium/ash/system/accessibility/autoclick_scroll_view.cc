@@ -315,7 +315,7 @@ class AutoclickScrollButton : public CustomShapeButton,
   gfx::Size size_;
   std::unique_ptr<base::RetainingOneShotTimer> scroll_hover_timer_;
   bool active_ = false;
-  const raw_ref<const gfx::VectorIcon, ExperimentalAsh> icon_;
+  const raw_ref<const gfx::VectorIcon> icon_;
 };
 
 BEGIN_METADATA(AutoclickScrollButton, CustomShapeButton)
@@ -353,9 +353,8 @@ bool AutoclickScrollBubbleView::IsAnchoredToStatusArea() const {
   return false;
 }
 
-const char* AutoclickScrollBubbleView::GetClassName() const {
-  return "AutoclickScrollBubbleView";
-}
+BEGIN_METADATA(AutoclickScrollBubbleView)
+END_METADATA
 
 // ------ AutoclickScrollView  ------ //
 
@@ -404,8 +403,7 @@ void AutoclickScrollView::Layout() {
       kScrollButtonCloseSizeDips, kScrollButtonCloseSizeDips);
 }
 
-const char* AutoclickScrollView::GetClassName() const {
-  return "AutoclickScrollView";
-}
+BEGIN_METADATA(AutoclickScrollView)
+END_METADATA
 
 }  // namespace ash

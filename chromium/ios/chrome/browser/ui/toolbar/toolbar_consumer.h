@@ -43,6 +43,14 @@
 // on disabled search button only visible in new tab page.
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
                   desktopTabEnabled:(BOOL)desktopTabEnabled;
+// Sets whether tab bar is enabled
+- (void)setIsTabBarEnabled:(BOOL)enabled;
+// Sets whether bottom omnibox is enabled
+- (void)setIsBottomOmniboxEnabled:(BOOL)enabled;
+// Sets whether dynamic accent color is enabled
+- (void)setIsDynamicAccentColorEnabled:(BOOL)enabled;
+// Sets the custom accent color for toolbars.
+- (void)setCustomAccentColor:(UIColor*)accentColor;
 // End Vivaldi
 
 @end

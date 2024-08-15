@@ -6,6 +6,7 @@
 #define ASH_WM_MODE_WM_MODE_CONTROLLER_H_
 
 #include <memory>
+#include <optional>
 
 #include "ash/ash_export.h"
 #include "ash/shell_observer.h"
@@ -14,7 +15,6 @@
 #include "ash/wm_mode/pie_menu_view.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window_observer.h"
 #include "ui/compositor/layer_delegate.h"
 #include "ui/compositor/layer_owner.h"
@@ -153,13 +153,12 @@ class ASH_EXPORT WmModeController : public ShellObserver,
 
   // The current root window the layer of `this` belongs to. It's always nullptr
   // when WM Mode is inactive.
-  raw_ptr<aura::Window, ExperimentalAsh> current_root_ = nullptr;
+  raw_ptr<aura::Window> current_root_ = nullptr;
 
   // The window that got selected as the top-most one at the most recent
   // received located event. This window (if available) will be the one that
   // receives all the gestures supported by this mode.
-  raw_ptr<aura::Window, DanglingUntriaged | ExperimentalAsh> selected_window_ =
-      nullptr;
+  raw_ptr<aura::Window, DanglingUntriaged> selected_window_ = nullptr;
 
   views::UniqueWidgetPtr pie_menu_widget_;
   raw_ptr<PieMenuView> pie_menu_view_ = nullptr;
@@ -174,7 +173,7 @@ class ASH_EXPORT WmModeController : public ShellObserver,
   // The screen location of the last received release located event.
   // Valid only if we receive a release located event, and only until
   // `OnLocatedEvent()` returns.
-  absl::optional<gfx::Point> last_release_event_screen_point_;
+  std::optional<gfx::Point> last_release_event_screen_point_;
 };
 
 }  // namespace ash

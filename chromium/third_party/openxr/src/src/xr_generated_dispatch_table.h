@@ -1,7 +1,9 @@
 // Copyright (c) 2017-2023, The Khronos Group Inc.
-// Copyright (c) 2017-2019 Valve Corporation
-// Copyright (c) 2017-2019 LunarG, Inc.
+// Copyright (c) 2017-2019, Valve Corporation
+// Copyright (c) 2017-2019, LunarG, Inc.
+
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+
 // *********** THIS FILE IS GENERATED - DO NOT EDIT ***********
 //     See utility_source_generator.py for modifications
 // ************************************************************
@@ -28,6 +30,7 @@
 //
 
 #pragma once
+
 #include "xr_dependencies.h"
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
@@ -352,6 +355,10 @@ struct XrGeneratedDispatchTable {
     PFN_xrUnpersistSpatialAnchorMSFT UnpersistSpatialAnchorMSFT;
     PFN_xrClearSpatialAnchorStoreMSFT ClearSpatialAnchorStoreMSFT;
 
+    // ---- XR_MSFT_scene_marker extension commands
+    PFN_xrGetSceneMarkerRawDataMSFT GetSceneMarkerRawDataMSFT;
+    PFN_xrGetSceneMarkerDecodedStringMSFT GetSceneMarkerDecodedStringMSFT;
+
     // ---- XR_FB_spatial_entity_query extension commands
     PFN_xrQuerySpacesFB QuerySpacesFB;
     PFN_xrRetrieveSpaceQueryResultsFB RetrieveSpaceQueryResultsFB;
@@ -406,6 +413,22 @@ struct XrGeneratedDispatchTable {
     // ---- XR_FB_haptic_pcm extension commands
     PFN_xrGetDeviceSampleRateFB GetDeviceSampleRateFB;
 
+    // ---- XR_META_passthrough_preferences extension commands
+    PFN_xrGetPassthroughPreferencesMETA GetPassthroughPreferencesMETA;
+
+    // ---- XR_META_virtual_keyboard extension commands
+    PFN_xrCreateVirtualKeyboardMETA CreateVirtualKeyboardMETA;
+    PFN_xrDestroyVirtualKeyboardMETA DestroyVirtualKeyboardMETA;
+    PFN_xrCreateVirtualKeyboardSpaceMETA CreateVirtualKeyboardSpaceMETA;
+    PFN_xrSuggestVirtualKeyboardLocationMETA SuggestVirtualKeyboardLocationMETA;
+    PFN_xrGetVirtualKeyboardScaleMETA GetVirtualKeyboardScaleMETA;
+    PFN_xrSetVirtualKeyboardModelVisibilityMETA SetVirtualKeyboardModelVisibilityMETA;
+    PFN_xrGetVirtualKeyboardModelAnimationStatesMETA GetVirtualKeyboardModelAnimationStatesMETA;
+    PFN_xrGetVirtualKeyboardDirtyTexturesMETA GetVirtualKeyboardDirtyTexturesMETA;
+    PFN_xrGetVirtualKeyboardTextureDataMETA GetVirtualKeyboardTextureDataMETA;
+    PFN_xrSendVirtualKeyboardInputMETA SendVirtualKeyboardInputMETA;
+    PFN_xrChangeVirtualKeyboardTextContextMETA ChangeVirtualKeyboardTextContextMETA;
+
     // ---- XR_OCULUS_external_camera extension commands
     PFN_xrEnumerateExternalCamerasOCULUS EnumerateExternalCamerasOCULUS;
 
@@ -423,6 +446,11 @@ struct XrGeneratedDispatchTable {
     PFN_xrGetSpaceUserIdFB GetSpaceUserIdFB;
     PFN_xrDestroySpaceUserFB DestroySpaceUserFB;
 
+    // ---- XR_META_passthrough_color_lut extension commands
+    PFN_xrCreatePassthroughColorLutMETA CreatePassthroughColorLutMETA;
+    PFN_xrDestroyPassthroughColorLutMETA DestroyPassthroughColorLutMETA;
+    PFN_xrUpdatePassthroughColorLutMETA UpdatePassthroughColorLutMETA;
+
     // ---- XR_QCOM_tracking_optimization_settings extension commands
     PFN_xrSetTrackingOptimizationSettingsHintQCOM SetTrackingOptimizationSettingsHintQCOM;
 
@@ -435,6 +463,17 @@ struct XrGeneratedDispatchTable {
 
     // ---- XR_MNDX_force_feedback_curl extension commands
     PFN_xrApplyForceFeedbackCurlMNDX ApplyForceFeedbackCurlMNDX;
+
+    // ---- XR_EXT_plane_detection extension commands
+    PFN_xrCreatePlaneDetectorEXT CreatePlaneDetectorEXT;
+    PFN_xrDestroyPlaneDetectorEXT DestroyPlaneDetectorEXT;
+    PFN_xrBeginPlaneDetectionEXT BeginPlaneDetectionEXT;
+    PFN_xrGetPlaneDetectionStateEXT GetPlaneDetectionStateEXT;
+    PFN_xrGetPlaneDetectionsEXT GetPlaneDetectionsEXT;
+    PFN_xrGetPlanePolygonBufferEXT GetPlanePolygonBufferEXT;
+
+    // ---- XR_ML_user_calibration extension commands
+    PFN_xrEnableUserCalibrationEventsML EnableUserCalibrationEventsML;
 };
 
 

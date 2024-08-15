@@ -222,7 +222,6 @@ export class CookiesTable extends UI.Widget.VBox {
         id: SDK.Cookie.Attributes.Priority,
         title: 'Priority',
         sortable: true,
-        sort: DataGrid.DataGrid.Order.Descending,
         weight: 7,
         editable: editable,
       },
@@ -776,13 +775,22 @@ export class DataGridNode extends DataGrid.DataGrid.DataGridNode<DataGridNode> {
         }
       }
     }
-
-    if (blockedReasonString) {
+    // When CookiesTable gets created in Application panel instead of Network Panel, `this.blockedReasons` only contains reasons for blocked cookies in responses.
+    // We want to show the warning icon for blocked cookies in requests as well.
+    if (columnId === SDK.Cookie.Attributes.Name &&
+        IssuesManager.RelatedIssue.hasThirdPartyPhaseoutCookieIssue(this.cookie)) {
+      const infoElement = new IconButton.Icon.Icon();
+      infoElement.data = {iconName: 'warning-filled', color: 'var(--icon-warning)', width: '14px', height: '14px'};
+      infoElement.onclick = (): Promise<void> => IssuesManager.RelatedIssue.reveal(this.cookie);
+      infoElement.style.cursor = 'pointer';
+      infoElement.title = blockedReasonString;
+      cell.insertBefore(infoElement, cell.firstChild);
+    } else if (blockedReasonString) {
       const infoElement = new IconButton.Icon.Icon();
       infoElement.data = {iconName: 'info', color: 'var(--icon-info)', width: '14px', height: '14px'};
-      UI.Tooltip.Tooltip.install(infoElement, blockedReasonString);
-      cell.insertBefore(infoElement, cell.firstChild);
       cell.classList.add('flagged-cookie-attribute-cell');
+      infoElement.title = blockedReasonString;
+      cell.insertBefore(infoElement, cell.firstChild);
     }
 
     return cell;

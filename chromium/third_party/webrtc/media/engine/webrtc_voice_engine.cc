@@ -66,7 +66,6 @@
 #include "rtc_base/checks.h"
 #include "rtc_base/dscp.h"
 #include "rtc_base/experiments/struct_parameters_parser.h"
-#include "rtc_base/ignore_wundef.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/race_checker.h"
 #include "rtc_base/string_encode.h"
@@ -79,13 +78,12 @@
 #include "system_wrappers/include/metrics.h"
 
 #if WEBRTC_ENABLE_PROTOBUF
-RTC_PUSH_IGNORING_WUNDEF()
 #ifdef WEBRTC_ANDROID_PLATFORM_BUILD
 #include "external/webrtc/webrtc/modules/audio_coding/audio_network_adaptor/config.pb.h"
 #else
 #include "modules/audio_coding/audio_network_adaptor/config.pb.h"
 #endif
-RTC_POP_IGNORING_WUNDEF()
+
 #endif
 
 namespace cricket {
@@ -147,12 +145,10 @@ bool IsCodec(const AudioCodec& codec, const char* ref_name) {
   return absl::EqualsIgnoreCase(codec.name, ref_name);
 }
 
-absl::optional<AudioCodec> FindCodec(
-    const std::vector<AudioCodec>& codecs,
-    const AudioCodec& codec,
-    const webrtc::FieldTrialsView* field_trials) {
+absl::optional<AudioCodec> FindCodec(const std::vector<AudioCodec>& codecs,
+                                     const AudioCodec& codec) {
   for (const AudioCodec& c : codecs) {
-    if (c.Matches(codec, field_trials)) {
+    if (c.Matches(codec)) {
       return c;
     }
   }
@@ -344,10 +340,7 @@ WebRtcVoiceEngine::WebRtcVoiceEngine(
     const rtc::scoped_refptr<webrtc::AudioDecoderFactory>& decoder_factory,
     rtc::scoped_refptr<webrtc::AudioMixer> audio_mixer,
     rtc::scoped_refptr<webrtc::AudioProcessing> audio_processing,
-    // TODO(bugs.webrtc.org/15111):
-    //   Remove the raw AudioFrameProcessor pointer in the follow-up.
-    webrtc::AudioFrameProcessor* audio_frame_processor,
-    std::unique_ptr<webrtc::AudioFrameProcessor> owned_audio_frame_processor,
+    std::unique_ptr<webrtc::AudioFrameProcessor> audio_frame_processor,
     const webrtc::FieldTrialsView& trials)
     : task_queue_factory_(task_queue_factory),
       adm_(adm),
@@ -355,8 +348,7 @@ WebRtcVoiceEngine::WebRtcVoiceEngine(
       decoder_factory_(decoder_factory),
       audio_mixer_(audio_mixer),
       apm_(audio_processing),
-      audio_frame_processor_(audio_frame_processor),
-      owned_audio_frame_processor_(std::move(owned_audio_frame_processor)),
+      audio_frame_processor_(std::move(audio_frame_processor)),
       minimized_remsampling_on_mobile_trial_enabled_(
           IsEnabled(trials, "WebRTC-Audio-MinimizeResamplingOnMobile")) {
   RTC_LOG(LS_INFO) << "WebRtcVoiceEngine::WebRtcVoiceEngine";
@@ -385,9 +377,8 @@ void WebRtcVoiceEngine::Init() {
 
   // TaskQueue expects to be created/destroyed on the same thread.
   RTC_DCHECK(!low_priority_worker_queue_);
-  low_priority_worker_queue_.reset(
-      new rtc::TaskQueue(task_queue_factory_->CreateTaskQueue(
-          "rtc-low-prio", webrtc::TaskQueueFactory::Priority::LOW)));
+  low_priority_worker_queue_ = task_queue_factory_->CreateTaskQueue(
+      "rtc-low-prio", webrtc::TaskQueueFactory::Priority::LOW);
 
   // Load our audio codec lists.
   RTC_LOG(LS_VERBOSE) << "Supported send codecs in order of preference:";
@@ -425,11 +416,7 @@ void WebRtcVoiceEngine::Init() {
     if (audio_frame_processor_) {
       config.async_audio_processing_factory =
           rtc::make_ref_counted<webrtc::AsyncAudioProcessing::Factory>(
-              *audio_frame_processor_, *task_queue_factory_);
-    } else if (owned_audio_frame_processor_) {
-      config.async_audio_processing_factory =
-          rtc::make_ref_counted<webrtc::AsyncAudioProcessing::Factory>(
-              std::move(owned_audio_frame_processor_), *task_queue_factory_);
+              std::move(audio_frame_processor_), *task_queue_factory_);
     }
     audio_state_ = webrtc::AudioState::Create(config);
   }
@@ -773,9 +760,9 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
       out.push_back(codec);
 
       if (codec.name == kOpusCodecName) {
-        std::string redFmtp =
+        std::string red_fmtp =
             rtc::ToString(codec.id) + "/" + rtc::ToString(codec.id);
-        map_format({kRedCodecName, 48000, 2, {{"", redFmtp}}}, &out);
+        map_format({kRedCodecName, 48000, 2, {{"", red_fmtp}}}, &out);
       }
     }
   }
@@ -1330,7 +1317,7 @@ bool WebRtcVoiceSendChannel::SetSenderParameters(
     }
   }
 
-  if (!SetMaxSendBitrate(params.max_bandwidth_bps)) {
+  if (send_codec_spec_ && !SetMaxSendBitrate(params.max_bandwidth_bps)) {
     return false;
   }
   return SetOptions(params.options);
@@ -1414,7 +1401,8 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
   }
 
   if (!send_codec_spec) {
-    return false;
+    // No codecs in common, bail out early.
+    return true;
   }
 
   RTC_DCHECK(voice_codec_info);
@@ -2151,8 +2139,7 @@ bool WebRtcVoiceReceiveChannel::SetRecvCodecs(
   for (const AudioCodec& codec : codecs) {
     // Log a warning if a codec's payload type is changing. This used to be
     // treated as an error. It's abnormal, but not really illegal.
-    absl::optional<AudioCodec> old_codec =
-        FindCodec(recv_codecs_, codec, &call_->trials());
+    absl::optional<AudioCodec> old_codec = FindCodec(recv_codecs_, codec);
     if (old_codec && old_codec->id != codec.id) {
       RTC_LOG(LS_WARNING) << codec.name << " mapped to a second payload type ("
                           << codec.id << ", was already mapped to "

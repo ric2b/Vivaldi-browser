@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 use std::ptr::null_mut;
 
+use crypto_provider_default::CryptoProviderImpl as CryptoProvider;
 use lazy_static::lazy_static;
 use lock_adapter::NoPoisonMutex;
 use rand::Rng;
@@ -31,13 +32,6 @@ use ukey2_connections::{
     InitiatorD2DHandshakeContext, ServerD2DHandshakeContext,
 };
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "rustcrypto")] {
-        use crypto_provider_rustcrypto::RustCrypto as CryptoProvider;
-    } else {
-        use crypto_provider_openssl::Openssl as CryptoProvider;
-    }
-}
 #[repr(C)]
 pub struct RustFFIByteArray {
     ptr: *mut u8,

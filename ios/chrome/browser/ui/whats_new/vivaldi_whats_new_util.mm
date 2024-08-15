@@ -53,6 +53,11 @@ void setVivaldiWhatsNewShown(PromosManager* promosManager) {
 }
 
 bool ShouldRegisterVivaldiWhatsNewPromo () {
+  if (!::vivaldi::IsBetaOrFinal()) {
+    // Only show for Stable channel
+    return false;
+  }
+
   bool version_changed = false;
   std::string version = vivaldi::GetVivaldiVersionString();
   std::string last_seen_version = base::SysNSStringToUTF8(

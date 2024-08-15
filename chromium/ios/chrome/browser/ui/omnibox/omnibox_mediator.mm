@@ -13,11 +13,10 @@
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/default_browser_promo_scene_agent_utils.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
@@ -43,6 +42,8 @@
 #import "app/vivaldi_apptools.h"
 
 using vivaldi::IsVivaldiRunning;
+using TemplateURLService::kDefaultSearchMain;
+using TemplateURLService::kDefaultSearchPrivate;
 // End Vivaldi
 
 using base::UserMetricsAction;
@@ -143,7 +144,12 @@ using base::UserMetricsAction;
   [self updateConsumerEmptyTextImage];
 
   // Vivaldi
-  [self.consumer updateSearchEngineList:templateUrlService->GetTemplateURLs()];
+  TemplateURLService::DefaultSearchType searchType =
+      _isIncognito ? kDefaultSearchPrivate : kDefaultSearchMain;
+  const TemplateURL* defaultProvider =
+      templateUrlService->GetDefaultSearchProvider(searchType);
+  [self.consumer updateSearchEngineList:templateUrlService->GetTemplateURLs()
+             currentDefaultSearchEngine:defaultProvider];
   // End Vivaldi
 
 }
@@ -436,7 +442,7 @@ using base::UserMetricsAction;
   [self logUserPasted];
   __weak __typeof(self) weakSelf = self;
   ClipboardRecentContent::GetInstance()->GetRecentURLFromClipboard(
-      base::BindOnce(^(absl::optional<GURL> optionalURL) {
+      base::BindOnce(^(std::optional<GURL> optionalURL) {
         if (!optionalURL) {
           return;
         }
@@ -451,7 +457,7 @@ using base::UserMetricsAction;
 - (void)didTapSearchCopiedText {
   __weak __typeof(self) weakSelf = self;
   ClipboardRecentContent::GetInstance()->GetRecentTextFromClipboard(
-      base::BindOnce(^(absl::optional<std::u16string> optionalText) {
+      base::BindOnce(^(std::optional<std::u16string> optionalText) {
         if (!optionalText) {
           return;
         }
@@ -466,7 +472,7 @@ using base::UserMetricsAction;
 - (void)didTapSearchCopiedImage {
   __weak __typeof(self) weakSelf = self;
   ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
-      base::BindOnce(^(absl::optional<gfx::Image> optionalImage) {
+      base::BindOnce(^(std::optional<gfx::Image> optionalImage) {
         if (!optionalImage) {
           return;
         }
@@ -479,7 +485,7 @@ using base::UserMetricsAction;
 - (void)didTapLensCopiedImage {
   __weak __typeof(self) weakSelf = self;
   ClipboardRecentContent::GetInstance()->GetRecentImageFromClipboard(
-      base::BindOnce(^(absl::optional<gfx::Image> optionalImage) {
+      base::BindOnce(^(std::optional<gfx::Image> optionalImage) {
         if (!optionalImage) {
           return;
         }
@@ -540,7 +546,7 @@ using base::UserMetricsAction;
   if (!_templateURLService)
     return;
   _templateURLService->VivaldiResetDefaultOverride();
-  [self.consumer restorePlaceholderToDefault];
+  [self.consumer resetOverriddenSearchEngine];
 }
 
 @end

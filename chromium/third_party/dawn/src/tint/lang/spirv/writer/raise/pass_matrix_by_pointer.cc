@@ -54,7 +54,7 @@ struct State {
     /// Process the module.
     void Process() {
         // Find user-declared functions that have value arguments containing matrices.
-        for (auto* func : ir.functions) {
+        for (auto& func : ir.functions) {
             for (auto* param : func->Params()) {
                 if (ContainsMatrix(param->Type())) {
                     TransformFunction(func);
@@ -95,7 +95,7 @@ struct State {
                 // Load from the pointer to get the value.
                 auto* load = b.Load(new_param);
                 func->Block()->Prepend(load);
-                param->ReplaceAllUsesWith(load->Result());
+                param->ReplaceAllUsesWith(load->Result(0));
 
                 // Modify all of the callsites.
                 func->ForEachUse([&](core::ir::Usage use) {
@@ -121,7 +121,7 @@ struct State {
         local_var->SetInitializer(arg);
         local_var->InsertBefore(call);
 
-        call->SetOperand(core::ir::UserCall::kArgsOperandOffset + arg_index, local_var->Result());
+        call->SetOperand(core::ir::UserCall::kArgsOperandOffset + arg_index, local_var->Result(0));
     }
 };
 
@@ -129,7 +129,7 @@ struct State {
 
 Result<SuccessType> PassMatrixByPointer(core::ir::Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "PassMatrixByPointer transform");
-    if (!result) {
+    if (result != Success) {
         return result;
     }
 

@@ -17,13 +17,21 @@ extern NSString* const vTabViewNotSelectedBackgroundColor;
 extern NSString* const vTabViewSelectedTintColor;
 // The tint color for the tab view items when the tabs are not selected
 extern NSString* const vTabViewNotSelectedTintColor;
+// Opacity for background tab view for dark tint color
+extern CGFloat const vTabViewDarkTintOpacity;
+// Opacity for background tab view for light tint color
+extern CGFloat const vTabViewLightTintOpacity;
 
 #pragma mark - SIZES
 // Corner radius for vivaldi tab view background
 extern CGFloat const vTabViewBackgroundCornerRadius;
-// Padding for the vivaldi tab view background.
+// Tab overlap padding for unstacked state
+extern CGFloat const vTabOverlapUnstacked;
+// Padding for the vivaldi tab view background when address bar is on top.
 // In order - (Top, Left, Bottom, Right)
-extern UIEdgeInsets const vTabViewBackgroundPadding;
+extern UIEdgeInsets const vTabViewBackgroundPaddingTopAddressBar;
+// Padding for the vivaldi tab view background when address bar is on bottom.
+extern UIEdgeInsets const vTabViewBackgroundPaddingBottomAddressBar;
 // Padding for the desktop tabs new tab button.
 extern UIEdgeInsets const vNewTabButtonPadding;
 

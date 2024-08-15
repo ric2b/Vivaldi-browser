@@ -130,7 +130,8 @@ ScopedBOMapping::Plane& ScopedBOMapping::Plane::operator=(
 
 ScopedBOMapping::Plane::~Plane() = default;
 
-ScopedBOMapping::ScopedAccess ScopedBOMapping::BeginAccess() {
+ScopedBOMapping::ScopedAccess ScopedBOMapping::BeginAccess() const {
+  CHECK(IsValid());
   return ScopedBOMapping::ScopedAccess(*this);
 }
 

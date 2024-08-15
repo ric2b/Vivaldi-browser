@@ -42,13 +42,11 @@ const std::u16string BookmarkNode::GetTitledUrlNodeDescription() const {
 
 // static
 std::unique_ptr<BookmarkPermanentNode> BookmarkPermanentNode::CreateTrashFolder(
-    int64_t id,
-    bool visible_when_empty) {
+    int64_t id) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new BookmarkPermanentNode(
       id, TRASH, base::Uuid::ParseLowercase(kVivaldiTrashNodeUuid),
-      l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME),
-      visible_when_empty));
+      l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME)));
 }
 
 }  // namespace bookmarks

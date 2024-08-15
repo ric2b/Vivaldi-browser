@@ -7,8 +7,10 @@
 #include <string>
 #include <utility>
 
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_untrusted_page_handler.h"
+#include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -17,11 +19,14 @@
 #include "chrome/grit/side_panel_shared_resources.h"
 #include "chrome/grit/side_panel_shared_resources_map.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "read_anything_untrusted_ui.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/resources/grit/webui_resources.h"
 #include "ui/views/style/platform_style.h"
 
 ReadAnythingUIUntrustedConfig::ReadAnythingUIUntrustedConfig()
@@ -98,6 +103,10 @@ ReadAnythingUntrustedUI::ReadAnythingUntrustedUI(content::WebUI* web_ui)
   // but not chrome-untrusted://, ReadAnythingUntrustedUI does not inherit them.
   source->UseStringsJs();
   source->EnableReplaceI18nInJS();
+  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
+  source->AddResourcePath("test_loader_util.js",
+                          IDR_WEBUI_JS_TEST_LOADER_UTIL_JS);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_TEST_LOADER_HTML);
   webui::EnableTrustedTypesCSP(source);
   webui::SetupChromeRefresh2023(source);
   source->AddResourcePaths(base::make_span(
@@ -107,7 +116,8 @@ ReadAnythingUntrustedUI::ReadAnythingUntrustedUI(content::WebUI* web_ui)
                                            kSidePanelSharedResourcesSize));
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src 'self' chrome-untrusted://resources;");
+      "script-src 'self' chrome-untrusted://resources "
+      "chrome-untrusted://webui-test;");
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::StyleSrc,
       "style-src 'self' chrome-untrusted://resources chrome-untrusted://theme "
@@ -119,6 +129,14 @@ ReadAnythingUntrustedUI::ReadAnythingUntrustedUI(content::WebUI* web_ui)
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ImgSrc,
       "img-src 'self' chrome-untrusted://resources;");
+  raw_ptr<Profile> profile = Profile::FromWebUI(web_ui);
+
+  // If the ThemeSource isn't added here, since Read Anything is
+  // chrome-untrusted, it will be unable to load stylesheets until a new tab
+  // is opened.
+  // TODO(crbug.com/1465029): Remove workaround code, as this is now unneeded.
+  content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(
+                                           profile, /*serve_untrusted=*/true));
 }
 
 ReadAnythingUntrustedUI::~ReadAnythingUntrustedUI() = default;
@@ -149,6 +167,10 @@ void ReadAnythingUntrustedUI::CreateUntrustedPageHandler(
   read_anything_untrusted_page_handler_ =
       std::make_unique<ReadAnythingUntrustedPageHandler>(
           std::move(page), std::move(receiver), web_ui());
+}
+
+void ReadAnythingUntrustedUI::ShouldShowUI() {
+  // Show the UI after the Side Panel content has loaded.
   if (embedder()) {
     embedder()->ShowUI();
   }

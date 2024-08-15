@@ -55,7 +55,9 @@ class Index_Model : public KeyedService {
   Index_Node* root_node() { return &root_; }
   // Returns the fixed node that is the ancestor regular sessions.
   Index_Node* items_node() { return items_node_; }
-  // Returns the fixed node that holds the timed session backup.
+  // Returns the fixed node that holds the timed session backup. Note: The
+  // returned object must never be saved for later use. Index_Model.Remove() can
+  // invalidate it any any time.
   Index_Node* backup_node() { return backup_node_; }
   // Returns the fixed node that holds saved persistent tabs.
   Index_Node* persistent_node() { return persistent_node_; }
@@ -73,7 +75,8 @@ class Index_Model : public KeyedService {
   // Managed by the root node. Provides easy access.
   raw_ptr<Index_Node> items_node_ = nullptr;
   // Managed by the root node. Provides easy access.
-  raw_ptr<Index_Node> backup_node_ = nullptr;
+  // DisableDanglingPtrDetection is needed because of backup_node().
+  raw_ptr<Index_Node, DisableDanglingPtrDetection> backup_node_ = nullptr;
   // Managed by the root node. Provides easy access.
   raw_ptr<Index_Node> persistent_node_ = nullptr;
 };

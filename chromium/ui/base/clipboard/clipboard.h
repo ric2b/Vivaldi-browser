@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "mojo/public/cpp/base/big_buffer.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
@@ -41,7 +42,6 @@ class GURL;
 namespace ui {
 class TestClipboard;
 class ScopedClipboardWriter;
-class DataTransferEndpoint;
 
 // Clipboard:
 // - reads from and writes to the system clipboard.
@@ -130,7 +130,7 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   virtual void OnPreShutdown() = 0;
 
   // Gets the source of the current clipboard buffer contents.
-  virtual const DataTransferEndpoint* GetSource(
+  virtual absl::optional<DataTransferEndpoint> GetSource(
       ClipboardBuffer buffer) const = 0;
 
   // Returns a token which uniquely identifies clipboard state.
@@ -338,8 +338,7 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
     RawData(RawData&&);
     RawData& operator=(RawData&&);
 
-    // Used with `ClipboardFormatType::Deserialize()`.
-    std::string format;
+    ClipboardFormatType format;
     std::vector<uint8_t> data;
   };
   struct SvgData {
@@ -447,11 +446,8 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   virtual void WriteText(base::StringPiece text) = 0;
 
   virtual void WriteHTML(base::StringPiece markup,
-                         absl::optional<base::StringPiece> source_url) = 0;
-
-  virtual void WriteUnsanitizedHTML(
-      base::StringPiece markup,
-      absl::optional<base::StringPiece> source_url) = 0;
+                         absl::optional<base::StringPiece> source_url,
+                         ClipboardContentType content_type) = 0;
 
   virtual void WriteSvg(base::StringPiece markup) = 0;
 

@@ -81,3 +81,7 @@ void VivaldiWindowsScheduleExtCommand(
                                                window.id, window.viv_ext_data));
   }
 }
+
+void TabRestoreServiceImpl::VivaldiRequestSave(int num_removed) {
+  persistence_delegate_->VivaldiRequestSave(num_removed);
+}

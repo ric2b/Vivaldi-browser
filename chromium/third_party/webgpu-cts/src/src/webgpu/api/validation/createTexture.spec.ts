@@ -15,6 +15,7 @@ import {
   filterFormatsByFeature,
   viewCompatible,
   textureDimensionAndFormatCompatible,
+  isTextureFormatUsableAsStorageFormat,
 } from '../../format_info.js';
 import { maxMipLevelCount } from '../../util/texture/base.js';
 
@@ -326,7 +327,7 @@ g.test('sampleCount,valid_sampleCount_with_other_parameter_varies')
           arrayLayerCount === 2 && dimension !== '2d' && dimension !== undefined
       )
       .combine('mipLevelCount', [1, 2])
-      .expand('usage', p => {
+      .expand('usage', () => {
         const usageSet = new Set<number>();
         for (const usage0 of kTextureUsages) {
           for (const usage1 of kTextureUsages) {
@@ -372,8 +373,12 @@ g.test('sampleCount,valid_sampleCount_with_other_parameter_varies')
       usage,
     };
 
+    const satisfyWithStorageUsageRequirement =
+      (usage & GPUConst.TextureUsage.STORAGE_BINDING) === 0 ||
+      isTextureFormatUsableAsStorageFormat(format, t.isCompatibility);
+
     const success =
-      sampleCount === 1 ||
+      (sampleCount === 1 && satisfyWithStorageUsageRequirement) ||
       (sampleCount === 4 &&
         (dimension === '2d' || dimension === undefined) &&
         kTextureFormatInfo[format].multisample &&
@@ -538,17 +543,17 @@ g.test('texture_size,2d_texture,uncompressed_format')
         'sizeVariant',
         /* prettier-ignore */ [
           // Test the bound of width
-          [{ mult: 1, add: -1, }, { mult: 0, add: 1 }, { mult: 0, add: 1 }],
-          [{ mult: 1, add:  0, }, { mult: 0, add: 1 }, { mult: 0, add: 1 }],
-          [{ mult: 1, add:  1, }, { mult: 0, add: 1 }, { mult: 0, add: 1 }],
+          [{ mult: 1, add: -1 }, { mult: 0, add:  1 }, { mult: 0, add:  1 }],
+          [{ mult: 1, add:  0 }, { mult: 0, add:  1 }, { mult: 0, add:  1 }],
+          [{ mult: 1, add:  1 }, { mult: 0, add:  1 }, { mult: 0, add:  1 }],
           // Test the bound of height
-          [{ mult: 0, add:  1, }, { mult: 1, add: -1 }, { mult: 0, add: 1 }],
-          [{ mult: 0, add:  1, }, { mult: 1, add:  0 }, { mult: 0, add: 1 }],
-          [{ mult: 0, add:  1, }, { mult: 1, add:  1 }, { mult: 0, add: 1 }],
+          [{ mult: 0, add:  1 }, { mult: 1, add: -1 }, { mult: 0, add:  1 }],
+          [{ mult: 0, add:  1 }, { mult: 1, add:  0 }, { mult: 0, add:  1 }],
+          [{ mult: 0, add:  1 }, { mult: 1, add:  1 }, { mult: 0, add:  1 }],
           // Test the bound of array layers
-          [{ mult: 0, add:  1, }, { mult: 0, add: 1 }, { mult: 1, add: -1 }],
-          [{ mult: 0, add:  1, }, { mult: 0, add: 1 }, { mult: 1, add:  0 }],
-          [{ mult: 0, add:  1, }, { mult: 0, add: 1 }, { mult: 1, add:  1 }],
+          [{ mult: 0, add:  1 }, { mult: 0, add:  1 }, { mult: 1, add: -1 }],
+          [{ mult: 0, add:  1 }, { mult: 0, add:  1 }, { mult: 1, add:  0 }],
+          [{ mult: 0, add:  1 }, { mult: 0, add:  1 }, { mult: 1, add:  1 }],
         ]
       )
   )
@@ -782,19 +787,19 @@ g.test('texture_size,3d_texture,uncompressed_format')
       .combine(
         'sizeVariant',
         /* prettier-ignore */ [
-        // Test the bound of width
-        [{mult: 1, add: -1}, {mult: 0, add: 1}, {mult: 0, add: 1}],
-        [{mult: 1, add:  0}, {mult: 0, add: 1}, {mult: 0, add: 1}],
-        [{mult: 1, add: +1}, {mult: 0, add: 1}, {mult: 0, add: 1}],
-        // Test the bound of height
-        [{mult: 0, add: 1}, {mult: 1, add: -1}, {mult: 0, add: 1}],
-        [{mult: 0, add: 1}, {mult: 1, add:  0}, {mult: 0, add: 1}],
-        [{mult: 0, add: 1}, {mult: 1, add: +1}, {mult: 0, add: 1}],
-        // Test the bound of depth
-        [{mult: 0, add: 1}, {mult: 0, add: 1}, {mult: 1, add: -1}],
-        [{mult: 0, add: 1}, {mult: 0, add: 1}, {mult: 1, add:  0}],
-        [{mult: 0, add: 1}, {mult: 0, add: 1}, {mult: 1, add: +1}],
-      ]
+          // Test the bound of width
+          [{ mult: 1, add: -1 }, { mult: 0, add:  1 }, { mult: 0, add:  1 }],
+          [{ mult: 1, add:  0 }, { mult: 0, add:  1 }, { mult: 0, add:  1 }],
+          [{ mult: 1, add: +1 }, { mult: 0, add:  1 }, { mult: 0, add:  1 }],
+          // Test the bound of height
+          [{ mult: 0, add:  1 }, { mult: 1, add: -1 }, { mult: 0, add:  1 }],
+          [{ mult: 0, add:  1 }, { mult: 1, add:  0 }, { mult: 0, add:  1 }],
+          [{ mult: 0, add:  1 }, { mult: 1, add: +1 }, { mult: 0, add:  1 }],
+          // Test the bound of depth
+          [{ mult: 0, add:  1 }, { mult: 0, add:  1 }, { mult: 1, add: -1 }],
+          [{ mult: 0, add:  1 }, { mult: 0, add:  1 }, { mult: 1, add:  0 }],
+          [{ mult: 0, add:  1 }, { mult: 0, add:  1 }, { mult: 1, add: +1 }],
+        ]
       )
   )
   .beforeAllSubcases(t => {
@@ -1058,9 +1063,13 @@ g.test('texture_usage')
     // Note that we unconditionally test copy usages for all formats. We don't check copySrc/copyDst in kTextureFormatInfo in capability_info.js
     // if (!info.copySrc && (usage & GPUTextureUsage.COPY_SRC) !== 0) success = false;
     // if (!info.copyDst && (usage & GPUTextureUsage.COPY_DST) !== 0) success = false;
-    if (!info.color?.storage && (usage & GPUTextureUsage.STORAGE_BINDING) !== 0) success = false;
     if (
-      (!info.renderable || appliedDimension !== '2d') &&
+      (usage & GPUTextureUsage.STORAGE_BINDING) !== 0 &&
+      !isTextureFormatUsableAsStorageFormat(format, t.isCompatibility)
+    )
+      success = false;
+    if (
+      (!info.renderable || (appliedDimension !== '2d' && appliedDimension !== '3d')) &&
       (usage & GPUTextureUsage.RENDER_ATTACHMENT) !== 0
     )
       success = false;
@@ -1096,7 +1105,9 @@ g.test('viewFormats')
 
     t.skipIfTextureFormatNotSupported(format, viewFormat);
 
-    const compatible = viewCompatible(format, viewFormat);
+    const compatible = t.isCompatibility
+      ? viewFormat === format
+      : viewCompatible(format, viewFormat);
 
     // Test the viewFormat in the list.
     t.expectValidationError(() => {

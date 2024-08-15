@@ -623,7 +623,23 @@ bool Animation::PreCommit(
     return false;
   }
 
+  absl::optional<int> replaced_cc_animation_id;
   if (should_cancel) {
+    // TODO(https://crbug.com/41496930): This code currently avoids preserving
+    // the id and compositor group of the cc animation on playback rate and
+    // state changes (i.e. "soft changes") due to the linked bug. That's
+    // because these soft changes use a time offset that assumes the start_time
+    // is reset. A more complete fix should account for the fact that the start
+    // time may be preserved when computing the offset.
+    if (should_start && GetCompositorAnimation() && !soft_change) {
+      // If the animation is being canceled and restarted, pass the replaced
+      // cc::Animation's id along so the compositor can recreate the
+      // cc::Animation with the same id, ensuring continuity in the animation.
+      replaced_cc_animation_id = GetCompositorAnimation()->CcAnimationId();
+      // Preserve the compositor group for a restarted Animation so that
+      // animation events are routed correctly.
+      compositor_group = compositor_group_;
+    }
     CancelAnimationOnCompositor();
     compositor_state_ = nullptr;
   }
@@ -646,7 +662,7 @@ bool Animation::PreCommit(
         // for a marquee element does not depend on having a layout object.
         if (HasActiveAnimationsOnCompositor())
           CancelAnimationOnCompositor();
-        CreateCompositorAnimation();
+        CreateCompositorAnimation(replaced_cc_animation_id);
         StartAnimationOnCompositor(paint_artifact_compositor);
         compositor_state_ = std::make_unique<CompositorState>(*this);
       } else {
@@ -737,6 +753,8 @@ bool Animation::HasLowerCompositeOrdering(
     // ::before
     // other pseudo-elements (ordered by selector)
     // ::after
+    // TODO(bokan): ::view-transition ordering should probably also be explicit:
+    // https://github.com/w3c/csswg-drafts/issues/9588.
     const PseudoId pseudo1 = owning_element1->GetPseudoId();
     const PseudoId pseudo2 = owning_element2->GetPseudoId();
     PseudoPriority priority1 = ConvertPseudoIdtoPriority(pseudo1);
@@ -745,9 +763,11 @@ bool Animation::HasLowerCompositeOrdering(
     if (priority1 != priority2)
       return priority1 < priority2;
 
-    // The following if statement is not reachable, but the implementation
-    // matches the specification for composite ordering
     if (priority1 == PseudoPriority::kOther && pseudo1 != pseudo2) {
+      // TODO(bokan): This can happen with child pseudos in the
+      // ::view-transition subtree but we may want to sort them based on their
+      // actual composite order.
+      // https://github.com/w3c/csswg-drafts/issues/9588.
       return CodeUnitCompareLessThan(
           PseudoElement::PseudoElementNameForEvents(owning_element1),
           PseudoElement::PseudoElementNameForEvents(owning_element2));
@@ -2832,10 +2852,12 @@ void Animation::cancel() {
   NotifyProbe();
 }
 
-void Animation::CreateCompositorAnimation() {
+void Animation::CreateCompositorAnimation(
+    absl::optional<int> replaced_cc_animation_id) {
   if (Platform::Current()->IsThreadedAnimationEnabled() &&
       !compositor_animation_) {
-    compositor_animation_ = CompositorAnimationHolder::Create(this);
+    compositor_animation_ =
+        CompositorAnimationHolder::Create(this, replaced_cc_animation_id);
     AttachCompositorTimeline();
   }
 
@@ -3302,14 +3324,18 @@ void Animation::Trace(Visitor* visitor) const {
 }
 
 Animation::CompositorAnimationHolder*
-Animation::CompositorAnimationHolder::Create(Animation* animation) {
-  return MakeGarbageCollected<CompositorAnimationHolder>(animation);
+Animation::CompositorAnimationHolder::Create(
+    Animation* animation,
+    absl::optional<int> replaced_cc_animation_id) {
+  return MakeGarbageCollected<CompositorAnimationHolder>(
+      animation, replaced_cc_animation_id);
 }
 
 Animation::CompositorAnimationHolder::CompositorAnimationHolder(
-    Animation* animation)
+    Animation* animation,
+    absl::optional<int> replaced_cc_animation_id)
     : animation_(animation) {
-  compositor_animation_ = CompositorAnimation::Create();
+  compositor_animation_ = CompositorAnimation::Create(replaced_cc_animation_id);
   compositor_animation_->SetAnimationDelegate(animation_);
 }
 

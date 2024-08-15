@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -55,7 +56,6 @@
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_handlers/web_file_handlers_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/scoped_display_for_new_windows.h"
@@ -102,7 +102,7 @@ class EnableViaDialogFlow : public ExtensionEnableFlowDelegate {
   // ExtensionEnableFlowDelegate overrides.
   void ExtensionEnableFlowFinished() override {
     const Extension* extension =
-        registry_->GetExtensionById(extension_id_, ExtensionRegistry::ENABLED);
+        registry_->enabled_extensions().GetByID(extension_id_);
     if (!extension)
       return;
     std::move(callback_).Run();
@@ -226,7 +226,6 @@ WebContents* OpenApplicationTab(Profile* profile,
 
   extensions::LaunchType launch_type =
       extensions::GetLaunchType(ExtensionPrefs::Get(profile), extension);
-  UMA_HISTOGRAM_ENUMERATION("Extensions.AppTabLaunchType", launch_type, 100);
 
   int add_type = AddTabTypes::ADD_ACTIVE;
   if (launch_type == extensions::LAUNCH_TYPE_PINNED)
@@ -518,8 +517,7 @@ void OpenApplicationWithReenablePrompt(Profile* profile,
       extensions::ExtensionSystem::Get(profile)->extension_service();
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile);
   if (!service->IsExtensionEnabled(extension->id()) ||
-      registry->GetExtensionById(extension->id(),
-                                 ExtensionRegistry::TERMINATED)) {
+      registry->terminated_extensions().GetByID(extension->id())) {
     // Self deleting.
     auto* flow = new EnableViaDialogFlow(
         service, registry, profile, extension->id(),

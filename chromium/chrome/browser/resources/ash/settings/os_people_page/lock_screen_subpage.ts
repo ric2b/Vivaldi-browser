@@ -39,10 +39,10 @@ import {AuthFactor, ConfigureResult, FactorObserverReceiver, ManagementType} fro
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../assert_extras.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
 import {LockStateMixin} from '../lock_state_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {FingerprintBrowserProxy, FingerprintBrowserProxyImpl} from './fingerprint_browser_proxy.js';
@@ -121,17 +121,6 @@ export class SettingsLockScreenElement extends SettingsLockScreenElementBase {
       },
 
       /**
-       * True if cryptohome recovery feature is enabled.
-       */
-      cryptohomeRecoveryEnabled_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('cryptohomeRecoveryEnabled');
-        },
-        readOnly: true,
-      },
-
-      /**
        * State of the recovery toggle. Is |null| iff recovery is not a
        * available.
        */
@@ -183,7 +172,6 @@ export class SettingsLockScreenElement extends SettingsLockScreenElementBase {
   private numFingerprintDescription_: string;
   private lockScreenNotificationsEnabled_: boolean;
   private lockScreenHideSensitiveNotificationSupported_: boolean;
-  private cryptohomeRecoveryEnabled_: boolean;
   private recovery_: chrome.settingsPrivate.PrefObject|null;
   private noRecoveryVirtualPref_: chrome.settingsPrivate.PrefObject;
   private recoveryChangeInProcess_: boolean;
@@ -274,9 +262,6 @@ export class SettingsLockScreenElement extends SettingsLockScreenElementBase {
   }
 
   private recoveryToggleSubLabel_(): string {
-    if (!this.cryptohomeRecoveryEnabled_) {
-      return '';
-    }
     if (this.recovery_) {
       return this.i18n('recoveryToggleSubLabel');
     }
@@ -284,14 +269,14 @@ export class SettingsLockScreenElement extends SettingsLockScreenElementBase {
   }
 
   private recoveryToggleLearnMoreUrl_(): string {
-    if (!this.cryptohomeRecoveryEnabled_ || this.recovery_) {
+    if (this.recovery_) {
       return '';
     }
     return this.i18n('recoveryLearnMoreUrl');
   }
 
   private recoveryToggleDisabled_(): boolean {
-    if (!this.cryptohomeRecoveryEnabled_ || !this.recovery_) {
+    if (!this.recovery_) {
       return true;
     }
     return this.recoveryChangeInProcess_;

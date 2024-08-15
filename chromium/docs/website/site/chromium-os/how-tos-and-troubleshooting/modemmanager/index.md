@@ -37,7 +37,7 @@ handy
 
 $ git fetch chromiumos
 
-$ git merge chromiumos/master
+$ git merge chromiumos/main
 
 Resolve any conflicts.
 
@@ -51,8 +51,6 @@ Test that dependencies (currently, Shill) compile and work, since
 
 they're sensitive to the MM DBus API.
 
-Push to the chromiumos repo (upstream branch and master)
+Push to the chromiumos repo
 
-$ git push chromiumos origin/master:refs/heads/upstream
-
-$ git push chromiumos merge-${DATE}:refs/heads/master
+$ git push chromiumos merge-${DATE}:refs/heads/main

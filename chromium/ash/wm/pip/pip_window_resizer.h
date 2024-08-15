@@ -51,11 +51,11 @@ class ASH_EXPORT PipWindowResizer : public WindowResizer {
   gfx::Rect ComputeFlungPosition();
   gfx::Vector2dF ComputeTiltOffset() const;
 
-  absl::optional<gfx::PointF> last_location_in_screen_;
+  std::optional<gfx::PointF> last_location_in_screen_;
   bool last_event_was_pinch_ = false;
   int fling_velocity_x_ = 0;
   int fling_velocity_y_ = 0;
-  float dismiss_fraction_ = 1.f;
+  float in_screen_fraction_ = 1.f;
   float accumulated_scale_ = 1.f;
   float accumulated_angle_ = 0.f;
   bool moved_or_resized_ = false;

@@ -48,6 +48,8 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 
 [LegacyOverrideBuiltIns]
 partial interface Document {
+  static Document parseHTMLUnsafe(DOMString html);
+
   // resource metadata management
   [PutForwards=href, LegacyUnforgeable] readonly attribute Location? location;
   attribute USVString domain;
@@ -999,6 +1001,8 @@ interface HTMLSelectElement : HTMLElement {
   boolean reportValidity();
   undefined setCustomValidity(DOMString error);
 
+  undefined showPicker();
+
   readonly attribute NodeList labels;
 };
 
@@ -1196,6 +1200,7 @@ dictionary FormDataEventInit : EventInit {
 interface HTMLDetailsElement : HTMLElement {
   [HTMLConstructor] constructor();
 
+  [CEReactions] attribute DOMString name;
   [CEReactions] attribute boolean open;
 };
 
@@ -1236,6 +1241,8 @@ interface HTMLTemplateElement : HTMLElement {
   [HTMLConstructor] constructor();
 
   readonly attribute DocumentFragment content;
+  [CEReactions] attribute DOMString shadowRootMode;
+  [CEReactions] attribute boolean shadowRootDelegatesFocus;
 };
 
 [Exposed=Window]
@@ -1626,6 +1633,9 @@ interface ElementInternals {
   boolean reportValidity();
 
   readonly attribute NodeList labels;
+
+  // Custom state pseudo-class
+  [SameObject] readonly attribute CustomStateSet states;
 };
 
 // Accessibility semantics
@@ -1642,6 +1652,11 @@ dictionary ValidityStateFlags {
   boolean stepMismatch = false;
   boolean badInput = false;
   boolean customError = false;
+};
+
+[Exposed=Window]
+interface CustomStateSet {
+  setlike<DOMString>;
 };
 
 [Exposed=(Window)]
@@ -1684,6 +1699,22 @@ interface mixin ElementContentEditable {
   [CEReactions] attribute DOMString enterKeyHint;
   readonly attribute boolean isContentEditable;
   [CEReactions] attribute DOMString inputMode;
+};
+
+[Exposed=Window]
+interface CloseWatcher : EventTarget {
+  constructor(optional CloseWatcherOptions options = {});
+
+  undefined requestClose();
+  undefined close();
+  undefined destroy();
+
+  attribute EventHandler oncancel;
+  attribute EventHandler onclose;
+};
+
+dictionary CloseWatcherOptions {
+  AbortSignal signal;
 };
 
 [Exposed=Window]
@@ -1849,6 +1880,7 @@ interface Navigation : EventTarget {
   readonly attribute NavigationHistoryEntry? currentEntry;
   undefined updateCurrentEntry(NavigationUpdateCurrentEntryOptions options);
   readonly attribute NavigationTransition? transition;
+  readonly attribute NavigationActivation? activation;
 
   readonly attribute boolean canGoBack;
   readonly attribute boolean canGoForward;
@@ -1919,6 +1951,13 @@ interface NavigationTransition {
   readonly attribute NavigationType navigationType;
   readonly attribute NavigationHistoryEntry from;
   readonly attribute Promise<undefined> finished;
+};
+
+[Exposed=Window]
+interface NavigationActivation {
+  readonly attribute NavigationHistoryEntry? from;
+  readonly attribute NavigationHistoryEntry entry;
+  readonly attribute NavigationType navigationType;
 };
 
 [Exposed=Window]
@@ -2022,6 +2061,16 @@ dictionary HashChangeEventInit : EventInit {
 };
 
 [Exposed=Window]
+interface PageRevealEvent : Event {
+  constructor(DOMString type, optional PageRevealEventInit eventInitDict = {});
+  readonly attribute ViewTransition? viewTransition;
+};
+
+dictionary PageRevealEventInit : EventInit {
+  ViewTransition? viewTransition = null;
+};
+
+[Exposed=Window]
 interface PageTransitionEvent : Event {
   constructor(DOMString type, optional PageTransitionEventInit eventInitDict = {});
 
@@ -2060,12 +2109,12 @@ dictionary ErrorEventInit : EventInit {
 interface PromiseRejectionEvent : Event {
   constructor(DOMString type, PromiseRejectionEventInit eventInitDict);
 
-  readonly attribute Promise<any> promise;
+  readonly attribute object promise;
   readonly attribute any reason;
 };
 
 dictionary PromiseRejectionEventInit : EventInit {
-  required Promise<any> promise;
+  required object promise;
   any reason;
 };
 
@@ -2170,6 +2219,7 @@ interface mixin WindowEventHandlers {
   attribute EventHandler onoffline;
   attribute EventHandler ononline;
   attribute EventHandler onpagehide;
+  attribute EventHandler onpagereveal;
   attribute EventHandler onpageshow;
   attribute EventHandler onpopstate;
   attribute EventHandler onrejectionhandled;
@@ -2223,6 +2273,14 @@ enum DOMParserSupportedType {
   "application/xml",
   "application/xhtml+xml",
   "image/svg+xml"
+};
+
+partial interface Element {
+  [CEReactions] undefined setHTMLUnsafe(DOMString html);
+};
+
+partial interface ShadowRoot {
+  [CEReactions] undefined setHTMLUnsafe(DOMString html);
 };
 
 [Exposed=Window]
@@ -2414,6 +2472,7 @@ interface MessagePort : EventTarget {
   // event handlers
   attribute EventHandler onmessage;
   attribute EventHandler onmessageerror;
+  attribute EventHandler onclose;
 };
 
 dictionary StructuredSerializeOptions {

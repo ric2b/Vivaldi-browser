@@ -96,41 +96,19 @@ enum class ProfileSignout {
   // If the device lock is removed from an Android automotive device, the
   // current account is automatically signed out.
   kDeviceLockRemovedOnAutomotive = 28,
-
   // User revoked Sync from the Settings by pressing "Turn off" in the "Sync and
   // Google Services" page.
   kRevokeSyncFromSettings = 29,
-
+  // User was in the web-only signed in state in the UNO model and clicked to
+  // turn on sync, but cancelled the sync confirmation dialog so they are
+  // reverted to the initial state, signed out in the profile but keeping the
+  // account on the web only.
+  kCancelSyncConfirmationOnWebOnlySignedIn = 30,
+  // Profile signout when IdleTimeoutActions enterprise policy triggers sign
+  // out.
+  kIdleTimeoutPolicyTriggeredSignOut = 31,
   // Keep this as the last enum.
-  kMaxValue = kRevokeSyncFromSettings
-};
-
-// Enum values used for use with "Signin.AllAccessPointActions" histograms.
-enum AccessPointAction {
-  // The infobar was shown to the user.
-  HISTOGRAM_SHOWN = 0,
-  // The user pressed the accept button to perform the suggested action.
-  HISTOGRAM_ACCEPTED = 1,
-  // The user pressed the reject to turn off the feature.
-  // Deprecated: HISTOGRAM_REJECTED = 2,
-  // The user pressed the X button to dismiss the infobar this time.
-  // Deprecated: HISTOGRAM_DISMISSED = 3,
-  // The user completely ignored the infobar.  Either they navigated away, or
-  // they used the page as is.
-  // Deprecated: HISTOGRAM_IGNORED = 4,
-  // The user clicked on the learn more link in the infobar.
-  // Deprecated: HISTOGRAM_LEARN_MORE = 5,
-  // The sync was started with default settings.
-  HISTOGRAM_WITH_DEFAULTS = 6,
-  // The sync was started with advanced settings.
-  HISTOGRAM_WITH_ADVANCED = 7,
-  // The sync was started through auto-accept with default settings.
-  // Deprecated: HISTOGRAM_AUTO_WITH_DEFAULTS = 8,
-  // The sync was started through auto-accept with advanced settings.
-  // Deprecated: HISTOGRAM_AUTO_WITH_ADVANCED = 9,
-  // The sync was aborted with an undo button.
-  // Deprecated: HISTOGRAM_UNDO = 10,
-  HISTOGRAM_MAX = 11
+  kMaxValue = kIdleTimeoutPolicyTriggeredSignOut
 };
 
 // Enum values which enumerates all access points where sign in could be
@@ -212,6 +190,10 @@ enum class AccessPoint : int {
   ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE = 54,
   // Restore primary account info in case it was lost.
   ACCESS_POINT_RESTORE_PRIMARY_ACCOUNT_ON_PROFILE_LOAD = 55,
+  // Access point for the tab organization UI within the tab search bubble.
+  ACCESS_POINT_TAB_ORGANIZATION = 56,
+  // Access point for the Save to Drive feature on iOS.
+  ACCESS_POINT_SAVE_TO_DRIVE_IOS = 57,
 
   // Add values above this line with a corresponding label to the
   // "SigninAccessPoint" enum in tools/metrics/histograms/enums.xml
@@ -233,7 +215,7 @@ enum class ReauthAccessPoint {
   kPasswordSettings = 3,
   kGeneratePasswordDropdown = 4,
   kGeneratePasswordContextMenu = 5,
-  kPasswordMoveBubble = 6,
+  // kPasswordMoveBubble = 6, (deprecated)
   // The password save bubble *without* a destination picker, i.e. the password
   // was already saved locally.
   kPasswordSaveLocallyBubble = 7,
@@ -336,9 +318,6 @@ enum class AccountConsistencyPromoAction : int {
 // numeric values should never be reused.
 // Please keep in Sync with "SigninReason" in
 // src/tools/metrics/histograms/enums.xml.
-// A Java counterpart will be generated for this enum.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.signin.metrics
-// GENERATED_JAVA_CLASS_NAME_OVERRIDE: SigninReason
 enum class Reason : int {
   kSigninPrimaryAccount = 0,
   kAddSecondaryAccount = 1,
@@ -499,9 +478,6 @@ void LogSigninAccessPointStarted(AccessPoint access_point,
                                  PromoAction promo_action);
 void LogSigninAccessPointCompleted(AccessPoint access_point,
                                    PromoAction promo_action);
-
-// Tracks the reason of sign in.
-void LogSigninReason(Reason reason);
 
 // Logs sign in offered events and their associated access points.
 // Access points (or features) are responsible for recording this where relevant

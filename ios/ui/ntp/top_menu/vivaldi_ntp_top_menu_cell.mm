@@ -9,7 +9,7 @@
 namespace {
 // Padding for title label. In order - Top, Left, Bottom, Right
 const UIEdgeInsets titleLabelPadding =
-    UIEdgeInsetsMake(4.f, 0.f, 0.f, 4.f);
+    UIEdgeInsetsMake(6.f, 0.f, 0.f, 4.f);
 // Padding for selection indicator. In order - Top, Left, Bottom, Right
 const UIEdgeInsets selectionIndicatorPadding =
     UIEdgeInsetsMake(6.f, 0.f, 0.f, 16.f);
@@ -57,7 +57,7 @@ const CGSize selectionIndicatorSize = CGSizeMake(0, 2.f);
   UILabel* label = [[UILabel alloc] init];
   _titleLabel = label;
   label.textColor = [UIColor colorNamed:vNTPToolbarTextColor];
-  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
   label.numberOfLines = 1;
   label.textAlignment = NSTextAlignmentLeft;
 

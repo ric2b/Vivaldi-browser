@@ -83,10 +83,11 @@ ViewTransitionSupplement* ViewTransitionSupplement::From(Document& document) {
 }
 
 // static
-DOMViewTransition* ViewTransitionSupplement::startViewTransition(
+DOMViewTransition* ViewTransitionSupplement::StartViewTransitionInternal(
     ScriptState* script_state,
     Document& document,
     V8ViewTransitionCallback* callback,
+    const absl::optional<Vector<String>>& types,
     ExceptionState& exception_state) {
   DCHECK(script_state);
   DCHECK(ThreadScheduler::Current());
@@ -100,7 +101,17 @@ DOMViewTransition* ViewTransitionSupplement::startViewTransition(
       callback->SetParentTask(tracker->RunningTask(script_state));
     }
   }
-  return supplement->StartTransition(document, callback, exception_state);
+  return supplement->StartTransition(document, callback, types,
+                                     exception_state);
+}
+
+DOMViewTransition* ViewTransitionSupplement::startViewTransition(
+    ScriptState* script_state,
+    Document& document,
+    V8ViewTransitionCallback* callback,
+    ExceptionState& exception_state) {
+  return StartViewTransitionInternal(script_state, document, callback,
+                                     absl::nullopt, exception_state);
 }
 
 DOMViewTransition* ViewTransitionSupplement::startViewTransition(
@@ -108,24 +119,25 @@ DOMViewTransition* ViewTransitionSupplement::startViewTransition(
     Document& document,
     ViewTransitionOptions* options,
     ExceptionState& exception_state) {
-  CHECK(!options || options->hasUpdate());
-  return startViewTransition(script_state, document,
-                             options ? options->update() : nullptr,
-                             exception_state);
+  CHECK(!options || (options->hasUpdate() && options->hasType()));
+  return StartViewTransitionInternal(
+      script_state, document, options ? options->update() : nullptr,
+      options ? options->type() : absl::nullopt, exception_state);
 }
 
 DOMViewTransition* ViewTransitionSupplement::startViewTransition(
     ScriptState* script_state,
     Document& document,
     ExceptionState& exception_state) {
-  return startViewTransition(script_state, document,
-                             static_cast<V8ViewTransitionCallback*>(nullptr),
-                             exception_state);
+  return StartViewTransitionInternal(
+      script_state, document, static_cast<V8ViewTransitionCallback*>(nullptr),
+      absl::nullopt, exception_state);
 }
 
 DOMViewTransition* ViewTransitionSupplement::StartTransition(
     Document& document,
     V8ViewTransitionCallback* callback,
+    const absl::optional<Vector<String>>& types,
     ExceptionState& exception_state) {
   // Disallow script initiated transitions during a navigation initiated
   // transition.
@@ -144,7 +156,8 @@ DOMViewTransition* ViewTransitionSupplement::StartTransition(
     return nullptr;
   }
 
-  transition_ = ViewTransition::CreateFromScript(&document, callback, this);
+  transition_ =
+      ViewTransition::CreateFromScript(&document, callback, types, this);
 
   // If there is a transition in a parent frame, give that precedence over a
   // transition in a child frame.
@@ -177,14 +190,6 @@ void ViewTransitionSupplement::SetCrossDocumentOptIn(
     document->GetFrame()
         ->GetLocalFrameHostRemote()
         .OnViewTransitionOptInChanged(cross_document_opt_in);
-  }
-
-  if (cross_document_opt_in_ ==
-          mojom::blink::ViewTransitionSameOriginOptIn::kDisabled &&
-      transition_ && !transition_->IsCreatedViaScriptAPI()) {
-    transition_->SkipTransition();
-    DCHECK(!transition_)
-        << "SkipTransition() should finish existing |transition_|";
   }
 }
 
@@ -314,24 +319,34 @@ void ViewTransitionSupplement::WillInsertBody() {
   auto* document = GetSupplementable();
   CHECK(document);
 
-  // Update active styles will compute the @view-transitions
-  // navigation-trigger opt in.
+  // Update active styles will compute the @view-transition
+  // navigation opt in.
   // TODO(https://crbug.com/1463966): This is probably a bit of a heavy hammer.
   // In the long term, we probably don't want to make this decision at
   // WillInsertBody or, if we do, we could look specifically for
-  // @view-transitions rather than all rules.
+  // @view-transition rather than all rules. Note: the opt-in is checked below
+  // from dispatching the pagereveal event during the first update-the-rendering
+  // steps.
   document->GetStyleEngine().UpdateActiveStyle();
+}
 
-  // If the opt-in is enabled, then there's nothing to do in this function.
-  if (cross_document_opt_in_ ==
-      mojom::blink::ViewTransitionSameOriginOptIn::kEnabled) {
-    return;
+DOMViewTransition*
+ViewTransitionSupplement::ResolveCrossDocumentViewTransition() {
+  if (!transition_ || !transition_->IsForNavigationOnNewDocument()) {
+    return nullptr;
   }
 
-  // Since we don't have an opt-in, skip a navigation transition if it exists.
-  transition_->SkipTransition();
-  DCHECK(!transition_)
-      << "SkipTransition() should finish existing |transition_|";
+  if (cross_document_opt_in_ ==
+      mojom::blink::ViewTransitionSameOriginOptIn::kDisabled) {
+    transition_->SkipTransition();
+    CHECK(!ViewTransitionUtils::GetTransition(*GetSupplementable()));
+    return nullptr;
+  }
+
+  // TODO(https://crbug.com/1502628): This is where types from the used
+  // @view-transition should be applied.
+
+  return transition_->GetScriptDelegate();
 }
 
 }  // namespace blink

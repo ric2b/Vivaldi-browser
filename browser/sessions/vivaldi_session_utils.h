@@ -104,7 +104,7 @@ int GetExpiredAutoSaveNodes(content::BrowserContext* browser_context,
                             bool on_add,
                             std::vector<Index_Node*>& nodes);
 // Saves current set of tabs to a fixed auto save node.
-void AutoSave(content::BrowserContext* browser_context);
+void AutoSave(content::BrowserContext* browser_context, bool from_ui = false);
 // Moves timed backup into auto saved sessions.
 int AutoSaveFromBackup(content::BrowserContext* browser_context);
 // Saves tabs to a special session that holds persistent entries.

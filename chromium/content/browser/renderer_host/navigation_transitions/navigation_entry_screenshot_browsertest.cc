@@ -322,18 +322,16 @@ class NavigationEntryScreenshotBrowserTest
   void ExpectScreenshotIsColor(NavigationEntryScreenshot* screenshot,
                                SkColor color) {
     EXPECT_NE(screenshot, nullptr);
-    auto ui_resource = screenshot->GetBitmap(0, false);
-    const auto size = ui_resource.GetSize();
-    EXPECT_EQ(size, GetScaledViewportSize());
+    EXPECT_EQ(screenshot->GetDimensions(), GetScaledViewportSize());
 
-    auto bitmap = ui_resource.GetBitmapForTesting();
+    auto bitmap = screenshot->GetBitmapForTesting();
     ExpectBitmapRowsAreColor(bitmap, /*row_start=*/0,
                              /*row_end_exclusive=*/bitmap.height(), color);
   }
 
   void AssertOrderedScreenshotsAre(
       NavigationControllerImpl& controller,
-      const std::vector<absl::optional<SkColor>>& expected_screenshots) {
+      const std::vector<std::optional<SkColor>>& expected_screenshots) {
     ASSERT_EQ(controller.GetEntryCount(),
               static_cast<int>(expected_screenshots.size()));
     for (int index = 0; index < controller.GetEntryCount(); ++index) {
@@ -398,7 +396,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     SCOPED_TRACE("[red*] -> [red&, green*]");
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/green.html"));
-    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
   }
   {
@@ -406,7 +404,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/blue.html"));
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
   }
   {
@@ -414,7 +412,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/red.html"));
     AssertOrderedScreenshotsAre(
-        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, absl::nullopt});
+        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -423,8 +421,8 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/green.html"));
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED,
-                     absl::nullopt});
+        controller,
+        {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -434,8 +432,8 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/blue.html"));
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, absl::nullopt, SK_ColorBLUE, SK_ColorRED,
-                     SK_ColorGREEN, absl::nullopt});
+        controller, {std::nullopt, std::nullopt, SK_ColorBLUE, SK_ColorRED,
+                     SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -457,8 +455,8 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, absl::nullopt, SK_ColorBLUE, SK_ColorRED,
-                     absl::nullopt, SK_ColorBLUE});
+        controller, {std::nullopt, std::nullopt, SK_ColorBLUE, SK_ColorRED,
+                     std::nullopt, SK_ColorBLUE});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -474,7 +472,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, absl::nullopt, SK_ColorBLUE, absl::nullopt,
+        controller, {std::nullopt, std::nullopt, SK_ColorBLUE, std::nullopt,
                      SK_ColorGREEN, SK_ColorBLUE});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
@@ -491,7 +489,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, absl::nullopt, absl::nullopt, SK_ColorRED,
+        controller, {std::nullopt, std::nullopt, std::nullopt, SK_ColorRED,
                      SK_ColorGREEN, SK_ColorBLUE});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
@@ -504,8 +502,8 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, absl::nullopt, SK_ColorBLUE, SK_ColorRED,
-                     SK_ColorGREEN, absl::nullopt});
+        controller, {std::nullopt, std::nullopt, SK_ColorBLUE, SK_ColorRED,
+                     SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
 }
@@ -528,7 +526,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleEntries) {
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/red.html"));
     AssertOrderedScreenshotsAre(
-        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, absl::nullopt});
+        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
   }
 
@@ -545,7 +543,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleEntries) {
                                                  -3);
     ASSERT_EQ(controller.GetEntryCount(), 4);
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED});
+        controller, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
   }
 
@@ -560,7 +558,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleEntries) {
     }
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller, 2);
     AssertOrderedScreenshotsAre(
-        controller, {SK_ColorRED, SK_ColorGREEN, absl::nullopt, SK_ColorRED});
+        controller, {SK_ColorRED, SK_ColorGREEN, std::nullopt, SK_ColorRED});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
   }
 }
@@ -585,7 +583,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
                                           GetNextUrl("/red.html"));
     ASSERT_EQ(controller.GetEntryCount(), 4);
     AssertOrderedScreenshotsAre(
-        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, absl::nullopt});
+        controller, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
   }
   {
@@ -594,14 +592,14 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
                                                  -3);
     ASSERT_EQ(controller.GetEntryCount(), 4);
     AssertOrderedScreenshotsAre(
-        controller, {absl::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED});
+        controller, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, SK_ColorRED});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
   }
   {
     SCOPED_TRACE("[red*, green&, blue&, red&] -> [red&, green&, blue*, red&]");
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller, 2);
     AssertOrderedScreenshotsAre(
-        controller, {SK_ColorRED, SK_ColorGREEN, absl::nullopt, SK_ColorRED});
+        controller, {SK_ColorRED, SK_ColorGREEN, std::nullopt, SK_ColorRED});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 3 * page_size);
   }
 }
@@ -623,7 +621,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleTabs) {
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/blue.html"));
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
   }
 
@@ -649,11 +647,11 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleTabs) {
         "tab2: [red*] -> [red&, green*]");
     NavigateTabAndWaitForScreenshotCached(tab2, controller2,
                                           GetNextUrl("/green.html"));
-    AssertOrderedScreenshotsAre(controller2, {SK_ColorRED, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller2, {SK_ColorRED, std::nullopt});
     // No change in tab1, because we have one cache slot for a new screenshot in
     // tab2.
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -663,12 +661,12 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleTabs) {
     NavigateTabAndWaitForScreenshotCached(tab2, controller2,
                                           GetNextUrl("/blue.html"));
     AssertOrderedScreenshotsAre(controller2,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     // Tab1's "red" screenshot is evicted. We always evict from the least
     // recently used tab (tab1), and always evict from the most distant
     // navigation entry (red).
     AssertOrderedScreenshotsAre(controller,
-                                {absl::nullopt, SK_ColorGREEN, absl::nullopt});
+                                {std::nullopt, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -678,10 +676,10 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleTabs) {
     NavigateTabAndWaitForScreenshotCached(tab2, controller2,
                                           GetNextUrl("/red.html"));
     AssertOrderedScreenshotsAre(
-        controller2, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, absl::nullopt});
+        controller2, {SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
     // Tab1's "green" is evicted.
     AssertOrderedScreenshotsAre(controller,
-                                {absl::nullopt, absl::nullopt, absl::nullopt});
+                                {std::nullopt, std::nullopt, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -691,10 +689,10 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleTabs) {
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
     AssertOrderedScreenshotsAre(controller,
-                                {absl::nullopt, absl::nullopt, SK_ColorBLUE});
+                                {std::nullopt, std::nullopt, SK_ColorBLUE});
     // Screenshot for "red" of tab2 is evicted.
-    AssertOrderedScreenshotsAre(controller2, {absl::nullopt, SK_ColorGREEN,
-                                              SK_ColorBLUE, absl::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller2, {std::nullopt, SK_ColorGREEN, SK_ColorBLUE, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
   {
@@ -705,10 +703,10 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleTabs) {
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
     AssertOrderedScreenshotsAre(controller,
-                                {absl::nullopt, SK_ColorGREEN, SK_ColorBLUE});
+                                {std::nullopt, SK_ColorGREEN, SK_ColorBLUE});
     // Screenshot for "red" is evicted.
-    AssertOrderedScreenshotsAre(controller2, {absl::nullopt, absl::nullopt,
-                                              SK_ColorBLUE, absl::nullopt});
+    AssertOrderedScreenshotsAre(
+        controller2, {std::nullopt, std::nullopt, SK_ColorBLUE, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), memory_budget);
   }
 
@@ -738,7 +736,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleProfiles) {
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/blue.html"));
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
   }
 
@@ -767,8 +765,8 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleProfiles) {
                                           GetNextUrl("/green.html"));
     ASSERT_EQ(controller.GetEntryCount(), 3);
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
-    AssertOrderedScreenshotsAre(controller2, {SK_ColorRED, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
+    AssertOrderedScreenshotsAre(controller2, {SK_ColorRED, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
     ASSERT_EQ(manager2->GetCurrentCacheSize(), page_size);
   }
@@ -784,9 +782,9 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, MultipleProfiles) {
     // managed independently.
     ASSERT_EQ(controller.GetEntryCount(), 3);
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     AssertOrderedScreenshotsAre(controller2,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
     ASSERT_EQ(manager2->GetCurrentCacheSize(), 2 * page_size);
   }
@@ -821,7 +819,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
   WaitForCopyableViewInWebContents(web_contents());
   ASSERT_TRUE(cache_obs.WaitForScreenshotCachedForEntry(expected_id));
 
-  AssertOrderedScreenshotsAre(controller, {SK_ColorRED, absl::nullopt});
+  AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
   ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
 }
 
@@ -843,7 +841,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, HistoryDotBack) {
     WaitForCopyableViewInWebContents(web_contents());
     ASSERT_TRUE(cache_obs.WaitForScreenshotCachedForEntry(expected_id));
 
-    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
   }
   {
@@ -857,7 +855,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, HistoryDotBack) {
     nav_observer.Wait();
     ASSERT_TRUE(cache_obs.WaitForScreenshotCachedForEntry(expected_id));
 
-    AssertOrderedScreenshotsAre(controller, {absl::nullopt, SK_ColorGREEN});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt, SK_ColorGREEN});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
   }
 }
@@ -896,11 +894,11 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
   ASSERT_TRUE(NavigateToURL(tab, GetNextUrl("/green.html")));
   WaitForCopyableViewInWebContents(tab);
   // Captured.
-  AssertOrderedScreenshotsAre(controller, {SK_ColorWHITE, absl::nullopt});
+  AssertOrderedScreenshotsAre(controller, {SK_ColorWHITE, std::nullopt});
 
   HistoryNavigateTabAndWaitForScreenshotCached(tab, controller, -1);
   // Captured.
-  AssertOrderedScreenshotsAre(controller, {absl::nullopt, SK_ColorGREEN});
+  AssertOrderedScreenshotsAre(controller, {std::nullopt, SK_ColorGREEN});
 }
 
 IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, Redirect) {
@@ -923,7 +921,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, Redirect) {
     ASSERT_TRUE(NavigateToURL(web_contents(), redirect_gurl, expected_gurl));
     WaitForCopyableViewInWebContents(web_contents());
     ASSERT_TRUE(cache_obs.WaitForScreenshotCachedForEntry(expected_id));
-    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
   }
   {
@@ -936,7 +934,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest, Redirect) {
     }
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
-    AssertOrderedScreenshotsAre(controller, {absl::nullopt, SK_ColorGREEN});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt, SK_ColorGREEN});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 1 * page_size);
   }
 }
@@ -957,7 +955,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
   ASSERT_EQ(
       NavigationTransitionUtils::GetNumCopyOutputRequestIssuedForTesting(), 0);
 
-  AssertOrderedScreenshotsAre(controller, {absl::nullopt});
+  AssertOrderedScreenshotsAre(controller, {std::nullopt});
   ASSERT_EQ(manager->GetCurrentCacheSize(), 0U);
 }
 
@@ -982,7 +980,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
   ASSERT_EQ(
       NavigationTransitionUtils::GetNumCopyOutputRequestIssuedForTesting(), 0);
 
-  AssertOrderedScreenshotsAre(controller, {absl::nullopt});
+  AssertOrderedScreenshotsAre(controller, {std::nullopt});
   ASSERT_EQ(manager->GetCurrentCacheSize(), 0U);
 }
 
@@ -1002,7 +1000,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
   ASSERT_EQ(
       NavigationTransitionUtils::GetNumCopyOutputRequestIssuedForTesting(), 0);
 
-  AssertOrderedScreenshotsAre(controller, {absl::nullopt});
+  AssertOrderedScreenshotsAre(controller, {std::nullopt});
   ASSERT_EQ(manager->GetCurrentCacheSize(), 0U);
 }
 
@@ -1013,10 +1011,8 @@ void AssertScreenshotForPageWithIFrameIs(NavigationEntry* entry,
                                          SkColor iframe) {
   auto* screenshot = PreviewScreenshotForEntry(entry);
   ASSERT_NE(screenshot, nullptr);
-  auto ui_resource = screenshot->GetBitmap(0, false);
-  const auto size = ui_resource.GetSize();
-
-  auto bitmap = ui_resource.GetBitmapForTesting();
+  const auto size = screenshot->GetDimensions();
+  auto bitmap = screenshot->GetBitmapForTesting();
 
   int half_height = size.height() / 2;
   bool is_height_odd = (size.height() % 2);
@@ -1064,7 +1060,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     // Insert an <iframe> into DOM does not create a navigation entry. This
     // navigation won't trigger a capture because it is not from the primary
     // main frame.
-    AssertOrderedScreenshotsAre(controller, {absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 0U);
   }
   {
@@ -1072,7 +1068,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     NavigateIframeToURL(web_contents(), "iframe_id",
                         GetNextUrl("/title1.html"));
     WaitForCopyableViewInWebContents(web_contents());
-    AssertOrderedScreenshotsAre(controller, {absl::nullopt, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 0U);
   }
   {
@@ -1080,7 +1076,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
     SCOPED_TRACE("[red(green), red(title1)*] -> [red(green)*, red(title1)]");
     ASSERT_TRUE(HistoryGoBack(web_contents()));
     WaitForCopyableViewInWebContents(web_contents());
-    AssertOrderedScreenshotsAre(controller, {absl::nullopt, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 0U);
   }
   {
@@ -1140,7 +1136,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTestWithPrerender,
     SCOPED_TRACE("[red*] -> [red&, green*]");
     NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                           GetNextUrl("/green.html"));
-    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, absl::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), page_size);
   }
 
@@ -1150,7 +1146,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTestWithPrerender,
   const auto prerender_gurl = GetNextUrl("/title1.html");
   prerender_helper()->AddPrerender(prerender_gurl);
   // No change in the screenshots.
-  AssertOrderedScreenshotsAre(controller, {SK_ColorRED, absl::nullopt});
+  AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
   ASSERT_EQ(manager->GetCurrentCacheSize(), page_size);
 
   // Activate the prerendered URL by navigating the primary main frame.
@@ -1165,7 +1161,7 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTestWithPrerender,
     activation_obs.WaitForActivation();
     ASSERT_TRUE(activation_obs.was_activated());
     AssertOrderedScreenshotsAre(controller,
-                                {SK_ColorRED, SK_ColorGREEN, absl::nullopt});
+                                {SK_ColorRED, SK_ColorGREEN, std::nullopt});
     ASSERT_EQ(manager->GetCurrentCacheSize(), 2 * page_size);
   }
 }

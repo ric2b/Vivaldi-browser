@@ -110,10 +110,15 @@ export class CrDialogElement extends CrDialogElementBase {
         type: Boolean,
         value: false,
       },
+
+      /**
+       * Text for the aria description.
+       */
+      ariaDescriptionText: String,
     };
   }
 
-  closeText: string;
+  closeText?: string;
   consumeKeydownEvent: boolean;
   ignoreEnterKey: boolean;
   ignorePopstate: boolean;
@@ -121,6 +126,7 @@ export class CrDialogElement extends CrDialogElementBase {
   open: boolean;
   showCloseButton: boolean;
   showOnAttach: boolean;
+  ariaDescriptionText: string;
 
   private intersectionObserver_: IntersectionObserver|null = null;
   private mutationObserver_: MutationObserver|null = null;

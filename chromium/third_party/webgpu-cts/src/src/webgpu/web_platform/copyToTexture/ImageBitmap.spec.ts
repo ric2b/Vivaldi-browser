@@ -443,13 +443,8 @@ g.test('copy_subrect_from_2D_Canvas')
       .combine('copySubRectInfo', kCopySubrectInfo)
   )
   .fn(async t => {
-    const {
-      copySubRectInfo,
-      orientation,
-      colorSpaceConversion,
-      dstPremultiplied,
-      srcFlipYInCopy,
-    } = t.params;
+    const { copySubRectInfo, orientation, colorSpaceConversion, dstPremultiplied, srcFlipYInCopy } =
+      t.params;
 
     const { srcOrigin, dstOrigin, srcSize, dstSize, copyExtent } = copySubRectInfo;
     const kColorFormat = 'rgba8unorm';

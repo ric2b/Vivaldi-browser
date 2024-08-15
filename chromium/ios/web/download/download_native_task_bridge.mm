@@ -45,8 +45,7 @@ void DownloadDidFinishWithSize(
 @interface DownloadNativeTaskBridge ()
 
 @property(nonatomic, readwrite, strong) NSData* resumeData;
-@property(nonatomic, readwrite, strong)
-    WKDownload* download API_AVAILABLE(ios(15));
+@property(nonatomic, readwrite, strong) WKDownload* download;
 
 @end
 
@@ -60,8 +59,8 @@ void DownloadDidFinishWithSize(
 }
 
 - (instancetype)initWithDownload:(WKDownload*)download
-                        delegate:(id<DownloadNativeTaskBridgeDelegate>)delegate
-    API_AVAILABLE(ios(15)) {
+                        delegate:
+                            (id<DownloadNativeTaskBridgeDelegate>)delegate {
   if ((self = [super init])) {
     _download = download;
     _delegate = delegate;
@@ -139,7 +138,7 @@ void DownloadDidFinishWithSize(
   _startDownloadBlock = nil;
 }
 
-- (void)onResumedDownload:(WKDownload*)download API_AVAILABLE(ios(15)) {
+- (void)onResumedDownload:(WKDownload*)download {
   _resumeData = nil;
   if (download) {
     _download = download;
@@ -166,8 +165,7 @@ void DownloadDidFinishWithSize(
 - (void)download:(WKDownload*)download
     decideDestinationUsingResponse:(NSURLResponse*)response
                  suggestedFilename:(NSString*)suggestedFilename
-                 completionHandler:(void (^)(NSURL* destination))handler
-    API_AVAILABLE(ios(15)) {
+                 completionHandler:(void (^)(NSURL* destination))handler {
   _response = response;
   _suggestedFilename = suggestedFilename;
   [self responseReceived:_response];
@@ -186,7 +184,7 @@ void DownloadDidFinishWithSize(
 
 - (void)download:(WKDownload*)download
     didFailWithError:(NSError*)error
-          resumeData:(NSData*)resumeData API_AVAILABLE(ios(15)) {
+          resumeData:(NSData*)resumeData {
   self.resumeData = resumeData;
   [self stopObservingDownloadProgress];
   if (!_completeCallback.is_null()) {
@@ -203,7 +201,7 @@ void DownloadDidFinishWithSize(
   }
 }
 
-- (void)downloadDidFinish:(WKDownload*)download API_AVAILABLE(ios(15)) {
+- (void)downloadDidFinish:(WKDownload*)download {
   [self stopObservingDownloadProgress];
   if (!_completeCallback.is_null()) {
     // The method -downloadDidFinish: will be called as soon as the
@@ -229,7 +227,7 @@ void DownloadDidFinishWithSize(
 - (void)observeValueForKeyPath:(NSString*)keyPath
                       ofObject:(id)object
                         change:(NSDictionary*)change
-                       context:(void*)context API_AVAILABLE(ios(15)) {
+                       context:(void*)context {
   if (!_progressCallback.is_null()) {
     NSProgress* progress = self.progress;
     _progressCallback.Run(progress.completedUnitCount, progress.totalUnitCount,

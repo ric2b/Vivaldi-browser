@@ -112,7 +112,7 @@ class TestMessageCenter : public message_center::FakeMessageCenter {
     EXPECT_EQ(id, notification_->id());
 
     notification_->delegate()->Click(/*button_index=*/button_index,
-                                     /*reply=*/absl::nullopt);
+                                     /*reply=*/std::nullopt);
   }
 
   void Close(const std::string& id, bool by_user) {
@@ -235,7 +235,7 @@ class FastPairPresenterImplTest : public AshTestBase {
   std::unique_ptr<signin::IdentityTestEnvironment> identity_test_environment_;
   std::unique_ptr<MockQuickPairBrowserDelegate> browser_delegate_;
   signin::IdentityTestEnvironment identity_test_env_;
-  raw_ptr<signin::IdentityManager, ExperimentalAsh> identity_manager_;
+  raw_ptr<signin::IdentityManager> identity_manager_;
   DiscoveryAction discovery_action_;
   DiscoveryAction secondary_discovery_action_;
   PairingFailedAction pairing_failed_action_;

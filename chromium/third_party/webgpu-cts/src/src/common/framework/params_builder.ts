@@ -82,7 +82,7 @@ export interface ParamsBuilder {
  */
 export type ParamTypeOf<
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  T extends ParamsBuilder
+  T extends ParamsBuilder,
 > = T extends SubcaseParamsBuilder<infer CaseP, infer SubcaseP>
   ? Merged<CaseP, SubcaseP>
   : T extends CaseParamsBuilder<infer CaseP>
@@ -131,7 +131,7 @@ export function builderIterateCasesWithSubcases(
     iterateCasesWithSubcases(caseFilter: TestParams | null): CaseSubcaseIterable<{}, {}>;
   }
 
-  return ((builder as unknown) as IterableParamsBuilder).iterateCasesWithSubcases(caseFilter);
+  return (builder as unknown as IterableParamsBuilder).iterateCasesWithSubcases(caseFilter);
 }
 
 /**
@@ -144,7 +144,8 @@ export function builderIterateCasesWithSubcases(
  */
 export class CaseParamsBuilder<CaseP extends {}>
   extends ParamsBuilderBase<CaseP, {}>
-  implements Iterable<DeepReadonly<CaseP>>, ParamsBuilder {
+  implements Iterable<DeepReadonly<CaseP>>, ParamsBuilder
+{
   *iterateCasesWithSubcases(caseFilter: TestParams | null): CaseSubcaseIterable<CaseP, {}> {
     for (const caseP of this.cases(caseFilter)) {
       if (caseFilter) {
@@ -230,7 +231,7 @@ export class CaseParamsBuilder<CaseP extends {}>
     values: Iterable<NewPValue>
   ): CaseParamsBuilder<Merged<CaseP, { [name in NewPKey]: NewPValue }>> {
     assertNotGenerator(values);
-    const mapped = mapLazy(values, v => ({ [key]: v } as { [name in NewPKey]: NewPValue }));
+    const mapped = mapLazy(values, v => ({ [key]: v }) as { [name in NewPKey]: NewPValue });
     return this.combineWithParams(mapped);
   }
 
@@ -279,7 +280,8 @@ export const kUnitCaseParamsBuilder = new CaseParamsBuilder(function* () {
  */
 export class SubcaseParamsBuilder<CaseP extends {}, SubcaseP extends {}>
   extends ParamsBuilderBase<CaseP, SubcaseP>
-  implements ParamsBuilder {
+  implements ParamsBuilder
+{
   protected readonly subcases: (_: CaseP) => Generator<SubcaseP>;
 
   constructor(
@@ -305,7 +307,7 @@ export class SubcaseParamsBuilder<CaseP extends {}, SubcaseP extends {}>
       if (subcases.length) {
         yield [
           caseP as DeepReadonly<typeof caseP>,
-          subcases as DeepReadonly<typeof subcases[number]>[],
+          subcases as DeepReadonly<(typeof subcases)[number]>[],
         ];
       }
     }

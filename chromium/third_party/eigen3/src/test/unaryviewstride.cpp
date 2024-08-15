@@ -9,30 +9,27 @@
 
 #include "main.h"
 
-template<int OuterStride,int InnerStride,typename VectorType> void unaryview_stride(const VectorType& m)
-{
+template <int OuterStride, int InnerStride, typename VectorType>
+void unaryview_stride(const VectorType& m) {
   typedef typename VectorType::Scalar Scalar;
   Index rows = m.rows();
   Index cols = m.cols();
   VectorType vec = VectorType::Random(rows, cols);
 
   struct view_op {
-    EIGEN_DEVICE_FUNC
-    EIGEN_STRONG_INLINE const Scalar&
-      operator()(const Scalar& v) const { return v; }
+    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar& operator()(const Scalar& v) const { return v; }
   };
 
-  CwiseUnaryView<view_op, VectorType, Stride<OuterStride,InnerStride>> vec_view(vec);
+  CwiseUnaryView<view_op, VectorType, Stride<OuterStride, InnerStride>> vec_view(vec);
   VERIFY(vec_view.outerStride() == (OuterStride == 0 ? 0 : OuterStride));
   VERIFY(vec_view.innerStride() == (InnerStride == 0 ? 1 : InnerStride));
 }
 
-EIGEN_DECLARE_TEST(unaryviewstride)
-{
-    CALL_SUBTEST_1(( unaryview_stride<1,2>(MatrixXf()) ));
-    CALL_SUBTEST_1(( unaryview_stride<0,0>(MatrixXf()) ));
-    CALL_SUBTEST_2(( unaryview_stride<1,2>(VectorXf()) ));
-    CALL_SUBTEST_2(( unaryview_stride<0,0>(VectorXf()) ));
-    CALL_SUBTEST_3(( unaryview_stride<1,2>(RowVectorXf()) ));
-    CALL_SUBTEST_3(( unaryview_stride<0,0>(RowVectorXf()) ));
+EIGEN_DECLARE_TEST(unaryviewstride) {
+  CALL_SUBTEST_1((unaryview_stride<1, 2>(MatrixXf())));
+  CALL_SUBTEST_1((unaryview_stride<0, 0>(MatrixXf())));
+  CALL_SUBTEST_2((unaryview_stride<1, 2>(VectorXf())));
+  CALL_SUBTEST_2((unaryview_stride<0, 0>(VectorXf())));
+  CALL_SUBTEST_3((unaryview_stride<1, 2>(RowVectorXf())));
+  CALL_SUBTEST_3((unaryview_stride<0, 0>(RowVectorXf())));
 }

@@ -4,17 +4,19 @@
 
 import * as Common from '../../../../../front_end/core/common/common.js';
 import * as Host from '../../../../../front_end/core/host/host.js';
+import {assertNotNullOrUndefined} from '../../../../../front_end/core/platform/platform.js';
 import * as VisualLoggingTesting from '../../../../../front_end/ui/visual_logging/visual_logging-testing.js';
 import {renderElementIntoDOM} from '../../helpers/DOMHelpers.js';
+import {stabilizeEvent, stabilizeImpressions} from '../../helpers/VisualLoggingHelpers.js';
 
 const {assert} = chai;
 
 describe('LoggingDriver', () => {
   let recordImpression: sinon.SinonStub;
-  const throttler = new Common.Throttler.Throttler(1000000000);
+  let throttler: Common.Throttler.Throttler;
 
   beforeEach(() => {
-    VisualLoggingTesting.LoggingState.resetStateForTesting();
+    throttler = new Common.Throttler.Throttler(1000000000);
     recordImpression = sinon.stub(
         Host.InspectorFrontendHost.InspectorFrontendHostInstance,
         'recordImpression',
@@ -23,11 +25,6 @@ describe('LoggingDriver', () => {
 
   afterEach(() => {
     VisualLoggingTesting.LoggingDriver.stopLogging();
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: 'instant',
-    });
   });
 
   function addLoggableElements() {
@@ -50,7 +47,8 @@ describe('LoggingDriver', () => {
     await VisualLoggingTesting.LoggingDriver.startLogging();
     assert.isTrue(recordImpression.calledOnce);
     assert.sameDeepMembers(
-        recordImpression.firstCall.firstArg.impressions, [{id: 2, type: 1, context: 42, parent: 1}, {id: 1, type: 1}]);
+        stabilizeImpressions(recordImpression.firstCall.firstArg.impressions),
+        [{id: 1, type: 1, context: 42, parent: 0}, {id: 0, type: 1}]);
   });
 
   async function assertImpressionRecordedDeferred() {
@@ -65,7 +63,7 @@ describe('LoggingDriver', () => {
   it('does not log impressions when hidden', async () => {
     addLoggableElements();
     sinon.stub(document, 'hidden').value(true);
-    await VisualLoggingTesting.LoggingDriver.startLogging({domProcessingThrottler: throttler});
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
     assert.isFalse(recordImpression.called);
   });
 
@@ -73,7 +71,7 @@ describe('LoggingDriver', () => {
     let hidden = true;
     addLoggableElements();
     sinon.stub(document, 'hidden').get(() => hidden);
-    await VisualLoggingTesting.LoggingDriver.startLogging({domProcessingThrottler: throttler});
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
 
     hidden = false;
     const event = document.createEvent('Event');
@@ -87,19 +85,28 @@ describe('LoggingDriver', () => {
     addLoggableElements();
     const parent = document.getElementById('parent') as HTMLElement;
     parent.style.marginTop = '2000px';
-    await VisualLoggingTesting.LoggingDriver.startLogging({domProcessingThrottler: throttler});
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
 
+    let scrollendPromise = new Promise(resolve => window.addEventListener('scrollend', resolve, {once: true}));
     window.scrollTo({
       top: 2000,
       left: 0,
       behavior: 'instant',
     });
-    await new Promise(resolve => window.addEventListener('scrollend', resolve, {once: true}));
+    await scrollendPromise;
     await assertImpressionRecordedDeferred();
+
+    scrollendPromise = new Promise(resolve => window.addEventListener('scrollend', resolve, {once: true}));
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant',
+    });
+    await scrollendPromise;
   });
 
   it('logs impressions on mutation', async () => {
-    await VisualLoggingTesting.LoggingDriver.startLogging({domProcessingThrottler: throttler});
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
     addLoggableElements();
     await assertImpressionRecordedDeferred();
   });
@@ -111,9 +118,39 @@ describe('LoggingDriver', () => {
     const shadowContent = document.createElement('div');
     shadow.appendChild(shadowContent);
 
-    await VisualLoggingTesting.LoggingDriver.startLogging({domProcessingThrottler: throttler});
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
     shadowContent.innerHTML = '<div jslog="TreeItem" style="width:300px;height:300px"></div>';
     await assertImpressionRecordedDeferred();
+  });
+
+  it('logs impressions on mutation in additional document', async () => {
+    const iframe = document.createElement('iframe') as HTMLIFrameElement;
+    renderElementIntoDOM(iframe);
+
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
+    const iframeDocument = iframe.contentDocument;
+    assertNotNullOrUndefined(iframeDocument);
+    await VisualLoggingTesting.LoggingDriver.addDocument(iframeDocument);
+    iframeDocument.body.innerHTML = '<div jslog="TreeItem" style="width:300px;height:300px"></div>';
+    await assertImpressionRecordedDeferred();
+  });
+
+  it('correctly determines visiblity in additional document', async () => {
+    const iframe = document.createElement('iframe') as HTMLIFrameElement;
+    renderElementIntoDOM(iframe);
+    iframe.style.width = '100px';
+    iframe.style.height = '100px';
+    iframe.width = '100';
+    iframe.height = '100';
+    const iframeDocument = iframe.contentDocument;
+    assertNotNullOrUndefined(iframeDocument);
+    iframeDocument.body.innerHTML =  // Second div should not be out of viewport and not logged
+        `<div style="width:150px;height:150px"></div>
+         <div jslog="TreeItem" style="width:150px;height:150px"></div>`;
+
+    await VisualLoggingTesting.LoggingDriver.startLogging({processingThrottler: throttler});
+    await VisualLoggingTesting.LoggingDriver.addDocument(iframeDocument);
+    assert.isFalse(recordImpression.called);
   });
 
   it('logs clicks', async () => {
@@ -223,7 +260,7 @@ describe('LoggingDriver', () => {
 
     await hoverLogThrottler.process?.();
     assert.isTrue(recordHover.called);
-    assert.deepStrictEqual(recordHover.firstCall.firstArg, {veid: 2, context: 42});
+    assert.deepStrictEqual(stabilizeEvent(recordHover.firstCall.firstArg), {veid: 0, context: 42});
   });
 
   it('logs drag', async () => {
@@ -264,4 +301,25 @@ describe('LoggingDriver', () => {
     assert.isFalse(recordDrag.called);
   });
 
+  it('marks loggable elements for debugging', async () => {
+    // @ts-ignore
+    globalThis.setVeDebuggingEnabled(true);
+    addLoggableElements();
+    await VisualLoggingTesting.LoggingDriver.startLogging();
+    assert.strictEqual(document.getElementById('parent')?.style.outline, 'red solid 1px');
+    assert.strictEqual(document.getElementById('element')?.style.outline, 'red solid 1px');
+  });
+
+  it('logs non-DOM impressions', async () => {
+    addLoggableElements();
+    const loggable = {};
+    VisualLoggingTesting.NonDomState.registerLoggable(
+        loggable, {ve: 1, context: '123'}, document.getElementById('parent') || undefined);
+    await VisualLoggingTesting.LoggingDriver.startLogging();
+    assert.isTrue(recordImpression.calledOnce);
+    assert.sameDeepMembers(
+        stabilizeImpressions(recordImpression.firstCall.firstArg.impressions),
+        [{id: 2, type: 1, context: 123, parent: 0}, {id: 1, type: 1, context: 42, parent: 0}, {id: 0, type: 1}]);
+    assert.isEmpty(VisualLoggingTesting.NonDomState.getNonDomState().loggables);
+  });
 });

@@ -7,10 +7,9 @@
  * and pass it on to the annotations manager.
  */
 
+import {MS_DELAY_BEFORE_TRIGGER, NO_DECORATION_NODE_NAMES, NON_TEXT_NODE_NAMES} from '//ios/web/annotations/resources/annotations_constants.js';
 import {gCrWeb} from '//ios/web/public/js_messaging/resources/gcrweb.js';
-import {sendWebKitMessage} from '//ios/web/public/js_messaging/resources/utils.js'
-import {MS_DELAY_BEFORE_TRIGGER, NON_TEXT_NODE_NAMES, NO_DECORATION_NODE_NAMES}
-    from '//ios/web/annotations/resources/annotations_constants.js';
+import {sendWebKitMessage} from '//ios/web/public/js_messaging/resources/utils.js';
 
 // Mark: Private properties
 
@@ -62,7 +61,7 @@ class Section {
  * `stopObserving`.
  */
 class MutationsDuringClickTracker {
-  mutationCount = 0;
+  hasMutations = false;
   mutationObserver: MutationObserver;
   mutationExtendId = 0;
 
@@ -71,7 +70,13 @@ class MutationsDuringClickTracker {
   constructor(private readonly initialEvent: Event) {
     this.mutationObserver =
         new MutationObserver((mutationList: MutationRecord[]) => {
-          this.mutationCount += mutationList.length;
+          for (let mutation of mutationList) {
+            if (mutation.target.contains(this.initialEvent.target as Node)) {
+              this.hasMutations = true;
+              this.stopObserving();
+              break;
+            }
+          }
         });
     this.mutationObserver.observe(
         document, {attributes: false, childList: true, subtree: true});
@@ -81,12 +86,7 @@ class MutationsDuringClickTracker {
   // or it was prevented or if any DOM mutations occurred.
   hasPreventativeActivity(event: Event): boolean {
     return event !== this.initialEvent || event.defaultPrevented ||
-        this.hasMutations();
-  }
-
-  // Returns true if DOM mutations occurred.
-  hasMutations(): boolean {
-    return this.mutationCount > 0;
+        this.hasMutations;
   }
 
   // Extends DOM observation by triggering `then` after de delay. This can be
@@ -152,8 +152,8 @@ function getMetaContentByHttpEquiv(httpEquiv: string) {
   return '';
 }
 
-const highlightTextColor = "#000";
-const highlightBackgroundColor = "rgba(20,111,225,0.25)";
+const highlightTextColor = '#000';
+const highlightBackgroundColor = 'rgba(20,111,225,0.25)';
 const decorationStyles = 'border-bottom-width: 1px; ' +
     'border-bottom-style: dotted; ' +
     'background-color: transparent';
@@ -215,8 +215,9 @@ function decorateAnnotations(annotations: Annotation[]): void {
   let failures = 0;
   decorations = [];
 
-  // Last checks when bubbling up event.
+  // Check CHROME_ANNOTATION on capturing and bubbling event.
   document.addEventListener('click', handleTopTap.bind(document));
+  document.addEventListener('click', handleTopTap.bind(document), true);
 
   annotations = removeOverlappingAnnotations(annotations);
 
@@ -301,7 +302,9 @@ function decorateAnnotations(annotations: Annotation[]): void {
   sendWebKitMessage('annotations', {
     command: 'annotations.decoratingComplete',
     successes: annotations.length - failures,
-    annotations: annotations.length
+    failures: failures,
+    annotations: annotations.length,
+    cancelled: []
   });
 }
 
@@ -327,7 +330,7 @@ function removeDecorations(): void {
  * @param type - the type of annotations to remove.
  */
 function removeDecorationsWithType(type: string): void {
-  var remainingDecorations : Decoration[] = [];
+  var remainingDecorations: Decoration[] = [];
   for (let decoration of decorations) {
     const replacements = decoration.replacements;
     const parentNode = replacements[0]!.parentNode;
@@ -377,7 +380,7 @@ function removeDecorationsWithType(type: string): void {
         newReplacements.push(replacement);
         continue;
       }
-      let text = document.createTextNode(element.textContent ?? "");
+      let text = document.createTextNode(element.textContent ?? '');
       parentNode.replaceChild(text, element);
       newReplacements.push(text);
     }
@@ -396,8 +399,8 @@ function removeHighlight(): void {
       if (!(replacement instanceof HTMLElement)) {
         continue;
       }
-      replacement.style.color = "";
-      replacement.style.background = "";
+      replacement.style.color = '';
+      replacement.style.background = '';
     }
   }
 }
@@ -432,6 +435,10 @@ function enumerateTextNodes(
       if (NON_TEXT_NODE_NAMES.has(node.nodeName)) {
         continue;
       }
+      // Reject editable nodes.
+      if (node instanceof Element && node.getAttribute('contenteditable')) {
+        continue;
+      }
       if (node.nodeName === 'BR') {
         if (isPreviousSpace)
           continue;
@@ -443,8 +450,8 @@ function enumerateTextNodes(
       }
       const style = window.getComputedStyle(node as Element);
       // Only proceed if the element is visible or if invisibles are to be kept.
-      if (filterInvisibles && (style.display === 'none' ||
-          style.visibility === 'hidden')) {
+      if (filterInvisibles &&
+          (style.display === 'none' || style.visibility === 'hidden')) {
         continue;
       }
       // No need to add a line break before `body` as it is the first element.
@@ -520,14 +527,6 @@ function getPageText(maxChars: number): string {
 
 let mutationDuringClickObserver: MutationsDuringClickTracker|null;
 
-// Initiates a `mutationDuringClickObserver` that will be checked at document
-// level tab handler (`handleTopTap`), where it will be decided if any action
-// bubbling to objc is required (i.e. no DOM change occurs).
-function handleTap(event: Event) {
-  cancelObserver();
-  mutationDuringClickObserver = new MutationsDuringClickTracker(event);
-}
-
 // Stops observing DOM mutations.
 function cancelObserver(): void {
   mutationDuringClickObserver?.stopObserving();
@@ -537,29 +536,45 @@ function cancelObserver(): void {
 // Monitors taps at the top, document level. This checks if it is tap
 // triggered by an annotation and if no DOM mutation have happened while the
 // event is bubbling up. If it's the case, the annotation callback is called.
-function handleTopTap(event: Event) {
-  // Nothing happened to the page between `handleTap` and `handleTopTap`.
-  if (event.target instanceof HTMLElement &&
-      event.target.tagName === 'CHROME_ANNOTATION' &&
-      mutationDuringClickObserver &&
-      !mutationDuringClickObserver.hasPreventativeActivity(event)) {
-    const annotation = event.target;
-    mutationDuringClickObserver.extendObservation(() => {
-      if (mutationDuringClickObserver &&
-          !mutationDuringClickObserver.hasMutations()) {
-        highlightAnnotation(annotation);
-        sendWebKitMessage('annotations', {
-          command: 'annotations.onClick',
-          data: annotation.dataset['data'],
-          rect: rectFromElement(annotation),
-          text: annotation.dataset['annotation'],
+function handleTopTap(event: Event): void {
+  const annotation = event.target;
+  if (annotation instanceof HTMLElement &&
+      annotation.tagName === 'CHROME_ANNOTATION') {
+    if (event.eventPhase === Event.CAPTURING_PHASE) {
+      // Initiates a `mutationDuringClickObserver` that will be checked at
+      // bubble up phase where it will be decided if the click should be
+      // cancelled.
+      cancelObserver();
+      mutationDuringClickObserver = new MutationsDuringClickTracker(event);
+    } else if (mutationDuringClickObserver) {
+      // At BUBBLING_PHASE.
+      if (!mutationDuringClickObserver.hasPreventativeActivity(event)) {
+        mutationDuringClickObserver.extendObservation(() => {
+          if (mutationDuringClickObserver) {
+            highlightAnnotation(annotation);
+            onClickAnnotation(
+                annotation, mutationDuringClickObserver.hasMutations);
+          }
         });
-        cancelObserver();
+      } else {
+        onClickAnnotation(annotation, mutationDuringClickObserver.hasMutations);
       }
-    });
+    }
   } else {
     cancelObserver();
   }
+}
+
+// Sends click to browser side and cancel observer.
+function onClickAnnotation(annotation: HTMLElement, cancel: boolean): void {
+  sendWebKitMessage('annotations', {
+    command: 'annotations.onClick',
+    cancel: cancel,
+    data: annotation.dataset['data'],
+    rect: rectFromElement(annotation),
+    text: annotation.dataset['annotation'],
+  });
+  cancelObserver();
 }
 
 /**
@@ -647,7 +662,6 @@ function replaceNode(
     }
 
     element.style.borderBottomColor = textColor;
-    element.addEventListener('click', handleTap.bind(element), true);
     parts.push(element);
     cursor = replacement.right;
   }

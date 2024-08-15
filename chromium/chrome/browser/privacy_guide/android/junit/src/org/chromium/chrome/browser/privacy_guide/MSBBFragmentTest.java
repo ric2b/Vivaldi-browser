@@ -10,7 +10,6 @@ import static org.junit.Assert.assertTrue;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentFactory;
 import androidx.fragment.app.testing.FragmentScenario;
@@ -26,14 +25,15 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridgeJni;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.browser_ui.widget.MaterialSwitchWithText;
 
 /** JUnit tests of the class {@link MSBBFragment}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -45,7 +45,7 @@ public class MSBBFragmentTest {
     @Mock private UnifiedConsentServiceBridge.Natives mNativeMock;
 
     private FragmentScenario mScenario;
-    private SwitchCompat mMSBBButton;
+    private MaterialSwitchWithText mMSBBButton;
     private final UserActionTester mActionTester = new UserActionTester();
 
     @Before

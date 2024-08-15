@@ -402,9 +402,8 @@ ElementsTestRunner.firstElementsTreeOutline = function() {
 };
 
 ElementsTestRunner.filterMatchedStyles = function(text) {
-  const regex = (text ? new RegExp(text, 'i') : null);
   TestRunner.addResult('Filtering styles by: ' + text);
-  Elements.ElementsPanel.ElementsPanel.instance().stylesWidget.onFilterChanged(regex);
+  Elements.ElementsPanel.ElementsPanel.instance().stylesWidget.onFilterChanged({data: text});
 };
 
 ElementsTestRunner.dumpRenderedMatchedStyles = function() {
@@ -1210,7 +1209,7 @@ ElementsTestRunner.addNewRuleInStyleSheet = function(styleSheetHeader, selector,
 ElementsTestRunner.addNewRule = function(selector, callback) {
   Elements.ElementsPanel.ElementsPanel.instance()
       .stylesWidget.contentElement.querySelector('.styles-pane-toolbar')
-      .shadowRoot.querySelector('.plus')
+      .shadowRoot.querySelector('[aria-label="New Style Rule"]')
       .click();
   TestRunner.addSniffer(
       Elements.StylesSidebarPane.StylesSidebarPane.prototype, 'addBlankSection',

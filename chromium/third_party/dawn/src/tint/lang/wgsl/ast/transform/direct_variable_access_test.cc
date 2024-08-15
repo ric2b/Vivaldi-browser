@@ -80,8 +80,6 @@ using DirectVariableAccessRemoveUncalledTest = TransformTest;
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrUniform) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 
 fn u(pre : i32, p : ptr<uniform, i32>, post : i32) -> i32 {
@@ -91,8 +89,6 @@ fn u(pre : i32, p : ptr<uniform, i32>, post : i32) -> i32 {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 )";
 
@@ -103,8 +99,6 @@ var<private> keep_me = 42;
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrStorage) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 
 fn s(pre : i32, p : ptr<storage, i32>, post : i32) -> i32 {
@@ -113,8 +107,6 @@ fn s(pre : i32, p : ptr<storage, i32>, post : i32) -> i32 {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 )";
 
@@ -125,8 +117,6 @@ var<private> keep_me = 42;
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrWorkgroup) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 
 fn w(pre : i32, p : ptr<workgroup, i32>, post : i32) -> i32 {
@@ -136,8 +126,6 @@ fn w(pre : i32, p : ptr<workgroup, i32>, post : i32) -> i32 {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 )";
 
@@ -148,8 +136,6 @@ var<private> keep_me = 42;
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrPrivate_Disabled) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 
 fn f(pre : i32, p : ptr<private, i32>, post : i32) -> i32 {
@@ -166,8 +152,6 @@ fn f(pre : i32, p : ptr<private, i32>, post : i32) -> i32 {
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrPrivate_Enabled) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 )";
 
@@ -180,8 +164,6 @@ var<private> keep_me = 42;
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrFunction_Disabled) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 
 fn f(pre : i32, p : ptr<function, i32>, post : i32) -> i32 {
@@ -198,8 +180,6 @@ fn f(pre : i32, p : ptr<function, i32>, post : i32) -> i32 {
 
 TEST_F(DirectVariableAccessRemoveUncalledTest, PtrFunction_Enabled) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<private> keep_me = 42;
 )";
 
@@ -221,8 +201,6 @@ using DirectVariableAccessPtrChainsTest = TransformTest;
 
 TEST_F(DirectVariableAccessPtrChainsTest, ConstantIndices) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 8>, 8>, 8>;
 
 fn a(pre : i32, p : ptr<uniform, vec4<i32>>, post : i32) -> vec4<i32> {
@@ -251,8 +229,6 @@ fn d() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 8>, 8>, 8>;
 
 alias U_X_X_X = array<u32, 3u>;
@@ -287,10 +263,72 @@ fn d() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessPtrChainsTest, ConstantIndices_ViaPointerIndex) {
+    auto* src = R"(
+@group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 8>, 8>, 8>;
+
+fn a(pre : i32, p : ptr<uniform, vec4<i32>>, post : i32) -> vec4<i32> {
+  return *p;
+}
+
+fn b() {
+  let p0 = &U;
+  let p1 = &p0[1];
+  let p2 = &p1[1+1];
+  let p3 = &p2[2*2 - 1];
+  a(10, p3, 20);
+}
+
+fn c(p : ptr<uniform, array<array<array<vec4<i32>, 8>, 8>, 8>>) {
+  let p0 = p;
+  let p1 = &p0[1];
+  let p2 = &p1[1+1];
+  let p3 = &p2[2*2 - 1];
+  a(10, p3, 20);
+}
+
+fn d() {
+  c(&U);
+}
+)";
+
+    auto* expect = R"(
+@group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 8>, 8>, 8>;
+
+alias U_X_X_X = array<u32, 3u>;
+
+fn a_U_X_X_X(pre : i32, p : U_X_X_X, post : i32) -> vec4<i32> {
+  return U[p[0]][p[1]][p[2]];
+}
+
+fn b() {
+  let p0 = &(U);
+  let p1 = &(p0[1]);
+  let p2 = &(p1[(1 + 1)]);
+  let p3 = &(p2[((2 * 2) - 1)]);
+  a_U_X_X_X(10, U_X_X_X(1, 2, 3), 20);
+}
+
+fn c_U() {
+  let p0 = &(U);
+  let p1 = &(U[1]);
+  let p2 = &(U[1][2]);
+  let p3 = &(U[1][2][3]);
+  a_U_X_X_X(10, U_X_X_X(1, 2, 3), 20);
+}
+
+fn d() {
+  c_U();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 TEST_F(DirectVariableAccessPtrChainsTest, HoistIndices) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 8>, 8>, 8>;
 
 var<private> i : i32;
@@ -331,8 +369,6 @@ fn d() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 8>, 8>, 8>;
 
 var<private> i : i32;
@@ -390,8 +426,6 @@ fn d() {
 
 TEST_F(DirectVariableAccessPtrChainsTest, HoistInForLoopInit) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -426,8 +460,6 @@ fn d() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -490,8 +522,6 @@ fn d() {
 
 TEST_F(DirectVariableAccessPtrChainsTest, HoistInForLoopCond) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -528,8 +558,6 @@ fn d() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -580,8 +608,6 @@ fn d() {
 
 TEST_F(DirectVariableAccessPtrChainsTest, HoistInForLoopCont) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -618,8 +644,6 @@ fn d() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -670,8 +694,6 @@ fn d() {
 
 TEST_F(DirectVariableAccessPtrChainsTest, HoistInWhileCond) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -708,8 +730,6 @@ fn d() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<array<vec4<i32>, 8>, 8>;
 
 var<private> i : i32;
@@ -769,8 +789,6 @@ using DirectVariableAccessUniformASTest = TransformTest;
 
 TEST_F(DirectVariableAccessUniformASTest, Param_ptr_i32_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : i32;
 
 fn a(pre : i32, p : ptr<uniform, i32>, post : i32) -> i32 {
@@ -783,8 +801,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : i32;
 
 fn a_U(pre : i32, post : i32) -> i32 {
@@ -803,8 +819,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessUniformASTest, Param_ptr_vec4i32_Via_array_DynamicRead) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<vec4<i32>, 8>;
 
 fn a(pre : i32, p : ptr<uniform, vec4<i32>>, post : i32) -> vec4<i32> {
@@ -818,8 +832,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<uniform> U : array<vec4<i32>, 8>;
 
 alias U_X = array<u32, 1u>;
@@ -839,10 +851,44 @@ fn b() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessUniformASTest, Param_ptr_vec4i32_Via_array_DynamicRead_ViaPointerDot) {
+    auto* src = R"(
+@group(0) @binding(0) var<uniform> U : array<vec4<i32>, 8>;
+
+fn a(pre : i32, p : ptr<uniform, vec4<i32>>, post : i32) -> vec4<i32> {
+  return *p;
+}
+
+fn b() {
+  var I = vec2<i32>(3, 3);
+  let p = &I;
+  a(10, &U[p.x], 20);
+}
+)";
+
+    auto* expect = R"(
+@group(0) @binding(0) var<uniform> U : array<vec4<i32>, 8>;
+
+alias U_X = array<u32, 1u>;
+
+fn a_U_X(pre : i32, p : U_X, post : i32) -> vec4<i32> {
+  return U[p[0]];
+}
+
+fn b() {
+  var I = vec2<i32>(3, 3);
+  let p = &(I);
+  a_U_X(10, U_X(u32(p.x)), 20);
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 TEST_F(DirectVariableAccessUniformASTest, CallChaining) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 };
@@ -903,8 +949,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 }
@@ -927,12 +971,6 @@ fn f0_U_mat_X(p : U_mat_X) -> f32 {
 alias U_arr_X_mat_X = array<u32, 2u>;
 
 fn f0_U_arr_X_mat_X(p : U_arr_X_mat_X) -> f32 {
-  return U.arr[p[0]].mat[p[0]].x;
-}
-
-alias U_arr_X_mat_X_1 = array<u32, 2u>;
-
-fn f0_U_arr_X_mat_X_1(p : U_arr_X_mat_X_1) -> f32 {
   return U.arr[p[0]].mat[p[1]].x;
 }
 
@@ -946,11 +984,11 @@ fn f1_U_mat() -> f32 {
     res += f0_U_mat_X(U_mat_X(1));
   }
   {
-    res += f0_U_arr_X_mat_X_1(U_arr_X_mat_X_1(2, 1));
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
   }
   {
     let p_vec = &(U.arr[2].mat[1]);
-    res += f0_U_arr_X_mat_X_1(U_arr_X_mat_X_1(2, 1));
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
   }
   return res;
 }
@@ -967,11 +1005,11 @@ fn f1_U_arr_X_mat(p : U_arr_X_mat) -> f32 {
     res += f0_U_arr_X_mat_X(U_arr_X_mat_X(p[0u], 1));
   }
   {
-    res += f0_U_arr_X_mat_X_1(U_arr_X_mat_X_1(2, 1));
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
   }
   {
     let p_vec = &(U.arr[2].mat[1]);
-    res += f0_U_arr_X_mat_X_1(U_arr_X_mat_X_1(2, 1));
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
   }
   return res;
 }
@@ -1002,6 +1040,225 @@ fn b() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessUniformASTest, CallChaining_ViaPointerDotOrIndex) {
+    auto* src = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+};
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> U : Outer;
+
+fn f0(p : ptr<uniform, vec4<f32>>) -> f32 {
+  return p.x;
+}
+
+fn f1(p : ptr<uniform, mat3x4<f32>>) -> f32 {
+  var res : f32;
+  {
+    // call f0() with inline usage of p
+    res += f0(&p[1]);
+  }
+  {
+    // call f0() with pointer-let usage of p
+    let p_vec = &p[1];
+    res += f0(p_vec);
+  }
+  {
+    // call f0() with inline usage of U
+    res += f0(&U.arr[2].mat[1]);
+  }
+  {
+    // call f0() with pointer-let usage of U
+    let p_vec = &U.arr[2].mat[1];
+    res += f0(p_vec);
+  }
+  return res;
+}
+
+fn f2(p : ptr<uniform, Inner>) -> f32 {
+  let p_mat = &p.mat;
+  return f1(p_mat);
+}
+
+fn f3(p0 : ptr<uniform, InnerArr>, p1 : ptr<uniform, mat3x4<f32>>) -> f32 {
+  let p0_inner = &(*p0)[3];
+  return f2(p0_inner) + f1(p1);
+}
+
+fn f4(p : ptr<uniform, Outer>) -> f32 {
+  return f3(&p.arr, &U.mat);
+}
+
+fn b() {
+  f4(&U);
+}
+)";
+
+    auto* expect = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+}
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+}
+
+@group(0) @binding(0) var<uniform> U : Outer;
+
+alias U_mat_X = array<u32, 1u>;
+
+fn f0_U_mat_X(p : U_mat_X) -> f32 {
+  return (&(U.mat[p[0]])).x;
+}
+
+alias U_arr_X_mat_X = array<u32, 2u>;
+
+fn f0_U_arr_X_mat_X(p : U_arr_X_mat_X) -> f32 {
+  return (&(U.arr[p[0]].mat[p[1]])).x;
+}
+
+fn f1_U_mat() -> f32 {
+  var res : f32;
+  {
+    res += f0_U_mat_X(U_mat_X(1));
+  }
+  {
+    let p_vec = &(U.mat[1]);
+    res += f0_U_mat_X(U_mat_X(1));
+  }
+  {
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
+  }
+  {
+    let p_vec = &(U.arr[2].mat[1]);
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
+  }
+  return res;
+}
+
+alias U_arr_X_mat = array<u32, 1u>;
+
+fn f1_U_arr_X_mat(p : U_arr_X_mat) -> f32 {
+  var res : f32;
+  {
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(p[0u], 1));
+  }
+  {
+    let p_vec = &(U.arr[p[0]].mat[1]);
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(p[0u], 1));
+  }
+  {
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
+  }
+  {
+    let p_vec = &(U.arr[2].mat[1]);
+    res += f0_U_arr_X_mat_X(U_arr_X_mat_X(2, 1));
+  }
+  return res;
+}
+
+alias U_arr_X = array<u32, 1u>;
+
+fn f2_U_arr_X(p : U_arr_X) -> f32 {
+  let p_mat = &(U.arr[p[0]].mat);
+  return f1_U_arr_X_mat(U_arr_X_mat(p[0u]));
+}
+
+fn f3_U_arr_U_mat() -> f32 {
+  let p0_inner = &(U.arr[3]);
+  return (f2_U_arr_X(U_arr_X(3)) + f1_U_mat());
+}
+
+fn f4_U() -> f32 {
+  return f3_U_arr_U_mat();
+}
+
+fn b() {
+  f4_U();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(DirectVariableAccessUniformASTest, CallChaining2) {
+    auto* src = R"(
+alias T3 = vec4i;
+alias T2 = array<T3, 5>;
+alias T1 = array<T2, 5>;
+alias T = array<T1, 5>;
+
+@binding(0) @group(0) var<uniform> input : T;
+
+fn f2(p : ptr<uniform, T2>) -> T3 {
+  return (*p)[3];
+}
+
+fn f1(p : ptr<uniform, T1>) -> T3 {
+  return f2(&(*p)[2]);
+}
+
+fn f0(p : ptr<uniform, T>) -> T3 {
+  return f1(&(*p)[1]);
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  f0(&input);
+}
+)";
+
+    auto* expect =
+        R"(
+alias T3 = vec4i;
+
+alias T2 = array<T3, 5>;
+
+alias T1 = array<T2, 5>;
+
+alias T = array<T1, 5>;
+
+@binding(0) @group(0) var<uniform> input : T;
+
+alias input_X_X = array<u32, 2u>;
+
+fn f2_input_X_X(p : input_X_X) -> T3 {
+  return input[p[0]][p[1]][3];
+}
+
+alias input_X = array<u32, 1u>;
+
+fn f1_input_X(p : input_X) -> T3 {
+  return f2_input_X_X(input_X_X(p[0u], 2));
+}
+
+fn f0_input() -> T3 {
+  return f1_input_X(input_X(1));
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  f0_input();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 }  // namespace uniform_as_tests
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1013,8 +1270,6 @@ using DirectVariableAccessStorageASTest = TransformTest;
 
 TEST_F(DirectVariableAccessStorageASTest, Param_ptr_i32_Via_struct_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 };
@@ -1031,8 +1286,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -1055,8 +1308,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessStorageASTest, Param_ptr_arr_i32_Via_struct_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 };
@@ -1073,8 +1324,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 }
@@ -1097,8 +1346,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessStorageASTest, Param_ptr_vec4i32_Via_array_DynamicWrite) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage, read_write> S : array<vec4<i32>, 8>;
 
 fn a(pre : i32, p : ptr<storage, vec4<i32>, read_write>, post : i32) {
@@ -1112,8 +1359,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage, read_write> S : array<vec4<i32>, 8>;
 
 alias S_X = array<u32, 1u>;
@@ -1135,8 +1380,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessStorageASTest, CallChaining) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 };
@@ -1197,8 +1440,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 }
@@ -1221,12 +1462,6 @@ fn f0_S_mat_X(p : S_mat_X) -> f32 {
 alias S_arr_X_mat_X = array<u32, 2u>;
 
 fn f0_S_arr_X_mat_X(p : S_arr_X_mat_X) -> f32 {
-  return S.arr[p[0]].mat[p[0]].x;
-}
-
-alias S_arr_X_mat_X_1 = array<u32, 2u>;
-
-fn f0_S_arr_X_mat_X_1(p : S_arr_X_mat_X_1) -> f32 {
   return S.arr[p[0]].mat[p[1]].x;
 }
 
@@ -1240,11 +1475,11 @@ fn f1_S_mat() -> f32 {
     res += f0_S_mat_X(S_mat_X(1));
   }
   {
-    res += f0_S_arr_X_mat_X_1(S_arr_X_mat_X_1(2, 1));
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
   }
   {
     let p_vec = &(S.arr[2].mat[1]);
-    res += f0_S_arr_X_mat_X_1(S_arr_X_mat_X_1(2, 1));
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
   }
   return res;
 }
@@ -1261,11 +1496,11 @@ fn f1_S_arr_X_mat(p : S_arr_X_mat) -> f32 {
     res += f0_S_arr_X_mat_X(S_arr_X_mat_X(p[0u], 1));
   }
   {
-    res += f0_S_arr_X_mat_X_1(S_arr_X_mat_X_1(2, 1));
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
   }
   {
     let p_vec = &(S.arr[2].mat[1]);
-    res += f0_S_arr_X_mat_X_1(S_arr_X_mat_X_1(2, 1));
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
   }
   return res;
 }
@@ -1296,6 +1531,225 @@ fn b() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessStorageASTest, CallChaining_ViaPointerDotOrIndex) {
+    auto* src = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+};
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+};
+
+@group(0) @binding(0) var<storage> S : Outer;
+
+fn f0(p : ptr<storage, vec4<f32>>) -> f32 {
+  return p.x;
+}
+
+fn f1(p : ptr<storage, mat3x4<f32>>) -> f32 {
+  var res : f32;
+  {
+    // call f0() with inline usage of p
+    res += f0(&p[1]);
+  }
+  {
+    // call f0() with pointer-let usage of p
+    let p_vec = &p[1];
+    res += f0(p_vec);
+  }
+  {
+    // call f0() with inline usage of S
+    res += f0(&S.arr[2].mat[1]);
+  }
+  {
+    // call f0() with pointer-let usage of S
+    let p_vec = &S.arr[2].mat[1];
+    res += f0(p_vec);
+  }
+  return res;
+}
+
+fn f2(p : ptr<storage, Inner>) -> f32 {
+  let p_mat = &p.mat;
+  return f1(p_mat);
+}
+
+fn f3(p0 : ptr<storage, InnerArr>, p1 : ptr<storage, mat3x4<f32>>) -> f32 {
+  let p0_inner = &p0[3];
+  return f2(p0_inner) + f1(p1);
+}
+
+fn f4(p : ptr<storage, Outer>) -> f32 {
+  return f3(&p.arr, &S.mat);
+}
+
+fn b() {
+  f4(&S);
+}
+)";
+
+    auto* expect = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+}
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+}
+
+@group(0) @binding(0) var<storage> S : Outer;
+
+alias S_mat_X = array<u32, 1u>;
+
+fn f0_S_mat_X(p : S_mat_X) -> f32 {
+  return (&(S.mat[p[0]])).x;
+}
+
+alias S_arr_X_mat_X = array<u32, 2u>;
+
+fn f0_S_arr_X_mat_X(p : S_arr_X_mat_X) -> f32 {
+  return (&(S.arr[p[0]].mat[p[1]])).x;
+}
+
+fn f1_S_mat() -> f32 {
+  var res : f32;
+  {
+    res += f0_S_mat_X(S_mat_X(1));
+  }
+  {
+    let p_vec = &(S.mat[1]);
+    res += f0_S_mat_X(S_mat_X(1));
+  }
+  {
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
+  }
+  {
+    let p_vec = &(S.arr[2].mat[1]);
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
+  }
+  return res;
+}
+
+alias S_arr_X_mat = array<u32, 1u>;
+
+fn f1_S_arr_X_mat(p : S_arr_X_mat) -> f32 {
+  var res : f32;
+  {
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(p[0u], 1));
+  }
+  {
+    let p_vec = &(S.arr[p[0]].mat[1]);
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(p[0u], 1));
+  }
+  {
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
+  }
+  {
+    let p_vec = &(S.arr[2].mat[1]);
+    res += f0_S_arr_X_mat_X(S_arr_X_mat_X(2, 1));
+  }
+  return res;
+}
+
+alias S_arr_X = array<u32, 1u>;
+
+fn f2_S_arr_X(p : S_arr_X) -> f32 {
+  let p_mat = &(S.arr[p[0]].mat);
+  return f1_S_arr_X_mat(S_arr_X_mat(p[0u]));
+}
+
+fn f3_S_arr_S_mat() -> f32 {
+  let p0_inner = &(S.arr[3]);
+  return (f2_S_arr_X(S_arr_X(3)) + f1_S_mat());
+}
+
+fn f4_S() -> f32 {
+  return f3_S_arr_S_mat();
+}
+
+fn b() {
+  f4_S();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(DirectVariableAccessStorageASTest, CallChaining2) {
+    auto* src = R"(
+alias T3 = vec4i;
+alias T2 = array<T3, 5>;
+alias T1 = array<T2, 5>;
+alias T = array<T1, 5>;
+
+@binding(0) @group(0) var<storage> input : T;
+
+fn f2(p : ptr<storage, T2>) -> T3 {
+  return (*p)[3];
+}
+
+fn f1(p : ptr<storage, T1>) -> T3 {
+  return f2(&(*p)[2]);
+}
+
+fn f0(p : ptr<storage, T>) -> T3 {
+  return f1(&(*p)[1]);
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  f0(&input);
+}
+)";
+
+    auto* expect =
+        R"(
+alias T3 = vec4i;
+
+alias T2 = array<T3, 5>;
+
+alias T1 = array<T2, 5>;
+
+alias T = array<T1, 5>;
+
+@binding(0) @group(0) var<storage> input : T;
+
+alias input_X_X = array<u32, 2u>;
+
+fn f2_input_X_X(p : input_X_X) -> T3 {
+  return input[p[0]][p[1]][3];
+}
+
+alias input_X = array<u32, 1u>;
+
+fn f1_input_X(p : input_X) -> T3 {
+  return f2_input_X_X(input_X_X(p[0u], 2));
+}
+
+fn f0_input() -> T3 {
+  return f1_input_X(input_X(1));
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  f0_input();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 }  // namespace storage_as_tests
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1307,8 +1761,6 @@ using DirectVariableAccessWorkgroupASTest = TransformTest;
 
 TEST_F(DirectVariableAccessWorkgroupASTest, Param_ptr_vec4i32_Via_array_StaticRead) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<workgroup> W : array<vec4<i32>, 8>;
 
 fn a(pre : i32, p : ptr<workgroup, vec4<i32>>, post : i32) -> vec4<i32> {
@@ -1321,8 +1773,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<workgroup> W : array<vec4<i32>, 8>;
 
 alias W_X = array<u32, 1u>;
@@ -1343,8 +1793,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessWorkgroupASTest, Param_ptr_vec4i32_Via_array_StaticWrite) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<workgroup> W : array<vec4<i32>, 8>;
 
 fn a(pre : i32, p : ptr<workgroup, vec4<i32>>, post : i32) {
@@ -1357,8 +1805,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 var<workgroup> W : array<vec4<i32>, 8>;
 
 alias W_X = array<u32, 1u>;
@@ -1379,8 +1825,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessWorkgroupASTest, CallChaining) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 };
@@ -1441,8 +1885,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 }
@@ -1465,12 +1907,6 @@ fn f0_W_mat_X(p : W_mat_X) -> f32 {
 alias W_arr_X_mat_X = array<u32, 2u>;
 
 fn f0_W_arr_X_mat_X(p : W_arr_X_mat_X) -> f32 {
-  return W.arr[p[0]].mat[p[0]].x;
-}
-
-alias W_arr_X_mat_X_1 = array<u32, 2u>;
-
-fn f0_W_arr_X_mat_X_1(p : W_arr_X_mat_X_1) -> f32 {
   return W.arr[p[0]].mat[p[1]].x;
 }
 
@@ -1484,11 +1920,11 @@ fn f1_W_mat() -> f32 {
     res += f0_W_mat_X(W_mat_X(1));
   }
   {
-    res += f0_W_arr_X_mat_X_1(W_arr_X_mat_X_1(2, 1));
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
   }
   {
     let p_vec = &(W.arr[2].mat[1]);
-    res += f0_W_arr_X_mat_X_1(W_arr_X_mat_X_1(2, 1));
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
   }
   return res;
 }
@@ -1505,11 +1941,11 @@ fn f1_W_arr_X_mat(p : W_arr_X_mat) -> f32 {
     res += f0_W_arr_X_mat_X(W_arr_X_mat_X(p[0u], 1));
   }
   {
-    res += f0_W_arr_X_mat_X_1(W_arr_X_mat_X_1(2, 1));
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
   }
   {
     let p_vec = &(W.arr[2].mat[1]);
-    res += f0_W_arr_X_mat_X_1(W_arr_X_mat_X_1(2, 1));
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
   }
   return res;
 }
@@ -1540,6 +1976,230 @@ fn b() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessWorkgroupASTest, CallChaining_ViaPointerDotOrIndex) {
+    auto* src = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+};
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+};
+
+var<workgroup> W : Outer;
+
+fn f0(p : ptr<workgroup, vec4<f32>>) -> f32 {
+  return p.x;
+}
+
+fn f1(p : ptr<workgroup, mat3x4<f32>>) -> f32 {
+  var res : f32;
+  {
+    // call f0() with inline usage of p
+    res += f0(&p[1]);
+  }
+  {
+    // call f0() with pointer-let usage of p
+    let p_vec = &p[1];
+    res += f0(p_vec);
+  }
+  {
+    // call f0() with inline usage of W
+    res += f0(&W.arr[2].mat[1]);
+  }
+  {
+    // call f0() with pointer-let usage of W
+    let p_vec = &W.arr[2].mat[1];
+    res += f0(p_vec);
+  }
+  return res;
+}
+
+fn f2(p : ptr<workgroup, Inner>) -> f32 {
+  let p_mat = &p.mat;
+  return f1(p_mat);
+}
+
+fn f3(p0 : ptr<workgroup, InnerArr>, p1 : ptr<workgroup, mat3x4<f32>>) -> f32 {
+  let p0_inner = &p0[3];
+  return f2(p0_inner) + f1(p1);
+}
+
+fn f4(p : ptr<workgroup, Outer>) -> f32 {
+  return f3(&p.arr, &W.mat);
+}
+
+fn b() {
+  f4(&W);
+}
+)";
+
+    auto* expect = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+}
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+}
+
+var<workgroup> W : Outer;
+
+alias W_mat_X = array<u32, 1u>;
+
+fn f0_W_mat_X(p : W_mat_X) -> f32 {
+  return (&(W.mat[p[0]])).x;
+}
+
+alias W_arr_X_mat_X = array<u32, 2u>;
+
+fn f0_W_arr_X_mat_X(p : W_arr_X_mat_X) -> f32 {
+  return (&(W.arr[p[0]].mat[p[1]])).x;
+}
+
+fn f1_W_mat() -> f32 {
+  var res : f32;
+  {
+    res += f0_W_mat_X(W_mat_X(1));
+  }
+  {
+    let p_vec = &(W.mat[1]);
+    res += f0_W_mat_X(W_mat_X(1));
+  }
+  {
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
+  }
+  {
+    let p_vec = &(W.arr[2].mat[1]);
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
+  }
+  return res;
+}
+
+alias W_arr_X_mat = array<u32, 1u>;
+
+fn f1_W_arr_X_mat(p : W_arr_X_mat) -> f32 {
+  var res : f32;
+  {
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(p[0u], 1));
+  }
+  {
+    let p_vec = &(W.arr[p[0]].mat[1]);
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(p[0u], 1));
+  }
+  {
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
+  }
+  {
+    let p_vec = &(W.arr[2].mat[1]);
+    res += f0_W_arr_X_mat_X(W_arr_X_mat_X(2, 1));
+  }
+  return res;
+}
+
+alias W_arr_X = array<u32, 1u>;
+
+fn f2_W_arr_X(p : W_arr_X) -> f32 {
+  let p_mat = &(W.arr[p[0]].mat);
+  return f1_W_arr_X_mat(W_arr_X_mat(p[0u]));
+}
+
+fn f3_W_arr_W_mat() -> f32 {
+  let p0_inner = &(W.arr[3]);
+  return (f2_W_arr_X(W_arr_X(3)) + f1_W_mat());
+}
+
+fn f4_W() -> f32 {
+  return f3_W_arr_W_mat();
+}
+
+fn b() {
+  f4_W();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(DirectVariableAccessWorkgroupASTest, CallChaining2) {
+    auto* src = R"(
+alias T3 = vec4i;
+alias T2 = array<T3, 5>;
+alias T1 = array<T2, 5>;
+alias T = array<T1, 5>;
+
+@binding(0) @group(0) var<storage, read> input : T;
+
+fn f2(p : ptr<workgroup, T2>) -> T3 {
+  return (*p)[3];
+}
+
+fn f1(p : ptr<workgroup, T1>) -> T3 {
+  return f2(&(*p)[2]);
+}
+
+fn f0(p : ptr<workgroup, T>) -> T3 {
+  return f1(&(*p)[1]);
+}
+
+var<workgroup> W : T;
+@compute @workgroup_size(1)
+fn main() {
+  W = input;
+  f0(&W);
+}
+)";
+
+    auto* expect =
+        R"(
+alias T3 = vec4i;
+
+alias T2 = array<T3, 5>;
+
+alias T1 = array<T2, 5>;
+
+alias T = array<T1, 5>;
+
+@binding(0) @group(0) var<storage, read> input : T;
+
+alias W_X_X = array<u32, 2u>;
+
+fn f2_W_X_X(p : W_X_X) -> T3 {
+  return W[p[0]][p[1]][3];
+}
+
+alias W_X = array<u32, 1u>;
+
+fn f1_W_X(p : W_X) -> T3 {
+  return f2_W_X_X(W_X_X(p[0u], 2));
+}
+
+fn f0_W() -> T3 {
+  return f1_W_X(W_X(1));
+}
+
+var<workgroup> W : T;
+
+@compute @workgroup_size(1)
+fn main() {
+  W = input;
+  f0_W();
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 }  // namespace workgroup_as_tests
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1551,8 +2211,6 @@ using DirectVariableAccessPrivateASTest = TransformTest;
 
 TEST_F(DirectVariableAccessPrivateASTest, Enabled_Param_ptr_i32_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a(pre : i32, p : ptr<private, i32>, post : i32) -> i32 {
   return *(p);
 }
@@ -1565,8 +2223,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a_F(pre : i32, p : ptr<private, i32>, post : i32) -> i32 {
   return *(p);
 }
@@ -1585,8 +2241,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Enabled_Param_ptr_i32_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a(pre : i32, p : ptr<private, i32>, post : i32) {
   *(p) = 42;
 }
@@ -1599,8 +2253,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a_F(pre : i32, p : ptr<private, i32>, post : i32) {
   *(p) = 42;
 }
@@ -1619,8 +2271,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Enabled_Param_ptr_i32_Via_struct_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 };
@@ -1637,8 +2287,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -1661,8 +2309,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Disabled_Param_ptr_i32_Via_struct_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -1687,8 +2333,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Enabled_Param_ptr_arr_i32_Via_struct_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 };
@@ -1705,8 +2349,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 }
@@ -1729,8 +2371,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Disabled_Param_ptr_arr_i32_Via_struct_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 }
@@ -1755,8 +2395,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Enabled_Param_ptr_i32_mixed) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 };
@@ -1777,8 +2415,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -1819,8 +2455,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Disabled_Param_ptr_i32_mixed) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -1851,8 +2485,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessPrivateASTest, Enabled_CallChaining) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 };
@@ -1913,8 +2545,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 }
@@ -1937,18 +2567,12 @@ fn f0_F_mat_X(p_base : ptr<private, Outer>, p_indices : F_mat_X) -> f32 {
 alias F_arr_X_mat_X = array<u32, 2u>;
 
 fn f0_F_arr_X_mat_X(p_base : ptr<private, Outer>, p_indices : F_arr_X_mat_X) -> f32 {
-  return (*(p_base)).arr[p_indices[0]].mat[p_indices[0]].x;
-}
-
-alias F_arr_X_mat_X_1 = array<u32, 2u>;
-
-fn f0_F_arr_X_mat_X_1(p_base : ptr<private, Outer>, p_indices : F_arr_X_mat_X_1) -> f32 {
   return (*(p_base)).arr[p_indices[0]].mat[p_indices[1]].x;
 }
 
 alias F_mat_X_1 = array<u32, 1u>;
 
-alias F_arr_X_mat_X_2 = array<u32, 2u>;
+alias F_arr_X_mat_X_1 = array<u32, 2u>;
 
 fn f1_F_mat(p : ptr<private, Outer>) -> f32 {
   var res : f32;
@@ -1960,34 +2584,34 @@ fn f1_F_mat(p : ptr<private, Outer>) -> f32 {
     res += f0_F_mat_X(p, F_mat_X_1(1));
   }
   {
-    res += f0_F_arr_X_mat_X_1(&(P), F_arr_X_mat_X_2(2, 1));
+    res += f0_F_arr_X_mat_X(&(P), F_arr_X_mat_X_1(2, 1));
   }
   {
     let p_vec = &(P.arr[2].mat[1]);
-    res += f0_F_arr_X_mat_X_1(&(P), F_arr_X_mat_X_2(2, 1));
+    res += f0_F_arr_X_mat_X(&(P), F_arr_X_mat_X_1(2, 1));
   }
   return res;
 }
 
 alias F_arr_X_mat = array<u32, 1u>;
 
-alias F_arr_X_mat_X_3 = array<u32, 2u>;
+alias F_arr_X_mat_X_2 = array<u32, 2u>;
 
 fn f1_F_arr_X_mat(p_base : ptr<private, Outer>, p_indices : F_arr_X_mat) -> f32 {
   var res : f32;
   {
-    res += f0_F_arr_X_mat_X(p_base, F_arr_X_mat_X_3(p_indices[0u], 1));
+    res += f0_F_arr_X_mat_X(p_base, F_arr_X_mat_X_2(p_indices[0u], 1));
   }
   {
     let p_vec = &((*(p_base)).arr[p_indices[0]].mat[1]);
-    res += f0_F_arr_X_mat_X(p_base, F_arr_X_mat_X_3(p_indices[0u], 1));
+    res += f0_F_arr_X_mat_X(p_base, F_arr_X_mat_X_2(p_indices[0u], 1));
   }
   {
-    res += f0_F_arr_X_mat_X_1(&(P), F_arr_X_mat_X_2(2, 1));
+    res += f0_F_arr_X_mat_X(&(P), F_arr_X_mat_X_1(2, 1));
   }
   {
     let p_vec = &(P.arr[2].mat[1]);
-    res += f0_F_arr_X_mat_X_1(&(P), F_arr_X_mat_X_2(2, 1));
+    res += f0_F_arr_X_mat_X(&(P), F_arr_X_mat_X_1(2, 1));
   }
   return res;
 }
@@ -2022,10 +2646,78 @@ fn b() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessPrivateASTest, Enabled_CallChaining2) {
+    auto* src = R"(
+alias T3 = vec4i;
+alias T2 = array<T3, 5>;
+alias T1 = array<T2, 5>;
+alias T = array<T1, 5>;
+
+fn f2(p : ptr<private, T2>) -> T3 {
+  return (*p)[3];
+}
+
+fn f1(p : ptr<private, T1>) -> T3 {
+  return f2(&(*p)[2]);
+}
+
+fn f0(p : ptr<private, T>) -> T3 {
+  return f1(&(*p)[1]);
+}
+
+var<private> P : T;
+
+@compute @workgroup_size(1)
+fn main() {
+  f0(&P);
+}
+)";
+
+    auto* expect =
+        R"(
+alias T3 = vec4i;
+
+alias T2 = array<T3, 5>;
+
+alias T1 = array<T2, 5>;
+
+alias T = array<T1, 5>;
+
+alias F_X_X = array<u32, 2u>;
+
+fn f2_F_X_X(p_base : ptr<private, array<array<array<vec4<i32>, 5u>, 5u>, 5u>>, p_indices : F_X_X) -> T3 {
+  return (*(p_base))[p_indices[0]][p_indices[1]][3];
+}
+
+alias F_X = array<u32, 1u>;
+
+alias F_X_X_1 = array<u32, 2u>;
+
+fn f1_F_X(p_base : ptr<private, array<array<array<vec4<i32>, 5u>, 5u>, 5u>>, p_indices : F_X) -> T3 {
+  return f2_F_X_X(p_base, F_X_X_1(p_indices[0u], 2));
+}
+
+alias F_X_1 = array<u32, 1u>;
+
+fn f0_F(p : ptr<private, array<array<array<vec4<i32>, 5u>, 5u>, 5u>>) -> T3 {
+  return f1_F_X(p, F_X_1(1));
+}
+
+var<private> P : T;
+
+@compute @workgroup_size(1)
+fn main() {
+  f0_F(&(P));
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src, EnablePrivate());
+
+    EXPECT_EQ(expect, str(got));
+}
+
 TEST_F(DirectVariableAccessPrivateASTest, Disabled_CallChaining) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct Inner {
   mat : mat3x4<f32>,
 }
@@ -2099,8 +2791,6 @@ using DirectVariableAccessFunctionASTest = TransformTest;
 
 TEST_F(DirectVariableAccessFunctionASTest, Enabled_LocalPtr) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn f() {
   var v : i32;
   let p : ptr<function, i32> = &(v);
@@ -2117,8 +2807,6 @@ fn f() {
 
 TEST_F(DirectVariableAccessFunctionASTest, Enabled_Param_ptr_i32_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a(pre : i32, p : ptr<function, i32>, post : i32) -> i32 {
   return *(p);
 }
@@ -2130,8 +2818,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a_F(pre : i32, p : ptr<function, i32>, post : i32) -> i32 {
   return *(p);
 }
@@ -2149,8 +2835,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessFunctionASTest, Enabled_Param_ptr_i32_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a(pre : i32, p : ptr<function, i32>, post : i32) {
   *(p) = 42;
 }
@@ -2162,8 +2846,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 fn a_F(pre : i32, p : ptr<function, i32>, post : i32) {
   *(p) = 42;
 }
@@ -2181,8 +2863,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessFunctionASTest, Enabled_Param_ptr_i32_Via_struct_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 };
@@ -2198,8 +2878,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -2221,8 +2899,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessFunctionASTest, Enabled_Param_ptr_arr_i32_Via_struct_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 };
@@ -2238,8 +2914,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 }
@@ -2261,8 +2935,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessFunctionASTest, Enabled_Param_ptr_i32_mixed) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 };
@@ -2283,8 +2955,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -2320,10 +2990,181 @@ fn b() {
     EXPECT_EQ(expect, str(got));
 }
 
+TEST_F(DirectVariableAccessFunctionASTest, Enabled_CallChaining) {
+    auto* src = R"(
+struct Inner {
+  mat : mat3x4<f32>,
+};
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+};
+
+fn f0(p : ptr<function, vec4<f32>>) -> f32 {
+  return (*p).x;
+}
+
+fn f1(p : ptr<function, mat3x4<f32>>) -> f32 {
+  var res : f32;
+  {
+    // call f0() with inline usage of p
+    res += f0(&(*p)[1]);
+  }
+  {
+    // call f0() with pointer-let usage of p
+    let p_vec = &(*p)[1];
+    res += f0(p_vec);
+  }
+  return res;
+}
+
+fn f2(p : ptr<function, Inner>) -> f32 {
+  let p_mat = &(*p).mat;
+  return f1(p_mat);
+}
+
+fn f3(p : ptr<function, InnerArr>) -> f32 {
+  let p_inner = &(*p)[3];
+  return f2(p_inner);
+}
+
+fn f4(p : ptr<function, Outer>) -> f32 {
+  return f3(&(*p).arr);
+}
+
+fn b() {
+  var S : Outer;
+  f4(&S);
+}
+)";
+
+    auto* expect =
+        R"(
+struct Inner {
+  mat : mat3x4<f32>,
+}
+
+alias InnerArr = array<Inner, 4>;
+
+struct Outer {
+  arr : InnerArr,
+  mat : mat3x4<f32>,
+}
+
+fn f0(p : ptr<function, vec4<f32>>) -> f32 {
+  return (*(p)).x;
+}
+
+fn f1(p : ptr<function, mat3x4<f32>>) -> f32 {
+  var res : f32;
+  {
+    res += f0(&((*(p))[1]));
+  }
+  {
+    let p_vec = &((*(p))[1]);
+    res += f0(p_vec);
+  }
+  return res;
+}
+
+fn f2(p : ptr<function, Inner>) -> f32 {
+  let p_mat = &((*(p)).mat);
+  return f1(p_mat);
+}
+
+fn f3(p : ptr<function, InnerArr>) -> f32 {
+  let p_inner = &((*(p))[3]);
+  return f2(p_inner);
+}
+
+fn f4(p : ptr<function, Outer>) -> f32 {
+  return f3(&((*(p)).arr));
+}
+
+fn b() {
+  var S : Outer;
+  f4(&(S));
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+TEST_F(DirectVariableAccessFunctionASTest, Enabled_CallChaining2) {
+    auto* src = R"(
+alias T3 = vec4i;
+alias T2 = array<T3, 5>;
+alias T1 = array<T2, 5>;
+alias T = array<T1, 5>;
+
+fn f2(p : ptr<function, T2>) -> T3 {
+  return (*p)[3];
+}
+
+fn f1(p : ptr<function, T1>) -> T3 {
+  return f2(&(*p)[2]);
+}
+
+fn f0(p : ptr<function, T>) -> T3 {
+  return f1(&(*p)[1]);
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  var v : T;
+  f0(&v);
+}
+)";
+
+    auto* expect =
+        R"(
+alias T3 = vec4i;
+
+alias T2 = array<T3, 5>;
+
+alias T1 = array<T2, 5>;
+
+alias T = array<T1, 5>;
+
+alias F_X_X = array<u32, 2u>;
+
+fn f2_F_X_X(p_base : ptr<function, array<array<array<vec4<i32>, 5u>, 5u>, 5u>>, p_indices : F_X_X) -> T3 {
+  return (*(p_base))[p_indices[0]][p_indices[1]][3];
+}
+
+alias F_X = array<u32, 1u>;
+
+alias F_X_X_1 = array<u32, 2u>;
+
+fn f1_F_X(p_base : ptr<function, array<array<array<vec4<i32>, 5u>, 5u>, 5u>>, p_indices : F_X) -> T3 {
+  return f2_F_X_X(p_base, F_X_X_1(p_indices[0u], 2));
+}
+
+alias F_X_1 = array<u32, 1u>;
+
+fn f0_F(p : ptr<function, array<array<array<vec4<i32>, 5u>, 5u>, 5u>>) -> T3 {
+  return f1_F_X(p, F_X_1(1));
+}
+
+@compute @workgroup_size(1)
+fn main() {
+  var v : T;
+  f0_F(&(v));
+}
+)";
+
+    auto got = Run<DirectVariableAccess>(src, EnableFunction());
+
+    EXPECT_EQ(expect, str(got));
+}
+
 TEST_F(DirectVariableAccessFunctionASTest, Disabled_Param_ptr_i32_Via_struct_read) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : i32,
 }
@@ -2347,8 +3188,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessFunctionASTest, Disabled_Param_ptr_arr_i32_Via_struct_write) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   arr : array<i32, 4>,
 }
@@ -2381,8 +3220,6 @@ using DirectVariableAccessComplexTest = TransformTest;
 
 TEST_F(DirectVariableAccessComplexTest, Param_ptr_mixed_vec4i32_ViaMultiple) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : vec4<i32>,
 };
@@ -2451,8 +3288,6 @@ fn b() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 struct str {
   i : vec4<i32>,
 }
@@ -2581,8 +3416,6 @@ fn b() {
 
 TEST_F(DirectVariableAccessComplexTest, Indexing) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage> S : array<array<array<array<i32, 9>, 9>, 9>, 50>;
 
 fn a(i : i32) -> i32 { return i; }
@@ -2599,8 +3432,6 @@ fn c() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage> S : array<array<array<array<i32, 9>, 9>, 9>, 50>;
 
 fn a(i : i32) -> i32 {
@@ -2625,8 +3456,6 @@ fn c() {
 
 TEST_F(DirectVariableAccessComplexTest, IndexingInPtrCall) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage> S : array<array<array<array<i32, 9>, 9>, 9>, 50>;
 
 fn a(pre : i32, i : ptr<storage, i32>, post : i32) -> i32 {
@@ -2645,14 +3474,12 @@ fn c() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage> S : array<array<array<array<i32, 9>, 9>, 9>, 50>;
 
 alias S_X_X_X_X = array<u32, 4u>;
 
 fn a_S_X_X_X_X(pre : i32, i : S_X_X_X_X, post : i32) -> i32 {
-  return S[i[0]][i[0]][i[1]][i[2]];
+  return S[i[0]][i[1]][i[2]][i[3]];
 }
 
 alias S_X = array<u32, 1u>;
@@ -2673,8 +3500,6 @@ fn c() {
 
 TEST_F(DirectVariableAccessComplexTest, IndexingDualPointers) {
     auto* src = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage> S : array<array<array<i32, 9>, 9>, 50>;
 @group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 9>, 9>, 50>;
 
@@ -2692,8 +3517,6 @@ fn c() {
 )";
 
     auto* expect = R"(
-enable chromium_experimental_full_ptr_parameters;
-
 @group(0) @binding(0) var<storage> S : array<array<array<i32, 9>, 9>, 50>;
 
 @group(0) @binding(0) var<uniform> U : array<array<array<vec4<i32>, 9>, 9>, 50>;

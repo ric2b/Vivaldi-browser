@@ -6,27 +6,35 @@
 #define CHROME_BROWSER_ENTERPRISE_DATA_CONTROLS_CHROME_DLP_RULES_MANAGER_H_
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/substring_set_matcher/matcher_string_pattern.h"
-#include "chrome/browser/enterprise/data_controls/dlp_rules_manager_base.h"
+#include "components/enterprise/data_controls/action_context.h"
+#include "components/enterprise/data_controls/dlp_rules_manager_base.h"
 #include "components/enterprise/data_controls/rule.h"
+#include "components/enterprise/data_controls/verdict.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/url_matcher/url_matcher.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
 namespace data_controls {
 
+class ChromeDlpRulesManagerTest;
+class RulesService;
+class RulesServiceFactory;
+
 // Implementation of DlpRulesManagerBase common to all desktop platforms.
-class ChromeDlpRulesManager : public policy::DlpRulesManagerBase {
+class ChromeDlpRulesManager : public DlpRulesManagerBase {
  public:
   using RuleId = int;
   using UrlConditionId = base::MatcherStringPattern::ID;
   using RulesConditionsMap = std::map<RuleId, UrlConditionId>;
+
+  ~ChromeDlpRulesManager() override;
 
   // DlpRulesManagerBase:
   Level IsRestricted(const GURL& source,
@@ -50,15 +58,23 @@ class ChromeDlpRulesManager : public policy::DlpRulesManagerBase {
       Level level,
       RuleMetadata* out_rule_metadata) const override;
 
+  // Returns a `Verdict` corresponding to all triggered Data Control rules given
+  // the provided context.
+  Verdict GetVerdict(Restriction restriction,
+                     const ActionContext& context) const;
+
  protected:
+  friend class data_controls::ChromeDlpRulesManagerTest;
+  friend class data_controls::RulesService;
+  friend class data_controls::RulesServiceFactory;
+
   explicit ChromeDlpRulesManager(Profile* profile);
-  ~ChromeDlpRulesManager() override;
 
   template <typename T>
   struct MatchedRuleInfo {
     MatchedRuleInfo(Level level,
-                    absl::optional<RuleId> rule_id,
-                    absl::optional<T> url_condition)
+                    std::optional<RuleId> rule_id,
+                    std::optional<T> url_condition)
         : level(level), rule_id(rule_id), url_condition(url_condition) {}
     MatchedRuleInfo(const MatchedRuleInfo&) = default;
     MatchedRuleInfo() = default;
@@ -66,8 +82,8 @@ class ChromeDlpRulesManager : public policy::DlpRulesManagerBase {
     ~MatchedRuleInfo() = default;
 
     Level level;
-    absl::optional<RuleId> rule_id;
-    absl::optional<T> url_condition;
+    std::optional<RuleId> rule_id;
+    std::optional<T> url_condition;
   };
 
   // Matches `url` against `url_matcher` patterns and returns the rules IDs

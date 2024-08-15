@@ -43,8 +43,9 @@ class Device;
 
 class PipelineLayout final : public PipelineLayoutBase {
   public:
-    static ResultOrError<Ref<PipelineLayout>> Create(Device* device,
-                                                     const PipelineLayoutDescriptor* descriptor);
+    static ResultOrError<Ref<PipelineLayout>> Create(
+        Device* device,
+        const UnpackedPtr<PipelineLayoutDescriptor>& descriptor);
 
     uint32_t GetCbvUavSrvRootParameterIndex(BindGroupIndex group) const;
     uint32_t GetSamplerRootParameterIndex(BindGroupIndex group) const;
@@ -74,7 +75,7 @@ class PipelineLayout final : public PipelineLayoutBase {
 
     ID3D12CommandSignature* GetDrawIndexedIndirectCommandSignatureWithInstanceVertexOffsets();
 
-    struct PerBindGroupDynamicStorageBufferLengthInfo {
+    struct BindGroupDynamicStorageBufferLengthInfo {
         // First register offset for a bind group's dynamic storage buffer lengths.
         // This is the index into the array of root constants where this bind group's
         // lengths start.
@@ -92,8 +93,7 @@ class PipelineLayout final : public PipelineLayoutBase {
 
     // Flat map from bind group index to the list of (BindingNumber,Register) pairs.
     // Each pair is used in shader translation to
-    using DynamicStorageBufferLengthInfo =
-        ityp::array<BindGroupIndex, PerBindGroupDynamicStorageBufferLengthInfo, kMaxBindGroups>;
+    using DynamicStorageBufferLengthInfo = PerBindGroup<BindGroupDynamicStorageBufferLengthInfo>;
 
     const DynamicStorageBufferLengthInfo& GetDynamicStorageBufferLengthInfo() const;
 
@@ -103,10 +103,9 @@ class PipelineLayout final : public PipelineLayoutBase {
     MaybeError Initialize();
     void DestroyImpl() override;
 
-    ityp::array<BindGroupIndex, uint32_t, kMaxBindGroups> mCbvUavSrvRootParameterInfo;
-    ityp::array<BindGroupIndex, uint32_t, kMaxBindGroups> mSamplerRootParameterInfo;
-    ityp::array<BindGroupIndex, ityp::vector<BindingIndex, uint32_t>, kMaxBindGroups>
-        mDynamicRootParameterIndices;
+    PerBindGroup<uint32_t> mCbvUavSrvRootParameterInfo;
+    PerBindGroup<uint32_t> mSamplerRootParameterInfo;
+    PerBindGroup<ityp::vector<BindingIndex, uint32_t>> mDynamicRootParameterIndices;
     DynamicStorageBufferLengthInfo mDynamicStorageBufferLengthInfo;
     uint32_t mFirstIndexOffsetParameterIndex;
     uint32_t mNumWorkgroupsParameterIndex;

@@ -61,7 +61,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) TextMessageProvider
   bool IsAllowTextMessagesPolicySet();
   bool IsMessageSuppressedByUser(const std::string& guid);
 
-  absl::optional<PolicyTextMessageSuppressionState> policy_suppression_state_;
+  std::optional<PolicyTextMessageSuppressionState> policy_suppression_state_;
 
   base::ScopedObservation<NetworkSmsHandler, NetworkSmsHandler::Observer>
       network_sms_handler_observer_{this};
@@ -73,8 +73,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) TextMessageProvider
   raw_ptr<ManagedNetworkConfigurationHandler>
       managed_network_configuration_handler_ = nullptr;
 
-  raw_ptr<NetworkMetadataStore, DanglingUntriaged | ExperimentalAsh>
-      network_metadata_store_ = nullptr;
+  raw_ptr<NetworkMetadataStore, DanglingUntriaged> network_metadata_store_ =
+      nullptr;
 
   base::ObserverList<TextMessageProvider::Observer> observers_;
 };

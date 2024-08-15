@@ -112,7 +112,7 @@ class MediaTrayTest : public AshTestBase {
 
  private:
   std::unique_ptr<MockMediaNotificationProvider> provider_;
-  raw_ptr<MediaTray, DanglingUntriaged | ExperimentalAsh> media_tray_;
+  raw_ptr<MediaTray, DanglingUntriaged> media_tray_;
   std::unique_ptr<MockTrayBackgroundView> mock_tray_;
 };
 
@@ -359,7 +359,7 @@ TEST_F(MediaTrayTest, ShowBubble) {
   // We start with no bubble view.
   EXPECT_EQ(nullptr, media_tray()->GetBubbleView());
 
-  EXPECT_CALL(*provider(), GetMediaNotificationListView(_, _, "", ""));
+  EXPECT_CALL(*provider(), GetMediaNotificationListView(_, _, _, ""));
   media_tray()->ShowBubble();
   EXPECT_NE(nullptr, media_tray()->GetBubbleView());
 }
@@ -369,9 +369,18 @@ TEST_F(MediaTrayTest, ShowBubbleWithItem) {
   EXPECT_EQ(nullptr, media_tray()->GetBubbleView());
 
   const std::string item_id = "my-item-id";
-  EXPECT_CALL(*provider(), GetMediaNotificationListView(_, _, item_id, ""));
+  EXPECT_CALL(*provider(), GetMediaNotificationListView(_, _, _, item_id));
   media_tray()->ShowBubbleWithItem(item_id);
   EXPECT_NE(nullptr, media_tray()->GetBubbleView());
+}
+
+TEST_F(MediaTrayTest, CloseBubbleIsNoopWhenNoBubble) {
+  // Start out with no bubble.
+  ASSERT_EQ(nullptr, media_tray()->GetBubbleView());
+
+  // `OnBubbleClosing()` should not be called when there is no bubble to close.
+  EXPECT_CALL(*provider(), OnBubbleClosing).Times(0);
+  media_tray()->CloseBubble();
 }
 
 }  // namespace ash

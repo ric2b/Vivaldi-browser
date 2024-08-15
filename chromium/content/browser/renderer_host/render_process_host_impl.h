@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -36,6 +37,7 @@
 #include "content/browser/renderer_host/render_process_host_internal_observer.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/tracing/tracing_service_controller.h"
+#include "content/common/buildflags.h"
 #include "content/common/child_process.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/media/media_log_records.mojom-forward.h"
@@ -66,7 +68,6 @@
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/tracing/public/mojom/traced_process.mojom-forward.h"
 #include "services/viz/public/mojom/compositing/compositing_mode_watcher.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/associated_interfaces/associated_interfaces.mojom-forward.h"
 #include "third_party/blink/public/mojom/background_sync/background_sync.mojom-forward.h"
@@ -264,7 +265,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void SetSuddenTerminationAllowed(bool enabled) override;
   bool SuddenTerminationAllowed() override;
   IPC::ChannelProxy* GetChannel() override;
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
   void AddFilter(BrowserMessageFilter* filter) override;
+#endif
   bool FastShutdownStarted() override;
   base::TimeDelta GetChildProcessIdleTime() override;
   viz::GpuClient* GetGpuClient();
@@ -289,8 +292,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
       const GlobalRenderFrameHostId& render_frame_host_id) override;
   void UnregisterRenderFrameHost(
       const GlobalRenderFrameHostId& render_frame_host_id) override;
-  void ForEachRenderFrameHost(base::RepeatingCallback<void(RenderFrameHost*)>
-                                  on_render_frame_host) override;
+  void ForEachRenderFrameHost(
+      base::FunctionRef<void(RenderFrameHost*)> on_render_frame_host) override;
   void IncrementWorkerRefCount() override;
   void DecrementWorkerRefCount() override;
   void IncrementPendingReuseRefCount() override;
@@ -307,6 +310,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void SetIsUsed() override;
 
   bool HostHasNotBeenUsed() override;
+  bool IsSpare() const override;
   void SetProcessLock(const IsolationContext& isolation_context,
                       const ProcessLock& process_lock) override;
   ProcessLock GetProcessLock() const override;
@@ -358,15 +362,14 @@ class CONTENT_EXPORT RenderProcessHostImpl
     child_process_activity_time_ = base::TimeTicks::Now();
   }
 
-  // Return the set of previously stored frame tokens for a |new_routing_id|.
-  // The frame tokens were stored on the IO thread via the
+  // Return the set of previously stored data for a `frame_token`.
+  // The routing ID and frame tokens were stored on the IO thread via the
   // RenderMessageFilter::GenerateFrameRoutingID mojo call. Returns false if
-  // |new_routing_id| was not found in the token table.
-  bool TakeFrameTokensForFrameRoutingID(
-      int32_t new_routing_id,
-      blink::LocalFrameToken& frame_token,
-      base::UnguessableToken& devtools_frame_token,
-      blink::DocumentToken& document_token);
+  // `frame_token` was not found in the token table.
+  bool TakeStoredDataForFrameToken(const blink::LocalFrameToken& frame_token,
+                                   int32_t& new_routing_id,
+                                   base::UnguessableToken& devtools_frame_token,
+                                   blink::DocumentToken& document_token);
 
   void AddInternalObserver(RenderProcessHostInternalObserver* observer);
   void RemoveInternalObserver(RenderProcessHostInternalObserver* observer);
@@ -596,13 +599,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Iterate over all renderers and clear their in-memory resource cache.
   static void ClearAllResourceCaches();
 
-  // Helper method that allows crash reporting logic to determine if a
-  // specific RenderProcessHost is the current spare process.
-  // Returns true if |render_process_host| is the current spare
-  // RenderProcessHost.
-  static bool IsSpareProcessForCrashReporting(
-      RenderProcessHost* render_process_host);
-
   PermissionServiceContext& permission_service_context() {
     return *permission_service_context_;
   }
@@ -783,6 +779,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
                            base::ScopedFD log_file_descriptor) override;
 #endif
 
+  void SetBatterySaverMode(bool battery_saver_mode_enabled) override;
+
   int keep_alive_ref_count() const { return keep_alive_ref_count_; }
   int worker_ref_count() const { return worker_ref_count_; }
 
@@ -906,6 +904,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void SetPrivateMemoryFootprint(
       uint64_t private_memory_footprint_bytes) override;
 #endif
+  void HasGpuProcess(HasGpuProcessCallback callback) override;
 
   void CreateEmbeddedFrameSinkProvider(
       mojo::PendingReceiver<blink::mojom::EmbeddedFrameSinkProvider> receiver);
@@ -990,6 +989,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Handle termination of our process.
   void ProcessDied(const ChildProcessTerminationInfo& termination_info);
 
+  // Shutdowns the child process as fast as possible. This is similar to the
+  // public `FastShutdownIfPossible()` method, but doesn't perform any checks
+  // before initiating fast shutdown.
+  void FastShutdown();
+
   // Destroy all objects that can cause methods to be invoked on this object or
   // any other that hang off it.
   void ResetIPC();
@@ -1022,7 +1026,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // limit the maximum number of main frames a RenderProcessHost can host.
   static RenderProcessHost* FindReusableProcessHostForSiteInstance(
       SiteInstanceImpl* site_instance,
-      absl::optional<size_t> main_frame_threshold = absl::nullopt);
+      std::optional<size_t> main_frame_threshold = std::nullopt);
 
   void NotifyRendererOfLockedStateUpdate();
 
@@ -1160,7 +1164,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // ignored, and an externally computed process priority is used. Set to true
   // and the process will stay foreground priority; set to false and it will
   // stay background priority.
-  absl::optional<bool> priority_override_;
+  std::optional<bool> priority_override_;
 
   // Used to allow a RenderWidgetHost to intercept various messages on the
   // IO thread.
@@ -1361,7 +1365,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // destruction.
   class IOThreadHostImpl;
   friend class IOThreadHostImpl;
-  absl::optional<base::SequenceBound<IOThreadHostImpl>> io_thread_host_impl_;
+  std::optional<base::SequenceBound<IOThreadHostImpl>> io_thread_host_impl_;
 
   std::unique_ptr<FileBackedBlobFactoryWorkerImpl> file_backed_blob_factory_;
 

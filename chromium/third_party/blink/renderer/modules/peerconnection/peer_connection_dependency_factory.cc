@@ -51,6 +51,7 @@
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
 #include "third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl.h"
 #include "third_party/blink/renderer/platform/graphics/video_frame_sink_bundle.h"
+#include "third_party/blink/renderer/platform/heap/cross_thread_persistent.h"
 #include "third_party/blink/renderer/platform/mediastream/webrtc_uma_histograms.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
 #include "third_party/blink/renderer/platform/p2p/empty_network_manager.h"
@@ -70,13 +71,12 @@
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_std.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
-#include "third_party/webrtc/api/call/call_factory_interface.h"
+#include "third_party/webrtc/api/enable_media.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
 #include "third_party/webrtc/api/rtc_event_log/rtc_event_log_factory.h"
 #include "third_party/webrtc/api/video_track_source_proxy_factory.h"
 #include "third_party/webrtc/media/engine/fake_video_codec_factory.h"
 #include "third_party/webrtc/media/engine/multiplex_codec_factory.h"
-#include "third_party/webrtc/media/engine/webrtc_media_engine.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
 #include "third_party/webrtc/rtc_base/openssl_stream_adapter.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
@@ -194,13 +194,39 @@ class PeerConnectionStaticDeps {
   ~PeerConnectionStaticDeps() {
     if (chrome_worker_thread_.IsRunning()) {
       chrome_worker_thread_.task_runner()->DeleteSoon(
-          FROM_HERE, std::move(metronome_source_));
+          FROM_HERE, std::move(decode_metronome_source_));
+
+      if (encode_metronome_source_) {
+        chrome_worker_thread_.task_runner()->DeleteSoon(
+            FROM_HERE, std::move(encode_metronome_source_));
+      }
     }
   }
 
-  MetronomeSource& metronome_source() {
-    CHECK(metronome_source_);
-    return *metronome_source_;
+  std::unique_ptr<webrtc::Metronome> CreateDecodeMetronome() {
+    CHECK(decode_metronome_source_);
+    return decode_metronome_source_->CreateWebRtcMetronome();
+  }
+
+  std::unique_ptr<webrtc::Metronome> MaybeCreateEncodeMetronome() {
+    if (encode_metronome_source_) {
+      return encode_metronome_source_->CreateWebRtcMetronome();
+    } else {
+      return nullptr;
+    }
+  }
+
+  void EnsureVsyncProvider(ExecutionContext& context) {
+    if (!vsync_provider_) {
+      vsync_provider_.emplace(
+          Platform::Current()->VideoFrameCompositorTaskRunner(),
+          To<LocalDOMWindow>(context)
+              .GetFrame()
+              ->GetPage()
+              ->GetChromeClient()
+              .GetFrameSinkId(To<LocalDOMWindow>(context).GetFrame())
+              .client_id());
+    }
   }
 
   void EnsureChromeThreadsStarted(ExecutionContext& context) {
@@ -225,17 +251,10 @@ class PeerConnectionStaticDeps {
     // To allow sending to the signaling/worker threads.
     webrtc::ThreadWrapper::EnsureForCurrentMessageLoop();
     webrtc::ThreadWrapper::current()->set_send_allowed(true);
-    if (!metronome_source_) {
+    if (!decode_metronome_source_) {
       std::unique_ptr<MetronomeSource::TickProvider> tick_provider;
       if (base::FeatureList::IsEnabled(features::kVSyncDecoding)) {
-        vsync_provider_.emplace(
-            Platform::Current()->VideoFrameCompositorTaskRunner(),
-            To<LocalDOMWindow>(context)
-                .GetFrame()
-                ->GetPage()
-                ->GetChromeClient()
-                .GetFrameSinkId(To<LocalDOMWindow>(context).GetFrame())
-                .client_id());
+        EnsureVsyncProvider(context);
         tick_provider = VSyncTickProvider::Create(
             *vsync_provider_, chrome_worker_thread_.task_runner(),
             std::make_unique<TimerBasedTickProvider>(
@@ -244,7 +263,18 @@ class PeerConnectionStaticDeps {
         tick_provider = std::make_unique<TimerBasedTickProvider>(
             TimerBasedTickProvider::kDefaultPeriod);
       }
-      metronome_source_ =
+      decode_metronome_source_ =
+          std::make_unique<MetronomeSource>(std::move(tick_provider));
+    }
+    if (base::FeatureList::IsEnabled(features::kVSyncEncoding) &&
+        !encode_metronome_source_) {
+      std::unique_ptr<MetronomeSource::TickProvider> tick_provider;
+      EnsureVsyncProvider(context);
+      tick_provider = VSyncTickProvider::Create(
+          *vsync_provider_, chrome_worker_thread_.task_runner(),
+          std::make_unique<TimerBasedTickProvider>(
+              features::kVSyncDecodingHiddenOccludedTickDuration.Get()));
+      encode_metronome_source_ =
           std::make_unique<MetronomeSource>(std::move(tick_provider));
     }
   }
@@ -369,7 +399,10 @@ class PeerConnectionStaticDeps {
   base::Thread chrome_worker_thread_;
   absl::optional<base::Thread> chrome_network_thread_;
 
-  std::unique_ptr<MetronomeSource> metronome_source_;
+  // Metronome source used for driving decoding and encoding, created from
+  // renderer main thread, always used and destroyed on `chrome_worker_thread_`.
+  std::unique_ptr<MetronomeSource> decode_metronome_source_;
+  std::unique_ptr<MetronomeSource> encode_metronome_source_;
 
   // WaitableEvents for observing thread initialization.
   base::WaitableEvent init_signaling_event{
@@ -444,8 +477,8 @@ PeerConnectionDependencyFactory::PeerConnectionDependencyFactory(
   context.GetBrowserInterfaceBroker().GetInterface(
       perf_recorder.InitWithNewPipeAndPassReceiver());
 
-  webrtc_video_perf_reporter_.Initialize(
-      context.GetTaskRunner(TaskType::kInternalMedia),
+  webrtc_video_perf_reporter_ = MakeGarbageCollected<WebrtcVideoPerfReporter>(
+      context.GetTaskRunner(TaskType::kInternalMedia), &context,
       std::move(perf_recorder));
 }
 
@@ -627,7 +660,7 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
       base::FeatureList::IsEnabled(features::kWebRtcSendPacketBatch));
 
   gpu_factories_ = gpu_factories;
-  // base::Unretained is safe below, because
+  // WrapCrossThreadWeakPersistent is safe below, because
   // PeerConnectionDependencyFactory (that holds `webrtc_video_perf_reporter_`)
   // outlives the encoders and decoders that are using the callback. The
   // lifetime of PeerConnectionDependencyFactory is tied to the ExecutionContext
@@ -638,13 +671,15 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
       blink::CreateWebrtcVideoEncoderFactory(
           gpu_factories, std::move(video_encoder_metrics_provider_factory),
           base::BindRepeating(&WebrtcVideoPerfReporter::StoreWebrtcVideoStats,
-                              base::Unretained(&webrtc_video_perf_reporter_)));
+                              WrapCrossThreadWeakPersistent(
+                                  webrtc_video_perf_reporter_.Get())));
   std::unique_ptr<webrtc::VideoDecoderFactory> webrtc_decoder_factory =
       blink::CreateWebrtcVideoDecoderFactory(
           gpu_factories, media_decoder_factory, std::move(media_task_runner),
           render_color_space,
           base::BindRepeating(&WebrtcVideoPerfReporter::StoreWebrtcVideoStats,
-                              base::Unretained(&webrtc_video_perf_reporter_)));
+                              WrapCrossThreadWeakPersistent(
+                                  webrtc_video_perf_reporter_.Get())));
 
   // Enable Multiplex codec in SDP optionally.
   if (base::FeatureList::IsEnabled(blink::features::kWebRtcMultiplexCodec)) {
@@ -669,24 +704,18 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
     LOG(INFO) << "Running WebRTC with a combined Network and Worker thread.";
   }
   pcf_deps.task_queue_factory = CreateWebRtcTaskQueueFactory();
-  if (base::FeatureList::IsEnabled(blink::features::kWebRtcMetronome)) {
-    pcf_deps.metronome =
-        StaticDeps().metronome_source().CreateWebRtcMetronome();
-  }
-  pcf_deps.call_factory = webrtc::CreateCallFactory();
-  pcf_deps.event_log_factory = std::make_unique<webrtc::RtcEventLogFactory>(
-      pcf_deps.task_queue_factory.get());
-  cricket::MediaEngineDependencies media_deps;
-  media_deps.task_queue_factory = pcf_deps.task_queue_factory.get();
-  media_deps.adm = audio_device_.get();
-  media_deps.audio_encoder_factory = blink::CreateWebrtcAudioEncoderFactory();
-  media_deps.audio_decoder_factory = blink::CreateWebrtcAudioDecoderFactory();
-  media_deps.video_encoder_factory = std::move(webrtc_encoder_factory);
-  media_deps.video_decoder_factory = std::move(webrtc_decoder_factory);
+  pcf_deps.decode_metronome = StaticDeps().CreateDecodeMetronome();
+  pcf_deps.encode_metronome = StaticDeps().MaybeCreateEncodeMetronome();
+  pcf_deps.event_log_factory = std::make_unique<webrtc::RtcEventLogFactory>();
+  pcf_deps.adm = audio_device_.get();
+  pcf_deps.audio_encoder_factory = blink::CreateWebrtcAudioEncoderFactory();
+  pcf_deps.audio_decoder_factory = blink::CreateWebrtcAudioDecoderFactory();
+  pcf_deps.video_encoder_factory = std::move(webrtc_encoder_factory);
+  pcf_deps.video_decoder_factory = std::move(webrtc_decoder_factory);
   // Audio Processing Module (APM) instances are owned and handled by the Blink
   // media stream module.
-  DCHECK_EQ(media_deps.audio_processing.get(), nullptr);
-  pcf_deps.media_engine = cricket::CreateMediaEngine(std::move(media_deps));
+  DCHECK_EQ(pcf_deps.audio_processing.get(), nullptr);
+  webrtc::EnableMedia(pcf_deps);
   pc_factory_ = webrtc::CreateModularPeerConnectionFactory(std::move(pcf_deps));
   CHECK(pc_factory_.get());
 
@@ -716,9 +745,6 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
   // |web_frame| may be null in tests, e.g. if
   // RTCPeerConnectionHandler::InitializeForTest() is used.
   if (web_frame) {
-    rtc::SetAllowLegacyTLSProtocols(web_frame->View()
-                                        ->GetRendererPreferences()
-                                        .webrtc_allow_legacy_tls_protocols);
     dependencies.allocator = CreatePortAllocator(web_frame);
   }
   dependencies.async_dns_resolver_factory = CreateAsyncDnsResolverFactory();
@@ -913,7 +939,6 @@ void PeerConnectionDependencyFactory::ContextDestroyed() {
 void PeerConnectionDependencyFactory::CleanupPeerConnectionFactory() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(1) << "PeerConnectionDependencyFactory::CleanupPeerConnectionFactory()";
-  webrtc_video_perf_reporter_.Shutdown();
   socket_factory_ = nullptr;
   // Not obtaining `signaling_thread` using GetWebRtcSignalingTaskRunner()
   // because that method triggers EnsureInitialized() and we're trying to
@@ -1023,5 +1048,11 @@ void PeerConnectionDependencyFactory::Trace(Visitor* visitor) const {
   Supplement<ExecutionContext>::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
   visitor->Trace(p2p_socket_dispatcher_);
+  visitor->Trace(webrtc_video_perf_reporter_);
+}
+
+std::unique_ptr<webrtc::Metronome>
+PeerConnectionDependencyFactory::CreateDecodeMetronome() {
+  return StaticDeps().CreateDecodeMetronome();
 }
 }  // namespace blink

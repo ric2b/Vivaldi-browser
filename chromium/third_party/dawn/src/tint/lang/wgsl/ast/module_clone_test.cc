@@ -38,7 +38,6 @@ namespace {
 
 TEST(ModuleCloneTest, Clone) {
     // Shader that exercises the bulk of the AST nodes and types.
-    // See also fuzzers/tint_ast_clone_fuzzer.cc for further coverage of cloning.
     Source::File file("test.wgsl", R"(enable f16;
 diagnostic(off, chromium.unreachable_code);
 
@@ -137,7 +136,9 @@ const declaration_order_check_4 : i32 = 1;
 )");
 
     // Parse the wgsl, create the src program
-    auto src = wgsl::reader::Parse(&file);
+    wgsl::reader::Options parser_options;
+    parser_options.allowed_features = wgsl::AllowedFeatures::Everything();
+    auto src = wgsl::reader::Parse(&file, parser_options);
 
     ASSERT_TRUE(src.IsValid()) << src.Diagnostics();
 
@@ -172,7 +173,7 @@ const declaration_order_check_4 : i32 = 1;
     std::string src_wgsl;
     {
         auto result = wgsl::writer::Generate(src, options);
-        ASSERT_TRUE(result) << result.Failure();
+        ASSERT_EQ(result, Success);
         src_wgsl = result->wgsl;
 
         // Move the src program to a temporary that'll be dropped, so that the src
@@ -185,7 +186,7 @@ const declaration_order_check_4 : i32 = 1;
 
     // Print the dst module, check it matches the original source
     auto result = wgsl::writer::Generate(dst, options);
-    ASSERT_TRUE(result);
+    ASSERT_EQ(result, Success);
     auto dst_wgsl = result->wgsl;
     ASSERT_EQ(src_wgsl, dst_wgsl);
 }

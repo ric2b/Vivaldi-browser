@@ -19,19 +19,16 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
-#include "base/time/default_clock.h"
 #include "components/services/storage/indexed_db/locks/partitioned_lock_manager.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom-test-utils.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "content/browser/indexed_db/indexed_db_bucket_context.h"
 #include "content/browser/indexed_db/indexed_db_class_factory.h"
-#include "content/browser/indexed_db/indexed_db_client_state_checker_wrapper.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
 #include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
-#include "content/browser/indexed_db/mock_indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/mock_indexed_db_factory_client.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/mock_mojo_indexed_db_factory_client.h"
@@ -66,20 +63,22 @@ base::FilePath CreateAndReturnTempDir(base::ScopedTempDir* temp_dir) {
 class LevelDBLock {
  public:
   LevelDBLock() = default;
-  LevelDBLock(leveldb::Env* env, leveldb::FileLock* lock)
-      : env_(env), lock_(lock) {}
+  LevelDBLock(leveldb::Env* env, std::unique_ptr<leveldb::FileLock> lock)
+      : env_(env), lock_(std::move(lock)) {}
 
   LevelDBLock(const LevelDBLock&) = delete;
   LevelDBLock& operator=(const LevelDBLock&) = delete;
 
   ~LevelDBLock() {
-    if (env_)
-      env_->UnlockFile(lock_);
+    if (env_) {
+      // The call to UnlockFile assumes ownership of the lock.
+      env_->UnlockFile(lock_.release());
+    }
   }
 
  private:
   raw_ptr<leveldb::Env> env_ = nullptr;
-  raw_ptr<leveldb::FileLock, DanglingUntriaged> lock_ = nullptr;
+  std::unique_ptr<leveldb::FileLock> lock_;
 };
 
 std::unique_ptr<LevelDBLock> LockForTesting(const base::FilePath& file_name) {
@@ -90,7 +89,8 @@ std::unique_ptr<LevelDBLock> LockForTesting(const base::FilePath& file_name) {
   if (!status.ok())
     return nullptr;
   DCHECK(lock);
-  return std::make_unique<LevelDBLock>(env, lock);
+  return std::make_unique<LevelDBLock>(
+      env, std::unique_ptr<leveldb::FileLock>(lock));
 }
 
 }  // namespace
@@ -133,10 +133,9 @@ class IndexedDBTest
             base::MakeRefCounted<storage::MockQuotaManagerProxy>(
                 quota_manager_.get(),
                 base::SequencedTaskRunner::GetCurrentDefault())),
-        context_(base::MakeRefCounted<IndexedDBContextImpl>(
+        context_(std::make_unique<IndexedDBContextImpl>(
             temp_dir_.GetPath(),
             quota_manager_proxy_.get(),
-            base::DefaultClock::GetInstance(),
             /*blob_storage_context=*/mojo::NullRemote(),
             /*file_system_access_context=*/mojo::NullRemote(),
             base::SequencedTaskRunner::GetCurrentDefault(),
@@ -246,7 +245,7 @@ class IndexedDBTest
       // Loop through all open buckets, and force close them, and request
       // the deletion of the leveldb state. Once the states are no longer
       // around, delete all of the databases on disk.
-      for (const auto& bucket_id : factory->GetOpenBuckets()) {
+      for (const auto& bucket_id : factory->GetOpenBucketIdsForTesting()) {
         context_->ForceClose(
             bucket_id,
             storage::mojom::ForceCloseReason::FORCE_CLOSE_DELETE_ORIGIN,
@@ -356,7 +355,7 @@ class IndexedDBTest
   scoped_refptr<storage::MockSpecialStoragePolicy> special_storage_policy_;
   scoped_refptr<storage::MockQuotaManager> quota_manager_;
   scoped_refptr<storage::MockQuotaManagerProxy> quota_manager_proxy_;
-  scoped_refptr<IndexedDBContextImpl> context_;
+  std::unique_ptr<IndexedDBContextImpl> context_;
   mojo::Remote<blink::mojom::IDBFactory> factory_remote_;
 };
 
@@ -431,7 +430,7 @@ TEST_P(IndexedDBTest, ClearSessionOnlyDatabases) {
   context()->ForceInitializeFromFilesForTesting(run_loop.QuitClosure());
   run_loop.Run();
 
-  context()->Shutdown();
+  IndexedDBContextImpl::Shutdown(std::move(context_));
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(base::DirectoryExists(normal_path_first_party));
@@ -488,7 +487,7 @@ TEST_P(IndexedDBTest, SetForceKeepSessionState) {
   context()->ForceInitializeFromFilesForTesting(base::DoNothing());
   base::RunLoop().RunUntilIdle();
 
-  context()->Shutdown();
+  IndexedDBContextImpl::Shutdown(std::move(context_));
   base::RunLoop().RunUntilIdle();
 
   // No data was cleared because of SetForceKeepSessionState.
@@ -531,7 +530,11 @@ TEST_P(IndexedDBTestFirstOrThirdParty, ForceCloseOpenDatabasesOnCommitFailure) {
   VerifyForcedClosedCalled(
       base::BindOnce(
           [](IndexedDBFactory* factory, storage::BucketInfo* bucket_info) {
-            factory->HandleBackingStoreFailure(bucket_info->ToBucketLocator());
+            factory->GetBucketContextForTesting(bucket_info->id)
+                ->delegate()
+                .on_fatal_error.Run(
+                    leveldb::Status::NotSupported("operation not supported"),
+                    {});
           },
           context()->GetIDBFactory(), &bucket_info),
       &bucket_info);
@@ -567,7 +570,8 @@ TEST_P(IndexedDBTestFirstOrThirdParty,
       base::BindOnce(&IndexedDBFactory::ContextDestroyed,
                      base::Unretained(context()->GetIDBFactory())),
       &bucket_info);
-  EXPECT_FALSE(context()->GetIDBFactory()->GetBucketContext(bucket_info.id));
+  EXPECT_FALSE(
+      context()->GetIDBFactory()->GetBucketContextForTesting(bucket_info.id));
 }
 
 TEST_P(IndexedDBTestFirstOrThirdParty, DeleteFailsIfDirectoryLocked) {

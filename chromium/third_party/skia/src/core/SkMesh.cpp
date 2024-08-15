@@ -26,7 +26,6 @@
 #include "src/sksl/SkSLContext.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
-#include "src/sksl/SkSLUtil.h"
 #include "src/sksl/analysis/SkSLProgramVisitor.h"
 #include "src/sksl/ir/SkSLExpression.h"
 #include "src/sksl/ir/SkSLFieldAccess.h"
@@ -503,7 +502,7 @@ SkMeshSpecification::Result SkMeshSpecification::MakeFromSourceWithStructs(
     std::vector<Child> children;
     size_t offset = 0;
 
-    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Standalone());
+    SkSL::Compiler compiler;
 
     // Disable memory pooling; this might slow down compilation slightly, but it will ensure that a
     // long-lived mesh specification doesn't waste memory.
@@ -705,7 +704,7 @@ SkMesh::Result SkMesh::Make(sk_sp<SkMeshSpecification> spec,
     mesh.fMode     = mode;
     mesh.fVB       = std::move(vb);
     mesh.fUniforms = std::move(uniforms);
-    mesh.fChildren = std::vector<ChildPtr>(children.begin(), children.end());
+    mesh.fChildren.push_back_n(children.size(), children.data());
     mesh.fVCount   = vertexCount;
     mesh.fVOffset  = vertexOffset;
     mesh.fBounds   = bounds;
@@ -740,7 +739,7 @@ SkMesh::Result SkMesh::MakeIndexed(sk_sp<SkMeshSpecification> spec,
     mesh.fVOffset  = vertexOffset;
     mesh.fIB       = std::move(ib);
     mesh.fUniforms = std::move(uniforms);
-    mesh.fChildren = std::vector<ChildPtr>(children.begin(), children.end());
+    mesh.fChildren.push_back_n(children.size(), children.data());
     mesh.fICount   = indexCount;
     mesh.fIOffset  = indexOffset;
     mesh.fBounds   = bounds;
@@ -775,14 +774,14 @@ std::tuple<bool, SkString> SkMesh::validate() const {
         FAIL_MESH_VALIDATE("A vertex buffer is required.");
     }
 
-    if (fSpec->children().size() != fChildren.size()) {
+    if (fSpec->children().size() != SkToSizeT(fChildren.size())) {
         FAIL_MESH_VALIDATE("The mesh specification declares %zu child effects, "
-                           "but the mesh supplies %zu.",
+                           "but the mesh supplies %d.",
                            fSpec->children().size(),
                            fChildren.size());
     }
 
-    for (size_t index = 0; index < fChildren.size(); ++index) {
+    for (int index = 0; index < fChildren.size(); ++index) {
         const SkRuntimeEffect::Child& meshSpecChild = fSpec->children()[index];
         if (fChildren[index].type().has_value()) {
             if (meshSpecChild.type != fChildren[index].type()) {

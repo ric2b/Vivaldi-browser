@@ -24,6 +24,8 @@
 #include "tools/Stats.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/testrunners/benchmark/target/BenchmarkTarget.h"
+#include "tools/testrunners/common/compilation_mode_keys/CompilationModeKeys.h"
+#include "tools/testrunners/common/surface_manager/SurfaceManager.h"
 #include "tools/timer/Timer.h"
 
 #include <cinttypes>
@@ -80,6 +82,16 @@ static DEFINE_string(surfaceConfig,
                      "benchmarks will draw on. See file "
                      "//tools/testrunners/common/surface_manager/SurfaceManager.h for details.");
 
+static DEFINE_string(
+        cpuName,
+        "",
+        "Contents of the \"cpu_or_gpu_value\" dimension for CPU-bound traces (e.g. \"AVX512\").");
+
+static DEFINE_string(
+        gpuName,
+        "",
+        "Contents of the \"cpu_or_gpu_value\" dimension for GPU-bound traces (e.g. \"RTX3060\").");
+
 static DEFINE_bool(
         writePNGs,
         false,
@@ -116,6 +128,16 @@ static DEFINE_bool(csv, false, "Print status in CSV format.");
 static DEFINE_bool2(quiet, q, false, "if true, do not print status updates.");
 
 static DEFINE_bool2(verbose, v, false, "Enable verbose output from the test runner.");
+
+// Set in //bazel/devicesrc but only consumed by adb_test_runner.go. We cannot use the
+// DEFINE_string macro because the flag name includes dashes.
+[[maybe_unused]] static bool unused =
+        SkFlagInfo::CreateStringFlag("device-specific-bazel-config",
+                                     nullptr,
+                                     new CommandLineFlags::StringArray(),
+                                     nullptr,
+                                     "Ignored by this test runner.",
+                                     nullptr);
 
 // TODO(lovisolo): Move these flag validation utilities under //tools/testrunners.
 
@@ -196,6 +218,9 @@ static void validate_flags(bool isBazelTest) {
 
     validate_string_flag_nonempty("--surfaceConfig", FLAGS_surfaceConfig);
     validate_string_flag_single_value("--surfaceConfig", FLAGS_surfaceConfig);
+
+    validate_string_flag_single_value("--cpuName", FLAGS_cpuName);
+    validate_string_flag_single_value("--gpuName", FLAGS_gpuName);
 
     validate_flags_exactly_one(
             {{"--loops", FLAGS_loops != 0}, {"--autoTuneLoops", FLAGS_autoTuneLoops}});
@@ -587,6 +612,9 @@ int main(int argc, char** argv) {
     std::string outputDir =
             FLAGS_outputDir.isEmpty() ? testUndeclaredOutputsDir : FLAGS_outputDir[0];
 
+    std::string cpuName = FLAGS_cpuName.isEmpty() ? "" : FLAGS_cpuName[0];
+    std::string gpuName = FLAGS_gpuName.isEmpty() ? "" : FLAGS_gpuName[0];
+
     // Output JSON file.
     //
     // TODO(lovisolo): Define a constant with the file name, use it here and in flag descriptions.
@@ -599,7 +627,7 @@ int main(int argc, char** argv) {
         SkDebugf(
                 "Warning: No --gitHash flag was specified. Perf ingestion ignores JSON files that "
                 "do not specify a Git hash. This is fine for local debugging, but CI tasks should "
-                "always set the --gitHash flag.");
+                "always set the --gitHash flag.\n");
     }
     if (FLAGS_issue.size() == 1 && FLAGS_patchset.size() == 1) {
         jsonWriter.addChangelistInfo(FLAGS_issue[0], FLAGS_patchset[0]);
@@ -614,6 +642,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < FLAGS_key.size(); i += 2) {
         keyValuePairs[FLAGS_key[i - 1]] = FLAGS_key[i];
     }
+    keyValuePairs.merge(GetCompilationModeGoldAndPerfKeyValuePairs());
     jsonWriter.addKey(keyValuePairs);
 
     // Links.
@@ -633,6 +662,18 @@ int main(int argc, char** argv) {
 
         std::unique_ptr<BenchmarkTarget> target =
                 BenchmarkTarget::FromConfig(surfaceConfig, benchmark.get());
+
+        // Print warning about missing cpu_or_gpu key if necessary.
+        if (target->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kCPU && cpuName == "") {
+            SkDebugf(
+                    "Warning: The surface is CPU-bound, but flag --cpuName was not provided. "
+                    "Perf traces will omit keys \"cpu_or_gpu\" and \"cpu_or_gpu_value\".\n");
+        }
+        if (target->isCpuOrGpuBound() == SurfaceManager::CpuOrGpu::kGPU && gpuName == "") {
+            SkDebugf(
+                    "Warning: The surface is GPU-bound, but flag --gpuName was not provided. "
+                    "Perf traces will omit keys \"cpu_or_gpu\" and \"cpu_or_gpu_value\".\n");
+        }
 
         if (benchmark->isSuitableFor(target->getBackend())) {
             // Run benchmark and collect samples.
@@ -706,6 +747,7 @@ int main(int argc, char** argv) {
                     {"width", SkStringPrintf("%d", benchmark->getSize().width()).c_str()},
                     {"height", SkStringPrintf("%d", benchmark->getSize().height()).c_str()},
             };
+            result.key.merge(target->getKeyValuePairs(cpuName, gpuName));
             result.measurements["ms"] = {
                     // Based on
                     // https://skia.googlesource.com/skia/+/a063eaeaf1e09e4d6f42e0f44a5723622a46d21c/bench/nanobench.cpp#1571.

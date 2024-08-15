@@ -72,6 +72,9 @@ CK_DEFINES = [
     ":enable_fonts_true": ["CK_INCLUDE_PARAGRAPH"],
     ":enable_fonts_false": ["CK_NO_FONTS"],
 }) + select({
+    ":include_embedded_font_true": ["CK_EMBED_FONT"],
+    ":include_embedded_font_false": [],
+}) + select({
     ":enable_skp_serialization_true": ["CK_SERIALIZE_SKP=1"],
     ":enable_skp_serialization_false": [],
 }) + select({
@@ -277,13 +280,13 @@ cc_binary(
         "//:skia_public",
     ] + select({
         ":enable_fonts_true": [
-            "//modules/skparagraph",
-            "//modules/skunicode",
+            "//modules/skparagraph:legacy_skparagraph",
+            "//modules/skunicode:legacy_skunicode",
         ],
         ":enable_fonts_false": [],
     }) + select({
         ":enable_skottie_true": [
-            "//modules/skottie",
+            "//modules/skottie:legacy_skottie",
             "//modules/skottie:utils",
         ],
         ":enable_skottie_false": [],

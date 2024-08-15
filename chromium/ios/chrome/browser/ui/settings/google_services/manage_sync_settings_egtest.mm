@@ -6,11 +6,12 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/common/storage_type.h"
 #import "components/policy/policy_constants.h"
+#import "components/strings/grit/components_strings.h"
 #import "components/sync/base/features.h"
-#import "ios/chrome/browser/policy/policy_app_interface.h"
-#import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
-#import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/policy/model/policy_app_interface.h"
+#import "ios/chrome/browser/policy/model/policy_earl_grey_utils.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
@@ -25,9 +26,11 @@
 #import "ios/chrome/browser/ui/settings/password/password_manager_egtest_utils.h"
 #import "ios/chrome/browser/ui/settings/password/password_settings_app_interface.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/web_http_server_chrome_test_case.h"
@@ -59,14 +62,13 @@ void SignInWithPromoFromAccountSettings(FakeSystemIdentity* fake_identity,
                                    fake_identity.userEmail)]
       performAction:grey_tap()];
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityLabel(
-                                       l10n_util::GetNSStringF(
-                                           IDS_IOS_FIRST_RUN_SIGNIN_CONTINUE_AS,
-                                           base::SysNSStringToUTF16(
-                                               fake_identity.userGivenName))),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
+      selectElementWithMatcher:
+          grey_allOf(
+              chrome_test_util::StaticTextWithAccessibilityLabel(
+                  l10n_util::GetNSStringF(
+                      IDS_IOS_FIRST_RUN_SIGNIN_CONTINUE_AS,
+                      base::SysNSStringToUTF16(fake_identity.userGivenName))),
+              grey_sufficientlyVisible(), nil)] performAction:grey_tap()];
   if (expect_history_sync) {
     [[EarlGrey selectElementWithMatcher:
                    chrome_test_util::SigninScreenPromoPrimaryButtonMatcher()]
@@ -296,6 +298,146 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   // Verify the account settings row is not showing in the settings menu.
   [[EarlGrey selectElementWithMatcher:SettingsAccountButton()]
       assertWithMatcher:grey_notVisible()];
+}
+
+// Tests the unsynced data dialog shows when there are unsynced passwords. Also
+// verifies that the user is still signed in when the dialog Cancel button is
+// tapped. kReplaceSyncPromosWithSignInPromos is enabled.
+- (void)
+    testUnsyncedDataDialogShowsInCaseOfUnsyncedPasswords_SyncToSigninEnabled {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+
+  [ChromeEarlGreyAppInterface disconnectFakeSyncServerNetwork];
+
+  password_manager_test_utils::SavePasswordFormToAccountStore(
+      @"password", @"user", @"https://example.com");
+
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TableViewSwitchCell(
+                                          kSyncPasswordsIdentifier,
+                                          /*is_toggled_on=*/YES,
+                                          /*enabled=*/YES)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  SignOutFromAccountSettings();
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
+                                   IDS_CANCEL)] performAction:grey_tap()];
+
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
+
+  // Re-connect the fake sync server to the network to be able to sign-in when
+  // the test gets run repeatedly.
+  [ChromeEarlGreyAppInterface connectFakeSyncServerNetwork];
+}
+
+// Tests the unsynced data dialog shows when there are unsynced readinglist
+// entries. Also verifies that the user is still signed in when the dialog
+// Cancel button is tapped. kReplaceSyncPromosWithSignInPromos is enabled.
+- (void)
+    testUnsyncedDataDialogShowsInCaseOfUnsyncedReadingListEntry_SyncToSigninEnabled {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+
+  [ChromeEarlGreyAppInterface disconnectFakeSyncServerNetwork];
+
+  reading_list_test_utils::AddURLToReadingList(GURL("https://example.com"));
+
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TableViewSwitchCell(
+                                          kSyncReadingListIdentifier,
+                                          /*is_toggled_on=*/YES,
+                                          /*enabled=*/YES)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  SignOutFromAccountSettings();
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
+                                   IDS_CANCEL)] performAction:grey_tap()];
+
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
+
+  // Re-connect the fake sync server to the network to be able to sign-in when
+  // the test gets run repeatedly.
+  [ChromeEarlGreyAppInterface connectFakeSyncServerNetwork];
+}
+
+// Tests the unsynced data dialog shows when there are unsynced bookmarks. Also
+// verifies that the user still signed in when the dialog Cancel button is
+// tapped. kReplaceSyncPromosWithSignInPromos is enabled.
+- (void)
+    testCancelSigningOutFromUnsyncedDataDialogInCaseOfUnsyncedBookmarks_SyncToSigninEnabled {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TableViewSwitchCell(
+                                          kSyncBookmarksIdentifier,
+                                          /*is_toggled_on=*/YES,
+                                          /*enabled=*/YES)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [ChromeEarlGreyAppInterface disconnectFakeSyncServerNetwork];
+
+  SaveBookmark(@"foo", @"https://www.foo.com");
+
+  SignOutFromAccountSettings();
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
+                                   IDS_CANCEL)] performAction:grey_tap()];
+
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
+
+  // Re-connect the fake sync server to the network to be able to sign-in when
+  // the test gets run repeatedly.
+  [ChromeEarlGreyAppInterface connectFakeSyncServerNetwork];
+}
+
+// Tests the unsynced data dialog shows when there are unsynced bookmarks. Also
+// verifies that the user is signed out when the dialog Delete and Sign Out
+// button is tapped. kReplaceSyncPromosWithSignInPromos is enabled.
+- (void)
+    testDeleteAndSignOutFromUnsyncedDataDialogInCaseOfUnsyncedBookmarks_SyncToSigninEnabled {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::TableViewSwitchCell(
+                                          kSyncBookmarksIdentifier,
+                                          /*is_toggled_on=*/YES,
+                                          /*enabled=*/YES)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [ChromeEarlGreyAppInterface disconnectFakeSyncServerNetwork];
+
+  SaveBookmark(@"foo", @"https://www.foo.com");
+
+  SignOutFromAccountSettings();
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::ButtonWithAccessibilityLabelId(
+                     IDS_IOS_SIGNOUT_DIALOG_SIGN_OUT_AND_DELETE_BUTTON)]
+      performAction:grey_tap()];
+
+  [SigninEarlGrey verifySignedOut];
+
+  // Re-connect the fake sync server to the network to be able to sign-in when
+  // the test gets run repeatedly.
+  [ChromeEarlGreyAppInterface connectFakeSyncServerNetwork];
 }
 
 // Tests that data type settings carry over signing out.
@@ -626,10 +768,10 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // contains the correct string for passwords.
 - (void)testBulkUploadDescriptionTextForPasswords {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password1", @"user1",
-                                                @"https://example1.com");
-  password_manager_test_utils::SavePasswordForm(@"password2", @"user2",
-                                                @"https://example2.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password1", @"user1", @"https://example1.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password2", @"user2", @"https://example2.com");
 
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
@@ -696,8 +838,8 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // contains the correct string for passwords and other data type.
 - (void)testBulkUploadDescriptionTextForPasswordsAndOthers {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
   reading_list_test_utils::AddURLToReadingList(GURL("https://example.com"));
   SaveBookmark(@"foo", @"https://www.foo.com");
 
@@ -723,8 +865,8 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // - Reading list
 - (void)testBulkUploadPageForAllDataTypes {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
   reading_list_test_utils::AddURLToReadingList(GURL("https://example.com"));
   SaveBookmark(@"foo", @"https://www.foo.com");
 
@@ -739,8 +881,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Tap on the batch upload button.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -769,8 +914,8 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // - Passwords
 - (void)testBulkUploadPageForPasswordsOnly {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
 
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
@@ -783,8 +928,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Tap on the batch upload button.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -814,8 +962,8 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // - Bookmarks
 - (void)testBulkUploadPageForPasswordsAndBookmarks {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
   SaveBookmark(@"foo", @"https://www.foo.com");
 
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
@@ -829,8 +977,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Tap on the batch upload button.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -859,8 +1010,8 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // - Passwords
 - (void)testBulkUploadForPasswords {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
   reading_list_test_utils::AddURLToReadingList(GURL("https://example.com"));
   SaveBookmark(@"foo", @"https://www.foo.com");
 
@@ -875,8 +1026,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Tap on the batch upload button.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -951,8 +1105,8 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // - Reading List
 - (void)testBulkUploadForBookmarksAndReadingList {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
   reading_list_test_utils::AddURLToReadingList(GURL("https://example.com"));
   SaveBookmark(@"foo", @"https://www.foo.com");
 
@@ -967,8 +1121,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Tap on the batch upload button.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -1016,14 +1173,15 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   // TODO(crbug.com/1482823): Test that items were actually moved.
 }
 
+// TODO(crbug.com/1515517): ManageSyncSettingsTestCase is failing
 // Tests that bulk upload moves the following data types to account:
 // - Passwords
 // - Bookmarks
 // - Reading List
-- (void)testBulkUploadForAllDataTypes {
+- (void)DISABLED_testBulkUploadForAllDataTypes {
   // Add local data.
-  password_manager_test_utils::SavePasswordForm(@"password", @"user",
-                                                @"https://example.com");
+  password_manager_test_utils::SavePasswordFormToProfileStore(
+      @"password", @"user", @"https://example.com");
   reading_list_test_utils::AddURLToReadingList(GURL("https://example.com"));
   SaveBookmark(@"foo", @"https://www.foo.com");
 
@@ -1038,8 +1196,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Tap on the batch upload button.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [ChromeEarlGreyUI waitForAppToIdle];
 
@@ -1104,8 +1265,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
                  grey_accessibilityID(
                      kBatchUploadRecommendationItemAccessibilityIdentifier)]
       assertWithMatcher:grey_notVisible()];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kBatchUploadAccessibilityIdentifier)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_accessibilityID(
+                                       kBatchUploadAccessibilityIdentifier),
+                                   grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notVisible()];
 
   // TODO(crbug.com/1482823): Test that items were actually moved.
@@ -1169,6 +1333,78 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
                                           /*is_toggled_on=*/YES,
                                           /*enabled=*/YES)]
       assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// Tests the account settings and the user actionable error view are dismissed
+// on account removal.
+- (void)testAccountSettingsWithErrorDismissed_SyncToSigninEnabled {
+  [ChromeEarlGrey addBookmarkWithSyncPassphrase:kPassphrase];
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  // Verify the error section is showing.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityLabel(l10n_util::GetNSString(
+                     IDS_IOS_ACCOUNT_TABLE_ERROR_ENTER_PASSPHRASE_BUTTON))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Tap "Enter Passphrase" button.
+  [[EarlGrey selectElementWithMatcher:
+                 grey_accessibilityLabel(l10n_util::GetNSString(
+                     IDS_IOS_ACCOUNT_TABLE_ERROR_ENTER_PASSPHRASE_BUTTON))]
+      performAction:grey_tap()];
+
+  // Remove fakeIdentity from device.
+  [ChromeEarlGreyUI waitForAppToIdle];
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
+
+  // Check that user is signed out and back to Settings main view.
+  [SigninEarlGrey verifySignedOut];
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::SettingsCollectionView()]
+      assertWithMatcher:grey_notNil()];
+}
+
+// Tests the account settings and the encryption view are dismissed
+// on account removal.
+- (void)testAccountSettingsAndEncryptionDismissed_SyncToSigninEnabled {
+  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+
+  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI openSettingsMenu];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
+
+  // Scroll to the bottom to view all section.
+  id<GREYMatcher> scroll_view_matcher =
+      grey_accessibilityID(kManageSyncTableViewAccessibilityIdentifier);
+  [[EarlGrey selectElementWithMatcher:scroll_view_matcher]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
+  // Verify the encryption item is shown.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kEncryptionAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Tap on the encryption item.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kEncryptionAccessibilityIdentifier)]
+      performAction:grey_tap()];
+
+  // Remove fakeIdentity from device.
+  [ChromeEarlGreyUI waitForAppToIdle];
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
+
+  // Check that user is signed out and back to Settings main view.
+  [ChromeEarlGreyUI waitForAppToIdle];
+  [SigninEarlGrey verifySignedOut];
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::SettingsCollectionView()]
+      assertWithMatcher:grey_notNil()];
 }
 
 @end

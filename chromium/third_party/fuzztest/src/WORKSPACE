@@ -36,9 +36,9 @@ http_archive(
 
 http_archive(
     name = "com_google_absl",
-    sha256 = "f17ba8d569af3ebf649cbce80d089fed35e046a44f40e0714b6bd6fe83d82738",
-    strip_prefix = "abseil-cpp-db08109eeb15fcd856761557f1668c2b34690036",
-    url = "https://github.com/abseil/abseil-cpp/archive/db08109eeb15fcd856761557f1668c2b34690036.tar.gz",
+    sha256 = "0ddd37f347c58d89f449dd189a645bfd97bcd85c5284404a3af27a3ca3476f39",
+    strip_prefix = "abseil-cpp-fad946221cec37175e762c399760f54b9de9a9fa",
+    url = "https://github.com/abseil/abseil-cpp/archive/fad946221cec37175e762c399760f54b9de9a9fa.tar.gz",
 )
 
 http_archive(
@@ -55,15 +55,57 @@ http_archive(
     url = "https://www.antlr.org/download/antlr4-cpp-runtime-4.12.0-source.zip",
 )
 
+http_archive(
+    name = "com_google_riegeli",
+    sha256 = "f8386e44e16d044c1d7151c0b553bb7075d79583d4fa9e613a4be452599e0795",
+    strip_prefix = "riegeli-411cda7f6aa81f8b8591b04cf141b1decdcc928c",
+    url = "https://github.com/google/riegeli/archive/411cda7f6aa81f8b8591b04cf141b1decdcc928c.tar.gz",
+)
+
+################################################################################
+# Dependencies required for Riegeli
+################################################################################
+
+http_archive(
+    name = "highwayhash",
+    sha256 = "cf891e024699c82aabce528a024adbe16e529f2b4e57f954455e0bf53efae585",
+    strip_prefix = "highwayhash-276dd7b4b6d330e4734b756e97ccfb1b69cc2e12",
+    urls = ["https://github.com/google/highwayhash/archive/276dd7b4b6d330e4734b756e97ccfb1b69cc2e12.zip"],  # 2019-02-22
+    build_file = "@com_google_riegeli//third_party:highwayhash.BUILD",
+)
+
+http_archive(
+    name = "org_brotli",
+    sha256 = "84a9a68ada813a59db94d83ea10c54155f1d34399baf377842ff3ab9b3b3256e",
+    strip_prefix = "brotli-3914999fcc1fda92e750ef9190aa6db9bf7bdb07",
+    urls = ["https://github.com/google/brotli/archive/3914999fcc1fda92e750ef9190aa6db9bf7bdb07.zip"],  # 2022-11-17
+)
+
+http_archive(
+    name = "net_zstd",
+    sha256 = "b6c537b53356a3af3ca3e621457751fa9a6ba96daf3aebb3526ae0f610863532",
+    strip_prefix = "zstd-1.4.5/lib",
+    urls = ["https://github.com/facebook/zstd/archive/v1.4.5.zip"],  # 2020-05-22
+    build_file = "@com_google_riegeli//third_party:net_zstd.BUILD",
+)
+
+http_archive(
+    name = "snappy",
+    sha256 = "38b4aabf88eb480131ed45bfb89c19ca3e2a62daeb081bdf001cfb17ec4cd303",
+    strip_prefix = "snappy-1.1.8",
+    urls = ["https://github.com/google/snappy/archive/1.1.8.zip"],  # 2020-01-14
+    build_file = "@com_google_riegeli//third_party:snappy.BUILD",
+)
+
 ################################################################################
 # Direct dependencies that are only required for running tests
 ################################################################################
 
 http_archive(
     name = "com_google_googletest",
-    sha256 = "8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7",
-    strip_prefix = "googletest-1.14.0",
-    url = "https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz",
+    sha256 = "2ebedb9330ff0e7e07abd77df9bd8c62692016a8138a4722f5259e7f657c89c1",
+    strip_prefix = "googletest-b3a9ba2b8e975550799838332803d468797ae2e1",
+    url = "https://github.com/google/googletest/archive/b3a9ba2b8e975550799838332803d468797ae2e1.tar.gz",
 )
 
 http_archive(
@@ -76,9 +118,9 @@ http_archive(
 
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "6f1f962933da7728d81e0467b7ee6f99987c02fc284ff929eb99aeb375ee4b90",
-    strip_prefix = "protobuf-33b78e67a92c7ba1ecc2e19a037cd2e12f4c5e27",
-    url = "https://github.com/protocolbuffers/protobuf/archive/33b78e67a92c7ba1ecc2e19a037cd2e12f4c5e27.tar.gz"
+    integrity = "sha256-m9h7goDvcg0yQFFPiE5WpxLyIY8NaTtIBQyDYCiUCkI=",
+    strip_prefix = "protobuf-25.1",
+    url = "https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz"
 )
 
 load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")

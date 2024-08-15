@@ -47,7 +47,7 @@ class InstructionResult : public Castable<InstructionResult, Value> {
     void Destroy() override;
 
     /// @returns the type of the value
-    const core::type::Type* Type() override { return type_; }
+    const core::type::Type* Type() const override { return type_; }
 
     /// @copydoc Value::Clone()
     InstructionResult* Clone(CloneContext& ctx) override;
@@ -56,15 +56,18 @@ class InstructionResult : public Castable<InstructionResult, Value> {
     /// @param type the new type of the value
     void SetType(const core::type::Type* type) { type_ = type; }
 
-    /// Sets the source instruction for this value
+    /// Sets the instruction for this value
     /// @param inst the instruction to set
-    void SetSource(Instruction* inst) { source_ = inst; }
+    void SetInstruction(Instruction* inst) { instruction_ = inst; }
 
-    /// @returns the source instruction, if any
-    Instruction* Source() { return source_; }
+    /// @returns the instruction, if any
+    ir::Instruction* Instruction() { return instruction_; }
+
+    /// @returns the instruction, if any
+    const ir::Instruction* Instruction() const { return instruction_; }
 
   private:
-    Instruction* source_ = nullptr;
+    ir::Instruction* instruction_ = nullptr;
     const core::type::Type* type_ = nullptr;
 };
 

@@ -234,6 +234,7 @@ initialLetter
 initialValue
 inlineSize
 inset
+insetArea
 insetBlock
 insetBlockEnd
 insetBlockStart
@@ -459,6 +460,7 @@ textOverflow
 textRendering
 textShadow
 textSizeAdjust
+textSpacingTrim
 textTransform
 textUnderlineOffset
 textUnderlinePosition

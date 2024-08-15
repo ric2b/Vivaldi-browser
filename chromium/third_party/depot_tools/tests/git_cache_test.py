@@ -148,6 +148,34 @@ class GitCacheTest(unittest.TestCase):
         self.assertNotIn(git_cache.GIT_CACHE_CORRUPT_MESSAGE,
                          sys.stdout.getvalue())
 
+    @mock.patch('sys.stdout', StringIO())
+    def testBadInit(self):
+        self.git(['init', '-q'])
+        with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:
+            f.write('touched\n')
+        self.git(['add', 'foo'])
+        self.git([
+            '-c', 'user.name=Test user', '-c', 'user.email=joj@test.com',
+            'commit', '-m', 'foo'
+        ])
+
+        mirror = git_cache.Mirror(self.origin_dir)
+
+        # Simulate init being interrupted during fetch phase.
+        with mock.patch.object(mirror, '_fetch'):
+            mirror.populate()
+
+        # Corrupt message is not expected at this point since it was
+        # "interrupted".
+        self.assertNotIn(git_cache.GIT_CACHE_CORRUPT_MESSAGE,
+                         sys.stdout.getvalue())
+
+        # We call mirror.populate() without _fetch patched. This time, a
+        # sentient file should prompt cache deletion.
+        mirror.populate()
+        self.assertIn(git_cache.GIT_CACHE_CORRUPT_MESSAGE,
+                      sys.stdout.getvalue())
+
     def _makeGitRepoWithTag(self):
         self.git(['init', '-q'])
         with open(os.path.join(self.origin_dir, 'foo'), 'w') as f:

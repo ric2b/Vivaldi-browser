@@ -26,6 +26,7 @@ import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.chrome.browser.customtabs.IncognitoCustomTabActivityTestRule;
 import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.DownloadManagerService;
@@ -39,7 +40,6 @@ import org.chromium.chrome.browser.profiles.ProfileKey;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
@@ -68,7 +68,6 @@ import java.util.concurrent.TimeoutException;
 @DisableFeatures(ChromeFeatureList.INCOGNITO_DOWNLOADS_WARNING)
 @CommandLineFlags.Add({
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-    "enable-features=UseDownloadOfflineContentProvider"
 })
 public class IncognitoDownloadLeakageTest {
     private String mDownloadTestPage;
@@ -232,9 +231,7 @@ public class IncognitoDownloadLeakageTest {
         // Retrieve downloads from the incognito DownloadService.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Profile profile =
-                            IncognitoUtils.getIncognitoProfileFromWindowAndroid(
-                                    incognitoTab.getWindowAndroid());
+                    Profile profile = incognitoTab.getProfile();
                     DownloadManagerService.getDownloadManagerService()
                             .getAllDownloads(profile.getOTRProfileID());
                 });
@@ -280,9 +277,7 @@ public class IncognitoDownloadLeakageTest {
         // Retrieve downloads from the incognito DownloadService.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Profile profile =
-                            IncognitoUtils.getIncognitoProfileFromWindowAndroid(
-                                    incognitoTab1.getWindowAndroid());
+                    Profile profile = incognitoTab1.getProfile();
                     DownloadManagerService.getDownloadManagerService()
                             .getAllDownloads(profile.getOTRProfileID());
                 });
@@ -299,9 +294,7 @@ public class IncognitoDownloadLeakageTest {
         // Retrieve downloads for the second incognito profile.
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Profile profile =
-                            IncognitoUtils.getIncognitoProfileFromWindowAndroid(
-                                    incognitoTab2.getWindowAndroid());
+                    Profile profile = incognitoTab2.getProfile();
                     DownloadManagerService.getDownloadManagerService()
                             .getAllDownloads(profile.getOTRProfileID());
                 });

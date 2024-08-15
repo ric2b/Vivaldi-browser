@@ -87,7 +87,7 @@ struct SanitizedResult {
 };
 
 /// Sanitize a program in preparation for generating MSL.
-/// @program The program to sanitize
+/// @param program The program to sanitize
 /// @param options The MSL generator options.
 /// @returns the sanitized program and any supplementary information
 SanitizedResult Sanitize(const Program& program, const Options& options);
@@ -378,6 +378,11 @@ class ASTPrinter : public tint::TextGenerator {
                               const ast::CallExpression* expr,
                               const sem::BuiltinFn* builtin);
 
+    /// Lazilly generates the TINT_ISOLATE_UB macro, used to prevent UB statements from affecting
+    /// later logic.
+    /// @return the MSL to call the TINT_ISOLATE_UB macro.
+    std::string IsolateUB();
+
     /// Handles generating a builtin name
     /// @param builtin the semantic info for the builtin
     /// @returns the name or "" if not valid
@@ -432,6 +437,10 @@ class ASTPrinter : public tint::TextGenerator {
     std::unordered_map<const core::type::Struct*, std::string> builtin_struct_names_;
 
     std::function<bool()> emit_continuing_;
+
+    /// The name of the macro used to prevent UB affecting later control flow.
+    /// Do not use this directly, instead call IsolateUB().
+    std::string isolate_ub_macro_name_;
 
     /// Name of atomicCompareExchangeWeak() helper for the given pointer storage
     /// class and struct return type

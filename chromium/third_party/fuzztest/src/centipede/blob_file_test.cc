@@ -14,38 +14,40 @@
 
 #include "./centipede/blob_file.h"
 
-#include <cstdint>
 #include <memory>
 #include <string>
+#include <tuple>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/status/status.h"
-#include "absl/types/span.h"
+#include "./centipede/defs.h"
 #include "./centipede/test_util.h"
 
 namespace centipede {
 namespace {
 
-std::string TempFilePath() {
-  return GetTestTempDir().append("blob_file");
-}
+std::string TempFilePath() { return TempDir("test").GetFilePath("blob_file"); }
 
-// Tests correct way of using a BlobFile.
 // We may have more than one BlobFile factory.
 // Need to test every factory the same way.
+class BlobFile : public testing::TestWithParam<bool> {};
+
+// Tests correct way of using a BlobFile, and that files written in both formats
+// can be appropriately detected and read.
 void TestOneBlobFile(std::unique_ptr<BlobFileReader> (*ReaderFactory)(),
-                     std::unique_ptr<BlobFileWriter> (*WriterFactory)()) {
+                     std::unique_ptr<BlobFileWriter> (*WriterFactory)(bool),
+                     bool riegeli) {
   ByteArray input1{1, 2, 3};
   ByteArray input2{4, 5};
   ByteArray input3{6, 7, 8, 9};
   ByteArray input4{10, 11};
   const auto path = TempFilePath();
-  absl::Span<uint8_t> blob;
+  ByteSpan blob;
 
   // Append two blobs to a file.
   {
-    auto appender = WriterFactory();
+    auto appender = WriterFactory(riegeli);
     EXPECT_OK(appender->Open(path, "a"));
     EXPECT_OK(appender->Write(input1));
     EXPECT_OK(appender->Write(input2));
@@ -66,7 +68,7 @@ void TestOneBlobFile(std::unique_ptr<BlobFileReader> (*ReaderFactory)(),
 
   // Append one more blob to the same file.
   {
-    auto appender = WriterFactory();
+    auto appender = WriterFactory(riegeli);
     EXPECT_OK(appender->Open(path, "a"));
     EXPECT_OK(appender->Write(input3));
     EXPECT_OK(appender->Close());
@@ -88,13 +90,13 @@ void TestOneBlobFile(std::unique_ptr<BlobFileReader> (*ReaderFactory)(),
 
   // Overwrite the contents of the file by a new blob.
   {
-    auto appender = WriterFactory();
+    auto appender = WriterFactory(riegeli);
     EXPECT_OK(appender->Open(path, "w"));
     EXPECT_OK(appender->Write(input4));
     EXPECT_OK(appender->Close());
   }
 
-  // Re-read the file, expect to see all 3 blobs.
+  // Re-read the file, expect to see the single new blob.
   {
     auto reader = ReaderFactory();
     EXPECT_OK(reader->Open(path));
@@ -105,57 +107,146 @@ void TestOneBlobFile(std::unique_ptr<BlobFileReader> (*ReaderFactory)(),
   }
 }
 
-TEST(BlobFile, DefaultTest) {
-  TestOneBlobFile(&DefaultBlobFileReaderFactory, &DefaultBlobFileWriterFactory);
+TEST_P(BlobFile, DefaultTest) {
+  TestOneBlobFile(&DefaultBlobFileReaderFactory, &DefaultBlobFileWriterFactory,
+                  GetParam());
+}
+
+// An Open() failure should not interfere with future proper functioning.
+TEST_P(BlobFile, AfterFailedOpenTest) {
+  auto reader = DefaultBlobFileReaderFactory();
+  auto appender = DefaultBlobFileWriterFactory(GetParam());
+  const std::string invalid_path = "/DOES/NOT/EXIST";
+  const std::string path = TempFilePath();
+  ByteArray input{1, 2, 3};
+
+  // Open failure of writer due to file that cannot be created.
+  ASSERT_FALSE(appender->Open(invalid_path, "a").ok());
+  // Follow that with opening and writing to a file that is expected to work.
+  ASSERT_OK(appender->Open(path, "a"));
+  ASSERT_OK(appender->Write(input));
+  ASSERT_OK(appender->Close());
+
+  // Open failure of reader due to non-existent file.
+  ASSERT_FALSE(reader->Open(invalid_path).ok());
+  ByteSpan blob;
+  // Follow that with reading the already written file and check that contents
+  // are as expected.
+  ASSERT_OK(reader->Open(path));
+  ASSERT_OK(reader->Read(blob));
+  EXPECT_EQ(input, blob);
+  EXPECT_EQ(reader->Read(blob), absl::OutOfRangeError("no more blobs"));
+  EXPECT_OK(reader->Close());
+}
+
+TEST_P(BlobFile, CloseReaderAfterFileRemovalTest) {
+  auto appender = DefaultBlobFileWriterFactory(GetParam());
+  const std::string path = TempFilePath();
+  ByteArray input{1};
+  ASSERT_OK(appender->Open(path, "a"));
+  ASSERT_OK(appender->Write(input));
+  ASSERT_OK(appender->Close());
+
+  auto reader = DefaultBlobFileReaderFactory();
+  ByteSpan blob;
+  ASSERT_OK(reader->Open(path));
+  ASSERT_OK(reader->Read(blob));
+  TempFilePath();  // Delete the file at `path`
+  EXPECT_OK(reader->Close());
 }
 
 // Tests incorrect ways of using a BlobFileReader/BlobFileWriter.
 void TestIncorrectUsage(std::unique_ptr<BlobFileReader> (*ReaderFactory)(),
-                        std::unique_ptr<BlobFileWriter> (*WriterFactory)()) {
+                        std::unique_ptr<BlobFileWriter> (*WriterFactory)(bool),
+                        bool riegeli) {
   const std::string invalid_path = "/DOES/NOT/EXIST";
   const auto path = TempFilePath();
   auto reader = ReaderFactory();
-  auto appender = WriterFactory();
+  auto appender = WriterFactory(riegeli);
 
-  // open invalid file path.
-  EXPECT_EQ(reader->Open(invalid_path), absl::UnknownError("can't open file"));
-  EXPECT_EQ(appender->Open(invalid_path, "a"),
-            absl::UnknownError("can't open file"));
-  absl::Span<uint8_t> blob;
+  // Open invalid file path.
+  EXPECT_FALSE(reader->Open(invalid_path).ok());
+  EXPECT_FALSE(appender->Open(invalid_path, "a").ok());
+  ByteSpan blob;
 
-  // Use the calls in the wrong order, e.g. Close() before Open(), etc.
-
-  // Writer first, it will create `path` if it doesn't exist.
-  EXPECT_EQ(appender->Close(), absl::FailedPreconditionError("was not open"));
-  EXPECT_EQ(appender->Write(blob),
-            absl::FailedPreconditionError("was not open"));
+  // Write() on objects that are not in a successfuly open state.
+  EXPECT_FALSE(appender->Write(blob).ok());
   EXPECT_OK(appender->Open(path, "a"));
-  EXPECT_EQ(appender->Open(path, "a"),
-            absl::FailedPreconditionError("already open"));
   EXPECT_OK(appender->Close());
-  EXPECT_EQ(appender->Write(blob),
-            absl::FailedPreconditionError("already closed"));
-  EXPECT_EQ(appender->Open(path, "a"),
-            absl::FailedPreconditionError("already closed"));
-  EXPECT_EQ(appender->Close(), absl::FailedPreconditionError("already closed"));
+  EXPECT_FALSE(appender->Write(blob).ok());
 
-  // Now the reader.
-  EXPECT_EQ(reader->Close(), absl::FailedPreconditionError("was not open"));
-  EXPECT_EQ(reader->Read(blob), absl::FailedPreconditionError("was not open"));
+  // Read() on objects that are not in a successfully open state.
+  EXPECT_FALSE(reader->Read(blob).ok());
   EXPECT_OK(reader->Open(path));
-  EXPECT_EQ(reader->Open(path), absl::FailedPreconditionError("already open"));
   EXPECT_OK(reader->Close());
-  EXPECT_EQ(reader->Read(blob),
-            absl::FailedPreconditionError("already closed"));
-  EXPECT_EQ(reader->Open(path),
-            absl::FailedPreconditionError("already closed"));
-  EXPECT_EQ(reader->Close(), absl::FailedPreconditionError("already closed"));
+  EXPECT_FALSE(reader->Read(blob).ok());
 }
 
-TEST(BlobFile, IncorrectUsage) {
+TEST_P(BlobFile, IncorrectUsage) {
   TestIncorrectUsage(&DefaultBlobFileReaderFactory,
-                     &DefaultBlobFileWriterFactory);
+                     &DefaultBlobFileWriterFactory, GetParam());
 }
+
+#ifndef CENTIPEDE_DISABLE_RIEGELI
+INSTANTIATE_TEST_SUITE_P(BlobFileTests, BlobFile, ::testing::Bool());
+#else
+INSTANTIATE_TEST_SUITE_P(BlobFileTests, BlobFile, ::testing::Values(false));
+#endif  // CENTIPEDE_DISABLE_RIEGELI
+
+class ReadMultipleFiles
+    : public testing::TestWithParam<std::tuple<bool, bool>> {};
+
+// Single reader object can be used to read multiple files, in the same or
+// different formats.
+TEST_P(ReadMultipleFiles, SingleObjectMultipleFormats) {
+  auto reader = DefaultBlobFileReaderFactory();
+  auto [first_riegeli, second_riegeli] = GetParam();
+  const auto path = TempFilePath();
+  ByteArray file1_blob1{1, 2, 3, 4, 5};
+  ByteArray file2_blob1{6, 7};
+  ByteArray file2_blob2{8, 9};
+  ByteSpan blob;
+
+  // Write in first format and read.
+  auto writer = DefaultBlobFileWriterFactory(first_riegeli);
+  EXPECT_OK(writer->Open(path, "w"));
+  EXPECT_OK(writer->Write(file1_blob1));
+  EXPECT_OK(writer->Close());
+  EXPECT_OK(reader->Open(path));
+  EXPECT_OK(reader->Read(blob));
+  EXPECT_EQ(file1_blob1, blob);
+  EXPECT_EQ(reader->Read(blob), absl::OutOfRangeError("no more blobs"));
+  EXPECT_OK(reader->Close());
+
+  // Write in second format and read.
+  writer = DefaultBlobFileWriterFactory(second_riegeli);
+  EXPECT_OK(writer->Open(path, "w"));
+  EXPECT_OK(writer->Write(file2_blob1));
+  EXPECT_OK(writer->Write(file2_blob2));
+  EXPECT_OK(writer->Close());
+  EXPECT_OK(reader->Open(path));
+  EXPECT_OK(reader->Read(blob));
+  EXPECT_EQ(file2_blob1, blob);
+  EXPECT_OK(reader->Read(blob));
+  EXPECT_EQ(file2_blob2, blob);
+  EXPECT_EQ(reader->Read(blob), absl::OutOfRangeError("no more blobs"));
+  EXPECT_OK(reader->Close());
+}
+
+#ifndef CENTIPEDE_DISABLE_RIEGELI
+INSTANTIATE_TEST_SUITE_P(DefaultBlobFileReaderTests, ReadMultipleFiles,
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Bool()));
+#else
+INSTANTIATE_TEST_SUITE_P(DefaultBlobFileReaderTests, ReadMultipleFiles,
+                         ::testing::Values(std::tuple{false, false}));
+#endif  // CENTIPEDE_DISABLE_RIEGELI
+
+#ifdef CENTIPEDE_DISABLE_RIEGELI
+TEST(WriterFactoryDeathTest, FailWhenBuiltWithoutRiegeli) {
+  ASSERT_DEATH(DefaultBlobFileWriterFactory(true), "");
+}
+#endif  // CENTIPEDE_DISABLE_RIEGELI
 
 }  // namespace
 }  // namespace centipede

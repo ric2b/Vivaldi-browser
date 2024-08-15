@@ -49,7 +49,7 @@ constexpr base::TimeDelta kGarbageCollectRetryDelay = base::Seconds(30);
 // garbage collected.
 constexpr base::TimeDelta kGarbageCollectStartupDelay = base::Seconds(30);
 
-typedef std::multimap<std::string, base::FilePath> ExtensionPathsMultimap;
+using ExtensionPathsMultimap = std::multimap<std::string, base::FilePath>;
 
 void CheckExtensionDirectory(const base::FilePath& path,
                              const ExtensionPathsMultimap& extension_paths) {
@@ -258,7 +258,7 @@ void ExtensionGarbageCollector::OnFinishCrxInstall(
   if (crx_installs_in_progress_ < 0) {
     // This can only happen if there is a mismatch in our begin/finish
     // accounting.
-    NOTREACHED();
+    DUMP_WILL_BE_NOTREACHED_NORETURN();
 
     // Don't let the count go negative to avoid garbage collecting when
     // an install is actually in progress.

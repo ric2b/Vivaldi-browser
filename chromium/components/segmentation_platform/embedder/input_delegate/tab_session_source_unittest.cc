@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -83,7 +84,8 @@ class MockOpenTabsUIDelegate : public sync_sessions::OpenTabsUIDelegate {
   }
 
   bool GetAllForeignSessions(
-      std::vector<const sync_sessions::SyncedSession*>* sessions) override {
+      std::vector<raw_ptr<const sync_sessions::SyncedSession,
+                          VectorExperimental>>* sessions) override {
     *sessions = foreign_sessions_;
     base::ranges::sort(*sessions, std::greater(),
                        [](const sync_sessions::SyncedSession* session) {
@@ -106,9 +108,9 @@ class MockOpenTabsUIDelegate : public sync_sessions::OpenTabsUIDelegate {
 
   MOCK_METHOD1(DeleteForeignSession, void(const std::string& tag));
 
-  MOCK_METHOD2(GetForeignSession,
-               bool(const std::string& tag,
-                    std::vector<const sessions::SessionWindow*>* windows));
+  MOCK_METHOD1(
+      GetForeignSession,
+      std::vector<const sessions::SessionWindow*>(const std::string& tag));
 
   MOCK_METHOD2(GetForeignSessionTabs,
                bool(const std::string& tag,
@@ -117,7 +119,8 @@ class MockOpenTabsUIDelegate : public sync_sessions::OpenTabsUIDelegate {
  private:
   std::vector<std::unique_ptr<sync_sessions::SyncedSession>>
       foreign_sessions_owned_;
-  std::vector<const sync_sessions::SyncedSession*> foreign_sessions_;
+  std::vector<raw_ptr<const sync_sessions::SyncedSession, VectorExperimental>>
+      foreign_sessions_;
   std::unique_ptr<sync_sessions::SyncedSession> local_session_;
 };
 
@@ -217,14 +220,13 @@ TEST_F(TabSessionSourceTest, ProcessLocal) {
         *tab = picked_tab.get();
         return true;
       });
-  EXPECT_CALL(open_tabs_delegate_, GetForeignSession(_, _))
-      .WillOnce([&local_session](
-                    const std::string& tag,
-                    std::vector<const sessions::SessionWindow*>* windows) {
+  EXPECT_CALL(open_tabs_delegate_, GetForeignSession(_))
+      .WillOnce([&local_session](const std::string& tag) {
+        std::vector<const sessions::SessionWindow*> windows;
         for (const auto& [window_id, window] : local_session->windows) {
-          windows->push_back(&window->wrapped_window);
+          windows.push_back(&window->wrapped_window);
         }
-        return true;
+        return windows;
       });
 
   Tensor result = GetResult(local_session->GetSessionTag(), id);
@@ -246,11 +248,12 @@ TEST_F(TabSessionSourceTest, ProcessLocal) {
 }
 
 TEST_F(TabSessionSourceTest, ProcessForeign) {
-  std::vector<const sync_sessions::SyncedSession*> foreign_sessions;
+  std::vector<raw_ptr<const sync_sessions::SyncedSession, VectorExperimental>>
+      foreign_sessions;
   ASSERT_TRUE(
       session_sync_service_.GetOpenTabsUIDelegate()->GetAllForeignSessions(
           &foreign_sessions));
-  const auto* picked_session = foreign_sessions[0];
+  const auto* picked_session = foreign_sessions[0].get();
   auto& picked_tab =
       picked_session->windows.begin()->second->wrapped_window.tabs[0];
   const base::TimeDelta kNavTime1 = base::Seconds(40);
@@ -267,14 +270,13 @@ TEST_F(TabSessionSourceTest, ProcessForeign) {
         *tab = picked_tab.get();
         return true;
       });
-  EXPECT_CALL(open_tabs_delegate_, GetForeignSession(_, _))
-      .WillOnce([&picked_session](
-                    const std::string& tag,
-                    std::vector<const sessions::SessionWindow*>* windows) {
+  EXPECT_CALL(open_tabs_delegate_, GetForeignSession(_))
+      .WillOnce([&picked_session](const std::string& tag) {
+        std::vector<const sessions::SessionWindow*> windows;
         for (const auto& [window_id, window] : picked_session->windows) {
-          windows->push_back(&window->wrapped_window);
+          windows.push_back(&window->wrapped_window);
         }
-        return true;
+        return windows;
       });
 
   Tensor result = GetResult(picked_session->GetSessionTag(), id);

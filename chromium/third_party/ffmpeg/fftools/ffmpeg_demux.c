@@ -20,6 +20,7 @@
 #include <stdint.h>
 
 #include "ffmpeg.h"
+#include "ffmpeg_utils.h"
 
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -73,9 +74,6 @@ typedef struct DemuxStream {
     ///< dts of the last packet read for this stream (in AV_TIME_BASE units)
     int64_t       dts;
 
-    int64_t min_pts; /* pts with the smallest value in a current stream */
-    int64_t max_pts; /* pts with the higher value in a current stream */
-
     /* number of packets successfully read for this stream */
     uint64_t nb_packets;
     // combined size of all the packets read
@@ -98,11 +96,11 @@ typedef struct Demuxer {
 
     /* number of times input stream should be looped */
     int loop;
-    /* actual duration of the longest stream in a file at the moment when
-     * looping happens */
-    int64_t duration;
-    /* time base of the duration */
-    AVRational time_base;
+    /* duration of the looped segment of the input file */
+    Timestamp duration;
+    /* pts with the smallest/largest values ever seen */
+    Timestamp min_pts;
+    Timestamp max_pts;
 
     /* number of streams that the user was warned of */
     int nb_streams_warn;
@@ -155,23 +153,6 @@ static void report_new_stream(Demuxer *d, const AVPacket *pkt)
     d->nb_streams_warn = pkt->stream_index + 1;
 }
 
-static void ifile_duration_update(Demuxer *d, DemuxStream *ds,
-                                  int64_t last_duration)
-{
-    /* the total duration of the stream, max_pts - min_pts is
-     * the duration of the stream without the last frame */
-    if (ds->max_pts > ds->min_pts &&
-        ds->max_pts - (uint64_t)ds->min_pts < INT64_MAX - last_duration)
-        last_duration += ds->max_pts - ds->min_pts;
-
-    if (!d->duration ||
-        av_compare_ts(d->duration, d->time_base,
-                      last_duration, ds->ist.st->time_base) < 0) {
-        d->duration = last_duration;
-        d->time_base = ds->ist.st->time_base;
-    }
-}
-
 static int seek_to_start(Demuxer *d)
 {
     InputFile    *ifile = &d->f;
@@ -182,40 +163,27 @@ static int seek_to_start(Demuxer *d)
     if (ret < 0)
         return ret;
 
-    if (ifile->audio_duration_queue_size) {
-        /* duration is the length of the last frame in a stream
-         * when audio stream is present we don't care about
-         * last video frame length because it's not defined exactly */
-        int got_durations = 0;
+    if (ifile->audio_ts_queue_size) {
+        int got_ts = 0;
 
-        while (got_durations < ifile->audio_duration_queue_size) {
-            DemuxStream *ds;
-            LastFrameDuration dur;
-            ret = av_thread_message_queue_recv(ifile->audio_duration_queue, &dur, 0);
+        while (got_ts < ifile->audio_ts_queue_size) {
+            Timestamp ts;
+            ret = av_thread_message_queue_recv(ifile->audio_ts_queue, &ts, 0);
             if (ret < 0)
                 return ret;
-            got_durations++;
+            got_ts++;
 
-            ds = ds_from_ist(ifile->streams[dur.stream_idx]);
-            ifile_duration_update(d, ds, dur.duration);
-        }
-    } else {
-        for (int i = 0; i < ifile->nb_streams; i++) {
-            int64_t duration = 0;
-            InputStream *ist = ifile->streams[i];
-            DemuxStream *ds  = ds_from_ist(ist);
-
-            if (ist->framerate.num) {
-                duration = av_rescale_q(1, av_inv_q(ist->framerate), ist->st->time_base);
-            } else if (ist->st->avg_frame_rate.num) {
-                duration = av_rescale_q(1, av_inv_q(ist->st->avg_frame_rate), ist->st->time_base);
-            } else {
-                duration = 1;
-            }
-
-            ifile_duration_update(d, ds, duration);
+            if (d->max_pts.ts == AV_NOPTS_VALUE ||
+                av_compare_ts(d->max_pts.ts, d->max_pts.tb, ts.ts, ts.tb) < 0)
+                d->max_pts = ts;
         }
     }
+
+    if (d->max_pts.ts != AV_NOPTS_VALUE) {
+        int64_t min_pts = d->min_pts.ts == AV_NOPTS_VALUE ? 0 : d->min_pts.ts;
+        d->duration.ts = d->max_pts.ts - av_rescale_q(min_pts, d->min_pts.tb, d->max_pts.tb);
+    }
+    d->duration.tb = d->max_pts.tb;
 
     if (d->loop > 0)
         d->loop--;
@@ -433,11 +401,27 @@ static int ts_fixup(Demuxer *d, AVPacket *pkt)
     if (pkt->dts != AV_NOPTS_VALUE)
         pkt->dts *= ds->ts_scale;
 
-    duration = av_rescale_q(d->duration, d->time_base, pkt->time_base);
+    duration = av_rescale_q(d->duration.ts, d->duration.tb, pkt->time_base);
     if (pkt->pts != AV_NOPTS_VALUE) {
+        // audio decoders take precedence for estimating total file duration
+        int64_t pkt_duration = ifile->audio_ts_queue_size ? 0 : pkt->duration;
+
         pkt->pts += duration;
-        ds->max_pts = FFMAX(pkt->pts, ds->max_pts);
-        ds->min_pts = FFMIN(pkt->pts, ds->min_pts);
+
+        // update max/min pts that will be used to compute total file duration
+        // when using -stream_loop
+        if (d->max_pts.ts == AV_NOPTS_VALUE ||
+            av_compare_ts(d->max_pts.ts, d->max_pts.tb,
+                          pkt->pts + pkt_duration, pkt->time_base) < 0) {
+            d->max_pts = (Timestamp){ .ts = pkt->pts + pkt_duration,
+                                      .tb = pkt->time_base };
+        }
+        if (d->min_pts.ts == AV_NOPTS_VALUE ||
+            av_compare_ts(d->min_pts.ts, d->min_pts.tb,
+                          pkt->pts, pkt->time_base) > 0) {
+            d->min_pts = (Timestamp){ .ts = pkt->pts,
+                                      .tb = pkt->time_base };
+        }
     }
 
     if (pkt->dts != AV_NOPTS_VALUE)
@@ -479,28 +463,6 @@ static int input_packet_process(Demuxer *d, DemuxMsg *msg, AVPacket *src)
 
     ds->data_size += pkt->size;
     ds->nb_packets++;
-
-    /* add the stream-global side data to the first packet */
-    if (ds->nb_packets == 1) {
-        for (int i = 0; i < ist->st->nb_side_data; i++) {
-            AVPacketSideData *src_sd = &ist->st->side_data[i];
-            uint8_t *dst_data;
-
-            if (src_sd->type == AV_PKT_DATA_DISPLAYMATRIX)
-                continue;
-
-            if (av_packet_get_side_data(pkt, src_sd->type, NULL))
-                continue;
-
-            dst_data = av_packet_new_side_data(pkt, src_sd->type, src_sd->size);
-            if (!dst_data) {
-                ret = AVERROR(ENOMEM);
-                goto fail;
-            }
-
-            memcpy(dst_data, src_sd->data, src_sd->size);
-        }
-    }
 
     if (debug_ts) {
         av_log(NULL, AV_LOG_INFO, "demuxer+ffmpeg -> ist_index:%d:%d type:%s pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s duration:%s duration_time:%s off:%s off_time:%s\n",
@@ -690,7 +652,7 @@ static void thread_stop(Demuxer *d)
 
     pthread_join(d->thread, NULL);
     av_thread_message_queue_free(&d->in_thread_queue);
-    av_thread_message_queue_free(&f->audio_duration_queue);
+    av_thread_message_queue_free(&f->audio_ts_queue);
 }
 
 static int thread_start(Demuxer *d)
@@ -720,11 +682,11 @@ static int thread_start(Demuxer *d)
         }
 
         if (nb_audio_dec) {
-            ret = av_thread_message_queue_alloc(&f->audio_duration_queue,
-                                                nb_audio_dec, sizeof(LastFrameDuration));
+            ret = av_thread_message_queue_alloc(&f->audio_ts_queue,
+                                                nb_audio_dec, sizeof(Timestamp));
             if (ret < 0)
                 goto fail;
-            f->audio_duration_queue_size = nb_audio_dec;
+            f->audio_ts_queue_size = nb_audio_dec;
         }
     }
 
@@ -979,6 +941,7 @@ static int add_display_matrix_to_stream(const OptionsContext *o,
                                         AVFormatContext *ctx, InputStream *ist)
 {
     AVStream *st = ist->st;
+    AVPacketSideData *sd;
     double rotation = DBL_MAX;
     int hflip = -1, vflip = -1;
     int hflip_set = 0, vflip_set = 0, rotation_set = 0;
@@ -995,12 +958,16 @@ static int add_display_matrix_to_stream(const OptionsContext *o,
     if (!rotation_set && !hflip_set && !vflip_set)
         return 0;
 
-    buf = (int32_t *)av_stream_new_side_data(st, AV_PKT_DATA_DISPLAYMATRIX, sizeof(int32_t) * 9);
-    if (!buf) {
+    sd = av_packet_side_data_new(&st->codecpar->coded_side_data,
+                                 &st->codecpar->nb_coded_side_data,
+                                 AV_PKT_DATA_DISPLAYMATRIX,
+                                 sizeof(int32_t) * 9, 0);
+    if (!sd) {
         av_log(ist, AV_LOG_FATAL, "Failed to generate a display matrix!\n");
         return AVERROR(ENOMEM);
     }
 
+    buf = (int32_t *)sd->data;
     av_display_rotation_set(buf,
                             rotation_set ? -(rotation) : -0.0f);
 
@@ -1059,9 +1026,6 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
     char *codec_tag = NULL;
     char *next;
     char *discard_str = NULL;
-    const AVClass *cc = avcodec_get_class();
-    const AVOption *discard_opt = av_opt_find(&cc, "skip_frame", NULL,
-                                              0, AV_OPT_SEARCH_FAKE_OBJ);
     int ret;
 
     ds  = demux_stream_alloc(d, st);
@@ -1072,12 +1036,8 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
 
     ist->discard = 1;
     st->discard  = AVDISCARD_ALL;
-    ist->nb_samples = 0;
     ds->first_dts   = AV_NOPTS_VALUE;
     ds->next_dts    = AV_NOPTS_VALUE;
-
-    ds->min_pts = INT64_MAX;
-    ds->max_pts = INT64_MIN;
 
     ds->ts_scale = 1.0;
     MATCH_PER_STREAM_OPT(ts_scale, dbl, ds->ts_scale, ic, st);
@@ -1193,17 +1153,19 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
         (o->data_disable && ist->st->codecpar->codec_type == AVMEDIA_TYPE_DATA))
             ist->user_set_discard = AVDISCARD_ALL;
 
+    ist->dec_ctx = avcodec_alloc_context3(ist->dec);
+    if (!ist->dec_ctx)
+        return AVERROR(ENOMEM);
+
     if (discard_str) {
-        ret = av_opt_eval_int(&cc, discard_opt, discard_str, &ist->user_set_discard);
+        const AVOption *discard_opt = av_opt_find(ist->dec_ctx, "skip_frame",
+                                                  NULL, 0, 0);
+        ret = av_opt_eval_int(ist->dec_ctx, discard_opt, discard_str, &ist->user_set_discard);
         if (ret  < 0) {
             av_log(ist, AV_LOG_ERROR, "Error parsing discard %s.\n", discard_str);
             return ret;
         }
     }
-
-    ist->dec_ctx = avcodec_alloc_context3(ist->dec);
-    if (!ist->dec_ctx)
-        return AVERROR(ENOMEM);
 
     ret = avcodec_parameters_to_context(ist->dec_ctx, par);
     if (ret < 0) {
@@ -1480,8 +1442,10 @@ int ifile_open(const OptionsContext *o, const char *filename)
     if (data_codec_name)
         ret = err_merge(ret, find_codec(NULL, data_codec_name    , AVMEDIA_TYPE_DATA,     0,
                                         &ic->data_codec));
-    if (ret < 0)
+    if (ret < 0) {
+        avformat_free_context(ic);
         return ret;
+    }
 
     ic->video_codec_id     = video_codec_name    ? ic->video_codec->id    : AV_CODEC_ID_NONE;
     ic->audio_codec_id     = audio_codec_name    ? ic->audio_codec->id    : AV_CODEC_ID_NONE;
@@ -1506,6 +1470,7 @@ int ifile_open(const OptionsContext *o, const char *filename)
             av_log(d, AV_LOG_ERROR, "Did you mean file:%s?\n", filename);
         return err;
     }
+    f->ctx = ic;
 
     av_strlcat(d->log_name, "/",               sizeof(d->log_name));
     av_strlcat(d->log_name, ic->iformat->name, sizeof(d->log_name));
@@ -1545,10 +1510,8 @@ int ifile_open(const OptionsContext *o, const char *filename)
 
         if (ret < 0) {
             av_log(d, AV_LOG_FATAL, "could not find codec parameters\n");
-            if (ic->nb_streams == 0) {
-                avformat_close_input(&ic);
+            if (ic->nb_streams == 0)
                 return ret;
-            }
         }
     }
 
@@ -1600,7 +1563,6 @@ int ifile_open(const OptionsContext *o, const char *filename)
         }
     }
 
-    f->ctx        = ic;
     f->start_time = start_time;
     f->recording_time = recording_time;
     f->input_sync_ref = o->input_sync_ref;
@@ -1608,9 +1570,11 @@ int ifile_open(const OptionsContext *o, const char *filename)
     f->ts_offset  = o->input_ts_offset - (copy_ts ? (start_at_zero && ic->start_time != AV_NOPTS_VALUE ? ic->start_time : 0) : timestamp);
     f->accurate_seek = o->accurate_seek;
     d->loop = o->loop;
-    d->duration = 0;
-    d->time_base = (AVRational){ 1, 1 };
     d->nb_streams_warn = ic->nb_streams;
+
+    d->duration        = (Timestamp){ .ts = 0,              .tb = (AVRational){ 1, 1 } };
+    d->min_pts         = (Timestamp){ .ts = AV_NOPTS_VALUE, .tb = (AVRational){ 1, 1 } };
+    d->max_pts         = (Timestamp){ .ts = AV_NOPTS_VALUE, .tb = (AVRational){ 1, 1 } };
 
     f->format_nots = !!(ic->iformat->flags & AVFMT_NOTIMESTAMPS);
 

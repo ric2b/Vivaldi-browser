@@ -82,10 +82,8 @@ devtools_entrypoint("bundle") {
     "../../../../panels/network/*",
     "../../../../panels/profiler/*",
     "../../../../panels/timeline/*",
-    "../../../components/docs/performance_panel/*",
-
-    # TODO(crbug.com/1202788): Remove invalid dependents
     "../../../components/docs/perf_piechart/*",
+    "../../../components/docs/performance_panel/*",
   ]
 
   visibility += devtools_ui_legacy_visibility
@@ -94,7 +92,13 @@ devtools_entrypoint("bundle") {
 devtools_entrypoint("meta") {
   entrypoint = "perf_ui-meta.ts"
 
-  deps = [ ":bundle" ]
+  deps = [
+    ":bundle",
+    "../../../../core/common:bundle",
+    "../../../../core/i18n:bundle",
+    "../../../../core/root:bundle",
+    "../../../../ui/legacy:bundle",
+  ]
 
   visibility = [ "../../../../entrypoints/*" ]
 }

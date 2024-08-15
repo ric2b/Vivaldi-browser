@@ -16,25 +16,17 @@ update_template_instance("//ios/chrome/app:info_plist") {
   ]
 }
 
+update_target("//ios/chrome/browser/ui/toolbar:toolbar_ui") {
+  deps += [
+    "//vivaldi/ios/ui/toolbar:vivaldi_toolbar",
+    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings"
+  ]
+}
+
 update_target("//ios/chrome/browser/ui/toolbar/buttons:buttons") {
   deps -= [
     "resources:tab_toolbar_button_color_highlighted",
     "resources:tab_toolbar_button_color_highlighted_incognito",
-  ]
-  deps += [
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_back",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_forward",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_new_tab_page",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_stop",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_switcher",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_menu",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_panel",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_share",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_more",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_reload",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_search",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:tab_toolbar_button_color_highlighted",
-    "//vivaldi/ios/ui/toolbar/buttons/resources:tab_toolbar_button_color_highlighted_incognito",
   ]
 }
 
@@ -126,17 +118,13 @@ update_target("//ios/chrome/common/ui/colors/resources:resources") {
     ":toolbar_button_color",
   ]
   deps += [
-    "//vivaldi/ios/ui/toolbar/buttons/resources:toolbar_button_color",
+    "//vivaldi/ios/ui/toolbar/resources:toolbar_button_color",
   ]
 }
 
 update_target("//ios/chrome/browser/ui/ntp:coordinator") {
   deps += [
-    "//vivaldi/ios/ui/ntp:vivaldi_ntp",
-    "//vivaldi/ios/ui/custom_views:custom_views",
-    "//vivaldi/ios/ui/helpers:helpers",
-    "//vivaldi/ios/ui/context_menu:context_menu",
-    "//vivaldi/ios/ui/common:vivaldi_common",
+    "//vivaldi/ios/ui/ntp:vivaldi_ntp"
   ]
 }
 
@@ -152,7 +140,7 @@ update_target("//ios/chrome/browser/ui/tabs:tabs") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/bookmarks:bookmarks") {
+update_target("//ios/chrome/browser/ui/bookmarks/home:home") {
   deps += [
     "//vivaldi/ios/ui/bookmarks_editor:vivaldi_bookmarks_editor"
   ]
@@ -171,6 +159,7 @@ update_target("//ios/chrome/browser/ui/badges:badges") {
 
 update_target("//ios/chrome/browser/ui/location_bar:location_bar") {
   deps += [
+    "//vivaldi/ios/chrome/browser/ui/location_bar:vivaldi_location_bar",
     "//vivaldi/ios/ui/ad_tracker_blocker:vivaldi_ad_tracker_blocker",
   ]
 }
@@ -185,7 +174,7 @@ update_target("//ios/chrome/browser/ui/settings:settings") {
     "//vivaldi/ios/ui/settings/resources:vivaldi_passwords_manager_empty",
     "//vivaldi/ios/ui/settings/custom_app_icon:vivaldi_custom_app_icon",
     "//vivaldi/ios/ui/settings/search_engine:vivaldi_search_engine_settings",
-    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_setting"
+    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings"
   ]
 }
 
@@ -203,9 +192,11 @@ update_target("//ios/chrome/browser/shared/model/browser_state:browser_state") {
   ]
 }
 
-update_target("//ios/chrome/browser/web:web_internal") {
+update_target("//ios/chrome/browser/web/model:web_internal") {
   deps += [
-    "//vivaldi/browser:stats_reporter"
+    "//vivaldi/browser:stats_reporter",
+    "//vivaldi/ios/website_dark_mode:website_dark_mode",
+    "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings"
   ]
 }
 
@@ -224,10 +215,14 @@ update_target("//ios/chrome/browser/ui/default_promo:default_promo") {
 update_target("//ios/chrome/browser/ui/first_run:first_run") {
   deps += [
     "//vivaldi/ios/ui/onboarding:vivaldi_onboarding",
+    "//vivaldi/ios/ui/custom_views:custom_views",
+    "//vivaldi/ios/ui/helpers:helpers",
+    "//vivaldi/ios/ui/context_menu:context_menu",
+    "//vivaldi/ios/ui/common:vivaldi_common",
   ]
 }
 
-update_target("//ios/chrome/browser/resources:settings_resources") {
+update_target("//ios/chrome/app/resources:settings_resources") {
   public_deps -= [ ":settings_resources_experimental_plist" ]
 }
 

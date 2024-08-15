@@ -30,22 +30,21 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifierJni;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
-import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.test.util.ToolbarUnitTestUtils;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.components.security_state.SecurityStateModelJni;
@@ -77,15 +76,13 @@ public final class ToolbarSecurityIconTest {
 
     @Rule public JniMocker mocker = new JniMocker();
 
-    @Mock private TabImpl mTab;
+    @Mock private Tab mTab;
 
     @Mock SecurityStateModel.Natives mSecurityStateMocks;
 
     @Mock private LocationBarModel mLocationBarModel;
 
     @Mock private LocationBarModel.Natives mLocationBarModelJni;
-
-    @Mock private SearchEngineLogoUtils mSearchEngineLogoUtils;
 
     @Mock private ChromeAutocompleteSchemeClassifier.Natives mChromeAutocompleteSchemeClassifierJni;
 
@@ -127,9 +124,7 @@ public final class ToolbarSecurityIconTest {
                                 context,
                                 NewTabPageDelegate.EMPTY,
                                 (url) -> url.getSpec(),
-                                (window) -> null,
-                                ToolbarUnitTestUtils.OFFLINE_STATUS,
-                                mSearchEngineLogoUtils));
+                                ToolbarUnitTestUtils.OFFLINE_STATUS));
         Profile.setLastUsedProfileForTesting(mMockProfile);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -222,7 +217,7 @@ public final class ToolbarSecurityIconTest {
         }
 
         assertEquals(
-                0,
+                R.drawable.omnibox_info,
                 mLocationBarModel.getSecurityIconResource(
                         ConnectionSecurityLevel.NONE,
                         IS_SMALL_DEVICE,

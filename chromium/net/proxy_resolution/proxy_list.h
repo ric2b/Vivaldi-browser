@@ -28,10 +28,6 @@ class NetLogWithSource;
 
 // This class is used to hold a prioritized list of proxy chains. It handles
 // fallback to lower-priority chains if multiple chains are specified.
-//
-// TODO(crbug.com/1491092): For compatibility until proxy chains are used
-// everywhere, this class can also provide a list of ProxyServers only when
-// there are no multi-proxy chains in the list. This support will be removed.
 class NET_EXPORT_PRIVATE ProxyList {
  public:
   ProxyList();
@@ -81,18 +77,8 @@ class NET_EXPORT_PRIVATE ProxyList {
   // Returns true if |*this| lists the same proxies as |other|.
   bool Equals(const ProxyList& other) const;
 
-  // Returns the single server of the first proxy chain in the list. It is only
-  // valid to call this if !IsEmpty() and no chains in the list are multi-proxy.
-  // TODO(crbug.com/1491092): Remove this method.
-  const ProxyServer& Get() const;
-
   // Returns the first proxy chain in the list.
   const ProxyChain& First() const;
-
-  // Returns all proxy servers in the list. It is only valid to call this
-  // if no chain in the list is multi-proxy.
-  // TODO(crbug.com/1491092): Remove this method in favor of `AllChains()`.
-  const std::vector<ProxyServer>& GetAll() const;
 
   // Returns all proxy chains in the list.
   const std::vector<ProxyChain>& AllChains() const;
@@ -106,8 +92,17 @@ class NET_EXPORT_PRIVATE ProxyList {
   void SetFromPacString(const std::string& pac_string);
 
   // Returns a PAC-style semicolon-separated list of valid proxy servers.
-  // For example: "PROXY xxx.xxx.xxx.xxx:xx; SOCKS yyy.yyy.yyy:yy".
+  // For example: "PROXY xxx.xxx.xxx.xxx:xx; SOCKS yyy.yyy.yyy:yy". This is
+  // only valid if the list contains no multi-proxy chains, as those cannot
+  // be represented in PAC syntax.
   std::string ToPacString() const;
+
+  // Returns a semicolon-separated list of proxy chain debug representations.
+  // For single-proxy chains, this is just the PAC representation of the proxy;
+  // otherwise the chain is displayed in "[..]".
+  // TODO(https://crbug.com/1491092): Once a PAC string format for multi-proxy
+  // chains is implemented, this can be removed in favor of `ToPacString()`.
+  std::string ToDebugString() const;
 
   // Returns a serialized value for the list.
   base::Value ToValue() const;
@@ -135,7 +130,7 @@ class NET_EXPORT_PRIVATE ProxyList {
       ProxyRetryInfoMap* proxy_retry_info,
       base::TimeDelta retry_delay,
       bool reconsider,
-      const std::vector<ProxyServer>& additional_proxies_to_bypass,
+      const std::vector<ProxyChain>& additional_proxies_to_bypass,
       int net_error,
       const NetLogWithSource& net_log) const;
 
@@ -152,17 +147,8 @@ class NET_EXPORT_PRIVATE ProxyList {
                                 int net_error,
                                 const NetLogWithSource& net_log) const;
 
-  // Update `proxy_servers_` based on `proxy_chains_`.
-  void UpdateProxyServers();
-
   // List of proxy chains.
   std::vector<ProxyChain> proxy_chains_;
-
-  // List of ProxyServers, or nullopt if any chains in `proxy_chains_` are
-  // multi-proxy. This is kept in sync with `proxy_chains_`. This begins as an
-  // empty vector and becomes `nullopt` when a multi-proxy chain is added.
-  absl::optional<std::vector<ProxyServer>> proxy_servers_ =
-      std::vector<ProxyServer>();
 };
 
 }  // namespace net

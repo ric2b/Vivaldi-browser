@@ -24,6 +24,7 @@
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/page/color_provider_color_maps.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/blink.h"
@@ -54,7 +55,6 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/document_fenced_frames.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
-#include "third_party/blink/renderer/core/html/portal/document_portals.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
 #include "third_party/blink/renderer/core/inspector/inspector_issue_storage.h"
@@ -91,7 +91,10 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/color/color_provider.h"
+#include "ui/color/color_provider_utils.h"
 
 namespace blink {
 
@@ -255,6 +258,31 @@ Page::~Page() {
   DCHECK(!main_frame_);
 }
 
+// Closing a window/FrameTree happens asynchronously. It's important to keep
+// track of the "current" Page because it might change, e.g. if a navigation
+// committed in between the time the task gets posted but before the task runs.
+// This class keeps track of the "current" Page and ensures that the window
+// close happens on the correct Page.
+class Page::CloseTaskHandler : public GarbageCollected<Page::CloseTaskHandler> {
+ public:
+  explicit CloseTaskHandler(WeakMember<Page> page) : page_(page) {}
+  ~CloseTaskHandler() = default;
+
+  void DoDeferredClose() {
+    if (page_) {
+      CHECK(page_->MainFrame());
+      page_->GetChromeClient().CloseWindow();
+    }
+  }
+
+  void SetPage(Page* page) { page_ = page; }
+
+  void Trace(Visitor* visitor) const { visitor->Trace(page_); }
+
+ private:
+  WeakMember<Page> page_;
+};
+
 void Page::CloseSoon() {
   // Make sure this Page can no longer be found by JS.
   is_closing_ = true;
@@ -263,7 +291,28 @@ void Page::CloseSoon() {
   if (auto* main_local_frame = DynamicTo<LocalFrame>(main_frame_.Get()))
     main_local_frame->Loader().StopAllLoaders(/*abort_client=*/true);
 
-  GetChromeClient().CloseWindowSoon();
+  // If the client is a popup, immediately close the window. This preserves the
+  // previous behavior where we do the closing synchronously.
+  if (GetChromeClient().IsPopup()) {
+    GetChromeClient().CloseWindow();
+    return;
+  }
+  // If the client is a WebView, post a task to close the window asynchronously.
+  // This is because we could be called from deep in Javascript.  If we ask the
+  // WebView to close now, the window could be closed before the JS finishes
+  // executing, thanks to nested message loops running and handling the
+  // resulting disconnecting PageBroadcast. So instead, post a message back to
+  // the message loop, which won't run until the JS is complete, and then the
+  // close request can be sent. Note that we won't post this task if the Page is
+  // already marked as being destroyed: in that case, `MainFrame()` will be
+  // null.
+  if (!close_task_handler_ && MainFrame()) {
+    close_task_handler_ = MakeGarbageCollected<Page::CloseTaskHandler>(this);
+    GetPageScheduler()->GetAgentGroupScheduler().DefaultTaskRunner()->PostTask(
+        FROM_HERE,
+        WTF::BindOnce(&Page::CloseTaskHandler::DoDeferredClose,
+                      WrapWeakPersistent(close_task_handler_.Get())));
+  }
 }
 
 ViewportDescription Page::GetViewportDescription() const {
@@ -339,6 +388,19 @@ void Page::SetMainFrame(Frame* main_frame) {
   page_scheduler_->SetIsMainFrameLocal(main_frame->IsLocalFrame());
 }
 
+void Page::TakeCloseTaskHandler(Page* old_page) {
+  // Setting the CloseTaskHandler using this function should only be done
+  // when transferring the CloseTaskHandler from a previous Page to the new
+  // Page during LocalFrame <-> LocalFrame swap. The new Page should not have
+  // a CloseTaskHandler yet at this point.
+  CHECK(!close_task_handler_);
+  close_task_handler_ = old_page->close_task_handler_;
+  old_page->close_task_handler_ = nullptr;
+  if (close_task_handler_) {
+    close_task_handler_->SetPage(this);
+  }
+}
+
 LocalFrame* Page::DeprecatedLocalMainFrame() const {
   return To<LocalFrame>(main_frame_.Get());
 }
@@ -372,8 +434,11 @@ void Page::UsesOverlayScrollbarsChanged() {
   for (Page* page : AllPages()) {
     for (Frame* frame = page->MainFrame(); frame;
          frame = frame->Tree().TraverseNext()) {
-      if (auto* local_frame = DynamicTo<LocalFrame>(frame))
-        local_frame->View()->UsesOverlayScrollbarsChanged();
+      if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
+        if (LocalFrameView* view = local_frame->View()) {
+          view->UsesOverlayScrollbarsChanged();
+        }
+      }
     }
   }
 }
@@ -383,7 +448,9 @@ void Page::PlatformColorsChanged() {
     for (Frame* frame = page->MainFrame(); frame;
          frame = frame->Tree().TraverseNext()) {
       if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
-        local_frame->GetDocument()->PlatformColorsChanged();
+        if (Document* document = local_frame->GetDocument()) {
+          document->PlatformColorsChanged();
+        }
         if (LayoutView* view = local_frame->ContentLayoutObject())
           view->InvalidatePaintForViewAndDescendants();
       }
@@ -395,14 +462,78 @@ void Page::ColorSchemeChanged() {
   for (const Page* page : AllPages())
     for (Frame* frame = page->MainFrame(); frame;
          frame = frame->Tree().TraverseNext()) {
-      if (auto* local_frame = DynamicTo<LocalFrame>(frame))
-        local_frame->GetDocument()->ColorSchemeChanged();
+      if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
+        if (Document* document = local_frame->GetDocument()) {
+          document->ColorSchemeChanged();
+        }
+      }
     }
 }
 
 void Page::ColorProvidersChanged() {
-  for (Page* page : AllPages())
+  for (Page* page : AllPages()) {
     page->InvalidatePaint();
+  }
+}
+
+void Page::EmulateForcedColors(bool is_dark_theme) {
+  emulated_forced_colors_provider_ =
+      WebTestSupport::IsRunningWebTest()
+          ? std::make_unique<ui::ColorProvider>(
+                ui::CreateEmulatedForcedColorsColorProviderForTest())
+          : std::make_unique<ui::ColorProvider>(
+                ui::CreateEmulatedForcedColorsColorProvider(is_dark_theme));
+}
+
+void Page::DisableEmulatedForcedColors() {
+  emulated_forced_colors_provider_.reset();
+}
+
+void Page::UpdateColorProviders(
+    const ColorProviderColorMaps& color_provider_colors) {
+  if (color_provider_colors.IsEmpty()) {
+    return;
+  }
+
+  // TODO(samomekarajr): Might want to only create new ColorProviders if the
+  // renderer color maps do not match the existing ColorProviders.
+  light_color_provider_ = std::make_unique<ui::ColorProvider>(
+      ui::CreateColorProviderFromRendererColorMap(
+          color_provider_colors.light_colors_map));
+  dark_color_provider_ = std::make_unique<ui::ColorProvider>(
+      ui::CreateColorProviderFromRendererColorMap(
+          color_provider_colors.dark_colors_map));
+  forced_colors_color_provider_ =
+      WebTestSupport::IsRunningWebTest()
+          ? std::make_unique<ui::ColorProvider>(
+                ui::CreateEmulatedForcedColorsColorProviderForTest())
+          : std::make_unique<ui::ColorProvider>(
+                ui::CreateColorProviderFromRendererColorMap(
+                    color_provider_colors.forced_colors_map));
+}
+
+void Page::UpdateColorProvidersForTest() {
+  light_color_provider_ = std::make_unique<ui::ColorProvider>(
+      ui::CreateColorProviderForBlinkTests(/*dark_mode=*/false));
+  dark_color_provider_ = std::make_unique<ui::ColorProvider>(
+      ui::CreateColorProviderForBlinkTests(/*dark_mode=*/true));
+  forced_colors_color_provider_ = std::make_unique<ui::ColorProvider>(
+      ui::CreateEmulatedForcedColorsColorProviderForTest());
+}
+
+const ui::ColorProvider* Page::GetColorProviderForPainting(
+    mojom::blink::ColorScheme color_scheme,
+    bool in_forced_colors) const {
+  if (in_forced_colors) {
+    if (emulated_forced_colors_provider_) {
+      return emulated_forced_colors_provider_.get();
+    }
+    return forced_colors_color_provider_.get();
+  }
+
+  return color_scheme == mojom::blink::ColorScheme::kDark
+             ? dark_color_provider_.get()
+             : light_color_provider_.get();
 }
 
 void Page::InitialStyleChanged() {
@@ -631,12 +762,6 @@ void CheckFrameCountConsistency(int expected_frame_count, Frame* frame) {
 
   int actual_frame_count = 0;
 
-  if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
-    if (auto* portals = DocumentPortals::Get(*local_frame->GetDocument())) {
-      actual_frame_count += static_cast<int>(portals->GetPortals().size());
-    }
-  }
-
   for (; frame; frame = frame->Tree().TraverseNext()) {
     ++actual_frame_count;
 
@@ -773,7 +898,7 @@ void Page::SettingsChanged(ChangeType change_type) {
         if (auto* window = DynamicTo<LocalDOMWindow>(frame->DomWindow())) {
           // Forcibly instantiate WindowProxy.
           window->GetScriptController().WindowProxy(
-              DOMWrapperWorld::MainWorld());
+              DOMWrapperWorld::MainWorld(window->GetIsolate()));
         }
       }
       break;
@@ -830,12 +955,6 @@ void Page::SettingsChanged(ChangeType change_type) {
     }
     case ChangeType::kColorScheme:
       InvalidateColorScheme();
-      break;
-    case ChangeType::kSpatialNavigation:
-      if (spatial_navigation_controller_ ||
-          GetSettings().GetSpatialNavigationEnabled()) {
-        GetSpatialNavigationController().OnSpatialNavigationSettingChanged();
-      }
       break;
     case ChangeType::kUniversalAccess: {
       if (!GetSettings().GetAllowUniversalAccessFromFileURLs())
@@ -983,6 +1102,7 @@ void Page::Trace(Visitor* visitor) const {
   visitor->Trace(agent_group_scheduler_);
   visitor->Trace(v8_compile_hints_producer_);
   visitor->Trace(v8_compile_hints_consumer_);
+  visitor->Trace(close_task_handler_);
   Supplementable<Page>::Trace(visitor);
 }
 
@@ -1011,6 +1131,8 @@ void Page::WillBeDestroyed() {
     main_frame->Detach(FrameDetachType::kRemove);
   }
 
+  // Only begin clearing state after JS has run, since running JS itself can
+  // sometimes alter Page's state.
   DCHECK(AllPages().Contains(this));
   AllPages().erase(this);
   OrdinaryPages().erase(this);
@@ -1041,6 +1163,11 @@ void Page::WillBeDestroyed() {
   page_visibility_observer_set_.clear();
 
   page_scheduler_ = nullptr;
+
+  if (close_task_handler_) {
+    close_task_handler_->SetPage(nullptr);
+    close_task_handler_ = nullptr;
+  }
 }
 
 void Page::RegisterPluginsChangedObserver(PluginsChangedObserver* observer) {
@@ -1098,20 +1225,6 @@ void Page::ClearAutoplayFlags() {
 
 int32_t Page::AutoplayFlags() const {
   return autoplay_flags_;
-}
-
-void Page::SetInsidePortal(bool inside_portal) {
-  if (inside_portal_ == inside_portal)
-    return;
-
-  inside_portal_ = inside_portal;
-
-  if (MainFrame() && MainFrame()->IsLocalFrame())
-    DeprecatedLocalMainFrame()->PortalStateChanged();
-}
-
-bool Page::InsidePortal() const {
-  return inside_portal_;
 }
 
 void Page::SetIsMainFrameFencedFrameRoot() {

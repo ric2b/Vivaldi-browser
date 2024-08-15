@@ -18,16 +18,15 @@
 namespace Eigen {
 
 /** \class TensorInitializer
-  * \ingroup CXX11_Tensor_Module
-  *
-  * \brief Helper template to initialize Tensors from std::initializer_lists.
-  */
+ * \ingroup CXX11_Tensor_Module
+ *
+ * \brief Helper template to initialize Tensors from std::initializer_lists.
+ */
 namespace internal {
 
 template <typename Derived, int N>
 struct Initializer {
-  typedef std::initializer_list<
-    typename Initializer<Derived, N - 1>::InitList> InitList;
+  typedef std::initializer_list<typename Initializer<Derived, N - 1>::InitList> InitList;
 
   static void run(TensorEvaluator<Derived, DefaultDevice>& tensor,
                   Eigen::array<typename traits<Derived>::Index, traits<Derived>::NumDimensions>* indices,
@@ -61,12 +60,10 @@ struct Initializer<Derived, 0> {
   typedef typename traits<Derived>::Scalar InitList;
 
   static void run(TensorEvaluator<Derived, DefaultDevice>& tensor,
-                  Eigen::array<typename traits<Derived>::Index, traits<Derived>::NumDimensions>*,
-                  const InitList& v) {
+                  Eigen::array<typename traits<Derived>::Index, traits<Derived>::NumDimensions>*, const InitList& v) {
     tensor.coeffRef(0) = v;
   }
 };
-
 
 template <typename Derived, int N>
 void initialize_tensor(TensorEvaluator<Derived, DefaultDevice>& tensor,

@@ -398,6 +398,10 @@ class AppWindow : public content::WebContentsDelegate,
     native_app_window_ = std::move(native_app_window);
   }
 
+  void SetOnUpdateDraggableRegionsForTesting(base::OnceClosure callback) {
+    on_update_draggable_regions_callback_for_testing_ = std::move(callback);
+  }
+
   bool DidFinishFirstNavigation() { return did_finish_first_navigation_; }
 
   // Vivaldi specific extensions.
@@ -437,7 +441,7 @@ class AppWindow : public content::WebContentsDelegate,
       const content::MediaStreamRequest& request,
       content::MediaResponseCallback callback) override;
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
-                                  const GURL& security_origin,
+                                  const url::Origin& security_origin,
                                   blink::mojom::MediaStreamType type) override;
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
@@ -607,8 +611,13 @@ class AppWindow : public content::WebContentsDelegate,
   // processes.
   bool did_finish_first_navigation_ = false;
 
+  // Allows tests to wait for draggable regions to be sent from the renderer.
+  base::OnceClosure on_update_draggable_regions_callback_for_testing_;
+
+  // Vivaldi
   ui::WindowShowState initial_state_ = ui::SHOW_STATE_NORMAL;
 
+  // Vivaldi
   // If the mouse has entered the app-window. Used for ContentsMouseEvent
   // leaving and entering.
   bool mouse_has_entered_ = false;

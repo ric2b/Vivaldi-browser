@@ -15,15 +15,20 @@
 #include "./centipede/symbol_table.h"
 
 #include <cstdlib>
-#include <filesystem>
+#include <filesystem>  // NOLINT
 #include <fstream>
+#include <istream>
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
 #include "absl/types/span.h"
 #include "./centipede/command.h"
@@ -33,10 +38,6 @@
 #include "./centipede/util.h"
 
 namespace centipede {
-
-bool SymbolTable::Entry::operator==(const Entry &other) const {
-  return this->func == other.func && this->file_line_col == other.file_line_col;
-}
 
 bool SymbolTable::operator==(const SymbolTable &other) const {
   return this->entries_ == other.entries_;
@@ -63,8 +64,8 @@ void SymbolTable::ReadFromLLVMSymbolizer(std::istream &in) {
 
 void SymbolTable::WriteToLLVMSymbolizer(std::ostream &out) {
   for (const Entry &entry : entries_) {
-    out << entry.func << std::endl;
-    out << entry.file_line_col << std::endl;
+    out << entry.func << '\n';
+    out << entry.file_line_col() << '\n';
     out << std::endl;
   }
 }
@@ -152,6 +153,44 @@ void SymbolTable::SetAllToUnknown(size_t size) {
   for (auto &entry : entries_) {
     entry = {"?", "?"};
   }
+
+  table_.clear();
+}
+
+void SymbolTable::AddEntry(std::string_view func,
+                           std::string_view file_line_col) {
+  if (absl::StrContains(file_line_col, "?")) {
+    AddEntryInternal(func, file_line_col, 0, 0);
+    return;
+  }
+  const std::vector<std::string_view> file_line_col_split =
+      absl::StrSplit(file_line_col, ':');
+  CHECK_LE(file_line_col_split.size(), 3);
+  CHECK_GE(file_line_col_split.size(), 1)
+      << "Unexpected symbolizer input format when getting source location: "
+      << file_line_col;
+  int line = -1;
+  int col = -1;
+  if (file_line_col_split.size() >= 2) {
+    CHECK(absl::SimpleAtoi(file_line_col_split[1], &line))
+        << "Unable to convert line number string to an int: "
+        << file_line_col_split[1];
+  }
+  if (file_line_col_split.size() == 3) {
+    CHECK(absl::SimpleAtoi(file_line_col_split[2], &col))
+        << "Unable to convert column number string to an int: "
+        << file_line_col_split[2];
+  }
+  AddEntryInternal(func, file_line_col_split[0], line, col);
+}
+
+void SymbolTable::AddEntryInternal(std::string_view func, std::string_view file,
+                                   int line, int col) {
+  entries_.emplace_back(Entry{GetOrInsert(func), GetOrInsert(file), line, col});
+}
+
+std::string_view SymbolTable::GetOrInsert(std::string_view str) {
+  return *table_.insert(std::string{str}).first;
 }
 
 }  // namespace centipede

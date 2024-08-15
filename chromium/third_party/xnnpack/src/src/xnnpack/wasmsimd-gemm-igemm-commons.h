@@ -5,7 +5,6 @@
 
 #pragma once
 
-
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
@@ -17,17 +16,20 @@
 #include <xnnpack/post-operation.h>
 #include <xnnpack/wasm-assembler.h>
 
+
 namespace xnnpack {
 namespace internal {
 
 template <typename Generator>
 xnn_status generate_gemm_or_igemm(xnn_code_buffer* b, const char* name, size_t max_mr, size_t kc,
-                                  size_t loop_unroll_iters, bool full_unroll, size_t nc_mod_nr, const void* params) {
+                                  size_t loop_unroll_iters, bool full_unroll, size_t nc_mod_nr, bool use_fma,
+                                  const void* params) {
   size_t iters = kc / sizeof(float);
   assert(!full_unroll || (iters == loop_unroll_iters));
   Generator generator(b);
 
-  generator.generate(name, max_mr, iters, loop_unroll_iters, full_unroll, nc_mod_nr,  static_cast<const jit_gemm_params*>(params));
+  generator.generate(name, max_mr, iters, loop_unroll_iters, full_unroll, nc_mod_nr, use_fma,
+                     static_cast<const jit_gemm_params*>(params));
   generator.Emit();
   auto finalized = generator.finalize();
   if (generator.error() == xnnpack::Error::kOutOfMemory) {
@@ -59,13 +61,18 @@ class PostOps : public WasmAssembler {
   }
 
   void InitClampLimit(float min, float max) {
-    clamps_consts_.clamp_min = min != -std::numeric_limits<float>::infinity();
-    clamps_consts_.clamp_max = max != +std::numeric_limits<float>::infinity();
-    if (clamps_consts_.clamp_min) {
-      clamps_consts_.vmin = MakeLocal(V128Const(min));
+    clamp_consts_.clamp_min = min != -std::numeric_limits<float>::infinity();
+    clamp_consts_.clamp_max = max != +std::numeric_limits<float>::infinity();
+    clamp_consts_.relu = (min == 0.0f && !clamp_consts_.clamp_max);
+    if (clamp_consts_.relu) {
+      clamp_consts_.vmin = MakeLocal(I32x4Splat(I32Const(0)));
+      return;
     }
-    if (clamps_consts_.clamp_max) {
-      clamps_consts_.vmax = MakeLocal(V128Const(max));
+    if (clamp_consts_.clamp_min) {
+      clamp_consts_.vmin = MakeLocal(V128Const(min));
+    }
+    if (clamp_consts_.clamp_max) {
+      clamp_consts_.vmax = MakeLocal(V128Const(max));
     }
   }
 
@@ -87,12 +94,30 @@ class PostOps : public WasmAssembler {
     }
   }
 
+  auto F32x4Max(const Local& a, const Local& b) {
+  #if XNN_ARCH_WASMRELAXEDSIMD
+    return F32x4RelaxedMax(a, b);
+  #endif
+    return F32x4Pmax(a, b);
+  }
+
+  auto F32x4Min(const Local& a, const Local& b) {
+  #if XNN_ARCH_WASMRELAXEDSIMD
+    return F32x4RelaxedMin(a, b);
+  #endif
+    return F32x4Pmin(a, b);
+  }
+
   void Clamp(Local& value) {
-    if (clamps_consts_.clamp_max) {
-      value = F32x4Pmin(clamps_consts_.vmax, value);
+    if (clamp_consts_.relu) {
+      value = I32x4MaxS(clamp_consts_.vmin, value);
+      return;
     }
-    if (clamps_consts_.clamp_min) {
-      value = F32x4Pmax(clamps_consts_.vmin, value);
+    if (clamp_consts_.clamp_max) {
+      value = F32x4Min(clamp_consts_.vmax, value);
+    }
+    if (clamp_consts_.clamp_min) {
+      value = F32x4Max(clamp_consts_.vmin, value);
     }
   }
 
@@ -107,7 +132,7 @@ class PostOps : public WasmAssembler {
           Hswish(v);
           break;
         default:
-          XNN_LOG_UNREACHABLE("unsupported post operation: %u", ops[i].op_type);
+          XNN_LOG_UNREACHABLE("unsupported post operation: %u", ops_[i].op_type);
       }
     }
   }
@@ -136,18 +161,20 @@ class PostOps : public WasmAssembler {
     bool clamp_max{};
     Local vmin;
     Local vmax;
+    bool relu{false};
   };
 
   const xnn_post_operation* ops_ = nullptr;
   size_t num_ops_{};
   HswishConsts hswish_consts_;
-  ClampConsts clamps_consts_;
+  ClampConsts clamp_consts_;
 };
 
 
 class GemmIGemmCommons : public PostOps {
  public:
   using PostOps::PostOps;
+
  protected:
   struct StoreArgs {
     StoreArgs(LocalsArray* cs, LocalsArray* vacc0123, LocalsArray* vacc4567, LocalsArray* as, Local* cn_stride, Local* kc, Local* nc):
@@ -198,10 +225,24 @@ class GemmIGemmCommons : public PostOps {
 
   void MulAdd(LocalsArray& vaccs, const LocalsArray& vas, const Local& vb, size_t max_mr) {
     for (size_t i = 0; i < max_mr; i++) {
-      vaccs[i] = F32x4Add(F32x4Mul(vas[i], vb), vaccs[i]);
+      vaccs[i] = MultiplyAndAdd(vas[i], vb, vaccs[i]);
     }
   }
+
+  template <typename Value>
+  ValueOnStack MultiplyAndAdd(const Value& a, const Local& b, const Local& c) {
+  #if XNN_ARCH_WASMRELAXEDSIMD
+    if (use_fma_) {
+      return F32x4RelaxedMadd(a, b, c);
+    } else
+  #endif
+    {
+      return F32x4Add(F32x4Mul(a, b), c);
+    }
+  }
+
+  bool use_fma_{false};
 };
 
-}
-}
+}  // namespace internal
+}  // namespace xnnpack

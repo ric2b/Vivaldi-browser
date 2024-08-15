@@ -7,6 +7,10 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+// End Vivaldi
+
 /// Protected interface of the AdaptiveToolbarViewController.
 @interface AdaptiveToolbarViewController (Subclassing)
 
@@ -28,6 +32,16 @@
 
 /// Updates the toolbar background color.
 - (void)updateBackgroundColor;
+
+// Vivaldi
+- (BOOL)isOmniboxFocused;
+- (BOOL)isTabBarEnabled;
+- (BOOL)isBottomOmniboxEnabled;
+- (BOOL)isDynamicAccentColorEnabled;
+- (BOOL)isIncognito;
+- (UIColor*)customAccentColor;
+- (UIColor*)toolbarBackgroundColorForType:(ToolbarType)type;
+// End Vivaldi
 
 @end
 

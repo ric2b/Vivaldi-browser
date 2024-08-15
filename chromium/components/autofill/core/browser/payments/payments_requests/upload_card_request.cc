@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/payments/payments_requests/upload_card_request.h"
 
 #include <string>
+#include <string_view>
 
 #include "base/feature_list.h"
 #include "base/json/json_writer.h"
@@ -27,11 +28,11 @@ const char kUploadCardRequestFormatWithoutCvc[] =
 }  // namespace
 
 UploadCardRequest::UploadCardRequest(
-    const PaymentsClient::UploadRequestDetails& request_details,
+    const PaymentsNetworkInterface::UploadRequestDetails& request_details,
     const bool full_sync_enabled,
-    base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
-                            const PaymentsClient::UploadCardResponseDetails&)>
-        callback)
+    base::OnceCallback<void(
+        AutofillClient::PaymentsRpcResult,
+        const PaymentsNetworkInterface::UploadCardResponseDetails&)> callback)
     : request_details_(request_details),
       full_sync_enabled_(full_sync_enabled),
       callback_(std::move(callback)) {}
@@ -122,7 +123,7 @@ void UploadCardRequest::ParseResponse(const base::Value::Dict& response) {
       response.FindString("instrument_id");
   if (response_instrument_id) {
     int64_t instrument_id;
-    if (base::StringToInt64(base::StringPiece(*response_instrument_id),
+    if (base::StringToInt64(std::string_view(*response_instrument_id),
                             &instrument_id)) {
       upload_card_response_details_.instrument_id = instrument_id;
     }
@@ -155,7 +156,7 @@ void UploadCardRequest::ParseResponse(const base::Value::Dict& response) {
       const auto* virtual_card_enrollment_data =
           virtual_card_metadata->FindDict("virtual_card_enrollment_data");
       if (virtual_card_enrollment_data) {
-        PaymentsClient::GetDetailsForEnrollmentResponseDetails
+        PaymentsNetworkInterface::GetDetailsForEnrollmentResponseDetails
             get_details_for_enrollment_response_details;
         const base::Value::Dict* google_legal_message =
             virtual_card_enrollment_data->FindDict("google_legal_message");

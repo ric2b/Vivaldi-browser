@@ -7,20 +7,18 @@
 #include <algorithm>
 #include <cstring>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/capture_mode/capture_mode_camera_preview_view.h"
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_util.h"
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/capture_mode/capture_mode_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/unified/unified_system_tray.h"
@@ -211,20 +209,10 @@ gfx::Rect GetCollisionAvoidanceRect(aura::Window* root_window) {
           status_area_widget->unified_system_tray();
       unified_system_tray->IsBubbleShown()) {
     collision_avoidance_rect = unified_system_tray->GetBubbleBoundsInScreen();
-
-    if (!features::IsQsRevampEnabled()) {
-      auto* message_center_bubble =
-          unified_system_tray->message_center_bubble();
-
-      if (message_center_bubble->IsMessageCenterVisible()) {
-        collision_avoidance_rect.Union(
-            message_center_bubble->GetBoundsInScreen());
-      }
-    }
   } else {
-    const std::vector<TrayBackgroundView*> tray_buttons =
-        status_area_widget->tray_buttons();
-    for (auto* tray_button : tray_buttons) {
+    const std::vector<raw_ptr<TrayBackgroundView, VectorExperimental>>
+        tray_buttons = status_area_widget->tray_buttons();
+    for (ash::TrayBackgroundView* tray_button : tray_buttons) {
       if (views::Widget* tray_bubble_widget = tray_button->GetBubbleWidget();
           tray_bubble_widget && tray_bubble_widget->IsVisible()) {
         collision_avoidance_rect.Union(
@@ -261,7 +249,7 @@ void UpdateFloatingPanelBoundsIfNeeded(aura::Window* root_window) {
 // with the current configuration.
 gfx::Size CalculatePreviewInitialSize() {
   int max_shorter_side = 0;
-  for (auto* root_window : Shell::GetAllRootWindows()) {
+  for (aura::Window* root_window : Shell::GetAllRootWindows()) {
     const auto work_area = display::Screen::GetScreen()
                                ->GetDisplayNearestWindow(root_window)
                                .work_area();
@@ -340,7 +328,7 @@ class CameraPreviewTargeter : public aura::WindowTargeter {
   }
 
  private:
-  const raw_ptr<aura::Window, ExperimentalAsh> camera_preview_window_;
+  const raw_ptr<aura::Window> camera_preview_window_;
 };
 
 capture_mode_util::AnimationParams BuildCameraVisibilityAnimationParams(
@@ -561,8 +549,8 @@ void CaptureModeCameraController::MaybeUpdatePreviewWidget(bool animate) {
   const bool did_visibility_change = capture_mode_util::SetWidgetVisibility(
       camera_preview_widget_.get(), size_specs.should_be_visible,
       !should_animate_visibility
-          ? absl::nullopt
-          : absl::make_optional<capture_mode_util::AnimationParams>(
+          ? std::nullopt
+          : std::make_optional<capture_mode_util::AnimationParams>(
                 BuildCameraVisibilityAnimationParams(
                     /*target_visibility=*/size_specs.should_be_visible,
                     /*apply_scale_up_animation=*/is_first_bounds_update_)));
@@ -893,6 +881,7 @@ void CaptureModeCameraController::RefreshCameraPreview() {
             PickSuitableCaptureFormat(initial_temp_bounds.size(),
                                       camera_info->supported_formats),
             ShouldCameraActLikeAMirror(*camera_info)));
+    camera_preview_view_->Initialize();
     ui::Layer* layer = camera_preview_widget_->GetLayer();
     layer->SetFillsBoundsOpaquely(false);
     layer->SetMasksToBounds(true);

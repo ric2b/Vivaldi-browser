@@ -14,15 +14,8 @@
 
 //! A no_std-friendly data-writing "sink" trait which allows for convenient expression
 //! of "write me into a limited-size buffer"-type methods on traits.
+
 #![cfg_attr(not(feature = "std"), no_std)]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used
-)]
 
 /// An append-only, limited-size collection.
 pub trait Sink<T> {

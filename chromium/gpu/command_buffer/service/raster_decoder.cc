@@ -94,6 +94,7 @@
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_util.h"
 #endif  // BUILDFLAG(ENABLE_VULKAN)
 
 #if BUILDFLAG(IS_WIN)
@@ -364,7 +365,7 @@ class RasterCommandsCompletedQuery : public QueryManager::Query {
   }
 
   const scoped_refptr<SharedContextState> shared_context_state_;
-  absl::optional<base::TimeTicks> begin_time_;
+  std::optional<base::TimeTicks> begin_time_;
   bool finished_ = false;
   base::WeakPtrFactory<RasterCommandsCompletedQuery> weak_ptr_factory_{this};
 };
@@ -918,7 +919,6 @@ class RasterDecoderImpl final : public RasterDecoder,
   // Number of commands remaining to be processed in DoCommands().
   int commands_to_process_ = 0;
 
-  bool gpu_raster_enabled_ = false;
   bool use_gpu_raster_ = false;
   bool use_passthrough_ = false;
 
@@ -1075,9 +1075,6 @@ RasterDecoderImpl::RasterDecoderImpl(
       disable_legacy_mailbox_(
           shared_image_manager &&
           shared_image_manager->display_context_on_another_thread()),
-      gpu_raster_enabled_(
-          gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
-          kGpuFeatureStatusEnabled),
       use_passthrough_(gles2::PassthroughCommandDecoderSupported() &&
                        gpu_preferences.use_passthrough_cmd_decoder),
       gpu_preferences_(gpu_preferences),
@@ -1149,12 +1146,6 @@ ContextResult RasterDecoderImpl::Initialize(
   query_manager_ = std::make_unique<RasterQueryManager>(shared_context_state_);
 
   if (attrib_helper.enable_oop_rasterization) {
-    if (!gpu_raster_enabled_) {
-      LOG(ERROR) << "ContextResult::kFatalFailure: GPU raster is disabled";
-      Destroy(true);
-      return ContextResult::kFatalFailure;
-    }
-
     DCHECK(gr_context() || graphite_context());
     use_gpu_raster_ = true;
     paint_cache_ = std::make_unique<cc::ServicePaintCache>();
@@ -1233,7 +1224,6 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   // TODO(enne): reconcile this with gles2_cmd_decoder's capability settings.
   Capabilities caps;
   caps.gpu_rasterization = use_gpu_raster_;
-  caps.supports_oop_raster = use_gpu_raster_;
   caps.gpu_memory_buffer_formats =
       feature_info()->feature_flags().gpu_memory_buffer_formats;
   caps.texture_target_exception_list =
@@ -1263,7 +1253,8 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   // Vulkan currently doesn't support single-component cross-thread shared
   // images.
   caps.disable_one_component_textures =
-      disable_legacy_mailbox_ && features::IsUsingVulkan();
+      workarounds().avoid_one_component_egl_images ||
+      (disable_legacy_mailbox_ && features::IsUsingVulkan());
   caps.angle_rgbx_internal_format =
       feature_info()->feature_flags().angle_rgbx_internal_format;
   caps.chromium_gpu_fence = feature_info()->feature_flags().chromium_gpu_fence;
@@ -1309,12 +1300,32 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
       supports_multiplanar_rendering = true;
     }
 #endif
-    caps.supports_yuv_rgb_conversion = supports_multiplanar_rendering;
+    caps.supports_yuv_to_rgb_conversion = true;
+    caps.supports_rgb_to_yuv_conversion = supports_multiplanar_rendering;
     caps.supports_yuv_readback = supports_multiplanar_rendering;
   } else {
-    caps.supports_yuv_rgb_conversion = true;
+    caps.supports_yuv_to_rgb_conversion = true;
+    caps.supports_rgb_to_yuv_conversion = true;
     caps.supports_yuv_readback = true;
   }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (shared_context_state_->GrContextIsGL()) {
+    PopulateDRMCapabilities(&caps, feature_info());
+  }
+#if BUILDFLAG(ENABLE_VULKAN)
+  else if (shared_context_state_->GrContextIsVulkan()) {
+    auto* device_queue =
+        shared_context_state_->vk_context_provider()->GetDeviceQueue();
+    caps.drm_device_id = device_queue->drm_device_id();
+    gpu::PopulateVkDrmFormatsAndModifiers(device_queue,
+                                          caps.drm_formats_and_modifiers);
+  }
+#endif  // BUILDFLAG(ENABLE_VULKAN)
+  else {
+    NOTREACHED();
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return caps;
 }
@@ -2330,6 +2341,7 @@ void RasterDecoderImpl::DoWritePixelsYUVINTERNAL(
 
   std::array<SkPixmap, SkYUVAInfo::kMaxPlanes> pixmaps = {};
 
+  size_t prev_byte_size = 0;
   for (int plane = 0; plane < yuv_info.numPlanes(); plane++) {
     auto color_type = viz::ToClosestSkColorType(true, dest_format, plane);
     auto plane_size =
@@ -2339,6 +2351,8 @@ void RasterDecoderImpl::DoWritePixelsYUVINTERNAL(
                           SkAlphaType::kPremul_SkAlphaType, nullptr);
 
     if (row_bytes[plane] < src_info.minRowBytes()) {
+      dest_scoped_access->ApplyBackendSurfaceEndState();
+      SubmitIfNecessary(std::move(end_semaphores));
       LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glWritePixelsYUV",
                          "row_bytes must be >= "
                          "SkImageInfo::minRowBytes() for source image.");
@@ -2347,16 +2361,20 @@ void RasterDecoderImpl::DoWritePixelsYUVINTERNAL(
 
     size_t byte_size = src_info.computeByteSize(row_bytes[plane]);
     if (byte_size > UINT32_MAX) {
+      dest_scoped_access->ApplyBackendSurfaceEndState();
+      SubmitIfNecessary(std::move(end_semaphores));
       LOCAL_SET_GL_ERROR(
           GL_INVALID_VALUE, "glWritePixelsYUV",
           "Cannot request a memory chunk larger than UINT32_MAX bytes");
       return;
     }
     if (plane > 0 &&
-        plane_offsets[plane] < plane_offsets[plane - 1] + byte_size) {
+        plane_offsets[plane] < plane_offsets[plane - 1] + prev_byte_size) {
+      dest_scoped_access->ApplyBackendSurfaceEndState();
+      SubmitIfNecessary(std::move(end_semaphores));
       LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glWritePixelsYUV",
                          "plane_offsets[plane] must be >= plane_offsets[plane "
-                         "- 1] + byte_size");
+                         "- 1] + prev_byte_size");
       return;
     }
 
@@ -2365,6 +2383,8 @@ void RasterDecoderImpl::DoWritePixelsYUVINTERNAL(
     void* pixel_data = GetSharedMemoryAs<void*>(
         shm_id, shm_offset + plane_offsets[plane], byte_size);
     if (!pixel_data) {
+      dest_scoped_access->ApplyBackendSurfaceEndState();
+      SubmitIfNecessary(std::move(end_semaphores));
       LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixelsYUV",
                          "Couldn't retrieve pixel data.");
       return;
@@ -2372,6 +2392,7 @@ void RasterDecoderImpl::DoWritePixelsYUVINTERNAL(
 
     // Create an SkPixmap for the plane.
     pixmaps[plane] = SkPixmap(src_info, pixel_data, row_bytes[plane]);
+    prev_byte_size = byte_size;
   }
 
   // Try a direct texture upload without using SkSurface.
@@ -2555,6 +2576,10 @@ void RasterDecoderImpl::DoReadbackARGBImagePixelsINTERNAL(
                        "Invalid plane_index");
     return;
   }
+
+  // Readback is potentially slow, so report progress here.
+  gl::ScopedProgressReporter report_progress(
+      shared_context_state_->progress_reporter());
 
   CopySharedImageHelper helper(&shared_image_representation_factory_,
                                shared_context_state_.get());
@@ -2749,6 +2774,10 @@ void RasterDecoderImpl::DoReadbackYUVImagePixelsINTERNAL(
   const SkIRect src_rect = SkIRect::MakeSize(sk_image->dimensions());
   const SkISize dst_size = SkISize::Make(dst_width, dst_height);
 
+  // Readback is potentially slow, so report progress here.
+  gl::ScopedProgressReporter report_progress(
+      shared_context_state_->progress_reporter());
+
   // While this function indicates it's asynchronous, the DoFinish() call below
   // ensures it completes synchronously.
   YUVReadbackResult yuv_result;
@@ -2922,6 +2951,7 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLfloat r,
                                               GLboolean visible,
                                               GLfloat hdr_headroom,
                                               const volatile GLbyte* key) {
+  TRACE_EVENT0("gpu", "RasterDecoderImpl::DoBeginRasterCHROMIUM");
   // Workaround for https://crbug.com/906453: Flush before BeginRaster (the
   // commands between BeginRaster and EndRaster will not flush).
   FlushToWorkAroundMacCrashes();
@@ -3018,7 +3048,7 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLfloat r,
 
   SkColor4f sk_color_4f = {r, g, b, a};
   if (shared_image_raster_) {
-    absl::optional<SkColor4f> clear_color;
+    std::optional<SkColor4f> clear_color;
     if (needs_clear)
       clear_color.emplace(sk_color_4f);
     scoped_shared_image_raster_write_ =

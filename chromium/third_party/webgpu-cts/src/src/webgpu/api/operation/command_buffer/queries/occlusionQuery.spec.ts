@@ -35,10 +35,10 @@ const kBytesPerQuery = 8;
 const kTextureSize = [4, 4];
 
 const kRenderModes = ['direct', 'render-bundle'] as const;
-type RenderMode = typeof kRenderModes[number];
+type RenderMode = (typeof kRenderModes)[number];
 
 const kBufferOffsets = ['zero', 'non-zero'] as const;
-type BufferOffset = typeof kBufferOffsets[number];
+type BufferOffset = (typeof kBufferOffsets)[number];
 
 type SetupParams = {
   numQueries: number;
@@ -212,7 +212,9 @@ class QueryStarterRenderBundle implements QueryStarter {
   ) {
     this._device = device;
     this._pass = pass;
-    const colorAttachment = (renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[])[0];
+    const colorAttachment = (
+      renderPassDescriptor.colorAttachments as GPURenderPassColorAttachment[]
+    )[0];
     this._renderBundleEncoderDescriptor = {
       colorFormats: ['rgba8unorm'],
       depthStencilFormat: renderPassDescriptor.depthStencilAttachment?.depthLoadOp
@@ -693,7 +695,7 @@ g.test('occlusion_query,scissor')
         const expectPassed = !occluded;
         t.expect(
           !!passed === expectPassed,
-          `queryIndex: ${queryIndex}, scissorCase: ${scissorCase}, was: ${!!passed}, expected: ${expectPassed}, ${name}`
+          `queryIndex: ${queryIndex}, scissorCase: ${scissorCase}, was: ${!!passed}, expected: ${expectPassed}`
         );
       }
     );
@@ -737,7 +739,7 @@ g.test('occlusion_query,depth')
         const expectPassed = queryIndex % 2 === 0;
         t.expect(
           !!passed === expectPassed,
-          `queryIndex: ${queryIndex}, was: ${!!passed}, expected: ${expectPassed}, ${name}`
+          `queryIndex: ${queryIndex}, was: ${!!passed}, expected: ${expectPassed}`
         );
       }
     );
@@ -781,7 +783,7 @@ g.test('occlusion_query,stencil')
         const expectPassed = queryIndex % 2 === 0;
         t.expect(
           !!passed === expectPassed,
-          `queryIndex: ${queryIndex}, was: ${!!passed}, expected: ${expectPassed}, ${name}`
+          `queryIndex: ${queryIndex}, was: ${!!passed}, expected: ${expectPassed}`
         );
       }
     );
@@ -849,7 +851,7 @@ g.test('occlusion_query,sample_mask')
         const expectPassed = !!(sampleMask & drawMask);
         t.expect(
           !!passed === expectPassed,
-          `queryIndex: ${queryIndex}, was: ${!!passed}, expected: ${expectPassed}, ${name}`
+          `queryIndex: ${queryIndex}, was: ${!!passed}, expected: ${expectPassed}`
         );
       }
     );

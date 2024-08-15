@@ -18,10 +18,13 @@
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/test/ash_test_base.h"
 #include "base/memory/raw_ptr.h"
+#include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/phonehub/fake_connection_scheduler.h"
+#include "chromeos/ash/components/phonehub/fake_icon_decoder.h"
 #include "chromeos/ash/components/phonehub/fake_multidevice_feature_access_manager.h"
 #include "chromeos/ash/components/phonehub/fake_phone_hub_manager.h"
 #include "chromeos/ash/components/phonehub/phone_model_test_util.h"
@@ -32,6 +35,8 @@
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/controls/menu/menu_controller.h"
+#include "ui/views/controls/menu/menu_item_view.h"
 
 namespace ash {
 
@@ -43,6 +48,8 @@ using AccessProhibitedReason =
     phonehub::MultideviceFeatureAccessManager::AccessProhibitedReason;
 
 constexpr base::TimeDelta kConnectingViewGracePeriod = base::Seconds(40);
+constexpr char kTrayBackgroundViewHistogramName[] =
+    "Ash.StatusArea.TrayBackgroundView.Pressed";
 const std::string kPhoneHubNudgeId = "PhoneHubNudge";
 
 // A mock implementation of |NewWindowDelegate| for use in tests.
@@ -69,9 +76,7 @@ class PhoneHubTrayTest : public AshTestBase {
         /*enabled_features=*/{features::kPhoneHub,
                               features::kPhoneHubCameraRoll,
                               features::kEcheLauncher, features::kEcheSWA,
-                              features::kPhoneHubOnboardingNotifierRevamp,
-                              features::kEcheNetworkConnectionState,
-                              features::kSystemNudgeV2},
+                              features::kEcheNetworkConnectionState},
         /*disabled_features=*/{});
     auto delegate = std::make_unique<MockNewWindowDelegate>();
     new_window_delegate_ = delegate.get();
@@ -139,6 +144,8 @@ class PhoneHubTrayTest : public AshTestBase {
     return phone_hub_tray_->content_view_for_testing();
   }
 
+  PhoneHubTray* phone_hub_tray() { return phone_hub_tray_; }
+
   MultideviceFeatureOptInView* multidevice_feature_opt_in_view() {
     return static_cast<MultideviceFeatureOptInView*>(bubble_view()->GetViewByID(
         PhoneHubViewID::kMultideviceFeatureOptInView));
@@ -148,24 +155,9 @@ class PhoneHubTrayTest : public AshTestBase {
     return bubble_view()->GetViewByID(PhoneHubViewID::kOnboardingMainView);
   }
 
-  views::View* onboarding_dismiss_prompt_view() {
-    return bubble_view()->GetViewByID(
-        PhoneHubViewID::kOnboardingDismissPromptView);
-  }
-
   views::Button* onboarding_get_started_button() {
     return static_cast<views::Button*>(bubble_view()->GetViewByID(
         PhoneHubViewID::kOnboardingGetStartedButton));
-  }
-
-  views::Button* onboarding_dismiss_button() {
-    return static_cast<views::Button*>(
-        bubble_view()->GetViewByID(PhoneHubViewID::kOnboardingDismissButton));
-  }
-
-  views::Button* onboarding_dismiss_ack_button() {
-    return static_cast<views::Button*>(bubble_view()->GetViewByID(
-        PhoneHubViewID::kOnboardingDismissAckButton));
   }
 
   views::Button* disconnected_refresh_button() {
@@ -194,12 +186,10 @@ class PhoneHubTrayTest : public AshTestBase {
   }
 
  protected:
-  raw_ptr<PhoneHubTray, DanglingUntriaged | ExperimentalAsh> phone_hub_tray_ =
-      nullptr;
+  raw_ptr<PhoneHubTray, DanglingUntriaged> phone_hub_tray_ = nullptr;
   phonehub::FakePhoneHubManager phone_hub_manager_;
   base::test::ScopedFeatureList feature_list_;
-  raw_ptr<MockNewWindowDelegate, DanglingUntriaged | ExperimentalAsh>
-      new_window_delegate_;
+  raw_ptr<MockNewWindowDelegate, DanglingUntriaged> new_window_delegate_;
   std::unique_ptr<TestNewWindowDelegateProvider> delegate_provider_;
 };
 
@@ -555,59 +545,22 @@ TEST_F(PhoneHubTrayTest, StartOnboardingFlow) {
   EXPECT_EQ(1u, GetOnboardingUiTracker()->handle_get_started_call_count());
 }
 
-TEST_F(PhoneHubTrayTest, DismissOnboardingFlowByClickingAckButton) {
+TEST_F(PhoneHubTrayTest, DismissOnboardingFlowByRightClickIcon) {
   // Simulate a pending setup state to show the onboarding screen.
   GetFeatureStatusProvider()->SetStatus(
       phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
   GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
 
-  ClickTrayButton();
-  EXPECT_TRUE(phone_hub_tray_->is_active());
-  EXPECT_EQ(PhoneHubViewID::kOnboardingView, content_view()->GetID());
-  // It should display the onboarding main view at first.
-  EXPECT_TRUE(onboarding_main_view());
-
-  // Simulate a click on the "Dismiss" button.
-  LeftClickOn(onboarding_dismiss_button());
-
-  // It should transit to show the dismiss prompt.
-  EXPECT_TRUE(onboarding_dismiss_prompt_view());
-  EXPECT_TRUE(onboarding_dismiss_prompt_view()->GetVisible());
-
-  // Simulate a click on the "OK, got it" button to ack.
-  LeftClickOn(onboarding_dismiss_ack_button());
+  RightClickOn(phone_hub_tray_);
+  EXPECT_TRUE(views::MenuController::GetActiveInstance());
+  views::MenuItemView* menu_item_view =
+      views::MenuController::GetActiveInstance()
+          ->GetSelectedMenuItem()
+          ->GetMenuItemByID(/*kHidePhoneHubIconCommandId*/ 1);
+  LeftClickOn(menu_item_view);
 
   // Clicking "Ok, got it" button should dismiss the bubble, hide the tray icon,
   // and disable the ability to show onboarding UI again.
-  EXPECT_FALSE(phone_hub_tray_->GetBubbleView());
-  EXPECT_FALSE(phone_hub_tray_->GetVisible());
-  EXPECT_FALSE(GetOnboardingUiTracker()->ShouldShowOnboardingUi());
-}
-
-TEST_F(PhoneHubTrayTest, DismissOnboardingFlowByClickingOutside) {
-  // Simulate a pending setup state to show the onboarding screen.
-  GetFeatureStatusProvider()->SetStatus(
-      phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
-  GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
-
-  ClickTrayButton();
-  EXPECT_TRUE(phone_hub_tray_->is_active());
-  EXPECT_EQ(PhoneHubViewID::kOnboardingView, content_view()->GetID());
-  // It should display the onboarding main view at first.
-  EXPECT_TRUE(onboarding_main_view());
-
-  // Simulate a click on the "Dismiss" button.
-  LeftClickOn(onboarding_dismiss_button());
-
-  // It should transit to show the dismiss prompt.
-  EXPECT_TRUE(onboarding_dismiss_prompt_view());
-  EXPECT_TRUE(onboarding_dismiss_prompt_view()->GetVisible());
-
-  // Simulate a click outside the bubble.
-  phone_hub_tray_->ClickedOutsideBubble();
-
-  // Clicking outside should dismiss the bubble, hide the tray icon, and disable
-  // the ability to show onboarding UI again.
   EXPECT_FALSE(phone_hub_tray_->GetBubbleView());
   EXPECT_FALSE(phone_hub_tray_->GetVisible());
   EXPECT_FALSE(GetOnboardingUiTracker()->ShouldShowOnboardingUi());
@@ -849,6 +802,33 @@ TEST_F(PhoneHubTrayTest, ShowAndHideNudge) {
   EXPECT_TRUE(GetOnboardingUiTracker()->is_icon_clicked_when_nudge_visible());
   EXPECT_FALSE(
       Shell::Get()->anchored_nudge_manager()->IsNudgeShown(kPhoneHubNudgeId));
+}
+
+TEST_F(PhoneHubTrayTest, EcheIconActivatesCallback) {
+  bool launched_app_window = false;
+  phone_hub_tray_->SetEcheIconActivationCallback(
+      base::BindLambdaForTesting([&]() { launched_app_window = true; }));
+  phone_hub_tray_->OnAppStreamUpdate(phonehub::proto::AppStreamUpdate());
+  phone_hub_manager_.fake_icon_decoder()->FinishLastCall();
+
+  LeftClickOn(phone_hub_tray_->eche_icon_);
+
+  EXPECT_TRUE(launched_app_window);
+}
+
+// Makes sure metrics are recorded for the phone hub tray or any nested button
+// being pressed.
+TEST_F(PhoneHubTrayTest, TrayPressedMetrics) {
+  base::HistogramTester histogram_tester;
+
+  LeftClickOn(phone_hub_tray());
+  histogram_tester.ExpectTotalCount(kTrayBackgroundViewHistogramName, 1);
+
+  LeftClickOn(phone_hub_tray()->icon_);
+  histogram_tester.ExpectTotalCount(kTrayBackgroundViewHistogramName, 2);
+
+  LeftClickOn(phone_hub_tray()->eche_icon_);
+  histogram_tester.ExpectTotalCount(kTrayBackgroundViewHistogramName, 3);
 }
 
 }  // namespace ash

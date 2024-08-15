@@ -514,6 +514,7 @@ static void set_allintra_speed_features_framesize_independent(
     sf->part_sf.prune_rectangular_split_based_on_qidx =
         allow_screen_content_tools ? 0 : 2;
     sf->part_sf.prune_rect_part_using_4x4_var_deviation = true;
+    sf->part_sf.prune_rect_part_using_none_pred_mode = true;
     sf->part_sf.prune_sub_8x8_partition_level =
         allow_screen_content_tools ? 0 : 1;
     sf->part_sf.prune_part4_search = 3;
@@ -1453,7 +1454,25 @@ static void set_rt_speed_feature_framesize_dependent(const AV1_COMP *const cpi,
     if (speed >= 9) sf->lpf_sf.cdef_pick_method = CDEF_PICK_FROM_Q;
     if (speed >= 10) sf->rt_sf.nonrd_aggressive_skip = 1;
   }
-
+  // TODO(marpan): Tune settings for speed 11 video mode,
+  // for resolutions below 720p.
+  if (speed >= 11 && !is_720p_or_larger &&
+      cpi->oxcf.tune_cfg.content != AOM_CONTENT_SCREEN) {
+    sf->rt_sf.skip_cdef_sb = 2;
+    sf->rt_sf.force_only_last_ref = 1;
+    sf->rt_sf.selective_cdf_update = 1;
+    sf->rt_sf.use_nonrd_filter_search = 0;
+    if (is_360p_or_larger) {
+      sf->part_sf.fixed_partition_size = BLOCK_32X32;
+      sf->rt_sf.use_fast_fixed_part = 1;
+    }
+    sf->rt_sf.increase_source_sad_thresh = 1;
+    sf->rt_sf.part_early_exit_zeromv = 2;
+    sf->rt_sf.set_zeromv_skip_based_on_source_sad = 2;
+    for (int i = 0; i < BLOCK_SIZES; ++i) {
+      sf->rt_sf.intra_y_mode_bsize_mask_nrd[i] = INTRA_DC;
+    }
+  }
   // Setting for SVC, or when the ref_frame_config control is
   // used to set the reference structure.
   if (cpi->ppi->use_svc || cpi->ppi->rtc_ref.set_ref_frame_config) {
@@ -1577,15 +1596,16 @@ static void set_rt_speed_feature_framesize_dependent(const AV1_COMP *const cpi,
       }
     }
     if (cpi->rc.max_block_source_sad > 20000 &&
-        cpi->rc.frame_source_sad > 100 &&
-        cpi->rc.percent_blocks_with_motion > 1 && speed >= 6) {
+        cpi->rc.frame_source_sad > 100 && speed >= 6 &&
+        (cpi->rc.percent_blocks_with_motion > 1 ||
+         cpi->svc.last_layer_dropped[0])) {
       sf->mv_sf.search_method = NSTEP;
       sf->rt_sf.fullpel_search_step_param = 2;
     }
     sf->rt_sf.partition_direct_merging = 0;
     sf->hl_sf.accurate_bit_estimate = 0;
-    // This feature is for nonrd_pickmode and  non-svc for now.
-    if (sf->rt_sf.use_nonrd_pick_mode && !cpi->ppi->use_svc)
+    // This feature is for nonrd_pickmode.
+    if (sf->rt_sf.use_nonrd_pick_mode)
       sf->rt_sf.estimate_motion_for_var_based_partition = 1;
     else
       sf->rt_sf.estimate_motion_for_var_based_partition = 0;
@@ -1600,6 +1620,18 @@ static void set_rt_speed_feature_framesize_dependent(const AV1_COMP *const cpi,
     // Disable for use_highbitdepth = 1 to mitigate issue: b/303023614.
     sf->rt_sf.estimate_motion_for_var_based_partition = 0;
   }
+  if (cpi->oxcf.superres_cfg.enable_superres) {
+    sf->rt_sf.use_rtc_tf = 0;
+    sf->rt_sf.nonrd_prune_ref_frame_search = 1;
+  }
+  // rtc_tf feature allocates new source because of possible
+  // temporal filtering which may change the input source during encoding:
+  // this causes an issue on resized frames when psnr is calculated,
+  // so disable it here for frames that are resized (encoding width/height
+  // different from configured width/height).
+  if (is_psnr_calc_enabled(cpi) && (cpi->oxcf.frm_dim_cfg.width != cm->width ||
+                                    cpi->oxcf.frm_dim_cfg.height != cm->height))
+    sf->rt_sf.use_rtc_tf = 0;
 }
 
 // TODO(kyslov): now this is very similar to
@@ -1768,6 +1800,8 @@ static void set_rt_speed_features_framesize_independent(AV1_COMP *cpi,
                 FLAG_EARLY_TERMINATE;
   sf->rt_sf.var_part_split_threshold_shift = 5;
   if (!frame_is_intra_only(&cpi->common)) sf->rt_sf.var_part_based_on_qidx = 1;
+  sf->rt_sf.use_fast_fixed_part = 0;
+  sf->rt_sf.increase_source_sad_thresh = 0;
 
   if (speed >= 6) {
     sf->mv_sf.use_fullpel_costlist = 1;
@@ -1978,6 +2012,7 @@ static AOM_INLINE void init_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
   part_sf->prune_ext_part_using_split_info = 0;
   part_sf->prune_rectangular_split_based_on_qidx = 0;
   part_sf->prune_rect_part_using_4x4_var_deviation = false;
+  part_sf->prune_rect_part_using_none_pred_mode = false;
   part_sf->early_term_after_none_split = 0;
   part_sf->ml_predict_breakout_level = 0;
   part_sf->prune_sub_8x8_partition_level = 0;
@@ -2169,6 +2204,8 @@ static AOM_INLINE void init_winner_mode_sf(
 static AOM_INLINE void init_lpf_sf(LOOP_FILTER_SPEED_FEATURES *lpf_sf) {
   lpf_sf->disable_loop_restoration_chroma = 0;
   lpf_sf->disable_loop_restoration_luma = 0;
+  lpf_sf->min_lr_unit_size = RESTORATION_PROC_UNIT_SIZE;
+  lpf_sf->max_lr_unit_size = RESTORATION_UNITSIZE_MAX;
   lpf_sf->prune_wiener_based_on_src_var = 0;
   lpf_sf->prune_sgr_based_on_wiener = 0;
   lpf_sf->enable_sgr_ep_pruning = 0;
@@ -2253,6 +2290,8 @@ static AOM_INLINE void init_rt_sf(REAL_TIME_SPEED_FEATURES *rt_sf) {
   rt_sf->enable_ref_short_signaling = false;
   rt_sf->check_globalmv_on_single_ref = true;
   rt_sf->increase_color_thresh_palette = false;
+  rt_sf->selective_cdf_update = 0;
+  rt_sf->force_only_last_ref = 0;
 }
 
 static fractional_mv_step_fp
@@ -2489,6 +2528,7 @@ void av1_set_speed_features_qindex_dependent(AV1_COMP *cpi, int speed) {
   const int is_480p_or_larger = AOMMIN(cm->width, cm->height) >= 480;
   const int is_720p_or_larger = AOMMIN(cm->width, cm->height) >= 720;
   const int is_1080p_or_larger = AOMMIN(cm->width, cm->height) >= 1080;
+  const int is_1440p_or_larger = AOMMIN(cm->width, cm->height) >= 1440;
   const int is_arf2_bwd_type =
       cpi->ppi->gf_group.update_type[cpi->gf_frame_index] == INTNL_ARF_UPDATE;
 
@@ -2644,6 +2684,36 @@ void av1_set_speed_features_qindex_dependent(AV1_COMP *cpi, int speed) {
     if (cm->features.allow_screen_content_tools &&
         cm->quant_params.base_qindex < 128 && is_480p_or_lesser) {
       sf->part_sf.prune_sub_8x8_partition_level = 0;
+    }
+  }
+
+  // Loop restoration size search
+  // At speed 0, always search all available sizes for the maximum possible gain
+  sf->lpf_sf.min_lr_unit_size = RESTORATION_PROC_UNIT_SIZE;
+  sf->lpf_sf.max_lr_unit_size = RESTORATION_UNITSIZE_MAX;
+
+  if (speed >= 1) {
+    // For large frames, small restoration units are almost never useful,
+    // so prune them away
+    if (is_1440p_or_larger) {
+      sf->lpf_sf.min_lr_unit_size = RESTORATION_UNITSIZE_MAX;
+    } else if (is_720p_or_larger) {
+      sf->lpf_sf.min_lr_unit_size = RESTORATION_UNITSIZE_MAX >> 1;
+    }
+  }
+
+  if (speed >= 3 || (cpi->oxcf.mode == ALLINTRA && speed >= 1)) {
+    // At this speed, a full search is too expensive. Instead, pick a single
+    // size based on size and qindex. Note that, in general, higher quantizers
+    // (== lower quality) and larger frames generally want to use larger
+    // restoration units.
+    int qindex_thresh = 96;
+    if (cm->quant_params.base_qindex <= qindex_thresh && !is_1440p_or_larger) {
+      sf->lpf_sf.min_lr_unit_size = RESTORATION_UNITSIZE_MAX >> 1;
+      sf->lpf_sf.max_lr_unit_size = RESTORATION_UNITSIZE_MAX >> 1;
+    } else {
+      sf->lpf_sf.min_lr_unit_size = RESTORATION_UNITSIZE_MAX;
+      sf->lpf_sf.max_lr_unit_size = RESTORATION_UNITSIZE_MAX;
     }
   }
 

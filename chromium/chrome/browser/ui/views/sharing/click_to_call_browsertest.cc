@@ -6,6 +6,7 @@
 #include <string>
 
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -226,7 +227,7 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest,
     sub_menu_model->ActivatedAt(device_id);
 
     CheckLastReceiver(*device);
-    absl::optional<std::string> expected_number =
+    std::optional<std::string> expected_number =
         ExtractPhoneNumberForClickToCall(GetProfile(0), kTextWithPhoneNumber);
     ASSERT_TRUE(expected_number.has_value());
     CheckLastSharingMessageSent(expected_number.value());
@@ -319,8 +320,8 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest, ContextMenu_UKM) {
 
   // Expect UKM metrics to be logged
   run_loop.Run();
-  std::vector<const ukm::mojom::UkmEntry*> ukm_entries =
-      ukm_recorder.GetEntriesByName(
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>>
+      ukm_entries = ukm_recorder.GetEntriesByName(
           ukm::builders::Sharing_ClickToCall::kEntryName);
   ASSERT_EQ(1u, ukm_entries.size());
 
@@ -512,7 +513,7 @@ IN_PROC_BROWSER_TEST_P(ClickToCallPolicyTest, RunTest) {
   EXPECT_EQ(expected_enabled, ShouldOfferClickToCallForURL(browser()->profile(),
                                                            GURL(kPhoneLink)));
 
-  absl::optional<std::string> extracted =
+  std::optional<std::string> extracted =
       ExtractPhoneNumberForClickToCall(browser()->profile(), kPhoneNumber);
   if (expected_enabled)
     EXPECT_EQ(kPhoneNumber, extracted.value());

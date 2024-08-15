@@ -579,7 +579,7 @@ void ServiceWorkerContextCore::UnregisterServiceWorker(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   BrowserContext* browser_context = wrapper_->browser_context();
-  DCHECK(browser_context);
+  CHECK(browser_context);
   if (!GetContentClient()->browser()->MayDeleteServiceWorkerRegistration(
           scope, browser_context)) {
     std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorDisallowed);
@@ -711,7 +711,7 @@ void ServiceWorkerContextCore::WaitForRegistrationsInitializedForTest() {
 void ServiceWorkerContextCore::AddWarmUpRequest(
     const GURL& document_url,
     const blink::StorageKey& key,
-    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback) {
+    ServiceWorkerContext::WarmUpServiceWorkerCallback callback) {
   const size_t kRequestQueueLength =
       blink::features::kSpeculativeServiceWorkerWarmUpRequestQueueLength.Get();
 
@@ -733,28 +733,37 @@ void ServiceWorkerContextCore::AddWarmUpRequest(
   }
 }
 
-absl::optional<ServiceWorkerContextCore::WarmUpRequest>
+std::optional<ServiceWorkerContextCore::WarmUpRequest>
 ServiceWorkerContextCore::PopNextWarmUpRequest() {
   DCHECK(!IsProcessingWarmingUp());
 
   if (warm_up_requests_.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   if (GetWarmedUpServiceWorkerCount(live_versions_) >=
       blink::features::kSpeculativeServiceWorkerWarmUpMaxCount.Get()) {
     warm_up_requests_.clear();
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Return the most recent queued request (LIFO order) to prioritize recently
   // added URLs. For example, the recent mouse-hoverd link will have a higher
   // chance to navigate than the previously mouse-hoverd link.
-  absl::optional<ServiceWorkerContextCore::WarmUpRequest> request(
+  std::optional<ServiceWorkerContextCore::WarmUpRequest> request(
       std::move(warm_up_requests_.back()));
   warm_up_requests_.pop_back();
   BeginProcessingWarmingUp();
   return request;
+}
+
+bool ServiceWorkerContextCore::IsWaitingForWarmUp(
+    const blink::StorageKey& key) const {
+  return std::find_if(
+             warm_up_requests_.begin(), warm_up_requests_.end(), [&](auto& it) {
+               const blink::StorageKey& warm_up_request_key = std::get<1>(it);
+               return key == warm_up_request_key;
+             }) != warm_up_requests_.end();
 }
 
 void ServiceWorkerContextCore::RegistrationComplete(
@@ -906,6 +915,9 @@ void ServiceWorkerContextCore::AddLiveVersion(ServiceWorkerVersion* version) {
   observer_list_->Notify(FROM_HERE,
                          &ServiceWorkerContextCoreObserver::OnNewLiveVersion,
                          version_info);
+  for (auto& observer : test_version_observers_) {
+    observer.OnServiceWorkerVersionCreated(version);
+  }
 }
 
 void ServiceWorkerContextCore::RemoveLiveVersion(int64_t id) {

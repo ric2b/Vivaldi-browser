@@ -35,38 +35,38 @@ namespace {
 vivaldi::notes::NodeType ToJSAPINodeType(NoteNode::Type type) {
   switch (type) {
     case NoteNode::NOTE:
-      return vivaldi::notes::NODE_TYPE_NOTE;
+      return vivaldi::notes::NodeType::kNote;
     case NoteNode::FOLDER:
-      return vivaldi::notes::NODE_TYPE_FOLDER;
+      return vivaldi::notes::NodeType::kFolder;
     case NoteNode::SEPARATOR:
-      return vivaldi::notes::NODE_TYPE_SEPARATOR;
+      return vivaldi::notes::NodeType::kSeparator;
     case NoteNode::ATTACHMENT:
-      return vivaldi::notes::NODE_TYPE_ATTACHMENT;
+      return vivaldi::notes::NodeType::kAttachment;
     case NoteNode::MAIN:
-      return vivaldi::notes::NODE_TYPE_MAIN;
+      return vivaldi::notes::NodeType::kMain;
     case NoteNode::OTHER:
-      return vivaldi::notes::NODE_TYPE_OTHER;
+      return vivaldi::notes::NodeType::kOther;
     case NoteNode::TRASH:
-      return vivaldi::notes::NODE_TYPE_TRASH;
+      return vivaldi::notes::NodeType::kTrash;
   }
 }
 
 absl::optional<NoteNode::Type> FromJSAPINodeType(
     vivaldi::notes::NodeType type) {
   switch (type) {
-    case vivaldi::notes::NODE_TYPE_NOTE:
+    case vivaldi::notes::NodeType::kNote:
       return NoteNode::NOTE;
-    case vivaldi::notes::NODE_TYPE_FOLDER:
+    case vivaldi::notes::NodeType::kFolder:
       return NoteNode::FOLDER;
-    case vivaldi::notes::NODE_TYPE_SEPARATOR:
+    case vivaldi::notes::NodeType::kSeparator:
       return NoteNode::SEPARATOR;
-    case vivaldi::notes::NODE_TYPE_ATTACHMENT:
+    case vivaldi::notes::NodeType::kAttachment:
       return NoteNode::ATTACHMENT;
-    case vivaldi::notes::NODE_TYPE_MAIN:
+    case vivaldi::notes::NodeType::kMain:
       return NoteNode::MAIN;
-    case vivaldi::notes::NODE_TYPE_OTHER:
+    case vivaldi::notes::NodeType::kOther:
       return NoteNode::OTHER;
-    case vivaldi::notes::NODE_TYPE_TRASH:
+    case vivaldi::notes::NodeType::kTrash:
       return NoteNode::TRASH;
     default:
       return absl::nullopt;
@@ -98,6 +98,8 @@ NoteTreeNode MakeTreeNode(const NoteNode* node) {
   // Javascript Date wants milliseconds since the epoch.
   notes_tree_node.date_added =
       node->GetCreationTime().InMillisecondsFSinceUnixEpoch();
+  notes_tree_node.date_modified =
+      node->GetLastModificationTime().InMillisecondsFSinceUnixEpoch();
 
   if (node->is_folder() || node->is_note()) {
     notes_tree_node.children.emplace();
@@ -217,6 +219,8 @@ void NotesAPI::NotesNodeRemoved(NotesModel* model,
 void NotesAPI::NotesNodeChanged(NotesModel* model, const NoteNode* node) {
   vivaldi::notes::OnChanged::NoteAfterChange note_after_change;
   note_after_change.title = base::UTF16ToUTF8(node->GetTitle());
+  note_after_change.date_modified =
+      node->GetLastModificationTime().InMillisecondsFSinceUnixEpoch();
   if (node->is_note()) {
     note_after_change.content = base::UTF16ToUTF8(node->GetContent());
     note_after_change.url = node->GetURL().spec();
@@ -346,6 +350,18 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
     url = GURL(*params->note.url);
   }
 
+  absl::optional<base::Time> creation_time;
+  if (params->note.date) {
+    creation_time =
+        base::Time::FromMillisecondsSinceUnixEpoch(*params->note.date);
+  }
+
+  absl::optional<base::Time> last_modified_time;
+  if (params->note.lastmod) {
+    last_modified_time =
+        base::Time::FromMillisecondsSinceUnixEpoch(*params->note.lastmod);
+  }
+
   const NoteNode* parent = nullptr;
   if (params->note.parent_id) {
     std::string error;
@@ -378,25 +394,27 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
   switch (type) {
     case NoteNode::NOTE:
       new_node = model->AddNote(parent, newIndex, title, url,
-                                base::UTF8ToUTF16(content));
+                                base::UTF8ToUTF16(content), creation_time,
+                                last_modified_time);
       break;
     case NoteNode::SEPARATOR:
-      new_node = model->AddSeparator(parent, newIndex, title);
+      new_node = model->AddSeparator(parent, newIndex, title, creation_time);
       break;
     case NoteNode::ATTACHMENT: {
       absl::optional<std::vector<uint8_t>> decoded_content =
           base::Base64Decode(content);
       if (!decoded_content || decoded_content->empty()) {
-        new_node = model->AddAttachmentFromChecksum(parent, newIndex, title,
-                                                    url, content);
+        new_node = model->AddAttachmentFromChecksum(
+            parent, newIndex, title, url, content, creation_time);
       } else {
         new_node = model->AddAttachment(parent, newIndex, title, url,
-                                        *decoded_content);
+                                        *decoded_content, creation_time);
       }
       break;
     }
     case NoteNode::FOLDER:
-      new_node = model->AddFolder(parent, newIndex, title);
+      new_node = model->AddFolder(parent, newIndex, title, creation_time,
+                                  last_modified_time);
       break;
     default:
       NOTREACHED();
@@ -437,22 +455,18 @@ ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
     return RespondNow(Error("Attachment content can not be modified"));
 
   // All fields are optional.
-  std::u16string title;
   if (params->changes.title) {
-    title = base::UTF8ToUTF16(*params->changes.title);
+    std::u16string title = base::UTF8ToUTF16(*params->changes.title);
     model->SetTitle(node, title);
   }
 
-  std::string content;
   if (params->changes.content) {
-    content = (*params->changes.content);
-    model->SetContent(node, base::UTF8ToUTF16(content));
+    std::u16string content = base::UTF8ToUTF16(*params->changes.content);
+    model->SetContent(node, content);
   }
 
-  std::string url_string;
   if (params->changes.url) {
-    url_string = *params->changes.url;
-    GURL url(url_string);
+    GURL url(*params->changes.url);
     model->SetURL(node, url);
   }
 
@@ -623,6 +637,22 @@ ExtensionFunction::ResponseAction NotesEmptyTrashFunction::Run() {
   }
   return RespondNow(
       ArgumentList(vivaldi::notes::EmptyTrash::Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction NotesBeginImportFunction::Run() {
+  NotesModel* model = GetNotesModel(this);
+  DCHECK(model);
+
+  model->BeginExtensiveChanges();
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction NotesEndImportFunction::Run() {
+  NotesModel* model = GetNotesModel(this);
+  DCHECK(model);
+
+  model->EndExtensiveChanges();
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

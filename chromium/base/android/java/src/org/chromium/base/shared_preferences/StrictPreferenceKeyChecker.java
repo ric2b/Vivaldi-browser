@@ -47,8 +47,10 @@ class StrictPreferenceKeyChecker implements PreferenceKeyChecker {
         if (BuildConfig.IS_VIVALDI) return;
 
         if (!isKeyInUse(key)) {
-            throw new RuntimeException("SharedPreferences key \"" + key
-                    + "\" is not registered in PreferenceKeyRegistry.mKeysInUse");
+            throw new RuntimeException(
+                    "SharedPreferences key \""
+                            + key
+                            + "\" is not registered in PreferenceKeyRegistry.mKeysInUse");
         }
         KnownPreferenceKeyRegistries.onRegistryUsed(mRegistry);
     }
@@ -103,7 +105,9 @@ class StrictPreferenceKeyChecker implements PreferenceKeyChecker {
             return;
         }
 
-        throw new RuntimeException("SharedPreferences KeyPrefix \"" + prefix.pattern()
-                + "\" is not registered in PreferenceKeyRegistry.mKeysInUse()");
+        throw new RuntimeException(
+                "SharedPreferences KeyPrefix \""
+                        + prefix.pattern()
+                        + "\" is not registered in PreferenceKeyRegistry.mKeysInUse()");
     }
 }

@@ -18,6 +18,7 @@
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_metrics_logger.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -35,7 +36,7 @@ TranslateIconView::TranslateIconView(
                          page_action_icon_delegate,
                          "Translate") {
   SetID(VIEW_ID_TRANSLATE_BUTTON);
-  SetAccessibilityProperties(/*role*/ absl::nullopt,
+  SetAccessibilityProperties(/*role*/ std::nullopt,
                              l10n_util::GetStringUTF16(IDS_TOOLTIP_TRANSLATE));
 }
 
@@ -46,8 +47,9 @@ views::BubbleDialogDelegate* TranslateIconView::GetBubble() const {
     TranslateBubbleController* translate_bubble_controller =
         TranslateBubbleController::FromWebContents(GetWebContents());
 
-    if (translate_bubble_controller)
+    if (translate_bubble_controller) {
       return translate_bubble_controller->GetTranslateBubble();
+    }
   }
 
   return nullptr;
@@ -59,8 +61,9 @@ views::BubbleDialogDelegate* TranslateIconView::GetPartialTranslateBubble()
     TranslateBubbleController* translate_bubble_controller =
         TranslateBubbleController::FromWebContents(GetWebContents());
 
-    if (translate_bubble_controller)
+    if (translate_bubble_controller) {
       return translate_bubble_controller->GetPartialTranslateBubble();
+    }
   }
 
   return nullptr;
@@ -76,8 +79,9 @@ bool TranslateIconView::IsBubbleShowing() const {
 }
 
 void TranslateIconView::UpdateImpl() {
-  if (!GetWebContents())
+  if (!GetWebContents()) {
     return;
+  }
 
   if (vivaldi::IsVivaldiRunning())
     return;
@@ -98,8 +102,10 @@ void TranslateIconView::UpdateImpl() {
   }
 
   SetVisible(enabled);
-  if (!enabled && TranslateBubbleController::FromWebContents(GetWebContents()))
+  if (!enabled &&
+      TranslateBubbleController::FromWebContents(GetWebContents())) {
     TranslateBubbleController::FromWebContents(GetWebContents())->CloseBubble();
+  }
 }
 
 void TranslateIconView::OnExecuting(
@@ -107,9 +113,9 @@ void TranslateIconView::OnExecuting(
 
 const gfx::VectorIcon& TranslateIconView::GetVectorIcon() const {
   return OmniboxFieldTrial::IsChromeRefreshIconsEnabled()
-             ? kTranslateChromeRefreshIcon
+             ? vector_icons::kTranslateChromeRefreshIcon
              : kTranslateIcon;
 }
 
-BEGIN_METADATA(TranslateIconView, PageActionIconView)
+BEGIN_METADATA(TranslateIconView)
 END_METADATA

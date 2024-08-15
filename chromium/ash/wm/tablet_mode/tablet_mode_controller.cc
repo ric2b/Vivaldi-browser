@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
@@ -48,6 +48,7 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/screen.h"
 #include "ui/display/tablet_state.h"
 #include "ui/display/util/display_util.h"
 #include "ui/events/devices/device_data_manager.h"
@@ -191,81 +192,64 @@ constexpr TabletModeController::TabletModeBehavior kDefault{};
 
 // Defines the behavior of the tablet mode when enabled by sensor.
 constexpr TabletModeController::TabletModeBehavior kOnBySensor{
-    /*use_sensor=*/true,
-    /*observe_display_events=*/true,
-    /*observe_pointer_device_events=*/true,
-    /*block_internal_input_device=*/true,
-    /*always_show_overview_button=*/false,
-    TabletModeController::ForcePhysicalTabletState::kDefault,
+    .block_internal_input_device = true,
 };
 
 // Defines the behavior that sticks to tablet mode. Used to implement the
 // --force-tablet-mode=touch_view flag.
 constexpr TabletModeController::TabletModeBehavior kLockInTabletMode{
-    /*use_sensor=*/false,
-    /*observe_display_events=*/false,
-    /*observe_pointer_device_events=*/false,
-    /*block_internal_input_device=*/false,
-    /*always_show_overview_button=*/true,
-    TabletModeController::ForcePhysicalTabletState::kDefault,
+    .use_sensor = false,
+    .observe_display_events = false,
+    .observe_pointer_device_events = false,
+    .always_show_overview_button = true,
 };
 
 // Defines the behavior that sticks to tablet mode. Used to implement the
 // --force-tablet-mode=clamshell flag.
 constexpr TabletModeController::TabletModeBehavior kLockInClamshellMode{
-    /*use_sensor=*/false,
-    /*observe_display_events=*/false,
-    /*observe_pointer_device_events=*/false,
-    /*block_internal_input_device=*/false,
-    /*always_show_overview_button=*/false,
-    TabletModeController::ForcePhysicalTabletState::kDefault,
+    .use_sensor = false,
+    .observe_display_events = false,
+    .observe_pointer_device_events = false,
 };
 
 // Defines the behavior used for testing. It prevents the device from
 // switching the mode due to sensor events during the test.
 constexpr TabletModeController::TabletModeBehavior kOnForTest{
-    /*use_sensor=*/false,
-    /*observe_display_events=*/true,
-    /*observe_pointer_device_events=*/true,
-    /*block_internal_input_device=*/true,
-    /*always_show_overview_button=*/false,
-    TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
+    .use_sensor = false,
+    .block_internal_input_device = true,
+    .force_physical_tablet_state =
+        TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
 };
 
 // Used for the testing API to forcibly enter into the tablet mode. It should
 // not observe hardware events as tests want to stick with the tablet mode, and
 // it should not block internal keyboard as some tests may want to use keyboard
 // events in the tablet mode.
-// TODO(mukai): consolidate this with kOnFOrTest.
 constexpr TabletModeController::TabletModeBehavior kOnForAutotest{
-    /*use_sensor=*/false,
-    /*observe_display_events=*/false,
-    /*observe_pointer_device_events=*/false,
-    /*block_internal_input_device=*/false,
-    /*always_show_overview_button=*/false,
-    TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
+    .use_sensor = false,
+    .observe_display_events = false,
+    .observe_pointer_device_events = false,
+    .force_physical_tablet_state =
+        TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
 };
 
 // Used for the testing API to forcibly exit from the tablet mode.
 constexpr TabletModeController::TabletModeBehavior kOffForAutotest{
-    /*use_sensor=*/false,
-    /*observe_display_events=*/false,
-    /*observe_pointer_device_events=*/false,
-    /*block_internal_input_device=*/false,
-    /*always_show_overview_button=*/false,
-    TabletModeController::ForcePhysicalTabletState::kForceClamshellMode,
+    .use_sensor = false,
+    .observe_display_events = false,
+    .observe_pointer_device_events = false,
+    .force_physical_tablet_state =
+        TabletModeController::ForcePhysicalTabletState::kForceClamshellMode,
 };
 
 // Used for development purpose (currently debug shortcut shift-ctrl-alt). This
 // ignores the sensor but allows to switch upon docked mode and external
 // pointing device. It also forces to show the overview button.
 constexpr TabletModeController::TabletModeBehavior kOnForDev{
-    /*use_sensor=*/false,
-    /*observe_display_events=*/true,
-    /*observe_pointer_device_events=*/true,
-    /*block_internal_input_device=*/false,
-    /*always_show_overview_button=*/true,
-    TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
+    .use_sensor = false,
+    .always_show_overview_button = true,
+    .force_physical_tablet_state =
+        TabletModeController::ForcePhysicalTabletState::kForceTabletMode,
 };
 
 using LidState = chromeos::PowerManagerClient::LidState;
@@ -280,9 +264,6 @@ const char* ToString(LidState lid_state) {
     case LidState::NOT_PRESENT:
       return "Not present";
   }
-
-  NOTREACHED();
-  return "";
 }
 
 const char* ToString(TabletMode tablet_mode) {
@@ -294,9 +275,6 @@ const char* ToString(TabletMode tablet_mode) {
     case TabletMode::UNSUPPORTED:
       return "Unsupported";
   }
-
-  NOTREACHED();
-  return "";
 }
 
 void ReportTrasitionSmoothness(bool enter_tablet_mode, int smoothness) {
@@ -333,7 +311,7 @@ class TabletModeController::DestroyObserver : public aura::WindowObserver {
   aura::Window* window() { return window_; }
 
  private:
-  raw_ptr<aura::Window, ExperimentalAsh> window_;
+  raw_ptr<aura::Window> window_;
   base::OnceCallback<void(void)> callback_;
 };
 
@@ -376,7 +354,7 @@ class TabletModeController::ScopedContainerHider {
   }
 
  private:
-  const raw_ptr<aura::Window, ExperimentalAsh> root_window_;
+  const raw_ptr<aura::Window> root_window_;
 
   // The layer that holds the clone of shelf and float layers while the
   // originals are hidden.
@@ -431,6 +409,9 @@ TabletModeController::~TabletModeController() {
 }
 
 void TabletModeController::Shutdown() {
+  // Stop observing any animations and delete any pending screenshots.
+  StopObservingAnimation(/*record_stats=*/false, /*delete_screenshot=*/true);
+
   if (tablet_mode_window_manager_)
     tablet_mode_window_manager_->Shutdown();
   tablet_mode_window_manager_.reset();
@@ -466,9 +447,9 @@ void TabletModeController::AddWindow(aura::Window* window) {
 
 bool TabletModeController::ShouldAutoHideTitlebars(views::Widget* widget) {
   DCHECK(widget);
-  const bool tablet_mode = InTabletMode();
-  if (!tablet_mode)
+  if (!display::Screen::GetScreen()->InTabletMode()) {
     return false;
+  }
   return widget->IsMaximized() ||
          (WindowState::Get(widget->GetNativeWindow()) &&
           WindowState::Get(widget->GetNativeWindow())->IsSnapped());
@@ -489,8 +470,8 @@ bool TabletModeController::TriggerRecordLidAngleTimerForTesting() {
 void TabletModeController::MaybeObserveBoundsAnimation(aura::Window* window) {
   StopObservingAnimation(/*record_stats=*/false, /*delete_screenshot=*/false);
 
-  if (tablet_state_.state() != display::TabletState::kEnteringTabletMode &&
-      tablet_state_.state() != display::TabletState::kExitingTabletMode) {
+  if (!display::IsTabletStateChanging(
+          display::Screen::GetScreen()->GetTabletState())) {
     return;
   }
 
@@ -546,12 +527,7 @@ void TabletModeController::RemoveObserver(TabletModeObserver* observer) {
   tablet_mode_observers_.RemoveObserver(observer);
 }
 
-bool TabletModeController::InTabletMode() const {
-  return tablet_state_.InTabletMode();
-}
-
-bool TabletModeController::ForceUiTabletModeState(
-    absl::optional<bool> enabled) {
+bool TabletModeController::ForceUiTabletModeState(std::optional<bool> enabled) {
   if (!enabled.has_value()) {
     tablet_mode_behavior_ = kDefault;
     AccelerometerReader::GetInstance()->SetEnabled(true);
@@ -828,9 +804,10 @@ void TabletModeController::OnLayerAnimationScheduled(
   if (!transition_tracker_) {
     transition_tracker_ =
         animating_layer_->GetCompositor()->RequestNewThroughputTracker();
-    transition_tracker_->Start(metrics_util::ForSmoothness(base::BindRepeating(
-        &ReportTrasitionSmoothness,
-        tablet_state_.state() == display::TabletState::kEnteringTabletMode)));
+    transition_tracker_->Start(metrics_util::ForSmoothnessV3(
+        base::BindRepeating(&ReportTrasitionSmoothness,
+                            display::Screen::GetScreen()->GetTabletState() ==
+                                display::TabletState::kEnteringTabletMode)));
     return;
   }
 
@@ -874,13 +851,14 @@ bool TabletModeController::CanEnterTabletMode() const {
 // TabletModeController, private:
 
 void TabletModeController::SetTabletModeEnabledInternal(bool should_enable) {
-  DCHECK_NE(InTabletMode(), should_enable);
+  DCHECK_NE(display::Screen::GetScreen()->InTabletMode(), should_enable);
 
   // Hide the context menu on entering tablet mode to prevent users from
   // accessing forbidden options. Hide the context menu on exiting tablet mode
   // to match behaviors.
-  for (auto* root_window : Shell::Get()->GetAllRootWindows())
+  for (aura::Window* root_window : Shell::Get()->GetAllRootWindows()) {
     RootWindowController::ForWindow(root_window)->HideContextMenu();
+  }
 
   // Suspend occlusion tracker when entering or exiting tablet mode.
   SuspendOcclusionTracker();
@@ -919,16 +897,14 @@ void TabletModeController::SetTabletModeEnabledInternal(bool should_enable) {
       FinishInitTabletMode();
     }
   } else {
+    // We may have entered tablet mode, then tried to exit before the screenshot
+    // was taken. In this case `tablet_mode_window_manager_` will be null.
+    if (tablet_mode_window_manager_) {
+      tablet_mode_window_manager_->SetIgnoreWmEventsForExit();
+    }
+
     Shell::Get()->display_manager()->SetTabletState(
         display::TabletState::kExitingTabletMode);
-
-    // We may have entered tablet mode, then tried to exit before the screenshot
-    // was taken. In this case |tablet_mode_window_manager_| will be null.
-    if (tablet_mode_window_manager_)
-      tablet_mode_window_manager_->SetIgnoreWmEventsForExit();
-
-    for (auto& observer : tablet_mode_observers_)
-      observer.OnTabletModeEnding();
 
     if (tablet_mode_window_manager_)
       tablet_mode_window_manager_->Shutdown();
@@ -938,8 +914,6 @@ void TabletModeController::SetTabletModeEnabledInternal(bool should_enable) {
     RecordTabletModeUsageInterval(TABLET_MODE_INTERVAL_ACTIVE);
     Shell::Get()->display_manager()->SetTabletState(
         display::TabletState::kInClamshellMode);
-    for (auto& observer : tablet_mode_observers_)
-      observer.OnTabletModeEnded();
     VLOG(1) << "Exit tablet mode.";
 
     UpdateInternalInputDevicesEventBlocker();
@@ -1026,7 +1000,7 @@ void TabletModeController::HandleHingeRotation(
 }
 
 void TabletModeController::OnGetSwitchStates(
-    absl::optional<chromeos::PowerManagerClient::SwitchStates> result) {
+    std::optional<chromeos::PowerManagerClient::SwitchStates> result) {
   if (!result.has_value())
     return;
 
@@ -1073,16 +1047,16 @@ void TabletModeController::RecordTabletModeUsageInterval(
 void TabletModeController::RecordLidAngle() {
   DCHECK(can_detect_lid_angle_);
   base::LinearHistogram::FactoryGet(
-      kLidAngleHistogramName, 1 /* minimum */, 360 /* maximum */,
-      50 /* bucket_count */, base::HistogramBase::kUmaTargetedHistogramFlag)
+      kLidAngleHistogramName, /*minimum=*/1, /*maximum=*/360,
+      /*bucket_count=*/50, base::HistogramBase::kUmaTargetedHistogramFlag)
       ->Add(std::round(lid_angle_));
 }
 
 TabletModeController::TabletModeIntervalType
 TabletModeController::CurrentTabletModeIntervalType() {
-  if (InTabletMode())
-    return TABLET_MODE_INTERVAL_ACTIVE;
-  return TABLET_MODE_INTERVAL_INACTIVE;
+  return display::Screen::GetScreen()->InTabletMode()
+             ? TABLET_MODE_INTERVAL_ACTIVE
+             : TABLET_MODE_INTERVAL_INACTIVE;
 }
 
 void TabletModeController::HandlePointingDeviceAddedOrRemoved() {
@@ -1154,7 +1128,8 @@ void TabletModeController::UpdateInternalInputDevicesEventBlocker() {
   // setting the brightness to 0.
   const bool should_block_internal_events =
       tablet_mode_behavior_.block_internal_input_device &&
-      (InTabletMode() || is_in_tablet_physical_state_);
+      (display::Screen::GetScreen()->InTabletMode() ||
+       is_in_tablet_physical_state_);
 
   if (should_block_internal_events == AreInternalInputDeviceEventsBlocked()) {
     if (force_notify_events_blocking_changed_) {
@@ -1185,10 +1160,9 @@ void TabletModeController::ResetPauser() {
 }
 
 void TabletModeController::FinishInitTabletMode() {
-  DCHECK_EQ(display::TabletState::kEnteringTabletMode, tablet_state_.state());
+  DCHECK_EQ(display::TabletState::kEnteringTabletMode,
+            display::Screen::GetScreen()->GetTabletState());
 
-  for (auto& observer : tablet_mode_observers_)
-    observer.OnTabletModeStarting();
   tablet_mode_window_manager_ = std::make_unique<TabletModeWindowManager>();
   tablet_mode_window_manager_->Init();
 
@@ -1196,9 +1170,6 @@ void TabletModeController::FinishInitTabletMode() {
   RecordTabletModeUsageInterval(TABLET_MODE_INTERVAL_INACTIVE);
   Shell::Get()->display_manager()->SetTabletState(
       display::TabletState::kInTabletMode);
-
-  for (auto& observer : tablet_mode_observers_)
-    observer.OnTabletModeStarted();
 
   // In some cases, TabletModeWindowManager::TabletModeWindowManager uses
   // split view to represent windows that were snapped in desktop mode. If
@@ -1387,8 +1358,10 @@ bool TabletModeController::SetIsInTabletPhysicalState(bool new_state) {
 
 bool TabletModeController::UpdateUiTabletState() {
   const bool should_be_in_tablet_mode = ShouldUiBeInTabletMode();
-  if (should_be_in_tablet_mode == InTabletMode())
+  if (should_be_in_tablet_mode ==
+      display::Screen::GetScreen()->InTabletMode()) {
     return false;
+  }
 
   SetTabletModeEnabledInternal(should_be_in_tablet_mode);
   Shell::Get()

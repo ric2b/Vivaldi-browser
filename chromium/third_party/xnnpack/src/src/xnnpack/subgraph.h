@@ -11,8 +11,8 @@
 #include <xnnpack.h>
 #include <xnnpack/common.h>
 #include <xnnpack/cache.h>
+#include <xnnpack/math.h>
 #include <xnnpack/node-type.h>
-#include <xnnpack/quantization.h>
 
 #if defined(EMSCRIPTEN)
 #include <emscripten/emscripten.h>
@@ -190,7 +190,7 @@ typedef enum xnn_status (*xnn_create_operator_fn)(
 
 typedef enum xnn_status (*xnn_reshape_operator_fn)(
   struct xnn_operator_data* opdata,
-  const struct xnn_value* values,
+  struct xnn_value* values,
   size_t num_values,
   pthreadpool_t threadpool);
 
@@ -218,14 +218,17 @@ enum xnn_compute_type {
   xnn_compute_type_fp32,
   xnn_compute_type_fp16,
   xnn_compute_type_qc8,
+  xnn_compute_type_qd8_to_fp16,
   xnn_compute_type_qd8_to_fp32,
   xnn_compute_type_qs8,
   xnn_compute_type_qu8,
+  xnn_compute_type_fp16_to_qd8,
+  xnn_compute_type_fp16_to_fp32,
   xnn_compute_type_fp32_to_fp16,
   xnn_compute_type_fp32_to_qd8,
   xnn_compute_type_fp32_to_qs8,
   xnn_compute_type_fp32_to_qu8,
-  xnn_compute_type_fp16_to_fp32,
+  xnn_compute_type_qs8_to_fp16,
   xnn_compute_type_qs8_to_fp32,
   xnn_compute_type_qu8_to_fp32,
 };

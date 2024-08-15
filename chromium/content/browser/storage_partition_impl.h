@@ -42,6 +42,7 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "services/network/public/cpp/network_service_buildflags.h"
+#include "services/network/public/mojom/cert_verifier_service.mojom.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "storage/browser/blob/blob_url_registry.h"
@@ -95,7 +96,6 @@ class PrivateAggregationDataModel;
 class PrivateAggregationManager;
 class PrivateAggregationManagerImpl;
 class PushMessagingContext;
-class ResourceCacheManager;
 class QuotaContext;
 class SharedDictionaryAccessObserver;
 class SharedStorageHeaderObserver;
@@ -161,9 +161,11 @@ class CONTENT_EXPORT StoragePartitionImpl
           private_aggregation_manager);
 
   // StoragePartition interface.
-  const StoragePartitionConfig& GetConfig() override;
-  base::FilePath GetPath() override;
+  const StoragePartitionConfig& GetConfig() const override;
+  const base::FilePath& GetPath() const override;
   network::mojom::NetworkContext* GetNetworkContext() override;
+  cert_verifier::mojom::CertVerifierServiceUpdater*
+  GetCertVerifierServiceUpdater() override;
   network::mojom::URLLoaderFactoryParamsPtr CreateURLLoaderFactoryParams();
   scoped_refptr<network::SharedURLLoaderFactory>
   GetURLLoaderFactoryForBrowserProcess() override;
@@ -251,6 +253,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   void AddObserver(DataRemovalObserver* observer) override;
   void RemoveObserver(DataRemovalObserver* observer) override;
   void FlushNetworkInterfaceForTesting() override;
+  void FlushCertVerifierInterfaceForTesting() override;
   void WaitForDeletionTasksForTesting() override;
   void WaitForCodeCacheShutdownForTesting() override;
   void SetNetworkContextForTesting(
@@ -274,7 +277,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   AttributionManager* GetAttributionManager();
   void SetFontAccessManagerForTesting(
       std::unique_ptr<FontAccessManager> font_access_manager);
-  std::string GetPartitionDomain();
+  const std::string& GetPartitionDomain() const;
   AggregationService* GetAggregationService();
   FontAccessManager* GetFontAccessManager();
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -284,7 +287,6 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   storage::SharedStorageManager* GetSharedStorageManager() override;
   PrivateAggregationManager* GetPrivateAggregationManager();
-  ResourceCacheManager* GetResourceCacheManager();
 
   // blink::mojom::DomStorage interface.
   void OpenLocalStorage(
@@ -337,7 +339,7 @@ class CONTENT_EXPORT StoragePartitionImpl
                              bool fatal,
                              OnSSLCertificateErrorCallback response) override;
   void OnCertificateRequested(
-      const absl::optional<base::UnguessableToken>& window_id,
+      const std::optional<base::UnguessableToken>& window_id,
       const scoped_refptr<net::SSLCertRequestInfo>& cert_info,
       mojo::PendingRemote<network::mojom::ClientCertificateResponder>
           cert_responder) override;
@@ -345,7 +347,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       mojo::PendingReceiver<network::mojom::URLLoaderNetworkServiceObserver>
           listener) override;
   void OnAuthRequired(
-      const absl::optional<base::UnguessableToken>& window_id,
+      const std::optional<base::UnguessableToken>& window_id,
       uint32_t request_id,
       const GURL& url,
       bool first_auth_attempt,
@@ -356,14 +358,14 @@ class CONTENT_EXPORT StoragePartitionImpl
   void OnPrivateNetworkAccessPermissionRequired(
       const GURL& url,
       const net::IPAddress& ip_address,
-      const absl::optional<std::string>& private_network_device_id,
-      const absl::optional<std::string>& private_network_device_name,
+      const std::optional<std::string>& private_network_device_id,
+      const std::optional<std::string>& private_network_device_name,
       OnPrivateNetworkAccessPermissionRequiredCallback callback) override;
   void OnClearSiteData(
       const GURL& url,
       const std::string& header_value,
       int load_flags,
-      const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
+      const std::optional<net::CookiePartitionKey>& cookie_partition_key,
       bool partitioned_state_allowed_only,
       OnClearSiteDataCallback callback) override;
   void OnLoadingStateUpdate(network::mojom::LoadInfoPtr info,
@@ -446,7 +448,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   CreateSharedDictionaryAccessObserverForServiceWorker();
 
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
-  CreateAuthCertObserverForServiceWorker();
+  CreateAuthCertObserverForServiceWorker(int process_id);
 
   std::vector<std::string> GetCorsExemptHeaderList();
 
@@ -488,15 +490,12 @@ class CONTENT_EXPORT StoragePartitionImpl
     static StoragePartitionImpl::URLLoaderNetworkContext CreateForNavigation(
         NavigationRequest& navigation_request);
 
-    // Creates a URLLoaderNetworkContext for the service worker.
-    static StoragePartitionImpl::URLLoaderNetworkContext
-    CreateForServiceWorker();
-
-    // Used when `type` is `kRenderFrameHostContext` or
-    // `kNavigationRequestContext`.
-    URLLoaderNetworkContext(
-        URLLoaderNetworkContext::Type type,
+    // Used when `type` is `kRenderFrameHostContext`.
+    explicit URLLoaderNetworkContext(
         GlobalRenderFrameHostId global_render_frame_host_id);
+
+    // Used when `type` is `kServiceWorkerContext`.
+    explicit URLLoaderNetworkContext(int process_id);
 
     // Used when `type` is `kNavigationRequestContext`.
     explicit URLLoaderNetworkContext(NavigationRequest& navigation_request);
@@ -510,9 +509,14 @@ class CONTENT_EXPORT StoragePartitionImpl
       return navigation_or_document_.get();
     }
 
+    int process_id() const { return process_id_; }
+
    private:
     Type type_;
     scoped_refptr<NavigationOrDocumentHandle> navigation_or_document_;
+
+    // Only valid when `type_` is kServiceWorkerContext.
+    int process_id_ = content::ChildProcessHost::kInvalidUniqueID;
   };
 
  private:
@@ -637,7 +641,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   network::mojom::URLLoaderFactory*
   GetURLLoaderFactoryForBrowserProcessInternal();
 
-  absl::optional<blink::StorageKey> CalculateStorageKey(
+  std::optional<blink::StorageKey> CalculateStorageKey(
       const url::Origin& origin,
       const base::UnguessableToken* nonce);
 
@@ -725,8 +729,6 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   std::unique_ptr<PrivateAggregationManagerImpl> private_aggregation_manager_;
 
-  std::unique_ptr<ResourceCacheManager> resource_cache_manager_;
-
   std::unique_ptr<CookieDeprecationLabelManagerImpl>
       cookie_deprecation_label_manager_;
 
@@ -756,6 +758,9 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   scoped_refptr<URLLoaderFactoryForBrowserProcess>
       shared_url_loader_factory_for_browser_process_;
+
+  mojo::Remote<cert_verifier::mojom::CertVerifierServiceUpdater>
+      cert_verifier_service_updater_;
 
   // URLLoaderFactory/CookieManager for use in the browser process only.
   // See the method comment for

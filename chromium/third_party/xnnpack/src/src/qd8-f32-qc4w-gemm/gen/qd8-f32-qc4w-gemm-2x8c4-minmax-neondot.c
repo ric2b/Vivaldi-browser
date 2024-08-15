@@ -69,18 +69,12 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_2x8c4__neondot(
       const int8x8_t va1x01234567 = vld1_s8(a1); a1 += 8;
 
       // Load a 8x8 block of weights.
-      const int8x16_t vb0123x01234567 = vld1q_s8(w); w = (const int8_t*) w + 16;
-      const int8x16_t vb4567x01234567 = vld1q_s8(w); w = (const int8_t*) w + 16;
-      const int8x16_t vb0123x01234567c02 = vshlq_n_s8(vb0123x01234567, 4);
-      const int8x16_t vb0123x01234567c13 = vandq_s8(vb0123x01234567, vmask);
-      const int8x16_t vb4567x01234567c02 = vshlq_n_s8(vb4567x01234567, 4);
-      const int8x16_t vb4567x01234567c13 = vandq_s8(vb4567x01234567, vmask);
-      const int8x16x2_t vb0123x01234567c0123 = vzipq_s8(vb0123x01234567c02, vb0123x01234567c13);
-      const int8x16_t vb0123x0123 =   vb0123x01234567c0123.val[0];
-      const int8x16_t vb0123x4567 = vb0123x01234567c0123.val[1];
-      const int8x16x2_t vb4567x01234567c0123 = vzipq_s8(vb4567x01234567c02, vb4567x01234567c13);
-      const int8x16_t vb4567x0123 =   vb4567x01234567c0123.val[0];
-      const int8x16_t vb4567x4567 = vb4567x01234567c0123.val[1];
+      const int8x16_t vb01234567x0123 = vld1q_s8(w); w = (const int8_t*) w + 16;
+      const int8x16_t vb01234567x4567 = vld1q_s8(w); w = (const int8_t*) w + 16;
+      const int8x16_t vb0123x0123 = vshlq_n_s8(vb01234567x0123, 4);
+      const int8x16_t vb0123x4567 = vshlq_n_s8(vb01234567x4567, 4);
+      const int8x16_t vb4567x0123 = vandq_s8(vb01234567x0123, vmask);
+      const int8x16_t vb4567x4567 = vandq_s8(vb01234567x4567, vmask);
 
       // Multiply-accumulate: 2x8 * 8x8 --> 2x8.
       vacc0x0123 = vdotq_lane_s32(vacc0x0123, vb0123x0123, va0x01234567, 0);
@@ -101,12 +95,10 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_2x8c4__neondot(
       const int8x8_t va1x01234567 = vld1_s8(a1); a1 += 4;
 
       // Load a 4x8 block of weights.
-      const int8x16_t vb0123x01234567 = vld1q_s8(w); w = (const int8_t*) w + 16;
-      const int8x16_t vb0123x01234567c02 = vshlq_n_s8(vb0123x01234567, 4);
-      const int8x16_t vb0123x01234567c13 = vandq_s8(vb0123x01234567, vmask);
-      int8x16x2_t vb0123x01234567c0123 = vzipq_s8(vb0123x01234567c02, vb0123x01234567c13);
-      const int8x16_t vb0123x0123 =   vb0123x01234567c0123.val[0];
-      const int8x16_t vb0123x4567 = vb0123x01234567c0123.val[1];
+      const int8x16_t vb01234567x0123 = vld1q_s8(w); w = (const int8_t*) w + 16;
+      const int8x16_t vb01234567x4567 = vld1q_s8(w); w = (const int8_t*) w + 16;
+      const int8x16_t vb0123x0123 = vshlq_n_s8(vb01234567x0123, 4);
+      const int8x16_t vb0123x4567 = vshlq_n_s8(vb01234567x4567, 4);
 
       // Multiply-accumulate: 2x4 * 4x8 --> 2x8.
       vacc0x0123 = vdotq_lane_s32(vacc0x0123, vb0123x0123, va0x01234567, 0);
@@ -158,10 +150,10 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_2x8c4__neondot(
     vout1x4567 = vminq_f32(vout1x4567, voutput_max);
 
     if XNN_LIKELY(nc >= 8) {
-      vst1q_f32(c1, vout1x0123);
-      vst1q_f32(c1 + 4, vout1x4567);
       vst1q_f32(c0, vout0x0123);
       vst1q_f32(c0 + 4, vout0x4567);
+      vst1q_f32(c1, vout1x0123);
+      vst1q_f32(c1 + 4, vout1x4567);
 
       a0 = (const int8_t*) ((uintptr_t) a0 - kc);
       a1 = (const int8_t*) ((uintptr_t) a1 - kc);
@@ -172,22 +164,22 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_2x8c4__neondot(
       nc -= 8;
     } else {
      if (nc & 4) {
-       vst1q_f32(c1, vout1x0123); c1 += 4;
-       vout1x0123 = vout1x4567;
        vst1q_f32(c0, vout0x0123); c0 += 4;
        vout0x0123 = vout0x4567;
+       vst1q_f32(c1, vout1x0123); c1 += 4;
+       vout1x0123 = vout1x4567;
      }
-     float32x2_t vout1x01 = vget_low_f32(vout1x0123);
      float32x2_t vout0x01 = vget_low_f32(vout0x0123);
+     float32x2_t vout1x01 = vget_low_f32(vout1x0123);
      if (nc & 2) {
-       vst1_f32(c1, vout1x01); c1 += 2;
        vst1_f32(c0, vout0x01); c0 += 2;
-       vout1x01 = vget_high_f32(vout1x0123);
+       vst1_f32(c1, vout1x01); c1 += 2;
        vout0x01 = vget_high_f32(vout0x0123);
+       vout1x01 = vget_high_f32(vout1x0123);
      }
      if (nc & 1) {
-       vst1_lane_f32(c1, vout1x01, 0);
        vst1_lane_f32(c0, vout0x01, 0);
+       vst1_lane_f32(c1, vout1x01, 0);
      }
       nc = 0;
     }

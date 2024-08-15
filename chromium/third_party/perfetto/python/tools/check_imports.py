@@ -284,6 +284,48 @@ RULES = [
         r'/plugins/.*',
         'widgets should only depend on base',
     ),
+    NoDep(
+        r'/widgets/.*',
+        r'/common/.*',
+        'widgets should only depend on base',
+    ),
+
+    # Bigtrace
+    NoDep(
+        r'/bigtrace/.*',
+        r'/frontend/.*',
+        'bigtrace should not depend on frontend',
+    ),
+    NoDep(
+        r'/bigtrace/.*',
+        r'/common/.*',
+        'bigtrace should not depend on common',
+    ),
+    NoDep(
+        r'/bigtrace/.*',
+        r'/engine/.*',
+        'bigtrace should not depend on engine',
+    ),
+    NoDep(
+        r'/bigtrace/.*',
+        r'/trace_processor/.*',
+        'bigtrace should not depend on trace_processor',
+    ),
+    NoDep(
+        r'/bigtrace/.*',
+        r'/traceconv/.*',
+        'bigtrace should not depend on traceconv',
+    ),
+    NoDep(
+        r'/bigtrace/.*',
+        r'/tracks/.*',
+        'bigtrace should not depend on tracks',
+    ),
+    NoDep(
+        r'/bigtrace/.*',
+        r'/controller/.*',
+        'bigtrace should not depend on controller',
+    ),
 
     # Fails at the moment as we have several circular dependencies. One
     # example:
@@ -311,10 +353,18 @@ def is_dir(path, cache={}):
     return result
 
 
+def remove_prefix(s, prefix):
+  return s[len(prefix):] if s.startswith(prefix) else s
+
+
+def remove_suffix(s, suffix):
+  return s[:-len(suffix)] if s.endswith(suffix) else s
+
+
 def find_imports(path):
   src = path
-  src = src.removeprefix(UI_SRC_DIR)
-  src = src.removesuffix('.ts')
+  src = remove_prefix(src, UI_SRC_DIR)
+  src = remove_suffix(src, '.ts')
   directory, _ = os.path.split(src)
   with open(path) as f:
     s = f.read()

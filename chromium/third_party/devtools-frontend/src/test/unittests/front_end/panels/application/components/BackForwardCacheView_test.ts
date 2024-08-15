@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Platform from '../../../../../../front_end/core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../../../front_end/core/platform/platform.js';
-import * as Root from '../../../../../../front_end/core/root/root.js';
 import * as SDK from '../../../../../../front_end/core/sdk/sdk.js';
 import * as Protocol from '../../../../../../front_end/generated/protocol.js';
 import * as ApplicationComponents from '../../../../../../front_end/panels/application/components/components.js';
@@ -17,8 +17,6 @@ import {
 } from '../../../helpers/DOMHelpers.js';
 import {createTarget} from '../../../helpers/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../../helpers/MockConnection.js';
-
-import type * as Platform from '../../../../../../front_end/core/platform/platform.js';
 
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
@@ -148,7 +146,6 @@ describeWithMockConnection('BackForwardCacheView', () => {
     });
 
     it('renders explanation tree', async () => {
-      Root.Runtime.experiments.enableForTest('bfcacheDisplayTree');
       resourceTreeModel.mainFrame = {
         url: 'https://www.example.com/',
         backForwardCacheDetails: {
@@ -229,6 +226,53 @@ describeWithMockConnection('BackForwardCacheView', () => {
       assert.deepStrictEqual(treeData, expected);
     });
 
+    it('renders blocking details if available', async () => {
+      resourceTreeModel.mainFrame = {
+        resourceForURL: () => null,
+        url: 'https://www.example.com/',
+        backForwardCacheDetails: {
+          restoredFromCache: false,
+          explanations: [
+            {
+              type: Protocol.Page.BackForwardCacheNotRestoredReasonType.SupportPending,
+              reason: Protocol.Page.BackForwardCacheNotRestoredReason.WebLocks,
+              details: [
+                {url: 'https://www.example.com/index.html', lineNumber: 10, columnNumber: 5},
+                {url: 'https://www.example.com/script.js', lineNumber: 15, columnNumber: 20},
+              ],
+            },
+          ],
+        },
+      } as unknown as SDK.ResourceTreeModel.ResourceTreeFrame;
+
+      const component = await renderBackForwardCacheView();
+      assertShadowRoot(component.shadowRoot);
+
+      const sectionHeaders = component.shadowRoot.querySelectorAll('devtools-report-section-header');
+      const sectionHeadersText = Array.from(sectionHeaders).map(sectionHeader => sectionHeader.textContent?.trim());
+      assert.deepStrictEqual(sectionHeadersText, ['Pending Support']);
+
+      const sections = component.shadowRoot.querySelectorAll('devtools-report-section');
+      const sectionsText = Array.from(sections).map(section => section.textContent?.trim());
+      const expected = [
+        'Not served from back/forward cache: to trigger back/forward cache, use Chrome\'s back/forward buttons, or use the test button below to automatically navigate away and back.',
+        'Test back/forward cache',
+        'Pages that use WebLocks are not currently eligible for back/forward cache.',
+        'Learn more: back/forward cache eligibility',
+      ];
+      assert.deepStrictEqual(sectionsText, expected);
+
+      const details = component.shadowRoot.querySelector('.details-list devtools-expandable-list');
+      assertNotNullOrUndefined(details);
+      assertShadowRoot(details.shadowRoot);
+      const button = details.shadowRoot.querySelector('button');
+      assertElement(button, HTMLButtonElement);
+      button.click();
+      const items = details?.shadowRoot.querySelectorAll('.expandable-list-items .devtools-link');
+      const detailsText = Array.from(items).map(detail => detail.textContent?.trim());
+      assert.deepStrictEqual(detailsText, ['www.example.com/index.html:11:6', 'www.example.com/script.js:16:21']);
+    });
+
     it('can handle delayed navigation history when testing for BFcache availability', async () => {
       const entries = [
         {
@@ -254,9 +298,9 @@ describeWithMockConnection('BackForwardCacheView', () => {
       stub.onCall(4).returns({entries, currentIndex: 1});
       resourceTreeModel.navigationHistory = stub;
 
-      resourceTreeModel.navigate = (url: Platform.DevToolsPath.UrlString): Promise<void> => {
+      resourceTreeModel.navigate = (url: Platform.DevToolsPath.UrlString): Promise<Protocol.Page.NavigateResponse> => {
         resourceTreeModel.frameNavigated({url} as unknown as Protocol.Page.Frame, undefined);
-        return Promise.resolve();
+        return Promise.resolve({frameId: '' as Protocol.Page.FrameId, getError(): undefined {}});
       };
       resourceTreeModel.navigateToHistoryEntry = (entry: Protocol.Page.NavigationEntry): void => {
         resourceTreeModel.frameNavigated({url: entry.url} as unknown as Protocol.Page.Frame, undefined);

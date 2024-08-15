@@ -23,8 +23,6 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/leveldatabase/env_chromium.h"
 
-using base::StringPiece;
-
 namespace base {
 class TaskRunner;
 }
@@ -54,7 +52,6 @@ TEST(IndexedDBIOErrorTest, CleanUpTest) {
                   nullptr, task_runner.get(),
                   TransactionalLevelDBDatabase::
                       kDefaultMaxOpenIteratorsPerDatabase),
-          /*filesystem_proxy=*/nullptr,
           IndexedDBBackingStore::BlobFilesCleanedCallback(),
           IndexedDBBackingStore::ReportOutstandingBlobsCallback(), task_runner);
   leveldb::Status s = backing_store->Initialize(false);
@@ -93,7 +90,6 @@ TEST(IndexedDBNonRecoverableIOErrorTest, NuancedCleanupTest) {
                     nullptr, task_runner.get(),
                     TransactionalLevelDBDatabase::
                         kDefaultMaxOpenIteratorsPerDatabase),
-            /*filesystem_proxy=*/nullptr,
             IndexedDBBackingStore::BlobFilesCleanedCallback(),
             IndexedDBBackingStore::ReportOutstandingBlobsCallback(),
             task_runner);

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -58,8 +59,6 @@
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
-#include "chrome/browser/media/history/media_history_keyed_service.h"
-#include "chrome/browser/media/history/media_history_store.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -139,6 +138,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
@@ -225,7 +225,6 @@
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "net/base/filename_util.h"
 #include "ppapi/buildflags/buildflags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
@@ -336,8 +335,9 @@ const extensions::Extension* GetExtensionForOrigin(
     Profile* profile,
     const GURL& security_origin) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (!security_origin.SchemeIs(extensions::kExtensionScheme))
+  if (!security_origin.SchemeIs(extensions::kExtensionScheme)) {
     return nullptr;
+  }
 
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
@@ -504,6 +504,8 @@ Browser::Browser(const CreateParams& params)
       content_setting_bubble_model_delegate_(
           new BrowserContentSettingBubbleModelDelegate(this)),
       location_bar_model_delegate_(new BrowserLocationBarModelDelegate(this)),
+      location_bar_model_(std::make_unique<LocationBarModelImpl>(
+          location_bar_model_delegate_.get(), content::kMaxURLDisplayChars)),
       live_tab_context_(new BrowserLiveTabContext(this)),
 #if BUILDFLAG(IS_ANDROID)
       synced_window_delegate_(new BrowserSyncedWindowDelegate(this)),
@@ -519,7 +521,7 @@ Browser::Browser(const CreateParams& params)
       user_title_(params.user_title),
       signin_view_controller_(this),
       breadcrumb_manager_browser_agent_(
-          breadcrumbs::IsEnabled()
+          breadcrumbs::IsEnabled(g_browser_process->local_state())
               ? std::make_unique<BreadcrumbManagerBrowserAgent>(this)
               : nullptr)
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -542,9 +544,6 @@ Browser::Browser(const CreateParams& params)
   }
 
   tab_strip_model_->AddObserver(this);
-
-  location_bar_model_ = std::make_unique<LocationBarModelImpl>(
-      location_bar_model_delegate_.get(), content::kMaxURLDisplayChars);
 
   ThemeServiceFactory::GetForProfile(profile_)->AddObserver(this);
 
@@ -689,6 +688,10 @@ Browser::~Browser() {
 // Getters & Setters
 
 base::WeakPtr<Browser> Browser::AsWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
+base::WeakPtr<const Browser> Browser::AsWeakPtr() const {
   return weak_factory_.GetWeakPtr();
 }
 
@@ -898,20 +901,22 @@ Browser::WarnBeforeClosingResult Browser::MaybeWarnBeforeClosing(
   return WarnBeforeClosingResult::kDoNotClose;
 }
 
-bool Browser::ShouldCloseWindow() {
+BrowserClosingStatus Browser::HandleBeforeClose() {
   // If `force_skip_warning_user_` is true, then we should immediately
   // return true.
-  if (force_skip_warning_user_on_close_)
-    return true;
+  if (force_skip_warning_user_on_close_) {
+    return BrowserClosingStatus::kPermitted;
+  }
 
   // If the user needs to see one or more warnings, hold off closing the
   // browser.
   const WarnBeforeClosingResult result = MaybeWarnBeforeClosing(base::BindOnce(
       &Browser::FinishWarnBeforeClosing, weak_factory_.GetWeakPtr()));
-  if (result == WarnBeforeClosingResult::kDoNotClose)
-    return false;
+  if (result == WarnBeforeClosingResult::kDoNotClose) {
+    return BrowserClosingStatus::kDeniedByUser;
+  }
 
-  return unload_controller_.ShouldCloseWindow();
+  return unload_controller_.GetBrowserClosingStatus();
 }
 
 bool Browser::TryToCloseWindow(
@@ -975,9 +980,22 @@ StatusBubble* Browser::GetStatusBubbleForTesting() {
   return GetStatusBubble();
 }
 
+void Browser::SetForceShowBookmarkBarFlag(ForceShowBookmarkBarFlag flag) {
+  force_show_bookmark_bar_flags_ |= flag;
+  UpdateBookmarkBarState(BOOKMARK_BAR_STATE_CHANGE_FORCE_SHOW);
+}
+
+void Browser::ClearForceShowBookmarkBarFlag(ForceShowBookmarkBarFlag flag) {
+  force_show_bookmark_bar_flags_ &= ~flag;
+  UpdateBookmarkBarState(BOOKMARK_BAR_STATE_CHANGE_FORCE_SHOW);
+}
+
 void Browser::OnWindowClosing() {
-  if (!ShouldCloseWindow())
+  if (const auto closing_status = HandleBeforeClose();
+      closing_status != BrowserClosingStatus::kPermitted) {
+    BrowserList::NotifyBrowserCloseCancelled(this, closing_status);
     return;
+  }
 
   // Application should shutdown on last window close if the user is explicitly
   // trying to quit, or if there is nothing keeping the browser alive (such as
@@ -1045,7 +1063,7 @@ Browser::DownloadCloseType Browser::OkToCloseWithInProgressDownloads(
   // profile, that are relevant for the ok-to-close decision.
   int profile_window_count = 0;
   int total_window_count = 0;
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     // Don't count this browser window or any other in the process of closing.
     // Window closing may be delayed, and windows that are in the process of
     // closing don't count against our totals.
@@ -1299,7 +1317,7 @@ void Browser::OnTabGroupChanged(const TabGroupChange& change) {
           base::FeatureList::IsEnabled(features::kTabGroupsSave)
               ? SavedTabGroupServiceFactory::GetForProfile(profile_)
               : nullptr;
-      absl::optional<std::string> saved_guid;
+      std::optional<std::string> saved_guid;
 
       if (saved_tab_group_keyed_service) {
         const SavedTabGroup* const saved_group =
@@ -1337,7 +1355,7 @@ void Browser::TabPinnedStateChanged(TabStripModel* tab_strip_model,
 }
 
 void Browser::TabGroupedStateChanged(
-    absl::optional<tab_groups::TabGroupId> group,
+    std::optional<tab_groups::TabGroupId> group,
     content::WebContents* contents,
     int index) {
   // See comment in Browser::OnTabGroupChanged
@@ -1440,7 +1458,7 @@ bool Browser::HandleKeyboardEvent(content::WebContents* source,
          window()->HandleKeyboardEvent(event);
 }
 
-bool Browser::TabsNeedBeforeUnloadFired() {
+bool Browser::TabsNeedBeforeUnloadFired() const {
   return unload_controller_.TabsNeedBeforeUnloadFired();
 }
 
@@ -1535,12 +1553,6 @@ content::PreloadingEligibility Browser::IsPrerender2Supported(
   return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
 }
 
-std::unique_ptr<content::WebContents> Browser::ActivatePortalWebContents(
-    content::WebContents* predecessor_contents,
-    std::unique_ptr<content::WebContents> portal_contents) {
-  return SwapWebContents(predecessor_contents, std::move(portal_contents));
-}
-
 void Browser::UpdateInspectedWebContentsIfNecessary(
     content::WebContents* old_contents,
     content::WebContents* new_contents,
@@ -1589,12 +1601,9 @@ bool Browser::ShouldShowStaleContentOnEviction(content::WebContents* source) {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
+// TODO(crbug.com/1198344): Remove this.
 void Browser::MediaWatchTimeChanged(
     const content::MediaPlayerWatchTime& watch_time) {
-  if (media_history::MediaHistoryKeyedService::IsEnabled()) {
-    media_history::MediaHistoryKeyedService::Get(profile())->SavePlayback(
-        watch_time);
-  }
 }
 
 base::WeakPtr<content::WebContentsDelegate> Browser::GetDelegateWeakPtr() {
@@ -1817,7 +1826,7 @@ void Browser::CloseContents(WebContents* source) {
 }
 
 void Browser::SetContentsBounds(WebContents* source, const gfx::Rect& bounds) {
-  if (is_type_normal() || is_type_picture_in_picture()) {
+  if (is_type_normal()) {
     return;
   }
 
@@ -1969,22 +1978,6 @@ void Browser::WebContentsCreated(WebContents* source_contents,
   task_manager::WebContentsTags::CreateForTabContents(new_contents);
 }
 
-void Browser::PortalWebContentsCreated(WebContents* portal_web_contents) {
-  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial("PortalsActive",
-                                                            "Enabled");
-
-  TabHelpers::AttachTabHelpers(portal_web_contents);
-
-  // Make the portal show up in the task manager.
-  WebContentsBecamePortal(portal_web_contents);
-}
-
-void Browser::WebContentsBecamePortal(WebContents* portal_web_contents) {
-  // Make the contents show up as a portal in the task manager.
-  task_manager::WebContentsTags::ClearTag(portal_web_contents);
-  task_manager::WebContentsTags::CreateForPortal(portal_web_contents);
-}
-
 void Browser::RendererUnresponsive(
     WebContents* source,
     content::RenderWidgetHost* render_widget_host,
@@ -2086,8 +2079,8 @@ bool Browser::CanUseWindowingControls(
   return true;
 }
 
-void Browser::SetCanResizeFromWebAPI(absl::optional<bool> can_resize) {
-  window_->SetCanResizeFromWebAPI(can_resize);
+void Browser::OnCanResizeFromWebAPIChanged() {
+  window_->OnCanResizeFromWebAPIChanged();
 }
 
 bool Browser::GetCanResize() {
@@ -2104,6 +2097,10 @@ void Browser::MaximizeFromWebAPI() {
 
 void Browser::RestoreFromWebAPI() {
   window_->Restore();
+}
+
+ui::WindowShowState Browser::GetWindowShowState() const {
+  return window_->GetWindowShowState();
 }
 
 bool Browser::CanEnterFullscreenModeForTab(
@@ -2330,24 +2327,15 @@ void Browser::RequestMediaAccessPermission(
 
 bool Browser::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     blink::mojom::MediaStreamType type) {
   Profile* profile =
       Profile::FromBrowserContext(render_frame_host->GetBrowserContext());
   const extensions::Extension* extension =
-      GetExtensionForOrigin(profile, security_origin);
+      GetExtensionForOrigin(profile, security_origin.GetURL());
   return MediaCaptureDevicesDispatcher::GetInstance()
       ->CheckMediaAccessPermission(render_frame_host, security_origin, type,
                                    extension);
-}
-
-std::string Browser::GetDefaultMediaDeviceID(
-    content::WebContents* web_contents,
-    blink::mojom::MediaStreamType type) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  return MediaCaptureDevicesDispatcher::GetInstance()
-      ->GetDefaultDeviceIDForProfile(profile, type);
 }
 
 std::string Browser::GetTitleForMediaControls(WebContents* web_contents) {
@@ -2453,15 +2441,9 @@ void Browser::OnZoomChanged(
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, ui::SelectFileDialog::Listener implementation:
 
-void Browser::FileSelected(const base::FilePath& path,
+void Browser::FileSelected(const ui::SelectedFileInfo& file_info,
                            int index,
                            void* params) {
-  FileSelectedWithExtraInfo(ui::SelectedFileInfo(path, path), index, params);
-}
-
-void Browser::FileSelectedWithExtraInfo(const ui::SelectedFileInfo& file_info,
-                                        int index,
-                                        void* params) {
   // Transfer the ownership of select file dialog so that the ref count is
   // released after the function returns. This is needed because the passed-in
   // data such as |file_info| and |params| could be owned by the dialog.
@@ -2925,7 +2907,7 @@ void Browser::SyncHistoryWithTabs(int index) {
         session_service->SetTabIndexInWindow(
             session_id(), session_tab_helper->session_id(), i);
 
-        absl::optional<tab_groups::TabGroupId> group_id =
+        std::optional<tab_groups::TabGroupId> group_id =
             tab_strip_model_->GetTabGroupForTab(i);
         session_service->SetTabGroup(session_id(),
                                      session_tab_helper->session_id(),
@@ -3248,7 +3230,8 @@ void Browser::UpdateBookmarkBarState(BookmarkBarStateChangeReason reason) {
     return;
   }
 
-  bool should_animate = reason == BOOKMARK_BAR_STATE_CHANGE_PREF_CHANGE;
+  bool should_animate = reason == BOOKMARK_BAR_STATE_CHANGE_PREF_CHANGE ||
+                        reason == BOOKMARK_BAR_STATE_CHANGE_FORCE_SHOW;
   window_->BookmarkBarStateChanged(
       should_animate ? BookmarkBar::ANIMATE_STATE_CHANGE
                      : BookmarkBar::DONT_ANIMATE_STATE_CHANGE);
@@ -3262,6 +3245,10 @@ bool Browser::ShouldShowBookmarkBar() const {
       profile_->GetPrefs()->GetBoolean(bookmarks::prefs::kShowBookmarkBar) &&
       !ShouldHideUIForFullscreen())
     return true;
+
+  if (force_show_bookmark_bar_flags_ != ForceShowBookmarkBarFlag::kNone) {
+    return true;
+  }
 
   WebContents* web_contents = tab_strip_model_->GetActiveWebContents();
   if (!web_contents)

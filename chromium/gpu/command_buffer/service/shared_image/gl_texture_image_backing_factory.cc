@@ -24,10 +24,12 @@ constexpr uint32_t kWebGPUUsages =
     SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE;
 
 constexpr uint32_t kSupportedUsage =
-    SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+    SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
+    SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
-    SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
-    SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE |
+    SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+    SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_SCANOUT |
+    SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE |
     SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
     kWebGPUUsages;
 }
@@ -46,21 +48,7 @@ GLTextureImageBackingFactory::GLTextureImageBackingFactory(
                                   workarounds,
                                   feature_info,
                                   progress_reporter),
-      for_cpu_upload_usage_(for_cpu_upload_usage) {
-  // If RED_8 and RG_88 are supported then YUV formats should also work.
-  // TODO(crbug.com/1406253): Verify if P010 support is also needed here for
-  // software GpuMemoryBuffers.
-  auto r_iter = supported_formats_.find(viz::SinglePlaneFormat::kR_8);
-  auto rg_iter = supported_formats_.find(viz::SinglePlaneFormat::kRG_88);
-  if (r_iter != supported_formats_.end() &&
-      rg_iter != supported_formats_.end()) {
-    auto& r_info = r_iter->second[0];
-    auto& rg_info = rg_iter->second[0];
-    supported_formats_[viz::MultiPlaneFormat::kNV12] = {r_info, rg_info};
-    supported_formats_[viz::MultiPlaneFormat::kYV12] = {r_info, r_info, r_info};
-    supported_formats_[viz::MultiPlaneFormat::kI420] = {r_info, r_info, r_info};
-  }
-}
+      for_cpu_upload_usage_(for_cpu_upload_usage) {}
 
 GLTextureImageBackingFactory::~GLTextureImageBackingFactory() = default;
 
@@ -176,7 +164,8 @@ bool GLTextureImageBackingFactory::IsSupported(
       gl::GetANGLEImplementation() == gl::ANGLEImplementation::kMetal) {
     constexpr uint32_t kMetalInvalidUsages =
         SHARED_IMAGE_USAGE_DISPLAY_READ | SHARED_IMAGE_USAGE_SCANOUT |
-        SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT;
+        SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
+        SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT;
     if (usage & kMetalInvalidUsages) {
       return false;
     }
@@ -187,7 +176,8 @@ bool GLTextureImageBackingFactory::IsSupported(
   if (gr_context_type != GrContextType::kGL &&
       ((usage & SHARED_IMAGE_USAGE_DISPLAY_READ) ||
        (usage & SHARED_IMAGE_USAGE_DISPLAY_WRITE) ||
-       (usage & SHARED_IMAGE_USAGE_RASTER))) {
+       (usage & SHARED_IMAGE_USAGE_RASTER_READ) ||
+       (usage & SHARED_IMAGE_USAGE_RASTER_WRITE))) {
     return false;
   }
 
@@ -218,8 +208,9 @@ GLTextureImageBackingFactory::CreateSharedImageInternal(
   DCHECK(CanCreateTexture(format, size, pixel_data, GL_TEXTURE_2D));
 
   const bool for_framebuffer_attachment =
-      (usage & (SHARED_IMAGE_USAGE_RASTER |
-                SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT)) != 0;
+      (usage &
+       (SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+        SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT)) != 0;
   const bool framebuffer_attachment_angle =
       for_framebuffer_attachment && texture_usage_angle_;
 

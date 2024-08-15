@@ -116,6 +116,65 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, AddAndUpdateCreditCard) {
   EXPECT_TRUE(RunAutofillSubtest("addAndUpdateCreditCard")) << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, AddCreditCard_Cvc) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addNewCreditCard")) << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount("AutofillCreditCardsAdded"));
+  EXPECT_EQ(
+      1, user_action_tester.GetActionCount("AutofillCreditCardsAddedWithCvc"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, AddCreditCard_NoCvc) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addNewCreditCardWithoutCvc")) << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount("AutofillCreditCardsAdded"));
+  EXPECT_EQ(
+      0, user_action_tester.GetActionCount("AutofillCreditCardsAddedWithCvc"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       UpdateCreditCard_NoExistingCvc_NoNewCvcAdded) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addAndUpdateCreditCard")) << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardsEditedAndCvcWasLeftBlank"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       UpdateCreditCard_NoExistingCvc_NewCvcAdded) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addAndUpdateCreditCard_AddCvc")) << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardsEditedAndCvcWasAdded"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       UpdateCreditCard_ExistingCvc_Removed) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addAndUpdateCreditCard_RemoveCvc"))
+      << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardsEditedAndCvcWasRemoved"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       UpdateCreditCard_ExistingCvc_Updated) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addAndUpdateCreditCard_UpdateCvc"))
+      << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardsEditedAndCvcWasUpdated"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       UpdateCreditCard_ExistingCvc_Unchanged) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("addAndUpdateCreditCard_UnchangedCvc"))
+      << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardsEditedAndCvcWasUnchanged"));
+}
+
 IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, AddNewIban_NoNickname) {
   base::UserActionTester user_action_tester;
   EXPECT_TRUE(RunAutofillSubtest("addNewIbanNoNickname")) << message_;
@@ -162,6 +221,23 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, removeExistingIban) {
   EXPECT_EQ(1, user_action_tester.GetActionCount("AutofillIbanDeleted"));
 }
 
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, removeExistingCard) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("removeExistingCard")) << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount("AutofillCreditCardDeleted"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
+                       removeExistingCard_WithCvcAndNickname) {
+  base::UserActionTester user_action_tester;
+  EXPECT_TRUE(RunAutofillSubtest("removeExistingCard_WithCvcAndNickname"))
+      << message_;
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardDeletedAndHadCvc"));
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "AutofillCreditCardDeletedAndHadNickname"));
+}
+
 IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, isValidIban) {
   base::UserActionTester user_action_tester;
   EXPECT_TRUE(RunAutofillSubtest("isValidIban")) << message_;
@@ -194,14 +270,8 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
                    "PaymentsUserAuthSuccessfulForMandatoryAuthToggle"));
 }
 
-// TODO(1495229): Flaking on Mac, Linux and ChromeOS bots
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_showEditCardDialogForLocalCard_ReauthOn DISABLED_showEditCardDialogForLocalCard_ReauthOn
-#else
-#define MAYBE_showEditCardDialogForLocalCard_ReauthOn showEditCardDialogForLocalCard_ReauthOn
-#endif
 IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
-                       MAYBE_showEditCardDialogForLocalCard_ReauthOn) {
+                       showEditCardDialogForLocalCard_ReauthOn) {
   base::UserActionTester user_action_tester;
 
   autofill_client()
@@ -230,14 +300,8 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
 }
 #endif
 
-// TODO(1495229): Flaking on Mac, Linux and ChromeOS bots
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_showEditCardDialogForLocalCard_ReauthOff DISABLED_showEditCardDialogForLocalCard_ReauthOff
-#else
-#define MAYBE_showEditCardDialogForLocalCard_ReauthOff showEditCardDialogForLocalCard_ReauthOff
-#endif
 IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
-                       MAYBE_showEditCardDialogForLocalCard_ReauthOff) {
+                       showEditCardDialogForLocalCard_ReauthOff) {
   base::UserActionTester user_action_tester;
 
   autofill_client()
@@ -255,6 +319,10 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest,
                    "PaymentsUserAuthTriggeredToShowEditLocalCardDialog"));
   EXPECT_EQ(0, user_action_tester.GetActionCount(
                    "PaymentsUserAuthSuccessfulToShowEditLocalCardDialog"));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiTest, bulkDeleteAllCvcs) {
+  EXPECT_TRUE(RunAutofillSubtest("bulkDeleteAllCvcs")) << message_;
 }
 
 }  // namespace extensions

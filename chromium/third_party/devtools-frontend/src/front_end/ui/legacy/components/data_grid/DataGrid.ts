@@ -29,6 +29,7 @@
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
+import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
 import dataGridStyles from './dataGrid.css.js';
@@ -111,8 +112,6 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const elementToLongTextMap = new WeakMap<Element, string>();
 
 const nodeToColumnIdMap = new WeakMap<Node, string>();
-
-const elementToSortIconMap = new WeakMap<Element, UI.Icon.Icon>();
 
 const elementToPreferedWidthMap = new WeakMap<Element, number>();
 
@@ -411,6 +410,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     }
 
     const cell = document.createElement('th');
+    cell.setAttribute('jslog', `${VisualLogging.tableHeader().track({click: column.sortable}).context(columnId)}`);
     cell.className = columnId + '-column';
     nodeToColumnIdMap.set(cell, columnId);
     this.dataTableHeaders[columnId] = cell;
@@ -431,9 +431,9 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (column.sortable) {
       cell.addEventListener('click', this.clickInHeaderCell.bind(this), false);
       cell.classList.add('sortable');
-      const icon = UI.Icon.Icon.create('', 'sort-order-icon');
+      const icon = document.createElement('span');
+      icon.className = 'sort-order-icon';
       cell.createChild('div', 'sort-order-icon-container').appendChild(icon);
-      elementToSortIconMap.set(cell, icon);
     }
   }
 
@@ -947,7 +947,14 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (!this.columnWeightsSetting) {
       return;
     }
-    const weights = this.columnWeightsSetting.get();
+    const weights: {
+      [x: string]: any,
+    } = {};
+    // TODO(b/320405843): remove this when kebab migration is complete and
+    // replace with settings version upgrade
+    for (const [key, value] of Object.entries(this.columnWeightsSetting.get())) {
+      weights[Platform.StringUtilities.toKebabCase(key)] = value;
+    }
     for (let i = 0; i < this.columnsArray.length; ++i) {
       const column = this.columnsArray[i];
       const weight = weights[column.id];
@@ -1271,11 +1278,6 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     this.sortColumnCell = cell;
 
     cell.classList.add(sortOrder);
-    const icon = elementToSortIconMap.get(cell);
-    if (!icon) {
-      return;
-    }
-    icon.setIconType(sortOrder === Order.Ascending ? 'triangle-up' : 'triangle-down');
 
     this.dispatchEventToListeners(Events.SortingChanged);
   }
@@ -1344,7 +1346,9 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       for (const column of sortableColumns) {
         const headerCell = this.dataTableHeaders[column.id];
         sortMenu.defaultSection().appendItem(
-            (column.title as string), this.sortByColumnHeaderCell.bind(this, headerCell));
+            (column.title as string), this.sortByColumnHeaderCell.bind(this, headerCell), {
+              jslogContext: column.id,
+            });
       }
     }
 
@@ -1575,9 +1579,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
 // Keep in sync with .data-grid col.corner style rule.
 export const CornerWidth = 14;
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   SelectedNode = 'SelectedNode',
   DeselectedNode = 'DeselectedNode',
   OpenedNode = 'OpenedNode',
@@ -1593,33 +1595,25 @@ export type EventTypes<T> = {
   [Events.PaddingChanged]: void,
 };
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Order {
   Ascending = 'sort-ascending',
   Descending = 'sort-descending',
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Align {
+export const enum Align {
   Center = 'center',
   Right = 'right',
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum DataType {
+export const enum DataType {
   String = 'String',
   Boolean = 'Boolean',
 }
 
-export const ColumnResizePadding = 24;
+export const ColumnResizePadding = 34;
 export const CenterResizerOverBorderAdjustment = 3;
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum ResizeMethod {
+export const enum ResizeMethod {
   Nearest = 'nearest',
   First = 'first',
   Last = 'last',
@@ -1936,6 +1930,12 @@ export class DataGridNode<T> {
 
   createTD(columnId: string): HTMLElement {
     const cell = this.createTDWithClass(columnId + '-column');
+    cell.setAttribute(
+        'jslog',
+        `${
+            VisualLogging.tableCell()
+                .track({click: true, keydown: Boolean(this.dataGrid?.columns[columnId].editable)})
+                .context(columnId)}`);
     nodeToColumnIdMap.set(cell, columnId);
 
     if (this.dataGrid) {
@@ -2452,7 +2452,7 @@ export interface Parameters {
   refreshCallback?: (() => void);
 }
 export interface ColumnDescriptor {
-  id: string;
+  id: Platform.StringUtilities.KebabString;
   title?: Common.UIString.LocalizedString;
   titleDOMFragment?: DocumentFragment|null;
   sortable: boolean;

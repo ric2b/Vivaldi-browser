@@ -30,7 +30,7 @@
   margin-bottom: -1px;
 }
 
-.ignore-list-option-group {
+.ignore-list-option-group-title {
   margin-top: 16px;
   margin-bottom: 3px;
   margin-left: 8px;
@@ -67,6 +67,10 @@
 .ignore-list-pattern {
   flex: auto;
   min-width: 100px;
+}
+
+.ignore-list-item > [is="dt-checkbox"] {
+  width: 100%;
 }
 
 .ignore-list-item .ignore-list-pattern {

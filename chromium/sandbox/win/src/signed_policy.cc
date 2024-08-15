@@ -29,8 +29,7 @@ bool SignedPolicy::GenerateRules(const wchar_t* name,
   std::wstring nt_filename = nt_path.Append(file_path.BaseName()).value();
   // Create a rule to ASK_BROKER if name matches.
   PolicyRule signed_policy(ASK_BROKER);
-  if (!signed_policy.AddStringMatch(IF, NameBased::NAME, nt_filename.c_str(),
-                                    CASE_INSENSITIVE)) {
+  if (!signed_policy.AddStringMatch(IF, NameBased::NAME, nt_filename.c_str())) {
     return false;
   }
   if (!policy->AddRule(IpcTag::NTCREATESECTION, &signed_policy)) {
@@ -55,7 +54,7 @@ NTSTATUS SignedPolicy::CreateSectionAction(
       &local_section_handle,
       SECTION_QUERY | SECTION_MAP_WRITE | SECTION_MAP_READ |
           SECTION_MAP_EXECUTE,
-      nullptr, 0, PAGE_EXECUTE, SEC_IMAGE, local_file_handle.Get());
+      nullptr, 0, PAGE_EXECUTE, SEC_IMAGE, local_file_handle.get());
   if (!local_section_handle)
     return status;
 

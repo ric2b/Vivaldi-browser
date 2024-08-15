@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <optional>
+
 #include "base/barrier_closure.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -11,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
+#include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -35,6 +38,8 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/gcm_driver/common/gcm_message.h"
 #include "components/gcm_driver/fake_gcm_profile_service.h"
 #include "components/permissions/permission_request_manager.h"
@@ -53,7 +58,6 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_database.mojom-forward.h"
 
@@ -305,7 +309,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, NoOpenInChrome) {
   size_t index = 0;
   const bool found = app_menu_model->GetModelAndIndexForCommandId(
       IDC_OPEN_IN_CHROME, &model, &index);
-  EXPECT_FALSE(found);
+  EXPECT_TRUE(found);
+  EXPECT_FALSE(model->IsVisibleAt(index));
 }
 
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromFile) {
@@ -427,6 +432,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserCookieTest, Cookies) {
       isolated_web_app_dev_server().GetURL("localhost", "/cookie.html");
   GURL non_app_url = https_server()->GetURL(
       kNonAppHost, "/web_apps/simple_isolated_app/cookie.html");
+  CookieSettingsFactory::GetForProfile(browser()->profile())
+      ->SetCookieSetting(non_app_url, CONTENT_SETTING_ALLOW);
 
   // Load a page that sets a cookie, then create a cross-origin iframe that
   // loads the same page.
@@ -653,8 +660,8 @@ var kApplicationServerKey = new Uint8Array([
 
   BrowserWaiter browser_waiter(nullptr);
   notification_tester_->SimulateClick(NotificationHandler::Type::WEB_PERSISTENT,
-                                      notifications[0].id(), absl::nullopt,
-                                      absl::nullopt);
+                                      notifications[0].id(), std::nullopt,
+                                      std::nullopt);
 
   // Check that the click resulted in a new isolated web app window that runs in
   // the same isolated non-default storage partition.

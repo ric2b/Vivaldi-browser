@@ -30,7 +30,7 @@ uint32_t BuiltinsConstantsTableBuilder::AddObject(Handle<Object> object) {
   // accessibly from the root list.
   RootIndex root_list_index;
   DCHECK(!isolate_->roots_table().IsRootHandle(object, &root_list_index));
-  DCHECK_IMPLIES(IsMap(*object), !HeapObject::cast(*object).InReadOnlySpace());
+  DCHECK_IMPLIES(IsMap(*object), !InReadOnlySpace(HeapObject::cast(*object)));
 
   // Not yet finalized.
   DCHECK_EQ(ReadOnlyRoots(isolate_).empty_fixed_array(),
@@ -104,7 +104,7 @@ void BuiltinsConstantsTableBuilder::Finalize() {
   DCHECK(isolate_->IsGeneratingEmbeddedBuiltins());
 
   // An empty map means there's nothing to do.
-  if (map_.size() == 0) return;
+  if (map_.empty()) return;
 
   Handle<FixedArray> table =
       isolate_->factory()->NewFixedArray(map_.size(), AllocationType::kOld);

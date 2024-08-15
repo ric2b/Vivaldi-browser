@@ -21,7 +21,7 @@
 #include "chrome/browser/performance_manager/decorators/page_live_state_decorator_delegate_impl.h"
 #include "chrome/browser/performance_manager/metrics/memory_pressure_metrics.h"
 #include "chrome/browser/performance_manager/metrics/metrics_provider_desktop.h"
-#include "chrome/browser/performance_manager/metrics/page_timeline_monitor.h"
+#include "chrome/browser/performance_manager/metrics/page_resource_monitor.h"
 #include "chrome/browser/performance_manager/observers/page_load_metrics_observer.h"
 #include "chrome/browser/performance_manager/policies/background_tab_loading_policy.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
@@ -33,6 +33,7 @@
 #include "components/performance_manager/embedder/performance_manager_lifetime.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/performance_manager/graph/policies/bfcache_policy.h"
+#include "components/performance_manager/graph/policies/process_priority_policy.h"
 #include "components/performance_manager/performance_manager_feature_observer_client.h"
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
 #include "components/performance_manager/public/decorators/page_load_tracker_decorator_helper.h"
@@ -68,11 +69,12 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/performance_manager/mechanisms/page_freezer.h"
-#include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy.h"
+#include "chrome/browser/performance_manager/policies/memory_saver_mode_policy.h"
 #include "chrome/browser/performance_manager/policies/page_discarding_helper.h"
 #include "chrome/browser/performance_manager/policies/page_freezing_policy.h"
 #include "chrome/browser/performance_manager/policies/urgent_page_discarding_policy.h"
 #include "chrome/browser/performance_manager/public/user_tuning/battery_saver_mode_manager.h"
+#include "chrome/browser/performance_manager/public/user_tuning/performance_detection_manager.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/performance_manager/user_tuning/user_performance_tuning_notifier.h"
 #include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
@@ -196,23 +198,24 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
       std::make_unique<performance_manager::policies::PageFreezingPolicy>());
 
   graph->PassToGraph(
-      std::make_unique<
-          performance_manager::policies::HighEfficiencyModePolicy>());
+      std::make_unique<performance_manager::policies::MemorySaverModePolicy>());
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   graph->PassToGraph(
       std::make_unique<performance_manager::metrics::MemoryPressureMetrics>());
-
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kPageTimelineMonitor)) {
-    graph->PassToGraph(
-        std::make_unique<performance_manager::metrics::PageTimelineMonitor>());
-  }
+  graph->PassToGraph(
+      std::make_unique<performance_manager::metrics::PageResourceMonitor>());
 
   if (base::FeatureList::IsEnabled(
           performance_manager::features::kBFCachePerformanceManagerPolicy)) {
     graph->PassToGraph(
         std::make_unique<performance_manager::policies::BFCachePolicy>());
+  }
+
+  if (base::FeatureList::IsEnabled(
+          performance_manager::features::kPMProcessPriorityPolicy)) {
+    graph->PassToGraph(std::make_unique<
+                       performance_manager::policies::ProcessPriorityPolicy>());
   }
 }
 
@@ -222,13 +225,9 @@ ChromeBrowserMainExtraPartsPerformanceManager::GetFeatureObserverClient() {
 }
 
 void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
-  auto graph_features = performance_manager::GraphFeatures::WithDefault();
-  if (performance_manager::features::kUseResourceAttributionCPUMonitor.Get()) {
-    graph_features.EnableResourceAttributionScheduler();
-  }
   performance_manager_lifetime_ =
       std::make_unique<performance_manager::PerformanceManagerLifetime>(
-          graph_features,
+          performance_manager::GraphFeatures::WithDefault(),
           base::BindOnce(&ChromeBrowserMainExtraPartsPerformanceManager::
                              CreatePoliciesAndDecorators));
 
@@ -263,6 +262,8 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
   battery_saver_mode_manager_ = base::WrapUnique(
       new performance_manager::user_tuning::BatterySaverModeManager(
           g_browser_process->local_state()));
+  performance_detection_manager_ = base::WrapUnique(
+      new performance_manager::user_tuning::PerformanceDetectionManager());
 #endif
 
   page_load_metrics_observer_ =
@@ -306,6 +307,8 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PreMainMessageLoopRun() {
   performance_manager::user_tuning::BatterySaverModeManager::GetInstance()
       ->Start();
   performance_manager::user_tuning::UserPerformanceTuningManager::GetInstance()
+      ->Start();
+  performance_manager::user_tuning::PerformanceDetectionManager::GetInstance()
       ->Start();
 
   // This object is created by the metrics service before threads, but it

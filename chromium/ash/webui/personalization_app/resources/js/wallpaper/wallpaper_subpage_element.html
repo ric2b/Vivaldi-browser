@@ -4,7 +4,7 @@
     grid-template-areas:
       'leftspacertop    selected   rightspacertop   '
       'leftspacerbottom imagegrid  rightspacerbottom';
-    grid-template-columns: minmax(16px, 1fr) minmax(568px, 920px) minmax(16px, 1fr);
+    grid-template-columns: minmax(10px, 1fr) minmax(568px, 920px) minmax(10px, 1fr);
     grid-template-rows: 172px minmax(0, 1fr);
     height: 100%;
     min-height: var(--personalization-app-subpage-container-min-height);
@@ -12,7 +12,7 @@
     width: 100%;
   }
 
-  wallpaper-subpage-top {
+  wallpaper-selected {
     background-color: var(--cros-bg-color);
     grid-area: selected;
     position: sticky;
@@ -23,10 +23,9 @@
   wallpaper-collections,
   wallpaper-images,
   google-photos-collection,
-  local-images,
-  sea-pen-collection {
+  local-images {
     grid-area: imagegrid;
-    padding: 12px 0 32px 0;
+    padding: 10px 0;
     background-color: var(--cros-bg-color);
   }
 
@@ -36,15 +35,14 @@
     z-index: 1;
   }
 
-  :host-context(body.jelly-enabled) wallpaper-subpage-top {
+  :host-context(body.jelly-enabled) wallpaper-selected {
     background-color: var(--cros-sys-app_base_shaded);
   }
 
   :host-context(body.jelly-enabled) wallpaper-collections,
   wallpaper-images,
   google-photos-collection,
-  local-images,
-  sea-pen-collection {
+  local-images {
     background-color: var(--cros-bg-color);
   }
 </style>
@@ -52,11 +50,10 @@
   <!-- Prevent left margin from collapsing on narrow window in RTL -->
   <div class="leftspacertop"></div>
   <div class="leftspacerbottom"></div>
-  <wallpaper-subpage-top path="[[path]]" collection-id="[[queryParams.id]]"
-        google-photos-album-id="[[queryParams.googlePhotosAlbumId]]"
-        is-google-photos-album-shared="[[isGooglePhotosAlbumShared_]]"
-        template-id="[[queryParams.seaPenTemplateId]]">
-  </wallpaper-subpage-top>
+  <wallpaper-selected path="[[path]]" collection-id="[[queryParams.id]]"
+      google-photos-album-id="[[queryParams.googlePhotosAlbumId]]"
+      is-google-photos-album-shared="[[isGooglePhotosAlbumShared_]]">
+  </wallpaper-selected>
   <!-- do not use hidden$ here - need to listen on property change in
           these elements. -->
   <wallpaper-collections hidden="[[!shouldShowCollections_(path)]]">
@@ -73,9 +70,6 @@
   <template is="dom-if" if="[[shouldShowLocalCollection_(path)]]" restamp>
     <local-images></local-images>
   </template>
-  <template is="dom-if" if="[[shouldShowSeaPenCollection_(path)]]">
-    <sea-pen-collection template-id="[[queryParams.seaPenTemplateId]]"></sea-pen-collection>
- </template>
   <!-- Prevent the right margin from collapsing when window gets very
            narrow -->
   <div class="rightspacertop"></div>

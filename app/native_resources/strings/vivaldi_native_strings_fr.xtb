@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Coller</translation>
 <translation id="4005270918754737597">Ignorer cette version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Ne plus afficher</translation>
 <translation id="4074744496918018786">Ouvrir l’image dans une fenêtre de navigation privée</translation>
 <translation id="410351446219883937">Jouer automatiquement</translation>
 <translation id="4281844954008187215">Conditions d’utilisation</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Ouvrir l’image dans une nouvelle fenêtre</translation>
 <translation id="5656371807944747581">Erreur durant la mise à jour !</translation>
-<translation id="5716238312826274098">Désactivation des notifications</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> est désormais disponible (vous avez actuellement <ph name="OLD_VERSION" />). Voulez-vous faire la mise à jour maintenant ?</translation>
 <translation id="5770433027661640693">Paysage 10</translation>
 <translation id="5857090052475505287">Nouveau dossier</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Échec de lancement de l’installeur de la mise à jour. Veuillez vérifier que l’ordinateur dispose d’assez de mémoire et d’espace disque et réessayer plus tard.</translation>
 <translation id="7658239707568436148">Annuler</translation>
-<translation id="7715497554424665066">&amp;Ignorer la mise à jour</translation>
 <translation id="7724603315864178912">Couper</translation>
 <translation id="7727481996062361502">Vérification de la mise à jour…</translation>
 <translation id="7793738202466490491">Ajouter en tant qu’événement de calendrier</translation>

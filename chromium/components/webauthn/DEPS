@@ -1,10 +1,10 @@
 include_rules = [
-  "+components/browser_ui/bottomsheet",
   "+components/keyed_service",
   "+components/payments/content/android/java/src/org/chromium/components/payments",
   "+components/sync",
   "+components/version_info/android/java/src/org/chromium/components/version_info/VersionInfo.java",
   "+content/public/browser",
+  "+crypto",
   "+device/fido",
   "+mojo/public/cpp/bindings",
   "+services/device/public/java/src/org/chromium/device/DeviceFeatureList.java",

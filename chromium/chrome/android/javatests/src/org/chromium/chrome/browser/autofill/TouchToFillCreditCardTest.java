@@ -29,20 +29,20 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.FakeTimeTestRule;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.password_manager.PasswordManagerTestUtilsBridge;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
+import org.chromium.components.payments.InputProtector;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -58,12 +58,13 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(Batch.PER_CLASS)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "show-autofill-signatures"})
-@EnableFeatures(ChromeFeatureList.AUTOFILL_TOUCH_TO_FILL_FOR_CREDIT_CARDS_ANDROID)
 public class TouchToFillCreditCardTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule public TestRule mProcessor = new Features.JUnitProcessor();
+
+    @Rule public FakeTimeTestRule mFakeTimeTestRule = new FakeTimeTestRule();
 
     private static final String FORM_URL =
             "/chrome/test/data/autofill/autofill_creditcard_form.html";
@@ -132,6 +133,9 @@ public class TouchToFillCreditCardTest {
                 () -> {
                     checkThat(mInputMethodWrapper.getShowSoftInputCounter(), is(0));
                 });
+
+        // Wait minimum amount of time for input protector.
+        mFakeTimeTestRule.advanceMillis(InputProtector.POTENTIALLY_UNINTENDED_INPUT_THRESHOLD);
 
         // The item with the index 1 in the recycler view is supposed to be the credit card.
         // Click on it to simulate user selection.

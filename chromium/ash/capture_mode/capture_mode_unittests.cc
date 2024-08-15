@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,7 @@
 #include "ash/style/tab_slider_button.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_util.h"
 #include "ash/test/test_widget_builder.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_controller.h"
@@ -60,6 +62,7 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/containers/contains.h"
@@ -85,7 +88,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_video_capture.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/capture_client_observer.h"
@@ -100,6 +102,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/util/display_util.h"
 #include "ui/events/event_constants.h"
@@ -245,7 +248,7 @@ class CaptureModeTest : public AshTestBase {
     return widget ? widget->GetNativeWindow() : nullptr;
   }
 
-  absl::optional<gfx::Point> GetMagnifierGlassCenterPoint() const {
+  std::optional<gfx::Point> GetMagnifierGlassCenterPoint() const {
     auto* controller = CaptureModeController::Get();
     DCHECK(controller->IsActive());
     auto& magnifier =
@@ -256,7 +259,7 @@ class CaptureModeTest : public AshTestBase {
           ->GetWindowBoundsInScreen()
           .CenterPoint();
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Start Capture Mode with source region and type image.
@@ -795,7 +798,7 @@ TEST_F(CaptureModeTest, CaptureRegionMagnifierWhenFineTuning) {
   // visible yet.
   gfx::Rect capture_region{200, 200, 400, 400};
   SelectRegion(capture_region);
-  EXPECT_EQ(absl::nullopt, GetMagnifierGlassCenterPoint());
+  EXPECT_EQ(std::nullopt, GetMagnifierGlassCenterPoint());
 
   auto check_magnifier_shows_properly = [this](const gfx::Point& origin,
                                                const gfx::Point& destination,
@@ -805,11 +808,10 @@ TEST_F(CaptureModeTest, CaptureRegionMagnifierWhenFineTuning) {
     // If not |should_show_magnifier|, check that the magnifying glass never
     // shows. Should always be not visible when mouse button is released.
     auto* event_generator = GetEventGenerator();
-    absl::optional<gfx::Point> expected_origin =
-        should_show_magnifier ? absl::make_optional(origin) : absl::nullopt;
-    absl::optional<gfx::Point> expected_destination =
-        should_show_magnifier ? absl::make_optional(destination)
-                              : absl::nullopt;
+    std::optional<gfx::Point> expected_origin =
+        should_show_magnifier ? std::make_optional(origin) : std::nullopt;
+    std::optional<gfx::Point> expected_destination =
+        should_show_magnifier ? std::make_optional(destination) : std::nullopt;
 
     auto* cursor_manager = Shell::Get()->cursor_manager();
     EXPECT_TRUE(cursor_manager->IsCursorVisible());
@@ -832,7 +834,7 @@ TEST_F(CaptureModeTest, CaptureRegionMagnifierWhenFineTuning) {
 
     // Release left button.
     event_generator->ReleaseLeftButton();
-    EXPECT_EQ(absl::nullopt, GetMagnifierGlassCenterPoint());
+    EXPECT_EQ(std::nullopt, GetMagnifierGlassCenterPoint());
     EXPECT_TRUE(cursor_manager->IsCursorVisible());
   };
 
@@ -2147,7 +2149,8 @@ TEST_F(CaptureModeTest, RotateDisplayWhileRecording) {
 }
 
 // Regression test for https://crbug.com/1331095.
-TEST_F(CaptureModeTest, CornerRegionWithScreenRotation) {
+// This is disabled due to flakiness: b/318349807
+TEST_F(CaptureModeTest, DISABLED_CornerRegionWithScreenRotation) {
   UpdateDisplay("800x600");
 
   // Pick a region at the bottom right corner of the landscape screen, so that
@@ -3391,9 +3394,8 @@ TEST_F(CaptureModeTest, CaptureModeBarButtonTypeHistograms) {
                                      CaptureModeBarButtonType::kWindow, 1);
 
   // Enter tablet mode and test the bar buttons.
-  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
-  tablet_mode_controller->SetEnabledForTest(true);
-  ASSERT_TRUE(tablet_mode_controller->InTabletMode());
+  ash::TabletModeControllerTestApi().EnterTabletMode();
+  ASSERT_TRUE(display::Screen::GetScreen()->InTabletMode());
 
   ClickOnView(GetImageToggleButton(), event_generator);
   histogram_tester.ExpectBucketCount(
@@ -3543,9 +3545,8 @@ TEST_F(CaptureModeTest, NumberOfCaptureRegionAdjustmentsHistogram) {
 
   // Enter tablet mode and restart the capture session. The capture region
   // should be remembered.
-  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
-  tablet_mode_controller->SetEnabledForTest(true);
-  ASSERT_TRUE(tablet_mode_controller->InTabletMode());
+  ash::TabletModeControllerTestApi().EnterTabletMode();
+  ASSERT_TRUE(display::Screen::GetScreen()->InTabletMode());
   StartImageRegionCapture();
   ASSERT_EQ(target_region, controller->user_capture_region());
 
@@ -3763,7 +3764,8 @@ TEST_F(CaptureModeTest, KeyboardNavigationBasic) {
 // mode.
 TEST_F(CaptureModeTest, KeyboardNavigationTabThroughWindowsOnMultipleDisplays) {
   UpdateDisplay("800x700,801+0-800x700");
-  std::vector<aura::Window*> root_windows = Shell::GetAllRootWindows();
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> root_windows =
+      Shell::GetAllRootWindows();
   ASSERT_EQ(2u, root_windows.size());
 
   // Create three windows, one of them is a modal transient child.
@@ -4438,7 +4440,7 @@ TEST_F(CaptureModeTest, QuickActionHistograms) {
     waiter.Wait();
   }
   // Click on the notification body. This should take us to the files app.
-  ClickOnNotification(absl::nullopt);
+  ClickOnNotification(std::nullopt);
   EXPECT_FALSE(GetPreviewNotification());
   histogram_tester.ExpectBucketCount(kQuickActionHistogramName,
                                      CaptureQuickAction::kFiles, 1);
@@ -4504,9 +4506,14 @@ TEST_F(CaptureModeTest, CannotDoMultipleRecordings) {
   EXPECT_FALSE(GetVideoToggleButton()->selected());
   EXPECT_EQ(CaptureModeType::kImage, controller->type());
 
-  // Things should go back to normal when there's no recording going on.
+  // Things should go back to normal when there's no recording going on and the
+  // video file has been fully saved.
   controller->Stop();
   controller->EndVideoRecording(EndRecordingReason::kStopRecordingButton);
+  EXPECT_FALSE(controller->can_start_new_recording());
+  WaitForCaptureFileToBeSaved();
+  EXPECT_TRUE(controller->can_start_new_recording());
+
   StartCaptureSession(CaptureModeSource::kFullscreen, CaptureModeType::kVideo);
   EXPECT_EQ(CaptureModeType::kVideo, controller->type());
   EXPECT_FALSE(GetImageToggleButton()->selected());
@@ -4798,6 +4805,7 @@ TEST_F(CaptureModeTest, SimulateUserCancelingDlpWarningDialog) {
   EXPECT_FALSE(GetPreviewNotification());
   ash::HoldingSpaceTestApi holding_space_api;
   EXPECT_TRUE(holding_space_api.GetScreenCaptureViews().empty());
+  EXPECT_TRUE(controller->can_start_new_recording());
 }
 
 // Tests that `CaptureScreenshotOfGivenWindow` can take window screenshot
@@ -4917,6 +4925,7 @@ class TestVideoCaptureOverlay : public Overlay {
     last_bounds_ = bounds;
   }
   void SetBounds(const gfx::RectF& bounds) override { last_bounds_ = bounds; }
+  void OnCapturedMouseEvent(const gfx::Point& coordinates) override {}
 
  private:
   mojo::Receiver<viz::mojom::FrameSinkVideoCaptureOverlay> receiver_;
@@ -4995,9 +5004,8 @@ class CaptureModeCursorOverlayTest : public CaptureModeTest {
       CaptureModeController* controller) {
     EXPECT_EQ(controller->type(), CaptureModeType::kImage);
 
-    auto* shell = Shell::Get();
-    auto* cursor_manager = shell->cursor_manager();
-    bool in_tablet_mode = shell->tablet_mode_controller()->InTabletMode();
+    auto* cursor_manager = Shell::Get()->cursor_manager();
+    bool in_tablet_mode = display::Screen::GetScreen()->InTabletMode();
 
     // The capture mode session locks the cursor for the whole active session
     // except in the tablet mode unless the cursor is visible.
@@ -5190,9 +5198,9 @@ class FakeCursorShapeClient : public aura::client::CursorShapeClient {
   ~FakeCursorShapeClient() override = default;
 
   // aura::client::CursorShapeClient:
-  absl::optional<ui::CursorData> GetCursorData(
+  std::optional<ui::CursorData> GetCursorData(
       const ui::Cursor& cursor) const override {
-    return absl::nullopt;
+    return std::nullopt;
   }
 };
 
@@ -6013,7 +6021,7 @@ class EventTargetCatcher : public ui::EventHandler {
   }
 
  private:
-  raw_ptr<ui::EventTarget, ExperimentalAsh> last_event_target_ = nullptr;
+  raw_ptr<ui::EventTarget> last_event_target_ = nullptr;
 };
 
 }  // namespace

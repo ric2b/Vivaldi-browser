@@ -66,17 +66,17 @@ struct State {
     /// Process the module.
     void Process() {
         // Find the binary instructions that need to be polyfilled.
-        Vector<ir::Binary*, 64> worklist;
+        Vector<ir::CoreBinary*, 64> worklist;
         for (auto* inst : ir.instructions.Objects()) {
             if (!inst->Alive()) {
                 continue;
             }
-            if (auto* binary = inst->As<ir::Binary>()) {
+            if (auto* binary = inst->As<ir::CoreBinary>()) {
                 switch (binary->Op()) {
                     case BinaryOp::kDivide:
                     case BinaryOp::kModulo:
                         if (config.int_div_mod &&
-                            binary->Result()->Type()->is_integer_scalar_or_vector()) {
+                            binary->Result(0)->Type()->is_integer_scalar_or_vector()) {
                             worklist.Push(binary);
                         }
                         break;
@@ -109,12 +109,12 @@ struct State {
             }
             TINT_ASSERT_OR_RETURN(replacement);
 
-            if (replacement != binary->Result()) {
+            if (replacement != binary->Result(0)) {
                 // Replace the old binary instruction result with the new value.
-                if (auto name = ir.NameOf(binary->Result())) {
+                if (auto name = ir.NameOf(binary->Result(0))) {
                     ir.SetName(replacement, name);
                 }
-                binary->Result()->ReplaceAllUsesWith(replacement);
+                binary->Result(0)->ReplaceAllUsesWith(replacement);
                 binary->Destroy();
             }
         }
@@ -149,8 +149,8 @@ struct State {
     /// divide-by-zero and signed integer overflow.
     /// @param binary the binary instruction
     /// @returns the replacement value
-    ir::Value* IntDivMod(ir::Binary* binary) {
-        auto* result_ty = binary->Result()->Type();
+    ir::Value* IntDivMod(ir::CoreBinary* binary) {
+        auto* result_ty = binary->Result(0)->Type();
         bool is_div = binary->Op() == BinaryOp::kDivide;
         bool is_signed = result_ty->is_signed_integer_scalar_or_vector();
 
@@ -197,7 +197,7 @@ struct State {
 
                 if (binary->Op() == BinaryOp::kDivide) {
                     // Perform the divide with the modified RHS.
-                    b.Return(func, b.Divide(result_ty, lhs, rhs_or_one)->Result());
+                    b.Return(func, b.Divide(result_ty, lhs, rhs_or_one)->Result(0));
                 } else if (binary->Op() == BinaryOp::kModulo) {
                     // Calculate the modulo manually, as modulo with negative operands is undefined
                     // behavior for many backends:
@@ -205,7 +205,7 @@ struct State {
                     auto* whole = b.Divide(result_ty, lhs, rhs_or_one);
                     auto* remainder =
                         b.Subtract(result_ty, lhs, b.Multiply(result_ty, whole, rhs_or_one));
-                    b.Return(func, remainder->Result());
+                    b.Return(func, remainder->Result(0));
                 }
             });
             return func;
@@ -214,7 +214,7 @@ struct State {
         /// Helper to splat a value to match the vector width of the result type if necessary.
         auto maybe_splat = [&](ir::Value* value) -> ir::Value* {
             if (value->Type()->Is<type::Scalar>() && result_ty->Is<core::type::Vector>()) {
-                return b.Construct(result_ty, value)->Result();
+                return b.Construct(result_ty, value)->Result(0);
             }
             return value;
         };
@@ -224,7 +224,7 @@ struct State {
         b.InsertBefore(binary, [&] {
             auto* lhs = maybe_splat(binary->LHS());
             auto* rhs = maybe_splat(binary->RHS());
-            result = b.Call(result_ty, helper, lhs, rhs)->Result();
+            result = b.Call(result_ty, helper, lhs, rhs)->Result(0);
         });
         return result;
     }
@@ -232,14 +232,14 @@ struct State {
     /// Mask the RHS of a shift instruction to ensure it is modulo the bitwidth of the LHS.
     /// @param binary the binary instruction
     /// @returns the replacement value
-    ir::Value* MaskShiftAmount(ir::Binary* binary) {
+    ir::Value* MaskShiftAmount(ir::CoreBinary* binary) {
         auto* lhs = binary->LHS();
         auto* rhs = binary->RHS();
         auto* mask = b.Constant(u32(lhs->Type()->DeepestElement()->Size() * 8 - 1));
         auto* masked = b.And(rhs->Type(), rhs, MatchWidth(mask, rhs->Type()));
         masked->InsertBefore(binary);
-        binary->SetOperand(ir::Binary::kRhsOperandOffset, masked->Result());
-        return binary->Result();
+        binary->SetOperand(ir::CoreBinary::kRhsOperandOffset, masked->Result(0));
+        return binary->Result(0);
     }
 };
 
@@ -247,7 +247,7 @@ struct State {
 
 Result<SuccessType> BinaryPolyfill(Module& ir, const BinaryPolyfillConfig& config) {
     auto result = ValidateAndDumpIfNeeded(ir, "BinaryPolyfill transform");
-    if (!result) {
+    if (result != Success) {
         return result;
     }
 

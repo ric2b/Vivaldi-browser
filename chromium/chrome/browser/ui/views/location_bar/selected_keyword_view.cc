@@ -57,10 +57,10 @@ SelectedKeywordView::SelectedKeywordView(
   // make more sense to only set `FocusBehavior` when this view will be shown.
   // For now, Eliminate the paint check failure.
   if (GetAccessibleName().empty()) {
-    SetAccessibilityProperties(/*role*/ absl::nullopt,
+    SetAccessibilityProperties(/*role*/ std::nullopt,
                                /*name*/ std::u16string(),
-                               /*description*/ absl::nullopt,
-                               /*role_description*/ absl::nullopt,
+                               /*description*/ std::nullopt,
+                               /*role_description*/ std::nullopt,
                                ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
 }
@@ -143,6 +143,6 @@ void SelectedKeywordView::SetLabelForCurrentWidth() {
   SetLabel(use_full_label ? full_label_.GetText() : partial_label_.GetText());
 }
 
-BEGIN_METADATA(SelectedKeywordView, IconLabelBubbleView)
+BEGIN_METADATA(SelectedKeywordView)
 ADD_PROPERTY_METADATA(std::u16string, Keyword)
 END_METADATA

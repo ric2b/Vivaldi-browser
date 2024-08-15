@@ -96,4 +96,19 @@ const CGFloat kLabelSize = 14;
       TextForTabCount(self.tabCount, kTabGridButtonFontSize);
 }
 
+// Vivaldi
+- (void)updateTintColor {
+  self.tintColor =
+      (self.iphHighlighted)
+          ? self.toolbarConfiguration.buttonsTintColorIPHHighlighted
+          : self.toolbarConfiguration.buttonsTintColor;
+  if (self.iphHighlighted) {
+    self.tabCountLabel.textColor =
+        self.toolbarConfiguration.buttonsTintColorIPHHighlighted;
+  } else {
+    self.tabCountLabel.textColor = self.toolbarConfiguration.buttonsTintColor;
+  }
+}
+// End Vivaldi
+
 @end

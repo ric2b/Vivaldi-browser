@@ -233,6 +233,7 @@ avifBool avifPNGRead(const char * inputFilename,
                      avifBool ignoreExif,
                      avifBool ignoreXMP,
                      avifBool allowChangingCicp,
+                     uint32_t imageSizeLimit,
                      uint32_t * outPNGDepth)
 {
     volatile avifBool readResult = AVIF_FALSE;
@@ -377,7 +378,7 @@ avifBool avifPNGRead(const char * inputFilename,
         } else if (allowChangingCicp) {
             if (png_get_sRGB(png, info, &srgbIntent) == PNG_INFO_sRGB) {
                 // srgbIntent ignored
-                avif->colorPrimaries = AVIF_COLOR_PRIMARIES_BT709;
+                avif->colorPrimaries = AVIF_COLOR_PRIMARIES_SRGB;
                 avif->transferCharacteristics = AVIF_TRANSFER_CHARACTERISTICS_SRGB;
             } else {
                 avifBool needToGenerateICC = AVIF_FALSE;
@@ -453,6 +454,10 @@ avifBool avifPNGRead(const char * inputFilename,
         fprintf(stderr, "png_get_channels() should return 3 or 4 but returns %d.\n", numChannels);
         goto cleanup;
     }
+    if ((uint32_t)avif->width > imageSizeLimit / (uint32_t)avif->height) {
+        fprintf(stderr, "Too big PNG dimensions (%d x %d > %u px): %s\n", avif->width, avif->height, imageSizeLimit, inputFilename);
+        goto cleanup;
+    }
 
     avifRGBImageSetDefaults(&rgb, avif);
     rgb.chromaDownsampling = chromaDownsampling;
@@ -473,6 +478,10 @@ avifBool avifPNGRead(const char * inputFilename,
         goto cleanup;
     }
     rowPointers = (png_bytep *)malloc(sizeof(png_bytep) * rgb.height);
+    if (rowPointers == NULL) {
+        fprintf(stderr, "avifPNGRead internal error: memory allocation failure");
+        goto cleanup;
+    }
     for (uint32_t y = 0; y < rgb.height; ++y) {
         rowPointers[y] = &rgb.pixels[y * rgb.rowBytes];
     }
@@ -615,7 +624,7 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
         // then they could be written in cHRM/gAMA chunks.
         png_set_iCCP(png, info, "libavif", 0, avif->icc.data, (png_uint_32)avif->icc.size);
     } else {
-        const avifBool isSrgb = (avif->colorPrimaries == AVIF_COLOR_PRIMARIES_BT709) &&
+        const avifBool isSrgb = (avif->colorPrimaries == AVIF_COLOR_PRIMARIES_SRGB) &&
                                 (avif->transferCharacteristics == AVIF_TRANSFER_CHARACTERISTICS_SRGB);
         if (isSrgb) {
             png_set_sRGB_gAMA_and_cHRM(png, info, PNG_sRGB_INTENT_PERCEPTUAL);
@@ -697,6 +706,10 @@ avifBool avifPNGWrite(const char * outputFilename, const avifImage * avif, uint3
     }
 
     rowPointers = (png_bytep *)malloc(sizeof(png_bytep) * avif->height);
+    if (rowPointers == NULL) {
+        fprintf(stderr, "Error writing PNG: memory allocation failure");
+        goto cleanup;
+    }
     if (monochrome8bit) {
         uint8_t * yPlane = avif->yuvPlanes[AVIF_CHAN_Y];
         uint32_t yRowBytes = avif->yuvRowBytes[AVIF_CHAN_Y];

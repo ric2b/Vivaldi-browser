@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,7 +44,6 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
@@ -167,13 +167,20 @@ std::string CreateJpeg(const int alpha = 255) {
 }
 
 // Returns scan settings with the given path and file type.
-mojo_ipc::ScanSettings CreateScanSettings(const base::FilePath& scan_to_path,
-                                          const mojo_ipc::FileType& file_type,
-                                          const std::string source = "") {
+mojo_ipc::ScanSettings CreateScanSettings(
+    const base::FilePath& scan_to_path,
+    const mojo_ipc::FileType& file_type,
+    const std::string& source = "",
+    mojo_ipc::ColorMode color_mode = mojo_ipc::ColorMode::kColor,
+    mojo_ipc::PageSize page_size = mojo_ipc::PageSize::kIsoA3,
+    uint32_t resolution = kFirstResolution) {
   mojo_ipc::ScanSettings settings;
   settings.scan_to_path = scan_to_path;
   settings.file_type = file_type;
   settings.source_name = source;
+  settings.page_size = page_size;
+  settings.color_mode = color_mode;
+  settings.resolution_dpi = resolution;
   return settings;
 }
 
@@ -399,11 +406,10 @@ class ScanServiceTest : public testing::Test {
   FakeLorgnetteScannerManager fake_lorgnette_scanner_manager_;
   FakeScanJobObserver fake_scan_job_observer_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  const raw_ptr<TestingProfile, ExperimentalAsh> profile_;
+  const raw_ptr<TestingProfile> profile_;
   std::unique_ptr<ScopedTestMountPoint> scanned_files_mount_;
   std::unique_ptr<TestSessionController> session_controller_;
-  const raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged | ExperimentalAsh>
-      user_manager_;
+  const raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged> user_manager_;
   user_manager::ScopedUserManager user_manager_owner_;
   std::unique_ptr<ScanService> scan_service_;
 
@@ -464,7 +470,7 @@ TEST_F(ScanServiceTest, NoCapabilities) {
   fake_lorgnette_scanner_manager_.SetGetScannerNamesResponse(
       {kFirstTestScannerName});
   fake_lorgnette_scanner_manager_.SetGetScannerCapabilitiesResponse(
-      absl::nullopt);
+      std::nullopt);
   auto scanners = GetScanners();
   ASSERT_EQ(scanners.size(), 1u);
   auto caps = GetScannerCapabilities(scanners[0]->id);
@@ -1143,4 +1149,27 @@ TEST_F(ScanServiceTest, ResetReceiverOnBindInterface) {
   scan_service_->BindInterface(remote.BindNewPipeAndPassReceiver());
   base::RunLoop().RunUntilIdle();
 }
+
+// TODO(b:307385730): Parameterize this test once more settings combinations
+// are added.
+TEST_F(ScanServiceTest, ScanDataSettings) {
+  fake_lorgnette_scanner_manager_.SetGetScannerNamesResponse(
+      {kFirstTestScannerName});
+  auto scanners = GetScanners();
+  ASSERT_EQ(scanners.size(), 1u);
+
+  // Settings correspond to "flatbed_jpeg_color_letter_300_dpi"
+  // which sets the `alpha` used in the generated JPEG images to
+  // 1.
+  mojo_ipc::ScanSettings settings = CreateScanSettings(
+      scanned_files_mount_->GetRootPath(), mojo_ipc::FileType::kPdf, "flatbed",
+      mojo_ipc::ColorMode::kColor, mojo_ipc::PageSize::kNaLetter,
+      kSecondResolution);
+
+  EXPECT_TRUE(StartScan(scanners[0]->id, settings.Clone()));
+  EXPECT_EQ(1u, scan_service_->GetScannedImagesForTesting().size());
+  EXPECT_EQ(CreateJpeg(/*alpha=*/1),
+            scan_service_->GetScannedImagesForTesting()[0]);
+}
+
 }  // namespace ash

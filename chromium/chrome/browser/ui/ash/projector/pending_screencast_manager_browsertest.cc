@@ -96,8 +96,7 @@ class PendingScreencastMangerBrowserTest : public InProcessBrowserTest {
  public:
   PendingScreencastMangerBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {features::kProjectorUpdateIndexableText},
-        {ash::features::kFilesInlineSyncStatus});
+        {features::kProjectorUpdateIndexableText}, {});
   }
   PendingScreencastMangerBrowserTest(
       const PendingScreencastMangerBrowserTest&) = delete;
@@ -223,7 +222,7 @@ class PendingScreencastMangerBrowserTest : public InProcessBrowserTest {
                             int64_t total_bytes,
                             int64_t transferred_bytes) {
     syncing_status.item_events.emplace_back(
-        absl::in_place, /*stable_id=*/1, /*group_id=*/1, path,
+        std::in_place, /*stable_id=*/1, /*group_id=*/1, path,
         total_bytes == transferred_bytes
             ? drivefs::mojom::ItemEvent::State::kCompleted
             : drivefs::mojom::ItemEvent::State::kInProgress,
@@ -796,7 +795,7 @@ IN_PROC_BROWSER_TEST_F(PendingScreencastMangerBrowserTest,
       std::make_unique<MockXhrSender>(
           base::BindLambdaForTesting(
               [&](const GURL& url, projector::mojom::RequestType method,
-                  const absl::optional<std::string>& request_body) {
+                  const std::optional<std::string>& request_body) {
                 EXPECT_EQ(
                     "{\"contentHints\":{\"indexableText\":\" metadata file. "
                     "another sentence.\"}}",
@@ -917,7 +916,7 @@ IN_PROC_BROWSER_TEST_F(PendingScreencastMangerBrowserTest,
   app_client->NotifyAppUIActive(false);
   SimulateSyncingEvent(syncing_status);
   WaitForPendingStatusUpdateToBeFinished();
-  VerifyNotificationCount(1);
+  VerifyNotificationCount(0);
 
   // When app is open, the notification gets suppressed again:
   app_client->NotifyAppUIActive(true);
@@ -931,7 +930,7 @@ IN_PROC_BROWSER_TEST_F(PendingScreencastMangerBrowserTest,
                                  /*transferred_bytes=*/0, syncing_status);
   SimulateSyncingEvent(syncing_status);
   WaitForPendingStatusUpdateToBeFinished();
-  VerifyNotificationCount(1);
+  VerifyNotificationCount(0);
 }
 
 class PendingScreencastMangerMultiProfileTest : public LoginManagerTest {

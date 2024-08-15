@@ -545,14 +545,11 @@ INSTANTIATE_TEST_SUITE_P(
 
 }  // namespace texture_constexpr_args
 
-// TODO(crbug.com/tint/1497): Update or remove ResolverDP4aExtensionValidationTest when the
-// experimental extension chromium_experimental_dp4a is not needed.
-using ResolverDP4aExtensionValidationTest = ResolverTest;
+using ResolverPacked4x8IntegerDotProductValidationTest = ResolverTest;
 
-TEST_F(ResolverDP4aExtensionValidationTest, Dot4I8PackedWithExtension) {
-    // enable chromium_experimental_dp4a;
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Dot4I8Packed) {
     // fn func { return dot4I8Packed(1u, 2u); }
-    Enable(wgsl::Extension::kChromiumExperimentalDp4A);
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
 
     Func("func", tint::Empty, ty.i32(),
          Vector{
@@ -563,7 +560,7 @@ TEST_F(ResolverDP4aExtensionValidationTest, Dot4I8PackedWithExtension) {
     EXPECT_TRUE(r()->Resolve());
 }
 
-TEST_F(ResolverDP4aExtensionValidationTest, Dot4I8PackedWithoutExtension) {
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Dot4I8Packed_FeatureDisallowed) {
     // fn func { return dot4I8Packed(1u, 2u); }
     Func("func", tint::Empty, ty.i32(),
          Vector{
@@ -571,16 +568,17 @@ TEST_F(ResolverDP4aExtensionValidationTest, Dot4I8PackedWithoutExtension) {
                          Vector{Expr(1_u), Expr(2_u)})),
          });
 
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(
-        r()->error(),
-        R"(12:34 error: cannot call built-in function 'dot4I8Packed' without extension chromium_experimental_dp4a)");
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'dot4I8Packed' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
 }
 
-TEST_F(ResolverDP4aExtensionValidationTest, Dot4U8PackedWithExtension) {
-    // enable chromium_experimental_dp4a;
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Dot4U8Packed) {
     // fn func { return dot4U8Packed(1u, 2u); }
-    Enable(wgsl::Extension::kChromiumExperimentalDp4A);
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
 
     Func("func", tint::Empty, ty.u32(),
          Vector{
@@ -591,7 +589,7 @@ TEST_F(ResolverDP4aExtensionValidationTest, Dot4U8PackedWithExtension) {
     EXPECT_TRUE(r()->Resolve());
 }
 
-TEST_F(ResolverDP4aExtensionValidationTest, Dot4U8PackedWithoutExtension) {
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Dot4U8Packed_FeatureDisallowed) {
     // fn func { return dot4U8Packed(1u, 2u); }
     Func("func", tint::Empty, ty.u32(),
          Vector{
@@ -599,10 +597,174 @@ TEST_F(ResolverDP4aExtensionValidationTest, Dot4U8PackedWithoutExtension) {
                          Vector{Expr(1_u), Expr(2_u)})),
          });
 
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(
-        r()->error(),
-        R"(12:34 error: cannot call built-in function 'dot4U8Packed' without extension chromium_experimental_dp4a)");
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'dot4U8Packed' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xI8) {
+    // fn func { return pack4xI8(vec4i()); }
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
+
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xI8", Call<vec4<i32>>())),
+         });
+
+    EXPECT_TRUE(r()->Resolve());
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xI8_FeatureDisallowed) {
+    // fn func { return pack4xI8(vec4i()); }
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xI8", Call<vec4<i32>>())),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'pack4xI8' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xU8) {
+    // fn func { return pack4xU8(vec4u()); }
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
+
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xU8", Call<vec4<u32>>())),
+         });
+
+    EXPECT_TRUE(r()->Resolve());
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xU8_FeatureDisallowed) {
+    // fn func { return pack4xU8(vec4u()); }
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xU8", Call<vec4<u32>>())),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'pack4xU8' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xI8Clamp) {
+    // fn func { return pack4xI8Clamp(vec4i()); }
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
+
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xI8Clamp", Call<vec4<i32>>())),
+         });
+
+    EXPECT_TRUE(r()->Resolve());
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xI8Clamp_FeatureDisallowed) {
+    // fn func { return pack4xI8Clamp(vec4i()); }
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xI8Clamp", Call<vec4<i32>>())),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'pack4xI8Clamp' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xU8Clamp) {
+    // fn func { return pack4xU8Clamp(vec4u()); }
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
+
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xU8Clamp", Call<vec4<u32>>())),
+         });
+
+    EXPECT_TRUE(r()->Resolve());
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Pack4xU8Clamp_FeatureDisallowed) {
+    // fn func { return pack4xU8Clamp(vec4u()); }
+    Func("func", tint::Empty, ty.u32(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "pack4xU8Clamp", Call<vec4<u32>>())),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'pack4xU8Clamp' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Unpack4xI8) {
+    // fn func { return unpack4xI8(u32()); }
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
+
+    Func("func", tint::Empty, ty.vec4<i32>(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "unpack4xI8", Call<u32>())),
+         });
+
+    EXPECT_TRUE(r()->Resolve());
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Unpack4xI8_FeatureDisallowed) {
+    // fn func { return unpack4xI8(u32()); }
+    Func("func", tint::Empty, ty.vec4<i32>(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "unpack4xI8", Call<u32>())),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'unpack4xI8' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Unpack4xU8) {
+    // fn func { return unpack4xU8(u32()); }
+    Require(wgsl::LanguageFeature::kPacked4X8IntegerDotProduct);
+
+    Func("func", tint::Empty, ty.vec4<u32>(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "unpack4xU8", Call<u32>())),
+         });
+
+    EXPECT_TRUE(r()->Resolve());
+}
+
+TEST_F(ResolverPacked4x8IntegerDotProductValidationTest, Unpack4xU8_FeatureDisallowed) {
+    // fn func { return unpack4xU8(u32()); }
+    Func("func", tint::Empty, ty.vec4<u32>(),
+         Vector{
+             Return(Call(Source{Source::Location{12, 34}}, "unpack4xU8", Call<u32>())),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'unpack4xU8' requires the "
+              "packed_4x8_integer_dot_product language feature, which is not allowed in the "
+              "current environment");
 }
 
 TEST_F(ResolverBuiltinValidationTest, WorkgroupUniformLoad_WrongAddressSpace) {
@@ -809,30 +971,29 @@ TEST_F(ResolverBuiltinValidationTest, SubgroupBroadcastLaneArgMustBeConst) {
         R"(12:34 error: the sourceLaneIndex argument of subgroupBroadcast must be a const-expression)");
 }
 
-TEST_F(ResolverBuiltinValidationTest, TextureBarrierWithoutExtension) {
+TEST_F(ResolverBuiltinValidationTest, TextureBarrier) {
     // fn func { textureBarrier(); }
-    Func("func", tint::Empty, ty.void_(),
-         Vector{
-             CallStmt(Call(Source{Source::Location{12, 34}}, "textureBarrier")),
-         });
-
-    EXPECT_FALSE(r()->Resolve());
-    EXPECT_EQ(
-        r()->error(),
-        R"(12:34 error: cannot call built-in function 'textureBarrier' without extension chromium_experimental_read_write_storage_texture)");
-}
-
-TEST_F(ResolverBuiltinValidationTest, TextureBarrierWithExtension) {
-    // enable chromium_experimental_read_write_storage_texture;
-    // fn func { textureBarrier(); }
-    Enable(wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture);
-
     Func("func", tint::Empty, ty.void_(),
          Vector{
              CallStmt(Call(Source{Source::Location{12, 34}}, "textureBarrier")),
          });
 
     EXPECT_TRUE(r()->Resolve()) << r()->error();
+}
+
+TEST_F(ResolverBuiltinValidationTest, TextureBarrier_FeatureDisallowed) {
+    // fn func { textureBarrier(); }
+    Func("func", tint::Empty, ty.void_(),
+         Vector{
+             CallStmt(Call(Source{Source::Location{12, 34}}, "textureBarrier")),
+         });
+
+    Resolver resolver{this, wgsl::AllowedFeatures{}};
+    EXPECT_FALSE(resolver.Resolve());
+    EXPECT_EQ(resolver.error(),
+              "12:34 error: built-in function 'textureBarrier' requires the "
+              "readonly_and_readwrite_storage_textures language feature, which is not allowed in "
+              "the current environment");
 }
 
 }  // namespace

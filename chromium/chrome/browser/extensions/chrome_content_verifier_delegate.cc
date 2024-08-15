@@ -49,9 +49,9 @@ namespace extensions {
 
 namespace {
 
-absl::optional<ChromeContentVerifierDelegate::VerifyInfo::Mode>&
+std::optional<ChromeContentVerifierDelegate::VerifyInfo::Mode>&
 GetModeForTesting() {
-  static absl::optional<ChromeContentVerifierDelegate::VerifyInfo::Mode>
+  static std::optional<ChromeContentVerifierDelegate::VerifyInfo::Mode>
       testing_mode;
   return testing_mode;
 }
@@ -76,8 +76,7 @@ ChromeContentVerifierDelegate::GetDefaultMode() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
 #if BUILDFLAG(PLATFORM_CFM)
-  if (command_line->HasSwitch(
-          extensions::switches::kDisableAppContentVerification)) {
+  if (command_line->HasSwitch(switches::kDisableAppContentVerification)) {
     return VerifyInfo::Mode::NONE;
   }
 #endif  // BUILDFLAG(PLATFORM_CFM)
@@ -137,7 +136,7 @@ ChromeContentVerifierDelegate::GetDefaultMode() {
 
 // static
 void ChromeContentVerifierDelegate::SetDefaultModeForTesting(
-    absl::optional<VerifyInfo::Mode> mode) {
+    std::optional<VerifyInfo::Mode> mode) {
   DCHECK(!GetModeForTesting() || !mode)
       << "Verification mode already overridden, unset it first.";
   GetModeForTesting() = mode;
@@ -186,7 +185,7 @@ GURL ChromeContentVerifierDelegate::GetSignatureFetchUrl(
 }
 
 std::set<base::FilePath> ChromeContentVerifierDelegate::GetBrowserImagePaths(
-    const extensions::Extension* extension) {
+    const Extension* extension) {
   return ExtensionsClient::Get()->GetBrowserImagePaths(extension);
 }
 
@@ -195,7 +194,7 @@ void ChromeContentVerifierDelegate::VerifyFailed(
     ContentVerifyJob::FailureReason reason) {
   ExtensionRegistry* registry = ExtensionRegistry::Get(context_);
   const Extension* extension =
-      registry->GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
+      registry->enabled_extensions().GetByID(extension_id);
   if (!extension)
     return;
 
@@ -272,8 +271,7 @@ void ChromeContentVerifierDelegate::VerifyFailed(
 
   DCHECK(should_disable);
   service->DisableExtension(extension_id, disable_reason::DISABLE_CORRUPTED);
-  ExtensionPrefs::Get(context_)->IncrementPref(
-      extensions::kCorruptedDisableCount);
+  ExtensionPrefs::Get(context_)->IncrementPref(kCorruptedDisableCount);
   UMA_HISTOGRAM_ENUMERATION("Extensions.CorruptExtensionDisabledReason", reason,
                             ContentVerifyJob::FAILURE_REASON_MAX);
 }

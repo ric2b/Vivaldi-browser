@@ -48,14 +48,7 @@ LensRegionSearchInstructionsView::LensRegionSearchInstructionsView(
 
   // Create a close button that is always white instead of conforming to
   // native theme.
-  // TODO(crbug/1353948): Refactor/migrate this callback away from using
-  // base::Passed.
-  close_button_ = views::CreateVectorImageButton(base::BindRepeating(
-      [](base::OnceClosure callback) {
-        DCHECK(callback);
-        std::move(callback).Run();
-      },
-      base::Passed(std::move(close_callback))));
+  close_button_ = views::CreateVectorImageButton(std::move(close_callback));
   close_button_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
 }
 
@@ -151,8 +144,7 @@ gfx::Rect LensRegionSearchInstructionsView::GetBubbleBounds() {
   return bubble_rect;
 }
 
-BEGIN_METADATA(LensRegionSearchInstructionsView,
-               views::BubbleDialogDelegateView)
+BEGIN_METADATA(LensRegionSearchInstructionsView)
 END_METADATA
 
 }  // namespace lens

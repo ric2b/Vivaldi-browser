@@ -211,20 +211,20 @@ def extract_known_subcommand_args(args):
 def extract_http_metrics(request_uri, method, status, response_time):
     """Extract metrics from the request URI.
 
-  Extracts the host, path, and arguments from the request URI, and returns them
-  along with the method, status and response time.
+    Extracts the host, path, and arguments from the request URI, and returns
+    them along with the method, status and response time.
 
-  The host, method, path and arguments must be in the KNOWN_HTTP_* constants
-  defined above.
+    The host, method, path and arguments must be in the KNOWN_HTTP_* constants
+    defined above.
 
-  Arguments are the values of the o= url parameter. In Gerrit, additional fields
-  can be obtained by adding o parameters, each option requires more database
-  lookups and slows down the query response time to the client, so we make an
-  effort to collect them.
+    Arguments are the values of the o= url parameter. In Gerrit, additional
+    fields can be obtained by adding o parameters, each option requires more
+    database lookups and slows down the query response time to the client, so
+    we make an effort to collect them.
 
-  The regex defined in KNOWN_HTTP_PATH_RES are checked against the path, and
-  those that match will be returned.
-  """
+    The regex defined in KNOWN_HTTP_PATH_RES are checked against the path, and
+    those that match will be returned.
+    """
     http_metrics = {
         'status': status,
         'response_time': response_time,
@@ -256,9 +256,9 @@ def extract_http_metrics(request_uri, method, status, response_time):
 def get_repo_timestamp(path_to_repo):
     """Get an approximate timestamp for the upstream of |path_to_repo|.
 
-  Returns the top two bits of the timestamp of the HEAD for the upstream of the
-  branch path_to_repo is checked out at.
-  """
+    Returns the top two bits of the timestamp of the HEAD for the upstream of
+    the branch path_to_repo is checked out at.
+    """
     # Get the upstream for the current branch. If we're not in a branch,
     # fallback to HEAD.
     try:

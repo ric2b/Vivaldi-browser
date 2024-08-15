@@ -8,6 +8,7 @@
 
 #include "src/base/hashmap.h"
 #include "src/codegen/code-desc.h"
+#include "src/codegen/compiler.h"
 #include "src/codegen/interface-descriptors-inl.h"
 #include "src/codegen/interface-descriptors.h"
 #include "src/codegen/register.h"
@@ -420,7 +421,11 @@ class ParallelMoveResolver {
   void EmitMovesFromSource(RegisterT source_reg, GapMoveTargets&& targets) {
     DCHECK(moves_from_register_[source_reg.code()].is_empty());
     if constexpr (DecompressIfNeeded) {
-      static_assert(COMPRESS_POINTERS_BOOL);
+      // The DecompressIfNeeded clause is redundant with the if-constexpr above,
+      // but otherwise this code cannot be compiled by compilers not yet
+      // implementing CWG2518.
+      static_assert(DecompressIfNeeded && COMPRESS_POINTERS_BOOL);
+
       if (targets.needs_decompression == kNeedsDecompression) {
         __ DecompressTagged(source_reg, source_reg);
       }
@@ -463,7 +468,11 @@ class ParallelMoveResolver {
     // Decompress after the first move, subsequent moves reuse this register so
     // they're guaranteed to be decompressed.
     if constexpr (DecompressIfNeeded) {
-      static_assert(COMPRESS_POINTERS_BOOL);
+      // The DecompressIfNeeded clause is redundant with the if-constexpr above,
+      // but otherwise this code cannot be compiled by compilers not yet
+      // implementing CWG2518.
+      static_assert(DecompressIfNeeded && COMPRESS_POINTERS_BOOL);
+
       if (targets.needs_decompression == kNeedsDecompression) {
         __ DecompressTagged(register_with_slot_value, register_with_slot_value);
         targets.needs_decompression = kDoesNotNeedDecompression;
@@ -610,7 +619,7 @@ class ExceptionHandlerTrampolineBuilder {
       DCHECK(!source->allocation().IsRegister());
 
       switch (source->properties().value_representation()) {
-        case ValueRepresentation::kWord64:
+        case ValueRepresentation::kIntPtr:
           UNREACHABLE();
         case ValueRepresentation::kTagged:
           direct_moves->RecordMove(
@@ -1258,7 +1267,7 @@ class MaglevFrameTranslationBuilder {
   void BuildDeoptStoreRegister(const compiler::AllocatedOperand& operand,
                                ValueRepresentation repr) {
     switch (repr) {
-      case ValueRepresentation::kWord64:
+      case ValueRepresentation::kIntPtr:
         UNREACHABLE();
       case ValueRepresentation::kTagged:
         translation_array_builder_->StoreRegister(operand.GetRegister());
@@ -1284,7 +1293,7 @@ class MaglevFrameTranslationBuilder {
                                 ValueRepresentation repr) {
     int stack_slot = DeoptStackSlotFromStackSlot(operand);
     switch (repr) {
-      case ValueRepresentation::kWord64:
+      case ValueRepresentation::kIntPtr:
         UNREACHABLE();
       case ValueRepresentation::kTagged:
         translation_array_builder_->StoreStackSlot(stack_slot);
@@ -1306,6 +1315,7 @@ class MaglevFrameTranslationBuilder {
 
   void BuildDeoptFrameSingleValue(const ValueNode* value,
                                   const InputLocation*& input_location) {
+    DCHECK(!value->Is<Identity>());
     if (input_location->operand().IsConstant()) {
       translation_array_builder_->StoreLiteral(
           GetDeoptLiteral(*value->Reify(local_isolate_)));
@@ -1420,7 +1430,11 @@ MaglevCodeGenerator::MaglevCodeGenerator(
       masm_(isolate->GetMainThreadIsolateUnsafe(), &code_gen_state_),
       graph_(graph),
       deopt_literals_(isolate->heap()->heap()),
-      retained_maps_(isolate->heap()) {}
+      retained_maps_(isolate->heap()) {
+  DCHECK(maglev::IsMaglevEnabled());
+  DCHECK_IMPLIES(compilation_info->toplevel_is_osr(),
+                 maglev::IsMaglevOsrEnabled());
+}
 
 bool MaglevCodeGenerator::Assemble() {
   if (!EmitCode()) {

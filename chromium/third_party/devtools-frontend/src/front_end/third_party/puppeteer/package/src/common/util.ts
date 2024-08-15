@@ -1,17 +1,7 @@
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import type FS from 'fs/promises';
@@ -31,10 +21,9 @@ import {
   raceWith,
 } from '../../third_party/rxjs/rxjs.js';
 import type {CDPSession} from '../api/CDPSession.js';
-import type {Page} from '../api/Page.js';
 import {isNode} from '../environment.js';
 import {assert} from '../util/assert.js';
-import {Deferred} from '../util/Deferred.js';
+import type {Deferred} from '../util/Deferred.js';
 import {isErrorLike} from '../util/ErrorLike.js';
 
 import {debug} from './Debug.js';
@@ -46,6 +35,11 @@ import type {NetworkManagerEvents} from './NetworkManagerEvents.js';
  * @internal
  */
 export const debugError = debug('puppeteer:error');
+
+/**
+ * @internal
+ */
+export const DEFAULT_VIEWPORT = Object.freeze({width: 800, height: 600});
 
 /**
  * @internal
@@ -361,6 +355,13 @@ export function addPageBinding(type: string, name: string): void {
   // @ts-expect-error: In a different context.
   const callCdp = globalThis[name];
 
+  // Depending on the frame loading state either Runtime.evaluate or
+  // Page.addScriptToEvaluateOnNewDocument might succeed. Let's check that we
+  // don't re-wrap Puppeteer's binding.
+  if (callCdp[Symbol.toStringTag] === 'PuppeteerBinding') {
+    return;
+  }
+
   // We replace the CDP binding with a Puppeteer binding.
   Object.assign(globalThis, {
     [name](...args: unknown[]): Promise<unknown> {
@@ -400,6 +401,8 @@ export function addPageBinding(type: string, name: string): void {
       });
     },
   });
+  // @ts-expect-error: In a different context.
+  globalThis[name][Symbol.toStringTag] = 'PuppeteerBinding';
 }
 
 /**
@@ -407,22 +410,6 @@ export function addPageBinding(type: string, name: string): void {
  */
 export function pageBindingInitString(type: string, name: string): string {
   return evaluationString(addPageBinding, type, name);
-}
-
-/**
- * @internal
- */
-export async function waitWithTimeout<T>(
-  promise: Promise<T>,
-  taskName: string,
-  timeout: number
-): Promise<T> {
-  const deferred = Deferred.create<never>({
-    message: `waiting for ${taskName} failed: timeout ${timeout}ms exceeded`,
-    timeout,
-  });
-
-  return await Deferred.race([promise, deferred]);
 }
 
 /**
@@ -523,22 +510,6 @@ export async function getReadableFromProtocolStream(
 /**
  * @internal
  */
-export async function setPageContent(
-  page: Pick<Page, 'evaluate'>,
-  content: string
-): Promise<void> {
-  // We rely upon the fact that document.open() will reset frame lifecycle with "init"
-  // lifecycle event. @see https://crrev.com/608658
-  return await page.evaluate(html => {
-    document.open();
-    document.write(html);
-    document.close();
-  }, content);
-}
-
-/**
- * @internal
- */
 export function getPageContent(): string {
   let content = '';
   for (const node of document.childNodes) {
@@ -633,3 +604,8 @@ export async function waitForHTTP<T extends {url(): string}>(
     )
   );
 }
+
+/**
+ * @internal
+ */
+export const NETWORK_IDLE_TIME = 500;

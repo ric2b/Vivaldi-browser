@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void sign_3bdab6() {
+  int4 res = int4(1);
+}
+vertex float4 vertex_main() {
+  sign_3bdab6();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  sign_3bdab6();
+}
+kernel void compute_main() {
+  sign_3bdab6();
+}

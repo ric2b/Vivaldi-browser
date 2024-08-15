@@ -41,18 +41,20 @@ Module::~Module() = default;
 
 Module& Module::operator=(Module&&) = default;
 
-Symbol Module::NameOf(Instruction* inst) {
-    TINT_ASSERT(inst->HasResults() && !inst->HasMultiResults());
-    return NameOf(inst->Result());
+Symbol Module::NameOf(const Instruction* inst) const {
+    if (inst->Results().Length() != 1) {
+        return Symbol{};
+    }
+    return NameOf(inst->Result(0));
 }
 
-Symbol Module::NameOf(Value* value) {
+Symbol Module::NameOf(const Value* value) const {
     return value_to_name_.Get(value).value_or(Symbol{});
 }
 
 void Module::SetName(Instruction* inst, std::string_view name) {
-    TINT_ASSERT(inst->HasResults() && !inst->HasMultiResults());
-    return SetName(inst->Result(), name);
+    TINT_ASSERT(inst->Results().Length() == 1);
+    return SetName(inst->Result(0), name);
 }
 
 void Module::SetName(Value* value, std::string_view name) {
@@ -63,6 +65,10 @@ void Module::SetName(Value* value, std::string_view name) {
 void Module::SetName(Value* value, Symbol name) {
     TINT_ASSERT(name.IsValid());
     value_to_name_.Replace(value, name);
+}
+
+void Module::ClearName(Value* value) {
+    value_to_name_.Remove(value);
 }
 
 }  // namespace tint::core::ir

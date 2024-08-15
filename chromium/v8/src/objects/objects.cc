@@ -234,13 +234,12 @@ Handle<Object> Object::NewStorageFor(Isolate* isolate, Handle<Object> object,
   if (!representation.IsDouble()) return object;
   Handle<HeapNumber> result = isolate->factory()->NewHeapNumberWithHoleNaN();
   if (IsUninitialized(*object, isolate)) {
-    result->set_value_as_bits(kHoleNanInt64, kRelaxedStore);
+    result->set_value_as_bits(kHoleNanInt64);
   } else if (IsHeapNumber(*object)) {
     // Ensure that all bits of the double value are preserved.
-    result->set_value_as_bits(
-        HeapNumber::cast(*object)->value_as_bits(kRelaxedLoad), kRelaxedStore);
+    result->set_value_as_bits(HeapNumber::cast(*object)->value_as_bits());
   } else {
-    result->set_value(Object::Number(*object), kRelaxedStore);
+    result->set_value(Object::Number(*object));
   }
   return result;
 }
@@ -254,7 +253,7 @@ Handle<Object> Object::WrapForRead(IsolateT* isolate, Handle<Object> object,
     return object;
   }
   return isolate->factory()->template NewHeapNumberFromBits<allocation_type>(
-      HeapNumber::cast(*object)->value_as_bits(kRelaxedLoad));
+      HeapNumber::cast(*object)->value_as_bits());
 }
 
 template Handle<Object> Object::WrapForRead<AllocationType::kYoung>(
@@ -1472,7 +1471,7 @@ MaybeHandle<Object> Object::GetPropertyWithAccessor(LookupIterator* it) {
     PropertyCallbackArguments args(isolate, info->data(), *receiver, *holder,
                                    Just(kDontThrow));
     Handle<Object> result = args.CallAccessorGetter(info, name);
-    RETURN_EXCEPTION_IF_SCHEDULED_EXCEPTION(isolate, Object);
+    RETURN_EXCEPTION_IF_EXCEPTION(isolate, Object);
     if (result.is_null()) return isolate->factory()->undefined_value();
     Handle<Object> reboxed_result = handle(*result, isolate);
     if (info->replace_on_access() && IsJSReceiver(*receiver)) {
@@ -1493,8 +1492,7 @@ MaybeHandle<Object> Object::GetPropertyWithAccessor(LookupIterator* it) {
   // Regular accessor.
   Handle<Object> getter(accessor_pair->getter(), isolate);
   if (IsFunctionTemplateInfo(*getter)) {
-    SaveAndSwitchContext save(isolate,
-                              *holder->GetCreationContext().ToHandleChecked());
+    SaveAndSwitchContext save(isolate, holder->GetCreationContext().value());
     return Builtins::InvokeApiFunction(
         isolate, false, Handle<FunctionTemplateInfo>::cast(getter), receiver, 0,
         nullptr, isolate->factory()->undefined_value());
@@ -1555,7 +1553,7 @@ Maybe<bool> Object::SetPropertyWithAccessor(
     // cannot have been set, so the result of Call will be null.  In the case of
     // AccessorNameBooleanSetterCallback, the result will either be null
     // (signalling an exception) or a boolean Oddball.
-    RETURN_VALUE_IF_SCHEDULED_EXCEPTION(isolate, Nothing<bool>());
+    RETURN_VALUE_IF_EXCEPTION(isolate, Nothing<bool>());
     if (result.is_null()) return Just(true);
     DCHECK(Object::BooleanValue(*result, isolate) ||
            GetShouldThrow(isolate, maybe_should_throw) == kDontThrow);
@@ -1565,8 +1563,7 @@ Maybe<bool> Object::SetPropertyWithAccessor(
   // Regular accessor.
   Handle<Object> setter(AccessorPair::cast(*structure)->setter(), isolate);
   if (IsFunctionTemplateInfo(*setter)) {
-    SaveAndSwitchContext save(isolate,
-                              *holder->GetCreationContext().ToHandleChecked());
+    SaveAndSwitchContext save(isolate, holder->GetCreationContext().value());
     Handle<Object> argv[] = {value};
     RETURN_ON_EXCEPTION_VALUE(
         isolate,
@@ -1699,7 +1696,7 @@ MaybeHandle<Object> Object::ArraySpeciesConstructor(
                             isolate->factory()->constructor_string()),
         Object);
     if (IsConstructor(*constructor)) {
-      Handle<Context> constructor_context;
+      Handle<NativeContext> constructor_context;
       ASSIGN_RETURN_ON_EXCEPTION(
           isolate, constructor_context,
           JSReceiver::GetFunctionRealm(Handle<JSReceiver>::cast(constructor)),
@@ -1773,21 +1770,19 @@ V8_WARN_UNUSED_RESULT MaybeHandle<Object> Object::SpeciesConstructor(
 
 // static
 bool Object::IterationHasObservableEffects(Tagged<Object> obj) {
+  DisallowGarbageCollection no_gc;
   // Check that this object is an array.
   if (!IsJSArray(obj)) return true;
   Tagged<JSArray> array = JSArray::cast(obj);
-  Isolate* isolate = array->GetIsolate();
 
   // Check that we have the original ArrayPrototype.
-  i::HandleScope handle_scope(isolate);
-  i::Handle<i::Context> context;
-  if (!array->GetCreationContext().ToHandle(&context)) return false;
-  if (!IsJSObject(array->map()->prototype())) return true;
-  Tagged<JSObject> array_proto = JSObject::cast(array->map()->prototype());
-  auto initial_array_prototype =
-      context->native_context()->initial_array_prototype();
-  if (initial_array_prototype != array_proto) return true;
+  Tagged<Object> array_proto = array->map()->prototype();
+  if (!IsJSObject(array_proto)) return true;
+  Tagged<NativeContext> native_context = array->GetCreationContext().value();
+  auto initial_array_prototype = native_context->initial_array_prototype();
+  if (initial_array_prototype != JSObject::cast(array_proto)) return true;
 
+  Isolate* isolate = array->GetIsolate();
   // Check that the ArrayPrototype hasn't been modified in a way that would
   // affect iteration.
   if (!Protectors::IsArrayIteratorLookupChainIntact(isolate)) return true;
@@ -1883,6 +1878,10 @@ void HeapObject::IterateBody(PtrComprCageBase cage_base, ObjectVisitor* v) {
 void HeapObject::IterateBody(Tagged<Map> map, int object_size,
                              ObjectVisitor* v) {
   IterateBodyFast<ObjectVisitor>(map, object_size, v);
+}
+
+int HeapObjectLayout::SizeFromMap(Tagged<Map> map) const {
+  return Tagged<HeapObject>(this)->SizeFromMap(map);
 }
 
 int HeapObject::SizeFromMap(Tagged<Map> map) const {
@@ -2498,8 +2497,8 @@ Maybe<bool> Object::RedefineIncompatibleProperty(
 Maybe<bool> Object::SetDataProperty(LookupIterator* it, Handle<Object> value) {
   Isolate* isolate = it->isolate();
   DCHECK_IMPLIES(IsJSProxy(*it->GetReceiver(), isolate),
-                 it->GetName()->IsPrivateName(isolate));
-  DCHECK_IMPLIES(!it->IsElement() && it->GetName()->IsPrivateName(isolate),
+                 it->GetName()->IsPrivateName());
+  DCHECK_IMPLIES(!it->IsElement() && it->GetName()->IsPrivateName(),
                  it->state() == LookupIterator::DATA);
   Handle<JSReceiver> receiver = Handle<JSReceiver>::cast(it->GetReceiver());
 
@@ -2663,7 +2662,7 @@ MaybeHandle<Object> Object::ShareSlow(Isolate* isolate,
   }
 
   if (IsHeapNumber(*value)) {
-    uint64_t bits = HeapNumber::cast(*value)->value_as_bits(kRelaxedLoad);
+    uint64_t bits = HeapNumber::cast(*value)->value_as_bits();
     return isolate->factory()
         ->NewHeapNumberFromBits<AllocationType::kSharedOld>(bits);
   }
@@ -2998,9 +2997,12 @@ Maybe<bool> JSArray::DefineOwnProperty(Isolate* isolate, Handle<JSArray> o,
                                        Handle<Object> name,
                                        PropertyDescriptor* desc,
                                        Maybe<ShouldThrow> should_throw) {
+  if (IsName(*name)) {
+    name = isolate->factory()->InternalizeName(Handle<Name>::cast(name));
+  }
+
   // 1. Assert: IsPropertyKey(P) is true. ("P" is |name|.)
   // 2. If P is "length", then:
-  // TODO(jkummerow): Check if we need slow string comparison.
   if (*name == ReadOnlyRoots(isolate).length_string()) {
     // 2a. Return ArraySetLength(A, Desc).
     return ArraySetLength(isolate, o, desc, should_throw);
@@ -3109,7 +3111,7 @@ Maybe<bool> JSArray::ArraySetLength(Isolate* isolate, Handle<JSArray> a,
   // 3. - 7. Convert Desc.[[Value]] to newLen.
   uint32_t new_len = 0;
   if (!AnythingToArrayLength(isolate, desc->value(), &new_len)) {
-    DCHECK(isolate->has_pending_exception());
+    DCHECK(isolate->has_exception());
     return Nothing<bool>();
   }
   // 8. Set newLenDesc.[[Value]] to newLen.
@@ -3442,7 +3444,7 @@ Maybe<bool> JSProxy::GetOwnPropertyDescriptor(Isolate* isolate,
   // 13. Let resultDesc be ? ToPropertyDescriptor(trapResultObj).
   if (!PropertyDescriptor::ToPropertyDescriptor(isolate, trap_result_obj,
                                                 desc)) {
-    DCHECK(isolate->has_pending_exception());
+    DCHECK(isolate->has_exception());
     return Nothing<bool>();
   }
   // 14. Call CompletePropertyDescriptor(resultDesc).
@@ -4162,9 +4164,6 @@ uint32_t StringHasher::MakeArrayIndexHash(uint32_t value, int length) {
   return value;
 }
 
-STATIC_ASSERT_FIELD_OFFSETS_EQUAL(HeapNumber::kValueOffset,
-                                  Oddball::kToNumberRawOffset);
-
 void Oddball::Initialize(Isolate* isolate, Handle<Oddball> oddball,
                          const char* to_string, Handle<Object> to_number,
                          const char* type_of, uint8_t kind) {
@@ -4174,7 +4173,7 @@ void Oddball::Initialize(Isolate* isolate, Handle<Oddball> oddball,
       isolate->factory()->InternalizeUtf8String(type_of);
   if (IsHeapNumber(*to_number)) {
     oddball->set_to_number_raw_as_bits(
-        Handle<HeapNumber>::cast(to_number)->value_as_bits(kRelaxedLoad));
+        Handle<HeapNumber>::cast(to_number)->value_as_bits());
   } else {
     oddball->set_to_number_raw(Object::Number(*to_number));
   }
@@ -4336,7 +4335,7 @@ bool Script::GetPositionInfo(int position, PositionInfo* info,
     DCHECK_LE(0, position);
     wasm::NativeModule* native_module = wasm_native_module();
     const wasm::WasmModule* module = native_module->module();
-    if (module->functions.size() == 0) return false;
+    if (module->functions.empty()) return false;
     info->line = 0;
     info->column = position;
     info->line_start = module->functions[0].code.offset();
@@ -4376,7 +4375,7 @@ bool Script::GetPositionInfo(int position, PositionInfo* info,
 
       while (right > 0) {
         DCHECK_LE(left, right);
-        const int mid = (left + right) / 2;
+        const int mid = left + (right - left) / 2;
         if (position > Smi::ToInt(ends->get(mid))) {
           left = mid + 1;
         } else if (position <= Smi::ToInt(ends->get(mid - 1))) {
@@ -4708,7 +4707,7 @@ bool JSArray::WouldChangeReadOnlyLength(Handle<JSArray> array, uint32_t index) {
 const char* Symbol::PrivateSymbolToName() const {
   ReadOnlyRoots roots = GetReadOnlyRoots();
 #define SYMBOL_CHECK_AND_PRINT(_, name) \
-  if (*this == roots.name()) return #name;
+  if (this == roots.name()) return #name;
   PRIVATE_SYMBOL_LIST_GENERATOR(SYMBOL_CHECK_AND_PRINT, /* not used */)
 #undef SYMBOL_CHECK_AND_PRINT
   return "UNKNOWN";
@@ -4886,13 +4885,13 @@ MaybeHandle<Object> JSPromise::Resolve(Handle<JSPromise> promise,
   Handle<Object> then_action;
   if (!then.ToHandle(&then_action)) {
     // The "then" lookup can cause termination.
-    if (!isolate->is_catchable_by_javascript(isolate->pending_exception())) {
+    if (!isolate->is_catchable_by_javascript(isolate->exception())) {
       return kNullMaybeHandle;
     }
 
     // a. Return RejectPromise(promise, then.[[Value]]).
-    Handle<Object> reason(isolate->pending_exception(), isolate);
-    isolate->clear_pending_exception();
+    Handle<Object> reason(isolate->exception(), isolate);
+    isolate->clear_exception();
     return Reject(promise, reason, false);
   }
 
@@ -5005,11 +5004,20 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
           static_cast<int>(PromiseReaction::kPromiseOrCapabilityOffset) ==
           static_cast<int>(
               PromiseFulfillReactionJobTask::kPromiseOrCapabilityOffset));
-      static_assert(
-          static_cast<int>(
-              PromiseReaction::kContinuationPreservedEmbedderDataOffset) ==
-          static_cast<int>(PromiseFulfillReactionJobTask::
-                               kContinuationPreservedEmbedderDataOffset));
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+      static_assert(static_cast<int>(
+                        PromiseReaction::
+                            kIsolateContinuationPreservedEmbedderDataOffset) ==
+                    static_cast<int>(
+                        PromiseFulfillReactionJobTask::
+                            kIsolateContinuationPreservedEmbedderDataOffset));
+      static_assert(static_cast<int>(
+                        PromiseReaction::
+                            kContextContinuationPreservedEmbedderDataOffset) ==
+                    static_cast<int>(
+                        PromiseFulfillReactionJobTask::
+                            kContextContinuationPreservedEmbedderDataOffset));
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
     } else {
       DisallowGarbageCollection no_gc;
       task->set_map(
@@ -5024,11 +5032,20 @@ Handle<Object> JSPromise::TriggerPromiseReactions(Isolate* isolate,
           static_cast<int>(PromiseReaction::kPromiseOrCapabilityOffset) ==
           static_cast<int>(
               PromiseRejectReactionJobTask::kPromiseOrCapabilityOffset));
-      static_assert(
-          static_cast<int>(
-              PromiseReaction::kContinuationPreservedEmbedderDataOffset) ==
-          static_cast<int>(PromiseRejectReactionJobTask::
-                               kContinuationPreservedEmbedderDataOffset));
+#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+      static_assert(static_cast<int>(
+                        PromiseReaction::
+                            kIsolateContinuationPreservedEmbedderDataOffset) ==
+                    static_cast<int>(
+                        PromiseRejectReactionJobTask::
+                            kIsolateContinuationPreservedEmbedderDataOffset));
+      static_assert(static_cast<int>(
+                        PromiseReaction::
+                            kContextContinuationPreservedEmbedderDataOffset) ==
+                    static_cast<int>(
+                        PromiseRejectReactionJobTask::
+                            kContextContinuationPreservedEmbedderDataOffset));
+#endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
     }
 
     MicrotaskQueue* microtask_queue = handler_context->microtask_queue();
@@ -6427,13 +6444,13 @@ void JSFinalizationRegistry::RemoveCellFromUnregisterTokenMap(
 // static
 bool MapWord::IsMapOrForwarded(Tagged<Map> map) {
   MapWord map_word = map->map_word(kRelaxedLoad);
-
   if (map_word.IsForwardingAddress()) {
     // During GC we can't access forwarded maps without synchronization.
     return true;
-  } else {
-    return IsMap(map_word.ToMap());
   }
+  // The meta map might be moved away by GC too but we can read instance
+  // type from both old and new location as it can't change.
+  return InstanceTypeChecker::IsMap(map_word.ToMap()->instance_type());
 }
 
 // Force instantiation of template instances class.

@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
+#include "chrome/browser/ui/views/extensions/extensions_toolbar_coordinator.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
@@ -91,8 +92,9 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (app_controller->system_app()) {
-    AddChildView(std::make_unique<SystemAppAccessibleName>(
-        app_controller->GetAppShortName()));
+    system_app_accessible_name_ =
+        AddChildView(std::make_unique<SystemAppAccessibleName>(
+            app_controller->GetAppShortName()));
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -149,6 +151,10 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
     extensions_container_ =
         AddChildView(std::make_unique<ExtensionsToolbarContainer>(
             browser_view_->browser(), display_mode));
+    extensions_toolbar_coordinator_ =
+        std::make_unique<ExtensionsToolbarCoordinator>(browser_view_->browser(),
+                                                       extensions_container_);
+
     extensions_container_->GetExtensionsButton()
         ->SetAppearDisabledInInactiveWidget(true);
     extensions_container_->SetProperty(
@@ -161,7 +167,7 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
                                static_cast<int>(HTCLIENT));
   }
 
-  if (download::IsDownloadBubbleEnabled(browser_view_->browser()->profile())) {
+  if (download::IsDownloadBubbleEnabled()) {
     download_button_ = AddChildView(
         std::make_unique<DownloadToolbarButtonView>(browser_view_));
     views::SetHitTestComponent(download_button_, static_cast<int>(HTCLIENT));
@@ -194,13 +200,15 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
 WebAppToolbarButtonContainer::~WebAppToolbarButtonContainer() {
   ImmersiveModeController* immersive_controller =
       browser_view_->immersive_mode_controller();
-  if (immersive_controller)
+  if (immersive_controller) {
     immersive_controller->RemoveObserver(this);
+  }
 }
 
 void WebAppToolbarButtonContainer::UpdateStatusIconsVisibility() {
-  if (content_settings_container_)
+  if (content_settings_container_) {
     content_settings_container_->UpdateContentSettingViewsVisibility();
+  }
   page_action_icon_controller_->UpdateAll();
 }
 
@@ -214,8 +222,9 @@ void WebAppToolbarButtonContainer::SetColors(SkColor foreground_color,
                                        /*show_text=*/color_changed);
   }
 
-  if (content_settings_container_)
+  if (content_settings_container_) {
     content_settings_container_->SetIconColor(foreground_color_);
+  }
   page_action_icon_controller_->SetIconColor(foreground_color_);
 }
 
@@ -257,8 +266,9 @@ int WebAppToolbarButtonContainer::GetPageActionIconSize() const {
 gfx::Insets WebAppToolbarButtonContainer::GetPageActionIconInsets(
     const PageActionIconView* icon_view) const {
   const int icon_size = icon_view->GetImageView()->GetPreferredSize().height();
-  if (icon_size == 0)
+  if (icon_size == 0) {
     return gfx::Insets();
+  }
 
   const int height = toolbar_button_provider_->GetToolbarButtonSize().height();
   const int inset_size = std::max(0, (height - icon_size) / 2);
@@ -273,8 +283,9 @@ bool WebAppToolbarButtonContainer::GetAnimate() const {
 }
 
 void WebAppToolbarButtonContainer::StartTitlebarAnimation() {
-  if (!GetAnimate())
+  if (!GetAnimate()) {
     return;
+  }
 
   if (web_app_origin_text_) {
     web_app_origin_text_->SetAllowedToAnimate(true);
@@ -289,11 +300,13 @@ void WebAppToolbarButtonContainer::StartTitlebarAnimation() {
 }
 
 void WebAppToolbarButtonContainer::FadeInContentSettingIcons() {
-  if (!GetAnimate())
+  if (!GetAnimate()) {
     return;
+  }
 
-  if (content_settings_container_)
+  if (content_settings_container_) {
     content_settings_container_->FadeIn();
+  }
 }
 
 void WebAppToolbarButtonContainer::ChildPreferredSizeChanged(
@@ -330,8 +343,9 @@ WebAppToolbarButtonContainer::GetContentSettingBubbleModelDelegate() {
 void WebAppToolbarButtonContainer::OnImmersiveRevealStarted() {
   // Don't wait for the fade in animation to make content setting icons
   // visible once in immersive mode.
-  if (content_settings_container_)
+  if (content_settings_container_) {
     content_settings_container_->EnsureVisible();
+  }
 }
 
 // PageActionIconView::Delegate:
@@ -342,14 +356,15 @@ WebAppToolbarButtonContainer::GetWebContentsForPageActionIconView() {
 
 void WebAppToolbarButtonContainer::AddedToWidget() {
   if (GetAnimate()) {
-    if (content_settings_container_)
+    if (content_settings_container_) {
       content_settings_container_->SetUpForFadeIn();
+    }
     animation_start_delay_.Start(
         FROM_HERE, kTitlebarAnimationDelay, this,
         &WebAppToolbarButtonContainer::StartTitlebarAnimation);
   }
 }
 
-BEGIN_METADATA(WebAppToolbarButtonContainer, views::View)
+BEGIN_METADATA(WebAppToolbarButtonContainer)
 ADD_READONLY_PROPERTY_METADATA(bool, Animate)
 END_METADATA

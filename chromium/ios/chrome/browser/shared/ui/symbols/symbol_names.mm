@@ -8,7 +8,6 @@
 #if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
 NSString* const kGoogleIconSymbol = @"google_icon";
 NSString* const kGoogleShieldSymbol = @"google_shield";
-NSString* const kChromeSymbol = @"chrome_symbol";
 NSString* const kMulticolorChromeballSymbol = @"multicolor_chromeball";
 NSString* const kGoogleMapsSymbol = @"google_maps";
 NSString* const kGooglePhotosSymbol = @"google_photos";
@@ -35,7 +34,6 @@ NSString* const kReadingListSymbol = @"square_bullet_square";
 NSString* const kRecentTabsSymbol = @"laptopcomputer_and_phone";
 NSString* const kLanguageSymbol = @"language";
 NSString* const kLocationSymbol = @"location";
-NSString* const kLocationFillSymbol = @"location.fill";
 NSString* const kPasswordSymbol = @"password";
 #if !BUILDFLAG(IS_IOS_MACCATALYST)
 NSString* const kMulticolorPasswordSymbol = @"multicolor_password";
@@ -55,6 +53,8 @@ NSString* const kMoveFolderSymbol = @"folder_badge_arrow_forward";
 NSString* const kTopOmniboxOptionSymbol = @"top_omnibox_option";
 NSString* const kBottomOmniboxOptionSymbol = @"bottom_omnibox_option";
 NSString* const kDangerousOmniboxSymbol = @"dangerous_omnibox";
+NSString* const kArrowDownSymbol = @"arrow.down";
+NSString* const kArrowUpSymbol = @"arrow.up";
 
 // Custom symbol names which can be configured with a color palette.
 NSString* const kIncognitoCircleFillSymbol = @"incognito_circle_fill";
@@ -77,6 +77,7 @@ NSString* const kDefaultBrowserSymbol = @"app.badge.checkmark";
 NSString* const kDefaultBrowseriOS14Symbol = @"app.badge";
 NSString* const kDiscoverSymbol = @"flame";
 NSString* const kBellSymbol = @"bell";
+NSString* const kBellBadgeSymbol = @"bell.badge";
 NSString* const kCachedDataSymbol = @"photo.on.rectangle";
 NSString* const kAutofillDataSymbol = @"wand.and.rays";
 NSString* const kSecureLocationBarSymbol = @"lock.fill";
@@ -122,6 +123,7 @@ NSString* const kPlusSymbol = @"plus";
 NSString* const kSearchSymbol = @"magnifyingglass";
 NSString* const kCheckmarkSymbol = @"checkmark";
 NSString* const kDownloadSymbol = @"arrow.down.circle";
+NSString* const kSecureSymbol = @"lock";
 NSString* const kWarningSymbol = @"exclamationmark.triangle";
 NSString* const kWarningFillSymbol = @"exclamationmark.triangle.fill";
 NSString* const kHelpSymbol = @"questionmark.circle";
@@ -140,6 +142,7 @@ NSString* const kSyncErrorSymbol =
     @"exclamationmark.arrow.triangle.2.circlepath";
 NSString* const kMenuSymbol = @"ellipsis";
 NSString* const kSortSymbol = @"arrow.up.arrow.down";
+NSString* const kExpandSymbol = @"arrow.up.left.and.arrow.down.right";
 NSString* const kBackSymbol = @"arrow.backward";
 NSString* const kForwardSymbol = @"arrow.forward";
 NSString* const kPersonFillSymbol = @"person.fill";
@@ -170,6 +173,7 @@ NSString* const kSquareOnSquareDashedSymbol = @"square.on.square.dashed";
 NSString* const kDocPlaintextSymbol = @"doc.plaintext";
 NSString* const kFlagSymbol = @"flag";
 NSString* const kKeyboardSymbol = @"keyboard";
+NSString* const kKeyboardDownSymbol = @"keyboard.chevron.compact.down";
 NSString* const kSpeedometerSymbol = @"speedometer";
 NSString* const kMovePlatterToTopPhoneSymbol =
     @"platter.filled.top.and.arrow.up.iphone";
@@ -190,6 +194,11 @@ NSString* const kCircleCircleFillSymbol = @"circle.circle.fill";
 NSString* const kLockSymbol = @"lock";
 NSString* const kRulerSymbol = @"ruler";
 NSString* const kLaptopAndIphoneSymbol = @"laptopcomputer.and.iphone";
+NSString* const kBoltSymbol = @"bolt";
+NSString* const kLightBulbSymbol = @"lightbulb";
+NSString* const kNewTabGroupActionSymbol = @"plus.square.on.square";
+NSString* const kRemoveTabFromGroupActionSymbol = @"minus.square";
+NSString* const kMoveTabToGroupActionSymbol = @"arrow.up.right.square";
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

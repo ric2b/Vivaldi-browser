@@ -40,7 +40,7 @@ class WindowCycleList;
 class ASH_EXPORT WindowCycleController : public SessionObserver,
                                          public DesksController::Observer {
  public:
-  using WindowList = std::vector<aura::Window*>;
+  using WindowList = std::vector<raw_ptr<aura::Window, VectorExperimental>>;
 
   enum class WindowCyclingDirection { kForward, kBackward };
   enum class KeyboardNavDirection { kUp, kDown, kLeft, kRight, kInvalid };
@@ -115,7 +115,7 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
   // Gets the window for the preview item located at |event|. Returns nullptr if
   // |event| is not on the cycle view or a preview item, or |window_cycle_list_|
   // does not exist.
-  aura::Window* GetWindowAtPoint(const ui::LocatedEvent* event) const;
+  aura::Window* GetWindowAtPoint(const ui::LocatedEvent* event);
 
   // Returns whether or not the event is located in tab slider container.
   bool IsEventInTabSliderContainer(const ui::LocatedEvent* event) const;
@@ -196,7 +196,7 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
   // Returns true if the direction is valid regarding the component that the
   // focus is currently on. For example, moving the focus on the top most
   // component, the tab slider button, further up is invalid.
-  bool IsValidKeyboardNavigation(KeyboardNavDirection direction);
+  bool IsValidKeyboardNavigation(KeyboardNavDirection direction) const;
 
   std::unique_ptr<WindowCycleList> window_cycle_list_;
 
@@ -206,8 +206,8 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
 
   // Tracks what Window was active when starting to cycle and used to determine
   // if the active Window changed in when ending cycling.
-  raw_ptr<aura::Window, DanglingUntriaged | ExperimentalAsh>
-      active_window_before_window_cycle_ = nullptr;
+  raw_ptr<aura::Window, DanglingUntriaged> active_window_before_window_cycle_ =
+      nullptr;
 
   // Non-null while actively cycling.
   std::unique_ptr<WindowCycleEventFilter> event_filter_;
@@ -217,7 +217,7 @@ class ASH_EXPORT WindowCycleController : public SessionObserver,
 
   // The pref service of the currently active user. Can be null in
   // ash_unittests.
-  raw_ptr<PrefService, ExperimentalAsh> active_user_pref_service_ = nullptr;
+  raw_ptr<PrefService> active_user_pref_service_ = nullptr;
 
   // The pref change registrar to observe changes in prefs value.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;

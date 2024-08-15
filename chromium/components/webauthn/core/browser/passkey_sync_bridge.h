@@ -15,6 +15,7 @@
 #include "components/sync/model/model_type_sync_bridge.h"
 #include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/webauthn/core/browser/passkey_model.h"
+#include "components/webauthn/core/browser/passkey_model_change.h"
 
 namespace syncer {
 struct EntityData;
@@ -58,11 +59,21 @@ class PasskeySyncBridge : public syncer::ModelTypeSyncBridge,
   base::flat_set<std::string> GetAllSyncIds() const override;
   std::vector<sync_pb::WebauthnCredentialSpecifics> GetAllPasskeys()
       const override;
+  absl::optional<sync_pb::WebauthnCredentialSpecifics> GetPasskeyByCredentialId(
+      const std::string& rp_id,
+      const std::string& credential_id) const override;
   std::vector<sync_pb::WebauthnCredentialSpecifics>
   GetPasskeysForRelyingPartyId(const std::string& rp_id) const override;
   bool DeletePasskey(const std::string& credential_id) override;
   bool UpdatePasskey(const std::string& credential_id,
-                     PasskeyChange change) override;
+                     PasskeyUpdate change) override;
+  sync_pb::WebauthnCredentialSpecifics CreatePasskey(
+      std::string_view rp_id,
+      const UserEntity& user_entity,
+      base::span<const uint8_t> trusted_vault_key,
+      int32_t trusted_vault_key_version,
+      std::vector<uint8_t>* public_key_spki_der_out) override;
+  void CreatePasskey(sync_pb::WebauthnCredentialSpecifics& passkey) override;
   std::string AddNewPasskeyForTesting(
       sync_pb::WebauthnCredentialSpecifics passkey) override;
 
@@ -77,7 +88,10 @@ class PasskeySyncBridge : public syncer::ModelTypeSyncBridge,
       const absl::optional<syncer::ModelError>& error,
       std::unique_ptr<syncer::MetadataBatch> metadata_batch);
   void OnStoreCommitWriteBatch(const absl::optional<syncer::ModelError>& error);
-  void NotifyPasskeysChanged();
+  void NotifyPasskeysChanged(const std::vector<PasskeyModelChange>& changes);
+  void AddPasskeyInternal(sync_pb::WebauthnCredentialSpecifics specifics);
+  void AddShadowedCredentialIdsToNewPasskey(
+      sync_pb::WebauthnCredentialSpecifics& passkey);
 
   // Local view of the stored data. Indexes specifics protos by storage key.
   std::map<std::string, sync_pb::WebauthnCredentialSpecifics> data_;

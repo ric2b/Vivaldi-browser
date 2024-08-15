@@ -21,7 +21,6 @@
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "media/gpu/vaapi/vp9_vaapi_video_encoder_delegate.h"
 #include "media/gpu/vp9_picture.h"
-#include "media/gpu/vp9_svc_layers.h"
 #include "media/video/fake_gpu_memory_buffer.h"
 #include "media/video/video_encode_accelerator.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -49,12 +48,15 @@ constexpr int kSpatialLayersResolutionDenom[][3] = {
     {2, 1, 0},  // For two spatial layers.
     {4, 2, 1},  // For three spatial layers.
 };
-const VideoEncodeAccelerator::Config kDefaultVideoEncodeAcceleratorConfig(
-    PIXEL_FORMAT_I420,
-    kDefaultEncodeSize,
-    VP9PROFILE_PROFILE0,
-    kDefaultBitrate,
-    kDefaultFramerate);
+
+VideoEncodeAccelerator::Config DefaultVideoEncodeAcceleratorConfig() {
+  VideoEncodeAccelerator::Config vea_config(
+      PIXEL_FORMAT_I420, kDefaultEncodeSize, VP9PROFILE_PROFILE0,
+      kDefaultBitrate);
+
+  vea_config.initial_framerate = kDefaultFramerate;
+  return vea_config;
+}
 
 std::vector<VideoEncodeAccelerator::Config::SpatialLayer> GetDefaultSVCLayers(
     size_t num_spatial_layers,
@@ -211,7 +213,7 @@ class MockVP9VaapiVideoEncoderDelegate : public VP9VaapiVideoEncoderDelegate {
   MOCK_CONST_METHOD0(GetBitstreamBufferSize, size_t());
   MOCK_CONST_METHOD0(GetMaxNumOfRefFrames, size_t());
   MOCK_METHOD2(GetMetadata, BitstreamBufferMetadata(const EncodeJob&, size_t));
-  MOCK_METHOD1(PrepareEncodeJob, bool(EncodeJob&));
+  MOCK_METHOD1(PrepareEncodeJob, PrepareEncodeJobResult(EncodeJob&));
   MOCK_METHOD1(BitrateControlUpdate, void(const BitstreamBufferMetadata&));
   MOCK_METHOD0(GetSVCLayerResolutions, std::vector<gfx::Size>());
   bool UpdateRates(const VideoBitrateAllocation&, uint32_t) override {
@@ -425,7 +427,7 @@ class VaapiVideoEncodeAcceleratorTest
             reinterpret_cast<VP9Picture*>(picture)->metadata_for_encoding =
                 Vp9Metadata();
           }
-          return true;
+          return VaapiVideoEncoderDelegate::PrepareEncodeJobResult::kSuccess;
         }));
     EXPECT_CALL(*mock_vaapi_wrapper_,
                 ExecuteAndDestroyPendingBuffers(kInputSurfaceId))
@@ -443,6 +445,7 @@ class VaapiVideoEncodeAcceleratorTest
               // Same implementation in VP9VaapiVideoEncoderDelegate.
               BitstreamBufferMetadata metadata(
                   payload_size, job.IsKeyframeRequested(), job.timestamp());
+              metadata.end_of_picture = job.end_of_picture();
               CodecPicture* picture = job.picture().get();
               metadata.vp9 =
                   reinterpret_cast<VP9Picture*>(picture)->metadata_for_encoding;
@@ -606,7 +609,7 @@ class VaapiVideoEncodeAcceleratorTest
             CodecPicture* picture = job.picture().get();
             reinterpret_cast<VP9Picture*>(picture)->metadata_for_encoding =
                 Vp9Metadata();
-            return true;
+            return VaapiVideoEncoderDelegate::PrepareEncodeJobResult::kSuccess;
           }));
       EXPECT_CALL(*mock_vaapi_wrapper_, ExecuteAndDestroyPendingBuffers(_))
           .WillOnce(Return(true));
@@ -624,6 +627,7 @@ class VaapiVideoEncodeAcceleratorTest
                 // Same implementation in VP9VaapiVideoEncoderDelegate.
                 BitstreamBufferMetadata metadata(
                     payload_size, job.IsKeyframeRequested(), job.timestamp());
+                metadata.end_of_picture = job.end_of_picture();
                 CodecPicture* picture = job.picture().get();
                 metadata.vp9 = reinterpret_cast<VP9Picture*>(picture)
                                    ->metadata_for_encoding;
@@ -699,7 +703,7 @@ TEST_P(VaapiVideoEncodeAcceleratorTest, Initialize) {
   const uint8_t num_of_spatial_layers = GetParam().num_of_spatial_layers;
   const SVCInterLayerPredMode inter_layer_pred = GetParam().inter_layer_pred;
 
-  VideoEncodeAccelerator::Config config = kDefaultVideoEncodeAcceleratorConfig;
+  VideoEncodeAccelerator::Config config = DefaultVideoEncodeAcceleratorConfig();
   config.inter_layer_pred = inter_layer_pred;
   const uint8_t num_of_temporal_layers = GetParam().num_of_temporal_layers;
   config.spatial_layers =
@@ -737,7 +741,7 @@ TEST_P(VaapiVideoEncodeAcceleratorTest, EncodeVP9WithSingleSpatialLayer) {
   if (GetParam().num_of_spatial_layers > 1u)
     GTEST_SKIP() << "Test only meant for single spatial layer";
 
-  VideoEncodeAccelerator::Config config = kDefaultVideoEncodeAcceleratorConfig;
+  VideoEncodeAccelerator::Config config = DefaultVideoEncodeAcceleratorConfig();
   const SVCInterLayerPredMode inter_layer_pred = GetParam().inter_layer_pred;
   config.inter_layer_pred = inter_layer_pred;
   VideoEncodeAccelerator::Config::SpatialLayer spatial_layer;
@@ -762,7 +766,7 @@ TEST_P(VaapiVideoEncodeAcceleratorTest, EncodeVP9WithMultipleSpatialLayers) {
     GTEST_SKIP() << "Test only meant for multiple spatial layers configuration";
 
   const uint8_t num_of_temporal_layers = GetParam().num_of_temporal_layers;
-  VideoEncodeAccelerator::Config config = kDefaultVideoEncodeAcceleratorConfig;
+  VideoEncodeAccelerator::Config config = DefaultVideoEncodeAcceleratorConfig();
   const SVCInterLayerPredMode inter_layer_pred = GetParam().inter_layer_pred;
   config.inter_layer_pred = inter_layer_pred;
   config.input_format = PIXEL_FORMAT_NV12;

@@ -26,8 +26,8 @@
 //! use np_adv::shared_data::TxPower;
 //!
 //! // no section identities or DEs need salt in this example
-//! let mut adv_builder = AdvBuilder::new();
-//! let mut section_builder = adv_builder.section_builder(PublicIdentity::default()).unwrap();
+//! let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+//! let mut section_builder = adv_builder.section_builder(PublicSectionEncoder::default()).unwrap();
 //!
 //! section_builder.add_de(|_salt| TxPowerDataElement::from(TxPower::try_from(3).unwrap())).unwrap();
 //!
@@ -54,28 +54,35 @@
 //!
 //! ```
 //! use np_adv::{
+//!     credential::{SimpleBroadcastCryptoMaterial, v1::V1},
 //!     de_type::EncryptedIdentityDataElementType,
 //!     extended::{data_elements::*, serialize::*, de_type::DeType },
+//!     MetadataKey,
 //! };
 //! use rand::{Rng as _, SeedableRng as _};
 //! use crypto_provider::{CryptoProvider, CryptoRng};
 //! use crypto_provider_default::CryptoProviderImpl;
 //! use np_adv::shared_data::TxPower;
 //!
-//! let mut adv_builder = AdvBuilder::new();
+//! let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
 //!
 //! // these would come from the credential//!
 //! let mut rng = <CryptoProviderImpl as CryptoProvider>::CryptoRng::new();
 //! let metadata_key: [u8; 16] = rng.gen();
+//! let metadata_key = MetadataKey(metadata_key);
 //! let key_seed: [u8; 32] = rng.gen();
 //! // use your preferred crypto impl
 //! let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 //!
-//! let mut section_builder = adv_builder.section_builder(MicEncrypted::new_random_salt(
+//! let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(
+//!     key_seed,
+//!     metadata_key,
+//! );
+//!
+//! let mut section_builder = adv_builder.section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new_random_salt(
 //!     &mut rng,
 //!     EncryptedIdentityDataElementType::Private,
-//!     &metadata_key,
-//!     &key_seed_hkdf,
+//!     &broadcast_cm,
 //! )).unwrap();
 //!
 //! section_builder.add_de(|_salt| TxPowerDataElement::from(TxPower::try_from(3).unwrap())).unwrap();
@@ -104,8 +111,12 @@
 //!         .try_into().expect("array sizes match")
 //! }
 //! ```
-use crate::extended::NP_V1_ADV_MAX_SECTION_COUNT;
+use crate::extended::{NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT, NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT};
 use crate::{
+    credential::{
+        v1::{SignedBroadcastCryptoMaterial, V1},
+        BroadcastCryptoMaterial,
+    },
     de_type::{EncryptedIdentityDataElementType, IdentityDataElementType},
     extended::{
         data_elements::EncryptionInfoDataElement,
@@ -114,11 +125,10 @@ use crate::{
         section_signature_payload::*,
         to_array_view, DeLength, BLE_ADV_SVC_CONTENT_LEN, NP_ADV_MAX_SECTION_LEN,
     },
-    DeLengthOutOfRange, PublicIdentity, NP_SVC_UUID,
+    DeLengthOutOfRange, MetadataKey, NP_SVC_UUID,
 };
 use array_view::ArrayView;
-use core::fmt;
-use core::marker::PhantomData;
+use core::fmt::{self, Display};
 use crypto_provider::{
     aes::{
         ctr::{AesCtr, AesCtrNonce, NonceAndCounter},
@@ -145,36 +155,35 @@ mod test_vectors;
 pub struct AdvBuilder {
     /// Contains the adv header byte
     adv: tinyvec::ArrayVec<[u8; BLE_ADV_SVC_CONTENT_LEN]>,
+    /// To track the number of sections that are in the advertisement
     section_count: usize,
+    /// Advertisement type: Public or Encrypted
+    advertisement_type: AdvertisementType,
 }
 
 impl AdvBuilder {
     /// Build an [AdvBuilder].
-    pub fn new() -> AdvBuilder {
+    pub fn new(advertisement_type: AdvertisementType) -> Self {
         let mut adv = tinyvec::ArrayVec::new();
         // version 1, 0bVVVRRRRR
         adv.push(0b00100000);
-
-        AdvBuilder { adv, section_count: 0 }
+        Self { adv, section_count: 0, advertisement_type }
     }
 
     /// Create a section builder.
-    ///
-    /// Returns `Err` if there isn't room in the advertisement for the section at its minimum length
-    /// with its chosen identity.
     ///
     /// The builder will not accept more DEs than can fit given the space already used in the
     /// advertisement by previous sections, if any.
     ///
     /// Once the builder is populated, add it to the originating advertisement with
     /// [SectionBuilder.add_to_advertisement].
-    pub fn section_builder<I: SectionIdentity>(
+    pub fn section_builder<SE: SectionEncoder>(
         &mut self,
-        identity: I,
-    ) -> Result<SectionBuilder<I>, AddSectionError> {
+        section_encoder: SE,
+    ) -> Result<SectionBuilder<SE>, AddSectionError> {
         // section header and identity prefix
-        let prefix_len = 1 + I::PREFIX_LEN;
-        let minimum_section_len = prefix_len + I::SUFFIX_LEN;
+        let prefix_len = 1 + SE::PREFIX_LEN;
+        let minimum_section_len = prefix_len + SE::SUFFIX_LEN;
         // the max overall len available to the section
         let available_len = self.adv.capacity() - self.adv.len();
 
@@ -182,11 +191,15 @@ impl AdvBuilder {
             return Err(AddSectionError::InsufficientAdvSpace);
         }
 
-        if self.section_count >= NP_V1_ADV_MAX_SECTION_COUNT {
+        if self.section_count >= self.advertisement_type.max_sections() {
             return Err(AddSectionError::MaxSectionCountExceeded);
         }
 
-        let mut section = tinyvec::ArrayVec::new();
+        if self.advertisement_type != SE::ADVERTISEMENT_TYPE {
+            return Err(AddSectionError::IncompatibleSectionType);
+        }
+
+        let mut section: tinyvec::ArrayVec<[u8; 249]> = tinyvec::ArrayVec::new();
         // placeholder for section header and identity prefix
         section.resize(prefix_len, 0);
 
@@ -194,11 +207,11 @@ impl AdvBuilder {
             section: CapacityLimitedVec {
                 vec: section,
                 // won't underflow: checked above
-                capacity: available_len - I::SUFFIX_LEN,
+                capacity: available_len - SE::SUFFIX_LEN,
             },
-            identity,
+            section_encoder,
             adv_builder: self,
-            next_de_offset: I::INITIAL_DE_OFFSET,
+            next_de_offset: SE::INITIAL_DE_OFFSET,
         })
     }
 
@@ -221,33 +234,30 @@ impl AdvBuilder {
     }
 }
 
-impl Default for AdvBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Errors that can occur when adding a section to an advertisement
 #[derive(Debug, PartialEq, Eq)]
 pub enum AddSectionError {
     /// The advertisement doesn't have enough space to hold the minimum size of the section
     InsufficientAdvSpace,
-    /// The advertisement can only hold a maximum of NP_V1_ADV_MAX_SECTION_COUNT number of sections
+    /// The advertisement can only hold a maximum of NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT number of sections
     MaxSectionCountExceeded,
+    /// An incompatible section trying to be added
+    IncompatibleSectionType,
 }
 
-/// Derived salt for an individual data element.
-pub struct DeSalt<C: CryptoProvider> {
-    salt: V1Salt<C>,
-    de_offset: DataElementOffset,
-}
-
-impl<C: CryptoProvider> DeSalt<C> {
-    /// Derive salt of the requested length.
-    ///
-    /// The length must be a valid HKDF-SHA256 length.
-    pub fn derive<const N: usize>(&self) -> Option<[u8; N]> {
-        self.salt.derive(Some(self.de_offset))
+impl Display for AddSectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AddSectionError::InsufficientAdvSpace => {
+                write!(f, "The advertisement (max {BLE_ADV_SVC_CONTENT_LEN} bytes) doesn't have enough remaining space to hold the section")
+            }
+            AddSectionError::MaxSectionCountExceeded => {
+                write!(f, "The advertisement can only hold a maximum of {NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT} number of sections")
+            }
+            AddSectionError::IncompatibleSectionType => {
+                write!(f, "Public and Encrypted sections cannot be mixed in the same advertisement")
+            }
+        }
     }
 }
 
@@ -269,22 +279,22 @@ type EncodedSection = ArrayView<u8, NP_ADV_MAX_SECTION_LEN>;
 
 /// Accumulates data elements and encodes them into a section.
 #[derive(Debug)]
-pub struct SectionBuilder<'a, I: SectionIdentity> {
+pub struct SectionBuilder<'a, SE: SectionEncoder> {
     /// Contains the section header, the identity-specified overhead, and any DEs added
     pub(crate) section: CapacityLimitedVec<u8, NP_ADV_MAX_SECTION_LEN>,
-    identity: I,
+    section_encoder: SE,
     /// mut ref to enforce only one active section builder at a time
     adv_builder: &'a mut AdvBuilder,
     next_de_offset: DataElementOffset,
 }
 
-impl<'a, I: SectionIdentity> SectionBuilder<'a, I> {
+impl<'a, SE: SectionEncoder> SectionBuilder<'a, SE> {
     /// Add this builder to the advertisement that created it.
     pub fn add_to_advertisement(self) {
         let adv_builder = self.adv_builder;
         adv_builder.add_section(Self::build_section(
             self.section.into_inner(),
-            self.identity,
+            self.section_encoder,
             adv_builder,
         ))
     }
@@ -292,11 +302,11 @@ impl<'a, I: SectionIdentity> SectionBuilder<'a, I> {
     /// Add a data element to the section with a closure that returns a `Result`.
     ///
     /// The provided `build_de` closure will be invoked with the derived salt for this DE.
-    pub fn add_de_res<W: WriteDataElement, E, F: FnOnce(I::DerivedSalt) -> Result<W, E>>(
+    pub fn add_de_res<W: WriteDataElement, E, F: FnOnce(SE::DerivedSalt) -> Result<W, E>>(
         &mut self,
         build_de: F,
     ) -> Result<(), AddDataElementError<E>> {
-        let writer = build_de(self.identity.de_salt(self.next_de_offset))
+        let writer = build_de(self.section_encoder.de_salt(self.next_de_offset))
             .map_err(AddDataElementError::BuildDeError)?;
 
         let orig_len = self.section.len();
@@ -320,10 +330,10 @@ impl<'a, I: SectionIdentity> SectionBuilder<'a, I> {
                 e
             })?;
 
-        if content_len != de_header.len.as_usize() {
+        if content_len != usize::from(de_header.len.as_u8()) {
             panic!(
                 "Buggy WriteDataElement impl: header len {}, actual written len {}",
-                de_header.len.as_usize(),
+                de_header.len.as_u8(),
                 content_len
             );
         }
@@ -336,7 +346,7 @@ impl<'a, I: SectionIdentity> SectionBuilder<'a, I> {
     /// Add a data element to the section with a closure that returns the data element directly.
     ///
     /// The provided `build_de` closure will be invoked with the derived salt for this DE.
-    pub fn add_de<W: WriteDataElement, F: FnOnce(I::DerivedSalt) -> W>(
+    pub fn add_de<W: WriteDataElement, F: FnOnce(SE::DerivedSalt) -> W>(
         &mut self,
         build_de: F,
     ) -> Result<(), AddDataElementError<()>> {
@@ -348,11 +358,11 @@ impl<'a, I: SectionIdentity> SectionBuilder<'a, I> {
     /// Implemented without self to avoid partial-move issues.
     fn build_section(
         mut section_contents: tinyvec::ArrayVec<[u8; NP_ADV_MAX_SECTION_LEN]>,
-        mut identity: I,
+        mut section_encoder: SE,
         adv_builder: &AdvBuilder,
     ) -> EncodedSection {
         // there is space because the capacity for DEs was restricted to allow it
-        section_contents.resize(section_contents.len() + I::SUFFIX_LEN, 0);
+        section_contents.resize(section_contents.len() + SE::SUFFIX_LEN, 0);
 
         section_contents[0] = section_contents
             .len()
@@ -361,7 +371,7 @@ impl<'a, I: SectionIdentity> SectionBuilder<'a, I> {
             .and_then(|len: u8| len.checked_sub(1))
             .expect("section length is always <=255 and non-negative");
 
-        identity.postprocess(
+        section_encoder.postprocess(
             adv_builder.header_byte(),
             section_contents[0],
             &mut section_contents[1..],
@@ -380,8 +390,26 @@ pub enum AddDataElementError<E> {
     InsufficientSectionSpace,
 }
 
-/// The identity used for an individual section.
-pub trait SectionIdentity {
+/// The advertisement type, which dictates what sections can exist
+#[derive(Debug, PartialEq, Eq)]
+pub enum AdvertisementType {
+    /// Plaintext advertisement with only plaintext sections
+    Plaintext,
+    /// Encrypted advertisement with only encrypted sections
+    Encrypted,
+}
+
+impl AdvertisementType {
+    fn max_sections(&self) -> usize {
+        match self {
+            AdvertisementType::Plaintext => NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
+            AdvertisementType::Encrypted => NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
+        }
+    }
+}
+
+/// Everything needed to properly encode a section
+pub trait SectionEncoder {
     /// How much space needs to be reserved for this identity's prefix bytes after the section
     /// header and before other DEs
     const PREFIX_LEN: usize;
@@ -391,6 +419,9 @@ pub trait SectionIdentity {
 
     /// The DE offset to use for any DEs added to the section
     const INITIAL_DE_OFFSET: DataElementOffset;
+
+    /// The advertisement type that can support this section
+    const ADVERTISEMENT_TYPE: AdvertisementType;
 
     /// Postprocess the contents of the section (the data after the section header byte), which will
     /// start with [Self::PREFIX_LEN] bytes set aside for the identity's use, and similarly end with
@@ -404,13 +435,16 @@ pub trait SectionIdentity {
     fn de_salt(&self, de_offset: DataElementOffset) -> Self::DerivedSalt;
 }
 
-impl SectionIdentity for PublicIdentity {
+/// Public section for plaintext data elements
+#[derive(Default, Debug)]
+pub struct PublicSectionEncoder {}
+impl SectionEncoder for PublicSectionEncoder {
     /// 1 byte of public identity DE header
     const PREFIX_LEN: usize = 1;
     const SUFFIX_LEN: usize = 0;
     /// Room for the public DE
     const INITIAL_DE_OFFSET: DataElementOffset = DataElementOffset::ZERO.incremented();
-
+    const ADVERTISEMENT_TYPE: AdvertisementType = AdvertisementType::Plaintext;
     fn postprocess(
         &mut self,
         _adv_header_byte: u8,
@@ -423,180 +457,50 @@ impl SectionIdentity for PublicIdentity {
                 .as_slice(),
         )
     }
-
     type DerivedSalt = ();
-
     fn de_salt(&self, _de_offset: DataElementOffset) -> Self::DerivedSalt {}
-}
-
-/// Encrypts the data elements and protects integrity with a MIC using key material derived from
-/// an NP identity.
-pub struct MicEncrypted<'a, C: CryptoProvider> {
-    identity_type: EncryptedIdentityDataElementType,
-    salt: V1Salt<C>,
-    identity_payload: &'a [u8; 16],
-    aes_key: Aes128Key,
-    mic_hmac_key: np_hkdf::NpHmacSha256Key<C>,
-}
-
-impl<'a, C: CryptoProvider> MicEncrypted<'a, C> {
-    /// Build a [MicEncrypted] from the provided identity info with a random salt.
-    pub fn new_random_salt(
-        rng: &mut C::CryptoRng,
-        identity_type: EncryptedIdentityDataElementType,
-        identity_payload: &'a [u8; 16],
-        keys: &impl np_hkdf::UnsignedSectionKeys<C>,
-    ) -> Self {
-        let salt: V1Salt<C> = rng.gen::<[u8; 16]>().into();
-        Self::new(identity_type, salt, identity_payload, keys)
-    }
-
-    /// Build a [MicEncrypted] from the provided identity info.
-    fn new(
-        identity_type: EncryptedIdentityDataElementType,
-        salt: V1Salt<C>,
-        identity_payload: &'a [u8; 16],
-        keys: &impl np_hkdf::UnsignedSectionKeys<C>,
-    ) -> Self {
-        MicEncrypted {
-            identity_type,
-            salt,
-            identity_payload,
-            aes_key: keys.aes_key(),
-            mic_hmac_key: keys.hmac_key(),
-        }
-    }
-
-    /// Build a [MicEncrypted] from the provided identity info. Exposed outside of this crate for
-    /// testing purposes only.
-    #[cfg(any(test, feature = "testing"))]
-    pub fn new_for_testing(
-        identity_type: EncryptedIdentityDataElementType,
-        salt: V1Salt<C>,
-        identity_payload: &'a [u8; 16],
-        keys: &impl np_hkdf::UnsignedSectionKeys<C>,
-    ) -> Self {
-        Self::new(identity_type, salt, identity_payload, keys)
-    }
-}
-
-impl<'a, C: CryptoProvider> SectionIdentity for MicEncrypted<'a, C> {
-    const PREFIX_LEN: usize =
-        EncryptionInfo::TOTAL_DE_LEN + EncryptedIdentityMetadata::TOTAL_DE_LEN;
-    /// Length of mic
-    const SUFFIX_LEN: usize = SectionMic::CONTENTS_LEN;
-    /// Room for the mic, encryption info, and identity DEs
-    const INITIAL_DE_OFFSET: DataElementOffset =
-        DataElementOffset::ZERO.incremented().incremented();
-
-    fn postprocess(
-        &mut self,
-        adv_header_byte: u8,
-        section_header: u8,
-        section_contents: &mut [u8],
-    ) {
-        // prefix byte layout:
-        // 0-18: Encryption Info DE (header + scheme + salt)
-        // 19-20: Identity DE header
-        // 21-36: Identity DE contents (metadata key)
-
-        // Encryption Info DE
-        let encryption_info_bytes = EncryptionInfoDataElement::mic(
-            self.salt.as_slice().try_into().expect("Salt should be 16 bytes"),
-        )
-        .serialize();
-        section_contents[0..19].copy_from_slice(&encryption_info_bytes);
-
-        // Identity DE
-        let identity_header = identity_de_header(self.identity_type, self.identity_payload);
-        section_contents[19..21].copy_from_slice(identity_header.serialize().as_slice());
-        section_contents[21..37].copy_from_slice(self.identity_payload);
-
-        // DE offset for identity is 1: Encryption Info DE, Identity DE, then other DEs
-        let nonce: AesCtrNonce = self
-            .de_salt(v1_salt::DataElementOffset::from(1))
-            .derive()
-            .expect("AES-CTR nonce is a valid HKDF length");
-
-        let mut cipher = C::AesCtr128::new(&self.aes_key, NonceAndCounter::from_nonce(nonce));
-
-        let ciphertext_end = section_contents.len() - SectionMic::CONTENTS_LEN;
-
-        // encrypt just the part that should be ciphertext: identity DE contents and subsequent DEs
-        cipher.encrypt(&mut section_contents[21..ciphertext_end]);
-
-        // calculate MAC per the spec
-        let mut section_hmac = self.mic_hmac_key.build_hmac();
-        // svc uuid
-        section_hmac.update(NP_SVC_UUID.as_slice());
-        // adv header
-        section_hmac.update(&[adv_header_byte]);
-        // section header
-        section_hmac.update(&[section_header]);
-        // encryption info
-        section_hmac.update(&encryption_info_bytes);
-        // derived salt
-        section_hmac.update(&nonce);
-        // identity header + ciphertext
-        section_hmac.update(&section_contents[19..ciphertext_end]);
-
-        let mic: [u8; 32] = section_hmac.finalize();
-
-        // write truncated MIC
-        section_contents[ciphertext_end..].copy_from_slice(&mic[..SectionMic::CONTENTS_LEN]);
-    }
-
-    type DerivedSalt = DeSalt<C>;
-
-    fn de_salt(&self, de_offset: DataElementOffset) -> Self::DerivedSalt {
-        DeSalt { salt: V1Salt::from(*self.salt.as_array_ref()), de_offset }
-    }
 }
 
 /// Encrypts the data elements and protects integrity with an np_ed25519 signature
 /// using key material derived from an NP identity.
-pub struct SignedEncrypted<'a, C: CryptoProvider> {
+pub struct SignedEncryptedSectionEncoder<C: CryptoProvider> {
     identity_type: EncryptedIdentityDataElementType,
     salt: V1Salt<C>,
-    metadata_key: &'a [u8; 16],
-    key_pair: &'a np_ed25519::KeyPair<C>,
+    metadata_key: MetadataKey,
+    key_pair: np_ed25519::KeyPair<C>,
     aes_key: Aes128Key,
-    _marker: PhantomData<C>,
 }
 
-impl<'a, C: CryptoProvider> SignedEncrypted<'a, C> {
-    /// Build a [SignedEncrypted] from the provided identity material with a random salt.
-    pub fn new_random_salt(
+impl<C: CryptoProvider> SignedEncryptedSectionEncoder<C> {
+    /// Build a [SignedEncryptedSectionEncoder] from an identity type,
+    /// some broadcast crypto-material, and with a random salt.
+    pub fn new_random_salt<B: SignedBroadcastCryptoMaterial>(
         rng: &mut C::CryptoRng,
         identity_type: EncryptedIdentityDataElementType,
-        metadata_key: &'a [u8; 16],
-        key_pair: &'a np_ed25519::KeyPair<C>,
-        key_seed_hkdf: &np_hkdf::NpKeySeedHkdf<C>,
+        crypto_material: &B,
     ) -> Self {
         let salt: V1Salt<C> = rng.gen::<[u8; 16]>().into();
-        Self::new(identity_type, salt, metadata_key, key_pair, key_seed_hkdf)
+        Self::new(identity_type, salt, crypto_material)
     }
 
-    /// Build a [SignedEncrypted] from the provided identity material.
-    pub(crate) fn new(
+    /// Build a [SignedEncryptedSectionEncoder] from an identity type,
+    /// a provided salt, and some broadcast crypto-material.
+    pub(crate) fn new<B: SignedBroadcastCryptoMaterial>(
         identity_type: EncryptedIdentityDataElementType,
         salt: V1Salt<C>,
-        metadata_key: &'a [u8; 16],
-        key_pair: &'a np_ed25519::KeyPair<C>,
-        key_seed_hkdf: &np_hkdf::NpKeySeedHkdf<C>,
+        crypto_material: &B,
     ) -> Self {
-        Self {
-            identity_type,
-            salt,
-            metadata_key,
-            key_pair,
-            aes_key: key_seed_hkdf.extended_signed_section_aes_key(),
-            _marker: Default::default(),
-        }
+        let metadata_key = crypto_material.metadata_key();
+        let key_seed = crypto_material.key_seed();
+        let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&key_seed);
+        let private_key = crypto_material.signing_key();
+        let key_pair = np_ed25519::KeyPair::<C>::from_private_key(&private_key);
+        let aes_key = key_seed_hkdf.extended_signed_section_aes_key();
+        Self { identity_type, salt, metadata_key, key_pair, aes_key }
     }
 }
 
-impl<'a, C: CryptoProvider> SectionIdentity for SignedEncrypted<'a, C> {
+impl<C: CryptoProvider> SectionEncoder for SignedEncryptedSectionEncoder<C> {
     const PREFIX_LEN: usize =
         EncryptionInfo::TOTAL_DE_LEN + EncryptedIdentityMetadata::TOTAL_DE_LEN;
     /// Ed25519 signature
@@ -604,6 +508,7 @@ impl<'a, C: CryptoProvider> SectionIdentity for SignedEncrypted<'a, C> {
     /// Room for the encryption info and identity DEs
     const INITIAL_DE_OFFSET: DataElementOffset =
         DataElementOffset::ZERO.incremented().incremented();
+    const ADVERTISEMENT_TYPE: AdvertisementType = AdvertisementType::Encrypted;
 
     fn postprocess(
         &mut self,
@@ -619,7 +524,7 @@ impl<'a, C: CryptoProvider> SectionIdentity for SignedEncrypted<'a, C> {
 
         let identity_header = identity_de_header(self.identity_type, self.metadata_key);
         section_contents[19..21].copy_from_slice(identity_header.serialize().as_slice());
-        section_contents[21..37].copy_from_slice(self.metadata_key);
+        section_contents[21..37].copy_from_slice(&self.metadata_key.0);
 
         let nonce: AesCtrNonce = self
             .de_salt(v1_salt::DataElementOffset::from(1))
@@ -632,7 +537,7 @@ impl<'a, C: CryptoProvider> SectionIdentity for SignedEncrypted<'a, C> {
             before_sig.split_at(EncryptionInfo::TOTAL_DE_LEN);
 
         let encryption_info: &[u8; EncryptionInfo::TOTAL_DE_LEN] =
-            encryption_info.try_into().unwrap();
+            encryption_info.try_into().expect("encryption info should always be the correct size");
 
         // we need to sign the 16-byte IV, which doesn't have to actually fit in the adv, but we
         // don't need a bigger buffer here since we won't be including the 66 bytes for the sig +
@@ -648,20 +553,149 @@ impl<'a, C: CryptoProvider> SectionIdentity for SignedEncrypted<'a, C> {
             after_encryption_info,
         );
 
-        let signature = section_signature_payload.sign(self.key_pair);
+        let signature = section_signature_payload.sign(&self.key_pair);
 
         sig[0..64].copy_from_slice(&signature.to_bytes());
 
         let mut cipher = C::AesCtr128::new(&self.aes_key, NonceAndCounter::from_nonce(nonce));
 
         // encrypt just the part that should be ciphertext: identity DE contents and subsequent DEs
-        cipher.encrypt(&mut section_contents[21..]);
+        cipher.apply_keystream(&mut section_contents[21..]);
     }
 
     type DerivedSalt = DeSalt<C>;
 
     fn de_salt(&self, de_offset: DataElementOffset) -> Self::DerivedSalt {
         DeSalt { salt: V1Salt::from(*self.salt.as_array_ref()), de_offset }
+    }
+}
+
+/// Encrypts the data elements and protects integrity with a MIC using key material derived from
+/// an NP identity.
+pub struct MicEncryptedSectionEncoder<C: CryptoProvider> {
+    identity_type: EncryptedIdentityDataElementType,
+    salt: V1Salt<C>,
+    metadata_key: MetadataKey,
+    aes_key: Aes128Key,
+    mic_hmac_key: np_hkdf::NpHmacSha256Key<C>,
+}
+
+impl<C: CryptoProvider> MicEncryptedSectionEncoder<C> {
+    /// Build a [MicEncryptedSectionEncoder] from the provided identity
+    /// info with a random salt.
+    pub fn new_random_salt<B: BroadcastCryptoMaterial<V1>>(
+        rng: &mut C::CryptoRng,
+        identity_type: EncryptedIdentityDataElementType,
+        crypto_material: &B,
+    ) -> Self {
+        let salt: V1Salt<C> = rng.gen::<[u8; 16]>().into();
+        Self::new(identity_type, salt, crypto_material)
+    }
+
+    /// Build a [MicEncryptedSectionEncoder] from the provided identity info.
+    pub(crate) fn new<B: BroadcastCryptoMaterial<V1>>(
+        identity_type: EncryptedIdentityDataElementType,
+        salt: V1Salt<C>,
+        crypto_material: &B,
+    ) -> Self {
+        let metadata_key = crypto_material.metadata_key();
+        let key_seed = crypto_material.key_seed();
+        let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<C>::new(&key_seed);
+        let aes_key = np_hkdf::UnsignedSectionKeys::aes_key(&key_seed_hkdf);
+        let mic_hmac_key = np_hkdf::UnsignedSectionKeys::hmac_key(&key_seed_hkdf);
+
+        Self { identity_type, salt, metadata_key, aes_key, mic_hmac_key }
+    }
+
+    /// Build a [MicEncrypedSectionEncoder] from the provided identity info.
+    /// Exposed outside of this crate for testing purposes only, since this
+    /// does not handle the generation of random salts.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn new_for_testing<B: BroadcastCryptoMaterial<V1>>(
+        identity_type: EncryptedIdentityDataElementType,
+        salt: V1Salt<C>,
+        crypto_material: &B,
+    ) -> Self {
+        Self::new(identity_type, salt, crypto_material)
+    }
+}
+
+impl<C: CryptoProvider> SectionEncoder for MicEncryptedSectionEncoder<C> {
+    const PREFIX_LEN: usize =
+        EncryptionInfo::TOTAL_DE_LEN + EncryptedIdentityMetadata::TOTAL_DE_LEN;
+    /// Length of mic
+    const SUFFIX_LEN: usize = SectionMic::CONTENTS_LEN;
+    /// Room for the mic, encryption info, and identity DEs
+    const INITIAL_DE_OFFSET: DataElementOffset =
+        DataElementOffset::ZERO.incremented().incremented();
+
+    const ADVERTISEMENT_TYPE: AdvertisementType = AdvertisementType::Encrypted;
+
+    fn postprocess(
+        &mut self,
+        adv_header_byte: u8,
+        section_header: u8,
+        section_contents: &mut [u8],
+    ) {
+        // prefix byte layout:
+        // 0-18: Encryption Info DE (header + scheme + salt)
+        // 19-20: Identity DE header
+        // 21-36: Identity DE contents (metadata key)
+        // Encryption Info DE
+        let encryption_info_bytes = EncryptionInfoDataElement::mic(
+            self.salt.as_slice().try_into().expect("Salt should be 16 bytes"),
+        )
+        .serialize();
+        section_contents[0..19].copy_from_slice(&encryption_info_bytes);
+        // Identity DE
+        let identity_header = identity_de_header(self.identity_type, self.metadata_key);
+        section_contents[19..21].copy_from_slice(identity_header.serialize().as_slice());
+        section_contents[21..37].copy_from_slice(&self.metadata_key.0);
+        // DE offset for identity is 1: Encryption Info DE, Identity DE, then other DEs
+        let nonce: AesCtrNonce = self
+            .de_salt(v1_salt::DataElementOffset::from(1))
+            .derive()
+            .expect("AES-CTR nonce is a valid HKDF length");
+        let mut cipher = C::AesCtr128::new(&self.aes_key, NonceAndCounter::from_nonce(nonce));
+        let ciphertext_end = section_contents.len() - SectionMic::CONTENTS_LEN;
+        // encrypt just the part that should be ciphertext: identity DE contents and subsequent DEs
+        cipher.apply_keystream(&mut section_contents[21..ciphertext_end]);
+        // calculate MAC per the spec
+        let mut section_hmac = self.mic_hmac_key.build_hmac();
+        // svc uuid
+        section_hmac.update(NP_SVC_UUID.as_slice());
+        // adv header
+        section_hmac.update(&[adv_header_byte]);
+        // section header
+        section_hmac.update(&[section_header]);
+        // encryption info
+        section_hmac.update(&encryption_info_bytes);
+        // derived salt
+        section_hmac.update(&nonce);
+        // identity header + ciphertext
+        section_hmac.update(&section_contents[19..ciphertext_end]);
+        let mic: [u8; 32] = section_hmac.finalize();
+        // write truncated MIC
+        section_contents[ciphertext_end..].copy_from_slice(&mic[..SectionMic::CONTENTS_LEN]);
+    }
+    type DerivedSalt = DeSalt<C>;
+    fn de_salt(&self, de_offset: DataElementOffset) -> Self::DerivedSalt {
+        DeSalt { salt: V1Salt::from(*self.salt.as_array_ref()), de_offset }
+    }
+}
+
+/// Derived salt for an individual data element.
+pub struct DeSalt<C: CryptoProvider> {
+    salt: V1Salt<C>,
+    de_offset: DataElementOffset,
+}
+
+impl<C: CryptoProvider> DeSalt<C> {
+    /// Derive salt of the requested length.
+    ///
+    /// The length must be a valid HKDF-SHA256 length.
+    pub fn derive<const N: usize>(&self) -> Option<[u8; N]> {
+        self.salt.derive(Some(self.de_offset))
     }
 }
 
@@ -766,11 +800,12 @@ impl DeHeader {
 
 fn identity_de_header(
     id_type: EncryptedIdentityDataElementType,
-    metadata_key: &[u8; 16],
+    metadata_key: MetadataKey,
 ) -> DeHeader {
     DeHeader {
         de_type: id_type.type_code(),
         len: metadata_key
+            .0
             .len()
             .try_into()
             .map_err(|_e| DeLengthOutOfRange)

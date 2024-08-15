@@ -677,10 +677,7 @@ inline void MaglevAssembler::LoadAddress(Register dst, MemOperand location) {
   Add(dst.X(), location.base(), Immediate(location.offset()));
 }
 
-inline int MaglevAssembler::PushOrSetReturnAddressTo(Label* target) {
-  adr(lr, target);
-  return 0;
-}
+inline void MaglevAssembler::Call(Label* target) { bl(target); }
 
 inline void MaglevAssembler::EmitEnterExitFrame(int extra_slots,
                                                 StackFrame::Type frame_type,
@@ -725,6 +722,9 @@ inline void MaglevAssembler::Move(Register dst, Tagged<TaggedIndex> i) {
 inline void MaglevAssembler::Move(Register dst, int32_t i) {
   Mov(dst.W(), Immediate(i));
 }
+inline void MaglevAssembler::Move(Register dst, uint32_t i) {
+  Mov(dst.W(), Immediate(i));
+}
 inline void MaglevAssembler::Move(DoubleRegister dst, double n) {
   Fmov(dst, n);
 }
@@ -733,6 +733,13 @@ inline void MaglevAssembler::Move(DoubleRegister dst, Float64 n) {
 }
 inline void MaglevAssembler::Move(Register dst, Handle<HeapObject> obj) {
   Mov(dst, Operand(obj));
+}
+void MaglevAssembler::MoveTagged(Register dst, Handle<HeapObject> obj) {
+#ifdef V8_COMPRESS_POINTERS
+  Mov(dst.W(), Operand(obj, RelocInfo::COMPRESSED_EMBEDDED_OBJECT));
+#else
+  Mov(dst, Operand(obj));
+#endif
 }
 
 inline void MaglevAssembler::LoadFloat32(DoubleRegister dst, MemOperand src) {
@@ -809,10 +816,6 @@ template <typename NodeT>
 inline void MaglevAssembler::DeoptIfBufferDetached(Register array,
                                                    Register scratch,
                                                    NodeT* node) {
-  if (!code_gen_state()
-           ->broker()
-           ->dependencies()
-           ->DependOnArrayBufferDetachingProtector()) {
     // A detached buffer leads to megamorphic feedback, so we won't have a deopt
     // loop if we deopt here.
     LoadTaggedField(scratch,
@@ -821,7 +824,6 @@ inline void MaglevAssembler::DeoptIfBufferDetached(Register array,
                     FieldMemOperand(scratch, JSArrayBuffer::kBitFieldOffset));
     Tst(scratch.W(), Immediate(JSArrayBuffer::WasDetachedBit::kMask));
     EmitEagerDeoptIf(ne, DeoptimizeReason::kArrayBufferWasDetached, node);
-  }
 }
 
 inline void MaglevAssembler::LoadByte(Register dst, MemOperand src) {
@@ -1075,6 +1077,12 @@ inline void MaglevAssembler::CompareInt32AndJumpIf(Register r1, Register r2,
   CompareAndBranch(r1.W(), r2.W(), cond, target);
 }
 
+void MaglevAssembler::CompareIntPtrAndJumpIf(Register r1, Register r2,
+                                             Condition cond, Label* target,
+                                             Label::Distance distance) {
+  CompareAndBranch(r1.X(), r2.X(), cond, target);
+}
+
 inline void MaglevAssembler::CompareInt32AndJumpIf(Register r1, int32_t value,
                                                    Condition cond,
                                                    Label* target,
@@ -1208,7 +1216,7 @@ inline void MaglevAssembler::TestInt32AndJumpIfAllClear(
 
 inline void MaglevAssembler::LoadHeapNumberValue(DoubleRegister result,
                                                  Register heap_number) {
-  Ldr(result, FieldMemOperand(heap_number, HeapNumber::kValueOffset));
+  Ldr(result, FieldMemOperand(heap_number, offsetof(HeapNumber, value_)));
 }
 
 inline void MaglevAssembler::Int32ToDouble(DoubleRegister result,
@@ -1274,6 +1282,7 @@ inline void MaglevAssembler::MoveRepr(MachineRepresentation repr, Register dst,
     case MachineRepresentation::kTagged:
     case MachineRepresentation::kTaggedPointer:
     case MachineRepresentation::kTaggedSigned:
+    case MachineRepresentation::kWord64:
       return Ldr(dst, src);
     default:
       UNREACHABLE();
@@ -1288,6 +1297,7 @@ inline void MaglevAssembler::MoveRepr(MachineRepresentation repr,
     case MachineRepresentation::kTagged:
     case MachineRepresentation::kTaggedPointer:
     case MachineRepresentation::kTaggedSigned:
+    case MachineRepresentation::kWord64:
       return Str(src, dst);
     default:
       UNREACHABLE();

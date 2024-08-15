@@ -18,9 +18,9 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
-#include <string_view>
 
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "./fuzztest/internal/logging.h"
 
 namespace fuzztest::internal {
@@ -48,7 +48,7 @@ size_t LLVMFuzzerCustomMutator(uint8_t* data, size_t size, size_t max_size,
       callback,
       "External engine callback is unset while running the FuzzTest mutator.");
   const std::string mutated_data = callback->MutateData(
-      std::string_view(reinterpret_cast<const char*>(data), size), max_size,
+      absl::string_view(reinterpret_cast<const char*>(data), size), max_size,
       seed);
   if (mutated_data.size() > max_size) {
     absl::FPrintF(GetStderr(),
@@ -64,11 +64,13 @@ FuzzTestExternalEngineAdaptor::FuzzTestExternalEngineAdaptor(
     const FuzzTest& test, std::unique_ptr<Driver> fixture_driver)
     : test_(test), fixture_driver_staging_(std::move(fixture_driver)) {}
 
-void FuzzTestExternalEngineAdaptor::RunInUnitTestMode() {
-  GetFuzzerImpl().RunInUnitTestMode();
+void FuzzTestExternalEngineAdaptor::RunInUnitTestMode(
+    const Configuration& configuration) {
+  GetFuzzerImpl().RunInUnitTestMode(configuration);
 }
 
-int FuzzTestExternalEngineAdaptor::RunInFuzzingMode(int* argc, char*** argv) {
+int FuzzTestExternalEngineAdaptor::RunInFuzzingMode(
+    int* argc, char*** argv, const Configuration& configuration) {
   FUZZTEST_INTERNAL_CHECK(&LLVMFuzzerRunDriver,
                           "LibFuzzer Driver API not defined.");
   FUZZTEST_INTERNAL_CHECK(
@@ -88,7 +90,7 @@ int FuzzTestExternalEngineAdaptor::RunInFuzzingMode(int* argc, char*** argv) {
   driver_started = true;
   LLVMFuzzerRunDriver(argc, argv, [](const uint8_t* data, size_t size) -> int {
     GetExternalEngineCallback()->RunOneInputData(
-        std::string_view(reinterpret_cast<const char*>(data), size));
+        absl::string_view(reinterpret_cast<const char*>(data), size));
     return 0;
   });
 
@@ -103,7 +105,7 @@ int FuzzTestExternalEngineAdaptor::RunInFuzzingMode(int* argc, char*** argv) {
 
 // External engine callbacks.
 
-void FuzzTestExternalEngineAdaptor::RunOneInputData(std::string_view data) {
+void FuzzTestExternalEngineAdaptor::RunOneInputData(absl::string_view data) {
   auto& impl = GetFuzzerImpl();
   if (impl.ShouldStop()) {
     FUZZTEST_INTERNAL_CHECK(impl.fixture_driver_ != nullptr,
@@ -119,7 +121,7 @@ void FuzzTestExternalEngineAdaptor::RunOneInputData(std::string_view data) {
   }
 }
 
-std::string FuzzTestExternalEngineAdaptor::MutateData(std::string_view data,
+std::string FuzzTestExternalEngineAdaptor::MutateData(absl::string_view data,
                                                       size_t max_size,
                                                       unsigned int seed) {
   auto& impl = GetFuzzerImpl();

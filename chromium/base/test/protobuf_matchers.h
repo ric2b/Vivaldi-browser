@@ -6,10 +6,11 @@
 #define BASE_TEST_PROTOBUF_MATCHERS_H_
 
 #include <string>
+#include <tuple>
 
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 
-namespace base {
+namespace base::test {
 
 // Matcher that verifies two protobufs contain the same data.
 MATCHER_P(EqualsProto,
@@ -34,6 +35,14 @@ MATCHER_P(EqualsProto,
   return true;
 }
 
-}  // namespace base
+// EqualsProto() implementation for 2-tuple matchers.
+MATCHER(EqualsProto,
+        "Matches if the tuple's proto Message arguments are equal.") {
+  return ::testing::Matcher<decltype(std::get<0>(arg))>(
+             EqualsProto(std::get<1>(arg)))
+      .MatchAndExplain(std::get<0>(arg), result_listener);
+}
+
+}  // namespace base::test
 
 #endif  // BASE_TEST_PROTOBUF_MATCHERS_H_

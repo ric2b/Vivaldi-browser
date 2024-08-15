@@ -4,6 +4,7 @@ static_library("mail_client") {
   sources = [
     "mail_client_backend.cc",
     "mail_client_backend.h",
+    "mail_client_backend_notifier.h",
     "mail_client_database_params.cc",
     "mail_client_database_params.h",
     "mail_client_database.cc",

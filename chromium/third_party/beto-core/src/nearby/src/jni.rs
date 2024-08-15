@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::support::run_cmd_shell;
+use cmd_runner::run_cmd_shell;
 use std::path;
 
 // This has to happen after both boringssl has been built and prepare rust openssl patches has been run.
@@ -20,6 +20,11 @@ pub fn check_ldt_jni(root: &path::Path) -> anyhow::Result<()> {
     for feature in ["opensslbssl", "boringssl"] {
         run_cmd_shell(root, format!("cargo --config .cargo/config-boringssl.toml build -p ldt_np_jni --no-default-features --features={}", feature))?;
     }
+    Ok(())
+}
 
+pub fn run_kotlin_tests(root: &path::Path) -> anyhow::Result<()> {
+    let kotlin_lib_path = root.to_path_buf().join("presence/ldt_np_jni/java/LdtNpJni");
+    run_cmd_shell(&kotlin_lib_path, "./gradlew :test")?;
     Ok(())
 }

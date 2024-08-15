@@ -13,12 +13,13 @@
 // limitations under the License.
 
 #include "nearby_protocol.h"
+#include "np_cpp_test.h"
 #include "shared_test_util.h"
 
 #include "absl/strings/escaping.h"
 #include "gtest/gtest.h"
 
-TEST(ByteBufferTests, ByteBufferMaxLength) {
+TEST_F(NpCppTest, ByteBufferMaxLength) {
   // Each hex byte takes up 2 characters so length 510 string = 255 bytes of hex
   auto str_bytes = generate_hex_string(510);
   auto bytes = absl::HexStringToBytes(str_bytes);
@@ -28,7 +29,7 @@ TEST(ByteBufferTests, ByteBufferMaxLength) {
   ASSERT_EQ(bytes, string);
 }
 
-TEST(ByteBufferTooLarge, ByteBufferInvalidLength) {
+TEST_F(NpCppTest, ByteBufferInvalidLength) {
   // 256 bytes should fail
   auto str_bytes = generate_hex_string(512);
   auto bytes = absl::HexStringToBytes(str_bytes);
@@ -36,26 +37,26 @@ TEST(ByteBufferTooLarge, ByteBufferInvalidLength) {
   ASSERT_FALSE(buffer.ok());
 }
 
-TEST(ByteBufferTests, ByteBufferRoundTrip) {
+TEST_F(NpCppTest, ByteBufferRoundTrip) {
   auto bytes = absl::HexStringToBytes("2003031503");
   auto buffer = nearby_protocol::ByteBuffer<255>::CopyFrom(bytes);
   auto string = buffer.value().ToString();
   ASSERT_EQ(bytes, string);
 }
 
-TEST(ByteBufferTests, ByteBufferPayloadWrongSize) {
+TEST_F(NpCppTest, ByteBufferPayloadWrongSize) {
   auto bytes = absl::HexStringToBytes("1111111111111111111111");
   auto buffer = nearby_protocol::ByteBuffer<10>::CopyFrom(bytes);
   ASSERT_FALSE(buffer.ok());
 }
 
-TEST(ByteBufferTests, ByteBufferEmptyString) {
+TEST_F(NpCppTest, ByteBufferEmptyString) {
   auto bytes = absl::HexStringToBytes("");
   auto buffer = nearby_protocol::ByteBuffer<10>::CopyFrom(bytes);
   ASSERT_TRUE(buffer.ok());
 }
 
-TEST(ByteBufferTests, ByteBufferToVector) {
+TEST_F(NpCppTest, ByteBufferToVector) {
   auto bytes = absl::HexStringToBytes("1234567890");
   auto buffer = nearby_protocol::ByteBuffer<100>::CopyFrom(bytes);
   auto vec = buffer.value().ToVector();
@@ -63,16 +64,19 @@ TEST(ByteBufferTests, ByteBufferToVector) {
   ASSERT_EQ(vec, expected);
 }
 
-TEST(ByteBufferTests, ByteBufferEndToEndPayloadAsString) {
+TEST_F(NpCppTest, ByteBufferEndToEndPayloadAsString) {
   std::string bytes = absl::HexStringToBytes("2003031503");
   auto buffer = nearby_protocol::ByteBuffer<255>::CopyFrom(bytes);
   ASSERT_TRUE(buffer.ok());
 
   nearby_protocol::RawAdvertisementPayload adv(buffer.value());
 
-  auto credential_book = nearby_protocol::CredentialBook::TryCreate();
+  auto credential_slab = nearby_protocol::CredentialSlab::TryCreate().value();
+  auto credential_book =
+      nearby_protocol::CredentialBook::TryCreateFromSlab(credential_slab)
+          .value();
   auto str = nearby_protocol::Deserializer::DeserializeAdvertisement(
-                 adv, credential_book.value())
+                 adv, credential_book)
                  .IntoV1()
                  .TryGetSection(0)
                  .value()

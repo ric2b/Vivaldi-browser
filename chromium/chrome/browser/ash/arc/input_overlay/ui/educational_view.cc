@@ -16,6 +16,7 @@
 #include "chrome/grit/component_extension_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_styles.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
@@ -109,8 +110,8 @@ int GetTitleFontSize(bool portrait_mode) {
 void SetBanner(views::ImageView& image) {
   image.SetImage(ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
       ash::DarkLightModeController::Get()->IsDarkModeEnabled()
-          ? IDS_ARC_INPUT_OVERLAY_ONBOARDING_ILLUSTRATION_DARK_JSON
-          : IDS_ARC_INPUT_OVERLAY_ONBOARDING_ILLUSTRATION_LIGHT_JSON));
+          ? IDR_ARC_INPUT_OVERLAY_ONBOARDING_ILLUSTRATION_DARK_JSON
+          : IDR_ARC_INPUT_OVERLAY_ONBOARDING_ILLUSTRATION_LIGHT_JSON));
 }
 
 }  // namespace
@@ -153,7 +154,7 @@ void EducationalView::Init(const gfx::Size& parent_size) {
   SetBackground(views::CreateThemedRoundedRectBackground(
       ash::kColorAshDialogBackgroundColor, kDialogCornerRadius));
 
-  bool is_dark = ash::DarkLightModeController::Get()->IsDarkModeEnabled();
+  const bool is_dark = ash::DarkLightModeController::Get()->IsDarkModeEnabled();
   const int parent_width = parent_size.width();
   {
     // UI's banner.
@@ -162,10 +163,10 @@ void EducationalView::Init(const gfx::Size& parent_size) {
 
     if (portrait_mode_) {
       // Resize the banner image size proportionally.
-      auto size = banner->CalculatePreferredSize();
-      int width =
+      const auto size = banner->CalculatePreferredSize();
+      const int width =
           GetDialogWidth(parent_width) - GetBorderSides(portrait_mode_) * 2;
-      float ratio = 1.0 * width / size.width();
+      const float ratio = 1.0 * width / size.width();
       banner->SetImageSize(gfx::Size(width, size.height() * ratio));
     }
     banner_ = AddChildView(std::move(banner));
@@ -279,5 +280,8 @@ void EducationalView::AddShadow() {
 void EducationalView::OnAcceptedPressed() {
   display_overlay_controller_->OnEducationalViewDismissed();
 }
+
+BEGIN_METADATA(EducationalView)
+END_METADATA
 
 }  // namespace arc::input_overlay

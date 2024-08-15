@@ -52,13 +52,13 @@ class Device final : public DeviceBase {
   public:
     class Context;
     static ResultOrError<Ref<Device>> Create(AdapterBase* adapter,
-                                             const DeviceDescriptor* descriptor,
+                                             const UnpackedPtr<DeviceDescriptor>& descriptor,
                                              const OpenGLFunctions& functions,
                                              std::unique_ptr<Context> context,
                                              const TogglesState& deviceToggles);
     ~Device() override;
 
-    MaybeError Initialize(const DeviceDescriptor* descriptor);
+    MaybeError Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor);
 
     // Returns all the OpenGL entry points and ensures that the associated
     // Context is current.
@@ -66,11 +66,11 @@ class Device final : public DeviceBase {
 
     const GLFormat& GetGLFormat(const Format& format);
 
-    MaybeError ValidateTextureCanBeWrapped(const TextureDescriptor* descriptor);
-    TextureBase* CreateTextureWrappingEGLImage(const ExternalImageDescriptor* descriptor,
-                                               ::EGLImage image);
-    TextureBase* CreateTextureWrappingGLTexture(const ExternalImageDescriptor* descriptor,
-                                                GLuint texture);
+    MaybeError ValidateTextureCanBeWrapped(const UnpackedPtr<TextureDescriptor>& descriptor);
+    Ref<TextureBase> CreateTextureWrappingEGLImage(const ExternalImageDescriptor* descriptor,
+                                                   ::EGLImage image);
+    Ref<TextureBase> CreateTextureWrappingGLTexture(const ExternalImageDescriptor* descriptor,
+                                                    GLuint texture);
 
     ResultOrError<Ref<CommandBufferBase>> CreateCommandBuffer(
         CommandEncoder* encoder,
@@ -102,7 +102,7 @@ class Device final : public DeviceBase {
 
   private:
     Device(AdapterBase* adapter,
-           const DeviceDescriptor* descriptor,
+           const UnpackedPtr<DeviceDescriptor>& descriptor,
            const OpenGLFunctions& functions,
            std::unique_ptr<Context> context,
            const TogglesState& deviceToggless);
@@ -111,28 +111,30 @@ class Device final : public DeviceBase {
         const BindGroupDescriptor* descriptor) override;
     ResultOrError<Ref<BindGroupLayoutInternalBase>> CreateBindGroupLayoutImpl(
         const BindGroupLayoutDescriptor* descriptor) override;
-    ResultOrError<Ref<BufferBase>> CreateBufferImpl(const BufferDescriptor* descriptor) override;
+    ResultOrError<Ref<BufferBase>> CreateBufferImpl(
+        const UnpackedPtr<BufferDescriptor>& descriptor) override;
     ResultOrError<Ref<PipelineLayoutBase>> CreatePipelineLayoutImpl(
-        const PipelineLayoutDescriptor* descriptor) override;
+        const UnpackedPtr<PipelineLayoutDescriptor>& descriptor) override;
     ResultOrError<Ref<QuerySetBase>> CreateQuerySetImpl(
         const QuerySetDescriptor* descriptor) override;
     ResultOrError<Ref<SamplerBase>> CreateSamplerImpl(const SamplerDescriptor* descriptor) override;
     ResultOrError<Ref<ShaderModuleBase>> CreateShaderModuleImpl(
-        const ShaderModuleDescriptor* descriptor,
+        const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         ShaderModuleParseResult* parseResult,
         OwnedCompilationMessages* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
         const SwapChainDescriptor* descriptor) override;
-    ResultOrError<Ref<TextureBase>> CreateTextureImpl(const TextureDescriptor* descriptor) override;
+    ResultOrError<Ref<TextureBase>> CreateTextureImpl(
+        const UnpackedPtr<TextureDescriptor>& descriptor) override;
     ResultOrError<Ref<TextureViewBase>> CreateTextureViewImpl(
         TextureBase* texture,
         const TextureViewDescriptor* descriptor) override;
     Ref<ComputePipelineBase> CreateUninitializedComputePipelineImpl(
-        const ComputePipelineDescriptor* descriptor) override;
+        const UnpackedPtr<ComputePipelineDescriptor>& descriptor) override;
     Ref<RenderPipelineBase> CreateUninitializedRenderPipelineImpl(
-        const RenderPipelineDescriptor* descriptor) override;
+        const UnpackedPtr<RenderPipelineDescriptor>& descriptor) override;
 
     ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsageImpl(
         const Surface* surface) const override;

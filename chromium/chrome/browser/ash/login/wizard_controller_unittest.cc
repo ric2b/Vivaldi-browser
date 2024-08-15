@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ash/login/wizard_controller.h"
+
 #include <memory>
 #include <utility>
 
@@ -11,13 +13,13 @@
 #include "base/functional/callback.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
-#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "build/config/chromebox_for_meetings/buildflags.h"
+#include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/input_method/input_method_configuration.h"
 #include "chrome/browser/ash/login/enrollment/mock_enrollment_launcher.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/ui/fake_login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
-#include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/ash/net/rollback_network_config/fake_rollback_network_config.h"
 #include "chrome/browser/ash/net/rollback_network_config/rollback_network_config_service.h"
@@ -284,7 +286,7 @@ class WizardControllerTestBase : public ::testing::Test {
   std::unique_ptr<ChromeKeyboardControllerClientTestHelper>
       chrome_keyboard_controller_client_test_helper_;
   ScopedTestingCrosSettings settings_;
-  KioskAppManager kiosk_app_manager_;
+  KioskChromeAppManager kiosk_chrome_app_manager_;
   ScopedStubInstallAttributes scoped_stub_install_attributes_;
   ash::ScopedDeviceSettingsTestHelper device_settings_test_helper_;
   ash::system::ScopedFakeStatisticsProvider statistics_provider_;
@@ -454,8 +456,7 @@ TEST_F(WizardControllerTest, DemoModeOobeFlowEndsOnGaiaScreenAndCompletesOobe) {
 
   PerformUserAction(kActionStartSetup);
 
-  // TODO: handle return value.
-  std::ignore = enrollment_signal.Wait();
+  ASSERT_TRUE(enrollment_signal.Wait());
 
   ASSERT_TRUE(AwaitScreen(kGaiaSigninScreen));
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.h"
+#include "partition_alloc/partition_alloc_base/logging.h"
 
 // TODO(1151236): After finishing copying //base files to PA library, remove
 // defined(BASE_CHECK_H_) from here.
@@ -14,10 +14,10 @@
 #error "logging.h should not include check.h"
 #endif
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/alias.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/immediate_crash.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_base/debug/alias.h"
+#include "partition_alloc/partition_alloc_base/immediate_crash.h"
 
 #include <algorithm>
 
@@ -25,22 +25,19 @@
 
 #include <io.h>
 #include <windows.h>
-// Windows warns on using write().  It prefers _write().
-#define write(fd, buf, count) _write(fd, buf, static_cast<unsigned int>(count))
-// Windows doesn't define STDERR_FILENO.  Define it here.
-#define STDERR_FILENO 2
 
 #endif
 
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #endif
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/posix/eintr_wrapper.h"
+#include "partition_alloc/partition_alloc_base/posix/eintr_wrapper.h"
 
 namespace partition_alloc::internal::logging {
 
@@ -53,8 +50,8 @@ void WriteToStderr(const char* data, size_t length) {
   size_t bytes_written = 0;
   int rv;
   while (bytes_written < length) {
-    rv = PA_HANDLE_EINTR(
-        write(STDERR_FILENO, data + bytes_written, length - bytes_written));
+    rv = WrapEINTR(write)(STDERR_FILENO, data + bytes_written,
+                          length - bytes_written);
     if (rv < 0) {
       // Give up, nothing we can do now.
       break;
@@ -116,8 +113,5 @@ void RawLog(int level, const char* message) {
     }
   }
 }
-
-// This was defined at the beginning of this file.
-#undef write
 
 }  // namespace partition_alloc::internal::logging

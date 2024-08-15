@@ -20,6 +20,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/types/optional_ref.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event_constants.h"
@@ -104,11 +105,11 @@ void SetOverridePref(const ui::Accelerator& accelerator,
 
 AcceleratorModificationData ValueToAcceleratorModificationData(
     const base::Value::Dict& value) {
-  absl::optional<int> keycode = value.FindInt(kAcceleratorKeyCodeKey);
-  absl::optional<int> modifier = value.FindInt(kAcceleratorModifiersKey);
-  absl::optional<int> modification_action =
+  std::optional<int> keycode = value.FindInt(kAcceleratorKeyCodeKey);
+  std::optional<int> modifier = value.FindInt(kAcceleratorModifiersKey);
+  std::optional<int> modification_action =
       value.FindInt(kAcceleratorModificationActionKey);
-  absl::optional<int> key_state = value.FindInt(kAcceleratorKeyStateKey);
+  std::optional<int> key_state = value.FindInt(kAcceleratorKeyStateKey);
   CHECK(keycode.has_value());
   CHECK(modifier.has_value());
   CHECK(modification_action.has_value());
@@ -173,6 +174,11 @@ class AshAcceleratorConfigurationTest : public AshTestBase {
   }
 
  protected:
+  base::optional_ref<const std::vector<ui::Accelerator>>
+  GetAcceleratorsForAction(AcceleratorActionId action_id) {
+    return config_->GetAcceleratorsForAction(action_id);
+  }
+
   base::test::ScopedFeatureList scoped_feature_list_;
   UpdatedAcceleratorsObserver observer_;
   std::unique_ptr<AshAcceleratorConfiguration> config_;
@@ -230,7 +236,9 @@ TEST_F(AshAcceleratorConfigurationTest, DeprecatedAccelerators) {
       {AcceleratorAction::kShowTaskManager,
        /*uma_histogram_name=*/"deprecated.showTaskManager",
        /*notification_message_id=*/1,
-       /*new_shortcut_id=*/2, /*deprecated_enabled=*/true},
+       /*new_shortcut_id=*/2,
+       ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN),
+       /*deprecated_enabled=*/true},
   };
 
   const AcceleratorData test_deprecated_accelerators[] = {
@@ -308,7 +316,9 @@ TEST_F(AshAcceleratorConfigurationTest,
       {AcceleratorAction::kShowTaskManager,
        /*uma_histogram_name=*/"deprecated.showTaskManager",
        /*notification_message_id=*/1,
-       /*new_shortcut_id=*/2, /*deprecated_enabled=*/true},
+       /*new_shortcut_id=*/2,
+       ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN),
+       /*deprecated_enabled=*/true},
   };
 
   const AcceleratorData test_deprecated_accelerators[] = {
@@ -385,7 +395,7 @@ TEST_F(AshAcceleratorConfigurationTest, IsDefaultAccelerator) {
   // AcceleratorAction::kToggleMirrorMode.
   ui::Accelerator expected_default =
       ui::Accelerator(ui::VKEY_ZOOM, ui::EF_CONTROL_DOWN);
-  absl::optional<AcceleratorAction> accelerator_id =
+  std::optional<AcceleratorAction> accelerator_id =
       config_->GetIdForDefaultAccelerator(expected_default);
   EXPECT_TRUE(accelerator_id.has_value());
   EXPECT_EQ(AcceleratorAction::kToggleMirrorMode, accelerator_id.value());
@@ -426,7 +436,7 @@ TEST_F(AshAcceleratorConfigurationTest, MultipleDefaultAccelerators) {
   ui::Accelerator expected_default_2 =
       ui::Accelerator(ui::VKEY_ZOOM, ui::EF_ALT_DOWN);
 
-  absl::optional<AcceleratorAction> accelerator_id =
+  std::optional<AcceleratorAction> accelerator_id =
       config_->GetIdForDefaultAccelerator(expected_default);
   EXPECT_TRUE(accelerator_id.has_value());
   EXPECT_EQ(AcceleratorAction::kToggleMirrorMode, accelerator_id.value());
@@ -465,7 +475,7 @@ TEST_F(AshAcceleratorConfigurationTest, DefaultNotFound) {
   // Verify that Ctrl + U is not a default accelerator in this test set.
   ui::Accelerator fake_default =
       ui::Accelerator(ui::VKEY_U, ui::EF_CONTROL_DOWN);
-  absl::optional<AcceleratorAction> accelerator_id =
+  std::optional<AcceleratorAction> accelerator_id =
       config_->GetIdForDefaultAccelerator(fake_default);
   EXPECT_FALSE(accelerator_id.has_value());
 }
@@ -496,9 +506,10 @@ TEST_F(AshAcceleratorConfigurationTest, GetAcceleratorsFromActionId) {
   for (const auto& data : test_data) {
     std::vector<AcceleratorData> expected =
         id_to_accelerator_data.at(data.action);
-    std::vector<ui::Accelerator> actual =
-        config_->GetAcceleratorsForAction(data.action);
-    ExpectAllAcceleratorsEqual(expected, actual);
+    base::optional_ref<const std::vector<ui::Accelerator>> actual =
+        GetAcceleratorsForAction(data.action);
+    ASSERT_TRUE(actual.has_value());
+    ExpectAllAcceleratorsEqual(expected, *actual);
   }
 }
 
@@ -986,9 +997,10 @@ TEST_F(AshAcceleratorConfigurationTest, AddAcceleratorDefaultConflict) {
   EXPECT_EQ(AcceleratorAction::kSwitchToLastUsedIme, *found_action);
 
   // Confirm that conflicting accelerator was removed.
-  const std::vector<ui::Accelerator>& backward_mru_accelerators =
-      config_->GetAcceleratorsForAction(AcceleratorAction::kCycleBackwardMru);
-  EXPECT_TRUE(backward_mru_accelerators.empty());
+  base::optional_ref<const std::vector<ui::Accelerator>>
+      backward_mru_accelerators =
+          GetAcceleratorsForAction(AcceleratorAction::kCycleBackwardMru);
+  ASSERT_TRUE(backward_mru_accelerators->empty());
 }
 
 // Add accelerator that conflicts with a deprecated accelerator.
@@ -1009,7 +1021,9 @@ TEST_F(AshAcceleratorConfigurationTest, AddAcceleratorDeprecatedConflict) {
       {AcceleratorAction::kShowTaskManager,
        /*uma_histogram_name=*/"deprecated.showTaskManager",
        /*notification_message_id=*/1,
-       /*new_shortcut_id=*/2, /*deprecated_enabled=*/true},
+       /*new_shortcut_id=*/2,
+       ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN),
+       /*deprecated_enabled=*/true},
   };
 
   const AcceleratorData test_deprecated_accelerators[] = {
@@ -1266,9 +1280,12 @@ TEST_F(AshAcceleratorConfigurationTest, RestoreWithDefaultConflicts) {
   EXPECT_EQ(AcceleratorAction::kSwitchToLastUsedIme, *found_action);
 
   // Confirm that conflicting accelerator was removed.
-  const std::vector<ui::Accelerator>& forward_mru_accelerators =
-      config_->GetAcceleratorsForAction(AcceleratorAction::kCycleForwardMru);
-  EXPECT_EQ(1u, forward_mru_accelerators.size());
+  base::optional_ref<const std::vector<ui::Accelerator>>
+      forward_mru_accelerators =
+          GetAcceleratorsForAction(AcceleratorAction::kCycleForwardMru);
+  ASSERT_TRUE(forward_mru_accelerators.has_value());
+
+  EXPECT_EQ(1u, forward_mru_accelerators->size());
 
   // Now restore the default of `kCycleForwardMru`, this will effectively be a
   // no-opt since one of its default is a used by `kSwitchToLastUsedIme`.

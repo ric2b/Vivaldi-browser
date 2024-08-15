@@ -140,7 +140,6 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
   void set_msaa_is_slow(bool msaa_is_slow);
   void set_gpu_rasterization(bool gpu_rasterization);
   void set_avoid_stencil_buffers(bool avoid_stencil_buffers);
-  void set_supports_oop_raster(bool support);
   void set_max_texture_size(int size);
   void set_supports_gpu_memory_buffer_format(gfx::BufferFormat format,
                                              bool support);
@@ -211,7 +210,7 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
   unsigned next_framebuffer_id_ = 1;
   std::unordered_set<unsigned> framebuffer_set_;
   unsigned current_framebuffer_ = 0;
-  std::vector<TestGLES2Interface*> shared_contexts_;
+  std::vector<raw_ptr<TestGLES2Interface, VectorExperimental>> shared_contexts_;
   bool reshape_called_ = false;
   int width_ = 0;
   int height_ = 0;

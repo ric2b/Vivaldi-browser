@@ -10,6 +10,7 @@
 
 #include "build/build_config.h"
 #include "core/fxcrt/fx_string.h"
+#include "core/fxcrt/utf16.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/base/containers/contains.h"
 #include "third_party/base/containers/span.h"
@@ -22,7 +23,7 @@ TEST(WideString, ElementAccess) {
   EXPECT_EQ(L'b', abc[1]);
   EXPECT_EQ(L'c', abc[2]);
 #ifndef NDEBUG
-  EXPECT_DEATH({ abc[4]; }, ".*");
+  EXPECT_DEATH({ abc[4]; }, "");
 #endif
 
   pdfium::span<const wchar_t> abc_span = abc.span();
@@ -52,7 +53,7 @@ TEST(WideString, ElementAccess) {
   EXPECT_EQ(L"abc", abc);
   EXPECT_EQ(L"def", mutable_abc);
 #ifndef NDEBUG
-  EXPECT_DEATH({ mutable_abc.SetAt(3, L'g'); }, ".*");
+  EXPECT_DEATH({ mutable_abc.SetAt(3, L'g'); }, "");
   EXPECT_EQ(L"abc", abc);
 #endif
 }
@@ -1136,6 +1137,137 @@ TEST(WideString, MultiCharReverseIterator) {
   EXPECT_EQ(0, iter - multi_str.rbegin());
 }
 
+TEST(WideString, FromUTF8) {
+  EXPECT_EQ(L"", WideString::FromUTF8(ByteStringView()));
+  EXPECT_EQ(
+      L"x"
+      L"\u0080"
+      L"\u00ff"
+      L"\ud7ff"
+      L"\ue000"
+      L"\uff2c"
+      L"\uffff"
+      L"y",
+      WideString::FromUTF8("x"
+                           "\u0080"
+                           "\u00ff"
+                           "\ud7ff"
+                           "\ue000"
+                           "\uff2c"
+                           "\uffff"
+                           "y"));
+}
+
+TEST(WideString, FromUTF8Supplementary) {
+  EXPECT_EQ(
+      L"\U00010000"
+      L"\U0001f3a8"
+      L"\U0010ffff",
+      WideString::FromUTF8("\U00010000"
+                           "🎨"
+                           "\U0010ffff"));
+}
+
+TEST(WideString, FromUTF8ErrorRecovery) {
+  EXPECT_EQ(L"(A)", WideString::FromUTF8("(\xc2\x41)"))
+      << "Invalid continuation";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\xc2\xc2)"))
+      << "Invalid continuation";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\xc2\xff\x80)"))
+      << "Invalid continuation";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\x80\x80)")) << "Invalid leading";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\xff\x80\x80)")) << "Invalid leading";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\xf8\x80\x80\x80\x80)"))
+      << "Invalid leading";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\xf8\x88\x80\x80\x80)"))
+      << "Invalid leading";
+  EXPECT_EQ(L"()", WideString::FromUTF8("(\xf4\x90\x80\x80)"))
+      << "Code point greater than U+10FFFF";
+}
+
+TEST(WideString, UTF8EncodeDecodeConsistency) {
+  WideString wstr;
+  wstr.Reserve(0x10000);
+  for (char32_t w = 0; w < pdfium::kMinimumSupplementaryCodePoint; ++w) {
+    if (pdfium::IsHighSurrogate(w) || pdfium::IsLowSurrogate(w)) {
+      // Skip UTF-16 surrogates.
+      continue;
+    }
+    wstr += static_cast<wchar_t>(w);
+  }
+  ASSERT_EQ(0xf800u, wstr.GetLength());
+
+  ByteString bstr = FX_UTF8Encode(wstr.AsStringView());
+  WideString wstr2 = WideString::FromUTF8(bstr.AsStringView());
+  EXPECT_EQ(wstr, wstr2);
+}
+
+TEST(WideString, UTF8EncodeDecodeConsistencyUnpairedHighSurrogates) {
+  WideString wstr;
+  wstr.Reserve(0x400);
+  for (wchar_t w = pdfium::kMinimumHighSurrogateCodeUnit;
+       w <= pdfium::kMaximumHighSurrogateCodeUnit; ++w) {
+    wstr += w;
+  }
+  ASSERT_EQ(0x400u, wstr.GetLength());
+
+  ByteString bstr = FX_UTF8Encode(wstr.AsStringView());
+  WideString wstr2 = WideString::FromUTF8(bstr.AsStringView());
+  EXPECT_EQ(wstr, wstr2);
+}
+
+TEST(WideString, UTF8EncodeDecodeConsistencyUnpairedLowSurrogates) {
+  WideString wstr;
+  wstr.Reserve(0x400);
+  for (wchar_t w = pdfium::kMinimumLowSurrogateCodeUnit;
+       w <= pdfium::kMaximumLowSurrogateCodeUnit; ++w) {
+    wstr += w;
+  }
+  ASSERT_EQ(0x400u, wstr.GetLength());
+
+  ByteString bstr = FX_UTF8Encode(wstr.AsStringView());
+  WideString wstr2 = WideString::FromUTF8(bstr.AsStringView());
+  EXPECT_EQ(wstr, wstr2);
+}
+
+TEST(WideString, FromUTF16BE) {
+  struct UTF16BEDecodeCase {
+    ByteString in;
+    WideString out;
+  } const utf16be_decode_cases[] = {
+      {"", L""},
+      {ByteString("\0a\0b\0c", 6), L"abc"},
+      {ByteString("\0a\0b\0c\0\0\0d\0e\0f", 14), WideString(L"abc\0def", 7)},
+      {ByteString(" &", 2), L"…"},
+      {ByteString("\xD8\x3C\xDF\xA8", 4), L"🎨"},
+  };
+
+  for (size_t i = 0; i < std::size(utf16be_decode_cases); ++i) {
+    EXPECT_EQ(WideString::FromUTF16BE(utf16be_decode_cases[i].in.raw_span()),
+              utf16be_decode_cases[i].out)
+        << " for case number " << i;
+  }
+}
+
+TEST(WideString, FromUTF16LE) {
+  struct UTF16LEDecodeCase {
+    ByteString in;
+    WideString out;
+  } const utf16le_decode_cases[] = {
+      {"", L""},
+      {ByteString("a\0b\0c\0", 6), L"abc"},
+      {ByteString("a\0b\0c\0\0\0d\0e\0f\0", 14), WideString(L"abc\0def", 7)},
+      {ByteString("& ", 2), L"…"},
+      {ByteString("\x3C\xD8\xA8\xDF", 4), L"🎨"},
+  };
+
+  for (size_t i = 0; i < std::size(utf16le_decode_cases); ++i) {
+    EXPECT_EQ(WideString::FromUTF16LE(utf16le_decode_cases[i].in.raw_span()),
+              utf16le_decode_cases[i].out)
+        << " for case number " << i;
+  }
+}
+
 TEST(WideString, ToUTF16LE) {
   struct UTF16LEEncodeCase {
     WideString ws;
@@ -1147,6 +1279,7 @@ TEST(WideString, ToUTF16LE) {
       {L"abc\0def", ByteString("a\0b\0c\0\0\0", 8)},
       {L"\xaabb\xccdd", ByteString("\xbb\xaa\xdd\xcc\0\0", 6)},
       {L"\x3132\x6162", ByteString("\x32\x31\x62\x61\0\0", 6)},
+      {L"🎨", ByteString("\x3C\xD8\xA8\xDF\0\0", 6)},
   };
 
   for (size_t i = 0; i < std::size(utf16le_encode_cases); ++i) {
@@ -1319,7 +1452,7 @@ TEST(WideStringView, ElementAccess) {
   EXPECT_EQ(L'b', static_cast<wchar_t>(abc[1]));
   EXPECT_EQ(L'c', static_cast<wchar_t>(abc[2]));
 #ifndef NDEBUG
-  EXPECT_DEATH({ abc[4]; }, ".*");
+  EXPECT_DEATH({ abc[4]; }, "");
 #endif
 }
 

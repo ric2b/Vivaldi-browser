@@ -23,5 +23,4 @@ source of Chrome binaries older than the current stable channel, because:
             bugs that are fixed in later channels, is very heavy.
 
 If you are a developer looking to build an old version to bisect a bug of check
-for a regression, please see the [developers
-page](http://www.chromium.org/developers).
+for a regression, please see the [developers page](/developers).

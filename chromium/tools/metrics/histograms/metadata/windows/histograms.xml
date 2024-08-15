@@ -45,7 +45,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.CetEnabled" enum="BooleanEnabled"
-    expires_after="2024-02-25">
+    expires_after="2024-06-30">
   <owner>ajgo@chromium.org</owner>
   <owner>wfh@chromium.org</owner>
   <summary>
@@ -56,28 +56,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Windows.DragEventsAfterPress" units="events"
-    expires_after="2022-08-01">
-  <obsolete>
-    We stopped emitting this stat on 07/14/22 in crrev.com/c/3761201.
-  </obsolete>
-  <owner>davidbienvenu@chromium.org</owner>
-  <owner>jessemckenna@google.com</owner>
-  <summary>
-    The number of drag events after a press event before we got a mouse move to
-    0, 0 that is more than 200 pixels away from the current cursor position.
-    This will be used to change the detection of spurious 0,0 move move events
-    to a much smaller value (e.g., 20 pixels) but with the addition of a check
-    that we've only received a few mouse move events, once we've determined the
-    distribution of the number of drag events we receive before the 0,0 mouse
-    move events. Recorded in HWNDMessageHandler::HandleMouseEventInternal when
-    we see a mouse drag to 0,0 that is more than 200 pixels from the cursor
-    position.
-  </summary>
-</histogram>
-
 <histogram name="Windows.Enclave.{Type}.Available" enum="BooleanAvailable"
-    expires_after="2024-03-10">
+    expires_after="2024-07-14">
   <owner>ajgo@chromium.org</owner>
   <owner>wfh@chromium.org</owner>
   <summary>
@@ -101,7 +81,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.HasHighResolutionTimeTicks" enum="Boolean"
-    expires_after="2024-02-20">
+    expires_after="2024-06-30">
   <owner>brucedawson@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>
@@ -111,7 +91,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.HighResolutionTimerUsage" units="%"
-    expires_after="2024-03-17">
+    expires_after="2024-05-19">
   <owner>olivierli@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -160,7 +140,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Windows.Launch.TaskbarInstallerPinned" enum="Boolean"
-    expires_after="2024-02-25">
+    expires_after="2024-04-28">
   <owner>davidbienvenu@chromium.org</owner>
   <owner>jessemckenna@google.com</owner>
   <summary>
@@ -168,27 +148,6 @@ chromium-metrics-reviews@google.com.
     the installer. Recorded when Chrome is launched from the taskbar, and the
     install was done after the installer started pinning Chrome to the taskbar
     for Windows 10+.
-  </summary>
-</histogram>
-
-<histogram name="Windows.Menu.Win11Style" enum="BooleanWin11MenuStyle"
-    expires_after="M97">
-  <owner>kylixrd@chromium.org</owner>
-  <owner>robliao@chromium.org</owner>
-  <summary>
-    Indicates whether Windows 11 style menus are used. Recorded on menu
-    configuration initialization.
-  </summary>
-</histogram>
-
-<histogram name="Windows.OOPSelectFileDialog.ProcessError" enum="BooleanError"
-    expires_after="M82">
-  <owner>pmonette@chromium.org</owner>
-  <summary>
-    Indicates whether a connection error occured between the browser and the
-    shell handler process. This is usually caused by a crash in the utility
-    process. This is logged every time SelectFile() function is called and the
-    WinOOPSelectFileDialog feature is enabled.
   </summary>
 </histogram>
 

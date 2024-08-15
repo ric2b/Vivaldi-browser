@@ -5,27 +5,37 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <utility>
+#include <vector>
 
 #include "avif/avif.h"
+#include "avifutil.h"
+#include "fuzztest/fuzztest.h"
+#include "gtest/gtest.h"
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 namespace {
 
 //------------------------------------------------------------------------------
 
-AvifImagePtr CreateAvifImage(size_t width, size_t height, int depth,
-                             avifPixelFormat pixel_format, bool has_alpha,
-                             const uint8_t* samples) {
-  AvifImagePtr image(
-      avifImageCreate(static_cast<uint32_t>(width),
-                      static_cast<uint32_t>(height), depth, pixel_format),
-      avifImageDestroy);
+ImagePtr CreateAvifImage(size_t width, size_t height, int depth,
+                         avifPixelFormat pixel_format, bool has_alpha,
+                         const uint8_t* samples) {
+  ImagePtr image(avifImageCreate(static_cast<uint32_t>(width),
+                                 static_cast<uint32_t>(height), depth,
+                                 pixel_format));
   if (image.get() == nullptr) {
     return image;
   }
-  avifImageAllocatePlanes(image.get(),
-                          has_alpha ? AVIF_PLANES_ALL : AVIF_PLANES_YUV);
+  if (avifImageAllocatePlanes(image.get(),
+                              has_alpha ? AVIF_PLANES_ALL : AVIF_PLANES_YUV) !=
+      AVIF_RESULT_OK) {
+    return nullptr;
+  }
 
   for (avifChannelIndex c :
        {AVIF_CHAN_Y, AVIF_CHAN_U, AVIF_CHAN_V, AVIF_CHAN_A}) {
@@ -45,26 +55,26 @@ AvifImagePtr CreateAvifImage(size_t width, size_t height, int depth,
 
 }  // namespace
 
-AvifImagePtr CreateAvifImage8b(size_t width, size_t height,
-                               avifPixelFormat pixel_format, bool has_alpha,
-                               const std::vector<uint8_t>& samples) {
+ImagePtr CreateAvifImage8b(size_t width, size_t height,
+                           avifPixelFormat pixel_format, bool has_alpha,
+                           const std::vector<uint8_t>& samples) {
   return CreateAvifImage(width, height, 8, pixel_format, has_alpha,
                          samples.data());
 }
 
-AvifImagePtr CreateAvifImage16b(size_t width, size_t height, int depth,
-                                avifPixelFormat pixel_format, bool has_alpha,
-                                const std::vector<uint16_t>& samples) {
+ImagePtr CreateAvifImage16b(size_t width, size_t height, int depth,
+                            avifPixelFormat pixel_format, bool has_alpha,
+                            const std::vector<uint16_t>& samples) {
   return CreateAvifImage(width, height, depth, pixel_format, has_alpha,
                          reinterpret_cast<const uint8_t*>(samples.data()));
 }
 
-AvifEncoderPtr CreateAvifEncoder(avifCodecChoice codec_choice, int max_threads,
-                                 int min_quantizer, int max_quantizer,
-                                 int min_quantizer_alpha,
-                                 int max_quantizer_alpha, int tile_rows_log2,
-                                 int tile_cols_log2, int speed) {
-  AvifEncoderPtr encoder(avifEncoderCreate(), avifEncoderDestroy);
+EncoderPtr CreateAvifEncoder(avifCodecChoice codec_choice, int max_threads,
+                             int min_quantizer, int max_quantizer,
+                             int min_quantizer_alpha, int max_quantizer_alpha,
+                             int tile_rows_log2, int tile_cols_log2,
+                             int speed) {
+  EncoderPtr encoder(avifEncoderCreate());
   if (encoder.get() == nullptr) {
     return encoder;
   }
@@ -83,15 +93,15 @@ AvifEncoderPtr CreateAvifEncoder(avifCodecChoice codec_choice, int max_threads,
   return encoder;
 }
 
-AvifDecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
-                                 avifDecoderSource requested_source,
-                                 bool allow_progressive, bool allow_incremental,
-                                 bool ignore_exif, bool ignore_xmp,
-                                 uint32_t image_size_limit,
-                                 uint32_t image_dimension_limit,
-                                 uint32_t image_count_limit,
-                                 avifStrictFlags strict_flags) {
-  AvifDecoderPtr decoder(avifDecoderCreate(), avifDecoderDestroy);
+DecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
+                             avifDecoderSource requested_source,
+                             bool allow_progressive, bool allow_incremental,
+                             bool ignore_exif, bool ignore_xmp,
+                             uint32_t image_size_limit,
+                             uint32_t image_dimension_limit,
+                             uint32_t image_count_limit,
+                             avifStrictFlags strict_flags) {
+  DecoderPtr decoder(avifDecoderCreate());
   if (decoder.get() == nullptr) {
     return decoder;
   }
@@ -109,9 +119,20 @@ AvifDecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
   return decoder;
 }
 
-AvifImagePtr AvifImageToUniquePtr(avifImage* image) {
-  return AvifImagePtr(image, avifImageDestroy);
+ImagePtr AvifImageToUniquePtr(avifImage* image) { return ImagePtr(image); }
+
+#if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
+DecoderPtr AddGainMapOptionsToDecoder(DecoderPtr decoder,
+                                      bool enable_parsing_gain_map_metadata,
+                                      bool enable_decoding_gain_map) {
+  decoder->enableParsingGainMapMetadata = enable_parsing_gain_map_metadata;
+  decoder->enableDecodingGainMap = enable_decoding_gain_map;
+  // Do not fuzz 'ignoreColorAndAlpha' since most tests assume that if the
+  // file/buffer is successfully decoded, then the main image was decoded, which
+  // is no longer the case when this option is on.
+  return decoder;
 }
+#endif
 
 //------------------------------------------------------------------------------
 
@@ -171,37 +192,82 @@ std::vector<uint8_t> GetWhiteSinglePixelAvif() {
 }
 
 //------------------------------------------------------------------------------
+// Environment setup
+
+namespace {
+class Environment : public ::testing::Environment {
+ public:
+  Environment(const char* name, const char* value)
+      : name_(name), value_(value) {}
+  void SetUp() override { setenv(name_, value_, 1); }
+
+ private:
+  const char* name_;
+  const char* value_;
+};
+}  // namespace
+
+::testing::Environment* SetEnv(const char* name, const char* value) {
+  return ::testing::AddGlobalTestEnvironment(new Environment(name, value));
+}
+
+//------------------------------------------------------------------------------
+
+std::vector<std::string> GetSeedDataDirs() {
+  const char* var = std::getenv("TEST_DATA_DIRS");
+  std::vector<std::string> res;
+  if (var == nullptr || *var == 0) return res;
+  const char* var_start = var;
+  while (true) {
+    if (*var == 0 || *var == ';') {
+      res.push_back(std::string(var_start, var - var_start));
+      if (*var == 0) break;
+      var_start = var + 1;
+    }
+    ++var;
+  }
+  return res;
+}
 
 std::vector<std::string> GetTestImagesContents(
     size_t max_file_size, const std::vector<avifAppFileFormat>& image_formats) {
   // Use an environment variable to get the test data directory because
   // fuzztest seeds are created before the main() function is called, so the
   // test has no chance to parse command line arguments.
-  const char* const test_data_dir = std::getenv("TEST_DATA_DIR");
-  if (test_data_dir == nullptr) {
-    // Do not fail, this can happen in normal circumstances when calling
-    // gtest_discover_tests() in cmake.
-    std::cout << "TEST_DATA_DIR not set, returning an empty seed set\n";
+  const std::vector<std::string> test_data_dirs = GetSeedDataDirs();
+  if (test_data_dirs.empty()) {
+    // Only a warning because this can happen when running the binary with
+    // --list_fuzz_tests (such as with gtest_discover_tests() in cmake).
+    std::cerr << "WARNING: TEST_DATA_DIRS env variable not set, unable to read "
+                 "seed files";
     return {};
   }
 
-  std::cout << "Reading seeds from " << test_data_dir << "\n";
-  auto tuple_vector = fuzztest::ReadFilesFromDirectory(test_data_dir);
   std::vector<std::string> seeds;
-  seeds.reserve(tuple_vector.size());
-  for (auto& [file_content] : tuple_vector) {
-    if (file_content.size() > max_file_size) continue;
-    if (!image_formats.empty()) {
-      const avifAppFileFormat format = avifGuessBufferFileFormat(
-          reinterpret_cast<const uint8_t*>(file_content.data()),
-          file_content.size());
-      if (std::find(image_formats.begin(), image_formats.end(), format) ==
-          image_formats.end()) {
-        continue;
+  for (const std::string& test_data_dir : test_data_dirs) {
+    std::cout << "Reading seeds from " << test_data_dir
+              << " (non recursively)\n";
+    auto tuple_vector = fuzztest::ReadFilesFromDirectory(test_data_dir);
+    seeds.reserve(tuple_vector.size());
+    for (auto& [file_content] : tuple_vector) {
+      if (file_content.size() > max_file_size) continue;
+      if (!image_formats.empty()) {
+        const avifAppFileFormat format = avifGuessBufferFileFormat(
+            reinterpret_cast<const uint8_t*>(file_content.data()),
+            file_content.size());
+        if (std::find(image_formats.begin(), image_formats.end(), format) ==
+            image_formats.end()) {
+          continue;
+        }
       }
-    }
 
-    seeds.push_back(std::move(file_content));
+      seeds.push_back(std::move(file_content));
+    }
+  }
+  if (seeds.empty()) {
+    std::cerr << "ERROR: no files found that match the given file size and "
+                 "format criteria\n";
+    std::abort();
   }
   std::cout << "Returning " << seeds.size() << " seed images\n";
   return seeds;
@@ -210,4 +276,4 @@ std::vector<std::string> GetTestImagesContents(
 //------------------------------------------------------------------------------
 
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif

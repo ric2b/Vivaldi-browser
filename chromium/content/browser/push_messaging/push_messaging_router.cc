@@ -34,9 +34,13 @@ using ServiceWorkerStartCallback =
 
 DevToolsBackgroundServicesContextImpl* GetDevTools(
     const ServiceWorkerContextWrapper& service_worker_context) {
-  return static_cast<DevToolsBackgroundServicesContextImpl*>(
-      service_worker_context.storage_partition()
-          ->GetDevToolsBackgroundServicesContext());
+  auto* storage_partition = service_worker_context.storage_partition();
+  // `storage_partition` will be null of the associated profile was deleted,
+  // which can happen if the last browser window for that profile was closed.
+  return storage_partition
+             ? static_cast<DevToolsBackgroundServicesContextImpl*>(
+                   storage_partition->GetDevToolsBackgroundServicesContext())
+             : nullptr;
 }
 
 void RunPushEventCallback(
@@ -118,7 +122,7 @@ void PushMessagingRouter::DeliverMessage(
     const GURL& origin,
     int64_t service_worker_registration_id,
     const std::string& message_id,
-    absl::optional<std::string> payload,
+    std::optional<std::string> payload,
     PushEventCallback deliver_message_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StartServiceWorkerForDispatch(
@@ -131,7 +135,7 @@ void PushMessagingRouter::DeliverMessage(
 // static
 void PushMessagingRouter::DeliverMessageToWorker(
     const std::string& message_id,
-    absl::optional<std::string> payload,
+    std::optional<std::string> payload,
     PushEventCallback deliver_message_callback,
     scoped_refptr<ServiceWorkerVersion> service_worker,
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
@@ -170,9 +174,8 @@ void PushMessagingRouter::DeliverMessageToWorker(
 
   auto* devtools_context =
       GetDevTools(CHECK_DEREF(service_worker_context.get()));
-  CHECK(devtools_context);
-  if (devtools_context->IsRecording(
-          DevToolsBackgroundService::kPushMessaging)) {
+  if (devtools_context && devtools_context->IsRecording(
+                              DevToolsBackgroundService::kPushMessaging)) {
     std::map<std::string, std::string> event_metadata;
     if (payload)
       event_metadata["Payload"] = *payload;
@@ -239,8 +242,8 @@ void PushMessagingRouter::DeliverMessageEnd(
 
   auto* devtools_context =
       GetDevTools(CHECK_DEREF(service_worker_context.get()));
-  CHECK(devtools_context);
-  if (devtools_context->IsRecording(
+  if (devtools_context &&
+      devtools_context->IsRecording(
           DevToolsBackgroundService::kPushMessaging) &&
       push_event_status !=
           blink::mojom::PushEventStatus::SERVICE_WORKER_ERROR) {

@@ -1160,7 +1160,7 @@ mojo::OptionalAsPointer<const media::internal::StatusData> StructTraits<
 
   CHECK(input.data_ || input.is_ok());
 
-  return MakeOptionalAsPointer(input.data_.get());
+  return mojo::OptionalAsPointer(input.data_.get());
 }
 
 // static
@@ -1625,6 +1625,21 @@ bool StructTraits<media::stable::mojom::VideoFrameMetadataDataView,
       "chromeos-gfx-video@google.com.");
 
   return input.hw_protected;
+}
+
+// static
+bool StructTraits<media::stable::mojom::VideoFrameMetadataDataView,
+                  media::VideoFrameMetadata>::
+    needs_detiling(const media::VideoFrameMetadata& input) {
+  static_assert(
+      std::is_same<decltype(::media::VideoFrameMetadata::needs_detiling),
+                   decltype(media::stable::mojom::VideoFrameMetadata::
+                                needs_detiling)>::value,
+      "Unexpected type for media::VideoFrameMetadata::needs_detiling. If you "
+      "need to change this assertion, please contact "
+      "chromeos-gfx-video@google.com.");
+
+  return input.needs_detiling;
 }
 
 // static

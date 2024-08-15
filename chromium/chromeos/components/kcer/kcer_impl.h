@@ -84,6 +84,11 @@ class COMPONENT_EXPORT(KCER) KcerImpl : public Kcer {
   void GetAvailableTokens(GetAvailableTokensCallback callback) override;
   void GetTokenInfo(Token token, GetTokenInfoCallback callback) override;
   void GetKeyInfo(PrivateKeyHandle key, GetKeyInfoCallback callback) override;
+  void GetKeyPermissions(PrivateKeyHandle key,
+                         GetKeyPermissionsCallback callback) override;
+  void GetCertProvisioningProfileId(
+      PrivateKeyHandle key,
+      GetCertProvisioningProfileIdCallback callback) override;
   void SetKeyNickname(PrivateKeyHandle key,
                       std::string nickname,
                       StatusCallback callback) override;
@@ -106,7 +111,7 @@ class COMPONENT_EXPORT(KCER) KcerImpl : public Kcer {
   void FindKeyToken(
       bool allow_guessing,
       PrivateKeyHandle key,
-      base::OnceCallback<void(base::expected<absl::optional<Token>, Error>)>
+      base::OnceCallback<void(base::expected<std::optional<Token>, Error>)>
           callback);
 
   // Attempts to find the token for the `key` (guessing is allowed). Returns a
@@ -119,7 +124,7 @@ class COMPONENT_EXPORT(KCER) KcerImpl : public Kcer {
       PrivateKeyHandle key,
       base::OnceCallback<void(base::expected<PrivateKeyHandle, Error>)>
           callback,
-      base::expected<absl::optional<Token>, Error> find_key_result);
+      base::expected<std::optional<Token>, Error> find_key_result);
 
   void RemoveKeyAndCertsWithToken(
       StatusCallback callback,
@@ -127,7 +132,7 @@ class COMPONENT_EXPORT(KCER) KcerImpl : public Kcer {
 
   void DoesPrivateKeyExistWithToken(
       DoesKeyExistCallback callback,
-      base::expected<absl::optional<Token>, Error> find_key_result);
+      base::expected<std::optional<Token>, Error> find_key_result);
 
   void SignWithToken(SigningScheme signing_scheme,
                      DataToSign data,
@@ -143,6 +148,14 @@ class COMPONENT_EXPORT(KCER) KcerImpl : public Kcer {
 
   void GetKeyInfoWithToken(
       GetKeyInfoCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void GetKeyPermissionsWithToken(
+      GetKeyPermissionsCallback callback,
+      base::expected<PrivateKeyHandle, Error> key_or_error);
+
+  void GetCertProvisioningProfileIdWithToken(
+      GetCertProvisioningProfileIdCallback callback,
       base::expected<PrivateKeyHandle, Error> key_or_error);
 
   void SetKeyNicknameWithToken(

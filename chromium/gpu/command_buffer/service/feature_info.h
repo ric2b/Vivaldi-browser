@@ -89,7 +89,6 @@ class GPU_GLES2_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_discard_framebuffer = false;
     bool angle_depth_texture = false;
     bool is_swiftshader_for_webgl = false;
-    bool chromium_texture_filtering_hint = false;
     bool angle_texture_usage = false;
     bool ext_texture_storage = false;
     bool blend_equation_advanced = false;
@@ -97,7 +96,6 @@ class GPU_GLES2_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_texture_rg = false;
     bool ext_texture_norm16 = false;
     bool chromium_image_ycbcr_420v = false;
-    bool chromium_image_ycbcr_422 = false;
     bool chromium_image_ar30 = false;
     bool chromium_image_ab30 = false;
     bool chromium_image_ycbcr_p010 = false;

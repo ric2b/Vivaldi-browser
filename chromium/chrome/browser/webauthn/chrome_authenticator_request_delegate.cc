@@ -28,7 +28,7 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -38,7 +38,6 @@
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/browser/webauthn/cablev2_devices.h"
-#include "chrome/browser/webauthn/chrome_authenticator_request_delegate_mac.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "chrome/browser/webauthn/webauthn_switches.h"
@@ -50,7 +49,7 @@
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/security_state/core/security_state.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/features.h"
 #include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/user_prefs/user_prefs.h"
@@ -70,14 +69,20 @@
 #include "device/fido/fido_types.h"
 #include "device/fido/public_key_credential_descriptor.h"
 #include "device/fido/public_key_credential_user_entity.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/permissions/permissions_data.h"
+#include "google_apis/gaia/gaia_constants.h"
 #include "net/base/url_util.h"
 #include "third_party/icu/source/common/unicode/locid.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/views/widget/widget.h"
+#include "url/url_util.h"
 
 #if BUILDFLAG(IS_MAC)
+#include "chrome/browser/webauthn/chrome_authenticator_request_delegate_mac.h"
 #include "device/fido/mac/authenticator.h"
 #include "device/fido/mac/credential_metadata.h"
 #endif
@@ -154,6 +159,70 @@ void FilterGoogleAuthPasskeys(
   });
 }
 
+// Returns true if |extension| is allowed to create and assert |rp_id|.
+bool ExtensionCanAssertRpId(const extensions::Extension& extension,
+                            const std::string& rp_id) {
+  // Extensions are always allowed to assert their own extension identifier.
+  // This has special handling in
+  // ChromeWebAuthenticationDelegate::MaybeGetRelyingPartyIdOverride, the RP ID
+  // will be prefixed with the extension scheme to isolate it from web origins.
+  if (extension.id() == rp_id) {
+    return true;
+  }
+  if (!base::FeatureList::IsEnabled(
+          device::kAllowExtensionsToSetWebAuthnRpIds)) {
+    return false;
+  }
+
+  // Extensions may not claim eTLDs as RP IDs, even if WebAuthn does not
+  // forbid origins from doing so if they are eTLDs themselves.
+  if (!net::registry_controlled_domains::HostHasRegistryControlledDomain(
+          base::TrimString(rp_id, ".", base::TrimPositions::TRIM_TRAILING),
+          net::registry_controlled_domains::INCLUDE_UNKNOWN_REGISTRIES,
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES) &&
+      !net::HostStringIsLocalhost(rp_id)) {
+    return false;
+  }
+
+  // An extension should be able to assert a WebAuthn RP ID if it has host
+  // permissions over any host that can assert that RP ID. This code duplicates
+  // some of the logic on content/public/browser/webauthn_security_utils.h.
+  // https://w3c.github.io/webauthn/#relying-party-identifier
+  for (const URLPattern& pattern :
+       extension.permissions_data()->active_permissions().explicit_hosts()) {
+    // Only https hosts and localhost are allowed to assert RP IDs. By design,
+    // this means extensions cannot claim RP IDs for other extensions.
+    if (!pattern.MatchesScheme(url::kHttpsScheme) &&
+        !(pattern.MatchesScheme(url::kHttpScheme) &&
+          net::HostStringIsLocalhost(pattern.host()))) {
+      continue;
+    }
+    // IP hosts are not allowed to assert RP IDs.
+    if (url::HostIsIPAddress(pattern.host())) {
+      continue;
+    }
+    // If the pattern matches the RP ID, then it is allowed to assert it.
+    // Pattern                   RP ID                     Allowed?
+    // *.com                     example.com               Yes
+    // example.com               example.com               Yes
+    // *.example.com             subdomain.example.com     Yes
+    if (pattern.MatchesHost(rp_id)) {
+      return true;
+    }
+    // If the pattern matchens any valid subdomain of the RP ID, then it is
+    // allowed to assert it, since subdomains can assert parent components up to
+    // eTLD+1 on WebAuthn.
+    // Pattern                   RP ID                     Allowed?
+    // subdomain.example.com     example.com               Yes
+    // *.subdomain.example.com   example.com               Yes
+    // example.com               subdomain.example.com     No
+    if (url::DomainIs(pattern.host(), rp_id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 #if BUILDFLAG(IS_MAC)
 const char kWebAuthnTouchIdMetadataSecretPrefName[] =
     "webauthn.touchid.metadata_secret";
@@ -223,18 +292,25 @@ class CableLinkingEventHandler : public ProfileObserver {
 
 ChromeWebAuthenticationDelegate::~ChromeWebAuthenticationDelegate() = default;
 
-#if !BUILDFLAG(IS_ANDROID)
-
 bool ChromeWebAuthenticationDelegate::
     OverrideCallerOriginAndRelyingPartyIdValidation(
         content::BrowserContext* browser_context,
         const url::Origin& caller_origin,
         const std::string& relying_party_id) {
   // Allow chrome-extensions:// origins to make WebAuthn requests.
-  // `MaybeGetRelyingPartyId` will override the RP ID to use when processing
-  // requests from extensions.
-  return caller_origin.scheme() == extensions::kExtensionScheme &&
-         caller_origin.host() == relying_party_id;
+  // `MaybeGetRelyingPartyId` will override the RP ID if it matches the
+  // extension origin.
+  if (caller_origin.scheme() != extensions::kExtensionScheme) {
+    return false;
+  }
+  const extensions::Extension* extension =
+      extensions::ExtensionRegistry::Get(browser_context)
+          ->enabled_extensions()
+          .GetByID(caller_origin.host());
+  if (!extension) {
+    return false;
+  }
+  return ExtensionCanAssertRpId(*extension, relying_party_id);
 }
 
 bool ChromeWebAuthenticationDelegate::OriginMayUseRemoteDesktopClientOverride(
@@ -285,49 +361,20 @@ bool ChromeWebAuthenticationDelegate::OriginMayUseRemoteDesktopClientOverride(
   return caller_origin == cmdline_allowed_origin;
 }
 
-bool ChromeWebAuthenticationDelegate::IsSecurityLevelAcceptableForWebAuthn(
-    content::RenderFrameHost* rfh,
-    const url::Origin& caller_origin) {
-  const Profile* profile =
-      Profile::FromBrowserContext(rfh->GetBrowserContext());
-  if (profile->GetPrefs()->GetBoolean(
-          webauthn::pref_names::kAllowWithBrokenCerts)) {
-    return true;
-  }
-  if (caller_origin.scheme() == extensions::kExtensionScheme) {
-    return true;
-  }
-  if (net::IsLocalhost(caller_origin.GetURL())) {
-    return true;
-  }
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(rfh);
-  SecurityStateTabHelper::CreateForWebContents(web_contents);
-  SecurityStateTabHelper* helper =
-      SecurityStateTabHelper::FromWebContents(web_contents);
-  security_state::SecurityLevel security_level = helper->GetSecurityLevel();
-  return security_level == security_state::SecurityLevel::SECURE ||
-         security_level ==
-             security_state::SecurityLevel::SECURE_WITH_POLICY_INSTALLED_CERT ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kIgnoreCertificateErrors);
-}
-
-absl::optional<std::string>
+std::optional<std::string>
 ChromeWebAuthenticationDelegate::MaybeGetRelyingPartyIdOverride(
     const std::string& claimed_relying_party_id,
     const url::Origin& caller_origin) {
-  // Otherwise, allow extensions to use WebAuthn and map their origins
-  // directly to RP IDs.
-  if (caller_origin.scheme() == extensions::kExtensionScheme) {
-    // `OverrideCallerOriginAndRelyingPartyIdValidation' ensures an extension
-    // must only use the extension identifier as the RP ID, no flexibility is
-    // permitted. When interacting with authenticators, however, we use the
-    // whole origin to avoid collisions with the RP ID space for HTTPS origins.
+  // Extensions may claim their origin as an RP ID. In that case, we use the
+  // whole origin to avoid collisions with the RP ID space for HTTPS origins.
+  // Extensions may not claim other extensions RP IDs, even if they have host
+  // permissions on them.
+  if (caller_origin.scheme() == extensions::kExtensionScheme &&
+      claimed_relying_party_id == caller_origin.host()) {
     return caller_origin.Serialize();
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool ChromeWebAuthenticationDelegate::ShouldPermitIndividualAttestation(
@@ -354,11 +401,11 @@ bool ChromeWebAuthenticationDelegate::IsFocused(
   return web_contents->GetVisibility() == content::Visibility::VISIBLE;
 }
 
-absl::optional<bool> ChromeWebAuthenticationDelegate::
+std::optional<bool> ChromeWebAuthenticationDelegate::
     IsUserVerifyingPlatformAuthenticatorAvailableOverride(
         content::RenderFrameHost* render_frame_host) {
   // If the testing API is active, its override takes precedence.
-  absl::optional<bool> testing_api_override =
+  std::optional<bool> testing_api_override =
       content::WebAuthenticationDelegate::
           IsUserVerifyingPlatformAuthenticatorAvailableOverride(
               render_frame_host);
@@ -368,13 +415,19 @@ absl::optional<bool> ChromeWebAuthenticationDelegate::
 
   // Chrome disables platform authenticators is Guest sessions. They may be
   // available (behind an additional interstitial) in Incognito mode.
-  Profile* profile =
-      Profile::FromBrowserContext(render_frame_host->GetBrowserContext());
+  auto* browser_context = render_frame_host->GetBrowserContext();
+  Profile* profile = Profile::FromBrowserContext(browser_context);
   if (profile->IsGuestSession()) {
     return false;
   }
 
-  return absl::nullopt;
+  // The cloud enclave authenticator counts as a UVPA, regardless of what the
+  // underlying platform offers.
+  if (IsEnclaveAuthenticatorAvailable(browser_context)) {
+    return true;
+  }
+
+  return std::nullopt;
 }
 
 content::WebAuthenticationRequestProxy*
@@ -385,8 +438,6 @@ ChromeWebAuthenticationDelegate::MaybeGetRequestProxy(
       Profile::FromBrowserContext(browser_context));
   return service && service->IsActive(caller_origin) ? service : nullptr;
 }
-
-#endif  // !IS_ANDROID
 
 #if BUILDFLAG(IS_MAC)
 // static
@@ -411,7 +462,7 @@ ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfigForProfile(
       .metadata_secret = std::move(metadata_secret)};
 }
 
-absl::optional<ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfig>
+std::optional<ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfig>
 ChromeWebAuthenticationDelegate::GetTouchIdAuthenticatorConfig(
     content::BrowserContext* browser_context) {
   return TouchIdAuthenticatorConfigForProfile(
@@ -430,6 +481,20 @@ ChromeWebAuthenticationDelegate::GetGenerateRequestIdCallback(
       ->GetRegisterCallback(window);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+bool ChromeWebAuthenticationDelegate::IsEnclaveAuthenticatorAvailable(
+    content::BrowserContext* browser_context) {
+  // `browser_context` is currently unused but will be needed to look up
+  // whether the current profile/device is registered with the authenticator.
+#if BUILDFLAG(IS_CHROMEOS)
+  // Enclave service authenticators are not needed for Chrome OS.
+  return false;
+#else
+  // TODO(https://crbug.com/1459620): This also has to be conditional on device
+  // registration with the enclave, when implemented.
+  return base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator);
+#endif
+}
 
 // ---------------------------------------------------------------------
 // ChromeAuthenticatorRequestDelegate
@@ -464,7 +529,7 @@ void ChromeAuthenticatorRequestDelegate::RegisterProfilePrefs(
           // we're still registering them. Thus we assume that they are not.
           /*is_active_profile_authenticator_user=*/false,
           IsICloudDriveEnabled(),
-          /*request_is_for_google_com=*/false, /*preference=*/absl::nullopt));
+          /*request_is_for_google_com=*/false, /*preference=*/std::nullopt));
 #endif
   cablev2::RegisterProfilePrefs(registry);
 }
@@ -649,17 +714,20 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
     const std::string& rp_id,
     RequestSource request_source,
     device::FidoRequestType request_type,
-    absl::optional<device::ResidentKeyRequirement> resident_key_requirement,
+    std::optional<device::ResidentKeyRequirement> resident_key_requirement,
     base::span<const device::CableDiscoveryData> pairings_from_extension,
+    bool is_enclave_authenticator_available,
     device::FidoDiscoveryFactory* discovery_factory) {
   DCHECK(request_type == device::FidoRequestType::kGetAssertion ||
          resident_key_requirement.has_value());
 
+  is_enclave_authenticator_available_ = is_enclave_authenticator_available;
+  dialog_model_->set_is_enclave_authenticator_available(
+      is_enclave_authenticator_available);
+
   // Without the UI enabled, discoveries like caBLE, Android AOA, iCloud
   // keychain, and the enclave, don't make sense.
-  if (base::FeatureList::IsEnabled(
-          device::kWebAuthnRequireUIForComplexDiscoveries) &&
-      disable_ui_) {
+  if (disable_ui_) {
     return;
   }
 
@@ -751,9 +819,9 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
             device::ResidentKeyRequirement::kDiscouraged) ||
        base::FeatureList::IsEnabled(device::kWebAuthCableExtensionAnywhere));
 
-  absl::optional<std::array<uint8_t, device::cablev2::kQRKeySize>>
+  std::optional<std::array<uint8_t, device::cablev2::kQRKeySize>>
       qr_generator_key;
-  absl::optional<std::string> qr_string;
+  std::optional<std::string> qr_string;
   if (non_extension_cablev2_enabled || cablev2_extension_provided) {
     // A QR key is generated for all caBLEv2 cases but whether the QR code is
     // displayed is up to the UI.
@@ -776,7 +844,7 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
   }
 
   if (non_extension_cablev2_enabled || cablev2_extension_provided ||
-      base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator)) {
+      is_enclave_authenticator_available_) {
     if (SystemNetworkContextManager::GetInstance()) {
       discovery_factory->set_network_context(
           SystemNetworkContextManager::GetInstance()->GetContext());
@@ -793,7 +861,7 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
       l10n_util::GetStringUTF8(IDS_WEBAUTHN_CABLEV2_AOA_REQUEST_DESCRIPTION));
 
   if (cable_extension_accepted || non_extension_cablev2_enabled) {
-    absl::optional<bool> extension_is_v2;
+    std::optional<bool> extension_is_v2;
     if (cable_extension_provided) {
       extension_is_v2 = cablev2_extension_provided;
     }
@@ -805,17 +873,25 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
   }
 
 #if BUILDFLAG(IS_MAC)
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(GetRenderFrameHost());
-  BrowserWindow* browser_window =
-      BrowserWindow::FindBrowserWindowWithWebContents(web_contents);
-  if (browser_window) {
-    discovery_factory->set_nswindow(reinterpret_cast<uintptr_t>(
-        browser_window->GetNativeWindow().GetNativeNSWindow()));
+  {
+    content::WebContents* web_contents =
+        content::WebContents::FromRenderFrameHost(GetRenderFrameHost());
+    // Not all contexts in which this code runs have a BrowserWindow.
+    // Notably the dialog containing a WebContents that is used for signing
+    // into a new profile does not. Thus the NSWindow is fetched more directly.
+    const views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(
+        web_contents->GetNativeView());
+    if (widget) {
+      const gfx::NativeWindow window = widget->GetNativeWindow();
+      if (window) {
+        discovery_factory->set_nswindow(
+            reinterpret_cast<uintptr_t>(window.GetNativeNSWindow()));
+      }
+    }
   }
 #endif
 
-  if (EnclaveAuthenticatorAvailable() &&
+  if (is_enclave_authenticator_available_ &&
       request_type == device::FidoRequestType::kGetAssertion) {
     ConfigureEnclaveDiscovery(rp_id, discovery_factory);
   }
@@ -826,6 +902,11 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
 #if BUILDFLAG(IS_MAC)
   ConfigureICloudKeychain(request_source, rp_id);
 #endif
+}
+
+void ChromeAuthenticatorRequestDelegate::SetHints(
+    const AuthenticatorRequestClientDelegate::Hints& hints) {
+  dialog_model_->SetHints(hints);
 }
 
 void ChromeAuthenticatorRequestDelegate::SelectAccount(
@@ -905,7 +986,7 @@ void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
   }
   if (base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials) &&
       base::FeatureList::IsEnabled(device::kWebAuthnNewPasskeyUI) &&
-      (can_use_synced_phone_passkeys_ || EnclaveAuthenticatorAvailable()) &&
+      (can_use_synced_phone_passkeys_ || is_enclave_authenticator_available_) &&
       !IsVirtualEnvironmentEnabled()) {
     GetPhoneContactableGpmPasskeysForRpId(&data.recognized_credentials);
   }
@@ -1110,10 +1191,6 @@ void ChromeAuthenticatorRequestDelegate::OnInvalidatedCablePairing(
 
 void ChromeAuthenticatorRequestDelegate::OnCableEvent(
     device::cablev2::Event event) {
-  if (!base::FeatureList::IsEnabled(device::kWebAuthnNewHybridUI)) {
-    return;
-  }
-
   if (event == device::cablev2::Event::kReady) {
     cable_device_ready_ = true;
   }
@@ -1127,7 +1204,7 @@ void ChromeAuthenticatorRequestDelegate::GetPhoneContactableGpmPasskeysForRpId(
       PasskeyModelFactory::GetInstance()->GetForProfile(
           Profile::FromBrowserContext(GetBrowserContext()));
   CHECK(passkey_model);
-  device::AuthenticatorType type = EnclaveAuthenticatorAvailable()
+  device::AuthenticatorType type = is_enclave_authenticator_available_
                                        ? device::AuthenticatorType::kEnclave
                                        : device::AuthenticatorType::kPhone;
   for (const sync_pb::WebauthnCredentialSpecifics& passkey :
@@ -1147,37 +1224,29 @@ void ChromeAuthenticatorRequestDelegate::GetPhoneContactableGpmPasskeysForRpId(
 void ChromeAuthenticatorRequestDelegate::ConfigureEnclaveDiscovery(
     const std::string& rp_id,
     device::FidoDiscoveryFactory* discovery_factory) {
+  discovery_factory->set_enclave_passkey_creation_callback(
+      base::BindRepeating(&ChromeAuthenticatorRequestDelegate::OnPasskeyCreated,
+                          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ChromeAuthenticatorRequestDelegate::OnPasskeyCreated(
+    sync_pb::WebauthnCredentialSpecifics passkey) {
   webauthn::PasskeyModel* passkey_model =
       PasskeyModelFactory::GetInstance()->GetForProfile(
           Profile::FromBrowserContext(GetBrowserContext()));
-  CHECK(passkey_model);
-
-  std::vector<sync_pb::WebauthnCredentialSpecifics> passkeys =
-      passkey_model->GetPasskeysForRelyingPartyId(rp_id);
-  discovery_factory->SetEnclavePasskeys(std::move(passkeys));
-}
-
-bool ChromeAuthenticatorRequestDelegate::EnclaveAuthenticatorAvailable() {
-#if BUILDFLAG(IS_CHROMEOS)
-  // Enclave service authenticators are not needed for Chrome OS.
-  return false;
-#else
-  // TODO(https://crbug.com/1459620): This also has to be conditional on device
-  // registration with the enclave, when implemented.
-  return base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator);
-#endif
+  passkey_model->CreatePasskey(passkey);
 }
 
 #if BUILDFLAG(IS_MAC)
 // static
-absl::optional<int> ChromeAuthenticatorRequestDelegate::DaysSinceDate(
+std::optional<int> ChromeAuthenticatorRequestDelegate::DaysSinceDate(
     const std::string& formatted_date,
     const base::Time now) {
   int year, month, day_of_month;
   // sscanf will ignore trailing garbage, but we don't need to be strict here.
   if (sscanf(formatted_date.c_str(), "%u-%u-%u", &year, &month,
              &day_of_month) != 3) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   const base::Time::Exploded exploded = {
@@ -1185,7 +1254,7 @@ absl::optional<int> ChromeAuthenticatorRequestDelegate::DaysSinceDate(
 
   base::Time t;
   if (!base::Time::FromUTCExploded(exploded, &t) || now < t) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   const base::TimeDelta difference = now - t;
@@ -1193,12 +1262,12 @@ absl::optional<int> ChromeAuthenticatorRequestDelegate::DaysSinceDate(
 }
 
 // static
-absl::optional<bool> ChromeAuthenticatorRequestDelegate::GetICloudKeychainPref(
+std::optional<bool> ChromeAuthenticatorRequestDelegate::GetICloudKeychainPref(
     const PrefService* prefs) {
   const PrefService::Preference* pref =
       prefs->FindPreference(prefs::kCreatePasskeysInICloudKeychain);
   if (pref->IsDefaultValue()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return pref->GetValue()->GetBool();
 }
@@ -1210,7 +1279,7 @@ bool ChromeAuthenticatorRequestDelegate::IsActiveProfileAuthenticatorUser(
   if (last_used.empty()) {
     return false;
   }
-  const absl::optional<int> days = DaysSinceDate(last_used, base::Time::Now());
+  const std::optional<int> days = DaysSinceDate(last_used, base::Time::Now());
   return days.has_value() && days.value() <= kMacOsRecentlyUsedMaxDays;
 }
 
@@ -1220,7 +1289,7 @@ bool ChromeAuthenticatorRequestDelegate::ShouldCreateInICloudKeychain(
     bool is_active_profile_authenticator_user,
     bool has_icloud_drive_enabled,
     bool request_is_for_google_com,
-    absl::optional<bool> preference) {
+    std::optional<bool> preference) {
   if (!base::FeatureList::IsEnabled(device::kWebAuthnICloudKeychain) ||
       // Secure Payment Confirmation and credit-card autofill continue to use
       // the profile authenticator.

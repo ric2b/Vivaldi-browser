@@ -14,10 +14,10 @@
 #import "components/autofill/ios/browser/personal_data_manager_observer_bridge.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
-#import "ios/chrome/browser/autofill/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
-#import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
-#import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
+#import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
+#import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
+#import "ios/chrome/browser/autofill/model/form_input_suggestions_provider.h"
+#import "ios/chrome/browser/autofill/model/form_suggestion_tab_helper.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/shared/model/web_state_list/active_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -29,6 +29,8 @@
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/resource/resource_bundle.h"
+
+using PaymentsSuggestionBottomSheetExitReason::kBadProvider;
 
 // Structure which contains all the required information to display about a
 // credit card.
@@ -278,7 +280,7 @@
   BOOL hasNonLocalCard = NO;
   NSMutableArray<id<PaymentsSuggestionBottomSheetData>>* creditCardData =
       [[NSMutableArray alloc] initWithCapacity:creditCards.size()];
-  for (const auto* creditCard : creditCards) {
+  for (const autofill::CreditCard* creditCard : creditCards) {
     CHECK(creditCard);
     [creditCardData
         addObject:[[PaymentsSuggestionBottomSheetCreditCardInfo alloc]
@@ -304,19 +306,31 @@
   }
 
   LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeStaySafe);
-  _needsRefocus = false;
 
   FormSuggestionTabHelper* tabHelper =
       FormSuggestionTabHelper::FromWebState(activeWebState);
   DCHECK(tabHelper);
 
-  id<FormSuggestionClient> client = tabHelper->GetAccessoryViewProvider();
-  DCHECK(client);
+  id<FormInputSuggestionsProvider> provider =
+      tabHelper->GetAccessoryViewProvider();
+  DCHECK(provider);
+
+  if (provider.type != SuggestionProviderTypeAutofill) {
+    // Last resort safety exit: On the unlikely event that the provider was set
+    // incorrectly (for example if local predictions and server predictions are
+    // different), simply exit and open the keyboard.
+    _needsRefocus = true;
+    [self disableBottomSheet];
+    [self logExitReason:kBadProvider];
+    return;
+  }
+  _needsRefocus = false;
 
   // Create a form suggestion containing the selected credit card's backend id
   // so that the suggestion provider can properly fill the form.
   FormSuggestion* suggestion = [FormSuggestion
              suggestionWithValue:nil
+                      minorValue:nil
               displayDescription:nil
                             icon:nil
                      popupItemId:autofill::PopupItemId::kCreditCardEntry
@@ -326,7 +340,7 @@
           base::SysUTF16ToNSString(l10n_util::GetStringUTF16(
               IDS_AUTOFILL_A11Y_ANNOUNCE_FILLED_FORM))];
 
-  [client didSelectSuggestion:suggestion params:_params];
+  [provider didSelectSuggestion:suggestion params:_params];
 }
 
 - (void)disableBottomSheet {
@@ -425,12 +439,13 @@
   }
 
   // Otherwise, try to get the default card icon
-  std::string icon = creditCard->CardIconStringForAutofillSuggestion();
-  return icon.empty() ? nil
-                      : ui::ResourceBundle::GetSharedInstance()
-                            .GetNativeImageNamed(
-                                autofill::CreditCard::IconResourceId(icon))
-                            .ToUIImage();
+  autofill::Suggestion::Icon icon = creditCard->CardIconForAutofillSuggestion();
+  return icon == autofill::Suggestion::Icon::kNoIcon
+             ? nil
+             : ui::ResourceBundle::GetSharedInstance()
+                   .GetNativeImageNamed(
+                       autofill::CreditCard::IconResourceId(icon))
+                   .ToUIImage();
 }
 
 @end

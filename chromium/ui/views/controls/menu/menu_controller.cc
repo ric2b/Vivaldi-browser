@@ -429,14 +429,14 @@ struct MenuController::MenuPart {
   //       but is over a menu (for example, the mouse is over a separator or
   //       empty menu), this is null and parent is the menu the mouse was
   //       clicked on.
-  raw_ptr<MenuItemView, DanglingUntriaged> menu = nullptr;
+  raw_ptr<MenuItemView> menu = nullptr;
 
   // If type is kMenuItem but the mouse is not over a menu item this is the
   // parent of the menu item the user clicked on. Otherwise this is null.
-  raw_ptr<MenuItemView, DanglingUntriaged> parent = nullptr;
+  raw_ptr<MenuItemView> parent = nullptr;
 
   // This is the submenu the mouse is over.
-  raw_ptr<SubmenuView, DanglingUntriaged> submenu = nullptr;
+  raw_ptr<SubmenuView> submenu = nullptr;
 
   // Whether the controller should apply SELECTION_OPEN_SUBMENU to this item.
   bool should_submenu_show = false;
@@ -1407,7 +1407,7 @@ ui::PostDispatchAction MenuController::OnWillDispatchKeyEvent(
         kKeysThatDontPropagate.end())
       return ui::POST_DISPATCH_PERFORM_DEFAULT;
   }
-  event->StopPropagation();
+  event->SetSkipped();
   return ui::POST_DISPATCH_NONE;
 }
 
@@ -1527,10 +1527,11 @@ void MenuController::SetSelection(MenuItemView* menu_item,
   if (pending_item_changed)
     StopShowTimer();
 
-  if (selection_types & SELECTION_UPDATE_IMMEDIATELY)
+  if (selection_types & SELECTION_UPDATE_IMMEDIATELY) {
     CommitPendingSelection();
-  else if (pending_item_changed)
+  } else if (pending_item_changed) {
     StartShowTimer();
+  }
 
   // Notify an accessibility focus event on all menu items except for the root.
   if (menu_item && pending_item_changed &&
@@ -1550,7 +1551,7 @@ void MenuController::SetSelection(MenuItemView* menu_item,
         menu_item->GetParentMenuItem()->GetSubmenu()) {
       menu_item->GetParentMenuItem()->GetSubmenu()->NotifyAccessibilityEvent(
           ax::mojom::Event::kSelectedChildrenChanged,
-          true /* send_native_event */);
+          /*send_native_event=*/true);
     }
   }
 }
@@ -2336,7 +2337,7 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
       const gfx::Point mouse_pos = ConvertFromScreen(
           *item->submenu_,
           display::Screen::GetScreen()->GetCursorScreenPoint());
-      MenuPart part_under_mouse = GetMenuPart(item->submenu_, mouse_pos);
+      MenuPart part_under_mouse = GetMenuPart(item->submenu_.get(), mouse_pos);
       if (part_under_mouse.type != MenuPartType::kNone) {
         menu_open_mouse_loc_ =
             GetLocationInRootMenu(*item->submenu_, mouse_pos);
@@ -2897,7 +2898,6 @@ void MenuController::IncrementSelection(
     Button* button = GetFirstHotTrackedView(item);
     if (button) {
       DCHECK_EQ(hot_button_, button);
-      SetHotTrackedButton(nullptr);
     }
     bool direction_is_down = direction == INCREMENT_SELECTION_DOWN;
     View* to_make_hot =

@@ -5,14 +5,16 @@
 #ifndef CHROME_BROWSER_METRICS_STRUCTURED_TEST_STRUCTURED_METRICS_MIXIN_H_
 #define CHROME_BROWSER_METRICS_STRUCTURED_TEST_STRUCTURED_METRICS_MIXIN_H_
 
+#include <optional>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/time/time.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/structured/structured_metrics_recorder.h"
+#include "components/metrics/structured/test/test_event_storage.h"
 #include "components/metrics/structured/test/test_structured_metrics_provider.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/metrics_proto/structured_data.pb.h"
 
 // Mixin browser tests can use StructuredMetricsMixin to set up test
@@ -56,9 +58,9 @@ class StructuredMetricsMixin : public InProcessBrowserTestMixin {
   structured::StructuredMetricsService* GetService();
 
   // Returns pointer to the first event with the hash |project_name_hash| and
-  // |event_name_hash|. If no event is found, returns absl::nullopt.
-  absl::optional<StructuredEventProto> FindEvent(uint64_t project_name_hash,
-                                                 uint64_t event_name_hash);
+  // |event_name_hash|. If no event is found, returns std::nullopt.
+  std::optional<StructuredEventProto> FindEvent(uint64_t project_name_hash,
+                                                uint64_t event_name_hash);
 
   // Returns a vector of pointers to the events with the hash
   // |project_name_hash| and |event_name_hash|.
@@ -76,6 +78,8 @@ class StructuredMetricsMixin : public InProcessBrowserTestMixin {
 
   // Builds a log of unstaged events.
   std::unique_ptr<ChromeUserMetricsExtension> GetUmaProto();
+
+  TestEventStorage* GetEventStorage();
 
  private:
   std::unique_ptr<MetricsProvider> system_profile_provider_;

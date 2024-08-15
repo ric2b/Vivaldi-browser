@@ -108,8 +108,9 @@ class TestBrowserWindow : public BrowserWindow {
   void Maximize() override {}
   void Minimize() override {}
   void Restore() override {}
-  void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) override {}
+  void OnCanResizeFromWebAPIChanged() override {}
   bool GetCanResize() override;
+  ui::WindowShowState GetWindowShowState() const override;
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
@@ -165,7 +166,7 @@ class TestBrowserWindow : public BrowserWindow {
       bool show_stay_in_chrome,
       bool show_remember_selection,
       apps::IntentPickerBubbleType bubble_type,
-      const absl::optional<url::Origin>& initiating_origin,
+      const std::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override {}
 #endif  //  !define(OS_ANDROID)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -237,7 +238,7 @@ class TestBrowserWindow : public BrowserWindow {
 
   void SetCloseCallback(base::OnceClosure close_callback);
 
-  void CreateTabSearchBubble() override {}
+  void CreateTabSearchBubble(int tab_index = -1) override {}
   void CloseTabSearchBubble() override {}
 
   user_education::FeaturePromoController* GetFeaturePromoController() override;
@@ -250,7 +251,7 @@ class TestBrowserWindow : public BrowserWindow {
       user_education::FeaturePromoParams params) override;
   bool CloseFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoCloseReason close_reason) override;
+      user_education::EndFeaturePromoReason close_reason) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override;
@@ -268,6 +269,8 @@ class TestBrowserWindow : public BrowserWindow {
   }
   void set_is_active(bool active) { is_active_ = active; }
   void set_is_minimized(bool minimized) { is_minimized_ = minimized; }
+
+  bool IsClosed() const { return is_closed_; }
 
   void set_element_context(ui::ElementContext element_context) {
     element_context_ = element_context;
@@ -309,6 +312,7 @@ class TestBrowserWindow : public BrowserWindow {
   bool visible_on_all_workspaces_ = false;
   bool is_minimized_ = false;
   bool is_active_ = false;
+  bool is_closed_ = false;
   bool is_tab_strip_editable_ = true;
 
   std::unique_ptr<user_education::FeaturePromoController>

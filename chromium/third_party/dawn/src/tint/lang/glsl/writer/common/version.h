@@ -73,4 +73,11 @@ struct Version {
 
 }  // namespace tint::glsl::writer
 
+namespace tint {
+
+/// Relect enum information for Version
+TINT_REFLECT_ENUM_RANGE(glsl::writer::Version::Standard, kDesktop, kES);
+
+}  // namespace tint
+
 #endif  // SRC_TINT_LANG_GLSL_WRITER_COMMON_VERSION_H_

@@ -52,8 +52,9 @@ namespace {
 constexpr gfx::Size kContentSize = gfx::Size(200, 200);
 
 class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
+  METADATA_HEADER(TestBubbleDialogDelegateView, BubbleDialogDelegateView)
+
  public:
-  METADATA_HEADER(TestBubbleDialogDelegateView);
   explicit TestBubbleDialogDelegateView(View* anchor_view)
       : BubbleDialogDelegateView(anchor_view, BubbleBorder::TOP_LEFT) {
     view_->SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -112,12 +113,14 @@ class TestBubbleDialogDelegateView : public BubbleDialogDelegateView {
   bool should_show_window_title_ = true;
 };
 
-BEGIN_METADATA(TestBubbleDialogDelegateView, views::BubbleDialogDelegateView)
+BEGIN_METADATA(TestBubbleDialogDelegateView)
 END_METADATA
 
 class TestAlertBubbleDialogDelegateView : public TestBubbleDialogDelegateView {
+  METADATA_HEADER(TestAlertBubbleDialogDelegateView,
+                  TestBubbleDialogDelegateView)
+
  public:
-  METADATA_HEADER(TestAlertBubbleDialogDelegateView);
   explicit TestAlertBubbleDialogDelegateView(View* anchor_view)
       : TestBubbleDialogDelegateView(anchor_view) {
     SetAccessibleWindowRole(ax::mojom::Role::kAlertDialog);
@@ -125,7 +128,7 @@ class TestAlertBubbleDialogDelegateView : public TestBubbleDialogDelegateView {
   ~TestAlertBubbleDialogDelegateView() override = default;
 };
 
-BEGIN_METADATA(TestAlertBubbleDialogDelegateView, TestBubbleDialogDelegateView)
+BEGIN_METADATA(TestAlertBubbleDialogDelegateView)
 END_METADATA
 
 // A Widget that returns something other than null as its ThemeProvider.  This
@@ -1316,7 +1319,9 @@ TEST_F(BubbleUmaLoggerTest, LogMetricFromView) {
   base::HistogramTester histogram;
   auto label = std::make_unique<Label>();
   TestBubbleUmaLogger logger;
-  logger.set_allowed_class_names_for_testing({"Label"});
+  const char* allow_names[] = {"Label"};
+  logger.set_allowed_class_names_for_testing(
+      base::make_span(allow_names, std::size(allow_names)));
   logger.set_bubble_view(label.get());
   histogram.ExpectTotalCount("Bubble.All.Metric1", 0);
   histogram.ExpectTotalCount("Bubble.Label.Metric1", 0);
@@ -1334,7 +1339,9 @@ TEST_F(BubbleUmaLoggerTest, LogMetricFromDelegate) {
   delegate.SetContentsView(std::make_unique<Label>());
 
   TestBubbleUmaLogger logger;
-  logger.set_allowed_class_names_for_testing({"Label"});
+  const char* allow_names[] = {"Label"};
+  logger.set_allowed_class_names_for_testing(
+      base::make_span(allow_names, std::size(allow_names)));
   logger.set_delegate(&delegate);
 
   histogram.ExpectTotalCount("Bubble.All.Metric1", 0);

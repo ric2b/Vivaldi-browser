@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/stack_trace.h"
+#include "partition_alloc/partition_alloc_base/debug/stack_trace.h"
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/process/process_handle.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/threading/platform_thread.h"
+#include <cstdint>
+
 #include "build/build_config.h"
-
-#include <stdint.h>
+#include "partition_alloc/partition_alloc_base/check.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/process/process_handle.h"
+#include "partition_alloc/partition_alloc_base/threading/platform_thread.h"
 
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(__GLIBC__)
 extern "C" void* __libc_stack_end;

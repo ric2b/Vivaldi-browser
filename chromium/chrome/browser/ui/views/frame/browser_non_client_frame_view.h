@@ -27,8 +27,9 @@ enum class BrowserFrameActiveState {
 // Browser-specific methods.
 class BrowserNonClientFrameView : public views::NonClientFrameView,
                                   public ProfileAttributesStorage::Observer {
+  METADATA_HEADER(BrowserNonClientFrameView, views::NonClientFrameView)
+
  public:
-  METADATA_HEADER(BrowserNonClientFrameView);
   // The minimum total height users should have to use as a drag handle to move
   // the window with.
   static constexpr int kMinimumDragHeight = 8;
@@ -116,7 +117,7 @@ class BrowserNonClientFrameView : public views::NonClientFrameView,
 
   // For non-transparent windows, returns the background tab image resource ID
   // if the image has been customized, directly or indirectly, by the theme.
-  absl::optional<int> GetCustomBackgroundId(
+  std::optional<int> GetCustomBackgroundId(
       BrowserFrameActiveState active_state) const;
 
   // Updates the throbber.

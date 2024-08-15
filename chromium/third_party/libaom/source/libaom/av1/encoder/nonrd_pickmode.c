@@ -577,7 +577,7 @@ static INLINE void set_early_term_based_on_uv_plane(
   struct macroblock_plane *const p = &x->plane[AOM_PLANE_Y];
   const uint32_t dc_quant = p->dequant_QTX[0];
   const uint32_t ac_quant = p->dequant_QTX[1];
-  const int64_t dc_thr = dc_quant * dc_quant >> 6;
+  int64_t dc_thr = dc_quant * dc_quant >> 6;
   int64_t ac_thr = ac_quant * ac_quant >> 6;
   const int bw = b_width_log2_lookup[bsize];
   const int bh = b_height_log2_lookup[bsize];
@@ -596,6 +596,11 @@ static INLINE void set_early_term_based_on_uv_plane(
   ac_thr *= ac_thr_factor(cpi->oxcf.speed, cm->width, cm->height, norm_sum);
 
 #endif
+
+  if (cpi->sf.rt_sf.increase_source_sad_thresh) {
+    dc_thr = dc_thr << 1;
+    ac_thr = ac_thr << 2;
+  }
 
   for (int k = 0; k < num_blk; k++) {
     // Check if all ac coefficients can be quantized to zero.
@@ -626,10 +631,12 @@ static INLINE void set_early_term_based_on_uv_plane(
         const BLOCK_SIZE uv_bsize = get_plane_block_size(
             bsize, puvd->subsampling_x, puvd->subsampling_y);
         // Adjust these thresholds for UV.
+        const int shift_ac = cpi->sf.rt_sf.increase_source_sad_thresh ? 5 : 3;
+        const int shift_dc = cpi->sf.rt_sf.increase_source_sad_thresh ? 4 : 3;
         const int64_t uv_dc_thr =
-            (puv->dequant_QTX[0] * puv->dequant_QTX[0]) >> 3;
+            (puv->dequant_QTX[0] * puv->dequant_QTX[0]) >> shift_dc;
         const int64_t uv_ac_thr =
-            (puv->dequant_QTX[1] * puv->dequant_QTX[1]) >> 3;
+            (puv->dequant_QTX[1] * puv->dequant_QTX[1]) >> shift_ac;
         av1_enc_build_inter_predictor(cm, xd, mi_row, mi_col, NULL, bsize,
                                       plane, plane);
         var_uv[j] = cpi->ppi->fn_ptr[uv_bsize].vf(puv->src.buf, puv->src.stride,
@@ -1762,7 +1769,7 @@ static AOM_INLINE void get_ref_frame_use_mask(AV1_COMP *cpi, MACROBLOCK *x,
       x->nonrd_prune_ref_frame_search > 2 &&
       x->color_sensitivity_sb_g[COLOR_SENS_IDX(AOM_PLANE_U)] == 0 &&
       x->color_sensitivity_sb_g[COLOR_SENS_IDX(AOM_PLANE_V)] == 0) {
-    int thr = (cm->width * cm->height >= 640 * 360) ? 100 : 150;
+    int thr = (cm->width * cm->height > RESOLUTION_288P) ? 100 : 150;
     int pred = x->pred_mv_sad[LAST_FRAME] >>
                (b_width_log2_lookup[bsize] + b_height_log2_lookup[bsize]);
     if (pred > thr) use_golden_ref_frame = 1;
@@ -1933,11 +1940,16 @@ static void set_color_sensitivity(AV1_COMP *cpi, MACROBLOCK *x,
     return;
   }
   int shift = 3;
+  unsigned int source_var_thr = 50;
+  int uv_sad_thr = 100;
   if (source_sad_nonrd >= kMedSad && x->source_variance > 0 && high_res)
     shift = 4;
-  if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
-      cpi->rc.high_source_sad) {
-    shift = 6;
+  if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN) {
+    if (cpi->rc.high_source_sad) shift = 6;
+    if (source_sad_nonrd > kMedSad) {
+      source_var_thr = 1200;
+      uv_sad_thr = 10;
+    }
   }
   NOISE_LEVEL noise_level = kLow;
   int norm_sad =
@@ -1975,7 +1987,7 @@ static void set_color_sensitivity(AV1_COMP *cpi, MACROBLOCK *x,
           uv_sad >> (b_width_log2_lookup[bs] + b_height_log2_lookup[bs]);
       x->color_sensitivity[COLOR_SENS_IDX(plane)] =
           uv_sad > (y_sad >> shift) && norm_uv_sad > 40;
-      if (source_variance < 50 && norm_uv_sad > 100)
+      if (source_variance < source_var_thr && norm_uv_sad > uv_sad_thr)
         x->color_sensitivity[COLOR_SENS_IDX(plane)] = 1;
     }
   }

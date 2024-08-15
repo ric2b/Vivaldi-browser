@@ -28,6 +28,7 @@
 #include "modules/skparagraph/include/TextShadow.h"
 #include "modules/skparagraph/include/TextStyle.h"
 #include "modules/skparagraph/include/TypefaceFontProvider.h"
+#include "modules/skparagraph/src/OneLineShaper.h"
 #include "modules/skparagraph/src/ParagraphBuilderImpl.h"
 #include "modules/skparagraph/src/ParagraphImpl.h"
 #include "modules/skparagraph/src/Run.h"
@@ -39,6 +40,7 @@
 #include "tests/Test.h"
 #include "tools/Resources.h"
 #include "tools/flags/CommandLineFlags.h"
+#include "tools/fonts/FontToolUtils.h"
 
 #include <string.h>
 #include <algorithm>
@@ -112,6 +114,7 @@ public:
 
         SkString path;
         while (iter.next(&path)) {
+            //SkDebugf("font %s\n", path.c_str());
             // Look for a sentinel font, without which several tests will fail/crash.
             if (path.endsWith("Roboto-Italic.ttf")) {
                 fFontsFound = true;
@@ -120,12 +123,13 @@ public:
         }
         SkASSERTF(fFontsFound, "--paragraph_fonts was set but didn't have the fonts we need");
 
+        sk_sp<SkFontMgr> mgr = ToolUtils::TestFontMgr();
         for (auto& font : fonts) {
             SkString file_path;
             file_path.printf("%s/%s", fontDir, font.c_str());
             auto stream = SkStream::MakeFromFile(file_path.c_str());
             SkASSERTF(stream, "%s not readable", file_path.c_str());
-            auto face = SkTypeface::MakeFromStream(std::move(stream), {});
+            sk_sp<SkTypeface> face = mgr->makeFromStream(std::move(stream), {});
             // Without --nativeFonts, DM will use the portable test font manager which does
             // not know how to read in fonts from bytes.
             SkASSERTF(face, "%s was not turned into a Typeface. Did you set --nativeFonts?",
@@ -225,11 +229,11 @@ private:
         return;                                              \
     }
 
-#define NEED_SYSTEM_FONTS(fontCollection)                          \
-    if (!FLAGS_run_paragraph_tests_needing_system_fonts)  {        \
-        return;                                                    \
-    }                                                              \
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());\
+#define NEED_SYSTEM_FONTS(fontCollection)                            \
+    if (!FLAGS_run_paragraph_tests_needing_system_fonts) {           \
+        return;                                                      \
+    }                                                                \
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr()); \
     fontCollection->enableFontFallback();
 
 UNIX_ONLY_TEST(SkParagraph_SimpleParagraph, reporter) {
@@ -1983,7 +1987,9 @@ UNIX_ONLY_TEST(SkParagraph_JustifyRTL, reporter) {
     const char* text =
             "אאא בּבּבּבּ אאאא בּבּ אאא בּבּבּ אאאאא בּבּבּבּ אאאא בּבּבּבּבּ "
             "אאאאא בּבּבּבּבּ אאאבּבּבּבּבּבּאאאאא בּבּבּבּבּבּאאאאאבּבּבּבּבּבּ אאאאא בּבּבּבּבּ "
-            "אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ";
+            "אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ אאאאא בּבּבּבּבּבּ "
+            "אאאאאבּבּבּבּבּבּאאאאאבּבּבּבּבּבּאאאאאבּבּבּבּבּבּ "
+            "אאאאא בּבּבּבּבּבּ";
     const size_t len = strlen(text);
 
     ParagraphStyle paragraph_style;
@@ -2011,8 +2017,10 @@ UNIX_ONLY_TEST(SkParagraph_JustifyRTL, reporter) {
         return TestCanvasWidth - 100 - line.width();
     };
     for (auto& line : impl->lines()) {
-        if (&line == &impl->lines().back()) {
+        if (&line == &impl->lines().back() || &line == &impl->lines()[impl->lines().size() - 2]) {
+            // Second-last line will be also right-aligned because it is only one cluster
             REPORTER_ASSERT(reporter, calculate(line) > EPSILON100);
+            REPORTER_ASSERT(reporter, line.offset().fX > EPSILON100);
         } else {
             REPORTER_ASSERT(reporter, SkScalarNearlyEqual(calculate(line), 0, EPSILON100));
         }
@@ -2030,14 +2038,23 @@ UNIX_ONLY_TEST(SkParagraph_JustifyRTL, reporter) {
     canvas.drawRects(SK_ColorRED, boxes);
     REPORTER_ASSERT(reporter, boxes.size() == 3);
 
-    boxes = paragraph->getRectsForRange(240, 250, rect_height_style, rect_width_style);
+    boxes = paragraph->getRectsForRange(226, 278, rect_height_style, rect_width_style);
+    canvas.drawRects(SK_ColorYELLOW, boxes);
+    REPORTER_ASSERT(reporter, boxes.size() == 1);
+
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.left(), 16, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.top(), 130, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.right(), 900, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.bottom(), 156, EPSILON100));
+
+    boxes = paragraph->getRectsForRange(292, 296, rect_height_style, rect_width_style);
     canvas.drawRects(SK_ColorBLUE, boxes);
     REPORTER_ASSERT(reporter, boxes.size() == 1);
 
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.left(), 588, EPSILON100));
-    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.top(), 130, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.top(), 156, EPSILON100));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.right(), 640, EPSILON100));
-    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.bottom(), 156, EPSILON100));
+    REPORTER_ASSERT(reporter, SkScalarNearlyEqual(boxes[0].rect.bottom(), 182, EPSILON100));
 }
 
 UNIX_ONLY_TEST(SkParagraph_JustifyRTLNewLine, reporter) {
@@ -5193,7 +5210,7 @@ UNIX_ONLY_TEST(SkParagraph_CacheStyles, reporter) {
 UNIX_ONLY_TEST(SkParagraph_ParagraphWithLineBreak, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     fontCollection->enableFontFallback();
 
     TestCanvas canvas("SkParagraph_ParagraphWithLineBreak.png");
@@ -5222,7 +5239,7 @@ UNIX_ONLY_TEST(SkParagraph_ParagraphWithLineBreak, reporter) {
 UNIX_ONLY_TEST(SkParagraph_NullInMiddleOfText, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
     const SkString text("null terminator ->\u0000<- on purpose did you see it?");
 
@@ -5262,7 +5279,7 @@ UNIX_ONLY_TEST(SkParagraph_PlaceholderOnly, reporter) {
 UNIX_ONLY_TEST(SkParagraph_Fallbacks, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault(), "Arial");
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr(), "Arial");
     fontCollection->enableFontFallback();
     TestCanvas canvas("SkParagraph_Fallbacks.png");
 
@@ -5306,7 +5323,7 @@ UNIX_ONLY_TEST(SkParagraph_Fallbacks, reporter) {
 UNIX_ONLY_TEST(SkParagraph_Bidi1, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     fontCollection->enableFontFallback();
     TestCanvas canvas("SkParagraph_Bidi1.png");
 
@@ -5358,7 +5375,7 @@ UNIX_ONLY_TEST(SkParagraph_Bidi1, reporter) {
 UNIX_ONLY_TEST(SkParagraph_Bidi2, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     fontCollection->enableFontFallback();
     TestCanvas canvas("SkParagraph_Bidi2.png");
 
@@ -5400,7 +5417,7 @@ UNIX_ONLY_TEST(SkParagraph_Bidi2, reporter) {
 UNIX_ONLY_TEST(SkParagraph_NewlineOnly, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
     TextStyle text_style;
     text_style.setFontFamilies({SkString("Ahem")});
@@ -5544,7 +5561,7 @@ UNIX_ONLY_TEST(SkParagraph_Shaping, reporter) {
 UNIX_ONLY_TEST(SkParagraph_Ellipsis, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     TestCanvas canvas("SkParagraph_Ellipsis.png");
 
     const char* text = "This\n"
@@ -5605,7 +5622,7 @@ UNIX_ONLY_TEST(SkParagraph_Ellipsis, reporter) {
 UNIX_ONLY_TEST(SkParagraph_MemoryLeak, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
 
     std::string text;
     for (size_t i = 0; i < 10; i++)
@@ -5636,7 +5653,7 @@ UNIX_ONLY_TEST(SkParagraph_MemoryLeak, reporter) {
 UNIX_ONLY_TEST(SkParagraph_FormattingInfinity, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     TestCanvas canvas("SkParagraph_FormattingInfinity.png");
 
     const char* text = "Some text\nAnother line";
@@ -7091,7 +7108,7 @@ UNIX_ONLY_TEST(SkParagraph_TabSubstitution, reporter) {
 UNIX_ONLY_TEST(SkParagraph_lineMetricsWithEllipsis, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     fontCollection->enableFontFallback();
 
     ParagraphStyle paragraph_style;
@@ -7113,7 +7130,7 @@ UNIX_ONLY_TEST(SkParagraph_lineMetricsWithEllipsis, reporter) {
 UNIX_ONLY_TEST(SkParagraph_lineMetricsAfterUpdate, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     fontCollection->enableFontFallback();
 
     auto text = std::u16string(u"hello world");
@@ -7559,6 +7576,14 @@ UNIX_ONLY_TEST(SkParagraph_RtlEllipsis2, reporter) {
         });
 };
 
+static bool has_empty_typeface(SkFont f) {
+    SkTypeface* face = f.getTypeface();
+    if (!face) {
+        return true; // Should be impossible, but just in case...
+    }
+    return face->countGlyphs() == 0 && face->getBounds().isEmpty();
+}
+
 UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
@@ -7639,7 +7664,7 @@ UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
                                               glyphInfo.fClusterTextRange.end == 229);
 
     auto font = paragraph->getFontAt(10);
-    REPORTER_ASSERT(reporter, font.getTypeface() != nullptr);
+    REPORTER_ASSERT(reporter, !has_empty_typeface(font));
     SkString fontFamily;
     font.getTypeface()->getFamilyName(&fontFamily);
     REPORTER_ASSERT(reporter, fontFamily.equals("Roboto"));
@@ -7647,7 +7672,7 @@ UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
     auto fonts = paragraph->getFonts();
     REPORTER_ASSERT(reporter, fonts.size() == 1);
     REPORTER_ASSERT(reporter, fonts[0].fTextRange.start == 0 && fonts[0].fTextRange.end == len);
-    REPORTER_ASSERT(reporter, fonts[0].fFont.getTypeface() != nullptr);
+    REPORTER_ASSERT(reporter, !has_empty_typeface(fonts[0].fFont));
     font.getTypeface()->getFamilyName(&fontFamily);
     REPORTER_ASSERT(reporter, fontFamily.equals("Roboto"));
 }
@@ -7655,7 +7680,7 @@ UNIX_ONLY_TEST(SkParagraph_TextEditingFunctionality, reporter) {
 UNIX_ONLY_TEST(SkParagraph_getLineNumberAt_Ellipsis, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
     SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     TestCanvas canvas("SkParagraph_Ellipsis.png");
 
     // The second line will be ellipsized. The 10th glyph ("0") will be replaced
@@ -7713,8 +7738,8 @@ UNIX_ONLY_TEST(SkParagraph_API_USES_UTF16, reporter) {
     auto paragraph = builder.Build();
     paragraph->layout(TestCanvasWidth);
 
-    REPORTER_ASSERT(reporter, paragraph->getFontAtUTF16Offset(0).getTypeface() != nullptr);
-    REPORTER_ASSERT(reporter, paragraph->getFontAtUTF16Offset(4).getTypeface() == nullptr);
+    REPORTER_ASSERT(reporter, !has_empty_typeface(paragraph->getFontAtUTF16Offset(0)));
+    REPORTER_ASSERT(reporter, has_empty_typeface(paragraph->getFontAtUTF16Offset(4)));
 
     REPORTER_ASSERT(reporter, paragraph->getGlyphInfoAtUTF16Offset(0, nullptr));
     REPORTER_ASSERT(reporter, !paragraph->getGlyphInfoAtUTF16Offset(4, nullptr));
@@ -7756,7 +7781,7 @@ UNIX_ONLY_TEST(SkParagraph_Empty_Paragraph_Metrics, reporter) {
     auto paragraph = builder.Build();
     paragraph->layout(TestCanvasWidth);
 
-    REPORTER_ASSERT(reporter, paragraph->getFontAt(0).getTypeface() == nullptr);
+    REPORTER_ASSERT(reporter, has_empty_typeface(paragraph->getFontAt(0)));
     REPORTER_ASSERT(reporter, !paragraph->getGlyphClusterAt(0, nullptr));
     REPORTER_ASSERT(reporter, paragraph->getLineNumberAt(0) == -1);
     REPORTER_ASSERT(reporter, !paragraph->getClosestGlyphClusterAt(10.0, 5.0, nullptr));
@@ -7872,7 +7897,6 @@ UNIX_ONLY_TEST(SkParagraph_SingleDummyPlaceholder, reporter) {
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
     REPORTER_ASSERT(reporter, impl->placeholders().size() == 1);
 
-
     size_t index = 0;
     for (auto& line : impl->lines()) {
         line.scanStyles(StyleType::kDecorations,
@@ -7887,7 +7911,7 @@ UNIX_ONLY_TEST(SkParagraph_SingleDummyPlaceholder, reporter) {
 
 UNIX_ONLY_TEST(SkParagraph_EndWithLineSeparator, reporter) {
     sk_sp<FontCollection> fontCollection = sk_make_sp<FontCollection>();
-    fontCollection->setDefaultFontManager(SkFontMgr::RefDefault());
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr());
     fontCollection->enableFontFallback();
 
     const char* text = "A text ending with line separator.\u2028";
@@ -7911,4 +7935,109 @@ UNIX_ONLY_TEST(SkParagraph_EndWithLineSeparator, reporter) {
         }
     });
     REPORTER_ASSERT(reporter, visitedCount == 3);
+}
+
+UNIX_ONLY_TEST(SkParagraph_EmojiFontResolution, reporter) {
+    auto fontCollection = sk_make_sp<FontCollection>();
+    fontCollection->setDefaultFontManager(ToolUtils::TestFontMgr(), std::vector<SkString>());
+    fontCollection->enableFontFallback();
+
+    const char* text = "♻️🏴󠁧󠁢󠁳󠁣󠁴󠁿";
+    const char* text1 = "♻️";
+    const size_t len = strlen(text);
+    const size_t len1 = strlen(text1);
+
+    ParagraphStyle paragraph_style;
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection);
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("")});
+    builder.pushStyle(text_style);
+    builder.addText(text, len);
+    auto paragraph = builder.Build();
+    paragraph->layout(SK_ScalarMax);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+
+    ParagraphBuilderImpl builder1(paragraph_style, fontCollection);
+    builder1.pushStyle(text_style);
+    builder1.addText(text1, len1);
+    auto paragraph1 = builder1.Build();
+    paragraph1->layout(SK_ScalarMax);
+
+    auto impl1 = static_cast<ParagraphImpl*>(paragraph1.get());
+    REPORTER_ASSERT(reporter, impl1->runs().size() == 1);
+    if (impl1->runs().size() == 1) {
+        SkString ff;
+        impl->run(0).font().getTypeface()->getFamilyName(&ff);
+        SkString ff1;
+        impl1->run(0).font().getTypeface()->getFamilyName(&ff1);
+        REPORTER_ASSERT(reporter, ff.equals(ff1));
+    }
+}
+
+UNIX_ONLY_TEST(SkParagraph_EmojiRuns, reporter) {
+
+    auto icu = SkUnicode::MakeIcuBasedUnicode();
+
+    auto test = [&](const char* text, SkUnichar expected) {
+        SkString str(text);
+        if ((false)) {
+            SkDebugf("'%s'\n", text);
+            const char* begin = str.data();
+            const char* end = str.data() + str.size();
+            while (begin != end) {
+                auto unicode = SkUTF::NextUTF8WithReplacement(&begin, end);
+                SkDebugf("  %d: %s %s\n", unicode,
+                         icu->isEmoji(unicode) ? "isEmoji" : "",
+                         icu->isEmojiComponent(unicode) ? "isEmojiComponent" : ""
+                         );
+            }
+
+            SkDebugf("Graphemes:");
+            skia_private::TArray<SkUnicode::CodeUnitFlags, true> codeUnitProperties;
+            icu->computeCodeUnitFlags(str.data(), str.size(), false, &codeUnitProperties);
+            int index = 0;
+            for (auto& cp : codeUnitProperties) {
+                if (SkUnicode::hasGraphemeStartFlag(cp)) {
+                    SkDebugf(" %d", index);
+                }
+                ++index;
+            }
+            SkDebugf("\n");
+        }
+
+        SkSpan<const char> textSpan(str.data(), str.size());
+        const char* begin = str.data();
+        const char* end = begin + str.size();
+        auto emojiStart = OneLineShaper::getEmojiSequenceStart(icu.get(), &begin, end);
+        REPORTER_ASSERT(reporter, expected == emojiStart);
+    };
+
+    test("", -1);
+    test("0", -1);
+    test("2nd", -1);
+    test("99", -1);
+    test("0️⃣", 48);
+    test("0️⃣12", 48);
+    test("#", -1);
+    test("#️⃣", 35);
+    test("#️⃣#", 35);
+    test("#️⃣#️⃣", 35);
+    test("*", -1);
+    test("*️⃣", 42);
+    test("*️⃣abc", 42);
+    test("*️⃣😊", 42);
+    test("😊", 128522);
+    test("😊abc", 128522);
+    test("😊*️⃣",128522);
+    test("👨‍👩‍👦‍👦", 128104);
+
+    // These 2 have emoji components as the first codepoint
+    test("🇷🇺", 127479); // Flag sequence
+    test("0️⃣", 48); // Keycap sequence
+
+    // These have a simple emoji as a first codepoint
+    test("🏴󠁧󠁢󠁥󠁮󠁧󠁿", 127988); // Tag sequence
+    test("👋🏼", 128075); // Modifier sequence
+    test("👨‍👩‍👧‍👦", 128104); // ZWJ sequence
 }

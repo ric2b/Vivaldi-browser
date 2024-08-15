@@ -54,8 +54,10 @@
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions_policy/document_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink-forward.h"
+#include "third_party/blink/public/web/web_form_related_change_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
+#include "third_party/blink/renderer/core/animation/animation_clock.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/media_value_change.h"
 #include "third_party/blink/renderer/core/dom/container_node.h"
@@ -122,6 +124,10 @@ enum class CSPDisposition : int32_t;
 }  // namespace mojom
 }  // namespace network
 
+namespace ui {
+class ColorProvider;
+}  // namespace ui
+
 namespace blink {
 
 class AXContext;
@@ -181,6 +187,7 @@ class HTMLDialogElement;
 class HTMLElement;
 class HTMLFrameOwnerElement;
 class HTMLHeadElement;
+class HTMLImageElement;
 class HTMLLinkElement;
 class HTMLMetaElement;
 class HitTestRequest;
@@ -196,12 +203,12 @@ class LiveNodeListBase;
 class LocalDOMWindow;
 class LocalFrame;
 class LocalFrameView;
+class LocalSVGResource;
 class Locale;
 class Location;
 class MediaQueryListListener;
 class MediaQueryMatcher;
 class NodeIterator;
-class NodeMoveScopeItem;
 class NthIndexCache;
 class Page;
 class PendingAnimations;
@@ -232,7 +239,6 @@ class SelectorQueryCache;
 class SerializedScriptValue;
 class Settings;
 class SlotAssignmentEngine;
-class SnapCoordinator;
 class StyleEngine;
 class StylePropertyMapReadOnly;
 class StyleResolver;
@@ -398,6 +404,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool IsPrerendering() const { return is_prerendering_; }
 
+  bool HasDocumentPictureInPictureWindow() const;
+
   void SetIsTrackingSoftNavigationHeuristics(bool value) {
     is_tracking_soft_navigation_heuristics_ = value;
   }
@@ -442,6 +450,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   DOMImplementation& implementation();
 
+  // Typically, but not guaranteed, to be non-null.
+  //
+  // ```js
+  // document.documentElement.remove();
+  // // document.documentElement is now null
+  // ```
   Element* documentElement() const { return document_element_.Get(); }
 
   Location* location() const;
@@ -485,6 +499,10 @@ class CORE_EXPORT Document : public ContainerNode,
   AtomicString EncodingName() const;
 
   void SetContent(const String&);
+
+  // DOMParser::parseFromString() calls to this. Does the same thing as
+  // `setContent()`, but may use the fast path parser.
+  void SetContentFromDOMParser(const String&);
 
   String SuggestedMIMEType() const;
   void SetMimeType(const AtomicString&);
@@ -620,6 +638,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void ScheduleUseShadowTreeUpdate(SVGUseElement&);
   void UnscheduleUseShadowTreeUpdate(SVGUseElement&);
 
+  void ScheduleSVGResourceInvalidation(LocalSVGResource&);
+  void InvalidatePendingSVGResources();
+
   void EvaluateMediaQueryList();
 
   FormController& GetFormController();
@@ -704,8 +725,8 @@ class CORE_EXPORT Document : public ContainerNode,
   // does its own ancestor tree walk).
   void UpdateStyleAndLayoutTreeForThisDocument();
 
-  void UpdateStyleAndLayoutTreeForNode(const Node*, DocumentUpdateReason);
-  void UpdateStyleAndLayoutTreeForSubtree(const Node*, DocumentUpdateReason);
+  void UpdateStyleAndLayoutTreeForElement(const Element*, DocumentUpdateReason);
+  void UpdateStyleAndLayoutTreeForSubtree(const Element*, DocumentUpdateReason);
 
   void UpdateStyleAndLayout(DocumentUpdateReason);
   void LayoutUpdated();
@@ -1440,6 +1461,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void SetContainsPlugins() { contains_plugins_ = true; }
   bool ContainsPlugins() const { return contains_plugins_; }
 
+  void EnqueueMoveEvent();
   void EnqueueResizeEvent();
   void EnqueueScrollEventForNode(Node*);
   void EnqueueScrollEndEventForNode(Node*);
@@ -1456,6 +1478,9 @@ class CORE_EXPORT Document : public ContainerNode,
       HeapVector<Member<MediaQueryListListener>>&);
   void EnqueueVisualViewportScrollEvent();
   void EnqueueVisualViewportResizeEvent();
+  void EnqueueSnapChangedEvent(Node* target, HeapVector<Member<Node>>& targets);
+  void EnqueueSnapChangingEvent(Node* target,
+                                HeapVector<Member<Node>>& targets);
 
   void DispatchEventsForPrinting();
 
@@ -1535,12 +1560,6 @@ class CORE_EXPORT Document : public ContainerNode,
     return *worklet_animation_controller_;
   }
 
-  // This uses an inline capacity of 2: typically there is only one scope active
-  // in a Document, but in some cases there will be a ShadowRoot being
-  // constructed, bringing the total to 2.
-  using NodeMoveScopeItemSet = HeapVector<Member<NodeMoveScopeItem>, 2>;
-  NodeMoveScopeItemSet& NodeMoveScopeItems() { return node_move_scope_items_; }
-
   void AttachCompositorTimeline(cc::AnimationTimeline*) const;
 
   enum class TopLayerReason {
@@ -1562,15 +1581,13 @@ class CORE_EXPORT Document : public ContainerNode,
 
   HTMLDialogElement* ActiveModalDialog() const;
 
-  HTMLElement* PopoverHintShowing() const {
-    return popover_hint_showing_.Get();
-  }
-  void SetPopoverHintShowing(HTMLElement* element);
-  HeapVector<Member<HTMLElement>>& PopoverStack() { return popover_stack_; }
-  const HeapVector<Member<HTMLElement>>& PopoverStack() const {
-    return popover_stack_;
-  }
-  bool PopoverAutoShowing() const { return !popover_stack_.empty(); }
+  using PopoverStack = HeapVector<Member<HTMLElement>>;
+  const PopoverStack& PopoverHintStack() const { return popover_hint_stack_; }
+  PopoverStack& PopoverHintStack() { return popover_hint_stack_; }
+  bool PopoverHintShowing() const { return !popover_hint_stack_.empty(); }
+  PopoverStack& PopoverAutoStack() { return popover_auto_stack_; }
+  const PopoverStack& PopoverAutoStack() const { return popover_auto_stack_; }
+  bool PopoverAutoShowing() const { return !popover_auto_stack_.empty(); }
   HeapHashSet<Member<HTMLElement>>& AllOpenPopovers() {
     return all_open_popovers_;
   }
@@ -1596,7 +1613,11 @@ class CORE_EXPORT Document : public ContainerNode,
   Document& EnsureTemplateDocument();
   Document* TemplateDocumentHost() { return template_document_host_.Get(); }
 
-  void DidAddOrRemoveFormRelatedElement(Element*);
+  // Signals the ChromeClient that a (Form|Listed)Element changed dynamically,
+  // passing the changed element as well as the type of the change.
+  // TODO(crbug.com/1483242): Fire the signal for elements that become hidden.
+  void DidChangeFormRelatedElementDynamically(HTMLElement*,
+                                              WebFormRelatedChangeType);
 
   void AddConsoleMessage(ConsoleMessage* message,
                          bool discard_duplicates = false) const;
@@ -1664,9 +1685,6 @@ class CORE_EXPORT Document : public ContainerNode,
     node_count_--;
   }
 #endif  // DCHECK_IS_ON()
-
-  SnapCoordinator& GetSnapCoordinator();
-  void PerformScrollSnappingTasks();
 
   void SetContainsShadowRoot() { may_contain_shadow_roots_ = true; }
 
@@ -1847,6 +1865,9 @@ class CORE_EXPORT Document : public ContainerNode,
   bool InForcedColorsMode() const;
   bool InDarkMode();
 
+  const ui::ColorProvider* GetColorProviderForPainting(
+      mojom::blink::ColorScheme color_scheme) const;
+
   // Capture the toggle event during parsing either by HTML parser or XML
   // parser.
   void SetToggleDuringParsing(bool toggle_during_parsing) {
@@ -1891,6 +1912,14 @@ class CORE_EXPORT Document : public ContainerNode,
 
   RenderBlockingResourceManager* GetRenderBlockingResourceManager() {
     return render_blocking_resource_manager_.Get();
+  }
+
+  void SetHasRenderBlockingExpectLinkElements(bool flag) {
+    has_render_blocking_expect_link_elements_ = flag;
+  }
+
+  bool HasRenderBlockingExpectLinkElements() const {
+    return has_render_blocking_expect_link_elements_;
   }
 
   // Called when a previously render-blocking resource is no longer render-
@@ -1949,6 +1978,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void ObserveForIntrinsicSize(Element* element);
   void UnobserveForIntrinsicSize(Element* element);
 
+  void ObserveForLazyLoadedAutoSizedImg(HTMLImageElement* img);
+  void UnobserveForLazyLoadedAutoSizedImg(HTMLImageElement* img);
+
   // Returns true if motion should be forcibly reduced in animations on this
   // document. This returns true if all of the following conditions are true:
   // 1. The user prefers reduced motion.
@@ -1982,6 +2014,9 @@ class CORE_EXPORT Document : public ContainerNode,
   // it.
   bool HasAtLeastOneDataList() const { return data_list_count_; }
 
+  // Updates app title based to the latest app title meta tag value.
+  void UpdateAppTitle();
+
   void ResetAgent(Agent& agent);
 
   bool SupportsLegacyDOMMutations();
@@ -1992,9 +2027,19 @@ class CORE_EXPORT Document : public ContainerNode,
   static Document* parseHTMLUnsafe(ExecutionContext* context,
                                    const String& html);
 
+  // Delays execution of pending async scripts until a milestone is reached.
+  // Used in conjunction with kDelayAsyncScriptExecution experiment.
+  void DelayAsyncScriptExecution();
+  void ResumeAsyncScriptExecution();
+
   // This method should only be called when the document is top-level and it is
   // rendering static media like video or images.
   void SetOverrideSiteForCookiesForCSPMedia(bool value);
+
+  // Flags to determine if LCPP ElementLocator matched during
+  // HTML preload scanning.
+  void SetLcpElementFoundInHtml(bool found);
+  bool IsLcpElementFoundInHtml();
 
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
@@ -2218,6 +2263,8 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Resource* GetPendingLinkPreloadForTesting(const KURL&);
 
+  ResizeObserver& GetLazyLoadedAutoSizedImgObserver();
+
   const DocumentToken token_;
 
   // Bitfield used for tracking UKM sampling of media features such that each
@@ -2379,6 +2426,8 @@ class CORE_EXPORT Document : public ContainerNode,
   bool have_explicitly_disabled_dns_prefetch_;
   bool contains_plugins_;
 
+  bool has_render_blocking_expect_link_elements_ = false;
+
   // Set to true whenever shadow root is attached to document. Does not
   // get reset if all roots are removed.
   bool may_contain_shadow_roots_ = false;
@@ -2495,11 +2544,16 @@ class CORE_EXPORT Document : public ContainerNode,
   };
   VectorOf<TopLayerPendingRemoval> top_layer_elements_pending_removal_;
 
-  // The stack of currently-displayed `popover=auto` elements. Elements in the
-  // stack go from earliest (bottom-most) to latest (top-most).
-  HeapVector<Member<HTMLElement>> popover_stack_;
-  // The `popover=hint` that is currently showing, if any.
-  Member<HTMLElement> popover_hint_showing_;
+  // The stack of currently-displayed popover elements that descend from a root
+  // `popover=auto` element. Elements in the stack go from earliest
+  // (bottom-most) to latest (top-most). Note that `popover=hint` elements can
+  // exist in this stack, but there will never be a `popover=auto` that comes
+  // after that in the stack.
+  HeapVector<Member<HTMLElement>> popover_auto_stack_;
+  // The stack of currently-displayed `popover=hint` elements. Ordering in the
+  // stack is the same as for `popover_auto_stack_`. This stack will only ever
+  // contain `popover=hint` elements, and nothing else.
+  HeapVector<Member<HTMLElement>> popover_hint_stack_;
   // The popover (if any) that received the most recent pointerdown event.
   Member<const HTMLElement> popover_pointerdown_target_;
   // A set of popovers for which hidePopover() has been called, but animations
@@ -2546,13 +2600,17 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<DocumentTimeline> timeline_;
   Member<PendingAnimations> pending_animations_;
   Member<WorkletAnimationController> worklet_animation_controller_;
-
-  NodeMoveScopeItemSet node_move_scope_items_;
+  AnimationClock animation_clock_;
 
   Member<Document> template_document_;
   Member<Document> template_document_host_;
 
   HeapHashSet<Member<SVGUseElement>> use_elements_needing_update_;
+  // SVG resources ("resource elements") for which NotifyContentChanged() needs
+  // to be called to notify any clients about a change in layout attachment
+  // state. Should be populated during layout detach or style recalc, and be
+  // empty before and after those operations.
+  HeapHashSet<Member<LocalSVGResource>> svg_resources_needing_invalidation_;
 
   ParserSynchronizationPolicy parser_sync_policy_;
 
@@ -2563,8 +2621,6 @@ class CORE_EXPORT Document : public ContainerNode,
 #if DCHECK_IS_ON()
   int node_count_ = 0;
 #endif
-
-  Member<SnapCoordinator> snap_coordinator_;
 
   Member<PropertyRegistry> property_registry_;
 
@@ -2685,6 +2741,9 @@ class CORE_EXPORT Document : public ContainerNode,
   HeapVector<Member<HTMLMetaElement>> meta_theme_color_elements_;
 
   Member<ResizeObserver> intrinsic_size_observer_;
+
+  // Watches lazy loaded auto sized img elements for resizes.
+  Member<ResizeObserver> lazy_loaded_auto_sized_img_observer_;
 
   // Whether any resource loads that block printing are happening.
   bool loading_for_print_ = false;

@@ -4,7 +4,7 @@
 
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/events/event_rewriter_controller_impl.h"
 #include "ash/metrics/task_switch_metrics_recorder.h"
@@ -283,7 +283,7 @@ bool WindowCycleController::IsEventInCycleView(
 }
 
 aura::Window* WindowCycleController::GetWindowAtPoint(
-    const ui::LocatedEvent* event) const {
+    const ui::LocatedEvent* event) {
   return window_cycle_list_ ? window_cycle_list_->GetWindowAtPoint(event)
                             : nullptr;
 }
@@ -420,7 +420,7 @@ WindowCycleController::BuildWindowListForWindowCycling(
   }
 
   MruWindowTracker::WindowList adjusted_window_list;
-  for (auto* window : window_list) {
+  for (aura::Window* window : window_list) {
     // The latter-activated window in a snap group should have been added. Skip
     // inserting to avoid duplicates.
     if (base::Contains(adjusted_window_list, window)) {
@@ -534,7 +534,7 @@ void WindowCycleController::OnAltTabModePrefChanged() {
 }
 
 bool WindowCycleController::IsValidKeyboardNavigation(
-    KeyboardNavDirection direction) {
+    KeyboardNavDirection direction) const {
   // Only allow Left and Right arrow keys if interactive alt-tab mode is not
   // in use.
   if (!IsInteractiveAltTabModeAllowed()) {

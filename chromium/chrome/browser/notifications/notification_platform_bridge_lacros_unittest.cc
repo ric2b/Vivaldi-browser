@@ -12,14 +12,19 @@
 #include "chromeos/crosapi/mojom/notification.mojom.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/native_theme/native_theme.h"
 #include "url/gurl.h"
 
 using base::ASCIIToUTF16;
@@ -48,7 +53,7 @@ class TestPlatformBridgeDelegate : public NotificationPlatformBridgeDelegate {
   void HandleNotificationButtonClicked(
       const std::string& id,
       int button_index,
-      const absl::optional<std::u16string>& reply) override {
+      const std::optional<std::u16string>& reply) override {
     ++button_clicked_count_;
     last_button_clicked_arguments_.emplace(
         ButtonClickedArguments{button_index, reply});
@@ -62,7 +67,7 @@ class TestPlatformBridgeDelegate : public NotificationPlatformBridgeDelegate {
 
   struct ButtonClickedArguments {
     int button_index;
-    absl::optional<std::u16string> reply;
+    std::optional<std::u16string> reply;
   };
 
   // Public because this is test code.
@@ -71,7 +76,7 @@ class TestPlatformBridgeDelegate : public NotificationPlatformBridgeDelegate {
   int button_clicked_count_ = 0;
   int settings_button_clicked_count_ = 0;
   int disabled_count_ = 0;
-  absl::optional<ButtonClickedArguments> last_button_clicked_arguments_;
+  std::optional<ButtonClickedArguments> last_button_clicked_arguments_;
 };
 
 // Simulates MessageCenterAsh in ash-chrome.
@@ -300,6 +305,61 @@ TEST_F(NotificationPlatformBridgeLacrosTest, SerializationProgress) {
   EXPECT_EQ(u"status2", last_notification->progress_status);
 }
 
+TEST_F(NotificationPlatformBridgeLacrosTest, SerializationAccentColor) {
+  const SkColor kTestColor = SkColorSetRGB(0x01, 0x41, 0x33);
+
+  // Create a message_center notification.
+  message_center::RichNotificationData rich_data;
+
+  // Set the desired color.
+  rich_data.accent_color = kTestColor;
+
+  message_center::Notification ui_notification(
+      message_center::NOTIFICATION_TYPE_PROGRESS, "test_id", std::u16string(),
+      std::u16string(), ui::ImageModel(), std::u16string(), GURL(),
+      message_center::NotifierId(), rich_data, nullptr);
+
+  // Show the notification.
+  bridge_.Display(NotificationHandler::Type::TRANSIENT, /*profile=*/nullptr,
+                  ui_notification, /*metadata=*/nullptr);
+  message_center_remote_.FlushForTesting();
+
+  // Notification was shown with correct fields.
+  crosapi::mojom::Notification* last_notification =
+      test_message_center_.last_notification_.get();
+  ASSERT_TRUE(last_notification);
+  EXPECT_THAT(last_notification->accent_color, testing::Optional(kTestColor));
+}
+
+TEST_F(NotificationPlatformBridgeLacrosTest, SerializationAccentColorId) {
+  const SkColor kTestColor = SkColorSetRGB(0xDE, 0xAD, 0xBF);
+  // Setup color provider
+  ui::ColorProvider* color_provider =
+      ui::ColorProviderManager::GetForTesting().GetColorProviderFor(
+          ui::NativeTheme::GetInstanceForNativeUi()->GetColorProviderKey(
+              nullptr));
+  color_provider->SetColorForTesting(ui::kColorSysPrimary, kTestColor);
+
+  // Create a message_center notification.
+  message_center::RichNotificationData rich_data;
+  rich_data.accent_color_id = ui::kColorSysPrimary;
+  message_center::Notification ui_notification(
+      message_center::NOTIFICATION_TYPE_PROGRESS, "test_id", std::u16string(),
+      std::u16string(), ui::ImageModel(), std::u16string(), GURL(),
+      message_center::NotifierId(), rich_data, nullptr);
+
+  // Show the notification.
+  bridge_.Display(NotificationHandler::Type::TRANSIENT, /*profile=*/nullptr,
+                  ui_notification, /*metadata=*/nullptr);
+  message_center_remote_.FlushForTesting();
+
+  // Notification was shown with correct fields.
+  crosapi::mojom::Notification* last_notification =
+      test_message_center_.last_notification_.get();
+  ASSERT_TRUE(last_notification);
+  EXPECT_THAT(last_notification->accent_color, testing::Optional(kTestColor));
+}
+
 TEST_F(NotificationPlatformBridgeLacrosTest, UserActions) {
   // Create a test notification.
   message_center::Notification ui_notification(
@@ -330,7 +390,7 @@ TEST_F(NotificationPlatformBridgeLacrosTest, UserActions) {
   EXPECT_EQ(1, bridge_delegate_.clicked_count_);
 
   notification_delegate_remote->OnNotificationButtonClicked(
-      /*button_index=*/0, /*reply=*/absl::nullopt);
+      /*button_index=*/0, /*reply=*/std::nullopt);
   notification_delegate_remote.FlushForTesting();
   EXPECT_EQ(1, bridge_delegate_.button_clicked_count_);
 
@@ -341,7 +401,7 @@ TEST_F(NotificationPlatformBridgeLacrosTest, UserActions) {
 
   // Test Inline reply.
   notification_delegate_remote->OnNotificationButtonClicked(
-      /*button_index=*/1, /*reply=*/absl::make_optional(u"test"));
+      /*button_index=*/1, /*reply=*/std::make_optional(u"test"));
   notification_delegate_remote.FlushForTesting();
   EXPECT_EQ(2, bridge_delegate_.button_clicked_count_);
 

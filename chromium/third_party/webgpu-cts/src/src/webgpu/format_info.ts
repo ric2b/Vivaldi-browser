@@ -53,7 +53,7 @@ function formatTableWithDefaults<Defaults extends {}, Table extends { readonly [
       ? Table[F][K]
       : K extends keyof Defaults
       ? Defaults[K]
-      : typeof kFormatUniversalDefaults[K];
+      : (typeof kFormatUniversalDefaults)[K];
   };
 } {
   return Object.fromEntries(
@@ -72,7 +72,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     // plain, 8 bits per component
 
     r8unorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 1, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -82,13 +89,27 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r8snorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       multisample: false,
       /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r8uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 1, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -98,7 +119,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r8sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 1, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -109,7 +137,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     },
 
     rg8unorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 2, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -119,13 +154,27 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg8snorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       multisample: false,
       /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg8uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -135,7 +184,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg8sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -146,7 +202,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     },
 
     rgba8unorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -157,7 +220,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'rgba8unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -168,13 +238,27 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba8snorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       multisample: false,
       /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba8uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -184,7 +268,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba8sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -194,7 +285,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     bgra8unorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -205,7 +303,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bgra8unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 1 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -219,7 +324,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     // plain, 16 bits per component
 
     r16uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -229,7 +341,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r16sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 2, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -239,7 +358,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r16float: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 2, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -250,7 +376,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     },
 
     rg16uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -260,7 +393,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg16sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -270,7 +410,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg16float: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 4, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -281,7 +428,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     },
 
     rgba16uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: true, bytes: 8 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -291,7 +445,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba16sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: true, bytes: 8 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -301,7 +462,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba16float: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: true, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 2 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -314,7 +482,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     // plain, 32 bits per component
 
     r32uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: true,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -324,7 +499,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r32sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: true,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -334,7 +516,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     r32float: {
-      color: { type: 'unfilterable-float', copySrc: true, copyDst: true, storage: true, bytes: 4 },
+      color: {
+        type: 'unfilterable-float',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: true,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 4, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -345,7 +534,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     },
 
     rg32uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: true, bytes: 8 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -355,7 +551,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg32sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: true, bytes: 8 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -365,7 +568,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg32float: {
-      color: { type: 'unfilterable-float', copySrc: true, copyDst: true, storage: true, bytes: 8 },
+      color: {
+        type: 'unfilterable-float',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -376,7 +586,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     },
 
     rgba32uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: true, bytes: 16 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 16, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -386,7 +603,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba32sint: {
-      color: { type: 'sint', copySrc: true, copyDst: true, storage: true, bytes: 16 },
+      color: {
+        type: 'sint',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 16, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -396,7 +620,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgba32float: {
-      color: { type: 'unfilterable-float', copySrc: true, copyDst: true, storage: true, bytes: 16 },
+      color: {
+        type: 'unfilterable-float',
+        copySrc: true,
+        copyDst: true,
+        storage: true,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 16, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -409,7 +640,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     // plain, mixed component width, 32 bits per texel
 
     rgb10a2uint: {
-      color: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: false, resolve: false, byteCost: 8, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -419,7 +657,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rgb10a2unorm: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       colorRender: { blend: true, resolve: true, byteCost: 8, alignment: 4 },
       renderable: true,
       /*prettier-ignore*/ get renderTargetComponentAlignment() { return this.colorRender.alignment; },
@@ -429,7 +674,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     rg11b10ufloat: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       multisample: false,
       /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
@@ -440,7 +692,14 @@ const kRegularTextureFormatInfo = formatTableWithDefaults({
     // packed
 
     rgb9e5ufloat: {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 4 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       multisample: false,
       /*prettier-ignore*/ get sampleType() { return this.color.type; },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
@@ -455,19 +714,40 @@ const kSizedDepthStencilFormatInfo = formatTableWithDefaults({
   defaults: { blockWidth: 1, blockHeight: 1, multisample: true, copySrc: true, renderable: true },
   table: {
     stencil8: {
-      stencil: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      stencil: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       sampleType: 'uint',
       copyDst: true,
       bytesPerBlock: 1,
     },
     depth16unorm: {
-      depth: { type: 'depth', copySrc: true, copyDst: true, storage: false, bytes: 2 },
+      depth: {
+        type: 'depth',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 2,
+      },
       sampleType: 'depth',
       copyDst: true,
       bytesPerBlock: 2,
     },
     depth32float: {
-      depth: { type: 'depth', copySrc: true, copyDst: false, storage: false, bytes: 4 },
+      depth: {
+        type: 'depth',
+        copySrc: true,
+        copyDst: false,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
       sampleType: 'depth',
       copyDst: false,
       bytesPerBlock: 4,
@@ -478,23 +758,58 @@ const kUnsizedDepthStencilFormatInfo = formatTableWithDefaults({
   defaults: { blockWidth: 1, blockHeight: 1, multisample: true },
   table: {
     depth24plus: {
-      depth: { type: 'depth', copySrc: false, copyDst: false, storage: false, bytes: undefined },
+      depth: {
+        type: 'depth',
+        copySrc: false,
+        copyDst: false,
+        storage: false,
+        readWriteStorage: false,
+        bytes: undefined,
+      },
       copySrc: false,
       copyDst: false,
       sampleType: 'depth',
       renderable: true,
     },
     'depth24plus-stencil8': {
-      depth: { type: 'depth', copySrc: false, copyDst: false, storage: false, bytes: undefined },
-      stencil: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      depth: {
+        type: 'depth',
+        copySrc: false,
+        copyDst: false,
+        storage: false,
+        readWriteStorage: false,
+        bytes: undefined,
+      },
+      stencil: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       copySrc: false,
       copyDst: false,
       sampleType: 'depth',
       renderable: true,
     },
     'depth32float-stencil8': {
-      depth: { type: 'depth', copySrc: true, copyDst: false, storage: false, bytes: 4 },
-      stencil: { type: 'uint', copySrc: true, copyDst: true, storage: false, bytes: 1 },
+      depth: {
+        type: 'depth',
+        copySrc: true,
+        copyDst: false,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 4,
+      },
+      stencil: {
+        type: 'uint',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 1,
+      },
       feature: 'depth32float-stencil8',
       copySrc: false,
       copyDst: false,
@@ -516,72 +831,170 @@ const kBCTextureFormatInfo = formatTableWithDefaults({
   },
   table: {
     'bc1-rgba-unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       baseFormat: 'bc1-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc1-rgba-unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       baseFormat: 'bc1-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'bc2-rgba-unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'bc2-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc2-rgba-unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'bc2-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'bc3-rgba-unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'bc3-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc3-rgba-unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'bc3-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'bc4-r-unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc4-r-snorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'bc5-rg-unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc5-rg-snorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'bc6h-rgb-ufloat': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc6h-rgb-float': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'bc7-rgba-unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'bc7-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'bc7-rgba-unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'bc7-rgba-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -600,53 +1013,123 @@ const kETC2TextureFormatInfo = formatTableWithDefaults({
   },
   table: {
     'etc2-rgb8unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       baseFormat: 'etc2-rgb8unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'etc2-rgb8unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       baseFormat: 'etc2-rgb8unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'etc2-rgb8a1unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       baseFormat: 'etc2-rgb8a1unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'etc2-rgb8a1unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       baseFormat: 'etc2-rgb8a1unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'etc2-rgba8unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'etc2-rgba8unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'etc2-rgba8unorm-srgb': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'etc2-rgba8unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'eac-r11unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'eac-r11snorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 8 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 8,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
 
     'eac-rg11unorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'eac-rg11snorm': {
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
   },
@@ -664,14 +1147,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-4x4-unorm': {
       blockWidth: 4,
       blockHeight: 4,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-4x4-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-4x4-unorm-srgb': {
       blockWidth: 4,
       blockHeight: 4,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-4x4-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -679,14 +1176,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-5x4-unorm': {
       blockWidth: 5,
       blockHeight: 4,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-5x4-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-5x4-unorm-srgb': {
       blockWidth: 5,
       blockHeight: 4,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-5x4-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -694,14 +1205,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-5x5-unorm': {
       blockWidth: 5,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-5x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-5x5-unorm-srgb': {
       blockWidth: 5,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-5x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -709,14 +1234,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-6x5-unorm': {
       blockWidth: 6,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-6x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-6x5-unorm-srgb': {
       blockWidth: 6,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-6x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -724,14 +1263,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-6x6-unorm': {
       blockWidth: 6,
       blockHeight: 6,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-6x6-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-6x6-unorm-srgb': {
       blockWidth: 6,
       blockHeight: 6,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-6x6-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -739,14 +1292,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-8x5-unorm': {
       blockWidth: 8,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-8x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-8x5-unorm-srgb': {
       blockWidth: 8,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-8x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -754,14 +1321,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-8x6-unorm': {
       blockWidth: 8,
       blockHeight: 6,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-8x6-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-8x6-unorm-srgb': {
       blockWidth: 8,
       blockHeight: 6,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-8x6-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -769,14 +1350,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-8x8-unorm': {
       blockWidth: 8,
       blockHeight: 8,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-8x8-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-8x8-unorm-srgb': {
       blockWidth: 8,
       blockHeight: 8,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-8x8-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -784,14 +1379,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-10x5-unorm': {
       blockWidth: 10,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-10x5-unorm-srgb': {
       blockWidth: 10,
       blockHeight: 5,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x5-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -799,14 +1408,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-10x6-unorm': {
       blockWidth: 10,
       blockHeight: 6,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x6-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-10x6-unorm-srgb': {
       blockWidth: 10,
       blockHeight: 6,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x6-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -814,14 +1437,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-10x8-unorm': {
       blockWidth: 10,
       blockHeight: 8,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x8-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-10x8-unorm-srgb': {
       blockWidth: 10,
       blockHeight: 8,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x8-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -829,14 +1466,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-10x10-unorm': {
       blockWidth: 10,
       blockHeight: 10,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x10-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-10x10-unorm-srgb': {
       blockWidth: 10,
       blockHeight: 10,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-10x10-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -844,14 +1495,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-12x10-unorm': {
       blockWidth: 12,
       blockHeight: 10,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-12x10-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-12x10-unorm-srgb': {
       blockWidth: 12,
       blockHeight: 10,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-12x10-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -859,14 +1524,28 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
     'astc-12x12-unorm': {
       blockWidth: 12,
       blockHeight: 12,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-12x12-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
     'astc-12x12-unorm-srgb': {
       blockWidth: 12,
       blockHeight: 12,
-      color: { type: 'float', copySrc: true, copyDst: true, storage: false, bytes: 16 },
+      color: {
+        type: 'float',
+        copySrc: true,
+        copyDst: true,
+        storage: false,
+        readWriteStorage: false,
+        bytes: 16,
+      },
       baseFormat: 'astc-12x12-unorm',
       /*prettier-ignore*/ get bytesPerBlock() { return this.color.bytes; },
     },
@@ -937,6 +1616,8 @@ interface TextureFormatAspectInfo {
   copyDst: boolean;
   /** Whether the aspect can be used as `STORAGE`. */
   storage: boolean;
+  /** Whether the aspect can be used as `STORAGE` with `read-write` storage texture access. */
+  readWriteStorage: boolean;
   /** The "texel block copy footprint" of one texel block; `undefined` if the aspect is unsized. */
   bytes: number | undefined;
 }
@@ -1248,6 +1929,28 @@ export function filterFormatsByFeature<T>(
 
 export function isCompressedTextureFormat(format: GPUTextureFormat) {
   return format in kCompressedTextureFormatInfo;
+}
+
+export const kCompatModeUnsupportedStorageTextureFormats: readonly GPUTextureFormat[] = [
+  'rg32float',
+  'rg32sint',
+  'rg32uint',
+] as const;
+
+export function isTextureFormatUsableAsStorageFormat(
+  format: GPUTextureFormat,
+  isCompatibilityMode: boolean
+) {
+  if (isCompatibilityMode) {
+    if (kCompatModeUnsupportedStorageTextureFormats.indexOf(format) >= 0) {
+      return false;
+    }
+  }
+  return !!kTextureFormatInfo[format].color?.storage;
+}
+
+export function isEncodableTextureformat(format: GPUTextureFormat) {
+  return format in kEncodableTextureFormatInfo;
 }
 
 export const kFeaturesForFormats = getFeaturesForFormats(kTextureFormats);

@@ -8,17 +8,15 @@
 #import "base/memory/weak_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
-#import "components/supervised_user/core/browser/kids_chrome_management_client.h"
 #import "components/supervised_user/core/browser/supervised_user_interstitial.h"
+#import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/browser/supervised_user_service.h"
 #import "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/pref_names.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "components/supervised_user/core/common/supervised_user_utils.h"
-#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/supervised_user/model/kids_chrome_management_client_factory.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_error.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_error_container.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
@@ -36,8 +34,7 @@ void OnURLFilteringDone(
     GURL request_url,
     web::WebStatePolicyDecider::RequestInfo request_info,
     web::WebStatePolicyDecider::PolicyDecisionCallback policy_decision_callback,
-    supervised_user::SupervisedUserURLFilter::FilteringBehavior
-        filtering_behavior,
+    supervised_user::FilteringBehavior filtering_behavior,
     supervised_user::FilteringBehaviorReason reason,
     bool uncertain) {
   // Allow navigation by default.
@@ -47,8 +44,7 @@ void OnURLFilteringDone(
   if (!web_state) {
     // Cancel the request if the corresponding `web_state` is destroyed.
     decision = PolicyDecision::Cancel();
-  } else if (filtering_behavior == supervised_user::SupervisedUserURLFilter::
-                                       FilteringBehavior::BLOCK) {
+  } else if (filtering_behavior == supervised_user::FilteringBehavior::kBlock) {
     SupervisedUserErrorContainer* container =
         SupervisedUserErrorContainer::FromWebState(web_state);
     CHECK(container);
@@ -86,13 +82,14 @@ void SupervisedUserURLFilterTabHelper::ShouldAllowRequest(
     return;
   }
 
-  supervised_user::SupervisedUserService* supervised_user_service =
-      SupervisedUserServiceFactory::GetForBrowserState(chrome_browser_state);
-
-  if (!supervised_user_service->IsURLFilteringEnabled()) {
+  if (!supervised_user::IsUrlFilteringEnabled(
+          *chrome_browser_state->GetPrefs())) {
     std::move(callback).Run(PolicyDecision::Allow());
     return;
   }
+
+  supervised_user::SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForBrowserState(chrome_browser_state);
 
   // Set up the callback taking filtering results, and perform URL filtering.
   GURL request_url = net::GURLWithNSURL(request.URL);

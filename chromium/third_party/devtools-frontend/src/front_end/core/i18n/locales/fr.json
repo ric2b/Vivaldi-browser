@@ -11,29 +11,26 @@
   "core/common/ResourceType.ts | document": {
     "message": "Document"
   },
-  "core/common/ResourceType.ts | documents": {
-    "message": "Documents"
-  },
   "core/common/ResourceType.ts | eventsource": {
     "message": "EventSource"
   },
   "core/common/ResourceType.ts | fetch": {
     "message": "Fetch"
   },
+  "core/common/ResourceType.ts | fetchAndXHR": {
+    "message": "Fetch et XHR"
+  },
   "core/common/ResourceType.ts | font": {
     "message": "Police"
-  },
-  "core/common/ResourceType.ts | fonts": {
-    "message": "Polices"
   },
   "core/common/ResourceType.ts | image": {
     "message": "Image"
   },
-  "core/common/ResourceType.ts | images": {
-    "message": "Images"
-  },
   "core/common/ResourceType.ts | img": {
     "message": "Image"
+  },
+  "core/common/ResourceType.ts | javascript": {
+    "message": "JavaScript"
   },
   "core/common/ResourceType.ts | js": {
     "message": "JS"
@@ -56,17 +53,11 @@
   "core/common/ResourceType.ts | script": {
     "message": "Script"
   },
-  "core/common/ResourceType.ts | scripts": {
-    "message": "Scripts"
-  },
   "core/common/ResourceType.ts | signedexchange": {
     "message": "Échange signé"
   },
   "core/common/ResourceType.ts | stylesheet": {
     "message": "Feuille de style"
-  },
-  "core/common/ResourceType.ts | stylesheets": {
-    "message": "Feuilles de style"
   },
   "core/common/ResourceType.ts | texttrack": {
     "message": "TextTrack"
@@ -83,17 +74,11 @@
   "core/common/ResourceType.ts | websocket": {
     "message": "WebSocket"
   },
-  "core/common/ResourceType.ts | websockets": {
-    "message": "WebSockets"
-  },
   "core/common/ResourceType.ts | webtransport": {
     "message": "WebTransport"
   },
   "core/common/ResourceType.ts | ws": {
     "message": "WS"
-  },
-  "core/common/ResourceType.ts | xhrAndFetch": {
-    "message": "XHR et Fetch"
   },
   "core/common/Revealer.ts | applicationPanel": {
     "message": "Panneau \"Application\""
@@ -106,6 +91,9 @@
   },
   "core/common/Revealer.ts | issuesView": {
     "message": "Affichage des problèmes"
+  },
+  "core/common/Revealer.ts | memoryInspectorPanel": {
+    "message": "Panneau de l'outil d'inspection de mémoire"
   },
   "core/common/Revealer.ts | networkPanel": {
     "message": "Panneau \"Network\""
@@ -380,6 +368,9 @@
   "core/sdk/NetworkRequest.ts | theSchemeOfThisConnectionIsNot": {
     "message": "Le schéma de cette connexion n'est pas autorisé à placer des cookies."
   },
+  "core/sdk/NetworkRequest.ts | thirdPartyPhaseout": {
+    "message": "Ce cookie a été bloqué, car les cookies tiers ont été abandonnés. En savoir plus dans l'onglet des problèmes"
+  },
   "core/sdk/NetworkRequest.ts | thisSetcookieDidntSpecifyASamesite": {
     "message": "Cet en-tête Set-Cookie n'a pas spécifié d'attribut SameSite. Il a été défini par défaut sur \"SameSite=Lax\" et a été bloqué, car il provenait d'une réponse intersite qui n'était pas la réponse à une navigation de niveau supérieur. Cette réponse est considérée comme intersite, car l'URL a un schéma différent de celui du site actuel."
   },
@@ -400,6 +391,9 @@
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedBecauseTheNameValuePairExceedsMaxSize": {
     "message": "Cette tentative de définir un cookie via un en-tête Set-Cookie a été bloquée, car le cookie était trop volumineux. La taille combinée du nom et de la valeur ne doit pas dépasser 4096 caractères."
+  },
+  "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedDueThirdPartyPhaseout": {
+    "message": "La définition de ce cookie a été bloquée en raison de l'abandon des cookies tiers. En savoir plus dans l'onglet des problèmes"
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedDueToUser": {
     "message": "Cette tentative de définir un cookie via un en-tête Set-Cookie a été bloquée en raison des préférences de l'utilisateur."
@@ -593,9 +587,6 @@
   "core/sdk/sdk-meta.ts | enableCache": {
     "message": "Activer le cache"
   },
-  "core/sdk/sdk-meta.ts | enableCustomFormatters": {
-    "message": "Activer les formateurs personnalisés"
-  },
   "core/sdk/sdk-meta.ts | enableJavascript": {
     "message": "Activer JavaScript"
   },
@@ -615,7 +606,7 @@
     "message": "Étendre les lignes de la grille"
   },
   "core/sdk/sdk-meta.ts | hideCoreWebVitalsOverlay": {
-    "message": "Masquer la superposition des Signaux Web essentiels"
+    "message": "Masquer la superposition Core Web Vitals"
   },
   "core/sdk/sdk-meta.ts | hideFramesPerSecondFpsMeter": {
     "message": "Masquer le compteur d'images par seconde (FPS)"
@@ -666,7 +657,7 @@
     "message": "Afficher les noms de zone"
   },
   "core/sdk/sdk-meta.ts | showCoreWebVitalsOverlay": {
-    "message": "Afficher la superposition Signaux Web essentiels"
+    "message": "Afficher la superposition Core Web Vitals"
   },
   "core/sdk/sdk-meta.ts | showFramesPerSecondFpsMeter": {
     "message": "Afficher le compteur d'images par seconde (FPS)"
@@ -726,7 +717,7 @@
     "message": "Page : {PH1}"
   },
   "entrypoints/inspector_main/RenderingOptions.ts | coreWebVitals": {
-    "message": "Signaux Web essentiels"
+    "message": "Core Web Vitals"
   },
   "entrypoints/inspector_main/RenderingOptions.ts | disableAvifImageFormat": {
     "message": "Désactiver le format d'image AVIF"
@@ -816,7 +807,7 @@
     "message": "Problèmes de performances du défilement"
   },
   "entrypoints/inspector_main/RenderingOptions.ts | showsAnOverlayWithCoreWebVitals": {
-    "message": "Afficher une superposition avec les Signaux Web essentiels."
+    "message": "Afficher une superposition avec Core Web Vitals."
   },
   "entrypoints/inspector_main/RenderingOptions.ts | showsLayerBordersOrangeoliveAnd": {
     "message": "Afficher les bordures (orange/olive) et les tuiles (cyan) des calques."
@@ -1139,9 +1130,6 @@
   "generated/Deprecation.ts | DocumentDomainSettingWithoutOriginAgentClusterHeader": {
     "message": "La possibilité de contourner la règle d'origine commune en définissant document.domain est obsolète et sera désactivée par défaut. Pour continuer à utiliser cette fonctionnalité, veuillez désactiver les clusters d'agents selon l'origine en envoyant un en-tête Origin-Agent-Cluster: ?0 avec la réponse HTTP pour le document et les frames. Pour en savoir plus, consultez https://developer.chrome.com/blog/immutable-document-domain/."
   },
-  "generated/Deprecation.ts | ExpectCTHeader": {
-    "message": "L'en-tête Expect-CT est obsolète et sera supprimé. Chrome exige la transparence des certificats pour tous les certificats reconnus publiquement émis après le 30 avril 2018."
-  },
   "generated/Deprecation.ts | GeolocationInsecureOrigin": {
     "message": "getCurrentPosition() et watchPosition() ne fonctionnent plus sur les origines non sécurisées. Pour utiliser cette fonctionnalité, vous devriez envisager d'utiliser une origine sûre pour votre application, par exemple HTTPS. Pour en savoir plus, consultez https://goo.gle/chrome-insecure-origins."
   },
@@ -1174,9 +1162,6 @@
   },
   "generated/Deprecation.ts | NoSysexWebMIDIWithoutPermission": {
     "message": "Web MIDI demandera une autorisation d'utilisation, même si le SysEx n'est pas spécifié dans les MIDIOptions."
-  },
-  "generated/Deprecation.ts | NonStandardDeclarativeShadowDOM": {
-    "message": "L'ancien attribut shadowroot non standardisé est obsolète et ne *fonctionnera plus* dans la version M119. Veuillez plutôt utiliser le nouvel attribut standardisé shadowrootmode."
   },
   "generated/Deprecation.ts | NotificationInsecureOrigin": {
     "message": "L'API Notification ne peut plus être utilisée depuis des origines non sécurisées. Vous devriez envisager d'utiliser une origine sûre pour votre application, par exemple HTTPS. Pour en savoir plus, consultez https://goo.gle/chrome-insecure-origins."
@@ -1256,6 +1241,9 @@
   "generated/Deprecation.ts | TextToSpeech_DisallowedByAutoplay": {
     "message": "La fonctionnalité speechSynthesis.speak() sans activation de l'utilisateur est obsolète et sera supprimée."
   },
+  "generated/Deprecation.ts | UnloadHandler": {
+    "message": "Les écouteurs d'événements de déchargement sont obsolètes et seront supprimés."
+  },
   "generated/Deprecation.ts | V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "message": "Les extensions doivent activer l'isolation multi-origine pour pouvoir continuer à utiliser SharedArrayBuffer. Consultez https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/."
   },
@@ -1334,6 +1322,9 @@
   "models/emulation/DeviceModeModel.ts | devicePixelRatioMustBeLessThanOr": {
     "message": "Le rapport de pixels de l'appareil doit être inférieur ou égal à {PH1}."
   },
+  "models/emulation/DeviceModeModel.ts | heightCannotBeEmpty": {
+    "message": "Vous devez indiquer une hauteur."
+  },
   "models/emulation/DeviceModeModel.ts | heightMustBeANumber": {
     "message": "La hauteur doit être un nombre."
   },
@@ -1342,6 +1333,9 @@
   },
   "models/emulation/DeviceModeModel.ts | heightMustBeLessThanOrEqualToS": {
     "message": "La hauteur doit être inférieure ou égale à {PH1}."
+  },
+  "models/emulation/DeviceModeModel.ts | widthCannotBeEmpty": {
+    "message": "Vous devez indiquer la largeur."
   },
   "models/emulation/DeviceModeModel.ts | widthMustBeANumber": {
     "message": "La largeur doit être un nombre."
@@ -1388,11 +1382,17 @@
   "models/issues_manager/ContentSecurityPolicyIssue.ts | trustedTypesPolicyViolation": {
     "message": "Trusted Types : non-respect de la règle"
   },
+  "models/issues_manager/CookieDeprecationMetadataIssue.ts | thirdPartyPhaseoutExplained": {
+    "message": "Se préparer à abandonner progressivement les cookies tiers"
+  },
   "models/issues_manager/CookieIssue.ts | aSecure": {
     "message": "sécurisé"
   },
   "models/issues_manager/CookieIssue.ts | anInsecure": {
     "message": "an insecure"
+  },
+  "models/issues_manager/CookieIssue.ts | fileCrosSiteRedirectBug": {
+    "message": "Signaler un bug"
   },
   "models/issues_manager/CookieIssue.ts | firstPartySetsExplained": {
     "message": "First-Party Sets et l'attribut SameParty"
@@ -1625,41 +1625,17 @@
   "models/timeline_model/TimelineJSProfile.ts | threadS": {
     "message": "Thread {PH1}"
   },
-  "models/timeline_model/TimelineModel.ts | bidderWorklet": {
-    "message": "Worklet d'enchérisseur"
-  },
-  "models/timeline_model/TimelineModel.ts | bidderWorkletS": {
-    "message": "Worklet d'enchérisseur : {PH1}"
-  },
   "models/timeline_model/TimelineModel.ts | dedicatedWorker": {
     "message": "Worker dédié"
   },
-  "models/timeline_model/TimelineModel.ts | sellerWorklet": {
-    "message": "Worklet de vendeur"
-  },
-  "models/timeline_model/TimelineModel.ts | sellerWorkletS": {
-    "message": "Worklet de vendeur : {PH1}"
-  },
   "models/timeline_model/TimelineModel.ts | threadS": {
     "message": "Thread {PH1}"
-  },
-  "models/timeline_model/TimelineModel.ts | unknownWorklet": {
-    "message": "Worklet d'enchères"
-  },
-  "models/timeline_model/TimelineModel.ts | unknownWorkletS": {
-    "message": "Worklet d'enchères : {PH1}"
   },
   "models/timeline_model/TimelineModel.ts | workerS": {
     "message": "Worker – {PH1}"
   },
   "models/timeline_model/TimelineModel.ts | workerSS": {
     "message": "Worker : {PH1} — {PH2}"
-  },
-  "models/timeline_model/TimelineModel.ts | workletService": {
-    "message": "Service de Worklet d'enchères"
-  },
-  "models/timeline_model/TimelineModel.ts | workletServiceS": {
-    "message": "Service de Worklet d'enchères : {PH1}"
   },
   "models/workspace/UISourceCode.ts | index": {
     "message": "(index)"
@@ -1708,6 +1684,9 @@
   },
   "panels/accessibility/AccessibilityNodeView.ts | elementIsHiddenBy": {
     "message": "Élément masqué par une boîte de dialogue active : "
+  },
+  "panels/accessibility/AccessibilityNodeView.ts | elementIsHiddenByChildTree": {
+    "message": "L'élément est masqué par l'arborescence enfant : "
   },
   "panels/accessibility/AccessibilityNodeView.ts | elementIsInAnInertSubTree": {
     "message": "L'élément se trouve dans une sous-arborescence inert de "
@@ -2157,7 +2136,7 @@
     "message": "{PH1} {PH2} n'est pas indiqué dans le fichier manifeste. {PH3} est utilisé à la place. Pour spécifier un ID d'appli correspondant à l'identité actuelle, définissez le champ {PH4} sur {PH5} {PH6}."
   },
   "panels/application/AppManifestView.ts | avoidPurposeAnyAndMaskable": {
-    "message": "Définir une icône sur \"purpose: \"any maskable\"\" est déconseillé. Elle risque de mal s'afficher sur certaines plates-formes en raison d'une marge intérieure trop petite ou trop grande."
+    "message": "Il est déconseillé de déclarer une icône avec \"purpose\" sur \"any maskable\". Elle risque de mal s'afficher sur certaines plates-formes en raison d'une marge intérieure trop petite ou trop grande."
   },
   "panels/application/AppManifestView.ts | backgroundColor": {
     "message": "Couleur d'arrière-plan"
@@ -2169,7 +2148,7 @@
     "message": "Suggestion d'ID \"{PH1}\" copiée dans le presse-papiers"
   },
   "panels/application/AppManifestView.ts | copyToClipboard": {
-    "message": "Copier dans le presse-papiers"
+    "message": "Copier l'ID suggéré dans le presse-papiers"
   },
   "panels/application/AppManifestView.ts | couldNotCheckServiceWorker": {
     "message": "Impossible de vérifier le service worker sans un champ \"start_url\" dans le fichier manifeste"
@@ -2247,13 +2226,13 @@
     "message": "Le fichier manifeste spécifie \"prefer_related_applications: true\""
   },
   "panels/application/AppManifestView.ts | manifestStartUrlIsNotValid": {
-    "message": "Le fichier manifeste \"start_URL\" n'est pas valide"
+    "message": "Le fichier manifeste \"start_url\" n'est pas valide"
   },
   "panels/application/AppManifestView.ts | name": {
     "message": "Nom"
   },
   "panels/application/AppManifestView.ts | needHelpReadOurS": {
-    "message": "Besoin d'aide ? Rendez-vous sur {PH1}."
+    "message": "Besoin d'aide ? Consultez le site {PH1}."
   },
   "panels/application/AppManifestView.ts | newNoteUrl": {
     "message": "URL de nouvelle note"
@@ -2262,10 +2241,10 @@
     "message": "Aucun ID Play Store fourni"
   },
   "panels/application/AppManifestView.ts | noScreenshotsForRicherPWAInstallOnDesktop": {
-    "message": "L'interface utilisateur d'installation de PWA enrichie ne sera pas disponible sur ordinateur. Veuillez ajouter au moins une capture d'écran avec \"form_factor\" défini sur \"wide\"."
+    "message": "L'interface utilisateur d'installation de PWA enrichie ne sera pas disponible sur ordinateur. Veuillez ajouter au moins une capture d'écran avec form_factor défini sur wide."
   },
   "panels/application/AppManifestView.ts | noScreenshotsForRicherPWAInstallOnMobile": {
-    "message": "L'interface utilisateur d'installation de PWA enrichie ne sera pas disponible sur mobile. Veuillez ajouter au moins une capture d'écran pour laquelle \"form_factor\" n'est pas défini ou est défini sur une valeur autre que \"wide\"."
+    "message": "L'interface utilisateur d'installation de PWA enrichie ne sera pas disponible sur mobile. Veuillez ajouter au moins une capture d'écran pour laquelle form_factor n'est pas défini ou est défini sur une valeur autre que wide."
   },
   "panels/application/AppManifestView.ts | noSuppliedIconIsAtLeastSpxSquare": {
     "message": "Aucune icône fournie ne fait au moins {PH1} px carrés au format PNG, SVG ou WebP, que l'attribut de fonction soit défini ou non sur any."
@@ -2340,13 +2319,16 @@
     "message": "Capture d'écran"
   },
   "panels/application/AppManifestView.ts | screenshotPixelSize": {
-    "message": "La taille initiale de la capture d'écran {url} doit être définie en pixels [width]x[height] plutôt que sur \"any\"."
+    "message": "La taille initiale de la capture d'écran {url} doit être définie en pixels [width]x[height] plutôt que sur any."
   },
   "panels/application/AppManifestView.ts | screenshotS": {
     "message": "instantané n° {PH1}"
   },
   "panels/application/AppManifestView.ts | screenshotsMustHaveSameAspectRatio": {
-    "message": "Toutes les captures d'écran ayant le même paramètre \"form_factor\" doivent être au même format que la première capture d'écran ayant ce paramètre \"form_factor\". Certaines captures d'écran seront ignorées."
+    "message": "Toutes les captures d'écran ayant le même form_factor doivent avoir le même format que la première capture d'écran ayant ce paramètre form_factor. Certaines captures d'écran seront ignorées."
+  },
+  "panels/application/AppManifestView.ts | selectWindowControlsOverlayEmulationOs": {
+    "message": "Émuler la superposition des commandes de fenêtre sur"
   },
   "panels/application/AppManifestView.ts | shortName": {
     "message": "Nom court"
@@ -2355,7 +2337,7 @@
     "message": "Raccourci {PH1}"
   },
   "panels/application/AppManifestView.ts | shortcutSShouldIncludeAXPixel": {
-    "message": "Le raccourci {PH1} doit inclure une icône de 96 x 96 pixels"
+    "message": "Le raccourci #{PH1} doit inclure une icône de 96 × 96 pixels"
   },
   "panels/application/AppManifestView.ts | shortcutsMayBeNotAvailable": {
     "message": "Le nombre maximal de raccourcis dépend de la plate-forme. Il est possible que certains raccourcis ne soient pas disponibles."
@@ -2373,7 +2355,7 @@
     "message": "L'URL de l'application Play Store et l'ID Play Store ne correspondent pas"
   },
   "panels/application/AppManifestView.ts | theSpecifiedApplicationPlatform": {
-    "message": "La plate-forme d'applis indiquée n'est pas compatible avec Android"
+    "message": "La plate-forme d'applications indiquée n'est pas compatible avec Android"
   },
   "panels/application/AppManifestView.ts | themeColor": {
     "message": "Couleur thème"
@@ -2456,9 +2438,6 @@
   "panels/application/ApplicationPanelSidebar.ts | openedWindows": {
     "message": "Fenêtres ouvertes"
   },
-  "panels/application/ApplicationPanelSidebar.ts | preloading": {
-    "message": "Préchargement"
-  },
   "panels/application/ApplicationPanelSidebar.ts | refreshIndexeddb": {
     "message": "Actualiser IndexedDB"
   },
@@ -2470,6 +2449,9 @@
   },
   "panels/application/ApplicationPanelSidebar.ts | theContentOfThisDocumentHasBeen": {
     "message": "Le contenu de ce document a été généré de façon dynamique via \"document.write()\"."
+  },
+  "panels/application/ApplicationPanelSidebar.ts | thirdPartyPhaseout": {
+    "message": "Les cookies de {PH1} ont peut-être été bloqués en raison de l'abandon des cookies tiers."
   },
   "panels/application/ApplicationPanelSidebar.ts | versionS": {
     "message": "Version : {PH1}"
@@ -2780,14 +2762,14 @@
   "panels/application/OpenedWindowDetailsView.ts | yes": {
     "message": "Oui"
   },
-  "panels/application/PreloadingTreeElement.ts | preloads": {
-    "message": "Préchargements"
+  "panels/application/PreloadingTreeElement.ts | rules": {
+    "message": "Règles"
   },
-  "panels/application/PreloadingTreeElement.ts | speculationRules": {
-    "message": "Règles de spéculation"
+  "panels/application/PreloadingTreeElement.ts | speculations": {
+    "message": "Spéculations"
   },
-  "panels/application/PreloadingTreeElement.ts | thisPage": {
-    "message": "Cette page"
+  "panels/application/PreloadingTreeElement.ts | speculativeLoads": {
+    "message": "Chargements spéculatifs"
   },
   "panels/application/ReportingApiReportsView.ts | clickToDisplayBody": {
     "message": "Cliquez sur un rapport pour voir son corps"
@@ -2796,7 +2778,7 @@
     "message": "API Reporting"
   },
   "panels/application/ResourcesPanel.ts | webSqlDeprecation": {
-    "message": "Web SQL est obsolète. Vous pouvez participer à l'essai d'abandon pour continuer à l'utiliser jusqu'à Chrome 123."
+    "message": "Web SQL est obsolète. Vous pouvez participer à l'évaluation avant arrêt pour continuer à l'utiliser jusqu'à Chrome 123."
   },
   "panels/application/ServiceWorkerCacheTreeElement.ts | cacheStorage": {
     "message": "Espace de stockage du cache"
@@ -2896,6 +2878,9 @@
   },
   "panels/application/ServiceWorkersView.ts | receivedS": {
     "message": "Reçu : {PH1}"
+  },
+  "panels/application/ServiceWorkersView.ts | routers": {
+    "message": "Routeurs"
   },
   "panels/application/ServiceWorkersView.ts | sActivatedAndIsS": {
     "message": "#{PH1} activé et est {PH2}"
@@ -3145,6 +3130,15 @@
   },
   "panels/application/components/BackForwardCacheStrings.ts | JavaScriptExecution": {
     "message": "Chrome a détecté une tentative d'exécuter JavaScript alors que la page se trouve dans le cache."
+  },
+  "panels/application/components/BackForwardCacheStrings.ts | LiveMediaStreamTrack": {
+    "message": "Non défini"
+  },
+  "panels/application/components/BackForwardCacheStrings.ts | SmartCard": {
+    "message": "Non défini"
+  },
+  "panels/application/components/BackForwardCacheStrings.ts | UnloadHandler": {
+    "message": "Non défini"
   },
   "panels/application/components/BackForwardCacheStrings.ts | appBanner": {
     "message": "Les pages qui ont demandé une AppBanner ne sont pas éligibles au cache amélioré."
@@ -3512,6 +3506,9 @@
   "panels/application/components/BackForwardCacheView.ts | circumstantialExplanation": {
     "message": "Vous ne pouvez pas agir sur ces raisons, car un élément échappant au contrôle de la page a empêché la mise en cache."
   },
+  "panels/application/components/BackForwardCacheView.ts | filesPerIssue": {
+    "message": "{n,plural, =1{# fichier}one{# fichier}other{# fichiers}}"
+  },
   "panels/application/components/BackForwardCacheView.ts | framesPerIssue": {
     "message": "{n,plural, =1{# frame}one{# frame}other{# frames}}"
   },
@@ -3638,6 +3635,9 @@
   "panels/application/components/FrameDetailsView.ts | clickToRevealInSourcesPanel": {
     "message": "Cliquer pour afficher dans le panneau \"Sources\""
   },
+  "panels/application/components/FrameDetailsView.ts | contentSecurityPolicy": {
+    "message": "Content Security Policy (CSP)"
+  },
   "panels/application/components/FrameDetailsView.ts | createdByAdScriptExplanation": {
     "message": "Quand ce frame a été créé, un script publicitaire figurant dans la (async) stack. Vous pouvez peut-être en savoir plus en examinant la stack trace sur la création de ce frame."
   },
@@ -3674,17 +3674,20 @@
   "panels/application/components/FrameDetailsView.ts | no": {
     "message": "Non"
   },
+  "panels/application/components/FrameDetailsView.ts | none": {
+    "message": "Aucune"
+  },
   "panels/application/components/FrameDetailsView.ts | origin": {
     "message": "Origine"
+  },
+  "panels/application/components/FrameDetailsView.ts | originTrialsExplanation": {
+    "message": "Les essais Origin Trial vous donnent accès à une fonctionnalité nouvelle ou expérimentale."
   },
   "panels/application/components/FrameDetailsView.ts | ownerElement": {
     "message": "Élément du propriétaire"
   },
   "panels/application/components/FrameDetailsView.ts | parentIsAdExplanation": {
     "message": "Ce frame est considéré comme un frame publicitaire, car son frame parent en est un."
-  },
-  "panels/application/components/FrameDetailsView.ts | refresh": {
-    "message": "Actualiser"
   },
   "panels/application/components/FrameDetailsView.ts | reportingTo": {
     "message": "signale à"
@@ -3766,6 +3769,9 @@
   },
   "panels/application/components/OriginTrialTreeView.ts | matchSubDomains": {
     "message": "Correspondance des sous-domaines"
+  },
+  "panels/application/components/OriginTrialTreeView.ts | noTrialTokens": {
+    "message": "Aucun jeton d'essai"
   },
   "panels/application/components/OriginTrialTreeView.ts | origin": {
     "message": "Origine"
@@ -3902,6 +3908,9 @@
   "panels/application/components/StackTrace.ts | cannotRenderStackTrace": {
     "message": "Impossible d'afficher la trace de la pile"
   },
+  "panels/application/components/StackTrace.ts | creationStackTrace": {
+    "message": "Stack Trace sur la création du frame"
+  },
   "panels/application/components/StackTrace.ts | showLess": {
     "message": "Afficher moins"
   },
@@ -3990,7 +3999,7 @@
     "message": "Jetons d'état privés"
   },
   "panels/application/preloading/PreloadingView.ts | filterAllPreloads": {
-    "message": "Tous les préchargements"
+    "message": "Tous les chargements spéculatifs"
   },
   "panels/application/preloading/PreloadingView.ts | filterFilterByRuleSet": {
     "message": "Filtrer par jeu de règles"
@@ -4059,22 +4068,22 @@
     "message": "Inspecter"
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusFailure": {
-    "message": "Échec du préchargement."
+    "message": "Échec du chargement spéculatif."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusNotTriggered": {
-    "message": "La tentative de préchargement n'est pas encore déclenchée."
+    "message": "La tentative de chargement spéculatif n'est pas encore déclenchée."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusPending": {
-    "message": "La tentative de préchargement est éligible, mais en attente."
+    "message": "La tentative de chargement spéculatif est éligible, mais en attente."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusReady": {
-    "message": "Le préchargement est terminé, et le résultat est prêt pour la prochaine navigation."
+    "message": "Le chargement spéculatif est terminé et le résultat est prêt pour la prochaine navigation."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusRunning": {
-    "message": "Le préchargement est en cours."
+    "message": "Le chargement spéculatif est en cours d'exécution."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusSuccess": {
-    "message": "Préchargement terminé et utilisé pour la navigation."
+    "message": "Chargement spéculatif terminé et utilisé pour la navigation."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailsAction": {
     "message": "Action"
@@ -4095,10 +4104,10 @@
     "message": "Sélectionnez un élément pour en savoir plus"
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | descriptionDisabledByBatterySaver": {
-    "message": "Le préchargement est désactivé en raison du mode Économiseur de batterie du système d'exploitation."
+    "message": "Le chargement spéculatif est désactivé à cause du mode Économiseur de batterie du système d'exploitation."
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | descriptionDisabledByDataSaver": {
-    "message": "Le préchargement est désactivé en raison du mode Économiseur de données du système d'exploitation."
+    "message": "Le chargement spéculatif est désactivé à cause du mode Économiseur de données du système d'exploitation."
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | descriptionDisabledByHoldbackPrefetchSpeculationRules": {
     "message": "Le préchargement est activé d'office, car les outils de développement sont ouverts. Lorsque les outils de développement sont fermés, le préchargement est désactivé, car cette session de navigateur fait partie d'un groupe non exposé utilisé pour la comparaison des performances."
@@ -4107,7 +4116,7 @@
     "message": "Le prérendu est activé d'office, car les outils de développement sont ouverts. Lorsque les outils de développement sont fermés, le prérendu est désactivé, car cette session de navigateur fait partie d'un groupe non exposé utilisé pour la comparaison des performances."
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | descriptionDisabledByPreference": {
-    "message": "Le préchargement est désactivé en raison des paramètres utilisateur ou d'une extension. Accédez à {PH1} pour mettre à jour vos préférences. Accédez à {PH2} pour désactiver toute extension qui bloque le préchargement."
+    "message": "Le chargement spéculatif est désactivé en raison des paramètres utilisateur ou d'une extension. Accédez à {PH1} pour mettre à jour vos préférences. Accédez à {PH2} pour désactiver toute extension qui bloque le chargement spéculatif."
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | extensionsSettings": {
     "message": "Paramètres des extensions"
@@ -4131,16 +4140,16 @@
     "message": "Paramètres utilisateur ou extensions"
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | infobarPreloadingIsDisabled": {
-    "message": "Le préchargement est désactivé"
+    "message": "Le chargement spéculatif est désactivé"
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | infobarPreloadingIsForceEnabled": {
-    "message": "Le préchargement est activé d'office"
+    "message": "Le chargement spéculatif est activé d'office"
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | preloadingPagesSettings": {
     "message": "Paramètres des pages préchargées"
   },
   "panels/application/preloading/components/PreloadingDisabledInfobar.ts | titleReasonsPreventingPreloading": {
-    "message": "Raisons empêchant le préchargement"
+    "message": "Raisons empêchant le chargement spéculatif"
   },
   "panels/application/preloading/components/PreloadingGrid.ts | action": {
     "message": "Action"
@@ -4151,8 +4160,23 @@
   "panels/application/preloading/components/PreloadingGrid.ts | status": {
     "message": "État"
   },
-  "panels/application/preloading/components/PreloadingString.ts | PrefetchEvicted": {
-    "message": "Le préchargement a été supprimé pour un préchargement plus récent, car |kPrefetchNewLimits| est activé"
+  "panels/application/preloading/components/PreloadingMismatchedHeadersGrid.ts | activationNavigationValue": {
+    "message": "Valeur de la navigation d'activation"
+  },
+  "panels/application/preloading/components/PreloadingMismatchedHeadersGrid.ts | headerName": {
+    "message": "Nom de l'en-tête"
+  },
+  "panels/application/preloading/components/PreloadingMismatchedHeadersGrid.ts | initialNavigationValue": {
+    "message": "Valeur dans la navigation initiale"
+  },
+  "panels/application/preloading/components/PreloadingMismatchedHeadersGrid.ts | missing": {
+    "message": "(manquant)"
+  },
+  "panels/application/preloading/components/PreloadingString.ts | PrefetchEvictedAfterCandidateRemoved": {
+    "message": "Le préchargement a été supprimé, car aucune règle de spéculation de la page d'initialisation ne déclenche plus de préchargement pour cette URL."
+  },
+  "panels/application/preloading/components/PreloadingString.ts | PrefetchEvictedForNewerPrefetch": {
+    "message": "Le préchargement a été supprimé, car la page de lancement comporte trop de préchargements en cours et il s'agissait de l'un des plus anciens."
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchFailedIneligibleRedirect": {
     "message": "Le préchargement a été redirigé, mais l'URL de redirection n'est pas éligible au préchargement."
@@ -4200,7 +4224,7 @@
     "message": "L'URL n'était pas éligible au préchargement, car elle utilise une partition de stockage autre que celle par défaut."
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchNotEligiblePreloadingDisabled": {
-    "message": "Le préchargement (prefetching) n'a pas été effectué, car le préchargement (preloading) a été désactivé."
+    "message": "Le préchargement n'a pas été effectué, car le chargement spéculatif a été désactivé."
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchNotEligibleSameSiteCrossOriginPrefetchRequiredProxy": {
     "message": "L'URL n'était pas éligible au préchargement, car le contexte réseau par défaut ne peut pas être configuré pour utiliser le proxy de préchargement pour une requête de préchargement multi-origine sur le même site."
@@ -4287,13 +4311,13 @@
     "message": "La page prérendue a redirigé elle-même vers une autre URL, ce qui n'est actuellement pas pris en charge."
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusMaxNumOfRunningEagerPrerendersExceeded": {
-    "message": "Le prérendu n'a pas été effectué, car il y a trop de prérendus en cours sur la page de lancement. Supprimez d'autres règles de spéculation pour continuer à effectuer des prérendus."
+    "message": "Le prérendu avec la valeur \"eager\" n'a pas été effectué, car il y a trop de prérendus en cours sur la page de lancement. Supprimez les autres règles de spéculation avec la valeur \"eager\" pour activer d'autres prérendus."
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusMaxNumOfRunningEmbedderPrerendersExceeded": {
-    "message": "Le prérendu n'a pas été effectué, car il y a trop de prérendus en cours sur la page de lancement."
+    "message": "Le prérendu déclenché par le navigateur n'a pas été effectué, car il y a trop de prérendus en cours sur la page de lancement."
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusMaxNumOfRunningNonEagerPrerendersExceeded": {
-    "message": "Le prérendu n'a pas été effectué, car il y a trop de prérendus en cours sur la page de lancement. Supprimez d'autres règles de spéculation pour continuer à effectuer des prérendus."
+    "message": "L'ancien prérendu sans la valeur \"eager\" (avec un niveau de persévérance \"moderate\" ou \"conservative\", et déclenché en pointant sur des liens ou en cliquant dessus) a été automatiquement annulé suite au lancement d'un nouveau prérendu sans la valeur \"eager\". Il peut être redéclenché en interagissant à nouveau avec le lien."
   },
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusMemoryLimitExceeded": {
     "message": "Le prérendu n'a pas été effectué, car le navigateur a dépassé la limite de mémoire pour le prérendu."
@@ -4395,7 +4419,7 @@
     "message": "Cliquer pour afficher dans le panneau \"Network\""
   },
   "panels/application/preloading/components/RuleSetGrid.ts | buttonRevealPreloadsAssociatedWithRuleSet": {
-    "message": "Afficher les préchargements associés à cet ensemble de règles"
+    "message": "Afficher les chargements spéculatifs associés à cet ensemble de règles"
   },
   "panels/application/preloading/components/RuleSetGrid.ts | errors": {
     "message": "{errorCount,plural, =1{# erreur}one{# erreur}other{# erreurs}}"
@@ -4405,6 +4429,27 @@
   },
   "panels/application/preloading/components/RuleSetGrid.ts | status": {
     "message": "État"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeFailure": {
+    "message": "Échec"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeFailureWithCount": {
+    "message": "{n,plural, =1{# échec}one{# échec}other{# échecs}}"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeInProgressWithCount": {
+    "message": "{n,plural, =1{# en cours}one{# en cours}other{# en cours}}"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeNoSpeculativeLoads": {
+    "message": "Aucun chargement spéculatif"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeNotTriggeredWithCount": {
+    "message": "{n,plural, =1{# non déclenchée}one{# non déclenchée}other{# non déclenchées}}"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeSuccess": {
+    "message": "Réussite"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | badgeSuccessWithCount": {
+    "message": "{n,plural, =1{# opération réussie}one{# opération réussie}other{# opérations réussies}}"
   },
   "panels/application/preloading/components/UsedPreloadingView.ts | currentURL": {
     "message": "URL actuelle"
@@ -4416,10 +4461,13 @@
     "message": "La page de lancement a tenté de précharger l'URL de cette page. Le prérendu a échoué, mais le corps de la réponse obtenu a quand même été utilisé comme préchargement."
   },
   "panels/application/preloading/components/UsedPreloadingView.ts | learnMore": {
-    "message": "En savoir plus sur le préchargement sur developer.chrome.com"
+    "message": "En savoir plus sur le chargement spéculatif sur developer.chrome.com"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | mismatchedHeadersDetail": {
+    "message": "Les en-têtes de requête HTTP ne correspondent pas"
   },
   "panels/application/preloading/components/UsedPreloadingView.ts | noPreloads": {
-    "message": "L'URL de cette page de lancement n'a pas été préchargée."
+    "message": "La page de lancement n'a pas tenté de charger l'URL de cette page de manière spéculative."
   },
   "panels/application/preloading/components/UsedPreloadingView.ts | prefetchFailed": {
     "message": "La page de lancement a tenté de précharger l'URL de cette page, mais le préchargement a échoué. Une navigation complète a donc été effectuée."
@@ -4428,10 +4476,7 @@
     "message": "Cette page a bien été préchargée."
   },
   "panels/application/preloading/components/UsedPreloadingView.ts | preloadedURLs": {
-    "message": "URL préchargées par la page de lancement"
-  },
-  "panels/application/preloading/components/UsedPreloadingView.ts | preloadingStatus": {
-    "message": "État du préchargement"
+    "message": "URL chargées de manière spéculative par la page de lancement"
   },
   "panels/application/preloading/components/UsedPreloadingView.ts | prerenderFailed": {
     "message": "La page de lancement a tenté de précharger l'URL de cette page, mais le prérendu a échoué. Une navigation complète a donc été effectuée."
@@ -4439,8 +4484,137 @@
   "panels/application/preloading/components/UsedPreloadingView.ts | prerenderUsed": {
     "message": "Cette page a bien été préchargée."
   },
+  "panels/application/preloading/components/UsedPreloadingView.ts | speculationsInitiatedByThisPage": {
+    "message": "Spéculations initiées par cette page"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | speculativeLoadingStatusForThisPage": {
+    "message": "État de chargement spéculatif pour cette page"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | viewAllRules": {
+    "message": "Afficher toutes les règles de spéculation"
+  },
+  "panels/application/preloading/components/UsedPreloadingView.ts | viewAllSpeculations": {
+    "message": "Afficher toutes les spéculations"
+  },
+  "panels/autofill/AutofillView.ts | addressPreview": {
+    "message": "Aperçu de l'adresse"
+  },
+  "panels/autofill/AutofillView.ts | attr": {
+    "message": "attr."
+  },
+  "panels/autofill/AutofillView.ts | autoShow": {
+    "message": "Ouvrir le panneau lors de la saisie automatique"
+  },
+  "panels/autofill/AutofillView.ts | autocompleteAttribute": {
+    "message": "Attribut de saisie semi-automatique"
+  },
+  "panels/autofill/AutofillView.ts | formField": {
+    "message": "Champ du formulaire"
+  },
+  "panels/autofill/AutofillView.ts | formInspector": {
+    "message": "Outil d'inspection de formulaires"
+  },
+  "panels/autofill/AutofillView.ts | heur": {
+    "message": "heur."
+  },
+  "panels/autofill/AutofillView.ts | inferredByHeuristics": {
+    "message": "Inférence heuristique"
+  },
+  "panels/autofill/AutofillView.ts | noDataAvailable": {
+    "message": "Aucun événement de saisie automatique détecté"
+  },
+  "panels/autofill/AutofillView.ts | predictedAutofillValue": {
+    "message": "Valeur de saisie automatique prédite"
+  },
+  "panels/autofill/AutofillView.ts | value": {
+    "message": "Valeur"
+  },
+  "panels/autofill/autofill-meta.ts | autofill": {
+    "message": "Saisie automatique"
+  },
+  "panels/autofill/autofill-meta.ts | showAutofill": {
+    "message": "Afficher la saisie automatique"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | animation": {
+    "message": "Animation"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | auctionWorklet": {
+    "message": "Worklet d'enchères publicitaires"
+  },
   "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | breakpointHit": {
     "message": "appel de point d'arrêt"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | canvas": {
+    "message": "Dessin"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | clipboard": {
+    "message": "Presse-papiers"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | control": {
+    "message": "Contrôle"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | device": {
+    "message": "Appareil"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | domMutation": {
+    "message": "Mutation DOM"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | dragDrop": {
+    "message": "Glisser-déposer"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | geolocation": {
+    "message": "Géolocalisation"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | keyboard": {
+    "message": "Clavier"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | load": {
+    "message": "Charger"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | media": {
+    "message": "Multimédia"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | mouse": {
+    "message": "Souris"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | notification": {
+    "message": "Notification"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | parse": {
+    "message": "Analyser"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | pictureinpicture": {
+    "message": "Picture-in-picture"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | pointer": {
+    "message": "Pointeur"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | script": {
+    "message": "Script"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | sharedStorageWorklet": {
+    "message": "Worklet de stockage partagé"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | timer": {
+    "message": "Minuteur"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | touch": {
+    "message": "Toucher"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | trustedTypeViolations": {
+    "message": "Non-respect du Trusted Type"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | webaudio": {
+    "message": "WebAudio"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | window": {
+    "message": "Fenêtre"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | worker": {
+    "message": "Service worker"
+  },
+  "panels/browser_debugger/CategorizedBreakpointsSidebarPane.ts | xhr": {
+    "message": "XHR"
   },
   "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | attributeModified": {
     "message": "Attribut modifié"
@@ -4492,9 +4666,6 @@
   },
   "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | unchecked": {
     "message": "décochée"
-  },
-  "panels/browser_debugger/ObjectEventListenersSidebarPane.ts | refreshGlobalListeners": {
-    "message": "Actualiser les écouteurs globaux"
   },
   "panels/browser_debugger/XHRBreakpointsSidebarPane.ts | addBreakpoint": {
     "message": "Ajouter un point d'arrêt"
@@ -4550,6 +4721,9 @@
   "panels/browser_debugger/browser_debugger-meta.ts | page": {
     "message": "Page"
   },
+  "panels/browser_debugger/browser_debugger-meta.ts | refreshGlobalListeners": {
+    "message": "Actualiser les écouteurs globaux"
+  },
   "panels/browser_debugger/browser_debugger-meta.ts | showContentScripts": {
     "message": "Afficher les scripts de contenu"
   },
@@ -4586,14 +4760,8 @@
   "panels/changes/ChangesView.ts | copy": {
     "message": "Copier"
   },
-  "panels/changes/ChangesView.ts | copyAllChangesFromCurrentFile": {
-    "message": "Copier toutes les modifications du fichier actuel"
-  },
   "panels/changes/ChangesView.ts | noChanges": {
     "message": "Aucune modification"
-  },
-  "panels/changes/ChangesView.ts | revertAllChangesToCurrentFile": {
-    "message": "Rétablir toutes les modifications du fichier actuel"
   },
   "panels/changes/ChangesView.ts | sDeletions": {
     "message": "{n,plural, =1{# suppression (-)}one{# suppression (-)}other{# suppressions (-)}}"
@@ -4603,6 +4771,12 @@
   },
   "panels/changes/changes-meta.ts | changes": {
     "message": "Modifications"
+  },
+  "panels/changes/changes-meta.ts | copyAllChangesFromCurrentFile": {
+    "message": "Copier toutes les modifications du fichier actuel"
+  },
+  "panels/changes/changes-meta.ts | revertAllChangesToCurrentFile": {
+    "message": "Rétablir toutes les modifications du fichier actuel"
   },
   "panels/changes/changes-meta.ts | showChanges": {
     "message": "Afficher les modifications"
@@ -4841,6 +5015,15 @@
   "panels/console/ConsoleViewMessage.ts | exception": {
     "message": "<exception>"
   },
+  "panels/console/ConsoleViewMessage.ts | explainThisError": {
+    "message": "Expliquer cette erreur"
+  },
+  "panels/console/ConsoleViewMessage.ts | explainThisMessage": {
+    "message": "Expliquer ce message"
+  },
+  "panels/console/ConsoleViewMessage.ts | explainThisWarning": {
+    "message": "Explication de cet avertissement"
+  },
   "panels/console/ConsoleViewMessage.ts | functionWasResolvedFromBound": {
     "message": "Fonction résolue à partir de la fonction liée."
   },
@@ -4973,6 +5156,9 @@
   "panels/console/console-meta.ts | showTimestamps": {
     "message": "Afficher l'horodatage"
   },
+  "panels/console/console-meta.ts | toggleConsole": {
+    "message": "Activer/Désactiver la console"
+  },
   "panels/console/console-meta.ts | treatEvaluationAsUserActivation": {
     "message": "Traiter l'évaluation comme une activation par l'utilisateur"
   },
@@ -5054,9 +5240,6 @@
   "panels/coverage/CoverageView.ts | chooseCoverageGranularityPer": {
     "message": "Choisir la précision de la couverture : \"Par fonction\" présente un coût faible, \"Par bloc\" un coût élevé."
   },
-  "panels/coverage/CoverageView.ts | clearAll": {
-    "message": "Tout effacer"
-  },
   "panels/coverage/CoverageView.ts | clickTheRecordButtonSToStart": {
     "message": "Cliquez sur le bouton d'enregistrement {PH1} pour démarrer la capture de couverture."
   },
@@ -5068,9 +5251,6 @@
   },
   "panels/coverage/CoverageView.ts | css": {
     "message": "CSS"
-  },
-  "panels/coverage/CoverageView.ts | export": {
-    "message": "Exporter…"
   },
   "panels/coverage/CoverageView.ts | filterCoverageByType": {
     "message": "Filtrer la couverture par type"
@@ -5099,14 +5279,17 @@
   "panels/coverage/CoverageView.ts | urlFilter": {
     "message": "Filtre d'URL"
   },
+  "panels/coverage/coverage-meta.ts | clearCoverage": {
+    "message": "Effacer la couverture"
+  },
   "panels/coverage/coverage-meta.ts | coverage": {
     "message": "Couverture"
   },
+  "panels/coverage/coverage-meta.ts | exportCoverage": {
+    "message": "Exporter la couverture"
+  },
   "panels/coverage/coverage-meta.ts | instrumentCoverage": {
     "message": "Couverture de l'instrument"
-  },
-  "panels/coverage/coverage-meta.ts | reloadPage": {
-    "message": "Actualiser la page"
   },
   "panels/coverage/coverage-meta.ts | showCoverage": {
     "message": "Afficher la couverture"
@@ -5333,6 +5516,12 @@
   "panels/developer_resources/developer_resources-meta.ts | showDeveloperResources": {
     "message": "Afficher les ressources pour les développeurs"
   },
+  "panels/elements/CSSRuleValidator.ts | flexGridContainerPropertyRuleFix": {
+    "message": "Essayez de définir {PROPERTY_NAME} sur l'élément conteneur ou utilisez {ALTERNATIVE_PROPERTY_NAME} à la place."
+  },
+  "panels/elements/CSSRuleValidator.ts | flexGridContainerPropertyRuleReason": {
+    "message": "Cet élément est de type {CONTAINER_DISPLAY_NAME} (c'est-à-dire un enfant d'un conteneur {CONTAINER_DISPLAY_NAME}), mais {PROPERTY_NAME} ne s'applique qu'aux conteneurs."
+  },
   "panels/elements/CSSRuleValidator.ts | fontVariationSettingsWarning": {
     "message": "La valeur du paramètre \"{PH1}\" {PH2} est en dehors de la plage autorisée [{PH3}, {PH4}] pour la famille de polices \"{PH5}\"."
   },
@@ -5341,6 +5530,9 @@
   },
   "panels/elements/CSSRuleValidator.ts | ruleViolatedByParentElementRuleReason": {
     "message": "La propriété {REASON_PROPERTY_DECLARATION_CODE} de l'élément parent empêche la mise en œuvre de {AFFECTED_PROPERTY_DECLARATION_CODE}."
+  },
+  "panels/elements/CSSRuleValidator.ts | ruleViolatedBySameElementRuleChangeFlexOrGrid": {
+    "message": "Essayez d'ajouter {DISPLAY_GRID_RULE} ou {DISPLAY_FLEX_RULE} pour transformer cet élément en conteneur."
   },
   "panels/elements/CSSRuleValidator.ts | ruleViolatedBySameElementRuleChangeSuggestion": {
     "message": "Essayez de définir la propriété {EXISTING_PROPERTY_DECLARATION} sur {TARGET_PROPERTY_DECLARATION}."
@@ -5534,6 +5726,9 @@
   "panels/elements/ElementsTreeElement.ts | hideElement": {
     "message": "Masquer l'élément"
   },
+  "panels/elements/ElementsTreeElement.ts | openMediaPanel": {
+    "message": "Accéder au panneau \"Multimédia\""
+  },
   "panels/elements/ElementsTreeElement.ts | paste": {
     "message": "Coller"
   },
@@ -5585,9 +5780,6 @@
   "panels/elements/EventListenersWidget.ts | passive": {
     "message": "Passif"
   },
-  "panels/elements/EventListenersWidget.ts | refresh": {
-    "message": "Actualiser"
-  },
   "panels/elements/EventListenersWidget.ts | resolveEventListenersBoundWith": {
     "message": "Résoudre les écouteurs d'événements liés au framework"
   },
@@ -5612,11 +5804,20 @@
   "panels/elements/PlatformFontsWidget.ts | dGlyphs": {
     "message": "{n,plural, =1{(# glyphe)}one{(# glyphe)}other{(# glyphes)}}"
   },
+  "panels/elements/PlatformFontsWidget.ts | familyName": {
+    "message": "Nom de famille"
+  },
+  "panels/elements/PlatformFontsWidget.ts | fontOrigin": {
+    "message": "Origine de la police"
+  },
   "panels/elements/PlatformFontsWidget.ts | localFile": {
     "message": "Fichier local"
   },
   "panels/elements/PlatformFontsWidget.ts | networkResource": {
     "message": "Ressource réseau"
+  },
+  "panels/elements/PlatformFontsWidget.ts | postScriptName": {
+    "message": "Nom PostScript"
   },
   "panels/elements/PlatformFontsWidget.ts | renderedFonts": {
     "message": "Polices affichées"
@@ -5765,9 +5966,6 @@
   "panels/elements/StylesSidebarPane.ts | layer": {
     "message": "Couche"
   },
-  "panels/elements/StylesSidebarPane.ts | newStyleRule": {
-    "message": "Nouvelle règle de style"
-  },
   "panels/elements/StylesSidebarPane.ts | noMatchingSelectorOrStyle": {
     "message": "Aucun sélecteur ou style correspondant"
   },
@@ -5812,6 +6010,9 @@
   },
   "panels/elements/components/CSSVariableValueView.ts | registeredPropertyLinkTitle": {
     "message": "Afficher la propriété enregistrée"
+  },
+  "panels/elements/components/CSSVariableValueView.ts | sIsNotDefined": {
+    "message": "{PH1} non défini"
   },
   "panels/elements/components/ElementsBreadcrumbs.ts | breadcrumbs": {
     "message": "Fil d'Ariane de l'arborescence DOM"
@@ -5894,11 +6095,17 @@
   "panels/elements/elements-meta.ts | layout": {
     "message": "Mise en page"
   },
+  "panels/elements/elements-meta.ts | newStyleRule": {
+    "message": "Nouvelle règle de style"
+  },
   "panels/elements/elements-meta.ts | properties": {
     "message": "Propriétés"
   },
   "panels/elements/elements-meta.ts | redo": {
     "message": "Répéter"
+  },
+  "panels/elements/elements-meta.ts | refreshEventListeners": {
+    "message": "Actualiser les écouteurs d'événements"
   },
   "panels/elements/elements-meta.ts | revealDomNodeOnHover": {
     "message": "Afficher le nœud DOM au passage du pointeur"
@@ -5968,6 +6175,9 @@
   },
   "panels/emulation/DeviceModeToolbar.ts | devicePixelRatio": {
     "message": "Rapport de pixels de l'appareil"
+  },
+  "panels/emulation/DeviceModeToolbar.ts | devicePosture": {
+    "message": "Position de l'appareil"
   },
   "panels/emulation/DeviceModeToolbar.ts | deviceType": {
     "message": "Type d'appareil"
@@ -6125,8 +6335,44 @@
   "panels/event_listeners/EventListenersView.ts | toggleWhetherEventListenerIs": {
     "message": "Définir si l'écouteur d'événements est passif ou s'il bloque"
   },
-  "panels/explain/explain-meta.ts | explainConsoleMessage": {
-    "message": "✨ Expliquer le message de la console"
+  "panels/explain/components/ConsoleInsight.ts | closeInsight": {
+    "message": "Fermer l'insight"
+  },
+  "panels/explain/components/ConsoleInsight.ts | consoleMessage": {
+    "message": "Message de la console"
+  },
+  "panels/explain/components/ConsoleInsight.ts | error": {
+    "message": "Un problème est survenu…"
+  },
+  "panels/explain/components/ConsoleInsight.ts | generating": {
+    "message": "Génération…"
+  },
+  "panels/explain/components/ConsoleInsight.ts | insight": {
+    "message": "Insight"
+  },
+  "panels/explain/components/ConsoleInsight.ts | networkRequest": {
+    "message": "Requête réseau"
+  },
+  "panels/explain/components/ConsoleInsight.ts | opensInNewTab": {
+    "message": "(s'ouvre dans un nouvel onglet)"
+  },
+  "panels/explain/components/ConsoleInsight.ts | relatedCode": {
+    "message": "Code associé"
+  },
+  "panels/explain/components/ConsoleInsight.ts | stackTrace": {
+    "message": "Trace de la pile"
+  },
+  "panels/explain/components/ConsoleInsight.ts | submitFeedback": {
+    "message": "Envoyer des commentaires"
+  },
+  "panels/explain/explain-meta.ts | explainThisError": {
+    "message": "Expliquer cette erreur"
+  },
+  "panels/explain/explain-meta.ts | explainThisMessage": {
+    "message": "Expliquer ce message"
+  },
+  "panels/explain/explain-meta.ts | explainThisWarning": {
+    "message": "Explication de cet avertissement"
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
     "message": "Ressource bloquée"
@@ -6245,6 +6491,9 @@
   "panels/issues/AffectedHeavyAdView.ts | warned": {
     "message": "Avertissement"
   },
+  "panels/issues/AffectedMetadataAllowedSitesView.ts | nAllowedSites": {
+    "message": "{n,plural, =1{1 site Web autorisé à accéder aux cookies}one{# site Web autorisé à accéder aux cookies}other{# sites Web autorisés à accéder aux cookies}}"
+  },
   "panels/issues/AffectedResourcesView.ts | clickToRevealTheFramesDomNodeIn": {
     "message": "Cliquez pour afficher le nœud DOM du frame dans le panneau \"Elements\""
   },
@@ -6304,12 +6553,6 @@
   },
   "panels/issues/AttributionReportingIssueDetailsView.ts | untrustworthyOrigin": {
     "message": "Origine non fiable"
-  },
-  "panels/issues/CSPViolationsView.ts | filter": {
-    "message": "Filtrer"
-  },
-  "panels/issues/ComboBoxOfCheckBoxes.ts | genericMenuLabel": {
-    "message": "Menu"
   },
   "panels/issues/CorsIssueDetailsView.ts | allowCredentialsValueFromHeader": {
     "message": "Valeur de l'en-tête Access-Control-Allow-Credentials"
@@ -6509,14 +6752,8 @@
   "panels/issues/components/HideIssuesMenu.ts | tooltipTitle": {
     "message": "Masquer les problèmes"
   },
-  "panels/issues/issues-meta.ts | cspViolations": {
-    "message": "Exemples de non-respect de CSP"
-  },
   "panels/issues/issues-meta.ts | issues": {
     "message": "Problèmes"
-  },
-  "panels/issues/issues-meta.ts | showCspViolations": {
-    "message": "Afficher les cas de non-respect CSP"
   },
   "panels/issues/issues-meta.ts | showIssues": {
     "message": "Afficher les problèmes"
@@ -6765,7 +7002,7 @@
     "message": "Cette page est-elle optimisée pour le classement des résultats dans les moteurs de recherche"
   },
   "panels/lighthouse/LighthouseController.ts | isThisPageUsableByPeopleWith": {
-    "message": "Cette page est-elle utilisable par des personnes souffrant de troubles ou d'un handicap"
+    "message": "Cette page est-elle utilisable par des personnes présentant des troubles ou un handicap"
   },
   "panels/lighthouse/LighthouseController.ts | javaScriptDisabled": {
     "message": "JavaScript est désactivé. Vous devez activer JavaScript pour auditer cette page. Ouvrez le menu \"Command\" (Commande) et exécutez la commande \"Enable JavaScript\" (Activer JavaScript) pour activer JavaScript."
@@ -6992,6 +7229,75 @@
   "panels/lighthouse/lighthouse-meta.ts | showLighthouse": {
     "message": "Afficher Lighthouse"
   },
+  "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | couldNotOpenLinearMemory": {
+    "message": "Impossible d'ouvrir l'inspecteur de mémoire linéaire : échec de la localisation du tampon."
+  },
+  "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | revealInMemoryInspectorPanel": {
+    "message": "Afficher dans le panneau \"Outil d'inspection de mémoire\""
+  },
+  "panels/linear_memory_inspector/LinearMemoryInspectorPane.ts | noOpenInspections": {
+    "message": "Aucun examen en cours"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryHighlightChipList.ts | deleteHighlight": {
+    "message": "Ne plus mettre en surbrillance cette mémoire"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryHighlightChipList.ts | jumpToAddress": {
+    "message": "Accéder à cette mémoire"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryInspector.ts | addressHasToBeANumberBetweenSAnd": {
+    "message": "L'adresse doit être un nombre compris entre {PH1} et {PH2}"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryNavigator.ts | enterAddress": {
+    "message": "Saisir une adresse"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryNavigator.ts | goBackInAddressHistory": {
+    "message": "Revenir en arrière dans l'historique des adresses"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryNavigator.ts | goForwardInAddressHistory": {
+    "message": "Avancer dans l'historique des adresses"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryNavigator.ts | nextPage": {
+    "message": "Page suivante"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryNavigator.ts | previousPage": {
+    "message": "Page précédente"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryNavigator.ts | refresh": {
+    "message": "Actualiser"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryValueInterpreter.ts | changeEndianness": {
+    "message": "Modifier Endianness"
+  },
+  "panels/linear_memory_inspector/components/LinearMemoryValueInterpreter.ts | toggleValueTypeSettings": {
+    "message": "Activer/Désactiver les paramètres du type de valeur"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterDisplay.ts | addressOutOfRange": {
+    "message": "Adresse hors de la plage mémoire"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterDisplay.ts | changeValueTypeMode": {
+    "message": "Changer de mode"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterDisplay.ts | jumpToPointer": {
+    "message": "Aller à l'adresse"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterDisplay.ts | signedValue": {
+    "message": "Valeur Signed"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterDisplay.ts | unsignedValue": {
+    "message": "Valeur Unsigned"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterDisplayUtils.ts | notApplicable": {
+    "message": "N/A"
+  },
+  "panels/linear_memory_inspector/components/ValueInterpreterSettings.ts | otherGroup": {
+    "message": "Autre"
+  },
+  "panels/linear_memory_inspector/linear_memory_inspector-meta.ts | memoryInspector": {
+    "message": "Outil d'inspection de mémoire"
+  },
+  "panels/linear_memory_inspector/linear_memory_inspector-meta.ts | showMemoryInspector": {
+    "message": "Afficher l'outil d'inspection de mémoire"
+  },
   "panels/media/EventDisplayTable.ts | eventDisplay": {
     "message": "Affichage d'événements"
   },
@@ -7191,16 +7497,19 @@
     "message": "Préréglages"
   },
   "panels/mobile_throttling/NetworkPanelIndicator.ts | acceptedEncodingOverrideSet": {
-    "message": "Le groupe d'en-têtes Content-Encoding acceptés a été modifié par les Outils de développement. Consultez le panneau \"Conditions du réseau\"."
+    "message": "L'ensemble d'en-têtes Content-Encoding acceptés a été modifié par les outils de développement. Consultez le panneau \"Conditions du réseau\""
+  },
+  "panels/mobile_throttling/NetworkPanelIndicator.ts | browserCacheDisabled": {
+    "message": "Le cache du navigateur est désactivé"
   },
   "panels/mobile_throttling/NetworkPanelIndicator.ts | networkThrottlingIsEnabled": {
     "message": "La limitation de bande passante réseau est activée"
   },
   "panels/mobile_throttling/NetworkPanelIndicator.ts | requestsMayBeBlocked": {
-    "message": "Des requêtes sont peut-être bloquées"
+    "message": "Les requêtes sont peut-être bloquées. Consultez le panneau de blocage des requêtes réseau"
   },
   "panels/mobile_throttling/NetworkPanelIndicator.ts | requestsMayBeOverridden": {
-    "message": "Les requêtes peuvent être remplacées localement"
+    "message": "Les requêtes peuvent être remplacées localement (voir le panneau \"Sources\")"
   },
   "panels/mobile_throttling/NetworkThrottlingSelector.ts | custom": {
     "message": "Personnalisé"
@@ -7394,9 +7703,6 @@
   "panels/network/BlockedURLsPane.ts | patternInputCannotBeEmpty": {
     "message": "Entrée de format obligatoire."
   },
-  "panels/network/BlockedURLsPane.ts | removeAllPatterns": {
-    "message": "Supprimer tous les formats"
-  },
   "panels/network/BlockedURLsPane.ts | textPatternToBlockMatching": {
     "message": "Motif de texte pour bloquer les demandes avec correspondance ; utilisez le caractère générique \"*\""
   },
@@ -7499,6 +7805,9 @@
   "panels/network/NetworkDataGridNode.ts | finished": {
     "message": "Terminé"
   },
+  "panels/network/NetworkDataGridNode.ts | initialPriorityToolTip": {
+    "message": "{PH1}, priorité initiale : {PH2}"
+  },
   "panels/network/NetworkDataGridNode.ts | level": {
     "message": "niveau 1"
   },
@@ -7507,6 +7816,9 @@
   },
   "panels/network/NetworkDataGridNode.ts | mappingMissing": {
     "message": "Chrome n'a pas utilisé une autre version HTTP car aucune information sur l'autre protocole n'était disponible lorsque la requête a été envoyée, mais un en-tête \"Alt-Svc\" était présent dans la réponse."
+  },
+  "panels/network/NetworkDataGridNode.ts | matchedToServiceWorkerRouter": {
+    "message": "Associé à ServiceWorker router#{PH1}, taille de la ressource : {PH2}"
   },
   "panels/network/NetworkDataGridNode.ts | memoryCache": {
     "message": "(cache mémoire)"
@@ -7574,7 +7886,7 @@
   "panels/network/NetworkDataGridNode.ts | servedFromPrefetchCacheResource": {
     "message": "Diffusé à partir du cache de préchargement, taille de la ressource : {PH1}"
   },
-  "panels/network/NetworkDataGridNode.ts | servedFromServiceworkerResource": {
+  "panels/network/NetworkDataGridNode.ts | servedFromServiceWorkerResource": {
     "message": "Diffusée à partir de ServiceWorker, taille de la ressource : {PH1}"
   },
   "panels/network/NetworkDataGridNode.ts | servedFromSignedHttpExchange": {
@@ -7583,11 +7895,14 @@
   "panels/network/NetworkDataGridNode.ts | servedFromWebBundle": {
     "message": "Diffusé depuis Web Bundle, taille de la ressource : {PH1}"
   },
-  "panels/network/NetworkDataGridNode.ts | serviceworker": {
+  "panels/network/NetworkDataGridNode.ts | serviceWorker": {
     "message": "(ServiceWorker)"
   },
   "panels/network/NetworkDataGridNode.ts | signedexchange": {
     "message": "échange signé"
+  },
+  "panels/network/NetworkDataGridNode.ts | thirdPartyPhaseout": {
+    "message": "Les cookies pour cette requête sont bloqués en raison de l'abandon des cookies tiers. En savoir plus dans l'onglet des problèmes"
   },
   "panels/network/NetworkDataGridNode.ts | timeSubtitleTooltipText": {
     "message": "Latence (heure de réception de la réponse - heure de début)"
@@ -7606,6 +7921,9 @@
   },
   "panels/network/NetworkDataGridNode.ts | webBundleInnerRequest": {
     "message": "Envoyée depuis Web Bundle"
+  },
+  "panels/network/NetworkItemView.ts | containsOverriddenHeaders": {
+    "message": "Cette réponse contient des en-têtes remplacés par les outils de développement"
   },
   "panels/network/NetworkItemView.ts | cookies": {
     "message": "Cookies"
@@ -7643,11 +7961,17 @@
   "panels/network/NetworkItemView.ts | response": {
     "message": "Réponse"
   },
+  "panels/network/NetworkItemView.ts | responseIsOverridden": {
+    "message": "Cette réponse est remplacée par les outils de développement"
+  },
   "panels/network/NetworkItemView.ts | responsePreview": {
     "message": "Aperçu de la réponse"
   },
   "panels/network/NetworkItemView.ts | signedexchangeError": {
     "message": "Erreur SignedExchange"
+  },
+  "panels/network/NetworkItemView.ts | thirdPartyPhaseout": {
+    "message": "Cookies bloqués en raison de l'abandon des cookies tiers."
   },
   "panels/network/NetworkItemView.ts | timing": {
     "message": "Délai"
@@ -7707,10 +8031,13 @@
     "message": "Tout copier au format HAR"
   },
   "panels/network/NetworkLogView.ts | copyAllAsNodejsFetch": {
-    "message": "Tout copier au format Node.js fetch"
+    "message": "Tout copier au format fetch (Node.js)"
   },
   "panels/network/NetworkLogView.ts | copyAllAsPowershell": {
     "message": "Tout copier au format PowerShell"
+  },
+  "panels/network/NetworkLogView.ts | copyAllURLs": {
+    "message": "Copier toutes les URL"
   },
   "panels/network/NetworkLogView.ts | copyAsCurl": {
     "message": "Copier au format cURL"
@@ -7725,7 +8052,7 @@
     "message": "Copier au format fetch"
   },
   "panels/network/NetworkLogView.ts | copyAsNodejsFetch": {
-    "message": "Copier en tant que fetch Node.js"
+    "message": "Copier au format fetch (Node.js)"
   },
   "panels/network/NetworkLogView.ts | copyAsPowershell": {
     "message": "Copier au format PowerShell"
@@ -7741,6 +8068,9 @@
   },
   "panels/network/NetworkLogView.ts | copyStacktrace": {
     "message": "Copier la trace de la pile"
+  },
+  "panels/network/NetworkLogView.ts | copyURL": {
+    "message": "Copier l'URL"
   },
   "panels/network/NetworkLogView.ts | domcontentloadedS": {
     "message": "DOMContentLoaded : {PH1}"
@@ -7849,6 +8179,9 @@
   },
   "panels/network/NetworkLogView.ts | saveAllAsHarWithContent": {
     "message": "Tout enregistrer au format HAR avec le contenu"
+  },
+  "panels/network/NetworkLogView.ts | showOnly": {
+    "message": "Afficher uniquement {PH1}"
   },
   "panels/network/NetworkLogView.ts | showOnlyHideRequests": {
     "message": "Afficher uniquement/Masquer les requêtes"
@@ -8087,105 +8420,6 @@
   "panels/network/RequestCookiesView.ts | thisRequestHasNoCookies": {
     "message": "Cette requête ne contient aucun cookie."
   },
-  "panels/network/RequestHeadersView.ts | activeClientExperimentVariation": {
-    "message": "client experiment variation IDs actifs."
-  },
-  "panels/network/RequestHeadersView.ts | activeClientExperimentVariationIds": {
-    "message": "client experiment variation IDs actifs qui déclenchent un comportement côté serveur."
-  },
-  "panels/network/RequestHeadersView.ts | chooseThisOptionIfTheResourceAnd": {
-    "message": "Sélectionnez cette option si la ressource et le document sont diffusés à partir du même site."
-  },
-  "panels/network/RequestHeadersView.ts | copyValue": {
-    "message": "Copier la valeur"
-  },
-  "panels/network/RequestHeadersView.ts | decoded": {
-    "message": "Décodé :"
-  },
-  "panels/network/RequestHeadersView.ts | fromDiskCache": {
-    "message": "(à partir du cache du disque)"
-  },
-  "panels/network/RequestHeadersView.ts | fromMemoryCache": {
-    "message": "(à partir du cache mémoire)"
-  },
-  "panels/network/RequestHeadersView.ts | fromPrefetchCache": {
-    "message": "(à partir du cache de préchargement)"
-  },
-  "panels/network/RequestHeadersView.ts | fromServiceWorker": {
-    "message": "(à partir de service worker)"
-  },
-  "panels/network/RequestHeadersView.ts | fromSignedexchange": {
-    "message": "(à partir de l'échange signé)"
-  },
-  "panels/network/RequestHeadersView.ts | fromWebBundle": {
-    "message": "(à partir de Web Bundle)"
-  },
-  "panels/network/RequestHeadersView.ts | general": {
-    "message": "Général"
-  },
-  "panels/network/RequestHeadersView.ts | learnMore": {
-    "message": "En savoir plus"
-  },
-  "panels/network/RequestHeadersView.ts | learnMoreInTheIssuesTab": {
-    "message": "En savoir plus dans l'onglet des problèmes"
-  },
-  "panels/network/RequestHeadersView.ts | onlyChooseThisOptionIfAn": {
-    "message": "Ne sélectionnez cette option que si un site Web arbitraire incluant cette ressource ne présente pas de risque de sécurité."
-  },
-  "panels/network/RequestHeadersView.ts | onlyProvisionalHeadersAre": {
-    "message": "Seuls les en-têtes provisoires sont disponibles, car cette requête n'a pas été envoyée sur le réseau, mais diffusée depuis un cache local qui ne stocke pas les en-têtes de requête d'origine. Désactivez le cache pour voir les en-têtes de requête complets."
-  },
-  "panels/network/RequestHeadersView.ts | provisionalHeadersAreShown": {
-    "message": "En-têtes provisoires affichés"
-  },
-  "panels/network/RequestHeadersView.ts | provisionalHeadersAreShownS": {
-    "message": "Les en-têtes affichés sont provisoires. Désactivez le cache pour voir les en-têtes complets."
-  },
-  "panels/network/RequestHeadersView.ts | referrerPolicy": {
-    "message": "Règlement sur les URL de provenance"
-  },
-  "panels/network/RequestHeadersView.ts | remoteAddress": {
-    "message": "Adresse distante"
-  },
-  "panels/network/RequestHeadersView.ts | requestHeaders": {
-    "message": "En-têtes de requête"
-  },
-  "panels/network/RequestHeadersView.ts | requestMethod": {
-    "message": "Mode de requête"
-  },
-  "panels/network/RequestHeadersView.ts | requestUrl": {
-    "message": "URL de requête"
-  },
-  "panels/network/RequestHeadersView.ts | responseHeaders": {
-    "message": "En-têtes de réponse"
-  },
-  "panels/network/RequestHeadersView.ts | showMore": {
-    "message": "Plus"
-  },
-  "panels/network/RequestHeadersView.ts | statusCode": {
-    "message": "Code d'état"
-  },
-  "panels/network/RequestHeadersView.ts | thisDocumentWasBlockedFrom": {
-    "message": "Le chargement du document dans un pop-up ouvert par un iFrame en bac à sable a été bloqué en raison d'une règle d'ouverture multi-origine spécifiée pour ce document."
-  },
-  "panels/network/RequestHeadersView.ts | toEmbedThisFrameInYourDocument": {
-    "message": "Pour intégrer cette image à votre document, la réponse doit activer la règle d'intégrateur multi-origine en spécifiant l'en-tête de réponse suivant :"
-  },
-  "panels/network/RequestHeadersView.ts | toUseThisResourceFromADifferent": {
-    "message": "Pour utiliser cette ressource depuis une autre origine, le serveur doit spécifier une règle pour les ressources multi-origines dans les en-têtes de réponse :"
-  },
-  "panels/network/RequestHeadersView.ts | toUseThisResourceFromADifferentOrigin": {
-    "message": "Pour utiliser cette ressource depuis une autre origine, le serveur peut libérer l'en-tête de la réponse de la règle sur les ressources multi-origines :"
-  },
-  "panels/network/RequestHeadersView.ts | toUseThisResourceFromADifferentSite": {
-    "message": "Pour utiliser cette ressource depuis un autre site, le serveur peut libérer l'en-tête de la réponse de la règle sur les ressources multi-origines :"
-  },
-  "panels/network/RequestHeadersView.ts | viewParsed": {
-    "message": "Afficher les données analysées"
-  },
-  "panels/network/RequestHeadersView.ts | viewSource": {
-    "message": "Afficher la source"
-  },
   "panels/network/RequestInitiatorView.ts | requestCallStack": {
     "message": "Pile d'appel de requête"
   },
@@ -8223,7 +8457,7 @@
     "message": "afficher les données décodées"
   },
   "panels/network/RequestPayloadView.ts | viewParsed": {
-    "message": "Afficher les données analysées"
+    "message": "Afficher analysés"
   },
   "panels/network/RequestPayloadView.ts | viewParsedL": {
     "message": "afficher les données analysées"
@@ -8517,7 +8751,7 @@
     "message": "client experiment variation IDs actifs qui déclenchent un comportement côté serveur."
   },
   "panels/network/components/HeaderSectionRow.ts | decoded": {
-    "message": "Décodé :"
+    "message": "Décodées :"
   },
   "panels/network/components/HeaderSectionRow.ts | editHeader": {
     "message": "Ignorer l'en-tête"
@@ -8553,7 +8787,7 @@
     "message": "(à partir du cache du disque)"
   },
   "panels/network/components/RequestHeadersView.ts | fromMemoryCache": {
-    "message": "(à partir du cache mémoire)"
+    "message": "(depuis le cache mémoire)"
   },
   "panels/network/components/RequestHeadersView.ts | fromPrefetchCache": {
     "message": "(à partir du cache de préchargement)"
@@ -8565,7 +8799,7 @@
     "message": "(à partir de l'échange signé)"
   },
   "panels/network/components/RequestHeadersView.ts | fromWebBundle": {
-    "message": "(à partir de Web Bundle)"
+    "message": "(depuis Web Bundle)"
   },
   "panels/network/components/RequestHeadersView.ts | general": {
     "message": "Général"
@@ -8667,19 +8901,22 @@
     "message": "Le chargement du document dans un pop-up ouvert par un iFrame en bac à sable a été bloqué en raison d'une règle d'ouverture multi-origine spécifiée pour ce document."
   },
   "panels/network/components/ResponseHeaderSection.ts | toEmbedThisFrameInYourDocument": {
-    "message": "Pour intégrer ce frame à votre document, la réponse doit activer la règle d'intégrateur multi-origine en spécifiant l'en-tête de réponse suivant :"
+    "message": "Pour intégrer cette image à votre document, la réponse doit activer la règle d'intégrateur multi-origine en spécifiant l'en-tête de réponse suivant :"
   },
   "panels/network/components/ResponseHeaderSection.ts | toUseThisResourceFromADifferent": {
     "message": "Pour utiliser cette ressource depuis une autre origine, le serveur doit spécifier une règle pour les ressources multi-origines dans les en-têtes de réponse :"
   },
   "panels/network/components/ResponseHeaderSection.ts | toUseThisResourceFromADifferentOrigin": {
-    "message": "Pour utiliser cette ressource depuis une autre origine, le serveur peut libérer l'en-tête de réponse de la règle sur les ressources multi-origines :"
+    "message": "Pour utiliser cette ressource depuis une autre origine, le serveur peut libérer l'en-tête de la réponse de la règle sur les ressources multi-origines :"
   },
   "panels/network/components/ResponseHeaderSection.ts | toUseThisResourceFromADifferentSite": {
-    "message": "Pour utiliser cette ressource depuis un autre site, le serveur peut libérer l'en-tête de réponse de la règle sur les ressources multi-origines :"
+    "message": "Pour utiliser cette ressource depuis un autre site, le serveur peut libérer l'en-tête de la réponse de la règle sur les ressources multi-origines :"
   },
   "panels/network/components/WebBundleInfoView.ts | bundledResource": {
     "message": "Ressource dans un Web Bundle"
+  },
+  "panels/network/network-meta.ts | addNetworkRequestBlockingPattern": {
+    "message": "Ajouter un schéma de blocage de requête réseau"
   },
   "panels/network/network-meta.ts | clear": {
     "message": "Effacer le journal réseau"
@@ -8731,6 +8968,9 @@
   },
   "panels/network/network-meta.ts | recordNetworkLog": {
     "message": "Enregistrer le journal réseau"
+  },
+  "panels/network/network-meta.ts | removeAllNetworkRequestBlockingPatterns": {
+    "message": "Supprimer tous les schémas de blocage des requêtes réseau"
   },
   "panels/network/network-meta.ts | resourceType": {
     "message": "type de ressource"
@@ -9107,9 +9347,6 @@
   "panels/profiler/HeapSnapshotView.ts | retainers": {
     "message": "Éléments de conservation"
   },
-  "panels/profiler/HeapSnapshotView.ts | sKb": {
-    "message": "{PH1} ko"
-  },
   "panels/profiler/HeapSnapshotView.ts | savingD": {
     "message": "Enregistrement… {PH1} %"
   },
@@ -9302,20 +9539,8 @@
   "panels/profiler/ProfileLauncherView.ts | takeSnapshot": {
     "message": "Réaliser un instantané"
   },
-  "panels/profiler/ProfileSidebarTreeElement.ts | delete": {
-    "message": "Supprimer"
-  },
-  "panels/profiler/ProfileSidebarTreeElement.ts | enterToSave": {
-    "message": "Enregistrer. Appuyez sur Entrée pour enregistrer le fichier."
-  },
-  "panels/profiler/ProfileSidebarTreeElement.ts | load": {
-    "message": "Charger…"
-  },
-  "panels/profiler/ProfileSidebarTreeElement.ts | save": {
-    "message": "Enregistrer"
-  },
-  "panels/profiler/ProfileSidebarTreeElement.ts | saveWithEllipsis": {
-    "message": "Enregistrer…"
+  "panels/profiler/ProfileSidebarTreeElement.ts | profileOptions": {
+    "message": "Options de profil"
   },
   "panels/profiler/ProfileView.ts | chart": {
     "message": "Graphique"
@@ -9377,26 +9602,14 @@
   "panels/profiler/ProfilesPanel.ts | cantLoadProfileWhileAnother": {
     "message": "Impossible de charger un profil quand un autre est en cours d'enregistrement."
   },
-  "panels/profiler/ProfilesPanel.ts | clearAllProfiles": {
-    "message": "Effacer tous les profils"
-  },
   "panels/profiler/ProfilesPanel.ts | deprecationWarnMsg": {
     "message": "Ce panneau sera abandonné dans la prochaine version. Utilisez le panneau \"Performances\" pour enregistrer des profils de processeur JavaScript."
-  },
-  "panels/profiler/ProfilesPanel.ts | enableThisPanelTemporarily": {
-    "message": "Activer temporairement ce panneau"
   },
   "panels/profiler/ProfilesPanel.ts | feedback": {
     "message": "Commentaires"
   },
   "panels/profiler/ProfilesPanel.ts | goToPerformancePanel": {
     "message": "Accéder au panneau \"Performances\""
-  },
-  "panels/profiler/ProfilesPanel.ts | learnMore": {
-    "message": "En savoir plus"
-  },
-  "panels/profiler/ProfilesPanel.ts | load": {
-    "message": "Charger…"
   },
   "panels/profiler/ProfilesPanel.ts | profileLoadingFailedS": {
     "message": "Échec du chargement du profil : {PH1}."
@@ -9407,11 +9620,23 @@
   "panels/profiler/ProfilesPanel.ts | runD": {
     "message": "Exécuter {PH1}"
   },
+  "panels/profiler/profiler-meta.ts | clearAllProfiles": {
+    "message": "Effacer tous les profils"
+  },
+  "panels/profiler/profiler-meta.ts | deleteProfile": {
+    "message": "Supprimer le profil"
+  },
   "panels/profiler/profiler-meta.ts | liveHeapProfile": {
     "message": "Profil de segment de mémoire actif"
   },
+  "panels/profiler/profiler-meta.ts | loadProfile": {
+    "message": "Charger le profil…"
+  },
   "panels/profiler/profiler-meta.ts | memory": {
     "message": "Mémoire"
+  },
+  "panels/profiler/profiler-meta.ts | saveProfile": {
+    "message": "Enregistrer le profil…"
   },
   "panels/profiler/profiler-meta.ts | showLiveHeapProfile": {
     "message": "Afficher le profil du segment de mémoire actif"
@@ -9553,6 +9778,12 @@
   },
   "panels/recorder/RecorderController.ts | importRecording": {
     "message": "Importer l'enregistrement"
+  },
+  "panels/recorder/RecorderController.ts | noRecordings": {
+    "message": "Aucun enregistrement"
+  },
+  "panels/recorder/RecorderController.ts | numberOfRecordings": {
+    "message": "enregistrement(s)"
   },
   "panels/recorder/RecorderController.ts | replayRecording": {
     "message": "Rediffuser l'enregistrement"
@@ -10901,6 +11132,66 @@
   "panels/sources/CallStackSidebarPane.ts | showMore": {
     "message": "Plus"
   },
+  "panels/sources/CategorizedBreakpointL10n.ts | animationFrameFired": {
+    "message": "Frame d'animation déclenché"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | beforeBidderWorkletBiddingStart": {
+    "message": "Début de la phase de définition d'enchères"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | beforeBidderWorkletReportingStart": {
+    "message": "Début de la phase de création de rapports des enchérisseurs"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | beforeSellerWorkletReportingStart": {
+    "message": "Début de la phase de création de rapports des vendeurs"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | beforeSellerWorkletScoringStart": {
+    "message": "Début de la phase d'attribution de scores par les vendeurs"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | cancelAnimationFrame": {
+    "message": "Annuler le frame d'animation"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | closeAudiocontext": {
+    "message": "Fermer AudioContext"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | createAudiocontext": {
+    "message": "Créer AudioContext"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | createCanvasContext": {
+    "message": "Créer un contexte de canevas"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | policyViolations": {
+    "message": "Non-respect des règles"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | requestAnimationFrame": {
+    "message": "Demander un frame d'animation"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | resumeAudiocontext": {
+    "message": "Reprendre AudioContext"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | scriptBlockedByContentSecurity": {
+    "message": "Script bloqué par Content Security Policy"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | scriptFirstStatement": {
+    "message": "Première déclaration du script"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | setInnerhtml": {
+    "message": "Définir innerHTML"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | setTimeoutOrIntervalFired": {
+    "message": "{PH1} déclenché"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | sinkViolations": {
+    "message": "Non-respects (récepteur)"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | suspendAudiocontext": {
+    "message": "Suspendre AudioContext"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | webglErrorFired": {
+    "message": "Erreur WebGL déclenchée"
+  },
+  "panels/sources/CategorizedBreakpointL10n.ts | webglWarningFired": {
+    "message": "Avertissement WebGL déclenché"
+  },
   "panels/sources/CoveragePlugin.ts | clickToShowCoveragePanel": {
     "message": "Cliquez ici pour afficher le panneau \"Couverture\""
   },
@@ -10961,6 +11252,9 @@
   "panels/sources/DebuggerPausedMessage.ts | pausedOnXhrOrFetch": {
     "message": "Suspendu sur XHR ou fetch"
   },
+  "panels/sources/DebuggerPausedMessage.ts | scriptBlockedDueToContent": {
+    "message": "Script bloqué en raison de la directive Content Security Policy : {PH1}"
+  },
   "panels/sources/DebuggerPausedMessage.ts | subtreeModifications": {
     "message": "modifications de la sous-arborescence"
   },
@@ -10969,6 +11263,9 @@
   },
   "panels/sources/DebuggerPausedMessage.ts | trustedTypeSinkViolation": {
     "message": "Non-respect (récepteur) - Trusted Type"
+  },
+  "panels/sources/DebuggerPausedMessage.ts | webglErrorFiredS": {
+    "message": "Erreur WebGL déclenchée ({PH1})"
   },
   "panels/sources/DebuggerPlugin.ts | addBreakpoint": {
     "message": "Ajouter un point d'arrêt"
@@ -11087,9 +11384,6 @@
   "panels/sources/NavigatorView.ts | actionCannotBeUndone": {
     "message": "Cette action est irréversible."
   },
-  "panels/sources/NavigatorView.ts | areYouSureYouWantToDeleteAllOverrides": {
-    "message": "Voulez-vous vraiment supprimer tous les remplacements contenus dans ce dossier ?"
-  },
   "panels/sources/NavigatorView.ts | areYouSureYouWantToDeleteFolder": {
     "message": "Voulez-vous vraiment supprimer ce dossier et son contenu ?"
   },
@@ -11110,9 +11404,6 @@
   },
   "panels/sources/NavigatorView.ts | delete": {
     "message": "Supprimer"
-  },
-  "panels/sources/NavigatorView.ts | deleteAllOverrides": {
-    "message": "Supprimer tous les remplacements"
   },
   "panels/sources/NavigatorView.ts | deployed": {
     "message": "Déployées"
@@ -11203,9 +11494,6 @@
   },
   "panels/sources/ScopeChainSidebarPane.ts | returnValue": {
     "message": "Valeur renvoyée"
-  },
-  "panels/sources/ScopeChainSidebarPane.ts | revealInMemoryInspectorPanel": {
-    "message": "Afficher dans le panneau \"Inspecteur de mémoire\""
   },
   "panels/sources/SnippetsPlugin.ts | ctrlenter": {
     "message": "Ctrl+Entrée"
@@ -11310,7 +11598,7 @@
     "message": "Reprendre avec toutes les suspensions bloquées pendant 500 ms"
   },
   "panels/sources/SourcesPanel.ts | revealInSidebar": {
-    "message": "Afficher dans la barre latérale"
+    "message": "Afficher dans la barre latérale du navigateur"
   },
   "panels/sources/SourcesPanel.ts | showDebugger": {
     "message": "Afficher le débogueur"
@@ -11321,8 +11609,8 @@
   "panels/sources/SourcesPanel.ts | showNavigator": {
     "message": "Afficher le navigateur"
   },
-  "panels/sources/SourcesPanel.ts | storeSAsGlobalVariable": {
-    "message": "Stocker {PH1} en tant que variable globale"
+  "panels/sources/SourcesPanel.ts | storeAsGlobalVariable": {
+    "message": "Stocker en tant que variable globale"
   },
   "panels/sources/SourcesPanel.ts | terminateCurrentJavascriptCall": {
     "message": "Mettre fin à l'appel JavaScript en cours"
@@ -11334,13 +11622,13 @@
     "message": "Exécuter la commande"
   },
   "panels/sources/SourcesView.ts | selectFolder": {
-    "message": "Sélectionner le dossier"
+    "message": "Sélectionner un dossier"
   },
   "panels/sources/SourcesView.ts | sourceViewActions": {
     "message": "Actions pour afficher la source"
   },
   "panels/sources/SourcesView.ts | workspaceDropInAFolderToSyncSources": {
-    "message": "Pour synchroniser les modifications dans l'espace de travail, déposez un dossier contenant vos sources ici ou :"
+    "message": "Pour synchroniser les modifications dans l'espace de travail, déposez un dossier contenant vos sources ici ou"
   },
   "panels/sources/TabbedEditorContainer.ts | areYouSureYouWantToCloseUnsaved": {
     "message": "Voulez-vous vraiment fermer le fichier {PH1} non enregistré ?"
@@ -11516,9 +11804,6 @@
   "panels/sources/sources-meta.ts | disableCssSourceMaps": {
     "message": "Désactiver les cartes sources CSS"
   },
-  "panels/sources/sources-meta.ts | disableJavascriptSourceMaps": {
-    "message": "Désactiver les cartes sources JavaScript"
-  },
   "panels/sources/sources-meta.ts | disableTabMovesFocus": {
     "message": "Désactiver Tabulation pour déplacer le curseur"
   },
@@ -11560,9 +11845,6 @@
   },
   "panels/sources/sources-meta.ts | enableCssSourceMaps": {
     "message": "Activer les cartes sources CSS"
-  },
-  "panels/sources/sources-meta.ts | enableJavascriptSourceMaps": {
-    "message": "Activer les cartes sources JavaScript"
   },
   "panels/sources/sources-meta.ts | enableTabMovesFocus": {
     "message": "Activer Tabulation pour déplacer le curseur"
@@ -11626,6 +11908,9 @@
   },
   "panels/sources/sources-meta.ts | resumeScriptExecution": {
     "message": "Reprendre l'exécution du script"
+  },
+  "panels/sources/sources-meta.ts | revealActiveFileInSidebar": {
+    "message": "Afficher le fichier actif dans la barre latérale du navigateur"
   },
   "panels/sources/sources-meta.ts | runSnippet": {
     "message": "Exécuter l'extrait"
@@ -11809,6 +12094,9 @@
   },
   "panels/timeline/EventUICategory.ts | consoleTime": {
     "message": "Heure de la console"
+  },
+  "panels/timeline/EventUICategory.ts | cppGc": {
+    "message": "Récupération de mémoire pour C++"
   },
   "panels/timeline/EventUICategory.ts | createWebsocket": {
     "message": "Créer un WebSocket"
@@ -12098,6 +12386,12 @@
   "panels/timeline/InteractionsTrackAppender.ts | interactions": {
     "message": "Interactions"
   },
+  "panels/timeline/IsolateSelector.ts | empty": {
+    "message": "(vide)"
+  },
+  "panels/timeline/IsolateSelector.ts | selectJavascriptVmInstance": {
+    "message": "Sélectionner l'instance de VM JavaScript"
+  },
   "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShifts": {
     "message": "Décalages de mise en page"
   },
@@ -12107,11 +12401,23 @@
   "panels/timeline/ThreadAppender.ts | anonymous": {
     "message": "(anonyme)"
   },
+  "panels/timeline/ThreadAppender.ts | bidderWorklet": {
+    "message": "Worklet d'enchérisseur"
+  },
+  "panels/timeline/ThreadAppender.ts | bidderWorkletS": {
+    "message": "Worklet d'enchérisseur : {PH1}"
+  },
   "panels/timeline/ThreadAppender.ts | dedicatedWorker": {
     "message": "Worker dédié"
   },
+  "panels/timeline/ThreadAppender.ts | eventDispatchS": {
+    "message": "Événement : {PH1}"
+  },
   "panels/timeline/ThreadAppender.ts | frameS": {
     "message": "Frame – {PH1}"
+  },
+  "panels/timeline/ThreadAppender.ts | main": {
+    "message": "Principal"
   },
   "panels/timeline/ThreadAppender.ts | mainS": {
     "message": "Principal – {PH1}"
@@ -12125,14 +12431,38 @@
   "panels/timeline/ThreadAppender.ts | rasterizerThreadS": {
     "message": "Thread du rastériseur {PH1}"
   },
+  "panels/timeline/ThreadAppender.ts | sellerWorklet": {
+    "message": "Worklet de vendeur"
+  },
+  "panels/timeline/ThreadAppender.ts | sellerWorkletS": {
+    "message": "Worklet de vendeur : {PH1}"
+  },
+  "panels/timeline/ThreadAppender.ts | threadPool": {
+    "message": "Pool de threads"
+  },
+  "panels/timeline/ThreadAppender.ts | threadPoolThreadS": {
+    "message": "Nœud de calcul de pool de threads {PH1}"
+  },
   "panels/timeline/ThreadAppender.ts | threadS": {
     "message": "Thread {PH1}"
+  },
+  "panels/timeline/ThreadAppender.ts | unknownWorklet": {
+    "message": "Worklet d'enchères"
+  },
+  "panels/timeline/ThreadAppender.ts | unknownWorkletS": {
+    "message": "Worklet d'enchères : {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | workerS": {
     "message": "Worker – {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | workerSS": {
     "message": "Worker : {PH1} — {PH2}"
+  },
+  "panels/timeline/ThreadAppender.ts | workletService": {
+    "message": "Service de Worklet d'enchères"
+  },
+  "panels/timeline/ThreadAppender.ts | workletServiceS": {
+    "message": "Service de Worklet d'enchères : {PH1}"
   },
   "panels/timeline/TimelineController.ts | tracingNotSupported": {
     "message": "Impossible d'enregistrer une trace des performances pour ce type de cible"
@@ -12308,6 +12638,9 @@
   "panels/timeline/TimelinePanel.ts | disablesJavascriptSampling": {
     "message": "Désactive l'échantillonnage JavaScript, réduit les coûts lors de l'exécution sur des appareils mobiles"
   },
+  "panels/timeline/TimelinePanel.ts | downloadAfterError": {
+    "message": "Télécharger les événements de trace bruts"
+  },
   "panels/timeline/TimelinePanel.ts | dropTimelineFileOrUrlHere": {
     "message": "Déposez l'URL ou le fichier de la chronologie ici"
   },
@@ -12428,8 +12761,11 @@
   "panels/timeline/TimelineTreeView.ts | hideHeaviestStack": {
     "message": "Masquer la pile la plus lourde"
   },
-  "panels/timeline/TimelineTreeView.ts | javascript": {
-    "message": "JavaScript"
+  "panels/timeline/TimelineTreeView.ts | matchCase": {
+    "message": "Respecter la casse"
+  },
+  "panels/timeline/TimelineTreeView.ts | matchWholeWord": {
+    "message": "Correspondre au mot entier"
   },
   "panels/timeline/TimelineTreeView.ts | noGrouping": {
     "message": "Aucun regroupement"
@@ -12463,6 +12799,9 @@
   },
   "panels/timeline/TimelineTreeView.ts | unattributed": {
     "message": "[non attribué]"
+  },
+  "panels/timeline/TimelineTreeView.ts | useRegularExpression": {
+    "message": "Utiliser une expression régulière"
   },
   "panels/timeline/TimelineTreeView.ts | vRuntime": {
     "message": "[Environnement d'exécution V8]"
@@ -12529,21 +12868,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | cancelIdleCallback": {
     "message": "Annuler le rappel à la prochaine période d'inactivité"
-  },
-  "panels/timeline/TimelineUIUtils.ts | changedAttributeToSs": {
-    "message": "(attribut remplacé par \"{PH1}\"{PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | changedClassToSs": {
-    "message": "(classe remplacée par \"{PH1}\"{PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | changedIdToSs": {
-    "message": "(ID remplacé par \"{PH1}\"{PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | changedPesudoToSs": {
-    "message": "(pseudo-élément remplacé par \"{PH1}\"{PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | changedSs": {
-    "message": "(\"{PH1}\"{PH2} modifiées)"
   },
   "panels/timeline/TimelineUIUtils.ts | collected": {
     "message": "Collecté"
@@ -12653,9 +12977,6 @@
   "panels/timeline/TimelineUIUtils.ts | emptyPlaceholder": {
     "message": "{PH1}"
   },
-  "panels/timeline/TimelineUIUtils.ts | emptyPlaceholderColon": {
-    "message": " : {PH1}"
-  },
   "panels/timeline/TimelineUIUtils.ts | encodedData": {
     "message": "Données encodées"
   },
@@ -12704,9 +13025,6 @@
   "panels/timeline/TimelineUIUtils.ts | firstPaint": {
     "message": "First Paint"
   },
-  "panels/timeline/TimelineUIUtils.ts | forcedReflow": {
-    "message": "Ajustement forcé de la mise en page"
-  },
   "panels/timeline/TimelineUIUtils.ts | frame": {
     "message": "Frame"
   },
@@ -12734,17 +13052,11 @@
   "panels/timeline/TimelineUIUtils.ts | hadRecentInput": {
     "message": "Valeur saisie récemment"
   },
-  "panels/timeline/TimelineUIUtils.ts | handlerTookS": {
-    "message": "Le gestionnaire a mis {PH1}"
-  },
   "panels/timeline/TimelineUIUtils.ts | hitTest": {
     "message": "Test de positionnement"
   },
   "panels/timeline/TimelineUIUtils.ts | idle": {
     "message": "Inactivité"
-  },
-  "panels/timeline/TimelineUIUtils.ts | idleCallbackExecutionExtended": {
-    "message": "Exécution du rappel à la prochaine période d'inactivité prolongée au-delà de la durée maximale de {PH1}"
   },
   "panels/timeline/TimelineUIUtils.ts | idleCallbackRequested": {
     "message": "Rappel à la prochaine période d'inactivité demandé"
@@ -12764,6 +13076,9 @@
   "panels/timeline/TimelineUIUtils.ts | initiator": {
     "message": "Initiateur"
   },
+  "panels/timeline/TimelineUIUtils.ts | inputDelay": {
+    "message": "Délai de réponse à l'entrée utilisateur"
+  },
   "panels/timeline/TimelineUIUtils.ts | installTimer": {
     "message": "Installer un minuteur"
   },
@@ -12772,6 +13087,9 @@
   },
   "panels/timeline/TimelineUIUtils.ts | invalidateLayout": {
     "message": "Invalider la mise en page"
+  },
+  "panels/timeline/TimelineUIUtils.ts | invalidationWithCallFrame": {
+    "message": "{PH1} à {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | invalidations": {
     "message": "Invalidations"
@@ -12797,9 +13115,6 @@
   "panels/timeline/TimelineUIUtils.ts | layerRoot": {
     "message": "Racine du calque"
   },
-  "panels/timeline/TimelineUIUtils.ts | layerTree": {
-    "message": "Arborescence des calques"
-  },
   "panels/timeline/TimelineUIUtils.ts | layerize": {
     "message": "Calcul des couches"
   },
@@ -12808,9 +13123,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | layoutForced": {
     "message": "Mise en page forcée"
-  },
-  "panels/timeline/TimelineUIUtils.ts | layoutInvalidations": {
-    "message": "Invalidations de mises en page"
   },
   "panels/timeline/TimelineUIUtils.ts | layoutRoot": {
     "message": "Racine de mise en page"
@@ -12830,12 +13142,6 @@
   "panels/timeline/TimelineUIUtils.ts | location": {
     "message": "Localisation"
   },
-  "panels/timeline/TimelineUIUtils.ts | longInteractionINP": {
-    "message": "Longue interaction"
-  },
-  "panels/timeline/TimelineUIUtils.ts | longTask": {
-    "message": "Tâche longue"
-  },
   "panels/timeline/TimelineUIUtils.ts | majorGc": {
     "message": "Récupération de mémoire majeure"
   },
@@ -12843,9 +13149,6 @@
     "message": "Message"
   },
   "panels/timeline/TimelineUIUtils.ts | mimeType": {
-    "message": "Type MIME"
-  },
-  "panels/timeline/TimelineUIUtils.ts | mimeTypeCaps": {
     "message": "Type MIME"
   },
   "panels/timeline/TimelineUIUtils.ts | minorGc": {
@@ -12869,17 +13172,8 @@
   "panels/timeline/TimelineUIUtils.ts | no": {
     "message": "Non"
   },
-  "panels/timeline/TimelineUIUtils.ts | node": {
-    "message": "Nœud :"
-  },
-  "panels/timeline/TimelineUIUtils.ts | nodes": {
-    "message": "Nœuds :"
-  },
   "panels/timeline/TimelineUIUtils.ts | nodesThatNeedLayout": {
     "message": "Nœuds nécessitant une mise en page"
-  },
-  "panels/timeline/TimelineUIUtils.ts | notOptimized": {
-    "message": "Non optimisé"
   },
   "panels/timeline/TimelineUIUtils.ts | onloadEvent": {
     "message": "Événement de chargement"
@@ -12889,9 +13183,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | other": {
     "message": "Autre"
-  },
-  "panels/timeline/TimelineUIUtils.ts | otherInvalidations": {
-    "message": "Autres invalidations"
   },
   "panels/timeline/TimelineUIUtils.ts | ownerElement": {
     "message": "Élément du propriétaire"
@@ -12929,11 +13220,17 @@
   "panels/timeline/TimelineUIUtils.ts | prePaint": {
     "message": "Pré-peinture"
   },
+  "panels/timeline/TimelineUIUtils.ts | presentationDelay": {
+    "message": "Délai de présentation"
+  },
   "panels/timeline/TimelineUIUtils.ts | preview": {
     "message": "Aperçu"
   },
   "panels/timeline/TimelineUIUtils.ts | priority": {
     "message": "Priorité"
+  },
+  "panels/timeline/TimelineUIUtils.ts | processingTime": {
+    "message": "Temps de traitement"
   },
   "panels/timeline/TimelineUIUtils.ts | producedCacheSize": {
     "message": "Taille du cache créé"
@@ -12962,9 +13259,6 @@
   "panels/timeline/TimelineUIUtils.ts | receiveWebsocketHandshake": {
     "message": "Recevoir le handshake WebSocket"
   },
-  "panels/timeline/TimelineUIUtils.ts | recurringHandlerTookS": {
-    "message": "Le gestionnaire récurrent a mis {PH1}"
-  },
   "panels/timeline/TimelineUIUtils.ts | relatedNode": {
     "message": "Nœud similaire"
   },
@@ -12989,29 +13283,17 @@
   "panels/timeline/TimelineUIUtils.ts | requestMethod": {
     "message": "Mode de requête"
   },
-  "panels/timeline/TimelineUIUtils.ts | resource": {
-    "message": "Ressource"
-  },
   "panels/timeline/TimelineUIUtils.ts | reveal": {
     "message": "Afficher"
   },
   "panels/timeline/TimelineUIUtils.ts | runMicrotasks": {
     "message": "Exécuter des microtâches"
   },
-  "panels/timeline/TimelineUIUtils.ts | sAndS": {
-    "message": "{PH1} et {PH2}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sAndSOther": {
-    "message": "{PH1}, {PH2} et 1 autre"
-  },
   "panels/timeline/TimelineUIUtils.ts | sAtS": {
     "message": "{PH1} à {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | sAtSParentheses": {
     "message": "{PH1} (à {PH2})"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sBytes": {
-    "message": "{n,plural, =1{# octet}one{# octet}other{# octets}}"
   },
   "panels/timeline/TimelineUIUtils.ts | sCLSInformation": {
     "message": "{PH1} peut conduire à une mauvaise expérience utilisateur. Il a récemment {PH2}."
@@ -13022,32 +13304,17 @@
   "panels/timeline/TimelineUIUtils.ts | sCollected": {
     "message": "{PH1} collectés"
   },
-  "panels/timeline/TimelineUIUtils.ts | sForS": {
-    "message": "{PH1} pour {PH2}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sIsALikelyPerformanceBottleneck": {
-    "message": "{PH1} est probablement un goulot d'étranglement des performances."
-  },
-  "panels/timeline/TimelineUIUtils.ts | sIsLikelyPoorPageResponsiveness": {
-    "message": "{PH1} indique une mauvaise réactivité de la page."
-  },
   "panels/timeline/TimelineUIUtils.ts | sOfS": {
     "message": "{PH1} sur {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | sS": {
     "message": "{PH1} : {PH2}"
   },
-  "panels/timeline/TimelineUIUtils.ts | sSAndSOthers": {
-    "message": "{PH1}, {PH2} et {PH3} autre"
-  },
   "panels/timeline/TimelineUIUtils.ts | sSCurlyBrackets": {
     "message": "({PH1}, {PH2})"
   },
   "panels/timeline/TimelineUIUtils.ts | sSDimensions": {
     "message": "{PH1} × {PH2}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sSDot": {
-    "message": "{PH1}. {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | sSSquareBrackets": {
     "message": "{PH1} [{PH2}…]"
@@ -13057,9 +13324,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | sSs": {
     "message": "{PH1} [{PH2}…{PH3}]"
-  },
-  "panels/timeline/TimelineUIUtils.ts | sTookS": {
-    "message": "{PH1} a mis {PH2}."
   },
   "panels/timeline/TimelineUIUtils.ts | scheduleStyleRecalculation": {
     "message": "Programmer le recalcul des styles"
@@ -13091,9 +13355,6 @@
   "panels/timeline/TimelineUIUtils.ts | sendWebsocketHandshake": {
     "message": "Envoyer le handshake WebSocket"
   },
-  "panels/timeline/TimelineUIUtils.ts | show": {
-    "message": "Afficher"
-  },
   "panels/timeline/TimelineUIUtils.ts | sign": {
     "message": "Signer"
   },
@@ -13106,14 +13367,8 @@
   "panels/timeline/TimelineUIUtils.ts | stackTrace": {
     "message": "Trace de la pile"
   },
-  "panels/timeline/TimelineUIUtils.ts | stackTraceColon": {
-    "message": "Trace de la pile :"
-  },
   "panels/timeline/TimelineUIUtils.ts | state": {
     "message": "État"
-  },
-  "panels/timeline/TimelineUIUtils.ts | statusCode": {
-    "message": "Code d'état"
   },
   "panels/timeline/TimelineUIUtils.ts | streamed": {
     "message": "Streamé"
@@ -13123,9 +13378,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | streamingWasmResponse": {
     "message": "Streaming de la réponse Wasm"
-  },
-  "panels/timeline/TimelineUIUtils.ts | styleInvalidations": {
-    "message": "Invalidations de styles"
   },
   "panels/timeline/TimelineUIUtils.ts | stylesheetUrl": {
     "message": "URL de la feuille de style"
@@ -13160,12 +13412,6 @@
   "panels/timeline/TimelineUIUtils.ts | type": {
     "message": "Type"
   },
-  "panels/timeline/TimelineUIUtils.ts | unknown": {
-    "message": "inconnu"
-  },
-  "panels/timeline/TimelineUIUtils.ts | unknownCause": {
-    "message": "Cause inconnue"
-  },
   "panels/timeline/TimelineUIUtils.ts | updateLayer": {
     "message": "Actualiser le calque"
   },
@@ -13195,9 +13441,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | wasmModuleCacheInvalid": {
     "message": "Cache du module Wasm non valide"
-  },
-  "panels/timeline/TimelineUIUtils.ts | websocketProtocol": {
-    "message": "Protocole WebSocket"
   },
   "panels/timeline/TimelineUIUtils.ts | willSendRequest": {
     "message": "Enverra une requête"
@@ -13244,14 +13487,32 @@
   "panels/timeline/components/DetailsView.ts | idleCallbackExecutionExtended": {
     "message": "Exécution du rappel à la prochaine période d'inactivité prolongée au-delà de la durée maximale de {PH1}"
   },
+  "panels/timeline/components/DetailsView.ts | longInteractionINP": {
+    "message": "Longue interaction"
+  },
   "panels/timeline/components/DetailsView.ts | longTask": {
     "message": "Tâche longue"
   },
   "panels/timeline/components/DetailsView.ts | sIsALikelyPerformanceBottleneck": {
-    "message": "{PH1} est probablement un goulot d'étranglement des performances."
+    "message": "{PH1} est probablement un goulot d'étranglement."
+  },
+  "panels/timeline/components/DetailsView.ts | sIsLikelyPoorPageResponsiveness": {
+    "message": "{PH1} indique une mauvaise réactivité de la page."
   },
   "panels/timeline/components/DetailsView.ts | sTookS": {
     "message": "{PH1} a mis {PH2}."
+  },
+  "panels/timeline/components/DetailsView.ts | websocketProtocol": {
+    "message": "Protocole WebSocket"
+  },
+  "panels/timeline/components/InteractionBreakdown.ts | inputDelay": {
+    "message": "Délai de réponse à l'entrée utilisateur"
+  },
+  "panels/timeline/components/InteractionBreakdown.ts | presentationDelay": {
+    "message": "Délai de présentation"
+  },
+  "panels/timeline/components/InteractionBreakdown.ts | processingTime": {
+    "message": "Temps de traitement"
   },
   "panels/timeline/timeline-meta.ts | hideChromeFrameInLayersView": {
     "message": "Masquer le frame chrome dans la vue des calques"
@@ -13363,6 +13624,9 @@
   },
   "panels/webauthn/WebauthnPane.ts | enableVirtualAuthenticator": {
     "message": "Activer l'environnement d'authentification virtuelle"
+  },
+  "panels/webauthn/WebauthnPane.ts | enterNewName": {
+    "message": "Saisissez un nouveau nom"
   },
   "panels/webauthn/WebauthnPane.ts | export": {
     "message": "Exporter"
@@ -13508,71 +13772,11 @@
   "ui/components/issue_counter/IssueLinkIcon.ts | issueUnavailable": {
     "message": "Problème non disponible pour le moment"
   },
-  "ui/components/linear_memory_inspector/LinearMemoryHighlightChipList.ts | deleteHighlight": {
-    "message": "Ne plus mettre en surbrillance cette mémoire"
+  "ui/components/markdown_view/CodeBlock.ts | copied": {
+    "message": "Copié dans le presse-papiers"
   },
-  "ui/components/linear_memory_inspector/LinearMemoryHighlightChipList.ts | jumpToAddress": {
-    "message": "Accéder à cette mémoire"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryInspector.ts | addressHasToBeANumberBetweenSAnd": {
-    "message": "L'adresse doit être un nombre compris entre {PH1} et {PH2}"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryInspectorController.ts | couldNotOpenLinearMemory": {
-    "message": "Impossible d'ouvrir l'inspecteur de mémoire linéaire : échec de la localisation du tampon."
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryInspectorPane.ts | noOpenInspections": {
-    "message": "Aucun examen en cours"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryNavigator.ts | enterAddress": {
-    "message": "Saisir une adresse"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryNavigator.ts | goBackInAddressHistory": {
-    "message": "Revenir en arrière dans l'historique des adresses"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryNavigator.ts | goForwardInAddressHistory": {
-    "message": "Avancer dans l'historique des adresses"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryNavigator.ts | nextPage": {
-    "message": "Page suivante"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryNavigator.ts | previousPage": {
-    "message": "Page précédente"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryNavigator.ts | refresh": {
-    "message": "Actualiser"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryValueInterpreter.ts | changeEndianness": {
-    "message": "Modifier Endianness"
-  },
-  "ui/components/linear_memory_inspector/LinearMemoryValueInterpreter.ts | toggleValueTypeSettings": {
-    "message": "Activer/Désactiver les paramètres du type de valeur"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterDisplay.ts | addressOutOfRange": {
-    "message": "Adresse hors de la plage mémoire"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterDisplay.ts | changeValueTypeMode": {
-    "message": "Changer de mode"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterDisplay.ts | jumpToPointer": {
-    "message": "Aller à l'adresse"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterDisplay.ts | signedValue": {
-    "message": "Valeur Signed"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterDisplay.ts | unsignedValue": {
-    "message": "Valeur Unsigned"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterDisplayUtils.ts | notApplicable": {
-    "message": "N/A"
-  },
-  "ui/components/linear_memory_inspector/ValueInterpreterSettings.ts | otherGroup": {
-    "message": "Autre"
-  },
-  "ui/components/linear_memory_inspector/linear_memory_inspector-meta.ts | memoryInspector": {
-    "message": "Outil d'analyse de la mémoire"
-  },
-  "ui/components/linear_memory_inspector/linear_memory_inspector-meta.ts | showMemoryInspector": {
-    "message": "Afficher l'outil d'inspection de mémoire"
+  "ui/components/markdown_view/CodeBlock.ts | copy": {
+    "message": "Copier le code"
   },
   "ui/components/panel_feedback/FeedbackButton.ts | feedback": {
     "message": "Commentaires"
@@ -13625,6 +13829,9 @@
   "ui/legacy/ActionRegistration.ts | background_services": {
     "message": "Services d'arrière-plan"
   },
+  "ui/legacy/ActionRegistration.ts | changes": {
+    "message": "Modifications"
+  },
   "ui/legacy/ActionRegistration.ts | console": {
     "message": "Console"
   },
@@ -13663,6 +13870,9 @@
   },
   "ui/legacy/ActionRegistration.ts | performance": {
     "message": "Performances"
+  },
+  "ui/legacy/ActionRegistration.ts | recorder": {
+    "message": "Enregistreur"
   },
   "ui/legacy/ActionRegistration.ts | rendering": {
     "message": "Affichage"
@@ -13778,11 +13988,17 @@
   "ui/legacy/ListWidget.ts | cancelString": {
     "message": "Annuler"
   },
+  "ui/legacy/ListWidget.ts | changesSaved": {
+    "message": "Les modifications apportées à l'élément ont été enregistrées"
+  },
   "ui/legacy/ListWidget.ts | editString": {
     "message": "Modifier"
   },
   "ui/legacy/ListWidget.ts | removeString": {
     "message": "Supprimer"
+  },
+  "ui/legacy/ListWidget.ts | removedItem": {
+    "message": "L'élément a été supprimé"
   },
   "ui/legacy/ListWidget.ts | saveString": {
     "message": "Enregistrer"
@@ -14250,7 +14466,7 @@
     "message": "Aucune propriété"
   },
   "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | revealInMemoryInpector": {
-    "message": "Afficher dans le panneau \"Inspecteur de mémoire\""
+    "message": "Afficher dans le panneau \"Outil d'inspection de mémoire\""
   },
   "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | showAllD": {
     "message": "Tout afficher ({PH1})"
@@ -14296,6 +14512,18 @@
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | flameChart": {
     "message": "Graphique de type \"flamme\""
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | hideChildren": {
+    "message": "Masquer les enfants"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | hideFunction": {
+    "message": "Masquer une fonction"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | hideRepeatingChildren": {
+    "message": "Masquer les enfants récurrents"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | resetTrace": {
+    "message": "Réinitialiser la trace"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | sCollapsed": {
     "message": "{PH1} réduit"
@@ -14380,6 +14608,9 @@
   },
   "ui/legacy/components/quick_open/FilteredListWidget.ts | quickOpenPrompt": {
     "message": "Invite d'ouverture rapide"
+  },
+  "ui/legacy/components/quick_open/FilteredListWidget.ts | sItemSOfS": {
+    "message": "{PH1}, élément {PH2} sur {PH3}"
   },
   "ui/legacy/components/quick_open/QuickOpen.ts | typeToSeeAvailableCommands": {
     "message": "Tapez ? pour voir les commandes disponibles"
@@ -14472,7 +14703,7 @@
     "message": "Source"
   },
   "ui/legacy/components/source_frame/SourceFrame.ts | typeAllowPasting": {
-    "message": "Type ''{PH1}''"
+    "message": "Saisir ''{PH1}''"
   },
   "ui/legacy/components/source_frame/XMLView.ts | find": {
     "message": "Rechercher"

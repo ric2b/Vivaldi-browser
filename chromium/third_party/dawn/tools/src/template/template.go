@@ -85,6 +85,7 @@ func (t *Template) Run(w io.Writer, data any, funcs Functions) error {
 		"HasPrefix":  strings.HasPrefix,
 		"HasSuffix":  strings.HasSuffix,
 		"Import":     g.importTmpl,
+		"Is":         is,
 		"Iterate":    iterate,
 		"List":       list,
 		"Map":        newMap,
@@ -100,6 +101,7 @@ func (t *Template) Run(w io.Writer, data any, funcs Functions) error {
 		"TrimSuffix": strings.TrimSuffix,
 		"Replace":    replace,
 		"Index":      index,
+		"Sum":        sum,
 		"Error":      func(err any) string { panic(err) },
 	}
 
@@ -122,7 +124,7 @@ type generator struct {
 
 func (g *generator) bindAndParse(t *template.Template, tmpl string) error {
 	_, err := t.
-		Funcs(map[string]interface{}(g.funcs)).
+		Funcs(map[string]any(g.funcs)).
 		Option("missingkey=error").
 		Parse(tmpl)
 	return err
@@ -130,7 +132,7 @@ func (g *generator) bindAndParse(t *template.Template, tmpl string) error {
 
 // eval executes the sub-template with the given name and argument, returning
 // the generated output
-func (g *generator) eval(template string, args ...interface{}) (string, error) {
+func (g *generator) eval(template string, args ...any) (string, error) {
 	target := g.template.Lookup(template)
 	if target == nil {
 		return "", fmt.Errorf("template '%v' not found", template)
@@ -184,21 +186,39 @@ func (g *generator) importTmpl(path string) (string, error) {
 }
 
 // Map is a simple generic key-value map, which can be used in the template
-type Map map[interface{}]interface{}
+type Map map[any]any
 
 func newMap() Map { return Map{} }
 
 // Put adds the key-value pair into the map.
 // Put always returns an empty string so nothing is printed in the template.
-func (m Map) Put(key, value interface{}) string {
+func (m Map) Put(key, value any) string {
 	m[key] = value
 	return ""
 }
 
 // Get looks up and returns the value with the given key. If the map does not
 // contain the given key, then nil is returned.
-func (m Map) Get(key interface{}) interface{} {
+func (m Map) Get(key any) any {
 	return m[key]
+}
+
+// is returns true if the type of object is ty
+func is(object any, ty string) bool {
+	val := reflect.ValueOf(object)
+	for val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+	return ty == val.Type().Name()
+}
+
+// sum returns the sum of provided values
+func sum(numbers ...int) int {
+	n := 0
+	for _, i := range numbers {
+		n += i
+	}
+	return n
 }
 
 // iterate returns a slice of length 'n', with each element equal to its index.

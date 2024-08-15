@@ -23,6 +23,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+// End Vivaldi
+
 namespace {
 typedef void (^ProceduralBlockWithItemArray)(NSArray<UIMenuElement*>*);
 typedef void (^ProceduralBlockWithBlockWithItemArray)(
@@ -122,6 +127,11 @@ void LogTrigger(bool incognito, bool search_engine_google) {
   if (![self canPerformSearch]) {
     return @"";
   }
+
+  if (vivaldi::IsVivaldiRunning())
+    return l10n_util::GetNSString(IDS_IOS_SEARCH_WITH_VIVALDI);
+  // End Vivaldi
+
   std::string param = base::GetFieldTrialParamValueByFeature(
       kIOSEditMenuSearchWith, kIOSEditMenuSearchWithTitleParamTitle);
   if (param == kIOSEditMenuSearchWithTitleSearchParam) {

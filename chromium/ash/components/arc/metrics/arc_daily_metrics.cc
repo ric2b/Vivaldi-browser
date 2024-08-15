@@ -36,7 +36,7 @@ class DailyObserver : public metrics::DailyEvent::Observer {
   }
 
  private:
-  const raw_ref<ArcDailyMetrics, ExperimentalAsh> arc_daily_metrics_;
+  const raw_ref<ArcDailyMetrics> arc_daily_metrics_;
 };
 
 class KillCounts {
@@ -163,7 +163,7 @@ ArcDailyMetrics::ArcDailyMetrics(PrefService* pref_service)
 ArcDailyMetrics::~ArcDailyMetrics() = default;
 
 void ArcDailyMetrics::OnLowMemoryKillCounts(
-    absl::optional<vm_tools::concierge::ListVmsResponse> vms_list,
+    std::optional<vm_tools::concierge::ListVmsResponse> vms_list,
     int oom,
     int foreground,
     int perceptible,

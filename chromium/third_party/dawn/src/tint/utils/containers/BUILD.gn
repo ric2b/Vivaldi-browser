@@ -45,6 +45,7 @@ if (tint_build_unittests || tint_build_benchmarks) {
 libtint_source_set("containers") {
   sources = [
     "bitset.h",
+    "const_propagating_ptr.h",
     "containers.cc",
     "enum_set.h",
     "hashmap.h",
@@ -94,6 +95,7 @@ if (tint_build_unittests) {
       "${tint_src_dir}/lang/core/type",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
+      "${tint_src_dir}/lang/wgsl/features",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
       "${tint_src_dir}/utils/containers",

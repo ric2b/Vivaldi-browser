@@ -47,6 +47,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
@@ -54,6 +55,8 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
@@ -68,10 +71,14 @@
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/ink_drop.h"
+#include "ui/views/animation/ink_drop_host.h"
+#include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
@@ -261,9 +268,28 @@ ui::ColorId GetFocusColorId(bool use_jelly_colors) {
              : ui::kColorAshFocusRing;
 }
 
+class RoundRectPathGenerator : public views::HighlightPathGenerator {
+ public:
+  explicit RoundRectPathGenerator(const gfx::RoundedCornersF& radii)
+      : radii_(radii) {}
+  RoundRectPathGenerator(const RoundRectPathGenerator&) = delete;
+  RoundRectPathGenerator& operator=(const RoundRectPathGenerator&) = delete;
+  ~RoundRectPathGenerator() override = default;
+
+  // views::HighlightPathGenerator:
+  absl::optional<gfx::RRectF> GetRoundRect(const gfx::RectF& rect) override {
+    return gfx::RRectF(rect, radii_);
+  }
+
+ private:
+  const gfx::RoundedCornersF radii_;
+};
+
 }  // namespace
 
 class CheckBoxMenuItemView : public views::MenuItemView {
+  METADATA_HEADER(CheckBoxMenuItemView, views::MenuItemView)
+
  public:
   CheckBoxMenuItemView(views::MenuItemView* parent,
                        int command,
@@ -287,11 +313,18 @@ class CheckBoxMenuItemView : public views::MenuItemView {
             static_cast<AppListSearchControlCategory>(GetCommand()))
             ? ax::mojom::CheckedState::kTrue
             : ax::mojom::CheckedState::kFalse);
+    // The title of the menu is not focusable but included in the position
+    // counting. Explicitly set the hierarchical level of the toggleable menu
+    // items to exclude the title.
+    node_data->AddIntAttribute(ax::mojom::IntAttribute::kHierarchicalLevel, 1);
   }
 
  private:
   raw_ptr<AppListViewDelegate> view_delegate_ = nullptr;
 };
+
+BEGIN_METADATA(CheckBoxMenuItemView)
+END_METADATA
 
 class FilterMenuAdapter : public views::MenuModelAdapter {
  public:
@@ -378,9 +411,10 @@ class FilterMenuAdapter : public views::MenuModelAdapter {
   void ShowFilterMenu(SearchBoxView* search_box) {
     int run_types = views::MenuRunner::USE_ASH_SYS_UI_LAYOUT |
                     views::MenuRunner::FIXED_ANCHOR;
-    filter_menu_root_ = CreateMenu();
-    filter_menu_runner_ =
-        std::make_unique<views::MenuRunner>(filter_menu_root_, run_types);
+    std::unique_ptr<views::MenuItemView> filter_menu_root = CreateMenu();
+    filter_menu_root_ = filter_menu_root.get();
+    filter_menu_runner_ = std::make_unique<views::MenuRunner>(
+        std::move(filter_menu_root), run_types);
     filter_menu_runner_->RunMenuAt(
         search_box->GetWidget(), nullptr /*button_controller*/,
         search_box->filter_button()->GetBoundsInScreen(),
@@ -397,7 +431,7 @@ class FilterMenuAdapter : public views::MenuModelAdapter {
   // `category` button. This should only be called when the menu is opened.
   views::MenuItemView* GetFilterMenuItemByCategory(
       AppListSearchControlCategory category) {
-    absl::optional<size_t> index =
+    std::optional<size_t> index =
         model_->GetIndexOfCommandId(base::to_underlying(category));
     CHECK(index.has_value());
     return GetFilterMenuItemByIdx(index.value());
@@ -479,6 +513,12 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
       model_provider->search_model()->search_box();
   search_box_model_observer_.Observe(search_box_model);
 
+  // The assistant view delegate could be nullptr in test.
+  if (view_delegate_->GetAssistantViewDelegate()) {
+    assistant_view_delegate_observer_.Observe(
+        view_delegate_->GetAssistantViewDelegate());
+  }
+
   if (features::IsUserEducationEnabled()) {
     // NOTE: Set `kHelpBubbleContextKey` before `views::kElementIdentifierKey`
     // in case registration causes a help bubble to be created synchronously.
@@ -522,8 +562,6 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   assistant_button->SetAccessibleName(assistant_button_label);
   assistant_button->SetTooltipText(assistant_button_label);
   SetShowAssistantButton(search_box_model->show_assistant_button());
-
-  UpdateIphViewVisibility();
 }
 
 SearchBoxView::~SearchBoxView() {
@@ -563,6 +601,7 @@ void SearchBoxView::SetResultSelectionController(
 }
 
 void SearchBoxView::ResetForShow() {
+  UpdateIphViewVisibility(false);
   if (!is_search_box_active())
     return;
   ClearSearchAndDeactivateSearchBox();
@@ -584,11 +623,6 @@ void SearchBoxView::OnActiveAppListModelsChanged(AppListModel* model,
   ResetForShow();
   UpdateSearchIcon();
   ShowAssistantChanged();
-
-  // `UpdateIphViewVisibility` expect that `AppListModelProvider` returns the
-  // new model.
-  CHECK(search_model == AppListModelProvider::Get()->search_model());
-  UpdateIphViewVisibility();
 }
 
 void SearchBoxView::UpdateKeyboardVisibility() {
@@ -658,7 +692,8 @@ void SearchBoxView::HandleQueryChange(const std::u16string& query,
 
   current_query_ = query;
 
-  UpdateIphViewVisibility();
+  // Any query changes will dismiss the Launcher search IPH.
+  UpdateIphViewVisibility(false);
 
   // The search box background depens on whether the query is empty, so schedule
   // repaint when this changes.
@@ -746,28 +781,24 @@ void SearchBoxView::OnPaintBorder(gfx::Canvas* canvas) {
   }
 }
 
-const char* SearchBoxView::GetClassName() const {
-  return "SearchBoxView";
-}
-
 void SearchBoxView::OnThemeChanged() {
   SearchBoxViewBase::OnThemeChanged();
 
   const SkColor button_icon_color =
       GetColorProvider()->GetColor(kColorAshButtonIconColor);
-  close_button()->SetImage(
+  close_button()->SetImageModel(
       views::ImageButton::STATE_NORMAL,
-      gfx::CreateVectorIcon(views::kIcCloseIcon, GetSearchBoxIconSize(),
-                            button_icon_color));
-  assistant_button()->SetImage(
+      ui::ImageModel::FromVectorIcon(views::kIcCloseIcon, button_icon_color,
+                                     GetSearchBoxIconSize()));
+  assistant_button()->SetImageModel(
       views::ImageButton::STATE_NORMAL,
-      gfx::CreateVectorIcon(chromeos::kAssistantIcon, GetSearchBoxIconSize(),
-                            button_icon_color));
+      ui::ImageModel::FromVectorIcon(
+          chromeos::kAssistantIcon, button_icon_color, GetSearchBoxIconSize()));
   if (filter_button()) {
-    filter_button()->SetImage(
+    filter_button()->SetImageModel(
         views::ImageButton::STATE_NORMAL,
-        gfx::CreateVectorIcon(kFilterIcon, GetSearchBoxIconSize(),
-                              button_icon_color));
+        ui::ImageModel::FromVectorIcon(kFilterIcon, button_icon_color,
+                                       GetSearchBoxIconSize()));
   }
   auto* focus_ring = views::FocusRing::Get(assistant_button());
   focus_ring->SetOutsetFocusRingDisabled(true);
@@ -809,7 +840,15 @@ void SearchBoxView::RunLauncherSearchQuery(const std::u16string& query) {
 }
 
 void SearchBoxView::OpenAssistantPage() {
-  delegate_->AssistantButtonPressed();
+  UpdateIphViewVisibility(false);
+  view_delegate_->StartAssistant(
+      assistant::AssistantEntryPoint::kLauncherSearchIphChip);
+}
+
+void SearchBoxView::OnLauncherSearchChipPressed(const std::u16string& query) {
+  view_delegate_->EndAssistant(
+      assistant::AssistantExitPoint::kLauncherSearchIphChip);
+  UpdateQuery(query);
 }
 
 void SearchBoxView::ShowFilterMenu() {
@@ -821,6 +860,7 @@ void SearchBoxView::ShowFilterMenu() {
       view_delegate_);
 
   filter_menu_adapter_->ShowFilterMenu(this);
+  RecordSearchCategoryFilterMenuOpened();
 }
 
 void SearchBoxView::OnFilterMenuClosed() {
@@ -828,6 +868,8 @@ void SearchBoxView::OnFilterMenuClosed() {
   if (HasSearch()) {
     TriggerSearch();
   }
+
+  RecordSearchCategoryEnableState(GetSearchCategoryEnableState());
 }
 
 views::MenuItemView* SearchBoxView::GetFilterMenuItemByCategory(
@@ -980,7 +1022,7 @@ void SearchBoxView::UpdateLayout(AppListState target_state,
   // Horizontal margins are selected to match search box icon's vertical
   // margins. Space used for iph should be ignored.
   const int iph_height =
-      iph_view() ? iph_view()->GetPreferredSize().height() : 0;
+      GetIphView() ? GetIphView()->GetPreferredSize().height() : 0;
   const int horizontal_spacing =
       (target_state_height - iph_height - GetSearchBoxIconSize()) / 2;
   const int horizontal_right_padding =
@@ -1163,22 +1205,33 @@ int SearchBoxView::GetSearchBoxButtonSize() {
   return kBubbleLauncherSearchBoxButtonSizeDip;
 }
 
-void SearchBoxView::SetIsIphAllowed(bool iph_allowed) {
-  if (is_iph_allowed_ == iph_allowed) {
-    return;
-  }
-
-  is_iph_allowed_ = iph_allowed;
-
-  UpdateIphViewVisibility();
-}
-
 void SearchBoxView::CloseButtonPressed() {
+  UpdateIphViewVisibility(false);
   delegate_->CloseButtonPressed();
 }
 
 void SearchBoxView::AssistantButtonPressed() {
-  delegate_->AssistantButtonPressed();
+  if (GetIphView()) {
+    // Notify the Assistant button is pressed when the IPH is visible and close
+    // the IPH.
+    GetIphView()->NotifyAssistantButtonPressedEvent();
+    UpdateIphViewVisibility(false);
+    delegate_->AssistantButtonPressed();
+    return;
+  }
+
+  // Tries to show an IPH. This can be rejected by various reasons.
+  UpdateIphViewVisibility(true);
+
+  // If UpdateIphViewVisibility() rejected the request, let the delegate_ handle
+  // this.
+  if (!GetIphView()) {
+    delegate_->AssistantButtonPressed();
+    return;
+  }
+
+  // Activate the search box based on UX SPEC.
+  SetSearchBoxActive(true, /*event_type=*/ui::ET_UNKNOWN);
 }
 
 void SearchBoxView::UpdateSearchIcon() {
@@ -1298,7 +1351,7 @@ bool SearchBoxView::HasAutocompleteText() {
 
 void SearchBoxView::OnBeforeUserAction(views::Textfield* sender) {
   if (a11y_active_descendant_)
-    SetA11yActiveDescendant(absl::nullopt);
+    SetA11yActiveDescendant(std::nullopt);
 }
 
 void SearchBoxView::SetAutocompleteText(
@@ -1384,10 +1437,11 @@ void SearchBoxView::EnterSearchResultSelection(const ui::KeyEvent& event) {
 }
 
 void SearchBoxView::ClearSearchAndDeactivateSearchBox() {
+  UpdateIphViewVisibility(false);
   if (!is_search_box_active())
     return;
 
-  SetA11yActiveDescendant(absl::nullopt);
+  SetA11yActiveDescendant(std::nullopt);
   // Set search box as inactive first, because ClearSearch() eventually calls
   // into AppListMainView::QueryChanged() which will hide search results based
   // on `is_search_box_active_`.
@@ -1397,7 +1451,7 @@ void SearchBoxView::ClearSearchAndDeactivateSearchBox() {
 }
 
 void SearchBoxView::SetA11yActiveDescendant(
-    const absl::optional<int32_t>& active_descendant) {
+    const std::optional<int32_t>& active_descendant) {
   a11y_active_descendant_ = active_descendant;
   search_box()->NotifyAccessibilityEvent(
       ax::mojom::Event::kActiveDescendantChanged, true);
@@ -1537,7 +1591,7 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
         close_button()->RequestFocus();
       }
 
-      SetA11yActiveDescendant(absl::nullopt);
+      SetA11yActiveDescendant(std::nullopt);
       break;
     case ResultSelectionController::MoveResult::kSelectionCycleAfterLastResult:
       // If move was about to cycle, clear the selection and move the focus to
@@ -1553,7 +1607,7 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
       } else {
         close_button()->RequestFocus();
       }
-      SetA11yActiveDescendant(absl::nullopt);
+      SetA11yActiveDescendant(std::nullopt);
       break;
     case ResultSelectionController::MoveResult::kResultChanged:
       UpdateSearchBoxForSelectedResult(
@@ -1622,26 +1676,14 @@ void SearchBoxView::ShowAssistantChanged() {
                              ->search_model()
                              ->search_box()
                              ->show_assistant_button());
-
-  // `LauncherSearchIphView` and an Assistant button have synchronized
-  // backgrounds. The IPH UI is integrated with the Assistant button. We don't
-  // show an IPH if Assistant is disabled. Both `LauncherSearchIphView` and the
-  // Assistant button are hosted by `SearchBoxViewBase`.
-  UpdateIphViewVisibility();
 }
 
-void SearchBoxView::UpdateIphViewVisibility() {
-  const bool show_assistant_button = AppListModelProvider::Get()
-                                         ->search_model()
-                                         ->search_box()
-                                         ->show_assistant_button();
+void SearchBoxView::UpdateIphViewVisibility(bool can_show_iph) {
   const bool would_trigger_iph =
       AppListModelProvider::Get()->search_model()->would_trigger_iph();
-  const bool is_iph_showing = iph_view() != nullptr;
+  const bool is_iph_showing = GetIphView() != nullptr;
 
-  const bool should_show_iph = show_assistant_button && is_iph_allowed_ &&
-                               !HasValidQuery() &&
-                               (would_trigger_iph || is_iph_showing);
+  const bool should_show_iph = can_show_iph && would_trigger_iph;
 
   if (should_show_iph == is_iph_showing) {
     return;
@@ -1655,17 +1697,36 @@ void SearchBoxView::UpdateIphViewVisibility() {
     }
 
     SetIphView(std::make_unique<LauncherSearchIphView>(
-        std::move(scoped_iph_session), /*delegate=*/this,
-        /*is_in_tablet_mode=*/!is_app_list_bubble_));
+        /*delegate=*/this, /*is_in_tablet_mode=*/!is_app_list_bubble_,
+        std::move(scoped_iph_session),
+        LauncherSearchIphView::UiLocation::kSearchBox));
 
+    auto radii = base::i18n::IsRTL() ? kAssistantButtonBackgroundRadiiRTL
+                                     : kAssistantButtonBackgroundRadiiLTR;
     assistant_button()->SetBackground(views::CreateThemedRoundedRectBackground(
-        kColorAshControlBackgroundColorInactive,
-        base::i18n::IsRTL() ? kAssistantButtonBackgroundRadiiRTL
-                            : kAssistantButtonBackgroundRadiiLTR,
+        kColorAshControlBackgroundColorInactive, radii,
         /*for_border_thickness=*/0));
+
+    auto highlight_path_generator =
+        std::make_unique<RoundRectPathGenerator>(radii);
+    views::HighlightPathGenerator::Install(assistant_button(),
+                                           std::move(highlight_path_generator));
+
+    // The ink drop doesn't automatically pick up on rounded corner changes, so
+    // we need to manually notify it here.
+    views::InkDrop::Get(assistant_button())
+        ->GetInkDrop()
+        ->HostSizeChanged(assistant_button()->size());
+
+    // Update the focus ring.
+    views::FocusRing::Get(assistant_button())->SchedulePaint();
+
+    // Announce the IPH title.
+    GetViewAccessibility().AnnounceAlert(GetIphView()->GetTitleText());
   } else {
     DeleteIphView();
     assistant_button()->SetBackground(nullptr);
+    views::InstallCircleHighlightPathGenerator(assistant_button());
   }
 
   // Adding or removing IPH view can change `SearchBoxView` bounds largely.
@@ -1674,10 +1735,6 @@ void SearchBoxView::UpdateIphViewVisibility() {
   // we can have unnecessary spaces in `SearchBoxView` for an IPH dismiss under
   // some conditions.
   InvalidateLayout();
-}
-
-void SearchBoxView::OnWouldTriggerIphChanged() {
-  UpdateIphViewVisibility();
 }
 
 bool SearchBoxView::ShouldProcessAutocomplete() {
@@ -1720,5 +1777,33 @@ std::vector<AppListSearchControlCategory>
 SearchBoxView::GetToggleableCategories() {
   return view_delegate_->GetToggleableCategories();
 }
+
+CategoryEnableStateMap SearchBoxView::GetSearchCategoryEnableState() {
+  auto toggleable_categories = GetToggleableCategories();
+  CategoryEnableStateMap category_to_state;
+
+  // Initialize the map.
+  for (int i = base::to_underlying(AppListSearchControlCategory::kMinValue);
+       i <= base::to_underlying(AppListSearchControlCategory::kMaxValue); ++i) {
+    auto category = static_cast<AppListSearchControlCategory>(i);
+    // Cannot toggle is not a category.
+    if (category == AppListSearchControlCategory::kCannotToggle) {
+      continue;
+    }
+
+    category_to_state[category] = SearchCategoryEnableState::kNotAvailable;
+  }
+
+  // Set the enable states for toggleable categories.
+  for (auto category : toggleable_categories) {
+    category_to_state[category] = view_delegate_->IsCategoryEnabled(category)
+                                      ? SearchCategoryEnableState::kEnabled
+                                      : SearchCategoryEnableState::kDisabled;
+  }
+  return category_to_state;
+}
+
+BEGIN_METADATA(SearchBoxView)
+END_METADATA
 
 }  // namespace ash

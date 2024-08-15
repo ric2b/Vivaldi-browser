@@ -4,15 +4,16 @@
 
 #include "chrome/browser/ash/crosapi/test_controller_ash.h"
 
+#include <optional>
 #include <utility>
 #include <vector>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/system/toast_manager.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
@@ -22,7 +23,7 @@
 #include "ash/shell.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_observer.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/check_is_test.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_helpers.h"
@@ -33,6 +34,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/version.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/apps/almanac_api_client/almanac_api_util.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
@@ -65,7 +67,6 @@
 #include "crypto/sha2.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "printing/buildflags/buildflags.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
@@ -114,10 +115,12 @@ bool DispatchMouseEvent(aura::Window* window,
 
 // Enables or disables tablet mode and waits for the transition to finish.
 void SetTabletModeEnabled(bool enabled) {
-  // This does not use ShellTestApi or TabletModeControllerTestApi because those
-  // are implemented in test-only files.
   ash::TabletMode::Waiter waiter(enabled);
-  ash::Shell::Get()->tablet_mode_controller()->SetEnabledForTest(enabled);
+  if (enabled) {
+    ash::TabletModeControllerTestApi().EnterTabletMode();
+  } else {
+    ash::TabletModeControllerTestApi().LeaveTabletMode();
+  }
   waiter.Wait();
 }
 
@@ -159,7 +162,7 @@ class TestControllerAsh::SelfOwnedAshBrowserWindowCloser
             &SelfOwnedAshBrowserWindowCloser::OnAllBrowserWindowsClosed,
             base::Unretained(this), /*success=*/false));
 
-    for (auto* browser : *BrowserList::GetInstance()) {
+    for (Browser* browser : *BrowserList::GetInstance()) {
       // Close the browser asynchronously.
       browser->window()->Close();
     }
@@ -428,7 +431,7 @@ void TestControllerAsh::GetWindowPositionInScreen(
     GetWindowPositionInScreenCallback cb) {
   aura::Window* window = GetShellSurfaceWindow(window_id);
   if (!window) {
-    std::move(cb).Run(absl::nullopt);
+    std::move(cb).Run(std::nullopt);
     return;
   }
   std::move(cb).Run(window->GetBoundsInScreen().origin());
@@ -617,7 +620,7 @@ void TestControllerAsh::GetOpenAshBrowserWindows(
 
 void TestControllerAsh::CloseAllBrowserWindows(
     CloseAllBrowserWindowsCallback callback) {
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     browser->window()->Close();
   }
 
@@ -780,15 +783,14 @@ void TestControllerAsh::GetSanitizedActiveUsername(
       cryptohome::CreateAccountIdentifierFromAccountId(user->GetAccountId())
           .account_id());
   ash::CryptohomeMiscClient::Get()->GetSanitizedUsername(
-      request,
-      base::BindOnce(
-          [](GetSanitizedActiveUsernameCallback callback,
-             absl::optional<::user_data_auth::GetSanitizedUsernameReply>
-                 result) {
-            CHECK(result.has_value());
-            std::move(callback).Run(result->sanitized_username());
-          },
-          std::move(callback)));
+      request, base::BindOnce(
+                   [](GetSanitizedActiveUsernameCallback callback,
+                      std::optional<::user_data_auth::GetSanitizedUsernameReply>
+                          result) {
+                     CHECK(result.has_value());
+                     std::move(callback).Run(result->sanitized_username());
+                   },
+                   std::move(callback)));
 }
 
 void TestControllerAsh::BindInputMethodTestInterface(
@@ -943,6 +945,18 @@ void TestControllerAsh::GetAllOpenTabURLs(GetAllOpenTabURLsCallback callback) {
   std::move(callback).Run(std::move(result));
 }
 
+void TestControllerAsh::SetAlmanacEndpointUrlForTesting(
+    const std::optional<std::string>& url_override,
+    SetAlmanacEndpointUrlForTestingCallback callback) {
+  apps::SetAlmanacEndpointUrlForTesting(url_override);
+  std::move(callback).Run();
+}
+
+void TestControllerAsh::IsToastShown(const std::string& toast_id,
+                                     IsToastShownCallback callback) {
+  std::move(callback).Run(ash::ToastManager::Get()->IsToastShown(toast_id));
+}
+
 void TestControllerAsh::OnAshUtteranceFinished(int utterance_id) {
   // Delete the utterance event delegate object when the utterance is finished.
   ash_utterance_event_delegates_.erase(utterance_id);
@@ -997,7 +1011,7 @@ class TestControllerAsh::OverviewWaiter : public ash::OverviewObserver {
   base::OnceClosure closure_;
 
   // The test controller owns this object so is never invalid.
-  raw_ptr<TestControllerAsh, ExperimentalAsh> test_controller_;
+  raw_ptr<TestControllerAsh> test_controller_;
 };
 
 TestShillControllerAsh::TestShillControllerAsh() {

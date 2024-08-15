@@ -118,8 +118,6 @@ AtomicString GetFrameOwnerType(HTMLFrameOwnerElement* frame_owner) {
       return html_names::kEmbedTag.LocalName();
     case FrameOwnerElementType::kFrame:
       return html_names::kFrameTag.LocalName();
-    case FrameOwnerElementType::kPortal:
-      return html_names::kPortalTag.LocalName();
     case FrameOwnerElementType::kFencedframe:
       return html_names::kFencedframeTag.LocalName();
   }
@@ -173,6 +171,7 @@ AtomicString SameOriginAttribution(Frame* observer_frame,
 
 bool IsEventTypeForInteractionId(const AtomicString& type) {
   return type == event_type_names::kPointercancel ||
+         type == event_type_names::kContextmenu ||
          type == event_type_names::kPointerdown ||
          type == event_type_names::kPointerup ||
          type == event_type_names::kClick ||
@@ -207,10 +206,9 @@ WindowPerformance::WindowPerformance(LocalDOMWindow* window)
     window->GetFrame()->GetPerformanceMonitor()->Subscribe(
         PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
   }
-  if (RuntimeEnabledFeatures::VisibilityStateEntryEnabled()) {
-    DCHECK(GetPage());
-    AddVisibilityStateEntry(GetPage()->IsPageVisible(), base::TimeTicks());
-  }
+
+  DCHECK(GetPage());
+  AddVisibilityStateEntry(GetPage()->IsPageVisible(), base::TimeTicks());
 }
 
 void WindowPerformance::EventData::Trace(Visitor* visitor) const {
@@ -541,7 +539,7 @@ void WindowPerformance::OnPresentationPromiseResolved(
   // Use |end_time| as a proxy for the current time to flush expired keydowns.
   DOMHighResTimeStamp end_time =
       MonotonicTimeToDOMHighResTimeStamp(presentation_timestamp);
-  responsiveness_metrics_->MaybeFlushKeyboardEntries(end_time);
+  responsiveness_metrics_->FlushExpiredKeydown(end_time);
 
   // Record histogram for pending presentation promise count.
   UMA_HISTOGRAM_COUNTS_1000(
@@ -676,8 +674,8 @@ void WindowPerformance::ReportEvent(InteractiveDetector* interactive_detector,
           PerformanceEventTiming::CreateFirstInputTiming(entry);
     } else if (entry->name() == event_type_names::kPointerup &&
                first_pointer_down_event_timing_) {
-      first_pointer_down_event_timing_->SetInteractionId(
-          entry->interactionId());
+      first_pointer_down_event_timing_->SetInteractionIdAndOffset(
+          entry->interactionId(), entry->interactionOffset());
       DispatchFirstInputTiming(first_pointer_down_event_timing_);
     } else if (entry->name() == event_type_names::kPointercancel) {
       first_pointer_down_event_timing_.Clear();
@@ -721,8 +719,8 @@ void WindowPerformance::ReportEventTimingsWithFrameIndex(
     events_data_.pop_front();
   }
 
-  // Use |end_time| as a proxy for the current time.
-  responsiveness_metrics_->MaybeFlushKeyboardEntries(end_time);
+  // Use |end_time| as a proxy for the current time to flush expired keydowns.
+  responsiveness_metrics_->FlushExpiredKeydown(end_time);
 }
 
 void WindowPerformance::NotifyAndAddEventTimingBuffer(
@@ -842,7 +840,6 @@ void WindowPerformance::AddLayoutShiftEntry(LayoutShift* entry) {
 
 void WindowPerformance::AddVisibilityStateEntry(bool is_visible,
                                                 base::TimeTicks timestamp) {
-  DCHECK(RuntimeEnabledFeatures::VisibilityStateEntryEnabled());
   VisibilityStateEntry* entry = MakeGarbageCollected<VisibilityStateEntry>(
       PageHiddenStateString(!is_visible),
       MonotonicTimeToDOMHighResTimeStamp(timestamp), DomWindow());
@@ -874,9 +871,6 @@ void WindowPerformance::AddSoftNavigationEntry(const AtomicString& name,
 
 void WindowPerformance::PageVisibilityChanged() {
   last_visibility_change_timestamp_ = base::TimeTicks::Now();
-  if (!RuntimeEnabledFeatures::VisibilityStateEntryEnabled())
-    return;
-
   AddVisibilityStateEntry(GetPage()->IsPageVisible(),
                           last_visibility_change_timestamp_);
 }
@@ -920,6 +914,9 @@ void WindowPerformance::OnLargestContentfulPaintUpdated(
   AddLargestContentfulPaint(entry);
   if (HTMLImageElement* image_element = DynamicTo<HTMLImageElement>(element)) {
     image_element->SetIsLCPElement();
+    if (image_element->HasLazyLoadingAttribute()) {
+      element->GetDocument().CountUse(WebFeature::kLCPImageWasLazy);
+    }
   }
 
   if (element) {

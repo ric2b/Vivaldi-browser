@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <utility>
@@ -23,21 +24,20 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_test_utils.h"
-#include "components/autofill/core/browser/webdata/autocomplete_entry.h"
-#include "components/autofill/core/browser/webdata/autofill_table.h"
+#include "components/autofill/core/browser/webdata/autocomplete/autocomplete_entry.h"
+#include "components/autofill/core/browser/webdata/autocomplete/autocomplete_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/webdata/common/web_database.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using autofill::AutocompleteChangeList;
 using autofill::AutocompleteEntry;
 using autofill::AutocompleteKey;
 using autofill::AutofillProfile;
-using autofill::AutofillTable;
 using autofill::AutofillType;
 using autofill::AutofillWebDataService;
 using autofill::AutofillWebDataServiceObserverOnDBSequence;
@@ -105,7 +105,7 @@ void GetAllAutocompleteEntriesOnDBSequence(
     AutofillWebDataService* wds,
     std::vector<AutocompleteEntry>* entries) {
   DCHECK(wds->GetDBTaskRunner()->RunsTasksInCurrentSequence());
-  AutofillTable::FromWebDatabase(wds->GetDatabase())
+  autofill::AutocompleteTable::FromWebDatabase(wds->GetDatabase())
       ->GetAllAutocompleteEntries(entries);
 }
 
@@ -119,7 +119,7 @@ std::vector<AutocompleteEntry> GetAllAutocompleteEntries(
   return entries;
 }
 
-bool ProfilesMatchImpl(const absl::optional<unsigned int>& expected_count,
+bool ProfilesMatchImpl(const std::optional<unsigned int>& expected_count,
                        int profile_a,
                        const std::vector<AutofillProfile*>& autofill_profiles_a,
                        int profile_b,
@@ -134,7 +134,7 @@ bool ProfilesMatchImpl(const absl::optional<unsigned int>& expected_count,
 
   std::map<std::string, AutofillProfile> autofill_profiles_a_map;
   for (AutofillProfile* p : autofill_profiles_a) {
-    autofill_profiles_a_map[p->guid()] = *p;
+    autofill_profiles_a_map.insert({p->guid(), *p});
   }
 
   // This seems to be a transient state that will eventually be rectified by
@@ -152,7 +152,15 @@ bool ProfilesMatchImpl(const absl::optional<unsigned int>& expected_count,
           << ".";
       return false;
     }
-    AutofillProfile* expected_profile = &autofill_profiles_a_map[p->guid()];
+
+    auto profiles_a_it = autofill_profiles_a_map.find(p->guid());
+
+    if (profiles_a_it == autofill_profiles_a_map.end()) {
+      *os << "Profile with GUID " << p->guid() << " was not found.";
+      return false;
+    }
+
+    AutofillProfile* expected_profile = &profiles_a_it->second;
     expected_profile->set_guid(p->guid());
     if (*expected_profile != *p) {
       *os << "Mismatch in profile with GUID " << p->guid() << ".";
@@ -174,7 +182,8 @@ bool ProfilesMatchImpl(const absl::optional<unsigned int>& expected_count,
 namespace autofill_helper {
 
 AutofillProfile CreateAutofillProfile(ProfileType type) {
-  AutofillProfile profile;
+  AutofillProfile profile(
+      autofill::i18n_model_definition::kLegacyHierarchyCountryCode);
   switch (type) {
     case PROFILE_MARION:
       autofill::test::SetProfileInfoWithGuid(
@@ -205,7 +214,7 @@ AutofillProfile CreateAutofillProfile(ProfileType type) {
 }
 
 AutofillProfile CreateUniqueAutofillProfile() {
-  AutofillProfile profile;
+  AutofillProfile profile(AddressCountryCode("US"));
   autofill::test::SetProfileInfoWithGuid(
       &profile, base::Uuid::GenerateRandomV4().AsLowercaseString().c_str(),
       "First", "Middle", "Last", "email@domain.tld", "Company", "123 Main St",
@@ -259,18 +268,19 @@ void RemoveKey(int profile, const AutocompleteKey& key) {
 }
 
 void RemoveKeys(int profile) {
-  std::set<AutocompleteEntry> keys = GetAllKeys(profile);
-  for (const AutocompleteEntry& entry : keys) {
-    RemoveKeyDontBlockForSync(profile, entry.key());
+  for (const AutocompleteKey& key : GetAllKeys(profile)) {
+    RemoveKeyDontBlockForSync(profile, key);
   }
   WaitForCurrentTasksToComplete(GetWebDataService(profile)->GetDBTaskRunner());
 }
 
-std::set<AutocompleteEntry> GetAllKeys(int profile) {
+std::set<AutocompleteKey> GetAllKeys(int profile) {
   scoped_refptr<AutofillWebDataService> wds = GetWebDataService(profile);
-  std::vector<AutocompleteEntry> all_entries =
-      GetAllAutocompleteEntries(wds.get());
-  return std::set<AutocompleteEntry>(all_entries.begin(), all_entries.end());
+  std::set<AutocompleteKey> result;
+  for (const AutocompleteEntry& entry : GetAllAutocompleteEntries(wds.get())) {
+    result.insert(entry.key());
+  }
+  return result;
 }
 
 bool KeysMatch(int profile_a, int profile_b) {
@@ -351,9 +361,9 @@ bool ProfilesMatch(int profile_a, int profile_b) {
   const std::vector<AutofillProfile*>& autofill_profiles_b =
       GetAllAutoFillProfiles(profile_b);
   std::ostringstream mismatch_reason_stream;
-  bool matched = ProfilesMatchImpl(
-      absl::nullopt, profile_a, autofill_profiles_a, profile_b,
-      autofill_profiles_b, &mismatch_reason_stream);
+  bool matched =
+      ProfilesMatchImpl(std::nullopt, profile_a, autofill_profiles_a, profile_b,
+                        autofill_profiles_b, &mismatch_reason_stream);
   if (!matched) {
     DLOG(INFO) << "Profiles mismatch: " << mismatch_reason_stream.str();
   }
@@ -376,7 +386,7 @@ bool AutocompleteKeysChecker::IsExitConditionSatisfied(std::ostream* os) {
 AutofillProfileChecker::AutofillProfileChecker(
     int profile_a,
     int profile_b,
-    absl::optional<unsigned int> expected_count)
+    std::optional<unsigned int> expected_count)
     : profile_a_(profile_a),
       profile_b_(profile_b),
       expected_count_(expected_count) {

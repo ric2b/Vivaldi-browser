@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void transpose_7eb2c5() {
+  float2x2 res = float2x2(float2(1.0f), float2(1.0f));
+}
+vertex float4 vertex_main() {
+  transpose_7eb2c5();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  transpose_7eb2c5();
+}
+kernel void compute_main() {
+  transpose_7eb2c5();
+}

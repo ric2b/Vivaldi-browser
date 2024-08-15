@@ -21,6 +21,7 @@
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "cc/input/touch_action.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/ash/assistant/assistant_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/browser/ash/crosapi/desk_profiles_ash.h"
 #include "chrome/browser/ash/crosapi/fullscreen_controller_ash.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_service_factory.h"
@@ -39,6 +41,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/session_restore.h"
+#include "chrome/browser/ui/ash/api/tasks/chrome_tasks_delegate.h"
 #include "chrome/browser/ui/ash/back_gesture_contextual_nudge_delegate.h"
 #include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/chrome_accelerator_prefs_delegate.h"
@@ -51,13 +54,13 @@
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/ash/system_sounds_delegate_impl.h"
 #include "chrome/browser/ui/ash/user_education/chrome_user_education_delegate.h"
-#include "chrome/browser/ui/ash/window_pin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/chromeos/window_pin_util.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -95,7 +98,7 @@ const char kKeyboardShortcutHelpPageUrl[] =
 
 // Browser tests are always started with --disable-logging-redirect, so we need
 // independent option here.
-absl::optional<bool> disable_logging_redirect_for_testing;
+std::optional<bool> disable_logging_redirect_for_testing;
 
 // Returns the TabStripModel that associates with |window| if the given |window|
 // contains a browser frame, otherwise returns nullptr.
@@ -117,6 +120,8 @@ content::WebContents* GetActiveWebContentsForNativeBrowserWindow(
 chrome::FeedbackSource ToChromeFeedbackSource(
     ash::ShellDelegate::FeedbackSource source) {
   switch (source) {
+    case ash::ShellDelegate::FeedbackSource::kFocusMode:
+      return chrome::FeedbackSource::kFeedbackSourceFocusMode;
     case ash::ShellDelegate::FeedbackSource::kGameDashboard:
       return chrome::FeedbackSource::kFeedbackSourceGameDashboard;
     case ash::ShellDelegate::FeedbackSource::kWindowLayoutMenu:
@@ -190,6 +195,11 @@ ChromeShellDelegate::CreateSystemSoundsDelegate() const {
   return std::make_unique<SystemSoundsDelegateImpl>();
 }
 
+std::unique_ptr<ash::api::TasksDelegate>
+ChromeShellDelegate::CreateTasksDelegate() const {
+  return std::make_unique<ash::api::ChromeTasksDelegate>();
+}
+
 std::unique_ptr<ash::UserEducationDelegate>
 ChromeShellDelegate::CreateUserEducationDelegate() const {
   return std::make_unique<ChromeUserEducationDelegate>();
@@ -230,7 +240,7 @@ bool ChromeShellDelegate::AllowDefaultTouchActions(gfx::NativeWindow window) {
       render_widget_host_view->GetRenderWidgetHost();
   if (!render_widget_host)
     return true;
-  absl::optional<cc::TouchAction> allowed_touch_action =
+  std::optional<cc::TouchAction> allowed_touch_action =
       render_widget_host->GetAllowedTouchAction();
   return allowed_touch_action.has_value()
              ? *allowed_touch_action != cc::TouchAction::kNone
@@ -388,6 +398,12 @@ void ChromeShellDelegate::OpenFeedbackDialog(
                              description_template);
 }
 
+void ChromeShellDelegate::OpenProfileManager() {
+  if (crosapi::BrowserManager::Get()->IsRunning()) {
+    crosapi::BrowserManager::Get()->OpenProfileManager();
+  }
+}
+
 // static
 void ChromeShellDelegate::SetDisableLoggingRedirectForTesting(bool value) {
   disable_logging_redirect_for_testing = value;
@@ -429,7 +445,7 @@ version_info::Channel ChromeShellDelegate::GetChannel() {
 }
 
 void ChromeShellDelegate::ForceSkipWarningUserOnClose(
-    const std::vector<aura::Window*>& windows) {
+    const std::vector<raw_ptr<aura::Window, VectorExperimental>>& windows) {
   for (aura::Window* window : windows) {
     BrowserView* browser_view =
         BrowserView::GetBrowserViewForNativeWindow(window);
@@ -449,4 +465,8 @@ void ChromeShellDelegate::ShouldExitFullscreenBeforeLock(
       ->crosapi_ash()
       ->fullscreen_controller_ash()
       ->ShouldExitFullscreenBeforeLock(std::move(callback));
+}
+
+ash::DeskProfilesDelegate* ChromeShellDelegate::GetDeskProfilesDelegate() {
+  return crosapi::CrosapiManager::Get()->crosapi_ash()->desk_profiles_ash();
 }

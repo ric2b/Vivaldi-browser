@@ -12,84 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate std;
+#![allow(clippy::unwrap_used)]
 
+extern crate std;
 use super::*;
 use crate::extended::deserialize::encrypted_section::{
     MicEncryptedSection, SignatureEncryptedSection,
 };
+use crate::extended::deserialize::test_stubs::IntermediateSectionExt;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 use std::vec;
-
-#[test]
-fn parse_adv_ext_no_identity() {
-    // 2 sections, 2 DEs each
-    let mut adv_body = vec![];
-    // section
-    adv_body.push(9);
-    // de 1 byte header, type 5, len 5
-    adv_body.extend_from_slice(&[0x55, 0x01, 0x02, 0x03, 0x04, 0x05]);
-    // de 2 byte header, type 6, len 1
-    adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
-
-    // section
-    adv_body.push(11);
-    // de 3 byte header, len 4
-    adv_body.extend_from_slice(&[0x84, 0xC3, 0x03, 0x01, 0x02, 0x03, 0x04]);
-    // de 1 byte header, type 8, len 3
-    adv_body.extend_from_slice(&[0x38, 0x01, 0x02, 0x03]);
-
-    assert_eq!(
-        Ok(vec![
-            PlaintextSection::new(
-                PlaintextIdentityMode::None,
-                SectionContents::new(
-                    9,
-                    &[
-                        // 1 byte header, len 5
-                        RefDataElement {
-                            offset: 0_usize.into(),
-                            header_len: 1,
-                            de_type: 5_u8.into(),
-                            contents: &[0x01, 0x02, 0x03, 0x04, 0x05]
-                        },
-                        // 2 byte header, len 1
-                        RefDataElement {
-                            offset: 1_usize.into(),
-                            header_len: 2,
-                            de_type: 6_u8.into(),
-                            contents: &[0x01]
-                        }
-                    ]
-                )
-            )
-            .into(),
-            PlaintextSection::new(
-                PlaintextIdentityMode::None,
-                SectionContents::new(
-                    11,
-                    &[
-                        // 3 byte header, len 4
-                        RefDataElement {
-                            offset: 0_usize.into(),
-                            header_len: 3,
-                            de_type: 0b0000_0000_0000_0000_0010_0001_1000_0011_u32.into(),
-                            contents: &[0x01, 0x02, 0x03, 0x04]
-                        },
-                        // 1 byte header, len 3
-                        RefDataElement {
-                            offset: 1_usize.into(),
-                            header_len: 1,
-                            de_type: 8_u8.into(),
-                            contents: &[0x01, 0x02, 0x03]
-                        }
-                    ]
-                )
-            )
-            .into()
-        ]),
-        parse_sections(&V1Header { header_byte: 0x20 }, &adv_body)
-    );
-}
 
 #[test]
 fn parse_adv_ext_public_identity() {
@@ -104,65 +38,29 @@ fn parse_adv_ext_public_identity() {
     // de 2 byte header, type 6, len 1
     adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
 
-    // section
-    adv_body.push(12);
-    // public identity
-    adv_body.push(0x03);
-    // de 3 byte header, len 4
-    adv_body.extend_from_slice(&[0x84, 0xC3, 0x03, 0x01, 0x02, 0x03, 0x04]);
-    // de 1 byte header, type 8, len 3
-    adv_body.extend_from_slice(&[0x38, 0x01, 0x02, 0x03]);
+    let parsed_sections =
+        parse_sections(V1Header { header_byte: 0x20 }, &adv_body).unwrap().into_vec();
+    assert_eq!(
+        vec![IntermediateSection::from(PlaintextSection::new(
+            PlaintextIdentityMode::Public,
+            SectionContents::new(10, &adv_body[2..], 1)
+        ))],
+        parsed_sections,
+    );
+    let expected_des = [
+        // 1 byte header, len 5
+        DataElement {
+            offset: 1_u8.into(),
+            de_type: 5_u8.into(),
+            contents: &[0x01, 0x02, 0x03, 0x04, 0x05],
+        },
+        // 2 byte header, len 1
+        DataElement { offset: 2_u8.into(), de_type: 6_u8.into(), contents: &[0x01] },
+    ];
 
     assert_eq!(
-        Ok(vec![
-            PlaintextSection::new(
-                PlaintextIdentityMode::Public,
-                SectionContents::new(
-                    10,
-                    &[
-                        // 1 byte header, len 5
-                        RefDataElement {
-                            offset: 1_usize.into(),
-                            header_len: 1,
-                            de_type: 5_u8.into(),
-                            contents: &[0x01, 0x02, 0x03, 0x04, 0x05],
-                        },
-                        // 2 byte header, len 1
-                        RefDataElement {
-                            offset: 2_usize.into(),
-                            header_len: 2,
-                            de_type: 6_u8.into(),
-                            contents: &[0x01],
-                        },
-                    ],
-                )
-            )
-            .into(),
-            PlaintextSection::new(
-                PlaintextIdentityMode::Public,
-                SectionContents::new(
-                    12,
-                    &[
-                        // 3 byte header, len 4
-                        RefDataElement {
-                            offset: 1_usize.into(),
-                            header_len: 3,
-                            de_type: 0b0000_0000_0000_0000_0010_0001_1000_0011_u32.into(),
-                            contents: &[0x01, 0x02, 0x03, 0x04],
-                        },
-                        // 1 byte header, len 3
-                        RefDataElement {
-                            offset: 2_usize.into(),
-                            header_len: 1,
-                            de_type: 8_u8.into(),
-                            contents: &[0x01, 0x02, 0x03],
-                        },
-                    ],
-                )
-            )
-            .into(),
-        ]),
-        parse_sections(&V1Header { header_byte: 0x20 }, &adv_body)
+        &expected_des[..],
+        &parsed_sections[0].as_plaintext().unwrap().collect_data_elements().unwrap()
     );
 }
 
@@ -230,48 +128,50 @@ fn parse_adv_ext_identity() {
             0x11, 0x11,
         ],
     };
-    assert_eq!(
-        Ok(vec![
-            SignatureEncryptedSection {
+    let expected_sections = [
+        SignatureEncryptedSection {
+            contents: EncryptedSectionContents {
                 section_header: 47,
-                adv_header: &adv_header,
+                adv_header,
                 encryption_info: encryption_info.clone(),
                 identity: EncryptedIdentityMetadata {
                     header_bytes: [0x90, 0x01],
-                    offset: 1_usize.into(),
+                    offset: 1_u8.into(),
                     identity_type: EncryptedIdentityDataElementType::Private,
                 },
                 // skip section header + encryption info + identity header -> end of section
                 all_ciphertext: &adv_body[1 + 19 + 2..48],
-            }
-            .into(),
-            SignatureEncryptedSection {
+            },
+        },
+        SignatureEncryptedSection {
+            contents: EncryptedSectionContents {
                 section_header: 48,
-                adv_header: &adv_header,
+                adv_header,
                 encryption_info: encryption_info.clone(),
                 identity: EncryptedIdentityMetadata {
                     header_bytes: [0x90, 0x02],
-                    offset: 1_usize.into(),
+                    offset: 1_u8.into(),
                     identity_type: EncryptedIdentityDataElementType::Trusted,
                 },
                 all_ciphertext: &adv_body[48 + 1 + 19 + 2..97],
-            }
-            .into(),
-            SignatureEncryptedSection {
+            },
+        },
+        SignatureEncryptedSection {
+            contents: EncryptedSectionContents {
                 section_header: 49,
-                adv_header: &adv_header,
+                adv_header,
                 encryption_info,
                 identity: EncryptedIdentityMetadata {
                     header_bytes: [0x90, 0x04],
-                    offset: 1_usize.into(),
+                    offset: 1_u8.into(),
                     identity_type: EncryptedIdentityDataElementType::Provisioned,
                 },
                 all_ciphertext: &adv_body[97 + 1 + 19 + 2..],
-            }
-            .into()
-        ]),
-        parse_sections(&adv_header, &adv_body)
-    );
+            },
+        },
+    ];
+    let parsed_sections = parse_sections(adv_header, &adv_body).unwrap();
+    assert_eq!(parsed_sections.into_vec(), expected_sections.map(IntermediateSection::from));
 }
 
 #[test]
@@ -353,145 +253,53 @@ fn parse_adv_ext_mic_identity() {
             0x11, 0x11,
         ],
     };
-    assert_eq!(
-        Ok(vec![
-            MicEncryptedSection {
+    let expected_sections = [
+        MicEncryptedSection {
+            contents: EncryptedSectionContents {
                 section_header: 63,
-                adv_header: &adv_header,
-                mic: SectionMic::from([0x33; 16]),
+                adv_header,
                 encryption_info: encryption_info.clone(),
                 identity: EncryptedIdentityMetadata {
                     header_bytes: [0x90, 0x01],
-                    offset: 1_usize.into(),
+                    offset: 1_u8.into(),
                     identity_type: EncryptedIdentityDataElementType::Private,
                 },
                 // skip section header +  encryption info + identity header -> end of ciphertext
                 all_ciphertext: &adv_body[1 + 19 + 2..64 - 16],
-            }
-            .into(),
-            MicEncryptedSection {
+            },
+            mic: SectionMic::from([0x33; 16]),
+        },
+        MicEncryptedSection {
+            contents: EncryptedSectionContents {
                 section_header: 64,
-                adv_header: &adv_header,
-                mic: SectionMic::from([0x66; 16]),
+                adv_header,
                 encryption_info: encryption_info.clone(),
                 identity: EncryptedIdentityMetadata {
                     header_bytes: [0x90, 0x02],
-                    offset: 1_usize.into(),
+                    offset: 1_u8.into(),
                     identity_type: EncryptedIdentityDataElementType::Trusted,
                 },
                 all_ciphertext: &adv_body[64 + 1 + 19 + 2..129 - 16],
-            }
-            .into(),
-            MicEncryptedSection {
+            },
+            mic: SectionMic::from([0x66; 16]),
+        },
+        MicEncryptedSection {
+            contents: EncryptedSectionContents {
                 section_header: 65,
-                adv_header: &adv_header,
-                mic: SectionMic::from([0x99; 16]),
+                adv_header,
                 encryption_info,
                 identity: EncryptedIdentityMetadata {
                     header_bytes: [0x90, 0x04],
-                    offset: 1_usize.into(),
+                    offset: 1_u8.into(),
                     identity_type: EncryptedIdentityDataElementType::Provisioned,
                 },
                 all_ciphertext: &adv_body[129 + 1 + 19 + 2..195 - 16],
-            }
-            .into(),
-        ]),
-        parse_sections(&adv_header, &adv_body)
-    );
-}
-
-#[test]
-fn public_identity_not_first_de_error() {
-    let mut adv_body = vec![];
-
-    // section
-    adv_body.push(3 + 1);
-    // misc other DE
-    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
-    // public identity after another DE
-    adv_body.push(0x03);
-
-    assert_eq!(
-        Err(nom::Err::Error(error::Error {
-            input: &adv_body[4..],
-            // Eof because all_consuming is used to ensure complete section is parsed
-            code: error::ErrorKind::Eof
-        })),
-        parse_sections(&V1Header { header_byte: 0x20 }, &adv_body)
-    );
-}
-
-#[test]
-fn public_identity_after_public_identity_error() {
-    let mut adv_body = vec![];
-
-    // section
-    adv_body.push(1 + 3 + 1);
-    // public identity after another DE
-    adv_body.push(0x03);
-    // misc other DE
-    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
-    // public identity after another DE
-    adv_body.push(0x03);
-
-    assert_eq!(
-        Err(nom::Err::Error(error::Error {
-            // since we use many1, the parser consumes the first byte and returns the remaining in the error
-            input: &adv_body[1..],
-            // Eof because all_consuming is used to ensure complete section is parsed
-            code: error::ErrorKind::Eof
-        })),
-        parse_sections(&V1Header { header_byte: 0x20 }, &adv_body)
-    );
-}
-
-#[test]
-fn salt_public_identity_error() {
-    let mut adv_body = vec![];
-    // section
-    adv_body.push(3 + 1 + 3);
-    // salt - 1 + 2x 0x22 (invalid: must be first DE)
-    adv_body.extend_from_slice(&[0x20, 0x22, 0x22]);
-    // public identity
-    adv_body.push(0x03);
-    // misc other DE
-    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
-
-    assert_eq!(
-        Err(nom::Err::Error(error::Error {
-            input: &adv_body[4..],
-            // Eof because all_consuming is used to ensure complete section is parsed
-            code: error::ErrorKind::Eof
-        })),
-        parse_sections(&V1Header { header_byte: 0x20 }, &adv_body)
-    );
-}
-
-#[test]
-fn salt_mic_public_identity_error() {
-    let mut adv_body = vec![];
-    // section
-    adv_body.push(3 + 18 + 1 + 3);
-    // salt - 1 + 2x 0x22 (invalid: must be first DE)
-    adv_body.extend_from_slice(&[0x20, 0x22, 0x22]);
-    // mic - 2 + 16x 0x33
-    adv_body.extend_from_slice(&[
-        0x90, 0x13, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
-        0x33, 0x33, 0x33,
-    ]);
-    // public identity
-    adv_body.push(0x03);
-    // misc other DE
-    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
-
-    assert_eq!(
-        Err(nom::Err::Error(error::Error {
-            input: &adv_body[22..],
-            // Eof because all_consuming is used to ensure complete section is parsed
-            code: error::ErrorKind::Eof
-        })),
-        parse_sections(&V1Header { header_byte: 0x20 }, &adv_body)
-    );
+            },
+            mic: SectionMic::from([0x99; 16]),
+        },
+    ];
+    let parsed_sections = parse_sections(adv_header, &adv_body).unwrap();
+    assert_eq!(parsed_sections.into_vec(), &expected_sections.map(IntermediateSection::from));
 }
 
 #[test]
@@ -616,6 +424,191 @@ fn parse_de_header_4_bytes() {
 }
 
 #[test]
+fn public_identity_not_first_de_error() {
+    let mut adv_body = vec![];
+    // section
+    adv_body.push(3 + 1);
+    // misc other DE
+    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
+    // public identity after another DE
+    adv_body.push(0x03);
+
+    assert_eq!(
+        nom::Err::Error(error::Error { input: &adv_body[1..], code: error::ErrorKind::Verify }),
+        parse_sections(V1Header { header_byte: 0x20 }, &adv_body).unwrap_err()
+    );
+}
+
+#[test]
+fn invalid_public_section() {
+    let mut rng = StdRng::from_entropy();
+    for _ in 0..100 {
+        let mut adv_body = vec![];
+        // Add section length
+        let remove_section_len = rng.gen_bool(0.5);
+        // Add public identity
+        let add_public_identity = rng.gen_bool(0.5);
+        // Add DEs
+        let add_des = rng.gen_bool(0.5);
+        // Shuffle adv
+        let shuffle = rng.gen_bool(0.5);
+
+        adv_body.push(0);
+        if add_public_identity {
+            adv_body[0] += 1;
+            adv_body.push(0x03);
+        }
+        if add_des {
+            adv_body[0] += 1;
+            adv_body.extend_from_slice(&[0x81]);
+        }
+        if remove_section_len {
+            let _ = adv_body.remove(0);
+        }
+
+        let ordered_adv = adv_body.clone();
+
+        if shuffle {
+            adv_body.shuffle(&mut rng);
+        }
+        // A V1 public section is invalid if
+        // * section length is missing
+        // * the section is empty
+        // * the section identity is missing
+        // * the identity does not follow the section length
+        // * the section length is 0
+        if remove_section_len || !add_public_identity || (ordered_adv != adv_body) {
+            let _ = parse_sections(V1Header { header_byte: 0x20 }, &adv_body)
+                .expect_err("Expected to fail because of missing section length or identity");
+        }
+    }
+}
+
+// There can only be one identity DE
+#[test]
+fn public_identity_after_public_identity_error() {
+    let mut adv_body = vec![];
+    // section
+    adv_body.push(1 + 3 + 1);
+    // public identity after another DE
+    adv_body.push(0x03);
+    // misc other DE
+    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
+    // public identity after another DE
+    adv_body.push(0x03);
+
+    let sections = parse_sections(V1Header { header_byte: 0x20 }, &adv_body).unwrap();
+    assert_eq!(sections.len(), 1);
+    assert_eq!(
+        DataElementParseError::DuplicateIdentityDataElement,
+        sections[0].as_plaintext().unwrap().collect_data_elements().unwrap_err()
+    );
+}
+
+#[test]
+fn salt_public_identity_error() {
+    let mut adv_body = vec![];
+    // section
+    adv_body.push(3 + 1 + 3);
+    // salt - 1 + 2x 0x22 (invalid: must be first DE)
+    adv_body.extend_from_slice(&[0x20, 0x22, 0x22]);
+    // public identity
+    adv_body.push(0x03);
+    // misc other DE
+    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
+
+    assert_eq!(
+        nom::Err::Error(error::Error {
+            input: &adv_body[1..],
+            // Eof because all_consuming is used to ensure complete section is parsed
+            code: error::ErrorKind::Verify
+        }),
+        parse_sections(V1Header { header_byte: 0x20 }, &adv_body).unwrap_err()
+    );
+}
+
+#[test]
+fn salt_mic_public_identity_error() {
+    let mut adv_body = vec![];
+    // section
+    adv_body.push(3 + 18 + 1 + 3);
+    // salt - 1 + 2x 0x22 (invalid: must be first DE)
+    adv_body.extend_from_slice(&[0x20, 0x22, 0x22]);
+    // mic - 2 + 16x 0x33
+    adv_body.extend_from_slice(&[
+        0x90, 0x13, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
+        0x33, 0x33, 0x33,
+    ]);
+    // public identity
+    adv_body.push(0x03);
+    // misc other DE
+    adv_body.extend_from_slice(&[0x81, 0x70, 0xFF]);
+
+    assert_eq!(
+        nom::Err::Error(error::Error {
+            input: &adv_body[1..],
+            // Eof because all_consuming is used to ensure complete section is parsed
+            code: error::ErrorKind::Verify
+        }),
+        parse_sections(V1Header { header_byte: 0x20 }, &adv_body).unwrap_err()
+    );
+}
+
+#[test]
+fn parse_adv_no_identity() {
+    let adv_body = vec![0x55, 0x01, 0x02, 0x03, 0x04, 0x05];
+    assert_eq!(
+        nom::Err::Error(error::Error { input: &adv_body[1..], code: error::ErrorKind::Eof }),
+        parse_sections(V1Header { header_byte: 0x20 }, &adv_body).unwrap_err()
+    );
+}
+
+#[test]
+fn parse_empty_section() {
+    // empty section - should return an EOF error
+    let input = [];
+    assert_eq!(
+        nom::Err::Error(error::Error {
+            // attempted to read section contents
+            input: input.as_slice(),
+            code: error::ErrorKind::Eof
+        }),
+        IntermediateSection::parser_encrypted_with_header(V1Header { header_byte: 0x20 })(&input)
+            .unwrap_err()
+    );
+}
+
+#[test]
+fn parse_de_header_non_canonical_multi_byte() {
+    // length 1, type 1
+    // first byte of type doesn't have any bits in it so it contributes nothing
+    let input = [0b1000_0001, 0b1000_0000, 0b0000_0001];
+    assert_eq!(
+        nom::Err::Error(error::Error {
+            // attempted to read first type byte
+            input: &input.as_slice()[1..],
+            code: error::ErrorKind::Verify
+        }),
+        DeHeader::parse(&input).unwrap_err()
+    );
+}
+
+#[test]
+fn parse_section_length_zero() {
+    // Section length of 0 - should return a verification error
+    let input = [0x00];
+    assert_eq!(
+        nom::Err::Error(error::Error {
+            // attempted to read section contents
+            input: input.as_slice(),
+            code: error::ErrorKind::Verify
+        }),
+        IntermediateSection::parser_encrypted_with_header(V1Header { header_byte: 0x20 })(&input)
+            .unwrap_err()
+    );
+}
+
+#[test]
 fn parse_section_length_overrun() {
     // section of length 0xF0 - legal but way longer than 3
     let input = [0xF0, 0x01, 0x02, 0x03];
@@ -625,7 +618,7 @@ fn parse_section_length_overrun() {
             input: &input.as_slice()[1..],
             code: error::ErrorKind::Eof
         }),
-        IntermediateSection::parser_with_header(&V1Header { header_byte: 0x20 })(&input)
+        IntermediateSection::parser_encrypted_with_header(V1Header { header_byte: 0x20 })(&input)
             .unwrap_err()
     );
 }
@@ -659,47 +652,33 @@ fn parse_de_multi_byte_header_length_overrun() {
 }
 
 #[test]
-fn parse_de_header_non_canonical_multi_byte() {
-    // length 1, type 1
-    // first byte of type doesn't have any bits in it so it contributes nothing
-    let input = [0b1000_0001, 0b1000_0000, 0b0000_0001];
-    assert_eq!(
-        nom::Err::Error(error::Error {
-            // attempted to read first type byte
-            input: &input.as_slice()[1..],
-            code: error::ErrorKind::Verify
-        }),
-        DeHeader::parse(&input).unwrap_err()
-    );
-}
+fn parse_adv_signature_encrypted_plaintext_mix() {
+    // 2 sections
+    let mut adv_body = vec![];
 
-#[test]
-fn parse_section_length_zero() {
-    // Section length of 0 - should return a verification error
-    let input = [0x00];
-    assert_eq!(
-        nom::Err::Error(error::Error {
-            // attempted to read section contents
-            input: input.as_slice(),
-            code: error::ErrorKind::Verify
-        }),
-        IntermediateSection::parser_with_header(&V1Header { header_byte: 0x20 })(&input)
-            .unwrap_err()
-    );
-}
+    // section 1 - plaintext - 10 bytes
+    adv_body.push(10);
+    // public identity
+    adv_body.push(0x03);
+    // de 1 byte header, type 5, len 5
+    adv_body.extend_from_slice(&[0x55, 0x01, 0x02, 0x03, 0x04, 0x05]);
+    // de 2 byte header, type 6, len 1
+    adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
 
-#[test]
-fn parse_empty_section() {
-    // empty section - should return an EOF error
-    let input = [];
+    // section 2 - plaintext - 10 bytes
+    adv_body.push(10);
+    // public identity
+    adv_body.push(0x03);
+    // de 1 byte header, type 5, len 5
+    adv_body.extend_from_slice(&[0x55, 0x01, 0x02, 0x03, 0x04, 0x05]);
+    // de 2 byte header, type 6, len 1
+    adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
+
+    let adv_header = V1Header { header_byte: 0x20 };
+
     assert_eq!(
-        nom::Err::Error(error::Error {
-            // attempted to read section contents
-            input: input.as_slice(),
-            code: error::ErrorKind::Eof
-        }),
-        IntermediateSection::parser_with_header(&V1Header { header_byte: 0x20 })(&input)
-            .unwrap_err()
+        nom::Err::Error(error::Error { input: &adv_body[11..], code: error::ErrorKind::Eof }),
+        parse_sections(adv_header, &adv_body).unwrap_err()
     );
 }
 
@@ -717,8 +696,8 @@ impl<'a> From<MicEncryptedSection<'a>> for IntermediateSection<'a> {
     }
 }
 
-impl<'a> From<PlaintextSection> for IntermediateSection<'a> {
-    fn from(s: PlaintextSection) -> Self {
+impl<'a> From<PlaintextSection<'a>> for IntermediateSection<'a> {
+    fn from(s: PlaintextSection<'a>) -> Self {
         IntermediateSection::Plaintext(s)
     }
 }

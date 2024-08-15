@@ -13,14 +13,14 @@
 #include "base/strings/strcat.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
-#include "components/password_manager/core/browser/mock_password_store_backend.h"
+#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_digest.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/password_store_backend.h"
-#include "components/password_manager/core/browser/password_store_backend_error.h"
-#include "components/password_manager/core/browser/password_store_change.h"
+#include "components/password_manager/core/browser/password_store/mock_password_store_backend.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend_error.h"
+#include "components/password_manager/core/browser/password_store/password_store_change.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -36,6 +36,7 @@ namespace {
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::AtMost;
+using ::testing::ElementsAreArray;
 using ::testing::Eq;
 using ::testing::Invoke;
 using ::testing::Optional;
@@ -70,14 +71,14 @@ PasswordForm CreateTestForm() {
   return form;
 }
 
-std::vector<std::unique_ptr<PasswordForm>> CreateTestLogins() {
-  std::vector<std::unique_ptr<PasswordForm>> forms;
-  forms.push_back(CreateEntry("Todd Tester", "S3cr3t",
-                              GURL(u"https://example.com"),
-                              PasswordForm::MatchType::kExact));
-  forms.push_back(CreateEntry("Marcus McSpartanGregor", "S0m3th1ngCr34t1v3",
-                              GURL(u"https://m.example.com"),
-                              PasswordForm::MatchType::kPSL));
+std::vector<PasswordForm> CreateTestLogins() {
+  std::vector<PasswordForm> forms;
+  forms.push_back(*CreateEntry("Todd Tester", "S3cr3t",
+                               GURL(u"https://example.com"),
+                               PasswordForm::MatchType::kExact));
+  forms.push_back(*CreateEntry("Marcus McSpartanGregor", "S0m3th1ngCr34t1v3",
+                               GURL(u"https://m.example.com"),
+                               PasswordForm::MatchType::kPSL));
   return forms;
 }
 
@@ -108,17 +109,23 @@ std::string GetFallbackHistogramNameForMethodName(std::string method_name) {
 class PasswordStoreProxyBackendBaseTest : public testing::Test {
  protected:
   PasswordStoreProxyBackendBaseTest() {
-    proxy_backend_ = std::make_unique<PasswordStoreProxyBackend>(
-        &built_in_backend_, &android_backend_, &prefs_);
-
     prefs_.registry()->RegisterIntegerPref(
         prefs::kCurrentMigrationVersionToGoogleMobileServices, 0);
     prefs_.registry()->RegisterBooleanPref(
         prefs::kUnenrolledFromGoogleMobileServicesDueToErrors, false);
+    prefs_.registry()->RegisterIntegerPref(
+        password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+        static_cast<int>(
+            password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOff));
+  }
 
-    // Initialize sync service.
-    EXPECT_CALL(android_backend(), OnSyncServiceInitialized(&sync_service_));
-    proxy_backend().OnSyncServiceInitialized(&sync_service_);
+  void SetUp() override {
+    proxy_backend_ = CreateProxyBackend();
+  }
+
+  virtual std::unique_ptr<PasswordStoreProxyBackend> CreateProxyBackend() {
+    return std::make_unique<PasswordStoreProxyBackend>(
+        &built_in_backend_, &android_backend_, &prefs_, IsAccountStore(false));
   }
 
   void TearDown() override {
@@ -145,12 +152,12 @@ class PasswordStoreProxyBackendBaseTest : public testing::Test {
   TestingPrefServiceSimple* prefs() { return &prefs_; }
   syncer::TestSyncService* sync_service() { return &sync_service_; }
 
- private:
-  base::test::ScopedFeatureList feature_list_;
-  TestingPrefServiceSimple prefs_;
-  std::unique_ptr<PasswordStoreProxyBackend> proxy_backend_;
   StrictMock<MockPasswordStoreBackend> built_in_backend_;
   StrictMock<MockPasswordStoreBackend> android_backend_;
+
+ private:
+  TestingPrefServiceSimple prefs_;
+  std::unique_ptr<PasswordStoreProxyBackend> proxy_backend_;
   syncer::TestSyncService sync_service_;
 };
 
@@ -163,38 +170,59 @@ TEST_F(PasswordStoreProxyBackendBaseTest, CallCompletionCallbackAfterInit) {
           WithArg<3>(Invoke([](base::OnceCallback<void(bool)> reply) -> void {
             std::move(reply).Run(true);
           })));
+
+  base::OnceCallback<void(bool)> captured_android_backend_reply;
   EXPECT_CALL(android_backend(), InitBackend)
       .WillOnce(
-          WithArg<3>(Invoke([](base::OnceCallback<void(bool)> reply) -> void {
-            std::move(reply).Run(true);
+          WithArg<3>(Invoke([&](base::OnceCallback<void(bool)> reply) -> void {
+            captured_android_backend_reply = std::move(reply);
           })));
-  EXPECT_CALL(completion_callback, Run(true));
+
   proxy_backend().InitBackend(nullptr, base::DoNothing(), base::DoNothing(),
                               completion_callback.Get());
+  // The android backend requires the sync service to be initialized before
+  // signaling that the backend initialization is complete.
+  EXPECT_CALL(completion_callback, Run(true));
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()))
+      .WillOnce(Invoke([&]() -> void {
+        std::move(captured_android_backend_reply).Run(true);
+      }));
+  proxy_backend().OnSyncServiceInitialized(sync_service());
 }
 
 TEST_F(PasswordStoreProxyBackendBaseTest,
        CallCompletionWithFailureForAnyError) {
   base::MockCallback<base::OnceCallback<void(bool)>> completion_callback;
 
-  // If one backend fails to initialize, the result of the second is irrelevant.
+  // If one backend fails to initialize, the result of the second is
+  // irrelevant.
   EXPECT_CALL(built_in_backend(), InitBackend)
       .WillOnce(
           WithArg<3>(Invoke([](base::OnceCallback<void(bool)> reply) -> void {
             std::move(reply).Run(false);
           })));
+  base::OnceCallback<void(bool)> captured_android_backend_reply;
   EXPECT_CALL(android_backend(), InitBackend)
       .Times(AtMost(1))
       .WillOnce(
-          WithArg<3>(Invoke([](base::OnceCallback<void(bool)> reply) -> void {
-            std::move(reply).Run(true);
+          WithArg<3>(Invoke([&](base::OnceCallback<void(bool)> reply) -> void {
+            captured_android_backend_reply = std::move(reply);
           })));
-  EXPECT_CALL(completion_callback, Run(false));
+
   proxy_backend().InitBackend(nullptr, base::DoNothing(), base::DoNothing(),
                               completion_callback.Get());
+  // The android backend requires the sync service to be initialized before
+  // signaling that the backend initialization is complete.
+  EXPECT_CALL(completion_callback, Run(false));
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()))
+      .WillOnce(Invoke([&]() -> void {
+        std::move(captured_android_backend_reply).Run(false);
+      }));
+  proxy_backend().OnSyncServiceInitialized(sync_service());
 }
 
-TEST_F(PasswordStoreProxyBackendBaseTest, CallRemoteChangesOnlyForMainBackend) {
+TEST_F(PasswordStoreProxyBackendBaseTest,
+       ProfileNoLocalSupportCallRemoteChangesOnlyForMainBackend) {
   base::MockCallback<RemoveChangesReceived> original_callback;
 
   // Both backends receive a callback that they trigger for new remote changes.
@@ -206,15 +234,17 @@ TEST_F(PasswordStoreProxyBackendBaseTest, CallRemoteChangesOnlyForMainBackend) {
       .WillOnce(SaveArg<1>(&android_remote_changes_callback));
   proxy_backend().InitBackend(nullptr, original_callback.Get(),
                               base::DoNothing(), base::DoNothing());
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+  proxy_backend().OnSyncServiceInitialized(sync_service());
 
   // With sync enabled, only the android backend calls the original callback.
   EnablePasswordSync();
   EXPECT_CALL(original_callback, Run);
-  android_remote_changes_callback.Run(absl::nullopt);
+  android_remote_changes_callback.Run(std::nullopt);
   testing::Mock::VerifyAndClearExpectations(&original_callback);
 
   EXPECT_CALL(original_callback, Run).Times(0);
-  built_in_remote_changes_callback.Run(absl::nullopt);
+  built_in_remote_changes_callback.Run(std::nullopt);
   testing::Mock::VerifyAndClearExpectations(&original_callback);
 
   // As soon as sync is disabled, only the built-in backend calls the original
@@ -222,33 +252,114 @@ TEST_F(PasswordStoreProxyBackendBaseTest, CallRemoteChangesOnlyForMainBackend) {
   DisablePasswordSync();
 
   EXPECT_CALL(original_callback, Run).Times(0);
-  android_remote_changes_callback.Run(absl::nullopt);
+  android_remote_changes_callback.Run(std::nullopt);
   testing::Mock::VerifyAndClearExpectations(&original_callback);
 
   EXPECT_CALL(original_callback, Run);
-  built_in_remote_changes_callback.Run(absl::nullopt);
+  built_in_remote_changes_callback.Run(std::nullopt);
 }
 
 TEST_F(PasswordStoreProxyBackendBaseTest,
-       CallSyncCallbackOnlyForBuiltInBackend) {
+       ProfileLocalSupportCallRemoteChangesOnlyFromAndroidBackend) {
+  prefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+  base::MockCallback<RemoveChangesReceived> original_callback;
+
+  // Both backends receive a callback that they trigger for new remote changes.
+  RemoveChangesReceived built_in_remote_changes_callback;
+  EXPECT_CALL(built_in_backend(), InitBackend)
+      .WillOnce(SaveArg<1>(&built_in_remote_changes_callback));
+  RemoveChangesReceived android_remote_changes_callback;
+  EXPECT_CALL(android_backend(), InitBackend)
+      .WillOnce(SaveArg<1>(&android_remote_changes_callback));
+  proxy_backend().InitBackend(nullptr, original_callback.Get(),
+                              base::DoNothing(), base::DoNothing());
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+  proxy_backend().OnSyncServiceInitialized(sync_service());
+
+  // With sync enabled, only the android backend calls the original callback.
+  EnablePasswordSync();
+  EXPECT_CALL(original_callback, Run);
+  android_remote_changes_callback.Run(std::nullopt);
+  testing::Mock::VerifyAndClearExpectations(&original_callback);
+
+  EXPECT_CALL(original_callback, Run).Times(0);
+  built_in_remote_changes_callback.Run(std::nullopt);
+  testing::Mock::VerifyAndClearExpectations(&original_callback);
+
+  // With sync disabled, the profile store still only services the local
+  // storage which is only backed by the android backend.
+  DisablePasswordSync();
+
+  EXPECT_CALL(original_callback, Run);
+  android_remote_changes_callback.Run(std::nullopt);
+  testing::Mock::VerifyAndClearExpectations(&original_callback);
+
+  EXPECT_CALL(original_callback, Run).Times(0);
+  built_in_remote_changes_callback.Run(std::nullopt);
+}
+
+TEST_F(PasswordStoreProxyBackendBaseTest,
+       AccountCallRemoteChangesOnlyForMainBackend) {
+  // The account store backend only exists if there is support for local
+  // passwords.
+  prefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+
+  base::MockCallback<RemoveChangesReceived> original_callback;
+
+  // Both backends receive a callback that they trigger for new remote changes.
+  RemoveChangesReceived built_in_remote_changes_callback;
+  EXPECT_CALL(built_in_backend(), InitBackend)
+      .WillOnce(SaveArg<1>(&built_in_remote_changes_callback));
+  RemoveChangesReceived android_remote_changes_callback;
+  EXPECT_CALL(android_backend(), InitBackend)
+      .WillOnce(SaveArg<1>(&android_remote_changes_callback));
+
+  // Create the account proxy backend.
+  std::unique_ptr<PasswordStoreBackend> proxy_backend =
+      std::make_unique<PasswordStoreProxyBackend>(
+          &built_in_backend_, &android_backend_, prefs(), IsAccountStore(true));
+
+  proxy_backend->InitBackend(nullptr, original_callback.Get(),
+                             base::DoNothing(), base::DoNothing());
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+  proxy_backend->OnSyncServiceInitialized(sync_service());
+
+  // The account store backend is only active when sync is enabled.
+  EnablePasswordSync();
+
+  // Only the android backend should report that logins have changed to avoid
+  // duplicate notifications.
+  EXPECT_CALL(original_callback, Run);
+  android_remote_changes_callback.Run(std::nullopt);
+  testing::Mock::VerifyAndClearExpectations(&original_callback);
+
+  EXPECT_CALL(original_callback, Run).Times(0);
+  built_in_remote_changes_callback.Run(std::nullopt);
+  testing::Mock::VerifyAndClearExpectations(&original_callback);
+}
+
+TEST_F(PasswordStoreProxyBackendBaseTest,
+       ProfileNoLocalSupportCallSyncCallbackForTheBuiltInBackend) {
   base::MockCallback<base::RepeatingClosure> original_callback;
 
   // Both backends receive a callback that they trigger for new remote changes.
   base::RepeatingClosure built_in_sync_callback;
   EXPECT_CALL(built_in_backend(), InitBackend)
       .WillOnce(SaveArg<2>(&built_in_sync_callback));
-  base::RepeatingClosure android_sync_callback;
-  EXPECT_CALL(android_backend(), InitBackend)
-      .WillOnce(SaveArg<2>(&android_sync_callback));
+  EXPECT_CALL(android_backend(), InitBackend);
   proxy_backend().InitBackend(nullptr, base::DoNothing(),
                               original_callback.Get(), base::DoNothing());
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+  proxy_backend().OnSyncServiceInitialized(sync_service());
 
   // With sync enabled, only the built-in backend calls the original callback.
   EnablePasswordSync();
-
-  EXPECT_CALL(original_callback, Run).Times(0);
-  android_sync_callback.Run();
-  testing::Mock::VerifyAndClearExpectations(&original_callback);
 
   EXPECT_CALL(original_callback, Run);
   built_in_sync_callback.Run();
@@ -258,9 +369,43 @@ TEST_F(PasswordStoreProxyBackendBaseTest,
   // original callback.
   DisablePasswordSync();
 
-  EXPECT_CALL(original_callback, Run).Times(0);
-  android_sync_callback.Run();
+  EXPECT_CALL(original_callback, Run);
+  built_in_sync_callback.Run();
+}
+
+TEST_F(PasswordStoreProxyBackendBaseTest,
+       AccountCallSyncCallbackForTheBuiltInBackend) {
+  // The account backend only exists if there is support for local passwords.
+  prefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+  base::MockCallback<base::RepeatingClosure> original_callback;
+
+  // Both backends receive a callback that they trigger for new remote changes.
+  base::RepeatingClosure built_in_sync_callback;
+  EXPECT_CALL(built_in_backend(), InitBackend)
+      .WillOnce(SaveArg<2>(&built_in_sync_callback));
+  EXPECT_CALL(android_backend(), InitBackend);
+  // Create the account proxy backend.
+  std::unique_ptr<PasswordStoreBackend> proxy_backend =
+      std::make_unique<PasswordStoreProxyBackend>(
+          &built_in_backend_, &android_backend_, prefs(), IsAccountStore(true));
+  proxy_backend->InitBackend(nullptr, base::DoNothing(),
+                             original_callback.Get(), base::DoNothing());
+  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+  proxy_backend->OnSyncServiceInitialized(sync_service());
+
+  // With sync enabled, only the built-in backend calls the original callback.
+  EnablePasswordSync();
+
+  EXPECT_CALL(original_callback, Run);
+  built_in_sync_callback.Run();
   testing::Mock::VerifyAndClearExpectations(&original_callback);
+
+  // With sync is disabled, the built-in backend remains the only to call the
+  // original callback.
+  DisablePasswordSync();
 
   EXPECT_CALL(original_callback, Run);
   built_in_sync_callback.Run();
@@ -271,6 +416,8 @@ TEST_F(PasswordStoreProxyBackendBaseTest,
 struct UpmVariationParam {
   bool is_sync_enabled = false;
   bool is_unenrolled = false;
+  bool is_account_store = false;
+  bool is_using_split_account_local_stores = false;
   bool android_is_main_backend = false;
 };
 
@@ -279,6 +426,14 @@ class PasswordStoreProxyBackendTest
       public testing::WithParamInterface<UpmVariationParam> {
  public:
   void SetUp() override {
+    PasswordStoreProxyBackendBaseTest::SetUp();
+    EXPECT_CALL(android_backend(), InitBackend);
+    EXPECT_CALL(built_in_backend(), InitBackend);
+    proxy_backend().InitBackend(nullptr, base::DoNothing(), base::DoNothing(),
+                                base::DoNothing());
+    EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+    proxy_backend().OnSyncServiceInitialized(sync_service());
+
     if (GetParam().is_sync_enabled) {
       EnablePasswordSync();
     } else {
@@ -286,6 +441,18 @@ class PasswordStoreProxyBackendTest
     }
     prefs()->SetBoolean(prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
                         GetParam().is_unenrolled);
+    if (GetParam().is_using_split_account_local_stores) {
+      prefs()->SetInteger(
+          password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+          static_cast<int>(
+              password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+    }
+  }
+
+  std::unique_ptr<PasswordStoreProxyBackend> CreateProxyBackend() override {
+    return std::make_unique<PasswordStoreProxyBackend>(
+        &built_in_backend_, &android_backend_, prefs(),
+        IsAccountStore(GetParam().is_account_store));
   }
 
   MockPasswordStoreBackend& main_backend() {
@@ -301,9 +468,9 @@ class PasswordStoreProxyBackendTest
 
 TEST_P(PasswordStoreProxyBackendTest, UseMainBackendToGetAllLoginsAsync) {
   base::MockCallback<LoginsOrErrorReply> mock_reply;
-  std::vector<std::unique_ptr<PasswordForm>> expected_logins =
-      CreateTestLogins();
-  EXPECT_CALL(mock_reply, Run(LoginsResultsOrErrorAre(&expected_logins)));
+  EXPECT_CALL(
+      mock_reply,
+      Run(VariantWith<LoginsResult>(ElementsAreArray(CreateTestLogins()))));
 
   EXPECT_CALL(main_backend(), GetAllLoginsAsync)
       .WillOnce(WithArg<0>(Invoke([](LoginsOrErrorReply reply) -> void {
@@ -317,9 +484,9 @@ TEST_P(PasswordStoreProxyBackendTest, UseMainBackendToGetAllLoginsAsync) {
 TEST_P(PasswordStoreProxyBackendTest,
        UseMainBackendToGetAutofillableLoginsAsync) {
   base::MockCallback<LoginsOrErrorReply> mock_reply;
-  std::vector<std::unique_ptr<PasswordForm>> expected_logins =
-      CreateTestLogins();
-  EXPECT_CALL(mock_reply, Run(LoginsResultsOrErrorAre(&expected_logins)));
+  EXPECT_CALL(
+      mock_reply,
+      Run(VariantWith<LoginsResult>(ElementsAreArray(CreateTestLogins()))));
 
   EXPECT_CALL(main_backend(), GetAutofillableLoginsAsync)
       .WillOnce(WithArg<0>(Invoke([](LoginsOrErrorReply reply) -> void {
@@ -332,9 +499,9 @@ TEST_P(PasswordStoreProxyBackendTest,
 
 TEST_P(PasswordStoreProxyBackendTest, UseMainBackendToFillMatchingLoginsAsync) {
   base::MockCallback<LoginsOrErrorReply> mock_reply;
-  std::vector<std::unique_ptr<PasswordForm>> expected_logins =
-      CreateTestLogins();
-  EXPECT_CALL(mock_reply, Run(LoginsResultsOrErrorAre(&expected_logins)));
+  EXPECT_CALL(
+      mock_reply,
+      Run(VariantWith<LoginsResult>(ElementsAreArray(CreateTestLogins()))));
 
   EXPECT_CALL(main_backend(), FillMatchingLoginsAsync)
       .WillOnce(WithArg<0>(Invoke([](LoginsOrErrorReply reply) -> void {
@@ -476,50 +643,132 @@ TEST_P(PasswordStoreProxyBackendTest,
   proxy_backend().GetSmartBubbleStatsStore();
 }
 
-TEST_P(PasswordStoreProxyBackendTest,
-       OnSyncServiceInitializedPropagatedToAndroidBackend) {
-  syncer::TestSyncService sync_service;
-  EXPECT_CALL(android_backend(), OnSyncServiceInitialized(&sync_service));
-  proxy_backend().OnSyncServiceInitialized(&sync_service);
-}
-
 INSTANTIATE_TEST_SUITE_P(
     PasswordStoreProxyBackendBaseTest,
     PasswordStoreProxyBackendTest,
-    testing::Values(UpmVariationParam{.is_sync_enabled = true,
-                                      .is_unenrolled = false,
-                                      .android_is_main_backend = true},
+    testing::Values(
+        // Profile store, pre-split.
+        UpmVariationParam{.is_sync_enabled = true,
+                          .is_unenrolled = false,
+                          .is_account_store = false,
+                          .is_using_split_account_local_stores = false,
+                          .android_is_main_backend = true},
 
-                    UpmVariationParam{.is_sync_enabled = true,
-                                      .is_unenrolled = true,
-                                      .android_is_main_backend = false},
+        UpmVariationParam{.is_sync_enabled = true,
+                          .is_unenrolled = true,
+                          .is_account_store = false,
+                          .is_using_split_account_local_stores = false,
+                          .android_is_main_backend = false},
 
-                    UpmVariationParam{.is_sync_enabled = false,
-                                      .is_unenrolled = true,
-                                      .android_is_main_backend = false},
+        UpmVariationParam{.is_sync_enabled = false,
+                          .is_unenrolled = true,
+                          .is_account_store = false,
+                          .is_using_split_account_local_stores = false,
+                          .android_is_main_backend = false},
 
-                    UpmVariationParam{.is_sync_enabled = false,
-                                      .is_unenrolled = false,
-                                      .android_is_main_backend = false}),
+        UpmVariationParam{.is_sync_enabled = false,
+                          .is_unenrolled = false,
+                          .is_account_store = false,
+                          .is_using_split_account_local_stores = false,
+                          .android_is_main_backend = false},
+
+        // Profile store, post-split.
+        // Unenrollment should have no impact.
+        UpmVariationParam{.is_sync_enabled = true,
+                          .is_unenrolled = true,
+                          .is_account_store = false,
+                          .is_using_split_account_local_stores = true,
+                          .android_is_main_backend = true},
+
+        UpmVariationParam{.is_sync_enabled = false,
+                          .is_unenrolled = true,
+                          .is_account_store = false,
+                          .is_using_split_account_local_stores = true,
+                          .android_is_main_backend = true},
+
+        // Account store, post-split.
+        UpmVariationParam{.is_sync_enabled = true,
+                          .is_unenrolled = false,
+                          .is_account_store = true,
+                          .is_using_split_account_local_stores = true,
+                          .android_is_main_backend = true},
+
+        UpmVariationParam{.is_sync_enabled = true,
+                          .is_unenrolled = true,
+                          .is_account_store = true,
+                          .is_using_split_account_local_stores = true,
+                          .android_is_main_backend = false},
+
+        // Sync disabled should still route calls to the android backend who
+        // will filter them. There is no fallback on the built-in backend in
+        // this case.
+        UpmVariationParam{.is_sync_enabled = false,
+                          .is_unenrolled = false,
+                          .is_account_store = true,
+                          .is_using_split_account_local_stores = true,
+                          .android_is_main_backend = true},
+
+        // The account store is designed to always respect unenrollment in order
+        // to reduce special-casing in the code.
+        // For non syncinc clients this makes very little difference in
+        // practice, as both backends will reply with an empty list of
+        // passwords. If the client is unenrolled, the account backend will
+        // behave like on desktop when the user isn't syncing, where it forwards
+        // calls to an empty login database.
+        UpmVariationParam{.is_sync_enabled = false,
+                          .is_unenrolled = true,
+                          .is_account_store = true,
+                          .is_using_split_account_local_stores = true,
+                          .android_is_main_backend = false}),
+
     [](const ::testing::TestParamInfo<UpmVariationParam>& info) {
       std::string syncing =
           info.param.is_sync_enabled ? "Syncing" : "NotSyncing";
       std::string unenrolled =
           info.param.is_unenrolled ? "Unenrolled" : "Enrolled";
-      return syncing + unenrolled;
+      std::string account_or_profile_store =
+          info.param.is_account_store ? "Account" : "Profile";
+      std::string new_upm =
+          info.param.is_using_split_account_local_stores ? "NewUPM" : "OldUPM";
+      return syncing + unenrolled + account_or_profile_store + new_upm;
     });
 
 struct FallbackParam {
   PasswordStoreBackendError error;
+  bool is_account_store;
+  bool is_using_split_account_local_stores;
   bool should_fallback;
 };
 
 class PasswordStoreProxyBackendTestWithErrorsForFallbacks
     : public PasswordStoreProxyBackendBaseTest,
-      public testing::WithParamInterface<FallbackParam> {};
+      public testing::WithParamInterface<FallbackParam> {
+ public:
+  void SetUp() override {
+    PasswordStoreProxyBackendBaseTest::SetUp();
+    EXPECT_CALL(android_backend(), InitBackend);
+    EXPECT_CALL(built_in_backend(), InitBackend);
+    proxy_backend().InitBackend(nullptr, base::DoNothing(), base::DoNothing(),
+                                base::DoNothing());
+    EXPECT_CALL(android_backend(), OnSyncServiceInitialized(sync_service()));
+    proxy_backend().OnSyncServiceInitialized(sync_service());
+    if (GetParam().is_using_split_account_local_stores) {
+      prefs()->SetInteger(
+          password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+          static_cast<int>(
+              password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOn));
+    }
+  }
+
+  std::unique_ptr<PasswordStoreProxyBackend> CreateProxyBackend() override {
+    return std::make_unique<PasswordStoreProxyBackend>(
+        &built_in_backend_, &android_backend_, prefs(),
+        IsAccountStore(GetParam().is_account_store));
+  }
+};
 
 TEST_P(PasswordStoreProxyBackendTestWithErrorsForFallbacks,
-       RetriesAddLoginOnBuiltInBackend) {
+       AddLoginFallsBackOnBuiltInBackend) {
   const FallbackParam& p = GetParam();
 
   base::HistogramTester histogram_tester;
@@ -554,7 +803,7 @@ TEST_P(PasswordStoreProxyBackendTestWithErrorsForFallbacks,
 }
 
 TEST_P(PasswordStoreProxyBackendTestWithErrorsForFallbacks,
-       RetriesUpdateLoginOnBuiltInBackend) {
+       UpdateLoginFallsBackOnBuiltInBackend) {
   const FallbackParam& p = GetParam();
   base::HistogramTester histogram_tester;
 
@@ -588,14 +837,12 @@ TEST_P(PasswordStoreProxyBackendTestWithErrorsForFallbacks,
 }
 
 TEST_P(PasswordStoreProxyBackendTestWithErrorsForFallbacks,
-       RetriesFillMatchingLoginsOnBuiltInBackend) {
+       FillMatchingLoginsFallsBackOnBuiltInBackend) {
   const FallbackParam& p = GetParam();
   base::HistogramTester histogram_tester;
   EnablePasswordSync();
 
   base::MockCallback<LoginsOrErrorReply> mock_reply;
-  std::vector<std::unique_ptr<PasswordForm>> expected_logins =
-      CreateTestLogins();
 
   EXPECT_CALL(android_backend(), FillMatchingLoginsAsync)
       .WillOnce(WithArg<0>(Invoke([&p](LoginsOrErrorReply reply) -> void {
@@ -607,7 +854,9 @@ TEST_P(PasswordStoreProxyBackendTestWithErrorsForFallbacks,
           std::move(reply).Run(CreateTestLogins());
         })));
     // Check that caller doesn't receive an error from android backend.
-    EXPECT_CALL(mock_reply, Run(LoginsResultsOrErrorAre(&expected_logins)));
+    EXPECT_CALL(
+        mock_reply,
+        Run(VariantWith<LoginsResult>(ElementsAreArray(CreateTestLogins()))));
   } else {
     EXPECT_CALL(built_in_backend(), FillMatchingLoginsAsync).Times(0);
     // Check that caller gets an error from android backend.
@@ -629,9 +878,73 @@ INSTANTIATE_TEST_SUITE_P(
     PasswordStoreProxyBackendBaseTest,
     PasswordStoreProxyBackendTestWithErrorsForFallbacks,
     testing::Values(
-        FallbackParam{.error = kUnrecoverableError, .should_fallback = true},
-        FallbackParam{.error = kUnspecifiedError, .should_fallback = true},
-        FallbackParam{.error = kRecoverableError, .should_fallback = false},
-        FallbackParam{.error = kRetriableError, .should_fallback = false}));
+        // Profile store, pre-split
+        FallbackParam{.error = kUnrecoverableError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = false,
+                      .should_fallback = true},
+        FallbackParam{.error = kUnspecifiedError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = false,
+                      .should_fallback = true},
+        FallbackParam{.error = kRecoverableError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = false,
+                      .should_fallback = false},
+        FallbackParam{.error = kRetriableError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = false,
+                      .should_fallback = false},
+
+        // Account store, post-split
+        FallbackParam{.error = kUnrecoverableError,
+                      .is_account_store = true,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = true},
+        FallbackParam{.error = kUnspecifiedError,
+                      .is_account_store = true,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = true},
+        FallbackParam{.error = kRecoverableError,
+                      .is_account_store = true,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = false},
+        FallbackParam{.error = kRetriableError,
+                      .is_account_store = true,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = false},
+
+        // Profile store, post-split
+        FallbackParam{.error = kUnrecoverableError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = false},
+        FallbackParam{.error = kUnspecifiedError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = false},
+        FallbackParam{.error = kRecoverableError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = false},
+        FallbackParam{.error = kRetriableError,
+                      .is_account_store = false,
+                      .is_using_split_account_local_stores = true,
+                      .should_fallback = false}),
+    [](const ::testing::TestParamInfo<FallbackParam>& info) {
+      std::string error_type = "Unspecified";
+      if (info.param.error == kUnrecoverableError) {
+        error_type = "Unrecoverable";
+      } else if (info.param.error == kRecoverableError) {
+        error_type = "Recoverable";
+      } else if (info.param.error == kRetriableError) {
+        error_type = "Retriable";
+      }
+      std::string account_or_profile_store =
+          info.param.is_account_store ? "Account" : "Profile";
+      std::string new_upm =
+          info.param.is_using_split_account_local_stores ? "NewUPM" : "OldUPM";
+      return error_type + account_or_profile_store + new_upm;
+    });
 
 }  // namespace password_manager

@@ -14,6 +14,8 @@ option optimize_for = LITE_RUNTIME;
 package user_data_auth;
 option go_package = "chromiumos/system_api/user_data_auth_proto";
 
+import "recoverable_key_store.proto";
+
 // Enum to define all the available types of AuthFactor. This would be used for
 // identification of a given AuthFactor.
 enum AuthFactorType {
@@ -86,6 +88,8 @@ message CryptohomeRecoveryAuthInput {
   string user_gaia_id = 2;
   // Unique id of the user's vault on the device.
   string device_user_id = 3;
+  // Whether the recovery id should be rotated.
+  optional bool ensure_fresh_recovery_id = 7;
 
   // These fields are used for `AuthenticateAuthFactor`:
   // Serialized cryptohome.cryptorecovery.CryptoRecoveryEpochResponse.
@@ -151,9 +155,10 @@ message AuthInput {
   }
 }
 
-// Password AuthFactor does not store any special metadata. Although this could
-// change in the future and keeping that in mind, an empty proto is defined.
-message PasswordMetadata {}
+message PasswordMetadata {
+  // The hash information used to generate the secret.
+  KnowledgeFactorHashInfo hash_info = 1;
+}
 
 message PinMetadata {
   // If true, the key is "locked" after too many unsuccessful authorization
@@ -164,6 +169,8 @@ message PinMetadata {
   // This is populated by cryptohome,  should be omitted in any Add/Update
   // request. And it will be ignored when present in any Add/Update request.
   bool auth_locked = 1;
+  // The hash information used to generate the secret.
+  KnowledgeFactorHashInfo hash_info = 2;
 }
 
 message CryptohomeRecoveryMetadata {
@@ -194,6 +201,18 @@ enum LockoutPolicy {
   // for a particular time after particular number of wrong attempts.
   // The policy specifics itself can be custom defined by an AuthFactor.
   LOCKOUT_POLICY_TIME_LIMITED = 3;
+}
+
+// The hash information of an auth factor that is used to generate the actual
+// secret. This can be used to generate the recoverable key store for the auth
+// factor.
+message KnowledgeFactorHashInfo {
+  cryptohome.KnowledgeFactorHashAlgorithm algorithm = 1;
+  bytes salt = 2;
+  // Some auth factors explicitly don't want to generate recoverable key stores
+  // even if they are knowledge factors with hash info. Use this flag to
+  // determine whether key stores should be generated using this hash info.
+  bool should_generate_key_store = 3;
 }
 
 message CommonMetadata {

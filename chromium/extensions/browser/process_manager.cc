@@ -450,7 +450,9 @@ bool ProcessManager::WakeEventPage(const std::string& extension_id,
     // The extension is already awake.
     return false;
   }
-  const LazyContextId context_id(browser_context_, extension_id);
+
+  const auto context_id =
+      LazyContextId::ForBackgroundPage(browser_context_, extension_id);
   context_id.GetTaskQueue()->AddPendingTask(
       context_id,
       base::BindOnce(&PropagateExtensionWakeResult, std::move(callback)));
@@ -869,9 +871,14 @@ void ProcessManager::DecrementServiceWorkerKeepaliveCount(
   // Example of when kWorkerNotRunning can happen is when the renderer process
   // is killed while handling a service worker request (e.g. because of a bad
   // IPC message).
+  // kNullContext can occur if the keepalive is being removed during browser
+  // context tear-down, since the ServiceWorkerContext can shut down before
+  // the ProcessManager.
   DCHECK((finish_result == content::ServiceWorkerExternalRequestResult::kOk) ||
          (finish_result ==
-          content::ServiceWorkerExternalRequestResult::kWorkerNotRunning))
+          content::ServiceWorkerExternalRequestResult::kWorkerNotRunning) ||
+         (finish_result ==
+          content::ServiceWorkerExternalRequestResult::kNullContext))
       << "; result = " << static_cast<int>(finish_result);
 }
 

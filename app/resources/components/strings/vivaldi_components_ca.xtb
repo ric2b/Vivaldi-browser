@@ -20,8 +20,9 @@
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          i assegur't que la configuració estigui definida com a "sense servidor intermediari" o com a "directa".</translation>
+          i assegura't que la configuració estigui definida com a "sense servidor intermediari" o com a "directa".</translation>
 <translation id="5248344925342018662">Estàs consultant una pàgina segura de Vivaldi</translation>
+<translation id="6690242244468452299">Aquesta pàgina mostra informació sobre errors recents si actives el registre d'errors.</translation>
 <translation id="7023871570427738255">Ves al
         menú de Vivaldi &gt;
         <ph name="SETTINGS_TITLE" />

@@ -99,10 +99,14 @@ static INLINE void free_cdef_row_sync(AV1CdefRowSync **cdef_row_mt,
   if (*cdef_row_mt == NULL) return;
 #if CONFIG_MULTITHREAD
   for (int row_idx = 0; row_idx < num_mi_rows; row_idx++) {
-    pthread_mutex_destroy((*cdef_row_mt)[row_idx].row_mutex_);
-    pthread_cond_destroy((*cdef_row_mt)[row_idx].row_cond_);
-    aom_free((*cdef_row_mt)[row_idx].row_mutex_);
-    aom_free((*cdef_row_mt)[row_idx].row_cond_);
+    if ((*cdef_row_mt)[row_idx].row_mutex_ != NULL) {
+      pthread_mutex_destroy((*cdef_row_mt)[row_idx].row_mutex_);
+      aom_free((*cdef_row_mt)[row_idx].row_mutex_);
+    }
+    if ((*cdef_row_mt)[row_idx].row_cond_ != NULL) {
+      pthread_cond_destroy((*cdef_row_mt)[row_idx].row_cond_);
+      aom_free((*cdef_row_mt)[row_idx].row_cond_);
+    }
   }
 #else
   (void)num_mi_rows;
@@ -167,7 +171,7 @@ static INLINE void alloc_cdef_row_sync(AV1_COMMON *const cm,
   if (*cdef_row_mt != NULL) return;
 
   CHECK_MEM_ERROR(cm, *cdef_row_mt,
-                  aom_malloc(sizeof(**cdef_row_mt) * num_mi_rows));
+                  aom_calloc(num_mi_rows, sizeof(**cdef_row_mt)));
 #if CONFIG_MULTITHREAD
   for (int row_idx = 0; row_idx < num_mi_rows; row_idx++) {
     CHECK_MEM_ERROR(cm, (*cdef_row_mt)[row_idx].row_mutex_,
@@ -177,8 +181,6 @@ static INLINE void alloc_cdef_row_sync(AV1_COMMON *const cm,
     CHECK_MEM_ERROR(cm, (*cdef_row_mt)[row_idx].row_cond_,
                     aom_malloc(sizeof(*(*cdef_row_mt)[row_idx].row_cond_)));
     pthread_cond_init((*cdef_row_mt)[row_idx].row_cond_, NULL);
-
-    (*cdef_row_mt)[row_idx].is_row_done = 0;
   }
 #endif  // CONFIG_MULTITHREAD
 }
@@ -288,11 +290,9 @@ void av1_alloc_cdef_buffers(AV1_COMMON *const cm,
                       cdef_info->allocated_mi_rows);
 }
 
-// Assumes cm->rst_info[p].restoration_unit_size is already initialized
+// Allocate buffers which are independent of restoration_unit_size
 void av1_alloc_restoration_buffers(AV1_COMMON *cm, bool is_sgr_enabled) {
   const int num_planes = av1_num_planes(cm);
-  for (int p = 0; p < num_planes; ++p)
-    av1_alloc_restoration_struct(cm, &cm->rst_info[p], p > 0);
 
   if (cm->rst_tmpbuf == NULL && is_sgr_enabled) {
     CHECK_MEM_ERROR(cm, cm->rst_tmpbuf,
@@ -468,11 +468,11 @@ static int alloc_mi(CommonModeInfoParams *mi_params) {
     mi_params->mi_grid_base = (MB_MODE_INFO **)aom_calloc(
         mi_grid_size, sizeof(*mi_params->mi_grid_base));
     if (!mi_params->mi_grid_base) return 1;
-    mi_params->mi_grid_size = mi_grid_size;
 
     mi_params->tx_type_map =
         aom_calloc(mi_grid_size, sizeof(*mi_params->tx_type_map));
     if (!mi_params->tx_type_map) return 1;
+    mi_params->mi_grid_size = mi_grid_size;
   }
 
   return 0;

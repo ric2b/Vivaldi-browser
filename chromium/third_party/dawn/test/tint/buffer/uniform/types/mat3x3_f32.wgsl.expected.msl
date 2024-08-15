@@ -20,15 +20,19 @@ struct tint_packed_vec3_f32_array_element {
 };
 
 float3x3 tint_unpack_vec3_in_composite(tint_array<tint_packed_vec3_f32_array_element, 3> in) {
-  float3x3 result = float3x3(0.0f);
-  for(uint i = 0u; (i < 3u); i = (i + 1u)) {
-    result[i] = float3(in[i].elements);
-  }
+  float3x3 result = float3x3(float3(in[0].elements), float3(in[1].elements), float3(in[2].elements));
   return result;
 }
 
-kernel void tint_symbol(const constant tint_array<tint_packed_vec3_f32_array_element, 3>* tint_symbol_1 [[buffer(0)]]) {
+void assign_and_preserve_padding(device tint_array<tint_packed_vec3_f32_array_element, 3>* const dest, float3x3 value) {
+  (*(dest))[0u].elements = packed_float3(value[0u]);
+  (*(dest))[1u].elements = packed_float3(value[1u]);
+  (*(dest))[2u].elements = packed_float3(value[2u]);
+}
+
+kernel void tint_symbol(const constant tint_array<tint_packed_vec3_f32_array_element, 3>* tint_symbol_1 [[buffer(0)]], device tint_array<tint_packed_vec3_f32_array_element, 3>* tint_symbol_2 [[buffer(1)]]) {
   float3x3 const x = tint_unpack_vec3_in_composite(*(tint_symbol_1));
+  assign_and_preserve_padding(tint_symbol_2, x);
   return;
 }
 

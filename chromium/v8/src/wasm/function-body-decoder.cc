@@ -199,7 +199,7 @@ bool PrintRawWasmCode(AccountingAllocator* allocator, const FunctionBody& body,
     }
     if (line_numbers) line_numbers->push_back(i.position());
     if (opcode == kExprElse || opcode == kExprCatch ||
-        opcode == kExprCatchAll) {
+        opcode == kExprCatchAll || opcode == kExprDelegate) {
       control_depth--;
     }
 
@@ -266,6 +266,15 @@ bool PrintRawWasmCode(AccountingAllocator* allocator, const FunctionBody& body,
         for (uint32_t j = 0; j < imm.out_arity(); j++) {
           os << " " << imm.out_type(j).name();
         }
+        control_depth++;
+        break;
+      }
+      case kExprTryTable: {
+        BlockTypeImmediate block_imm(WasmFeatures::All(), &i, i.pc() + 1,
+                                     Decoder::kNoValidation);
+        TryTableImmediate imm(&i, i.pc() + block_imm.length + 1,
+                              Decoder::kNoValidation);
+        os << " entries=" << imm.table_count;
         control_depth++;
         break;
       }

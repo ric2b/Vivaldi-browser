@@ -151,6 +151,12 @@ inline sk_sp<ManagedBackendTexture> ManagedBackendTexture::MakeWithoutData(
  */
 class ManagedGraphiteTexture : public SkNVRefCnt<ManagedGraphiteTexture> {
 public:
+    static sk_sp<ManagedGraphiteTexture> MakeUnInit(Recorder*,
+                                                    const SkImageInfo&,
+                                                    skgpu::Mipmapped,
+                                                    skgpu::Renderable,
+                                                    skgpu::Protected = skgpu::Protected::kNo);
+
     static sk_sp<ManagedGraphiteTexture> MakeFromPixmap(Recorder*,
                                                         const SkPixmap&,
                                                         skgpu::Mipmapped,
@@ -159,6 +165,7 @@ public:
 
     /** finished and image/surface release procs */
     static void FinishedProc(void* context, skgpu::CallbackResult);
+    static void ReleaseProc(void* context);
     static void ImageReleaseProc(void* context);
 
     ~ManagedGraphiteTexture();

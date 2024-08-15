@@ -25,6 +25,8 @@ namespace sk_gpu_test { class FlushFinishTracker; }
 
 namespace skiatest::graphite {
 
+struct TestOptions;
+
 /**
  * An offscreen 3D context. This class is intended for Skia's internal testing needs and not
  * for general use.
@@ -40,8 +42,7 @@ public:
 
     virtual skgpu::ContextType contextType() = 0;
 
-    virtual std::unique_ptr<skgpu::graphite::Context> makeContext(
-            const skgpu::graphite::ContextOptions&) = 0;
+    virtual std::unique_ptr<skgpu::graphite::Context> makeContext(const TestOptions&) = 0;
 
     bool getMaxGpuFrameLag(int *maxFrameLag) const {
         *maxFrameLag = kMaxFrameLag;
@@ -55,6 +56,18 @@ public:
      * wait on the CPU until one has finished.
      */
     void submitRecordingAndWaitOnSync(skgpu::graphite::Context*, skgpu::graphite::Recording*);
+
+    /**
+     * Allow the GPU API to make or detect forward progress on submitted work. For most APIs this is
+     * a no-op as the API can do this on another thread.
+     */
+    virtual void tick() {}
+
+    /**
+     * If the context supports CPU/GPU sync'ing this calls submit with skgpu::SyncToCpu::kYes.
+     * Otherwise it calls it with kNo in a busy loop.
+     */
+    void syncedSubmit(skgpu::graphite::Context*);
 
 protected:
     static constexpr int kMaxFrameLag = 3;

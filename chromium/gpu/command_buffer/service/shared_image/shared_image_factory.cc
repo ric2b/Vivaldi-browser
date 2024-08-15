@@ -31,6 +31,7 @@
 #include "gpu/command_buffer/service/shared_image/wrapped_sk_image_backing_factory.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_shared_memory.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -283,10 +284,10 @@ SharedImageFactory::SharedImageFactory(
         shared_context_state_.get()));
   }
   if (D3DImageBackingFactory::IsD3DSharedImageSupported(gpu_preferences)) {
-    // TODO(sunnyps): Should we get the device from SharedContextState instead?
     auto d3d_factory = std::make_unique<D3DImageBackingFactory>(
         shared_context_state_->GetD3D11Device(),
-        shared_image_manager_->dxgi_shared_handle_manager());
+        shared_image_manager_->dxgi_shared_handle_manager(),
+        shared_context_state_->GetGLFormatCaps());
     d3d_backing_factory_ = d3d_factory.get();
     factories_.push_back(std::move(d3d_factory));
   }
@@ -444,11 +445,11 @@ bool SharedImageFactory::IsNativeBufferSupported(gfx::BufferFormat format,
   if (!supported_gmb_configurations_inited_) {
     supported_gmb_configurations_inited_ = true;
     if (WillGetGmbConfigFromGpu()) {
-#if defined(USE_OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_OZONE_X11)
       for (const auto& config : gpu_extra_info_.gpu_memory_buffer_support_x11) {
         supported_gmb_configurations_.emplace(config);
       }
-#endif
+#endif  // BUILDFLAG(IS_OZONE_X11)
     } else {
       supported_gmb_configurations_ =
           gpu::GpuMemoryBufferSupport::GetNativeGpuMemoryBufferConfigurations();
@@ -770,10 +771,23 @@ bool SharedImageFactory::DestroySharedImage(const Mailbox& mailbox) {
   return true;
 }
 
+bool SharedImageFactory::SetSharedImagePurgeable(const Mailbox& mailbox,
+                                                 bool purgeable) {
+  auto it = shared_images_.find(mailbox);
+  if (it == shared_images_.end()) {
+    LOG(ERROR)
+        << "SetSharedImagePurgeable: Could not find shared image mailbox";
+    return false;
+  }
+  (*it)->SetPurgeable(purgeable);
+  return true;
+}
+
 void SharedImageFactory::DestroyAllSharedImages(bool have_context) {
   if (!have_context) {
-    for (auto& shared_image : shared_images_)
+    for (auto& shared_image : shared_images_) {
       shared_image->OnContextLost();
+    }
   }
   shared_images_.clear();
 }
@@ -787,8 +801,9 @@ bool SharedImageFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
                                          GrSurfaceOrigin surface_origin,
                                          SkAlphaType alpha_type,
                                          uint32_t usage) {
-  if (!D3DImageBackingFactory::IsSwapChainSupported())
+  if (!D3DImageBackingFactory::IsSwapChainSupported(gpu_preferences_)) {
     return false;
+  }
 
   auto backings = d3d_backing_factory_->CreateSwapChain(
       front_buffer_mailbox, back_buffer_mailbox, format, size, color_space,
@@ -798,8 +813,9 @@ bool SharedImageFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
 }
 
 bool SharedImageFactory::PresentSwapChain(const Mailbox& mailbox) {
-  if (!D3DImageBackingFactory::IsSwapChainSupported())
+  if (!D3DImageBackingFactory::IsSwapChainSupported(gpu_preferences_)) {
     return false;
+  }
   auto it = shared_images_.find(mailbox);
   if (it == shared_images_.end()) {
     DLOG(ERROR) << "PresentSwapChain: Could not find shared image mailbox";
@@ -875,16 +891,22 @@ gpu::SharedImageCapabilities SharedImageFactory::MakeCapabilities() {
       is_angle_metal || is_skia_graphite;
   shared_image_caps.disable_r8_shared_images =
       workarounds_.r8_egl_images_broken;
+  shared_image_caps.disable_webgpu_shared_images =
+      workarounds_.disable_webgpu_shared_images;
 
 #if BUILDFLAG(IS_WIN)
   shared_image_caps.shared_image_d3d =
       D3DImageBackingFactory::IsD3DSharedImageSupported(gpu_preferences_);
   shared_image_caps.shared_image_swap_chain =
       shared_image_caps.shared_image_d3d &&
-      D3DImageBackingFactory::IsSwapChainSupported();
+      D3DImageBackingFactory::IsSwapChainSupported(gpu_preferences_);
 #endif  // BUILDFLAG(IS_WIN)
 
   return shared_image_caps;
+}
+
+bool SharedImageFactory::HasSharedImage(const Mailbox& mailbox) const {
+  return shared_images_.contains(mailbox);
 }
 
 void SharedImageFactory::SetGpuExtraInfo(
@@ -1037,9 +1059,10 @@ SharedImageRepresentationFactory::ProduceDawn(
     const Mailbox& mailbox,
     const wgpu::Device& device,
     wgpu::BackendType backend_type,
-    std::vector<wgpu::TextureFormat> view_formats) {
+    std::vector<wgpu::TextureFormat> view_formats,
+    scoped_refptr<SharedContextState> context_state) {
   return manager_->ProduceDawn(mailbox, tracker_.get(), device, backend_type,
-                               std::move(view_formats));
+                               std::move(view_formats), context_state);
 }
 
 std::unique_ptr<OverlayImageRepresentation>

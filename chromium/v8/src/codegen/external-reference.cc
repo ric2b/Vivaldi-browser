@@ -470,6 +470,10 @@ FUNCTION_REFERENCE(wasm_switch_to_the_central_stack,
                    wasm::switch_to_the_central_stack)
 FUNCTION_REFERENCE(wasm_switch_from_the_central_stack,
                    wasm::switch_from_the_central_stack)
+FUNCTION_REFERENCE(wasm_switch_to_the_central_stack_for_js,
+                   wasm::switch_to_the_central_stack_for_js)
+FUNCTION_REFERENCE(wasm_switch_from_the_central_stack_for_js,
+                   wasm::switch_from_the_central_stack_for_js)
 FUNCTION_REFERENCE(wasm_f32_trunc, wasm::f32_trunc_wrapper)
 FUNCTION_REFERENCE(wasm_f32_floor, wasm::f32_floor_wrapper)
 FUNCTION_REFERENCE(wasm_f32_ceil, wasm::f32_ceil_wrapper)
@@ -498,10 +502,10 @@ FUNCTION_REFERENCE(wasm_int64_div, wasm::int64_div_wrapper)
 FUNCTION_REFERENCE(wasm_int64_mod, wasm::int64_mod_wrapper)
 FUNCTION_REFERENCE(wasm_uint64_div, wasm::uint64_div_wrapper)
 FUNCTION_REFERENCE(wasm_uint64_mod, wasm::uint64_mod_wrapper)
-FUNCTION_REFERENCE(wasm_word32_ctz, wasm::word32_ctz_wrapper)
-FUNCTION_REFERENCE(wasm_word64_ctz, wasm::word64_ctz_wrapper)
-FUNCTION_REFERENCE(wasm_word32_popcnt, wasm::word32_popcnt_wrapper)
-FUNCTION_REFERENCE(wasm_word64_popcnt, wasm::word64_popcnt_wrapper)
+FUNCTION_REFERENCE(wasm_word32_ctz, base::bits::CountTrailingZeros<uint32_t>)
+FUNCTION_REFERENCE(wasm_word64_ctz, base::bits::CountTrailingZeros<uint64_t>)
+FUNCTION_REFERENCE(wasm_word32_popcnt, base::bits::CountPopulation<uint32_t>)
+FUNCTION_REFERENCE(wasm_word64_popcnt, base::bits::CountPopulation<uint64_t>)
 FUNCTION_REFERENCE(wasm_word32_rol, wasm::word32_rol_wrapper)
 FUNCTION_REFERENCE(wasm_word32_ror, wasm::word32_ror_wrapper)
 FUNCTION_REFERENCE(wasm_word64_rol, wasm::word64_rol_wrapper)
@@ -642,9 +646,8 @@ ExternalReference ExternalReference::handle_scope_limit_address(
   return ExternalReference(HandleScope::current_limit_address(isolate));
 }
 
-ExternalReference ExternalReference::scheduled_exception_address(
-    Isolate* isolate) {
-  return ExternalReference(isolate->scheduled_exception_address());
+ExternalReference ExternalReference::exception_address(Isolate* isolate) {
+  return ExternalReference(isolate->exception_address());
 }
 
 ExternalReference ExternalReference::address_of_pending_message(
@@ -1110,26 +1113,22 @@ void StringWriteToFlatTwoByte(Address source, uint16_t* sink, int32_t start,
 }
 
 const uint8_t* ExternalOneByteStringGetChars(Address string) {
-  PtrComprCageBase cage_base = GetPtrComprCageBaseFromOnHeapAddress(string);
   // The following CHECK is a workaround to prevent a CFI bug where
   // ExternalOneByteStringGetChars() and ExternalTwoByteStringGetChars() are
   // merged by the linker, resulting in one of the input type's vtable address
   // failing the address range check.
   // TODO(chromium:1160961): Consider removing the CHECK when CFI is fixed.
-  CHECK(IsExternalOneByteString(Tagged<Object>(string), cage_base));
-  return ExternalOneByteString::cast(Tagged<Object>(string))
-      ->GetChars(cage_base);
+  CHECK(IsExternalOneByteString(Tagged<Object>(string)));
+  return ExternalOneByteString::cast(Tagged<Object>(string))->GetChars();
 }
 const uint16_t* ExternalTwoByteStringGetChars(Address string) {
-  PtrComprCageBase cage_base = GetPtrComprCageBaseFromOnHeapAddress(string);
   // The following CHECK is a workaround to prevent a CFI bug where
   // ExternalOneByteStringGetChars() and ExternalTwoByteStringGetChars() are
   // merged by the linker, resulting in one of the input type's vtable address
   // failing the address range check.
   // TODO(chromium:1160961): Consider removing the CHECK when CFI is fixed.
-  CHECK(IsExternalTwoByteString(Tagged<Object>(string), cage_base));
-  return ExternalTwoByteString::cast(Tagged<Object>(string))
-      ->GetChars(cage_base);
+  CHECK(IsExternalTwoByteString(Tagged<Object>(string)));
+  return ExternalTwoByteString::cast(Tagged<Object>(string))->GetChars();
 }
 
 }  // namespace
@@ -1439,6 +1438,12 @@ ExternalReference ExternalReference::api_callback_thunk_argument_address(
     Isolate* isolate) {
   return ExternalReference(
       isolate->isolate_data()->api_callback_thunk_argument_address());
+}
+
+ExternalReference ExternalReference::continuation_preserved_embedder_data(
+    Isolate* isolate) {
+  return ExternalReference(
+      isolate->continuation_preserved_embedder_data_address());
 }
 
 ExternalReference ExternalReference::stack_is_iterable_address(

@@ -11,123 +11,14 @@ vector e3*e1- (e3* dot(e2,e1) + sqrt(k)) *e2.
 `;
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
-import { ROArrayArray } from '../../../../../../common/util/types.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { toVector, TypeF32, TypeF16, TypeVec } from '../../../../../util/conversion.js';
-import { FP, FPKind } from '../../../../../util/floating_point.js';
-import {
-  sparseVectorF32Range,
-  sparseVectorF16Range,
-  sparseF32Range,
-  sparseF16Range,
-} from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
-import { allInputSources, Case, IntervalFilter, run } from '../../expression.js';
+import { TypeF16, TypeF32, TypeVec } from '../../../../../util/conversion.js';
+import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
+import { d } from './refract.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-// Using a bespoke implementation of make*Case and generate*Cases here
-// since refract is the only builtin with the API signature
-// (vec, vec, scalar) -> vec
-
-/**
- * @returns a Case for `refract`
- * @param kind what type of floating point numbers to operate on
- * @param i the `i` param for the case
- * @param s the `s` param for the case
- * @param r the `r` param for the case
- * @param check what interval checking to apply
- * */
-function makeCase(
-  kind: FPKind,
-  i: readonly number[],
-  s: readonly number[],
-  r: number,
-  check: IntervalFilter
-): Case | undefined {
-  const fp = FP[kind];
-  i = i.map(fp.quantize);
-  s = s.map(fp.quantize);
-  r = fp.quantize(r);
-
-  const vectors = fp.refractInterval(i, s, r);
-  if (check === 'finite' && vectors.some(e => !e.isFinite())) {
-    return undefined;
-  }
-
-  return {
-    input: [toVector(i, fp.scalarBuilder), toVector(s, fp.scalarBuilder), fp.scalarBuilder(r)],
-    expected: fp.refractInterval(i, s, r),
-  };
-}
-
-/**
- * @returns an array of Cases for `refract`
- * @param kind what type of floating point numbers to operate on
- * @param param_is array of inputs to try for the `i` param
- * @param param_ss array of inputs to try for the `s` param
- * @param param_rs array of inputs to try for the `r` param
- * @param check what interval checking to apply
- */
-function generateCases(
-  kind: FPKind,
-  param_is: ROArrayArray<number>,
-  param_ss: ROArrayArray<number>,
-  param_rs: readonly number[],
-  check: IntervalFilter
-): Case[] {
-  // Cannot use `cartesianProduct` here due to heterogeneous param types
-  return param_is
-    .flatMap(i => {
-      return param_ss.flatMap(s => {
-        return param_rs.map(r => {
-          return makeCase(kind, i, s, r, check);
-        });
-      });
-    })
-    .filter((c): c is Case => c !== undefined);
-}
-
-// Cases: f32_vecN_[non_]const
-const f32_vec_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f32_vec${n}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return generateCases(
-          'f32',
-          sparseVectorF32Range(n),
-          sparseVectorF32Range(n),
-          sparseF32Range(),
-          nonConst ? 'unfiltered' : 'finite'
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-// Cases: f16_vecN_[non_]const
-const f16_vec_cases = ([2, 3, 4] as const)
-  .flatMap(n =>
-    ([true, false] as const).map(nonConst => ({
-      [`f16_vec${n}_${nonConst ? 'non_const' : 'const'}`]: () => {
-        return generateCases(
-          'f16',
-          sparseVectorF16Range(n),
-          sparseVectorF16Range(n),
-          sparseF16Range(),
-          nonConst ? 'unfiltered' : 'finite'
-        );
-      },
-    }))
-  )
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('refract', {
-  ...f32_vec_cases,
-  ...f16_vec_cases,
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

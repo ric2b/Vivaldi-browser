@@ -967,12 +967,10 @@ HttpHandler::HttpHandler(
                      WrapToCommand("SelectAccount",
                                    base::BindRepeating(&ExecuteSelectAccount))),
 
-      // This command is prefixed because standardization is still pending:
-      // https://github.com/fedidcg/FedCM/pull/436/files
-      VendorPrefixedCommandMapping(
-          kPost, "session/:sessionId/%s/fedcm/confirmidplogin",
-          WrapToCommand("ConfirmIdpLogin",
-                        base::BindRepeating(&ExecuteConfirmIdpLogin))),
+      CommandMapping(
+          kPost, "session/:sessionId/fedcm/clickdialogbutton",
+          WrapToCommand("ClickDialogButton",
+                        base::BindRepeating(&ExecuteClickDialogButton))),
 
       CommandMapping(kGet, "session/:sessionId/fedcm/accountlist",
                      WrapToCommand("GetAccounts",
@@ -1260,7 +1258,7 @@ void HttpHandler::HandleCommand(
   }
 
   if (request.data.length()) {
-    absl::optional<base::Value> parsed_body =
+    std::optional<base::Value> parsed_body =
         base::JSONReader::Read(request.data);
     base::Value::Dict* body_params =
         parsed_body ? parsed_body->GetIfDict() : nullptr;
@@ -1669,7 +1667,7 @@ void HttpHandler::OnWebSocketUnboundConnectionRequest(
 
 void HttpHandler::SendResponseOverWebSocket(HttpServerInterface* http_server,
                                             int connection_id,
-                                            absl::optional<double> maybe_id,
+                                            std::optional<double> maybe_id,
                                             const Status& status,
                                             std::unique_ptr<base::Value> result,
                                             const std::string& session_id,
@@ -1730,7 +1728,7 @@ void HttpHandler::OnNewSessionCreated(const CommandCallback& next_callback,
 void HttpHandler::OnNewBidiSessionOnCmdThread(
     HttpServerInterface* http_server,
     int connection_id,
-    absl::optional<double> maybe_id,
+    std::optional<double> maybe_id,
     const Status& status,
     std::unique_ptr<base::Value> result,
     const std::string& session_id,
@@ -1784,7 +1782,7 @@ void HttpHandler::OnWebSocketMessage(HttpServerInterface* http_server,
                               nullptr, "", true);
     return;
   }
-  absl::optional<double> maybe_id = parsed.FindDouble("id");
+  std::optional<double> maybe_id = parsed.FindDouble("id");
   std::string* method = parsed.FindString("method");
 
   // Invalid session id must be handled first and it has been.
@@ -1882,9 +1880,36 @@ void HttpHandler::OnClose(HttpServerInterface* http_server, int connection_id) {
     return;
   }
   std::string session_id = it->second;
-  std::vector<int>& bucket = session_connection_map_[session_id];
+  auto ses_it = session_connection_map_.find(session_id);
+  // This situation can never happen: the session related entry is removed from
+  // the session_connection_map_ only after all connections have been closed
+  // either by the client or by the session thread.
+  // Therefore if the session related entry is missing in the
+  // session_connection_map_ the corresponding connection entry must miss in the
+  // connection_session_map_. This situation is handled above.
+  // We leave this check just to be on the safe side.
+  if (ses_it == session_connection_map_.end()) {
+    VLOG(logging::LOGGING_WARNING)
+        << "Session related entry is missing in session_connection_map_.";
+    return;
+  }
+  std::vector<int>& bucket = ses_it->second;
   auto bucket_it = base::ranges::find(bucket, connection_id);
-  DCHECK(bucket_it != bucket.end());
+  // The case when it can happen:
+  // The session thread has sent a response (e.g. Quit command) to the client.
+  // After that the session thread preempted before closing all connections.
+  // The client has handled the response and closed all connections.
+  // The command thread has handled the connection close requests initiated by
+  // the client. Therefore the connection is no longer in the bucket.
+  // The session thread wakes up and posts a request to close all connections.
+  // The request arrives to the CMD thread but some or all connections don't
+  // exist any longer.
+  // TODO (crbug.com/chromedriver/4597): Fix this by callback chaining.
+  // The reproducer is testConnectionIsClosedIfSessionIsDestroyed that flakes
+  // from time to time.
+  if (bucket_it == bucket.end()) {
+    return;
+  }
   bucket.erase(bucket_it);
   connection_session_map_.erase(it);
 
@@ -1963,7 +1988,7 @@ bool internal::IsNewSession(const CommandMapping& command) {
 Status internal::ParseBidiCommand(const std::string& data,
                                   base::Value::Dict& parsed) {
   Status status{kOk};
-  absl::optional<base::Value> maybe_bidi_command = base::JSONReader::Read(data);
+  std::optional<base::Value> maybe_bidi_command = base::JSONReader::Read(data);
   if (!maybe_bidi_command.has_value()) {
     return Status{kInvalidArgument, "unable to parse BiDi command: " + data};
   }
@@ -1972,7 +1997,7 @@ Status internal::ParseBidiCommand(const std::string& data,
                   "a JSON dictionary is expected as a BiDi command: " + data);
   }
   parsed = std::move(maybe_bidi_command->GetDict());
-  absl::optional<double> maybe_id = parsed.FindDouble("id");
+  std::optional<double> maybe_id = parsed.FindDouble("id");
   if (!maybe_id) {
     return Status(kInvalidArgument,
                   "BiDi command has no id of type integer: " + data);
@@ -1992,7 +2017,7 @@ Status internal::ParseBidiCommand(const std::string& data,
 
 base::Value::Dict internal::CreateBidiErrorResponse(
     Status status,
-    absl::optional<double> maybe_id) {
+    std::optional<double> maybe_id) {
   base::Value::Dict ret;
   // Error is generated by ChromeDriver
   ret.Set("type", "error");

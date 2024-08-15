@@ -10,7 +10,7 @@
 #include "SwapChainProcessor.h"
 #include "public/properties.h"
 
-#include <algorithm>
+#include <memory>
 
 #pragma region EventDeclaration
 
@@ -41,10 +41,7 @@ struct IndirectDeviceContextWrapper {
 struct IndirectMonitorContextWrapper {
   display::test::IndirectMonitorContext* pContext;
 
-  void Cleanup() {
-    delete pContext;
-    pContext = nullptr;
-  }
+  void Cleanup() { pContext = nullptr; }
 };
 
 #pragma endregion
@@ -147,48 +144,6 @@ EvtWdfDriverDeviceAdd(WDFDRIVER Driver, PWDFDEVICE_INIT pDeviceInit) {
   // Create a new device context object and attach it to the WDF device object
   auto* pContext = WdfObjectGet_IndirectDeviceContextWrapper(Device);
   pContext->pContext = new display::test::IndirectDeviceContext(Device);
-
-  // Read the properties structure sent from the client code that created
-  // the software device.
-  WDF_DEVICE_PROPERTY_DATA propertyRead;
-  WDF_DEVICE_PROPERTY_DATA_INIT(&propertyRead, &DisplayConfigurationProperty);
-  propertyRead.Lcid = LOCALE_NEUTRAL;
-  propertyRead.Flags = PLUGPLAY_PROPERTY_PERSISTENT;
-  DriverProperties driver_properties;
-  ULONG requiredSize = 0;
-  DEVPROPTYPE propType;
-  Status =
-      WdfDeviceQueryPropertyEx(Device, &propertyRead, sizeof(DriverProperties),
-                               &driver_properties, &requiredSize, &propType);
-  if (!NT_SUCCESS(Status)) {
-    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
-                "WdfDeviceQueryPropertyEx failed: %!STATUS!", Status);
-    return Status;
-  }
-
-  TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "num_displays: %d",
-              driver_properties.monitor_count);
-
-  for (int i = 0; i < driver_properties.monitor_count; i++) {
-    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "Checking for display #%d", i);
-    display::test::IndirectMonitor indirect_monitor;
-    auto mode = driver_properties.requested_modes[i];
-    display::test::Edid edid(indirect_monitor.pEdidBlock.data());
-    bool success =
-        edid.GetTimingEntry(0)->SetMode(mode.width, mode.height, mode.vSync);
-    if (!success) {
-      TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "SetMode() unsuccessful");
-    }
-    edid.UpdateChecksum();
-    indirect_monitor.pEdidBlock = edid.getEdidBlock();
-    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
-                "Width (Modified EDID,Chosen Mode) (Inside "
-                "EvtWdfDriverDeviceAdd): %ld, %hu",
-                edid.GetTimingEntry(0)->GetWidth(), mode.width);
-    indirect_monitor.pModeList.push_back(mode);
-    pContext->pContext->monitors.push_back(indirect_monitor);
-  }
-
   return Status;
 }
 
@@ -215,7 +170,13 @@ IndirectDeviceContext::IndirectDeviceContext(_In_ WDFDEVICE WdfDevice)
   m_Adapter = {};
 }
 
-IndirectDeviceContext::~IndirectDeviceContext() {}
+IndirectDeviceContext::~IndirectDeviceContext() {
+  if (m_hThread.Get()) {
+    TerminateThread(m_hThread.Get(), 0);
+    // Wait for the thread to terminate
+    WaitForSingleObject(m_hThread.Get(), INFINITE);
+  }
+}
 
 void IndirectDeviceContext::InitAdapter() {
   // ==============================
@@ -278,7 +239,111 @@ void IndirectDeviceContext::InitAdapter() {
   }
 }
 
-void IndirectDeviceContext::FinishInit(UINT ConnectorIndex) {
+void IndirectDeviceContext::FinishInit() {
+  SyncRequestedConfig();
+  m_hThread.Attach(CreateThread(nullptr, 0, RunThread, this, 0, nullptr));
+}
+
+void IndirectDeviceContext::SyncRequestedConfig() {
+  // Read the properties structure sent from the client code that created
+  // the software device.
+  WDF_DEVICE_PROPERTY_DATA propertyRead;
+  WDF_DEVICE_PROPERTY_DATA_INIT(&propertyRead, &DisplayConfigurationProperty);
+  propertyRead.Lcid = LOCALE_NEUTRAL;
+  propertyRead.Flags = PLUGPLAY_PROPERTY_PERSISTENT;
+  DriverProperties driver_properties;
+  ULONG requiredSize = 0;
+  DEVPROPTYPE propType;
+  NTSTATUS Status = WdfDeviceQueryPropertyEx(
+      m_WdfDevice, &propertyRead, sizeof(DriverProperties), &driver_properties,
+      &requiredSize, &propType);
+  if (!NT_SUCCESS(Status)) {
+    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                "WdfDeviceQueryPropertyEx failed: %!STATUS!", Status);
+    return;
+  }
+  const std::vector<MonitorConfig>& requested_configs =
+      driver_properties.requested_configs();
+  std::vector<IndirectMonitor> requested_monitors;
+  for (const auto& config : requested_configs) {
+    IndirectMonitor indirect_monitor;
+
+    Edid edid(indirect_monitor.pEdidBlock.data());
+    bool success = edid.GetTimingEntry(0)->SetMode(
+        config.width(), config.height(), config.v_sync());
+    edid.SetProductCode(config.product_code());
+    edid.SetSerialNumber(config.product_code());
+    if (!success) {
+      TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "SetMode() unsuccessful");
+    }
+    edid.UpdateChecksum();
+    indirect_monitor.pEdidBlock = edid.getEdidBlock();
+    indirect_monitor.pConfigList.push_back(config);
+    indirect_monitor.id = config.product_code();
+    requested_monitors.push_back(indirect_monitor);
+  }
+
+  // Attach monitors that were added but not attached yet.
+  for (const auto& indirect_monitor : requested_monitors) {
+    auto it = std::find_if(
+        monitors.begin(), monitors.end(),
+        [&indirect_monitor](const std::unique_ptr<IndirectMonitorContext>& m) {
+          return m && m->monitor_config().id == indirect_monitor.id;
+        });
+    if (it == monitors.end()) {
+      TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                  "New monitor config detected. Attaching monitor. %u",
+                  indirect_monitor.id);
+      Status = AddMonitor(indirect_monitor);
+      if (!NT_SUCCESS(Status)) {
+        TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                    "AttachMonitor failed: %!STATUS!", Status);
+      }
+    }
+  }
+
+  // Detach monitors that are no longer in the requested config.
+  for (auto& monitor : monitors) {
+    if (monitor &&
+        std::find_if(requested_monitors.begin(), requested_monitors.end(),
+                     [&monitor](const IndirectMonitor& m) {
+                       return m.id == monitor->monitor_config().id;
+                     }) == requested_monitors.end()) {
+      TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                  "Monitor removed from config. Detaching. %u. %ix%i",
+                  monitor->monitor_config().id,
+                  monitor->monitor_config().pConfigList[0].width(),
+                  monitor->monitor_config().pConfigList[0].height());
+      Status = monitor->Detach();
+      if (!NT_SUCCESS(Status)) {
+        TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                    "Monitor detach failed: %!STATUS!", Status);
+      }
+      monitor.reset();
+    }
+  }
+}
+
+DWORD CALLBACK IndirectDeviceContext::RunThread(LPVOID Argument) {
+  IndirectDeviceContext* context =
+      reinterpret_cast<IndirectDeviceContext*>(Argument);
+  // Continually poll for changes to the requested monitor config.
+  while (true) {
+    context->SyncRequestedConfig();
+    Sleep(200);
+  }
+}
+
+NTSTATUS IndirectDeviceContext::AddMonitor(IndirectMonitor monitor) {
+  NTSTATUS Status = STATUS_SUCCESS;
+  auto it = std::find(monitors.begin(), monitors.end(), nullptr);
+  if (it == monitors.end()) {
+    TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "All connectors are in use.");
+    return STATUS_INVALID_PARAMETER;
+  }
+  size_t connector_index = it - monitors.begin();
+  TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "Connector index: %llu",
+              connector_index);
   // ==============================
   // TODO: In a real driver, the EDID should be retrieved dynamically from a
   // connected physical monitor. The EDIDs provided here are purely for
@@ -297,37 +362,12 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex) {
   IDDCX_MONITOR_INFO MonitorInfo = {};
   MonitorInfo.Size = sizeof(MonitorInfo);
   MonitorInfo.MonitorType = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_HDMI;
-  MonitorInfo.ConnectorIndex = ConnectorIndex;
+  MonitorInfo.ConnectorIndex = static_cast<UINT>(connector_index);
 
   MonitorInfo.MonitorDescription.Size = sizeof(MonitorInfo.MonitorDescription);
   MonitorInfo.MonitorDescription.Type = IDDCX_MONITOR_DESCRIPTION_TYPE_EDID;
-  if (ConnectorIndex >= monitors.size()) {
-    MonitorInfo.MonitorDescription.DataSize = 0;
-    MonitorInfo.MonitorDescription.pData = nullptr;
-  } else {
-    MonitorInfo.MonitorDescription.DataSize = Edid::kBlockSize;
-    MonitorInfo.MonitorDescription.pData =
-        (monitors[ConnectorIndex].pEdidBlock.data());
-  }
-
-  TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "ConnectorIndex: %d",
-              ConnectorIndex);
-
-  display::test::Edid edid1(monitors[ConnectorIndex].pEdidBlock.data());
-  TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
-              "Width (Modified EDID) (Inside FinishInit): %ld",
-              edid1.GetTimingEntry(0)->GetWidth());
-
-  // ==============================
-  // TODO: The monitor's container ID should be distinct from "this" device's
-  // container ID if the monitor is not permanently attached to the display
-  // adapter device object. The container ID is typically made unique for each
-  // monitor and can be used to associate the monitor with other devices, like
-  // audio or input devices. In this case we generate a random container ID
-  // GUID, but it's best practice to choose a stable container ID for a unique
-  // monitor or to use "this" device's container ID for a permanent/integrated
-  // monitor.
-  // ==============================
+  MonitorInfo.MonitorDescription.DataSize = Edid::kBlockSize;
+  MonitorInfo.MonitorDescription.pData = monitor.pEdidBlock.data();
 
   // Create a container ID
   CoCreateGuid(&MonitorInfo.MonitorContainerId);
@@ -338,29 +378,25 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex) {
 
   // Create a monitor object with the specified monitor descriptor
   IDARG_OUT_MONITORCREATE MonitorCreateOut;
-  NTSTATUS Status =
-      IddCxMonitorCreate(m_Adapter, &MonitorCreate, &MonitorCreateOut);
+  Status = IddCxMonitorCreate(m_Adapter, &MonitorCreate, &MonitorCreateOut);
   if (NT_SUCCESS(Status)) {
     // Create a new monitor context object and attach it to the Idd monitor
     // object
     auto* pMonitorContextWrapper = WdfObjectGet_IndirectMonitorContextWrapper(
         MonitorCreateOut.MonitorObject);
-    pMonitorContextWrapper->pContext =
-        new IndirectMonitorContext(MonitorCreateOut.MonitorObject);
-
-    if (ConnectorIndex < monitors.size()) {
-      pMonitorContextWrapper->pContext->default_mode_list =
-          monitors[ConnectorIndex].pModeList;
-    }
-
+    auto monitor_ctx = std::make_unique<IndirectMonitorContext>(
+        MonitorCreateOut.MonitorObject, monitor);
+    pMonitorContextWrapper->pContext = monitor_ctx.get();
     // Tell the OS that the monitor has been plugged in
-    IDARG_OUT_MONITORARRIVAL ArrivalOut;
-    Status = IddCxMonitorArrival(MonitorCreateOut.MonitorObject, &ArrivalOut);
+    Status = monitor_ctx->Attach();
+    monitors[connector_index] = std::move(monitor_ctx);
   }
+  return Status;
 }
 
-IndirectMonitorContext::IndirectMonitorContext(_In_ IDDCX_MONITOR Monitor)
-    : m_Monitor(Monitor) {}
+IndirectMonitorContext::IndirectMonitorContext(_In_ IDDCX_MONITOR Monitor,
+                                               IndirectMonitor config)
+    : m_Monitor(Monitor), monitor_config_(std::move(config)) {}
 
 IndirectMonitorContext::~IndirectMonitorContext() {
   m_ProcessingThread.reset();
@@ -387,6 +423,15 @@ void IndirectMonitorContext::UnassignSwapChain() {
   // Stop processing the last swap-chain
   m_ProcessingThread.reset();
 }
+
+NTSTATUS IndirectMonitorContext::Attach() {
+  IDARG_OUT_MONITORARRIVAL ArrivalOut;
+  return IddCxMonitorArrival(m_Monitor, &ArrivalOut);
+}
+
+NTSTATUS IndirectMonitorContext::Detach() {
+  return IddCxMonitorDeparture(m_Monitor);
+}
 }  // namespace display::test
 
 #pragma endregion
@@ -402,10 +447,7 @@ EvtIddCxAdapterInitFinished(IDDCX_ADAPTER AdapterObject,
   auto* pDeviceContextWrapper =
       WdfObjectGet_IndirectDeviceContextWrapper(AdapterObject);
   if (NT_SUCCESS(pInArgs->AdapterInitStatus)) {
-    for (DWORD i = 0; i < pDeviceContextWrapper->pContext->monitors.size();
-         i++) {
-      pDeviceContextWrapper->pContext->FinishInit(i);
-    }
+    pDeviceContextWrapper->pContext->FinishInit();
   }
 
   return STATUS_SUCCESS;
@@ -460,31 +502,13 @@ EvtIddCxParseMonitorDescription(const IDARG_IN_PARSEMONITORDESCRIPTION* pInArgs,
     display::test::Edid edid(
         reinterpret_cast<unsigned char*>(pInArgs->MonitorDescription.pData));
 
-    // TODO: Return STATUS_INVALID_PARAMETER for monitors not belonging to this
-    // driver.
-    bool success = false;
-    for (size_t i = 0; i < DriverProperties::kSupportedModesCount; i++) {
-      if (edid.GetTimingEntry(0)->GetWidth() ==
-              DriverProperties::kSupportedModes[i].width &&
-          edid.GetTimingEntry(0)->GetHeight() ==
-              DriverProperties::kSupportedModes[i].height &&
-          edid.GetTimingEntry(0)->GetVerticalFrequency() ==
-              DriverProperties::kSupportedModes[i].vSync) {
-        success = true;
-        break;
-      }
-    }
-    if (!success) {
-      return STATUS_INVALID_PARAMETER;
-    }
-
     TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
                 "Making the displays requested: %ld, %ld, %ld",
                 edid.GetTimingEntry(0)->GetWidth(),
                 edid.GetTimingEntry(0)->GetHeight(),
                 edid.GetTimingEntry(0)->GetVerticalFrequency());
 
-    pInArgs->pMonitorModes[0] = display::test::Methods::CreateIddCxMonitorMode(
+    pInArgs->pMonitorModes[0] = display::test::CreateIddCxMonitorMode(
         edid.GetTimingEntry(0)->GetWidth(), edid.GetTimingEntry(0)->GetHeight(),
         edid.GetTimingEntry(0)->GetVerticalFrequency(),
         IDDCX_MONITOR_MODE_ORIGIN_MONITORDESCRIPTOR);
@@ -510,30 +534,23 @@ _Use_decl_annotations_ NTSTATUS EvtIddCxMonitorGetDefaultModes(
 
   auto* pMonitorContextWrapper =
       WdfObjectGet_IndirectMonitorContextWrapper(MonitorObject);
-
-  if (pInArgs->DefaultMonitorModeBufferInputCount == 0) {
-    pOutArgs->DefaultMonitorModeBufferOutputCount = static_cast<UINT>(
-        pMonitorContextWrapper->pContext->default_mode_list.size());
-  } else {
-    for (DWORD ModeIndex = 0;
-         ModeIndex < pMonitorContextWrapper->pContext->default_mode_list.size();
-         ModeIndex++) {
-      TraceEvents(
-          TRACE_LEVEL_ERROR, TRACE_DRIVER,
-          "Making the default modes: %hu, %hu, %hu",
-          pMonitorContextWrapper->pContext->default_mode_list[ModeIndex].width,
-          pMonitorContextWrapper->pContext->default_mode_list[ModeIndex].height,
-          pMonitorContextWrapper->pContext->default_mode_list[ModeIndex].vSync);
-      pInArgs->pDefaultMonitorModes
-          [ModeIndex] = display::test::Methods::CreateIddCxMonitorMode(
-          pMonitorContextWrapper->pContext->default_mode_list[ModeIndex].width,
-          pMonitorContextWrapper->pContext->default_mode_list[ModeIndex].height,
-          pMonitorContextWrapper->pContext->default_mode_list[ModeIndex].vSync,
+  auto& monitor_config_list =
+      pMonitorContextWrapper->pContext->monitor_config().pConfigList;
+  pOutArgs->DefaultMonitorModeBufferOutputCount =
+      static_cast<UINT>(monitor_config_list.size());
+  if (pInArgs->DefaultMonitorModeBufferInputCount != 0) {
+    for (DWORD i = 0;
+         i < std::min(pInArgs->DefaultMonitorModeBufferInputCount,
+                      pOutArgs->DefaultMonitorModeBufferOutputCount);
+         i++) {
+      const display::test::MonitorConfig config = monitor_config_list[i];
+      TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER,
+                  "Making the default modes: %hu, %hu, %hu", config.width(),
+                  config.height(), config.v_sync());
+      pInArgs->pDefaultMonitorModes[i] = display::test::CreateIddCxMonitorMode(
+          config.width(), config.height(), config.v_sync(),
           IDDCX_MONITOR_MODE_ORIGIN_DRIVER);
     }
-
-    pOutArgs->DefaultMonitorModeBufferOutputCount = static_cast<UINT>(
-        pMonitorContextWrapper->pContext->default_mode_list.size());
     pOutArgs->PreferredMonitorModeIdx = 0;
   }
 
@@ -555,26 +572,13 @@ EvtIddCxMonitorQueryModes(IDDCX_MONITOR MonitorObject,
 
   TraceEvents(TRACE_LEVEL_ERROR, TRACE_DRIVER, "MonitorQueryModes");
 
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(3840, 2160, 60));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(2560, 1440, 144));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(2560, 1440, 90));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(2560, 1440, 60));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(1920, 1080, 144));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(1920, 1080, 90));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(1920, 1080, 60));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(1600, 900, 60));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(1024, 768, 75));
-  TargetModes.push_back(
-      display::test::Methods::CreateIddCxTargetMode(1024, 768, 60));
+  auto* pMonitorContextWrapper =
+      WdfObjectGet_IndirectMonitorContextWrapper(MonitorObject);
+  for (auto mode :
+       pMonitorContextWrapper->pContext->monitor_config().pConfigList) {
+    TargetModes.push_back(display::test::CreateIddCxTargetMode(
+        mode.width(), mode.height(), mode.v_sync()));
+  }
 
   pOutArgs->TargetModeBufferOutputCount = static_cast<UINT>(TargetModes.size());
 

@@ -18,6 +18,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.permission.AwPermissionRequest;
@@ -30,9 +32,10 @@ import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.util.TestWebServer;
 
 /** Test AwPermissionManager. */
-@RunWith(AwJUnit4ClassRunner.class)
-public class AwPermissionManagerTest {
-    @Rule public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
+public class AwPermissionManagerTest extends AwParameterizedTest {
+    @Rule public AwActivityTestRule mActivityTestRule;
 
     private static final String REQUEST_DUPLICATE =
             "<html> <script>"
@@ -61,6 +64,10 @@ public class AwPermissionManagerTest {
     private TestWebServer mTestWebServer;
     private String mPage;
     private TestAwContentsClient mContentsClient;
+
+    public AwPermissionManagerTest(AwSettingsMutation param) {
+        this.mActivityTestRule = new AwActivityTestRule(param.getMutation());
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -153,6 +160,93 @@ public class AwPermissionManagerTest {
                         awContents.getWebContents(), ENUMERATE_DEVICES_JS);
 
         assertDeviceLabels(devices, true);
+    }
+
+    @Test
+    @Feature({"AndroidWebView"})
+    @SmallTest
+    @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
+    public void testEnumerateDevicesWithAllowFileAccessFromFileURLsFalse() throws Throwable {
+        AwContents awContents = setUpEnumerateDevicesTest(null);
+        awContents.getSettings().setAllowFileAccessFromFileURLs(false);
+        mActivityTestRule.loadDataWithBaseUrlSync(
+                awContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                EMPTY_PAGE,
+                "text/html",
+                true,
+                "file:///foo.html",
+                "");
+        JavaScriptUtils.runJavascriptWithUserGestureAndAsyncResult(
+                awContents.getWebContents(), GUM_JS);
+
+        String devices =
+                JavaScriptUtils.runJavascriptWithUserGestureAndAsyncResult(
+                        awContents.getWebContents(), ENUMERATE_DEVICES_JS);
+
+        assertDeviceLabels(devices, true);
+    }
+
+    @Test
+    @Feature({"AndroidWebView"})
+    @SmallTest
+    @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
+    public void testEnumerateDevicesWithAllowFileAccessFromFileURLsTrue() throws Throwable {
+        AwContents awContents = setUpEnumerateDevicesTest(null);
+        awContents.getSettings().setAllowFileAccessFromFileURLs(true);
+        mActivityTestRule.loadDataWithBaseUrlSync(
+                awContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                EMPTY_PAGE,
+                "text/html",
+                true,
+                "file:///foo.html",
+                "");
+        JavaScriptUtils.runJavascriptWithUserGestureAndAsyncResult(
+                awContents.getWebContents(), GUM_JS);
+
+        String devices =
+                JavaScriptUtils.runJavascriptWithUserGestureAndAsyncResult(
+                        awContents.getWebContents(), ENUMERATE_DEVICES_JS);
+
+        assertDeviceLabels(devices, false);
+    }
+
+    // Test that a successful getUserMedia grants enumerateDevices permission for
+    // all file:/// URLs when AllowFileAccessFromFileURLs is enabled.
+    @Test
+    @Feature({"AndroidWebView"})
+    @SmallTest
+    @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
+    public void testPermissionIsCachedAfterFileNavigation() throws Throwable {
+        AwContents awContents = setUpEnumerateDevicesTest(null);
+        awContents.getSettings().setAllowFileAccessFromFileURLs(true);
+        mActivityTestRule.loadDataWithBaseUrlSync(
+                awContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                EMPTY_PAGE,
+                "text/html",
+                true,
+                "file:///foo.html",
+                "");
+        JavaScriptUtils.runJavascriptWithUserGestureAndAsyncResult(
+                awContents.getWebContents(), GUM_JS);
+
+        // Navigate to a different file URL.
+        mActivityTestRule.loadDataWithBaseUrlSync(
+                awContents,
+                mContentsClient.getOnPageFinishedHelper(),
+                EMPTY_PAGE,
+                "text/html",
+                true,
+                "file:///bar.html",
+                "");
+
+        String devices =
+                JavaScriptUtils.runJavascriptWithUserGestureAndAsyncResult(
+                        awContents.getWebContents(), ENUMERATE_DEVICES_JS);
+
+        assertDeviceLabels(devices, false);
     }
 
     @Test

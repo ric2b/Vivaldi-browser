@@ -37,14 +37,12 @@ BitstreamBufferMetadata::BitstreamBufferMetadata(size_t payload_size_bytes,
     : payload_size_bytes(payload_size_bytes),
       key_frame(key_frame),
       timestamp(timestamp) {}
-BitstreamBufferMetadata::~BitstreamBufferMetadata() = default;
 
-bool BitstreamBufferMetadata::end_of_picture() const {
-  if (vp9) {
-    return vp9->end_of_picture;
-  }
-  return true;
+bool BitstreamBufferMetadata::dropped_frame() const {
+  return payload_size_bytes == 0;
 }
+
+BitstreamBufferMetadata::~BitstreamBufferMetadata() = default;
 
 absl::optional<uint8_t> BitstreamBufferMetadata::spatial_idx() const {
   if (vp9) {
@@ -54,39 +52,21 @@ absl::optional<uint8_t> BitstreamBufferMetadata::spatial_idx() const {
 }
 
 VideoEncodeAccelerator::Config::Config()
-    : input_format(PIXEL_FORMAT_UNKNOWN),
-      output_profile(VIDEO_CODEC_PROFILE_UNKNOWN),
-      bitrate(Bitrate::ConstantBitrate(0u)),
-      content_type(ContentType::kCamera) {}
+    : Config(PIXEL_FORMAT_UNKNOWN,
+             gfx::Size(),
+             VIDEO_CODEC_PROFILE_UNKNOWN,
+             Bitrate::ConstantBitrate(0u)) {}
 
 VideoEncodeAccelerator::Config::Config(const Config& config) = default;
 
-VideoEncodeAccelerator::Config::Config(
-    VideoPixelFormat input_format,
-    const gfx::Size& input_visible_size,
-    VideoCodecProfile output_profile,
-    const Bitrate& bitrate,
-    absl::optional<uint32_t> initial_framerate,
-    absl::optional<uint32_t> gop_length,
-    absl::optional<uint8_t> h264_output_level,
-    bool is_constrained_h264,
-    absl::optional<StorageType> storage_type,
-    ContentType content_type,
-    const std::vector<SpatialLayer>& spatial_layers,
-    SVCInterLayerPredMode inter_layer_pred)
+VideoEncodeAccelerator::Config::Config(VideoPixelFormat input_format,
+                                       const gfx::Size& input_visible_size,
+                                       VideoCodecProfile output_profile,
+                                       const Bitrate& bitrate)
     : input_format(input_format),
       input_visible_size(input_visible_size),
       output_profile(output_profile),
-      bitrate(bitrate),
-      initial_framerate(initial_framerate.value_or(
-          VideoEncodeAccelerator::kDefaultFramerate)),
-      gop_length(gop_length),
-      h264_output_level(h264_output_level),
-      is_constrained_h264(is_constrained_h264),
-      storage_type(storage_type),
-      content_type(content_type),
-      spatial_layers(spatial_layers),
-      inter_layer_pred(inter_layer_pred) {}
+      bitrate(bitrate) {}
 
 VideoEncodeAccelerator::Config::~Config() = default;
 
@@ -232,9 +212,11 @@ bool VideoEncodeAccelerator::IsGpuFrameResizeSupported() {
 
 void VideoEncodeAccelerator::RequestEncodingParametersChange(
     const VideoBitrateAllocation& bitrate_allocation,
-    uint32_t framerate) {
+    uint32_t framerate,
+    const absl::optional<gfx::Size>& size) {
   RequestEncodingParametersChange(
-      Bitrate::ConstantBitrate(bitrate_allocation.GetSumBps()), framerate);
+      Bitrate::ConstantBitrate(bitrate_allocation.GetSumBps()), framerate,
+      size);
 }
 
 bool operator==(const VideoEncodeAccelerator::SupportedProfile& l,
@@ -267,7 +249,6 @@ bool operator==(const Vp9Metadata& l, const Vp9Metadata& r) {
          l.referenced_by_upper_spatial_layers ==
              r.referenced_by_upper_spatial_layers &&
          l.reference_lower_spatial_layers == r.reference_lower_spatial_layers &&
-         l.end_of_picture == r.end_of_picture &&
          l.temporal_idx == r.temporal_idx && l.spatial_idx == r.spatial_idx &&
          l.spatial_layer_resolutions == r.spatial_layer_resolutions &&
          l.p_diffs == r.p_diffs;
@@ -281,8 +262,9 @@ bool operator==(const BitstreamBufferMetadata& l,
                 const BitstreamBufferMetadata& r) {
   return l.payload_size_bytes == r.payload_size_bytes &&
          l.key_frame == r.key_frame && l.timestamp == r.timestamp &&
-         l.vp8 == r.vp8 && l.vp9 == r.vp9 && l.h264 == r.h264 &&
-         l.av1 == r.av1 && l.h265 == r.h265;
+         l.end_of_picture == r.end_of_picture && l.vp8 == r.vp8 &&
+         l.vp9 == r.vp9 && l.h264 == r.h264 && l.av1 == r.av1 &&
+         l.h265 == r.h265;
 }
 
 bool operator==(const VideoEncodeAccelerator::Config::SpatialLayer& l,

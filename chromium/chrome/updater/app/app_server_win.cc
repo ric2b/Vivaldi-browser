@@ -8,6 +8,7 @@
 #include <wrl/module.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -24,7 +25,6 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
-#include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/types/expected_macros.h"
@@ -46,7 +46,6 @@
 #include "chrome/updater/win/setup/uninstall.h"
 #include "chrome/updater/win/task_scheduler.h"
 #include "chrome/updater/win/win_constants.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 namespace {
@@ -128,7 +127,7 @@ bool SwapGoogleUpdate(UpdaterScope scope,
                       WorkItemList* list) {
   CHECK(list);
 
-  const absl::optional<base::FilePath> target_path =
+  const std::optional<base::FilePath> target_path =
       GetGoogleUpdateExePath(scope);
   if (!target_path || !base::CreateDirectory(target_path->DirName())) {
     return false;
@@ -155,7 +154,7 @@ bool SwapGoogleUpdate(UpdaterScope scope,
       base::ASCIIToWide(PRODUCT_FULLNAME_STRING), true);
   list->AddSetRegValueWorkItem(
       root, UPDATER_KEY, KEY_WOW64_32KEY, kRegValueUninstallCmdLine,
-      [scope, &updater_path]() {
+      [scope, &updater_path] {
         base::CommandLine uninstall_if_unused_command(updater_path);
         uninstall_if_unused_command.AppendSwitch(kWakeSwitch);
         if (IsSystemInstall(scope)) {
@@ -215,18 +214,6 @@ bool UninstallGoogleUpdate(UpdaterScope scope) {
   return DeleteExcept(GetGoogleUpdateExePath(scope));
 }
 
-absl::optional<int> DaynumFromDWORD(DWORD value) {
-  const int daynum = static_cast<int>(value);
-
-  // When daynum is positive, it is the number of days since January 1, 2007.
-  // It's reasonable to only accept value between 3000 (maps to Mar 20, 2015)
-  // and 50000 (maps to Nov 24, 2143).
-  // -1 is special value for first install.
-  return daynum == -1 || (daynum >= 3000 && daynum <= 50000)
-             ? absl::make_optional(daynum)
-             : absl::nullopt;
-}
-
 }  // namespace
 
 HRESULT IsCOMCallerAllowed() {
@@ -278,26 +265,7 @@ void AppServerWin::PostRpcTaskOnMainSequence(base::OnceClosure task) {
   main_task_runner_->PostTask(FROM_HERE, std::move(task));
 }
 
-bool AppServerWin::RestoreComInterfaces(bool is_internal) {
-  if (AreComInterfacesPresent(updater_scope(), is_internal)) {
-    return true;
-  }
-
-  // Skip `DUMP_WILL_BE_CHECK` when running
-  // `IntegrationTest.UpdateAppSucceedsEvenAfterDeletingInterfaces`.
-  if (!base::win::RegKey(HKEY_LOCAL_MACHINE, UPDATER_DEV_KEY, KEY_READ)
-           .HasValue(kRegValueIntegrationTestMode)) {
-    DUMP_WILL_BE_CHECK(false);
-  }
-  return InstallComInterfaces(updater_scope(), is_internal);
-}
-
 HRESULT AppServerWin::RegisterClassObjects() {
-  // TODO(crbug.com/1484803): maybe remove once the E_NOINTERFACE issue is
-  // fixed.
-  const bool succeeded = RestoreComInterfaces(false);
-  LOG_IF(ERROR, !succeeded);
-
   // Register COM class objects that are under either the ActiveSystem or the
   // ActiveUser group.
   // See wrl_classes.cc for details on the COM classes within the group.
@@ -306,11 +274,6 @@ HRESULT AppServerWin::RegisterClassObjects() {
 }
 
 HRESULT AppServerWin::RegisterInternalClassObjects() {
-  // TODO(crbug.com/1484803): maybe remove once the E_NOINTERFACE issue is
-  // fixed.
-  const bool succeeded = RestoreComInterfaces(true);
-  LOG_IF(ERROR, !succeeded);
-
   // Register COM class objects that are under either the InternalSystem or the
   // InternalUser group.
   // See wrl_classes.cc for details on the COM classes within the group.
@@ -323,12 +286,6 @@ void AppServerWin::UnregisterClassObjects() {
       Microsoft::WRL::Module<Microsoft::WRL::OutOfProc>::GetModule()
           .UnregisterObjects();
   LOG_IF(ERROR, FAILED(hr)) << "UnregisterObjects failed; hr: " << hr;
-
-  // TODO(crbug.com/1484803): maybe remove once the E_NOINTERFACE issue is
-  // fixed.
-  const bool succeeded =
-      RestoreComInterfaces(update_service_internal_ != nullptr);
-  LOG_IF(ERROR, !succeeded);
 }
 
 void AppServerWin::CreateWRLModule() {
@@ -390,7 +347,7 @@ void AppServerWin::UninstallSelf() {
 bool AppServerWin::SwapInNewVersion() {
   std::unique_ptr<WorkItemList> list(WorkItem::CreateWorkItemList());
 
-  const absl::optional<base::FilePath> versioned_directory =
+  const std::optional<base::FilePath> versioned_directory =
       GetVersionedInstallDirectory(updater_scope());
   if (!versioned_directory) {
     return false;
@@ -403,7 +360,7 @@ bool AppServerWin::SwapInNewVersion() {
     return false;
   }
 
-  absl::optional<base::ScopedTempDir> temp_dir = CreateSecureTempDir();
+  std::optional<base::ScopedTempDir> temp_dir = CreateSecureTempDir();
   if (!temp_dir) {
     return false;
   }
@@ -422,7 +379,7 @@ bool AppServerWin::SwapInNewVersion() {
   const base::ScopedClosureRunner reset_shutdown_event(
       SignalShutdownEvent(updater_scope()));
 
-  absl::optional<base::FilePath> target =
+  std::optional<base::FilePath> target =
       GetGoogleUpdateExePath(updater_scope());
   if (target) {
     StopProcessesUnderPath(target->DirName(), base::Seconds(45));
@@ -445,92 +402,11 @@ bool AppServerWin::SwapInNewVersion() {
   return true;
 }
 
-bool AppServerWin::MigrateLegacyUpdaters(
-    base::RepeatingCallback<void(const RegistrationRequest&)>
-        register_callback) {
-  const HKEY root = UpdaterScopeToHKeyRoot(updater_scope());
-  for (base::win::RegistryKeyIterator it(root, CLIENTS_KEY, KEY_WOW64_32KEY);
-       it.Valid(); ++it) {
-    const std::wstring app_id = it.Name();
-
-    // Skip importing legacy updater.
-    if (base::EqualsCaseInsensitiveASCII(app_id, kLegacyGoogleUpdateAppID)) {
-      continue;
-    }
-
-    base::win::RegKey key;
-    if (key.Open(root, GetAppClientsKey(app_id).c_str(), Wow6432(KEY_READ)) !=
-        ERROR_SUCCESS) {
-      continue;
-    }
-
-    RegistrationRequest registration;
-    registration.app_id = base::SysWideToUTF8(app_id);
-    std::wstring pv;
-    if (key.ReadValue(kRegValuePV, &pv) != ERROR_SUCCESS) {
-      continue;
-    }
-
-    registration.version = base::Version(base::SysWideToUTF8(pv));
-    if (!registration.version.IsValid()) {
-      continue;
-    }
-
-    base::win::RegKey client_state_key;
-    if (client_state_key.Open(root, GetAppClientStateKey(app_id).c_str(),
-                              Wow6432(KEY_READ)) == ERROR_SUCCESS) {
-      std::wstring brand_code;
-      if (client_state_key.ReadValue(kRegValueBrandCode, &brand_code) ==
-          ERROR_SUCCESS) {
-        registration.brand_code = base::SysWideToUTF8(brand_code);
-      }
-
-      std::wstring ap;
-      if (client_state_key.ReadValue(kRegValueAP, &ap) == ERROR_SUCCESS) {
-        registration.ap = base::SysWideToUTF8(ap);
-      }
-
-      DWORD date_last_activity = 0;
-      if (client_state_key.ReadValueDW(kRegValueDateOfLastActivity,
-                                       &date_last_activity) == ERROR_SUCCESS) {
-        registration.dla = DaynumFromDWORD(date_last_activity);
-      }
-
-      DWORD date_last_rollcall = 0;
-      if (client_state_key.ReadValueDW(kRegValueDateOfLastRollcall,
-                                       &date_last_rollcall) == ERROR_SUCCESS) {
-        registration.dlrc = DaynumFromDWORD(date_last_rollcall);
-      }
-
-      base::win::RegKey cohort_key;
-      if (cohort_key.Open(root, GetAppCohortKey(app_id).c_str(),
-                          Wow6432(KEY_READ)) == ERROR_SUCCESS) {
-        std::wstring cohort;
-        if (cohort_key.ReadValue(nullptr, &cohort) == ERROR_SUCCESS) {
-          registration.cohort = base::SysWideToUTF8(cohort);
-
-          std::wstring cohort_name;
-          if (cohort_key.ReadValue(kRegValueCohortName, &cohort_name) ==
-              ERROR_SUCCESS) {
-            registration.cohort_name = base::SysWideToUTF8(cohort_name);
-          }
-
-          std::wstring cohort_hint;
-          if (cohort_key.ReadValue(kRegValueCohortHint, &cohort_hint) ==
-              ERROR_SUCCESS) {
-            registration.cohort_hint = base::SysWideToUTF8(cohort_hint);
-          }
-          VLOG(2) << "Cohort values: " << registration.cohort << ", "
-                  << registration.cohort_name << ", "
-                  << registration.cohort_hint;
-        }
-      }
-    }
-
-    register_callback.Run(registration);
+void AppServerWin::RepairUpdater(UpdaterScope scope, bool is_internal) {
+  if (AreComInterfacesPresent(scope, is_internal)) {
+    return;
   }
-
-  return true;
+  InstallComInterfaces(scope, is_internal);
 }
 
 }  // namespace updater

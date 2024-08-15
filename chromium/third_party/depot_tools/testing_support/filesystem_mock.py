@@ -16,10 +16,10 @@ def _RaiseNotFound(path):
 class MockFileSystem(object):
     """Stripped-down version of WebKit's webkitpy.common.system.filesystem_mock
 
-  Implements a filesystem-like interface on top of a dict of filenames ->
-  file contents. A file content value of None indicates that the file should
-  not exist (IOError will be raised if it is opened;
-  reading from a missing key raises a KeyError, not an IOError."""
+    Implements a filesystem-like interface on top of a dict of filenames ->
+    file contents. A file content value of None indicates that the file should
+    not exist (IOError will be raised if it is opened;
+    reading from a missing key raises a KeyError, not an IOError."""
     def __init__(self, files=None):
         self.files = files or {}
         self.written_files = {}

@@ -135,14 +135,16 @@ TEST_F(QuicLinuxSocketUtilsTest, QuicMsgHdr) {
   QuicSocketAddress peer_addr(QuicIpAddress::Loopback4(), 1234);
   char packet_buf[1024];
 
-  QuicMsgHdr quic_hdr(packet_buf, sizeof(packet_buf), peer_addr, nullptr, 0);
-  CheckMsghdrWithoutCbuf(quic_hdr.hdr(), packet_buf, sizeof(packet_buf),
-                         peer_addr);
+  {
+    QuicMsgHdr quic_hdr(packet_buf, sizeof(packet_buf), peer_addr, nullptr, 0);
+    CheckMsghdrWithoutCbuf(quic_hdr.hdr(), packet_buf, sizeof(packet_buf),
+                           peer_addr);
+  }
 
   for (bool is_ipv4 : {true, false}) {
     QuicIpAddress self_addr =
         is_ipv4 ? QuicIpAddress::Loopback4() : QuicIpAddress::Loopback6();
-    char cbuf[kCmsgSpaceForIp + kCmsgSpaceForTTL];
+    alignas(cmsghdr) char cbuf[kCmsgSpaceForIp + kCmsgSpaceForTTL];
     QuicMsgHdr quic_hdr(packet_buf, sizeof(packet_buf), peer_addr, cbuf,
                         sizeof(cbuf));
     msghdr* hdr = const_cast<msghdr*>(quic_hdr.hdr());

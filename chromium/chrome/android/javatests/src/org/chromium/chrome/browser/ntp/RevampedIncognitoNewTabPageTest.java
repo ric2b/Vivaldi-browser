@@ -28,6 +28,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -36,7 +38,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.content_settings.PrefNames;
 import org.chromium.components.prefs.PrefService;
@@ -47,6 +48,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(Batch.PER_CLASS)
 @EnableFeatures({ChromeFeatureList.INCOGNITO_NTP_REVAMP})
+@DisableFeatures({ChromeFeatureList.TRACKING_PROTECTION_3PCD})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class RevampedIncognitoNewTabPageTest {
     @ClassRule
@@ -83,9 +85,7 @@ public class RevampedIncognitoNewTabPageTest {
                 });
     }
 
-    /**
-     * Test cookie controls toggle defaults to on if cookie controls mode is on.
-     */
+    /** Test cookie controls toggle defaults to on if cookie controls mode is on. */
     @Test
     @SmallTest
     public void testCookieControlsToggleStartsOn() throws Exception {

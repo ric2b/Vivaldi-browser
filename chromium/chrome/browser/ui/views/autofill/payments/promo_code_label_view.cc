@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/autofill/payments/promo_code_label_view.h"
 
+#include <utility>
+
 #include "base/strings/strcat.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -51,7 +53,7 @@ PromoCodeLabelView::PromoCodeLabelView(
                                             kPromoCodeLabelRightMarginPx));
 
   copy_button_ = AddChildView(std::make_unique<views::MdTextButton>(
-      copy_button_pressed_callback,
+      std::move(copy_button_pressed_callback),
       l10n_util::GetStringUTF16(IDS_DISCOUNT_CODE_COPY_BUTTON_TEXT)));
   copy_button_->SetImageModel(
       views::Button::STATE_NORMAL,
@@ -88,7 +90,7 @@ const std::u16string& PromoCodeLabelView::GetPromoCodeLabelTextForTesting()
   return promo_code_label_->GetText();
 }
 
-BEGIN_METADATA(PromoCodeLabelView, views::FlexLayoutView)
+BEGIN_METADATA(PromoCodeLabelView)
 END_METADATA
 
 }  // namespace autofill

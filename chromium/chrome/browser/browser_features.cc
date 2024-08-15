@@ -52,11 +52,34 @@ BASE_FEATURE(kDevToolsVeLogging,
              "DevToolsVeLogging",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Let the DevTools front-end query an AIDA endpoint for explanations and
+// insights regarding console (error) messages.
+BASE_FEATURE(kDevToolsConsoleInsights,
+             "DevToolsConsoleInsights",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<std::string> kDevToolsConsoleInsightsAidaScope{
+    &kDevToolsConsoleInsights, "aida_scope", /*default*/ ""};
+const base::FeatureParam<std::string> kDevToolsConsoleInsightsAidaEndpoint{
+    &kDevToolsConsoleInsights, "aida_endpoint", /*default*/ ""};
+const base::FeatureParam<std::string> kDevToolsConsoleInsightsApiKey{
+    &kDevToolsConsoleInsights, "aida_api_key", /*default*/ ""};
+const base::FeatureParam<double> kDevToolsConsoleInsightsTemperature{
+    &kDevToolsConsoleInsights, "aida_temperature", /*default*/ 0.2};
+
 // Nukes profile directory before creating a new profile using
 // ProfileManager::CreateMultiProfileAsync().
 BASE_FEATURE(kNukeProfileBeforeCreateMultiAsync,
              "NukeProfileBeforeCreateMultiAsync",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_CHROMEOS)
+// Enables AES keys support in the chrome.enterprise.platformKeys and
+// chrome.platformKeys APIs. The new operations include `sign`, `encrypt` and
+// `decrypt`. For additional details, see the proposal tracked in b/288880151.
+BASE_FEATURE(kPlatformKeysAesEncryption,
+             "PlatformKeysAesEncryption",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Enables executing the browser commands sent by the NTP promos.
 BASE_FEATURE(kPromoBrowserCommands,
@@ -87,12 +110,6 @@ BASE_FEATURE(kDoubleTapToZoomInTabletMode,
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
-// Adds an item to the context menu that copies a link to the page with the
-// selected text highlighted.
-BASE_FEATURE(kCopyLinkToText,
-             "CopyLinkToText",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Adds a "Snooze" action to mute notifications during screen sharing sessions.
 BASE_FEATURE(kMuteNotificationSnoozeAction,
              "MuteNotificationSnoozeAction",
@@ -208,6 +225,13 @@ BASE_FEATURE(kLockProfileCookieDatabase,
              "LockProfileCookieDatabase",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Don't try to clear downlevel OS appcompat layers out of Chrome's
+// AppCompatFlags\Layers value in the Windows registry on process startup in
+// child processes; see https://crbug.com/1482568.
+BASE_FEATURE(kNoAppCompatClearInChildren,
+             "NoAppCompatClearInChildren",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Don't call the Win32 API PrefetchVirtualMemory when loading chrome.dll inside
 // non-browser processes. This is done by passing flags to these processes. This
 // prevents pulling the entirety of chrome.dll into physical memory (albeit only
@@ -217,7 +241,21 @@ BASE_FEATURE(kLockProfileCookieDatabase,
 BASE_FEATURE(kNoPreReadMainDll,
              "NoPreReadMainDll",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
+
+// When this feature is enabled, the network service will be passed an
+// OSCryptAsync crypto cookie delegate meaning that OSCryptAsync will be used
+// for cookie encryption.
+BASE_FEATURE(kUseOsCryptAsyncForCookieEncryption,
+             "UseOsCryptAsyncForCookieEncryption",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When this feature is enabled, the DPAPI encryption provider will be
+// registered and enabled for encryption/decryption. This provider is
+// forwards/backwards compatible with OSCrypt sync.
+BASE_FEATURE(kEnableDPAPIEncryptionProvider,
+             "EnableDPAPIEncryptionProvider",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_WIN)
 
 // Enables showing the email of the flex org admin that setup CBCM in the
 // management disclosures.
@@ -254,7 +292,7 @@ BASE_FEATURE(kOmniboxTriggerForPrerender2,
 // Enables bookmark trigger prerendering.
 BASE_FEATURE(kBookmarkTriggerForPrerender2,
              "BookmarkTriggerForPrerender2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables New Tab Page trigger prerendering.
 BASE_FEATURE(kNewTabPageTriggerForPrerender2,
@@ -263,7 +301,12 @@ BASE_FEATURE(kNewTabPageTriggerForPrerender2,
 
 BASE_FEATURE(kSupportSearchSuggestionForPrerender2,
              "SupportSearchSuggestionForPrerender2",
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS) || \
+    BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 const base::FeatureParam<SearchPreloadShareableCacheType>::Option
     search_preload_shareable_cache_types[] = {
@@ -291,11 +334,5 @@ BASE_FEATURE(kAutocompleteActionPredictorConfidenceCutoff,
 BASE_FEATURE(kOmniboxTriggerForNoStatePrefetch,
              "OmniboxTriggerForNoStatePrefetch",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-BASE_FEATURE(kPayloadTestComponent,
-             "PayloadTestComponent",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
 
 }  // namespace features

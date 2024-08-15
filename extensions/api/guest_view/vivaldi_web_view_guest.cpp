@@ -53,17 +53,21 @@
 #include "content/public/common/origin_util.h"
 #include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
+#include "extensions/helper/vivaldi_panel_helper.h"
 #include "net/cert/x509_certificate.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "base/files/file_util.h"
 #include "browser/startup_vivaldi_browser.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "browser/vivaldi_webcontents_util.h"
@@ -242,6 +246,17 @@ void SendEventToView(WebViewGuest& guest,
       std::make_unique<GuestViewEvent>(event_name, std::move(args_value)));
 }
 
+bool IsPanelId(const std::string &name) {
+  if (name.rfind("WEBPANEL_", 0) == 0) {
+    return true;
+  }
+
+  if (name.rfind("EXT_PANEL_", 0) == 0) {
+    return true;
+  }
+
+  return false;
+}
 }  // namespace
 
 #if defined(USE_AURA)
@@ -1010,7 +1025,10 @@ void WebViewGuest::VivaldiCreateWebContents(
       }
     }
 
-    if (auto* view_name = create_params.FindString("vivaldi_view_type")) {
+    const std::string* view_name =
+        create_params.FindString("vivaldi_view_type");
+
+    if (view_name) {
       if (*view_name == "extension_popup") {
         // 1. Create an ExtensionFrameHelper for the viewtype.
         // 2. take a WebContents as parameter.
@@ -1051,6 +1069,9 @@ void WebViewGuest::VivaldiCreateWebContents(
             std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
                 new_contents.get()));
 
+        if (view_name && IsPanelId(*view_name)) {
+          VivaldiPanelHelper::CreateForWebContents(new_contents.get(), *view_name);
+        }
       } else {
         WebContents::CreateParams params(context,
                                          std::move(guest_site_instance));
@@ -1108,6 +1129,70 @@ void WebViewGuest::ActivateContents(content::WebContents* web_contents) {
   // GuestViewBase::ActivateContents
   embedder_web_contents()->GetDelegate()->ActivateContents(
       embedder_web_contents());
+}
+
+void WebViewGuest::VivaldiCanDownload(const GURL& url,
+                                      const std::string& request_method,
+                                      base::OnceCallback<void(bool)> callback) {
+  GURL tab_url = web_contents()->GetURL();
+  // NOTE(andre@vivaldi.com) : Mimick Chrome download flow and deny download of
+  // mixed-content. (It will be cancelled later on anyways so do not present a
+  // save dialog to the user.) This should be called from CanDownload.
+
+  bool is_redirect_chain_secure = true;
+  // Was the download initiated by a secure origin, but delivered insecurely?
+  bool is_mixed_content = false;
+  // Was the download initiated by an insecure origin or delivered insecurely?
+  bool is_insecure_download = false;
+
+  url::Origin initiator = url::Origin::Create(tab_url);
+
+  // Skip over the final URL so that we can investigate it separately below.
+  // The redirect chain always contains the final URL, so this is always safe
+  // in Chrome, but some tests don't plan for it, so we check here.
+  if (download_info_.redirect_chain.size() > 1) {
+    for (unsigned i = 0; i < download_info_.redirect_chain.size() - 1; ++i) {
+      const GURL& last_url = download_info_.redirect_chain[i];
+      if (!network::IsUrlPotentiallyTrustworthy(last_url)) {
+        is_redirect_chain_secure = false;
+        break;
+      }
+    }
+  }
+  // Whether or not the download was securely delivered, ignoring where we got
+  // the download URL from (i.e. ignoring the initiator).
+  bool download_delivered_securely =
+      is_redirect_chain_secure && (network::IsUrlPotentiallyTrustworthy(url) ||
+                                   url.SchemeIsBlob() || url.SchemeIsFile());
+
+  // Mixed downloads are those initiated by a secure initiator but not
+  // delivered securely.
+  is_mixed_content = (initiator.GetURL().SchemeIsCryptographic() &&
+                      !download_delivered_securely);
+
+  is_insecure_download =
+      (((!initiator.opaque() &&
+         !network::IsUrlPotentiallyTrustworthy(initiator.GetURL()))) ||
+       !download_delivered_securely) &&
+      !net::IsLocalhost(url);
+
+  // Block secure tab and not secure download, and redirect from unsecure.
+  if ((is_insecure_download || is_mixed_content)) {
+    std::move(callback).Run(false /*allow*/);
+    return;
+  }
+
+  // If the download was started by a page mechanism, direct download etc. Allow
+  // the download, the user will be asked by the download interceptor.
+  if (download_info_.content_initiated) {
+    // Start the download directly without asking.
+    std::move(callback).Run(true /*allow*/);
+    return;
+  }
+
+  web_view_permission_helper_->SetDownloadInformation(download_info_);
+  web_view_permission_helper_->CanDownload(url, request_method,
+                                           std::move(callback));
 }
 
 }  // namespace extensions

@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/child_accounts/family_user_device_metrics.h"
 
 #include <memory>
+#include <optional>
 #include <tuple>
 
 #include "base/memory/raw_ptr.h"
@@ -20,7 +21,6 @@
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_test.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 
@@ -46,8 +46,7 @@ class FamilyUserDeviceMetricsTest
   }
   bool IsUserExisting() const { return std::get<1>(GetParam()); }
 
-  raw_ptr<FakeChromeUserManager, DanglingUntriaged | ExperimentalAsh>
-      user_manager_ = nullptr;
+  raw_ptr<FakeChromeUserManager, DanglingUntriaged> user_manager_ = nullptr;
 
   LoggedInUserMixin logged_in_user_mixin_{
       &mixin_host_,
@@ -55,7 +54,7 @@ class FamilyUserDeviceMetricsTest
       embedded_test_server(),
       this,
       /*should_launch_browser=*/false,
-      /*account_id=*/absl::nullopt,
+      /*account_id=*/std::nullopt,
       /*include_initial_user=*/IsUserExisting()};
 
   // MixinBasedInProcessBrowserTest:

@@ -29,6 +29,11 @@ const char kFeatureFlags[] = "feature-flags";
 // origins). Example: {"isolate-origins":"http://example.com"}
 const char kFeatureFlagsOriginList[] = "feature-flags-origin-list";
 
+// Disables GPU accelerated video decoding when passed to Chrome as a
+// command-line argument.
+const char kDisableAcceleratedVideoDecode[] =
+    "--disable-accelerated-video-decode";
+
 }  // namespace switches
 }  // namespace chromeos
 

@@ -9,11 +9,11 @@
 #import "base/feature_list.h"
 #import "base/functional/bind.h"
 #import "base/logging.h"
-#import "components/autofill/core/browser/webdata/autocomplete_sync_bridge.h"
-#import "components/autofill/core/browser/webdata/autofill_profile_sync_bridge.h"
-#import "components/autofill/core/browser/webdata/autofill_wallet_metadata_sync_bridge.h"
-#import "components/autofill/core/browser/webdata/autofill_wallet_sync_bridge.h"
+#import "components/autofill/core/browser/webdata/addresses/autofill_profile_sync_bridge.h"
+#import "components/autofill/core/browser/webdata/autocomplete/autocomplete_sync_bridge.h"
 #import "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#import "components/autofill/core/browser/webdata/payments/autofill_wallet_metadata_sync_bridge.h"
+#import "components/autofill/core/browser/webdata/payments/autofill_wallet_sync_bridge.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/browser_sync/browser_sync_switches.h"
 #import "components/browser_sync/sync_api_component_factory_impl.h"
@@ -23,7 +23,7 @@
 #import "components/history/core/browser/history_service.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/metrics/demographics/user_demographics.h"
-#import "components/password_manager/core/browser/password_store_interface.h"
+#import "components/password_manager/core/browser/password_store/password_store_interface.h"
 #import "components/password_manager/core/browser/sharing/password_receiver_service.h"
 #import "components/password_manager/core/browser/sharing/password_sender_service.h"
 #import "components/reading_list/core/dual_reading_list_model.h"
@@ -43,8 +43,8 @@
 #import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
 #import "ios/chrome/browser/dom_distiller/model/dom_distiller_service_factory.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
-#import "ios/chrome/browser/history/history_service_factory.h"
-#import "ios/chrome/browser/metrics/google_groups_updater_service_factory.h"
+#import "ios/chrome/browser/history/model/history_service_factory.h"
+#import "ios/chrome/browser/metrics/model/google_groups_updater_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_receiver_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_sender_service_factory.h"
@@ -53,8 +53,8 @@
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/device_info_sync_service_factory.h"
 #import "ios/chrome/browser/sync/model/ios_user_event_service_factory.h"
 #import "ios/chrome/browser/sync/model/model_type_store_service_factory.h"
@@ -295,9 +295,17 @@ IOSChromeSyncClient::GetSyncApiComponentFactory() {
   return component_factory_.get();
 }
 
-syncer::SyncTypePreferenceProvider*
-IOSChromeSyncClient::GetPreferenceProvider() {
-  return nullptr;
+bool IOSChromeSyncClient::IsCustomPassphraseAllowed() {
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  supervised_user::SupervisedUserSettingsService*
+      supervised_user_settings_service =
+          SupervisedUserSettingsServiceFactory::GetForBrowserState(
+              browser_state_);
+  if (supervised_user_settings_service) {
+    return supervised_user_settings_service->IsCustomPassphraseAllowed();
+  }
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  return true;
 }
 
 void IOSChromeSyncClient::OnLocalSyncTransportDataCleared() {

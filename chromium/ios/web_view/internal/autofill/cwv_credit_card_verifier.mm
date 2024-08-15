@@ -114,7 +114,7 @@ class WebViewCardUnmaskPromptView : public autofill::CardUnmaskPromptView {
         base::BindOnce(^autofill::CardUnmaskPromptView*() {
           return [weakSelf createUnmaskingView];
         }),
-        creditCard, autofill::CardUnmaskPromptOptions(absl::nullopt, reason),
+        creditCard, autofill::CardUnmaskPromptOptions(std::nullopt, reason),
         delegate);
   }
   return self;
@@ -186,7 +186,8 @@ class WebViewCardUnmaskPromptView : public autofill::CardUnmaskPromptView {
 
   _unmaskingController->OnUnmaskPromptAccepted(
       base::SysNSStringToUTF16(CVC), base::SysNSStringToUTF16(expirationMonth),
-      base::SysNSStringToUTF16(expirationYear), /*enable_fido_auth=*/false);
+      base::SysNSStringToUTF16(expirationYear), /*enable_fido_auth=*/false,
+      /*was_checkbox_visible=*/false);
 }
 
 - (BOOL)isCVCValid:(NSString*)CVC {

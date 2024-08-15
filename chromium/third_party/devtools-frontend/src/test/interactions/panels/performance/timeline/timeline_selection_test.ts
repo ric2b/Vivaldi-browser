@@ -7,15 +7,14 @@ import {assert} from 'chai';
 import type * as Timeline from '../../../../../front_end/panels/timeline/timeline.js';
 import type * as LegacyUI from '../../../../../front_end/ui/legacy/legacy.js';
 import {getBrowserAndPages, waitFor, waitForMany} from '../../../../shared/helper.js';
-import {describe} from '../../../../shared/mocha-extensions.js';
+import {describe, it} from '../../../../shared/mocha-extensions.js';
 import {loadComponentDocExample, preloadForCodeCoverage} from '../../../helpers/shared.js';
 
 describe('FlameChart', function() {
-  // TODO(crbug.com/1492405): Improve perf panel trace load speed to
+  preloadForCodeCoverage('performance_panel/basic.html');
+  // TODO(crbug.com/1472155): Improve perf panel trace load speed to
   // prevent timeout bump.
   this.timeout(20_000);
-  preloadForCodeCoverage('performance_panel/basic.html');
-
   async function getCoordinatesForEntryWithTitleAndTs(
       title: string, tsMicroSecs: number): Promise<{x: number, y: number}> {
     const perfPanel = await waitFor('.vbox.panel.timeline');
@@ -43,7 +42,7 @@ describe('FlameChart', function() {
   }
 
   it('shows the details of an entry when selected on the timeline', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=simple-js-program&threadTracksSource=new');
+    await loadComponentDocExample('performance_panel/basic.html?trace=simple-js-program');
     await waitFor('.timeline-flamechart');
     const {frontend} = getBrowserAndPages();
 
@@ -86,7 +85,7 @@ describe('FlameChart', function() {
   });
 
   it('reveals an event\'s initiator in the flamechart', async () => {
-    await loadComponentDocExample('performance_panel/basic.html?trace=web-dev&threadTracksSource=new');
+    await loadComponentDocExample('performance_panel/basic.html?trace=web-dev');
     await waitFor('.timeline-flamechart');
     const {frontend} = getBrowserAndPages();
 

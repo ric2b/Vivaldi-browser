@@ -249,33 +249,6 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxSettingsBrowserTest,
             privacy_sandbox_settings()->TopicsDataAccessibleSince());
 }
 
-IN_PROC_BROWSER_TEST_F(PrivacySandboxSettingsBrowserTest,
-                       SettingsAreNotOverridden) {
-  privacy_sandbox_settings()->SetPrivacySandboxEnabled(false);
-  EXPECT_FALSE(privacy_sandbox_settings()->IsPrivacySandboxEnabled());
-  EXPECT_FALSE(base::FeatureList::IsEnabled(
-      privacy_sandbox::kOverridePrivacySandboxSettingsLocalTesting));
-}
-
-class PrivacySandboxSettingsAdsApisFlagBrowserTest
-    : public PrivacySandboxSettingsBrowserTest {
- public:
-  PrivacySandboxSettingsAdsApisFlagBrowserTest() {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnablePrivacySandboxAdsApis);
-  }
-};
-
-IN_PROC_BROWSER_TEST_F(PrivacySandboxSettingsAdsApisFlagBrowserTest,
-                       FollowsOverrideBehavior) {
-  privacy_sandbox_settings()->SetPrivacySandboxEnabled(false);
-  EXPECT_TRUE(privacy_sandbox_settings()->IsPrivacySandboxEnabled());
-
-  // The flag should enable this feature.
-  EXPECT_TRUE(base::FeatureList::IsEnabled(
-      privacy_sandbox::kOverridePrivacySandboxSettingsLocalTesting));
-}
-
 namespace {
 
 enum class AttestedApiStatus {
@@ -793,12 +766,17 @@ IN_PROC_BROWSER_TEST_P(PrivacySandboxSettingsEventReportingBrowserTest,
     EXPECT_EQ(response.http_request()->method,
               net::test_server::HttpMethod::METHOD_GET);
   } else {
-    // Verify the console message states to require Protected Audience only.
+    // Verify the console messages states to require Protected Audience only.
+    // Note that two console messages are sent due to debug and normal reporting
     ASSERT_TRUE(console_error_observer_->Wait());
-    EXPECT_EQ(console_error_observer_->messages().size(), 1u);
+    EXPECT_EQ(console_error_observer_->messages().size(), 2u);
     EXPECT_TRUE(base::Contains(console_error_observer_->GetMessageAt(0u),
                                "Protected Audience"));
     EXPECT_FALSE(base::Contains(console_error_observer_->GetMessageAt(0u),
+                                "Attribution Reporting"));
+    EXPECT_TRUE(base::Contains(console_error_observer_->GetMessageAt(1u),
+                               "Protected Audience"));
+    EXPECT_FALSE(base::Contains(console_error_observer_->GetMessageAt(1u),
                                 "Attribution Reporting"));
 
     // Verify the `reportWin()` beacon was not sent.
@@ -885,11 +863,16 @@ IN_PROC_BROWSER_TEST_P(PrivacySandboxSettingsEventReportingBrowserTest,
               net::test_server::HttpMethod::METHOD_GET);
   } else {
     // Verify the console message states to require Protected Audience only.
+    // Note that two console messages are sent due to debug and normal reporting
     ASSERT_TRUE(console_error_observer_->Wait());
-    EXPECT_EQ(console_error_observer_->messages().size(), 1u);
+    EXPECT_EQ(console_error_observer_->messages().size(), 2u);
     EXPECT_TRUE(base::Contains(console_error_observer_->GetMessageAt(0u),
                                "Protected Audience"));
     EXPECT_FALSE(base::Contains(console_error_observer_->GetMessageAt(0u),
+                                "Attribution Reporting"));
+    EXPECT_TRUE(base::Contains(console_error_observer_->GetMessageAt(1u),
+                               "Protected Audience"));
+    EXPECT_FALSE(base::Contains(console_error_observer_->GetMessageAt(1u),
                                 "Attribution Reporting"));
 
     // Verify the `reportResult()` beacon was not sent.

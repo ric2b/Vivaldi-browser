@@ -1,0 +1,14 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_location_bar") {
+  sources = [
+    "location_bar_constants+vivaldi.h",
+    "location_bar_constants+vivaldi.mm",
+  ]
+
+  deps = [
+    "resources:resources",
+  ]
+
+ frameworks = [ "UIKit.framework" ]
+}

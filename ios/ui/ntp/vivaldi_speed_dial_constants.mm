@@ -11,6 +11,11 @@
 NSString* vStartPageLayoutChangeDidChange =
     @"vStartPageLayoutChangeDidChange";
 
+NSString* vSpeedDialPropertyDidChange = @"vSpeedDialPropertyDidChange";
+NSString* vSpeedDialIdentifierKey = @"vSpeedDialIdentifierKey";
+NSString* vSpeedDialThumbnailRefreshStateKey =
+    @"vSpeedDialThumbnailRefreshStateKey";
+
 #pragma mark - SIZE AND PADDINGS
 // Speed dial container top padding
 const CGFloat vSpeedDialContainerTopPadding = 8.0;

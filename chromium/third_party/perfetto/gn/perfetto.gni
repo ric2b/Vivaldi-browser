@@ -208,7 +208,7 @@ declare_args() {
   # are monolithic and don't use a common shared library. This is mainly to
   # avoid LD_LIBRARY_PATH dances when testing locally.
   # On Windows we default to monolithic executables, because pairing
-  # dllexport/import adds extra complexity for little benefit. Te only reason
+  # dllexport/import adds extra complexity for little benefit. The only reason
   # for monolithic_binaries=false is saving binary size, which matters mainly on
   # Android. See also comments on PERFETTO_EXPORT_ENTRYPOINT in compiler.h.
   monolithic_binaries = !perfetto_build_with_android && (is_win || is_mac)
@@ -296,9 +296,12 @@ declare_args() {
 
   # Enables httpd RPC support in the trace processor.
   # Further per-OS conditionals are applied in gn/BUILD.gn.
+  # Chromium+Win: httpd support depends on enable_perfetto_ipc, which is not
+  # enabled on Chromium+Win for now (see a comment there).
   enable_perfetto_trace_processor_httpd =
       enable_perfetto_trace_processor &&
-      (perfetto_build_standalone || perfetto_build_with_android)
+      (perfetto_build_standalone || perfetto_build_with_android ||
+       (build_with_chromium && !is_win))
 
   # Enables Zlib support. This is used to compress traces (by the tracing
   # service and by the "perfetto" cmdline client) and to decompress traces (by

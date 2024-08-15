@@ -47,6 +47,7 @@ _allowed_compiler_options = [
     'strictPropertyInitialization',
     'typeRoots',
     'types',
+    'useDefineForClassFields',
 ]
 
 
@@ -54,6 +55,12 @@ def validateTsconfigJson(tsconfig, tsconfig_file, is_base_tsconfig):
   # Special exception for material_web_components, which uses ts_library()
   # in an unsupported way.
   if 'third_party/material_web_components/tsconfig_base.json' in tsconfig_file:
+    return True, None
+
+  # TODO(b/267329383): Migrate A11y to TypeScript. Accessibility code has
+  # different requirements for the migration because of this we need both
+  # allowjs and a custom tsconfig.
+  if 'accessibility/tsconfig.base.json' in tsconfig_file:
     return True, None
 
   if not is_base_tsconfig:
@@ -71,7 +78,7 @@ def validateTsconfigJson(tsconfig, tsconfig_file, is_base_tsconfig):
             f' Use the dedicated |{tslibrary_flag}| attribute in '+ \
             'ts_library() instead.'
 
-    if 'ui/file_manager/tsconfig_base.json' in tsconfig_file:
+    if 'ui/file_manager' in tsconfig_file:
       # File manager uses ts_library() in an unsupported way. Just return true
       # here for this special case.
       return True, None
@@ -109,10 +116,17 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       'ash/webui/color_internals/',
       'ash/webui/common/resources/',
       'ash/webui/diagnostics_ui/',
-      'ash/webui/face_ml_app_ui/',
       'ash/webui/file_manager/resources/labs/',
+      # TODO(b/314827247): Migrate media_app_ui to TypeScript and remove
+      # exception.
+      'ash/webui/media_app_ui/',
+      # TODO(b/315002705): Migrate shimless_rma to TypeScript and remove
+      # exception.
+      'ash/webui/shimless_rma/',
       'ash/webui/shortcut_customization_ui/',
       'ash/webui/sample_system_web_app_ui/',
+      # TODO(b/267329383): Migrate A11y to TypeScript.
+      'chrome/browser/resources/chromeos/accessibility',
       'ui/file_manager/',
   ]
   for directory in ash_directories:
@@ -125,12 +139,11 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # remove exception.
       'chrome/browser/resources/bluetooth_internals',
       'chrome/browser/resources/chromeos/accessibility',
+      # TODO(crbug.com/1511758): Migrate to TypeScript.
+      'chrome/browser/resources/device_log',
       'chrome/test/data/webui',
       'chrome/test/data/webui/chromeos',
       'chrome/test/data/webui/chromeos/ash_common',
-      # TODO(b/305287898): Migrate scanning app tests to Typescript and
-      # remove exception.
-      'chrome/test/data/webui/chromeos/scanning',
       'chrome/test/data/webui/cr_components/chromeos',
       'chrome/test/data/webui/nearby_share',
       'chrome/test/data/webui/settings/chromeos',
@@ -141,6 +154,9 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # TODO(crbug.com/1478961) : Migrate to TypeScript.
       'chrome/test/data/webui/media_internals',
       'content/browser/resources/media',
+
+      # TODO(b/274059668): Migrate OOBE to TypeScript.
+      'chrome/browser/resources/chromeos/login',
   ]
   for directory in migrating_directories:
     if (source_dir.endswith(directory)
@@ -152,17 +168,57 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       'code should be added in TypeScript.'
 
 
+def getTargetPath(gen_dir, root_gen_dir):
+  root_gen_dir_from_build = os.path.normpath(os.path.join(
+      gen_dir, root_gen_dir)).replace('\\', '/')
+  return os.path.relpath(gen_dir, root_gen_dir_from_build).replace('\\', '/')
+
+
+def isInAshFolder(path):
+  # TODO (https://crbug.com/1506296): Organize Ash WebUI code under fewer
+  # directories.
+  ash_folders = [
+      # Source code folders
+      'ash/webui',
+      'chrome/browser/resources/ash',
+      'chrome/browser/resources/chromeos',
+      'chrome/browser/resources/nearby_share',
+      'ui/file_manager',
+
+      # Test folders
+      'chrome/test/data/webui/chromeos',
+      'chrome/test/data/webui/cr_components/chromeos',
+      'chrome/test/data/webui/settings/chromeos',
+  ]
+  return any(path.startswith(folder) for folder in ash_folders)
+
+
+def isDependencyAllowed(is_ash_target, raw_dep, target_path):
+  is_ash_dep = isInAshFolder(raw_dep[2:])
+  if not is_ash_dep or is_ash_target:
+    return True
+
+  exceptions = [
+      # TODO(https://crbug.com/1506299): Remove this incorrect dependency
+      'chrome/browser/resources/settings',
+  ]
+
+  return target_path in exceptions
+
+
+def isMappingAllowed(is_ash_target, target_path, mapping_path):
+  if is_ash_target:
+    return True
+
+  return not isInAshFolder(mapping_path) or target_path in exceptions
+
+
 # TODO (https://www.crbug.com/1412158): Remove all exceptions below and this
 # function; these build targets rely on implicitly unmapped dependencies.
 def isUnsupportedJsTarget(gen_dir, root_gen_dir):
-  root_gen_dir_from_build = os.path.normpath(os.path.join(
-      gen_dir, root_gen_dir)).replace('\\', '/')
-  target_path = os.path.relpath(gen_dir,
-                                root_gen_dir_from_build).replace('\\', '/')
-
+  target_path = getTargetPath(gen_dir, root_gen_dir)
   exceptions = [
       'ash/webui/color_internals/resources',
-      'ash/webui/face_ml_app_ui/resources/trusted',
       'ash/webui/sample_system_web_app_ui/resources/trusted',
       'ash/webui/sample_system_web_app_ui/resources/untrusted',
       'chrome/browser/resources/chromeos/accessibility/select_to_speak',
@@ -193,9 +249,15 @@ def validateRootDir(root_dir, gen_dir, root_gen_dir, is_ios):
   exceptions = [
       # ChromeOS cases
       'ash/webui/color_internals/mojom',
-      'ash/webui/face_ml_app_ui/mojom',
       'ash/webui/sample_system_web_app_ui/mojom',
+      # TODO(b/315150183): Migrate A11y code to use path mappings.
+      'chrome/browser/resources/chromeos/accessibility/accessibility_common',
+      'chrome/browser/resources/chromeos/accessibility/braille_ime',
+      'chrome/browser/resources/chromeos/accessibility/chromevox',
+      'chrome/browser/resources/chromeos/accessibility/common',
+      'chrome/browser/resources/chromeos/accessibility/enhanced_network_tts',
       'chrome/browser/resources/chromeos/accessibility/select_to_speak',
+      'chrome/browser/resources/chromeos/accessibility/switch_access',
   ]
 
   if target_path in exceptions:

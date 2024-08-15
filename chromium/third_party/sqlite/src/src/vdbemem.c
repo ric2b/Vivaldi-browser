@@ -1515,7 +1515,7 @@ static int valueFromFunction(
 #endif
   assert( pFunc );
   if( (pFunc->funcFlags & (SQLITE_FUNC_CONSTANT|SQLITE_FUNC_SLOCHNG))==0
-   || (pFunc->funcFlags & SQLITE_FUNC_NEEDCOLL)
+   || (pFunc->funcFlags & (SQLITE_FUNC_NEEDCOLL|SQLITE_FUNC_RUNONLY))!=0
   ){
     return SQLITE_OK;
   }
@@ -1716,6 +1716,7 @@ static int valueFromExpr(
     if( pVal ){
       pVal->flags = MEM_Int;
       pVal->u.i = pExpr->u.zToken[4]==0;
+      sqlite3ValueApplyAffinity(pVal, affinity, enc);
     }
   }
 

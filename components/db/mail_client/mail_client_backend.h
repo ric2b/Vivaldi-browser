@@ -22,6 +22,7 @@
 #include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/single_thread_task_runner.h"
+#include "mail_client_backend_notifier.h"
 #include "mail_client_database.h"
 #include "sql/init_status.h"
 
@@ -42,7 +43,8 @@ struct MailClientDatabaseParams;
 // Most functions here are just the implementations of the corresponding
 // functions in the MailClient service. These functions are not documented
 // here, see the MailClient service for behavior.
-class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend> {
+class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend>,
+                          public MailClientBackendNotifier {
  public:
   // Interface implemented by the owner of the MailClient backend object.
   // Normally, the MailClient service implements this to send stuff back to the
@@ -51,6 +53,13 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend> {
   class MailClientDelegate {
    public:
     virtual ~MailClientDelegate() {}
+
+    virtual void NotifyMigrationProgress(int progress,
+                                         int total,
+                                         std::string msg) = 0;
+
+    // Reports status on Deleting messages from search db
+    virtual void NotifyDeleteMessages(int delete_progress_count) = 0;
 
     // Invoked when the backend has finished loading the db.
     virtual void DBLoaded() = 0;
@@ -84,38 +93,37 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend> {
   // Creates an FTS Message
   void CreateFTSMessage();
 
-  void CreateMessages(std::vector<mail_client::MessageRow> messages,
-                      std::shared_ptr<bool> result);
+  bool CreateMessages(std::vector<MessageRow> messages);
 
-  void DeleteMessages(std::vector<SearchListID> search_list_ids,
-                      std::shared_ptr<bool> result);
+  bool DeleteMessages(SearchListIDs ids);
 
-  void AddMessageBody(SearchListID search_list_id,
-                      std::u16string body,
+  MessageResult UpdateMessage(mail_client::MessageRow message);
 
-                      std::shared_ptr<MessageResult> result);
+  SearchListIDs EmailSearch(std::u16string searchValue);
 
-  void EmailSearch(std::u16string searchValue,
-                   std::shared_ptr<SearchListIdRows> results);
+  bool MatchMessage(SearchListID search_list_id, std::u16string searchValue);
 
-  void MatchMessage(SearchListID search_list_id,
-                    std::u16string searchValue,
-                    std::shared_ptr<bool> results);
+  bool MigrateSearchDB();
+  Migration GetDBVersion();
 
-  void RebuildAndVacuumDatabase(std::shared_ptr<bool> result);
+  void NotifyMigrationProgress(int progress,
+                               int total,
+                               std::string msg) override;
+
+  void NotifyDeleteMessages(int delete_progress_count) override;
 
  protected:
-  virtual ~MailClientBackend();
+  ~MailClientBackend() override;
 
  private:
   friend class base::RefCountedThreadSafe<MailClientBackend>;
-
   // Does the work of Init.
   void InitImpl(const MailClientDatabaseParams& mail_client_database_params);
 
   // Closes all databases managed by MailClientBackend. Commits any pending
   // transactions.
   void CloseAllDatabases();
+  void DeleteMailDB();
 
   // Querying ------------------------------------------------------------------
 

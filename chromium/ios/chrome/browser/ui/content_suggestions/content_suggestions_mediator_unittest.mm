@@ -17,7 +17,7 @@
 #import "components/ntp_tiles/icon_cacher.h"
 #import "components/ntp_tiles/most_visited_sites.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
-#import "components/password_manager/core/browser/test_password_store.h"
+#import "components/password_manager/core/browser/password_store/test_password_store.h"
 #import "components/reading_list/core/reading_list_model_impl.h"
 #import "components/segmentation_platform/public/constants.h"
 #import "components/segmentation_platform/public/features.h"
@@ -28,12 +28,10 @@
 #import "ios/chrome/browser/default_browser/model/utils_test_support.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_cache_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
-#import "ios/chrome/browser/first_run/first_run.h"
-#import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/ntp/home/features.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/ntp/set_up_list_item_type.h"
-#import "ios/chrome/browser/ntp/set_up_list_prefs.h"
+#import "ios/chrome/browser/first_run/model/first_run.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_prefs.h"
 #import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_util.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
@@ -42,9 +40,7 @@
 #import "ios/chrome/browser/reading_list/model/reading_list_test_utils.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
-#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
@@ -54,19 +50,20 @@
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
-#import "ios/chrome/browser/ui/content_suggestions/cells/parcel_tracking_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_return_to_recent_tab_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/query_suggestion_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
+#import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/ntp/metrics/new_tab_page_metrics_recorder.h"
@@ -78,6 +75,7 @@
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
+#import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
@@ -85,8 +83,89 @@
 using set_up_list_prefs::SetUpListItemState;
 using startup_metric_utils::FirstRunSentinelCreationResult;
 
+#define EXPECT_SET_MAGIC_STACK_ORDER(consumer, ...)                      \
+  {                                                                      \
+    id block_checker = [OCMArg checkWithBlock:^BOOL(id value) {          \
+      NSArray<NSNumber*>* magic_stack_order = (NSArray*)value;           \
+      std::vector<ContentSuggestionsModuleType> expected_order = {       \
+          __VA_ARGS__};                                                  \
+      EXPECT_EQ(magic_stack_order.count, expected_order.size());         \
+      for (unsigned int i = 0; i < expected_order.size(); i++) {         \
+        EXPECT_EQ(magic_stack_order[i].intValue, int(expected_order[i])) \
+            << "For Magic Stack order index " << i;                      \
+      }                                                                  \
+      return YES;                                                        \
+    }];                                                                  \
+    OCMExpect([consumer setMagicStackOrder:block_checker]);              \
+  }
+
 @protocol ContentSuggestionsMediatorDispatcher <BrowserCoordinatorCommands,
                                                 SnackbarCommands>
+@end
+
+// Fake object to validate configs passed from the mediator.
+@interface FakeContentSuggestionsConsumer
+    : NSObject <ContentSuggestionsConsumer>
+
+@property(nonatomic, copy) NSArray<ParcelTrackingItem*>* parcelTrackingItems;
+
+@end
+
+@implementation FakeContentSuggestionsConsumer
+
+- (void)showReturnToRecentTabTileWithConfig:
+    (ContentSuggestionsReturnToRecentTabItem*)config {
+}
+
+- (void)updateReturnToRecentTabTileWithConfig:
+    (ContentSuggestionsReturnToRecentTabItem*)config {
+}
+
+- (void)hideReturnToRecentTabTile {
+}
+
+- (void)setMostVisitedTilesConfig:(MostVisitedTilesConfig*)config {
+}
+
+- (void)setShortcutTilesConfig:(ShortcutsConfig*)configs {
+}
+
+- (void)setMagicStackOrder:(NSArray<NSNumber*>*)order {
+}
+
+- (void)updateMagicStackOrder:(MagicStackOrderChange)change {
+}
+
+- (void)scrollToNextMagicStackModuleForCompletedModule:
+    (ContentSuggestionsModuleType)moduleType {
+}
+
+- (void)showSetUpListWithItems:(NSArray<SetUpListItemViewData*>*)items {
+}
+
+- (void)markSetUpListItemComplete:(SetUpListItemType)type
+                       completion:(ProceduralBlock)completion {
+}
+
+- (void)hideSetUpListWithAnimations:(ProceduralBlock)animations {
+}
+
+- (void)showSetUpListDoneWithAnimations:(ProceduralBlock)animations {
+}
+
+- (void)showSafetyCheck:(SafetyCheckState*)state {
+}
+
+- (void)showTabResumptionWithItem:(TabResumptionItem*)item {
+}
+
+- (void)hideTabResumption {
+}
+
+- (void)showParcelTrackingItems:(NSArray<ParcelTrackingItem*>*)items {
+  _parcelTrackingItems = items;
+}
+
 @end
 
 @interface ContentSuggestionsMediator ()
@@ -102,8 +181,7 @@ class ContentSuggestionsMediatorTest : public PlatformTest {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {{segmentation_platform::features::kSegmentationPlatformFeature, {}},
          {segmentation_platform::features::kSegmentationPlatformIosModuleRanker,
-          {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
-         {kIOSSetUpList, {}}},
+          {{segmentation_platform::kDefaultModelEnabledParam, "true"}}}},
         {});
 
     TestChromeBrowserState::Builder test_cbs_builder;
@@ -157,8 +235,6 @@ class ContentSuggestionsMediatorTest : public PlatformTest {
     dispatcher_ =
         OCMProtocolMock(@protocol(ContentSuggestionsMediatorDispatcher));
     consumer_ = OCMProtocolMock(@protocol(ContentSuggestionsConsumer));
-    scene_state_ = [[SceneState alloc] initWithAppState:nil];
-    SceneStateBrowserAgent::CreateForBrowser(browser_.get(), scene_state_);
 
     SetUpMediator();
     mediator_.consumer = consumer_;
@@ -187,6 +263,13 @@ class ContentSuggestionsMediatorTest : public PlatformTest {
     delivered_status.estimated_delivery_time =
         base::Time::Now() - base::Days(3);
     parcels.emplace_back(delivered_status);
+
+    commerce::ParcelTrackingStatus in_progress;
+    in_progress.carrier = commerce::ParcelIdentifier::UPS;
+    in_progress.state = commerce::ParcelStatus::WITH_CARRIER;
+    in_progress.tracking_id = "abc";
+    in_progress.estimated_delivery_time = base::Time::Now() + base::Days(3);
+    parcels.emplace_back(in_progress);
 
     shopping_service_->SetGetAllParcelStatusesCallbackValue(parcels);
   }
@@ -278,7 +361,6 @@ class ContentSuggestionsMediatorTest : public PlatformTest {
   base::test::ScopedFeatureList scoped_feature_list_;
   sync_preferences::TestingPrefServiceSyncable pref_service_;
   IOSChromeScopedTestingLocalState local_state_;
-  SceneState* scene_state_;
   testing::StrictMock<favicon::MockFaviconService> mock_favicon_service_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<Browser> browser_;
@@ -329,7 +411,50 @@ TEST_F(ContentSuggestionsMediatorTest, TestOpenMostVisited) {
       url_loader_->last_params.web_params.transition_type));
 }
 
+// Tests that MostRecentTab can be opened and that its title is correct when
+// tab has a title.
 TEST_F(ContentSuggestionsMediatorTest, TestOpenMostRecentTab) {
+  // Create non-NTP WebState
+  auto web_state = CreateWebState("http://chromium.org");
+  web_state->SetTitle(u"title");
+  int recent_tab_index = web_state_list_->InsertWebState(
+      0, std::move(web_state), WebStateList::INSERT_ACTIVATE, WebStateOpener());
+  favicon::WebFaviconDriver::CreateForWebState(
+      web_state_list_->GetActiveWebState(),
+      /*favicon_service=*/nullptr);
+  StartSurfaceRecentTabBrowserAgent* browser_agent =
+      StartSurfaceRecentTabBrowserAgent::FromBrowser(browser_.get());
+  browser_agent->SaveMostRecentTab();
+  // Create NTP
+  web_state_list_->InsertWebState(1, CreateWebState("chrome://newtab"),
+                                  WebStateList::INSERT_ACTIVATE,
+                                  WebStateOpener());
+  web::WebState* ntp_web_state = web_state_list_->GetActiveWebState();
+  mediator_.webState = ntp_web_state;
+  NewTabPageTabHelper::FromWebState(ntp_web_state)->SetShowStartSurface(true);
+
+  OCMExpect([consumer_
+      updateReturnToRecentTabTileWithConfig:
+          [OCMArg
+              checkWithBlock:^(ContentSuggestionsReturnToRecentTabItem* item) {
+                EXPECT_NSEQ(@"title - 12 hours ago", item.subtitle);
+                return YES;
+              }]]);
+  [mediator_
+      configureMostRecentTabItemWithWebState:browser_agent->most_recent_tab()
+                                   timeLabel:@"12 hours ago"];
+
+  OCMExpect([consumer_ hideReturnToRecentTabTile]);
+  OCMExpect([mediator_.NTPMetricsDelegate recentTabTileOpened]);
+
+  [mediator_ openMostRecentTab];
+  // Verify the most recent tab was opened.
+  EXPECT_EQ(recent_tab_index, web_state_list_->active_index());
+}
+
+// Tests that MostRecentTab can be opened and that its title is correct when
+// tab has a no title.
+TEST_F(ContentSuggestionsMediatorTest, TestOpenMostRecentTabNoTitle) {
   // Create non-NTP WebState
   int recent_tab_index = web_state_list_->InsertWebState(
       0, CreateWebState("http://chromium.org"), WebStateList::INSERT_ACTIVATE,
@@ -348,7 +473,13 @@ TEST_F(ContentSuggestionsMediatorTest, TestOpenMostRecentTab) {
   mediator_.webState = ntp_web_state;
   NewTabPageTabHelper::FromWebState(ntp_web_state)->SetShowStartSurface(true);
 
-  OCMExpect([consumer_ showReturnToRecentTabTileWithConfig:[OCMArg any]]);
+  OCMExpect([consumer_
+      updateReturnToRecentTabTileWithConfig:
+          [OCMArg
+              checkWithBlock:^(ContentSuggestionsReturnToRecentTabItem* item) {
+                EXPECT_NSEQ(@"chromium.org - 12 hours ago", item.subtitle);
+                return YES;
+              }]]);
   [mediator_
       configureMostRecentTabItemWithWebState:browser_agent->most_recent_tab()
                                    timeLabel:@"12 hours ago"];
@@ -378,10 +509,11 @@ TEST_F(ContentSuggestionsMediatorTest, TestStartSurfaceRecentTabObserving) {
                                   WebStateOpener());
   web::WebState* web_state = browser_agent->most_recent_tab();
   [mediator_ configureMostRecentTabItemWithWebState:web_state
-                                          timeLabel:@"12 hours ago"];
+                                          timeLabel:@" - 12 hours ago"];
 
   OCMExpect([consumer_ updateReturnToRecentTabTileWithConfig:[OCMArg any]]);
-  [mediator_ mostRecentTabFaviconUpdatedWithImage:[[UIImage alloc] init]];
+  [mediator_ mostRecentTab:web_state
+      faviconUpdatedWithImage:[[UIImage alloc] init]];
 
   OCMExpect([consumer_ hideReturnToRecentTabTile]);
   [mediator_ mostRecentTabWasRemoved:web_state];
@@ -408,7 +540,7 @@ TEST_F(ContentSuggestionsMediatorTest, TestMagicStackConsumerCall) {
   scoped_feature_list_.InitWithFeatures({kMagicStack}, {});
   OCMExpect([consumer_ setMagicStackOrder:[OCMArg any]]);
   OCMExpect([consumer_ showSetUpListWithItems:[OCMArg any]]);
-  OCMExpect([consumer_ setShortcutTilesWithConfigs:[OCMArg any]]);
+  OCMExpect([consumer_ setShortcutTilesConfig:[OCMArg any]]);
   [consumer_ setExpectationOrderMatters:YES];
   mediator_.consumer = consumer_;
   EXPECT_OCMOCK_VERIFY(consumer_);
@@ -436,15 +568,15 @@ TEST_F(ContentSuggestionsMediatorTest,
            {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
           {kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}},
       },
-      {kIOSSetUpList});
-  OCMExpect(
-      [consumer_ setMagicStackOrder:[OCMArg checkWithBlock:^BOOL(id value) {
-                   NSArray<NSNumber*>* magicStackOrder = (NSArray*)value;
-                   // Ensure MVT and Shortcuts are returned in that order.
-                   return [magicStackOrder count] == 2 &&
-                          0 == [magicStackOrder[0] intValue] &&
-                          1 == [magicStackOrder[1] intValue];
-                 }]]);
+      {});
+
+  EXPECT_SET_MAGIC_STACK_ORDER(
+      consumer_, ContentSuggestionsModuleType::kSetUpListSync,
+      ContentSuggestionsModuleType::kSetUpListDefaultBrowser,
+      ContentSuggestionsModuleType::kSetUpListAutofill,
+      ContentSuggestionsModuleType::kMostVisited,
+      ContentSuggestionsModuleType::kShortcuts, );
+
   mediator_.consumer = consumer_;
 
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
@@ -472,17 +604,15 @@ TEST_F(ContentSuggestionsMediatorTest,
         {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
        {kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}},
        {kSafetyCheckMagicStack, {}}},
-      {kIOSSetUpList});
-  OCMExpect(
-      [consumer_ setMagicStackOrder:[OCMArg checkWithBlock:^BOOL(id value) {
-                   NSArray<NSNumber*>* magicStackOrder = (NSArray*)value;
-                   // Ensure MVT, Shortcuts, and Safety Check are returned in
-                   // that order.
-                   return [magicStackOrder count] == 3 &&
-                          0 == [magicStackOrder[0] intValue] &&
-                          1 == [magicStackOrder[1] intValue] &&
-                          7 == [magicStackOrder[2] intValue];
-                 }]]);
+      {});
+
+  EXPECT_SET_MAGIC_STACK_ORDER(
+      consumer_, ContentSuggestionsModuleType::kSetUpListSync,
+      ContentSuggestionsModuleType::kSetUpListDefaultBrowser,
+      ContentSuggestionsModuleType::kSetUpListAutofill,
+      ContentSuggestionsModuleType::kMostVisited,
+      ContentSuggestionsModuleType::kShortcuts,
+      ContentSuggestionsModuleType::kSafetyCheck, );
   mediator_.consumer = consumer_;
 
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
@@ -510,7 +640,7 @@ TEST_F(ContentSuggestionsMediatorTest,
          {kHideIrrelevantModulesParam, "true"}}},
        {kSafetyCheckMagicStack, {}},
        {kTabResumption, {}}},
-      {kIOSSetUpList});
+      {});
 
   [mediator_ disconnect];
   SetUpMediator();
@@ -519,15 +649,12 @@ TEST_F(ContentSuggestionsMediatorTest,
       segmentation_platform::SegmentationPlatformServiceFactory::
           GetForBrowserState(chrome_browser_state_.get());
 
-  OCMExpect(
-      [consumer_ setMagicStackOrder:[OCMArg checkWithBlock:^BOOL(id value) {
-                   NSArray<NSNumber*>* magicStackOrder = (NSArray*)value;
-                   // Ensure MVT, Shortcuts, and Safety Check are returned in
-                   // that order.
-                   return [magicStackOrder count] == 2 &&
-                          0 == [magicStackOrder[0] intValue] &&
-                          1 == [magicStackOrder[1] intValue];
-                 }]]);
+  EXPECT_SET_MAGIC_STACK_ORDER(
+      consumer_, ContentSuggestionsModuleType::kSetUpListDefaultBrowser,
+      ContentSuggestionsModuleType::kSetUpListAutofill,
+      ContentSuggestionsModuleType::kSetUpListSync,
+      ContentSuggestionsModuleType::kMostVisited,
+      ContentSuggestionsModuleType::kShortcuts, );
   mediator_.consumer = consumer_;
 
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
@@ -640,10 +767,10 @@ TEST_F(ContentSuggestionsMediatorTest, TestParcelTrackingReceived) {
         {{segmentation_platform::kDefaultModelEnabledParam, "true"}}},
        {kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}},
        {kIOSParcelTracking, {}}},
-      {kIOSSetUpList});
+      {});
   [mediator_ disconnect];
   SetUpMediator();
-  consumer_ = OCMProtocolMock(@protocol(ContentSuggestionsConsumer));
+  consumer_ = [[FakeContentSuggestionsConsumer alloc] init];
   mediator_.segmentationService =
       segmentation_platform::SegmentationPlatformServiceFactory::
           GetForBrowserState(chrome_browser_state_.get());
@@ -653,18 +780,7 @@ TEST_F(ContentSuggestionsMediatorTest, TestParcelTrackingReceived) {
           prefs::
               kIosMagicStackSegmentationParcelTrackingImpressionsSinceFreshness);
   EXPECT_EQ(parcel_tracking_freshness_impression_count, -1);
-  OCMExpect(
-      [consumer_ setMagicStackOrder:[OCMArg checkWithBlock:^BOOL(id value) {
-                   NSArray<NSNumber*>* magicStackOrder = (NSArray*)value;
-                   // Ensure MVT, Shortcuts, and two Parcel Tracking items are
-                   // in the ranking.
-                   return [magicStackOrder count] == 4 &&
-                          0 == [magicStackOrder[0] intValue] &&
-                          1 == [magicStackOrder[1] intValue] &&
-                          11 == [magicStackOrder[2] intValue] &&
-                          11 == [magicStackOrder[3] intValue];
-                 }]]);
-  OCMExpect([consumer_ showParcelTrackingItems:[OCMArg any]]);
+
   // One of the parcels should be untracked since it was delivered more than two
   // days ago.
   EXPECT_CALL(*shopping_service_, StopTrackingParcel(testing::_, testing::_))
@@ -674,7 +790,7 @@ TEST_F(ContentSuggestionsMediatorTest, TestParcelTrackingReceived) {
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       TestTimeouts::action_timeout(), true, ^bool() {
         base::RunLoop().RunUntilIdle();
-        return [[mediator_ parcelTrackingItems] count] == 2;
+        return [[mediator_ parcelTrackingItems] count] == 3;
       }));
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       TestTimeouts::action_timeout(), true, ^bool() {
@@ -682,16 +798,12 @@ TEST_F(ContentSuggestionsMediatorTest, TestParcelTrackingReceived) {
         return mediator_.hasReceivedMagicStackResponse;
       }));
 
-  EXPECT_OCMOCK_VERIFY(consumer_);
-
-  NSArray<ParcelTrackingItem*>* items = [mediator_ parcelTrackingItems];
+  NSArray<ParcelTrackingItem*>* items = [consumer_ parcelTrackingItems];
+  ASSERT_EQ([items count], 1u);
   ParcelTrackingItem* outForDeliveryItem = items[0];
   EXPECT_EQ(outForDeliveryItem.parcelType, ParcelType::kUPS);
   EXPECT_EQ(outForDeliveryItem.status, ParcelState::kOutForDelivery);
-
-  ParcelTrackingItem* finishedItem = items[1];
-  EXPECT_EQ(finishedItem.parcelType, ParcelType::kUSPS);
-  EXPECT_EQ(finishedItem.status, ParcelState::kFinished);
+  EXPECT_TRUE(outForDeliveryItem.shouldShowSeeMore);
 
   parcel_tracking_freshness_impression_count = local_state_.Get()->GetInteger(
       prefs::kIosMagicStackSegmentationParcelTrackingImpressionsSinceFreshness);

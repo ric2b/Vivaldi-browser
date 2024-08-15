@@ -130,10 +130,14 @@ const std::u16string& RichControlsContainerView::GetTitleForTesting() {
   return title_->GetText();
 }
 
+const ui::ImageModel RichControlsContainerView::GetIconImageModelForTesting() {
+  return icon_->GetImageModel();
+}
+
 int RichControlsContainerView::GetMinBubbleWidth() const {
   return ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH);
 }
 
-BEGIN_METADATA(RichControlsContainerView, views::FlexLayoutView)
+BEGIN_METADATA(RichControlsContainerView)
 END_METADATA

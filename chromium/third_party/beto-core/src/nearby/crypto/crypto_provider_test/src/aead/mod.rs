@@ -14,3 +14,6 @@
 
 /// Contains test cases for aes_gcm_siv implementations.
 pub mod aes_gcm_siv;
+
+/// Contains test cases for aes_gcm implementations.
+pub mod aes_gcm;

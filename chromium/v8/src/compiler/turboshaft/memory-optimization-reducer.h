@@ -9,8 +9,11 @@
 #include "src/builtins/builtins.h"
 #include "src/codegen/external-reference.h"
 #include "src/compiler/turboshaft/assembler.h"
+#include "src/compiler/turboshaft/copying-phase.h"
 #include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/utils.h"
+#include "src/compiler/write-barrier-kind.h"
+#include "src/zone/zone-containers.h"
 
 namespace v8::internal::compiler::turboshaft {
 
@@ -38,11 +41,13 @@ struct MemoryAnalyzer {
   const Graph& input_graph;
   Isolate* isolate_ = PipelineData::Get().isolate();
   AllocationFolding allocation_folding;
+  bool is_wasm;
   MemoryAnalyzer(Zone* phase_zone, const Graph& input_graph,
-                 AllocationFolding allocation_folding)
+                 AllocationFolding allocation_folding, bool is_wasm)
       : phase_zone(phase_zone),
         input_graph(input_graph),
-        allocation_folding(allocation_folding) {}
+        allocation_folding(allocation_folding),
+        is_wasm(is_wasm) {}
 
   struct BlockState {
     const AllocateOp* last_allocation = nullptr;
@@ -55,12 +60,13 @@ struct MemoryAnalyzer {
   };
   FixedBlockSidetable<base::Optional<BlockState>> block_states{
       input_graph.block_count(), phase_zone};
-  ZoneUnorderedMap<const AllocateOp*, const AllocateOp*> folded_into{
+  ZoneAbslFlatHashMap<const AllocateOp*, const AllocateOp*> folded_into{
       phase_zone};
-  ZoneUnorderedSet<OpIndex> skipped_write_barriers{phase_zone};
-  ZoneUnorderedMap<const AllocateOp*, uint32_t> reserved_size{phase_zone};
+  ZoneAbslFlatHashSet<OpIndex> skipped_write_barriers{phase_zone};
+  ZoneAbslFlatHashMap<const AllocateOp*, uint32_t> reserved_size{phase_zone};
   BlockIndex current_block = BlockIndex(0);
   BlockState state;
+  TurboshaftPipelineKind pipeline_kind = PipelineData::Get().pipeline_kind();
 
   bool SkipWriteBarrier(const StoreOp& store) {
     const Operation& object = input_graph.Get(store.base());
@@ -68,6 +74,11 @@ struct MemoryAnalyzer {
 
     auto CannotEliminate = [&](WriteBarrierKind kind) {
       if (kind == WriteBarrierKind::kAssertNoWriteBarrier) {
+        // TODO(nicohartmann@): We should reenable this once we have no false
+        // positives anymore in the CSA pipeline.
+        if (pipeline_kind == TurboshaftPipelineKind::kCSA) {
+          return true;
+        }
         std::stringstream str;
         str << "MemoryOptimizationReducer could not remove write barrier for "
                "operation\n  #"
@@ -134,13 +145,23 @@ template <class Next>
 class MemoryOptimizationReducer : public Next {
  public:
   TURBOSHAFT_REDUCER_BOILERPLATE()
+#if defined(__clang__)
+  static_assert(reducer_list_contains<ReducerList, VariableReducer>::value);
+#endif
 
   void Analyze() {
+    auto* info = PipelineData::Get().info();
+#if V8_ENABLE_WEBASSEMBLY
+    bool is_wasm = info->IsWasm() || info->IsWasmBuiltin();
+#else
+    bool is_wasm = false;
+#endif
     analyzer_.emplace(
         __ phase_zone(), __ input_graph(),
-        PipelineData::Get().info()->allocation_folding()
+        info->allocation_folding()
             ? MemoryAnalyzer::AllocationFolding::kDoAllocationFolding
-            : MemoryAnalyzer::AllocationFolding::kDontAllocationFolding);
+            : MemoryAnalyzer::AllocationFolding::kDontAllocationFolding,
+        is_wasm);
     analyzer_->Run();
     Next::Analyze();
   }
@@ -183,11 +204,11 @@ class MemoryOptimizationReducer : public Next {
       // Wasm mode: producing isolate-independent code, loading the isolate
       // address at runtime.
 #if V8_ENABLE_WEBASSEMBLY
-      V<WasmInstanceObject> instance_node = __ WasmInstanceParameter();
+      V<WasmTrustedInstanceData> instance_node = __ WasmInstanceParameter();
       int top_address_offset =
           type == AllocationType::kYoung
-              ? WasmInstanceObject::kNewAllocationTopAddressOffset
-              : WasmInstanceObject::kOldAllocationTopAddressOffset;
+              ? WasmTrustedInstanceData::kNewAllocationTopAddressOffset
+              : WasmTrustedInstanceData::kOldAllocationTopAddressOffset;
       top_address =
           __ Load(instance_node, LoadOp::Kind::TaggedBase().Immutable(),
                   MemoryRepresentation::PointerSized(), top_address_offset);
@@ -202,7 +223,7 @@ class MemoryOptimizationReducer : public Next {
       __ SetVariable(top(type), __ PointerAdd(__ GetVariable(top(type)), size));
       __ StoreOffHeap(top_address, __ GetVariable(top(type)),
                       MemoryRepresentation::PointerSized());
-      return __ BitcastWordPtrToTagged(
+      return __ BitcastWordPtrToHeapObject(
           __ PointerAdd(obj_addr, __ IntPtrConstant(kHeapObjectTag)));
     }
 
@@ -211,7 +232,7 @@ class MemoryOptimizationReducer : public Next {
         __ LoadOffHeap(top_address, MemoryRepresentation::PointerSized()));
 
     OpIndex allocate_builtin;
-    if (isolate_ != nullptr) {
+    if (!analyzer_->is_wasm) {
       if (type == AllocationType::kYoung) {
         allocate_builtin =
             __ BuiltinCode(Builtin::kAllocateInYoungGeneration, isolate_);
@@ -220,18 +241,29 @@ class MemoryOptimizationReducer : public Next {
             __ BuiltinCode(Builtin::kAllocateInOldGeneration, isolate_);
       }
     } else {
+#if V8_ENABLE_WEBASSEMBLY
       // This lowering is used by Wasm, where we compile isolate-independent
       // code. Builtin calls simply encode the target builtin ID, which will
       // be patched to the builtin's address later.
-#if V8_ENABLE_WEBASSEMBLY
-      Builtin builtin;
-      if (type == AllocationType::kYoung) {
-        builtin = Builtin::kAllocateInYoungGeneration;
+      if (isolate_ == nullptr) {
+        Builtin builtin;
+        if (type == AllocationType::kYoung) {
+          builtin = Builtin::kWasmAllocateInYoungGeneration;
+        } else {
+          builtin = Builtin::kWasmAllocateInOldGeneration;
+        }
+        static_assert(std::is_same<Smi, BuiltinPtr>(),
+                      "BuiltinPtr must be Smi");
+        allocate_builtin = __ NumberConstant(static_cast<int>(builtin));
       } else {
-        builtin = Builtin::kAllocateInOldGeneration;
+        if (type == AllocationType::kYoung) {
+          allocate_builtin =
+              __ BuiltinCode(Builtin::kWasmAllocateInYoungGeneration, isolate_);
+        } else {
+          allocate_builtin =
+              __ BuiltinCode(Builtin::kWasmAllocateInOldGeneration, isolate_);
+        }
       }
-      static_assert(std::is_same<Smi, BuiltinPtr>(), "BuiltinPtr must be Smi");
-      allocate_builtin = __ NumberConstant(static_cast<int>(builtin));
 #else
       UNREACHABLE();
 #endif
@@ -256,7 +288,7 @@ class MemoryOptimizationReducer : public Next {
         // Check if we can do bump pointer allocation here.
         OpIndex top_value = __ GetVariable(top(type));
         __ SetVariable(result,
-                       __ BitcastWordPtrToTagged(__ WordPtrAdd(
+                       __ BitcastWordPtrToHeapObject(__ WordPtrAdd(
                            top_value, __ IntPtrConstant(kHeapObjectTag))));
         OpIndex new_top = __ PointerAdd(top_value, size);
         OpIndex limit =
@@ -306,7 +338,7 @@ class MemoryOptimizationReducer : public Next {
       OpIndex allocated = __ Call(allocate_builtin, {reservation_size},
                                   AllocateBuiltinDescriptor());
       __ SetVariable(top(type),
-                     __ PointerSub(__ BitcastTaggedToWord(allocated),
+                     __ PointerSub(__ BitcastHeapObjectToWordPtr(allocated),
                                    __ IntPtrConstant(kHeapObjectTag)));
       __ Goto(done);
     }
@@ -317,7 +349,7 @@ class MemoryOptimizationReducer : public Next {
     __ SetVariable(top(type), __ PointerAdd(__ GetVariable(top(type)), size));
     __ StoreOffHeap(top_address, __ GetVariable(top(type)),
                     MemoryRepresentation::PointerSized());
-    return __ BitcastWordPtrToTagged(
+    return __ BitcastWordPtrToHeapObject(
         __ PointerAdd(obj_addr, __ IntPtrConstant(kHeapObjectTag)));
   }
 
@@ -419,11 +451,11 @@ class MemoryOptimizationReducer : public Next {
       // Wasm mode: producing isolate-independent code, loading the isolate
       // address at runtime.
 #if V8_ENABLE_WEBASSEMBLY
-      V<WasmInstanceObject> instance_node = __ WasmInstanceParameter();
+      V<WasmTrustedInstanceData> instance_node = __ WasmInstanceParameter();
       int limit_address_offset =
           type == AllocationType::kYoung
-              ? WasmInstanceObject::kNewAllocationLimitAddressOffset
-              : WasmInstanceObject::kOldAllocationLimitAddressOffset;
+              ? WasmTrustedInstanceData::kNewAllocationLimitAddressOffset
+              : WasmTrustedInstanceData::kOldAllocationLimitAddressOffset;
       limit_address =
           __ Load(instance_node, LoadOp::Kind::TaggedBase(),
                   MemoryRepresentation::PointerSized(), limit_address_offset);

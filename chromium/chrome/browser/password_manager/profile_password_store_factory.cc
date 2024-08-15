@@ -14,82 +14,31 @@
 #include "chrome/browser/password_manager/affiliation_service_factory.h"
 #include "chrome/browser/password_manager/affiliations_prefetcher_factory.h"
 #include "chrome/browser/password_manager/credentials_cleaner_runner_factory.h"
+#include "chrome/browser/password_manager/password_store_backend_factory.h"
 #include "chrome/browser/password_manager/password_store_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "components/password_manager/core/browser/affiliation/affiliations_prefetcher.h"
 #include "components/password_manager/core/browser/password_manager_constants.h"
-#include "components/password_manager/core/browser/password_store.h"
-#include "components/password_manager/core/browser/password_store_backend.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
 #include "components/password_manager/core/browser/password_store_factory_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/profiles/profile_helper.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 using password_manager::AffiliatedMatchHelper;
 using password_manager::PasswordStore;
 using password_manager::PasswordStoreInterface;
 
-// static
-scoped_refptr<PasswordStoreInterface>
-ProfilePasswordStoreFactory::GetForProfile(Profile* profile,
-                                           ServiceAccessType access_type) {
-  // |profile| gets always redirected to a non-Incognito profile below, so
-  // Incognito & IMPLICIT_ACCESS means that incognito browsing session would
-  // result in traces in the normal profile without the user knowing it.
-  if (access_type == ServiceAccessType::IMPLICIT_ACCESS &&
-      profile->IsOffTheRecord())
-    return nullptr;
-  return base::WrapRefCounted(static_cast<PasswordStoreInterface*>(
-      GetInstance()->GetServiceForBrowserContext(profile, true).get()));
-}
+namespace {
 
-// static
-ProfilePasswordStoreFactory* ProfilePasswordStoreFactory::GetInstance() {
-  static base::NoDestructor<ProfilePasswordStoreFactory> instance;
-  return instance.get();
-}
-
-ProfilePasswordStoreFactory::ProfilePasswordStoreFactory()
-    : RefcountedProfileKeyedServiceFactory(
-          "PasswordStore",
-          ProfileSelections::Builder()
-              .WithRegular(ProfileSelection::kRedirectedToOriginal)
-              // TODO(crbug.com/1418376): Check if this service is needed in
-              // Guest mode.
-              .WithGuest(ProfileSelection::kRedirectedToOriginal)
-              .Build()) {
-  DependsOn(AffiliationServiceFactory::GetInstance());
-  DependsOn(AffiliationsPrefetcherFactory::GetInstance());
-  DependsOn(CredentialsCleanerRunnerFactory::GetInstance());
-}
-
-ProfilePasswordStoreFactory::~ProfilePasswordStoreFactory() = default;
-
-scoped_refptr<RefcountedKeyedService>
-ProfilePasswordStoreFactory::BuildServiceInstanceFor(
-    content::BrowserContext* context) const {
+scoped_refptr<RefcountedKeyedService> BuildPasswordStore(
+    content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
 
   DCHECK(!profile->IsOffTheRecord());
-
-  // Incognito profiles don't have their own password stores. Guest, or system
-  // profiles aren't relevant for Password Manager, and no PasswordStore should
-  // even be created for those types of profiles.
-  if (!profile->IsRegularProfile())
-    return nullptr;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // On Ash, there are additional non-interesting profile types (sign-in
-  // profile and lockscreen profile).
-  if (!ash::ProfileHelper::IsUserProfile(profile))
-    return nullptr;
-#endif
 
   scoped_refptr<PasswordStore> ps;
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC) || \
@@ -106,9 +55,9 @@ ProfilePasswordStoreFactory::BuildServiceInstanceFor(
   // mechanism, if the sync service isn't created yet, we proceed as if the
   // user isn't syncing which forces moving the passwords to the Android backend
   // to avoid data loss.
-  ps = new password_manager::PasswordStore(
-      password_manager::PasswordStoreBackend::Create(profile->GetPath(),
-                                                     profile->GetPrefs()));
+  ps = new password_manager::PasswordStore(CreateProfilePasswordStoreBackend(
+      profile->GetPath(), profile->GetPrefs(),
+      AffiliationsPrefetcherFactory::GetForProfile(profile)));
 #else
   NOTIMPLEMENTED();
 #endif
@@ -138,6 +87,54 @@ ProfilePasswordStoreFactory::BuildServiceInstanceFor(
   DelayReportingPasswordStoreMetrics(profile);
 
   return ps;
+}
+
+}  // namespace
+
+// static
+scoped_refptr<PasswordStoreInterface>
+ProfilePasswordStoreFactory::GetForProfile(Profile* profile,
+                                           ServiceAccessType access_type) {
+  // |profile| gets always redirected to a non-Incognito profile below, so
+  // Incognito & IMPLICIT_ACCESS means that incognito browsing session would
+  // result in traces in the normal profile without the user knowing it.
+  if (access_type == ServiceAccessType::IMPLICIT_ACCESS &&
+      profile->IsOffTheRecord()) {
+    return nullptr;
+  }
+  return base::WrapRefCounted(static_cast<PasswordStoreInterface*>(
+      GetInstance()->GetServiceForBrowserContext(profile, true).get()));
+}
+
+// static
+ProfilePasswordStoreFactory* ProfilePasswordStoreFactory::GetInstance() {
+  static base::NoDestructor<ProfilePasswordStoreFactory> instance;
+  return instance.get();
+}
+
+ProfilePasswordStoreFactory::ProfilePasswordStoreFactory()
+    : RefcountedProfileKeyedServiceFactory(
+          "PasswordStore",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kRedirectedToOriginal)
+              .WithAshInternals(ProfileSelection::kNone)
+              .Build()) {
+  DependsOn(AffiliationServiceFactory::GetInstance());
+  DependsOn(AffiliationsPrefetcherFactory::GetInstance());
+  DependsOn(CredentialsCleanerRunnerFactory::GetInstance());
+}
+
+ProfilePasswordStoreFactory::~ProfilePasswordStoreFactory() = default;
+
+ProfilePasswordStoreFactory::TestingFactory
+ProfilePasswordStoreFactory::GetDefaultFactoryForTesting() {
+  return base::BindRepeating(&BuildPasswordStore);
+}
+
+scoped_refptr<RefcountedKeyedService>
+ProfilePasswordStoreFactory::BuildServiceInstanceFor(
+    content::BrowserContext* context) const {
+  return BuildPasswordStore(context);
 }
 
 bool ProfilePasswordStoreFactory::ServiceIsNULLWhileTesting() const {

@@ -22,7 +22,6 @@ void RemoveSsrcsAndMsids(cricket::SessionDescription* desc) {
   for (ContentInfo& content : desc->contents()) {
     content.media_description()->mutable_streams().clear();
   }
-  desc->set_msid_supported(false);
   desc->set_msid_signaling(0);
 }
 
@@ -46,7 +45,7 @@ void RemoveSsrcsAndKeepMsids(cricket::SessionDescription* desc) {
 
 int FindFirstMediaStatsIndexByKind(
     const std::string& kind,
-    const std::vector<const webrtc::RTCInboundRtpStreamStats*>& inbound_rtps) {
+    const std::vector<const RTCInboundRtpStreamStats*>& inbound_rtps) {
   for (size_t i = 0; i < inbound_rtps.size(); i++) {
     if (*inbound_rtps[i]->kind == kind) {
       return i;

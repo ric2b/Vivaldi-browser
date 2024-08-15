@@ -1,0 +1,42 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("resources") {
+  deps = [
+    ":location_bar_page_info",
+    ":location_bar_reload",
+    ":location_bar_stop",
+    ":location_bar_light_bg_color",
+    ":location_bar_dark_bg_color",
+  ]
+}
+
+imageset("location_bar_page_info") {
+  sources = [
+    "location_bar_page_info.imageset/Contents.json",
+    "location_bar_page_info.imageset/vivaldi_location_bar_page_info.pdf",
+  ]
+}
+
+imageset("location_bar_reload") {
+  sources = [
+    "location_bar_reload.imageset/Contents.json",
+    "location_bar_reload.imageset/vivaldi_location_bar_reload.pdf",
+  ]
+}
+
+imageset("location_bar_stop") {
+  sources = [
+    "location_bar_stop.imageset/Contents.json",
+    "location_bar_stop.imageset/vivaldi_location_bar_stop.pdf",
+  ]
+}
+
+colorset("location_bar_light_bg_color") {
+  sources = [ "location_bar_light_bg_color.colorset/Contents.json" ]
+}
+
+colorset("location_bar_dark_bg_color") {
+  sources = [ "location_bar_dark_bg_color.colorset/Contents.json" ]
+}

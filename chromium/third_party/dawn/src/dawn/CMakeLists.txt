@@ -29,6 +29,7 @@
 # Dawn projects
 ###############################################################################
 
+add_subdirectory(partition_alloc)
 add_subdirectory(common)
 add_subdirectory(platform)
 add_subdirectory(native)
@@ -108,10 +109,11 @@ DawnJSONGenerator(
 # dawn_headers above.
 add_library(dawncpp_headers STATIC ${DAWN_PLACEHOLDER_FILE})
 common_compile_options(dawncpp_headers)
-target_sources(dawncpp_headers INTERFACE
+target_sources(dawncpp_headers
+  INTERFACE
     "${DAWN_INCLUDE_DIR}/webgpu/webgpu_cpp.h"
-    "${DAWN_INCLUDE_DIR}/dawn/EnumClassBitmasks.h"
-    PRIVATE
+    "${DAWN_INCLUDE_DIR}/webgpu/webgpu_enum_class_bitmasks.h"
+  PRIVATE
     ${DAWNCPP_HEADERS_GEN_SOURCES}
 )
 target_link_libraries(dawncpp_headers INTERFACE dawn_headers)
@@ -158,7 +160,13 @@ target_sources(dawn_proc
   PRIVATE
     ${DAWNPROC_GEN_SOURCES}
 )
-target_link_libraries(dawn_proc PUBLIC dawn_headers)
+target_link_libraries(dawn_proc
+  PUBLIC
+  dawn_headers
+  PRIVATE
+  dawn_common
+  dawn_internal_config
+)
 
 install_if_enabled(dawn_proc)
 

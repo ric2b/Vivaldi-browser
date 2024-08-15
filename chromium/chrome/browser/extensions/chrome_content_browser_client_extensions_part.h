@@ -66,6 +66,9 @@ class ChromeContentBrowserClientExtensionsPart
   static bool DoesSiteRequireDedicatedProcess(
       content::BrowserContext* browser_context,
       const GURL& effective_site_url);
+  static bool ShouldAllowCrossProcessSandboxedFrameForPrecursor(
+      content::BrowserContext* browser_context,
+      const GURL& precursor);
   static bool CanCommitURL(content::RenderProcessHost* process_host,
                            const GURL& url);
   static bool IsSuitableHost(Profile* profile,
@@ -125,7 +128,8 @@ class ChromeContentBrowserClientExtensionsPart
 
   // ChromeContentBrowserClientParts:
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
-  void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
+  void SiteInstanceGotProcessAndSite(
+      content::SiteInstance* site_instance) override;
   void OverrideWebkitPrefs(content::WebContents* web_contents,
                            blink::web_pref::WebPreferences* web_prefs) override;
   bool OverrideWebPreferencesAfterNavigation(

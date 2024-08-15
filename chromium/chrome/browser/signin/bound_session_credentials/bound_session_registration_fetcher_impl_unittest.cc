@@ -41,7 +41,7 @@ using unexportable_keys::UnexportableKeyId;
 using RegistrationError =
     BoundSessionRegistrationFetcherImpl::RegistrationError;
 using RegistrationResultFuture = base::test::TestFuture<
-    absl::optional<bound_session_credentials::BoundSessionParams>>;
+    std::optional<bound_session_credentials::BoundSessionParams>>;
 
 constexpr std::string_view kXssiPrefix = ")]}'";
 constexpr std::string_view kBoundSessionParamsValidJson = R"(
@@ -86,7 +86,7 @@ constexpr std::string_view kChallenge = "test_challenge";
 // Checks equality of the two protos in an std::tuple. Useful for matching two
 // two protos using ::testing::Pointwise or ::testing::UnorderedPointwise.
 MATCHER(TupleEqualsProto, "") {
-  return testing::ExplainMatchResult(base::EqualsProto(std::get<1>(arg)),
+  return testing::ExplainMatchResult(base::test::EqualsProto(std::get<1>(arg)),
                                      std::get<0>(arg), result_listener);
 }
 
@@ -193,9 +193,15 @@ class BoundSessionRegistrationFetcherImplTest : public testing::Test {
     scoped_key_provider_.emplace<crypto::ScopedNullUnexportableKeyProvider>();
   }
 
-  void ExpectRecordedResultHistogram(RegistrationError error) {
+  void ExpectRecordedMetrics(RegistrationError error) {
     histogram_tester_.ExpectUniqueSample(
         "Signin.BoundSessionCredentials.SessionRegistrationResult", error, 1);
+    histogram_tester_.ExpectTotalCount(
+        "Signin.BoundSessionCredentials.SessionRegistrationTotalDuration", 1);
+    histogram_tester_.ExpectTotalCount(
+        "Signin.BoundSessionCredentials."
+        "SessionRegistrationGenerateRegistrationTokenDuration",
+        1);
   }
 
  private:
@@ -249,10 +255,10 @@ TEST_F(BoundSessionRegistrationFetcherImplTest, ValidInput) {
   ASSERT_TRUE(future.Get().has_value());
   ASSERT_TRUE(bound_session_credentials::AreParamsValid(*future.Get()));
   EXPECT_THAT(future.Get(),
-              testing::Optional(base::EqualsProto(
+              testing::Optional(base::test::EqualsProto(
                   CreateTestBoundSessionParams(future.Get()->wrapped_key()))));
 
-  ExpectRecordedResultHistogram(RegistrationError::kNone);
+  ExpectRecordedMetrics(RegistrationError::kNone);
 
   // Verify the wrapped key.
   std::string wrapped_key = future.Get<>()->wrapped_key();
@@ -284,14 +290,14 @@ TEST_F(BoundSessionRegistrationFetcherImplTest, MissingXSSIPrefix) {
   EXPECT_TRUE(future.IsReady());
   ASSERT_TRUE(future.Get().has_value());
   EXPECT_THAT(future.Get(),
-              testing::Optional(base::EqualsProto(
+              testing::Optional(base::test::EqualsProto(
                   CreateTestBoundSessionParams(future.Get()->wrapped_key()))));
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest, MissingJSONBoundSessionParams) {
   // Response body contains XSSI prefix but JSON of bound session params
   // missing. Expecting early termination and callback to be called with
-  // absl::nullopt.
+  // std::nullopt.
   SetUpServerResponse(kXssiPrefix);
   std::unique_ptr<BoundSessionRegistrationFetcher> fetcher = CreateFetcher();
   RegistrationResultFuture future;
@@ -300,9 +306,9 @@ TEST_F(BoundSessionRegistrationFetcherImplTest, MissingJSONBoundSessionParams) {
   RunBackgroundTasks();
   EXPECT_TRUE(WasRequestSent());
   EXPECT_TRUE(future.IsReady());
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
 
-  ExpectRecordedResultHistogram(RegistrationError::kParseJsonFailed);
+  ExpectRecordedMetrics(RegistrationError::kParseJsonFailed);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest,
@@ -314,8 +320,8 @@ TEST_F(BoundSessionRegistrationFetcherImplTest,
   fetcher->Start(future.GetCallback());
   RunBackgroundTasks();
 
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
-  ExpectRecordedResultHistogram(RegistrationError::kRequiredFieldMissing);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
+  ExpectRecordedMetrics(RegistrationError::kRequiredFieldMissing);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest,
@@ -327,8 +333,8 @@ TEST_F(BoundSessionRegistrationFetcherImplTest,
   fetcher->Start(future.GetCallback());
   RunBackgroundTasks();
 
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
-  ExpectRecordedResultHistogram(RegistrationError::kRequiredFieldMissing);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
+  ExpectRecordedMetrics(RegistrationError::kRequiredFieldMissing);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest,
@@ -354,9 +360,8 @@ TEST_F(BoundSessionRegistrationFetcherImplTest,
   fetcher->Start(future.GetCallback());
   RunBackgroundTasks();
 
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
-  ExpectRecordedResultHistogram(
-      RegistrationError::kRequiredCredentialFieldMissing);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
+  ExpectRecordedMetrics(RegistrationError::kRequiredCredentialFieldMissing);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest, NonOkHttpResponseCode) {
@@ -367,8 +372,8 @@ TEST_F(BoundSessionRegistrationFetcherImplTest, NonOkHttpResponseCode) {
   fetcher->Start(future.GetCallback());
   RunBackgroundTasks();
 
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
-  ExpectRecordedResultHistogram(RegistrationError::kServerError);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
+  ExpectRecordedMetrics(RegistrationError::kServerError);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest, NetworkError) {
@@ -379,8 +384,8 @@ TEST_F(BoundSessionRegistrationFetcherImplTest, NetworkError) {
   fetcher->Start(future.GetCallback());
   RunBackgroundTasks();
 
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
-  ExpectRecordedResultHistogram(RegistrationError::kNetworkError);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
+  ExpectRecordedMetrics(RegistrationError::kNetworkError);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest, NoKeyProvider) {
@@ -392,9 +397,8 @@ TEST_F(BoundSessionRegistrationFetcherImplTest, NoKeyProvider) {
   RunBackgroundTasks();
 
   EXPECT_FALSE(WasRequestSent());
-  EXPECT_EQ(future.Get<>(), absl::nullopt);
-  ExpectRecordedResultHistogram(
-      RegistrationError::kGenerateRegistrationTokenFailed);
+  EXPECT_EQ(future.Get<>(), std::nullopt);
+  ExpectRecordedMetrics(RegistrationError::kGenerateRegistrationTokenFailed);
 }
 
 TEST_F(BoundSessionRegistrationFetcherImplTest, ParseCredentials) {

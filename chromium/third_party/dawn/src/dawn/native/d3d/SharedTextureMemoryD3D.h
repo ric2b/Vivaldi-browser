@@ -44,13 +44,11 @@ class SharedTextureMemory : public SharedTextureMemoryBase {
 
   protected:
     MaybeError BeginAccessImpl(TextureBase* texture,
-                               const BeginAccessDescriptor* descriptor) override;
-    ResultOrError<FenceAndSignalValue> EndAccessImpl(TextureBase* texture) override;
+                               const UnpackedPtr<BeginAccessDescriptor>& descriptor) override;
+    ResultOrError<FenceAndSignalValue> EndAccessImpl(TextureBase* texture,
+                                                     UnpackedPtr<EndAccessState>& state) override;
 
   private:
-    virtual ResultOrError<Ref<SharedFenceBase>> CreateFenceImpl(
-        const SharedFenceDXGISharedHandleDescriptor* desc) = 0;
-
     // If the resource has IDXGIKeyedMutex interface, it will be used for synchronization.
     // TODO(dawn:1906): remove the mDXGIKeyedMutex when it is not used in chrome.
     ComPtr<IDXGIKeyedMutex> mDXGIKeyedMutex;

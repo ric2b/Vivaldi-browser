@@ -7,16 +7,16 @@
 
 #include <stdint.h>
 
-#include <ostream>
+#include <iosfwd>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
-#include "base/strings/string_piece.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
 #include "net/base/proxy_server.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
 
@@ -57,18 +57,18 @@ class NET_EXPORT ProxyChain {
   // `ProxyChain()` or `Direct()` respectively to create an invalid or direct
   // ProxyChain.
   static ProxyChain FromSchemeHostAndPort(ProxyServer::Scheme scheme,
-                                          base::StringPiece host,
-                                          base::StringPiece port_str) {
+                                          std::string_view host,
+                                          std::string_view port_str) {
     return ProxyChain(
         ProxyServer::FromSchemeHostAndPort(scheme, host, port_str));
   }
   static ProxyChain FromSchemeHostAndPort(ProxyServer::Scheme scheme,
-                                          base::StringPiece host,
-                                          absl::optional<uint16_t> port) {
+                                          std::string_view host,
+                                          std::optional<uint16_t> port) {
     return ProxyChain(ProxyServer::FromSchemeHostAndPort(scheme, host, port));
   }
   // Create a "direct" proxy chain, which includes no proxy servers.
-  static ProxyChain Direct() { return ProxyChain(ProxyServer::Direct()); }
+  static ProxyChain Direct() { return ProxyChain(std::vector<ProxyServer>()); }
 
   // Get ProxyServer at index in chain. This is not valid for direct or invalid
   // proxy chains.
@@ -78,16 +78,20 @@ class NET_EXPORT ProxyChain {
   // proxy chains. An empty vector is returned for direct proxy chains.
   const std::vector<ProxyServer>& proxy_servers() const;
 
+  // Return the last proxy server in the chain, together with all of the
+  // preceding proxies. The chain must have at least one proxy server. If it
+  // only has one proxy server, then the resulting chain will be direct.
+  std::pair<ProxyChain, const ProxyServer&> SplitLast() const;
+
+  // Get the last ProxyServer in this chain, which must have at least one
+  // server.
+  const ProxyServer& Last() const;
+
   // Get the ProxyServers in this chain, or `nullopt` if the chain is not valid.
-  const absl::optional<std::vector<ProxyServer>>& proxy_servers_if_valid()
+  const std::optional<std::vector<ProxyServer>>& proxy_servers_if_valid()
       const {
     return proxy_server_list_;
   }
-
-  // Get the single ProxyServer equivalent to this chain. This must not be
-  // called for multi-proxy chains.
-  // TODO(crbug.com/1491092): Remove this method.
-  const ProxyServer& proxy_server() const;
 
   // Returns number of proxy servers in chain.
   size_t length() const {
@@ -115,24 +119,44 @@ class NET_EXPORT ProxyChain {
                                           : false;
   }
 
-  // Returns true if a proxy server list is available .
+  // Determines if HTTP GETs to the last proxy in the chain are allowed,
+  // instead of establishing a tunnel with CONNECT. This is currently not
+  // supported for multi-proxy chains.
+  bool is_get_to_proxy_allowed() const {
+    return is_single_proxy() && GetProxyServer(0).is_http_like();
+  }
+
+  // Returns true if a proxy server list is available.
   bool IsValid() const { return proxy_server_list_.has_value(); }
 
+  // Returns a `ProxyChain` for use by the IP Protection feature. This is used
+  // for metrics collection and for special handling (for instance, IP
+  // protection proxy chains will have an authorization header appended to the
+  // CONNECT requests sent to the proxy servers, and requests sent through an
+  // IP Protection proxy chain will have an "IP-Protection: 1" header added to
+  // them).
+  ProxyChain&& ForIpProtection() &&;
+  bool is_for_ip_protection() const { return is_for_ip_protection_; }
+
   bool operator==(const ProxyChain& other) const {
-    return proxy_server_list_ == other.proxy_server_list_;
+    return std::tie(proxy_server_list_, is_for_ip_protection_) ==
+           std::tie(other.proxy_server_list_, other.is_for_ip_protection_);
   }
 
   bool operator!=(const ProxyChain& other) const { return !(*this == other); }
 
   // Comparator function so this can be placed in a std::map.
   bool operator<(const ProxyChain& other) const {
-    return proxy_server_list_ < other.proxy_server_list_;
+    return std::tie(proxy_server_list_, is_for_ip_protection_) <
+           std::tie(other.proxy_server_list_, other.is_for_ip_protection_);
   }
 
   std::string ToDebugString() const;
 
  private:
-  absl::optional<std::vector<ProxyServer>> proxy_server_list_;
+  std::optional<std::vector<ProxyServer>> proxy_server_list_;
+
+  bool is_for_ip_protection_ = false;
 
   // Returns true if this chain is valid.
   bool IsValidInternal() const;

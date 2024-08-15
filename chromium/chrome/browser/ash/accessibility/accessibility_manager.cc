@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/autoclick/autoclick_controller.h"
 #include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/color_enhancement/color_enhancement_controller.h"
@@ -16,7 +17,6 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/accelerators.h"
-#include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/accessibility_controller_enums.h"
 #include "ash/public/cpp/accessibility_focus_ring_controller.h"
 #include "ash/public/cpp/accessibility_focus_ring_info.h"
@@ -48,13 +48,12 @@
 #include "chrome/browser/accessibility/accessibility_extension_api_ash.h"
 #include "chrome/browser/accessibility/pdf_ocr_controller.h"
 #include "chrome/browser/accessibility/pdf_ocr_controller_factory.h"
+#include "chrome/browser/ash/accessibility/accessibility_dlc_installer.h"
 #include "chrome/browser/ash/accessibility/accessibility_extension_loader.h"
 #include "chrome/browser/ash/accessibility/dictation.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
-#include "chrome/browser/ash/accessibility/pumpkin_installer.h"
 #include "chrome/browser/ash/accessibility/select_to_speak_event_handler_delegate_impl.h"
 #include "chrome/browser/ash/accessibility/service/accessibility_service_client.h"
-#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -123,7 +122,9 @@ namespace ash {
 namespace {
 
 using ::extensions::api::accessibility_private::DlcType;
+using ::extensions::api::accessibility_private::FaceGazeAssets;
 using ::extensions::api::accessibility_private::PumpkinData;
+using ::extensions::api::accessibility_private::TtsVariant;
 using ::extensions::api::braille_display_private::BrailleController;
 using ::extensions::api::braille_display_private::DisplayState;
 using ::extensions::api::braille_display_private::KeyEvent;
@@ -145,8 +146,11 @@ const char kUserBluetoothBrailleDisplayAddress[] =
 // The name of the Brltty upstart job.
 constexpr char kBrlttyUpstartJobName[] = "brltty";
 
-// The path to the pumpkin DLC directory.
-constexpr char kPumpkinDlcRootPath[] = "/run/imageloader/pumpkin/package/root/";
+// The file name of a lite TTS voice.
+const char kTtsLiteFileName[] = "voice.zvoice";
+
+// The file name of a standard TTS voice.
+const char kTtsStandardFileName[] = "voice-standard.zvoice";
 
 static AccessibilityManager* g_accessibility_manager = nullptr;
 
@@ -189,47 +193,47 @@ std::string AccessibilityPrivateEnumForAction(SelectToSpeakPanelAction action) {
   switch (action) {
     case SelectToSpeakPanelAction::kPreviousSentence:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_PREVIOUSSENTENCE);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kPreviousSentence);
     case SelectToSpeakPanelAction::kPreviousParagraph:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_PREVIOUSPARAGRAPH);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kPreviousParagraph);
     case SelectToSpeakPanelAction::kPause:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_PAUSE);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kPause);
     case SelectToSpeakPanelAction::kResume:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_RESUME);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kResume);
     case SelectToSpeakPanelAction::kNextSentence:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_NEXTSENTENCE);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kNextSentence);
     case SelectToSpeakPanelAction::kNextParagraph:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_NEXTPARAGRAPH);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kNextParagraph);
     case SelectToSpeakPanelAction::kChangeSpeed:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_CHANGESPEED);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kChangeSpeed);
     case SelectToSpeakPanelAction::kExit:
       return extensions::api::accessibility_private::ToString(
-          extensions::api::accessibility_private::
-              SELECT_TO_SPEAK_PANEL_ACTION_EXIT);
+          extensions::api::accessibility_private::SelectToSpeakPanelAction::
+              kExit);
     case SelectToSpeakPanelAction::kNone:
       NOTREACHED();
       return "";
   }
 }
 
-absl::optional<bool> GetDictationOfflineNudgePrefForLocale(
+std::optional<bool> GetDictationOfflineNudgePrefForLocale(
     Profile* profile,
     const std::string& dictation_locale) {
   if (dictation_locale.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   const base::Value::Dict& offline_nudges = profile->GetPrefs()->GetDict(
       prefs::kAccessibilityDictationLocaleOfflineNudge);
@@ -239,7 +243,7 @@ absl::optional<bool> GetDictationOfflineNudgePrefForLocale(
 // Represents response data returned by `ReadDlcFile`.
 struct ReadDlcFileResponse {
   ReadDlcFileResponse(std::vector<uint8_t> contents,
-                      absl::optional<std::string> error)
+                      std::optional<std::string> error)
       : contents(contents), error(error) {}
   ~ReadDlcFileResponse() = default;
   ReadDlcFileResponse(const ReadDlcFileResponse&) = default;
@@ -248,7 +252,7 @@ struct ReadDlcFileResponse {
   // The content of the DLC file.
   std::vector<uint8_t> contents;
   // An error, if any.
-  absl::optional<std::string> error;
+  std::optional<std::string> error;
 };
 
 // Reads the contents of a DLC file specified by `path`. Must run asynchronously
@@ -279,17 +283,40 @@ ReadDlcFileResponse ReadDlcFile(base::FilePath path) {
     return ReadDlcFileResponse(std::vector<uint8_t>(), error);
   }
 
-  return ReadDlcFileResponse(contents, absl::nullopt);
+  return ReadDlcFileResponse(contents, std::nullopt);
 }
 
 // Runs when `ReadDlcFile` returns the contents of a file.
-void OnReadDlcFile(GetDlcContentsCallback callback,
+void OnReadDlcFile(GetTtsDlcContentsCallback callback,
                    ReadDlcFileResponse response) {
   std::move(callback).Run(response.contents, response.error);
 }
 
-absl::optional<PumpkinData> CreatePumpkinData(
-    base::FilePath base_pumpkin_path) {
+std::optional<FaceGazeAssets> CreateFaceGazeAssets(base::FilePath base_path) {
+  DCHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+  FaceGazeAssets assets;
+  base::flat_map<std::string, std::vector<uint8_t>*> files_to_data({
+      {"face_landmarker.task", &assets.model},
+      {"vision_wasm_internal.wasm", &assets.wasm},
+  });
+
+  for (const auto& iter : files_to_data) {
+    std::string file_name = iter.first;
+    std::vector<uint8_t>* file_data = iter.second;
+    ReadDlcFileResponse response = ReadDlcFile(base_path.Append(file_name));
+    if (response.error.has_value()) {
+      return std::nullopt;
+    }
+
+    *file_data = response.contents;
+  }
+
+  return assets;
+}
+
+std::optional<PumpkinData> CreatePumpkinData(base::FilePath base_pumpkin_path) {
   DCHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
@@ -318,7 +345,7 @@ absl::optional<PumpkinData> CreatePumpkinData(
     ReadDlcFileResponse response =
         ReadDlcFile(base_pumpkin_path.Append(file_name));
     if (response.error.has_value())
-      return absl::nullopt;
+      return std::nullopt;
 
     *file_data = response.contents;
   }
@@ -351,7 +378,7 @@ class AccessibilityPanelWidgetObserver : public views::WidgetObserver {
   }
 
  private:
-  raw_ptr<views::Widget, ExperimentalAsh> widget_;
+  raw_ptr<views::Widget> widget_;
 
   base::OnceCallback<void()> on_destroying_;
 };
@@ -469,45 +496,69 @@ AccessibilityManager::AccessibilityManager() {
   base::FilePath resources_path;
   if (!base::PathService::Get(chrome::DIR_RESOURCES, &resources_path))
     NOTREACHED();
+  const bool enable_v3_manifest =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kEnableExperimentalAccessibilityManifestV3);
+  const base::FilePath::CharType* accessibility_common_manifest_filename =
+      enable_v3_manifest
+          ? extension_misc::kAccessibilityCommonManifestV3Filename
+          : extension_misc::kAccessibilityCommonManifestFilename;
+  const base::FilePath::CharType* accessibility_common_guest_manifest_filename =
+      enable_v3_manifest
+          ? extension_misc::kAccessibilityCommonGuestManifestV3Filename
+          : extension_misc::kAccessibilityCommonGuestManifestFilename;
+
   accessibility_common_extension_loader_ =
       base::WrapUnique(new AccessibilityExtensionLoader(
           extension_misc::kAccessibilityCommonExtensionId,
           resources_path.Append(
               extension_misc::kAccessibilityCommonExtensionPath),
-          extension_misc::kAccessibilityCommonManifestFilename,
-          extension_misc::kAccessibilityCommonGuestManifestFilename,
+          accessibility_common_manifest_filename,
+          accessibility_common_guest_manifest_filename,
           base::BindRepeating(
               &AccessibilityManager::PostUnloadAccessibilityCommon,
               weak_ptr_factory_.GetWeakPtr())));
+
+  const base::FilePath::CharType* chromevox_manifest_filename =
+      enable_v3_manifest ? extension_misc::kChromeVoxManifestV3Filename
+                         : extension_misc::kChromeVoxManifestFilename;
+  const base::FilePath::CharType* chromevox_guest_manifest_filename =
+      enable_v3_manifest ? extension_misc::kChromeVoxGuestManifestV3Filename
+                         : extension_misc::kChromeVoxGuestManifestFilename;
+
   chromevox_loader_ = base::WrapUnique(new AccessibilityExtensionLoader(
       extension_misc::kChromeVoxExtensionId,
       resources_path.Append(extension_misc::kChromeVoxExtensionPath),
-      extension_misc::kChromeVoxManifestFilename,
-      extension_misc::kChromeVoxGuestManifestFilename,
+      chromevox_manifest_filename, chromevox_guest_manifest_filename,
       base::BindRepeating(&AccessibilityManager::PostUnloadChromeVox,
                           weak_ptr_factory_.GetWeakPtr())));
+
+  const base::FilePath::CharType* select_to_speak_manifest_filename =
+      enable_v3_manifest ? extension_misc::kSelectToSpeakManifestV3Filename
+                         : extension_misc::kSelectToSpeakManifestFilename;
+  const base::FilePath::CharType* select_to_speak_guest_manifest_filename =
+      enable_v3_manifest ? extension_misc::kSelectToSpeakGuestManifestV3Filename
+                         : extension_misc::kSelectToSpeakGuestManifestFilename;
+
   select_to_speak_loader_ = base::WrapUnique(new AccessibilityExtensionLoader(
       extension_misc::kSelectToSpeakExtensionId,
       resources_path.Append(extension_misc::kSelectToSpeakExtensionPath),
-      extension_misc::kSelectToSpeakManifestFilename,
-      extension_misc::kSelectToSpeakGuestManifestFilename,
+      select_to_speak_manifest_filename,
+      select_to_speak_guest_manifest_filename,
       base::BindRepeating(&AccessibilityManager::PostUnloadSelectToSpeak,
                           weak_ptr_factory_.GetWeakPtr())));
 
-  const bool enable_v3_manifest =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kEnableExperimentalAccessibilityManifestV3);
-  const base::FilePath::CharType* switchAccessManifestFilename =
+  const base::FilePath::CharType* switch_access_manifest_filename =
       enable_v3_manifest ? extension_misc::kSwitchAccessManifestV3Filename
                          : extension_misc::kSwitchAccessManifestFilename;
-  const base::FilePath::CharType* switchAccessGuestManifestFilename =
+  const base::FilePath::CharType* switch_access_guest_manifest_filename =
       enable_v3_manifest ? extension_misc::kSwitchAccessGuestManifestV3Filename
                          : extension_misc::kSwitchAccessGuestManifestFilename;
 
   switch_access_loader_ = base::WrapUnique(new AccessibilityExtensionLoader(
       extension_misc::kSwitchAccessExtensionId,
       resources_path.Append(extension_misc::kSwitchAccessExtensionPath),
-      switchAccessManifestFilename, switchAccessGuestManifestFilename,
+      switch_access_manifest_filename, switch_access_guest_manifest_filename,
       base::BindRepeating(&AccessibilityManager::PostUnloadSwitchAccess,
                           weak_ptr_factory_.GetWeakPtr())));
 
@@ -520,7 +571,7 @@ AccessibilityManager::AccessibilityManager() {
 
   CrasAudioHandler::Get()->AddAudioObserver(this);
 
-  pumpkin_installer_ = std::make_unique<PumpkinInstaller>();
+  dlc_installer_ = std::make_unique<AccessibilityDlcInstaller>();
 }
 
 AccessibilityManager::~AccessibilityManager() {
@@ -852,6 +903,21 @@ bool AccessibilityManager::IsAutoclickEnabled() const {
                          prefs::kAccessibilityAutoclickEnabled);
 }
 
+void AccessibilityManager::EnableFaceGaze(bool enabled) {
+  if (!profile_) {
+    return;
+  }
+
+  PrefService* pref_service = profile_->GetPrefs();
+  pref_service->SetBoolean(prefs::kAccessibilityFaceGazeEnabled, enabled);
+  pref_service->CommitPendingWrite();
+}
+
+bool AccessibilityManager::IsFaceGazeEnabled() const {
+  return profile_ &&
+         profile_->GetPrefs()->GetBoolean(prefs::kAccessibilityFaceGazeEnabled);
+}
+
 void AccessibilityManager::OnAccessibilityCommonChanged(
     const std::string& pref_name) {
   if (!profile_)
@@ -1121,7 +1187,7 @@ void AccessibilityManager::OnDictationChanged(bool triggered_by_user) {
       pref_service->GetString(prefs::kAccessibilityDictationLocale);
   if (!triggered_by_user) {
     // This Dictation change was not due to an explicit user action.
-    const absl::optional<bool> offline_nudge =
+    const std::optional<bool> offline_nudge =
         GetDictationOfflineNudgePrefForLocale(profile_, dictation_locale);
 
     // See if the Dictation locale can now work offline in the
@@ -1267,6 +1333,13 @@ void AccessibilityManager::OnSelectToSpeakChanged() {
       prefs::kAccessibilitySelectToSpeakEnabled);
   if (enabled) {
     select_to_speak_loader_->SetBrowserContext(profile_, base::OnceClosure());
+
+    if (::features::IsAccessibilityPdfOcrForSelectToSpeakEnabled() &&
+        ::features::IsPdfOcrEnabled()) {
+      // Create PdfOcrController when both the PDF OCR feature flag and STS are
+      // enabled.
+      ::screen_ai::PdfOcrControllerFactory::GetForProfile(profile());
+    }
   }
 
   if (select_to_speak_enabled_ == enabled)
@@ -1586,6 +1659,14 @@ void AccessibilityManager::SetProfile(Profile* profile) {
                        base::Unretained(this)));
     }
 
+    if (::features::IsAccessibilityFaceGazeEnabled()) {
+      pref_change_registrar_->Add(
+          prefs::kAccessibilityFaceGazeEnabled,
+          base::BindRepeating(
+              &AccessibilityManager::OnAccessibilityCommonChanged,
+              base::Unretained(this)));
+    }
+
     local_state_pref_change_registrar_ =
         std::make_unique<PrefChangeRegistrar>();
     local_state_pref_change_registrar_->Init(g_browser_process->local_state());
@@ -1630,6 +1711,11 @@ void AccessibilityManager::SetProfile(Profile* profile) {
 
   for (const std::string& feature : kAccessibilityCommonFeatures)
     OnAccessibilityCommonChanged(feature);
+
+  if (::features::IsAccessibilityFaceGazeEnabled()) {
+    OnAccessibilityCommonChanged(prefs::kAccessibilityFaceGazeEnabled);
+  }
+
   // Dictation is not in kAccessibilityCommonFeatures because it needs to
   // be handled in OnDictationChanged also. OnDictationChanged will call to
   // OnAccessibilityCommonChanged.
@@ -1990,11 +2076,22 @@ void AccessibilityManager::LoadEnhancedNetworkTts() {
   base::FilePath resources_path;
   if (!base::PathService::Get(chrome::DIR_RESOURCES, &resources_path))
     NOTREACHED();
+
+  const bool enable_v3_manifest =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ::switches::kEnableExperimentalAccessibilityManifestV3);
+  const base::FilePath::CharType* manifest_filename =
+      enable_v3_manifest ? extension_misc::kEnhancedNetworkTtsManifestV3Filename
+                         : extension_misc::kEnhancedNetworkTtsManifestFilename;
+  const base::FilePath::CharType* guest_manifest_filename =
+      enable_v3_manifest
+          ? extension_misc::kEnhancedNetworkTtsGuestManifestV3Filename
+          : extension_misc::kEnhancedNetworkTtsGuestManifestFilename;
+
   component_loader->AddComponentFromDirWithManifestFilename(
       resources_path.Append(extension_misc::kEnhancedNetworkTtsExtensionPath),
-      extension_misc::kEnhancedNetworkTtsExtensionId,
-      extension_misc::kEnhancedNetworkTtsManifestFilename,
-      extension_misc::kEnhancedNetworkTtsGuestManifestFilename,
+      extension_misc::kEnhancedNetworkTtsExtensionId, manifest_filename,
+      guest_manifest_filename,
       base::BindOnce(&AccessibilityManager::PostLoadEnhancedNetworkTts,
                      base::Unretained(this)));
 }
@@ -2354,18 +2451,18 @@ void AccessibilityManager::SendMouseEventToSelectToSpeak(
   switch (type) {
     case ui::EventType::ET_MOUSE_PRESSED:
       event_type = extensions::api::accessibility_private::
-          SyntheticMouseEventType::SYNTHETIC_MOUSE_EVENT_TYPE_PRESS;
+          SyntheticMouseEventType::kPress;
       break;
     case ui::EventType::ET_MOUSE_RELEASED:
       event_type = extensions::api::accessibility_private::
-          SyntheticMouseEventType::SYNTHETIC_MOUSE_EVENT_TYPE_RELEASE;
+          SyntheticMouseEventType::kRelease;
       break;
     case ui::EventType::ET_MOUSE_MOVED:
     case ui::EventType::ET_MOUSE_ENTERED:
     case ui::EventType::ET_MOUSE_EXITED:
     case ui::EventType::ET_MOUSE_DRAGGED:
       event_type = extensions::api::accessibility_private::
-          SyntheticMouseEventType::SYNTHETIC_MOUSE_EVENT_TYPE_MOVE;
+          SyntheticMouseEventType::kMove;
       break;
     case ui::EventType::ET_MOUSEWHEEL:
       // Mouse wheel not handled.
@@ -2508,7 +2605,7 @@ void AccessibilityManager::OnSodaInstallUpdated(int progress) {
   if (soda_installer->IsSodaDownloading(GetDictationLanguageCode()))
     return;
 
-  const absl::optional<bool> offline_nudge =
+  const std::optional<bool> offline_nudge =
       GetDictationOfflineNudgePrefForLocale(profile_, dictation_locale);
   // Check if this locale was downloaded and a nudge for it should be
   // shown to the user (the key is in kAccessibilityDictationLocale but the
@@ -2602,7 +2699,7 @@ void AccessibilityManager::UpdateDictationNotification() {
     soda_installed = speech::SodaInstaller::GetInstance()->IsSodaInstalled(
         GetDictationLanguageCode());
   }
-  bool pumpkin_installed = pumpkin_installer_->IsPumpkinInstalled();
+  bool pumpkin_installed = dlc_installer_->IsPumpkinInstalled();
 
   // There are four possible states for the Dictation notification:
   // 1. Pumpkin installed, SODA installed
@@ -2648,17 +2745,67 @@ speech::LanguageCode AccessibilityManager::GetDictationLanguageCode() {
       profile_->GetPrefs()->GetString(prefs::kAccessibilityDictationLocale));
 }
 
+void AccessibilityManager::InstallFaceGazeAssets(
+    InstallFaceGazeAssetsCallback callback) {
+  DCHECK(!callback.is_null());
+  if (!::features::IsAccessibilityFaceGazeEnabled() || !IsFaceGazeEnabled()) {
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
+
+  install_facegaze_assets_callback_ = std::move(callback);
+  dlc_installer_->MaybeInstall(
+      AccessibilityDlcInstaller::DlcType::kFaceGazeAssets,
+      base::BindOnce(&AccessibilityManager::OnFaceGazeAssetsInstalled,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindRepeating([](double progress) {}),
+      base::BindOnce([](const std::string& error) {}));
+}
+
+void AccessibilityManager::OnFaceGazeAssetsInstalled(
+    bool success,
+    const std::string& root_path) {
+  if (install_facegaze_assets_callback_.is_null()) {
+    return;
+  }
+
+  if (!success) {
+    std::move(install_facegaze_assets_callback_).Run(std::nullopt);
+    return;
+  }
+
+  base::FilePath base_path = dlc_path_for_test_.empty()
+                                 ? base::FilePath(root_path)
+                                 : dlc_path_for_test_;
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&CreateFaceGazeAssets, base::FilePath(base_path)),
+      base::BindOnce(&AccessibilityManager::OnFaceGazeAssetsCreated,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void AccessibilityManager::OnFaceGazeAssetsCreated(
+    std::optional<FaceGazeAssets> assets) {
+  if (install_facegaze_assets_callback_.is_null()) {
+    return;
+  }
+
+  std::move(install_facegaze_assets_callback_).Run(std::move(assets));
+}
+
 void AccessibilityManager::InstallPumpkinForDictation(
     InstallPumpkinCallback callback) {
   DCHECK(!callback.is_null());
   if (!IsDictationEnabled()) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return;
   }
 
   // Save `callback` and run it after the installation succeeds or fails.
   install_pumpkin_callback_ = std::move(callback);
-  pumpkin_installer_->MaybeInstall(
+  dlc_installer_->MaybeInstall(
+      AccessibilityDlcInstaller::DlcType::kPumpkin,
       base::BindOnce(&AccessibilityManager::OnPumpkinInstalled,
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindRepeating([](double progress) {}),
@@ -2666,19 +2813,20 @@ void AccessibilityManager::InstallPumpkinForDictation(
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void AccessibilityManager::OnPumpkinInstalled(bool success) {
+void AccessibilityManager::OnPumpkinInstalled(bool success,
+                                              const std::string& root_path) {
   if (install_pumpkin_callback_.is_null()) {
     return;
   }
 
   if (!success) {
-    std::move(install_pumpkin_callback_).Run(absl::nullopt);
+    std::move(install_pumpkin_callback_).Run(std::nullopt);
     return;
   }
 
   is_pumpkin_installed_for_testing_ = success;
   base::FilePath base_pumpkin_path = dlc_path_for_test_.empty()
-                                         ? base::FilePath(kPumpkinDlcRootPath)
+                                         ? base::FilePath(root_path)
                                          : dlc_path_for_test_;
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
@@ -2690,7 +2838,7 @@ void AccessibilityManager::OnPumpkinInstalled(bool success) {
 }
 
 void AccessibilityManager::OnPumpkinDataCreated(
-    absl::optional<PumpkinData> data) {
+    std::optional<PumpkinData> data) {
   if (install_pumpkin_callback_.is_null()) {
     return;
   }
@@ -2703,69 +2851,67 @@ void AccessibilityManager::OnPumpkinError(const std::string& error) {
     return;
   }
 
-  std::move(install_pumpkin_callback_).Run(absl::nullopt);
+  std::move(install_pumpkin_callback_).Run(std::nullopt);
   is_pumpkin_installed_for_testing_ = false;
 
   UpdateDictationNotification();
 }
 
-void AccessibilityManager::GetDlcContents(DlcType dlc,
-                                          GetDlcContentsCallback callback) {
-  // Convert enum to locale. Note that this API currently only supports TTS
-  // DLCs.
+void AccessibilityManager::GetTtsDlcContents(
+    DlcType dlc,
+    TtsVariant variant,
+    GetTtsDlcContentsCallback callback) {
   static constexpr auto kTtsDlcTypeToLocale =
       base::MakeFixedFlatMap<DlcType, const char*>(
-          {{DlcType::DLC_TYPE_TTSBNBD, "bn-bd"},
-           {DlcType::DLC_TYPE_TTSCSCZ, "cs-cz"},
-           {DlcType::DLC_TYPE_TTSDADK, "da-dk"},
-           {DlcType::DLC_TYPE_TTSDEDE, "de-de"},
-           {DlcType::DLC_TYPE_TTSELGR, "el-gr"},
-           {DlcType::DLC_TYPE_TTSENAU, "en-au"},
-           {DlcType::DLC_TYPE_TTSENGB, "en-gb"},
-           {DlcType::DLC_TYPE_TTSENUS, "en-us"},
-           {DlcType::DLC_TYPE_TTSESES, "es-es"},
-           {DlcType::DLC_TYPE_TTSESUS, "es-us"},
-           {DlcType::DLC_TYPE_TTSFIFI, "fi-fi"},
-           {DlcType::DLC_TYPE_TTSFILPH, "fil-ph"},
-           {DlcType::DLC_TYPE_TTSFRFR, "fr-fr"},
-           {DlcType::DLC_TYPE_TTSHIIN, "hi-in"},
-           {DlcType::DLC_TYPE_TTSHUHU, "hu-hu"},
-           {DlcType::DLC_TYPE_TTSIDID, "id-id"},
-           {DlcType::DLC_TYPE_TTSITIT, "it-it"},
-           {DlcType::DLC_TYPE_TTSJAJP, "ja-jp"},
-           {DlcType::DLC_TYPE_TTSKMKH, "km-kh"},
-           {DlcType::DLC_TYPE_TTSKOKR, "ko-kr"},
-           {DlcType::DLC_TYPE_TTSNBNO, "nb-no"},
-           {DlcType::DLC_TYPE_TTSNENP, "ne-np"},
-           {DlcType::DLC_TYPE_TTSNLNL, "nl-nl"},
-           {DlcType::DLC_TYPE_TTSPLPL, "pl-pl"},
-           {DlcType::DLC_TYPE_TTSPTBR, "pt-br"},
-           {DlcType::DLC_TYPE_TTSSILK, "si-lk"},
-           {DlcType::DLC_TYPE_TTSSKSK, "sk-sk"},
-           {DlcType::DLC_TYPE_TTSSVSE, "sv-se"},
-           {DlcType::DLC_TYPE_TTSTHTH, "th-th"},
-           {DlcType::DLC_TYPE_TTSTRTR, "tr-tr"},
-           {DlcType::DLC_TYPE_TTSUKUA, "uk-ua"},
-           {DlcType::DLC_TYPE_TTSVIVN, "vi-vn"},
-           {DlcType::DLC_TYPE_TTSYUEHK, "yue-hk"}});
+          {{DlcType::kTtsBnBd, "bn-bd"}, {DlcType::kTtsCsCz, "cs-cz"},
+           {DlcType::kTtsDaDk, "da-dk"}, {DlcType::kTtsDeDe, "de-de"},
+           {DlcType::kTtsElGr, "el-gr"}, {DlcType::kTtsEnAu, "en-au"},
+           {DlcType::kTtsEnGb, "en-gb"}, {DlcType::kTtsEnUs, "en-us"},
+           {DlcType::kTtsEsEs, "es-es"}, {DlcType::kTtsEsUs, "es-us"},
+           {DlcType::kTtsFiFi, "fi-fi"}, {DlcType::kTtsFilPh, "fil-ph"},
+           {DlcType::kTtsFrFr, "fr-fr"}, {DlcType::kTtsHiIn, "hi-in"},
+           {DlcType::kTtsHuHu, "hu-hu"}, {DlcType::kTtsIdId, "id-id"},
+           {DlcType::kTtsItIt, "it-it"}, {DlcType::kTtsJaJp, "ja-jp"},
+           {DlcType::kTtsKmKh, "km-kh"}, {DlcType::kTtsKoKr, "ko-kr"},
+           {DlcType::kTtsNbNo, "nb-no"}, {DlcType::kTtsNeNp, "ne-np"},
+           {DlcType::kTtsNlNl, "nl-nl"}, {DlcType::kTtsPlPl, "pl-pl"},
+           {DlcType::kTtsPtBr, "pt-br"}, {DlcType::kTtsPtPt, "pt-pt"},
+           {DlcType::kTtsSiLk, "si-lk"}, {DlcType::kTtsSkSk, "sk-sk"},
+           {DlcType::kTtsSvSe, "sv-se"}, {DlcType::kTtsThTh, "th-th"},
+           {DlcType::kTtsTrTr, "tr-tr"}, {DlcType::kTtsUkUa, "uk-ua"},
+           {DlcType::kTtsViVn, "vi-vn"}, {DlcType::kTtsYueHk, "yue-hk"}});
 
   // Use LanguagePackManager to get the path of the DLC.
   std::string locale = kTtsDlcTypeToLocale.find(dlc)->second;
-  language_packs::LanguagePackManager::GetInstance()->GetPackState(
+  language_packs::LanguagePackManager::GetPackState(
       language_packs::kTtsFeatureId, locale,
-      base::BindOnce(&AccessibilityManager::GetDlcContentsOnPackState,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+      base::BindOnce(&AccessibilityManager::GetTtsDlcContentsOnPackState,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(variant),
+                     std::move(callback)));
 }
 
-void AccessibilityManager::GetDlcContentsOnPackState(
-    GetDlcContentsCallback callback,
+void AccessibilityManager::GetTtsDlcContentsOnPackState(
+    TtsVariant variant,
+    GetTtsDlcContentsCallback callback,
     const language_packs::PackResult& pack_result) {
+  std::string file_name;
+  switch (variant) {
+    case TtsVariant::kLite:
+      file_name = kTtsLiteFileName;
+      break;
+    case TtsVariant::kStandard:
+      file_name = kTtsStandardFileName;
+      break;
+    case TtsVariant::kNone:
+      NOTREACHED();
+  }
+
   base::FilePath path;
   if (!dlc_path_for_test_.empty()) {
     // This path will only be set for tests. We need to skip the below install
     // check during tests because there is currently no way to set a DLC as
     // installed from a browsertest.
-    path = dlc_path_for_test_.Append("voice.zvoice");
+    path = dlc_path_for_test_.Append(file_name);
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock()}, base::BindOnce(&ReadDlcFile, path),
         base::BindOnce(&OnReadDlcFile, std::move(callback)));
@@ -2783,7 +2929,7 @@ void AccessibilityManager::GetDlcContentsOnPackState(
   }
 
   // Extract the path and read the file.
-  path = base::FilePath(pack_result.path).Append("voice.zvoice");
+  path = base::FilePath(pack_result.path).Append(file_name);
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()}, base::BindOnce(&ReadDlcFile, path),
       base::BindOnce(&OnReadDlcFile, std::move(callback)));

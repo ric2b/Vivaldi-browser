@@ -49,8 +49,7 @@ class PerformanceControlsHatsServiceTest : public testing::Test {
     environment_.SetUp(&local_state_);
 
     performance_controls_hats_service_ =
-        std::make_unique<PerformanceControlsHatsService>(&local_state_,
-                                                         profile);
+        std::make_unique<PerformanceControlsHatsService>(profile);
   }
 
   void TearDown() override {
@@ -70,10 +69,10 @@ class PerformanceControlsHatsServiceTest : public testing::Test {
         static_cast<int>(battery_saver_mode));
   }
 
-  void SetHighEfficiencyEnabled(const bool high_efficiency_enabled) {
+  void SetMemorySaverEnabled(const bool memory_saver_enabled) {
     performance_manager::user_tuning::UserPerformanceTuningManager::
         GetInstance()
-            ->SetHighEfficiencyModeEnabled(high_efficiency_enabled);
+            ->SetMemorySaverModeEnabled(memory_saver_enabled);
   }
 
   PerformanceControlsHatsService* performance_controls_hats_service() {
@@ -130,13 +129,13 @@ class PerformanceControlsHatsServiceHasBatteryTest
   }
 };
 
-class PerformanceControlsHatsServiceHighEfficiencyOptOutTest
+class PerformanceControlsHatsServiceMemorySaverOptOutTest
     : public PerformanceControlsHatsServiceTest {
  protected:
   const std::vector<base::test::FeatureRefAndParams> GetFeatures() override {
     return {
         {performance_manager::features::
-             kPerformanceControlsHighEfficiencyOptOutSurvey,
+             kPerformanceControlsMemorySaverOptOutSurvey,
          {}},
     };
   }
@@ -155,16 +154,13 @@ class PerformanceControlsHatsServiceBatterySaverOptOutTest
 };
 
 TEST_F(PerformanceControlsHatsServiceTest, LaunchesPerformanceSurvey) {
-  SetHighEfficiencyEnabled(false);
+  SetMemorySaverEnabled(false);
   SetBatterySaverMode(performance_manager::user_tuning::prefs::
                           BatterySaverModeState::kEnabledBelowThreshold);
 
-  SurveyBitsData expected_bits = {{"high_efficiency_mode", false}};
-  SurveyStringData expected_strings = {
-      {"battery_saver_mode",
-       base::NumberToString(static_cast<int>(
-           performance_manager::user_tuning::prefs::BatterySaverModeState::
-               kEnabledBelowThreshold))}};
+  SurveyBitsData expected_bits = {{"high_efficiency_mode", false},
+                                  {"battery_saver_mode", true}};
+  SurveyStringData expected_strings = {};
   EXPECT_CALL(*mock_hats_service(),
               LaunchSurvey(kHatsSurveyTriggerPerformanceControlsPerformance, _,
                            _, expected_bits, expected_strings));
@@ -180,13 +176,13 @@ TEST_F(PerformanceControlsHatsServiceHasBatteryTest,
   performance_controls_hats_service()->OpenedNewTabPage();
 }
 
-TEST_F(PerformanceControlsHatsServiceHighEfficiencyOptOutTest,
-       LaunchesHighEfficiencyOptOutSurvey) {
-  EXPECT_CALL(*mock_hats_service(),
-              LaunchDelayedSurvey(
-                  kHatsSurveyTriggerPerformanceControlsHighEfficiencyOptOut,
-                  10000, _, _));
-  SetHighEfficiencyEnabled(false);
+TEST_F(PerformanceControlsHatsServiceMemorySaverOptOutTest,
+       LaunchesMemorySaverOptOutSurvey) {
+  EXPECT_CALL(
+      *mock_hats_service(),
+      LaunchDelayedSurvey(
+          kHatsSurveyTriggerPerformanceControlsMemorySaverOptOut, 10000, _, _));
+  SetMemorySaverEnabled(false);
 }
 
 TEST_F(PerformanceControlsHatsServiceBatterySaverOptOutTest,

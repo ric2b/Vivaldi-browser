@@ -8,6 +8,7 @@
 #import "base/metrics/user_metrics.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_accessory_view_controller_delegate.h"
 #import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -147,6 +148,10 @@ static NSTimeInterval MFAnimationDuration = 0.2;
   _passwordButtonHidden = passwordButtonHidden;
 }
 
+- (void)setViewHidden:(BOOL)hidden {
+  self.view.hidden = hidden;
+}
+
 #pragma mark - Private
 
 // Helper to create a system button with the passed data and `self` as the
@@ -170,12 +175,10 @@ static NSTimeInterval MFAnimationDuration = 0.2;
   image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   // End Vivaldi
 
-  if (IsUIButtonConfigurationEnabled()) {
-    UIButtonConfiguration* buttonConfiguration =
-        [UIButtonConfiguration plainButtonConfiguration];
-    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
-    button.configuration = buttonConfiguration;
-  }
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
+  button.configuration = buttonConfiguration;
 
   [button setImage:image forState:UIControlStateNormal];
   button.tintColor = IconActiveTintColor();
@@ -244,15 +247,10 @@ static NSTimeInterval MFAnimationDuration = 0.2;
 
   self.passwordButton.hidden = self.isPasswordButtonHidden;
 
-  if (IsUIButtonConfigurationEnabled()) {
-    UIButtonConfiguration* buttonConfiguration =
-        self.passwordButton.configuration;
-    buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(0, 2, 0, 2);
-    self.passwordButton.configuration = buttonConfiguration;
-  } else {
-    UIEdgeInsets contentEdgeInsets = UIEdgeInsetsMake(0, 2, 0, 2);
-    SetContentEdgeInsets(self.passwordButton, contentEdgeInsets);
-  }
+  UIButtonConfiguration* buttonConfiguration =
+      self.passwordButton.configuration;
+  buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(0, 2, 0, 2);
+  self.passwordButton.configuration = buttonConfiguration;
 
   [icons addObject:self.passwordButton];
 
@@ -366,7 +364,7 @@ static NSTimeInterval MFAnimationDuration = 0.2;
 - (void)keyboardButtonPressed {
   base::RecordAction(base::UserMetricsAction("ManualFallback_Close"));
   [self resetAnimated:YES];
-  [self.delegate keyboardButtonPressed];
+  [self.delegate manualFillAccessoryViewControllerKeyboardButtonPressed:self];
 }
 
 - (void)passwordButtonPressed:(UIButton*)sender {
@@ -375,7 +373,8 @@ static NSTimeInterval MFAnimationDuration = 0.2;
   [self resetIcons];
   self.passwordButton.userInteractionEnabled = NO;
   self.passwordButton.tintColor = IconHighlightTintColor();
-  [self.delegate passwordButtonPressed:sender];
+  [self.delegate manualFillAccessoryViewControllerPasswordButtonPressed:self
+                                                                 sender:sender];
 }
 
 - (void)cardButtonPressed:(UIButton*)sender {
@@ -384,7 +383,8 @@ static NSTimeInterval MFAnimationDuration = 0.2;
   [self resetIcons];
   self.cardsButton.userInteractionEnabled = NO;
   self.cardsButton.tintColor = IconHighlightTintColor();
-  [self.delegate cardButtonPressed:sender];
+  [self.delegate manualFillAccessoryViewControllerCardButtonPressed:self
+                                                             sender:sender];
 }
 
 - (void)accountButtonPressed:(UIButton*)sender {
@@ -393,7 +393,8 @@ static NSTimeInterval MFAnimationDuration = 0.2;
   [self resetIcons];
   self.accountButton.userInteractionEnabled = NO;
   self.accountButton.tintColor = IconHighlightTintColor();
-  [self.delegate accountButtonPressed:sender];
+  [self.delegate manualFillAccessoryViewControllerAccountButtonPressed:self
+                                                                sender:sender];
 }
 
 @end

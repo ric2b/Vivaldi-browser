@@ -29,6 +29,8 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/total_animation_throughput_reporter.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/bounds_animator_observer.h"
 
@@ -45,9 +47,8 @@ constexpr char kLoginThroughputUnordered[] = "LoginThroughput-unordered";
 // A class used to wait for animations.
 class AnimationObserver : public views::BoundsAnimatorObserver {
  public:
-  AnimationObserver(ShelfView* shelf_view, base::OnceClosure& on_animation_end)
-      : shelf_view_(shelf_view),
-        on_animation_end_(std::move(on_animation_end)) {}
+  AnimationObserver(base::OnceClosure& on_animation_end)
+      : on_animation_end_(std::move(on_animation_end)) {}
 
   AnimationObserver(const AnimationObserver&) = delete;
   AnimationObserver& operator=(const AnimationObserver&) = delete;
@@ -57,13 +58,14 @@ class AnimationObserver : public views::BoundsAnimatorObserver {
   // ShelfViewObserver overrides:
   void OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) override {}
   void OnBoundsAnimatorDone(views::BoundsAnimator* animator) override {
-    shelf_view_->RemoveAnimationObserver(this);
+    GetShelfView()->RemoveAnimationObserver(this);
     RunCallbackAndDestroy();
   }
 
   void StartObserving() {
-    if (shelf_view_->IsAnimating()) {
-      shelf_view_->AddAnimationObserver(this);
+    ShelfView* shelf_view = GetShelfView();
+    if (shelf_view->IsAnimating()) {
+      shelf_view->AddAnimationObserver(this);
       return;
     }
     RunCallbackAndDestroy();
@@ -75,14 +77,21 @@ class AnimationObserver : public views::BoundsAnimatorObserver {
     delete this;
   }
 
-  raw_ptr<ShelfView, LeakedDanglingUntriaged> shelf_view_;
+  ShelfView* GetShelfView() {
+    return RootWindowController::ForWindow(
+               Shell::Get()->window_tree_host_manager()->GetPrimaryRootWindow())
+        ->shelf()
+        ->hotseat_widget()
+        ->scrollable_shelf_view()
+        ->shelf_view();
+  }
+
   base::OnceClosure on_animation_end_;
 };
 
 std::string GetDeviceModeSuffix() {
-  return Shell::Get()->tablet_mode_controller()->InTabletMode()
-             ? "TabletMode"
-             : "ClamshellMode";
+  return display::Screen::GetScreen()->InTabletMode() ? "TabletMode"
+                                                      : "ClamshellMode";
 }
 
 void RecordDurationMetrics(
@@ -92,7 +101,7 @@ void RecordDurationMetrics(
     const char* jank_name,
     const char* duration_name_short,
     const char* duration_name_long) {
-  DCHECK(data.frames_expected);
+  DCHECK(data.frames_expected_v3);
 
   // Report could happen during Shell shutdown. Early out in that case.
   if (!Shell::HasInstance() || !Shell::Get()->tablet_mode_controller())
@@ -100,8 +109,8 @@ void RecordDurationMetrics(
 
   int duration_ms = (base::TimeTicks::Now() - start).InMilliseconds();
   int smoothness, jank;
-  smoothness = metrics_util::CalculateSmoothness(data);
-  jank = metrics_util::CalculateJank(data);
+  smoothness = metrics_util::CalculateSmoothnessV3(data);
+  jank = metrics_util::CalculateJankV3(data);
 
   std::string suffix = GetDeviceModeSuffix();
   base::UmaHistogramPercentage(smoothness_name + suffix, smoothness);
@@ -128,7 +137,7 @@ void RecordDurationMetrics(
 void ReportLoginTotalAnimationThroughput(
     base::TimeTicks start,
     const cc::FrameSequenceMetrics::CustomReportData& data) {
-  if (!data.frames_expected) {
+  if (!data.frames_expected_v3) {
     LOG(WARNING) << "Zero frames expected in login animation throughput data";
     return;
   }
@@ -147,14 +156,14 @@ void ReportLoginTotalAnimationThroughput(
 void RecordSmoothnessMetrics(
     const cc::FrameSequenceMetrics::CustomReportData& data,
     const char* smoothness_name) {
-  DCHECK(data.frames_expected);
+  DCHECK(data.frames_expected_v3);
 
   // Report could happen during Shell shutdown. Early out in that case.
   if (!Shell::HasInstance() || !Shell::Get()->tablet_mode_controller()) {
     return;
   }
 
-  const int smoothness = metrics_util::CalculateSmoothness(data);
+  const int smoothness = metrics_util::CalculateSmoothnessV3(data);
 
   const std::string suffix = GetDeviceModeSuffix();
   base::UmaHistogramPercentage(smoothness_name + suffix, smoothness);
@@ -163,7 +172,7 @@ void RecordSmoothnessMetrics(
 }
 
 void ReportUnlock(const cc::FrameSequenceMetrics::CustomReportData& data) {
-  if (!data.frames_expected) {
+  if (!data.frames_expected_v3) {
     LOG(WARNING) << "Zero frames expected in unlock animation throughput data";
     return;
   }
@@ -214,6 +223,25 @@ void LoginUnlockThroughputRecorder::OnLockStateChanged(bool locked) {
 LoginUnlockThroughputRecorder::TimeMarker::TimeMarker(const std::string& name)
     : name_(name) {}
 
+void LoginUnlockThroughputRecorder::EnsureTracingSliceNamed() {
+  // EnsureTracingSliceNamed() should be called only on expected events.
+  // If login ThroughputRecording did not start with either OnAuthSuccess
+  // or LoggedInStateChanged the tracing slice will have the "-unordered"
+  // suffix.
+  //
+  // Depending on the login flow this function may get called multiple times.
+  if (login_time_markers_.empty()) {
+    // The first event will name the tracing row.
+    AddLoginTimeMarker(kLoginThroughput);
+    primary_user_logged_in_ = base::TimeTicks::Now();
+  }
+}
+
+void LoginUnlockThroughputRecorder::OnAuthSuccess() {
+  EnsureTracingSliceNamed();
+  AddLoginTimeMarker("OnAuthSuccess");
+}
+
 void LoginUnlockThroughputRecorder::LoggedInStateChanged() {
   auto* login_state = LoginState::Get();
   auto logged_in_user = login_state->GetLoggedInUserType();
@@ -224,9 +252,9 @@ void LoginUnlockThroughputRecorder::LoggedInStateChanged() {
   if (!login_state->IsUserLoggedIn())
     return;
 
-  // The first event will name the tracing row.
-  if (login_time_markers_.empty())
-    AddLoginTimeMarker(kLoginThroughput);
+  const base::TimeTicks old_primary_user_logged_in = primary_user_logged_in_;
+  EnsureTracingSliceNamed();
+  AddLoginTimeMarker("UserLoggedIn");
 
   if (logged_in_user != LoginState::LOGGED_IN_USER_OWNER &&
       logged_in_user != LoginState::LOGGED_IN_USER_REGULAR) {
@@ -235,9 +263,16 @@ void LoginUnlockThroughputRecorder::LoggedInStateChanged() {
   }
 
   user_logged_in_ = true;
+
+  // Report UserLoggedIn histogram if we had OnAuthSuccess() event previously.
+  if (!old_primary_user_logged_in.is_null()) {
+    const base::TimeDelta duration =
+        base::TimeTicks::Now() - old_primary_user_logged_in;
+    base::UmaHistogramTimes("Ash.Login.LoggedInStateChanged", duration);
+  }
+
   ui_recorder_.OnUserLoggedIn();
   auto* primary_root = Shell::GetPrimaryRootWindow();
-  primary_user_logged_in_ = base::TimeTicks::Now();
 
   auto* rec = new ui::TotalAnimationThroughputReporter(
       primary_root->GetHost()->compositor(),
@@ -318,12 +353,16 @@ void LoginUnlockThroughputRecorder::OnBeforeRestoredWindowShown(
     AddLoginTimeMarker(kAshLoginSessionRestoreAllBrowserWindowsShown);
   }
 
-  if (!compositor)
-    return;
-
-  restore_windows_presentation_time_requested_.insert(restore_window_id);
-  compositor->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
-      &OnRestoredWindowPresentationTimeReceived, restore_window_id));
+  if (compositor &&
+      display::Screen::GetScreen()->GetPrimaryDisplay().detected()) {
+    restore_windows_presentation_time_requested_.insert(restore_window_id);
+    compositor->RequestSuccessfulPresentationTimeForNextFrame(base::BindOnce(
+        &OnRestoredWindowPresentationTimeReceived, restore_window_id));
+  } else if (compositor) {
+    // Primary display not detected. Assume it's a headless unit.
+    restore_windows_presentation_time_requested_.insert(restore_window_id);
+    OnRestoredWindowPresented(restore_window_id);
+  }
 }
 
 void LoginUnlockThroughputRecorder::OnRestoredWindowPresented(
@@ -342,9 +381,13 @@ void LoginUnlockThroughputRecorder::OnRestoredWindowPresented(
         base::TimeTicks::Now() - primary_user_logged_in_;
     constexpr char kAshLoginSessionRestoreAllBrowserWindowsPresented[] =
         "Ash.LoginSessionRestore.AllBrowserWindowsPresented";
-    UMA_HISTOGRAM_CUSTOM_TIMES(
-        kAshLoginSessionRestoreAllBrowserWindowsPresented, duration_ms,
-        base::Milliseconds(1), base::Seconds(100), 100);
+    // Headless units do not report presentation time, so we only report
+    // the histogram if primary display is functional.
+    if (display::Screen::GetScreen()->GetPrimaryDisplay().detected()) {
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          kAshLoginSessionRestoreAllBrowserWindowsPresented, duration_ms,
+          base::Milliseconds(1), base::Seconds(100), 100);
+    }
     AddLoginTimeMarker(kAshLoginSessionRestoreAllBrowserWindowsPresented);
     all_restored_windows_presented_ = true;
     ScheduleWaitForShelfAnimationEndIfNeeded();
@@ -457,13 +500,6 @@ void LoginUnlockThroughputRecorder::ScheduleWaitForShelfAnimationEndIfNeeded() {
     shelf_container->SchedulePaintInRect(bounds);
   }
 
-  ShelfView* shelf_view =
-      RootWindowController::ForWindow(
-          Shell::Get()->window_tree_host_manager()->GetPrimaryRootWindow())
-          ->shelf()
-          ->hotseat_widget()
-          ->scrollable_shelf_view()
-          ->shelf_view();
   base::OnceCallback on_animation_end = base::BindOnce(
       [](base::WeakPtr<LoginUnlockThroughputRecorder> self) {
         self->shelf_animation_finished_ = true;
@@ -481,7 +517,7 @@ void LoginUnlockThroughputRecorder::ScheduleWaitForShelfAnimationEndIfNeeded() {
       },
       weak_ptr_factory_.GetWeakPtr());
 
-  (new AnimationObserver(shelf_view, on_animation_end))->StartObserving();
+  (new AnimationObserver(on_animation_end))->StartObserving();
 }
 
 void LoginUnlockThroughputRecorder::OnAllExpectedShelfIconsLoaded() {
@@ -568,6 +604,8 @@ void LoginUnlockThroughputRecorder::AddLoginTimeMarker(
         "Ash.UnlockAnimation.Smoothness.ClamshellMode");
     REPORT_LOGIN_THROUGHPUT_EVENT("Ash.UnlockAnimation.Smoothness.TabletMode");
     REPORT_LOGIN_THROUGHPUT_EVENT("ArcUiAvailable");
+    REPORT_LOGIN_THROUGHPUT_EVENT("OnAuthSuccess");
+    REPORT_LOGIN_THROUGHPUT_EVENT("UserLoggedIn");
     if (!reported) {
       constexpr char kFailedEvent[] = "FailedToReportEvent";
       TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
@@ -588,11 +626,23 @@ void LoginUnlockThroughputRecorder::AddLoginTimeMarker(
                    << login_time_markers_.size();
 }
 
-void LoginUnlockThroughputRecorder::RestoreDataLoaded() {
-  if (windows_to_restore_.empty()) {
-    browser_windows_will_not_be_restored_ = true;
-    ScheduleWaitForShelfAnimationEndIfNeeded();
+void LoginUnlockThroughputRecorder::BrowserSessionRestoreDataLoaded() {
+  if (login_finished_reported_) {
+    return;
   }
+
+  DCHECK(!browser_session_restore_data_loaded_);
+  browser_session_restore_data_loaded_ = true;
+  MaybeRestoreDataLoaded();
+}
+
+void LoginUnlockThroughputRecorder::FullSessionRestoreDataLoaded() {
+  if (login_finished_reported_) {
+    return;
+  }
+  DCHECK(!full_session_restore_data_loaded_);
+  full_session_restore_data_loaded_ = true;
+  MaybeRestoreDataLoaded();
 }
 
 void LoginUnlockThroughputRecorder::ArcUiAvailableAfterLogin() {
@@ -603,6 +653,10 @@ void LoginUnlockThroughputRecorder::ArcUiAvailableAfterLogin() {
                                 duration, base::Milliseconds(100),
                                 base::Seconds(30), 100);
   LOCAL_HISTOGRAM_TIMES("Ash.Tast.ArcUiAvailableAfterLogin.Duration", duration);
+}
+
+void LoginUnlockThroughputRecorder::SetLoginFinishedReportedForTesting() {
+  login_finished_reported_ = true;
 }
 
 void LoginUnlockThroughputRecorder::MaybeReportLoginFinished() {
@@ -641,6 +695,18 @@ void LoginUnlockThroughputRecorder::OnLoginAnimationFinishedTimerFired() {
       "startup",
       "LoginUnlockThroughputRecorder::OnLoginAnimationFinishedTimerFired");
   post_login_deferred_task_runner_->Start();
+}
+
+void LoginUnlockThroughputRecorder::MaybeRestoreDataLoaded() {
+  DCHECK(!restore_data_loaded_);
+  if (browser_session_restore_data_loaded_ &&
+      full_session_restore_data_loaded_) {
+    restore_data_loaded_ = true;
+    if (windows_to_restore_.empty() && !first_restored_window_created_) {
+      browser_windows_will_not_be_restored_ = true;
+      ScheduleWaitForShelfAnimationEndIfNeeded();
+    }
+  }
 }
 
 }  // namespace ash

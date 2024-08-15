@@ -109,26 +109,6 @@ void FastPairScannerImpl::StartScanning() {
 
   background_scan_session_ = adapter_->StartLowEnergyScanSession(
       std::move(filter), weak_ptr_factory_.GetWeakPtr());
-
-  if (features::IsFastPairLowPowerEnabled()) {
-    task_runner_->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&FastPairScannerImpl::StopScanning,
-                       weak_ptr_factory_.GetWeakPtr()),
-        base::Seconds(features::kFastPairLowPowerActiveSeconds.Get()));
-  }
-}
-
-void FastPairScannerImpl::StopScanning() {
-  DCHECK(features::IsFastPairLowPowerEnabled());
-
-  background_scan_session_.reset();
-
-  task_runner_->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&FastPairScannerImpl::StartScanning,
-                     weak_ptr_factory_.GetWeakPtr()),
-      base::Seconds(features::kFastPairLowPowerInactiveSeconds.Get()));
 }
 
 void FastPairScannerImpl::AddObserver(FastPairScanner::Observer* observer) {
@@ -141,7 +121,7 @@ void FastPairScannerImpl::RemoveObserver(FastPairScanner::Observer* observer) {
 
 void FastPairScannerImpl::OnSessionStarted(
     device::BluetoothLowEnergyScanSession* scan_session,
-    absl::optional<device::BluetoothLowEnergyScanSession::ErrorCode>
+    std::optional<device::BluetoothLowEnergyScanSession::ErrorCode>
         error_code) {
   RecordBluetoothLowEnergyScannerStartSessionResult(
       /*success=*/!error_code.has_value());

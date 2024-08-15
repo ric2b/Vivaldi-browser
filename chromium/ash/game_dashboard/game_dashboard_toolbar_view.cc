@@ -205,7 +205,7 @@ class ToolbarDragHandler : public ui::EventHandler {
   }
 
   // Allows this class to access `GameDashboardToolbarView` owned functions.
-  const raw_ptr<GameDashboardToolbarView, ExperimentalAsh> toolbar_view_;
+  const raw_ptr<GameDashboardToolbarView> toolbar_view_;
 
   // The location of the previous drag event in screen coordinates.
   gfx::PointF previous_location_in_screen_;
@@ -279,16 +279,8 @@ void GameDashboardToolbarView::UpdateViewForGameControls(
     }
 
     // Update game_controls_button_.
-    game_controls_button_->SetEnabled(
-        game_dashboard_utils::IsFlagSet(flags, ArcGameControlsFlag::kEnabled) &&
-        !game_dashboard_utils::IsFlagSet(flags, ArcGameControlsFlag::kEmpty));
-    if (game_controls_button_->GetEnabled()) {
-      game_controls_button_->SetToggled(
-          game_dashboard_utils::IsFlagSet(flags, ArcGameControlsFlag::kHint));
-    }
-
-    game_dashboard_utils::UpdateGameControlsHintButtonToolTipText(
-        game_controls_button_, flags);
+    game_dashboard_utils::UpdateGameControlsHintButton(game_controls_button_,
+                                                       flags);
   }
 }
 
@@ -374,12 +366,11 @@ void GameDashboardToolbarView::AddShortcutTiles() {
             IDS_ASH_GAME_DASHBOARD_RECORD_GAME_TILE_BUTTON_TITLE),
         /*is_togglable=*/true));
     record_game_button_->SetVectorIcon(kGdRecordGameIcon);
-    record_game_button_->SetIconColorId(cros_tokens::kCrosSysOnSurface);
+    record_game_button_->SetIconColor(cros_tokens::kCrosSysOnSurface);
 
-    record_game_button_->SetBackgroundToggledColorId(
-        cros_tokens::kCrosSysError);
+    record_game_button_->SetBackgroundToggledColor(cros_tokens::kCrosSysError);
     record_game_button_->SetToggledVectorIcon(kCaptureModeCircleStopIcon);
-    record_game_button_->SetIconToggledColorId(cros_tokens::kCrosSysOnError);
+    record_game_button_->SetIconToggledColor(cros_tokens::kCrosSysOnError);
     UpdateRecordGameButton(
         GameDashboardController::Get()->active_recording_context() == context_);
   }
@@ -421,7 +412,7 @@ void GameDashboardToolbarView::UpdateRecordGameButton(
 
   record_game_button_->SetEnabled(
       is_recording_game_window ||
-      !CaptureModeController::Get()->is_recording_in_progress());
+      CaptureModeController::Get()->can_start_new_recording());
   record_game_button_->SetToggled(is_recording_game_window);
 }
 

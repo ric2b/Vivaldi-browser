@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <deque>
 #include <limits>
+#include <optional>
 #include <set>
 #include <utility>
 #include <vector>
@@ -57,6 +58,7 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "build/build_config.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
@@ -65,7 +67,6 @@
 #include "chromeos/system/core_scheduling.h"
 #include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
@@ -88,9 +89,9 @@ constexpr base::TimeDelta kConnectSleepDurationInitial =
 
 constexpr const char kEmptyDiskPath[] = "/dev/null";
 
-absl::optional<base::TimeDelta> g_connect_timeout_limit_for_testing;
-absl::optional<base::TimeDelta> g_connect_sleep_duration_initial_for_testing;
-absl::optional<int> g_boot_notification_server_fd;
+std::optional<base::TimeDelta> g_connect_timeout_limit_for_testing;
+std::optional<base::TimeDelta> g_connect_sleep_duration_initial_for_testing;
+std::optional<int> g_boot_notification_server_fd;
 
 ash::ConciergeClient* GetConciergeClient() {
   return ash::ConciergeClient::Get();
@@ -182,6 +183,12 @@ std::vector<std::string> GenerateUpgradeProps(
         base::StringPrintf("%s.force_post_boot_dexopt=1", prefix.c_str()));
   }
 
+  if (GetArcAndroidSdkVersionAsInt() == kArcVersionT &&
+      upgrade_params.skip_dexopt_cache) {
+    result.push_back(
+        base::StringPrintf("%s.skip_dexopt_cache=1", prefix.c_str()));
+  }
+
   return result;
 }
 
@@ -251,7 +258,7 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     const std::string& user_id_hash,
     uint32_t cpus,
     const base::FilePath& demo_session_apps_path,
-    const absl::optional<base::FilePath>& data_disk_path,
+    const std::optional<base::FilePath>& data_disk_path,
     const FileSystemStatus& file_system_status,
     bool use_per_vm_core_scheduling,
     const StartParams& start_params,
@@ -453,6 +460,12 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       base::FeatureList::IsEnabled(kVmmSwapPolicy) ||
       base::FeatureList::IsEnabled(kVmmSwapKeyboardShortcut));
 
+#if defined(ARCH_CPU_X86_64)
+  if (base::FeatureList::IsEnabled(kEnableArcS2Idle)) {
+    request.set_enable_s2idle(true);
+  }
+#endif  // defined(ARCH_CPU_X86_64)
+
   auto orientation = display::PanelOrientation::kNormal;
   if (auto* screen = display::Screen::GetScreen()) {
     const auto display_id = screen->GetPrimaryDisplay().id();
@@ -477,20 +490,22 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       break;
   }
 
-  const ArcVmUreadaheadMode mode = GetArcVmUreadaheadMode();
+  const ArcUreadaheadMode mode =
+      GetArcUreadaheadMode(ash::switches::kArcVmUreadaheadMode);
   switch (mode) {
     using StartArcVmRequest = vm_tools::concierge::StartArcVmRequest;
-    case ArcVmUreadaheadMode::READAHEAD:
+    case ArcUreadaheadMode::READAHEAD:
       request.set_ureadahead_mode(StartArcVmRequest::UREADAHEAD_MODE_READAHEAD);
       break;
-    case ArcVmUreadaheadMode::GENERATE:
+    case ArcUreadaheadMode::GENERATE:
       request.set_ureadahead_mode(StartArcVmRequest::UREADAHEAD_MODE_GENERATE);
       break;
-    case ArcVmUreadaheadMode::DISABLED:
+    case ArcUreadaheadMode::DISABLED:
       request.set_ureadahead_mode(StartArcVmRequest::UREADAHEAD_MODE_DISABLED);
       break;
+    default:
+      NOTREACHED_NORETURN();
   }
-
   return request;
 }
 
@@ -901,7 +916,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     if (!start_params_.use_virtio_blk_data) {
       VLOG(2) << "Using virtio-fs for /data";
       StartArcVm(std::move(callback), std::move(file_system_status),
-                 /*data_disk_path=*/absl::nullopt);
+                 /*data_disk_path=*/std::nullopt);
       return;
     }
 
@@ -938,7 +953,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   void OnDataDiskImageCreated(
       chromeos::VoidDBusMethodCallback callback,
       FileSystemStatus file_system_status,
-      absl::optional<vm_tools::concierge::CreateDiskImageResponse> res) {
+      std::optional<vm_tools::concierge::CreateDiskImageResponse> res) {
     if (!res) {
       LOG(ERROR) << "Failed to create a disk image for /data. Empty response.";
       std::move(callback).Run(false);
@@ -967,7 +982,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
   void StartArcVm(chromeos::VoidDBusMethodCallback callback,
                   FileSystemStatus file_system_status,
-                  absl::optional<base::FilePath> data_disk_path) {
+                  std::optional<base::FilePath> data_disk_path) {
     const base::FilePath demo_session_apps_path =
         demo_mode_delegate_->GetDemoAppsPath();
     const bool use_per_vm_core_scheduling =
@@ -1002,7 +1017,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
   void OnStartArcVmReply(
       chromeos::VoidDBusMethodCallback callback,
-      absl::optional<vm_tools::concierge::StartVmResponse> reply) {
+      std::optional<vm_tools::concierge::StartVmResponse> reply) {
     if (!reply.has_value()) {
       LOG(ERROR) << "Failed to start arcvm. Empty response.";
       std::move(callback).Run(false);
@@ -1129,8 +1144,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
       observer.ArcInstanceStopped(is_system_shutdown);
   }
 
-  void OnStopVmReply(
-      absl::optional<vm_tools::concierge::StopVmResponse> reply) {
+  void OnStopVmReply(std::optional<vm_tools::concierge::StopVmResponse> reply) {
     // If the reply indicates the D-Bus call is successfully done, do nothing.
     // Concierge will call OnVmStopped() eventually.
     if (reply.has_value() && reply.value().success())
@@ -1145,7 +1159,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
 
   void OnTrimVmMemory(
       TrimVmMemoryCallback callback,
-      absl::optional<vm_tools::concierge::ReclaimVmMemoryResponse> reply) {
+      std::optional<vm_tools::concierge::ReclaimVmMemoryResponse> reply) {
     bool success = false;
     std::string failure_reason;
 
@@ -1165,7 +1179,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   }
 
   static void OnArcVmCompleteBootResponse(
-      absl::optional<vm_tools::concierge::ArcVmCompleteBootResponse> reply) {
+      std::optional<vm_tools::concierge::ArcVmCompleteBootResponse> reply) {
     vm_tools::concierge::ArcVmCompleteBootResult result =
         reply.has_value()
             ? reply.value().result()
@@ -1192,7 +1206,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   FileSystemStatusRewriter file_system_status_rewriter_for_testing_;
 
   // The delegate is owned by ArcSessionRunner.
-  raw_ptr<DemoModeDelegate, ExperimentalAsh> demo_mode_delegate_ = nullptr;
+  raw_ptr<DemoModeDelegate> demo_mode_delegate_ = nullptr;
 
   // For callbacks.
   base::WeakPtrFactory<ArcVmClientAdapter> weak_factory_{this};
@@ -1225,7 +1239,7 @@ void SetArcVmBootNotificationServerAddressForTesting(
   g_connect_sleep_duration_initial_for_testing = connect_sleep_duration_initial;
 }
 
-void SetArcVmBootNotificationServerFdForTesting(absl::optional<int> fd) {
+void SetArcVmBootNotificationServerFdForTesting(std::optional<int> fd) {
   g_boot_notification_server_fd = fd;
 }
 

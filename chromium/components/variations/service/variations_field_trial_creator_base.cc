@@ -35,6 +35,7 @@
 #include "components/metrics/metrics_state_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/variations/field_trial_config/field_trial_util.h"
+#include "components/variations/limited_entropy_mode_gate.h"
 #include "components/variations/platform_field_trials.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/proto/variations_seed.pb.h"
@@ -122,17 +123,22 @@ Study::CpuArchitecture GetCurrentCpuArchitecture() {
 // testing/variations/fieldtrial_testing_config.json should be applied. If the
 // "disable_fieldtrial_testing_config" GN flag is set to true, then the testing
 // config should never be applied. Otherwise, if the build is a Chrome-branded
-// build, then the testing config should only be applied if the
-// "--enable-field-trial-config" switch is passed. For non-Chrome branded
-// builds, by default, the testing config is applied, unless the
-// "--disable-field-trial-config" and/or "--variations-server-url" switches are
-// passed. It is however possible to apply the testing config by using the
-// "--enable-field-trial-config" switch.
+// build, then the testing config should only be applied if either the
+// "--enable-field-trial-config" or
+// "--enable-benchmarking=enable-field-trial-config" switch is passed. For
+// non-Chrome branded builds, by default, the testing config is applied, unless
+// the "--disable-field-trial-config" and/or "--variations-server-url" switches
+// are passed and no enabling switches are set.
 bool ShouldUseFieldTrialTestingConfig(const base::CommandLine* command_line) {
+  bool is_enable_switch_set =
+      command_line->HasSwitch(switches::kEnableFieldTrialTestingConfig) ||
+      command_line->GetSwitchValueASCII(
+          variations::switches::kEnableBenchmarking) ==
+          switches::kEnableFieldTrialTestingConfig;
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return command_line->HasSwitch(switches::kEnableFieldTrialTestingConfig);
+  return is_enable_switch_set;
 #else
-  return command_line->HasSwitch(switches::kEnableFieldTrialTestingConfig) ||
+  return is_enable_switch_set ||
          (!command_line->HasSwitch(switches::kDisableFieldTrialTestingConfig) &&
           !command_line->HasSwitch(switches::kVariationsServerURL));
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -159,6 +165,16 @@ void MaybeExtendVariationsSafeMode(
   metrics_state_manager->LogHasSessionShutdownCleanly(
       /*has_session_shutdown_cleanly=*/false,
       /*is_extended_safe_mode=*/true);
+}
+
+// Returns true iff the given seed contains a layer with LIMITED entropy mode.
+bool ContainsLimitedEntropyLayer(const VariationsSeed& seed) {
+  for (const Layer& layer_proto : seed.layers()) {
+    if (layer_proto.entropy_mode() == Layer::LIMITED) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -188,13 +204,15 @@ Study::Channel ConvertProductChannelToStudyChannel(
 VariationsFieldTrialCreatorBase::VariationsFieldTrialCreatorBase(
     VariationsServiceClient* client,
     std::unique_ptr<VariationsSeedStore> seed_store,
-    base::OnceCallback<std::string(PrefService*)> locale_cb)
+    base::OnceCallback<std::string(PrefService*)> locale_cb,
+    LimitedEntropySyntheticTrial* limited_entropy_synthetic_trial)
     : client_(client),
       seed_store_(std::move(seed_store)),
       create_trials_from_seed_called_(false),
       application_locale_(std::move(locale_cb).Run(seed_store_->local_state())),
       has_platform_override_(false),
-      platform_override_(Study::PLATFORM_WINDOWS) {}
+      platform_override_(Study::PLATFORM_WINDOWS),
+      limited_entropy_synthetic_trial_(limited_entropy_synthetic_trial) {}
 
 VariationsFieldTrialCreatorBase::~VariationsFieldTrialCreatorBase() = default;
 
@@ -214,7 +232,7 @@ bool VariationsFieldTrialCreatorBase::SetUpFieldTrials(
     std::unique_ptr<base::FeatureList> feature_list,
     metrics::MetricsStateManager* metrics_state_manager,
     PlatformFieldTrials* platform_field_trials,
-    SafeSeedManagerInterface* safe_seed_manager,
+    SafeSeedManagerBase* safe_seed_manager,
     bool add_entropy_source_to_variations_ids) {
   DCHECK(feature_list);
   DCHECK(metrics_state_manager);
@@ -261,11 +279,11 @@ bool VariationsFieldTrialCreatorBase::SetUpFieldTrials(
                                        switches::kForceDisableVariationIds));
   }
 
-  feature_list->InitializeFromCommandLine(
+  feature_list->InitFromCommandLine(
       command_line->GetSwitchValueASCII(::switches::kEnableFeatures),
       command_line->GetSwitchValueASCII(::switches::kDisableFeatures));
 
-  // This needs to happen here: After the InitializeFromCommandLine() call,
+  // This needs to happen here: After the InitFromCommandLine() call,
   // because the explicit cmdline --disable-features and --enable-features
   // should take precedence over these extra overrides. Before the call to
   // SetInstance(), because overrides cannot be registered after the FeatureList
@@ -498,21 +516,25 @@ void VariationsFieldTrialCreatorBase::ApplyFieldTrialTestingConfig(
 }
 #endif  // BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
 
-bool VariationsFieldTrialCreatorBase::HasSeedExpired(bool is_safe_seed) {
+base::Time VariationsFieldTrialCreatorBase::CalculateSeedFreshness() {
   // TODO(crbug/1462588): Consider comparing the server-provided fetch time with
   // the network time.
-  const base::Time fetch_time = is_safe_seed
-                                    ? GetSeedStore()->GetSafeSeedFetchTime()
-                                    : GetSeedStore()->GetLastFetchTime();
+  return seed_type_ == SeedType::kSafeSeed
+             ? GetSeedStore()->GetSafeSeedFetchTime()
+             : GetSeedStore()->GetLastFetchTime();
+}
 
+bool VariationsFieldTrialCreatorBase::HasSeedExpired() {
+  const base::Time fetch_time = CalculateSeedFreshness();
   // If the fetch time is null, skip the expiry check. If the seed is a regular
   // seed (i.e. not a safe seed) and the fetch time is missing, then this must
   // be the first run of Chrome. If the seed is a safe seed, the fetch time may
   // be missing because the pref was added about a milestone later than most of
   // the other safe seed prefs.
   if (fetch_time.is_null()) {
-    RecordSeedExpiry(is_safe_seed, VariationsSeedExpiry::kFetchTimeMissing);
-    if (!is_safe_seed) {
+    RecordSeedExpiry(seed_type_ == SeedType::kSafeSeed,
+                     VariationsSeedExpiry::kFetchTimeMissing);
+    if (seed_type_ != SeedType::kSafeSeed) {
       // Store the current time as the last fetch time for Chrome's first run.
       GetSeedStore()->RecordLastFetchTime(base::Time::Now());
       // Record freshness of "0", since we expect a first run seed to be fresh.
@@ -524,9 +546,9 @@ bool VariationsFieldTrialCreatorBase::HasSeedExpired(bool is_safe_seed) {
   if (!has_seed_expired) {
     RecordSeedFreshness(base::Time::Now() - fetch_time);
   }
-  RecordSeedExpiry(is_safe_seed, has_seed_expired
-                                     ? VariationsSeedExpiry::kExpired
-                                     : VariationsSeedExpiry::kNotExpired);
+  RecordSeedExpiry(seed_type_ == SeedType::kSafeSeed,
+                   has_seed_expired ? VariationsSeedExpiry::kExpired
+                                    : VariationsSeedExpiry::kNotExpired);
   return has_seed_expired;
 }
 
@@ -580,7 +602,7 @@ VariationsFieldTrialCreatorBase::GetGoogleGroupsFromPrefs() {
 bool VariationsFieldTrialCreatorBase::CreateTrialsFromSeed(
     const EntropyProviders& entropy_providers,
     base::FeatureList* feature_list,
-    SafeSeedManagerInterface* safe_seed_manager) {
+    SafeSeedManagerBase* safe_seed_manager) {
   // This histogram name uses "VariationsFieldTrialCreator" rather than
   // "VariationsFieldTrialCreatorBase" for consistency with historical data
   TRACE_EVENT0("startup", "VariationsFieldTrialCreator::CreateTrialsFromSeed");
@@ -626,7 +648,7 @@ bool VariationsFieldTrialCreatorBase::CreateTrialsFromSeed(
                                   : SeedUsage::kUnloadableRegularSeedNotUsed);
     return false;
   }
-  if (HasSeedExpired(/*is_safe_seed=*/run_in_safe_mode)) {
+  if (HasSeedExpired()) {
     RecordVariationsSeedUsage(run_in_safe_mode
                                   ? SeedUsage::kExpiredSafeSeedNotUsed
                                   : SeedUsage::kExpiredRegularSeedNotUsed);
@@ -641,6 +663,14 @@ bool VariationsFieldTrialCreatorBase::CreateTrialsFromSeed(
   RecordVariationsSeedUsage(run_in_safe_mode ? SeedUsage::kSafeSeedUsed
                                              : SeedUsage::kRegularSeedUsed);
 
+  // Register group membership for the limited entropy synthetic trial if the
+  // required parameters are non null, and a LIMITED entropy layer is in the
+  // seed.
+  if (IsLimitedEntropyModeEnabled(client_->GetChannelForVariations()) &&
+      limited_entropy_synthetic_trial_ && ContainsLimitedEntropyLayer(seed)) {
+    client_->RegisterLimitedEntropySyntheticTrial(
+        limited_entropy_synthetic_trial_->GetGroupName());
+  }
   // Note that passing base::Unretained(this) below is safe because the callback
   // is executed synchronously. It is not possible to pass UIStringOverrider
   // directly to VariationsSeedProcessor (which is in components/variations and

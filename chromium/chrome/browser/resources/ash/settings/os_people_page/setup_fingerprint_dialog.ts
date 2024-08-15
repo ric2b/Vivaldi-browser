@@ -14,7 +14,6 @@ import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialo
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assertNotReached} from 'chrome://resources/js/assert.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordSettingChange} from '../metrics_recorder.js';
@@ -36,7 +35,7 @@ export enum FingerprintSetupStep {
  * The amount of milliseconds after a successful but not completed scan before
  * a message shows up telling the user to scan their finger again.
  */
-const SHOW_TAP_SENSOR_MESSAGE_DELAY_MS: number = 2000;
+const SHOW_TAP_SENSOR_MESSAGE_DELAY_MS = 2000;
 
 const SettingsSetupFingerprintDialogElementBase =
     I18nMixin(WebUiListenerMixin(PolymerElement));
@@ -100,20 +99,11 @@ export class SettingsSetupFingerprintDialogElement extends
         value: 0,
         observer: 'onProgressChanged_',
       },
-
-      /**
-       * Indicates whether Jelly is enabled.
-       */
-      isDynamicColor_: {
-        type: Boolean,
-        value: loadTimeData.getBoolean('isJellyEnabled'),
-      },
     };
   }
 
   allowAddAnotherFinger: boolean;
   authToken: string;
-  private isDynamicColor_: boolean;
   private browserProxy_: FingerprintBrowserProxy;
   private percentComplete_: number;
   private problemMessage_: string;

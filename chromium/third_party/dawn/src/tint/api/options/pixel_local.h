@@ -28,6 +28,7 @@
 #ifndef SRC_TINT_API_OPTIONS_PIXEL_LOCAL_H_
 #define SRC_TINT_API_OPTIONS_PIXEL_LOCAL_H_
 
+#include <cstdint>
 #include <unordered_map>
 
 #include "src/tint/utils/reflection/reflection.h"
@@ -39,9 +40,25 @@ struct PixelLocalOptions {
     /// Index of pixel_local structure member index to attachment index
     std::unordered_map<uint32_t, uint32_t> attachments;
 
+    /// The supported pixel local storage attachment format
+    enum class TexelFormat : uint8_t {
+        kR32Sint,
+        kR32Uint,
+        kR32Float,
+        kUndefined,
+    };
+    /// Index of pixel_local structure member index to pixel local storage attachment format
+    std::unordered_map<uint32_t, TexelFormat> attachment_formats;
+
+    /// The bind group index of all pixel local storage attachments
+    uint32_t pixel_local_group_index = 0;
+
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
-    TINT_REFLECT(attachments);
+    TINT_REFLECT(attachments, attachment_formats, pixel_local_group_index);
 };
+
+/// Reflect valid value ranges for the PixelLocalOptions::TexelFormat enum.
+TINT_REFLECT_ENUM_RANGE(PixelLocalOptions::TexelFormat, kR32Sint, kR32Float);
 
 }  // namespace tint
 

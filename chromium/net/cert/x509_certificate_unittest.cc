@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -20,14 +21,14 @@
 #include "crypto/rsa_private_key.h"
 #include "net/base/net_errors.h"
 #include "net/cert/asn1_util.h"
-#include "net/cert/pem.h"
-#include "net/cert/pki/parse_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/test/cert_builder.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/boringssl/src/pki/parse_certificate.h"
+#include "third_party/boringssl/src/pki/pem.h"
 
 using base::HexEncode;
 using base::Time;
@@ -220,7 +221,7 @@ TEST(X509CertificateTest, ThawteCertParsing) {
 }
 
 // Test that all desired AttributeAndValue pairs can be extracted when only
-// a single RelativeDistinguishedName is present. "Normally" there is only
+// a single bssl::RelativeDistinguishedName is present. "Normally" there is only
 // one AVA per RDN, but some CAs place all AVAs within a single RDN.
 // This is a regression test for http://crbug.com/101009
 TEST(X509CertificateTest, MultivalueRDN) {
@@ -273,7 +274,7 @@ TEST(X509CertificateTest, InvalidPrintableStringIsUtf8) {
           "subject_printable_string_containing_utf8_client_cert.pem"),
       &file_data));
 
-  net::PEMTokenizer pem_tokenizer(file_data, {"CERTIFICATE"});
+  bssl::PEMTokenizer pem_tokenizer(file_data, {"CERTIFICATE"});
   ASSERT_TRUE(pem_tokenizer.GetNext());
   std::string cert_der(pem_tokenizer.data());
   ASSERT_FALSE(pem_tokenizer.GetNext());
@@ -574,7 +575,7 @@ TEST(X509CertificateTest, ExtractSPKIFromDERCert) {
       ImportCertFromFile(certs_dir, "nist.der");
   ASSERT_NE(static_cast<X509Certificate*>(nullptr), cert.get());
 
-  base::StringPiece spkiBytes;
+  std::string_view spkiBytes;
   EXPECT_TRUE(asn1::ExtractSPKIFromDERCert(
       x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()), &spkiBytes));
 
@@ -622,20 +623,20 @@ TEST(X509CertificateTest, ExtractExtension) {
   ASSERT_TRUE(cert);
 
   bool present, critical;
-  base::StringPiece contents;
+  std::string_view contents;
   ASSERT_TRUE(asn1::ExtractExtensionFromDERCert(
       x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()),
-      der::Input(kBasicConstraintsOid).AsStringView(), &present, &critical,
-      &contents));
+      bssl::der::Input(bssl::kBasicConstraintsOid).AsStringView(), &present,
+      &critical, &contents));
   EXPECT_TRUE(present);
   EXPECT_TRUE(critical);
-  ASSERT_EQ(base::StringPiece("\x30\x00", 2), contents);
+  ASSERT_EQ(std::string_view("\x30\x00", 2), contents);
 
   static constexpr uint8_t kNonsenseOID[] = {0x56, 0x1d, 0x13};
   ASSERT_TRUE(asn1::ExtractExtensionFromDERCert(
       x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()),
-      base::StringPiece(reinterpret_cast<const char*>(kNonsenseOID),
-                        sizeof(kNonsenseOID)),
+      std::string_view(reinterpret_cast<const char*>(kNonsenseOID),
+                       sizeof(kNonsenseOID)),
       &present, &critical, &contents));
   ASSERT_FALSE(present);
 
@@ -644,11 +645,11 @@ TEST(X509CertificateTest, ExtractExtension) {
   ASSERT_TRUE(uid_cert);
   ASSERT_TRUE(asn1::ExtractExtensionFromDERCert(
       x509_util::CryptoBufferAsStringPiece(uid_cert->cert_buffer()),
-      der::Input(kBasicConstraintsOid).AsStringView(), &present, &critical,
-      &contents));
+      bssl::der::Input(bssl::kBasicConstraintsOid).AsStringView(), &present,
+      &critical, &contents));
   EXPECT_TRUE(present);
   EXPECT_FALSE(critical);
-  ASSERT_EQ(base::StringPiece("\x30\x00", 2), contents);
+  ASSERT_EQ(std::string_view("\x30\x00", 2), contents);
 }
 
 // Tests CRYPTO_BUFFER deduping via X509Certificate::CreateFromBuffer.  We
@@ -1000,7 +1001,7 @@ TEST(X509CertificateTest, IsSelfSigned) {
 
   constexpr char invalid_cert_data[] = "this is not a certificate";
   bssl::UniquePtr<CRYPTO_BUFFER> invalid_cert_handle =
-      x509_util::CreateCryptoBuffer(base::StringPiece(invalid_cert_data));
+      x509_util::CreateCryptoBuffer(std::string_view(invalid_cert_data));
   ASSERT_TRUE(invalid_cert_handle);
   EXPECT_FALSE(X509Certificate::IsSelfSigned(invalid_cert_handle.get()));
 }

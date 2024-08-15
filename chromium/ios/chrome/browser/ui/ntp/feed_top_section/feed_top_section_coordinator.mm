@@ -7,15 +7,20 @@
 #import "base/feature_list.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/sync/base/features.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_service.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_util.h"
+#import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
@@ -23,6 +28,9 @@
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_utils.h"
+#import "ios/chrome/browser/ui/push_notification/notifications_confirmation_presenter.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 @interface FeedTopSectionCoordinator () <SigninPresenter>
 
@@ -38,6 +46,9 @@
 // Returns `YES` if the signin promo exists on the current NTP.
 @property(nonatomic, assign) BOOL isSignInPromoEnabled;
 
+// Alert Coordinator used to display the notifications system prompt.
+@property(nonatomic, strong) AlertCoordinator* alertCoordinator;
+
 @end
 
 @implementation FeedTopSectionCoordinator
@@ -46,7 +57,7 @@
 @synthesize viewController = _viewController;
 
 - (void)start {
-  DCHECK(self.ntpDelegate);
+  DCHECK(self.NTPDelegate);
   self.feedTopSectionViewController =
       [[FeedTopSectionViewController alloc] init];
   _viewController = self.feedTopSectionViewController;
@@ -65,10 +76,9 @@
            authService:authenticationService
            isIncognito:browserState->IsOffTheRecord()
            prefService:browserState->GetPrefs()];
-
   self.isSignInPromoEnabled =
       ShouldShowTopOfFeedSyncPromo() && authenticationService &&
-      [self.ntpDelegate isSignInAllowed] &&
+      [self.NTPDelegate isSignInAllowed] &&
       !authenticationService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
 
   // If the user is signed out and signin is allowed, then start the top-of-feed
@@ -84,14 +94,13 @@
                           syncService:syncService
                           accessPoint:signin_metrics::AccessPoint::
                                           ACCESS_POINT_NTP_FEED_TOP_PROMO
-                            presenter:self];
+                      signinPresenter:self
+             accountSettingsPresenter:nil];
 
     if (base::FeatureList::IsEnabled(
             syncer::kReplaceSyncPromosWithSignInPromos)) {
       self.signinPromoMediator.signinPromoAction =
-          accountManagerService->HasIdentities()
-              ? SigninPromoAction::kSigninSheet
-              : SigninPromoAction::kInstantSignin;
+          SigninPromoAction::kSigninWithNoDefaultIdentity;
     }
     self.signinPromoMediator.consumer = self.feedTopSectionMediator;
     self.feedTopSectionMediator.signinPromoMediator = self.signinPromoMediator;
@@ -99,9 +108,13 @@
         self.signinPromoMediator;
   }
 
-  self.feedTopSectionMediator.ntpDelegate = self.ntpDelegate;
+  self.feedTopSectionMediator.messagePresenter = self;
+  self.feedTopSectionMediator.notificationsPresenter = self;
+  self.feedTopSectionMediator.NTPDelegate = self.NTPDelegate;
   self.feedTopSectionViewController.delegate = self.feedTopSectionMediator;
-  self.feedTopSectionViewController.ntpDelegate = self.ntpDelegate;
+  self.feedTopSectionViewController.feedTopSectionMutator =
+      self.feedTopSectionMediator;
+  self.feedTopSectionViewController.NTPDelegate = self.NTPDelegate;
   [self.feedTopSectionMediator setUp];
 }
 
@@ -151,6 +164,78 @@
   _isSignInPromoEnabled = isSignInPromoEnabled;
   CHECK(self.feedTopSectionMediator);
   self.feedTopSectionMediator.isSignInPromoEnabled = isSignInPromoEnabled;
+}
+
+#pragma mark - NotificationsAlertPresenter
+
+- (void)presentPushNotificationPermissionAlert {
+  NSString* settingURL = UIApplicationOpenSettingsURLString;
+  if (@available(iOS 15.4, *)) {
+    settingURL = UIApplicationOpenNotificationSettingsURLString;
+  }
+  NSString* alertTitle = l10n_util::GetNSString(
+      IDS_IOS_CONTENT_NOTIFICATIONS_SETTINGS_ALERT_TITLE);
+  NSString* alertMessage = l10n_util::GetNSString(
+      IDS_IOS_CONTENT_NOTIFICATIONS_SETTINGS_ALERT_MESSAGE);
+  NSString* cancelTitle = l10n_util::GetNSString(
+      IDS_IOS_CONTENT_NOTIFICATIONS_PERMISSION_REDIRECT_ALERT_CANCEL);
+  NSString* settingsTitle = l10n_util::GetNSString(
+      IDS_IOS_CONTENT_NOTIFICATIONS_PERMISSION_REDIRECT_ALERT_REDIRECT);
+
+  __weak FeedTopSectionCoordinator* weakSelf = self;
+  [_alertCoordinator stop];
+  _alertCoordinator =
+      [[AlertCoordinator alloc] initWithBaseViewController:_viewController
+                                                   browser:self.browser
+                                                     title:alertTitle
+                                                   message:alertMessage];
+  [_alertCoordinator addItemWithTitle:cancelTitle
+                               action:^{
+                                 [weakSelf dimissAlertCoordinator];
+                               }
+                                style:UIAlertActionStyleCancel];
+  [_alertCoordinator
+      addItemWithTitle:settingsTitle
+                action:^{
+                  [[UIApplication sharedApplication]
+                                openURL:[NSURL URLWithString:settingURL]
+                                options:{}
+                      completionHandler:nil];
+                  [weakSelf dimissAlertCoordinator];
+                }
+                 style:UIAlertActionStyleDefault];
+  [_alertCoordinator start];
+}
+
+#pragma mark - NotificationsConfirmationPresenter
+
+- (void)presentNotificationsConfirmationMessage {
+  id<SnackbarCommands> snackbarHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), SnackbarCommands);
+  __weak __typeof(self) weakSelf = self;
+  [snackbarHandler
+      showSnackbarWithMessage:l10n_util::GetNSString(
+                                  IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_TITLE)
+                   buttonText:
+                       l10n_util::GetNSString(
+                           IDS_IOS_CONTENT_NOTIFICATION_SNACKBAR_ACTION_MANAGE)
+                messageAction:^{
+                  [weakSelf showNotificationSettings];
+                }
+             completionAction:nil];
+}
+
+#pragma mark - Private
+
+- (void)dimissAlertCoordinator {
+  [_alertCoordinator stop];
+  _alertCoordinator = nil;
+}
+
+// Display the notification settings.
+- (void)showNotificationSettings {
+  [HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                      ApplicationSettingsCommands) showNotificationsSettings];
 }
 
 @end

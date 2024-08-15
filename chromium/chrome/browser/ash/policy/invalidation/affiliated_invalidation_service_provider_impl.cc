@@ -65,11 +65,14 @@ class AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver
   std::string GetOwnerName() const override;
 
  private:
-  raw_ptr<AffiliatedInvalidationServiceProviderImpl, ExperimentalAsh> parent_;
-  const raw_ptr<invalidation::InvalidationService, ExperimentalAsh>
-      invalidation_service_;
+  raw_ptr<AffiliatedInvalidationServiceProviderImpl> parent_;
+  const raw_ptr<invalidation::InvalidationService> invalidation_service_;
   bool is_service_connected_;
   bool is_observer_ready_;
+
+  base::ScopedObservation<invalidation::InvalidationService,
+                          invalidation::InvalidationHandler>
+      invalidation_service_observation_{this};
 };
 
 AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
@@ -81,7 +84,7 @@ AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
       is_service_connected_(false),
       is_observer_ready_(false) {
   DCHECK(invalidation_service_);
-  invalidation_service_->RegisterInvalidationHandler(this);
+  invalidation_service_observation_.Observe(invalidation_service_);
   is_service_connected_ = invalidation_service->GetInvalidatorState() ==
                           invalidation::INVALIDATIONS_ENABLED;
   is_observer_ready_ = true;
@@ -90,7 +93,6 @@ AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
 AffiliatedInvalidationServiceProviderImpl::InvalidationServiceObserver::
     ~InvalidationServiceObserver() {
   is_observer_ready_ = false;
-  invalidation_service_->UnregisterInvalidationHandler(this);
 }
 
 invalidation::InvalidationService* AffiliatedInvalidationServiceProviderImpl::
@@ -363,6 +365,7 @@ AffiliatedInvalidationServiceProviderImpl::
           base::BindRepeating(&invalidation::FCMNetworkHandler::Create,
                               g_browser_process->gcm_driver(),
                               device_instance_id_driver_.get()),
+          base::BindRepeating(&invalidation::FCMInvalidationListener::Create),
           base::BindRepeating(
               &invalidation::PerUserTopicSubscriptionManager::Create,
               device_identity_provider_.get(), g_browser_process->local_state(),

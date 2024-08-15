@@ -254,13 +254,13 @@ class TestGclientGitCheckout(unittest.TestCase):
     def test_init(self):
         self.checkout.init()
         self.assertEqual(2, self.run_gclient.call_count)
-        self.assertEqual(3, self.run_git.call_count)
+        self.assertEqual(2, self.run_git.call_count)
 
         # Verify only expected commands and ignore arguments to avoid copying
         # commands from fetch.py
         self.assertEqual(['config', 'sync'],
                          [a[0][0] for a in self.run_gclient.call_args_list])
-        self.assertEqual(['submodule', 'config', 'config'],
+        self.assertEqual(['config', 'config'],
                          [a[0][0] for a in self.run_git.call_args_list])
 
         # First call to gclient, format spec is expected to be called so "foo"

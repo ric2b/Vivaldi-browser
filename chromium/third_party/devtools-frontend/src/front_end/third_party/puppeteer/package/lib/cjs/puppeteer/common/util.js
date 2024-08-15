@@ -1,18 +1,8 @@
 "use strict";
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -38,11 +28,10 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.waitForHTTP = exports.getSourceUrlComment = exports.SOURCE_URL_REGEX = exports.UTILITY_WORLD_NAME = exports.timeout = exports.validateDialogType = exports.getPageContent = exports.setPageContent = exports.getReadableFromProtocolStream = exports.getReadableAsBuffer = exports.importFSPromises = exports.waitWithTimeout = exports.pageBindingInitString = exports.addPageBinding = exports.evaluationString = exports.isDate = exports.isRegExp = exports.isPlainObject = exports.isNumber = exports.isString = exports.valueFromRemoteObject = exports.getSourcePuppeteerURLIfAvailable = exports.withSourcePuppeteerURLIfNone = exports.PuppeteerURL = exports.createClientError = exports.createEvaluationError = exports.debugError = void 0;
+exports.NETWORK_IDLE_TIME = exports.waitForHTTP = exports.getSourceUrlComment = exports.SOURCE_URL_REGEX = exports.UTILITY_WORLD_NAME = exports.timeout = exports.validateDialogType = exports.getPageContent = exports.getReadableFromProtocolStream = exports.getReadableAsBuffer = exports.importFSPromises = exports.pageBindingInitString = exports.addPageBinding = exports.evaluationString = exports.isDate = exports.isRegExp = exports.isPlainObject = exports.isNumber = exports.isString = exports.valueFromRemoteObject = exports.getSourcePuppeteerURLIfAvailable = exports.withSourcePuppeteerURLIfNone = exports.PuppeteerURL = exports.createClientError = exports.createEvaluationError = exports.DEFAULT_VIEWPORT = exports.debugError = void 0;
 const rxjs_js_1 = require("../../third_party/rxjs/rxjs.js");
 const environment_js_1 = require("../environment.js");
 const assert_js_1 = require("../util/assert.js");
-const Deferred_js_1 = require("../util/Deferred.js");
 const ErrorLike_js_1 = require("../util/ErrorLike.js");
 const Debug_js_1 = require("./Debug.js");
 const Errors_js_1 = require("./Errors.js");
@@ -50,6 +39,10 @@ const Errors_js_1 = require("./Errors.js");
  * @internal
  */
 exports.debugError = (0, Debug_js_1.debug)('puppeteer:error');
+/**
+ * @internal
+ */
+exports.DEFAULT_VIEWPORT = Object.freeze({ width: 800, height: 600 });
 /**
  * @internal
  */
@@ -308,6 +301,12 @@ function addPageBinding(type, name) {
     // This is the CDP binding.
     // @ts-expect-error: In a different context.
     const callCdp = globalThis[name];
+    // Depending on the frame loading state either Runtime.evaluate or
+    // Page.addScriptToEvaluateOnNewDocument might succeed. Let's check that we
+    // don't re-wrap Puppeteer's binding.
+    if (callCdp[Symbol.toStringTag] === 'PuppeteerBinding') {
+        return;
+    }
     // We replace the CDP binding with a Puppeteer binding.
     Object.assign(globalThis, {
         [name](...args) {
@@ -342,6 +341,8 @@ function addPageBinding(type, name) {
             });
         },
     });
+    // @ts-expect-error: In a different context.
+    globalThis[name][Symbol.toStringTag] = 'PuppeteerBinding';
 }
 exports.addPageBinding = addPageBinding;
 /**
@@ -351,17 +352,6 @@ function pageBindingInitString(type, name) {
     return evaluationString(addPageBinding, type, name);
 }
 exports.pageBindingInitString = pageBindingInitString;
-/**
- * @internal
- */
-async function waitWithTimeout(promise, taskName, timeout) {
-    const deferred = Deferred_js_1.Deferred.create({
-        message: `waiting for ${taskName} failed: timeout ${timeout}ms exceeded`,
-        timeout,
-    });
-    return await Deferred_js_1.Deferred.race([promise, deferred]);
-}
-exports.waitWithTimeout = waitWithTimeout;
 /**
  * @internal
  */
@@ -454,19 +444,6 @@ exports.getReadableFromProtocolStream = getReadableFromProtocolStream;
 /**
  * @internal
  */
-async function setPageContent(page, content) {
-    // We rely upon the fact that document.open() will reset frame lifecycle with "init"
-    // lifecycle event. @see https://crrev.com/608658
-    return await page.evaluate(html => {
-        document.open();
-        document.write(html);
-        document.close();
-    }, content);
-}
-exports.setPageContent = setPageContent;
-/**
- * @internal
- */
 function getPageContent() {
     let content = '';
     for (const node of document.childNodes) {
@@ -543,4 +520,8 @@ ms, cancelation) {
     }), (0, rxjs_js_1.raceWith)(timeout(ms), (0, rxjs_js_1.from)(cancelation.valueOrThrow()))));
 }
 exports.waitForHTTP = waitForHTTP;
+/**
+ * @internal
+ */
+exports.NETWORK_IDLE_TIME = 500;
 //# sourceMappingURL=util.js.map

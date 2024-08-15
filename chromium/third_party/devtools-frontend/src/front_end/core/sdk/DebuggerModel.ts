@@ -32,23 +32,21 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
+import * as Protocol from '../../generated/protocol.js';
 import * as Common from '../common/common.js';
 import * as Host from '../host/host.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
-import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
-import * as Protocol from '../../generated/protocol.js';
 
-import {ScopeRef, type GetPropertiesResult, type RemoteObject} from './RemoteObject.js';
+import {type GetPropertiesResult, type RemoteObject, ScopeRef} from './RemoteObject.js';
 import {Events as ResourceTreeModelEvents, ResourceTreeModel} from './ResourceTreeModel.js';
-
-import {RuntimeModel, type EvaluationOptions, type EvaluationResult, type ExecutionContext} from './RuntimeModel.js';
+import {type EvaluationOptions, type EvaluationResult, type ExecutionContext, RuntimeModel} from './RuntimeModel.js';
 import {Script} from './Script.js';
-
-import {Capability, Type, type Target} from './Target.js';
 import {SDKModel} from './SDKModel.js';
 import {SourceMapManager} from './SourceMapManager.js';
+import {Capability, type Target, Type} from './Target.js';
 
 const UIStrings = {
   /**
@@ -143,9 +141,7 @@ export function sortAndMergeRanges(locationRanges: Protocol.Debugger.LocationRan
   return merged;
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum StepMode {
+export const enum StepMode {
   StepInto = 'StepInto',
   StepOut = 'StepOut',
   StepOver = 'StepOver',
@@ -300,8 +296,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   }
 
   private registerDebugger(response: Protocol.Debugger.EnableResponse): void {
-    if (response.getError() || response.debuggerId === undefined) {
-      this.#debuggerEnabledInternal = false;
+    if (response.getError()) {
       return;
     }
     const {debuggerId} = response;
@@ -457,7 +452,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
       condition?: BackendCondition): Promise<SetBreakpointResult> {
     // Convert file url to node-js path.
     let urlRegex;
-    if (this.target().type() === Type.Node && url.startsWith('file://')) {
+    if (this.target().type() === Type.Node && Common.ParsedURL.schemeIs(url, 'file:')) {
       const platformPath = Common.ParsedURL.ParsedURL.urlToRawPathString(url, Host.Platform.isWin());
       urlRegex =
           `${Platform.StringUtilities.escapeForRegExp(platformPath)}|${Platform.StringUtilities.escapeForRegExp(url)}`;
@@ -938,8 +933,6 @@ export const _debuggerIdToModel = new Map<string, DebuggerModel>();
 /**
  * Keep these in sync with WebCore::V8Debugger
  */
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum PauseOnExceptionsState {
   DontPauseOnExceptions = 'none',
   PauseOnAllExceptions = 'all',
@@ -947,8 +940,6 @@ export enum PauseOnExceptionsState {
   PauseOnUncaughtExceptions = 'uncaught',
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   DebuggerWasEnabled = 'DebuggerWasEnabled',
   DebuggerWasDisabled = 'DebuggerWasDisabled',
@@ -1154,16 +1145,16 @@ export interface MissingDebugInfoDetails {
 
 export class CallFrame {
   debuggerModel: DebuggerModel;
-  readonly #scriptInternal: Script;
+  readonly script: Script;
   payload: Protocol.Debugger.CallFrame;
   readonly #locationInternal: Location;
   readonly #scopeChainInternal: Scope[];
   readonly #localScopeInternal: Scope|null;
-  readonly #inlineFrameIndexInternal: number;
-  readonly #functionNameInternal: string;
+  readonly inlineFrameIndex: number;
+  readonly functionName: string;
   readonly #functionLocationInternal: Location|undefined;
   #returnValueInternal: RemoteObject|null;
-  #missingDebugInfoDetails: MissingDebugInfoDetails|null = null;
+  missingDebugInfoDetails: MissingDebugInfoDetails|null;
 
   readonly canBeRestarted: boolean;
 
@@ -1171,13 +1162,14 @@ export class CallFrame {
       debuggerModel: DebuggerModel, script: Script, payload: Protocol.Debugger.CallFrame, inlineFrameIndex?: number,
       functionName?: string) {
     this.debuggerModel = debuggerModel;
-    this.#scriptInternal = script;
+    this.script = script;
     this.payload = payload;
     this.#locationInternal = Location.fromPayload(debuggerModel, payload.location, inlineFrameIndex);
     this.#scopeChainInternal = [];
     this.#localScopeInternal = null;
-    this.#inlineFrameIndexInternal = inlineFrameIndex || 0;
-    this.#functionNameInternal = functionName || payload.functionName;
+    this.inlineFrameIndex = inlineFrameIndex || 0;
+    this.functionName = functionName || payload.functionName;
+    this.missingDebugInfoDetails = null;
     this.canBeRestarted = Boolean(payload.canBeRestarted);
     for (let i = 0; i < payload.scopeChain.length; ++i) {
       const scope = new Scope(this, i);
@@ -1206,27 +1198,11 @@ export class CallFrame {
   }
 
   createVirtualCallFrame(inlineFrameIndex: number, name: string): CallFrame {
-    return new CallFrame(this.debuggerModel, this.#scriptInternal, this.payload, inlineFrameIndex, name);
-  }
-
-  setMissingDebugInfoDetails(details: MissingDebugInfoDetails): void {
-    this.#missingDebugInfoDetails = details;
-  }
-
-  get missingDebugInfoDetails(): MissingDebugInfoDetails|null {
-    return this.#missingDebugInfoDetails;
-  }
-
-  get script(): Script {
-    return this.#scriptInternal;
+    return new CallFrame(this.debuggerModel, this.script, this.payload, inlineFrameIndex, name);
   }
 
   get id(): Protocol.Debugger.CallFrameId {
     return this.payload.callFrameId;
-  }
-
-  get inlineFrameIndex(): number {
-    return this.#inlineFrameIndexInternal;
   }
 
   scopeChain(): Scope[] {
@@ -1261,10 +1237,6 @@ export class CallFrame {
     }
     this.#returnValueInternal = this.debuggerModel.runtimeModel().createRemoteObject(evaluateResponse.result);
     return this.#returnValueInternal;
-  }
-
-  get functionName(): string {
-    return this.#functionNameInternal;
   }
 
   location(): Location {

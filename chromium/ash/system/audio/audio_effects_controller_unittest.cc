@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/shell.h"
@@ -194,8 +194,8 @@ class AudioEffectsControllerTest : public NoSessionAshTestBase {
   base::HistogramTester histogram_tester_;
 
  private:
-  raw_ptr<AudioEffectsController, DanglingUntriaged | ExperimentalAsh>
-      audio_effects_controller_ = nullptr;
+  raw_ptr<AudioEffectsController, DanglingUntriaged> audio_effects_controller_ =
+      nullptr;
   std::unique_ptr<FakeVideoConferenceTrayController> tray_controller_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -236,7 +236,7 @@ TEST_F(AudioEffectsControllerTest, NoiseCancellationSupported) {
 
   // Delegate should be registered.
   EXPECT_TRUE(VideoConferenceTrayController::Get()
-                  ->effects_manager()
+                  ->GetEffectsManager()
                   .IsDelegateRegistered(audio_effects_controller()));
 }
 
@@ -255,7 +255,7 @@ TEST_F(AudioEffectsControllerTest, NoiseCancellationNotEnabled) {
       CrasAudioHandler::AudioSettingsChangeSource::kVideoConferenceTray, 1);
 
   // Noise cancellation effect state is disabled.
-  absl::optional<int> effect_state = audio_effects_controller()->GetEffectState(
+  std::optional<int> effect_state = audio_effects_controller()->GetEffectState(
       VcEffectId::kNoiseCancellation);
   EXPECT_TRUE(effect_state.has_value());
   EXPECT_EQ(effect_state, 0);
@@ -286,7 +286,7 @@ TEST_F(AudioEffectsControllerTest, NoiseCancellationEnabled) {
       CrasAudioHandler::AudioSettingsChangeSource::kVideoConferenceTray, 1);
 
   // Noise cancellation effect state is disabled.
-  absl::optional<int> effect_state = audio_effects_controller()->GetEffectState(
+  std::optional<int> effect_state = audio_effects_controller()->GetEffectState(
       VcEffectId::kNoiseCancellation);
   EXPECT_TRUE(effect_state.has_value());
   EXPECT_EQ(effect_state, 1);
@@ -308,7 +308,7 @@ TEST_F(AudioEffectsControllerTest, NoiseCancellationSetNotEnabled) {
 
   // User pressed the noise cancellation toggle.
   audio_effects_controller()->OnEffectControlActivated(
-      VcEffectId::kNoiseCancellation, absl::nullopt);
+      VcEffectId::kNoiseCancellation, std::nullopt);
 
   // State should now be disabled.
   EXPECT_FALSE(cras_audio_handler()->GetNoiseCancellationState());
@@ -330,7 +330,7 @@ TEST_F(AudioEffectsControllerTest, NoiseCancellationSetEnabled) {
 
   // User pressed the noise cancellation toggle.
   audio_effects_controller()->OnEffectControlActivated(
-      VcEffectId::kNoiseCancellation, absl::nullopt);
+      VcEffectId::kNoiseCancellation, std::nullopt);
 
   // State should now be enabled.
   EXPECT_TRUE(cras_audio_handler()->GetNoiseCancellationState());
@@ -486,7 +486,7 @@ TEST_F(AudioEffectsControllerTest, LiveCaptionSupported) {
 
   // Delegate should be registered.
   EXPECT_TRUE(VideoConferenceTrayController::Get()
-                  ->effects_manager()
+                  ->GetEffectsManager()
                   .IsDelegateRegistered(audio_effects_controller()));
 }
 
@@ -518,13 +518,13 @@ TEST_F(AudioEffectsControllerTest, LiveCaptionNotEnabled) {
   SimulateUserLogin("testuser1@gmail.com");
 
   // Explicitly disable live caption, confirm that it is disabled.
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   controller->live_caption().SetEnabled(false);
   EXPECT_FALSE(controller->live_caption().enabled());
 
   // Live caption effect state is disabled.
-  absl::optional<int> state =
+  std::optional<int> state =
       audio_effects_controller()->GetEffectState(VcEffectId::kLiveCaption);
   EXPECT_TRUE(state.has_value());
   EXPECT_FALSE(state.value());
@@ -541,13 +541,13 @@ TEST_F(AudioEffectsControllerTest, LiveCaptionEnabled) {
   SimulateUserLogin("testuser1@gmail.com");
 
   // Explicitly enable live caption, confirm that it is enabled.
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   controller->live_caption().SetEnabled(true);
   EXPECT_TRUE(controller->live_caption().enabled());
 
   // Live caption effect state is enabled.
-  absl::optional<int> state =
+  std::optional<int> state =
       audio_effects_controller()->GetEffectState(VcEffectId::kLiveCaption);
   EXPECT_TRUE(state.has_value());
   EXPECT_TRUE(state.value());
@@ -564,14 +564,14 @@ TEST_F(AudioEffectsControllerTest, LiveCaptionSetNotEnabled) {
   SimulateUserLogin("testuser1@gmail.com");
 
   // Explicitly enable live caption, confirm that it is enabled.
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   controller->live_caption().SetEnabled(true);
   EXPECT_TRUE(controller->live_caption().enabled());
 
   // User pressed the live caption toggle.
   audio_effects_controller()->OnEffectControlActivated(VcEffectId::kLiveCaption,
-                                                       absl::nullopt);
+                                                       std::nullopt);
 
   // Live caption is now disabled.
   EXPECT_FALSE(controller->live_caption().enabled());
@@ -588,14 +588,14 @@ TEST_F(AudioEffectsControllerTest, LiveCaptionSetEnabled) {
   SimulateUserLogin("testuser1@gmail.com");
 
   // Explicitly disable live caption, confirm that it is disabled.
-  AccessibilityControllerImpl* controller =
+  AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
   controller->live_caption().SetEnabled(false);
   EXPECT_FALSE(controller->live_caption().enabled());
 
   // User pressed the live caption toggle.
   audio_effects_controller()->OnEffectControlActivated(VcEffectId::kLiveCaption,
-                                                       absl::nullopt);
+                                                       std::nullopt);
 
   // Live caption is now enabled.
   EXPECT_TRUE(controller->live_caption().enabled());
@@ -629,13 +629,13 @@ TEST_F(AudioEffectsControllerTest, LiveCaptionAndNoiseCancellationAdded) {
 
   // Delegate should be registered.
   EXPECT_TRUE(VideoConferenceTrayController::Get()
-                  ->effects_manager()
+                  ->GetEffectsManager()
                   .IsDelegateRegistered(audio_effects_controller()));
 }
 
 TEST_F(AudioEffectsControllerTest, DelegateRegistered) {
   VideoConferenceTrayEffectsManager& effects_manager =
-      VideoConferenceTrayController::Get()->effects_manager();
+      VideoConferenceTrayController::Get()->GetEffectsManager();
 
   // No effects supported. Delegate should not be registered.
   SimulateUserLogin("testuser1@gmail.com");

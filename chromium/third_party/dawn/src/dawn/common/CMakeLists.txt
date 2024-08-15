@@ -58,6 +58,7 @@ target_sources(dawn_common PRIVATE
     "CoreFoundationRef.h"
     "DynamicLib.cpp"
     "DynamicLib.h"
+    "Enumerator.h"
     "FutureUtils.h"
     "GPUInfo.cpp"
     "GPUInfo.h"
@@ -77,6 +78,7 @@ target_sources(dawn_common PRIVATE
     "PlacementAllocated.h"
     "Platform.h"
     "Preprocessor.h"
+    "Range.h"
     "Ref.h"
     "RefBase.h"
     "RefCounted.cpp"
@@ -120,7 +122,11 @@ elseif(APPLE)
     )
 endif()
 
-target_link_libraries(dawn_common PUBLIC dawncpp_headers PRIVATE dawn_internal_config)
+target_link_libraries(dawn_common
+    PUBLIC dawncpp_headers
+    PUBLIC partition_alloc
+    PRIVATE dawn_internal_config
+)
 
 # TODO Android Log support
 # TODO Vulkan headers support

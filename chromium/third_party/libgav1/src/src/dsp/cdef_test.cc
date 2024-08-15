@@ -79,11 +79,11 @@ class CdefDirectionTest : public testing::TestWithParam<int> {
     const char* const test_case = test_info->test_suite_name();
     if (absl::StartsWith(test_case, "C/")) {
     } else if (absl::StartsWith(test_case, "SSE41/")) {
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
       CdefInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "AVX2/")) {
-      if ((GetCpuInfo() & kAVX2) != 0) {
-        CdefInit_AVX2();
-      }
+      if ((GetCpuInfo() & kAVX2) == 0) GTEST_SKIP() << "No AVX2 support!";
+      CdefInit_AVX2();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       CdefInit_NEON();
     } else {
@@ -275,11 +275,11 @@ class CdefFilteringTest : public testing::TestWithParam<CdefTestParam> {
     } else if (absl::StartsWith(test_case, "NEON/")) {
       CdefInit_NEON();
     } else if (absl::StartsWith(test_case, "SSE41/")) {
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
       CdefInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "AVX2/")) {
-      if ((GetCpuInfo() & kAVX2) != 0) {
-        CdefInit_AVX2();
-      }
+      if ((GetCpuInfo() & kAVX2) == 0) GTEST_SKIP() << "No AVX2 support!";
+      CdefInit_AVX2();
     } else {
       FAIL() << "Unrecognized architecture prefix in test case name: "
              << test_case;

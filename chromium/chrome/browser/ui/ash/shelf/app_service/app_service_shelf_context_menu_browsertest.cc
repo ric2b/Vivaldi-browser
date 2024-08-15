@@ -31,6 +31,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
@@ -42,6 +43,7 @@
 class AppServiceShelfContextMenuBrowserTest : public InProcessBrowserTest {
  public:
   AppServiceShelfContextMenuBrowserTest() = default;
+
   ~AppServiceShelfContextMenuBrowserTest() override = default;
 
   struct MenuSection {
@@ -52,7 +54,7 @@ class AppServiceShelfContextMenuBrowserTest : public InProcessBrowserTest {
     size_t command_index = 0;
   };
 
-  absl::optional<MenuSection> GetContextMenuSectionForAppCommand(
+  std::optional<MenuSection> GetContextMenuSectionForAppCommand(
       const webapps::AppId& app_id,
       int command_id) {
     MenuSection result;
@@ -74,21 +76,28 @@ class AppServiceShelfContextMenuBrowserTest : public InProcessBrowserTest {
     result.command_index = 0;
     if (!ui::MenuModel::GetModelAndIndexForCommandId(
             command_id, &result.sub_model, &result.command_index)) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     return result;
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class AppServiceShelfContextMenuWebAppBrowserTest
-    : public AppServiceShelfContextMenuBrowserTest {
+    : public AppServiceShelfContextMenuBrowserTest,
+      public testing::WithParamInterface<bool> {
  public:
   AppServiceShelfContextMenuWebAppBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {blink::features::kDesktopPWAsTabStrip,
-         features::kDesktopPWAsTabStripSettings},
-        {});
+    base::flat_map<base::test::FeatureRef, bool> features;
+    features.insert({blink::features::kDesktopPWAsTabStrip, true});
+    features.insert({features::kDesktopPWAsTabStripSettings, true});
+    features.insert(
+        {chromeos::features::kCrosShortstand, IsShortstandEnabled()});
+
+    scoped_feature_list_.InitWithFeatureStates(features);
   }
   ~AppServiceShelfContextMenuWebAppBrowserTest() override = default;
 
@@ -101,11 +110,13 @@ class AppServiceShelfContextMenuWebAppBrowserTest
       return views::kOpenIcon;
   }
 
+  bool IsShortstandEnabled() { return GetParam(); }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
+IN_PROC_BROWSER_TEST_P(AppServiceShelfContextMenuWebAppBrowserTest,
                        WindowCommandCheckedForMinimalUi) {
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
@@ -116,8 +127,18 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
   webapps::AppId app_id =
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
 
+  // When Shortstand is enabled, the display mode can no longer be changed
+  // through the context menu. The submenu is replaced with a 'New Window'
+  // command.
+  if (IsShortstandEnabled()) {
+    std::optional<MenuSection> menu_section =
+        GetContextMenuSectionForAppCommand(app_id, ash::LAUNCH_NEW);
+    ASSERT_TRUE(menu_section);
+    return;
+  }
+
   // Activate open in window menu item.
-  absl::optional<MenuSection> menu_section =
+  std::optional<MenuSection> menu_section =
       GetContextMenuSectionForAppCommand(app_id, ash::USE_LAUNCH_TYPE_WINDOW);
   ASSERT_TRUE(menu_section);
   menu_section->sub_model->ActivatedAt(menu_section->command_index);
@@ -133,8 +154,14 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
       menu_section->sub_model->IsItemCheckedAt(menu_section->command_index));
 }
 
-IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
+IN_PROC_BROWSER_TEST_P(AppServiceShelfContextMenuWebAppBrowserTest,
                        SetOpenInTabbedWindow) {
+  // As the display mode can no longer be changed through the context menu when
+  // Shortstand is enabled, this test is skipped.
+  if (IsShortstandEnabled()) {
+    GTEST_SKIP();
+  }
+
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
@@ -145,7 +172,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
 
   // Set app to open in tabbed window.
-  absl::optional<MenuSection> menu_section = GetContextMenuSectionForAppCommand(
+  std::optional<MenuSection> menu_section = GetContextMenuSectionForAppCommand(
       app_id, ash::USE_LAUNCH_TYPE_TABBED_WINDOW);
   ASSERT_TRUE(menu_section);
   menu_section->sub_model->ActivatedAt(menu_section->command_index);
@@ -161,8 +188,13 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
   EXPECT_TRUE(app_browser->app_controller()->has_tab_strip());
 }
 
-IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
+IN_PROC_BROWSER_TEST_P(AppServiceShelfContextMenuWebAppBrowserTest,
                        SetOpenInBrowserTab) {
+  // As the display mode can no longer be changed through the context menu when
+  // Shortstand is enabled, this test is skipped.
+  if (IsShortstandEnabled()) {
+    GTEST_SKIP();
+  }
   Profile* profile = browser()->profile();
   base::UserActionTester user_action_tester;
 
@@ -172,7 +204,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
 
   // Set app to open in browser tab.
-  absl::optional<MenuSection> menu_section =
+  std::optional<MenuSection> menu_section =
       GetContextMenuSectionForAppCommand(app_id, ash::USE_LAUNCH_TYPE_REGULAR);
   ASSERT_TRUE(menu_section);
   menu_section->sub_model->ActivatedAt(menu_section->command_index);
@@ -183,15 +215,21 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
   EXPECT_EQ(user_action_tester.GetActionCount("WebApp.SetWindowMode.Tab"), 1);
 }
 
-IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
+IN_PROC_BROWSER_TEST_P(AppServiceShelfContextMenuWebAppBrowserTest,
                        LaunchNewMenuItemDynamicallyChanges) {
+  // As the display mode can no longer be changed through the context menu when
+  // Shortstand is enabled, this test is skipped.
+  if (IsShortstandEnabled()) {
+    GTEST_SKIP();
+  }
+
   Profile* profile = browser()->profile();
   auto web_app_install_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_install_info->start_url = GURL("https://example.org");
   webapps::AppId app_id =
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
 
-  absl::optional<MenuSection> menu_section =
+  std::optional<MenuSection> menu_section =
       GetContextMenuSectionForAppCommand(app_id, ash::LAUNCH_NEW);
   ASSERT_TRUE(menu_section);
 
@@ -221,6 +259,9 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuWebAppBrowserTest,
                   launch_new_submodel->GetCommandIdAt(launch_new_item_index)));
   }
 }
+INSTANTIATE_TEST_SUITE_P(All,
+                         AppServiceShelfContextMenuWebAppBrowserTest,
+                         ::testing::Bool());
 
 class AppServiceShelfContextMenuTabbedWebAppBrowserTest
     : public AppServiceShelfContextMenuBrowserTest {
@@ -249,7 +290,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuTabbedWebAppBrowserTest,
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
 
   // Select the "Open in window" menu item.
-  absl::optional<MenuSection> menu_section =
+  std::optional<MenuSection> menu_section =
       GetContextMenuSectionForAppCommand(app_id, ash::USE_LAUNCH_TYPE_WINDOW);
   ASSERT_TRUE(menu_section);
   menu_section->sub_model->ActivatedAt(menu_section->command_index);
@@ -293,7 +334,7 @@ IN_PROC_BROWSER_TEST_F(AppServiceShelfContextMenuNonTabbedWebAppBrowserTest,
       web_app::test::InstallWebApp(profile, std::move(web_app_install_info));
 
   // Select the "Open in window" menu item.
-  absl::optional<MenuSection> menu_section =
+  std::optional<MenuSection> menu_section =
       GetContextMenuSectionForAppCommand(app_id, ash::USE_LAUNCH_TYPE_WINDOW);
   ASSERT_TRUE(menu_section);
   menu_section->sub_model->ActivatedAt(menu_section->command_index);

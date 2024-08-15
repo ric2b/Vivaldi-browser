@@ -5,24 +5,12 @@ Execution Tests for the f16 arithmetic unary expression operations
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
 import { TypeF16 } from '../../../../util/conversion.js';
-import { FP } from '../../../../util/floating_point.js';
-import { fullF16Range } from '../../../../util/math.js';
-import { makeCaseCache } from '../case_cache.js';
 import { allInputSources, run } from '../expression.js';
 
+import { d } from './f16_arithmetic.cache.js';
 import { unary } from './unary.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('unary/f16_arithmetic', {
-  negation: () => {
-    return FP.f16.generateScalarToIntervalCases(
-      fullF16Range({ neg_norm: 250, neg_sub: 20, pos_sub: 20, pos_norm: 250 }),
-      'unfiltered',
-      FP.f16.negationInterval
-    );
-  },
-});
 
 g.test('negation')
   .specURL('https://www.w3.org/TR/WGSL/#floating-point-evaluation')

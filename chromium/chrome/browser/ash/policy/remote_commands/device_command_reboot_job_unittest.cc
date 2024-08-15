@@ -236,7 +236,7 @@ TEST_F(DeviceCommandRebootJobTest, RebootsWhenPowerManagerIsAvailable) {
   auto scoped_login_state = ScopedLoginState::CreateKiosk();
 
   chromeos::FakePowerManagerClient::Get()->SetServiceAvailability(
-      /*availability=*/absl::nullopt);
+      /*availability=*/std::nullopt);
 
   auto command = CreateAndInitializeCommand();
   base::test::TestFuture<void> future;
@@ -439,6 +439,10 @@ INSTANTIATE_TEST_SUITE_P(
                     R"({"not_delay_field": 10})",
                     R"({"user_session_delay_seconds": false})",
                     R"({"user_session_delay_seconds": -1})",
+                    R"({"user_session_delay_seconds": 1.0})",
+                    R"({"user_session_delay_seconds": 1.10})",
+                    R"({"user_session_delay_seconds": -1.0})",
+                    R"({"user_session_delay_seconds": -1.10})",
                     base::StringPrintf(R"({"user_session_delay_seconds": %ld})",
                                        base::TimeDelta::Max().InSeconds()),
                     base::StringPrintf(R"({"user_session_delay_seconds": %ld})",

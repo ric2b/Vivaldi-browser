@@ -261,17 +261,17 @@ void VideoConferenceTrayController::MaybeShowSpeakOnMuteOptInNudge() {
   nudge_data.title_text = l10n_util::GetStringUTF16(
       IDS_ASH_VIDEO_CONFERENCE_NUDGE_SPEAK_ON_MUTE_OPT_IN_TITLE);
 
-  nudge_data.first_button_text = l10n_util::GetStringUTF16(
-      IDS_ASH_VIDEO_CONFERENCE_NUDGE_SPEAK_ON_MUTE_OPT_IN_FIRST_BUTTON);
-  nudge_data.first_button_callback = base::BindRepeating(
-      &VideoConferenceTrayController::OnSpeakOnMuteNudgeOptInAction,
-      weak_ptr_factory_.GetWeakPtr(), /*opt_in=*/false);
-
-  nudge_data.second_button_text = l10n_util::GetStringUTF16(
-      IDS_ASH_VIDEO_CONFERENCE_NUDGE_SPEAK_ON_MUTE_OPT_IN_SECOND_BUTTON);
-  nudge_data.second_button_callback = base::BindRepeating(
+  nudge_data.primary_button_text = l10n_util::GetStringUTF16(
+      IDS_ASH_VIDEO_CONFERENCE_NUDGE_SPEAK_ON_MUTE_OPT_IN_PRIMARY_BUTTON);
+  nudge_data.primary_button_callback = base::BindRepeating(
       &VideoConferenceTrayController::OnSpeakOnMuteNudgeOptInAction,
       weak_ptr_factory_.GetWeakPtr(), /*opt_in=*/true);
+
+  nudge_data.secondary_button_text = l10n_util::GetStringUTF16(
+      IDS_ASH_VIDEO_CONFERENCE_NUDGE_SPEAK_ON_MUTE_OPT_IN_SECONDARY_BUTTON);
+  nudge_data.secondary_button_callback = base::BindRepeating(
+      &VideoConferenceTrayController::OnSpeakOnMuteNudgeOptInAction,
+      weak_ptr_factory_.GetWeakPtr(), /*opt_in=*/false);
 
   nudge_data.duration = NudgeDuration::kLongDuration;
   nudge_data.anchored_to_shelf = true;
@@ -612,14 +612,6 @@ void VideoConferenceTrayController::OnUserSessionAdded(
   if (!pref_service) {
     return;
   }
-
-  // If enabled, reset the prefs relevant to showing the speak-on-mute opt-in
-  // nudge, so it can be shown again for debugging purposes.
-  if (features::IsSpeakOnMuteOptInNudgePrefsResetEnabled()) {
-    pref_service->SetBoolean(prefs::kShouldShowSpeakOnMuteOptInNudge, true);
-    pref_service->SetBoolean(prefs::kUserSpeakOnMuteDetectionEnabled, false);
-    pref_service->SetInteger(prefs::kSpeakOnMuteOptInNudgeShownCount, 0);
-  }
 }
 
 void VideoConferenceTrayController::OnShellDestroying() {
@@ -676,6 +668,16 @@ VideoConferenceTrayController::GetShelfAutoHideTimerForTest() {
   return disable_shelf_autohide_timer_;
 }
 
+VideoConferenceTrayEffectsManager&
+VideoConferenceTrayController::GetEffectsManager() {
+  return effects_manager_;
+}
+
+void VideoConferenceTrayController::CreateBackgroundImage() {
+  CHECK(video_conference_manager_);
+  video_conference_manager_->CreateBackgroundImage();
+}
+
 void VideoConferenceTrayController::UpdateWithMediaState(
     VideoConferenceMediaState state) {
   auto old_state = state_;
@@ -684,7 +686,7 @@ void VideoConferenceTrayController::UpdateWithMediaState(
   const bool new_tray_target_visibility = ShouldShowTray();
 
   if (new_tray_target_visibility && !old_tray_target_visibility) {
-    effects_manager_.RecordInitialStates();
+    GetEffectsManager().RecordInitialStates();
 
     // Keeps increment the count to track the number of times the view flickers.
     // When the delay of `kRepeatedShowTimerInterval` has reached, record that

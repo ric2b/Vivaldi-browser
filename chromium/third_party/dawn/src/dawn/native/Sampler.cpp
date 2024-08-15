@@ -69,13 +69,7 @@ MaybeError ValidateSamplerDescriptor(DeviceBase*, const SamplerDescriptor* descr
     DAWN_TRY(ValidateAddressMode(descriptor->addressModeU));
     DAWN_TRY(ValidateAddressMode(descriptor->addressModeV));
     DAWN_TRY(ValidateAddressMode(descriptor->addressModeW));
-
-    // CompareFunction::Undefined is tagged as invalid because it can't be used, except for the
-    // SamplerDescriptor where it is a special value that means the sampler is not a
-    // comparison-sampler.
-    if (descriptor->compare != wgpu::CompareFunction::Undefined) {
-        DAWN_TRY(ValidateCompareFunction(descriptor->compare));
-    }
+    DAWN_TRY(ValidateCompareFunction(descriptor->compare));
 
     return {};
 }
@@ -112,8 +106,8 @@ void SamplerBase::DestroyImpl() {
 }
 
 // static
-SamplerBase* SamplerBase::MakeError(DeviceBase* device, const char* label) {
-    return new SamplerBase(device, ObjectBase::kError, label);
+Ref<SamplerBase> SamplerBase::MakeError(DeviceBase* device, const char* label) {
+    return AcquireRef(new SamplerBase(device, ObjectBase::kError, label));
 }
 
 ObjectType SamplerBase::GetType() const {

@@ -5,11 +5,12 @@
 #ifndef V8_COMPILER_TURBOSHAFT_LATE_LOAD_ELIMINATION_REDUCER_H_
 #define V8_COMPILER_TURBOSHAFT_LATE_LOAD_ELIMINATION_REDUCER_H_
 
+#include "src/base/doubly-threaded-list.h"
 #include "src/compiler/turboshaft/analyzer-iterator.h"
 #include "src/compiler/turboshaft/assembler.h"
-#include "src/compiler/turboshaft/doubly-threaded-list.h"
 #include "src/compiler/turboshaft/graph.h"
 #include "src/compiler/turboshaft/loop-finder.h"
+#include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/snapshot-table-opindex.h"
 #include "src/compiler/turboshaft/utils.h"
 #include "src/zone/zone.h"
@@ -179,6 +180,12 @@ struct MemoryAddress {
            offset == other.offset &&
            element_size_log2 == other.element_size_log2 && size == other.size;
   }
+
+  template <typename H>
+  friend H AbslHashValue(H h, const MemoryAddress& mem) {
+    return H::combine(std::move(h), mem.base, mem.index, mem.offset,
+                      mem.element_size_log2, mem.size);
+  }
 };
 
 inline size_t hash_value(MemoryAddress const& mem) {
@@ -214,9 +221,9 @@ struct BaseListTraits {
 struct BaseData {
   using Key = SnapshotTable<OpIndex, KeyData>::Key;
   // List of every value at this base that has an offset rather than an index.
-  DoublyThreadedList<Key, BaseListTraits> with_offsets;
+  v8::base::DoublyThreadedList<Key, BaseListTraits> with_offsets;
   // List of every value at this base that has a valid index.
-  DoublyThreadedList<Key, BaseListTraits> with_indices;
+  v8::base::DoublyThreadedList<Key, BaseListTraits> with_indices;
 };
 
 class MemoryContentTable
@@ -489,32 +496,32 @@ class MemoryContentTable
     auto base_keys = base_keys_.find(base);
     if (base_keys != base_keys_.end()) {
       if (key.data().mem.index.valid()) {
-        base_keys->second.with_indices.Add(key);
+        base_keys->second.with_indices.PushFront(key);
       } else {
-        base_keys->second.with_offsets.Add(key);
+        base_keys->second.with_offsets.PushFront(key);
       }
     } else {
       BaseData data;
       if (key.data().mem.index.valid()) {
-        data.with_indices.Add(key);
+        data.with_indices.PushFront(key);
       } else {
-        data.with_offsets.Add(key);
+        data.with_offsets.PushFront(key);
       }
       base_keys_.insert({base, std::move(data)});
     }
 
     if (key.data().mem.index.valid()) {
       // Inserting in {index_keys_}.
-      index_keys_.Add(key);
+      index_keys_.PushFront(key);
     } else {
       // Inserting in {offset_keys_}.
       int offset = key.data().mem.offset;
       auto offset_keys = offset_keys_.find(offset);
       if (offset_keys != offset_keys_.end()) {
-        offset_keys->second.Add(key);
+        offset_keys->second.PushFront(key);
       } else {
-        DoublyThreadedList<Key, OffsetListTraits> list;
-        list.Add(key);
+        v8::base::DoublyThreadedList<Key, OffsetListTraits> list;
+        list.PushFront(key);
         offset_keys_.insert({offset, std::move(list)});
       }
     }
@@ -522,27 +529,25 @@ class MemoryContentTable
 
   void RemoveKeyFromBaseOffsetMaps(Key key) {
     // Removing from {base_keys_}.
-    DoublyThreadedList<Key, BaseListTraits>::Remove(key);
-    DoublyThreadedList<Key, OffsetListTraits>::Remove(key);
+    v8::base::DoublyThreadedList<Key, BaseListTraits>::Remove(key);
+    v8::base::DoublyThreadedList<Key, OffsetListTraits>::Remove(key);
   }
 
   SparseOpIndexSnapshotTable<bool>& non_aliasing_objects_;
   SparseOpIndexSnapshotTable<MapMaskAndOr>& object_maps_;
   FixedOpIndexSidetable<OpIndex>& replacements_;
 
-  // TODO(dmercadier): consider using a faster datastructure than
-  // ZoneUnorderedMap for {all_keys_}, {base_keys_} and {offset_keys_}.
-
   // A map containing all of the keys, for fast lookup of a specific
   // MemoryAddress.
-  ZoneUnorderedMap<MemoryAddress, Key> all_keys_;
+  ZoneAbslFlatHashMap<MemoryAddress, Key> all_keys_;
   // Map from base OpIndex to keys associated with this base.
-  ZoneUnorderedMap<OpIndex, BaseData> base_keys_;
+  ZoneAbslFlatHashMap<OpIndex, BaseData> base_keys_;
   // Map from offsets to keys associated with this offset.
-  ZoneUnorderedMap<int, DoublyThreadedList<Key, OffsetListTraits>> offset_keys_;
+  ZoneAbslFlatHashMap<int, v8::base::DoublyThreadedList<Key, OffsetListTraits>>
+      offset_keys_;
 
   // List of all of the keys that have a valid index.
-  DoublyThreadedList<Key, OffsetListTraits> index_keys_;
+  v8::base::DoublyThreadedList<Key, OffsetListTraits> index_keys_;
 };
 
 class LateLoadEliminationAnalyzer {
@@ -558,11 +563,18 @@ class LateLoadEliminationAnalyzer {
   using MemoryKey = MemoryContentTable::Key;
   using MemorySnapshot = MemoryContentTable::Snapshot;
 
+  enum class RawBaseAssumption {
+    kNoInnerPointer,
+    kMaybeInnerPointer,
+  };
+
   LateLoadEliminationAnalyzer(Graph& graph, Zone* phase_zone,
-                              JSHeapBroker* broker)
+                              JSHeapBroker* broker,
+                              RawBaseAssumption raw_base_assumption)
       : graph_(graph),
         phase_zone_(phase_zone),
         broker_(broker),
+        raw_base_assumption_(raw_base_assumption),
         replacements_(graph.op_id_count(), phase_zone, &graph),
         non_aliasing_objects_(phase_zone),
         object_maps_(phase_zone),
@@ -648,12 +660,18 @@ class LateLoadEliminationAnalyzer {
   // modifications. If the snapshots are unchanged, we discard them and don't
   // revisit the loop.
   void SealAndDiscard();
+  void StoreLoopSnapshotInForwardPredecessor(const Block& loop_header);
+
+  // Returns true if the loop's backedge already has snapshot data (meaning that
+  // it was already visited).
+  bool BackedgeHasSnapshot(const Block& loop_header) const;
 
   void InvalidateIfAlias(OpIndex op_idx);
 
   Graph& graph_;
   Zone* phase_zone_;
   JSHeapBroker* broker_;
+  RawBaseAssumption raw_base_assumption_;
 
 #if V8_ENABLE_WEBASSEMBLY
   bool is_wasm_ = PipelineData::Get().is_wasm();
@@ -694,7 +712,7 @@ class LateLoadEliminationReducer : public Next {
   TURBOSHAFT_REDUCER_BOILERPLATE()
 
   void Analyze() {
-    if (v8_flags.turboshaft_load_elimination) {
+    if (is_wasm_ || v8_flags.turboshaft_load_elimination) {
       DCHECK(AllowHandleDereference::IsAllowed());
       analyzer_.Run();
     }
@@ -702,7 +720,7 @@ class LateLoadEliminationReducer : public Next {
   }
 
   OpIndex REDUCE_INPUT_GRAPH(Load)(OpIndex ig_index, const LoadOp& load) {
-    if (v8_flags.turboshaft_load_elimination) {
+    if (is_wasm_ || v8_flags.turboshaft_load_elimination) {
       OpIndex ig_replacement_index = analyzer_.Replacement(ig_index);
       if (ig_replacement_index.valid()) {
         OpIndex replacement = Asm().MapToNewGraph(ig_replacement_index);
@@ -726,9 +744,15 @@ class LateLoadEliminationReducer : public Next {
   }
 
  private:
-  LateLoadEliminationAnalyzer analyzer_{Asm().modifiable_input_graph(),
-                                        Asm().phase_zone(),
-                                        PipelineData::Get().broker()};
+  const bool is_wasm_ = PipelineData::Get().is_wasm();
+  using RawBaseAssumption = LateLoadEliminationAnalyzer::RawBaseAssumption;
+  RawBaseAssumption raw_base_assumption_ =
+      PipelineData::Get().pipeline_kind() == TurboshaftPipelineKind::kCSA
+          ? RawBaseAssumption::kMaybeInnerPointer
+          : RawBaseAssumption::kNoInnerPointer;
+  LateLoadEliminationAnalyzer analyzer_{
+      Asm().modifiable_input_graph(), Asm().phase_zone(),
+      PipelineData::Get().broker(), raw_base_assumption_};
 };
 
 #include "src/compiler/turboshaft/undef-assembler-macros.inc"

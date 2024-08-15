@@ -72,7 +72,6 @@ class BlueYellowClient : public ContentLayerClient {
   explicit BlueYellowClient(const gfx::Size& size)
       : size_(size), blue_top_(true) {}
 
-  gfx::Rect PaintableRegion() const override { return gfx::Rect(size_); }
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     auto display_list = base::MakeRefCounted<DisplayItemList>();
 
@@ -95,7 +94,7 @@ class BlueYellowClient : public ContentLayerClient {
     flags.setColor(SkColorSetRGB(0xF2, 0xF2, 0x00));
     display_list->push<DrawRectOp>(gfx::RectToSkRect(yellow_rect), flags);
 
-    display_list->EndPaintOfUnpaired(PaintableRegion());
+    display_list->EndPaintOfUnpaired(gfx::Rect(size_));
     display_list->Finalize();
     return display_list;
   }
@@ -151,7 +150,6 @@ class PrimaryColorClient : public ContentLayerClient {
  public:
   explicit PrimaryColorClient(const gfx::Size& size) : size_(size) {}
 
-  gfx::Rect PaintableRegion() const override { return gfx::Rect(size_); }
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList() override {
     // When painted, the DisplayItemList should produce blocks of red, green,
     // and blue to test primary color reproduction.
@@ -174,7 +172,7 @@ class PrimaryColorClient : public ContentLayerClient {
     flags.setColor(SK_ColorBLUE);
     display_list->push<DrawRectOp>(gfx::RectToSkRect(blue_rect), flags);
 
-    display_list->EndPaintOfUnpaired(PaintableRegion());
+    display_list->EndPaintOfUnpaired(gfx::Rect(size_));
     display_list->Finalize();
     return display_list;
   }
@@ -228,7 +226,10 @@ std::vector<RasterTestConfig> const kTestCases = {
     {viz::RendererType::kSkiaVk, TestRasterType::kGpu},
 #endif  // BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
 #if BUILDFLAG(ENABLE_SKIA_GRAPHITE_TESTS)
-    {viz::RendererType::kSkiaGraphite, TestRasterType::kGpu},
+    {viz::RendererType::kSkiaGraphiteDawn, TestRasterType::kGpu},
+#if BUILDFLAG(IS_IOS)
+    {viz::RendererType::kSkiaGraphiteMetal, TestRasterType::kGpu},
+#endif  // BUILDFLAG(IS_IOS)
 #endif  // BUILDFLAG(ENABLE_SKIA_GRAPHITE_TESTS)
 };
 
@@ -274,7 +275,10 @@ std::vector<RasterTestConfig> const kTestCasesMultiThread = {
     {viz::RendererType::kSkiaVk, TestRasterType::kGpu},
 #endif  // BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
 #if BUILDFLAG(ENABLE_SKIA_GRAPHITE_TESTS)
-    {viz::RendererType::kSkiaGraphite, TestRasterType::kGpu},
+    {viz::RendererType::kSkiaGraphiteDawn, TestRasterType::kGpu},
+#if BUILDFLAG(IS_IOS)
+    {viz::RendererType::kSkiaGraphiteMetal, TestRasterType::kGpu},
+#endif  // BUILDFLAG(IS_IOS)
 #endif  // BUILDFLAG(ENABLE_SKIA_GRAPHITE_TESTS)
 };
 
@@ -337,6 +341,9 @@ TEST_P(LayerTreeHostTilesTestRasterColorSpace, sRGB) {
 }
 
 TEST_P(LayerTreeHostTilesTestRasterColorSpace, GenericRGB) {
+#if BUILDFLAG(IS_IOS)
+  pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>();
+#endif
   SetColorSpace(gfx::ColorSpace(gfx::ColorSpace::PrimaryID::APPLE_GENERIC_RGB,
                                 gfx::ColorSpace::TransferID::GAMMA18));
 

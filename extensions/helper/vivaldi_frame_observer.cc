@@ -4,9 +4,11 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
-#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_view_host.h"
+#include "ui/content/vivaldi_tab_check.h"
+#include "extensions/browser/extension_web_contents_observer.h"
+#include "extensions/helper/vivaldi_panel_helper.h"
 
 namespace vivaldi {
 
@@ -37,4 +39,21 @@ void VivaldiFrameObserver::RenderFrameHostChanged(
   web_contents()->SyncRendererPrefs();
 }
 
+void VivaldiFrameObserver::RenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
+  if (!render_frame_host->IsRenderFrameLive()) {
+    return;
+  }
+
+  auto *panel_helper =
+    extensions::VivaldiPanelHelper::FromWebContents(web_contents());
+
+  if (!panel_helper) {
+    return;
+  }
+
+  extensions::ExtensionWebContentsObserver::GetForWebContents(web_contents())
+      ->GetLocalFrame(render_frame_host)
+      ->SetVivaldiPanelId(panel_helper->tab_id());
+}
 }  // namespace vivaldi

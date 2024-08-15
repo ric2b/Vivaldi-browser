@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -86,8 +87,11 @@ class CPDF_Dictionary final : public CPDF_Object {
   // Prefer using these templates over calls to SetFor(), since by creating
   // a new object with no previous references, they ensure cycles can not be
   // introduced.
+  // A stream must be indirect and added as a `CPDF_Reference` instead.
   template <typename T, typename... Args>
-  typename std::enable_if<!CanInternStrings<T>::value, RetainPtr<T>>::type
+  typename std::enable_if<!CanInternStrings<T>::value &&
+                              !std::is_same<T, CPDF_Stream>::value,
+                          RetainPtr<T>>::type
   SetNewFor(const ByteString& key, Args&&... args) {
     return pdfium::WrapRetain(static_cast<T*>(SetForInternal(
         key, pdfium::MakeRetain<T>(std::forward<Args>(args)...))));
@@ -99,10 +103,12 @@ class CPDF_Dictionary final : public CPDF_Object {
         key, pdfium::MakeRetain<T>(m_pPool, std::forward<Args>(args)...))));
   }
 
-  // If |pObj| is null, then |key| is erased from the map. Otherwise, takes
-  // ownership of |pObj| and stores in in the map. Invalidates iterators for
-  // the element with the key |key|.
-  void SetFor(const ByteString& key, RetainPtr<CPDF_Object> pObj);
+  // If `object` is null, then `key` is erased from the map. Otherwise, takes
+  // ownership of `object` and stores in in the map. Invalidates iterators for
+  // the element with the key `key`.
+  void SetFor(const ByteString& key, RetainPtr<CPDF_Object> object);
+  // A stream must be indirect and added as a `CPDF_Reference` instead.
+  void SetFor(const ByteString& key, RetainPtr<CPDF_Stream> stream) = delete;
 
   // Convenience functions to convert native objects to array form.
   void SetRectFor(const ByteString& key, const CFX_FloatRect& rect);

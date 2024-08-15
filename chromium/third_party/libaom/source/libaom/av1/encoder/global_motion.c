@@ -187,23 +187,31 @@ static void force_wmtype(WarpedMotionParams *wm, TransformationType wmtype) {
 }
 
 #if CONFIG_AV1_HIGHBITDEPTH
-int64_t av1_calc_highbd_frame_error_c(const uint16_t *const ref, int ref_stride,
-                                      const uint16_t *const dst, int dst_stride,
-                                      int p_width, int p_height, int bd) {
-  int64_t sum_error = 0;
+static INLINE int generic_sad_highbd(const uint16_t *const ref, int ref_stride,
+                                     const uint16_t *const dst, int dst_stride,
+                                     int p_width, int p_height) {
+  // This function should only be called for patches smaller than
+  // WARP_ERROR_BLOCK x WARP_ERROR_BLOCK. This keeps the number of pixels
+  // small enough that we don't need a 64-bit accumulator
+  assert(p_width <= WARP_ERROR_BLOCK && p_height <= WARP_ERROR_BLOCK);
+
+  int sad = 0;
   for (int i = 0; i < p_height; ++i) {
     for (int j = 0; j < p_width; ++j) {
-      sum_error += highbd_error_measure(
-          dst[j + i * dst_stride] - ref[j + i * ref_stride], bd);
+      sad += abs(dst[j + i * dst_stride] - ref[j + i * ref_stride]);
     }
   }
-  return sum_error;
+  return sad;
 }
 
+#if WARP_ERROR_BLOCK != 32
+#error "Need to change SAD call size in highbd_segmented_frame_error"
+#endif  // WARP_ERROR_BLOCK != 32
 static int64_t highbd_segmented_frame_error(
     const uint16_t *const ref, int ref_stride, const uint16_t *const dst,
     int dst_stride, int p_width, int p_height, int bd, uint8_t *segment_map,
     int segment_map_stride) {
+  (void)bd;
   int patch_w, patch_h;
   const int error_bsize_w = AOMMIN(p_width, WARP_ERROR_BLOCK);
   const int error_bsize_h = AOMMIN(p_height, WARP_ERROR_BLOCK);
@@ -219,14 +227,24 @@ static int64_t highbd_segmented_frame_error(
       // avoid computing error into the frame padding
       patch_w = AOMMIN(error_bsize_w, p_width - j);
       patch_h = AOMMIN(error_bsize_h, p_height - i);
-      sum_error += av1_calc_highbd_frame_error(
-          ref + j + i * ref_stride, ref_stride, dst + j + i * dst_stride,
-          dst_stride, patch_w, patch_h, bd);
+
+      if (patch_w == WARP_ERROR_BLOCK && patch_h == WARP_ERROR_BLOCK) {
+        sum_error += aom_highbd_sad32x32(
+            CONVERT_TO_BYTEPTR(ref + j + i * ref_stride), ref_stride,
+            CONVERT_TO_BYTEPTR(dst + j + i * dst_stride), dst_stride);
+      } else {
+        sum_error += generic_sad_highbd(ref + j + i * ref_stride, ref_stride,
+                                        dst + j + i * dst_stride, dst_stride,
+                                        patch_w, patch_h);
+      }
     }
   }
   return sum_error;
 }
 
+#if WARP_ERROR_BLOCK != 32
+#error "Need to change SAD call size in highbd_warp_error"
+#endif  // WARP_ERROR_BLOCK != 32
 static int64_t highbd_warp_error(WarpedMotionParams *wm,
                                  const uint16_t *const ref, int ref_width,
                                  int ref_height, int ref_stride,
@@ -256,9 +274,17 @@ static int64_t highbd_warp_error(WarpedMotionParams *wm,
       highbd_warp_plane(wm, ref, ref_width, ref_height, ref_stride, tmp, j, i,
                         warp_w, warp_h, WARP_ERROR_BLOCK, subsampling_x,
                         subsampling_y, bd, &conv_params);
-      gm_sumerr += av1_calc_highbd_frame_error(tmp, WARP_ERROR_BLOCK,
-                                               dst + j + i * dst_stride,
-                                               dst_stride, warp_w, warp_h, bd);
+
+      if (warp_w == WARP_ERROR_BLOCK && warp_h == WARP_ERROR_BLOCK) {
+        gm_sumerr += aom_highbd_sad32x32(
+            CONVERT_TO_BYTEPTR(tmp), WARP_ERROR_BLOCK,
+            CONVERT_TO_BYTEPTR(dst + j + i * dst_stride), dst_stride);
+      } else {
+        gm_sumerr +=
+            generic_sad_highbd(tmp, WARP_ERROR_BLOCK, dst + j + i * dst_stride,
+                               dst_stride, warp_w, warp_h);
+      }
+
       if (gm_sumerr > best_error) return INT64_MAX;
     }
   }
@@ -266,19 +292,26 @@ static int64_t highbd_warp_error(WarpedMotionParams *wm,
 }
 #endif
 
-int64_t av1_calc_frame_error_c(const uint8_t *const ref, int ref_stride,
-                               const uint8_t *const dst, int dst_stride,
-                               int p_width, int p_height) {
-  int64_t sum_error = 0;
+static INLINE int generic_sad(const uint8_t *const ref, int ref_stride,
+                              const uint8_t *const dst, int dst_stride,
+                              int p_width, int p_height) {
+  // This function should only be called for patches smaller than
+  // WARP_ERROR_BLOCK x WARP_ERROR_BLOCK. This keeps the number of pixels
+  // small enough that we don't need a 64-bit accumulator
+  assert(p_width <= WARP_ERROR_BLOCK && p_height <= WARP_ERROR_BLOCK);
+
+  int sad = 0;
   for (int i = 0; i < p_height; ++i) {
     for (int j = 0; j < p_width; ++j) {
-      sum_error += (int64_t)error_measure(dst[j + i * dst_stride] -
-                                          ref[j + i * ref_stride]);
+      sad += abs(dst[j + i * dst_stride] - ref[j + i * ref_stride]);
     }
   }
-  return sum_error;
+  return sad;
 }
 
+#if WARP_ERROR_BLOCK != 32
+#error "Need to change SAD call size in segmented_warp_error"
+#endif  // WARP_ERROR_BLOCK != 32
 static int64_t segmented_frame_error(const uint8_t *const ref, int ref_stride,
                                      const uint8_t *const dst, int dst_stride,
                                      int p_width, int p_height,
@@ -299,14 +332,23 @@ static int64_t segmented_frame_error(const uint8_t *const ref, int ref_stride,
       // avoid computing error into the frame padding
       patch_w = AOMMIN(error_bsize_w, p_width - j);
       patch_h = AOMMIN(error_bsize_h, p_height - i);
-      sum_error += av1_calc_frame_error(ref + j + i * ref_stride, ref_stride,
-                                        dst + j + i * dst_stride, dst_stride,
-                                        patch_w, patch_h);
+
+      if (patch_w == WARP_ERROR_BLOCK && patch_h == WARP_ERROR_BLOCK) {
+        sum_error += aom_sad32x32(ref + j + i * ref_stride, ref_stride,
+                                  dst + j + i * dst_stride, dst_stride);
+      } else {
+        sum_error +=
+            generic_sad(ref + j + i * ref_stride, ref_stride,
+                        dst + j + i * dst_stride, dst_stride, patch_w, patch_h);
+      }
     }
   }
   return sum_error;
 }
 
+#if WARP_ERROR_BLOCK != 32
+#error "Need to change SAD call size in warp_error"
+#endif  // WARP_ERROR_BLOCK != 32
 static int64_t warp_error(WarpedMotionParams *wm, const uint8_t *const ref,
                           int ref_width, int ref_height, int ref_stride,
                           const uint8_t *const dst, int dst_stride, int p_col,
@@ -337,29 +379,19 @@ static int64_t warp_error(WarpedMotionParams *wm, const uint8_t *const ref,
                  warp_h, WARP_ERROR_BLOCK, subsampling_x, subsampling_y,
                  &conv_params);
 
-      gm_sumerr +=
-          av1_calc_frame_error(tmp, WARP_ERROR_BLOCK, dst + j + i * dst_stride,
-                               dst_stride, warp_w, warp_h);
+      if (warp_w == WARP_ERROR_BLOCK && warp_h == WARP_ERROR_BLOCK) {
+        gm_sumerr += aom_sad32x32(tmp, WARP_ERROR_BLOCK,
+                                  dst + j + i * dst_stride, dst_stride);
+      } else {
+        gm_sumerr +=
+            generic_sad(tmp, WARP_ERROR_BLOCK, dst + j + i * dst_stride,
+                        dst_stride, warp_w, warp_h);
+      }
+
       if (gm_sumerr > best_error) return INT64_MAX;
     }
   }
   return gm_sumerr;
-}
-
-int64_t av1_frame_error(int use_hbd, int bd, const uint8_t *ref, int ref_stride,
-                        uint8_t *dst, int dst_stride, int p_width,
-                        int p_height) {
-#if CONFIG_AV1_HIGHBITDEPTH
-  if (use_hbd) {
-    return av1_calc_highbd_frame_error(CONVERT_TO_SHORTPTR(ref), ref_stride,
-                                       CONVERT_TO_SHORTPTR(dst), dst_stride,
-                                       p_width, p_height, bd);
-  }
-#endif
-  (void)use_hbd;
-  (void)bd;
-  return av1_calc_frame_error(ref, ref_stride, dst, dst_stride, p_width,
-                              p_height);
 }
 
 int64_t av1_segmented_frame_error(int use_hbd, int bd, const uint8_t *ref,

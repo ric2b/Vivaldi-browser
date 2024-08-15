@@ -13,7 +13,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/ports/SkTypeface_fontations.h"
 #include "modules/skshaper/include/SkShaper.h"
-#include "src/ports/SkFontHost_FreeType_common.h"
+#include "src/ports/SkTypeface_FreeType.h"
 #include "tests/Test.h"
 #include "tools/TestFontDataProvider.h"
 

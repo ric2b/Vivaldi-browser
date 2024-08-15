@@ -8,7 +8,12 @@ import {
   elementsOf,
   isAbstractType,
 } from '../../../../../util/conversion.js';
-import { fullF16Range, fullF32Range, fullF64Range, linearRange } from '../../../../../util/math.js';
+import {
+  scalarF16Range,
+  scalarF32Range,
+  scalarF64Range,
+  linearRange,
+} from '../../../../../util/math.js';
 import { ShaderValidationTest } from '../../../shader_validation_test.js';
 
 /// A linear sweep between -2 to 2
@@ -166,17 +171,17 @@ export function fullRangeForType(type: Type, count?: number) {
   }
   switch (elementType(type)?.kind) {
     case 'abstract-float':
-      return fullF64Range({
+      return scalarF64Range({
         pos_sub: Math.ceil((count * 1) / 5),
         pos_norm: Math.ceil((count * 4) / 5),
       });
     case 'f32':
-      return fullF32Range({
+      return scalarF32Range({
         pos_sub: Math.ceil((count * 1) / 5),
         pos_norm: Math.ceil((count * 4) / 5),
       });
     case 'f16':
-      return fullF16Range({
+      return scalarF16Range({
         pos_sub: Math.ceil((count * 1) / 5),
         pos_norm: Math.ceil((count * 4) / 5),
       });

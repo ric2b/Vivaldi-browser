@@ -28,7 +28,7 @@ class Environment {
  public:
   Environment() {
     CHECK(base::i18n::InitializeICU());
-    logging::SetMinLogLevel(logging::LOG_FATAL);
+    logging::SetMinLogLevel(logging::LOGGING_FATAL);
   }
 
  private:
@@ -44,9 +44,15 @@ base::FilePath GenerateFuzzedFilePath(FuzzedDataProvider& provider) {
 #endif
 }
 
+const size_t kMaxFuzzerInputBytes = 100 * 1024;
+
 }  // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+  if (size > kMaxFuzzerInputBytes) {
+    return 0;
+  }
+
   static Environment env;
   FuzzedDataProvider provider(data, size);
 

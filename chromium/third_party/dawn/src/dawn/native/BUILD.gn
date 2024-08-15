@@ -39,9 +39,6 @@ if (enable_vulkan_validation_layers) {
   import("//build_overrides/vulkan_validation_layers.gni")
 }
 
-# ANGLE is an optional dependency; only use it if the path has been set.
-use_angle = dawn_use_angle && defined(dawn_angle_dir)
-
 # Swiftshader is an optional dependency, only use it if the path has been set.
 use_swiftshader = dawn_use_swiftshader && dawn_swiftshader_dir != ""
 if (use_swiftshader) {
@@ -65,6 +62,9 @@ group("abseil") {
     public_deps = [ "$dawn_abseil_dir:absl" ]
   } else {
     public_deps = [
+      "${dawn_root}/third_party/gn/abseil-cpp:bits",
+      "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_map",
+      "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_set",
       "${dawn_root}/third_party/gn/abseil-cpp:str_format",
       "${dawn_root}/third_party/gn/abseil-cpp:strings",
     ]
@@ -162,6 +162,7 @@ source_set("sources") {
     ":utils_gen",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/tint/api",
+    "${dawn_root}/src/tint/lang/wgsl/features",
 
     # TODO(dawn:286): These should only be necessary if SPIR-V validation is
     # enabled with dawn_enable_spirv_validation
@@ -188,6 +189,7 @@ source_set("sources") {
   # dawn native target
   public_deps = [
     ":abseil",
+    "${dawn_root}/src/dawn/partition_alloc:raw_ptr",
     "${dawn_root}/src/dawn/platform",
   ]
 
@@ -367,6 +369,8 @@ source_set("sources") {
     "SwapChain.h",
     "SystemEvent.cpp",
     "SystemEvent.h",
+    "SystemHandle.cpp",
+    "SystemHandle.h",
     "Texture.cpp",
     "Texture.h",
     "TintUtils.cpp",
@@ -376,6 +380,7 @@ source_set("sources") {
     "Toggles.h",
     "UsageValidationMode.h",
     "VisitableMembers.h",
+    "WaitAnySystemEvent.h",
     "dawn_platform.h",
     "stream/BlobSource.cpp",
     "stream/BlobSource.h",
@@ -395,6 +400,13 @@ source_set("sources") {
     sources += [
       "X11Functions.cpp",
       "X11Functions.h",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "AHBFunctions.cpp",
+      "AHBFunctions.h",
     ]
   }
 
@@ -433,13 +445,13 @@ source_set("sources") {
       "d3d/DeviceD3D.h",
       "d3d/ExternalImageDXGIImpl.cpp",
       "d3d/ExternalImageDXGIImpl.h",
-      "d3d/Fence.cpp",
-      "d3d/Fence.h",
       "d3d/Forward.h",
       "d3d/PhysicalDeviceD3D.cpp",
       "d3d/PhysicalDeviceD3D.h",
       "d3d/PlatformFunctions.cpp",
       "d3d/PlatformFunctions.h",
+      "d3d/QueueD3D.cpp",
+      "d3d/QueueD3D.h",
       "d3d/ShaderUtils.cpp",
       "d3d/ShaderUtils.h",
       "d3d/SharedFenceD3D.cpp",
@@ -479,8 +491,6 @@ source_set("sources") {
       "d3d11/DeviceD3D11.h",
       "d3d11/DeviceInfoD3D11.cpp",
       "d3d11/DeviceInfoD3D11.h",
-      "d3d11/FenceD3D11.cpp",
-      "d3d11/FenceD3D11.h",
       "d3d11/Forward.h",
       "d3d11/PhysicalDeviceD3D11.cpp",
       "d3d11/PhysicalDeviceD3D11.h",
@@ -541,8 +551,6 @@ source_set("sources") {
       "d3d12/D3D12Info.h",
       "d3d12/DeviceD3D12.cpp",
       "d3d12/DeviceD3D12.h",
-      "d3d12/FenceD3D12.cpp",
-      "d3d12/FenceD3D12.h",
       "d3d12/Forward.h",
       "d3d12/GPUDescriptorHeapAllocationD3D12.cpp",
       "d3d12/GPUDescriptorHeapAllocationD3D12.h",
@@ -772,6 +780,7 @@ source_set("sources") {
       "vulkan/QuerySetVk.h",
       "vulkan/QueueVk.cpp",
       "vulkan/QueueVk.h",
+      "vulkan/RefCountedVkHandle.h",
       "vulkan/RenderPassCache.cpp",
       "vulkan/RenderPassCache.h",
       "vulkan/RenderPipelineVk.cpp",
@@ -784,6 +793,10 @@ source_set("sources") {
       "vulkan/SamplerVk.h",
       "vulkan/ShaderModuleVk.cpp",
       "vulkan/ShaderModuleVk.h",
+      "vulkan/SharedFenceVk.cpp",
+      "vulkan/SharedFenceVk.h",
+      "vulkan/SharedTextureMemoryVk.cpp",
+      "vulkan/SharedTextureMemoryVk.h",
       "vulkan/StreamImplVk.cpp",
       "vulkan/SwapChainVk.cpp",
       "vulkan/SwapChainVk.h",
@@ -869,13 +882,6 @@ source_set("sources") {
       defines += [ "DAWN_ENABLE_SPIRV_VALIDATION" ]
     }
   }
-
-  if (use_angle) {
-    data_deps += [
-      "${dawn_angle_dir}:libEGL",
-      "${dawn_angle_dir}:libGLESv2",
-    ]
-  }
 }
 
 # The static and shared libraries for dawn_native. Most of the files are
@@ -932,6 +938,14 @@ dawn_json_generator("webgpu_dawn_native_proc_gen") {
   outputs = [ "src/dawn/native/webgpu_dawn_native_proc.cpp" ]
 }
 
+source_set("webgpu_dawn_native_proc_sources") {
+  sources = get_target_outputs(":webgpu_dawn_native_proc_gen")
+  deps = [
+    ":headers",
+    ":webgpu_dawn_native_proc_gen",
+  ]
+}
+
 dawn_component("webgpu_dawn") {
   # For a single library - build `webgpu_dawn_shared` with GN args:
   #   dawn_complete_static_libs = true - to package a single lib
@@ -950,9 +964,8 @@ dawn_component("webgpu_dawn") {
   DEFINE_PREFIX = "WGPU"
   output_name = "webgpu_dawn"
 
-  sources = get_target_outputs(":webgpu_dawn_native_proc_gen")
   deps = [
     ":static",
-    ":webgpu_dawn_native_proc_gen",
+    ":webgpu_dawn_native_proc_sources",
   ]
 }

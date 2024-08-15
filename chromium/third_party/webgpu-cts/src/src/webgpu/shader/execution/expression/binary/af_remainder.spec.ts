@@ -5,65 +5,12 @@ Execution Tests for non-matrix abstract float remainder expression
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
 import { TypeAbstractFloat, TypeVec } from '../../../../util/conversion.js';
-import { FP, FPVector } from '../../../../util/floating_point.js';
-import { sparseF64Range, sparseVectorF64Range } from '../../../../util/math.js';
-import { makeCaseCache } from '../case_cache.js';
 import { onlyConstInputSource, run } from '../expression.js';
 
+import { d } from './af_remainder.cache.js';
 import { abstractBinary } from './binary.js';
 
-const remainderVectorScalarInterval = (v: readonly number[], s: number): FPVector => {
-  return FP.abstract.toVector(v.map(e => FP.abstract.remainderInterval(e, s)));
-};
-
-const remainderScalarVectorInterval = (s: number, v: readonly number[]): FPVector => {
-  return FP.abstract.toVector(v.map(e => FP.abstract.remainderInterval(s, e)));
-};
-
 export const g = makeTestGroup(GPUTest);
-
-const scalar_cases = {
-  ['scalar']: () => {
-    return FP.abstract.generateScalarPairToIntervalCases(
-      sparseF64Range(),
-      sparseF64Range(),
-      'finite',
-      FP.abstract.remainderInterval
-    );
-  },
-};
-
-const vector_scalar_cases = ([2, 3, 4] as const)
-  .map(dim => ({
-    [`vec${dim}_scalar`]: () => {
-      return FP.abstract.generateVectorScalarToVectorCases(
-        sparseVectorF64Range(dim),
-        sparseF64Range(),
-        'finite',
-        remainderVectorScalarInterval
-      );
-    },
-  }))
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-const scalar_vector_cases = ([2, 3, 4] as const)
-  .map(dim => ({
-    [`scalar_vec${dim}`]: () => {
-      return FP.abstract.generateScalarVectorToVectorCases(
-        sparseF64Range(),
-        sparseVectorF64Range(dim),
-        'finite',
-        remainderScalarVectorInterval
-      );
-    },
-  }))
-  .reduce((a, b) => ({ ...a, ...b }), {});
-
-export const d = makeCaseCache('binary/af_remainder', {
-  ...scalar_cases,
-  ...vector_scalar_cases,
-  ...scalar_vector_cases,
-});
 
 g.test('scalar')
   .specURL('https://www.w3.org/TR/WGSL/#floating-point-evaluation')

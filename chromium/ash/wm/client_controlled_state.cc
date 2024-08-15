@@ -11,7 +11,6 @@
 #include "ash/wm/pip/pip_positioner.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_delegate.h"
@@ -129,7 +128,7 @@ void ClientControlledState::HandleWorkspaceEvents(WindowState* window_state,
                                    bounds, window_state->GetDisplay().id());
   } else if (window_state->IsFloated()) {
     const gfx::Rect bounds =
-        Shell::Get()->tablet_mode_controller()->InTabletMode()
+        display::Screen::GetScreen()->InTabletMode()
             ? FloatController::GetFloatWindowTabletBounds(
                   window_state->window())
             : FloatController::GetFloatWindowClamshellBounds(
@@ -165,25 +164,10 @@ void ClientControlledState::HandleCompoundEvents(WindowState* window_state,
     return;
   switch (event->type()) {
     case WM_EVENT_TOGGLE_MAXIMIZE_CAPTION:
-      if (window_state->IsFullscreen()) {
-        const WMEvent wm_event(WM_EVENT_TOGGLE_FULLSCREEN);
-        window_state->OnWMEvent(&wm_event);
-      } else if (window_state->IsMaximized()) {
-        window_state->Restore();
-      } else if (window_state->IsNormalOrSnapped()) {
-        if (window_state->CanMaximize())
-          window_state->Maximize();
-      }
+      ToggleMaximizeCaption(window_state);
       break;
     case WM_EVENT_TOGGLE_MAXIMIZE:
-      if (window_state->IsFullscreen()) {
-        const WMEvent wm_event(WM_EVENT_TOGGLE_FULLSCREEN);
-        window_state->OnWMEvent(&wm_event);
-      } else if (window_state->IsMaximized()) {
-        window_state->Restore();
-      } else if (window_state->CanMaximize()) {
-        window_state->Maximize();
-      }
+      ToggleMaximize(window_state);
       break;
     case WM_EVENT_TOGGLE_VERTICAL_MAXIMIZE:
       // TODO(oshima): Implement this.
@@ -295,7 +279,7 @@ bool ClientControlledState::EnterNextState(WindowState* window_state,
   // the window.
   auto* const float_controller = Shell::Get()->float_controller();
   if (next_state_type == WindowStateType::kFloated) {
-    if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+    if (display::Screen::GetScreen()->InTabletMode()) {
       float_controller->FloatForTablet(window, previous_state_type);
     } else {
       float_controller->FloatImpl(window);
@@ -331,9 +315,10 @@ WindowStateType ClientControlledState::GetResolvedNextWindowStateType(
 
   const WindowStateType next = GetStateForTransitionEvent(window_state, event);
 
-  if (Shell::Get()->tablet_mode_controller()->InTabletMode() &&
-      next == WindowStateType::kNormal && window_state->CanMaximize())
+  if (display::Screen::GetScreen()->InTabletMode() &&
+      next == WindowStateType::kNormal && window_state->CanMaximize()) {
     return WindowStateType::kMaximized;
+  }
 
   return next;
 }
@@ -384,17 +369,23 @@ void ClientControlledState::UpdateWindowForTransitionEvents(
               << ", state=" << state_type_
               << ", next_state=" << next_state_type;
 
+      const gfx::Rect snapped_bounds = GetSnappedWindowBoundsInParent(
+          window, next_state_type, next_snap_ratio);
+
+      // The snap ratio of `snapped_bounds` may be different from the requested
+      // snap ratio (e.g., if the window has a minimum size requirement or the
+      // opposite side of splitview is partial-snapped).
+      window_state->ForceUpdateSnapRatio(snapped_bounds);
+
       // Then ask delegate to set the desired bounds for the snap state.
-      delegate_->HandleBoundsRequest(
-          window_state, next_state_type,
-          GetSnappedWindowBoundsInParent(window, next_state_type,
-                                         next_snap_ratio),
-          window_state->GetDisplay().id());
+      delegate_->HandleBoundsRequest(window_state, next_state_type,
+                                     snapped_bounds,
+                                     window_state->GetDisplay().id());
     }
   } else if (next_state_type == WindowStateType::kFloated) {
     if (chromeos::wm::CanFloatWindow(window)) {
       const gfx::Rect bounds =
-          Shell::Get()->tablet_mode_controller()->InTabletMode()
+          display::Screen::GetScreen()->InTabletMode()
               ? FloatController::GetFloatWindowTabletBounds(window)
               : FloatController::GetFloatWindowClamshellBounds(
                     window, event_type == WM_EVENT_FLOAT

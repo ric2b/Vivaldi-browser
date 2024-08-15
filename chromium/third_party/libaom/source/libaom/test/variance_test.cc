@@ -2147,6 +2147,27 @@ INSTANTIATE_TEST_SUITE_P(
                       MseParams(3, 3, &aom_highbd_8_mse8x8_neon_dotprod, 8)));
 #endif  // HAVE_NEON_DOTPROD
 
+#if HAVE_SVE
+INSTANTIATE_TEST_SUITE_P(
+    SVE, MseHBDWxHTest,
+    ::testing::Values(MseHBDWxHParams(3, 3, &aom_mse_wxh_16bit_highbd_sve, 10),
+                      MseHBDWxHParams(3, 2, &aom_mse_wxh_16bit_highbd_sve, 10),
+                      MseHBDWxHParams(2, 3, &aom_mse_wxh_16bit_highbd_sve, 10),
+                      MseHBDWxHParams(2, 2, &aom_mse_wxh_16bit_highbd_sve,
+                                      10)));
+
+INSTANTIATE_TEST_SUITE_P(
+    SVE, AvxHBDMseTest,
+    ::testing::Values(MseParams(4, 4, &aom_highbd_12_mse16x16_sve, 12),
+                      MseParams(4, 3, &aom_highbd_12_mse16x8_sve, 12),
+                      MseParams(3, 4, &aom_highbd_12_mse8x16_sve, 12),
+                      MseParams(3, 3, &aom_highbd_12_mse8x8_sve, 12),
+                      MseParams(4, 4, &aom_highbd_10_mse16x16_sve, 10),
+                      MseParams(4, 3, &aom_highbd_10_mse16x8_sve, 10),
+                      MseParams(3, 4, &aom_highbd_10_mse8x16_sve, 10),
+                      MseParams(3, 3, &aom_highbd_10_mse8x8_sve, 10)));
+#endif  // HAVE_SVE
+
 const VarianceParams kArrayHBDVariance_c[] = {
   VarianceParams(7, 7, &aom_highbd_12_variance128x128_c, 12),
   VarianceParams(7, 6, &aom_highbd_12_variance128x64_c, 12),
@@ -4261,5 +4282,85 @@ INSTANTIATE_TEST_SUITE_P(
                       MseParams(4, 3, &aom_mse16x8_neon_dotprod)));
 
 #endif  // HAVE_NEON_DOTPROD
+
+#if HAVE_SVE
+
+#if CONFIG_AV1_HIGHBITDEPTH
+const VarianceParams kArrayHBDVariance_sve[] = {
+  VarianceParams(7, 7, &aom_highbd_12_variance128x128_sve, 12),
+  VarianceParams(7, 6, &aom_highbd_12_variance128x64_sve, 12),
+  VarianceParams(6, 7, &aom_highbd_12_variance64x128_sve, 12),
+  VarianceParams(6, 6, &aom_highbd_12_variance64x64_sve, 12),
+  VarianceParams(6, 5, &aom_highbd_12_variance64x32_sve, 12),
+  VarianceParams(5, 6, &aom_highbd_12_variance32x64_sve, 12),
+  VarianceParams(5, 5, &aom_highbd_12_variance32x32_sve, 12),
+  VarianceParams(5, 4, &aom_highbd_12_variance32x16_sve, 12),
+  VarianceParams(4, 5, &aom_highbd_12_variance16x32_sve, 12),
+  VarianceParams(4, 4, &aom_highbd_12_variance16x16_sve, 12),
+  VarianceParams(4, 3, &aom_highbd_12_variance16x8_sve, 12),
+  VarianceParams(3, 4, &aom_highbd_12_variance8x16_sve, 12),
+  VarianceParams(3, 3, &aom_highbd_12_variance8x8_sve, 12),
+  VarianceParams(3, 2, &aom_highbd_12_variance8x4_sve, 12),
+  VarianceParams(2, 3, &aom_highbd_12_variance4x8_sve, 12),
+  VarianceParams(2, 2, &aom_highbd_12_variance4x4_sve, 12),
+  VarianceParams(7, 7, &aom_highbd_10_variance128x128_sve, 10),
+  VarianceParams(7, 6, &aom_highbd_10_variance128x64_sve, 10),
+  VarianceParams(6, 7, &aom_highbd_10_variance64x128_sve, 10),
+  VarianceParams(6, 6, &aom_highbd_10_variance64x64_sve, 10),
+  VarianceParams(6, 5, &aom_highbd_10_variance64x32_sve, 10),
+  VarianceParams(5, 6, &aom_highbd_10_variance32x64_sve, 10),
+  VarianceParams(5, 5, &aom_highbd_10_variance32x32_sve, 10),
+  VarianceParams(5, 4, &aom_highbd_10_variance32x16_sve, 10),
+  VarianceParams(4, 5, &aom_highbd_10_variance16x32_sve, 10),
+  VarianceParams(4, 4, &aom_highbd_10_variance16x16_sve, 10),
+  VarianceParams(4, 3, &aom_highbd_10_variance16x8_sve, 10),
+  VarianceParams(3, 4, &aom_highbd_10_variance8x16_sve, 10),
+  VarianceParams(3, 3, &aom_highbd_10_variance8x8_sve, 10),
+  VarianceParams(3, 2, &aom_highbd_10_variance8x4_sve, 10),
+  VarianceParams(2, 3, &aom_highbd_10_variance4x8_sve, 10),
+  VarianceParams(2, 2, &aom_highbd_10_variance4x4_sve, 10),
+  VarianceParams(7, 7, &aom_highbd_8_variance128x128_sve, 8),
+  VarianceParams(7, 6, &aom_highbd_8_variance128x64_sve, 8),
+  VarianceParams(6, 7, &aom_highbd_8_variance64x128_sve, 8),
+  VarianceParams(6, 6, &aom_highbd_8_variance64x64_sve, 8),
+  VarianceParams(6, 5, &aom_highbd_8_variance64x32_sve, 8),
+  VarianceParams(5, 6, &aom_highbd_8_variance32x64_sve, 8),
+  VarianceParams(5, 5, &aom_highbd_8_variance32x32_sve, 8),
+  VarianceParams(5, 4, &aom_highbd_8_variance32x16_sve, 8),
+  VarianceParams(4, 5, &aom_highbd_8_variance16x32_sve, 8),
+  VarianceParams(4, 4, &aom_highbd_8_variance16x16_sve, 8),
+  VarianceParams(4, 3, &aom_highbd_8_variance16x8_sve, 8),
+  VarianceParams(3, 4, &aom_highbd_8_variance8x16_sve, 8),
+  VarianceParams(3, 3, &aom_highbd_8_variance8x8_sve, 8),
+  VarianceParams(3, 2, &aom_highbd_8_variance8x4_sve, 8),
+  VarianceParams(2, 3, &aom_highbd_8_variance4x8_sve, 8),
+  VarianceParams(2, 2, &aom_highbd_8_variance4x4_sve, 8),
+#if !CONFIG_REALTIME_ONLY
+  VarianceParams(6, 4, &aom_highbd_12_variance64x16_sve, 12),
+  VarianceParams(4, 6, &aom_highbd_12_variance16x64_sve, 12),
+  VarianceParams(5, 3, &aom_highbd_12_variance32x8_sve, 12),
+  VarianceParams(3, 5, &aom_highbd_12_variance8x32_sve, 12),
+  VarianceParams(4, 2, &aom_highbd_12_variance16x4_sve, 12),
+  VarianceParams(2, 4, &aom_highbd_12_variance4x16_sve, 12),
+  VarianceParams(6, 4, &aom_highbd_10_variance64x16_sve, 10),
+  VarianceParams(4, 6, &aom_highbd_10_variance16x64_sve, 10),
+  VarianceParams(5, 3, &aom_highbd_10_variance32x8_sve, 10),
+  VarianceParams(3, 5, &aom_highbd_10_variance8x32_sve, 10),
+  VarianceParams(4, 2, &aom_highbd_10_variance16x4_sve, 10),
+  VarianceParams(2, 4, &aom_highbd_10_variance4x16_sve, 10),
+  VarianceParams(6, 4, &aom_highbd_8_variance64x16_sve, 8),
+  VarianceParams(4, 6, &aom_highbd_8_variance16x64_sve, 8),
+  VarianceParams(5, 3, &aom_highbd_8_variance32x8_sve, 8),
+  VarianceParams(3, 5, &aom_highbd_8_variance8x32_sve, 8),
+  VarianceParams(4, 2, &aom_highbd_8_variance16x4_sve, 8),
+  VarianceParams(2, 4, &aom_highbd_8_variance4x16_sve, 8),
+#endif
+};
+
+INSTANTIATE_TEST_SUITE_P(SVE, AvxHBDVarianceTest,
+                         ::testing::ValuesIn(kArrayHBDVariance_sve));
+
+#endif  // CONFIG_AV1_HIGHBITDEPTH
+#endif  // HAVE_SVE
 
 }  // namespace

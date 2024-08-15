@@ -15,7 +15,6 @@
 import m from 'mithril';
 
 import {
-  Duration,
   duration,
   Span,
   time,
@@ -36,7 +35,9 @@ import {
   TickType,
   timeScaleForVisibleWindow,
 } from './gridline_helper';
-import {Panel, PanelSize} from './panel';
+import {PanelSize} from './panel';
+import {Panel} from './panel_container';
+import {renderDuration} from './widgets/duration';
 
 export interface BBox {
   x: number;
@@ -130,8 +131,14 @@ function drawIBar(
   ctx.fillText(label, xPosLabel, yMid);
 }
 
-export class TimeSelectionPanel extends Panel {
-  view() {
+export class TimeSelectionPanel implements Panel {
+  readonly kind = 'panel';
+  readonly selectable = false;
+  readonly trackKey = undefined;
+
+  constructor(readonly key: string) {}
+
+  get mithril(): m.Children {
     return m('.time-selection-panel');
   }
 
@@ -144,7 +151,7 @@ export class TimeSelectionPanel extends Panel {
     ctx.rect(TRACK_SHELL_WIDTH, 0, size.width - TRACK_SHELL_WIDTH, size.height);
     ctx.clip();
 
-    const span = globals.frontendLocalState.visibleTimeSpan;
+    const span = globals.timeline.visibleTimeSpan;
     if (size.width > TRACK_SHELL_WIDTH && span.duration > 0n) {
       const maxMajorTicks = getMaxMajorTicks(size.width - TRACK_SHELL_WIDTH);
       const map = timeScaleForVisibleWindow(TRACK_SHELL_WIDTH, size.width);
@@ -159,7 +166,7 @@ export class TimeSelectionPanel extends Panel {
       }
     }
 
-    const localArea = globals.frontendLocalState.selectedArea;
+    const localArea = globals.timeline.selectedArea;
     const selection = globals.state.currentSelection;
     if (localArea !== undefined) {
       const start = Time.min(localArea.start, localArea.end);
@@ -190,7 +197,7 @@ export class TimeSelectionPanel extends Panel {
   }
 
   renderHover(ctx: CanvasRenderingContext2D, size: PanelSize, ts: time) {
-    const {visibleTimeScale} = globals.frontendLocalState;
+    const {visibleTimeScale} = globals.timeline;
     const xPos = TRACK_SHELL_WIDTH + Math.floor(visibleTimeScale.timeToPx(ts));
     const domainTime = globals.toDomainTime(ts);
     const label = stringifyTimestamp(domainTime);
@@ -200,10 +207,10 @@ export class TimeSelectionPanel extends Panel {
   renderSpan(
       ctx: CanvasRenderingContext2D, size: PanelSize,
       span: Span<time, duration>) {
-    const {visibleTimeScale} = globals.frontendLocalState;
+    const {visibleTimeScale} = globals.timeline;
     const xLeft = visibleTimeScale.timeToPx(span.start);
     const xRight = visibleTimeScale.timeToPx(span.end);
-    const label = Duration.humanise(span.duration);
+    const label = renderDuration(span.duration);
     drawHBar(
         ctx,
         {
@@ -230,6 +237,7 @@ function stringifyTimestamp(time: time): string {
   const fmt = timestampFormat();
   switch (fmt) {
     case TimestampFormat.UTC:
+    case TimestampFormat.TraceTz:
     case TimestampFormat.Timecode:
       const THIN_SPACE = '\u2009';
       return Time.toTimecode(time).toString(THIN_SPACE);

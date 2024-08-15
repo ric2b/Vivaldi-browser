@@ -28,7 +28,7 @@
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/browser/password_store/test_password_store.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
@@ -40,6 +40,10 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/point_f.h"
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#include "components/os_crypt/sync/os_crypt_mocker.h"
+#endif
 
 namespace {
 
@@ -60,6 +64,10 @@ class PasswordGenerationInteractiveTest
     // the tests to hang on Mac.
     autofill::test::DisableSystemServices(browser()->profile()->GetPrefs());
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+    OSCryptMocker::SetUp();
+#endif
+
     // Set observer for popup.
     ChromePasswordManagerClient* client =
         ChromePasswordManagerClient::FromWebContents(WebContents());
@@ -72,6 +80,11 @@ class PasswordGenerationInteractiveTest
   }
 
   void TearDownOnMainThread() override {
+    // RunUntilIdle() is necessary because otherwise, under the hood
+    // PasswordFormManager::OnFetchComplete() callback is run after this test is
+    // destroyed meaning that OsCryptImpl will be used instead of OsCryptMocker,
+    // causing this test to fail.
+    base::RunLoop().RunUntilIdle();
     PasswordManagerBrowserTestBase::TearDownOnMainThread();
 
     autofill::test::ReenableSystemServices();
@@ -430,9 +443,8 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
   WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
 }
 
-// https://crbug.com/791389
 IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
-                       DISABLED_AutoSavingGeneratedPassword) {
+                       AutoSavingGeneratedPassword) {
   scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
           ProfilePasswordStoreFactory::GetForProfile(

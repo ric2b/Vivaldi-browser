@@ -4,11 +4,14 @@
 
 #include "third_party/blink/renderer/modules/service_worker/web_service_worker_fetch_context_impl.h"
 
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
 #include "third_party/blink/public/platform/web_url_request_extra_data.h"
 #include "third_party/blink/public/platform/websocket_handshake_throttle_provider.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 
 namespace blink {
 
@@ -28,8 +31,8 @@ class WebServiceWorkerFetchContextImplTest : public testing::Test {
     }
 
     WebVector<std::unique_ptr<URLLoaderThrottle>> CreateThrottles(
-        int render_frame_id,
-        const WebURLRequest& request) override {
+        base::optional_ref<const blink::LocalFrameToken> local_frame_token,
+        const network::ResourceRequest& request) override {
       WebVector<std::unique_ptr<URLLoaderThrottle>> throttles;
       throttles.emplace_back(std::make_unique<FakeURLLoaderThrottle>());
       return throttles;
@@ -37,6 +40,7 @@ class WebServiceWorkerFetchContextImplTest : public testing::Test {
 
     void SetOnline(bool is_online) override { NOTREACHED(); }
   };
+  test::TaskEnvironment task_environment_;
 };
 
 TEST_F(WebServiceWorkerFetchContextImplTest, SkipThrottling) {
@@ -54,18 +58,18 @@ TEST_F(WebServiceWorkerFetchContextImplTest, SkipThrottling) {
 
   {
     // Call WillSendRequest() for kScriptURL.
-    WebURLRequest request;
-    request.SetUrl(kScriptUrl);
-    request.SetRequestContext(mojom::RequestContextType::SERVICE_WORKER);
+    network::ResourceRequest request;
+    request.url = GURL(kScriptUrl);
+    request.destination = network::mojom::RequestDestination::kServiceWorker;
     WebVector<std::unique_ptr<URLLoaderThrottle>> throttles =
         context->CreateThrottles(request);
     EXPECT_EQ(1u, throttles.size());
   }
   {
     // Call WillSendRequest() for kScriptURLToSkipThrottling.
-    WebURLRequest request;
-    request.SetUrl(kScriptUrlToSkipThrottling);
-    request.SetRequestContext(mojom::RequestContextType::SERVICE_WORKER);
+    network::ResourceRequest request;
+    request.url = GURL(kScriptUrlToSkipThrottling);
+    request.destination = network::mojom::RequestDestination::kServiceWorker;
     WebVector<std::unique_ptr<URLLoaderThrottle>> throttles =
         context->CreateThrottles(request);
     EXPECT_TRUE(throttles.empty());

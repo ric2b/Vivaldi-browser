@@ -8,6 +8,10 @@
 
 const CGFloat kSymbolActionPointSize = 18;
 
+// Vivaldi
+const CGFloat kVivaldiSymbolActionPointSize = 24;
+// End Vivaldi
+
 const CGFloat kColorfulBackgroundSymbolCornerRadius = 7;
 
 const CGFloat kSymbolDownloadInfobarPointSize = 18;

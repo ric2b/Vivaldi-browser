@@ -96,6 +96,7 @@
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/native_widget.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/vivaldi_side_panel_coordinator.h"
 
 #include "app/vivaldi_constants.h"
 #include "browser/menus/vivaldi_menus.h"
@@ -165,16 +166,16 @@ using extensions::vivaldi::window_private::WindowState;
 WindowState ConvertToJSWindowState(ui::WindowShowState state) {
   switch (state) {
     case ui::SHOW_STATE_FULLSCREEN:
-      return WindowState::WINDOW_STATE_FULLSCREEN;
+      return WindowState::kFullscreen;
     case ui::SHOW_STATE_MAXIMIZED:
-      return WindowState::WINDOW_STATE_MAXIMIZED;
+      return WindowState::kMaximized;
     case ui::SHOW_STATE_MINIMIZED:
-      return WindowState::WINDOW_STATE_MINIMIZED;
+      return WindowState::kMinimized;
     default:
-      return WindowState::WINDOW_STATE_NORMAL;
+      return WindowState::kNormal;
   }
   NOTREACHED();
-  return WindowState::WINDOW_STATE_NORMAL;
+  return WindowState::kNormal;
 }
 
 class VivaldiBrowserWindow::InterfaceHelper final
@@ -643,6 +644,8 @@ VivaldiBrowserWindow::~VivaldiBrowserWindow() {
   }
 #endif
 
+  SidePanelUI::RemoveSidePanelUIForBrowser(browser());
+
   // The WindowRegistryService can return null.
   if (vivaldi::WindowRegistryService::Get(GetProfile())) {
     vivaldi::WindowRegistryService::Get(GetProfile())
@@ -705,7 +708,13 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
 
   params.resource_relative_url = VIVALDI_WINDOW_DOCUMENT;
   window->SetWindowURL(params.resource_relative_url);
+
+  auto* browser_ptr = browser.get();
+
   window->CreateWebContents(std::move(browser), params);
+
+  SidePanelUI::SetSidePanelUIForBrowser(
+      browser_ptr, std::make_unique<vivaldi::SidePanelCoordinator>(window));
 
   return window;
 }
@@ -811,9 +820,6 @@ void VivaldiBrowserWindow::CreateWebContents(
   web_contents()->GetController().LoadURL(resource_url, content::Referrer(),
                                           ui::PAGE_TRANSITION_LINK,
                                           std::string());
-  PrefService* prefs = GetProfile()->GetPrefs();
-  prompt_on_quit_ =
-      prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog);
 
   toolbar_button_provider_ =
       std::make_unique<VivaldiToolbarButtonProvider>(this);
@@ -997,6 +1003,9 @@ void VivaldiBrowserWindow::ShowForReal() {
   keep_alive_ = std::make_unique<ScopedKeepAlive>(
       KeepAliveOrigin::CHROME_APP_DELEGATE, KeepAliveRestartOption::DISABLED);
 
+  if (!widget_)
+    return;
+
   ui::WindowShowState initial_show_state = browser_->initial_show_state();
   if (initial_show_state == ui::SHOW_STATE_FULLSCREEN)
     SetFullscreen(true);
@@ -1075,7 +1084,6 @@ void VivaldiBrowserWindow::Close() {
 // 3 Must be called after any dialog or code that can abort the close-sequence
 //   (note: onbeforeunload)
 void VivaldiBrowserWindow::CloseCleanup() {
-  AutoSaveSession();
   MovePersistentTabsToOtherWindowIfNeeded();
   extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(GetProfile(),
                                                             browser());
@@ -1176,16 +1184,21 @@ void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
   is_moving_persistent_tabs_ = false;
 }
 
-// Saves to session when the last window is about to be closed. Disabled for
-// Mac as that platform allows no windows to be open while the program keeps
-// running.
+// Saves to session if possible.
 void VivaldiBrowserWindow::AutoSaveSession() {
 #if !BUILDFLAG(IS_MAC)
-  Profile* profile = GetProfile();
-  if (vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL) == 1 &&
-      !profile->IsGuestSession()) {
-    if (sessions::IndexServiceFactory::GetForBrowserContextIfExists(profile)) {
-      sessions::AutoSave(profile);
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->is_vivaldi()) {
+      VivaldiBrowserWindow* window =
+          static_cast<VivaldiBrowserWindow*>(browser->window());
+      Profile* profile = window->GetProfile();
+      if (!profile->IsGuestSession()) {
+        if (sessions::IndexServiceFactory::GetForBrowserContextIfExists(
+            profile)) {
+          sessions::AutoSave(profile, true);
+          break;
+        }
+      }
     }
   }
 #endif  // !IS_MAC
@@ -1199,29 +1212,44 @@ bool VivaldiBrowserWindow::ConfirmWindowClose() {
   }
 
 #if !BUILDFLAG(IS_MAC)
-  // We can attempt a close for a non-active window from the window panel.
-  this->Activate();
-
   int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL);
   bool isQuit = browser_shutdown::IsTryingToQuit() || tabbed_windows_cnt == 1;
-  if (isQuit && ShouldShowDialogOnQuit()) {
-    // Only one window (in case there are more) shall open dialog.
-    bool show = AcquireQuitDialog();
-    if (show) {
-      // Dialog needs a visible window.
-      if (IsMinimized()) {
-        Restore();
+  if (isQuit) {
+    switch (GetQuitAction()) {
+      case QuitAction::SaveSessionOnQuit:
+        AutoSaveSession();
+        break;
+      case QuitAction::ShowDialogOnQuit: {
+        // Only one window (in case there are more) shall open dialog.
+        bool show = AcquireQuitDialog();
+        if (show) {
+          // We can attempt a close for a non-active window from the window panel.
+          if (!IsActive()) {
+            this->Activate();
+          }
+          // Dialog needs a visible window.
+          if (IsMinimized()) {
+            Restore();
+          }
+          new vivaldi::VivaldiQuitConfirmationDialog(
+              base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
+                             weak_ptr_factory_.GetWeakPtr(),
+                             CloseDialogMode::QuitApplication),
+              nullptr, GetNativeWindow(),
+              new vivaldi::VivaldiDialogQuitDelegate());
+        }
+        return false;
       }
-      new vivaldi::VivaldiQuitConfirmationDialog(
-          base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
-                         weak_ptr_factory_.GetWeakPtr(),
-                         CloseDialogMode::QuitApplication),
-          nullptr, GetNativeWindow(), new vivaldi::VivaldiDialogQuitDelegate());
+      default:
+        break;
     }
-    return false;
   }
   if (!browser_shutdown::IsTryingToQuit() && tabbed_windows_cnt >= 1) {
     if (ShouldShowDialogOnCloseWindow()) {
+      // We can attempt a close for a non-active window from the window panel.
+      if (!IsActive()) {
+        this->Activate();
+      }
       // Dialog needs a visible window.
       if (IsMinimized()) {
         Restore();
@@ -1255,7 +1283,7 @@ bool VivaldiBrowserWindow::ConfirmWindowClose() {
   // place.
   CloseCleanup();
 
-  if (!browser()->ShouldCloseWindow()) {
+  if (browser()->HandleBeforeClose() != BrowserClosingStatus::kPermitted) {
     // Onbeforunload events may have been fired with the call above. This means
     // the whole close operation can still be called off.
     return false;
@@ -1279,22 +1307,19 @@ void VivaldiBrowserWindow::ContinueClose(CloseDialogMode mode,
                                          bool accepted,
                                          bool stop_asking) {
   PrefService* prefs = GetProfile()->GetPrefs();
-  if (mode == CloseDialogMode::QuitApplication) {
-    SetQuitDialogOwner(nullptr);
-    prefs->SetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog,
-                      !stop_asking);
-    quit_dialog_shown_ = accepted;
-  } else {
-    prefs->SetBoolean(vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog,
-                      !stop_asking);
-    close_dialog_shown_ = accepted;
-  }
-
   if (accepted) {
+    quit_dialog_shown_ = true;
+
     if (mode == CloseDialogMode::QuitApplication) {
+      SetQuitDialogOwner(nullptr);
+      prefs->SetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog,
+                        !stop_asking);
+
       // Only one window shows a dialog and the rest must follow.
       AcceptQuitForAllWindows();
     } else {
+      prefs->SetBoolean(vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog,
+                        !stop_asking);
       // TODO: This is too early as the browser() may fire onbeforeunload events
       // that again can abort the close sequence.
       CloseCleanup();
@@ -1302,20 +1327,6 @@ void VivaldiBrowserWindow::ContinueClose(CloseDialogMode mode,
     }
   } else {
     browser_shutdown::SetTryingToQuit(false);
-    // We may have overriden this value when calling quit from menu.
-    SetPromptOnQuit(
-        prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog));
-  }
-}
-
-// static
-void VivaldiBrowserWindow::SetPromptOnQuit(bool prompt) {
-  for (Browser* browser : *BrowserList::GetInstance()) {
-    if (browser->is_vivaldi()) {
-      VivaldiBrowserWindow* window =
-          static_cast<VivaldiBrowserWindow*>(browser->window());
-      window->prompt_on_quit_ = prompt;
-    }
   }
 }
 
@@ -1334,14 +1345,19 @@ void VivaldiBrowserWindow::CancelWindowClose() {
   }
 }
 
-bool VivaldiBrowserWindow::ShouldShowDialogOnQuit() {
+VivaldiBrowserWindow::QuitAction VivaldiBrowserWindow::GetQuitAction() {
   bool closed_due_to_profile =
       extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
           browser());
-
-  return !closed_due_to_profile && prompt_on_quit_ && !quit_dialog_shown_ &&
-         browser()->type() == Browser::TYPE_NORMAL &&
-         !GetProfile()->IsGuestSession();
+  if (!closed_due_to_profile && !quit_dialog_shown_ &&
+      browser()->type() == Browser::TYPE_NORMAL &&
+      !GetProfile()->IsGuestSession()) {
+    PrefService* prefs = GetProfile()->GetPrefs();
+    return prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog)
+        ? QuitAction::ShowDialogOnQuit : QuitAction::SaveSessionOnQuit;
+  } else {
+    return QuitAction::DoNothingOnQuit;
+  }
 }
 
 bool VivaldiBrowserWindow::ShouldShowDialogOnCloseWindow() {
@@ -1358,6 +1374,7 @@ bool VivaldiBrowserWindow::ShouldShowDialogOnCloseWindow() {
          browser()->type() == Browser::TYPE_NORMAL &&
          !GetProfile()->IsGuestSession();
 }
+
 bool VivaldiBrowserWindow::ShouldSavePersistentTabsOnCloseWindow() {
   if (GetProfile()->IsGuestSession() || GetProfile()->IsOffTheRecord()) {
     return false;
@@ -1406,6 +1423,7 @@ bool VivaldiBrowserWindow::AcquireQuitDialog() {
 // This is to signal a quit to all windows. Even those the do not show the
 // dialog.
 void VivaldiBrowserWindow::AcceptQuitForAllWindows() {
+  AutoSaveSession();
   for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->is_vivaldi()) {
       VivaldiBrowserWindow* window =
@@ -1701,6 +1719,9 @@ ExclusiveAccessContext* VivaldiBrowserWindow::GetExclusiveAccessContext() {
 void VivaldiBrowserWindow::DestroyBrowser() {
   // TODO(pettern): Crashes on shutdown, fix.
   //  extensions::ExtensionRegistry::Get(browser_->profile())->RemoveObserver(this);
+  if (!browser_)
+    return;
+  SidePanelUI::RemoveSidePanelUIForBrowser(browser());
   browser_.reset();
 }
 
@@ -2211,7 +2232,7 @@ bool VivaldiBrowserWindow::MaybeShowStartupFeaturePromo(
 
 bool VivaldiBrowserWindow::CloseFeaturePromo(
     const base::Feature& iph_feature,
-    user_education::FeaturePromoCloseReason close_reason) {
+    user_education::EndFeaturePromoReason close_reason) {
   return false;
 }
 
@@ -2249,10 +2270,74 @@ bool VivaldiBrowserWindow::IsBorderlessModeEnabled() const {
   return false;
 }
 
+void VivaldiBrowserWindow::OnCanResizeFromWebAPIChanged() {
+  // NOTE(andre@vivaldi.com) : Lifted from BrowserView.
+  // TODO(laurila, crbug.com/1493617): Support multi-tab apps.
+  // The value can only be set in web apps, where there currently can only be 1
+  // WebContents, the return value can be determined only by looking at the
+  // value set by the active WebContents' primary page.
+  content::WebContents* web_contents = GetActiveWebContents();
+  if (!web_contents || !web_contents->GetPrimaryMainFrame() || !widget_) {
+    return;
+  }
+
+  auto can_resize = web_contents->GetPrimaryPage().GetResizable();
+  if (cached_can_resize_from_web_api_ == can_resize) {
+    return;
+  }
+
+  // Setting it to std::nullopt should never be blocked.
+  if (can_resize.has_value() && browser()->tab_strip_model()->count() > 1) {
+    // This adds a warning to the active tab, even when another tab makes the
+    // call, which also needs to be fixed as part of the multi-apps support.
+    web_contents->GetPrimaryMainFrame()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kWarning,
+        base::StringPrintf("window.setResizable blocked due to being called "
+                           "from a multi-tab browser."));
+    return;
+  }
+
+  cached_can_resize_from_web_api_ = can_resize;
+  widget_->OnSizeConstraintsChanged();
+}
+
 bool VivaldiBrowserWindow::GetCanResize() {
   // Will change in the future to handle multi-tab windows.
   // crbug.com/1493617 & SetCanResizeFromWebAPI.
-  return false;
+  bool can_ever_resize = widget_->widget_delegate()
+                             ? widget_->widget_delegate()->CanResize()
+                             : false;
+
+  return can_ever_resize && GetCanResizeFromWebAPI().value_or(true);
+}
+
+std::optional<bool> VivaldiBrowserWindow::GetCanResizeFromWebAPI() const {
+  // TODO(laurila, crbug.com/1493617): Support multi-tab apps.
+  if (browser()->tab_strip_model()->count() > 1) {
+    return std::nullopt;
+  }
+
+  // The value can only be set in web apps, where there currently can only be 1
+  // WebContents, the return value can be determined only by looking at the
+  // value set by the active WebContents' primary page.
+  content::WebContents* web_contents = GetActiveWebContents();
+  if (!web_contents || !web_contents->GetPrimaryMainFrame()) {
+    return std::nullopt;
+  }
+
+  return web_contents->GetPrimaryPage().GetResizable();
+}
+
+ui::WindowShowState VivaldiBrowserWindow::GetWindowShowState() const {
+  if (IsMaximized()) {
+    return ui::SHOW_STATE_MAXIMIZED;
+  } else if (IsMinimized()) {
+    return ui::SHOW_STATE_MINIMIZED;
+  } else if (IsFullscreen()) {
+    return ui::SHOW_STATE_FULLSCREEN;
+  } else {
+    return ui::SHOW_STATE_DEFAULT;
+  }
 }
 
 void VivaldiBrowserWindow::BeforeUnloadFired(content::WebContents* source) {

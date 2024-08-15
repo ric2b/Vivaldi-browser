@@ -34,7 +34,6 @@ import * as Common from '../../../../core/common/common.js';
 import * as Host from '../../../../core/host/host.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
-import * as Root from '../../../../core/root/root.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as IconButton from '../../../components/icon_button/icon_button.js';
 import * as SrgbOverlay from '../../../components/srgb_overlay/srgb_overlay.js';
@@ -144,6 +143,8 @@ const enum SpectrumGamut {
   DISPLAY_P3 = 'display-p3',
 }
 
+const IS_NATIVE_EYE_DROPPER_AVAILABLE = 'EyeDropper' in window;
+
 function doesFormatSupportDisplayP3(format: Common.Color.Format): boolean {
   return !srgbGamutFormats.includes(format);
 }
@@ -197,8 +198,7 @@ function getColorFromHsva(gamut: SpectrumGamut, hsva: Common.ColorUtils.Color4D)
   const color: Common.Color.Legacy = Common.Color.Legacy.fromHSVA(hsva);
   switch (gamut) {
     case SpectrumGamut.DISPLAY_P3: {
-      const rgba: Common.ColorUtils.Color4D = [0, 0, 0, 0];
-      Common.Color.hsva2rgba(hsva, rgba);
+      const rgba = Common.Color.hsva2rgba(hsva);
       return new Common.Color.ColorFunction(
           Common.Color.Format.DISPLAY_P3, rgba[0], rgba[1], rgba[2], rgba[3], undefined);
     }
@@ -256,7 +256,6 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
   private colorOffset?: DOMRect;
   private closeButton?: UI.Toolbar.ToolbarButton;
   private paletteContainerMutable?: boolean;
-  private eyeDropperExperimentEnabled?: boolean;
   private shadesCloseHandler?: (() => void);
   private dragElement?: HTMLElement;
   private dragHotSpotX?: number;
@@ -279,7 +278,8 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     this.contentElement.setAttribute('jslog', `${VisualLogging.colorPicker()}`);
     this.colorElement = this.contentElement.createChild('div', 'spectrum-color');
     this.colorElement.tabIndex = 0;
-    this.colorElement.setAttribute('jslog', `${VisualLogging.colorCanvas().track({click: true, drag: true})}`);
+    this.colorElement.setAttribute(
+        'jslog', `${VisualLogging.canvas().track({click: true, drag: true}).context('color-canvas')}`);
     this.setDefaultFocusedElement(this.colorElement);
     this.colorElement.addEventListener('keydown', this.onSliderKeydown.bind(this, positionColor.bind(this)));
     const swatchAriaText = i18nString(UIStrings.pressArrowKeysMessage);
@@ -299,8 +299,8 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
         toggleEyeDropperShortcut[0]?.descriptors.flatMap(descriptor => descriptor.name.split(' + '))[0];
 
     this.colorPickerButton = new UI.Toolbar.ToolbarToggle(
-        i18nString(UIStrings.toggleColorPicker, {PH1: definedShortcutKey || ''}), 'color-picker',
-        'color-picker-filled');
+        i18nString(UIStrings.toggleColorPicker, {PH1: definedShortcutKey || ''}), 'color-picker', 'color-picker-filled',
+        'color-eye-dropper');
     this.colorPickerButton.setToggled(true);
     this.colorPickerButton.addEventListener(
         UI.Toolbar.ToolbarButton.Events.Click, this.toggleColorPicker.bind(this, undefined));
@@ -361,7 +361,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     UI.ARIAUtils.setLabel(this.hexValue, label.textContent);
 
     const displaySwitcher = toolsContainer.createChild('button', 'spectrum-display-switcher spectrum-switcher');
-    displaySwitcher.setAttribute('jslog', `${VisualLogging.dropDown().track({click: true}).context('colorFormat')}`);
+    displaySwitcher.setAttribute('jslog', `${VisualLogging.dropDown().track({click: true}).context('color-format')}`);
     appendSwitcherIcon(displaySwitcher);
     UI.UIUtils.setTitle(displaySwitcher, i18nString(UIStrings.changeColorFormat));
     displaySwitcher.tabIndex = 0;
@@ -394,7 +394,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     this.element.classList.add('flex-none');
     this.palettes = new Map();
     this.palettePanel = this.contentElement.createChild('div', 'palette-panel');
-    this.palettePanel.setAttribute('jslog', `${VisualLogging.palettePanel()}`);
+    this.palettePanel.setAttribute('jslog', `${VisualLogging.section().context('palette-panel')}`);
     this.palettePanelShowing = false;
     this.paletteSectionContainer = this.contentElement.createChild('div', 'spectrum-palette-container');
     this.paletteContainer = this.paletteSectionContainer.createChild('div', 'spectrum-palette');
@@ -407,7 +407,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     const paletteSwitcher =
         this.paletteSectionContainer.createChild('div', 'spectrum-palette-switcher spectrum-switcher');
     paletteSwitcher.setAttribute(
-        'jslog', `${VisualLogging.dropDown().track({click: true}).context('paletteSwitcher')}`);
+        'jslog', `${VisualLogging.dropDown().track({click: true}).context('palette-switcher')}`);
     appendSwitcherIcon(paletteSwitcher);
     UI.UIUtils.setTitle(paletteSwitcher, i18nString(UIStrings.previewPalettes));
     UI.ARIAUtils.markAsButton(paletteSwitcher);
@@ -425,10 +425,10 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     overlay.addEventListener('click', this.togglePalettePanel.bind(this, false));
 
     this.addColorToolbar = new UI.Toolbar.Toolbar('add-color-toolbar');
-    const addColorButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.addToPalette), 'plus');
+    const addColorButton =
+        new UI.Toolbar.ToolbarButton(i18nString(UIStrings.addToPalette), 'plus', undefined, 'add-color');
     addColorButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.onAddColorMousedown.bind(this));
     addColorButton.element.addEventListener('keydown', this.onAddColorKeydown.bind(this));
-    addColorButton.element.setAttribute('jslog', `${VisualLogging.addColor().track({click: true})}`);
     this.addColorToolbar.appendToolbarItem(addColorButton);
 
     this.colorPickedBound = this.colorPicked.bind(this);
@@ -1340,11 +1340,9 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     this.dragHeight = this.colorElement.offsetHeight;
     this.colorDragElementHeight = this.colorDragElement.offsetHeight / 2;
     this.innerSetColor(undefined, undefined, undefined /* colorName */, undefined, ChangeSource.Model);
-    this.eyeDropperExperimentEnabled =
-        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.EYEDROPPER_COLOR_PICKER);
     // When flag is turned on, eye dropper is not turned on by default.
     // This is because the global change of the cursor into a dropper will disturb the user.
-    if (!this.eyeDropperExperimentEnabled) {
+    if (!IS_NATIVE_EYE_DROPPER_AVAILABLE) {
       void this.toggleColorPicker(true);
     } else {
       this.colorPickerButton.setToggled(false);
@@ -1367,8 +1365,6 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
   }
 
   async toggleColorPicker(enabled?: boolean): Promise<void> {
-    const eyeDropperExperimentEnabled = this.eyeDropperExperimentEnabled;
-
     if (enabled === undefined) {
       enabled = !this.colorPickerButton.toggled();
     }
@@ -1381,7 +1377,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     }
 
     // With the old color picker, colors can only be picked up within the page.
-    if (!eyeDropperExperimentEnabled) {
+    if (!IS_NATIVE_EYE_DROPPER_AVAILABLE) {
       Host.InspectorFrontendHost.InspectorFrontendHostInstance.setEyeDropperActive(enabled);
       if (enabled) {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.addEventListener(
@@ -1390,7 +1386,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.removeEventListener(
             Host.InspectorFrontendHostAPI.Events.EyeDropperPickedColor, this.colorPickedBound);
       }
-    } else if (eyeDropperExperimentEnabled && enabled) {
+    } else if (IS_NATIVE_EYE_DROPPER_AVAILABLE && enabled) {
       // Use EyeDropper API, can pick up colors outside the browser window,
       // Note: The current EyeDropper API is not designed to pick up colors continuously.
       // Wait for TypeScript to support the definition of EyeDropper API:
@@ -1411,7 +1407,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
       }
 
       this.colorPickerButton.setToggled(false);
-    } else if (eyeDropperExperimentEnabled && !enabled) {
+    } else if (IS_NATIVE_EYE_DROPPER_AVAILABLE && !enabled) {
       this.eyeDropperAbortController?.abort();
       this.eyeDropperAbortController = null;
     }
@@ -1433,9 +1429,7 @@ export const ChangeSource = {
   Other: 'Other',
 };
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   ColorChanged = 'ColorChanged',
   SizeChanged = 'SizeChanged',
 }
@@ -1620,10 +1614,10 @@ export class Swatch {
   private colorString!: string|null;
   private swatchInnerElement: HTMLElement;
   private swatchOverlayElement: HTMLElement;
-  private readonly swatchCopyIcon: UI.Icon.Icon;
+  private readonly swatchCopyIcon: IconButton.Icon.Icon;
   constructor(parentElement: HTMLElement) {
     const swatchElement = parentElement.createChild('span', 'swatch');
-    swatchElement.setAttribute('jslog', `${VisualLogging.copyColor().track({click: true})}`);
+    swatchElement.setAttribute('jslog', `${VisualLogging.action().context('copy-color').track({click: true})}`);
     this.swatchInnerElement = swatchElement.createChild('span', 'swatch-inner');
     this.swatchOverlayElement = swatchElement.createChild('span', 'swatch-overlay') as HTMLElement;
     UI.ARIAUtils.markAsButton(this.swatchOverlayElement);
@@ -1632,7 +1626,7 @@ export class Swatch {
     self.onInvokeElement(this.swatchOverlayElement, this.onCopyText.bind(this));
     this.swatchOverlayElement.addEventListener('mouseout', this.onCopyIconMouseout.bind(this));
     this.swatchOverlayElement.addEventListener('blur', this.onCopyIconMouseout.bind(this));
-    this.swatchCopyIcon = UI.Icon.Icon.create('copy', 'copy-color-icon');
+    this.swatchCopyIcon = IconButton.Icon.create('copy', 'copy-color-icon');
     UI.Tooltip.Tooltip.install(this.swatchCopyIcon, i18nString(UIStrings.copyColorToClipboard));
     this.swatchOverlayElement.appendChild(this.swatchCopyIcon);
     UI.ARIAUtils.setLabel(this.swatchOverlayElement, this.swatchCopyIcon.title);
@@ -1652,14 +1646,14 @@ export class Swatch {
   }
 
   private onCopyText(event: Event): void {
-    this.swatchCopyIcon.setIconType('checkmark');
+    this.swatchCopyIcon.name = 'checkmark';
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(this.colorString);
     UI.ARIAUtils.setPressed(this.swatchOverlayElement, true);
     event.consume();
   }
 
   private onCopyIconMouseout(): void {
-    this.swatchCopyIcon.setIconType('copy');
+    this.swatchCopyIcon.name = 'copy';
     UI.ARIAUtils.setPressed(this.swatchOverlayElement, false);
   }
 }

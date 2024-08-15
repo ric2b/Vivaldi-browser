@@ -42,6 +42,10 @@
 #include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
+
 class Profile;
 
 namespace web_app {
@@ -203,7 +207,7 @@ void ManifestUpdateManager::Shutdown() {
 
 void ManifestUpdateManager::MaybeUpdate(
     const GURL& url,
-    const absl::optional<webapps::AppId>& app_id,
+    const std::optional<webapps::AppId>& app_id,
     content::WebContents* web_contents) {
   if (!started_) {
     return;
@@ -240,9 +244,13 @@ void ManifestUpdateManager::MaybeUpdate(
   }
 
   if (provider_->registrar_unsafe().IsShortcutApp(*app_id) &&
-      base::FeatureList::IsEnabled(
-          webapps::features::kCreateShortcutIgnoresManifest)) {
-    // When we create shortcut ignores manifest, we should update manifest for
+      (base::FeatureList::IsEnabled(
+           webapps::features::kCreateShortcutIgnoresManifest)
+#if BUILDFLAG(IS_CHROMEOS)
+       || chromeos::features::IsCrosShortstandEnabled()
+#endif
+           )) {
+    // When create shortcut ignores manifest, we should not update manifest for
     // shortcuts.
     NotifyResult(url, *app_id, ManifestUpdateResult::kShortcutIgnoresManifest);
     return;
@@ -319,7 +327,7 @@ void ManifestUpdateManager::OnManifestCheckAwaitAppWindowClose(
     const GURL& url,
     const webapps::AppId& app_id,
     ManifestUpdateCheckResult check_result,
-    absl::optional<WebAppInstallInfo> install_info) {
+    std::optional<WebAppInstallInfo> install_info) {
   auto update_stage_it = update_stages_.find(app_id);
   if (update_stage_it == update_stages_.end()) {
     // If the web_app already has already been uninstalled after the
@@ -408,7 +416,7 @@ void ManifestUpdateManager::StartManifestWriteAfterWindowsClosed(
 
 bool ManifestUpdateManager::IsUpdateConsumed(const webapps::AppId& app_id,
                                              base::Time check_time) {
-  absl::optional<base::Time> last_check_time = GetLastUpdateCheckTime(app_id);
+  std::optional<base::Time> last_check_time = GetLastUpdateCheckTime(app_id);
   if (last_check_time.has_value() &&
       check_time < *last_check_time + kDelayBetweenChecks &&
       !base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -455,11 +463,11 @@ bool ManifestUpdateManager::MaybeConsumeUpdateCheck(
   return true;
 }
 
-absl::optional<base::Time> ManifestUpdateManager::GetLastUpdateCheckTime(
+std::optional<base::Time> ManifestUpdateManager::GetLastUpdateCheckTime(
     const webapps::AppId& app_id) const {
   auto it = last_update_check_.find(app_id);
-  return it != last_update_check_.end() ? absl::optional<base::Time>(it->second)
-                                        : absl::nullopt;
+  return it != last_update_check_.end() ? std::optional<base::Time>(it->second)
+                                        : std::nullopt;
 }
 
 void ManifestUpdateManager::SetLastUpdateCheckTime(const GURL& origin,
@@ -482,7 +490,7 @@ void ManifestUpdateManager::OnUpdateStopped(const GURL& url,
 
 void ManifestUpdateManager::NotifyResult(
     const GURL& url,
-    const absl::optional<webapps::AppId>& app_id,
+    const std::optional<webapps::AppId>& app_id,
     ManifestUpdateResult result) {
   // Don't log kNoAppInScope because it will be far too noisy (most page loads
   // will hit it).

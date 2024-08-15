@@ -16,7 +16,7 @@ namespace mail_client {
 
 typedef int64_t SearchListID;
 
-typedef std::vector<SearchListID> SearchListIdRows;
+typedef std::vector<SearchListID> SearchListIDs;
 
 // Holds all information associated with message.
 class MessageRow {
@@ -40,11 +40,16 @@ typedef std::vector<MessageRow> MessageRows;
 class MessageResult {
  public:
   MessageResult() = default;
-  MessageResult(const MessageResult&) = delete;
-  MessageResult& operator=(const MessageResult&) = delete;
+  MessageResult(const MessageResult&) = default;
+  MessageResult& operator=(const MessageResult&) = default;
 
   bool success;
   std::string message;
+};
+
+struct Migration {
+  int db_version;
+  bool migration_needed;
 };
 
 }  // namespace mail_client

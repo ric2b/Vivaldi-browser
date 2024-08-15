@@ -10,6 +10,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import performanceMonitorStyles from './performanceMonitor.css.js';
 
@@ -58,8 +59,6 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/performance_monitor/PerformanceMonitor.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-let performanceMonitorImplInstance: PerformanceMonitorImpl;
-
 export class PerformanceMonitorImpl extends UI.Widget.HBox implements
     SDK.TargetManager.SDKModelObserver<SDK.PerformanceMetricsModel.PerformanceMetricsModel> {
   private metricsBuffer: {timestamp: number, metrics: Map<string, number>}[];
@@ -77,8 +76,10 @@ export class PerformanceMonitorImpl extends UI.Widget.HBox implements
   private startTimestamp?: number;
   private pollTimer?: number;
 
-  constructor(pollIntervalMs: number) {
+  constructor(pollIntervalMs: number = 500) {
     super(true);
+
+    this.element.setAttribute('jslog', `${VisualLogging.panel().context('performance-monitor')}`);
 
     this.contentElement.classList.add('perfmon-pane');
     this.metricsBuffer = [];
@@ -100,15 +101,6 @@ export class PerformanceMonitorImpl extends UI.Widget.HBox implements
         i18nString(UIStrings.paused);
     this.controlPane.addEventListener(Events.MetricChanged, this.recalcChartHeight, this);
     SDK.TargetManager.TargetManager.instance().observeModels(SDK.PerformanceMetricsModel.PerformanceMetricsModel, this);
-  }
-
-  static instance(opts = {forceNew: null}): PerformanceMonitorImpl {
-    const {forceNew} = opts;
-    if (!performanceMonitorImplInstance || forceNew) {
-      performanceMonitorImplInstance = new PerformanceMonitorImpl(500);
-    }
-
-    return performanceMonitorImplInstance;
   }
 
   override wasShown(): void {
@@ -583,6 +575,8 @@ export class ControlPane extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
       const chartName = chartInfo.metrics[0].name;
       const active = this.enabledCharts.has(chartName);
       const indicator = new MetricIndicator(this.element, chartInfo, active, this.onToggle.bind(this, chartName));
+      indicator.element.setAttribute(
+          'jslog', `${VisualLogging.toggle().track({click: true, keydown: 'Enter'}).context(chartName)}`);
       this.indicators.set(chartName, indicator);
     }
   }

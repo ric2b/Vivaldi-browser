@@ -10,7 +10,7 @@ import string
 
 class TestCaseUtils(object):
     """Base class with some additional functionalities. People will usually want
-  to use SuperMoxTestBase instead."""
+    to use SuperMoxTestBase instead."""
     # Backup the separator in case it gets mocked
     _OS_SEP = os.sep
     _RANDOM_CHOICE = random.choice

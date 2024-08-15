@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void transpose_84a763() {
+  float4x2 res = float4x2(float2(1.0f), float2(1.0f), float2(1.0f), float2(1.0f));
+}
+vertex float4 vertex_main() {
+  transpose_84a763();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  transpose_84a763();
+}
+kernel void compute_main() {
+  transpose_84a763();
+}

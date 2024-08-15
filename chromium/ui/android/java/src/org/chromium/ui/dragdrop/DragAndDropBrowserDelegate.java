@@ -9,9 +9,9 @@ import android.content.Intent;
 import android.view.DragAndDropPermissions;
 import android.view.DragEvent;
 
-/**
- * Delegate for browser related functions used by Drag and Drop.
- */
+import org.chromium.ui.dragdrop.DragDropMetricUtils.UrlIntentSource;
+
+/** Delegate for browser related functions used by Drag and Drop. */
 public interface DragAndDropBrowserDelegate {
     /** Get whether to support the image drop into Chrome. */
     boolean getSupportDropInChrome();
@@ -22,8 +22,8 @@ public interface DragAndDropBrowserDelegate {
     /** Request DragAndDropPermissions. */
     DragAndDropPermissions getDragAndDropPermissions(DragEvent dropEvent);
 
-    /** Create an intent from a dragged text link. */
-    Intent createLinkIntent(String urlString);
+    /** Create an intent from a dragged URL. */
+    Intent createUrlIntent(String urlString, @UrlIntentSource int intentSrc);
 
     /** Build clip data for drag. */
     ClipData buildClipData(DropDataAndroid dropData);

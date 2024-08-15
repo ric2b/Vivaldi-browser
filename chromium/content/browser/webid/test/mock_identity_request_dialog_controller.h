@@ -23,30 +23,34 @@ class MockIdentityRequestDialogController
   MockIdentityRequestDialogController& operator=(
       const MockIdentityRequestDialogController&) = delete;
 
-  MOCK_METHOD7(ShowAccountsDialog,
+  MOCK_METHOD9(ShowAccountsDialog,
                void(const std::string&,
-                    const absl::optional<std::string>&,
+                    const std::optional<std::string>&,
                     const std::vector<content::IdentityProviderData>&,
                     IdentityRequestAccount::SignInMode,
+                    blink::mojom::RpMode rp_mode,
                     bool,
                     AccountSelectionCallback,
+                    LoginToIdPCallback,
                     DismissCallback));
   MOCK_METHOD0(DestructorCalled, void());
-  MOCK_METHOD7(ShowFailureDialog,
+  MOCK_METHOD8(ShowFailureDialog,
                void(const std::string&,
-                    const absl::optional<std::string>&,
+                    const std::optional<std::string>&,
                     const std::string&,
-                    const blink::mojom::RpContext& rp_context,
+                    blink::mojom::RpContext rp_context,
+                    blink::mojom::RpMode rp_mode,
                     const content::IdentityProviderMetadata&,
                     DismissCallback,
-                    SigninToIdPCallback));
-  MOCK_METHOD8(ShowErrorDialog,
+                    LoginToIdPCallback));
+  MOCK_METHOD9(ShowErrorDialog,
                void(const std::string&,
-                    const absl::optional<std::string>&,
+                    const std::optional<std::string>&,
                     const std::string&,
-                    const blink::mojom::RpContext& rp_context,
+                    blink::mojom::RpContext rp_context,
+                    blink::mojom::RpMode rp_mode,
                     const content::IdentityProviderMetadata&,
-                    const absl::optional<IdentityCredentialTokenError>&,
+                    const std::optional<IdentityCredentialTokenError>&,
                     DismissCallback,
                     MoreDetailsCallback));
   MOCK_METHOD2(ShowModalDialog, WebContents*(const GURL&, DismissCallback));

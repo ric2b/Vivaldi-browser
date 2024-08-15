@@ -24,49 +24,43 @@ namespace Eigen {
  *
  * \tparam Derived is the derived type.
  */
-template<typename Derived>
-class KroneckerProductBase : public ReturnByValue<Derived>
-{
-  private:
-    typedef typename internal::traits<Derived> Traits;
-    typedef typename Traits::Scalar Scalar;
+template <typename Derived>
+class KroneckerProductBase : public ReturnByValue<Derived> {
+ private:
+  typedef typename internal::traits<Derived> Traits;
+  typedef typename Traits::Scalar Scalar;
 
-  protected:
-    typedef typename Traits::Lhs Lhs;
-    typedef typename Traits::Rhs Rhs;
+ protected:
+  typedef typename Traits::Lhs Lhs;
+  typedef typename Traits::Rhs Rhs;
 
-  public:
-    /*! \brief Constructor. */
-    KroneckerProductBase(const Lhs& A, const Rhs& B)
-      : m_A(A), m_B(B)
-    {}
+ public:
+  /*! \brief Constructor. */
+  KroneckerProductBase(const Lhs& A, const Rhs& B) : m_A(A), m_B(B) {}
 
-    inline Index rows() const { return m_A.rows() * m_B.rows(); }
-    inline Index cols() const { return m_A.cols() * m_B.cols(); }
+  inline Index rows() const { return m_A.rows() * m_B.rows(); }
+  inline Index cols() const { return m_A.cols() * m_B.cols(); }
 
-    /*!
-     * This overrides ReturnByValue::coeff because this function is
-     * efficient enough.
-     */
-    Scalar coeff(Index row, Index col) const
-    {
-      return m_A.coeff(row / m_B.rows(), col / m_B.cols()) *
-             m_B.coeff(row % m_B.rows(), col % m_B.cols());
-    }
+  /*!
+   * This overrides ReturnByValue::coeff because this function is
+   * efficient enough.
+   */
+  Scalar coeff(Index row, Index col) const {
+    return m_A.coeff(row / m_B.rows(), col / m_B.cols()) * m_B.coeff(row % m_B.rows(), col % m_B.cols());
+  }
 
-    /*!
-     * This overrides ReturnByValue::coeff because this function is
-     * efficient enough.
-     */
-    Scalar coeff(Index i) const
-    {
-      EIGEN_STATIC_ASSERT_VECTOR_ONLY(Derived);
-      return m_A.coeff(i / m_A.size()) * m_B.coeff(i % m_A.size());
-    }
+  /*!
+   * This overrides ReturnByValue::coeff because this function is
+   * efficient enough.
+   */
+  Scalar coeff(Index i) const {
+    EIGEN_STATIC_ASSERT_VECTOR_ONLY(Derived);
+    return m_A.coeff(i / m_A.size()) * m_B.coeff(i % m_A.size());
+  }
 
-  protected:
-    typename Lhs::Nested m_A;
-    typename Rhs::Nested m_B;
+ protected:
+  typename Lhs::Nested m_A;
+  typename Rhs::Nested m_B;
 };
 
 /*!
@@ -81,22 +75,20 @@ class KroneckerProductBase : public ReturnByValue<Derived>
  * \tparam Lhs  Type of the left-hand side, a matrix expression.
  * \tparam Rhs  Type of the rignt-hand side, a matrix expression.
  */
-template<typename Lhs, typename Rhs>
-class KroneckerProduct : public KroneckerProductBase<KroneckerProduct<Lhs,Rhs> >
-{
-  private:
-    typedef KroneckerProductBase<KroneckerProduct> Base;
-    using Base::m_A;
-    using Base::m_B;
+template <typename Lhs, typename Rhs>
+class KroneckerProduct : public KroneckerProductBase<KroneckerProduct<Lhs, Rhs> > {
+ private:
+  typedef KroneckerProductBase<KroneckerProduct> Base;
+  using Base::m_A;
+  using Base::m_B;
 
-  public:
-    /*! \brief Constructor. */
-    KroneckerProduct(const Lhs& A, const Rhs& B)
-      : Base(A, B)
-    {}
+ public:
+  /*! \brief Constructor. */
+  KroneckerProduct(const Lhs& A, const Rhs& B) : Base(A, B) {}
 
-    /*! \brief Evaluate the Kronecker tensor product. */
-    template<typename Dest> void evalTo(Dest& dst) const;
+  /*! \brief Evaluate the Kronecker tensor product. */
+  template <typename Dest>
+  void evalTo(Dest& dst) const;
 };
 
 /*!
@@ -114,85 +106,72 @@ class KroneckerProduct : public KroneckerProductBase<KroneckerProduct<Lhs,Rhs> >
  * \tparam Lhs  Type of the left-hand side, a matrix expression.
  * \tparam Rhs  Type of the rignt-hand side, a matrix expression.
  */
-template<typename Lhs, typename Rhs>
-class KroneckerProductSparse : public KroneckerProductBase<KroneckerProductSparse<Lhs,Rhs> >
-{
-  private:
-    typedef KroneckerProductBase<KroneckerProductSparse> Base;
-    using Base::m_A;
-    using Base::m_B;
+template <typename Lhs, typename Rhs>
+class KroneckerProductSparse : public KroneckerProductBase<KroneckerProductSparse<Lhs, Rhs> > {
+ private:
+  typedef KroneckerProductBase<KroneckerProductSparse> Base;
+  using Base::m_A;
+  using Base::m_B;
 
-  public:
-    /*! \brief Constructor. */
-    KroneckerProductSparse(const Lhs& A, const Rhs& B)
-      : Base(A, B)
-    {}
+ public:
+  /*! \brief Constructor. */
+  KroneckerProductSparse(const Lhs& A, const Rhs& B) : Base(A, B) {}
 
-    /*! \brief Evaluate the Kronecker tensor product. */
-    template<typename Dest> void evalTo(Dest& dst) const;
+  /*! \brief Evaluate the Kronecker tensor product. */
+  template <typename Dest>
+  void evalTo(Dest& dst) const;
 };
 
-template<typename Lhs, typename Rhs>
-template<typename Dest>
-void KroneckerProduct<Lhs,Rhs>::evalTo(Dest& dst) const
-{
-  const int BlockRows = Rhs::RowsAtCompileTime,
-            BlockCols = Rhs::ColsAtCompileTime;
-  const Index Br = m_B.rows(),
-              Bc = m_B.cols();
-  for (Index i=0; i < m_A.rows(); ++i)
-    for (Index j=0; j < m_A.cols(); ++j)
-      Block<Dest,BlockRows,BlockCols>(dst,i*Br,j*Bc,Br,Bc) = m_A.coeff(i,j) * m_B;
+template <typename Lhs, typename Rhs>
+template <typename Dest>
+void KroneckerProduct<Lhs, Rhs>::evalTo(Dest& dst) const {
+  const int BlockRows = Rhs::RowsAtCompileTime, BlockCols = Rhs::ColsAtCompileTime;
+  const Index Br = m_B.rows(), Bc = m_B.cols();
+  for (Index i = 0; i < m_A.rows(); ++i)
+    for (Index j = 0; j < m_A.cols(); ++j)
+      Block<Dest, BlockRows, BlockCols>(dst, i * Br, j * Bc, Br, Bc) = m_A.coeff(i, j) * m_B;
 }
 
-template<typename Lhs, typename Rhs>
-template<typename Dest>
-void KroneckerProductSparse<Lhs,Rhs>::evalTo(Dest& dst) const
-{
+template <typename Lhs, typename Rhs>
+template <typename Dest>
+void KroneckerProductSparse<Lhs, Rhs>::evalTo(Dest& dst) const {
   Index Br = m_B.rows(), Bc = m_B.cols();
   dst.resize(this->rows(), this->cols());
   dst.resizeNonZeros(0);
-  
+
   // 1 - evaluate the operands if needed:
-  typedef typename internal::nested_eval<Lhs,Dynamic>::type Lhs1;
+  typedef typename internal::nested_eval<Lhs, Dynamic>::type Lhs1;
   typedef internal::remove_all_t<Lhs1> Lhs1Cleaned;
   const Lhs1 lhs1(m_A);
-  typedef typename internal::nested_eval<Rhs,Dynamic>::type Rhs1;
+  typedef typename internal::nested_eval<Rhs, Dynamic>::type Rhs1;
   typedef internal::remove_all_t<Rhs1> Rhs1Cleaned;
   const Rhs1 rhs1(m_B);
-    
+
   // 2 - construct respective iterators
   typedef Eigen::InnerIterator<Lhs1Cleaned> LhsInnerIterator;
   typedef Eigen::InnerIterator<Rhs1Cleaned> RhsInnerIterator;
-  
+
   // compute number of non-zeros per innervectors of dst
   {
     // TODO VectorXi is not necessarily big enough!
     VectorXi nnzA = VectorXi::Zero(Dest::IsRowMajor ? m_A.rows() : m_A.cols());
-    for (Index kA=0; kA < m_A.outerSize(); ++kA)
-      for (LhsInnerIterator itA(lhs1,kA); itA; ++itA)
-        nnzA(Dest::IsRowMajor ? itA.row() : itA.col())++;
-      
+    for (Index kA = 0; kA < m_A.outerSize(); ++kA)
+      for (LhsInnerIterator itA(lhs1, kA); itA; ++itA) nnzA(Dest::IsRowMajor ? itA.row() : itA.col())++;
+
     VectorXi nnzB = VectorXi::Zero(Dest::IsRowMajor ? m_B.rows() : m_B.cols());
-    for (Index kB=0; kB < m_B.outerSize(); ++kB)
-      for (RhsInnerIterator itB(rhs1,kB); itB; ++itB)
-        nnzB(Dest::IsRowMajor ? itB.row() : itB.col())++;
-    
-    Matrix<int,Dynamic,Dynamic,ColMajor> nnzAB = nnzB * nnzA.transpose();
+    for (Index kB = 0; kB < m_B.outerSize(); ++kB)
+      for (RhsInnerIterator itB(rhs1, kB); itB; ++itB) nnzB(Dest::IsRowMajor ? itB.row() : itB.col())++;
+
+    Matrix<int, Dynamic, Dynamic, ColMajor> nnzAB = nnzB * nnzA.transpose();
     dst.reserve(VectorXi::Map(nnzAB.data(), nnzAB.size()));
   }
 
-  for (Index kA=0; kA < m_A.outerSize(); ++kA)
-  {
-    for (Index kB=0; kB < m_B.outerSize(); ++kB)
-    {
-      for (LhsInnerIterator itA(lhs1,kA); itA; ++itA)
-      {
-        for (RhsInnerIterator itB(rhs1,kB); itB; ++itB)
-        {
-          Index i = itA.row() * Br + itB.row(),
-                j = itA.col() * Bc + itB.col();
-          dst.insert(i,j) = itA.value() * itB.value();
+  for (Index kA = 0; kA < m_A.outerSize(); ++kA) {
+    for (Index kB = 0; kB < m_B.outerSize(); ++kB) {
+      for (LhsInnerIterator itA(lhs1, kA); itA; ++itA) {
+        for (RhsInnerIterator itB(rhs1, kB); itB; ++itB) {
+          Index i = itA.row() * Br + itB.row(), j = itA.col() * Bc + itB.col();
+          dst.insert(i, j) = itA.value() * itB.value();
         }
       }
     }
@@ -201,9 +180,8 @@ void KroneckerProductSparse<Lhs,Rhs>::evalTo(Dest& dst) const
 
 namespace internal {
 
-template<typename Lhs_, typename Rhs_>
-struct traits<KroneckerProduct<Lhs_,Rhs_> >
-{
+template <typename Lhs_, typename Rhs_>
+struct traits<KroneckerProduct<Lhs_, Rhs_> > {
   typedef remove_all_t<Lhs_> Lhs;
   typedef remove_all_t<Rhs_> Rhs;
   typedef typename ScalarBinaryOpTraits<typename Lhs::Scalar, typename Rhs::Scalar>::ReturnType Scalar;
@@ -216,17 +194,18 @@ struct traits<KroneckerProduct<Lhs_,Rhs_> >
     MaxCols = size_at_compile_time(traits<Lhs>::MaxColsAtCompileTime, traits<Rhs>::MaxColsAtCompileTime)
   };
 
-  typedef Matrix<Scalar,Rows,Cols> ReturnType;
+  typedef Matrix<Scalar, Rows, Cols> ReturnType;
 };
 
-template<typename Lhs_, typename Rhs_>
-struct traits<KroneckerProductSparse<Lhs_,Rhs_> >
-{
+template <typename Lhs_, typename Rhs_>
+struct traits<KroneckerProductSparse<Lhs_, Rhs_> > {
   typedef MatrixXpr XprKind;
   typedef remove_all_t<Lhs_> Lhs;
   typedef remove_all_t<Rhs_> Rhs;
   typedef typename ScalarBinaryOpTraits<typename Lhs::Scalar, typename Rhs::Scalar>::ReturnType Scalar;
-  typedef typename cwise_promote_storage_type<typename traits<Lhs>::StorageKind, typename traits<Rhs>::StorageKind, scalar_product_op<typename Lhs::Scalar, typename Rhs::Scalar> >::ret StorageKind;
+  typedef typename cwise_promote_storage_type<typename traits<Lhs>::StorageKind, typename traits<Rhs>::StorageKind,
+                                              scalar_product_op<typename Lhs::Scalar, typename Rhs::Scalar> >::ret
+      StorageKind;
   typedef typename promote_index_type<typename Lhs::StorageIndex, typename Rhs::StorageIndex>::type StorageIndex;
 
   enum {
@@ -241,15 +220,14 @@ struct traits<KroneckerProductSparse<Lhs_,Rhs_> >
     EvalToRowMajor = (int(LhsFlags) & int(RhsFlags) & RowMajorBit),
     RemovedBits = ~(EvalToRowMajor ? 0 : RowMajorBit),
 
-    Flags = ((int(LhsFlags) | int(RhsFlags)) & HereditaryBits & RemovedBits)
-          | EvalBeforeNestingBit,
+    Flags = ((int(LhsFlags) | int(RhsFlags)) & HereditaryBits & RemovedBits) | EvalBeforeNestingBit,
     CoeffReadCost = HugeCost
   };
 
   typedef SparseMatrix<Scalar, 0, StorageIndex> ReturnType;
 };
 
-} // end namespace internal
+}  // end namespace internal
 
 /*!
  * \ingroup KroneckerProduct_Module
@@ -270,9 +248,8 @@ struct traits<KroneckerProductSparse<Lhs_,Rhs_> >
  * \param b  Dense matrix b
  * \return   Kronecker tensor product of a and b
  */
-template<typename A, typename B>
-KroneckerProduct<A,B> kroneckerProduct(const MatrixBase<A>& a, const MatrixBase<B>& b)
-{
+template <typename A, typename B>
+KroneckerProduct<A, B> kroneckerProduct(const MatrixBase<A>& a, const MatrixBase<B>& b) {
   return KroneckerProduct<A, B>(a.derived(), b.derived());
 }
 
@@ -297,12 +274,11 @@ KroneckerProduct<A,B> kroneckerProduct(const MatrixBase<A>& a, const MatrixBase<
  * \return   Kronecker tensor product of a and b, stored in a sparse
  *           matrix
  */
-template<typename A, typename B>
-KroneckerProductSparse<A,B> kroneckerProduct(const EigenBase<A>& a, const EigenBase<B>& b)
-{
-  return KroneckerProductSparse<A,B>(a.derived(), b.derived());
+template <typename A, typename B>
+KroneckerProductSparse<A, B> kroneckerProduct(const EigenBase<A>& a, const EigenBase<B>& b) {
+  return KroneckerProductSparse<A, B>(a.derived(), b.derived());
 }
 
-} // end namespace Eigen
+}  // end namespace Eigen
 
-#endif // KRONECKER_TENSOR_PRODUCT_H
+#endif  // KRONECKER_TENSOR_PRODUCT_H

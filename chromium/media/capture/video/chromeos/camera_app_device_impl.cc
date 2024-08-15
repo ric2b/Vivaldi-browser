@@ -38,7 +38,7 @@ int CameraAppDeviceImpl::GetPortraitSegResultCode(
 CameraAppDeviceImpl::CameraAppDeviceImpl(const std::string& device_id)
     : device_id_(device_id),
       allow_new_ipc_weak_ptrs_(true),
-      capture_intent_(cros::mojom::CaptureIntent::DEFAULT),
+      capture_intent_(cros::mojom::CaptureIntent::kDefault),
       camera_device_context_(nullptr) {}
 
 CameraAppDeviceImpl::~CameraAppDeviceImpl() {
@@ -170,12 +170,12 @@ void CameraAppDeviceImpl::TakePortraitModePhoto(
       base::BindPostTaskToCurrentDefault(
           base::BindOnce(&CameraAppDeviceImpl::NotifyPortraitResultOnMojoThread,
                          weak_ptr_factory_for_mojo_.GetWeakPtr(),
-                         cros::mojom::Effect::NO_EFFECT));
+                         cros::mojom::Effect::kNoEffect));
   take_portrait_photo_callbacks.portrait_photo_callback =
       base::BindPostTaskToCurrentDefault(
           base::BindOnce(&CameraAppDeviceImpl::NotifyPortraitResultOnMojoThread,
                          weak_ptr_factory_for_mojo_.GetWeakPtr(),
-                         cros::mojom::Effect::PORTRAIT_MODE));
+                         cros::mojom::Effect::kPortraitMode));
   take_portrait_photo_callbacks_ = std::move(take_portrait_photo_callbacks);
 
   std::move(callback).Run();
@@ -483,6 +483,35 @@ CameraAppDeviceImpl::ConsumePortraitModeCallbacks() {
     take_portrait_photo_callbacks_.reset();
   }
   return callbacks;
+}
+
+void CameraAppDeviceImpl::SetCropRegion(const gfx::Rect& crop_region,
+                                        SetCropRegionCallback callback) {
+  CHECK(mojo_task_runner_->BelongsToCurrentThread());
+
+  base::AutoLock lock(crop_region_lock_);
+  crop_region_ = {
+      crop_region.x(),
+      crop_region.y(),
+      crop_region.width(),
+      crop_region.height(),
+  };
+
+  std::move(callback).Run();
+}
+
+void CameraAppDeviceImpl::ResetCropRegion(ResetCropRegionCallback callback) {
+  CHECK(mojo_task_runner_->BelongsToCurrentThread());
+
+  base::AutoLock lock(crop_region_lock_);
+  crop_region_.reset();
+
+  std::move(callback).Run();
+}
+
+std::optional<std::vector<int32_t>> CameraAppDeviceImpl::GetCropRegion() {
+  base::AutoLock lock(crop_region_lock_);
+  return crop_region_;
 }
 
 }  // namespace media

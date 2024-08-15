@@ -10,11 +10,13 @@
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/float/float_controller.h"
+#include "ash/wm/pip/pip_controller.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_metrics_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state_delegate.h"
 #include "ash/wm/window_state_util.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/check.h"
@@ -39,10 +41,6 @@ namespace ash {
 namespace {
 
 using ::chromeos::WindowStateType;
-
-// This specifies how much percent (30%) of a window rect
-// must be visible when the window is added to the workspace.
-const float kMinimumPercentOnScreenArea = 0.3f;
 
 // When a window that has restore bounds at least as large as a work area is
 // unmaximized, inset the bounds slightly so that they are not exactly the same.
@@ -280,30 +278,10 @@ void DefaultState::HandleCompoundEvents(WindowState* window_state,
 
   switch (event->type()) {
     case WM_EVENT_TOGGLE_MAXIMIZE_CAPTION:
-      if (window_state->IsFullscreen()) {
-        const WMEvent wm_event(WM_EVENT_TOGGLE_FULLSCREEN);
-        window_state->OnWMEvent(&wm_event);
-      } else if (window_state->IsMaximized()) {
-        window_state->Restore();
-      } else if (window_state->IsNormalOrSnapped() ||
-                 window_state->IsFloated()) {
-        if (window_state->CanMaximize())
-          window_state->Maximize();
-      }
+      ToggleMaximizeCaption(window_state);
       return;
     case WM_EVENT_TOGGLE_MAXIMIZE:
-      if (window_state->IsFullscreen()) {
-        const WMEvent wm_event(WM_EVENT_TOGGLE_FULLSCREEN);
-        window_state->OnWMEvent(&wm_event);
-      } else if (window_state->IsMaximized()) {
-        window_state->Restore();
-      } else if (window_state->CanMaximize()) {
-        window_state->Maximize();
-      } else {
-        // If `window` cannot be maximized, then do a window bounce animation.
-        wm::AnimateWindow(window_state->window(),
-                          wm::WINDOW_ANIMATION_TYPE_BOUNCE);
-      }
+      ToggleMaximize(window_state);
       return;
     case WM_EVENT_TOGGLE_VERTICAL_MAXIMIZE: {
       gfx::Rect work_area =
@@ -438,10 +416,10 @@ void DefaultState::HandleTransitionEvents(WindowState* window_state,
     }
   }
 
-  absl::optional<chromeos::FloatStartLocation> float_start_location =
+  std::optional<chromeos::FloatStartLocation> float_start_location =
       event->AsFloatEvent()
-          ? absl::make_optional(event->AsFloatEvent()->float_start_location())
-          : absl::nullopt;
+          ? std::make_optional(event->AsFloatEvent()->float_start_location())
+          : std::nullopt;
   EnterToNextState(window_state, next_state_type, float_start_location);
 }
 
@@ -463,7 +441,13 @@ bool DefaultState::SetMaximizedOrFullscreenBounds(WindowState* window_state) {
 
 void DefaultState::SetBounds(WindowState* window_state,
                              const SetBoundsWMEvent* event) {
-  if (window_state->is_dragged() || window_state->allow_set_bounds_direct()) {
+  // TODO(andreaorru|oshima): Fix dragging code so that if a window is dragging
+  // tabs, it contains drag details, and `is_dragged` is true for its state.
+  // Then we can simplify this condition and remove `IsDraggingTabs`.
+  bool is_dragged = window_state->is_dragged() ||
+                    window_util::IsDraggingTabs(window_state->window());
+
+  if (is_dragged || window_state->allow_set_bounds_direct()) {
     if (event->animate()) {
       window_state->SetBoundsDirectAnimated(event->requested_bounds(),
                                             event->duration());
@@ -491,7 +475,7 @@ void DefaultState::SetBounds(WindowState* window_state,
 void DefaultState::EnterToNextState(
     WindowState* window_state,
     WindowStateType next_state_type,
-    absl::optional<chromeos::FloatStartLocation> float_start_location) {
+    std::optional<chromeos::FloatStartLocation> float_start_location) {
   if (!ShouldEnterNextState(state_type_, next_state_type, window_state)) {
     return;
   }
@@ -595,7 +579,7 @@ void DefaultState::ReenterToCurrentState(
   }
 
   UpdateBoundsFromState(window_state, state_in_previous_mode->GetType(),
-                        /*float_start_location=*/absl::nullopt);
+                        /*float_start_location=*/std::nullopt);
   UpdateMinimizedState(window_state, state_in_previous_mode->GetType());
 
   // Then restore the restore bounds to their previous value.
@@ -610,7 +594,7 @@ void DefaultState::ReenterToCurrentState(
 void DefaultState::UpdateBoundsFromState(
     WindowState* window_state,
     WindowStateType previous_state_type,
-    absl::optional<chromeos::FloatStartLocation> float_start_location) {
+    std::optional<chromeos::FloatStartLocation> float_start_location) {
   aura::Window* window = window_state->window();
   gfx::Rect bounds_in_parent;
 
@@ -627,8 +611,9 @@ void DefaultState::UpdateBoundsFromState(
           window_state->window(), state_type_, *window_state->snap_ratio());
       base::UmaHistogramEnumeration(
           kSnapWindowDeviceOrientationHistogramName,
-          chromeos::IsDisplayLayoutHorizontal(
-              display::Screen::GetScreen()->GetDisplayNearestWindow(window))
+          display::Screen::GetScreen()
+                  ->GetDisplayNearestWindow(window)
+                  .is_landscape()
               ? SplitViewMetricsController::DeviceOrientation::kLandscape
               : SplitViewMetricsController::DeviceOrientation::kPortrait);
       break;
@@ -716,12 +701,12 @@ void DefaultState::UpdateBoundsFromState(
   } else {
     // Record smoothness of the snapping animation if the size of the window
     // changes.
-    absl::optional<ui::AnimationThroughputReporter> reporter;
+    std::optional<ui::AnimationThroughputReporter> reporter;
     if (window_state->IsSnapped() &&
         bounds_in_parent.size() != window->bounds().size()) {
       reporter.emplace(
           window_state->window()->layer()->GetAnimator(),
-          metrics_util::ForSmoothness(base::BindRepeating([](int smoothness) {
+          metrics_util::ForSmoothnessV3(base::BindRepeating([](int smoothness) {
             UMA_HISTOGRAM_PERCENTAGE(kSnapWindowSmoothnessHistogramName,
                                      smoothness);
           })));
@@ -744,8 +729,11 @@ void DefaultState::UpdateBoundsForDisplayOrWorkAreaBoundsChange(
   gfx::Rect bounds = window_state->window()->GetTargetBounds();
   if (ensure_full_window_visibility)
     bounds.AdjustToFit(work_area_in_parent);
-  else if (!::wm::GetTransientParent(window_state->window()))
+  else if (!wm::GetTransientParent(window_state->window()) &&
+           !(window_state->IsPip() &&
+             Shell::Get()->pip_controller()->is_tucked())) {
     AdjustBoundsToEnsureMinimumWindowVisibility(work_area_in_parent, &bounds);
+  }
   window_state->AdjustSnappedBoundsForDisplayWorkspaceChange(&bounds);
 
   if (window_state->window()->GetTargetBounds() == bounds)

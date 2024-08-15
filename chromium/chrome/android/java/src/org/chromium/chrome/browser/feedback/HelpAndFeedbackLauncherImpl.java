@@ -75,10 +75,14 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
             return;
         }
         RecordUserAction.record("MobileHelpAndFeedback");
-        new ChromeFeedbackCollector(activity, null /* categoryTag */, null /* description */,
+        new ChromeFeedbackCollector(
+                activity,
+                /* categoryTag= */ null,
+                /* description= */ null,
                 new ScreenshotTask(activity),
                 new ChromeFeedbackCollector.InitParams(mProfile, url, helpContext),
-                collector -> mDelegate.show(activity, helpContext, collector), mProfile);
+                collector -> mDelegate.show(activity, helpContext, collector),
+                mProfile);
     }
 
     /**
@@ -92,16 +96,22 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
      * @param feedbackContext The context that describes the current feature being used.
      */
     @Override
-    public void showFeedback(final Activity activity, @Nullable String url,
-            @Nullable final String categoryTag, @ScreenshotMode int screenshotMode,
+    public void showFeedback(
+            final Activity activity,
+            @Nullable String url,
+            @Nullable final String categoryTag,
+            @ScreenshotMode int screenshotMode,
             @Nullable final String feedbackContext) {
         long startTime = SystemClock.elapsedRealtime();
-        new ChromeFeedbackCollector(activity, categoryTag, null /* description */,
+        new ChromeFeedbackCollector(
+                activity,
+                categoryTag,
+                /* description= */ null,
                 new ScreenshotTask(activity, screenshotMode),
                 new ChromeFeedbackCollector.InitParams(mProfile, url, feedbackContext),
-                (collector)
-                        -> {
-                    RecordHistogram.recordLongTimesHistogram("Feedback.Duration.FormOpenToSubmit",
+                (collector) -> {
+                    RecordHistogram.recordLongTimesHistogram(
+                            "Feedback.Duration.FormOpenToSubmit",
                             SystemClock.elapsedRealtime() - startTime);
                     mDelegate.showFeedback(activity, collector);
                 },
@@ -131,12 +141,19 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
      * @param feedContext Feed specific parameters (url, title, etc) to include with feedback.
      */
     @Override
-    public void showFeedback(final Activity activity, @Nullable String url,
-            @Nullable final String categoryTag, @Nullable final Map<String, String> feedContext) {
-        new FeedFeedbackCollector(activity, categoryTag, null /* description */,
+    public void showFeedback(
+            final Activity activity,
+            @Nullable String url,
+            @Nullable final String categoryTag,
+            @Nullable final Map<String, String> feedContext) {
+        new FeedFeedbackCollector(
+                activity,
+                categoryTag,
+                /* description= */ null,
                 new ScreenshotTask(activity),
                 new FeedFeedbackCollector.InitParams(mProfile, url, feedContext),
-                collector -> mDelegate.showFeedback(activity, collector), mProfile);
+                collector -> mDelegate.showFeedback(activity, collector),
+                mProfile);
     }
 
     /**

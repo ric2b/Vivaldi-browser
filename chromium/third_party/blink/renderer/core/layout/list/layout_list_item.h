@@ -7,7 +7,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/list_item_ordinal.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 
 namespace blink {
 
@@ -43,7 +43,10 @@ class CORE_EXPORT LayoutListItem final : public LayoutNGBlockFlow {
   }
 
  private:
-  bool IsOfType(LayoutObjectType) const override;
+  bool IsLayoutListItem() const final {
+    NOT_DESTROYED();
+    return true;
+  }
 
   void InsertedIntoTree() override;
   void WillBeRemovedFromTree() override;

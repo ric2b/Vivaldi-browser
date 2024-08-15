@@ -18,49 +18,59 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwThreadUtils;
 import org.chromium.android_webview.common.crash.AwCrashReporterClient;
+import org.chromium.base.JniAndroid;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 
 import java.lang.reflect.Field;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * Test suite for actions that should cause java exceptions to be
- * propagated to the embedding application.
+ * Test suite for actions that should cause java exceptions to be propagated to the embedding
+ * application.
  */
-@RunWith(AwJUnit4ClassRunner.class)
-public class AwUncaughtExceptionTest {
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
+@DoNotBatch(reason = "uncaught exceptions leave the process in a bad state")
+public class AwUncaughtExceptionTest extends AwParameterizedTest {
     // Initialization of WebView is delayed until a background thread
     // is started. This gives us the chance to process the uncaught
     // exception off the UI thread. An uncaught exception on the UI
     // thread appears to cause the test to fail to exit.
-    @Rule
-    public AwActivityTestRule mActivityTestRule =
-            new AwActivityTestRule() {
-                @Override
-                public boolean needsAwBrowserContextCreated() {
-                    return false;
-                }
+    @Rule public AwActivityTestRule mActivityTestRule;
 
-                @Override
-                public boolean needsBrowserProcessStarted() {
-                    return false;
-                }
+    public AwUncaughtExceptionTest(AwSettingsMutation param) {
+        mActivityTestRule =
+                new AwActivityTestRule(param.getMutation()) {
+                    @Override
+                    public boolean needsAwBrowserContextCreated() {
+                        return false;
+                    }
 
-                @Override
-                public boolean needsAwContentsCleanup() {
-                    // State of VM might be hosed after throwing and not catching exceptions.
-                    // Do not assume it is safe to destroy AwContents by posting to the UI thread.
-                    // Instead explicitly destroy any AwContents created in this test.
-                    return false;
-                }
-            };
+                    @Override
+                    public boolean needsBrowserProcessStarted() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean needsAwContentsCleanup() {
+                        // State of VM might be hosed after throwing and not catching exceptions.
+                        // Do not assume it is safe to destroy AwContents by posting to the UI
+                        // thread.
+                        // Instead explicitly destroy any AwContents created in this test.
+                        return false;
+                    }
+                };
+    }
 
     private class BackgroundThread extends Thread {
         private Looper mLooper;
@@ -102,6 +112,7 @@ public class AwUncaughtExceptionTest {
     private AwTestContainerView mTestContainerView;
     private AwContents mAwContents;
     private Thread.UncaughtExceptionHandler mDefaultUncaughtExceptionHandler;
+    private boolean mCleanupBackgroundThread = true;
 
     // Since this test overrides the UI thread, Android's ActivityLifecycleMonitor assertions fail
     // as our UI thread isn't the Main Looper thread, so we have to disable them.
@@ -132,11 +143,13 @@ public class AwUncaughtExceptionTest {
 
     @After
     public void tearDown() throws InterruptedException {
-        Looper backgroundThreadLooper = mBackgroundThread.getLooper();
-        if (backgroundThreadLooper != null) {
-            backgroundThreadLooper.quitSafely();
+        if (mCleanupBackgroundThread) {
+            Looper backgroundThreadLooper = mBackgroundThread.getLooper();
+            if (backgroundThreadLooper != null) {
+                backgroundThreadLooper.quitSafely();
+            }
+            mBackgroundThread.join();
         }
-        mBackgroundThread.join();
         Thread.setDefaultUncaughtExceptionHandler(mDefaultUncaughtExceptionHandler);
     }
 
@@ -148,6 +161,10 @@ public class AwUncaughtExceptionTest {
             Runnable onException) {
         Thread.setDefaultUncaughtExceptionHandler(
                 (thread, exception) -> {
+                    if (exception instanceof JniAndroid.UncaughtExceptionException) {
+                        // Unwrap the UncaughtExceptionException.
+                        exception = exception.getCause();
+                    }
                     if ((onThread == null || onThread.equals(thread))
                             && (exceptionClass == null || exceptionClass.isInstance(exception))
                             && (message == null || exception.getMessage().equals(message))) {
@@ -171,7 +188,10 @@ public class AwUncaughtExceptionTest {
                 msg,
                 /* reportable= */ true,
                 () -> {
+                    mCleanupBackgroundThread = false;
                     latch.countDown();
+                    // Do not return to native as this will terminate the process.
+                    Looper.loop();
                 });
 
         Runnable r =
@@ -218,7 +238,10 @@ public class AwUncaughtExceptionTest {
                 msg,
                 /* reportable= */ false,
                 () -> {
+                    mCleanupBackgroundThread = false;
                     latch.countDown();
+                    // Do not return to native as this will terminate the process.
+                    Looper.loop();
                 });
 
         Runnable r =

@@ -16,6 +16,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwContents;
@@ -44,12 +46,13 @@ import java.util.Map;
  * server may not be able to start if the same test is run multiple times in quick succession.
  */
 @Batch(Batch.PER_CLASS)
-@RunWith(AwJUnit4ClassRunner.class)
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
 @CommandLineFlags.Add({
     "origin-trial-public-key=dRCs+TocuKkocNKa0AtZ4awrt9XKH2SQCI6o4FY6BNA=",
     "enable-features=PersistentOriginTrials,WebViewXRequestedWithHeaderControl"
 })
-public class XRWOriginTrialTest {
+public class XRWOriginTrialTest extends AwParameterizedTest {
     private static final String ORIGIN_TRIAL_HEADER = "Origin-Trial";
     private static final String CRITICAL_ORIGIN_TRIAL_HEADER = "Critical-Origin-Trial";
     private static final String XRW_HEADER = "X-Requested-With";
@@ -58,10 +61,14 @@ public class XRWOriginTrialTest {
 
     private static final String REQUEST_PATH = "/";
 
-    @Rule public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+    @Rule public AwActivityTestRule mActivityTestRule;
 
     private TestAwContentsClient mContentsClient;
     private AwContents mAwContents;
+
+    public XRWOriginTrialTest(AwSettingsMutation param) {
+        this.mActivityTestRule = new AwActivityTestRule(param.getMutation());
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -112,8 +119,8 @@ public class XRWOriginTrialTest {
         */
         final String trialToken =
                 "AyNFCtEW5OxS8NeOGQ5IN10l6pQiiDRWtvgLq7teZDxi7gl//fxZ/EBVYXDWqYs8LQ5IhCx/xya5ZHh1NT"
-                    + "FA1AwAAABpeyJvcmlnaW4iOiAiaHR0cDovL2xvY2FsaG9zdDoyMjQ0MyIsICJmZWF0dXJlIjogIl"
-                    + "dlYlZpZXdYUmVxdWVzdGVkV2l0aERlcHJlY2F0aW9uIiwgImV4cGlyeSI6IDIwMDAwMDAwMDB9";
+                        + "FA1AwAAABpeyJvcmlnaW4iOiAiaHR0cDovL2xvY2FsaG9zdDoyMjQ0MyIsICJmZWF0dXJlIjogIl"
+                        + "dlYlZpZXdYUmVxdWVzdGVkV2l0aERlcHJlY2F0aW9uIiwgImV4cGlyeSI6IDIwMDAwMDAwMDB9";
         // Port number unique to this test method. Other tests should use different ports.
         try (TestWebServer server = TestWebServer.start(22443)) {
             var headers = Map.of(ORIGIN_TRIAL_HEADER, trialToken);
@@ -139,8 +146,8 @@ public class XRWOriginTrialTest {
         */
         final String trialToken =
                 "A/kHrOHw8h7WZ6L54iqkbhLpjf8m6dhrvKfZ1IQS3lF32ZFowFpx3E9LFYftApKPUZ5HBkSr5GI1UQra8c"
-                    + "nK3QQAAABpeyJvcmlnaW4iOiAiaHR0cDovL2xvY2FsaG9zdDoyMjQ1MyIsICJmZWF0dXJlIjogIl"
-                    + "dlYlZpZXdYUmVxdWVzdGVkV2l0aERlcHJlY2F0aW9uIiwgImV4cGlyeSI6IDIwMDAwMDAwMDB9";
+                        + "nK3QQAAABpeyJvcmlnaW4iOiAiaHR0cDovL2xvY2FsaG9zdDoyMjQ1MyIsICJmZWF0dXJlIjogIl"
+                        + "dlYlZpZXdYUmVxdWVzdGVkV2l0aERlcHJlY2F0aW9uIiwgImV4cGlyeSI6IDIwMDAwMDAwMDB9";
         // Port number unique to this test method. Other tests should use different ports.
         try (TestWebServer server = TestWebServer.start(22453)) {
             var headers =
@@ -171,9 +178,9 @@ public class XRWOriginTrialTest {
         // WebViewXRequestedWithDeprecation --expire-timestamp=2000000000 --is-third-party
         final String trialToken =
                 "A6cHxkfwJmfXXuUv6PrTqnYqPcrnrDj50ZrzAJaIR394yEKISBDrhAiLecCfb1fSBA/8H4jAHQf0uUREEm"
-                    + "HLcwYAAAB/eyJvcmlnaW4iOiAiaHR0cDovL2xvY2FsaG9zdDoyMjQ3MyIsICJmZWF0dXJlIjogIl"
-                    + "dlYlZpZXdYUmVxdWVzdGVkV2l0aERlcHJlY2F0aW9uIiwgImV4cGlyeSI6IDIwMDAwMDAwMDAsIC"
-                    + "Jpc1RoaXJkUGFydHkiOiB0cnVlfQ==";
+                        + "HLcwYAAAB/eyJvcmlnaW4iOiAiaHR0cDovL2xvY2FsaG9zdDoyMjQ3MyIsICJmZWF0dXJlIjogIl"
+                        + "dlYlZpZXdYUmVxdWVzdGVkV2l0aERlcHJlY2F0aW9uIiwgImV4cGlyeSI6IDIwMDAwMDAwMDAsIC"
+                        + "Jpc1RoaXJkUGFydHkiOiB0cnVlfQ==";
         try (TestWebServer primaryServer = TestWebServer.start(mainServerPort);
                 TestWebServer thirdPartyServer = TestWebServer.startAdditional(thirdPartyPort)) {
             // This is our target request, which should have the XRW header.

@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 
 namespace blink {
 
@@ -56,6 +57,7 @@ class TestCSSParserObserver : public CSSParserObserver {
 };
 
 TEST(CSSParserImplTest, AtImportOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@import 'test.css';";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -72,6 +74,7 @@ TEST(CSSParserImplTest, AtImportOffsets) {
 }
 
 TEST(CSSParserImplTest, AtMediaOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@media screen { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -88,6 +91,7 @@ TEST(CSSParserImplTest, AtMediaOffsets) {
 }
 
 TEST(CSSParserImplTest, AtSupportsOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@supports (display:none) { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -105,6 +109,7 @@ TEST(CSSParserImplTest, AtSupportsOffsets) {
 }
 
 TEST(CSSParserImplTest, AtFontFaceOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@font-face { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -122,6 +127,7 @@ TEST(CSSParserImplTest, AtFontFaceOffsets) {
 }
 
 TEST(CSSParserImplTest, AtKeyframesOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@keyframes test { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -139,6 +145,7 @@ TEST(CSSParserImplTest, AtKeyframesOffsets) {
 }
 
 TEST(CSSParserImplTest, AtPageOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@page :first { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -155,6 +162,7 @@ TEST(CSSParserImplTest, AtPageOffsets) {
 }
 
 TEST(CSSParserImplTest, AtPropertyOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@property --test { syntax: '*'; inherits: false }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -172,6 +180,7 @@ TEST(CSSParserImplTest, AtPropertyOffsets) {
 }
 
 TEST(CSSParserImplTest, AtCounterStyleOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@counter-style test { }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -189,6 +198,7 @@ TEST(CSSParserImplTest, AtCounterStyleOffsets) {
 }
 
 TEST(CSSParserImplTest, AtContainerOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@container (max-width: 100px) { }";
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -207,7 +217,7 @@ TEST(CSSParserImplTest, AtContainerOffsets) {
 }
 
 TEST(CSSParserImplTest, DirectNesting) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text =
       ".element { color: green; &.other { color: red; margin-left: 10px; }}";
 
@@ -233,7 +243,7 @@ TEST(CSSParserImplTest, DirectNesting) {
 }
 
 TEST(CSSParserImplTest, RuleNotStartingWithAmpersand) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text = ".element { color: green;  .outer & { color: red; }}";
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -259,7 +269,7 @@ TEST(CSSParserImplTest, RuleNotStartingWithAmpersand) {
 }
 
 TEST(CSSParserImplTest, ImplicitDescendantSelector) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text = ".element { color: green; .outer { color: red; }}";
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -285,7 +295,7 @@ TEST(CSSParserImplTest, ImplicitDescendantSelector) {
 }
 
 TEST(CSSParserImplTest, NestedRelativeSelector) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text = ".element { color: green; > .inner { color: red; }}";
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -311,6 +321,7 @@ TEST(CSSParserImplTest, NestedRelativeSelector) {
 }
 
 TEST(CSSParserImplTest, NestingAtTopLevelIsLegalThoughIsMatchesNothing) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "&.element { color: orchid; }";
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -327,6 +338,7 @@ TEST(CSSParserImplTest, NestingAtTopLevelIsLegalThoughIsMatchesNothing) {
 }
 
 TEST(CSSParserImplTest, ErrorRecoveryEatsOnlyFirstDeclaration) {
+  test::TaskEnvironment task_environment;
   // Note the colon after the opening bracket.
   String sheet_text = R"CSS(
     .element {:
@@ -351,6 +363,7 @@ TEST(CSSParserImplTest, ErrorRecoveryEatsOnlyFirstDeclaration) {
 }
 
 TEST(CSSParserImplTest, NestedEmptySelectorCrash) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "y{ :is() {} }";
 
   auto* context = MakeGarbageCollected<CSSParserContext>(
@@ -364,7 +377,7 @@ TEST(CSSParserImplTest, NestedEmptySelectorCrash) {
 }
 
 TEST(CSSParserImplTest, NestedRulesInsideMediaQueries) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text = R"CSS(
     .element {
       color: green;
@@ -412,7 +425,7 @@ TEST(CSSParserImplTest, NestedRulesInsideMediaQueries) {
 }
 
 TEST(CSSParserImplTest, ObserveNestedMediaQuery) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text = R"CSS(
     .element {
       color: green;
@@ -437,7 +450,7 @@ TEST(CSSParserImplTest, ObserveNestedMediaQuery) {
 }
 
 TEST(CSSParserImplTest, ObserveNestedLayer) {
-  ScopedCSSNestingForTest enabled(true);
+  test::TaskEnvironment task_environment;
   String sheet_text = R"CSS(
     .element {
       color: green;
@@ -462,6 +475,7 @@ TEST(CSSParserImplTest, ObserveNestedLayer) {
 }
 
 TEST(CSSParserImplTest, NestedIdent) {
+  test::TaskEnvironment task_environment;
   ScopedCSSNestingIdentForTest enabled(true);
 
   String sheet_text = "div { p:hover { } }";
@@ -478,6 +492,7 @@ TEST(CSSParserImplTest, NestedIdent) {
 }
 
 TEST(CSSParserImplTest, RemoveImportantAnnotationIfPresent) {
+  test::TaskEnvironment task_environment;
   struct TestCase {
     String input;
     String expected_text;
@@ -511,6 +526,7 @@ TEST(CSSParserImplTest, RemoveImportantAnnotationIfPresent) {
 }
 
 TEST(CSSParserImplTest, InvalidLayerRules) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -537,6 +553,7 @@ TEST(CSSParserImplTest, InvalidLayerRules) {
 }
 
 TEST(CSSParserImplTest, ValidLayerBlockRule) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -572,6 +589,7 @@ TEST(CSSParserImplTest, ValidLayerBlockRule) {
 }
 
 TEST(CSSParserImplTest, ValidLayerStatementRule) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -614,6 +632,7 @@ TEST(CSSParserImplTest, ValidLayerStatementRule) {
 }
 
 TEST(CSSParserImplTest, NestedLayerRules) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -677,6 +696,7 @@ TEST(CSSParserImplTest, NestedLayerRules) {
 }
 
 TEST(CSSParserImplTest, LayeredImportRules) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -712,6 +732,7 @@ TEST(CSSParserImplTest, LayeredImportRules) {
 }
 
 TEST(CSSParserImplTest, LayeredImportRulesInvalid) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -742,7 +763,64 @@ TEST(CSSParserImplTest, LayeredImportRulesInvalid) {
   }
 }
 
+TEST(CSSParserImplTest, ImportRulesWithSupports) {
+  test::TaskEnvironment task_environment;
+  using css_test_helpers::ParseRule;
+  ScopedNullExecutionContext execution_context;
+  Document* document =
+      Document::CreateForTest(execution_context.GetExecutionContext());
+
+  {
+    String rule =
+        "@import url(foo.css) layer(bar.baz) supports(display: block);";
+    auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
+    ASSERT_TRUE(parsed);
+    ASSERT_TRUE(parsed->IsSupported());
+  }
+
+  {
+    String rule = "@import url(foo.css) supports(display: block);";
+    auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
+    ASSERT_TRUE(parsed);
+    ASSERT_TRUE(parsed->IsSupported());
+  }
+
+  {
+    String rule =
+        "@import url(foo.css)   supports((display: block) and (color: green));";
+    auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
+    ASSERT_TRUE(parsed);
+    ASSERT_TRUE(parsed->IsSupported());
+  }
+
+  {
+    String rule =
+        "@import url(foo.css) supports((foo: bar) and (color: green));";
+    auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
+    ASSERT_TRUE(parsed);
+    ASSERT_FALSE(parsed->IsSupported());
+  }
+
+  {
+    String rule = "@import url(foo.css) supports());";
+    auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
+    ASSERT_TRUE(parsed);
+    ASSERT_FALSE(parsed->IsSupported());
+  }
+
+  {
+    String rule = "@import url(foo.css) supports(color: green) (width >= 0px);";
+    auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
+    ASSERT_TRUE(parsed);
+    ASSERT_TRUE(parsed->IsSupported());
+    ASSERT_TRUE(parsed->MediaQueries());
+    ASSERT_EQ(parsed->MediaQueries()->QueryVector().size(), 1u);
+    ASSERT_EQ(parsed->MediaQueries()->MediaText(), String("(width >= 0px)"));
+  }
+}
+
 TEST(CSSParserImplTest, LayeredImportRulesMultipleLayers) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -783,6 +861,7 @@ TEST(CSSParserImplTest, LayeredImportRulesMultipleLayers) {
 }
 
 TEST(CSSParserImplTest, CorrectAtRuleOrderingWithLayers) {
+  test::TaskEnvironment task_environment;
   String sheet_text = R"CSS(
     @layer foo;
     @import url(bar.css) layer(bar);
@@ -803,6 +882,7 @@ TEST(CSSParserImplTest, CorrectAtRuleOrderingWithLayers) {
 }
 
 TEST(CSSParserImplTest, EmptyLayerStatementsAtWrongPositions) {
+  test::TaskEnvironment task_environment;
   {
     // @layer interleaving with @import rules
     String sheet_text = R"CSS(
@@ -848,6 +928,7 @@ TEST(CSSParserImplTest, EmptyLayerStatementsAtWrongPositions) {
 }
 
 TEST(CSSParserImplTest, EmptyLayerStatementAfterRegularRule) {
+  test::TaskEnvironment task_environment;
   // Empty @layer statements after regular rules are parsed as regular rules.
 
   String sheet_text = R"CSS(
@@ -866,6 +947,7 @@ TEST(CSSParserImplTest, EmptyLayerStatementAfterRegularRule) {
 }
 
 TEST(CSSParserImplTest, FontPaletteValuesDisabled) {
+  test::TaskEnvironment task_environment;
   // @font-palette-values rules should be ignored when the feature is disabled.
 
   using css_test_helpers::ParseRule;
@@ -879,6 +961,7 @@ TEST(CSSParserImplTest, FontPaletteValuesDisabled) {
 }
 
 TEST(CSSParserImplTest, FontPaletteValuesBasicRuleParsing) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -900,6 +983,7 @@ TEST(CSSParserImplTest, FontPaletteValuesBasicRuleParsing) {
 }
 
 TEST(CSSParserImplTest, FontPaletteValuesMultipleFamiliesParsing) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -921,6 +1005,7 @@ TEST(CSSParserImplTest, FontPaletteValuesMultipleFamiliesParsing) {
 // families, compare:
 // https://drafts.csswg.org/css-fonts/#descdef-font-palette-values-font-family.
 TEST(CSSParserImplTest, FontPaletteValuesGenericFamiliesNotParsing) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -939,6 +1024,7 @@ TEST(CSSParserImplTest, FontPaletteValuesGenericFamiliesNotParsing) {
 }
 
 TEST(CSSParserImplTest, FontFeatureValuesRuleParsing) {
+  test::TaskEnvironment task_environment;
   using css_test_helpers::ParseRule;
   ScopedNullExecutionContext execution_context;
   Document* document =
@@ -961,6 +1047,7 @@ TEST(CSSParserImplTest, FontFeatureValuesRuleParsing) {
 }
 
 TEST(CSSParserImplTest, FontFeatureValuesOffsets) {
+  test::TaskEnvironment task_environment;
   String sheet_text = "@font-feature-values myFam { @styleset { curly: 1; } }";
   auto* context = MakeGarbageCollected<CSSParserContext>(
       kHTMLStandardMode, SecureContextMode::kInsecureContext);
@@ -978,6 +1065,7 @@ TEST(CSSParserImplTest, FontFeatureValuesOffsets) {
 }
 
 TEST(CSSParserImplTest, PositionFallbackRuleMaxLength) {
+  test::TaskEnvironment task_environment;
   ScopedCSSAnchorPositioningForTest enabled(true);
 
   String sheet_text = R"CSS(

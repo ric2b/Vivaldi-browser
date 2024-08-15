@@ -62,18 +62,21 @@ export class TransformController extends Common.ObjectWrapper.ObjectWrapper<Even
 
     this.modeButtons = {};
     if (!disableRotate) {
-      const panModeButton = new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.panModeX), '3d-pan');
+      const panModeButton =
+          new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.panModeX), '3d-pan', undefined, 'layers.3d-pan');
       panModeButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.setMode.bind(this, Modes.Pan));
       this.modeButtons[Modes.Pan] = panModeButton;
       this.controlPanelToolbar.appendToolbarItem(panModeButton);
-      const rotateModeButton = new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.rotateModeV), '3d-rotate');
+      const rotateModeButton =
+          new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.rotateModeV), '3d-rotate', undefined, 'layers.3d-rotate');
       rotateModeButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.setMode.bind(this, Modes.Rotate));
       this.modeButtons[Modes.Rotate] = rotateModeButton;
       this.controlPanelToolbar.appendToolbarItem(rotateModeButton);
     }
     this.setMode(Modes.Pan);
 
-    const resetButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.resetTransform), '3d-center');
+    const resetButton =
+        new UI.Toolbar.ToolbarButton(i18nString(UIStrings.resetTransform), '3d-center', undefined, 'layers.3d-center');
     resetButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.resetAndNotify.bind(this, undefined));
     this.controlPanelToolbar.appendToolbarItem(resetButton);
 
@@ -257,9 +260,7 @@ export class TransformController extends Common.ObjectWrapper.ObjectWrapper<Even
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   TransformChanged = 'TransformChanged',
 }
 

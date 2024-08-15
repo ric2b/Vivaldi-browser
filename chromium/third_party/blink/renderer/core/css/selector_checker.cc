@@ -1680,14 +1680,11 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return element.MatchesDefaultPseudoClass();
     case CSSSelector::kPseudoDisabled:
       if (auto* fieldset = DynamicTo<HTMLFieldSetElement>(element)) {
-        if (RuntimeEnabledFeatures::
-                SendMouseEventsDisabledFormControlsEnabled()) {
-          // <fieldset> should never be considered disabled, but should still
-          // match the :enabled or :disabled pseudo-classes according to whether
-          // the attribute is set or not. See here for context:
-          // https://github.com/whatwg/html/issues/5886#issuecomment-1582410112
-          return fieldset->IsActuallyDisabled();
-        }
+        // <fieldset> should never be considered disabled, but should still
+        // match the :enabled or :disabled pseudo-classes according to whether
+        // the attribute is set or not. See here for context:
+        // https://github.com/whatwg/html/issues/5886#issuecomment-1582410112
+        return fieldset->IsActuallyDisabled();
       }
       return element.IsDisabledFormControl();
     case CSSSelector::kPseudoReadOnly:
@@ -1700,13 +1697,15 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return element.IsRequiredFormControl();
     case CSSSelector::kPseudoUserInvalid:
       CHECK(RuntimeEnabledFeatures::UserValidUserInvalidEnabled());
-      if (auto* form_control = DynamicTo<HTMLFormControlElement>(element)) {
+      if (auto* form_control =
+              DynamicTo<HTMLFormControlElementWithState>(element)) {
         return form_control->MatchesUserInvalidPseudo();
       }
       return false;
     case CSSSelector::kPseudoUserValid:
       CHECK(RuntimeEnabledFeatures::UserValidUserInvalidEnabled());
-      if (auto* form_control = DynamicTo<HTMLFormControlElement>(element)) {
+      if (auto* form_control =
+              DynamicTo<HTMLFormControlElementWithState>(element)) {
         return form_control->MatchesUserValidPseudo();
       }
       return false;
@@ -1895,9 +1894,6 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoSpatialNavigationFocus:
       DCHECK(is_ua_rule_);
       return MatchesSpatialNavigationFocusPseudoClass(element);
-    case CSSSelector::kPseudoSpatialNavigationInterest:
-      DCHECK(is_ua_rule_);
-      return MatchesSpatialNavigationInterestPseudoClass(element);
     case CSSSelector::kPseudoHasDatalist:
       DCHECK(is_ua_rule_);
       return MatchesHasDatalistPseudoClass(element);
@@ -1976,6 +1972,33 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoRelativeAnchor:
       DCHECK(context.relative_anchor_element);
       return context.relative_anchor_element == &element;
+    case CSSSelector::kPseudoActiveViewTransition: {
+      // :active_view_transition is only valid on the html element.
+      if (!IsA<HTMLElement>(element)) {
+        return false;
+      }
+
+      if (mode_ == kResolvingStyle) {
+        if (UNLIKELY(context.is_inside_has_pseudo_class)) {
+          element.SetAncestorsOrSiblingsAffectedByActiveViewTransitionInHas();
+        } else if (ImpactsNonSubject(context)) {
+          element.SetChildrenOrSiblingsAffectedByActiveViewTransition();
+        }
+      }
+      if (ImpactsSubject(context)) {
+        result.SetFlag(MatchFlag::kAffectedByActiveViewTransition);
+      }
+
+      // The pseudo is only valid if there is a transition.
+      auto* transition =
+          ViewTransitionUtils::GetTransition(element.GetDocument());
+      if (!transition) {
+        return false;
+      }
+
+      // Ask the transition to match based on the argument list.
+      return transition->MatchForActiveViewTransition(selector.IdentList());
+    }
     case CSSSelector::kPseudoUnparsed:
       // Only kept around for parsing; can never match anything
       // (because we don't know what it's supposed to mean).
@@ -2070,9 +2093,6 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoDetailsContent:
       return MatchesUAShadowElement(element,
                                     shadow_element_names::kIdDetailsContent);
-    case CSSSelector::kPseudoDetailsSummary:
-      return MatchesUAShadowElement(element,
-                                    shadow_element_names::kIdDetailsSummary);
     case CSSSelector::kPseudoWebKitCustomElement:
       return MatchesUAShadowElement(element, selector.Value());
     case CSSSelector::kPseudoBlinkInternalElement:
@@ -2107,16 +2127,28 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
       }
       return false;
     }
+    case CSSSelector::kPseudoViewTransition:
     case CSSSelector::kPseudoViewTransitionGroup:
     case CSSSelector::kPseudoViewTransitionImagePair:
     case CSSSelector::kPseudoViewTransitionOld:
     case CSSSelector::kPseudoViewTransitionNew: {
-      if (CSSSelector::GetPseudoId(selector.GetPseudoType()) !=
-          context.pseudo_id) {
+      const PseudoId selector_pseudo_id =
+          CSSSelector::GetPseudoId(selector.GetPseudoType());
+      if (element.IsDocumentElement() && context.pseudo_id == kPseudoIdNone) {
+        // We don't strictly need to use dynamic_pseudo since we don't rely on
+        // SetHasPseudoElementStyle but we need to return a match to invalidate
+        // the originating element and set dynamic_pseudo to avoid collecting
+        // it as a matched rule in ElementRuleCollector.
+        result.dynamic_pseudo = selector_pseudo_id;
+        return true;
+      }
+
+      if (selector_pseudo_id != context.pseudo_id) {
         return false;
       }
       result.dynamic_pseudo = context.pseudo_id;
-      return selector.Argument() == CSSSelector::UniversalSelectorAtom() ||
+      return selector_pseudo_id == kPseudoIdViewTransition ||
+             selector.Argument() == CSSSelector::UniversalSelectorAtom() ||
              selector.Argument() == pseudo_argument_;
     }
     case CSSSelector::kPseudoScrollbarButton:
@@ -2359,25 +2391,6 @@ bool SelectorChecker::MatchesFocusVisiblePseudoClass(const Element& element) {
 
   return (always_show_focus || is_text_input || !last_focus_from_mouse ||
           had_keyboard_event);
-}
-
-// static
-bool SelectorChecker::MatchesSpatialNavigationInterestPseudoClass(
-    const Element& element) {
-  if (!IsSpatialNavigationEnabled(element.GetDocument().GetFrame())) {
-    return false;
-  }
-
-  if (!RuntimeEnabledFeatures::FocuslessSpatialNavigationEnabled()) {
-    return false;
-  }
-
-  DCHECK(element.GetDocument().GetPage());
-  Element* interested_element = element.GetDocument()
-                                    .GetPage()
-                                    ->GetSpatialNavigationController()
-                                    .GetInterestedElement();
-  return interested_element && *interested_element == element;
 }
 
 namespace {

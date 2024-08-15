@@ -2,12 +2,11 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="1038842779957582377">未知名称</translation>
-<translation id="1089439967362294234">更改密码</translation>
+<translation id="1089439967362294234">更改口令</translation>
 <translation id="1110994991967754504">选择对<ph name="PERMISSION_NAME" />的权限</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外终止了连接。</translation>
 <translation id="1161325031994447685">重新连接到 Wi-Fi 网络</translation>
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />尝试清理 Cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">关于版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送数据。</translation>
 <translation id="1559528461873125649">该文件或目录不存在</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">请尝试联系系统管理员。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />正在尝试运行Windows网络诊断<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">此网站包含有害程序</translation>
-<translation id="1916770123977586577">要将您更新后的设置应用到此网站，请重新加载此页面</translation>
 <translation id="1974060860693918893">高级</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />检查代理服务器和防火墙<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">颁发对象：<ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">攻击者可能能够看到您正在此网站上浏览的图片，并通过编辑这些图片让您受骗。</translation>
 <translation id="2356070529366658676">询问</translation>
 <translation id="2359808026110333948">继续</translation>
+<translation id="2388886110302389394">在新隐身窗口中打开页面 (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />正在进行网络诊断<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">此页面已被某个扩展程序屏蔽</translation>
 <translation id="2501278716633472235">返回</translation>
@@ -60,13 +59,13 @@
 <translation id="3226128629678568754">点击刷新按钮以重新提交加载该网页所需的数据。</translation>
 <translation id="3234666976984236645">始终检测此网站上的重要内容</translation>
 <translation id="3308738399950580893">广告</translation>
-<translation id="3384522979010096022">贵组织不允许您查看此网站</translation>
+<translation id="3384522979010096022">您的组织不允许您查看此网站</translation>
 <translation id="3422472998109090673">目前无法访问 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允许（默认）</translation>
 <translation id="3447661539832366887">此设备的所有者已关闭恐龙游戏。</translation>
 <translation id="3447884698081792621">显示证书（由<ph name="ISSUER" />签发）</translation>
 <translation id="3462200631372590220">隐藏详情</translation>
-<translation id="3484560055331845446">您可能会无法再访问自己的 Google 帐号。Chrome 建议您立即更改密码。系统会要求您登录。</translation>
+<translation id="3484560055331845446">您可能会无法再访问自己的 Google 帐号。Chrome 建议您立即更改口令。系统会要求您登录。</translation>
 <translation id="3566021033012934673">您的连接不是私密连接</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /><ph name="STATE" /><ph name="CITY" /></translation>
 <translation id="3586931643579894722">隐藏详细信息</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">登录</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> 已被屏蔽</translation>
 <translation id="3987940399970879459">小于 1 MB</translation>
+<translation id="4075123085690634698">在新隐身窗口中打开页面 (⇧⌘N)</translation>
 <translation id="4075732493274867456">客户端和服务器不支持一般的 SSL 协议版本或加密套件。</translation>
 <translation id="4116663294526079822">在此网站上始终允许</translation>
 <translation id="4130226655945681476">检查网线、调制解调器和路由器</translation>
@@ -131,7 +131,7 @@
 <translation id="5838278095973806738">请勿在此网站上输入敏感信息（例如密码或信用卡信息），因为攻击者可能会盗取这些信息。</translation>
 <translation id="5869405914158311789">无法访问此网站</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{正在使用 1 个} other {正在使用 # 个}}</translation>
-<translation id="5932224571077948991">网站展示过侵扰性或误导性广告</translation>
+<translation id="5932224571077948991">网站展示侵扰性或误导性广告</translation>
 <translation id="6051221802930200923">您目前无法访问 <ph name="SITE" />，因为此网站使用了证书锁定。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="6146055958333702838">请检查所有网线连接状况，然后重启所有您可能正在使用的路由器、调制解调器
 或其他网络设备。</translation>
@@ -151,11 +151,12 @@
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">确认重新提交表单</translation>
 <translation id="6569060085658103619">您正在查看扩展程序页面</translation>
-<translation id="6657585470893396449">密码</translation>
+<translation id="6657585470893396449">口令</translation>
 <translation id="6711464428925977395">代理服务器出现问题，或者地址有误。</translation>
 <translation id="6757797048963528358">您的设备已进入休眠模式。</translation>
 <translation id="6890956352250146925">Cookie 和网站数据的相关选项</translation>
 <translation id="6897140037006041989">用户代理</translation>
+<translation id="6957624206566198865">在新隐身窗口中打开页面</translation>
 <translation id="7053983685419859001">禁止</translation>
 <translation id="7079718277001814089">此网站包含恶意软件</translation>
 <translation id="7096937462164235847">此网站的身份未经验证。</translation>
@@ -167,7 +168,7 @@
 <translation id="7221855153210829124">显示通知</translation>
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7364115444476960850">您尝试访问的页面被Vivaldi的<ph name="BLOCKER_NAME" />阻止</translation>
-<translation id="7419106976560586862">个人资料路径</translation>
+<translation id="7419106976560586862">配置文件路径</translation>
 <translation id="7445762425076701745">无法完全验证您所连接到的服务器的身份。您在连接服务器时使用的服务器名称仅在您的网络中有效，而外部证书授权中心无法验证该名称的所有权。由于一些证书授权中心仍然会为这些名称颁发证书，因此无法确保您连接到想要访问的网站而不是攻击网站。</translation>
 <translation id="7455133967321480974">使用全局默认设置（阻止）</translation>
 <translation id="7518003948725431193">找不到与以下网址对应的网页：<ph name="URL" /></translation>
@@ -182,12 +183,13 @@
 <translation id="7758069387465995638">防火墙或防病毒软件可能已阻止您连接到网络。</translation>
 <translation id="7800304661137206267">该连接是使用 <ph name="CIPHER" /> 进行加密的，同时使用 <ph name="MAC" /> 进行讯息身份验证并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> 通常会使用加密技术来保护您的信息。Vivaldi 此次尝试连接到 <ph name="SITE" /> 时，该网站发回了异常的错误凭据。这可能是因为有攻击者在试图冒充 <ph name="SITE" />，或者 Wi-Fi 登录屏幕中断了此次连接。请放心，您的信息仍然是安全的，因为 Vivaldi 尚未进行任何数据交换便停止了连接。</translation>
-<translation id="7878562273885520351">您的密码可能已泄露</translation>
+<translation id="7878562273885520351">您的口令可能已泄露</translation>
 <translation id="7951415247503192394">（32 位）</translation>
+<translation id="7953236668995583915">请重新加载此页面，以便在该网站上应用更新后的设置</translation>
 <translation id="8025119109950072390">此网站上的攻击者可能会诱骗您做出一些诸如安装软件或泄露个人信息（例如：密码、电话号码或信用卡信息）之类的危险事情。</translation>
 <translation id="8037357227543935929">询问（默认）</translation>
 <translation id="8041940743680923270">使用全局默认设置（询问）</translation>
-<translation id="808894953321890993">更改密码</translation>
+<translation id="808894953321890993">更改口令</translation>
 <translation id="8119307142152921512">广告和追踪器</translation>
 <translation id="8149426793427495338">您的计算机已进入休眠模式。</translation>
 <translation id="8150722005171944719">无法读取 <ph name="URL" /> 上的文件。该文件可能已遭到删除、移动，或者文件权限不允许进行访问。</translation>
@@ -216,7 +218,7 @@
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9180553614777056266">广告拦截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
-<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改密码。系统会要求您登录。</translation>
+<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改口令。系统会要求您登录。</translation>
 <translation id="969892804517981540">官方版</translation>
 <translation id="988159990683914416">开发者内部版本</translation>
 </translationbundle>

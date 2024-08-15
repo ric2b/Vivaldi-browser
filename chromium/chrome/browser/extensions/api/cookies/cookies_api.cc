@@ -251,7 +251,7 @@ ExtensionFunction::ResponseAction CookiesGetFunction::Run() {
   if (!cookie_manager)
     return RespondNow(Error(std::move(error)));
 
-  absl::optional<net::CookiePartitionKey> partition_key;
+  std::optional<net::CookiePartitionKey> partition_key;
   if (!cookies_helpers::ValidateCookieApiPartitionKey(
           parsed_args_->details.partition_key, partition_key, error)) {
     return RespondNow(Error(std::move(error)));
@@ -279,9 +279,10 @@ void CookiesGetFunction::GetCookieListCallback(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (const net::CookieWithAccessResult& cookie_with_access_result :
        cookie_list) {
-    if (!cookies_helpers::CookieMatchesPartitionKeyInDetails(
-            parsed_args_->details.partition_key,
-            cookie_with_access_result.cookie)) {
+    if (!cookies_helpers::
+            CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+                parsed_args_->details.partition_key,
+                cookie_with_access_result.cookie.PartitionKey())) {
       continue;
     }
 
@@ -340,7 +341,7 @@ ExtensionFunction::ResponseAction CookiesGetAllFunction::Run() {
     return RespondNow(Error(std::move(error)));
 
   // make sure user input is valid
-  absl::optional<net::CookiePartitionKey> partition_key;
+  std::optional<net::CookiePartitionKey> partition_key;
   if (!cookies_helpers::ValidateCookieApiPartitionKey(
           parsed_args_->details.partition_key, partition_key, error)) {
     return RespondNow(Error(std::move(error)));
@@ -447,7 +448,7 @@ ExtensionFunction::ResponseAction CookiesSetFunction::Run() {
   if (!cookie_manager)
     return RespondNow(Error(std::move(error)));
 
-  absl::optional<net::CookiePartitionKey> partition_key;
+  std::optional<net::CookiePartitionKey> partition_key;
   if (!cookies_helpers::ValidateCookieApiPartitionKey(
           parsed_args_->details.partition_key, partition_key, error)) {
     return RespondNow(Error(std::move(error)));
@@ -486,7 +487,6 @@ ExtensionFunction::ResponseAction CookiesSetFunction::Run() {
       break;
   }
 
-  // TODO(crbug.com/1144181): Add support for SameParty attribute.
   std::unique_ptr<net::CanonicalCookie> cc(
       net::CanonicalCookie::CreateSanitizedCookie(
           url_,                                                  //
@@ -501,7 +501,6 @@ ExtensionFunction::ResponseAction CookiesSetFunction::Run() {
           parsed_args_->details.http_only.value_or(false),       //
           same_site,                                             //
           net::COOKIE_PRIORITY_DEFAULT,                          //
-          /*same_party=*/false,                                  //
           partition_key));
   if (!cc) {
     // Return error through callbacks so that the proper error message
@@ -555,16 +554,17 @@ void CookiesSetFunction::GetCookieListCallback(
     return;
   }
 
-  absl::optional<ResponseValue> value;
+  std::optional<ResponseValue> value;
   for (const net::CookieWithAccessResult& cookie_with_access_result :
        cookie_list) {
     // Return the first matching cookie. Relies on the fact that the
     // CookieMonster returns them in canonical order (longest path, then
     // earliest creation time).
 
-    if (!extensions::cookies_helpers::CookieMatchesPartitionKeyInDetails(
-            parsed_args_->details.partition_key,
-            cookie_with_access_result.cookie)) {
+    if (!extensions::cookies_helpers::
+            CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+                parsed_args_->details.partition_key,
+                cookie_with_access_result.cookie.PartitionKey())) {
       continue;
     }
 
@@ -603,7 +603,7 @@ ExtensionFunction::ResponseAction CookiesRemoveFunction::Run() {
   if (!cookie_manager)
     return RespondNow(Error(std::move(error)));
 
-  absl::optional<net::CookiePartitionKey> partition_key;
+  std::optional<net::CookiePartitionKey> partition_key;
   if (!cookies_helpers::ValidateCookieApiPartitionKey(
           parsed_args_->details.partition_key, partition_key, error)) {
     return RespondNow(Error(std::move(error)));
@@ -659,7 +659,7 @@ ExtensionFunction::ResponseAction CookiesGetAllCookieStoresFunction::Run() {
   // Iterate through all browser instances, and for each browser,
   // add its tab IDs to either the regular or incognito tab ID list depending
   // whether the browser is regular or incognito.
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->profile() == original_profile) {
       cookies_helpers::AppendToTabIdList(browser, original_tab_ids);
     } else if (browser->profile() == incognito_profile) {

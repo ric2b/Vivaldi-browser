@@ -361,13 +361,13 @@ void KcerImpl::DoesPrivateKeyExist(PrivateKeyHandle key,
 
 void KcerImpl::DoesPrivateKeyExistWithToken(
     DoesKeyExistCallback callback,
-    base::expected<absl::optional<Token>, Error> find_key_result) {
+    base::expected<std::optional<Token>, Error> find_key_result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (!find_key_result.has_value()) {
     return std::move(callback).Run(base::unexpected(find_key_result.error()));
   }
-  const absl::optional<Token>& token = find_key_result.value();
+  const std::optional<Token>& token = find_key_result.value();
   return std::move(callback).Run(token.has_value());
 }
 
@@ -551,6 +551,93 @@ void KcerImpl::GetKeyInfoWithToken(
                      base::BindPostTaskToCurrentDefault(std::move(callback))));
 }
 
+void KcerImpl::GetKeyPermissions(PrivateKeyHandle key,
+                                 GetKeyPermissionsCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (init_queue_) {
+    return init_queue_->push_back(
+        base::BindOnce(&KcerImpl::GetKeyPermissions, weak_factory_.GetWeakPtr(),
+                       std::move(key), std::move(callback)));
+  }
+
+  if (key.GetTokenInternal().has_value()) {
+    return GetKeyPermissionsWithToken(std::move(callback), std::move(key));
+  }
+
+  auto on_find_key_done =
+      base::BindOnce(&KcerImpl::GetKeyPermissionsWithToken,
+                     weak_factory_.GetWeakPtr(), std::move(callback));
+  return PopulateTokenForKey(std::move(key), std::move(on_find_key_done));
+}
+
+void KcerImpl::GetKeyPermissionsWithToken(
+    GetKeyPermissionsCallback callback,
+    base::expected<PrivateKeyHandle, Error> key_or_error) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (!key_or_error.has_value()) {
+    return std::move(callback).Run(base::unexpected(key_or_error.error()));
+  }
+  PrivateKeyHandle key = std::move(key_or_error).value();
+
+  const base::WeakPtr<KcerToken>& kcer_token =
+      GetToken(key.GetTokenInternal().value());
+  if (!kcer_token.MaybeValid()) {
+    return std::move(callback).Run(
+        base::unexpected(Error::kTokenIsNotAvailable));
+  }
+  token_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&KcerToken::GetKeyPermissions, kcer_token, std::move(key),
+                     base::BindPostTaskToCurrentDefault(std::move(callback))));
+}
+
+void KcerImpl::GetCertProvisioningProfileId(
+    PrivateKeyHandle key,
+    GetCertProvisioningProfileIdCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (init_queue_) {
+    return init_queue_->push_back(base::BindOnce(
+        &KcerImpl::GetCertProvisioningProfileId, weak_factory_.GetWeakPtr(),
+        std::move(key), std::move(callback)));
+  }
+
+  if (key.GetTokenInternal().has_value()) {
+    return GetCertProvisioningProfileIdWithToken(std::move(callback),
+                                                 std::move(key));
+  }
+
+  auto on_find_key_done =
+      base::BindOnce(&KcerImpl::GetCertProvisioningProfileIdWithToken,
+                     weak_factory_.GetWeakPtr(), std::move(callback));
+  return PopulateTokenForKey(std::move(key), std::move(on_find_key_done));
+}
+
+void KcerImpl::GetCertProvisioningProfileIdWithToken(
+    GetCertProvisioningProfileIdCallback callback,
+    base::expected<PrivateKeyHandle, Error> key_or_error) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (!key_or_error.has_value()) {
+    return std::move(callback).Run(base::unexpected(key_or_error.error()));
+  }
+  PrivateKeyHandle key = std::move(key_or_error).value();
+
+  const base::WeakPtr<KcerToken>& kcer_token =
+      GetToken(key.GetTokenInternal().value());
+  if (!kcer_token.MaybeValid()) {
+    return std::move(callback).Run(
+        base::unexpected(Error::kTokenIsNotAvailable));
+  }
+  token_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&KcerToken::GetCertProvisioningProfileId, kcer_token,
+                     std::move(key),
+                     base::BindPostTaskToCurrentDefault(std::move(callback))));
+}
+
 void KcerImpl::SetKeyNickname(PrivateKeyHandle key,
                               std::string nickname,
                               StatusCallback callback) {
@@ -702,7 +789,7 @@ base::WeakPtr<internal::KcerToken>& KcerImpl::GetToken(Token token) {
 void KcerImpl::FindKeyToken(
     bool allow_guessing,
     PrivateKeyHandle key,
-    base::OnceCallback<void(base::expected<absl::optional<Token>, Error>)>
+    base::OnceCallback<void(base::expected<std::optional<Token>, Error>)>
         callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -745,7 +832,7 @@ void KcerImpl::PopulateTokenForKey(
 void KcerImpl::PopulateTokenForKeyWithToken(
     PrivateKeyHandle key,
     base::OnceCallback<void(base::expected<PrivateKeyHandle, Error>)> callback,
-    base::expected<absl::optional<Token>, Error> find_key_result) {
+    base::expected<std::optional<Token>, Error> find_key_result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (!find_key_result.has_value()) {

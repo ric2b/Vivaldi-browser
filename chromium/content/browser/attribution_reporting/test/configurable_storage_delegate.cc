@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -16,12 +17,14 @@
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
+#include "components/attribution_reporting/event_level_epsilon.h"
+#include "components/attribution_reporting/event_report_windows.h"
+#include "components/attribution_reporting/max_event_level_reports.h"
 #include "content/browser/attribution_reporting/attribution_config.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_storage_delegate.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "services/network/public/cpp/trigger_verification.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 
@@ -41,8 +44,6 @@ ConfigurableStorageDelegate::ConfigurableStorageDelegate()
         c.rate_limit.max_reporting_origins_per_source_reporting_site =
             std::numeric_limits<int>::max();
 
-        c.event_level_limit.randomized_response_epsilon =
-            std::numeric_limits<double>::infinity();
         c.event_level_limit.max_reports_per_destination =
             std::numeric_limits<int>::max();
 
@@ -61,11 +62,15 @@ void ConfigurableStorageDelegate::DetachFromSequence() {
 }
 
 base::Time ConfigurableStorageDelegate::GetEventLevelReportTime(
-    const attribution_reporting::EventReportWindows&,
+    const attribution_reporting::EventReportWindows& event_report_windows,
     base::Time source_time,
     base::Time trigger_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return source_time + report_delay_;
+  if (use_realistic_report_times_) {
+    return event_report_windows.ComputeReportTime(source_time, trigger_time);
+  } else {
+    return source_time + report_delay_;
+  }
 }
 
 base::Time ConfigurableStorageDelegate::GetAggregatableReportTime(
@@ -91,7 +96,7 @@ base::Uuid ConfigurableStorageDelegate::NewReportID() const {
   return DefaultExternalReportID();
 }
 
-absl::optional<AttributionStorageDelegate::OfflineReportDelayConfig>
+std::optional<AttributionStorageDelegate::OfflineReportDelayConfig>
 ConfigurableStorageDelegate::GetOfflineReportDelayConfig() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return offline_report_delay_config_;
@@ -115,9 +120,9 @@ void ConfigurableStorageDelegate::ShuffleTriggerVerifications(
 }
 
 double ConfigurableStorageDelegate::GetRandomizedResponseRate(
-    attribution_reporting::mojom::SourceType,
-    const attribution_reporting::EventReportWindows&,
-    int max_event_level_reports) const {
+    const attribution_reporting::TriggerSpecs&,
+    attribution_reporting::MaxEventLevelReports,
+    attribution_reporting::EventLevelEpsilon) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return randomized_response_rate_;
 }
@@ -125,8 +130,9 @@ double ConfigurableStorageDelegate::GetRandomizedResponseRate(
 AttributionStorageDelegate::GetRandomizedResponseResult
 ConfigurableStorageDelegate::GetRandomizedResponse(
     attribution_reporting::mojom::SourceType,
-    const attribution_reporting::EventReportWindows&,
-    int max_event_level_reports,
+    const attribution_reporting::TriggerSpecs&,
+    attribution_reporting::MaxEventLevelReports,
+    attribution_reporting::EventLevelEpsilon,
     base::Time source_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (exceeds_channel_capacity_limit_) {
@@ -141,7 +147,7 @@ std::vector<AttributionStorageDelegate::NullAggregatableReport>
 ConfigurableStorageDelegate::GetNullAggregatableReports(
     const AttributionTrigger& trigger,
     base::Time trigger_time,
-    absl::optional<base::Time> attributed_source_time) const {
+    std::optional<base::Time> attributed_source_time) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return null_aggregatable_reports_;
 }
@@ -206,7 +212,7 @@ void ConfigurableStorageDelegate::set_report_delay(
 }
 
 void ConfigurableStorageDelegate::set_offline_report_delay_config(
-    absl::optional<OfflineReportDelayConfig> config) {
+    std::optional<OfflineReportDelayConfig> config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   offline_report_delay_config_ = config;
 }
@@ -242,6 +248,11 @@ void ConfigurableStorageDelegate::set_null_aggregatable_reports(
     std::vector<NullAggregatableReport> null_aggregatable_reports) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   null_aggregatable_reports_ = std::move(null_aggregatable_reports);
+}
+
+void ConfigurableStorageDelegate::use_realistic_report_times() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  use_realistic_report_times_ = true;
 }
 
 }  // namespace content

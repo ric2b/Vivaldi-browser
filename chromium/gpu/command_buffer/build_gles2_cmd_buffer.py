@@ -221,7 +221,6 @@ _NAMED_TYPE_INFO = {
       'GL_STENCIL_BITS',
       'GL_TEXTURE_BINDING_2D',
       'GL_TEXTURE_BINDING_CUBE_MAP',
-      'GL_TEXTURE_FILTERING_HINT_CHROMIUM',
       'GL_UNPACK_ALIGNMENT',
       'GL_BIND_GENERATES_RESOURCE_CHROMIUM',
       # we can add this because we emulate it if the driver does not support it.
@@ -977,7 +976,6 @@ _NAMED_TYPE_INFO = {
     'type': 'GLenum',
     'valid': [
       'GL_GENERATE_MIPMAP_HINT',
-      'GL_TEXTURE_FILTERING_HINT_CHROMIUM',
     ],
     'valid_es3': [
       'GL_FRAGMENT_SHADER_DERIVATIVE_HINT',
@@ -1334,7 +1332,6 @@ _NAMED_TYPE_INFO = {
       'GL_RGB10_A2',
       'GL_RGBA16F',
       'GL_RGB_YCRCB_420_CHROMIUM',
-      'GL_RGB_YCBCR_422_CHROMIUM',
       'GL_RGB_YCBCR_420V_CHROMIUM',
       'GL_RGB_YCBCR_P010_CHROMIUM',
       'GL_R16_EXT',
@@ -1422,7 +1419,6 @@ _NAMED_TYPE_INFO = {
     'valid': [
       'GL_RGB',
       'GL_RGB_YCRCB_420_CHROMIUM',
-      'GL_RGB_YCBCR_422_CHROMIUM',
       'GL_RGB_YCBCR_420V_CHROMIUM',
       'GL_RGB_YCBCR_P010_CHROMIUM',
       'GL_RGBA',

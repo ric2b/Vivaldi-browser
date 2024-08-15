@@ -4,16 +4,18 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ukey2_connections = { path = "../ukey2_connections" }
 ukey2_rs = { path = "../ukey2" }
-lock_adapter.workspace = true
+lock_adapter = {workspace = true, features = ["spin"]}
 
 cfg-if.workspace = true
-crypto_provider_openssl = { workspace = true, optional = true }
-crypto_provider_rustcrypto = { workspace = true, optional = true, features = [ "alloc" ] }
+crypto_provider_default = { workspace = true }
 lazy_static.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
@@ -22,10 +24,10 @@ log = { workspace = true, features = ["std"] }
 
 [features]
 default = ["rustcrypto"]
-openssl = ["dep:crypto_provider_openssl", "std"]
-rustcrypto = ["crypto_provider_rustcrypto"]
-std = ["lock_adapter/std", "crypto_provider_rustcrypto/std"]
-crypto_provider_rustcrypto = ["dep:crypto_provider_rustcrypto"]
+openssl = ["crypto_provider_default/openssl", "std"]
+rustcrypto = ["crypto_provider_default/rustcrypto"]
+boringssl = ["crypto_provider_default/boringssl"]
+std = ["lock_adapter/std"]
 
 [lib]
 crate_type = ["cdylib"]

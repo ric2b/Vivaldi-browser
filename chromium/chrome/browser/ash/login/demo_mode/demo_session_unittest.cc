@@ -7,15 +7,18 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/timer/mock_timer.h"
 #include "chrome/browser/ash/login/demo_mode/demo_components.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
@@ -41,7 +44,6 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/extension_builder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 namespace {
@@ -78,6 +80,9 @@ class DemoSessionTest : public testing::Test {
         WallpaperControllerClientImpl>(
         std::make_unique<wallpaper_handlers::TestWallpaperFetcherDelegate>());
     wallpaper_controller_client_->InitForTesting(&test_wallpaper_controller_);
+    // TODO(b/321321392): Test loading growth campaigns at session start.
+    scoped_feature_list_.InitAndDisableFeature(
+        ash::features::kGrowthCampaignsInDemoMode);
   }
 
   void TearDown() override {
@@ -134,8 +139,7 @@ class DemoSessionTest : public testing::Test {
     return profile;
   }
 
-  raw_ptr<FakeCrOSComponentManager, ExperimentalAsh> cros_component_manager_ =
-      nullptr;
+  raw_ptr<FakeCrOSComponentManager> cros_component_manager_ = nullptr;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<session_manager::SessionManager> session_manager_;
   std::unique_ptr<WallpaperControllerClientImpl> wallpaper_controller_client_;
@@ -147,6 +151,7 @@ class DemoSessionTest : public testing::Test {
 
  private:
   BrowserProcessPlatformPartTestApi browser_process_platform_part_test_api_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(DemoSessionTest, StartForDeviceInDemoMode) {

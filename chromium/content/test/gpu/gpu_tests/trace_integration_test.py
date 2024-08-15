@@ -18,6 +18,7 @@ import dataclasses  # Built-in, but pylint gives an ordering false positive.
 
 from gpu_tests import common_browser_args as cba
 from gpu_tests import common_typing as ct
+from gpu_tests import gpu_helper
 from gpu_tests import gpu_integration_test
 from gpu_tests import pixel_test_pages
 
@@ -112,8 +113,7 @@ _SWAP_CHAIN_GET_FRAME_STATISTICS_MEDIA_FAILED = -1
 _GET_STATISTICS_EVENT_NAME = 'GetFrameStatisticsMedia'
 _SWAP_CHAIN_PRESENT_EVENT_NAME = 'SwapChain::Present'
 _UPDATE_OVERLAY_EVENT_NAME = 'DCLayerTree::VisualTree::UpdateOverlay'
-_PRESENT_SWAP_CHAIN_EVENT_NAME =\
-    'DirectCompositionChildSurfaceWin::PresentSwapChain'
+_PRESENT_SWAP_CHAIN_EVENT_NAME = 'IDXGISwapChain1::Present1'
 
 _SUPPORTED_WIN_AMD_GPUS_WITH_NV12_ROTATED_OVERLAYS = [0x7340]
 
@@ -260,6 +260,11 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       serial_globs |= {
           # Flaky when run in parallel on Windows.
           'OverlayModeTraceTest_DirectComposition_Underlay*',
+          # Has issues running with any amount of parallelization on
+          # Windows/NVIDIA even though comment 12 in crbug.com/1505609 implies
+          # that up to three Chrome processes should be able to run in
+          # parallel without issue on the driver's end.
+          'OverlayModeTraceTest_DirectComposition_Video*',
       }
     return serial_globs
 
@@ -309,7 +314,11 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
               success_eval_func='CheckSwapChainPath',
               other_args=p.other_args)
       ])
-    for p in namespace.DirectCompositionPages('OverlayModeTraceTest'):
+    # The increased swap count is necessary for tests to consistently pass on
+    # NVIDIA since overlays can take ~35 frames to take effect. See
+    # crbug.com/1505609.
+    for p in namespace.DirectCompositionPages('OverlayModeTraceTest',
+                                              swap_count=60):
       yield (p.name, posixpath.join(gpu_data_relative_path, p.url), [
           _TraceTestArguments(
               browser_args=p.browser_args,
@@ -749,6 +758,9 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
           'nv12_overlay_support'] == 'SOFTWARE'
 
       if expected.pixel_format is None:
+        # If no specific pixel format was requested via browser arguments, we
+        # expect use of NV12 > YUY2 > BGRA based on hardware support for
+        # NV12/YUY2.
         if supports_hw_nv12_overlays:
           expected.pixel_format = 'NV12'
         elif supports_hw_yuy2_overlays:
@@ -757,15 +769,20 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
           assert supports_sw_nv12_overlays
           expected.pixel_format = 'BGRA'
       else:
-        if (not supports_hw_nv12_overlays and not supports_hw_yuy2_overlays):
+        # If a specific pixel format was requested via browser arguments that
+        # the browser does not support, we expect a direct fallback to BGRA.
+        if expected.pixel_format == 'NV12' and not supports_hw_nv12_overlays:
+          expected.pixel_format = 'BGRA'
+        elif expected.pixel_format == 'YUY2' and not supports_hw_yuy2_overlays:
           expected.pixel_format = 'BGRA'
 
       gpu = self.browser.GetSystemInfo().gpu.devices[0]
       supports_rotated_video_overlays = (
-          gpu.vendor_id == 0x1002 and
-          gpu.device_id in _SUPPORTED_WIN_AMD_GPUS_WITH_NV12_ROTATED_OVERLAYS)
+          gpu.vendor_id == gpu_helper.GpuVendors.AMD and gpu.device_id
+          in _SUPPORTED_WIN_AMD_GPUS_WITH_NV12_ROTATED_OVERLAYS)
 
-      supports_downscaled_overlay_promotion = gpu.vendor_id != 0x8086
+      supports_downscaled_overlay_promotion = (gpu.vendor_id
+                                               != gpu_helper.GpuVendors.INTEL)
       no_issue_with_downscaled_overlay_promotion = (
           video_is_not_scaled or supports_downscaled_overlay_promotion)
 
@@ -931,6 +948,8 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
     expect_has_alpha = other_args and other_args.get('has_alpha', False)
 
+    has_present_swap_chain_event_with_has_alpha = False
+
     # Verify expectations through captured trace events.
     for event in event_iterator:
       if event.category != category:
@@ -939,10 +958,19 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         continue
 
       got_has_alpha = event.args.get('has_alpha', None)
-      if got_has_alpha is not None and expect_has_alpha != got_has_alpha:
-        self.fail(
-            'Expected events with name %s with has_alpha expected %s, got %s' %
-            (_PRESENT_SWAP_CHAIN_EVENT_NAME, expect_has_alpha, got_has_alpha))
+      if got_has_alpha is not None:
+        has_present_swap_chain_event_with_has_alpha = True
+
+        if expect_has_alpha != got_has_alpha:
+          self.fail(
+              f'Expected events with name {_PRESENT_SWAP_CHAIN_EVENT_NAME} with'
+              f' has_alpha expected {expect_has_alpha}, got {got_has_alpha}')
+
+    # It's also considered a failure if we did not see the expected event.
+    if not has_present_swap_chain_event_with_has_alpha:
+      self.fail(
+          f'Expected events with name {_PRESENT_SWAP_CHAIN_EVENT_NAME} and '
+          'has_alpha value, but were not found')
 
   def _EvaluateSuccess_CheckWebGLCanvasCapture(self, category: str,
                                                event_iterator: Iterator,

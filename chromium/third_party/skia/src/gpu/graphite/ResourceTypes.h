@@ -56,6 +56,16 @@ enum class Layout {
     kMetal,
 };
 
+static constexpr const char* LayoutString(Layout layout) {
+    switch(layout) {
+        case Layout::kStd140:  return "std140";
+        case Layout::kStd430:  return "std430";
+        case Layout::kMetal:   return "metal";
+        case Layout::kInvalid: return "invalid";
+    }
+    SkUNREACHABLE;
+}
+
 /**
  * Indicates the intended access pattern over resource memory. This is used to select the most
  * efficient memory type during resource creation based on the capabilities of the platform.
@@ -132,6 +142,20 @@ struct BindBufferInfo {
         return fBuffer == o.fBuffer && (!fBuffer || fOffset == o.fOffset);
     }
     bool operator!=(const BindBufferInfo& o) const { return !(*this == o); }
+};
+
+/*
+ * Struct that can be passed into bind uniform buffer calls on the CommandBuffer.
+ * It is similar to BindBufferInfo with additional fBindingSize member.
+ */
+struct BindUniformBufferInfo : public BindBufferInfo {
+    // TODO(b/308933713): Add size to BindBufferInfo instead
+    uint32_t fBindingSize = 0;
+
+    bool operator==(const BindUniformBufferInfo& o) const {
+        return BindBufferInfo::operator==(o) && (!fBuffer || fBindingSize == o.fBindingSize);
+    }
+    bool operator!=(const BindUniformBufferInfo& o) const { return !(*this == o); }
 };
 
 /**

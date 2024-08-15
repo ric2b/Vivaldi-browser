@@ -36,6 +36,8 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_progress.h"
 #include "third_party/blink/renderer/core/layout/layout_theme_default.h"
+#include "third_party/blink/renderer/core/page/chrome_client.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_auto_dark_mode.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
@@ -44,6 +46,7 @@
 #include "third_party/blink/renderer/platform/text/writing_mode.h"
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_helper.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/native_theme/native_theme.h"
 
@@ -84,7 +87,8 @@ class DirectionFlippingScope {
   ~DirectionFlippingScope();
 
  private:
-  bool needs_flipping_;
+  bool needs_horizontal_flipping_;
+  bool needs_vertical_flipping_;
   const PaintInfo& paint_info_;
 };
 
@@ -92,18 +96,30 @@ DirectionFlippingScope::DirectionFlippingScope(
     const LayoutObject& layout_object,
     const PaintInfo& paint_info,
     const gfx::Rect& rect)
-    : needs_flipping_(!layout_object.StyleRef().IsLeftToRightDirection()),
+    : needs_horizontal_flipping_(
+          IsHorizontalWritingMode(layout_object.StyleRef().GetWritingMode()) &&
+          !layout_object.StyleRef().IsLeftToRightDirection()),
+      needs_vertical_flipping_(
+          !IsHorizontalWritingMode(layout_object.StyleRef().GetWritingMode()) &&
+          RuntimeEnabledFeatures::
+              FormControlsVerticalWritingModeDirectionSupportEnabled() &&
+          layout_object.StyleRef().IsLeftToRightDirection()),
       paint_info_(paint_info) {
-  if (!needs_flipping_)
-    return;
-  paint_info_.context.Save();
-  paint_info_.context.Translate(2 * rect.x() + rect.width(), 0);
-  paint_info_.context.Scale(-1, 1);
+  if (needs_horizontal_flipping_) {
+    paint_info_.context.Save();
+    paint_info_.context.Translate(2 * rect.x() + rect.width(), 0);
+    paint_info_.context.Scale(-1, 1);
+  } else if (needs_vertical_flipping_) {
+    paint_info_.context.Save();
+    paint_info_.context.Translate(0, 2 * rect.y() + rect.height());
+    paint_info_.context.Scale(1, -1);
+  }
 }
 
 DirectionFlippingScope::~DirectionFlippingScope() {
-  if (!needs_flipping_)
+  if (!needs_horizontal_flipping_ && !needs_vertical_flipping_) {
     return;
+  }
   paint_info_.context.Restore();
 }
 
@@ -174,15 +190,21 @@ gfx::Rect ConvertToPaintingRect(const LayoutObject& input_layout_object,
   return ToPixelSnappedRect(part_rect);
 }
 
-absl::optional<SkColor> GetAccentColor(const ComputedStyle& style) {
+absl::optional<SkColor> GetAccentColor(const ComputedStyle& style,
+                                       const Document& document) {
   absl::optional<Color> css_accent_color = style.AccentColorResolved();
   if (css_accent_color)
     return css_accent_color->Rgb();
 
-  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
-  LayoutTheme& layout_theme = LayoutTheme::GetTheme();
-  if (layout_theme.IsAccentColorCustomized(color_scheme)) {
-    return layout_theme.GetSystemAccentColor(color_scheme).Rgb();
+  bool in_image =
+      document.GetPage()->GetChromeClient().IsSVGImageChromeClient();
+  if (!RuntimeEnabledFeatures::PreventReadingSystemAccentColorEnabled() ||
+      !in_image) {
+    mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+    LayoutTheme& layout_theme = LayoutTheme::GetTheme();
+    if (layout_theme.IsAccentColorCustomized(color_scheme)) {
+      return layout_theme.GetSystemAccentColor(color_scheme).Rgb();
+    }
   }
 
   return absl::nullopt;
@@ -194,7 +216,7 @@ ThemePainterDefault::ThemePainterDefault(LayoutThemeDefault& theme)
     : ThemePainter(), theme_(theme) {}
 
 bool ThemePainterDefault::PaintCheckbox(const Element& element,
-                                        const Document&,
+                                        const Document& document,
                                         const ComputedStyle& style,
                                         const PaintInfo& paint_info,
                                         const gfx::Rect& rect) {
@@ -208,15 +230,18 @@ bool ThemePainterDefault::PaintCheckbox(const Element& element,
   gfx::Rect unzoomed_rect =
       ApplyZoomToRect(rect, paint_info, state_saver, zoom_level);
   WebThemeEngine::ExtraParams extra_params(button);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      document.GetColorProviderForPainting(color_scheme);
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartCheckbox,
-      GetWebThemeState(element), unzoomed_rect, &extra_params,
-      style.UsedColorScheme(), GetAccentColor(style));
+      GetWebThemeState(element), unzoomed_rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, document));
   return false;
 }
 
 bool ThemePainterDefault::PaintRadio(const Element& element,
-                                     const Document&,
+                                     const Document& document,
                                      const ComputedStyle& style,
                                      const PaintInfo& paint_info,
                                      const gfx::Rect& rect) {
@@ -229,16 +254,18 @@ bool ThemePainterDefault::PaintRadio(const Element& element,
   GraphicsContextStateSaver state_saver(paint_info.context, false);
   gfx::Rect unzoomed_rect =
       ApplyZoomToRect(rect, paint_info, state_saver, zoom_level);
-
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      document.GetColorProviderForPainting(color_scheme);
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartRadio,
-      GetWebThemeState(element), unzoomed_rect, &extra_params,
-      style.UsedColorScheme(), GetAccentColor(style));
+      GetWebThemeState(element), unzoomed_rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, document));
   return false;
 }
 
 bool ThemePainterDefault::PaintButton(const Element& element,
-                                      const Document&,
+                                      const Document& document,
                                       const ComputedStyle& style,
                                       const PaintInfo& paint_info,
                                       const gfx::Rect& rect) {
@@ -246,11 +273,14 @@ bool ThemePainterDefault::PaintButton(const Element& element,
   button.has_border = true;
   button.zoom = style.EffectiveZoom();
   WebThemeEngine::ExtraParams extra_params(button);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      document.GetColorProviderForPainting(color_scheme);
 
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartButton,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, document));
   return false;
 }
 
@@ -280,11 +310,14 @@ bool ThemePainterDefault::PaintTextField(const Element& element,
           WebAutofillState::kPreviewed;
 
   WebThemeEngine::ExtraParams extra_params(text_field);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      element.GetDocument().GetColorProviderForPainting(color_scheme);
 
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartTextField,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, element.GetDocument()));
   return false;
 }
 
@@ -318,10 +351,14 @@ bool ThemePainterDefault::PaintMenuList(const Element& element,
 
   SetupMenuListArrow(document, style, rect, extra_params);
 
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      document.GetColorProviderForPainting(color_scheme);
+
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartMenuList,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, document));
   return false;
 }
 
@@ -337,11 +374,14 @@ bool ThemePainterDefault::PaintMenuListButton(const Element& element,
   menu_list.fill_content_area = false;
   WebThemeEngine::ExtraParams extra_params(menu_list);
   SetupMenuListArrow(document, style, rect, extra_params);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      document.GetColorProviderForPainting(color_scheme);
 
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartMenuList,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, document));
   return false;
 }
 
@@ -447,11 +487,14 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
     }
   }
   WebThemeEngine::ExtraParams extra_params(slider);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      element.GetDocument().GetColorProviderForPainting(color_scheme);
 
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartSliderTrack,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, element.GetDocument()));
   return false;
 }
 
@@ -477,13 +520,17 @@ bool ThemePainterDefault::PaintSliderThumb(const Element& element,
   DCHECK(slider_element);  // PaintSliderThumb should always be passed a
                            // SliderThumbElement
   absl::optional<SkColor> accent_color =
-      GetAccentColor(*slider_element->HostInput()->EnsureComputedStyle());
+      GetAccentColor(*slider_element->HostInput()->EnsureComputedStyle(),
+                     element.GetDocument());
   WebThemeEngine::ExtraParams extra_params(slider);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      element.GetDocument().GetColorProviderForPainting(color_scheme);
 
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartSliderThumb,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      accent_color);
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, accent_color);
   return false;
 }
 
@@ -511,11 +558,14 @@ bool ThemePainterDefault::PaintInnerSpinButton(const Element& element,
           : WebThemeEngine::SpinArrowsDirection::kLeftRight;
 
   WebThemeEngine::ExtraParams extra_params(inner_spin);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      element.GetDocument().GetColorProviderForPainting(color_scheme);
 
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartInnerSpinButton,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, element.GetDocument()));
   return false;
 }
 
@@ -541,10 +591,13 @@ bool ThemePainterDefault::PaintProgressBar(const Element& element,
       IsHorizontalWritingMode(layout_progress->StyleRef().GetWritingMode());
   WebThemeEngine::ExtraParams extra_params(progress_bar);
   DirectionFlippingScope scope(layout_object, paint_info, rect);
+  mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
+  const ui::ColorProvider* color_provider =
+      element.GetDocument().GetColorProviderForPainting(color_scheme);
   WebThemeEngineHelper::GetNativeThemeEngine()->Paint(
       paint_info.context.Canvas(), WebThemeEngine::kPartProgressBar,
-      GetWebThemeState(element), rect, &extra_params, style.UsedColorScheme(),
-      GetAccentColor(style));
+      GetWebThemeState(element), rect, &extra_params, color_scheme,
+      color_provider, GetAccentColor(style, element.GetDocument()));
   return false;
 }
 

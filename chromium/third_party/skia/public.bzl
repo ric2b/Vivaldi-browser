@@ -1,5 +1,7 @@
-# This file contains lists of files and defines used in the legacy G3 build, that is, the G3 build
-# that is not derived from our Bazel rules.
+"""
+This module contains lists of files and defines used in the legacy G3 build, that is, the G3 build
+that is not derived from our Bazel rules.
+"""
 
 SKIA_PUBLIC_HDRS = [
     "include/android/SkAndroidFrameworkUtils.h",
@@ -148,6 +150,7 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/ganesh/gl/GrGLBackendSurface.h",
     "include/gpu/ganesh/gl/GrGLDirectContext.h",
     "include/gpu/ganesh/mtl/SkSurfaceMetal.h",
+    "include/gpu/ganesh/vk/GrVkBackendSemaphore.h",
     "include/gpu/ganesh/vk/GrVkBackendSurface.h",
     "include/gpu/ganesh/vk/GrVkDirectContext.h",
     "include/gpu/gl/egl/GrGLMakeEGLInterface.h",
@@ -184,6 +187,7 @@ SKIA_PUBLIC_HDRS = [
     "include/gpu/vk/GrVkTypes.h",
     "include/gpu/vk/VulkanExtensions.h",
     "include/gpu/vk/VulkanMemoryAllocator.h",
+    "include/gpu/vk/VulkanMutableTextureState.h",
     "include/gpu/vk/VulkanTypes.h",
     "include/pathops/SkPathOps.h",
     "include/ports/SkCFObject.h",
@@ -289,7 +293,6 @@ BASE_SRCS_ALL = [
     "include/private/gpu/ganesh/GrImageContext.h",
     "include/private/gpu/ganesh/GrTextureGenerator.h",
     "include/private/gpu/ganesh/GrTypesPriv.h",
-    "include/private/gpu/vk/VulkanTypesPriv.h",
     "src/android/SkAndroidFrameworkUtils.cpp",
     "src/android/SkAnimatedImage.cpp",
     "src/base/SkASAN.h",
@@ -478,8 +481,8 @@ BASE_SRCS_ALL = [
     "src/core/SkFontMetricsPriv.cpp",
     "src/core/SkFontMetricsPriv.h",
     "src/core/SkFontMgr.cpp",
-    "src/core/SkFontMgrPriv.h",
     "src/core/SkFontPriv.h",
+    "src/core/SkFontScanner.h",
     "src/core/SkFontStream.cpp",
     "src/core/SkFontStream.h",
     "src/core/SkFont_serial.cpp",
@@ -526,6 +529,8 @@ BASE_SRCS_ALL = [
     "src/core/SkMaskFilterBase.h",
     "src/core/SkMaskGamma.cpp",
     "src/core/SkMaskGamma.h",
+    "src/core/SkMasks.cpp",
+    "src/core/SkMasks.h",
     "src/core/SkMatrix.cpp",
     "src/core/SkMatrixInvert.cpp",
     "src/core/SkMatrixInvert.h",
@@ -780,9 +785,11 @@ BASE_SRCS_ALL = [
     "src/gpu/BufferWriter.h",
     "src/gpu/DitherUtils.cpp",
     "src/gpu/DitherUtils.h",
+    "src/gpu/GpuRefCnt.h",
     "src/gpu/GpuTypesPriv.h",
     "src/gpu/KeyBuilder.h",
-    "src/gpu/MutableTextureStateRef.h",
+    "src/gpu/MutableTextureStatePriv.h",
+    "src/gpu/MutableTextureState.cpp",
     "src/gpu/PipelineUtils.cpp",
     "src/gpu/PipelineUtils.h",
     "src/gpu/Rectanizer.h",
@@ -794,6 +801,7 @@ BASE_SRCS_ALL = [
     "src/gpu/ResourceKey.cpp",
     "src/gpu/ResourceKey.h",
     "src/gpu/ShaderErrorHandler.cpp",
+    "src/gpu/SkBackingFit.cpp",
     "src/gpu/SkBackingFit.h",
     "src/gpu/SkRenderEngineAbortf.h",
     "src/gpu/Swizzle.cpp",
@@ -879,8 +887,6 @@ BASE_SRCS_ALL = [
     "src/gpu/ganesh/GrEagerVertexAllocator.cpp",
     "src/gpu/ganesh/GrEagerVertexAllocator.h",
     "src/gpu/ganesh/GrFPArgs.h",
-    "src/gpu/ganesh/GrFinishCallbacks.cpp",
-    "src/gpu/ganesh/GrFinishCallbacks.h",
     "src/gpu/ganesh/GrFixedClip.cpp",
     "src/gpu/ganesh/GrFixedClip.h",
     "src/gpu/ganesh/GrFragmentProcessor.cpp",
@@ -944,7 +950,6 @@ BASE_SRCS_ALL = [
     "src/gpu/ganesh/GrRecordingContext.cpp",
     "src/gpu/ganesh/GrRecordingContextPriv.cpp",
     "src/gpu/ganesh/GrRecordingContextPriv.h",
-    "src/gpu/ganesh/GrRefCnt.h",
     "src/gpu/ganesh/GrRenderTarget.cpp",
     "src/gpu/ganesh/GrRenderTarget.h",
     "src/gpu/ganesh/GrRenderTargetContext.h",
@@ -1358,8 +1363,6 @@ BASE_SRCS_ALL = [
     "src/pdf/SkClusterator.h",
     "src/pdf/SkDeflate.cpp",
     "src/pdf/SkDeflate.h",
-    "src/pdf/SkJpegInfo.h",
-    "src/pdf/SkJpegInfo_none.cpp",
     "src/pdf/SkKeyedImage.cpp",
     "src/pdf/SkKeyedImage.h",
     "src/pdf/SkPDFBitmap.cpp",
@@ -1515,12 +1518,11 @@ BASE_SRCS_ALL = [
     "src/sksl/SkSLString.cpp",
     "src/sksl/SkSLString.h",
     "src/sksl/SkSLStringStream.h",
-    "src/sksl/SkSLThreadContext.cpp",
-    "src/sksl/SkSLThreadContext.h",
     "src/sksl/SkSLUtil.cpp",
     "src/sksl/SkSLUtil.h",
     "src/sksl/analysis/SkSLCanExitWithoutReturningValue.cpp",
     "src/sksl/analysis/SkSLCheckProgramStructure.cpp",
+    "src/sksl/analysis/SkSLCheckSymbolTableCorrectness.cpp",
     "src/sksl/analysis/SkSLFinalizationChecks.cpp",
     "src/sksl/analysis/SkSLGetLoopControlFlowInfo.cpp",
     "src/sksl/analysis/SkSLGetLoopUnrollInfo.cpp",
@@ -1540,6 +1542,8 @@ BASE_SRCS_ALL = [
     "src/sksl/codegen/SkSLCodeGenerator.h",
     "src/sksl/codegen/SkSLGLSLCodeGenerator.cpp",
     "src/sksl/codegen/SkSLGLSLCodeGenerator.h",
+    "src/sksl/codegen/SkSLHLSLCodeGenerator.cpp",
+    "src/sksl/codegen/SkSLHLSLCodeGenerator.h",
     "src/sksl/codegen/SkSLMetalCodeGenerator.cpp",
     "src/sksl/codegen/SkSLMetalCodeGenerator.h",
     "src/sksl/codegen/SkSLPipelineStageCodeGenerator.cpp",
@@ -1645,6 +1649,7 @@ BASE_SRCS_ALL = [
     "src/sksl/ir/SkSLSwitchStatement.h",
     "src/sksl/ir/SkSLSwizzle.cpp",
     "src/sksl/ir/SkSLSwizzle.h",
+    "src/sksl/ir/SkSLSymbol.cpp",
     "src/sksl/ir/SkSLSymbol.h",
     "src/sksl/ir/SkSLSymbolTable.cpp",
     "src/sksl/ir/SkSLSymbolTable.h",
@@ -1831,8 +1836,6 @@ CODEC_SRCS_LIMITED = [
     "src/codec/SkJpegSourceMgr.h",
     "src/codec/SkJpegUtility.cpp",
     "src/codec/SkJpegUtility.h",
-    "src/codec/SkMasks.cpp",
-    "src/codec/SkMasks.h",
     "src/codec/SkMaskSwizzler.cpp",
     "src/codec/SkMaskSwizzler.h",
     "src/codec/SkParseEncodedOrigin.cpp",
@@ -1871,8 +1874,12 @@ TEXTUAL_HDRS = [
     "src/sksl/generated/sksl_gpu.unoptimized.sksl",
     "src/sksl/generated/sksl_graphite_frag.minified.sksl",
     "src/sksl/generated/sksl_graphite_frag.unoptimized.sksl",
+    "src/sksl/generated/sksl_graphite_frag_es2.minified.sksl",
+    "src/sksl/generated/sksl_graphite_frag_es2.unoptimized.sksl",
     "src/sksl/generated/sksl_graphite_vert.minified.sksl",
     "src/sksl/generated/sksl_graphite_vert.unoptimized.sksl",
+    "src/sksl/generated/sksl_graphite_vert_es2.minified.sksl",
+    "src/sksl/generated/sksl_graphite_vert_es2.unoptimized.sksl",
     "src/sksl/generated/sksl_public.minified.sksl",
     "src/sksl/generated/sksl_public.unoptimized.sksl",
     "src/sksl/generated/sksl_rt_shader.minified.sksl",
@@ -1905,6 +1912,8 @@ base_gl_srcs = [
     "src/gpu/ganesh/gl/GrGLDefines.h",
     "src/gpu/ganesh/gl/GrGLDirectContext.cpp",
     "src/gpu/ganesh/gl/GrGLExtensions.cpp",
+    "src/gpu/ganesh/gl/GrGLFinishCallbacks.cpp",
+    "src/gpu/ganesh/gl/GrGLFinishCallbacks.h",
     "src/gpu/ganesh/gl/GrGLGLSL.cpp",
     "src/gpu/ganesh/gl/GrGLGLSL.h",
     "src/gpu/ganesh/gl/GrGLGpu.cpp",
@@ -1959,7 +1968,6 @@ PORTS_SRCS_UNIX = [
     "src/ports/SkFontMgr_custom_embedded.cpp",
     "src/ports/SkFontMgr_custom_empty.cpp",
     "src/ports/SkFontMgr_custom.h",
-    "src/ports/SkFontMgr_fontconfig_factory.cpp",
     "src/ports/SkFontMgr_fontconfig.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkMemory_malloc.cpp",
@@ -1967,6 +1975,7 @@ PORTS_SRCS_UNIX = [
     "src/ports/SkOSFile_stdio.cpp",
     "src/ports/SkOSLibrary.h",
     "src/ports/SkOSLibrary_posix.cpp",
+    "src/ports/SkTypeface_FreeType.h",
 ]
 
 GL_SRCS_ANDROID = base_gl_srcs + [
@@ -1979,7 +1988,6 @@ PORTS_SRCS_ANDROID = [
     "src/ports/SkFontHost_FreeType_common.h",
     "src/ports/SkFontHost_FreeType.cpp",
     "src/ports/SkFontMgr_android.cpp",
-    "src/ports/SkFontMgr_android_factory.cpp",
     "src/ports/SkFontMgr_android_parser.cpp",
     "src/ports/SkFontMgr_android_parser.h",
     "src/ports/SkFontMgr_custom.cpp",
@@ -1993,11 +2001,11 @@ PORTS_SRCS_ANDROID = [
     "src/ports/SkOSFile_stdio.cpp",
     "src/ports/SkOSLibrary.h",
     "src/ports/SkOSLibrary_posix.cpp",
+    "src/ports/SkTypeface_FreeType.h",
 ]
 
 PORTS_SRCS_ANDROID_NO_FONT = [
     "src/ports/SkDebug_android.cpp",
-    "src/ports/SkFontMgr_empty_factory.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkMemory_malloc.cpp",
     "src/ports/SkOSFile_posix.cpp",
@@ -2014,7 +2022,6 @@ PORTS_SRCS_IOS = [
     "src/ports/SkDebug_stdio.cpp",
     "src/ports/SkFontMgr_custom.h",
     "src/ports/SkFontMgr_mac_ct.cpp",
-    "src/ports/SkFontMgr_mac_ct_factory.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkImageGeneratorCG.cpp",
     "src/ports/SkMemory_malloc.cpp",
@@ -2042,7 +2049,6 @@ PORTS_SRCS_FUCHSIA = [
     "src/ports/SkFontHost_FreeType.cpp",
     "src/ports/SkFontMgr_custom.cpp",
     "src/ports/SkFontMgr_custom.h",
-    "src/ports/SkFontMgr_empty_factory.cpp",
     "src/ports/SkFontMgr_fuchsia.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkMemory_malloc.cpp",
@@ -2050,6 +2056,7 @@ PORTS_SRCS_FUCHSIA = [
     "src/ports/SkOSFile_stdio.cpp",
     "src/ports/SkOSLibrary.h",
     "src/ports/SkOSLibrary_posix.cpp",
+    "src/ports/SkTypeface_FreeType.h",
 ]
 
 GL_SRCS_MACOS = base_gl_srcs + [
@@ -2066,13 +2073,14 @@ PORTS_SRCS_WASM = [
     "src/ports/SkFontMgr_custom.cpp",
     "src/ports/SkFontMgr_custom.h",
     "src/ports/SkFontMgr_custom_embedded.cpp",
-    "src/ports/SkFontMgr_empty_factory.cpp",
+    "src/ports/SkFontMgr_custom_empty.cpp",
     "src/ports/SkGlobalInitialization_default.cpp",
     "src/ports/SkMemory_malloc.cpp",
     "src/ports/SkOSFile_posix.cpp",
     "src/ports/SkOSFile_stdio.cpp",
     "src/ports/SkOSLibrary.h",
     "src/ports/SkOSLibrary_posix.cpp",
+    "src/ports/SkTypeface_FreeType.h",
 ]
 GL_SRCS_WASM = GL_SRCS_UNIX_EGL
 
@@ -2135,6 +2143,9 @@ MTL_SRCS = [
 ]
 
 VULKAN_SRCS = [
+    "src/gpu/vk/VulkanMutableTextureState.cpp",
+    "src/gpu/vk/VulkanMutableTextureStatePriv.h",
+    "src/gpu/ganesh/vk/GrVkBackendSemaphore.cpp",
     "src/gpu/ganesh/vk/GrVkBackendSurface.cpp",
     "src/gpu/ganesh/vk/GrVkBackendSurfacePriv.h",
     "src/gpu/ganesh/vk/GrVkBuffer.cpp",
@@ -2145,6 +2156,8 @@ VULKAN_SRCS = [
     "src/gpu/ganesh/vk/GrVkCommandBuffer.h",
     "src/gpu/ganesh/vk/GrVkCommandPool.cpp",
     "src/gpu/ganesh/vk/GrVkCommandPool.h",
+    "src/gpu/ganesh/vk/GrVkContextThreadSafeProxy.cpp",
+    "src/gpu/ganesh/vk/GrVkContextThreadSafeProxy.h",
     "src/gpu/ganesh/vk/GrVkDescriptorPool.cpp",
     "src/gpu/ganesh/vk/GrVkDescriptorPool.h",
     "src/gpu/ganesh/vk/GrVkDescriptorSet.cpp",
@@ -2204,6 +2217,7 @@ VULKAN_SRCS = [
     "src/gpu/vk/VulkanInterface.h",
     "src/gpu/vk/VulkanMemory.cpp",
     "src/gpu/vk/VulkanMemory.h",
+    "src/gpu/vk/VulkanUtilsPriv.cpp",
     "src/gpu/vk/VulkanUtilsPriv.h",
 ]
 
@@ -2236,17 +2250,33 @@ UNIX_DEFINES = [
     "SK_R32_SHIFT=16",
     "SK_GL",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_FREETYPE_DIRECTORY_AVAILABLE",
+    "SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE",
+    "SK_FONTMGR_FONTCONFIG_AVAILABLE",
 ]
-ANDROID_DEFINES = [
+ANDROID_BASE_DEFINES = [
     "SK_BUILD_FOR_ANDROID",
+    "SK_GL",
+]
+ANDROID_FONT_DEFINES = [
+    "SK_FONTMGR_ANDROID_AVAILABLE",
+    "SK_FONTMGR_FREETYPE_DIRECTORY_AVAILABLE",
+    "SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE",
+    "SK_FONTMGR_FONTCONFIG_AVAILABLE",
+]
+ANDROID_CODEC_DEFINES = [
     "SK_CODEC_DECODES_PNG",
     "SK_CODEC_DECODES_WEBP",
-    "SK_GL",
     "SK_CODEC_DECODES_JPEG",
 ]
+
+# TODO(kjlubick) Delete these once we use the more granular versions
+ANDROID_DEFINES = ANDROID_BASE_DEFINES + ANDROID_FONT_DEFINES + ANDROID_CODEC_DEFINES
+ANDROID_NO_CODECS_DEFINES = ANDROID_BASE_DEFINES
 IOS_DEFINES = [
     "SK_BUILD_FOR_IOS",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_CORETEXT_AVAILABLE",
 ]
 WASM_DEFINES = [
     "SK_DISABLE_LEGACY_SHADERCONTEXT",
@@ -2257,6 +2287,7 @@ WASM_DEFINES = [
     "SK_FORCE_8_BYTE_ALIGNMENT",
     "SKNX_NO_SIMD",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_FREETYPE_EMPTY_AVAILABLE",
 ]
 FUCHSIA_DEFINES = [
     "SK_BUILD_FOR_UNIX",
@@ -2265,15 +2296,13 @@ FUCHSIA_DEFINES = [
     "SK_R32_SHIFT=16",
     "SK_VULKAN",
     "SK_CODEC_DECODES_JPEG",
+    "SK_FONTMGR_FUCHSIA_AVAILABLE",
 ]
 MACOS_DEFINES = [
     "SK_BUILD_FOR_MAC",
     "SK_GL",
     "SK_CODEC_DECODES_JPEG",
-]
-ANDROID_NO_CODECS_DEFINES = [
-    "SK_BUILD_FOR_ANDROID",
-    "SK_GL",
+    "SK_FONTMGR_CORETEXT_AVAILABLE",
 ]
 
 ################################################################################

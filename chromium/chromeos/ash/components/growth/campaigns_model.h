@@ -5,15 +5,33 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_GROWTH_CAMPAIGNS_MODEL_H_
 #define CHROMEOS_ASH_COMPONENTS_GROWTH_CAMPAIGNS_MODEL_H_
 
+#include <memory>
+#include <optional>
+
+#include "base/component_export.h"
 #include "base/values.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+
+namespace base {
+class Time;
+}
 
 namespace growth {
 
-enum class Slot { kDemoModeApp = 0 };
+// Entries should not be renumbered and numeric values should never be reused
+// as it is used for logging metrics as well. Please keep in sync with
+// "CampaignSlot" in src/tools/metrics/histograms/enums.xml.
+enum class Slot {
+  kDemoModeApp = 0,
+  kDemoModeFreePlayApps = 1,
+
+  kMaxValue = kDemoModeFreePlayApps
+};
 
 // Dictionary of supported targetings. For example:
-// { "demoModeTargeting" : {...} }
+// {
+//    "demoMode" : {...},
+//    "session": {...}
+// }
 using Targeting = base::Value::Dict;
 
 // List of `Targeting`.
@@ -33,6 +51,7 @@ using Payload = base::Value::Dict;
 // Dictionary of Campaign. For example:
 // {
 //    "id": 1,
+//    "studyId":1,
 //    "targetings": {...}
 //    "payload": {...}
 // }
@@ -49,31 +68,19 @@ using Campaigns = base::Value::List;
 // }
 using CampaignsPerSlot = base::Value::Dict;
 
-// All campaigns including proactive and reactive campaigns. For example:
-// {
-//   "proactiveCampaigns" : {
-//     "0": [...],
-//     "1": [...]
-//   },
-//   "reactiveCampaigns" : {
-//     "3": [...],
-//     "4": [...]
-//   },
-// }
-using CampaignsStore = base::Value::Dict;
-
-const CampaignsPerSlot* GetProactiveCampaigns(
-    const CampaignsStore* campaigns_store);
-
-const CampaignsPerSlot* GetReactiveCampaigns(
-    const CampaignsStore* campaigns_store);
-
 const Campaigns* GetCampaignsBySlot(const CampaignsPerSlot* campaigns_per_slot,
                                     Slot slot);
 
 const Targetings* GetTargetings(const Campaign* campaign);
 
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
 const Payload* GetPayloadBySlot(const Campaign* campaign, Slot slot);
+
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
+std::optional<int> GetCampaignId(const Campaign* campaign);
+
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
+std::optional<int> GetStudyId(const Campaign* campaign);
 
 // Lists of campaigns keyed by the targeted slot. The key is the slot ID in
 // string. For example:
@@ -82,25 +89,6 @@ const Payload* GetPayloadBySlot(const Campaign* campaign, Slot slot);
 //   "1": [...]
 // }
 using CampaignsPerSlot = base::Value::Dict;
-
-// All campaigns including proactive and reactive campaigns. For example:
-// {
-//   "proactiveCampaigns" : {
-//     "0": [...],
-//     "1": [...]
-//   },
-//   "reactiveCampaigns" : {
-//     "3": [...],
-//     "4": [...]
-//   },
-// }
-using CampaignsStore = base::Value::Dict;
-
-const CampaignsPerSlot* GetProactiveCampaigns(
-    const CampaignsStore* campaigns_store);
-
-const CampaignsPerSlot* GetReactiveCampaigns(
-    const CampaignsStore* campaigns_store);
 
 const Campaigns* GetCampaignsBySlot(const CampaignsPerSlot* campaigns_per_slot,
                                     Slot slot);
@@ -111,7 +99,7 @@ const Payload* GetPayloadBySlot(const Campaign* campaign, Slot slot);
 
 class TargetingBase {
  public:
-  explicit TargetingBase(const Targeting& targeting_dict,
+  explicit TargetingBase(const Targeting* targeting_dict,
                          const char* targeting_path);
   TargetingBase(const TargetingBase&) = delete;
   TargetingBase& operator=(const TargetingBase) = delete;
@@ -124,8 +112,8 @@ class TargetingBase {
 
  protected:
   const base::Value::List* GetListCriteria(const char* path_suffix) const;
-  const absl::optional<bool> GetBoolCriteria(const char* path_suffix) const;
-  const absl::optional<int> GetIntCriteria(const char* path_suffix) const;
+  const std::optional<bool> GetBoolCriteria(const char* path_suffix) const;
+  const std::optional<int> GetIntCriteria(const char* path_suffix) const;
   const std::string* GetStringCriteria(const char* path_suffix) const;
 
  private:
@@ -133,7 +121,7 @@ class TargetingBase {
 
   // The dictionary that contains targeting definition. Owned by
   // `CampaignsManager`.
-  const Targeting& targeting_;
+  raw_ptr<const Targeting> targeting_;
   // The targeting path.
   const char* targeting_path_;
 };
@@ -150,7 +138,7 @@ class TargetingBase {
 // }
 class DemoModeTargeting : public TargetingBase {
  public:
-  explicit DemoModeTargeting(const Targeting& targeting_dict);
+  explicit DemoModeTargeting(const Targeting* targeting_dict);
   DemoModeTargeting(const DemoModeTargeting&) = delete;
   DemoModeTargeting& operator=(const DemoModeTargeting) = delete;
   ~DemoModeTargeting();
@@ -160,8 +148,8 @@ class DemoModeTargeting : public TargetingBase {
   const base::Value::List* GetCountries() const;
   const std::string* GetAppMinVersion() const;
   const std::string* GetAppMaxVersion() const;
-  const absl::optional<bool> TargetCloudGamingDevice() const;
-  const absl::optional<bool> TargetFeatureAwareDevice() const;
+  const std::optional<bool> TargetCloudGamingDevice() const;
+  const std::optional<bool> TargetFeatureAwareDevice() const;
 };
 
 // Wrapper around Device targeting dictionary. The structure looks like:
@@ -174,14 +162,54 @@ class DemoModeTargeting : public TargetingBase {
 // }
 class DeviceTargeting : public TargetingBase {
  public:
-  explicit DeviceTargeting(const Targeting& targeting_dict);
+  explicit DeviceTargeting(const Targeting* targeting_dict);
   DeviceTargeting(const DeviceTargeting&) = delete;
   DeviceTargeting& operator=(const DeviceTargeting) = delete;
   ~DeviceTargeting();
 
   const base::Value::List* GetLocales() const;
-  const absl::optional<int> GetMinMilestone() const;
-  const absl::optional<int> GetMaxMilestone() const;
+  const std::optional<int> GetMinMilestone() const;
+  const std::optional<int> GetMaxMilestone() const;
+};
+
+// Wrapper around scheduling targeting dictionary.
+//
+// The structure looks like:
+// {
+//   "start": 1697046365,
+//   "end": 1697046598
+// }
+//
+// Start and end are the number of seconds since epoch in UTC.
+class SchedulingTargeting {
+ public:
+  explicit SchedulingTargeting(const base::Value::Dict* scheduling);
+  SchedulingTargeting(const SchedulingTargeting&) = delete;
+  SchedulingTargeting& operator=(const SchedulingTargeting) = delete;
+  ~SchedulingTargeting();
+
+  const base::Time GetStartTime() const;
+  const base::Time GetEndTime() const;
+
+ private:
+  raw_ptr<const base::Value::Dict> scheduling_dict_;
+};
+
+// Wrapper around scheduling targeting dictionary.
+//
+// The structure looks like:
+// {
+//   "scheduling": []
+// }
+class SessionTargeting : public TargetingBase {
+ public:
+  explicit SessionTargeting(const Targeting* targeting_dict);
+  SessionTargeting(const SessionTargeting&) = delete;
+  SessionTargeting& operator=(const SessionTargeting) = delete;
+  ~SessionTargeting();
+
+  const std::vector<std::unique_ptr<SchedulingTargeting>> GetSchedulings()
+      const;
 };
 
 }  // namespace growth

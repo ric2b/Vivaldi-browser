@@ -7,7 +7,7 @@ package com.android.webview.chromium;
 import android.webkit.WebChromeClient;
 import android.webkit.WebViewClient;
 
-import org.chromium.android_webview.AwBrowserContext;
+import org.chromium.android_webview.AwBrowserContextStore;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwRenderProcess;
 import org.chromium.android_webview.ScriptHandler;
@@ -82,12 +82,13 @@ public class SharedWebViewChromium {
 
     public void insertVisualStateCallback(long requestId, AwContents.VisualStateCallback callback) {
         if (checkNeedsPost()) {
-            mRunQueue.addTask(new Runnable() {
-                @Override
-                public void run() {
-                    insertVisualStateCallback(requestId, callback);
-                }
-            });
+            mRunQueue.addTask(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            insertVisualStateCallback(requestId, callback);
+                        }
+                    });
             return;
         }
         mAwContents.insertVisualStateCallback(requestId, callback);
@@ -96,32 +97,39 @@ public class SharedWebViewChromium {
     public MessagePort[] createWebMessageChannel() {
         mAwInit.startYourEngines(true);
         if (checkNeedsPost()) {
-            MessagePort[] ret = mRunQueue.runOnUiThreadBlocking(new Callable<MessagePort[]>() {
-                @Override
-                public MessagePort[] call() {
-                    return createWebMessageChannel();
-                }
-            });
+            MessagePort[] ret =
+                    mRunQueue.runOnUiThreadBlocking(
+                            new Callable<MessagePort[]>() {
+                                @Override
+                                public MessagePort[] call() {
+                                    return createWebMessageChannel();
+                                }
+                            });
             return ret;
         }
         return mAwContents.createMessageChannel();
     }
 
-    public void postMessageToMainFrame(final MessagePayload messagePayload,
-            final String targetOrigin, final MessagePort[] sentPorts) {
+    public void postMessageToMainFrame(
+            final MessagePayload messagePayload,
+            final String targetOrigin,
+            final MessagePort[] sentPorts) {
         if (checkNeedsPost()) {
-            mRunQueue.addTask(new Runnable() {
-                @Override
-                public void run() {
-                    postMessageToMainFrame(messagePayload, targetOrigin, sentPorts);
-                }
-            });
+            mRunQueue.addTask(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            postMessageToMainFrame(messagePayload, targetOrigin, sentPorts);
+                        }
+                    });
             return;
         }
         mAwContents.postMessageToMainFrame(messagePayload, targetOrigin, sentPorts);
     }
 
-    public void addWebMessageListener(final String jsObjectName, final String[] allowedOriginRules,
+    public void addWebMessageListener(
+            final String jsObjectName,
+            final String[] allowedOriginRules,
             final WebMessageListener listener) {
         if (checkNeedsPost()) {
             mRunQueue.addTask(
@@ -151,12 +159,13 @@ public class SharedWebViewChromium {
     public void setWebViewRendererClientAdapter(
             SharedWebViewRendererClientAdapter webViewRendererClientAdapter) {
         if (checkNeedsPost()) {
-            mRunQueue.addTask(new Runnable() {
-                @Override
-                public void run() {
-                    setWebViewRendererClientAdapter(webViewRendererClientAdapter);
-                }
-            });
+            mRunQueue.addTask(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            setWebViewRendererClientAdapter(webViewRendererClientAdapter);
+                        }
+                    });
             return;
         }
         mContentsClientAdapter.setWebViewRendererClientAdapter(webViewRendererClientAdapter);
@@ -181,7 +190,7 @@ public class SharedWebViewChromium {
             mRunQueue.addTask(() -> setProfile(profileName));
             return;
         }
-        mAwContents.setBrowserContext(AwBrowserContext.getNamedContext(profileName, true));
+        mAwContents.setBrowserContext(AwBrowserContextStore.getNamedContext(profileName, true));
     }
 
     public Profile getProfile() {

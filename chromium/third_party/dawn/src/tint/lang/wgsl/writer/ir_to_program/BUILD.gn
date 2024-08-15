@@ -46,8 +46,7 @@ libtint_source_set("ir_to_program") {
   sources = [
     "ir_to_program.cc",
     "ir_to_program.h",
-    "rename_conflicts.cc",
-    "rename_conflicts.h",
+    "program_options.h",
   ]
   deps = [
     "${tint_src_dir}/api/common",
@@ -58,6 +57,8 @@ libtint_source_set("ir_to_program") {
     "${tint_src_dir}/lang/core/type",
     "${tint_src_dir}/lang/wgsl",
     "${tint_src_dir}/lang/wgsl/ast",
+    "${tint_src_dir}/lang/wgsl/common",
+    "${tint_src_dir}/lang/wgsl/features",
     "${tint_src_dir}/lang/wgsl/intrinsic",
     "${tint_src_dir}/lang/wgsl/ir",
     "${tint_src_dir}/lang/wgsl/program",
@@ -80,10 +81,7 @@ libtint_source_set("ir_to_program") {
 }
 if (tint_build_unittests) {
   tint_unittests_source_set("unittests") {
-    sources = [
-      "ir_to_program_test.h",
-      "rename_conflicts_test.cc",
-    ]
+    sources = [ "ir_to_program_test.h" ]
     deps = [
       "${tint_src_dir}:gmock_and_gtest",
       "${tint_src_dir}/api/common",
@@ -95,6 +93,8 @@ if (tint_build_unittests) {
       "${tint_src_dir}/lang/core/type",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
+      "${tint_src_dir}/lang/wgsl/common",
+      "${tint_src_dir}/lang/wgsl/features",
       "${tint_src_dir}/lang/wgsl/intrinsic",
       "${tint_src_dir}/lang/wgsl/ir",
       "${tint_src_dir}/lang/wgsl/program",

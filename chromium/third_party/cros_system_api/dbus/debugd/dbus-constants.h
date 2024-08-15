@@ -34,7 +34,7 @@ const char kSystraceStop[] = "SystraceStop";
 const char kSystraceStatus[] = "SystraceStatus";
 const char kGetLog[] = "GetLog";
 const char kGetAllLogs[] = "GetAllLogs";
-const char kGetFeedbackLogsV2[] = "GetFeedbackLogsV2";
+const char kGetFeedbackLogs[] = "GetFeedbackLogs";
 const char kGetFeedbackLogsV3[] = "GetFeedbackLogsV3";
 const char kKstaledSetRatio[] = "KstaledSetRatio";
 const char kTestICMP[] = "TestICMP";
@@ -155,6 +155,9 @@ enum FeedbackLogType {
   OS_RELEASE_INFO = 8,
   VAR_LOG_FILES = 9,
   PMT_DATA = 10,
+  // The dumps may be added to feedback reports only if the
+  // UserFeedbackWithLowLevelDebugDataAllowed policy is enabled for all or wifi.
+  WIFI_FIRMWARE_DUMPS = 11,
 };
 
 // PrintscanDebugCategories flags. These values must align with those in
@@ -182,7 +185,8 @@ constexpr char kG2f[] = "g2f";
 constexpr char kVerbose[] = "verbose";
 constexpr char kUserKeys[] = "user_keys";
 constexpr char kAllowlistData[] = "allowlist_data";
-constexpr char kCorpProtocol[] = "corp_protocol";
+constexpr char kDisableCorpProtocol[] = "disable_corp_protocol";
+constexpr char kActivateFips[] = "activate_fips";
 }  // namespace u2f_flags
 
 }  // namespace debugd

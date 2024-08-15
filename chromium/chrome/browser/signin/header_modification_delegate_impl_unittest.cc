@@ -62,13 +62,15 @@ class MockBoundSessionCookieRefreshService
               (base::RepeatingClosure updated_callback),
               (override));
   MOCK_METHOD(void,
-              OnRequestBlockedOnCookie,
-              (OnRequestBlockedOnCookieCallback resume_blocked_request),
+              HandleRequestBlockedOnCookie,
+              (HandleRequestBlockedOnCookieCallback resume_blocked_request),
               (override));
   MOCK_METHOD(base::WeakPtr<BoundSessionCookieRefreshService>,
               GetWeakPtr,
               (),
               (override));
+  MOCK_METHOD(void, AddObserver, (Observer* observer), (override));
+  MOCK_METHOD(void, RemoveObserver, (Observer* observer), (override));
 };
 
 class TestResponseAdapter : public signin::ResponseAdapter {
@@ -95,7 +97,7 @@ class TestResponseAdapter : public signin::ResponseAdapter {
 
   bool IsOutermostMainFrame() const override { return true; }
 
-  absl::optional<url::Origin> GetRequestInitiator() const override {
+  std::optional<url::Origin> GetRequestInitiator() const override {
     // Pretend the request came from the same origin.
     return url::Origin::Create(GetUrl());
   }

@@ -65,9 +65,8 @@ class ReconstructionTest : public testing::TestWithParam<int> {
       const char* const test_case = test_info->test_suite_name();
       if (absl::StartsWith(test_case, "C/")) {
       } else if (absl::StartsWith(test_case, "SSE41/")) {
-        if ((GetCpuInfo() & kSSE4_1) != 0) {
-          dsp::InverseTransformInit_SSE4_1();
-        }
+        if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+        dsp::InverseTransformInit_SSE4_1();
       } else if (absl::StartsWith(test_case, "NEON/")) {
         dsp::InverseTransformInit_NEON();
       } else {

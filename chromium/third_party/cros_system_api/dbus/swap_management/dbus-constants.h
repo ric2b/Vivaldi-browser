@@ -25,17 +25,20 @@ constexpr char kSwapZramWriteback[] = "InitiateSwapZramWriteback";
 constexpr char kMGLRUSetEnable[] = "MGLRUSetEnable";
 constexpr char kSwapZramRecompression[] = "InitiateSwapZramRecompression";
 constexpr char kSwapZramSetRecompAlgorithms[] = "SwapZramSetRecompAlgorithms";
+constexpr char kReclaimAllProcesses[] = "ReclaimAllProcesses";
 
 // ZramWritebackMode contains the allowed modes of operation
 // for zram writeback. The definition is in:
 // src/platform2/swap_management/dbus_binding/org.chromium.SwapManagement.xml
 enum ZramWritebackMode {
+  WRITEBACK_NONE = 0x000,
   WRITEBACK_IDLE = 0x001,
   WRITEBACK_HUGE = 0x002,
   WRITEBACK_HUGE_IDLE = 0x004,
 };
 
 enum ZramRecompressionMode {
+  RECOMPRESSION_NONE = 0x000,
   RECOMPRESSION_IDLE = 0x001,
   RECOMPRESSION_HUGE = 0x002,
   RECOMPRESSION_HUGE_IDLE = 0x004,

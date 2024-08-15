@@ -69,19 +69,17 @@ class SelfGuidedFilterTest : public testing::TestWithParam<int>,
     const char* const test_case = test_info->test_suite_name();
     if (absl::StartsWith(test_case, "C/")) {
     } else if (absl::StartsWith(test_case, "AVX2/")) {
-      if ((GetCpuInfo() & kAVX2) != 0) {
-        LoopRestorationInit_AVX2();
+      if ((GetCpuInfo() & kAVX2) == 0) GTEST_SKIP() << "No AVX2 support!";
+      LoopRestorationInit_AVX2();
 #if LIBGAV1_MAX_BITDEPTH >= 10
-        LoopRestorationInit10bpp_AVX2();
+      LoopRestorationInit10bpp_AVX2();
 #endif
-      }
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        LoopRestorationInit_SSE4_1();
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      LoopRestorationInit_SSE4_1();
 #if LIBGAV1_MAX_BITDEPTH >= 10
-        LoopRestorationInit10bpp_SSE4_1();
+      LoopRestorationInit10bpp_SSE4_1();
 #endif
-      }
     } else if (absl::StartsWith(test_case, "NEON/")) {
       LoopRestorationInit_NEON();
 #if LIBGAV1_MAX_BITDEPTH >= 10
@@ -381,19 +379,17 @@ class WienerFilterTest : public testing::TestWithParam<int>,
     const char* const test_case = test_info->test_suite_name();
     if (absl::StartsWith(test_case, "C/")) {
     } else if (absl::StartsWith(test_case, "AVX2/")) {
-      if ((GetCpuInfo() & kAVX2) != 0) {
-        LoopRestorationInit_AVX2();
+      if ((GetCpuInfo() & kAVX2) == 0) GTEST_SKIP() << "No AVX2 support!";
+      LoopRestorationInit_AVX2();
 #if LIBGAV1_MAX_BITDEPTH >= 10
-        LoopRestorationInit10bpp_AVX2();
+      LoopRestorationInit10bpp_AVX2();
 #endif
-      }
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        LoopRestorationInit_SSE4_1();
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      LoopRestorationInit_SSE4_1();
 #if LIBGAV1_MAX_BITDEPTH >= 10
-        LoopRestorationInit10bpp_SSE4_1();
+      LoopRestorationInit10bpp_SSE4_1();
 #endif
-      }
     } else if (absl::StartsWith(test_case, "NEON/")) {
       LoopRestorationInit_NEON();
 #if LIBGAV1_MAX_BITDEPTH >= 10

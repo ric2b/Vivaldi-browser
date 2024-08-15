@@ -46,6 +46,9 @@ class ExitLoop final : public Castable<ExitLoop, Exit> {
     /// The base offset in Operands() for the args
     static constexpr size_t kArgsOperandOffset = 0;
 
+    /// Constructor (no operands, no loop)
+    ExitLoop();
+
     /// Constructor
     /// @param loop the loop being exited
     /// @param args the target MultiInBlock arguments
@@ -62,8 +65,11 @@ class ExitLoop final : public Castable<ExitLoop, Exit> {
     /// @returns the loop being exited
     ir::Loop* Loop();
 
+    /// @returns the loop being exited
+    const ir::Loop* Loop() const;
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "exit_loop"; }
+    std::string FriendlyName() const override { return "exit_loop"; }
 };
 
 }  // namespace tint::core::ir

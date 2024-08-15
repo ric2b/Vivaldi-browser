@@ -3,17 +3,23 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <utility>
+
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/run_loop.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/ash/login/auth/chrome_safe_mode_delegate.h"
 #include "chrome/browser/ash/login/login_manager_test.h"
+#include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/ash/login/test/cryptohome_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
+#include "chrome/browser/ash/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
@@ -24,6 +30,9 @@
 #include "chromeos/ash/components/login/auth/auth_session_authenticator.h"
 #include "chromeos/ash/components/login/auth/authenticator_builder.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/services/auth_factor_config/auth_factor_config.h"
+#include "chromeos/ash/services/auth_factor_config/in_process_instances.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -38,6 +47,9 @@ constexpr char kNewUserGaiaId[] = "1234";
 constexpr char kNewUserPassword[] = "password";
 constexpr char kNewUserEmail[] = "new-user@gmail.com";
 
+// TODO(b/315827147): After Local Passwords are launched it would be
+// possible to rewrite this test in a way without callback injection,
+// as getting right timing could be performed via Screens interaction.
 class FakeAuthSessionAuthenticator : public AuthSessionAuthenticator {
  public:
   FakeAuthSessionAuthenticator(
@@ -103,12 +115,22 @@ class MisconfiguredOwnerUserTest : public LoginManagerTest {
  public:
   void SetUpOnMainThread() override {
     add_auth_factor_waiter_ = std::make_unique<base::test::TestFuture<void>>();
-    user_session_manager_test_api_ =
-        std::make_unique<test::UserSessionManagerTestApi>(
-            UserSessionManager::GetInstance());
-    user_session_manager_test_api_->InjectAuthenticatorBuilder(
-        std::make_unique<FakeAuthenticatorBuilder>(
-            add_auth_factor_waiter_->GetCallback()));
+    if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
+      auto test_api =
+          auth::AuthFactorConfig::TestApi(auth::GetAuthFactorConfigForTesting(
+              quick_unlock::QuickUnlockFactory::GetDelegate(),
+              g_browser_process->local_state()));
+      test_api.SetAddKnowledgeFactorCallback(
+          add_auth_factor_waiter_->GetCallback());
+      test_api.SetSkipUserIntegrityNotification(true);
+    } else {
+      auto user_session_manager_test_api =
+          std::make_unique<test::UserSessionManagerTestApi>(
+              UserSessionManager::GetInstance());
+      user_session_manager_test_api->InjectAuthenticatorBuilder(
+          std::make_unique<FakeAuthenticatorBuilder>(
+              add_auth_factor_waiter_->GetCallback()));
+    }
     LoginManagerTest::SetUpOnMainThread();
   }
 
@@ -118,6 +140,10 @@ class MisconfiguredOwnerUserTest : public LoginManagerTest {
     OobeScreenWaiter(UserCreationView::kScreenId).Wait();
 
     fake_gaia_mixin_.fake_gaia()->MapEmailToGaiaId(email, kNewUserGaiaId);
+
+    auto* context =
+        LoginDisplayHost::default_host()->GetWizardContextForTesting();
+    context->skip_post_login_screens_for_tests = true;
 
     LoginDisplayHost::default_host()
         ->GetOobeUI()
@@ -133,8 +159,6 @@ class MisconfiguredOwnerUserTest : public LoginManagerTest {
                                    nullptr,
                                    &cryptohome_mixin_};
   FakeGaiaMixin fake_gaia_mixin_{&mixin_host_};
-  std::unique_ptr<test::UserSessionManagerTestApi>
-      user_session_manager_test_api_;
   std::unique_ptr<base::test::TestFuture<void>> add_auth_factor_waiter_;
 };
 
@@ -156,6 +180,8 @@ class MisconfiguredUserTest : public MisconfiguredOwnerUserTest {
   MisconfiguredUserTest() {
     login_manager_.AppendRegularUsers(1);
     test_account_id_ = login_manager_.users().front().account_id;
+    scoped_testing_cros_settings_.device_settings()->Set(
+        ash::kDeviceOwner, base::Value(test_account_id_.GetUserEmail()));
   }
 
  protected:
@@ -164,6 +190,8 @@ class MisconfiguredUserTest : public MisconfiguredOwnerUserTest {
     EXPECT_TRUE(LoginScreenTestApi::ClickAddUserButton());
     MisconfiguredOwnerUserTest::InitiateUserCreation(email, password);
   }
+
+  ash::ScopedTestingCrosSettings scoped_testing_cros_settings_;
 };
 
 IN_PROC_BROWSER_TEST_F(
@@ -215,6 +243,8 @@ IN_PROC_BROWSER_TEST_F(MisconfiguredUserTest,
 IN_PROC_BROWSER_TEST_F(MisconfiguredUserTest,
                        MisconfiguredUserCryptohomeSuccessfullyRemoved) {
   base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(FakeUserDataAuthClient::Get()
+                  ->WasCalled<FakeUserDataAuthClient::Operation::kRemove>());
   ::user_data_auth::RemoveRequest last_remove_request =
       FakeUserDataAuthClient::Get()
           ->GetLastRequest<FakeUserDataAuthClient::Operation::kRemove>();

@@ -89,7 +89,7 @@ class BleScannerImpl : public BleScanner,
                     device::BluetoothDevice* device) override;
   void OnSessionStarted(
       device::BluetoothLowEnergyScanSession* scan_session,
-      absl::optional<device::BluetoothLowEnergyScanSession::ErrorCode>
+      std::optional<device::BluetoothLowEnergyScanSession::ErrorCode>
           error_code) override;
   void OnSessionInvalidated(
       device::BluetoothLowEnergyScanSession* scan_session) override;
@@ -116,8 +116,8 @@ class BleScannerImpl : public BleScanner,
   void SetServiceDataProviderForTesting(
       std::unique_ptr<ServiceDataProvider> service_data_provider);
 
-  raw_ptr<BluetoothHelper, ExperimentalAsh> bluetooth_helper_;
-  raw_ptr<BleSynchronizerBase, ExperimentalAsh> ble_synchronizer_;
+  raw_ptr<BluetoothHelper> bluetooth_helper_;
+  raw_ptr<BleSynchronizerBase> ble_synchronizer_;
   scoped_refptr<device::BluetoothAdapter> adapter_;
 
   std::unique_ptr<ServiceDataProvider> service_data_provider_;

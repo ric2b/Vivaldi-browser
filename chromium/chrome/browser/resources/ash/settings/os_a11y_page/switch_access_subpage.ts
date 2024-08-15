@@ -25,9 +25,9 @@ import {assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, routes} from '../router.js';
 
 import {AUTO_SCAN_SPEED_RANGE_MS, SwitchAccessCommand, SwitchAccessDeviceType} from './switch_access_constants.js';
@@ -38,7 +38,7 @@ import {KeyAssignment, SwitchAccessAssignmentsChangedValue} from './switch_acces
 /**
  * The portion of the setting name common to all Switch Access preferences.
  */
-const PREFIX: string = 'settings.a11y.switch_access.';
+const PREFIX = 'settings.a11y.switch_access.';
 
 const POINT_SCAN_SPEED_RANGE_DIPS_PER_SECOND: number[] =
     [25, 50, 75, 100, 150, 200, 300];

@@ -468,6 +468,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_EDIT_SPEED_DIAL" desc="The string title describing the context menu option for editing an speed dial.">
         Edit Speed Dial
       </message>
+      <message name="IDS_IOS_UPDATE_SPEED_DIAL_THUMBNAIL" desc="The string title describing the context menu option for updating thumbnail of a speed dial.">
+        Update thumbnail
+      </message>
       <message name="IDS_IOS_NEW_SPEED_DIAL_FOLDER" desc="The string title describing the context menu option for adding a new speed dial folder.">
         New Speed Dial Folder
       </message>
@@ -857,7 +860,7 @@ locale.  The strings in this file are specific to iOS.
         History
       </message>
       <message name="IDS_VIVALDI_SYNC_TYPED_URLS_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
-        Sync typed URLs
+        Sync History and Typed Urls
       </message>
       <message name="IDS_VIVALDI_SYNC_READING_LIST_SUBTITLE" desc="(Vivaldi) Subtitle of switch for choosing whether the given datatype gets synced.">
         Sync the Reading List
@@ -1216,9 +1219,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar used to search folder on folder selection page">
         Search Folder
       </message>
-      <!-- START PAGE LAYOUT SETTINGS -->
-      <message name="IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT" desc="Title for the start page layout settings">
-        Start Page Layout
+      <!-- START PAGE -->
+      <message name="IDS_IOS_PREFS_VIVALDI_START_PAGE" desc="Title for the start page settings">
+        Start Page
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_TITLE" desc="Title for the start page layout settings">
+        Layout
       </message>
       <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_LARGE" desc="Start page layout settings large speed dials">
         Large
@@ -1235,21 +1241,69 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SIZE_PREVIEW" desc="Start page layout settings title for size preview">
         Size Preview
       </message>
-      <!-- END START PAGE LAYOUT SETTINGS -->
-      <!-- DESKTOP TABS SETTINGS -->
-      <message name="IDS_IOS_PREFS_VIVALDI_DESKTOP_TABS" desc="Title for the desktop tabs settings">
-        Desktop tabs
+      <message name="IDS_IOS_VIVALDI_START_PAGE_WALLPAPER_TITLE" desc="Title for the start page wallpaper settings">
+        Wallpaper
       </message>
-      <!-- END DESKTOP TABS SETTINGS -->
+      <message name="IDS_IOS_VIVALDI_START_PAGE_PREVIEW_TITLE" desc="Title for the start page wallpaper settings preview">
+        Preview
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_SELECT_WALLPAPER" desc="Title for the start page select wallpaper settings">
+        Select as Wallapaper
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_WALLPAPER_PINCH" desc="Title for the start page wallpaper settings Pinch caption">
+        Pinch to crop and position the image
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_WALLPAPER_CANCEL_TITLE" desc="Title for the start page wallpaper settings Cancel">
+        Cancel
+      </message>
+      <!-- END START PAGE SETTINGS -->
+      <!--TABS SETTINGS -->
+      <message name="IDS_IOS_PREFS_VIVALDI_TABS" desc="Title for the tabs settings">
+        Tabs
+      </message>
+      <message name="IDS_IOS_TABS_ADDRESS_BAR_POSITION_TITLE" desc="Title for the tabs address bar settings">
+        Address Bar Position
+      </message>
+      <message name="IDS_IOS_TABS_ADDRESS_BAR_POSITION_TOP" desc="Title for tabs address bar settings position top">
+        Top
+      </message>
+      <message name="IDS_IOS_TABS_ADDRESS_BAR_POSITION_BOTTOM" desc="Title for tabs address bar settings position bottom">
+        Bottom
+      </message>
+      <message name="IDS_IOS_TABS_SEARCH_SUGGESTION_TITLE" desc="Title for search suggestions settings. Visible for only bottom address bar.">
+        Search Suggestions
+      </message>
+      <message name="IDS_IOS_TABS_REVERSE_SEARCH_SUGGESTION_TITLE" desc="Title for reverse search suggestions results settings. Visible for only bottom address bar.">
+        Reverse search suggestion order
+      </message>
+      <message name="IDS_IOS_TABS_REVERSE_SEARCH_SUGGESTION_DESCRIPTION" desc="Description for reverse search suggestions results settings. Visible for only bottom address bar.">
+        Applicable when address bar is at bottom, makes it easier to reach the top suggestions.
+      </message>
+      <message name="IDS_IOS_TABS_TAB_STYLE_TITLE" desc="Title for tabs tab bar style settings">
+        Tab Style
+      </message>
+      <message name="IDS_IOS_TABS_TAB_STYLE_SHOW_TAB_BAR_TITLE" desc="Title for tabs show tab bar settings">
+        Show Tab Bar
+      </message>
+      <!-- END TABS SETTINGS -->
       <!-- TOOLBAR -->
       <message name="IDS_IOS_TOOLBAR_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker button on the toolbar menu for iPhone landscape">
         Ad and Tracker blocker
       </message>
-      <message name="IDS_IOS_TOOLBAR_VIVALDI_SHARE" desc="Title for the share button on the toolbar menu for iPhone landscape">
+      <message name="IDS_IOS_TOOLBAR_VIVALDI_SHARE" desc="Title for the share button on the toolbar">
         Share
       </message>
-      <message name="IDS_IOS_TOOLBAR_VIVALDI_PANEL" desc="Title for the panel button on the toolbar menu for iPhone landscape">
+      <message name="IDS_IOS_TOOLBAR_VIVALDI_PANEL" desc="Title for the panel button on the toolbar menu">
         Panel
+      </message>
+      <message name="IDS_IOS_TOOLBAR_OVERFLOW_BACK" desc="Title for the back button on the toolbar overflow menu">
+        Navigation Back
+      </message>
+      <message name="IDS_IOS_TOOLBAR_OVERFLOW_FORWARD" desc="Title for the forward button on the toolbar overflow menu">
+        Navigation Forward
+      </message>
+      <message name="IDS_IOS_TOOLBAR_OVERFLOW_TAB_SWITCHER" desc="Title for the tab switcher button on the toolbar overflow menu">
+        Tab Switcher
       </message>
       <message name="IDS_ACCNAME_MORE" desc="The accessible name for the more button.">
         More
@@ -1268,6 +1322,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <!-- END TOOLBAR -->
       <!-- OVERFLOW MENU/MAIN MENU -->
+      <message name="IDS_VIVALDI_TOOLS_MENU_SHARE" desc="The title for the share item on the overflow menu">
+        Share
+      </message>
       <message name="IDS_VIVALDI_TOOLS_MENU_PAGE_INFO" desc="The title for the page info item on the overflow menu">
         Page Info
       </message>
@@ -1415,6 +1472,15 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_IOS_ONBOARDING_TABS_DESCRIPTION" desc="Description for the tabs settings page on onboarding flow">
         Choose between full desktop tabs, or the simplified tab switcher.
       </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_ADDRESS_BAR_POSITION_TITLE" desc="Title for the address bar position page on onboarding flow">
+        Top or Bottom
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_ADDRESS_BAR_POSITION_DESCRIPTION" desc="Description for the address bar position page on onboarding flow">
+        Select where you prefer to have the Tab Bar and Address Field.
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_ADDRESS_BAR_POSITION_NO_TABS_DESCRIPTION" desc="Description for the address bar position page on onboarding flow when tabs disabled">
+        Select where you prefer to have the Address Field.
+      </message>
       <!-- END ONBOARDING -->
       <!-- CUSTOM APP ICON -->
        <message name="IDS_VIVALDI_IOS_APP_ICON_TITLE" desc="Title for App Icon Button in Settings">
@@ -1445,25 +1511,70 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <!-- END SEARCH ENGINE SETTINGS -->
       <!-- APPEARANCE SETTING -->
-      <message name="IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE" desc="Title for the apperance settings page for start page wallapaper">
-        Appearance
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE" desc="Title for the appearance and theme settings">
+        Appearance &amp; Theme
       </message>
-      <message name="IDS_VIVALDI_IOS_APPEARANCE_THEME_TITLE" desc="Title for the theme in apperance settings">
-        Theme
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_TITLE" desc="Title for the website appearance section in appearance settings">
+        Website Appearance
       </message>
-      <message name="IDS_VIVALDI_IOS_APPEARANCE_WALLPAPER_TITLE" desc="Title for the wallapapers in apperance settings">
-        Wallpapers
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_DESCRIPTION" desc="Description for the website appearance section in appearance settings">
+        Some websites customize their color scheme according to user preferences. Choose which color scheme you would like these sites to use.
       </message>
-      <message name="IDS_VIVALDI_IOS_APPEARANCE_DARK_MODE_TITLE" desc="Title for dark mode in apperance settings">
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_DARK_TITLE" desc="Title for dark style of website appearance in appearance settings">
         Dark
       </message>
-      <message name="IDS_VIVALDI_IOS_APPEARANCE_LIGHT_MODE_TITLE" desc="Title for light mode in apperance settings">
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_LIGHT_TITLE" desc="Title for light style of website appearance in appearance settings">
         Light
       </message>
-      <message name="IDS_VIVALDI_IOS_APPEARANCE_SYSTEM_MODE_TITLE" desc="Title for system mode in apperance settings">
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_AUTO_TITLE" desc="Title for automatic style of website appearance in appearance settings">
+        Auto
+      </message>
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_ACC_TITLE" desc="Accessible title for website appearance view">
+        Website appearance options
+      </message>
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_FORCE_DARK_TITLE" desc="Title for force dark theme toggle of website appearance in appearance settings">
+        Force a dark theme on all websites
+      </message>
+      <message name="IDS_VIVALDI_IOS_WEBSITE_APPEARANCE_FORCE_DARK_DESCRIPTION" desc="Description for force dark theme toggle of website appearance in appearance settings">
+        Enabling this setting may break some websites and/or images. Requires a restart to take full effect.
+      </message>
+      <message name="IDS_VIVALDI_IOS_APPEARANCE_BROWSER_THEME_TITLE" desc="Title for the browser theme section in appearance settings">
+        Browser Theme
+      </message>
+      <message name="IDS_VIVALDI_IOS_BROWSER_THEME_DARK_TITLE" desc="Title for dark browser theme in appearance settings">
+        Dark
+      </message>
+      <message name="IDS_VIVALDI_IOS_BROWSER_THEME_LIGHT_TITLE" desc="Title for light browser theme in appearance settings">
+        Light
+      </message>
+      <message name="IDS_VIVALDI_IOS_BROWSER_THEME_SYSTEM_TITLE" desc="Title for system browser theme in appearance settings">
         System
       </message>
+      <message name="IDS_VIVALDI_IOS_ACCENT_COLOR_TITLE" desc="Title for the accent color section in appearance settings">
+        Accent Color
+      </message>
+      <message name="IDS_VIVALDI_IOS_ACCENT_COLOR_INHERIT_TITLE" desc="Title for the inherit accent color from webpage toggle in appearance settings">
+        Inherit Accent color from page
+      </message>
+      <message name="IDS_VIVALDI_IOS_CUSTOM_COLOR_CODE_TITLE" desc="Title for the custom color code subsection in appearance settings">
+        Custom Color Code
+      </message>
+      <message name="IDS_VIVALDI_IOS_CUSTOM_COLOR_PICKER_TITLE" desc="Title for the custom color picker in appearance settings">
+        Colors
+      </message>
+      <message name="IDS_VIVALDI_IOS_ACCENT_COLOR_TOOLBAR_PREVIEW_ACC_TITLE" desc="Accessible title for toolbar preview view of accent color settings.">
+        Preview for the toolbar with selected accent color
+      </message>
+      <message name="IDS_VIVALDI_IOS_ACCENT_COLOR_SELECTED_ACC_TITLE" desc="Accessible title for the selected preloaded color.">
+        Currently selected color
+      </message>
+      <message name="IDS_VIVALDI_IOS_ACCENT_COLOR_SELECT_ACC_TITLE" desc="Accessible title for the not selected preloaded color.">
+        Tap to select this color
+      </message>
       <!-- END APPEARANCE SETTING -->
+      <message name="IDS_IOS_CONTENT_CONTEXT_OPENLINK_NEWBACKGROUNDTAB" desc="The iOS menu item for opening a link in a background tab.">
+        Open in New Background Tab
+      </message>
     </messages>
   </release>
 </grit>

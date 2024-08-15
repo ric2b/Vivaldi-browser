@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,7 +40,6 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "url/gurl.h"
 
@@ -107,7 +107,7 @@ IN_PROC_BROWSER_TEST_F(WebAppMetricsBrowserTest,
 
   auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
   ASSERT_EQ(entries.size(), 1U);
-  auto* entry = entries[0];
+  auto* entry = entries[0].get();
   ukm_recorder.ExpectEntrySourceHasUrl(entry, GetInstallableAppURL());
   ukm::TestAutoSetUkmRecorder::ExpectEntryMetric(entry, UkmEntry::kUsedName,
                                                  true);
@@ -150,7 +150,7 @@ IN_PROC_BROWSER_TEST_F(WebAppMetricsBrowserTest,
 
   auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
   ASSERT_EQ(entries.size(), 1U);
-  auto* entry = entries[0];
+  auto* entry = entries[0].get();
   ukm_recorder.ExpectEntrySourceHasUrl(entry, GetInstallableAppURL());
   ukm::TestAutoSetUkmRecorder::ExpectEntryMetric(entry, UkmEntry::kUsedName,
                                                  true);
@@ -205,7 +205,7 @@ IN_PROC_BROWSER_TEST_F(WebAppMetricsBrowserTest,
 
   auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
   ASSERT_EQ(entries.size(), 1U);
-  auto* entry = entries[0];
+  auto* entry = entries[0].get();
   ukm_recorder.ExpectEntrySourceHasUrl(entry, GetInstallableAppURL());
   ukm::TestAutoSetUkmRecorder::ExpectEntryMetric(entry, UkmEntry::kUsedName,
                                                  true);
@@ -270,7 +270,7 @@ IN_PROC_BROWSER_TEST_F(
 
   auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
   ASSERT_EQ(entries.size(), 1U);
-  auto* entry = entries[0];
+  auto* entry = entries[0].get();
   ukm_recorder.ExpectEntrySourceHasUrl(entry, GetInstallableAppURL());
   ukm::TestAutoSetUkmRecorder::ExpectEntryMetric(entry, UkmEntry::kUsedName,
                                                  true);
@@ -581,7 +581,7 @@ IN_PROC_BROWSER_TEST_F(WebAppMetricsBrowserTest, Suspend_FlushesSessionTimes) {
 
   auto entries = ukm_recorder.GetEntriesByName(UkmEntry::kEntryName);
   ASSERT_EQ(entries.size(), 1U);
-  auto* entry = entries[0];
+  auto* entry = entries[0].get();
   // 2 hours = 7200 seconds. Nearest 1/50 day bucket is 6912.
   EXPECT_THAT(entry->metrics,
               Contains(Pair(UkmEntry::kForegroundDurationNameHash, 6912)));

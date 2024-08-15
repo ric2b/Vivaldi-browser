@@ -12,8 +12,10 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -26,7 +28,7 @@
 #include "chrome/browser/net/disk_cache_dir_policy_handler.h"
 #include "chrome/browser/net/explicitly_allowed_network_ports_policy_handler.h"
 #include "chrome/browser/net/secure_dns_policy_handler.h"
-#include "chrome/browser/performance_manager/public/user_tuning/high_efficiency_policy_handler.h"
+#include "chrome/browser/performance_manager/public/user_tuning/memory_saver_policy_handler.h"
 #include "chrome/browser/policy/browsing_history_policy_handler.h"
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/policy/drive_file_sync_available_policy_handler.h"
@@ -46,7 +48,7 @@
 #include "chrome/browser/spellchecker/spellcheck_language_policy_handler.h"
 #include "chrome/browser/ssl/secure_origin_policy_handler.h"
 #include "chrome/browser/themes/theme_color_policy_handler.h"
-#include "chrome/browser/ui/toolbar/chrome_labs_prefs.h"
+#include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
@@ -84,6 +86,8 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/network_time/network_time_pref_names.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/common/omnibox_features.h"
+#include "components/optimization_guide/core/model_execution/model_execution_prefs.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
@@ -105,6 +109,7 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_policy_handler.h"
 #include "components/search_engines/search_engines_pref_names.h"
+#include "components/search_engines/site_search_policy_handler.h"
 #include "components/security_interstitials/core/https_only_mode_policy_handler.h"
 #include "components/security_interstitials/core/pref_names.h"
 #include "components/services/storage/public/cpp/storage_prefs.h"
@@ -182,6 +187,7 @@
 #include "chrome/browser/policy/default_geolocation_policy_handler.h"
 #include "chrome/browser/policy/device_login_screen_geolocation_access_level_policy_handler.h"
 #include "chrome/browser/policy/os_color_mode_policy_handler.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "chromeos/components/disks/disks_prefs.h"
@@ -240,6 +246,12 @@
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_prefs.h"
 #endif
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/policy/battery_saver_policy_handler.h"
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_ASH)
+
 namespace policy {
 namespace {
 
@@ -273,13 +285,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kFeedbackSurveysEnabled,
     policy::policy_prefs::kFeedbackSurveysEnabled,
     base::Value::Type::BOOLEAN },
-// We avoid checking for BUILDFLAG(ENABLE_NACL) since we may want the policy to
-// exist (deprecated) even if NACL is no longer being built.
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
-  { key::kNativeClientForceAllowed,
-    prefs::kNativeClientForceAllowed,
-    base::Value::Type::BOOLEAN },
-#endif
   { key::kPasswordManagerEnabled,
     password_manager::prefs::kCredentialsEnableService,
     base::Value::Type::BOOLEAN },
@@ -390,6 +395,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::INTEGER },
   { key::kWebXRImmersiveArEnabled,
     prefs::kWebXRImmersiveArEnabled,
+    base::Value::Type::BOOLEAN },
+  { key::kListenToThisPageEnabled,
+    prefs::kListenToThisPageEnabled,
     base::Value::Type::BOOLEAN },
 #else // !BUILDFLAG(IS_ANDROID)
   { key::kAbusiveExperienceInterventionEnforce,
@@ -753,9 +761,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kWebHidBlockedForUrls,
     prefs::kManagedWebHidBlockedForUrls,
     base::Value::Type::LIST },
-  { key::kWebRtcAllowLegacyTLSProtocols,
-    prefs::kWebRTCAllowLegacyTLSProtocols,
-    base::Value::Type::BOOLEAN },
   { key::kWebRtcEventLogCollectionAllowed,
     prefs::kWebRtcEventLogCollectionAllowed,
     base::Value::Type::BOOLEAN },
@@ -787,6 +792,11 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kForceGoogleSafeSearch,
     policy_prefs::kForceGoogleSafeSearch,
     base::Value::Type::BOOLEAN },
+#if BUILDFLAG(IS_CHROMEOS)
+  { key::kEssentialSearchEnabled,
+    prefs::kEssentialSearchEnabled,
+    base::Value::Type::BOOLEAN },
+#endif  // BUILDFLAG(IS_CHROMEOS)
   { key::kForceYouTubeRestrict,
     policy::policy_prefs::kForceYouTubeRestrict,
     base::Value::Type::INTEGER },
@@ -972,6 +982,10 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kQuickOfficeForceFileDownloadEnabled,
     quickoffice::kQuickOfficeForceFileDownloadEnabled,
     base::Value::Type::BOOLEAN },
+  { key::kAlwaysOnVpnPreConnectUrlAllowlist,
+    policy_prefs::kAlwaysOnVpnPreConnectUrlAllowlist,
+    base::Value::Type::LIST
+  },
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1135,6 +1149,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     nullptr,
     base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenVirtualKeyboardEnabled,
+    nullptr,
+    base::Value::Type::BOOLEAN },
+  { key::kDeviceLoginScreenTouchVirtualKeyboardEnabled,
     nullptr,
     base::Value::Type::BOOLEAN },
   { key::kDeviceLoginScreenDictationEnabled,
@@ -1480,9 +1497,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kQuickAnswersUnitConversionEnabled,
     quick_answers::prefs::kQuickAnswersUnitConversionEnabled,
     base::Value::Type::BOOLEAN },
-  { key::kChromadToCloudMigrationEnabled,
-    ash::prefs::kChromadToCloudMigrationEnabled,
-    base::Value::Type::BOOLEAN },
   { key::kProjectorEnabled,
     ash::prefs::kProjectorAllowByPolicy,
     base::Value::Type::BOOLEAN },
@@ -1567,6 +1581,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kUserFeedbackWithLowLevelDebugDataAllowed,
     ash::prefs::kUserFeedbackWithLowLevelDebugDataAllowed,
     base::Value::Type::LIST },
+  { key::kHeartbeatEnabled,
+    ash::kHeartbeatEnabled,
+    base::Value::Type::BOOLEAN },
 #endif // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_LINUX)
@@ -1859,14 +1876,10 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kRemoteAccessHostAllowEnterpriseRemoteSupportConnections,
     prefs::kRemoteAccessHostAllowEnterpriseRemoteSupportConnections,
     base::Value::Type::BOOLEAN },
-  { key::kRealTimeDownloadProtectionRequestAllowed,
-    prefs::kRealTimeDownloadProtectionRequestAllowedByPolicy,
-    base::Value::Type::BOOLEAN },
-  { key::kClientSidePhishingProtectionAllowed,
-    prefs::kSafeBrowsingCsdPhishingProtectionAllowedByPolicy,
-    base::Value::Type::BOOLEAN },
-  { key::kSafeBrowsingExtensionProtectionAllowed,
-    prefs::kSafeBrowsingExtensionProtectionAllowedByPolicy,
+  // We avoid checking for BUILDFLAG(ENABLE_NACL) since we may want the policy
+  // to exist (deprecated) even if NACL is no longer being built.
+  { key::kNativeClientForceAllowed,
+    prefs::kNativeClientForceAllowed,
     base::Value::Type::BOOLEAN },
 #endif // BUILDFLAG(IS_CHROMEOS)
 
@@ -1903,12 +1916,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::LIST },
 #endif // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
-  { key::kChromeRootStoreEnabled,
-    prefs::kChromeRootStoreEnabled,
-    base::Value::Type::BOOLEAN },
-#endif  // BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
-
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
   { key::kEnforceLocalAnchorConstraintsEnabled,
@@ -1937,12 +1944,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kPdfAnnotationsEnabled,
     base::Value::Type::BOOLEAN },
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  { key::kChromeAppsWebViewPermissiveBehaviorAllowed,
-    extensions::pref_names::kChromeAppsWebViewPermissiveBehaviorAllowed,
-    base::Value::Type::BOOLEAN },
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   { key::kCORSNonWildcardRequestHeadersSupport,
     prefs::kCorsNonWildcardRequestHeadersSupport,
@@ -1975,21 +1976,12 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kAccessControlAllowMethodsInCORSPreflightSpecConformant,
     prefs::kAccessControlAllowMethodsInCORSPreflightSpecConformant,
     base::Value::Type::BOOLEAN},
-  { key::kOffsetParentNewSpecBehaviorEnabled,
-    policy_prefs::kOffsetParentNewSpecBehaviorEnabled,
-    base::Value::Type::BOOLEAN},
-  { key::kSendMouseEventsDisabledFormControlsEnabled,
-    policy_prefs::kSendMouseEventsDisabledFormControlsEnabled,
-    base::Value::Type::BOOLEAN},
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   { key::kDeviceAutofillSAMLUsername,
     ash::prefs::kUrlParameterToAutofillSAMLUsername,
     base::Value::Type::STRING },
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
-  { key::kBatterySaverModeAvailability,
-    performance_manager::user_tuning::prefs::kBatterySaverModeState,
-    base::Value::Type::INTEGER },
   { key::kTabDiscardingExceptions,
     performance_manager::user_tuning::prefs::kManagedTabDiscardingExceptions,
     base::Value::Type::LIST },
@@ -2045,11 +2037,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kMidiBlockedForUrls,
     prefs::kManagedMidiBlockedForUrls,
     base::Value::Type::LIST },
-#if BUILDFLAG(IS_CHROMEOS)
-  { key::kPPAPISharedImagesForVideoDecoderAllowed,
-    policy::policy_prefs::kPPAPISharedImagesForVideoDecoderAllowed,
-    base::Value::Type::BOOLEAN },
-#endif
   { key::kIPv6ReachabilityOverrideEnabled,
     prefs::kIPv6ReachabilityOverrideEnabled,
     base::Value::Type::BOOLEAN },
@@ -2063,6 +2050,36 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::LIST},
 #endif // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #endif // BUILDFLAG(ENABLE_EXTENSIONS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+  { key::kTabOrganizerSettings,
+    optimization_guide::model_execution::prefs::kTabOrganizationEnterprisePolicyAllowed,
+    base::Value::Type::INTEGER},
+#endif
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+  { key::kHelpMeWriteSettings,
+    optimization_guide::model_execution::prefs::kComposeEnterprisePolicyAllowed,
+    base::Value::Type::INTEGER},
+#endif
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+  { key::kCreateThemesSettings,
+    optimization_guide::model_execution::prefs::kWallpaperSearchEnterprisePolicyAllowed,
+    base::Value::Type::INTEGER},
+#endif
+
+#if BUILDFLAG(CHROME_CERTIFICATE_POLICIES_SUPPORTED)
+  { key::kCACertificates,
+    prefs::kCACertificates,
+    base::Value::Type::LIST },
+  { key::kCADistrustedCertificates,
+    prefs::kCADistrustedCertificates,
+    base::Value::Type::LIST },
+  { key::kCAHintCertificates,
+    prefs::kCAHintCertificates,
+    base::Value::Type::LIST },
+  { key::kCAPlatformIntegrationEnabled,
+    prefs::kCAPlatformIntegrationEnabled,
+    base::Value::Type::BOOLEAN },
+#endif // BUILDFLAG(CHROME_CERTIFICATE_POLICIES_SUPPORTED)
 };
 // clang-format on
 
@@ -2156,7 +2173,10 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS_ASH)
   handlers->AddHandler(
-      std::make_unique<performance_manager::HighEfficiencyPolicyHandler>());
+      std::make_unique<performance_manager::MemorySaverPolicyHandler>());
+  // Note: This needs to be created after `DefaultSearchPolicyHandler`.
+  handlers->AddHandler(
+      std::make_unique<SiteSearchPolicyHandler>(chrome_schema));
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -2402,7 +2422,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(
       std::make_unique<ExplicitlyAllowedNetworkPortsPolicyHandler>());
   handlers->AddHandler(std::make_unique<HttpsOnlyModePolicyHandler>(
-      prefs::kHttpsOnlyModeEnabled));
+      prefs::kHttpsOnlyModeEnabled, prefs::kHttpsFirstModeIncognito));
 
   handlers->AddHandler(std::make_unique<BrowsingDataLifetimePolicyHandler>(
       key::kBrowsingDataLifetime, browsing_data::prefs::kBrowsingDataLifetime,
@@ -2598,10 +2618,6 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(std::make_unique<SimplePolicyHandler>(
       key::kUserPrintersAllowed, prefs::kUserPrintersAllowed,
       base::Value::Type::BOOLEAN));
-  handlers->AddHandler(std::make_unique<SimplePolicyHandler>(
-      key::kSecondaryGoogleAccountUsage,
-      ::account_manager::prefs::kSecondaryGoogleAccountUsage,
-      base::Value::Type::STRING));
   handlers->AddHandler(std::make_unique<IntRangePolicyHandler>(
       key::kGaiaOfflineSigninTimeLimitDays,
       ash::prefs::kGaiaOfflineSigninTimeLimitDays, -1, 365, true));
@@ -2882,6 +2898,12 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
           key::kRelatedWebsiteSetsEnabled,
           prefs::kPrivacySandboxRelatedWebsiteSetsEnabled,
           base::Value::Type::BOOLEAN)));
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS_ASH)
+  handlers->AddHandler(std::make_unique<BatterySaverPolicyHandler>());
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return handlers;
 }

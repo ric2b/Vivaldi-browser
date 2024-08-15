@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void clamp_d396af() {
+  int4 res = int4(1);
+}
+vertex float4 vertex_main() {
+  clamp_d396af();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  clamp_d396af();
+}
+kernel void compute_main() {
+  clamp_d396af();
+}

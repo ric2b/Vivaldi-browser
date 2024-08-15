@@ -44,18 +44,31 @@ TEST_F(MslASTPrinterTest, InvalidProgram) {
     auto program = resolver::Resolve(*this);
     ASSERT_FALSE(program.IsValid());
     auto result = Generate(program, Options{});
-    EXPECT_FALSE(result);
+    EXPECT_NE(result, Success);
     EXPECT_EQ(result.Failure().reason.str(), "error: make the program invalid");
 }
 
 TEST_F(MslASTPrinterTest, UnsupportedExtension) {
-    Enable(Source{{12, 34}}, wgsl::Extension::kUndefined);
+    Enable(Source{{12, 34}}, wgsl::Extension::kChromiumExperimentalPushConstant);
 
     ASTPrinter& gen = Build();
 
     ASSERT_FALSE(gen.Generate());
-    EXPECT_EQ(gen.Diagnostics().str(),
-              R"(12:34 error: MSL backend does not support extension 'undefined')");
+    EXPECT_EQ(
+        gen.Diagnostics().str(),
+        R"(12:34 error: MSL backend does not support extension 'chromium_experimental_push_constant')");
+}
+
+TEST_F(MslASTPrinterTest, RequiresDirective) {
+    Require(wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures);
+
+    ASTPrinter& gen = Build();
+
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
+    EXPECT_EQ(gen.Result(), R"(#include <metal_stdlib>
+
+using namespace metal;
+)");
 }
 
 TEST_F(MslASTPrinterTest, Generate) {
@@ -213,12 +226,16 @@ struct tint_array {
     T elements[N];
 };
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 struct tint_symbol_3 {
   tint_array<float2x2, 4> m;
 };
 
 void comp_main_inner(uint local_invocation_index, threadgroup tint_array<float2x2, 4>* const tint_symbol) {
-  for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
+  TINT_ISOLATE_UB(tint_volatile_true) for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
     uint const i = idx;
     (*(tint_symbol))[i] = float2x2(float2(0.0f), float2(0.0f));
   }

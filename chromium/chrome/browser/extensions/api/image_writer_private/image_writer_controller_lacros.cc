@@ -28,19 +28,19 @@ const char kUnsupportedAshVersion[] = "UNSUPPORTED_ASH_VERSION";
 image_writer_api::Stage FromMojo(crosapi::mojom::Stage mojo_stage) {
   switch (mojo_stage) {
     case crosapi::mojom::Stage::kConfirmation:
-      return image_writer_api::Stage::STAGE_CONFIRMATION;
+      return image_writer_api::Stage::kConfirmation;
     case crosapi::mojom::Stage::kDownload:
-      return image_writer_api::Stage::STAGE_DOWNLOAD;
+      return image_writer_api::Stage::kDownload;
     case crosapi::mojom::Stage::kVerifyDownload:
-      return image_writer_api::Stage::STAGE_VERIFYDOWNLOAD;
+      return image_writer_api::Stage::kVerifyDownload;
     case crosapi::mojom::Stage::kUnzip:
-      return image_writer_api::Stage::STAGE_UNZIP;
+      return image_writer_api::Stage::kUnzip;
     case crosapi::mojom::Stage::kWrite:
-      return image_writer_api::Stage::STAGE_WRITE;
+      return image_writer_api::Stage::kWrite;
     case crosapi::mojom::Stage::kVerifyWrite:
-      return image_writer_api::Stage::STAGE_VERIFYWRITE;
+      return image_writer_api::Stage::kVerifyWrite;
     case crosapi::mojom::Stage::kUnknown:
-      return image_writer_api::Stage::STAGE_UNKNOWN;
+      return image_writer_api::Stage::kUnknown;
   }
 }
 
@@ -144,7 +144,7 @@ void ImageWriterControllerLacros::ListRemovableStorageDevices(
     service->GetRemote<crosapi::mojom::ImageWriter>()
         ->ListRemovableStorageDevices(std::move(callback));
   } else {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
   }
 }
 
@@ -175,7 +175,7 @@ void ImageWriterControllerLacros::WriteFromUrl(
     const std::string& extension_id,
     const std::string& storage_unit_id,
     const GURL& image_url,
-    const absl::optional<std::string>& image_hash,
+    const std::optional<std::string>& image_hash,
     WriteOperationCallback callback) {
   chromeos::LacrosService* service = chromeos::LacrosService::Get();
   if (!service->IsAvailable<crosapi::mojom::ImageWriter>() ||
@@ -232,7 +232,7 @@ void ImageWriterControllerLacros::CancelWrite(const std::string& extension_id,
   // Deleting pending client will trigger its disconnect handler in ash,
   // which will cancel its pending write operation if there is any.
   DeletePendingClient(extension_id);
-  std::move(callback).Run(absl::nullopt);
+  std::move(callback).Run(std::nullopt);
 }
 
 void ImageWriterControllerLacros::OnPendingClientWriteCompleted(

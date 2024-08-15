@@ -32,10 +32,12 @@
 #include <vector>
 
 #include "dawn/common/MutexProtected.h"
+#include "dawn/common/Range.h"
 #include "dawn/native/BindGroupTracker.h"
 #include "dawn/native/CommandValidation.h"
 #include "dawn/native/DynamicUploader.h"
 #include "dawn/native/Error.h"
+#include "dawn/native/Queue.h"
 #include "dawn/native/RenderBundle.h"
 #include "dawn/native/d3d12/BindGroupD3D12.h"
 #include "dawn/native/d3d12/BindGroupLayoutD3D12.h"
@@ -354,10 +356,10 @@ MaybeError TransitionAndClearForSyncScope(CommandRecordingContext* commandContex
 
         D3D12_RESOURCE_BARRIER barrier;
         if (buffer->TrackUsageAndGetResourceBarrier(commandContext, &barrier,
-                                                    usages.bufferUsages[i])) {
+                                                    usages.bufferSyncInfos[i].usage)) {
             barriers.push_back(barrier);
         }
-        bufferUsages |= usages.bufferUsages[i];
+        bufferUsages |= usages.bufferSyncInfos[i].usage;
     }
 
     wgpu::TextureUsage textureUsages = wgpu::TextureUsage::None;
@@ -368,18 +370,18 @@ MaybeError TransitionAndClearForSyncScope(CommandRecordingContext* commandContex
         // Clear subresources that are not render attachments. Render attachments will be
         // cleared in RecordBeginRenderPass by setting the loadop to clear when the texture
         // subresource has not been initialized before the render pass.
-        DAWN_TRY(usages.textureUsages[i].Iterate(
-            [&](const SubresourceRange& range, wgpu::TextureUsage usage) -> MaybeError {
-                if (usage & ~wgpu::TextureUsage::RenderAttachment) {
+        DAWN_TRY(usages.textureSyncInfos[i].Iterate(
+            [&](const SubresourceRange& range, const TextureSyncInfo& syncInfo) -> MaybeError {
+                if (syncInfo.usage & ~wgpu::TextureUsage::RenderAttachment) {
                     DAWN_TRY(texture->EnsureSubresourceContentInitialized(commandContext, range));
                 }
-                textureUsages |= usage;
+                textureUsages |= syncInfo.usage;
                 return {};
             }));
 
         ToBackend(usages.textures[i])
             ->TrackUsageAndGetResourceBarrierForPass(commandContext, &barriers,
-                                                     usages.textureUsages[i]);
+                                                     usages.textureSyncInfos[i]);
     }
 
     if (barriers.size()) {
@@ -615,8 +617,7 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
 
     bool mInCompute = false;
 
-    ityp::array<BindGroupIndex, D3D12_GPU_DESCRIPTOR_HANDLE, kMaxBindGroups>
-        mBoundRootSamplerTables = {};
+    PerBindGroup<D3D12_GPU_DESCRIPTOR_HANDLE> mBoundRootSamplerTables = {};
 
     MutexProtected<ShaderVisibleDescriptorAllocator>& mViewAllocator;
     MutexProtected<ShaderVisibleDescriptorAllocator>& mSamplerAllocator;
@@ -664,7 +665,7 @@ class VertexBufferTracker {
   public:
     void OnSetVertexBuffer(VertexBufferSlot slot, Buffer* buffer, uint64_t offset, uint64_t size) {
         mStartSlot = std::min(mStartSlot, slot);
-        mEndSlot = std::max(mEndSlot, ityp::Add(slot, VertexBufferSlot(uint8_t(1))));
+        mEndSlot = std::max(mEndSlot, ityp::PlusOne(slot));
 
         auto* d3d12BufferView = &mD3D12BufferViews[slot];
         d3d12BufferView->BufferLocation = buffer->GetVA() + offset;
@@ -684,10 +685,9 @@ class VertexBufferTracker {
         if (mLastAppliedRenderPipeline != renderPipeline) {
             mLastAppliedRenderPipeline = renderPipeline;
 
-            for (VertexBufferSlot slot :
-                 IterateBitSet(renderPipeline->GetVertexBufferSlotsUsed())) {
+            for (VertexBufferSlot slot : IterateBitSet(renderPipeline->GetVertexBuffersUsed())) {
                 startSlot = std::min(startSlot, slot);
-                endSlot = std::max(endSlot, ityp::Add(slot, VertexBufferSlot(uint8_t(1))));
+                endSlot = std::max(endSlot, ityp::PlusOne(slot));
                 mD3D12BufferViews[slot].StrideInBytes =
                     renderPipeline->GetVertexBuffer(slot).arrayStride;
             }
@@ -705,8 +705,8 @@ class VertexBufferTracker {
                                         static_cast<uint8_t>(ityp::Sub(endSlot, startSlot)),
                                         &mD3D12BufferViews[startSlot]);
 
-        mStartSlot = VertexBufferSlot(kMaxVertexBuffers);
-        mEndSlot = VertexBufferSlot(uint8_t(0));
+        mStartSlot = kMaxVertexBuffersTyped;
+        mEndSlot = {};
     }
 
   private:
@@ -716,9 +716,8 @@ class VertexBufferTracker {
     // data in the middle of the range).
     const RenderPipeline* mLastAppliedRenderPipeline = nullptr;
     VertexBufferSlot mStartSlot{kMaxVertexBuffers};
-    VertexBufferSlot mEndSlot{uint8_t(0)};
-    ityp::array<VertexBufferSlot, D3D12_VERTEX_BUFFER_VIEW, kMaxVertexBuffers> mD3D12BufferViews =
-        {};
+    VertexBufferSlot mEndSlot{};
+    PerVertexBuffer<D3D12_VERTEX_BUFFER_VIEW> mD3D12BufferViews = {};
 };
 
 void ResolveMultisampledRenderPass(CommandRecordingContext* commandContext,
@@ -984,6 +983,8 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* commandContext
                             uint32_t sourceLayer = 0;
                             uint32_t sourceZ = 0;
                             switch (source->GetDimension()) {
+                                case wgpu::TextureDimension::Undefined:
+                                    DAWN_UNREACHABLE();
                                 case wgpu::TextureDimension::e1D:
                                     DAWN_ASSERT(copy->source.origin.z == 0);
                                     break;
@@ -998,6 +999,8 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* commandContext
                             uint32_t destinationLayer = 0;
                             uint32_t destinationZ = 0;
                             switch (destination->GetDimension()) {
+                                case wgpu::TextureDimension::Undefined:
+                                    DAWN_UNREACHABLE();
                                 case wgpu::TextureDimension::e1D:
                                     DAWN_ASSERT(copy->destination.origin.z == 0);
                                     break;
@@ -1147,9 +1150,10 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* commandContext
                 uint8_t* data = mCommands.NextData<uint8_t>(size);
 
                 UploadHandle uploadHandle;
-                DAWN_TRY_ASSIGN(uploadHandle, device->GetDynamicUploader()->Allocate(
-                                                  size, device->GetPendingCommandSerial(),
-                                                  kCopyBufferToBufferOffsetAlignment));
+                DAWN_TRY_ASSIGN(uploadHandle,
+                                device->GetDynamicUploader()->Allocate(
+                                    size, device->GetQueue()->GetPendingCommandSerial(),
+                                    kCopyBufferToBufferOffsetAlignment));
                 DAWN_ASSERT(uploadHandle.mappedBuffer != nullptr);
                 memcpy(uploadHandle.mappedBuffer, data, size);
 
@@ -1324,7 +1328,7 @@ MaybeError CommandBuffer::SetupRenderPass(CommandRecordingContext* commandContex
     D3D12_CPU_DESCRIPTOR_HANDLE nullRTV;
 
     const auto& colorAttachmentsMaskBitSet = renderPass->attachmentState->GetColorAttachmentsMask();
-    for (ColorAttachmentIndex i(uint8_t(0)); i < ColorAttachmentIndex(kMaxColorAttachments); i++) {
+    for (auto i : Range(kMaxColorAttachmentsTyped)) {
         if (colorAttachmentsMaskBitSet.test(i)) {
             RenderPassColorAttachmentInfo& attachmentInfo = renderPass->colorAttachments[i];
             TextureView* view = ToBackend(attachmentInfo.view.Get());
@@ -1335,7 +1339,8 @@ MaybeError CommandBuffer::SetupRenderPass(CommandRecordingContext* commandContex
                 rtvAllocation,
                 device->GetRenderTargetViewAllocator()->AllocateTransientCPUDescriptors());
 
-            const D3D12_RENDER_TARGET_VIEW_DESC viewDesc = view->GetRTVDescriptor();
+            D3D12_RENDER_TARGET_VIEW_DESC viewDesc =
+                view->GetRTVDescriptor(attachmentInfo.depthSlice);
             const D3D12_CPU_DESCRIPTOR_HANDLE baseDescriptor = rtvAllocation.GetBaseDescriptor();
 
             device->GetD3D12Device()->CreateRenderTargetView(

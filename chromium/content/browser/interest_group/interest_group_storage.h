@@ -5,9 +5,11 @@
 #ifndef CONTENT_BROWSER_INTEREST_GROUP_INTEREST_GROUP_STORAGE_H_
 #define CONTENT_BROWSER_INTEREST_GROUP_INTEREST_GROUP_STORAGE_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
@@ -77,6 +79,10 @@ class CONTENT_EXPORT InterestGroupStorage {
       const std::set<std::string>& interest_groups_to_keep,
       const url::Origin& main_frame_origin);
 
+  // Gets lockout and cooldowns for sending forDebuggingOnly reports.
+  std::optional<DebugReportLockoutAndCooldowns>
+  GetDebugReportLockoutAndCooldowns(base::flat_set<url::Origin> origins);
+
   // Updates the interest group `name` of `owner` with the populated fields of
   // `update`.
   //
@@ -97,16 +103,24 @@ class CONTENT_EXPORT InterestGroupStorage {
   // piece of opaque data to identify the winning ad.
   void RecordInterestGroupWin(const blink::InterestGroupKey& group_key,
                               const std::string& ad_json);
+  // Adds an entry to forDebuggingOnly report lockout table if the table is
+  // empty. Otherwise replaces the existing entry.
+  void RecordDebugReportLockout(base::Time last_report_sent_time);
+  // Adds an entry to forDebuggingOnly report cooldown table for `origin` if it
+  // does not exist, otherwise replaces the existing entry.
+  void RecordDebugReportCooldown(const url::Origin& origin,
+                                 base::Time cooldown_start,
+                                 DebugReportCooldownType cooldown_type);
   // Records K-anonymity.
   void UpdateKAnonymity(const StorageInterestGroup::KAnonymityData& data);
 
   // Gets the last time that the key was reported to the k-anonymity server.
-  absl::optional<base::Time> GetLastKAnonymityReported(const std::string& key);
+  std::optional<base::Time> GetLastKAnonymityReported(const std::string& key);
   // Updates the last time that the key was reported to the k-anonymity server.
   void UpdateLastKAnonymityReported(const std::string& key);
 
   // Gets a single interest group.
-  absl::optional<StorageInterestGroup> GetInterestGroup(
+  std::optional<StorageInterestGroup> GetInterestGroup(
       const blink::InterestGroupKey& group_key);
   // Gets a list of all interest group owners. Each owner will only appear
   // once.

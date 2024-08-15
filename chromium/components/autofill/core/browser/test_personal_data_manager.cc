@@ -8,6 +8,7 @@
 
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/strike_databases/autofill_profile_migration_strike_database.h"
 
@@ -42,6 +43,21 @@ void TestPersonalDataManager::RecordUseOf(
 
     if (profile)
       profile->RecordAndLogUse();
+  }
+}
+
+void TestPersonalDataManager::RecordUseOfIban(Iban& iban) {
+  std::unique_ptr<Iban> updated_iban = std::make_unique<Iban>(iban);
+  std::vector<std::unique_ptr<Iban>>& container =
+      iban.record_type() == Iban::kLocalIban ? local_ibans_ : server_ibans_;
+  auto it =
+      base::ranges::find(container,
+                         iban.record_type() == Iban::kLocalIban
+                             ? GetIbanByGUID(iban.guid())
+                             : GetIbanByInstrumentId(iban.instrument_id()),
+                         &std::unique_ptr<Iban>::get);
+  if (it != container.end()) {
+    it->get()->RecordAndLogUse();
   }
 }
 
@@ -83,7 +99,7 @@ void TestPersonalDataManager::RemoveByGuidWithoutNotifications(
         GetProfileStorage(profile->source());
     profiles.erase(base::ranges::find(profiles, profile,
                                       &std::unique_ptr<AutofillProfile>::get));
-  } else if (Iban* iban = GetIbanByGUID(guid)) {
+  } else if (const Iban* iban = GetIbanByGUID(guid)) {
     local_ibans_.erase(
         base::ranges::find(local_ibans_, iban, &std::unique_ptr<Iban>::get));
   }
@@ -102,7 +118,7 @@ void TestPersonalDataManager::AddCreditCard(const CreditCard& credit_card) {
   NotifyPersonalDataObserver();
 }
 
-std::string TestPersonalDataManager::AddIban(Iban iban) {
+std::string TestPersonalDataManager::AddAsLocalIban(Iban iban) {
   CHECK_EQ(iban.record_type(), Iban::kUnknown);
   iban.set_record_type(Iban::kLocalIban);
   iban.set_identifier(
@@ -114,10 +130,10 @@ std::string TestPersonalDataManager::AddIban(Iban iban) {
 }
 
 std::string TestPersonalDataManager::UpdateIban(const Iban& iban) {
-  Iban* old_iban = GetIbanByGUID(iban.guid());
+  const Iban* old_iban = GetIbanByGUID(iban.guid());
   CHECK(old_iban);
-  *old_iban = iban;
-  NotifyPersonalDataObserver();
+  local_ibans_.push_back(std::make_unique<Iban>(iban));
+  RemoveByGUID(old_iban->guid());
   return iban.guid();
 }
 
@@ -142,14 +158,6 @@ void TestPersonalDataManager::UpdateCreditCard(const CreditCard& credit_card) {
   }
 }
 
-void TestPersonalDataManager::AddFullServerCreditCard(
-    const CreditCard& credit_card) {
-  // Though the name is AddFullServerCreditCard, this test class treats masked
-  // and full server cards equally, relying on their preset RecordType to
-  // differentiate them.
-  AddServerCreditCard(credit_card);
-}
-
 const std::string& TestPersonalDataManager::GetDefaultCountryCodeForNewAddress()
     const {
   if (default_country_code_.empty())
@@ -163,7 +171,6 @@ void TestPersonalDataManager::LoadProfiles() {
   // for the side-effect of logging the profile count.
   pending_synced_local_profiles_query_ = 123;
   pending_account_profiles_query_ = 124;
-  pending_creditcard_billing_addresses_query_ = 125;
   {
     std::vector<std::unique_ptr<AutofillProfile>> profiles;
     synced_local_profiles_.swap(profiles);
@@ -180,15 +187,6 @@ void TestPersonalDataManager::LoadProfiles() {
         WDResult<std::vector<std::unique_ptr<AutofillProfile>>>>(
         AUTOFILL_PROFILES_RESULT, std::move(profiles));
     OnWebDataServiceRequestDone(pending_account_profiles_query_,
-                                std::move(result));
-  }
-  {
-    std::vector<std::unique_ptr<AutofillProfile>> profiles;
-    credit_card_billing_addresses_.swap(profiles);
-    auto result = std::make_unique<
-        WDResult<std::vector<std::unique_ptr<AutofillProfile>>>>(
-        AUTOFILL_PROFILES_RESULT, std::move(profiles));
-    OnWebDataServiceRequestDone(pending_creditcard_billing_addresses_query_,
                                 std::move(result));
   }
 }
@@ -275,7 +273,7 @@ bool TestPersonalDataManager::IsAutofillWalletImportEnabled() const {
   return PersonalDataManager::IsAutofillWalletImportEnabled();
 }
 
-bool TestPersonalDataManager::ShouldSuggestServerCards() const {
+bool TestPersonalDataManager::ShouldSuggestServerPaymentMethods() const {
   return IsAutofillPaymentMethodsEnabled() && IsAutofillWalletImportEnabled();
 }
 
@@ -330,6 +328,42 @@ void TestPersonalDataManager::SetPaymentMethodsMandatoryReauthEnabled(
   PersonalDataManager::SetPaymentMethodsMandatoryReauthEnabled(enabled);
 }
 
+bool TestPersonalDataManager::IsPaymentCvcStorageEnabled() {
+  if (payments_cvc_storage_enabled_.has_value()) {
+    return payments_cvc_storage_enabled_.value();
+  }
+  return PersonalDataManager::IsPaymentCvcStorageEnabled();
+}
+
+void TestPersonalDataManager::AddServerCvc(int64_t instrument_id,
+                                           const std::u16string& cvc) {
+  auto card_iterator =
+      std::find_if(server_credit_cards_.begin(), server_credit_cards_.end(),
+                   [instrument_id](auto& card) {
+                     return card->instrument_id() == instrument_id;
+                   });
+
+  if (card_iterator != server_credit_cards_.end()) {
+    card_iterator->get()->set_cvc(cvc);
+  }
+}
+
+void TestPersonalDataManager::ClearServerCvcs() {
+  for (CreditCard* card : PersonalDataManager::GetServerCreditCards()) {
+    if (!card->cvc().empty()) {
+      card->clear_cvc();
+    }
+  }
+}
+
+void TestPersonalDataManager::ClearLocalCvcs() {
+  for (CreditCard* card : PersonalDataManager::GetLocalCreditCards()) {
+    if (!card->cvc().empty()) {
+      card->clear_cvc();
+    }
+  }
+}
+
 void TestPersonalDataManager::ClearProfiles() {
   synced_local_profiles_.clear();
   account_profiles_.clear();
@@ -373,6 +407,7 @@ void TestPersonalDataManager::AddAutofillOfferData(
 }
 
 void TestPersonalDataManager::AddServerIban(const Iban& iban) {
+  CHECK(iban.value().empty());
   server_ibans_.push_back(std::make_unique<Iban>(iban));
   NotifyPersonalDataObserver();
 }

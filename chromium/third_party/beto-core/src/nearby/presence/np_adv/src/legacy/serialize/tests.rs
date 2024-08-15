@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::unwrap_used)]
+
 extern crate std;
 
 use crate::legacy::actions::FastPairSass;
 use crate::legacy::actions::NearbyShare;
 use crate::{
+    credential::{v0::V0, SimpleBroadcastCryptoMaterial},
     de_type::EncryptedIdentityDataElementType,
     legacy::{actions::*, data_elements::*, serialize::*},
     shared_data::TxPower,
@@ -27,7 +30,7 @@ use std::vec;
 
 #[test]
 fn public_identity_packet_serialization() {
-    let mut builder = AdvBuilder::new(PublicIdentity::default());
+    let mut builder = AdvBuilder::new(PublicIdentity);
 
     let tx_power = TxPower::try_from(3).unwrap();
     let mut action = ActionBits::default();
@@ -48,29 +51,8 @@ fn public_identity_packet_serialization() {
 }
 
 #[test]
-fn no_identity_packet_serialization() {
-    let mut builder = AdvBuilder::new(NoIdentity::default());
-
-    let tx_power = TxPower::try_from(3).unwrap();
-    let mut action = ActionBits::default();
-    action.set_action(NearbyShare::from(true));
-    builder.add_data_element(TxPowerDataElement::from(tx_power)).unwrap();
-    builder.add_data_element(ActionsDataElement::from(action)).unwrap();
-
-    let packet = builder.into_advertisement().unwrap();
-    assert_eq!(
-        &[
-            0x00, // Adv Header
-            0x15, 0x03, // Tx Power DE with value 3
-            0x26, 0x00, 0x40, // Actions DE w/ bit 9
-        ],
-        packet.as_slice()
-    );
-}
-
-#[test]
 fn packet_limits_capacity() {
-    let mut builder = AdvBuilder::new(PublicIdentity::default());
+    let mut builder = AdvBuilder::new(PublicIdentity);
     // 2 + 1 left out of 24 payload bytes
     builder.len = 21;
     let mut bits = ActionBits::default();
@@ -90,22 +72,24 @@ fn packet_limits_capacity() {
 #[test]
 fn ldt_packet_serialization() {
     // don't care about the HMAC since we're not decrypting
-    let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&[0; 32]);
+    let key_seed = [0; 32];
+    let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
     let ldt = LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(&hkdf.legacy_ldt_key());
-    let metadata_key = [0x33; 14];
+    let metadata_key = ShortMetadataKey([0x33; 14]);
     let salt = LegacySalt::from([0x01, 0x02]);
 
     let mut ciphertext = vec![];
-    ciphertext.extend_from_slice(&metadata_key);
+    ciphertext.extend_from_slice(&metadata_key.0);
     // tx power & action DEs
     ciphertext.extend_from_slice(&[0x15, 0x03, 0x26, 0x00, 0x10]);
     ldt.encrypt(&mut ciphertext, &salt_padder::<16, CryptoProviderImpl>(salt)).unwrap();
 
+    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, metadata_key);
+
     let mut builder = AdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
         EncryptedIdentityDataElementType::Private,
         salt,
-        metadata_key,
-        ldt,
+        &broadcast_cm,
     ));
 
     let tx_power = TxPower::try_from(3).unwrap();
@@ -126,16 +110,16 @@ fn ldt_packet_serialization() {
 
 #[test]
 fn ldt_packet_cant_encrypt_without_des() {
-    let metadata_key = [0x33; 14];
+    let metadata_key = ShortMetadataKey([0x33; 14]);
     let salt = LegacySalt::from([0x01, 0x02]);
+    let key_seed = [0xFE; 32];
+
+    let broadcast_cm = SimpleBroadcastCryptoMaterial::<V0>::new(key_seed, metadata_key);
 
     let builder = AdvBuilder::new(LdtIdentity::<CryptoProviderImpl>::new(
         EncryptedIdentityDataElementType::Private,
         salt,
-        metadata_key,
-        LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(
-            &np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&[0xFE; 32]).legacy_ldt_key(),
-        ),
+        &broadcast_cm,
     ));
 
     // not enough ciphertext
@@ -144,7 +128,7 @@ fn ldt_packet_cant_encrypt_without_des() {
 
 #[test]
 fn nearby_share_action() {
-    let mut builder = AdvBuilder::new(PublicIdentity::default());
+    let mut builder = AdvBuilder::new(PublicIdentity);
 
     let mut action = ActionBits::default();
     action.set_action(NearbyShare::from(true));

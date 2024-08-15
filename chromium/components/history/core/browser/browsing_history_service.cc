@@ -27,6 +27,10 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/sync/protocol/history_delete_directive_specifics.pb.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace history {
 
 namespace {
@@ -625,8 +629,17 @@ void BrowsingHistoryService::ReturnResultsToDriver(
 
   QueryResultsInfo info;
   info.search_text = state->search_text;
+
+  // Note:(prio@vivaldi.com) - Depend on local_status only since remote_status
+  // is not functional for us. And considering remote_status leads to return
+  // wrong value since it always returns FAILURE because of unavailability.
+  if (vivaldi::IsVivaldiRunning()) {
+    info.reached_beginning = !CanRetry(state->local_status);
+  } else {
   info.reached_beginning =
       !CanRetry(state->local_status) && !CanRetry(state->remote_status);
+  } // End Vivaldi
+
   info.sync_timed_out = state->remote_status == TIMED_OUT;
   info.has_synced_results = state->remote_status == MORE_RESULTS ||
                             state->remote_status == REACHED_BEGINNING;

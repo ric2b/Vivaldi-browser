@@ -62,14 +62,19 @@ class MockHost : public BubbleContentsWrapper::Host {
   base::WeakPtrFactory<MockHost> weak_ptr_factory_{this};
 };
 
-class TestBubbleContentsWrapper : public BubbleContentsWrapper {
+class TestBubbleContentsWrapper
+    : public BubbleContentsWrapper,
+      public base::SupportsWeakPtr<TestBubbleContentsWrapper> {
  public:
   explicit TestBubbleContentsWrapper(Profile* profile)
-      : BubbleContentsWrapper(GURL(""), profile, 0, true, true) {}
+      : BubbleContentsWrapper(GURL(""), profile, 0, true, true, "Test") {}
   ~TestBubbleContentsWrapper() override = default;
 
   // BubbleContentsWrapper:
   void ReloadWebContents() override {}
+  base::WeakPtr<BubbleContentsWrapper> GetWeakPtr() override {
+    return AsWeakPtr();
+  }
 };
 
 }  // namespace

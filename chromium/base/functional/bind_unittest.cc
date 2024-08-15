@@ -17,7 +17,6 @@
 #include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_for_testing.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
 #include "base/functional/callback.h"
-#include "base/functional/disallow_unretained.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
@@ -40,24 +39,6 @@ using ::testing::StrictMock;
 
 namespace base {
 namespace {
-
-class AllowsUnretained {};
-
-class BansUnretained {
- public:
-  DISALLOW_UNRETAINED();
-};
-
-class BansUnretainedInPrivate {
-  DISALLOW_UNRETAINED();
-};
-
-class DerivedButBaseBansUnretained : public BansUnretained {};
-
-static_assert(internal::TypeSupportsUnretainedV<AllowsUnretained>);
-static_assert(!internal::TypeSupportsUnretainedV<BansUnretained>);
-static_assert(!internal::TypeSupportsUnretainedV<BansUnretainedInPrivate>);
-static_assert(!internal::TypeSupportsUnretainedV<DerivedButBaseBansUnretained>);
 
 class NoRef {
  public:
@@ -956,9 +937,7 @@ struct RepeatingTestConfig {
   using ClosureType = RepeatingClosure;
 
   template <typename F, typename... Args>
-  static CallbackType<internal::MakeUnboundRunType<F, Args...>> Bind(
-      F&& f,
-      Args&&... args) {
+  static auto Bind(F&& f, Args&&... args) {
     return BindRepeating(std::forward<F>(f), std::forward<Args>(args)...);
   }
 };
@@ -969,9 +948,7 @@ struct OnceTestConfig {
   using ClosureType = OnceClosure;
 
   template <typename F, typename... Args>
-  static CallbackType<internal::MakeUnboundRunType<F, Args...>> Bind(
-      F&& f,
-      Args&&... args) {
+  static auto Bind(F&& f, Args&&... args) {
     return BindOnce(std::forward<F>(f), std::forward<Args>(args)...);
   }
 };
@@ -1485,18 +1462,29 @@ TEST_F(BindTest, ArgumentCopiesAndMoves) {
   EXPECT_EQ(0, move_assigns);
 }
 
+TEST_F(BindTest, RepeatingWithoutPassed) {
+  // It should be possible to use a move-only type with `BindRepeating` without
+  // `Passed` if running the callback does not require copying the instance.
+  struct S {
+    S() = default;
+    S(S&&) = default;
+    S& operator=(S&&) = default;
+  } s;
+  BindRepeating([](const S&) {}, std::move(s));
+}
+
 TEST_F(BindTest, CapturelessLambda) {
-  EXPECT_FALSE(internal::IsCallableObject<void>::value);
-  EXPECT_FALSE(internal::IsCallableObject<int>::value);
-  EXPECT_FALSE(internal::IsCallableObject<void (*)()>::value);
-  EXPECT_FALSE(internal::IsCallableObject<void (NoRef::*)()>::value);
+  EXPECT_FALSE(internal::IsCallableObject<void>);
+  EXPECT_FALSE(internal::IsCallableObject<int>);
+  EXPECT_FALSE(internal::IsCallableObject<void (*)()>);
+  EXPECT_FALSE(internal::IsCallableObject<void (NoRef::*)()>);
 
   auto f = [] {};
-  EXPECT_TRUE(internal::IsCallableObject<decltype(f)>::value);
+  EXPECT_TRUE(internal::IsCallableObject<decltype(f)>);
 
   int i = 0;
   auto g = [i] { (void)i; };
-  EXPECT_TRUE(internal::IsCallableObject<decltype(g)>::value);
+  EXPECT_TRUE(internal::IsCallableObject<decltype(g)>);
 
   auto h = [](int, double) { return 'k'; };
   EXPECT_TRUE((std::is_same_v<char(int, double),
@@ -1528,9 +1516,9 @@ TEST_F(BindTest, EmptyFunctor) {
     int operator()() const { return 42; }
   };
 
-  EXPECT_TRUE(internal::IsCallableObject<NonEmptyFunctor>::value);
-  EXPECT_TRUE(internal::IsCallableObject<EmptyFunctor>::value);
-  EXPECT_TRUE(internal::IsCallableObject<EmptyFunctorConst>::value);
+  EXPECT_TRUE(internal::IsCallableObject<NonEmptyFunctor>);
+  EXPECT_TRUE(internal::IsCallableObject<EmptyFunctor>);
+  EXPECT_TRUE(internal::IsCallableObject<EmptyFunctorConst>);
   EXPECT_EQ(42, BindOnce(EmptyFunctor()).Run());
   EXPECT_EQ(42, BindOnce(EmptyFunctorConst()).Run());
   EXPECT_EQ(42, BindRepeating(EmptyFunctorConst()).Run());
@@ -1875,10 +1863,11 @@ void HandleOOM(size_t unused_size) {
 // Basic set of options to mostly only enable `BackupRefPtr::kEnabled`.
 // This avoids the boilerplate of having too much options enabled for simple
 // testing purpose.
-static constexpr partition_alloc::PartitionOptions
-    kOnlyEnableBackupRefPtrOptions = {
-        .backup_ref_ptr = partition_alloc::PartitionOptions::kEnabled,
-};
+static constexpr auto kOnlyEnableBackupRefPtrOptions = []() {
+  partition_alloc::PartitionOptions opts;
+  opts.backup_ref_ptr = partition_alloc::PartitionOptions::kEnabled;
+  return opts;
+}();
 
 class BindUnretainedDanglingInternalFixture : public BindTest {
  public:

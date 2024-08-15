@@ -8,7 +8,7 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-//#ifndef EIGEN_CXX11_TENSOR_MODULE_H
+// #ifndef EIGEN_CXX11_TENSOR_MODULE_H
 #define EIGEN_CXX11_TENSOR_MODULE_H
 
 #include "../../../Eigen/Core"
@@ -23,16 +23,16 @@
 // IWYU pragma: end_exports
 
 /** \defgroup CXX11_Tensor_Module Tensor Module
-  *
-  * This module provides a Tensor class for storing arbitrarily indexed
-  * objects.
-  *
-  * \code
-  * #include <Eigen/CXX11/Tensor>
-  * \endcode
-  *
-  * Much of the documentation can be found \ref eigen_tensors "here".
-  */
+ *
+ * This module provides a Tensor class for storing arbitrarily indexed
+ * objects.
+ *
+ * \code
+ * #include <Eigen/CXX11/Tensor>
+ * \endcode
+ *
+ * Much of the documentation can be found \ref eigen_tensors "here".
+ */
 
 #include <atomic>
 #include <chrono>
@@ -49,12 +49,12 @@
 #endif
 
 #ifdef EIGEN_USE_GPU
-  #include <iostream>
-  #if defined(EIGEN_USE_HIP)
-    #include <hip/hip_runtime.h>
-  #else
-    #include <cuda_runtime.h>
-  #endif
+#include <iostream>
+#if defined(EIGEN_USE_HIP)
+#include <hip/hip_runtime.h>
+#else
+#include <cuda_runtime.h>
+#endif
 #endif
 
 // IWYU pragma: begin_exports
@@ -138,4 +138,4 @@
 
 #include "../../../Eigen/src/Core/util/ReenableStupidWarnings.h"
 
-//#endif // EIGEN_CXX11_TENSOR_MODULE_H
+// #endif // EIGEN_CXX11_TENSOR_MODULE_H

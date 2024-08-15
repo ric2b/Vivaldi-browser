@@ -61,11 +61,13 @@
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "pdf/buildflags.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -77,7 +79,9 @@
 #endif
 
 #if BUILDFLAG(ENABLE_PDF)
+#include "base/test/with_feature_override.h"
 #include "chrome/browser/pdf/pdf_extension_test_util.h"
+#include "pdf/pdf_features.h"
 #endif
 
 namespace extensions {
@@ -140,7 +144,7 @@ class ExtensionTabsTest : public PlatformAppBrowserTest {
     return api_test_utils::GetString(result, "type");
   }
 
-  absl::optional<base::Value> RunFunctionWithDispatcherDelegateAndReturnValue(
+  std::optional<base::Value> RunFunctionWithDispatcherDelegateAndReturnValue(
       scoped_refptr<ExtensionFunction> function,
       const std::string& args,
       Browser* browser) {
@@ -230,7 +234,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, GetWindow) {
   // "populate" was enabled so tabs should be populated.
   base::Value::List tabs = api_test_utils::GetList(result, keys::kTabsKey);
   ASSERT_FALSE(tabs.empty());
-  absl::optional<int> tab0_id = tabs[0].GetDict().FindInt(keys::kIdKey);
+  std::optional<int> tab0_id = tabs[0].GetDict().FindInt(keys::kIdKey);
   ASSERT_TRUE(tab0_id.has_value());
   EXPECT_GE(*tab0_id, 0);
 
@@ -314,7 +318,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, GetCurrentWindow) {
   // "populate" was enabled so tabs should be populated.
   base::Value::List tabs = api_test_utils::GetList(result, keys::kTabsKey);
   ASSERT_FALSE(tabs.empty());
-  absl::optional<int> tab0_id = tabs[0].GetDict().FindInt(keys::kIdKey);
+  std::optional<int> tab0_id = tabs[0].GetDict().FindInt(keys::kIdKey);
   ASSERT_TRUE(tab0_id.has_value());
   // The tab id should not be -1 as this is a browser window.
   EXPECT_GE(*tab0_id, 0);
@@ -960,7 +964,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, MAYBE_AcceptState) {
 // wayland since our current fix only applies to X11.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // Must be checked inside IS_LINUX to compile on windows/mac.
-#if BUILDFLAG(OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_OZONE_X11)
   // DesktopWindowTreeHostX11::IsMinimized() relies on an asynchronous update
   // from the window server
   views::test::PropertyWaiter minimize_waiter(
@@ -968,7 +972,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, MAYBE_AcceptState) {
                           base::Unretained(new_window->window())),
       true);
   EXPECT_TRUE(minimize_waiter.Wait());
-#elif BUILDFLAG(OZONE_PLATFORM_WAYLAND)
+#elif BUILDFLAG(IS_OZONE_WAYLAND)
   // TODO(crbug.com/1406188): Find a fix/workaround for wayland and add
   // verification of IsMinimized() for as well.
 #endif
@@ -1095,7 +1099,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, ValidateCreateWindowBounds) {
 IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, CreatePopupWindowFromWebUI) {
   scoped_refptr<WindowsCreateFunction> function(new WindowsCreateFunction());
   function->SetBrowserContextForTesting(browser()->profile());
-  function->set_source_context_type(Feature::Context::WEBUI_UNTRUSTED_CONTEXT);
+  function->set_source_context_type(mojom::ContextType::kUntrustedWebUi);
 
   const base::Value::Dict result =
       utils::ToDict(utils::RunFunctionAndReturnSingleResult(
@@ -1379,7 +1383,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DiscardedProperty) {
     int tab_id_a = ExtensionTabUtil::GetTabId(web_contents_a);
 
     ASSERT_TRUE(result[0].is_dict());
-    absl::optional<int> id = result[0].GetDict().FindInt(keys::kIdKey);
+    std::optional<int> id = result[0].GetDict().FindInt(keys::kIdKey);
     ASSERT_TRUE(id);
 
     EXPECT_EQ(tab_id_a, *id);
@@ -1398,7 +1402,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DiscardedProperty) {
         ExtensionTabUtil::GetTabId(tab_strip_model->GetWebContentsAt(0));
 
     ASSERT_TRUE(result[0].is_dict());
-    absl::optional<int> id = result[0].GetDict().FindInt(keys::kIdKey);
+    std::optional<int> id = result[0].GetDict().FindInt(keys::kIdKey);
     ASSERT_TRUE(id);
 
     EXPECT_EQ(tab_id_c, *id);
@@ -1605,7 +1609,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, AutoDiscardableProperty) {
 
   // Make sure the returned tab is the correct one.
   ASSERT_TRUE(query_result[0].is_dict());
-  absl::optional<int> tab_id = query_result[0].GetDict().FindInt(keys::kIdKey);
+  std::optional<int> tab_id = query_result[0].GetDict().FindInt(keys::kIdKey);
   ASSERT_TRUE(tab_id);
   EXPECT_EQ(tab_id_a, *tab_id);
 
@@ -1622,8 +1626,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, AutoDiscardableProperty) {
 
   // Make sure the returned tab is the correct one.
   ASSERT_TRUE(query_result[0].is_dict());
-  absl::optional<int> id_value =
-      query_result[0].GetDict().FindInt(keys::kIdKey);
+  std::optional<int> id_value = query_result[0].GetDict().FindInt(keys::kIdKey);
   ASSERT_TRUE(id_value);
   EXPECT_EQ(ExtensionTabUtil::GetTabId(tab_strip_model->GetWebContentsAt(0)),
             *id_value);
@@ -1710,7 +1713,7 @@ testing::AssertionResult ExtensionTabsZoomTest::RunGetZoom(
   get_zoom_function->set_extension(extension_.get());
   get_zoom_function->set_has_callback(true);
 
-  absl::optional<base::Value> get_zoom_result =
+  std::optional<base::Value> get_zoom_result =
       utils::RunFunctionAndReturnSingleResult(
           get_zoom_function.get(), base::StringPrintf("[%u]", tab_id),
           browser()->profile());
@@ -1718,7 +1721,7 @@ testing::AssertionResult ExtensionTabsZoomTest::RunGetZoom(
   if (!get_zoom_result)
     return testing::AssertionFailure() << "no result";
 
-  absl::optional<double> maybe_value = get_zoom_result->GetIfDouble();
+  std::optional<double> maybe_value = get_zoom_result->GetIfDouble();
   if (!maybe_value.has_value())
     return testing::AssertionFailure() << "result was not a double";
 
@@ -1757,7 +1760,7 @@ testing::AssertionResult ExtensionTabsZoomTest::RunGetZoomSettings(
   get_zoom_settings_function->set_extension(extension_.get());
   get_zoom_settings_function->set_has_callback(true);
 
-  absl::optional<base::Value> get_zoom_settings_result =
+  std::optional<base::Value> get_zoom_settings_result =
       utils::RunFunctionAndReturnSingleResult(
           get_zoom_settings_function.get(), base::StringPrintf("[%u]", tab_id),
           browser()->profile());
@@ -1782,7 +1785,7 @@ testing::AssertionResult ExtensionTabsZoomTest::RunGetDefaultZoom(
   get_zoom_settings_function->set_extension(extension_.get());
   get_zoom_settings_function->set_has_callback(true);
 
-  absl::optional<base::Value> get_zoom_settings_result =
+  std::optional<base::Value> get_zoom_settings_result =
       utils::RunFunctionAndReturnSingleResult(
           get_zoom_settings_function.get(), base::StringPrintf("[%u]", tab_id),
           browser()->profile());
@@ -1792,7 +1795,7 @@ testing::AssertionResult ExtensionTabsZoomTest::RunGetDefaultZoom(
            << "no result or result is not a dictionary";
   }
 
-  absl::optional<double> default_zoom_factor_setting =
+  std::optional<double> default_zoom_factor_setting =
       get_zoom_settings_result->GetDict().FindDouble("defaultZoomFactor");
   if (!default_zoom_factor_setting) {
     return testing::AssertionFailure()
@@ -2082,8 +2085,20 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsZoomTest, CannotZoomInvalidTab) {
 }
 
 #if BUILDFLAG(ENABLE_PDF)
+class ExtensionApiPdfTest : public base::test::WithFeatureOverride,
+                            public ExtensionApiTest {
+ public:
+  ExtensionApiPdfTest()
+      : base::test::WithFeatureOverride(chrome_pdf::features::kPdfOopif) {}
+};
+
 // Regression test for crbug.com/660498.
-IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TemporaryAddressSpoof) {
+IN_PROC_BROWSER_TEST_P(ExtensionApiPdfTest, TemporaryAddressSpoof) {
+  // TODO(crbug.com/1445746): Remove this once the test passes for OOPIF PDF.
+  if (IsParamFeatureEnabled()) {
+    GTEST_SKIP();
+  }
+
   ASSERT_TRUE(StartEmbeddedTestServer());
   content::WebContents* first_web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -2137,6 +2152,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TemporaryAddressSpoof) {
   // avoid a race during browser teardown (see crbug.com/882213).
   ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
 }
+
+// TODO(crbug.com/1445746): Stop testing both modes after OOPIF PDF viewer
+// launches.
+INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(ExtensionApiPdfTest);
 #endif  // BUILDFLAG(ENABLE_PDF)
 
 // Tests how chrome.windows.create behaves when setSelfAsOpener parameter is
@@ -2274,7 +2293,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowsCreate_OpenerAndOrigin) {
     // The url to use in chrome.windows.create().
     std::string url;
     // If set, its value will be used to specify |setSelfAsOpener|.
-    absl::optional<bool> set_self_as_opener;
+    std::optional<bool> set_self_as_opener;
     // The origin we expect the new tab to be in, opaque origins will be "null".
     std::string expected_origin_str;
   } test_cases[] = {
@@ -2284,20 +2303,20 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowsCreate_OpenerAndOrigin) {
       // origin.
       {url::kAboutBlankURL, true, extension_origin_str},
       {url::kAboutBlankURL, false, "null"},
-      {url::kAboutBlankURL, absl::nullopt, "null"},
+      {url::kAboutBlankURL, std::nullopt, "null"},
 
       // data:... URLs.
       // With opener relationship or not, "data:..." URLs always gets unique
       // origin, so origin will always be "null" in these cases.
       {kDataURL, true, "null"},
       {kDataURL, false, "null"},
-      {kDataURL, absl::nullopt, "null"},
+      {kDataURL, std::nullopt, "null"},
 
       // chrome-extension:// URLs.
       // These always get extension origin.
       {extension_url_str, true, extension_origin_str},
       {extension_url_str, false, extension_origin_str},
-      {extension_url_str, absl::nullopt, extension_origin_str},
+      {extension_url_str, std::nullopt, extension_origin_str},
   };
 
   auto run_test_case = [&web_contents](const TestCase& test_case) {

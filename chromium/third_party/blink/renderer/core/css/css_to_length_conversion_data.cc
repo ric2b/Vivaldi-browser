@@ -125,7 +125,7 @@ float CSSToLengthConversionData::FontSizes::Ic(float zoom) const {
   const SimpleFontData* font_data = font_->PrimaryFont();
   absl::optional<float> full_width;
   if (font_data) {
-    full_width = font_data->GetFontMetrics().IdeographicFullWidth();
+    full_width = font_data->IdeographicInlineSize();
   }
   if (!full_width.has_value()) {
     return Em(zoom);
@@ -140,7 +140,7 @@ float CSSToLengthConversionData::FontSizes::Ric(float zoom) const {
   const SimpleFontData* font_data = root_font_->PrimaryFont();
   absl::optional<float> full_width;
   if (font_data) {
-    full_width = font_data->GetFontMetrics().IdeographicFullWidth();
+    full_width = font_data->IdeographicInlineSize();
   }
   if (!full_width.has_value()) {
     return Rem(zoom);
@@ -438,6 +438,10 @@ double CSSToLengthConversionData::ContainerHeight() const {
 }
 
 WritingMode CSSToLengthConversionData::GetWritingMode() const {
+  // This method is called by CSSLengthResolver only when resolving
+  // logical direction relative units, so we can set the flag
+  // indicating the presence of such units.
+  SetFlag(Flag::kLogicalDirectionRelative);
   return writing_mode_;
 }
 

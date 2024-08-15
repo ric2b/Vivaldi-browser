@@ -33,9 +33,9 @@ using RunAfterModelLoadCallback =
 void RunAfterModelLoad(BookmarkModel* model,
                        RunAfterModelLoadCallback callback);
 
-constexpr auto kNonClonableKeys =
-    base::MakeFixedFlatSetSorted<std::string_view>(
-        { "bookmarkbar", "nickname", "partner", "speeddial"});
+constexpr auto kNonClonableKeys = base::MakeFixedFlatSet<std::string_view>(
+    base::sorted_unique,
+    {"bookmarkbar", "nickname", "partner", "speeddial"});
 
 const std::string& ThumbnailString();
 

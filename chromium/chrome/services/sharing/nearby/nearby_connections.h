@@ -6,7 +6,9 @@
 #define CHROME_SERVICES_SHARING_NEARBY_NEARBY_CONNECTIONS_H_
 
 #include <stdint.h>
+
 #include <memory>
+#include <optional>
 
 #include "base/containers/flat_map.h"
 #include "base/files/file.h"
@@ -30,7 +32,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/nearby/src/connections/implementation/service_controller_router.h"
 #include "third_party/nearby/src/presence/presence_device.h"
 
@@ -125,7 +126,20 @@ class NearbyConnections : public mojom::NearbyConnections {
       ash::nearby::presence::mojom::PresenceDevicePtr remote_device,
       mojom::ConnectionOptionsPtr connection_options,
       mojo::PendingRemote<mojom::ConnectionListenerV3> listener,
-      RequestConnectionCallback callback) override;
+      RequestConnectionV3Callback callback) override;
+  void AcceptConnectionV3(
+      const std::string& service_id,
+      ash::nearby::presence::mojom::PresenceDevicePtr remote_device,
+      mojo::PendingRemote<mojom::PayloadListenerV3> listener,
+      AcceptConnectionV3Callback callback) override;
+  void RejectConnectionV3(
+      const std::string& service_id,
+      ash::nearby::presence::mojom::PresenceDevicePtr remote_device,
+      RejectConnectionV3Callback callback) override;
+  void DisconnectFromDeviceV3(
+      const std::string& service_id,
+      ash::nearby::presence::mojom::PresenceDevicePtr remote_device,
+      DisconnectFromDeviceV3Callback callback) override;
 
   // Returns the file associated with |payload_id| for InputFile.
   base::File ExtractInputFile(int64_t payload_id);

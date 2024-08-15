@@ -28,12 +28,12 @@
 #ifndef SRC_DAWN_NATIVE_PASSRESOURCEUSAGETRACKER_H_
 #define SRC_DAWN_NATIVE_PASSRESOURCEUSAGETRACKER_H_
 
-#include <map>
-#include <set>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "dawn/native/PassResourceUsage.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "dawn/native/dawn_platform.h"
 
 namespace dawn::native {
@@ -44,7 +44,7 @@ class ExternalTextureBase;
 class QuerySetBase;
 class TextureBase;
 
-using QueryAvailabilityMap = std::map<QuerySetBase*, std::vector<bool>>;
+using QueryAvailabilityMap = absl::flat_hash_map<QuerySetBase*, std::vector<bool>>;
 
 // Helper class to build SyncScopeResourceUsages
 class SyncScopeUsageTracker {
@@ -55,13 +55,18 @@ class SyncScopeUsageTracker {
 
     SyncScopeUsageTracker& operator=(SyncScopeUsageTracker&&);
 
-    void BufferUsedAs(BufferBase* buffer, wgpu::BufferUsage usage);
-    void TextureViewUsedAs(TextureViewBase* view, wgpu::TextureUsage usage);
+    void BufferUsedAs(BufferBase* buffer,
+                      wgpu::BufferUsage usage,
+                      wgpu::ShaderStage shaderStages = wgpu::ShaderStage::None);
+    void TextureViewUsedAs(TextureViewBase* texture,
+                           wgpu::TextureUsage usage,
+                           wgpu::ShaderStage shaderStages = wgpu::ShaderStage::None);
     void TextureRangeUsedAs(TextureBase* texture,
                             const SubresourceRange& range,
-                            wgpu::TextureUsage usage);
+                            wgpu::TextureUsage usage,
+                            wgpu::ShaderStage shaderStages = wgpu::ShaderStage::None);
     void AddRenderBundleTextureUsage(TextureBase* texture,
-                                     const TextureSubresourceUsage& textureUsage);
+                                     const TextureSubresourceSyncInfo& textureSyncInfo);
 
     // Walks the bind groups and tracks all its resources.
     void AddBindGroup(BindGroupBase* group);
@@ -70,9 +75,9 @@ class SyncScopeUsageTracker {
     SyncScopeResourceUsage AcquireSyncScopeUsage();
 
   private:
-    std::map<BufferBase*, wgpu::BufferUsage> mBufferUsages;
-    std::map<TextureBase*, TextureSubresourceUsage> mTextureUsages;
-    std::set<ExternalTextureBase*> mExternalTextureUsages;
+    absl::flat_hash_map<BufferBase*, BufferSyncInfo> mBufferSyncInfos;
+    absl::flat_hash_map<TextureBase*, TextureSubresourceSyncInfo> mTextureSyncInfos;
+    absl::flat_hash_set<ExternalTextureBase*> mExternalTextureUsages;
 };
 
 // Helper class to build ComputePassResourceUsages

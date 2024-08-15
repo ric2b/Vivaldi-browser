@@ -4,12 +4,14 @@
 
 #include "components/segmentation_platform/internal/segmentation_platform_service_impl.h"
 
+#include <memory>
 #include <string>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/system/sys_info.h"
@@ -19,6 +21,7 @@
 #include "components/segmentation_platform/internal/config_parser.h"
 #include "components/segmentation_platform/internal/constants.h"
 #include "components/segmentation_platform/internal/database/storage_service.h"
+#include "components/segmentation_platform/internal/database_client_impl.h"
 #include "components/segmentation_platform/internal/execution/processing/sync_device_info_observer.h"
 #include "components/segmentation_platform/internal/platform_options.h"
 #include "components/segmentation_platform/internal/proto/model_prediction.pb.h"
@@ -29,6 +32,7 @@
 #include "components/segmentation_platform/internal/selection/segmentation_result_prefs.h"
 #include "components/segmentation_platform/internal/stats.h"
 #include "components/segmentation_platform/public/config.h"
+#include "components/segmentation_platform/public/features.h"
 #include "components/segmentation_platform/public/field_trial_register.h"
 #include "components/segmentation_platform/public/input_context.h"
 #include "components/segmentation_platform/public/input_delegate.h"
@@ -91,9 +95,10 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
       config_holder->configs());
 
   // Construct signal processors.
+  DCHECK(!init_params->profile_id.empty());
   signal_handler_.Initialize(
       storage_service_.get(), init_params->history_service,
-      config_holder->all_segment_ids(),
+      config_holder->all_segment_ids(), init_params->profile_id,
       base::BindRepeating(
           &SegmentationPlatformServiceImpl::OnModelRefreshNeeded,
           weak_ptr_factory_.GetWeakPtr()));
@@ -145,6 +150,7 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
 
 SegmentationPlatformServiceImpl::~SegmentationPlatformServiceImpl() {
   signal_handler_.TearDown();
+  ClearAllUserData();
 }
 
 void SegmentationPlatformServiceImpl::GetSelectedSegment(
@@ -198,6 +204,15 @@ ServiceProxy* SegmentationPlatformServiceImpl::GetServiceProxy() {
   return proxy_.get();
 }
 
+DatabaseClient* SegmentationPlatformServiceImpl::GetDatabaseClient() {
+  if (base::FeatureList::IsEnabled(features::kSegmentationPlatformUkmEngine)) {
+    return database_client_.get();
+  } else {
+    // The database is not created when the feature is disabled.
+    return nullptr;
+  }
+}
+
 bool SegmentationPlatformServiceImpl::IsPlatformInitialized() {
   return storage_init_status_.has_value() && storage_init_status_.value();
 }
@@ -220,7 +235,9 @@ void SegmentationPlatformServiceImpl::OnDatabaseInitialized(bool success) {
 
   signal_handler_.OnSignalListUpdated();
 
-  std::vector<ModelExecutionSchedulerImpl::Observer*> observers;
+  std::vector<
+      raw_ptr<ModelExecutionSchedulerImpl::Observer, VectorExperimental>>
+      observers;
   for (auto& key_and_selector : segment_selectors_)
     observers.push_back(key_and_selector.second.get());
   observers.push_back(proxy_.get());
@@ -232,6 +249,8 @@ void SegmentationPlatformServiceImpl::OnDatabaseInitialized(bool success) {
       storage_service_->cached_result_provider());
 
   proxy_->SetExecutionService(&execution_service_);
+  database_client_ = std::make_unique<DatabaseClientImpl>(
+      &execution_service_, storage_service_->ukm_data_manager());
 
   for (auto& selector : segment_selectors_) {
     selector.second->OnPlatformInitialized(&execution_service_);

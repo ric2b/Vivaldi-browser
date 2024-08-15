@@ -7,7 +7,6 @@
 <translation id="1158211211994409885">Serwer <ph name="HOST_NAME" /> nieoczekiwanie zakończył połączenie.</translation>
 <translation id="1161325031994447685">Ponownie połącz się z siecią Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Usuń pliki cookie<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Wersja Vivaldi – informacje</translation>
 <translation id="139305205187523129">Serwer <ph name="HOST_NAME" /> nie wysłał żadnych danych.</translation>
 <translation id="1559528461873125649">Podany plik lub folder nie istnieje</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Skontaktuj się z administratorem systemu.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Spróbuj przeprowadzić diagnostykę sieci systemu Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Ta strona zawiera szkodliwe programy</translation>
-<translation id="1916770123977586577">Załaduj stronę ponownie aby zastosować zaktualizowane ustawienia</translation>
 <translation id="1974060860693918893">Zaawansowane</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sprawdź serwer proxy i zaporę sieciową<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Wystawiony dla: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Osoby dokonujące ataków mogą widzieć te same obrazy w witrynie co ty i zmodyfikować je by cię oszukać.</translation>
 <translation id="2356070529366658676">Pytaj</translation>
 <translation id="2359808026110333948">Kontynuuj</translation>
+<translation id="2388886110302389394">Otwórz stronę w nowym oknie prywatnym (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798">Spróbuj przeprowadzić <ph name="BEGIN_LINK" />diagnostykę sieci<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Ta strona została zablokowana przez rozszerzenie</translation>
 <translation id="2501278716633472235">Przejdź wstecz</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Zaloguj się</translation>
 <translation id="3973234410852337861">Strona <ph name="HOST_NAME" /> jest zablokowana</translation>
 <translation id="3987940399970879459">Mniej niż 1 MB</translation>
+<translation id="4075123085690634698">Otwórz stronę w nowym oknie prywatnym (⇧⌘N)</translation>
 <translation id="4075732493274867456">Klient i serwer nie obsługują wspólnej wersji protokołu SSL lub mechanizmu szyfrowania.</translation>
 <translation id="4116663294526079822">Zawsze zezwalaj na tej stronie</translation>
 <translation id="4130226655945681476">Sprawdź kable sieciowe, modem i router</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Twój komputer przeszedł w stan uśpienia.</translation>
 <translation id="6890956352250146925">Opcje ciasteczek i danych stron</translation>
 <translation id="6897140037006041989">User agent (id przeglądarki)</translation>
+<translation id="6957624206566198865">Otwórz stronę w trybie prywatnym</translation>
 <translation id="7053983685419859001">Blokuj</translation>
 <translation id="7079718277001814089">Ta strona zawiera złośliwe oprogramowanie</translation>
 <translation id="7096937462164235847">Tożsamość tej strony nie została zweryfikowana.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> zazwyczaj używa szyfrowania do ochrony Twoich informacji. Gdy tym razem przeglądarka Vivaldi próbowała połączyć się ze stroną <ph name="SITE" />, odesłała ona nietypowe i nieprawidłowe dane logowania. Może się tak zdarzyć, gdy pod stronę <ph name="SITE" /> podszywa się osoba atakująca albo gdy ekran logowania do sieci Wi-Fi przerwie połączenie. Twoje informacje są nadal bezpieczne, bo połączenie w Vivaldi zakończyło się przed wymianą jakichkolwiek danych.</translation>
 <translation id="7878562273885520351">Ktoś mógł poznać twoje hasło</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">Odśwież stronę, aby zastosować nowe ustawienia dla tej witryny</translation>
 <translation id="8025119109950072390">Osoby atakujące tę stronę mogą podstępem nakłonić cię do zrobienia czegoś niebezpiecznego, np. zainstalowania oprogramowania lub ujawnienia danych osobowych (takich jak hasła, numery telefonów czy dane kart kredytowych).</translation>
 <translation id="8037357227543935929">Pytaj (domyślnie)</translation>
 <translation id="8041940743680923270">Użyj globalnej wartości domyślnej (Pytaj)</translation>

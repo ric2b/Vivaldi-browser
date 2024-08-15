@@ -22,6 +22,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
+#import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -53,9 +54,11 @@ const CGFloat kLeadingMargin = 20;
 // The image view displaying the current location icon (i.e. http[s] status).
 @property(nonatomic, strong) UIImageView* locationIconImageView;
 
+#if !defined(VIVALDI_BUILD)
 // The view containing the location label, and (sometimes) the location image
 // view.
 @property(nonatomic, strong) UIView* locationContainerView;
+#endif // End Vivaldi
 
 // Leading constraint for locationContainerView when there is no BadgeView to
 // its left.
@@ -207,16 +210,41 @@ const CGFloat kLeadingMargin = 20;
     [_locationContainerView addSubview:_locationLabel];
 
     if (IsVivaldiRunning()) {
+      // Hide location icon image view always as its replaced with site info.
+      _locationIconImageView.hidden = YES;
+
+      // Setup leading button.
+      _leadingButton =
+          [ExtendedTouchTargetButton buttonWithType:UIButtonTypeSystem];
+      _leadingButton.translatesAutoresizingMaskIntoConstraints = NO;
+      _leadingButton.pointerInteractionEnabled = YES;
+      // Make the pointer shape fit the location bar's semi-circle end shape.
+      _leadingButton.pointerStyleProvider =
+          CreateLiftEffectCirclePointerStyleProvider();
+      [_leadingButton setImage:[UIImage imageNamed:vLocationBarPageInfo]
+                      forState:UIControlStateNormal];
+      _leadingButton.accessibilityLabel =
+          l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_SITE_INFORMATION);
+      _leadingButton.accessibilityIdentifier =
+          kToolsMenuSiteInformation;
+      [_locationContainerView addSubview:_leadingButton];
+
+      _locationContainerView.userInteractionEnabled = YES;
+
+      // Resuse the location image contraints property from chromium for leading
+      // button since the name is only different, and the functional behaviour
+      // is same for the leading button and the image which is not present on
+      // the UI.
       _showLocationImageConstraints = @[
         [_locationContainerView.leadingAnchor
-            constraintEqualToAnchor:_locationIconImageView.leadingAnchor],
-        [_locationIconImageView.trailingAnchor
+            constraintEqualToAnchor:_leadingButton.leadingAnchor],
+        [_leadingButton.trailingAnchor
             constraintEqualToAnchor:_locationLabel.leadingAnchor
                 constant:vLocationBarSteadyViewLocationImageToLabelSpacing],
         [_locationLabel.trailingAnchor
             constraintLessThanOrEqualToAnchor:
               _locationContainerView.trailingAnchor],
-        [_locationIconImageView.centerYAnchor
+        [_leadingButton.centerYAnchor
             constraintEqualToAnchor:_locationContainerView.centerYAnchor],
       ];
     } else {
@@ -364,9 +392,18 @@ const CGFloat kLeadingMargin = 20;
   // different colors. The icon should be the same color as the text, but it
   // only appears with the regular label, so its color can be set here.
   self.locationIconImageView.tintColor = self.colorScheme.fontColor;
+
+  // Vivaldi
+  self.locationLabel.textColor = self.colorScheme.fontColor;
+  self.leadingButton.tintColor = self.colorScheme.fontColor;
+  // End Vivaldi
 }
 
 - (void)setLocationImage:(UIImage*)locationImage {
+
+  if (IsVivaldiRunning()) {
+    return;
+  } else {
   BOOL hadImage = self.locationIconImageView.image != nil;
   BOOL hasImage = locationImage != nil;
   self.locationIconImageView.image = locationImage;
@@ -385,6 +422,8 @@ const CGFloat kLeadingMargin = 20;
     [NSLayoutConstraint activateConstraints:self.hideLocationImageConstraints];
     [self.locationIconImageView removeFromSuperview];
   }
+  } // End Vivaldi
+
 }
 
 - (void)setLocationLabelText:(NSString*)string {
@@ -587,6 +626,18 @@ const CGFloat kLeadingMargin = 20;
   } else {
     [self.accessibleElements removeObject:self.trailingButton];
   }
+
+  // Vivaldi
+  if (self.leadingButton.enabled) {
+    if ([self.accessibleElements indexOfObject:self.leadingButton] ==
+        NSNotFound) {
+      [self.accessibleElements addObject:self.leadingButton];
+    }
+  } else {
+    [self.accessibleElements removeObject:self.leadingButton];
+  }
+  // End Vivaldi
+
 }
 
 // Returns the font size for the location label.
@@ -599,17 +650,31 @@ const CGFloat kLeadingMargin = 20;
 #pragma mark - SharingPositioner
 
 - (UIView*)sourceView {
-  return self.trailingButton;
+  return self.locationLabel;
 }
 
 - (CGRect)sourceRect {
-  return self.trailingButton.bounds;
+  return self.locationLabel.bounds;
 }
 
 - (void)fadeSteadyViewContentsWithAlpha:(CGFloat)alpha {
   _locationButton.alpha = alpha;
 }
 
+- (void)setLeadingButtonEnabled:(BOOL)enabled {
+  self.leadingButton.enabled = enabled;
+  self.leadingButton.hidden = !enabled;
+  if (enabled) {
+    [NSLayoutConstraint
+        deactivateConstraints:self.hideLocationImageConstraints];
+    [NSLayoutConstraint activateConstraints:self.showLocationImageConstraints];
+  } else {
+    [NSLayoutConstraint
+        deactivateConstraints:self.showLocationImageConstraints];
+    [NSLayoutConstraint activateConstraints:self.hideLocationImageConstraints];
+  }
+  [self updateAccessibility];
+}
 // End Vivaldi
 
 @end

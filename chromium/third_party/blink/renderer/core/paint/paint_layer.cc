@@ -66,6 +66,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/anchor_position_scroll_data.h"
 #include "third_party/blink/renderer/core/layout/fragmentainer_iterator.h"
+#include "third_party/blink/renderer/core/layout/fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
@@ -74,10 +75,10 @@
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_tree_as_text.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.h"
+#include "third_party/blink/renderer/core/paint/box_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/box_reflection_utils.h"
 #include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
 #include "third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.h"
@@ -85,7 +86,6 @@
 #include "third_party/blink/renderer/core/paint/filter_effect_builder.h"
 #include "third_party/blink/renderer/core/paint/fragment_data_iterator.h"
 #include "third_party/blink/renderer/core/paint/hit_testing_transform_state.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_box_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
@@ -140,29 +140,19 @@ ASSERT_SIZE(PaintLayer, SameSizeAsPaintLayer);
 inline PhysicalRect PhysicalVisualOverflowRectAllowingUnset(
     const LayoutBoxModelObject& layout_object) {
 #if DCHECK_IS_ON()
-  NGInkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
+  InkOverflow::ReadUnsetAsNoneScope read_unset_as_none;
 #endif
   return layout_object.VisualOverflowRect();
 }
 
-PaintLayer* SlowContainingLayer(const PaintLayer* ancestor,
-                                bool* skipped_ancestor,
-                                LayoutObject* layout_object) {
+PaintLayer* SlowContainingLayer(LayoutObject& layout_object) {
   // This is a universal approach to find the containing layer, but it is
   // slower.
-  absl::optional<LayoutObject::AncestorSkipInfo> skip_info;
-  if (skipped_ancestor)
-    skip_info.emplace(&ancestor->GetLayoutObject());
-  while (auto* container = layout_object->Container(
-             skipped_ancestor ? &*skip_info : nullptr)) {
-    if (skipped_ancestor) {
-      if (skip_info->AncestorSkipped())
-        *skipped_ancestor = true;
-      skip_info.emplace(&ancestor->GetLayoutObject());
-    }
+  auto* container = layout_object.Container(nullptr);
+  while (container) {
     if (container->HasLayer())
       return To<LayoutBoxModelObject>(container)->Layer();
-    layout_object = container;
+    container = container->Container(nullptr);
   }
   return nullptr;
 }
@@ -281,34 +271,6 @@ const PaintLayer* PaintLayer::ContainingScrollContainerLayer(
   if (is_fixed_to_view)
     *is_fixed_to_view = true;
   return nullptr;
-}
-
-void PaintLayer::UpdateLayerPositionsAfterLayout() {
-  DCHECK(IsRootLayer());
-
-  SCOPED_BLINK_UMA_HISTOGRAM_TIMER_HIGHRES(
-      "Blink.Layout.UpdateLayerPositionsAfterLayout");
-  TRACE_EVENT0("blink,benchmark",
-               "PaintLayer::updateLayerPositionsAfterLayout");
-  RUNTIME_CALL_TIMER_SCOPE(
-      GetLayoutObject().GetDocument().GetAgent().isolate(),
-      RuntimeCallStats::CounterId::kUpdateLayerPositionsAfterLayout);
-
-  UpdateLayerPositionRecursive();
-}
-
-void PaintLayer::UpdateLayerPositionRecursive() {
-  GetLayoutObject().UpdateStickyPositionConstraints();
-
-  // Display-locked elements always have a PaintLayer, meaning that the
-  // PaintLayer traversal won't skip locked elements. Thus, we don't have to do
-  // an ancestor check, and simply skip iterating children when this element is
-  // locked for child layout.
-  if (GetLayoutObject().ChildLayoutBlockedByDisplayLock())
-    return;
-
-  for (PaintLayer* child = FirstChild(); child; child = child->NextSibling())
-    child->UpdateLayerPositionRecursive();
 }
 
 void PaintLayer::UpdateTransform() {
@@ -482,7 +444,7 @@ void PaintLayer::UpdateDescendantDependentFlags() {
         MarkAncestorChainForFlagsUpdate(kDoesNotNeedDescendantDependentUpdate);
       }
     }
-    GetLayoutObject().InvalidateIntersectionObserverCachedRects();
+    GetLayoutObject().DeprecatedInvalidateIntersectionObserverCachedRects();
     needs_visual_overflow_recalc_ = false;
   }
 
@@ -564,14 +526,7 @@ void PaintLayer::UpdateScrollingAfterLayout() {
   }
 }
 
-PaintLayer* PaintLayer::ContainingLayer(const PaintLayer* ancestor,
-                                        bool* skipped_ancestor) const {
-  // If we have specified an ancestor, surely the caller needs to know whether
-  // we skipped it.
-  DCHECK(!ancestor || skipped_ancestor);
-  if (skipped_ancestor)
-    *skipped_ancestor = false;
-
+PaintLayer* PaintLayer::ContainingLayer() const {
   LayoutObject& layout_object = GetLayoutObject();
   if (layout_object.IsOutOfFlowPositioned()) {
     // In NG, the containing block chain goes directly from a column spanner to
@@ -581,7 +536,7 @@ PaintLayer* PaintLayer::ContainingLayer(const PaintLayer* ancestor,
     // path for OOFs inside an NG spanner. However, doing so for all OOF
     // descendants of a multicol container is reasonable enough.
     if (layout_object.IsInsideFlowThread())
-      return SlowContainingLayer(ancestor, skipped_ancestor, &layout_object);
+      return SlowContainingLayer(layout_object);
     auto can_contain_this_layer =
         layout_object.IsFixedPositioned()
             ? &LayoutObject::CanContainFixedPositionObjects
@@ -589,8 +544,6 @@ PaintLayer* PaintLayer::ContainingLayer(const PaintLayer* ancestor,
 
     PaintLayer* curr = Parent();
     while (curr && !((&curr->GetLayoutObject())->*can_contain_this_layer)()) {
-      if (skipped_ancestor && curr == ancestor)
-        *skipped_ancestor = true;
       curr = curr->Parent();
     }
     return curr;
@@ -605,7 +558,7 @@ PaintLayer* PaintLayer::ContainingLayer(const PaintLayer* ancestor,
       !layout_object.IsColumnSpanAll())
     return Parent();
 
-  return SlowContainingLayer(ancestor, skipped_ancestor, &layout_object);
+  return SlowContainingLayer(layout_object);
 }
 
 PaintLayer* PaintLayer::CompositingContainer() const {
@@ -638,24 +591,6 @@ void PaintLayer::SetNeedsCompositingInputsUpdate() {
 
 void PaintLayer::ScrollContainerStatusChanged() {
   SetNeedsCompositingInputsUpdate();
-
-  if (!RuntimeEnabledFeatures::LayoutNewStickyLogicEnabled()) {
-    // Invalidate sticky layers and anchor positioned layers in ancestor
-    // scrollable areas. We could invalidate only the affected scrollable
-    // areas, but it's complicated considering the change of containing block
-    // relationship for out-of-flow descendants. This function is called rarely.
-    for (auto* layer = this; layer; layer = layer->Parent()) {
-      if (auto* scrollable_area = layer->GetScrollableArea()) {
-        scrollable_area->InvalidateAllStickyConstraints();
-      }
-    }
-
-    // Make sure UpdateLayerPositionsAfterLayout() will be called to update
-    // sticky and anchor positioned layers.
-    if (auto* frame_view = GetLayoutObject().GetFrameView()) {
-      frame_view->SetNeedsLayout();
-    }
-  }
 }
 
 void PaintLayer::SetNeedsVisualOverflowRecalc() {
@@ -757,16 +692,6 @@ void PaintLayer::RemoveChild(PaintLayer* old_child) {
     // Dirty the z-order list in which we are contained.
     old_child->DirtyStackingContextZOrderLists();
     MarkAncestorChainForFlagsUpdate();
-
-    if (!RuntimeEnabledFeatures::LayoutNewStickyLogicEnabled() &&
-        old_child->GetLayoutObject()
-            .StyleRef()
-            .HasStickyConstrainedPosition()) {
-      if (const auto* scroll_container =
-              old_child->ContainingScrollContainerLayer()) {
-        scroll_container->GetScrollableArea()->InvalidateAllStickyConstraints();
-      }
-    }
   }
 
   if (GetLayoutObject().StyleRef().Visibility() != EVisibility::kVisible)
@@ -1692,7 +1617,7 @@ PaintLayer* PaintLayer::HitTestLayerByApplyingTransform(
 
 bool PaintLayer::HitTestFragmentWithPhase(
     HitTestResult& result,
-    const NGPhysicalBoxFragment* physical_fragment,
+    const PhysicalBoxFragment* physical_fragment,
     const PhysicalOffset& fragment_offset,
     const HitTestLocation& hit_test_location,
     HitTestPhase phase) const {
@@ -1705,7 +1630,7 @@ bool PaintLayer::HitTestFragmentWithPhase(
       did_hit = false;
     } else {
       did_hit =
-          NGBoxFragmentPainter(*physical_fragment)
+          BoxFragmentPainter(*physical_fragment)
               .NodeAtPoint(result, hit_test_location, fragment_offset, phase);
     }
   } else {
@@ -1870,7 +1795,19 @@ gfx::RectF PaintLayer::FilterReferenceBox() const {
 }
 
 gfx::RectF PaintLayer::BackdropFilterReferenceBox() const {
-  return gfx::RectF(GetLayoutObject().BorderBoundingBox());
+  if (const auto* layout_inline = DynamicTo<LayoutInline>(GetLayoutObject())) {
+    return RuntimeEnabledFeatures::ReferenceBoxNoPixelSnappingEnabled()
+               ? gfx::RectF(
+                     gfx::SizeF(layout_inline->PhysicalLinesBoundingBox().size))
+               : gfx::RectF(
+                     ToEnclosingRect(layout_inline->PhysicalLinesBoundingBox())
+                         .size());
+  }
+
+  const auto* layout_box = GetLayoutBox();
+  return RuntimeEnabledFeatures::ReferenceBoxNoPixelSnappingEnabled()
+             ? gfx::RectF(layout_box->PhysicalBorderBoxRect())
+             : gfx::RectF(layout_box->DeprecatedPixelSnappedBorderBoxRect());
 }
 
 gfx::RRectF PaintLayer::BackdropFilterBounds() const {

@@ -59,6 +59,8 @@ constexpr CGFloat kTextfieldStackInsetTrailing = 12;
 
 constexpr CGFloat kTextfieldInset = 8;
 
+constexpr CGFloat kSpinnerInsetBottom = 6;
+
 // This is how many bits UIViewAnimationCurve needs to be shifted to be in
 // UIViewAnimationOptions format. Must match the one in UIView.h.
 constexpr NSUInteger kUIViewAnimationCurveToOptionsShift = 16;
@@ -142,32 +144,20 @@ GrayHighlightButton* GetButtonForAction(AlertAction* action) {
     textColor = [UIColor colorNamed:kRedColor];
   }
 
-  GrayHighlightButton* button = nil;
-  if (IsUIButtonConfigurationEnabled()) {
-    UIButtonConfiguration* buttonConfiguration =
-        [UIButtonConfiguration plainButtonConfiguration];
-    buttonConfiguration.contentInsets =
-        NSDirectionalEdgeInsetsMake(kButtonInsetTop, kButtonInsetLeading,
-                                    kButtonInsetBottom, kButtonInsetTrailing);
-    NSDictionary* attributes = @{NSFontAttributeName : font};
-    NSAttributedString* title =
-        [[NSAttributedString alloc] initWithString:action.title
-                                        attributes:attributes];
-    buttonConfiguration.attributedTitle = title;
-    buttonConfiguration.baseForegroundColor = textColor;
-    button = [GrayHighlightButton buttonWithConfiguration:buttonConfiguration
-                                            primaryAction:nil];
-  } else {
-    button = [[GrayHighlightButton alloc] init];
-    UIEdgeInsets contentEdgeInsets =
-        UIEdgeInsetsMake(kButtonInsetTop, kButtonInsetLeading,
-                         kButtonInsetBottom, kButtonInsetTrailing);
-    SetContentEdgeInsets(button, contentEdgeInsets);
-    button.titleLabel.font = font;
-    button.titleLabel.adjustsFontForContentSizeCategory = YES;
-    [button setTitleColor:textColor forState:UIControlStateNormal];
-    [button setTitle:action.title forState:UIControlStateNormal];
-  }
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  buttonConfiguration.contentInsets =
+      NSDirectionalEdgeInsetsMake(kButtonInsetTop, kButtonInsetLeading,
+                                  kButtonInsetBottom, kButtonInsetTrailing);
+  NSDictionary* attributes = @{NSFontAttributeName : font};
+  NSAttributedString* title =
+      [[NSAttributedString alloc] initWithString:action.title
+                                      attributes:attributes];
+  buttonConfiguration.attributedTitle = title;
+  buttonConfiguration.baseForegroundColor = textColor;
+  GrayHighlightButton* button =
+      [GrayHighlightButton buttonWithConfiguration:buttonConfiguration
+                                     primaryAction:nil];
 
   button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
   button.translatesAutoresizingMaskIntoConstraints = NO;
@@ -219,6 +209,9 @@ GrayHighlightButton* GetButtonForAction(AlertAction* action) {
 
 // This holds the text field stack view.
 @property(nonatomic, strong) UIView* textFieldStackHolder;
+
+// Whether the activity indicator should be visible in the alert view.
+@property(nonatomic, assign) BOOL shouldShowActivityIndicator;
 
 @end
 
@@ -329,6 +322,13 @@ GrayHighlightButton* GetButtonForAction(AlertAction* action) {
     AddSameConstraintsToSidesWithInsets(
         titleLabel, self.contentView,
         LayoutSides::kTrailing | LayoutSides::kLeading, titleInsets);
+  }
+
+  if (self.shouldShowActivityIndicator) {
+    UIActivityIndicatorView* spinner = GetMediumUIActivityIndicatorView();
+    [spinner startAnimating];
+    [stackView addArrangedSubview:spinner];
+    [stackView setCustomSpacing:kSpinnerInsetBottom afterView:spinner];
   }
 
   if (self.message.length) {

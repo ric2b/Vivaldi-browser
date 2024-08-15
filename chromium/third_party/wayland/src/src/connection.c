@@ -87,6 +87,9 @@ ring_buffer_put(struct wl_ring_buffer *b, const void *data, size_t count)
 {
 	size_t head, size;
 
+	if (count == 0)
+		return 0;
+
 	head = ring_buffer_mask(b, b->head);
 	if (head + count <= ring_buffer_space(b)) {
 		memcpy(b->data + head, data, count);
@@ -153,6 +156,9 @@ static void
 ring_buffer_copy(struct wl_ring_buffer *b, void *data, size_t count)
 {
 	size_t tail, size;
+
+	if (count == 0)
+		return;
 
 	tail = ring_buffer_mask(b, b->tail);
 	if (tail + count <= ring_buffer_space(b)) {
@@ -1333,7 +1339,8 @@ serialize_closure(struct wl_closure *closure, uint32_t *buffer,
 			if (p + div_roundup(size, sizeof *p) > end)
 				goto overflow;
 
-			memcpy(p, closure->args[i].a->data, size);
+			if (size != 0)
+				memcpy(p, closure->args[i].a->data, size);
 			p += div_roundup(size, sizeof *p);
 			break;
 		default:

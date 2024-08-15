@@ -45,6 +45,12 @@
 #include "chrome/browser/app_controller_mac.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 #include "app/vivaldi_apptools.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 
@@ -284,7 +290,7 @@ void SessionServiceBase::TabRestored(WebContents* tab, bool pinned) {
   if (!ShouldTrackChangesToWindow(session_tab_helper->window_id()))
     return;
 
-  BuildCommandsForTab(session_tab_helper->window_id(), tab, -1, absl::nullopt,
+  BuildCommandsForTab(session_tab_helper->window_id(), tab, -1, std::nullopt,
                       pinned, nullptr);
   command_storage_manager()->StartSaveTimer();
 }
@@ -510,7 +516,7 @@ void SessionServiceBase::BuildCommandsForTab(
     SessionID window_id,
     WebContents* tab,
     int index_in_window,
-    absl::optional<tab_groups::TabGroupId> group,
+    std::optional<tab_groups::TabGroupId> group,
     bool is_pinned,
     IdToRange* tab_to_available_range) {
   DCHECK(tab);
@@ -647,7 +653,7 @@ void SessionServiceBase::BuildCommandsForBrowser(
       const tab_groups::TabGroupVisualData* visual_data =
           group_model->GetTabGroup(group_id)->visual_data();
 
-      absl::optional<std::string> saved_guid;
+      std::optional<std::string> saved_guid;
       if (saved_tab_group_keyed_service) {
         const SavedTabGroup* const saved_group =
             saved_tab_group_keyed_service->model()->Get(group_id);
@@ -665,7 +671,7 @@ void SessionServiceBase::BuildCommandsForBrowser(
   for (int i = 0; i < tab_strip->count(); ++i) {
     WebContents* tab = tab_strip->GetWebContentsAt(i);
     DCHECK(tab);
-    const absl::optional<tab_groups::TabGroupId> group_id =
+    const std::optional<tab_groups::TabGroupId> group_id =
         tab_strip->GetTabGroupForTab(i);
     BuildCommandsForTab(browser->session_id(), tab, i, group_id,
                         tab_strip->IsTabPinned(i), tab_to_available_range);
@@ -678,7 +684,7 @@ void SessionServiceBase::BuildCommandsFromBrowsers(
     IdToRange* tab_to_available_range,
     std::set<SessionID>* windows_to_track) {
   DCHECK(is_saving_enabled_);
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     // Make sure the browser has tabs and a window. Browser's destructor
     // removes itself from the BrowserList. When a browser is closed the
     // destructor is not necessarily run immediately. This means it's possible
@@ -733,10 +739,25 @@ bool SessionServiceBase::ShouldTrackBrowser(Browser* browser) const {
     return false;
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
+  // Windows that are auto-started and prevented from closing are exempted from
+  // tracking for session restore to prevent multiple unclosable open instances
+  // of the same app.
+  web_app::AppBrowserController* app_controller = browser->app_controller();
+  web_app::WebAppProvider* provider =
+      web_app::WebAppProvider::GetForWebApps(profile());
+  // Checking for close prevention does not require an `AppLock` and
+  // therefore `registrar_unsafe()` is safe to use.
+  if (app_controller && provider &&
+      provider->registrar_unsafe().IsPreventCloseEnabled(
+          app_controller->app_id())) {
+    return false;
+  }
+#endif  // #if BUILDFLAG(IS_CHROMEOS)
+
   if (vivaldi::IsVivaldiRunning() && !ShouldTrackVivaldiBrowser(browser)) {
     return false;
   }
-
 
   return ShouldRestoreWindowOfType(WindowTypeForBrowserType(browser->type()));
 }

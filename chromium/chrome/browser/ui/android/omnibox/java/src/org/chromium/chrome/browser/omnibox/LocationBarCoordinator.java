@@ -8,10 +8,10 @@ import android.animation.Animator;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
-import android.graphics.Typeface;
 import android.view.ActionMode;
 import android.view.View;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
@@ -62,9 +62,6 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
-// Vivaldi
-import org.chromium.build.BuildConfig;
-
 /**
  * The public API of the location bar component. Location bar responsibilities are:
  *
@@ -94,7 +91,6 @@ public class LocationBarCoordinator
     private StatusCoordinator mStatusCoordinator;
     private WindowDelegate mWindowDelegate;
     private WindowAndroid mWindowAndroid;
-    private View mAutocompleteAnchorView;
     private LocationBarMediator mLocationBarMediator;
     private View mUrlBar;
     private View mDeleteButton;
@@ -104,15 +100,13 @@ public class LocationBarCoordinator
     private boolean mDestroyed;
 
     private boolean mNativeInitialized;
-    private final int mDropdownStandardBackgroundColor;
-    private final int mDropdownIncognitoBackgroundColor;
-    private final int mSuggestionStandardBackgroundColor;
-    private final int mSuggestionIncognitoBackgroundColor;
-    private boolean mShortCircuitUnfocusAnimation;
+    private final @ColorInt int mDropdownStandardBackgroundColor;
+    private final @ColorInt int mDropdownIncognitoBackgroundColor;
+    private final @ColorInt int mSuggestionStandardBackgroundColor;
+    private final @ColorInt int mSuggestionIncognitoBackgroundColor;
 
     /** Vivaldi */
     private View mQrCodeButton;
-    private boolean mShouldRefineSuggestion;
 
     /**
      * Creates {@link LocationBarCoordinator} and its subcoordinator: {@link
@@ -138,7 +132,6 @@ public class LocationBarCoordinator
      * @param activityLifecycleDispatcher Allows observation of the activity state.
      * @param overrideUrlLoadingDelegate Delegate that allows customization of url loading behavior.
      * @param backKeyBehavior Delegate that allows customization of back key behavior.
-     * @param searchEngineLogoUtils Utils to query the state of the search engine logos feature.
      * @param pageInfoAction Displays page info popup.
      * @param bringTabToFrontCallback Callback to bring the browser foreground and switch to a tab.
      * @param saveOfflineButtonState Whether the 'save offline' button should be enabled.
@@ -152,6 +145,8 @@ public class LocationBarCoordinator
      * @param reportExceptionCallback A {@link Callback} to report exceptions.
      * @param backPressManager The {@link BackPressManager} for intercepting back press.
      * @param tabModelSelectorSupplier Supplier of the {@link TabModelSelector}.
+     * @param forcePhoneStyleOmnibox Whether a "phone-style" (full bleed, unrounded corners) omnibox
+     *     suggestions list should be used even when the screen width is >600dp.
      */
     public LocationBarCoordinator(
             View locationBarLayout,
@@ -169,7 +164,6 @@ public class LocationBarCoordinator
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
             OverrideUrlLoadingDelegate overrideUrlLoadingDelegate,
             BackKeyBehaviorDelegate backKeyBehavior,
-            SearchEngineLogoUtils searchEngineLogoUtils,
             @NonNull PageInfoAction pageInfoAction,
             @NonNull Callback<Tab> bringTabToFrontCallback,
             @NonNull SaveOfflineButtonState saveOfflineButtonState,
@@ -188,13 +182,13 @@ public class LocationBarCoordinator
                     OmniboxSuggestionsDropdownScrollListener
                             omniboxSuggestionsDropdownScrollListener,
             @Nullable OpenHistoryClustersDelegate openHistoryClustersDelegate,
-            @Nullable ObservableSupplier<TabModelSelector> tabModelSelectorSupplier) {
+            @Nullable ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
+            boolean forcePhoneStyleOmnibox) {
         mLocationBarLayout = (LocationBarLayout) locationBarLayout;
         mWindowDelegate = windowDelegate;
         mWindowAndroid = windowAndroid;
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
         mActivityLifecycleDispatcher.register(this);
-        mAutocompleteAnchorView = autocompleteAnchorView;
         Context context = mLocationBarLayout.getContext();
         OneshotSupplierImpl<TemplateUrlService> templateUrlServiceSupplier =
                 new OneshotSupplierImpl<>();
@@ -203,7 +197,8 @@ public class LocationBarCoordinator
                         mWindowAndroid,
                         mWindowDelegate,
                         autocompleteAnchorView,
-                        mLocationBarLayout);
+                        mLocationBarLayout,
+                        forcePhoneStyleOmnibox);
 
         mUrlBar = mLocationBarLayout.findViewById(R.id.url_bar);
         // TODO(crbug.com/1151513): Inject LocaleManager instance to LocationBarCoordinator instead
@@ -221,7 +216,6 @@ public class LocationBarCoordinator
                         backKeyBehavior,
                         windowAndroid,
                         isTabletWindow() && isTabletLayout(),
-                        searchEngineLogoUtils,
                         LensController.getInstance(),
                         saveOfflineButtonState,
                         omniboxUma,
@@ -261,7 +255,8 @@ public class LocationBarCoordinator
                         bookmarkState,
                         omniboxActionDelegate,
                         omniboxSuggestionsDropdownScrollListener,
-                        openHistoryClustersDelegate);
+                        openHistoryClustersDelegate,
+                        forcePhoneStyleOmnibox);
         StatusView statusView = mLocationBarLayout.findViewById(R.id.location_bar_status);
         mStatusCoordinator =
                 new StatusCoordinator(
@@ -270,7 +265,6 @@ public class LocationBarCoordinator
                         mUrlCoordinator,
                         locationBarDataProvider,
                         templateUrlServiceSupplier,
-                        searchEngineLogoUtils,
                         profileObservableSupplier,
                         windowAndroid,
                         pageInfoAction,
@@ -298,8 +292,7 @@ public class LocationBarCoordinator
         mUrlCoordinator.setUrlDirectionListener(
                 mCallbackController.makeCancelable(
                         layoutDirection -> {
-                            ViewCompat.setLayoutDirection(
-                                    mLocationBarLayout, (Integer) layoutDirection);
+                            ViewCompat.setLayoutDirection(mLocationBarLayout, layoutDirection);
                             mAutocompleteCoordinator.updateSuggestionListLayoutDirection();
                         }));
 
@@ -308,8 +301,7 @@ public class LocationBarCoordinator
                 mAutocompleteCoordinator,
                 mUrlCoordinator,
                 mStatusCoordinator,
-                locationBarDataProvider,
-                searchEngineLogoUtils);
+                locationBarDataProvider);
 
         mDropdownStandardBackgroundColor =
                 ChromeColors.getSurfaceColor(
@@ -387,6 +379,10 @@ public class LocationBarCoordinator
 
         mLocationBarMediator.destroy();
         mLocationBarMediator = null;
+
+        // Vivaldi
+        mQrCodeButton.setOnClickListener(null);
+        mQrCodeButton = null;
 
         mDestroyed = true;
     }
@@ -496,9 +492,6 @@ public class LocationBarCoordinator
     @Override
     public void onSuggestionsChanged(String autocompleteText, boolean defaultMatchIsSearch) {
         mLocationBarMediator.onSuggestionsChanged(autocompleteText, defaultMatchIsSearch);
-
-        // Vivaldi
-        mShouldRefineSuggestion = false;
     }
 
     @Override
@@ -516,8 +509,6 @@ public class LocationBarCoordinator
 
     @Override
     public void loadUrl(String url, int transition, long inputStart, boolean openInNewTab) {
-        mShortCircuitUnfocusAnimation =
-                isUrlBarFocused() && OmniboxFeatures.shouldShortCircuitUnfocusAnimation();
         mLocationBarMediator.loadUrl(url, transition, inputStart, openInNewTab);
     }
 
@@ -545,10 +536,6 @@ public class LocationBarCoordinator
 
     @Override
     public void setOmniboxEditingText(String text) {
-        if (BuildConfig.IS_VIVALDI && !mShouldRefineSuggestion)
-            mUrlCoordinator.setUrlBarData(UrlBarData.forNonUrlText(text),
-                    UrlBar.ScrollType.NO_SCROLL, UrlBarCoordinator.SelectionState.SELECT_ALL);
-        else
         mUrlCoordinator.setUrlBarData(
                 UrlBarData.forNonUrlText(text),
                 UrlBar.ScrollType.NO_SCROLL,
@@ -775,19 +762,6 @@ public class LocationBarCoordinator
         mLocationBarMediator.setShouldShowButtonsWhenUnfocusedForTablet(shouldShowButtons);
     }
 
-    /**
-     * Whether the unfocus animation should be skipped to speed up navigation. If short circuiting
-     * occurs, the caller should immediately call {@link #onUnfocusAnimationShortCircuited()}.
-     */
-    public boolean shouldShortCircuitUnfocusAnimation() {
-        return mShortCircuitUnfocusAnimation;
-    }
-
-    /** Call to report that the focus animation was short circuited. */
-    public void onUnfocusAnimationShortCircuited() {
-        mShortCircuitUnfocusAnimation = false;
-    }
-
     // End tablet-specific methods.
 
     public void setVoiceRecognitionHandlerForTesting(
@@ -819,15 +793,11 @@ public class LocationBarCoordinator
         return mLocationBarMediator;
     }
 
-    /* package */ StatusCoordinator getStatusCoordinatorForTesting() {
-        return mStatusCoordinator;
-    }
-
     /**
      * @param isIncognito Whether we are currently in incognito mode.
      * @return The background color for the Omnibox suggestion dropdown list.
      */
-    public int getDropdownBackgroundColor(boolean isIncognito) {
+    public @ColorInt int getDropdownBackgroundColor(boolean isIncognito) {
         return isIncognito ? mDropdownIncognitoBackgroundColor : mDropdownStandardBackgroundColor;
     }
 
@@ -835,7 +805,7 @@ public class LocationBarCoordinator
      * @param isIncognito Whether we are currently in incognito mode.
      * @return The the background color for each individual suggestion.
      */
-    public int getSuggestionBackgroundColor(boolean isIncognito) {
+    public @ColorInt int getSuggestionBackgroundColor(boolean isIncognito) {
         return isIncognito
                 ? mSuggestionIncognitoBackgroundColor
                 : mSuggestionStandardBackgroundColor;
@@ -857,36 +827,28 @@ public class LocationBarCoordinator
     }
 
     /**
-     * @see LocationBarMediator#setUrlBarHintTextColor(boolean)
+     * @see LocationBarMediator#updateUrlBarHintTextColor(boolean)
      */
-    public void setUrlBarHintTextColor(boolean isStartOrNtp) {
-        mLocationBarMediator.setUrlBarHintTextColor(isStartOrNtp);
+    public void updateUrlBarHintTextColor(boolean useDefaultUrlBarHintTextColor) {
+        mLocationBarMediator.updateUrlBarHintTextColor(useDefaultUrlBarHintTextColor);
     }
 
     /**
-     * @see LocationBarMediator#setUrlBarTypeface(Typeface)
+     * @see LocationBarMediator#updateUrlBarTypeface(boolean)
      */
-    public void setUrlBarTypeface(Typeface typeface) {
-        mLocationBarMediator.setUrlBarTypeface(typeface);
+    public void updateUrlBarTypeface(boolean useDefaultUrlBarTypeface) {
+        mLocationBarMediator.updateUrlBarTypeface(useDefaultUrlBarTypeface);
     }
 
     /**
-     * Updates the value for the end margin of the url action container in the search box.
-     *
-     * @param endMargin The end margin for the url action container in the search box.
+     * @see LocationBarMediator#updateUrlActionContainerEndMargin(boolean)
      */
-    public void updateUrlActionContainerEndMargin(int endMargin) {
-        mLocationBarMediator.updateUrlActionContainerEndMargin(endMargin);
+    public void updateUrlActionContainerEndMargin(boolean useDefaultUrlActionContainerEndMargin) {
+        mLocationBarMediator.updateUrlActionContainerEndMargin(
+                useDefaultUrlActionContainerEndMargin);
     }
 
     public int getUrlActionContainerEndMarginForTesting() {
         return mLocationBarLayout.getUrlActionContainerEndMarginForTesting(); // IN-TEST
-    }
-
-    // Vivaldi
-    @Override
-    public void setOmniboxEditingText(String text, boolean isRefineSuggestion) {
-        mShouldRefineSuggestion = isRefineSuggestion;
-        setOmniboxEditingText(text);
     }
 }

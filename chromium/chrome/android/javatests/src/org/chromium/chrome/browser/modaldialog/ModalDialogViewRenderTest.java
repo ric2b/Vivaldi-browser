@@ -72,7 +72,7 @@ public class ModalDialogViewRenderTest extends BlankUiTestActivityTestCase {
     @Rule
     public RenderTestRule mRenderTestRule =
             RenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(1)
+                    .setRevision(2)
                     .setBugComponent(RenderTestRule.Component.UI_BROWSER_MOBILE_MESSAGES)
                     .build();
 
@@ -228,6 +228,29 @@ public class ModalDialogViewRenderTest extends BlankUiTestActivityTestCase {
                         .with(ModalDialogProperties.CUSTOM_BUTTON_BAR_VIEW, mCustomButtonBar)
                         .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, mResources, R.string.ok));
         mRenderTestRule.render(mModalDialogView, "custom_button_bar_view");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"ModalDialog", "RenderTest"})
+    public void testRender_ButtonGroup() throws IOException {
+        setUpViews(R.style.ThemeOverlay_BrowserUI_ModalDialog_TextPrimaryButton);
+        createModel(
+                mModelBuilder.with(
+                        ModalDialogProperties.BUTTON_GROUP_BUTTON_SPEC_LIST,
+                        new ModalDialogProperties.ModalDialogButtonSpec[] {
+                            new ModalDialogProperties.ModalDialogButtonSpec(
+                                    ModalDialogProperties.ButtonType.POSITIVE_EPHEMERAL,
+                                    mResources.getString(R.string.ok)),
+                            new ModalDialogProperties.ModalDialogButtonSpec(
+                                    ModalDialogProperties.ButtonType.POSITIVE,
+                                    mResources.getString(R.string.ok_got_it)),
+                            new ModalDialogProperties.ModalDialogButtonSpec(
+                                    ModalDialogProperties.ButtonType.NEGATIVE,
+                                    mResources.getString(R.string.cancel))
+                        }));
+
+        mRenderTestRule.render(mModalDialogView, "button_group");
     }
 
     @Test

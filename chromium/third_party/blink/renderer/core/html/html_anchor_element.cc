@@ -128,49 +128,43 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
 
 HTMLAnchorElement::~HTMLAnchorElement() = default;
 
-bool HTMLAnchorElement::SupportsFocus() const {
+bool HTMLAnchorElement::SupportsFocus(UpdateBehavior update_behavior) const {
   if (IsLink() && !IsEditable(*this)) {
     return true;
   }
-  return HTMLElement::SupportsFocus();
+  return HTMLElement::SupportsFocus(update_behavior);
 }
 
 bool HTMLAnchorElement::ShouldHaveFocusAppearance() const {
   // TODO(crbug.com/1444450): Can't this be done with focus-visible now?
   return (GetDocument().LastFocusType() != mojom::blink::FocusType::kMouse) ||
-         HTMLElement::SupportsFocus();
+         HTMLElement::SupportsFocus(UpdateBehavior::kNoneForIsFocused);
 }
 
-bool HTMLAnchorElement::IsFocusable(
-    bool disallow_layout_updates_for_accessibility_only) const {
-  if (disallow_layout_updates_for_accessibility_only) {
-    if (!IsFocusableStyleNeverLayoutForAccessibilityOnly()) {
-      return false;
-    }
-  } else {
-    if (!IsFocusableStyleAfterUpdate()) {
-      return false;
-    }
+bool HTMLAnchorElement::IsFocusable(UpdateBehavior update_behavior) const {
+  if (!IsFocusableStyle(update_behavior)) {
+    return false;
   }
   if (IsLink()) {
-    return SupportsFocus();
+    return SupportsFocus(update_behavior);
   }
-  return HTMLElement::IsFocusable(
-      disallow_layout_updates_for_accessibility_only);
+  return HTMLElement::IsFocusable(update_behavior);
 }
 
-bool HTMLAnchorElement::IsKeyboardFocusable() const {
-  if (!IsFocusableStyleAfterUpdate())
+bool HTMLAnchorElement::IsKeyboardFocusable(
+    UpdateBehavior update_behavior) const {
+  if (!IsFocusableStyle(update_behavior)) {
     return false;
+  }
 
   // Anchor is focusable if the base element supports focus and is focusable.
-  if (Element::SupportsFocus() && IsFocusable()) {
-    return HTMLElement::IsKeyboardFocusable();
+  if (Element::SupportsFocus(update_behavior) && IsFocusable(update_behavior)) {
+    return HTMLElement::IsKeyboardFocusable(update_behavior);
   }
 
   if (IsLink() && !GetDocument().GetPage()->GetChromeClient().TabsToLinks())
     return false;
-  return HTMLElement::IsKeyboardFocusable();
+  return HTMLElement::IsKeyboardFocusable(update_behavior);
 }
 
 static void AppendServerMapMousePosition(StringBuilder& url, Event* event) {
@@ -400,7 +394,24 @@ void HTMLAnchorElement::SetRel(const AtomicString& value) {
   }
   if (new_link_relations.Contains(AtomicString("opener"))) {
     link_relations_ |= kRelationOpener;
+    UseCounter::Count(GetDocument(), WebFeature::kLinkRelOpener);
   }
+
+  // These don't currently have web-facing behavior, but embedders may wish to
+  // expose their presence to users:
+  if (new_link_relations.Contains(AtomicString("privacy-policy"))) {
+    link_relations_ |= kRelationPrivacyPolicy;
+    UseCounter::Count(GetDocument(), WebFeature::kLinkRelPrivacyPolicy);
+  }
+  if (new_link_relations.Contains(AtomicString("terms-of-service"))) {
+    link_relations_ |= kRelationTermsOfService;
+    UseCounter::Count(GetDocument(), WebFeature::kLinkRelTermsOfService);
+  }
+
+  // Adding or removing a value here whose processing model is web-visible
+  // (e.g. if the value is listed as a "supported token" for `<a>`'s `rel`
+  // attribute in HTML) also requires you to update the list of tokens in
+  // RelList::SupportedTokensAnchorAndAreaAndForm().
 }
 
 const AtomicString& HTMLAnchorElement::GetName() const {
@@ -497,8 +508,6 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
                  : mojom::blink::TriggeringEventInfo::kFromUntrustedEvent);
   frame_request.SetInputStartTime(platform_time_stamp);
 
-  frame->MaybeLogAdClickNavigation();
-
   if (const AtomicString& attribution_src =
           FastGetAttribute(html_names::kAttributionsrcAttr);
       !attribution_src.IsNull()) {
@@ -532,6 +541,15 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
                       WebFeature::kHTMLAnchorElementHrefTranslateAttribute);
   }
 
+  if (target_frame == frame && HasRel(kRelationOpener)) {
+    // TODO(https://crbug.com/1431495): rel=opener is currently only meaningful
+    // with target=_blank. Applying it to same-frame navigations is a potential
+    // opt-out for issue 1431495, but how many sites would trigger this opt-out
+    // inadvertently?
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kLinkRelOpenerTargetingSameFrame);
+  }
+
   if (target_frame) {
     target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
   }
@@ -553,8 +571,8 @@ void HTMLAnchorElement::HandleClick(Event& event) {
                       WebFeature::kAnchorClickDispatchForNonConnectedNode);
   }
 
-  Document& top_document = GetDocument().TopDocument();
-  if (auto* sender = AnchorElementMetricsSender::From(top_document)) {
+  if (auto* sender =
+          AnchorElementMetricsSender::GetForFrame(GetDocument().GetFrame())) {
     sender->MaybeReportClickedMetricsOnClick(*this);
   }
 
@@ -694,8 +712,8 @@ Node::InsertionNotificationRequest HTMLAnchorElement::InsertedInto(
       HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("a", html_names::kHrefAttr);
 
-  Document& top_document = GetDocument().TopDocument();
-  if (auto* sender = AnchorElementMetricsSender::From(top_document)) {
+  if (auto* sender =
+          AnchorElementMetricsSender::GetForFrame(GetDocument().GetFrame())) {
     sender->AddAnchorElement(*this);
   }
 
@@ -708,6 +726,7 @@ Node::InsertionNotificationRequest HTMLAnchorElement::InsertedInto(
       static const bool warm_up_on_inserted_into_dom =
           features::kSpeculativeServiceWorkerWarmUpOnInsertedIntoDom.Get();
       if (warm_up_on_visible || warm_up_on_inserted_into_dom) {
+        Document& top_document = GetDocument().TopDocument();
         if (auto* observer =
                 AnchorElementObserverForServiceWorker::From(top_document)) {
           if (warm_up_on_visible) {

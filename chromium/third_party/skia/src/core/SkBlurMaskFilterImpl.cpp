@@ -76,8 +76,8 @@ sk_sp<SkImageFilter> SkBlurMaskFilterImpl::asImageFilter(const SkMatrix& ctm) co
         // This is analogous to computeXformedSigma(), but it might be more correct to wrap the
         // blur image filter in a local matrix with ctm^-1, or to control the skif::Mapping when
         // the mask filter layer is restored. This is inaccurate when 'ctm' has skew or perspective
-        float xformedSigma = ctm.mapRadius(fSigma);
-        sigma /= xformedSigma;
+        const float ctmScaleFactor = fSigma / ctm.mapRadius(fSigma);
+        sigma *= ctmScaleFactor;
     }
 
     // The null input image filter will be bound to the original coverage mask.
@@ -205,7 +205,7 @@ static SkCachedData* copy_mask_to_cacheddata(SkMaskBuilder* mask) {
     if (data) {
         memcpy(data->writable_data(), mask->fImage, size);
         SkMaskBuilder::FreeImage(mask->image());
-        mask->image() = (uint8_t*)data->data();
+        mask->image() = (uint8_t*)data->writable_data();
     }
     return data;
 }

@@ -8,13 +8,20 @@
 #include <numeric>
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_compute_result.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/modules/ml/buildflags.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder_test.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder_utils.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operand.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
+
+#if BUILDFLAG(BUILD_WEBNN_WITH_TFLITE_MODEL_LOADER)
+#include "third_party/blink/renderer/modules/ml/webnn/ml_graph_test_model_loader.h"
+#endif
 
 namespace blink {
 
@@ -22,11 +29,14 @@ class MLGraphBuilder;
 class V8TestingScope;
 
 // The utility methods for graph test.
-enum ExecutionMode { kAsync, kSync };
+enum class ExecutionMode { kAsync, kSync };
 // The backends share the unit tests in the MLGraphTest.
-enum BackendType { kFake, kXnnpack, kModelLoader, kWebNNService };
+enum class BackendType { kFake, kXnnpack, kModelLoader, kWebNNService };
 
-using TestVariety = std::tuple<BackendType, ExecutionMode>;
+struct TestVariety {
+  BackendType backend_type;
+  ExecutionMode execution_mode;
+};
 
 std::string TestVarietyToString(
     const ::testing::TestParamInfo<TestVariety>& info);
@@ -69,14 +79,36 @@ class MLGraphTestBase : public ::testing::Test,
       V8TestingScope& scope,
       MLContextOptions* options = MLContextOptions::Create());
 
+  // The backend type for testing MLGraphTest (e.g. Xnnpack, ModelLoader).
+  BackendType GetBackendType();
+
  private:
   // The execution mode for testing build and compute graph (e.g. async, sync.).
   ExecutionMode GetExecutionMode();
+  test::TaskEnvironment task_environment_;
+};
+
+// This class performs backend specific setup.
+class MLGraphV8TestingScope : public V8TestingScope {
+  STACK_ALLOCATED();
+
+ public:
+  MLGraphV8TestingScope() {
+#if BUILDFLAG(BUILD_WEBNN_WITH_TFLITE_MODEL_LOADER)
+    scoped_ml_service_.SetUpMLService(*this);
+#endif
+  }
+  ~MLGraphV8TestingScope() = default;
+
+ private:
+#if BUILDFLAG(BUILD_WEBNN_WITH_TFLITE_MODEL_LOADER)
+  ScopedMLService scoped_ml_service_;
+#endif
 };
 
 template <typename T>
 struct OperandInfo {
-  V8MLOperandType::Enum type;
+  V8MLOperandDataType::Enum data_type;
   Vector<uint32_t> dimensions;
   Vector<T> values;
 };
@@ -115,15 +147,15 @@ Vector<T> GetArrayBufferViewValues(
 template <typename T>
 MLOperand* BuildConstant(MLGraphBuilder* builder,
                          const Vector<uint32_t>& dimensions,
-                         V8MLOperandType::Enum type,
+                         V8MLOperandDataType::Enum data_type,
                          const Vector<T>& values,
                          ExceptionState& exception_state) {
   size_t buffer_size = std::accumulate(dimensions.begin(), dimensions.end(),
                                        size_t(1), std::multiplies<uint32_t>());
-  auto buffer = CreateDOMArrayBufferView(buffer_size, type);
+  auto buffer = CreateDOMArrayBufferView(buffer_size, data_type);
   DCHECK_EQ(buffer->byteLength(), values.size() * sizeof(T));
   memcpy(buffer->BaseAddress(), values.data(), buffer->byteLength());
-  return BuildConstant(builder, dimensions, type, exception_state, buffer);
+  return BuildConstant(builder, dimensions, data_type, exception_state, buffer);
 }
 
 }  // namespace blink

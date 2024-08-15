@@ -42,6 +42,12 @@ void FakeServiceWorkerContext::UnregisterServiceWorker(
     ResultCallback callback) {
   NOTREACHED();
 }
+void FakeServiceWorkerContext::UnregisterServiceWorkerImmediately(
+    const GURL& scope,
+    const blink::StorageKey& key,
+    ResultCallback callback) {
+  NOTREACHED();
+}
 ServiceWorkerExternalRequestResult
 FakeServiceWorkerContext::StartingExternalRequest(
     int64_t service_worker_version_id,
@@ -134,6 +140,13 @@ void FakeServiceWorkerContext::StartServiceWorkerForNavigationHint(
     const blink::StorageKey& key,
     StartServiceWorkerForNavigationHintCallback callback) {
   start_service_worker_for_navigation_hint_called_ = true;
+}
+
+void FakeServiceWorkerContext::WarmUpServiceWorker(
+    const GURL& document_url,
+    const blink::StorageKey& key,
+    WarmUpServiceWorkerCallback callback) {
+  NOTREACHED();
 }
 
 void FakeServiceWorkerContext::StartServiceWorkerAndDispatchMessage(

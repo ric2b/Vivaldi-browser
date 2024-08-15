@@ -6,8 +6,7 @@
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> üçün icazələri seçin</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> gözlənilmədən bağlantını kəsdi.</translation>
 <translation id="1161325031994447685">Wi-Fi şəbəkəsinə qoşulur</translation>
-<translation id="1175364870820465910">&amp;Çap...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Kukilərinizi silməyə cəhd edin<ph name="END_LINK" /></translation>
+<translation id="1175364870820465910">&amp;Çap edin...</translation>
 <translation id="1375198122581997741">Versiya haqqında</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> heç bir məlumat göndərmədi.</translation>
 <translation id="1559528461873125649">Belə fayl və ya qovluq yoxdur</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Sistem inzibatçısına müraciət edin.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows çəbəkəsinin diaqnostikasını başladın<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Sayt zərərli proqramlardan ibarətdir</translation>
-<translation id="1916770123977586577">Sayta yeni ayarları tətbiq etmək üçün səhifəni yenidən açın</translation>
 <translation id="1974060860693918893">Daha ətraflı</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proksi və təhlükəsizlik divarının yoxlanılması<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verildi: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Təcavüzkarlar bu saytda baxdığınız şəkilləri görə bilər və sizi aldatmaq məqsədi ilə onları dəyişdirə bilər.</translation>
 <translation id="2356070529366658676">Soruşmaq</translation>
 <translation id="2359808026110333948">Davam edin</translation>
+<translation id="2388886110302389394">Səhifəni yeni gizli pəncərədə açın (Ctrl+Shift+N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Şəbəkə diaqnostika edilir<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Bu səhifə əlavə qoşma tərəfindən əngəllənib</translation>
 <translation id="2501278716633472235">Qayıtmaq</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Giriş</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> kilidlənib</translation>
 <translation id="3987940399970879459">1 MB-dan az</translation>
+<translation id="4075123085690634698">Səhifəni yeni gizli pəncərədə açın (⇧⌘N)</translation>
 <translation id="4075732493274867456">Müştəri və server, müxtəlif SSL protokolu versiyasını və ya şifrələr yığınını dəstəkləyir.</translation>
 <translation id="4116663294526079822">Bu saytda həmişə icazə vermək</translation>
 <translation id="4130226655945681476">Şəbəkə kabelini, modemi, routeri yoxlayın</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Cihazınız yuxu rejiminə keçdi.</translation>
 <translation id="6890956352250146925">Kukilər və sayt verilənləri üçün seçimlər</translation>
 <translation id="6897140037006041989">User Agent</translation>
+<translation id="6957624206566198865">Səhifəni yeni gizli vərəqdə açın</translation>
 <translation id="7053983685419859001">Əngəlləmək</translation>
 <translation id="7079718277001814089">Saytda zərərli proqram təminatı var</translation>
 <translation id="7096937462164235847">Bu veb saytın etibarlılığı doğrulanmayıb.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> adi halda məlumatlarınızın qorunması üçün şifrələmədən istifadə edir. İndi Vivaldinin <ph name="SITE" /> saytına qoşulduğu zaman veb-saytdan qeyri-adi və səhv kimlik məlumatları alındı. Ola bilsin ki, təcavüzkar <ph name="SITE" /> adı altında maskalanıb və ya Wi-Fi şəbəkəsinə giriş ekranı bağlantını kəsdi. Sizin məlumatlarınız hələ də qorunur, çünki Vivaldi, verilənlərdə dəyişiklik edilmədən öncə bağlantını kəsdi.</translation>
 <translation id="7878562273885520351">Şifrəniz üçüncü tərəfin əlinə keçə bilər</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">Bu saytda yenilənmiş ayarların tətbiqi üçün bu səhifəni yenidən yükləyin</translation>
 <translation id="8025119109950072390">Bu sayta səyahət zərərli proqram təminatının quraşdırılmasına və şəxsi məlumatlarınızın (məs., şifrələr, telefon nömrələri və bank kartı məlumatları) oğurlanmasına səbəb ola bilər.</translation>
 <translation id="8037357227543935929">Soruşmaq (standart)</translation>
 <translation id="8041940743680923270">Ümumi istifadə etmək (soruşulsun)</translation>
@@ -207,7 +209,7 @@
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tərəfindən əngəllənib</translation>
 <translation id="8963117664422609631">Sayt ayarlarına keçin</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> proksi serveri istifadəçi adı və şifrə tələb edir.</translation>
-<translation id="9008201768610948239">Gözardı etmək</translation>
+<translation id="9008201768610948239">Gözardı edin</translation>
 <translation id="9025348182339809926">(yalnış)</translation>
 <translation id="9039213469156557790">Nəzərə alın ki, bu səhifə təhlükəli olan digər mənbələrdən ibarətdir. Bu mənbələr, göndərilmə zamanı üçüncü şəxs tərəfindən görünə və dəyişdirilə bilər, kiberdələduzlar isə səhifəyə giriş əldə edərək onun davranışlarını dəyişə bilərlər.</translation>
 <translation id="9062620674789239642">Bu, ya köçürülüb, dəyişdirilib və ya silinib.</translation>

@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "chrome/browser/picture_in_picture/picture_in_picture_occlusion_tracker.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -131,9 +132,9 @@ T* AddChildView(std::vector<std::unique_ptr<views::View>>* views,
 }
 
 class WindowBackgroundView : public views::View {
- public:
-  METADATA_HEADER(WindowBackgroundView);
+  METADATA_HEADER(WindowBackgroundView, views::View)
 
+ public:
   WindowBackgroundView() = default;
   WindowBackgroundView(const WindowBackgroundView&) = delete;
   WindowBackgroundView& operator=(const WindowBackgroundView&) = delete;
@@ -145,13 +146,13 @@ class WindowBackgroundView : public views::View {
   }
 };
 
-BEGIN_METADATA(WindowBackgroundView, views::View)
+BEGIN_METADATA(WindowBackgroundView)
 END_METADATA
 
 class ControlsBackgroundView : public views::View {
- public:
-  METADATA_HEADER(ControlsBackgroundView);
+  METADATA_HEADER(ControlsBackgroundView, views::View)
 
+ public:
   ControlsBackgroundView() = default;
   ControlsBackgroundView(const ControlsBackgroundView&) = delete;
   ControlsBackgroundView& operator=(const ControlsBackgroundView&) = delete;
@@ -167,13 +168,15 @@ class ControlsBackgroundView : public views::View {
   }
 };
 
-BEGIN_METADATA(ControlsBackgroundView, views::View)
+BEGIN_METADATA(ControlsBackgroundView)
 END_METADATA
 
 }  // namespace
 
 // OverlayWindow implementation of NonClientFrameView.
 class OverlayWindowFrameView : public views::NonClientFrameView {
+  METADATA_HEADER(OverlayWindowFrameView, views::NonClientFrameView)
+
  public:
   explicit OverlayWindowFrameView(views::Widget* widget) : widget_(widget) {}
 
@@ -227,6 +230,9 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
  private:
   raw_ptr<views::Widget> widget_;
 };
+
+BEGIN_METADATA(OverlayWindowFrameView)
+END_METADATA
 
 // OverlayWindow implementation of WidgetDelegate.
 class OverlayWindowWidgetDelegate : public views::WidgetDelegate {
@@ -305,6 +311,12 @@ std::unique_ptr<VideoOverlayWindowViews> VideoOverlayWindowViews::Create(
     }
   }
 #endif  // BUILDFLAG(IS_WIN)
+
+  PictureInPictureOcclusionTracker* tracker =
+      PictureInPictureWindowManager::GetInstance()->GetOcclusionTracker();
+  if (tracker) {
+    tracker->OnPictureInPictureWidgetOpened(overlay_window.get());
+  }
 
   return overlay_window;
 }
@@ -682,6 +694,11 @@ void VideoOverlayWindowViews::OnViewVisibilityChanged(
   OnSizeConstraintsChanged();
 }
 
+void VideoOverlayWindowViews::OnAutoPipSettingOverlayViewHidden() {
+  // If there is an existing overlay view, remove it now.
+  RemoveOverlayViewIfExists();
+}
+
 gfx::Rect VideoOverlayWindowViews::GetWorkAreaForWindow() const {
   return display::Screen::GetScreen()
       ->GetDisplayNearestWindow(
@@ -698,12 +715,7 @@ void VideoOverlayWindowViews::UpdateMaxSize(const gfx::Rect& work_area) {
     return;
 
   auto new_max_size =
-#if defined(VIVALDI_BUILD)
-      // 1.1 allows for the window to be almost as large as the monitor.
-      gfx::Size(work_area.width() / 1.1, work_area.height() / 1.1);
-#else
       gfx::Size(work_area.width() * 0.8, work_area.height() * 0.8);
-#endif  // defined(VIVALDI_BUILD)
 
   // Ensure |new_max_size| is not smaller than |min_size_|, or else we will
   // crash.
@@ -736,7 +748,7 @@ void VideoOverlayWindowViews::UpdateMaxSize(const gfx::Rect& work_area) {
 
 bool VideoOverlayWindowViews::ControlsHitTestContainsPoint(
     const gfx::Point& point) {
-  if (IsOverlayViewShown()) {
+  if (overlay_view_) {
     // Let the overlay view consume this event if it wants to.  If not, then
     // ignore any of our controls as well.  This will still permit dragging the
     // window by any parts that aren't consumed by the overlay view.
@@ -1297,12 +1309,12 @@ void VideoOverlayWindowViews::ShowInactive() {
   // Re-add it if needed.
   if (overlay_view) {
     overlay_view_ = GetContentsView()->AddChildView(std::move(overlay_view));
-    overlay_view_->AddObserver(this);
+    overlay_view_->views::View::AddObserver(this);
+    auto_pip_setting_overlay_view_observation_.Observe(overlay_view_);
     // Also update the bounds, since that's already happened for everything
     // else, potentially, during widget resize.
     overlay_view_->SetBoundsRect(gfx::Rect(GetBounds().size()));
-    overlay_view_->ShowBubble(
-        GetNativeView(), AutoPipSettingOverlayView::PipWindowType::kVideoPip);
+    overlay_view_->ShowBubble(GetNativeView());
     SetBounds(CalculateAndUpdateWindowBounds());
   }
 
@@ -1665,10 +1677,11 @@ bool VideoOverlayWindowViews::IsOverlayViewShown() const {
 
 void VideoOverlayWindowViews::RemoveOverlayViewIfExists() {
   if (overlay_view_) {
+    auto_pip_setting_overlay_view_observation_.Reset();
     // Remove and delete the outgoing view.  Note the trailing `T` on the method
     // name -- this removes `overlay_view_` and returns a unique_ptr to it which
     // we then discard.  Without the `T`, it returns nothing and frees nothing.
-    overlay_view_->RemoveObserver(this);
+    overlay_view_->views::View::RemoveObserver(this);
     GetContentsView()->RemoveChildViewT(overlay_view_.ExtractAsDangling());
     OnSizeConstraintsChanged();
   }

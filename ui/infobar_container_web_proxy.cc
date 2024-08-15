@@ -43,7 +43,7 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_OK) {
     InfobarButton button[1] = {};
 
-    button->action = ButtonAction::BUTTON_ACTION_ACCEPT;
+    button->action = ButtonAction::kAccept;
     button->prominent = true;
     button->text = base::UTF16ToUTF8(
         delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
@@ -52,7 +52,7 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   if (delegate->GetButtons() & ConfirmInfoBarDelegate::BUTTON_CANCEL) {
     InfobarButton button[1] = {};
 
-    button->action = ButtonAction::BUTTON_ACTION_CANCEL;
+    button->action = ButtonAction::kCancel;
     button->text = base::UTF16ToUTF8(
         delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
 

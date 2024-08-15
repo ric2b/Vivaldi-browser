@@ -553,8 +553,8 @@ static void test_purge_command_buffer_usage(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 2 == TestResource::NumAlive());
 
     // Add command buffer usages to all resources
-    a->addCommandBufferUsage();
-    b->addCommandBufferUsage();
+    a->refCommandBuffer();
+    b->refCommandBuffer();
 
     // Should be safe to purge without deleting the resources since we still have refs and command
     // buffer usages.
@@ -573,8 +573,8 @@ static void test_purge_command_buffer_usage(skiatest::Reporter* reporter) {
     REPORTER_ASSERT(reporter, 2 == TestResource::NumAlive());
 
     // Remove command buffer usages
-    a->removeCommandBufferUsage();
-    b->removeCommandBufferUsage();
+    a->unrefCommandBuffer();
+    b->unrefCommandBuffer();
     REPORTER_ASSERT(reporter, 2 == TestResource::NumAlive());
     REPORTER_ASSERT(reporter, 2 == cache->getResourceCount());
     REPORTER_ASSERT(reporter, a->gpuMemorySize() + b->gpuMemorySize() == cache->getResourceBytes());
@@ -1114,7 +1114,7 @@ static void test_duplicate_unique_key(skiatest::Reporter* reporter) {
     skgpu::UniqueKey key3;
     make_unique_key<0>(&key3, 0);
     sk_sp<GrGpuResource> d2(cache->findAndRefUniqueResource(key3));
-    REPORTER_ASSERT(reporter, *(int*) d2->getUniqueKey().getCustomData()->data() == 4132);
+    REPORTER_ASSERT(reporter, *(const int*) d2->getUniqueKey().getCustomData()->data() == 4132);
 }
 
 static void test_purge_invalidated(skiatest::Reporter* reporter) {
@@ -1533,12 +1533,12 @@ static void test_custom_data(skiatest::Reporter* reporter) {
     make_unique_key<0>(&key2, 2);
     int foo = 4132;
     key1.setCustomData(SkData::MakeWithCopy(&foo, sizeof(foo)));
-    REPORTER_ASSERT(reporter, *(int*) key1.getCustomData()->data() == 4132);
+    REPORTER_ASSERT(reporter, *(const int*) key1.getCustomData()->data() == 4132);
     REPORTER_ASSERT(reporter, key2.getCustomData() == nullptr);
 
     // Test that copying a key also takes a ref on its custom data.
     skgpu::UniqueKey key3 = key1;
-    REPORTER_ASSERT(reporter, *(int*) key3.getCustomData()->data() == 4132);
+    REPORTER_ASSERT(reporter, *(const int*) key3.getCustomData()->data() == 4132);
 }
 
 static void test_abandoned(skiatest::Reporter* reporter) {
@@ -1695,11 +1695,16 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(ResourceMessagesAfterAbandon,
                                        reporter,
                                        ctxInfo,
                                        CtsEnforcement::kApiLevel_T) {
+    using namespace skgpu;
+
     auto dContext = ctxInfo.directContext();
     GrGpu* gpu = dContext->priv().getGpu();
 
+    Protected isProtected = Protected(dContext->priv().caps()->supportsProtectedContent());
+
     GrBackendTexture backend = dContext->createBackendTexture(
-            16, 16, SkColorType::kRGBA_8888_SkColorType, skgpu::Mipmapped::kNo, GrRenderable::kNo);
+            16, 16, SkColorType::kRGBA_8888_SkColorType, skgpu::Mipmapped::kNo, GrRenderable::kNo,
+            isProtected);
     sk_sp<GrTexture> tex = gpu->wrapBackendTexture(backend,
                                                    GrWrapOwnership::kBorrow_GrWrapOwnership,
                                                    GrWrapCacheable::kYes,

@@ -100,7 +100,7 @@ struct ArrayLengthFromUniform::State {
 
         IterateArrayLengthOnStorageVar(
             [&](const CallExpression*, const sem::VariableUser*, const sem::GlobalVariable* var) {
-                if (auto binding = var->BindingPoint()) {
+                if (auto binding = var->Attributes().binding_point) {
                     auto idx_itr = cfg->bindpoint_to_size_index.find(*binding);
                     if (idx_itr == cfg->bindpoint_to_size_index.end()) {
                         return;
@@ -138,7 +138,7 @@ struct ArrayLengthFromUniform::State {
         IterateArrayLengthOnStorageVar([&](const CallExpression* call_expr,
                                            const sem::VariableUser* storage_buffer_sem,
                                            const sem::GlobalVariable* var) {
-            auto binding = var->BindingPoint();
+            auto binding = var->Attributes().binding_point;
             if (!binding) {
                 return;
             }
@@ -162,6 +162,11 @@ struct ArrayLengthFromUniform::State {
             // array_length = ----------------------------------------
             //                             array_stride
             const Expression* total_size = total_storage_buffer_size;
+            if (TINT_UNLIKELY(storage_buffer_sem->Type()->Is<core::type::Pointer>())) {
+                TINT_ICE() << "storage buffer variable should not be a pointer. These should have "
+                              "been removed by the SimplifyPointers transform";
+                return;
+            }
             auto* storage_buffer_type = storage_buffer_sem->Type()->UnwrapRef();
             const core::type::Array* array_type = nullptr;
             if (auto* str = storage_buffer_type->As<core::type::Struct>()) {

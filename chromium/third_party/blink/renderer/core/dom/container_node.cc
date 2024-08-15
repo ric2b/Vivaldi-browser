@@ -41,7 +41,6 @@
 #include "third_party/blink/renderer/core/dom/node_cloning_data.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
-#include "third_party/blink/renderer/core/dom/node_move_scope.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/part.h"
@@ -73,6 +72,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
 namespace blink {
 
@@ -154,9 +154,6 @@ static inline bool CollectChildrenAndRemoveFromOldParent(
     Node& node,
     NodeVector& nodes,
     ExceptionState& exception_state) {
-  if (RuntimeEnabledFeatures::DOMPartsAPIActivePartTrackingEnabled()) {
-    NodeMoveScope::SetCurrentNodeBeingRemoved(node);
-  }
   if (auto* fragment = DynamicTo<DocumentFragment>(node)) {
     GetChildNodes(*fragment, nodes);
     fragment->RemoveChildren();
@@ -418,10 +415,6 @@ Node* ContainerNode::InsertBefore(Node* new_child,
   // 4. Adopt node into parent’s node document.
   NodeVector targets;
   DOMTreeMutationDetector detector(*new_child, *this);
-  NodeMoveScope node_move_scope(
-      *this, firstChild() == ref_child
-                 ? NodeMoveScopeType::kInsertBeforeAllChildren
-                 : NodeMoveScopeType::kOther);
   if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
                                              exception_state))
     return new_child;
@@ -610,11 +603,6 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
     // 13. Let nodes be node’s children if node is a DocumentFragment node, and
     // a list containing solely node otherwise.
     DOMTreeMutationDetector detector(*new_child, *this);
-    NodeMoveScope node_move_scope(
-        *this, !next ? NodeMoveScopeType::kAppendAfterAllChildren
-                     : (firstChild() == next
-                            ? NodeMoveScopeType::kInsertBeforeAllChildren
-                            : NodeMoveScopeType::kOther));
     if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
                                                exception_state))
       return old_child;
@@ -703,7 +691,7 @@ static bool ShouldMergeCombinedTextAfterRemoval(const Node& old_child) {
   if (!layout_object)
     return false;
 
-  // Request to merge previous and next |LayoutNGTextCombine| of |child|.
+  // Request to merge previous and next |LayoutTextCombine| of |child|.
   // See http:://crbug.com/1227066
   auto* const previous_sibling = layout_object->PreviousSibling();
   if (!previous_sibling)
@@ -929,8 +917,6 @@ Node* ContainerNode::AppendChild(Node* new_child,
 
   NodeVector targets;
   DOMTreeMutationDetector detector(*new_child, *this);
-  NodeMoveScope node_move_scope(*this,
-                                NodeMoveScopeType::kAppendAfterAllChildren);
   if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
                                              exception_state))
     return new_child;
@@ -987,6 +973,83 @@ void ContainerNode::ParserAppendChild(Node* new_child) {
   NotifyNodeInserted(*new_child, ChildrenChangeSource::kParser);
 }
 
+void ContainerNode::ParserAppendChildInDocumentFragment(Node* new_child) {
+  DCHECK(new_child);
+  DCHECK(CheckParserAcceptChild(*new_child));
+  DCHECK(!new_child->IsDocumentFragment());
+  DCHECK(!IsA<HTMLTemplateElement>(this));
+  DCHECK_EQ(new_child->GetDocument(), GetDocument());
+  DCHECK_EQ(&new_child->GetTreeScope(), &GetTreeScope());
+  DCHECK_EQ(new_child->parentNode(), nullptr);
+  EventDispatchForbiddenScope assert_no_event_dispatch;
+  ScriptForbiddenScope forbid_script;
+  AppendChildCommon(*new_child);
+  DCHECK_EQ(new_child->ConnectedSubframeCount(), 0u);
+  // TODO(sky): This has to happen for every add. It seems like it should be
+  // better factored.
+  ChildListMutationScope(*this).ChildAdded(*new_child);
+  probe::DidInsertDOMNode(this);
+}
+
+void ContainerNode::ParserFinishedBuildingDocumentFragment() {
+  EventDispatchForbiddenScope assert_no_event_dispatch;
+  ScriptForbiddenScope forbid_script;
+  const bool may_contain_shadow_roots = GetDocument().MayContainShadowRoots();
+
+  const ChildrenChange change =
+      ChildrenChange::ForFinishingBuildingDocumentFragmentTree();
+  for (Node& node : NodeTraversal::DescendantsOf(*this)) {
+    NotifyNodeAtEndOfBuildingFragmentTree(node, change,
+                                          may_contain_shadow_roots);
+  }
+
+  if (GetDocument().ShouldInvalidateNodeListCaches(nullptr)) {
+    GetDocument().InvalidateNodeListCaches(nullptr);
+  }
+}
+
+void ContainerNode::NotifyNodeAtEndOfBuildingFragmentTree(
+    Node& node,
+    const ChildrenChange& change,
+    bool may_contain_shadow_roots) {
+  // Fast path parser only creates disconnected nodes.
+  DCHECK(!node.isConnected());
+
+  if (may_contain_shadow_roots) {
+    node.CheckSlotChangeAfterInserted();
+  }
+
+  // As an optimization we don't notify leaf nodes when when inserting
+  // into detached subtrees that are not in a shadow tree, unless the
+  // node has DOM Parts attached.
+  if (!node.IsContainerNode() && !IsInShadowTree() && !node.GetDOMParts()) {
+    return;
+  }
+
+  // NotifyNodeInserted() keeps a list of nodes to call
+  // DidNotifySubtreeInsertionsToDocument() on if InsertedInto() returns
+  // kInsertionShouldCallDidNotifySubtreeInsertions, but only if the node
+  // is connected. None of the nodes are connected at this point, so it's
+  // not needed here.
+  node.InsertedInto(*this);
+
+  if (ShadowRoot* shadow_root = node.GetShadowRoot()) {
+    for (Node& shadow_node :
+         NodeTraversal::InclusiveDescendantsOf(*shadow_root)) {
+      NotifyNodeAtEndOfBuildingFragmentTree(shadow_node, change,
+                                            may_contain_shadow_roots);
+    }
+  }
+
+  // No node-lists should have been created at this (otherwise
+  // InvalidateNodeListCaches() would need to be called).
+  DCHECK(!HasRareData() || !RareData()->NodeLists());
+
+  if (node.IsContainerNode()) {
+    DynamicTo<ContainerNode>(node)->ChildrenChanged(change);
+  }
+}
+
 DISABLE_CFI_PERF
 void ContainerNode::NotifyNodeInserted(Node& root,
                                        ChildrenChangeSource source) {
@@ -1020,9 +1083,9 @@ void ContainerNode::NotifyNodeInsertedInternal(
   ScriptForbiddenScope forbid_script;
 
   for (Node& node : NodeTraversal::InclusiveDescendantsOf(root)) {
-    // As an optimization we don't notify leaf nodes when when inserting
-    // into detached subtrees that are not in a shadow tree, unless the
-    // node has DOM Parts attached.
+    // As an optimization we don't notify leaf nodes when inserting into
+    // detached subtrees that are not in a shadow tree, unless the node has DOM
+    // Parts attached.
     if (!isConnected() && !IsInShadowTree() && !node.IsContainerNode() &&
         !node.GetDOMParts()) {
       continue;
@@ -1086,6 +1149,12 @@ void ContainerNode::DetachLayoutTree(bool performing_reattach) {
 void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
   GetDocument().IncDOMTreeVersion();
   GetDocument().NotifyChangeChildren(*this, change);
+  if (change.type ==
+      ChildrenChangeType::kFinishedBuildingDocumentFragmentTree) {
+    // The rest of this is not necessary when building a DocumentFragment.
+    return;
+  }
+
   InvalidateNodeListCachesInAncestors(nullptr, nullptr, &change);
   if (change.IsChildRemoval() ||
       change.type == ChildrenChangeType::kAllChildrenRemoved) {
@@ -1168,6 +1237,24 @@ unsigned ContainerNode::CountChildren() const {
   for (Node* node = firstChild(); node; node = node->nextSibling())
     count++;
   return count;
+}
+
+bool ContainerNode::HasOnlyText() const {
+  bool has_text = false;
+  for (Node* child = firstChild(); child; child = child->nextSibling()) {
+    switch (child->getNodeType()) {
+      case kTextNode:
+      case kCdataSectionNode:
+        has_text = has_text || !To<Text>(child)->data().empty();
+        break;
+      case kCommentNode:
+        // Ignore comments.
+        break;
+      default:
+        return false;
+    }
+  }
+  return has_text;
 }
 
 Element* ContainerNode::QuerySelector(const AtomicString& selectors,
@@ -1486,6 +1573,19 @@ RadioNodeList* ContainerNode::GetRadioNodeList(const AtomicString& name,
   CollectionType type =
       only_match_img_elements ? kRadioImgNodeListType : kRadioNodeListType;
   return EnsureCachedCollection<RadioNodeList>(type, name);
+}
+
+String ContainerNode::FindTextInElementWith(
+    const AtomicString& substring) const {
+  for (Element& element : ElementTraversal::DescendantsOf(*this)) {
+    if (element.HasOnlyText()) {
+      const String& text = element.TextFromChildren();
+      if (text.Find(substring) != WTF::kNotFound) {
+        return text;
+      }
+    }
+  }
+  return String();
 }
 
 Element* ContainerNode::getElementById(const AtomicString& id) const {

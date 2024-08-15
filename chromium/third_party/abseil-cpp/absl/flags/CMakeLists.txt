@@ -169,6 +169,7 @@ absl_cc_library(
     absl::strings
     absl::synchronization
     absl::flat_hash_map
+    absl::no_destructor
 )
 
 # Internal-only target, do not depend on directly.
@@ -200,12 +201,9 @@ absl_cc_library(
 absl_cc_library(
   NAME
     flags
-  SRCS
-    "flag.cc"
   HDRS
     "declare.h"
     "flag.h"
-    "internal/flag_msvc.inc"
   COPTS
     ${ABSL_DEFAULT_COPTS}
   LINKOPTS

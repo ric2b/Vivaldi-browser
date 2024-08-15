@@ -6,7 +6,6 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
 import * as UI from '../../ui/legacy/legacy.js';
-import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import type * as Emulation from './emulation.js';
 
@@ -80,7 +79,7 @@ UI.ActionRegistration.registerActionExtension({
   toggleable: true,
   async loadActionDelegate() {
     const Emulation = await loadEmulationModule();
-    return Emulation.DeviceModeWrapper.ActionDelegate.instance();
+    return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
   condition: Root.Runtime.ConditionName.CAN_DOCK,
   title: i18nLazyString(UIStrings.toggleDeviceToolbar),
@@ -102,7 +101,7 @@ UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.SCREENSHOT,
   async loadActionDelegate() {
     const Emulation = await loadEmulationModule();
-    return Emulation.DeviceModeWrapper.ActionDelegate.instance();
+    return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
   condition: Root.Runtime.ConditionName.CAN_DOCK,
   title: i18nLazyString(UIStrings.captureScreenshot),
@@ -113,7 +112,7 @@ UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.SCREENSHOT,
   async loadActionDelegate() {
     const Emulation = await loadEmulationModule();
-    return Emulation.DeviceModeWrapper.ActionDelegate.instance();
+    return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
   condition: Root.Runtime.ConditionName.CAN_DOCK,
   title: i18nLazyString(UIStrings.captureFullSizeScreenshot),
@@ -124,7 +123,7 @@ UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.SCREENSHOT,
   async loadActionDelegate() {
     const Emulation = await loadEmulationModule();
-    return Emulation.DeviceModeWrapper.ActionDelegate.instance();
+    return new Emulation.DeviceModeWrapper.ActionDelegate();
   },
   condition: Root.Runtime.ConditionName.CAN_DOCK,
   title: i18nLazyString(UIStrings.captureNodeScreenshot),
@@ -192,7 +191,6 @@ UI.Toolbar.registerToolbarItem({
   showLabel: undefined,
   loadItem: undefined,
   separator: undefined,
-  jslog: `${VisualLogging.toggleDeviceMode().track({click: true})}`,
 });
 
 Common.AppProvider.registerAppProvider({

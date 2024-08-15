@@ -76,12 +76,12 @@ void LayoutSVGInline::ObjectBoundingBoxForCursor(InlineCursor& cursor,
                                                  gfx::RectF& bounds) {
   for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
     const FragmentItem& item = *cursor.CurrentItem();
-    if (item.Type() == FragmentItem::kSvgText) {
+    if (item.IsSvgText()) {
       bounds.Union(cursor.Current().ObjectBoundingBox(cursor));
     } else if (InlineCursor descendants = cursor.CursorForDescendants()) {
       for (; descendants; descendants.MoveToNext()) {
         const FragmentItem& descendant_item = *descendants.CurrentItem();
-        if (descendant_item.Type() == FragmentItem::kSvgText) {
+        if (descendant_item.IsSvgText()) {
           bounds.Union(descendants.Current().ObjectBoundingBox(cursor));
         }
       }
@@ -135,7 +135,7 @@ void LayoutSVGInline::AbsoluteQuads(Vector<gfx::QuadF>& quads,
     for (cursor.MoveToIncludingCulledInline(*this); cursor;
          cursor.MoveToNextForSameLayoutObject()) {
       const FragmentItem& item = *cursor.CurrentItem();
-      if (item.Type() == FragmentItem::kSvgText) {
+      if (item.IsSvgText()) {
         quads.push_back(LocalToAbsoluteQuad(
             gfx::QuadF(SVGLayoutSupport::ExtendTextBBoxWithStroke(
                 *this, cursor.Current().ObjectBoundingBox(cursor))),
@@ -148,7 +148,7 @@ void LayoutSVGInline::AbsoluteQuads(Vector<gfx::QuadF>& quads,
 void LayoutSVGInline::AddOutlineRects(OutlineRectCollector& collector,
                                       OutlineInfo* info,
                                       const PhysicalOffset& additional_offset,
-                                      NGOutlineType outline_type) const {
+                                      OutlineType outline_type) const {
   if (!IsInLayoutNGInlineFormattingContext()) {
     LayoutInline::AddOutlineRects(collector, nullptr, additional_offset,
                                   outline_type);
@@ -181,7 +181,8 @@ void LayoutSVGInline::StyleDidChange(StyleDifference diff,
 
   if (diff.NeedsFullLayout()) {
     // The boundaries affect mask clip and clip path mask/clip.
-    if (StyleRef().MaskerResource() || StyleRef().HasClipPath()) {
+    const ComputedStyle& style = StyleRef();
+    if (style.HasMaskForSVG() || style.HasClipPath()) {
       SetNeedsPaintPropertyUpdate();
     }
     SetNeedsBoundariesUpdate();

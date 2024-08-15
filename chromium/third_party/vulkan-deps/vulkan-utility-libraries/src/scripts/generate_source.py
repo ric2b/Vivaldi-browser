@@ -93,9 +93,8 @@ def RunGenerators(api: str, registry: str, targetFilter: str) -> None:
         # Parse the specified registry XML into an ElementTree object
         tree = ElementTree.parse(registry)
 
-        # Filter out non-Vulkan extensions
-        if api == 'vulkan':
-            [exts.remove(e) for exts in tree.findall('extensions') for e in exts.findall('extension') if (sup := e.get('supported')) is not None and options.apiname not in sup.split(',')]
+        # Filter out extensions that are not on the API list
+        [exts.remove(e) for exts in tree.findall('extensions') for e in exts.findall('extension') if (sup := e.get('supported')) is not None and all(api not in sup.split(',') for api in apiList)]
 
         # Load the XML tree into the registry object
         reg.loadElementTree(tree)

@@ -15,7 +15,7 @@
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
+#include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 
 class PasswordStoreBridge
@@ -41,8 +41,17 @@ class PasswordStoreBridge
                     const base::android::JavaParamRef<jobject>& credential,
                     const base::android::JavaParamRef<jstring>& new_password);
 
-  // Called by Java to get the number of stored credentials.
-  jint GetPasswordStoreCredentialsCount(JNIEnv* env) const;
+  // Called by Java to get the number of stored credentials for both profile and
+  // account stores.
+  jint GetPasswordStoreCredentialsCountForAllStores(JNIEnv* env) const;
+
+  // Called by Java to get the number of stored credentials in the account
+  // storage.
+  jint GetPasswordStoreCredentialsCountForAccountStore(JNIEnv* env) const;
+
+  // Called by Java to get the number of stored credentials in the local
+  // storage.
+  jint GetPasswordStoreCredentialsCountForProfileStore(JNIEnv* env) const;
 
   // Called by Java to get all stored credentials.
   void GetAllCredentials(

@@ -7,6 +7,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/types/strong_alias.h"
 #include "services/network/public/mojom/no_vary_search.mojom-blink.h"
@@ -34,12 +35,14 @@
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/speculation_rules/document_rule_predicate.h"
 #include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
+#include "third_party/blink/renderer/core/speculation_rules/speculation_rules_metrics.h"
 #include "third_party/blink/renderer/core/speculation_rules/stub_speculation_host.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/core/url_pattern/url_pattern.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -85,6 +88,48 @@ class ListRuleMatcher {
 
  private:
   ::testing::Matcher<const Vector<KURL>&> url_matcher_;
+};
+
+class URLPatternMatcher {
+ public:
+  explicit URLPatternMatcher(v8::Isolate* isolate,
+                             String pattern,
+                             const KURL& base_url) {
+    auto* url_pattern_input = MakeGarbageCollected<V8URLPatternInput>(pattern);
+    url_pattern_ = URLPattern::Create(isolate, url_pattern_input, base_url,
+                                      ASSERT_NO_EXCEPTION);
+  }
+
+  bool MatchAndExplain(URLPattern* pattern,
+                       ::testing::MatchResultListener* listener) const {
+    if (!pattern) {
+      return false;
+    }
+    return MatchAndExplain(*pattern, listener);
+  }
+
+  bool MatchAndExplain(const URLPattern& pattern,
+                       ::testing::MatchResultListener* listener) const {
+    using Component = V8URLPatternComponent::Enum;
+    Component components[] = {Component::kProtocol, Component::kUsername,
+                              Component::kPassword, Component::kHostname,
+                              Component::kPort,     Component::kPathname,
+                              Component::kSearch,   Component::kHash};
+    for (auto component : components) {
+      if (URLPattern::compareComponent(V8URLPatternComponent(component),
+                                       url_pattern_, &pattern) != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void DescribeTo(::std::ostream* os) const { *os << url_pattern_->ToString(); }
+
+  void DescribeNegationTo(::std::ostream* os) const { DescribeTo(os); }
+
+ private:
+  Persistent<URLPattern> url_pattern_;
 };
 
 template <typename... Matchers>
@@ -155,10 +200,16 @@ class SpeculationRuleSetTest : public ::testing::Test {
     return static_cast<NullExecutionContext*>(execution_context_.Get());
   }
 
+  auto URLPattern(String pattern,
+                  const KURL& base_url = KURL("https://example.com/")) {
+    return ::testing::MakePolymorphicMatcher(
+        URLPatternMatcher(execution_context_->GetIsolate(), pattern, base_url));
+  }
+
  private:
-  ScopedSpeculationRulesPrefetchProxyForTest enable_prefetch_{true};
   ScopedSpeculationRulesRelativeToDocumentForTest enable_relative_to_{true};
   ScopedPrerender2ForTest enable_prerender2_{true};
+  test::TaskEnvironment task_environment_;
   Persistent<ExecutionContext> execution_context_;
 };
 
@@ -461,13 +512,16 @@ TEST_F(SpeculationRuleSetTest, IgnoresUnknownOrDifferentlyTypedTopLevelKeys) {
 TEST_F(SpeculationRuleSetTest, DropUnrecognizedRules) {
   ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint_{
       true};
+  ScopedSpeculationRulesImplicitSourceForTest enable_implicit_source{true};
   auto* rule_set = CreateRuleSet(
       R"({"prefetch": [)"
 
       // A rule of incorrect type.
       R"("not an object",)"
 
-      // A rule that doesn't elaborate on its source.
+      // This used to be invalid, but now is, even with no source.
+      // TODO(crbug.com/1517696): Remove this when SpeculationRulesImplictSource
+      // is permanently shipped, so keep the test focused.
       R"({"urls": ["no-source.html"]},)"
 
       // A rule with an unrecognized source.
@@ -534,8 +588,10 @@ TEST_F(SpeculationRuleSetTest, DropUnrecognizedRules) {
   // The rule set itself is valid, however many of the individual rules are
   // invalid. So we should have populated a warning message.
   EXPECT_FALSE(rule_set->error_message().empty());
-  EXPECT_THAT(rule_set->prefetch_rules(),
-              ElementsAre(MatchesListOfURLs("https://example.com/valid.html")));
+  EXPECT_THAT(
+      rule_set->prefetch_rules(),
+      ElementsAre(MatchesListOfURLs("https://example.com/no-source.html"),
+                  MatchesListOfURLs("https://example.com/valid.html")));
 }
 
 // Test that only prerender rule can process a "_blank" target hint.
@@ -882,9 +938,6 @@ TEST_F(SpeculationRuleSetTest, PropagatesAllRulesToBrowser) {
 // Tests that prefetch rules are ignored unless SpeculationRulesPrefetchProxy
 // is enabled.
 TEST_F(SpeculationRuleSetTest, PrerenderIgnorePrefetchRules) {
-  // Overwrite the kSpeculationRulesPrefetchProxy flag.
-  ScopedSpeculationRulesPrefetchProxyForTest enable_prefetch{false};
-
   DummyPageHolder page_holder;
   StubSpeculationHost speculation_host;
   const String speculation_script =
@@ -951,11 +1004,11 @@ TEST_F(SpeculationRuleSetTest, UseCounter) {
       page_holder.GetDocument().IsUseCounted(WebFeature::kSpeculationRules));
 }
 
-// Tests that the presence of a speculationrules No-Vary-Search hint is
-// recorded.
-TEST_F(SpeculationRuleSetTest, NoVarySearchHintUseCounter) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
-      true};
+// Test helper method that returns if the No-Vary-Search hint use counter is
+// properly counted during shipping.
+// The use counter also acts as a proxy to check if the No-Vary-Search hint
+// feature is enabled.
+bool NoVarySearchHintUseCounterTestHelper() {
   DummyPageHolder page_holder;
   StubSpeculationHost speculation_host;
   page_holder.GetFrame().GetSettings()->SetScriptEnabled(true);
@@ -970,8 +1023,61 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintUseCounter) {
       }]})nvs";
   PropagateRulesToStubSpeculationHost(page_holder, speculation_host,
                                       speculation_script);
-  EXPECT_TRUE(page_holder.GetDocument().IsUseCounted(
-      WebFeature::kSpeculationRulesNoVarySearchHint));
+
+  return page_holder.GetDocument().IsUseCounted(
+      WebFeature::kSpeculationRulesNoVarySearchHint);
+}
+
+// Tests that the presence of a speculationrules No-Vary-Search hint is
+// recorded.
+TEST_F(SpeculationRuleSetTest, NoVarySearchHintUseCounter) {
+  {
+    // By default No-Vary-Search hint functionality is enabled without
+    // Origin Trial token.
+    ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
+        false};
+    ScopedSpeculationRulesNoVarySearchHintShippedByDefaultForTest
+        ship_no_vary_search_hint{true};
+    EXPECT_TRUE(NoVarySearchHintUseCounterTestHelper())
+        << "No-Vary-Search hint functionality is enabled "
+           "when shipped and without an Origin Trial token.";
+  }
+  {
+    // By default No-Vary-Search hint is enabled with Origin Trial token.
+    ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
+        true};
+    ScopedSpeculationRulesNoVarySearchHintShippedByDefaultForTest
+        ship_no_vary_search_hint{true};
+    EXPECT_TRUE(NoVarySearchHintUseCounterTestHelper())
+        << "No-Vary-Search hint functionality is enabled "
+           "when shipped and with an Origin Trial token.";
+  }
+  {
+    // No-Vary-Search hint is disabled when
+    // SpeculationRulesNoVarySearchHintControlShipping is set to false and
+    // there is no Origin Trial token.
+    ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
+        false};
+    ScopedSpeculationRulesNoVarySearchHintShippedByDefaultForTest
+        ship_no_vary_search_hint{false};
+    EXPECT_FALSE(NoVarySearchHintUseCounterTestHelper())
+        << "No-Vary-Search hint functionality is "
+           "disabled when unshipped and without "
+           "an Origin Trial token";
+  }
+  {
+    // No-Vary-Search hint is enabled when
+    // SpeculationRulesNoVarySearchHintControlShipping is set to false and
+    // there is an Origin Trial token.
+    ScopedSpeculationRulesNoVarySearchHintShippedByDefaultForTest
+        ship_no_vary_search_hint{false};
+    ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
+        true};
+    EXPECT_TRUE(NoVarySearchHintUseCounterTestHelper())
+        << "No-Vary-Search hint functionality is enabled when unshipped and "
+           "with "
+           "an Origin Trial token";
+  }
 }
 
 // Tests that the document's URL is excluded from candidates.
@@ -1387,51 +1493,6 @@ auto Selector(Vector<::testing::Matcher<StyleRule>> style_rule_matchers = {}) {
                               &DocumentRulePredicate::GetStyleRulesForTesting);
 }
 
-class URLPatternMatcher {
- public:
-  explicit URLPatternMatcher(String pattern, const KURL& base_url) {
-    auto* url_pattern_input = MakeGarbageCollected<V8URLPatternInput>(pattern);
-    url_pattern_ =
-        URLPattern::Create(url_pattern_input, base_url, ASSERT_NO_EXCEPTION);
-  }
-
-  bool MatchAndExplain(URLPattern* pattern,
-                       ::testing::MatchResultListener* listener) const {
-    if (!pattern)
-      return false;
-    return MatchAndExplain(*pattern, listener);
-  }
-
-  bool MatchAndExplain(const URLPattern& pattern,
-                       ::testing::MatchResultListener* listener) const {
-    using Component = V8URLPatternComponent::Enum;
-    Component components[] = {Component::kProtocol, Component::kUsername,
-                              Component::kPassword, Component::kHostname,
-                              Component::kPort,     Component::kPathname,
-                              Component::kSearch,   Component::kHash};
-    for (auto component : components) {
-      if (URLPattern::compareComponent(V8URLPatternComponent(component),
-                                       url_pattern_, &pattern) != 0) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  void DescribeTo(::std::ostream* os) const { *os << url_pattern_->ToString(); }
-
-  void DescribeNegationTo(::std::ostream* os) const { DescribeTo(os); }
-
- private:
-  Persistent<URLPattern> url_pattern_;
-};
-
-auto URLPattern(String pattern,
-                const KURL& base_url = KURL("https://example.com/")) {
-  return ::testing::MakePolymorphicMatcher(
-      URLPatternMatcher(pattern, base_url));
-}
-
 class StyleRuleMatcher {
  public:
   explicit StyleRuleMatcher(String selector_text)
@@ -1587,9 +1648,9 @@ TEST_F(DocumentRulesTest, ParseHref) {
           MatchesPredicate(Href({URLPattern("/foo#bar")})),
           MatchesPredicate(Href({URLPattern("/foo")})),
           MatchesPredicate(Href({URLPattern("/buzz"), URLPattern("/fizz"),
-                                 URLPattern("https://bar.com")})),
-          MatchesPredicate(Or({Href({URLPattern("https://foo.com")}),
-                               Neg(Href({URLPattern("http://*")}))}))));
+                                 URLPattern("https://bar.com:*")})),
+          MatchesPredicate(Or({Href({URLPattern("https://foo.com:*")}),
+                               Neg(Href({URLPattern("http://*:*")}))}))));
 }
 
 TEST_F(DocumentRulesTest, ParseHref_AllUrlPatternKeys) {
@@ -1604,7 +1665,7 @@ TEST_F(DocumentRulesTest, ParseHref_AllUrlPatternKeys) {
     "hostname": "abc.xyz",
     "baseURL": "https://example.com"
   })");
-  EXPECT_THAT(href_matches, Href({URLPattern("https://abc.xyz:*/*\\?*")}));
+  EXPECT_THAT(href_matches, Href({URLPattern("https://:@abc.xyz:*/*\\?*#")}));
 }
 
 TEST_F(DocumentRulesTest, HrefMatchesWithBaseURL) {
@@ -1668,10 +1729,13 @@ TEST_F(DocumentRulesTest, DropInvalidRules) {
       enable_selector_matches{true};
   ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
+  ScopedSpeculationRulesImplicitSourceForTest enable_implicit_source{true};
   auto* rule_set = CreateRuleSet(
       R"({"prefetch": [)"
 
-      // A rule that doesn't elaborate on its source.
+      // A rule that doesn't elaborate on its source (previously disallowed).
+      // TODO(crbug.com/1517696): Remove this when SpeculationRulesImplictSource
+      // is permanently shipped, so keep the test focused.
       R"({"where": {"and": []}},)"
 
       // A rule with an unrecognized source.
@@ -1789,6 +1853,12 @@ TEST_F(DocumentRulesTest, DropInvalidRules) {
         "expects_no_vary_search": 0
         },)"
 
+      // Both "where" and "urls" with implicit source.
+      R"({"urls": ["/"], "where": {"selector_matches": "*"}},)"
+
+      // Neither "where" nor "urls" with implicit source.
+      R"({},)"
+
       // valid document rule.
       R"({"source": "document",
         "where": {"and": [
@@ -1801,11 +1871,14 @@ TEST_F(DocumentRulesTest, DropInvalidRules) {
   ASSERT_TRUE(rule_set);
   EXPECT_EQ(rule_set->error_type(),
             SpeculationRuleSetErrorType::kInvalidRulesSkipped);
-  EXPECT_THAT(rule_set->prefetch_rules(),
-              ElementsAre(MatchesPredicate(
-                  And({Or({Href({URLPattern("/hello.html")}),
-                           Selector({StyleRuleWithSelectorText(".valid")})}),
-                       Neg(And({Href({URLPattern("https://world.com")})}))}))));
+  EXPECT_THAT(
+      rule_set->prefetch_rules(),
+      ElementsAre(
+          MatchesPredicate(And({})),
+          MatchesPredicate(
+              And({Or({Href({URLPattern("/hello.html")}),
+                       Selector({StyleRuleWithSelectorText(".valid")})}),
+                   Neg(And({Href({URLPattern("https://world.com:*")})}))}))));
 }
 
 // Tests that errors of individual rules which cause them to be ignored are
@@ -3080,11 +3153,7 @@ TEST_F(DocumentRulesTest, SelectorMatchesInsideShadowTree) {
   PropagateRulesToStubSpeculationHost(page_holder, speculation_host,
                                       speculation_script);
   const auto& candidates = speculation_host.candidates();
-  // TODO(crbug.com/1371522): Having document as the scoping root while matching
-  // 'selector_matches' means no link inside a shadow tree can ever be matched.
-  // If https://github.com/WICG/nav-speculation/pull/241 changes this, update
-  // this expectation.
-  EXPECT_THAT(candidates, HasURLs());
+  EXPECT_THAT(candidates, HasURLs(KURL("https://foo.com/fizz")));
 }
 
 TEST_F(DocumentRulesTest, SelectorMatchesWithScopePseudoSelector) {
@@ -4020,6 +4089,7 @@ TEST_F(SpeculationRuleSetTest, Eagerness) {
   const KURL kUrl6{"https://example.com/prefetch/document/page2.html"};
   const KURL kUrl7{"https://example.com/prerender/list/page2.html"};
   const KURL kUrl8{"https://example.com/prerender/document/page2.html"};
+  const KURL kUrl9{"https://example.com/prefetch/list/page3.html"};
 
   AddAnchor(*document.body(), kUrl2.GetString());
   AddAnchor(*document.body(), kUrl4.GetString());
@@ -4045,6 +4115,11 @@ TEST_F(SpeculationRuleSetTest, Eagerness) {
           {
             "source": "document",
             "where": {"href_matches": "https://example.com/prefetch/document/page2.html"}
+          },
+          {
+            "source": "list",
+            "urls": ["https://example.com/prefetch/list/page3.html"],
+            "eagerness": "immediate"
           }
         ],
         "prerender": [
@@ -4090,9 +4165,11 @@ TEST_F(SpeculationRuleSetTest, Eagerness) {
               HasEagerness(blink::mojom::SpeculationEagerness::kConservative)),
           AllOf(HasURL(kUrl7),
                 HasEagerness(blink::mojom::SpeculationEagerness::kEager)),
-          AllOf(HasURL(kUrl8),
-                HasEagerness(
-                    blink::mojom::SpeculationEagerness::kConservative))));
+          AllOf(
+              HasURL(kUrl8),
+              HasEagerness(blink::mojom::SpeculationEagerness::kConservative)),
+          AllOf(HasURL(kUrl9),
+                HasEagerness(blink::mojom::SpeculationEagerness::kEager))));
 }
 
 TEST_F(SpeculationRuleSetTest, InvalidUseOfEagerness1) {
@@ -4481,6 +4558,77 @@ TEST_F(SpeculationRuleSetTest, ValidNoVarySearchHintNoErrorOrWarningMessages) {
     EXPECT_FALSE(rule_set->HasError());
     EXPECT_FALSE(rule_set->HasWarnings());
   }
+}
+
+TEST_F(SpeculationRuleSetTest, DocumentReportsSuccessMetric) {
+  base::HistogramTester histogram_tester;
+  DummyPageHolder page_holder;
+  page_holder.GetFrame().GetSettings()->SetScriptEnabled(true);
+  Document& document = page_holder.GetDocument();
+  HTMLScriptElement* script =
+      MakeGarbageCollected<HTMLScriptElement>(document, CreateElementFlags());
+  script->setAttribute(html_names::kTypeAttr, AtomicString("speculationrules"));
+  script->setText("{}");
+  document.head()->appendChild(script);
+  histogram_tester.ExpectUniqueSample("Blink.SpeculationRules.LoadOutcome",
+                                      SpeculationRulesLoadOutcome::kSuccess, 1);
+}
+
+TEST_F(SpeculationRuleSetTest, DocumentReportsParseErrorFromScript) {
+  base::HistogramTester histogram_tester;
+  DummyPageHolder page_holder;
+  page_holder.GetFrame().GetSettings()->SetScriptEnabled(true);
+  Document& document = page_holder.GetDocument();
+  HTMLScriptElement* script =
+      MakeGarbageCollected<HTMLScriptElement>(document, CreateElementFlags());
+  script->setAttribute(html_names::kTypeAttr, AtomicString("speculationrules"));
+  script->setText("{---}");
+  document.head()->appendChild(script);
+  histogram_tester.ExpectUniqueSample(
+      "Blink.SpeculationRules.LoadOutcome",
+      SpeculationRulesLoadOutcome::kParseErrorInline, 1);
+}
+
+TEST_F(SpeculationRuleSetTest, DocumentReportsParseErrorFromRequest) {
+  base::HistogramTester histogram_tester;
+  DummyPageHolder page_holder;
+  Document& document = page_holder.GetDocument();
+  SpeculationRuleSet* rule_set = SpeculationRuleSet::Parse(
+      SpeculationRuleSet::Source::FromRequest(
+          "{---}", KURL("https://fake.test/sr.json"), 0),
+      document.GetExecutionContext());
+  DocumentSpeculationRules::From(document).AddRuleSet(rule_set);
+  histogram_tester.ExpectUniqueSample(
+      "Blink.SpeculationRules.LoadOutcome",
+      SpeculationRulesLoadOutcome::kParseErrorFetched, 1);
+}
+
+TEST_F(SpeculationRuleSetTest, DocumentReportsParseErrorFromBrowserInjection) {
+  base::HistogramTester histogram_tester;
+  DummyPageHolder page_holder;
+  Document& document = page_holder.GetDocument();
+  SpeculationRuleSet* rule_set = SpeculationRuleSet::Parse(
+      SpeculationRuleSet::Source::FromBrowserInjected("{---}", KURL()),
+      document.GetExecutionContext());
+  DocumentSpeculationRules::From(document).AddRuleSet(rule_set);
+  histogram_tester.ExpectUniqueSample(
+      "Blink.SpeculationRules.LoadOutcome",
+      SpeculationRulesLoadOutcome::kParseErrorBrowserInjected, 1);
+}
+
+TEST_F(SpeculationRuleSetTest, ImplicitSource) {
+  auto* rule_set = CreateRuleSet(
+      R"({
+        "prefetch": [{
+          "where": {"href_matches": "/foo"}
+        }, {
+          "urls": ["/bar"]
+        }]
+      })",
+      KURL("https://example.com/"), execution_context());
+  EXPECT_THAT(rule_set->prefetch_rules(),
+              ElementsAre(MatchesPredicate(Href({URLPattern("/foo")})),
+                          MatchesListOfURLs("https://example.com/bar")));
 }
 
 }  // namespace

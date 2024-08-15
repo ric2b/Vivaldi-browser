@@ -43,6 +43,7 @@
 #include "base/task/thread_pool.h"
 #include "base/thread_annotations.h"
 #include "base/types/expected.h"
+#include "base/types/expected_macros.h"
 #include "components/reporting/compression/compression_module.h"
 #include "components/reporting/encryption/encryption_module_interface.h"
 #include "components/reporting/proto/synced/record.pb.h"
@@ -390,7 +391,7 @@ StatusOr<int64_t> StorageQueue::AddDataFile(
       full_name, file_info.GetSize(), options_.memory_resource(),
       options_.disk_space_resource(), completion_closure_list_);
   if (!file_or_status.has_value()) {
-    return base::unexpected(file_or_status.error());
+    return base::unexpected(std::move(file_or_status).error());
   }
   if (!files_.emplace(file_sequence_id, file_or_status.value()).second) {
     return base::unexpected(Status(
@@ -2323,7 +2324,7 @@ StatusOr<std::string_view> StorageQueue::SingleFile::Read(
         std::min(max_buffer_size, RoundUpToFrameSize(size_));
     auto alloc_status = buffer_.Allocate(buffer_size);
     if (!alloc_status.ok()) {
-      return base::unexpected(alloc_status);
+      return base::unexpected(std::move(alloc_status));
     }
     data_start_ = data_end_ = 0;
     file_position_ = 0;

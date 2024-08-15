@@ -27,6 +27,8 @@
 
 #include "src/tint/lang/core/ir/switch.h"
 
+#include <utility>
+
 #include "src/tint/lang/core/ir/clone_context.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/utils/ice/ice.h"
@@ -34,6 +36,8 @@
 TINT_INSTANTIATE_TYPEINFO(tint::core::ir::Switch);
 
 namespace tint::core::ir {
+
+Switch::Switch() = default;
 
 Switch::Switch(Value* cond) {
     TINT_ASSERT(cond);
@@ -45,7 +49,7 @@ Switch::~Switch() = default;
 
 void Switch::ForeachBlock(const std::function<void(ir::Block*)>& cb) {
     for (auto& c : cases_) {
-        cb(c.Block());
+        cb(c.block);
     }
 }
 
@@ -55,17 +59,17 @@ Switch* Switch::Clone(CloneContext& ctx) {
     ctx.Replace(this, new_switch);
 
     new_switch->cases_.Reserve(cases_.Length());
-    for (const auto& cse : cases_) {
+    for (auto& cse : cases_) {
         Switch::Case new_case{};
         new_case.block = ctx.ir.blocks.Create<ir::Block>();
         cse.block->CloneInto(ctx, new_case.block);
 
         new_case.selectors.Reserve(cse.selectors.Length());
-        for (const auto& sel : cse.selectors) {
+        for (auto& sel : cse.selectors) {
             auto* new_val = sel.val ? ctx.Clone(sel.val) : nullptr;
             new_case.selectors.Push(Switch::CaseSelector{new_val});
         }
-        new_switch->cases_.Push(new_case);
+        new_switch->cases_.Push(std::move(new_case));
     }
 
     new_switch->SetResults(ctx.Clone(results_));

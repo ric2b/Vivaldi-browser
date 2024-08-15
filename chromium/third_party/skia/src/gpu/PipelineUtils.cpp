@@ -7,27 +7,38 @@
 
 #include "src/gpu/PipelineUtils.h"
 
+#include "include/gpu/ShaderErrorHandler.h"
+#include "src/sksl/SkSLCompiler.h"
+#include "src/sksl/SkSLProgramKind.h"
+#include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/SkSLUtil.h"
+#include "src/sksl/ir/SkSLProgram.h"
+#include "src/utils/SkShaderUtils.h"
+
+#include <string>
+
 namespace skgpu {
 
-static bool sksl_to_backend(SkSL::Compiler* compiler,
-                            bool (SkSL::Compiler::*toBackend)(SkSL::Program&, std::string*),
-                            const char* backendLabel,
-                            const std::string& sksl,
-                            SkSL::ProgramKind programKind,
-                            const SkSL::ProgramSettings& settings,
-                            std::string* output,
-                            SkSL::Program::Interface* outInterface,
-                            ShaderErrorHandler* errorHandler) {
+bool SkSLToBackend(const SkSL::ShaderCaps* caps,
+                   bool (*toBackend)(SkSL::Program&, const SkSL::ShaderCaps*, std::string*),
+                   const char* backendLabel,
+                   const std::string& sksl,
+                   SkSL::ProgramKind programKind,
+                   const SkSL::ProgramSettings& settings,
+                   std::string* output,
+                   SkSL::ProgramInterface* outInterface,
+                   ShaderErrorHandler* errorHandler) {
 #ifdef SK_DEBUG
     std::string src = SkShaderUtils::PrettyPrint(sksl);
 #else
     const std::string& src = sksl;
 #endif
-    std::unique_ptr<SkSL::Program> program = compiler->convertProgram(programKind,
-                                                                      src,
-                                                                      settings);
-    if (!program || !(compiler->*toBackend)(*program, output)) {
-        errorHandler->compileError(src.c_str(), compiler->errorText().c_str());
+    SkSL::Compiler compiler;
+    std::unique_ptr<SkSL::Program> program = compiler.convertProgram(programKind, src, settings);
+    if (!program || !(*toBackend)(*program, caps, output)) {
+        errorHandler->compileError(src.c_str(),
+                                   compiler.errorText().c_str(),
+                                   /*shaderWasCached=*/false);
         return false;
     }
 
@@ -36,17 +47,22 @@ static bool sksl_to_backend(SkSL::Compiler* compiler,
 #else
     const bool kPrintSkSL = false;
 #endif
+    const bool kSkSLPostCompilation = false;
 #if defined(SK_PRINT_NATIVE_SHADERS)
     const bool printBackendSL = (backendLabel != nullptr);
 #else
     const bool printBackendSL = false;
 #endif
 
-    if (kPrintSkSL || printBackendSL) {
+    if (kPrintSkSL || kSkSLPostCompilation || printBackendSL) {
         SkShaderUtils::PrintShaderBanner(programKind);
         if (kPrintSkSL) {
             SkDebugf("SkSL:\n");
             SkShaderUtils::PrintLineByLine(SkShaderUtils::PrettyPrint(sksl));
+        }
+        if (kSkSLPostCompilation) {
+            SkDebugf("SkSL (post-compilation):\n");
+            SkShaderUtils::PrintLineByLine(SkShaderUtils::PrettyPrint(program->description()));
         }
         if (printBackendSL) {
             SkDebugf("%s:\n", backendLabel);
@@ -60,59 +76,4 @@ static bool sksl_to_backend(SkSL::Compiler* compiler,
     return true;
 }
 
-bool SkSLToGLSL(SkSL::Compiler* compiler,
-                const std::string& sksl,
-                SkSL::ProgramKind programKind,
-                const SkSL::ProgramSettings& settings,
-                std::string* glsl,
-                SkSL::Program::Interface* outInterface,
-                ShaderErrorHandler* errorHandler) {
-    return sksl_to_backend(compiler, &SkSL::Compiler::toGLSL, "GLSL",
-                           sksl, programKind, settings, glsl, outInterface, errorHandler);
-}
-
-bool SkSLToSPIRV(SkSL::Compiler* compiler,
-                 const std::string& sksl,
-                 SkSL::ProgramKind programKind,
-                 const SkSL::ProgramSettings& settings,
-                 std::string* spirv,
-                 SkSL::Program::Interface* outInterface,
-                 ShaderErrorHandler* errorHandler) {
-    return sksl_to_backend(compiler, &SkSL::Compiler::toSPIRV, /*backendLabel=*/nullptr,
-                           sksl, programKind, settings, spirv, outInterface, errorHandler);
-}
-
-bool SkSLToWGSL(SkSL::Compiler* compiler,
-                const std::string& sksl,
-                SkSL::ProgramKind programKind,
-                const SkSL::ProgramSettings& settings,
-                std::string* wgsl,
-                SkSL::Program::Interface* outInterface,
-                ShaderErrorHandler* errorHandler) {
-    return sksl_to_backend(compiler, &SkSL::Compiler::toWGSL, "WGSL",
-                           sksl, programKind, settings, wgsl, outInterface, errorHandler);
-}
-
-bool SkSLToMSL(SkSL::Compiler* compiler,
-               const std::string& sksl,
-               SkSL::ProgramKind programKind,
-               const SkSL::ProgramSettings& settings,
-               std::string* msl,
-               SkSL::Program::Interface* outInterface,
-               ShaderErrorHandler* errorHandler) {
-    return sksl_to_backend(compiler, &SkSL::Compiler::toMetal, "MSL",
-                           sksl, programKind, settings, msl, outInterface, errorHandler);
-}
-
-bool SkSLToHLSL(SkSL::Compiler* compiler,
-                const std::string& sksl,
-                SkSL::ProgramKind programKind,
-                const SkSL::ProgramSettings& settings,
-                std::string* hlsl,
-                SkSL::Program::Interface* outInterface,
-                ShaderErrorHandler* errorHandler) {
-    return sksl_to_backend(compiler, &SkSL::Compiler::toHLSL, "HLSL",
-                           sksl, programKind, settings, hlsl, outInterface, errorHandler);
-}
-
-} // namespace skgpu
+}  // namespace skgpu

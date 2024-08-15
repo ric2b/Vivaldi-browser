@@ -7,10 +7,8 @@ import("//testing/libfuzzer/fuzzer_test.gni")
 
 source_set("sync") {
   sources = [
-    "credential_model_type_controller.cc",
-    "credential_model_type_controller.h",
-    "password_account_storage_settings_watcher.cc",
-    "password_account_storage_settings_watcher.h",
+    "password_model_type_controller.cc",
+    "password_model_type_controller.h",
     "password_proto_utils.cc",
     "password_proto_utils.h",
     "password_store_sync.cc",
@@ -21,16 +19,15 @@ source_set("sync") {
   deps = [
     "//components/password_manager/core/browser:metrics_util",
     "//components/password_manager/core/browser:password_form",
-    "//components/password_manager/core/browser:password_store_interface",
     "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/browser/features:utils",
+    "//components/password_manager/core/browser/password_store:password_store_interface",
     "//components/password_manager/core/common",
     "//components/password_manager/core/common:features",
     "//components/prefs",
     "//components/sync/model",
     "//components/sync/protocol:util",
     "//components/sync/service",
-    "//third_party/abseil-cpp:absl",
     "//url",
   ]
 }
@@ -38,7 +35,7 @@ source_set("sync") {
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "password_account_storage_settings_watcher_unittest.cc",
+    "password_model_type_controller_unittest.cc",
     "password_proto_utils_unittest.cc",
     "password_sync_bridge_unittest.cc",
   ]
@@ -51,6 +48,7 @@ source_set("unit_tests") {
     "//components/password_manager/core/common",
     "//components/prefs",
     "//components/prefs:test_support",
+    "//components/signin/public/identity_manager:test_support",
     "//components/sync:test_support",
     "//components/sync/protocol",
     "//testing/gmock",

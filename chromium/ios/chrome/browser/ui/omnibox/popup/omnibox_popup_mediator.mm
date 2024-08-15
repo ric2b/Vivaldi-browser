@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator+Testing.h"
 
 #import "base/feature_list.h"
 #import "base/ios/ios_util.h"
@@ -28,10 +29,9 @@
 #import "components/variations/variations_ids_provider.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
-#import "ios/chrome/browser/net/crurl.h"
-#import "ios/chrome/browser/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/default_browser_promo_scene_agent_utils.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -43,10 +43,9 @@
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_controller_observer_bridge.h"
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_match_formatter.h"
 #import "ios/chrome/browser/ui/omnibox/popup/autocomplete_suggestion_group_impl.h"
-#import "ios/chrome/browser/ui/omnibox/popup/carousel_item.h"
-#import "ios/chrome/browser/ui/omnibox/popup/carousel_item_menu_provider.h"
+#import "ios/chrome/browser/ui/omnibox/popup/carousel/carousel_item.h"
+#import "ios/chrome/browser/ui/omnibox/popup/carousel/carousel_item_menu_provider.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_pedal_annotator.h"
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_mediator+private.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
 #import "ios/chrome/browser/ui/omnibox/popup/pedal_section_extractor.h"
 #import "ios/chrome/browser/ui/omnibox/popup/pedal_suggestion_wrapper.h"
@@ -59,6 +58,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "prefs/vivaldi_pref_names.h"
 // End Vivaldi
 
 namespace {
@@ -112,6 +112,12 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   /// Holds cached images keyed by their URL. The cache is purged when the popup
   /// is closed.
   NSCache<NSString*, UIImage*>* _cachedImages;
+
+  // Vivaldi
+  /// Pref tracking if reverse search suggestions is enabled.
+  PrefBackedBoolean* _reverseSearchResultsEnabled;
+  // End Vivaldi
+
 }
 @synthesize consumer = _consumer;
 @synthesize hasResults = _hasResults;
@@ -203,7 +209,7 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   if (self.remoteSuggestionsService) {
     _remoteSuggestionsServiceObserverBridge =
         std::make_unique<RemoteSuggestionsServiceObserverBridge>(
-            debugInfoConsumer);
+            debugInfoConsumer, self.remoteSuggestionsService);
     self.remoteSuggestionsService->AddObserver(
         _remoteSuggestionsServiceObserverBridge.get());
   }
@@ -220,10 +226,24 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     [_bottomOmniboxEnabled setObserver:self];
     // Initialize to the correct value.
     [self booleanDidChange:_bottomOmniboxEnabled];
+
+    // Vivaldi
+    _reverseSearchResultsEnabled =
+        [[PrefBackedBoolean alloc]
+           initWithPrefService:originalPrefService
+              prefName:vivaldiprefs::kVivaldiReverseSearchResultsEnabled];
+    // End Vivaldi
+
   } else {
     [_bottomOmniboxEnabled stop];
     [_bottomOmniboxEnabled setObserver:nil];
     _bottomOmniboxEnabled = nil;
+
+    // Vivaldi
+    [_reverseSearchResultsEnabled stop];
+    _reverseSearchResultsEnabled = nil;
+    // End Vivaldi
+
   }
 }
 
@@ -515,6 +535,10 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     }
   }
 
+  if (vivaldi::IsVivaldiRunning())
+    return [self autoCompleteResultsVivaldiFromMatches:wrappedMatches];
+  // End Vivaldi
+
   return wrappedMatches;
 }
 
@@ -643,7 +667,7 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
             strongSelf.mostVisitedActionFactory;
 
         // Record that this context menu was shown to the user.
-        RecordMenuShown(MenuScenarioHistogram::kOmniboxMostVisitedEntry);
+        RecordMenuShown(kMenuScenarioHistogramOmniboxMostVisitedEntry);
 
         NSMutableArray<UIMenuElement*>* menuElements =
             [[NSMutableArray alloc] init];
@@ -672,7 +696,8 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
           [menuElements addObject:newWindowAction];
         }
 
-        [menuElements addObject:[actionFactory actionToCopyURL:copyURL]];
+        CrURL* URL = [[CrURL alloc] initWithGURL:copyURL];
+        [menuElements addObject:[actionFactory actionToCopyURL:URL]];
 
         [menuElements addObject:[actionFactory actionToShareWithBlock:^{
                         [weakSelf.sharingDelegate
@@ -822,6 +847,49 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
       [OpenNewTabCommand commandWithURLFromChrome:carouselItem.URL.gurl
                                       inIncognito:incognito];
   [self.applicationCommandsHandler openURLInNewTab:command];
+}
+
+#pragma mark - Vivaldi
+// Returns search suggestion based on omnibox position and search results
+// reverse order settings
+-(NSMutableArray<id<AutocompleteSuggestion>>*)
+    autoCompleteResultsVivaldiFromMatches:
+        (NSMutableArray<id<AutocompleteSuggestion>>*)wrappedMatches {
+
+  // Reverse order for search results when bottom omnibox and the settings for
+  // reverse order is enabled.
+  BOOL isReverse = [_bottomOmniboxEnabled value] &&
+      [_reverseSearchResultsEnabled value];
+
+  [wrappedMatches sortUsingComparator:
+      ^NSComparisonResult(id<AutocompleteSuggestion> firstMatch,
+                          id<AutocompleteSuggestion> secondMatch) {
+    if (![firstMatch isKindOfClass:[AutocompleteMatchFormatter class]] ||
+        ![secondMatch isKindOfClass:[AutocompleteMatchFormatter class]]) {
+      return NSOrderedSame;
+    }
+
+    AutocompleteMatchFormatter* firstFormatter =
+        (AutocompleteMatchFormatter*)firstMatch;
+    AutocompleteMatchFormatter* secondFormatter =
+        (AutocompleteMatchFormatter*)secondMatch;
+
+    if (!firstFormatter || !secondFormatter) {
+      return NSOrderedSame;
+    }
+
+    if (firstFormatter.autocompleteMatch.relevance <
+        secondFormatter.autocompleteMatch.relevance) {
+      return isReverse ? NSOrderedAscending : NSOrderedDescending;
+    } else if (firstFormatter.autocompleteMatch.relevance >
+               secondFormatter.autocompleteMatch.relevance) {
+      return isReverse ? NSOrderedDescending:  NSOrderedAscending;
+    } else {
+      return NSOrderedSame;
+    }
+  }];
+
+  return wrappedMatches;
 }
 
 @end

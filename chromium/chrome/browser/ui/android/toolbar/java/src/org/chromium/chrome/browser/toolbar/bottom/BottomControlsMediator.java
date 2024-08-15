@@ -26,9 +26,11 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
  * coordinators, running most of the business logic associated with the bottom controls component,
  * and updating the model accordingly.
  */
-class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
-                                        KeyboardVisibilityDelegate.KeyboardVisibilityListener,
-                                        LayoutStateObserver, TabObscuringHandler.Observer {
+class BottomControlsMediator
+        implements BrowserControlsStateProvider.Observer,
+                KeyboardVisibilityDelegate.KeyboardVisibilityListener,
+                LayoutStateObserver,
+                TabObscuringHandler.Observer {
     /** The model for the bottom controls component that holds all of its view state. */
     private final PropertyModel mModel;
 
@@ -37,13 +39,12 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
 
     /** The browser controls sizer/manager to observe browser controls events. */
     private final BrowserControlsSizer mBrowserControlsSizer;
+
     private final TabObscuringHandler mTabObscuringHandler;
 
     private final CallbackController mCallbackController;
 
-    /**
-     * The height of the bottom bar in pixels, not including the top shadow.
-     */
+    /** The height of the bottom bar in pixels, not including the top shadow. */
     private int mBottomControlsHeight;
 
     /** A {@link WindowAndroid} for watching keyboard visibility events. */
@@ -75,9 +76,13 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
      * @param bottomControlsHeight The height of the bottom bar in pixels.
      * @param overlayPanelVisibilitySupplier Notifies overlay panel visibility event.
      */
-    BottomControlsMediator(WindowAndroid windowAndroid, PropertyModel model,
-            BrowserControlsSizer controlsSizer, FullscreenManager fullscreenManager,
-            TabObscuringHandler tabObscuringHandler, int bottomControlsHeight,
+    BottomControlsMediator(
+            WindowAndroid windowAndroid,
+            PropertyModel model,
+            BrowserControlsSizer controlsSizer,
+            FullscreenManager fullscreenManager,
+            TabObscuringHandler tabObscuringHandler,
+            int bottomControlsHeight,
             ObservableSupplier<Boolean> overlayPanelVisibilitySupplier) {
         mModel = model;
 
@@ -89,10 +94,12 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
 
         mBottomControlsHeight = bottomControlsHeight;
         mCallbackController = new CallbackController();
-        overlayPanelVisibilitySupplier.addObserver(mCallbackController.makeCancelable((showing) -> {
-            mIsOverlayPanelShowing = showing;
-            updateAndroidViewVisibility();
-        }));
+        overlayPanelVisibilitySupplier.addObserver(
+                mCallbackController.makeCancelable(
+                        (showing) -> {
+                            mIsOverlayPanelShowing = showing;
+                            updateAndroidViewVisibility();
+                        }));
 
         // Watch for keyboard events so we can hide the bottom toolbar when the keyboard is showing.
         mWindowAndroid = windowAndroid;
@@ -110,9 +117,7 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
         updateAndroidViewVisibility();
     }
 
-    /**
-     * Clean up anything that needs to be when the bottom controls component is destroyed.
-     */
+    /** Clean up anything that needs to be when the bottom controls component is destroyed. */
     void destroy() {
         mCallbackController.destroy();
         mBrowserControlsSizer.removeObserver(this);
@@ -125,9 +130,20 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
     }
 
     @Override
-    public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
-            int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
-        mModel.set(BottomControlsProperties.Y_OFFSET, bottomOffset);
+    public void onControlsOffsetChanged(
+            int topOffset,
+            int topControlsMinHeightOffset,
+            int bottomOffset,
+            int bottomControlsMinHeightOffset,
+            boolean needsAnimate) {
+        int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
+        mModel.set(BottomControlsProperties.Y_OFFSET, bottomOffset - minHeight);
+
+        // Translate Android view at the end of the bottom controls min height
+        // animation.
+        if (minHeight == bottomControlsMinHeightOffset) {
+            mModel.set(BottomControlsProperties.ANDROID_VIEW_TRANSLATE_Y, -minHeight);
+        }
         updateAndroidViewVisibility();
     }
 
@@ -163,12 +179,13 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
     private void updateCompositedViewVisibility() {
         final boolean isCompositedViewVisible = isCompositedViewVisible();
         mModel.set(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE, isCompositedViewVisible);
+        int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();
+
         // Note(david@vivaldi.com): The bottom controls height will be set in the
         // |VivaldiTopToolbarCoordinator|
         if (!BuildConfig.IS_VIVALDI)
         mBrowserControlsSizer.setBottomControlsHeight(
-                isCompositedViewVisible ? mBottomControlsHeight : 0,
-                mBrowserControlsSizer.getBottomControlsMinHeight());
+                isCompositedViewVisible ? mBottomControlsHeight + minHeight : minHeight, minHeight);
     }
 
     boolean isCompositedViewVisible() {
@@ -189,8 +206,11 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
             return;
         }
 
-        mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE,
-                isCompositedViewVisible() && !mIsOverlayPanelShowing && !mIsInSwipeLayout
+        mModel.set(
+                BottomControlsProperties.ANDROID_VIEW_VISIBLE,
+                isCompositedViewVisible()
+                        && !mIsOverlayPanelShowing
+                        && !mIsInSwipeLayout
                         && mBrowserControlsSizer.getBottomControlOffset() == 0);
     }
 

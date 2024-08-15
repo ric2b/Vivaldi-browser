@@ -7,6 +7,20 @@ import * as Platform from '../../../core/platform/platform.js';
 import type * as CPUProfile from '../../cpu_profile/cpu_profile.js';
 import * as Types from '../types/types.js';
 
+export function stackTraceForEvent(event: Types.TraceEvents.TraceEventData): Types.TraceEvents.TraceEventCallFrame[]|
+    null {
+  if (Types.TraceEvents.isSyntheticInvalidation(event)) {
+    return event.stackTrace || null;
+  }
+  if (event.args?.data?.stackTrace) {
+    return event.args.data.stackTrace;
+  }
+  if (Types.TraceEvents.isTraceEventUpdateLayoutTree(event)) {
+    return event.args.beginData?.stackTrace || null;
+  }
+  return null;
+}
+
 export function extractOriginFromTrace(firstNavigationURL: string): string|null {
   const url = Common.ParsedURL.ParsedURL.fromString(firstNavigationURL);
   if (url) {
@@ -131,16 +145,17 @@ export function getNavigationForTraceEvent(
   return navigations[eventNavigationIndex];
 }
 
-export function extractId(event: Types.TraceEvents.TraceEventNestableAsync): string|undefined {
-  return event.id || event.id2?.global || event.id2?.local;
+export function extractId(event: Types.TraceEvents.TraceEventNestableAsync|
+                          Types.TraceEvents.SyntheticNestableAsyncEvent): string|undefined {
+  return event.id ?? event.id2?.global ?? event.id2?.local;
 }
 
 export function activeURLForFrameAtTime(
     frameId: string, time: Types.Timing.MicroSeconds,
-    rendererProcessesByFrame: Map<
-        string,
-        Map<Types.TraceEvents.ProcessID, {frame: Types.TraceEvents.TraceFrame, window: Types.Timing.TraceWindow}[]>>):
-    string|null {
+    rendererProcessesByFrame:
+        Map<string,
+            Map<Types.TraceEvents.ProcessID,
+                {frame: Types.TraceEvents.TraceFrame, window: Types.Timing.TraceWindowMicroSeconds}[]>>): string|null {
   const processData = rendererProcessesByFrame.get(frameId);
   if (!processData) {
     return null;
@@ -158,7 +173,7 @@ export function activeURLForFrameAtTime(
 
 export function makeProfileCall(
     node: CPUProfile.ProfileTreeModel.ProfileNode, ts: Types.Timing.MicroSeconds, pid: Types.TraceEvents.ProcessID,
-    tid: Types.TraceEvents.ThreadID): Types.TraceEvents.TraceEventSyntheticProfileCall {
+    tid: Types.TraceEvents.ThreadID): Types.TraceEvents.SyntheticProfileCall {
   return {
     cat: '',
     name: 'ProfileCall',
@@ -172,4 +187,92 @@ export function makeProfileCall(
     selfTime: Types.Timing.MicroSeconds(0),
     callFrame: node.callFrame,
   };
+}
+
+export function matchBeginningAndEndEvents(unpairedEvents: Types.TraceEvents.TraceEventNestableAsync[]): Map<string, {
+  begin: Types.TraceEvents.TraceEventNestableAsyncBegin | null,
+  end: Types.TraceEvents.TraceEventNestableAsyncEnd | null,
+}> {
+  // map to store begin and end of the event
+  const matchedPairs: Map<string, {
+    begin: Types.TraceEvents.TraceEventNestableAsyncBegin | null,
+    end: Types.TraceEvents.TraceEventNestableAsyncEnd | null,
+  }> = new Map();
+
+  // looking for start and end
+  for (const event of unpairedEvents) {
+    const id = extractId(event);
+    if (id === undefined) {
+      continue;
+    }
+    // Create a synthetic id to prevent collisions across categories.
+    // Console timings can be dispatched with the same id, so use the
+    // event name as well to generate unique ids.
+    const syntheticId = `${event.cat}:${id}:${event.name}`;
+    const otherEventsWithID = Platform.MapUtilities.getWithDefault(matchedPairs, syntheticId, () => {
+      return {begin: null, end: null};
+    });
+
+    const isStartEvent = event.ph === Types.TraceEvents.Phase.ASYNC_NESTABLE_START;
+    const isEndEvent = event.ph === Types.TraceEvents.Phase.ASYNC_NESTABLE_END;
+
+    if (isStartEvent) {
+      otherEventsWithID.begin = event;
+    } else if (isEndEvent) {
+      otherEventsWithID.end = event;
+    }
+  }
+
+  return matchedPairs;
+}
+
+export function createSortedSyntheticEvents(matchedPairs: Map<string, {
+  begin: Types.TraceEvents.TraceEventNestableAsyncBegin | null,
+  end: Types.TraceEvents.TraceEventNestableAsyncEnd | null,
+}>): Types.TraceEvents.SyntheticNestableAsyncEvent[] {
+  const syntheticEvents: Types.TraceEvents.SyntheticNestableAsyncEvent[] = [];
+  for (const [id, eventsPair] of matchedPairs.entries()) {
+    if (!eventsPair.begin || !eventsPair.end) {
+      // This should never happen, the backend only creates the events once it
+      // has them both, so we should never get into this state.
+      // If we do, something is very wrong, so let's just drop that problematic event.
+      continue;
+    }
+
+    const event: Types.TraceEvents.SyntheticNestableAsyncEvent = {
+      cat: eventsPair.end.cat,
+      ph: eventsPair.end.ph,
+      pid: eventsPair.end.pid,
+      tid: eventsPair.end.tid,
+      id,
+      // Both events have the same name, so it doesn't matter which we pick to
+      // use as the description
+      name: eventsPair.begin.name,
+      dur: Types.Timing.MicroSeconds(eventsPair.end.ts - eventsPair.begin.ts),
+      ts: eventsPair.begin.ts,
+      args: {
+        data: {
+          beginEvent: eventsPair.begin,
+          endEvent: eventsPair.end,
+        },
+      },
+    };
+
+    if (event.dur < 0) {
+      // We have seen in the backend that sometimes animation events get
+      // generated with multiple begin entries, or multiple end entries, and this
+      // can cause invalid data on the performance panel, so we drop them.
+      // crbug.com/1472375
+      continue;
+    }
+    syntheticEvents.push(event);
+  }
+  return syntheticEvents.sort((a, b) => a.ts - b.ts);
+}
+
+export function createMatchedSortedSyntheticEvents(unpairedAsyncEvents: Types.TraceEvents.TraceEventNestableAsync[]):
+    Types.TraceEvents.SyntheticNestableAsyncEvent[] {
+  const matchedPairs = matchBeginningAndEndEvents(unpairedAsyncEvents);
+  const syntheticEvents = createSortedSyntheticEvents(matchedPairs);
+  return syntheticEvents;
 }

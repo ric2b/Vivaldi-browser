@@ -17,14 +17,12 @@
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "url/android/gurl_android.h"
 
-using password_manager::PasswordChangeSuccessTracker;
-
 namespace {
 
 password_manager::CredentialUIEntry ConvertJavaObjectToCredential(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& credential) {
-  std::string signon_realm = ConvertJavaStringToUTF8(
+  std::string signon_realm = base::android::ConvertJavaStringToUTF8(
       env, Java_CompromisedCredential_getSignonRealm(env, credential));
   password_manager::FacetURI facet =
       password_manager::FacetURI::FromPotentiallyInvalidSpec(signon_realm);
@@ -43,9 +41,9 @@ password_manager::CredentialUIEntry ConvertJavaObjectToCredential(
   credential_facet.signon_realm = std::move(signon_realm);
   entry.facets.push_back(std::move(credential_facet));
 
-  entry.username = ConvertJavaStringToUTF16(
+  entry.username = base::android::ConvertJavaStringToUTF16(
       env, Java_CompromisedCredential_getUsername(env, credential));
-  entry.password = ConvertJavaStringToUTF16(
+  entry.password = base::android::ConvertJavaStringToUTF16(
       env, Java_CompromisedCredential_getPassword(env, credential));
   entry.last_used_time = base::Time::FromMillisecondsSinceUnixEpoch(
       Java_CompromisedCredential_getLastUsedTime(env, credential));
@@ -132,7 +130,7 @@ void PasswordCheckBridge::LaunchCheckupInAccount(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& activity) {
   PasswordCheckupLauncherHelperImpl checkup_launcher;
-  checkup_launcher.LaunchCheckupInAccountWithActivity(
+  checkup_launcher.LaunchCheckupOnlineWithActivity(
       env,
       base::android::ConvertUTF8ToJavaString(
           env, password_manager::GetPasswordCheckupURL().spec()),

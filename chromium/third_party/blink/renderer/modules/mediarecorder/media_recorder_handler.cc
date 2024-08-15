@@ -21,9 +21,11 @@
 #include "media/base/audio_codecs.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/mime_util.h"
+#include "media/base/video_codec_string_parsers.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_frame.h"
 #include "media/formats/mp4/mp4_status.h"
+#include "media/media_buildflags.h"
 #include "media/mojo/clients/mojo_video_encoder_metrics_provider.h"
 #include "media/muxers/live_webm_muxer_delegate.h"
 #include "media/muxers/mp4_muxer.h"
@@ -33,7 +35,6 @@
 #include "media/muxers/webm_muxer.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
-#include "third_party/blink/renderer/modules/mediarecorder/buildflags.h"
 #include "third_party/blink/renderer/modules/mediarecorder/media_recorder.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
@@ -147,10 +148,9 @@ VideoTrackRecorder::CodecProfile VideoStringToCodecProfile(
         codecs_str
             .Substring(avc1_start, avc1_end == kNotFound ? UINT_MAX : avc1_end)
             .StripWhiteSpace();
-    media::VideoCodecProfile profile;
-    uint8_t level;
-    if (media::ParseAVCCodecId(avc1_str.Ascii(), &profile, &level))
-      return {codec_id, profile, level};
+    if (auto result = media::ParseAVCCodecId(avc1_str.Ascii())) {
+      return {codec_id, result->profile, result->level};
+    }
   }
 #endif
   // TODO(crbug.com/1465734): Remove the wrong AV1 codecs string, "av1", once
@@ -750,6 +750,12 @@ void MediaRecorderHandler::OnEncodedVideo(
   if (invalidated_)
     return;
 
+  if (encoded_data.empty() && encoded_alpha.empty()) {
+    // An encoder drops a frame. This can happen with VideoToolBox encoder as
+    // there is no way to disallow the frame dropping with it.
+    return;
+  }
+
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   // TODO(crbug.com/1441395). Once Encoder supports VideoEncoder, then the
   // below code could go away.
@@ -938,8 +944,10 @@ void MediaRecorderHandler::OnSourceReadyStateChanged() {
 void MediaRecorderHandler::OnVideoFrameForTesting(
     scoped_refptr<media::VideoFrame> frame,
     const TimeTicks& timestamp) {
-  for (const auto& recorder : video_recorders_)
-    recorder->OnVideoFrameForTesting(frame, timestamp);
+  for (const auto& recorder : video_recorders_) {
+    recorder->OnVideoFrameForTesting(frame, timestamp,
+                                     /*allow_vea_encoder=*/true);
+  }
 }
 
 void MediaRecorderHandler::OnEncodedVideoFrameForTesting(

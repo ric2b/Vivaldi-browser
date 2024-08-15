@@ -14,7 +14,6 @@
 #import "components/notes/note_node.h"
 #import "components/notes/notes_model.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
-#import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -410,10 +409,10 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
 // Presents the diff controllers from note browser.
 // Note browser is not presented but shown in page view controller
 - (void)presentTableViewController:
-            (ChromeTableViewController<
+            (LegacyChromeTableViewController<
                 UIAdaptivePresentationControllerDelegate>*)viewController
     withReplacementViewControllers:
-        (NSArray<ChromeTableViewController*>*)replacementViewControllers {
+        (NSArray<LegacyChromeTableViewController*>*)replacementViewControllers {
   TableViewNavigationController* navController =
       [[TableViewNavigationController alloc] initWithTable:viewController];
 
@@ -440,10 +439,10 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
 }
 
 - (void)showHomeViewController:
-            (ChromeTableViewController<
+            (LegacyChromeTableViewController<
                 UIAdaptivePresentationControllerDelegate>*)viewController
     withReplacementViewControllers:
-        (NSArray<ChromeTableViewController*>*)replacementViewControllers {
+        (NSArray<LegacyChromeTableViewController*>*)replacementViewControllers {
   TableViewNavigationController* navController =
       [[TableViewNavigationController alloc] initWithTable:viewController];
   self.noteNavigationController = navController;

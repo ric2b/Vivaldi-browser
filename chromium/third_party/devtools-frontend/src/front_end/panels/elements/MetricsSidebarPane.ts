@@ -59,7 +59,7 @@ export class MetricsSidebarPane extends ElementsSidebarPane {
     this.inlineStyle = null;
     this.highlightMode = '';
     this.boxElements = [];
-    this.contentElement.setAttribute('jslog', `${VisualLogging.stylesMetricsPane()}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane().context('styles-metrics')}`);
   }
 
   override doUpdate(): Promise<void> {
@@ -185,7 +185,7 @@ export class MetricsSidebarPane extends ElementsSidebarPane {
 
       element.textContent = value;
       element.setAttribute(
-          'jslog', `${VisualLogging.value().track({dblclick: true}).context('elementValueModification')}`);
+          'jslog', `${VisualLogging.value().track({dblclick: true}).context('element-value-modification')}`);
       element.addEventListener('dblclick', this.startEditing.bind(this, element, name, propertyName, style), false);
       return element;
     }
@@ -291,14 +291,14 @@ export class MetricsSidebarPane extends ElementsSidebarPane {
         widthElement.addEventListener(
             'dblclick', this.startEditing.bind(this, widthElement, 'width', 'width', style), false);
         widthElement.setAttribute(
-            'jslog', `${VisualLogging.value().track({'dblclick': true}).context('elementValueModification')}`);
+            'jslog', `${VisualLogging.value().track({'dblclick': true}).context('element-value-modification')}`);
 
         const heightElement = document.createElement('span');
         heightElement.textContent = getContentAreaHeightPx(style);
         heightElement.addEventListener(
             'dblclick', this.startEditing.bind(this, heightElement, 'height', 'height', style), false);
         heightElement.setAttribute(
-            'jslog', `${VisualLogging.value().track({'dblclick': true}).context('elementValueModification')}`);
+            'jslog', `${VisualLogging.value().track({'dblclick': true}).context('element-value-modification')}`);
 
         const timesElement = document.createElement('span');
         timesElement.textContent = ' × ';

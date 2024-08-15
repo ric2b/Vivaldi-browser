@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,7 +32,6 @@
 #include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "components/guest_os/guest_os_engagement_metrics.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/events/ozone/gamepad/gamepad_observer.h"
 #include "ui/wm/public/activation_change_observer.h"
 
@@ -162,23 +162,8 @@ class ArcMetricsService : public KeyedService,
   void ReportProvisioningPreSignIn() override;
   void ReportWaylandLateTimingEvent(mojom::WaylandTimingEvent event,
                                     base::TimeDelta duration) override;
-  void ReportNonAndroidPlayFilesCount(
-      uint32_t number_of_directories,
-      uint32_t number_of_non_directories) override;
-  void ReportPerAppFileStatsOfAndroidDataDirs(
-      uint32_t number_of_directories,
-      uint32_t number_of_non_directories,
-      uint32_t size_in_kilobytes) override;
-  void ReportTotalFileStatsOfAndroidDataDirs(uint32_t number_of_directories,
-                                             uint32_t number_of_non_directories,
-                                             uint32_t size_in_kilobytes,
-                                             base::TimeDelta duration) override;
-  void ReportTotalFileStatsOfAndroidDataSubdir(
-      mojom::AndroidDataSubdirectory target,
-      uint32_t number_of_directories,
-      uint32_t number_of_non_directories,
-      uint32_t size_in_kilobytes) override;
   void ReportWebViewProcessStarted() override;
+  void ReportArcKeyMintError(mojom::ArcKeyMintError error) override;
 
   // wm::ActivationChangeObserver overrides.
   // Records to UMA when a user has interacted with an ARC app window.
@@ -213,9 +198,9 @@ class ArcMetricsService : public KeyedService,
 
   // Finds the boot_progress_arc_upgraded event, removes it from |events|, and
   // returns the event time. If the boot_progress_arc_upgraded event is not
-  // found, absl::nullopt is returned. This function is public for testing
+  // found, std::nullopt is returned. This function is public for testing
   // purposes.
-  absl::optional<base::TimeTicks> GetArcStartTimeFromEvents(
+  std::optional<base::TimeTicks> GetArcStartTimeFromEvents(
       std::vector<mojom::BootProgressEventPtr>& events);
 
   // Forwards reports of app kills resulting from a MemoryPressureArcvm signal
@@ -256,7 +241,7 @@ class ArcMetricsService : public KeyedService,
     void OnConnectionReady() override;
     void OnConnectionClosed() override;
 
-    raw_ptr<ArcMetricsService, ExperimentalAsh> arc_metrics_service_;
+    raw_ptr<ArcMetricsService> arc_metrics_service_;
   };
 
   class ArcBridgeServiceObserver : public arc::ArcBridgeService::Observer {
@@ -294,9 +279,8 @@ class ArcMetricsService : public KeyedService,
     // overrides.
     void OnConnectionClosed() override;
 
-    raw_ptr<ArcMetricsService, ExperimentalAsh> arc_metrics_service_;
-    raw_ptr<ArcBridgeServiceObserver, ExperimentalAsh>
-        arc_bridge_service_observer_;
+    raw_ptr<ArcMetricsService> arc_metrics_service_;
+    raw_ptr<ArcBridgeServiceObserver> arc_bridge_service_observer_;
   };
 
   class AppLauncherObserver : public ConnectionObserver<mojom::AppInstance> {
@@ -314,9 +298,8 @@ class ArcMetricsService : public KeyedService,
     // overrides.
     void OnConnectionClosed() override;
 
-    raw_ptr<ArcMetricsService, ExperimentalAsh> arc_metrics_service_;
-    raw_ptr<ArcBridgeServiceObserver, ExperimentalAsh>
-        arc_bridge_service_observer_;
+    raw_ptr<ArcMetricsService> arc_metrics_service_;
+    raw_ptr<ArcBridgeServiceObserver> arc_bridge_service_observer_;
   };
 
   void RecordArcUserInteraction(UserInteractionType type);
@@ -325,21 +308,21 @@ class ArcMetricsService : public KeyedService,
 
   void OnRequestKillCountTimer();
   void OnListVmsResponse(
-      absl::optional<vm_tools::concierge::ListVmsResponse> response);
+      std::optional<vm_tools::concierge::ListVmsResponse> response);
   void OnLowMemoryKillCounts(
-      absl::optional<vm_tools::concierge::ListVmsResponse> vms_list,
+      std::optional<vm_tools::concierge::ListVmsResponse> vms_list,
       mojom::LowMemoryKillCountsPtr counts);
 
   // DBus callbacks.
   void OnArcStartTimeRetrieved(std::vector<mojom::BootProgressEventPtr> events,
                                mojom::BootType boot_type,
-                               absl::optional<base::TimeTicks> arc_start_time);
+                               std::optional<base::TimeTicks> arc_start_time);
   void OnArcStartTimeForPriAbiMigration(
       base::TimeTicks durationTicks,
-      absl::optional<base::TimeTicks> arc_start_time);
+      std::optional<base::TimeTicks> arc_start_time);
 
   void OnVmsListedForKillCounts(
-      absl::optional<vm_tools::concierge::ListVmsResponse> response);
+      std::optional<vm_tools::concierge::ListVmsResponse> response);
 
   // Notify AppKillObservers.
   void NotifyLowMemoryKill();
@@ -353,7 +336,7 @@ class ArcMetricsService : public KeyedService,
 
   THREAD_CHECKER(thread_checker_);
 
-  const raw_ptr<ArcBridgeService, ExperimentalAsh>
+  const raw_ptr<ArcBridgeService>
       arc_bridge_service_;  // Owned by ArcServiceManager.
 
   // Helper class for tracking engagement metrics.
@@ -389,15 +372,15 @@ class ArcMetricsService : public KeyedService,
   base::ObserverList<UserInteractionObserver> user_interaction_observers_;
   base::ObserverList<BootTypeObserver> boot_type_observers_;
 
-  raw_ptr<PrefService, ExperimentalAsh> prefs_ = nullptr;
+  raw_ptr<PrefService> prefs_ = nullptr;
   std::unique_ptr<ArcMetricsAnr> metrics_anr_;
 
   // Tracks window management related metrics.
   std::unique_ptr<ArcWmMetrics> arc_wm_metrics_;
 
   // For reporting Arc.Provisioning.PreSignInTimeDelta.
-  absl::optional<base::TimeTicks> arc_provisioning_start_time_;
-  absl::optional<std::string> arc_provisioning_account_type_suffix_;
+  std::optional<base::TimeTicks> arc_provisioning_start_time_;
+  std::optional<std::string> arc_provisioning_account_type_suffix_;
 
   // Load average values returned by sysinfo() after ARC start.
   // Maps from the index of the value to the value itself.

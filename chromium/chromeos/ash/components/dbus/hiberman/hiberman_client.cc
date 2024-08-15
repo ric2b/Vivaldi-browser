@@ -62,22 +62,14 @@ class HibermanClientImpl : public HibermanClient {
 
   bool IsEnabled() const override {
     bool enabled = base::FeatureList::IsEnabled(features::kSuspendToDisk);
-    bool s4_enabled =
-        base::FeatureList::IsEnabled(features::kSuspendToDiskAllowS4);
     if (enabled) {
       LOG(WARNING) << "SuspendToDisk is enabled with value "
-                   << features::kHibernateAfterTimeHours.Get()
-                   << " hours. Suspend Mode is: "
-                   << (s4_enabled ? "S5 (S4 allowed with aeskl)" : "S5 only");
+                   << features::kHibernateAfterTimeHours.Get() << " hours.";
     } else {
       LOG(WARNING) << "SuspendToDisk is NOT enabled";
     }
 
     return enabled;
-  }
-
-  bool IsHibernateToS4Enabled() const override {
-    return base::FeatureList::IsEnabled(features::kSuspendToDiskAllowS4);
   }
 
   void WaitForServiceToBeAvailable(
@@ -93,9 +85,7 @@ class HibermanClientImpl : public HibermanClient {
                                  ::hiberman::kResumeFromHibernateASMethod);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(account_id);
-    writer.AppendArrayOfBytes(
-        reinterpret_cast<const uint8_t*>(&auth_session_id[0]),
-        auth_session_id.length());
+    writer.AppendArrayOfBytes(base::as_byte_span(auth_session_id));
     // Bind with the weak pointer of |this| so the response is not
     // handled once |this| is already destroyed.
     proxy_->CallMethod(&method_call, kHibermanResumeTimeoutMs,
@@ -155,7 +145,7 @@ class HibermanClientImpl : public HibermanClient {
   std::string abort_reason_;
 
   // D-Bus proxy for hiberman, not owned.
-  raw_ptr<dbus::ObjectProxy, ExperimentalAsh> proxy_ = nullptr;
+  raw_ptr<dbus::ObjectProxy> proxy_ = nullptr;
   base::WeakPtrFactory<HibermanClientImpl> weak_factory_{this};
 };
 

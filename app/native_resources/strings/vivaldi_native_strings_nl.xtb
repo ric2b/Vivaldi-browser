@@ -18,9 +18,9 @@
 <translation id="1728549374069268714">Plakken &amp;en gaan</translation>
 <translation id="1756026472674246267">Koppeling openen in nieuwe &amp;tab</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Afbeeldingseigenschappen</translation>
+<translation id="1769904678986817931">Afbeeldingseigenschappen…</translation>
 <translation id="1920297417712412573">Kopiëren naar notitie</translation>
-<translation id="1921101374471252440">Afbeelding he&amp;rladen</translation>
+<translation id="1921101374471252440">Afbeelding ve&amp;rnieuwen</translation>
 <translation id="1924750141060565109">Landschap 15</translation>
 <translation id="19598411548897379">Algemeen</translation>
 <translation id="1973351931613083086">Automatisch afspelen</translation>
@@ -65,7 +65,7 @@
 <translation id="3588820906588687999">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3601066750251199488">Monster 3</translation>
 <translation id="3620979700683094848">Websites mogen video automatisch afspelen</translation>
-<translation id="3680031241659195730">Er is een nieuwe versie van Vivaldi beschikbaar.</translation>
+<translation id="3680031241659195730">Er is een nieuwe versie van Vivaldi beschikbaar!</translation>
 <translation id="3708982624815781692">De download is geannuleerd.</translation>
 <translation id="3732157130969736834">Koppeling toevoegen aan &amp;bladwijzers</translation>
 <translation id="3732388226447288666">Dier 2</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Plakken</translation>
 <translation id="4005270918754737597">Deze versie overslaan</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">Niet meer weergeven</translation>
 <translation id="4074744496918018786">Afbeelding openen in &amp;privévenster</translation>
 <translation id="410351446219883937">Automatisch afspelen</translation>
 <translation id="4281844954008187215">Servicevoorwaarden</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera versie 15+ (Bèta)</translation>
 <translation id="5648110075441906505">Afbeelding openen in &amp;nieuw venster</translation>
 <translation id="5656371807944747581">Updatefout!</translation>
-<translation id="5716238312826274098">Meldingen uitschakelen</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> is nu beschikbaar (je gebruikt <ph name="OLD_VERSION" />). Wil je deze nu downloaden?</translation>
 <translation id="5770433027661640693">Landschap 10</translation>
 <translation id="5857090052475505287">Nieuwe map</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Kan het installatieprogramma van de update niet starten. Controleer dat de computer genoeg geheugen en schijfruimte heeft en probeer het opnieuw.</translation>
 <translation id="7658239707568436148">Annuleren</translation>
-<translation id="7715497554424665066">Nieuwe versie negeren</translation>
 <translation id="7724603315864178912">Knippen</translation>
 <translation id="7727481996062361502">Update verifiëren...</translation>
 <translation id="7793738202466490491">Toevoegen als kalendergebeurtenis</translation>
@@ -164,7 +161,7 @@
 <translation id="8539196077526389150">Landschap 13</translation>
 <translation id="8562339533180097902">Vivaldi afsluiten en installeren</translation>
 <translation id="8567452685425968223">Update uitpakken...</translation>
-<translation id="8624587806981488221">Afbeelding he&amp;rladen</translation>
+<translation id="8624587806981488221">Afbeelding ve&amp;rnieuwen</translation>
 <translation id="864444594187862076">Opera versie 15+ (Developer)</translation>
 <translation id="8651348004684669199">Huidige tab toevoegen</translation>
 <translation id="8669345741879513971">Monster 10</translation>

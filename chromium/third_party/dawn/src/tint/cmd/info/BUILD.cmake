@@ -48,9 +48,10 @@ tint_target_add_dependencies(tint_cmd_info_cmd cmd
   tint_lang_core
   tint_lang_core_constant
   tint_lang_core_type
-  tint_lang_spirv_reader_common
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_inspector
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
@@ -69,6 +70,12 @@ tint_target_add_dependencies(tint_cmd_info_cmd cmd
   tint_utils_text
   tint_utils_traits
 )
+
+if(TINT_BUILD_SPV_READER)
+  tint_target_add_dependencies(tint_cmd_info_cmd cmd
+    tint_lang_spirv_reader_common
+  )
+endif(TINT_BUILD_SPV_READER)
 
 if(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
   tint_target_add_external_dependencies(tint_cmd_info_cmd cmd

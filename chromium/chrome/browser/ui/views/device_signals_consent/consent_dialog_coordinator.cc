@@ -54,14 +54,14 @@ ConsentDialogCoordinator::CreateDeviceSignalsConsentDialogModel() {
       .AddOkButton(
           base::BindOnce(&ConsentDialogCoordinator::OnConsentDialogAccept,
                          weak_ptr_factory_.GetWeakPtr()),
-          ui::DialogModelButton::Params()
+          ui::DialogModel::Button::Params()
               .SetLabel(l10n_util::GetStringUTF16(
                   IDS_DEVICE_SIGNALS_CONSENT_DIALOG_PROCEED_BUTTON))
               .SetId(kDeviceSignalsConsentOkButtonElementId))
       .AddCancelButton(
           base::BindOnce(&ConsentDialogCoordinator::OnConsentDialogCancel,
                          weak_ptr_factory_.GetWeakPtr()),
-          ui::DialogModelButton::Params()
+          ui::DialogModel::Button::Params()
               .SetLabel(l10n_util::GetStringUTF16(
                   IDS_DEVICE_SIGNALS_CONSENT_DIALOG_CANCEL_BUTTON))
               .SetId(kDeviceSignalsConsentCancelButtonElementId))
@@ -118,7 +118,7 @@ void ConsentDialogCoordinator::RequestConsent(RequestConsentCallback callback) {
 }
 
 std::u16string ConsentDialogCoordinator::GetDialogBodyText() {
-  absl::optional<std::string> manager =
+  std::optional<std::string> manager =
       chrome::GetAccountManagerIdentity(profile_);
   if (!manager &&
       base::FeatureList::IsEnabled(features::kFlexOrgManagementDisclosure)) {

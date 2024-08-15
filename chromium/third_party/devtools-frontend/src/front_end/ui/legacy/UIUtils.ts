@@ -47,7 +47,6 @@ import confirmDialogStyles from './confirmDialog.css.legacy.js';
 import {Dialog} from './Dialog.js';
 import {Size} from './Geometry.js';
 import {GlassPane, PointerEventsBehavior, SizeBehavior} from './GlassPane.js';
-import {Icon} from './Icon.js';
 import inlineButtonStyles from './inlineButton.css.legacy.js';
 import {KeyboardShortcut} from './KeyboardShortcut.js';
 import radioButtonStyles from './radioButton.css.legacy.js';
@@ -1073,26 +1072,31 @@ export const createTextChildren = (element: Element|DocumentFragment, ...childre
   }
 };
 
-export function createTextButton(
-    text: string, eventHandler?: ((arg0: Event) => void), className?: string, primary?: boolean,
-    alternativeEvent?: string): HTMLButtonElement {
+export function createTextButton(text: string, clickHandler?: ((arg0: Event) => void), opts?: {
+  className?: string,
+  jslogContext?: string,
+  primary?: boolean,
+}): HTMLButtonElement {
   const element = document.createElement('button');
-  if (className) {
-    element.className = className;
+  if (opts?.className) {
+    element.className = opts.className;
   }
   element.textContent = text;
   element.classList.add('text-button');
-  if (primary) {
+  if (opts?.primary) {
     element.classList.add('primary-button');
   }
-  if (eventHandler) {
-    element.addEventListener(alternativeEvent || 'click', eventHandler);
+  if (clickHandler) {
+    element.addEventListener('click', clickHandler);
+  }
+  if (opts?.jslogContext) {
+    element.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context(opts.jslogContext)}`);
   }
   element.type = 'button';
   return element;
 }
 
-export function createInput(className?: string, type?: string): HTMLInputElement {
+export function createInput(className?: string, type?: string, jslogContext?: string): HTMLInputElement {
   const element = document.createElement('input');
   if (className) {
     element.className = className;
@@ -1101,6 +1105,9 @@ export function createInput(className?: string, type?: string): HTMLInputElement
   element.classList.add('harmony-input');
   if (type) {
     element.type = type;
+  }
+  if (jslogContext) {
+    element.setAttribute('jslog', `${VisualLogging.textField().track({keydown: true}).context(jslogContext)}`);
   }
   return element;
 }
@@ -1140,11 +1147,15 @@ export function createLabel(title: string, className?: string, associatedControl
   return element;
 }
 
-export function createRadioLabel(name: string, title: string, checked?: boolean): DevToolsRadioButton {
+export function createRadioLabel(
+    name: string, title: string, checked?: boolean, jslogContext?: string): DevToolsRadioButton {
   const element = (document.createElement('span', {is: 'dt-radio'}) as DevToolsRadioButton);
   element.radioElement.name = name;
   element.radioElement.checked = Boolean(checked);
   createTextChild(element.labelElement, title);
+  if (jslogContext) {
+    element.radioElement.setAttribute('jslog', `${VisualLogging.toggle().track({change: true}).context(jslogContext)}`);
+  }
   return element;
 }
 
@@ -1205,7 +1216,7 @@ export class CheckboxLabel extends HTMLSpanElement {
     element.checkboxElement.checked = Boolean(checked);
     if (jslogContext) {
       element.checkboxElement.setAttribute(
-          'jslog', `${VisualLogging.toggle().track({click: true}).context(jslogContext)}`);
+          'jslog', `${VisualLogging.toggle().track({change: true}).context(jslogContext)}`);
     }
     if (title !== undefined) {
       element.textElement.textContent = title;
@@ -1232,6 +1243,7 @@ export class DevToolsIconLabel extends HTMLSpanElement {
     });
     this.#icon = new IconButton.Icon.Icon();
     this.#icon.style.setProperty('margin-right', '4px');
+    this.#icon.style.setProperty('vertical-align', 'baseline');
     root.appendChild(this.#icon);
     root.createChild('slot');
   }
@@ -1331,7 +1343,7 @@ export class DevToolsCloseButton extends HTMLDivElement {
     Tooltip.install(this.buttonElement, i18nString(UIStrings.close));
     ARIAUtils.setLabel(this.buttonElement, i18nString(UIStrings.close));
     ARIAUtils.markAsButton(this.buttonElement);
-    const regularIcon = Icon.create('cross', 'default-icon');
+    const regularIcon = IconButton.Icon.create('cross');
     this.buttonElement.appendChild(regularIcon);
   }
 
@@ -1388,14 +1400,14 @@ export function bindInput(
     }
 
     const value = modifiedFloatNumber(parseFloat(input.value), event, modifierMultiplier);
-    const stringValue = value ? String(value) : '';
-    const {valid} = validate(stringValue);
-    if (!valid || !value) {
+    if (value === null) {
       return;
     }
-
-    input.value = stringValue;
-    apply(input.value);
+    const stringValue = String(value);
+    const {valid} = validate(stringValue);
+    if (valid) {
+      setValue(stringValue);
+    }
     event.preventDefault();
   }
 
@@ -1515,10 +1527,6 @@ export function loadImage(url: string): Promise<HTMLImageElement|null> {
   });
 }
 
-export function loadImageFromData(data: string|null): Promise<HTMLImageElement|null> {
-  return data ? loadImage('data:image/jpg;base64,' + data) : Promise.resolve(null);
-}
-
 export function createFileSelectorElement(callback: (arg0: File) => void): HTMLInputElement {
   const fileSelectorElement = document.createElement('input');
   fileSelectorElement.type = 'file';
@@ -1544,7 +1552,7 @@ export class MessageDialog {
         dialog.contentElement, {cssFile: confirmDialogStyles, delegatesFocus: undefined});
     const content = shadowRoot.createChild('div', 'widget');
     await new Promise(resolve => {
-      const okButton = createTextButton(i18nString(UIStrings.ok), resolve, '', true);
+      const okButton = createTextButton(i18nString(UIStrings.ok), resolve, {jslogContext: 'confirm', primary: true});
       content.createChild('div', 'message').createChild('span').textContent = message;
       content.createChild('div', 'button').appendChild(okButton);
       dialog.setOutsideClickCallback(event => {
@@ -1572,11 +1580,10 @@ export class ConfirmDialog {
     const result = await new Promise<boolean>(resolve => {
       const okButton = createTextButton(
           /* text= */ options?.okButtonLabel || i18nString(UIStrings.ok), /* clickHandler= */ () => resolve(true),
-          /* className= */ '',
-          /* primary= */ true);
+          {jslogContext: 'confirm', primary: true});
       buttonsBar.appendChild(okButton);
-      buttonsBar.appendChild(
-          createTextButton(options?.cancelButtonLabel || i18nString(UIStrings.cancel), () => resolve(false)));
+      buttonsBar.appendChild(createTextButton(
+          options?.cancelButtonLabel || i18nString(UIStrings.cancel), () => resolve(false), {jslogContext: 'cancel'}));
       dialog.setOutsideClickCallback(event => {
         event.consume();
         resolve(false);

@@ -3,10 +3,12 @@
 # found in the LICENSE file.
 """Definitions of builders in the chromium.angle builder group."""
 
-load("//lib/builders.star", "reclient", "sheriff_rotations", "xcode")
+load("//lib/builders.star", "os", "reclient", "sheriff_rotations", "xcode")
 load("//lib/builder_config.star", "builder_config")
+load("//lib/builder_health_indicators.star", "health_spec")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
+load("//lib/gn_args.star", "gn_args")
 
 ci.defaults.set(
     executable = "recipe:angle_chromium",
@@ -14,6 +16,7 @@ ci.defaults.set(
     pool = ci.gpu.POOL,
     sheriff_rotations = sheriff_rotations.ANGLE,
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
+    health_spec = health_spec.DEFAULT,
     properties = {
         "perf_dashboard_machine_group": "ChromiumANGLE",
     },
@@ -53,11 +56,24 @@ ci.gpu.linux_builder(
             config = "android",
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
             config = "main_builder_mb",
         ),
         build_gs_bucket = "chromium-angle-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "android_builder_without_codecs",
+            "release_try_builder",
+            "minimal_symbols",
+            "reclient",
+            "arm64",
+            "static_angle",
+            "android_fastbuild",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Android|Builder|Chromium",
@@ -82,6 +98,7 @@ ci.thin_tester(
             config = "android",
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(
             config = "main_builder_mb",
@@ -114,8 +131,20 @@ ci.gpu.linux_builder(
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
+            target_platform = builder_config.target_platform.FUCHSIA,
         ),
         build_gs_bucket = "chromium-angle-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "angle_deqp_tests",
+            "shared",
+            "release",
+            "reclient",
+            "minimal_symbols",
+            "dcheck_always_on",
+            "fuchsia",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Fuchsia|Builder|ANGLE",
@@ -143,6 +172,15 @@ ci.gpu.linux_builder(
             target_platform = builder_config.target_platform.LINUX,
         ),
         build_gs_bucket = "chromium-angle-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "reclient",
+            "minimal_symbols",
+            "dcheck_always_on",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Linux|Builder|Chromium",
@@ -226,10 +264,21 @@ ci.gpu.mac_builder(
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
         build_gs_bucket = "chromium-angle-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "reclient",
+            "minimal_symbols",
+            "dcheck_always_on",
+            "x64",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Mac|Builder|Chromium",
@@ -255,6 +304,7 @@ ci.thin_tester(
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
@@ -285,6 +335,7 @@ ci.thin_tester(
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
@@ -320,11 +371,26 @@ ci.gpu.mac_builder(
         ),
         build_gs_bucket = "chromium-angle-archive",
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "angle_deqp_tests",
+            "release_builder",
+            "reclient",
+            "minimal_symbols",
+            "dcheck_always_on",
+            "ios_simulator",
+            "x64",
+            "xctest",
+        ],
+    ),
+    os = os.MAC_DEFAULT,
     console_view_entry = consoles.console_view_entry(
         category = "iOS|Builder|ANGLE",
         short_name = "x64",
     ),
     contact_team_email = "angle-team@google.com",
+    # TODO(crbug.com/1449999): Change to xcode_default once the machines
+    # are upgraded to MacOS13
     xcode = xcode.x14main,
 )
 
@@ -379,6 +445,15 @@ ci.gpu.windows_builder(
             target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-angle-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "reclient",
+            "minimal_symbols",
+            "dcheck_always_on",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|Chromium",
@@ -467,6 +542,16 @@ ci.gpu.windows_builder(
             target_platform = builder_config.target_platform.WIN,
         ),
         build_gs_bucket = "chromium-angle-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "release_builder",
+            "reclient",
+            "minimal_symbols",
+            "dcheck_always_on",
+            "x86",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|Chromium",

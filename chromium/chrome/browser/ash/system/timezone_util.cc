@@ -183,9 +183,6 @@ bool CanSetSystemTimezone(const user_manager::User* user) {
     case user_manager::USER_TYPE_PUBLIC_ACCOUNT:
       return CanSetSystemTimezoneFromManagedGuestSession();
 
-    case user_manager::NUM_USER_TYPES:
-      NOTREACHED();
-
       // No default case means the compiler makes sure we handle new types.
   }
   NOTREACHED();
@@ -197,7 +194,7 @@ bool CanSetSystemTimezone(const user_manager::User* user) {
 namespace ash {
 namespace system {
 
-absl::optional<std::string> GetCountryCodeFromTimezoneIfAvailable(
+std::optional<std::string> GetCountryCodeFromTimezoneIfAvailable(
     const std::string& timezone) {
   // Determine region code from timezone id.
   char region[kMaxGeolocationResponseLength];
@@ -207,7 +204,7 @@ absl::optional<std::string> GetCountryCodeFromTimezoneIfAvailable(
                            kMaxGeolocationResponseLength, error);
   // Track failures.
   if (U_FAILURE(error))
-    return absl::nullopt;
+    return std::nullopt;
 
   return base::ToLowerASCII(region);
 }

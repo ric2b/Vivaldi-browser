@@ -80,7 +80,18 @@ bool IsValidModuleWord(const std::string& word) {
 }
 
 bool ValidateModuleName(const std::string& name) {
+  if (name.empty()) {
+    return false;
+  }
+
   std::vector<std::string> packages = base::SplitString(name, ".");
+
+  // The last part of the path can be a wildcard.
+  if (!packages.empty() && packages.back() == "*") {
+    packages.pop_back();
+  }
+
+  // The rest of the path must be valid words.
   return std::find_if(packages.begin(), packages.end(),
                       std::not_fn(IsValidModuleWord)) == packages.end();
 }
@@ -190,21 +201,20 @@ bool PerfettoSqlParser::Next() {
         break;
       case State::kCreateOrReplacePerfetto:
       case State::kCreatePerfetto:
+        bool replace = state == State::kCreateOrReplacePerfetto;
         if (TokenIsCustomKeyword("function", token)) {
-          return ParseCreatePerfettoFunction(
-              state == State::kCreateOrReplacePerfetto, *first_non_space_token);
+          return ParseCreatePerfettoFunction(replace, *first_non_space_token);
         }
         if (TokenIsSqliteKeyword("table", token)) {
-          return ParseCreatePerfettoTableOrView(*first_non_space_token,
+          return ParseCreatePerfettoTableOrView(replace, *first_non_space_token,
                                                 TableOrView::kTable);
         }
         if (TokenIsSqliteKeyword("view", token)) {
-          return ParseCreatePerfettoTableOrView(*first_non_space_token,
+          return ParseCreatePerfettoTableOrView(replace, *first_non_space_token,
                                                 TableOrView::kView);
         }
         if (TokenIsCustomKeyword("macro", token)) {
-          return ParseCreatePerfettoMacro(state ==
-                                          State::kCreateOrReplacePerfetto);
+          return ParseCreatePerfettoMacro(replace);
         }
         base::StackString<1024> err(
             "Expected 'FUNCTION', 'TABLE' or 'MACRO' after 'CREATE PERFETTO', "
@@ -223,8 +233,8 @@ bool PerfettoSqlParser::ParseIncludePerfettoModule(
 
   if (!ValidateModuleName(key)) {
     base::StackString<1024> err(
-        "Only alphanumeric characters, dots and underscores allowed in include "
-        "keys: '%s'",
+        "Include key should be a dot-separated list of module names, with the"
+        "last name optionally being a wildcard: '%s'",
         key.c_str());
     return ErrorAtToken(tok, err.c_str());
   }
@@ -235,6 +245,7 @@ bool PerfettoSqlParser::ParseIncludePerfettoModule(
 }
 
 bool PerfettoSqlParser::ParseCreatePerfettoTableOrView(
+    bool replace,
     Token first_non_space_token,
     TableOrView table_or_view) {
   Token table_name = tokenizer_.NextNonWhitespace();
@@ -270,7 +281,7 @@ bool PerfettoSqlParser::ParseCreatePerfettoTableOrView(
   Token terminal = tokenizer_.NextTerminal();
   switch (table_or_view) {
     case TableOrView::kTable:
-      statement_ = CreateTable{std::move(name),
+      statement_ = CreateTable{replace, std::move(name),
                                tokenizer_.Substr(first, terminal), schema};
       break;
     case TableOrView::kView:
@@ -281,8 +292,9 @@ bool PerfettoSqlParser::ParseCreatePerfettoTableOrView(
       SqlSource::Rewriter rewriter(original_statement);
       tokenizer_.Rewrite(rewriter, first_non_space_token, first, header,
                          SqliteTokenizer::EndToken::kExclusive);
-      statement_ =
-          CreateView{std::move(name), std::move(rewriter).Build(), schema};
+      statement_ = CreateView{replace, std::move(name),
+                              tokenizer_.Substr(first, terminal),
+                              std::move(rewriter).Build(), schema};
       break;
   }
   statement_sql_ = tokenizer_.Substr(first_non_space_token, terminal);
@@ -507,7 +519,7 @@ PerfettoSqlParser::ResolveRawArgument(RawArgument arg) {
       sql_argument::ParseType(base::StringView(arg_type));
   if (!parsed_arg_type) {
     base::StackString<1024> err("Invalid type %s", arg_type.c_str());
-    ErrorAtToken(arg.name, err.c_str());
+    ErrorAtToken(arg.type, err.c_str());
     return std::nullopt;
   }
   return sql_argument::ArgumentDefinition("$" + arg_name, *parsed_arg_type);

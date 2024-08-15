@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -11,8 +12,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool.h"
+#include "base/vivaldi_switches.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/version_info/version_info.h"
 #include "components/version_info/version_info_values.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -38,8 +41,8 @@ constexpr int kMatomoId = 36;        // Browser Usage - New implementation.
 constexpr int kScheduleJitter = 15;  // minutes
 #else
 constexpr base::TimeDelta kLockDelay = base::Seconds(1);
-constexpr int kMatomoId = 13;                             // Blackhole
-constexpr int kScheduleJitter = 1;                        // minutes
+constexpr int kMatomoId = 13;       // Blackhole
+constexpr int kScheduleJitter = 1;  // minutes
 #endif
 
 constexpr int kExtraPingCount = 2;
@@ -63,11 +66,13 @@ constexpr char kDescriptionText[] =
     "privacy implications, please see "
     "https://help.vivaldi.com/article/how-we-count-our-users/";
 
-constexpr char kMatomoUrl[] =
-    "https://update.vivaldi.com/rep/rep?"
+constexpr char kPingUrl[] = "https://update.vivaldi.com/rep/rep";
+
+constexpr char kPingUrlParams[] =
+    "?"
     // Ping version can be increased to help the server-side to deal with format
     // changes.
-    "ping_version=1"
+    "ping_version=2"
 #ifndef NDEBUG
     "&debug"
 #endif
@@ -104,6 +109,7 @@ constexpr char kReportRequest[] =
     "rec=1&"
     "idsite=%u&"
     "ua=%s&"
+    "uadata=%s&"
     "res=%ux%u&"
     "_cvar={\"1\":[\"cpu\",\"%s\"],\"2\":[\"v\",\"%s\"]}&"
     // The four following items are redundant with _cvar and res. The goal is to
@@ -347,6 +353,7 @@ bool StatsReporterImpl::GeneratePingRequest(
     const std::string& architecture,
     const std::string& vivaldi_version,
     const std::string& user_agent,
+    const std::string& client_hints,
     ReportingData& local_state_reporting_data,
     absl::optional<base::Value>& os_profile_reporting_data_json,
     std::string& request_url,
@@ -370,18 +377,18 @@ bool StatsReporterImpl::GeneratePingRequest(
         now, kMaxWeeklyPingDelay);
 
     os_profile_reporting_data.next_pings.monthly = ValidateTime(
-        base::ValueToTime(
-            os_profile_reporting_data_json->GetDict().Find(kNextMonthlyPingKey)),
+        base::ValueToTime(os_profile_reporting_data_json->GetDict().Find(
+            kNextMonthlyPingKey)),
         now, kMaxMonthlyPingDelay);
 
     os_profile_reporting_data.next_pings.trimestrial = ValidateTime(
-        base::ValueToTime(
-            os_profile_reporting_data_json->GetDict().Find(kNextTrimestrialPingKey)),
+        base::ValueToTime(os_profile_reporting_data_json->GetDict().Find(
+            kNextTrimestrialPingKey)),
         now, kMaxTrimestrialPingDelay);
 
     os_profile_reporting_data.next_pings.semestrial = ValidateTime(
-        base::ValueToTime(
-            os_profile_reporting_data_json->GetDict().Find(kNextSemestrialPingKey)),
+        base::ValueToTime(os_profile_reporting_data_json->GetDict().Find(
+            kNextSemestrialPingKey)),
         now, kMaxSemestrialPingDelay);
 
     os_profile_reporting_data.next_pings.yearly = ValidateTime(
@@ -397,11 +404,12 @@ bool StatsReporterImpl::GeneratePingRequest(
     if (os_profile_reporting_data.user_id.empty() && !legacy_user_id.empty()) {
       os_profile_reporting_data.user_id = legacy_user_id;
       os_profile_reporting_data_json->GetDict().Set(kUniqueUserIdKey,
-                                                   legacy_user_id);
+                                                    legacy_user_id);
     }
 
     absl::optional<int> pings_since_last_month =
-        os_profile_reporting_data_json->GetDict().FindInt(kPingsSinceLastMonthKey);
+        os_profile_reporting_data_json->GetDict().FindInt(
+            kPingsSinceLastMonthKey);
     if (pings_since_last_month)
       os_profile_reporting_data.pings_since_last_month =
           *pings_since_last_month;
@@ -519,7 +527,14 @@ bool StatsReporterImpl::GeneratePingRequest(
   if (!next_pings.daily.is_null())
     report_delay = (now - next_pings.daily).InDays();
 
-  request_url = kMatomoUrl;
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  if (!version_info::IsOfficialBuild() &&
+      cmd_line.HasSwitch(switches::kOverrideStatsReporterPingUrl))
+    request_url =
+        cmd_line.GetSwitchValueASCII(switches::kOverrideStatsReporterPingUrl);
+  else
+    request_url = kPingUrl;
+  request_url.append(kPingUrlParams);
   switch (installation_status) {
     case InstallationStatus::NEW_USER:
       request_url += kNewUser;
@@ -640,7 +655,7 @@ bool StatsReporterImpl::GeneratePingRequest(
 
   if (os_profile_reporting_data_json) {
     os_profile_reporting_data_json->GetDict().Set(kDescriptionKey,
-                                                 kDescriptionText);
+                                                  kDescriptionText);
 
     os_profile_reporting_data_json->GetDict().Set(
         kNextDailyPingKey, base::TimeToValue(new_next_pings.daily));
@@ -655,12 +670,13 @@ bool StatsReporterImpl::GeneratePingRequest(
     os_profile_reporting_data_json->GetDict().Set(
         kNextYearlyPingKey, base::TimeToValue(new_next_pings.yearly));
     os_profile_reporting_data_json->GetDict().Set(kPingsSinceLastMonthKey,
-                                              new_pings_since_last_month);
+                                                  new_pings_since_last_month);
   }
 
   body = base::StringPrintf(
       kReportRequest, kMatomoId,
       base::EscapeUrlEncodedData(user_agent, true).c_str(),
+      base::EscapeUrlEncodedData(client_hints, true).c_str(),
       display_size.width(), display_size.height(),
       base::EscapeUrlEncodedData(architecture, true).c_str(),
       base::EscapeUrlEncodedData(vivaldi_version, true).c_str(),
@@ -776,7 +792,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
           now, legacy_user_id_,
           display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel(),
           base::SysInfo::OperatingSystemArchitecture(), VIVALDI_UA_VERSION,
-          GetUserAgent(), local_state_reporting_data,
+          GetUserAgent(), GetClientHints(), local_state_reporting_data,
           os_profile_reporting_data_json, request_url, body,
           next_reporting_time_interval)) {
     ScheduleNextReporting(next_reporting_time_interval, true);

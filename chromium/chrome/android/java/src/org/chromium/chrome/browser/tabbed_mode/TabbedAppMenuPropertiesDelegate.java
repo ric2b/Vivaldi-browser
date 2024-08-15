@@ -42,9 +42,7 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.appmenu.AppMenuIconRow;
 import org.vivaldi.browser.common.VivaldiUtils;
 
-/**
- * An {@link AppMenuPropertiesDelegateImpl} for ChromeTabbedActivity.
- */
+/** An {@link AppMenuPropertiesDelegateImpl} for ChromeTabbedActivity. */
 public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateImpl {
     AppMenuDelegate mAppMenuDelegate;
     WebFeedSnackbarController.FeedLauncher mFeedLauncher;
@@ -55,21 +53,35 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     private final ObservableSupplier<BookmarkModel> mBookmarkModelSupplier;
     private AppMenuIconRow mMenuBarView;
 
-    public TabbedAppMenuPropertiesDelegate(Context context, ActivityTabProvider activityTabProvider,
+    public TabbedAppMenuPropertiesDelegate(
+            Context context,
+            ActivityTabProvider activityTabProvider,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
-            TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
+            TabModelSelector tabModelSelector,
+            ToolbarManager toolbarManager,
+            View decorView,
             AppMenuDelegate appMenuDelegate,
             OneshotSupplier<LayoutStateProvider> layoutStateProvider,
             OneshotSupplier<StartSurface> startSurfaceSupplier,
             ObservableSupplier<BookmarkModel> bookmarkModelSupplier,
             WebFeedSnackbarController.FeedLauncher feedLauncher,
-            ModalDialogManager modalDialogManager, SnackbarManager snackbarManager,
-            @NonNull OneshotSupplier<IncognitoReauthController>
-                    incognitoReauthControllerOneshotSupplier,
+            ModalDialogManager modalDialogManager,
+            SnackbarManager snackbarManager,
+            @NonNull
+                    OneshotSupplier<IncognitoReauthController>
+                            incognitoReauthControllerOneshotSupplier,
             Supplier<ReadAloudController> readAloudControllerSupplier) {
-        super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
-                toolbarManager, decorView, layoutStateProvider, startSurfaceSupplier,
-                bookmarkModelSupplier, incognitoReauthControllerOneshotSupplier,
+        super(
+                context,
+                activityTabProvider,
+                multiWindowModeStateDispatcher,
+                tabModelSelector,
+                toolbarManager,
+                decorView,
+                layoutStateProvider,
+                startSurfaceSupplier,
+                bookmarkModelSupplier,
+                incognitoReauthControllerOneshotSupplier,
                 readAloudControllerSupplier);
         mAppMenuDelegate = appMenuDelegate;
         mFeedLauncher = feedLauncher;
@@ -81,11 +93,11 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     }
 
     private boolean shouldShowWebFeedMenuItem() {
-        if (!FeedFeatures.isWebFeedUIEnabled()) {
-            return false;
-        }
         Tab tab = mActivityTabProvider.get();
         if (tab == null || tab.isIncognito() || OfflinePageUtils.isOfflinePage(tab)) {
+            return false;
+        }
+        if (!FeedFeatures.isWebFeedUIEnabled(tab.getProfile())) {
             return false;
         }
         String url = tab.getOriginalUrl().getSpec();
@@ -109,9 +121,14 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     public void onFooterViewInflated(AppMenuHandler appMenuHandler, View view) {
         if (view instanceof WebFeedMainMenuItem) {
             ((WebFeedMainMenuItem) view)
-                    .initialize(mActivityTabProvider.get(), appMenuHandler,
-                            WebFeedFaviconFetcher.createDefault(), mFeedLauncher,
-                            mModalDialogManager, mSnackbarManager, CreatorActivity.class);
+                    .initialize(
+                            mActivityTabProvider.get(),
+                            appMenuHandler,
+                            WebFeedFaviconFetcher.createDefault(),
+                            mFeedLauncher,
+                            mModalDialogManager,
+                            mSnackbarManager,
+                            CreatorActivity.class);
         }
 
         if (ChromeApplicationImpl.isVivaldi() && view instanceof AppMenuIconRow) {

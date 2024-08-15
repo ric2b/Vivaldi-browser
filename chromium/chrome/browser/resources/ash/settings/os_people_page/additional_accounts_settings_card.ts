@@ -28,11 +28,11 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {DomRepeat, DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertExists} from '../assert_extras.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
 import {isChild} from '../common/load_time_booleans.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, routes} from '../router.js';
 
 import {Account, AccountManagerBrowserProxy, AccountManagerBrowserProxyImpl} from './account_manager_browser_proxy.js';
@@ -59,17 +59,12 @@ export class AdditionalAccountsSettingsCardElement extends
 
   static get properties() {
     return {
-      accounts_: {
+      accounts: {
         type: Array,
         value() {
           return [];
         },
       },
-
-      /**
-       * Primary / Device account.
-       */
-      deviceAccount_: Object,
 
       /**
        * The targeted account for menu operations.
@@ -129,10 +124,9 @@ export class AdditionalAccountsSettingsCardElement extends
     };
   }
 
-  private accounts_: Account[];
+  accounts: Account[];
   private actionMenuAccount_: Account|null;
   private browserProxy_: AccountManagerBrowserProxy;
-  private deviceAccount_: Account|null;
   private isArcAccountRestrictionsEnabled_: boolean;
   private isChildUser_: boolean;
   private isDeviceAccountManaged_: boolean;
@@ -144,35 +138,12 @@ export class AdditionalAccountsSettingsCardElement extends
     this.browserProxy_ = AccountManagerBrowserProxyImpl.getInstance();
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-
-    this.addWebUiListener('accounts-changed', this.refreshAccounts_.bind(this));
-  }
-
-  override ready(): void {
-    super.ready();
-    this.refreshAccounts_();
-  }
-
   override currentRouteChanged(newRoute: Route): void {
     if (newRoute !== routes.OS_PEOPLE) {
       return;
     }
 
     this.attemptDeepLink();
-  }
-
-  private async refreshAccounts_(): Promise<void> {
-    const accounts = await this.browserProxy_.getAccounts();
-    this.set('accounts_', accounts);
-    const deviceAccount = accounts.find(account => account.isDeviceAccount);
-
-    if (!deviceAccount) {
-      console.error('Cannot find device account.');
-      return;
-    }
-    this.deviceAccount_ = deviceAccount;
   }
 
   /**
@@ -204,7 +175,7 @@ export class AdditionalAccountsSettingsCardElement extends
 
   private addAccount_(): void {
     recordSettingChange(
-        Setting.kAddAccount, {intValue: this.accounts_.length + 1});
+        Setting.kAddAccount, {intValue: this.accounts.length + 1});
     this.browserProxy_.addAccount();
   }
 
@@ -249,12 +220,11 @@ export class AdditionalAccountsSettingsCardElement extends
   }
 
   private shouldShowSecondaryAccountsList_(): boolean {
-    return this.accounts_.filter(account => !account.isDeviceAccount).length ===
-        0;
+    return this.getSecondaryAccounts_().length === 0;
   }
 
   private getSecondaryAccounts_(): Account[] {
-    return this.accounts_.filter(account => !account.isDeviceAccount);
+    return this.accounts.filter(account => !account.isDeviceAccount);
   }
 
   private getAddAccountLabel_(): string {

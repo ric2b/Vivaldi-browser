@@ -555,7 +555,8 @@ class PageLoadMetricsObserverInterface {
       const GURL& first_party_url,
       bool blocked_by_policy,
       bool is_ad_tagged,
-      const net::CookieSettingOverrides& cookie_setting_overrides) = 0;
+      const net::CookieSettingOverrides& cookie_setting_overrides,
+      bool is_partitioned_access) = 0;
 
   // Called when a cookie is set by a header or via document.cookie.
   virtual void OnCookieChange(
@@ -564,7 +565,8 @@ class PageLoadMetricsObserverInterface {
       const net::CanonicalCookie& cookie,
       bool blocked_by_policy,
       bool is_ad_tagged,
-      const net::CookieSettingOverrides& cookie_setting_overrides) = 0;
+      const net::CookieSettingOverrides& cookie_setting_overrides,
+      bool is_partitioned_access) = 0;
 
   // Called when a storage access attempt by the origin |url| to |storage_type|
   // is checked by the content settings manager. |blocked_by_policy| is false
@@ -577,14 +579,13 @@ class PageLoadMetricsObserverInterface {
   // Called when prefetch is likely to occur in this page load.
   virtual void OnPrefetchLikely() = 0;
 
-  // Called when the page tracked was just activated after being loaded inside a
-  // portal.
-  virtual void DidActivatePortal(base::TimeTicks activation_time) = 0;
-
   // Called when the page tracked was just activated after being prerendered.
   // |navigation_handle| is for the activation navigation.
   virtual void DidActivatePrerenderedPage(
       content::NavigationHandle* navigation_handle) = 0;
+
+  // Called when the previewed page is activated for the tab promotion.
+  virtual void DidActivatePreviewedPage(base::TimeTicks activation_time) = 0;
 
   // Called when V8 per-frame memory usage updates are available. Each
   // MemoryUpdate consists of a GlobalRenderFrameHostId and a nonzero int64_t

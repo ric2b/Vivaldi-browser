@@ -26,6 +26,16 @@ TestCase& TestCase::TabletMode() {
   return *this;
 }
 
+TestCase& TestCase::SetLocale(const std::string& locale) {
+  options.locale = locale;
+  return *this;
+}
+
+TestCase& TestCase::SetCountry(const std::string& country) {
+  options.country = country;
+  return *this;
+}
+
 TestCase& TestCase::EnableGenericDocumentsProvider() {
   options.arc = true;
   options.generic_documents_provider = true;
@@ -139,17 +149,6 @@ TestCase& TestCase::EnableMirrorSync() {
   return *this;
 }
 
-TestCase& TestCase::EnableInlineSyncStatus() {
-  options.enable_inline_sync_status = true;
-  return *this;
-}
-
-TestCase& TestCase::EnableInlineSyncStatusProgressEvents() {
-  options.enable_inline_sync_status = true;
-  options.enable_inline_sync_status_progress_events = true;
-  return *this;
-}
-
 TestCase& TestCase::EnableFileTransferConnector() {
   options.enable_file_transfer_connector = true;
   return *this;
@@ -182,6 +181,11 @@ TestCase& TestCase::EnableFSPsInRecents() {
 
 TestCase& TestCase::EnableGoogleOneOfferFilesBanner() {
   options.enable_google_one_offer_files_banner = true;
+  return *this;
+}
+
+TestCase& TestCase::DisableGoogleOneOfferFilesBanner() {
+  options.enable_google_one_offer_files_banner = false;
   return *this;
 }
 
@@ -230,6 +234,17 @@ std::string TestCase::GetFullName() const {
     full_name += "_TabletMode";
   }
 
+  if (!options.locale.empty()) {
+    // You cannot use `-` in a test case name.
+    std::string locale_for_name;
+    base::ReplaceChars(options.locale, "-", "_", &locale_for_name);
+    full_name += "_" + locale_for_name;
+  }
+
+  if (!options.country.empty()) {
+    full_name += "_" + options.country;
+  }
+
   if (options.offline) {
     full_name += "_Offline";
   }
@@ -266,10 +281,6 @@ std::string TestCase::GetFullName() const {
     full_name += "_MirrorSync";
   }
 
-  if (options.enable_inline_sync_status) {
-    full_name += "_InlineSyncStatus";
-  }
-
   if (options.file_transfer_connector_report_only) {
     full_name += "_ReportOnly";
   }
@@ -282,8 +293,11 @@ std::string TestCase::GetFullName() const {
     full_name += "_FSPsInRecents";
   }
 
-  if (options.enable_google_one_offer_files_banner) {
-    full_name += "_GoogleOneOfferFilesBanner";
+  // Google One offer is enabled by default. Append it to a test name only if
+  // it's different from the default value.
+  // TODO(b/315829911): Remove Google One offer files banner flag.
+  if (!options.enable_google_one_offer_files_banner) {
+    full_name += "_DisableGoogleOneOfferFilesBanner";
   }
 
   if (options.enable_drive_bulk_pinning) {

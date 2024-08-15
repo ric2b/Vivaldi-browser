@@ -23,6 +23,7 @@
 #include "base/trace_event/typed_macros.h"
 #include "media/base/audio_pull_fifo.h"
 #include "media/base/audio_timestamp_helper.h"
+#include "media/base/channel_layout.h"
 #include "media/base/mac/channel_layout_util_mac.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -82,8 +83,21 @@ void SetAudioChannelLayout(int channels,
   DCHECK_GT(channels, 0);
   DCHECK_GT(channel_layout, CHANNEL_LAYOUT_UNSUPPORTED);
 
+  // On macOS, Audio MIDI only support setup 4 channel layout as
+  // Quadraphonic(kAudioChannelLayoutTag_Quadraphonic) which equals to
+  // "CHANNEL_LAYOUT_2_2" in FFMPEG/Chrome. FFMPEG and Chrome will guess
+  // 4 channel layout as "CHANNEL_LAYOUT_QUAD" which will always result
+  // in silent channel 3/4 output on Macs.
+  //
+  // On Windows, the system also support setup 4 channel layout as
+  // Quadraphonic(KSAUDIO_SPEAKER_QUAD) which equals to "CHANNEL_LAYOUT_QUAD"
+  // in FFMPEG/Chrome, so there is not such issue on Windows.
+  auto input_layout = channels == 4 && channel_layout == CHANNEL_LAYOUT_QUAD
+                          ? CHANNEL_LAYOUT_2_2
+                          : channel_layout;
+
   auto coreaudio_layout =
-      ChannelLayoutToAudioChannelLayout(channel_layout, channels);
+      ChannelLayoutToAudioChannelLayout(input_layout, channels);
 
   OSStatus result = AudioUnitSetProperty(
       audio_unit, kAudioUnitProperty_AudioChannelLayout, kAudioUnitScope_Input,
@@ -103,11 +117,11 @@ void ReportFramesRequestedUma(int number_of_frames_requested) {
 
 }  // namespace
 
-AUHALStream::AUHALStream(AudioIOStreamClient* client,
+AUHALStream::AUHALStream(AudioManagerApple* manager,
                          const AudioParameters& params,
                          AudioDeviceID device,
                          const AudioManager::LogCallback& log_callback)
-    : client_(client),
+    : manager_(manager),
       params_(params),
       source_(nullptr),
       device_(device),
@@ -120,7 +134,7 @@ AUHALStream::AUHALStream(AudioIOStreamClient* client,
   // We must have a manager.
   DVLOG(1) << __FUNCTION__ << " this " << this << " params "
            << params.AsHumanReadableString();
-  DCHECK(client_);
+  DCHECK(manager_);
   DCHECK(params_.IsValid());
 #if BUILDFLAG(IS_MAC)
   DCHECK_NE(device, kAudioObjectUnknown);
@@ -182,7 +196,7 @@ void AUHALStream::Close() {
   // destruction. Also include the device ID as a signal to the audio manager
   // that it should try to increase the native I/O buffer size after the stream
   // has been closed.
-  client_->ReleaseOutputStreamUsingRealDevice(this, device_);
+  manager_->ReleaseOutputStream(this);
 }
 
 void AUHALStream::Start(AudioSourceCallback* callback) {
@@ -203,13 +217,13 @@ void AUHALStream::Start(AudioSourceCallback* callback) {
 
 #if BUILDFLAG(IS_MAC)
   // Check if we should defer Start() for http://crbug.com/160920.
-  base::TimeDelta defer_start = client_->GetDeferStreamStartTimeout();
+  base::TimeDelta defer_start = manager_->GetDeferStreamStartTimeout();
   if (!defer_start.is_zero()) {
     // Use a cancellable closure so that if Stop() is called before Start()
     // actually runs, we can cancel the pending start.
     deferred_start_cb_.Reset(
         base::BindOnce(&AUHALStream::Start, base::Unretained(this), callback));
-    client_->GetTaskRunner()->PostDelayedTask(
+    manager_->GetTaskRunner()->PostDelayedTask(
         FROM_HERE, deferred_start_cb_.callback(), defer_start);
     return;
   }
@@ -224,8 +238,8 @@ void AUHALStream::Start(AudioSourceCallback* callback) {
 
 #if BUILDFLAG(IS_MAC)
     peak_detector_ = std::make_unique<AmplitudePeakDetector>(
-        base::BindRepeating(&AudioIOStreamClient::StopAmplitudePeakTrace,
-                            base::Unretained(client_)));
+        base::BindRepeating(&AudioManagerApple::StopAmplitudePeakTrace,
+                            base::Unretained(manager_)));
 #endif
   }
 
@@ -527,8 +541,8 @@ bool AUHALStream::ConfigureAUHAL() {
     return false;
   }
 
-  if (!client_->MaybeChangeBufferSize(device_, local_audio_unit->audio_unit(),
-                                      0, params_.frames_per_buffer())) {
+  if (!manager_->MaybeChangeBufferSize(device_, local_audio_unit->audio_unit(),
+                                       0, params_.frames_per_buffer())) {
     return false;
   }
 

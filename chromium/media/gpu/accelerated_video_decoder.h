@@ -10,6 +10,7 @@
 
 #include "media/base/decoder_buffer.h"
 #include "media/base/video_codecs.h"
+#include "media/base/video_color_space.h"
 #include "media/base/video_types.h"
 #include "media/gpu/media_gpu_export.h"
 #include "ui/gfx/geometry/rect.h"
@@ -59,8 +60,6 @@ class MEDIA_GPU_EXPORT AcceleratedVideoDecoder {
                     // properly. E.g. allocate buffers with the new resolution.
     kRanOutOfStreamData,  // Need more stream data to proceed.
     kRanOutOfSurfaces,    // Waiting for the client to free up output surfaces.
-    kNeedContextUpdate,   // Waiting for the client to update decoding context
-                          // with data acquired from the accelerator.
     kTryAgain,  // The accelerator needs additional data (independently
     // provided) in order to proceed. This may be a new key in order to decrypt
     // encrypted data, or existing hardware resources freed so that they can be

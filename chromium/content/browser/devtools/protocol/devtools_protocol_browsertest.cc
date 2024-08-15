@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include <cstddef>
 #include <memory>
 #include <utility>
 
@@ -69,6 +70,7 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
+#include "content/test/content_browser_test_utils_internal.h"
 #include "net/base/features.h"
 #include "net/dns/dns_test_util.h"
 #include "net/dns/mock_host_resolver.h"
@@ -693,7 +695,7 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
                                 int height,
                                 float device_scale_factor,
                                 bool mobile,
-                                absl::optional<bool> fitWindow) {
+                                std::optional<bool> fitWindow) {
     auto params = base::Value::Dict();
     params.Set("width", width);
     params.Set("height", height);
@@ -737,7 +739,7 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
     // change during screenshotting. This verifies that the page doesn't observe
     // a change in frame size as a side effect of screenshotting.
     SetDeviceMetricsOverride(frame_size.width(), frame_size.height(),
-                             device_scale_factor, false, absl::nullopt);
+                             device_scale_factor, false, std::nullopt);
 
     // Resize frame to scaled blue box size.
     gfx::RectF clip;
@@ -962,7 +964,7 @@ IN_PROC_BROWSER_TEST_F(NoGPUCaptureScreenshotTest, MAYBE_LargeScreenshot) {
   SetDeviceMetricsOverride(/*width=*/1280, /*height=*/8440,
                            /*device_scale_factor=*/1,
                            /*mobile=*/false,
-                           /*fitWindow=*/absl::nullopt);
+                           /*fitWindow=*/std::nullopt);
   auto bitmap = CaptureScreenshot(ScreenshotEncoding::PNG, true,
                                   gfx::RectF(0, 0, 1280, 8440), 1);
   SendCommandSync("Emulation.clearDeviceMetricsOverride");
@@ -3235,6 +3237,31 @@ IN_PROC_BROWSER_TEST_F(DevToolsDownloadContentTest, DefaultDownloadHeadless) {
   ASSERT_EQ(download::DownloadItem::CANCELLED, download->GetState());
 }
 
+// Check that defaulting downloads cancels when there's no proxy
+// download delegate.
+IN_PROC_BROWSER_TEST_F(DevToolsDownloadContentTest,
+                       SetDownloadBehaviorAccessChecks) {
+  SetMayWriteLocalFiles(false);
+  Attach();
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  base::Value::Dict params;
+  params.Set("behavior", "allow");
+  params.Set("downloadPath",
+             temp_dir.GetPath().AppendASCII("download").AsUTF8Unsafe());
+
+  SendCommandSync("Page.setDownloadBehavior", params.Clone());
+  ASSERT_TRUE(error());
+  EXPECT_EQ(*error()->FindString("message"), "Not allowed");
+  Detach();
+  SetMayWriteLocalFiles(true);
+  Attach();
+  SendCommandSync("Page.setDownloadBehavior", std::move(params));
+  EXPECT_FALSE(error());
+}
+
 // Flaky on ChromeOS https://crbug.com/860312
 // Also flaky on Wndows and other platforms: http://crbug.com/1070302
 // Check that downloading multiple (in this case, 2) files does not result in
@@ -3599,11 +3626,11 @@ IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetails) {
   ASSERT_TRUE(group);
   EXPECT_EQ("X25519", *group);
 
-  absl::optional<int> sigalg = response.FindIntByDottedPath(
+  std::optional<int> sigalg = response.FindIntByDottedPath(
       "response.securityDetails.serverSignatureAlgorithm");
   EXPECT_EQ(SSL_SIGN_RSA_PSS_RSAE_SHA384, sigalg);
 
-  absl::optional<bool> ech = response.FindBoolByDottedPath(
+  std::optional<bool> ech = response.FindBoolByDottedPath(
       "response.securityDetails.encryptedClientHello");
   EXPECT_EQ(false, ech);
 
@@ -3624,12 +3651,12 @@ IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetails) {
   ASSERT_EQ(1u, sans->GetList().size());
   EXPECT_EQ(base::Value("127.0.0.1"), sans->GetList()[0]);
 
-  absl::optional<double> valid_from =
+  std::optional<double> valid_from =
       response.FindDoubleByDottedPath("response.securityDetails.validFrom");
   EXPECT_EQ(server.GetCertificate()->valid_start().InSecondsFSinceUnixEpoch(),
             valid_from);
 
-  absl::optional<double> valid_to =
+  std::optional<double> valid_to =
       response.FindDoubleByDottedPath("response.securityDetails.validTo");
   EXPECT_EQ(server.GetCertificate()->valid_expiry().InSecondsFSinceUnixEpoch(),
             valid_to);
@@ -3684,11 +3711,11 @@ IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolTest, SecurityDetailsTLS13) {
   ASSERT_TRUE(group);
   EXPECT_EQ("X25519", *group);
 
-  absl::optional<int> sigalg = response.FindIntByDottedPath(
+  std::optional<int> sigalg = response.FindIntByDottedPath(
       "response.securityDetails.serverSignatureAlgorithm");
   EXPECT_EQ(SSL_SIGN_RSA_PSS_RSAE_SHA384, sigalg);
 
-  absl::optional<bool> ech = response.FindBoolByDottedPath(
+  std::optional<bool> ech = response.FindBoolByDottedPath(
       "response.securityDetails.encryptedClientHello");
   EXPECT_EQ(false, ech);
 }
@@ -3781,8 +3808,7 @@ class NetworkResponseProtocolECHTest : public NetworkResponseProtocolTest {
       : ech_server_{net::EmbeddedTestServer::TYPE_HTTPS} {
     scoped_feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/
-        {{net::features::kEncryptedClientHello, {}},
-         {net::features::kUseDnsHttpsSvcb,
+        {{net::features::kUseDnsHttpsSvcb,
           {{"UseDnsHttpsSvcbEnforceSecureResponse", "true"}}}},
         /*disabled_features=*/{});
   }
@@ -3816,7 +3842,7 @@ class NetworkResponseProtocolECHTest : public NetworkResponseProtocolTest {
     host_resolver()->AddRule(kDohServerHostname, "127.0.0.1");
 
     // Configure the network service to use the test DoH server.
-    absl::optional<net::DnsOverHttpsConfig> doh_config =
+    std::optional<net::DnsOverHttpsConfig> doh_config =
         net::DnsOverHttpsConfig::FromString(doh_server_.GetTemplate());
     ASSERT_TRUE(doh_config.has_value());
     SetTestDohConfig(net::SecureDnsMode::kSecure,
@@ -3843,7 +3869,7 @@ IN_PROC_BROWSER_TEST_F(NetworkResponseProtocolECHTest, SecurityDetailsECH) {
   SendCommandAsync("Network.enable");
 
   base::Value::Dict response = FetchAndWaitForResponse(GetURL("/empty.html"));
-  absl::optional<bool> ech = response.FindBoolByDottedPath(
+  std::optional<bool> ech = response.FindBoolByDottedPath(
       "response.securityDetails.encryptedClientHello");
   EXPECT_EQ(true, ech);
 }
@@ -3881,6 +3907,48 @@ IN_PROC_BROWSER_TEST_F(
 
   EXPECT_THAT(*result.FindString("disallowedMojoInterface"),
               Eq("device.mojom.GamepadMonitor"));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    PrerenderDevToolsProtocolTest,
+    PrerenderStatusUpdatedReportsFailureWithPrerenderMismatchedHeaders) {
+  const std::string user_agent_override = "foo";
+  ASSERT_TRUE(embedded_test_server()->Start());
+  // Navigate to an initial page.
+  const GURL initial_url = GetUrl("/empty.html");
+  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
+
+  // Enable user agent override for future navigations.
+  UserAgentInjector injector(shell()->web_contents(), user_agent_override);
+
+  const GURL prerendering_url = GetUrl("/empty.html?prerender");
+
+  // Start prerendering.
+  const int host_id = AddPrerender(prerendering_url);
+
+  Attach();
+  SendCommandSync("Preload.enable");
+
+  RenderFrameHostImpl* prerender_rfh =
+      static_cast<RenderFrameHostImpl*>(GetPrerenderedMainFrameHost(host_id));
+  EXPECT_EQ(user_agent_override, EvalJs(prerender_rfh, "navigator.userAgent"));
+
+  // Stop overriding user agent from now on.
+  injector.set_is_overriding_user_agent(false);
+
+  // Activate the prerendered page.
+  test::PrerenderHostObserver host_observer(*web_contents(), host_id);
+  NavigatePrimaryPage(prerendering_url);
+  host_observer.WaitForDestroyed();
+
+  base::Value::Dict result;
+  while (true) {
+    result = WaitForNotification("Preload.prerenderStatusUpdated", true);
+    if (*result.FindString("status") == "Failure") {
+      break;
+    }
+  }
+  EXPECT_TRUE(result.Find("mismatchedHeaders"));
 }
 
 IN_PROC_BROWSER_TEST_F(PrerenderDevToolsProtocolTest,

@@ -88,7 +88,8 @@ bool DidPasswordCheckupFail(PasswordCheckState currentState) {
 #pragma mark - PasswordCheckupViewControllerDelegate
 
 - (void)startPasswordCheck {
-  _passwordCheckManager->StartPasswordCheck();
+  _passwordCheckManager->StartPasswordCheck(
+      password_manager::LeakDetectionInitiator::kBulkSyncedPasswordsCheck);
 }
 
 #pragma mark - PasswordCheckObserver
@@ -173,7 +174,7 @@ bool DidPasswordCheckupFail(PasswordCheckState currentState) {
 
 // Returns the string containing the timestamp of the last password check.
 - (NSString*)formattedElapsedTimeSinceLastCheck {
-  absl::optional<base::Time> lastCompletedCheck =
+  std::optional<base::Time> lastCompletedCheck =
       _passwordCheckManager->GetLastPasswordCheckTime();
   return password_manager::FormatElapsedTimeSinceLastCheck(
       lastCompletedCheck, /*use_title_case=*/true);

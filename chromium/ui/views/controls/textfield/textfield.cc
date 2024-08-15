@@ -19,6 +19,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -55,6 +56,7 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/touch_selection/touch_selection_metrics.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/accessibility/views_utilities_aura.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -72,6 +74,7 @@
 #include "ui/views/style/platform_style.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
+#include "ui/views/touchui/touch_selection_controller.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
@@ -105,6 +108,10 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/input_method_manager.h"
+#endif
+
+#if defined(USE_AURA)
+#include "ui/views/touchui/touch_selection_controller_impl.h"
 #endif
 
 namespace views {
@@ -186,17 +193,6 @@ bool IsControlKeyModifier(int flags) {
 bool IsValidCharToInsert(const char16_t& ch) {
   // Filter out all control characters, including tab and new line characters.
   return (ch >= 0x20 && ch < 0x7F) || ch > 0x9F;
-}
-
-bool CanUseTransparentBackgroundForDragImage() {
-#if BUILDFLAG(IS_OZONE)
-  const auto* const egl_utility =
-      ui::OzonePlatform::GetInstance()->GetPlatformGLEGLUtility();
-  return egl_utility ? egl_utility->IsTransparentBackgroundSupported() : false;
-#else
-  // Other platforms allow this.
-  return true;
-#endif
 }
 
 #if BUILDFLAG(IS_MAC)
@@ -331,6 +327,7 @@ void Textfield::SetTextInputType(ui::TextInputType type) {
     GetInputMethod()->OnTextInputTypeChanged(this);
   OnCaretBoundsChanged();
   OnPropertyChanged(&text_input_type_, kPropertyEffectsPaint);
+  UpdateAfterChange(TextChangeType::kInternal, false);
 }
 
 void Textfield::SetTextInputFlags(int flags) {
@@ -491,7 +488,7 @@ void Textfield::SetMinimumWidthInChars(int minimum_width) {
   minimum_width_in_chars_ = minimum_width;
 }
 
-std::u16string Textfield::GetPlaceholderText() const {
+const std::u16string& Textfield::GetPlaceholderText() const {
   return placeholder_text_;
 }
 
@@ -1057,7 +1054,36 @@ void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
                              base::checked_cast<int32_t>(range.start()));
   node_data->AddIntAttribute(ax::mojom::IntAttribute::kTextSelEnd,
                              base::checked_cast<int32_t>(range.end()));
+
+#if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+  std::u16string ax_value =
+      node_data->GetString16Attribute(ax::mojom::StringAttribute::kValue);
+  // If the accessible value changed since the last time we computed the text
+  // offsets, we need to recompute them.
+  if (::features::IsUiaProviderEnabled() &&
+      ax_value_used_to_compute_offsets_ != ax_value) {
+    GetViewAccessibility().ClearTextOffsets();
+    RefreshAccessibleTextOffsets();
+    ax_value_used_to_compute_offsets_ = ax_value;
+  }
+#endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 }
+
+#if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+void Textfield::RefreshAccessibleTextOffsets() {
+  // TODO(https://crbug.com/1485632): Add support for multiline textfields.
+  if (GetRenderText()->multiline()) {
+    return;
+  }
+
+  GetViewAccessibility().OverrideCharacterOffsets(
+      ComputeTextOffsets(GetRenderText()));
+
+  WordBoundaries boundaries = ComputeWordBoundaries(GetText());
+  GetViewAccessibility().OverrideWordStarts(boundaries.starts);
+  GetViewAccessibility().OverrideWordEnds(boundaries.ends);
+}
+#endif  // BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
 
 bool Textfield::HandleAccessibleAction(const ui::AXActionData& action_data) {
   if (action_data.action == ax::mojom::Action::kSetSelection) {
@@ -1208,7 +1234,7 @@ void Textfield::WriteDragDataForView(View* sender,
 
   SkBitmap bitmap;
   float raster_scale = ScaleFactorForDragFromWidget(GetWidget());
-  SkColor color = CanUseTransparentBackgroundForDragImage()
+  SkColor color = views::Widget::IsWindowCompositingSupported()
                       ? SK_ColorTRANSPARENT
                       : GetBackgroundColor();
   label.Paint(PaintInfo::CreateRootPaintInfo(
@@ -1248,16 +1274,18 @@ bool Textfield::CanStartDragForView(View* sender,
 
 bool Textfield::GetWordLookupDataAtPoint(const gfx::Point& point,
                                          gfx::DecoratedText* decorated_word,
-                                         gfx::Point* baseline_point) {
-  return GetRenderText()->GetWordLookupDataAtPoint(point, decorated_word,
-                                                   baseline_point);
+                                         gfx::Rect* rect) {
+  return GetRenderText()->GetWordLookupDataAtPoint(point, decorated_word, rect);
 }
 
 bool Textfield::GetWordLookupDataFromSelection(
     gfx::DecoratedText* decorated_text,
-    gfx::Point* baseline_point) {
+    gfx::Rect* rect) {
+  if (GetRenderText()->obscured()) {
+    return false;
+  }
   return GetRenderText()->GetLookupDataForRange(GetRenderText()->selection(),
-                                                decorated_text, baseline_point);
+                                                decorated_text, rect);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1959,42 +1987,25 @@ bool Textfield::SetCompositionFromExistingText(
 
 #if BUILDFLAG(IS_CHROMEOS)
 gfx::Range Textfield::GetAutocorrectRange() const {
-  return model_->autocorrect_range();
+  // TODO(b/316461955): Implement autocorrect UI for native fields.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return gfx::Range();
 }
 
 gfx::Rect Textfield::GetAutocorrectCharacterBounds() const {
-  gfx::Range autocorrect_range = model_->autocorrect_range();
-  if (autocorrect_range.is_empty())
-    return gfx::Rect();
-
-  gfx::RenderText* render_text = GetRenderText();
-  const gfx::SelectionModel caret(autocorrect_range, gfx::CURSOR_BACKWARD);
-  gfx::Rect rect;
-  rect = render_text->GetCursorBounds(caret, false);
-
-  ConvertRectToScreen(this, &rect);
-  return rect;
+  // TODO(b/316461955): Implement autocorrect UI for native fields.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return gfx::Rect();
 }
 
 bool Textfield::SetAutocorrectRange(const gfx::Range& range) {
   if (!range.is_empty()) {
     base::UmaHistogramEnumeration("InputMethod.Assistive.Autocorrect.Count",
                                   TextInputClient::SubClass::kTextField);
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    auto* input_method_manager = ash::input_method::InputMethodManager::Get();
-    if (input_method_manager &&
-        ash::extension_ime_util::IsExperimentalMultilingual(
-            input_method_manager->GetActiveIMEState()
-                ->GetCurrentInputMethod()
-                .id())) {
-      base::UmaHistogramEnumeration(
-          "InputMethod.MultilingualExperiment.Autocorrect.Count",
-          TextInputClient::SubClass::kTextField);
-    }
-#endif
   }
-  return model_->SetAutocorrectRange(range);
+  // TODO(b/316461955): Implement autocorrect UI for native fields.
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
 }
 
 bool Textfield::AddGrammarFragments(
@@ -2659,6 +2670,8 @@ void Textfield::UpdateCursorVisibility() {
 gfx::Rect Textfield::CalculateCursorViewBounds() const {
   gfx::Rect location(GetRenderText()->GetUpdatedCursorBounds());
   location.set_x(GetMirroredXForRect(location));
+  // Shrink the cursor bounds to fit within the view.
+  location.Intersect(GetLocalBounds());
   return location;
 }
 
@@ -2828,8 +2841,10 @@ void Textfield::CreateTouchSelectionControllerAndNotifyIt() {
     return;
 
   if (!touch_selection_controller_) {
-    touch_selection_controller_.reset(
-        ui::TouchEditingControllerDeprecated::Create(this));
+#if defined(USE_AURA)
+    touch_selection_controller_ =
+        std::make_unique<TouchSelectionControllerImpl>(this);
+#endif
   }
   if (touch_selection_controller_)
     touch_selection_controller_->SelectionChanged();
@@ -2842,11 +2857,9 @@ void Textfield::OnEditFailed() {
 bool Textfield::ShouldShowCursor() const {
   // Show the cursor when the primary selected range is empty; secondary
   // selections do not affect cursor visibility.
-  // TODO(crbug.com/1434319): The cursor will be entirely hidden if partially
-  // occluded. It would be better if only the occluded part is hidden.
   return HasFocus() && !HasSelection(true) && GetEnabled() && !GetReadOnly() &&
          !drop_cursor_visible_ && GetRenderText()->cursor_enabled() &&
-         GetLocalBounds().Contains(cursor_view_->bounds());
+         !cursor_view_->bounds().IsEmpty();
 }
 
 int Textfield::CharsToDips(int width_in_chars) const {
@@ -3118,7 +3131,7 @@ void Textfield::StopSelectionDragging() {
   selection_drag_type_ = absl::nullopt;
 }
 
-BEGIN_METADATA(Textfield, View)
+BEGIN_METADATA(Textfield)
 ADD_PROPERTY_METADATA(bool, ReadOnly)
 ADD_PROPERTY_METADATA(std::u16string, Text)
 ADD_PROPERTY_METADATA(ui::TextInputType, TextInputType)

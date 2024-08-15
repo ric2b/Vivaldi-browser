@@ -6,13 +6,12 @@
 
 #import "base/apple/foundation_util.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/ntp/new_tab_page_util.h"
-#import "ios/chrome/browser/overlays/public/overlay_presentation_context.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/overlays/model/public/overlay_presentation_context.h"
 #import "ios/chrome/browser/prerender/model/prerender_service.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
-#import "ios/chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -41,7 +40,18 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
+#import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
+#import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
+#import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller.h"
+#import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view_controller.h"
+#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -51,6 +61,7 @@ using vivaldi::IsVivaldiRunning;
 
                                   // Vivaldi
                                   LocationBarSteadyViewConsumer,
+                                  VivaldiATBConsumer,
                                   // End Vivaldi
 
                                   ToolbarMediatorDelegate> {
@@ -75,6 +86,22 @@ using vivaldi::IsVivaldiRunning;
 /// Whether the omnibox is currently focused.
 @property(nonatomic, assign) BOOL locationBarFocused;
 
+// Vivaldi
+@property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
+
+// Important!!!: (prio@vivaldi.com) - Note to self or someone visiting this part
+// Chrome moves only omnibox to the bottom, but for us we have buttons
+// (shield, menu, panels) alongside omnibox to move to bottom when bottom
+// omnibox is enabled, which are part of primary toolbar.
+// Therefore, we create a separate view with this
+// coordinator to use that as top primary toolbar. And, use chrome's whole
+// primary toolbar as bottom omnibox with buttons, and not just the omnibox part.
+@property(nonatomic, strong)
+    PrimaryToolbarCoordinator* vivaldiTopToolbarCoordinator;
+// Manager to keep track of adblocker shield state for the web state.
+@property(nonatomic, strong) VivaldiATBManager* adblockManager;
+// End Vivaldi
+
 @end
 
 @implementation ToolbarCoordinator {
@@ -96,6 +123,12 @@ using vivaldi::IsVivaldiRunning;
   BOOL _showShareButtonIPHOnNextLocationBarUnfocus;
   /// Command handler for showing the IPH.
   id<HelpCommands> _helpHandler;
+
+  // Vivaldi
+  // Pref backed boolean to track tab bar style state.
+  BOOL _tabBarEnabled;
+  // End Vivaldi
+
 }
 
 - (instancetype)initWithBrowser:(Browser*)browser {
@@ -108,6 +141,11 @@ using vivaldi::IsVivaldiRunning;
         [[PrimaryToolbarCoordinator alloc] initWithBrowser:browser];
     _secondaryToolbarCoordinator =
         [[SecondaryToolbarCoordinator alloc] initWithBrowser:browser];
+
+    // Vivaldi
+    _vivaldiTopToolbarCoordinator =
+        [[PrimaryToolbarCoordinator alloc] initWithBrowser:browser];
+    // End Vivaldi
 
     [self.browser->GetCommandDispatcher()
         startDispatchingToTarget:self
@@ -169,9 +207,28 @@ using vivaldi::IsVivaldiRunning;
       self.toolbarHeightDelegate;
   [self.secondaryToolbarCoordinator start];
 
+  // Vivaldi
+  self.vivaldiTopToolbarCoordinator.viewControllerDelegate = self;
+  [self.vivaldiTopToolbarCoordinator start];
+
+  LayoutGuideCenter* layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
+  _layoutGuideCenter = layoutGuideCenter;
+  [_layoutGuideCenter referenceView:
+      self.secondaryToolbarCoordinator.viewController.view
+                          underName:vivaldiBottomOmniboxGuide];
+  [self initialiseAdblockManager];
+  // End Vivaldi
+
   self.orchestrator = [[OmniboxFocusOrchestrator alloc] init];
+
+  // Important:(prio@vivaldi.com) - Animatee is set below with config. Setting
+  // this incorrectly breaks primary toolbar position.
+  if (!IsVivaldiRunning()) {
   self.orchestrator.toolbarAnimatee =
       self.primaryToolbarCoordinator.toolbarAnimatee;
+  } // End Vivaldi
+
   self.orchestrator.locationBarAnimatee =
       [self.locationBarCoordinator locationBarAnimatee];
   self.orchestrator.editViewAnimatee =
@@ -222,7 +279,14 @@ using vivaldi::IsVivaldiRunning;
   self.toolbarMediator = nil;
 
   // Vivaldi
+  [self.vivaldiTopToolbarCoordinator stop];
+  self.vivaldiTopToolbarCoordinator.viewControllerDelegate = nil;
+  self.vivaldiTopToolbarCoordinator = nil;
   self.locationBarCoordinator.steadyViewConsumer = nil;
+  if (self.adblockManager) {
+    self.adblockManager.consumer = nil;
+    [self.adblockManager disconnect];
+  }
   // End Vivaldi
 
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
@@ -233,6 +297,11 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - Public
 
 - (UIViewController*)primaryToolbarViewController {
+
+  if (IsVivaldiRunning()) {
+    return self.vivaldiTopToolbarCoordinator.viewController;
+  } // End Vivaldi
+
   return self.primaryToolbarCoordinator.viewController;
 }
 
@@ -333,9 +402,17 @@ using vivaldi::IsVivaldiRunning;
   BOOL animateTransition = _enableAnimationsForOmniboxFocus &&
                            _steadyStateOmniboxPosition == ToolbarType::kPrimary;
 
+  if (IsVivaldiRunning())
+    animateTransition = _enableAnimationsForOmniboxFocus; // End Vivaldi
+
   __weak __typeof(self) weakSelf = self;
   BOOL toolbarExpanded =
       focused && !IsRegularXRegularSizeClass(self.traitEnvironment);
+
+  // Vivaldi
+  [self updateToolbarBackgroundColorWithOmniboxFocus:focused];
+  // End Vivaldi
+
   [self.orchestrator
       transitionToStateOmniboxFocused:focused
                       toolbarExpanded:toolbarExpanded
@@ -364,6 +441,11 @@ using vivaldi::IsVivaldiRunning;
     CHECK(IsBottomOmniboxSteadyStateEnabled());
     // TODO(crbug.com/1473629): Find out why primary toolbar height cannot be
     // zero. This is a temporary fix for the pdf bug.
+
+    if (IsVivaldiRunning()) {
+      return 0.0;
+    } // End Vivaldi
+
     return 1.0;
   }
 
@@ -376,6 +458,11 @@ using vivaldi::IsVivaldiRunning;
     CHECK(IsBottomOmniboxSteadyStateEnabled());
     // TODO(crbug.com/1473629): Find out why primary toolbar height cannot be
     // zero. This is a temporary fix for the pdf bug.
+
+    if (IsVivaldiRunning()) {
+      return 0.0;
+    } // End Vivaldi
+
     return 1.0;
   }
 
@@ -399,6 +486,23 @@ using vivaldi::IsVivaldiRunning;
 
 - (CGFloat)expandedSecondaryToolbarHeight {
   if (!IsSplitToolbarMode(self.traitEnvironment)) {
+
+    // Important(prio@vivaldi.com) - This enables the bottom omnibox area for
+    // iPads and iPhone landscape.
+    if (_omniboxPosition == ToolbarType::kSecondary) {
+      CGFloat height =
+          self.secondaryToolbarViewController.view.intrinsicContentSize.height;
+      if (_tabBarEnabled || [VivaldiGlobalHelpers isDeviceTablet]) {
+        CHECK(IsBottomOmniboxSteadyStateEnabled());
+        height += ToolbarExpandedHeight(
+            self.traitEnvironment.traitCollection.preferredContentSizeCategory);
+      } else {
+        height += vBottomAdaptiveLocationBarTopMargin;
+      }
+      return height;
+    }
+    // End Vivaldi
+
     return 0.0;
   }
   CGFloat height =
@@ -512,6 +616,18 @@ using vivaldi::IsVivaldiRunning;
     // with edge swipes from the right side.
     CGRect toolbarFrame =
         CGRectInset([coordinator viewController].view.bounds, -1, -1);
+
+    // Important(prio@vivaldi.com) - When tab bar is enabled we have to deduct
+    // tab bar height and bottom safe area height from the toolbar view.
+    // Otherwise, swiping on tab bar conflicts with the omnibox swipe gesture.
+    if (_omniboxPosition == ToolbarType::kSecondary &&
+        _tabBarEnabled && coordinator == self.secondaryToolbarCoordinator) {
+      toolbarFrame.size.height =
+          toolbarFrame.size.height - kTabStripHeight -
+            VivaldiGlobalHelpers.safeAreaInsets.bottom;
+    }
+    // End Vivaldi
+
     CGPoint pointInToolbarCoordinates =
         [[coordinator viewController].view convertPoint:point fromView:nil];
     if (CGRectContainsPoint(toolbarFrame, pointInToolbarCoordinates)) {
@@ -548,6 +664,10 @@ using vivaldi::IsVivaldiRunning;
     (ToolbarType)toolbarType {
   switch (toolbarType) {
     case ToolbarType::kPrimary:
+
+      if (IsVivaldiRunning())
+        return self.vivaldiTopToolbarCoordinator; // End Vivaldi
+
       return self.primaryToolbarCoordinator;
     case ToolbarType::kSecondary:
       return self.secondaryToolbarCoordinator;
@@ -622,6 +742,14 @@ using vivaldi::IsVivaldiRunning;
 /// Returns primary and secondary coordinator in a array. Helper to call method
 /// on both coordinators.
 - (NSArray<id<ToolbarCoordinatee>>*)coordinators {
+
+  if (IsVivaldiRunning()) {
+    return @[
+      self.vivaldiTopToolbarCoordinator,
+      self.secondaryToolbarCoordinator
+    ];
+  } // End Vivaldi
+
   return @[ self.primaryToolbarCoordinator, self.secondaryToolbarCoordinator ];
 }
 
@@ -688,11 +816,213 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - VIVALDI
+- (PrimaryToolbarView*)primaryToolbarView {
+  if (_omniboxPosition == ToolbarType::kPrimary) {
+    PrimaryToolbarView* primaryView =
+      (PrimaryToolbarView*)[self.primaryToolbarViewController view];
+    return primaryView;
+  } else {
+    PrimaryToolbarView* primaryView =
+      (PrimaryToolbarView*)[self.primaryToolbarCoordinator.viewController view];
+    return primaryView;
+  }
+}
+
+// Returns the toolbar button stack view for Secondary Toolbar. This is hidden
+// when bottom omnibox and tab bar both enabled.
+- (UIStackView*)secondaryToolbarButtonStackView {
+  SecondaryToolbarViewController* viewController =
+      (SecondaryToolbarViewController*)
+          self.secondaryToolbarCoordinator.viewController;
+  return viewController.toolbarButtonStackView;
+}
+
+// Sets the correct toolbar after settings is changed.
+- (void)vivaldiTransitionOmniboxToToolbarType:(ToolbarType)toolbarType {
+  [self updateProgressBarVisibilityWithToolbarType:toolbarType];
+  switch (toolbarType) {
+    case ToolbarType::kPrimary:
+      [self.vivaldiTopToolbarCoordinator
+          setLocationBarViewController:
+              self.locationBarCoordinator.locationBarViewController];
+      [self.secondaryToolbarCoordinator setLocationBarViewController:nil];
+      [self.primaryToolbarCoordinator
+          setLocationBarViewController:nil];
+
+      if (self.vivaldiTopToolbarCoordinator.viewController) {
+        self.orchestrator.toolbarAnimatee =
+            self.vivaldiTopToolbarCoordinator.toolbarAnimatee;
+        [self updateToolsMenuButtonGuideForController:
+            self.vivaldiTopToolbarCoordinator.viewController];
+      }
+      break;
+    case ToolbarType::kSecondary:
+      [self.primaryToolbarCoordinator
+          setLocationBarViewController:
+              self.locationBarCoordinator.locationBarViewController];
+      [self.secondaryToolbarCoordinator
+          setLocationBarViewController
+              :self.primaryToolbarCoordinator.viewController];
+      [self.vivaldiTopToolbarCoordinator setLocationBarViewController:nil];
+
+      if (self.primaryToolbarCoordinator.viewController) {
+        self.orchestrator.toolbarAnimatee =
+            self.primaryToolbarCoordinator.toolbarAnimatee;
+        [self updateToolsMenuButtonGuideForController:
+            self.primaryToolbarCoordinator.viewController];
+      }
+      break;
+  }
+}
+
+// Maintain the visibility of progress bar for the toolbar. Each toolbar has
+// a progress bar. Make sure only one progress bar is visible, and based on the
+// ToolbarType.
+- (void)updateProgressBarVisibilityWithToolbarType:(ToolbarType)toolbarType {
+  BOOL bottomOmniboxEnabled = toolbarType == ToolbarType::kSecondary;
+  [self.primaryToolbarCoordinator
+      setLocationBarShouldShowProgressBar:!bottomOmniboxEnabled];
+  [self.vivaldiTopToolbarCoordinator
+      setLocationBarShouldShowProgressBar:!bottomOmniboxEnabled];
+  [self.secondaryToolbarCoordinator
+      setLocationBarShouldShowProgressBar:bottomOmniboxEnabled];
+}
+
+- (void)updateToolsMenuButtonGuideForController:
+    (AdaptiveToolbarViewController*)controller {
+  controller.toolsMenuButton.guideName = vToolsMenuGuide;
+  [controller refreshToolbarButtonsGuide];
+}
+
+#pragma mark - ToolbarMediatorDelegate (Vivaldi)
+
+- (void)transitionOmniboxToToolbarType:(ToolbarType)toolbarType
+                         tabBarEnabled:(BOOL)tabBarEnabled {
+  _omniboxPosition = toolbarType;
+  _tabBarEnabled = tabBarEnabled;
+  [self vivaldiTransitionOmniboxToToolbarType:toolbarType];
+  [self updateToolbarWithBottomOmniboxEnabled:
+      toolbarType == ToolbarType::kSecondary
+                                tabBarEnabled:tabBarEnabled];
+  self.secondaryToolbarButtonStackView.hidden =
+      (tabBarEnabled && toolbarType == ToolbarType::kSecondary) ||
+          !IsSplitToolbarMode(self.traitEnvironment);
+  [self updateToolbarsLayout];
+
+  AdaptiveToolbarCoordinator* adaptiveToolbarCoordinator =
+      [self coordinatorWithToolbarType:toolbarType];
+  [adaptiveToolbarCoordinator updateConsumerForWebState:[self activeWebState]];
+}
+
+- (void)transitionSteadyStateOmniboxToToolbarType:(ToolbarType)toolbarType
+                                    tabBarEnabled:(BOOL)tabBarEnabled {
+  _steadyStateOmniboxPosition = toolbarType;
+}
+
+- (void)updateToolbarWithBottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
+                                tabBarEnabled:(BOOL)tabBarEnabled {
+  PrimaryToolbarView* primaryView = [self primaryToolbarView];
+  if (primaryView) {
+    primaryView.bottomOmniboxEnabled = bottomOmniboxEnabled;
+    primaryView.tabBarEnabled = tabBarEnabled;
+    [primaryView redrawToolbarButtons];
+    primaryView.atbSettingForActiveWebState =
+        [self atbSettingsForActiveWebState];
+    primaryView.toolsMenuButton.guideName = kToolsMenuGuide;
+  }
+}
+
+/// Triggers updating the toolbar accent color with omnibox focus state
+/// when tab bar is disabled. When omnibox is focused custom or dynamic accent
+/// color is replaced by default background color to match the color of omnibox
+/// search results  view color.
+- (void)updateToolbarBackgroundColorWithOmniboxFocus:(BOOL)focused {
+  if (_tabBarEnabled)
+    return;
+
+  AdaptiveToolbarCoordinator* adaptiveToolbarCoordinator =
+      [self coordinatorWithToolbarType:_omniboxPosition];
+  [adaptiveToolbarCoordinator.viewController setIsOmniboxFocused:focused];
+
+  AdaptiveToolbarViewController* primaryVC;
+  if (_omniboxPosition == ToolbarType::kSecondary) {
+    primaryVC = (PrimaryToolbarViewController*)
+        [self.primaryToolbarCoordinator viewController];
+  }
+  if (primaryVC) {
+    [primaryVC setIsOmniboxFocused:focused];
+  }
+}
+
+#pragma mark - Adblocker manager
+
+- (void)initialiseAdblockManager {
+  if (!self.browser)
+    return;
+  self.adblockManager =
+      [[VivaldiATBManager alloc] initWithBrowser:self.browser];
+  self.adblockManager.consumer = self;
+  [self updateVivaldiShieldState];
+}
+
+- (void)updateVivaldiShieldState {
+  PrimaryToolbarView* primaryView = [self primaryToolbarView];
+  if (primaryView) {
+    primaryView.atbSettingForActiveWebState =
+        [self atbSettingsForActiveWebState];
+  }
+}
+
+- (ATBSettingType)atbSettingsForActiveWebState {
+  web::WebState* webState = [self activeWebState];
+  if (!webState)
+    return [self globalATBSetting];
+
+  NewTabPageTabHelper* NTPHelper = NewTabPageTabHelper::FromWebState(webState);
+  BOOL isNTP = NTPHelper && NTPHelper->IsActive();
+  // Return Global Adblocker Settings for New Tab Page.
+  if (isNTP)
+    return [self globalATBSetting];
+
+  // Find the settings for last committed URL of the active WebState.
+  NSString* lastCommittedURLString =
+      base::SysUTF8ToNSString(webState->GetLastCommittedURL().spec());
+  NSURL* lastCommittedURL = [NSURL URLWithString:lastCommittedURLString];
+  NSString* host = [lastCommittedURL host];
+  if (!host)
+    return [self globalATBSetting];
+  return [self.adblockManager blockingSettingForDomain:host];
+}
+
+- (ATBSettingType)globalATBSetting {
+  return [self.adblockManager globalBlockingSetting];
+}
+
+- (web::WebState*)activeWebState {
+  return self.browser->GetWebStateList()->GetActiveWebState();
+}
+
+#pragma mark: - VivaldiATBConsumer
+- (void)didRefreshSettingOptions:(NSArray*)options {
+  if (options.count > 0)
+    [self updateVivaldiShieldState];
+}
+
+- (void)didRefreshExceptionsList:(NSArray*)exceptions {
+  if (exceptions.count > 0)
+    [self updateVivaldiShieldState];
+}
+
+- (void)ruleServiceStateDidLoad {
+  [self updateVivaldiShieldState];
+}
+
 #pragma mark - LocationBarSteadyViewConsumer
 
 - (void)updateLocationText:(NSString*)text clipTail:(BOOL)clipTail {
   [self.steadyViewConsumer updateLocationText:text
                                      clipTail:clipTail];
+  [self updateVivaldiShieldState];
 }
 
 - (void)updateLocationIcon:(UIImage*)icon
@@ -702,11 +1032,11 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)updateAfterNavigatingToNTP {
-  // no op.
+  [self.steadyViewConsumer updateAfterNavigatingToNTP];
 }
 
 - (void)updateLocationShareable:(BOOL)shareable {
-  // no op.
+  [self.steadyViewConsumer updateLocationShareable:shareable];
 }
 // End Vivaldi
 

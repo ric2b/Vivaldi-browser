@@ -15,6 +15,7 @@
 
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "media/base/video_codecs.h"
@@ -22,6 +23,7 @@
 #include "media/base/video_types.h"
 #include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/macros.h"
+#include "media/media_buildflags.h"
 #include "ui/gfx/geometry/size.h"
 
 // This has not been accepted upstream.
@@ -475,7 +477,12 @@ base::TimeDelta TimeValToTimeDelta(const struct timeval& timeval) {
 }
 
 struct timeval TimeDeltaToTimeVal(base::TimeDelta time_delta) {
-  return base::Time::FromTimeSpec(time_delta.ToTimeSpec()).ToTimeVal();
+  const int64_t time_delta_linear = time_delta.InMicroseconds();
+  constexpr int64_t kMicrosecondsPerSecond = 1000 * 1000;
+  return {.tv_sec = base::checked_cast<__time_t>(time_delta_linear /
+                                                 kMicrosecondsPerSecond),
+          .tv_usec = base::checked_cast<__suseconds_t>(time_delta_linear %
+                                                       kMicrosecondsPerSecond)};
 }
 
 }  // namespace media

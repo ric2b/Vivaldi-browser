@@ -23,7 +23,7 @@ namespace {
 class ControllerTestSupport {
  public:
   explicit ControllerTestSupport(content::WebContents* web_contents)
-      : card_art_image_(gfx::test::CreateImage().AsImageSkia()),
+      : card_art_image_(gfx::test::CreateImage(100, 50).AsImageSkia()),
         controller_(static_cast<VirtualCardEnrollBubbleControllerImpl*>(
             VirtualCardEnrollBubbleControllerImpl::GetOrCreate(web_contents))) {
     virtual_card_enrollment_fields_.credit_card = test::GetFullServerCard();
@@ -63,6 +63,20 @@ class VirtualCardEnrollBubbleControllerImplBottomSheetTest
  private:
   base::test::ScopedFeatureList features_;
 };
+
+TEST_F(VirtualCardEnrollBubbleControllerImplBottomSheetTest,
+       ShowBubbleSetsUiModel) {
+  ControllerTestSupport test_support(web_contents());
+
+  test_support.controller()->ShowBubble(
+      test_support.virtual_card_enrollment_fields(),
+      /*accept_virtual_card_callback=*/base::DoNothing(),
+      /*decline_virtual_card_callback=*/base::DoNothing());
+
+  auto expected_model = VirtualCardEnrollUiModel::Create(
+      test_support.virtual_card_enrollment_fields());
+  EXPECT_EQ(test_support.controller()->GetUiModel(), expected_model);
+}
 
 TEST_F(VirtualCardEnrollBubbleControllerImplBottomSheetTest, ShowBubble) {
   ControllerTestSupport test_support(web_contents());

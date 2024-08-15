@@ -21,8 +21,6 @@ import org.chromium.base.memory.MemoryPressureMonitor;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentViewStatics;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -45,24 +43,27 @@ public class AwBrowserContext implements BrowserContextHandle {
 
     /** Pointer to the Native-side AwBrowserContext. */
     private long mNativeAwBrowserContext;
-    @NonNull
-    private final String mName;
-    @NonNull
-    private final String mRelativePath;
-    @NonNull
-    private final AwCookieManager mCookieManager;
+
+    @NonNull private final String mName;
+    @NonNull private final String mRelativePath;
+    @NonNull private final AwCookieManager mCookieManager;
     private final boolean mIsDefault;
-    @NonNull
-    private final SharedPreferences mSharedPreferences;
+    @NonNull private final SharedPreferences mSharedPreferences;
 
     public AwBrowserContext(long nativeAwBrowserContext) {
-        this(nativeAwBrowserContext, AwBrowserContextJni.get().getDefaultContextName(),
+        this(
+                nativeAwBrowserContext,
+                AwBrowserContextJni.get().getDefaultContextName(),
                 AwBrowserContextJni.get().getDefaultContextRelativePath(),
-                AwCookieManager.getDefaultCookieManager(), true);
+                AwCookieManager.getDefaultCookieManager(),
+                true);
     }
 
-    public AwBrowserContext(long nativeAwBrowserContext, @NonNull String name,
-            @NonNull String relativePath, @NonNull AwCookieManager cookieManager,
+    public AwBrowserContext(
+            long nativeAwBrowserContext,
+            @NonNull String name,
+            @NonNull String relativePath,
+            @NonNull AwCookieManager cookieManager,
             boolean isDefault) {
         mNativeAwBrowserContext = nativeAwBrowserContext;
         mName = name;
@@ -83,17 +84,19 @@ public class AwBrowserContext implements BrowserContextHandle {
         // Register MemoryPressureMonitor callbacks and make sure it polls only if there is at
         // least one WebView around.
         MemoryPressureMonitor.INSTANCE.registerComponentCallbacks();
-        AwContentsLifecycleNotifier.getInstance().addObserver(
-                new AwContentsLifecycleNotifier.Observer() {
-                    @Override
-                    public void onFirstWebViewCreated() {
-                        MemoryPressureMonitor.INSTANCE.enablePolling();
-                    }
-                    @Override
-                    public void onLastWebViewDestroyed() {
-                        MemoryPressureMonitor.INSTANCE.disablePolling();
-                    }
-                });
+        AwContentsLifecycleNotifier.getInstance()
+                .addObserver(
+                        new AwContentsLifecycleNotifier.Observer() {
+                            @Override
+                            public void onFirstWebViewCreated() {
+                                MemoryPressureMonitor.INSTANCE.enablePolling();
+                            }
+
+                            @Override
+                            public void onLastWebViewDestroyed() {
+                                MemoryPressureMonitor.INSTANCE.disablePolling();
+                            }
+                        });
     }
 
     @VisibleForTesting
@@ -147,8 +150,10 @@ public class AwBrowserContext implements BrowserContextHandle {
 
     public AwQuotaManagerBridge getQuotaManagerBridge() {
         if (mQuotaManagerBridge == null) {
-            mQuotaManagerBridge = new AwQuotaManagerBridge(
-                    AwBrowserContextJni.get().getQuotaManagerBridge(mNativeAwBrowserContext));
+            mQuotaManagerBridge =
+                    new AwQuotaManagerBridge(
+                            AwBrowserContextJni.get()
+                                    .getQuotaManagerBridge(mNativeAwBrowserContext));
         }
         return mQuotaManagerBridge;
     }
@@ -159,32 +164,27 @@ public class AwBrowserContext implements BrowserContextHandle {
         // location if needed.
         final String oldGlobalPrefsName = "WebViewChromiumPrefs";
         SharedPreferences oldGlobalPrefs =
-                ContextUtils.getApplicationContext().getSharedPreferences(
-                        oldGlobalPrefsName, Context.MODE_PRIVATE);
+                ContextUtils.getApplicationContext()
+                        .getSharedPreferences(oldGlobalPrefsName, Context.MODE_PRIVATE);
         AwGeolocationPermissions.migrateGeolocationPreferences(oldGlobalPrefs, mSharedPreferences);
     }
 
-    /**
-     * Used by {@link AwServiceWorkerSettings#setRequestedWithHeaderOriginAllowList(Set)}
-     */
+    /** Used by {@link AwServiceWorkerSettings#setRequestedWithHeaderOriginAllowList(Set)} */
     Set<String> updateServiceWorkerXRequestedWithAllowListOriginMatcher(
             Set<String> allowedOriginRules) {
         String[] badRules =
-                AwBrowserContextJni.get().updateServiceWorkerXRequestedWithAllowListOriginMatcher(
-                        mNativeAwBrowserContext, allowedOriginRules.toArray(new String[0]));
+                AwBrowserContextJni.get()
+                        .updateServiceWorkerXRequestedWithAllowListOriginMatcher(
+                                mNativeAwBrowserContext, allowedOriginRules.toArray(new String[0]));
         return Set.of(badRules);
     }
 
-    /**
-     * @see android.webkit.WebView#pauseTimers()
-     */
+    /** @see android.webkit.WebView#pauseTimers() */
     public void pauseTimers() {
         ContentViewStatics.setWebKitSharedTimersSuspended(true);
     }
 
-    /**
-     * @see android.webkit.WebView#resumeTimers()
-     */
+    /** @see android.webkit.WebView#resumeTimers() */
     public void resumeTimers() {
         ContentViewStatics.setWebKitSharedTimersSuspended(false);
     }
@@ -199,66 +199,12 @@ public class AwBrowserContext implements BrowserContextHandle {
     }
 
     private static AwBrowserContext sInstance;
+
     public static AwBrowserContext getDefault() {
         if (sInstance == null) {
             sInstance = AwBrowserContextJni.get().getDefaultJava();
         }
         return sInstance;
-    }
-
-    /**
-     * Check whether a context with the given name exists (in memory or on disk).
-     * <p>
-     * Name must be non-null and valid Unicode.
-     */
-    public static boolean checkNamedContextExists(String name) {
-        return AwBrowserContextJni.get().checkNamedContextExists(name);
-    }
-
-    /**
-     * Get the context with the given name, optionally creating it if needed.
-     * <p>
-     * Returns null if the context does not exist and createIfNeeded is false.
-     * <p>
-     * Name must be non-null and valid Unicode.
-     */
-    public static AwBrowserContext getNamedContext(String name, boolean createIfNeeded) {
-        return AwBrowserContextJni.get().getNamedContextJava(name, createIfNeeded);
-    }
-
-    /**
-     * Delete the named context.
-     * <p>
-     * Returns true if a context was deleted. Returns false if the context did not exist beforehand.
-     * <p>
-     * Name must be non-null and valid Unicode.
-     *
-     * @throws IllegalArgumentException if trying to delete the default profile.
-     * @throws IllegalStateException if trying to delete a profile which is in use.
-     */
-    public static boolean deleteNamedContext(String name)
-            throws IllegalArgumentException, IllegalStateException {
-        final String defaultContextName = AwBrowserContextJni.get().getDefaultContextName();
-        if (name.equals(defaultContextName)) {
-            throw new IllegalArgumentException("Cannot delete the default profile");
-        }
-        return AwBrowserContextJni.get().deleteNamedContext(name);
-    }
-
-    /**
-     * List all contexts.
-     */
-    public static List<String> listAllContexts() {
-        return Arrays.asList(AwBrowserContextJni.get().listAllContexts());
-    }
-
-    /**
-     * Get the named context's relative path, without loading it in.
-     * <p>
-     * Will return null if the context doesn't exist.
-     */
-    public static String getNamedContextPathForTesting(String name) {
-        return AwBrowserContextJni.get().getNamedContextPathForTesting(name); // IN-TEST
     }
 
     // See comments in WebViewChromiumFactoryProvider for details.
@@ -267,8 +213,8 @@ public class AwBrowserContext implements BrowserContextHandle {
     }
 
     public void clearPersistentOriginTrialStorageForTesting() {
-        AwBrowserContextJni.get().clearPersistentOriginTrialStorageForTesting(
-                mNativeAwBrowserContext);
+        AwBrowserContextJni.get()
+                .clearPersistentOriginTrialStorageForTesting(mNativeAwBrowserContext);
     }
 
     public boolean hasFormData() {
@@ -280,18 +226,22 @@ public class AwBrowserContext implements BrowserContextHandle {
     }
 
     public void setServiceWorkerIoThreadClient(AwContentsIoThreadClient ioThreadClient) {
-        AwBrowserContextJni.get().setServiceWorkerIoThreadClient(
-                mNativeAwBrowserContext, ioThreadClient);
+        AwBrowserContextJni.get()
+                .setServiceWorkerIoThreadClient(mNativeAwBrowserContext, ioThreadClient);
     }
 
     private static SharedPreferences createSharedPrefs(String relativePath) {
-        return ContextUtils.getApplicationContext().getSharedPreferences(
-                getSharedPrefsFilename(relativePath), Context.MODE_PRIVATE);
+        return ContextUtils.getApplicationContext()
+                .getSharedPreferences(getSharedPrefsFilename(relativePath), Context.MODE_PRIVATE);
     }
 
     @CalledByNative
-    public static AwBrowserContext create(long nativeAwBrowserContext, String name,
-            String relativePath, AwCookieManager cookieManager, boolean isDefault) {
+    public static AwBrowserContext create(
+            long nativeAwBrowserContext,
+            String name,
+            String relativePath,
+            AwCookieManager cookieManager,
+            boolean isDefault) {
         return new AwBrowserContext(
                 nativeAwBrowserContext, name, relativePath, cookieManager, isDefault);
     }
@@ -308,20 +258,24 @@ public class AwBrowserContext implements BrowserContextHandle {
     @NativeMethods
     interface Natives {
         AwBrowserContext getDefaultJava();
-        AwBrowserContext getNamedContextJava(String name, boolean createIfNeeded);
+
         String getDefaultContextName();
+
         String getDefaultContextRelativePath();
-        String getNamedContextPathForTesting(String name); // IN-TEST
-        boolean deleteNamedContext(String name);
-        String[] listAllContexts();
-        boolean checkNamedContextExists(String name);
+
         long getQuotaManagerBridge(long nativeAwBrowserContext);
+
         void setWebLayerRunningInSameProcess(long nativeAwBrowserContext);
+
         String[] updateServiceWorkerXRequestedWithAllowListOriginMatcher(
                 long nativeAwBrowserContext, String[] rules);
+
         void clearPersistentOriginTrialStorageForTesting(long nativeAwBrowserContext);
+
         boolean hasFormData(long nativeAwBrowserContext);
+
         void clearFormData(long nativeAwBrowserContext);
+
         void setServiceWorkerIoThreadClient(
                 long nativeAwBrowserContext, AwContentsIoThreadClient ioThreadClient);
     }

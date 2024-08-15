@@ -5,7 +5,8 @@
 #ifndef IOS_WEB_VIEW_INTERNAL_WEB_VIEW_WEB_CLIENT_H_
 #define IOS_WEB_VIEW_INTERNAL_WEB_VIEW_WEB_CLIENT_H_
 
-#include <memory>
+#import <memory>
+#import <optional>
 
 #import "ios/web/public/web_client.h"
 
@@ -37,12 +38,14 @@ class WebViewWebClient : public web::WebClient {
                         NSError* error,
                         bool is_post,
                         bool is_off_the_record,
-                        const absl::optional<net::SSLInfo>& info,
+                        const std::optional<net::SSLInfo>& info,
                         int64_t navigation_id,
                         base::OnceCallback<void(NSString*)> callback) override;
   bool EnableLongPressUIContextMenu() const override;
   bool EnableWebInspector(web::BrowserState* browser_state) const override;
   bool IsMixedContentAutoupgradeEnabled(
+      web::BrowserState* browser_state) const override;
+  bool IsInsecureFormWarningEnabled(
       web::BrowserState* browser_state) const override;
 };
 

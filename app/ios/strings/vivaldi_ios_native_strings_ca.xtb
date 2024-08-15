@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Nota actualitzada</translation>
 <translation id="1041637248958093184">Cerques, llocs visitats, galetes i fitxers temporals no es desden a Vivaldi quan s'usen pestanyes privades.</translation>
 <translation id="1066692930984703744">Activa el bloqueig d'anuncis i rastrejadors per una navegació més ràpida i segura</translation>
-<translation id="1076258485383101882">Sincronitza les adreces escrites</translation>
 <translation id="1116694919640316211">Sobre</translation>
 <translation id="1123707809902612118">Bloqueja rastrejadors i anuncis</translation>
 <translation id="1151972924205500581">És necessària la contrasenya</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">Condicions d'ús</translation>
 <translation id="1771413903824396513">Per sobrenom</translation>
 <translation id="1804522390855853698">Xinès (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Clara</translation>
 <translation id="1809939268435598390">Suprimeix la carpeta</translation>
 <translation id="1813686536470127172">Altres carpetes</translation>
 <translation id="1828800626900562968">Toca la icona "+" a sota per crear una nova pestanya.</translation>
@@ -71,12 +71,16 @@
 <translation id="2388224692799337242">Quan comencis a navegar, el teu historial sortirà aquí</translation>
 <translation id="2391028308389203648">Turc (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Activa</translation>
+<translation id="2414886740292270097">Fosca</translation>
+<translation id="2433507940547922241">Aparença</translation>
 <translation id="2434910957904013691">Sincronitza-ho tot</translation>
 <translation id="2448144008809286557">S'ha oblidat el <ph name="BEGIN_LINK" />nom d'usuari<ph name="END_LINK" /> o la <ph name="BEGIN_LINK" />contrasenya<ph name="END_LINK" />?</translation>
 <translation id="2536780277491102902">EXCEPCIONS</translation>
 <translation id="2558801801411970131">Bloquejant rastrejadors</translation>
 <translation id="2577446409661931381">Nova nota</translation>
 <translation id="2619628557366098325">Portuguès (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Sistema</translation>
+<translation id="2666092431469916601">Superior</translation>
 <translation id="2677862276555105603">Anunci
 bloquejat</translation>
 <translation id="2678542925523700624">Estonià (<ph name="ORIGIN" />)</translation>
@@ -98,6 +102,7 @@ bloquejat</translation>
 <translation id="3073196329485613487">Entra al teu compte</translation>
 <translation id="307859903981308731">En continuar, accedeixes a</translation>
 <translation id="3086746722712840547">nota</translation>
+<translation id="3087734570205094154">Inferior</translation>
 <translation id="3091563570137981919">Bloqueig de rastrejadors i anuncis</translation>
 <translation id="3134385238404760368">Cap pestanya recent</translation>
 <translation id="3157931365184549694">Restableix</translation>
@@ -127,12 +132,14 @@ bloquejat</translation>
 <translation id="3699026013955941879">El codi ha caducat. Sol·licita un nou codi d'activació.</translation>
 <translation id="3700829948786686853">Benvingut a Vivaldi</translation>
 <translation id="3766350025418769949">Pots usar les contrasenyes desades al gestor de contrasenyes de Vivaldi a altres aplicacions al teu iPad.</translation>
+<translation id="3842727926262967527">Tria on prefereixes tenir la barra de pestanyes i el camp d'adreça.</translation>
 <translation id="3845564230651302310">Aplicant nous ajustos del bloquejador...</translation>
 <translation id="3858860766373142691">Nom</translation>
 <translation id="3866249974567520381">Descripció</translation>
 <translation id="3872195896030547485">Si us plau, introdueix una adreça de correu electrònic vàlida.</translation>
 <translation id="3894427358181296146">Afegeix una carpeta</translation>
 <translation id="3897092660631435901">Menú</translation>
+<translation id="3921585859122905677">Posició de la barra d'adreces</translation>
 <translation id="3953599441418463312">Japonès (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Rastrejador bloquejat</translation>
 <translation id="3958433364221339259">Cerca amb <ph name="SEARCH_ENGINE" /></translation>
@@ -163,6 +170,7 @@ bloquejats</translation>
 <translation id="4394049700291259645">Desactiva</translation>
 <translation id="4413780690230851155">Suprimeix l'historial de navegació</translation>
 <translation id="4452878871193896747">Indonesi (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Estil de pestanyes</translation>
 <translation id="4474581062946673155">Actualment no tens cap pestanya sincronitzada d'altres dispositius.</translation>
 <translation id="4493850495402472953">i</translation>
 <translation id="4497115807425788318">Ubicació</translation>
@@ -207,6 +215,7 @@ bloquejat</translation>
 <translation id="5238642303473095117">Suprimeix dades</translation>
 <translation id="5245732982828228444">Aquí trobaràs les teves notes</translation>
 <translation id="5249199221558969362">Si us plau, introdueix una edat realista.</translation>
+<translation id="5271549068863921519">Desa la contrasenya</translation>
 <translation id="5290452628447338707">Sense notes</translation>
 <translation id="5317780077021120954">Desa</translation>
 <translation id="5349678548463426691">Per descripció</translation>
@@ -240,9 +249,10 @@ bloquejat</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> notes mogudes</translation>
 <translation id="6147094071357011481">Les pestanyes tancades recentment no estan disponibles</translation>
 <translation id="6193995664633100765">Indi (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">Tema</translation>
 <translation id="6365929278691047681">Alemany (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Edita el marcador</translation>
-<translation id="6406506848690869874">Sync</translation>
+<translation id="6406506848690869874">Sincronitza</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> seleccionades</translation>
 <translation id="6468130661190228905">Ho sentim molt, però t'hauràs d'esperar un temps per a poder unir-te a la nostra comunitat. Cal que tinguis almenys 16 anys per a poder-te unir.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importa<ph name="END_LINK" /></translation>
@@ -278,7 +288,6 @@ bloquejat</translation>
 <translation id="7041964446309059643">Manual</translation>
 <translation id="7110758301321962823">Recupera el nom d'usuari</translation>
 <translation id="7194677467200983873">Última sincronització:</translation>
-<translation id="7196846668589096106">Pestanyes d'escriptori</translation>
 <translation id="7210372243397300116">Cerca la carpeta</translation>
 <translation id="7215420652436283416">Per adreça</translation>
 <translation id="7229439505896086266">Crea una nota</translation>
@@ -326,6 +335,7 @@ bloquejat</translation>
 <translation id="8273666073173891138">Nota desada a <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Importa</translation>
 <translation id="8284356787013856231">Permís per obrir el fitxer denegat</translation>
+<translation id="8289933454364510719">Superior o inferior</translation>
 <translation id="8326104954595890674">Nova pestanya privada</translation>
 <translation id="8329813750766387010">Actualitzat: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Suprimeix advertències de les galetes (<ph name="TYPE" />)</translation>
@@ -349,6 +359,7 @@ bloquejat</translation>
 <translation id="8684294196284714094">Preparat per fer de Vivaldi el navegador predeterminat?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> notes suprimides</translation>
 <translation id="8763006697839582351">Obre en privat a Vivaldi</translation>
+<translation id="8786689981011401964">Fons de pantalla</translation>
 <translation id="8804164990146287819">Política de privacitat</translation>
 <translation id="8819841443522803117">És hora de canviar el teu navegador predeterminat? Tria Vivaldi.</translation>
 <translation id="8820817407110198400">Marcadors</translation>

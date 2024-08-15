@@ -393,6 +393,13 @@ public:
     }
 
     /**
+     * For matrix types, returns the type of a single column (`m[n]`). Asserts for all other types.
+     */
+    const Type& columnType(const Context& context) const {
+        return this->componentType().toCompound(context, this->rows(), /*rows=*/1);
+    }
+
+    /**
      * For texture samplers, returns the type of texture it samples (e.g., sampler2D has
      * a texture type of texture2D).
      */
@@ -485,7 +492,9 @@ public:
         return fTypeKind == TypeKind::kSampler;
     }
 
-    bool isAtomic() const { return this->typeKind() == TypeKind::kAtomic; }
+    bool isAtomic() const {
+        return this->typeKind() == TypeKind::kAtomic;
+    }
 
     virtual bool isScalar() const {
         return false;
@@ -553,9 +562,17 @@ public:
         return 0;
     }
 
-    bool isOrContainsArray() const;
-    bool isOrContainsUnsizedArray() const;
-    bool isOrContainsAtomic() const;
+    virtual bool isOrContainsArray() const {
+        return false;
+    }
+
+    virtual bool isOrContainsUnsizedArray() const {
+        return false;
+    }
+
+    virtual bool isOrContainsAtomic() const {
+        return false;
+    }
 
     /**
      * Returns the corresponding vector or matrix type with the specified number of columns and
@@ -620,6 +637,11 @@ protected:
     const Type* applyAccessQualifiers(const Context& context,
                                       ModifierFlags* modifierFlags,
                                       Position pos) const;
+
+    /** If the type is a struct, returns the depth of the struct's most deeply-nested field. */
+    virtual int structNestingDepth() const {
+        return 0;
+    }
 
 private:
     using INHERITED = Symbol;

@@ -107,12 +107,14 @@ V4L2StatelessVideoDecoderBackend::V4L2StatelessVideoDecoderBackend(
     scoped_refptr<V4L2Device> device,
     VideoCodecProfile profile,
     const VideoColorSpace& color_space,
-    scoped_refptr<base::SequencedTaskRunner> task_runner)
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
+    CdmContext* cdm_context)
     : V4L2VideoDecoderBackend(client, std::move(device)),
       profile_(profile),
       color_space_(color_space),
       bitstream_id_to_timestamp_(kTimestampCacheSize),
-      task_runner_(task_runner) {
+      task_runner_(task_runner),
+      cdm_context_(cdm_context) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
@@ -213,16 +215,6 @@ void V4L2StatelessVideoDecoderBackend::OnOutputBufferDequeued(
   }
 
   PumpOutputSurfaces();
-
-  // If we were waiting for an output buffer to be available, schedule a
-  // decode task.
-  if (pause_reason_ == PauseReason::kWaitSubFrameDecoded) {
-    pause_reason_ = PauseReason::kNone;
-    task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&V4L2StatelessVideoDecoderBackend::DoDecodeWork,
-                       weak_this_));
-  }
 }
 
 scoped_refptr<V4L2DecodeSurface>
@@ -289,7 +281,7 @@ V4L2StatelessVideoDecoderBackend::CreateSecureSurface(uint64_t secure_handle) {
 
   return new V4L2RequestDecodeSurface(std::move(*input_buf),
                                       std::move(*output_buf), std::move(frame),
-                                      std::move(*request_ref));
+                                      secure_handle, std::move(*request_ref));
 }
 
 scoped_refptr<V4L2DecodeSurface>
@@ -371,6 +363,11 @@ void V4L2StatelessVideoDecoderBackend::SurfaceReady(
   output_request_queue_.push(
       OutputRequest::Surface(std::move(dec_surface), timestamp));
   PumpOutputSurfaces();
+}
+
+void V4L2StatelessVideoDecoderBackend::ResumeDecoding() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DoDecodeWork();
 }
 
 void V4L2StatelessVideoDecoderBackend::EnqueueDecodeTask(
@@ -484,20 +481,16 @@ bool V4L2StatelessVideoDecoderBackend::PumpDecodeTask() {
         pause_reason_ = PauseReason::kRanOutOfSurfaces;
         return true;
 
-      case AcceleratedVideoDecoder::kNeedContextUpdate:
-        DVLOGF(3) << "Awaiting context update";
-        pause_reason_ = PauseReason::kWaitSubFrameDecoded;
-        return true;
-
       case AcceleratedVideoDecoder::kDecodeError:
         DVLOGF(3) << "Error decoding stream";
         return false;
 
       case AcceleratedVideoDecoder::kTryAgain:
-        NOTREACHED() << "Should not reach here unless this class accepts "
-                        "encrypted streams.";
-        DVLOGF(4) << "No key for decoding stream.";
-        return false;
+        // In this case we are waiting for an async operation relating to secure
+        // content. When that is complete, ResumeDecoding will be invoked and we
+        // will start decoding again; or a reset will occur and that will resume
+        // decoding.
+        return true;
     }
   }
 }
@@ -734,7 +727,8 @@ bool V4L2StatelessVideoDecoderBackend::CreateDecoder() {
 
   if (profile_ >= H264PROFILE_MIN && profile_ <= H264PROFILE_MAX) {
     decoder_ = std::make_unique<H264Decoder>(
-        std::make_unique<V4L2VideoDecoderDelegateH264>(this, device_.get()),
+        std::make_unique<V4L2VideoDecoderDelegateH264>(this, device_.get(),
+                                                       cdm_context_),
         profile_, color_space_);
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
   } else if (profile_ >= HEVCPROFILE_MIN && profile_ <= HEVCPROFILE_MAX) {

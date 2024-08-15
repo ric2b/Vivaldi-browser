@@ -321,20 +321,14 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   EXPECT_EQ(1u, console_observer.messages().size());
 
   ASSERT_TRUE(web_contents()->GetController().CanGoBack());
-  content::WindowedNotificationObserver back_navigation_stop_observer(
-      content::NOTIFICATION_LOAD_STOP,
-      content::NotificationService::AllSources());
   web_contents()->GetController().GoBack();
-  back_navigation_stop_observer.Wait();
+  content::WaitForLoadStop(web_contents());
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectScriptInFrameToLoadWithoutActivation));
 
   ASSERT_TRUE(web_contents()->GetController().CanGoForward());
-  content::WindowedNotificationObserver forward_navigation_stop_observer(
-      content::NOTIFICATION_LOAD_STOP,
-      content::NotificationService::AllSources());
   web_contents()->GetController().GoForward();
-  forward_navigation_stop_observer.Wait();
+  content::WaitForLoadStop(web_contents());
   ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
       kSubframeNames, kExpectScriptInFrameToLoadWithActivation));
 }

@@ -160,8 +160,8 @@ void Menubar::RunMenu(views::Widget* parent) {
       types |= views::MenuRunner::SHOULD_SHOW_MNEMONICS;
     // The root menus (the one we create here and its siblings) will be managed
     // by the menu runner and released when menu runner terminates.
-    views::MenuItemView* root = id_to_menu_map_[active_menu_id_];
-    menu_runner_.reset(new views::MenuRunner(root, types));
+    std::unique_ptr<views::MenuItemView> root(id_to_menu_map_[active_menu_id_]);
+    menu_runner_.reset(new views::MenuRunner(std::move(root), types));
 
     const gfx::Rect& rect = params_->GetSibling(active_menu_id_)->rect;
     menu_runner_->RunMenuAt(parent, nullptr, rect,

@@ -28,7 +28,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/ash_test_views_delegate.h"
-#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "components/user_manager/fake_user_manager.h"
@@ -46,7 +46,6 @@ class GURL;
 
 namespace chromeos {
 class ScopedLacrosServiceTestHelper;
-class TabletState;
 }  // namespace chromeos
 
 namespace content {
@@ -101,11 +100,9 @@ class BrowserWithTestWindowTest : public testing::Test {
   // Creates a BrowserWithTestWindowTest with zero or more traits. By default
   // the initial window will be a tabbed browser created on the native desktop,
   // which is not a hosted app.
-  template <
-      typename... TaskEnvironmentTraits,
-      class CheckArgumentsAreValid = std::enable_if_t<
-          base::trait_helpers::AreValidTraits<ValidTraits,
-                                              TaskEnvironmentTraits...>::value>>
+  template <typename... TaskEnvironmentTraits>
+    requires base::trait_helpers::AreValidTraits<ValidTraits,
+                                                 TaskEnvironmentTraits...>
   NOINLINE explicit BrowserWithTestWindowTest(TaskEnvironmentTraits... traits)
       : BrowserWithTestWindowTest(
             std::make_unique<content::BrowserTaskEnvironment>(
@@ -181,9 +178,14 @@ class BrowserWithTestWindowTest : public testing::Test {
                                            const GURL& url,
                                            const std::u16string& title);
 
+  // Returns the profile name used for the profile created in SetUp() by
+  // default.
+  // Subclasses can override to change the profile name.
+  virtual std::string GetDefaultProfileName();
+
   // Creates the profile used by this test. The caller doesn't own the return
   // value.
-  virtual TestingProfile* CreateProfile();
+  virtual TestingProfile* CreateProfile(const std::string& profile_name);
 
   // Returns a vector of testing factories to be used when creating the profile.
   // This is only used by CreateProfile(), and will be irrelevant if that
@@ -209,6 +211,11 @@ class BrowserWithTestWindowTest : public testing::Test {
     return views_test_helper_->test_views_delegate();
 #endif
   }
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // Logs in an User as `email`.
+  virtual void LogIn(const std::string& email);
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -237,7 +244,7 @@ class BrowserWithTestWindowTest : public testing::Test {
   raw_ptr<user_manager::FakeUserManager> user_manager_ = nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   std::unique_ptr<crosapi::CrosapiManager> manager_;
-  std::unique_ptr<ash::KioskAppManager> kiosk_app_manager_;
+  std::unique_ptr<ash::KioskChromeAppManager> kiosk_chrome_app_manager_;
 #endif
 
   raw_ptr<TestingProfile, AcrossTasksDanglingUntriaged> profile_ = nullptr;
@@ -258,10 +265,6 @@ class BrowserWithTestWindowTest : public testing::Test {
   std::unique_ptr<views::ScopedViewsTestHelper> views_test_helper_ =
       std::make_unique<views::ScopedViewsTestHelper>(
           std::make_unique<ChromeTestViewsDelegate<>>());
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  std::unique_ptr<chromeos::TabletState> tablet_state_;
 #endif
 
   // The existence of this object enables tests via RenderViewHostTester.

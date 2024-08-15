@@ -207,6 +207,9 @@ WebRange WebInputMethodControllerImpl::CompositionRange() const {
 
   Element* editable =
       GetFrame()->Selection().RootEditableElementOrDocumentElement();
+  if (!editable) {
+    return WebRange();
+  }
 
   editable->GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kInput);
 
@@ -237,7 +240,7 @@ bool WebInputMethodControllerImpl::GetCompositionCharacterBounds(
     result[i] = rect;
   }
 
-  bounds.Swap(result);
+  bounds.swap(result);
   return true;
 }
 

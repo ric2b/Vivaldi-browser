@@ -42,6 +42,18 @@ if (vivaldi_yahoo_oauth_client_secret != "") {
   ]
 }
 
+if (vivaldi_aol_oauth_client_id != "") {
+  defines += [
+    "VIVALDI_AOL_OAUTH_API_CLIENT_ID=\"$vivaldi_aol_oauth_client_id\""
+  ]
+}
+
+if (vivaldi_aol_oauth_client_secret != "") {
+  defines += [
+    "VIVALDI_AOL_OAUTH_API_CLIENT_SECRET=\"$vivaldi_aol_oauth_client_secret\""
+  ]
+}
+
 if (vivaldi_net_oauth_client_secret != "") {
   defines += [
     "VIVALDI_NET_OAUTH_CLIENT_SECRET=\"$vivaldi_net_oauth_client_secret\""

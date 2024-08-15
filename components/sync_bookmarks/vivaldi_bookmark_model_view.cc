@@ -11,4 +11,9 @@ BookmarkModelViewUsingLocalOrSyncableNodes::trash_node() const {
   return underlying_model()->trash_node();
 }
 
+const bookmarks::BookmarkNode*
+BookmarkModelViewUsingAccountNodes::trash_node() const {
+  return nullptr;
+}
+
 }  // namespace bookmarks

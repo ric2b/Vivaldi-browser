@@ -1,5 +1,5 @@
 load("//bazel:flags.bzl", "bool_flag", "selects", "string_flag_with_values")
-load("//bazel:skia_rules.bzl", "exports_files_legacy", "select_multi", "skia_cc_deps", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "exports_files_legacy", "select_multi", "skia_cc_deps", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
 
 licenses(["notice"])
 
@@ -19,9 +19,11 @@ SHARED_FILES = [
     "BufferWriter.h",
     "DitherUtils.cpp",
     "DitherUtils.h",
+    "GpuRefCnt.h",
     "GpuTypesPriv.h",
     "KeyBuilder.h",
-    "MutableTextureStateRef.h",
+    "MutableTextureStatePriv.h",
+    "MutableTextureState.cpp",
     "PipelineUtils.cpp",
     "PipelineUtils.h",
     "Rectanizer.h",
@@ -32,6 +34,7 @@ SHARED_FILES = [
     "RefCntedCallback.h",
     "ResourceKey.cpp",
     "ResourceKey.h",
+    "SkBackingFit.cpp",
     "SkBackingFit.h",
     "Swizzle.cpp",
     "Swizzle.h",
@@ -146,10 +149,11 @@ skia_filegroup(
         ":shared_srcs",
         "//src/gpu/ganesh:srcs",
         "//src/gpu/tessellate:srcs",
-    ] + select_multi(
+    ] + select(
         {
-            ":has_dawn": ["//src/gpu/dawn:srcs"],
             ":has_vulkan": ["//src/gpu/vk:srcs"],
+            "@platforms//os:android": ["//src/gpu/android:shared_android_srcs"],
+            "//conditions:default": [],
         },
     ),
     visibility = ["//src:__pkg__"],
@@ -173,7 +177,6 @@ skia_filegroup(
         "//src/gpu/tessellate:private_hdrs",
     ] + select_multi(
         {
-            ":has_dawn": ["//src/gpu/dawn:private_hdrs"],
             ":has_vulkan": ["//src/gpu/vk:private_hdrs"],
             ":has_metal": ["//src/gpu/mtl:private_hdrs"],
         },
@@ -191,4 +194,30 @@ skia_cc_deps(
             ":has_vulkan": ["//src/gpu/vk:deps"],
         },
     ),
+)
+
+skia_cc_library(
+    name = "gpu",
+    srcs = [
+        ":core_srcs",
+        ":shared_srcs",
+        "//src/gpu/tessellate:private_hdrs",
+        "//src/gpu/tessellate:srcs",
+        "//src/utils:shader_utils_srcs",
+    ],
+    hdrs = [
+        ":core_hdrs",
+        ":shared_hdrs",
+        "//include/gpu:shared_gpu_hdrs",
+        "//src/utils:shader_utils_hdrs",
+    ],
+    visibility = [
+        "//src/gpu:__subpackages__",
+        "//src/sksl/codegen:__pkg__",
+    ],
+    deps = [
+        "//:core",
+        "//src/base",
+        "//src/core:core_priv",
+    ],
 )

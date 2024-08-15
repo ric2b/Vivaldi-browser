@@ -17,9 +17,10 @@
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_util.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
-#include "components/password_manager/core/browser/password_store_interface.h"
+#include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -29,11 +30,13 @@
 namespace metrics_util = password_manager::metrics_util;
 namespace {
 
+using password_manager::metrics_util::PasswordManagementBubbleInteractions;
+
 // Reports a metric based on the change between the `current_note` and the
 // `updated_note`.
 void LogNoteChangesInPasswordManagementBubble(
-    const absl::optional<std::u16string>& current_note,
-    const absl::optional<std::u16string>& updated_note) {
+    const std::optional<std::u16string>& current_note,
+    const std::optional<std::u16string>& updated_note) {
   std::u16string current_note_value = current_note.value_or(std::u16string());
   std::u16string updated_note_value = updated_note.value_or(std::u16string());
   if (current_note_value == updated_note_value) {
@@ -131,6 +134,13 @@ void ManagePasswordsBubbleController::OnGooglePasswordManagerLinkClicked() {
         password_manager::ManagePasswordsReferrer::kManagePasswordsBubble);
   }
 }
+
+// TODO(1503146): Add implementation of this method.
+void ManagePasswordsBubbleController::OnMovePasswordLinkClicked() {
+  password_manager::metrics_util::LogUserInteractionsInPasswordManagementBubble(
+      PasswordManagementBubbleInteractions::kMovePasswordLinkClicked);
+}
+
 const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
 ManagePasswordsBubbleController::GetCredentials() const {
   return delegate_->GetCurrentForms();
@@ -208,6 +218,10 @@ bool ManagePasswordsBubbleController::UsernameExists(
       [&username](const std::unique_ptr<password_manager::PasswordForm>& form) {
         return form->username_value == username;
       });
+}
+
+bool ManagePasswordsBubbleController::IsOptedInForAccountStorage() const {
+  return delegate_->GetPasswordFeatureManager()->IsOptedInForAccountStorage();
 }
 
 void ManagePasswordsBubbleController::OnFaviconReady(

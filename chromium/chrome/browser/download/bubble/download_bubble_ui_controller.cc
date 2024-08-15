@@ -83,7 +83,7 @@ bool IsForDownload(Browser* browser, download::DownloadItem* item) {
 // static
 DownloadBubbleUIController* DownloadBubbleUIController::GetForDownload(
     download::DownloadItem* item) {
-  for (auto* browser : BrowserList::GetInstance()->OrderedByActivation()) {
+  for (Browser* browser : BrowserList::GetInstance()->OrderedByActivation()) {
     if (IsForDownload(browser, item) && browser->window() &&
         browser->window()->GetDownloadBubbleUIController()) {
       return browser->window()->GetDownloadBubbleUIController();
@@ -114,13 +114,11 @@ void DownloadBubbleUIController::HideDownloadUi() {
 }
 
 void DownloadBubbleUIController::HandleButtonPressed() {
-  RecordDownloadBubbleInteraction();
   display_controller_->HandleButtonPressed();
 }
 
 bool DownloadBubbleUIController::OpenMostSpecificDialog(
     const offline_items_collection::ContentId& content_id) {
-  RecordDownloadBubbleInteraction();
   return display_controller_->OpenMostSpecificDialog(content_id);
 }
 
@@ -138,18 +136,6 @@ void DownloadBubbleUIController::OnDownloadItemAdded(
   }
   display_controller_->OnNewItem(may_show_animation &&
                                  model.ShouldShowDownloadStartedAnimation());
-}
-
-bool DownloadBubbleUIController::ShouldShowIncognitoIcon(
-    const DownloadUIModel* model) const {
-  return download::IsDownloadBubbleV2Enabled(profile_) && model->profile() &&
-         model->profile()->IsIncognitoProfile();
-}
-
-bool DownloadBubbleUIController::ShouldShowGuestIcon(
-    const DownloadUIModel* model) const {
-  return download::IsDownloadBubbleV2Enabled(profile_) && model->profile() &&
-         model->profile()->IsGuestSession();
 }
 
 void DownloadBubbleUIController::OnOfflineItemRemoved(const ContentId& id) {
@@ -189,6 +175,9 @@ void DownloadBubbleUIController::OnDownloadItemUpdated(
   bool is_done = item->IsDone() ||
                  (item->GetState() == download::DownloadItem::IN_PROGRESS &&
                   !IsItemInProgress(item));
+  if (model.IsDangerous()) {
+    RecordDangerousDownloadShownToUser();
+  }
   display_controller_->OnUpdatedItem(is_done, may_show_details);
 }
 
@@ -221,7 +210,7 @@ std::vector<DownloadUIModelPtr> DownloadBubbleUIController::GetMainView() {
     base::UmaHistogramLongTimes(
         "Download.Bubble.PartialToFullViewLatency",
         base::Time::Now() - (*last_partial_view_shown_time_));
-    last_partial_view_shown_time_ = absl::nullopt;
+    last_partial_view_shown_time_ = std::nullopt;
   }
   std::vector<DownloadUIModelPtr> list =
       GetDownloadUIModels(/*is_main_view=*/true);
@@ -241,7 +230,7 @@ std::vector<DownloadUIModelPtr> DownloadBubbleUIController::GetPartialView() {
   std::vector<DownloadUIModelPtr> list =
       GetDownloadUIModels(/*is_main_view=*/false);
   if (!list.empty()) {
-    last_partial_view_shown_time_ = absl::make_optional(now);
+    last_partial_view_shown_time_ = std::make_optional(now);
   }
   base::UmaHistogramCounts100("Download.Bubble.PartialViewSize", list.size());
   return list;
@@ -251,7 +240,6 @@ void DownloadBubbleUIController::ProcessDownloadButtonPress(
     base::WeakPtr<DownloadUIModel> model,
     DownloadCommands::Command command,
     bool is_main_view) {
-  RecordDownloadBubbleInteraction();
   if (!model) {
     return;
   }
@@ -288,17 +276,28 @@ void DownloadBubbleUIController::ProcessDownloadButtonPress(
       break;
     case DownloadCommands::CANCEL:
       model->SetActionedOn(true);
-      [[fallthrough]];
-    case DownloadCommands::DEEP_SCAN:
+      commands.ExecuteCommand(command);
+      break;
     case DownloadCommands::BYPASS_DEEP_SCANNING:
+      DownloadItemWarningData::AddWarningActionEvent(
+          model->GetDownloadItem(), warning_surface,
+          DownloadItemWarningData::WarningAction::PROCEED_DEEP_SCAN);
+      commands.ExecuteCommand(command);
+      break;
+    case DownloadCommands::LEARN_MORE_SCANNING:
+    case DownloadCommands::LEARN_MORE_DOWNLOAD_BLOCKED:
+      DownloadItemWarningData::AddWarningActionEvent(
+          model->GetDownloadItem(), warning_surface,
+          DownloadItemWarningData::WarningAction::OPEN_LEARN_MORE_LINK);
+      commands.ExecuteCommand(command);
+      break;
+    case DownloadCommands::DEEP_SCAN:
     case DownloadCommands::RESUME:
     case DownloadCommands::PAUSE:
     case DownloadCommands::OPEN_WHEN_COMPLETE:
     case DownloadCommands::SHOW_IN_FOLDER:
     case DownloadCommands::ALWAYS_OPEN_TYPE:
     case DownloadCommands::CANCEL_DEEP_SCAN:
-    case DownloadCommands::LEARN_MORE_SCANNING:
-    case DownloadCommands::LEARN_MORE_DOWNLOAD_BLOCKED:
     case DownloadCommands::OPEN_SAFE_BROWSING_SETTING:
       commands.ExecuteCommand(command);
       break;
@@ -374,11 +373,11 @@ void DownloadBubbleUIController::ScheduleCancelForEphemeralWarning(
   }
 }
 
-void DownloadBubbleUIController::RecordDownloadBubbleInteraction() {
+void DownloadBubbleUIController::RecordDangerousDownloadShownToUser() {
   feature_engagement::Tracker* tracker =
       feature_engagement::TrackerFactory::GetForBrowserContext(
           browser_->profile());
-  tracker->NotifyEvent("download_bubble_interaction");
+  tracker->NotifyEvent("download_bubble_dangerous_download_detected");
 }
 
 base::WeakPtr<DownloadBubbleUIController>

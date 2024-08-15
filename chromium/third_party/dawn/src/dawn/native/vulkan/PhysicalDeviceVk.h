@@ -66,16 +66,21 @@ class PhysicalDevice : public PhysicalDeviceBase {
     void InitializeSupportedFeaturesImpl() override;
     MaybeError InitializeSupportedLimitsImpl(CombinedLimits* limits) override;
 
-    MaybeError ValidateFeatureSupportedWithTogglesImpl(wgpu::FeatureName feature,
-                                                       const TogglesState& toggles) const override;
+    FeatureValidationResult ValidateFeatureSupportedWithTogglesImpl(
+        wgpu::FeatureName feature,
+        const TogglesState& toggles) const override;
 
     void SetupBackendAdapterToggles(TogglesState* adapterToggles) const override;
     void SetupBackendDeviceToggles(TogglesState* deviceToggles) const override;
     ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
-                                                    const DeviceDescriptor* descriptor,
+                                                    const UnpackedPtr<DeviceDescriptor>& descriptor,
                                                     const TogglesState& deviceToggles) override;
 
     uint32_t FindDefaultComputeSubgroupSize() const;
+    bool CheckSemaphoreSupport(DeviceExt deviceExt,
+                               VkExternalSemaphoreHandleTypeFlagBits handleType) const;
+
+    void PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const override;
 
     VkPhysicalDevice mVkPhysicalDevice;
     Ref<VulkanInstance> mVulkanInstance;

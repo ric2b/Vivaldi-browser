@@ -85,11 +85,11 @@ base::Value AcceleratorModificationDataToValue(
 
 AcceleratorModificationData ValueToAcceleratorModificationData(
     const base::Value::Dict& value) {
-  absl::optional<int> keycode = value.FindInt(kAcceleratorKeyCodeKey);
-  absl::optional<int> modifier = value.FindInt(kAcceleratorModifiersKey);
-  absl::optional<int> modification_action =
+  std::optional<int> keycode = value.FindInt(kAcceleratorKeyCodeKey);
+  std::optional<int> modifier = value.FindInt(kAcceleratorModifiersKey);
+  std::optional<int> modification_action =
       value.FindInt(kAcceleratorModificationActionKey);
-  absl::optional<int> key_state = value.FindInt(kAcceleratorKeyStateKey);
+  std::optional<int> key_state = value.FindInt(kAcceleratorKeyStateKey);
   CHECK(keycode.has_value());
   CHECK(modifier.has_value());
   CHECK(modification_action.has_value());
@@ -223,11 +223,13 @@ void AshAcceleratorConfiguration::OnActiveUserPrefServiceChanged(
   }
 }
 
-const std::vector<ui::Accelerator>&
+base::optional_ref<const std::vector<ui::Accelerator>>
 AshAcceleratorConfiguration::GetAcceleratorsForAction(
     AcceleratorActionId action_id) {
   const auto accelerator_iter = id_to_accelerators_.find(action_id);
-  CHECK(accelerator_iter != id_to_accelerators_.end());
+  if (accelerator_iter == id_to_accelerators_.end()) {
+    return std::nullopt;
+  }
 
   return accelerator_iter->second;
 }
@@ -526,7 +528,7 @@ AcceleratorConfigResult AshAcceleratorConfiguration::DoAddAccelerator(
     // save the override as it will be handled implicitly when applying the
     // prefs.
     bool save_remove_override = true;
-    absl::optional<AcceleratorAction> conflict_accelerator_default_id =
+    std::optional<AcceleratorAction> conflict_accelerator_default_id =
         GetIdForDefaultAccelerator(accelerator);
     if (conflict_accelerator_default_id.has_value()) {
       save_remove_override =
@@ -598,13 +600,12 @@ void AshAcceleratorConfiguration::NotifyAcceleratorsUpdated() {
   }
 }
 
-absl::optional<AcceleratorAction>
+std::optional<AcceleratorAction>
 AshAcceleratorConfiguration::GetIdForDefaultAccelerator(
     ui::Accelerator accelerator) {
   AcceleratorAction* found_id =
       default_accelerators_to_id_cache_.Find(accelerator);
-  return found_id ? absl::optional<AcceleratorAction>(*found_id)
-                  : absl::nullopt;
+  return found_id ? std::optional<AcceleratorAction>(*found_id) : std::nullopt;
 }
 
 std::vector<ui::Accelerator>

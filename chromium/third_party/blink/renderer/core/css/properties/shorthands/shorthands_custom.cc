@@ -200,8 +200,8 @@ bool ParseBackgroundOrMaskPosition(
     const CSSParserContext& context,
     absl::optional<WebFeature> three_value_position,
     HeapVector<CSSPropertyValue, 64>& properties) {
-  CSSValue* result_x = nullptr;
-  CSSValue* result_y = nullptr;
+  const CSSValue* result_x = nullptr;
+  const CSSValue* result_y = nullptr;
   if (!css_parsing_utils::ConsumeBackgroundPosition(
           range, context, css_parsing_utils::UnitlessQuirk::kAllow,
           three_value_position, result_x, result_y) ||
@@ -1496,12 +1496,10 @@ bool ConsumeFont(bool important,
       CSSPropertyID::kFontVariationSettings, CSSPropertyID::kFont,
       *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
       css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-  if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
-    css_parsing_utils::AddProperty(
-        CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFont,
-        *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
-        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-  }
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFont,
+      *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
+      css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
 
   css_parsing_utils::AddProperty(
       CSSPropertyID::kFontWeight, CSSPropertyID::kFont,
@@ -1606,12 +1604,10 @@ bool FontVariant::ParseShorthand(
         CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFontVariant,
         *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
         css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-    if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
-      css_parsing_utils::AddProperty(
-          CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFontVariant,
-          *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
-          css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-    }
+    css_parsing_utils::AddProperty(
+        CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFontVariant,
+        *CSSIdentifierValue::Create(CSSValueID::kNormal), important,
+        css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
     return range.AtEnd();
   }
 
@@ -1701,14 +1697,12 @@ bool FontVariant::ParseShorthand(
       CSSPropertyID::kFontVariantAlternates, CSSPropertyID::kFontVariant,
       *alternates_parser.FinalizeValue(), important,
       css_parsing_utils::IsImplicitProperty::kNotImplicit, properties);
-  if (RuntimeEnabledFeatures::FontVariantPositionEnabled()) {
-    css_parsing_utils::AddProperty(
-        CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFontVariant,
-        position_value ? *position_value
-                       : *CSSIdentifierValue::Create(CSSValueID::kNormal),
-        important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
-        properties);
-  }
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kFontVariantPosition, CSSPropertyID::kFontVariant,
+      position_value ? *position_value
+                     : *CSSIdentifierValue::Create(CSSValueID::kNormal),
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
   return true;
 }
 

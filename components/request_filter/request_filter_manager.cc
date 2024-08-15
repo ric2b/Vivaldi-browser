@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <utility>
 
 #include "chrome/browser/profiles/profile.h"
@@ -127,7 +128,7 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
     content::RenderFrameHost* frame,
     int render_process_id,
     URLLoaderFactoryType type,
-    absl::optional<int64_t> navigation_id,
+    std::optional<int64_t> navigation_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -172,7 +173,7 @@ void RequestFilterManager::ProxiedProxyWebSocket(
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const net::SiteForCookies& site_for_cookies,
-    const absl::optional<std::string>& user_agent,
+    const std::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -195,7 +196,7 @@ void RequestFilterManager::ProxyWebSocket(
     const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const net::SiteForCookies& site_for_cookies,
-    const absl::optional<std::string>& user_agent,
+    const std::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -225,14 +226,14 @@ void RequestFilterManager::ProxiedProxyWebTransport(
     content::ContentBrowserClient::WillCreateWebTransportCallback callback,
     mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
         handshake_client,
-    absl::optional<network::mojom::WebTransportErrorPtr> error) {
+    std::optional<network::mojom::WebTransportErrorPtr> error) {
   if (error) {
     std::move(callback).Run(std::move(handshake_client), std::move(error));
     return;
   }
   auto* render_process_host = content::RenderProcessHost::FromID(process_id);
   if (!render_process_host) {
-    std::move(callback).Run(std::move(handshake_client), absl::nullopt);
+    std::move(callback).Run(std::move(handshake_client), std::nullopt);
     return;
   }
   auto* request_filter_manager =

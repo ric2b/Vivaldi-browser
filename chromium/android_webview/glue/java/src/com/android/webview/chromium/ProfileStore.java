@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.android_webview.AwBrowserContext;
+import org.chromium.android_webview.AwBrowserContextStore;
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.base.ThreadUtils;
 
@@ -34,29 +35,34 @@ public class ProfileStore {
     @NonNull
     public Profile getOrCreateProfile(@NonNull String name) {
         ThreadUtils.checkUiThread();
-        return mProfiles.computeIfAbsent(name,
-                profileName -> new Profile(AwBrowserContext.getNamedContext(profileName, true)));
+        return mProfiles.computeIfAbsent(
+                name,
+                profileName ->
+                        new Profile(AwBrowserContextStore.getNamedContext(profileName, true)));
     }
 
     @Nullable
     public Profile getProfile(@NonNull String name) {
         ThreadUtils.checkUiThread();
-        return mProfiles.computeIfAbsent(name, profileName -> {
-            AwBrowserContext browserContext = AwBrowserContext.getNamedContext(profileName, false);
-            return browserContext != null ? new Profile(browserContext) : null;
-        });
+        return mProfiles.computeIfAbsent(
+                name,
+                profileName -> {
+                    AwBrowserContext browserContext =
+                            AwBrowserContextStore.getNamedContext(profileName, false);
+                    return browserContext != null ? new Profile(browserContext) : null;
+                });
     }
 
     @NonNull
     public List<String> getAllProfileNames() {
         ThreadUtils.checkUiThread();
-        return AwBrowserContext.listAllContexts();
+        return AwBrowserContextStore.listAllContexts();
     }
 
     @NonNull
     public boolean deleteProfile(@NonNull String name) {
         ThreadUtils.checkUiThread();
-        boolean deletionResult = AwBrowserContext.deleteNamedContext(name);
+        boolean deletionResult = AwBrowserContextStore.deleteNamedContext(name);
         if (deletionResult) {
             mProfiles.remove(name);
         } else {

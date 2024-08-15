@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> stängde oväntat ner anslutningen.</translation>
 <translation id="1161325031994447685">Ansluta till det trådlösa nätet på nytt</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Testa att rensa kakorna (cookies)<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Om version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> skickade ingen data.</translation>
 <translation id="1559528461873125649">Filen eller katalogen finns inte</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Försök att kontakta systemadministratören.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Testa att köra Windows nätverksdiagnostik<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Den här webbplatsen innehåller skadliga program</translation>
-<translation id="1916770123977586577">Läs in sidan igen för att tillämpa dina uppdaterade inställningar för webbplatsen</translation>
 <translation id="1974060860693918893">Avancerat</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerar mellanservern (proxyn) och brandväggen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utfärdat till: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Det är möjligt att angripare kan se vilka bilder du visar på den här webbplatsen och att de försöker lura dig genom att modifiera dem.</translation>
 <translation id="2356070529366658676">Fråga</translation>
 <translation id="2359808026110333948">Fortsätt</translation>
+<translation id="2388886110302389394">Öppna sidan i ett nytt privat fönster (Ctrl-Skift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Kör nätverksdiagnostik<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Den här sidan har blockerats av ett tillägg</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Logga in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> har blockerats</translation>
 <translation id="3987940399970879459">Mindre än 1 MB</translation>
+<translation id="4075123085690634698">Öppna sidan i ett nytt privat fönster (⇧⌘N)</translation>
 <translation id="4075732493274867456">Klienten och servern har inte stöd för en gemensam SSL-protokollversion eller chiffersvit.</translation>
 <translation id="4116663294526079822">Tillåt alltid på den här webbplatsen</translation>
 <translation id="4130226655945681476">Kontrollera nätverkskablar, modem och router</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Enheten gick ner i vänteläge.</translation>
 <translation id="6890956352250146925">Alternativ för cookies och webbplatsdata</translation>
 <translation id="6897140037006041989">Användaragent</translation>
+<translation id="6957624206566198865">Öppna sidan på en ny privat flik</translation>
 <translation id="7053983685419859001">Blockera</translation>
 <translation id="7079718277001814089">Webbplatsen innehåller skadlig programvara</translation>
 <translation id="7096937462164235847">Identiteten för denna webbplats är inte verifierad.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676">På <ph name="SITE" /> används normalt kryptering för att skydda din information. När Vivaldi försökte ansluta till <ph name="SITE" /> den här gången skickade webbplatsen tillbaka ovanliga och felaktiga uppgifter. Sådant kan hända när en angripare utger sig för att vara <ph name="SITE" /> eller när anslutningen har avbrutits av en Wi-Fi-inloggningsskärm. Din information är fortfarande säker eftersom Vivaldi avbröt anslutningen innan någon data utbyttes.</translation>
 <translation id="7878562273885520351">Lösenordet kan vara utsatt för risk</translation>
 <translation id="7951415247503192394">(32 bitar)</translation>
+<translation id="7953236668995583915">Läs in sidan igen så att de uppdaterade inställningarna tillämpas på webbplatsen</translation>
 <translation id="8025119109950072390">Angripare på den här webbplatsen kan lura dig att göra något farligt, till exempel installera programvara eller lämna ut personliga uppgifter (som lösenord, telefonnummer eller kreditkortsuppgifter).</translation>
 <translation id="8037357227543935929">Fråga (standard)</translation>
 <translation id="8041940743680923270">Använd global standardinställning (Fråga)</translation>

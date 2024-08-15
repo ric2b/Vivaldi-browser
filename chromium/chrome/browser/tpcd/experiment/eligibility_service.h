@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_TPCD_EXPERIMENT_ELIGIBILITY_SERVICE_H_
 #define CHROME_BROWSER_TPCD_EXPERIMENT_ELIGIBILITY_SERVICE_H_
 
+#include <optional>
+
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/profiles/profile.h"
@@ -12,7 +14,6 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/privacy_sandbox/tpcd_experiment_eligibility.h"
 #include "components/privacy_sandbox/tracking_protection_onboarding.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace privacy_sandbox {
 class TrackingProtectionOnboarding;
@@ -50,7 +51,7 @@ class EligibilityService
   // So EligibilityServiceFactory::BuildServiceInstanceFor can call the
   // constructor.
   friend class EligibilityServiceFactory;
-  friend class EligibilityServiceBrowserTest;
+  friend class EligibilityServiceBrowserTestBase;
 
   // MarkProfileEligibility should be called for all profiles to set their
   // eligibility, whether currently loaded or created later.
@@ -61,10 +62,16 @@ class EligibilityService
   void MaybeNotifyManagerTrackingProtectionOnboarded(
       privacy_sandbox::TrackingProtectionOnboarding::OnboardingStatus
           onboarding_status);
+  void MaybeNotifyManagerTrackingProtectionSilentOnboarded(
+      privacy_sandbox::TrackingProtectionOnboarding::SilentOnboardingStatus
+          onboarding_status);
 
   // privacy_sandbox::TrackingProtectionOnboarding::Observer:
   void OnTrackingProtectionOnboardingUpdated(
       privacy_sandbox::TrackingProtectionOnboarding::OnboardingStatus
+          onboarding_status) override;
+  void OnTrackingProtectionSilentOnboardingUpdated(
+      privacy_sandbox::TrackingProtectionOnboarding::SilentOnboardingStatus
           onboarding_status) override;
 
   raw_ptr<Profile> profile_;
@@ -76,7 +83,7 @@ class EligibilityService
   // Set in the constructor, it will always have a value past that point. An
   // optional is used since the user preferences are sometimes reset before
   // setting the `profile_eligibility_`.
-  absl::optional<privacy_sandbox::TpcdExperimentEligibility>
+  std::optional<privacy_sandbox::TpcdExperimentEligibility>
       profile_eligibility_;
 
   base::ScopedObservation<

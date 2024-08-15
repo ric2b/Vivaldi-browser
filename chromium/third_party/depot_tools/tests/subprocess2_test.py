@@ -97,10 +97,10 @@ class DefaultsTest(unittest.TestCase):
 
 def _run_test(with_subprocess=True):
     """Runs a tests in 12 combinations:
-  - With universal_newlines=True and False.
-  - With LF, CR, and CRLF output.
-  - With subprocess and subprocess2.
-  """
+    - With universal_newlines=True and False.
+    - With LF, CR, and CRLF output.
+    - With subprocess and subprocess2.
+    """
     subps = (subprocess2, subprocess) if with_subprocess else (subprocess2, )
     no_op = lambda s: s
     to_bytes = lambda s: s.encode()

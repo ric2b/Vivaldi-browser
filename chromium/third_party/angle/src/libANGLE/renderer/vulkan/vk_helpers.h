@@ -725,11 +725,20 @@ class PipelineBarrier : angle::NonCopyable
 };
 using PipelineBarrierArray = angle::PackedEnumMap<PipelineStage, PipelineBarrier>;
 
-enum class MemoryCoherency
+enum class MemoryCoherency : uint8_t
 {
-    NonCoherent,
-    Coherent
+    CachedNonCoherent,
+    CachedPreferCoherent,
+    UnCachedCoherent,
+
+    InvalidEnum = 3,
+    EnumCount   = 3,
 };
+ANGLE_INLINE bool IsCached(MemoryCoherency coherency)
+{
+    return coherency == MemoryCoherency::CachedNonCoherent ||
+           coherency == MemoryCoherency::CachedPreferCoherent;
+}
 
 enum class MemoryHostVisibility
 {
@@ -788,7 +797,7 @@ class BufferHelper : public ReadWriteResource
     VkDeviceSize getBlockMemorySize() const { return mSuballocation.getBlockMemorySize(); }
     bool isHostVisible() const { return mSuballocation.isHostVisible(); }
     bool isCoherent() const { return mSuballocation.isCoherent(); }
-
+    bool isCached() const { return mSuballocation.isCached(); }
     bool isMapped() const { return mSuballocation.isMapped(); }
 
     // Also implicitly sets up the correct barriers.
@@ -885,6 +894,11 @@ class BufferHelper : public ReadWriteResource
     BufferSerial mSerial;
     // Manages the descriptorSet cache that created with this BufferHelper object.
     DescriptorSetCacheManager mDescriptorSetCacheManager;
+    // For external buffer
+    GLeglClientBufferEXT mClientBuffer;
+
+    // Whether ANGLE currently has ownership of this resource or it's released to external.
+    bool mIsReleasedToExternal;
 };
 
 class BufferPool : angle::NonCopyable
@@ -1775,6 +1789,7 @@ enum class ImageLayout
     ExternalShadersWrite,
     TransferSrc,
     TransferDst,
+    TransferSrcDst,
     // Used when the image is transitioned on the host for use by host image copy
     HostCopy,
     VertexShaderReadOnly,
@@ -2839,6 +2854,9 @@ class ImageHelper final : public Resource, public angle::Subject
     // The QueueSerial that associated with the last barrier.
     QueueSerial mBarrierQueueSerial;
 
+    // Whether ANGLE currently has ownership of this resource or it's released to external.
+    bool mIsReleasedToExternal;
+
     // For imported images
     YcbcrConversionDesc mYcbcrConversionDesc;
 
@@ -3402,6 +3420,16 @@ class CommandBufferAccess : angle::NonCopyable
     {
         onImageWrite(levelStart, levelCount, layerStart, layerCount, aspectFlags,
                      ImageLayout::TransferDst, image);
+    }
+    void onImageSelfCopy(gl::LevelIndex writeLevelStart,
+                         uint32_t writeLevelCount,
+                         uint32_t writeLayerStart,
+                         uint32_t writeLayerCount,
+                         VkImageAspectFlags aspectFlags,
+                         ImageHelper *image)
+    {
+        onImageWrite(writeLevelStart, writeLevelCount, writeLayerStart, writeLayerCount,
+                     aspectFlags, ImageLayout::TransferSrcDst, image);
     }
     void onImageComputeShaderRead(VkImageAspectFlags aspectFlags, ImageHelper *image)
     {

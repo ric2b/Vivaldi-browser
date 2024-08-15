@@ -35,7 +35,7 @@ struct SkPDFObjectSerializer;
 
 struct SkPDFIndirectReference {
     int fValue = -1;
-    explicit operator bool() { return fValue != -1; }
+    explicit operator bool() const { return fValue != -1; }
 };
 
 inline static bool operator==(SkPDFIndirectReference u, SkPDFIndirectReference v) {
@@ -186,6 +186,7 @@ public:
     void insertTextString(const char key[], const char value[]);
     void insertByteString(const char key[], SkString value);
     void insertTextString(const char key[], SkString value);
+    void insertUnion(const char key[], SkPDFUnion&&);
 
 private:
     std::vector<std::pair<SkPDFUnion, SkPDFUnion>> fRecords;

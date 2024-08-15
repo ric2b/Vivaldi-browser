@@ -14,6 +14,9 @@
 #include "include/private/gpu/graphite/ContextOptionsPriv.h"
 #include "tools/gpu/ContextType.h"
 #include "tools/gpu/vk/VkTestUtils.h"
+#include "tools/graphite/TestOptions.h"
+
+extern bool gCreateProtectedContext;
 
 namespace skiatest::graphite {
 
@@ -33,7 +36,9 @@ std::unique_ptr<GraphiteTestContext> VulkanTestContext::Make() {
     features = new VkPhysicalDeviceFeatures2;
     memset(features, 0, sizeof(VkPhysicalDeviceFeatures2));
     if (!sk_gpu_test::CreateVkBackendContext(instProc, &backendContext, extensions,
-                                             features, &debugCallback)) {
+                                             features, &debugCallback,
+                                             nullptr, sk_gpu_test::CanPresentFn(),
+                                             gCreateProtectedContext)) {
         sk_gpu_test::FreeVulkanFeaturesStructs(features);
         delete features;
         delete extensions;
@@ -89,16 +94,17 @@ skgpu::ContextType VulkanTestContext::contextType() {
 }
 
 std::unique_ptr<skgpu::graphite::Context> VulkanTestContext::makeContext(
-        const skgpu::graphite::ContextOptions& options) {
-    skgpu::graphite::ContextOptions revisedOptions(options);
-    skgpu::graphite::ContextOptionsPriv optionsPriv;
-    if (!options.fOptionsPriv) {
-        revisedOptions.fOptionsPriv = &optionsPriv;
+        const TestOptions& options) {
+    SkASSERT(!options.fNeverYieldToWebGPU);
+    skgpu::graphite::ContextOptions revisedContextOptions(options.fContextOptions);
+    skgpu::graphite::ContextOptionsPriv contextOptionsPriv;
+    if (!options.fContextOptions.fOptionsPriv) {
+        revisedContextOptions.fOptionsPriv = &contextOptionsPriv;
     }
     // Needed to make synchronous readPixels work
-    revisedOptions.fOptionsPriv->fStoreContextRefInRecorder = true;
+    revisedContextOptions.fOptionsPriv->fStoreContextRefInRecorder = true;
 
-    return skgpu::graphite::ContextFactory::MakeVulkan(fVulkan, revisedOptions);
+    return skgpu::graphite::ContextFactory::MakeVulkan(fVulkan, revisedContextOptions);
 }
 
 }  // namespace skiatest::graphite

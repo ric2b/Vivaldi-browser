@@ -69,14 +69,19 @@ SupplementalProfileCache<AudioType>* GetSupplementalAudioTypeCache() {
   return cache.get();
 }
 
-bool IsSupportedHdrMetadata(const gfx::HdrMetadataType& hdr_metadata_type) {
-  switch (hdr_metadata_type) {
+bool IsSupportedHdrMetadata(const VideoType& type) {
+  switch (type.hdr_metadata_type) {
     case gfx::HdrMetadataType::kNone:
       return true;
 
     case gfx::HdrMetadataType::kSmpteSt2086:
-      return base::FeatureList::IsEnabled(kSupportSmpteSt2086HdrMetadata);
+      // HDR metadata is currently only used with the PQ transfer function.
+      // See gfx::ColorTransform for more details.
+      return type.color_space.transfer ==
+             VideoColorSpace::TransferID::SMPTEST2084;
 
+    // 2094-10 SEI metadata is not the same as Dolby Vision RPU metadata, Dolby
+    // Vision decoders on each platform only support Dolby Vision RPU metadata.
     case gfx::HdrMetadataType::kSmpteSt2094_10:
     case gfx::HdrMetadataType::kSmpteSt2094_40:
       return false;
@@ -201,6 +206,7 @@ bool IsAudioCodecProprietary(AudioCodec codec) {
       return true;
 
     case AudioCodec::kFLAC:
+    case AudioCodec::kIAMF:
     case AudioCodec::kMP3:
     case AudioCodec::kOpus:
     case AudioCodec::kVorbis:
@@ -342,8 +348,9 @@ bool IsSupportedVideoType(const VideoType& type) {
 // TODO(chcunningham): Add platform specific logic for Android (move from
 // MimeUtilInternal).
 bool IsDefaultSupportedVideoType(const VideoType& type) {
-  if (!IsSupportedHdrMetadata(type.hdr_metadata_type))
+  if (!IsSupportedHdrMetadata(type)) {
     return false;
+  }
 
 #if !BUILDFLAG(USE_PROPRIETARY_CODECS)
   if (IsVideoCodecProprietary(type.codec))
@@ -400,24 +407,18 @@ bool IsDefaultSupportedAudioType(const AudioType& type) {
     case AudioCodec::kGSM_MS:
     case AudioCodec::kALAC:
     case AudioCodec::kMpegHAudio:
-    case AudioCodec::kAC4:
+    case AudioCodec::kIAMF:
     case AudioCodec::kUnknown:
       return false;
     case AudioCodec::kDTS:
     case AudioCodec::kDTSXP2:
     case AudioCodec::kDTSE:
-#if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
-      return true;
-#else
-      return false;
-#endif
+      return BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO);
     case AudioCodec::kAC3:
     case AudioCodec::kEAC3:
-#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
-      return true;
-#else
-      return false;
-#endif
+      return BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO);
+    case AudioCodec::kAC4:
+      return BUILDFLAG(ENABLE_PLATFORM_AC4_AUDIO);
   }
 }
 

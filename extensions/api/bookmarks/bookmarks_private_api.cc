@@ -32,6 +32,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/history/core/browser/top_sites.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/shell_dialogs/selected_file_info.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -271,7 +272,8 @@ void BookmarksPrivateIOFunction::FileSelectionCanceled(void* params) {
 }
 
 void BookmarksPrivateIOFunction::MultiFilesSelected(
-    const std::vector<base::FilePath>& files, void* params) {
+    const std::vector<ui::SelectedFileInfo>& files,
+    void* params) {
   select_file_dialog_.reset();
   Release();  // Balanced in BookmarsIOFunction::SelectFile()
   NOTREACHED() << "Should not be able to select multiple files";
@@ -305,10 +307,10 @@ BookmarksPrivateExportFunction::RunOnReady() {
 }
 
 void BookmarksPrivateExportFunction::FileSelected(
-    const base::FilePath& path,
+    const ui::SelectedFileInfo& path,
     int index,
     void* params) {
-  bookmark_html_writer::WriteBookmarks(GetProfile(), path, nullptr);
+  bookmark_html_writer::WriteBookmarks(GetProfile(), path.file_path, nullptr);
   select_file_dialog_.reset();
   Release();  // Balanced in BookmarkManagerPrivateIOFunction::SelectFile()
 }

@@ -380,6 +380,15 @@ const size_t kMaxConcurrentStreamLimit = 256;
 
 }  // namespace
 
+BASE_FEATURE(kH2InitialMaxConcurrentStreamsOverride,
+             "H2InitialMaxConcurrentStreamsOverride",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<int> kH2InitialMaxConcurrentStreams(
+    &kH2InitialMaxConcurrentStreamsOverride,
+    "initial_max_concurrent_streams",
+    kDefaultInitialMaxConcurrentStreams);
+
 SpdyProtocolErrorDetails MapFramerErrorToProtocolError(
     http2::Http2DecoderAdapter::SpdyFramerError err) {
   switch (err) {
@@ -719,13 +728,11 @@ void SpdyStreamRequest::OnConfirmHandshakeComplete(int rv) {
 }
 
 // static
-bool SpdySession::CanPool(
-    TransportSecurityState* transport_security_state,
-    const SSLInfo& ssl_info,
-    const SSLConfigService& ssl_config_service,
-    const std::string& old_hostname,
-    const std::string& new_hostname,
-    const net::NetworkAnonymizationKey& network_anonymization_key) {
+bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
+                          const SSLInfo& ssl_info,
+                          const SSLConfigService& ssl_config_service,
+                          const std::string& old_hostname,
+                          const std::string& new_hostname) {
   // Pooling is prohibited if the server cert is not valid for the new domain,
   // and for connections on which client certs were sent. It is also prohibited
   // when channel ID was sent if the hosts are from different eTLDs+1.
@@ -741,15 +748,10 @@ bool SpdySession::CanPool(
   if (!ssl_info.cert->VerifyNameMatch(new_hostname))
     return false;
 
-  std::string pinning_failure_log;
-  // DISABLE_PIN_REPORTS is set here because this check can fail in
-  // normal operation without being indicative of a misconfiguration or
-  // attack. Port is left at 0 as it is never used.
+  // Port is left at 0 as it is never used.
   if (transport_security_state->CheckPublicKeyPins(
           HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
-          ssl_info.public_key_hashes, ssl_info.unverified_cert.get(),
-          ssl_info.cert.get(), TransportSecurityState::DISABLE_PIN_REPORTS,
-          network_anonymization_key, &pinning_failure_log) ==
+          ssl_info.public_key_hashes) ==
       TransportSecurityState::PKPStatus::VIOLATED) {
     return false;
   }
@@ -757,7 +759,6 @@ bool SpdySession::CanPool(
   switch (transport_security_state->CheckCTRequirements(
       HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
       ssl_info.public_key_hashes, ssl_info.cert.get(),
-      ssl_info.unverified_cert.get(), ssl_info.signed_certificate_timestamps,
       ssl_info.ct_policy_compliance)) {
     case TransportSecurityState::CT_REQUIREMENTS_NOT_MET:
       return false;
@@ -802,7 +803,7 @@ SpdySession::SpdySession(
       greased_http2_frame_(greased_http2_frame),
       http2_end_stream_with_data_frame_(http2_end_stream_with_data_frame),
       enable_priority_update_(enable_priority_update),
-      max_concurrent_streams_(kInitialMaxConcurrentStreams),
+      max_concurrent_streams_(kH2InitialMaxConcurrentStreams.Get()),
       last_read_time_(time_func()),
       session_max_recv_window_size_(session_max_recv_window_size),
       session_max_queued_capped_frames_(session_max_queued_capped_frames),
@@ -971,8 +972,7 @@ bool SpdySession::VerifyDomainAuthentication(const std::string& domain) const {
     return true;  // This is not a secure session, so all domains are okay.
 
   return CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
-                 host_port_pair().host(), domain,
-                 spdy_session_key_.network_anonymization_key());
+                 host_port_pair().host(), domain);
 }
 
 void SpdySession::EnqueueStreamWrite(
@@ -1288,10 +1288,6 @@ base::StringPiece SpdySession::GetAcceptChViaAlps(
 
   LogSpdyAcceptChForOriginHistogram(true);
   return it->second;
-}
-
-bool SpdySession::WasAlpnNegotiated() const {
-  return socket_->WasAlpnNegotiated();
 }
 
 NextProto SpdySession::GetNegotiatedProtocol() const {
@@ -1732,12 +1728,15 @@ void SpdySession::CloseActiveStreamIterator(ActiveStreamMap::iterator it,
 
   DeleteStream(std::move(owned_stream), status);
 
-  // If the socket belongs to a socket pool, and there are no active streams,
-  // and the socket pool is stalled, then close the session to free up a socket
-  // slot.
-  if (client_socket_handle_ && active_streams_.empty() &&
-      created_streams_.empty() && client_socket_handle_->IsPoolStalled()) {
-    DoDrainSession(ERR_CONNECTION_CLOSED, "Closing idle connection.");
+  if (active_streams_.empty() && created_streams_.empty()) {
+    // If the socket belongs to a socket pool, and there are no active streams,
+    // and the socket pool is stalled, then close the session to free up a
+    // socket slot.
+    if (client_socket_handle_ && client_socket_handle_->IsPoolStalled()) {
+      DoDrainSession(ERR_CONNECTION_CLOSED, "Closing idle connection.");
+    } else {
+      MaybeFinishGoingAway();
+    }
   }
 }
 
@@ -1883,7 +1882,7 @@ int SpdySession::DoRead() {
 
   CHECK(socket_);
   read_state_ = READ_STATE_DO_READ_COMPLETE;
-  read_buffer_ = base::MakeRefCounted<IOBuffer>(kReadBufferSize);
+  read_buffer_ = base::MakeRefCounted<IOBufferWithSize>(kReadBufferSize);
   int rv = socket_->ReadIfReady(
       read_buffer_.get(), kReadBufferSize,
       base::BindOnce(&SpdySession::PumpReadLoop, weak_factory_.GetWeakPtr(),
@@ -2772,6 +2771,10 @@ void SpdySession::OnDataFrameHeader(spdy::SpdyStreamId stream_id,
                                     bool fin) {
   CHECK(in_io_loop_);
 
+  net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_RECV_DATA, [&] {
+    return NetLogSpdyDataParams(stream_id, length, fin);
+  });
+
   auto it = active_streams_.find(stream_id);
 
   // By the time data comes in, the stream may already be inactive.
@@ -2790,10 +2793,6 @@ void SpdySession::OnStreamFrameData(spdy::SpdyStreamId stream_id,
                                     size_t len) {
   CHECK(in_io_loop_);
   DCHECK_LT(len, 1u << 24);
-
-  net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_RECV_DATA, [&] {
-    return NetLogSpdyDataParams(stream_id, len, false);
-  });
 
   // Build the buffer as early as possible so that we go through the
   // session flow control checks and update
@@ -2828,8 +2827,6 @@ void SpdySession::OnStreamFrameData(spdy::SpdyStreamId stream_id,
 
 void SpdySession::OnStreamEnd(spdy::SpdyStreamId stream_id) {
   CHECK(in_io_loop_);
-  net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_RECV_DATA,
-                    [&] { return NetLogSpdyDataParams(stream_id, 0, true); });
 
   auto it = active_streams_.find(stream_id);
   // By the time data comes in, the stream may already be inactive.
@@ -2864,15 +2861,20 @@ void SpdySession::OnSettings() {
   net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_RECV_SETTINGS);
   net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_SEND_SETTINGS_ACK);
 
-  base::UmaHistogramCounts1000("Net.SpdySession.OnSettings.CreatedStreamCount",
-                               created_streams_.size());
-  base::UmaHistogramCounts1000("Net.SpdySession.OnSettings.ActiveStreamCount",
-                               active_streams_.size());
-  base::UmaHistogramCounts1000(
-      "Net.SpdySession.OnSettings.CreatedAndActiveStreamCount",
-      created_streams_.size() + active_streams_.size());
-  base::UmaHistogramCounts1000("Net.SpdySession.OnSettings.PendingStreamCount",
-                               GetTotalSize(pending_create_stream_queues_));
+  if (!settings_frame_received_) {
+    base::UmaHistogramCounts1000(
+        "Net.SpdySession.OnSettings.CreatedStreamCount2",
+        created_streams_.size());
+    base::UmaHistogramCounts1000(
+        "Net.SpdySession.OnSettings.ActiveStreamCount2",
+        active_streams_.size());
+    base::UmaHistogramCounts1000(
+        "Net.SpdySession.OnSettings.CreatedAndActiveStreamCount2",
+        created_streams_.size() + active_streams_.size());
+    base::UmaHistogramCounts1000(
+        "Net.SpdySession.OnSettings.PendingStreamCount2",
+        GetTotalSize(pending_create_stream_queues_));
+  }
 
   // Send an acknowledgment of the setting.
   spdy::SpdySettingsIR settings_ir;
@@ -3005,8 +3007,7 @@ void SpdySession::OnAltSvc(
     if (!GetSSLInfo(&ssl_info))
       return;
     if (!CanPool(transport_security_state_, ssl_info, *ssl_config_service_,
-                 host_port_pair().host(), gurl.host(),
-                 spdy_session_key_.network_anonymization_key())) {
+                 host_port_pair().host(), gurl.host())) {
       return;
     }
     scheme_host_port = url::SchemeHostPort(gurl);

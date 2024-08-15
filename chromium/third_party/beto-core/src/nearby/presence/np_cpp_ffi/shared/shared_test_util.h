@@ -18,7 +18,7 @@
 #include "nearby_protocol.h"
 
 inline nearby_protocol::RawAdvertisementPayload
-    V0AdvEmpty(nearby_protocol::ByteBuffer<255>({1, {0x00}}));
+    V0AdvEmpty(nearby_protocol::ByteBuffer<255>({2, {0x00, 0x03}}));
 
 inline nearby_protocol::RawAdvertisementPayload
     V0AdvSimple(nearby_protocol::ByteBuffer<255>({
@@ -37,20 +37,6 @@ inline nearby_protocol::RawAdvertisementPayload
              0x03,      // Public Identity DE header
              0x15, 0x03 // Length 1 Tx Power DE with value 3
          }}));
-
-inline nearby_protocol::RawAdvertisementPayload
-    V1AdvMultipleSections(nearby_protocol::ByteBuffer<255>(
-        {10,
-         {
-             0x20,             // V1 Advertisement header
-             0x04,             // Section Header
-             0x03,             // Public Identity DE header
-             0x26, 0x00, 0x46, // Length 2 Actions DE
-             0x03,             // Section Header
-             0x03,             // Public Identity DE header
-             0x15, 0x03        // Length 1 Tx Power DE with value 3
-         }}));
-
 void test_panic_handler(nearby_protocol::PanicReason reason);
 
 std::string generate_hex_string(size_t length);

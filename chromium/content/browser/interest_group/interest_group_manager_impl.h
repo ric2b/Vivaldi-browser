@@ -5,12 +5,15 @@
 #ifndef CONTENT_BROWSER_INTEREST_GROUP_INTEREST_GROUP_MANAGER_IMPL_H_
 #define CONTENT_BROWSER_INTEREST_GROUP_INTEREST_GROUP_MANAGER_IMPL_H_
 
+#include <cstddef>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
@@ -19,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/types/expected.h"
+#include "base/types/optional_ref.h"
 #include "content/browser/interest_group/auction_process_manager.h"
 #include "content/browser/interest_group/bidding_and_auction_serializer.h"
 #include "content/browser/interest_group/bidding_and_auction_server_key_fetcher.h"
@@ -37,7 +41,6 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/mojom/interest_group/ad_auction_service.mojom.h"
 #include "url/origin.h"
@@ -51,6 +54,7 @@ class FilePath;
 namespace content {
 
 class InterestGroupStorage;
+struct DebugReportLockoutAndCooldowns;
 
 // InterestGroupManager is a per-StoragePartition class that owns shared
 // state needed to run FLEDGE auctions. It lives on the UI thread.
@@ -61,6 +65,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
  public:
   using AreReportingOriginsAttestedCallback =
       base::RepeatingCallback<bool(const std::vector<url::Origin>&)>;
+  using GetKAnonymityServiceDelegateCallback =
+      InterestGroupKAnonymityManager::GetKAnonymityServiceDelegateCallback;
 
   // Controls how auction worklets will be run. kDedicated will use
   // fully-isolated utility processes solely for worklet. kInRenderer will
@@ -84,7 +90,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       bool in_memory,
       ProcessMode process_mode,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      KAnonymityServiceDelegate* k_anonymity_service);
+      GetKAnonymityServiceDelegateCallback k_anonymity_service_callback);
   ~InterestGroupManagerImpl() override;
   InterestGroupManagerImpl(const InterestGroupManagerImpl& other) = delete;
   InterestGroupManagerImpl& operator=(const InterestGroupManagerImpl& other) =
@@ -102,11 +108,19 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       kWin,
       kAdditionalBidWin,
       kClear,
+      kTopLevelBid,
+      kTopLevelAdditionalBid
     };
-    virtual void OnInterestGroupAccessed(const base::Time& access_time,
-                                         AccessType type,
-                                         const url::Origin& owner_origin,
-                                         const std::string& name) = 0;
+
+    virtual void OnInterestGroupAccessed(
+        base::optional_ref<const std::string> devtools_auction_id,
+        base::Time access_time,
+        AccessType type,
+        const url::Origin& owner_origin,
+        const std::string& name,
+        base::optional_ref<const url::Origin> component_seller_origin,
+        std::optional<double> bid,
+        base::optional_ref<const std::string> bid_currency) = 0;
   };
 
   // InterestGroupManager overrides:
@@ -131,7 +145,9 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   //
   // `url_loader_factory` is the factory for renderer frame where
   // navigator.joinAdInterestGroup() was invoked, and will be used for the
-  // .well-known fetch if one is needed.
+  // .well-known fetch if one is needed. It will also be used to pre-fetch
+  // B&A server keys if the B&A server is enabled and if this is the first
+  // joinAdInterestGroup call since browser start.
   //
   // `report_result_only`, if true, results in calling `callback` with the
   // result of the permissions check, but not actually joining the interest
@@ -202,9 +218,15 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   //
   // The list is shuffled in-place to ensure fairness.
   void UpdateInterestGroupsOfOwners(
-      base::span<url::Origin> owners,
+      std::vector<url::Origin> owners,
       network::mojom::ClientSecurityStatePtr client_security_state,
       AreReportingOriginsAttestedCallback callback);
+
+  void UpdateInterestGroupsOfOwnersWithDelay(
+      std::vector<url::Origin> owners,
+      network::mojom::ClientSecurityStatePtr client_security_state,
+      AreReportingOriginsAttestedCallback callback,
+      const base::TimeDelta& delay);
 
   // For testing *only*; changes the maximum amount of time that the update
   // process can run before it gets cancelled for taking too long.
@@ -227,6 +249,14 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // piece of opaque data to identify the winning ad.
   void RecordInterestGroupWin(const blink::InterestGroupKey& group_key,
                               const std::string& ad_json);
+  // Adds an entry to forDebuggingOnly report lockout table if the table is
+  // empty. Otherwise replaces the existing entry.
+  void RecordDebugReportLockout(base::Time last_report_sent_time);
+  // Adds an entry to forDebuggingOnly report cooldown table for `origin` if it
+  // does not exist, otherwise replaces the existing entry.
+  void RecordDebugReportCooldown(const url::Origin& origin,
+                                 base::Time cooldown_start,
+                                 DebugReportCooldownType cooldown_type);
 
   // Reports the ad keys to the k-anonymity service. Should be called when
   // FLEDGE selects an ad.
@@ -235,13 +265,15 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Gets a single interest group.
   void GetInterestGroup(
       const blink::InterestGroupKey& group_key,
-      base::OnceCallback<void(absl::optional<StorageInterestGroup>)> callback);
+      base::OnceCallback<void(std::optional<SingleStorageInterestGroup>)>
+          callback);
 
   // Gets a single interest group.
   void GetInterestGroup(
       const url::Origin& owner,
       const std::string& name,
-      base::OnceCallback<void(absl::optional<StorageInterestGroup>)> callback);
+      base::OnceCallback<void(std::optional<SingleStorageInterestGroup>)>
+          callback);
 
   // Gets a list of all interest group owners. Each owner will only appear
   // once.
@@ -251,6 +283,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Gets a list of all interest groups with their bidding information
   // associated with the provided owner.
   void GetInterestGroupsForOwner(
+      const std::optional<std::string>& devtools_auction_id,
       const url::Origin& owner,
       base::OnceCallback<void(scoped_refptr<StorageInterestGroups>)> callback);
 
@@ -358,10 +391,16 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       base::OnceCallback<void(
           const std::vector<StorageInterestGroup::KAnonymityData>&)> callback);
 
+  // Gets lockout and cooldown for sending forDebuggingOnly reports.
+  void GetDebugReportLockoutAndCooldowns(
+      base::flat_set<url::Origin> origins,
+      base::OnceCallback<void(std::optional<DebugReportLockoutAndCooldowns>)>
+          callback);
+
   // Gets the last time that the key was reported to the k-anonymity server.
   void GetLastKAnonymityReported(
       const std::string& key,
-      base::OnceCallback<void(absl::optional<base::Time>)> callback);
+      base::OnceCallback<void(std::optional<base::Time>)> callback);
   // Updates the last time that the key was reported to the k-anonymity server.
   void UpdateLastKAnonymityReported(const std::string& key);
 
@@ -374,7 +413,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // remain valid until the `callback` is called or destroyed.
   void GetBiddingAndAuctionServerKey(
       network::mojom::URLLoaderFactory* loader,
-      absl::optional<url::Origin> coordinator,
+      std::optional<url::Origin> coordinator,
       base::OnceCallback<void(
           base::expected<BiddingAndAuctionServerKey, std::string>)> callback);
 
@@ -395,9 +434,14 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // database (can't log them all before the database update, since for, e.g.,
   // calls to retrieve all interest groups for an owner, the name may not be
   // known until after the database has been accessed).
-  void NotifyInterestGroupAccessed(InterestGroupObserver::AccessType type,
-                                   const url::Origin& owner_origin,
-                                   const std::string& name);
+  void NotifyInterestGroupAccessed(
+      base::optional_ref<const std::string> devtools_auction_id,
+      InterestGroupObserver::AccessType type,
+      const url::Origin& owner_origin,
+      const std::string& name,
+      base::optional_ref<const url::Origin> component_seller_origin,
+      std::optional<double> bid,
+      base::optional_ref<const std::string> bid_currency);
 
  private:
   // InterestGroupUpdateManager calls private members to write updates to the
@@ -427,6 +471,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
     AdAuctionDataLoaderState(AdAuctionDataLoaderState&& state);
     BiddingAndAuctionSerializer serializer;
     base::OnceCallback<void(BiddingAndAuctionData)> callback;
+    base::TimeTicks start_time;
   };
 
   // Callbacks for CheckPermissionsAndJoinInterestGroup(),
@@ -498,6 +543,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
 
   void OnGetInterestGroupsComplete(
       base::OnceCallback<void(scoped_refptr<StorageInterestGroups>)> callback,
+      const std::optional<std::string>& devtools_auction_id,
       scoped_refptr<StorageInterestGroups> groups);
 
   // Dequeues and sends the first report request in `report_requests_` queue,

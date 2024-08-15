@@ -29,6 +29,7 @@ import {Form, FormLabel} from '../widgets/form';
 import {HotkeyGlyphs} from '../widgets/hotkey_glyphs';
 import {Icon} from '../widgets/icon';
 import {Menu, MenuDivider, MenuItem, PopupMenu2} from '../widgets/menu';
+import {showModal} from '../widgets/modal';
 import {
   MultiSelect,
   MultiSelectDiff,
@@ -42,11 +43,11 @@ import {Switch} from '../widgets/switch';
 import {TextInput} from '../widgets/text_input';
 import {MultiParagraphText, TextParagraph} from '../widgets/text_paragraph';
 import {LazyTreeNode, Tree, TreeNode} from '../widgets/tree';
+import {VegaView} from '../widgets/vega_view';
 
 import {createPage} from './pages';
 import {PopupMenuButton} from './popup_menu';
 import {TableShowcase} from './tables/table_showcase';
-import {VegaView} from './widgets/vega_view';
 
 const DATA_ENGLISH_LETTER_FREQUENCY = {
   table: [
@@ -257,6 +258,7 @@ function PortalButton() {
   let portalOpen = false;
 
   return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     view: function({attrs}: any) {
       const {
         zIndex = true,
@@ -351,12 +353,14 @@ interface WidgetShowcaseAttrs {
   label: string;
   description?: string;
   initialOpts?: Options;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   renderWidget: (options: any) => any;
   wide?: boolean;
 }
 
 // A little helper class to render any vnode with a dynamic set of options
 class WidgetShowcase implements m.ClassComponent<WidgetShowcaseAttrs> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private optValues: any = {};
   private opts?: Options;
 
@@ -508,6 +512,7 @@ export const WidgetsPage = createPage({
         }),
         m(WidgetShowcase, {
           label: 'Switch',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           renderWidget: ({label, ...rest}: any) =>
               m(Switch, {label: label ? 'Switch' : undefined, ...rest}),
           initialOpts: {
@@ -1015,9 +1020,98 @@ export const WidgetsPage = createPage({
                 );
               },
             }),
+            m(
+              WidgetShowcase, {
+                label: 'Modal',
+                description: `A helper for modal dialog.`,
+                renderWidget: () => m(ModalShowcase),
+              }),
     );
   },
 });
+
+class ModalShowcase implements m.ClassComponent {
+  private static counter = 0;
+
+  private static log(txt: string) {
+    const mwlogs = document.getElementById('mwlogs');
+    if (!mwlogs || !(mwlogs instanceof HTMLTextAreaElement)) return;
+    const time = new Date().toLocaleTimeString();
+    mwlogs.value += `[${time}] ${txt}\n`;
+    mwlogs.scrollTop = mwlogs.scrollHeight;
+  }
+
+  private static showModalDialog(staticContent = false) {
+    const id = `N=${++ModalShowcase.counter}`;
+    ModalShowcase.log(`Open ${id}`);
+    const logOnClose = () => ModalShowcase.log(`Close ${id}`);
+
+    let content;
+    if (staticContent) {
+      content = m('.modal-pre', 'Content of the modal dialog.\nEnd of content');
+    } else {
+      const component = {
+        oninit: function(vnode: m.Vnode<{}, {progress: number}>) {
+          vnode.state.progress = (vnode.state.progress as number || 0) + 1;
+        },
+        view: function(vnode: m.Vnode<{}, {progress: number}>) {
+          vnode.state.progress = (vnode.state.progress + 1) % 100;
+          raf.scheduleFullRedraw();
+          return m(
+              'div',
+              m('div', 'You should see an animating progress bar'),
+              m('progress', {value: vnode.state.progress, max: 100}),
+          );
+        },
+      } as m.Component<{}, {progress: number}>;
+      content = () => m(component);
+    }
+    const closePromise = showModal({
+      title: `Modal dialog ${id}`,
+      buttons: [
+        {text: 'OK', action: () => ModalShowcase.log(`OK ${id}`)},
+        {text: 'Cancel', action: () => ModalShowcase.log(`Cancel ${id}`)},
+        {
+          text: 'Show another now',
+          action: () => ModalShowcase.showModalDialog(),
+        },
+        {
+          text: 'Show another in 2s',
+          action: () => setTimeout(() => ModalShowcase.showModalDialog(), 2000),
+        },
+      ],
+      content,
+    });
+    closePromise.then(logOnClose);
+  }
+
+  view() {
+    return m(
+        'div',
+        {
+          style: {
+            'display': 'flex',
+            'flex-direction': 'column',
+            'width': '100%',
+          },
+        },
+        m('textarea', {
+          id: 'mwlogs',
+          readonly: 'readonly',
+          rows: '8',
+          placeholder: 'Logs will appear here',
+        }),
+        m('input[type=button]', {
+          value: 'Show modal (static)',
+          onclick: () => ModalShowcase.showModalDialog(true),
+        }),
+        m('input[type=button]', {
+          value: 'Show modal (dynamic)',
+          onclick: () => ModalShowcase.showModalDialog(false),
+        }),
+    );
+  }
+}  // class ModalShowcase
 
 function renderForm(id: string) {
   return m(

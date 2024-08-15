@@ -172,6 +172,7 @@ sm2 = perm * sm1;    // Permute the columns
   sm1.cwiseMax(sm2);
   sm1.cwiseAbs();
   sm1.cwiseSqrt();
+  sm1.cwiseCbrt();
   \endcode</td>
   <td>
   sm1 and sm2 should have the same storage order

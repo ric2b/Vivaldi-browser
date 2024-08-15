@@ -28,6 +28,10 @@
   #define COMPAT_HWCAP_ISA_V (1 << ('V' - 'A'))
 #endif
 
+#if XNN_ARCH_PPC64
+  #include <sys/auxv.h>
+#endif
+
 #if XNN_ARCH_WASMRELAXEDSIMD
   #include <wasm_simd128.h>
 #endif
@@ -96,6 +100,8 @@ static void init_hardware_config(void) {
     hardware_config.use_x86_avx512skx = hardware_config.use_x86_avx512f &&
       cpuinfo_has_x86_avx512bw() && cpuinfo_has_x86_avx512dq() && cpuinfo_has_x86_avx512vl();
     hardware_config.use_x86_avx512vbmi = hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vbmi();
+    hardware_config.use_x86_avx512vnni = hardware_config.use_x86_avx512skx && cpuinfo_has_x86_avx512vnni();
+    hardware_config.use_x86_avxvnni = hardware_config.use_x86_avx2 && cpuinfo_has_x86_avxvnni();
   #endif  // !XNN_ARCH_X86 && !XNN_ARCH_X86_64
 
   #if XNN_ARCH_RISCV
@@ -109,6 +115,22 @@ static void init_hardware_config(void) {
       hardware_config.vlenb = vlenb;
       xnn_log_info("RISC-V VLENB: %" PRIu32, vlenb);
     }
+  #endif
+
+  #if XNN_ARCH_PPC64
+    const unsigned long HWCAPs = getauxval(AT_HWCAP);
+    const unsigned long HWCAPs_2 = getauxval(AT_HWCAP2);
+    if (HWCAPs & PPC_FEATURE_HAS_VSX) {
+      hardware_config.use_vsx = 1;
+    }
+    #if defined PPC_FEATURE2_ARCH_3_1
+      if (HWCAPs_2 &  PPC_FEATURE2_ARCH_3_1) {
+        hardware_config.use_vsx3 = 1;
+      }
+      if (HWCAPs_2 & PPC_FEATURE2_MMA) {
+        hardware_config.use_mma = 1;
+      }
+    #endif
   #endif
 
   #if XNN_ARCH_WASM || XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
@@ -162,6 +184,16 @@ static void init_hardware_config(void) {
       }
       hardware_config.use_wasm_blendvps = !wasm_v128_any_true(diff);
     }
+    {
+      const v128_t input1 = wasm_f32x4_const(16777218.f, 0.f, 0.f, 0.f);
+      const v128_t input2 = wasm_f32x4_const(3.f, 0.f, 0.f, 0.f);
+      const v128_t input3 = wasm_f32x4_const(3.f, 0.f, 0.f, 0.f);
+      v128_t diff = wasm_i8x16_const_splat(0);
+      const v128_t relaxed_result = wasm_f32x4_relaxed_madd(input1, input2, input3);
+      const v128_t mul_result = wasm_f32x4_add(input3, wasm_f32x4_mul(input1, input2));
+      diff = wasm_v128_or(diff, wasm_v128_xor(mul_result, relaxed_result));
+      hardware_config.use_wasm_fma = !wasm_v128_any_true(diff);
+    }
   #endif  // XNN_ARCH_WASMRELAXEDSIMD
 }
 
@@ -173,7 +205,7 @@ static void init_hardware_config(void) {
 #endif
 
 const struct xnn_hardware_config* xnn_init_hardware_config() {
-  #if !XNN_PLATFORM_WEB && !XNN_ARCH_RISCV && !(XNN_ARCH_ARM64 && XNN_PLATFORM_WINDOWS)
+  #if !XNN_PLATFORM_WEB && !XNN_ARCH_RISCV && !XNN_ARCH_PPC64 && !(XNN_ARCH_ARM64 && XNN_PLATFORM_WINDOWS)
     if (!cpuinfo_initialize()) {
       xnn_log_error("failed to initialize cpuinfo");
       return NULL;

@@ -212,6 +212,9 @@ enum attribute {
   size
   vertex
   workgroup_size
+
+  // framebuffer-fetch input
+  color
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -629,6 +632,10 @@ match workgroup
 @must_use @const fn pack2x16unorm(vec2<f32>) -> u32
 @must_use @const fn pack4x8snorm(vec4<f32>) -> u32
 @must_use @const fn pack4x8unorm(vec4<f32>) -> u32
+@must_use @const fn pack4xI8(vec4<i32>) -> u32
+@must_use @const fn pack4xU8(vec4<u32>) -> u32
+@must_use @const fn pack4xI8Clamp(vec4<i32>) -> u32
+@must_use @const fn pack4xU8Clamp(vec4<u32>) -> u32
 @must_use @const fn pow<T: fa_f32_f16>(T, T) -> T
 @must_use @const fn pow<N: num, T: fa_f32_f16>(vec<N, T>, vec<N, T>) -> vec<N, T>
 @must_use @const fn quantizeToF16(f32) -> f32
@@ -671,6 +678,8 @@ match workgroup
 @must_use @const fn unpack2x16unorm(u32) -> vec2<f32>
 @must_use @const fn unpack4x8snorm(u32) -> vec4<f32>
 @must_use @const fn unpack4x8unorm(u32) -> vec4<f32>
+@must_use @const fn unpack4xI8(u32) -> vec4<i32>
+@must_use @const fn unpack4xU8(u32) -> vec4<u32>
 @stage("compute") fn workgroupBarrier()
 
 @stage("compute") fn textureBarrier()
@@ -1106,8 +1115,3 @@ ctor mat4x4<T: fa_f32_f16>(T, T, T, T,
 
 @must_use @const op >> <T: ia_iu32>(T, u32) -> T
 @must_use @const op >> <T: ia_iu32, N: num> (vec<N, T>, vec<N, u32>) -> vec<N, T>
-
-////////////////////////////////////////////////////////////////////////////////
-// Tint internal builtins                                                     //
-////////////////////////////////////////////////////////////////////////////////
-@const("Identity") fn _tint_materialize<T>(T) -> T

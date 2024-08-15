@@ -15,9 +15,10 @@
 #include "components/sync/service/data_type_controller.h"
 #include "components/sync/service/sync_service_impl.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
-#include "ios/chrome/browser/history/history_service_factory.h"
+#include "ios/chrome/browser/history/model/history_service_factory.h"
 #include "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #include "ios/web/public/test/web_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -106,6 +107,7 @@ class SyncServiceFactoryTest : public PlatformTest {
 
  private:
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
 };
 

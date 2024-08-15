@@ -57,7 +57,7 @@
 <translation id="3402602684546832928">Pelê şûnpela Opera-yê hilbijêre</translation>
 <translation id="3451317331714872347">Dîmen 8</translation>
 <translation id="3457498675806041407">Derketinê bipejirîne</translation>
-<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> hate sazkirin û wê çalak bibe piştî gerok ji nû ve werê destpêkirin.</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> hat sazkirin û wê çalak bibe piştî gerok ji nû ve werê destpêkirin.</translation>
 <translation id="3516213908976398531">Dîmen 11</translation>
 <translation id="3521635864657970829">Tu bi rastî dixwazî vê çarçoveyê bigirî?</translation>
 <translation id="3540597690227428180">Heywan 9</translation>
@@ -66,7 +66,7 @@
 <translation id="3601066750251199488">Hov 3</translation>
 <translation id="3620979700683094848">Malper dikarin vîdyoyan bi xweberî lêbidin</translation>
 <translation id="3680031241659195730">Guhertoyekê nû ya Vivaldiyê heye!</translation>
-<translation id="3708982624815781692">Daxistin hate qutkirin.</translation>
+<translation id="3708982624815781692">Daxistin hat têkbirin.</translation>
 <translation id="3732157130969736834">Girêdanê tevlî şûnpelan bike</translation>
 <translation id="3732388226447288666">Heywan 2</translation>
 <translation id="3732439195215136813">Heywan 5</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Pêve bike</translation>
 <translation id="4005270918754737597">Vê guhertoyê derbas bike</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Dîsa nîşan nede</translation>
 <translation id="4074744496918018786">Wêneyê di çarçoveyekê nû de veke</translation>
 <translation id="410351446219883937">Bi xweberî lêbide</translation>
 <translation id="4324492550286218827">Dîmen 2</translation>
@@ -110,7 +109,6 @@
 <translation id="5615637589913244581">Guhertoya Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Wêneyê di çarçoveyekê nû de veke</translation>
 <translation id="5656371807944747581">Çewtiya rojanekirinê!</translation>
-<translation id="5716238312826274098">Agahdariyan neçalak bike</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> niha berdest e ( ya te <ph name="OLD_VERSION" /> ye). Tu dixwazî niha daxî?</translation>
 <translation id="5770433027661640693">Dîmen 10</translation>
 <translation id="5857090052475505287">Peldankekê nû</translation>
@@ -137,8 +135,7 @@
 <translation id="7111492742514999492">Dîmen 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Sazkirina rojanekirinê nehat destpêkirin. Ji kerema xwe, kontrol bike ku cih li ser bîrgeh an jî dîska kombersê heye ya na û paşê dîsa biceribîne.</translation>
-<translation id="7658239707568436148">Dev jê berde</translation>
-<translation id="7715497554424665066">&amp;Guh nede rojanekirinê</translation>
+<translation id="7658239707568436148">Têk bibe</translation>
 <translation id="7724603315864178912">Jê bike</translation>
 <translation id="7727481996062361502">Rojanekirin tê piştrastkirin...</translation>
 <translation id="7793738202466490491">Wekî bûyera salnameyê tevlî bike</translation>
@@ -157,7 +154,7 @@
 <translation id="8388552048012645975">Rojanekirin tê daxistin...</translation>
 <translation id="8427094907586191051">Dîmen 17</translation>
 <translation id="8439034818057146672">Guhertoyekê nû ya Vivaldiyê ji bo sazkirinê amade ye.</translation>
-<translation id="8446668873108041390">Xebitandina JavaScript-ê bi riya AppleScript-ê ve hatiye vemirandin. Li bin Sazkarî&gt; Nihênî&gt; Bûyerên Apple-ê sazkarî heye ku di Bûyerên Apple de mafê bide JavaScript -ê.</translation>
+<translation id="8446668873108041390">Xebitandina JavaScript bi riya AppleScript ve hatiye vemirandin. Li bin Sazkarî&gt; Taybetî&gt; Bûyerên Apple sazkarî heye ku di Bûyerên Apple de mafê bide JavaScript.</translation>
 <translation id="8539196077526389150">Dîmen 13</translation>
 <translation id="8562339533180097902">Vivaldi bigire û niha saz bike</translation>
 <translation id="8567452685425968223">Rojanekirin tê derxistin...</translation>

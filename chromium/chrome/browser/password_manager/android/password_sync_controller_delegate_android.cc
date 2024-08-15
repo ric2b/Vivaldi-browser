@@ -7,7 +7,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "components/password_manager/core/browser/android_backend_error.h"
+#include "components/password_manager/core/browser/password_store/android_backend_error.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/engine/data_type_activation_response.h"
@@ -188,7 +188,7 @@ PasswordSyncControllerDelegateAndroid::GetWeakPtrToBaseClass() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-void PasswordSyncControllerDelegateAndroid::ClearMetadataWhileStopped() {
+void PasswordSyncControllerDelegateAndroid::ClearMetadataIfStopped() {
   // If this method is being called, this means sync was permanently disabled,
   // either fully or specifically for passwords. This also includes more
   // advanced cases like the user having cleared all sync data in the dashboard
@@ -196,6 +196,11 @@ void PasswordSyncControllerDelegateAndroid::ClearMetadataWhileStopped() {
   // sync metadata is obsolete (i.e. CLIENT_DATA_OBSOLETE in the sync protocol).
   is_sync_enabled_ = IsSyncEnabled(false);
   // No metadata is managed by PasswordSyncControllerDelegateAndroid.
+}
+
+void PasswordSyncControllerDelegateAndroid::ReportBridgeErrorForTest() {
+  // Not supported for Android.
+  NOTREACHED();
 }
 
 }  // namespace password_manager

@@ -26,6 +26,7 @@ option go_package = "chromiumos/system_api/user_data_auth_proto";
 
 import "auth_factor.proto";
 import "fido.proto";
+import "recoverable_key_store.proto";
 
 ///////////////////////////////////////////////////////////////////////////////
 // Messages that's used by the actual request/reply goes below
@@ -350,22 +351,6 @@ message RemoveReply {
   CryptohomeErrorInfo error_info = 2;
 }
 
-// Input parameters to CheckKey()
-message CheckKeyRequest {
-  // We only check against keys that belongs to the user identified by
-  // account_id.
-  cryptohome.AccountIdentifier account_id = 1;
-  // The authentication credentials to check against the keys
-  cryptohome.AuthorizationRequest authorization_request = 2;
-  // Whether the webauthn secret should be unlocked.
-  bool unlock_webauthn_secret = 3;
-}
-
-// Output parameters for CheckKey()
-message CheckKeyReply {
-  CryptohomeErrorCode error = 1;
-}
-
 // Deprecated.
 // Input parameters to StartFingerprintAuthSession()
 message StartFingerprintAuthSessionRequest {
@@ -430,6 +415,7 @@ message GetHibernateSecretRequest {
 // Output parameters for GetHibernateSecret()
 message GetHibernateSecretReply {
   CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 3;
 
   // The hibernate secret.
   bytes hibernate_secret = 2;
@@ -468,6 +454,7 @@ message StartMigrateToDircryptoRequest {
 // Output parameters for StartMigrateToDircrypto().
 message StartMigrateToDircryptoReply {
   CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
 }
 
 // Status code for the message DircryptoMigrationProgress below.
@@ -684,6 +671,47 @@ message ExtendAuthSessionReply {
 message CreatePersistentUserRequest {
   // Id of the auth session associated with the user we aim to create.
   bytes auth_session_id = 1;
+}
+
+// AuthFactorAdded is the dbus signal that is sent whenever an AuthFactor
+// is added (freshly added or replaced).
+message AuthFactorAdded {
+  // Broadcast ID allows chrome to identify the authenticatng user, however, it
+  // cannot be used for authentication purposes.
+  bytes broadcast_id = 1;
+  // AuthFactor that was just added and is read from disk.
+  AuthFactor auth_factor = 2;
+}
+
+// AuthFactorRemoved is the dbus signal that is sent whenever an
+// AuthFactor is removed.
+message AuthFactorRemoved {
+  // Broadcast ID allows chrome to identify the authenticatng user, however, it
+  // cannot be used for authentication purposes.
+  bytes broadcast_id = 1;
+  // AuthFactor that was just removed and was last read from disk.
+  AuthFactor auth_factor = 2;
+}
+
+// AuthFactorUpdated is the dbus signal that is sent whenever an
+// AuthFactor is updated (including relabled, update key or metadata).
+// Note that Replace is a remove and add, so they would be two separate events.
+message AuthFactorUpdated {
+  // Broadcast ID allows chrome to identify the authenticatng user, however, it
+  // cannot be used for authentication purposes.
+  bytes broadcast_id = 1;
+  // AuthFactor that was just updated and was read from disk.
+  AuthFactor auth_factor = 2;
+}
+
+// AuthSessionExpiring is the dbus signal that is sent whenever an
+// AuthSession has less than a minute remaining.
+message AuthSessionExpiring {
+  // Broadcast ID allows chrome to identify the authenticatng user, however, it
+  // cannot be used for authentication purposes.
+  bytes broadcast_id = 1;
+  // Time left before which this auth session expires.
+  uint32 time_left = 2;
 }
 
 message CreatePersistentUserReply {
@@ -1449,10 +1477,9 @@ message GetRecoveryRequestReply {
   bytes recovery_request = 3;
 }
 
-// CreateVaultKeysetRequest is built when a user is trying to get the
-// recovery payload for CryptohomeRecoveryAuthFactor for a user. When the call
-// is made, AuthSession is in an unauthenticated state. After the operation the
-// AuthSession would still be in an unauthenticated state.
+// CreateVaultKeysetRequest is built when a user is trying to create a
+// VaultKeyset for a user, it is a similar operation to AddAuthFactor, but for
+// testing purposes with legacy VaultKeysets.
 message CreateVaultKeysetRequest {
   // Serialized form of token that is used to identify Auth Session that needs
   // to be extended.
@@ -1468,6 +1495,14 @@ message CreateVaultKeysetRequest {
   // A flag to disable the creation of KeyData with the VaultKeyset. Used to
   // emulate legacy VaultKeysets before M91.
   bool disable_key_data = 5;
+  // Optional parameters for SmartCard input.
+  // Parameters for connecting and making requests to a key delegate service:
+  // |dbus_service_name|, the D-Bus service name of the key delegate service
+  // that exports the key delegate object.
+  string key_delegate_dbus_service_name = 6;
+  // Specifies the key which is asked to sign the data. Contains the DER-encoded
+  // blob of the X.509 Subject Public Key Info.
+  bytes public_key_spki_der = 7;
 }
 
 message CreateVaultKeysetReply {
@@ -1631,15 +1666,38 @@ message AuthenticateAuthFactorCompleted {
   CryptohomeErrorCode error = 1;
   CryptohomeErrorInfo error_info = 2;
 
-  // The auth factor type should be filled regardless of result.
-  AuthFactorType auth_factor_type = 3;
+  oneof auth_factor {
+    // The auth factor type should be filled when it is not a new
+    // new user creation.
+    AuthFactorType auth_factor_type = 3;
+
+    // When a new user is created they are implicitly authenticated,
+    // so authentication does not occur.
+    // Create a new signal with this flag set on user creation instead.
+    bool user_creation = 4;
+  }
 }
 
 // The message sent in signal EvictedKeyRestoreSignal
 message EvictedKeyRestored {
-  bool done = 1;
   // Unique ID associated with the current suspend request,
   // when RestoreDeviceKey completes, correlated to a unique
   // suspend attempt.
-  int64 eviction_id = 2;
+  int64 eviction_id = 1;
+}
+
+// GetRecoverableKeyStores fetches all of the recoverable key stores of the
+// given user.
+
+// The request message of GetRecoverableKeyStores.
+message GetRecoverableKeyStoresRequest {
+  // The account of a user.
+  cryptohome.AccountIdentifier account_id = 1;
+}
+
+// The reply message of GetRecoverableKeyStores.
+message GetRecoverableKeyStoresReply {
+  CryptohomeErrorCode error = 1;
+  CryptohomeErrorInfo error_info = 2;
+  repeated cryptohome.RecoverableKeyStore key_stores = 3;
 }

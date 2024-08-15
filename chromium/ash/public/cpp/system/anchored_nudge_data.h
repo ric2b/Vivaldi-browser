@@ -13,6 +13,8 @@
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/time/time.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/view_tracker.h"
@@ -61,8 +63,8 @@ struct ASH_PUBLIC_EXPORT AnchoredNudgeData {
   AnchoredNudgeData& operator=(AnchoredNudgeData&& other);
   ~AnchoredNudgeData();
 
-  views::View* GetAnchorView() { return anchor_view_tracker_->view(); }
-  bool is_anchored() { return is_anchored_; }
+  views::View* GetAnchorView() const { return anchor_view_tracker_->view(); }
+  bool is_anchored() const { return is_anchored_; }
 
   // Sets the anchor view, observes it with a view tracker to assign a nullptr
   // in case the view is deleted, and sets the `is_anchored_` member variable.
@@ -73,29 +75,33 @@ struct ASH_PUBLIC_EXPORT AnchoredNudgeData {
   NudgeCatalogName catalog_name;
   std::u16string body_text;
 
-  // Optional system nudge view elements. If not empty, a leading image or nudge
-  // title will be created.
+  // Optional system nudge view elements. If not empty, a leading image, nudge
+  // title, or keyboard shortcut view will be created and the background will
+  // use customized colors.
   ui::ImageModel image_model;
   std::u16string title_text;
+  std::vector<ui::KeyboardCode> keyboard_codes;
+  absl::optional<ui::ColorId> background_color_id;
+  absl::optional<ui::ColorId> image_background_color_id;
 
   // Callback for close button pressed.
   base::RepeatingClosure close_button_callback;
 
   // Optional system nudge buttons. If the text is not empty, the respective
   // button will be created. Pressing the button will execute its callback, if
-  // any, followed by the nudge being closed. `second_button_text` should only
-  // be set if `first_button_text` has also been set.
+  // any, followed by the nudge being closed. `secondary_button_text` should
+  // only be set if `primary_button_text` has also been set.
   // TODO(b/285023559): Add a `ChainedCancelCallback` class instead of a
   // `RepeatingClosure` so we don't have to manually modify the provided
   // callbacks in the manager.
-  std::u16string first_button_text;
-  base::RepeatingClosure first_button_callback = base::DoNothing();
+  std::u16string primary_button_text;
+  base::RepeatingClosure primary_button_callback = base::DoNothing();
 
-  std::u16string second_button_text;
-  base::RepeatingClosure second_button_callback = base::DoNothing();
+  std::u16string secondary_button_text;
+  base::RepeatingClosure secondary_button_callback = base::DoNothing();
 
   // Used to set the nudge's placement in relation to the anchor view, if any.
-  views::BubbleBorder::Arrow arrow = views::BubbleBorder::BOTTOM_CENTER;
+  views::BubbleBorder::Arrow arrow = views::BubbleBorder::BOTTOM_RIGHT;
 
   // Nudges can set a default, medium or long duration for nudges that persist.
   // Refer to `anchored_nudge_manager_impl.cc` to see the duration values.
@@ -106,6 +112,10 @@ struct ASH_PUBLIC_EXPORT AnchoredNudgeData {
   // nudge will listen to shelf alignment changes to readjust its `arrow`.
   // It will maintain the shelf visible while a nudge is being shown.
   bool anchored_to_shelf = false;
+
+  // Whether the image will be set to the same size as its container view. This
+  // is required for lottie images, which need their size to be set directly.
+  bool fill_image_size = false;
 
   // Nudge action callbacks.
   HoverStateChangeCallback hover_state_change_callback;

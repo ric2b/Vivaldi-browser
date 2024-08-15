@@ -4,6 +4,7 @@
 
 #include "content/browser/preloading/preloading_attempt_impl.h"
 
+#include "base/containers/span.h"
 #include "base/metrics/crc32.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/state_transitions.h"
@@ -15,6 +16,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace content {
 
@@ -111,8 +113,15 @@ bool PreloadingAttemptImpl::ShouldHoldback() {
     return holdback_status_ == PreloadingHoldbackStatus::kHoldback;
   }
 
-  bool should_holdback = PreloadingConfig::GetInstance().ShouldHoldback(
-      preloading_type_, predictor_type_);
+  bool should_holdback_due_to_preloading_config =
+      PreloadingConfig::GetInstance().ShouldHoldback(preloading_type_,
+                                                     predictor_type_);
+  bool should_holdback_due_to_autosr_holdback =
+      predictor_type_ == content_preloading_predictor::
+                             kSpeculationRulesFromAutoSpeculationRules &&
+      blink::features::kAutoSpeculationRulesHoldback.Get();
+  bool should_holdback = should_holdback_due_to_preloading_config ||
+                         should_holdback_due_to_autosr_holdback;
   if (should_holdback) {
     holdback_status_ = PreloadingHoldbackStatus::kHoldback;
   } else {
@@ -224,8 +233,8 @@ void PreloadingAttemptImpl::RecordPreloadingAttemptMetrics(
 
   PreloadingConfig& config = PreloadingConfig::GetInstance();
   uint32_t sampled_num = sampling_seed_;
-  sampled_num =
-      base::Crc32(sampled_num, &sampling_source, sizeof(sampling_source));
+  sampled_num = base::Crc32(
+      sampled_num, base::as_bytes(base::make_span(&sampling_source, 1u)));
 
   double sampling_likelihood =
       config.SamplingLikelihood(preloading_type_, predictor_type_);
@@ -344,7 +353,10 @@ void PreloadingAttemptImpl::SetSpeculationEagerness(
             content_preloading_predictor::kSpeculationRules.ukm_value() ||
         predictor_type_.ukm_value() ==
             content_preloading_predictor::kSpeculationRulesFromIsolatedWorld
-                .ukm_value())
+                .ukm_value() ||
+        predictor_type_.ukm_value() ==
+            content_preloading_predictor::
+                kSpeculationRulesFromAutoSpeculationRules.ukm_value())
       << "predictor_type_: " << predictor_type_.name()
       << " (ukm_value = " << predictor_type_.ukm_value() << ")";
   eagerness_ = eagerness;

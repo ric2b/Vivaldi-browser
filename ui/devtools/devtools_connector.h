@@ -49,6 +49,10 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   void ConnectionReady() override;
   void SetOpenNewWindowForPopups(bool value) override;
 
+  int GetDockStateForLogging() override;
+  int GetOpenedByForLogging() override;
+  int GetClosedByForLogging() override;
+
  private:
   // Notify JS side to update bounds.
   void NotifyUpdateBounds();

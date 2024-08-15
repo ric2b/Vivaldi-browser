@@ -10,21 +10,21 @@
 #include <cstddef>
 #include <limits>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/address_pool_manager_types.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/flags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_config.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_forward.h"
 #include "build/build_config.h"
+#include "partition_alloc/address_pool_manager_types.h"
+#include "partition_alloc/flags.h"
+#include "partition_alloc/page_allocator_constants.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_config.h"
+#include "partition_alloc/partition_alloc_forward.h"
 
 #if BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)
 #include <mach/vm_page_size.h>
 #endif
 
-#if PA_CONFIG(HAS_MEMORY_TAGGING)
-#include "base/allocator/partition_allocator/src/partition_alloc/tagging.h"
+#if BUILDFLAG(HAS_MEMORY_TAGGING)
+#include "partition_alloc/tagging.h"
 #endif
 
 namespace partition_alloc {
@@ -61,7 +61,11 @@ enum class FreeFlags {
   kNoMemoryToolOverride = 1 << 0,
   // Don't allow any hooks (override or observers).
   kNoHooks = 1 << 1,  // Internal.
-  kMaxValue = kNoHooks,
+  // Quarantine for a while to ensure no UaF from on-stack pointers.
+  kSchedulerLoopQuarantine = 1 << 2,
+  // Zap the object region on `Free()`.
+  kZap = 1 << 3,
+  kMaxValue = kZap,
 };
 PA_DEFINE_OPERATORS_FOR_FLAGS(FreeFlags);
 }  // namespace internal
@@ -107,6 +111,7 @@ PartitionPageShift() {
   return 18;  // 256 KiB
 }
 #elif (BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)) || \
+    (BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)) ||   \
     (BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64))
 PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR size_t
 PartitionPageShift() {
@@ -206,13 +211,13 @@ constexpr size_t kHighThresholdForAlternateDistribution =
 // Free Slot Bitmap is only present when USE_FREESLOT_BITMAP is true. State
 // Bitmap is inserted for partitions that may have quarantine enabled.
 //
-// If refcount_at_end_allocation is enabled, RefcountBitmap(4KiB) is inserted
-// after the Metadata page for BackupRefPtr. The guard pages after the bitmap
-// will be 4KiB.
+// If ENABLE_BACKUP_REF_PTR_SUPPORT is on, RefCountTable(4KiB) is inserted
+// after the Metadata page for BackupRefPtr. The guard pages after the table
+// is reduced to 4KiB.
 //
 //...
 //     | Metadata page (4 KiB) |
-//     | RefcountBitmap (4 KiB)|
+//     | RefCountTable (4 KiB) |
 //     | Guard pages (4 KiB)   |
 //...
 //
@@ -331,7 +336,7 @@ static_assert(kThreadIsolatedPoolHandle == kNumPools,
 // of large areas which are less likely to benefit from MTE protection.
 constexpr size_t kMaxMemoryTaggingSize = 1024;
 
-#if PA_CONFIG(HAS_MEMORY_TAGGING)
+#if BUILDFLAG(HAS_MEMORY_TAGGING)
 // Returns whether the tag of |object| overflowed, meaning the containing slot
 // needs to be moved to quarantine.
 PA_ALWAYS_INLINE bool HasOverflowTag(void* object) {
@@ -341,7 +346,7 @@ PA_ALWAYS_INLINE bool HasOverflowTag(void* object) {
                 "Overflow tag must be in tag bits");
   return (reinterpret_cast<uintptr_t>(object) & kPtrTagMask) == kOverflowTag;
 }
-#endif  // PA_CONFIG(HAS_MEMORY_TAGGING)
+#endif  // BUILDFLAG(HAS_MEMORY_TAGGING)
 
 PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR size_t
 NumPartitionPagesPerSuperPage() {
@@ -487,10 +492,11 @@ constexpr unsigned char kQuarantinedByte = 0xEF;
 // static_cast<uint32_t>(-1) is too close to a "real" size.
 constexpr size_t kInvalidBucketSize = 1;
 
-#if PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
-// Requested size that require the hack.
+#if PA_CONFIG(MAYBE_ENABLE_MAC11_MALLOC_SIZE_HACK)
+// Requested size that requires the hack.
 constexpr size_t kMac11MallocSizeHackRequestedSize = 32;
-#endif  // PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
+#endif
+
 }  // namespace internal
 
 // These constants are used outside PartitionAlloc itself, so we provide

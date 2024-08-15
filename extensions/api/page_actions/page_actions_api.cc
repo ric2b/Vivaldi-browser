@@ -16,11 +16,11 @@ absl::optional<page_actions::Service::ScriptOverride>
 FromVivaldiPageActionsScriptOverride(
     vivaldi::page_actions::ScriptOverride script_override) {
   switch (script_override) {
-    case vivaldi::page_actions::ScriptOverride::SCRIPT_OVERRIDE_NO_OVERRIDE:
+    case vivaldi::page_actions::ScriptOverride::kNoOverride:
       return page_actions::Service::kNoOverride;
-    case vivaldi::page_actions::ScriptOverride::SCRIPT_OVERRIDE_ENABLED:
+    case vivaldi::page_actions::ScriptOverride::kEnabled:
       return page_actions::Service::kEnabledOverride;
-    case vivaldi::page_actions::ScriptOverride::SCRIPT_OVERRIDE_DISABLED:
+    case vivaldi::page_actions::ScriptOverride::kDisabled:
       return page_actions::Service::kDisabledOverride;
     default:
       NOTREACHED();
@@ -178,9 +178,8 @@ PageActionsGetScriptOverridesForTabFunction::RunWithService(
         overriden_script.script = script_override.first.AsUTF8Unsafe();
         overriden_script.override =
             script_override.second
-                ? vivaldi::page_actions::ScriptOverride::SCRIPT_OVERRIDE_ENABLED
-                : vivaldi::page_actions::ScriptOverride::
-                      SCRIPT_OVERRIDE_DISABLED;
+                ? vivaldi::page_actions::ScriptOverride::kEnabled
+                : vivaldi::page_actions::ScriptOverride::kDisabled;
         result.push_back(std::move(overriden_script));
       }
     }

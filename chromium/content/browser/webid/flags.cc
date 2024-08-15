@@ -16,10 +16,6 @@ bool IsFedCmAuthzEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmAuthz);
 }
 
-bool IsFedCmIdpSignoutEnabled() {
-  return base::FeatureList::IsEnabled(features::kFedCmLogoutRps);
-}
-
 bool IsFedCmMultipleIdentityProvidersEnabled() {
   return base::FeatureList::IsEnabled(
       features::kFedCmMultipleIdentityProviders);
@@ -41,6 +37,10 @@ bool IsFedCmMetricsEndpointEnabled() {
 
 bool IsFedCmSelectiveDisclosureEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmSelectiveDisclosure);
+}
+
+bool IsFedCmSkipWellKnownForSameSiteEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmSkipWellKnownForSameSite);
 }
 
 bool IsFedCmIdPRegistrationEnabled() {
@@ -68,8 +68,25 @@ bool IsFedCmErrorEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmError);
 }
 
-bool IsFedCmRevokeEnabled() {
-  return base::FeatureList::IsEnabled(features::kFedCmRevoke);
+bool IsFedCmDisconnectEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmDisconnect);
+}
+
+bool IsFedCmAddAccountEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmAddAccount);
+}
+
+bool IsFedCmExemptIdpWithThirdPartyCookiesEnabled() {
+  return base::FeatureList::IsEnabled(
+      features::kFedCmExemptIdpWithThirdPartyCookies);
+}
+
+bool IsFedCmButtonModeEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmButtonMode);
+}
+
+bool IsFedCmSameSiteLoginStatusEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmSameSiteLoginStatus);
 }
 
 }  // namespace content

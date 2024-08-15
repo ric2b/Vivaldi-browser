@@ -26,7 +26,6 @@ RENAME = {
     'CHARINFO': 'CharInfo',
     'COLORITEM': 'ColorItem',
     'COLORMAP': 'ColorMap',
-    'Connection': 'RandRConnection',
     'CP': 'CreatePictureAttribute',
     'CS': 'ClientSpec',
     'CW': 'CreateWindowAttribute',
@@ -62,6 +61,9 @@ RENAME = {
     'VISUALID': 'VisualId',
     'VISUALTYPE': 'VisualType',
     'WAITCONDITION': 'WaitCondition',
+
+    # Avoid name conflicts.
+    'Connection': 'RandRConnection',
 }
 
 READ_SPECIAL = set([
@@ -616,8 +618,7 @@ class GenXproto(FileWriter):
                 self.write('%s.resize(%s);' % (name, size))
             else:
                 left = 'static_cast<size_t>(%s)' % size
-                self.write('DUMP_WILL_BE_CHECK_EQ(%s, %s.size());' %
-                           (left, name))
+                self.write('CHECK_EQ(%s, %s.size());' % (left, name))
         with Indent(self, 'for (auto& %s_elem : %s) {' % (name, name), '}'):
             elem_name = name + '_elem'
             elem_type = t.member
@@ -970,7 +971,7 @@ class GenXproto(FileWriter):
             self.copy_container(reply, '(*reply)')
             self.write('Align(&buf, 4);')
             offset = 'buf.offset < 32 ? 0 : buf.offset - 32'
-            self.write('DUMP_WILL_BE_CHECK_EQ(%s, 4 * length);' % offset)
+            self.write('CHECK_EQ(%s, 4 * length);' % offset)
             self.write()
             self.write('return reply;')
         self.write()
@@ -987,10 +988,9 @@ class GenXproto(FileWriter):
             self.copy_container(event, '(*event_)')
             if event.is_ge_event:
                 self.write('Align(&buf, 4);')
-                self.write(
-                    'DUMP_WILL_BE_CHECK_EQ(buf.offset, 32 + 4 * length);')
+                self.write('CHECK_EQ(buf.offset, 32 + 4 * length);')
             else:
-                self.write('DUMP_WILL_BE_CHECK_LE(buf.offset, 32ul);')
+                self.write('CHECK_LE(buf.offset, 32ul);')
         self.write()
 
     def define_error(self, error, name):
@@ -1014,7 +1014,7 @@ class GenXproto(FileWriter):
             self.write()
             self.is_read = True
             self.copy_container(error, '(*error_)')
-            self.write('DUMP_WILL_BE_CHECK_LE(buf.offset, 32ul);')
+            self.write('CHECK_LE(buf.offset, 32ul);')
         self.write()
 
     def define_type(self, item, name):
@@ -1325,6 +1325,7 @@ class GenXproto(FileWriter):
         self.write()
         self.write('#include "base/logging.h"')
         self.write('#include "base/posix/eintr_wrapper.h"')
+        self.write('#include "ui/gfx/x/connection.h"')
         self.write('#include "ui/gfx/x/xproto_internal.h"')
         self.write()
         self.write('namespace x11 {')
@@ -1601,7 +1602,7 @@ class GenReadError(FileWriter):
         self.write('namespace {')
         self.write()
         self.write('template <typename T>')
-        sig = 'std::unique_ptr<Error> MakeError(Connection::RawError error_)'
+        sig = 'std::unique_ptr<Error> MakeError(RawError error_)'
         with Indent(self, '%s {' % sig, '}'):
             self.write('ReadBuffer buf(error_);')
             self.write('auto error = std::make_unique<T>();')

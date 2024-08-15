@@ -431,15 +431,19 @@ void av1_compute_global_motion_facade(AV1_COMP *cpi) {
   }
 
   if (cpi->common.current_frame.frame_type == INTER_FRAME && cpi->source &&
-      cpi->oxcf.tool_cfg.enable_global_motion && !gm_info->search_done) {
+      cpi->oxcf.tool_cfg.enable_global_motion && !gm_info->search_done &&
+      cpi->sf.gm_sf.gm_search_type != GM_DISABLE_SEARCH) {
     setup_global_motion_info_params(cpi);
-    gm_alloc_data(cpi, &cpi->td.gm_data);
-    if (cpi->mt_info.num_workers > 1)
-      av1_global_motion_estimation_mt(cpi);
-    else
-      global_motion_estimation(cpi);
-    gm_dealloc_data(&cpi->td.gm_data);
-    gm_info->search_done = 1;
+    // Terminate early if the total number of reference frames is zero.
+    if (cpi->gm_info.num_ref_frames[0] || cpi->gm_info.num_ref_frames[1]) {
+      gm_alloc_data(cpi, &cpi->td.gm_data);
+      if (cpi->mt_info.num_workers > 1)
+        av1_global_motion_estimation_mt(cpi);
+      else
+        global_motion_estimation(cpi);
+      gm_dealloc_data(&cpi->td.gm_data);
+      gm_info->search_done = 1;
+    }
   }
   memcpy(cm->cur_frame->global_motion, cm->global_motion,
          sizeof(cm->cur_frame->global_motion));

@@ -85,6 +85,17 @@ XMLPUBFUN xmlEntityPtr
 						 const xmlChar *ExternalID,
 						 const xmlChar *SystemID,
 						 const xmlChar *content);
+XMLPUBFUN void
+			xmlFreeEntity		(xmlEntityPtr entity);
+XMLPUBFUN int
+			xmlAddEntity		(xmlDocPtr doc,
+						 int extSubset,
+						 const xmlChar *name,
+						 int type,
+						 const xmlChar *ExternalID,
+						 const xmlChar *SystemID,
+						 const xmlChar *content,
+						 xmlEntityPtr *out);
 XMLPUBFUN xmlEntityPtr
 			xmlAddDocEntity		(xmlDocPtr doc,
 						 const xmlChar *name,

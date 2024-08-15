@@ -15,12 +15,14 @@
 #include "base/values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/destination_set.h"
+#include "components/attribution_reporting/event_level_epsilon.h"
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/max_event_level_reports.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/test_utils.h"
-#include "components/attribution_reporting/trigger_config.h"
+#include "components/attribution_reporting/trigger_data_matching.mojom.h"
 #include "net/base/schemeful_site.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -79,13 +81,15 @@ TEST(SourceRegistrationTest, Parse) {
                                                      SourceType::kNavigation)),
               Field(&SourceRegistration::aggregatable_report_window,
                     base::Days(30)),
-              Field(&SourceRegistration::max_event_level_reports, 3),
+              Field(&SourceRegistration::max_event_level_reports,
+                    MaxEventLevelReports(SourceType::kNavigation)),
               Field(&SourceRegistration::priority, 0),
               Field(&SourceRegistration::filter_data, FilterData()),
               Field(&SourceRegistration::debug_key, absl::nullopt),
               Field(&SourceRegistration::aggregation_keys, AggregationKeys()),
               Field(&SourceRegistration::debug_reporting, false),
-              Field(&SourceRegistration::trigger_config, TriggerConfig()))),
+              Field(&SourceRegistration::trigger_data_matching,
+                    mojom::TriggerDataMatching::kModulus))),
       },
       {
           "source_event_id_valid",
@@ -200,7 +204,6 @@ TEST(SourceRegistrationTest, Parse) {
           ValueIs(Field(&SourceRegistration::event_report_windows,
                         *EventReportWindows::Create(base::Seconds(0),
                                                     {base::Seconds(86401)}))),
-
       },
       {
           "aggregatable_report_window_valid",
@@ -257,38 +260,16 @@ TEST(SourceRegistrationTest, Parse) {
                         base::Seconds(172800))),
       },
       {
-          "max_event_level_reports_omitted_event",
-          R"json({"destination":"https://d.example"})json",
-          ValueIs(Field(&SourceRegistration::max_event_level_reports, 1)),
-          SourceType::kEvent,
-      },
-      {
+          // Tested more thoroughly in `max_event_level_reports_unittest.cc`
           "max_event_level_reports_valid",
           R"json({"max_event_level_reports":5,
           "destination":"https://d.example"})json",
           ValueIs(Field(&SourceRegistration::max_event_level_reports, 5)),
       },
       {
-          "max_event_level_reports_wrong_type",
-          R"json({"max_event_level_reports":"5",
-          "destination":"https://d.example"})json",
-          ErrorIs(SourceRegistrationError::kMaxEventLevelReportsValueInvalid),
-      },
-      {
-          "max_event_level_reports_negative",
-          R"json({"max_event_level_reports":-5,
-          "destination":"https://d.example"})json",
-          ErrorIs(SourceRegistrationError::kMaxEventLevelReportsValueInvalid),
-      },
-      {
-          "max_event_level_reports_zero",
-          R"json({"max_event_level_reports":0,
-          "destination":"https://d.example"})json",
-          ValueIs(Field(&SourceRegistration::max_event_level_reports, 0)),
-      },
-      {
-          "max_event_level_reports_higher_than_max",
-          R"json({"max_event_level_reports":25,
+          // Tested more thoroughly in `max_event_level_reports_unittest.cc`
+          "max_event_level_reports_invalid",
+          R"json({"max_event_level_reports":null,
           "destination":"https://d.example"})json",
           ErrorIs(SourceRegistrationError::kMaxEventLevelReportsValueInvalid),
       },
@@ -340,10 +321,24 @@ TEST(SourceRegistrationTest, Parse) {
           R"json({"debug_reporting":"true","destination":"https://d.example"})json",
           ValueIs(Field(&SourceRegistration::debug_reporting, false)),
       },
+      {
+          // Tested more thoroughly in `event_level_epsilon_unittest.cc`
+          "event_level_epsilon_valid",
+          R"json({"event_level_epsilon":4.2,
+          "destination":"https://d.example"})json",
+          ValueIs(Field(&SourceRegistration::event_level_epsilon, 4.2)),
+      },
+      {
+          // Tested more thoroughly in `event_level_epsilon_unittest.cc`
+          "event_level_epsilon_invalid",
+          R"json({"event_level_epsilon":null,
+          "destination":"https://d.example"})json",
+          ErrorIs(SourceRegistrationError::kEventLevelEpsilonWrongType),
+      },
   };
 
   static constexpr char kSourceRegistrationErrorMetric[] =
-      "Conversions.SourceRegistrationError7";
+      "Conversions.SourceRegistrationError10";
 
   for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(test_case.desc);
@@ -380,10 +375,12 @@ TEST(SourceRegistrationTest, ToJson) {
               "start_time": 0,
               "end_times": [2592000]
             },
+            "event_level_epsilon": 14.0,
             "expiry": 2592000,
             "max_event_level_reports": 0,
             "priority": "0",
-            "source_event_id": "0"
+            "source_event_id": "0",
+            "trigger_data_matching": "modulus"
           })json",
       },
       {
@@ -398,7 +395,9 @@ TEST(SourceRegistrationTest, ToJson) {
                 r.filter_data = *FilterData::Create({{"b", {}}});
                 r.priority = -6;
                 r.source_event_id = 7;
-                r.max_event_level_reports = 8;
+                r.max_event_level_reports = MaxEventLevelReports(8);
+                r.trigger_data_matching = mojom::TriggerDataMatching::kExact;
+                r.event_level_epsilon = EventLevelEpsilon(0);
               }),
           R"json({
             "aggregatable_report_window": 1,
@@ -415,6 +414,8 @@ TEST(SourceRegistrationTest, ToJson) {
             "priority": "-6",
             "source_event_id": "7",
             "max_event_level_reports": 8,
+            "trigger_data_matching": "exact",
+            "event_level_epsilon": 0.0
           })json",
       },
   };
@@ -481,22 +482,6 @@ TEST(SourceRegistrationTest, IsValid) {
 
   EXPECT_TRUE(SourceRegistrationWith(destination, [](SourceRegistration& r) {
                 r.aggregatable_report_window = base::Hours(1);
-              }).IsValid());
-
-  EXPECT_FALSE(SourceRegistrationWith(destination, [](SourceRegistration& r) {
-                 r.max_event_level_reports = -1;
-               }).IsValid());
-
-  EXPECT_FALSE(SourceRegistrationWith(destination, [](SourceRegistration& r) {
-                 r.max_event_level_reports = 21;
-               }).IsValid());
-
-  EXPECT_TRUE(SourceRegistrationWith(destination, [](SourceRegistration& r) {
-                r.max_event_level_reports = 0;
-              }).IsValid());
-
-  EXPECT_TRUE(SourceRegistrationWith(destination, [](SourceRegistration& r) {
-                r.max_event_level_reports = 20;
               }).IsValid());
 }
 

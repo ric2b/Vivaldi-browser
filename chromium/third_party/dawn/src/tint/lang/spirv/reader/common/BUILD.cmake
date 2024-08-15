@@ -34,11 +34,59 @@
 #                       Do not modify this file directly
 ################################################################################
 
+if(TINT_BUILD_SPV_READER)
 ################################################################################
 # Target:    tint_lang_spirv_reader_common
 # Kind:      lib
+# Condition: TINT_BUILD_SPV_READER
 ################################################################################
 tint_add_target(tint_lang_spirv_reader_common lib
   lang/spirv/reader/common/common.cc
   lang/spirv/reader/common/options.h
 )
+
+tint_target_add_dependencies(tint_lang_spirv_reader_common lib
+  tint_lang_wgsl
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
+  tint_utils_containers
+  tint_utils_ice
+  tint_utils_macros
+  tint_utils_math
+  tint_utils_memory
+  tint_utils_reflection
+  tint_utils_rtti
+  tint_utils_traits
+)
+
+endif(TINT_BUILD_SPV_READER)
+if(TINT_BUILD_SPV_READER)
+################################################################################
+# Target:    tint_lang_spirv_reader_common_test
+# Kind:      test
+# Condition: TINT_BUILD_SPV_READER
+################################################################################
+tint_add_target(tint_lang_spirv_reader_common_test test
+  lang/spirv/reader/common/helper_test.h
+)
+
+tint_target_add_dependencies(tint_lang_spirv_reader_common_test test
+  tint_utils_containers
+  tint_utils_diagnostic
+  tint_utils_ice
+  tint_utils_macros
+  tint_utils_math
+  tint_utils_memory
+  tint_utils_result
+  tint_utils_rtti
+  tint_utils_text
+  tint_utils_traits
+)
+
+if(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
+  tint_target_add_external_dependencies(tint_lang_spirv_reader_common_test test
+    "spirv-tools"
+  )
+endif(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
+
+endif(TINT_BUILD_SPV_READER)

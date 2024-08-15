@@ -12,8 +12,8 @@
 #include "ash/public/cpp/external_arc/message_center/arc_notification_view.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/system/message_center/ash_notification_control_button_factory.h"
-#include "ash/system/message_center/message_center_constants.h"
+#include "ash/system/notification_center/ash_notification_control_button_factory.h"
+#include "ash/system/notification_center/message_center_constants.h"
 #include "base/auto_reset.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -70,7 +70,7 @@ class ArcNotificationContentView::MouseEnterExitHandler
   }
 
  private:
-  const raw_ptr<ArcNotificationContentView, ExperimentalAsh> owner_;
+  const raw_ptr<ArcNotificationContentView> owner_;
 };
 
 class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
@@ -131,8 +131,9 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
           located_event->IsMouseWheelEvent()) {
         widget->OnMouseEvent(located_event->AsMouseEvent());
       } else if (located_event->IsScrollEvent()) {
-        widget->OnScrollEvent(located_event->AsScrollEvent());
         owner_->item_->CancelPress();
+        widget->OnScrollEvent(located_event->AsScrollEvent());
+        return;
       } else if (located_event->IsGestureEvent() &&
                  event->type() != ui::ET_GESTURE_TAP) {
         bool slide_handled_by_android = false;
@@ -222,7 +223,7 @@ class ArcNotificationContentView::EventForwarder : public ui::EventHandler {
   // Android.
   bool swipe_captured_ = false;
 
-  const raw_ptr<ArcNotificationContentView, ExperimentalAsh> owner_;
+  const raw_ptr<ArcNotificationContentView> owner_;
   bool is_current_slide_handled_by_android_ = false;
 
   base::ScopedObservation<ui::EventTarget, ui::EventHandler> observation_{this};
@@ -258,7 +259,7 @@ class ArcNotificationContentView::SlideHelper {
   }
 
  private:
-  const raw_ptr<ArcNotificationContentView, ExperimentalAsh> owner_;
+  const raw_ptr<ArcNotificationContentView> owner_;
 
   // True if the view is not at the original position.
   bool slide_in_progress_ = false;

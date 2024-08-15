@@ -15,6 +15,7 @@
 #include "base/task/current_thread.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_tags.h"
+#include "base/test/run_until.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/notifications/request_system_proxy_credentials_view.h"
 #include "chrome/browser/ash/policy/affiliation/affiliation_test_helper.h"
@@ -23,7 +24,6 @@
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_handler.h"
-#include "chrome/browser/ui/login/login_handler_test_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -238,7 +238,7 @@ IN_PROC_BROWSER_TEST_F(SystemProxyManagerBrowserTest, AuthenticationDialog) {
 
   display_service_tester_->SimulateClick(
       NotificationHandler::Type::TRANSIENT, kSystemProxyNotificationId,
-      /*action_index=*/absl::nullopt, /*reply=*/absl::nullopt);
+      /*action_index=*/std::nullopt, /*reply=*/std::nullopt);
   // Dialog is created.
   ASSERT_TRUE(dialog());
 
@@ -282,7 +282,7 @@ IN_PROC_BROWSER_TEST_F(SystemProxyManagerBrowserTest,
 
   display_service_tester_->SimulateClick(
       NotificationHandler::Type::TRANSIENT, kSystemProxyNotificationId,
-      /*action_index=*/absl::nullopt, /*reply=*/absl::nullopt);
+      /*action_index=*/std::nullopt, /*reply=*/std::nullopt);
 
   // Dialog is created.
   ASSERT_TRUE(dialog());
@@ -326,7 +326,7 @@ IN_PROC_BROWSER_TEST_F(SystemProxyManagerBrowserTest,
 
   display_service_tester_->SimulateClick(
       NotificationHandler::Type::TRANSIENT, kSystemProxyNotificationId,
-      /*action_index=*/absl::nullopt, /*reply=*/absl::nullopt);
+      /*action_index=*/std::nullopt, /*reply=*/std::nullopt);
   ASSERT_TRUE(dialog());
 
   // Expect warning is shown.
@@ -677,19 +677,14 @@ class SystemProxyCredentialsReuseBrowserTest
   // login dialog with `username` and `password`.
   void LoginWithDialog(const std::u16string& username,
                        const std::u16string& password) {
-    LoginPromptBrowserTestObserver login_observer;
-    login_observer.Register(content::Source<content::NavigationController>(
-        &GetWebContents()->GetController()));
-    WindowedAuthNeededObserver auth_needed(&GetWebContents()->GetController());
     ASSERT_TRUE(
         ui_test_utils::NavigateToURL(browser(), GetServerUrl("/simple.html")));
-    auth_needed.Wait();
-    WindowedAuthSuppliedObserver auth_supplied(
-        &GetWebContents()->GetController());
-    LoginHandler* login_handler = login_observer.handlers().front();
+    ASSERT_TRUE(base::test::RunUntil([]() {
+      return LoginHandler::GetAllLoginHandlersForTest().size() == 1;
+    }));
+    LoginHandler* login_handler =
+        LoginHandler::GetAllLoginHandlersForTest().front();
     login_handler->SetAuth(username, password);
-    auth_supplied.Wait();
-    EXPECT_EQ(1, login_observer.auth_supplied_count());
   }
 
   void CheckEntryInHttpAuthCache(const std::string& auth_scheme,
@@ -707,7 +702,7 @@ class SystemProxyCredentialsReuseBrowserTest
         base::BindOnce(
             [](std::string* username, std::string* password,
                base::OnceClosure closure,
-               const absl::optional<net::AuthCredentials>& credentials) {
+               const std::optional<net::AuthCredentials>& credentials) {
               if (credentials) {
                 *username = base::UTF16ToUTF8(credentials->username());
                 *password = base::UTF16ToUTF8(credentials->password());

@@ -23,13 +23,13 @@ DEFAULT_BRANCH = 'main'
 def git_hash_data(data, typ='blob'):
     """Calculate the git-style SHA1 for some data.
 
-  Only supports 'blob' type data at the moment.
-  """
+    Only supports 'blob' type data at the moment.
+    """
     assert typ == 'blob', 'Only support blobs for now'
     return hashlib.sha1(b'blob %d\0%s' % (len(data), data)).hexdigest()
 
 
-class OrderedSet(collections.MutableSet):
+class OrderedSet(collections.abc.MutableSet):
     # from http://code.activestate.com/recipes/576694/
     def __init__(self, iterable=None):
         self.end = end = []
@@ -73,20 +73,20 @@ class OrderedSet(collections.MutableSet):
             yield curr[0]
             curr = curr[1]
 
-    def add(self, key):
-        if key not in self.data:
+    def add(self, value):
+        if value not in self.data:
             end = self.end
             curr = end[1]
-            curr[2] = end[1] = self.data[key] = [key, curr, end]
+            curr[2] = end[1] = self.data[value] = [value, curr, end]
 
     def difference_update(self, *others):
         for other in others:
             for i in other:
                 self.discard(i)
 
-    def discard(self, key):
-        if key in self.data:
-            key, prev, nxt = self.data.pop(key)
+    def discard(self, value):
+        if value in self.data:
+            value, prev, nxt = self.data.pop(value)
             prev[2] = nxt
             nxt[1] = prev
 
@@ -101,8 +101,8 @@ class OrderedSet(collections.MutableSet):
 class UTC(datetime.tzinfo):
     """UTC time zone.
 
-  from https://docs.python.org/2/library/datetime.html#tzinfo-objects
-  """
+    from https://docs.python.org/2/library/datetime.html#tzinfo-objects
+    """
     def utcoffset(self, dt):
         return datetime.timedelta(0)
 
@@ -119,41 +119,41 @@ UTC = UTC()
 class GitRepoSchema(object):
     """A declarative git testing repo.
 
-  Pass a schema to __init__ in the form of:
-     A B C D
-       B E D
+    Pass a schema to __init__ in the form of:
+        A B C D
+        B E D
 
-  This is the repo
+    This is the repo
 
-     A - B -  C - D
-           \\ E /
+        A - B -  C - D
+            \\ E /
 
-  Whitespace doesn't matter. Each line is a declaration of which commits come
-  before which other commits.
+    Whitespace doesn't matter. Each line is a declaration of which commits come
+    before which other commits.
 
-  Every commit gets a tag 'tag_%(commit)s'
-  Every unique terminal commit gets a branch 'branch_%(commit)s'
-  Last commit in First line is the branch 'main'
-  Root commits get a ref 'root_%(commit)s'
+    Every commit gets a tag 'tag_%(commit)s'
+    Every unique terminal commit gets a branch 'branch_%(commit)s'
+    Last commit in First line is the branch 'main'
+    Root commits get a ref 'root_%(commit)s'
 
-  Timestamps are in topo order, earlier commits (as indicated by their presence
-  in the schema) get earlier timestamps. Stamps start at the Unix Epoch, and
-  increment by 1 day each.
-  """
+    Timestamps are in topo order, earlier commits (as indicated by their
+    presence in the schema) get earlier timestamps. Stamps start at the Unix
+    Epoch, and increment by 1 day each.
+    """
     COMMIT = collections.namedtuple('COMMIT', 'name parents is_branch is_root')
 
     def __init__(self, repo_schema='', content_fn=lambda v: {v: {'data': v}}):
         """Builds a new GitRepoSchema.
 
-    Args:
-      repo_schema (str) - Initial schema for this repo. See class docstring for
-        info on the schema format.
-      content_fn ((commit_name) -> commit_data) - A function which will be
-        lazily called to obtain data for each commit. The results of this
-        function are cached (i.e. it will never be called twice for the same
-        commit_name). See the docstring on the GitRepo class for the format of
-        the data returned by this function.
-    """
+        Args:
+            repo_schema (str) - Initial schema for this repo. See class
+                docstring for info on the schema format.
+            content_fn ((commit_name) -> commit_data) - A function which will
+                be lazily called to obtain data for each commit. The results of
+                this function are cached (i.e. it will never be called twice
+                for the same commit_name). See the docstring on the GitRepo
+                class for the format of the data returned by this function.
+        """
         self.main = None
         self.par_map = {}
         self.data_cache = {}
@@ -163,10 +163,10 @@ class GitRepoSchema(object):
     def walk(self):
         """(Generator) Walks the repo schema from roots to tips.
 
-    Generates GitRepoSchema.COMMIT objects for each commit.
+        Generates GitRepoSchema.COMMIT objects for each commit.
 
-    Throws an AssertionError if it detects a cycle.
-    """
+        Throws an AssertionError if it detects a cycle.
+        """
         is_root = True
         par_map = copy.deepcopy(self.par_map)
         while par_map:
@@ -191,11 +191,11 @@ class GitRepoSchema(object):
     def add_commits(self, schema):
         """Adds more commits from a schema into the existing Schema.
 
-    Args:
-      schema (str) - See class docstring for info on schema format.
+        Args:
+            schema (str) - See class docstring for info on schema format.
 
-    Throws an AssertionError if it detects a cycle.
-    """
+        Throws an AssertionError if it detects a cycle.
+        """
         for commits in (l.split() for l in schema.splitlines() if l.strip()):
             parent = None
             for commit in commits:
@@ -213,10 +213,11 @@ class GitRepoSchema(object):
     def data_for(self, commit):
         """Obtains the data for |commit|.
 
-    See the docstring on the GitRepo class for the format of the returned data.
+        See the docstring on the GitRepo class for the format of the returned
+        data.
 
-    Caches the result on this GitRepoSchema instance.
-    """
+        Caches the result on this GitRepoSchema instance.
+        """
         if commit not in self.data_cache:
             self.data_cache[commit] = self.content_fn(commit)
         return self.data_cache[commit]
@@ -224,10 +225,10 @@ class GitRepoSchema(object):
     def simple_graph(self):
         """Returns a dictionary of {commit_subject: {parent commit_subjects}}
 
-    This allows you to get a very simple connection graph over the whole repo
-    for comparison purposes. Only commit subjects (not ids, not content/data)
-    are considered
-    """
+        This allows you to get a very simple connection graph over the whole
+        repo for comparison purposes. Only commit subjects (not ids, not
+        content/data) are considered.
+        """
         ret = {}
         for commit in self.walk():
             ret.setdefault(commit.name, set()).update(commit.parents)
@@ -237,27 +238,28 @@ class GitRepoSchema(object):
 class GitRepo(object):
     """Creates a real git repo for a GitRepoSchema.
 
-  Obtains schema and content information from the GitRepoSchema.
+    Obtains schema and content information from the GitRepoSchema.
 
-  The format for the commit data supplied by GitRepoSchema.data_for is:
-    {
-      SPECIAL_KEY: special_value,
-      ...
-      "path/to/some/file": { 'data': "some data content for this file",
-                              'mode': 0o755 },
-      ...
-    }
+    The format for the commit data supplied by GitRepoSchema.data_for is:
+        {
+        SPECIAL_KEY: special_value,
+        ...
+        "path/to/some/file": { 'data': "some data content for this file",
+                                'mode': 0o755 },
+        ...
+        }
 
-  The SPECIAL_KEYs are the following attributes of the GitRepo class:
-    * AUTHOR_NAME
-    * AUTHOR_EMAIL
-    * AUTHOR_DATE - must be a datetime.datetime instance
-    * COMMITTER_NAME
-    * COMMITTER_EMAIL
-    * COMMITTER_DATE - must be a datetime.datetime instance
+    The SPECIAL_KEYs are the following attributes of the GitRepo class:
+        * AUTHOR_NAME
+        * AUTHOR_EMAIL
+        * AUTHOR_DATE - must be a datetime.datetime instance
+        * COMMITTER_NAME
+        * COMMITTER_EMAIL
+        * COMMITTER_DATE - must be a datetime.datetime instance
 
-  For file content, if 'data' is None, then this commit will `git rm` that file.
-  """
+    For file content, if 'data' is None, then this commit will `git rm` that
+    file.
+    """
     BASE_TEMP_DIR = tempfile.mkdtemp(suffix='base', prefix='git_repo')
     atexit.register(gclient_utils.rmtree, BASE_TEMP_DIR)
 
@@ -279,14 +281,14 @@ class GitRepo(object):
     def __init__(self, schema):
         """Makes new GitRepo.
 
-    Automatically creates a temp folder under GitRepo.BASE_TEMP_DIR. It's
-    recommended that you clean this repo up by calling nuke() on it, but if not,
-    GitRepo will automatically clean up all allocated repos at the exit of the
-    program (assuming a normal exit like with sys.exit)
+        Automatically creates a temp folder under GitRepo.BASE_TEMP_DIR. It's
+        recommended that you clean this repo up by calling nuke() on it, but if
+        not, GitRepo will automatically clean up all allocated repos at the
+        exit of the program (assuming a normal exit like with sys.exit)
 
-    Args:
-      schema - An instance of GitRepoSchema
-    """
+        Args:
+            schema - An instance of GitRepoSchema
+        """
         self.repo_path = os.path.realpath(
             tempfile.mkdtemp(dir=self.BASE_TEMP_DIR))
         self.commit_map = {}
@@ -306,10 +308,10 @@ class GitRepo(object):
     def __getitem__(self, commit_name):
         """Gets the hash of a commit by its schema name.
 
-    >>> r = GitRepo(GitRepoSchema('A B C'))
-    >>> r['B']
-    '7381febe1da03b09da47f009963ab7998a974935'
-    """
+        >>> r = GitRepo(GitRepoSchema('A B C'))
+        >>> r['B']
+        '7381febe1da03b09da47f009963ab7998a974935'
+        """
         return self.commit_map[commit_name]
 
     def _add_schema_commit(self, commit, commit_data):
@@ -407,14 +409,14 @@ class GitRepo(object):
     def nuke(self):
         """Obliterates the git repo on disk.
 
-    Causes this GitRepo to be unusable.
-    """
+        Causes this GitRepo to be unusable.
+        """
         gclient_utils.rmtree(self.repo_path)
         self.repo_path = None
 
     def run(self, fn, *args, **kwargs):
         """Run a python function with the given args and kwargs with the cwd
-    set to the git repo."""
+        set to the git repo."""
         assert self.repo_path is not None
         curdir = os.getcwd()
         try:
@@ -425,11 +427,11 @@ class GitRepo(object):
 
     def capture_stdio(self, fn, *args, **kwargs):
         """Run a python function with the given args and kwargs with the cwd set
-    to the git repo.
+        to the git repo.
 
-    Returns the (stdout, stderr) of whatever ran, instead of the what |fn|
-    returned.
-    """
+        Returns the (stdout, stderr) of whatever ran, instead of the what |fn|
+        returned.
+        """
         stdout = sys.stdout
         stderr = sys.stderr
         try:
@@ -480,15 +482,15 @@ class GitRepo(object):
 class GitRepoSchemaTestBase(unittest.TestCase):
     """A TestCase with a built-in GitRepoSchema.
 
-  Expects a class variable REPO_SCHEMA to be a GitRepoSchema string in the form
-  described by that class.
+    Expects a class variable REPO_SCHEMA to be a GitRepoSchema string in the
+    form described by that class.
 
-  You may also set class variables in the form COMMIT_%(commit_name)s, which
-  provide the content for the given commit_name commits.
+    You may also set class variables in the form COMMIT_%(commit_name)s, which
+    provide the content for the given commit_name commits.
 
-  You probably will end up using either GitRepoReadOnlyTestBase or
-  GitRepoReadWriteTestBase for real tests.
-  """
+    You probably will end up using either GitRepoReadOnlyTestBase or
+    GitRepoReadWriteTestBase for real tests.
+    """
     REPO_SCHEMA = None
 
     @classmethod
@@ -505,11 +507,11 @@ class GitRepoSchemaTestBase(unittest.TestCase):
 
 class GitRepoReadOnlyTestBase(GitRepoSchemaTestBase):
     """Injects a GitRepo object given the schema and content from
-  GitRepoSchemaTestBase into TestCase classes which subclass this.
+    GitRepoSchemaTestBase into TestCase classes which subclass this.
 
-  This GitRepo will appear as self.repo, and will be deleted and recreated once
-  for the duration of all the tests in the subclass.
-  """
+    This GitRepo will appear as self.repo, and will be deleted and recreated
+    once for the duration of all the tests in the subclass.
+    """
     REPO_SCHEMA = None
 
     @classmethod
@@ -529,11 +531,11 @@ class GitRepoReadOnlyTestBase(GitRepoSchemaTestBase):
 
 class GitRepoReadWriteTestBase(GitRepoSchemaTestBase):
     """Injects a GitRepo object given the schema and content from
-  GitRepoSchemaTestBase into TestCase classes which subclass this.
+    GitRepoSchemaTestBase into TestCase classes which subclass this.
 
-  This GitRepo will appear as self.repo, and will be deleted and recreated for
-  each test function in the subclass.
-  """
+    This GitRepo will appear as self.repo, and will be deleted and recreated for
+    each test function in the subclass.
+    """
     REPO_SCHEMA = None
 
     def setUp(self):

@@ -527,8 +527,6 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   WorkingCopyChanged = 'WorkingCopyChanged',
   WorkingCopyCommitted = 'WorkingCopyCommitted',
@@ -690,9 +688,7 @@ export class Message {
 }
 
 export namespace Message {
-  // TODO(crbug.com/1167717): Make this a const enum again
-  // eslint-disable-next-line rulesdir/const_enum
-  export enum Level {
+  export const enum Level {
     Error = 'Error',
     Issue = 'Issue',
     Warning = 'Warning',

@@ -18,6 +18,7 @@
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
+#include "net/base/proxy_chain.h"
 #include "net/base/url_util.h"
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -232,6 +233,8 @@ std::string DeviceManagementService::JobConfiguration::GetJobTypeAsString(
       return "InitialEnrollmentStateRetrieval";
     case DeviceManagementService::JobConfiguration::TYPE_INVALID:
       return "Invalid";
+    case DeviceManagementService::JobConfiguration::TYPE_OIDC_REGISTRATION:
+      return "OidcRegistration";
     case DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH:
       return "PolicyFetch";
     case DeviceManagementService::JobConfiguration::
@@ -285,7 +288,7 @@ JobConfigurationBase::JobConfigurationBase(
   CHECK(!auth_data_.has_oauth_token()) << "Use |oauth_token| instead";
 
 #if !BUILDFLAG(IS_IOS)
-  if (oauth_token_) {
+  if (oauth_token_ && auth_data.token_type() != DMAuthTokenType::kOidc) {
     // Put the oauth token in the query parameters for platforms that are not
     // iOS. On iOS we are trying the oauth token in the request headers
     // (crbug.com/1312158). We might want to use the iOS approach on all
@@ -409,6 +412,16 @@ JobConfigurationBase::GetResourceRequest(bool bypass_proxy, int last_error) {
     case DMAuthTokenType::kOauth:
       // OAuth token is transferred as a HTTP query parameter.
       break;
+    case DMAuthTokenType::kOidc:
+      // Send OIDC Auth token and ID token in auth header, send profile ID in
+      // URL parameter
+      rr->headers.SetHeader(
+          dm_protocol::kAuthHeader,
+          base::StrCat({dm_protocol::kOidcAuthHeaderPrefix,
+                        dm_protocol::kOidcAuthTokenHeaderPrefix, *oauth_token_,
+                        ",", dm_protocol::kOidcIdTokenHeaderPrefix,
+                        auth_data_.oidc_id_token()}));
+      break;
   }
 
   return rr;
@@ -506,8 +519,8 @@ void DeviceManagementService::JobImpl::OnURLLoaderComplete(
   std::string mime_type;
   if (url_loader_->ResponseInfo()) {
     was_fetched_via_proxy =
-        url_loader_->ResponseInfo()->proxy_server.is_valid() &&
-        !url_loader_->ResponseInfo()->proxy_server.is_direct();
+        url_loader_->ResponseInfo()->proxy_chain.IsValid() &&
+        !url_loader_->ResponseInfo()->proxy_chain.is_direct();
     mime_type = url_loader_->ResponseInfo()->mime_type;
     if (url_loader_->ResponseInfo()->headers) {
       response_code = url_loader_->ResponseInfo()->headers->response_code();

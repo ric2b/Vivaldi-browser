@@ -10,6 +10,8 @@ import re
 import sys
 import io
 
+import xnncommon
+
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -20,6 +22,8 @@ ISA_LIST = frozenset({
   'avx512f',
   'avx512skx',
   'avx512vbmi',
+  'avx512vnni',
+  'avxvnni',
   'f16c',
   'fma',
   'fma3',
@@ -28,6 +32,7 @@ ISA_LIST = frozenset({
   'neon',
   'neonbf16',
   'neondot',
+  'neondotfp16arith',
   'neoni8mm',
   'neonfma',
   'neonfp16',
@@ -69,12 +74,15 @@ ISA_TO_HEADER_MAP = {
   'avx512f': 'immintrin.h',
   'avx512skx': 'immintrin.h',
   'avx512vbmi': 'immintrin.h',
+  'avx512vnni': 'immintrin.h',
+  'avxvnni': 'immintrin.h',
   'f16c': 'immintrin.h',
   'fma3': 'immintrin.h',
   'fp16arith': 'arm_fp16.h',
   'neon': 'arm_neon.h',
   'neonbf16': 'arm_neon.h',
   'neondot': 'arm_neon.h',
+  'neondotfp16arith': 'arm_neon.h',
   'neoni8mm': 'arm_neon.h',
   'neonfma': 'arm_neon.h',
   'neonfp16': 'arm_neon.h',
@@ -195,15 +203,6 @@ def amalgamate_microkernel_sources(source_paths, include_header):
   amalgam_text += '\n'.join(amalgam_lines)
 
   return amalgam_text
-
-def overwrite_if_changed(filepath, content):
-  file_changed = True
-  if os.path.exists(filepath):
-    with open(filepath, 'r', encoding='utf-8') as f:
-      file_changed = f.read() != content
-  if file_changed:
-    with open(filepath, 'w', encoding='utf-8') as f:
-      f.write(content)
 
 def make_variable_name(prefix, key, suffix):
   return '_'.join(token for token in [prefix, key.upper(), suffix] if token)
@@ -336,7 +335,7 @@ Auto-generated file. Do not edit!
     write_grouped_microkernels_bzl(microkernels_bzl, asm_microkernels_per_arch, '', 'ASM_MICROKERNEL_SRCS')
     write_grouped_microkernels_bzl(microkernels_bzl, jit_microkernels_per_arch, '', 'JIT_MICROKERNEL_SRCS')
     microkernels_bzl.seek(0)
-    overwrite_if_changed(os.path.join(root_dir, 'microkernels.bzl'), microkernels_bzl.read())
+    xnncommon.overwrite_if_changed(os.path.join(root_dir, 'microkernels.bzl'), microkernels_bzl.read())
 
   with io.StringIO() as microkernels_cmake:
     microkernels_cmake.write("""\
@@ -355,7 +354,7 @@ Auto-generated file. Do not edit!
     write_grouped_microkernels_cmake(microkernels_cmake, asm_microkernels_per_arch, '', 'ASM_MICROKERNEL_SRCS')
     write_grouped_microkernels_cmake(microkernels_cmake, jit_microkernels_per_arch, '', 'JIT_MICROKERNEL_SRCS')
     microkernels_cmake.seek(0)
-    overwrite_if_changed(os.path.join(root_dir, 'cmake', 'microkernels.cmake'), microkernels_cmake.read())
+    xnncommon.overwrite_if_changed(os.path.join(root_dir, 'cmake', 'microkernels.cmake'), microkernels_cmake.read())
 
   if options.amalgamate:
     # Collect filenames of production microkernels as a set
@@ -379,7 +378,7 @@ Auto-generated file. Do not edit!
           amalgam_filename = f'{isa}.c'
         header = ISA_TO_HEADER_MAP.get(isa)
         amalgam_text = amalgamate_microkernel_sources(filepaths, include_header=header)
-        overwrite_if_changed(os.path.join(src_dir, 'amalgam', 'gen', amalgam_filename), amalgam_text)
+        xnncommon.overwrite_if_changed(os.path.join(src_dir, 'amalgam', 'gen', amalgam_filename), amalgam_text)
 
 
 if __name__ == '__main__':

@@ -20,6 +20,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -32,6 +33,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
+#include "chrome/browser/apps/app_service/app_registry_cache_waiter.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
@@ -52,6 +54,7 @@
 #include "chrome/browser/resource_coordinator/lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -72,7 +75,12 @@
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/policy/web_app_policy_constants.h"
+#include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/web_app_id_constants.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -82,6 +90,7 @@
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -93,6 +102,7 @@
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/sessions/core/command_storage_manager_test_helper.h"
 #include "components/strings/grit/components_strings.h"
@@ -130,6 +140,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
@@ -368,7 +380,8 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
 
 }  // namespace
 
-class BrowserTest : public extensions::ExtensionBrowserTest {
+class BrowserTest : public extensions::ExtensionBrowserTest,
+                    public BrowserListObserver {
  protected:
   void SetUpOnMainThread() override {
     extensions::ExtensionBrowserTest::SetUpOnMainThread();
@@ -410,6 +423,12 @@ class BrowserTest : public extensions::ExtensionBrowserTest {
     NOTREACHED();
     return nullptr;
   }
+
+  // BrowserListObserver:
+  MOCK_METHOD(void,
+              OnBrowserCloseCancelled,
+              (Browser * browser, BrowserClosingStatus reason),
+              (override));
 };
 
 // Launch the app on a page with no title, check that the app title was set
@@ -1035,9 +1054,10 @@ class BeforeUnloadAtQuitWithTwoWindows : public InProcessBrowserTest {
 
     // Run the application event loop to completion, which will cycle the
     // native MessagePump on all platforms.
+    base::RunLoop loop;
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
-    base::RunLoop().Run();
+        FROM_HERE, loop.QuitWhenIdleClosure());
+    loop.Run();
 
     // Take care of any remaining Cocoa work.
     CycleRunLoops();
@@ -1331,7 +1351,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ShouldShowLocationBar) {
   // Find the new browsers.
   Browser* app_browser = nullptr;
   Browser* dev_tools_browser = nullptr;
-  for (auto* b : *BrowserList::GetInstance()) {
+  for (Browser* b : *BrowserList::GetInstance()) {
     if (b == browser()) {
       continue;
     } else if (b->app_name() == DevToolsWindow::kDevToolsApp) {
@@ -1522,7 +1542,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
 
   // Find the new browser.
   Browser* new_browser = nullptr;
-  for (auto* b : *BrowserList::GetInstance()) {
+  for (Browser* b : *BrowserList::GetInstance()) {
     if (b != browser())
       new_browser = b;
   }
@@ -2586,37 +2606,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, CanDuplicateTab) {
   EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 1));
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTest, DefaultMediaDevices) {
-  const std::string kDefaultAudioCapture1 = "test_default_audio_capture";
-  const std::string kDefaultVideoCapture1 = "test_default_video_capture";
-  auto SetString = [this](const std::string& path, const std::string& value) {
-    browser()->profile()->GetPrefs()->SetString(path, value);
-  };
-  SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture1);
-  SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture1);
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab")));
-  WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  auto GetDeviceID = [web_contents](blink::mojom::MediaStreamType type) {
-    return web_contents->GetDelegate()->GetDefaultMediaDeviceID(web_contents,
-                                                                type);
-  };
-  EXPECT_EQ(kDefaultAudioCapture1,
-            GetDeviceID(blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE));
-  EXPECT_EQ(kDefaultVideoCapture1,
-            GetDeviceID(blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE));
-
-  const std::string kDefaultAudioCapture2 = "test_default_audio_capture_2";
-  const std::string kDefaultVideoCapture2 = "test_default_video_capture_2";
-  SetString(prefs::kDefaultAudioCaptureDevice, kDefaultAudioCapture2);
-  SetString(prefs::kDefaultVideoCaptureDevice, kDefaultVideoCapture2);
-  EXPECT_EQ(kDefaultAudioCapture2,
-            GetDeviceID(blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE));
-  EXPECT_EQ(kDefaultVideoCapture2,
-            GetDeviceID(blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE));
-}
-
 namespace {
 
 void CheckDisplayModeMQ(const std::u16string& display_mode,
@@ -2833,6 +2822,202 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestNavEntryCommittedUserAction) {
   base::UserActionTester user_action_tester;
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://newtab")));
   EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 1);
+  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted.SRP"), 0);
+}
+
+namespace {
+
+void SetTestDefaultSearchProvider(TemplateURLService* service,
+                                  const GURL& search_template) {
+  ASSERT_TRUE(service);
+  search_test_utils::WaitForTemplateURLServiceToLoad(service);
+  ASSERT_TRUE(service->loaded());
+
+  TemplateURLData data;
+  data.SetShortName(u"test");
+  data.SetKeyword(data.short_name());
+  data.SetURL(search_template.spec());
+
+  TemplateURL* template_url = service->Add(std::make_unique<TemplateURL>(data));
+  ASSERT_TRUE(template_url);
+  service->SetUserSelectedDefaultSearchProvider(template_url);
+}
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestNavEntryCommittedSRPUserAction) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  TemplateURLService* service =
+      TemplateURLServiceFactory::GetForProfile(browser()->profile());
+  SetTestDefaultSearchProvider(
+      service,
+      embedded_test_server()->GetURL("a.test", "/title1.html?q={searchTerms}"));
+
+  const GURL srp_url =
+      service->GenerateSearchURLForDefaultSearchProvider(u"testing");
+
+  base::UserActionTester user_action_tester;
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), srp_url));
+  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 1);
+  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted.SRP"), 1);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest,
+                       TestNavEntryCommittedUserActionOnlyRecordedForTabs) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  TemplateURLService* service =
+      TemplateURLServiceFactory::GetForProfile(browser()->profile());
+  SetTestDefaultSearchProvider(
+      service,
+      embedded_test_server()->GetURL("a.test", "/title1.html?q={searchTerms}"));
+
+  const GURL srp_url =
+      service->GenerateSearchURLForDefaultSearchProvider(u"testing");
+
+  base::UserActionTester user_action_tester;
+
+  // Create and navigate a WebContents that is not a tab. The NavEntryCommitted
+  // actions should not be recorded for this WebContents.
+  std::unique_ptr<content::WebContents> non_tab_web_contents =
+      content::WebContents::Create(
+          content::WebContents::CreateParams(browser()->profile()));
+  content::TestNavigationObserver observer(non_tab_web_contents.get());
+  non_tab_web_contents->GetController().LoadURL(
+      srp_url, content::Referrer(), ::ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      std::string());
+  observer.Wait();
+
+  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted"), 0);
+  EXPECT_EQ(user_action_tester.GetActionCount("NavEntryCommitted.SRP"), 0);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestTabCountMetrics) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // This test assumes there's only one browser with one tab at the start of the
+  // test.
+  EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+  ASSERT_EQ(1, browser()->tab_strip_model()->count());
+
+  // Create an additional browser with two tabs.
+  Browser* browser2 = CreateBrowser(browser()->profile());
+  chrome::NewTab(browser2);
+  ASSERT_TRUE(content::WaitForLoadStop(
+      browser2->tab_strip_model()->GetActiveWebContents()));
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+  ASSERT_EQ(1, browser()->tab_strip_model()->count());
+  ASSERT_EQ(2, browser2->tab_strip_model()->count());
+
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser2, embedded_test_server()->GetURL("/title1.html")));
+
+  histogram_tester.ExpectBucketCount("Tabs.TabCountPerWindow", 1, 1);
+  histogram_tester.ExpectBucketCount("Tabs.TabCountPerWindow", 2, 1);
+  histogram_tester.ExpectUniqueSample("Tabs.TabCountPerLoad", 3, 1);
+  // Skipping "Tabs.TabCountActiveWindow" due to flakiness risk w.r.t. focus.
+
+  // Also check that tab group count metrics are recorded. In this case, there
+  // aren't any groups.
+  histogram_tester.ExpectUniqueSample("TabGroups.UserGroupCountPerLoad", 0, 1);
+  histogram_tester.ExpectUniqueSample("TabGroups.UserPinnedTabCountPerLoad", 0,
+                                      1);
+  histogram_tester.ExpectUniqueSample("Tabs.TabCountInGroupPerLoad", 0, 1);
+  histogram_tester.ExpectUniqueSample(
+      "TabGroups.UserCustomizedGroupCountPerLoad", 0, 1);
+  histogram_tester.ExpectUniqueSample("TabGroups.CollapsedGroupCountPerLoad", 0,
+                                      1);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest,
+                       TestTabCountMetricsOnlyRecordedWhenTabLoads) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  base::HistogramTester histogram_tester;
+
+  // Create and navigate a WebContents that is not a tab. Tab count metrics
+  // should not be recorded when this WebContents loads.
+  std::unique_ptr<content::WebContents> non_tab_web_contents =
+      content::WebContents::Create(
+          content::WebContents::CreateParams(browser()->profile()));
+  content::TestNavigationObserver observer(non_tab_web_contents.get());
+  non_tab_web_contents->GetController().LoadURL(
+      embedded_test_server()->GetURL("/title1.html"), content::Referrer(),
+      ::ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
+  observer.Wait();
+
+  histogram_tester.ExpectTotalCount("Tabs.TabCountPerLoad", 0);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest,
+                       TestTabCountMetricsNotRecordedWhenIframeLoads) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/iframe.html")));
+
+  base::HistogramTester histogram_tester;
+
+  // Tab count metrics should not be recorded when the iframe navigates.
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  const GURL iframe_url = embedded_test_server()->GetURL("/title2.html");
+  ASSERT_TRUE(content::NavigateIframeToURL(web_contents, "test", iframe_url));
+
+  histogram_tester.ExpectTotalCount("Tabs.TabCountPerLoad", 0);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    BrowserTest,
+    TestTabCountMetricsNotRecordedForSameDocumentNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+
+  base::HistogramTester histogram_tester;
+
+  // Tab count metrics should not be recorded for same document navigations.
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::TestNavigationObserver nav_observer(web_contents);
+  ASSERT_TRUE(content::ExecJs(web_contents, "location.href = '#test'"));
+  nav_observer.Wait();
+
+  histogram_tester.ExpectTotalCount("Tabs.TabCountPerLoad", 0);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest, TestTabCountMetricsRecordedOnReload) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+
+  base::HistogramTester histogram_tester;
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::TestNavigationObserver nav_observer(web_contents);
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  nav_observer.Wait();
+
+  histogram_tester.ExpectTotalCount("Tabs.TabCountPerLoad", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserTest,
+                       TestTabCountMetricsRecordedOnBackNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title1.html")));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/title2.html")));
+
+  base::HistogramTester histogram_tester;
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::TestNavigationObserver nav_observer(web_contents);
+  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
+  nav_observer.Wait();
+
+  histogram_tester.ExpectTotalCount("Tabs.TabCountPerLoad", 1);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, TestActiveBrowserChangedUserAction) {
@@ -3001,3 +3186,58 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, CreatePictureInPicture) {
   ASSERT_TRUE(popup_browser->is_type_picture_in_picture());
 }
 #endif  // !IS_CHROMEOS_LACROS
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+IN_PROC_BROWSER_TEST_F(BrowserTest, PreventCloseYieldsCancelledEvent) {
+  base::ScopedObservation<BrowserList, BrowserListObserver> observer(this);
+  observer.Observe(BrowserList::GetInstance());
+
+  base::test::TestFuture<void> policy_refresh_sync_future;
+  web_app::WebAppProvider::GetForWebApps(profile())
+      ->policy_manager()
+      .SetRefreshPolicySettingsCompletedCallbackForTesting(
+          policy_refresh_sync_future.GetCallback());
+
+  const absl::Cleanup policy_cleanup = [this]() {
+    // Clear policy values, otherwise we won't be able to gracefully close the
+    // browser test.
+    profile()->GetPrefs()->SetList(prefs::kWebAppSettings, base::Value::List());
+  };
+
+  // Set up policy values.
+  static constexpr char kCalculatorAppUrl[] = "https://calculator.apps.chrome/";
+  profile()->GetPrefs()->SetList(
+      prefs::kWebAppSettings,
+      base::Value::List().Append(
+          base::Value::Dict()
+              .Set(web_app::kManifestId, kCalculatorAppUrl)
+              .Set(web_app::kRunOnOsLogin, web_app::kRunWindowed)
+              .Set(web_app::kPreventClose, true)));
+  profile()->GetPrefs()->SetList(
+      prefs::kWebAppInstallForceList,
+      base::Value::List().Append(
+          base::Value::Dict()
+              .Set(web_app::kUrlKey, kCalculatorAppUrl)
+              .Set(web_app::kDefaultLaunchContainerKey,
+                   web_app::kDefaultLaunchContainerWindowValue)));
+  ASSERT_TRUE(policy_refresh_sync_future.Wait());
+
+  apps::AppUpdateWaiter waiter(
+      profile(), web_app::kCalculatorAppId,
+      base::BindRepeating([](const apps::AppUpdate& update) {
+        return update.AllowClose().has_value() && !update.AllowClose().value();
+      }));
+  waiter.Await();
+
+  Browser* const browser =
+      web_app::LaunchWebAppBrowser(profile(), web_app::kCalculatorAppId);
+  ASSERT_TRUE(browser);
+
+  EXPECT_EQ(BrowserClosingStatus::kDeniedByPolicy,
+            browser->HandleBeforeClose());
+  EXPECT_CALL(*this, OnBrowserCloseCancelled(
+                         browser, BrowserClosingStatus::kDeniedByPolicy))
+      .Times(1);
+  browser->OnWindowClosing();
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)

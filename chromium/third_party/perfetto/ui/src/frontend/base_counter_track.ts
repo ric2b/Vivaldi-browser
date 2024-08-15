@@ -15,19 +15,23 @@
 import m from 'mithril';
 
 import {searchSegment} from '../base/binary_search';
+import {Disposable, NullDisposable} from '../base/disposable';
 import {assertTrue} from '../base/logging';
-import {duration, Time, time} from '../base/time';
+import {duration, Span, Time, time} from '../base/time';
+import {uuidv4} from '../base/uuid';
 import {drawTrackHoverTooltip} from '../common/canvas_utils';
+import {HighPrecisionTime} from '../common/high_precision_time';
 import {raf} from '../core/raf_scheduler';
-import {LONG, NUM} from '../public';
+import {EngineProxy, LONG, NUM, Track} from '../public';
 import {CounterScaleOptions} from '../tracks/counter';
 import {Button} from '../widgets/button';
 import {MenuItem, PopupMenu2} from '../widgets/menu';
 
 import {checkerboardExcept} from './checkerboard';
 import {globals} from './globals';
+import {PanelSize} from './panel';
 import {constraintsToQuerySuffix} from './sql_utils';
-import {NewTrackArgs, TrackBase} from './track';
+import {NewTrackArgs} from './track';
 import {CacheKey, TrackCache} from './track_cache';
 
 interface CounterData {
@@ -48,8 +52,20 @@ interface CounterData {
 // 0.5 Makes the horizontal lines sharp.
 const MARGIN_TOP = 3.5;
 
-export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
+export interface RenderOptions {
+  // Whether Y scale should cover all of the possible values (and therefore, be
+  // static) or whether it should be dynamic and cover only the visible values.
+  yRange: 'all'|'viewport';
+  // Whether the range boundaries should be strict and use the precise min/max
+  // values or whether they should be rounded to the nearest human readable
+  // value.
+  yBoundaries: 'strict'|'human_readable';
+}
+
+export abstract class BaseCounterTrack implements Track {
   protected readonly tableName: string;
+  protected engine: EngineProxy;
+  protected trackKey: string;
 
   // This is the over-skirted cached bounds:
   private countersKey: CacheKey = CacheKey.zero();
@@ -73,7 +89,9 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
 
   private sqlState: 'UNINITIALIZED'|'INITIALIZING'|'QUERY_PENDING'|
       'QUERY_DONE' = 'UNINITIALIZED';
-  private isDestroyed: boolean = false;
+
+  // Cleanup hook for onInit.
+  private initState?: Disposable;
 
   private maximumValueSeen = 0;
   private minimumValueSeen = 0;
@@ -89,18 +107,39 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
   private scale?: CounterScaleOptions;
 
   // Extension points.
-  abstract initSqlTable(_tableName: string): Promise<void>;
+
+  // onInit hook lets you do asynchronous set up e.g. creating a table
+  // etc. We guarantee that this will be resolved before doing any
+  // queries using the result of getSqlSource(). All persistent
+  // state in trace_processor should be cleaned up when dispose is
+  // called on the returned hook.
+  async onInit(): Promise<Disposable> {
+    return new NullDisposable();
+  }
+
+  // This should be an SQL expression returning the columns `ts` and `value`.
+  abstract getSqlSource(): string;
+
+  protected getRenderOptions(): RenderOptions {
+    return {
+      yRange: 'all',
+      yBoundaries: 'human_readable',
+    };
+  }
 
   constructor(args: NewTrackArgs) {
-    super(args);
-    this.tableName = `track_${this.trackKey}`.replace(/[^a-zA-Z0-9_]+/g, '_');
+    this.engine = args.engine;
+    this.trackKey = args.trackKey;
+    this.tableName = `track_${uuidv4().replace(/[^a-zA-Z0-9_]+/g, '_')}`;
   }
 
   getHeight() {
     return 30;
   }
 
-  getCounterContextMenuItems(): m.Children {
+  // A method to render menu items for switching the rendering modes.
+  // Useful if a subclass wants to encorporate it as a submenu.
+  protected getCounterContextMenuItems(): m.Children {
     const currentScale = this.scale;
     const scales: {name: CounterScaleOptions, humanName: string}[] = [
       {name: 'ZERO_BASED', humanName: 'Zero based'},
@@ -120,7 +159,10 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
     });
   }
 
-  getCounterContextMenu(): m.Child {
+  // A method to render a context menu corresponding to switching the rendering
+  // modes. By default, getTrackShellButtons renders it, but a subclass can call
+  // it manually, if they want to customise rendering track buttons.
+  protected getCounterContextMenu(): m.Child {
     return m(
         PopupMenu2,
         {
@@ -131,27 +173,36 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
   }
 
   getTrackShellButtons(): m.Children {
-    return this.getCounterContextMenu();
+    return [
+      this.getCounterContextMenu(),
+    ];
   }
 
-  renderCanvas(ctx: CanvasRenderingContext2D) {
+  async onCreate(): Promise<void> {
+    this.initState = await this.onInit();
+  }
+
+  async onUpdate(): Promise<void> {
     const {
       visibleTimeScale: timeScale,
       visibleWindowTime: vizTime,
-      windowSpan,
-    } = globals.frontendLocalState;
+    } = globals.timeline;
 
-    {
-      const windowSizePx = Math.max(1, timeScale.pxSpan.delta);
-      const rawStartNs = vizTime.start.toTime();
-      const rawEndNs = vizTime.end.toTime();
-      const rawCountersKey =
-          CacheKey.create(rawStartNs, rawEndNs, windowSizePx);
+    const windowSizePx = Math.max(1, timeScale.pxSpan.delta);
+    const rawStartNs = vizTime.start.toTime();
+    const rawEndNs = vizTime.end.toTime();
+    const rawCountersKey = CacheKey.create(rawStartNs, rawEndNs, windowSizePx);
 
-      // If the visible time range is outside the cached area, requests
-      // asynchronously new data from the SQL engine.
-      this.maybeRequestData(rawCountersKey);
-    }
+    // If the visible time range is outside the cached area, requests
+    // asynchronously new data from the SQL engine.
+    await this.maybeRequestData(rawCountersKey);
+  }
+
+  render(ctx: CanvasRenderingContext2D, size: PanelSize) {
+    const {
+      visibleTimeScale: timeScale,
+      visibleWindowTime: vizTime,
+    } = globals.timeline;
 
     // In any case, draw whatever we have (which might be stale/incomplete).
 
@@ -188,36 +239,21 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
       minimumValue = data.minimumRate;
     }
 
+    if (this.getRenderOptions().yRange === 'viewport') {
+      const visValuesRange = this.getVisibleValuesRange(
+          data.timestamps, minValues, maxValues, vizTime);
+      minimumValue = visValuesRange.minValue;
+      maximumValue = visValuesRange.maxValue;
+    }
+
     const effectiveHeight = this.getHeight() - MARGIN_TOP;
-    const endPx = windowSpan.end;
+    const endPx = size.width;
     const zeroY = MARGIN_TOP + effectiveHeight / (minimumValue < 0 ? 2 : 1);
 
     // Quantize the Y axis to quarters of powers of tens (7.5K, 10K, 12.5K).
-    const maxValue = Math.max(maximumValue, 0);
-
-    let yMax = Math.max(Math.abs(minimumValue), maxValue);
-    const kUnits = ['', 'K', 'M', 'G', 'T', 'E'];
-    const exp = Math.ceil(Math.log10(Math.max(yMax, 1)));
-    const pow10 = Math.pow(10, exp);
-    yMax = Math.ceil(yMax / (pow10 / 4)) * (pow10 / 4);
-    let yRange = 0;
-    const unitGroup = Math.floor(exp / 3);
-    let yMin = 0;
-    let yLabel = '';
-    if (scale === 'MIN_MAX') {
-      yRange = maximumValue - minimumValue;
-      yMin = minimumValue;
-      yLabel = 'min - max';
-    } else {
-      yRange = minimumValue < 0 ? yMax * 2 : yMax;
-      yMin = minimumValue < 0 ? -yMax : 0;
-      yLabel = `${yMax / Math.pow(10, unitGroup * 3)} ${kUnits[unitGroup]}`;
-      if (scale === 'DELTA_FROM_PREVIOUS') {
-        yLabel += '\u0394';
-      } else if (scale === 'RATE') {
-        yLabel += '\u0394/t';
-      }
-    }
+    const {yMin, yMax, yLabel} =
+        this.computeYRange(minimumValue, Math.max(maximumValue, 0));
+    const yRange = yMax - yMin;
 
     // There are 360deg of hue. We want a scale that starts at green with
     // exp <= 3 (<= 1KB), goes orange around exp = 6 (~1MB) and red/violet
@@ -227,6 +263,7 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
     // Red        orange         green | blue         purple          magenta
     // So we want to start @ 180deg with pow=0, go down to 0deg and then wrap
     // back from 360deg back to 180deg.
+    const exp = Math.ceil(Math.log10(Math.max(yMax, 1)));
     const expCapped = Math.min(Math.max(exp - 3), 9);
     const hue = (180 - Math.floor(expCapped * (180 / 6)) + 360) % 360;
 
@@ -346,8 +383,8 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
     checkerboardExcept(
         ctx,
         this.getHeight(),
-        windowSpan.start,
-        windowSpan.end,
+        0,
+        size.width,
         timeScale.timeToPx(this.countersKey.start),
         timeScale.timeToPx(this.countersKey.end));
   }
@@ -356,7 +393,7 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
     const data = this.counters;
     if (data === undefined) return;
     this.mousePos = pos;
-    const {visibleTimeScale} = globals.frontendLocalState;
+    const {visibleTimeScale} = globals.timeline;
     const time = visibleTimeScale.pxToHpTime(pos.x);
 
     let values = data.lastValues;
@@ -380,6 +417,83 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
     this.hoveredTs = undefined;
   }
 
+  // Depending on the rendering settings, the Y range would cover either the
+  // entire range of possible values or the values visible on the screen. This
+  // method computes the latter.
+  private getVisibleValuesRange(
+      timestamps: BigInt64Array, minValues: Float64Array,
+      maxValues: Float64Array, visibleWindowTime: Span<HighPrecisionTime>):
+      {minValue: number, maxValue: number} {
+    let minValue = undefined;
+    let maxValue = undefined;
+    for (let i = 0; i < timestamps.length; ++i) {
+      const next = i + 1 < timestamps.length ?
+          HighPrecisionTime.fromNanos(timestamps[i + 1]) :
+          HighPrecisionTime.fromTime(globals.state.traceTime.end);
+      if (visibleWindowTime.intersects(
+              HighPrecisionTime.fromNanos(timestamps[i]), next)) {
+        if (minValue === undefined) {
+          minValue = minValues[i];
+        } else {
+          minValue = Math.min(minValue, minValues[i]);
+        }
+        if (maxValue === undefined) {
+          maxValue = maxValues[i];
+        } else {
+          maxValue = Math.max(maxValue, maxValues[i]);
+        }
+      }
+    }
+
+    return {
+      minValue: minValue ?? 0,
+      maxValue: maxValue ?? 0,
+    };
+  }
+
+  onDestroy(): void {
+    if (this.initState) {
+      this.initState.dispose();
+      this.initState = undefined;
+    }
+  }
+
+  // Compute the range of values to display, converting to human-readable scale
+  // if needed.
+  private computeYRange(minimumValue: number, maximumValue: number): {
+    yMin: number,
+    yMax: number,
+    yLabel: string,
+  } {
+    let yMax = Math.max(Math.abs(minimumValue), maximumValue);
+    const kUnits = ['', 'K', 'M', 'G', 'T', 'E'];
+    const exp = Math.ceil(Math.log10(Math.max(yMax, 1)));
+    const pow10 = Math.pow(10, exp);
+    if (this.getRenderOptions().yBoundaries === 'human_readable') {
+      yMax = Math.ceil(yMax / (pow10 / 4)) * (pow10 / 4);
+    }
+    const unitGroup = Math.floor(exp / 3);
+    let yMin = 0;
+    let yLabel = '';
+    if (this.scale === 'MIN_MAX') {
+      yMin = minimumValue;
+      yLabel = 'min - max';
+    } else {
+      yMin = minimumValue < 0 ? -yMax : 0;
+      yLabel = `${yMax / Math.pow(10, unitGroup * 3)} ${kUnits[unitGroup]}`;
+      if (this.scale === 'DELTA_FROM_PREVIOUS') {
+        yLabel += '\u0394';
+      } else if (this.scale === 'RATE') {
+        yLabel += '\u0394/t';
+      }
+    }
+    return {
+      yMin,
+      yMax,
+      yLabel,
+    };
+  }
+
   // The underlying table has `ts` and `value` columns, but we also want to
   // query `dur` and `delta` - we create a CTE to help with that.
   private getSqlPreamble(): string {
@@ -390,7 +504,7 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
           value,
           lead(ts, 1, ts) over (order by ts) - ts as dur,
           lead(value, 1, value) over (order by ts) - value as delta
-        FROM ${this.tableName}
+        FROM (${this.getSqlSource()})
       )
     `;
   }
@@ -403,14 +517,7 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
     if (this.sqlState === 'UNINITIALIZED') {
       this.sqlState = 'INITIALIZING';
 
-      if (this.isDestroyed) {
-        return;
-      }
-      await this.initSqlTable(this.tableName);
-
-      if (this.isDestroyed) {
-        return;
-      }
+      this.initState = await this.onInit();
 
       {
         const queryRes = (await this.engine.query(`
@@ -476,11 +583,6 @@ export abstract class BaseCounterTrack<Config> extends TrackBase<Config> {
         'tsq',
       ],
     });
-
-    if (this.isDestroyed) {
-      this.sqlState = 'QUERY_DONE';
-      return;
-    }
 
     const queryRes = await this.engine.query(`
       ${this.getSqlPreamble()}

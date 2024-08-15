@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/containers/flat_map.h"
+#include "base/token.h"
 #include "chrome/browser/compose/compose_enabling.h"
 #include "chrome/browser/compose/compose_session.h"
 #include "chrome/browser/compose/proto/compose_optimization_guide.pb.h"
@@ -24,6 +25,7 @@
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -31,15 +33,19 @@
 #include "mojo/public/cpp/bindings/remote.h"
 
 namespace content {
+class Page;
 class WebContents;
 }  // namespace content
 
 // An implementation of `ComposeClient` for Desktop and Android.
 class ChromeComposeClient
     : public compose::ComposeClient,
+      public content::WebContentsObserver,
       public content::WebContentsUserData<ChromeComposeClient>,
-      public compose::mojom::ComposeDialogClosePageHandler {
+      public compose::mojom::ComposeClientPageHandler,
+      public InnerTextProvider {
  public:
+  using EntryPoint = autofill::AutofillComposeDelegate::UiEntryPoint;
   ChromeComposeClient(const ChromeComposeClient&) = delete;
   ChromeComposeClient& operator=(const ChromeComposeClient&) = delete;
   ~ChromeComposeClient() override;
@@ -47,32 +53,73 @@ class ChromeComposeClient
   // compose::ComposeClient:
   compose::ComposeManager& GetManager() override;
   void ShowComposeDialog(
-      autofill::AutofillComposeDelegate::UiEntryPoint ui_entry_point,
+      EntryPoint ui_entry_point,
       const autofill::FormFieldData& trigger_field,
       std::optional<autofill::AutofillClient::PopupScreenLocation>
           popup_screen_location,
       ComposeCallback callback) override;
   bool HasSession(const autofill::FieldGlobalId& trigger_field_id) override;
+  bool ShouldTriggerPopup(
+      const autofill::FormFieldData& trigger_field) override;
+  compose::PageUkmTracker* getPageUkmTracker() override;
 
-  // ComposeDialogClosePageHandler
+  // ComposeClientPageHandler
+  // Shows the compose dialog.
+  void ShowUI() override;
   // Closes the compose dialog. `reason` describes the user action that
   // triggered the close.
   void CloseUI(compose::mojom::CloseReason reason) override;
+  // Update corresponding prefs and state when FRE is completed.
+  void CompleteFirstRun() override;
+  // Opens the Compose-related Chrome settings page in a new tab when the
+  // "Go to Settings" link is clicked in the MSBB dialog.
+  void OpenComposeSettings() override;
 
-  bool ShouldTriggerPopup(std::string autocomplete_attribute,
-                          autofill::FieldGlobalId field_id) override;
+  // InnerTextProvider
+  void GetInnerText(content::RenderFrameHost& host,
+                    absl::optional<int> node_id,
+                    content_extraction::InnerTextCallback callback) override;
+
+  bool GetMSBBStateFromPrefs();
+
+  void UpdateAllSessionsWithFirstRunComplete();
+
   virtual bool ShouldTriggerContextMenu(content::RenderFrameHost* rfh,
                                         content::ContextMenuParams& params);
 
   void BindComposeDialog(
-      mojo::PendingReceiver<compose::mojom::ComposeDialogClosePageHandler>
-          close_handler,
-      mojo::PendingReceiver<compose::mojom::ComposeDialogPageHandler> handler,
+      mojo::PendingReceiver<compose::mojom::ComposeClientPageHandler>
+          client_handler,
+      mojo::PendingReceiver<compose::mojom::ComposeSessionPageHandler> handler,
       mojo::PendingRemote<compose::mojom::ComposeDialog> dialog);
 
+  void SetModelQualityLogsUploaderForTest(
+      optimization_guide::ModelQualityLogsUploader* model_quality_uploader);
   void SetModelExecutorForTest(
       optimization_guide::OptimizationGuideModelExecutor* model_executor);
-  void SetSkipShowDialogForTest();
+  void SetSkipShowDialogForTest(bool should_skip);
+  void SetSessionIdForTest(base::Token session_id);
+  void SetInnerTextProviderForTest(InnerTextProvider* inner_text);
+
+  // content::WebContentsObserver implementation.
+  // Called when the primary page location changes. This includes reloads.
+  // TODO: Look into using DocumentUserData or keying sessions on render ID
+  // to more accurately save and remove state.
+  void PrimaryPageChanged(content::Page& page) override;
+
+  // Notification that the `render_widget_host` for this WebContents has gained
+  // focus. We will use this to relaunch a MSBB flow if applicable.
+  void OnWebContentsFocused(
+      content::RenderWidgetHost* render_widget_host) override;
+
+  // content::WebContentsObserver implementation.
+  // Called when there has been direct user interaction with the WebContents.
+  // Used to close the dialog when the user scrolls.
+  void DidGetUserInteraction(const blink::WebInputEvent& event) override;
+
+  // content::WebContentsObserver implementation.
+  // Invoked every time the WebContents changes visibility.
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
   void SetOptimizationGuideForTest(
       optimization_guide::OptimizationGuideDecider* opt_guide);
@@ -83,26 +130,60 @@ class ChromeComposeClient
 
   ComposeEnabling& GetComposeEnabling();
 
+  int GetSessionCountForTest();
+
+  // If there is an active session calls the OpenFeedbackPage method on it.
+  // Used only for testing.
+  void OpenFeedbackPageForTest(std::string feedback_id);
+
+  // Returns true when the dialog is showing and false otherwise.
+  bool IsDialogShowing();
+
  protected:
   explicit ChromeComposeClient(content::WebContents* web_contents);
+  optimization_guide::ModelQualityLogsUploader* GetModelQualityLogsUploader();
   optimization_guide::OptimizationGuideModelExecutor* GetModelExecutor();
   optimization_guide::OptimizationGuideDecider* GetOptimizationGuide();
+  base::Token GetSessionId();
+  InnerTextProvider* GetInnerTextProvider();
   std::unique_ptr<TranslateLanguageProvider> translate_language_provider_;
-  ComposeEnabling compose_enabling_;
+  std::unique_ptr<ComposeEnabling> compose_enabling_;
 
  private:
   friend class content::WebContentsUserData<ChromeComposeClient>;
+
   raw_ptr<Profile> profile_;
+  raw_ptr<PrefService> pref_service_;
 
   // Creates a session for `trigger_field` and initializes it as necessary.
   // `callback` is a callback to the renderer to insert the compose response
   // into the compose field.
-  void CreateSessionIfNeeded(const autofill::FormFieldData& trigger_field,
+  void CreateOrUpdateSession(EntryPoint ui_entry_point,
+                             const autofill::FormFieldData& trigger_field,
                              ComposeCallback callback);
 
-  // Removes `last_compose_field_id_` from `sessions_` and resets
-  // `last_compose_field_id_`.
+  // Set the exit reason for a session that does not progress past the FRE.
+  void SetFirstRunSessionCloseReason(
+      compose::ComposeFirstRunSessionCloseReason close_reason);
+
+  // Set the exit reason for a session that does not progress past the
+  // MSBB UI.
+  void SetMSBBSessionCloseReason(
+      compose::ComposeMSBBSessionCloseReason close_reason);
+
+  // Set the exit reason for a session.
+  void SetSessionCloseReason(compose::ComposeSessionCloseReason close_reason);
+
+  // Removes `active_compose_field_id_` from `sessions_` and resets
+  // `active_compose_field_id_` and `active_compose_form_id_`
   void RemoveActiveSession();
+
+  // Removes all sessions and resets `active_compose_field_id_` and
+  // `active_compose_form_id_`.
+  void RemoveAllSessions();
+
+  // Returns nullptr if no such session exists.
+  ComposeSession* GetSessionForActiveComposeField();
 
   compose::ComposeManagerImpl manager_;
 
@@ -111,11 +192,20 @@ class ChromeComposeClient
   // recently been navigated to.
   raw_ptr<optimization_guide::OptimizationGuideDecider> opt_guide_;
 
+  std::optional<optimization_guide::ModelQualityLogsUploader*>
+      model_quality_uploader_for_test_;
+
   std::optional<optimization_guide::OptimizationGuideModelExecutor*>
       model_executor_for_test_;
 
-  // The unique renderer ID of the last field the user selected compose on.
-  std::optional<autofill::FieldGlobalId> last_compose_field_id_;
+  std::optional<base::Token> session_id_for_test_;
+
+  // The unique renderer and form IDs of the last field the user selected
+  // compose on.
+  std::optional<std::pair<autofill::FieldGlobalId, autofill::FormGlobalId>>
+      active_compose_ids_;
+
+  std::optional<InnerTextProvider*> inner_text_provider_for_test_;
 
   // Saved states for each compose field.
   base::flat_map<autofill::FieldGlobalId, std::unique_ptr<ComposeSession>>
@@ -126,13 +216,25 @@ class ChromeComposeClient
   // next bind call. With mojo, there is no need to immediately reset the
   // binding when the pipe disconnects. Any callbacks in receiver methods can be
   // safely called even when the pipe is disconnected.
-  mojo::Receiver<compose::mojom::ComposeDialogClosePageHandler>
-      close_page_receiver_;
+  mojo::Receiver<compose::mojom::ComposeClientPageHandler>
+      client_page_receiver_;
+
+  // Time that the last call to show the dialog was started.
+  base::TimeTicks show_dialog_start_;
 
   // Used to test Compose in a tab at |chrome://compose|.
   std::unique_ptr<ComposeSession> debug_session_;
 
+  // Collects per-pageload UKM metrics and reports them on destruction (if any
+  // were collected).
+  std::unique_ptr<compose::PageUkmTracker> page_ukm_tracker_;
+
   bool skip_show_dialog_for_test_ = false;
+
+  // This boolean gets set to true upon opening the Settings page via the
+  // OpenComposeSettings function, and gets set back to false when the current
+  // page is refocused using OnWebContentsFocused.
+  bool open_settings_requested_ = false;
 
   base::WeakPtrFactory<ChromeComposeClient> weak_ptr_factory_{this};
 

@@ -22,7 +22,7 @@
 #     size_t cn_stride,                  [sp] -> (x0)
 #     size_t a_offset,                   [sp + 8] -> x8
 #     const int8_t* zero,                [sp + 16] -> x12
-#     const union xnn_qs8_conv_minmax_params params [sp + 24] -> (x11)
+#     const union xnn_qs8_conv_minmax_params *params)  [sp + 24] -> x11
 
 # d8-d15, x19-x30 need to be preserved if used. x18 is reserved by the OS.
 
@@ -46,10 +46,11 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_fp32_ukernel_4x16c4__asm_aarch64_neondot_cor
         CMP         x0, 2                   // if mr < 2
         LDR         x8, [sp, 8]             // Load a_offset
         ADD         x16, x6, x7             // c1 = c0 + cm_stride
-        LDP         x12, x11, [sp, 16]      // Load zero, params pointer
+        LDR         x12, [sp, 16]       // Load zero
+        LDR         x11, [sp, 24]      // Load params pointer
         CSEL        x16, x6,  x16, LO       //   c1 = c0
         ADD         x2, x2, 3               // kc = (kc + 3) & ~3
-        STP         d8,  d9, [sp, -32]!     // Save d8-d11 on stack
+        STP         d8,  d9, [sp, -32]!   // Save d8-d11 on stack
 
         ADD         x17, x16, x7            // c2 = c1 + cm_stride
         STP         d10, d11, [sp, 16]
@@ -88,16 +89,16 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_fp32_ukernel_4x16c4__asm_aarch64_neondot_cor
 
         CMP         x13, x12                // if a0 == zero
         ADD         x13, x13, x8            // a0 += a_offset
-        CSEL        x13, x12, x13, EQ       //   a0 = zero, else += a0 + a_offset
+        CSEL        x13, x12, x13, EQ       //   a0 = zero, else a0 += a_offset
         CMP         x14, x12                // if a1 == zero
         ADD         x14, x14, x8            // a1 += a_offset
-        CSEL        x14, x12, x14, EQ       //   a1 = zero, else += a1 + a_offset
+        CSEL        x14, x12, x14, EQ       //   a1 = zero, else a1 += a_offset
         CMP         x15, x12                // if a2 == zero
         ADD         x15, x15, x8            // a2 += a_offset
-        CSEL        x15, x12, x15, EQ       //   a2 = zero, else += a2 + a_offset
+        CSEL        x15, x12, x15, EQ       //   a2 = zero, else a2 += a_offset
         CMP         x10, x12                // if a3 == zero
         ADD         x10, x10, x8            // a3 += a_offset
-        CSEL        x10, x12, x10, EQ       //   a3 = zero, else += a3 + a_offset
+        CSEL        x10, x12, x10, EQ       //   a3 = zero, else a3 += a_offset
 
         # Is there at least 16 bytes for prologue/epilogue?
         SUBS        x0, x2, 16              // k = kc - 16
@@ -420,7 +421,7 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_fp32_ukernel_4x16c4__asm_aarch64_neondot_cor
         # BLOCK 3
         SDOT        v28.4s, v11.16b, v4.4b[1]
         SDOT        v29.4s, v11.16b, v5.4b[1]
-        LDR         x11, [sp, 56]               // reload params pointer
+        LDR         x11, [sp, 56]                  // reload params pointer
         SDOT        v30.4s, v11.16b, v6.4b[1]
         SDOT        v31.4s, v11.16b, v7.4b[1]
 
@@ -550,7 +551,7 @@ BEGIN_FUNCTION xnn_qs8_igemm_minmax_fp32_ukernel_4x16c4__asm_aarch64_neondot_cor
 
         # Restore d8-d11 from stack
         LDP         d10, d11, [sp, 16]
-        LDP         d8,  d9, [sp], 32
+        LDP         d8, d9, [sp], 32
         RET
 
         # Remainder- 4 to 12 bytes of A

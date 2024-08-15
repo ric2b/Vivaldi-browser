@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -187,8 +188,8 @@ int av1_rc_bits_per_mb(const AV1_COMP *cpi, FRAME_TYPE frame_type, int qindex,
   assert(correction_factor <= MAX_BPB_FACTOR &&
          correction_factor >= MIN_BPB_FACTOR);
 
-  if (frame_type != KEY_FRAME && accurate_estimate) {
-    assert(cpi->rec_sse != UINT64_MAX);
+  if (cpi->oxcf.rc_cfg.mode == AOM_CBR && frame_type != KEY_FRAME &&
+      accurate_estimate && cpi->rec_sse != UINT64_MAX) {
     const int mbs = cm->mi_params.MBs;
     const double sse_sqrt =
         (double)((int)sqrt((double)(cpi->rec_sse)) << BPER_MB_NORMBITS) /
@@ -334,7 +335,7 @@ int av1_rc_get_default_min_gf_interval(int width, int height,
                                        double framerate) {
   // Assume we do not need any constraint lower than 4K 20 fps
   static const double factor_safe = 3840 * 2160 * 20.0;
-  const double factor = width * height * framerate;
+  const double factor = (double)width * height * framerate;
   const int default_interval =
       clamp((int)(framerate * 0.125), MIN_GF_INTERVAL, MAX_GF_INTERVAL);
 
@@ -440,6 +441,32 @@ void av1_rc_init(const AV1EncoderConfig *oxcf, RATE_CONTROL *rc) {
   rc->use_external_qp_one_pass = 0;
 }
 
+static bool check_buffer_below_thresh(AV1_COMP *cpi, int64_t buffer_level,
+                                      int drop_mark) {
+  SVC *svc = &cpi->svc;
+  if (!cpi->ppi->use_svc || cpi->svc.number_spatial_layers == 1 ||
+      cpi->svc.framedrop_mode == AOM_LAYER_DROP) {
+    return (buffer_level <= drop_mark);
+  } else {
+    // For SVC in the AOM_FULL_SUPERFRAME_DROP): the condition on
+    // buffer is checked on current and upper spatial layers.
+    for (int i = svc->spatial_layer_id; i < svc->number_spatial_layers; ++i) {
+      const int layer = LAYER_IDS_TO_IDX(i, svc->temporal_layer_id,
+                                         svc->number_temporal_layers);
+      LAYER_CONTEXT *lc = &svc->layer_context[layer];
+      PRIMARY_RATE_CONTROL *lrc = &lc->p_rc;
+      // Exclude check for layer whose bitrate is 0.
+      if (lc->target_bandwidth > 0) {
+        const int drop_thresh = cpi->oxcf.rc_cfg.drop_frames_water_mark;
+        const int drop_mark_layer =
+            (int)(drop_thresh * lrc->optimal_buffer_level / 100);
+        if (lrc->buffer_level <= drop_mark_layer) return true;
+      }
+    }
+    return false;
+  }
+}
+
 int av1_rc_drop_frame(AV1_COMP *cpi) {
   const AV1EncoderConfig *oxcf = &cpi->oxcf;
   RATE_CONTROL *const rc = &cpi->rc;
@@ -454,28 +481,44 @@ int av1_rc_drop_frame(AV1_COMP *cpi) {
   int64_t buffer_level = p_rc->buffer_level;
 #endif
   // Never drop on key frame, or for frame whose base layer is key.
+  // If drop_count_consec hits or exceeds max_consec_drop then don't drop.
   if (cpi->common.current_frame.frame_type == KEY_FRAME ||
       (cpi->ppi->use_svc &&
        cpi->svc.layer_context[cpi->svc.temporal_layer_id].is_key_frame) ||
-      !oxcf->rc_cfg.drop_frames_water_mark) {
+      !oxcf->rc_cfg.drop_frames_water_mark ||
+      (rc->max_consec_drop > 0 &&
+       rc->drop_count_consec >= rc->max_consec_drop)) {
     return 0;
   } else {
-    if (buffer_level < 0) {
+    SVC *svc = &cpi->svc;
+    // In the full_superframe framedrop mode for svc, if the previous spatial
+    // layer was dropped, drop the current spatial layer.
+    if (cpi->ppi->use_svc && svc->spatial_layer_id > 0 &&
+        svc->drop_spatial_layer[svc->spatial_layer_id - 1] &&
+        svc->framedrop_mode == AOM_FULL_SUPERFRAME_DROP)
+      return 1;
+    // -1 is passed here for drop_mark since we are checking if
+    // buffer goes below 0 (<= -1).
+    if (check_buffer_below_thresh(cpi, buffer_level, -1)) {
       // Always drop if buffer is below 0.
+      rc->drop_count_consec++;
       return 1;
     } else {
       // If buffer is below drop_mark, for now just drop every other frame
       // (starting with the next frame) until it increases back over drop_mark.
-      int drop_mark = (int)(oxcf->rc_cfg.drop_frames_water_mark *
-                            p_rc->optimal_buffer_level / 100);
-      if ((buffer_level > drop_mark) && (rc->decimation_factor > 0)) {
+      const int drop_mark = (int)(oxcf->rc_cfg.drop_frames_water_mark *
+                                  p_rc->optimal_buffer_level / 100);
+      const bool buffer_below_thresh =
+          check_buffer_below_thresh(cpi, buffer_level, drop_mark);
+      if (!buffer_below_thresh && rc->decimation_factor > 0) {
         --rc->decimation_factor;
-      } else if (buffer_level <= drop_mark && rc->decimation_factor == 0) {
+      } else if (buffer_below_thresh && rc->decimation_factor == 0) {
         rc->decimation_factor = 1;
       }
       if (rc->decimation_factor > 0) {
         if (rc->decimation_count > 0) {
           --rc->decimation_count;
+          rc->drop_count_consec++;
           return 1;
         } else {
           rc->decimation_count = rc->decimation_factor;
@@ -2080,6 +2123,13 @@ static void rc_compute_variance_onepass_rt(AV1_COMP *cpi) {
   // TODO(yunqing): support scaled reference frames.
   if (cpi->scaled_ref_buf[LAST_FRAME - 1]) return;
 
+  for (int i = 0; i < 2; ++i) {
+    if (unscaled_src->widths[i] != yv12->widths[i] ||
+        unscaled_src->heights[i] != yv12->heights[i]) {
+      return;
+    }
+  }
+
   const int num_mi_cols = cm->mi_params.mi_cols;
   const int num_mi_rows = cm->mi_params.mi_rows;
   const BLOCK_SIZE bsize = BLOCK_64X64;
@@ -2242,7 +2292,8 @@ void av1_rc_postencode_update(AV1_COMP *cpi, uint64_t bytes_used) {
   av1_rc_update_rate_correction_factors(cpi, 0, cm->width, cm->height);
 
   // Update bit estimation ratio.
-  if (cm->current_frame.frame_type != KEY_FRAME &&
+  if (cpi->oxcf.rc_cfg.mode == AOM_CBR &&
+      cm->current_frame.frame_type != KEY_FRAME &&
       cpi->sf.hl_sf.accurate_bit_estimate) {
     const double q = av1_convert_qindex_to_q(cm->quant_params.base_qindex,
                                              cm->seq_params->bit_depth);
@@ -2354,6 +2405,7 @@ void av1_rc_postencode_update(AV1_COMP *cpi, uint64_t bytes_used) {
   rc->prev_coded_height = cm->height;
   rc->frame_number_encoded++;
   rc->prev_frame_is_dropped = 0;
+  rc->drop_count_consec = 0;
   // if (current_frame->frame_number == 1 && cm->show_frame)
   /*
   rc->this_frame_target =
@@ -2379,6 +2431,10 @@ void av1_rc_postencode_update_drop_frame(AV1_COMP *cpi) {
   // otherwise the avg_source_sad can get too large and subsequent frames
   // may miss the scene/slide detection.
   if (cpi->rc.high_source_sad) cpi->rc.avg_source_sad = 0;
+  if (cpi->ppi->use_svc && cpi->svc.number_spatial_layers > 1) {
+    cpi->svc.last_layer_dropped[cpi->svc.spatial_layer_id] = true;
+    cpi->svc.drop_spatial_layer[cpi->svc.spatial_layer_id] = true;
+  }
 }
 
 int av1_find_qindex(double desired_q, aom_bit_depth_t bit_depth,
@@ -2889,10 +2945,12 @@ void av1_set_rtc_reference_structure_one_layer(AV1_COMP *cpi, int gf_update) {
   for (int i = 0; i < REF_FRAMES; ++i) rtc_ref->refresh[i] = 0;
   // Set the reference frame flags.
   ext_flags->ref_frame_flags ^= AOM_LAST_FLAG;
-  ext_flags->ref_frame_flags ^= AOM_ALT_FLAG;
-  ext_flags->ref_frame_flags ^= AOM_GOLD_FLAG;
-  if (cpi->sf.rt_sf.ref_frame_comp_nonrd[1])
-    ext_flags->ref_frame_flags ^= AOM_LAST2_FLAG;
+  if (!cpi->sf.rt_sf.force_only_last_ref) {
+    ext_flags->ref_frame_flags ^= AOM_ALT_FLAG;
+    ext_flags->ref_frame_flags ^= AOM_GOLD_FLAG;
+    if (cpi->sf.rt_sf.ref_frame_comp_nonrd[1])
+      ext_flags->ref_frame_flags ^= AOM_LAST2_FLAG;
+  }
   const int sh = 6;
   // Moving index slot for last: 0 - (sh - 1).
   if (frame_number > 1) last_idx = ((frame_number - 1) % sh);
@@ -3367,6 +3425,7 @@ void av1_get_one_pass_rt_params(AV1_COMP *cpi, FRAME_TYPE *const frame_type,
       svc->layer_context[layer].is_key_frame = 1;
     }
     rc->frame_number_encoded = 0;
+    cpi->ppi->rtc_ref.non_reference_frame = 0;
   } else {
     *frame_type = INTER_FRAME;
     gf_group->update_type[cpi->gf_frame_index] = LF_UPDATE;

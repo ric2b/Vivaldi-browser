@@ -20,7 +20,10 @@
 #include "content/common/content_export.h"
 
 namespace attribution_reporting {
+class EventLevelEpsilon;
 class EventReportWindows;
+class MaxEventLevelReports;
+class TriggerSpecs;
 }  // namespace attribution_reporting
 
 namespace base {
@@ -119,7 +122,7 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // being open, or internet being disconnected. This gives them a noisy
   // report time to help disassociate them from other reports. Returns null if
   // no delay should be applied, e.g. due to debug mode.
-  virtual absl::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
+  virtual std::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
       const = 0;
 
   // Shuffles reports to provide plausible deniability on the ordering of
@@ -135,13 +138,13 @@ class CONTENT_EXPORT AttributionStorageDelegate {
       std::vector<network::TriggerVerification>& verifications) = 0;
 
   // Returns the rate used to determine whether to randomize the response to a
-  // source with the given source type and reporting windows, as implemented
-  // by`GetRandomizedResponse()`.Must be in the range [0, 1] and remain constant
+  // source with the given trigger specs, as implemented by
+  // `GetRandomizedResponse()`. Must be in the range [0, 1] and remain constant
   // for the lifetime of the delegate for calls with identical inputs.
   virtual double GetRandomizedResponseRate(
-      attribution_reporting::mojom::SourceType,
-      const attribution_reporting::EventReportWindows&,
-      int max_event_level_reports) const = 0;
+      const attribution_reporting::TriggerSpecs&,
+      attribution_reporting::MaxEventLevelReports,
+      attribution_reporting::EventLevelEpsilon) const = 0;
 
   using GetRandomizedResponseResult =
       base::expected<RandomizedResponseData, ExceedsChannelCapacityLimit>;
@@ -151,8 +154,9 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // limit.
   virtual GetRandomizedResponseResult GetRandomizedResponse(
       attribution_reporting::mojom::SourceType,
-      const attribution_reporting::EventReportWindows&,
-      int max_event_level_reports,
+      const attribution_reporting::TriggerSpecs&,
+      attribution_reporting::MaxEventLevelReports,
+      attribution_reporting::EventLevelEpsilon,
       base::Time source_time) const = 0;
 
   int GetMaxAggregatableReportsPerSource() const;
@@ -163,7 +167,7 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   virtual std::vector<NullAggregatableReport> GetNullAggregatableReports(
       const AttributionTrigger&,
       base::Time trigger_time,
-      absl::optional<base::Time> attributed_source_time) const = 0;
+      std::optional<base::Time> attributed_source_time) const = 0;
 
  protected:
   AttributionConfig config_ GUARDED_BY_CONTEXT(sequence_checker_);

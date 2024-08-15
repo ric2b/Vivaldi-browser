@@ -13,7 +13,6 @@ APP_ENUM_TO_STRING(AppType,
                    kCrostini,
                    kChromeApp,
                    kWeb,
-                   kMacOs,
                    kPluginVm,
                    kStandaloneBrowser,
                    kRemote,
@@ -130,6 +129,9 @@ bool App::operator==(const App& other) const {
   if (this->run_on_os_login != other.run_on_os_login) {
     return false;
   }
+  if (this->allow_close != other.allow_close) {
+    return false;
+  }
   if (this->app_size_in_bytes != other.app_size_in_bytes) {
     return false;
   }
@@ -145,6 +147,15 @@ bool App::operator==(const App& other) const {
   }
 
   if (!IsEqual(this->intent_filters, other.intent_filters)) {
+    return false;
+  }
+
+  IS_VECTOR_VALUE_EQUAL(supported_locales);
+  if (this->selected_locale != other.selected_locale) {
+    return false;
+  }
+
+  if (this->extra != other.extra) {
     return false;
   }
 
@@ -195,9 +206,17 @@ AppPtr App::Clone() const {
     app->run_on_os_login = apps::RunOnOsLogin(run_on_os_login->login_mode,
                                               run_on_os_login->is_managed);
   }
+  app->allow_close = allow_close;
 
   app->app_size_in_bytes = app_size_in_bytes;
   app->data_size_in_bytes = data_size_in_bytes;
+
+  app->supported_locales = supported_locales;
+  app->selected_locale = selected_locale;
+
+  if (extra.has_value()) {
+    app->extra = extra->Clone();
+  }
 
   return app;
 }
@@ -230,8 +249,6 @@ ApplicationType ConvertAppTypeToProtoApplicationType(AppType app_type) {
       return ApplicationType::APPLICATION_TYPE_CHROME_APP;
     case AppType::kWeb:
       return ApplicationType::APPLICATION_TYPE_WEB;
-    case AppType::kMacOs:
-      return ApplicationType::APPLICATION_TYPE_MAC_OS;
     case AppType::kPluginVm:
       return ApplicationType::APPLICATION_TYPE_PLUGIN_VM;
     case AppType::kStandaloneBrowser:

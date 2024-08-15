@@ -9,18 +9,23 @@ interface ElementWithParent {
   parent?: Element;
 }
 
-export function getDomState(): {loggables: ElementWithParent[], shadowRoots: ShadowRoot[]} {
+export function getDomState(documents: Document[]): {loggables: ElementWithParent[], shadowRoots: ShadowRoot[]} {
   const loggables: ElementWithParent[] = [];
   const shadowRoots: ShadowRoot[] = [];
-  const stack: ElementWithParent[] = [];
-  const putOnStack = (children: HTMLCollection, parent?: Element): void => {
+  const queue: ElementWithParent[] = [];
+  const enqueue = (children: HTMLCollection, parent?: Element): void => {
     for (const child of children) {
-      stack.push({element: child, parent});
+      queue.push({element: child, parent});
     }
   };
-  putOnStack(document.body.children);
-  while (stack.length > 0) {
-    const top = stack.pop();
+  for (const document of documents) {
+    enqueue(document.body.children);
+  }
+
+  let head = 0;
+  const dequeue = (): ElementWithParent => queue[head++];
+  while (true) {
+    const top = dequeue();
     if (!top) {
       break;
     }
@@ -30,10 +35,10 @@ export function getDomState(): {loggables: ElementWithParent[], shadowRoots: Sha
       loggables.push({element, parent});
       parent = element;
     }
-    putOnStack(element.children, parent);
+    enqueue(element.children, parent);
     if (element.shadowRoot) {
       shadowRoots.push(element.shadowRoot);
-      putOnStack(element.shadowRoot.children, parent);
+      enqueue(element.shadowRoot.children, parent);
     }
   }
   return {loggables, shadowRoots};

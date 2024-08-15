@@ -309,8 +309,6 @@ class SharedStorageChromeBrowserTestBase : public PlatformBrowserTest {
 
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{blink::features::kSharedStorageAPI,
-                              privacy_sandbox::kPrivacySandboxSettings4,
-                              privacy_sandbox::kPrivacySandboxSettings3,
                               features::kPrivacySandboxAdsAPIsOverride,
                               privacy_sandbox::
                                   kOverridePrivacySandboxSettingsLocalTesting},
@@ -376,11 +374,6 @@ class SharedStorageChromeBrowserTestBase : public PlatformBrowserTest {
   virtual void FinishSetUp() { CHECK(https_server()->Start()); }
 
   void SetPrefs(bool enable_privacy_sandbox, bool allow_third_party_cookies) {
-    GetProfile()->GetPrefs()->SetBoolean(prefs::kPrivacySandboxApisEnabledV2,
-                                         enable_privacy_sandbox);
-    GetProfile()->GetPrefs()->SetBoolean(
-        prefs::kPrivacySandboxManuallyControlledV2, enable_privacy_sandbox);
-
     GetProfile()->GetPrefs()->SetInteger(
         prefs::kCookieControlsMode,
         static_cast<int>(
@@ -388,10 +381,13 @@ class SharedStorageChromeBrowserTestBase : public PlatformBrowserTest {
                 ? content_settings::CookieControlsMode::kOff
                 : content_settings::CookieControlsMode::kBlockThirdParty));
 
-    // For `privacy_sandbox::kPrivacySandboxSettings4`, we also need to ensure
-    // the `PrivacySandboxDelegate::IsPrivacySandboxRestricted()` response
-    // returns the negation of `enable_privacy_sandbox`.
+    // We need to ensure the
+    // `PrivacySandboxDelegate::IsPrivacySandboxRestricted()` response returns
+    // the negation of `enable_privacy_sandbox`.
     auto* privacy_sandbox_settings = GetPrivacySandboxSettings();
+    if (enable_privacy_sandbox) {
+      privacy_sandbox_settings->SetAllPrivacySandboxAllowedForTesting();
+    }
     auto privacy_sandbox_delegate = std::make_unique<testing::NiceMock<
         privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate>>();
     privacy_sandbox_delegate->SetUpIsPrivacySandboxRestrictedResponse(
@@ -403,9 +399,8 @@ class SharedStorageChromeBrowserTestBase : public PlatformBrowserTest {
   }
 
   void SetThirdPartyCookieSetting(const GURL& main_url) {
-    // For `privacy_sandbox::kPrivacySandboxSettings4`, we also need to ensure
-    // the specific first-party URL `main_url` used by the test either has its
-    // third-party-cookie content setting set to
+    // We need to ensure the specific first-party URL `main_url` used by the
+    // test either has its third-party-cookie content setting set to
     // `ContentSetting::CONTENT_SETTING_ALLOW` or
     // `ContentSetting::CONTENT_SETTING_BLOCK`, according to
     // `AllowThirdPartyCookies()`.
@@ -571,7 +566,7 @@ class SharedStorageChromeBrowserTestBase : public PlatformBrowserTest {
       return false;
     }
 
-    absl::optional<GURL> observed_urn_uuid = config_observer.GetUrnUuid();
+    std::optional<GURL> observed_urn_uuid = config_observer.GetUrnUuid();
     EXPECT_TRUE(observed_urn_uuid.has_value());
     EXPECT_TRUE(blink::IsValidUrnUuidURL(observed_urn_uuid.value()));
     GURL urn_uuid = observed_urn_uuid.value();
@@ -1034,7 +1029,7 @@ IN_PROC_BROWSER_TEST_P(SharedStoragePrefBrowserTest, RunURLSelectionOperation) {
   // Privacy Sandbox is enabled and 3P cookies are allowed, so Shared Storage
   // should be allowed.
   EXPECT_TRUE(run_url_op_result.error.empty());
-  absl::optional<GURL> observed_urn_uuid = config_observer.GetUrnUuid();
+  std::optional<GURL> observed_urn_uuid = config_observer.GetUrnUuid();
   EXPECT_TRUE(observed_urn_uuid.has_value());
   EXPECT_TRUE(blink::IsValidUrnUuidURL(observed_urn_uuid.value()));
   GURL urn_uuid = observed_urn_uuid.value();
@@ -2797,8 +2792,7 @@ class SharedStorageFencedFrameChromeBrowserTest
 
     EXPECT_TRUE(run_url_op_console_observer.Wait());
     EXPECT_TRUE(run_url_op_result.error.empty());
-    const absl::optional<GURL>& observed_urn_uuid =
-        config_observer.GetUrnUuid();
+    const std::optional<GURL>& observed_urn_uuid = config_observer.GetUrnUuid();
     EXPECT_TRUE(observed_urn_uuid.has_value());
     EXPECT_TRUE(blink::IsValidUrnUuidURL(observed_urn_uuid.value()));
 

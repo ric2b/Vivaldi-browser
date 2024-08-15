@@ -230,7 +230,7 @@ enum ContextLookupFlags {
   V(STRING_FIXED_ARRAY_FROM_ITERABLE_FUNCTION_INDEX, JSFunction,               \
     string_fixed_array_from_iterable)                                          \
   /* Context maps */                                                           \
-  V(NATIVE_CONTEXT_MAP_INDEX, Map, native_context_map)                         \
+  V(META_MAP_INDEX, Map, meta_map)                                             \
   V(FUNCTION_CONTEXT_MAP_INDEX, Map, function_context_map)                     \
   V(MODULE_CONTEXT_MAP_INDEX, Map, module_context_map)                         \
   V(EVAL_CONTEXT_MAP_INDEX, Map, eval_context_map)                             \
@@ -375,6 +375,7 @@ enum ContextLookupFlags {
   V(SET_HAS_INDEX, JSFunction, set_has)                                        \
   V(SHADOW_REALM_IMPORT_VALUE_REJECTED_INDEX, JSFunction,                      \
     shadow_realm_import_value_rejected)                                        \
+  V(SUPPRESSED_ERROR_FUNCTION_INDEX, JSFunction, suppressed_error_function)    \
   V(SYNTAX_ERROR_FUNCTION_INDEX, JSFunction, syntax_error_function)            \
   V(TYPE_ERROR_FUNCTION_INDEX, JSFunction, type_error_function)                \
   V(URI_ERROR_FUNCTION_INDEX, JSFunction, uri_error_function)                  \

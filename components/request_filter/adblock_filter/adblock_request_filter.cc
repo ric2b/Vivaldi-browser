@@ -64,6 +64,7 @@ flat::ResourceType ResourceTypeFromRequest(
     case network::mojom::RequestDestination::kWorker:
     case network::mojom::RequestDestination::kSharedWorker:
     case network::mojom::RequestDestination::kServiceWorker:
+    case network::mojom::RequestDestination::kJson:
       return flat::ResourceType_SCRIPT;
     case network::mojom::RequestDestination::kImage:
       return flat::ResourceType_IMAGE;
@@ -75,6 +76,7 @@ flat::ResourceType ResourceTypeFromRequest(
     case network::mojom::RequestDestination::kWebBundle:
     case network::mojom::RequestDestination::kWebIdentity:
     case network::mojom::RequestDestination::kDictionary:
+    case network::mojom::RequestDestination::kSpeculationRules:
       return flat::ResourceType_OTHER;
     case network::mojom::RequestDestination::kEmpty:
       if (request.request.keepalive)

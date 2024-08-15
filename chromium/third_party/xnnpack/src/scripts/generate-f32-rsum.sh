@@ -25,6 +25,13 @@ tools/xngen src/f32-rsum/avx.c.in -D BATCH_TILE=24 -D ACCUMULATORS=3 -o src/f32-
 tools/xngen src/f32-rsum/avx.c.in -D BATCH_TILE=32 -D ACCUMULATORS=2 -o src/f32-rsum/gen/f32-rsum-avx-u32-acc2.c &
 tools/xngen src/f32-rsum/avx.c.in -D BATCH_TILE=32 -D ACCUMULATORS=4 -o src/f32-rsum/gen/f32-rsum-avx-u32-acc4.c &
 
+################################## x86 AVX512 #################################
+tools/xngen src/f32-rsum/avx512f.c.in -D BATCH_TILE=16 -D ACCUMULATORS=1 -o src/f32-rsum/gen/f32-rsum-avx512f-u16.c &
+tools/xngen src/f32-rsum/avx512f.c.in -D BATCH_TILE=32 -D ACCUMULATORS=2 -o src/f32-rsum/gen/f32-rsum-avx512f-u32-acc2.c &
+tools/xngen src/f32-rsum/avx512f.c.in -D BATCH_TILE=48 -D ACCUMULATORS=3 -o src/f32-rsum/gen/f32-rsum-avx512f-u48-acc3.c &
+tools/xngen src/f32-rsum/avx512f.c.in -D BATCH_TILE=64 -D ACCUMULATORS=2 -o src/f32-rsum/gen/f32-rsum-avx512f-u64-acc2.c &
+tools/xngen src/f32-rsum/avx512f.c.in -D BATCH_TILE=64 -D ACCUMULATORS=4 -o src/f32-rsum/gen/f32-rsum-avx512f-u64-acc4.c &
+
 ################################## Wasm SIMD ##################################
 tools/xngen src/f32-rsum/wasmsimd.c.in -D BATCH_TILE=4  -D ACCUMULATORS=1 -o src/f32-rsum/gen/f32-rsum-wasmsimd-u4.c &
 tools/xngen src/f32-rsum/wasmsimd.c.in -D BATCH_TILE=8  -D ACCUMULATORS=2 -o src/f32-rsum/gen/f32-rsum-wasmsimd-u8-acc2.c &
@@ -38,8 +45,5 @@ tools/xngen src/f32-rsum/scalar.c.in -D BATCH_TILE=2 -D ACCUMULATORS=2 -o src/f3
 tools/xngen src/f32-rsum/scalar.c.in -D BATCH_TILE=3 -D ACCUMULATORS=3 -o src/f32-rsum/gen/f32-rsum-scalar-u3-acc3.c &
 tools/xngen src/f32-rsum/scalar.c.in -D BATCH_TILE=4 -D ACCUMULATORS=2 -o src/f32-rsum/gen/f32-rsum-scalar-u4-acc2.c &
 tools/xngen src/f32-rsum/scalar.c.in -D BATCH_TILE=4 -D ACCUMULATORS=4 -o src/f32-rsum/gen/f32-rsum-scalar-u4-acc4.c &
-
-################################## Unit tests #################################
-tools/generate-reduce-test.py --tester RSumMicrokernelTester --spec test/f32-rsum.yaml --output test/f32-rsum.cc &
 
 wait

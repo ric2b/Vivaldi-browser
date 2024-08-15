@@ -47,6 +47,7 @@ impl DeTypeCode {
     }
 }
 
+/// The DE type code is out of range for v0 DE types.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct DeTypeCodeOutOfRange;
 

@@ -24,7 +24,6 @@
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "chromeos/ash/components/drivefs/drivefs_host.h"
 #include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
-#include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
@@ -100,7 +99,7 @@ class DriveIntegrationService : public KeyedService,
       base::OnceCallback<void(FileError,
                               std::vector<drivefs::mojom::QueryItemPtr>)>;
   using GetThumbnailCallback =
-      base::OnceCallback<void(const absl::optional<std::vector<uint8_t>>&)>;
+      base::OnceCallback<void(const std::optional<std::vector<uint8_t>>&)>;
   using GetReadOnlyAuthenticationTokenCallback =
       base::OnceCallback<void(google_apis::ApiErrorCode code,
                               const std::string& access_token)>;
@@ -180,7 +179,7 @@ class DriveIntegrationService : public KeyedService,
     virtual void OnBulkPinProgress(const drivefs::pinning::Progress& progress) {
     }
 
-    // Triggered when the bulk pinning manger is fully initialized.
+    // Triggered when the bulk-pinning manager is fully initialized.
     virtual void OnBulkPinInitialized() {}
 
     // Triggered when the network connection to Drive could have changed.
@@ -203,9 +202,9 @@ class DriveIntegrationService : public KeyedService,
 
   // MountObserver implementation.
   void OnMounted(const base::FilePath& mount_path) override;
-  void OnUnmounted(absl::optional<base::TimeDelta> remount_delay) override;
+  void OnUnmounted(std::optional<base::TimeDelta> remount_delay) override;
   void OnMountFailed(MountFailure failure,
-                     absl::optional<base::TimeDelta> remount_delay) override;
+                     std::optional<base::TimeDelta> remount_delay) override;
 
   // PinningManager::Observer implementation
   using Progress = drivefs::pinning::Progress;
@@ -316,8 +315,6 @@ class DriveIntegrationService : public KeyedService,
   void GetSyncingPaths(
       drivefs::mojom::DriveFs::GetSyncingPathsCallback callback);
 
-  drivefs::SyncState GetSyncStateForPath(const base::FilePath& drive_path);
-
   // Tells DriveFS to update its cached pin states of hosted files (once).
   void PollHostedFilePinStates();
 
@@ -406,7 +403,7 @@ class DriveIntegrationService : public KeyedService,
   // then tries to add it back after that delay. If |remount_delay| isn't
   // specified, |failed_to_mount| is true and the user is offline, schedules a
   // retry when the user is online.
-  void MaybeRemountFileSystem(absl::optional<base::TimeDelta> remount_delay,
+  void MaybeRemountFileSystem(std::optional<base::TimeDelta> remount_delay,
                               bool failed_to_mount);
 
   // Helper function for ClearCacheAndRemountFileSystem() that deletes the cache
@@ -458,17 +455,17 @@ class DriveIntegrationService : public KeyedService,
       mojo::Remote<drivefs::mojom::SearchQuery> search_query,
       base::OnceCallback<void(int64_t)> callback,
       FileError error,
-      absl::optional<std::vector<drivefs::mojom::QueryItemPtr>> results);
+      std::optional<std::vector<drivefs::mojom::QueryItemPtr>> results);
 
   void OnGetQuickAccessItems(
       GetQuickAccessItemsCallback callback,
       FileError error,
-      absl::optional<std::vector<drivefs::mojom::QueryItemPtr>> items);
+      std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items);
 
   void OnSearchDriveByFileName(
       SearchDriveByFileNameCallback callback,
       FileError error,
-      absl::optional<std::vector<drivefs::mojom::QueryItemPtr>> items);
+      std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items);
 
   void OnEnableMirroringStatusUpdate(drivefs::mojom::MirrorSyncStatus status);
 
@@ -500,7 +497,7 @@ class DriveIntegrationService : public KeyedService,
 
   friend class DriveIntegrationServiceFactory;
 
-  const raw_ptr<Profile, ExperimentalAsh> profile_;
+  const raw_ptr<Profile> profile_;
 
   State state_ = State::kNone;
   bool enabled_ = false;
@@ -585,7 +582,7 @@ class DriveIntegrationServiceFactory : public ProfileKeyedServiceFactory {
   ~DriveIntegrationServiceFactory() override;
 
   // BrowserContextKeyedServiceFactory overrides.
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
 
   // This is static so it can be set without instantiating the factory. This

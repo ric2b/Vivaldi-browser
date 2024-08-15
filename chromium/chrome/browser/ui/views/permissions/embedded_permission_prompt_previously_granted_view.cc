@@ -11,10 +11,14 @@
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(
+    EmbeddedPermissionPromptPreviouslyGrantedView,
+    kStopAllowingId);
+
 EmbeddedPermissionPromptPreviouslyGrantedView::
     EmbeddedPermissionPromptPreviouslyGrantedView(
         Browser* browser,
-        base::WeakPtr<Delegate> delegate)
+        base::WeakPtr<EmbeddedPermissionPromptViewDelegate> delegate)
     : EmbeddedPermissionPromptBaseView(browser, delegate) {}
 
 EmbeddedPermissionPromptPreviouslyGrantedView::
@@ -23,12 +27,25 @@ EmbeddedPermissionPromptPreviouslyGrantedView::
 std::u16string
 EmbeddedPermissionPromptPreviouslyGrantedView::GetAccessibleWindowTitle()
     const {
-  return GetMessageText();
+  return GetWindowTitle();
 }
 
 std::u16string EmbeddedPermissionPromptPreviouslyGrantedView::GetWindowTitle()
     const {
-  return std::u16string();
+  const auto& requests = delegate()->Requests();
+  CHECK_GT(requests.size(), 0U);
+
+  std::u16string permission_name;
+  if (requests.size() == 2) {
+    permission_name = l10n_util::GetStringUTF16(
+        IDS_CAMERA_AND_MICROPHONE_PERMISSION_NAME_FRAGMENT);
+  } else {
+    permission_name = requests[0]->GetPermissionNameTextFragment();
+  }
+
+  return l10n_util::GetStringFUTF16(IDS_EMBEDDED_PROMPT_PREVIOUSLY_ALLOWED,
+                                    permission_name,
+                                    GetUrlIdentityObject().name);
 }
 
 void EmbeddedPermissionPromptPreviouslyGrantedView::RunButtonCallback(
@@ -51,7 +68,7 @@ std::vector<
     EmbeddedPermissionPromptPreviouslyGrantedView::RequestLineConfiguration>
 EmbeddedPermissionPromptPreviouslyGrantedView::GetRequestLinesConfiguration()
     const {
-  return {{/*icon=*/nullptr, GetMessageText()}};
+  return {};
 }
 
 std::vector<EmbeddedPermissionPromptPreviouslyGrantedView::ButtonConfiguration>
@@ -63,24 +80,6 @@ EmbeddedPermissionPromptPreviouslyGrantedView::GetButtonsConfiguration() const {
 
   buttons.emplace_back(
       l10n_util::GetStringUTF16(IDS_EMBEDDED_PROMPT_STOP_ALLOWING),
-      ButtonType::kStopAllowing, ui::ButtonStyle::kTonal);
+      ButtonType::kStopAllowing, ui::ButtonStyle::kTonal, kStopAllowingId);
   return buttons;
-}
-
-std::u16string EmbeddedPermissionPromptPreviouslyGrantedView::GetMessageText()
-    const {
-  const auto& requests = delegate()->Requests();
-  CHECK_GT(requests.size(), 0U);
-
-  std::u16string permission_name;
-  if (requests.size() == 2) {
-    permission_name = l10n_util::GetStringUTF16(
-        IDS_CAMERA_AND_MICROPHONE_PERMISSION_NAME_FRAGMENT);
-  } else {
-    permission_name = requests[0]->GetPermissionNameTextFragment();
-  }
-
-  return l10n_util::GetStringFUTF16(IDS_EMBEDDED_PROMPT_PREVIOUSLY_ALLOWED,
-                                    permission_name,
-                                    GetUrlIdentityObject().name);
 }

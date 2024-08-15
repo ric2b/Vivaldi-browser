@@ -2,26 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_address_space.h"
+#include "partition_alloc/partition_address_space.h"
 
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <ostream>
 #include <string>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/address_pool_manager.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/compressed_pointer.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/bits.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/alias.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_config.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.h"
 #include "build/build_config.h"
+#include "partition_alloc/address_pool_manager.h"
+#include "partition_alloc/compressed_pointer.h"
+#include "partition_alloc/page_allocator.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/debug/alias.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/partition_alloc_config.h"
+#include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/thread_isolation/thread_isolation.h"
 
 #if BUILDFLAG(IS_IOS)
 #include <mach-o/dyld.h>
@@ -65,7 +65,8 @@ PA_NOINLINE void HandlePoolAllocFailure() {
     // The error code says NOT_ENOUGH_MEMORY, but since we only do MEM_RESERVE,
     // it must be VA space exhaustion.
     HandlePoolAllocFailureOutOfVASpace();
-  } else if (alloc_page_error_code == ERROR_COMMITMENT_LIMIT) {
+  } else if (alloc_page_error_code == ERROR_COMMITMENT_LIMIT ||
+             alloc_page_error_code == ERROR_COMMITMENT_MINIMUM) {
     // Should not happen, since as of Windows 8.1+, reserving address space
     // should not be charged against the commit limit, aside from a very small
     // amount per 64kiB block. Keep this path anyway, to check in crash reports.
@@ -301,7 +302,7 @@ void PartitionAddressSpace::InitConfigurablePool(uintptr_t pool_base,
   PA_CHECK(pool_base);
   PA_CHECK(size <= kConfigurablePoolMaxSize);
   PA_CHECK(size >= kConfigurablePoolMinSize);
-  PA_CHECK(base::bits::IsPowerOfTwo(size));
+  PA_CHECK(std::has_single_bit(size));
   PA_CHECK(pool_base % size == 0);
 
   setup_.configurable_pool_base_address_ = pool_base;
@@ -420,11 +421,12 @@ void PartitionAddressSpace::UninitThreadIsolatedPoolForTesting() {
 }
 #endif
 
-#if BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64)
+#if (BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)) && defined(ARCH_CPU_ARM64)
 
 PageCharacteristics page_characteristics;
 
-#endif  // BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64)
+#endif  // (BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)) &&
+        // defined(ARCH_CPU_ARM64)
 
 #endif  // BUILDFLAG(HAS_64_BIT_POINTERS)
 

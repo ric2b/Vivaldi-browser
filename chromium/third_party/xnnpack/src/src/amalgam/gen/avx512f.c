@@ -668,7 +668,7 @@ void xnn_f32_dwconv_minmax_ukernel_4p16c__avx512f(
   } while (--output_width != 0);
 }
 
-void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
+void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f(
     size_t channels,
     size_t output_width,
     const float** input,
@@ -743,8 +743,8 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         const __m512 vk1x0 = _mm512_load_ps(w + 64);
         const __m512 vk1x1 = _mm512_load_ps(w + 80);
-        __m512 vacc0p1 = _mm512_mul_ps(vi1x0, vk1x0);
-        __m512 vacc1p1 = _mm512_mul_ps(vi1x1, vk1x1);
+        vacc0p0 = _mm512_fmadd_ps(vi1x0, vk1x0, vacc0p0);
+        vacc1p0 = _mm512_fmadd_ps(vi1x1, vk1x1, vacc1p0);
 
         const __m512 vi2x0 = _mm512_loadu_ps(i2);
         const __m512 vi2x1 = _mm512_loadu_ps(i2 + 16);
@@ -761,8 +761,8 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         const __m512 vk3x0 = _mm512_load_ps(w + 128);
         const __m512 vk3x1 = _mm512_load_ps(w + 144);
-        vacc0p1 = _mm512_fmadd_ps(vi3x0, vk3x0, vacc0p1);
-        vacc1p1 = _mm512_fmadd_ps(vi3x1, vk3x1, vacc1p1);
+        vacc0p0 = _mm512_fmadd_ps(vi3x0, vk3x0, vacc0p0);
+        vacc1p0 = _mm512_fmadd_ps(vi3x1, vk3x1, vacc1p0);
 
         const __m512 vi4x0 = _mm512_loadu_ps(i4);
         const __m512 vi4x1 = _mm512_loadu_ps(i4 + 16);
@@ -775,9 +775,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 192;
 
-        // Add up all accumulators to vacc0p0
-        vacc0p0 = _mm512_add_ps(vacc0p0, vacc0p1);
-        vacc1p0 = _mm512_add_ps(vacc1p0, vacc1p1);
 
         _mm512_store_ps(b, vacc0p0);
         _mm512_store_ps(b + 16, vacc1p0);
@@ -798,7 +795,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         i1 += 16;
 
         const __m512 vk1x0 = _mm512_load_ps(w + 32);
-        __m512 vaccp1 = _mm512_mul_ps(vi1x0, vk1x0);
+        vaccp0 = _mm512_fmadd_ps(vi1x0, vk1x0, vaccp0);
 
         const __m512 vi2x0 = _mm512_loadu_ps(i2);
         i2 += 16;
@@ -810,7 +807,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         i3 += 16;
 
         const __m512 vk3x0 = _mm512_load_ps(w + 64);
-        vaccp1 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp1);
+        vaccp0 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp0);
 
         const __m512 vi4x0 = _mm512_loadu_ps(i4);
         i4 += 16;
@@ -820,8 +817,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 96;
 
-        // Add up all accumulators to vaccp0
-        vaccp0 = _mm512_add_ps(vaccp0, vaccp1);
 
         _mm512_store_ps(b, vaccp0);
         b += 16;
@@ -842,7 +837,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         const __m512 vi1x0 = _mm512_maskz_loadu_ps(vmask, i1);
 
         const __m512 vk1x0 = _mm512_load_ps(w + 32);
-        __m512 vaccp1 = _mm512_mul_ps(vi1x0, vk1x0);
+        vaccp0 = _mm512_fmadd_ps(vi1x0, vk1x0, vaccp0);
 
         const __m512 vi2x0 = _mm512_maskz_loadu_ps(vmask, i2);
 
@@ -852,7 +847,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         const __m512 vi3x0 = _mm512_maskz_loadu_ps(vmask, i3);
 
         const __m512 vk3x0 = _mm512_load_ps(w + 64);
-        vaccp1 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp1);
+        vaccp0 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp0);
 
         const __m512 vi4x0 = _mm512_maskz_loadu_ps(vmask, i4);
 
@@ -861,8 +856,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 96;
 
-        // Add up all accumulators to vaccp0
-        vaccp0 = _mm512_add_ps(vaccp0, vaccp1);
 
         _mm512_store_ps(b, vaccp0);
       }
@@ -919,8 +912,8 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         const __m512 vk1x0 = _mm512_load_ps(w + 32);
         const __m512 vk1x1 = _mm512_load_ps(w + 48);
-        __m512 vacc0p1 = _mm512_mul_ps(vi1x0, vk1x0);
-        __m512 vacc1p1 = _mm512_mul_ps(vi1x1, vk1x1);
+        vacc0p0 = _mm512_fmadd_ps(vi1x0, vk1x0, vacc0p0);
+        vacc1p0 = _mm512_fmadd_ps(vi1x1, vk1x1, vacc1p0);
 
         const __m512 vi2x0 = _mm512_loadu_ps(i2);
         const __m512 vi2x1 = _mm512_loadu_ps(i2 + 16);
@@ -937,8 +930,8 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         const __m512 vk3x0 = _mm512_load_ps(w + 96);
         const __m512 vk3x1 = _mm512_load_ps(w + 112);
-        vacc0p1 = _mm512_fmadd_ps(vi3x0, vk3x0, vacc0p1);
-        vacc1p1 = _mm512_fmadd_ps(vi3x1, vk3x1, vacc1p1);
+        vacc0p0 = _mm512_fmadd_ps(vi3x0, vk3x0, vacc0p0);
+        vacc1p0 = _mm512_fmadd_ps(vi3x1, vk3x1, vacc1p0);
 
         const __m512 vi4x0 = _mm512_loadu_ps(i4);
         const __m512 vi4x1 = _mm512_loadu_ps(i4 + 16);
@@ -951,9 +944,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 160;
 
-        // Add up all accumulators to vacc0p0
-        vacc0p0 = _mm512_add_ps(vacc0p0, vacc0p1);
-        vacc1p0 = _mm512_add_ps(vacc1p0, vacc1p1);
 
         _mm512_store_ps(b, vacc0p0);
         _mm512_store_ps(b + 16, vacc1p0);
@@ -974,7 +964,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         i1 += 16;
 
         const __m512 vk1x0 = _mm512_load_ps(w + 16);
-        __m512 vaccp1 = _mm512_mul_ps(vi1x0, vk1x0);
+        vaccp0 = _mm512_fmadd_ps(vi1x0, vk1x0, vaccp0);
 
         const __m512 vi2x0 = _mm512_loadu_ps(i2);
         i2 += 16;
@@ -986,7 +976,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         i3 += 16;
 
         const __m512 vk3x0 = _mm512_load_ps(w + 48);
-        vaccp1 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp1);
+        vaccp0 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp0);
 
         const __m512 vi4x0 = _mm512_loadu_ps(i4);
         i4 += 16;
@@ -996,8 +986,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 80;
 
-        // Add up all accumulators to vaccp0
-        vaccp0 = _mm512_add_ps(vaccp0, vaccp1);
 
         _mm512_store_ps(b, vaccp0);
         b += 16;
@@ -1018,7 +1006,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         const __m512 vi1x0 = _mm512_maskz_loadu_ps(vmask, i1);
 
         const __m512 vk1x0 = _mm512_load_ps(w + 16);
-        __m512 vaccp1 = _mm512_mul_ps(vi1x0, vk1x0);
+        vaccp0 = _mm512_fmadd_ps(vi1x0, vk1x0, vaccp0);
 
         const __m512 vi2x0 = _mm512_maskz_loadu_ps(vmask, i2);
 
@@ -1028,7 +1016,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         const __m512 vi3x0 = _mm512_maskz_loadu_ps(vmask, i3);
 
         const __m512 vk3x0 = _mm512_load_ps(w + 48);
-        vaccp1 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp1);
+        vaccp0 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp0);
 
         const __m512 vi4x0 = _mm512_maskz_loadu_ps(vmask, i4);
 
@@ -1037,8 +1025,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 80;
 
-        // Add up all accumulators to vaccp0
-        vaccp0 = _mm512_add_ps(vaccp0, vaccp1);
 
         _mm512_store_ps(b, vaccp0);
       }
@@ -1097,8 +1083,8 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         __m512 vk1x0 = _mm512_load_ps(w + 32);
         __m512 vk1x1 = _mm512_load_ps(w + 48);
 
-        __m512 vacc0p1 = _mm512_mul_ps(vi1x0, vk1x0);
-        __m512 vacc1p1 = _mm512_mul_ps(vi1x1, vk1x1);
+        vacc0p0 = _mm512_fmadd_ps(vi1x0, vk1x0, vacc0p0);
+        vacc1p0 = _mm512_fmadd_ps(vi1x1, vk1x1, vacc1p0);
 
         const __m512 vi2x0 = _mm512_loadu_ps(i2);
         const __m512 vi2x1 = _mm512_loadu_ps(i2 + 16);
@@ -1117,8 +1103,8 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         __m512 vk3x0 = _mm512_load_ps(w + 96);
         __m512 vk3x1 = _mm512_load_ps(w + 112);
 
-        vacc0p1 = _mm512_fmadd_ps(vi3x0, vk3x0, vacc0p1);
-        vacc1p1 = _mm512_fmadd_ps(vi3x1, vk3x1, vacc1p1);
+        vacc0p0 = _mm512_fmadd_ps(vi3x0, vk3x0, vacc0p0);
+        vacc1p0 = _mm512_fmadd_ps(vi3x1, vk3x1, vacc1p0);
 
         const __m512 vi4x0 = _mm512_loadu_ps(i4);
         const __m512 vi4x1 = _mm512_loadu_ps(i4 + 16);
@@ -1132,9 +1118,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         w += 160;
 
-        // Add up all accumulators to vacc0p0
-        vacc0p0 = _mm512_add_ps(vacc0p0, vacc0p1);
-        vacc1p0 = _mm512_add_ps(vacc1p0, vacc1p1);
 
         __m512 vacc0 = _mm512_max_ps(vmin, vacc0p0);
         __m512 vacc1 = _mm512_max_ps(vmin, vacc1p0);
@@ -1165,7 +1148,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         __m512 vk1x0 = _mm512_load_ps(w + 16);
 
-        __m512 vaccp1 = _mm512_mul_ps(vi1x0, vk1x0);
+        vaccp0 = _mm512_fmadd_ps(vi1x0, vk1x0, vaccp0);
 
         const __m512 vi2x0 = _mm512_loadu_ps(i2);
         i2 += 16;
@@ -1179,7 +1162,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         __m512 vk3x0 = _mm512_load_ps(w + 48);
 
-        vaccp1 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp1);
+        vaccp0 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp0);
 
         const __m512 vi4x0 = _mm512_loadu_ps(i4);
         i4 += 16;
@@ -1191,8 +1174,6 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
         w += 80;
 
 
-        // Add up all accumulators to vaccp0
-        vaccp0 = _mm512_add_ps(vaccp0, vaccp1);
 
         __m512 vacc = _mm512_max_ps(vmin, vaccp0);
 
@@ -1214,7 +1195,7 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         const __m512 vi1x0 = _mm512_maskz_loadu_ps(vmask, i1);
         __m512 vk1x0 = _mm512_load_ps(w + 16);
-        __m512 vaccp1 = _mm512_mul_ps(vi1x0, vk1x0);
+        vaccp0 = _mm512_fmadd_ps(vi1x0, vk1x0, vaccp0);
 
         const __m512 vi2x0 = _mm512_maskz_loadu_ps(vmask, i2);
         __m512 vk2x0 = _mm512_load_ps(w + 32);
@@ -1222,14 +1203,12 @@ void xnn_f32_dwconv_minmax_ukernel_5f5m5l32c16s1r__avx512f_acc2(
 
         const __m512 vi3x0 = _mm512_maskz_loadu_ps(vmask, i3);
         __m512 vk3x0 = _mm512_load_ps(w + 48);
-        vaccp1 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp1);
+        vaccp0 = _mm512_fmadd_ps(vi3x0, vk3x0, vaccp0);
 
         const __m512 vi4x0 = _mm512_maskz_loadu_ps(vmask, i4);
         __m512 vk4x0 = _mm512_load_ps(w + 64);
         vaccp0 = _mm512_fmadd_ps(vi4x0, vk4x0, vaccp0);
 
-        // Add up all accumulators to vaccp0
-        vaccp0 = _mm512_add_ps(vaccp0, vaccp1);
 
         __m512 vacc = _mm512_max_ps(vmin, vaccp0);
         vacc = _mm512_min_ps(vmax, vacc);
@@ -1619,28 +1598,28 @@ void xnn_f32_gemm_minmax_ukernel_7x16__avx512f_broadcast(
     vacc6x0123456789ABCDEF = _mm512_min_ps(vmax, vacc6x0123456789ABCDEF);
 
     if XNN_LIKELY(nc >= 16) {
-      _mm512_storeu_ps(c6, vacc6x0123456789ABCDEF);
-      c6 = (float*) ((uintptr_t) c6 + cn_stride);
-      _mm512_storeu_ps(c5, vacc5x0123456789ABCDEF);
-      c5 = (float*) ((uintptr_t) c5 + cn_stride);
-      _mm512_storeu_ps(c4, vacc4x0123456789ABCDEF);
-      c4 = (float*) ((uintptr_t) c4 + cn_stride);
-      _mm512_storeu_ps(c3, vacc3x0123456789ABCDEF);
-      c3 = (float*) ((uintptr_t) c3 + cn_stride);
-      _mm512_storeu_ps(c2, vacc2x0123456789ABCDEF);
-      c2 = (float*) ((uintptr_t) c2 + cn_stride);
-      _mm512_storeu_ps(c1, vacc1x0123456789ABCDEF);
-      c1 = (float*) ((uintptr_t) c1 + cn_stride);
       _mm512_storeu_ps(c0, vacc0x0123456789ABCDEF);
       c0 = (float*) ((uintptr_t) c0 + cn_stride);
+      _mm512_storeu_ps(c1, vacc1x0123456789ABCDEF);
+      c1 = (float*) ((uintptr_t) c1 + cn_stride);
+      _mm512_storeu_ps(c2, vacc2x0123456789ABCDEF);
+      c2 = (float*) ((uintptr_t) c2 + cn_stride);
+      _mm512_storeu_ps(c3, vacc3x0123456789ABCDEF);
+      c3 = (float*) ((uintptr_t) c3 + cn_stride);
+      _mm512_storeu_ps(c4, vacc4x0123456789ABCDEF);
+      c4 = (float*) ((uintptr_t) c4 + cn_stride);
+      _mm512_storeu_ps(c5, vacc5x0123456789ABCDEF);
+      c5 = (float*) ((uintptr_t) c5 + cn_stride);
+      _mm512_storeu_ps(c6, vacc6x0123456789ABCDEF);
+      c6 = (float*) ((uintptr_t) c6 + cn_stride);
 
-      a6 = (const float*) ((uintptr_t) a6 - kc);
-      a5 = (const float*) ((uintptr_t) a5 - kc);
-      a4 = (const float*) ((uintptr_t) a4 - kc);
-      a3 = (const float*) ((uintptr_t) a3 - kc);
-      a2 = (const float*) ((uintptr_t) a2 - kc);
-      a1 = (const float*) ((uintptr_t) a1 - kc);
       a0 = (const float*) ((uintptr_t) a0 - kc);
+      a1 = (const float*) ((uintptr_t) a1 - kc);
+      a2 = (const float*) ((uintptr_t) a2 - kc);
+      a3 = (const float*) ((uintptr_t) a3 - kc);
+      a4 = (const float*) ((uintptr_t) a4 - kc);
+      a5 = (const float*) ((uintptr_t) a5 - kc);
+      a6 = (const float*) ((uintptr_t) a6 - kc);
 
       nc -= 16;
     } else {
@@ -1648,13 +1627,13 @@ void xnn_f32_gemm_minmax_ukernel_7x16__avx512f_broadcast(
       assert(nc < 16);
       // Prepare mask for valid 32-bit elements (depends on nc).
       const __mmask16 vmask = _cvtu32_mask16((uint16_t) ((uint32_t) (UINT32_C(1) << nc) - UINT32_C(1)));
-      _mm512_mask_storeu_ps(c6, vmask, vacc6x0123456789ABCDEF);
-      _mm512_mask_storeu_ps(c5, vmask, vacc5x0123456789ABCDEF);
-      _mm512_mask_storeu_ps(c4, vmask, vacc4x0123456789ABCDEF);
-      _mm512_mask_storeu_ps(c3, vmask, vacc3x0123456789ABCDEF);
-      _mm512_mask_storeu_ps(c2, vmask, vacc2x0123456789ABCDEF);
-      _mm512_mask_storeu_ps(c1, vmask, vacc1x0123456789ABCDEF);
       _mm512_mask_storeu_ps(c0, vmask, vacc0x0123456789ABCDEF);
+      _mm512_mask_storeu_ps(c1, vmask, vacc1x0123456789ABCDEF);
+      _mm512_mask_storeu_ps(c2, vmask, vacc2x0123456789ABCDEF);
+      _mm512_mask_storeu_ps(c3, vmask, vacc3x0123456789ABCDEF);
+      _mm512_mask_storeu_ps(c4, vmask, vacc4x0123456789ABCDEF);
+      _mm512_mask_storeu_ps(c5, vmask, vacc5x0123456789ABCDEF);
+      _mm512_mask_storeu_ps(c6, vmask, vacc6x0123456789ABCDEF);
       nc = 0;
     }
   } while (nc != 0);
@@ -2010,6 +1989,61 @@ void xnn_f32_prelu_ukernel__avx512f_2x16(
   } while (rows != 0);
 }
 
+void xnn_f32_rmax_ukernel__avx512f_u64_acc4(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+
+  __m512 vmax0 = _mm512_set1_ps(*input);
+  __m512 vmax1 = vmax0;
+  __m512 vmax2 = vmax0;
+  __m512 vmax3 = vmax0;
+  for (; batch >= 64 * sizeof(float); batch -= 64 * sizeof(float)) {
+    const __m512 vt0 = _mm512_loadu_ps(input);
+    const __m512 vt1 = _mm512_loadu_ps(input + 16);
+    const __m512 vt2 = _mm512_loadu_ps(input + 32);
+    const __m512 vt3 = _mm512_loadu_ps(input + 48);
+    input += 64;
+
+    vmax0 = _mm512_max_ps(vmax0, vt0);
+    vmax1 = _mm512_max_ps(vmax1, vt1);
+    vmax2 = _mm512_max_ps(vmax2, vt2);
+    vmax3 = _mm512_max_ps(vmax3, vt3);
+  }
+  vmax0 = _mm512_max_ps(vmax0, vmax1);
+  vmax2 = _mm512_max_ps(vmax2, vmax3);
+  vmax0 = _mm512_max_ps(vmax0, vmax2);
+  for (; batch >= 16 * sizeof(float); batch -= 16 * sizeof(float)) {
+    const __m512 vt = _mm512_loadu_ps(input);
+    input += 16;
+
+    vmax0 = _mm512_max_ps(vmax0, vt);
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    assert(batch >= 1 * sizeof(float));
+    assert(batch <= 15 * sizeof(float));
+
+    // Prepare mask for valid elements (depends on batch).
+    batch >>= XNN_LOG2_SIZEOF_FLOAT;
+    const __mmask16 vmask = _cvtu32_mask16((uint16_t) ((uint32_t) (UINT32_C(1) << batch) - UINT32_C(1)));
+
+    const __m512 vt = _mm512_maskz_loadu_ps(vmask, input);
+
+    vmax0 = _mm512_mask_max_ps(vmax0, vmask, vmax0, vt);
+  }
+  __m256 vmax256 = _mm256_max_ps(_mm512_castps512_ps256(vmax0), _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(vmax0), 1)));
+  __m128 vmax = _mm_max_ps(_mm256_castps256_ps128(vmax256), _mm256_extractf128_ps(vmax256, 1));
+  vmax = _mm_max_ps(vmax, _mm_movehl_ps(vmax, vmax));
+  vmax = _mm_max_ss(vmax, _mm_movehdup_ps(vmax));
+  _mm_store_ss(output, vmax);
+}
+
 void xnn_f32_rminmax_ukernel__avx512f_u64_acc4(
     size_t batch,
     const float* input,
@@ -2081,6 +2115,62 @@ void xnn_f32_rminmax_ukernel__avx512f_u64_acc4(
   vmax = _mm_max_ss(vmax, _mm_movehdup_ps(vmax));
   _mm_store_ss(output, vmin);
   _mm_store_ss(output + 1, vmax);
+}
+
+void xnn_f32_rsum_ukernel__avx512f_u64_acc4(
+    size_t batch,
+    const float* input,
+    float* output,
+    const union xnn_f32_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
+{
+  assert(batch != 0);
+  assert(batch % sizeof(float) == 0);
+  assert(input != NULL);
+  assert(output != NULL);
+
+  __m512 vacc0 = _mm512_setzero_ps();
+  __m512 vacc1 = _mm512_setzero_ps();
+  __m512 vacc2 = _mm512_setzero_ps();
+  __m512 vacc3 = _mm512_setzero_ps();
+  for (; batch >= 64 * sizeof(float); batch -= 64 * sizeof(float)) {
+    const __m512 vt0 = _mm512_loadu_ps(input);
+    const __m512 vt1 = _mm512_loadu_ps(input + 16);
+    const __m512 vt2 = _mm512_loadu_ps(input + 32);
+    const __m512 vt3 = _mm512_loadu_ps(input + 48);
+    input += 64;
+
+    vacc0 = _mm512_add_ps(vacc0, vt0);
+    vacc1 = _mm512_add_ps(vacc1, vt1);
+    vacc2 = _mm512_add_ps(vacc2, vt2);
+    vacc3 = _mm512_add_ps(vacc3, vt3);
+  }
+  vacc0 = _mm512_add_ps(vacc0, vacc1);
+  vacc2 = _mm512_add_ps(vacc2, vacc3);
+  vacc0 = _mm512_add_ps(vacc0, vacc2);
+  for (; batch >= 16 * sizeof(float); batch -= 16 * sizeof(float)) {
+    const __m512 vt = _mm512_loadu_ps(input);
+    input += 16;
+
+    vacc0 = _mm512_add_ps(vacc0, vt);
+  }
+  if XNN_UNLIKELY(batch != 0) {
+    assert(batch >= 1 * sizeof(float));
+    assert(batch <= 15 * sizeof(float));
+
+    // Prepare mask for valid elements (depends on batch).
+    batch >>= XNN_LOG2_SIZEOF_FLOAT;
+    const __mmask16 vmask = _cvtu32_mask16((uint16_t) ((uint32_t) (UINT32_C(1) << batch) - UINT32_C(1)));
+
+    const __m512 vt = _mm512_maskz_loadu_ps(vmask, input);
+    vacc0 = _mm512_add_ps(vacc0, vt);
+  }
+
+  __m256 vacc256 = _mm256_add_ps(_mm512_castps512_ps256(vacc0), _mm256_castpd_ps(_mm512_extractf64x4_pd(_mm512_castps_pd(vacc0), 1)));
+  __m128 vacc = _mm_add_ps(_mm256_castps256_ps128(vacc256), _mm256_extractf128_ps(vacc256, 1));
+  vacc = _mm_add_ps(vacc, _mm_movehl_ps(vacc, vacc));
+  vacc = _mm_add_ss(vacc, _mm_movehdup_ps(vacc));
+  vacc = _mm_mul_ss(vacc, _mm_load_ss(&params->scalar.scale));
+  _mm_store_ss(output, vacc);
 }
 
 void xnn_f32_vadd_minmax_ukernel__avx512f_u32(
@@ -3070,7 +3160,7 @@ void xnn_f32_vclamp_ukernel__avx512f_u16(
   }
 }
 
-void xnn_f32_velu_ukernel__avx512f_rr1_lut16_p3_perm_u64(
+void xnn_f32_velu_ukernel__avx512f_rr1_p6_u128(
     size_t batch,
     const float* input,
     float* output,
@@ -3081,61 +3171,109 @@ void xnn_f32_velu_ukernel__avx512f_rr1_lut16_p3_perm_u64(
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m512 vprescale = _mm512_set1_ps(params->avx512_rr1_lut16_p3.prescale);
-  const __m512 valpha = _mm512_set1_ps(params->avx512_rr1_lut16_p3.alpha);
-  const __m512 vbeta = _mm512_set1_ps(params->avx512_rr1_lut16_p3.beta);
-  const __m512 vsat_cutoff = _mm512_set1_ps(params->avx512_rr1_lut16_p3.sat_cutoff);
-  const __m512 vmagic_bias = _mm512_set1_ps(params->avx512_rr1_lut16_p3.magic_bias);
-  const __m512 vlog2e = _mm512_set1_ps(params->avx512_rr1_lut16_p3.log2e);
-  const __m512 vminus_ln2 = _mm512_set1_ps(params->avx512_rr1_lut16_p3.minus_ln2);
-  const __m512 vc3 = _mm512_set1_ps(params->avx512_rr1_lut16_p3.c3);
-  const __m512 vc2 = _mm512_set1_ps(params->avx512_rr1_lut16_p3.c2);
-  const __m512i vtable = _mm512_load_si512(params->avx512_rr1_lut16_p3.table);
+  const __m512 vprescale = _mm512_set1_ps(params->avx512_rr1_p6.prescale);
+  const __m512 valpha = _mm512_set1_ps(params->avx512_rr1_p6.alpha);
+  const __m512 vbeta = _mm512_set1_ps(params->avx512_rr1_p6.beta);
+  const __m512 vsat_cutoff = _mm512_set1_ps(params->avx512_rr1_p6.sat_cutoff);
+  const __m512 vmagic_bias = _mm512_set1_ps(params->avx512_rr1_p6.magic_bias);
+  const __m512 vlog2e = _mm512_set1_ps(params->avx512_rr1_p6.log2e);
+  const __m512 vminus_ln2 = _mm512_set1_ps(params->avx512_rr1_p6.minus_ln2);
+  const __m512 vc6 = _mm512_set1_ps(params->avx512_rr1_p6.c6);
+  const __m512 vc5 = _mm512_set1_ps(params->avx512_rr1_p6.c5);
+  const __m512 vc4 = _mm512_set1_ps(params->avx512_rr1_p6.c4);
+  const __m512 vc3 = _mm512_set1_ps(params->avx512_rr1_p6.c3);
+  const __m512 vc2 = _mm512_set1_ps(params->avx512_rr1_p6.c2);
 
-  for (; batch >= 64 * sizeof(float); batch -= 64 * sizeof(float)) {
+  for (; batch >= 128 * sizeof(float); batch -= 128 * sizeof(float)) {
     __m512 vx0 = _mm512_loadu_ps(input);
     __m512 vx1 = _mm512_loadu_ps(input + 16);
     __m512 vx2 = _mm512_loadu_ps(input + 32);
     __m512 vx3 = _mm512_loadu_ps(input + 48);
-    input += 64;
+    __m512 vx4 = _mm512_loadu_ps(input + 64);
+    __m512 vx5 = _mm512_loadu_ps(input + 80);
+    __m512 vx6 = _mm512_loadu_ps(input + 96);
+    __m512 vx7 = _mm512_loadu_ps(input + 112);
+    input += 128;
 
     const __m512 vz0 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx0, vprescale));
     const __m512 vz1 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx1, vprescale));
     const __m512 vz2 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx2, vprescale));
     const __m512 vz3 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx3, vprescale));
+    const __m512 vz4 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx4, vprescale));
+    const __m512 vz5 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx5, vprescale));
+    const __m512 vz6 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx6, vprescale));
+    const __m512 vz7 = _mm512_max_ps(vsat_cutoff, _mm512_mul_ps(vx7, vprescale));
 
     __m512 vn0 = _mm512_fmadd_ps(vz0, vlog2e, vmagic_bias);
     __m512 vn1 = _mm512_fmadd_ps(vz1, vlog2e, vmagic_bias);
     __m512 vn2 = _mm512_fmadd_ps(vz2, vlog2e, vmagic_bias);
     __m512 vn3 = _mm512_fmadd_ps(vz3, vlog2e, vmagic_bias);
+    __m512 vn4 = _mm512_fmadd_ps(vz4, vlog2e, vmagic_bias);
+    __m512 vn5 = _mm512_fmadd_ps(vz5, vlog2e, vmagic_bias);
+    __m512 vn6 = _mm512_fmadd_ps(vz6, vlog2e, vmagic_bias);
+    __m512 vn7 = _mm512_fmadd_ps(vz7, vlog2e, vmagic_bias);
 
-    const __m512i ven0 = _mm512_slli_epi32(_mm512_castps_si512(vn0), 19);
-    const __m512i vl0 = _mm512_permutexvar_epi32(_mm512_castps_si512(vn0), vtable);
-    const __m512i ven1 = _mm512_slli_epi32(_mm512_castps_si512(vn1), 19);
-    const __m512i vl1 = _mm512_permutexvar_epi32(_mm512_castps_si512(vn1), vtable);
-    const __m512i ven2 = _mm512_slli_epi32(_mm512_castps_si512(vn2), 19);
-    const __m512i vl2 = _mm512_permutexvar_epi32(_mm512_castps_si512(vn2), vtable);
-    const __m512i ven3 = _mm512_slli_epi32(_mm512_castps_si512(vn3), 19);
-    const __m512i vl3 = _mm512_permutexvar_epi32(_mm512_castps_si512(vn3), vtable);
-
-    __m512 vs0 = _mm512_castsi512_ps(_mm512_add_epi32(vl0, ven0));
+    __m512 vs0 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn0), 23));
     vn0 = _mm512_sub_ps(vn0, vmagic_bias);
-    __m512 vs1 = _mm512_castsi512_ps(_mm512_add_epi32(vl1, ven1));
+    __m512 vs1 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn1), 23));
     vn1 = _mm512_sub_ps(vn1, vmagic_bias);
-    __m512 vs2 = _mm512_castsi512_ps(_mm512_add_epi32(vl2, ven2));
+    __m512 vs2 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn2), 23));
     vn2 = _mm512_sub_ps(vn2, vmagic_bias);
-    __m512 vs3 = _mm512_castsi512_ps(_mm512_add_epi32(vl3, ven3));
+    __m512 vs3 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn3), 23));
     vn3 = _mm512_sub_ps(vn3, vmagic_bias);
+    __m512 vs4 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn4), 23));
+    vn4 = _mm512_sub_ps(vn4, vmagic_bias);
+    __m512 vs5 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn5), 23));
+    vn5 = _mm512_sub_ps(vn5, vmagic_bias);
+    __m512 vs6 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn6), 23));
+    vn6 = _mm512_sub_ps(vn6, vmagic_bias);
+    __m512 vs7 = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn7), 23));
+    vn7 = _mm512_sub_ps(vn7, vmagic_bias);
 
     __m512 vt0 = _mm512_fmadd_ps(vn0, vminus_ln2, vz0);
     __m512 vt1 = _mm512_fmadd_ps(vn1, vminus_ln2, vz1);
     __m512 vt2 = _mm512_fmadd_ps(vn2, vminus_ln2, vz2);
     __m512 vt3 = _mm512_fmadd_ps(vn3, vminus_ln2, vz3);
+    __m512 vt4 = _mm512_fmadd_ps(vn4, vminus_ln2, vz4);
+    __m512 vt5 = _mm512_fmadd_ps(vn5, vminus_ln2, vz5);
+    __m512 vt6 = _mm512_fmadd_ps(vn6, vminus_ln2, vz6);
+    __m512 vt7 = _mm512_fmadd_ps(vn7, vminus_ln2, vz7);
 
-    __m512 vp0 = _mm512_fmadd_ps(vc3, vt0, vc2);
-    __m512 vp1 = _mm512_fmadd_ps(vc3, vt1, vc2);
-    __m512 vp2 = _mm512_fmadd_ps(vc3, vt2, vc2);
-    __m512 vp3 = _mm512_fmadd_ps(vc3, vt3, vc2);
+    __m512 vp0 = _mm512_fmadd_ps(vc6, vt0, vc5);
+    __m512 vp1 = _mm512_fmadd_ps(vc6, vt1, vc5);
+    __m512 vp2 = _mm512_fmadd_ps(vc6, vt2, vc5);
+    __m512 vp3 = _mm512_fmadd_ps(vc6, vt3, vc5);
+    __m512 vp4 = _mm512_fmadd_ps(vc6, vt4, vc5);
+    __m512 vp5 = _mm512_fmadd_ps(vc6, vt5, vc5);
+    __m512 vp6 = _mm512_fmadd_ps(vc6, vt6, vc5);
+    __m512 vp7 = _mm512_fmadd_ps(vc6, vt7, vc5);
+
+    vp0 = _mm512_fmadd_ps(vp0, vt0, vc4);
+    vp1 = _mm512_fmadd_ps(vp1, vt1, vc4);
+    vp2 = _mm512_fmadd_ps(vp2, vt2, vc4);
+    vp3 = _mm512_fmadd_ps(vp3, vt3, vc4);
+    vp4 = _mm512_fmadd_ps(vp4, vt4, vc4);
+    vp5 = _mm512_fmadd_ps(vp5, vt5, vc4);
+    vp6 = _mm512_fmadd_ps(vp6, vt6, vc4);
+    vp7 = _mm512_fmadd_ps(vp7, vt7, vc4);
+
+    vp0 = _mm512_fmadd_ps(vp0, vt0, vc3);
+    vp1 = _mm512_fmadd_ps(vp1, vt1, vc3);
+    vp2 = _mm512_fmadd_ps(vp2, vt2, vc3);
+    vp3 = _mm512_fmadd_ps(vp3, vt3, vc3);
+    vp4 = _mm512_fmadd_ps(vp4, vt4, vc3);
+    vp5 = _mm512_fmadd_ps(vp5, vt5, vc3);
+    vp6 = _mm512_fmadd_ps(vp6, vt6, vc3);
+    vp7 = _mm512_fmadd_ps(vp7, vt7, vc3);
+
+    vp0 = _mm512_fmadd_ps(vp0, vt0, vc2);
+    vp1 = _mm512_fmadd_ps(vp1, vt1, vc2);
+    vp2 = _mm512_fmadd_ps(vp2, vt2, vc2);
+    vp3 = _mm512_fmadd_ps(vp3, vt3, vc2);
+    vp4 = _mm512_fmadd_ps(vp4, vt4, vc2);
+    vp5 = _mm512_fmadd_ps(vp5, vt5, vc2);
+    vp6 = _mm512_fmadd_ps(vp6, vt6, vc2);
+    vp7 = _mm512_fmadd_ps(vp7, vt7, vc2);
 
     vp0 = _mm512_mul_ps(vp0, vt0);
     vt0 = _mm512_mul_ps(vt0, vs0);
@@ -3145,16 +3283,32 @@ void xnn_f32_velu_ukernel__avx512f_rr1_lut16_p3_perm_u64(
     vt2 = _mm512_mul_ps(vt2, vs2);
     vp3 = _mm512_mul_ps(vp3, vt3);
     vt3 = _mm512_mul_ps(vt3, vs3);
+    vp4 = _mm512_mul_ps(vp4, vt4);
+    vt4 = _mm512_mul_ps(vt4, vs4);
+    vp5 = _mm512_mul_ps(vp5, vt5);
+    vt5 = _mm512_mul_ps(vt5, vs5);
+    vp6 = _mm512_mul_ps(vp6, vt6);
+    vt6 = _mm512_mul_ps(vt6, vs6);
+    vp7 = _mm512_mul_ps(vp7, vt7);
+    vt7 = _mm512_mul_ps(vt7, vs7);
 
     vs0 = _mm512_fmsub_ps(vs0, valpha, valpha);
     vs1 = _mm512_fmsub_ps(vs1, valpha, valpha);
     vs2 = _mm512_fmsub_ps(vs2, valpha, valpha);
     vs3 = _mm512_fmsub_ps(vs3, valpha, valpha);
+    vs4 = _mm512_fmsub_ps(vs4, valpha, valpha);
+    vs5 = _mm512_fmsub_ps(vs5, valpha, valpha);
+    vs6 = _mm512_fmsub_ps(vs6, valpha, valpha);
+    vs7 = _mm512_fmsub_ps(vs7, valpha, valpha);
 
     vp0 = _mm512_fmadd_ps(vp0, vt0, vt0);
     vp1 = _mm512_fmadd_ps(vp1, vt1, vt1);
     vp2 = _mm512_fmadd_ps(vp2, vt2, vt2);
     vp3 = _mm512_fmadd_ps(vp3, vt3, vt3);
+    vp4 = _mm512_fmadd_ps(vp4, vt4, vt4);
+    vp5 = _mm512_fmadd_ps(vp5, vt5, vt5);
+    vp6 = _mm512_fmadd_ps(vp6, vt6, vt6);
+    vp7 = _mm512_fmadd_ps(vp7, vt7, vt7);
 
     const __m512 vzero = _mm512_setzero_ps();
     __m512 vy0 = _mm512_fmadd_ps(vp0, valpha, vs0);
@@ -3165,17 +3319,33 @@ void xnn_f32_velu_ukernel__avx512f_rr1_lut16_p3_perm_u64(
     const __mmask16 vsign2 = _mm512_cmp_ps_mask(vx2, vzero, _CMP_NLT_US);
     __m512 vy3 = _mm512_fmadd_ps(vp3, valpha, vs3);
     const __mmask16 vsign3 = _mm512_cmp_ps_mask(vx3, vzero, _CMP_NLT_US);
+    __m512 vy4 = _mm512_fmadd_ps(vp4, valpha, vs4);
+    const __mmask16 vsign4 = _mm512_cmp_ps_mask(vx4, vzero, _CMP_NLT_US);
+    __m512 vy5 = _mm512_fmadd_ps(vp5, valpha, vs5);
+    const __mmask16 vsign5 = _mm512_cmp_ps_mask(vx5, vzero, _CMP_NLT_US);
+    __m512 vy6 = _mm512_fmadd_ps(vp6, valpha, vs6);
+    const __mmask16 vsign6 = _mm512_cmp_ps_mask(vx6, vzero, _CMP_NLT_US);
+    __m512 vy7 = _mm512_fmadd_ps(vp7, valpha, vs7);
+    const __mmask16 vsign7 = _mm512_cmp_ps_mask(vx7, vzero, _CMP_NLT_US);
 
     vy0 = _mm512_mask_mul_ps(vy0, vsign0, vx0, vbeta);
     vy1 = _mm512_mask_mul_ps(vy1, vsign1, vx1, vbeta);
     vy2 = _mm512_mask_mul_ps(vy2, vsign2, vx2, vbeta);
     vy3 = _mm512_mask_mul_ps(vy3, vsign3, vx3, vbeta);
+    vy4 = _mm512_mask_mul_ps(vy4, vsign4, vx4, vbeta);
+    vy5 = _mm512_mask_mul_ps(vy5, vsign5, vx5, vbeta);
+    vy6 = _mm512_mask_mul_ps(vy6, vsign6, vx6, vbeta);
+    vy7 = _mm512_mask_mul_ps(vy7, vsign7, vx7, vbeta);
 
     _mm512_storeu_ps(output, vy0);
     _mm512_storeu_ps(output + 16, vy1);
     _mm512_storeu_ps(output + 32, vy2);
     _mm512_storeu_ps(output + 48, vy3);
-    output += 64;
+    _mm512_storeu_ps(output + 64, vy4);
+    _mm512_storeu_ps(output + 80, vy5);
+    _mm512_storeu_ps(output + 96, vy6);
+    _mm512_storeu_ps(output + 112, vy7);
+    output += 128;
   }
   for (; batch >= 16 * sizeof(float); batch -= 16 * sizeof(float)) {
     __m512 vx = _mm512_loadu_ps(input);
@@ -3185,14 +3355,15 @@ void xnn_f32_velu_ukernel__avx512f_rr1_lut16_p3_perm_u64(
     const __mmask16 vsign = _mm512_cmp_ps_mask(vx, _mm512_setzero_ps(), _CMP_NLT_US);
 
     __m512 vn = _mm512_fmadd_ps(vz, vlog2e, vmagic_bias);
-    const __m512i ven = _mm512_slli_epi32(_mm512_castps_si512(vn), 19);
-    const __m512i vl = _mm512_permutexvar_epi32(_mm512_castps_si512(vn), vtable);
-    __m512 vs = _mm512_castsi512_ps(_mm512_add_epi32(vl, ven));
+    __m512 vs = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn), 23));
     vn = _mm512_sub_ps(vn, vmagic_bias);
 
     __m512 vt = _mm512_fmadd_ps(vn, vminus_ln2, vz);
 
-    __m512 vp = _mm512_fmadd_ps(vc3, vt, vc2);
+    __m512 vp = _mm512_fmadd_ps(vc6, vt, vc5);
+    vp = _mm512_fmadd_ps(vp, vt, vc4);
+    vp = _mm512_fmadd_ps(vp, vt, vc3);
+    vp = _mm512_fmadd_ps(vp, vt, vc2);
     vp = _mm512_mul_ps(vp, vt);
 
     vt = _mm512_mul_ps(vt, vs);
@@ -3218,14 +3389,15 @@ void xnn_f32_velu_ukernel__avx512f_rr1_lut16_p3_perm_u64(
     const __mmask16 vsign = _mm512_cmp_ps_mask(vx, _mm512_setzero_ps(), _CMP_NLT_US);
 
     __m512 vn = _mm512_fmadd_ps(vz, vlog2e, vmagic_bias);
-    const __m512i ven = _mm512_slli_epi32(_mm512_castps_si512(vn), 19);
-    const __m512i vl = _mm512_permutexvar_epi32(_mm512_castps_si512(vn), vtable);
-    __m512 vs = _mm512_castsi512_ps(_mm512_add_epi32(vl, ven));
+    __m512 vs = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_castps_si512(vn), 23));
     vn = _mm512_sub_ps(vn, vmagic_bias);
 
     __m512 vt = _mm512_fmadd_ps(vn, vminus_ln2, vz);
 
-    __m512 vp = _mm512_fmadd_ps(vc3, vt, vc2);
+    __m512 vp = _mm512_fmadd_ps(vc6, vt, vc5);
+    vp = _mm512_fmadd_ps(vp, vt, vc4);
+    vp = _mm512_fmadd_ps(vp, vt, vc3);
+    vp = _mm512_fmadd_ps(vp, vt, vc2);
     vp = _mm512_mul_ps(vp, vt);
 
     vt = _mm512_mul_ps(vt, vs);

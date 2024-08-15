@@ -15,6 +15,7 @@
 
 #if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi/vaapi_dmabuf_video_frame_mapper.h"
+#include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif  // BUILDFLAG(USE_VAAPI)
 
 namespace media {

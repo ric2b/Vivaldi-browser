@@ -13,6 +13,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -159,7 +160,7 @@ void ResetAccount(network::SharedURLLoaderFactory* url_loader_factory,
   simple_loader->SetTimeoutDuration(base::Seconds(10));
   content::SimpleURLLoaderTestHelper url_loader_helper;
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
-      url_loader_factory, url_loader_helper.GetCallback());
+      url_loader_factory, url_loader_helper.GetCallbackDeprecated());
   url_loader_helper.WaitForCallback();
   if (simple_loader->NetError() != 0) {
     LOG(ERROR) << "Reset account failed with error "
@@ -211,18 +212,26 @@ bool SyncServiceImplHarness::SignInPrimaryAccount(
 
   switch (signin_type_) {
     case SigninType::UI_SIGNIN: {
-      return signin_delegate_->SigninUI(profile_, username_, password_,
-                                        consent_level);
+      if (!signin_delegate_->SigninUI(profile_, username_, password_,
+                                      consent_level)) {
+        return false;
+      }
+      break;
     }
 
     case SigninType::FAKE_SIGNIN: {
       signin_delegate_->SigninFake(profile_, username_, consent_level);
-      return true;
+      break;
     }
   }
 
-  NOTREACHED();
-  return false;
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
+  CHECK(identity_manager->HasPrimaryAccount(consent_level));
+  CHECK(identity_manager->HasPrimaryAccountWithRefreshToken(consent_level));
+  CHECK(!service()->GetAccountInfo().IsEmpty());
+
+  return true;
 }
 
 void SyncServiceImplHarness::ResetSyncForPrimaryAccount() {
@@ -251,7 +260,7 @@ void SyncServiceImplHarness::ResetSyncForPrimaryAccount() {
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 void SyncServiceImplHarness::SignOutPrimaryAccount() {
   DCHECK(!username_.empty());
-  signin::ClearPrimaryAccount(IdentityManagerFactory::GetForProfile(profile_));
+  signin_delegate_->SignOutPrimaryAccount(profile_);
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -329,38 +338,6 @@ void SyncServiceImplHarness::FinishSyncSetup() {
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-void SyncServiceImplHarness::StopSyncServiceAndClearData() {
-  DVLOG(1) << "Requesting stop for service and clearing data.";
-  service()->StopAndClear();
-}
-
-bool SyncServiceImplHarness::EnableSyncFeature() {
-  std::unique_ptr<syncer::SyncSetupInProgressHandle> blocker =
-      service()->GetSetupInProgressHandle();
-  DVLOG(1) << "Requesting start for service";
-  service()->SetSyncFeatureRequested();
-
-  if (!AwaitEngineInitialization()) {
-    LOG(ERROR) << "AwaitEngineInitialization failed.";
-    return false;
-  }
-  DVLOG(1) << "Engine Initialized successfully.";
-
-  blocker.reset();
-
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-  service()->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
-      syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-
-  if (!AwaitSyncSetupCompletion()) {
-    LOG(FATAL) << "AwaitSyncSetupCompletion failed.";
-    return false;
-  }
-
-  return true;
-}
-
 bool SyncServiceImplHarness::AwaitMutualSyncCycleCompletion(
     SyncServiceImplHarness* partner) {
   std::vector<SyncServiceImplHarness*> harnesses;
@@ -376,7 +353,7 @@ bool SyncServiceImplHarness::AwaitQuiescence(
     return true;
   }
 
-  std::vector<SyncServiceImpl*> services;
+  std::vector<raw_ptr<SyncServiceImpl, VectorExperimental>> services;
   for (SyncServiceImplHarness* harness : clients) {
     services.push_back(harness->service());
   }

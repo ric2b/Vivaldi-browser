@@ -6,6 +6,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -41,7 +42,6 @@
 #include "components/user_manager/user.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_test_util.h"
 #include "ui/base/interaction/expect_call_in_scope.h"
@@ -105,27 +105,21 @@ class ChromeUserEducationDelegateTest : public BrowserWithTestWindowTest {
     delegate_ = std::make_unique<ChromeUserEducationDelegate>();
   }
 
-  TestingProfile* CreateProfile() override {
-    constexpr char kUserEmail[] = "user@test";
-    const AccountId kUserAccountId(AccountId::FromUserEmail(kUserEmail));
-
+  // TODO(crbug.com/1494005): merge into BrowserWithTestWindowTest.
+  void LogIn(const std::string& email) override {
+    const AccountId account_id = AccountId::FromUserEmail(email);
     // Register user.
-    user_manager_->AddUser(kUserAccountId);
-    user_manager_->LoginUser(kUserAccountId);
+    user_manager_->AddUser(account_id);
+    user_manager_->LoginUser(account_id);
 
     // Activate session.
     auto* client = ash_test_helper()->test_session_controller_client();
-    client->AddUserSession(kUserEmail);
-    client->SwitchActiveUser(kUserAccountId);
-
-    // Create profile.
-    return profile_manager()->CreateTestingProfile(kUserEmail,
-                                                   GetTestingFactories());
+    client->AddUserSession(email);
+    client->SwitchActiveUser(account_id);
   }
 
   // User management.
-  const raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged | ExperimentalAsh>
-      user_manager_;
+  const raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged> user_manager_;
   user_manager::ScopedUserManager user_manager_enabler_;
 
   // The delegate instance under test.
@@ -172,13 +166,13 @@ TEST_F(ChromeUserEducationDelegateTest, CreateHelpBubble) {
 // Verifies that `GetElementIdentifierForAppId()` is working as intended.
 TEST_F(ChromeUserEducationDelegateTest, GetElementIdentifierForAppId) {
   using AppIdWithElementIdentifier =
-      std::pair<const char*, absl::optional<ui::ElementIdentifier>>;
+      std::pair<const char*, std::optional<ui::ElementIdentifier>>;
 
   const std::array<AppIdWithElementIdentifier, 4u> kAppIdsWithElementIds = {
       {{web_app::kHelpAppId, ash::kExploreAppElementId},
        {web_app::kOsSettingsAppId, ash::kSettingsAppElementId},
-       {"unknown", absl::nullopt},
-       {"", absl::nullopt}}};
+       {"unknown", std::nullopt},
+       {"", std::nullopt}}};
 
   for (const auto& [app_id, element_id] : kAppIdsWithElementIds) {
     EXPECT_EQ(delegate()->GetElementIdentifierForAppId(app_id), element_id);
@@ -371,7 +365,7 @@ INSTANTIATE_TEST_SUITE_P(All,
 TEST_P(ChromeUserEducationDelegateNewUserTest, IsNewUser) {
   // Until the first app list sync in the session has been completed, it is
   // not known whether a given user can be considered new.
-  EXPECT_EQ(delegate()->IsNewUser(account_id()), absl::nullopt);
+  EXPECT_EQ(delegate()->IsNewUser(account_id()), std::nullopt);
 
   // Signal that the first app list sync in the session has been completed.
   on_first_sync().Signal();

@@ -32,6 +32,7 @@ class VivaldiFrameObserver
   // Keep track of the HostZoomMap we're currently subscribed to.
   raw_ptr<content::HostZoomMap> host_zoom_map_;
 
+  void RenderFrameCreated(content::RenderFrameHost* render_view_host) override;
   void RenderFrameHostChanged(content::RenderFrameHost* old_host,
                               content::RenderFrameHost* new_host) override;
 

@@ -14,11 +14,11 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/signin/constants.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
-#import "ios/chrome/browser/signin/system_identity.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/constants.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/ui/account_picker/account_picker_confirmation/account_picker_confirmation_screen_coordinator.h"
 #import "ios/chrome/browser/ui/account_picker/account_picker_confirmation/account_picker_confirmation_screen_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/account_picker/account_picker_coordinator_delegate.h"
@@ -90,12 +90,20 @@
   _accountPickerConfirmationScreenCoordinator = nil;
 }
 
+#pragma mark - AccountPickerConsumer
+
 - (void)startValidationSpinner {
   [_accountPickerConfirmationScreenCoordinator startValidationSpinner];
 }
 
 - (void)stopValidationSpinner {
   [_accountPickerConfirmationScreenCoordinator stopValidationSpinner];
+}
+
+- (void)setIdentityButtonHidden:(BOOL)hidden animated:(BOOL)animated {
+  [_accountPickerConfirmationScreenCoordinator
+      setIdentityButtonHidden:hidden
+                     animated:animated];
 }
 
 #pragma mark - ChromeCoordinator
@@ -109,6 +117,8 @@
                        configuration:_configuration];
   _accountPickerConfirmationScreenCoordinator.delegate = self;
   _accountPickerConfirmationScreenCoordinator.layoutDelegate = self;
+  _accountPickerConfirmationScreenCoordinator.childViewController =
+      self.accountConfirmationChildViewController;
   [_accountPickerConfirmationScreenCoordinator start];
 
   // Create AccountPickerScreenNavigationController.

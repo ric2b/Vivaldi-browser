@@ -78,7 +78,7 @@ const char kOsMarker[] = "windows";
 constexpr int kMaxXmlNestingDepth = 1000;
 
 std::string WideToUTF8(const wchar_t* s, size_t length) {
-  return base::WideToUTF8(base::WStringPiece(s, length));
+  return base::WideToUTF8(std::wstring_view(s, length));
 }
 
 // context data for the parser

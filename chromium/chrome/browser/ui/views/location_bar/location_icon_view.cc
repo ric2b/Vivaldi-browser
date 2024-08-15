@@ -54,9 +54,9 @@
 using content::WebContents;
 using security_state::SecurityLevel;
 
-absl::optional<ui::ColorId>
+std::optional<ui::ColorId>
 LocationIconView::Delegate::GetLocationIconBackgroundColorOverride() const {
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 LocationIconView::LocationIconView(
@@ -237,7 +237,7 @@ void LocationIconView::UpdateTextVisibility(bool suppress_animations) {
   if (!GetAnimateTextVisibilityChange() || suppress_animations)
     ResetSlideAnimation(should_show);
   else if (should_show)
-    AnimateIn(absl::nullopt);
+    AnimateIn(std::nullopt);
   else
     AnimateOut();
 }
@@ -431,7 +431,7 @@ gfx::Size LocationIconView::GetMinimumSizeForPreferredSize(
   return size;
 }
 
-BEGIN_METADATA(LocationIconView, IconLabelBubbleView)
+BEGIN_METADATA(LocationIconView)
 ADD_READONLY_PROPERTY_METADATA(int, MinimumLabelTextWidth)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, Text)
 ADD_READONLY_PROPERTY_METADATA(bool, ShowText)

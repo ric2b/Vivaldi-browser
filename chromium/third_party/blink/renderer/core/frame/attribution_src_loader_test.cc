@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <memory>
 
@@ -35,6 +36,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/testing/fake_local_frame_host.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -211,6 +213,10 @@ class MockAttributionHost : public mojom::blink::AttributionHost {
   void RegisterNavigationDataHost(
       mojo::PendingReceiver<mojom::blink::AttributionDataHost> data_host,
       const blink::AttributionSrcToken& attribution_src_token) override {}
+
+  void NotifyNavigationWithBackgroundRegistrationsWillStart(
+      const blink::AttributionSrcToken& attribution_src_token,
+      uint32_t expected_registrations) override {}
 
   mojo::AssociatedReceiver<mojom::blink::AttributionHost> receiver_{this};
   base::OnceClosure quit_;
@@ -756,6 +762,67 @@ TEST_F(AttributionSrcLoaderCrossAppWebEnabledTest,
       request, response, resource));
   histograms.ExpectUniqueSample("Conversions.HeadersSize.RegisterOsSource",
                                 os_registration.length(), 1);
+}
+
+class AttributionSrcLoaderInBrowserMigrationEnabledTest
+    : public AttributionSrcLoaderTest {
+ public:
+  AttributionSrcLoaderInBrowserMigrationEnabledTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {blink::features::kKeepAliveInBrowserMigration,
+         blink::features::kAttributionReportingInBrowserMigration},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AttributionSrcLoaderInBrowserMigrationEnabledTest,
+       MaybeRegisterAttributionHeaders_ResponseIgnored) {
+  KURL test_url = ToKURL("https://example1.com/foo.html");
+
+  ResourceRequest request(test_url);
+  request.SetKeepalive(true);
+  request.SetAttributionReportingEligibility(
+      AttributionReportingEligibility::kTrigger);
+  auto* resource = MakeGarbageCollected<MockResource>(test_url);
+  ResourceResponse response(test_url);
+  response.SetHttpStatusCode(200);
+  response.SetHttpHeaderField(
+      http_names::kAttributionReportingRegisterTrigger,
+      AtomicString(R"({"event_trigger_data":[{"trigger_data": "7"}]})"));
+
+  EXPECT_FALSE(attribution_src_loader_->MaybeRegisterAttributionHeaders(
+      request, response, resource));
+}
+
+TEST_F(AttributionSrcLoaderInBrowserMigrationEnabledTest,
+       MaybeRegisterAttributionHeadersNonKeepAlive_ResponseProcessed) {
+  KURL test_url = ToKURL("https://example1.com/foo.html");
+
+  ResourceRequest request(test_url);
+  request.SetKeepalive(false);
+  request.SetAttributionReportingEligibility(
+      AttributionReportingEligibility::kTrigger);
+  auto* resource = MakeGarbageCollected<MockResource>(test_url);
+  ResourceResponse response(test_url);
+  response.SetHttpStatusCode(200);
+  response.SetHttpHeaderField(
+      http_names::kAttributionReportingRegisterTrigger,
+      AtomicString(R"({"event_trigger_data":[{"trigger_data": "7"}]})"));
+
+  MockAttributionHost host(
+      GetFrame().GetRemoteNavigationAssociatedInterfaces());
+  EXPECT_TRUE(attribution_src_loader_->MaybeRegisterAttributionHeaders(
+      request, response, resource));
+  host.WaitUntilBoundAndFlush();
+
+  auto* mock_data_host = host.mock_data_host();
+  ASSERT_TRUE(mock_data_host);
+
+  mock_data_host->Flush();
+  EXPECT_EQ(mock_data_host->trigger_data().size(), 1u);
 }
 
 }  // namespace

@@ -20,7 +20,7 @@ import {
   Time,
   time,
 } from '../base/time';
-import {hueForCpu} from '../common/colorizer';
+import {colorForCpu} from '../common/colorizer';
 import {timestampFormat, TimestampFormat} from '../common/timestamp_format';
 
 import {
@@ -39,11 +39,15 @@ import {
   TickGenerator,
   TickType,
 } from './gridline_helper';
-import {Panel, PanelSize} from './panel';
+import {PanelSize} from './panel';
+import {Panel} from './panel_container';
 import {PxSpan, TimeScale} from './time_scale';
 
-export class OverviewTimelinePanel extends Panel {
+export class OverviewTimelinePanel implements Panel {
   private static HANDLE_SIZE_PX = 5;
+  readonly kind = 'panel';
+  readonly selectable = false;
+  readonly trackKey = undefined;
 
   private width = 0;
   private gesture?: DragGestureHandler;
@@ -51,6 +55,8 @@ export class OverviewTimelinePanel extends Panel {
   private traceTime?: Span<time, duration>;
   private dragStrategy?: DragStrategy;
   private readonly boundOnMouseMove = this.onMouseMove.bind(this);
+
+  constructor(readonly key: string) {}
 
   // Must explicitly type now; arguments types are no longer auto-inferred.
   // https://github.com/Microsoft/TypeScript/issues/1373
@@ -88,8 +94,12 @@ export class OverviewTimelinePanel extends Panel {
         .removeEventListener('mousemove', this.boundOnMouseMove);
   }
 
-  view() {
-    return m('.overview-timeline');
+  get mithril(): m.Children {
+    return m('.overview-timeline', {
+      oncreate: (vnode) => this.oncreate(vnode),
+      onupdate: (vnode) => this.onupdate(vnode),
+      onremove: (vnode) => this.onremove(vnode),
+    });
   }
 
   renderCanvas(ctx: CanvasRenderingContext2D, size: PanelSize) {
@@ -135,7 +145,8 @@ export class OverviewTimelinePanel extends Panel {
           const xEnd = Math.ceil(this.timeScale.timeToPx(loads[i].end));
           const yOff = Math.floor(headerHeight + y * trackHeight);
           const lightness = Math.ceil((1 - loads[i].load * 0.7) * 100);
-          ctx.fillStyle = `hsl(${hueForCpu(y)}, 50%, ${lightness}%)`;
+          const color = colorForCpu(y).setHSL({s: 50, l: lightness});
+          ctx.fillStyle = color.cssString;
           ctx.fillRect(xStart, yOff, xEnd - xStart, Math.ceil(trackHeight));
         }
         y++;
@@ -225,7 +236,7 @@ export class OverviewTimelinePanel extends Panel {
   }
 
   private static extractBounds(timeScale: TimeScale): [number, number] {
-    const vizTime = globals.frontendLocalState.visibleWindowTime;
+    const vizTime = globals.timeline.visibleWindowTime;
     return [
       Math.floor(timeScale.hpTimeToPx(vizTime.start)),
       Math.ceil(timeScale.hpTimeToPx(vizTime.end)),
@@ -248,6 +259,7 @@ function renderTimestamp(
   const fmt = timestampFormat();
   switch (fmt) {
     case TimestampFormat.UTC:
+    case TimestampFormat.TraceTz:
     case TimestampFormat.Timecode:
       renderTimecode(ctx, time, x, y, minWidth);
       break;

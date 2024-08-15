@@ -25,6 +25,7 @@
 #include "third_party/base/containers/contains.h"
 #include "v8/include/v8-function-callback.h"
 #include "v8/include/v8-function.h"
+#include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-object.h"
 #include "xfa/fxfa/cxfa_eventparam.h"
 #include "xfa/fxfa/cxfa_ffdoc.h"
@@ -165,10 +166,10 @@ CFXJSE_Engine::EventParamScope::~EventParamScope() {
   m_pEngine->m_eventParam = m_pPrevEventParam;
 }
 
-bool CFXJSE_Engine::RunScript(CXFA_Script::Type eScriptType,
-                              WideStringView wsScript,
-                              CFXJSE_Value* hRetValue,
-                              CXFA_Object* pThisObject) {
+CFXJSE_Context::ExecutionResult CFXJSE_Engine::RunScript(
+    CXFA_Script::Type eScriptType,
+    WideStringView wsScript,
+    CXFA_Object* pThisObject) {
   CFXJSE_ScopeUtil_IsolateHandleContext scope(GetJseContext());
   AutoRestorer<CXFA_Script::Type> typeRestorer(&m_eScriptType);
   m_eScriptType = eScriptType;
@@ -182,8 +183,9 @@ bool CFXJSE_Engine::RunScript(CXFA_Script::Type eScriptType,
     absl::optional<WideTextBuffer> wsJavaScript =
         CFXJSE_FormCalcContext::Translate(m_pDocument->GetHeap(), wsScript);
     if (!wsJavaScript.has_value()) {
-      hRetValue->SetUndefined(GetIsolate());
-      return false;
+      auto undefined_value = std::make_unique<CFXJSE_Value>();
+      undefined_value->SetUndefined(GetIsolate());
+      return CFXJSE_Context::ExecutionResult(false, std::move(undefined_value));
     }
     btScript = FX_UTF8Encode(wsJavaScript.value().AsStringView());
   } else {
@@ -197,8 +199,7 @@ bool CFXJSE_Engine::RunScript(CXFA_Script::Type eScriptType,
     pThisBinding = GetOrCreateJSBindingFromMap(pThisObject);
 
   IJS_Runtime::ScopedEventContext ctx(m_pSubordinateRuntime);
-  return m_JsContext->ExecuteScript(btScript.AsStringView(), hRetValue,
-                                    pThisBinding);
+  return m_JsContext->ExecuteScript(btScript.AsStringView(), pThisBinding);
 }
 
 bool CFXJSE_Engine::QueryNodeByFlag(CXFA_Node* refNode,
@@ -543,7 +544,7 @@ CJS_Result CFXJSE_Engine::NormalMethodCall(
   CFXJSE_Engine* pScriptContext = pObject->GetDocument()->GetScriptContext();
   pObject = pScriptContext->GetVariablesThis(pObject);
 
-  std::vector<v8::Local<v8::Value>> parameters;
+  v8::LocalVector<v8::Value> parameters(info.GetIsolate());
   for (int i = 0; i < info.Length(); i++)
     parameters.push_back(info[i]);
 
@@ -616,13 +617,12 @@ void CFXJSE_Engine::RunVariablesScript(CXFA_Script* pScriptNode) {
     return;
 
   ByteString btScript = wsScript->ToUTF8();
-  auto hRetValue = std::make_unique<CFXJSE_Value>();
   CXFA_Node* pThisObject = pParent->GetParent();
   CFXJSE_Context* pVariablesContext =
       CreateVariablesContext(pScriptNode, pThisObject);
   AutoRestorer<cppgc::Persistent<CXFA_Object>> nodeRestorer(&m_pThisObject);
   m_pThisObject = pThisObject;
-  pVariablesContext->ExecuteScript(btScript.AsStringView(), hRetValue.get(),
+  pVariablesContext->ExecuteScript(btScript.AsStringView(),
                                    v8::Local<v8::Object>());
 }
 

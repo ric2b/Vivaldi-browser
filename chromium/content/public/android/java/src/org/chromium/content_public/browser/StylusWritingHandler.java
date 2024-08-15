@@ -27,12 +27,11 @@ public interface StylusWritingHandler {
     boolean canShowSoftKeyboard();
 
     /**
-     * Requests to start stylus writing for input field in web page.
+     * Check if stylus writing can be started for input field in web page.
      *
-     * @return true if writing can be started or if started successfully, false if writing cannot
-     * be started.
+     * @return true if stylus writing can be started, false otherwise.
      */
-    boolean requestStartStylusWriting(StylusWritingImeCallback imeCallback);
+    boolean shouldInitiateStylusWriting();
 
     /**
      * Update current input state parameters to stylus writing system.
@@ -50,8 +49,12 @@ public interface StylusWritingHandler {
      * @param currentView the {@link View} in which the focused node changed.
      */
     @Nullable
-    default EditorBoundsInfo onFocusedNodeChanged(Rect editableBoundsOnScreenDip,
-            boolean isEditable, View currentView, float scaleFactor, int contentOffsetY) {
+    default EditorBoundsInfo onFocusedNodeChanged(
+            Rect editableBoundsOnScreenDip,
+            boolean isEditable,
+            View currentView,
+            float scaleFactor,
+            int contentOffsetY) {
         return null;
     }
 
@@ -97,12 +100,23 @@ public interface StylusWritingHandler {
 
     /**
      * This message is sent when the stylus writable element has been focused.
+     *
      * @param focusedEditBounds the input field bounds in view
      * @param cursorPosition the input cursor Position point in pix
+     * @param scaleFactor current device scale factor
+     * @param contentOffsetY the Physical on-screen Y offset amount below the browser controls
+     * @param view the view on which to start stylus handwriting
      */
     @Nullable
     default EditorBoundsInfo onEditElementFocusedForStylusWriting(
-            Rect focusedEditBounds, Point cursorPosition, float scaleFactor, int contentOffsetY) {
+            Rect focusedEditBounds,
+            Point cursorPosition,
+            float scaleFactor,
+            int contentOffsetY,
+            View view) {
         return null;
     }
+
+    /** Notify that ImeAdapter is destroyed. */
+    default void onImeAdapterDestroyed() {}
 }

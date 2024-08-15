@@ -86,7 +86,6 @@ class Boolean;
 class CodeLargeObjectSpace;
 class CodeRange;
 class CollectionBarrier;
-class ConcurrentAllocator;
 class ConcurrentMarking;
 class CppHeap;
 class EphemeronRememberedSet;
@@ -415,9 +414,8 @@ class Heap final {
 
   void NotifyBootstrapComplete();
 
-  void NotifyOldGenerationExpansion(AllocationSpace space, MemoryChunk* chunk);
-  void NotifyOldGenerationExpansionBackground(AllocationSpace space,
-                                              MemoryChunk* chunk);
+  void NotifyOldGenerationExpansion(LocalHeap* local_heap,
+                                    AllocationSpace space, MemoryChunk* chunk);
 
   inline Address* NewSpaceAllocationTopAddress();
   inline Address* NewSpaceAllocationLimitAddress();
@@ -452,12 +450,7 @@ class Heap final {
   // Initialize a filler object at a specific address. Unlike
   // `CreateFillerObjectAt` this method will not perform slot verification since
   // this would race on background threads.
-  void CreateFillerObjectAtBackground(Address addr, int size);
-
-  // This method is used by the sweeper on free memory ranges to make the page
-  // iterable again. Unlike `CreateFillerObjectAt` this method will not verify
-  // slots since the sweeper can run concurrently.
-  void CreateFillerObjectAtSweeper(Address addr, int size);
+  void CreateFillerObjectAtBackground(const WritableFreeSpace& free_space);
 
   bool CanMoveObjectStart(Tagged<HeapObject> object);
 
@@ -549,27 +542,16 @@ class Heap final {
   // Dump heap statistics in JSON format.
   void DumpJSONHeapStatistics(std::stringstream& stream);
 
-  bool write_protect_code_memory() const {
-    if (V8_HAS_PTHREAD_JIT_WRITE_PROTECT) {
-      // On MacOS on ARM64 ("Apple M1"/Apple Silicon) code modification
-      // protection must be used. It can be achieved by one of the following
-      // approaches:
-      // 1) switching memory protection between RW-RX as on other architectures
-      //    => return true,
-      // 2) fast W^X machinery (see V8_HEAP_USE_PTHREAD_JIT_WRITE_PROTECT) which
-      //    doesn not require memory protection changes => return false.
-      return !V8_HEAP_USE_PTHREAD_JIT_WRITE_PROTECT;
-    }
-    return write_protect_code_memory_;
-  }
-
   inline HeapState gc_state() const {
     return gc_state_.load(std::memory_order_relaxed);
   }
-  void SetGCState(HeapState state);
+  V8_EXPORT_PRIVATE void SetGCState(HeapState state);
   bool IsTearingDown() const { return gc_state() == TEAR_DOWN; }
   bool IsInGC() const {
-    return gc_state() != NOT_IN_GC && gc_state() != TEAR_DOWN;
+    // Load state only once and store it in local variable. Otherwise multiples
+    // loads could return different states on background threads.
+    HeapState state = gc_state();
+    return state != NOT_IN_GC && state != TEAR_DOWN;
   }
   bool force_oom() const { return force_oom_; }
 
@@ -686,6 +668,9 @@ class Heap final {
 
   V8_EXPORT_PRIVATE bool ShouldOptimizeForMemoryUsage();
 
+  // Returns true when GC should optimize for battery.
+  V8_EXPORT_PRIVATE bool ShouldOptimizeForBattery() const;
+
   bool HighMemoryPressure() {
     return memory_pressure_level_.load(std::memory_order_relaxed) !=
            v8::MemoryPressureLevel::kNone;
@@ -712,7 +697,8 @@ class Heap final {
   // Initialization. ===========================================================
   // ===========================================================================
 
-  void ConfigureHeap(const v8::ResourceConstraints& constraints);
+  void ConfigureHeap(const v8::ResourceConstraints& constraints,
+                     v8::CppHeap* cpp_heap);
   void ConfigureHeapDefault();
 
   // Prepares the heap, setting up for deserialization.
@@ -796,13 +782,13 @@ class Heap final {
   ExternalPointerTable::Space* read_only_external_pointer_space() {
     return &read_only_external_pointer_space_;
   }
-
-  TrustedPointerTable::Space* trusted_pointer_space() {
-    return &trusted_pointer_space_;
-  }
 #endif  // V8_COMPRESS_POINTERS
 
 #ifdef V8_ENABLE_SANDBOX
+  TrustedPointerTable::Space* trusted_pointer_space() {
+    return &trusted_pointer_space_;
+  }
+
   CodePointerTable::Space* code_pointer_space() { return &code_pointer_space_; }
 #endif  // V8_ENABLE_SANDBOX
 
@@ -821,9 +807,6 @@ class Heap final {
 
   // Check if we run on isolate's main thread.
   inline bool IsMainThread() const;
-  // Check if we run on the current main thread of the shared isolate during
-  // shared GC.
-  inline bool IsSharedMainThread() const;
 
   MarkCompactCollector* mark_compact_collector() {
     return mark_compact_collector_.get();
@@ -1048,9 +1031,8 @@ class Heap final {
   V8_EXPORT_PRIVATE void StartIncrementalMarkingOnInterrupt();
 
   V8_EXPORT_PRIVATE void StartIncrementalMarkingIfAllocationLimitIsReached(
-      GCFlags gc_flags,
+      LocalHeap* local_heap, GCFlags gc_flags,
       GCCallbackFlags gc_callback_flags = GCCallbackFlags::kNoGCCallbackFlags);
-  void StartIncrementalMarkingIfAllocationLimitIsReachedBackground();
 
   // Synchronously finalizes incremental marking.
   V8_EXPORT_PRIVATE void FinalizeIncrementalMarkingAtomically(
@@ -1120,6 +1102,7 @@ class Heap final {
 
   V8_EXPORT_PRIVATE void SetStackStart(void* stack_start);
 
+  // Stack information of the main thread.
   V8_EXPORT_PRIVATE ::heap::base::Stack& stack();
 
   // ===========================================================================
@@ -1176,9 +1159,6 @@ class Heap final {
   // Same as above, but checks whether the object resides in any of the code
   // spaces.
   V8_EXPORT_PRIVATE bool ContainsCode(Tagged<HeapObject> value) const;
-
-  // Checks whether object resides in the non-read-only shared heap.
-  static inline bool InWritableSharedSpace(MaybeObject object);
 
   // Checks whether an address/object is in the non-read-only heap (including
   // auxiliary area and unused area). Use IsValidHeapObject if checking both
@@ -1270,8 +1250,8 @@ class Heap final {
 
   base::Mutex* heap_expansion_mutex() { return &heap_expansion_mutex_; }
 
-  // Returns the amount of memory currently held alive by the unmapper.
-  size_t CommittedMemoryOfUnmapper();
+  // Returns the amount of memory currently held alive by the pool.
+  size_t CommittedMemoryOfPool();
 
   // Returns the amount of memory currently committed for the heap.
   size_t CommittedMemory();
@@ -1633,7 +1613,7 @@ class Heap final {
 
   bool ShouldUseBackgroundThreads() const;
 
-  HeapAllocator* allocator() { return &heap_allocator_; }
+  HeapAllocator* allocator() { return heap_allocator_; }
 
  private:
   class AllocationTrackerForDebugging;
@@ -1753,7 +1733,7 @@ class Heap final {
 
   // Creates a filler object in the specified memory area. This method is the
   // internal method used by all CreateFillerObjectAtXXX-methods.
-  void CreateFillerObjectAtRaw(Address addr, int size,
+  void CreateFillerObjectAtRaw(const WritableFreeSpace& free_space,
                                ClearFreedMemoryMode clear_memory_mode,
                                ClearRecordedSlots clear_slots_mode,
                                VerifyNoSlotsRecorded verify_no_slots_recorded);
@@ -1885,6 +1865,7 @@ class Heap final {
                                 double mutator_utilization);
   void CheckIneffectiveMarkCompact(size_t old_generation_size,
                                    double mutator_utilization);
+  void ReportIneffectiveMarkCompactIfNeeded();
 
   inline void IncrementExternalBackingStoreBytes(ExternalBackingStoreType type,
                                                  size_t amount);
@@ -1910,7 +1891,19 @@ class Heap final {
     return old_generation_allocation_limit_.load(std::memory_order_relaxed);
   }
 
-  size_t global_allocation_limit() const { return global_allocation_limit_; }
+  size_t global_allocation_limit() const {
+    return global_allocation_limit_.load(std::memory_order_relaxed);
+  }
+
+  bool old_generation_allocation_limit_configured() const {
+    return old_generation_allocation_limit_configured_.load(
+        std::memory_order_relaxed);
+  }
+
+  void set_old_generation_allocation_limit_configured(bool value) {
+    old_generation_allocation_limit_configured_.store(
+        value, std::memory_order_relaxed);
+  }
 
   size_t max_old_generation_size() const {
     return max_old_generation_size_.load(std::memory_order_relaxed);
@@ -2057,7 +2050,7 @@ class Heap final {
   // more expedient to get at the isolate directly from within Heap methods.
   Isolate* isolate_ = nullptr;
 
-  HeapAllocator heap_allocator_;
+  HeapAllocator* heap_allocator_ = nullptr;
 
   // These limits are initialized in Heap::ConfigureHeap based on the resource
   // constraints and flags.
@@ -2087,7 +2080,7 @@ class Heap final {
   // limit in Heap::RecomputeLimits. The old generation allocation limit is then
   // considered to be configured for all subsequent GCs. After the first full GC
   // this field is only ever reset for top context disposals.
-  bool old_generation_allocation_limit_configured_ = false;
+  std::atomic<bool> old_generation_allocation_limit_configured_ = false;
 
   size_t maximum_committed_ = 0;
   size_t old_generation_capacity_after_bootstrap_ = 0;
@@ -2142,21 +2135,17 @@ class Heap final {
   ExternalPointerTable::Space external_pointer_space_;
   // Likewise but for slots in host objects in ReadOnlySpace.
   ExternalPointerTable::Space read_only_external_pointer_space_;
-
-  // Likewise, but for the trusted pointer table.
-  TrustedPointerTable::Space trusted_pointer_space_;
 #endif  // V8_COMPRESS_POINTERS
 
 #ifdef V8_ENABLE_SANDBOX
+  // Likewise, but for the trusted pointer table.
+  TrustedPointerTable::Space trusted_pointer_space_;
+
   // The space in the process-wide code pointer table managed by this heap.
   CodePointerTable::Space code_pointer_space_;
 #endif  // V8_ENABLE_SANDBOX
 
   LocalHeap* main_thread_local_heap_ = nullptr;
-
-  // Determines whether code space is write-protected. This is essentially a
-  // race-free copy of the {v8_flags.write_protect_code_memory} flag.
-  bool write_protect_code_memory_ = false;
 
   std::atomic<HeapState> gc_state_{NOT_IN_GC};
 
@@ -2169,7 +2158,7 @@ class Heap final {
 
   // The maximum percent of the marking limit reached without causing marking.
   // This is tracked when specifying --fuzzer-gc-analysis.
-  double max_marking_limit_reached_ = 0.0;
+  std::atomic<double> max_marking_limit_reached_ = 0.0;
 
   // How many mark-sweep collections happened.
   unsigned int ms_count_ = 0;
@@ -2193,7 +2182,7 @@ class Heap final {
   // which collector to invoke, before expanding a paged space in the old
   // generation and on every allocation in large object space.
   std::atomic<size_t> old_generation_allocation_limit_{0};
-  size_t global_allocation_limit_ = 0;
+  std::atomic<size_t> global_allocation_limit_{0};
 
   // Weak list heads, threaded through the objects.
   // List heads are initialized lazily and contain the undefined_value at start.
@@ -2269,7 +2258,14 @@ class Heap final {
   TrustedRange* trusted_range_ = nullptr;
 #endif
 
-  v8::CppHeap* cpp_heap_ = nullptr;  // Owned by the embedder.
+  // V8 configuration where V8 owns the heap which is either created or passed
+  // in during Isolate initialization.
+  std::unique_ptr<CppHeap> owning_cpp_heap_;
+  // Deprecated API where the heap is owned by the embedder. This field is
+  // always set, independent of which CppHeap configuration (owned, unowned) is
+  // used. As soon as Isolate::AttachCppHeap() is removed, this field should
+  // also be removed and we should exclusively rely on the owning version.
+  v8::CppHeap* cpp_heap_ = nullptr;
   EmbedderRootsHandler* embedder_roots_handler_ =
       nullptr;  // Owned by the embedder.
 
@@ -2380,7 +2376,6 @@ class Heap final {
   friend class AlwaysAllocateScope;
   friend class ArrayBufferCollector;
   friend class ArrayBufferSweeper;
-  friend class ConcurrentAllocator;
   friend class ConcurrentMarking;
   friend class ConservativeTracedHandlesMarkingVisitor;
   friend class EmbedderStackStateScope;
@@ -2548,30 +2543,6 @@ using CodePageHeaderModificationScope = RwxMemoryWriteScope;
 using CodePageHeaderModificationScope = NopRwxMemoryWriteScope;
 #endif  // V8_HEAP_USE_PTHREAD_JIT_WRITE_PROTECT
 
-// The CodePageMemoryModificationScope does not check if transitions to
-// writeable and back to executable are actually allowed, i.e. the MemoryChunk
-// was registered to be executable. It can be used by concurrent threads.
-class V8_NODISCARD CodePageMemoryModificationScope {
- public:
-  explicit inline CodePageMemoryModificationScope(BasicMemoryChunk* chunk);
-  explicit inline CodePageMemoryModificationScope(
-      Tagged<InstructionStream> object);
-  inline ~CodePageMemoryModificationScope();
-
- private:
-#if V8_HEAP_USE_PTHREAD_JIT_WRITE_PROTECT || V8_HEAP_USE_PKU_JIT_WRITE_PROTECT
-  base::Optional<RwxMemoryWriteScope> rwx_write_scope_;
-#else
-  BasicMemoryChunk* chunk_;
-  bool scope_active_;
-  base::Optional<base::MutexGuard> guard_;
-#endif
-
-  // Disallow any GCs inside this scope, as a relocation of the underlying
-  // object would change the {MemoryChunk} that this scope targets.
-  DISALLOW_GARBAGE_COLLECTION(no_heap_allocation_)
-};
-
 class CodePageMemoryModificationScopeForDebugging {
  public:
   // When we zap newly allocated MemoryChunks, the chunk is not initialized yet
@@ -2585,10 +2556,6 @@ class CodePageMemoryModificationScopeForDebugging {
  private:
 #if V8_HEAP_USE_PTHREAD_JIT_WRITE_PROTECT || V8_HEAP_USE_PKU_JIT_WRITE_PROTECT
   RwxMemoryWriteScope rwx_write_scope_;
-#else
-  VirtualMemory* reservation_ = nullptr;
-  base::Optional<base::AddressRegion> region_;
-  base::Optional<CodePageMemoryModificationScope> memory_modification_scope_;
 #endif
 };
 

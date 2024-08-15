@@ -117,7 +117,12 @@ def tryjob(
         experiment_percentage = None,
         location_filters = None,
         cancel_stale = None,
-        add_default_filters = True):
+        add_default_filters = True,
+        equivalent_builder = None,
+        equivalent_builder_percentage = None,
+        equivalent_builder_whitelist = None,
+        omit_from_luci_cv = False,
+        custom_cq_run_modes = None):
     """Specifies the details of a tryjob verifier.
 
     See https://chromium.googlesource.com/infra/luci/luci-go/+/HEAD/lucicfg/doc/README.md#luci.cq_tryjob_verifier
@@ -135,6 +140,14 @@ def tryjob(
         exclude certain directories that would have no impact when building
         chromium with the patch applied (docs, config files that don't take
         effect until landing, etc., see default_location_filters).
+      equivalent_builder: See cq.tryjob_verifier.
+      equivalent_builder_percentage: See cq.tryjob_verifier.
+      equivalent_builder_whitelist: See cq.tryjob_verifier.
+      omit_from_luci_cv: A bool indicating whether the tryjob will be
+        added to luci verifier. This is useful for the equivalent_builder which
+        can't be added twice.
+      custom_cq_run_modes: List of cq.run_mode names that will trigger this
+        tryjob. Uses cq.MODE_DRY_RUN, cq.MODE_FULL_RUN if not specified.
 
     Returns:
       A struct that can be passed to the `tryjob` argument of `try_.builder` to
@@ -155,6 +168,11 @@ def tryjob(
         add_default_filters = add_default_filters,
         location_filters = location_filters,
         cancel_stale = cancel_stale,
+        custom_cq_run_modes = custom_cq_run_modes,
+        equivalent_builder = equivalent_builder,
+        equivalent_builder_percentage = equivalent_builder_percentage,
+        equivalent_builder_whitelist = equivalent_builder_whitelist,
+        omit_from_luci_cv = omit_from_luci_cv,
     )
 
 def try_builder(
@@ -217,6 +235,9 @@ def try_builder(
 
     # TODO(crbug.com/1346781): Remove when the experiment is the default.
     experiments.setdefault("chromium_swarming.expose_merge_script_failures", 100)
+
+    # TODO(crbug.com/1466962): Remove when the experiment is the default.
+    experiments.setdefault("swarming.prpc.cli", 100)
 
     merged_resultdb_bigquery_exports = [
         resultdb.export_test_results(
@@ -284,10 +305,13 @@ def try_builder(
             check_for_flakiness_with_resultdb,
         )
 
-        properties["$build/flakiness"] = {
-            "check_for_flakiness": check_for_flakiness,
-            "check_for_flakiness_with_resultdb": check_for_flakiness_with_resultdb,
-        }
+        flakiness = {}
+        if defaults.get_value("check_for_flakiness", check_for_flakiness):
+            flakiness["check_for_flakiness"] = True
+        if defaults.get_value("check_for_flakiness_with_resultdb", check_for_flakiness_with_resultdb):
+            flakiness["check_for_flakiness_with_resultdb"] = True
+        if flakiness:
+            properties["$build/flakiness"] = flakiness
 
     # Define the builder first so that any validation of luci.builder arguments
     # (e.g. bucket) occurs before we try to use it
@@ -309,18 +333,21 @@ def try_builder(
         location_filters = tryjob.location_filters
         if tryjob.add_default_filters:
             location_filters = (location_filters or []) + default_location_filters(builder)
-
-        luci.cq_tryjob_verifier(
-            builder = builder,
-            cq_group = cq_group,
-            disable_reuse = tryjob.disable_reuse,
-            experiment_percentage = tryjob.experiment_percentage,
-            location_filters = location_filters,
-            cancel_stale = tryjob.cancel_stale,
-            # These are the default if includable_only is False, but we list
-            # them here so we can add additional modes in a later generator.
-            mode_allowlist = [cq.MODE_DRY_RUN, cq.MODE_FULL_RUN],
-        )
+        if not tryjob.omit_from_luci_cv:
+            luci.cq_tryjob_verifier(
+                builder = builder,
+                cq_group = cq_group,
+                disable_reuse = tryjob.disable_reuse,
+                experiment_percentage = tryjob.experiment_percentage,
+                location_filters = location_filters,
+                cancel_stale = tryjob.cancel_stale,
+                # These are the default if includable_only is False, but we list
+                # them here so we can add additional modes in a later generator.
+                mode_allowlist = tryjob.custom_cq_run_modes or [cq.MODE_DRY_RUN, cq.MODE_FULL_RUN],
+                equivalent_builder = tryjob.equivalent_builder,
+                equivalent_builder_percentage = tryjob.equivalent_builder_percentage,
+                equivalent_builder_whitelist = tryjob.equivalent_builder_whitelist,
+            )
     else:
         # Allow CQ to trigger this builder if user opts in via CQ-Include-Trybots.
         luci.cq_tryjob_verifier(
@@ -464,6 +491,8 @@ try_ = struct(
     DEFAULT_EXECUTION_TIMEOUT = 4 * time.hour,
     DEFAULT_POOL = "luci.chromium.try",
     DEFAULT_SERVICE_ACCOUNT = "chromium-try-builder@chops-service-accounts.iam.gserviceaccount.com",
+    MEGA_CQ_DRY_RUN_NAME = "CQ_MODE_MEGA_DRY_RUN",
+    MEGA_CQ_FULL_RUN_NAME = "CQ_MODE_MEGA_FULL_RUN",
     gpu = struct(
         optional_tests_builder = _gpu_optional_tests_builder,
         SERVICE_ACCOUNT = "chromium-try-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",

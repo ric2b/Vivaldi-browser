@@ -47,13 +47,11 @@ public final class ReauthenticationManager {
     public static final String FRAGMENT_TAG = "reauthentication-manager-fragment";
 
     // Defines how long a successful reauthentication remains valid.
-    @VisibleForTesting
-    public static final int VALID_REAUTHENTICATION_TIME_INTERVAL_MILLIS = 60000;
+    @VisibleForTesting public static final int VALID_REAUTHENTICATION_TIME_INTERVAL_MILLIS = 60000;
 
     // Used for verifying if the last successful reauthentication is still valid. The null value
     // means there was no successful reauthentication yet.
-    @Nullable
-    private static Long sLastReauthTimeMillis;
+    @Nullable private static Long sLastReauthTimeMillis;
 
     // Stores the reauth scope used when |sLastReauthTimeMillis| was reset last time.
     private static @ReauthScope int sLastReauthScope = ReauthScope.ONE_AT_A_TIME;
@@ -136,8 +134,11 @@ public final class ReauthenticationManager {
      * @param fragmentManager For putting the lock screen on the transaction stack.
      */
     // Vivaldi: We are returning the |PasswordReauthenticationFragment| here.
-    public static Fragment displayReauthenticationFragment(int descriptionId, int containerViewId,
-            FragmentManager fragmentManager, @ReauthScope int scope) {
+    public static Fragment displayReauthenticationFragment(
+            int descriptionId,
+            int containerViewId,
+            FragmentManager fragmentManager,
+            @ReauthScope int scope) {
         if (sSkipSystemReauth) return null; // Vivaldi
 
         Fragment passwordReauthentication = new PasswordReauthenticationFragment();
@@ -169,9 +170,10 @@ public final class ReauthenticationManager {
     public static boolean authenticationStillValid(@ReauthScope int scope) {
         final boolean scopeIncluded =
                 scope == sLastReauthScope || sLastReauthScope == ReauthScope.BULK;
-        return sLastReauthTimeMillis != null && scopeIncluded
+        return sLastReauthTimeMillis != null
+                && scopeIncluded
                 && (System.currentTimeMillis() - sLastReauthTimeMillis)
-                < VALID_REAUTHENTICATION_TIME_INTERVAL_MILLIS;
+                        < VALID_REAUTHENTICATION_TIME_INTERVAL_MILLIS;
     }
 
     /**

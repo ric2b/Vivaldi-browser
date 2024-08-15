@@ -25,16 +25,16 @@ import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl} from '../device_page/device_page_browser_proxy.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getTemplate} from './cursor_and_touchpad_page.html.js';
 import {CursorAndTouchpadPageBrowserProxy, CursorAndTouchpadPageBrowserProxyImpl} from './cursor_and_touchpad_page_browser_proxy.js';
 
-const DEFAULT_BLACK_CURSOR_COLOR: number = 0;
+const DEFAULT_BLACK_CURSOR_COLOR = 0;
 
 interface Option {
   name: string;
@@ -221,11 +221,25 @@ export class SettingsCursorAndTouchpadPageElement extends
        * Whether the face movements mouse cursor and keyboard control feature is
        * enabled.
        */
-      isAccessibilityFaceTrackingEnabled_: {
+      isAccessibilityFaceGazeEnabled_: {
         type: Boolean,
         value() {
+          return loadTimeData.getBoolean('isAccessibilityFaceGazeEnabled');
+        },
+      },
+
+      /**
+       * The maximum size in density-independent pixels of the large mouse
+       * cursor. Note that this has no effect if it is larger than the maximum
+       * set in CursorWindowController.
+       */
+      largeCursorMaxSize_: {
+        type: Number,
+        value() {
           return loadTimeData.getBoolean(
-              'isAccessibilityGameFaceIntegrationEnabled');
+                     'isAccessibilityExtraLargeCursorEnabled') ?
+              128 :
+              64;
         },
       },
 
@@ -262,7 +276,8 @@ export class SettingsCursorAndTouchpadPageElement extends
   private shelfNavigationButtonsPref_:
       chrome.settingsPrivate.PrefObject<boolean>;
   private showShelfNavigationButtonsSettings_: boolean;
-  private isAccessibilityFaceTrackingEnabled_: boolean;
+  private isAccessibilityFaceGazeEnabled_: boolean;
+  private readonly largeCursorMaxSize_: number;
 
   constructor() {
     super();
@@ -295,6 +310,11 @@ export class SettingsCursorAndTouchpadPageElement extends
     super.ready();
 
     this.addFocusConfig(routes.POINTERS, '#pointerSubpageButton');
+    this.addFocusConfig(
+        routes.MANAGE_FACEGAZE_CURSOR_SETTINGS, '#faceGazeCursorControlButton');
+    this.addFocusConfig(
+        routes.MANAGE_FACEGAZE_FACIAL_EXPRESSIONS_SETTINGS,
+        '#faceGazeFacialExpressionsButton');
   }
 
   /**
@@ -309,6 +329,15 @@ export class SettingsCursorAndTouchpadPageElement extends
     }
 
     this.attemptDeepLink();
+  }
+
+  private onFaceGazeCursorSettingsClick_(): void {
+    Router.getInstance().navigateTo(routes.MANAGE_FACEGAZE_CURSOR_SETTINGS);
+  }
+
+  private onFaceGazeFacialExpressionsSettingsClick_(): void {
+    Router.getInstance().navigateTo(
+        routes.MANAGE_FACEGAZE_FACIAL_EXPRESSIONS_SETTINGS);
   }
 
   pointersChanged(

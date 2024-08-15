@@ -4,6 +4,7 @@
 
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -12,9 +13,6 @@
 #include "vivaldi/ui/vector_icons/vector_icons.h"
 
 namespace vivaldi {
-
-// static
-const char VolumeSlider::kViewClassName[] = "VolumeSlider";
 
 VolumeSlider::VolumeSlider(views::SliderListener* listener)
     : views::Slider(listener) {
@@ -31,5 +29,8 @@ VolumeSlider::~VolumeSlider() = default;
 ui::Cursor VolumeSlider::GetCursor(const ui::MouseEvent& event) {
   return ui::mojom::CursorType::kHand;
 }
+
+BEGIN_METADATA(VolumeSlider)
+END_METADATA
 
 }  //  namespace vivaldi

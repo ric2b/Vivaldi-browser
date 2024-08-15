@@ -5,7 +5,7 @@ import {
   deserializeExpectation,
   serializeExpectation,
 } from '../shader/execution/expression/case_cache.js';
-import { Expectation, toComparator } from '../shader/execution/expression/expression.js';
+import { Expectation, toComparator } from '../shader/execution/expression/expectation.js';
 
 import BinaryStream from './binary_stream.js';
 import { isFloatValue, Matrix, Scalar, Value, Vector } from './conversion.js';

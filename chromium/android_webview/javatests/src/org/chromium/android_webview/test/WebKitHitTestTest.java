@@ -22,6 +22,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.util.AwTestTouchUtils;
@@ -35,9 +37,10 @@ import org.chromium.net.test.util.TestWebServer;
 import java.util.concurrent.TimeUnit;
 
 /** Test for getHitTestResult, requestFocusNodeHref, and requestImageRef methods */
-@RunWith(AwJUnit4ClassRunner.class)
-public class WebKitHitTestTest {
-    @Rule public AwActivityTestRule mActivityTestRule = new AwActivityTestRule();
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
+public class WebKitHitTestTest extends AwParameterizedTest {
+    @Rule public AwActivityTestRule mActivityTestRule;
 
     private TestAwContentsClient mContentsClient;
     private AwTestContainerView mTestView;
@@ -47,6 +50,10 @@ public class WebKitHitTestTest {
     private static final String HREF = "http://foo/";
     private static final String ANCHOR_TEXT = "anchor text";
     private int mServerResponseCount;
+
+    public WebKitHitTestTest(AwSettingsMutation param) {
+        this.mActivityTestRule = new AwActivityTestRule(param.getMutation());
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -469,9 +476,9 @@ public class WebKitHitTestTest {
         String html =
                 CommonResources.makeHtmlPageFrom(
                         "<meta name=\"viewport\""
-                            + " content=\"width=device-width,height=device-height\" /><style"
-                            + " type=\"text/css\">.full_width { width:100%; position:absolute; }"
-                            + "</style>",
+                                + " content=\"width=device-width,height=device-height\" /><style"
+                                + " type=\"text/css\">.full_width { width:100%; position:absolute; }"
+                                + "</style>",
                         "<form><input class=\"full_width\" style=\"height:25%;\" "
                                 + "type=\"text\" name=\"test\"></form>"
                                 + "<img class=\"full_width\" style=\"height:50%;top:25%;\" "

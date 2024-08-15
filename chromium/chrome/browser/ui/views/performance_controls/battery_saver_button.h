@@ -26,9 +26,9 @@ class BubbleDialogModelHost;
 class BatterySaverButton : public ToolbarButton,
                            public BatterySaverBubbleObserver,
                            public BatterySaverButtonControllerDelegate {
- public:
-  METADATA_HEADER(BatterySaverButton);
+  METADATA_HEADER(BatterySaverButton, ToolbarButton)
 
+ public:
   explicit BatterySaverButton(BrowserView* browser_view);
   ~BatterySaverButton() override;
 
@@ -56,7 +56,7 @@ class BatterySaverButton : public ToolbarButton,
   void OnClicked();
 
   void MaybeShowFeaturePromo();
-  void CloseFeaturePromo(user_education::FeaturePromoCloseReason close_reason);
+  void CloseFeaturePromo(user_education::EndFeaturePromoReason close_reason);
 
  private:
   const raw_ptr<BrowserView> browser_view_;

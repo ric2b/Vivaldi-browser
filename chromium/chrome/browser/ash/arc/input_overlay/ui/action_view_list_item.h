@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_UI_ACTION_VIEW_LIST_ITEM_H_
 
 #include "chrome/browser/ash/arc/input_overlay/ui/action_edit_view.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 
 namespace arc::input_overlay {
 
@@ -16,16 +17,18 @@ namespace arc::input_overlay {
 // ----------------------------
 
 class ActionViewListItem : public ActionEditView {
+  METADATA_HEADER(ActionViewListItem, views::View)
+
  public:
   ActionViewListItem(DisplayOverlayController* controller, Action* action);
   ActionViewListItem(const ActionViewListItem&) = delete;
   ActionViewListItem& operator=(const ActionViewListItem&) = delete;
   ~ActionViewListItem() override;
 
+  void PerformPulseAnimation();
+
   // ActionEditView:
   void OnActionNameUpdated() override;
-
-  void ShowEduNudgeForEditingTip();
 
  private:
   friend class EditLabelTest;
@@ -35,6 +38,7 @@ class ActionViewListItem : public ActionEditView {
 
   // views::View:
   void OnMouseEntered(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
 };
 
 }  // namespace arc::input_overlay

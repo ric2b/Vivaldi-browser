@@ -472,9 +472,15 @@ export namespace ProtocolMapping {
      */
     'Storage.indexedDBListUpdated': [Protocol.Storage.IndexedDBListUpdatedEvent];
     /**
-     * One of the interest groups was accessed by the associated page.
+     * One of the interest groups was accessed. Note that these events are global
+     * to all targets sharing an interest group store.
      */
     'Storage.interestGroupAccessed': [Protocol.Storage.InterestGroupAccessedEvent];
+    /**
+     * An auction involving interest groups is taking place. These events are
+     * target-specific.
+     */
+    'Storage.interestGroupAuctionEventOccurred': [Protocol.Storage.InterestGroupAuctionEventOccurredEvent];
     /**
      * Shared storage was accessed by the associated page.
      * The following parameters are included in all events.
@@ -482,11 +488,8 @@ export namespace ProtocolMapping {
     'Storage.sharedStorageAccessed': [Protocol.Storage.SharedStorageAccessedEvent];
     'Storage.storageBucketCreatedOrUpdated': [Protocol.Storage.StorageBucketCreatedOrUpdatedEvent];
     'Storage.storageBucketDeleted': [Protocol.Storage.StorageBucketDeletedEvent];
-    /**
-     * TODO(crbug.com/1458532): Add other Attribution Reporting events, e.g.
-     * trigger registration.
-     */
     'Storage.attributionReportingSourceRegistered': [Protocol.Storage.AttributionReportingSourceRegisteredEvent];
+    'Storage.attributionReportingTriggerRegistered': [Protocol.Storage.AttributionReportingTriggerRegisteredEvent];
     /**
      * Issued when attached to target because of auto-attach or `attachToTarget` command.
      */
@@ -663,6 +666,11 @@ export namespace ProtocolMapping {
      */
     'Preload.preloadingAttemptSourcesUpdated': [Protocol.Preload.PreloadingAttemptSourcesUpdatedEvent];
     'FedCm.dialogShown': [Protocol.FedCm.DialogShownEvent];
+    /**
+     * Triggered when a dialog is closed, either by user action, JS abort,
+     * or a command below.
+     */
+    'FedCm.dialogClosed': [Protocol.FedCm.DialogClosedEvent];
     /**
      * Fired when breakpoint is resolved to an actual script and location.
      */
@@ -2789,6 +2797,14 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Enables streaming of the response for the given requestId.
+     * If enabled, the dataReceived event contains the data that was received during streaming.
+     */
+    'Network.streamResourceContent': {
+      paramsType: [Protocol.Network.StreamResourceContentRequest];
+      returnType: Protocol.Network.StreamResourceContentResponse;
+    };
+    /**
      * Returns information about the COEP/COOP isolation status.
      */
     'Network.getSecurityIsolationStatus': {
@@ -3118,15 +3134,6 @@ export namespace ProtocolMapping {
     'Page.getAdScriptId': {
       paramsType: [Protocol.Page.GetAdScriptIdRequest];
       returnType: Protocol.Page.GetAdScriptIdResponse;
-    };
-    /**
-     * Returns all browser cookies for the page and all of its subframes. Depending
-     * on the backend support, will return detailed cookie information in the
-     * `cookies` field.
-     */
-    'Page.getCookies': {
-      paramsType: [];
-      returnType: Protocol.Page.GetCookiesResponse;
     };
     /**
      * Returns present frame tree structure.
@@ -3719,6 +3726,13 @@ export namespace ProtocolMapping {
       returnType: void;
     };
     /**
+     * Enables/Disables issuing of interestGroupAuctionEvent events.
+     */
+    'Storage.setInterestGroupAuctionTracking': {
+      paramsType: [Protocol.Storage.SetInterestGroupAuctionTrackingRequest];
+      returnType: void;
+    };
+    /**
      * Gets metadata for an origin's shared storage.
      */
     'Storage.getSharedStorageMetadata': {
@@ -4267,12 +4281,8 @@ export namespace ProtocolMapping {
       paramsType: [Protocol.FedCm.SelectAccountRequest];
       returnType: void;
     };
-    /**
-     * Only valid if the dialog type is ConfirmIdpLogin. Acts as if the user had
-     * clicked the continue button.
-     */
-    'FedCm.confirmIdpLogin': {
-      paramsType: [Protocol.FedCm.ConfirmIdpLoginRequest];
+    'FedCm.clickDialogButton': {
+      paramsType: [Protocol.FedCm.ClickDialogButtonRequest];
       returnType: void;
     };
     'FedCm.dismissDialog': {

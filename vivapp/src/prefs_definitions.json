@@ -1249,6 +1249,10 @@
     "vivaldi.proxy.seen": {
       "id": 312,
       "merge_method": "none"
+    },
+    "vivaldi.mail.search_folder": {
+      "id": 313,
+      "merge_method": "none"
     }
   },
   "vivaldi": {
@@ -1542,6 +1546,11 @@
           "COMMAND_MAIL_REPLY_ALL": {
             "shortcuts": [
               "shift+r"
+            ]
+          },
+          "COMMAND_MAIL_REPLY_LIST": {
+            "shortcuts": [
+              "shift+l"
             ]
           },
           "COMMAND_MAIL_SEND_MESSAGE": {
@@ -2337,6 +2346,11 @@
               "shift+r"
             ]
           },
+          "COMMAND_MAIL_REPLY_LIST": {
+            "shortcuts": [
+              "shift+l"
+            ]
+          },
           "COMMAND_MAIL_SEND_MESSAGE": {
             "shortcuts": [
               "ctrl+enter"
@@ -3110,6 +3124,11 @@
           "COMMAND_MAIL_REPLY_ALL": {
             "shortcuts": [
               "shift+r"
+            ]
+          },
+          "COMMAND_MAIL_REPLY_LIST": {
+            "shortcuts": [
+              "shift+l"
             ]
           },
           "COMMAND_MAIL_SEND_MESSAGE": {
@@ -4061,6 +4080,15 @@
           "debug": 4
         },
         "default": "warn"
+      },
+      "log_components": {
+        "description": "Components to log. See type: LoggingComponent",
+        "type": "dictionary",
+        "default": {
+          "Mail": true,
+          "Calendar": true,
+          "oAuth": true
+        }
       }
     },
     "calendar": {
@@ -4909,6 +4937,11 @@
         "type": "boolean",
         "default": false
       },
+      "search_folder": {
+        "description": "Which folder to start mail searches in by default",
+        "type": "string",
+        "default": "all"
+      },
       "mailto_in_vivaldi": {
         "description": "Handle mailto protocol in Vivaldi",
         "type": "boolean",
@@ -5529,7 +5562,7 @@
           "type": "dictionary",
           "default": {
             "showToolbar": true,
-            "allControls": false,
+            "allControls": true,
             "zoomControls": false
           }
         }
@@ -5946,7 +5979,7 @@
             "huge": 5,
             "fit_to_columns": 6
           },
-          "default": "small"
+          "default": "icon"
         },
         "tracker_suggestion_show": {
           "type": "boolean",
@@ -5999,6 +6032,26 @@
         "description": "Set to Git repo path on startup if we store a |.gitignore| file in the profile folder and find .git directories somewhere in the profile folder.",
         "type": "file_path",
         "default": ""
+      },
+      "last_crash_report_seen": {
+        "description": "UUID of the last crash report that was taken into consideration when showing crash report dialog.",
+        "type": "string",
+        "default": ""
+      },
+      "show_crash_reporting_dialog": {
+        "description": "Show the crash reporting dialog on startup.",
+        "type": "boolean",
+        "default": true
+      },
+      "crash_reporting_last_requested": {
+        "description": "Timestamp when the crash reporting dialog was last shown.",
+        "type": "double",
+        "default": 0.0
+      },
+      "crash_reporting_times_shown": {
+        "description": "How many times the crash reporting dialog was shown.",
+        "type": "integer",
+        "default": 0
       }
     },
     "status_bar": {
@@ -6407,6 +6460,10 @@
         "description": "CSS modifications directory where *.css files will be injected from.",
         "default": ""
       },
+      "force_dark_mode_theme": {
+        "type": "boolean",
+        "default": false
+      },
       "hud": {
         "enabled": {
           "description": "[DEPRECATED 2023/2] Display overlaid Head-Up Display",
@@ -6431,6 +6488,11 @@
         "description": "Enable automatic translations. Used to set the chromium setting which we unfortunately hardcoded to be disabled in the past.",
         "type": "boolean",
         "default": true
+      },
+      "target_language": {
+        "description": "Remember which target language was used last.",
+        "type": "string",
+        "default": ""
       }
     },
     "theme": {
@@ -6588,14 +6650,14 @@
         "default": [
           {
             "engineVersion": 1,
-            "version": 1.0,
+            "version": 1.1,
             "id": "Vivaldi1",
             "url": "",
             "name": "Vivaldi",
             "accentFromPage": true,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "",
+            "backgroundImage": "/resources/startup-static.svg",
             "backgroundPosition": "stretch",
             "radius": 4,
             "colorAccentBg": "#ef3939",
@@ -6605,8 +6667,8 @@
             "colorWindowBg": "#EDEEF2",
             "contrast": 0,
             "preferSystemAccent": false,
-            "alpha": 0.92,
-            "blur": 5,
+            "alpha": 0.85,
+            "blur": 0,
             "transparencyTabs": false,
             "transparencyTabBar": false
           },
@@ -6844,8 +6906,7 @@
           "FlexibleSpacer",
           "UpdateButton",
           "Extensions",
-          "AccountButton",
-          "ExtensionInstallInfo"
+          "AccountButton"
         ]
       },
       "panel": {
@@ -7459,6 +7520,126 @@
       "path": "enable_do_not_track",
       "type": "boolean"
     },
+    "kExceptionsAugmentedReality": {
+      "path": "profile.content_settings.exceptions.ar",
+      "type": "dictionary"
+    },
+    "kExceptionsAutoDownload": {
+      "path": "profile.content_settings.exceptions.automatic_downloads",
+      "type": "dictionary"
+    },
+    "kExceptionsAutoplay": {
+      "path": "profile.content_settings.exceptions.autoplay",
+      "type": "dictionary"
+    },
+    "kExceptionsBackgroundSync": {
+      "path": "profile.content_settings.exceptions.background_sync",
+      "type": "dictionary"
+    },
+    "kExceptionsBluetooth": {
+      "path": "profile.content_settings.exceptions.bluetooth_scanning",
+      "type": "dictionary"
+    },
+    "kExceptionsCookies": {
+      "path": "profile.content_settings.exceptions.cookies",
+      "type": "dictionary"
+    },
+    "kExceptionsClipboard": {
+      "path": "profile.content_settings.exceptions.clipboard",
+      "type": "dictionary"
+    },
+    "kExceptionsFileEdit": {
+      "path": "profile.content_settings.exceptions.file_system_write_guard",
+      "type": "dictionary"
+    },
+    "kExceptionsGeolocation": {
+      "path": "profile.content_settings.exceptions.geolocation",
+      "type": "dictionary"
+    },
+    "kExceptionsHID": {
+      "path": "profile.content_settings.exceptions.hid_guard",
+      "type": "dictionary"
+    },
+    "kExceptionsIdle": {
+      "path": "profile.content_settings.exceptions.idle_detection",
+      "type": "dictionary"
+    },
+    "kExceptionsImage": {
+      "path": "profile.content_settings.exceptions.images",
+      "type": "dictionary"
+    },
+    "kExceptionsJavaScript": {
+      "path": "profile.content_settings.exceptions.javascript",
+      "type": "dictionary"
+    },
+    "kExceptionsFont": {
+      "path": "profile.content_settings.exceptions.local_fonts",
+      "type": "dictionary"
+    },
+    "kExceptionsCamera": {
+      "path": "profile.content_settings.exceptions.media_stream_camera",
+      "type": "dictionary"
+    },
+    "kExceptionsMic": {
+      "path": "profile.content_settings.exceptions.media_stream_mic",
+      "type": "dictionary"
+    },
+    "kExceptionsMIDI": {
+      "path": "profile.content_settings.exceptions.midi_sysex",
+      "type": "dictionary"
+    },
+    "kExceptionsNotifications": {
+      "path": "profile.content_settings.exceptions.notifications",
+      "type": "dictionary"
+    },
+    "kExceptionsPayment": {
+      "path": "profile.content_settings.exceptions.payment_handler",
+      "type": "dictionary"
+    },
+    "kExceptionsAutoBlockData": {
+      "path": "profile.content_settings.exceptions.permission_autoblocking_data",
+      "type": "dictionary"
+    },
+    "kExceptionsPopUp": {
+      "path": "profile.content_settings.exceptions.popups",
+      "type": "dictionary"
+    },
+    "kExceptionsSensors": {
+      "path": "profile.content_settings.exceptions.sensors",
+      "type": "dictionary"
+    },
+    "kExceptionsSerial": {
+      "path": "profile.content_settings.exceptions.serial_guard",
+      "type": "dictionary"
+    },
+    "kExceptionsSiteEngagement": {
+      "path": "profile.content_settings.exceptions.site_engagement",
+      "type": "dictionary"
+    },
+    "kExceptionsSound": {
+      "path": "profile.content_settings.exceptions.sound",
+      "type": "dictionary"
+    },
+    "kExceptionsSubResource": {
+      "path": "profile.content_settings.exceptions.subresource_filter",
+      "type": "dictionary"
+    },
+    "kExceptionsUSB": {
+      "path": "profile.content_settings.exceptions.usb_guard",
+      "type": "dictionary"
+    },
+    "kExceptionsVirtualReality": {
+      "path": "profile.content_settings.exceptions.vr",
+      "type": "dictionary"
+    },
+    "kExceptionsWebID": {
+      "path": "profile.content_settings.exceptions.webid_api",
+      "type": "dictionary"
+    },
+    "kExceptionsWindowManagement": {
+      "path": "profile.content_settings.exceptions.window_placement",
+      "type": "dictionary"
+    },
     "kExtensionURLOverrides": {
       "path": "extensions.chrome_url_overrides",
       "type": "dictionary"
@@ -7470,6 +7651,10 @@
     "kPluginsAlwaysOpenPdfExternally": {
       "path": "plugins.always_open_pdf_externally",
       "type": "boolean"
+    },
+    "kPreferredColorScheme": {
+      "path": "browser.theme.color_scheme",
+      "type": "integer"
     },
     "kSafeBrowsingEnabled": {
       "path": "safebrowsing.enabled",
@@ -7544,6 +7729,10 @@
     "kApplicationLocale": {
       "path": "intl.app_locale",
       "type": "string"
+    },
+    "kVivaldiCrashReportingConsentGranted": {
+      "path": "vivaldi.CrashReportingConsentGranted",
+      "type": "boolean"
     },
     "kVivaldiAutoUpdateStandalone": {
       "description": "enable autoupdates for standalone installs",

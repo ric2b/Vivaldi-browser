@@ -18,6 +18,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "net/http/http_status_code.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -81,17 +82,29 @@ TEST_F(PlusAddressServiceTest, DefaultSupportsPlusAddressesState) {
   // By default, the `SupportsPlusAddresses` function should return `false`.
   PlusAddressService service;
   EXPECT_FALSE(service.SupportsPlusAddresses(
-      url::Origin::Create(GURL("https://test.example"))));
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
 }
 
-// Tests for the label overrides. These tests are not in the enabled/disabled
-// fixtures as they vary parameters.
-TEST_F(PlusAddressServiceTest, LabelOverrides) {
+// Ensure `SupportsPlusAddresses` is false without a server URL.
+TEST_F(PlusAddressServiceTest, SupportsPlusAddressNoServer) {
+  // Enable the feature, but do not provide a server URL, which indicates no
+  // suggestion should be shown.
+  base::test::ScopedFeatureList scoped_feature_list{plus_addresses::kFeature};
+  PlusAddressService service;
+  EXPECT_FALSE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
+}
+
+// Tests for the suggestion label overrides. These tests are not in the
+// enabled/disabled fixtures as they vary parameters.
+TEST_F(PlusAddressServiceTest, SuggestionLabelOverride) {
   base::test::ScopedFeatureList scoped_feature_list;
   // Setting the override should result in echoing the override back.
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       plus_addresses::kFeature,
-      {{plus_addresses::kEnterprisePlusAddressLabelOverride.name,
+      {{plus_addresses::kEnterprisePlusAddressSuggestionLabelOverride.name,
         "mattwashere"}});
   PlusAddressService service;
   EXPECT_EQ(service.GetCreateSuggestionLabel(), u"mattwashere");
@@ -102,7 +115,7 @@ TEST_F(PlusAddressServiceTest, LabelOverrideWithSpaces) {
   // Setting the override should result in echoing the override back.
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       plus_addresses::kFeature,
-      {{plus_addresses::kEnterprisePlusAddressLabelOverride.name,
+      {{plus_addresses::kEnterprisePlusAddressSuggestionLabelOverride.name,
         "matt was here"}});
   PlusAddressService service;
   EXPECT_EQ(service.GetCreateSuggestionLabel(), u"matt was here");
@@ -114,12 +127,9 @@ TEST_F(PlusAddressServiceTest, NoAccountPlusAddressCreation) {
   const url::Origin no_subdomain_origin =
       url::Origin::Create(GURL("https://test.example"));
 
-  base::MockOnceCallback<void(const std::string&)> offer_callback;
   base::MockOnceCallback<void(const PlusProfileOrError&)> reserve_callback;
   base::MockOnceCallback<void(const PlusProfileOrError&)> confirm_callback;
   // Ensure that the lambdas aren't called since there is no signed-in account.
-  EXPECT_CALL(offer_callback, Run).Times(0);
-  service.OfferPlusAddressCreation(no_subdomain_origin, offer_callback.Get());
   EXPECT_CALL(reserve_callback, Run).Times(0);
   service.ReservePlusAddress(no_subdomain_origin, reserve_callback.Get());
   EXPECT_CALL(confirm_callback, Run).Times(0);
@@ -137,12 +147,9 @@ TEST_F(PlusAddressServiceTest, AbortPlusAddressCreation) {
   const url::Origin no_subdomain_origin =
       url::Origin::Create(GURL("https://test.example"));
 
-  base::MockOnceCallback<void(const std::string&)> offer_callback;
   base::MockOnceCallback<void(const PlusProfileOrError&)> reserve_callback;
   base::MockOnceCallback<void(const PlusProfileOrError&)> confirm_callback;
   // Ensure that the lambdas aren't called since there is no signed-in account.
-  EXPECT_CALL(offer_callback, Run).Times(0);
-  service.OfferPlusAddressCreation(no_subdomain_origin, offer_callback.Get());
   EXPECT_CALL(reserve_callback, Run).Times(0);
   service.ReservePlusAddress(no_subdomain_origin, reserve_callback.Get());
   EXPECT_CALL(confirm_callback, Run).Times(0);
@@ -186,44 +193,6 @@ class PlusAddressServiceRequestsTest : public ::testing::Test {
   data_decoder::test::InProcessDataDecoder decoder_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-TEST_F(PlusAddressServiceRequestsTest, OfferPlusAddressCreation) {
-  signin::IdentityTestEnvironment identity_test_env;
-  identity_test_env.MakeAccountAvailable("plus@plus.plus",
-                                         {signin::ConsentLevel::kSignin});
-  identity_test_env.SetAutomaticIssueOfAccessTokens(true);
-
-  PlusAddressService service(
-      identity_test_env.identity_manager(), nullptr,
-      PlusAddressClient(identity_test_env.identity_manager(),
-                        test_shared_loader_factory));
-
-  const url::Origin no_subdomain_origin =
-      url::Origin::Create(GURL("https://test.example"));
-  const std::string site = "test.example";
-  const std::string plus_address = "plus+remote@plus.plus";
-
-  base::test::TestFuture<const std::string&> future;
-  service.OfferPlusAddressCreation(no_subdomain_origin, future.GetCallback());
-
-  // Check that the future callback is blocked and unblock it.
-  ASSERT_FALSE(future.IsReady());
-  test_url_loader_factory.SimulateResponseForPendingRequest(
-      plus_profiles_endpoint,
-      test::MakeCreationResponse(
-          PlusProfile({.facet = site, .plus_address = plus_address})));
-  ASSERT_TRUE(future.IsReady());
-  EXPECT_EQ(future.Get(), plus_address);
-
-  // Assert that ensuing calls to the same facet do not make a network request.
-  const url::Origin subdomain_origin =
-      url::Origin::Create(GURL("https://subdomain.test.example"));
-  base::test::TestFuture<const std::string&> second_future;
-  service.OfferPlusAddressCreation(no_subdomain_origin,
-                                   second_future.GetCallback());
-  ASSERT_TRUE(second_future.IsReady());
-  EXPECT_EQ(second_future.Get(), plus_address);
-}
 
 TEST_F(PlusAddressServiceRequestsTest, ReservePlusAddress_ReturnsUnconfirmed) {
   signin::IdentityTestEnvironment identity_test_env;
@@ -556,6 +525,93 @@ TEST_F(PlusAddressServicePolling, CallsGetAllPlusAddresses) {
   EXPECT_TRUE(service.IsPlusAddress("plus+bar@plus.plus"));
 }
 
+TEST_F(PlusAddressServicePolling,
+       DisableForForbiddenUsers_Enabled_404sDontDisableFeature) {
+  features()->Reset();
+  features()->InitAndEnableFeatureWithParameters(
+      plus_addresses::kFeature, {
+                                    {"server-url", server_url.spec()},
+                                    {"oauth-scope", "scope.example"},
+                                    {"sync-with-server", "true"},
+                                    {"disable-for-forbidden-users", "true"},
+                                });
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  identity_test_env.SetAutomaticIssueOfAccessTokens(true);
+
+  PlusAddressClient client(identity_test_env.identity_manager(),
+                           test_shared_loader_factory);
+  // The service starts the timer on construction and issues a request to
+  // poll.
+  PlusAddressService service(identity_test_env.identity_manager(), prefs(),
+                             std::move(client));
+  EXPECT_TRUE(service.is_enabled());
+  // Unblock the initial polling request.
+  ASSERT_EQ(test_url_loader_factory.NumPending(), 1);
+  test_url_loader_factory.SimulateResponseForPendingRequest(
+      plus_profiles_endpoint, "", net::HTTP_NOT_FOUND);
+  EXPECT_TRUE(service.is_enabled());
+}
+
+TEST_F(PlusAddressServicePolling,
+       DisableForForbiddenUsers_Enabled_403sDisableFeature) {
+  features()->Reset();
+  features()->InitAndEnableFeatureWithParameters(
+      plus_addresses::kFeature, {
+                                    {"server-url", server_url.spec()},
+                                    {"oauth-scope", "scope.example"},
+                                    {"sync-with-server", "true"},
+                                    {"disable-for-forbidden-users", "true"},
+                                });
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  identity_test_env.SetAutomaticIssueOfAccessTokens(true);
+
+  PlusAddressClient client(identity_test_env.identity_manager(),
+                           test_shared_loader_factory);
+  // The service starts the timer on construction and issues a request to
+  // poll.
+  PlusAddressService service(identity_test_env.identity_manager(), prefs(),
+                             std::move(client));
+  EXPECT_TRUE(service.is_enabled());
+  // Unblock the initial polling request.
+  ASSERT_EQ(test_url_loader_factory.NumPending(), 1);
+  test_url_loader_factory.SimulateResponseForPendingRequest(
+      plus_profiles_endpoint, "", net::HTTP_FORBIDDEN);
+  // Simulate failed responses for the successive retry requests
+  for (int i = 0; i < service.MAX_INITIAL_POLL_RETRY_ATTEMPTS; i++) {
+    EXPECT_TRUE(service.is_enabled());
+    ASSERT_EQ(test_url_loader_factory.NumPending(), 1);
+    test_url_loader_factory.SimulateResponseForPendingRequest(
+        plus_profiles_endpoint, "", net::HTTP_FORBIDDEN);
+  }
+  // Service is finally disabled once retries are exhausted.
+  EXPECT_FALSE(service.is_enabled());
+}
+
+TEST_F(PlusAddressServicePolling,
+       DisableForForbiddenUsers_Disabled_403DoesntRetryOrDisableFeature) {
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  identity_test_env.SetAutomaticIssueOfAccessTokens(true);
+
+  PlusAddressClient client(identity_test_env.identity_manager(),
+                           test_shared_loader_factory);
+  // The service starts the timer on construction and issues a request to
+  // poll.
+  PlusAddressService service(identity_test_env.identity_manager(), prefs(),
+                             std::move(client));
+  EXPECT_TRUE(service.is_enabled());
+  // Unblock the initial polling request.
+  test_url_loader_factory.SimulateResponseForPendingRequest(
+      plus_profiles_endpoint, "", net::HTTP_FORBIDDEN);
+  EXPECT_EQ(test_url_loader_factory.NumPending(), 0);
+  EXPECT_TRUE(service.is_enabled());
+}
+
 // Doesn't run on ChromeOS since ClearPrimaryAccount() doesn't exist for it.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PlusAddressServicePolling, PrimaryAccountCleared_TogglesPollingOff) {
@@ -654,7 +710,8 @@ TEST_F(PlusAddressServiceDisabledTest, FeatureExplicitlyDisabled) {
                                          {signin::ConsentLevel::kSignin});
   PlusAddressService service(identity_test_env.identity_manager());
   EXPECT_FALSE(service.SupportsPlusAddresses(
-      url::Origin::Create(GURL("https://test.example"))));
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
 }
 
 TEST_F(PlusAddressServiceDisabledTest, DisabledFeatureLabel) {
@@ -664,8 +721,16 @@ TEST_F(PlusAddressServiceDisabledTest, DisabledFeatureLabel) {
 }
 
 class PlusAddressServiceEnabledTest : public PlusAddressServiceTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{plus_addresses::kFeature};
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        plus_addresses::kFeature,
+        {{plus_addresses::kEnterprisePlusAddressServerUrl.name,
+          "mattwashere"}});
+  }
+
+ protected:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(PlusAddressServiceEnabledTest, NullIdentityManager) {
@@ -673,7 +738,8 @@ TEST_F(PlusAddressServiceEnabledTest, NullIdentityManager) {
   // `false`.
   PlusAddressService service;
   EXPECT_FALSE(service.SupportsPlusAddresses(
-      url::Origin::Create(GURL("https://test.example"))));
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
 }
 
 TEST_F(PlusAddressServiceEnabledTest, NoSignedInUser) {
@@ -682,7 +748,8 @@ TEST_F(PlusAddressServiceEnabledTest, NoSignedInUser) {
   signin::IdentityTestEnvironment identity_test_env;
   PlusAddressService service(identity_test_env.identity_manager());
   EXPECT_FALSE(service.SupportsPlusAddresses(
-      url::Origin::Create(GURL("https://test.example"))));
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
 }
 
 TEST_F(PlusAddressServiceEnabledTest, FullySupported) {
@@ -693,7 +760,92 @@ TEST_F(PlusAddressServiceEnabledTest, FullySupported) {
                                          {signin::ConsentLevel::kSignin});
   PlusAddressService service(identity_test_env.identity_manager());
   EXPECT_TRUE(service.SupportsPlusAddresses(
-      url::Origin::Create(GURL("https://test.example"))));
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
+}
+
+// `SupportsPlusAddresses` returns false when `origin` is included on
+// `kPlusAddressExcludedSites` and true otherwise.
+TEST_F(PlusAddressServiceEnabledTest, ExcludedSitesAreNotSupported) {
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      plus_addresses::kFeature,
+      {{plus_addresses::kEnterprisePlusAddressServerUrl.name, "mattwashere"},
+       {plus_addresses::kPlusAddressExcludedSites.name,
+        "exclude.co.th,forbidden.com"}});
+
+  PlusAddressService service(identity_test_env.identity_manager());
+  // Verify that url not on the excluded site continues to work.
+  EXPECT_TRUE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/false));
+
+  // Sites on excluded list are not supported.
+  EXPECT_FALSE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("https://www.forbidden.com")),
+      /*is_off_the_record=*/false));
+  EXPECT_FALSE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("https://www.exclude.co.th")),
+      /*is_off_the_record=*/false));
+
+  // Excluded site with different subdomain are also not supported.
+  EXPECT_FALSE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("https://myaccount.forbidden.com")),
+      /*is_off_the_record=*/false));
+}
+
+// `SupportsPlusAddresses` returns false when `origin` scheme is not http or
+// https.
+TEST_F(PlusAddressServiceEnabledTest, NonHTTPSchemesAreNotSupported) {
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  PlusAddressService service(identity_test_env.identity_manager());
+  EXPECT_TRUE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("http://test.example")),
+      /*is_off_the_record=*/false));
+  EXPECT_FALSE(
+      service.SupportsPlusAddresses(url::Origin::Create(GURL("other://hello")),
+                                    /*is_off_the_record=*/false));
+}
+
+// `SupportsPlusAddresses` returns false when `origin` is opaque.
+TEST_F(PlusAddressServiceEnabledTest, OpaqueOriginIsNotSupported) {
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  PlusAddressService service(identity_test_env.identity_manager());
+  url::Origin origin;
+  EXPECT_FALSE(service.SupportsPlusAddresses(origin, false));
+}
+
+TEST_F(PlusAddressServiceEnabledTest, OTRWithNoExistingAddress) {
+  // With a signed in user, an off-the-record session, and no existing address,
+  // the `SupportsPlusAddresses` function should return `false`.
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  PlusAddressService service(identity_test_env.identity_manager());
+  EXPECT_FALSE(service.SupportsPlusAddresses(
+      url::Origin::Create(GURL("https://test.example")),
+      /*is_off_the_record=*/true));
+}
+
+TEST_F(PlusAddressServiceEnabledTest, OTRWithExistingAddress) {
+  // With a signed in user, an off-the-record session, and an existing address,
+  // the `SupportsPlusAddresses` function should return `true`.
+  signin::IdentityTestEnvironment identity_test_env;
+  identity_test_env.MakeAccountAvailable("plus@plus.plus",
+                                         {signin::ConsentLevel::kSignin});
+  url::Origin site = url::Origin::Create(GURL("https://foo.com"));
+
+  PlusAddressService service(identity_test_env.identity_manager());
+  service.SavePlusAddress(site, "plus@plus.plus");
+
+  EXPECT_TRUE(service.SupportsPlusAddresses(site, /*is_off_the_record=*/true));
 }
 
 TEST_F(PlusAddressServiceEnabledTest, DefaultLabel) {
@@ -737,6 +889,14 @@ class PlusAddressServiceSignoutTest : public ::testing::Test {
         "alpha@plus.plus", signin::ConsentLevel::kSignin);
   }
 
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        plus_addresses::kFeature,
+        {{plus_addresses::kEnterprisePlusAddressServerUrl.name, "mattwashere"},
+         {plus_addresses::kEnterprisePlusAddressOAuthScope.name,
+          "scope.example"}});
+  }
+
   CoreAccountInfo primary_account;
   AccountInfo secondary_account;
 
@@ -747,7 +907,7 @@ class PlusAddressServiceSignoutTest : public ::testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
   signin::IdentityTestEnvironment identity_test_env_;
-  base::test::ScopedFeatureList scoped_feature_list_{plus_addresses::kFeature};
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Doesn't run on ChromeOS since ClearPrimaryAccount() doesn't exist for it.
@@ -759,7 +919,7 @@ TEST_F(PlusAddressServiceSignoutTest, PrimaryAccountCleared_TogglesIsEnabled) {
   // Verify behaviors expected when service is enabled.
   url::Origin site = url::Origin::Create(GURL("https://foo.com"));
   service.SavePlusAddress(site, "plus@plus.plus");
-  EXPECT_TRUE(service.SupportsPlusAddresses(site));
+  EXPECT_TRUE(service.SupportsPlusAddresses(site, /*is_off_the_record=*/false));
   EXPECT_TRUE(service.GetPlusAddress(site));
   EXPECT_EQ(service.GetPlusAddress(site).value(), "plus@plus.plus");
   EXPECT_TRUE(service.IsPlusAddress("plus@plus.plus"));
@@ -768,7 +928,8 @@ TEST_F(PlusAddressServiceSignoutTest, PrimaryAccountCleared_TogglesIsEnabled) {
   EXPECT_FALSE(service.is_enabled());
 
   // Ensure that the local data is cleared on disabling.
-  EXPECT_FALSE(service.SupportsPlusAddresses(site));
+  EXPECT_FALSE(
+      service.SupportsPlusAddresses(site, /*is_off_the_record=*/false));
   EXPECT_FALSE(service.IsPlusAddress("plus@plus.plus"));
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -781,7 +942,7 @@ TEST_F(PlusAddressServiceSignoutTest,
   // Verify behaviors expected when service is enabled.
   url::Origin site = url::Origin::Create(GURL("https://foo.com"));
   service.SavePlusAddress(site, "plus@plus.plus");
-  EXPECT_TRUE(service.SupportsPlusAddresses(site));
+  EXPECT_TRUE(service.SupportsPlusAddresses(site, /*is_off_the_record=*/false));
   EXPECT_TRUE(service.GetPlusAddress(site));
   EXPECT_EQ(service.GetPlusAddress(site).value(), "plus@plus.plus");
   EXPECT_TRUE(service.IsPlusAddress("plus@plus.plus"));
@@ -805,7 +966,8 @@ TEST_F(PlusAddressServiceSignoutTest,
   EXPECT_FALSE(service.is_enabled());
 
   // Ensure that the local data is cleared on disabling.
-  EXPECT_FALSE(service.SupportsPlusAddresses(site));
+  EXPECT_FALSE(
+      service.SupportsPlusAddresses(site, /*is_off_the_record=*/false));
   EXPECT_FALSE(service.IsPlusAddress("plus@plus.plus"));
 }
 

@@ -14,7 +14,11 @@ struct tint_array {
     T elements[N];
 };
 
-struct tint_symbol_5 {
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
+struct tint_symbol_7 {
   tint_array<half2x3, 4> w;
 };
 
@@ -24,23 +28,17 @@ struct tint_packed_vec3_f16_array_element {
 };
 
 half2x3 tint_unpack_vec3_in_composite(tint_array<tint_packed_vec3_f16_array_element, 2> in) {
-  half2x3 result = half2x3(0.0h);
-  for(uint i = 0u; (i < 2u); i = (i + 1u)) {
-    result[i] = half3(in[i].elements);
-  }
+  half2x3 result = half2x3(half3(in[0].elements), half3(in[1].elements));
   return result;
 }
 
 tint_array<half2x3, 4> tint_unpack_vec3_in_composite_1(tint_array<tint_array<tint_packed_vec3_f16_array_element, 2>, 4> in) {
-  tint_array<half2x3, 4> result = {};
-  for(uint i = 0u; (i < 4u); i = (i + 1u)) {
-    result[i] = tint_unpack_vec3_in_composite(in[i]);
-  }
+  tint_array<half2x3, 4> result = tint_array<half2x3, 4>{tint_unpack_vec3_in_composite(in[0]), tint_unpack_vec3_in_composite(in[1]), tint_unpack_vec3_in_composite(in[2]), tint_unpack_vec3_in_composite(in[3])};
   return result;
 }
 
-void f_inner(uint local_invocation_index, threadgroup tint_array<half2x3, 4>* const tint_symbol, const constant tint_array<tint_array<tint_packed_vec3_f16_array_element, 2>, 4>* const tint_symbol_1) {
-  for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
+void f_inner(uint local_invocation_index, threadgroup tint_array<half2x3, 4>* const tint_symbol, const constant tint_array<tint_array<tint_packed_vec3_f16_array_element, 2>, 4>* const tint_symbol_1, device half* const tint_symbol_2) {
+  TINT_ISOLATE_UB(tint_volatile_true) for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
     uint const i = idx;
     (*(tint_symbol))[i] = half2x3(half3(0.0h), half3(0.0h));
   }
@@ -49,11 +47,12 @@ void f_inner(uint local_invocation_index, threadgroup tint_array<half2x3, 4>* co
   (*(tint_symbol))[1] = tint_unpack_vec3_in_composite((*(tint_symbol_1))[2]);
   (*(tint_symbol))[1][0] = half3((*(tint_symbol_1))[0][1].elements).zxy;
   (*(tint_symbol))[1][0][0] = (*(tint_symbol_1))[0][1].elements[0];
+  *(tint_symbol_2) = (*(tint_symbol))[1][0][0];
 }
 
-kernel void f(const constant tint_array<tint_array<tint_packed_vec3_f16_array_element, 2>, 4>* tint_symbol_4 [[buffer(0)]], threadgroup tint_symbol_5* tint_symbol_3 [[threadgroup(0)]], uint local_invocation_index [[thread_index_in_threadgroup]]) {
-  threadgroup tint_array<half2x3, 4>* const tint_symbol_2 = &((*(tint_symbol_3)).w);
-  f_inner(local_invocation_index, tint_symbol_2, tint_symbol_4);
+kernel void f(const constant tint_array<tint_array<tint_packed_vec3_f16_array_element, 2>, 4>* tint_symbol_5 [[buffer(0)]], device half* tint_symbol_6 [[buffer(1)]], threadgroup tint_symbol_7* tint_symbol_4 [[threadgroup(0)]], uint local_invocation_index [[thread_index_in_threadgroup]]) {
+  threadgroup tint_array<half2x3, 4>* const tint_symbol_3 = &((*(tint_symbol_4)).w);
+  f_inner(local_invocation_index, tint_symbol_3, tint_symbol_5, tint_symbol_6);
   return;
 }
 

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_SIGNIN_BOUND_SESSION_CREDENTIALS_BOUND_SESSION_COOKIE_CONTROLLER_H_
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
@@ -35,7 +36,7 @@ class BoundSessionCookieController {
     // Called when the cookie refresh request results in a persistent error that
     // can't be fixed by retrying. `BoundSessionCookieController` is expected to
     // be deleted after this call.
-    virtual void TerminateSession() = 0;
+    virtual void OnPersistentErrorEncountered() = 0;
 
     // Called when the bound session parameters change, for example the minimum
     // cookie expiration date changes. Cookie deletion is considered as a change
@@ -55,7 +56,7 @@ class BoundSessionCookieController {
   // The callback will be called once the cookie is fresh or the session is
   // terminated. Note: The callback might be called synchronously if the
   // previous conditions apply.
-  virtual void OnRequestBlockedOnCookie(
+  virtual void HandleRequestBlockedOnCookie(
       base::OnceClosure resume_blocked_request) = 0;
 
   const GURL& url() const { return url_; }
@@ -64,6 +65,7 @@ class BoundSessionCookieController {
   base::Time min_cookie_expiration_time();
   chrome::mojom::BoundSessionThrottlerParamsPtr
   bound_session_throttler_params();
+  base::flat_set<std::string> bound_cookie_names() const;
 
  protected:
   const GURL url_;

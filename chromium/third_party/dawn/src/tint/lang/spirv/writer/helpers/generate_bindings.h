@@ -31,13 +31,13 @@
 #include "src/tint/lang/spirv/writer/common/options.h"
 
 // Forward declarations
-namespace tint {
-class Program;
+namespace tint::core::ir {
+class Module;
 }
 
 namespace tint::spirv::writer {
 
-Bindings GenerateBindings(const Program& program);
+Bindings GenerateBindings(const core::ir::Module& module);
 
 }  // namespace tint::spirv::writer
 

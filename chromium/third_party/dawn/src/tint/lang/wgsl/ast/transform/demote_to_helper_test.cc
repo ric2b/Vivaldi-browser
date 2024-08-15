@@ -334,6 +334,56 @@ fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) {
     EXPECT_EQ(expect, str(got));
 }
 
+// Test that write via sugared pointer also discards
+TEST_F(DemoteToHelperTest, WriteInEntryPoint_DiscardInEntryPoint_ViaPointerDot) {
+    auto* src = R"(
+@group(0) @binding(0) var t : texture_2d<f32>;
+
+@group(0) @binding(1) var s : sampler;
+
+@group(0) @binding(2) var<storage, read_write> v : vec4<f32>;
+
+@fragment
+fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) {
+  if (in == 0.0) {
+    discard;
+  }
+  let ret = textureSample(t, s, coord);
+  let p = &v;
+  p.x = ret.x;
+}
+)";
+
+    auto* expect = R"(
+var<private> tint_discarded = false;
+
+@group(0) @binding(0) var t : texture_2d<f32>;
+
+@group(0) @binding(1) var s : sampler;
+
+@group(0) @binding(2) var<storage, read_write> v : vec4<f32>;
+
+@fragment
+fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) {
+  if ((in == 0.0)) {
+    tint_discarded = true;
+  }
+  let ret = textureSample(t, s, coord);
+  let p = &(v);
+  if (!(tint_discarded)) {
+    p.x = ret.x;
+  }
+  if (tint_discarded) {
+    discard;
+  }
+}
+)";
+
+    auto got = Run<DemoteToHelper>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
 // Test that no additional discards are inserted when the function unconditionally returns in a
 // nested block.
 TEST_F(DemoteToHelperTest, EntryPointReturn_NestedInBlock) {
@@ -656,6 +706,58 @@ fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) {
   var vf : f32;
   vf = ret.x;
   vp = ret.y;
+  if (tint_discarded) {
+    discard;
+  }
+}
+)";
+
+    auto got = Run<DemoteToHelper>(src);
+
+    EXPECT_EQ(expect, str(got));
+}
+
+// Test that we do not mask writes to invocation-private address spaces via a sugared pointer write
+TEST_F(DemoteToHelperTest, InvocationPrivateWritesViaPointerDot) {
+    auto* src = R"(
+@group(0) @binding(0) var t : texture_2d<f32>;
+
+@group(0) @binding(1) var s : sampler;
+
+var<private> vp : vec4<f32>;
+
+@fragment
+fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) {
+  if (in == 0.0) {
+    discard;
+  }
+  let ret = textureSample(t, s, coord);
+  var vf : f32;
+  vf = ret.x;
+  let p = &vp;
+  p.x = ret.x;
+}
+)";
+
+    auto* expect = R"(
+var<private> tint_discarded = false;
+
+@group(0) @binding(0) var t : texture_2d<f32>;
+
+@group(0) @binding(1) var s : sampler;
+
+var<private> vp : vec4<f32>;
+
+@fragment
+fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) {
+  if ((in == 0.0)) {
+    tint_discarded = true;
+  }
+  let ret = textureSample(t, s, coord);
+  var vf : f32;
+  vf = ret.x;
+  let p = &(vp);
+  p.x = ret.x;
   if (tint_discarded) {
     discard;
   }
@@ -1085,11 +1187,6 @@ fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) -> @location(0) i3
     auto* expect = R"(
 var<private> tint_discarded = false;
 
-struct tint_symbol_1 {
-  old_value : i32,
-  exchanged : bool,
-}
-
 @group(0) @binding(0) var t : texture_2d<f32>;
 
 @group(0) @binding(1) var s : sampler;
@@ -1102,20 +1199,16 @@ fn foo(@location(0) in : f32, @location(1) coord : vec2<f32>) -> @location(0) i3
     tint_discarded = true;
   }
   var result = 0;
-  var tint_symbol : tint_symbol_1;
+  var tint_symbol : __atomic_compare_exchange_result_i32;
   if (!(tint_discarded)) {
-    let tint_symbol_2 = atomicCompareExchangeWeak(&(a), i32(in), 42);
-    tint_symbol.old_value = tint_symbol_2.old_value;
-    tint_symbol.exchanged = tint_symbol_2.exchanged;
+    tint_symbol = atomicCompareExchangeWeak(&(a), i32(in), 42);
   }
   if (!(tint_symbol.exchanged)) {
-    var tint_symbol_3 : tint_symbol_1;
+    var tint_symbol_1 : __atomic_compare_exchange_result_i32;
     if (!(tint_discarded)) {
-      let tint_symbol_4 = atomicCompareExchangeWeak(&(a), i32(in), 42);
-      tint_symbol_3.old_value = tint_symbol_4.old_value;
-      tint_symbol_3.exchanged = tint_symbol_4.exchanged;
+      tint_symbol_1 = atomicCompareExchangeWeak(&(a), i32(in), 42);
     }
-    let xchg = tint_symbol_3;
+    let xchg = tint_symbol_1;
     result = xchg.old_value;
   }
   result += i32(textureSample(t, s, coord).x);

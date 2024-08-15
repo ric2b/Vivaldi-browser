@@ -25,14 +25,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -68,7 +65,7 @@ public class SupervisedUserCriticalJourneysIntegrationTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     SupervisedUserSettingsTestUtils.addUrlToBlocklist(
-                            Profile.getLastUsedRegularProfile(), BLOCKED_SITE_URL);
+                            mActivityTestRule.getProfile(/* incognito= */ false), BLOCKED_SITE_URL);
                 });
 
         EmbeddedTestServer testServer = mActivityTestRule.getEmbeddedTestServerRule().getServer();
@@ -105,15 +102,16 @@ public class SupervisedUserCriticalJourneysIntegrationTest {
 
     @Test
     @LargeTest
-    @Features.EnableFeatures({ChromeFeatureList.ENABLE_PROTO_API_FOR_CLASSIFY_URL})
     public void matureSitesAreBlockedBySafeSites() throws Exception {
         SupervisedUserSettingsTestUtils.setUpTestUrlLoaderFactoryHelper();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     SupervisedUserSettingsTestUtils.setKidsManagementResponseForTesting(
-                            Profile.getLastUsedRegularProfile(), /* isAllowed= */ false);
+                            mActivityTestRule.getProfile(/* incognito= */ false),
+                            /* isAllowed= */ false);
                     SupervisedUserSettingsTestUtils.setSafeSearchResponseForTesting(
-                            Profile.getLastUsedRegularProfile(), /* isAllowed= */ false);
+                            mActivityTestRule.getProfile(/* incognito= */ false),
+                            /* isAllowed= */ false);
                 });
 
         EmbeddedTestServer testServer = mActivityTestRule.getEmbeddedTestServerRule().getServer();

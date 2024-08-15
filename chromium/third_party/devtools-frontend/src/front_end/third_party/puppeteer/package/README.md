@@ -46,7 +46,7 @@ pnpm i puppeteer
 ```
 
 When you install Puppeteer, it automatically downloads a recent version of
-[Chrome for Testing](https://goo.gle/chrome-for-testing) (~170MB macOS, ~282MB Linux, ~280MB Windows) that is [guaranteed to
+[Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) (~170MB macOS, ~282MB Linux, ~280MB Windows) that is [guaranteed to
 work](https://pptr.dev/faq#q-why-doesnt-puppeteer-vxxx-work-with-chromium-vyyy)
 with Puppeteer. The browser is downloaded to the `$HOME/.cache/puppeteer` folder
 by default (starting with Puppeteer v19.0.0).
@@ -90,7 +90,7 @@ information.
 
 #### `puppeteer-core`
 
-Every release since v1.7.0 we publish two packages:
+For every release since v1.7.0 we publish two packages:
 
 - [`puppeteer`](https://www.npmjs.com/package/puppeteer)
 - [`puppeteer-core`](https://www.npmjs.com/package/puppeteer-core)
@@ -110,7 +110,7 @@ You should use `puppeteer-core` if you are
 or [managing browsers yourself](https://pptr.dev/browsers-api/).
 If you are managing browsers yourself, you will need to call
 [`puppeteer.launch`](https://pptr.dev/api/puppeteer.puppeteernode.launch) with
-an an explicit
+an explicit
 [`executablePath`](https://pptr.dev/api/puppeteer.launchoptions)
 (or [`channel`](https://pptr.dev/api/puppeteer.launchoptions) if it's
 installed in a standard location).

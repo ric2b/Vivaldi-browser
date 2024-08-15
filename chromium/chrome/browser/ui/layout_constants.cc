@@ -36,9 +36,7 @@ int GetLayoutConstant(LayoutConstant constant) {
     case BOOKMARK_BAR_BUTTON_HEIGHT:
       return touch_ui ? 36 : 28;
     case BOOKMARK_BAR_BUTTON_PADDING:
-      return features::IsChromeRefresh2023()
-                 ? (touch_ui ? 0 : 8)
-                 : GetLayoutConstant(TOOLBAR_ELEMENT_PADDING);
+      return GetLayoutConstant(TOOLBAR_ELEMENT_PADDING);
     case BOOKMARK_BAR_BUTTON_IMAGE_LABEL_PADDING:
       return features::IsChromeRefresh2023() ? 6 : 8;
     case WEB_APP_MENU_BUTTON_SIZE:
@@ -131,6 +129,14 @@ int GetLayoutConstant(LayoutConstant constant) {
       } else {
         return touch_ui ? 48 : 28;
       }
+    case TOOLBAR_DIVIDER_CORNER_RADIUS:
+      return 1;
+    case TOOLBAR_DIVIDER_HEIGHT:
+      return touch_ui ? 20 : 16;
+    case TOOLBAR_DIVIDER_SPACING:
+      return 9;
+    case TOOLBAR_DIVIDER_WIDTH:
+      return 2;
     case TOOLBAR_ELEMENT_PADDING:
       return touch_ui ? 0 : 4;
     case TOOLBAR_ICON_DEFAULT_MARGIN:

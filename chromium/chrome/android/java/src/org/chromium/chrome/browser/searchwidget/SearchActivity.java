@@ -28,6 +28,8 @@ import org.chromium.base.Log;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.OneShotCallback;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.chrome.R;
@@ -40,14 +42,16 @@ import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.chrome.browser.init.ActivityProfileProvider;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.init.SingleWindowKeyboardVisibilityDelegate;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.metrics.UmaActivityObserver;
 import org.chromium.chrome.browser.omnibox.BackKeyBehaviorDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.OverrideUrlLoadingDelegate;
-import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
@@ -57,7 +61,9 @@ import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
+import org.chromium.chrome.browser.profiles.OTRProfileID;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBuilder;
@@ -92,6 +98,10 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 import org.vivaldi.browser.qrcode.VivaldiQrCodeScanDialog;
+
+// Vivaldi
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.components.search_engines.TemplateUrlService;
 
 /** Queries the user's default search engine and shows autocomplete suggestions. */
 public class SearchActivity extends AsyncInitializationActivity
@@ -169,6 +179,12 @@ public class SearchActivity extends AsyncInitializationActivity
     private ObservableSupplierImpl<Profile> mProfileSupplier = new ObservableSupplierImpl<>();
     protected final UnownedUserDataSupplier<InsetObserver> mInsetObserverViewSupplier =
             new InsetObserverSupplier();
+
+    private final UmaActivityObserver mUmaActivityObserver;
+
+    public SearchActivity() {
+        mUmaActivityObserver = new UmaActivityObserver(this);
+    }
 
     @Override
     protected boolean isStartedUpCorrectly(Intent intent) {
@@ -268,7 +284,6 @@ public class SearchActivity extends AsyncInitializationActivity
                         getLifecycleDispatcher(),
                         overrideUrlLoadingDelegate,
                         /* backKeyBehavior= */ this,
-                        SearchEngineLogoUtils.getInstance(),
                         /* pageInfoAction= */ (tab, pageInfoHighlight) -> {},
                         IntentHandler::bringTabToFront,
                         /* saveOfflineButtonState= */ (tab) -> false,
@@ -319,7 +334,8 @@ public class SearchActivity extends AsyncInitializationActivity
                             @Override
                             public void openHistoryClustersUi(String query) {}
                         },
-                        /* tabModelSelectorSupplier= */ null);
+                        /* tabModelSelectorSupplier= */ null,
+                        /* forcePhoneStyleOmnibox= */ true);
         mLocationBarCoordinator.setUrlBarFocusable(true);
         mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
         mLocationBarCoordinator.getOmniboxStub().addUrlFocusChangeListener(this);
@@ -336,12 +352,53 @@ public class SearchActivity extends AsyncInitializationActivity
     }
 
     @Override
+    protected OneshotSupplier<ProfileProvider> createProfileProvider() {
+        ActivityProfileProvider profileProvider =
+                new ActivityProfileProvider(getLifecycleDispatcher()) {
+                    @Nullable
+                    @Override
+                    protected OTRProfileID createOffTheRecordProfileID() {
+                        throw new IllegalStateException(
+                                "Attempting to access incognito from the search activity");
+                    }
+                };
+        profileProvider.onAvailable(
+                (provider) -> {
+                    mProfileSupplier.set(profileProvider.get().getOriginalProfile());
+                });
+        return profileProvider;
+    }
+
+    @Override
     public void finishNativeInitialization() {
-        Profile profile = Profile.getLastUsedRegularProfile();
-        mProfileSupplier.set(profile);
-
         super.finishNativeInitialization();
+        // Vivaldi WebSearch trigger
+        if (ChromeApplicationImpl.isVivaldi()) {
+            Profile profile = Profile.getLastUsedRegularProfile();
+            mProfileSupplier.set(profile);
 
+            if (getIntent().getAction().equals(Intent.ACTION_WEB_SEARCH)) {
+                TemplateUrlService.PostParams postParams = new TemplateUrlService.PostParams();
+                String searchUrl = TemplateUrlServiceFactory.getForProfile(mProfileSupplier.get())
+                        .getUrlForSearchQuery(getOptionalIntentQuery(), null, postParams,
+                                TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_MAIN);
+                loadUrl(searchUrl, PageTransition.FIRST, null, null);
+            }
+        }
+
+        if (mProfileSupplier.hasValue()) {
+            finishNativeInitializationWithProfile(mProfileSupplier.get());
+        } else {
+            new OneShotCallback<>(
+                    mProfileSupplier,
+                    (profile) -> {
+                        if (isDestroyed()) return;
+                        finishNativeInitializationWithProfile(profile);
+                    });
+        }
+    }
+
+    private void finishNativeInitializationWithProfile(Profile profile) {
         TabDelegateFactory factory =
                 new TabDelegateFactory() {
                     @Override
@@ -403,7 +460,7 @@ public class SearchActivity extends AsyncInitializationActivity
 
         WebContents webContents = WebContentsFactory.createWebContents(profile, false, false);
         mTab =
-                new TabBuilder()
+                new TabBuilder(profile)
                         .setWindow(getWindowAndroid())
                         .setLaunchType(TabLaunchType.FROM_EXTERNAL_APP)
                         .setWebContents(webContents)
@@ -490,6 +547,34 @@ public class SearchActivity extends AsyncInitializationActivity
     }
 
     @Override
+    public void onPauseWithNative() {
+        umaSessionEnd();
+        super.onPauseWithNative();
+    }
+
+    @Override
+    public void onResumeWithNative() {
+        // Start a new UMA session for the new activity.
+        umaSessionResume();
+
+        // Inform the actity lifecycle observers. Among other things, the observers record
+        // metrics pertaining to the "resumed" activity. This needs to happens after
+        // umaSessionResume has closed the old UMA record, pertaining to the previous
+        // (backgrounded) activity, and opened a new one pertaining to the "resumed" activity.
+        super.onResumeWithNative();
+    }
+
+    /** Mark that the UMA session has ended. */
+    private void umaSessionResume() {
+        mUmaActivityObserver.startUmaSession(ActivityType.TABBED, null, getWindowAndroid());
+    }
+
+    /** Mark that the UMA session has ended. */
+    private void umaSessionEnd() {
+        mUmaActivityObserver.endUmaSession();
+    }
+
+    @Override
     public SnackbarManager getSnackbarManager() {
         return mSnackbarManager;
     }
@@ -531,6 +616,11 @@ public class SearchActivity extends AsyncInitializationActivity
                     VivaldiQrCodeScanDialog.newInstance(getWindowAndroid());
             dialog.show(getFragmentManager(), null);
             return;
+        }
+        // Vivaldi action web search
+        if (ChromeApplicationImpl.isVivaldi() &&
+                getIntent().getAction().equals(Intent.ACTION_WEB_SEARCH)) {
+            mLocationBarCoordinator.setUrlBarFocusable(false);
         }
 
         @SearchType int searchType = getSearchType(getIntent().getAction());

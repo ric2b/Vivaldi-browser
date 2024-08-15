@@ -19,7 +19,8 @@ import {
   vec4,
 } from '../../../../../util/conversion.js';
 import { quantizeToF32, vectorF32Range } from '../../../../../util/math.js';
-import { allInputSources, Case, run } from '../../expression.js';
+import { Case } from '../../case.js';
+import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
 

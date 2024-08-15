@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_table_view_controller.h"
 
 #import "base/apple/foundation_util.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
@@ -24,12 +24,12 @@ namespace {
 
 // Table view customized header heights.
 CGFloat kAccountSectionHeaderHeightPointSize = 22.17;
-CGFloat kSyncDataTypeSectionHeaderHeightPointSize = 60.;
+CGFloat kSyncDataTypeSectionHeaderHeightPointSize = 48.;
 CGFloat kAdvancedSettingsSectionHeaderHeightPointSize = 26.;
 CGFloat kSignOutSectionHeaderHeightPointSize = 26.;
 
 // Table view customized footer heights.
-CGFloat kAccountSectionFooterHeightPointSize = 16.;
+CGFloat kAccountSectionFooterHeightPointSize = 28.;
 CGFloat kDefaultSectionFooterHeightPointSize = 10.;
 
 }  // namespace
@@ -121,7 +121,7 @@ CGFloat kDefaultSectionFooterHeightPointSize = 10.;
   return view;
 }
 
-#pragma mark - ChromeTableViewController
+#pragma mark - LegacyChromeTableViewController
 
 - (void)loadModel {
   [super loadModel];

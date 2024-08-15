@@ -7,8 +7,7 @@
 
 #include "base/types/id_type.h"
 
-namespace extensions {
-namespace declarative_net_request {
+namespace extensions::declarative_net_request {
 
 // Permission name.
 extern const char kDeclarativeNetRequestPermission[];
@@ -94,8 +93,12 @@ extern const char kHeaderOperationKey[];
 extern const char kHeaderValueKey[];
 extern const char kTabIdsKey[];
 extern const char kExcludedTabIdsKey[];
+extern const char kMatchResponseHeadersPath[];
+extern const char kMatchExcludedResponseHeadersPath[];
+extern const char kHeaderValuesKey[];
+extern const char kHeaderExcludedValuesKey[];
+extern const char kExcludedResponseHeadersKey[];
 
-}  // namespace declarative_net_request
-}  // namespace extensions
+}  // namespace extensions::declarative_net_request
 
 #endif  // EXTENSIONS_COMMON_API_DECLARATIVE_NET_REQUEST_CONSTANTS_H_

@@ -22,9 +22,9 @@ enum class CloseRequestResult;
 //  such as non-client hit testing information, sizing etc. Sub-classes of
 //  ClientView are used to create more elaborate contents.
 class VIEWS_EXPORT ClientView : public View {
- public:
-  METADATA_HEADER(ClientView);
+  METADATA_HEADER(ClientView, View)
 
+ public:
   // Constructs a ClientView object for the specified widget with the specified
   // contents. Since this object is created during the process of creating
   // |widget|, |contents_view| must be valid if you want the initial size of
@@ -51,6 +51,14 @@ class VIEWS_EXPORT ClientView : public View {
   // client" area. A good example of this is the size box at the bottom right
   // corner of resizable dialog boxes.
   virtual int NonClientHitTest(const gfx::Point& point);
+
+  // Updates the rounded corners of the ClientView's contents as part of
+  // rounding the window.
+  // Some platforms, such as ChromeOS, do not have borders surrounding
+  // ClientView part of the NonClientFrameView. Therefore, the
+  // NonClientFrameView has to delegate part of the rounding logic to the
+  // ClientView.
+  virtual void UpdateWindowRoundedCorners();
 
   // Overridden from View:
   gfx::Size CalculatePreferredSize() const override;

@@ -528,6 +528,10 @@ class Builder {
     /// Pops the top-most scope
     void PopScope();
 
+    /// Declare all the extensions and capabilities required by `OpSDot` and `OpUDot` using 4x8
+    // packed integer vectors as input.
+    void DeclarePacked4x8IntegerDotProductCapabilitiesAndExtensions();
+
     ProgramBuilder builder_;
     writer::Module module_;
     Function current_function_;

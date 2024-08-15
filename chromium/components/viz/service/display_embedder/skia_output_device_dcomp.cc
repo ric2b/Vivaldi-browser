@@ -41,6 +41,7 @@
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 
@@ -119,7 +120,11 @@ SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
   capabilities_.number_of_buffers =
       gl::DirectCompositionRootSurfaceBufferCount();
   if (feature_info->workarounds().supports_two_yuv_hardware_overlays) {
-    capabilities_.supports_two_yuv_hardware_overlays = true;
+    capabilities_.allowed_yuv_overlay_count = 2;
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kDirectCompositionUnlimitedOverlays)) {
+    capabilities_.allowed_yuv_overlay_count = INT_MAX;
   }
   capabilities_.supports_gpu_vsync = true;
   capabilities_.supports_dc_layers = true;
@@ -262,14 +267,6 @@ SkiaOutputDeviceDCompGLSurface::SkiaOutputDeviceDCompGLSurface(
   capabilities_.supports_delegated_ink = gl_surface_->SupportsDelegatedInk();
   capabilities_.pending_swap_params.max_pending_swaps =
       gl_surface_->GetBufferCount() - 1;
-
-  if (gl_surface_->SupportsSwapTimestamps()) {
-    gl_surface_->SetEnableSwapTimestamps();
-
-    // Changes to swap timestamp queries are only picked up when making current.
-    context_state_->ReleaseCurrent(nullptr);
-    context_state_->MakeCurrent(gl_surface_.get());
-  }
 }
 
 SkiaOutputDeviceDCompGLSurface::~SkiaOutputDeviceDCompGLSurface() {
@@ -294,7 +291,7 @@ bool SkiaOutputDeviceDCompGLSurface::Reshape(const SkImageInfo& image_info,
     base::debug::Alias(nullptr);
     return false;
   }
-  SkSurfaceProps surface_props{0, kUnknown_SkPixelGeometry};
+  SkSurfaceProps surface_props;
 
   GrGLFramebufferInfo framebuffer_info = {0};
   DCHECK_EQ(gl_surface_->GetBackingFramebufferObject(), 0u);

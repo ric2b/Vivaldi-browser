@@ -42,18 +42,12 @@ public interface SigninManager {
         int WIPE_ALL_PROFILE_DATA = 1;
     }
 
-    /**
-     * A SignInStateObserver is notified when the user signs in to or out of Chrome.
-     */
+    /** A SignInStateObserver is notified when the user signs in to or out of Chrome. */
     public interface SignInStateObserver {
-        /**
-         * Invoked when the user has signed in to Chrome.
-         */
+        /** Invoked when the user has signed in to Chrome. */
         default void onSignedIn() {}
 
-        /**
-         * Invoked when the user has signed out of Chrome.
-         */
+        /** Invoked when the user has signed out of Chrome. */
         default void onSignedOut() {}
 
         /**
@@ -65,39 +59,31 @@ public interface SigninManager {
         default void onSignOutAllowedChanged() {}
     }
 
-    /**
-     * Callbacks for the sign-in flow.
-     */
+    /** Callbacks for the sign-in flow. */
     interface SignInCallback {
         /**
-         * Invoked after sign-in is completed successfully.
+         * Invoked after sign-in is completed successfully. Sign-in preferences may not be committed
+         * yet.
          */
         void onSignInComplete();
 
-        /**
-         * Invoked if the sign-in processes does not complete for any reason.
-         */
+        /** Invoked after sign-in preferences are committed. */
+        default void onPrefsCommitted() {}
+
+        /** Invoked if the sign-in processes does not complete for any reason. */
         void onSignInAborted();
     }
 
-    /**
-     * Callbacks for the sign-out flow.
-     */
+    /** Callbacks for the sign-out flow. */
     interface SignOutCallback {
-        /**
-         * Called before the data wiping is started.
-         */
+        /** Called before the data wiping is started. */
         default void preWipeData() {}
 
-        /**
-         * Called after the data is wiped.
-         */
+        /** Called after the data is wiped. */
         void signOutComplete();
     }
 
-    /**
-     * Extracts the domain name of a given account's email.
-     */
+    /** Extracts the domain name of a given account's email. */
     String extractDomainName(String accountEmail);
 
     /**
@@ -105,19 +91,13 @@ public interface SigninManager {
      */
     IdentityManager getIdentityManager();
 
-    /**
-     * Returns true if sign in can be started now.
-     */
+    /** Returns true if sign in can be started now. */
     boolean isSigninAllowed();
 
-    /**
-     * Returns true if sync opt in can be started now.
-     */
+    /** Returns true if sync opt in can be started now. */
     boolean isSyncOptInAllowed();
 
-    /**
-     * Returns true if signin is disabled by policy.
-     */
+    /** Returns true if signin is disabled by policy. */
     boolean isSigninDisabledByPolicy();
 
     /**
@@ -227,17 +207,15 @@ public interface SigninManager {
      * @param signOutCallback Callback to notify about progress.
      * @param forceWipeUserData Whether user selected to wipe all device data.
      */
-    void revokeSyncConsent(@SignoutReason int signoutSource, SignOutCallback signOutCallback,
+    void revokeSyncConsent(
+            @SignoutReason int signoutSource,
+            SignOutCallback signOutCallback,
             boolean forceWipeUserData);
 
-    /**
-     * Returns true if sign out can be started now.
-     */
+    /** Returns true if sign out can be started now. */
     boolean isSignOutAllowed();
 
-    /**
-     * Invokes signOut with no callback.
-     */
+    /** Invokes signOut with no callback. */
     default void signOut(@SignoutReason int signoutSource) {
         signOut(signoutSource, null, false);
     }
@@ -251,7 +229,9 @@ public interface SigninManager {
      * @param signOutCallback Callback to notify about the sign-out progress.
      * @param forceWipeUserData Whether user selected to wipe all device data.
      */
-    void signOut(@SignoutReason int signoutSource, SignOutCallback signOutCallback,
+    void signOut(
+            @SignoutReason int signoutSource,
+            SignOutCallback signOutCallback,
             boolean forceWipeUserData);
 
     /**

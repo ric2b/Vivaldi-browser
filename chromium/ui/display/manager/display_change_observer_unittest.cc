@@ -11,7 +11,7 @@
 #include <tuple>
 
 #include "base/command_line.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_command_line.h"
@@ -297,14 +297,14 @@ TEST_P(DisplayChangeObserverTest, GetExternalManagedDisplayModeList) {
 }
 
 TEST_P(DisplayChangeObserverTest, GetEmptyExternalManagedDisplayModeList) {
+  DisplaySnapshot::ColorInfo color_info;
   FakeDisplaySnapshot display_snapshot(
       /*display_id=*/123, /*port_display_id=*/123, /*edid_display_id=*/456,
       /*connector_index=*/0x0001, gfx::Point(), gfx::Size(),
       DISPLAY_CONNECTION_TYPE_UNKNOWN,
       /*base_connector_id=*/1u, /*path_topology=*/{}, false, false,
-      PrivacyScreenState::kNotSupported, false, false, false, std::string(),
-      base::FilePath(), {}, nullptr, nullptr, 0, gfx::Size(), gfx::ColorSpace(),
-      /*bits_per_channel=*/8u, /*hdr_static_metadata=*/{}, kVrrNotCapable,
+      PrivacyScreenState::kNotSupported, false, std::string(), base::FilePath(),
+      {}, nullptr, nullptr, 0, gfx::Size(), color_info, kVrrNotCapable,
       absl::nullopt, DrmFormatsAndModifiers());
 
   ManagedDisplayInfo::ManagedDisplayModeList display_modes =

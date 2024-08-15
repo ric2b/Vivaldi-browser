@@ -143,7 +143,7 @@ ExtensionFunction::ResponseAction ZoomSetVivaldiUIZoomFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   double zoom_level = blink::PageZoomFactorToZoomLevel(params->zoom_factor);
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     // Avoid crash if we have a non-Vivaldi window open (such as devtools for
     // our UI).
     if (browser->is_vivaldi()) {

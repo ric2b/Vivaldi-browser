@@ -16,15 +16,6 @@ import java.util.List;
 /** Bridge, providing access to the native-side Privacy Sandbox configuration. */
 // TODO(crbug.com/1410601): Pass in the profile and remove GetActiveUserProfile in C++.
 public class PrivacySandboxBridge {
-    public static boolean isPrivacySandboxEnabled() {
-        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
-        return PrivacySandboxBridgeJni.get().isPrivacySandboxEnabled();
-    }
-
-    public static boolean isPrivacySandboxManaged() {
-        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
-        return PrivacySandboxBridgeJni.get().isPrivacySandboxManaged();
-    }
 
     public static boolean isPrivacySandboxRestricted() {
         if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
@@ -36,11 +27,6 @@ public class PrivacySandboxBridge {
         return PrivacySandboxBridgeJni.get().isRestrictedNoticeEnabled();
     }
 
-    public static void setPrivacySandboxEnabled(boolean enabled) {
-        if (org.chromium.build.BuildConfig.IS_VIVALDI) return;
-        PrivacySandboxBridgeJni.get().setPrivacySandboxEnabled(enabled);
-    }
-
     public static List<Topic> getCurrentTopTopics() {
         return sortTopics(Arrays.asList(PrivacySandboxBridgeJni.get().getCurrentTopTopics()));
     }
@@ -49,18 +35,27 @@ public class PrivacySandboxBridge {
         return sortTopics(Arrays.asList(PrivacySandboxBridgeJni.get().getBlockedTopics()));
     }
 
+    public static List<Topic> getFirstLevelTopics() {
+        return sortTopics(Arrays.asList(PrivacySandboxBridgeJni.get().getFirstLevelTopics()));
+    }
+
     public static void setTopicAllowed(Topic topic, boolean allowed) {
-        PrivacySandboxBridgeJni.get().setTopicAllowed(
-                topic.getTopicId(), topic.getTaxonomyVersion(), allowed);
+        PrivacySandboxBridgeJni.get()
+                .setTopicAllowed(topic.getTopicId(), topic.getTaxonomyVersion(), allowed);
     }
 
     @CalledByNative
-    private static Topic createTopic(int topicId, int taxonomyVersion, String name) {
-        return new Topic(topicId, taxonomyVersion, name);
+    private static Topic createTopic(
+            int topicId, int taxonomyVersion, String name, String description) {
+        return new Topic(topicId, taxonomyVersion, name, description);
     }
 
     private static List<Topic> sortTopics(List<Topic> topics) {
-        Collections.sort(topics, (o1, o2) -> { return o1.getName().compareTo(o2.getName()); });
+        Collections.sort(
+                topics,
+                (o1, o2) -> {
+                    return o1.getName().compareTo(o2.getName());
+                });
         return topics;
     }
 
@@ -93,14 +88,17 @@ public class PrivacySandboxBridge {
     }
 
     public static boolean isFirstPartySetsDataAccessManaged() {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isFirstPartySetsDataAccessManaged();
     }
 
     public static boolean isPartOfManagedFirstPartySet(String origin) {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return false;
         return PrivacySandboxBridgeJni.get().isPartOfManagedFirstPartySet(origin);
     }
 
     public static void setFirstPartySetsDataAccessEnabled(boolean enabled) {
+        if (org.chromium.build.BuildConfig.IS_VIVALDI) return;
         PrivacySandboxBridgeJni.get().setFirstPartySetsDataAccessEnabled(enabled);
     }
 
@@ -117,26 +115,46 @@ public class PrivacySandboxBridge {
         PrivacySandboxBridgeJni.get().topicsToggleChanged(newValue);
     }
 
+    public static void setAllPrivacySandboxAllowedForTesting() {
+        PrivacySandboxBridgeJni.get().setAllPrivacySandboxAllowedForTesting(); // IN-TEST
+    }
+
     @NativeMethods
     public interface Natives {
-        boolean isPrivacySandboxEnabled();
-        boolean isPrivacySandboxManaged();
         boolean isPrivacySandboxRestricted();
+
         boolean isRestrictedNoticeEnabled();
+
         boolean isFirstPartySetsDataAccessEnabled();
+
         boolean isFirstPartySetsDataAccessManaged();
+
         boolean isPartOfManagedFirstPartySet(String origin);
-        void setPrivacySandboxEnabled(boolean enabled);
+
         void setFirstPartySetsDataAccessEnabled(boolean enabled);
+
         String getFirstPartySetOwner(String memberOrigin);
+
         Topic[] getCurrentTopTopics();
+
         Topic[] getBlockedTopics();
+
+        Topic[] getFirstLevelTopics();
+
         void setTopicAllowed(int topicId, int taxonomyVersion, boolean allowed);
+
         void getFledgeJoiningEtldPlusOneForDisplay(Callback<String[]> callback);
+
         String[] getBlockedFledgeJoiningTopFramesForDisplay();
+
         void setFledgeJoiningAllowed(String topFrameEtldPlus1, boolean allowed);
+
         int getRequiredPromptType();
+
         void promptActionOccurred(int action);
+
         void topicsToggleChanged(boolean newValue);
+
+        void setAllPrivacySandboxAllowedForTesting(); // IN-TEST
     }
 }

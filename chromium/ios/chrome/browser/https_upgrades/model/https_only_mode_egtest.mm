@@ -16,7 +16,7 @@
 #import "components/security_interstitials/core/omnibox_https_upgrade_metrics.h"
 #import "ios/chrome/browser/https_upgrades/model/https_upgrade_app_interface.h"
 #import "ios/chrome/browser/https_upgrades/model/https_upgrade_test_helper.h"
-#import "ios/chrome/browser/metrics/metrics_app_interface.h"
+#import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
@@ -322,6 +322,28 @@ enum class TestType {
   [ChromeEarlGrey tapWebStateElementWithID:@"link"];
   [ChromeEarlGrey waitForWebStateContainingText:"HTTPS_RESPONSE"];
   [self assertSuccessfulUpgrade];
+}
+
+// Navigate to an HTTP URL by posting a form. This should not be upgraded to
+// HTTPS.
+- (void)test_HTTPWithGoodHTTPS_Post_ShouldNotUpgrade {
+  [HttpsUpgradeAppInterface setHTTPSPortForTesting:self.goodHTTPSServer->port()
+                                      useFakeHTTPS:true];
+  int HTTPPort = self.testServer->port();
+
+  GURL testURL(base::StringPrintf(
+      "data:text/html,"
+      "<form method='POST' action='http://127.0.0.1:%d/good-https' id='myform'>"
+      "<input name='test' value='test'><br>"
+      "<input type='submit' id='submit-btn' value='Submit'></form><br>READY",
+      HTTPPort));
+  [ChromeEarlGrey loadURL:testURL];
+  [ChromeEarlGrey waitForWebStateContainingText:"READY"];
+
+  // Post the form. Should load the http URL.
+  [ChromeEarlGrey tapWebStateElementWithID:@"submit-btn"];
+  [ChromeEarlGrey waitForWebStateContainingText:"HTTP_RESPONSE"];
+  [self assertNoUpgrade];
 }
 
 // Navigate to an HTTP URL directly. The upgraded HTTPS version serves good SSL

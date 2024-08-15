@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "linux-official",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "builder_group": "chromium",
@@ -20,7 +20,8 @@
                   "mb"
                 ],
                 "config": "chromium",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "apply_configs": [
@@ -36,9 +37,10 @@
         {
           "bucket": "ci",
           "builder": "linux-official",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/try/linux-official/targets"
     }
   },
   "$build/reclient": {

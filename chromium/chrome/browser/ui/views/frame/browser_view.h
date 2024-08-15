@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,7 +25,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
-#include "chrome/browser/ui/performance_controls/high_efficiency_opt_in_iph_controller.h"
+#include "chrome/browser/ui/performance_controls/memory_saver_opt_in_iph_controller.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
@@ -37,6 +38,7 @@
 #include "chrome/browser/ui/views/frame/top_controls_slide_controller.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_popup_closer.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/user_education/browser_feature_promo_controller.h"
 #include "chrome/common/buildflags.h"
@@ -49,7 +51,6 @@
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -123,20 +124,9 @@ class BrowserView : public BrowserWindow,
                     public extensions::ExtensionKeybindingRegistry::Delegate,
                     public ImmersiveModeController::Observer,
                     public webapps::AppBannerManager::Observer {
+  METADATA_HEADER(BrowserView, views::ClientView)
+
  public:
-  METADATA_HEADER(BrowserView);
-
-  // Enumerates where the devtools are docked relative to the browser's main
-  // web contents.
-  enum class DevToolsDockedPlacement {
-    kLeft,
-    kRight,
-    kBottom,
-    // Devtools are not docked.
-    kNone,
-    kUnknown
-  };
-
   explicit BrowserView(std::unique_ptr<Browser> browser);
   BrowserView(const BrowserView&) = delete;
   BrowserView& operator=(const BrowserView&) = delete;
@@ -229,7 +219,7 @@ class BrowserView : public BrowserWindow,
     return GetBrowserViewLayout()->contents_border_widget();
   }
   void SetContentBorderBounds(
-      const absl::optional<gfx::Rect>& region_capture_rect) {
+      const std::optional<gfx::Rect>& region_capture_rect) {
     GetBrowserViewLayout()->SetContentBorderBounds(region_capture_rect);
   }
 
@@ -268,10 +258,6 @@ class BrowserView : public BrowserWindow,
   // Accessor for the contents and devtools WebViews.
   ContentsWebView* contents_web_view() { return contents_web_view_; }
   views::WebView* devtools_web_view() { return devtools_web_view_; }
-
-  DevToolsDockedPlacement devtools_docked_placement() const {
-    return current_devtools_docked_placement_;
-  }
 
   base::WeakPtr<BrowserView> GetAsWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -338,7 +324,7 @@ class BrowserView : public BrowserWindow,
 
   // Returns the document picture in picture options from |browser_|'s
   // CreateParams.
-  absl::optional<blink::mojom::PictureInPictureWindowOptions>
+  std::optional<blink::mojom::PictureInPictureWindowOptions>
   GetDocumentPictureInPictureOptions() const;
 
   // Returns the lock_aspect_ratio parameter from |browser_|'s CreateParams.
@@ -451,7 +437,7 @@ class BrowserView : public BrowserWindow,
   void UpdateWebAppStatusIconsVisiblity();
 
   // Getter for the `window.setResizable(bool)` state.
-  absl::optional<bool> GetCanResizeFromWebAPI() const;
+  std::optional<bool> GetCanResizeFromWebAPI() const;
 
   // BrowserWindow:
   void Show() override;
@@ -502,8 +488,9 @@ class BrowserView : public BrowserWindow,
   void Maximize() override;
   void Minimize() override;
   void Restore() override;
-  void SetCanResizeFromWebAPI(absl::optional<bool> can_resize) override;
+  void OnCanResizeFromWebAPIChanged() override;
   bool GetCanResize() override;
+  ui::WindowShowState GetWindowShowState() const override;
   void EnterFullscreen(const GURL& url,
                        ExclusiveAccessBubbleType bubble_type,
                        int64_t display_id) override;
@@ -557,7 +544,7 @@ class BrowserView : public BrowserWindow,
       bool show_stay_in_chrome,
       bool show_remember_selection,
       apps::IntentPickerBubbleType bubble_type,
-      const absl::optional<url::Origin>& initiating_origin,
+      const std::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override;
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override;
   sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
@@ -648,7 +635,7 @@ class BrowserView : public BrowserWindow,
       user_education::FeaturePromoParams params) override;
   bool CloseFeaturePromo(
       const base::Feature& iph_feature,
-      user_education::FeaturePromoCloseReason close_reason) override;
+      user_education::EndFeaturePromoReason end_promo_reason) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override;
@@ -681,6 +668,7 @@ class BrowserView : public BrowserWindow,
   std::u16string GetAccessibleWindowTitle() const override;
   views::View* GetInitiallyFocusedView() override;
   bool ShouldShowWindowTitle() const override;
+  bool ShouldShowWindowIcon() const override;
   ui::ImageModel GetWindowAppIcon() override;
   ui::ImageModel GetWindowIcon() override;
   bool ExecuteWindowsCommand(int command_id) override;
@@ -716,10 +704,10 @@ class BrowserView : public BrowserWindow,
   void OnWidgetBoundsChanged(views::Widget* widget,
                              const gfx::Rect& new_bounds) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
-  void OnWidgetSizeConstraintsChanged(views::Widget* widget) override;
+  void OnWidgetShowStateChanged(views::Widget* widget) override;
 
   // content::WebContentsObserver:
-  void PrimaryPageChanged(content::Page& page) override;
+  void DidFirstVisuallyNonEmptyPaint() override;
 
   // views::ClientView:
   views::CloseRequestResult OnWindowCloseRequested() override;
@@ -803,8 +791,7 @@ class BrowserView : public BrowserWindow,
   std::vector<views::NativeViewHost*> GetNativeViewHostsForTopControlsSlide()
       const;
 
-  // Create and open the tab search bubble.
-  void CreateTabSearchBubble() override;
+  void CreateTabSearchBubble(int tab_index = -1) override;
   // Closes the tab search bubble if open for the given browser instance.
   void CloseTabSearchBubble() override;
 
@@ -829,6 +816,29 @@ class BrowserView : public BrowserWindow,
   // TopContainerBackground::PaintThemeCustomImage for details.
   gfx::Point GetThemeOffsetFromBrowserView() const;
 
+ protected:
+  // Enumerates where the devtools are docked relative to the browser's main
+  // web contents.
+  enum class DevToolsDockedPlacement {
+    kLeft,
+    kRight,
+    kBottom,
+    // Devtools are not docked.
+    kNone,
+    kUnknown
+  };
+
+  DevToolsDockedPlacement devtools_docked_placement() const {
+    return current_devtools_docked_placement_;
+  }
+
+  // Return the DevTools docked placement. It infers the docked placement from
+  // the bounds of contents_webview relative to the local bounds of the
+  // container that holds both contents_webview and devtools_webview.
+  static DevToolsDockedPlacement GetDevToolsDockedPlacement(
+      const gfx::Rect& contents_webview_bounds,
+      const gfx::Rect& local_webview_container_bounds);
+
  private:
   // Do not friend BrowserViewLayout. Use the BrowserViewLayoutDelegate
   // interface to keep these two classes decoupled and testable.
@@ -837,26 +847,6 @@ class BrowserView : public BrowserWindow,
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, AccessibleWindowTitle);
   class AccessibilityModeObserver;
-
-  // Data scoped to a single page. PageData has the same lifetime as the page's
-  // main document.
-  class PageData : public content::PageUserData<PageData> {
-   public:
-    explicit PageData(content::Page& page);
-    PageData(const PageData&) = delete;
-    PageData& operator=(const PageData&) = delete;
-
-    absl::optional<bool> can_resize() const { return can_resize_; }
-    void set_can_resize(absl::optional<bool> can_resize) {
-      can_resize_ = can_resize;
-    }
-
-    PAGE_USER_DATA_KEY_DECL();
-
-   private:
-    // Keeps track of the resizability set by `window.setResizable(bool)` API.
-    absl::optional<bool> can_resize_ = absl::nullopt;
-  };
 
   // If the browser is in immersive full screen mode, it will reveal the
   // tabstrip for a short duration. This is useful for shortcuts that perform
@@ -936,6 +926,9 @@ class BrowserView : public BrowserWindow,
                          ExclusiveAccessBubbleType bubble_type,
                          int64_t display_id);
 
+  void SynchronizeRenderWidgetHostVisualPropertiesForMainFrame();
+  void NotifyWidgetSizeConstraintsChanged();
+
   // Returns whether immmersive fullscreen should replace fullscreen. This
   // should only occur for "browser-fullscreen" for tabbed-typed windows (not
   // for tab-fullscreen and not for app/popup type windows).
@@ -1012,7 +1005,15 @@ class BrowserView : public BrowserWindow,
   // whenever the touch mode changes.
   void MaybeShowReadingListInSidePanelIPH();
 
+  // Attempts to show IPH promo for experimental AI.
+  void MaybeShowExperimentalAIIPH();
+
   void UpdateWindowControlsOverlayEnabled();
+
+  // `window.setResizable(bool)` API (part of Additional Windowing Controls)
+  // can block the use of APIs resizing the window, such as `resizeTo` and
+  // `resizeBy`. window.moveTo | window.moveBy should not be blocked.
+  bool CanSetBounds(const gfx::Rect& new_bounds);
 
   // Updates the visibility of the Window Controls Overlay toggle button.
   void UpdateWindowControlsOverlayToggleVisible();
@@ -1231,7 +1232,7 @@ class BrowserView : public BrowserWindow,
   // is true, OnWidgetActivationChanged will call RestoreFocus. This is set
   // to true when not set in Show() so that RestoreFocus on activation only
   // happens for very first Show() calls.
-  absl::optional<bool> restore_focus_on_activation_;
+  std::optional<bool> restore_focus_on_activation_;
 
   // This is non-null on Chrome OS only.
   std::unique_ptr<TopControlsSlideController> top_controls_slide_controller_;
@@ -1283,25 +1284,25 @@ class BrowserView : public BrowserWindow,
 
   OnLinkOpeningFromGestureCallbackList link_opened_from_gesture_callbacks_;
 
-  std::unique_ptr<HighEfficiencyOptInIPHController>
-      high_efficiency_opt_in_iph_controller_;
+  std::unique_ptr<MemorySaverOptInIPHController>
+      memory_saver_opt_in_iph_controller_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // |loading_animation_tracker_| is used to measure animation smoothness for
   // tab loading animation.
-  absl::optional<ui::ThroughputTracker> loading_animation_tracker_;
+  std::optional<ui::ThroughputTracker> loading_animation_tracker_;
 #endif
 
   bool window_controls_overlay_enabled_ = false;
   bool should_show_window_controls_overlay_toggle_ = false;
   bool borderless_mode_enabled_ = false;
   bool window_management_permission_granted_ = false;
-  absl::optional<content::PermissionController::SubscriptionId>
+  std::optional<content::PermissionController::SubscriptionId>
       window_management_subscription_id_;
 
   // Caching the last value of `PageData::can_resize_` that has been notified to
   // the WidgetObservers to avoid notifying them when nothing has changed.
-  absl::optional<bool> cached_can_resize_from_web_api_;
+  std::optional<bool> cached_can_resize_from_web_api_;
 
   base::CallbackListSubscription paint_as_active_subscription_;
 
@@ -1309,6 +1310,8 @@ class BrowserView : public BrowserWindow,
       DevToolsDockedPlacement::kNone;
 
   PrefChangeRegistrar registrar_;
+
+  ui::OmniboxPopupCloser omnibox_popup_closer_{this};
 
   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
 };

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/enterprise_platform_keys/enterprise_platform_keys_api.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/containers/span.h"
@@ -34,7 +35,6 @@
 #include "extensions/common/extension_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using testing::_;
 using testing::Invoke;
@@ -52,7 +52,7 @@ void FakeRunCheckNotRegister(::attestation::VerifiedAccessFlow flow_type,
                              bool register_key,
                              ::attestation::KeyType key_crypto_type,
                              const std::string& key_name_for_spkac,
-                             const absl::optional<std::string>& signals) {
+                             const std::optional<std::string>& signals) {
   EXPECT_FALSE(register_key);
   std::move(callback).Run(
       ash::attestation::TpmChallengeKeyResult::MakeChallengeResponse(
@@ -110,10 +110,17 @@ class EPKChallengeKeyTestBase : public BrowserWithTestWindowTest {
   }
 
   // This will be called by BrowserWithTestWindowTest::SetUp();
-  TestingProfile* CreateProfile() override {
-    fake_user_manager_->AddUserWithAffiliation(
-        AccountId::FromUserEmail(kUserEmail), true);
-    return profile_manager()->CreateTestingProfile(kUserEmail);
+  std::string GetDefaultProfileName() override { return kUserEmail; }
+
+  void LogIn(const std::string& email) override {
+    const AccountId account_id = AccountId::FromUserEmail(email);
+    fake_user_manager_->AddUserWithAffiliation(account_id,
+                                               /*is_affiliated=*/true);
+    fake_user_manager_->UserLoggedIn(
+        account_id,
+        user_manager::FakeUserManager::GetFakeUsernameHash(account_id),
+        /*browser_restart=*/false,
+        /*is_child=*/false);
   }
 
   std::unique_ptr<KeyedService> CreateKeyPermissionsManagerService(
@@ -172,13 +179,12 @@ class EPKChallengeKeyTestBase : public BrowserWithTestWindowTest {
   scoped_refptr<const extensions::Extension> extension_;
   ash::StubInstallAttributes stub_install_attributes_;
   // fake_user_manager_ is owned by user_manager_enabler_.
-  raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged | ExperimentalAsh>
-      fake_user_manager_ = nullptr;
+  raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged> fake_user_manager_ =
+      nullptr;
   user_manager::ScopedUserManager user_manager_enabler_;
   ash::platform_keys::MockKeyPermissionsManager key_permissions_manager_;
-  raw_ptr<PrefService, DanglingUntriaged | ExperimentalAsh> prefs_ = nullptr;
-  raw_ptr<ash::attestation::MockTpmChallengeKey,
-          DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<PrefService, DanglingUntriaged> prefs_ = nullptr;
+  raw_ptr<ash::attestation::MockTpmChallengeKey, DanglingUntriaged>
       mock_tpm_challenge_key_ = nullptr;
 };
 
@@ -190,7 +196,7 @@ class EPKChallengeMachineKeyTest : public EPKChallengeKeyTestBase {
     func_->set_extension(extension_.get());
   }
 
-  base::Value::List CreateArgs() { return CreateArgsInternal(absl::nullopt); }
+  base::Value::List CreateArgs() { return CreateArgsInternal(std::nullopt); }
 
   base::Value::List CreateArgsNoRegister() {
     return CreateArgsInternal(base::Value(false));
@@ -201,7 +207,7 @@ class EPKChallengeMachineKeyTest : public EPKChallengeKeyTestBase {
   }
 
   base::Value::List CreateArgsInternal(
-      absl::optional<base::Value> register_key) {
+      std::optional<base::Value> register_key) {
     static constexpr base::StringPiece kData = "challenge";
     base::Value::List args;
     args.Append(base::Value(base::as_bytes(base::make_span(kData))));
@@ -338,7 +344,7 @@ TEST_F(EPKChallengeUserKeyTest, ExtensionNotAllowedThenErrorMessageReturned) {
 
 using EPKChallengeKeyParams =
     std::tuple<api::enterprise_platform_keys::Scope,
-               absl::optional<api::enterprise_platform_keys::Algorithm>>;
+               std::optional<api::enterprise_platform_keys::Algorithm>>;
 
 class EPKChallengeKeyTest
     : public EPKChallengeKeyTestBase,
@@ -358,7 +364,7 @@ class EPKChallengeKeyTest
   }
 
   base::Value::List CreateArgs(
-      absl::optional<api::enterprise_platform_keys::RegisterKeyOptions>
+      std::optional<api::enterprise_platform_keys::RegisterKeyOptions>
           register_key,
       api::enterprise_platform_keys::Scope scope) {
     api::enterprise_platform_keys::ChallengeKeyOptions options;
@@ -387,26 +393,26 @@ TEST_P(EPKChallengeKeyTest, Success) {
   auto scope = std::get<0>(GetParam());
   ::attestation::VerifiedAccessFlow expected_va_flow_type;
   switch (scope) {
-    case api::enterprise_platform_keys::SCOPE_NONE:
-    case api::enterprise_platform_keys::SCOPE_MACHINE:
+    case api::enterprise_platform_keys::Scope::kNone:
+    case api::enterprise_platform_keys::Scope::kMachine:
       expected_va_flow_type = ::attestation::ENTERPRISE_MACHINE;
       break;
-    case api::enterprise_platform_keys::SCOPE_USER:
+    case api::enterprise_platform_keys::Scope::kUser:
       expected_va_flow_type = ::attestation::ENTERPRISE_USER;
       break;
   }
   auto algorithm_opt = std::get<1>(GetParam());
   auto expect_register = algorithm_opt.has_value();
   auto expect_crypto_key_type = ::attestation::KEY_TYPE_RSA;
-  absl::optional<api::enterprise_platform_keys::RegisterKeyOptions>
-      register_key = absl::nullopt;
+  std::optional<api::enterprise_platform_keys::RegisterKeyOptions>
+      register_key = std::nullopt;
   if (algorithm_opt.has_value()) {
     switch (algorithm_opt.value()) {
-      case api::enterprise_platform_keys::ALGORITHM_NONE:
-      case api::enterprise_platform_keys::ALGORITHM_RSA:
+      case api::enterprise_platform_keys::Algorithm::kNone:
+      case api::enterprise_platform_keys::Algorithm::kRsa:
         expect_crypto_key_type = ::attestation::KEY_TYPE_RSA;
         break;
-      case api::enterprise_platform_keys::ALGORITHM_ECDSA:
+      case api::enterprise_platform_keys::Algorithm::kEcdsa:
         expect_crypto_key_type = ::attestation::KEY_TYPE_ECC;
         break;
     }
@@ -435,8 +441,8 @@ TEST_P(EPKChallengeKeyTest, ExtensionNotAllowed) {
 
   auto scope = std::get<0>(GetParam());
   auto algorithm_opt = std::get<1>(GetParam());
-  absl::optional<api::enterprise_platform_keys::RegisterKeyOptions>
-      register_key = absl::nullopt;
+  std::optional<api::enterprise_platform_keys::RegisterKeyOptions>
+      register_key = std::nullopt;
   if (algorithm_opt.has_value()) {
     register_key = api::enterprise_platform_keys::RegisterKeyOptions();
     register_key.value().algorithm = algorithm_opt.value();
@@ -453,12 +459,11 @@ INSTANTIATE_TEST_SUITE_P(
     EPKChallengeKeyTests,
     EPKChallengeKeyTest,
     testing::Combine(
-        testing::Values(api::enterprise_platform_keys::Scope::SCOPE_MACHINE,
-                        api::enterprise_platform_keys::Scope::SCOPE_USER),
-        testing::Values(
-            api::enterprise_platform_keys::Algorithm::ALGORITHM_RSA,
-            api::enterprise_platform_keys::Algorithm::ALGORITHM_ECDSA,
-            absl::nullopt)),
+        testing::Values(api::enterprise_platform_keys::Scope::kMachine,
+                        api::enterprise_platform_keys::Scope::kUser),
+        testing::Values(api::enterprise_platform_keys::Algorithm::kRsa,
+                        api::enterprise_platform_keys::Algorithm::kEcdsa,
+                        std::nullopt)),
 
     [](const testing::TestParamInfo<EPKChallengeKeyParams>& info) {
       std::string alg =

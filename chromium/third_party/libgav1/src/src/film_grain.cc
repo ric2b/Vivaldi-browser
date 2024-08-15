@@ -279,6 +279,14 @@ FilmGrain<bitdepth>::FilmGrain(const FilmGrainParams& params,
       thread_pool_(thread_pool) {}
 
 template <int bitdepth>
+FilmGrain<bitdepth>::~FilmGrain() {
+  // Clear the earlier poisoning to avoid false reports when the memory range
+  // is reused.
+  ASAN_UNPOISON_MEMORY_REGION(luma_grain_, sizeof(luma_grain_));
+  ASAN_UNPOISON_MEMORY_REGION(scaling_lut_y_, sizeof(scaling_lut_y_));
+}
+
+template <int bitdepth>
 bool FilmGrain<bitdepth>::Init() {
   // Section 7.18.3.3. Generate grain process.
   const dsp::Dsp& dsp = *dsp::GetDspTable(bitdepth);

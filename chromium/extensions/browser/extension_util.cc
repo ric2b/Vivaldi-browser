@@ -9,6 +9,7 @@
 #include "base/no_destructor.h"
 #include "build/chromeos_buildflags.h"
 #include "components/crx_file/id_util.h"
+#include "components/guest_view/browser/guest_view_base.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/render_frame_host.h"
@@ -25,6 +26,7 @@
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
+#include "extensions/common/mojom/host_id.mojom.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
 #include "extensions/grit/extensions_browser_resources.h"
@@ -57,6 +59,31 @@ bool IsSigninProfileTestExtensionOnTestImage(const Extension* extension) {
 #endif
 
 }  // namespace
+
+mojom::HostID::HostType HostIdTypeFromGuestView(
+    const guest_view::GuestViewBase& guest) {
+  if (guest.IsOwnedByWebUI()) {
+    return mojom::HostID::HostType::kWebUi;
+  }
+
+  if (guest.IsOwnedByControlledFrameEmbedder()) {
+    return mojom::HostID::HostType::kControlledFrameEmbedder;
+  }
+
+  // Note: We return a type of kExtensions for all cases where
+  // |guest.IsOwnedByExtension()| are true, as well as some additional cases
+  // where that call is false but also |guest.IsOwnedByWebUI()| and
+  // |guest.IsOwnedByControlledFrameEmbedder()| are false. Those appear to be
+  // when the provided extension identifier is blank. Future work in this area
+  // could improve the checks here so all the cases are declared relative to
+  // what the GuestView instance asserts itself to be.
+  return mojom::HostID::HostType::kExtensions;
+}
+
+mojom::HostID GenerateHostIdFromGuestView(
+    const guest_view::GuestViewBase& guest) {
+  return mojom::HostID(HostIdTypeFromGuestView(guest), guest.owner_host());
+}
 
 bool CanBeIncognitoEnabled(const Extension* extension) {
   return IncognitoInfo::IsIncognitoAllowed(extension) &&
@@ -149,7 +176,7 @@ content::ServiceWorkerContext* GetServiceWorkerContextForExtensionId(
 
 void SetUserScriptWorldInfo(const Extension& extension,
                             content::BrowserContext* browser_context,
-                            absl::optional<std::string> csp,
+                            std::optional<std::string> csp,
                             bool messaging) {
   // Persist world configuratation in state store.
   auto* extension_prefs = ExtensionPrefs::Get(browser_context);
@@ -177,7 +204,7 @@ mojom::UserScriptWorldInfoPtr GetUserScriptWorldInfo(
     const ExtensionId& extension_id,
     content::BrowserContext* browser_context) {
   bool enable_messaging = false;
-  absl::optional<std::string> csp = absl::nullopt;
+  std::optional<std::string> csp = std::nullopt;
 
   const base::Value::Dict* worlds_configuration =
       ExtensionPrefs::Get(browser_context)
@@ -192,7 +219,7 @@ mojom::UserScriptWorldInfoPtr GetUserScriptWorldInfo(
 
       const std::string* csp_pref =
           world_info->FindString(kUserScriptWorldCspKey);
-      csp = csp_pref ? absl::make_optional(*csp_pref) : absl::nullopt;
+      csp = csp_pref ? std::make_optional(*csp_pref) : std::nullopt;
     }
   }
 
@@ -215,7 +242,7 @@ bool MapUrlToLocalFilePath(const ExtensionSet* extensions,
   // (GetFilePath()), so that this can be called on the non blocking threads. It
   // only handles a subset of the urls.
   if (!use_blocking_api) {
-    if (file_url.SchemeIs(extensions::kExtensionScheme)) {
+    if (file_url.SchemeIs(kExtensionScheme)) {
       std::string path = file_url.path();
       base::TrimString(path, "/", &path);  // Remove first slash
       *file_path = extension->path().AppendASCII(path);

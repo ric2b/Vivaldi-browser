@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_TOOLBAR_BUTTON_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_TOOLBAR_BUTTON_VIEW_H_
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -15,8 +17,8 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "components/offline_items_collection/core/offline_item.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/events/event_observer.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
 namespace gfx {
@@ -25,6 +27,10 @@ class RenderText;
 
 namespace offline_items_collection {
 struct ContentId;
+}
+
+namespace views {
+class EventMonitor;
 }
 
 class Browser;
@@ -55,6 +61,10 @@ class DownloadBubbleNavigationHandler {
   // or by focusing (on the partial view).
   virtual void OnDialogInteracted() = 0;
 
+  virtual void OnSecurityDialogButtonPress(
+      const DownloadUIModel& model,
+      DownloadCommands::Command command) = 0;
+
   // Returns a CloseOnDeactivatePin for the download bubble. For the lifetime of
   // the returned pin (if non-null), the download bubble will not close on
   // deactivate. Returns nullptr if the bubble is not open.
@@ -74,9 +84,9 @@ class DownloadToolbarButtonView : public ToolbarButton,
                                   public DownloadBubbleNavigationHandler,
                                   public BrowserListObserver,
                                   public DownloadBubbleRowListViewInfoObserver {
- public:
-  METADATA_HEADER(DownloadToolbarButtonView);
+  METADATA_HEADER(DownloadToolbarButtonView, ToolbarButton)
 
+ public:
   // Identifies the bubble dialog widget for testing.
   static constexpr char kBubbleName[] = "DownloadBubbleDialog";
 
@@ -106,7 +116,6 @@ class DownloadToolbarButtonView : public ToolbarButton,
 
   // ToolbarButton:
   void UpdateIcon() override;
-  void OnThemeChanged() override;
   void Layout() override;
   bool ShouldShowInkdropAfterIphInteraction() override;
 
@@ -115,6 +124,8 @@ class DownloadToolbarButtonView : public ToolbarButton,
   void OpenSecurityDialog(
       const offline_items_collection::ContentId& content_id) override;
   void CloseDialog(views::Widget::ClosedReason reason) override;
+  void OnSecurityDialogButtonPress(const DownloadUIModel& model,
+                                   DownloadCommands::Command command) override;
   void ResizeDialog() override;
   void OnDialogInteracted() override;
   std::unique_ptr<views::BubbleDialogDelegate::CloseOnDeactivatePin>
@@ -123,6 +134,7 @@ class DownloadToolbarButtonView : public ToolbarButton,
 
   // BrowserListObserver
   void OnBrowserSetLastActive(Browser* browser) override;
+  void OnBrowserNoLongerActive(Browser* browser) override;
 
   // Deactivates the automatic closing of the partial bubble.
   void DeactivateAutoClose();
@@ -146,6 +158,32 @@ class DownloadToolbarButtonView : public ToolbarButton,
       std::unique_ptr<DownloadBubbleUIController> bubble_controller);
 
  private:
+  // Closes the bubble when it detects an event such as a mouse click, escape
+  // key press, etc., which indicates the user's intent to close the bubble.
+  // This is needed when the bubble is inactive (shown with ShowInactive)
+  // because the normal close-on-deactivate mechanism doesn't work from an
+  // already-inactive state. This is created by the DownloadToolbarButtonView
+  // when the bubble is shown with ShowInactive, and is destroyed when the
+  // bubble is closed.
+  // TODO(crbug.com/1503082): Factor out common logic copied from translate
+  // bubble.
+  class BubbleCloser : public ui::EventObserver {
+   public:
+    explicit BubbleCloser(DownloadToolbarButtonView* toolbar_button);
+
+    BubbleCloser(const BubbleCloser& other) = delete;
+    BubbleCloser& operator=(const BubbleCloser& other) = delete;
+
+    ~BubbleCloser() override;
+
+    // ui::EventObserver:
+    void OnEvent(const ui::Event& event) override;
+
+   private:
+    raw_ptr<DownloadToolbarButtonView> toolbar_button_ = nullptr;  // Owns this.
+    std::unique_ptr<views::EventMonitor> event_monitor_;
+  };
+
   // Max download count to show in the badge. Any higher number of downloads
   // results in a placeholder ("9+").
   static constexpr int kMaxDownloadCountDisplayed = 9;
@@ -153,7 +191,7 @@ class DownloadToolbarButtonView : public ToolbarButton,
   // views::Button overrides:
   void PaintButtonContents(gfx::Canvas* canvas) override;
 
-  gfx::ImageSkia GetBadgeImage(bool is_active,
+  ui::ImageModel GetBadgeImage(bool is_active,
                                int progress_download_count,
                                SkColor badge_text_color,
                                SkColor badge_background_color);
@@ -170,10 +208,13 @@ class DownloadToolbarButtonView : public ToolbarButton,
   // Opens primary dialog and shows the item with given id, if found. Returns
   // pointer to the row if found, or nullptr if not found.
   DownloadBubbleRowView* ShowPrimaryDialogRow(
-      absl::optional<offline_items_collection::ContentId> content_id);
+      std::optional<offline_items_collection::ContentId> content_id);
 
   // Callback invoked when the partial view is closed.
   void OnPartialViewClosed();
+
+  // Helper function to show an IPH promo.
+  void ShowIphPromo();
 
   // Called to automatically close the partial view, if such closing has not
   // been deactivated.
@@ -195,6 +236,10 @@ class DownloadToolbarButtonView : public ToolbarButton,
 
   SkColor GetProgressColor(bool is_disabled, bool is_active) const;
 
+  // Makes the required visual changes to set/unset the button into a dormant
+  // or normal state.
+  void UpdateIconDormant();
+
   // DownloadBubbleRowListViewInfoObserver implementation:
   void OnAnyRowRemoved() override;
 
@@ -206,6 +251,21 @@ class DownloadToolbarButtonView : public ToolbarButton,
   std::unique_ptr<DownloadBubbleUIController> bubble_controller_;
   raw_ptr<views::BubbleDialogDelegate> bubble_delegate_ = nullptr;
   raw_ptr<DownloadBubbleContentsView> bubble_contents_ = nullptr;
+
+  // Whether the progress ring in the icon should be updated continuously
+  // (false), or the icon should be displayed as dormant (true). This is a
+  // performance optimization to avoid redrawing the progress ring too many
+  // times when a download is occurring. If the button is dormant, the progress
+  // ring is drawn as a solid circle, and the icon color is the inactive color.
+  // The badge is still drawn, and the icon shape is still updated. (These
+  // change relatively infrequently, so it's ok to update them when they
+  // change.) Buttons on browsers other than the most recent active browser for
+  // the profile are generally dormant.
+  bool is_dormant_ = false;
+
+  // Following 3 fields are updated by the display controller and determine the
+  // visual characteristics of the button icon. Note that they are still updated
+  // as if the button is normal, even when the button is in a dormant state.
 
   // Current or pending state of the icon. If changing these, trigger
   // UpdateIcon() afterwards.
@@ -256,6 +316,8 @@ class DownloadToolbarButtonView : public ToolbarButton,
   // Used for holding the top views visible while the download bubble is showing
   // in immersive mode on ChromeOS and Mac.
   std::unique_ptr<ImmersiveRevealedLock> immersive_revealed_lock_;
+
+  std::unique_ptr<BubbleCloser> bubble_closer_;
 
   base::WeakPtrFactory<DownloadToolbarButtonView> weak_factory_{this};
 };

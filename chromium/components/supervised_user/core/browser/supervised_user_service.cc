@@ -18,17 +18,16 @@
 #include "base/values.h"
 #include "base/version.h"
 #include "build/build_config.h"
-#include "components/google/core/common/google_util.h"
-#include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/supervised_user/core/browser/kids_chrome_management_client.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/core/common/supervised_user_utils.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -40,23 +39,6 @@ namespace supervised_user {
 SupervisedUserService::~SupervisedUserService() {
   DCHECK(!did_init_ || did_shutdown_);
   url_filter_->RemoveObserver(this);
-}
-
-// static
-void SupervisedUserService::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
-  registry->RegisterDictionaryPref(prefs::kSupervisedUserManualHosts);
-  registry->RegisterDictionaryPref(prefs::kSupervisedUserManualURLs);
-  registry->RegisterIntegerPref(prefs::kDefaultSupervisedUserFilteringBehavior,
-                                SupervisedUserURLFilter::ALLOW);
-  registry->RegisterBooleanPref(prefs::kSupervisedUserSafeSites, true);
-  for (const char* pref : kCustodianInfoPrefs) {
-    registry->RegisterStringPref(pref, std::string());
-  }
-  registry->RegisterIntegerPref(
-      prefs::kFirstTimeInterstitialBannerState,
-      static_cast<int>(FirstTimeInterstitialBannerState::kUnknown));
 }
 
 void SupervisedUserService::Init() {
@@ -76,7 +58,7 @@ void SupervisedUserService::Init() {
 
   user_prefs_->SetInteger(prefs::kFirstTimeInterstitialBannerState,
                           static_cast<int>(banner_state));
-  SetActive(IsSubjectToParentalControls());
+  SetActive(supervised_user::IsChildAccount(user_prefs_.get()));
 }
 
 void SupervisedUserService::SetDelegate(Delegate* delegate) {
@@ -138,30 +120,6 @@ std::string SupervisedUserService::GetSecondCustodianName() const {
   return name.empty() ? GetSecondCustodianEmailAddress() : name;
 }
 
-bool SupervisedUserService::IsURLFilteringEnabled() const {
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  return IsSubjectToParentalControls();
-#else
-  return IsSubjectToParentalControls() &&
-         base::FeatureList::IsEnabled(
-             kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
-#endif
-}
-
-bool SupervisedUserService::AreExtensionsPermissionsEnabled() const {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  return IsSubjectToParentalControls();
-#else
-  return IsSubjectToParentalControls() &&
-         base::FeatureList::IsEnabled(
-             kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif
-#else
-  return false;
-#endif
-}
-
 bool SupervisedUserService::HasACustodian() const {
   return !GetCustodianEmailAddress().empty() ||
          !GetSecondCustodianEmailAddress().empty();
@@ -179,33 +137,27 @@ void SupervisedUserService::RemoveObserver(
 
 SupervisedUserService::SupervisedUserService(
     signin::IdentityManager* identity_manager,
-    KidsChromeManagementClient* kids_chrome_management_client,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     PrefService& user_prefs,
     SupervisedUserSettingsService& settings_service,
-    syncer::SyncService& sync_service,
+    syncer::SyncService* sync_service,
     ValidateURLSupportCallback check_webstore_url_callback,
     std::unique_ptr<SupervisedUserURLFilter::Delegate> url_filter_delegate,
+    std::unique_ptr<SupervisedUserService::PlatformDelegate> platform_delegate,
     bool can_show_first_time_interstitial_banner)
     : user_prefs_(user_prefs),
       settings_service_(settings_service),
       sync_service_(sync_service),
       identity_manager_(identity_manager),
-      kids_chrome_management_client_(kids_chrome_management_client),
+      url_loader_factory_(url_loader_factory),
       delegate_(nullptr),
+      platform_delegate_(std::move(platform_delegate)),
       can_show_first_time_interstitial_banner_(
           can_show_first_time_interstitial_banner) {
   url_filter_ = std::make_unique<SupervisedUserURLFilter>(
-      std::move(check_webstore_url_callback), std::move(url_filter_delegate));
+      user_prefs, std::move(check_webstore_url_callback),
+      std::move(url_filter_delegate));
   url_filter_->AddObserver(this);
-}
-
-void SupervisedUserService::ReportNonDefaultWebFilterValue() const {
-  if (AreWebFilterPrefsDefault(*user_prefs_)) {
-    return;
-  }
-
-  url_filter_->ReportManagedSiteListMetrics();
-  url_filter_->ReportWebFilterTypeMetrics();
 }
 
 FirstTimeInterstitialBannerState SupervisedUserService::GetUpdatedBannerState(
@@ -244,7 +196,8 @@ void SupervisedUserService::SetActive(bool active) {
   // SupervisedUserSettingsModelTypeController.
   // TODO(crbug.com/946473): Get rid of this hack and instead call
   // DataTypePreconditionChanged from the controller.
-  if (sync_service_->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
+  if (sync_service_ &&
+      sync_service_->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
     // Trigger a reconfig by grabbing a SyncSetupInProgressHandle and
     // immediately releasing it again (via the temporary unique_ptr going away).
     sync_service_->GetSetupInProgressHandle();
@@ -302,10 +255,6 @@ void SupervisedUserService::SetActive(bool active) {
   }
 }
 
-bool SupervisedUserService::IsSubjectToParentalControls() const {
-  return user_prefs_->GetString(prefs::kSupervisedUserId) == kChildAccountSUID;
-}
-
 void SupervisedUserService::OnCustodianInfoChanged() {
   for (SupervisedUserServiceObserver& observer : observer_list_) {
     observer.OnCustodianInfoChanged();
@@ -313,13 +262,21 @@ void SupervisedUserService::OnCustodianInfoChanged() {
 }
 
 void SupervisedUserService::OnSupervisedUserIdChanged() {
-  SetActive(IsSubjectToParentalControls());
+  bool is_child = supervised_user::IsChildAccount(user_prefs_.get());
+  if (is_child) {
+    // When supervision is enabled, close any incognito windows/tabs that may
+    // be open for this profile. These windows cannot be created after the
+    // user is signed in, and closing existing ones avoids unexpected
+    // behavior due to baked-in assumptions in the SupervisedUser code.
+    platform_delegate_->CloseIncognitoTabs();
+  }
+  SetActive(is_child);
 }
 
 void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
   int behavior_value =
       user_prefs_->GetInteger(prefs::kDefaultSupervisedUserFilteringBehavior);
-  SupervisedUserURLFilter::FilteringBehavior behavior =
+  supervised_user::FilteringBehavior behavior =
       SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
   url_filter_->SetDefaultFilteringBehavior(behavior);
   UpdateAsyncUrlChecker();
@@ -328,8 +285,7 @@ void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
     observer.OnURLFilterChanged();
   }
 
-  SupervisedUserURLFilter::WebFilterType filter_type =
-      url_filter_->GetWebFilterType();
+  WebFilterType filter_type = url_filter_->GetWebFilterType();
   if (!AreWebFilterPrefsDefault(*user_prefs_) &&
       current_web_filter_type_ != filter_type) {
     url_filter_->ReportWebFilterTypeMetrics();
@@ -337,16 +293,10 @@ void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
   }
 }
 
-bool SupervisedUserService::IsSafeSitesEnabled() const {
-  return IsSubjectToParentalControls() &&
-         user_prefs_->GetBoolean(prefs::kSupervisedUserSafeSites);
-}
-
 void SupervisedUserService::OnSafeSitesSettingChanged() {
   UpdateAsyncUrlChecker();
 
-  SupervisedUserURLFilter::WebFilterType filter_type =
-      url_filter_->GetWebFilterType();
+  WebFilterType filter_type = url_filter_->GetWebFilterType();
   if (!AreWebFilterPrefsDefault(*user_prefs_) &&
       current_web_filter_type_ != filter_type) {
     url_filter_->ReportWebFilterTypeMetrics();
@@ -357,16 +307,16 @@ void SupervisedUserService::OnSafeSitesSettingChanged() {
 void SupervisedUserService::UpdateAsyncUrlChecker() {
   int behavior_value =
       user_prefs_->GetInteger(prefs::kDefaultSupervisedUserFilteringBehavior);
-  SupervisedUserURLFilter::FilteringBehavior behavior =
+  supervised_user::FilteringBehavior behavior =
       SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
 
   bool use_online_check =
-      IsSafeSitesEnabled() ||
-      behavior == SupervisedUserURLFilter::FilteringBehavior::BLOCK;
+      IsSafeSitesEnabled(user_prefs_.get()) ||
+      behavior == supervised_user::FilteringBehavior::kBlock;
 
   if (use_online_check != url_filter_->HasAsyncURLChecker()) {
     if (use_online_check) {
-      url_filter_->InitAsyncURLChecker(kids_chrome_management_client_);
+      url_filter_->InitAsyncURLChecker(identity_manager_, url_loader_factory_);
     } else {
       url_filter_->ClearAsyncURLChecker();
     }
@@ -417,7 +367,7 @@ void SupervisedUserService::Shutdown() {
   }
   DCHECK(!did_shutdown_);
   did_shutdown_ = true;
-  if (IsSubjectToParentalControls()) {
+  if (supervised_user::IsChildAccount(user_prefs_.get())) {
     base::RecordAction(UserMetricsAction("ManagedUsers_QuitBrowser"));
   }
   SetActive(false);
@@ -442,20 +392,5 @@ bool SupervisedUserService::ShouldShowFirstTimeInterstitialBanner() const {
       static_cast<FirstTimeInterstitialBannerState>(
           user_prefs_->GetInteger(prefs::kFirstTimeInterstitialBannerState));
   return banner_state == FirstTimeInterstitialBannerState::kNeedToShow;
-}
-
-// Some Google-affiliated domains are not allowed to delete cookies for
-// supervised accounts.
-bool SupervisedUserService::IsCookieDeletionDisabled(const GURL& origin) const {
-  if (!base::FeatureList::IsEnabled(
-          supervised_user::kClearingCookiesKeepsSupervisedUsersSignedIn)) {
-    return false;
-  }
-
-  if (!IsSubjectToParentalControls()) {
-    return false;
-  }
-  return google_util::IsYoutubeDomainUrl(origin, google_util::ALLOW_SUBDOMAIN,
-                                         google_util::ALLOW_NON_STANDARD_PORTS);
 }
 }  // namespace supervised_user

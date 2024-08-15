@@ -331,14 +331,14 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   if (request.iseditable) {
     if (is_vivaldi_origin) {
       if (params_.vivaldi_input_type == "vivaldi-addressfield") {
-        request.textfield = context_menu::TEXTFIELD_TYPE_ADDRESSFIELD;
+        request.textfield = context_menu::TextfieldType::kAddressfield;
       } else if (params_.vivaldi_input_type == "vivaldi-searchfield") {
-        request.textfield = context_menu::TEXTFIELD_TYPE_SEARCHFIELD;
+        request.textfield = context_menu::TextfieldType::kSearchfield;
       } else {
-        request.textfield = context_menu::TEXTFIELD_TYPE_REGULAR;
+        request.textfield = context_menu::TextfieldType::kRegular;
       }
     } else {
-      request.textfield = context_menu::TEXTFIELD_TYPE_DOCUMENT;
+      request.textfield = context_menu::TextfieldType::kDocument;
       request.support.password = content_type->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_PASSWORD);
       if (request.support.password) {
@@ -876,18 +876,19 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
       break;
     case IDC_WRITING_DIRECTION_RTL:
     case IDC_WRITING_DIRECTION_LTR: {
-      content::RenderViewHost* view_host = GetRenderViewHost();
-      view_host->GetWidget()->UpdateTextDirection(
+      content::RenderFrameHost* rfh = GetRenderFrameHost();
+      rfh->GetRenderWidgetHost()->UpdateTextDirection(
           (command_id == IDC_WRITING_DIRECTION_RTL)
               ? base::i18n::RIGHT_TO_LEFT
               : base::i18n::LEFT_TO_RIGHT);
-      view_host->GetWidget()->NotifyTextDirection();
+      rfh->GetRenderWidgetHost()->NotifyTextDirection();
       break;
     }
 #if BUILDFLAG(IS_MAC)
     case IDC_CONTENT_CONTEXT_LOOK_UP: {
+      content::RenderFrameHost* rfh = GetRenderFrameHost();
       content::RenderWidgetHostView* view =
-          GetRenderViewHost()->GetWidget()->GetView();
+          rfh->GetRenderViewHost()->GetWidget()->GetView();
       if (view) {
         view->ShowDefinitionForSelection();
       }
@@ -927,27 +928,27 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
     const Container& container) {
   namespace context_menu = extensions::vivaldi::context_menu;
   switch (container.content) {
-    case context_menu::CONTAINER_CONTENT_LINKINPROFILE:
+    case context_menu::ContainerContent::kLinkinprofile:
       return !params_.link_url.is_empty() &&
              ProfileMenuController::HasRemoteProfile(GetProfile());
-    case context_menu::CONTAINER_CONTENT_IMAGEINPROFILE:
+    case context_menu::ContainerContent::kImageinprofile:
       return params_.has_image_contents &&
              ProfileMenuController::HasRemoteProfile(GetProfile());
-    case context_menu::CONTAINER_CONTENT_LINKINPWA:
+    case context_menu::ContainerContent::kLinkinpwa:
       return !params_.link_url.is_empty();
-    case context_menu::CONTAINER_CONTENT_SPEECH:
+    case context_menu::ContainerContent::kSpeech:
 #if BUILDFLAG(IS_MAC)
       return true;
 #else
       return false;
 #endif
-    case context_menu::CONTAINER_CONTENT_NOTES:
-    case context_menu::CONTAINER_CONTENT_EXTENSIONS:
-    case context_menu::CONTAINER_CONTENT_LINKTOHIGHLIGHT:
-    case context_menu::CONTAINER_CONTENT_SENDPAGETODEVICES:
-    case context_menu::CONTAINER_CONTENT_SENDLINKTODEVICES:
-    case context_menu::CONTAINER_CONTENT_SPELLCHECK:
-    case context_menu::CONTAINER_CONTENT_SPELLCHECKOPTIONS:
+    case context_menu::ContainerContent::kNotes:
+    case context_menu::ContainerContent::kExtensions:
+    case context_menu::ContainerContent::kLinktohighlight:
+    case context_menu::ContainerContent::kSendpagetodevices:
+    case context_menu::ContainerContent::kSendlinktodevices:
+    case context_menu::ContainerContent::kSpellcheck:
+    case context_menu::ContainerContent::kSpellcheckoptions:
       return true;
     default:
       return false;
@@ -960,34 +961,34 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
     ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
   switch (container.content) {
-    case context_menu::CONTAINER_CONTENT_LINKINPROFILE:
+    case context_menu::ContainerContent::kLinkinprofile:
       link_profile_controller_.reset(
           new ProfileMenuController(this, GetProfile(), false));
       link_profile_controller_->Populate(base::UTF8ToUTF16(container.name),
                                          menu_model, this);
       break;
-    case context_menu::CONTAINER_CONTENT_IMAGEINPROFILE:
+    case context_menu::ContainerContent::kImageinprofile:
       image_profile_controller_.reset(
           new ProfileMenuController(this, GetProfile(), true));
       image_profile_controller_->Populate(base::UTF8ToUTF16(container.name),
                                           menu_model, this);
       break;
-    case context_menu::CONTAINER_CONTENT_LINKINPWA:
+    case context_menu::ContainerContent::kLinkinpwa:
       pwa_link_controller_ = std::make_unique<PWALinkMenuController>(
           PWALinkMenuController(this, GetProfile()));
       pwa_link_controller_->Populate(
           GetBrowser(), base::UTF8ToUTF16(container.name), menu_model);
       break;
-    case context_menu::CONTAINER_CONTENT_NOTES:
+    case context_menu::ContainerContent::kNotes:
       AddNotesController(
           menu_model, id,
           container.mode ==
-              extensions::vivaldi::context_menu::CONTAINER_MODE_FOLDER);
+              extensions::vivaldi::context_menu::ContainerMode::kFolder);
       break;
-    case context_menu::CONTAINER_CONTENT_LINKTOHIGHLIGHT:
+    case context_menu::ContainerContent::kLinktohighlight:
       VivaldiAppendLinkToTextItems();
       break;
-    case context_menu::CONTAINER_CONTENT_EXTENSIONS: {
+    case context_menu::ContainerContent::kExtensions: {
       std::u16string text = PrintableSelectionText();
       EscapeAmpersands(&text);
       extensions_controller_.reset(new ExtensionsMenuController(this));
@@ -996,7 +997,7 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
           base::BindRepeating(VivaldiMenuItemMatchesParams, params_));
       break;
     }
-    case context_menu::CONTAINER_CONTENT_SENDPAGETODEVICES:
+    case context_menu::ContainerContent::kSendpagetodevices:
       sendtopage_controller_.reset(
           new DeviceMenuController(this, DeviceMenuController::kPage));
       if (GetBrowser()) {
@@ -1004,7 +1005,7 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
             GetBrowser(), base::UTF8ToUTF16(container.name), menu_model, this);
       }
       break;
-    case context_menu::CONTAINER_CONTENT_SENDLINKTODEVICES:
+    case context_menu::ContainerContent::kSendlinktodevices:
       sendtolink_controller_.reset(
           new DeviceMenuController(this, DeviceMenuController::kLink));
       if (GetBrowser()) {
@@ -1012,18 +1013,18 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
             GetBrowser(), base::UTF8ToUTF16(container.name), menu_model, this);
       }
       break;
-    case context_menu::CONTAINER_CONTENT_SPEECH:
+    case context_menu::ContainerContent::kSpeech:
 #if BUILDFLAG(IS_MAC)
       speech_controller_.reset(new SpeechMenuController(this));
       speech_controller_->Populate(menu_model);
 #endif
       break;
-    case context_menu::CONTAINER_CONTENT_SPELLCHECK:
+    case context_menu::ContainerContent::kSpellcheck:
       populating_menu_model_ = menu_model;
       VivaldiAppendSpellingSuggestionItems();
       populating_menu_model_ = nullptr;
       break;
-    case context_menu::CONTAINER_CONTENT_SPELLCHECKOPTIONS:
+    case context_menu::ContainerContent::kSpellcheckoptions:
       populating_menu_model_ = menu_model;
       VivaldiAppendLanguageSettings();
       populating_menu_model_ = nullptr;

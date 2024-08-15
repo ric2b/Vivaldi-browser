@@ -9,26 +9,23 @@
 #include <utility>
 
 #include "ash/api/tasks/tasks_types.h"
-#include "ash/constants/ash_features.h"
 #include "ash/glanceables/common/glanceables_view_id.h"
 #include "ash/glanceables/glanceables_metrics.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/typography.h"
 #include "ash/system/time/calendar_utils.h"
 #include "ash/system/time/date_helper.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
-#include "ui/events/keycodes/keyboard_codes_posix.h"
-#include "ui/events/types/event_type.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -39,8 +36,6 @@
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -101,55 +96,11 @@ std::unique_ptr<views::ImageView> CreateSecondRowIcon(
   return icon_view;
 }
 
-class TaskViewTextField : public views::Textfield,
-                          public views::TextfieldController {
- public:
-  using OnFinishedEditingCallback =
-      base::OnceCallback<void(const std::u16string& title)>;
-
-  TaskViewTextField(const std::u16string& title,
-                    OnFinishedEditingCallback on_finished_editing)
-      : on_finished_editing_(std::move(on_finished_editing)) {
-    SetAccessibleName(u"[l10n] Title");
-    SetBackgroundColor(SK_ColorTRANSPARENT);
-    SetBorder(nullptr);
-    SetController(this);
-    SetID(base::to_underlying(GlanceablesViewId::kTaskItemTitleTextField));
-    SetPlaceholderText(u"[l10n] Title");
-    SetText(title);
-  }
-  TaskViewTextField(const TaskViewTextField&) = delete;
-  TaskViewTextField& operator=(const TaskViewTextField&) = delete;
-  ~TaskViewTextField() override = default;
-
-  // views::TextfieldController:
-  bool HandleKeyEvent(views::Textfield* sender,
-                      const ui::KeyEvent& key_event) override {
-    if (key_event.type() == ui::ET_KEY_PRESSED &&
-        (key_event.key_code() == ui::VKEY_ESCAPE ||
-         key_event.key_code() == ui::VKEY_RETURN)) {
-      OnFinishedEditing();
-      return true;
-    }
-    return views::TextfieldController::HandleKeyEvent(sender, key_event);
-  }
-
-  // TODO(b/301253574): implement other triggers to run the callback:
-  // - tab navigation away from the text field;
-  // - mouse click outside.
-
- private:
-  void OnFinishedEditing() {
-    // Running `on_finished_editing_` deletes `this`.
-    std::move(on_finished_editing_).Run(GetText());
-  }
-
-  OnFinishedEditingCallback on_finished_editing_;
-};
-
 }  // namespace
 
 class GlanceablesTaskView::CheckButton : public views::ImageButton {
+  METADATA_HEADER(CheckButton, views::ImageButton)
+
  public:
   explicit CheckButton(PressedCallback pressed_callback)
       : views::ImageButton(std::move(pressed_callback)) {
@@ -196,7 +147,12 @@ class GlanceablesTaskView::CheckButton : public views::ImageButton {
   bool checked_ = false;
 };
 
+BEGIN_METADATA(GlanceablesTaskView, CheckButton, views::ImageButton)
+END_METADATA
+
 class GlanceablesTaskView::TaskTitleButton : public views::LabelButton {
+  METADATA_HEADER(TaskTitleButton, views::LabelButton)
+
  public:
   TaskTitleButton(const std::u16string& title, PressedCallback pressed_callback)
       : views::LabelButton(std::move(pressed_callback), title) {
@@ -206,22 +162,14 @@ class GlanceablesTaskView::TaskTitleButton : public views::LabelButton {
     label()->SetLineHeight(TypographyProvider::Get()->ResolveLineHeight(
         TypographyToken::kCrosButton2));
 
-    if (!base::FeatureList::IsEnabled(
-            features::kGlanceablesTimeManagementStableLaunch)) {
       SetFocusBehavior(FocusBehavior::NEVER);
       SetState(ButtonState::STATE_DISABLED);
-    }
   }
 
   void UpdateLabelForState(bool completed) {
-    const auto color_id = completed ? cros_tokens::kCrosSysSecondary
-                                    : cros_tokens::kCrosSysOnSurface;
-    if (base::FeatureList::IsEnabled(
-            features::kGlanceablesTimeManagementStableLaunch)) {
-      SetEnabledTextColorIds(color_id);
-    } else {
-      SetTextColorId(ButtonState::STATE_DISABLED, color_id);
-    }
+    SetTextColorId(ButtonState::STATE_DISABLED,
+                   completed ? cros_tokens::kCrosSysSecondary
+                             : cros_tokens::kCrosSysOnSurface);
 
     label()->SetFontList(
         TypographyProvider::Get()
@@ -231,14 +179,15 @@ class GlanceablesTaskView::TaskTitleButton : public views::LabelButton {
   }
 };
 
+BEGIN_METADATA(GlanceablesTaskView, TaskTitleButton, views::LabelButton)
+END_METADATA
+
 GlanceablesTaskView::GlanceablesTaskView(
     const api::Task* task,
-    MarkAsCompletedCallback mark_as_completed_callback,
-    SaveCallback save_callback)
+    MarkAsCompletedCallback mark_as_completed_callback)
     : task_id_(task ? task->id : ""),
       task_title_(task ? base::UTF8ToUTF16(task->title) : u""),
-      mark_as_completed_callback_(std::move(mark_as_completed_callback)),
-      save_callback_(std::move(save_callback)) {
+      mark_as_completed_callback_(std::move(mark_as_completed_callback)) {
   SetAccessibleRole(ax::mojom::Role::kListItem);
 
   SetBackground(views::CreateThemedRoundedRectBackground(
@@ -354,14 +303,10 @@ void GlanceablesTaskView::UpdateTaskTitleViewForState(
       task_title_button_->UpdateLabelForState(/*completed=*/button_->checked());
       break;
     case TaskTitleViewState::kEdit:
-      auto* const text_field =
-          tasks_title_view_->AddChildView(std::make_unique<TaskViewTextField>(
-              task_title_,
-              base::BindOnce(&GlanceablesTaskView::OnFinishedEditing,
-                             base::Unretained(this))));
-      GetWidget()->widget_delegate()->SetCanActivate(true);
-      text_field->RequestFocus();
-      break;
+      // TODO(b/315188389): As there is a `GlanceablesTaskViewV2` that replace
+      // this class when the stable launch flag is enabled, remove the
+      // adding/editing functions in this class to simplify the code.
+      NOTREACHED();
   }
 }
 
@@ -379,12 +324,6 @@ void GlanceablesTaskView::CheckButtonPressed() {
 void GlanceablesTaskView::TaskTitleButtonPressed() {
   // TODO(b/301253574): notify siblings to switch to `kView`.
   UpdateTaskTitleViewForState(TaskTitleViewState::kEdit);
-}
-
-void GlanceablesTaskView::OnFinishedEditing(const std::u16string& title) {
-  task_title_ = title;
-  UpdateTaskTitleViewForState(TaskTitleViewState::kView);
-  save_callback_.Run(task_id_, base::UTF16ToUTF8(task_title_));
 }
 
 BEGIN_METADATA(GlanceablesTaskView, views::View)

@@ -13,8 +13,8 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "components/password_manager/core/browser/affiliation/affiliations_prefetcher.h"
-#import "components/password_manager/core/browser/login_database.h"
-#import "components/password_manager/core/browser/password_store_built_in_backend.h"
+#import "components/password_manager/core/browser/password_store/login_database.h"
+#import "components/password_manager/core/browser/password_store/password_store_built_in_backend.h"
 #import "components/password_manager/core/browser/password_store_factory_util.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/signin/public/identity_manager/tribool.h"
@@ -25,10 +25,9 @@
 #import "ios/chrome/browser/passwords/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_affiliations_prefetcher_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_password_store_utils.h"
-#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/signin/signin_util.h"
+#import "ios/chrome/browser/signin/model/signin_util.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -102,7 +101,8 @@ IOSChromeProfilePasswordStoreFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       password_manager::CreateLoginDatabaseForProfileStorage(
-          context->GetStatePath()));
+          context->GetStatePath(),
+          /*is_empty_cb=*/base::NullCallback()));
 
   scoped_refptr<password_manager::PasswordStore> store =
       base::MakeRefCounted<password_manager::PasswordStore>(

@@ -429,6 +429,24 @@ check_gcc_machine_options() {
   fi
 }
 
+check_neon_sve_bridge_compiles() {
+  if enabled sve; then
+    check_cc -march=armv8.2-a+dotprod+i8mm+sve <<EOF
+#ifndef __ARM_NEON_SVE_BRIDGE
+#error 1
+#endif
+#include <arm_sve.h>
+#include <arm_neon_sve_bridge.h>
+EOF
+    compile_result=$?
+    if [ ${compile_result} -ne 0 ]; then
+      log_echo "  disabling sve: arm_neon_sve_bridge.h not supported by compiler"
+      disable_feature sve
+      RTCD_OPTIONS="${RTCD_OPTIONS}--disable-sve "
+    fi
+  fi
+}
+
 check_gcc_avx512_compiles() {
   if disabled gcc; then
     return
@@ -792,7 +810,7 @@ process_common_toolchain() {
         tgt_isa=x86_64
         tgt_os=`echo $gcctarget | sed 's/.*\(darwin1[0-9]\).*/\1/'`
         ;;
-      *darwin2[0-2]*)
+      *darwin2[0-3]*)
         tgt_isa=`uname -m`
         tgt_os=`echo $gcctarget | sed 's/.*\(darwin2[0-9]\).*/\1/'`
         ;;
@@ -863,8 +881,14 @@ process_common_toolchain() {
       ;;
   esac
 
-  # PIC is probably what we want when building shared libs
+  # Position independent code (PIC) is probably what we want when building
+  # shared libs or position independent executable (PIE) targets.
   enabled shared && soft_enable pic
+  check_cpp << EOF || soft_enable pic
+#if !(__pie__ || __PIE__)
+#error Neither __pie__ or __PIE__ are set
+#endif
+EOF
 
   # Minimum iOS version for all target platforms (darwin and iphonesimulator).
   # Shared library framework builds are only possible on iOS 8 and later.
@@ -945,7 +969,7 @@ process_common_toolchain() {
       add_cflags  "-mmacosx-version-min=10.15"
       add_ldflags "-mmacosx-version-min=10.15"
       ;;
-    *-darwin2[0-2]-*)
+    *-darwin2[0-3]-*)
       add_cflags  "-arch ${toolchain%%-*}"
       add_ldflags "-arch ${toolchain%%-*}"
       ;;
@@ -990,6 +1014,7 @@ process_common_toolchain() {
               soft_enable $ext
             fi
           done
+          check_neon_sve_bridge_compiles
           ;;
         armv7|armv7s)
           soft_enable neon

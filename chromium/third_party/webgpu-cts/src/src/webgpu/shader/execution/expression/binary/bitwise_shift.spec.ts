@@ -5,7 +5,8 @@ Execution Tests for the bitwise shift binary expression operations
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
 import { i32, scalarType, ScalarType, TypeU32, u32 } from '../../../../util/conversion.js';
-import { allInputSources, CaseList, run } from '../expression.js';
+import { CaseList } from '../case.js';
+import { allInputSources, run } from '../expression.js';
 
 import { binary, compoundBinary } from './binary.js';
 

@@ -5,10 +5,10 @@
 #ifndef ASH_WEBUI_CAMERA_APP_UI_CAMERA_APP_HELPER_IMPL_H_
 #define ASH_WEBUI_CAMERA_APP_UI_CAMERA_APP_HELPER_IMPL_H_
 
+#include <optional>
 #include <vector>
 
 #include "ash/public/cpp/screen_backlight.h"
-#include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/webui/camera_app_ui/camera_app_helper.mojom.h"
 #include "ash/webui/camera_app_ui/camera_app_ui.h"
 #include "ash/webui/camera_app_ui/camera_app_window_state_controller.h"
@@ -18,15 +18,17 @@
 #include "chromeos/services/machine_learning/public/mojom/document_scanner.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 
+namespace display {
+enum class TabletState;
+}  // namespace display
+
 namespace ash {
 
-class CameraAppHelperImpl : public TabletModeObserver,
-                            public ScreenBacklightObserver,
+class CameraAppHelperImpl : public ScreenBacklightObserver,
                             public display::DisplayObserver,
                             public camera_app::mojom::CameraAppHelper {
  public:
@@ -101,6 +103,7 @@ class CameraAppHelperImpl : public TabletModeObserver,
                            StartStorageMonitorCallback callback) override;
   void StopStorageMonitor() override;
   void OpenStorageManagement() override;
+  void OpenWifiDialog(camera_app::mojom::WifiConfigPtr wifi_config) override;
 
  private:
   void CheckExternalScreenState();
@@ -117,10 +120,6 @@ class CameraAppHelperImpl : public TabletModeObserver,
   // callback for storage monitor status update
   void OnStorageStatusUpdated(CameraAppUIDelegate::StorageMonitorStatus status);
 
-  // TabletModeObserver overrides;
-  void OnTabletModeStarted() override;
-  void OnTabletModeEnded() override;
-
   // ScreenBacklightObserver overrides;
   void OnScreenBacklightStateChanged(
       ScreenBacklightState screen_backlight_state) override;
@@ -128,12 +127,13 @@ class CameraAppHelperImpl : public TabletModeObserver,
   // display::DisplayObserver overrides;
   void OnDisplayAdded(const display::Display& new_display) override;
   void OnDisplayRemoved(const display::Display& old_display) override;
+  void OnDisplayTabletStateChanged(display::TabletState state) override;
 
   // For platform app, we set |camera_app_ui_| to nullptr and should not use
   // it. For SWA, since CameraAppUI owns CameraAppHelperImpl, it is safe to
   // assume that the |camera_app_ui_| is always valid during the whole lifetime
   // of CameraAppHelperImpl.
-  raw_ptr<CameraAppUI, ExperimentalAsh> camera_app_ui_;
+  raw_ptr<CameraAppUI> camera_app_ui_;
 
   CameraResultCallback camera_result_callback_;
 
@@ -141,9 +141,9 @@ class CameraAppHelperImpl : public TabletModeObserver,
 
   bool has_external_screen_;
 
-  absl::optional<uint32_t> pending_intent_id_;
+  std::optional<uint32_t> pending_intent_id_;
 
-  raw_ptr<aura::Window, ExperimentalAsh> window_;
+  raw_ptr<aura::Window> window_;
 
   mojo::Remote<TabletModeMonitor> tablet_mode_monitor_;
   mojo::Remote<ScreenStateMonitor> screen_state_monitor_;

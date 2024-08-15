@@ -5,12 +5,12 @@ File Format, as described here:
 
 <https://aomediacodec.github.io/av1-avif/>
 
-It is a work-in-progress, but can already encode and decode all AOM supported
-YUV formats and bit depths (with alpha).
+It can encode and decode all AV1 supported YUV formats and bit depths (with
+alpha).
 
-For now, it is recommended that you check out/use
+It is recommended that you check out/use
 [tagged releases](https://github.com/AOMediaCodec/libavif/releases) instead of
-just using the master branch. I will regularly create new versions as bugfixes
+just using the main branch. We will regularly create new versions as bug fixes
 and features are added.
 
 ## Usage
@@ -23,8 +23,9 @@ run the examples too.
 
 Building libavif requires [CMake](https://cmake.org/).
 
-No AV1 codecs are enabled by default. Enable them by enabling any of the
-following CMake options (e.g. `-DAVIF_CODEC_AOM=ON`):
+No AV1 codecs are enabled by default. Enable them by setting any of the
+following CMake options to `LOCAL` or `SYSTEM` whether you want to use a
+locally built or a system installed version (e.g. `-DAVIF_CODEC_AOM=LOCAL`):
 
 * `AVIF_CODEC_AOM` for [libaom](https://aomedia.googlesource.com/aom/) (encoder
   and decoder)
@@ -36,9 +37,9 @@ following CMake options (e.g. `-DAVIF_CODEC_AOM=ON`):
 * `AVIF_CODEC_SVT` for [SVT-AV1](https://gitlab.com/AOMediaCodec/SVT-AV1)
   (encoder)
 
-These libraries (in their C API form) must be externally available
-(discoverable via CMake's `FIND_LIBRARY`) to use them, or if libavif is
-a child CMake project, the appropriate CMake target must already exist
+When set to `SYSTEM`, these libraries (in their C API form) must be externally
+available (discoverable via CMake's `FIND_LIBRARY`) to use them, or if libavif
+is a child CMake project, the appropriate CMake target must already exist
 by the time libavif's CMake scripts are executed.
 
 ### Local / Static Builds
@@ -50,9 +51,10 @@ and rav1e uses cargo (Rust). Check each library's documentation for an exact
 list of requirements.
 
 If you want to statically link any codec into your local (static) build of
-libavif, building using one of these scripts and then enabling the associated
-`AVIF_LOCAL_*` is a convenient method, but you must make sure to disable
-`BUILD_SHARED_LIBS` in CMake to instruct it to make a static libavif library.
+libavif, building using one of these scripts and then setting the associated
+`AVIF_CODEC_*` to `LOCAL` is a convenient method, but you must make sure to
+disable `BUILD_SHARED_LIBS` in CMake to instruct it to make a static libavif
+library.
 
 If you want to build/install shared libraries for AV1 codecs, you can still
 peek inside of each script to see where the current known-good SHA is for each
@@ -66,6 +68,40 @@ option.
 The remaining tests can be built by enabling the `AVIF_BUILD_TESTS` and
 `AVIF_ENABLE_GTEST` CMake options. They require GoogleTest to be built locally
 with ext/googletest.cmd or installed on the system.
+
+### Command Lines
+
+The following instructions can be used to build the libavif library and the
+`avifenc` and `avifdec` tools.
+
+#### Build using installed dependencies
+
+To link against the already installed `aom`, `libjpeg` and `libpng` dependency
+libraries (recommended):
+
+```sh
+git clone -b v1.0.3 https://github.com/AOMediaCodec/libavif.git
+cd libavif
+cmake -S . -B build -DAVIF_CODEC_AOM=SYSTEM -DAVIF_BUILD_APPS=ON
+cmake --build build --parallel
+```
+
+#### Build everything from scratch
+
+For development and debugging purposes, or to generate fully static binaries:
+
+```sh
+git clone -b v1.0.3 https://github.com/AOMediaCodec/libavif.git
+cd libavif/ext
+./aom.cmd
+./libyuv.cmd
+./libsharpyuv.cmd
+./libjpeg.cmd
+./zlibpng.cmd
+cd ..
+cmake -S . -B build -DBUILD_SHARED_LIBS=OFF -DAVIF_CODEC_AOM=ON -DAVIF_LOCAL_AOM=ON -DAVIF_LOCAL_LIBYUV=ON -DAVIF_LOCAL_LIBSHARPYUV=ON -DAVIF_LOCAL_JPEG=ON -DAVIF_LOCAL_ZLIBPNG=ON -DAVIF_BUILD_APPS=ON
+cmake --build build --parallel
+```
 
 ## Prebuilt Library (Windows)
 
@@ -85,10 +121,9 @@ sources from the top-level folder:
 
 ```sh
 clang-format -style=file -i \
-  apps/*.c apps/shared/avifexif.* apps/shared/avifjpeg.* \
-  apps/shared/avifpng.* apps/shared/avifutil.* apps/shared/y4m.* \
-  examples/*.c include/avif/*.h src/*.c tests/*.c \
-  tests/gtest/*.h tests/gtest/*.cc tests/oss-fuzz/*.cc
+  apps/*.c apps/*/*.c apps/*/*.cc apps/*/*.h examples/*.c \
+  include/avif/*.h src/*.c src/*.cc \
+  tests/*.c tests/*/*.cc tests/*/*.h
 ```
 
 Use [cmake-format](https://github.com/cheshirekow/cmake_format) to format the

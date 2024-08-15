@@ -15,11 +15,11 @@
 import m from 'mithril';
 
 import {Actions, PostedScrollToRange, PostedTrace} from '../common/actions';
+import {showModal} from '../widgets/modal';
 
 import {initCssConstants} from './css_constants';
 import {globals} from './globals';
 import {toggleHelp} from './help_modal';
-import {showModal} from './modal';
 import {focusHorizontalRange} from './scroll_helper';
 
 const TRUSTED_ORIGINS_KEY = 'trustedOrigins';
@@ -269,6 +269,7 @@ function isPostedScrollToRange(obj: unknown):
       wrapped.perfetto.timeEnd !== undefined;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function isPostedTraceWrapped(obj: any): obj is PostedTraceWrapped {
   const wrapped = obj as PostedTraceWrapped;
   if (wrapped.perfetto === undefined) {

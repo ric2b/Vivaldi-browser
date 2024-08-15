@@ -24,7 +24,7 @@ class QuickSettingsFooterPixelTest : public AshTestBase {
   }
 
   // AshTestBase:
-  absl::optional<pixel_test::InitParams> CreatePixelTestInitParams()
+  std::optional<pixel_test::InitParams> CreatePixelTestInitParams()
       const override {
     return pixel_test::InitParams();
   }
@@ -62,15 +62,14 @@ class QuickSettingsFooterPixelTest : public AshTestBase {
   base::test::ScopedFeatureList feature_list_;
 
   // Owned by view hierarchy.
-  raw_ptr<QuickSettingsFooter, DanglingUntriaged | ExperimentalAsh> footer_ =
-      nullptr;
+  raw_ptr<QuickSettingsFooter, DanglingUntriaged> footer_ = nullptr;
 };
 
 TEST_F(QuickSettingsFooterPixelTest, FooterShouldBeRenderedCorrectly) {
   InitPowerStatusAndOpenBubble();
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "with_no_extra_button",
-      /*revision_number=*/5, GetFooter()));
+      /*revision_number=*/6, GetFooter()));
   CloseBubble();
 
   // Regression test for b/293484037: The settings button is missing when
@@ -79,7 +78,7 @@ TEST_F(QuickSettingsFooterPixelTest, FooterShouldBeRenderedCorrectly) {
   InitPowerStatusAndOpenBubble();
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "with_exit_button",
-      /*revision_number=*/5, GetFooter()));
+      /*revision_number=*/6, GetFooter()));
   CloseBubble();
 }
 

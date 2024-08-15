@@ -5,9 +5,11 @@
 const {assert} = chai;
 
 import * as SDK from '../../../../../front_end/core/sdk/sdk.js';
-import type * as Platform from '../../../../../front_end/core/platform/platform.js';
+import * as Platform from '../../../../../front_end/core/platform/platform.js';
 import * as Protocol from '../../../../../front_end/generated/protocol.js';
 import {expectCookie} from '../../helpers/Cookies.js';
+import {createTarget} from '../../helpers/EnvironmentHelpers.js';
+import {describeWithMockConnection} from '../../helpers/MockConnection.js';
 
 describe('NetworkRequest', () => {
   it('can parse statusText from the first line of responseReceivedExtraInfo\'s headersText', () => {
@@ -79,13 +81,15 @@ describe('NetworkRequest', () => {
         'requestId', 'url' as Platform.DevToolsPath.UrlString, 'documentURL' as Platform.DevToolsPath.UrlString, null);
     request.addExtraResponseInfo({
       blockedResponseCookies: [],
-      responseHeaders: [{name: 'Set-Cookie', value: 'foo=bar'}, {name: 'Set-Cookie', value: 'baz=qux'}],
+      responseHeaders:
+          [{name: 'Set-Cookie', value: 'foo=bar'}, {name: 'Set-Cookie', value: 'baz=qux; Secure;Partitioned'}],
       resourceIPAddressSpace: 'Public' as Protocol.Network.IPAddressSpace,
       cookiePartitionKey: 'partitionKey',
     } as unknown as SDK.NetworkRequest.ExtraResponseInfo);
     assert.strictEqual(request.responseCookies.length, 2);
-    expectCookie(request.responseCookies[0], {name: 'foo', value: 'bar', partitionKey: 'partitionKey', size: 8});
-    expectCookie(request.responseCookies[1], {name: 'baz', value: 'qux', partitionKey: 'partitionKey', size: 7});
+    expectCookie(request.responseCookies[0], {name: 'foo', value: 'bar', size: 8});
+    expectCookie(
+        request.responseCookies[1], {name: 'baz', value: 'qux', secure: true, partitionKey: 'partitionKey', size: 27});
   });
 
   it('determines whether the response headers have been overridden', () => {
@@ -121,10 +125,14 @@ describe('NetworkRequest', () => {
     request.originalResponseHeaders =
         [{name: 'one', value: 'first'}, {name: 'two', value: 'second'}, {name: 'two', value: 'second'}];
     assert.isTrue(request.hasOverriddenHeaders());
+  });
 
+  it('considers duplicate headers which only differ in the order of their values as overridden', () => {
+    const request = SDK.NetworkRequest.NetworkRequest.createWithoutBackendRequest(
+        'requestId', 'url' as Platform.DevToolsPath.UrlString, 'documentURL' as Platform.DevToolsPath.UrlString, null);
     request.responseHeaders = [{name: 'duplicate', value: 'first'}, {name: 'duplicate', value: 'second'}];
-    request.originalResponseHeaders = [{name: 'duplicate', value: 'second'}, {name: 'Duplicate', value: 'first'}];
-    assert.isFalse(request.hasOverriddenHeaders());
+    request.originalResponseHeaders = [{name: 'duplicate', value: 'second'}, {name: 'duplicate', value: 'first'}];
+    assert.isTrue(request.hasOverriddenHeaders());
   });
 
   it('can handle the case of duplicate cookies with only 1 of them being blocked', async () => {
@@ -166,5 +174,48 @@ describe('NetworkRequest', () => {
       resourceIPAddressSpace: 'Public' as Protocol.Network.IPAddressSpace,
     } as unknown as SDK.NetworkRequest.ExtraResponseInfo);
     assert.deepEqual(request.sortedResponseHeaders, responseHeaders);
+  });
+
+  it('treats multiple headers with the same name the same as single header with comma-separated values', () => {
+    const request = SDK.NetworkRequest.NetworkRequest.createWithoutBackendRequest(
+        'requestId', 'url' as Platform.DevToolsPath.UrlString, 'documentURL' as Platform.DevToolsPath.UrlString, null);
+    request.responseHeaders = [{name: 'duplicate', value: 'first, second'}];
+    request.originalResponseHeaders = [{name: 'duplicate', value: 'first'}, {name: 'duplicate', value: 'second'}];
+    assert.isFalse(request.hasOverriddenHeaders());
+  });
+});
+
+describeWithMockConnection('NetworkRequest', () => {
+  it('adds blocked cookies to cookieModel', () => {
+    const target = createTarget();
+    const networkManager = target.model(SDK.NetworkManager.NetworkManager);
+    const networkManagerForRequestStub =
+        sinon.stub(SDK.NetworkManager.NetworkManager, 'forRequest').returns(networkManager);
+    const cookie = new SDK.Cookie.Cookie('name', 'value');
+    const cookieModel = target.model(SDK.CookieModel.CookieModel);
+    Platform.assertNotNullOrUndefined(cookieModel);
+    const addBlockedCookieSpy = sinon.spy(cookieModel, 'addBlockedCookie');
+    const request = SDK.NetworkRequest.NetworkRequest.create(
+        'requestId' as Protocol.Network.RequestId, 'url' as Platform.DevToolsPath.UrlString,
+        'documentURL' as Platform.DevToolsPath.UrlString, null, null, null);
+
+    request.addExtraResponseInfo({
+      responseHeaders: [{name: 'Set-Cookie', value: 'name=value; Path=/'}],
+      blockedResponseCookies: [{
+        blockedReasons: [Protocol.Network.SetCookieBlockedReason.ThirdPartyPhaseout],
+        cookie,
+        cookieLine: 'name=value; Path=/',
+      }],
+      resourceIPAddressSpace: Protocol.Network.IPAddressSpace.Public,
+      statusCode: undefined,
+      cookiePartitionKey: undefined,
+      cookiePartitionKeyOpaque: undefined,
+    });
+    assert.isTrue(addBlockedCookieSpy.calledOnceWith(
+        cookie, [{
+          attribute: null,
+          uiString: 'Setting this cookie was blocked due to third-party cookie phaseout. Learn more in the Issues tab.',
+        }]));
+    networkManagerForRequestStub.restore();
   });
 });

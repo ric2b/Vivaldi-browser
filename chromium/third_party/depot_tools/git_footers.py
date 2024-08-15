@@ -44,8 +44,8 @@ def parse_footers(message):
 def matches_footer_key(line, key):
     """Returns whether line is a valid footer whose key matches a given one.
 
-  Keys are compared in normalized form.
-  """
+    Keys are compared in normalized form.
+    """
     r = parse_footer(line)
     if r is None:
         return False
@@ -55,13 +55,14 @@ def matches_footer_key(line, key):
 def split_footers(message):
     """Returns (non_footer_lines, footer_lines, parsed footers).
 
-  Guarantees that:
-    (non_footer_lines + footer_lines) ~= message.splitlines(), with at
-      most one new newline, if the last paragraph is text followed by footers.
-    parsed_footers is parse_footer applied on each line of footer_lines.
-      There could be fewer parsed_footers than footer lines if some lines in
-      last paragraph are malformed.
-  """
+    Guarantees that:
+        (non_footer_lines + footer_lines) ~= message.splitlines(), with at
+            most one new newline, if the last paragraph is text followed by
+            footers.
+        parsed_footers is parse_footer applied on each line of footer_lines.
+            There could be fewer parsed_footers than footer lines if some lines
+            in last paragraph are malformed.
+    """
     message_lines = list(message.rstrip().splitlines())
     footer_lines = []
     maybe_footer_lines = []
@@ -102,10 +103,10 @@ def get_footer_change_id(message):
 def add_footer_change_id(message, change_id):
     """Returns message with Change-ID footer in it.
 
-  Assumes that Change-Id is not yet in footers, which is then inserted at
-  earliest footer line which is after all of these footers:
-    Bug|Issue|Test|Feature.
-  """
+    Assumes that Change-Id is not yet in footers, which is then inserted at
+    earliest footer line which is after all of these footers:
+        Bug|Issue|Test|Feature.
+    """
     assert 'Change-Id' not in parse_footers(message)
     return add_footer(message,
                       'Change-Id',
@@ -116,18 +117,19 @@ def add_footer_change_id(message, change_id):
 def add_footer(message, key, value, after_keys=None, before_keys=None):
     """Returns a message with given footer appended.
 
-  If after_keys and before_keys are both None (default), appends footer last.
-  If after_keys is provided and matches footers already present, inserts footer
-  as *early* as possible while still appearing after all provided keys, even
-  if doing so conflicts with before_keys.
-  If before_keys is provided, inserts footer as late as possible while still
-  appearing before all provided keys.
+    If after_keys and before_keys are both None (default), appends footer last.
+    If after_keys is provided and matches footers already present, inserts
+    footer as *early* as possible while still appearing after all provided
+    keys, even if doing so conflicts with before_keys.
+    If before_keys is provided, inserts footer as late as possible while still
+    appearing before all provided keys.
 
-  For example, given
-      message='Header.\n\nAdded: 2016\nBug: 123\nVerified-By: CQ'
-      after_keys=['Bug', 'Issue']
-  the new footer will be inserted between Bug and Verified-By existing footers.
-  """
+    For example, given
+        message='Header.\n\nAdded: 2016\nBug: 123\nVerified-By: CQ'
+        after_keys=['Bug', 'Issue']
+    the new footer will be inserted between Bug and Verified-By existing
+    footers.
+    """
     assert key == normalize_name(key), 'Use normalized key'
     new_footer = '%s: %s' % (key, value)
     if not FOOTER_PATTERN.match(new_footer):
@@ -192,13 +194,13 @@ def get_unique(footers, key):
 def get_position(footers):
     """Get the commit position from the footers multimap using a heuristic.
 
-  Returns:
-    A tuple of the branch and the position on that branch. For example,
+    Returns:
+        A tuple of the branch and the position on that branch. For example,
 
-    Cr-Commit-Position: refs/heads/main@{#292272}
+        Cr-Commit-Position: refs/heads/main@{#292272}
 
-    would give the return value ('refs/heads/main', 292272).
-  """
+        would give the return value ('refs/heads/main', 292272).
+    """
 
     position = get_unique(footers, 'Cr-Commit-Position')
     if position:

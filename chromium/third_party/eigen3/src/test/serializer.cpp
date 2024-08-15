@@ -15,9 +15,7 @@
 
 template <typename T>
 struct RandomImpl {
-  static auto Create(Eigen::Index rows, Eigen::Index cols) {
-    return T::Random(rows, cols);
-  }
+  static auto Create(Eigen::Index rows, Eigen::Index cols) { return T::Random(rows, cols); }
 };
 
 template <typename Scalar, int Options, typename DenseIndex>
@@ -85,13 +83,13 @@ struct MyPodType {
 void test_pod_type() {
   MyPodType initial = {1.3, 17, 1.9f};
   MyPodType clone = {-1, -1, -1};
-  
+
   Eigen::Serializer<MyPodType> serializer;
-  
+
   // Determine required size.
   size_t buffer_size = serializer.size(initial);
   VERIFY_IS_EQUAL(buffer_size, sizeof(MyPodType));
-  
+
   // Serialize.
   std::vector<uint8_t> buffer(buffer_size);
   uint8_t* begin = buffer.data();
@@ -99,7 +97,7 @@ void test_pod_type() {
   uint8_t* dest = serializer.serialize(begin, end, initial);
   VERIFY(dest != nullptr);
   VERIFY_IS_EQUAL(dest - begin, buffer_size);
-  
+
   // Deserialize.
   const uint8_t* src = serializer.deserialize(begin, end, clone);
   VERIFY(src != nullptr);
@@ -126,7 +124,7 @@ void test_pod_type() {
 }
 
 // Matrix, Vector, Array
-template<typename T>
+template <typename T>
 void test_eigen_type(const T& type) {
   const Index rows = type.rows();
   const Index cols = type.cols();
@@ -142,7 +140,7 @@ void test_eigen_type(const T& type) {
   uint8_t* dest = serializer.serialize(begin, end, initial);
   VERIFY(dest != nullptr);
   VERIFY_IS_EQUAL(dest - begin, buffer_size);
-  
+
   // Deserialize.
   T clone;
   const uint8_t* src = serializer.deserialize(begin, end, clone);
@@ -168,14 +166,13 @@ void test_eigen_type(const T& type) {
 }
 
 // Test a collection of dense types.
-template<typename T1, typename T2, typename T3>
+template <typename T1, typename T2, typename T3>
 void test_dense_types(const T1& type1, const T2& type2, const T3& type3) {
-  
   // Make random inputs.
   const T1 x1 = T1::Random(type1.rows(), type1.cols());
   const T2 x2 = T2::Random(type2.rows(), type2.cols());
   const T3 x3 = T3::Random(type3.rows(), type3.cols());
-  
+
   // Allocate buffer and serialize.
   size_t buffer_size = Eigen::serialize_size(x1, x2, x3);
   std::vector<uint8_t> buffer(buffer_size);
@@ -183,7 +180,7 @@ void test_dense_types(const T1& type1, const T2& type2, const T3& type3) {
   uint8_t* end = buffer.data() + buffer.size();
   uint8_t* dest = Eigen::serialize(begin, end, x1, x2, x3);
   VERIFY(dest != nullptr);
-  
+
   // Clone everything.
   T1 y1;
   T2 y2;
@@ -213,21 +210,18 @@ void test_dense_types(const T1& type1, const T2& type2, const T3& type3) {
   VERIFY(src == nullptr);
 }
 
-EIGEN_DECLARE_TEST(serializer)
-{
-  CALL_SUBTEST( test_pod_type() );
+EIGEN_DECLARE_TEST(serializer) {
+  CALL_SUBTEST(test_pod_type());
 
-  for(int i = 0; i < g_repeat; i++) {
-    CALL_SUBTEST( test_eigen_type(Eigen::Array33f()) );
-    CALL_SUBTEST( test_eigen_type(Eigen::ArrayXd(10)) );
-    CALL_SUBTEST( test_eigen_type(Eigen::Vector3f()) );
-    CALL_SUBTEST( test_eigen_type(Eigen::Matrix4d()) );
-    CALL_SUBTEST( test_eigen_type(Eigen::MatrixXd(15, 17)) );
+  for (int i = 0; i < g_repeat; i++) {
+    CALL_SUBTEST(test_eigen_type(Eigen::Array33f()));
+    CALL_SUBTEST(test_eigen_type(Eigen::ArrayXd(10)));
+    CALL_SUBTEST(test_eigen_type(Eigen::Vector3f()));
+    CALL_SUBTEST(test_eigen_type(Eigen::Matrix4d()));
+    CALL_SUBTEST(test_eigen_type(Eigen::MatrixXd(15, 17)));
     CALL_SUBTEST(test_eigen_type(Eigen::SparseMatrix<float>(13, 12)));
     CALL_SUBTEST(test_eigen_type(Eigen::SparseVector<float>(17)));
 
-    CALL_SUBTEST( test_dense_types( Eigen::Array33f(),
-                                    Eigen::ArrayXd(10),
-                                    Eigen::MatrixXd(15, 17)) );
+    CALL_SUBTEST(test_dense_types(Eigen::Array33f(), Eigen::ArrayXd(10), Eigen::MatrixXd(15, 17)));
   }
 }

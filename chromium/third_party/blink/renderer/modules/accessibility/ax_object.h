@@ -328,6 +328,10 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // AXObjectCacheImpl::InvalidateCachedValuesOnSubtree().
   void InvalidateCachedValues();
   bool NeedsToUpdateCachedValues() const { return cached_values_need_update_; }
+  bool ChildrenNeedToUpdateCachedValues() const {
+    return child_cached_values_need_update_;
+  }
+  void CheckCanAccessCachedValues() const;
 
   // The AXObjectCacheImpl that owns this object, and its unique ID within this
   // cache.
@@ -701,8 +705,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Load inline text boxes for just this node, even if
   // AXObjectCache().GetAXMode().has_mode(ui::AXMode::kInlineTextBoxes) is
-  // false. Can be called even when layout is not clean, but in that case
-  // it will force clean layout.
+  // false. Must be called with clean layout.
   virtual void LoadInlineTextBoxes();
   virtual void LoadInlineTextBoxesHelper();
   // When adding children to this node, consider inline textboxes.
@@ -1143,6 +1146,12 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // Can AXObjects backed by this element have AXObject children?
   static bool CanHaveChildren(Element& element);
 
+  // Given the candidate parent node, return a node that can be used for the
+  // parent, or null if no parent is possible. For example, passing in a <map>
+  // will return the associated <img>, because the image would parent any of the
+  // map's descendants.
+  static Node* GetParentNodeForComputeParent(AXObjectCacheImpl&, Node*);
+
   // Compute the AXObject parent for the given node.
   // Does not take aria-owns into account.
   static AXObject* ComputeNonARIAParent(AXObjectCacheImpl& cache, Node* node);
@@ -1163,10 +1172,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool IsRoot() const;
 
 #if DCHECK_IS_ON()
-  // When the parent on children during AddChildren(), take the opportunity to
-  // check out ComputeParent() implementation. It should match.
-  void EnsureCorrectParentComputation();
-
   // Get/Prints the entire AX subtree to the screen for debugging, with |this|
   // highlighted via a "*" notation.
   std::string GetAXTreeForThis() const;
@@ -1204,7 +1209,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool CanHaveChildren() const { return true; }
   void UpdateChildrenIfNecessary();
   bool NeedsToUpdateChildren() const;
-  virtual void SetNeedsToUpdateChildren() const;
+  virtual void SetNeedsToUpdateChildren(bool update = true) const;
   virtual void ClearChildren() const;
   void DetachFromParent();
   virtual void SelectedOptions(AXObjectVector&) const {}
@@ -1323,7 +1328,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // TODO(accessibility): Remove virtual -- the only override is in a unit test.
   virtual void ChildrenChangedWithCleanLayout();
   virtual void HandleActiveDescendantChanged() {}
-  virtual void HandleAutofillStateChanged(WebAXAutofillState) {}
+  virtual void HandleAutofillSuggestionAvailabilityChanged(
+      WebAXAutofillSuggestionAvailability) {}
   virtual void HandleAriaExpandedChanged() {}
 
   // Static helper functions.
@@ -1393,7 +1399,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   mutable Member<AXObject> parent_;
   // Only children that are included in tree, maybe rename to children_in_tree_.
   mutable AXObjectVector children_;
-  mutable bool children_dirty_ = false;
   mutable bool has_dirty_descendants_ = false;
 
   // The final role, taking into account the ARIA role and native role.
@@ -1481,16 +1486,17 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual void SerializeMarkerAttributes(ui::AXNodeData* node_data) const;
 
  private:
-  // Given the candidate parent node, return a node that can be used for the
-  // parent, or null if no parent is possible. For example, passing in a <map>
-  // will return the associated <img>, because the image would parent any of the
-  // map's descendants.
-  static Node* GetParentNodeForComputeParent(AXObjectCacheImpl&, Node*);
   bool ComputeCanSetFocusAttribute() const;
   String KeyboardShortcut() const;
+  void UpdateStyleAndLayoutTreeForNode(Node& node);
+  void OnInheritedCachedValuesChanged() const;
+
+  mutable bool children_dirty_ : 1 = false;
 
   // Do the rest of the cached_* member variables need to be recomputed?
   mutable bool cached_values_need_update_ : 1;
+  // Do children need to recompute their cached values?
+  mutable bool child_cached_values_need_update_ : 1;
 
   // The following cached attribute values (the ones starting with m_cached*)
   // are only valid if last_modification_count_ matches

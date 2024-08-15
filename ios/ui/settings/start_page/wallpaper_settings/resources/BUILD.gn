@@ -1,0 +1,26 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("imagesets") {
+  deps = [
+    ":add_image_plus",
+    ":pinch"
+  ]
+}
+
+imageset("add_image_plus") {
+  sources = [
+    "add_image_plus.imageset/Contents.json",
+    "add_image_plus.imageset/add_image_plus.pdf"
+  ]
+}
+
+imageset("pinch") {
+  sources = [
+    "pinch.imageset/Contents.json",
+    "pinch.imageset/pinch.png",
+    "pinch.imageset/pinch@2x.png",
+    "pinch.imageset/pinch@3x.png"
+  ]
+}

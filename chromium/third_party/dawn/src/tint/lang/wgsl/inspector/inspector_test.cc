@@ -442,14 +442,14 @@ TEST_P(InspectorGetEntryPointComponentAndCompositionTest, Test) {
 
     ASSERT_EQ(1u, result[0].input_variables.size());
     EXPECT_EQ("in_var", result[0].input_variables[0].name);
-    EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
+    EXPECT_EQ("in_var", result[0].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].input_variables[0].attributes.location);
     EXPECT_EQ(component, result[0].input_variables[0].component_type);
 
     ASSERT_EQ(1u, result[0].output_variables.size());
     EXPECT_EQ("<retval>", result[0].output_variables[0].name);
-    EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
+    EXPECT_EQ("", result[0].output_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].output_variables[0].attributes.location);
     EXPECT_EQ(component, result[0].output_variables[0].component_type);
 }
 INSTANTIATE_TEST_SUITE_P(InspectorGetEntryPointTest,
@@ -464,6 +464,8 @@ INSTANTIATE_TEST_SUITE_P(InspectorGetEntryPointTest,
                                                           CompositionType::kVec4)));
 
 TEST_F(InspectorGetEntryPointTest, MultipleInOutVariables) {
+    Enable(wgsl::Extension::kChromiumExperimentalFramebufferFetch);
+
     auto* in_var0 = Param("in_var0", ty.u32(),
                           Vector{
                               Location(0_u),
@@ -476,8 +478,7 @@ TEST_F(InspectorGetEntryPointTest, MultipleInOutVariables) {
                           });
     auto* in_var4 = Param("in_var4", ty.u32(),
                           Vector{
-                              Location(4_u),
-                              Flat(),
+                              Color(2_u),
                           });
     Func("foo", Vector{in_var0, in_var1, in_var4}, ty.u32(),
          Vector{
@@ -498,25 +499,29 @@ TEST_F(InspectorGetEntryPointTest, MultipleInOutVariables) {
 
     ASSERT_EQ(3u, result[0].input_variables.size());
     EXPECT_EQ("in_var0", result[0].input_variables[0].name);
-    EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
+    EXPECT_EQ("in_var0", result[0].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].input_variables[0].attributes.location);
+    EXPECT_EQ(std::nullopt, result[0].input_variables[0].attributes.color);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[0].interpolation_type);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
     EXPECT_EQ("in_var1", result[0].input_variables[1].name);
-    EXPECT_TRUE(result[0].input_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[0].input_variables[1].location_attribute);
+    EXPECT_EQ("in_var1", result[0].input_variables[1].variable_name);
+    EXPECT_EQ(1u, result[0].input_variables[1].attributes.location);
+    EXPECT_EQ(std::nullopt, result[0].input_variables[1].attributes.color);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[1].interpolation_type);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[1].component_type);
     EXPECT_EQ("in_var4", result[0].input_variables[2].name);
-    EXPECT_TRUE(result[0].input_variables[2].has_location_attribute);
-    EXPECT_EQ(4u, result[0].input_variables[2].location_attribute);
+    EXPECT_EQ("in_var4", result[0].input_variables[2].variable_name);
+    EXPECT_EQ(std::nullopt, result[0].input_variables[2].attributes.location);
+    EXPECT_EQ(2u, result[0].input_variables[2].attributes.color);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[2].interpolation_type);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[2].component_type);
 
     ASSERT_EQ(1u, result[0].output_variables.size());
     EXPECT_EQ("<retval>", result[0].output_variables[0].name);
-    EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
+    EXPECT_EQ("", result[0].output_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].output_variables[0].attributes.location);
+    EXPECT_EQ(std::nullopt, result[0].output_variables[0].attributes.color);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
 }
 
@@ -562,28 +567,28 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutVariables) {
 
     ASSERT_EQ(1u, result[0].input_variables.size());
     EXPECT_EQ("in_var_foo", result[0].input_variables[0].name);
-    EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
+    EXPECT_EQ("in_var_foo", result[0].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].input_variables[0].attributes.location);
     EXPECT_EQ(InterpolationType::kFlat, result[0].input_variables[0].interpolation_type);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
 
     ASSERT_EQ(1u, result[0].output_variables.size());
     EXPECT_EQ("<retval>", result[0].output_variables[0].name);
-    EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
+    EXPECT_EQ("", result[0].output_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].output_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
 
     ASSERT_EQ(1u, result[1].input_variables.size());
     EXPECT_EQ("in_var_bar", result[1].input_variables[0].name);
-    EXPECT_TRUE(result[1].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[1].input_variables[0].location_attribute);
+    EXPECT_EQ("in_var_bar", result[1].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[1].input_variables[0].attributes.location);
     EXPECT_EQ(InterpolationType::kFlat, result[1].input_variables[0].interpolation_type);
     EXPECT_EQ(ComponentType::kU32, result[1].input_variables[0].component_type);
 
     ASSERT_EQ(1u, result[1].output_variables.size());
     EXPECT_EQ("<retval>", result[1].output_variables[0].name);
-    EXPECT_TRUE(result[1].output_variables[0].has_location_attribute);
-    EXPECT_EQ(1u, result[1].output_variables[0].location_attribute);
+    EXPECT_EQ("", result[1].output_variables[0].variable_name);
+    EXPECT_EQ(1u, result[1].output_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[1].output_variables[0].component_type);
 }
 
@@ -615,8 +620,8 @@ TEST_F(InspectorGetEntryPointTest, BuiltInsNotStageVariables) {
 
     ASSERT_EQ(1u, result[0].input_variables.size());
     EXPECT_EQ("in_var1", result[0].input_variables[0].name);
-    EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
+    EXPECT_EQ("in_var1", result[0].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].input_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kF32, result[0].input_variables[0].component_type);
 
     ASSERT_EQ(0u, result[0].output_variables.size());
@@ -647,22 +652,22 @@ TEST_F(InspectorGetEntryPointTest, InOutStruct) {
 
     ASSERT_EQ(2u, result[0].input_variables.size());
     EXPECT_EQ("param.a", result[0].input_variables[0].name);
-    EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
+    EXPECT_EQ("a", result[0].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].input_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
     EXPECT_EQ("param.b", result[0].input_variables[1].name);
-    EXPECT_TRUE(result[0].input_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[0].input_variables[1].location_attribute);
+    EXPECT_EQ("b", result[0].input_variables[1].variable_name);
+    EXPECT_EQ(1u, result[0].input_variables[1].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[1].component_type);
 
     ASSERT_EQ(2u, result[0].output_variables.size());
     EXPECT_EQ("<retval>.a", result[0].output_variables[0].name);
-    EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
+    EXPECT_EQ("a", result[0].output_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].output_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
     EXPECT_EQ("<retval>.b", result[0].output_variables[1].name);
-    EXPECT_TRUE(result[0].output_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[0].output_variables[1].location_attribute);
+    EXPECT_EQ("b", result[0].output_variables[1].variable_name);
+    EXPECT_EQ(1u, result[0].output_variables[1].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[1].component_type);
 }
 
@@ -693,22 +698,22 @@ TEST_F(InspectorGetEntryPointTest, MultipleEntryPointsInOutSharedStruct) {
 
     ASSERT_EQ(2u, result[0].output_variables.size());
     EXPECT_EQ("<retval>.a", result[0].output_variables[0].name);
-    EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
+    EXPECT_EQ("a", result[0].output_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].output_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
     EXPECT_EQ("<retval>.b", result[0].output_variables[1].name);
-    EXPECT_TRUE(result[0].output_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[0].output_variables[1].location_attribute);
+    EXPECT_EQ("b", result[0].output_variables[1].variable_name);
+    EXPECT_EQ(1u, result[0].output_variables[1].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[1].component_type);
 
     ASSERT_EQ(2u, result[1].input_variables.size());
     EXPECT_EQ("param.a", result[1].input_variables[0].name);
-    EXPECT_TRUE(result[1].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[1].input_variables[0].location_attribute);
+    EXPECT_EQ("a", result[1].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[1].input_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[1].input_variables[0].component_type);
     EXPECT_EQ("param.b", result[1].input_variables[1].name);
-    EXPECT_TRUE(result[1].input_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[1].input_variables[1].location_attribute);
+    EXPECT_EQ("b", result[1].input_variables[1].variable_name);
+    EXPECT_EQ(1u, result[1].input_variables[1].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[1].input_variables[1].component_type);
 
     ASSERT_EQ(0u, result[1].output_variables.size());
@@ -745,34 +750,34 @@ TEST_F(InspectorGetEntryPointTest, MixInOutVariablesAndStruct) {
 
     ASSERT_EQ(5u, result[0].input_variables.size());
     EXPECT_EQ("param_a.a", result[0].input_variables[0].name);
-    EXPECT_TRUE(result[0].input_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].input_variables[0].location_attribute);
+    EXPECT_EQ("a", result[0].input_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].input_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[0].component_type);
     EXPECT_EQ("param_a.b", result[0].input_variables[1].name);
-    EXPECT_TRUE(result[0].input_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[0].input_variables[1].location_attribute);
+    EXPECT_EQ("b", result[0].input_variables[1].variable_name);
+    EXPECT_EQ(1u, result[0].input_variables[1].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[1].component_type);
     EXPECT_EQ("param_b.a", result[0].input_variables[2].name);
-    EXPECT_TRUE(result[0].input_variables[2].has_location_attribute);
-    EXPECT_EQ(2u, result[0].input_variables[2].location_attribute);
+    EXPECT_EQ("a", result[0].input_variables[2].variable_name);
+    EXPECT_EQ(2u, result[0].input_variables[2].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].input_variables[2].component_type);
     EXPECT_EQ("param_c", result[0].input_variables[3].name);
-    EXPECT_TRUE(result[0].input_variables[3].has_location_attribute);
-    EXPECT_EQ(3u, result[0].input_variables[3].location_attribute);
+    EXPECT_EQ("param_c", result[0].input_variables[3].variable_name);
+    EXPECT_EQ(3u, result[0].input_variables[3].attributes.location);
     EXPECT_EQ(ComponentType::kF32, result[0].input_variables[3].component_type);
     EXPECT_EQ("param_d", result[0].input_variables[4].name);
-    EXPECT_TRUE(result[0].input_variables[4].has_location_attribute);
-    EXPECT_EQ(4u, result[0].input_variables[4].location_attribute);
+    EXPECT_EQ("param_d", result[0].input_variables[4].variable_name);
+    EXPECT_EQ(4u, result[0].input_variables[4].attributes.location);
     EXPECT_EQ(ComponentType::kF32, result[0].input_variables[4].component_type);
 
     ASSERT_EQ(2u, result[0].output_variables.size());
     EXPECT_EQ("<retval>.a", result[0].output_variables[0].name);
-    EXPECT_TRUE(result[0].output_variables[0].has_location_attribute);
-    EXPECT_EQ(0u, result[0].output_variables[0].location_attribute);
+    EXPECT_EQ("a", result[0].output_variables[0].variable_name);
+    EXPECT_EQ(0u, result[0].output_variables[0].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[0].component_type);
     EXPECT_EQ("<retval>.b", result[0].output_variables[1].name);
-    EXPECT_TRUE(result[0].output_variables[1].has_location_attribute);
-    EXPECT_EQ(1u, result[0].output_variables[1].location_attribute);
+    EXPECT_EQ("b", result[0].output_variables[1].variable_name);
+    EXPECT_EQ(1u, result[0].output_variables[1].attributes.location);
     EXPECT_EQ(ComponentType::kU32, result[0].output_variables[1].component_type);
 }
 
@@ -1853,15 +1858,15 @@ TEST_F(InspectorGetConstantNameToIdMapTest, WithAndWithoutIds) {
 
     ASSERT_TRUE(result.count("a"));
     ASSERT_TRUE(program_->Sem().Get(a));
-    EXPECT_EQ(result["a"], program_->Sem().Get(a)->OverrideId());
+    EXPECT_EQ(result["a"], program_->Sem().Get(a)->Attributes().override_id);
 
     ASSERT_TRUE(result.count("b"));
     ASSERT_TRUE(program_->Sem().Get(b));
-    EXPECT_EQ(result["b"], program_->Sem().Get(b)->OverrideId());
+    EXPECT_EQ(result["b"], program_->Sem().Get(b)->Attributes().override_id);
 
     ASSERT_TRUE(result.count("c"));
     ASSERT_TRUE(program_->Sem().Get(c));
-    EXPECT_EQ(result["c"], program_->Sem().Get(c)->OverrideId());
+    EXPECT_EQ(result["c"], program_->Sem().Get(c)->Attributes().override_id);
 }
 
 TEST_F(InspectorGetResourceBindingsTest, Empty) {
@@ -3100,11 +3105,9 @@ TEST_P(InspectorGetStorageTextureResourceBindingsTestWithParam, Simple) {
             expectedResourceType = ResourceBinding::ResourceType::kWriteOnlyStorageTexture;
             break;
         case core::Access::kRead:
-            Enable(wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture);
             expectedResourceType = ResourceBinding::ResourceType::kReadOnlyStorageTexture;
             break;
         case core::Access::kReadWrite:
-            Enable(wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture);
             expectedResourceType = ResourceBinding::ResourceType::kReadWriteStorageTexture;
             break;
         case core::Access::kUndefined:

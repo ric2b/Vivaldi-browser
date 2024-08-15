@@ -70,16 +70,16 @@ static const std::vector<NotificationSettingManagedTestCase> managed_test_cases{
      SETTING_SOURCE_USER,
      settings_private::PrefSetting::kNotSet,
      settings_private::PrefSource::kNone,
-     settings_api::ControlledBy::CONTROLLED_BY_NONE,
-     settings_api::Enforcement::ENFORCEMENT_NONE,
+     settings_api::ControlledBy::kNone,
+     settings_api::Enforcement::kNone,
      kNoRecommendedValue,
      {}},
     {CONTENT_SETTING_ASK,
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kNotSet,
      settings_private::PrefSource::kNone,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {SettingsState::kCanPromptWithAlwaysLoudUI,
       SettingsState::kCanPromptWithAlwaysQuietUI}},
@@ -87,32 +87,32 @@ static const std::vector<NotificationSettingManagedTestCase> managed_test_cases{
      SETTING_SOURCE_USER,
      settings_private::PrefSetting::kEnforcedOn,
      settings_private::PrefSource::kDevicePolicy,
-     settings_api::ControlledBy::CONTROLLED_BY_DEVICE_POLICY,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kDevicePolicy,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {SettingsState::kCanPromptWithAlwaysQuietUI, SettingsState::kBlocked}},
     {CONTENT_SETTING_ASK,
      SETTING_SOURCE_USER,
      settings_private::PrefSetting::kEnforcedOff,
      settings_private::PrefSource::kExtension,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {SettingsState::kCanPromptWithAlwaysLoudUI, SettingsState::kBlocked}},
     {CONTENT_SETTING_ASK,
      SETTING_SOURCE_POLICY,
      settings_private::PrefSetting::kEnforcedOn,
      settings_private::PrefSource::kDevicePolicy,
-     settings_api::ControlledBy::CONTROLLED_BY_DEVICE_POLICY,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kDevicePolicy,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {}},
     {CONTENT_SETTING_ASK,
      SETTING_SOURCE_SUPERVISED,
      settings_private::PrefSetting::kRecommendedOn,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_CHILD_RESTRICTION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kChildRestriction,
+     settings_api::Enforcement::kEnforced,
      SettingsState::kCanPromptWithAlwaysQuietUI,
      {SettingsState::kCanPromptWithAlwaysLoudUI,
       SettingsState::kCanPromptWithAlwaysQuietUI}},
@@ -120,8 +120,8 @@ static const std::vector<NotificationSettingManagedTestCase> managed_test_cases{
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kRecommendedOff,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      SettingsState::kCanPromptWithAlwaysLoudUI,
      {SettingsState::kCanPromptWithAlwaysLoudUI,
       SettingsState::kCanPromptWithAlwaysQuietUI}},
@@ -129,40 +129,40 @@ static const std::vector<NotificationSettingManagedTestCase> managed_test_cases{
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kRecommendedOn,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {}},
     {CONTENT_SETTING_BLOCK,
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kRecommendedOff,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {}},
     {CONTENT_SETTING_BLOCK,
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kEnforcedOn,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {}},
     {CONTENT_SETTING_BLOCK,
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kEnforcedOff,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {}},
     {CONTENT_SETTING_BLOCK,
      SETTING_SOURCE_EXTENSION,
      settings_private::PrefSetting::kNotSet,
      settings_private::PrefSource::kRecommended,
-     settings_api::ControlledBy::CONTROLLED_BY_EXTENSION,
-     settings_api::Enforcement::ENFORCEMENT_ENFORCED,
+     settings_api::ControlledBy::kExtension,
+     settings_api::Enforcement::kEnforced,
      kNoRecommendedValue,
      {}},
 };
@@ -172,10 +172,11 @@ void SetupManagedTestConditions(
     sync_preferences::TestingPrefServiceSyncable* prefs,
     const NotificationSettingManagedTestCase& test_case) {
   auto provider = std::make_unique<content_settings::MockProvider>();
-  provider->SetWebsiteSetting(ContentSettingsPattern::Wildcard(),
-                              ContentSettingsPattern::Wildcard(),
-                              ContentSettingsType::NOTIFICATIONS,
-                              base::Value(test_case.default_content_setting));
+  provider->SetWebsiteSetting(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      ContentSettingsType::NOTIFICATIONS,
+      base::Value(test_case.default_content_setting), /*constraints=*/{},
+      content_settings::PartitionKey::GetDefaultForTesting());
   HostContentSettingsMap::ProviderType provider_type;
   switch (test_case.default_content_setting_source) {
     case content_settings::SETTING_SOURCE_POLICY:
@@ -205,13 +206,11 @@ void SetupManagedTestConditions(
 void ValidateManagedPreference(
     settings_api::PrefObject& pref,
     const NotificationSettingManagedTestCase& test_case) {
-  if (test_case.expected_controlled_by !=
-      settings_api::ControlledBy::CONTROLLED_BY_NONE) {
+  if (test_case.expected_controlled_by != settings_api::ControlledBy::kNone) {
     EXPECT_EQ(pref.controlled_by, test_case.expected_controlled_by);
   }
 
-  if (test_case.expected_enforcement !=
-      settings_api::Enforcement::ENFORCEMENT_NONE) {
+  if (test_case.expected_enforcement != settings_api::Enforcement::kNone) {
     EXPECT_EQ(pref.enforcement, test_case.expected_enforcement);
   }
 
@@ -313,10 +312,11 @@ TEST_F(GeneratedNotificationPrefTest, UpdatePreferenceInvalidAction) {
 
   // Make notification content setting not user modifiable.
   auto provider = std::make_unique<content_settings::MockProvider>();
-  provider->SetWebsiteSetting(ContentSettingsPattern::Wildcard(),
-                              ContentSettingsPattern::Wildcard(),
-                              ContentSettingsType::NOTIFICATIONS,
-                              base::Value(ContentSetting::CONTENT_SETTING_ASK));
+  provider->SetWebsiteSetting(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      ContentSettingsType::NOTIFICATIONS,
+      base::Value(ContentSetting::CONTENT_SETTING_ASK), /*constraints=*/{},
+      content_settings::PartitionKey::GetDefaultForTesting());
 
   content_settings::TestUtils::OverrideProvider(
       map, std::move(provider), HostContentSettingsMap::POLICY_PROVIDER);

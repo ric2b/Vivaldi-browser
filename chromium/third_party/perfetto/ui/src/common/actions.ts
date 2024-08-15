@@ -22,7 +22,6 @@ import {
   GenericSliceDetailsTabConfig,
   GenericSliceDetailsTabConfigBase,
 } from '../frontend/generic_slice_details_tab';
-import {globals} from '../frontend/globals';
 import {
   Aggregation,
   AggregationFunction,
@@ -39,7 +38,7 @@ import {
   performReordering,
 } from './dragndrop_logic';
 import {createEmptyState} from './empty_state';
-import {DEFAULT_VIEWING_OPTION, PERF_SAMPLES_KEY} from './flamegraph_util';
+import {defaultViewingOption} from './flamegraph_util';
 import {
   MetatraceTrackId,
   traceEvent,
@@ -316,10 +315,12 @@ export const StateActions = {
       }
       const threadSortKey = state.utidToThreadSortKey[threadTrackSortKey.utid];
       return [
+        /* eslint-disable @typescript-eslint/strict-boolean-expressions */
         threadSortKey ? threadSortKey.sortKey :
                         PrimaryTrackSortKey.ORDINARY_THREAD,
         threadSortKey && threadSortKey.tid !== undefined ? threadSortKey.tid :
                                                            Number.MAX_VALUE,
+        /* eslint-enable */
         threadTrackSortKey.utid,
         threadTrackSortKey.priority,
       ];
@@ -348,6 +349,7 @@ export const StateActions = {
   updateAggregateSorting(
       state: StateDraft, args: {id: string, column: string}) {
     let prefs = state.aggregatePreferences[args.id];
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (!prefs) {
       prefs = {id: args.id};
       state.aggregatePreferences[args.id] = prefs;
@@ -369,10 +371,6 @@ export const StateActions = {
       // If direction is currently 'ASC' toggle to no sorting.
       state.aggregatePreferences[args.id].sorting = undefined;
     }
-  },
-
-  setVisibleTracks(state: StateDraft, args: {tracks: string[]}) {
-    state.visibleTracks = args.tracks;
   },
 
   moveTrack(
@@ -428,6 +426,7 @@ export const StateActions = {
       },
 
   requestTrackReload(state: StateDraft, _: {}) {
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (state.lastTrackReloadRequest) {
       state.lastTrackReloadRequest++;
     } else {
@@ -507,9 +506,11 @@ export const StateActions = {
   // TODO(hjd): Remove setState - it causes problems due to reuse of ids.
   setState(state: StateDraft, args: {newState: State}): void {
     for (const key of Object.keys(state)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (state as any)[key];
     }
     for (const key of Object.keys(args.newState)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (state as any)[key] = (args.newState as any)[key];
     }
 
@@ -675,7 +676,7 @@ export const StateActions = {
           time,  // TODO(stevegolton): Avoid type assertion here.
       end: args.ts,
       upids: [args.upid],
-      viewingOption: DEFAULT_VIEWING_OPTION,
+      viewingOption: defaultViewingOption(args.type),
     });
   },
 
@@ -699,7 +700,7 @@ export const StateActions = {
       start: args.leftTs,
       end: args.rightTs,
       upids: [args.upid],
-      viewingOption: PERF_SAMPLES_KEY,
+      viewingOption: defaultViewingOption(args.type),
     });
   },
 
@@ -1025,7 +1026,7 @@ export const StateActions = {
   togglePivotTable(state: StateDraft, args: {areaId: string|null}) {
     state.nonSerializableState.pivotTable.selectionArea = args.areaId === null ?
         undefined :
-        {areaId: args.areaId, tracks: globals.state.areas[args.areaId].tracks};
+        {areaId: args.areaId, tracks: state.areas[args.areaId].tracks};
     if (args.areaId !==
         state.nonSerializableState.pivotTable.selectionArea?.areaId) {
       state.nonSerializableState.pivotTable.queryResult = null;
@@ -1172,7 +1173,9 @@ type DeferredActions<C> = {
 // It's a Proxy such that any attribute access returns a function:
 // (args) => {return {type: ATTRIBUTE_NAME, args};}
 export const Actions =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     new Proxy<DeferredActions<typeof StateActions>>({} as any, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       get(_: any, prop: string, _2: any) {
         return (args: {}): DeferredAction<{}> => {
           return {

@@ -4,9 +4,10 @@
 
 #include "components/policy/core/common/policy_logger.h"
 
+#include <deque>
+#include <string_view>
 #include <utility>
 
-#include "base/containers/cxx20_erase.h"
 #include "base/functional/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/no_destructor.h"
@@ -113,7 +114,7 @@ PolicyLogger::LogHelper::~LogHelper() {
 }
 
 void PolicyLogger::LogHelper::StreamLog() const {
-  base::StringPiece filename(location_.file_name());
+  std::string_view filename(location_.file_name());
   std::ostringstream message;
 
   // Create the message to be logged to the terminal.
@@ -124,7 +125,7 @@ void PolicyLogger::LogHelper::StreamLog() const {
           << message_buffer_.str();
 
   size_t last_slash_pos = filename.find_last_of("\\/");
-  if (last_slash_pos != base::StringPiece::npos) {
+  if (last_slash_pos != std::string_view::npos) {
     filename.remove_prefix(last_slash_pos + 1);
   }
 
@@ -195,7 +196,7 @@ void PolicyLogger::DeleteOldLogs() {
   // Delete older logs with lifetime `kTimeToLive` mins, set the flag and
   // reschedule the task.
   base::AutoLock lock(lock_);
-  base::EraseIf(logs_, IsLogExpired);
+  std::erase_if(logs_, IsLogExpired);
 
   if (logs_.size() > 0) {
     ScheduleOldLogsDeletion();

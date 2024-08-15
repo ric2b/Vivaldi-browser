@@ -13,7 +13,6 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Rect;
-import android.graphics.Typeface;
 import android.text.TextUtils;
 import android.util.FloatProperty;
 import android.view.KeyEvent;
@@ -39,7 +38,6 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
@@ -192,7 +190,6 @@ class LocationBarMediator
     private final ObserverList<UrlFocusChangeListener> mUrlFocusChangeListeners =
             new ObserverList<>();
     private final Rect mRootViewBounds = new Rect();
-    private final SearchEngineLogoUtils mSearchEngineLogoUtils;
     private final SaveOfflineButtonState mSaveOfflineButtonState;
     private final OmniboxUma mOmniboxUma;
     private final OmniboxSuggestionsDropdownEmbedderImpl mEmbedderImpl;
@@ -216,9 +213,10 @@ class LocationBarMediator
     private @BrandedColorScheme int mBrandedColorScheme = BrandedColorScheme.APP_DEFAULT;
     private ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
             new ObservableSupplierImpl<>();
-    private boolean mShouldClearOmniboxOnFocus = true;
+    private boolean mShouldClearOmniboxOnFocus; // Vivaldi: Do not clear omnibox on focus.
     private ObservableSupplier<TabModelSelector> mTabModelSelectorSupplier;
     private boolean mIsSurfacePolishOmniboxColorEnabled;
+    private SearchEngineUtils mSearchEngineUtils;
 
     // Vivaldi
     private boolean mIsStatusBarModified;
@@ -235,7 +233,6 @@ class LocationBarMediator
             @NonNull BackKeyBehaviorDelegate backKeyBehavior,
             @NonNull WindowAndroid windowAndroid,
             boolean isTablet,
-            @NonNull SearchEngineLogoUtils searchEngineLogoUtils,
             @NonNull LensController lensController,
             @NonNull SaveOfflineButtonState saveOfflineButtonState,
             @NonNull OmniboxUma omniboxUma,
@@ -257,7 +254,6 @@ class LocationBarMediator
         mBackKeyBehavior = backKeyBehavior;
         mWindowAndroid = windowAndroid;
         mIsTablet = isTablet;
-        mSearchEngineLogoUtils = searchEngineLogoUtils;
         mShouldShowButtonsWhenUnfocused = isTablet;
         mLensController = lensController;
         mSaveOfflineButtonState = saveOfflineButtonState;
@@ -370,7 +366,7 @@ class LocationBarMediator
         if (mProfileSupplier.hasValue()) setProfile(mProfileSupplier.get());
 
         mLocationBarLayout.setMicButtonDrawable(
-                AppCompatResources.getDrawable(mContext, R.drawable.btn_mic));
+                AppCompatResources.getDrawable(mContext, R.drawable.ic_mic_white_24dp));
         onPrimaryColorChanged();
 
         for (Runnable deferredRunnable : mDeferredNativeRunnables) {
@@ -578,7 +574,7 @@ class LocationBarMediator
         }
 
         if (currentTab != null) {
-            boolean isCurrentTabNtpUrl = UrlUtilities.isNTPUrl(currentTab.getUrl());
+            boolean isCurrentTabNtpUrl = UrlUtilities.isNtpUrl(currentTab.getUrl());
             if (currentTab.isNativePage() || isCurrentTabNtpUrl) {
                 mOmniboxUma.recordNavigationOnNtp(
                         url, transition, !currentTab.isIncognito() && isCurrentTabNtpUrl);
@@ -753,16 +749,16 @@ class LocationBarMediator
         if (mIsTablet) {
             float urlFocusChangeFraction = showExpandedState ? 1.0f : 0.0f;
             mLocationBarLayout.setUrlFocusChangePercent(
-                    urlFocusChangeFraction,
-                    urlFocusChangeFraction,
-                    urlFocusChangeFraction,
-                    mIsUrlFocusChangeInProgress);
+                    urlFocusChangeFraction, urlFocusChangeFraction, urlFocusChangeFraction, false);
             mLocationBarLayout.updateLayoutParams(
                     MeasureSpec.makeMeasureSpec(
                             mLocationBarLayout.getMeasuredWidth(), MeasureSpec.EXACTLY));
         }
         // Reset to the default value.
-        mShouldClearOmniboxOnFocus = true;
+        mShouldClearOmniboxOnFocus = false; // Vivaldi: Should never clear omnibox on focus.
+        // Vivaldi
+        if (shouldShowKeyboard)
+            mUrlCoordinator.selectAll();
     }
 
     /**
@@ -904,8 +900,7 @@ class LocationBarMediator
                     @Override
                     public void onAnimationEnd(Animator animation) {
                         // Only reset values if the animation is ending because it's completely
-                        // finished
-                        // and not because it was canceled.
+                        // finished and not because it was canceled.
                         if (locationBarTablet.getWidthChangeFraction() == 0.f) {
                             locationBarTablet.finishAnimatingWidthChange();
                             locationBarTablet.resetValuesAfterAnimation();
@@ -978,8 +973,7 @@ class LocationBarMediator
                     @Override
                     public void onAnimationEnd(Animator animation) {
                         // Only reset values if the animation is ending because it's completely
-                        // finished
-                        // and not because it was canceled.
+                        // finished and not because it was canceled.
                         if (locationBarTablet.getWidthChangeFraction() == 1.f) {
                             locationBarTablet.finishAnimatingWidthChange();
                             locationBarTablet.resetValuesAfterAnimation();
@@ -1063,6 +1057,8 @@ class LocationBarMediator
     private void setProfile(Profile profile) {
         if (profile == null || !mNativeInitialized) return;
         mOmniboxPrerender.initializeForProfile(profile);
+        mSearchEngineUtils = SearchEngineUtils.getForProfile(profile);
+        mLocationBarLayout.setSearchEngineUtils(mSearchEngineUtils);
     }
 
     private void focusCurrentTab() {
@@ -1253,7 +1249,7 @@ class LocationBarMediator
         // Vivaldi:
         // Should not show page action buttons when current URL is NTP.
         if (BuildConfig.IS_VIVALDI &&
-                UrlUtilities.isNTPUrl(mLocationBarDataProvider.getCurrentGurl())) return false;
+                UrlUtilities.isNtpUrl(mLocationBarDataProvider.getCurrentGurl())) return false;
 
         // There are two actions, bookmark and save offline, and they should be shown if the
         // omnibox isn't focused.
@@ -1295,8 +1291,7 @@ class LocationBarMediator
     private void updateSearchEngineStatusIconShownState() {
         // The search engine icon will be the first visible focused view when it's showing.
         boolean shouldShowSearchEngineLogo =
-                mSearchEngineLogoUtils.shouldShowSearchEngineLogo(
-                        mLocationBarDataProvider.isIncognito());
+                mSearchEngineUtils == null || mSearchEngineUtils.shouldShowSearchEngineLogo();
 
         // This branch will be hit if the search engine logo should be shown.
         if (shouldShowSearchEngineLogo && mLocationBarLayout instanceof LocationBarPhone) {
@@ -1306,7 +1301,7 @@ class LocationBarMediator
         }
     }
 
-    // LocationBarData.Observer implementation
+    // LocationBarData.Observer implementation.
     // Using the default empty onSecurityStateChanged.
     // Using the default empty onTitleChanged.
 
@@ -1555,8 +1550,7 @@ class LocationBarMediator
         // the scrim on the web contents, which is not desirable.
         if (!mUrlFocusedWithoutAnimations
                 || mUrlCoordinator == null
-                || !TextUtils.isEmpty(mUrlCoordinator.getTextWithoutAutocomplete())
-                || !ChromeFeatureList.isEnabled(ChromeFeatureList.ADVANCED_PERIPHERALS_SUPPORT)) {
+                || !TextUtils.isEmpty(mUrlCoordinator.getTextWithoutAutocomplete())) {
             return;
         }
         handleUrlFocusAnimation(true);
@@ -1655,35 +1649,39 @@ class LocationBarMediator
     }
 
     /**
-     * Sets the search box hint text color, depending on whether or not the the current page is
-     * Start Surface or NTP.
+     * Updates the color of the hint text in the search box.
      *
-     * @param isStartOrNtp Whether the current page is Start Surface or NTP. If true, then a
-     *     colorful theme may be applied.
+     * @param useDefaultUrlBarHintTextColor Whether to use the default color for the search text in
+     *     the search box. If not we will use specific color for surface polish.
      */
-    public void setUrlBarHintTextColor(boolean isStartOrNtp) {
-        if (isStartOrNtp) {
+    public void updateUrlBarHintTextColor(boolean useDefaultUrlBarHintTextColor) {
+        if (useDefaultUrlBarHintTextColor) {
+            mUrlCoordinator.setUrlBarHintTextColorForDefault(mBrandedColorScheme);
+        } else {
             mUrlCoordinator.setUrlBarHintTextColorForSurfacePolish(
                     mIsSurfacePolishOmniboxColorEnabled);
-        } else {
-            mUrlCoordinator.setUrlBarHintTextColorForDefault(mBrandedColorScheme);
         }
     }
 
     /**
-     * Sets the typeface and style of the search text in the search box.
+     * Updates the typeface and style of the search text in the search box.
      *
-     * @param typeface The typeface for the search text in the search box.
+     * @param useDefaultUrlBarTypeface Whether to use the default typeface for the search text in
+     *     the search box. If not we will use medium Google sans typeface for surface polish.
      */
-    public void setUrlBarTypeface(Typeface typeface) {
-        mUrlCoordinator.setUrlBarTypeface(typeface);
+    public void updateUrlBarTypeface(boolean useDefaultUrlBarTypeface) {
+        mUrlCoordinator.updateUrlBarTypeface(useDefaultUrlBarTypeface);
     }
 
     /**
-     * @see LocationBarCoordinator#updateUrlActionContainerEndMargin(int)
+     * Updates the value for the end margin of the url action container in the search box.
+     *
+     * @param useDefaultUrlActionContainerEndMargin Whether to use the default end margin for the
+     *     url action container in the search box. If not we will use the specific end margin value
+     *     for surface polish.
      */
-    public void updateUrlActionContainerEndMargin(int endMargin) {
-        mLocationBarLayout.updateUrlActionContainerEndMargin(endMargin);
+    public void updateUrlActionContainerEndMargin(boolean useDefaultUrlActionContainerEndMargin) {
+        mLocationBarLayout.updateUrlActionContainerEndMargin(useDefaultUrlActionContainerEndMargin);
     }
 
     /** Vivaldi
@@ -1714,11 +1712,8 @@ class LocationBarMediator
      */
     private boolean shouldShowQrCodeButton() {
         if (mUrlCoordinator == null) return false;
-        boolean visible =
-                TextUtils.isEmpty(mUrlCoordinator.getTextWithAutocomplete()) &&
-                        (mUrlHasFocus ||
-                                mShouldShowMicButtonWhenUnfocused);
-        return visible;
+        return TextUtils.isEmpty(mUrlCoordinator.getTextWithAutocomplete()) &&
+                        (mUrlHasFocus || mShouldShowMicButtonWhenUnfocused);
     }
 
     /** Vivaldi

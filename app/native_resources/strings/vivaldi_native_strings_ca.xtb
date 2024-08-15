@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Enganxa</translation>
 <translation id="4005270918754737597">Omet aquesta versió</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;No ho tornis a mostrar</translation>
 <translation id="4074744496918018786">Obre la imatge a una finestra privada</translation>
 <translation id="410351446219883937">Reproducció automàtica</translation>
 <translation id="4281844954008187215">Condicions d'ús</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera versió 15+ (Beta)</translation>
 <translation id="5648110075441906505">Obre la imatge a una finestra nova</translation>
 <translation id="5656371807944747581">S'ha produït un error d'actualització!</translation>
-<translation id="5716238312826274098">Desactivant les notificacions</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> ja està disponible (actualment tens la versió <ph name="OLD_VERSION" />). Vols descarregar-la ara?</translation>
 <translation id="5770433027661640693">Paisatge 10</translation>
 <translation id="5857090052475505287">Nova carpeta</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error en iniciar l'instal·lador d'actualitzacions. Si us plau, comprova que el dispositiu tingui suficient memòria o espai al disc i torna-ho a intentar més tard.</translation>
 <translation id="7658239707568436148">Cancel·la</translation>
-<translation id="7715497554424665066">&amp;Ignora l'actualització</translation>
 <translation id="7724603315864178912">Retalla</translation>
 <translation id="7727481996062361502">Verificant l'actualització...</translation>
 <translation id="7793738202466490491">Afegeix com a esdeveniment del calendari</translation>

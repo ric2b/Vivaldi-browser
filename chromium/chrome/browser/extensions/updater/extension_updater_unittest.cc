@@ -116,8 +116,8 @@ using update_client::UpdateQueryParams;
 
 namespace extensions {
 
-typedef ExtensionDownloaderDelegate::Error Error;
-typedef ExtensionDownloaderDelegate::PingResult PingResult;
+using Error = ExtensionDownloaderDelegate::Error;
+using PingResult = ExtensionDownloaderDelegate::PingResult;
 
 namespace {
 
@@ -405,8 +405,8 @@ class ServiceForDownloadTests : public MockService {
     fake_crx_installers_[id] = crx_installer;
   }
 
-  scoped_refptr<extensions::CrxInstaller> CreateUpdateInstaller(
-      const extensions::CRXFileInfo& file,
+  scoped_refptr<CrxInstaller> CreateUpdateInstaller(
+      const CRXFileInfo& file,
       bool file_ownership_passed) override {
     extension_id_ = file.extension_id;
     install_path_ = file.path;
@@ -1429,7 +1429,7 @@ class ExtensionUpdaterTest : public testing::Test {
             std::move(task), test_url, hash, version.GetString(),
             fetch_priority);
 
-    updater.downloader_->FetchUpdatedExtension(std::move(fetch), absl::nullopt);
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch), std::nullopt);
 
     auto* request = helper.GetPendingRequest(0);
     if (fetch_priority == DownloadFetchPriority::kForeground) {
@@ -1468,7 +1468,7 @@ class ExtensionUpdaterTest : public testing::Test {
         std::make_unique<ExtensionDownloader::ExtensionFetch>(
             CreateDownloaderTask(id), test_url, hash, version.GetString(),
             DownloadFetchPriority::kBackground);
-    updater.downloader_->FetchUpdatedExtension(std::move(fetch), absl::nullopt);
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch), std::nullopt);
 
     if (pending) {
       const bool kIsFromSync = true;
@@ -1757,7 +1757,7 @@ class ExtensionUpdaterTest : public testing::Test {
             CreateDownloaderTask(id), test_url, hash, version.GetString(),
             DownloadFetchPriority::kBackground);
     updater.downloader_->FetchUpdatedExtension(std::move(extension_fetch),
-                                               absl::nullopt);
+                                               std::nullopt);
 
     EXPECT_EQ(
         kExpectedLoadFlags,
@@ -1977,9 +1977,9 @@ class ExtensionUpdaterTest : public testing::Test {
             CreateDownloaderTask(id2), url2, hash2, version2,
             DownloadFetchPriority::kBackground);
     updater.downloader_->FetchUpdatedExtension(std::move(fetch1),
-                                               absl::optional<std::string>());
+                                               std::optional<std::string>());
     updater.downloader_->FetchUpdatedExtension(std::move(fetch2),
-                                               absl::optional<std::string>());
+                                               std::optional<std::string>());
 
     // Make the first fetch complete.
     EXPECT_TRUE(updater.downloader_->extension_loader_);
@@ -2255,7 +2255,7 @@ class ExtensionUpdaterTest : public testing::Test {
 
     updater.downloader_->HandleManifestResults(std::move(fetch_data),
                                                std::move(results),
-                                               /*error=*/absl::nullopt);
+                                               /*error=*/std::nullopt);
     Time last_ping_day =
         service.extension_prefs()->LastPingDay(extension->id());
     EXPECT_FALSE(last_ping_day.is_null());
@@ -2750,7 +2750,7 @@ TEST_F(ExtensionUpdaterTest, TestUninstallWhileUpdateCheck) {
   ASSERT_EQ(1u, tmp.size());
   ExtensionId id = tmp.front()->id();
   ExtensionRegistry* registry = ExtensionRegistry::Get(service.profile());
-  ASSERT_TRUE(registry->GetExtensionById(id, ExtensionRegistry::ENABLED));
+  ASSERT_TRUE(registry->enabled_extensions().GetByID(id));
 
   ExtensionUpdater updater(&service, service.extension_prefs(),
                            service.pref_service(), service.profile(),
@@ -2762,7 +2762,7 @@ TEST_F(ExtensionUpdaterTest, TestUninstallWhileUpdateCheck) {
   updater.CheckNow(std::move(params));
 
   service.set_extensions(ExtensionList(), ExtensionList());
-  ASSERT_FALSE(registry->GetExtensionById(id, ExtensionRegistry::ENABLED));
+  ASSERT_FALSE(registry->enabled_extensions().GetByID(id));
 
   // RunUntilIdle is needed to make sure that the UpdateService instance that
   // runs the extension update process has a chance to exit gracefully; without

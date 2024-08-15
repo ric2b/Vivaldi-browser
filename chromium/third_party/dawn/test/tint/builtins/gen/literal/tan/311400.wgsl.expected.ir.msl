@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void tan_311400() {
+  float res = 1.55740773677825927734f;
+}
+vertex float4 vertex_main() {
+  tan_311400();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  tan_311400();
+}
+kernel void compute_main() {
+  tan_311400();
+}

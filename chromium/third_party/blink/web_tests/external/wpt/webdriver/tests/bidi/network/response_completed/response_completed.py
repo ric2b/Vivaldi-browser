@@ -5,20 +5,21 @@ import pytest
 
 from tests.support.sync import AsyncPoll
 
-from .. import assert_response_event, HTTP_STATUS_AND_STATUS_TEXT
-
-PAGE_EMPTY_HTML = "/webdriver/tests/bidi/network/support/empty.html"
-PAGE_EMPTY_IMAGE = "/webdriver/tests/bidi/network/support/empty.png"
-PAGE_EMPTY_SCRIPT = "/webdriver/tests/bidi/network/support/empty.js"
-PAGE_EMPTY_SVG = "/webdriver/tests/bidi/network/support/empty.svg"
-PAGE_EMPTY_TEXT = "/webdriver/tests/bidi/network/support/empty.txt"
-
-RESPONSE_COMPLETED_EVENT = "network.responseCompleted"
+from .. import (
+    assert_response_event,
+    HTTP_STATUS_AND_STATUS_TEXT,
+    PAGE_EMPTY_HTML,
+    PAGE_EMPTY_IMAGE,
+    PAGE_EMPTY_SCRIPT,
+    PAGE_EMPTY_SVG,
+    PAGE_EMPTY_TEXT,
+    RESPONSE_COMPLETED_EVENT,
+)
 
 
 @pytest.mark.asyncio
-async def test_subscribe_status(bidi_session, top_context, wait_for_event, url, fetch):
-    await bidi_session.session.subscribe(events=[RESPONSE_COMPLETED_EVENT])
+async def test_subscribe_status(bidi_session, subscribe_events, top_context, wait_for_event, wait_for_future_safe, url, fetch):
+    await subscribe_events(events=[RESPONSE_COMPLETED_EVENT])
 
     # Track all received network.responseCompleted events in the events array
     events = []
@@ -37,7 +38,7 @@ async def test_subscribe_status(bidi_session, top_context, wait_for_event, url, 
         url=html_url,
         wait="complete",
     )
-    await on_response_completed
+    await wait_for_future_safe(on_response_completed)
 
     assert len(events) == 1
     expected_request = {"method": "GET", "url": html_url}
@@ -58,7 +59,7 @@ async def test_subscribe_status(bidi_session, top_context, wait_for_event, url, 
     text_url = url(PAGE_EMPTY_TEXT)
     on_response_completed = wait_for_event(RESPONSE_COMPLETED_EVENT)
     await fetch(text_url)
-    await on_response_completed
+    await wait_for_future_safe(on_response_completed)
 
     assert len(events) == 2
     expected_request = {"method": "GET", "url": text_url}
@@ -88,8 +89,41 @@ async def test_subscribe_status(bidi_session, top_context, wait_for_event, url, 
 
 
 @pytest.mark.asyncio
+async def test_iframe_load(
+    bidi_session,
+    top_context,
+    setup_network_test,
+    test_page,
+    test_page_same_origin_frame,
+):
+    network_events = await setup_network_test(events=[RESPONSE_COMPLETED_EVENT])
+    events = network_events[RESPONSE_COMPLETED_EVENT]
+
+    await bidi_session.browsing_context.navigate(
+        context=top_context["context"],
+        url=test_page_same_origin_frame,
+        wait="complete",
+    )
+
+    contexts = await bidi_session.browsing_context.get_tree(root=top_context["context"])
+    frame_context = contexts[0]["children"][0]
+
+    assert len(events) == 2
+    assert_response_event(
+        events[0],
+        expected_request={"url": test_page_same_origin_frame},
+        context=top_context["context"],
+    )
+    assert_response_event(
+        events[1],
+        expected_request={"url": test_page},
+        context=frame_context["context"],
+    )
+
+
+@pytest.mark.asyncio
 async def test_load_page_twice(
-    bidi_session, top_context, wait_for_event, url, setup_network_test
+    bidi_session, top_context, wait_for_event, wait_for_future_safe, url, setup_network_test
 ):
     html_url = url(PAGE_EMPTY_HTML)
 
@@ -102,7 +136,7 @@ async def test_load_page_twice(
         url=html_url,
         wait="complete",
     )
-    await on_response_completed
+    await wait_for_future_safe(on_response_completed)
 
     assert len(events) == 1
     expected_request = {"method": "GET", "url": html_url}
@@ -129,7 +163,7 @@ async def test_load_page_twice(
 )
 @pytest.mark.asyncio
 async def test_response_status(
-    wait_for_event, url, fetch, setup_network_test, status, status_text
+    wait_for_event, wait_for_future_safe, url, fetch, setup_network_test, status, status_text
 ):
     status_url = url(
         f"/webdriver/tests/support/http_handlers/status.py?status={status}&nocache={RESPONSE_COMPLETED_EVENT}"
@@ -140,7 +174,7 @@ async def test_response_status(
 
     on_response_completed = wait_for_event(RESPONSE_COMPLETED_EVENT)
     await fetch(status_url)
-    await on_response_completed
+    await wait_for_future_safe(on_response_completed)
 
     assert len(events) == 1
     expected_request = {"method": "GET", "url": status_url}
@@ -161,7 +195,7 @@ async def test_response_status(
 
 
 @pytest.mark.asyncio
-async def test_response_headers(wait_for_event, url, fetch, setup_network_test):
+async def test_response_headers(wait_for_event, wait_for_future_safe, url, fetch, setup_network_test):
     headers_url = url(
         "/webdriver/tests/support/http_handlers/headers.py?header=foo:bar&header=baz:biz"
     )
@@ -171,7 +205,7 @@ async def test_response_headers(wait_for_event, url, fetch, setup_network_test):
 
     on_response_completed = wait_for_event(RESPONSE_COMPLETED_EVENT)
     await fetch(headers_url, method="GET")
-    await on_response_completed
+    await wait_for_future_safe(on_response_completed)
 
     assert len(events) == 1
 
@@ -208,14 +242,14 @@ async def test_response_headers(wait_for_event, url, fetch, setup_network_test):
 )
 @pytest.mark.asyncio
 async def test_response_mime_type_file(
-    url, wait_for_event, fetch, setup_network_test, page_url, mime_type
+    url, wait_for_event, wait_for_future_safe, fetch, setup_network_test, page_url, mime_type
 ):
     network_events = await setup_network_test(events=[RESPONSE_COMPLETED_EVENT])
     events = network_events[RESPONSE_COMPLETED_EVENT]
 
     on_response_completed = wait_for_event(RESPONSE_COMPLETED_EVENT)
     await fetch(url(page_url), method="GET")
-    await on_response_completed
+    await wait_for_future_safe(on_response_completed)
 
     assert len(events) == 1
 

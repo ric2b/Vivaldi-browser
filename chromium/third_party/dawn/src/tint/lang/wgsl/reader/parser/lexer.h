@@ -29,7 +29,6 @@
 #define SRC_TINT_LANG_WGSL_READER_PARSER_LEXER_H_
 
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "src/tint/lang/wgsl/reader/parser/token.h"
@@ -87,7 +86,7 @@ class Lexer {
     void end_source(Source&) const;
 
     /// @returns view of current line
-    const std::string_view line() const;
+    std::string_view line() const;
     /// @returns position in current line
     size_t pos() const;
     /// @returns length of current line

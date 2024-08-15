@@ -87,6 +87,8 @@ found in the LICENSE file.
             android:paddingStart="8dp"
             android:visibility="gone" />
 
+        <include layout="@layout/tracker_shield_button"/>
+
         <org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton
             android:id="@+id/tab_switcher_button"
             style="@style/ToolbarHoverableButton"
@@ -94,7 +96,9 @@ found in the LICENSE file.
             android:paddingStart="@dimen/toolbar_tab_switcher_button_padding"
             android:layout_gravity="top"
             android:contentDescription="@string/accessibility_toolbar_btn_tabswitcher_toggle_default"
-            android:visibility="visible" />
+            android:visibility="visible"
+            app:menuMaxWidth="@dimen/tab_switcher_menu_width"
+            app:menuVerticalOverlapAnchor="false" />
 
         <!-- Vivaldi -->
         <org.chromium.ui.widget.ChromeImageButton

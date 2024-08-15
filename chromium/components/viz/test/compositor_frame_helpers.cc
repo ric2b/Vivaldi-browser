@@ -208,9 +208,10 @@ RenderPassBuilder& RenderPassBuilder::AddTextureQuad(
   auto* quad = pass_->CreateAndAppendDrawQuad<TextureDrawQuad>();
   quad->SetAll(sqs, rect, visible_rect, params.needs_blending, resource_id,
                rect.size(), params.premultiplied_alpha, gfx::PointF(0.0f, 0.0f),
-               gfx::PointF(1.0f, 1.0f), params.background_color,
-               params.vertex_opacity, params.flipped, params.nearest_neighbor,
-               params.secure_output_only, params.protected_video_type);
+               gfx::PointF(1.0f, 1.0f), params.background_color, params.flipped,
+               params.nearest_neighbor, params.secure_output_only,
+               params.protected_video_type);
+  quad->set_vertex_opacity(params.vertex_opacity);
 
   return *this;
 }
@@ -519,7 +520,7 @@ void PopulateTransferableResources(CompositorFrame& frame) {
         // Adds a TransferableResource the first time seeing a ResourceId.
         if (resources_added.insert(resource_id).second) {
           frame.resource_list.push_back(TransferableResource::MakeSoftware(
-              SharedBitmap::GenerateId(), quad->rect.size(),
+              SharedBitmap::GenerateId(), gpu::SyncToken(), quad->rect.size(),
               SinglePlaneFormat::kRGBA_8888));
           frame.resource_list.back().id = resource_id;
         }

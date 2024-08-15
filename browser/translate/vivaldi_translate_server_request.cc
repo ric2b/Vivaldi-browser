@@ -29,7 +29,7 @@ namespace vivaldi {
 
 namespace {
 constexpr char kTranslateLanguageServerUrl[] =
-    "https://mimir.vivaldi.com/translate";
+    "https://mimir2.vivaldi.com/api/translate";
 
 constexpr char kSourceLanguageKey[] = "source";
 constexpr char kTargetLanguageKey[] = "target";
@@ -63,7 +63,9 @@ std::string VivaldiTranslateServerRequest::GenerateJSON(
   base::Value request(base::Value::Type::DICT);
   base::Value string_collection(base::Value::Type::LIST);
 
-  request.GetDict().Set(kSourceLanguageKey, source_language);
+  if (source_language != "") {
+    request.GetDict().Set(kSourceLanguageKey, source_language);
+  }
   request.GetDict().Set(kTargetLanguageKey, destination_language);
 
   for (auto& item : data) {

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -93,7 +94,6 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -216,8 +216,9 @@ const base::FeatureParam<bool> kPrerenderBookmarkBarOnMouseHoverTrigger{
 // Base class for non-menu hosting buttons used on the bookmark bar.
 
 class BookmarkButtonBase : public views::LabelButton {
+  METADATA_HEADER(BookmarkButtonBase, views::LabelButton)
+
  public:
-  METADATA_HEADER(BookmarkButtonBase);
   BookmarkButtonBase(PressedCallback callback, const std::u16string& title)
       : LabelButton(std::move(callback), title) {
     ConfigureInkDropForToolbar(this);
@@ -276,7 +277,7 @@ class BookmarkButtonBase : public views::LabelButton {
   std::unique_ptr<gfx::SlideAnimation> show_animation_;
 };
 
-BEGIN_METADATA(BookmarkButtonBase, views::LabelButton)
+BEGIN_METADATA(BookmarkButtonBase)
 END_METADATA
 
 // BookmarkButton -------------------------------------------------------------
@@ -284,8 +285,9 @@ END_METADATA
 // Buttons used for the bookmarks on the bookmark bar.
 
 class BookmarkButton : public BookmarkButtonBase {
+  METADATA_HEADER(BookmarkButton, BookmarkButtonBase)
+
  public:
-  METADATA_HEADER(BookmarkButton);
   BookmarkButton(PressedCallback callback,
                  const GURL& url,
                  const std::u16string& title,
@@ -382,9 +384,6 @@ class BookmarkButton : public BookmarkButtonBase {
     hover_duration_recorded_ = false;
     mouse_has_been_pressed_ = false;
 
-    base::UmaHistogramEnumeration(
-        "Prerender.Experimental.BookmarkUrlButtonEvent",
-        PreloadBookmarkMetricsEvent::kMouseOver);
     BookmarkButtonBase::OnMouseEntered(event);
 
     if (base::FeatureList::IsEnabled(features::kBookmarkTriggerForPrerender2) &&
@@ -402,7 +401,7 @@ class BookmarkButton : public BookmarkButtonBase {
         content::PreloadingData* preloading_data =
             content::PreloadingData::GetOrCreateForWebContents(web_contents);
         preloading_data->SetIsNavigationInDomainCallback(
-            chrome_preloading_predictor::kPointerDownOnBookmarkBar,
+            chrome_preloading_predictor::kMouseHoverOrMouseDownOnBookmarkBar,
             base::BindRepeating(
                 [](content::NavigationHandle* navigation_handle) -> bool {
                   return ui::PageTransitionCoreTypeIs(
@@ -455,8 +454,9 @@ class BookmarkButton : public BookmarkButtonBase {
     if (event.IsOnlyLeftMouseButton() &&
         base::FeatureList::IsEnabled(features::kBookmarkTriggerForPrerender2) &&
         kPrerenderBookmarkBarOnMousePressedTrigger.Get()) {
-      StartPrerendering(chrome_preloading_predictor::kPointerDownOnBookmarkBar,
-                        *url_);
+      StartPrerendering(
+          chrome_preloading_predictor::kMouseHoverOrMouseDownOnBookmarkBar,
+          *url_);
     }
     return result;
   }
@@ -478,8 +478,9 @@ class BookmarkButton : public BookmarkButtonBase {
     if (kPrerenderStartDelayOnMouseHoverByMiliseconds.Get() -
             kPreconnectStartDelayOnMouseHoverByMiliseconds.Get() <=
         0) {
-      StartPrerendering(chrome_preloading_predictor::kMouseHoverOnBookmarkBar,
-                        url);
+      StartPrerendering(
+          chrome_preloading_predictor::kMouseHoverOrMouseDownOnBookmarkBar,
+          url);
     } else {
       auto* loading_predictor =
           predictors::LoadingPredictorFactory::GetForProfile(
@@ -496,7 +497,8 @@ class BookmarkButton : public BookmarkButtonBase {
               kPreconnectStartDelayOnMouseHoverByMiliseconds.Get()),
           base::BindRepeating(
               &BookmarkButton::StartPrerendering, base::Unretained(this),
-              chrome_preloading_predictor::kMouseHoverOnBookmarkBar, url));
+              chrome_preloading_predictor::kMouseHoverOrMouseDownOnBookmarkBar,
+              url));
     }
   }
 
@@ -511,8 +513,7 @@ class BookmarkButton : public BookmarkButtonBase {
       PrerenderManager::CreateForWebContents(&(*prerender_web_contents_));
       auto* prerender_manager =
           PrerenderManager::FromWebContents(&(*prerender_web_contents_));
-      prerender_handle_ =
-          prerender_manager->StartPrerenderBookmark(url, predictor);
+      prerender_handle_ = prerender_manager->StartPrerenderBookmark(url);
     }
   }
 
@@ -528,13 +529,13 @@ class BookmarkButton : public BookmarkButtonBase {
   base::WeakPtr<content::WebContents> prerender_web_contents_;
 
   // Information for metrics.
-  absl::optional<base::TimeTicks> mouse_entered_time_;
-  absl::optional<base::TimeTicks> mouse_move_time_;
+  std::optional<base::TimeTicks> mouse_entered_time_;
+  std::optional<base::TimeTicks> mouse_move_time_;
   bool hover_duration_recorded_ = false;
   bool mouse_has_been_pressed_ = false;
 };
 
-BEGIN_METADATA(BookmarkButton, BookmarkButtonBase)
+BEGIN_METADATA(BookmarkButton)
 END_METADATA
 
 // ShortcutButton -------------------------------------------------------------
@@ -542,15 +543,16 @@ END_METADATA
 // Buttons used for the shortcuts on the bookmark bar.
 
 class ShortcutButton : public BookmarkButtonBase {
+  METADATA_HEADER(ShortcutButton, BookmarkButtonBase)
+
  public:
-  METADATA_HEADER(ShortcutButton);
   ShortcutButton(PressedCallback callback, const std::u16string& title)
       : BookmarkButtonBase(std::move(callback), title) {}
   ShortcutButton(const ShortcutButton&) = delete;
   ShortcutButton& operator=(const ShortcutButton&) = delete;
 };
 
-BEGIN_METADATA(ShortcutButton, BookmarkButtonBase)
+BEGIN_METADATA(ShortcutButton)
 END_METADATA
 
 // BookmarkFolderButton -------------------------------------------------------
@@ -558,8 +560,9 @@ END_METADATA
 // Buttons used for folders on the bookmark bar, including the 'other folders'
 // button.
 class BookmarkFolderButton : public BookmarkMenuButtonBase {
+  METADATA_HEADER(BookmarkFolderButton, BookmarkMenuButtonBase)
+
  public:
-  METADATA_HEADER(BookmarkFolderButton);
   explicit BookmarkFolderButton(PressedCallback callback,
                                 const std::u16string& title = std::u16string())
       : BookmarkMenuButtonBase(std::move(callback), title) {
@@ -629,7 +632,7 @@ class BookmarkFolderButton : public BookmarkMenuButtonBase {
   std::unique_ptr<gfx::SlideAnimation> show_animation_;
 };
 
-BEGIN_METADATA(BookmarkFolderButton, BookmarkMenuButtonBase)
+BEGIN_METADATA(BookmarkFolderButton)
 END_METADATA
 
 // BookmarkTabGroupButton
@@ -659,7 +662,7 @@ struct BookmarkBarView::DropLocation {
   }
 
   // Index into the model the drop is over. This is relative to the root node.
-  absl::optional<size_t> index;
+  std::optional<size_t> index;
 
   // Drop constants.
   DragOperation operation = DragOperation::kNone;
@@ -695,8 +698,9 @@ struct BookmarkBarView::DropInfo {
 // ButtonSeparatorView  --------------------------------------------------------
 
 class BookmarkBarView::ButtonSeparatorView : public views::Separator {
+  METADATA_HEADER(ButtonSeparatorView, views::Separator)
+
  public:
-  METADATA_HEADER(ButtonSeparatorView);
   ButtonSeparatorView() {
     const int leading_padding = features::IsChromeRefresh2023() ? 8 : 4;
     const int trailing_padding = features::IsChromeRefresh2023() ? 8 : 3;
@@ -739,9 +743,8 @@ class BookmarkBarView::ButtonSeparatorView : public views::Separator {
  private:
   int separator_thickness_;
 };
-using ButtonSeparatorView = BookmarkBarView::ButtonSeparatorView;
 
-BEGIN_METADATA(ButtonSeparatorView, views::Separator)
+BEGIN_METADATA(BookmarkBarView, ButtonSeparatorView, views::Separator)
 END_METADATA
 
 // BookmarkBarView ------------------------------------------------------------
@@ -911,7 +914,7 @@ MenuButton* BookmarkBarView::GetMenuButtonForNode(const BookmarkNode* node) {
   }
   // TODO: add logic to handle saved groups node(crbug.com/1223929 and
   // crbug.com/1223919)
-  absl::optional<size_t> index =
+  std::optional<size_t> index =
       bookmark_model_->bookmark_bar_node()->GetIndexOf(node);
   if (!index.has_value() || !node->is_folder()) {
     return nullptr;
@@ -945,7 +948,7 @@ int BookmarkBarView::GetLeadingMargin() const {
   return kBookmarksBarLeadingMarginWithoutSavedTabGroups;
 }
 
-views::MenuItemView* BookmarkBarView::GetMenu() {
+const views::MenuItemView* BookmarkBarView::GetMenu() const {
   return bookmark_menu_ ? bookmark_menu_->menu() : nullptr;
 }
 
@@ -1665,11 +1668,6 @@ void BookmarkBarView::OnButtonPressed(const bookmarks::BookmarkNode* node,
       /*add_to_group=*/false,
       BookmarkNavigationHandleUserData::InitiatorLocation::kBookmarkBar,
       {{BookmarkLaunchLocation::kAttachedBar, base::TimeTicks::Now()}});
-  if (event.IsMouseEvent()) {
-    base::UmaHistogramEnumeration(
-        "Prerender.Experimental.BookmarkUrlButtonEvent",
-        PreloadBookmarkMetricsEvent::kMouseClick);
-  }
   RecordBookmarkLaunch(
       BookmarkLaunchLocation::kAttachedBar,
       profile_metrics::GetBrowserProfileType(browser_->profile()));
@@ -1709,7 +1707,7 @@ void BookmarkBarView::ShowContextMenuForViewImpl(
   }
 
   const BookmarkNode* parent = nullptr;
-  std::vector<const BookmarkNode*> nodes;
+  std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes;
   if (source == all_bookmarks_button_) {
     parent = bookmark_model_->other_node();
     // Do this so the user can open all bookmarks. BookmarkContextMenu makes
@@ -2341,7 +2339,7 @@ void BookmarkBarView::InsertBookmarkButtonAtIndex(
   if (saved_tab_group_bar_) {
     DCHECK_EQ(*i++, saved_tab_group_bar_);
   }
-  const auto is_bookmark_button = [this](const auto* v) {
+  const auto is_bookmark_button = [this](const View* v) {
     return (views::IsViewClass<BookmarkButton>(v) ||
             views::IsViewClass<BookmarkFolderButton>(v)) &&
            v != overflow_button_ && v != all_bookmarks_button_;
@@ -2415,7 +2413,7 @@ int BookmarkBarView::GetDropLocationModelIndexForTesting() const {
              : -1;
 }
 
-BEGIN_METADATA(BookmarkBarView, views::AccessiblePaneView)
+BEGIN_METADATA(BookmarkBarView)
 ADD_PROPERTY_METADATA(bool, InfoBarVisible)
 ADD_READONLY_PROPERTY_METADATA(size_t, FirstHiddenNodeIndex)
 END_METADATA

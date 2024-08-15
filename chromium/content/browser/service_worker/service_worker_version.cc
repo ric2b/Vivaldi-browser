@@ -146,7 +146,7 @@ void OnOpenWindowFinished(
     blink::mojom::ServiceWorkerClientInfoPtr client_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const bool success = (status == blink::ServiceWorkerStatusCode::kOk);
-  absl::optional<std::string> error_msg;
+  std::optional<std::string> error_msg;
   if (!success) {
     DCHECK(!client_info);
     error_msg.emplace("Something went wrong while trying to open the window.");
@@ -181,7 +181,7 @@ void DidNavigateClient(
     blink::mojom::ServiceWorkerClientInfoPtr client) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const bool success = (status == blink::ServiceWorkerStatusCode::kOk);
-  absl::optional<std::string> error_msg;
+  std::optional<std::string> error_msg;
   if (!success) {
     DCHECK(!client);
     error_msg.emplace("Cannot navigate to URL: " + url.spec());
@@ -203,10 +203,10 @@ const char* FetchHandlerTypeToSuffix(
 
 // This function merges SHA256 checksum hash strings in
 // ServiceWokrerResourceRecord and return a single hash string.
-absl::optional<std::string> MergeResourceRecordSHA256ScriptChecksum(
+std::optional<std::string> MergeResourceRecordSHA256ScriptChecksum(
     const GURL& main_script_url,
     const ServiceWorkerScriptCacheMap& script_cache_map,
-    absl::optional<blink::mojom::ServiceWorkerFetchHandlerType>
+    std::optional<blink::mojom::ServiceWorkerFetchHandlerType>
         fetch_handler_type) {
   const std::unique_ptr<crypto::SecureHash> checksum =
       crypto::SecureHash::Create(crypto::SecureHash::SHA256);
@@ -225,7 +225,7 @@ absl::optional<std::string> MergeResourceRecordSHA256ScriptChecksum(
 
   for (auto& resource : resources) {
     if (!resource->sha256_checksum) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     // This may not be the case because we use the fixed length string, but
     // insert a delimiter here to distinguish following cases to avoid hash
@@ -450,7 +450,7 @@ void ServiceWorkerVersion::RegisterStatusChangeCallback(
 
 ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  absl::optional<std::string> router_rules;
+  std::optional<std::string> router_rules;
   if (router_evaluator_) {
     router_rules = router_evaluator_->ToString();
   }
@@ -511,7 +511,9 @@ ServiceWorkerVersion::EffectiveFetchHandlerType() const {
     case FetchHandlerType::kNotSkippable:
       return FetchHandlerType::kNotSkippable;
     case FetchHandlerType::kEmptyFetchHandler: {
-      if (features::kSkipEmptyFetchHandler.Get()) {
+      if (base::FeatureList::IsEnabled(
+              features::kServiceWorkerSkipIgnorableFetchHandler) &&
+          features::kSkipEmptyFetchHandler.Get()) {
         return FetchHandlerType::kEmptyFetchHandler;
       } else {
         return FetchHandlerType::kNotSkippable;
@@ -1592,7 +1594,8 @@ void ServiceWorkerVersion::ClaimClients(ClaimClientsCallback callback) {
       context_->GetLiveRegistration(registration_id_);
   // Registration must be kept alive by ServiceWorkerGlobalScope#registration.
   if (!registration) {
-    mojo::ReportBadMessage("ClaimClients: No live registration");
+    associated_interface_receiver_.ReportBadMessage(
+        "ClaimClients: No live registration");
     // ReportBadMessage() will kill the renderer process, but Mojo complains if
     // the callback is not run. Just run it with nonsense arguments.
     std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kUnknown,
@@ -1602,7 +1605,7 @@ void ServiceWorkerVersion::ClaimClients(ClaimClientsCallback callback) {
 
   registration->ClaimClients();
   std::move(callback).Run(blink::mojom::ServiceWorkerErrorType::kNone,
-                          absl::nullopt);
+                          std::nullopt);
 }
 
 void ServiceWorkerVersion::GetClients(
@@ -1677,7 +1680,7 @@ void ServiceWorkerVersion::OpenPaymentHandlerWindow(
   }
 
   if (!url.is_valid() || !key_.origin().IsSameOriginWith(url)) {
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received PaymentRequestEvent#openWindow() request for a cross-origin "
         "URL.");
     receiver_.reset();
@@ -1718,7 +1721,7 @@ void ServiceWorkerVersion::PostMessageToClient(
 
   if (container_host->url().DeprecatedGetOriginAsURL() !=
       script_url_.DeprecatedGetOriginAsURL()) {
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received Client#postMessage() request for a cross-origin client.");
     receiver_.reset();
     return;
@@ -1746,14 +1749,14 @@ void ServiceWorkerVersion::PostMessageToClient(
     // ServiceWorkerObjectHost not associated with its
     // ServiceWorkerContainerHost. If that world should occur, we should queue
     // the message instead of crashing.
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received Client#postMessage() request for a reserved client.");
     receiver_.reset();
     return;
   }
   // As we don't track tasks between workers and renderers, we can nullify the
   // message's parent task ID.
-  message.parent_task_id = absl::nullopt;
+  message.parent_task_id = std::nullopt;
   container_host->PostMessageToClient(this, std::move(message));
 }
 
@@ -1772,14 +1775,14 @@ void ServiceWorkerVersion::FocusClient(const std::string& client_uuid,
   }
   if (container_host->url().DeprecatedGetOriginAsURL() !=
       script_url_.DeprecatedGetOriginAsURL()) {
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received WindowClient#focus() request for a cross-origin client.");
     receiver_.reset();
     return;
   }
   if (!container_host->IsContainerForWindowClient()) {
     // focus() should be called only for WindowClient.
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received WindowClient#focus() request for a non-window client.");
     receiver_.reset();
     return;
@@ -1801,7 +1804,7 @@ void ServiceWorkerVersion::NavigateClient(const std::string& client_uuid,
 
   if (!url.is_valid() ||
       !base::Uuid::ParseCaseInsensitive(client_uuid).is_valid()) {
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received unexpected invalid URL/UUID from renderer process.");
     receiver_.reset();
     return;
@@ -1828,14 +1831,14 @@ void ServiceWorkerVersion::NavigateClient(const std::string& client_uuid,
   }
   if (container_host->url().DeprecatedGetOriginAsURL() !=
       script_url_.DeprecatedGetOriginAsURL()) {
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received WindowClient#navigate() request for a cross-origin client.");
     receiver_.reset();
     return;
   }
   if (!container_host->IsContainerForWindowClient()) {
     // navigate() should be called only for WindowClient.
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received WindowClient#navigate() request for a non-window client.");
     receiver_.reset();
     return;
@@ -1896,23 +1899,65 @@ void ServiceWorkerVersion::RegisterRouter(
     RegisterRouterCallback callback) {
   if (!IsStaticRouterEnabled()) {
     // This renderer should have called this only when the feature is enabled.
-    receiver_.ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Unexpected router registration call during the feature is disabled.");
     return;
   }
-  if (router_evaluator()) {
-    // The renderer should have denied calling this twice.
-    receiver_.ReportBadMessage("The ServiceWorker router rules are set twice.");
-    return;
+  switch (router_registration_method_) {
+    case RouterRegistrationMethod::Uninitialized:
+      break;
+    case RouterRegistrationMethod::RegisterRouter:
+      // The renderer should have denied calling this twice.
+    case RouterRegistrationMethod::AddRoutes:
+      // The renderer should have denied calling both RegisterRouter() and
+      // AddRoutes().
+      CHECK(router_evaluator());
+      associated_interface_receiver_.ReportBadMessage(
+          "The ServiceWorker router rules are set twice.");
+      return;
   }
   if (!SetupRouterEvaluator(rules)) {
     // The renderer should have denied calling this method while the setup
     // fails.
     // TODO(crbug.com/1371756): revisit this to confirm no case for this error.
-    receiver_.ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Failed to configure a router. Possibly a syntax error");
     return;
   }
+  router_registration_method_ = RouterRegistrationMethod::RegisterRouter;
+  std::move(callback).Run();
+}
+
+void ServiceWorkerVersion::AddRoutes(
+    const blink::ServiceWorkerRouterRules& rules,
+    RegisterRouterCallback callback) {
+  if (!IsStaticRouterEnabled()) {
+    // This renderer should have called this only when the feature is enabled.
+    associated_interface_receiver_.ReportBadMessage(
+        "Unexpected router registration call during the feature is disabled.");
+    return;
+  }
+  switch (router_registration_method_) {
+    case RouterRegistrationMethod::Uninitialized:
+    case RouterRegistrationMethod::AddRoutes:
+      break;
+    case RouterRegistrationMethod::RegisterRouter:
+      // The renderer should have denied calling both RegisterRouter() and
+      // AddRoutes().
+      CHECK(router_evaluator());
+      associated_interface_receiver_.ReportBadMessage(
+          "The ServiceWorker router rules are set twice.");
+      return;
+  }
+  if (!SetupRouterEvaluator(rules)) {
+    // The renderer should have denied calling this method while the setup
+    // fails.
+    // TODO(crbug.com/1371756): revisit this to confirm no case for this error.
+    associated_interface_receiver_.ReportBadMessage(
+        "Failed to configure a router. Possibly a syntax error");
+    return;
+  }
+  router_registration_method_ = RouterRegistrationMethod::AddRoutes;
   std::move(callback).Run();
 }
 
@@ -1952,7 +1997,7 @@ void ServiceWorkerVersion::OpenWindow(
   }
 
   if (!url.is_valid()) {
-    mojo::ReportBadMessage(
+    associated_interface_receiver_.ReportBadMessage(
         "Received unexpected invalid URL from renderer process.");
     receiver_.reset();
     return;
@@ -2992,8 +3037,19 @@ void ServiceWorkerVersion::SetResources(
 bool ServiceWorkerVersion::SetupRouterEvaluator(
     const blink::ServiceWorkerRouterRules& rules) {
   CHECK(IsStaticRouterEnabled());
-  CHECK(!router_evaluator_);
-  router_evaluator_ = std::make_unique<ServiceWorkerRouterEvaluator>(rules);
+  blink::ServiceWorkerRouterRules new_rules;
+  // If there are existing router rules, set them first.
+  // TODO(crbug.com/1468184) Consider having a method to merge rules instead of
+  // replacing each time.
+  if (router_evaluator()) {
+    for (const auto& e : router_evaluator()->rules().rules) {
+      new_rules.rules.push_back(e);
+    }
+  }
+  for (const auto& e : rules.rules) {
+    new_rules.rules.push_back(e);
+  }
+  router_evaluator_ = std::make_unique<ServiceWorkerRouterEvaluator>(new_rules);
   if (!router_evaluator_->IsValid()) {
     router_evaluator_.reset();
     return false;

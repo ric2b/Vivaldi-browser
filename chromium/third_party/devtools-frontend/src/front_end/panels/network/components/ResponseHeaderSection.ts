@@ -2,16 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
+import * as Platform from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
 import * as IssuesManager from '../../../models/issues_manager/issues_manager.js';
+import * as Persistence from '../../../models/persistence/persistence.js';
+import type * as Workspace from '../../../models/workspace/workspace.js';
 import * as NetworkForward from '../../../panels/network/forward/forward.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as Sources from '../../../panels/sources/sources.js';
+import * as Buttons from '../../../ui/components/buttons/buttons.js';
+import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as UI from '../../../ui/legacy/legacy.js';
+import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {
   compareHeaders,
@@ -23,13 +29,6 @@ import {
   HeaderSectionRow,
   type HeaderSectionRowData,
 } from './HeaderSectionRow.js';
-import * as Persistence from '../../../models/persistence/persistence.js';
-import type * as Workspace from '../../../models/workspace/workspace.js';
-import * as Platform from '../../../core/platform/platform.js';
-import * as Common from '../../../core/common/common.js';
-import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as Root from '../../../core/root/root.js';
-
 import responseHeaderSectionStyles from './ResponseHeaderSection.css.js';
 
 const {render, html} = LitHtml;
@@ -227,7 +226,7 @@ export class ResponseHeaderSection extends HTMLElement {
       if (!this.#overrides.every(Persistence.NetworkPersistenceManager.isHeaderOverride)) {
         throw 'Type mismatch after parsing';
       }
-      this.#headersAreOverrideable = Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HEADER_OVERRIDES) &&
+      this.#headersAreOverrideable =
           Common.Settings.Settings.instance().moduleSetting('persistenceNetworkOverridesEnabled').get();
       for (const header of this.#headerEditors) {
         header.valueEditable = this.#headersAreOverrideable;
@@ -245,64 +244,52 @@ export class ResponseHeaderSection extends HTMLElement {
     if (!this.#request || this.#request.originalResponseHeaders.length === 0) {
       return;
     }
+    const originalHeaders =
+        this.#request.originalResponseHeaders.map(header => ({
+                                                    name: Platform.StringUtilities.toLowerCaseString(header.name),
+                                                    value: header.value.replace(/\s/g, ' '),
+                                                  }));
+    originalHeaders.sort(function(a, b) {
+      return Platform.StringUtilities.compare(a.name, b.name);
+    });
 
-    // To compare original headers and actual headers we use a map from header
-    // name to an array of header values. This allows us to handle the cases
-    // in which we have multiple headers with the same name (and corresponding
-    // header values which may or may not occur multiple times as well). We are
-    // not using MultiMaps, because a Set would not able to distinguish between
-    // header values [a, a, b] and [a, b, b].
-    const originalHeaders = new Map<Platform.StringUtilities.LowerCaseString, string[]>();
-    for (const header of this.#request?.originalResponseHeaders || []) {
-      const headerName = Platform.StringUtilities.toLowerCaseString(header.name);
-      const headerValues = originalHeaders.get(headerName);
-      if (headerValues) {
-        headerValues.push(header.value.replace(/\s/g, ' '));
-      } else {
-        originalHeaders.set(headerName, [header.value.replace(/\s/g, ' ')]);
+    // Loop over actual headers and original headers simultaneously and mark each actual header as
+    // overridden if there is no identical original header.
+    // If there are multiple headers with the same name, concatenate their values first before
+    // comparing them.
+    let indexActual = 0;
+    let indexOriginal = 0;
+    while (indexActual < this.#headerDetails.length) {
+      const currentName = this.#headerDetails[indexActual].name;
+      let actualValue = this.#headerDetails[indexActual].value || '';
+      const headerNotSet = this.#headerDetails[indexActual].headerNotSet;
+      while (indexActual < this.#headerDetails.length - 1 &&
+             this.#headerDetails[indexActual + 1].name === currentName) {
+        indexActual++;
+        actualValue += `, ${this.#headerDetails[indexActual].value}`;
       }
-    }
 
-    const actualHeaders = new Map<Platform.StringUtilities.LowerCaseString, string[]>();
-    for (const header of this.#headerDetails) {
-      if (header.headerNotSet) {
-        continue;
+      while (indexOriginal < originalHeaders.length && originalHeaders[indexOriginal].name < currentName) {
+        indexOriginal++;
       }
-      const headerValues = actualHeaders.get(header.name);
-      if (headerValues) {
-        headerValues.push(header.value || '');
-      } else {
-        actualHeaders.set(header.name, [header.value || '']);
-      }
-    }
-
-    const isDifferent =
-        (headerName: Platform.StringUtilities.LowerCaseString,
-         actualHeaders: Map<Platform.StringUtilities.LowerCaseString, string[]>,
-         originalHeaders: Map<Platform.StringUtilities.LowerCaseString, string[]>): boolean => {
-          const actual = actualHeaders.get(headerName);
-          const original = originalHeaders.get(headerName);
-          if (!actual || !original || actual.length !== original.length) {
-            return true;
-          }
-          actual.sort();
-          original.sort();
-          for (let i = 0; i < actual.length; i++) {
-            if (!compareHeaders(actual[i], original[i])) {
-              return true;
-            }
-          }
-          return false;
-        };
-
-    for (const headerName of actualHeaders.keys()) {
-      // If the array of actual headers and the array of original headers do not
-      // exactly match, mark all headers with 'headerName' as being overridden.
-      if (headerName !== 'set-cookie' && isDifferent(headerName, actualHeaders, originalHeaders)) {
-        this.#headerEditors.filter(header => compareHeaders(header.name, headerName)).forEach(header => {
+      if (indexOriginal < originalHeaders.length && originalHeaders[indexOriginal].name === currentName) {
+        let originalValue = originalHeaders[indexOriginal].value;
+        while (indexOriginal < originalHeaders.length - 1 && originalHeaders[indexOriginal + 1].name === currentName) {
+          indexOriginal++;
+          originalValue += `, ${originalHeaders[indexOriginal].value}`;
+        }
+        indexOriginal++;
+        if (currentName !== 'set-cookie' && !headerNotSet && !compareHeaders(actualValue, originalValue)) {
+          this.#headerEditors.filter(header => compareHeaders(header.name, currentName)).forEach(header => {
+            header.isOverride = true;
+          });
+        }
+      } else if (currentName !== 'set-cookie' && !headerNotSet) {
+        this.#headerEditors.filter(header => compareHeaders(header.name, currentName)).forEach(header => {
           header.isOverride = true;
         });
       }
+      indexActual++;
     }
 
     // Special case for 'set-cookie' headers: compare each header individually
@@ -489,16 +476,22 @@ export class ResponseHeaderSection extends HTMLElement {
     // clang-format off
     render(html`
       ${headerDescriptors.map((header, index) => html`
-        <${HeaderSectionRow.litTagName} .data=${{header} as HeaderSectionRowData} @headeredited=${this.#onHeaderEdited} @headerremoved=${this.#onHeaderRemoved} @enableheaderediting=${this.#onEnableHeaderEditingClick} data-index=${index}></${HeaderSectionRow.litTagName}>
+        <${HeaderSectionRow.litTagName}
+            .data=${{header} as HeaderSectionRowData}
+            @headeredited=${this.#onHeaderEdited}
+            @headerremoved=${this.#onHeaderRemoved}
+            @enableheaderediting=${this.#onEnableHeaderEditingClick}
+            data-index=${index}
+            jslog=${VisualLogging.value().context('response-header')}
+        ></${HeaderSectionRow.litTagName}>
       `)}
       ${this.#headersAreOverrideable ? html`
         <${Buttons.Button.Button.litTagName}
           class="add-header-button"
           .variant=${Buttons.Button.Variant.SECONDARY}
           .iconUrl=${plusIconUrl}
-          .iconWidth=${'12px'}
-          .iconHeight=${'12px'}
-          @click=${this.#onAddHeaderClick}>
+          @click=${this.#onAddHeaderClick}
+          jslog=${VisualLogging.action().track({click: true}).context('add-header')}>
           ${i18nString(UIStrings.addHeader)}
         </${Buttons.Button.Button.litTagName}>
       ` : LitHtml.nothing}

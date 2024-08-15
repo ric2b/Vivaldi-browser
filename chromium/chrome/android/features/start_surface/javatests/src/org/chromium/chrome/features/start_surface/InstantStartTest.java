@@ -49,6 +49,8 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.build.BuildConfig;
@@ -76,8 +78,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
@@ -98,11 +98,8 @@ import java.util.concurrent.CountDownLatch;
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
     "force-fieldtrials=Study/Group"
 })
-@EnableFeatures({
-    ChromeFeatureList.START_SURFACE_ANDROID,
-    ChromeFeatureList.INSTANT_START,
-    ChromeFeatureList.EMPTY_STATES
-})
+@EnableFeatures({ChromeFeatureList.INSTANT_START})
+@DisableFeatures({ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID})
 @Restriction({
     Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE,
     UiRestriction.RESTRICTION_TYPE_PHONE
@@ -299,7 +296,7 @@ public class InstantStartTest {
     @SmallTest
     @DisableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
     public void testInstantStartWithoutStartSurface() throws IOException {
-        StartSurfaceTestUtils.createTabStateFile(new int[] {123});
+        StartSurfaceTestUtils.createTabStatesAndMetadataFile(new int[] {123});
         mActivityTestRule.startMainActivityFromLauncher();
 
         Assert.assertTrue(
@@ -319,7 +316,7 @@ public class InstantStartTest {
     @SmallTest
     @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
     public void testInstantStartDisabledOnLowEndDevice() throws IOException {
-        StartSurfaceTestUtils.createTabStateFile(new int[] {123});
+        StartSurfaceTestUtils.createTabStatesAndMetadataFile(new int[] {123});
         mActivityTestRule.startMainActivityFromLauncher();
 
         Assert.assertFalse(
@@ -420,7 +417,7 @@ public class InstantStartTest {
     }
 
     private void testShowLastTabAtStartUp() throws IOException {
-        StartSurfaceTestUtils.createTabStateFile(new int[] {0});
+        StartSurfaceTestUtils.createTabStatesAndMetadataFile(new int[] {0});
         StartSurfaceTestUtils.createThumbnailBitmapAndWriteToFile(0, mBrowserControlsStateProvider);
         TabAttributeCache.setTitleForTesting(0, "Google");
 

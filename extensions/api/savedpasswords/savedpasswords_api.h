@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "components/password_manager/core/browser/password_store.h"
-#include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store/password_store.h"
+#include "components/password_manager/core/browser/password_store/password_store_consumer.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/savedpasswords.h"
@@ -91,6 +91,17 @@ class SavedpasswordsGetFunction
   std::string username_;
 
   base::WeakPtrFactory<SavedpasswordsGetFunction> weak_ptr_factory_{this};
+};
+
+class SavedpasswordsCreateDelegateFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("savedpasswords.createDelegate", SAVEDPASSWORDS_CREATEDELEGATE)
+  SavedpasswordsCreateDelegateFunction() = default;
+
+ private:
+  ~SavedpasswordsCreateDelegateFunction() override = default;
+
+  ResponseAction Run() override;
 };
 
 class SavedpasswordsDeleteFunction : public ExtensionFunction {

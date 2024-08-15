@@ -69,12 +69,11 @@ WebView::ScopedWebContentsCreatorForTesting::
 
 WebView::WebView(content::BrowserContext* browser_context) {
   set_suppress_default_focus_handling();
-  ui::AXPlatformNode::AddAXModeObserver(this);
+  ax_mode_observation_.Observe(&ui::AXPlatform::GetInstance());
   SetBrowserContext(browser_context);
 }
 
 WebView::~WebView() {
-  ui::AXPlatformNode::RemoveAXModeObserver(this);
   SetWebContents(nullptr);  // Make sure all necessary tear-down takes place.
   browser_context_ = nullptr;
 }
@@ -302,6 +301,14 @@ void WebView::AddedToWidget() {
   }
 }
 
+void WebView::RemovedFromWidget() {
+  // Immediately clear the accessible parent upon being removed, as it's a
+  // weak reference to an object that is about to be destroyed.
+  if (holder_->native_view()) {
+    holder_->SetParentAccessible(nullptr);
+  }
+}
+
 gfx::NativeViewAccessible WebView::GetNativeViewAccessible() {
   if (web_contents() && !web_contents()->IsCrashed()) {
     content::RenderWidgetHostView* host_view =
@@ -525,7 +532,7 @@ void WebView::MaybeEnableAutoResize(content::RenderFrameHost* frame_host) {
   }
 }
 
-BEGIN_METADATA(WebView, View)
+BEGIN_METADATA(WebView)
 END_METADATA
 
 }  // namespace views

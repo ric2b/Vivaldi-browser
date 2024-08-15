@@ -45,10 +45,6 @@ FORWARD_DECLARE_TEST(ChromeMetricsServiceClientTest,
 FORWARD_DECLARE_TEST(IOSChromeMetricsServiceClientTest,
                      TestRegisterMetricsServiceProviders);
 
-namespace base {
-class PrefService;
-}  // namespace base
-
 namespace variations {
 class SyntheticTrialRegistry;
 }
@@ -146,6 +142,9 @@ class MetricsService {
   // Called when the application is coming out of background mode.
   void OnAppEnterForeground(bool force_open_new_log = false);
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
+  // Called when a document first starts loading.
+  void OnPageLoadStarted();
 
   // Signals that the browser is shutting down cleanly. Intended to be called
   // during shutdown after critical shutdown tasks have completed.

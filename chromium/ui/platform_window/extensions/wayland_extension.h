@@ -9,6 +9,10 @@
 #include "build/chromeos_buildflags.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 
+namespace gfx {
+class RoundedCornersF;
+}  // namespace gfx
+
 namespace ui {
 
 class PlatformWindow;
@@ -57,7 +61,16 @@ class COMPONENT_EXPORT(PLATFORM_WINDOW) WaylandExtension {
   // Sets the top inset (header) height which is reserved or occupied by the top
   // window frame.
   virtual void SetTopInset(int height) = 0;
-#endif
+
+  // Gets the radius of each corner of the browser window in dps. The radii is
+  // specified by the platform.
+  virtual gfx::RoundedCornersF GetWindowCornersRadii() = 0;
+
+  // Signals the underlying platform to round the browser window's drop shadow.
+  // The radius of each corner of the shadow is specified in dps.
+  virtual void SetShadowCornersRadii(const gfx::RoundedCornersF& radii) = 0;
+
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // Signals the underneath platform to shows a preview for the given window
   // snap direction. `allow_haptic_feedback` indicates if it should send haptic

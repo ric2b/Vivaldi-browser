@@ -45,15 +45,16 @@ class DownloadBubbleRowView : public views::View,
                               public views::ContextMenuController,
                               public views::FocusChangeListener,
                               public DownloadBubbleRowViewInfoObserver {
- public:
-  METADATA_HEADER(DownloadBubbleRowView);
+  METADATA_HEADER(DownloadBubbleRowView, views::View)
 
+ public:
   explicit DownloadBubbleRowView(
       const DownloadBubbleRowViewInfo& info,
       base::WeakPtr<DownloadBubbleUIController> bubble_controller,
       base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler,
       base::WeakPtr<Browser> browser,
-      int fixed_width);
+      int fixed_width,
+      bool is_in_partial_view = false);
   DownloadBubbleRowView(const DownloadBubbleRowView&) = delete;
   DownloadBubbleRowView& operator=(const DownloadBubbleRowView&) = delete;
   ~DownloadBubbleRowView() override;
@@ -88,6 +89,9 @@ class DownloadBubbleRowView : public views::View,
   // Overrides ui::AcceleratorTarget
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
+
+  // Returns the transparent button that is activated when the row is clicked.
+  views::Button* transparent_button() { return transparent_button_; }
 
   const std::u16string& GetSecondaryLabelTextForTesting();
 
@@ -233,7 +237,7 @@ class DownloadBubbleRowView : public views::View,
   // Whether we are dragging the download bubble row.
   bool dragging_ = false;
   // Position that a possible drag started at.
-  absl::optional<gfx::Point> drag_start_point_;
+  std::optional<gfx::Point> drag_start_point_;
   // A CloseOnDeactivate pin that prevents the download bubble from closing on
   // deactivating, for the duration of its lifetime. This is used to prevent
   // the dialog from closing when the row is being dragged.
@@ -255,6 +259,11 @@ class DownloadBubbleRowView : public views::View,
 
   // Mitigates the risk of clickjacking by enforcing a delay in click input.
   std::unique_ptr<views::InputEventActivationProtector> input_protector_;
+
+  // Used for metrics to study clickjacking potential.
+  const base::Time shown_time_;
+  // False in tests.
+  const bool is_in_partial_view_ = false;
 
   // TODO(crbug.com/1349528): The size constraint is not passed down from the
   // views tree in the first round of layout, so setting a fixed width to bound

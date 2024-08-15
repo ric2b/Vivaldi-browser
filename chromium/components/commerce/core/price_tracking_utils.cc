@@ -70,29 +70,8 @@ void UpdateBookmarksForSubscriptionsResult(
       specifics->set_last_subscription_change_time(
           base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds());
 
-      // If being untracked and the bookmark was created by price tracking
-      // rather than by explicitly bookmarking, delete the bookmark.
-      bool should_delete_node = false;
-      if (!enabled && specifics->bookmark_created_by_price_tracking() &&
-          !base::FeatureList::IsEnabled(kShoppingListTrackByDefault)) {
-        // If there is more than one bookmark with the specified cluster ID,
-        // don't delete the bookmark.
-        should_delete_node =
-            GetBookmarksWithClusterId(model.get(), cluster_id, 2).size() < 2;
-
-        if (should_delete_node) {
-          // Clear the shopping specifics so other observers don't fire on
-          // deletion.
-          meta->clear_shopping_specifics();
-        }
-      }
-
       power_bookmarks::SetNodePowerBookmarkMeta(model.get(), node,
                                                 std::move(meta));
-
-      if (should_delete_node) {
-        model->Remove(node, bookmarks::metrics::BookmarkEditSource::kOther);
-      }
     }
   }
 
@@ -306,7 +285,7 @@ void GetAllPriceTrackedBookmarks(
             std::vector<const bookmarks::BookmarkNode*> shopping_bookmarks =
                 GetAllShoppingBookmarks(model);
             std::vector<const bookmarks::BookmarkNode*> tracked_bookmarks;
-            for (const auto* node : shopping_bookmarks) {
+            for (const bookmarks::BookmarkNode* node : shopping_bookmarks) {
               std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
                   power_bookmarks::GetNodePowerBookmarkMeta(model, node);
 
@@ -444,12 +423,13 @@ bool CanTrackPrice(const power_bookmarks::ShoppingSpecifics& specifics) {
   return specifics.has_product_cluster_id();
 }
 
-const std::u16string& GetBookmarkParentNameOrDefault(
+absl::optional<std::u16string> GetBookmarkParentName(
     bookmarks::BookmarkModel* model,
     const GURL& url) {
   const bookmarks::BookmarkNode* node =
       model->GetMostRecentlyAddedUserNodeForURL(url);
-  return node ? node->parent()->GetTitle() : model->other_node()->GetTitle();
+  return node ? absl::optional<std::u16string>(node->parent()->GetTitle())
+              : absl::nullopt;
 }
 
 const bookmarks::BookmarkNode* GetShoppingCollectionBookmarkFolder(
@@ -461,8 +441,10 @@ const bookmarks::BookmarkNode* GetShoppingCollectionBookmarkFolder(
 
   const base::Uuid collection_uuid =
       base::Uuid::ParseLowercase(bookmarks::kShoppingCollectionUuid);
-  const bookmarks::BookmarkNode* collection_node =
-      model->GetNodeByUuid(collection_uuid);
+
+  const bookmarks::BookmarkNode* collection_node = model->GetNodeByUuid(
+      collection_uuid,
+      bookmarks::BookmarkModel::NodeTypeForUuidLookup::kLocalOrSyncableNodes);
 
   CHECK(!collection_node || collection_node->is_folder());
 
@@ -475,7 +457,11 @@ const bookmarks::BookmarkNode* GetShoppingCollectionBookmarkFolder(
         model->other_node(), model->other_node()->children().size(),
         l10n_util::GetStringUTF16(IDS_SHOPPING_COLLECTION_FOLDER_NAME), nullptr,
         absl::nullopt, collection_uuid);
-    CHECK_EQ(model->GetNodeByUuid(collection_uuid), collection_node);
+    CHECK_EQ(
+        model->GetNodeByUuid(collection_uuid,
+                             bookmarks::BookmarkModel::NodeTypeForUuidLookup::
+                                 kLocalOrSyncableNodes),
+        collection_node);
   }
 
   return collection_node;
@@ -485,6 +471,31 @@ bool IsShoppingCollectionBookmarkFolder(const bookmarks::BookmarkNode* node) {
   return node && node->is_folder() &&
          node->uuid() ==
              base::Uuid::ParseLowercase(bookmarks::kShoppingCollectionUuid);
+}
+
+absl::optional<uint64_t> GetProductClusterIdFromBookmark(
+    const GURL& url,
+    bookmarks::BookmarkModel* model) {
+  const bookmarks::BookmarkNode* node =
+      model->GetMostRecentlyAddedUserNodeForURL(url);
+
+  if (!node) {
+    return absl::nullopt;
+  }
+
+  std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
+      power_bookmarks::GetNodePowerBookmarkMeta(model, node);
+
+  if (!meta) {
+    return absl::nullopt;
+  }
+
+  const power_bookmarks::ShoppingSpecifics specifics =
+      meta->shopping_specifics();
+
+  return specifics.has_product_cluster_id()
+             ? absl::optional<uint64_t>(specifics.product_cluster_id())
+             : absl::nullopt;
 }
 
 }  // namespace commerce

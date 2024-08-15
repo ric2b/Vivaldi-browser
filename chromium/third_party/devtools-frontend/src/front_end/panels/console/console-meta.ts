@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import type * as Console from './console.js';
 
-import * as i18n from '../../core/i18n/i18n.js';
 const UIStrings = {
   /**
    *@description Title of the Console tool
@@ -17,6 +17,10 @@ const UIStrings = {
    *@description Title of an action that shows the console.
    */
   showConsole: 'Show Console',
+  /**
+   *@description Title of an action that toggles the console.
+   */
+  toggleConsole: 'Toggle Console',
   /**
    *@description Text to clear the console
    */
@@ -170,12 +174,12 @@ UI.ViewManager.registerViewExtension({
 });
 
 UI.ActionRegistration.registerActionExtension({
-  actionId: 'console.show',
+  actionId: 'console.toggle',
   category: UI.ActionRegistration.ActionCategory.CONSOLE,
-  title: i18nLazyString(UIStrings.showConsole),
+  title: i18nLazyString(UIStrings.toggleConsole),
   async loadActionDelegate() {
     const Console = await loadConsoleModule();
-    return Console.ConsoleView.ActionDelegate.instance();
+    return new Console.ConsoleView.ActionDelegate();
   },
   bindings: [
     {
@@ -195,7 +199,7 @@ UI.ActionRegistration.registerActionExtension({
   iconClass: UI.ActionRegistration.IconClass.CLEAR,
   async loadActionDelegate() {
     const Console = await loadConsoleModule();
-    return Console.ConsoleView.ActionDelegate.instance();
+    return new Console.ConsoleView.ActionDelegate();
   },
   contextTypes() {
     return maybeRetrieveContextTypes(Console => [Console.ConsoleView.ConsoleView]);
@@ -217,7 +221,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.clearConsoleHistory),
   async loadActionDelegate() {
     const Console = await loadConsoleModule();
-    return Console.ConsoleView.ActionDelegate.instance();
+    return new Console.ConsoleView.ActionDelegate();
   },
 });
 
@@ -228,7 +232,7 @@ UI.ActionRegistration.registerActionExtension({
   iconClass: UI.ActionRegistration.IconClass.EYE,
   async loadActionDelegate() {
     const Console = await loadConsoleModule();
-    return Console.ConsoleView.ActionDelegate.instance();
+    return new Console.ConsoleView.ActionDelegate();
   },
 });
 
@@ -435,9 +439,9 @@ Common.Revealer.registerRevealer({
       Common.Console.Console,
     ];
   },
+  destination: undefined,
   async loadRevealer() {
     const Console = await loadConsoleModule();
-    return Console.ConsolePanel.ConsoleRevealer.instance();
+    return new Console.ConsolePanel.ConsoleRevealer();
   },
-  destination: undefined,
 });

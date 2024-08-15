@@ -50,10 +50,18 @@ bool& IsolateCurrentlyInBackground() EXCLUSIVE_LOCKS_REQUIRED(IsolatesLock()) {
   return isolate_currently_in_background;
 }
 
+bool& BatterySaverModeEnabled() EXCLUSIVE_LOCKS_REQUIRED(IsolatesLock()) {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(bool, battery_saver_mode_enabled, ());
+  return battery_saver_mode_enabled;
+}
+
 void AddWorkerIsolate(v8::Isolate* isolate) {
   base::AutoLock locker(IsolatesLock());
   if (IsolateCurrentlyInBackground()) {
     isolate->IsolateInBackgroundNotification();
+  }
+  if (BatterySaverModeEnabled()) {
+    isolate->SetBatterySaverMode(true);
   }
   Isolates().insert(isolate);
 }
@@ -76,8 +84,15 @@ void RemoveForegroundedWorkerIsolate(v8::Isolate* isolate) {
 }  // namespace
 
 // Wrapper functions defined in third_party/blink/public/web/blink.h
-void MemoryPressureNotificationToWorkerThreadIsolates(
-    v8::MemoryPressureLevel level) {
+void MemoryPressureNotificationToAllIsolates(v8::MemoryPressureLevel level) {
+  Thread::MainThread()
+      ->Scheduler()
+      ->ToMainThreadScheduler()
+      ->ForEachMainThreadIsolate(WTF::BindRepeating(
+          [](v8::MemoryPressureLevel level, v8::Isolate* isolate) {
+            isolate->MemoryPressureNotification(level);
+          },
+          level));
   WorkerBackingThread::MemoryPressureNotificationToWorkerThreadIsolates(level);
 }
 
@@ -99,6 +114,19 @@ void IsolateInForegroundNotification() {
         isolate->IsolateInForegroundNotification();
       }));
   WorkerBackingThread::IsolateInForegroundNotificationToWorkerThreadIsolates();
+}
+
+void SetBatterySaverModeForAllIsolates(bool battery_saver_mode_enabled) {
+  Thread::MainThread()
+      ->Scheduler()
+      ->ToMainThreadScheduler()
+      ->ForEachMainThreadIsolate(WTF::BindRepeating(
+          [](bool battery_saver_mode_enabled, v8::Isolate* isolate) {
+            isolate->SetBatterySaverMode(battery_saver_mode_enabled);
+          },
+          battery_saver_mode_enabled));
+  WorkerBackingThread::SetBatterySaverModeForWorkerThreadIsolates(
+      battery_saver_mode_enabled);
 }
 
 WorkerBackingThread::WorkerBackingThread(const ThreadCreationParams& params)
@@ -188,6 +216,17 @@ void WorkerBackingThread::
       isolate->IsolateInForegroundNotification();
     }
   }
+}
+
+// static
+void WorkerBackingThread::SetBatterySaverModeForWorkerThreadIsolates(
+    bool battery_saver_mode_enabled) {
+  base::AutoLock locker(IsolatesLock());
+
+  for (v8::Isolate* isolate : Isolates()) {
+    isolate->SetBatterySaverMode(battery_saver_mode_enabled);
+  }
+  BatterySaverModeEnabled() = battery_saver_mode_enabled;
 }
 
 }  // namespace blink

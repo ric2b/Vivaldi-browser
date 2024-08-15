@@ -6,15 +6,18 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/geolocation_access_level.h"
 #include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/shell.h"
 #include "ash/system/geolocation/geolocation_controller.h"
+#include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -54,6 +57,7 @@
 #include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine.pb.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
+#include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
 #include "chromeos/ash/components/peripheral_notification/peripheral_notification_manager.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/components/standalone_browser/lacros_availability.h"
@@ -72,7 +76,6 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom.h"
 #include "third_party/cros_system_api/dbus/update_engine/dbus-constants.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
@@ -162,14 +165,12 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kLocalStateDevicePeripheralDataAccessEnabled, false);
   registry->RegisterBooleanPref(prefs::kDeviceI18nShortcutsEnabled, true);
-  registry->RegisterBooleanPref(prefs::kChromadToCloudMigrationEnabled, false);
   registry->RegisterBooleanPref(prefs::kLoginScreenWebUILazyLoading, false);
   registry->RegisterBooleanPref(::prefs::kConsumerAutoUpdateToggle, true);
   registry->RegisterBooleanPref(prefs::kDeviceEphemeralNetworkPoliciesEnabled,
                                 false);
   registry->RegisterBooleanPref(prefs::kDeviceSwitchFunctionKeysBehaviorEnabled,
                                 false);
-  registry->RegisterBooleanPref(prefs::kIsolatedWebAppsEnabled, false);
 
   RegisterLocalStatePrefs(registry);
   ash::hid_detection_revamp_field_trial::RegisterLocalStatePrefs(registry);
@@ -553,11 +554,6 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(::prefs::kStartupBrowserWindowLaunchSuppressed,
                                 false);
 
-  // This pref is a per-session pref and must not be synced.
-  registry->RegisterBooleanPref(
-      ::prefs::kLoginExtensionApiCanLockManagedGuestSession, false,
-      PrefRegistry::NO_REGISTRATION_FLAGS);
-
   registry->RegisterBooleanPref(prefs::kLoginDisplayPasswordButtonEnabled,
                                 true);
 
@@ -611,6 +607,14 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kShowHumanPresenceSensorScreenEnabled,
                                 true);
   registry->RegisterListPref(prefs::kUserFeedbackWithLowLevelDebugDataAllowed);
+  registry->RegisterBooleanPref(prefs::kIsolatedWebAppsEnabled, false);
+
+  registry->RegisterDictionaryPref(prefs::kAshAppIconLightVibrantColorCache);
+  registry->RegisterDictionaryPref(prefs::kAshAppIconSortableColorGroupCache);
+  registry->RegisterDictionaryPref(prefs::kAshAppIconSortableColorHueCache);
+
+  registry->RegisterBooleanPref(::prefs::kStandaloneWindowMigrationNudgeShown,
+                                false);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
@@ -685,9 +689,8 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   consumer_auto_update_toggle_pref_.Init(::prefs::kConsumerAutoUpdateToggle,
                                          g_browser_process->local_state(),
                                          callback);
-  // TODO(zauri): change to BooleanPrefMember
   pref_change_registrar_.Init(prefs);
-  pref_change_registrar_.Add(ash::prefs::kUserGeolocationAllowed, callback);
+  pref_change_registrar_.Add(ash::prefs::kUserGeolocationAccessLevel, callback);
   pref_change_registrar_.Add(::prefs::kUserTimezone, callback);
   pref_change_registrar_.Add(::prefs::kResolveTimezoneByGeolocationMethod,
                              callback);
@@ -1141,32 +1144,30 @@ void Preferences::ApplyPreferences(ApplyReason reason,
   // TODO(b/277061508): Move this logic inside
   // GeolocationPrivacySwitchController.
   if (reason == REASON_INITIALIZATION ||
-      (pref_name == ash::prefs::kUserGeolocationAllowed &&
+      (pref_name == ash::prefs::kUserGeolocationAccessLevel &&
        reason == REASON_PREF_CHANGED)) {
-    const bool system_geolocation_permission_enabled =
-        prefs_->GetBoolean(ash::prefs::kUserGeolocationAllowed);
+    const auto user_geolocation_access_level =
+        static_cast<GeolocationAccessLevel>(
+            prefs_->GetInteger(ash::prefs::kUserGeolocationAccessLevel));
 
-    const bool automatic_timezone_selected = prefs_->GetBoolean(
-        ::prefs::kResolveTimezoneByGeolocationMigratedToMethod);
+    // Notify `SimpleGeolocationProvider` of the user geolocation permission
+    // change.
+    SimpleGeolocationProvider::GetInstance()->SetGeolocationAccessLevel(
+        user_geolocation_access_level);
 
-    // Fall back to static timezone when system geolocation access is disabled.
-    if (!system_geolocation_permission_enabled && automatic_timezone_selected) {
-      prefs_->SetBoolean(::prefs::kResolveTimezoneByGeolocationMigratedToMethod,
-                         false);
-      prefs_->SetInteger(::prefs::kResolveTimezoneByGeolocationMethod,
-                         static_cast<int>(system::TimeZoneResolverManager::
-                                              TimeZoneResolveMethod::DISABLED));
+    // Log-in screen follows the owner's geolocation setting.
+    if (user_is_owner) {
+      GeolocationAccessLevel access_level;
+      if (SimpleGeolocationProvider::GetInstance()
+              ->IsGeolocationUsageAllowedForSystem()) {
+        access_level = GeolocationAccessLevel::kAllowed;
+      } else {
+        access_level = GeolocationAccessLevel::kDisallowed;
+      }
+      g_browser_process->local_state()->SetInteger(
+          ash::prefs::kDeviceGeolocationAllowed,
+          static_cast<int>(access_level));
     }
-
-    ash::system::TimeZoneResolverManager* timezone_resolver_manager =
-        g_browser_process->platform_part()->GetTimezoneResolverManager();
-    GeolocationController* geolocation_controller =
-        ash::Shell::Get()->geolocation_controller();
-
-    timezone_resolver_manager->OnSystemGeolocationPermissionChanged(
-        system_geolocation_permission_enabled);
-    geolocation_controller->OnSystemGeolocationPermissionChanged(
-        system_geolocation_permission_enabled);
   }
 
   if (pref_name == ::prefs::kUserTimezone &&
@@ -1273,8 +1274,9 @@ void Preferences::SetLanguageConfigStringListAsCSV(const char* section,
   }
 
   // Transfers the xkb id to extension-xkb id.
-  if (input_method_manager_->MigrateInputMethods(&split_values))
+  if (input_method_manager_->GetMigratedInputMethodIDs(&split_values)) {
     preload_engines_.SetValue(base::JoinString(split_values, ","));
+  }
 
   if (section == std::string(language_prefs::kGeneralSectionName) &&
       name == std::string(language_prefs::kPreloadEnginesConfigName)) {
@@ -1355,7 +1357,7 @@ void Preferences::UpdateStatusChanged(
   }
 }
 
-void Preferences::OnIsConsumerAutoUpdateEnabled(absl::optional<bool> enabled) {
+void Preferences::OnIsConsumerAutoUpdateEnabled(std::optional<bool> enabled) {
   DVLOG(1) << "OnIsConsumerAutoUpdateEnabled";
   if (!enabled.has_value()) {
     VLOG(1) << "Failed to retrieve consumer auto update feature value.";

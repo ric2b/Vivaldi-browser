@@ -38,8 +38,13 @@ ffmpeg_config_root =
 group("generate_config") {
   deps = [
     ":generate_decoder_list",
-    ":generate_redirected_log",
   ]
+  if (!is_linux) {
+    # Only used by Mac and Windows platform media files
+    deps += [
+      ":generate_redirected_log",
+    ]
+  }
 }
 
 generated_file("generate_decoder_list") {
@@ -79,12 +84,14 @@ generated_file("generate_decoder_list") {
   output_conversion = "list lines"
 }
 
-# Override chromium/third_party/ffmpeg/libavutil/log.h with an implementation
-# that uses Chromium logging.
-generated_file("generate_redirected_log") {
-  outputs = [target_gen_dir + "/libavutil/log.h"]
-  contents = [
-    "#include \"platform_media/ffmpeg/ffviv_log.h\""
-  ]
-  output_conversion = "list lines"
+if (!is_linux) {
+  # Override chromium/third_party/ffmpeg/libavutil/log.h with an implementation
+  # that uses Chromium logging.
+  generated_file("generate_redirected_log") {
+    outputs = [target_gen_dir + "/libavutil/log.h"]
+    contents = [
+      "#include \"platform_media/ffmpeg/ffviv_log.h\""
+    ]
+    output_conversion = "list lines"
+  }
 }

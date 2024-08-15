@@ -48,8 +48,10 @@ struct CONTENT_EXPORT AttributionConfig {
     // Controls the time window for reporting origins per site limit.
     base::TimeDelta origins_per_site_window = base::Days(1);
 
-    // When adding new members, the corresponding `Validate()` definition and
-    // `operator==()` definition in `attribution_interop_parser_unittest.cc`
+    friend bool operator==(const RateLimitConfig&,
+                           const RateLimitConfig&) = default;
+
+    // When adding new members, the corresponding `Validate()` definition
     // should also be updated.
   };
 
@@ -66,21 +68,13 @@ struct CONTENT_EXPORT AttributionConfig {
     // Returns true if this config is valid.
     [[nodiscard]] bool Validate() const;
 
-    // Controls randomized response rates for the API: when a source is
-    // registered, this parameter is used to determine the probability that any
-    // subsequent attributions for the source are handled truthfully, or whether
-    // the source is immediately attributed with zero or more fake reports and
-    // real attributions are dropped. Must be non-negative and non-NaN, but may
-    // be infinite.
-    double randomized_response_epsilon = 14;
-
     // Controls how many reports can be in the storage per attribution
     // destination.
     int max_reports_per_destination = 1024;
 
     // Default constants for max info gain in bits per source type.
     // Rounded up to nearest e-5 digit.
-    static constexpr double kDefaultMaxNavigationInfoGain = 11.46173;
+    static constexpr double kDefaultMaxNavigationInfoGain = 11.5;
     static constexpr double kDefaultMaxEventInfoGain = 6.5;
 
     // Controls the max number bits of information that can be associated with
@@ -88,8 +82,10 @@ struct CONTENT_EXPORT AttributionConfig {
     double max_navigation_info_gain = kDefaultMaxNavigationInfoGain;
     double max_event_info_gain = kDefaultMaxEventInfoGain;
 
-    // When adding new members, the corresponding `Validate()` definition and
-    // `operator==()` definition in `attribution_interop_parser_unittest.cc`
+    friend bool operator==(const EventLevelLimit&,
+                           const EventLevelLimit&) = default;
+
+    // When adding new members, the corresponding `Validate()` definition
     // should also be updated.
   };
 
@@ -117,8 +113,10 @@ struct CONTENT_EXPORT AttributionConfig {
 
     int max_aggregatable_reports_per_source = 20;
 
-    // When adding new members, the corresponding `Validate()` definition and
-    // `operator==()` definition in `attribution_interop_parser_unittest.cc`
+    friend bool operator==(const AggregateLimit&,
+                           const AggregateLimit&) = default;
+
+    // When adding new members, the corresponding `Validate()` definition
     // should also be updated.
   };
 
@@ -130,8 +128,10 @@ struct CONTENT_EXPORT AttributionConfig {
     int max_per_reporting_site = 50;
     base::TimeDelta rate_limit_window = base::Minutes(1);
 
-    // When adding new members, the corresponding `Validate()` definition and
-    // `operator==()` definition in `attribution_interop_parser_unittest.cc`
+    friend bool operator==(const DestinationRateLimit&,
+                           const DestinationRateLimit&) = default;
+
+    // When adding new members, the corresponding `Validate()` definition
     // should also be updated.
   };
 
@@ -160,8 +160,10 @@ struct CONTENT_EXPORT AttributionConfig {
   AggregateLimit aggregate_limit;
   DestinationRateLimit destination_rate_limit;
 
-  // When adding new members, the corresponding `Validate()` definition and
-  // `operator==()` definition in `attribution_interop_parser_unittest.cc`
+  friend bool operator==(const AttributionConfig&,
+                         const AttributionConfig&) = default;
+
+  // When adding new members, the corresponding `Validate()` definition
   // should also be updated.
 };
 

@@ -223,7 +223,7 @@ class FileManagerFileTaskWithAppServiceTest : public testing::Test {
   }
 
   void AddFakeAppToAppService(const std::string& app_id,
-                              const absl::optional<std::string>& package_name,
+                              const std::optional<std::string>& package_name,
                               std::vector<std::string> policy_ids,
                               apps::AppType app_type) {
     auto app = std::make_unique<apps::App>(app_type, app_id);
@@ -245,7 +245,7 @@ class FileManagerFileTaskWithAppServiceTest : public testing::Test {
  private:
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-  raw_ptr<apps::AppServiceProxy, ExperimentalAsh> app_service_proxy_ = nullptr;
+  raw_ptr<apps::AppServiceProxy> app_service_proxy_ = nullptr;
   apps::AppServiceTest app_service_test_;
 };
 

@@ -35,6 +35,19 @@ class MODULES_EXPORT BrowserCaptureMediaStreamTrack
 #if !BUILDFLAG(IS_ANDROID)
   void Trace(Visitor*) const override;
 
+  // MediaStreamTrack impl
+  void SendWheel(
+      double relative_x,
+      double relative_y,
+      int wheel_delta_x,
+      int wheel_delta_y,
+      base::OnceCallback<void(bool, const String&)> callback) override;
+  void GetZoomLevel(base::OnceCallback<void(absl::optional<int>, const String&)>
+                        callback) override;
+  void SetZoomLevel(
+      int zoom_level,
+      base::OnceCallback<void(bool, const String&)> callback) override;
+
   // Allows tests to invoke OnSubCaptureTargetVersionObserved() directly, since
   // triggering it via mocks would be prohibitively difficult.
   void OnSubCaptureTargetVersionObservedForTesting(

@@ -14,12 +14,14 @@
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/x/x11_desktop_window_move_client.h"
 #include "ui/base/x/x11_drag_drop_client.h"
 #include "ui/base/x/x11_move_loop_delegate.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/sync.h"
 #include "ui/gfx/x/xfixes.h"
@@ -114,7 +116,6 @@ class X11Window : public PlatformWindow,
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void SizeConstraintsChanged() override;
-  bool IsTranslucentWindowOpacitySupported() const override;
   void SetOpacity(float opacity) override;
   bool CanSetDecorationInsets() const override;
   void SetDecorationInsets(const gfx::Insets* insets_px) override;
@@ -274,6 +275,8 @@ class X11Window : public PlatformWindow,
   // Called when |xwindow_|'s _NET_WM_STATE property is updated.
   void OnWMStateUpdated();
 
+  WindowTiledEdges GetTiledState() const;
+
   // Called when |xwindow_|'s _NET_FRAME_EXTENTS property is updated.
   void OnFrameExtentsUpdated();
 
@@ -320,6 +323,8 @@ class X11Window : public PlatformWindow,
   // Stores current state of this window.
   PlatformWindowState state_ = PlatformWindowState::kUnknown;
 
+  WindowTiledEdges tiled_state_;
+
   const raw_ptr<PlatformWindowDelegate> platform_window_delegate_;
 
   raw_ptr<WorkspaceExtensionDelegate, DanglingUntriaged>
@@ -355,10 +360,10 @@ class X11Window : public PlatformWindow,
   std::unique_ptr<X11MoveLoop> drag_loop_;
 
   // Events that we have selected on the source window of the incoming drag.
-  std::unique_ptr<x11::XScopedEventSelector> source_window_events_;
+  x11::ScopedEventSelector source_window_events_;
 
   // The display and the native X window hosting the root window.
-  const raw_ptr<x11::Connection> connection_;
+  const raw_ref<x11::Connection> connection_;
   x11::Window xwindow_ = x11::Window::None;
   x11::Window x_root_window_ = x11::Window::None;
 
@@ -366,7 +371,7 @@ class X11Window : public PlatformWindow,
   x11::Window transient_window_ = x11::Window::None;
 
   // Events selected on |xwindow_|.
-  std::unique_ptr<x11::XScopedEventSelector> xwindow_events_;
+  x11::ScopedEventSelector xwindow_events_;
 
   // The window manager state bits.
   base::flat_set<x11::Atom> window_properties_;

@@ -47,7 +47,7 @@ std::string TreeToStringHelper(const AXNode* node, int indent, bool verbose) {
   return std::accumulate(
       node->children().cbegin(), node->children().cend(),
       std::string(2 * indent, ' ') + node->data().ToString(verbose) + "\n",
-      [indent, verbose](const std::string& str, const auto* child) {
+      [indent, verbose](const std::string& str, const ui::AXNode* child) {
         return str + TreeToStringHelper(child, indent + 1, verbose);
       });
 }
@@ -619,7 +619,7 @@ struct AXTree::OrderedSetContent {
       : ordered_set_(ordered_set) {}
   ~OrderedSetContent() = default;
 
-  std::vector<const AXNode*> set_items_;
+  std::vector<raw_ptr<const AXNode, VectorExperimental>> set_items_;
 
   // Some ordered set items may not be associated with an ordered set.
   raw_ptr<const AXNode> ordered_set_;
@@ -809,8 +809,9 @@ void AXTree::Destroy() {
     DestroyNodeAndSubtree(root_.ExtractAsDangling(), nullptr);
   }  // tree_update_in_progress.
 
-  UMA_HISTOGRAM_TIMES("Accessibility.Performance.AXTree.Destroy",
-                      timer.Elapsed());
+  UMA_HISTOGRAM_CUSTOM_TIMES("Accessibility.Performance.AXTree.Destroy2",
+                             timer.Elapsed(), base::Microseconds(1),
+                             base::Seconds(1), 50);
 }
 
 void AXTree::UpdateDataForTesting(const AXTreeData& new_data) {
@@ -840,7 +841,7 @@ gfx::RectF AXTree::RelativeToTreeBoundsInternal(const AXNode* node,
     // bad state.
     if (bounds.IsEmpty() && !GetTreeUpdateInProgressState() &&
         allow_recursion) {
-      for (auto* child : node->children()) {
+      for (ui::AXNode* child : node->children()) {
         gfx::RectF child_bounds = RelativeToTreeBoundsInternal(
             child, gfx::RectF(), /*offscreen=*/nullptr, clip_bounds,
             skip_container_offset,
@@ -1068,7 +1069,8 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
     return false;
 
   // Log unserialize perf after early returns.
-  SCOPED_UMA_HISTOGRAM_TIMER("Accessibility.Performance.Tree.Unserialize");
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
+      "Accessibility.Performance.Tree.Unserialize2");
 
   // Notify observers of subtrees and nodes that are about to be destroyed or
   // reparented, this must be done before applying any updates to the tree.
@@ -1202,9 +1204,10 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
         // If the tree doesn't exists any more because the root has just been
         // replaced, there is nothing more to clear.
         if (root_) {
-          for (auto* child : cleared_node->children())
+          for (ui::AXNode* child : cleared_node->children()) {
             DestroySubtree(child, &update_state);
-          std::vector<AXNode*> children;
+          }
+          std::vector<raw_ptr<AXNode, VectorExperimental>> children;
           cleared_node->SwapChildren(&children);
           update_state.pending_node_ids.insert(cleared_node->id());
         }
@@ -1796,7 +1799,7 @@ bool AXTree::UpdateNode(const AXNodeData& src,
 
   // Now build a new children vector, reusing nodes when possible,
   // and swap it in.
-  std::vector<AXNode*> new_children;
+  std::vector<raw_ptr<AXNode, VectorExperimental>> new_children;
   bool success = CreateNewChildVector(
       node, src.child_ids, &new_children, update_state);
   node->SwapChildren(&new_children);
@@ -1873,8 +1876,9 @@ void AXTree::RecursivelyNotifyNodeDeletedForTreeTeardown(AXNode* node) {
 
   for (AXTreeObserver& observer : observers_)
     observer.OnNodeDeleted(this, node->id());
-  for (auto* child : node->children())
+  for (ui::AXNode* child : node->children()) {
     RecursivelyNotifyNodeDeletedForTreeTeardown(child);
+  }
 }
 
 void AXTree::NotifyNodeHasBeenDeleted(AXNodeID node_id) {
@@ -2225,8 +2229,9 @@ void AXTree::DestroyNodeAndSubtree(AXNode* node,
   id_map_.erase(iter);
   node = nullptr;
 
-  for (auto* child : node_to_delete->children())
+  for (ui::AXNode* child : node_to_delete->children()) {
     DestroyNodeAndSubtree(child, update_state);
+  }
   if (update_state) {
     update_state->pending_node_ids.erase(id);
     update_state->DecrementPendingDestroyNodeCount(id);
@@ -2258,10 +2263,11 @@ void AXTree::DeleteOldChildren(AXNode* node,
   }
 }
 
-bool AXTree::CreateNewChildVector(AXNode* node,
-                                  const std::vector<AXNodeID>& new_child_ids,
-                                  std::vector<AXNode*>* new_children,
-                                  AXTreeUpdateState* update_state) {
+bool AXTree::CreateNewChildVector(
+    AXNode* node,
+    const std::vector<AXNodeID>& new_child_ids,
+    std::vector<raw_ptr<AXNode, VectorExperimental>>* new_children,
+    AXTreeUpdateState* update_state) {
   DCHECK(GetTreeUpdateInProgressState());
   bool success = true;
   for (size_t i = 0; i < new_child_ids.size(); ++i) {
@@ -2500,12 +2506,15 @@ void AXTree::ComputeSetSizePosInSetAndCache(const AXNode& node,
                                             const AXNode* ordered_set) {
   DCHECK(ordered_set);
 
-  // Set items role::kComment and role::kRadioButton are special cases and do
-  // not necessarily need to be contained in an ordered set.
+  // Set items role::kComment and role::kDisclosureTriangleGrouped and
+  // role::kRadioButton are special cases and do not necessarily need to be
+  // contained in an ordered set.
   if (node.GetRole() != ax::mojom::Role::kComment &&
+      node.GetRole() != ax::mojom::Role::kDisclosureTriangleGrouped &&
       node.GetRole() != ax::mojom::Role::kRadioButton &&
-      !node.SetRoleMatchesItemRole(ordered_set) && !node.IsOrderedSet())
+      !node.SetRoleMatchesItemRole(ordered_set) && !node.IsOrderedSet()) {
     return;
+  }
 
   // Find all items within ordered_set and add to |items_map_to_be_populated|.
   OrderedSetItemsMap items_map_to_be_populated;

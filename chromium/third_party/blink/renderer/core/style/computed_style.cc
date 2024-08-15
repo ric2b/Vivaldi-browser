@@ -95,17 +95,11 @@
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/case_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/math_transform.h"
+#include "third_party/blink/renderer/platform/wtf/text/text_offset_map.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace blink {
-
-struct SameSizeAsBorderValue {
-  StyleColor color_;
-  unsigned bitfield_;
-};
-
-ASSERT_SIZE(BorderValue, SameSizeAsBorderValue);
 
 // Since different compilers/architectures pack ComputedStyle differently,
 // re-create the same structure for an accurate size comparison.
@@ -117,14 +111,12 @@ ASSERT_SIZE(BorderValue, SameSizeAsBorderValue);
 struct SameSizeAsComputedStyleBase
     : public GarbageCollected<SameSizeAsComputedStyleBase> {
   SameSizeAsComputedStyleBase() {
-    base::debug::Alias(&data_refs);
     base::debug::Alias(&pointers);
     base::debug::Alias(&bitfields);
   }
 
  private:
-  void* data_refs[8];
-  Member<void*> pointers[1];
+  Member<void*> pointers[10];
   unsigned bitfields[5];
 };
 
@@ -358,7 +350,7 @@ bool ComputedStyle::NeedsReattachLayoutTree(const Element& element,
     return true;
   }
 
-  // We use LayoutNGTextCombine only for vertical writing mode.
+  // We use LayoutTextCombine only for vertical writing mode.
   if (new_style->HasTextCombine() && old_style->IsHorizontalWritingMode() !=
                                          new_style->IsHorizontalWritingMode()) {
     DCHECK_EQ(old_style->HasTextCombine(), new_style->HasTextCombine());
@@ -421,7 +413,8 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
     return Difference::kDescendantAffecting;
   }
   if (old_style.Display() != new_style.Display() &&
-      old_style.BlockifiesChildren() != new_style.BlockifiesChildren()) {
+      (old_style.BlockifiesChildren() != new_style.BlockifiesChildren() ||
+       old_style.InlinifiesChildren() != new_style.InlinifiesChildren())) {
     return Difference::kDescendantAffecting;
   }
   // TODO(crbug.com/1213888): Only recalc affected descendants.
@@ -586,28 +579,86 @@ bool ComputedStyle::operator==(const ComputedStyle& o) const {
          InheritedVariablesEqual(o);
 }
 
-bool ComputedStyle::HighlightPseudoElementStylesDependOnFontMetrics() const {
+bool ComputedStyle::HighlightPseudoElementStylesDependOnRelativeUnits() const {
   const StyleHighlightData& highlight_data = HighlightData();
   if (highlight_data.Selection() &&
-      highlight_data.Selection()->HasFontRelativeUnits()) {
+      highlight_data.Selection()->HasAnyRelativeUnits()) {
     return true;
   }
   if (highlight_data.TargetText() &&
-      highlight_data.TargetText()->HasFontRelativeUnits()) {
+      highlight_data.TargetText()->HasAnyRelativeUnits()) {
     return true;
   }
   if (highlight_data.SpellingError() &&
-      highlight_data.SpellingError()->HasFontRelativeUnits()) {
+      highlight_data.SpellingError()->HasAnyRelativeUnits()) {
     return true;
   }
   if (highlight_data.GrammarError() &&
-      highlight_data.GrammarError()->HasFontRelativeUnits()) {
+      highlight_data.GrammarError()->HasAnyRelativeUnits()) {
     return true;
   }
   const CustomHighlightsStyleMap& custom_highlights =
       highlight_data.CustomHighlights();
   for (auto custom_highlight : custom_highlights) {
-    if (custom_highlight.value->HasFontRelativeUnits()) {
+    if (custom_highlight.value->HasAnyRelativeUnits()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ComputedStyle::HighlightPseudoElementStylesDependOnContainerUnits() const {
+  const StyleHighlightData& highlight_data = HighlightData();
+  if (highlight_data.Selection() &&
+      highlight_data.Selection()->HasContainerRelativeUnits()) {
+    return true;
+  }
+  if (highlight_data.TargetText() &&
+      highlight_data.TargetText()->HasContainerRelativeUnits()) {
+    return true;
+  }
+  if (highlight_data.SpellingError() &&
+      highlight_data.SpellingError()->HasContainerRelativeUnits()) {
+    return true;
+  }
+  if (highlight_data.GrammarError() &&
+      highlight_data.GrammarError()->HasContainerRelativeUnits()) {
+    return true;
+  }
+  const CustomHighlightsStyleMap& custom_highlights =
+      highlight_data.CustomHighlights();
+  for (auto custom_highlight : custom_highlights) {
+    if (custom_highlight.value->HasContainerRelativeUnits()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ComputedStyle::HighlightPseudoElementStylesDependOnViewportUnits() const {
+  const StyleHighlightData& highlight_data = HighlightData();
+  if (highlight_data.Selection() &&
+      highlight_data.Selection()->HasViewportUnits()) {
+    return true;
+  }
+  if (highlight_data.TargetText() &&
+      highlight_data.TargetText()->HasViewportUnits()) {
+    return true;
+  }
+  if (highlight_data.SpellingError() &&
+      highlight_data.SpellingError()->HasViewportUnits()) {
+    return true;
+  }
+  if (highlight_data.GrammarError() &&
+      highlight_data.GrammarError()->HasViewportUnits()) {
+    return true;
+  }
+  const CustomHighlightsStyleMap& custom_highlights =
+      highlight_data.CustomHighlights();
+  for (auto custom_highlight : custom_highlights) {
+    if (custom_highlight.value->HasViewportUnits()) {
       return true;
     }
   }
@@ -735,7 +786,9 @@ bool ComputedStyle::NonInheritedEqual(const ComputedStyle& other) const {
 }
 
 bool ComputedStyle::InheritedDataShared(const ComputedStyle& other) const {
-  // This is a fast check that only looks if the data structures are shared.
+  // We use a by-value check that is a bit more expensive than
+  // pointer comparison, but yields many more full MPC hits,
+  // so it generally makes up for it.
   return ComputedStyleBase::InheritedDataShared(other);
 }
 
@@ -769,7 +822,8 @@ StyleDifference ComputedStyle::VisualInvalidationDiff(
   }
 
   if (!diff.NeedsFullLayout() && GetPosition() != EPosition::kStatic &&
-      !OffsetEqual(other)) {
+      (!InsetsEqual(other) ||
+       (HasOutOfFlowPosition() && GetInsetArea() != other.GetInsetArea()))) {
     diff.SetNeedsPositionedMovementLayout();
   }
 
@@ -1829,47 +1883,49 @@ static String DisableNewGeorgianCapitalLetters(const String& text) {
 
 namespace {
 
-static void ApplyMathAutoTransform(String* text) {
-  if (text->length() != 1) {
-    return;
+String ApplyMathAutoTransform(const String& text, TextOffsetMap* offset_map) {
+  if (text.length() != 1) {
+    return text;
   }
-  UChar character = (*text)[0];
-  UChar32 transformed_char = ItalicMathVariant((*text)[0]);
+  UChar character = text[0];
+  UChar32 transformed_char = ItalicMathVariant(text[0]);
   if (transformed_char == static_cast<UChar32>(character)) {
-    return;
+    return text;
   }
 
   Vector<UChar> transformed_text(U16_LENGTH(transformed_char));
   int i = 0;
   U16_APPEND_UNSAFE(transformed_text, i, transformed_char);
-  *text = String(transformed_text);
+  String transformed_string = String(transformed_text);
+  if (offset_map) {
+    offset_map->Append(text.length(), transformed_string.length());
+  }
+  return transformed_string;
 }
 
 }  // namespace
 
-void ComputedStyle::ApplyTextTransform(String* text,
-                                       UChar previous_character) const {
+String ComputedStyle::ApplyTextTransform(const String& text,
+                                         UChar previous_character,
+                                         TextOffsetMap* offset_map) const {
   switch (TextTransform()) {
     case ETextTransform::kNone:
-      return;
+      return text;
     case ETextTransform::kCapitalize:
-      *text = Capitalize(*text, previous_character);
-      return;
+      return Capitalize(text, previous_character);
     case ETextTransform::kUppercase: {
       const LayoutLocale* locale = GetFontDescription().Locale();
       CaseMap case_map(locale ? locale->CaseMapLocale() : CaseMap::Locale());
-      *text = DisableNewGeorgianCapitalLetters(case_map.ToUpper(*text));
-      return;
+      return DisableNewGeorgianCapitalLetters(
+          case_map.ToUpper(text, offset_map));
     }
     case ETextTransform::kLowercase: {
       const LayoutLocale* locale = GetFontDescription().Locale();
       CaseMap case_map(locale ? locale->CaseMapLocale() : CaseMap::Locale());
-      *text = case_map.ToLower(*text);
-      return;
+      return case_map.ToLower(text, offset_map);
     }
     case ETextTransform::kMathAuto:
-      ApplyMathAutoTransform(text);
-      return;
+      return ApplyMathAutoTransform(text, offset_map);
   }
   NOTREACHED();
 }
@@ -1987,7 +2043,6 @@ FontHeight ComputedStyle::GetFontHeight(FontBaseline baseline) const {
   if (const SimpleFontData* font_data = GetFont().PrimaryFont()) {
     return font_data->GetFontMetrics().GetFontHeight(baseline);
   }
-  NOTREACHED();
   return FontHeight();
 }
 
@@ -2577,7 +2632,8 @@ bool ComputedStyle::CanMatchSizeContainerQueries(const Element& element) const {
 
 bool ComputedStyle::IsInterleavingRoot(const ComputedStyle* style) {
   const ComputedStyle* unensured = ComputedStyle::NullifyEnsured(style);
-  return unensured && unensured->IsContainerForSizeContainerQueries();
+  return unensured && (unensured->IsContainerForSizeContainerQueries() ||
+                       unensured->PositionFallback());
 }
 
 bool ComputedStyle::CalculateIsStackingContextWithoutContainment() const {
@@ -2622,6 +2678,20 @@ bool ComputedStyle::CalculateIsStackingContextWithoutContainment() const {
 bool ComputedStyle::IsRenderedInTopLayer(const Element& element) const {
   return (element.IsInTopLayer() && Overlay() == EOverlay::kAuto) ||
          StyleType() == kPseudoIdBackdrop;
+}
+
+bool ComputedStyle::ApplyControlFixedSize(const Node* node) const {
+  if (FieldSizing() == EFieldSizing::kFixed) {
+    return true;
+  }
+  if (!node) {
+    return false;
+  }
+  const auto* control = DynamicTo<HTMLFormControlElement>(node);
+  if (!control) {
+    control = DynamicTo<HTMLFormControlElement>(node->OwnerShadowHost());
+  }
+  return control && control->GetAutofillState() != WebAutofillState::kNotFilled;
 }
 
 ComputedStyleBuilder::ComputedStyleBuilder(const ComputedStyle& style)
@@ -2799,6 +2869,12 @@ void ComputedStyleBuilder::SetUsedColorScheme(
       (force_dark && !prefers_dark);
 
   SetColorSchemeForced(forced_scheme);
+
+  if (RuntimeEnabledFeatures::UsedColorSchemeRootScrollbarsEnabled()) {
+    const bool is_normal =
+        flags == static_cast<ColorSchemeFlags>(ColorSchemeFlag::kNormal);
+    SetColorSchemeFlagsIsNormal(is_normal);
+  }
 }
 
 CSSVariableData* ComputedStyleBuilder::GetVariableData(
@@ -2849,12 +2925,5 @@ STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kContain,
                    EOverscrollBehavior::kContain);
 STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kNone,
                    EOverscrollBehavior::kNone);
-
-STATIC_ASSERT_ENUM(cc::PaintFlags::DynamicRangeLimit::kStandard,
-                   EDynamicRangeLimit::kStandard);
-STATIC_ASSERT_ENUM(cc::PaintFlags::DynamicRangeLimit::kHigh,
-                   EDynamicRangeLimit::kHigh);
-STATIC_ASSERT_ENUM(cc::PaintFlags::DynamicRangeLimit::kConstrainedHigh,
-                   EDynamicRangeLimit::kConstrainedHigh);
 
 }  // namespace blink

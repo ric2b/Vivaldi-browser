@@ -120,17 +120,23 @@ IntersectionObserver& DisplayLockDocumentState::EnsureIntersectionObserver() {
     // Paint containment requires using the overflow clip edge. To do otherwise
     // results in overflow-clip-margin not being painted in certain scenarios.
     intersection_observer_ = IntersectionObserver::Create(
-        {Length::Percent(kViewportMarginPercentage)},
-        {std::numeric_limits<float>::min()}, document_,
+        /* (root) margin */ {Length::Percent(kViewportMarginPercentage)},
+        /* scroll_margin */ Vector<Length>(),
+        /* thresholds */ {std::numeric_limits<float>::min()},
+        /* document */ document_,
+        /* callback */
         WTF::BindRepeating(
             &DisplayLockDocumentState::ProcessDisplayLockActivationObservation,
             WrapWeakPersistent(this)),
+        /* ukm_metric_id */
         LocalFrameUkmAggregator::kDisplayLockIntersectionObserver,
-        IntersectionObserver::kDeliverDuringPostLayoutSteps,
-        IntersectionObserver::kFractionOfTarget, 0 /* delay */,
-        false /* track_visibility */, false /* always report_root_bounds */,
-        IntersectionObserver::kApplyMarginToTarget,
-        true /* use_overflow_clip_edge */);
+        /* behavior */ IntersectionObserver::kDeliverDuringPostLayoutSteps,
+        /* semantics */ IntersectionObserver::kFractionOfTarget,
+        /* delay */ 0,
+        /* track_visibility */ false,
+        /* always report_root_bounds */ false,
+        /* margin_target */ IntersectionObserver::kApplyMarginToTarget,
+        /* use_overflow_clip_edge */ true);
   }
   return *intersection_observer_;
 }
@@ -208,8 +214,11 @@ void DisplayLockDocumentState::ElementAddedToTopLayer(Element* element) {
     return;
   }
 
-  if (MarkAncestorContextsHaveTopLayerElement(element))
+  if (MarkAncestorContextsHaveTopLayerElement(element)) {
+    StyleEngine& style_engine = document_->GetStyleEngine();
+    StyleEngine::DetachLayoutTreeScope detach_scope(style_engine);
     element->DetachLayoutTree();
+  }
 }
 
 void DisplayLockDocumentState::ElementRemovedFromTopLayer(Element*) {
@@ -392,7 +401,7 @@ DisplayLockDocumentState::ScopedForceActivatableDisplayLocks::
       if (context->HasElement()) {
         context->DidForceActivatableDisplayLocks();
       } else {
-        NOTREACHED()
+        DUMP_WILL_BE_NOTREACHED_NORETURN()
             << "The DisplayLockContext's element has been garbage collected or"
             << " otherwise deleted, but the DisplayLockContext is still alive!"
             << " This shouldn't happen and could cause a crash. See"

@@ -5,9 +5,9 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_RANDOM_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_RANDOM_H_
 
-#include <stdint.h>
+#include <cstdint>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
 
 namespace partition_alloc {
 

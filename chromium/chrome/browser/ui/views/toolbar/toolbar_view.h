@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_VIEW_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -15,7 +16,7 @@
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/toolbar/back_forward_menu_model.h"
-#include "chrome/browser/ui/toolbar/chrome_labs_model.h"
+#include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_model.h"
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
@@ -25,7 +26,6 @@
 #include "chrome/browser/ui/views/toolbar/overflow_button.h"
 #include "chrome/browser/ui/views/toolbar/side_panel_toolbar_button.h"
 #include "components/prefs/pref_member.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/pointer/touch_ui_controller.h"
@@ -51,6 +51,7 @@ class ExtensionsToolbarContainer;
 class ChromeLabsButton;
 class HomeButton;
 class IntentChipButton;
+class ExtensionsToolbarCoordinator;
 class MediaToolbarButtonView;
 class ReloadButton;
 class SidePanelToolbarContainer;
@@ -80,9 +81,9 @@ class ToolbarView : public views::AccessiblePaneView,
                     public AppMenuIconController::Delegate,
                     public ToolbarButtonProvider,
                     public BrowserRootView::DropTarget {
- public:
-  METADATA_HEADER(ToolbarView);
+  METADATA_HEADER(ToolbarView, views::AccessiblePaneView)
 
+ public:
   // Types of display mode this toolbar can have.
   enum class DisplayMode {
     NORMAL,     // Normal toolbar with buttons, etc.
@@ -130,7 +131,7 @@ class ToolbarView : public views::AccessiblePaneView,
       bool show_stay_in_chrome,
       bool show_remember_selection,
       IntentPickerBubbleView::BubbleType bubble_type,
-      const absl::optional<url::Origin>& initiating_origin,
+      const std::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback);
 
   // Shows a bookmark bubble and anchors it appropriately.
@@ -310,6 +311,8 @@ class ToolbarView : public views::AccessiblePaneView,
   AppMenuIconController app_menu_icon_controller_;
 
   std::unique_ptr<ChromeLabsModel> chrome_labs_model_;
+  std::unique_ptr<ExtensionsToolbarCoordinator>
+      extensions_toolbar_coordinator_ = nullptr;
 
   // Controls whether or not a home button should be shown on the toolbar.
   BooleanPrefMember show_home_button_;

@@ -242,8 +242,9 @@ void ElementInnerTextCollector::ProcessChildrenWithRequiredLineBreaks(
 
 void ElementInnerTextCollector::ProcessLayoutText(const LayoutText& layout_text,
                                                   const Text& text_node) {
-  if (layout_text.TextLength() == 0)
+  if (layout_text.HasEmptyText()) {
     return;
+  }
   if (layout_text.Style()->Visibility() != EVisibility::kVisible) {
     // TODO(editing-dev): Once we make ::first-letter don't apply "visibility",
     // we should get rid of this if-statement. http://crbug.com/866744
@@ -253,7 +254,7 @@ void ElementInnerTextCollector::ProcessLayoutText(const LayoutText& layout_text,
   const OffsetMapping* const mapping = GetOffsetMapping(layout_text);
   if (!mapping) {
     // TODO(crbug.com/967995): There are certain cases where we fail to compute
-    // |NGOffsetMapping| due to failures in layout. As the root cause is hard to
+    // |OffsetMapping| due to failures in layout. As the root cause is hard to
     // fix at the moment, we work around it here so that the production build
     // doesn't crash.
     NOTREACHED() << layout_text;
@@ -406,7 +407,7 @@ void ElementInnerTextCollector::ProcessTextNode(const Text& node) {
     return;
   const LayoutText& layout_text = *node.GetLayoutObject();
   if (LayoutText* first_letter_part = layout_text.GetFirstLetterPart()) {
-    if (layout_text.TextLength() == 0 ||
+    if (layout_text.HasEmptyText() ||
         OffsetMapping::GetInlineFormattingContextOf(layout_text) !=
             OffsetMapping::GetInlineFormattingContextOf(*first_letter_part)) {
       // "::first-letter" with "float" reach here.

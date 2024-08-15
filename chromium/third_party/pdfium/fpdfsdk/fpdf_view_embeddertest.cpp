@@ -4,6 +4,7 @@
 
 #include <math.h>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <string>
@@ -25,9 +26,8 @@
 #include "testing/utils/file_util.h"
 #include "testing/utils/hash.h"
 #include "testing/utils/path_service.h"
-#include "third_party/base/check.h"
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 #include "third_party/skia/include/core/SkCanvas.h"           // nogncheck
 #include "third_party/skia/include/core/SkColor.h"            // nogncheck
 #include "third_party/skia/include/core/SkColorType.h"        // nogncheck
@@ -38,7 +38,7 @@
 #include "third_party/skia/include/core/SkRefCnt.h"           // nogncheck
 #include "third_party/skia/include/core/SkSize.h"             // nogncheck
 #include "third_party/skia/include/core/SkSurface.h"          // nogncheck
-#endif  // defined(_SKIA_SUPPORT_)
+#endif  // defined(PDF_USE_SKIA)
 
 using pdfium::ManyRectanglesChecksum;
 
@@ -109,7 +109,7 @@ class MockDownloadHints final : public FX_DOWNLOADHINTS {
   ~MockDownloadHints() = default;
 };
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 ScopedFPDFBitmap SkImageToPdfiumBitmap(const SkImage& image) {
   ScopedFPDFBitmap bitmap(
       FPDFBitmap_Create(image.width(), image.height(), /*alpha=*/1));
@@ -149,7 +149,7 @@ ScopedFPDFBitmap SkPictureToPdfiumBitmap(sk_sp<SkPicture> picture,
 
   return SkImageToPdfiumBitmap(*image);
 }
-#endif  // defined(_SKIA_SUPPORT_)
+#endif  // defined(PDF_USE_SKIA)
 
 }  // namespace
 
@@ -227,7 +227,7 @@ class FPDFViewEmbedderTest : public EmbedderTest {
         page, format, /*bitmap_stride=*/0, expected_checksum);
   }
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
   void TestRenderPageSkp(FPDF_PAGE page, const char* expected_checksum) {
     int width = static_cast<int>(FPDF_GetPageWidth(page));
     int height = static_cast<int>(FPDF_GetPageHeight(page));
@@ -248,7 +248,7 @@ class FPDFViewEmbedderTest : public EmbedderTest {
         std::move(picture), SkISize::Make(width, height));
     CompareBitmap(bitmap.get(), width, height, expected_checksum);
   }
-#endif  // defined(_SKIA_SUPPORT_)
+#endif  // defined(PDF_USE_SKIA)
 
  private:
   void TestRenderPageBitmapWithExternalMemoryImpl(
@@ -507,15 +507,13 @@ TEST_F(FPDFViewEmbedderTest, Document) {
 }
 
 TEST_F(FPDFViewEmbedderTest, LoadDocument64) {
-  std::string file_path;
-  ASSERT_TRUE(PathService::GetTestFilePath("about_blank.pdf", &file_path));
+  std::string file_path = PathService::GetTestFilePath("about_blank.pdf");
+  ASSERT_FALSE(file_path.empty());
 
-  size_t file_length = 0;
-  std::unique_ptr<char, pdfium::FreeDeleter> file_contents =
-      GetFileContents(file_path.c_str(), &file_length);
-  DCHECK(file_contents);
-  ScopedFPDFDocument doc(
-      FPDF_LoadMemDocument64(file_contents.get(), file_length, nullptr));
+  std::vector<uint8_t> file_contents = GetFileContents(file_path.c_str());
+  ASSERT_FALSE(file_contents.empty());
+  ScopedFPDFDocument doc(FPDF_LoadMemDocument64(file_contents.data(),
+                                                file_contents.size(), nullptr));
   ASSERT_TRUE(doc);
 
   int version;
@@ -610,18 +608,17 @@ TEST_F(FPDFViewEmbedderTest, LoadCustomDocumentWithShortLivedFileAccess) {
   ScopedFPDFDocument doc;
   {
     // Read a PDF, and copy it into |file_contents_string|.
-    std::string pdf_path;
-    size_t pdf_length;
-    ASSERT_TRUE(PathService::GetTestFilePath("rectangles.pdf", &pdf_path));
-    auto file_contents = GetFileContents(pdf_path.c_str(), &pdf_length);
-    ASSERT_TRUE(file_contents);
-    for (size_t i = 0; i < pdf_length; ++i)
-      file_contents_string.push_back(file_contents.get()[i]);
+    std::string pdf_path = PathService::GetTestFilePath("rectangles.pdf");
+    ASSERT_FALSE(pdf_path.empty());
+    std::vector<uint8_t> file_contents = GetFileContents(pdf_path.c_str());
+    ASSERT_FALSE(file_contents.empty());
+    std::copy(file_contents.begin(), file_contents.end(),
+              std::back_inserter(file_contents_string));
 
     // Define a FPDF_FILEACCESS object that will go out of scope, while the
     // loaded document in |doc| remains valid.
     FPDF_FILEACCESS file_access = {};
-    file_access.m_FileLen = pdf_length;
+    file_access.m_FileLen = file_contents_string.size();
     file_access.m_GetBlock = GetBlockFromString;
     file_access.m_Param = &file_contents_string;
     doc.reset(FPDF_LoadCustomDocument(&file_access, nullptr));
@@ -1401,9 +1398,9 @@ TEST_F(FPDFViewEmbedderTest, UnSupportedOperations_LoadCustomDocument) {
 }
 
 TEST_F(FPDFViewEmbedderTest, UnSupportedOperations_LoadDocument) {
-  std::string file_path;
-  ASSERT_TRUE(
-      PathService::GetTestFilePath("unsupported_feature.pdf", &file_path));
+  std::string file_path =
+      PathService::GetTestFilePath("unsupported_feature.pdf");
+  ASSERT_FALSE(file_path.empty());
 
   RecordUnsupportedErrorDelegate delegate;
   SetDelegate(&delegate);
@@ -1432,20 +1429,18 @@ TEST_F(FPDFViewEmbedderTest, LoadDocumentWithEmptyXRefConsistently) {
   ASSERT_TRUE(OpenDocument("empty_xref.pdf"));
   EXPECT_TRUE(FPDF_DocumentHasValidCrossReferenceTable(document()));
 
-  std::string file_path;
-  ASSERT_TRUE(PathService::GetTestFilePath("empty_xref.pdf", &file_path));
+  std::string file_path = PathService::GetTestFilePath("empty_xref.pdf");
+  ASSERT_FALSE(file_path.empty());
   {
     ScopedFPDFDocument doc(FPDF_LoadDocument(file_path.c_str(), ""));
     ASSERT_TRUE(doc);
     EXPECT_TRUE(FPDF_DocumentHasValidCrossReferenceTable(doc.get()));
   }
   {
-    size_t file_length = 0;
-    std::unique_ptr<char, pdfium::FreeDeleter> file_contents =
-        GetFileContents(file_path.c_str(), &file_length);
-    DCHECK(file_contents);
+    std::vector<uint8_t> file_contents = GetFileContents(file_path.c_str());
+    ASSERT_FALSE(file_contents.empty());
     ScopedFPDFDocument doc(
-        FPDF_LoadMemDocument(file_contents.get(), file_length, ""));
+        FPDF_LoadMemDocument(file_contents.data(), file_contents.size(), ""));
     ASSERT_TRUE(doc);
     EXPECT_TRUE(FPDF_DocumentHasValidCrossReferenceTable(doc.get()));
   }
@@ -1701,7 +1696,7 @@ TEST_F(FPDFViewEmbedderTest, RenderHelloWorldWithFlags) {
 #if BUILDFLAG(IS_APPLE)
     return "6eef7237f7591f07616e238422086737";
 #else
-    return "37d0b34e1762fdda4c05ce7ea357b828";
+    return "6dec98c848028fa4be3ad38d6782e304";
 #endif
   }();
 
@@ -2058,7 +2053,7 @@ TEST_F(FPDFViewEmbedderTest, RenderXfaPage) {
   UnloadPage(page);
 }
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
 TEST_F(FPDFViewEmbedderTest, RenderPageToSkp) {
   if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     GTEST_SKIP() << "FPDF_RenderPageSkp() only makes sense with Skia";
@@ -2137,7 +2132,7 @@ TEST_F(FPDFViewEmbedderTest, Bug2087) {
   EmbedderTestEnvironment::GetInstance()->TearDown();
   EmbedderTestEnvironment::GetInstance()->SetUp();
 }
-#endif  // defined(_SKIA_SUPPORT_)
+#endif  // defined(PDF_USE_SKIA)
 
 TEST_F(FPDFViewEmbedderTest, NoSmoothTextItalicOverlappingGlyphs) {
   ASSERT_TRUE(OpenDocument("bug_1919.pdf"));
@@ -2154,9 +2149,39 @@ TEST_F(FPDFViewEmbedderTest, NoSmoothTextItalicOverlappingGlyphs) {
       return "ceeb93d2bcdb586d62c95b33cadcd873";
     }
 #endif
-    return "4ef1f65ab1ac76acb97a3540dcb10b4e";
+    return "5f99e2fa2bad09393d6428e105a83c96";
   }();
 
   TestRenderPageBitmapWithFlags(page, FPDF_RENDER_NO_SMOOTHTEXT, checksum);
   UnloadPage(page);
+}
+
+TEST_F(FPDFViewEmbedderTest, RenderTransparencyOnWhiteBackground) {
+  ASSERT_TRUE(OpenDocument("bug_1302355.pdf"));
+  FPDF_PAGE page = LoadPage(0);
+  ASSERT_TRUE(page);
+
+  constexpr int kWidth = 200;
+  constexpr int kHeight = 200;
+  EXPECT_EQ(kWidth, static_cast<int>(FPDF_GetPageWidthF(page)));
+  EXPECT_EQ(kHeight, static_cast<int>(FPDF_GetPageHeightF(page)));
+  EXPECT_TRUE(FPDFPage_HasTransparency(page));
+  ScopedFPDFBitmap bitmap(FPDFBitmap_Create(kWidth, kHeight, /*alpha=*/true));
+  FPDFBitmap_FillRect(bitmap.get(), 0, 0, kWidth, kHeight, 0xFFFFFFFF);
+  FPDF_RenderPageBitmap(bitmap.get(), page, /*start_x=*/0, /*start_y=*/0,
+                        kWidth, kHeight, /*rotate=*/0, /*flags=*/0);
+  // TODO(crbug.com/1302355): This page should not render blank.
+  EXPECT_EQ("eee4600ac08b458ac7ac2320e225674c", HashBitmap(bitmap.get()));
+
+  UnloadPage(page);
+}
+
+TEST_F(FPDFViewEmbedderTest, Bug2112) {
+  constexpr int kWidth = 595;
+  constexpr int kHeight = 842;
+  constexpr int kStride = kWidth * 3;
+  std::vector<uint8_t> vec(kStride * kHeight);
+  ScopedFPDFBitmap bitmap(FPDFBitmap_CreateEx(kWidth, kHeight, FPDFBitmap_BGR,
+                                              vec.data(), kStride));
+  EXPECT_EQ(FPDFBitmap_BGR, FPDFBitmap_GetFormat(bitmap.get()));
 }

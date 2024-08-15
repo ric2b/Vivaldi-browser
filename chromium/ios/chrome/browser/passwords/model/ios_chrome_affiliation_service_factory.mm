@@ -8,6 +8,7 @@
 #import <utility>
 
 #import "base/no_destructor.h"
+#import "base/not_fatal_until.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/task/thread_pool.h"
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
@@ -30,8 +31,16 @@ IOSChromeAffiliationServiceFactory::GetInstance() {
 password_manager::AffiliationService*
 IOSChromeAffiliationServiceFactory::GetForBrowserState(
     web::BrowserState* browser_state) {
+  CHECK(browser_state, base::NotFatalUntil::M123);
+
+  // Always use the original BrowserState, not incognito. AffiliationService is
+  // safe to use in incognito.
+  auto* original_browser_state =
+      ChromeBrowserState::FromBrowserState(browser_state)
+          ->GetOriginalChromeBrowserState();
+
   return static_cast<password_manager::AffiliationService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(original_browser_state, true));
 }
 
 IOSChromeAffiliationServiceFactory::IOSChromeAffiliationServiceFactory()

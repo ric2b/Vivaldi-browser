@@ -97,8 +97,6 @@ class CONTENT_EXPORT XRRuntimeManagerImpl
 
   // XRRuntimeManager implementation
   BrowserXRRuntimeImpl* GetRuntime(device::mojom::XRDeviceId id) override;
-  void ForEachRuntime(
-      base::RepeatingCallback<void(BrowserXRRuntime*)> fn) override;
 
   content::WebXrLoggerManager& GetLoggerManager();
 
@@ -127,7 +125,7 @@ class CONTENT_EXPORT XRRuntimeManagerImpl
 
   ~XRRuntimeManagerImpl() override;
 
-  void InitializeProviders();
+  void InitializeProviders(VRServiceImpl* initializing_service);
   bool AreAllProvidersInitialized();
 
   bool IsInitializedOnCompatibleAdapter(BrowserXRRuntimeImpl* runtime);

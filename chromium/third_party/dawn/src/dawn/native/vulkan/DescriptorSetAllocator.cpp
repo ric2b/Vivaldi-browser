@@ -29,6 +29,7 @@
 
 #include <utility>
 
+#include "dawn/native/Queue.h"
 #include "dawn/native/vulkan/BindGroupLayoutVk.h"
 #include "dawn/native/vulkan/DeviceVk.h"
 #include "dawn/native/vulkan/FencedDeleter.h"
@@ -42,13 +43,13 @@ static constexpr uint32_t kMaxDescriptorsPerPool = 512;
 // static
 Ref<DescriptorSetAllocator> DescriptorSetAllocator::Create(
     BindGroupLayout* layout,
-    std::map<VkDescriptorType, uint32_t> descriptorCountPerType) {
+    absl::flat_hash_map<VkDescriptorType, uint32_t> descriptorCountPerType) {
     return AcquireRef(new DescriptorSetAllocator(layout, descriptorCountPerType));
 }
 
 DescriptorSetAllocator::DescriptorSetAllocator(
     BindGroupLayout* layout,
-    std::map<VkDescriptorType, uint32_t> descriptorCountPerType)
+    absl::flat_hash_map<VkDescriptorType, uint32_t> descriptorCountPerType)
     : ObjectBase(layout->GetDevice()), mLayout(layout) {
     DAWN_ASSERT(layout != nullptr);
 
@@ -124,7 +125,7 @@ void DescriptorSetAllocator::Deallocate(DescriptorSetAllocation* allocationInfo)
     // documentation for vkCmdBindDescriptorSets that the set may be consumed any time between
     // host execution of the command and the end of the draw/dispatch.
     Device* device = ToBackend(GetDevice());
-    const ExecutionSerial serial = device->GetPendingCommandSerial();
+    const ExecutionSerial serial = device->GetQueue()->GetPendingCommandSerial();
     mPendingDeallocations.Enqueue({allocationInfo->poolIndex, allocationInfo->setIndex}, serial);
 
     if (mLastDeallocationSerial != serial) {

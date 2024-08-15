@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ntp/set_up_list_item_type.h"
+#import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
 
 // Enum specifying the type of Content Suggestions a module is showing.
 // Entries should always keep synced with the IOSMagicStackModuleType histogram
@@ -28,9 +28,23 @@ enum class ContentSuggestionsModuleType {
   kTabResumption = 10,
   kParcelTracking = 11,
   kParcelTrackingSeeMore = 12,
-  kMaxValue = kParcelTrackingSeeMore,
+  kSetUpListContentNotification = 13,
+  kPlaceholder = 14,
+  kMaxValue = kPlaceholder,
 };
-// LINT.ThenChange(/tools/metrics/histograms/enums.xml)
+// LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml)
+
+// Enum for content notification promo events UMA metrics. Entries should not
+// be renumbered and numeric values should never be reused. This should align
+// with the ContentNotificationSnackbarEvent enum in enums.xml.
+//
+// LINT.IfChange
+enum class ContentNotificationSnackbarEvent {
+  kShown = 0,
+  kActionButtonTapped = 1,
+  kMaxValue = kActionButtonTapped,
+};
+// LINT.ThenChange(/tools/metrics/histograms/metadata/content/enums.xml)
 
 // Represents the content suggestions collection view.
 extern NSString* const kContentSuggestionsCollectionIdentifier;
@@ -61,6 +75,10 @@ extern NSString* const kMagicStackEditButtonAccessibilityIdentifier;
 // Represents the "Done" button in the Magic Stack edit half sheet.
 extern NSString* const
     kMagicStackEditHalfSheetDoneButtonAccessibilityIdentifier;
+
+// Represents the "Continue with This Tab" module in the magic stack.
+extern NSString* const
+    kMagicStackContentSuggestionsModuleTabResumptionAccessibilityIdentifier;
 
 // Represents the width of the Magic Stack ScrollView for the unique wide
 // layout.

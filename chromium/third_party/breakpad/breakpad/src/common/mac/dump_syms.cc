@@ -265,6 +265,10 @@ SuperFatArch* DumpSymbols::FindBestMatchForArchitecture(
   return nullptr;
 }
 
+void DumpSymbols::SetReportWarnings(bool report_warnings) {
+    report_warnings_ = report_warnings;
+}
+
 string DumpSymbols::Identifier() {
   scoped_ptr<FileID> file_id;
 
@@ -524,10 +528,17 @@ void DumpSymbols::ReadDwarf(google_breakpad::Module* module,
   for (uint64_t offset = 0; offset < debug_info_length;) {
     // Make a handler for the root DIE that populates MODULE with the
     // debug info.
-    DwarfCUToModule::WarningReporter reporter(selected_object_name_,
-                                              offset);
+    DwarfCUToModule::WarningReporter *reporter = nullptr;
+    if (report_warnings_) {
+        reporter = new DwarfCUToModule::WarningReporter(
+            selected_object_name_, offset);
+    } else {
+        reporter = new DwarfCUToModule::NullWarningReporter(
+            selected_object_name_, offset);
+    }
     DwarfCUToModule root_handler(&file_context, &line_to_module,
-                                 &ranges_handler, &reporter, handle_inline);
+                                 &ranges_handler, reporter,
+                                 handle_inline);
     // Make a Dwarf2Handler that drives our DIEHandler.
     DIEDispatcher die_dispatcher(&root_handler);
     // Make a DWARF parser for the compilation unit at OFFSET.
@@ -543,6 +554,7 @@ void DumpSymbols::ReadDwarf(google_breakpad::Module* module,
       StartProcessSplitDwarf(&dwarf_reader, module, endianness,
                              handle_inter_cu_refs, handle_inline);
     }
+    delete reporter;
   }
 }
 

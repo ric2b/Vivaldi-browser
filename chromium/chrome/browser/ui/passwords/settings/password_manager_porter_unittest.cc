@@ -27,7 +27,7 @@
 #include "components/password_manager/core/browser/import/csv_password_sequence.h"
 #include "components/password_manager/core/browser/import/import_results.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/browser/password_store/test_password_store.h"
 #include "components/password_manager/core/browser/ui/credential_provider_interface.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/browser/browser_context.h"
@@ -40,6 +40,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/shell_dialogs/select_file_dialog_factory.h"
+#include "ui/shell_dialogs/selected_file_info.h"
 #include "url/gurl.h"
 
 using ::testing::_;
@@ -73,7 +74,8 @@ class TestSelectFileDialog : public ui::SelectFileDialog {
                       gfx::NativeWindow owning_window,
                       void* params,
                       const GURL* caller) override {
-    listener_->FileSelected(forced_path_, file_type_index, params);
+    listener_->FileSelected(ui::SelectedFileInfo(forced_path_), file_type_index,
+                            params);
   }
   bool IsRunning(gfx::NativeWindow owning_window) const override {
     return false;

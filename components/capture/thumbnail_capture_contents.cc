@@ -228,7 +228,7 @@ void ThumbnailCaptureContents::RequestMediaAccessPermission(
 
 bool ThumbnailCaptureContents::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     blink::mojom::MediaStreamType type) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(),
             content::WebContents::FromRenderFrameHost(render_frame_host));

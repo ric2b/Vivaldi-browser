@@ -8,11 +8,44 @@
 #ifndef skgpu_VulkanUtilsPriv_DEFINED
 #define skgpu_VulkanUtilsPriv_DEFINED
 
+#include <cstdint>
+#include <string>
+
 #include "include/gpu/vk/VulkanTypes.h"
 
 #include "include/core/SkColor.h"
+#include "src/gpu/PipelineUtils.h"
+#include "src/sksl/codegen/SkSLSPIRVCodeGenerator.h"
+
+#ifdef SK_BUILD_FOR_ANDROID
+#include <android/hardware_buffer.h>
+#include "include/gpu/vk/VulkanTypes.h"
+#include "src/gpu/vk/VulkanInterface.h"
+#endif
+
+namespace SkSL {
+
+enum class ProgramKind : int8_t;
+struct ProgramInterface;
+struct ProgramSettings;
+struct ShaderCaps;
+
+}  // namespace SkSL
 
 namespace skgpu {
+
+class ShaderErrorHandler;
+
+inline bool SkSLToSPIRV(const SkSL::ShaderCaps* caps,
+                        const std::string& sksl,
+                        SkSL::ProgramKind programKind,
+                        const SkSL::ProgramSettings& settings,
+                        std::string* spirv,
+                        SkSL::ProgramInterface* outInterface,
+                        ShaderErrorHandler* errorHandler) {
+    return SkSLToBackend(caps, &SkSL::ToSPIRV, /*backendLabel=*/nullptr,
+                         sksl, programKind, settings, spirv, outInterface, errorHandler);
+}
 
 static constexpr uint32_t VkFormatChannels(VkFormat vkFormat) {
     switch (vkFormat) {
@@ -20,6 +53,7 @@ static constexpr uint32_t VkFormatChannels(VkFormat vkFormat) {
         case VK_FORMAT_R8_UNORM:                 return kRed_SkColorChannelFlag;
         case VK_FORMAT_B8G8R8A8_UNORM:           return kRGBA_SkColorChannelFlags;
         case VK_FORMAT_R5G6B5_UNORM_PACK16:      return kRGB_SkColorChannelFlags;
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:      return kRGB_SkColorChannelFlags;
         case VK_FORMAT_R16G16B16A16_SFLOAT:      return kRGBA_SkColorChannelFlags;
         case VK_FORMAT_R16_SFLOAT:               return kRed_SkColorChannelFlag;
         case VK_FORMAT_R8G8B8_UNORM:             return kRGB_SkColorChannelFlags;
@@ -49,6 +83,7 @@ static constexpr size_t VkFormatBytesPerBlock(VkFormat vkFormat) {
         case VK_FORMAT_R8_UNORM:                  return 1;
         case VK_FORMAT_B8G8R8A8_UNORM:            return 4;
         case VK_FORMAT_R5G6B5_UNORM_PACK16:       return 2;
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:       return 2;
         case VK_FORMAT_R16G16B16A16_SFLOAT:       return 8;
         case VK_FORMAT_R16_SFLOAT:                return 2;
         case VK_FORMAT_R8G8B8_UNORM:              return 3;
@@ -70,6 +105,7 @@ static constexpr size_t VkFormatBytesPerBlock(VkFormat vkFormat) {
         // to compressed textures that go through their own special query for calculating size.
         case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM: return 3;
         case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:  return 3;
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16: return 6;
         case VK_FORMAT_S8_UINT:                   return 1;
         case VK_FORMAT_D24_UNORM_S8_UINT:         return 4;
         case VK_FORMAT_D32_SFLOAT_S8_UINT:        return 8;
@@ -114,7 +150,8 @@ static constexpr int VkFormatStencilBits(VkFormat format) {
 
 static constexpr bool VkFormatNeedsYcbcrSampler(VkFormat format)  {
     return format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
-           format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
+           format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM ||
+           format == VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16;
 }
 
 static constexpr bool SampleCountToVkSampleCount(uint32_t samples,
@@ -156,6 +193,35 @@ static constexpr bool VkFormatIsCompressed(VkFormat vkFormat) {
     SkUNREACHABLE;
 }
 
+/**
+ * Returns a ptr to the requested extension feature struct or nullptr if it is not present.
+*/
+template<typename T> T* GetExtensionFeatureStruct(const VkPhysicalDeviceFeatures2& features,
+                                                  VkStructureType type) {
+    // All Vulkan structs that could be part of the features chain will start with the
+    // structure type followed by the pNext pointer. We cast to the CommonVulkanHeader
+    // so we can get access to the pNext for the next struct.
+    struct CommonVulkanHeader {
+        VkStructureType sType;
+        void*           pNext;
+    };
+
+    void* pNext = features.pNext;
+    while (pNext) {
+        CommonVulkanHeader* header = static_cast<CommonVulkanHeader*>(pNext);
+        if (header->sType == type) {
+            return static_cast<T*>(pNext);
+        }
+        pNext = header->pNext;
+    }
+    return nullptr;
+}
+
+/**
+ * Returns a populated VkSamplerYcbcrConversionCreateInfo object based on VulkanYcbcrConversionInfo
+*/
+void SetupSamplerYcbcrConversionInfo(VkSamplerYcbcrConversionCreateInfo* outInfo,
+                                     const VulkanYcbcrConversionInfo& conversionInfo);
 
 #if defined(SK_DEBUG) || defined(GR_TEST_UTILS)
 static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
@@ -164,6 +230,7 @@ static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
         case VK_FORMAT_R8_UNORM:                 return "R8_UNORM";
         case VK_FORMAT_B8G8R8A8_UNORM:           return "B8G8R8A8_UNORM";
         case VK_FORMAT_R5G6B5_UNORM_PACK16:      return "R5G6B5_UNORM_PACK16";
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:      return "B5G6R5_UNORM_PACK16";
         case VK_FORMAT_R16G16B16A16_SFLOAT:      return "R16G16B16A16_SFLOAT";
         case VK_FORMAT_R16_SFLOAT:               return "R16_SFLOAT";
         case VK_FORMAT_R8G8B8_UNORM:             return "R8G8B8_UNORM";
@@ -189,6 +256,31 @@ static constexpr const char* VkFormatToStr(VkFormat vkFormat) {
     }
 }
 #endif // defined(SK_DEBUG) || defined(GR_TEST_UTILS)
+
+#ifdef SK_BUILD_FOR_ANDROID
+/**
+ * Vulkan AHardwareBuffer utility functions shared between graphite and ganesh
+*/
+void GetYcbcrConversionInfoFromFormatProps(
+        VulkanYcbcrConversionInfo* outConversionInfo,
+        const VkAndroidHardwareBufferFormatPropertiesANDROID& formatProps);
+
+bool GetAHardwareBufferProperties(
+        VkAndroidHardwareBufferFormatPropertiesANDROID* outHwbFormatProps,
+        VkAndroidHardwareBufferPropertiesANDROID* outHwbProps,
+        const skgpu::VulkanInterface*,
+        const AHardwareBuffer*,
+        VkDevice);
+
+bool AllocateAndBindImageMemory(skgpu::VulkanAlloc* outVulkanAlloc,
+                                VkImage,
+                                const VkPhysicalDeviceMemoryProperties2&,
+                                const VkAndroidHardwareBufferPropertiesANDROID&,
+                                AHardwareBuffer*,
+                                const skgpu::VulkanInterface*,
+                                VkDevice);
+
+#endif // SK_BUILD_FOR_ANDROID
 
 }  // namespace skgpu
 

@@ -368,8 +368,9 @@ void ExpireHistoryBackend::ClearOldOnDemandFaviconsIfPossible(
 void ExpireHistoryBackend::InitWorkQueue() {
   DCHECK(work_queue_.empty()) << "queue has to be empty prior to init";
 
-  for (const auto* reader : readers_)
+  for (const history::ExpiringVisitsReader* reader : readers_) {
     work_queue_.push(reader);
+  }
 }
 
 const ExpiringVisitsReader* ExpireHistoryBackend::GetAllVisitsReader() {
@@ -643,6 +644,8 @@ void ExpireHistoryBackend::DoExpireIteration() {
         base::Days(internal::kOnDemandFaviconIsOldAfterDays));
   }
 
+  ExpireOldSegmentData(GetCurrentExpirationTime());
+
   ScheduleExpire();
 }
 
@@ -672,6 +675,12 @@ bool ExpireHistoryBackend::ExpireSomeOldHistory(
                          DeletionInfo::Reason::kOther);
 
   return more_to_expire;
+}
+
+void ExpireHistoryBackend::ExpireOldSegmentData(base::Time end_time) {
+  if (main_db_) {
+    main_db_->DeleteSegmentDataOlderThan(end_time);
+  }
 }
 
 void ExpireHistoryBackend::ParanoidExpireHistory() {

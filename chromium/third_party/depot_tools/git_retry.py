@@ -77,12 +77,12 @@ class GitRetry(object):
     def computeDelay(self, iteration):
         """Returns: the delay (in seconds) for a given iteration
 
-    The first iteration has a delay of '0'.
+        The first iteration has a delay of '0'.
 
-    Args:
-      iteration: (int) The iteration index (starting with zero as the first
-          iteration)
-    """
+        Args:
+            iteration: (int) The iteration index (starting with zero as the
+                first iteration)
+        """
         if (not self.delay) or (iteration == 0):
             return 0
         if self.delay_factor == 0:

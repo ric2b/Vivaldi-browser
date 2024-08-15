@@ -80,7 +80,7 @@ const StunAttribute* StunDictionaryView::GetOrNull(
 webrtc::RTCErrorOr<
     std::pair<uint64_t, std::deque<std::unique_ptr<StunAttribute>>>>
 StunDictionaryView::ParseDelta(const StunByteStringAttribute& delta) {
-  rtc::ByteBufferReader buf(delta.bytes(), delta.length());
+  rtc::ByteBufferReader buf(delta.array_view());
   uint16_t magic;
   if (!buf.ReadUInt16(&magic)) {
     return webrtc::RTCError(webrtc::RTCErrorType::INVALID_PARAMETER,
@@ -214,7 +214,8 @@ StunDictionaryView::ApplyDelta(const StunByteStringAttribute& delta) {
       if (attr->value_type() == STUN_VALUE_BYTE_STRING && attr->length() == 0) {
         attrs_.erase(attr->type());
       } else {
-        attrs_[attr->type()] = std::move(attr);
+        int attribute_type = attr->type();
+        attrs_[attribute_type] = std::move(attr);
       }
     }
   }

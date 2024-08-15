@@ -9,7 +9,6 @@ import {
   $,
   $$,
   click,
-  enableExperiment,
   step,
   typeText,
   waitFor,
@@ -134,7 +133,8 @@ describe('The Network Request view', async () => {
     await waitForElementWithTextContent('uuid-in-package:020111b3-437a-4c5c-ae07-adb6bbffb720', networkView);
   });
 
-  it('prevents requests on the preview tab.', async () => {
+  // failing test blocking the roll
+  it.skip('[crbug.com/1518454]: prevents requests on the preview tab.', async () => {
     await navigateToNetworkTab('embedded_requests.html');
 
     // For the issue to manifest it's mandatory to load the stylesheet by absolute URL. A relative URL would be treated
@@ -174,7 +174,8 @@ describe('The Network Request view', async () => {
     await waitForFunction(async () => await styleSrcError.caught);
   });
 
-  it('permits inline styles on the preview tab.', async () => {
+  // failing test blocking the roll
+  it.skip('[crbug.com/1518454]: permits inline styles on the preview tab.', async () => {
     await navigateToNetworkTab('embedded_requests.html');
     const contents = '<head><style>p { color: red; }</style></head><body><p>Content</p></body>';
     const {target} = getBrowserAndPages();
@@ -407,7 +408,7 @@ describe('The Network Request view', async () => {
       'Keep-Alive: timeout=5',
       'Transfer-Encoding: chunked',
     ].join('\r\n');
-    const rawHeaders = await $('.raw-headers', section);
+    const rawHeaders = await waitFor('.raw-headers', section);
     const rawHeadersText = await rawHeaders.evaluate(el => el.textContent || '');
     assertOutlineMatches([expectedRawHeadersContent], [rawHeadersText]);
 
@@ -504,7 +505,6 @@ describe('The Network Request view', async () => {
   });
 
   it('can create header overrides via request\'s context menu', async () => {
-    await enableExperiment('headerOverrides');
     await navigateToNetworkTab('hello.html');
     await selectRequestByName('hello.html', {button: 'right'});
 
@@ -514,7 +514,6 @@ describe('The Network Request view', async () => {
   });
 
   it('can create header overrides via header\'s pencil icon', async () => {
-    await enableExperiment('headerOverrides');
     await navigateToNetworkTab('hello.html');
     await selectRequestByName('hello.html');
 

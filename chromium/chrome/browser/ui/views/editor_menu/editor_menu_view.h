@@ -9,12 +9,11 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observation.h"
+#include "chrome/browser/ui/views/editor_menu/utils/pre_target_handler_view.h"
 #include "chrome/browser/ui/views/editor_menu/utils/preset_text_query.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/unique_widget_ptr.h"
-#include "ui/views/widget/widget_observer.h"
 
 namespace views {
 class ImageButton;
@@ -26,15 +25,14 @@ namespace chromeos::editor_menu {
 
 class EditorMenuTextfieldView;
 class EditorMenuViewDelegate;
-class PreTargetHandler;
 
 enum class EditorMenuMode { kWrite = 0, kRewrite };
 
 // A bubble style view to show Editor Menu.
-class EditorMenuView : public views::View, public views::WidgetObserver {
- public:
-  METADATA_HEADER(EditorMenuView);
+class EditorMenuView : public PreTargetHandlerView {
+  METADATA_HEADER(EditorMenuView, views::View)
 
+ public:
   EditorMenuView(EditorMenuMode editor_menu_mode,
                  const PresetTextQueries& preset_text_queries,
                  const gfx::Rect& anchor_view_bounds,
@@ -51,22 +49,20 @@ class EditorMenuView : public views::View, public views::WidgetObserver {
       const gfx::Rect& anchor_view_bounds,
       EditorMenuViewDelegate* delegate);
 
-  // views::View:
+  // PreTargetHandlerView:
   void AddedToWidget() override;
   void RequestFocus() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-
-  // views::WidgetObserver:
-  void OnWidgetDestroying(views::Widget* widget) override;
-  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
 
   void UpdateBounds(const gfx::Rect& anchor_view_bounds);
 
-  const views::View* chips_container_for_testing() const {
-    return chips_container_;
-  }
+  void DisableMenu();
+
+  views::View* chips_container_for_testing() { return chips_container_; }
+
+  EditorMenuTextfieldView* textfield_for_testing() { return textfield_; }
 
  private:
   void InitLayout(const PresetTextQueries& preset_text_queries);
@@ -81,11 +77,7 @@ class EditorMenuView : public views::View, public views::WidgetObserver {
   void OnSettingsButtonPressed();
   void OnChipButtonPressed(const std::string& text_query_id);
 
-  void ResetPreTargetHandler();
-
   EditorMenuMode editor_menu_mode_;
-
-  std::unique_ptr<PreTargetHandler> pre_target_handler_;
 
   // `delegate_` outlives `this`.
   raw_ptr<EditorMenuViewDelegate> delegate_ = nullptr;
@@ -98,9 +90,6 @@ class EditorMenuView : public views::View, public views::WidgetObserver {
   raw_ptr<views::FlexLayoutView> chips_container_ = nullptr;
 
   raw_ptr<EditorMenuTextfieldView> textfield_ = nullptr;
-
-  base::ScopedObservation<views::Widget, views::WidgetObserver>
-      widget_observation_{this};
 
   base::WeakPtrFactory<EditorMenuView> weak_factory_{this};
 };

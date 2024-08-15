@@ -291,10 +291,14 @@ class CONTENT_EXPORT ServiceWorkerProviderContext
       fetch_handler_bypass_option_ =
           blink::mojom::ServiceWorkerFetchHandlerBypassOption::kDefault;
 
-  absl::optional<std::string> sha256_script_checksum_;
+  std::optional<std::string> sha256_script_checksum_;
 
-  absl::optional<blink::ServiceWorkerRouterRules> router_rules_;
-  blink::EmbeddedWorkerStatus initial_running_status_;
+  std::optional<blink::ServiceWorkerRouterRules> router_rules_;
+  // TODO(crbug.com/1501047): It may be better to make this an optional, so it
+  // is possible to distinguish between unset and kStopped, which are not really
+  // equivalent.
+  blink::EmbeddedWorkerStatus initial_running_status_ =
+      blink::EmbeddedWorkerStatus::kStopped;
   mojo::PendingRemote<blink::mojom::CacheStorage> remote_cache_storage_;
   mojo::PendingReceiver<blink::mojom::ServiceWorkerRunningStatusCallback>
       running_status_receiver_;

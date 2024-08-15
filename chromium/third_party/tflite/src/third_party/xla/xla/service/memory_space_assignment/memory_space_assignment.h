@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef XLA_SERVICE_MEMORY_SPACE_ASSIGNMENT_MEMORY_SPACE_ASSIGNMENT_H_
 #define XLA_SERVICE_MEMORY_SPACE_ASSIGNMENT_MEMORY_SPACE_ASSIGNMENT_H_
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <list>
@@ -26,6 +27,7 @@ limitations under the License.
 #include <set>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -35,23 +37,33 @@ limitations under the License.
 #include "absl/container/btree_map.h"
 #endif
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/functional/function_ref.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/utils/hlo_live_range.h"
+#include "xla/service/buffer_value.h"
+#include "xla/service/call_graph.h"
 #include "xla/service/heap_simulator.h"
 #include "xla/service/hlo.pb.h"
+#include "xla/service/hlo_alias_analysis.h"
+#include "xla/service/hlo_buffer.h"
 #include "xla/service/hlo_cost_analysis.h"
 #include "xla/service/hlo_value.h"
 #include "xla/service/memory_space_assignment/memory_space_assignment.pb.h"
 #include "xla/service/memory_space_assignment/repacking.h"
 #include "xla/shape.h"
+#include "xla/shape_util.h"
 #include "xla/statusor.h"
+#include "xla/util.h"
 
 namespace xla {
-
 namespace memory_space_assignment {
+
 // Forward Declaration of Options.
-class Options;
+struct Options;
 
 inline constexpr char kConcatBitcastCustomCall[] = "ConcatBitcast";
 
@@ -547,6 +559,33 @@ class CostAnalysisPrefetchIntervalPicker : public PrefetchIntervalPicker {
   std::optional<Shape> shape_override_;
 };
 
+// A class for turning a copy start time and end time into slice start times.
+class SlicedPrefetchStartTimePicker {
+ public:
+  // Returns the amount of time elapsed in the instruction schedule between
+  // (exclusive_start_time, exclusive_end_time).
+  using ElapsedTimeFn = std::add_pointer<float(
+      int64_t exclusive_start_time, int64_t exclusive_end_time) const>::type;
+
+  // Returns true if the instructions at lhs_time and rhs_time are in the same
+  // computation.
+  using SameComputationParentFn =
+      std::add_pointer<bool(int64_t lhs_time, int64_t rhs_time) const>::type;
+
+  // Picks slice start times, given the num_slices, prefetch_start_time, and
+  // prefetch_end_time. The returned times are exclusive.
+  //
+  // REQUIRES:
+  // - The instructions following each start time are guaranateed to be in the
+  //   same computation.
+  // - The returned times sorted.
+  // - The first returned time is equal to prefetch_start_time.
+  static std::vector<int64_t> Pick(
+      int64_t num_slices, int64_t exclusive_prefetch_start_time,
+      int64_t prefetch_end_time, absl::AnyInvocable<ElapsedTimeFn> elapsed_fn,
+      absl::AnyInvocable<SameComputationParentFn> has_same_parent_fn);
+};
+
 // MemorySpaceAssignment assigns memory spaces (default or alternate) to each
 // instruction in the module. It will greedily try placing as as many values in
 // the alternate memory space as possible. It uses the heap simulator to
@@ -572,7 +611,39 @@ class MemorySpaceAssignment {
       const absl::flat_hash_set<
           std::pair<int, ShapeIndex>>& /*operands_in_alternate_memory*/,
       const absl::flat_hash_set<ShapeIndex>& /*outputs_in_alternate_memory*/)>;
-  using UpdateLayoutFunction = std::function<void(Shape*)>;
+
+  // The BufferInterval sorting interface that MemorySpaceAssignment expects.
+  class BufferIntervalComparator {
+   public:
+    using BufferInterval = MemorySpaceAssignment::BufferInterval;
+
+    virtual ~BufferIntervalComparator() = default;
+
+    // A logging string explaining the sorting criteria. E.g., [ -size, offset ]
+    // indicates we sort (desc) size, then (asc) offset.
+    virtual std::string DescribeComparisonCriteria() const = 0;
+
+    // A logging string containing the values used to sort buffer_interval.
+    // E.g., we might return [ -1024, 100 ], if the criteria is [ -size,
+    // offset ].
+    virtual std::string CriteriaToString(
+        const BufferInterval& buffer_interval) = 0;
+
+    // comparator.LessThan(lhs, rhs) will be used for BufferIntervalCompare.
+    virtual bool LessThan(const BufferInterval& lhs,
+                          const BufferInterval& rhs) = 0;
+
+    // Used to create a functor that can be passed to a method like std::sort.
+    // E.g., absl::c_sort(v, comparator.GetComparisonFunctor());
+    BufferIntervalCompare GetComparisonFunctor() {
+      return [this](const BufferInterval& lhs, const BufferInterval& rhs) {
+        return LessThan(lhs, rhs);
+      };
+    }
+
+   protected:
+    BufferIntervalComparator() = default;
+  };
 
   // MemorySpaceAssignment uses a notion of a slow and large default memory
   // space and a fast and small alternate memory space.
@@ -727,7 +798,7 @@ class MemorySpaceAssignment {
     CopyAllocation(
         Allocation& prev_allocation, MemorySpace memory_space,
         std::optional<Chunk> chunk, int64_t copy_start_schedule_after_time,
-        int64_t end_time, int64_t copy_done_schedule_before_time,
+        int64_t copy_done_schedule_before_time, int64_t end_time,
         std::optional<int64_t> cross_program_prefetch_index = std::nullopt);
 
     bool is_copy_allocation() const override { return true; }
@@ -889,13 +960,9 @@ class MemorySpaceAssignment {
       bool operator==(const SliceDetail& other) const;
 
       // Create the instructions to copy the slice. This method updates
-      // copy_start and copy_done. Given a Shape, the hardware may have
-      // constraints on how the shape is physically laid out in memory.
-      // update_layout_fn updates a Shape's layout in accordance with those
-      // constraints.
+      // copy_start and copy_done.
       Status CreateAsyncSlice(const Shape& original_shape,
-                              HloInstruction& producer, HloComputation& parent,
-                              absl::FunctionRef<void(Shape*)> update_layout_fn);
+                              HloInstruction& producer, HloComputation& parent);
 
       SliceDecision slice_decision;
       int64_t copy_start_after_time = -1;
@@ -910,8 +977,7 @@ class MemorySpaceAssignment {
     SlicedCopyAllocation(
         const Allocation& prev_allocation, MemorySpace memory_space,
         std::vector<SliceDecision> slice_decisions_sorted_by_start_time,
-        int64_t end_time, int64_t copy_done_schedule_before_time,
-        absl::FunctionRef<void(Shape*)> update_layout_fn);
+        int64_t copy_done_schedule_before_time, int64_t end_time);
 
     bool is_sliced_copy_allocation() const override { return true; }
 
@@ -963,7 +1029,6 @@ class MemorySpaceAssignment {
     //   sorted_segments_[i+j].copy.start_before_time
     std::vector<SliceDetail> slice_details_sorted_by_start_time_;
     HloInstruction* concat_ = nullptr;
-    absl::FunctionRef<void(Shape*)> update_layout_fn_;
   };
 
   // An allocation in the default memory space that mirrors another Allocation
@@ -1187,10 +1252,6 @@ class MemorySpaceAssignment {
   // Calculates asynchronous copy statistics.
   StatusOr<AsyncCopyStats> CalculateAsyncCopyStats() const;
 
-  static BufferIntervalCompare GetMemoryBoundednessBufferIntervalCompare(
-      const MemorySpaceAssignmentCostAnalysis& cost_analysis,
-      MemorySpaceAssignmentCostAnalysis::Cache* cache = nullptr);
-
   // Verify that the memory space assignment is free of overlapping buffers and
   // export heap simulator trace to be used by buffer_assignment.
   Status VerifyAndExportHeapSimulatorTrace();
@@ -1277,6 +1338,69 @@ class MemorySpaceAssignment {
   // to modify and fix the schedule.
   absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> schedule_after_;
   absl::flat_hash_map<int64_t, std::vector<HloInstruction*>> schedule_before_;
+};
+
+// A BufferIntervalComparator that utilizes MemoryBoundedness as its primary
+// sorting criteria.
+//
+// This comparator caches HloValues -> latest use time.
+class MemoryBoundednessBufferIntervalComparator
+    : public MemorySpaceAssignment::BufferIntervalComparator {
+ public:
+  MemoryBoundednessBufferIntervalComparator(
+      const MemorySpaceAssignmentCostAnalysis& cost_analysis,
+      MemorySpaceAssignmentCostAnalysis::Cache* cost_analysis_cache);
+
+  ~MemoryBoundednessBufferIntervalComparator() override = default;
+
+  std::string DescribeComparisonCriteria() const override;
+  std::string CriteriaToString(const BufferInterval& buffer_interval) override;
+  bool LessThan(const BufferInterval& lhs, const BufferInterval& rhs) override;
+
+ private:
+  // See the value returned by DescribeComparisonCriteria() for the meaning of
+  // each tuple element.
+  using ComparisonTuple =
+      std::tuple<float, int64_t, int64_t, int64_t, int64_t, BufferValue::Id>;
+
+  ComparisonTuple GetTuple(const BufferInterval& buffer_interval);
+
+  absl::flat_hash_map<const HloValue*, int64_t> buffer_to_latest_use_;
+  const MemorySpaceAssignmentCostAnalysis& cost_analysis_;
+  MemorySpaceAssignmentCostAnalysis::Cache* cost_analysis_cache_;
+};
+
+// The default BufferIntervalComparator used for cross-program prefetching.
+//
+// This class caches HloValue -> {latest use, cumulative use size }.
+class DefaultCrossProgramPrefetchBufferIntervalComparator
+    : public MemorySpaceAssignment::BufferIntervalComparator {
+ public:
+  explicit DefaultCrossProgramPrefetchBufferIntervalComparator(
+      const HloLiveRange& hlo_live_range);
+
+  ~DefaultCrossProgramPrefetchBufferIntervalComparator() override = default;
+
+  std::string DescribeComparisonCriteria() const override;
+  std::string CriteriaToString(const BufferInterval& buffer_interval) override;
+  bool LessThan(const BufferInterval& lhs, const BufferInterval& rhs) override;
+
+ private:
+  // See the value returned by DescribeComparisonCriteria() for the meaning of
+  // each tuple element.
+  using ComparisonTuple =
+      std::tuple<int64_t, int64_t, int64_t, BufferValue::Id>;
+
+  struct AdditionalSortData {
+    int64_t latest_use = 0;
+    int64_t cumulative_use_size = 0;
+  };
+
+  ComparisonTuple GetTuple(const BufferInterval& buffer_interval);
+
+  absl::flat_hash_map<const HloValue*, AdditionalSortData>
+      additional_sort_data_;
+  const HloLiveRange& hlo_live_range_;
 };
 
 // Filters prefetches by matching against multiple filters and overrides the
@@ -1372,10 +1496,10 @@ struct Options {
   // Memory alignment of the alternate memory space.
   int64_t alignment_in_bytes = 1;
 
-  // If provided, we sort the buffers using this comparison function
-  // otherwise, we use GlobalDecreasingSizeBestFitHeap::kSpatial.
-  std::optional<MemorySpaceAssignment::BufferIntervalCompare>
-      buffer_interval_compare = std::nullopt;
+  // If provided, we sort the buffers using this comparator. Otherwise, we use
+  // GlobalDecreasingSizeBestFitHeap::kSpatial.
+  MemorySpaceAssignment::BufferIntervalComparator* buffer_interval_comparator =
+      nullptr;
 
   // This object determines how early and how late prefetches can occur.
   PrefetchIntervalPicker* prefetch_interval_picker = nullptr;
@@ -1541,9 +1665,6 @@ struct Options {
 
   // Options for the memory-bound loop optimizer feature.
   MemoryBoundLoopOptimizerOptions memory_bound_loop_optimizer_options;
-
-  // A function for updating shape layouts.
-  MemorySpaceAssignment::UpdateLayoutFunction update_layout_fn = [](Shape*) {};
 
   MemorySpaceAssignment::SliceProposalFunction propose_slice_fn =
       [](const Shape&, const SlicedPrefetchOptions&)
@@ -1795,6 +1916,10 @@ class MemoryBoundLoopOptimizer {
     // ToString methods for logging/debugging.
     static std::string AllocationTypeToString(AllocationType allocation_type);
     std::string ToString() const;
+
+    // Returns true if memory-bound loop optimizer supports allocating this type
+    // of a loop value.
+    bool IsAllocationTypeSupported() const;
 
     // The HloValues that correspond to this LoopValue.
     std::vector<const HloValue*> hlo_values;
@@ -2380,11 +2505,6 @@ class AlternateMemoryBestFitHeap
   // Check if for the specified type of solution, using the parameters in
   // context. If we find a solution, it will be stored in context.
   Result CheckPrefetchFit(bool for_sliced_solution, PrefetchContext& context);
-  // Given a specified number of slices, start times, and end times, pick times
-  // to start each slice.
-  std::vector<int64_t> PickSliceStartTimes(int64_t num_slices,
-                                           int64_t prefetch_start_time,
-                                           int64_t prefetch_end_time) const;
   // Creates a debugging string describing the timing of the prefetch solution
   // we are currently attempting (as dictated by for_sliced_solution and
   // context).
@@ -2508,6 +2628,7 @@ class AlternateMemoryBestFitHeap
   // Helper functions to implement ImportRepackedAllocations.
   void ImportRepackedNonSlicedAllocation(RepackAllocationBlock& block);
   void ImportRepackedSlicedAllocation(RepackAllocationBlock& block);
+  Status AreRepackedSlicesValid(const RepackAllocationBlock& block);
 
   // Adds an asynchronous copy to allocations.
   void AddAsyncCopy(
@@ -2582,7 +2703,7 @@ class AlternateMemoryBestFitHeap
     allocation_block.offset = -1;
     allocation_block.initial_offset = initial_offset;
     allocation_block.id = id;
-    allocation_block.colocations = {};
+    allocation_block.next_colocated = nullptr;
     allocation_block.allocation = allocation;
     return allocation_block;
   }
@@ -2609,6 +2730,7 @@ class AlternateMemoryBestFitHeap
   // for aliased allocations.
   std::list<RepackAllocationBlock> repack_allocation_blocks_;
   int64_t num_repacks_ = 0;
+  int64_t num_repacks_successful_ = 0;
   std::vector<std::pair<BufferInterval, Chunk>> pending_chunks_;
   std::vector<AsynchronousCopy> pending_async_copies_;
   std::vector<std::pair<const HloValue*, RequiredMemoryAssignment>>

@@ -7,7 +7,6 @@ load("//bazel:skia_rules.bzl", "select_multi")
 
 GENERAL_DEFINES = [
     "SK_GAMMA_APPLY_TO_A8",
-    "SK_DEFAULT_TYPEFACE_IS_EMPTY",
 ] + select({
     "//bazel/common_config_settings:debug_build": [
         "SK_DEBUG",
@@ -104,6 +103,7 @@ CODEC_DEFINES = select_multi({
 TYPEFACE_DEFINES = select_multi(
     {
         "//src/ports:uses_freetype": ["SK_TYPEFACE_FACTORY_FREETYPE"],
+        "//src/ports:uses_fontations": ["SK_TYPEFACE_FACTORY_FONTATIONS"],
         #TODO: others when they become available
     },
 )

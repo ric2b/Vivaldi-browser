@@ -18,9 +18,14 @@ import {copyToClipboard} from '../../base/clipboard';
 import {Icons} from '../../base/semantic_icons';
 import {time, Time} from '../../base/time';
 import {Actions} from '../../common/actions';
-import {TimestampFormat, timestampFormat} from '../../common/timestamp_format';
+import {
+  setTimestampFormat,
+  TimestampFormat,
+  timestampFormat,
+} from '../../common/timestamp_format';
+import {raf} from '../../core/raf_scheduler';
 import {Anchor} from '../../widgets/anchor';
-import {MenuItem, PopupMenu2} from '../../widgets/menu';
+import {MenuDivider, MenuItem, PopupMenu2} from '../../widgets/menu';
 import {globals} from '../globals';
 
 // import {MenuItem, PopupMenu2} from './menu';
@@ -61,9 +66,35 @@ export class Timestamp implements m.ClassComponent<TimestampAttrs> {
             copyToClipboard(ts.toString());
           },
         }),
-        ...(attrs.extraMenuItems ?? []),
+        m(
+            MenuItem,
+            {
+              label: 'Time format',
+            },
+            menuItemForFormat(TimestampFormat.Timecode, 'Timecode'),
+            menuItemForFormat(TimestampFormat.UTC, 'Realtime (UTC)'),
+            menuItemForFormat(TimestampFormat.TraceTz, 'Realtime (Trace TZ)'),
+            menuItemForFormat(TimestampFormat.Seconds, 'Seconds'),
+            menuItemForFormat(TimestampFormat.Raw, 'Raw'),
+            menuItemForFormat(
+                TimestampFormat.RawLocale,
+                'Raw (with locale-specific formatting)'),
+            ),
+        attrs.extraMenuItems ? [m(MenuDivider), attrs.extraMenuItems] : null,
     );
   }
+}
+
+export function menuItemForFormat(
+    value: TimestampFormat, label: string): m.Children {
+  return m(MenuItem, {
+    label,
+    active: value === timestampFormat(),
+    onclick: () => {
+      setTimestampFormat(value);
+      raf.scheduleFullRedraw();
+    },
+  });
 }
 
 function renderTimestamp(time: time): m.Children {
@@ -71,6 +102,7 @@ function renderTimestamp(time: time): m.Children {
   const domainTime = globals.toDomainTime(time);
   switch (fmt) {
     case TimestampFormat.UTC:
+    case TimestampFormat.TraceTz:
     case TimestampFormat.Timecode:
       return renderTimecode(domainTime);
     case TimestampFormat.Raw:

@@ -65,14 +65,14 @@ AX_TEST_F(
       Object.defineProperty(slider, 'value', {get: () => sliderValue});
 
       const event = new CustomAutomationEvent(EventType.VALUE_CHANGED, slider);
-      mockFeedback.call(() => this.handler_.onValueChanged(event))
+      mockFeedback.call(() => this.handler_.onValueChanged_(event))
           .expectSpeech('Slider', '50%')
 
           // Override the min time to observe value changes so that even super
           // fast updates triggers speech.
           .call(() => DesktopAutomationHandler.MIN_VALUE_CHANGE_DELAY_MS = -1)
           .call(() => sliderValue = '60%')
-          .call(() => this.handler_.onValueChanged(event))
+          .call(() => this.handler_.onValueChanged_(event))
 
           // The range stays on the slider, so subsequent value changes only
           // report the value.
@@ -83,12 +83,12 @@ AX_TEST_F(
           .call(
               () => DesktopAutomationHandler.MIN_VALUE_CHANGE_DELAY_MS = 10000)
           .call(() => sliderValue = '70%')
-          .call(() => this.handler_.onValueChanged(event))
+          .call(() => this.handler_.onValueChanged_(event))
 
           // Send one more that is processed.
           .call(() => DesktopAutomationHandler.MIN_VALUE_CHANGE_DELAY_MS = -1)
           .call(() => sliderValue = '80%')
-          .call(() => this.handler_.onValueChanged(event))
+          .call(() => this.handler_.onValueChanged_(event))
 
           .expectNextSpeechUtteranceIsNot('70%')
           .expectSpeech('80%');
@@ -199,6 +199,34 @@ AX_TEST_F(
       await mockFeedback.replay();
     });
 
+// Ensures that selection events from IME candidate doesn't break ChromeVox's
+// range.
+AX_TEST_F(
+    'ChromeVoxDesktopAutomationHandlerTest', 'ImeCandidate_keepRange',
+    async function() {
+      const mockFeedback = this.createMockFeedback();
+      const site =
+          `<button>First</button><button>Second</button><button>Third</button>`;
+      const root = await this.runWithLoadedTree(site);
+      const candidates = root.findAll({role: RoleType.BUTTON});
+      const first = candidates[0];
+      const third = candidates[2];
+      assertNotNullNorUndefined(first);
+      assertNotNullNorUndefined(third);
+      // Fake role to imitate IME candidates.
+      Object.defineProperty(third, 'role', {get: () => RoleType.IME_CANDIDATE});
+      const selectEvent = new CustomAutomationEvent(EventType.SELECTION, third);
+
+      mockFeedback.call(() => first.focus())
+          .expectSpeech('First')
+          .call(() => this.handler_.onSelection(selectEvent))
+          .expectSpeech('Third')
+          .expectSpeech(/tango/)
+          .call(doCmd('nextObject'))
+          .expectSpeech('Second');
+      await mockFeedback.replay();
+    });
+
 AX_TEST_F(
     'ChromeVoxDesktopAutomationHandlerTest', 'IgnoreRepeatedAlerts',
     async function() {
@@ -298,7 +326,7 @@ AX_TEST_F(
       // Case: no selection start.
       // Because automation.setDocumentSelection enforces that there is a
       // selectionStart object, we will call the method directly.
-      instance.onDocumentSelectionChanged({
+      instance.onDocumentSelectionChanged_({
         target: {
           selectionStartObject: null,
           selectionStartOffset: 0,
@@ -325,7 +353,7 @@ AX_TEST_F('ChromeVoxDesktopAutomationHandlerTest', 'OnFocus', async function() {
   const assertGetFocusCalled = this.prepareToExpectMethodCall(
       DesktopAutomationInterface.instance, 'maybeRecoverFocusAndOutput_');
 
-  DesktopAutomationInterface.instance.onFocus({target: root});
+  DesktopAutomationInterface.instance.onFocus_({target: root});
   await this.waitForPendingMethods();
   assertGetFocusCalled();
   assertEquals(
@@ -339,7 +367,7 @@ AX_TEST_F('ChromeVoxDesktopAutomationHandlerTest', 'OnFocus', async function() {
     const assertExitEarly = this.prepareToExpectMethodNotCalled(
         Output, 'forceModeForNextSpeechUtterance');
 
-    DesktopAutomationInterface.instance.onFocus({target: button});
+    DesktopAutomationInterface.instance.onFocus_({target: button});
     await this.waitForPendingMethods();
     assertCreateTextHandlerCalled();
     assertExitEarly();
@@ -388,7 +416,7 @@ AX_TEST_F('ChromeVoxDesktopAutomationHandlerTest', 'OnFocus', async function() {
   const assertEventDefault = this.prepareToExpectMethodCall(
       DesktopAutomationInterface.instance, 'onEventDefault');
 
-  DesktopAutomationInterface.instance.onFocus({target: button});
+  DesktopAutomationInterface.instance.onFocus_({target: button});
   await this.waitForPendingMethods();
   assertNotEquals('fake url', DesktopAutomationInterface.instance.lastRootUrl_);
   assertOutputFlush();

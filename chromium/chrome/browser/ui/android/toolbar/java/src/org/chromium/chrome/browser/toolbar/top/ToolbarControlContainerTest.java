@@ -8,6 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 import android.view.View;
@@ -29,6 +30,9 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.Features.JUnitProcessor;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.cc.input.BrowserControlsState;
@@ -43,9 +47,6 @@ import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbar
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer.ToolbarViewResourceAdapter;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer.ToolbarViewResourceAdapter.ToolbarInMotionStage;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.chrome.test.util.browser.Features.JUnitProcessor;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
@@ -65,6 +66,7 @@ public class ToolbarControlContainerTest {
 
     @Mock private ResourceFactory.Natives mResourceFactoryJni;
     @Mock private View mToolbarContainer;
+    @Mock private View mToolbarHairline;
     @Mock private Toolbar mToolbar;
     @Mock private Tab mTab;
     @Mock private LayoutStateProvider mLayoutStateProvider;
@@ -183,6 +185,8 @@ public class ToolbarControlContainerTest {
         UmaRecorderHolder.resetForTesting();
         when(mToolbarContainer.getWidth()).thenReturn(1);
         when(mToolbarContainer.getHeight()).thenReturn(1);
+        when(mToolbarContainer.findViewById(anyInt())).thenReturn(mToolbarHairline);
+        when(mToolbarHairline.getHeight()).thenReturn(1);
         mBrowserStateBrowserControlsVisibilityDelegate.set(BrowserControlsState.BOTH);
         mCompositorInMotionSupplier.set(false);
         mBrowserStateBrowserControlsVisibilityDelegate.addObserver(

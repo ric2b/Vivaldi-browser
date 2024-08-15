@@ -33,9 +33,6 @@ class CORE_EXPORT CSSMathFunctionValue : public CSSPrimitiveValue {
   bool MayHaveRelativeUnit() const;
 
   CalculationResultCategory Category() const { return expression_->Category(); }
-  bool CanBeResolvedWithConversionData() const {
-    return expression_->CanBeResolvedWithConversionData();
-  }
 
   bool IsAngle() const { return Category() == kCalcAngle; }
   bool IsLength() const { return Category() == kCalcLength; }
@@ -82,6 +79,7 @@ class CORE_EXPORT CSSMathFunctionValue : public CSSPrimitiveValue {
   double ComputeLengthPx(const CSSLengthResolver&) const;
   double ComputeDotsPerPixel() const;
   int ComputeInteger(const CSSLengthResolver&) const;
+  double ComputeNumber(const CSSLengthResolver&) const;
 
   bool AccumulateLengthArray(CSSLengthArray& length_array,
                              double multiplier) const;
@@ -95,6 +93,9 @@ class CORE_EXPORT CSSMathFunctionValue : public CSSPrimitiveValue {
   bool Equals(const CSSMathFunctionValue& other) const;
 
   bool HasComparisons() const { return expression_->HasComparisons(); }
+  bool InvolvesAnchorQueries() const {
+    return expression_->InvolvesAnchorQueries();
+  }
 
   const CSSValue& PopulateWithTreeScope(const TreeScope*) const;
 

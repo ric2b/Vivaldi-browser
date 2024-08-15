@@ -48,7 +48,7 @@
 #include "net/quic/quic_crypto_client_config_handle.h"
 #include "net/quic/quic_http_utils.h"
 #include "net/quic/quic_server_info.h"
-#include "net/quic/quic_stream_factory.h"
+#include "net/quic/quic_session_pool.h"
 #include "net/quic/quic_test_packet_maker.h"
 #include "net/quic/quic_test_packet_printer.h"
 #include "net/quic/test_quic_crypto_client_config_handle.h"
@@ -143,7 +143,7 @@ bool CheckHeader(const base::Value::Dict& params,
     if (!header) {
       return false;
     }
-    if (base::StartsWith(*header, header_prefix)) {
+    if (header->starts_with(header_prefix)) {
       if (header_found) {
         return false;
       }
@@ -413,7 +413,8 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<TestParams>,
         quic::QuicTime::Delta::FromMilliseconds(
             kDefaultRetransmittableOnWireTimeout.InMilliseconds()),
         /*migrate_idle_session=*/false, /*allow_port_migration=*/false,
-        kDefaultIdleSessionMigrationPeriod, kMaxTimeOnNonDefaultNetwork,
+        kDefaultIdleSessionMigrationPeriod, /*multi_port_probing_interval=*/0,
+        kMaxTimeOnNonDefaultNetwork,
         kMaxMigrationsToNonDefaultNetworkOnWriteError,
         kMaxMigrationsToNonDefaultNetworkOnPathDegrading,
         kQuicYieldAfterPacketsRead,
@@ -421,8 +422,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<TestParams>,
             kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
-        dns_start, dns_end,
-        base::DefaultTickClock::GetInstance(),
+        dns_start, dns_end, base::DefaultTickClock::GetInstance(),
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         /*socket_performance_watcher=*/nullptr, HostResolverEndpointResult(),
         NetLog::Get());

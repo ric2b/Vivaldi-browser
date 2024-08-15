@@ -47,7 +47,8 @@ class PipeToEngine::PipeToReadRequest final : public ReadRequest {
   explicit PipeToReadRequest(PipeToEngine* instance) : instance_(instance) {}
 
   void ChunkSteps(ScriptState* script_state,
-                  v8::Local<v8::Value> chunk) const override {
+                  v8::Local<v8::Value> chunk,
+                  ExceptionState&) const override {
     scoped_refptr<scheduler::EventLoop> event_loop =
         ExecutionContext::From(script_state)->GetAgent()->event_loop();
     v8::Global<v8::Value> value(script_state->GetIsolate(), chunk);
@@ -116,7 +117,7 @@ ScriptPromise PipeToEngine::Start(ReadableStream* readable,
   // 3. Assert: preventClose, preventAbort, and preventCancel are all
   // booleans.
 
-  // TODO(ricea): Implement |signal|.
+  // Already done by WebIDL bindings:
   // 4. If signal was not given, let signal be undefined.
   // 5. Assert: either signal is undefined, or signal implements AbortSignal.
 
@@ -240,9 +241,7 @@ bool PipeToEngine::CheckInitialState() {
 void PipeToEngine::AbortAlgorithm(AbortSignal* signal) {
   // a. Let abortAlgorithm be the following steps:
   //    i. Let error be signal's abort reason.
-  v8::Local<v8::Value> error =
-      ToV8(signal->reason(script_state_), script_state_->GetContext()->Global(),
-           script_state_->GetIsolate());
+  v8::Local<v8::Value> error = signal->reason(script_state_).V8Value();
 
   // Steps ii. to iv. are implemented in AbortAlgorithmAction.
 
@@ -312,9 +311,13 @@ v8::Local<v8::Value> PipeToEngine::HandleNextEvent(v8::Local<v8::Value>) {
     return Undefined();
   }
 
+  ExceptionState exception_state(script_state_->GetIsolate(),
+                                 ExceptionContextType::kUnknown, "", "");
+
   is_reading_ = true;
   auto* read_request = MakeGarbageCollected<PipeToReadRequest>(this);
-  ReadableStreamDefaultReader::Read(script_state_, reader_, read_request);
+  ReadableStreamDefaultReader::Read(script_state_, reader_, read_request,
+                                    exception_state);
   return Undefined();
 }
 

@@ -1,16 +1,13 @@
 #include <Eigen/Dense>
 #include <iostream>
 
-int main()
-{
+int main() {
   Eigen::VectorXf v(2);
-  Eigen::MatrixXf m(2,2), n(2,2);
-  
-  v << -1,
-       2;
-  
-  m << 1,-2,
-       -3,4;
+  Eigen::MatrixXf m(2, 2), n(2, 2);
+
+  v << -1, 2;
+
+  m << 1, -2, -3, 4;
 
   std::cout << "v.squaredNorm() = " << v.squaredNorm() << std::endl;
   std::cout << "v.norm() = " << v.norm() << std::endl;

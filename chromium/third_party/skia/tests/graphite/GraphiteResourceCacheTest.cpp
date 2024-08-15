@@ -17,6 +17,8 @@
 #include "include/gpu/graphite/Recording.h"
 #include "include/gpu/graphite/Surface.h"
 #include "src/core/SkCanvasPriv.h"
+#include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/Device.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/Resource.h"
@@ -28,6 +30,7 @@
 #include "src/gpu/graphite/TextureUtils.h"
 #include "src/image/SkImage_Base.h"
 #include "tools/Resources.h"
+#include "tools/graphite/GraphiteTestContext.h"
 
 namespace skgpu::graphite {
 
@@ -53,6 +56,8 @@ public:
         return resource;
     }
 
+    const char* getResourceType() const override { return "Test Resource"; }
+
     static void CreateKey(GraphiteResourceKey* key, Shareable shareable) {
         // Internally we assert that we don't make the same key twice where the only difference is
         // shareable vs non-shareable. That allows us to now have Shareable be part of the Key's
@@ -68,7 +73,11 @@ private:
                  Ownership owned,
                  skgpu::Budgeted budgeted,
                  size_t gpuMemorySize)
-            : Resource(sharedContext, owned, budgeted, gpuMemorySize) {}
+            : Resource(sharedContext,
+                       owned,
+                       budgeted,
+                       gpuMemorySize,
+                       	/*label=*/"TestResource") {}
 
     void freeGpuData() override {}
 };
@@ -85,8 +94,12 @@ static sk_sp<SkData> create_image_data(const SkImageInfo& info) {
     return data;
 }
 
-DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest, reporter, context,
-                                   CtsEnforcement::kNextRelease) {
+DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest,
+                                               reporter,
+                                               context,
+                                               testContext,
+                                               true,
+                                               CtsEnforcement::kNextRelease) {
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
     ResourceProvider* resourceProvider = recorder->priv().resourceProvider();
     ResourceCache* resourceCache = resourceProvider->resourceCache();
@@ -133,7 +146,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest, reporter, cont
     resourcePtr2->unref();
     resourceCache->forceProcessReturnedResources();
 
-    // Test making a non budgeted, non shareable resource.
+    // Test making a budgeted, shareable resource.
     resource = TestResource::Make(
             sharedContext, Ownership::kOwned, skgpu::Budgeted::kYes, Shareable::kYes);
     if (!resource) {
@@ -203,13 +216,16 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest, reporter, cont
     InsertRecordingInfo insertInfo;
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
     recording.reset();
     imageGpu.reset();
     resourceCache->forceProcessReturnedResources();
 
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 4);
-    REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 4);
+    // Remapping async buffers before returning them to the cache can extend buffer lifetime.
+    if (!context->priv().caps()->bufferMapsAreAsync()) {
+        REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 4);
+    }
     REPORTER_ASSERT(reporter, imageResourcePtr->budgeted() == skgpu::Budgeted::kYes);
 
     // Now try an SkSurface. This is simpler since we can directly create Graphite SkSurface's.
@@ -233,7 +249,10 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest, reporter, cont
     const Resource* surfaceResourcePtr = surfaceProxy->texture();
 
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 5);
-    REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 4);
+    // Remapping async buffers before returning them to the cache can extend buffer lifetime.
+    if (!context->priv().caps()->bufferMapsAreAsync()) {
+        REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 4);
+    }
     REPORTER_ASSERT(reporter, surfaceResourcePtr->budgeted() == skgpu::Budgeted::kNo);
 
     // The creation of the surface may have added an initial clear to it. Thus if we just reset the
@@ -242,7 +261,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest, reporter, cont
     recording = recorder->snap();
     insertInfo.fRecording = recording.get();
     context->insertRecording(insertInfo);
-    context->submit(SyncToCpu::kYes);
+    testContext->syncedSubmit(context);
     recording.reset();
 
     surface.reset();

@@ -2,48 +2,41 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/constants/ash_features.h"
-#include "ash/shelf/shelf.h"
 #include "ash/system/notification_center/notification_center_test_api.h"
 #include "ash/system/notification_center/notification_center_tray.h"
-#include "ash/system/status_area_widget_delegate.h"
-#include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/pixel/ash_pixel_differ.h"
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
-#include "base/test/scoped_feature_list.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "ui/message_center/message_center.h"
 
 namespace ash {
 
 class NotificationCenterTrayPixelTest : public AshTestBase {
  public:
-  NotificationCenterTrayPixelTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kQsRevamp, chromeos::features::kJelly}, {});
-  }
+  NotificationCenterTrayPixelTest() = default;
+  NotificationCenterTrayPixelTest(const NotificationCenterTrayPixelTest&) =
+      delete;
+  NotificationCenterTrayPixelTest& operator=(
+      const NotificationCenterTrayPixelTest&) = delete;
+  ~NotificationCenterTrayPixelTest() override = default;
 
   // AshTestBase:
   void SetUp() override {
     AshTestBase::SetUp();
 
-    test_api_ = std::make_unique<NotificationCenterTestApi>(
-        StatusAreaWidgetTestHelper::GetStatusAreaWidget()
-            ->notification_center_tray());
+    test_api_ = std::make_unique<NotificationCenterTestApi>();
   }
 
   NotificationCenterTestApi* test_api() { return test_api_.get(); }
 
   // AshTestBase:
-  absl::optional<pixel_test::InitParams> CreatePixelTestInitParams()
+  std::optional<pixel_test::InitParams> CreatePixelTestInitParams()
       const override {
     return pixel_test::InitParams();
   }
 
  private:
   std::unique_ptr<NotificationCenterTestApi> test_api_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests the UI of the notification center tray when connecting a secondary

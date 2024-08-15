@@ -17,7 +17,7 @@
 #include "src/execution/isolate.h"
 #include "src/handles/global-handles.h"
 #include "src/handles/persistent-handles.h"
-#include "src/heap/concurrent-allocator.h"
+#include "src/heap/base/stack.h"
 #include "src/heap/gc-callbacks.h"
 
 namespace v8 {
@@ -105,18 +105,6 @@ class V8_EXPORT_PRIVATE LocalHeap {
   Heap* AsHeap() const { return heap(); }
 
   MarkingBarrier* marking_barrier() { return marking_barrier_.get(); }
-  ConcurrentAllocator* old_space_allocator() {
-    return old_space_allocator_.get();
-  }
-  ConcurrentAllocator* code_space_allocator() {
-    return code_space_allocator_.get();
-  }
-  ConcurrentAllocator* shared_old_space_allocator() {
-    return shared_old_space_allocator_.get();
-  }
-  ConcurrentAllocator* trusted_space_allocator() {
-    return trusted_space_allocator_.get();
-  }
 
   // Give up all LABs. Used for e.g. full GCs.
   void FreeLinearAllocationAreas();
@@ -175,17 +163,14 @@ class V8_EXPORT_PRIVATE LocalHeap {
                               ClearRecordedSlots clear_recorded_slots);
 
   bool is_main_thread() const { return is_main_thread_; }
+  bool is_main_thread_for(Heap* heap) const {
+    return is_main_thread() && heap_ == heap;
+  }
   bool is_in_trampoline() const { return heap_->stack().IsMarkerSet(); }
   bool deserialization_complete() const {
     return heap_->deserialization_complete();
   }
   ReadOnlySpace* read_only_space() { return heap_->read_only_space(); }
-
-#ifdef V8_COMPRESS_POINTERS
-  TrustedPointerTable::Space* trusted_pointer_space() {
-    return heap_->trusted_pointer_space();
-  }
-#endif
 
   // Adds a callback that is invoked with the given |data| after each GC.
   // The callback is invoked on the main thread before any background thread
@@ -312,7 +297,9 @@ class V8_EXPORT_PRIVATE LocalHeap {
       int object_size, AllocationType type, AllocationOrigin origin,
       AllocationAlignment alignment);
 
-  bool IsMainThreadOfClientIsolate() const;
+#ifdef DEBUG
+  bool IsSafeForConservativeStackScanning() const;
+#endif
 
   template <typename Callback>
   V8_INLINE void ExecuteWithStackMarker(Callback callback);
@@ -321,7 +308,7 @@ class V8_EXPORT_PRIVATE LocalHeap {
 
   void Park() {
     DCHECK(AllowSafepoints::IsAllowed());
-    DCHECK_IMPLIES(IsMainThreadOfClientIsolate(), is_in_trampoline());
+    DCHECK(IsSafeForConservativeStackScanning());
     ThreadState expected = ThreadState::Running();
     if (!state_.CompareExchangeWeak(expected, ThreadState::Parked())) {
       ParkSlowPath();
@@ -351,8 +338,11 @@ class V8_EXPORT_PRIVATE LocalHeap {
   void InvokeGCEpilogueCallbacksInSafepoint(
       GCCallbacksInSafepoint::GCType gc_type);
 
-  void SetUpMainThread();
-  void SetUp();
+  // Set up this LocalHeap as main thread.
+  void SetUpMainThread(LinearAllocationArea& new_allocation_info,
+                       LinearAllocationArea& old_allocation_info);
+
+  void SetUpMarkingBarrier();
   void SetUpSharedMarking();
 
   Heap* heap_;
@@ -373,15 +363,14 @@ class V8_EXPORT_PRIVATE LocalHeap {
 
   GCCallbacksInSafepoint gc_epilogue_callbacks_;
 
-  std::unique_ptr<ConcurrentAllocator> old_space_allocator_;
-  std::unique_ptr<ConcurrentAllocator> code_space_allocator_;
-  std::unique_ptr<ConcurrentAllocator> shared_old_space_allocator_;
-  std::unique_ptr<ConcurrentAllocator> trusted_space_allocator_;
+  HeapAllocator heap_allocator_;
 
   MarkingBarrier* saved_marking_barrier_ = nullptr;
 
+  // Stack information for the thread using this local heap.
+  ::heap::base::Stack stack_;
+
   friend class CollectionBarrier;
-  friend class ConcurrentAllocator;
   friend class GlobalSafepoint;
   friend class Heap;
   friend class Isolate;

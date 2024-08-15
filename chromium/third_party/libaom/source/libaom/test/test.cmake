@@ -157,12 +157,6 @@ if(NOT BUILD_SHARED_LIBS)
               "${AOM_ROOT}/test/simd_cmp_impl.h"
               "${AOM_ROOT}/test/simd_impl.h")
 
-  if(HAVE_NEON)
-    list(APPEND AOM_UNIT_TEST_COMMON_INTRIN_NEON
-                "${AOM_ROOT}/test/simd_cmp_neon.cc")
-    add_to_libaom_test_srcs(AOM_UNIT_TEST_COMMON_INTRIN_NEON)
-  endif()
-
   if(HAVE_SSE2)
     list(APPEND AOM_UNIT_TEST_COMMON_INTRIN_SSE2
                 "${AOM_ROOT}/test/simd_cmp_sse2.cc")
@@ -216,7 +210,6 @@ if(NOT BUILD_SHARED_LIBS)
               "${AOM_ROOT}/test/fdct4x4_test.cc"
               "${AOM_ROOT}/test/fft_test.cc"
               "${AOM_ROOT}/test/firstpass_test.cc"
-              "${AOM_ROOT}/test/frame_error_test.cc"
               "${AOM_ROOT}/test/fwht4x4_test.cc"
               "${AOM_ROOT}/test/hadamard_test.cc"
               "${AOM_ROOT}/test/horver_correlation_test.cc"
@@ -304,11 +297,6 @@ if(NOT BUILD_SHARED_LIBS)
     endif()
   endif()
 
-  if(HAVE_NEON)
-    list(APPEND AOM_UNIT_TEST_COMMON_SOURCES
-                "${AOM_ROOT}/test/simd_neon_test.cc")
-  endif()
-
   if(CONFIG_FPMT_TEST AND (NOT CONFIG_REALTIME_ONLY))
     list(APPEND AOM_UNIT_TEST_COMMON_SOURCES
                 "${AOM_ROOT}/test/frame_parallel_enc_test.cc")
@@ -381,7 +369,6 @@ if(NOT BUILD_SHARED_LIBS)
                      "${AOM_ROOT}/test/end_to_end_qmpsnr_test.cc"
                      "${AOM_ROOT}/test/end_to_end_ssim_test.cc"
                      "${AOM_ROOT}/test/firstpass_test.cc"
-                     "${AOM_ROOT}/test/frame_error_test.cc"
                      "${AOM_ROOT}/test/motion_vector_test.cc"
                      "${AOM_ROOT}/test/obmc_sad_test.cc"
                      "${AOM_ROOT}/test/obmc_variance_test.cc"

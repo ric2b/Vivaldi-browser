@@ -18,6 +18,7 @@
 #include "cc/paint/transfer_cache_entry.h"
 #include "cc/paint/transfer_cache_serialize_helper.h"
 #include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/gl_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -162,7 +163,11 @@ void RasterImplementationGLES::CopySharedImage(
     GLboolean unpack_premultiply_alpha) {
   // CopySharedImage does not support legacy mailboxes so fallback to
   // CopySubTexture.
-  if (capabilities_.supports_yuv_rgb_conversion &&
+  // We don't know if this would require rgb to yuv or yuv to rgb conversion, so
+  // we check for both flags, but in reality validating command decoder doesn't
+  // support either and passthrough command decoder always supports both.
+  if (capabilities_.supports_yuv_to_rgb_conversion &&
+      capabilities_.supports_rgb_to_yuv_conversion &&
       source_mailbox.IsSharedImage() && dest_mailbox.IsSharedImage()) {
     if (width < 0) {
       LOG(ERROR) << "GL_INVALID_VALUE, glCopySharedImage, width < 0";
@@ -544,6 +549,12 @@ GLuint RasterImplementationGLES::CreateAndConsumeForGpuRaster(
   return mailbox.IsSharedImage()
              ? gl_->CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name)
              : gl_->CreateAndConsumeTextureCHROMIUM(mailbox.name);
+}
+
+GLuint RasterImplementationGLES::CreateAndConsumeForGpuRaster(
+    const scoped_refptr<gpu::ClientSharedImage>& shared_image) {
+  CHECK(shared_image);
+  return CreateAndConsumeForGpuRaster(shared_image->mailbox());
 }
 
 void RasterImplementationGLES::DeleteGpuRasterTexture(GLuint texture) {

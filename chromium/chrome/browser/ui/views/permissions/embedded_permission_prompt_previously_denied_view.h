@@ -18,9 +18,10 @@ class Browser;
 class EmbeddedPermissionPromptPreviouslyDeniedView
     : public EmbeddedPermissionPromptBaseView {
  public:
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kAllowThisTimeId);
   EmbeddedPermissionPromptPreviouslyDeniedView(
       Browser* browser,
-      base::WeakPtr<Delegate> delegate);
+      base::WeakPtr<EmbeddedPermissionPromptViewDelegate> delegate);
   EmbeddedPermissionPromptPreviouslyDeniedView(
       const EmbeddedPermissionPromptPreviouslyDeniedView&) = delete;
   EmbeddedPermissionPromptPreviouslyDeniedView& operator=(
@@ -35,9 +36,6 @@ class EmbeddedPermissionPromptPreviouslyDeniedView
   std::vector<RequestLineConfiguration> GetRequestLinesConfiguration()
       const override;
   std::vector<ButtonConfiguration> GetButtonsConfiguration() const override;
-
- private:
-  std::u16string GetMessageText() const;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PERMISSIONS_EMBEDDED_PERMISSION_PROMPT_PREVIOUSLY_DENIED_VIEW_H_

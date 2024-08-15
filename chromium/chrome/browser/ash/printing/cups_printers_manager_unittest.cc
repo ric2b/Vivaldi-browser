@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "base/containers/contains.h"
@@ -183,12 +184,9 @@ class FakeSyncedPrintersManager : public SyncedPrintersManager {
  private:
   void RemovePrinters(const std::unordered_set<std::string>& ids,
                       std::vector<Printer>* target) {
-    auto new_end = std::remove_if(target->begin(), target->end(),
-                                  [&ids](const Printer& printer) -> bool {
-                                    return base::Contains(ids, printer.id());
-                                  });
-
-    target->resize(new_end - target->begin());
+    std::erase_if(*target, [&ids](const Printer& printer) {
+      return base::Contains(ids, printer.id());
+    });
   }
 
   bool IsPrinterAlreadySaved(const Printer& printer) const {
@@ -238,13 +236,9 @@ class FakePrinterDetector : public PrinterDetector {
 
   // Remove printers that have ids in ids.
   void RemoveDetections(const std::unordered_set<std::string>& ids) {
-    auto new_end =
-        std::remove_if(detections_.begin(), detections_.end(),
-                       [&ids](const DetectedPrinter& detection) -> bool {
-                         return base::Contains(ids, detection.printer.id());
-                       });
-
-    detections_.resize(new_end - detections_.begin());
+    std::erase_if(detections_, [&ids](const DetectedPrinter& detection) {
+      return base::Contains(ids, detection.printer.id());
+    });
     on_printers_found_callback_.Run(detections_);
   }
 
@@ -390,7 +384,7 @@ class FakePrintServersManager : public PrintServersManager {
   }
 
  private:
-  raw_ptr<Observer, ExperimentalAsh> observer_;
+  raw_ptr<Observer> observer_;
 };
 
 class CupsPrintersManagerTest : public testing::Test,
@@ -480,16 +474,15 @@ class CupsPrintersManagerTest : public testing::Test,
 
   // Backend fakes driving the CupsPrintersManager.
   FakeSyncedPrintersManager synced_printers_manager_;
-  raw_ptr<FakeEnterprisePrintersProvider, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<FakeEnterprisePrintersProvider, DanglingUntriaged>
       enterprise_printers_provider_;  // Not owned.
-  raw_ptr<FakePrinterDetector, DanglingUntriaged | ExperimentalAsh>
-      usb_detector_;  // Not owned.
-  raw_ptr<FakePrinterDetector, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<FakePrinterDetector, DanglingUntriaged> usb_detector_;  // Not owned.
+  raw_ptr<FakePrinterDetector, DanglingUntriaged>
       zeroconf_detector_;  // Not owned.
   raw_ptr<FakeUsbPrinterNotificationController,
-          DanglingUntriaged | ExperimentalAsh>
+          DanglingUntriaged>
       usb_notif_controller_;  // Not owned.
-  raw_ptr<FakePrintServersManager, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<FakePrintServersManager, DanglingUntriaged>
       print_servers_manager_;  // Not owned.
   scoped_refptr<FakePpdProvider> ppd_provider_;
 
@@ -713,12 +706,12 @@ TEST_F(CupsPrintersManagerTest, GetPrinter) {
 
   for (const std::string& id :
        {"Saved", "Enterprise", "Discovered", "Automatic"}) {
-    absl::optional<Printer> printer = manager_->GetPrinter(id);
+    std::optional<Printer> printer = manager_->GetPrinter(id);
     ASSERT_TRUE(printer);
     EXPECT_EQ(printer->id(), id);
   }
 
-  absl::optional<Printer> printer = manager_->GetPrinter("Nope");
+  std::optional<Printer> printer = manager_->GetPrinter("Nope");
   EXPECT_FALSE(printer);
 }
 
@@ -814,10 +807,10 @@ TEST_F(CupsPrintersManagerTest, GetPrinterUserNativePrintersDisabled) {
   // Disable the use of non-enterprise printers.
   UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
-  absl::optional<Printer> saved_printer = manager_->GetPrinter("Saved");
+  std::optional<Printer> saved_printer = manager_->GetPrinter("Saved");
   EXPECT_FALSE(saved_printer);
 
-  absl::optional<Printer> enterprise_printer =
+  std::optional<Printer> enterprise_printer =
       manager_->GetPrinter("Enterprise");
   ASSERT_TRUE(enterprise_printer);
   EXPECT_EQ(enterprise_printer->id(), "Enterprise");
@@ -957,7 +950,7 @@ TEST_F(CupsPrintersManagerTest, AutomaticUsbPrinterIsInstalledAutomatically) {
 
   task_environment_.RunUntilIdle();
 
-  absl::optional<chromeos::Printer> printer =
+  std::optional<chromeos::Printer> printer =
       manager_->GetPrinter(automatic_printer.printer.id());
   ASSERT_TRUE(printer);
   EXPECT_TRUE(manager_->IsPrinterInstalled(*printer));

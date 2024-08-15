@@ -9,29 +9,16 @@
  * PATENTS file, you can obtain it at www.aomedia.org/license/patent.
  */
 
-#include "warp_plane_neon.h"
+#include <arm_neon.h>
 
-#include <arm_neon_sve_bridge.h>
+#include "aom_dsp/arm/dot_sve.h"
+#include "warp_plane_neon.h"
 
 DECLARE_ALIGNED(16, static const uint8_t, usdot_permute_idx[48]) = {
   0, 1, 2,  3,  1, 2,  3,  4,  2,  3,  4,  5,  3,  4,  5,  6,
   4, 5, 6,  7,  5, 6,  7,  8,  6,  7,  8,  9,  7,  8,  9,  10,
   8, 9, 10, 11, 9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14
 };
-
-static INLINE int64x2_t aom_sdotq_s16(int64x2_t acc, int16x8_t x, int16x8_t y) {
-  // The 16-bit dot product instructions only exist in SVE and not Neon.
-  // We can get away without rewriting the existing Neon code by making use of
-  // the Neon-SVE bridge intrinsics to reinterpret a Neon vector as a SVE
-  // vector with the high part of the vector being "don't care", and then
-  // operating on that instead.
-  // This is clearly suboptimal in machines with a SVE vector length above
-  // 128-bits as the remainder of the vector is wasted, however this appears to
-  // still be beneficial compared to not using the instruction.
-  return svget_neonq_s64(svdot_s64(svset_neonq_s64(svundef_s64(), acc),
-                                   svset_neonq_s16(svundef_s16(), x),
-                                   svset_neonq_s16(svundef_s16(), y)));
-}
 
 static INLINE int16x8_t horizontal_filter_4x1_f4(const uint8x16_t in, int sx,
                                                  int alpha) {

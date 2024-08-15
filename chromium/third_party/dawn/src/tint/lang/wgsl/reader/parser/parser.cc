@@ -173,17 +173,17 @@ class Parser::MultiTokenSource {
 
     /// @returns the Source that returns the combined source from start to the current last token's
     /// source.
-    tint::Source Source() const {
+    tint::Source operator()() const { return *this; }
+
+    /// @returns the Source that returns the combined source from start to the current last token's
+    /// source.
+    operator tint::Source() const {
         auto end = parser_->last_source().End();
         if (end < start_) {
             end = start_;
         }
         return Source::Combine(start_, end);
     }
-
-    /// Implicit conversion to Source that returns the combined source from start to the current
-    /// last token's source.
-    operator tint::Source() const { return Source(); }
 
   private:
     Parser* parser_;
@@ -447,7 +447,7 @@ Maybe<Void> Parser::enable_directive() {
             return Failure::kErrored;
         }
 
-        builder_.AST().AddEnable(create<ast::Enable>(decl_source.Source(), std::move(extensions)));
+        builder_.AST().AddEnable(create<ast::Enable>(decl_source(), std::move(extensions)));
         return kSuccess;
     });
 }
@@ -456,6 +456,7 @@ Maybe<Void> Parser::enable_directive() {
 //  : require identifier (COMMA identifier)* COMMA? SEMICOLON
 Maybe<Void> Parser::requires_directive() {
     return sync(Token::Type::kSemicolon, [&]() -> Maybe<Void> {
+        MultiTokenSource decl_source(this);
         if (!match(Token::Type::kRequires)) {
             return Failure::kNoMatch;
         }
@@ -473,34 +474,42 @@ Maybe<Void> Parser::requires_directive() {
             return add_error(t.source(), "requires directives don't take parenthesis");
         }
 
+        ast::Requires::LanguageFeatures features;
         while (continue_parsing()) {
-            auto& t2 = peek();
-
-            // Match the require name.
+            auto& t2 = next();
             if (handle_error(t2)) {
                 // The token might itself be an error.
                 return Failure::kErrored;
             }
 
+            // Match the require name.
             if (t2.IsIdentifier()) {
-                // TODO(dsinclair): When there are actual values for a requires directive they
-                // should be checked here.
-
-                // Any identifer is a valid feature name, so we correctly handle new feature
-                // names getting added in the future, they just all get flagged as not supported.
-                return add_error(t2.source(), "feature '" + t2.to_str() + "' is not supported");
-            }
-            if (t2.Is(Token::Type::kSemicolon)) {
-                break;
-            }
-            if (!match(Token::Type::kComma)) {
+                auto feature = wgsl::ParseLanguageFeature(t2.to_str_view());
+                if (feature == LanguageFeature::kUndefined) {
+                    // Any identifier is a valid feature name, so we correctly handle new feature
+                    // names getting added in the future, they just all get flagged as not
+                    // supported.
+                    return add_error(t2.source(), "feature '" + t2.to_str() + "' is not supported");
+                }
+                features.Add(feature);
+            } else {
                 return add_error(t2.source(), "invalid feature name for requires");
             }
+
+            if (!match(Token::Type::kComma)) {
+                break;
+            }
+            if (peek_is(Token::Type::kSemicolon)) {
+                break;
+            }
         }
-        // TODO(dsinclair): When there are actual values for a requires directive then the
-        // `while` will need to keep track if any were seen, and this needs to become
-        // conditional.
-        return add_error(t.source(), "missing feature names in requires directive");
+
+        if (!expect("requires directive", Token::Type::kSemicolon)) {
+            return Failure::kErrored;
+        }
+
+        builder_.AST().AddRequires(create<ast::Requires>(decl_source(), std::move(features)));
+        return kSuccess;
     });
 }
 
@@ -847,8 +856,8 @@ Maybe<Parser::VariableQualifier> Parser::variable_qualifier() {
 // type_alias_decl
 //   : ALIAS IDENT EQUAL type_specifier
 Maybe<const ast::Alias*> Parser::type_alias_decl() {
-    Source source;
-    if (!match(Token::Type::kAlias, &source)) {
+    MultiTokenSource source(this);
+    if (!match(Token::Type::kAlias)) {
         return Failure::kNoMatch;
     }
 
@@ -871,7 +880,7 @@ Maybe<const ast::Alias*> Parser::type_alias_decl() {
         return add_error(peek(), "invalid type alias");
     }
 
-    return builder_.ty.alias(make_source_range_from(source), name.value, type.value);
+    return builder_.ty.alias(source(), name.value, type.value);
 }
 
 // type_specifier
@@ -884,7 +893,7 @@ Maybe<ast::Type> Parser::type_specifier() {
     }
 
     if (!peek_is(Token::Type::kTemplateArgsLeft)) {
-        return builder_.ty(builder_.Ident(source.Source(), ident.to_str()));
+        return builder_.ty(builder_.Ident(source(), ident.to_str()));
     }
 
     auto args = expect_template_arg_block("type template arguments", [&] {
@@ -894,17 +903,18 @@ Maybe<ast::Type> Parser::type_specifier() {
     if (args.errored) {
         return Failure::kErrored;
     }
-    return builder_.ty(builder_.Ident(source.Source(), ident.to_str(), std::move(args.value)));
+    return builder_.ty(builder_.Ident(source(), ident.to_str(), std::move(args.value)));
 }
 
-template <typename ENUM, size_t N>
+template <typename ENUM>
 Expect<ENUM> Parser::expect_enum(std::string_view name,
                                  ENUM (*parse)(std::string_view str),
-                                 const char* const (&strings)[N],
+                                 Slice<const std::string_view> strings,
                                  std::string_view use) {
     auto& t = peek();
+    auto ident = t.to_str();
     if (t.IsIdentifier()) {
-        auto val = parse(t.to_str());
+        auto val = parse(ident);
         if (val != ENUM::kUndefined) {
             synchronized_ = true;
             next();
@@ -926,7 +936,20 @@ Expect<ENUM> Parser::expect_enum(std::string_view name,
     }
     err << "\n";
 
-    tint::SuggestAlternatives(t.to_str(), strings, err);
+    if (strings == wgsl::kExtensionStrings && !HasPrefix(ident, "chromium")) {
+        // Filter out 'chromium' prefixed extensions. We don't want to advertise experimental
+        // extensions to end users (unless it looks like they've actually mis-typed a chromium
+        // extension name)
+        Vector<std::string_view, 8> filtered;
+        for (auto str : strings) {
+            if (!HasPrefix(str, "chromium")) {
+                filtered.Push(str);
+            }
+        }
+        tint::SuggestAlternatives(ident, filtered.Slice(), err);
+    } else {
+        tint::SuggestAlternatives(ident, strings, err);
+    }
 
     synchronized_ = false;
     return add_error(t.source(), err.str());
@@ -1018,8 +1041,8 @@ Expect<const ast::StructMember*> Parser::expect_struct_member() {
 // const_assert_statement
 //   : STATIC_ASSERT expression
 Maybe<const ast::ConstAssert*> Parser::const_assert_statement() {
-    Source start;
-    if (!match(Token::Type::kConstAssert, &start)) {
+    MultiTokenSource source(this);
+    if (!match(Token::Type::kConstAssert)) {
         return Failure::kNoMatch;
     }
 
@@ -1031,8 +1054,7 @@ Maybe<const ast::ConstAssert*> Parser::const_assert_statement() {
         return add_error(peek(), "unable to parse condition expression");
     }
 
-    Source source = make_source_range_from(start);
-    return create<ast::ConstAssert>(source, condition.value);
+    return create<ast::ConstAssert>(source(), condition.value);
 }
 
 // function_decl
@@ -1189,16 +1211,14 @@ Expect<ast::BlockStatement*> Parser::expect_compound_statement(std::string_view 
 //   : attribute* BRACE_LEFT statement* BRACE_RIGHT
 Expect<ast::BlockStatement*> Parser::expect_compound_statement(AttributeList& attrs,
                                                                std::string_view use) {
-    auto source_start = peek().source();
+    MultiTokenSource source(this);
     auto stmts =
         expect_brace_block(use, [&]() -> Expect<StatementList> { return expect_statements(); });
-    auto source_end = last_source();
     if (stmts.errored) {
         return Failure::kErrored;
     }
     TINT_DEFER(attrs.Clear());
-    return create<ast::BlockStatement>(Source::Combine(source_start, source_end), stmts.value,
-                                       std::move(attrs));
+    return create<ast::BlockStatement>(source(), stmts.value, std::move(attrs));
 }
 
 // paren_expression
@@ -1430,14 +1450,14 @@ Maybe<const ast::ReturnStatement*> Parser::return_statement() {
 //   | LET optionally_typed_ident EQUAL expression
 //   | CONST optionally_typed_ident EQUAL expression
 Maybe<const ast::VariableDeclStatement*> Parser::variable_statement() {
-    auto decl_source_range = make_source_range();
+    MultiTokenSource decl_source_range(this);
     if (match(Token::Type::kConst)) {
         auto typed_ident = expect_optionally_typed_ident("'const' declaration");
         if (typed_ident.errored) {
             return Failure::kErrored;
         }
 
-        auto decl_source = decl_source_range.Source();
+        auto decl_source = decl_source_range();
 
         if (!expect("'const' declaration", Token::Type::kEqual)) {
             return Failure::kErrored;
@@ -1465,7 +1485,7 @@ Maybe<const ast::VariableDeclStatement*> Parser::variable_statement() {
             return Failure::kErrored;
         }
 
-        auto decl_source = decl_source_range.Source();
+        auto decl_source = decl_source_range();
 
         if (!expect("'let' declaration", Token::Type::kEqual)) {
             return Failure::kErrored;
@@ -1495,7 +1515,7 @@ Maybe<const ast::VariableDeclStatement*> Parser::variable_statement() {
         return Failure::kNoMatch;
     }
 
-    auto decl_source = decl_source_range.Source();
+    auto decl_source = decl_source_range();
 
     const ast::Expression* initializer = nullptr;
     if (match(Token::Type::kEqual)) {
@@ -1755,7 +1775,7 @@ Maybe<const ast::LoopStatement*> Parser::loop_statement(AttributeList& attrs) {
     }
 
     Maybe<const ast::BlockStatement*> continuing(Failure::kErrored);
-    auto body_start = peek().source();
+    MultiTokenSource body_source(this);
     auto body = expect_brace_block("loop", [&]() -> Maybe<StatementList> {
         auto stmts = expect_statements();
         if (stmts.errored) {
@@ -1771,13 +1791,10 @@ Maybe<const ast::LoopStatement*> Parser::loop_statement(AttributeList& attrs) {
     if (body.errored) {
         return Failure::kErrored;
     }
-    auto body_end = last_source();
 
     TINT_DEFER(attrs.Clear());
     return create<ast::LoopStatement>(
-        source,
-        create<ast::BlockStatement>(Source::Combine(body_start, body_end), body.value,
-                                    std::move(body_attrs.value)),
+        source, create<ast::BlockStatement>(body_source(), body.value, std::move(body_attrs.value)),
         continuing.value, std::move(attrs));
 }
 
@@ -1993,7 +2010,7 @@ Maybe<const ast::BlockStatement*> Parser::continuing_compound_statement() {
         return Failure::kErrored;
     }
 
-    auto source_start = peek().source();
+    MultiTokenSource source(this);
     auto body = expect_brace_block("", [&]() -> Expect<StatementList> {
         StatementList stmts;
 
@@ -2023,10 +2040,8 @@ Maybe<const ast::BlockStatement*> Parser::continuing_compound_statement() {
     if (body.errored) {
         return Failure::kErrored;
     }
-    auto source_end = last_source();
 
-    return create<ast::BlockStatement>(Source::Combine(source_start, source_end), body.value,
-                                       std::move(attrs.value));
+    return create<ast::BlockStatement>(source(), body.value, std::move(attrs.value));
 }
 
 // continuing_statement
@@ -2085,9 +2100,9 @@ Maybe<const ast::Expression*> Parser::primary_expression() {
                 return expect_expression_list("template argument list",
                                               Token::Type::kTemplateArgsRight);
             });
-            ident = builder_.Ident(source.Source(), t.to_str(), std::move(tmpl_args.value));
+            ident = builder_.Ident(source(), t.to_str(), std::move(tmpl_args.value));
         } else {
-            ident = builder_.Ident(source.Source(), t.to_str());
+            ident = builder_.Ident(source(), t.to_str());
         }
 
         if (peek_is(Token::Type::kParenLeft)) {
@@ -2096,7 +2111,7 @@ Maybe<const ast::Expression*> Parser::primary_expression() {
                 return Failure::kErrored;
             }
 
-            return builder_.Call(source.Source(), ident, std::move(params.value));
+            return builder_.Call(source(), ident, std::move(params.value));
         }
 
         return builder_.Expr(ident);
@@ -2138,7 +2153,7 @@ Maybe<const ast::Expression*> Parser::component_or_swizzle_specifier(
                     return Failure::kErrored;
                 }
 
-                return create<ast::IndexAccessorExpression>(source.Source(), prefix, param.value);
+                return create<ast::IndexAccessorExpression>(source(), prefix, param.value);
             });
 
             if (res.errored) {
@@ -2154,7 +2169,7 @@ Maybe<const ast::Expression*> Parser::component_or_swizzle_specifier(
                 return Failure::kErrored;
             }
 
-            prefix = builder_.MemberAccessor(source.Source(), prefix, ident.value);
+            prefix = builder_.MemberAccessor(source(), prefix, ident.value);
             continue;
         }
 
@@ -2181,7 +2196,9 @@ Expect<Parser::ExpressionList> Parser::expect_argument_expression_list(std::stri
 //   | OR unary_expression (OR unary_expression)*
 //   | XOR unary_expression (XOR unary_expression)*
 Maybe<const ast::Expression*> Parser::bitwise_expression_post_unary_expression(
-    const ast::Expression* lhs) {
+    const ast::Expression* lhs,
+    const Source& lhs_source) {
+    MultiTokenSource source(this, lhs_source);
     auto& t = peek();
 
     std::optional<core::BinaryOp> op;
@@ -2210,7 +2227,7 @@ Maybe<const ast::Expression*> Parser::bitwise_expression_post_unary_expression(
                                          std::string(t.to_name()) + " expression");
         }
 
-        lhs = create<ast::BinaryExpression>(t.source(), *op, lhs, rhs.value);
+        lhs = create<ast::BinaryExpression>(source(), *op, lhs, rhs.value);
 
         if (!match(t.type())) {
             return lhs;
@@ -2240,7 +2257,9 @@ Maybe<core::BinaryOp> Parser::multiplicative_operator() {
 // multiplicative_expression.post.unary_expression
 //   : (multiplicative_operator unary_expression)*
 Expect<const ast::Expression*> Parser::expect_multiplicative_expression_post_unary_expression(
-    const ast::Expression* lhs) {
+    const ast::Expression* lhs,
+    const Source& lhs_source) {
+    MultiTokenSource source(this, lhs_source);
     while (continue_parsing()) {
         auto& t = peek();
 
@@ -2261,7 +2280,7 @@ Expect<const ast::Expression*> Parser::expect_multiplicative_expression_post_una
                                          std::string(t.to_name()) + " expression");
         }
 
-        lhs = create<ast::BinaryExpression>(t.source(), op.value, lhs, rhs.value);
+        lhs = create<ast::BinaryExpression>(source(), op.value, lhs, rhs.value);
     }
     return Failure::kErrored;
 }
@@ -2296,7 +2315,9 @@ Maybe<core::BinaryOp> Parser::additive_operator() {
 // This is `( additive_operator unary_expression ( multiplicative_operator unary_expression )* )*`
 // split apart.
 Expect<const ast::Expression*> Parser::expect_additive_expression_post_unary_expression(
-    const ast::Expression* lhs) {
+    const ast::Expression* lhs,
+    const Source& lhs_source) {
+    MultiTokenSource source(this, lhs_source);
     while (continue_parsing()) {
         auto& t = peek();
 
@@ -2317,14 +2338,14 @@ Expect<const ast::Expression*> Parser::expect_additive_expression_post_unary_exp
                                          std::string(t.to_name()) + " expression");
         }
 
-        // The multiplicative binds tigher, so pass the unary into that and build that expression
-        // before creating the additve expression.
-        auto rhs = expect_multiplicative_expression_post_unary_expression(unary.value);
+        // The multiplicative binds tighter, so pass the unary into that and build that expression
+        // before creating the additive expression.
+        auto rhs = expect_multiplicative_expression_post_unary_expression(unary.value, lhs_source);
         if (rhs.errored) {
             return Failure::kErrored;
         }
 
-        lhs = create<ast::BinaryExpression>(t.source(), op.value, lhs, rhs.value);
+        lhs = create<ast::BinaryExpression>(source(), op.value, lhs, rhs.value);
     }
     return Failure::kErrored;
 }
@@ -2335,18 +2356,22 @@ Expect<const ast::Expression*> Parser::expect_additive_expression_post_unary_exp
 // This is `( multiplicative_operator unary_expression )* ( additive_operator unary_expression (
 // multiplicative_operator unary_expression )* )*` split apart.
 Expect<const ast::Expression*> Parser::expect_math_expression_post_unary_expression(
-    const ast::Expression* lhs) {
-    auto rhs = expect_multiplicative_expression_post_unary_expression(lhs);
+    const ast::Expression* lhs,
+    const Source& lhs_source) {
+    MultiTokenSource source(this, lhs_source);
+
+    auto rhs = expect_multiplicative_expression_post_unary_expression(lhs, source);
     if (rhs.errored) {
         return Failure::kErrored;
     }
 
-    return expect_additive_expression_post_unary_expression(rhs.value);
+    return expect_additive_expression_post_unary_expression(rhs.value, source());
 }
 
 // shift_expression
 //   : unary_expression shift_expression.post.unary_expression
 Maybe<const ast::Expression*> Parser::shift_expression() {
+    MultiTokenSource source(this);
     auto lhs = unary_expression();
     if (lhs.errored) {
         return Failure::kErrored;
@@ -2354,7 +2379,7 @@ Maybe<const ast::Expression*> Parser::shift_expression() {
     if (!lhs.matched) {
         return Failure::kNoMatch;
     }
-    return expect_shift_expression_post_unary_expression(lhs.value);
+    return expect_shift_expression_post_unary_expression(lhs.value, source);
 }
 
 // shift_expression.post.unary_expression
@@ -2365,7 +2390,10 @@ Maybe<const ast::Expression*> Parser::shift_expression() {
 // Note, add the `math_expression.post.unary_expression` is added here to make
 // implementation simpler.
 Expect<const ast::Expression*> Parser::expect_shift_expression_post_unary_expression(
-    const ast::Expression* lhs) {
+    const ast::Expression* lhs,
+    const Source& lhs_source) {
+    MultiTokenSource source(this, lhs_source);
+
     auto& t = peek();
     if (match(Token::Type::kShiftLeft) || match(Token::Type::kShiftRight)) {
         std::string name;
@@ -2387,15 +2415,16 @@ Expect<const ast::Expression*> Parser::expect_shift_expression_post_unary_expres
             return add_error(rhs_start,
                              std::string("unable to parse right side of ") + name + " expression");
         }
-        return create<ast::BinaryExpression>(t.source(), *op, lhs, rhs.value);
+        return create<ast::BinaryExpression>(source(), *op, lhs, rhs.value);
     }
 
-    return expect_math_expression_post_unary_expression(lhs);
+    return expect_math_expression_post_unary_expression(lhs, source);
 }
 
 // relational_expression
 //   : unary_expression relational_expression.post.unary_expression
 Maybe<const ast::Expression*> Parser::relational_expression() {
+    MultiTokenSource source(this);
     auto lhs = unary_expression();
     if (lhs.errored) {
         return Failure::kErrored;
@@ -2403,7 +2432,7 @@ Maybe<const ast::Expression*> Parser::relational_expression() {
     if (!lhs.matched) {
         return Failure::kNoMatch;
     }
-    return expect_relational_expression_post_unary_expression(lhs.value);
+    return expect_relational_expression_post_unary_expression(lhs.value, source);
 }
 
 // relational_expression.post.unary_expression
@@ -2417,8 +2446,11 @@ Maybe<const ast::Expression*> Parser::relational_expression() {
 //
 // Note, a `shift_expression` element was added to simplify many of the right sides
 Expect<const ast::Expression*> Parser::expect_relational_expression_post_unary_expression(
-    const ast::Expression* lhs) {
-    auto lhs_result = expect_shift_expression_post_unary_expression(lhs);
+    const ast::Expression* lhs,
+    const Source& lhs_source) {
+    MultiTokenSource source(this, lhs_source);
+
+    auto lhs_result = expect_shift_expression_post_unary_expression(lhs, source);
     if (lhs_result.errored) {
         return Failure::kErrored;
     }
@@ -2462,7 +2494,7 @@ Expect<const ast::Expression*> Parser::expect_relational_expression_post_unary_e
                                       std::string(tok_op.to_name()) + " expression");
     }
 
-    return create<ast::BinaryExpression>(tok_op.source(), *op, lhs, rhs.value);
+    return create<ast::BinaryExpression>(source(), *op, lhs, rhs.value);
 }
 
 Expect<const ast::Expression*> Parser::expect_expression(std::string_view use) {
@@ -2536,6 +2568,8 @@ Expect<Parser::ExpressionList> Parser::expect_expression_list(std::string_view u
 //
 // Note, a `relational_expression` element was added to simplify many of the right sides
 Maybe<const ast::Expression*> Parser::expression() {
+    MultiTokenSource source(this);
+    Source first_op;
     auto expr = [&]() -> Maybe<const ast::Expression*> {
         auto lhs = unary_expression();
         if (lhs.errored) {
@@ -2545,7 +2579,9 @@ Maybe<const ast::Expression*> Parser::expression() {
             return Failure::kNoMatch;
         }
 
-        auto bitwise = bitwise_expression_post_unary_expression(lhs.value);
+        first_op = peek().source();
+
+        auto bitwise = bitwise_expression_post_unary_expression(lhs.value, source);
         if (bitwise.errored) {
             return Failure::kErrored;
         }
@@ -2553,7 +2589,7 @@ Maybe<const ast::Expression*> Parser::expression() {
             return bitwise.value;
         }
 
-        auto relational = expect_relational_expression_post_unary_expression(lhs.value);
+        auto relational = expect_relational_expression_post_unary_expression(lhs.value, source);
         if (relational.errored) {
             return Failure::kErrored;
         }
@@ -2584,7 +2620,7 @@ Maybe<const ast::Expression*> Parser::expression() {
                                                  std::string(t.to_name()) + " expression");
                 }
 
-                ret = create<ast::BinaryExpression>(t.source(), op, ret, rhs.value);
+                ret = create<ast::BinaryExpression>(source(), op, ret, rhs.value);
             }
         }
         return ret;
@@ -2596,9 +2632,9 @@ Maybe<const ast::Expression*> Parser::expression() {
         // after this then it _must_ be a different one, and hence an error.
         if (auto* lhs = expr->As<ast::BinaryExpression>()) {
             if (auto& n = peek(); n.IsBinaryOperator()) {
-                auto source = Source::Combine(expr->source, n.source());
-                add_error(source, std::string("mixing '") + ast::Operator(lhs->op) + "' and '" +
-                                      std::string(n.to_name()) + "' requires parenthesis");
+                add_error(Source::Combine(first_op, n.source()),
+                          std::string("mixing '") + ast::Operator(lhs->op) + "' and '" +
+                              std::string(n.to_name()) + "' requires parenthesis");
                 return Failure::kErrored;
             }
         }
@@ -2632,10 +2668,11 @@ Maybe<const ast::Expression*> Parser::singular_expression() {
 // The `primary_expression component_or_swizzle_specifier ?` is moved out into a
 // `singular_expression`
 Maybe<const ast::Expression*> Parser::unary_expression() {
-    auto& t = peek();
+    MultiTokenSource source(this);
 
+    auto& t = peek();
     if (match(Token::Type::kPlusPlus) || match(Token::Type::kMinusMinus)) {
-        add_error(t.source(),
+        add_error(source,
                   "prefix increment and decrement operators are reserved for a "
                   "future WGSL version");
         return Failure::kErrored;
@@ -2676,7 +2713,7 @@ Maybe<const ast::Expression*> Parser::unary_expression() {
             peek(), "unable to parse right side of " + std::string(t.to_name()) + " expression");
     }
 
-    return create<ast::UnaryOpExpression>(t.source(), op, expr.value);
+    return create<ast::UnaryOpExpression>(source(), op, expr.value);
 }
 
 // compound_assignment_operator
@@ -3064,6 +3101,8 @@ Maybe<const ast::Attribute*> Parser::attribute() {
             return create<ast::BindingAttribute>(t.source(), args[0]);
         case core::Attribute::kBuiltin:
             return create<ast::BuiltinAttribute>(t.source(), args[0]);
+        case core::Attribute::kColor:
+            return create<ast::ColorAttribute>(t.source(), args[0]);
         case core::Attribute::kCompute:
             return create<ast::StageAttribute>(t.source(), ast::PipelineStage::kCompute);
         case core::Attribute::kFragment:
@@ -3472,14 +3511,6 @@ T Parser::without_diag(F&& body) {
     auto result = body();
     silence_diags_--;
     return result;
-}
-
-Parser::MultiTokenSource Parser::make_source_range() {
-    return MultiTokenSource(this);
-}
-
-Parser::MultiTokenSource Parser::make_source_range_from(const Source& start) {
-    return MultiTokenSource(this, start);
 }
 
 }  // namespace tint::wgsl::reader

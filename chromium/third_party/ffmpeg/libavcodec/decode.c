@@ -28,18 +28,13 @@
 #endif
 
 #include "libavutil/avassert.h"
-#include "libavutil/avstring.h"
-#include "libavutil/bprint.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "libavutil/emms.h"
-#include "libavutil/fifo.h"
 #include "libavutil/frame.h"
 #include "libavutil/hwcontext.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
-#include "libavutil/intmath.h"
-#include "libavutil/opt.h"
 
 #include "avcodec.h"
 #include "avcodec_internal.h"
@@ -52,6 +47,7 @@
 #include "hwconfig.h"
 #include "internal.h"
 #include "packet_internal.h"
+#include "refstruct.h"
 #include "thread.h"
 
 typedef struct DecodeContext {
@@ -1403,6 +1399,16 @@ int ff_get_format(AVCodecContext *avctx, const enum AVPixelFormat *fmt)
     return ret;
 }
 
+const AVPacketSideData *ff_get_coded_side_data(const AVCodecContext *avctx,
+                                               enum AVPacketSideDataType type)
+{
+    for (int i = 0; i < avctx->nb_coded_side_data; i++)
+        if (avctx->coded_side_data[i].type == type)
+            return &avctx->coded_side_data[i];
+
+    return NULL;
+}
+
 static int add_metadata_from_side_data(const AVPacket *avpkt, AVFrame *frame)
 {
     size_t size;
@@ -1415,6 +1421,21 @@ static int add_metadata_from_side_data(const AVPacket *avpkt, AVFrame *frame)
     return av_packet_unpack_dictionary(side_metadata, size, frame_md);
 }
 
+static const struct {
+    enum AVPacketSideDataType packet;
+    enum AVFrameSideDataType frame;
+} sd_global_map[] = {
+    { AV_PKT_DATA_REPLAYGAIN ,                AV_FRAME_DATA_REPLAYGAIN },
+    { AV_PKT_DATA_DISPLAYMATRIX,              AV_FRAME_DATA_DISPLAYMATRIX },
+    { AV_PKT_DATA_SPHERICAL,                  AV_FRAME_DATA_SPHERICAL },
+    { AV_PKT_DATA_STEREO3D,                   AV_FRAME_DATA_STEREO3D },
+    { AV_PKT_DATA_AUDIO_SERVICE_TYPE,         AV_FRAME_DATA_AUDIO_SERVICE_TYPE },
+    { AV_PKT_DATA_MASTERING_DISPLAY_METADATA, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA },
+    { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
+    { AV_PKT_DATA_ICC_PROFILE,                AV_FRAME_DATA_ICC_PROFILE },
+    { AV_PKT_DATA_DYNAMIC_HDR10_PLUS,         AV_FRAME_DATA_DYNAMIC_HDR_PLUS },
+};
+
 int ff_decode_frame_props_from_pkt(const AVCodecContext *avctx,
                                    AVFrame *frame, const AVPacket *pkt)
 {
@@ -1422,18 +1443,9 @@ int ff_decode_frame_props_from_pkt(const AVCodecContext *avctx,
         enum AVPacketSideDataType packet;
         enum AVFrameSideDataType frame;
     } sd[] = {
-        { AV_PKT_DATA_REPLAYGAIN ,                AV_FRAME_DATA_REPLAYGAIN },
-        { AV_PKT_DATA_DISPLAYMATRIX,              AV_FRAME_DATA_DISPLAYMATRIX },
-        { AV_PKT_DATA_SPHERICAL,                  AV_FRAME_DATA_SPHERICAL },
-        { AV_PKT_DATA_STEREO3D,                   AV_FRAME_DATA_STEREO3D },
-        { AV_PKT_DATA_AUDIO_SERVICE_TYPE,         AV_FRAME_DATA_AUDIO_SERVICE_TYPE },
-        { AV_PKT_DATA_MASTERING_DISPLAY_METADATA, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA },
-        { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
         { AV_PKT_DATA_A53_CC,                     AV_FRAME_DATA_A53_CC },
         { AV_PKT_DATA_AFD,                        AV_FRAME_DATA_AFD },
-        { AV_PKT_DATA_ICC_PROFILE,                AV_FRAME_DATA_ICC_PROFILE },
         { AV_PKT_DATA_S12M_TIMECODE,              AV_FRAME_DATA_S12M_TIMECODE },
-        { AV_PKT_DATA_DYNAMIC_HDR10_PLUS,         AV_FRAME_DATA_DYNAMIC_HDR_PLUS },
         { AV_PKT_DATA_SKIP_SAMPLES,               AV_FRAME_DATA_SKIP_SAMPLES },
     };
 
@@ -1446,6 +1458,18 @@ FF_DISABLE_DEPRECATION_WARNINGS
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
+    for (int i = 0; i < FF_ARRAY_ELEMS(sd_global_map); i++) {
+        size_t size;
+        const uint8_t *packet_sd = av_packet_get_side_data(pkt, sd_global_map[i].packet, &size);
+        if (packet_sd) {
+            AVFrameSideData *frame_sd;
+
+            frame_sd = av_frame_new_side_data(frame, sd_global_map[i].frame, size);
+            if (!frame_sd)
+                return AVERROR(ENOMEM);
+            memcpy(frame_sd->data, packet_sd, size);
+        }
+    }
     for (int i = 0; i < FF_ARRAY_ELEMS(sd); i++) {
         size_t size;
         uint8_t *packet_sd = av_packet_get_side_data(pkt, sd[i].packet, &size);
@@ -1480,6 +1504,20 @@ FF_ENABLE_DEPRECATION_WARNINGS
 int ff_decode_frame_props(AVCodecContext *avctx, AVFrame *frame)
 {
     int ret;
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(sd_global_map); i++) {
+        const AVPacketSideData *packet_sd = ff_get_coded_side_data(avctx,
+                                                                   sd_global_map[i].packet);
+        if (packet_sd) {
+            AVFrameSideData *frame_sd = av_frame_new_side_data(frame,
+                                                               sd_global_map[i].frame,
+                                                               packet_sd->size);
+            if (!frame_sd)
+                return AVERROR(ENOMEM);
+
+            memcpy(frame_sd->data, packet_sd->data, packet_sd->size);
+        }
+    }
 
     if (!(ffcodec(avctx->codec)->caps_internal & FF_CODEC_CAP_SETS_FRAME_PROPS)) {
         const AVPacket *pkt = avctx->internal->last_pkt_props;
@@ -1797,34 +1835,22 @@ int ff_copy_palette(void *dst, const AVPacket *src, void *logctx)
     return 0;
 }
 
-int ff_hwaccel_frame_priv_alloc(AVCodecContext *avctx, void **hwaccel_picture_private,
-                                AVBufferRef **hwaccel_priv_buf)
+int ff_hwaccel_frame_priv_alloc(AVCodecContext *avctx, void **hwaccel_picture_private)
 {
     const FFHWAccel *hwaccel = ffhwaccel(avctx->hwaccel);
-    AVBufferRef *ref;
     AVHWFramesContext *frames_ctx;
-    uint8_t *data;
 
     if (!hwaccel || !hwaccel->frame_priv_data_size)
         return 0;
 
     av_assert0(!*hwaccel_picture_private);
-    data       = av_mallocz(hwaccel->frame_priv_data_size);
-    if (!data)
-        return AVERROR(ENOMEM);
 
     frames_ctx = (AVHWFramesContext *)avctx->hw_frames_ctx->data;
-
-    ref = av_buffer_create(data, hwaccel->frame_priv_data_size,
-                           hwaccel->free_frame_priv,
-                           frames_ctx->device_ctx, 0);
-    if (!ref) {
-        av_free(data);
+    *hwaccel_picture_private = ff_refstruct_alloc_ext(hwaccel->frame_priv_data_size, 0,
+                                                      frames_ctx->device_ctx,
+                                                      hwaccel->free_frame_priv);
+    if (!*hwaccel_picture_private)
         return AVERROR(ENOMEM);
-    }
-
-    *hwaccel_priv_buf        = ref;
-    *hwaccel_picture_private = ref->data;
 
     return 0;
 }

@@ -72,6 +72,7 @@ class SanitizedImageSourceTest : public testing::Test {
   }
 
   void TearDown() override {
+    mock_data_decoder_delegate_ = nullptr;
     sanitized_image_source_.reset();
     profile_.reset();
     test_url_loader_factory_.ClearResponses();
@@ -81,8 +82,7 @@ class SanitizedImageSourceTest : public testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
   network::TestURLLoaderFactory test_url_loader_factory_;
-  raw_ptr<MockDataDecoderDelegate, DanglingUntriaged>
-      mock_data_decoder_delegate_;
+  raw_ptr<MockDataDecoderDelegate> mock_data_decoder_delegate_ = nullptr;
   std::unique_ptr<SanitizedImageSource> sanitized_image_source_;
 };
 
@@ -150,9 +150,27 @@ TEST_F(SanitizedImageSourceTest, FailedLoad) {
               DecodeAnimation(testing::_, testing::_))
       .Times(0);
   base::MockCallback<content::URLDataSource::GotDataCallback> callback;
-  EXPECT_CALL(callback,
-              Run(MemoryEq(base::MakeRefCounted<base::RefCountedString>())))
-      .Times(1);
+  EXPECT_CALL(callback, Run(testing::IsNull())).Times(1);
+
+  // Issue request.
+  sanitized_image_source_->StartDataRequest(
+      GURL(base::StrCat({chrome::kChromeUIImageURL, "?", kImageUrl})),
+      content::WebContents::Getter(), callback.Get());
+  task_environment_.RunUntilIdle();
+}
+
+// Verifies that the image source sends back an error in case the external
+// image is served via an HTTP scheme.
+TEST_F(SanitizedImageSourceTest, HttpScheme) {
+  constexpr char kImageUrl[] = "http://foo.com/img.png";
+
+  // Set up expectations and mock data.
+  test_url_loader_factory_.AddResponse(kImageUrl, "abcd");
+  EXPECT_CALL(*mock_data_decoder_delegate_,
+              DecodeAnimation(testing::_, testing::_))
+      .Times(0);
+  base::MockCallback<content::URLDataSource::GotDataCallback> callback;
+  EXPECT_CALL(callback, Run(testing::IsNull())).Times(1);
 
   // Issue request.
   sanitized_image_source_->StartDataRequest(
@@ -168,9 +186,7 @@ TEST_F(SanitizedImageSourceTest, WrongUrl) {
               DecodeAnimation(testing::_, testing::_))
       .Times(0);
   base::MockCallback<content::URLDataSource::GotDataCallback> callback;
-  EXPECT_CALL(callback,
-              Run(MemoryEq(base::MakeRefCounted<base::RefCountedString>())))
-      .Times(2);
+  EXPECT_CALL(callback, Run(testing::IsNull())).Times(2);
 
   // Issue request.
   sanitized_image_source_->StartDataRequest(

@@ -33,7 +33,7 @@ base::flat_set<int64_t>* internal_display_ids() {
 // A list of bogus sizes in mm that should be ignored.
 // See crbug.com/136533. The first element maintains the minimum
 // size required to be valid size.
-const int kInvalidDisplaySizeList[][2] = {
+constexpr int kInvalidDisplaySizeList[][2] = {
     {40, 30},
     {50, 40},
     {160, 90},
@@ -170,7 +170,6 @@ gfx::ColorSpace GetColorSpaceFromEdid(const display::EdidParser& edid_parser) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       if (base::FeatureList::IsEnabled(
               display::features::kEnableExternalDisplayHDR10Mode) &&
-          edid_parser.is_external_display() &&
           base::Contains(
               edid_parser.supported_color_primary_matrix_ids(),
               EdidParser::PrimaryMatrixPair(gfx::ColorSpace::PrimaryID::BT2020,

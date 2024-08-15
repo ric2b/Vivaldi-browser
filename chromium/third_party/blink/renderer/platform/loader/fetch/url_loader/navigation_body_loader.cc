@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/navigation_body_loader.h"
 
+#include <algorithm>
+
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial_params.h"
@@ -241,7 +243,7 @@ class NavigationBodyLoader::OffThreadBodyReader : public BodyReader {
     // Avoid copying the encoded data unless the caller needs it.
     if (should_keep_encoded_data_) {
       encoded_data_copy = std::make_unique<char[]>(size);
-      memcpy(encoded_data_copy.get(), encoded_data, size);
+      std::copy_n(encoded_data, size, encoded_data_copy.get());
     }
 
     bool post_task;
@@ -590,7 +592,8 @@ void WebNavigationBodyLoader::FillNavigationParamsResponseAndBodyLoader(
     std::unique_ptr<ResourceLoadInfoNotifierWrapper>
         resource_load_info_notifier_wrapper,
     bool is_main_frame,
-    WebNavigationParams* navigation_params) {
+    WebNavigationParams* navigation_params,
+    bool is_ad_frame) {
   // Use the original navigation url to start with. We'll replay the
   // redirects afterwards and will eventually arrive to the final url.
   const KURL original_url = !commit_params->original_url.is_empty()
@@ -602,7 +605,7 @@ void WebNavigationBodyLoader::FillNavigationParamsResponseAndBodyLoader(
       !commit_params->original_method.empty() ? commit_params->original_method
                                               : common_params->method,
       common_params->referrer->url, common_params->request_destination,
-      is_main_frame ? net::HIGHEST : net::LOWEST);
+      is_main_frame ? net::HIGHEST : net::LOWEST, is_ad_frame);
   size_t redirect_count = commit_params->redirect_response.size();
 
   if (redirect_count != commit_params->redirects.size()) {

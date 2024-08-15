@@ -259,6 +259,12 @@ OPENSSL_EXPORT void OPENSSL_reset_malloc_counter_for_testing(void);
 OPENSSL_INLINE void OPENSSL_reset_malloc_counter_for_testing(void) {}
 #endif
 
+#if defined(__has_builtin)
+#define OPENSSL_HAS_BUILTIN(x) __has_builtin(x)
+#else
+#define OPENSSL_HAS_BUILTIN(x) 0
+#endif
+
 
 // Pointer utility functions.
 
@@ -1134,6 +1140,110 @@ static inline uint64_t CRYPTO_rotr_u64(uint64_t value, int shift) {
 }
 
 
+// Arithmetic functions.
+
+// CRYPTO_addc_* returns |x + y + carry|, and sets |*out_carry| to the carry
+// bit. |carry| must be zero or one.
+#if OPENSSL_HAS_BUILTIN(__builtin_addc)
+
+#define CRYPTO_GENERIC_ADDC(x, y, carry, out_carry) \
+  (_Generic((x),                                    \
+      unsigned: __builtin_addc,                     \
+      unsigned long: __builtin_addcl,               \
+      unsigned long long: __builtin_addcll))((x), (y), (carry), (out_carry))
+
+static inline uint32_t CRYPTO_addc_u32(uint32_t x, uint32_t y, uint32_t carry,
+                                       uint32_t *out_carry) {
+  assert(carry <= 1);
+  return CRYPTO_GENERIC_ADDC(x, y, carry, out_carry);
+}
+
+static inline uint64_t CRYPTO_addc_u64(uint64_t x, uint64_t y, uint64_t carry,
+                                       uint64_t *out_carry) {
+  assert(carry <= 1);
+  return CRYPTO_GENERIC_ADDC(x, y, carry, out_carry);
+}
+
+#else
+
+static inline uint32_t CRYPTO_addc_u32(uint32_t x, uint32_t y, uint32_t carry,
+                                       uint32_t *out_carry) {
+  assert(carry <= 1);
+  uint64_t ret = carry;
+  ret += (uint64_t)x + y;
+  *out_carry = (uint32_t)(ret >> 32);
+  return (uint32_t)ret;
+}
+
+static inline uint64_t CRYPTO_addc_u64(uint64_t x, uint64_t y, uint64_t carry,
+                                       uint64_t *out_carry) {
+  assert(carry <= 1);
+#if defined(BORINGSSL_HAS_UINT128)
+  uint128_t ret = carry;
+  ret += (uint128_t)x + y;
+  *out_carry = (uint64_t)(ret >> 64);
+  return (uint64_t)ret;
+#else
+  x += carry;
+  carry = x < carry;
+  uint64_t ret = x + y;
+  carry += ret < x;
+  *out_carry = carry;
+  return ret;
+#endif
+}
+#endif
+
+// CRYPTO_subc_* returns |x - y - borrow|, and sets |*out_borrow| to the borrow
+// bit. |borrow| must be zero or one.
+#if OPENSSL_HAS_BUILTIN(__builtin_subc)
+
+#define CRYPTO_GENERIC_SUBC(x, y, borrow, out_borrow) \
+  (_Generic((x),                                      \
+      unsigned: __builtin_subc,                       \
+      unsigned long: __builtin_subcl,                 \
+      unsigned long long: __builtin_subcll))((x), (y), (borrow), (out_borrow))
+
+static inline uint32_t CRYPTO_subc_u32(uint32_t x, uint32_t y, uint32_t borrow,
+                                       uint32_t *out_borrow) {
+  assert(borrow <= 1);
+  return CRYPTO_GENERIC_SUBC(x, y, borrow, out_borrow);
+}
+
+static inline uint64_t CRYPTO_subc_u64(uint64_t x, uint64_t y, uint64_t borrow,
+                                       uint64_t *out_borrow) {
+  assert(borrow <= 1);
+  return CRYPTO_GENERIC_SUBC(x, y, borrow, out_borrow);
+}
+
+#else
+
+static inline uint32_t CRYPTO_subc_u32(uint32_t x, uint32_t y, uint32_t borrow,
+                                       uint32_t *out_borrow) {
+  assert(borrow <= 1);
+  uint32_t ret = x - y - borrow;
+  *out_borrow = (x < y) | ((x == y) & borrow);
+  return ret;
+}
+
+static inline uint64_t CRYPTO_subc_u64(uint64_t x, uint64_t y, uint64_t borrow,
+                                       uint64_t *out_borrow) {
+  assert(borrow <= 1);
+  uint64_t ret = x - y - borrow;
+  *out_borrow = (x < y) | ((x == y) & borrow);
+  return ret;
+}
+#endif
+
+#if defined(OPENSSL_64_BIT)
+#define CRYPTO_addc_w CRYPTO_addc_u64
+#define CRYPTO_subc_w CRYPTO_subc_u64
+#else
+#define CRYPTO_addc_w CRYPTO_addc_u32
+#define CRYPTO_subc_w CRYPTO_subc_u32
+#endif
+
+
 // FIPS functions.
 
 #if defined(BORINGSSL_FIPS)
@@ -1221,7 +1331,8 @@ OPENSSL_INLINE int boringssl_fips_break_test(const char *test) {
 //     ECX for CPUID where EAX = 7
 //
 // Note: the CPUID bits are pre-adjusted for the OSXSAVE bit and the YMM and XMM
-// bits in XCR0, so it is not necessary to check those.
+// bits in XCR0, so it is not necessary to check those. (WARNING: See caveats
+// in cpu_intel.c.)
 //
 // From C, this symbol should only be accessed with |OPENSSL_get_ia32cap|.
 extern uint32_t OPENSSL_ia32cap_P[4];
@@ -1288,6 +1399,9 @@ OPENSSL_INLINE int CRYPTO_is_AESNI_capable(void) {
 #endif
 }
 
+// We intentionally avoid defining a |CRYPTO_is_XSAVE_capable| function. See
+// |CRYPTO_cpu_perf_is_like_silvermont|.
+
 OPENSSL_INLINE int CRYPTO_is_AVX_capable(void) {
 #if defined(__AVX__)
   return 1;
@@ -1297,13 +1411,10 @@ OPENSSL_INLINE int CRYPTO_is_AVX_capable(void) {
 }
 
 OPENSSL_INLINE int CRYPTO_is_RDRAND_capable(void) {
-  // The GCC/Clang feature name and preprocessor symbol for RDRAND are "rdrnd"
-  // and |__RDRND__|, respectively.
-#if defined(__RDRND__)
-  return 1;
-#else
+  // We intentionally do not check |__RDRND__| here. On some AMD processors, we
+  // will act as if the hardware is RDRAND-incapable, even it actually supports
+  // it. See cpu_intel.c.
   return (OPENSSL_get_ia32cap(1) & (1u << 30)) != 0;
-#endif
 }
 
 // See Intel manual, volume 2A, table 3-8.
@@ -1338,6 +1449,55 @@ OPENSSL_INLINE int CRYPTO_is_ADX_capable(void) {
 #else
   return (OPENSSL_get_ia32cap(2) & (1u << 19)) != 0;
 #endif
+}
+
+// SHA-1 and SHA-256 are defined as a single extension.
+OPENSSL_INLINE int CRYPTO_is_x86_SHA_capable(void) {
+  // We should check __SHA__ here, but for now we ignore it. We've run into a
+  // few places where projects build with -march=goldmont, but need a build that
+  // does not require SHA extensions:
+  //
+  // - Some CrOS toolchain definitions are incorrect and build with
+  //   -march=goldmont when targetting boards that are not Goldmont. b/320482539
+  //   tracks fixing this.
+  //
+  // - Sometimes projects build with -march=goldmont as a rough optimized
+  //   baseline. However, Intel CPU capabilities are not strictly linear, so
+  //   this does not quite work. Some combination of -mtune and
+  //   -march=x86-64-v{1,2,3,4} would be a better strategy here.
+  //
+  // - QEMU versions before 8.2 do not support SHA extensions and disable it
+  //   with a warning. Projects that target Goldmont and test on QEMU will
+  //   break. The long-term fix is to update to 8.2. A principled short-term fix
+  //   would be -march=goldmont -mno-sha, to reflect that the binary needs to
+  //   run on both QEMU-8.1-Goldmont and actual-Goldmont.
+  //
+  // TODO(b/320482539): Once the CrOS toolchain is fixed, try this again.
+  return (OPENSSL_get_ia32cap(2) & (1u << 29)) != 0;
+}
+
+// CRYPTO_cpu_perf_is_like_silvermont returns one if, based on a heuristic, the
+// CPU has Silvermont-like performance characteristics. It is often faster to
+// run different codepaths on these CPUs than the available instructions would
+// otherwise select. See chacha-x86_64.pl.
+//
+// Bonnell, Silvermont's predecessor in the Atom lineup, will also be matched by
+// this. |OPENSSL_cpuid_setup| forces Knights Landing to also be matched by
+// this. Goldmont (Silvermont's successor in the Atom lineup) added XSAVE so it
+// isn't matched by this. Various sources indicate AMD first implemented MOVBE
+// and XSAVE at the same time in Jaguar, so it seems like AMD chips will not be
+// matched by this. That seems to be the case for other x86(-64) CPUs.
+OPENSSL_INLINE int CRYPTO_cpu_perf_is_like_silvermont(void) {
+  // WARNING: This MUST NOT be used to guard the execution of the XSAVE
+  // instruction. This is the "hardware supports XSAVE" bit, not the OSXSAVE bit
+  // that indicates whether we can safely execute XSAVE. This bit may be set
+  // even when XSAVE is disabled (by the operating system). See the comment in
+  // cpu_intel.c and check how the users of this bit use it.
+  //
+  // We do not use |__XSAVE__| for static detection because the hack in
+  // |OPENSSL_cpuid_setup| for Knights Landing CPUs needs to override it.
+  int hardware_supports_xsave = (OPENSSL_get_ia32cap(1) & (1u << 26)) != 0;
+  return !hardware_supports_xsave && CRYPTO_is_MOVBE_capable();
 }
 
 #endif  // OPENSSL_X86 || OPENSSL_X86_64
@@ -1406,6 +1566,41 @@ OPENSSL_INLINE int CRYPTO_is_ARMv8_PMULL_capable(void) {
   return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV8_PMULL) != 0;
+#endif
+}
+
+OPENSSL_INLINE int CRYPTO_is_ARMv8_SHA1_capable(void) {
+  // SHA-1 and SHA-2 (only) share |__ARM_FEATURE_SHA2| but otherwise
+  // are dealt with independently.
+#if defined(OPENSSL_STATIC_ARMCAP_SHA1) || defined(__ARM_FEATURE_SHA2)
+  return 1;
+#elif defined(OPENSSL_STATIC_ARMCAP)
+  return 0;
+#else
+  return (OPENSSL_get_armcap() & ARMV8_SHA1) != 0;
+#endif
+}
+
+OPENSSL_INLINE int CRYPTO_is_ARMv8_SHA256_capable(void) {
+  // SHA-1 and SHA-2 (only) share |__ARM_FEATURE_SHA2| but otherwise
+  // are dealt with independently.
+#if defined(OPENSSL_STATIC_ARMCAP_SHA256) || defined(__ARM_FEATURE_SHA2)
+  return 1;
+#elif defined(OPENSSL_STATIC_ARMCAP)
+  return 0;
+#else
+  return (OPENSSL_get_armcap() & ARMV8_SHA256) != 0;
+#endif
+}
+
+OPENSSL_INLINE int CRYPTO_is_ARMv8_SHA512_capable(void) {
+  // There is no |OPENSSL_STATIC_ARMCAP_SHA512|.
+#if defined(__ARM_FEATURE_SHA512)
+  return 1;
+#elif defined(OPENSSL_STATIC_ARMCAP)
+  return 0;
+#else
+  return (OPENSSL_get_armcap() & ARMV8_SHA512) != 0;
 #endif
 }
 

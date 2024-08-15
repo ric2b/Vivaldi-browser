@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -276,7 +276,7 @@ chrome.accessibilityPrivate.AcceleratorAction = {
 chrome.accessibilityPrivate.AccessibilityFeature = {
   GOOGLE_TTS_LANGUAGE_PACKS: 'googleTtsLanguagePacks',
   DICTATION_CONTEXT_CHECKING: 'dictationContextChecking',
-  GAME_FACE_INTEGRATION: 'gameFaceIntegration',
+  FACE_GAZE: 'faceGaze',
   GOOGLE_TTS_HIGH_QUALITY_VOICES: 'googleTtsHighQualityVoices',
 };
 
@@ -376,6 +376,7 @@ chrome.accessibilityPrivate.DlcType = {
   TTS_NL_NL: 'ttsNlNl',
   TTS_PL_PL: 'ttsPlPl',
   TTS_PT_BR: 'ttsPtBr',
+  TTS_PT_PT: 'ttsPtPt',
   TTS_SI_LK: 'ttsSiLk',
   TTS_SK_SK: 'ttsSkSk',
   TTS_SV_SE: 'ttsSvSe',
@@ -384,6 +385,14 @@ chrome.accessibilityPrivate.DlcType = {
   TTS_UK_UA: 'ttsUkUa',
   TTS_VI_VN: 'ttsViVn',
   TTS_YUE_HK: 'ttsYueHk',
+};
+
+/**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.TtsVariant = {
+  LITE: 'lite',
+  STANDARD: 'standard',
 };
 
 /**
@@ -404,6 +413,14 @@ chrome.accessibilityPrivate.DlcType = {
  * }}
  */
 chrome.accessibilityPrivate.PumpkinData;
+
+/**
+ * @typedef {{
+ *   model: ArrayBuffer,
+ *   wasm: ArrayBuffer
+ * }}
+ */
+chrome.accessibilityPrivate.FaceGazeAssets;
 
 /**
  * Property to indicate whether event source should default to touch.
@@ -435,6 +452,14 @@ chrome.accessibilityPrivate.getBatteryDescription = function(callback) {};
 chrome.accessibilityPrivate.installPumpkinForDictation = function(callback) {};
 
 /**
+ * Called to request an install of the FaceGaze assets DLC, which contains files
+ * (e.g. the FaceLandmarker model) required for FaceGaze to work.
+ * @param {function(!chrome.accessibilityPrivate.FaceGazeAssets): void} callback
+ *     Runs when the DLC download finishes.
+ */
+chrome.accessibilityPrivate.installFaceGazeAssets = function(callback) {};
+
+/**
  * Enables or disables native accessibility support. Once disabled, it is up to
  * the calling extension to provide accessibility for web contents.
  * @param {boolean} enabled True if native accessibility support should be
@@ -459,6 +484,16 @@ chrome.accessibilityPrivate.setFocusRings = function(focusRings, atType) {};
  *     #FF9982 or #EEE.
  */
 chrome.accessibilityPrivate.setHighlights = function(rects, color) {};
+
+/**
+ * Informs the system where Select to Speak's reading focus is in screen
+ * coordinates. Causes chrome.accessibilityPrivate.onSelectToSpeakFocusChanged
+ * to be fired within the AccessibilityCommon component extension.
+ * @param {!chrome.accessibilityPrivate.ScreenRect} bounds Bounds of currently
+ *     spoken word (if available) or node (if the spoken node is not a text
+ *     node).
+ */
+chrome.accessibilityPrivate.setSelectToSpeakFocus = function(bounds) {};
 
 /**
  * Sets the calling extension as a listener of all keyboard events optionally
@@ -529,6 +564,13 @@ chrome.accessibilityPrivate.sendSyntheticKeyEvent = function(keyEvent, useRewrit
  *     receive mouse events.
  */
 chrome.accessibilityPrivate.enableMouseEvents = function(enabled) {};
+
+/**
+ * Sets the cursor position on the screen in absolute screen coordinates.
+ * @param {!chrome.accessibilityPrivate.ScreenPoint} point The screen point at
+ *     which to put the cursor.
+ */
+chrome.accessibilityPrivate.setCursorPosition = function(point) {};
 
 /**
  * Sends a fabricated mouse event.
@@ -666,6 +708,24 @@ chrome.accessibilityPrivate.silenceSpokenFeedback = function() {};
 chrome.accessibilityPrivate.getDlcContents = function(dlc, callback) {};
 
 /**
+ * Returns the contents of a TTS DLC.
+ * @param {!chrome.accessibilityPrivate.DlcType} dlc The DLC of interest.
+ * @param {!chrome.accessibilityPrivate.TtsVariant} variant The TTS voice
+ *     variant.
+ * @param {function(ArrayBuffer): void} callback A callback that is run when the
+ *     contents are returned.
+ */
+chrome.accessibilityPrivate.getTtsDlcContents = function(dlc, variant, callback) {};
+
+/**
+ * Returns the bounds of the displays in density-independent pixels in screen
+ * coordinates.
+ * @param {function(!Array<!chrome.accessibilityPrivate.ScreenRect>): void}
+ *     callback A callback that is run when the result is returned.
+ */
+chrome.accessibilityPrivate.getDisplayBounds = function(callback) {};
+
+/**
  * Gets whether new browser windows and tabs should be in Lacros browser.
  * @param {function(boolean): void} callback A callback that is run when the
  *     result is returned.
@@ -712,6 +772,12 @@ chrome.accessibilityPrivate.onTwoFingerTouchStop;
  * @type {!ChromeEvent}
  */
 chrome.accessibilityPrivate.onSelectToSpeakContextMenuClicked;
+
+/**
+ * Fired when the Select to Speak reading focus changes.
+ * @type {!ChromeEvent}
+ */
+chrome.accessibilityPrivate.onSelectToSpeakFocusChanged;
 
 /**
  * Fired when Chrome OS wants to change the Select-to-Speak state, between

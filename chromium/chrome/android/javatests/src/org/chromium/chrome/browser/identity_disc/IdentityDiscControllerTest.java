@@ -31,11 +31,11 @@ import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
 
-import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -74,21 +74,6 @@ public class IdentityDiscControllerTest {
     private static final String EMAIL = "email@gmail.com";
     private static final String NAME = "Email Emailson";
     private static final String FULL_NAME = NAME + ".full";
-    private static final ObservableSupplier<Profile> EMPTY_PROFILE_SUPPLIER =
-            new ObservableSupplier<>() {
-                @Override
-                public Profile addObserver(Callback<Profile> obs) {
-                    return null;
-                }
-
-                @Override
-                public void removeObserver(Callback<Profile> obs) {}
-
-                @Override
-                public Profile get() {
-                    return null;
-                }
-            };
 
     private final ChromeTabbedActivityTestRule mActivityTestRule =
             new ChromeTabbedActivityTestRule();
@@ -129,7 +114,7 @@ public class IdentityDiscControllerTest {
         ViewUtils.waitForVisibleView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
 
         // Identity Disc should be hidden on navigation away from NTP.
-        leaveNTP();
+        leaveNtp();
         onView(withId(R.id.optional_toolbar_button))
                 .check(
                         matches(
@@ -165,13 +150,11 @@ public class IdentityDiscControllerTest {
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProviderMock);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    when(mIdentityServicesProviderMock.getSigninManager(
-                                    Profile.getLastUsedRegularProfile()))
+                    when(mIdentityServicesProviderMock.getSigninManager(Mockito.any()))
                             .thenReturn(mSigninManagerMock);
                     // This mock is required because the MainSettings class calls the
                     // IdentityManager.
-                    when(mIdentityServicesProviderMock.getIdentityManager(
-                                    Profile.getLastUsedRegularProfile()))
+                    when(mIdentityServicesProviderMock.getIdentityManager(Mockito.any()))
                             .thenReturn(mIdentityManagerMock);
                 });
         when(mSigninManagerMock.isSigninDisabledByPolicy()).thenReturn(true);
@@ -373,14 +356,14 @@ public class IdentityDiscControllerTest {
         TrackerFactory.setTrackerForTests(mTracker);
         IdentityDiscController identityDiscController =
                 new IdentityDiscController(
-                        mActivityTestRule.getActivity(), mDispatcher, EMPTY_PROFILE_SUPPLIER);
+                        mActivityTestRule.getActivity(), mDispatcher, mProfileSupplier);
 
         // If the button is tapped before the profile is set, the click shouldn't be recorded.
         identityDiscController.onClick();
         verifyNoMoreInteractions(mTracker);
     }
 
-    private void leaveNTP() {
+    private void leaveNtp() {
         mActivityTestRule.loadUrl(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
         ChromeTabUtils.waitForTabPageLoaded(mTab, ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
     }
@@ -397,7 +380,7 @@ public class IdentityDiscControllerTest {
             ButtonDataProvider.ButtonDataObserver observer) {
         IdentityDiscController controller =
                 new IdentityDiscController(
-                        mActivityTestRule.getActivity(), mDispatcher, EMPTY_PROFILE_SUPPLIER);
+                        mActivityTestRule.getActivity(), mDispatcher, mProfileSupplier);
         controller.addObserver(observer);
 
         return controller;

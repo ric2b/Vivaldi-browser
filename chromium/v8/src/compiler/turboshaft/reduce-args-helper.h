@@ -21,7 +21,9 @@ class CallWithReduceArgsHelper {
 #undef TEST
   }
 
-  OpIndex operator()(const GotoOp& op) { return callback_(op.destination); }
+  OpIndex operator()(const GotoOp& op) {
+    return callback_(op.destination, op.is_backedge);
+  }
 
   OpIndex operator()(const BranchOp& op) {
     return callback_(op.condition(), op.if_true, op.if_false, op.hint);
@@ -82,10 +84,6 @@ class CallWithReduceArgsHelper {
     return callback_(op.left(), op.right(), op.kind, op.rep);
   }
 
-  OpIndex operator()(const EqualOp& op) {
-    return callback_(op.left(), op.right(), op.rep);
-  }
-
   OpIndex operator()(const ComparisonOp& op) {
     return callback_(op.left(), op.right(), op.kind, op.rep);
   }
@@ -108,7 +106,7 @@ class CallWithReduceArgsHelper {
   }
 
   OpIndex operator()(const TaggedBitcastOp& op) {
-    return callback_(op.input(), op.from, op.to);
+    return callback_(op.input(), op.from, op.to, op.kind);
   }
 
   OpIndex operator()(const ObjectIsOp& op) {
@@ -156,7 +154,8 @@ class CallWithReduceArgsHelper {
   }
 
   OpIndex operator()(const ConvertJSPrimitiveToObjectOp& op) {
-    return callback_(op.value(), op.global_proxy(), op.mode);
+    return callback_(op.value(), op.native_context(), op.global_proxy(),
+                     op.mode);
   }
 
   OpIndex operator()(const SelectOp& op) {
@@ -265,12 +264,10 @@ class CallWithReduceArgsHelper {
     return callback_(op.input(), op.rep);
   }
 
+  OpIndex operator()(const CommentOp& op) { return callback_(op.message); }
+
   OpIndex operator()(const BigIntBinopOp& op) {
     return callback_(op.left(), op.right(), op.frame_state(), op.kind);
-  }
-
-  OpIndex operator()(const BigIntEqualOp& op) {
-    return callback_(op.left(), op.right());
   }
 
   OpIndex operator()(const BigIntComparisonOp& op) {
@@ -310,10 +307,6 @@ class CallWithReduceArgsHelper {
   }
 
   OpIndex operator()(const StringConcatOp& op) {
-    return callback_(op.left(), op.right());
-  }
-
-  OpIndex operator()(const StringEqualOp& op) {
     return callback_(op.left(), op.right());
   }
 
@@ -417,6 +410,10 @@ class CallWithReduceArgsHelper {
     return callback_(op.data_structure(), op.key(), op.kind);
   }
 
+  OpIndex operator()(const SpeculativeNumberBinopOp& op) {
+    return callback_(op.left(), op.right(), op.frame_state(), op.kind);
+  }
+
   OpIndex operator()(const Word32PairBinopOp& op) {
     return callback_(op.left_low(), op.left_high(), op.right_low(),
                      op.right_high(), op.kind);
@@ -465,7 +462,7 @@ class CallWithReduceArgsHelper {
   }
 
   OpIndex operator()(const RttCanonOp& op) {
-    return callback_(op.instance(), op.type_index);
+    return callback_(op.rtts(), op.type_index);
   }
 
   OpIndex operator()(const WasmTypeCheckOp& op) {
@@ -487,7 +484,7 @@ class CallWithReduceArgsHelper {
   }
 
   OpIndex operator()(const ArrayGetOp& op) {
-    return callback_(op.array(), op.index(), op.element_type, op.is_signed);
+    return callback_(op.array(), op.index(), op.array_type, op.is_signed);
   }
 
   OpIndex operator()(const ArraySetOp& op) {
@@ -578,6 +575,12 @@ class CallWithReduceArgsHelper {
 
   OpIndex operator()(const WasmTypeAnnotationOp& op) {
     return callback_(op.value(), op.type);
+  }
+
+  OpIndex operator()(const LoadStackPointerOp& op) { return callback_(); }
+
+  OpIndex operator()(const SetStackPointerOp& op) {
+    return callback_(op.value(), op.fp_scope);
   }
 #endif
 

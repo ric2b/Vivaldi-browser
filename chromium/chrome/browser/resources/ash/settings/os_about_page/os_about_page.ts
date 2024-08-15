@@ -34,12 +34,12 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
 import {isCrostiniSupported, isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {RouteOriginMixin} from '../common/route_origin_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, AboutPageUpdateInfo, BrowserChannel, browserChannelToI18nId, RegulatoryInfo, TpmFirmwareUpdateStatusChangedEvent, UpdateStatus, UpdateStatusChangedEvent} from './about_page_browser_proxy.js';
@@ -54,7 +54,7 @@ declare global {
 interface OsAboutPageElement {
   $: {
     updateStatusMessageInner: HTMLDivElement,
-    'product-logo': HTMLImageElement,
+    productLogo: HTMLImageElement,
   };
 }
 
@@ -239,6 +239,33 @@ class OsAboutPageElement extends OsAboutPageBase {
         },
         readOnly: true,
       },
+
+      rowIcons_: {
+        type: Object,
+        value() {
+          if (isRevampWayfindingEnabled()) {
+            return {
+              powerWash: 'os-settings:startup',
+              releaseNotes: 'os-settings:about-release-notes',
+              help: 'os-settings:about-help',
+              feedback: 'os-settings:about-feedback',
+              diagnostics: 'os-settings:about-diagnostics',
+              firmwareUpdates: 'os-settings:about-firmware-updates',
+              additionalDetails: 'os-settings:about-additional-details',
+            };
+          }
+
+          return {
+            powerWash: '',
+            releaseNotes: '',
+            help: '',
+            feedback: '',
+            diagnostics: '',
+            firmwareUpdates: '',
+            additionalDetails: '',
+          };
+        },
+      },
     };
   }
 
@@ -267,6 +294,7 @@ class OsAboutPageElement extends OsAboutPageBase {
   private eolMessageWithMonthAndYear_: string;
   private hasInternetConnection_: boolean;
   private firmwareUpdateCount_: number;
+  private rowIcons_: Record<string, string>;
   private showCrostiniLicense_: boolean;
   private showUpdateStatus_: boolean;
   private showButtonContainer_: boolean;
@@ -557,14 +585,20 @@ class OsAboutPageElement extends OsAboutPageBase {
       case UpdateStatus.FAILED_DOWNLOAD:
       case UpdateStatus.FAILED_HTTP:
       case UpdateStatus.FAILED:
-        return 'cr:error-outline';
+        return this.isRevampWayfindingEnabled_ ?
+            'os-settings:about-update-error' :
+            'cr:error-outline';
       case UpdateStatus.UPDATED:
       case UpdateStatus.NEARLY_UPDATED:
         // TODO(crbug.com/986596): Don't use browser icons here. Fork them.
-        return 'settings:check-circle';
+        return this.isRevampWayfindingEnabled_ ?
+            'os-settings:about-update-complete' :
+            'settings:check-circle';
       case UpdateStatus.DEFERRED:
       case UpdateStatus.UPDATE_TO_ROLLBACK_VERSION_DISALLOWED:
-        return 'cr:warning';
+        return this.isRevampWayfindingEnabled_ ?
+            'os-settings:about-update-warning' :
+            'cr:warning';
       default:
         return null;
     }
@@ -705,7 +739,7 @@ class OsAboutPageElement extends OsAboutPageBase {
   }
 
   private onProductLogoClick_(): void {
-    this.$['product-logo'].animate(
+    this.$.productLogo.animate(
         {
           transform: ['none', 'rotate(-10turn)'],
         },

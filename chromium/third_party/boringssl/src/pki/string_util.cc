@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include <openssl/base64.h>
 #include <openssl/mem.h>
 
 namespace bssl::string_util {
@@ -39,8 +40,7 @@ bool StartsWithNoCase(std::string_view str, std::string_view prefix) {
          IsEqualNoCase(prefix, str.substr(0, prefix.size()));
 }
 
-std::string FindAndReplace(std::string_view str,
-                           std::string_view find,
+std::string FindAndReplace(std::string_view str, std::string_view find,
                            std::string_view replace) {
   std::string ret;
 
@@ -71,7 +71,7 @@ bool StartsWith(std::string_view str, std::string_view prefix) {
   return prefix.size() <= str.size() && prefix == str.substr(0, prefix.size());
 }
 
-std::string HexEncode(const uint8_t* data, size_t length) {
+std::string HexEncode(const uint8_t *data, size_t length) {
   std::ostringstream out;
   for (size_t i = 0; i < length; i++) {
     out << std::hex << std::setfill('0') << std::setw(2) << std::uppercase
@@ -112,6 +112,82 @@ std::vector<std::string_view> SplitString(std::string_view str,
   }
 
   return out;
+}
+
+static bool IsUnicodeWhitespace(char c) {
+  return c == 9 || c == 10 || c == 11 || c == 12 || c == 13 || c == ' ';
+}
+
+std::string CollapseWhitespaceASCII(std::string_view text,
+                                    bool trim_sequences_with_line_breaks) {
+  std::string result;
+  result.resize(text.size());
+
+  // Set flags to pretend we're already in a trimmed whitespace sequence, so we
+  // will trim any leading whitespace.
+  bool in_whitespace = true;
+  bool already_trimmed = true;
+
+  int chars_written = 0;
+  for (auto i = text.begin(); i != text.end(); ++i) {
+    if (IsUnicodeWhitespace(*i)) {
+      if (!in_whitespace) {
+        // Reduce all whitespace sequences to a single space.
+        in_whitespace = true;
+        result[chars_written++] = L' ';
+      }
+      if (trim_sequences_with_line_breaks && !already_trimmed &&
+          ((*i == '\n') || (*i == '\r'))) {
+        // Whitespace sequences containing CR or LF are eliminated entirely.
+        already_trimmed = true;
+        --chars_written;
+      }
+    } else {
+      // Non-whitespace chracters are copied straight across.
+      in_whitespace = false;
+      already_trimmed = false;
+      result[chars_written++] = *i;
+    }
+  }
+
+  if (in_whitespace && !already_trimmed) {
+    // Any trailing whitespace is eliminated.
+    --chars_written;
+  }
+
+  result.resize(chars_written);
+  return result;
+}
+
+bool Base64Encode(const std::string_view &input, std::string *output) {
+  size_t len;
+  if (!EVP_EncodedLength(&len, input.size())) {
+    return false;
+  }
+  std::vector<char> encoded(len);
+  len = EVP_EncodeBlock(reinterpret_cast<uint8_t *>(encoded.data()),
+                        reinterpret_cast<const uint8_t *>(input.data()),
+                        input.size());
+  if (!len) {
+    return false;
+  }
+  output->assign(encoded.data(), len);
+  return true;
+}
+
+bool Base64Decode(const std::string_view &input, std::string *output) {
+  size_t len;
+  if (!EVP_DecodedLength(&len, input.size())) {
+    return false;
+  }
+  std::vector<char> decoded(len);
+  if (!EVP_DecodeBase64(reinterpret_cast<uint8_t *>(decoded.data()), &len, len,
+                        reinterpret_cast<const uint8_t *>(input.data()),
+                        input.size())) {
+    return false;
+  }
+  output->assign(decoded.data(), len);
+  return true;
 }
 
 }  // namespace bssl::string_util

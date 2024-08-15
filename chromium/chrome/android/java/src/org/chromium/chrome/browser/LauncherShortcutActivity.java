@@ -29,13 +29,12 @@ import java.util.List;
 
 import org.vivaldi.browser.common.VivaldiIntentHandler;
 
-/**
- * A helper activity for routing launcher shortcut intents.
- */
+/** A helper activity for routing launcher shortcut intents. */
 public class LauncherShortcutActivity extends Activity {
     public static final String ACTION_OPEN_NEW_TAB = "chromium.shortcut.action.OPEN_NEW_TAB";
     public static final String ACTION_OPEN_NEW_INCOGNITO_TAB =
             "chromium.shortcut.action.OPEN_NEW_INCOGNITO_TAB";
+
     @VisibleForTesting
     static final String DYNAMIC_OPEN_NEW_INCOGNITO_TAB_ID = "dynamic-new-incognito-tab-shortcut";
 
@@ -124,12 +123,16 @@ public class LauncherShortcutActivity extends Activity {
 
         ShortcutInfo shortcut =
                 new ShortcutInfo.Builder(context, DYNAMIC_OPEN_NEW_INCOGNITO_TAB_ID)
-                        .setShortLabel(context.getResources().getString(
-                                R.string.accessibility_tabstrip_incognito_identifier))
-                        .setLongLabel(sLabelForTesting != null
+                        .setShortLabel(
+                                context.getResources()
+                                        .getString(
+                                                R.string
+                                                        .accessibility_tabstrip_incognito_identifier))
+                        .setLongLabel(
+                                sLabelForTesting != null
                                         ? sLabelForTesting
-                                        : context.getResources().getString(
-                                                R.string.menu_new_incognito_tab))
+                                        : context.getResources()
+                                                .getString(R.string.menu_new_incognito_tab))
                         .setIcon(Icon.createWithResource(context, R.drawable.shortcut_incognito))
                         .setIntent(intent)
                         .build();
@@ -160,8 +163,10 @@ public class LauncherShortcutActivity extends Activity {
      */
     private static Intent getChromeLauncherActivityIntent(
             Context context, String launcherShortcutIntentAction) {
-        Intent newIntent = IntentHandler.createTrustedOpenNewTabIntent(context,
-                launcherShortcutIntentAction.equals(ACTION_OPEN_NEW_INCOGNITO_TAB));
+        Intent newIntent =
+                IntentHandler.createTrustedOpenNewTabIntent(
+                        context,
+                        launcherShortcutIntentAction.equals(ACTION_OPEN_NEW_INCOGNITO_TAB));
         newIntent.putExtra(IntentHandler.EXTRA_INVOKED_FROM_SHORTCUT, true);
 
         // Vivaldi

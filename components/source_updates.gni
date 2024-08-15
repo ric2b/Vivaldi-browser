@@ -12,6 +12,12 @@ update_target("//components/content_settings/renderer:renderer") {
   sources += [
     "//vivaldi/components/blink/vivaldi_content_settings_agent_impl.cc",
   ]
+  deps += [
+    "//v8",
+  ]
+  cflags = [
+    "-Wno-implicit-const-int-float-conversion",
+  ]
 }
 
 update_template_instance("//third_party/blink/renderer/core:core") {
@@ -19,6 +25,7 @@ update_template_instance("//third_party/blink/renderer/core:core") {
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.cc",
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.h",
     "//vivaldi/components/blink/vivaldi_data_transfer.cc",
+    "//vivaldi/components/blink/vivaldi_web_frame_widget_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_settings_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_view_impl.cc",
   ]
@@ -86,6 +93,12 @@ if (vivaldi_build_tests) {
         "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
       ]
     }
+
+    update_target("//content/test:content_unittests") {
+      sources += [
+        "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+      ]
+    }
   }
   if (!is_ios && !is_android) {
     update_target("//content/shell:content_shell") {
@@ -96,6 +109,16 @@ if (vivaldi_build_tests) {
         "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
       ]
     }
+    if (is_mac && is_debug) {
+      update_target("//content/shell:content_shell_app") {
+        if (!defined(sources)) {
+          sources = []
+        }
+        sources += [
+          "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+        ]
+      }
+    }
   }
 }
 
@@ -103,6 +126,17 @@ if (!is_ios && !is_android) {
   update_target("//headless:headless_non_renderer") {
     sources += [
       "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+    ]
+  }
+
+  update_target("//chrome/browser:browser") {
+    sources += [
+      "//vivaldi/components/crashreport/crashreport_accessor.cc",
+      "//vivaldi/components/crashreport/crashreport_accessor.h",
+      "//vivaldi/components/crashreport/crashreport_observer.cc",
+      "//vivaldi/components/crashreport/crashreport_observer.h",
+      "//vivaldi/components/theme/native_web_theme_observer.cc",
+      "//vivaldi/components/theme/native_web_theme_observer.h",
     ]
   }
 }
@@ -237,12 +271,13 @@ update_template_instance(
 }
 
 if (is_android) {
-  update_template_instance("//components/search_engines:search_engine_type_java") {
+  update_template_instance("//components/search_engines:search_engine_enums_java") {
     sources -= [ "search_engine_type.h" ]
     sources += [ "$root_gen_dir/vivaldi/search_engines_types/search_engine_type.h" ]
   }
 
-  update_target("//components/search_engines:search_engine_type_java") {
+  # Need to update the target, not the template instance to update deps
+  update_target("//components/search_engines:search_engine_enums_java") {
     if (!defined(deps)) {
       deps = []
     }
@@ -257,7 +292,7 @@ update_target("//components/embedder_support:browser_util"){
     "//vivaldi/components/browser/vivaldi_brand_select.h",
   ]
   deps += [
-    "//components/version_info:generate_version_info",
+    "//base/version_info:generate_version_info",
     "//vivaldi/base:edge_version"
   ]
 }

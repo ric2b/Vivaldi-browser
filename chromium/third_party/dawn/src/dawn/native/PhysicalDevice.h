@@ -39,6 +39,7 @@
 #include "dawn/common/ityp_span.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/Features.h"
+#include "dawn/native/Forward.h"
 #include "dawn/native/Limits.h"
 #include "dawn/native/Toggles.h"
 #include "dawn/native/dawn_platform.h"
@@ -46,6 +47,16 @@
 namespace dawn::native {
 
 class DeviceBase;
+
+struct FeatureValidationResult {
+    // Constructor of successful result
+    FeatureValidationResult();
+    // Constructor of failed result
+    explicit FeatureValidationResult(std::string errorMsg);
+
+    bool success;
+    std::string errorMessage;
+};
 
 class PhysicalDeviceBase : public RefCounted {
   public:
@@ -55,7 +66,7 @@ class PhysicalDeviceBase : public RefCounted {
     MaybeError Initialize();
 
     ResultOrError<Ref<DeviceBase>> CreateDevice(AdapterBase* adapter,
-                                                const DeviceDescriptor* descriptor,
+                                                const UnpackedPtr<DeviceDescriptor>& descriptor,
                                                 const TogglesState& deviceToggles);
 
     uint32_t GetVendorId() const;
@@ -93,8 +104,11 @@ class PhysicalDeviceBase : public RefCounted {
     virtual void SetupBackendDeviceToggles(TogglesState* deviceToggles) const = 0;
 
     // Check if a feature os supported by this adapter AND suitable with given toggles.
-    MaybeError ValidateFeatureSupportedWithToggles(wgpu::FeatureName feature,
-                                                   const TogglesState& toggles) const;
+    FeatureValidationResult ValidateFeatureSupportedWithToggles(wgpu::FeatureName feature,
+                                                                const TogglesState& toggles) const;
+
+    // Populate backend properties. Ownership of allocations written are owned by the caller.
+    virtual void PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const = 0;
 
   protected:
     uint32_t mVendorId = 0xFFFFFFFF;
@@ -118,9 +132,10 @@ class PhysicalDeviceBase : public RefCounted {
     void GetDefaultLimitsForSupportedFeatureLevel(Limits* limits) const;
 
   private:
-    virtual ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(AdapterBase* adapter,
-                                                            const DeviceDescriptor* descriptor,
-                                                            const TogglesState& deviceToggles) = 0;
+    virtual ResultOrError<Ref<DeviceBase>> CreateDeviceImpl(
+        AdapterBase* adapter,
+        const UnpackedPtr<DeviceDescriptor>& descriptor,
+        const TogglesState& deviceToggles) = 0;
 
     virtual MaybeError InitializeImpl() = 0;
 
@@ -132,7 +147,7 @@ class PhysicalDeviceBase : public RefCounted {
 
     virtual void InitializeVendorArchitectureImpl();
 
-    virtual MaybeError ValidateFeatureSupportedWithTogglesImpl(
+    virtual FeatureValidationResult ValidateFeatureSupportedWithTogglesImpl(
         wgpu::FeatureName feature,
         const TogglesState& toggles) const = 0;
 

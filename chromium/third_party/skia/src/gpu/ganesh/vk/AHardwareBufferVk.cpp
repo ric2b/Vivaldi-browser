@@ -16,6 +16,7 @@
 #include "src/gpu/ganesh/GrDirectContextPriv.h"
 #include "src/gpu/ganesh/vk/GrVkCaps.h"
 #include "src/gpu/ganesh/vk/GrVkGpu.h"
+#include "src/gpu/vk/VulkanUtilsPriv.h"
 
 #include <android/hardware_buffer.h>
 
@@ -26,77 +27,83 @@ namespace GrAHardwareBufferUtils {
 GrBackendFormat GetVulkanBackendFormat(GrDirectContext* dContext, AHardwareBuffer* hardwareBuffer,
                                        uint32_t bufferFormat, bool requireKnownFormat) {
     GrBackendApi backend = dContext->backend();
-
     if (backend != GrBackendApi::kVulkan) {
         return GrBackendFormat();
     }
+
+    VkFormat bufferVkFormat = VK_FORMAT_UNDEFINED;
     switch (bufferFormat) {
-        case AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM:
-            return GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8A8_UNORM);
-        case AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT:
-            return GrBackendFormats::MakeVk(VK_FORMAT_R16G16B16A16_SFLOAT);
-        case AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM:
-            return GrBackendFormats::MakeVk(VK_FORMAT_R5G6B5_UNORM_PACK16);
-        case AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM:
-            return GrBackendFormats::MakeVk(VK_FORMAT_A2B10G10R10_UNORM_PACK32);
-        case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM:
-            return GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8A8_UNORM);
-        case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
-            return GrBackendFormats::MakeVk(VK_FORMAT_R8G8B8_UNORM);
+        case AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM: {
+            bufferVkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+            break;
+        }
+        case AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT: {
+            bufferVkFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+            break;
+        }
+        case AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM: {
+            bufferVkFormat = VK_FORMAT_R5G6B5_UNORM_PACK16;
+            break;
+        }
+        case AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM: {
+            bufferVkFormat = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+            break;
+        }
+        case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM: {
+            bufferVkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+            break;
+        }
+        case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM: {
+            bufferVkFormat = VK_FORMAT_R8G8B8_UNORM;
+            break;
+        }
 #if __ANDROID_API__ >= 33
-        case AHARDWAREBUFFER_FORMAT_R8_UNORM:
-            return GrBackendFormats::MakeVk(VK_FORMAT_R8_UNORM);
+        case AHARDWAREBUFFER_FORMAT_R8_UNORM: {
+            bufferVkFormat = VK_FORMAT_R8_UNORM;
+            break;
+        }
 #endif
         default: {
             if (requireKnownFormat) {
                 return GrBackendFormat();
-            } else {
-                GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
-                SkASSERT(gpu);
-                VkDevice device = gpu->device();
-
-                if (!gpu->vkCaps().supportsAndroidHWBExternalMemory()) {
-                    return GrBackendFormat();
-                }
-                VkAndroidHardwareBufferFormatPropertiesANDROID hwbFormatProps;
-                hwbFormatProps.sType =
-                        VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID;
-                hwbFormatProps.pNext = nullptr;
-
-                VkAndroidHardwareBufferPropertiesANDROID hwbProps;
-                hwbProps.sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID;
-                hwbProps.pNext = &hwbFormatProps;
-
-                VkResult err = VK_CALL(GetAndroidHardwareBufferProperties(device,
-                                                                          hardwareBuffer,
-                                                                          &hwbProps));
-                if (VK_SUCCESS != err) {
-                    return GrBackendFormat();
-                }
-
-                if (hwbFormatProps.format != VK_FORMAT_UNDEFINED) {
-                    return GrBackendFormat();
-                }
-
-                GrVkYcbcrConversionInfo ycbcrConversion;
-                ycbcrConversion.fYcbcrModel = hwbFormatProps.suggestedYcbcrModel;
-                ycbcrConversion.fYcbcrRange = hwbFormatProps.suggestedYcbcrRange;
-                ycbcrConversion.fXChromaOffset = hwbFormatProps.suggestedXChromaOffset;
-                ycbcrConversion.fYChromaOffset = hwbFormatProps.suggestedYChromaOffset;
-                ycbcrConversion.fForceExplicitReconstruction = VK_FALSE;
-                ycbcrConversion.fExternalFormat = hwbFormatProps.externalFormat;
-                ycbcrConversion.fFormatFeatures = hwbFormatProps.formatFeatures;
-                if (VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT &
-                    hwbFormatProps.formatFeatures) {
-                    ycbcrConversion.fChromaFilter = VK_FILTER_LINEAR;
-                } else {
-                    ycbcrConversion.fChromaFilter = VK_FILTER_NEAREST;
-                }
-
-                return GrBackendFormats::MakeVk(ycbcrConversion);
             }
+            break;
         }
     }
+
+    GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
+    SkASSERT(gpu);
+
+    if (bufferVkFormat != VK_FORMAT_UNDEFINED) {
+        // Check to make sure the associated VkFormat has the necessary format features. If not,
+        // default to using an external format (set the VkFormat as undefined).
+        // TODO: When creating a GrBackendFormat with a VkFormat that is not VK_FORMAT_UNDEFINED, we
+        // currently assume that the VkFormat's VkFormatFeatureFlags contain
+        // VK_FORMAT_FEATURE_TRANSFER_SRC_BIT and VK_FORMAT_FEATURE_TRANSFER_DST_BIT.
+        if (gpu->vkCaps().isVkFormatTexturable(bufferVkFormat)) {
+            return GrBackendFormats::MakeVk(bufferVkFormat);
+        }
+        bufferVkFormat = VK_FORMAT_UNDEFINED;
+    }
+    // If there is no associated VkFormat (or it does not support the necessary features) and
+    // requireKnownFormat = false, then import using an external format.
+    VkDevice device = gpu->device();
+
+    if (!gpu->vkCaps().supportsAndroidHWBExternalMemory()) {
+        return GrBackendFormat();
+    }
+
+    VkAndroidHardwareBufferFormatPropertiesANDROID hwbFormatProps;
+    VkAndroidHardwareBufferPropertiesANDROID hwbProps;
+    if (!GetAHardwareBufferProperties(
+                &hwbFormatProps, &hwbProps, gpu->vkInterface(), hardwareBuffer, device)) {
+        return GrBackendFormat();
+    }
+
+    GrVkYcbcrConversionInfo ycbcrConversion;
+    GetYcbcrConversionInfoFromFormatProps(&ycbcrConversion, hwbFormatProps);
+
+    return GrBackendFormats::MakeVk(ycbcrConversion);
 }
 
 class VulkanCleanupHelper {
@@ -135,50 +142,49 @@ static GrBackendTexture make_vk_backend_texture(
         UpdateImageProc* updateProc,
         TexImageCtx* imageCtx,
         bool isProtectedContent,
-        const GrBackendFormat& backendFormat,
+        const GrBackendFormat& grBackendFormat,
         bool isRenderable,
         bool fromAndroidWindow) {
     SkASSERT(dContext->backend() == GrBackendApi::kVulkan);
-    GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
 
+    GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
+    SkASSERT(gpu);
     SkASSERT(!isProtectedContent || gpu->protectedContext());
 
     VkPhysicalDevice physicalDevice = gpu->physicalDevice();
     VkDevice device = gpu->device();
 
-    SkASSERT(gpu);
-
     if (!gpu->vkCaps().supportsAndroidHWBExternalMemory()) {
         return GrBackendTexture();
     }
 
-    VkFormat format;
-    if (!GrBackendFormats::AsVkFormat(backendFormat, &format)) {
+    VkFormat grBackendVkFormat;
+    if (!GrBackendFormats::AsVkFormat(grBackendFormat, &grBackendVkFormat)) {
         SkDebugf("AsVkFormat failed (valid: %d, backend: %u)",
-                 backendFormat.isValid(),
-                 (unsigned)backendFormat.backend());
+                 grBackendFormat.isValid(),
+                 (unsigned)grBackendFormat.backend());
         return GrBackendTexture();
     }
-
-    VkResult err;
+    bool importAsExternalFormat = grBackendVkFormat == VK_FORMAT_UNDEFINED;
 
     VkAndroidHardwareBufferFormatPropertiesANDROID hwbFormatProps;
-    hwbFormatProps.sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID;
-    hwbFormatProps.pNext = nullptr;
-
     VkAndroidHardwareBufferPropertiesANDROID hwbProps;
-    hwbProps.sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID;
-    hwbProps.pNext = &hwbFormatProps;
-
-    err = VK_CALL(GetAndroidHardwareBufferProperties(device, hardwareBuffer, &hwbProps));
-    if (VK_SUCCESS != err) {
+    if (!skgpu::GetAHardwareBufferProperties(
+                &hwbFormatProps, &hwbProps, gpu->vkInterface(), hardwareBuffer, device)) {
         return GrBackendTexture();
     }
+    VkFormat hwbVkFormat = hwbFormatProps.format;
 
-    if (hwbFormatProps.format != format) {
+    // We normally expect the hardware buffer format (hwbVkFormat) to be equivalent to ganesh's
+    // GrBackendFormat VkFormat (grBackendVkFormat). However, even if the hwbVkFormat is a defined
+    // format, we may choose to ignore that and instead import the AHardwareBuffer using an
+    // external format. For example, we would attempt to do this if the VkFormat doesn't support the
+    // necessary features. Thus, it is acceptable for hwbVkFormat to differ from grBackendVkFormat
+    // iff we are importing the AHardwareBuffer using an external format.
+    if (!importAsExternalFormat && hwbVkFormat != grBackendVkFormat) {
         SkDebugf("Queried format not consistent with expected format; got: %d, expected: %d",
-                 hwbFormatProps.format,
-                 format);
+                 hwbVkFormat,
+                 grBackendVkFormat);
         return GrBackendTexture();
     }
 
@@ -188,25 +194,38 @@ static GrBackendTexture make_vk_backend_texture(
     externalFormat.externalFormat = 0;  // If this is zero it is as if we aren't using this struct.
 
     const GrVkYcbcrConversionInfo* ycbcrConversion =
-            GrBackendFormats::GetVkYcbcrConversionInfo(backendFormat);
+            GrBackendFormats::GetVkYcbcrConversionInfo(grBackendFormat);
     if (!ycbcrConversion) {
         return GrBackendTexture();
     }
 
-    if (hwbFormatProps.format != VK_FORMAT_UNDEFINED) {
-        // TODO: We should not assume the transfer features here and instead should have a way for
-        // Ganesh's tracking of intenral images to report whether or not they support transfers.
-        SkASSERT(SkToBool(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT & hwbFormatProps.formatFeatures) &&
-                 SkToBool(VK_FORMAT_FEATURE_TRANSFER_SRC_BIT & hwbFormatProps.formatFeatures) &&
-                 SkToBool(VK_FORMAT_FEATURE_TRANSFER_DST_BIT & hwbFormatProps.formatFeatures));
-        SkASSERT(!ycbcrConversion->isValid());
-    } else {
-        SkASSERT(ycbcrConversion->isValid());
-        // We have an external only format
+    // TODO: Check the supported tilings vkGetPhysicalDeviceImageFormatProperties2 to see if we have
+    // to use linear. Add better linear support throughout Ganesh.
+    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+
+    if (isRenderable && (importAsExternalFormat || // cannot render to external formats
+                         !gpu->vkCaps().isFormatRenderable(grBackendVkFormat, tiling))) {
+        SkDebugf("Renderable texture requested from an AHardwareBuffer which uses a "
+                 "VkFormat that Skia cannot render to (VkFormat: %d).\n", grBackendVkFormat);
+        return GrBackendTexture();
+    }
+
+    if (importAsExternalFormat) {
+        if (!ycbcrConversion->isValid()) {
+            SkDebugf("YCbCr conversion must be valid when importing an AHardwareBuffer with an "
+                     "external format");
+            return GrBackendTexture();
+        }
         SkASSERT(SkToBool(VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT & hwbFormatProps.formatFeatures));
-        SkASSERT(format == VK_FORMAT_UNDEFINED);
         SkASSERT(hwbFormatProps.externalFormat == ycbcrConversion->fExternalFormat);
         externalFormat.externalFormat = hwbFormatProps.externalFormat;
+    } else {
+        SkASSERT(!ycbcrConversion->isValid());
+        // Non-external formats are subject to format caps from VkPhysicalDeviceFormatProperties.
+        SkASSERT(gpu->vkCaps().isVkFormatTexturable(grBackendVkFormat));
+        // TODO: We currently assume that the provided VkFormat has transfer features
+        // (VK_FORMAT_FEATURE_TRANSFER_[SRC/DST]_BIT). Instead, we should have a way for Ganesh's
+        // tracking of intenral images to report whether or not they support transfers.
     }
 
     const VkExternalMemoryImageCreateInfo externalMemoryImageInfo{
@@ -214,19 +233,16 @@ static GrBackendTexture make_vk_backend_texture(
             &externalFormat,                                                     // pNext
             VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID,  // handleTypes
     };
+
     VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (format != VK_FORMAT_UNDEFINED) {
+    if (!importAsExternalFormat) {
         usageFlags = usageFlags |
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                     VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         if (isRenderable) {
             usageFlags = usageFlags | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
     }
-
-    // TODO: Check the supported tilings vkGetPhysicalDeviceImageFormatProperties2 to see if we have
-    // to use linear. Add better linear support throughout Ganesh.
-    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
 
     VkImageCreateFlags flags = isProtectedContent ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
 
@@ -235,7 +251,7 @@ static GrBackendTexture make_vk_backend_texture(
         &externalMemoryImageInfo,                    // pNext
         flags,                                       // VkImageCreateFlags
         VK_IMAGE_TYPE_2D,                            // VkImageType
-        format,                                      // VkFormat
+        grBackendVkFormat,                           // VkFormat
         { (uint32_t)width, (uint32_t)height, 1 },    // VkExtent3D
         1,                                           // mipLevels
         1,                                           // arrayLayers
@@ -249,6 +265,7 @@ static GrBackendTexture make_vk_backend_texture(
     };
 
     VkImage image;
+    VkResult err;
     err = VK_CALL(CreateImage(device, &imageCreateInfo, nullptr, &image));
     if (VK_SUCCESS != err) {
         return GrBackendTexture();
@@ -257,91 +274,21 @@ static GrBackendTexture make_vk_backend_texture(
     VkPhysicalDeviceMemoryProperties2 phyDevMemProps;
     phyDevMemProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
     phyDevMemProps.pNext = nullptr;
-
-    uint32_t typeIndex = 0;
-    bool foundHeap = false;
     VK_CALL(GetPhysicalDeviceMemoryProperties2(physicalDevice, &phyDevMemProps));
-    uint32_t memTypeCnt = phyDevMemProps.memoryProperties.memoryTypeCount;
-    for (uint32_t i = 0; i < memTypeCnt && !foundHeap; ++i) {
-        if (hwbProps.memoryTypeBits & (1 << i)) {
-            const VkPhysicalDeviceMemoryProperties& pdmp = phyDevMemProps.memoryProperties;
-            uint32_t supportedFlags = pdmp.memoryTypes[i].propertyFlags &
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            if (supportedFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-                typeIndex = i;
-                foundHeap = true;
-            }
-        }
-    }
-
-    // Fallback to use any available memory type for AHB
-    //
-    // For external memory import, compatible memory types are decided by the Vulkan driver since
-    // the memory has been allocated externally. There are usually special requirements against
-    // external memory. e.g. AHB allocated with CPU R/W often usage bits is only importable for
-    // non-device-local heap on some AMD systems.
-    if (!foundHeap && hwbProps.memoryTypeBits) {
-        typeIndex = ffs(hwbProps.memoryTypeBits) - 1;
-        foundHeap = true;
-    }
-
-    if (!foundHeap) {
-        VK_CALL(DestroyImage(device, image, nullptr));
-        return GrBackendTexture();
-    }
-
-    VkImportAndroidHardwareBufferInfoANDROID hwbImportInfo;
-    hwbImportInfo.sType = VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
-    hwbImportInfo.pNext = nullptr;
-    hwbImportInfo.buffer = hardwareBuffer;
-
-    VkMemoryDedicatedAllocateInfo dedicatedAllocInfo;
-    dedicatedAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO;
-    dedicatedAllocInfo.pNext = &hwbImportInfo;
-    dedicatedAllocInfo.image = image;
-    dedicatedAllocInfo.buffer = VK_NULL_HANDLE;
-
-    VkMemoryAllocateInfo allocInfo = {
-        VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,      // sType
-        &dedicatedAllocInfo,                         // pNext
-        hwbProps.allocationSize,                     // allocationSize
-        typeIndex,                                   // memoryTypeIndex
-    };
-
-    VkDeviceMemory memory;
-
-    err = VK_CALL(AllocateMemory(device, &allocInfo, nullptr, &memory));
-    if (VK_SUCCESS != err) {
-        VK_CALL(DestroyImage(device, image, nullptr));
-        return GrBackendTexture();
-    }
-
-    VkBindImageMemoryInfo bindImageInfo;
-    bindImageInfo.sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO;
-    bindImageInfo.pNext = nullptr;
-    bindImageInfo.image = image;
-    bindImageInfo.memory = memory;
-    bindImageInfo.memoryOffset = 0;
-
-    err = VK_CALL(BindImageMemory2(device, 1, &bindImageInfo));
-    if (VK_SUCCESS != err) {
-        VK_CALL(DestroyImage(device, image, nullptr));
-        VK_CALL(FreeMemory(device, memory, nullptr));
-        return GrBackendTexture();
-    }
 
     skgpu::VulkanAlloc alloc;
-    alloc.fMemory = memory;
-    alloc.fOffset = 0;
-    alloc.fSize = hwbProps.allocationSize;
-    alloc.fFlags = 0;
+    if (!skgpu::AllocateAndBindImageMemory(&alloc, image, phyDevMemProps, hwbProps, hardwareBuffer,
+                                           gpu->vkInterface(), device)) {
+        VK_CALL(DestroyImage(device, image, nullptr));
+        return GrBackendTexture();
+    }
 
     GrVkImageInfo imageInfo;
     imageInfo.fImage = image;
     imageInfo.fAlloc = alloc;
     imageInfo.fImageTiling = tiling;
     imageInfo.fImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.fFormat = format;
+    imageInfo.fFormat = grBackendVkFormat;
     imageInfo.fLevelCount = 1;
     // TODO: This should possibly be VK_QUEUE_FAMILY_FOREIGN_EXT but current Adreno devices do not
     // support that extension. Or if we know the source of the AHardwareBuffer is not from a
@@ -356,7 +303,7 @@ static GrBackendTexture make_vk_backend_texture(
 
     *deleteProc = delete_vk_image;
     *updateProc = update_vk_image;
-    *imageCtx = new VulkanCleanupHelper(gpu, image, memory);
+    *imageCtx = new VulkanCleanupHelper(gpu, image, alloc.fMemory);
 
     return GrBackendTextures::MakeVk(width, height, imageInfo);
 }

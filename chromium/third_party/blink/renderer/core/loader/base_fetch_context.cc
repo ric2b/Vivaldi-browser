@@ -169,7 +169,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   // specifying accomponying client hints, in which case we disable sending
   // them.
   using network::mojom::blink::WebClientHintsType;
-  if (RuntimeEnabledFeatures::UserAgentClientHintEnabled() && ua) {
+  if (ua) {
     // ShouldSendClientHint is called to make sure UA is controlled by
     // Permissions Policy.
     if (ShouldSendClientHint(policy, resource_origin, is_1p_origin,
@@ -331,7 +331,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
   }
 
   // Only send User Agent hints if the info is available
-  if (RuntimeEnabledFeatures::UserAgentClientHintEnabled() && ua) {
+  if (ua) {
     if (ShouldSendClientHint(policy, resource_origin, is_1p_origin,
                              WebClientHintsType::kUAArch, hints_preferences)) {
       SetHttpHeader(WebClientHintsType::kUAArch,
@@ -391,7 +391,7 @@ void BaseFetchContext::AddClientHintsIfNecessary(
             network::mojom::blink::WebClientHintsType::kUAFormFactor,
             hints_preferences)) {
       SetHttpHeader(WebClientHintsType::kUAFormFactor,
-                    SerializeStringHeader(ua->form_factor), request);
+                    AtomicString(ua->SerializeFormFactor().c_str()), request);
     }
   }
 

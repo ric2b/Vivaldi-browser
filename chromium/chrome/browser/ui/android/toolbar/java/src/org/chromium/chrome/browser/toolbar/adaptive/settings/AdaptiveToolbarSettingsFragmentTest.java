@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.toolbar.adaptive.settings;
 
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
+
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED;
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS;
 
@@ -26,36 +29,46 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionUtil;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarPrefs;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.search_engines.TemplateUrl;
+import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.components.user_prefs.UserPrefsJni;
 
 /** Tests for {@link AdaptiveToolbarSettingsFragment}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 @EnableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2)
 @DisableFeatures({
-    ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR,
     ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_TRANSLATE,
     ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_ADD_TO_BOOKMARKS,
     ChromeFeatureList.READALOUD
 })
 public class AdaptiveToolbarSettingsFragmentTest {
     @Rule public TestRule mProcessor = new Features.JUnitProcessor();
+    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Mock Profile mProfile;
+    @Mock private UserPrefsJni mUserPrefsNatives;
+    @Mock private PrefService mPrefService;
+    @Mock private TemplateUrlService mTemplateUrlService;
+    @Mock private TemplateUrl mSearchEngine;
 
     private ChromeSwitchPreference mSwitchPreference;
     private RadioButtonGroupAdaptiveToolbarPreference mRadioPreference;
@@ -64,6 +77,9 @@ public class AdaptiveToolbarSettingsFragmentTest {
     public void setUpTest() throws Exception {
         MockitoAnnotations.initMocks(this);
 
+        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNatives);
+        doReturn(mPrefService).when(mUserPrefsNatives).get(any());
+
         ChromeSharedPreferences.getInstance().removeKey(ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED);
         ChromeSharedPreferences.getInstance().removeKey(ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
@@ -71,6 +87,9 @@ public class AdaptiveToolbarSettingsFragmentTest {
         AdaptiveToolbarFeatures.setProfile(mProfile);
 
         VoiceRecognitionUtil.setIsVoiceSearchEnabledForTesting(true);
+        UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(true);
+
+        TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
     }
 
     @After
@@ -339,7 +358,6 @@ public class AdaptiveToolbarSettingsFragmentTest {
     @SmallTest
     @EnableFeatures(ChromeFeatureList.READALOUD)
     public void testReadAloudOption_Enabled() {
-        UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(true);
         FragmentScenario<AdaptiveToolbarSettingsFragment> scenario =
                 FragmentScenario.launchInContainer(
                         AdaptiveToolbarSettingsFragment.class,

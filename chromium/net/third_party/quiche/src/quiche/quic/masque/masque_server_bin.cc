@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This file is reponsible for the masque_server binary. It allows testing
+// This file is responsible for the masque_server binary. It allows testing
 // our MASQUE server code by creating a MASQUE proxy that relays HTTP/3
 // requests to web servers tunnelled over MASQUE connections.
 // e.g.: masque_server
 
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "quiche/quic/masque/masque_server.h"
 #include "quiche/quic/masque/masque_server_backend.h"
-#include "quiche/quic/platform/api/quic_flags.h"
+#include "quiche/quic/masque/masque_utils.h"
+#include "quiche/quic/platform/api/quic_ip_address.h"
 #include "quiche/quic/platform/api/quic_logging.h"
 #include "quiche/quic/platform/api/quic_socket_address.h"
 #include "quiche/common/platform/api/quiche_command_line_flags.h"
@@ -35,6 +39,18 @@ DEFINE_QUICHE_COMMAND_LINE_FLAG(
     std::string, masque_mode, "",
     "Allows setting MASQUE mode, currently only valid value is \"open\".");
 
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    std::string, signature_auth, "",
+    "Require HTTP Signature Authentication. Pass in a list of key identifiers "
+    "and hex-encoded public keys. "
+    "Separated with colons and semicolons. "
+    "For example: \"kid1:0123...f;kid2:0123...f\".");
+
+DEFINE_QUICHE_COMMAND_LINE_FLAG(
+    bool, signature_auth_on_all_requests, false,
+    "If set to true, enable signature auth on all requests (such as GET) "
+    "instead of just MASQUE.");
+
 int main(int argc, char* argv[]) {
   const char* usage = "Usage: masque_server [options]";
   std::vector<std::string> non_option_args =
@@ -55,6 +71,11 @@ int main(int argc, char* argv[]) {
   auto backend = std::make_unique<quic::MasqueServerBackend>(
       masque_mode, quiche::GetQuicheCommandLineFlag(FLAGS_server_authority),
       quiche::GetQuicheCommandLineFlag(FLAGS_cache_dir));
+
+  backend->SetSignatureAuth(
+      quiche::GetQuicheCommandLineFlag(FLAGS_signature_auth));
+  backend->SetSignatureAuthOnAllRequests(
+      quiche::GetQuicheCommandLineFlag(FLAGS_signature_auth_on_all_requests));
 
   auto server =
       std::make_unique<quic::MasqueServer>(masque_mode, backend.get());

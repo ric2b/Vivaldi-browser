@@ -216,6 +216,24 @@ void SavedpasswordsGetFunction::OnGetPasswordStoreResults(
   Release();
 }
 
+ExtensionFunction::ResponseAction SavedpasswordsCreateDelegateFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  //We only need to create the delegate once.
+  //There is no process for deleting the delegate,
+  // so once it's created it lives until browser shutdown.
+  if (!extensions::PasswordsPrivateDelegateFactory::GetForBrowserContext(
+          profile, false)) {
+    scoped_refptr<extensions::PasswordsPrivateDelegate>*
+        passwords_private_delegate;
+    passwords_private_delegate =
+        new scoped_refptr<extensions::PasswordsPrivateDelegate>;
+    *passwords_private_delegate =
+        extensions::PasswordsPrivateDelegateFactory::GetForBrowserContext(
+            profile, true);
+  }
+  return RespondNow(NoArguments());
+}
+
 ExtensionFunction::ResponseAction SavedpasswordsDeleteFunction::Run() {
   using vivaldi::savedpasswords::Delete::Params;
 

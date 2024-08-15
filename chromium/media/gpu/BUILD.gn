@@ -11,6 +11,7 @@ import("//gpu/vulkan/features.gni")
 import("//media/gpu/args.gni")
 import("//media/media_options.gni")
 import("//testing/test.gni")
+import("//third_party/libgav1/options.gni")
 import("//tools/generate_stubs/rules.gni")
 
 buildflag_header("buildflags") {
@@ -21,17 +22,7 @@ buildflag_header("buildflags") {
     "USE_VAAPI_IMAGE_CODECS=$use_vaapi_image_codecs",
     "USE_V4L2_CODEC=$use_v4l2_codec",
     "USE_LIBV4L2=$use_v4lplugin",
-    "USE_VAAPI_X11=$use_vaapi_x11",
   ]
-}
-
-if (is_android) {
-  generate_stubs("mediacodec_stubs") {
-    extra_header = "android/mediacodec.fragment"
-    sigs = [ "android/mediacodec.sigs" ]
-    output_name = "android/mediacodec_stubs"
-    deps = [ "//base" ]
-  }
 }
 
 component("gpu") {
@@ -58,6 +49,7 @@ component("gpu") {
     "//media/mojo/*",
     "//remoting/codec:encoder",
     "//third_party/blink/renderer/modules:unit_tests",
+    "//third_party/blink/renderer/modules:unit_tests_v2",
     "//ui/gl:gl_unittests",
 
     # TODO(crbug.com/1184041): Remove //remoting/host:common when the usage is removed.
@@ -70,11 +62,12 @@ component("gpu") {
     visibility += [ "//content/common" ]
   }
 
-  defines = [ "MEDIA_GPU_IMPLEMENTATION" ]
-  if (!use_runtime_vlog) {
-    # Enable VLOG(1) when using build time VLOG.
-    defines += [ "ENABLED_VLOG_LEVEL=1" ]
-  }
+  defines = [
+    "MEDIA_GPU_IMPLEMENTATION",
+
+    # Enable VLOG(1) so that they are included in field feedbacks.
+    "ENABLED_VLOG_LEVEL=1",
+  ]
 
   sources = [
     "gpu_video_accelerator_util.cc",
@@ -152,7 +145,6 @@ component("gpu") {
       "android/maybe_render_early_manager.h",
       "android/media_codec_video_decoder.cc",
       "android/media_codec_video_decoder.h",
-      "android/ndk_constants.cc",
       "android/ndk_media_codec_wrapper.cc",
       "android/ndk_media_codec_wrapper.h",
       "android/ndk_video_encode_accelerator.cc",
@@ -178,16 +170,11 @@ component("gpu") {
         "android/ndk_audio_encoder.h",
       ]
     }
-    defines += [
-      # We need to reference functions and constants from NDK API levels
-      # beyond the one Chromium compiles with by default.
-      # Therefore relax the verification of functions and constants.
-      "__ANDROID_UNAVAILABLE_SYMBOLS_ARE_WEAK__",
+    libs += [
+      "aaudio",
+      "mediandk",
     ]
-    libs += [ "android" ]
     deps += [
-      ":mediacodec_stubs",
-
       # TODO(crbug.com/789435): This can be removed once CdmManager is removed.
       "//gpu/ipc/common",
       "//media/mojo:buildflags",
@@ -332,6 +319,10 @@ source_set("common") {
     "h264_decoder.h",
     "h264_dpb.cc",
     "h264_dpb.h",
+    "h264_rate_control_util.cc",
+    "h264_rate_control_util.h",
+    "h264_rate_controller.cc",
+    "h264_rate_controller.h",
     "hrd_buffer.cc",
     "hrd_buffer.h",
     "macros.h",
@@ -393,7 +384,9 @@ source_set("common") {
       "//third_party/libvpx:libvpxrc",
     ]
   }
-  if (use_libgav1_parser) {
+
+  if (use_av1_hw_decoder) {
+    assert(use_libgav1_parser)
     sources += [
       "av1_decoder.cc",
       "av1_decoder.h",
@@ -417,6 +410,14 @@ component("buffer_validation") {
     "//base",
     "//media",
   ]
+
+  if (is_linux || is_chromeos) {
+    deps = [ "//build/config/linux/libdrm" ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//ui/gfx:gfx_switches" ]
+  }
 }
 
 source_set("command_buffer_helper") {
@@ -461,7 +462,10 @@ if (use_v4l2_codec || use_vaapi) {
 
     # vaapi_dmabuf_video_frame_mapper
     if (use_vaapi) {
-      deps += [ "//media/gpu/vaapi" ]
+      deps += [
+        "//media/gpu/vaapi",
+        "//media/gpu/vaapi:common",
+      ]
     }
   }
 
@@ -593,6 +597,8 @@ source_set("unit_tests") {
     "exponential_moving_average_unittest.cc",
     "frame_size_estimator_unittest.cc",
     "h264_decoder_unittest.cc",
+    "h264_rate_control_util_unittest.cc",
+    "h264_rate_controller_unittest.cc",
     "hrd_buffer_unittest.cc",
   ]
   if (enable_hevc_parser_and_hw_decoder) {
@@ -620,7 +626,7 @@ source_set("unit_tests") {
     sources += [ "vp8_decoder_unittest.cc" ]
   }
 
-  if (use_libgav1_parser && media_use_ffmpeg) {
+  if (use_av1_hw_decoder && media_use_ffmpeg) {
     sources += [ "av1_decoder_unittest.cc" ]
     deps += [
       "//build:chromeos_buildflags",
@@ -664,7 +670,7 @@ if (enable_hevc_parser_and_hw_decoder) {
   }
 }
 
-if (use_libgav1_parser) {
+if (use_av1_hw_decoder) {
   fuzzer_test("media_av1_decoder_fuzzer") {
     sources = [ "av1_decoder_fuzzertest.cc" ]
     deps = [

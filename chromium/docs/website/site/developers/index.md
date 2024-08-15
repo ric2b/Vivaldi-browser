@@ -167,8 +167,7 @@ See also: All [How-tos](/developers/how-tos).
     *   Windows-specific issues can be profiled with
                 [UIforETW](https://randomascii.wordpress.com/2015/09/01/xperf-basics-recording-a-trace-the-ultimate-easy-way/)
     *   [Leak Detection](/developers/leak-detection)
-*   [Perf
-            Sheriffing](http://www.chromium.org/developers/tree-sheriffs/perf-sheriffs)
+*   [Perf Sheriffing](/developers/tree-sheriffs/perf-sheriffs)
 
 ### Sync
 

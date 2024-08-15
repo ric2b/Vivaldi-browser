@@ -7,14 +7,18 @@
 #import "app/vivaldi_apptools.h"
 #import "base/ios/ios_util.h"
 #import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
+#import "ios/chrome/browser/ui/bookmarks/home/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -47,13 +51,10 @@ enum class PresentedState {
 }  // namespace
 
 @interface PanelInteractionController ()<HistoryCoordinatorDelegate,
-                                        ReadingListCoordinatorDelegate> {
+                                        ReadingListCoordinatorDelegate,
+                                        BooleanObserver> {
   // The browser panels are presented in.
   Browser* _browser;  // weak
-
-  // The browser state to use, might be different from _currentBrowserState if
-  // it is incognito.
-  ChromeBrowserState* _browserState;  // weak
 
   // The parent controller on top of which the UI needs to be presented.
   __weak UIViewController* _parentController;
@@ -61,6 +62,9 @@ enum class PresentedState {
   NoteInteractionController* _noteInteractionController;
   BookmarksCoordinator* _bookmarksCoordinator;
   ReadingListCoordinator* _readinglistCoordinator;
+
+  /// Pref tracking if bottom omnibox is enabled.
+  PrefBackedBoolean* _bottomOmniboxEnabled;
 }
 
 @property(nonatomic, strong) HistoryCoordinator* historyCoordinator;
@@ -78,6 +82,8 @@ enum class PresentedState {
 @property(nonatomic, readonly, weak) id<ApplicationCommands, BrowserCommands>
     handler;
 
+@property(nonatomic, assign) ToolbarType toolbarType;
+
 // Dismisses the panel browser.  If |urlsToOpen| is not empty, then the user
 // has selected to navigate to those URLs with specified tab mode.
 - (void)dismissPanelBrowserAnimated:(BOOL)animated
@@ -89,11 +95,12 @@ enum class PresentedState {
 @synthesize panelController = _panelController;
 @synthesize currentPresentedState = _currentPresentedState;
 
-- (instancetype)initWithBrowser:(Browser*)browser{
+- (instancetype)initWithBrowser:(Browser*)browser {
   self = [super init];
   if (self) {
     _browser = browser;
     _currentPresentedState = PresentedState::NONE;
+    [self startObservingOmniboxPositionChange];
   }
   return self;
 }
@@ -103,11 +110,17 @@ enum class PresentedState {
 }
 
 - (void)shutdown {
-    _noteInteractionController = nil;
-    // shutdown
-    _historyCoordinator = nil;
-    _bookmarksCoordinator = nil;
-    _readinglistCoordinator = nil;
+  _noteInteractionController = nil;
+  // shutdown
+  _historyCoordinator = nil;
+  _bookmarksCoordinator = nil;
+  _readinglistCoordinator = nil;
+
+  if (_bottomOmniboxEnabled) {
+    [_bottomOmniboxEnabled stop];
+    [_bottomOmniboxEnabled setObserver:nil];
+    _bottomOmniboxEnabled = nil;
+  }
 }
 
 - (void)dismissPanelBrowserAnimated:(BOOL)animated
@@ -127,20 +140,21 @@ enum class PresentedState {
 
   UIViewController* vc;
   if (self.showSidePanel) {
-      SidebarPanelViewController* sidebar =
-        [[SidebarPanelViewController alloc] init];
-      self.tc = [[PanelTransitioningDelegate alloc] init];
-      sidebar.transitioningDelegate = self.tc;
-      self.sidebarPanelController = sidebar;
-      [self.sidebarPanelController
-       setModalPresentationStyle:UIModalPresentationCustom];
-      self.sidebarPanelController.modalInPresentation = NO;
-      vc = self.sidebarPanelController;
+    SidebarPanelViewController* sidebar =
+    [[SidebarPanelViewController alloc] init];
+    self.tc = [[PanelTransitioningDelegate alloc] init];
+    self.tc.toolbarType = self.toolbarType;
+    sidebar.transitioningDelegate = self.tc;
+    self.sidebarPanelController = sidebar;
+    [self.sidebarPanelController
+        setModalPresentationStyle:UIModalPresentationCustom];
+    self.sidebarPanelController.modalInPresentation = NO;
+    vc = self.sidebarPanelController;
   } else {
-      PanelViewController* panelController = [[PanelViewController alloc] init];
-      self.panelController = panelController;
-      [panelController setModalPresentationStyle:UIModalPresentationPageSheet];
-      vc = self.panelController;
+    PanelViewController* panelController = [[PanelViewController alloc] init];
+    self.panelController = panelController;
+    [panelController setModalPresentationStyle:UIModalPresentationPageSheet];
+    vc = self.panelController;
   }
 
   [self initializeNoteInteractionController:vc];
@@ -162,9 +176,9 @@ enum class PresentedState {
   }
 
   if (self.showSidePanel) {
-      [self setupAndPresentiPadPanel:index];
+    [self setupAndPresentiPadPanel:index];
   } else {
-      [self setupAndPresentPhonePanel:index];
+    [self setupAndPresentPhonePanel:index];
   }
   self.currentPresentedState = PresentedState::PANEL_BROWSER;
 }
@@ -216,6 +230,21 @@ enum class PresentedState {
 }
 
 #pragma mark - Private
+- (void)startObservingOmniboxPositionChange {
+  if (!_browser)
+    return;
+
+  if (!_browser->GetBrowserState()->GetPrefs())
+    return;
+
+  _bottomOmniboxEnabled =
+      [[PrefBackedBoolean alloc]
+          initWithPrefService:_browser->GetBrowserState()->GetPrefs()
+                     prefName:prefs::kBottomOmnibox];
+  [_bottomOmniboxEnabled setObserver:self];
+  // Initialize to the correct value.
+  [self booleanDidChange:_bottomOmniboxEnabled];
+}
 
 - (void)showHistory:(UIViewController*)vc
    withSearchString:(NSString*)searchString {
@@ -308,6 +337,14 @@ enum class PresentedState {
   [_readinglistCoordinator stop];
   _readinglistCoordinator.delegate = nil;
   _readinglistCoordinator = nil;
+}
+
+#pragma mark - Boolean Observer
+- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
+  if (observableBoolean == _bottomOmniboxEnabled) {
+    self.toolbarType = _bottomOmniboxEnabled.value ?
+        ToolbarType::kSecondary : ToolbarType::kPrimary;
+  }
 }
 
 @end

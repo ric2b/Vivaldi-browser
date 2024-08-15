@@ -26,15 +26,6 @@ extern const char kEnableChromeCart[];
 BASE_DECLARE_FEATURE(kCommercePriceTracking);
 BASE_DECLARE_FEATURE(kCommercePriceTrackingRegionLaunched);
 
-// Feature flag for Price Tracking chip experiment
-BASE_DECLARE_FEATURE(kCommercePriceTrackingChipExperiment);
-// This indicates the Price Tracking chip experiment variation.
-enum class PriceTrackingChipExperimentVariation {
-  kDefault = 0,
-  kDelayChip = 1,
-  kWithChipIPH = 2
-};
-
 // Price tracking variations for Android.
 constexpr flags_ui::FeatureEntry::FeatureParam
     kCommercePriceTracking_PriceAlerts[] = {
@@ -97,10 +88,9 @@ extern const char kPriceInsightsUseCacheParam[];
 extern const base::FeatureParam<bool> kPriceInsightsUseCache;
 BASE_DECLARE_FEATURE(kPriceTrackingIconColors);
 BASE_DECLARE_FEATURE(kShoppingCollection);
+BASE_DECLARE_FEATURE(kShoppingIconColorVariant);
 BASE_DECLARE_FEATURE(kShoppingList);
 BASE_DECLARE_FEATURE(kShoppingListRegionLaunched);
-BASE_DECLARE_FEATURE(kShoppingListTrackByDefault);
-BASE_DECLARE_FEATURE(kShoppingListWAARestrictionRemoval);
 BASE_DECLARE_FEATURE(kShoppingPageTypes);
 BASE_DECLARE_FEATURE(kShoppingPageTypesRegionLaunched);
 BASE_DECLARE_FEATURE(kShoppingPDPMetrics);
@@ -113,8 +103,8 @@ enum class DiscountDialogAutoPopupBehavior {
   kAlwaysAutoPopup = 1,
   kNoAutoPopup = 2
 };
-BASE_DECLARE_FEATURE(kShowDiscountOnNavigation);
-BASE_DECLARE_FEATURE(kShowDiscountOnNavigationRegionLaunched);
+BASE_DECLARE_FEATURE(kEnableDiscountInfoApi);
+BASE_DECLARE_FEATURE(kEnableDiscountInfoApiRegionLaunched);
 BASE_DECLARE_FEATURE(kDiscountDialogAutoPopupBehaviorSetting);
 extern const char kHistoryClustersBehaviorParam[];
 extern const base::FeatureParam<int> kHistoryClustersBehavior;
@@ -133,9 +123,6 @@ BASE_DECLARE_FEATURE(kDiscountConsentV2);
 
 // Feature flag for exposing commerce hint on Android.
 BASE_DECLARE_FEATURE(kCommerceHintAndroid);
-
-// Feature flag for Merchant Wide promotion.
-BASE_DECLARE_FEATURE(kMerchantWidePromotion);
 
 // Feature flag for Code-based RBD.
 BASE_DECLARE_FEATURE(kCodeBasedRBD);
@@ -386,21 +373,12 @@ extern const base::FeatureParam<bool> kContextualConsentShowOnSRP;
 // Feature params for enabling the cart heuristics improvement on Android.
 extern const char kCommerceHintAndroidHeuristicsImprovementParam[];
 
-// Feature params for merchant wide promotion.
-extern const char kReadyToFetchMerchantWidePromotionParam[];
-extern const base::FeatureParam<bool> kReadyToFetchMerchantWidePromotion;
-
 // Feature params for code-based Rule-based Discount (RBD).
 extern const char kCodeBasedRuleDiscountParam[];
 extern const base::FeatureParam<bool> kCodeBasedRuleDiscount;
 extern const char kCodeBasedRuleDiscountCouponDeletionTimeParam[];
 extern const base::FeatureParam<base::TimeDelta>
     kCodeBasedRuleDiscountCouponDeletionTime;
-
-// CommercePriceTrackingChipExperiment params.
-extern const char kCommercePriceTrackingChipExperimentVariationParam[];
-extern const base::FeatureParam<int>
-    kCommercePriceTrackingChipExperimentVariation;
 
 // Check if a URL belongs to a partner merchant of any type of discount.
 bool IsPartnerMerchant(const GURL& url);

@@ -30,7 +30,7 @@ if (!is_ios) {
 
   _targets = [
     "//chrome/common:version_header",
-    "//components/version_info:generate_version_info",
+    "//base/version_info:generate_version_info",
   ]
 
   if (is_linux && !is_component_build) {
@@ -80,7 +80,7 @@ if (!is_ios) {
 if (is_ios) {
   import("//vivaldi/ios/source_updates.gni")
 
-  update_template_instance("//components/version_info:generate_version_info") {
+  update_template_instance("//base/version_info:generate_version_info") {
     sources += [ vivaldi_version_path ]
     if (!defined(extra_args)) {
       extra_args = []
@@ -98,8 +98,11 @@ if (vivaldi_build_tests) {
   update_template_instance("//chrome/test/data/webui/settings:build") {
     files -= [
       "privacy_page_test.ts",
+      "privacy_guide_fragments_test.ts",
+      "privacy_guide_integration_test.ts",
+      "privacy_guide_page_test.ts",
+      "privacy_guide_test_util.ts",
       "privacy_sandbox_page_test.ts",
-      "privacy_sandbox_test.ts",
     ]
   }
 }

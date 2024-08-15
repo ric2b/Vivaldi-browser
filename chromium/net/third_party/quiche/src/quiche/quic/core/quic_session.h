@@ -11,12 +11,12 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "absl/types/span.h"
 #include "quiche/quic/core/crypto/tls_connection.h"
 #include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
@@ -26,6 +26,7 @@
 #include "quiche/quic/core/legacy_quic_stream_id_manager.h"
 #include "quiche/quic/core/proto/cached_network_parameters_proto.h"
 #include "quiche/quic/core/quic_connection.h"
+#include "quiche/quic/core/quic_constants.h"
 #include "quiche/quic/core/quic_control_frame_manager.h"
 #include "quiche/quic/core/quic_crypto_stream.h"
 #include "quiche/quic/core/quic_datagram_queue.h"
@@ -189,6 +190,7 @@ class QUICHE_EXPORT QuicSession
   void OnServerPreferredAddressAvailable(
       const QuicSocketAddress& /*server_preferred_address*/) override;
   void MaybeBundleOpportunistically() override {}
+  QuicByteCount GetFlowControlSendWindowSize(QuicStreamId id) override;
 
   // QuicStreamFrameDataProducer
   WriteStreamDataResult WriteStreamData(QuicStreamId id,
@@ -304,8 +306,8 @@ class QUICHE_EXPORT QuicSession
 
   // Called by the TLS handshaker when ALPS data is received.
   // Returns an error message if an error has occurred, or nullopt otherwise.
-  virtual absl::optional<std::string> OnAlpsData(const uint8_t* alps_data,
-                                                 size_t alps_length);
+  virtual std::optional<std::string> OnAlpsData(const uint8_t* alps_data,
+                                                size_t alps_length);
 
   // From HandshakerDelegateInterface
   bool OnNewDecryptionKeyAvailable(EncryptionLevel level,
@@ -316,6 +318,7 @@ class QUICHE_EXPORT QuicSession
       EncryptionLevel level, std::unique_ptr<QuicEncrypter> encrypter) override;
   void SetDefaultEncryptionLevel(EncryptionLevel level) override;
   void OnTlsHandshakeComplete() override;
+  void OnTlsHandshakeConfirmed() override {}
   void DiscardOldDecryptionKey(EncryptionLevel level) override;
   void DiscardOldEncryptionKey(EncryptionLevel level) override;
   void NeuterUnencryptedData() override;
@@ -613,7 +616,7 @@ class QUICHE_EXPORT QuicSession
   // Returns the encryption level to send application data.
   EncryptionLevel GetEncryptionLevelToSendApplicationData() const;
 
-  const absl::optional<std::string> user_agent_id() const {
+  const std::optional<std::string> user_agent_id() const {
     return user_agent_id_;
   }
 
@@ -637,7 +640,8 @@ class QUICHE_EXPORT QuicSession
 
   virtual QuicSSLConfig GetSSLConfig() const { return QuicSSLConfig(); }
 
-  // Try converting all pending streams to normal streams.
+  // Start converting all pending streams to normal streams in the same order as
+  // they are created, which may need several event loops to finish.
   void ProcessAllPendingStreams();
 
   const ParsedQuicVersionVector& client_original_supported_versions() const {
@@ -672,6 +676,10 @@ class QUICHE_EXPORT QuicSession
   // streams.
   QuicStream* GetActiveStream(QuicStreamId id) const;
 
+  // Called in the following event loop to reset
+  // |new_incoming_streams_in_current_loop_| and process any pending streams.
+  void OnStreamCountReset();
+
   // Returns the priority type used by the streams in the session.
   QuicPriorityType priority_type() const { return QuicPriorityType::kHttp; }
 
@@ -679,8 +687,10 @@ class QUICHE_EXPORT QuicSession
   using StreamMap =
       absl::flat_hash_map<QuicStreamId, std::unique_ptr<QuicStream>>;
 
+  // Use a linked hash map for pending streams so that they will be processed in
+  // a FIFO order to avoid starvation.
   using PendingStreamMap =
-      absl::flat_hash_map<QuicStreamId, std::unique_ptr<PendingStream>>;
+      quiche::QuicheLinkedHashMap<QuicStreamId, std::unique_ptr<PendingStream>>;
 
   using ClosedStreams = std::vector<std::unique_ptr<QuicStream>>;
 
@@ -802,7 +812,8 @@ class QUICHE_EXPORT QuicSession
   size_t num_draining_streams() const { return num_draining_streams_; }
 
   // How a pending stream is converted to a full QuicStream depends on subclass
-  // implementations. Here as UsesPendingStreamForFrame() returns false, this
+  // implementations. As the default value of max_streams_accepted_per_loop_ is
+  // kMaxQuicStreamCount and UsesPendingStreamForFrame() returns false, this
   // method is not supposed to be called at all.
   virtual QuicStream* ProcessReadUnidirectionalPendingStream(
       PendingStream* /*pending*/) {
@@ -811,7 +822,7 @@ class QUICHE_EXPORT QuicSession
   }
   virtual QuicStream* ProcessBidirectionalPendingStream(
       PendingStream* /*pending*/) {
-    QUICHE_BUG(received unexpected bidirectional pending stream);
+    QUICHE_BUG(received unexpected pending bidirectional stream);
     return nullptr;
   }
 
@@ -846,17 +857,25 @@ class QUICHE_EXPORT QuicSession
 
   // Only called at a server session. Generate a CachedNetworkParameters that
   // can be sent to the client as part of the address token, based on the latest
-  // bandwidth/rtt information. If return absl::nullopt, address token will not
+  // bandwidth/rtt information. If return std::nullopt, address token will not
   // contain the CachedNetworkParameters.
-  virtual absl::optional<CachedNetworkParameters>
+  virtual std::optional<CachedNetworkParameters>
   GenerateCachedNetworkParameters() const {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Debug helper for OnCanWrite. Check that after QuicStream::OnCanWrite(),
   // if stream has buffered data and is not stream level flow control blocked,
   // it has to be in the write blocked list.
   virtual bool CheckStreamWriteBlocked(QuicStream* stream) const;
+
+  // Sets the limit on the maximum number of new streams that can be created in
+  // a single event loop. Any addition stream data will be stored in a
+  // PendingStream until a subsequent event loop.
+  void set_max_streams_accepted_per_loop(
+      QuicStreamCount max_streams_accepted_per_loop) {
+    max_streams_accepted_per_loop_ = max_streams_accepted_per_loop;
+  }
 
  private:
   friend class test::QuicSessionPeer;
@@ -916,7 +935,9 @@ class QUICHE_EXPORT QuicSession
                                          QuicStreamId id) const;
 
   // Process the pending stream if possible.
-  void MaybeProcessPendingStream(PendingStream* pending);
+  // Returns true if more pending streams should be processed afterwards while
+  // iterating through all pending streams.
+  bool MaybeProcessPendingStream(PendingStream* pending);
 
   // Creates or gets pending stream, feeds it with |frame|, and returns the
   // pending stream. Can return NULL, e.g., if the stream ID is invalid.
@@ -938,6 +959,8 @@ class QUICHE_EXPORT QuicSession
   // If the pending stream has been converted to a normal stream, returns a
   // pointer to the new stream; otherwise, returns nullptr.
   QuicStream* ProcessPendingStream(PendingStream* pending);
+
+  bool ExceedsPerLoopStreamLimit() const;
 
   // Keep track of highest received byte offset of locally closed streams, while
   // waiting for a definitive final highest offset from the peer.
@@ -994,7 +1017,7 @@ class QUICHE_EXPORT QuicSession
 
   // Received information for a connection close.
   QuicConnectionCloseFrame on_closed_frame_;
-  absl::optional<ConnectionCloseSource> source_;
+  std::optional<ConnectionCloseSource> source_;
 
   // Used for connection-level flow control.
   QuicFlowController flow_controller_;
@@ -1042,7 +1065,7 @@ class QUICHE_EXPORT QuicSession
   // negotiation was received.
   ParsedQuicVersionVector client_original_supported_versions_;
 
-  absl::optional<std::string> user_agent_id_;
+  std::optional<std::string> user_agent_id_;
 
   // Initialized to false. Set to true when the session has been properly
   // configured and is ready for general operation.
@@ -1055,9 +1078,13 @@ class QUICHE_EXPORT QuicSession
   // creation of new outgoing bidirectional streams.
   bool liveness_testing_in_progress_;
 
-  // If true, then do not send MAX_STREAM frames if there are already two
-  // outstanding. Latched value of flag quic_limit_sending_max_streams.
-  bool limit_sending_max_streams_;
+  // The counter for newly created non-static incoming streams in the current
+  // event loop and gets reset for each event loop.
+  QuicStreamCount new_incoming_streams_in_current_loop_ = 0u;
+  // Default to max stream count so that there is no stream creation limit per
+  // event loop.
+  QuicStreamCount max_streams_accepted_per_loop_ = kMaxQuicStreamCount;
+  std::unique_ptr<QuicAlarm> stream_count_reset_alarm_;
 };
 
 }  // namespace quic

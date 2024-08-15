@@ -51,11 +51,6 @@ const char* const kWebViewCrashKeyAllowList[] = {
     "oop_read_failure",
     "gpu-gl-error-message",
 
-    // components/android_autofill
-    "crbug1479006-form_ token",
-    "crbug1479006-form token",
-    "crbug1479006-manager token",
-
     // components/viz
     "viz_deserialization",
 
@@ -155,10 +150,6 @@ const char* const kWebViewCrashKeyAllowList[] = {
     "seccomp-sigsys",
 
     kWeblayerWebViewCompatMode,
-
-    // Temporary keys for crbug.com/1430313:
-    "db_init_error-diagnostics",
-    "db_init_error-path",
 
     // Used to report switches/feature flags overridden in the DevUI
     "commandline-enabled-feature-*",

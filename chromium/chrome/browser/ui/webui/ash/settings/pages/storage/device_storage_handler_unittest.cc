@@ -230,11 +230,11 @@ class StorageHandlerTest : public testing::Test {
     ASSERT_EQ(expected_size, stat.st_size);
   }
 
-  raw_ptr<StorageHandler, DanglingUntriaged | ExperimentalAsh> handler_;
+  raw_ptr<StorageHandler, DanglingUntriaged> handler_;
   std::unique_ptr<content::TestWebUI> web_ui_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::test::ScopedFeatureList features_;
   std::unique_ptr<TotalDiskSpaceTestAPI> total_disk_space_test_api_;
   std::unique_ptr<FreeDiskSpaceTestAPI> free_disk_space_test_api_;
@@ -244,7 +244,7 @@ class StorageHandlerTest : public testing::Test {
   std::unique_ptr<DriveOfflineSizeTestAPI> drive_offline_size_test_api_;
   std::unique_ptr<CrostiniSizeTestAPI> crostini_size_test_api_;
   std::unique_ptr<OtherUsersSizeTestAPI> other_users_size_test_api_;
-  raw_ptr<MockNewWindowDelegate, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<MockNewWindowDelegate, DanglingUntriaged>
       new_window_delegate_primary_;
 
  private:
@@ -610,7 +610,7 @@ TEST_F(StorageHandlerTest, SystemSize) {
       std::vector<int64_t>{200 * GB, 50 * GB, 50 * GB};
   other_users_size_test_api_->InitializeOtherUserSize(other_user_sizes.size());
   for (std::size_t i = 0; i < other_user_sizes.size(); i++) {
-    absl::optional<::user_data_auth::GetAccountDiskUsageReply> reply =
+    std::optional<::user_data_auth::GetAccountDiskUsageReply> reply =
         ::user_data_auth::GetAccountDiskUsageReply();
     reply->set_size(other_user_sizes[i]);
     other_users_size_test_api_->SimulateOnGetOtherUserSize(reply);

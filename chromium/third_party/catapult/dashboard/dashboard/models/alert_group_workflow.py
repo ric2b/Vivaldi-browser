@@ -730,6 +730,15 @@ class AlertGroupWorkflow:
       cc = list(set(e for s in subscriptions for e in s.bug_cc_emails))
       labels = list(set(l for s in subscriptions for l in s.bug_labels))
 
+    if any(r for r in regressions if r.source and r.source == 'skia'):
+      # If any priority is specified in the labels, let's remove it
+      # since we want the skia bugs to be low priority.
+      for l in labels:
+        if l.startswith('Pri-'):
+          labels.remove(l)
+      labels.append('DoNotNotify')
+      labels.append('Pri-3')
+
     labels.append('Chromeperf-Auto-Triaged')
     # We layer on some default labels if they don't conflict with any of the
     # provided ones.
@@ -1007,9 +1016,12 @@ class AlertGroupWorkflow:
       return None, []
 
     auto_triage_regressions = []
+    masters = set()
     for r in regressions:
       if r.auto_triage_enable:
         auto_triage_regressions.append(r)
+      if r.master_name:
+        masters.add(r.master_name)
 
     logging.info('auto_triage_enabled due to %s', auto_triage_regressions)
     template_args = self._GetTemplateArgs(regressions)
@@ -1022,18 +1034,18 @@ class AlertGroupWorkflow:
 
     try:
       # Add the public url only if at least one of the anomalies in the group are public
-      if any(not r.internal_only for r in regressions):
-        skia_url_public = skia_helper.GetSkiaUrlForAlertGroup(
-            self._group.key.string_id(), False, self._group.project_id)
-        template_args['skia_url_text_public'] = skia_url_public
+      if any(not r.test.get().internal_only for r in regressions):
+        skia_urls_public = skia_helper.GetSkiaUrlsForAlertGroup(
+            self._group.key.string_id(), False, list(masters))
+        template_args['skia_urls_text_public'] = skia_urls_public
     except Exception:  #pylint: disable=broad-except
-      template_args['skia_url_text_public'] = ''
+      template_args['skia_urls_text_public'] = None
     try:
-      skia_url_internal = skia_helper.GetSkiaUrlForAlertGroup(
-          self._group.key.string_id(), True, self._group.project_id)
-      template_args['skia_url_text_internal'] = skia_url_internal
+      skia_urls_internal = skia_helper.GetSkiaUrlsForAlertGroup(
+          self._group.key.string_id(), True, list(masters))
+      template_args['skia_urls_text_internal'] = skia_urls_internal
     except Exception:  # pylint: disable=broad-except
-      template_args['skia_url_text_internal'] = ''
+      template_args['skia_urls_text_internal'] = None
 
     # Rendering issue's title and content
     title = _TEMPLATE_ISSUE_TITLE.render(template_args)
@@ -1106,12 +1118,17 @@ class AlertGroupWorkflow:
     # 2. has a valid bug_id
     # 3. hasn't start a bisection
     # 4. is not a summary metric (has story)
-    regressions = [
-        r for r in regressions or []
-        if (r.auto_bisect_enable and r.bug_id > 0
-            and not set(r.pinpoint_bisects) & set(self._group.bisection_ids)
-            and r.test.get().unescaped_story_name)
-    ]
+    filtered_regressions = []
+    for r in regressions:
+      if not r.bug_id:
+        logging.error('No bug_id found in anomaly %s', r.key.id())
+        continue
+      if (r.auto_bisect_enable and r.bug_id > 0
+          and not set(r.pinpoint_bisects) & set(self._group.bisection_ids)
+          and r.test.get().unescaped_story_name):
+        filtered_regressions.append(r)
+    regressions = filtered_regressions
+
     if not regressions:
       return None
 

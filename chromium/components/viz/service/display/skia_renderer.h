@@ -160,8 +160,10 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
       const DrawQuad* quad,
       const gfx::QuadF* draw_region) const;
 
-  DrawRPDQParams CalculateRPDQParams(const AggregatedRenderPassDrawQuad* quad,
-                                     const DrawQuadParams* params);
+  DrawRPDQParams CalculateRPDQParams(
+      const gfx::AxisTransform2d& target_to_device,
+      const AggregatedRenderPassDrawQuad* quad,
+      const DrawQuadParams* params);
   // Modifies |params| and |rpdq_params| to apply correctly when drawing the
   // RenderPass directly via |bypass_quad|.
   BypassMode CalculateBypassParams(const DrawQuad* bypass_quad,
@@ -269,6 +271,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
       absl::optional<uint32_t> src_bit_depth,
       absl::optional<gfx::HDRMetadata> src_hdr_metadata,
       const gfx::ColorSpace& dst,
+      bool is_video_frame,
       float resource_offset = 0.0f,
       float resource_multiplier = 1.0f);
   // Returns the color filter that should be applied to the current canvas.
@@ -342,7 +345,8 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
       render_pass_backings_;
   sk_sp<SkColorSpace> RenderPassBackingSkColorSpace(
       const RenderPassBacking& backing) {
-    return backing.color_space.ToSkColorSpace(CurrentFrameSDRWhiteLevel());
+    return backing.color_space.GetWithSdrWhiteLevel(CurrentFrameSDRWhiteLevel())
+        .ToSkColorSpace();
   }
 
   // Interface used for drawing. Common among different draw modes.

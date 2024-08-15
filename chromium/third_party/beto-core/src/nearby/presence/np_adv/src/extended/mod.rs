@@ -31,7 +31,10 @@ pub const BLE_ADV_SVC_CONTENT_LEN: usize = 254
     - 2;
 
 /// Maximum number of sections in an advertisement
-pub const NP_V1_ADV_MAX_SECTION_COUNT: usize = 8;
+pub const NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT: usize = 8;
+
+/// Maximum number of public sections in an advertisement
+pub const NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT: usize = 1;
 
 /// Maximum size of a NP section, including its header byte
 pub const NP_ADV_MAX_SECTION_LEN: usize = BLE_ADV_SVC_CONTENT_LEN
@@ -53,8 +56,8 @@ impl DeLength {
     /// A convenient constant for zero length.
     pub const ZERO: DeLength = DeLength { len: 0 };
 
-    fn as_usize(&self) -> usize {
-        self.len as usize
+    fn as_u8(&self) -> u8 {
+        self.len
     }
 }
 
@@ -62,7 +65,7 @@ impl TryFrom<u8> for DeLength {
     type Error = DeLengthOutOfRange;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
-        if value as usize <= MAX_DE_LEN {
+        if usize::from(value) <= MAX_DE_LEN {
             Ok(Self { len: value })
         } else {
             Err(DeLengthOutOfRange {})

@@ -55,8 +55,6 @@ public:
 
     GrGLGpu* gpu() const { return fGpu; }
 
-    SkSL::Compiler* shaderCompiler() const override;
-
 private:
     GrGLProgramBuilder(GrGLGpu*, const GrProgramDesc&, const GrProgramInfo&);
 
@@ -65,6 +63,7 @@ private:
                                  GrGLuint programId,
                                  GrGLenum type,
                                  SkTDArray<GrGLuint>* shaderIds,
+                                 bool shaderWasCached,
                                  GrContextOptions::ShaderErrorHandler* errorHandler);
 
     void computeCountsAndStrides(GrGLuint programID,

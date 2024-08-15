@@ -33,6 +33,6 @@ the system. These records consist of the following information:
     the entry fields using a private salt provided by every vendor. This field
     is used to validate the entry data and to prevent abuse.
 
-If Chrome detects a [security
-incident](https://www.google.ca/chrome/browser/privacy/whitepaper.html#malware),
-some of this data may be reported as part of its environmental data collection.
+If Chrome detects a security incident, some of this data may be reported as part
+of its environmental data collection.
+[Learn more](https://support.google.com/chrome/answer/13844634).

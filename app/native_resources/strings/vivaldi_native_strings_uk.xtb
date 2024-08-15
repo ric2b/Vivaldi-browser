@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Вставити</translation>
 <translation id="4005270918754737597">Пропустити цю версію</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">Не показувати знову</translation>
 <translation id="4074744496918018786">Відкрити зображення в анонімному вікні</translation>
 <translation id="410351446219883937">Автовідтворення</translation>
 <translation id="4281844954008187215">Умови використання</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Відкрити зображення у новому вікні</translation>
 <translation id="5656371807944747581">Помилка оновлення!</translation>
-<translation id="5716238312826274098">Вимкнення сповіщень</translation>
 <translation id="5732584064771442623">Доступна версія Vivaldi <ph name="NEW_VERSION" /> (у вас встановлено <ph name="OLD_VERSION" />). Бажаєте завантажити зараз?</translation>
 <translation id="5770433027661640693">Краєвид 10</translation>
 <translation id="5857090052475505287">Нова тека</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Сталася помилка запуску інсталятора. Перевірте наявність вільного місця та пам'яті та спробуйте ще раз.</translation>
 <translation id="7658239707568436148">Скасувати</translation>
-<translation id="7715497554424665066">Ігнорувати оновлення</translation>
 <translation id="7724603315864178912">Вирізати</translation>
 <translation id="7727481996062361502">Перевірка оновлення...</translation>
 <translation id="7793738202466490491">Додати у ролі події календаря</translation>
@@ -168,7 +165,7 @@
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>
 <translation id="8651348004684669199">Додати активну вкладку</translation>
 <translation id="8669345741879513971">Монстр 10</translation>
-<translation id="867544375504146191">Yandex</translation>
+<translation id="867544375504146191">Яндекс</translation>
 <translation id="8689295374912158752">Перевірити документ-портали</translation>
 <translation id="8768970203213061953">Краєвид 14</translation>
 <translation id="8773635261052182196">Ви більше не будете отримувати повідомлення. Ви можете включити їх в налаштуваннях Vivaldi.</translation>

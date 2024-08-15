@@ -19,6 +19,7 @@
 #include "fxjs/fx_date_helpers.h"
 #include "fxjs/fxv8.h"
 #include "third_party/base/check.h"
+#include "third_party/base/containers/span.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
@@ -59,14 +60,14 @@ double JS_DateParse(v8::Isolate* pIsolate, const WideString& str) {
   return isfinite(date) ? FX_LocalTime(date) : date;
 }
 
-std::vector<v8::Local<v8::Value>> ExpandKeywordParams(
+v8::LocalVector<v8::Value> ExpandKeywordParams(
     CJS_Runtime* pRuntime,
-    const std::vector<v8::Local<v8::Value>>& originals,
+    pdfium::span<v8::Local<v8::Value>> originals,
     size_t nKeywords,
     ...) {
   DCHECK(nKeywords);
 
-  std::vector<v8::Local<v8::Value>> result(nKeywords, v8::Local<v8::Value>());
+  v8::LocalVector<v8::Value> result(pRuntime->GetIsolate(), nKeywords);
   size_t size = std::min(originals.size(), nKeywords);
   for (size_t i = 0; i < size; ++i)
     result[i] = originals[i];

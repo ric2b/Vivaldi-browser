@@ -320,19 +320,21 @@ class MyActivity(object):
     def filter_modified_monorail_issue(self, issue):
         """Precisely checks if an issue has been modified in the time range.
 
-    This fetches all issue comments to check if the issue has been modified in
-    the time range specified by user. This is needed because monorail only
-    allows filtering by last updated and published dates, which is not
-    sufficient to tell whether a given issue has been modified at some specific
-    time range. Any update to the issue is a reported as comment on Monorail.
+        This fetches all issue comments to check if the issue has been modified
+        in the time range specified by user. This is needed because monorail
+        only allows filtering by last updated and published dates, which is not
+        sufficient to tell whether a given issue has been modified at some
+        specific time range. Any update to the issue is a reported as comment
+        on Monorail.
 
-    Args:
-      issue: Issue dict as returned by monorail_query_issues method. In
-          particular, must have a key 'uid' formatted as 'project:issue_id'.
+        Args:
+            issue: Issue dict as returned by monorail_query_issues method. In
+                particular, must have a key 'uid' formatted as
+                'project:issue_id'.
 
-    Returns:
-      Passed issue if modified, None otherwise.
-    """
+        Returns:
+            Passed issue if modified, None otherwise.
+        """
         http = self.monorail_get_auth_http()
         project, issue_id = issue['uid'].split(':')
         url = ('https://monorail-prod.appspot.com/_ah/api/monorail/v1/projects'

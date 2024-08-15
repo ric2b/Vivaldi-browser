@@ -8,7 +8,7 @@ import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as Models from '../models/models.js';
-import * as Actions from '../recorder-actions.js';  // eslint-disable-line rulesdir/es_modules_import
+import * as Actions from '../recorder-actions/recorder-actions.js';
 
 import recordingListViewStyles from './recordingListView.css.js';
 
@@ -165,12 +165,7 @@ export class RecordingListView extends HTMLElement {
                 recording.storageName,
               )} @click=${this.#onOpenClick.bind(this, recording.storageName)}>
                     <div class="icon">
-                      <${IconButton.Icon.Icon.litTagName} .data=${
-                        {
-                          iconName: 'flow',
-                          color: 'var( --sys-color-primary)',
-                        } as IconButton.Icon.IconData
-                      }>
+                      <${IconButton.Icon.Icon.litTagName} name="flow">
                       </${IconButton.Icon.Icon.litTagName}>
                     </div>
                     <div class="title">${recording.name}</div>

@@ -10,6 +10,10 @@
 #import "base/strings/strcat.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/lens_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
+#import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/whats_new/data_source/whats_new_data_source.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_mediator_consumer.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
@@ -21,7 +25,6 @@
 @interface WhatsNewMediator ()
 
 @property(nonatomic, strong) NSMutableArray<WhatsNewItem*>* chromeTipEntries;
-@property(nonatomic, strong) WhatsNewItem* useChromeByDefaultEntry;
 
 @end
 
@@ -36,11 +39,6 @@
     // Serialize What's New Chrome Tips
     self.chromeTipEntries = [[NSMutableArray alloc] init];
     for (WhatsNewItem* item in WhatsNewChromeTipEntries(WhatsNewFilePath())) {
-      // Save use chrome by default entry separately.
-      if (item.type == WhatsNewType::kUseChromeByDefault) {
-        self.useChromeByDefaultEntry = item;
-        continue;
-      }
       [self.chromeTipEntries addObject:item];
     }
   }
@@ -67,16 +65,23 @@
       break;
     case WhatsNewPrimaryAction::kPrivacySettings:
       // Handles actions that open privacy in Chrome settings.
-      [self.handler
+      [self.applicationHandler
           showPrivacySettingsFromViewController:self.baseViewController];
       break;
     case WhatsNewPrimaryAction::kChromeSettings:
       // Handles actions that open Chrome Settings.
-      [self.handler showSettingsFromViewController:self.baseViewController];
+      [self.applicationHandler
+          showSettingsFromViewController:self.baseViewController];
       break;
     case WhatsNewPrimaryAction::kIOSSettingsPasswords:
       // Handles actions that open Passwords in iOS Settings.
       ios::provider::PasswordsInOtherAppsOpensSettings();
+      break;
+    case WhatsNewPrimaryAction::kLens:
+      // Handles actions that open Lens.
+      // TODO(crbug.com/1502927): Add the Lens promo that contains the
+      // button that triggers the Lens action.
+      [self openLens];
       break;
     case WhatsNewPrimaryAction::kNoAction:
     case WhatsNewPrimaryAction::kError:
@@ -94,7 +99,7 @@
 }
 
 - (void)didTapInstructions:(WhatsNewType)type {
-  const char* type_str = WhatsNewTypeToStringM116(type);
+  const char* type_str = WhatsNewTypeToString(type);
   if (!type_str) {
     return;
   }
@@ -128,18 +133,11 @@
 
 #pragma mark Private
 
-// Returns a `WhatsNewItem` representing a highlighted chrome tip. By default,
-// it will be the `WhatsNewType::kUseChromeByDefault` otherwise it will choose a
-// random chrome tip.
+// Returns a `WhatsNewItem` representing a highlighted chrome tip.
 - (WhatsNewItem*)whatsNewChromeTipItem {
-  // Return a random chrome tip if chrome is already the default browser or if
-  // What's New M116 is enabled.
-  if (IsChromeLikelyDefaultBrowser() || IsWhatsNewM116Enabled()) {
-    int entryIndex = arc4random_uniform(self.chromeTipEntries.count);
-    return self.chromeTipEntries[entryIndex];
-  }
-
-  return self.useChromeByDefaultEntry;
+  // Return a random chrome tip.
+  int entryIndex = arc4random_uniform(self.chromeTipEntries.count);
+  return self.chromeTipEntries[entryIndex];
 }
 
 // Returns an Array of `WhatsNewItem` features.
@@ -153,6 +151,19 @@
                 openURL:[NSURL URLWithString:UIApplicationOpenSettingsURLString]
                 options:{}
       completionHandler:nil];
+}
+
+// Called to opens Lens.
+- (void)openLens {
+  // Dismiss the What's New modal since Lens must be displayed in a fullscreen
+  // modal.
+  [self.browserCoordinatorHandler dismissWhatsNew];
+  OpenLensInputSelectionCommand* command = [[OpenLensInputSelectionCommand
+      alloc]
+          initWithEntryPoint:LensEntrypoint::WhatsNewPromo
+           presentationStyle:LensInputSelectionPresentationStyle::SlideFromRight
+      presentationCompletion:nil];
+  [self.lensHandler openLensInputSelection:command];
 }
 
 // Update the consumer with What's New items.

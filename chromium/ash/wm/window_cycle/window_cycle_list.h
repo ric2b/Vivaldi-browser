@@ -36,7 +36,7 @@ using WindowCyclingDirection = WindowCycleController::WindowCyclingDirection;
 class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
                                    public display::DisplayObserver {
  public:
-  using WindowList = std::vector<aura::Window*>;
+  using WindowList = std::vector<raw_ptr<aura::Window, VectorExperimental>>;
 
   WindowCycleList(const WindowList& windows, bool same_app_only);
   WindowCycleList(const WindowCycleList&) = delete;
@@ -84,21 +84,21 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
 
   // Returns true if during keyboard navigation, alt-tab focuses the tab slider
   // instead of cycle window.
-  bool IsTabSliderFocused();
+  bool IsTabSliderFocused() const;
 
   // Checks whether |event| occurs within the cycle view. Returns false if
   // |cycle_view_| does not exist.
-  bool IsEventInCycleView(const ui::LocatedEvent* event);
+  bool IsEventInCycleView(const ui::LocatedEvent* event) const;
 
   // Returns the window for the preview item located at |event|. Returns nullptr
   // if |event| not in cycle view or if |cycle_view_| does not exist.
   aura::Window* GetWindowAtPoint(const ui::LocatedEvent* event);
 
   // Returns whether or not the event is located in tab slider container.
-  bool IsEventInTabSliderContainer(const ui::LocatedEvent* event);
+  bool IsEventInTabSliderContainer(const ui::LocatedEvent* event) const;
 
   // Returns true if the window list overlay should be shown.
-  bool ShouldShowUi();
+  bool ShouldShowUi() const;
 
   // Updates the tab slider mode UI when alt-tab mode in user prefs changes.
   void OnModePrefsChanged();
@@ -157,9 +157,8 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
   // |windows_|.
   int GetIndexOfWindow(aura::Window* window) const;
 
-  // Returns the number of items to be cycled in the window cycle list with the
-  // existence of snap groups for all desks.
-  int GetNumberOfCycleItemsAllDesks() const;
+  // Returns the number of windows in the window cycle list for all desks.
+  int GetNumberOfWindowsAllDesks() const;
 
   // Computes and reports the number of non-same-app windows skipped metric if
   // `same_app_only_`. This must be called from the destructor before the call
@@ -188,10 +187,10 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
 
   // The top level View for the window cycle UI. May be null if the UI is not
   // showing.
-  raw_ptr<WindowCycleView, ExperimentalAsh> cycle_view_ = nullptr;
+  raw_ptr<WindowCycleView> cycle_view_ = nullptr;
 
   // The widget that hosts the window cycle UI.
-  raw_ptr<views::Widget, ExperimentalAsh> cycle_ui_widget_ = nullptr;
+  raw_ptr<views::Widget> cycle_ui_widget_ = nullptr;
 
   // The window list will dismiss if the display metrics change.
   display::ScopedDisplayObserver display_observer_{this};
@@ -205,8 +204,7 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
 
   // Tracks what window was active when starting to cycle and used to determine
   // if alt-tab should focus the first or the second window in the list.
-  raw_ptr<aura::Window, ExperimentalAsh> active_window_before_window_cycle_ =
-      nullptr;
+  raw_ptr<aura::Window> active_window_before_window_cycle_ = nullptr;
 
   // The most recent direction `Step()` was called with.
   WindowCyclingDirection last_cycling_direction_;

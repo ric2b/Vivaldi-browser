@@ -135,6 +135,9 @@ class V8_EXPORT V8_NODISCARD HandleScope {
   internal::Isolate* i_isolate_;
   internal::Address* prev_next_;
   internal::Address* prev_limit_;
+#ifdef V8_ENABLE_CHECKS
+  int scope_level_ = 0;
+#endif
 
   // LocalBase<T>::New uses CreateHandle with an Isolate* parameter.
   template <typename T>
@@ -155,7 +158,7 @@ class V8_EXPORT V8_NODISCARD HandleScope {
 #ifdef V8_ENABLE_DIRECT_LOCAL
 
 template <typename T>
-class LocalBase : public DirectHandleBase {
+class LocalBase : public api_internal::DirectHandleBase {
  protected:
   template <class F>
   friend class Local;
@@ -184,7 +187,7 @@ class LocalBase : public DirectHandleBase {
 #else  // !V8_ENABLE_DIRECT_LOCAL
 
 template <typename T>
-class LocalBase : public IndirectHandleBase {
+class LocalBase : public api_internal::IndirectHandleBase {
  protected:
   template <class F>
   friend class Local;
@@ -245,14 +248,18 @@ class LocalBase : public IndirectHandleBase {
  * to these values as to their handles.
  */
 template <class T>
-class Local : public LocalBase<T> {
+class V8_TRIVIAL_ABI Local : public LocalBase<T>,
+#ifdef V8_ENABLE_LOCAL_OFF_STACK_CHECK
+                             public api_internal::StackAllocated<true>
+#else
+                             public api_internal::StackAllocated<false>
+#endif
+{
  public:
-  V8_INLINE Local() : LocalBase<T>() { VerifyOnStack(); }
+  V8_INLINE Local() = default;
 
   template <class S>
   V8_INLINE Local(Local<S> that) : LocalBase<T>(that) {
-    VerifyOnStack();
-
     /**
      * This check fails when trying to convert between incompatible
      * handles. For example, converting from a Local<String> to a
@@ -371,6 +378,7 @@ class Local : public LocalBase<T> {
   friend Local<Boolean> False(Isolate* isolate);
   friend class HandleScope;
   friend class EscapableHandleScope;
+  friend class InternalEscapableScope;
   template <class F1, class F2, class F3>
   friend class PersistentValueMapBase;
   template <class F1, class F2>
@@ -384,15 +392,13 @@ class Local : public LocalBase<T> {
   friend class debug::ConsoleCallArguments;
   friend class internal::LocalUnchecked<T>;
 
-  struct no_checking_tag {};
+  explicit Local(no_checking_tag do_not_check)
+      : LocalBase<T>(), StackAllocated(do_not_check) {}
+  explicit Local(const Local<T>& other, no_checking_tag do_not_check)
+      : LocalBase<T>(other), StackAllocated(do_not_check) {}
 
-  explicit Local(no_checking_tag) : LocalBase<T>() {}
-  explicit Local(const Local<T>& other, no_checking_tag)
+  V8_INLINE explicit Local<T>(const LocalBase<T>& other)
       : LocalBase<T>(other) {}
-
-  V8_INLINE explicit Local<T>(const LocalBase<T>& other) : LocalBase<T>(other) {
-    VerifyOnStack();
-  }
 
   V8_INLINE static Local<T> FromSlot(internal::Address* slot) {
     return Local<T>(LocalBase<T>::FromSlot(slot));
@@ -417,30 +423,27 @@ class Local : public LocalBase<T> {
   V8_INLINE Local<S> UnsafeAs() const {
     return Local<S>(LocalBase<S>(*this));
   }
-
-  void VerifyOnStack() const {
-#ifdef V8_ENABLE_LOCAL_OFF_STACK_CHECK
-    internal::HandleHelper::VerifyOnStack(this);
-#endif
-  }
 };
 
 namespace internal {
 // A local variant that is suitable for off-stack allocation.
 // Used internally by LocalVector<T>. Not to be used directly!
 template <typename T>
-class LocalUnchecked : public Local<T> {
+class V8_TRIVIAL_ABI LocalUnchecked : public Local<T> {
  public:
-  LocalUnchecked() : Local<T>(do_not_check) {}
-  LocalUnchecked(const LocalUnchecked& other) : Local<T>(other, do_not_check) {}
+  LocalUnchecked() : Local<T>(Local<T>::do_not_check) {}
+
+#if defined(V8_ENABLE_LOCAL_OFF_STACK_CHECK) && V8_HAS_ATTRIBUTE_TRIVIAL_ABI
+  // In this case, the check is also enforced in the copy constructor and we
+  // need to suppress it.
+  LocalUnchecked(const LocalUnchecked& other)
+      : Local<T>(other, Local<T>::do_not_check) {}
   LocalUnchecked& operator=(const LocalUnchecked&) = default;
+#endif
 
   // Implicit conversion from Local.
   LocalUnchecked(const Local<T>& other)  // NOLINT(runtime/explicit)
-      : Local<T>(other, do_not_check) {}
-
- private:
-  static constexpr typename Local<T>::no_checking_tag do_not_check{};
+      : Local<T>(other, Local<T>::do_not_check) {}
 };
 
 #ifdef V8_ENABLE_DIRECT_LOCAL
@@ -643,29 +646,79 @@ class MaybeLocal {
     return IsEmpty() ? default_value : Local<S>(local_);
   }
 
+  /**
+   * Cast a handle to a subclass, e.g. MaybeLocal<Value> to MaybeLocal<Object>.
+   * This is only valid if the handle actually refers to a value of the target
+   * type.
+   */
+  template <class S>
+  V8_INLINE static MaybeLocal<T> Cast(MaybeLocal<S> that) {
+#ifdef V8_ENABLE_CHECKS
+    // If we're going to perform the type check then we have to check
+    // that the handle isn't empty before doing the checked cast.
+    if (that.IsEmpty()) return MaybeLocal<T>();
+    T::Cast(that.local_.template value<S>());
+#endif
+    return MaybeLocal<T>(that.local_);
+  }
+
+  /**
+   * Calling this is equivalent to MaybeLocal<S>::Cast().
+   * In particular, this is only valid if the handle actually refers to a value
+   * of the target type.
+   */
+  template <class S>
+  V8_INLINE MaybeLocal<S> As() const {
+    return MaybeLocal<S>::Cast(*this);
+  }
+
  private:
   Local<T> local_;
+
+  template <typename S>
+  friend class MaybeLocal;
 };
 
 /**
  * A HandleScope which first allocates a handle in the current scope
  * which will be later filled with the escape value.
  */
-class V8_EXPORT V8_NODISCARD EscapableHandleScope : public HandleScope {
+class V8_EXPORT V8_NODISCARD EscapableHandleScopeBase : public HandleScope {
  public:
-  explicit EscapableHandleScope(Isolate* isolate);
-  V8_INLINE ~EscapableHandleScope() = default;
+  explicit EscapableHandleScopeBase(Isolate* isolate);
+  V8_INLINE ~EscapableHandleScopeBase() = default;
 
+  EscapableHandleScopeBase(const EscapableHandleScopeBase&) = delete;
+  void operator=(const EscapableHandleScopeBase&) = delete;
+  void* operator new(size_t size) = delete;
+  void* operator new[](size_t size) = delete;
+  void operator delete(void*, size_t) = delete;
+  void operator delete[](void*, size_t) = delete;
+
+ protected:
   /**
    * Pushes the value into the previous scope and returns a handle to it.
    * Cannot be called twice.
    */
+  internal::Address* EscapeSlot(internal::Address* escape_value);
+
+ private:
+  internal::Address* escape_slot_;
+};
+
+class V8_EXPORT V8_NODISCARD EscapableHandleScope
+    : public EscapableHandleScopeBase {
+ public:
+  explicit EscapableHandleScope(Isolate* isolate)
+      : EscapableHandleScopeBase(isolate) {}
+  V8_INLINE ~EscapableHandleScope() = default;
   template <class T>
   V8_INLINE Local<T> Escape(Local<T> value) {
 #ifdef V8_ENABLE_DIRECT_LOCAL
     return value;
 #else
-    return Local<T>::FromSlot(Escape(value.slot()));
+    if (value.IsEmpty()) return value;
+    return Local<T>::FromSlot(EscapeSlot(value.slot()));
 #endif
   }
 
@@ -673,20 +726,6 @@ class V8_EXPORT V8_NODISCARD EscapableHandleScope : public HandleScope {
   V8_INLINE MaybeLocal<T> EscapeMaybe(MaybeLocal<T> value) {
     return Escape(value.FromMaybe(Local<T>()));
   }
-
-  EscapableHandleScope(const EscapableHandleScope&) = delete;
-  void operator=(const EscapableHandleScope&) = delete;
-
- private:
-  // Declaring operator new and delete as deleted is not spec compliant.
-  // Therefore declare them private instead to disable dynamic alloc
-  void* operator new(size_t size);
-  void* operator new[](size_t size);
-  void operator delete(void*, size_t);
-  void operator delete[](void*, size_t);
-
-  internal::Address* Escape(internal::Address* escape_value);
-  internal::Address* escape_slot_;
 };
 
 /**
@@ -701,15 +740,12 @@ class V8_EXPORT V8_NODISCARD SealHandleScope {
 
   SealHandleScope(const SealHandleScope&) = delete;
   void operator=(const SealHandleScope&) = delete;
+  void* operator new(size_t size) = delete;
+  void* operator new[](size_t size) = delete;
+  void operator delete(void*, size_t) = delete;
+  void operator delete[](void*, size_t) = delete;
 
  private:
-  // Declaring operator new and delete as deleted is not spec compliant.
-  // Therefore declare them private instead to disable dynamic alloc
-  void* operator new(size_t size);
-  void* operator new[](size_t size);
-  void operator delete(void*, size_t);
-  void operator delete[](void*, size_t);
-
   internal::Isolate* const i_isolate_;
   internal::Address* prev_limit_;
   int prev_sealed_level_;

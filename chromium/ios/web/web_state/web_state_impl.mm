@@ -28,10 +28,6 @@
 #import "net/base/mac/url_conversions.h"
 #import "url/gurl.h"
 
-// To get access to UseSessionSerializationOptimizations().
-// TODO(crbug.com/1383087): remove once the feature is fully launched.
-#import "ios/web/common/features.h"
-
 namespace web {
 namespace {
 
@@ -51,9 +47,16 @@ void CheckForOverRealization() {
   if ((now - g_last_creation_time) < kWindowSize) {
     g_last_realized_count++;
     if (g_last_realized_count >= kMaxEvents) {
-      base::debug::DumpWithoutCrashing();
       g_has_reported_once = true;
-      NOTREACHED();
+      // Don't use an assertion primitive (e.g. NOTREACHED) because
+      // sometimes this is not detected until stable release, and while
+      // this is a memory and performance regression, this does not need
+      // to be fatal for official.
+#if defined(OFFICIAL_BUILD)
+      base::debug::DumpWithoutCrashing();
+#else
+      base::ImmediateCrash();
+#endif  // defined(OFFICIAL_BUILD)
     }
   } else {
     g_last_creation_time = now;
@@ -109,7 +112,6 @@ WebStateImpl::WebStateImpl(const CreateParams& params) {
 
 WebStateImpl::WebStateImpl(const CreateParams& params,
                            CRWSessionStorage* session_storage) {
-  DCHECK(!features::UseSessionSerializationOptimizations());
   AddWebStateImplMarker();
 
   // Restore the serializable user data as user code may depend on accessing
@@ -141,7 +143,6 @@ WebStateImpl::WebStateImpl(BrowserState* browser_state,
                            proto::WebStateMetadataStorage metadata,
                            WebStateStorageLoader storage_loader,
                            NativeSessionFetcher session_fetcher) {
-  DCHECK(features::UseSessionSerializationOptimizations());
   AddWebStateImplMarker();
 
   saved_ = std::make_unique<SerializedData>(
@@ -351,8 +352,10 @@ void WebStateImpl::SendChangeLoadProgress(double progress) {
 }
 
 void WebStateImpl::ShowRepostFormWarningDialog(
+    FormWarningType warning_type,
     base::OnceCallback<void(bool)> callback) {
-  RealizedState()->ShowRepostFormWarningDialog(std::move(callback));
+  RealizedState()->ShowRepostFormWarningDialog(warning_type,
+                                               std::move(callback));
 }
 
 void WebStateImpl::RunJavaScriptAlertDialog(const GURL& origin_url,
@@ -418,14 +421,15 @@ void WebStateImpl::RemoveAllWebFrames() {
 
 void WebStateImpl::RequestPermissionsWithDecisionHandler(
     NSArray<NSNumber*>* permissions,
+    const GURL& origin,
     PermissionDecisionHandler handler) {
-  RealizedState()->RequestPermissionsWithDecisionHandler(permissions, handler);
+  RealizedState()->RequestPermissionsWithDecisionHandler(permissions, origin,
+                                                         handler);
 }
 
 #pragma mark - WebState implementation
 
 void WebStateImpl::SerializeToProto(proto::WebStateStorage& storage) const {
-  DCHECK(features::UseSessionSerializationOptimizations());
   DCHECK(IsRealized());
   pimpl_->SerializeToProto(storage);
 }
@@ -598,7 +602,6 @@ WebStateImpl::GetSessionCertificatePolicyCache() {
 }
 
 CRWSessionStorage* WebStateImpl::BuildSessionStorage() const {
-  DCHECK(!features::UseSessionSerializationOptimizations());
   CRWSessionStorage* session_storage = nil;
   if (LIKELY(pimpl_)) {
     proto::WebStateStorage storage;
@@ -606,9 +609,10 @@ CRWSessionStorage* WebStateImpl::BuildSessionStorage() const {
 
     // Convert the proto::WebStateStorage to CRWSessionStorage as this
     // is still the format used outside of //ios/web.
-    session_storage = [[CRWSessionStorage alloc] initWithProto:storage];
-    session_storage.stableIdentifier = GetStableIdentifier();
-    session_storage.uniqueIdentifier = GetUniqueIdentifier();
+    session_storage =
+        [[CRWSessionStorage alloc] initWithProto:storage
+                                uniqueIdentifier:GetUniqueIdentifier()
+                                stableIdentifier:GetStableIdentifier()];
   } else {
     session_storage = saved_->GetSessionStorage();
   }
@@ -709,7 +713,7 @@ const GURL& WebStateImpl::GetLastCommittedURL() const {
                         : saved_->GetLastCommittedURL();
 }
 
-absl::optional<GURL> WebStateImpl::GetLastCommittedURLIfTrusted() const {
+std::optional<GURL> WebStateImpl::GetLastCommittedURLIfTrusted() const {
   return LIKELY(pimpl_) ? pimpl_->GetLastCommittedURLIfTrusted()
                         : saved_->GetLastCommittedURL();
 }
@@ -738,8 +742,7 @@ bool WebStateImpl::CanTakeSnapshot() const {
   return LIKELY(pimpl_) ? pimpl_->CanTakeSnapshot() : false;
 }
 
-void WebStateImpl::TakeSnapshot(const gfx::RectF& rect,
-                                SnapshotCallback callback) {
+void WebStateImpl::TakeSnapshot(const CGRect rect, SnapshotCallback callback) {
   RealizedState()->TakeSnapshot(rect, std::move(callback));
 }
 
@@ -805,10 +808,10 @@ void WebStateImpl::RemovePolicyDecider(WebStatePolicyDecider* decider) {
   policy_deciders_.RemoveObserver(decider);
 }
 
-void WebStateImpl::DownloadCurrentPage(NSString* destination_file,
-                                       id<CRWWebViewDownloadDelegate> delegate,
-                                       void (^handler)(id<CRWWebViewDownload>))
-    API_AVAILABLE(ios(14.5)) {
+void WebStateImpl::DownloadCurrentPage(
+    NSString* destination_file,
+    id<CRWWebViewDownloadDelegate> delegate,
+    void (^handler)(id<CRWWebViewDownload>)) {
   CRWWebController* web_controller = GetWebController();
   NSURLRequest* request =
       [NSURLRequest requestWithURL:net::NSURLWithGURL(GetLastCommittedURL())];

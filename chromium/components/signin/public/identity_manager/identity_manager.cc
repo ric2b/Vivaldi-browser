@@ -17,6 +17,7 @@
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_client.h"
 #include "components/signin/public/base/signin_switches.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
@@ -120,10 +121,11 @@ IdentityManager::IdentityManager(IdentityManager::InitParameters&& parameters)
 #if BUILDFLAG(IS_CHROMEOS)
       account_manager_facade_(parameters.account_manager_facade),
 #endif
-      identity_mutator_(std::move(parameters.primary_account_mutator),
-                        std::move(parameters.accounts_mutator),
-                        std::move(parameters.accounts_cookie_mutator),
-                        std::move(parameters.device_accounts_synchronizer)),
+      identity_mutator_(std::make_unique<IdentityMutator>(
+          std::move(parameters.primary_account_mutator),
+          std::move(parameters.accounts_mutator),
+          std::move(parameters.accounts_cookie_mutator),
+          std::move(parameters.device_accounts_synchronizer))),
       diagnostics_provider_(std::move(parameters.diagnostics_provider)),
       account_consistency_(parameters.account_consistency),
       should_verify_scope_access_(parameters.should_verify_scope_access) {
@@ -200,6 +202,8 @@ void IdentityManager::Shutdown() {
   token_service_observation_.Reset();
   primary_account_manager_observation_.Reset();
 
+  diagnostics_provider_.reset();
+  identity_mutator_.reset();
   account_fetcher_service_.reset();
   gaia_cookie_manager_service_.reset();
   primary_account_manager_.reset();
@@ -370,19 +374,19 @@ AccountsInCookieJarInfo IdentityManager::GetAccountsInCookieJar() const {
 }
 
 PrimaryAccountMutator* IdentityManager::GetPrimaryAccountMutator() {
-  return identity_mutator_.GetPrimaryAccountMutator();
+  return identity_mutator_->GetPrimaryAccountMutator();
 }
 
 AccountsMutator* IdentityManager::GetAccountsMutator() {
-  return identity_mutator_.GetAccountsMutator();
+  return identity_mutator_->GetAccountsMutator();
 }
 
 AccountsCookieMutator* IdentityManager::GetAccountsCookieMutator() {
-  return identity_mutator_.GetAccountsCookieMutator();
+  return identity_mutator_->GetAccountsCookieMutator();
 }
 
 DeviceAccountsSynchronizer* IdentityManager::GetDeviceAccountsSynchronizer() {
-  return identity_mutator_.GetDeviceAccountsSynchronizer();
+  return identity_mutator_->GetDeviceAccountsSynchronizer();
 }
 
 void IdentityManager::AddDiagnosticsObserver(DiagnosticsObserver* observer) {
@@ -436,7 +440,7 @@ base::android::ScopedJavaLocalRef<jobject> IdentityManager::GetJavaObject() {
 base::android::ScopedJavaLocalRef<jobject>
 IdentityManager::GetIdentityMutatorJavaObject() {
   return base::android::ScopedJavaLocalRef<jobject>(
-      identity_mutator_.GetJavaObject());
+      identity_mutator_->GetJavaObject());
 }
 
 void IdentityManager::RefreshAccountInfoIfStale(
@@ -453,8 +457,15 @@ void IdentityManager::RefreshAccountInfoIfStale(
 void IdentityManager::RefreshAccountInfoIfStale(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& j_core_account_id) {
-  RefreshAccountInfoIfStale(
-      ConvertFromJavaCoreAccountId(env, j_core_account_id));
+  if (j_core_account_id) {
+    RefreshAccountInfoIfStale(
+        ConvertFromJavaCoreAccountId(env, j_core_account_id));
+  } else {
+    std::vector<CoreAccountInfo> accounts = GetAccountsWithRefreshTokens();
+    for (const CoreAccountInfo& account : accounts) {
+      RefreshAccountInfoIfStale(account.account_id);
+    }
+  }
 }
 
 base::android::ScopedJavaLocalRef<jobject>

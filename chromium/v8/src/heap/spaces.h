@@ -149,24 +149,26 @@ class V8_EXPORT_PRIVATE ObjectIterator : public Malloced {
   virtual Tagged<HeapObject> Next() = 0;
 };
 
-template <class PAGE_TYPE>
+template <class PageType>
 class PageIteratorImpl
-    : public base::iterator<std::forward_iterator_tag, PAGE_TYPE> {
+    : public base::iterator<std::forward_iterator_tag, PageType> {
  public:
-  explicit PageIteratorImpl(PAGE_TYPE* p) : p_(p) {}
-  PageIteratorImpl(const PageIteratorImpl<PAGE_TYPE>& other) : p_(other.p_) {}
-  PAGE_TYPE* operator*() { return p_; }
-  bool operator==(const PageIteratorImpl<PAGE_TYPE>& rhs) const {
+  explicit PageIteratorImpl(PageType* p) : p_(p) {}
+  PageIteratorImpl(const PageIteratorImpl&) V8_NOEXCEPT = default;
+  PageIteratorImpl& operator=(const PageIteratorImpl&) V8_NOEXCEPT = default;
+
+  PageType* operator*() { return p_; }
+  bool operator==(const PageIteratorImpl<PageType>& rhs) const {
     return rhs.p_ == p_;
   }
-  bool operator!=(const PageIteratorImpl<PAGE_TYPE>& rhs) const {
+  bool operator!=(const PageIteratorImpl<PageType>& rhs) const {
     return rhs.p_ != p_;
   }
-  inline PageIteratorImpl<PAGE_TYPE>& operator++();
-  inline PageIteratorImpl<PAGE_TYPE> operator++(int);
+  inline PageIteratorImpl<PageType>& operator++();
+  inline PageIteratorImpl<PageType> operator++(int);
 
  private:
-  PAGE_TYPE* p_;
+  PageType* p_;
 };
 
 using PageIterator = PageIteratorImpl<Page>;
@@ -201,80 +203,6 @@ class ConstPageRange {
  private:
   const Page* begin_;
   const Page* end_;
-};
-
-// -----------------------------------------------------------------------------
-// A space has a circular list of pages. The next page can be accessed via
-// Page::next_page() call.
-
-// LocalAllocationBuffer represents a linear allocation area that is created
-// from a given {AllocationResult} and can be used to allocate memory without
-// synchronization.
-//
-// The buffer is properly closed upon destruction and reassignment.
-// Example:
-//   {
-//     AllocationResult result = ...;
-//     LocalAllocationBuffer a(heap, result, size);
-//     LocalAllocationBuffer b = a;
-//     CHECK(!a.IsValid());
-//     CHECK(b.IsValid());
-//     // {a} is invalid now and cannot be used for further allocations.
-//   }
-//   // Since {b} went out of scope, the LAB is closed, resulting in creating a
-//   // filler object for the remaining area.
-class LocalAllocationBuffer {
- public:
-  // Indicates that a buffer cannot be used for allocations anymore. Can result
-  // from either reassigning a buffer, or trying to construct it from an
-  // invalid {AllocationResult}.
-  static LocalAllocationBuffer InvalidBuffer() {
-    return LocalAllocationBuffer(
-        nullptr, LinearAllocationArea(kNullAddress, kNullAddress));
-  }
-
-  // Creates a new LAB from a given {AllocationResult}. Results in
-  // InvalidBuffer if the result indicates a retry.
-  static inline LocalAllocationBuffer FromResult(Heap* heap,
-                                                 AllocationResult result,
-                                                 intptr_t size);
-
-  ~LocalAllocationBuffer() { CloseAndMakeIterable(); }
-
-  LocalAllocationBuffer(const LocalAllocationBuffer& other) = delete;
-  V8_EXPORT_PRIVATE LocalAllocationBuffer(LocalAllocationBuffer&& other)
-      V8_NOEXCEPT;
-
-  LocalAllocationBuffer& operator=(const LocalAllocationBuffer& other) = delete;
-  V8_EXPORT_PRIVATE LocalAllocationBuffer& operator=(
-      LocalAllocationBuffer&& other) V8_NOEXCEPT;
-
-  V8_WARN_UNUSED_RESULT inline AllocationResult AllocateRawAligned(
-      int size_in_bytes, AllocationAlignment alignment);
-  V8_WARN_UNUSED_RESULT inline AllocationResult AllocateRawUnaligned(
-      int size_in_bytes);
-
-  inline bool IsValid() { return allocation_info_.top() != kNullAddress; }
-
-  // Try to merge LABs, which is only possible when they are adjacent in memory.
-  // Returns true if the merge was successful, false otherwise.
-  inline bool TryMerge(LocalAllocationBuffer* other);
-
-  inline bool TryFreeLast(Tagged<HeapObject> object, int object_size);
-
-  // Close a LAB, effectively invalidating it. Returns the unused area.
-  V8_EXPORT_PRIVATE LinearAllocationArea CloseAndMakeIterable();
-  void MakeIterable();
-
-  Address top() const { return allocation_info_.top(); }
-  Address limit() const { return allocation_info_.limit(); }
-
- private:
-  V8_EXPORT_PRIVATE LocalAllocationBuffer(
-      Heap* heap, LinearAllocationArea allocation_info) V8_NOEXCEPT;
-
-  Heap* heap_;
-  LinearAllocationArea allocation_info_;
 };
 
 class V8_EXPORT_PRIVATE SpaceWithLinearArea : public Space {

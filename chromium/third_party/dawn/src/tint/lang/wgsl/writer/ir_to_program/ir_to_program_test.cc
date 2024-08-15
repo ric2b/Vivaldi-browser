@@ -33,6 +33,7 @@
 #include "src/tint/lang/core/ir/disassembler.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
+#include "src/tint/lang/wgsl/ir/unary.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
 #include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program_test.h"
 #include "src/tint/lang/wgsl/writer/writer.h"
@@ -48,7 +49,9 @@ IRToProgramTest::Result IRToProgramTest::Run() {
 
     result.ir = tint::core::ir::Disassemble(mod);
 
-    auto output_program = IRToProgram(mod);
+    ProgramOptions options;
+    options.allowed_features = AllowedFeatures::Everything();
+    auto output_program = IRToProgram(mod, options);
     if (!output_program.IsValid()) {
         result.err = output_program.Diagnostics().str();
         result.ast = Program::printer(output_program);
@@ -56,7 +59,7 @@ IRToProgramTest::Result IRToProgramTest::Run() {
     }
 
     auto output = wgsl::writer::Generate(output_program, {});
-    if (!output) {
+    if (output != Success) {
         std::stringstream ss;
         ss << "wgsl::Generate() errored: " << output.Failure();
         result.err = ss.str();
@@ -111,6 +114,153 @@ TEST_F(IRToProgramTest, SingleFunction_Parameters) {
     EXPECT_WGSL(R"(
 fn f(i : i32, u : u32) -> i32 {
   return i;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_Compute) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kCompute,
+                          std::array{3u, 4u, 5u});
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+@compute @workgroup_size(3, 4, 5)
+fn f() {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_Fragment) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f() {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_Vertex) {
+    auto* fn = b.Function("f", ty.vec4<f32>(), core::ir::Function::PipelineStage::kVertex);
+    fn->SetReturnBuiltin(core::BuiltinValue::kPosition);
+
+    fn->Block()->Append(b.Return(fn, b.Splat(ty.vec4<f32>(), 0_f, 4)));
+
+    EXPECT_WGSL(R"(
+@vertex
+fn f() -> @builtin(position) vec4<f32> {
+  return vec4<f32>();
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_ReturnAttribute_FragDepth) {
+    auto* fn = b.Function("f", ty.f32(), core::ir::Function::PipelineStage::kFragment);
+    fn->SetReturnBuiltin(core::BuiltinValue::kFragDepth);
+
+    fn->Block()->Append(b.Return(fn, b.Constant(0.5_f)));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f() -> @builtin(frag_depth) f32 {
+  return 0.5f;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_ReturnAttribute_SampleMask) {
+    auto* fn = b.Function("f", ty.u32(), core::ir::Function::PipelineStage::kFragment);
+    fn->SetReturnBuiltin(core::BuiltinValue::kSampleMask);
+
+    fn->Block()->Append(b.Return(fn, b.Constant(3_u)));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f() -> @builtin(sample_mask) u32 {
+  return 3u;
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_ReturnAttribute_Invariant) {
+    auto* fn = b.Function("f", ty.vec4<f32>(), core::ir::Function::PipelineStage::kVertex);
+    fn->SetReturnBuiltin(core::BuiltinValue::kPosition);
+    fn->SetReturnInvariant(true);
+
+    fn->Block()->Append(b.Return(fn, b.Splat(ty.vec4<f32>(), 0_f, 4)));
+
+    EXPECT_WGSL(R"(
+@vertex
+fn f() -> @builtin(position) @invariant vec4<f32> {
+  return vec4<f32>();
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_ReturnAttribute_Location) {
+    auto* fn = b.Function("f", ty.vec4<f32>(), core::ir::Function::PipelineStage::kFragment);
+    fn->SetReturnLocation(1, std::nullopt);
+
+    fn->Block()->Append(b.Return(fn, b.Splat(ty.vec4<f32>(), 0_f, 4)));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f() -> @location(1) vec4<f32> {
+  return vec4<f32>();
+}
+)");
+}
+
+namespace {
+core::ir::FunctionParam* MakeBuiltinParam(core::ir::Builder& b,
+                                          const core::type::Type* type,
+                                          enum core::BuiltinValue builtin) {
+    auto* param = b.FunctionParam(type);
+    param->SetBuiltin(builtin);
+    return param;
+}
+}  // namespace
+
+TEST_F(IRToProgramTest, EntryPoint_ParameterAttribute_Compute) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kCompute,
+                          std::array{3u, 4u, 5u});
+    fn->SetParams({
+        MakeBuiltinParam(b, ty.vec3<u32>(), core::BuiltinValue::kLocalInvocationId),
+        MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kLocalInvocationIndex),
+        MakeBuiltinParam(b, ty.vec3<u32>(), core::BuiltinValue::kGlobalInvocationId),
+        MakeBuiltinParam(b, ty.vec3<u32>(), core::BuiltinValue::kWorkgroupId),
+        MakeBuiltinParam(b, ty.vec3<u32>(), core::BuiltinValue::kNumWorkgroups),
+        MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSubgroupInvocationId),
+        MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSubgroupSize),
+    });
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+enable chromium_experimental_subgroups;
+
+@compute @workgroup_size(3, 4, 5)
+fn f(@builtin(local_invocation_id) v : vec3<u32>, @builtin(local_invocation_index) v_1 : u32, @builtin(global_invocation_id) v_2 : vec3<u32>, @builtin(workgroup_id) v_3 : vec3<u32>, @builtin(num_workgroups) v_4 : vec3<u32>, @builtin(subgroup_invocation_id) v_5 : u32, @builtin(subgroup_size) v_6 : u32) {
+}
+)");
+}
+
+TEST_F(IRToProgramTest, EntryPoint_ParameterAttribute_Fragment) {
+    auto* fn = b.Function("f", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    fn->SetParams({
+        MakeBuiltinParam(b, ty.bool_(), core::BuiltinValue::kFrontFacing),
+        MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSampleIndex),
+        MakeBuiltinParam(b, ty.u32(), core::BuiltinValue::kSampleMask),
+    });
+
+    fn->Block()->Append(b.Return(fn));
+
+    EXPECT_WGSL(R"(
+@fragment
+fn f(@builtin(front_facing) v : bool, @builtin(sample_index) v_1 : u32, @builtin(sample_mask) v_2 : u32) {
 }
 )");
 }
@@ -777,7 +927,7 @@ fn f(v : i32) {
 ////////////////////////////////////////////////////////////////////////////////
 // Short-circuiting binary ops
 ////////////////////////////////////////////////////////////////////////////////
-TEST_F(IRToProgramTest, ShortCircuit_And_Param_2) {
+TEST_F(IRToProgramTest, ShortCircuit_And_2) {
     auto* fn = b.Function("f", ty.bool_());
     auto* pa = b.FunctionParam("a", ty.bool_());
     auto* pb = b.FunctionParam("b", ty.bool_());
@@ -789,7 +939,7 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Param_2) {
         b.Append(if_->True(), [&] { b.ExitIf(if_, pb); });
         b.Append(if_->False(), [&] { b.ExitIf(if_, false); });
 
-        b.Return(fn, if_->Result(0));
+        b.Return(fn, if_);
     });
 
     EXPECT_WGSL(R"(
@@ -799,7 +949,7 @@ fn f(a : bool, b : bool) -> bool {
 )");
 }
 
-TEST_F(IRToProgramTest, ShortCircuit_And_Param_3_ab_c) {
+TEST_F(IRToProgramTest, ShortCircuit_And_3_ab_c) {
     auto* fn = b.Function("f", ty.bool_());
     auto* pa = b.FunctionParam("a", ty.bool_());
     auto* pb = b.FunctionParam("b", ty.bool_());
@@ -812,12 +962,12 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Param_3_ab_c) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, pb); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, false); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, pc); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -827,7 +977,7 @@ fn f(a : bool, b : bool, c : bool) -> bool {
 )");
 }
 
-TEST_F(IRToProgramTest, ShortCircuit_And_Param_3_a_bc) {
+TEST_F(IRToProgramTest, ShortCircuit_And_3_a_bc) {
     auto* fn = b.Function("f", ty.bool_());
     auto* pa = b.FunctionParam("a", ty.bool_());
     auto* pb = b.FunctionParam("b", ty.bool_());
@@ -843,10 +993,10 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Param_3_a_bc) {
             b.Append(if2->True(), [&] { b.ExitIf(if2, pc); });
             b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-            b.ExitIf(if1, if2->Result(0));
+            b.ExitIf(if1, if2);
         });
         b.Append(if1->False(), [&] { b.ExitIf(if1, false); });
-        b.Return(fn, if1->Result(0));
+        b.Return(fn, if1);
     });
 
     EXPECT_WGSL(R"(
@@ -868,8 +1018,8 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Let_2) {
         b.Append(if_->True(), [&] { b.ExitIf(if_, pb); });
         b.Append(if_->False(), [&] { b.ExitIf(if_, false); });
 
-        mod.SetName(if_->Result(0), "l");
-        b.Return(fn, if_->Result(0));
+        mod.SetName(if_, "l");
+        b.Return(fn, if_);
     });
 
     EXPECT_WGSL(R"(
@@ -893,13 +1043,13 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Let_3_ab_c) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, pb); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, false); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, pc); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-        mod.SetName(if2->Result(0), "l");
-        b.Return(fn, if2->Result(0));
+        mod.SetName(if2, "l");
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -926,12 +1076,12 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Let_3_a_bc) {
             b.Append(if2->True(), [&] { b.ExitIf(if2, pc); });
             b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-            b.ExitIf(if1, if2->Result(0));
+            b.ExitIf(if1, if2);
         });
         b.Append(if1->False(), [&] { b.ExitIf(if1, false); });
 
-        mod.SetName(if1->Result(0), "l");
-        b.Return(fn, if1->Result(0));
+        mod.SetName(if1, "l");
+        b.Return(fn, if1);
     });
 
     EXPECT_WGSL(R"(
@@ -957,7 +1107,7 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Call_2) {
         b.Append(if_->True(), [&] { b.ExitIf(if_, b.Call(ty.bool_(), fn_b)); });
         b.Append(if_->False(), [&] { b.ExitIf(if_, false); });
 
-        b.Return(fn, if_->Result(0));
+        b.Return(fn, if_);
     });
 
     EXPECT_WGSL(R"(
@@ -993,12 +1143,12 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Call_3_ab_c) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, b.Call(ty.bool_(), fn_b)); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, false); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, b.Call(ty.bool_(), fn_c)); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1041,11 +1191,11 @@ TEST_F(IRToProgramTest, ShortCircuit_And_Call_3_a_bc) {
             b.Append(if2->True(), [&] { b.ExitIf(if2, b.Call(ty.bool_(), fn_c)); });
             b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-            b.ExitIf(if1, if2->Result(0));
+            b.ExitIf(if1, if2);
         });
         b.Append(if1->False(), [&] { b.ExitIf(if1, false); });
 
-        b.Return(fn, if1->Result(0));
+        b.Return(fn, if1);
     });
 
     EXPECT_WGSL(R"(
@@ -1079,7 +1229,7 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Param_2) {
         b.Append(if_->True(), [&] { b.ExitIf(if_, true); });
         b.Append(if_->False(), [&] { b.ExitIf(if_, pb); });
 
-        b.Return(fn, if_->Result(0));
+        b.Return(fn, if_);
     });
 
     EXPECT_WGSL(R"(
@@ -1102,12 +1252,12 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Param_3_ab_c) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, true); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, pb); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, pc); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1134,10 +1284,10 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Param_3_a_bc) {
             b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
             b.Append(if2->False(), [&] { b.ExitIf(if2, pc); });
 
-            b.ExitIf(if1, if2->Result(0));
+            b.ExitIf(if1, if2);
         });
 
-        b.Return(fn, if1->Result(0));
+        b.Return(fn, if1);
     });
 
     EXPECT_WGSL(R"(
@@ -1159,8 +1309,8 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Let_2) {
         b.Append(if_->True(), [&] { b.ExitIf(if_, true); });
         b.Append(if_->False(), [&] { b.ExitIf(if_, pb); });
 
-        mod.SetName(if_->Result(0), "l");
-        b.Return(fn, if_->Result(0));
+        mod.SetName(if_, "l");
+        b.Return(fn, if_);
     });
 
     EXPECT_WGSL(R"(
@@ -1184,13 +1334,13 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Let_3_ab_c) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, true); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, pb); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, pc); });
 
-        mod.SetName(if2->Result(0), "l");
-        b.Return(fn, if2->Result(0));
+        mod.SetName(if2, "l");
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1218,11 +1368,11 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Let_3_a_bc) {
             b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
             b.Append(if2->False(), [&] { b.ExitIf(if2, pc); });
 
-            b.ExitIf(if1, if2->Result(0));
+            b.ExitIf(if1, if2);
         });
 
-        mod.SetName(if1->Result(0), "l");
-        b.Return(fn, if1->Result(0));
+        mod.SetName(if1, "l");
+        b.Return(fn, if1);
     });
 
     EXPECT_WGSL(R"(
@@ -1248,7 +1398,7 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Call_2) {
         b.Append(if_->True(), [&] { b.ExitIf(if_, true); });
         b.Append(if_->False(), [&] { b.ExitIf(if_, b.Call(ty.bool_(), fn_b)); });
 
-        b.Return(fn, if_->Result(0));
+        b.Return(fn, if_);
     });
 
     EXPECT_WGSL(R"(
@@ -1284,12 +1434,12 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Call_3_ab_c) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, true); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, b.Call(ty.bool_(), fn_b)); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, b.Call(ty.bool_(), fn_c)); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1333,10 +1483,10 @@ TEST_F(IRToProgramTest, ShortCircuit_Or_Call_3_a_bc) {
             b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
             b.Append(if2->False(), [&] { b.ExitIf(if2, b.Call(ty.bool_(), fn_c)); });
 
-            b.ExitIf(if1, if2->Result(0));
+            b.ExitIf(if1, if2);
         });
 
-        b.Return(fn, if1->Result(0));
+        b.Return(fn, if1);
     });
 
     EXPECT_WGSL(R"(
@@ -1376,7 +1526,7 @@ TEST_F(IRToProgramTest, ShortCircuit_Mixed) {
         b.Append(if1->True(), [&] { b.ExitIf(if1, true); });
         b.Append(if1->False(), [&] { b.ExitIf(if1, b.Call(ty.bool_(), fn_b)); });
 
-        auto* if2 = b.If(if1->Result(0));
+        auto* if2 = b.If(if1);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] {
             auto* if3 = b.If(pc);
@@ -1384,12 +1534,12 @@ TEST_F(IRToProgramTest, ShortCircuit_Mixed) {
             b.Append(if3->True(), [&] { b.ExitIf(if3, true); });
             b.Append(if3->False(), [&] { b.ExitIf(if3, b.Call(ty.bool_(), fn_d)); });
 
-            b.ExitIf(if2, if3->Result(0));
+            b.ExitIf(if2, if3);
         });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-        mod.SetName(if2->Result(0), "l");
-        b.Return(fn, if2->Result(0));
+        mod.SetName(if2, "l");
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1433,9 +1583,9 @@ TEST_F(IRToProgramTest, NonShortCircuit_And_ParamCallParam_a_bc) {
 
         auto* if2 = b.If(pa);
         if2->SetResults(b.InstructionResult(ty.bool_()));
-        b.Append(if2->True(), [&] { b.ExitIf(if2, if1->Result(0)); });
+        b.Append(if2->True(), [&] { b.ExitIf(if2, if1); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1474,10 +1624,10 @@ TEST_F(IRToProgramTest, NonShortCircuit_And_Call_3_a_bc) {
 
         auto* if2 = b.If(b.Call(ty.bool_(), fn_a));
         if2->SetResults(b.InstructionResult(ty.bool_()));
-        b.Append(if2->True(), [&] { b.ExitIf(if2, if1->Result(0)); });
+        b.Append(if2->True(), [&] { b.ExitIf(if2, if1); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1520,10 +1670,10 @@ TEST_F(IRToProgramTest, NonShortCircuit_And_Param_3_a_bc_EarlyEval) {
 
         auto* if2 = b.If(pa);
         if2->SetResults(b.InstructionResult(ty.bool_()));
-        b.Append(if2->True(), [&] { b.ExitIf(if2, if1->Result(0)); });
+        b.Append(if2->True(), [&] { b.ExitIf(if2, if1); });
         b.Append(if2->False(), [&] { b.ExitIf(if2, false); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1555,10 +1705,10 @@ TEST_F(IRToProgramTest, NonShortCircuit_Or_ParamCallParam_a_bc) {
         auto* if2 = b.If(pa);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
-        b.Append(if2->False(), [&] { b.ExitIf(if2, if1->Result(0)); });
+        b.Append(if2->False(), [&] { b.ExitIf(if2, if1); });
 
-        mod.SetName(if2->Result(0), "l");
-        b.Return(fn, if2->Result(0));
+        mod.SetName(if2, "l");
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1598,9 +1748,9 @@ TEST_F(IRToProgramTest, NonShortCircuit_Or_Call_3_a_bc) {
         auto* if2 = b.If(b.Call(ty.bool_(), fn_a));
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
-        b.Append(if2->False(), [&] { b.ExitIf(if2, if1->Result(0)); });
+        b.Append(if2->False(), [&] { b.ExitIf(if2, if1); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1644,9 +1794,9 @@ TEST_F(IRToProgramTest, NonShortCircuit_Or_Param_3_a_bc_EarlyEval) {
         auto* if2 = b.If(pa);
         if2->SetResults(b.InstructionResult(ty.bool_()));
         b.Append(if2->True(), [&] { b.ExitIf(if2, true); });
-        b.Append(if2->False(), [&] { b.ExitIf(if2, if1->Result(0)); });
+        b.Append(if2->False(), [&] { b.ExitIf(if2, if1); });
 
-        b.Return(fn, if2->Result(0));
+        b.Return(fn, if2);
     });
 
     EXPECT_WGSL(R"(
@@ -1664,7 +1814,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Increment) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Add(ty.i32(), b.Load(v), 1_i));
 
         b.Return(fn);
@@ -1682,7 +1832,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Decrement) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Subtract(ty.i32(), b.Load(v), 1_i));
 
         b.Return(fn);
@@ -1700,7 +1850,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Add) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Add(ty.i32(), b.Load(v), 8_i));
 
         b.Return(fn);
@@ -1718,7 +1868,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Subtract) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Subtract(ty.i32(), b.Load(v), 8_i));
 
         b.Return(fn);
@@ -1736,7 +1886,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Multiply) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Multiply(ty.i32(), b.Load(v), 8_i));
 
         b.Return(fn);
@@ -1754,7 +1904,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Divide) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Divide(ty.i32(), b.Load(v), 8_i));
 
         b.Return(fn);
@@ -1772,7 +1922,7 @@ TEST_F(IRToProgramTest, CompoundAssign_Xor) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
+        auto* v = b.Var<function, i32>("v");
         b.Store(v, b.Xor(ty.i32(), b.Load(v), 8_i));
 
         b.Return(fn);
@@ -1795,9 +1945,8 @@ TEST_F(IRToProgramTest, LetUsedOnce) {
     fn->SetParams({i});
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Complement(ty.u32(), i);
+        auto* v = b.Let("v", b.Complement(ty.u32(), i));
         b.Return(fn, v);
-        mod.SetName(v, "v");
     });
 
     EXPECT_WGSL(R"(
@@ -1814,9 +1963,8 @@ TEST_F(IRToProgramTest, LetUsedTwice) {
     fn->SetParams({i});
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Multiply(ty.i32(), i, 2_i);
+        auto* v = b.Let("v", b.Multiply(ty.i32(), i, 2_i));
         b.Return(fn, b.Add(ty.i32(), v, v));
-        mod.SetName(v, "v");
     });
 
     EXPECT_WGSL(R"(
@@ -1834,7 +1982,7 @@ TEST_F(IRToProgramTest, FunctionScopeVar_i32) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {  //
-        b.Var("i", ty.ptr<function, i32>());
+        b.Var<function, i32>("i");
 
         b.Return(fn);
     });
@@ -1850,8 +1998,7 @@ TEST_F(IRToProgramTest, FunctionScopeVar_i32_InitLiteral) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* i = b.Var("i", ty.ptr<function, i32>());
-        i->SetInitializer(b.Constant(42_i));
+        b.Var("i", 42_i);
 
         b.Return(fn);
     });
@@ -1867,16 +2014,11 @@ TEST_F(IRToProgramTest, FunctionScopeVar_Chained) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* va = b.Var("a", ty.ptr<function, i32>());
-        va->SetInitializer(b.Constant(42_i));
+        auto* va = b.Var("a", 42_i);
 
-        auto* la = b.Load(va)->Result();
-        auto* vb = b.Var("b", ty.ptr<function, i32>());
-        vb->SetInitializer(la);
+        auto* vb = b.Var("b", b.Load(va));
 
-        auto* lb = b.Load(vb)->Result();
-        auto* vc = b.Var("c", ty.ptr<function, i32>());
-        vc->SetInitializer(lb);
+        b.Var("c", b.Load(vb));
 
         b.Return(fn);
     });
@@ -1948,8 +2090,7 @@ TEST_F(IRToProgramTest, If_Return_i32) {
     auto* fn = b.Function("f", ty.i32());
 
     b.Append(fn->Block(), [&] {
-        auto* cond = b.Var("cond", ty.ptr<function, bool>());
-        cond->SetInitializer(b.Constant(true));
+        auto* cond = b.Var("cond", true);
         auto if_ = b.If(b.Load(cond));
         b.Append(if_->True(), [&] { b.Return(fn, 42_i); });
 
@@ -2013,8 +2154,7 @@ TEST_F(IRToProgramTest, If_Return_f32_Else_Return_f32) {
     auto* fn = b.Function("f", ty.f32());
 
     b.Append(fn->Block(), [&] {
-        auto* cond = b.Var("cond", ty.ptr<function, bool>());
-        cond->SetInitializer(b.Constant(true));
+        auto* cond = b.Var("cond", true);
         auto if_ = b.If(b.Load(cond));
         b.Append(if_->True(), [&] { b.Return(fn, 1.0_f); });
         b.Append(if_->False(), [&] { b.Return(fn, 2.0_f); });
@@ -2044,8 +2184,7 @@ TEST_F(IRToProgramTest, If_Return_u32_Else_CallFn) {
     auto* fn = b.Function("f", ty.u32());
 
     b.Append(fn->Block(), [&] {
-        auto* cond = b.Var("cond", ty.ptr<function, bool>());
-        cond->SetInitializer(b.Constant(true));
+        auto* cond = b.Var("cond", true);
         auto if_ = b.If(b.Load(cond));
         b.Append(if_->True(), [&] { b.Return(fn, 1_u); });
         b.Append(if_->False(), [&] {
@@ -2089,8 +2228,7 @@ TEST_F(IRToProgramTest, If_CallFn_ElseIf_CallFn) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* cond = b.Var("cond", ty.ptr<function, bool>());
-        cond->SetInitializer(b.Constant(true));
+        auto* cond = b.Var("cond", true);
         auto if1 = b.If(b.Load(cond));
         b.Append(if1->True(), [&] {
             b.Call(ty.void_(), fn_a);
@@ -2202,11 +2340,10 @@ TEST_F(IRToProgramTest, Switch_Default) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
-        v->SetInitializer(b.Constant(42_i));
+        auto* v = b.Var("v", 42_i);
 
         auto s = b.Switch(b.Load(v));
-        b.Append(b.Case(s, {core::ir::Switch::CaseSelector{}}), [&] {
+        b.Append(b.DefaultCase(s), [&] {
             b.Call(ty.void_(), fn_a);
             b.ExitSwitch(s);
         });
@@ -2242,24 +2379,18 @@ TEST_F(IRToProgramTest, Switch_3_Cases) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
-        v->SetInitializer(b.Constant(42_i));
+        auto* v = b.Var("v", 42_i);
 
         auto s = b.Switch(b.Load(v));
-        b.Append(b.Case(s, {core::ir::Switch::CaseSelector{b.Constant(0_i)}}), [&] {
+        b.Append(b.Case(s, {b.Constant(0_i)}), [&] {
             b.Call(ty.void_(), fn_a);
             b.ExitSwitch(s);
         });
-        b.Append(b.Case(s,
-                        {
-                            core::ir::Switch::CaseSelector{b.Constant(1_i)},
-                            core::ir::Switch::CaseSelector{},
-                        }),
-                 [&] {
-                     b.Call(ty.void_(), fn_b);
-                     b.ExitSwitch(s);
-                 });
-        b.Append(b.Case(s, {core::ir::Switch::CaseSelector{b.Constant(2_i)}}), [&] {
+        b.Append(b.Case(s, {b.Constant(1_i), nullptr}), [&] {
+            b.Call(ty.void_(), fn_b);
+            b.ExitSwitch(s);
+        });
+        b.Append(b.Case(s, {b.Constant(2_i)}), [&] {
             b.Call(ty.void_(), fn_c);
             b.ExitSwitch(s);
         });
@@ -2301,20 +2432,12 @@ TEST_F(IRToProgramTest, Switch_3_Cases_AllReturn) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* v = b.Var("v", ty.ptr<function, i32>());
-        v->SetInitializer(b.Constant(42_i));
+        auto* v = b.Var("v", 42_i);
 
         auto s = b.Switch(b.Load(v));
-        b.Append(b.Case(s, {core::ir::Switch::CaseSelector{b.Constant(0_i)}}),
-                 [&] { b.Return(fn); });
-        b.Append(b.Case(s,
-                        {
-                            core::ir::Switch::CaseSelector{b.Constant(1_i)},
-                            core::ir::Switch::CaseSelector{},
-                        }),
-                 [&] { b.Return(fn); });
-        b.Append(b.Case(s, {core::ir::Switch::CaseSelector{b.Constant(2_i)}}),
-                 [&] { b.Return(fn); });
+        b.Append(b.Case(s, {b.Constant(0_i)}), [&] { b.Return(fn); });
+        b.Append(b.Case(s, {b.Constant(1_i), nullptr}), [&] { b.Return(fn); });
+        b.Append(b.Case(s, {b.Constant(2_i)}), [&] { b.Return(fn); });
 
         b.Call(ty.void_(), fn_a);
         b.Return(fn);
@@ -2354,36 +2477,23 @@ TEST_F(IRToProgramTest, Switch_Nested) {
 
     auto* fn = b.Function("f", ty.void_());
     b.Append(fn->Block(), [&] {
-        auto* v1 = b.Var("v1", ty.ptr<function, i32>());
-        v1->SetInitializer(b.Constant(42_i));
+        auto* v1 = b.Var("v1", 42_i);
 
-        auto* v2 = b.Var("v2", ty.ptr<function, i32>());
-        v2->SetInitializer(b.Constant(24_i));
+        auto* v2 = b.Var("v2", 24_i);
 
         auto s1 = b.Switch(b.Load(v1));
-        b.Append(b.Case(s1, {core::ir::Switch::CaseSelector{b.Constant(0_i)}}), [&] {
+        b.Append(b.Case(s1, {b.Constant(0_i)}), [&] {
             b.Call(ty.void_(), fn_a);
             b.ExitSwitch(s1);
         });
-        b.Append(b.Case(s1,
-                        {
-                            core::ir::Switch::CaseSelector{b.Constant(1_i)},
-                            core::ir::Switch::CaseSelector{},
-                        }),
-                 [&] {
-                     auto s2 = b.Switch(b.Load(v2));
-                     b.Append(b.Case(s2, {core::ir::Switch::CaseSelector{b.Constant(0_i)}}),
-                              [&] { b.ExitSwitch(s2); });
-                     b.Append(b.Case(s2,
-                                     {
-                                         core::ir::Switch::CaseSelector{b.Constant(1_i)},
-                                         core::ir::Switch::CaseSelector{},
-                                     }),
-                              [&] { b.Return(fn); });
+        b.Append(b.Case(s1, {b.Constant(1_i), nullptr}), [&] {
+            auto s2 = b.Switch(b.Load(v2));
+            b.Append(b.Case(s2, {b.Constant(0_i)}), [&] { b.ExitSwitch(s2); });
+            b.Append(b.Case(s2, {b.Constant(1_i), nullptr}), [&] { b.Return(fn); });
 
-                     b.ExitSwitch(s1);
-                 });
-        b.Append(b.Case(s1, {core::ir::Switch::CaseSelector{b.Constant(2_i)}}), [&] {
+            b.ExitSwitch(s1);
+        });
+        b.Append(b.Case(s1, {b.Constant(2_i)}), [&] {
             b.Call(ty.void_(), fn_c);
             b.ExitSwitch(s1);
         });
@@ -2434,8 +2544,7 @@ TEST_F(IRToProgramTest, For_Empty) {
         auto* loop = b.Loop();
 
         b.Append(loop->Initializer(), [&] {
-            auto* i = b.Var("i", ty.ptr<function, i32>());
-            i->SetInitializer(b.Constant(0_i));
+            auto* i = b.Var("i", 0_i);
             b.NextIteration(loop);
 
             b.Append(loop->Body(), [&] {
@@ -2466,8 +2575,7 @@ TEST_F(IRToProgramTest, For_Empty_NoInit) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* i = b.Var("i", ty.ptr<function, i32>());
-        i->SetInitializer(b.Constant(0_i));
+        auto* i = b.Var("i", 0_i);
 
         auto* loop = b.Loop();
 
@@ -2502,8 +2610,7 @@ TEST_F(IRToProgramTest, For_Empty_NoCont) {
         auto* loop = b.Loop();
 
         b.Append(loop->Initializer(), [&] {
-            auto* i = b.Var("i", ty.ptr<function, i32>());
-            i->SetInitializer(b.Constant(0_i));
+            auto* i = b.Var("i", 0_i);
             b.NextIteration(loop);
 
             b.Append(loop->Body(), [&] {
@@ -2537,8 +2644,7 @@ TEST_F(IRToProgramTest, For_ComplexBody) {
         auto* loop = b.Loop();
 
         b.Append(loop->Initializer(), [&] {
-            auto* i = b.Var("i", ty.ptr<function, i32>());
-            i->SetInitializer(b.Constant(0_i));
+            auto* i = b.Var("i", 0_i);
             b.NextIteration(loop);
 
             b.Append(loop->Body(), [&] {
@@ -2588,8 +2694,7 @@ TEST_F(IRToProgramTest, For_ComplexBody_NoInit) {
     auto* fn = b.Function("f", ty.i32());
 
     b.Append(fn->Block(), [&] {
-        auto* i = b.Var("i", ty.ptr<function, i32>());
-        i->SetInitializer(b.Constant(0_i));
+        auto* i = b.Var("i", 0_i);
 
         auto* loop = b.Loop();
 
@@ -2644,8 +2749,7 @@ TEST_F(IRToProgramTest, For_ComplexBody_NoCont) {
         auto* loop = b.Loop();
 
         b.Append(loop->Initializer(), [&] {
-            auto* i = b.Var("i", ty.ptr<function, i32>());
-            i->SetInitializer(b.Constant(0_i));
+            auto* i = b.Var("i", 0_i);
             b.NextIteration(loop);
 
             b.Append(loop->Body(), [&] {
@@ -2694,9 +2798,7 @@ TEST_F(IRToProgramTest, For_CallInInitCondCont) {
         auto* loop = b.Loop();
 
         b.Append(loop->Initializer(), [&] {
-            auto* n_0 = b.Call(ty.i32(), fn_n, 0_i)->Result();
-            auto* i = b.Var("i", ty.ptr<function, i32>());
-            i->SetInitializer(n_0);
+            auto* i = b.Var("i", b.Call(ty.i32(), fn_n, 0_i));
             b.NextIteration(loop);
 
             b.Append(loop->Body(), [&] {
@@ -2763,7 +2865,7 @@ TEST_F(IRToProgramTest, For_IncInInit_Cmp) {
     // }
 
     b.Append(mod.root_block, [&] {
-        auto* i = b.Var(ty.ptr<storage, u32, read_write>());
+        auto* i = b.Var<storage, u32, read_write>();
         i->SetBindingPoint(0, 0);
 
         auto* fn_f = b.Function("f", ty.void_());
@@ -3030,8 +3132,7 @@ TEST_F(IRToProgramTest, Loop_IfContinuing) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* cond = b.Var("cond", ty.ptr<function, bool>());
-        cond->SetInitializer(b.Constant(false));
+        auto* cond = b.Var("cond", false);
 
         auto* loop = b.Loop();
 
@@ -3068,14 +3169,12 @@ TEST_F(IRToProgramTest, Loop_VarsDeclaredOutsideAndInside) {
     auto* fn = b.Function("f", ty.void_());
 
     b.Append(fn->Block(), [&] {
-        auto* var_b = b.Var("b", ty.ptr<function, i32>());
-        var_b->SetInitializer(b.Constant(1_i));
+        auto* var_b = b.Var("b", 1_i);
 
         auto* loop = b.Loop();
 
         b.Append(loop->Body(), [&] {
-            auto* var_a = b.Var("a", ty.ptr<function, i32>());
-            var_a->SetInitializer(b.Constant(2_i));
+            auto* var_a = b.Var("a", 2_i);
 
             auto* body_load_a = b.Load(var_a);
             auto* body_load_b = b.Load(var_b);
@@ -3113,161 +3212,14 @@ fn f() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// chromium_experimental_full_ptr_parameters
-////////////////////////////////////////////////////////////////////////////////
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalFullPtrParameters_StoragePtrParameter) {
-    auto* fn = b.Function("f", ty.void_());
-    fn->SetParams({b.FunctionParam("p", ty.ptr<storage, i32>())});
-
-    b.Append(fn->Block(), [&] { b.Return(fn); });
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_full_ptr_parameters;
-
-fn f(p : ptr<storage, i32, read_write>) {
-}
-)");
-}
-
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalFullPtrParameters_UniformPtrParameter) {
-    auto* fn = b.Function("f", ty.void_());
-    fn->SetParams({b.FunctionParam("p", ty.ptr<uniform, i32>())});
-
-    b.Append(fn->Block(), [&] { b.Return(fn); });
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_full_ptr_parameters;
-
-fn f(p : ptr<uniform, i32>) {
-}
-)");
-}
-
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalFullPtrParameters_WorkgroupPtrParameter) {
-    auto* fn = b.Function("f", ty.void_());
-    fn->SetParams({b.FunctionParam("p", ty.ptr<workgroup, i32>())});
-
-    b.Append(fn->Block(), [&] { b.Return(fn); });
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_full_ptr_parameters;
-
-fn f(p : ptr<workgroup, i32>) {
-}
-)");
-}
-
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalFullPtrParameters_SubObjectPtrArg) {
-    auto* x = b.Function("x", ty.void_());
-    x->SetParams({b.FunctionParam("p", ty.ptr<function, vec3<f32>>())});
-    b.Append(x->Block(), [&] { b.Return(x); });
-
-    auto* y = b.Function("y", ty.void_());
-    b.Append(y->Block(), [&] {
-        auto* m = b.Var<function, mat3x3<f32>>();
-        auto* v = b.Access(ty.ptr<function, vec3<f32>>(), m, 1_i);
-        b.Call(ty.void_(), x, v);
-        b.Return(y);
-    });
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_full_ptr_parameters;
-
-fn x(p : ptr<function, vec3<f32>>) {
-}
-
-fn y() {
-  var v : mat3x3<f32>;
-  x(&(v[1i]));
-}
-)");
-}
-
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalFullPtrParameters_SubObjectPtrArg_ViaLet) {
-    auto* x = b.Function("x", ty.void_());
-    x->SetParams({b.FunctionParam("p", ty.ptr<function, vec3<f32>>())});
-    b.Append(x->Block(), [&] { b.Return(x); });
-
-    auto* y = b.Function("y", ty.void_());
-    b.Append(y->Block(), [&] {
-        auto* m = b.Var<function, mat3x3<f32>>();
-        auto* v = b.Access(ty.ptr<function, vec3<f32>>(), m, 1_i);
-        auto* l = b.Let("l", v);
-        b.Call(ty.void_(), x, l);
-        b.Return(y);
-    });
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_full_ptr_parameters;
-
-fn x(p : ptr<function, vec3<f32>>) {
-}
-
-fn y() {
-  var v : mat3x3<f32>;
-  let l = &(v[1i]);
-  x(l);
-}
-)");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// chromium_experimental_read_write_storage_texture
-////////////////////////////////////////////////////////////////////////////////
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalReadWriteStorageTexture_TextureBarrier) {
-    auto* fn = b.Function("f", ty.void_());
-    b.Append(fn->Block(), [&] {
-        b.Append(mod.instructions.Create<wgsl::ir::BuiltinCall>(
-            b.InstructionResult(ty.void_()), wgsl::BuiltinFn::kTextureBarrier, Empty));
-        b.Return(fn);
-    });
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_read_write_storage_texture;
-
-fn f() {
-  textureBarrier();
-}
-)");
-}
-
-TEST_F(IRToProgramTest, Enable_ChromiumExperimentalReadWriteStorageTexture_ReadOnlyStorageTexture) {
-    auto* T = b.Var("T", ty.ptr<handle>(ty.Get<core::type::StorageTexture>(
-                             core::type::TextureDimension::k2d, core::TexelFormat::kR32Float,
-                             core::Access::kRead, ty.f32())));
-    T->SetBindingPoint(0, 0);
-    b.ir.root_block->Append(T);
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_read_write_storage_texture;
-
-@group(0) @binding(0) var T : texture_storage_2d<r32float, read>;
-)");
-}
-
-TEST_F(IRToProgramTest,
-       Enable_ChromiumExperimentalReadWriteStorageTexture_ReadWriteOnlyStorageTexture) {
-    auto* T = b.Var("T", ty.ptr<handle>(ty.Get<core::type::StorageTexture>(
-                             core::type::TextureDimension::k2d, core::TexelFormat::kR32Float,
-                             core::Access::kReadWrite, ty.f32())));
-    T->SetBindingPoint(0, 0);
-    b.ir.root_block->Append(T);
-
-    EXPECT_WGSL(R"(
-enable chromium_experimental_read_write_storage_texture;
-
-@group(0) @binding(0) var T : texture_storage_2d<r32float, read_write>;
-)");
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // chromium_experimental_subgroups
 ////////////////////////////////////////////////////////////////////////////////
 TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBallot) {
     auto* fn = b.Function("f", ty.void_());
     b.Append(fn->Block(), [&] {
-        b.Append(mod.instructions.Create<wgsl::ir::BuiltinCall>(
+        auto* call = b.Append(mod.instructions.Create<wgsl::ir::BuiltinCall>(
             b.InstructionResult(ty.vec4<u32>()), wgsl::BuiltinFn::kSubgroupBallot, Empty));
+        b.Let("v", call);
         b.Return(fn);
     });
 
@@ -3275,7 +3227,7 @@ TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBallot) {
 enable chromium_experimental_subgroups;
 
 fn f() {
-  _ = subgroupBallot();
+  let v = subgroupBallot();
 }
 )");
 }
@@ -3284,8 +3236,9 @@ TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBroadcast) 
     auto* fn = b.Function("f", ty.void_());
     b.Append(fn->Block(), [&] {
         auto* one = b.Value(1_u);
-        b.Append(mod.instructions.Create<wgsl::ir::BuiltinCall>(
+        auto* call = b.Append(mod.instructions.Create<wgsl::ir::BuiltinCall>(
             b.InstructionResult(ty.u32()), wgsl::BuiltinFn::kSubgroupBroadcast, Vector{one, one}));
+        b.Let("v", call);
         b.Return(fn);
     });
 
@@ -3293,7 +3246,7 @@ TEST_F(IRToProgramTest, Enable_ChromiumExperimentalSubgroups_SubgroupBroadcast) 
 enable chromium_experimental_subgroups;
 
 fn f() {
-  _ = subgroupBroadcast(1u, 1u);
+  let v = subgroupBroadcast(1u, 1u);
 }
 )");
 }

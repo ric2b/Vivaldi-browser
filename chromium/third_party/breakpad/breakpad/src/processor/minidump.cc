@@ -817,9 +817,19 @@ bool MinidumpContext::Read(uint32_t expected_size) {
     switch (cpu_type) {
       case MD_CONTEXT_X86: {
         if (expected_size != sizeof(MDRawContextX86)) {
-          BPLOG(ERROR) << "MinidumpContext x86 size mismatch, " <<
-            expected_size << " != " << sizeof(MDRawContextX86);
-          return false;
+          // Context may include xsave registers and so be larger than
+          // sizeof(MDRawContextX86). For now we skip this extended data.
+          if (context_flags & MD_CONTEXT_X86_XSTATE) {
+            size_t bytes_left = expected_size - sizeof(MDRawContextX86);
+            if (bytes_left > kMaxXSaveAreaSize) {
+              BPLOG(ERROR) << "MinidumpContext oversized xstate area";
+              return false;
+            }
+          } else {
+            BPLOG(ERROR) << "MinidumpContext x86 size mismatch, "
+                         << expected_size << " != " << sizeof(MDRawContextX86);
+            return false;
+          }
         }
 
         scoped_ptr<MDRawContextX86> context_x86(new MDRawContextX86());
@@ -884,6 +894,12 @@ bool MinidumpContext::Read(uint32_t expected_size) {
         }
 
         SetContextX86(context_x86.release());
+
+        // Skip extended xstate data if present in X86 context.
+        if (context_flags & MD_CONTEXT_X86_XSTATE) {
+          minidump_->SeekSet((minidump_->Tell() - sizeof(MDRawContextX86)) +
+                             expected_size);
+        }
 
         break;
       }

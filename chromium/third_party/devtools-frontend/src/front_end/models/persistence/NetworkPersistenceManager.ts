@@ -5,14 +5,13 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as Breakpoints from '../breakpoints/breakpoints.js';
 import * as Workspace from '../workspace/workspace.js';
 
-import {FileSystemWorkspaceBinding, type FileSystem} from './FileSystemWorkspaceBinding.js';
+import {type FileSystem, FileSystemWorkspaceBinding} from './FileSystemWorkspaceBinding.js';
 import {IsolatedFileSystemManager} from './IsolatedFileSystemManager.js';
 import {PersistenceBinding, PersistenceImpl} from './PersistenceImpl.js';
 
@@ -502,7 +501,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
   }
 
   private canHandleNetworkUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): boolean {
-    return this.activeInternal && !uiSourceCode.url().startsWith('snippet://');
+    return this.activeInternal && !Common.ParsedURL.schemeIs(uiSourceCode.url(), 'snippet:');
   }
 
   private async networkUISourceCodeAdded(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
@@ -699,8 +698,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
         continue;
       }
       const pattern = this.patternForFileSystemUISourceCode(uiSourceCode);
-      if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HEADER_OVERRIDES) &&
-          uiSourceCode.name() === HEADERS_FILENAME) {
+      if (uiSourceCode.name() === HEADERS_FILENAME) {
         const {headerPatterns, path, overridesWithRegex} = await this.generateHeaderPatterns(uiSourceCode);
         if (headerPatterns.size > 0) {
           patterns = new Set([...patterns, ...headerPatterns]);
@@ -925,10 +923,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
     const proj = this.projectInternal as FileSystem;
     const path = this.fileUrlFromNetworkUrl(interceptedRequest.request.url as Platform.DevToolsPath.UrlString);
     const fileSystemUISourceCode = proj.uiSourceCodeForURL(path);
-    let responseHeaders: Protocol.Fetch.HeaderEntry[] = [];
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HEADER_OVERRIDES)) {
-      responseHeaders = this.handleHeaderInterception(interceptedRequest);
-    }
+    let responseHeaders = this.handleHeaderInterception(interceptedRequest);
     if (!fileSystemUISourceCode && !responseHeaders.length) {
       return;
     }
@@ -936,16 +931,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
       responseHeaders = interceptedRequest.responseHeaders || [];
     }
 
-    let mimeType = '';
-    if (interceptedRequest.responseHeaders) {
-      for (const header of interceptedRequest.responseHeaders) {
-        if (header.name.toLowerCase() === 'content-type') {
-          mimeType = header.value;
-          break;
-        }
-      }
-    }
-
+    let {mimeType} = interceptedRequest.getMimeTypeAndCharset();
     if (!mimeType) {
       const expectedResourceType =
           Common.ResourceType.resourceTypes[interceptedRequest.resourceType] || Common.ResourceType.resourceTypes.Other;
@@ -958,18 +944,10 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
     if (fileSystemUISourceCode) {
       this.originalResponseContentPromises.set(
           fileSystemUISourceCode, interceptedRequest.responseBody().then(response => {
-            if (response.error || response.content === null) {
+            if (SDK.ContentData.ContentData.isError(response) || !response.isTextContent) {
               return null;
             }
-            if (response.encoded) {
-              const text = atob(response.content);
-              const data = new Uint8Array(text.length);
-              for (let i = 0; i < text.length; ++i) {
-                data[i] = text.charCodeAt(i);
-              }
-              return new TextDecoder('utf-8').decode(data);
-            }
-            return response.content;
+            return response.text;
           }));
 
       const project = fileSystemUISourceCode.project() as FileSystem;
@@ -983,9 +961,10 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
           new Blob([], {type: mimeType}), /* encoded */ true, responseHeaders, /* isBodyOverridden */ false);
     } else {
       const responseBody = await interceptedRequest.responseBody();
-      if (!responseBody.error && responseBody.content) {
+      if (!SDK.ContentData.ContentData.isError(responseBody)) {
+        const content = responseBody.isTextContent ? responseBody.text : responseBody.base64;
         void interceptedRequest.continueRequestWithContent(
-            new Blob([responseBody.content], {type: mimeType}), /* encoded */ true, responseHeaders,
+            new Blob([content], {type: mimeType}), /* encoded */ true, responseHeaders,
             /* isBodyOverridden */ false);
       }
     }
@@ -999,9 +978,7 @@ const RESERVED_FILENAMES = new Set<string>([
 
 export const HEADERS_FILENAME = '.headers';
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   ProjectChanged = 'ProjectChanged',
   RequestsForHeaderOverridesFileChanged = 'RequestsForHeaderOverridesFileChanged',
   LocalOverridesProjectUpdated = 'LocalOverridesProjectUpdated',

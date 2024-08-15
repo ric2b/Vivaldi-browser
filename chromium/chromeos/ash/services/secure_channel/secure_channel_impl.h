@@ -17,6 +17,10 @@
 #include "chromeos/ash/services/secure_channel/public/cpp/shared/connection_priority.h"
 #include "chromeos/ash/services/secure_channel/public/mojom/secure_channel.mojom.h"
 
+namespace cross_device {
+class TimerFactory;
+}  // namespace cross_device
+
 namespace device {
 class BluetoothAdapter;
 }
@@ -176,13 +180,13 @@ class SecureChannelImpl : public mojom::SecureChannel,
   // Validates |device| and adds it to the |remote_device_cache_| if it is
   // valid. If it is not valid, the reason is provided as a return type, and the
   // device is not added to the cache.
-  absl::optional<InvalidRemoteDeviceReason> AddDeviceToCacheIfPossible(
+  std::optional<InvalidRemoteDeviceReason> AddDeviceToCacheIfPossible(
       ApiFunctionName api_fn_name,
       const multidevice::RemoteDevice& device,
       ConnectionMedium connection_medium);
 
   scoped_refptr<device::BluetoothAdapter> bluetooth_adapter_;
-  std::unique_ptr<TimerFactory> timer_factory_;
+  std::unique_ptr<cross_device::TimerFactory> timer_factory_;
   std::unique_ptr<multidevice::RemoteDeviceCache> remote_device_cache_;
   std::unique_ptr<BluetoothHelper> bluetooth_helper_;
   std::unique_ptr<BleSynchronizerBase> ble_synchronizer_;

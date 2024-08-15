@@ -160,7 +160,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SetIsLoading(bool is_loading) override;
   void FocusedNodeChanged(bool is_editable_node,
                           const gfx::Rect& node_bounds_in_screen) override;
-  bool RequestStartStylusWriting() override;
+  bool ShouldInitiateStylusWriting() override;
   void NotifyHoverActionStylusWritable(bool stylus_writable) override;
   void OnEditElementFocusedForStylusWriting(
       const gfx::Rect& focused_edit_bounds,
@@ -179,14 +179,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       blink::mojom::InputEventResultState ack_result) override;
   blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
-  void GestureEventAck(
-      const blink::WebGestureEvent& event,
-      blink::mojom::InputEventResultState ack_result,
-      blink::mojom::ScrollResultDataPtr scroll_result_data) override;
+  void GestureEventAck(const blink::WebGestureEvent& event,
+                       blink::mojom::InputEventResultState ack_result) override;
   void ChildDidAckGestureEvent(
       const blink::WebGestureEvent& event,
-      blink::mojom::InputEventResultState ack_result,
-      blink::mojom::ScrollResultDataPtr scroll_result_data) override;
+      blink::mojom::InputEventResultState ack_result) override;
   blink::mojom::PointerLockResult LockMouse(
       bool request_unadjusted_movement) override;
   blink::mojom::PointerLockResult ChangeMouseLock(
@@ -201,7 +198,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool CanSynchronizeVisualProperties() override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
       override;
-  void DidNavigateMainFramePreCommit() override;
+  void OnOldViewDidNavigatePreCommit() override;
+  void OnNewViewDidNavigatePostCommit() override;
   void DidEnterBackForwardCache() override;
   const viz::FrameSinkId& GetFrameSinkId() const override;
   viz::FrameSinkId GetRootFrameSinkId() override;
@@ -216,7 +214,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnRendererWidgetCreated() override;
   void TakeFallbackContentFrom(RenderWidgetHostView* view) override;
   void OnSynchronizedDisplayPropertiesChanged(bool rotation) override;
-  absl::optional<SkColor> GetBackgroundColor() override;
+  std::optional<SkColor> GetBackgroundColor() override;
   void DidNavigate() override;
   WebContentsAccessibility* GetWebContentsAccessibility() override;
   viz::ScopedSurfaceIdAllocator DidUpdateVisualProperties(
@@ -235,7 +233,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool OnGestureEvent(const ui::GestureEventAndroid& event) override;
   void OnSizeChanged() override;
   void OnPhysicalBackingSizeChanged(
-      absl::optional<base::TimeDelta> deadline_override) override;
+      std::optional<base::TimeDelta> deadline_override) override;
   void NotifyVirtualKeyboardOverlayRect(
       const gfx::Rect& keyboard_rect) override;
 
@@ -282,7 +280,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // Returns the temporary background color of the underlaying document, for
   // example, returns black during screen rotation.
-  absl::optional<SkColor> GetCachedBackgroundColor();
+  std::optional<SkColor> GetCachedBackgroundColor();
   void SendKeyEvent(const NativeWebKeyboardEvent& event);
   void SendMouseEvent(const blink::WebMouseEvent& event,
                       const ui::LatencyInfo& info);
@@ -295,6 +293,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   }
   void set_selection_popup_controller(SelectionPopupController* controller) {
     selection_popup_controller_ = controller;
+  }
+  SelectionPopupController* selection_popup_controller() const {
+    return selection_popup_controller_.get();
   }
   void set_text_suggestion_host(
       TextSuggestionHostAndroid* text_suggestion_host) {
@@ -319,7 +320,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   bool SynchronizeVisualProperties(
       const cc::DeadlinePolicy& deadline_policy,
-      const absl::optional<viz::LocalSurfaceId>& child_local_surface_id,
+      const std::optional<viz::LocalSurfaceId>& child_local_surface_id,
       bool reuse_current_local_surface_id = false,
       bool ignore_ack = false);
 
@@ -350,7 +351,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       TextInputManager* text_input_manager,
       RenderWidgetHostViewBase* updated_view,
       bool character_bounds_changed,
-      const absl::optional<std::vector<gfx::Rect>>& line_bounds) override;
+      const std::optional<std::vector<gfx::Rect>>& line_bounds) override;
   void OnImeCancelComposition(TextInputManager* text_input_manager,
                               RenderWidgetHostViewBase* updated_view) override;
   void OnTextSelectionChanged(TextInputManager* text_input_manager,
@@ -429,9 +430,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   ~RenderWidgetHostViewAndroid() override;
 
   // RenderWidgetHostViewBase:
+  void UpdateFrameSinkIdRegistration() override;
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
-  absl::optional<DisplayFeature> GetDisplayFeature() override;
+  std::optional<DisplayFeature> GetDisplayFeature() override;
   void SetDisplayFeatureForTesting(
       const DisplayFeature* display_feature) override;
   void NotifyHostAndDelegateOnWasShown(

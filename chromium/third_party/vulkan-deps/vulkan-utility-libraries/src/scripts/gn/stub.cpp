@@ -8,7 +8,6 @@
 
 #include <vulkan/layer/vk_layer_settings.h>
 #include <vulkan/layer/vk_layer_settings.hpp>
-#include <vulkan/layer/vk_layer_settings_ext.h>
 #include <vulkan/utility/vk_dispatch_table.h>
 #include <vulkan/utility/vk_format_utils.h>
 #include <vulkan/utility/vk_struct_helper.hpp>

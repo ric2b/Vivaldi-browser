@@ -31,6 +31,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/check.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
@@ -66,13 +67,15 @@
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/core/html/html_frame_set_element.h"
-#include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
 #include "third_party/blink/renderer/core/input/event_handling_util.h"
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
+#include "third_party/blink/renderer/core/layout/custom_scrollbar.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/layout/layout_custom_scrollbar_part.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
@@ -85,19 +88,23 @@
 #include "third_party/blink/renderer/core/page/touch_adjustment.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/core/style/cursor_data.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/core/svg/svg_use_element.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/cursors.h"
+#include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/windows_keyboard_codes.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/cursor.h"
@@ -179,10 +186,6 @@ gfx::Point DetermineHotSpot(const Image& image,
 // Returns whether the hit element contains a title and isn't a SVGUseElement or
 // part of an SVGUseElement.
 bool HasTitleAndNotSVGUseElement(const HitTestResult& hovered_node_result) {
-  // TODO(crbug.com/1473774): Remove flag check if no issues arise.
-  if (!RuntimeEnabledFeatures::SkipShadowHostWhenHoveringForTooltipEnabled()) {
-    return false;
-  }
   Node* inner_node = hovered_node_result.InnerNode();
   if (!inner_node) {
     return false;
@@ -198,6 +201,46 @@ bool HasTitleAndNotSVGUseElement(const HitTestResult& hovered_node_result) {
     return false;
   }
   return true;
+}
+
+// Get the entire style of scrollbar to get the cursor style of scrollbar
+const ComputedStyle* GetComputedStyleFromScrollbar(
+    const LayoutObject& layout_object,
+    const HitTestResult& result) {
+  if (result.IsOverScrollCorner()) {
+    PaintLayerScrollableArea* scrollable_area =
+        To<LayoutBox>(layout_object).GetScrollableArea();
+
+    // For a frame, hit tests over scroll controls are considered to be over
+    // the document element, but the scrollable area belongs to the LayoutView,
+    // not the document element's LayoutObject.
+    if (layout_object.IsDocumentElement()) {
+      scrollable_area = layout_object.View()->GetScrollableArea();
+    }
+
+    // TODO(crbug.com/1519197): if the mouse is over a scroll corner, there must
+    // be a scrollable area. Investigate where this is coming from.
+    if (!scrollable_area) {
+      return nullptr;
+    }
+
+    LayoutCustomScrollbarPart* scroll_corner_layout_object =
+        scrollable_area->ScrollCorner();
+    if (scroll_corner_layout_object) {
+      return scroll_corner_layout_object->Style();
+    }
+  }
+
+  if (result.GetScrollbar() && result.GetScrollbar()->IsCustomScrollbar()) {
+    const auto& custom_scroll_bar = To<CustomScrollbar>(*result.GetScrollbar());
+
+    if (const ComputedStyle* style =
+            custom_scroll_bar.GetScrollbarPartStyleForCursor(
+                custom_scroll_bar.HoveredPart())) {
+      return style;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace
@@ -351,7 +394,8 @@ HitTestResult EventHandler::HitTestResultAtLocation(
     const HitTestLocation& location,
     HitTestRequest::HitTestRequestType hit_type,
     const LayoutObject* stop_node,
-    bool no_lifecycle_update) {
+    bool no_lifecycle_update,
+    std::optional<HitTestRequest::HitNodeCb> hit_node_cb) {
   TRACE_EVENT0("blink", "EventHandler::HitTestResultAtLocation");
 
   // We always send HitTestResultAtLocation to the main frame if we have one,
@@ -392,7 +436,7 @@ HitTestResult EventHandler::HitTestResultAtLocation(
   // HitTestResultAtLocation is specifically used to hitTest into all frames,
   // thus it always allows child frame content.
   HitTestRequest request(hit_type | HitTestRequest::kAllowChildFrameContent,
-                         stop_node);
+                         stop_node, std::move(hit_node_cb));
   HitTestResult result(request, location);
   PerformHitTest(location, result, no_lifecycle_update);
   return result;
@@ -529,8 +573,9 @@ absl::optional<ui::Cursor> EventHandler::SelectCursor(
   if (scroll_manager_->MiddleClickAutoscrollInProgress())
     return absl::nullopt;
 
-  if (result.GetScrollbar() && !result.GetScrollbar()->IsCustomScrollbar())
+  if (result.GetScrollbar() && !result.GetScrollbar()->IsCustomScrollbar()) {
     return PointerCursor();
+  }
 
   Node* node = result.InnerPossiblyPseudoNode();
   if (!node || !node->GetLayoutObject()) {
@@ -569,7 +614,12 @@ absl::optional<ui::Cursor> EventHandler::SelectCursor(
     }
   }
 
-  const ComputedStyle& style = layout_object.StyleRef();
+  const ComputedStyle* scrollbar_style =
+      GetComputedStyleFromScrollbar(layout_object, result);
+
+  const ComputedStyle& style =
+      scrollbar_style ? *scrollbar_style : layout_object.StyleRef();
+
   if (const CursorList* cursors = style.Cursors()) {
     for (const auto& cursor : *cursors) {
       const StyleImage* style_image = cursor.GetImage();
@@ -827,10 +877,17 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     // EmbeddedContentView entered a modal event loop.  The capturing should be
     // done only when the result indicates it has been handled. See
     // crbug.com/269917
+    //
+    // TODO(mustaq): The only user of `MouseEventManager::captures_dragging_` is
+    // the following `if` condition.  After shipping the feature
+    // MouseDragFromIframeOnCancelledMouseDown, remove `captures_dragging_` plus
+    // the old comment block above.
     mouse_event_manager_->SetCapturesDragging(
         subframe->GetEventHandler().mouse_event_manager_->CapturesDragging());
     if (mouse_event_manager_->MousePressed() &&
-        mouse_event_manager_->CapturesDragging()) {
+        (RuntimeEnabledFeatures::
+             MouseDragFromIframeOnCancelledMouseDownEnabled() ||
+         mouse_event_manager_->CapturesDragging())) {
       capturing_mouse_events_element_ = mev.InnerElement();
       capturing_subframe_element_ = mev.InnerElement();
     }
@@ -1112,11 +1169,9 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   }
 
   WebInputEventResult event_result = WebInputEventResult::kNotHandled;
-  bool is_portal =
-      mev.InnerElement() && IsA<HTMLPortalElement>(*mev.InnerElement());
   bool is_remote_frame = false;
-  LocalFrame* current_subframe = event_handling_util::GetTargetSubframe(
-      mev, capturing_mouse_events_element_, &is_remote_frame);
+  LocalFrame* current_subframe =
+      event_handling_util::GetTargetSubframe(mev, &is_remote_frame);
 
   // We want mouseouts to happen first, from the inside out.  First send a
   // move event to the last subframe so that it will fire mouseouts.
@@ -1160,7 +1215,7 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
                                                             mev.InnerNode());
 
     LocalFrameView* view = frame_->View();
-    if ((!is_remote_frame || is_portal) && view) {
+    if (!is_remote_frame && view) {
       absl::optional<ui::Cursor> optional_cursor =
           SelectCursor(mev.GetHitTestLocation(), mev.GetHitTestResult());
       if (optional_cursor.has_value()) {
@@ -1171,20 +1226,33 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
 
   last_mouse_move_event_subframe_ = current_subframe;
 
-  if (event_result != WebInputEventResult::kNotHandled)
+  if (event_result != WebInputEventResult::kNotHandled) {
     return event_result;
+  }
 
   event_result = DispatchMousePointerEvent(WebInputEvent::Type::kPointerMove,
                                            mev.InnerElement(), mev.Event(),
                                            coalesced_events, predicted_events);
   // TODO(crbug.com/346473): Since there is no default action for the mousemove
-  // event we should consider doing drag&drop even when js cancels the
-  // mouse move event.
+  // event, MouseEventManager should handle drag for text selection even when js
+  // cancels the mouse move event.
   // https://w3c.github.io/uievents/#event-type-mousemove
-  if (event_result != WebInputEventResult::kNotHandled)
-    return event_result;
+  if (event_result == WebInputEventResult::kNotHandled ||
+      (RuntimeEnabledFeatures::MouseDragOnCancelledMouseMoveEnabled() &&
+       event_result == WebInputEventResult::kHandledApplication)) {
+    bool mousemove_cancelled =
+        (event_result == WebInputEventResult::kHandledApplication);
 
-  return mouse_event_manager_->HandleMouseDraggedEvent(mev);
+    event_result = mouse_event_manager_->HandleMouseDraggedEvent(mev);
+
+    if (mousemove_cancelled &&
+        event_result == WebInputEventResult::kHandledSystem) {
+      UseCounter::Count(frame_->GetDocument(),
+                        WebFeature::kMouseDragOnCancelledMouseMove);
+    }
+  }
+
+  return event_result;
 }
 
 WebInputEventResult EventHandler::HandleMouseReleaseEvent(
@@ -1246,8 +1314,7 @@ WebInputEventResult EventHandler::HandleMouseReleaseEvent(
   HitTestRequest::HitTestRequestType hit_type = HitTestRequest::kRelease;
   HitTestRequest request(hit_type);
   MouseEventWithHitTestResults mev = GetMouseEventTarget(request, mouse_event);
-  LocalFrame* subframe = event_handling_util::GetTargetSubframe(
-      mev, capturing_mouse_events_element_.Get());
+  LocalFrame* subframe = event_handling_util::GetTargetSubframe(mev);
   capturing_mouse_events_element_ = nullptr;
   if (subframe)
     return PassMouseReleaseEventToSubframe(mev, subframe);
@@ -1432,6 +1499,12 @@ Element* EventHandler::EffectiveMouseEventTargetElement(
   if (pointer_event_manager_->GetMouseCaptureTarget())
     new_element_under_mouse = pointer_event_manager_->GetMouseCaptureTarget();
   return new_element_under_mouse;
+}
+
+void EventHandler::OnScrollbarDestroyed(const Scrollbar& scrollbar) {
+  if (*last_scrollbar_under_mouse_ == scrollbar) {
+    last_scrollbar_under_mouse_ = nullptr;
+  }
 }
 
 Element* EventHandler::GetElementUnderMouse() {
@@ -1648,21 +1721,8 @@ WebInputEventResult EventHandler::HandleGestureEventInFrame(
   return gesture_manager_->HandleGestureEventInFrame(targeted_event);
 }
 
-WebInputEventResult EventHandler::HandleGestureScrollEvent(
-    const WebGestureEvent& gesture_event) {
-  TRACE_EVENT0("input", "EventHandler::handleGestureScrollEvent");
-  if (!frame_->GetPage())
-    return WebInputEventResult::kNotHandled;
-
-  return scroll_manager_->HandleGestureScrollEvent(gesture_event);
-}
-
 void EventHandler::SetMouseDownMayStartAutoscroll() {
   mouse_event_manager_->SetMouseDownMayStartAutoscroll();
-}
-
-bool EventHandler::IsScrollbarHandlingGestures() const {
-  return scroll_manager_->IsScrollbarHandlingGestures();
 }
 
 bool EventHandler::ShouldApplyTouchAdjustment(
@@ -1736,6 +1796,12 @@ bool EventHandler::BestNodeForHitTestResult(
   if (touch_rect.IsEmpty()) {
     return false;
   }
+
+  CHECK(location.BoundingBox().Contains(location.Point()) ||
+        (location.BoundingBox().Right() == LayoutUnit::Max() &&
+         location.Point().left == LayoutUnit::Max()) ||
+        (location.BoundingBox().Bottom() == LayoutUnit::Max() &&
+         location.Point().top == LayoutUnit::Max()));
 
   HeapVector<Member<Node>, 11> nodes(result.ListBasedTestResult());
 

@@ -8,7 +8,6 @@ import * as Bindings from '../../../../../front_end/models/bindings/bindings.js'
 import * as Breakpoints from '../../../../../front_end/models/breakpoints/breakpoints.js';
 import * as Common from '../../../../../front_end/core/common/common.js';
 import * as Persistence from '../../../../../front_end/models/persistence/persistence.js';
-import * as Root from '../../../../../front_end/core/root/root.js';
 import * as Host from '../../../../../front_end/core/host/host.js';
 import type * as Platform from '../../../../../front_end/core/platform/platform.js';
 import * as SDK from '../../../../../front_end/core/sdk/sdk.js';
@@ -26,7 +25,6 @@ import {describeWithMockConnection} from '../../helpers/MockConnection.js';
 
 describeWithEnvironment('SourcesView', () => {
   beforeEach(async () => {
-    Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.HEADER_OVERRIDES);
     const actionRegistryInstance = UI.ActionRegistry.ActionRegistry.instance({forceNew: true});
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
     const targetManager = SDK.TargetManager.TargetManager.instance();
@@ -185,5 +183,18 @@ describeWithMockConnection('SourcesView', () => {
     assert.deepEqual(addedURLs, ['http://foo.com/script.js']);
     const removedURLs = removeUISourceCodesSpy.args.map(args => args[0][0].url());
     assert.deepEqual(removedURLs, ['http://example.com/a.js', 'http://example.com/b.js']);
+  });
+
+  it('doesn\'t remove non-network UISourceCodes when changing the scope target', () => {
+    createFileSystemUISourceCode({
+      url: 'snippet:///foo.js' as Platform.DevToolsPath.UrlString,
+      mimeType: 'application/javascript',
+      type: 'snippets',
+    });
+
+    const sourcesView = new Sources.SourcesView.SourcesView();
+    const removeUISourceCodesSpy = sinon.spy(sourcesView.editorContainer, 'removeUISourceCodes');
+    target2.targetManager().setScopeTarget(target2);
+    assert.isTrue(removeUISourceCodesSpy.notCalled);
   });
 });

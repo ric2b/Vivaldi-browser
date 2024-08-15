@@ -4,13 +4,16 @@
 
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 
+#include <utility>
+
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/fast_checkout/fast_checkout_client_impl.h"
-#include "chrome/browser/fast_checkout/fast_checkout_features.h"
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
+#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
 #include "components/autofill/content/browser/test_autofill_driver_injector.h"
@@ -32,14 +35,21 @@
 #include "chrome/browser/ui/android/autofill/autofill_save_card_bottom_sheet_bridge.h"
 #include "chrome/browser/ui/android/autofill/autofill_save_card_delegate_android.h"
 #include "components/autofill/core/browser/payments/autofill_save_card_ui_info.h"
+#else
+#include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
+#include "chrome/browser/ui/hats/hats_service_factory.h"
+#include "chrome/browser/ui/hats/mock_hats_service.h"
 #endif
 
 namespace autofill {
 namespace {
 
+using ::testing::_;
 using ::testing::AllOf;
 using ::testing::Field;
 using ::testing::InSequence;
+using ::testing::Ref;
+using ::testing::Return;
 
 #if BUILDFLAG(IS_ANDROID)
 class MockAutofillSaveCardBottomSheetBridge
@@ -210,6 +220,33 @@ TEST_F(ChromeAutofillClientTest,
   EXPECT_EQ(client()->GetPlusAddressService(), nullptr);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+// Test that the hats service is called with the expected params.
+// Note that Surveys are only launched on Desktop.
+TEST_F(ChromeAutofillClientTest, TriggerUserPerceptionOfAutofillSurvey) {
+  MockHatsService* mock_hats_service = static_cast<MockHatsService*>(
+      HatsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+          profile(), base::BindRepeating(&BuildMockHatsService)));
+  EXPECT_CALL(*mock_hats_service, CanShowAnySurvey)
+      .WillRepeatedly(Return(true));
+
+  SurveyBitsData expected_bits = {{"granular filling available", false}};
+  const SurveyStringData field_filling_stats_data;
+  EXPECT_CALL(*mock_hats_service,
+              LaunchDelayedSurveyForWebContents(
+                  kHatsSurveyTriggerAutofillAddressUserPerception, _, _,
+                  expected_bits, Ref(field_filling_stats_data), _, _, _, _, _));
+
+  client()->TriggerUserPerceptionOfAutofillSurvey(field_filling_stats_data);
+}
+#endif
+
+// Test that there is always an PaymentsWindowManager present if attempted
+// to be retrieved.
+TEST_F(ChromeAutofillClientTest, GetPaymentsWindowManager) {
+  EXPECT_NE(client()->GetPaymentsWindowManager(), nullptr);
+}
+
 #if BUILDFLAG(IS_ANDROID)
 class ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature
     : public ChromeAutofillClientTest {
@@ -363,6 +400,57 @@ TEST_F(ChromeAutofillClientTestWithPaymentsAndroidBottomSheetFeature,
       CreditCard(),
       ChromeAutofillClient::SaveCreditCardOptions().with_show_prompt(true),
       base::DoNothing()));
+}
+#endif
+
+#if !BUILDFLAG(IS_ANDROID)
+class MockSaveCardBubbleController : public SaveCardBubbleControllerImpl {
+ public:
+  explicit MockSaveCardBubbleController(content::WebContents* web_contents)
+      : SaveCardBubbleControllerImpl(web_contents) {}
+  ~MockSaveCardBubbleController() override = default;
+
+  MOCK_METHOD(void, HideIconAndBubbleAfterUpload, (), (override));
+};
+
+class ChromeAutofillClientTestWithSaveCardLoadingAndConfirmation
+    : public ChromeAutofillClientTest {
+ public:
+  ChromeAutofillClientTestWithSaveCardLoadingAndConfirmation() {
+    feature_list_.InitAndEnableFeature(
+        features::kAutofillEnableSaveCardLoadingAndConfirmation);
+  }
+
+  void SetUp() override {
+    ChromeAutofillClientTest::SetUp();
+
+    SecurityStateTabHelper::CreateForWebContents(web_contents());
+
+    auto save_card_bubble_controller =
+        std::make_unique<MockSaveCardBubbleController>(web_contents());
+    save_card_bubble_controller_ = save_card_bubble_controller.get();
+    web_contents()->SetUserData(save_card_bubble_controller_->UserDataKey(),
+                                std::move(save_card_bubble_controller));
+  }
+
+  void TearDown() override {
+    save_card_bubble_controller_ = nullptr;
+    ChromeAutofillClientTest::TearDown();
+  }
+
+  MockSaveCardBubbleController& save_card_bubble_controller() {
+    return *save_card_bubble_controller_;
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  raw_ptr<MockSaveCardBubbleController> save_card_bubble_controller_ = nullptr;
+};
+
+TEST_F(ChromeAutofillClientTestWithSaveCardLoadingAndConfirmation,
+       CreditCardUploadCompleted_HidesSaveCardBubbleAndIcon) {
+  EXPECT_CALL(save_card_bubble_controller(), HideIconAndBubbleAfterUpload);
+  client()->CreditCardUploadCompleted(true);
 }
 #endif
 

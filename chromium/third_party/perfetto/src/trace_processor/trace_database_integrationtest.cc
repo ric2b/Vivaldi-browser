@@ -23,6 +23,7 @@
 
 #include "perfetto/base/logging.h"
 #include "perfetto/ext/base/scoped_file.h"
+#include "perfetto/ext/base/string_utils.h"
 #include "perfetto/trace_processor/basic_types.h"
 #include "perfetto/trace_processor/trace_processor.h"
 #include "protos/perfetto/common/descriptor.pbzero.h"
@@ -398,26 +399,261 @@ TEST_F(TraceProcessorIntegrationTest, MAYBE_Clusterfuzz28766) {
   ASSERT_TRUE(LoadTrace("clusterfuzz_28766", 4096).ok());
 }
 
-TEST_F(TraceProcessorIntegrationTest, RestoreInitialTables) {
-  ASSERT_TRUE(LoadTrace("android_sched_and_ps.pb").ok());
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesInvariant) {
+  Processor()->NotifyEndOfFile();
+  uint64_t first_restore = RestoreInitialTables();
+  ASSERT_EQ(RestoreInitialTables(), first_restore);
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesPerfettoSql) {
+  Processor()->NotifyEndOfFile();
+  RestoreInitialTables();
 
   for (int repeat = 0; repeat < 3; repeat++) {
     ASSERT_EQ(RestoreInitialTables(), 0u);
 
-    auto it = Query("CREATE TABLE user1(unused text);");
-    it.Next();
-    ASSERT_TRUE(it.Status().ok());
+    // 1. Perfetto table
+    {
+      auto it = Query("CREATE PERFETTO TABLE obj1 AS SELECT 1 AS col;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    // 2. Perfetto view
+    {
+      auto it = Query("CREATE PERFETTO VIEW obj2 AS SELECT * FROM stats;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    // 3. Runtime function
+    {
+      auto it =
+          Query("CREATE PERFETTO FUNCTION obj3() RETURNS INT AS SELECT 1;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    // 4. Runtime table function
+    {
+      auto it = Query(
+          "CREATE PERFETTO FUNCTION obj4() RETURNS TABLE(col INT) AS SELECT 1 "
+          "AS col;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    // 5. Macro
+    {
+      auto it = Query("CREATE PERFETTO MACRO obj5(a Expr) returns Expr AS $a;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("obj5!(SELECT 1);");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    ASSERT_EQ(RestoreInitialTables(), 5u);
+  }
+}
 
-    it = Query("CREATE TEMPORARY TABLE user2(unused text);");
-    it.Next();
-    ASSERT_TRUE(it.Status().ok());
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesStandardSqlite) {
+  Processor()->NotifyEndOfFile();
+  RestoreInitialTables();
 
-    it = Query("CREATE VIEW user3 AS SELECT * FROM stats;");
-    it.Next();
-    ASSERT_TRUE(it.Status().ok());
-
+  for (int repeat = 0; repeat < 3; repeat++) {
+    ASSERT_EQ(RestoreInitialTables(), 0u);
+    {
+      auto it = Query("CREATE TABLE obj1(unused text);");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("CREATE TEMPORARY TABLE obj2(unused text);");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    // Add a view
+    {
+      auto it = Query("CREATE VIEW obj3 AS SELECT * FROM stats;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
     ASSERT_EQ(RestoreInitialTables(), 3u);
   }
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesModules) {
+  Processor()->NotifyEndOfFile();
+  RestoreInitialTables();
+
+  for (int repeat = 0; repeat < 3; repeat++) {
+    ASSERT_EQ(RestoreInitialTables(), 0u);
+    {
+      auto it = Query("INCLUDE PERFETTO MODULE common.timestamps;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("SELECT trace_start();");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    RestoreInitialTables();
+  }
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesSpanJoin) {
+  Processor()->NotifyEndOfFile();
+  RestoreInitialTables();
+
+  for (int repeat = 0; repeat < 3; repeat++) {
+    ASSERT_EQ(RestoreInitialTables(), 0u);
+    {
+      auto it = Query(
+          "CREATE TABLE t1(ts BIGINT, dur BIGINT, PRIMARY KEY (ts, dur)) "
+          "WITHOUT ROWID;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query(
+          "CREATE TABLE t2(ts BIGINT, dur BIGINT, PRIMARY KEY (ts, dur)) "
+          "WITHOUT ROWID;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("INSERT INTO t2(ts, dur) VALUES(1, 2), (5, 0), (1, 1);");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("CREATE VIRTUAL TABLE sp USING span_join(t1, t2);;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("SELECT ts, dur FROM sp;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    ASSERT_EQ(RestoreInitialTables(), 3u);
+  }
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesWithClause) {
+  Processor()->NotifyEndOfFile();
+  RestoreInitialTables();
+
+  for (int repeat = 0; repeat < 3; repeat++) {
+    ASSERT_EQ(RestoreInitialTables(), 0u);
+    {
+      auto it = Query(
+          "CREATE PERFETTO TABLE foo AS WITH bar AS (SELECT * FROM slice) "
+          "SELECT ts FROM bar;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    ASSERT_EQ(RestoreInitialTables(), 1u);
+  }
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesIndex) {
+  Processor()->NotifyEndOfFile();
+  RestoreInitialTables();
+
+  for (int repeat = 0; repeat < 3; repeat++) {
+    ASSERT_EQ(RestoreInitialTables(), 0u);
+    {
+      auto it = Query("CREATE TABLE foo AS SELECT * FROM slice;");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    {
+      auto it = Query("CREATE INDEX ind ON foo (ts, track_id);");
+      it.Next();
+      ASSERT_TRUE(it.Status().ok());
+    }
+    ASSERT_EQ(RestoreInitialTables(), 2u);
+  }
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesTraceBounds) {
+  ASSERT_TRUE(LoadTrace("android_sched_and_ps.pb").ok());
+  {
+    auto it = Query("SELECT * from trace_bounds;");
+    it.Next();
+    ASSERT_TRUE(it.Status().ok());
+    ASSERT_EQ(it.Get(0).AsLong(), 81473009948313l);
+  }
+
+  ASSERT_EQ(RestoreInitialTables(), 0u);
+  {
+    auto it = Query("SELECT * from trace_bounds;");
+    it.Next();
+    ASSERT_TRUE(it.Status().ok());
+    ASSERT_EQ(it.Get(0).AsLong(), 81473009948313l);
+  }
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreInitialTablesDependents) {
+  Processor()->NotifyEndOfFile();
+  {
+    auto it = Query("create perfetto table foo as select 1 as x");
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok());
+
+    it = Query("create perfetto function f() returns INT as select * from foo");
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok());
+
+    it = Query("SELECT f()");
+    ASSERT_TRUE(it.Next());
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok());
+  }
+
+  ASSERT_EQ(RestoreInitialTables(), 2u);
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreDependentFunction) {
+  Processor()->NotifyEndOfFile();
+  {
+    auto it =
+        Query("create perfetto function foo0() returns INT as select 1 as x");
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok());
+  }
+  for (int i = 1; i < 100; ++i) {
+    base::StackString<1024> sql(
+        "create perfetto function foo%d() returns INT as select foo%d()", i,
+        i - 1);
+    auto it = Query(sql.c_str());
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok()) << it.Status().c_message();
+  }
+
+  ASSERT_EQ(RestoreInitialTables(), 100u);
+}
+
+TEST_F(TraceProcessorIntegrationTest, RestoreDependentTableFunction) {
+  Processor()->NotifyEndOfFile();
+  {
+    auto it = Query(
+        "create perfetto function foo0() returns TABLE(x INT) "
+        " as select 1 as x");
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok());
+  }
+  for (int i = 1; i < 100; ++i) {
+    base::StackString<1024> sql(
+        "create perfetto function foo%d() returns TABLE(x INT) "
+        " as select * from foo%d()",
+        i, i - 1);
+    auto it = Query(sql.c_str());
+    ASSERT_FALSE(it.Next());
+    ASSERT_TRUE(it.Status().ok()) << it.Status().c_message();
+  }
+
+  ASSERT_EQ(RestoreInitialTables(), 100u);
 }
 
 // This test checks that a ninja trace is tokenized properly even if read in
@@ -540,6 +776,21 @@ TEST_F(TraceProcessorIntegrationTest, ErrorMessageModule) {
     select t from slice
            ^
 no such column: t)");
+}
+
+TEST_F(TraceProcessorIntegrationTest, FunctionRegistrationError) {
+  auto it =
+      Query("create perfetto function f() returns INT as select * from foo");
+  ASSERT_FALSE(it.Next());
+  ASSERT_FALSE(it.Status().ok());
+
+  it = Query("SELECT foo()");
+  ASSERT_FALSE(it.Next());
+  ASSERT_FALSE(it.Status().ok());
+
+  it = Query("create perfetto function f() returns INT as select 1");
+  ASSERT_FALSE(it.Next());
+  ASSERT_TRUE(it.Status().ok());
 }
 
 }  // namespace

@@ -65,6 +65,8 @@ NoteNode::NoteNode(int64_t id,
     : type_(type),
       creation_time_(
           base::Time::Now()),  // This will be overwritten if read from file.
+      last_modification_time_(
+          base::Time::Now()),  // This will be overwritten if read from file.
       uuid_(uuid),
       id_(id),
       is_permanent_node_(is_permanent_node) {

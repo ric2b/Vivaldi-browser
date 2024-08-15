@@ -6,6 +6,7 @@
 #define CONTENT_BROWSER_FILE_SYSTEM_ACCESS_FILE_SYSTEM_ACCESS_LOCK_MANAGER_H_
 
 #include <map>
+#include <optional>
 
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
@@ -15,7 +16,7 @@
 #include "base/types/pass_key.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "content/common/content_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "content/public/browser/global_routing_id.h"
 
 namespace storage {
 class FileSystemURL;
@@ -43,7 +44,7 @@ class CONTENT_EXPORT FileSystemAccessLockManager {
   using TakeLockCallback = base::OnceCallback<void(scoped_refptr<LockHandle>)>;
 
   // A handle to a `Lock` passed to the frame that holds the lock. The `Lock` is
-  // kept alive as long as `LockHandle` is kept alive.
+  // kept alive as long as there is some `LockHandle` to it.
   class CONTENT_EXPORT LockHandle : public base::RefCounted<LockHandle> {
    public:
     LockHandle(LockHandle const&) = delete;
@@ -58,7 +59,8 @@ class CONTENT_EXPORT FileSystemAccessLockManager {
     friend class base::RefCounted<LockHandle>;
 
     LockHandle(base::WeakPtr<Lock> lock,
-               scoped_refptr<LockHandle> parent_lock_handle);
+               scoped_refptr<LockHandle> parent_lock_handle,
+               const GlobalRenderFrameHostId& frame_id);
 
     // On destruction, lets its `lock_` know it is no longer held.
     ~LockHandle();
@@ -70,6 +72,10 @@ class CONTENT_EXPORT FileSystemAccessLockManager {
     const bool is_exclusive_;
 
     const scoped_refptr<LockHandle> parent_lock_handle_;
+
+    // The frame id of the associated render frame host that holds this lock
+    // handle.
+    const GlobalRenderFrameHostId frame_id_;
   };
 
   explicit FileSystemAccessLockManager(
@@ -83,12 +89,23 @@ class CONTENT_EXPORT FileSystemAccessLockManager {
   // Attempts to take a lock of `lock_type` on `url`. Passes a handle of the
   // lock to `callback` if successful. The lock is released when there are no
   // handles to it.
-  void TakeLock(const storage::FileSystemURL& url,
+  //
+  // `frame_id` is the `GlobalRenderFrameHostId` of the render frame host
+  // associated with the frame that holds this handle.
+  //
+  // If there is an existing lock that is in contention with the `lock_type`, it
+  // will evict pages that hold the existing lock if they are all inactive (e.g.
+  // in the BFCache).
+  void TakeLock(const GlobalRenderFrameHostId& frame_id,
+                const storage::FileSystemURL& url,
                 LockType lock_type,
                 TakeLockCallback callback);
 
   // Returns true if there is not an existing lock on `url` that is contentious
   // with `lock_type`.
+  //
+  // This may return `false` but the same arguments would succeed for `TakeLock`
+  // since `TakeLock` may evict pages to take the lock.
   bool IsContentious(const storage::FileSystemURL& url, LockType lock_type);
 
   // Creates a new shared lock type.
@@ -122,7 +139,7 @@ class CONTENT_EXPORT FileSystemAccessLockManager {
     static RootLocator FromFileSystemURL(const storage::FileSystemURL& url);
 
     RootLocator(const EntryPathType& type,
-                const absl::optional<storage::BucketLocator>& bucket_locator);
+                const std::optional<storage::BucketLocator>& bucket_locator);
     RootLocator(const RootLocator&);
     ~RootLocator();
 
@@ -130,7 +147,7 @@ class CONTENT_EXPORT FileSystemAccessLockManager {
 
     const EntryPathType type;
     // Non-null iff `type` is kSandboxed.
-    const absl::optional<storage::BucketLocator> bucket_locator;
+    const std::optional<storage::BucketLocator> bucket_locator;
   };
 
   // Releases the root lock for `root_locator`. Called from the RootLock.

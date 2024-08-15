@@ -22,16 +22,15 @@ enum class BubbleType {
   // card.
   UPLOAD_CVC_SAVE,
 
-  // Credit card upload is in progress. No bubble visible but show the credit
-  // card icon with the loading indicator animation.
+  // Credit card upload is in progress.
   UPLOAD_IN_PROGRESS,
+
+  // Credit card upload is completed.
+  UPLOAD_COMPLETED,
 
   // The manage cards bubble when bubble is reshown after
   // icon is clicked.
   MANAGE_CARDS,
-
-  // The failure bubble when credit card uploading failed.
-  FAILURE,
 
   // There is no bubble to show anymore. This also
   // indicates that the icon should not be visible.

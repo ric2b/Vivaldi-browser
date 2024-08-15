@@ -252,6 +252,7 @@ bool Heap::CreateMutableHeapObjects() {
   return true;
 }
 
+// Allocates contextless map in read-only or map (old) space.
 AllocationResult Heap::AllocateMap(AllocationType allocation_type,
                                    InstanceType instance_type,
                                    int instance_size,
@@ -265,11 +266,11 @@ AllocationResult Heap::AllocateMap(AllocationType allocation_type,
   AllocationResult allocation = AllocateRaw(Map::kSize, allocation_type);
   if (!allocation.To(&result)) return allocation;
 
-  result->set_map_after_allocation(ReadOnlyRoots(this).meta_map(),
-                                   SKIP_WRITE_BARRIER);
+  ReadOnlyRoots roots(this);
+  result->set_map_after_allocation(roots.meta_map(), SKIP_WRITE_BARRIER);
   Tagged<Map> map = isolate()->factory()->InitializeMap(
       Map::cast(result), instance_type, instance_size, elements_kind,
-      inobject_properties, this);
+      inobject_properties, roots);
 
   return AllocationResult::FromObject(map);
 }
@@ -382,11 +383,12 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
   Tagged<Type> name = Type::unchecked_cast(obj);                           \
   set_##name(name)
 
-    ALLOCATE_AND_SET_ROOT(Undefined, undefined_value, Undefined::kSize);
-    ALLOCATE_AND_SET_ROOT(Null, null_value, Null::kSize);
-    ALLOCATE_AND_SET_ROOT(SeqOneByteString, empty_string, String::kHeaderSize);
-    ALLOCATE_AND_SET_ROOT(False, false_value, False::kSize);
-    ALLOCATE_AND_SET_ROOT(True, true_value, True::kSize);
+    ALLOCATE_AND_SET_ROOT(Undefined, undefined_value, sizeof(Undefined));
+    ALLOCATE_AND_SET_ROOT(Null, null_value, sizeof(Null));
+    ALLOCATE_AND_SET_ROOT(SeqOneByteString, empty_string,
+                          SeqOneByteString::SizeFor(0));
+    ALLOCATE_AND_SET_ROOT(False, false_value, sizeof(False));
+    ALLOCATE_AND_SET_ROOT(True, true_value, sizeof(True));
 
     for (const StringTypeInit& entry : kStringTypeTable) {
       {
@@ -409,9 +411,9 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
     // Then, initialise the initial maps.
     InitializePartialMap(meta_map, meta_map, MAP_TYPE, Map::kSize);
     InitializePartialMap(undefined_map, meta_map, ODDBALL_TYPE,
-                         Undefined::kSize);
-    InitializePartialMap(null_map, meta_map, ODDBALL_TYPE, Null::kSize);
-    InitializePartialMap(boolean_map, meta_map, ODDBALL_TYPE, Boolean::kSize);
+                         sizeof(Undefined));
+    InitializePartialMap(null_map, meta_map, ODDBALL_TYPE, sizeof(Null));
+    InitializePartialMap(boolean_map, meta_map, ODDBALL_TYPE, sizeof(Boolean));
     boolean_map->SetConstructorFunctionIndex(Context::BOOLEAN_FUNCTION_INDEX);
 
     for (const StringTypeInit& entry : kStringTypeTable) {
@@ -420,7 +422,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
       map->SetConstructorFunctionIndex(Context::STRING_FUNCTION_INDEX);
       if (StringShape(entry.type).IsCons()) map->mark_unstable();
     }
-    InitializePartialMap(symbol_map, meta_map, SYMBOL_TYPE, Symbol::kSize);
+    InitializePartialMap(symbol_map, meta_map, SYMBOL_TYPE, sizeof(Symbol));
     symbol_map->SetConstructorFunctionIndex(Context::SYMBOL_FUNCTION_INDEX);
 
     // Finally, initialise the non-map objects using those maps.
@@ -460,6 +462,8 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
 
   {  // Partial map allocation
     ALLOCATE_PARTIAL_MAP(FIXED_ARRAY_TYPE, kVariableSizeSentinel, fixed_array);
+    ALLOCATE_PARTIAL_MAP(TRUSTED_FIXED_ARRAY_TYPE, kVariableSizeSentinel,
+                         trusted_fixed_array);
     ALLOCATE_PARTIAL_MAP(WEAK_FIXED_ARRAY_TYPE, kVariableSizeSentinel,
                          weak_fixed_array);
     ALLOCATE_PARTIAL_MAP(WEAK_ARRAY_LIST_TYPE, kVariableSizeSentinel,
@@ -549,6 +553,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
   // Fix the instance_descriptors for the existing maps.
   FinalizePartialMap(roots.meta_map());
   FinalizePartialMap(roots.fixed_array_map());
+  FinalizePartialMap(roots.trusted_fixed_array_map());
   FinalizePartialMap(roots.weak_fixed_array_map());
   FinalizePartialMap(roots.weak_array_list_map());
   FinalizePartialMap(roots.fixed_cow_array_map());
@@ -597,7 +602,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
     ALLOCATE_VARSIZE_MAP(FEEDBACK_VECTOR_TYPE, feedback_vector)
 
     // Keep HeapNumber and BigInt maps together for cheaper numerics checks.
-    ALLOCATE_PRIMITIVE_MAP(HEAP_NUMBER_TYPE, HeapNumber::kSize, heap_number,
+    ALLOCATE_PRIMITIVE_MAP(HEAP_NUMBER_TYPE, sizeof(HeapNumber), heap_number,
                            Context::NUMBER_FUNCTION_INDEX)
     ALLOCATE_VARSIZE_MAP(BIGINT_TYPE, bigint);
 
@@ -608,6 +613,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
     roots.fixed_double_array_map()->set_elements_kind(HOLEY_DOUBLE_ELEMENTS);
     ALLOCATE_VARSIZE_MAP(FEEDBACK_METADATA_TYPE, feedback_metadata)
     ALLOCATE_VARSIZE_MAP(BYTE_ARRAY_TYPE, byte_array)
+    ALLOCATE_VARSIZE_MAP(TRUSTED_BYTE_ARRAY_TYPE, trusted_byte_array)
     ALLOCATE_VARSIZE_MAP(BYTECODE_ARRAY_TYPE, bytecode_array)
     ALLOCATE_VARSIZE_MAP(FREE_SPACE_TYPE, free_space)
     ALLOCATE_VARSIZE_MAP(PROPERTY_ARRAY_TYPE, property_array)
@@ -741,9 +747,13 @@ bool Heap::CreateLateReadOnlyNonJSReceiverMaps() {
     IF_WASM(ALLOCATE_MAP, WASM_CONTINUATION_OBJECT_TYPE,
             WasmContinuationObject::kSize, wasm_continuation_object)
     IF_WASM(ALLOCATE_MAP, WASM_NULL_TYPE, kVariableSizeSentinel, wasm_null);
+    IF_WASM(ALLOCATE_MAP, WASM_TRUSTED_INSTANCE_DATA_TYPE,
+            WasmTrustedInstanceData::kSize, wasm_trusted_instance_data);
 
     ALLOCATE_MAP(WEAK_CELL_TYPE, WeakCell::kSize, weak_cell)
     ALLOCATE_VARSIZE_MAP(EXTERNAL_POINTER_ARRAY_TYPE, external_pointer_array)
+    ALLOCATE_MAP(INTERPRETER_DATA_TYPE, InterpreterData::kSize,
+                 interpreter_data)
   }
 
   return true;
@@ -916,7 +926,7 @@ bool Heap::CreateImportantReadOnlyObjects() {
   // The -0 value must be set before NewNumber works.
   set_minus_zero_value(
       *factory->NewHeapNumber<AllocationType::kReadOnly>(-0.0));
-  DCHECK(std::signbit(Object::Number(*roots.minus_zero_value())));
+  DCHECK(std::signbit(Object::Number(roots.minus_zero_value())));
 
   set_nan_value(*factory->NewHeapNumber<AllocationType::kReadOnly>(
       std::numeric_limits<double>::quiet_NaN()));
@@ -1050,6 +1060,7 @@ bool Heap::CreateReadOnlyObjects() {
 
   set_property_cell_hole_value(*factory->NewHole());
   set_hash_table_hole_value(*factory->NewHole());
+  set_promise_hole_value(*factory->NewHole());
   set_uninitialized_value(*factory->NewHole());
   set_arguments_marker(*factory->NewHole());
   set_termination_exception(*factory->NewHole());
@@ -1069,19 +1080,19 @@ bool Heap::CreateReadOnlyObjects() {
 
   {
     HandleScope handle_scope(isolate());
-#define PUBLIC_SYMBOL_INIT(_, name, description)                           \
-  Handle<Symbol> name = factory->NewSymbol(AllocationType::kReadOnly);     \
-  Handle<String> name##d = factory->InternalizeUtf8String(#description);   \
-  TaggedField<Object>::store(*name, Symbol::kDescriptionOffset, *name##d); \
+#define PUBLIC_SYMBOL_INIT(_, name, description)                         \
+  Handle<Symbol> name = factory->NewSymbol(AllocationType::kReadOnly);   \
+  Handle<String> name##d = factory->InternalizeUtf8String(#description); \
+  name->set_description(*name##d);                                       \
   roots_table()[RootIndex::k##name] = name->ptr();
 
     PUBLIC_SYMBOL_LIST_GENERATOR(PUBLIC_SYMBOL_INIT, /* not used */)
 
-#define WELL_KNOWN_SYMBOL_INIT(_, name, description)                       \
-  Handle<Symbol> name = factory->NewSymbol(AllocationType::kReadOnly);     \
-  Handle<String> name##d = factory->InternalizeUtf8String(#description);   \
-  name->set_is_well_known_symbol(true);                                    \
-  TaggedField<Object>::store(*name, Symbol::kDescriptionOffset, *name##d); \
+#define WELL_KNOWN_SYMBOL_INIT(_, name, description)                     \
+  Handle<Symbol> name = factory->NewSymbol(AllocationType::kReadOnly);   \
+  Handle<String> name##d = factory->InternalizeUtf8String(#description); \
+  name->set_is_well_known_symbol(true);                                  \
+  name->set_description(*name##d);                                       \
   roots_table()[RootIndex::k##name] = name->ptr();
 
     WELL_KNOWN_SYMBOL_LIST_GENERATOR(WELL_KNOWN_SYMBOL_INIT, /* not used */)

@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_inline_text.h"
@@ -143,8 +144,8 @@ Text* Text::splitText(unsigned offset, ExceptionState& exception_state) {
 
   // [NewObject] must always create a new wrapper.  Check that a wrapper
   // does not exist yet.
-  DCHECK(
-      DOMDataStore::GetWrapper(new_text, v8::Isolate::GetCurrent()).IsEmpty());
+  DCHECK(DOMDataStore::GetWrapper(new_text, GetDocument().GetAgent().isolate())
+             .IsEmpty());
 
   return new_text;
 }
@@ -268,7 +269,7 @@ static inline bool CanHaveWhitespaceChildren(
 
     return style.ShouldPreserveBreaks() ||
            !EndsWithWhitespace(
-               To<LayoutText>(context.previous_in_flow)->GetText());
+               To<LayoutText>(context.previous_in_flow)->TransformedText());
   }
   return true;
 }
@@ -313,7 +314,7 @@ bool Text::TextLayoutObjectIsNeeded(const AttachContext& context,
 
   if (context.previous_in_flow->IsText()) {
     return !EndsWithWhitespace(
-        To<LayoutText>(context.previous_in_flow)->GetText());
+        To<LayoutText>(context.previous_in_flow)->TransformedText());
   }
 
   return context.previous_in_flow->IsInline() &&
@@ -456,7 +457,7 @@ static bool ShouldUpdateLayoutByReattaching(const Text& text_node,
   if (text_layout_object->IsSecure())
     return false;
   if (!FirstLetterPseudoElement::FirstLetterLength(
-          text_layout_object->GetText()) &&
+          text_layout_object->TransformedText()) &&
       FirstLetterPseudoElement::FirstLetterLength(text_node.data())) {
     // We did not previously apply ::first-letter styles to this |text_node|,
     // and if there was no first formatted letter, but now is, we may need to

@@ -21,11 +21,6 @@ LayoutListMarkerImage* LayoutListMarkerImage::CreateAnonymous(
   return object;
 }
 
-bool LayoutListMarkerImage::IsOfType(LayoutObjectType type) const {
-  NOT_DESTROYED();
-  return type == kLayoutObjectListMarkerImage || LayoutImage::IsOfType(type);
-}
-
 gfx::SizeF LayoutListMarkerImage::DefaultSize() const {
   NOT_DESTROYED();
   const SimpleFontData* font_data = Style()->GetFont().PrimaryFont();
@@ -42,14 +37,11 @@ gfx::SizeF LayoutListMarkerImage::DefaultSize() const {
 void LayoutListMarkerImage::ComputeIntrinsicSizingInfoByDefaultSize(
     IntrinsicSizingInfo& intrinsic_sizing_info) const {
   NOT_DESTROYED();
-  gfx::SizeF concrete_size = ImageResource()->ImageSizeWithDefaultSize(
+  gfx::SizeF concrete_size = ImageResource()->ConcreteObjectSize(
       Style()->EffectiveZoom(), DefaultSize());
   concrete_size.Scale(ImageDevicePixelRatio());
 
-  intrinsic_sizing_info.size.set_width(
-      LayoutUnit(concrete_size.width()).ToFloat());
-  intrinsic_sizing_info.size.set_height(
-      LayoutUnit(concrete_size.height()).ToFloat());
+  intrinsic_sizing_info.size = concrete_size;
   intrinsic_sizing_info.has_width = true;
   intrinsic_sizing_info.has_height = true;
 }
@@ -61,8 +53,9 @@ void LayoutListMarkerImage::ComputeIntrinsicSizingInfo(
 
   // If this is an image without intrinsic width and height, compute the
   // concrete object size by using the specified default object size.
-  if (intrinsic_sizing_info.size.IsEmpty() && ImageResource())
+  if (intrinsic_sizing_info.size.IsEmpty()) {
     ComputeIntrinsicSizingInfoByDefaultSize(intrinsic_sizing_info);
+  }
 }
 
 }  // namespace blink

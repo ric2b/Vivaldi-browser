@@ -48,7 +48,6 @@ import org.mockito.MockitoAnnotations;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
-import org.chromium.base.FeatureList;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
@@ -58,19 +57,15 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.back_press.BackPressHelper;
-import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.download.home.list.ListUtils;
 import org.chromium.chrome.browser.download.home.list.holder.ListItemViewHolder;
 import org.chromium.chrome.browser.download.home.rename.RenameUtils;
 import org.chromium.chrome.browser.download.home.toolbar.DownloadHomeToolbar;
 import org.chromium.chrome.browser.download.internal.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.test.AutomotiveContextWrapperTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.util.date.StringUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -93,9 +88,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /** Tests the download home V2. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -155,12 +148,6 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
                             return url.getSpec();
                         });
 
-        Map<String, Boolean> features = new HashMap<>();
-        features.put(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER, false);
-        features.put(ChromeFeatureList.EMPTY_STATES, false);
-
-        FeatureList.setTestFeatures(features);
-
         mStubbedOfflineContentProvider =
                 new StubbedOfflineContentProvider() {
                     @Override
@@ -217,19 +204,11 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
                         mStubbedOfflineContentProvider,
                         mDiscardableReferencePool);
         getActivity().setContentView(mDownloadCoordinator.getView());
-        if (BackPressManager.isSecondaryActivityEnabled()) {
-            BackPressHelper.create(
-                    getActivity(),
-                    getActivity().getOnBackPressedDispatcher(),
-                    mDownloadCoordinator.getBackPressHandlers(),
-                    SecondaryActivity.DOWNLOAD);
-        } else {
-            BackPressHelper.create(
-                    getActivity(),
-                    getActivity().getOnBackPressedDispatcher(),
-                    mDownloadCoordinator::onBackPressed,
-                    SecondaryActivity.DOWNLOAD);
-        }
+        BackPressHelper.create(
+                getActivity(),
+                getActivity().getOnBackPressedDispatcher(),
+                mDownloadCoordinator.getBackPressHandlers(),
+                SecondaryActivity.DOWNLOAD);
 
         mDownloadCoordinator.updateForUrl(UrlConstants.DOWNLOADS_URL);
     }
@@ -324,36 +303,6 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
     @Test
     @MediumTest
     public void testPrefetchTabEmptyText() throws Exception {
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    setUpUi();
-                });
-
-        onView(withId(R.id.empty)).check(matches(not(isDisplayed())));
-
-        // Go to Prefetch tab. It should be empty.
-        onView(withText(equalToIgnoringCase("Explore Offline")))
-                .check(matches(isDisplayed()))
-                .perform(ViewActions.click());
-        onView(withText(containsString("Articles appear here"))).check(matches(isDisplayed()));
-        onView(withId(R.id.empty)).check(matches(isDisplayed()));
-
-        // Go back to files tab. It shouldn't be empty.
-        onView(withText(equalToIgnoringCase("My Files")))
-                .check(matches(isDisplayed()))
-                .perform(ViewActions.click());
-        onView(withId(R.id.empty)).check(matches(not(isDisplayed())));
-    }
-
-    @Test
-    @MediumTest
-    public void testPrefetchTabEmptyText_EmptyState() throws Exception {
-        // Enable Empty State FF.
-        Map<String, Boolean> features = new HashMap<>();
-        features.put(ChromeFeatureList.EMPTY_STATES, true);
-        features.put(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER, false);
-        FeatureList.setTestFeatures(features);
-
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     setUpUi();
@@ -550,51 +499,6 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
                 });
 
         // The files tab should show empty view now.
-        onView(withId(R.id.empty)).check(matches(isDisplayed()));
-    }
-
-    @Test
-    @MediumTest
-    public void testDeleteItem_EmptyState() throws Exception {
-        // Enable Empty State FF.
-        Map<String, Boolean> features = new HashMap<>();
-        features.put(ChromeFeatureList.EMPTY_STATES, true);
-        features.put(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER, false);
-        FeatureList.setTestFeatures(features);
-
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    setUpUi();
-                });
-        SnackbarManager.setDurationForTesting(1);
-
-        // The last item may be outside the view port, that recycler view won't create the view
-        // holder, so scroll to that view holder first.
-        onView(withId(R.id.download_home_recycler_view))
-                .perform(RecyclerViewActions.scrollToHolder(hasTextInViewHolder("page 1")));
-
-        onView(withText("page 1")).check(matches(isDisplayed()));
-
-        // Delete an item using three dot menu. The item should be removed from the list.
-        onView(allOf(withId(R.id.more), hasSibling(withText("page 1"))))
-                .perform(ViewActions.click());
-        onView(withText("Delete")).check(matches(isDisplayed())).perform(ViewActions.click());
-        onView(withText("page 1")).check(doesNotExist());
-
-        // Delete the remaining items using long press and multi-delete from toolbar menu.
-        onView(withText("page 2")).check(matches(isDisplayed())).perform(ViewActions.longClick());
-        onView(withText("page 3")).check(matches(isDisplayed())).perform(ViewActions.longClick());
-        onView(withText("page 4")).check(matches(isDisplayed())).perform(ViewActions.longClick());
-
-        PostTask.runOrPostTask(
-                TaskTraits.UI_DEFAULT,
-                () -> {
-                    DownloadHomeToolbar toolbar = getActivity().findViewById(R.id.download_toolbar);
-                    toolbar.getMenu()
-                            .performIdentifierAction(R.id.selection_mode_delete_menu_id, 0);
-                });
-
-        // The files tab should show empty view now.
         onView(withId(R.id.empty_state_icon)).check(matches(isDisplayed()));
     }
 
@@ -686,8 +590,6 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
 
     @Test
     @MediumTest
-    @DisableFeatures({ChromeFeatureList.BACK_GESTURE_REFACTOR_ACTIVITY})
-    @DisabledTest(message = "https://crbug.com/1416712")
     public void testDismissSearchViewByBackPress() {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -727,13 +629,6 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
                 () -> {
                     onView(withId(R.id.search_text)).check(matches(not(isDisplayed())));
                 });
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.BACK_GESTURE_REFACTOR_ACTIVITY})
-    public void testDismissSearchViewByBackPress_BackPressRefactor() {
-        testDismissSearchViewByBackPress();
     }
 
     /**

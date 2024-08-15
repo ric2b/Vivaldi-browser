@@ -57,7 +57,7 @@ import (
 // Note: Validate() should be called before attempting to update the
 // expectations. If Validate() returns errors, then Update() behaviour is
 // undefined.
-func (c *Content) Update(results result.List, testlist []query.Query) (Diagnostics, error) {
+func (c *Content) Update(results result.List, testlist []query.Query, verbose bool) (Diagnostics, error) {
 	// Make a copy of the results. This code mutates the list.
 	results = append(result.List{}, results...)
 
@@ -76,6 +76,13 @@ func (c *Content) Update(results result.List, testlist []query.Query) (Diagnosti
 	// Scan the full result list to obtain all the test variants
 	// (unique tag combinations).
 	variants := results.Variants()
+
+	if verbose {
+		fmt.Println("result variants:")
+		for i, tags := range variants {
+			fmt.Printf(" (%.2d) %v\n", i, tags.List())
+		}
+	}
 
 	// Add 'consumed' results for tests that were skipped.
 	// This ensures that skipped results are not included in reduced trees.
@@ -482,17 +489,27 @@ func (u *updater) expectation(in Expectation, immutable bool) []Expectation {
 	if immutable { // Expectation chunk was marked with 'KEEP'
 		// Add a diagnostic if all tests of the expectation were 'Pass'
 		if s := results.Statuses(); len(s) == 1 && s.One() == result.Pass {
-			if c := len(results); c > 1 {
-				u.diag(Note, in.Line, "all %d tests now pass", len(results))
-			} else {
-				u.diag(Note, in.Line, "test now passes")
-			}
+			u.diagAllPass(in.Line, results)
 		}
 		return []Expectation{in}
 	}
 
 	// Rebuild the expectations for this query.
-	return u.expectationsForRoot(q, in.Line, in.Bug, in.Comment)
+	expectations, somePass, someConsumed := u.expectationsForRoot(q, in.Line, in.Bug, in.Comment)
+
+	// Add a diagnostic if the expectation is filtered away
+	if len(expectations) == 0 {
+		switch {
+		case somePass && someConsumed:
+			u.diag(Note, in.Line, "expectation is partly covered by previous expectations and the remaining tests all pass")
+		case someConsumed:
+			u.diag(Note, in.Line, "expectation is fully covered by previous expectations")
+		case somePass:
+			u.diagAllPass(in.Line, results)
+		}
+	}
+
+	return expectations
 }
 
 // addNewExpectations (potentially) appends to 'u.out' chunks for new flaky and
@@ -514,7 +531,8 @@ func (u *updater) addNewExpectations() error {
 		}
 
 		// Build a tree from the results matching the given variant.
-		tree, err := u.qt.results.FilterByVariant(variant).StatusTree()
+		filtered := u.qt.results.FilterByVariant(variant)
+		tree, err := filtered.StatusTree()
 		if err != nil {
 			return fmt.Errorf("while building tree for tags '%v': %w", variant, err)
 		}
@@ -522,8 +540,10 @@ func (u *updater) addNewExpectations() error {
 		tree.Reduce(treeReducer)
 		// Add all the reduced leaf nodes to 'roots'.
 		for _, qd := range tree.List() {
-			// Use Split() to ensure that only the leaves have data (true) in the tree
-			roots.Split(qd.Query, true)
+			if qd.Data != result.Pass {
+				// Use Split() to ensure that only the leaves have data (true) in the tree
+				roots.Split(qd.Query, true)
+			}
 		}
 	}
 
@@ -537,12 +557,13 @@ func (u *updater) addNewExpectations() error {
 				{Count: 1 + i},
 			}})
 		}
-		expectations = append(expectations, u.expectationsForRoot(
+		rootExpectations, _, _ := u.expectationsForRoot(
 			root.Query,            // Root query
 			0,                     // Line number
 			"crbug.com/dawn/0000", // Bug
 			"",                    // Comment
-		)...)
+		)
+		expectations = append(expectations, rootExpectations...)
 	}
 
 	// Bin the expectations by failure or flake.
@@ -587,17 +608,21 @@ func (u *updater) expectationsForRoot(
 	line int, // The originating line, when producing diagnostics
 	bug string, // The bug to apply to all returned expectations
 	comment string, // The comment to apply to all returned expectations
-) []Expectation {
+) (
+	expectations []Expectation, // The output expectations
+	somePass bool, // Some of the results for the query had a Pass status
+	someConsumed bool, // The query was at least partly consumed by previous expectations
+) {
 	results, err := u.qt.glob(root)
 	if err != nil {
 		u.diag(Error, line, "%v", err)
-		return nil
+		return nil, false, false
 	}
 
 	// Using the full list of unfiltered tests, generate the minimal set of
 	// variants (tags) that uniquely classify the results with differing status.
 	minimalVariants := u.
-		cleanupTags(results).
+		removeUnknownTags(results).
 		MinimalVariantTags(u.tagSets)
 
 	// For each minimized variant...
@@ -627,9 +652,17 @@ func (u *updater) expectationsForRoot(
 	}
 
 	// Filter out any results that passed or have already been consumed
-	filtered := reduced.Filter(func(r result.Result) bool {
-		return r.Status != result.Pass && r.Status != consumed
-	})
+	filtered := result.List{}
+	for _, r := range reduced {
+		switch r.Status {
+		case result.Pass:
+			somePass = true
+		case consumed:
+			someConsumed = true
+		default:
+			filtered = append(filtered, r)
+		}
+	}
 
 	// Mark all the new expectation results as consumed.
 	for _, r := range filtered {
@@ -637,7 +670,8 @@ func (u *updater) expectationsForRoot(
 	}
 
 	// Transform the results to expectations.
-	return u.resultsToExpectations(filtered, bug, comment)
+	expectations = u.resultsToExpectations(filtered, bug, comment)
+	return expectations, somePass, someConsumed
 }
 
 // resultsToExpectations returns a list of expectations from the given results.
@@ -659,7 +693,7 @@ func (u *updater) resultsToExpectations(results result.List, bug, comment string
 		}
 		out[i] = Expectation{
 			Bug:     bug,
-			Tags:    r.Tags,
+			Tags:    u.in.Tags.RemoveLowerPriorityTags(r.Tags),
 			Query:   q,
 			Status:  []string{string(r.Status)},
 			Comment: comment,
@@ -669,32 +703,17 @@ func (u *updater) resultsToExpectations(results result.List, bug, comment string
 	return out
 }
 
-// cleanupTags returns a copy of the provided results with:
-//   - All tags not found in the expectations list removed
-//   - All but the highest priority tag for any tag-set.
-//     The tag sets are defined by the `BEGIN TAG HEADER` / `END TAG HEADER`
-//     section at the top of the expectations file.
-func (u *updater) cleanupTags(results result.List) result.List {
+// removeUnknownTags returns a copy of the provided results with all tags not
+// found in the expectations list removed
+func (u *updater) removeUnknownTags(results result.List) result.List {
 	return results.TransformTags(func(t result.Tags) result.Tags {
-		type HighestPrioritySetTag struct {
-			tag      string
-			priority int
-		}
-		// Set name to highest priority tag for that set
-		best := map[string]HighestPrioritySetTag{}
+		filtered := result.NewTags()
 		for tag := range t {
-			sp, ok := u.in.Tags.ByName[tag]
-			if ok {
-				if set := best[sp.Set]; sp.Priority >= set.priority {
-					best[sp.Set] = HighestPrioritySetTag{tag, sp.Priority}
-				}
+			if _, ok := u.in.Tags.ByName[tag]; ok {
+				filtered.Add(tag)
 			}
 		}
-		t = result.NewTags()
-		for _, ts := range best {
-			t.Add(ts.tag)
-		}
-		return t
+		return filtered
 	})
 }
 
@@ -748,4 +767,13 @@ func (u *updater) diag(severity Severity, line int, msg string, args ...interfac
 		Line:     line,
 		Message:  fmt.Sprintf(msg, args...),
 	})
+}
+
+// diagAllPass appends a new note diagnostic that all the tests now pass
+func (u *updater) diagAllPass(line int, results result.List) {
+	if c := len(results); c > 1 {
+		u.diag(Note, line, "all %d tests now pass", len(results))
+	} else {
+		u.diag(Note, line, "test now passes")
+	}
 }

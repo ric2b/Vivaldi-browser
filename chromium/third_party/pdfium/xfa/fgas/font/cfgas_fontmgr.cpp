@@ -16,16 +16,18 @@
 #include "build/build_config.h"
 #include "core/fxcrt/cfx_read_only_vector_stream.h"
 #include "core/fxcrt/data_vector.h"
-#include "core/fxcrt/fixed_uninit_data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_system.h"
+#include "core/fxcrt/span_util.h"
 #include "core/fxge/cfx_font.h"
 #include "core/fxge/cfx_fontmapper.h"
 #include "core/fxge/cfx_fontmgr.h"
 #include "core/fxge/cfx_gemodule.h"
 #include "core/fxge/fx_font.h"
+#include "core/fxge/fx_fontencoding.h"
 #include "third_party/base/check.h"
 #include "third_party/base/containers/contains.h"
 #include "third_party/base/containers/span.h"
@@ -40,13 +42,13 @@ bool VerifyUnicode(const RetainPtr<CFGAS_GEFont>& pFont, wchar_t wcUnicode) {
   if (!pFace)
     return false;
 
-  FXFT_FaceRec* pFaceRec = pFace->GetRec();
-  FT_CharMap charmap = pFaceRec->charmap;
-  if (FXFT_Select_Charmap(pFaceRec, FT_ENCODING_UNICODE) != 0)
+  CFX_Face::CharMap charmap = pFace->GetCurrentCharMap();
+  if (!pFace->SelectCharMap(fxge::FontEncoding::kUnicode)) {
     return false;
+  }
 
-  if (FT_Get_Char_Index(pFaceRec, wcUnicode) == 0) {
-    FT_Set_Charmap(pFaceRec, charmap);
+  if (pFace->GetCharIndex(wcUnicode) == 0) {
+    pFace->SetCharMap(charmap);
     return false;
   }
   return true;
@@ -430,54 +432,40 @@ std::vector<WideString> GetNames(pdfium::span<const uint8_t> name_table) {
   return results;
 }
 
-void GetUSBCSB(FXFT_FaceRec* pFace, uint32_t* USB, uint32_t* CSB) {
-  TT_OS2* pOS2 = static_cast<TT_OS2*>(FT_Get_Sfnt_Table(pFace, ft_sfnt_os2));
-  if (!pOS2) {
-    USB[0] = 0;
-    USB[1] = 0;
-    USB[2] = 0;
-    USB[3] = 0;
-    CSB[0] = 0;
-    CSB[1] = 0;
-    return;
-  }
-  USB[0] = static_cast<uint32_t>(pOS2->ulUnicodeRange1);
-  USB[1] = static_cast<uint32_t>(pOS2->ulUnicodeRange2);
-  USB[2] = static_cast<uint32_t>(pOS2->ulUnicodeRange3);
-  USB[3] = static_cast<uint32_t>(pOS2->ulUnicodeRange4);
-  CSB[0] = static_cast<uint32_t>(pOS2->ulCodePageRange1);
-  CSB[1] = static_cast<uint32_t>(pOS2->ulCodePageRange2);
-}
-
-uint32_t GetFlags(FXFT_FaceRec* pFace) {
+uint32_t GetFlags(const RetainPtr<CFX_Face>& face) {
   uint32_t flags = 0;
-  if (FXFT_Is_Face_Bold(pFace))
+  if (face->IsBold()) {
     flags |= FXFONT_FORCE_BOLD;
-  if (FXFT_Is_Face_Italic(pFace))
+  }
+  if (face->IsItalic()) {
     flags |= FXFONT_ITALIC;
-  if (FT_IS_FIXED_WIDTH(pFace))
+  }
+  if (face->IsFixedWidth()) {
     flags |= FXFONT_FIXED_PITCH;
+  }
 
-  TT_OS2* pOS2 = static_cast<TT_OS2*>(FT_Get_Sfnt_Table(pFace, ft_sfnt_os2));
-  if (!pOS2)
-    return flags;
-
-  if (pOS2->ulCodePageRange1 & (1 << 31))
+  absl::optional<std::array<uint32_t, 2>> code_page_range =
+      face->GetOs2CodePageRange();
+  if (code_page_range.has_value() && (code_page_range.value()[0] & (1 << 31))) {
     flags |= FXFONT_SYMBOLIC;
-  if (pOS2->panose[0] == 2) {
-    uint8_t uSerif = pOS2->panose[1];
-    if ((uSerif > 1 && uSerif < 10) || uSerif > 13)
+  }
+
+  absl::optional<std::array<uint8_t, 2>> panose = face->GetOs2Panose();
+  if (panose.has_value() && panose.value()[0] == 2) {
+    uint8_t serif = panose.value()[1];
+    if ((serif > 1 && serif < 10) || serif > 13) {
       flags |= FXFONT_SERIF;
+    }
   }
   return flags;
 }
 
 RetainPtr<IFX_SeekableReadStream> CreateFontStream(CFX_FontMapper* pFontMapper,
                                                    size_t index) {
-  FixedUninitDataVector<uint8_t> buffer = pFontMapper->RawBytesForIndex(index);
-  if (buffer.empty())
+  FixedSizeDataVector<uint8_t> buffer = pFontMapper->RawBytesForIndex(index);
+  if (buffer.empty()) {
     return nullptr;
-
+  }
   return pdfium::MakeRetain<CFX_ReadOnlyVectorStream>(std::move(buffer));
 }
 
@@ -544,14 +532,13 @@ bool VerifyUnicodeForFontDescriptor(CFGAS_FontDescriptor* pDesc,
   if (!pFace)
     return false;
 
-  FT_Error retCharmap =
-      FXFT_Select_Charmap(pFace->GetRec(), FT_ENCODING_UNICODE);
-  FT_Error retIndex = FT_Get_Char_Index(pFace->GetRec(), wcUnicode);
+  bool select_charmap_result =
+      pFace->SelectCharMap(fxge::FontEncoding::kUnicode);
+  int ret_index = pFace->GetCharIndex(wcUnicode);
 
-  if (FXFT_Get_Face_External_Stream(pFace->GetRec()))
-    FXFT_Clear_Face_External_Stream(pFace->GetRec());
+  pFace->ClearExternalStream();
 
-  return !retCharmap && retIndex;
+  return select_charmap_result && ret_index;
 }
 
 bool IsPartName(const WideString& name1, const WideString& name2) {
@@ -726,25 +713,43 @@ std::vector<CFGAS_FontDescriptorInfo> CFGAS_FontMgr::MatchFonts(
 
 void CFGAS_FontMgr::RegisterFace(RetainPtr<CFX_Face> pFace,
                                  const WideString& wsFaceName) {
-  if ((pFace->GetRec()->face_flags & FT_FACE_FLAG_SCALABLE) == 0)
+  if (!pFace->IsScalable()) {
     return;
+  }
 
   auto pFont = std::make_unique<CFGAS_FontDescriptor>();
-  pFont->m_dwFontStyles |= GetFlags(pFace->GetRec());
+  pFont->m_dwFontStyles |= GetFlags(pFace);
 
-  GetUSBCSB(pFace->GetRec(), pFont->m_dwUsb, pFont->m_dwCsb);
+  // TODO(crbug.com/pdfium/2085): Use make_span() in fewer places after updating
+  // pdfium::span.
+  absl::optional<std::array<uint32_t, 4>> unicode_range =
+      pFace->GetOs2UnicodeRange();
+  auto usb_span = pdfium::make_span(pFont->m_dwUsb);
+  if (unicode_range.has_value()) {
+    fxcrt::spancpy(usb_span, pdfium::make_span(unicode_range.value()));
+  } else {
+    fxcrt::spanclr(usb_span);
+  }
 
-  FT_ULong dwTag;
-  FT_ENC_TAG(dwTag, 'n', 'a', 'm', 'e');
+  absl::optional<std::array<uint32_t, 2>> code_page_range =
+      pFace->GetOs2CodePageRange();
+  auto csb_span = pdfium::make_span(pFont->m_dwCsb);
+  if (code_page_range.has_value()) {
+    fxcrt::spancpy(csb_span, pdfium::make_span(code_page_range.value()));
+  } else {
+    fxcrt::spanclr(csb_span);
+  }
+
+  static constexpr uint32_t kNameTag =
+      CFX_FontMapper::MakeTag('n', 'a', 'm', 'e');
 
   DataVector<uint8_t> table;
-  unsigned long nLength = 0;
-  unsigned int error =
-      FT_Load_Sfnt_Table(pFace->GetRec(), dwTag, 0, nullptr, &nLength);
-  if (error == 0 && nLength != 0) {
-    table.resize(nLength);
-    if (FT_Load_Sfnt_Table(pFace->GetRec(), dwTag, 0, table.data(), nullptr))
+  size_t table_size = pFace->GetSfntTable(kNameTag, table);
+  if (table_size) {
+    table.resize(table_size);
+    if (!pFace->GetSfntTable(kNameTag, table)) {
       table.clear();
+    }
   }
   pFont->m_wsFamilyNames = GetNames(table);
   pFont->m_wsFamilyNames.push_back(
@@ -770,8 +775,7 @@ void CFGAS_FontMgr::RegisterFaces(
           pdfium::base::checked_cast<int32_t>(pFace->GetRec()->num_faces);
     }
     RegisterFace(pFace, wsFaceName);
-    if (FXFT_Get_Face_External_Stream(pFace->GetRec()))
-      FXFT_Clear_Face_External_Stream(pFace->GetRec());
+    pFace->ClearExternalStream();
   } while (index < num_faces);
 }
 

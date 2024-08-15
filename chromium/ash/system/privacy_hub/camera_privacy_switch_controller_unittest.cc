@@ -23,6 +23,7 @@
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -64,8 +65,7 @@ class FakeSensorDisabledNotificationDelegate
   }
 
   void CloseAppAccessingCamera(const std::u16string& app_name) {
-    auto it = std::find(apps_accessing_camera_.begin(),
-                        apps_accessing_camera_.end(), app_name);
+    auto it = base::ranges::find(apps_accessing_camera_, app_name);
     if (it != apps_accessing_camera_.end()) {
       apps_accessing_camera_.erase(it);
     }
@@ -107,7 +107,7 @@ class ScopedCameraMuteToggler {
   }
 
  private:
-  const raw_ref<CameraPrivacySwitchController, ExperimentalAsh>
+  const raw_ref<CameraPrivacySwitchController>
       camera_privacy_switch_controller_;
   const bool software_switch_;
 };
@@ -122,7 +122,7 @@ class MockFrontendAPI : public PrivacyHubDelegate {
 
 class PrivacyHubCameraTestBase
     : public AshTestBase,
-      public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
  public:
   PrivacyHubCameraTestBase()
       : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
@@ -132,11 +132,6 @@ class PrivacyHubCameraTestBase
       enabled_features.push_back(ash::features::kCrosPrivacyHubV0);
     } else {
       disabled_features.push_back(ash::features::kCrosPrivacyHubV0);
-    }
-    if (IsPrivacyIndicatorsEnabled()) {
-      enabled_features.push_back(features::kPrivacyIndicators);
-    } else {
-      disabled_features.push_back(features::kPrivacyIndicators);
     }
     if (IsVideoConferenceEnabled()) {
       fake_video_conference_tray_controller_ =
@@ -181,9 +176,8 @@ class PrivacyHubCameraTestBase
     AshTestBase::TearDown();
   }
 
-  bool IsPrivacyIndicatorsEnabled() { return std::get<0>(GetParam()); }
-  bool IsVideoConferenceEnabled() { return std::get<1>(GetParam()); }
-  bool IsPrivacyHubEnabled() { return std::get<2>(GetParam()); }
+  bool IsVideoConferenceEnabled() { return std::get<0>(GetParam()); }
+  bool IsPrivacyHubEnabled() { return std::get<1>(GetParam()); }
 
   void SetUserPref(bool allowed) {
     Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
@@ -198,9 +192,7 @@ class PrivacyHubCameraTestBase
   }
 
  protected:
-  raw_ptr<::testing::NiceMock<MockSwitchAPI>,
-          DanglingUntriaged | ExperimentalAsh>
-      mock_switch_;
+  raw_ptr<::testing::NiceMock<MockSwitchAPI>, DanglingUntriaged> mock_switch_;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -325,8 +317,7 @@ class NotificationTestBase : public PrivacyHubCameraTestBase {
             ->sensor_disabled_notification_delegate());
   }
 
-  raw_ptr<CameraPrivacySwitchController, DanglingUntriaged | ExperimentalAsh>
-      controller_;
+  raw_ptr<CameraPrivacySwitchController, DanglingUntriaged> controller_;
   const base::HistogramTester histogram_tester_;
 };
 
@@ -820,7 +811,7 @@ TEST_P(PrivacyHubCameraControllerTest,
   for (const bool previous_value : {true, false}) {
     SetUserPref(previous_value);
 
-    absl::optional<CameraPrivacySwitchController> controller;
+    std::optional<CameraPrivacySwitchController> controller;
 
     // Create the controller.
     controller.emplace();
@@ -875,7 +866,7 @@ TEST_P(PrivacyHubCameraControllerTest,
   for (const bool previous_value : {true, false}) {
     SetUserPref(previous_value);
 
-    absl::optional<CameraPrivacySwitchController> controller;
+    std::optional<CameraPrivacySwitchController> controller;
 
     // Create the controller.
     controller.emplace();
@@ -897,15 +888,13 @@ TEST_P(PrivacyHubCameraControllerTest,
   }
 }
 
-class PrivacyIndicatorAndVideoConferenceCameraControllerTest
-    : public NotificationTestBase {};
+class VideoConferenceCameraControllerTest : public NotificationTestBase {};
 
-// With VcControls or Privacy Indicators enabled, tests that no notification
-// shows up if the switches are toggled when the number of capturing apps does
-// not change.
-TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
+// With VcControls enabled, tests that no notification shows up if the switches
+// are toggled when the number of capturing apps does not change.
+TEST_P(VideoConferenceCameraControllerTest,
        NoNotificationDuringCaptureSession) {
-  if (!IsPrivacyIndicatorsEnabled() && !IsVideoConferenceEnabled()) {
+  if (!IsVideoConferenceEnabled()) {
     return;
   }
 
@@ -948,7 +937,7 @@ TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
 // With VcControls or Privacy Indicators enabled, tests that a notification
 // shows up when the number of apps capturing the camera increases if the switch
 // is muted.
-TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
+TEST_P(VideoConferenceCameraControllerTest,
        NotificationShowsIfNewAppStartsCapturing) {
   for (bool software_switch : {true, false}) {
     SCOPED_TRACE(::testing::Message()
@@ -978,7 +967,7 @@ TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
 
 // With VcControls or Privacy Indicators enabled, tests that turning camera
 // access back on hides the notification.
-TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
+TEST_P(VideoConferenceCameraControllerTest,
        EnablingCameraAccessHidesNotification) {
   for (bool software_switch : {true, false}) {
     auto scoped_software_switch_toggler =
@@ -1008,7 +997,7 @@ TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
 
 // With VcControls or Privacy Indicators enabled, tests that a notification
 // shows up if muted and then a capture starts.
-TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
+TEST_P(VideoConferenceCameraControllerTest,
        NotificationWhenMutedOnCaptureStart) {
   for (bool software_switch : {true, false}) {
     auto scoped_software_switch_toggler =
@@ -1037,7 +1026,7 @@ TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
 
 // With VcControls or Privacy Indicators enabled, tests that a notification goes
 // away when capturing apps drop to 0.
-TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
+TEST_P(VideoConferenceCameraControllerTest,
        NotificationGoesAwayWhenAppsGoToZero) {
   for (bool software_switch : {true, false}) {
     auto scoped_software_switch_toggler =
@@ -1065,25 +1054,22 @@ TEST_P(PrivacyIndicatorAndVideoConferenceCameraControllerTest,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PrivacyHubCameraSynchronizerTest,
-    testing::Combine(/*IsPrivacyIndicatorsEnabled=*/testing::Bool(),
-                     /*IsVideoConferenceEnabled=*/testing::Bool(),
-                     /*IsPrivacyHubEnabled()=*/testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(All,
+                         PrivacyHubCameraSynchronizerTest,
+                         testing::Combine(
+                             /*IsVideoConferenceEnabled=*/testing::Bool(),
+                             /*IsPrivacyHubEnabled()=*/testing::Bool()));
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PrivacyHubCameraControllerTest,
-    testing::Combine(/*IsPrivacyIndicatorsEnabled=*/testing::Bool(),
-                     /*IsVideoConferenceEnabled=*/testing::Bool(),
-                     /*IsPrivacyHubEnabled()=*/testing::Values(true)));
+INSTANTIATE_TEST_SUITE_P(All,
+                         PrivacyHubCameraControllerTest,
+                         testing::Combine(
+                             /*IsVideoConferenceEnabled=*/testing::Bool(),
+                             /*IsPrivacyHubEnabled()=*/testing::Values(true)));
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PrivacyIndicatorAndVideoConferenceCameraControllerTest,
-    testing::Combine(/*IsPrivacyIndicatorsEnabled=*/testing::Bool(),
-                     /*IsVideoConferenceEnabled=*/testing::Bool(),
-                     /*IsPrivacyHubEnabled()=*/testing::Values(true)));
+INSTANTIATE_TEST_SUITE_P(All,
+                         VideoConferenceCameraControllerTest,
+                         testing::Combine(
+                             /*IsVideoConferenceEnabled=*/testing::Bool(),
+                             /*IsPrivacyHubEnabled()=*/testing::Values(true)));
 
 }  // namespace ash

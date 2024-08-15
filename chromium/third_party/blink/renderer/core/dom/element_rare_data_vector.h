@@ -40,6 +40,7 @@ class ResizeObservation;
 class StyleScopeData;
 class CustomElementDefinition;
 class PopoverData;
+class PositionFallbackData;
 class HTMLElement;
 
 enum class ElementFlags;
@@ -96,8 +97,9 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
     kLastRememberedInlineSize = 28,
     kRestrictionTargetId = 29,
     kStyleScopeData = 30,
+    kPositionFallbackData = 31,
 
-    kNumFields = 31,
+    kNumFields = 32,
   };
 
   ElementRareDataField* GetField(FieldId field_id) const;
@@ -255,6 +257,9 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   StyleScopeData& EnsureStyleScopeData();
   StyleScopeData* GetStyleScopeData() const;
 
+  PositionFallbackData& EnsurePositionFallbackData();
+  PositionFallbackData* GetPositionFallbackData() const;
+
   // Returns the crop-ID if one was set, or nullptr otherwise.
   const RegionCaptureCropId* GetRegionCaptureCropId() const;
   // Sets a crop-ID on the item. Must be called at most once. Cannot be used
@@ -381,6 +386,14 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   void SetAncestorsOrSiblingsAffectedByHoverInHas() {
     has_invalidation_flags_.ancestors_or_siblings_affected_by_hover_in_has =
         true;
+  }
+  bool AncestorsOrSiblingsAffectedByActiveViewTransitionInHas() const {
+    return has_invalidation_flags_
+        .ancestors_or_siblings_affected_by_active_view_transition_in_has;
+  }
+  void SetAncestorsOrSiblingsAffectedByActiveViewTransitionInHas() {
+    has_invalidation_flags_
+        .ancestors_or_siblings_affected_by_active_view_transition_in_has = true;
   }
   bool AncestorsOrSiblingsAffectedByActiveInHas() const {
     return has_invalidation_flags_

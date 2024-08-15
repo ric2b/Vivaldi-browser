@@ -63,10 +63,6 @@ MaybeError ValidateQuerySetDescriptor(DeviceBase* device, const QuerySetDescript
             break;
 
         case wgpu::QueryType::Timestamp:
-            DAWN_INVALID_IF(!device->IsToggleEnabled(Toggle::AllowUnsafeAPIs),
-                            "Timestamp queries are disallowed because they may expose precise "
-                            "timing information.");
-
             DAWN_INVALID_IF(
                 !device->HasFeature(Feature::TimestampQuery) &&
                     !device->HasFeature(Feature::ChromiumExperimentalTimestampQueryInsidePasses),
@@ -113,8 +109,9 @@ void QuerySetBase::DestroyImpl() {
 }
 
 // static
-QuerySetBase* QuerySetBase::MakeError(DeviceBase* device, const QuerySetDescriptor* descriptor) {
-    return new ErrorQuerySet(device, descriptor);
+Ref<QuerySetBase> QuerySetBase::MakeError(DeviceBase* device,
+                                          const QuerySetDescriptor* descriptor) {
+    return AcquireRef(new ErrorQuerySet(device, descriptor));
 }
 
 ObjectType QuerySetBase::GetType() const {

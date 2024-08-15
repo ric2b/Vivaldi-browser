@@ -48,6 +48,9 @@ enum MethodType {
   // Method corresponding to `CompanionPage.RefreshCompanionPage`.
   kRefreshCompanionPage = 12,
 
+  // Method corresponding to `CompanionPage.ServerSideUrlFilterEvent`.
+  kServerSideUrlFilterEvent = 13,
+
   // Methods used in browser -> renderer communication.
   // Method corresponding to `CompanionPage.UpdateCompanionPage`.
   kUpdateCompanionPage = 31,
@@ -60,6 +63,9 @@ enum MethodType {
 
   // Method corresponding to `CompanionPage.NotifyLinkOpen`.
   kNotifyLinkOpen = 34,
+
+  // Method corresponding to `CompanionPage.UpdatePageContent`.
+  kUpdatePageContent = 35,
 };
 
 // Types of promos shown in the companion UI.
@@ -266,6 +272,10 @@ interface CompanionPageHandler {
 
   // Does a hard refresh of the companion page with new state.
   RefreshCompanionPage();
+
+  // For metrics only. Called to record that a URL was excluded from VQS
+  // triggering due to pXLQ or pornography signals from Diner.
+  OnServerSideUrlFilterEvent();
 };
 
 // WebUI page handler for request from Browser side. (C++ -> TypeScript)
@@ -298,4 +308,7 @@ interface CompanionPage {
   // Notify the frontend that the user clicked a link that is meant to open
   // outside of side panel. `opened_url` is the link the user clicked on.
   NotifyLinkOpen(url.mojom.Url opened_url, LinkOpenMetadata metadata );
+
+  // Passes the title and the innerHtml of the main page to the companion page.
+  UpdatePageContent(string page_title, string inner_html);
 };

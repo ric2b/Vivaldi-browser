@@ -69,7 +69,7 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   void OnSpeechResult(
       const std::u16string& text,
       bool is_final,
-      const absl::optional<media::SpeechRecognitionResult>& timing) override;
+      const std::optional<media::SpeechRecognitionResult>& timing) override;
   // This class is not utilizing the information about sound level.
   void OnSpeechSoundLevelChanged(int16_t level) override {}
   void OnSpeechRecognitionStateChanged(
@@ -104,7 +104,7 @@ class ProjectorClientImpl : public ash::ProjectorClient,
   // Called when app registry becomes ready.
   void SetAppIsDisabled(bool disabled);
 
-  const raw_ptr<ash::ProjectorController, ExperimentalAsh> controller_;
+  const raw_ptr<ash::ProjectorController> controller_;
   SpeechRecognizerStatus recognizer_status_ =
       SpeechRecognizerStatus::SPEECH_RECOGNIZER_OFF;
   std::unique_ptr<SpeechRecognitionRecognizerClientImpl> speech_recognizer_;

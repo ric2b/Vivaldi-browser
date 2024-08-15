@@ -16,6 +16,7 @@
 #include "chrome/browser/ash/printing/cups_printers_manager.h"
 #include "chrome/browser/ash/printing/printer_event_tracker.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
+#include "chromeos/ash/components/dbus/printscanmgr/printscanmgr_client.h"
 #include "chromeos/printing/cups_printer_status.h"
 #include "chromeos/printing/ppd_provider.h"
 #include "chromeos/printing/printer_configuration.h"
@@ -50,7 +51,8 @@ namespace settings {
 // Chrome OS CUPS printing settings page UI handler.
 class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                             public ui::SelectFileDialog::Listener,
-                            public CupsPrintersManager::Observer {
+                            public CupsPrintersManager::Observer,
+                            public CupsPrintersManager::LocalPrintersObserver {
  public:
   static std::unique_ptr<CupsPrintersHandler> CreateForTesting(
       Profile* profile,
@@ -191,10 +193,11 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
   void HandleAddDiscoveredPrinter(const base::Value::List& args);
 
   // Called when we get a response from
-  // DebugDaemonClient::CupsRetrievePrinterPpd.
-  void OnRetrieveCupsPrinterPpd(const std::string& printer_name,
-                                const std::string& eula,
-                                const std::vector<uint8_t>& data);
+  // PrintscanmgrClient::CupsRetrievePrinterPpd.
+  void OnRetrieveCupsPrinterPpd(
+      const std::string& printer_name,
+      const std::string& eula,
+      std::optional<printscanmgr::CupsRetrievePpdResponse> response);
 
   void OnRetrievePpdError(const std::string& printer_name);
   void WriteAndDisplayPpdFile(const std::string& printer_name,
@@ -215,6 +218,9 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
       chromeos::PrinterClass printer_class,
       const std::vector<chromeos::Printer>& printers) override;
 
+  // CupsPrintersManager::LocalPrintersObserver:
+  void OnLocalPrintersUpdated() override;
+
   // Handles getting the EULA URL if available.
   void HandleGetEulaUrl(const base::Value::List& args);
 
@@ -224,7 +230,7 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
                     const std::string& eula_url);
 
   // ui::SelectFileDialog::Listener override:
-  void FileSelected(const base::FilePath& path,
+  void FileSelected(const ui::SelectedFileInfo& file,
                     int index,
                     void* params) override;
   void FileSelectionCanceled(void* params) override;
@@ -267,7 +273,7 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
       const std::string& callback_id,
       const chromeos::CupsPrinterStatus& printer_status);
 
-  raw_ptr<Profile, DanglingUntriaged | ExperimentalAsh> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
 
   // Discovery support.  discovery_active_ tracks whether or not the UI
   // currently wants updates about printer availability.  The two vectors track
@@ -289,13 +295,17 @@ class CupsPrintersHandler : public ::settings::SettingsPageUIHandler,
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
   std::string webui_callback_id_;
-  raw_ptr<CupsPrintersManager, ExperimentalAsh> printers_manager_;
+  raw_ptr<CupsPrintersManager> printers_manager_;
   std::unique_ptr<local_discovery::EndpointResolver> endpoint_resolver_;
 
   std::unique_ptr<ServerPrintersFetcher> server_printers_fetcher_;
 
   base::ScopedObservation<CupsPrintersManager, CupsPrintersManager::Observer>
       printers_manager_observation_{this};
+
+  base::ScopedObservation<CupsPrintersManager,
+                          CupsPrintersManager::LocalPrintersObserver>
+      local_printers_observation_{this};
 
   base::WeakPtrFactory<CupsPrintersHandler> weak_factory_{this};
 };

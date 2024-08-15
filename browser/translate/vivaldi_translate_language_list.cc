@@ -36,7 +36,7 @@ namespace translate {
 
 namespace {
 constexpr char kTranslateLanguageListUrl[] =
-    "https://mimir.vivaldi.com/list/languages.json";
+    "https://mimir2.vivaldi.com/list/languages.json";
 // Hours between language list downloads.  Static file on the server,
 // so short interval is acceptable.
 constexpr int kLanguageListUpdateInterval = 8;

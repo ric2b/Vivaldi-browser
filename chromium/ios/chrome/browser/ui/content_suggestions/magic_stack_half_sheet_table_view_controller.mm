@@ -5,8 +5,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack_half_sheet_table_view_controller.h"
 
 #import "base/apple/foundation_util.h"
-#import "ios/chrome/browser/ntp/features.h"
-#import "ios/chrome/browser/ntp/home/features.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -14,6 +12,7 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack_half_sheet_model_delegate.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -113,23 +112,23 @@ enum ItemType : NSInteger {
   _parcelTrackingToggle.on = !_parcelTrackingDisabled;
 }
 
-#pragma mark - ChromeTableViewController
+#pragma mark - LegacyChromeTableViewController
 
 - (void)loadModel {
   [super loadModel];
 
   [self.tableViewModel addSectionWithIdentifier:SectionIdentifierOptions];
 
-  if (IsIOSSetUpListEnabled() && _showSetUpList) {
+  if (_showSetUpList) {
     NSString* listSymbolName = kListBulletRectangleSymbol;
     if (@available(iOS 16.0, *)) {
       listSymbolName = kListBulletClipboardSymbol;
     }
-    _setUpListToggle = [self
-        switchItemWithType:ItemTypeToggleSetUpList
-                     title:l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_TITLE)
-                    symbol:DefaultSymbolWithPointSize(listSymbolName,
-                                                      kIconPointSize)];
+    _setUpListToggle =
+        [self switchItemWithType:ItemTypeToggleSetUpList
+                           title:content_suggestions::SetUpListTitleString()
+                          symbol:DefaultSymbolWithPointSize(listSymbolName,
+                                                            kIconPointSize)];
     _setUpListToggle.on = !_setUpListDisabled;
     [self.tableViewModel addItem:_setUpListToggle
          toSectionWithIdentifier:SectionIdentifierOptions];

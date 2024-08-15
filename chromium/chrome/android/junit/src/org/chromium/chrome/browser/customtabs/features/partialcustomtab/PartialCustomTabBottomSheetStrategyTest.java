@@ -4,6 +4,10 @@
 
 package org.chromium.chrome.browser.customtabs.features.partialcustomtab;
 
+import static androidx.browser.customtabs.CustomTabsCallback.ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET;
+import static androidx.browser.customtabs.CustomTabsCallback.ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET_MAXIMIZED;
+import static androidx.browser.customtabs.CustomTabsCallback.ACTIVITY_LAYOUT_STATE_FULL_SCREEN;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -19,9 +23,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
 
-import static org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET;
-import static org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET_MAXIMIZED;
-import static org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.ACTIVITY_LAYOUT_STATE_FULL_SCREEN;
 import static org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabBottomSheetStrategy.BOTTOM_SHEET_MAX_WIDTH_DP_LANDSCAPE;
 import static org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabTestRule.DEVICE_HEIGHT;
 import static org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabTestRule.DEVICE_HEIGHT_LANDSCAPE;
@@ -56,6 +57,8 @@ import org.robolectric.shadows.ShadowLooper;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
@@ -64,9 +67,8 @@ import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialC
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar.HandleStrategy;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.view.ContentView;
+import org.chromium.ui.accessibility.UiAccessibilityFeatures;
 
 import java.util.concurrent.TimeUnit;
 
@@ -77,7 +79,7 @@ import java.util.concurrent.TimeUnit;
         shadows = {PartialCustomTabTestRule.ShadowSemanticColorUtils.class})
 @EnableFeatures({
     ChromeFeatureList.CCT_RESIZABLE_FOR_THIRD_PARTIES,
-    ChromeFeatureList.CCT_RESIZABLE_ALLOW_RESIZE_BY_USER_GESTURE
+    UiAccessibilityFeatures.START_SURFACE_ACCESSIBILITY_CHECK
 })
 @LooperMode(Mode.PAUSED)
 public class PartialCustomTabBottomSheetStrategyTest {
@@ -536,7 +538,7 @@ public class PartialCustomTabBottomSheetStrategyTest {
         clearInvocations(mPCCTTestRule.mSpinnerView);
 
         // Verify the spinner remains invisible after the tab reaches the top.
-        int topY = strategy.getFullyExpandedYWithAdjustment();
+        int topY = strategy.getFullyExpandedY();
         actionMove(handleStrategy, timestamp, topY);
         verify(mPCCTTestRule.mSpinnerView).setVisibility(View.GONE);
         clearInvocations(mPCCTTestRule.mSpinnerView);
@@ -931,7 +933,7 @@ public class PartialCustomTabBottomSheetStrategyTest {
         PartialCustomTabBottomSheetStrategy strategy = createPcctAtHeight(500);
         strategy.setToolbarColorForTesting(PCCT_TOOLBAR_COLOR);
         doReturn(FIND_TOOLBAR_COLOR)
-                .when(mPCCTTestRule.mResources)
+                .when(mPCCTTestRule.mActivity)
                 .getColor(eq(R.color.find_in_page_background_color));
         doReturn(mPCCTTestRule.mDragBarBackground).when(mPCCTTestRule.mDragBar).getBackground();
 
@@ -1081,8 +1083,9 @@ public class PartialCustomTabBottomSheetStrategyTest {
                 mPCCTTestRule.mLayoutParams.rightMargin);
         assertEquals(
                 "Bottom sheet width should be 900dp",
-                BOTTOM_SHEET_MAX_WIDTH_DP_LANDSCAPE,
-                getWindowAttributes().width);
+                BOTTOM_SHEET_MAX_WIDTH_DP_LANDSCAPE * mPCCTTestRule.getDisplayDensity(),
+                getWindowAttributes().width,
+                0.01f);
     }
 
     @CommandLineFlags.Add({BaseSwitches.ENABLE_LOW_END_DEVICE_MODE})

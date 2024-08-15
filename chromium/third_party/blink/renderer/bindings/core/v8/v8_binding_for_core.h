@@ -36,7 +36,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
-#include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/platform/bindings/dom_data_store.h"
@@ -91,11 +90,11 @@ enum class BlinkState : uint8_t {
   PAINT = 4,
 };
 
-#define ENTER_EMBEDDER_STATE(isolate, frame, state)               \
-  v8::HandleScope scope(isolate);                                 \
-  v8::Local<v8::Context> v8_context =                             \
-      ToV8ContextMaybeEmpty(frame, DOMWrapperWorld::MainWorld()); \
-  v8::EmbedderStateScope embedder_state(                          \
+#define ENTER_EMBEDDER_STATE(isolate, frame, state)                      \
+  v8::HandleScope scope(isolate);                                        \
+  v8::Local<v8::Context> v8_context =                                    \
+      ToV8ContextMaybeEmpty(frame, DOMWrapperWorld::MainWorld(isolate)); \
+  v8::EmbedderStateScope embedder_state(                                 \
       isolate, v8_context, static_cast<v8::EmbedderStateTag>(state));
 
 template <typename CallbackInfo, typename T>
@@ -465,6 +464,7 @@ CORE_EXPORT ScriptState* ToScriptState(ExecutionContext*, DOMWrapperWorld&);
 CORE_EXPORT ScriptState* ToScriptState(LocalFrame*, DOMWrapperWorld&);
 // Do not use this method unless you are sure you should use the main world's
 // ScriptState
+CORE_EXPORT ScriptState* ToScriptStateForMainWorld(ExecutionContext*);
 CORE_EXPORT ScriptState* ToScriptStateForMainWorld(LocalFrame*);
 
 // Returns the frame object of the window object associated with

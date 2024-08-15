@@ -6,8 +6,8 @@
 #import "base/ios/ios_util.h"
 #import "components/feature_engagement/public/feature_list.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/metrics/metrics_app_interface.h"
-#import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/authentication/signin_matchers.h"
@@ -57,7 +57,7 @@ int GetInfoBarEnterPassphraseButtonLabelId() {
   [ChromeEarlGrey
       waitForSyncEngineInitialized:NO
                        syncTimeout:syncher::kSyncUKMOperationsTimeout];
-  [ChromeEarlGrey clearSyncServerData];
+  [ChromeEarlGrey clearFakeSyncServerData];
 
   [super tearDown];
 }

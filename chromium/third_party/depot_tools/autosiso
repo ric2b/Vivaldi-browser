@@ -4,5 +4,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-base_dir=$(dirname "$0")
-PYTHONDONTWRITEBYTECODE=1 exec python3 "$base_dir/autosiso.py" "$@"
+echo "Error: 'autosiso' is deprecated and will be removed soon." >&2
+echo "" >&2
+echo "You can just run 'autoninja' instead, which will delegate either to Ninja" >&2
+echo "or to Siso based on the value of the 'use_siso' GN arg." >&2
+
+exit 1

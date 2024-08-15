@@ -506,27 +506,7 @@ inline void MaglevAssembler::LoadAddress(Register dst, MemOperand location) {
   add(dst, location.rn(), Operand(location.offset()));
 }
 
-inline int MaglevAssembler::PushOrSetReturnAddressTo(Label* target) {
-  // This should be just a
-  //    add(lr, pc, branch_offset(target));
-  // but current implementation of Assembler::bind_to()/target_at_put() add
-  // (InstructionStream::kHeaderSize - kHeapObjectTag) to a position of a label
-  // in a "linked" state and thus making it usable only for mov_label_offset().
-  // TODO(ishell): fix branch_offset() and re-implement
-  // RegExpMacroAssemblerARM::PushBacktrack() without mov_label_offset().
-  mov_label_offset(lr, target);
-  // mov_label_offset computes offset of the |target| relative to the "current
-  // InstructionStream object pointer" which is essentally pc_offset() of the
-  // label added with (InstructionStream::kHeaderSize - kHeapObjectTag).
-  // Compute "current InstructionStream object pointer" and add it to the
-  // offset in |lr| register.
-  int current_instr_code_object_relative_offset =
-      pc_offset() + Instruction::kPcLoadDelta +
-      (InstructionStream::kHeaderSize - kHeapObjectTag);
-  add(lr, pc, lr);
-  sub(lr, lr, Operand(current_instr_code_object_relative_offset));
-  return 0;
-}
+inline void MaglevAssembler::Call(Label* target) { bl(target); }
 
 inline void MaglevAssembler::EmitEnterExitFrame(int extra_slots,
                                                 StackFrame::Type frame_type,
@@ -575,6 +555,9 @@ inline void MaglevAssembler::Move(Register dst, Tagged<TaggedIndex> i) {
 inline void MaglevAssembler::Move(Register dst, int32_t i) {
   mov(dst, Operand(i));
 }
+inline void MaglevAssembler::Move(Register dst, uint32_t i) {
+  mov(dst, Operand(static_cast<int32_t>(i)));
+}
 inline void MaglevAssembler::Move(DoubleRegister dst, double n) {
   vmov(dst, base::Double(n));
 }
@@ -583,6 +566,9 @@ inline void MaglevAssembler::Move(DoubleRegister dst, Float64 n) {
 }
 inline void MaglevAssembler::Move(Register dst, Handle<HeapObject> obj) {
   MacroAssembler::Move(dst, obj);
+}
+inline void MaglevAssembler::MoveTagged(Register dst, Handle<HeapObject> obj) {
+  Move(dst, obj);
 }
 
 inline void MaglevAssembler::LoadFloat32(DoubleRegister dst, MemOperand src) {
@@ -693,10 +679,6 @@ template <typename NodeT>
 inline void MaglevAssembler::DeoptIfBufferDetached(Register array,
                                                    Register scratch,
                                                    NodeT* node) {
-  if (!code_gen_state()
-           ->broker()
-           ->dependencies()
-           ->DependOnArrayBufferDetachingProtector()) {
     // A detached buffer leads to megamorphic feedback, so we won't have a deopt
     // loop if we deopt here.
     LoadTaggedField(scratch,
@@ -705,7 +687,6 @@ inline void MaglevAssembler::DeoptIfBufferDetached(Register array,
                     FieldMemOperand(scratch, JSArrayBuffer::kBitFieldOffset));
     tst(scratch, Operand(JSArrayBuffer::WasDetachedBit::kMask));
     EmitEagerDeoptIf(ne, DeoptimizeReason::kArrayBufferWasDetached, node);
-  }
 }
 
 inline void MaglevAssembler::LoadByte(Register dst, MemOperand src) {
@@ -947,6 +928,14 @@ inline void MaglevAssembler::CompareInt32AndJumpIf(Register r1, Register r2,
   JumpIf(cond, target);
 }
 
+inline void MaglevAssembler::CompareIntPtrAndJumpIf(Register r1, Register r2,
+                                                    Condition cond,
+                                                    Label* target,
+                                                    Label::Distance distance) {
+  cmp(r1, r2);
+  JumpIf(cond, target);
+}
+
 inline void MaglevAssembler::CompareInt32AndJumpIf(Register r1, int32_t value,
                                                    Condition cond,
                                                    Label* target,
@@ -1083,7 +1072,7 @@ inline void MaglevAssembler::TestInt32AndJumpIfAllClear(
 
 inline void MaglevAssembler::LoadHeapNumberValue(DoubleRegister result,
                                                  Register heap_number) {
-  vldr(result, FieldMemOperand(heap_number, HeapNumber::kValueOffset));
+  vldr(result, FieldMemOperand(heap_number, offsetof(HeapNumber, value_)));
 }
 
 inline void MaglevAssembler::Int32ToDouble(DoubleRegister result,

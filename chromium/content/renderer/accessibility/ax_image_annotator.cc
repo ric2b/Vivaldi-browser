@@ -140,10 +140,6 @@ AXImageAnnotator::AXImageAnnotator(
 
 AXImageAnnotator::~AXImageAnnotator() {}
 
-void AXImageAnnotator::Destroy() {
-  MarkAllImagesDirty();
-}
-
 std::string AXImageAnnotator::GetImageAnnotation(
     blink::WebAXObject& image) const {
   DCHECK(!image.IsDetached());
@@ -291,16 +287,6 @@ std::string AXImageAnnotator::GenerateImageSourceId(
   return source_id;
 }
 
-void AXImageAnnotator::MarkAllImagesDirty() {
-  for (auto& key_value : image_annotations_) {
-    blink::WebAXObject image = blink::WebAXObject::FromWebDocumentByID(
-        render_accessibility_->GetMainDocument(), key_value.first);
-    if (!image.IsDetached())
-      MarkDirty(image);
-  }
-  image_annotations_.clear();
-}
-
 void AXImageAnnotator::MarkDirty(const blink::WebAXObject& image) const {
   render_accessibility_->MarkWebAXObjectDirty(image, false /* subtree */);
 
@@ -328,7 +314,7 @@ AXImageAnnotator::ImageInfo::ImageInfo(const blink::WebAXObject& image)
     : image_processor_(
           base::BindRepeating(&AXImageAnnotator::GetImageData, image)),
       status_(ax::mojom::ImageAnnotationStatus::kAnnotationPending),
-      annotation_(absl::nullopt) {}
+      annotation_(std::nullopt) {}
 
 AXImageAnnotator::ImageInfo::~ImageInfo() = default;
 

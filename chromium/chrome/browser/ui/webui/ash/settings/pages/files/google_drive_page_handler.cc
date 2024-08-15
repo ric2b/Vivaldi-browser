@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/ash/settings/pages/files/google_drive_page_handler.h"
 
+#include <optional>
+
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -12,7 +14,6 @@
 #include "chrome/browser/ui/webui/ash/settings/pages/files/mojom/google_drive_handler.mojom.h"
 #include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/text/bytes_formatting.h"
 
 namespace ash::settings {
@@ -21,9 +22,11 @@ namespace {
 using drive::DriveIntegrationService;
 using drivefs::pinning::PinningManager;
 using drivefs::pinning::Progress;
+using google_drive::mojom::Status;
+using google_drive::mojom::StatusPtr;
 
-google_drive::mojom::StatusPtr CreateStatusPtr(const Progress& progress) {
-  auto status = google_drive::mojom::Status::New();
+StatusPtr CreateStatusPtr(const Progress& progress) {
+  StatusPtr status = Status::New();
   status->required_space =
       (progress.required_space >= 0)
           ? base::UTF16ToUTF8(ui::FormatBytes(progress.required_space))
@@ -96,7 +99,7 @@ void GoogleDrivePageHandler::GetContentCacheSize(
     GetContentCacheSizeCallback callback) {
   if (!GetDriveService()) {
     page_->OnServiceUnavailable();
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return;
   }
 
@@ -115,7 +118,7 @@ void GoogleDrivePageHandler::OnGetContentCacheSize(
     GetContentCacheSizeCallback callback,
     int64_t size) {
   if (size < 0) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return;
   }
   std::move(callback).Run(base::UTF16ToUTF8(ui::FormatBytes(size)));

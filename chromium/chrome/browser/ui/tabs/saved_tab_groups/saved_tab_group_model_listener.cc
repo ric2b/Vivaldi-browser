@@ -56,14 +56,23 @@ void SavedTabGroupModelListener::OnTabGroupChanged(
       return;
     }
 
-    // Ignored because closing empty groups is handled when the last tab is
-    // removed in TabGroupedStateChanged.
+    // We should never get close notifications, because we destroy the
+    // LocalTabGroupListener when the last tab is closed, which happens before
+    // this event is sent out.
     case TabGroupChange::kClosed:
+    // We should never get created notifications, because we only are connected
+    // to the local group after it has been created and populated.
+    case TabGroupChange::kCreated: {
+      // The exception to both of these is when the group is being moved between
+      // browser windows, as it gets created in the new window and destroyed in
+      // the old window. In these cases, tracking must be paused, as otherwise
+      // the saved group will get emptied out during the move.
+      CHECK(local_tab_group_listeners_.at(change.group).IsTrackingPaused());
+      return;
+    }
+
     // Ignored because contents changes are handled in TabGroupedStateChanged.
     case TabGroupChange::kContentsChanged:
-    // Ignored because we explicitly add the TabGroupId to the saved tab group
-    // outside of the observer flow.
-    case TabGroupChange::kCreated:
     // kEditorOpened doesn't affect the SavedTabGroup.
     case TabGroupChange::kEditorOpened:
     // kMoved doesn't affect the order of the saved tab groups.
@@ -74,7 +83,7 @@ void SavedTabGroupModelListener::OnTabGroupChanged(
 }
 
 void SavedTabGroupModelListener::TabGroupedStateChanged(
-    absl::optional<tab_groups::TabGroupId> new_local_group_id,
+    std::optional<tab_groups::TabGroupId> new_local_group_id,
     content::WebContents* contents,
     int index) {
   // Remove `contents` from its current saved group, if it's in one.
@@ -111,7 +120,7 @@ void SavedTabGroupModelListener::OnTabStripModelChanged(
     const TabStripSelectionChange& selection) {
   switch (change.type()) {
     case TabStripModelChange::kReplaced: {
-      absl::optional<tab_groups::TabGroupId> local_id =
+      std::optional<tab_groups::TabGroupId> local_id =
           tab_strip_model->GetTabGroupForTab(change.GetReplace()->index);
 
       // Do nothing if the tab is no longer in a group.
@@ -132,7 +141,7 @@ void SavedTabGroupModelListener::OnTabStripModelChanged(
       return;
     }
     case TabStripModelChange::kMoved: {
-      absl::optional<tab_groups::TabGroupId> local_id =
+      std::optional<tab_groups::TabGroupId> local_id =
           tab_strip_model->GetTabGroupForTab(change.GetMove()->to_index);
 
       // Do nothing if the tab is no longer in a group.

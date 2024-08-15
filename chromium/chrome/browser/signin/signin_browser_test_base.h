@@ -5,6 +5,10 @@
 #ifndef CHROME_BROWSER_SIGNIN_SIGNIN_BROWSER_TEST_BASE_H_
 #define CHROME_BROWSER_SIGNIN_SIGNIN_BROWSER_TEST_BASE_H_
 
+#include <concepts>
+#include <memory>
+#include <vector>
+
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -26,9 +30,8 @@
 //
 // If you don't need to derive from some existing test class, prefer to use
 // `SigninBrowserTestBase`.
-template <typename T,
-          typename =
-              std::enable_if_t<std::is_base_of_v<InProcessBrowserTest, T>>>
+template <typename T>
+  requires(std::derived_from<T, InProcessBrowserTest>)
 class SigninBrowserTestBaseT : public T {
  public:
   // `use_main_profile` controls whether the main profile is used (the default
@@ -39,11 +42,13 @@ class SigninBrowserTestBaseT : public T {
 
   ~SigninBrowserTestBaseT() override = default;
 
-  // Sets accounts in the environment to new ones based on the given `emails`,
-  // and makes the first one primary.
+  // Sets accounts in the environment to new ones based on the given `emails`.
+  // The primary account is automatically set by Chrome when
+  // `switches::kUnoDesktop` is disabled, and remains unset when it is enabled.
   // Returns `AccountInfo`s for each added account, in the same order as
   // `emails`.
-  std::vector<AccountInfo> SetAccounts(const std::vector<std::string>& emails) {
+  std::vector<AccountInfo> SetAccountsCookiesAndTokens(
+      const std::vector<std::string>& emails) {
     auto account_availability_options =
         identity_test_env()
             ->CreateAccountAvailabilityOptionsBuilder()

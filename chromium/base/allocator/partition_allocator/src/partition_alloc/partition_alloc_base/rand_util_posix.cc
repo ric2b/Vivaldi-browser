@@ -2,22 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/rand_util.h"
+#include "partition_alloc/partition_alloc_base/rand_util.h"
 
-#include <errno.h>
 #include <fcntl.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <cstddef>
+#include <cstdint>
 #include <sstream>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/files/file_util.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/no_destructor.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/check.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/files/file_util.h"
+#include "partition_alloc/partition_alloc_base/no_destructor.h"
+#include "partition_alloc/partition_alloc_base/posix/eintr_wrapper.h"
 
 #if BUILDFLAG(IS_MAC)
 // TODO(crbug.com/995996): Waiting for this header to appear in the iOS SDK.
@@ -34,13 +35,24 @@ static constexpr int kOpenFlags = O_RDONLY;
 static constexpr int kOpenFlags = O_RDONLY | O_CLOEXEC;
 #endif
 
+// On Android the 'open' function has two versions:
+// int open(const char *pathname, int flags);
+// int open(const char *pathname, int flags, mode_t mode);
+//
+// This doesn't play well with WrapEINTR template. This alias helps the compiler
+// to make a decision.
+int OpenFile(const char* pathname, int flags) {
+  return open(pathname, flags);
+}
+
 // We keep the file descriptor for /dev/urandom around so we don't need to
 // reopen it (which is expensive), and since we may not even be able to reopen
 // it if we are later put in a sandbox. This class wraps the file descriptor so
 // we can use a static-local variable to handle opening it on the first access.
 class URandomFd {
  public:
-  URandomFd() : fd_(PA_HANDLE_EINTR(open("/dev/urandom", kOpenFlags))) {
+  URandomFd()
+      : fd_(partition_alloc::WrapEINTR(OpenFile)("/dev/urandom", kOpenFlags)) {
     PA_BASE_CHECK(fd_ >= 0) << "Cannot open /dev/urandom";
   }
 
@@ -76,7 +88,7 @@ void RandBytes(void* output, size_t output_length) {
   // that do have this syscall defined. This diverges from upstream
   // `//base` behavior both here and below.
   const ssize_t r =
-      PA_HANDLE_EINTR(syscall(__NR_getrandom, output, output_length, 0));
+      WrapEINTR(syscall)(__NR_getrandom, output, output_length, 0);
 
   // Return success only on total success. In case errno == ENOSYS (or any other
   // error), we'll fall through to reading from urandom below.

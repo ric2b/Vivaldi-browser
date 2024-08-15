@@ -38,7 +38,7 @@ class ScopedMockContentBrowserClient : public TestContentBrowserClient {
        int render_process_id,
        URLLoaderFactoryType type,
        const url::Origin& request_initiator,
-       absl::optional<int64_t> navigation_id,
+       std::optional<int64_t> navigation_id,
        ukm::SourceIdObj ukm_source_id,
        mojo::PendingReceiver<network::mojom::URLLoaderFactory>*
            factory_receiver,
@@ -97,7 +97,7 @@ TEST_F(PrefetchNetworkContextTest, CreateIsolatedURLLoaderFactory) {
                 return request_initiator.IsSameOriginWith(kReferringUrl);
               },
               true),
-          testing::Eq(absl::nullopt),
+          testing::Eq(std::nullopt),
           ukm::SourceIdObj::FromInt64(main_rfh()->GetPageUkmSourceId()),
           testing::NotNull(), testing::NotNull(), testing::NotNull(),
           testing::IsNull(), testing::IsNull(), testing::IsNull()))
@@ -108,13 +108,13 @@ TEST_F(PrefetchNetworkContextTest, CreateIsolatedURLLoaderFactory) {
 
   std::unique_ptr<PrefetchNetworkContext> prefetch_network_context =
       std::make_unique<PrefetchNetworkContext>(
-          prefetch_service(),
           /*use_isolated_network_context=*/true,
-          PrefetchType(/*use_prefetch_proxy=*/false,
+          PrefetchType(PreloadingTriggerType::kSpeculationRule,
+                       /*use_prefetch_proxy=*/false,
                        blink::mojom::SpeculationEagerness::kEager),
           referring_origin, main_rfh()->GetGlobalId());
 
-  prefetch_network_context->GetURLLoaderFactory();
+  prefetch_network_context->GetURLLoaderFactory(prefetch_service());
 }
 
 TEST_F(PrefetchNetworkContextTest,
@@ -131,7 +131,7 @@ TEST_F(PrefetchNetworkContextTest,
                 return request_initiator.IsSameOriginWith(kReferringUrl);
               },
               true),
-          testing::Eq(absl::nullopt),
+          testing::Eq(std::nullopt),
           ukm::SourceIdObj::FromInt64(main_rfh()->GetPageUkmSourceId()),
           testing::NotNull(), testing::NotNull(), testing::NotNull(),
           testing::IsNull(), testing::IsNull(), testing::IsNull()))
@@ -142,13 +142,13 @@ TEST_F(PrefetchNetworkContextTest,
 
   std::unique_ptr<PrefetchNetworkContext> prefetch_network_context =
       std::make_unique<PrefetchNetworkContext>(
-          prefetch_service(),
           /*use_isolated_network_context=*/false,
-          PrefetchType(/*use_prefetch_proxy=*/false,
+          PrefetchType(PreloadingTriggerType::kSpeculationRule,
+                       /*use_prefetch_proxy=*/false,
                        blink::mojom::SpeculationEagerness::kEager),
           referring_origin, main_rfh()->GetGlobalId());
 
-  prefetch_network_context->GetURLLoaderFactory();
+  prefetch_network_context->GetURLLoaderFactory(prefetch_service());
 }
 
 }  // namespace

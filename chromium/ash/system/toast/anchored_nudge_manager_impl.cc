@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "ash/constants/ash_features.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/system/anchored_nudge_data.h"
 #include "ash/public/cpp/system/scoped_nudge_pause.h"
 #include "ash/session/session_controller_impl.h"
@@ -25,11 +25,13 @@
 #include "ui/events/event.h"
 #include "ui/events/event_observer.h"
 #include "ui/events/types/event_type.h"
+#include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -80,7 +82,7 @@ class HideAnimationObserver : public ui::ImplicitAnimationObserver {
 
  private:
   // Owned by the views hierarchy.
-  raw_ptr<AnchoredNudge, ExperimentalAsh> anchored_nudge_;
+  raw_ptr<AnchoredNudge> anchored_nudge_;
 };
 
 }  // namespace
@@ -184,8 +186,7 @@ class AnchoredNudgeManagerImpl::NudgeHoverObserver : public ui::EventObserver {
 
   // `NudgeHoverObserver` is guaranteed to not outlive
   // `anchored_nudge_manager_`, which is owned by `Shell`.
-  const raw_ptr<AnchoredNudgeManagerImpl, ExperimentalAsh>
-      anchored_nudge_manager_;
+  const raw_ptr<AnchoredNudgeManagerImpl> anchored_nudge_manager_;
 };
 
 // A view observer that is used to close the nudge's widget whenever its
@@ -290,7 +291,6 @@ class AnchoredNudgeManagerImpl::NudgeWidgetObserver
 };
 
 AnchoredNudgeManagerImpl::AnchoredNudgeManagerImpl() {
-  DCHECK(features::IsSystemNudgeV2Enabled());
   Shell::Get()->session_controller()->AddObserver(this);
 }
 
@@ -331,16 +331,16 @@ void AnchoredNudgeManagerImpl::Show(AnchoredNudgeData& nudge_data) {
   // Chain callbacks with `Cancel()` so nudge is dismissed on button pressed.
   // TODO(b/285023559): Add `ChainedCancelCallback` class so we don't have to
   // manually modify the provided callbacks.
-  if (!nudge_data.first_button_text.empty()) {
-    nudge_data.first_button_callback =
-        ChainCancelCallback(nudge_data.first_button_callback,
-                            nudge_data.catalog_name, id, /*first_button=*/true);
+  if (!nudge_data.primary_button_text.empty()) {
+    nudge_data.primary_button_callback = ChainCancelCallback(
+        nudge_data.primary_button_callback, nudge_data.catalog_name, id,
+        /*primary_button=*/true);
   }
 
-  if (!nudge_data.second_button_text.empty()) {
-    nudge_data.second_button_callback = ChainCancelCallback(
-        nudge_data.second_button_callback, nudge_data.catalog_name, id,
-        /*first_button=*/false);
+  if (!nudge_data.secondary_button_text.empty()) {
+    nudge_data.secondary_button_callback = ChainCancelCallback(
+        nudge_data.secondary_button_callback, nudge_data.catalog_name, id,
+        /*primary_button=*/false);
   }
 
   nudge_data.close_button_callback = base::BindRepeating(
@@ -375,7 +375,7 @@ void AnchoredNudgeManagerImpl::Show(AnchoredNudgeData& nudge_data) {
   // button or its body text has `kLongBodyTextLength` or more characters.
   if (nudge_data.duration == NudgeDuration::kDefaultDuration &&
       (nudge_data.body_text.length() >= kLongBodyTextLength ||
-       !nudge_data.first_button_text.empty())) {
+       !nudge_data.primary_button_text.empty())) {
     nudge_data.duration = NudgeDuration::kMediumDuration;
   }
 
@@ -468,6 +468,9 @@ void AnchoredNudgeManagerImpl::OnSessionStateChanged(
   CloseAllNudges();
 }
 
+// TODO(b/311526868): Replace instances of `base::Contains()` and
+// `shown_nudges_[id]` with logic that only performs a single lookup.
+
 // TODO(b/296948349): Replace this with a new `GetNudge(id)` function as this
 // does not accurately reflect is a nudge is shown or not.
 bool AnchoredNudgeManagerImpl::IsNudgeShown(const std::string& id) {
@@ -477,7 +480,9 @@ bool AnchoredNudgeManagerImpl::IsNudgeShown(const std::string& id) {
 const std::u16string& AnchoredNudgeManagerImpl::GetNudgeBodyTextForTest(
     const std::string& id) {
   CHECK(base::Contains(shown_nudges_, id));
-  return shown_nudges_[id]->GetBodyText();
+  return views::AsViewClass<views::Label>(
+             shown_nudges_[id]->GetViewByID(VIEW_ID_SYSTEM_NUDGE_BODY_LABEL))
+      ->GetText();
 }
 
 views::View* AnchoredNudgeManagerImpl::GetNudgeAnchorViewForTest(
@@ -486,22 +491,35 @@ views::View* AnchoredNudgeManagerImpl::GetNudgeAnchorViewForTest(
   return shown_nudges_[id]->GetAnchorView();
 }
 
-views::LabelButton* AnchoredNudgeManagerImpl::GetNudgeFirstButtonForTest(
+views::LabelButton* AnchoredNudgeManagerImpl::GetNudgePrimaryButtonForTest(
     const std::string& id) {
   CHECK(base::Contains(shown_nudges_, id));
-  return shown_nudges_[id]->GetFirstButton();
+  return views::AsViewClass<views::LabelButton>(
+      shown_nudges_[id]->GetViewByID(VIEW_ID_SYSTEM_NUDGE_PRIMARY_BUTTON));
 }
 
-views::LabelButton* AnchoredNudgeManagerImpl::GetNudgeSecondButtonForTest(
+views::LabelButton* AnchoredNudgeManagerImpl::GetNudgeSecondaryButtonForTest(
     const std::string& id) {
   CHECK(base::Contains(shown_nudges_, id));
-  return shown_nudges_[id]->GetSecondButton();
+  return views::AsViewClass<views::LabelButton>(
+      shown_nudges_[id]->GetViewByID(VIEW_ID_SYSTEM_NUDGE_SECONDARY_BUTTON));
 }
 
 AnchoredNudge* AnchoredNudgeManagerImpl::GetShownNudgeForTest(
     const std::string& id) {
+  return base::Contains(shown_nudges_, id) ? shown_nudges_[id] : nullptr;
+}
+
+NudgeCatalogName AnchoredNudgeManagerImpl::GetNudgeCatalogNameForTest(
+    const std::string& id) {
   CHECK(base::Contains(shown_nudges_, id));
-  return shown_nudges_[id];
+  return shown_nudges_[id]->catalog_name();
+}
+
+AnchoredNudge* AnchoredNudgeManagerImpl::GetNudgeIfShown(
+    const std::string& nudge_id) const {
+  const auto iter = shown_nudges_.find(nudge_id);
+  return iter != shown_nudges_.end() ? iter->second.get() : nullptr;
 }
 
 void AnchoredNudgeManagerImpl::ResetNudgeRegistryForTesting() {
@@ -538,10 +556,10 @@ void AnchoredNudgeManagerImpl::RecordNudgeShown(NudgeCatalogName catalog_name) {
 
 void AnchoredNudgeManagerImpl::RecordButtonPressed(
     NudgeCatalogName catalog_name,
-    bool first_button) {
+    bool is_primary_button) {
   base::UmaHistogramEnumeration(
-      first_button ? "Ash.NotifierFramework.Nudge.FirstButtonPressed"
-                   : "Ash.NotifierFramework.Nudge.SecondButtonPressed",
+      is_primary_button ? "Ash.NotifierFramework.Nudge.PrimaryButtonPressed"
+                        : "Ash.NotifierFramework.Nudge.SecondaryButtonPressed",
       catalog_name);
 }
 
@@ -562,13 +580,13 @@ base::RepeatingClosure AnchoredNudgeManagerImpl::ChainCancelCallback(
     base::RepeatingClosure callback,
     NudgeCatalogName catalog_name,
     const std::string& id,
-    bool first_button) {
+    bool is_primary_button) {
   return std::move(callback)
       .Then(base::BindRepeating(&AnchoredNudgeManagerImpl::Cancel,
                                 base::Unretained(this), id))
       .Then(base::BindRepeating(&AnchoredNudgeManagerImpl::RecordButtonPressed,
                                 base::Unretained(this), catalog_name,
-                                first_button));
+                                is_primary_button));
 }
 
 void AnchoredNudgeManagerImpl::Pause() {

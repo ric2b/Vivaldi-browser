@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -20,7 +21,6 @@
 #include "components/offline_items_collection/core/offline_item.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/common/proto/download_file_types.pb.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -45,6 +45,20 @@ class FontList;
 // with a download.
 class DownloadUIModel {
  public:
+  // The type of tailored warning that is shown.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class TailoredWarningType {
+    kNoTailoredWarning = 0,
+    // Base cookie theft warning.
+    kCookieTheft = 1,
+    // Cookie theft warning with account info.
+    kCookieTheftWithAccountInfo = 2,
+    // Suspicious archive warning.
+    kSuspiciousArchive = 3,
+    kMaxValue = kSuspiciousArchive
+  };
+
   // Abstract base class for building StatusText
   class StatusTextBuilderBase {
    public:
@@ -110,6 +124,8 @@ class DownloadUIModel {
   };
 
 #if !BUILDFLAG(IS_ANDROID)
+  // Keep UI logic in this class in sync with DownloadBubbleRowViewInfo.
+  // TODO(crbug.com/1482901): Unify the logic.
   struct BubbleUIInfo {
     struct SubpageButton {
       DownloadCommands::Command command;
@@ -118,12 +134,12 @@ class DownloadUIModel {
 
       // Controls the text color of the button. Only applied for some secondary
       // buttons.
-      absl::optional<ui::ColorId> color;
+      std::optional<ui::ColorId> color;
 
       SubpageButton(DownloadCommands::Command command,
                     std::u16string label,
                     bool is_prominent,
-                    absl::optional<ui::ColorId> color = absl::nullopt);
+                    std::optional<ui::ColorId> color = std::nullopt);
     };
 
     struct QuickAction {
@@ -163,7 +179,7 @@ class DownloadUIModel {
     // Color used for alert text, which may be different from |secondary_color|,
     // used for icons. If this is nullopt, |secondary_color| will be used for
     // text.
-    absl::optional<ui::ColorId> secondary_text_color = absl::nullopt;
+    std::optional<ui::ColorId> secondary_text_color = std::nullopt;
 
     // Override icon
     raw_ptr<const gfx::VectorIcon> icon_model_override = nullptr;
@@ -177,11 +193,8 @@ class DownloadUIModel {
     // Icon for the secondary text in the subpage
     raw_ptr<const gfx::VectorIcon> warning_secondary_icon = nullptr;
 
-    // Label for the checkbox, empty if no checkbox is needed
-    std::u16string checkbox_label;
-
     // The command for the primary button
-    absl::optional<DownloadCommands::Command> primary_button_command;
+    std::optional<DownloadCommands::Command> primary_button_command;
 
     // List of quick actions
     std::vector<QuickAction> quick_actions;
@@ -191,7 +204,7 @@ class DownloadUIModel {
 
     // Text with link to go at the bottom of the subpage summary, such as "Learn
     // why Chrome blocks some downloads".
-    absl::optional<LabelWithLink> learn_more_link;
+    std::optional<LabelWithLink> learn_more_link;
 
     // Whether the main button should be enabled. When true, the main button
     // will either:
@@ -211,16 +224,14 @@ class DownloadUIModel {
                                   ui::ColorId color_id);
     BubbleUIInfo& AddSecondaryTextColor(ui::ColorId color_id);
     BubbleUIInfo& AddPrimaryButton(DownloadCommands::Command command);
-    BubbleUIInfo& AddCheckbox(const std::u16string& label);
     // Add button to the subpage. Only two buttons are supported.
     // The first one added is the primary, and the second one the secondary.
-    // The checkbox, if present, controls the secondary.
     BubbleUIInfo& AddPrimarySubpageButton(const std::u16string& label,
                                           DownloadCommands::Command command);
     BubbleUIInfo& AddSecondarySubpageButton(
         const std::u16string& label,
         DownloadCommands::Command command,
-        absl::optional<ui::ColorId> color = absl::nullopt);
+        std::optional<ui::ColorId> color = std::nullopt);
     BubbleUIInfo& SetProgressBarLooping();
     BubbleUIInfo& AddQuickAction(DownloadCommands::Command command,
                                  const std::u16string& label,
@@ -247,7 +258,6 @@ class DownloadUIModel {
 
     ui::ColorId GetColorForSecondaryText() const;
     bool HasSubpage() const;
-    bool HasCheckbox() const;
   };
 #endif
 
@@ -405,9 +415,10 @@ class DownloadUIModel {
   // Change what's returned by WasActionedOn().
   virtual void SetActionedOn(bool actioned_on);
 
-  // Returns |true| if the Download Bubble UI has shown this download warning.
-  // By default, this value is |false| and should be changed explicitly using
-  // SetWasUIWarningShown().
+  // Returns |true| if the UI (download bubble, downloads page, notification)
+  // has shown this download warning. By default, this value is |false| and
+  // should be changed explicitly using SetWasUIWarningShown(). Used to prevent
+  // double-logging of download warnings.
   virtual bool WasUIWarningShown() const;
 
   // Change what's returned by WasUIWarningShown().
@@ -416,9 +427,9 @@ class DownloadUIModel {
   // If this is an ephemeral warning, returns when the bubble first displayed
   // the warning. If the warning has not yet shown (or this isn't an ephemeral
   // warning), it returns no value. This does not persist across restarts.
-  virtual absl::optional<base::Time> GetEphemeralWarningUiShownTime() const;
+  virtual std::optional<base::Time> GetEphemeralWarningUiShownTime() const;
 
-  virtual void SetEphemeralWarningUiShownTime(absl::optional<base::Time> time);
+  virtual void SetEphemeralWarningUiShownTime(std::optional<base::Time> time);
 
   // Returns |true| if opening in the browser is preferred for this download. If
   // |false|, the download should be opened with the system default application.
@@ -575,19 +586,22 @@ class DownloadUIModel {
                               DownloadCommands::Command command);
 
   // Gets the information about the download bubbles subpage.
-  BubbleUIInfo GetBubbleUIInfo(bool is_download_bubble_v2) const;
+  BubbleUIInfo GetBubbleUIInfo() const;
   BubbleUIInfo GetBubbleUIInfoForInterrupted(
       offline_items_collection::FailState fail_state) const;
-  BubbleUIInfo GetBubbleUIInfoForInProgressOrComplete(
-      bool is_download_bubble_v2) const;
-  virtual BubbleUIInfo GetBubbleUIInfoForTailoredWarning() const;
+  BubbleUIInfo GetBubbleUIInfoForInProgressOrComplete() const;
+  virtual BubbleUIInfo GetBubbleUIInfoForTailoredWarning(
+      TailoredWarningType tailored_warning_type) const;
   BubbleUIInfo GetBubbleUIInfoForFileTypeWarningNoSafeBrowsing() const;
 
   // Returns |true| if this download should be displayed in the download bubble.
+  // Note that this may return true even if the download bubble is not enabled
+  // on the platform.
   virtual bool ShouldShowInBubble() const;
 
-  // Should this download trigger a tailored warning?
-  virtual bool ShouldShowTailoredWarning() const;
+  // Returns the type of tailored warning. Returns kNoTailoredWarning if this
+  // download shouldn't trigger a tailored warning.
+  virtual TailoredWarningType GetTailoredWarningType() const;
 
   // Ephemeral warnings are ones that are quickly removed from the bubble if the
   // user has not acted on them, and later deleted altogether. Is this that kind
@@ -632,11 +646,6 @@ class DownloadUIModel {
 
   raw_ptr<Delegate> delegate_ = nullptr;
 
-#if !BUILDFLAG(IS_ANDROID)
-  // Returns whether the DownloadBubbleV2 functionality is enabled.
-  bool IsBubbleV2Enabled() const;
-#endif
-
  private:
   friend class DownloadItemModelTest;
 
@@ -644,19 +653,8 @@ class DownloadUIModel {
 
   void set_status_text_builder_for_testing(bool for_bubble);
 
-#if !BUILDFLAG(IS_ANDROID)
-  // The following two methods exist for simpler unit testing.
-  // Setting an override for whether the DownloadBubbleV2 functionality is
-  // enabled.
-  void set_is_bubble_v2_enabled_for_testing(bool is_enabled);
-#endif
-
   // Unowned Clock to override the time of "Now".
   raw_ptr<base::Clock> clock_ = base::DefaultClock::GetInstance();
-
-#if !BUILDFLAG(IS_ANDROID)
-  absl::optional<bool> is_bubble_V2_enabled_for_testing_;
-#endif
 
   std::unique_ptr<StatusTextBuilderBase> status_text_builder_;
 

@@ -36,9 +36,10 @@ export class TestEduCoexistenceBrowserProxy extends TestBrowserProxy implements
     super([
       'initializeLogin',
       'initializeEduArgs',
-      'authExtensionReady',
+      'authenticatorReady',
       'completeLogin',
       'getAccounts',
+      'getDeviceId',
       'consentValid',
       'consentLogged',
       'dialogClose',
@@ -58,8 +59,8 @@ export class TestEduCoexistenceBrowserProxy extends TestBrowserProxy implements
     return Promise.resolve(this.coexistenceParams);
   }
 
-  authExtensionReady() {
-    this.methodCalled('authExtensionReady');
+  authenticatorReady() {
+    this.methodCalled('authenticatorReady');
   }
 
   completeLogin(credentials: AuthCompletedCredentials) {
@@ -70,6 +71,11 @@ export class TestEduCoexistenceBrowserProxy extends TestBrowserProxy implements
     this.methodCalled('getAccounts');
     return Promise.resolve(
         ['test@gmail.com', 'test2@gmail.com', 'test3@gmail.com']);
+  }
+
+  getDeviceId(): Promise<string> {
+    this.methodCalled('getDeviceId');
+    return Promise.resolve('4b1918ab-e8a4-456d-b499-0000deadbeef');
   }
 
   consentValid() {

@@ -39,13 +39,6 @@ constexpr int kFileTypeIconSize = 20;
 
 // Helpers ---------------------------------------------------------------------
 
-SkBitmap CreateBitmap(int width, int height, SkColor color) {
-  SkBitmap bitmap;
-  bitmap.allocN32Pixels(width, height);
-  bitmap.eraseColor(color);
-  return bitmap;
-}
-
 gfx::ImageSkia ExtractFileTypeIcon(const gfx::ImageSkia& image) {
   gfx::Rect file_type_icon_bounds(image.size());
   file_type_icon_bounds.ClampToCenteredSize(
@@ -107,8 +100,8 @@ class ImageGenerator {
     ASSERT_LT(index, pending_requests_.size());
 
     auto it = pending_requests_.begin() + index;
-    SkBitmap result =
-        CreateBitmap((*it)->size.width(), (*it)->size.height(), color);
+    SkBitmap result = gfx::test::CreateBitmap((*it)->size.width(),
+                                              (*it)->size.height(), color);
     HoldingSpaceImage::BitmapCallback callback = std::move((*it)->callback);
 
     pending_requests_.erase(it);
@@ -162,8 +155,7 @@ class TestImageClient {
   }
 
  private:
-  const raw_ptr<const HoldingSpaceImage, DanglingUntriaged | ExperimentalAsh>
-      image_;
+  const raw_ptr<const HoldingSpaceImage, DanglingUntriaged> image_;
   base::CallbackListSubscription image_subscription_;
   size_t image_change_count_ = 0;
 };

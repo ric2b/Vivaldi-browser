@@ -204,6 +204,9 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
   if (config.HasClientSentConnectionOption(kCONH, perspective)) {
     conservative_handshake_retransmits_ = true;
   }
+  if (config.HasClientSentConnectionOption(kRNIB, perspective)) {
+    pacing_sender_.set_remove_non_initial_burst();
+  }
   send_algorithm_->SetFromConfig(config, perspective);
   loss_algorithm_->SetFromConfig(config, perspective);
 
@@ -223,7 +226,7 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
 
 void QuicSentPacketManager::ApplyConnectionOptions(
     const QuicTagVector& connection_options) {
-  absl::optional<CongestionControlType> cc_type;
+  std::optional<CongestionControlType> cc_type;
   if (ContainsQuicTag(connection_options, kB2ON)) {
     cc_type = kBBRv2;
   } else if (ContainsQuicTag(connection_options, kTBBR)) {
@@ -316,7 +319,7 @@ void QuicSentPacketManager::PostProcessNewlyAckedPackets(
     QuicPacketNumber ack_packet_number, EncryptionLevel ack_decrypted_level,
     const QuicAckFrame& ack_frame, QuicTime ack_receive_time, bool rtt_updated,
     QuicByteCount prior_bytes_in_flight,
-    absl::optional<QuicEcnCounts> ecn_counts) {
+    std::optional<QuicEcnCounts> ecn_counts) {
   unacked_packets_.NotifyAggregatedStreamFrameAcked(
       last_ack_frame_.ack_delay_time);
   InvokeLossDetection(ack_receive_time);
@@ -358,7 +361,7 @@ void QuicSentPacketManager::PostProcessNewlyAckedPackets(
 
 void QuicSentPacketManager::MaybeInvokeCongestionEvent(
     bool rtt_updated, QuicByteCount prior_in_flight, QuicTime event_time,
-    absl::optional<QuicEcnCounts> ecn_counts,
+    std::optional<QuicEcnCounts> ecn_counts,
     const QuicEcnCounts& previous_counts) {
   if (!rtt_updated && packets_acked_.empty() && packets_lost_.empty()) {
     return;
@@ -369,7 +372,7 @@ void QuicSentPacketManager::MaybeInvokeCongestionEvent(
   // is necessary.
   QuicPacketCount newly_acked_ect = 0, newly_acked_ce = 0;
   if (ecn_counts.has_value()) {
-    QUICHE_DCHECK(GetQuicReloadableFlag(quic_send_ect1));
+    QUICHE_DCHECK(GetQuicRestartFlag(quic_support_ect1));
     newly_acked_ect = ecn_counts->ect1 - previous_counts.ect1;
     if (newly_acked_ect == 0) {
       newly_acked_ect = ecn_counts->ect0 - previous_counts.ect0;
@@ -745,7 +748,7 @@ QuicSentPacketManager::OnRetransmissionTimeout() {
       const QuicTime now = clock_->Now();
       InvokeLossDetection(now);
       MaybeInvokeCongestionEvent(false, prior_in_flight, now,
-                                 absl::optional<QuicEcnCounts>(),
+                                 std::optional<QuicEcnCounts>(),
                                  peer_ack_ecn_counts_[APPLICATION_DATA]);
       return LOSS_MODE;
     }
@@ -1278,7 +1281,7 @@ void QuicSentPacketManager::OnAckTimestamp(QuicPacketNumber packet_number,
 }
 
 bool QuicSentPacketManager::IsEcnFeedbackValid(
-    PacketNumberSpace space, const absl::optional<QuicEcnCounts>& ecn_counts,
+    PacketNumberSpace space, const std::optional<QuicEcnCounts>& ecn_counts,
     QuicPacketCount newly_acked_ect0, QuicPacketCount newly_acked_ect1) {
   if (!ecn_counts.has_value()) {
     if (newly_acked_ect0 > 0 || newly_acked_ect1 > 0) {
@@ -1325,7 +1328,7 @@ bool QuicSentPacketManager::IsEcnFeedbackValid(
 AckResult QuicSentPacketManager::OnAckFrameEnd(
     QuicTime ack_receive_time, QuicPacketNumber ack_packet_number,
     EncryptionLevel ack_decrypted_level,
-    const absl::optional<QuicEcnCounts>& ecn_counts) {
+    const std::optional<QuicEcnCounts>& ecn_counts) {
   QuicByteCount prior_bytes_in_flight = unacked_packets_.bytes_in_flight();
   QuicPacketCount newly_acked_ect0 = 0;
   QuicPacketCount newly_acked_ect1 = 0;
@@ -1391,6 +1394,7 @@ AckResult QuicSentPacketManager::OnAckFrameEnd(
     if (info->in_flight) {
       acked_packet.bytes_acked = info->bytes_sent;
     } else {
+      acked_packet.spurious_loss = (info->state == LOST);
       // Unackable packets are skipped earlier.
       largest_newly_acked_ = acked_packet.packet_number;
     }
@@ -1423,9 +1427,9 @@ AckResult QuicSentPacketManager::OnAckFrameEnd(
                       acked_packet.receive_timestamp);
   }
   // Validate ECN feedback.
-  absl::optional<QuicEcnCounts> valid_ecn_counts;
-  if (GetQuicReloadableFlag(quic_send_ect1)) {
-    QUIC_RELOADABLE_FLAG_COUNT_N(quic_send_ect1, 1, 8);
+  std::optional<QuicEcnCounts> valid_ecn_counts;
+  if (GetQuicRestartFlag(quic_support_ect1)) {
+    QUIC_RESTART_FLAG_COUNT_N(quic_support_ect1, 1, 9);
     if (IsEcnFeedbackValid(acked_packet_number_space, ecn_counts,
                            newly_acked_ect0, newly_acked_ect1)) {
       valid_ecn_counts = ecn_counts;

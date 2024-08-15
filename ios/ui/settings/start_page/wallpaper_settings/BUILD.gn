@@ -1,0 +1,48 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("wallpaper_settings") {
+
+  deps = [
+    "resources:imagesets",
+    "resources/vivaldi_wallpapers:imagesets",
+    ":wallpaper_settings_swift",
+    "//base",
+    "//ui/base"
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework"
+  ]
+}
+
+swift_source_set("wallpaper_settings_swift") {
+  bridge_header = "vivaldi_wallpaper_settings_swift_bridge.h"
+  sources = [
+    "vivaldi_wallpaper_settings_view_provider.swift",
+    "vivaldi_wallpaper_image_picker.swift",
+    "vivaldi_wallpapers.swift",
+    "vivaldi_wallpaper_settings_view.swift",
+    "vivaldi_wallpaper_thumbnail_image.swift",
+    "vivaldi_wallpaper_thumbnail_modifier.swift",
+    "vivaldi_wallpaper_preview_viewcontroller.swift",
+    "vivaldi_wallpaper_navigation_bar.swift",
+    "vivaldi_wallpaper_preview_representation.swift",
+    "vivaldi_wallapaper_settings_constants.swift"
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//url",
+    "//ios/chrome/app/strings"
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

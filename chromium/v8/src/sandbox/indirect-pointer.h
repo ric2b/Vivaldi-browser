@@ -7,6 +7,7 @@
 
 #include "src/common/globals.h"
 #include "src/sandbox/indirect-pointer-tag.h"
+#include "src/sandbox/isolate.h"
 
 namespace v8 {
 namespace internal {
@@ -23,17 +24,15 @@ namespace internal {
 // invalid (it cannot be dereferenced).
 
 // Initialize the 'self' indirect pointer that contains a reference back to the
-// owning object through the trusted pointer table. Must not be used for Code
-// objects, as these use the code pointer table instead of the trusted pointer
-// table.
+// owning object through its pointer table entry. For Code objects, this will
+// allocate an entry in the code pointer table. For all other trusted objects,
+// this will allocate an entry in the trusted pointer table.
 //
 // Only available when the sandbox is enabled.
-// TODO(saelo): we might want to move this method into trusted-pointer.h and
-// name it InitSelfTrustedPointerField to be consistent with
-// InitSelfCodePointerField.
 V8_INLINE void InitSelfIndirectPointerField(Address field_address,
-                                            LocalIsolate* isolate,
-                                            Tagged<HeapObject> object);
+                                            IsolateForSandbox isolate,
+                                            Tagged<HeapObject> host,
+                                            IndirectPointerTag tag);
 
 // Reads the IndirectPointerHandle from the field and loads the Object
 // referenced by this handle from the appropriate pointer table. The given
@@ -44,7 +43,7 @@ V8_INLINE void InitSelfIndirectPointerField(Address field_address,
 // Only available when the sandbox is enabled.
 template <IndirectPointerTag tag>
 V8_INLINE Tagged<Object> ReadIndirectPointerField(Address field_address,
-                                                  const Isolate* isolate);
+                                                  IsolateForSandbox isolate);
 
 // Loads the 'self' IndirectPointerHandle from the given object and stores it
 // into the indirect pointer field. In this way, the field becomes a (indirect)

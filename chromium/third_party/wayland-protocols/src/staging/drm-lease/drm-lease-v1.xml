@@ -148,6 +148,10 @@
         indicate the name of this connector. This will not change for the
         duration of the Wayland session, but is not guaranteed to be consistent
         between sessions.
+
+        If the compositor supports wl_output version 4 and this connector
+        corresponds to a wl_output, the compositor should use the same name as
+        for the wl_output.
       </description>
       <arg name="name" type="string" summary="connector name" />
     </event>

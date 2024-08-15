@@ -24,7 +24,7 @@ class V8_NODISCARD InvokeScope {
   explicit InvokeScope(Isolate* isolate)
       : isolate_(isolate), save_context_(isolate) {}
   ~InvokeScope() {
-    bool has_exception = isolate_->has_pending_exception();
+    bool has_exception = isolate_->has_exception();
     if (has_exception) {
       isolate_->ReportPendingMessages();
     } else {
@@ -388,8 +388,8 @@ bool IsSimpleInstantiation(Isolate* isolate, Tagged<ObjectTemplateInfo> info,
 
   if (!IsJSFunction(new_target)) return false;
   Tagged<JSFunction> fun = JSFunction::cast(new_target);
-  if (fun->shared()->function_data(kAcquireLoad) != info->constructor())
-    return false;
+  if (!fun->shared()->IsApiFunction()) return false;
+  if (fun->shared()->api_func_data() != info->constructor()) return false;
   if (info->immutable_proto()) return false;
   return fun->native_context() == isolate->raw_native_context();
 }
@@ -624,7 +624,7 @@ MaybeHandle<JSObject> ApiNatives::InstantiateRemoteObject(
 
   Handle<FunctionTemplateInfo> constructor(
       FunctionTemplateInfo::cast(data->constructor()), isolate);
-  Handle<Map> object_map = isolate->factory()->NewMap(
+  Handle<Map> object_map = isolate->factory()->NewContextlessMap(
       JS_SPECIAL_API_OBJECT_TYPE,
       JSObject::kHeaderSize +
           data->embedder_field_count() * kEmbedderDataSlotSize,
@@ -743,8 +743,8 @@ Handle<JSFunction> ApiNatives::CreateApiFunction(
   int instance_size = JSObject::GetHeaderSize(type) +
                       kEmbedderDataSlotSize * embedder_field_count;
 
-  Handle<Map> map = isolate->factory()->NewMap(type, instance_size,
-                                               TERMINAL_FAST_ELEMENTS_KIND);
+  Handle<Map> map = isolate->factory()->NewContextfulMap(
+      native_context, type, instance_size, TERMINAL_FAST_ELEMENTS_KIND);
 
   // Mark as undetectable if needed.
   if (obj->undetectable()) {

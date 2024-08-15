@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/views/download/bubble/download_bubble_primary_view.h"
 
 #include "base/metrics/histogram_functions.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -37,12 +37,10 @@ namespace {
 constexpr int kMaxHeightForRowList = 450;
 
 bool IsOtrInfoRowEnabled(Browser* browser) {
-  if (!browser) {
+  if (!browser || !browser->profile()) {
     return false;
   }
-  Profile* profile = browser->profile();
-  return download::IsDownloadBubbleV2Enabled(profile) &&
-         profile->IsOffTheRecord();
+  return browser->profile()->IsOffTheRecord();
 }
 
 }  // namespace
@@ -70,7 +68,8 @@ void DownloadBubblePrimaryView::BuildAndAddScrollView(
     const DownloadBubbleRowListViewInfo& info,
     int fixed_width) {
   auto row_list_view = std::make_unique<DownloadBubbleRowListView>(
-      browser, bubble_controller, navigation_handler, fixed_width, info);
+      browser, bubble_controller, navigation_handler, fixed_width, info,
+      IsPartialView());
   row_list_view_ = row_list_view.get();
   scroll_view_ = AddChildView(std::make_unique<views::ScrollView>());
   scroll_view_->SetContents(std::move(row_list_view));
@@ -138,10 +137,18 @@ DownloadBubbleRowView* DownloadBubblePrimaryView::GetRow(
   return row_list_view_->GetRow(id);
 }
 
+views::View* DownloadBubblePrimaryView::GetInitiallyFocusedView() {
+  if (row_list_view_->children().empty()) {
+    return nullptr;
+  }
+  return static_cast<DownloadBubbleRowView*>(row_list_view_->children().front())
+      ->transparent_button();
+}
+
 DownloadBubbleRowView* DownloadBubblePrimaryView::GetRowForTesting(
     size_t index) {
   return static_cast<DownloadBubbleRowView*>(row_list_view_->children()[index]);
 }
 
-BEGIN_METADATA(DownloadBubblePrimaryView, views::FlexLayoutView)
+BEGIN_METADATA(DownloadBubblePrimaryView)
 END_METADATA

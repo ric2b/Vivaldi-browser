@@ -69,7 +69,7 @@ void WebClient::PrepareErrorPage(WebState* web_state,
                                  NSError* error,
                                  bool is_post,
                                  bool is_off_the_record,
-                                 const absl::optional<net::SSLInfo>& info,
+                                 const std::optional<net::SSLInfo>& info,
                                  int64_t navigation_id,
                                  base::OnceCallback<void(NSString*)> callback) {
   DCHECK(error);
@@ -125,5 +125,10 @@ bool WebClient::IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) {
 
 void WebClient::SetOSLockdownModeEnabled(web::BrowserState* browser_state,
                                          bool enabled) {}
+
+bool WebClient::IsInsecureFormWarningEnabled(
+    web::BrowserState* browser_state) const {
+  return true;
+}
 
 }  // namespace web

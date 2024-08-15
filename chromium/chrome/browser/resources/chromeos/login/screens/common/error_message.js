@@ -24,6 +24,8 @@ import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/beha
 import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
 import {Oobe} from '../../cr_ui.js';
 
+import {getTemplate} from './error_message.html.js';
+
 
 const USER_ACTION_LAUNCH_OOBE_GUEST = 'launch-oobe-guest';
 const USER_ACTION_SHOW_CAPTIVE_PORTAL = 'show-captive-portal';
@@ -89,6 +91,14 @@ const ErrorMessageScreenBase = mixinBehaviors(
     PolymerElement);
 
 /**
+ * Data that is passed to the screen during onBeforeShow.
+ * @typedef {{
+ *   isCloseable: boolean,
+ * }}
+ */
+let ErrorScreenData;
+
+/**
  * @polymer
  */
 class ErrorMessageScreen extends ErrorMessageScreenBase {
@@ -97,7 +107,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   /** @override */
@@ -364,7 +374,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
 
   /**
    * Event handler that is invoked just before the screen is shown.
-   * @param {Object} data Screen init payload.
+   * @param {ErrorScreenData} data Screen init payload.
    */
   onBeforeShow(data) {
     this.enableWifiScans_ = true;

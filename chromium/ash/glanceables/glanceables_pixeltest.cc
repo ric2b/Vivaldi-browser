@@ -67,7 +67,7 @@ class GlanceablesPixelTest : public AshTestBase {
   }
 
   // AshTestBase:
-  absl::optional<pixel_test::InitParams> CreatePixelTestInitParams()
+  std::optional<pixel_test::InitParams> CreatePixelTestInitParams()
       const override {
     return pixel_test::InitParams();
   }
@@ -86,8 +86,10 @@ class GlanceablesPixelTest : public AshTestBase {
     return fake_glanceables_tasks_client_.get();
   }
 
- private:
+ protected:
   base::test::ScopedFeatureList features_{ash::features::kGlanceablesV2};
+
+ private:
   std::unique_ptr<views::Widget> widget_;
   AccountId account_id_ =
       AccountId::FromUserEmailGaiaId("test_user@gmail.com", "123456");
@@ -95,8 +97,6 @@ class GlanceablesPixelTest : public AshTestBase {
 };
 
 // Pixel test for glanceables when no data is available.
-// Test disabled due to not taking dark/light mode into consideration.
-// http://b/294612234
 TEST_F(GlanceablesPixelTest, GlanceablesZeroState) {
   base::subtle::ScopedTimeClockOverrides time_override(
       []() {
@@ -115,14 +115,12 @@ TEST_F(GlanceablesPixelTest, GlanceablesZeroState) {
   GetGlanceableTrayBubble()->GetTasksView()->ScrollViewToVisible();
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "glanceables_zero_state", /*revision_number=*/5,
+      "glanceables_zero_state", /*revision_number=*/7,
       GetGlanceableTrayBubble()->GetBubbleView()));
 }
 
 // Pixel test verifying initial UI for tasks glanceable as well as UI updates
 // when a task is marked as completed.
-// Test disabled due to not taking dark/light mode into consideration.
-// http://b/294612234
 TEST_F(GlanceablesPixelTest, GlanceablesTasksMarkAsCompleted) {
   base::subtle::ScopedTimeClockOverrides time_override(
       []() {
@@ -164,6 +162,33 @@ TEST_F(GlanceablesPixelTest, GlanceablesTasksMarkAsCompleted) {
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "glanceables_task_view_one_completed_task", /*revision_number=*/3,
       GetGlanceableTrayBubble()->GetTasksView()));
+}
+
+// Pixel test for calendar bubble height with `kGlanceablesV2CalendarView`
+// enabled.
+TEST_F(GlanceablesPixelTest, GlanceablesCalendarHeight) {
+  features_.Reset();
+  features_.InitWithFeatures({ash::features::kGlanceablesV2,
+                              ash::features::kGlanceablesV2CalendarView},
+                             /*disabled_features=*/{});
+
+  base::subtle::ScopedTimeClockOverrides time_override(
+      []() {
+        base::Time date;
+        bool result = base::Time::FromString("28 Jul 2023 10:00 GMT", &date);
+        DCHECK(result);
+        return date;
+      },
+      /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  ASSERT_FALSE(GetDateTray()->is_active());
+  OpenGlanceables();
+  ASSERT_TRUE(GetDateTray()->is_active());
+
+  EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+      "glanceables_calendar_height", /*revision_number=*/2,
+      GetGlanceableTrayBubble()->GetBubbleView()));
 }
 
 }  // namespace ash

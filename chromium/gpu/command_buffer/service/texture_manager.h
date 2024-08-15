@@ -312,9 +312,6 @@ class GPU_GLES2_EXPORT Texture final : public TextureBase {
     return estimated_size() > 0;
   }
 
-  // Initialize TEXTURE_MAX_ANISOTROPY to 1 if we haven't done so yet.
-  void InitTextureMaxAnisotropyIfNeeded(GLenum target);
-
   void DumpLevelMemory(base::trace_event::ProcessMemoryDump* pmd,
                        uint64_t client_tracing_id,
                        const std::string& dump_name) const;
@@ -624,9 +621,6 @@ class GPU_GLES2_EXPORT Texture final : public TextureBase {
 
   // Cache of the computed CanRenderCondition flag.
   CanRenderCondition can_render_condition_ = CAN_RENDER_ALWAYS;
-
-  // Whether we have initialized TEXTURE_MAX_ANISOTROPY to 1.
-  bool texture_max_anisotropy_initialized_ = false;
 
   raw_ptr<const CompatibilitySwizzle> compatibility_swizzle_ = nullptr;
 };
@@ -1214,7 +1208,8 @@ class GPU_GLES2_EXPORT TextureManager
 
   scoped_refptr<FeatureInfo> feature_info_;
 
-  std::vector<FramebufferManager*> framebuffer_managers_;
+  std::vector<raw_ptr<FramebufferManager, VectorExperimental>>
+      framebuffer_managers_;
 
   // Info for each texture in the system.
   typedef std::unordered_map<GLuint, scoped_refptr<TextureRef>> TextureMap;
@@ -1248,7 +1243,8 @@ class GPU_GLES2_EXPORT TextureManager
   // The default textures for each target (texture name = 0)
   scoped_refptr<TextureRef> default_textures_[kNumDefaultTextures];
 
-  std::vector<DestructionObserver*> destruction_observers_;
+  std::vector<raw_ptr<DestructionObserver, VectorExperimental>>
+      destruction_observers_;
 
   uint32_t current_service_id_generation_;
 

@@ -36,13 +36,19 @@ impl DeType {
 
 impl From<u8> for DeType {
     fn from(value: u8) -> Self {
-        DeType { code: value as u32 }
+        DeType { code: value.into() }
     }
 }
 
 impl From<u32> for DeType {
     fn from(value: u32) -> Self {
         DeType { code: value }
+    }
+}
+
+impl From<DeType> for u32 {
+    fn from(value: DeType) -> Self {
+        value.code
     }
 }
 

@@ -183,7 +183,8 @@ func populateSourceFiles(p *Project) error {
 					"*/**.cc",
 					"*/**.h",
 					"*/**.inl",
-					"*/**.mm"
+					"*/**.mm",
+					"*/**.proto"
 				]
 			},
 			{
@@ -201,7 +202,14 @@ func populateSourceFiles(p *Project) error {
 		dir, name := path.Split(filepath)
 		if kind := targetKindFromFilename(name); kind != targetInvalid {
 			directory := p.AddDirectory(dir)
-			p.AddTarget(directory, kind).AddSourceFile(p.AddFile(filepath))
+			target := p.AddTarget(directory, kind)
+			target.AddSourceFile(p.AddFile(filepath))
+
+			if kind == targetProto {
+				noExt, _ := fileutils.SplitExt(filepath)
+				target.AddGeneratedFile(p.AddGeneratedFile(noExt + ".pb.h"))
+				target.AddGeneratedFile(p.AddGeneratedFile(noExt + ".pb.cc"))
+			}
 		}
 	}
 
@@ -222,12 +230,17 @@ func scanSourceFiles(p *Project) error {
 	// parseFile parses the source file at 'path' represented by 'file'
 	// As this is run concurrently, it must not modify any shared state (including file)
 	parseFile := func(path string, file *File) (string, *ParsedFile, error) {
-		conditions := []Condition{}
+		if file.IsGenerated {
+			return "", nil, nil
+		}
 
 		body, err := os.ReadFile(file.AbsPath())
 		if err != nil {
 			return path, nil, err
 		}
+
+		conditions := []Condition{}
+
 		out := &ParsedFile{}
 		for i, line := range strings.Split(string(body), "\n") {
 			wrapErr := func(err error) error {
@@ -366,6 +379,7 @@ func applyDirectoryConfigs(p *Project) error {
 			kind TargetKind
 		}{
 			{cfg.Lib, targetLib},
+			{cfg.Proto, targetProto},
 			{cfg.Test, targetTest},
 			{cfg.TestCmd, targetTestCmd},
 			{cfg.Bench, targetBench},
@@ -426,6 +440,32 @@ func applyDirectoryConfigs(p *Project) error {
 		}
 	}
 
+	return nil
+}
+
+// checkInclude checks that the include statement is valid
+// file is the file that contains the include
+// include is the include statement
+// includeCondition holds the required conditions for the include
+func checkInclude(file *File, include Include, includeCondition Condition) error {
+	noneIfEmpty := func(cond Condition) string {
+		if len(cond) == 0 {
+			return "<none>"
+		}
+		return cond.String()
+	}
+	sourceConditions := cnf.And(cnf.And(include.Condition, file.Condition), file.Target.Condition)
+	targetConditions := includeCondition
+	if missing := targetConditions.AssumeTrue(sourceConditions); len(missing) > 0 {
+		return fmt.Errorf(`%v:%v #include "%v" requires guard: #if %v
+
+%v build conditions: %v
+%v build conditions: %v`,
+			file.Path(), include.Line, include.Path, strings.ToUpper(missing.String()),
+			file.Path(), noneIfEmpty(sourceConditions),
+			include.Path, targetConditions,
+		)
+	}
 	return nil
 }
 
@@ -495,30 +535,19 @@ func buildDependencies(p *Project) error {
 						addExternalDependency(dependency)
 					}
 
-					noneIfEmpty := func(cond Condition) string {
-						if len(cond) == 0 {
-							return "<none>"
-						}
-						return cond.String()
+					includeCondition := cnf.And(includeFile.Condition, includeFile.Target.Condition)
+					if err := checkInclude(file, include, includeCondition); err != nil {
+						return err
 					}
-					sourceConditions := cnf.And(cnf.And(include.Condition, file.Condition), file.Target.Condition)
-					targetConditions := cnf.And(includeFile.Condition, includeFile.Target.Condition)
-					if missing := targetConditions.Remove(sourceConditions); len(missing) > 0 {
-						return fmt.Errorf(`%v:%v #include "%v" requires guard: #if %v
-
-%v build conditions: %v
-%v build conditions: %v`,
-							file.Path(), include.Line, include.Path, strings.ToUpper(missing.String()),
-							file.Path(), noneIfEmpty(sourceConditions),
-							include.Path, targetConditions,
-						)
-					}
-
 				} else {
 					// Check for external includes
 					for _, external := range p.externals.Values() {
 						if external.includePatternMatch(include.Path) {
 							addExternalDependency(external)
+
+							if err := checkInclude(file, include, external.Condition); err != nil {
+								return err
+							}
 						}
 					}
 				}

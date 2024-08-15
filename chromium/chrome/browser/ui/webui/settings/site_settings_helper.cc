@@ -46,7 +46,6 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/permissions/contexts/bluetooth_chooser_context.h"
-#include "components/permissions/features.h"
 #include "components/permissions/object_permission_context_base.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_util.h"
@@ -96,6 +95,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::COOKIES, "cookies"},
     {ContentSettingsType::IMAGES, "images"},
     {ContentSettingsType::JAVASCRIPT, "javascript"},
+    {ContentSettingsType::JAVASCRIPT_JIT, "javascript-jit"},
     {ContentSettingsType::POPUPS, "popups"},
     {ContentSettingsType::GEOLOCATION, "location"},
     {ContentSettingsType::NOTIFICATIONS, "notifications"},
@@ -138,6 +138,8 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::ANTI_ABUSE, "anti-abuse"},
     {ContentSettingsType::STORAGE_ACCESS, "storage-access"},
     {ContentSettingsType::AUTO_PICTURE_IN_PICTURE, "auto-picture-in-picture"},
+    {ContentSettingsType::CAPTURED_SURFACE_CONTROL, "captured-surface-control"},
+    {ContentSettingsType::WEB_PRINTING, "web-printing"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required, for example if the content setting
@@ -173,11 +175,11 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY, nullptr},
     {ContentSettingsType::DISPLAY_CAPTURE, nullptr},
     {ContentSettingsType::FEDERATED_IDENTITY_SHARING, nullptr},
-    {ContentSettingsType::JAVASCRIPT_JIT, nullptr},
     {ContentSettingsType::HTTP_ALLOWED, nullptr},
     {ContentSettingsType::HTTPS_ENFORCED, nullptr},
     {ContentSettingsType::FORMFILL_METADATA, nullptr},
-    {ContentSettingsType::FEDERATED_IDENTITY_ACTIVE_SESSION, nullptr},
+    {ContentSettingsType::DEPRECATED_FEDERATED_IDENTITY_ACTIVE_SESSION,
+     nullptr},
     {ContentSettingsType::AUTO_DARK_WEB_CONTENT, nullptr},
     {ContentSettingsType::REQUEST_DESKTOP_SITE, nullptr},
     {ContentSettingsType::NOTIFICATION_INTERACTIONS, nullptr},
@@ -198,12 +200,17 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::THIRD_PARTY_STORAGE_PARTITIONING, nullptr},
     {ContentSettingsType::ALL_SCREEN_CAPTURE, nullptr},
     {ContentSettingsType::COOKIE_CONTROLS_METADATA, nullptr},
-    {ContentSettingsType::TPCD_SUPPORT, nullptr},
+    {ContentSettingsType::TPCD_TRIAL, nullptr},
     {ContentSettingsType::TPCD_METADATA_GRANTS, nullptr},
     // TODO(crbug.com/1011533): Update the name once the design is finalized
     // for the integration with Safety Hub.
     {ContentSettingsType::FILE_SYSTEM_ACCESS_EXTENDED_PERMISSION, nullptr},
     {ContentSettingsType::TPCD_HEURISTICS_GRANTS, nullptr},
+    {ContentSettingsType::FILE_SYSTEM_ACCESS_RESTORE_PERMISSION, nullptr},
+    // TODO(crbug.com/1464851): Update name once UI design is done.
+    {ContentSettingsType::SMART_CARD_GUARD, nullptr},
+    {ContentSettingsType::SMART_CARD_DATA, nullptr},
+    {ContentSettingsType::TOP_LEVEL_TPCD_TRIAL, nullptr},
 };
 
 static_assert(std::size(kContentSettingsTypeGroupNames) ==
@@ -310,13 +317,9 @@ SiteSettingSource CalculateSiteSettingSource(
   return SiteSettingSource::kPreference;
 }
 
-bool PatternAppliesToWebUISchemes(const ContentSettingPatternSource& pattern) {
-  return pattern.primary_pattern.GetScheme() ==
-             ContentSettingsPattern::SchemeType::SCHEME_CHROME ||
-         pattern.primary_pattern.GetScheme() ==
-             ContentSettingsPattern::SchemeType::SCHEME_CHROMEUNTRUSTED ||
-         pattern.primary_pattern.GetScheme() ==
-             ContentSettingsPattern::SchemeType::SCHEME_DEVTOOLS;
+bool IsFromWebUIAllowlistSource(const ContentSettingPatternSource& pattern) {
+  return HostContentSettingsMap::GetProviderTypeFromSource(pattern.source) ==
+         HostContentSettingsMap::WEBUI_ALLOWLIST_PROVIDER;
 }
 
 // If the given |pattern| represents an individual origin, Isolated Web App, or
@@ -540,6 +543,7 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       ContentSettingsType::MEDIASTREAM_CAMERA,
       ContentSettingsType::MEDIASTREAM_MIC,
       ContentSettingsType::MIXEDSCRIPT,
+      ContentSettingsType::JAVASCRIPT_JIT,
       ContentSettingsType::NOTIFICATIONS,
       ContentSettingsType::POPUPS,
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
@@ -593,11 +597,14 @@ const std::vector<ContentSettingsType>& GetVisiblePermissionCategories() {
       base_types->push_back(ContentSettingsType::AUTO_PICTURE_IN_PICTURE);
     }
 
-    if (base::FeatureList::IsEnabled(
-            permissions::features::kBlockMidiByDefault)) {
+    if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
       base_types->push_back(ContentSettingsType::MIDI);
     } else {
       base_types->push_back(ContentSettingsType::MIDI_SYSEX);
+    }
+
+    if (base::FeatureList::IsEnabled(blink::features::kWebPrinting)) {
+      base_types->push_back(ContentSettingsType::WEB_PRINTING);
     }
 
     initialized = true;
@@ -870,8 +877,8 @@ void GetRawExceptionsForContentSettingsType(
       continue;
     }
 
-    // Don't add WebUI settings.
-    if (PatternAppliesToWebUISchemes(setting)) {
+    // Don't add allowlisted settings.
+    if (IsFromWebUIAllowlistSource(setting)) {
       continue;
     }
 
@@ -883,20 +890,15 @@ void GetRawExceptionsForContentSettingsType(
     }
 
     auto content_setting = setting.GetContentSetting();
-
+    // There is no user-facing concept of SESSION_ONLY cookie exceptions that
+    // use secondary patterns. These are instead presented as ALLOW.
+    // TODO(crbug.com/1404436): Perform a one time migration of the actual
+    // content settings when the extension API no-longer allows them to be
+    // created.
     if (type == ContentSettingsType::COOKIES &&
-        base::FeatureList::IsEnabled(
-            privacy_sandbox::kPrivacySandboxSettings4)) {
-      // With the changes to settings introduced in PrivacySandboxSettings4,
-      // there is no user-facing concept of SESSION_ONLY cookie exceptions that
-      // use secondary patterns. These are instead presented as ALLOW.
-      // TODO(crbug.com/1404436): Perform a one time migration of the actual
-      // content settings when the extension API no-longer allows them to be
-      // created.
-      if (content_setting == ContentSetting::CONTENT_SETTING_SESSION_ONLY &&
-          setting.secondary_pattern != ContentSettingsPattern::Wildcard()) {
-        content_setting = ContentSetting::CONTENT_SETTING_ALLOW;
-      }
+        content_setting == ContentSetting::CONTENT_SETTING_SESSION_ONLY &&
+        setting.secondary_pattern != ContentSettingsPattern::Wildcard()) {
+      content_setting = ContentSetting::CONTENT_SETTING_ALLOW;
     }
 
     all_patterns_settings[{setting.primary_pattern, setting.source}][{
@@ -982,6 +984,8 @@ void GetExceptionsForContentType(ContentSettingsType type,
 
   // Display the URLs with File System entries that are granted
   // permissions via File System Access Persistent Permissions.
+  // TODO(crbug.com/1467574): Remove `kFileSystemAccessPersistentPermissions`
+  // flag after FSA Persistent Permissions feature launch.
   if (base::FeatureList::IsEnabled(
           features::kFileSystemAccessPersistentPermissions) &&
       (type == ContentSettingsType::FILE_SYSTEM_READ_GUARD ||
@@ -1092,7 +1096,7 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
       permissions::PermissionDecisionAutoBlocker* auto_blocker =
           permissions::PermissionsClient::Get()
               ->GetPermissionDecisionAutoBlocker(profile);
-      absl::optional<content::PermissionResult> embargo_result =
+      std::optional<content::PermissionResult> embargo_result =
           auto_blocker->GetEmbargoResult(origin, content_type);
       if (embargo_result) {
         result = embargo_result.value();
@@ -1119,11 +1123,12 @@ std::vector<ContentSettingPatternSource>
 GetSingleOriginExceptionsForContentType(HostContentSettingsMap* map,
                                         ContentSettingsType content_type) {
   ContentSettingsForOneType entries = map->GetSettingsForOneType(content_type);
-  // Exclude any entries that don't represent a single webby top-frame origin.
+  // Exclude any entries that are allowlisted or don't represent a single
+  // top-frame origin.
   base::EraseIf(entries, [](const ContentSettingPatternSource& e) {
     return !content_settings::PatternAppliesToSingleOrigin(
                e.primary_pattern, e.secondary_pattern) ||
-           PatternAppliesToWebUISchemes(e);
+           IsFromWebUIAllowlistSource(e);
   });
   return entries;
 }

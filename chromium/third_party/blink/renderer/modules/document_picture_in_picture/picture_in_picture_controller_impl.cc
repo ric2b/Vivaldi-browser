@@ -350,6 +350,10 @@ LocalDOMWindow* PictureInPictureControllerImpl::documentPictureInPictureWindow()
   return document_picture_in_picture_window_.Get();
 }
 
+bool PictureInPictureControllerImpl::HasDocumentPictureInPictureWindow() const {
+  return document_picture_in_picture_window_;
+}
+
 void PictureInPictureControllerImpl::CreateDocumentPictureInPictureWindow(
     ScriptState* script_state,
     LocalDOMWindow& opener,
@@ -359,15 +363,6 @@ void PictureInPictureControllerImpl::CreateDocumentPictureInPictureWindow(
   if (!LocalFrame::ConsumeTransientUserActivation(opener.GetFrame())) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
                                       "Document PiP requires user activation");
-    resolver->Reject(exception_state);
-    return;
-  }
-
-  if (!opener.Url().ProtocolIs(WTF::g_https_atom) &&
-      !opener.Url().IsLocalFile()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
-                                      "Opening a PiP window requires https "
-                                      "or file protocol");
     resolver->Reject(exception_state);
     return;
   }
@@ -542,8 +537,9 @@ void PictureInPictureControllerImpl::OnStopped() {
 
 void PictureInPictureControllerImpl::SetMayThrottleIfUndrawnFrames(
     bool may_throttle) {
-  if (!GetSupplementable()->GetFrame()->GetWidgetForLocalRoot()) {
-    // Tests do not always have a widget.
+  if (!GetSupplementable()->GetFrame() ||
+      !GetSupplementable()->GetFrame()->GetWidgetForLocalRoot()) {
+    // Tests do not always have a frame or widget.
     return;
   }
   GetSupplementable()

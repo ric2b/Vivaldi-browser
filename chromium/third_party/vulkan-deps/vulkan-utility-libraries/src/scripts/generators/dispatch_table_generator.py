@@ -32,6 +32,8 @@ class DispatchTableOutputGenerator(BaseGenerator):
 
 #include <string.h>
 
+// clang-format off
+
 typedef PFN_vkVoidFunction(VKAPI_PTR *PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char *pName);
 ''')
         out.append('''
@@ -90,6 +92,8 @@ static inline void vkuInitInstanceDispatchTable(VkInstance instance, VkuInstance
             out.extend(guard_helper.addGuard(command.protect))
             out.append(f'    table->{command.name[2:]} = (PFN_{command.name})gipa(instance, "{command.name}");\n')
         out.extend(guard_helper.addGuard(None))
-        out.append('}')
+        out.append('}\n')
+
+        out.append('// clang-format on')
 
         self.write("".join(out))

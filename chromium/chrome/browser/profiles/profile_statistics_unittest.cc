@@ -32,7 +32,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/storage_type.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/browser/password_store/test_password_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -45,13 +45,12 @@ namespace {
 std::unique_ptr<KeyedService> BuildBookmarkModelWithoutLoad(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
-  std::unique_ptr<bookmarks::BookmarkModel> bookmark_model(
-      new bookmarks::BookmarkModel(std::make_unique<ChromeBookmarkClient>(
+  return std::make_unique<bookmarks::BookmarkModel>(
+      std::make_unique<ChromeBookmarkClient>(
           profile, ManagedBookmarkServiceFactory::GetForProfile(profile),
           LocalOrSyncableBookmarkSyncServiceFactory::GetForProfile(profile),
           AccountBookmarkSyncServiceFactory::GetForProfile(profile),
-          BookmarkUndoServiceFactory::GetForProfile(profile))));
-  return std::move(bookmark_model);
+          BookmarkUndoServiceFactory::GetForProfile(profile)));
 }
 
 void LoadBookmarkModel(Profile* profile) {
@@ -103,14 +102,13 @@ TEST_F(ProfileStatisticsTest, WaitOrCountBookmarks) {
        {HistoryServiceFactory::GetInstance(),
         HistoryServiceFactory::GetDefaultFactory()},
        {WebDataServiceFactory::GetInstance(),
-        WebDataServiceFactory::GetDefaultFactory()}});
+        WebDataServiceFactory::GetDefaultFactory()},
+       {ProfilePasswordStoreFactory::GetInstance(),
+        base::BindRepeating(&password_manager::BuildPasswordStore<
+                            content::BrowserContext,
+                            password_manager::TestPasswordStore>)}});
 
   ASSERT_TRUE(profile);
-  ProfilePasswordStoreFactory::GetInstance()->SetTestingFactory(
-      profile,
-      base::BindRepeating(
-          &password_manager::BuildPasswordStore<
-              content::BrowserContext, password_manager::TestPasswordStore>));
 
   // Run ProfileStatisticsAggregator::WaitOrCountBookmarks.
   BookmarkStatHelper bookmark_stat_helper;

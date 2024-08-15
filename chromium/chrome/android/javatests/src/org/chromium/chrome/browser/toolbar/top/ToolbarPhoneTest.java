@@ -14,7 +14,6 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
@@ -30,7 +29,9 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.widget.ImageButton;
 
+import androidx.annotation.ColorInt;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.matcher.ViewMatchers.Visibility;
 import androidx.test.filters.MediumTest;
@@ -48,8 +49,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
-import org.chromium.base.Callback;
-import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterizedRunner;
@@ -57,6 +57,8 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
@@ -66,6 +68,8 @@ import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
@@ -77,7 +81,6 @@ import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator;
-import org.chromium.chrome.browser.toolbar.top.ToolbarPhone.NtpSearchBoxDrawable;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone.VisualState;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
@@ -85,10 +88,9 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
 import org.chromium.ui.test.util.NightModeTestUtils;
@@ -115,13 +117,13 @@ public class ToolbarPhoneTest {
     @Mock ThemeColorProvider mThemeColorProvider;
     @Mock GradientDrawable mLocationbarBackgroundDrawable;
     @Mock OptionalButtonCoordinator mOptionalButtonCoordinator;
-    @Mock NtpSearchBoxDrawable mNtpSearchBoxDrawable;
 
     private Canvas mCanvas = new Canvas();
     private ToolbarPhone mToolbar;
     private View mToolbarButtonsContainer;
     private MenuButton mMenuButton;
     private OmniboxTestUtils mOmnibox;
+    private TemplateUrlService mTemplateUrlService;
 
     @ParameterAnnotations.UseMethodParameterBefore(NightModeTestUtils.NightModeParams.class)
     public void setupNightMode(boolean nightModeEnabled) {
@@ -141,6 +143,13 @@ public class ToolbarPhoneTest {
         MockitoAnnotations.initMocks(this);
 
         mActivityTestRule.startMainActivityOnBlankPage();
+        TemplateUrlService originalService =
+                TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () ->
+                                TemplateUrlServiceFactory.getForProfile(
+                                        Profile.getLastUsedRegularProfile()));
+        mTemplateUrlService = Mockito.spy(originalService);
+        TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
         mToolbar = mActivityTestRule.getActivity().findViewById(R.id.toolbar);
         mToolbarButtonsContainer = mToolbar.findViewById(R.id.toolbar_buttons);
         mOmnibox = new OmniboxTestUtils(mActivityTestRule.getActivity());
@@ -470,10 +479,8 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({
-        ChromeFeatureList.START_SURFACE_ANDROID,
-        ChromeFeatureList.TAB_TO_GTS_ANIMATION
-    })
+    @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION})
+    @DisableFeatures({ChromeFeatureList.ANDROID_HUB})
     public void testEnterTabSwitcher_toolbarVisibleUntilTransitionEnds_startSurfaceEnabled() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         TabModelSelector tabModelSelector = cta.getTabModelSelectorSupplier().get();
@@ -510,10 +517,8 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({
-        ChromeFeatureList.START_SURFACE_ANDROID,
-        ChromeFeatureList.TAB_TO_GTS_ANIMATION
-    })
+    @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION})
+    @DisableFeatures({ChromeFeatureList.ANDROID_HUB})
     @DisableAnimationsTestRule.EnsureAnimationsOn
     public void
             testEnterTabSwitcher_toolbarVisibleUntilTransitionEnds_startSurfaceEnabled_animationsEnabled() {
@@ -561,7 +566,7 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @DisableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
+    @DisableFeatures({ChromeFeatureList.START_SURFACE_ANDROID, ChromeFeatureList.ANDROID_HUB})
     @DisableAnimationsTestRule.EnsureAnimationsOn
     public void testEnterTabSwitcher_toolbarVisibleUntilTransitionEnds_startSurfaceDisabled() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -604,10 +609,8 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({
-        ChromeFeatureList.START_SURFACE_ANDROID,
-        ChromeFeatureList.TAB_TO_GTS_ANIMATION
-    })
+    @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION})
+    @DisableFeatures({ChromeFeatureList.ANDROID_HUB})
     @DisableAnimationsTestRule.EnsureAnimationsOn
     public void testToolbarTabSwitcherButtonNotClickableDuringTransition_startSurfaceEnabled() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -675,8 +678,7 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @DisableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
-    @EnableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
+    @DisableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION, ChromeFeatureList.ANDROID_HUB})
     @DisableAnimationsTestRule.EnsureAnimationsOn
     public void
             testToolbarTabSwitcherButtonNotClickableDuringTransition_startSurfaceEnabled_noAnimation() {
@@ -746,7 +748,7 @@ public class ToolbarPhoneTest {
     @Test
     @MediumTest
     @EnableFeatures(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
-    @DisableFeatures(ChromeFeatureList.START_SURFACE_ANDROID)
+    @DisableFeatures({ChromeFeatureList.START_SURFACE_ANDROID, ChromeFeatureList.ANDROID_HUB})
     @DisableAnimationsTestRule.EnsureAnimationsOn
     public void testToolbarTabSwitcherButtonNotClickableDuringTransition_startSurfaceDisabled() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -960,74 +962,35 @@ public class ToolbarPhoneTest {
     @Test
     @MediumTest
     @EnableFeatures({ChromeFeatureList.SURFACE_POLISH})
-    public void testLocationBarBackgroundChangedWithStartSurfaceState() {
-        // Test updating the location bar background when entering the search page from the Start
-        // Surface.
-        assertEquals(false, mToolbar.isLocationBarShownInNTP());
-        mToolbar.setLocationBarBackgroundDrawableForTesting(mLocationbarBackgroundDrawable);
-        mToolbar.setIsShowingStartSurfaceHomepageForTesting(true);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mToolbar.onStartSurfaceStateChanged(false, false, false, true);
-                });
-        assertEquals(
-                mLocationbarBackgroundDrawable,
-                mToolbar.getActiveLocationBarBackgroundForTesting());
-
-        // Test updating the location bar background when entering the New Tab Page from the Start
-        // Surface.
-        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
-        Tab tab = mActivityTestRule.getActivity().getActivityTab();
-        NewTabPageTestUtils.waitForNtpLoaded(tab);
-        assertEquals(true, mToolbar.isLocationBarShownInNTP());
-        mToolbar.setNtpSearchBoxBackgroundForTesting(mNtpSearchBoxDrawable);
-        mToolbar.setIsShowingStartSurfaceHomepageForTesting(true);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mToolbar.onStartSurfaceStateChanged(false, false, false, false);
-                });
-        assertEquals(mNtpSearchBoxDrawable, mToolbar.getActiveLocationBarBackgroundForTesting());
-
-        // Test updating the location bar background when entering the New Tab Page from the Start
-        // Surface when NtpSearchBoxDrawable hasn't been constructed.
-        assertEquals(true, mToolbar.isLocationBarShownInNTP());
-        mToolbar.setNtpSearchBoxBackgroundForTesting(null);
-        mToolbar.setIsShowingStartSurfaceHomepageForTesting(true);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mToolbar.onStartSurfaceStateChanged(false, false, false, false);
-                });
-        assertTrue(mToolbar.getActiveLocationBarBackgroundForTesting() != null);
-        assertTrue(
-                mToolbar.getActiveLocationBarBackgroundForTesting()
-                        instanceof NtpSearchBoxDrawable);
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH})
     public void testToolbarBackgroundChanged() {
         ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
-        int expectColor =
-                androidx.core.graphics.ColorUtils.setAlphaComponent(
+        @ColorInt
+        int homeSurfaceToolbarBackgroundColorForSurfacePolish =
+                ColorUtils.setAlphaComponent(
                         ChromeColors.getSurfaceColor(
                                 mToolbar.getContext(),
                                 R.dimen.home_surface_background_color_elevation),
                         0);
 
-        assertEquals(false, mToolbar.isLocationBarShownInNTP());
-        assertNotEquals(expectColor, toolbarBackgroundDrawable.getColor());
+        assertEquals(false, mToolbar.isLocationBarShownInNtp());
+        assertNotEquals(
+                homeSurfaceToolbarBackgroundColorForSurfacePolish,
+                toolbarBackgroundDrawable.getColor());
 
         // Load the new tab page.
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(tab);
-        assertEquals(true, mToolbar.isLocationBarShownInNTP());
-        assertEquals(expectColor, toolbarBackgroundDrawable.getColor());
+        assertEquals(true, mToolbar.isLocationBarShownInNtp());
+        assertEquals(
+                homeSurfaceToolbarBackgroundColorForSurfacePolish,
+                toolbarBackgroundDrawable.getColor());
 
         // Focus on the Omnibox.
         mOmnibox.requestFocus();
-        assertNotEquals(expectColor, toolbarBackgroundDrawable.getColor());
+        assertNotEquals(
+                homeSurfaceToolbarBackgroundColorForSurfacePolish,
+                toolbarBackgroundDrawable.getColor());
     }
 
     @Test
@@ -1040,12 +1003,12 @@ public class ToolbarPhoneTest {
         View iconBackground = mToolbar.findViewById(R.id.location_bar_status_icon_bg);
         int expectedEndMarginAfterPolish =
                 mToolbar.getResources()
-                        .getDimensionPixelOffset(R.dimen.location_bar_url_action_offset_polish);
+                        .getDimensionPixelSize(R.dimen.location_bar_url_action_offset_polish);
         int expectedEndMarginBeforePolish =
                 mToolbar.getResources()
-                        .getDimensionPixelOffset(R.dimen.location_bar_url_action_offset);
+                        .getDimensionPixelSize(R.dimen.location_bar_url_action_offset);
 
-        assertEquals(false, mToolbar.isLocationBarShownInNTP());
+        assertEquals(false, mToolbar.isLocationBarShownInNtp());
         assertEquals(View.INVISIBLE, iconBackground.getVisibility());
         assertEquals(
                 expectedEndMarginBeforePolish,
@@ -1055,11 +1018,12 @@ public class ToolbarPhoneTest {
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(tab);
-        assertEquals(true, mToolbar.isLocationBarShownInNTP());
+        assertEquals(true, mToolbar.isLocationBarShownInNtp());
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mToolbar.setNtpSearchBoxScrollFractionForTesting(1);
-                    mToolbar.updateLocationBarForSurfacePolish(VisualState.NEW_TAB_NORMAL, false);
+                    mToolbar.updateLocationBarForSurfacePolish(
+                            VisualState.NEW_TAB_NORMAL, /* hasFocus= */ false);
                 });
         if (nightModeEnabled) {
             assertEquals(View.INVISIBLE, iconBackground.getVisibility());
@@ -1078,24 +1042,45 @@ public class ToolbarPhoneTest {
                 locationBarCoordinator.getUrlActionContainerEndMarginForTesting());
     }
 
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH})
+    public void testToolbarBackgroundChangedWhenSearchEngineHasNoLogo() {
+        when(mTemplateUrlService.doesDefaultSearchEngineHaveLogo()).thenReturn(false);
+
+        ColorDrawable toolbarBackgroundDrawable = mToolbar.getBackgroundDrawable();
+        @ColorInt
+        int homeSurfaceToolbarBackgroundColorForSurfacePolish =
+                ChromeColors.getSurfaceColor(
+                        mToolbar.getContext(),
+                        org.chromium.chrome.browser.toolbar.R.dimen
+                                .home_surface_background_color_elevation);
+
+        assertEquals(false, mToolbar.isLocationBarShownInGeneralNtp());
+        assertNotEquals(
+                homeSurfaceToolbarBackgroundColorForSurfacePolish,
+                toolbarBackgroundDrawable.getColor());
+
+        // Load the new tab page.
+        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
+        Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        NewTabPageTestUtils.waitForNtpLoaded(tab);
+        assertEquals(true, mToolbar.isLocationBarShownInGeneralNtp());
+        assertEquals(
+                homeSurfaceToolbarBackgroundColorForSurfacePolish,
+                toolbarBackgroundDrawable.getColor());
+
+        // Focus the Omnibox.
+        mOmnibox.requestFocus();
+        assertNotEquals(
+                homeSurfaceToolbarBackgroundColorForSurfacePolish,
+                toolbarBackgroundDrawable.getColor());
+    }
+
     private static class TestControlsVisibilityDelegate
             extends BrowserStateBrowserControlsVisibilityDelegate {
         public TestControlsVisibilityDelegate() {
-            super(
-                    new ObservableSupplier<Boolean>() {
-                        @Override
-                        public Boolean addObserver(Callback<Boolean> obs) {
-                            return false;
-                        }
-
-                        @Override
-                        public void removeObserver(Callback<Boolean> obs) {}
-
-                        @Override
-                        public Boolean get() {
-                            return false;
-                        }
-                    });
+            super(new ObservableSupplierImpl<>(false));
         }
     }
 }

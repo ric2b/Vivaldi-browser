@@ -404,6 +404,7 @@ target(link_target_type, "gles2_sources") {
     "//third_party/re2",
     "//third_party/zlib",
     "//ui/base:features",
+    "//ui/base:ozone_buildflags",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl",
@@ -474,6 +475,8 @@ target(link_target_type, "gles2_sources") {
       sources += [
         "shared_image/skia_vk_ozone_image_representation.cc",
         "shared_image/skia_vk_ozone_image_representation.h",
+        "shared_image/vulkan_ozone_image_representation.cc",
+        "shared_image/vulkan_ozone_image_representation.h",
       ]
     }
 
@@ -584,6 +587,9 @@ target(link_target_type, "gles2_sources") {
       "texture_owner.h",
     ]
 
+    # For AImageReader.
+    libs = [ "mediandk" ]
+
     if (use_dawn) {
       sources += [
         "shared_image/dawn_ahardwarebuffer_image_representation.cc",
@@ -591,7 +597,10 @@ target(link_target_type, "gles2_sources") {
       ]
     }
 
-    deps += [ "//base" ]
+    deps += [
+      "//base",
+      "//third_party/jni_zero",
+    ]
 
     # TODO(cblume): http://crbug.com/911313
     # Abstract out the platform specific defines. Right now we need the android
@@ -668,6 +677,9 @@ if (is_android) {
       "surface_texture_gl_owner_unittest.cc",
       "surface_texture_transform_unittest.cc",
     ]
+
+    # For AImageReader_getFormat()
+    libs = [ "mediandk" ]
 
     deps = [
       ":android_texture_owner_test_support",

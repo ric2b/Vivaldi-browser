@@ -6,9 +6,9 @@ import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeo
 
 import {MockVolumeManager} from '../../background/js/mock_volume_manager.js';
 import {VolumeEntry} from '../../common/js/files_app_entry_types.js';
-import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
-import {State} from '../../externs/ts/state.js';
-import {constants} from '../../foreground/js/constants.js';
+import {VolumeType} from '../../common/js/volume_manager_types.js';
+import {ODFS_EXTENSION_ID} from '../../foreground/js/constants.js';
+import type {State} from '../../state/state.js';
 import {createFakeVolumeMetadata, setUpFileManagerOnWindow, waitDeepEquals} from '../for_tests.js';
 import {getEmptyState, getEntry, getFileData, getStore, type Store} from '../store.js';
 
@@ -25,8 +25,7 @@ export function setUp() {
 
 export async function testUpdateDeviceConnection(done: () => void) {
   const volumeInfo = MockVolumeManager.createMockVolumeInfo(
-      VolumeManagerCommon.VolumeType.PROVIDED, 'odfs', 'OneDrive', '',
-      constants.ODFS_EXTENSION_ID, '');
+      VolumeType.PROVIDED, 'odfs', 'OneDrive', '', ODFS_EXTENSION_ID, '');
   const volumeMetadata = createFakeVolumeMetadata(volumeInfo);
   store.dispatch(addVolume({
     volumeInfo,
@@ -42,7 +41,7 @@ export async function testUpdateDeviceConnection(done: () => void) {
   assertEquals(
       chrome.fileManagerPrivate.DeviceConnectionState.ONLINE,
       store.getState().device.connection);
-  assertFalse(store.getState().volumes[odfsVolume.volumeId].isDisabled);
+  assertFalse(store.getState().volumes[odfsVolume.volumeId]!.isDisabled);
   assertFalse(odfsVolumeFileData.disabled);
   assertFalse(odfsVolumeEntry.disabled);
 

@@ -4,9 +4,13 @@
 
 export * as Animations from './AnimationHandler.js';
 export * as AuctionWorklets from './AuctionWorkletsHandler.js';
+export * as Frames from './FramesHandler.js';
 export * as GPU from './GPUHandler.js';
+export * as Initiators from './InitiatorsHandler.js';
+export * as Invalidations from './InvalidationsHandler.js';
 export * as LargestImagePaint from './LargestImagePaintHandler.js';
 export * as LargestTextPaint from './LargestTextPaintHandler.js';
+export * as LayerTree from './LayerTreeHandler.js';
 export * as LayoutShifts from './LayoutShiftsHandler.js';
 export * as Memory from './MemoryHandler.js';
 export * as Meta from './MetaHandler.js';

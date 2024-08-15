@@ -15,9 +15,6 @@ enum class FedCmIdpSigninStatusMode { DISABLED, METRICS_ONLY, ENABLED };
 // Whether the AuthZ is enabled or not.
 bool IsFedCmAuthzEnabled();
 
-// Whether FedCM IDP sign-out is enabled.
-bool IsFedCmIdpSignoutEnabled();
-
 // Whether multiple identity providers are enabled.
 bool IsFedCmMultipleIdentityProvidersEnabled();
 
@@ -38,6 +35,10 @@ bool IsFedCmIdPRegistrationEnabled();
 // Whether the well-known enforcement is bypassed.
 bool IsFedCmWithoutWellKnownEnforcementEnabled();
 
+// Whether we should skip well-known enforcement if RP and IDP are in the
+// same site.
+bool IsFedCmSkipWellKnownForSameSiteEnabled();
+
 // Whether the Web Identity Digital Credentials API is enabled.
 bool IsWebIdentityDigitalCredentialsEnabled();
 
@@ -50,8 +51,20 @@ bool IsFedCmDomainHintEnabled();
 // Whether the Error API is enabled.
 bool IsFedCmErrorEnabled();
 
-// Whether the revoke API is enabled.
-bool IsFedCmRevokeEnabled();
+// Whether the disconnect API is enabled.
+bool IsFedCmDisconnectEnabled();
+
+// Whether "Add Account" is enabled.
+bool IsFedCmAddAccountEnabled();
+
+// Whether the ExemptIdpWithThirdPartyCookies feature is enabled.
+bool IsFedCmExemptIdpWithThirdPartyCookiesEnabled();
+
+// Whether the ButtonMode feature is enabled.
+bool IsFedCmButtonModeEnabled();
+
+// Whether same-site login status is enabled.
+bool IsFedCmSameSiteLoginStatusEnabled();
 
 }  // namespace content
 

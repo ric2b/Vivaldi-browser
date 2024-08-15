@@ -132,7 +132,7 @@ class PredictionModelStoreBrowserTestBase : public InProcessBrowserTest {
     OptimizationGuideKeyedServiceFactory::GetForProfile(profile)
         ->AddObserverForOptimizationTargetModel(
             proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD,
-            /*model_metadata=*/absl::nullopt, model_file_observer);
+            /*model_metadata=*/std::nullopt, model_file_observer);
   }
 
   // Registers |model_file_observer| for model updates from the optimization
@@ -168,7 +168,7 @@ class PredictionModelStoreBrowserTestBase : public InProcessBrowserTest {
   }
 
   void set_server_model_cache_key(
-      absl::optional<proto::ModelCacheKey> server_model_cache_key) {
+      std::optional<proto::ModelCacheKey> server_model_cache_key) {
     server_model_cache_key_ = server_model_cache_key;
   }
 
@@ -240,7 +240,7 @@ class PredictionModelStoreBrowserTestBase : public InProcessBrowserTest {
   base::HistogramTester histogram_tester_;
 
   // Server returned ModelCacheKey in the GetModels response.
-  absl::optional<proto::ModelCacheKey> server_model_cache_key_;
+  std::optional<proto::ModelCacheKey> server_model_cache_key_;
 };
 
 class PredictionModelStoreBrowserTest
@@ -280,7 +280,14 @@ IN_PROC_BROWSER_TEST_F(PredictionModelStoreBrowserTest, TestRegularProfile) {
       kSuccessfulModelVersion, 1);
 }
 
-IN_PROC_BROWSER_TEST_F(PredictionModelStoreBrowserTest, TestIncognitoProfile) {
+// TODO(crbug.com/1517460): Re-enable this test
+#if BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+#define MAYBE_TestIncognitoProfile DISABLED_TestIncognitoProfile
+#else
+#define MAYBE_TestIncognitoProfile TestIncognitoProfile
+#endif
+IN_PROC_BROWSER_TEST_F(PredictionModelStoreBrowserTest,
+                       MAYBE_TestIncognitoProfile) {
   ModelFileObserver model_file_observer;
   RegisterAndWaitForModelUpdate(&model_file_observer);
   histogram_tester_.ExpectUniqueSample(
@@ -651,6 +658,13 @@ class PredictionModelStoreMigrationBrowserTest
           features::kOptimizationGuideInstallWideModelStore);
     }
   }
+
+  void CheckOldModelStoreDirectory(bool should_exist) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    EXPECT_EQ(should_exist,
+              base::DirectoryExists(browser()->profile()->GetPath().Append(
+                  kOldOptimizationGuidePredictionModelDownloads)));
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(PredictionModelStoreMigrationBrowserTest,
@@ -663,6 +677,7 @@ IN_PROC_BROWSER_TEST_F(PredictionModelStoreMigrationBrowserTest,
   histogram_tester_.ExpectUniqueSample(
       "OptimizationGuide.PredictionModelDownloadManager.DownloadStatus",
       PredictionModelDownloadStatus::kSuccess, 1);
+  CheckOldModelStoreDirectory(true);
 }
 
 IN_PROC_BROWSER_TEST_F(PredictionModelStoreMigrationBrowserTest,
@@ -675,6 +690,7 @@ IN_PROC_BROWSER_TEST_F(PredictionModelStoreMigrationBrowserTest,
   histogram_tester_.ExpectUniqueSample(
       "OptimizationGuide.PredictionModelDownloadManager.DownloadStatus",
       PredictionModelDownloadStatus::kSuccess, 1);
+  CheckOldModelStoreDirectory(false);
 }
 
 IN_PROC_BROWSER_TEST_F(PredictionModelStoreMigrationBrowserTest,
@@ -683,10 +699,11 @@ IN_PROC_BROWSER_TEST_F(PredictionModelStoreMigrationBrowserTest,
   ModelFileObserver model_file_observer;
   RegisterAndWaitForModelUpdate(&model_file_observer);
 
-  // The model saved in the old model store will be used, and no download will
-  // happen.
-  histogram_tester_.ExpectTotalCount(
-      "OptimizationGuide.PredictionModelDownloadManager.DownloadStatus", 0);
+  // The model will be downloaded again.
+  histogram_tester_.ExpectUniqueSample(
+      "OptimizationGuide.PredictionModelDownloadManager.DownloadStatus",
+      PredictionModelDownloadStatus::kSuccess, 1);
+  CheckOldModelStoreDirectory(true);
 }
 
 }  // namespace optimization_guide

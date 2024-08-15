@@ -4,11 +4,8 @@
 
 package org.chromium.chrome.browser.customtabs;
 
-import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.graphics.Rect;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewStub;
@@ -20,7 +17,9 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import org.chromium.base.Callback;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
@@ -42,9 +41,7 @@ import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabController;
 import org.chromium.chrome.browser.customtabs.features.branding.BrandingController;
-import org.chromium.chrome.browser.customtabs.features.minimizedcustomtab.CustomTabMinimizationManager;
-import org.chromium.chrome.browser.customtabs.features.minimizedcustomtab.MinimizedCustomTabIPHController;
-import org.chromium.chrome.browser.customtabs.features.minimizedcustomtab.MinimizedFeatureUtils;
+import org.chromium.chrome.browser.customtabs.features.minimizedcustomtab.CustomTabMinimizeDelegate;
 import org.chromium.chrome.browser.customtabs.features.partialcustomtab.CustomTabHeightStrategy;
 import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabBottomSheetStrategy;
 import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabDisplayManager;
@@ -64,6 +61,8 @@ import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.page_insights.PageInsightsCoordinator;
 import org.chromium.chrome.browser.page_insights.proto.Config.PageInsightsConfig;
+import org.chromium.chrome.browser.page_insights.proto.IntentParams.PageInsightsIntentParams;
+import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxDialogController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.reengagement.ReengagementNotificationController;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
@@ -76,13 +75,14 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarColorProvider;
-import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFactory;
 import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -91,19 +91,18 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.function.BooleanSupplier;
 
-/**
- * A {@link RootUiCoordinator} variant that controls UI for {@link BaseCustomTabActivity}.
- */
+/** A {@link RootUiCoordinator} variant that controls UI for {@link BaseCustomTabActivity}. */
 public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
+
     private final Supplier<CustomTabToolbarCoordinator> mToolbarCoordinator;
     private final Supplier<CustomTabActivityNavigationController> mNavigationController;
     private final Supplier<BrowserServicesIntentDataProvider> mIntentDataProvider;
     private final Supplier<CustomTabActivityTabController> mTabController;
+    private final Supplier<CustomTabMinimizeDelegate> mMinimizeDelegateSupplier;
+    private final Supplier<CustomTabFeatureOverridesManager> mFeatureOverridesManagerSupplier;
 
     private CustomTabHeightStrategy mCustomTabHeightStrategy;
 
-    // Created only when ChromeFeatureList.CctBrandTransparency is enabled.
-    // TODO(https://crbug.com/1343056): Make it part of the ctor.
     private @Nullable BrandingController mBrandingController;
 
     private @Nullable DesktopSiteSettingsIPHController mDesktopSiteSettingsIPHController;
@@ -111,14 +110,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     private @Nullable PageInsightsCoordinator mPageInsightsCoordinator;
     private @Nullable ContextualSearchObserver mContextualSearchObserver;
 
-    // The minimum API level is checked before initializing the manager.
-    @SuppressLint("NewApi")
-    private CustomTabMinimizationManager mMinimizationManager;
-
-    private MinimizedCustomTabIPHController mMinimizedCustomTabIPHController;
-
     /**
      * Construct a new BaseCustomTabRootUiCoordinator.
+     *
      * @param activity The activity whose UI the coordinator is responsible for.
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate}.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
@@ -152,8 +146,12 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
      * @param customTabNavigationController Controls the custom tab navigation.
      * @param intentDataProvider Contains intent information used to start the Activity.
      * @param tabController Activity tab controller.
+     * @param minimizeDelegateSupplier Supplies the {@link CustomTabMinimizeDelegate} used to
+     *     minimize the tab.
+     * @param featureOverridesManagerSupplier Supplies the {@link CustomTabFeatureOverridesManager}.
      */
-    public BaseCustomTabRootUiCoordinator(@NonNull AppCompatActivity activity,
+    public BaseCustomTabRootUiCoordinator(
+            @NonNull AppCompatActivity activity,
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             @NonNull ActivityTabProvider tabProvider,
             @NonNull ObservableSupplier<Profile> profileSupplier,
@@ -176,7 +174,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier,
             @NonNull Supplier<TabContentManager> tabContentManagerSupplier,
             @NonNull Supplier<SnackbarManager> snackbarManagerSupplier,
-            @ActivityType int activityType, @NonNull Supplier<Boolean> isInOverviewModeSupplier,
+            @NonNull ObservableSupplierImpl<EdgeToEdgeController> edgeToEdgeControllerSupplier,
+            @ActivityType int activityType,
+            @NonNull Supplier<Boolean> isInOverviewModeSupplier,
             @NonNull Supplier<Boolean> isWarmOnResumeSupplier,
             @NonNull AppMenuDelegate appMenuDelegate,
             @NonNull StatusBarColorProvider statusBarColorProvider,
@@ -186,25 +186,55 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             @NonNull Supplier<BrowserServicesIntentDataProvider> intentDataProvider,
             @NonNull Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
             @NonNull BackPressManager backPressManager,
-            @NonNull Supplier<CustomTabActivityTabController> tabController) {
-        super(activity, null, shareDelegateSupplier, tabProvider,
-                profileSupplier, bookmarkModelSupplier, tabBookmarkerSupplier,
-                contextualSearchManagerSupplier, tabModelSelectorSupplier,
-                new OneshotSupplierImpl<>(), new OneshotSupplierImpl<>(),
-                new OneshotSupplierImpl<>(), new OneshotSupplierImpl<>(), () -> null,
-                browserControlsManager, windowAndroid,
-                activityLifecycleDispatcher, layoutManagerSupplier, menuOrKeyboardActionController,
-                activityThemeColorSupplier, modalDialogManagerSupplier, appMenuBlocker,
-                supportsAppMenuSupplier, supportsFindInPage, tabCreatorManagerSupplier,
-                fullscreenManager, compositorViewHolderSupplier, tabContentManagerSupplier,
-                snackbarManagerSupplier, activityType,
-                isInOverviewModeSupplier, isWarmOnResumeSupplier, appMenuDelegate,
-                statusBarColorProvider, intentRequestTracker, new OneshotSupplierImpl<>(),
-                ephemeralTabCoordinatorSupplier, false, backPressManager, null);
+            @NonNull Supplier<CustomTabActivityTabController> tabController,
+            @NonNull Supplier<CustomTabMinimizeDelegate> minimizeDelegateSupplier,
+            @NonNull Supplier<CustomTabFeatureOverridesManager> featureOverridesManagerSupplier) {
+        super(
+                activity,
+                null,
+                shareDelegateSupplier,
+                tabProvider,
+                profileSupplier,
+                bookmarkModelSupplier,
+                tabBookmarkerSupplier,
+                contextualSearchManagerSupplier,
+                tabModelSelectorSupplier,
+                new OneshotSupplierImpl<>(),
+                new OneshotSupplierImpl<>(),
+                new OneshotSupplierImpl<>(),
+                new OneshotSupplierImpl<>(),
+                new OneshotSupplierImpl<>(),
+                () -> null,
+                browserControlsManager,
+                windowAndroid,
+                activityLifecycleDispatcher,
+                layoutManagerSupplier,
+                menuOrKeyboardActionController,
+                activityThemeColorSupplier,
+                modalDialogManagerSupplier,
+                appMenuBlocker,
+                supportsAppMenuSupplier,
+                supportsFindInPage,
+                tabCreatorManagerSupplier,
+                fullscreenManager,
+                compositorViewHolderSupplier,
+                tabContentManagerSupplier,
+                snackbarManagerSupplier,
+                edgeToEdgeControllerSupplier,
+                activityType,
+                isInOverviewModeSupplier,
+                isWarmOnResumeSupplier,
+                appMenuDelegate,
+                statusBarColorProvider,
+                intentRequestTracker,
+                new OneshotSupplierImpl<>(),
+                ephemeralTabCoordinatorSupplier,
+                false,
+                backPressManager,
+                null);
         mToolbarCoordinator = customTabToolbarCoordinator;
         mNavigationController = customTabNavigationController;
         mIntentDataProvider = intentDataProvider;
-
         if (intentDataProvider.get().getActivityType() == ActivityType.CUSTOM_TAB
                 && !intentDataProvider.get().isOpenedByChrome()
                 && !intentDataProvider.get().isIncognito()) {
@@ -213,10 +243,18 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                 appId = CustomTabIntentDataProvider.getAppIdFromReferrer(activity);
             }
             String browserName = activity.getResources().getString(R.string.app_name);
-            mBrandingController = new BrandingController(
-                    activity, appId, browserName, new ChromePureJavaExceptionReporter());
+            mBrandingController =
+                    new BrandingController(
+                            activity, appId, browserName, new ChromePureJavaExceptionReporter());
         }
         mTabController = tabController;
+        mMinimizeDelegateSupplier = minimizeDelegateSupplier;
+        mFeatureOverridesManagerSupplier = featureOverridesManagerSupplier;
+        // TODO(https://crbug.com/1509163): move this RootUiCoordinator once this flag is removed.
+        if (ChromeFeatureList.sCctTabModalDialog.isEnabled()) {
+            getAppBrowserControlsVisibilityDelegate()
+                    .addDelegate(browserControlsManager.getBrowserVisibilityDelegate());
+        }
     }
 
     @Override
@@ -227,6 +265,9 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         mNavigationController.get().onToolbarInitialized(mToolbarManager);
 
         CustomTabToolbar toolbar = mActivity.findViewById(R.id.toolbar);
+        if (ChromeFeatureList.sCctIntentFeatureOverrides.isEnabled()) {
+            toolbar.setFeatureOverridesManager(mFeatureOverridesManagerSupplier.get());
+        }
         View coordinator = mActivity.findViewById(R.id.coordinator);
         mCustomTabHeightStrategy.onToolbarInitialized(
                 coordinator, toolbar, mIntentDataProvider.get().getPartialTabToolbarCornerRadius());
@@ -234,31 +275,33 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             mBrandingController.onToolbarInitialized(toolbar.getBrandingDelegate());
         }
         toolbar.setCloseButtonPosition(mIntentDataProvider.get().getCloseButtonPosition());
-        if (mMinimizationManager != null) {
-            toolbar.setMinimizeDelegate(mMinimizationManager);
+        if (mMinimizeDelegateSupplier.hasValue()) {
+            toolbar.setMinimizeDelegate(mMinimizeDelegateSupplier.get());
         }
         if (mIntentDataProvider.get().isPartialCustomTab()) {
             Callback<Runnable> softInputCallback;
             if (ChromeFeatureList.sCctResizableSideSheet.isEnabled()) {
-                softInputCallback = ((
-                        PartialCustomTabDisplayManager) mCustomTabHeightStrategy)::onShowSoftInput;
+                softInputCallback =
+                        ((PartialCustomTabDisplayManager) mCustomTabHeightStrategy)
+                                ::onShowSoftInput;
             } else {
-                softInputCallback = ((PartialCustomTabBottomSheetStrategy)
-                                mCustomTabHeightStrategy)::onShowSoftInput;
+                softInputCallback =
+                        ((PartialCustomTabBottomSheetStrategy) mCustomTabHeightStrategy)
+                                ::onShowSoftInput;
             }
 
-            mTabController.get().registerTabObserver(
-                    new PartialCustomTabTabObserver(softInputCallback));
-            mTabController.get().registerTabObserver(new EmptyTabObserver() {
-                @Override
-                public void didFirstVisuallyNonEmptyPaint(Tab tab) {
-                    BaseCustomTabActivity baseActivity = (BaseCustomTabActivity) mActivity;
-                    assert baseActivity != null;
-                    baseActivity.getContextualSearchManagerSupplier()
-                            .get()
-                            .setCanHideAndroidBrowserControls(false);
-                }
-            });
+            var tabController = mTabController.get();
+            tabController.registerTabObserver(new PartialCustomTabTabObserver(softInputCallback));
+            var csManager = mContextualSearchManagerSupplier.get();
+            if (csManager != null) {
+                tabController.registerTabObserver(
+                        new EmptyTabObserver() {
+                            @Override
+                            public void didFirstVisuallyNonEmptyPaint(Tab tab) {
+                                csManager.setCanHideAndroidBrowserControls(false);
+                            }
+                        });
+            }
         }
     }
 
@@ -269,15 +312,18 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         maybeCreatePageInsightsComponent();
 
         if (ReengagementNotificationController.isEnabled()) {
-            new OneShotCallback<>(mProfileSupplier, mCallbackController.makeCancelable(profile -> {
-                assert profile != null : "Unexpectedly null profile from TabModel.";
-                if (profile == null) return;
-                Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
-                ReengagementNotificationController controller =
-                        new ReengagementNotificationController(
-                                mActivity, tracker, ReengagementActivity.class);
-                controller.tryToReengageTheUser();
-            }));
+            new OneShotCallback<>(
+                    mProfileSupplier,
+                    mCallbackController.makeCancelable(
+                            profile -> {
+                                assert profile != null : "Unexpectedly null profile from TabModel.";
+                                if (profile == null) return;
+                                Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+                                ReengagementNotificationController controller =
+                                        new ReengagementNotificationController(
+                                                mActivity, tracker, ReengagementActivity.class);
+                                controller.tryToReengageTheUser();
+                            }));
         }
     }
 
@@ -295,12 +341,13 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
 
         ViewStub containerStub = mActivity.findViewById(R.id.page_insights_hub_container_stub);
         if (containerStub != null) containerStub.inflate();
-        var controller = BottomSheetControllerFactory.createFullWidthBottomSheetController(
-                this::getScrimCoordinator,
-                (v)
-                        -> mPageInsightsCoordinator.initView(v),
-                mActivity.getWindow(), mWindowAndroid.getKeyboardDelegate(),
-                () -> mActivity.findViewById(R.id.page_insights_hub_container));
+        var controller =
+                BottomSheetControllerFactory.createFullWidthBottomSheetController(
+                        this::getScrimCoordinator,
+                        (v) -> mPageInsightsCoordinator.initView(v),
+                        mActivity.getWindow(),
+                        mWindowAndroid.getKeyboardDelegate(),
+                        () -> mActivity.findViewById(R.id.page_insights_hub_container));
 
         mPageInsightsCoordinator =
                 new PageInsightsCoordinator(
@@ -318,22 +365,27 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                         mCompositorViewHolderSupplier.get() == null
                                 ? null
                                 : mCompositorViewHolderSupplier.get().getInMotionSupplier(),
+                        mWindowAndroid.getApplicationBottomInsetSupplier(),
+                        getPageInsightsIntentParams(),
                         this::isPageInsightsHubEnabled,
                         this::getPageInsightsConfig);
 
-        mContextualSearchObserver = new ContextualSearchObserver() {
-            @Override
-            public void onShowContextualSearch(
-                    @Nullable GSAContextDisplaySelection selectionContext) {
-                mPageInsightsCoordinator.onBottomUiStateChanged(true);
-            }
+        if (mContextualSearchManagerSupplier.get() != null) {
+            mContextualSearchObserver =
+                    new ContextualSearchObserver() {
+                        @Override
+                        public void onShowContextualSearch(
+                                @Nullable GSAContextDisplaySelection selectionContext) {
+                            mPageInsightsCoordinator.onBottomUiStateChanged(true);
+                        }
 
-            @Override
-            public void onHideContextualSearch() {
-                mPageInsightsCoordinator.onBottomUiStateChanged(false);
-            }
-        };
-        mContextualSearchManagerSupplier.get().addObserver(mContextualSearchObserver);
+                        @Override
+                        public void onHideContextualSearch() {
+                            mPageInsightsCoordinator.onBottomUiStateChanged(false);
+                        }
+                    };
+            mContextualSearchManagerSupplier.get().addObserver(mContextualSearchObserver);
+        }
     }
 
     boolean isPageInsightsHubEnabled() {
@@ -348,10 +400,20 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                         .shouldEnablePageInsightsForIntent(intentDataProvider);
     }
 
-    private PageInsightsConfig getPageInsightsConfig(NavigationHandle navigationHandle) {
+    private PageInsightsIntentParams getPageInsightsIntentParams() {
+        return CustomTabsConnection.getInstance()
+                .getPageInsightsIntentParams(mIntentDataProvider.get());
+    }
+
+    private PageInsightsConfig getPageInsightsConfig(
+            @Nullable NavigationHandle navigationHandle,
+            @Nullable NavigationEntry navigationEntry) {
         return CustomTabsConnection.getInstance()
                 .getPageInsightsConfig(
-                        mIntentDataProvider.get(), navigationHandle, mProfileSupplier);
+                        mIntentDataProvider.get(),
+                        navigationHandle,
+                        navigationEntry,
+                        mProfileSupplier);
     }
 
     public @Nullable PageInsightsCoordinator getPageInsightsCoordinator() {
@@ -366,13 +428,17 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         showRegularOverviewIntent.putExtra(IntentHandler.EXTRA_OPEN_REGULAR_OVERVIEW_MODE, true);
         IntentUtils.addTrustedIntentExtras(showRegularOverviewIntent);
 
-        return new IncognitoReauthCoordinatorFactory(mActivity, mTabModelSelectorSupplier.get(),
-                mModalDialogManagerSupplier.get(), new IncognitoReauthManager(),
+        return new IncognitoReauthCoordinatorFactory(
+                mActivity,
+                mTabModelSelectorSupplier.get(),
+                mModalDialogManagerSupplier.get(),
+                new IncognitoReauthManager(),
                 new SettingsLauncherImpl(),
-                /*incognitoReauthTopToolbarDelegate= */ null,
-                /*layoutManager=*/null,
-                /*showRegularOverviewIntent= */ showRegularOverviewIntent,
-                /*isTabbedActivity= */ false);
+                /* incognitoReauthTopToolbarDelegate= */ null,
+                /* layoutManager= */ null,
+                /* hubManagerSupplier= */ null,
+                /* showRegularOverviewIntent= */ showRegularOverviewIntent,
+                /* isTabbedActivity= */ false);
     }
 
     @Override
@@ -392,32 +458,19 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         super.onPreInflationStartup();
 
         BrowserServicesIntentDataProvider intentDataProvider = mIntentDataProvider.get();
-        assert intentDataProvider
-                != null : "IntentDataProvider needs to be non-null after preInflationStartup";
+        assert intentDataProvider != null
+                : "IntentDataProvider needs to be non-null after preInflationStartup";
 
-        mCustomTabHeightStrategy = CustomTabHeightStrategy.createStrategy(mActivity,
-                intentDataProvider,
-                () -> mCompositorViewHolderSupplier.get(),
-                () -> mTabModelSelectorSupplier.get().getCurrentTab(),
-                CustomTabsConnection.getInstance(),
-                mActivityLifecycleDispatcher,
-                mFullscreenManager,
-                DeviceFormFactor.isWindowOnTablet(mWindowAndroid));
-
-        if (MinimizedFeatureUtils.isMinimizedCustomTabAvailable(mActivity)) {
-            mMinimizedCustomTabIPHController =
-                    new MinimizedCustomTabIPHController(
-                            mActivity,
-                            mActivityTabProvider,
-                            new UserEducationHelper(mActivity, new Handler(Looper.getMainLooper())),
-                            mProfileSupplier);
-            // The method above already checks for the minimum API level.
-            //
-            // noinspection NewApi
-            mMinimizationManager =
-                    new CustomTabMinimizationManager(
-                            mActivity, mActivityTabProvider, mMinimizedCustomTabIPHController);
-        }
+        mCustomTabHeightStrategy =
+                CustomTabHeightStrategy.createStrategy(
+                        mActivity,
+                        intentDataProvider,
+                        () -> mCompositorViewHolderSupplier.get(),
+                        () -> mTabModelSelectorSupplier.get().getCurrentTab(),
+                        CustomTabsConnection.getInstance(),
+                        mActivityLifecycleDispatcher,
+                        mFullscreenManager,
+                        DeviceFormFactor.isWindowOnTablet(mWindowAndroid));
     }
 
     @Override
@@ -442,7 +495,10 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             View coord = mActivity.findViewById(R.id.coordinator);
             int[] location = new int[2];
             coord.getLocationOnScreen(location);
-            return new Rect(location[0], location[1], location[0] + coord.getWidth(),
+            return new Rect(
+                    location[0],
+                    location[1],
+                    location[0] + coord.getWidth(),
                     location[1] + coord.getHeight());
         }
         return super.getAppRectOnScreen();
@@ -489,11 +545,6 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             mPageInsightsCoordinator.destroy();
             mPageInsightsCoordinator = null;
         }
-
-        if (mMinimizedCustomTabIPHController != null) {
-            mMinimizedCustomTabIPHController.destroy();
-            mMinimizedCustomTabIPHController = null;
-        }
     }
 
     /**
@@ -514,19 +565,58 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         mCustomTabHeightStrategy.handleCloseAnimation(finishRunnable);
     }
 
-    /**
-     * Runs a set of deferred startup tasks.
-     */
+    /** Runs a set of deferred startup tasks. */
     void onDeferredStartup() {
         new OneShotCallback<>(
                 mProfileSupplier,
                 mCallbackController.makeCancelable(
                         (profile) -> {
                             Profile regularProfile = profile.getOriginalProfile();
-
-                            boolean didShowPrompt =
-                                    RequestDesktopUtils.maybeShowDefaultEnableGlobalSettingMessage(
-                                            regularProfile, mMessageDispatcher, mActivity);
+                            boolean didShowPrompt = false;
+                            boolean shouldShowPrivacySandboxDialog =
+                                    PrivacySandboxDialogController.shouldShowPrivacySandboxDialog(
+                                                    mTabModelSelectorSupplier
+                                                            .get()
+                                                            .isIncognitoSelected())
+                                            && !(mIntentDataProvider.get().isPartialCustomTab());
+                            RecordHistogram.recordBooleanHistogram(
+                                    "Startup.Android.PrivacySandbox.ShouldShowAdsNoticeCCT",
+                                    shouldShowPrivacySandboxDialog);
+                            if (ChromeFeatureList.isEnabled(
+                                            ChromeFeatureList.PRIVACY_SANDBOX_ADS_NOTICE_CCT)
+                                    && shouldShowPrivacySandboxDialog) {
+                                boolean shouldShowPrivacySandboxDialogAppIdCheck = true;
+                                String appId = mIntentDataProvider.get().getClientPackageName();
+                                String paramAdsNoticeAppId =
+                                        ChromeFeatureList.getFieldTrialParamByFeature(
+                                                ChromeFeatureList.PRIVACY_SANDBOX_ADS_NOTICE_CCT,
+                                                "app-id");
+                                if (!paramAdsNoticeAppId.isEmpty()
+                                        && !paramAdsNoticeAppId.equals(appId)) {
+                                    shouldShowPrivacySandboxDialogAppIdCheck = false;
+                                }
+                                RecordHistogram.recordBooleanHistogram(
+                                        "Startup.Android.PrivacySandbox.AdsNoticeCCTAppIDCheck",
+                                        shouldShowPrivacySandboxDialogAppIdCheck);
+                                if (shouldShowPrivacySandboxDialogAppIdCheck) {
+                                    didShowPrompt =
+                                            PrivacySandboxDialogController
+                                                    .maybeLaunchPrivacySandboxDialog(
+                                                            mActivity,
+                                                            new SettingsLauncherImpl(),
+                                                            mTabModelSelectorSupplier
+                                                                    .get()
+                                                                    .isIncognitoSelected());
+                                }
+                            }
+                            if (!didShowPrompt) {
+                                didShowPrompt =
+                                        RequestDesktopUtils
+                                                .maybeShowDefaultEnableGlobalSettingMessage(
+                                                        regularProfile,
+                                                        mMessageDispatcher,
+                                                        mActivity);
+                            }
                             if (!didShowPrompt && mAppMenuCoordinator != null) {
                                 mDesktopSiteSettingsIPHController =
                                         DesktopSiteSettingsIPHController.create(

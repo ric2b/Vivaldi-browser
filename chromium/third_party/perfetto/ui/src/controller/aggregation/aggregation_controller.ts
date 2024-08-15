@@ -19,11 +19,11 @@ import {
   ColumnDef,
   ThreadStateExtra,
 } from '../../common/aggregation_data';
-import {Engine} from '../../common/engine';
-import {NUM} from '../../common/query_result';
 import {Area, Sorting} from '../../common/state';
 import {globals} from '../../frontend/globals';
 import {publishAggregateData} from '../../frontend/publish';
+import {Engine} from '../../trace_processor/engine';
+import {NUM} from '../../trace_processor/query_result';
 import {AreaSelectionHandler} from '../area_selection_handler';
 import {Controller} from '../controller';
 
@@ -74,6 +74,7 @@ export abstract class AggregationController extends Controller<'main'> {
     const aggregatePreferences =
         globals.state.aggregatePreferences[this.args.kind];
 
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     const sortingChanged = aggregatePreferences &&
         this.previousSorting !== aggregatePreferences.sorting;
     const [hasAreaChanged, area] = this.areaSelectionHandler.getAreaChange();
@@ -115,6 +116,7 @@ export abstract class AggregationController extends Controller<'main'> {
     const pref = globals.state.aggregatePreferences[this.kind];
     let sorting = `${this.getDefaultSorting().column} ${
         this.getDefaultSorting().direction}`;
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (pref && pref.sorting) {
       sorting = `${pref.sorting.column} ${pref.sorting.direction}`;
     }
@@ -154,7 +156,7 @@ export abstract class AggregationController extends Controller<'main'> {
           // the purposes of aggregation, however the aggregation infrastructure
           // is likely to be significantly reworked when we introduce EventSet,
           // and the complexity of supporting bigints throughout the aggregation
-          // panels in it's current form is not worth it. Thus, we simply
+          // panels in its current form is not worth it. Thus, we simply
           // convert bigints to numbers.
           column.data[i] = Number(item);
         } else {

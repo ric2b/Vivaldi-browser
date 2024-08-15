@@ -55,7 +55,6 @@
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
-#include "third_party/blink/public/mojom/input/input_handler.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
@@ -119,15 +118,17 @@ namespace {
 //    progress, it exits the run loop.
 // 7. At this point, all parsing, resource loads, and layout should be finished.
 
-void RunServeAsyncRequestsTask(scoped_refptr<base::TaskRunner> task_runner) {
+void RunServeAsyncRequestsTask(scoped_refptr<base::TaskRunner> task_runner,
+                               base::OnceClosure quit_closure) {
   // TODO(kinuko,toyoshim): Create a mock factory and use it instead of
   // getting the platform's one. (crbug.com/751425)
   URLLoaderMockFactory::GetSingletonInstance()->ServeAsynchronousRequests();
   if (TestWebFrameClient::IsLoading()) {
-    task_runner->PostTask(
-        FROM_HERE, WTF::BindOnce(&RunServeAsyncRequestsTask, task_runner));
+    task_runner->PostTask(FROM_HERE,
+                          WTF::BindOnce(&RunServeAsyncRequestsTask, task_runner,
+                                        std::move(quit_closure)));
   } else {
-    test::ExitRunLoop();
+    std::move(quit_closure).Run();
   }
 }
 
@@ -251,11 +252,13 @@ void ReloadFrameBypassingCache(WebLocalFrame* frame) {
 }
 
 void PumpPendingRequestsForFrameToLoad(WebLocalFrame* frame) {
+  base::RunLoop loop;
   scoped_refptr<base::TaskRunner> task_runner =
       frame->GetTaskRunner(blink::TaskType::kInternalTest);
   task_runner->PostTask(FROM_HERE,
-                        WTF::BindOnce(&RunServeAsyncRequestsTask, task_runner));
-  test::EnterRunLoop();
+                        WTF::BindOnce(&RunServeAsyncRequestsTask, task_runner,
+                                      loop.QuitClosure()));
+  loop.Run();
 }
 
 void FillNavigationParamsResponse(WebNavigationParams* params) {
@@ -745,6 +748,10 @@ void WebViewHelper::InitializeWebView(
   // Consequently, all external image resources must be mocked.
   web_view_->GetSettings()->SetLoadsImagesAutomatically(true);
 
+  // Color providers are required for painting, so we ensure they are not null
+  // even in unittests.
+  web_view_->GetPage()->UpdateColorProvidersForTest();
+
   // If a test turned off this settings, opened WebViews should propagate that.
   if (opener) {
     web_view_->GetSettings()->SetAllowUniversalAccessFromFileURLs(
@@ -973,8 +980,7 @@ void TestWebFrameWidget::DispatchThroughCcInputHandler(
           [](TestWebFrameWidget* widget, mojom::blink::InputEventResultSource,
              const ui::LatencyInfo&, mojom::blink::InputEventResultState,
              mojom::blink::DidOverscrollParamsPtr overscroll,
-             mojom::blink::TouchActionOptionalPtr,
-             mojom::blink::ScrollResultDataPtr) {
+             mojom::blink::TouchActionOptionalPtr) {
             if (widget)
               widget->last_overscroll_ = std::move(overscroll);
           },
@@ -1119,6 +1125,9 @@ void TestWidgetInputHandlerHost::ImeCompositionRangeChanged(
     const absl::optional<WTF::Vector<gfx::Rect>>& line_bounds) {}
 
 void TestWidgetInputHandlerHost::SetMouseCapture(bool capture) {}
+
+void TestWidgetInputHandlerHost::SetAutoscrollSelectionActiveInMainFrame(
+    bool autoscroll_selection) {}
 
 void TestWidgetInputHandlerHost::RequestMouseLock(
     bool from_user_gesture,

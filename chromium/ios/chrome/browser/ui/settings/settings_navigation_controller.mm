@@ -14,10 +14,10 @@
 #import "components/autofill/core/browser/personal_data_manager.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/browser/ui/password_check_referrer.h"
-#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/sync/base/features.h"
 #import "components/sync/service/sync_service.h"
-#import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
+#import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
@@ -48,6 +48,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_coordinator.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/notifications/notifications_coordinator.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_coordinator.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_controller.h"
@@ -56,6 +57,7 @@
 #import "ios/chrome/browser/ui/settings/privacy/privacy_safe_browsing_coordinator.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_coordinator.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/settings_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_root_view_controlling.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/sync/sync_encryption_passphrase_table_view_controller.h"
@@ -94,17 +96,16 @@ void ConfigureHandlers(id<SettingsRootViewControlling> controller,
 
 }  // namespace
 
-using password_manager::features::IsPasswordCheckupEnabled;
-
 NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 
 @interface SettingsNavigationController () <
     ClearBrowsingDataCoordinatorDelegate,
     GoogleServicesSettingsCoordinatorDelegate,
-    PrivacyCoordinatorDelegate,
     ManageSyncSettingsCoordinatorDelegate,
+    NotificationsCoordinatorDelegate,
     PasswordDetailsCoordinatorDelegate,
     PasswordsCoordinatorDelegate,
+    PrivacyCoordinatorDelegate,
     PrivacySafeBrowsingCoordinatorDelegate,
     SafetyCheckCoordinatorDelegate,
     UIAdaptivePresentationControllerDelegate,
@@ -147,6 +148,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 @property(nonatomic, strong)
     InactiveTabsSettingsCoordinator* inactiveTabsSettingsCoordinator;
 
+// Coordinator for the Notifications settings.
+@property(nonatomic, strong) NotificationsCoordinator* notificationsCoordinator;
 
 // Handler for Snackbar Commands.
 @property(nonatomic, weak) id<SnackbarCommands> snackbarCommandsHandler;
@@ -323,14 +326,7 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
           initWithRootViewController:nil
                              browser:browser
                             delegate:delegate];
-  if (IsPasswordCheckupEnabled()) {
-    [navigationController
-        showSavedPasswordsAndShowCancelButton:showCancelButton];
-  } else {
-    [navigationController
-        showSavedPasswordsAndStartPasswordCheck:YES
-                               showCancelButton:showCancelButton];
-  }
+  [navigationController showSavedPasswordsAndShowCancelButton:showCancelButton];
 
   return navigationController;
 }
@@ -594,6 +590,20 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   return navigationController;
 }
 
++ (instancetype)
+    notificationsSettingsControllerForBrowser:(Browser*)browser
+                                     delegate:
+                                         (id<SettingsNavigationControllerDelegate>)
+                                             delegate {
+  SettingsNavigationController* navigationController =
+      [[SettingsNavigationController alloc]
+          initWithRootViewController:nil
+                             browser:browser
+                            delegate:delegate];
+  [navigationController showNotificationsSettings];
+  return navigationController;
+}
+
 #pragma mark - Lifecycle
 
 - (instancetype)initWithRootViewController:(UIViewController*)rootViewController
@@ -631,19 +641,6 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [super viewDidLoad];
 
   self.view.backgroundColor = [UIColor colorNamed:kPrimaryBackgroundColor];
-
-  // Hardcode navigation bar style for iOS 14 and under to workaround bug that
-  // navigation bar height not adjusting consistently across subviews. Should be
-  // removed once iOS 14 is deprecated.
-  if (!base::ios::IsRunningOnIOS15OrLater()) {
-    UINavigationBarAppearance* appearance =
-        [[UINavigationBarAppearance alloc] init];
-    [appearance configureWithOpaqueBackground];
-    self.navigationBar.standardAppearance = appearance;
-    self.navigationBar.compactAppearance = appearance;
-    self.navigationBar.scrollEdgeAppearance = appearance;
-  }
-
   self.toolbar.translucent = NO;
   self.navigationBar.barTintColor =
       [UIColor colorNamed:kSecondaryBackgroundColor];
@@ -653,7 +650,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
       [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
 
   self.navigationBar.prefersLargeTitles = YES;
-  self.navigationBar.accessibilityIdentifier = @"SettingNavigationBar";
+  self.navigationBar.accessibilityIdentifier =
+      password_manager::kSettingsNavigationBarAccessibilityID;
 
   // Set the NavigationController delegate.
   self.delegate = self;
@@ -694,6 +692,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [self stopPrivacySafeBrowsingCoordinator];
   [self stopPrivacySettingsCoordinator];
   [self stopInactiveTabSettingsCoordinator];
+  [self stopPasswordDetailsCoordinator];
+  [self stopNotificationsCoordinator];
 
   // Reset the delegate to prevent any queued transitions from attempting to
   // close the settings.
@@ -781,10 +781,12 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   // users migrated to kSignin in phase 3. See ConsentLevel::kSync
   // documentation for details.
   SyncSettingsAccountState accountState =
-      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState())
-              ->HasSyncConsent()
-          ? SyncSettingsAccountState::kSyncing
-          : SyncSettingsAccountState::kSignedIn;
+      (base::FeatureList::IsEnabled(
+           syncer::kReplaceSyncPromosWithSignInPromos) &&
+       !SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState())
+            ->HasSyncConsent())
+          ? SyncSettingsAccountState::kSignedIn
+          : SyncSettingsAccountState::kSyncing;
   self.manageSyncSettingsCoordinator = [[ManageSyncSettingsCoordinator alloc]
       initWithBaseNavigationController:self
                                browser:self.browser
@@ -846,31 +848,9 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   self.manageSyncSettingsCoordinator = nil;
 }
 
-// Shows the saved passwords and starts the password check if
-// `startPasswordCheck` is true. If `showCancelButton` is true, adds a cancel
-// button as the left navigation item. Used when kIOSPasswordCheckup is
-// disabled.
-- (void)showSavedPasswordsAndStartPasswordCheck:(BOOL)startPasswordCheck
-                               showCancelButton:(BOOL)showCancelButton {
-  DCHECK(!IsPasswordCheckupEnabled());
-  self.savedPasswordsCoordinator = [[PasswordsCoordinator alloc]
-      initWithBaseNavigationController:self
-                               browser:self.browser];
-  self.savedPasswordsCoordinator.delegate = self;
-  [self.savedPasswordsCoordinator start];
-  if (startPasswordCheck) {
-    [self.savedPasswordsCoordinator checkSavedPasswords];
-  }
-  if (showCancelButton) {
-    [self.savedPasswordsCoordinator.viewController navigationItem]
-        .leftBarButtonItem = [self cancelButton];
-  }
-}
-
 // Shows the saved passwords. If `showCancelButton` is true, adds a cancel
-// button as the left navigation item. Used when kIOSPasswordCheckup is enabled.
+// button as the left navigation item.
 - (void)showSavedPasswordsAndShowCancelButton:(BOOL)showCancelButton {
-  DCHECK(IsPasswordCheckupEnabled());
   self.savedPasswordsCoordinator = [[PasswordsCoordinator alloc]
       initWithBaseNavigationController:self
                                browser:self.browser];
@@ -943,6 +923,20 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   self.privacySafeBrowsingCoordinator = nil;
 }
 
+// Stops the underlying PasswordDetailsCoordinator.
+- (void)stopPasswordDetailsCoordinator {
+  [self.passwordDetailsCoordinator stop];
+  self.passwordDetailsCoordinator.delegate = nil;
+  self.passwordDetailsCoordinator = nil;
+}
+
+// Stops the underlying NotificationsCoordinator.
+- (void)stopNotificationsCoordinator {
+  [self.notificationsCoordinator stop];
+  self.notificationsCoordinator.delegate = nil;
+  self.notificationsCoordinator = nil;
+}
+
 #pragma mark - GoogleServicesSettingsCoordinatorDelegate
 
 - (void)googleServicesSettingsCoordinatorDidRemove:
@@ -978,14 +972,21 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   [self stopPasswordsCoordinator];
 }
 
+#pragma mark - PasswordManagerReauthenticationDelegate
+
+- (void)dismissPasswordManagerAfterFailedReauthentication {
+  id<ApplicationCommands> applicationHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+
+  [applicationHandler closeSettingsUI];
+}
+
 #pragma mark PasswordDetailsCoordinatorDelegate
 
 - (void)passwordDetailsCoordinatorDidRemove:
     (PasswordDetailsCoordinator*)coordinator {
   DCHECK_EQ(self.passwordDetailsCoordinator, coordinator);
-  [self.passwordDetailsCoordinator stop];
-  self.passwordDetailsCoordinator.delegate = nil;
-  self.passwordDetailsCoordinator = nil;
+  [self stopPasswordDetailsCoordinator];
 }
 
 - (void)passwordDetailsCancelButtonWasTapped {
@@ -1013,6 +1014,14 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
     (PrivacySafeBrowsingCoordinator*)coordinator {
   DCHECK_EQ(self.privacySafeBrowsingCoordinator, coordinator);
   [self stopPrivacySafeBrowsingCoordinator];
+}
+
+#pragma mark - NotificationsCoordinatorDelegate
+
+- (void)notificationsCoordinatorDidRemove:
+    (NotificationsCoordinator*)coordinator {
+  DCHECK_EQ(self.notificationsCoordinator, coordinator);
+  [self stopNotificationsCoordinator];
 }
 
 #pragma mark - UIAdaptivePresentationControllerDelegate
@@ -1144,14 +1153,8 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 // TODO(crbug.com/779791) : Do not pass `baseViewController` through dispatcher.
 - (void)showSavedPasswordsSettingsFromViewController:
             (UIViewController*)baseViewController
-                                    showCancelButton:(BOOL)showCancelButton
-                                  startPasswordCheck:(BOOL)startPasswordCheck {
-  if (IsPasswordCheckupEnabled()) {
-    [self showSavedPasswordsAndShowCancelButton:showCancelButton];
-  } else {
-    [self showSavedPasswordsAndStartPasswordCheck:startPasswordCheck
-                                 showCancelButton:showCancelButton];
-  }
+                                    showCancelButton:(BOOL)showCancelButton {
+  [self showSavedPasswordsAndShowCancelButton:showCancelButton];
 }
 
 // TODO(crbug.com/779791) : Do not pass `baseViewController` through dispatcher.
@@ -1234,6 +1237,15 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   ContentSettingsTableViewController* controller =
       [[ContentSettingsTableViewController alloc] initWithBrowser:self.browser];
   [self pushViewController:controller animated:YES];
+}
+
+- (void)showNotificationsSettings {
+  [self stopNotificationsCoordinator];
+  self.notificationsCoordinator = [[NotificationsCoordinator alloc]
+      initWithBaseNavigationController:self
+                               browser:_browser];
+  self.notificationsCoordinator.delegate = self;
+  [self.notificationsCoordinator start];
 }
 
 #pragma mark - Vivaldi

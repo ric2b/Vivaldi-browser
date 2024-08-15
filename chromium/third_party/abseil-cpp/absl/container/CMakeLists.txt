@@ -177,6 +177,7 @@ absl_cc_library(
     ${ABSL_DEFAULT_COPTS}
   DEPS
     absl::compressed_tuple
+    absl::config
     absl::core_headers
     absl::memory
     absl::span
@@ -305,6 +306,7 @@ absl_cc_test(
     absl::check
     absl::flat_hash_map
     absl::hash_generator_testing
+    absl::type_traits
     absl::unordered_map_constructor_test
     absl::unordered_map_lookup_test
     absl::unordered_map_members_test
@@ -448,8 +450,10 @@ absl_cc_test(
     ${ABSL_TEST_COPTS}
   DEPS
     absl::container_memory
+    absl::no_destructor
     absl::strings
     absl::test_instance_tracker
+    absl::type_traits
     GTest::gmock_main
 )
 
@@ -500,6 +504,7 @@ absl_cc_library(
     absl::hash_policy_testing
     absl::memory
     absl::meta
+    absl::no_destructor
     absl::strings
   TESTONLY
 )
@@ -743,14 +748,18 @@ absl_cc_test(
     absl::core_headers
     absl::flat_hash_map
     absl::flat_hash_set
+    absl::hash
     absl::hash_function_defaults
     absl::hash_policy_testing
     absl::hashtable_debug
+    absl::hashtablez_sampler
     absl::log
+    absl::memory
     absl::prefetch
     absl::raw_hash_set
     absl::strings
     absl::test_allocator
+    absl::type_traits
     GTest::gmock_main
 )
 

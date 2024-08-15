@@ -21,6 +21,11 @@ enum class Destination {
   WhatsNew = 8,
   SpotlightDebugger = 9,
   PriceNotifications = 10,
+
+  // Vivaldi
+  vShare = 11,
+  // End Vivaldi
+
 };
 // LINT.ThenChange(overflow_menu_metrics.h:destination)
 
@@ -47,6 +52,7 @@ enum class ActionType {
   EditActions,
 
   // Vivaldi action groups
+  vSiteInfo,
   vBookmarks,
   vNotes,
   vHistory,

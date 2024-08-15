@@ -52,6 +52,7 @@ enum class Attribute : uint8_t {
     kAlign,
     kBinding,
     kBuiltin,
+    kColor,
     kCompute,
     kDiagnostic,
     kFragment,
@@ -84,10 +85,10 @@ auto& operator<<(STREAM& out, Attribute value) {
 /// @returns the parsed enum, or Attribute::kUndefined if the string could not be parsed.
 Attribute ParseAttribute(std::string_view str);
 
-constexpr const char* kAttributeStrings[] = {
-    "align",    "binding", "builtin", "compute",        "diagnostic", "fragment",
-    "group",    "id",      "index",   "interpolate",    "invariant",  "location",
-    "must_use", "size",    "vertex",  "workgroup_size",
+constexpr std::string_view kAttributeStrings[] = {
+    "align",    "binding",  "builtin", "color",  "compute",        "diagnostic",
+    "fragment", "group",    "id",      "index",  "interpolate",    "invariant",
+    "location", "must_use", "size",    "vertex", "workgroup_size",
 };
 
 }  // namespace tint::core

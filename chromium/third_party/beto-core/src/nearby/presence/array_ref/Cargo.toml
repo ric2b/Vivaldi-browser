@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = []
 std = []
 
-[dependencies]

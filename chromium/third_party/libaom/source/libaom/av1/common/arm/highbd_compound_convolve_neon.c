@@ -1235,7 +1235,7 @@ static INLINE void highbd_2d_copy_neon(const uint16_t *src_ptr, int src_stride,
       uint16x4_t d = vshl_u16(s, round_shift_s16);
       d = vadd_u16(d, offset_u16);
       if (w == 2) {
-        store_u16_2x1(dst_ptr + y * dst_stride, d, 0);
+        store_u16_2x1(dst_ptr + y * dst_stride, d);
       } else {
         vst1_u16(dst_ptr + y * dst_stride, d);
       }

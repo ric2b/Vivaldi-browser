@@ -590,7 +590,7 @@ var defaultTests = [
       chrome.test.assertEq('Running', item.status);
       chrome.test.assertTrue(item.showsTooltip);
       chrome.test.assertFalse(item.pinnedByPolicy);
-      chrome.test.assertFalse(item.pinStateForcedByType);
+      chrome.test.assertTrue(item.pinStateForcedByType);
       chrome.test.assertFalse(item.hasNotification);
     }));
   },
@@ -1550,17 +1550,40 @@ var holdingSpaceTests = [
 ];
 
 var isFieldTrialActiveTests = [
-  function getActiveTrial() {
-    chrome.autotestPrivate.isFieldTrialActive("ActiveTrialForTest",
-      chrome.test.callbackPass(enabled => {
-        chrome.test.assertTrue(enabled);
-      }));
+  function getActiveTrialActiveGroup() {
+    chrome.autotestPrivate.isFieldTrialActive(
+        'ActiveTrialForTest', 'GroupForTest',
+        chrome.test.callbackPass(enabled => {
+          chrome.test.assertTrue(enabled);
+        }));
+  },
+  function getActiveTrialInactiveGroup() {
+    chrome.autotestPrivate.isFieldTrialActive(
+        'ActiveTrialForTest', 'WrongGroupForTest',
+        chrome.test.callbackPass(enabled => {
+          chrome.test.assertFalse(enabled);
+        }));
   },
   function getInactiveTrial() {
-    chrome.autotestPrivate.isFieldTrialActive("InactiveTrialForTest",
-      chrome.test.callbackPass(enabled => {
-        chrome.test.assertFalse(enabled);
-      }));
+    chrome.autotestPrivate.isFieldTrialActive(
+        'InactiveTrialForTest', 'GroupForTest',
+        chrome.test.callbackPass(enabled => {
+          chrome.test.assertFalse(enabled);
+        }));
+  }
+];
+
+var clearAllowedPrefTests = [
+  function clearAllowedPrefs(pref_name) {
+    chrome.autotestPrivate.clearAllowedPref(pref_name,
+        chrome.test.callbackPass());
+  }
+];
+
+var setDeviceLanguage = [
+  function setDeviceLanguage(locale) {
+    chrome.autotestPrivate.setDeviceLanguage(locale,
+        chrome.test.callbackPass());
   }
 ];
 
@@ -1653,6 +1676,8 @@ var systemWebAppsTests = [
       'lacrosEnabled': lacrosEnabledTests,
       'launcherSearchBoxState': launcherSearchBoxStateTests,
       'isFieldTrialActive': isFieldTrialActiveTests,
+      'clearAllowedPref': clearAllowedPrefTests,
+      'setDeviceLanguage': setDeviceLanguage
     };
 
 chrome.test.getConfig(function(config) {

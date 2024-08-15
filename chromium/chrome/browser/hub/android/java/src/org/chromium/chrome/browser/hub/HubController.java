@@ -4,16 +4,39 @@
 
 package org.chromium.chrome.browser.hub;
 
+import android.view.View;
+
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /** The interface for communication between the {@link HubLayout} and Hub internals. */
 public interface HubController {
+    /** Called once by {@link HubLayout} when it is initialized. */
+    void setHubLayoutController(@NonNull HubLayoutController hubLayoutController);
+
     /** Returns the view that contains all the Hub UI. */
-    public @NonNull HubContainerView getContainerView();
+    @NonNull
+    HubContainerView getContainerView();
+
+    /** Returns the view that contains the Hub panes. */
+    @Nullable
+    View getPaneHostView();
+
+    /** Returns the background color of the Hub for the pane. */
+    @ColorInt
+    int getBackgroundColor(@Nullable Pane pane);
 
     /** Called at the start of {@link HubLayout#show(long, boolean)}. */
-    public void onHubLayoutShow();
+    void onHubLayoutShow();
 
     /** Called at the end of {@link HubLayout#doneHiding()}. */
-    public void onHubLayoutDoneHiding();
+    void onHubLayoutDoneHiding();
+
+    /**
+     * Called when the legacy back method {@link HubLayout#onBackPressed()} is invoked.
+     *
+     * @return whether the back press was handled.
+     */
+    boolean onHubLayoutBackPressed();
 }

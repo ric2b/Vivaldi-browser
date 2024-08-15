@@ -6,6 +6,7 @@
 /// Bridging header between Swift and Obj-C. These types/includes need to be
 /// pure Obj-C and have no C++ in them.
 
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"

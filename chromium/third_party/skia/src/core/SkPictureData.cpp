@@ -148,7 +148,11 @@ void SkPictureData::WriteTypefaces(SkWStream* stream, const SkRefCntSet& rec,
                 continue;
             }
         }
-        array[i]->serialize(stream);
+        // With the default serialization and deserialization behavior,
+        // kIncludeDataIfLocal does not always work because there is no default
+        // fontmgr to pass into SkTypeface::MakeDeserialize, so there is no
+        // fontmgr to find a font given the descriptor only.
+        tf->serialize(stream, SkTypeface::SerializeBehavior::kDoIncludeData);
     }
 }
 
@@ -345,17 +349,14 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
                 sk_sp<SkTypeface> tf;
                 if (procs.fTypefaceProc) {
                     tf = procs.fTypefaceProc(&stream, sizeof(stream), procs.fTypefaceCtx);
-                } else {
-                    tf = SkTypeface::MakeDeserialize(stream, SkFontMgr::RefDefault());
+                }
+                else {
+                    tf = SkTypeface::MakeDeserialize(stream, nullptr);
                 }
                 if (!tf) {    // failed to deserialize
                     // fTFPlayback asserts it never has a null, so we plop in
                     // a default here.
-#if !defined(SK_DISABLE_LEGACY_DEFAULT_TYPEFACE)
-                    tf = SkTypeface::MakeDefault();
-#else
                     tf = SkTypeface::MakeEmpty();
-#endif
                 }
                 fTFPlayback[i] = std::move(tf);
             }

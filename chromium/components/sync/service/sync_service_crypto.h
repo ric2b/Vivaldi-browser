@@ -64,8 +64,8 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
   bool IsEncryptEverythingEnabled() const;
   void SetEncryptionPassphrase(const std::string& passphrase);
   bool SetDecryptionPassphrase(const std::string& passphrase);
-  void SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori);
-  std::unique_ptr<Nigori> GetDecryptionNigoriKey() const;
+  void SetExplicitPassphraseDecryptionNigoriKey(std::unique_ptr<Nigori> nigori);
+  std::unique_ptr<Nigori> GetExplicitPassphraseDecryptionNigoriKey() const;
 
   // Returns whether it's already possible to determine whether trusted vault
   // key required (e.g. engine didn't start yet or silent fetch attempt is in
@@ -208,7 +208,8 @@ class SyncServiceCrypto : public SyncEncryptionHandler::Observer,
     // want to be able to synchronously do that from the UI thread. For
     // passphrase types other than CUSTOM_PASSPHRASE, their key derivation
     // method will always be PBKDF2.
-    KeyDerivationParams passphrase_key_derivation_params;
+    KeyDerivationParams passphrase_key_derivation_params =
+        KeyDerivationParams::CreateForPbkdf2();
 
     // If an explicit passphrase is in use, the time at which the passphrase was
     // first set (if available).

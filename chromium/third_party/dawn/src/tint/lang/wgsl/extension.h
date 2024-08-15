@@ -47,11 +47,9 @@ namespace tint::wgsl {
 enum class Extension : uint8_t {
     kUndefined,
     kChromiumDisableUniformityAnalysis,
-    kChromiumExperimentalDp4A,
-    kChromiumExperimentalFullPtrParameters,
+    kChromiumExperimentalFramebufferFetch,
     kChromiumExperimentalPixelLocal,
     kChromiumExperimentalPushConstant,
-    kChromiumExperimentalReadWriteStorageTexture,
     kChromiumExperimentalSubgroups,
     kChromiumInternalDualSourceBlending,
     kChromiumInternalRelaxedUniformLayout,
@@ -75,15 +73,26 @@ auto& operator<<(STREAM& out, Extension value) {
 /// @returns the parsed enum, or Extension::kUndefined if the string could not be parsed.
 Extension ParseExtension(std::string_view str);
 
-constexpr const char* kExtensionStrings[] = {
-    "chromium_disable_uniformity_analysis",      "chromium_experimental_dp4a",
-    "chromium_experimental_full_ptr_parameters", "chromium_experimental_pixel_local",
-    "chromium_experimental_push_constant",       "chromium_experimental_read_write_storage_texture",
-    "chromium_experimental_subgroups",           "chromium_internal_dual_source_blending",
-    "chromium_internal_relaxed_uniform_layout",  "f16",
+constexpr std::string_view kExtensionStrings[] = {
+    "chromium_disable_uniformity_analysis",     "chromium_experimental_framebuffer_fetch",
+    "chromium_experimental_pixel_local",        "chromium_experimental_push_constant",
+    "chromium_experimental_subgroups",          "chromium_internal_dual_source_blending",
+    "chromium_internal_relaxed_uniform_layout", "f16",
 };
 
-// A unique vector of extensions
+/// All extensions
+static constexpr Extension kAllExtensions[] = {
+    Extension::kChromiumDisableUniformityAnalysis,
+    Extension::kChromiumExperimentalFramebufferFetch,
+    Extension::kChromiumExperimentalPixelLocal,
+    Extension::kChromiumExperimentalPushConstant,
+    Extension::kChromiumExperimentalSubgroups,
+    Extension::kChromiumInternalDualSourceBlending,
+    Extension::kChromiumInternalRelaxedUniformLayout,
+    Extension::kF16,
+};
+
+/// A unique vector of extensions
 using Extensions = UniqueVector<Extension, 4>;
 
 }  // namespace tint::wgsl

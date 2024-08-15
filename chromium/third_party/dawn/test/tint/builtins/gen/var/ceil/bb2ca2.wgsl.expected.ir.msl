@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void ceil_bb2ca2() {
+  float2 res = float2(2.0f);
+}
+vertex float4 vertex_main() {
+  ceil_bb2ca2();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  ceil_bb2ca2();
+}
+kernel void compute_main() {
+  ceil_bb2ca2();
+}

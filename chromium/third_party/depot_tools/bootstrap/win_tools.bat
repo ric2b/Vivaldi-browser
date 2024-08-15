@@ -25,8 +25,8 @@ if not exist "%BOOTSTRAP_ROOT_DIR%\.bleeding_edge" (
   set CIPD_MANIFEST=manifest_bleeding_edge.txt
 )
 
-:: Parse our CIPD manifest and identify the "cpython" version. We do this by
-:: reading it line-by-line, identifying the line containing "cpython", and
+:: Parse our CIPD manifest and identify the "cpython3" version. We do this by
+:: reading it line-by-line, identifying the line containing "cpython3", and
 :: stripping all text preceding "version:". This leaves us with the version
 :: string.
 ::
@@ -35,13 +35,7 @@ if not exist "%BOOTSTRAP_ROOT_DIR%\.bleeding_edge" (
 :: delayed expansion variables.
 for /F "usebackq tokens=*" %%A in ("%~dp0%CIPD_MANIFEST%") do (
   set LINE=%%A
-  if not "x!LINE:cpython/=!" == "x!LINE!" set PYTHON_VERSION=!LINE:*version:=!
   if not "x!LINE:cpython3/=!" == "x!LINE!" set PYTHON3_VERSION=!LINE:*version:=!
-)
-if "%PYTHON_VERSION%" == "" (
-  @echo Could not extract Python version from manifest.
-  set ERRORLEVEL=1
-  goto :END
 )
 if "%PYTHON3_VERSION%" == "" (
   @echo Could not extract Python version from manifest.

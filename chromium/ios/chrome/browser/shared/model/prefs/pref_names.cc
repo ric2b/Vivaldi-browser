@@ -133,10 +133,20 @@ const char kIosBookmarkLastUsedStorageReceivingBookmarks[] =
 // the sign-in promo in bookmark view.
 const char kIosBookmarkPromoAlreadySeen[] = "ios.bookmark.promo_already_seen";
 
+// Preference that hold a boolean indicating if the user has already dismissed
+// the review account settings promo in bookmark view.
+const char kIosBookmarkSettingsPromoAlreadySeen[] =
+    "ios.bookmark.settings_promo_already_seen";
+
 // Integer to represent the number of time the sign-in promo has been displayed
 // in the bookmark view.
 const char kIosBookmarkSigninPromoDisplayedCount[] =
     "ios.bookmark.signin_promo_displayed_count";
+
+// Boolean to represent if the user has uploaded the sync left-behind bookmarks
+// from the bookmarks manager.
+const char kIosBookmarkUploadSyncLeftBehindCompleted[] =
+    "ios.bookmark.upload_sync_left_behind_completed";
 
 // Boolean to represent if the Bring Android Tabs prompt has been displayed for
 // the user.
@@ -308,6 +318,11 @@ const char kIosNtpFeedTopSigninPromoDisplayedCount[] =
 const char kIosReadingListPromoAlreadySeen[] =
     "ios.reading_list.promo_already_seen";
 
+// Preference that hold a boolean indicating if the user has already dismissed
+// the review account settings promo in the reading list.
+const char kIosReadingListSettingsPromoAlreadySeen[] =
+    "ios.reading_list.settings_promo_already_seen";
+
 // Integer to represent the number of time the sign-in promo has been displayed
 // in the reading list view.
 const char kIosReadingListSigninPromoDisplayedCount[] =
@@ -391,8 +406,16 @@ const char kTrackPricesOnTabsEnabled[] = "track_prices_on_tabs.enabled";
 const char kLensCameraAssistedSearchPolicyAllowed[] =
     "ios.lens_camera_assited_search_policy.allowed";
 
+// Number of times the NTP Lens button "new" IPH badge has been shown.
+// This is set to INT_MAX when the user taps the button.
+const char kNTPLensEntryPointNewBadgeShownCount[] =
+    "ios.ntp_lens_new_badge_shown_count";
+
 // A boolean specifying whether Web Inspector support is enabled.
 const char kWebInspectorEnabled[] = "ios.web_inspector_enabled";
+
+// The pref to enable units detection in web pages.
+const char kDetectUnitsEnabled[] = "ios.settings.detect_units_enabled";
 
 // An integer set to one of the NetworkPredictionSetting enum values indicating
 // network prediction settings.
@@ -404,13 +427,6 @@ const char kNtpShownBookmarksFolder[] = "ntp.shown_bookmarks_folder";
 
 // True if the memory debugging tools should be visible.
 const char kShowMemoryDebuggingTools[] = "ios.memory.show_debugging_tools";
-
-// List which contains the last known list of accounts.
-const char kSigninLastAccounts[] = "ios.signin.last_accounts";
-
-// Boolean which indicates if the pref which contains the last known list of
-// accounts was migrated to use account ids instead of emails.
-const char kSigninLastAccountsMigrated[] = "ios.signin.last_accounts_migrated";
 
 // Boolean which indicates if user should be prompted to sign in again
 // when a new tab is created.
@@ -435,8 +451,16 @@ const char kPrintingEnabled[] = "printing.enabled";
 const char kIncognitoAuthenticationSetting[] =
     "ios.settings.incognito_authentication_enabled";
 
+// Timestamp set when a user signs in. It is used for policies that clear data
+// on sign-out only for the duration the user was signed in. It is also used for
+// user policies that should clear data only from the time of sign-in and not
+// for the entire browser. An example of the latter would be when
+// `IdleTimeoutActions` policy is set to clear data as a user policy not a
+// browser policy.
+const char kLastSigninTimestamp[] = "signin.last_signin_timestamp";
+
 // Integer that represents the value of BrowserSigninPolicy. Values are defined
-// in ios/chrome/browser/policy/policy_util.h.
+// in ios/chrome/browser/policy/model/policy_util.h.
 const char kBrowserSigninPolicy[] = "signin.browser_signin_policy";
 
 // Bool that represents whether iCloud backups are allowed by policy.
@@ -471,5 +495,22 @@ const char kPriceNotificationsHasBeenShown[] =
 // from the first run experience screen.
 const char kPasswordSharingFlowHasBeenEntered[] =
     "ios.password_sharing.flow_entered";
+
+// A time object used to determine when the Notifications promo was last
+// dismissed.
+const char kNotificationsPromoLastDismissed[] =
+    "ios.content_notifications.promo_last_dismissed";
+// A time object used to determine when the Notifications promo was last shown.
+const char kNotificationsPromoLastShown[] =
+    "ios.content_notifications.promo_last_shown";
+// An int used to determine how many times the Notifications promo has been
+// shown to the user.
+const char kNotificationsPromoTimesShown[] =
+    "ios.content_notifications.promo_times_shown";
+const char kNotificationsPromoTimesDismissed[] =
+    "ios.content_notifications.promo_times_dismissed";
+
+const char kInsecureFormWarningsEnabled[] =
+    "ios.insecure_form_warnings_enabled";
 
 }  // namespace prefs

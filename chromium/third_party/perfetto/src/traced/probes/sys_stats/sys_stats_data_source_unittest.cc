@@ -169,7 +169,8 @@ unevictable_pgs_rescued 14640
 unevictable_pgs_mlocked 52520
 unevictable_pgs_munlocked 14640
 unevictable_pgs_cleared 2342
-unevictable_pgs_stranded 2342)";
+unevictable_pgs_stranded 2342
+vma_lock_abort 1173728)";
 
 const char kMockStat[] = R"(
 cpu  2655987 822682 2352153 8801203 41917 322733 175055 0 0 0
@@ -202,6 +203,10 @@ const char kMockDiskStat[] = R"(
  253       0 zram0 13886 0 111088 128 57298 0 458384 48 0 15248 176 0 0 0 0 0 0
    8       0 sda 54133 5368 8221736 75929 30333 1157434 9599744 143190 0 63672 249858 9595 0 2160072 19411 6649 11327
    8       1 sda1 18 6 632 7 39 49 704 92 0 156 100 0 0 0 0 0 0)";
+
+const char kMockPsi[] = R"(
+some avg10=23.10 avg60=5.06 avg300=15.10 total=417963
+full avg10=9.00 avg60=19.20 avg300=3.23 total=205933)";
 
 class TestSysStatsDataSource : public SysStatsDataSource {
  public:
@@ -237,6 +242,8 @@ base::ScopedFile MockOpenReadOnly(const char* path) {
     EXPECT_GT(pwrite(tmp_.fd(), kMockBuddy, strlen(kMockBuddy), 0), 0);
   } else if (!strcmp(path, "/proc/diskstats")) {
     EXPECT_GT(pwrite(tmp_.fd(), kMockDiskStat, strlen(kMockDiskStat), 0), 0);
+  } else if (base::StartsWith(path, "/proc/pressure/")) {
+    EXPECT_GT(pwrite(tmp_.fd(), kMockPsi, strlen(kMockPsi), 0), 0);
   } else {
     PERFETTO_FATAL("Unexpected file opened %s", path);
   }
@@ -342,6 +349,7 @@ TEST_F(SysStatsDataSourceTest, Vmstat) {
   sys_cfg.add_vmstat_counters(C::VMSTAT_PGACTIVATE);
   sys_cfg.add_vmstat_counters(C::VMSTAT_PGMIGRATE_FAIL);
   sys_cfg.add_vmstat_counters(C::VMSTAT_PGSTEAL_DIRECT);
+  sys_cfg.add_vmstat_counters(C::VMSTAT_VMA_LOCK_ABORT);
   config.set_sys_stats_config_raw(sys_cfg.SerializeAsString());
   auto data_source = GetSysStatsDataSource(config);
 
@@ -359,11 +367,13 @@ TEST_F(SysStatsDataSourceTest, Vmstat) {
   for (const auto& kv : sys_stats.vmstat())
     kvs.push_back({kv.key(), kv.value()});
 
-  EXPECT_THAT(kvs, UnorderedElementsAre(KV{C::VMSTAT_NR_FREE_PAGES, 16449},  //
-                                        KV{C::VMSTAT_PGACTIVATE, 11897892},  //
-                                        KV{C::VMSTAT_PGMIGRATE_FAIL, 3439},  //
-                                        KV{C::VMSTAT_PGSTEAL_DIRECT, 91537}  //
-                                        ));
+  EXPECT_THAT(kvs,
+              UnorderedElementsAre(KV{C::VMSTAT_NR_FREE_PAGES, 16449},    //
+                                   KV{C::VMSTAT_PGACTIVATE, 11897892},    //
+                                   KV{C::VMSTAT_PGMIGRATE_FAIL, 3439},    //
+                                   KV{C::VMSTAT_PGSTEAL_DIRECT, 91537},   //
+                                   KV{C::VMSTAT_VMA_LOCK_ABORT, 1173728}  //
+                                   ));
 }
 
 TEST_F(SysStatsDataSourceTest, VmstatAll) {
@@ -619,6 +629,35 @@ TEST_F(SysStatsDataSourceTest, DiskStat) {
   EXPECT_EQ(sys_stats.disk_stat()[2].write_time_ms(), 92u);
   EXPECT_EQ(sys_stats.disk_stat()[2].discard_time_ms(), 0u);
   EXPECT_EQ(sys_stats.disk_stat()[2].flush_time_ms(), 0u);
+}
+
+TEST_F(SysStatsDataSourceTest, Psi) {
+  protos::gen::SysStatsConfig cfg;
+  cfg.set_psi_period_ms(10);
+  DataSourceConfig config_obj;
+  config_obj.set_sys_stats_config_raw(cfg.SerializeAsString());
+  auto data_source = GetSysStatsDataSource(config_obj);
+
+  WaitTick(data_source.get());
+
+  protos::gen::TracePacket packet = writer_raw_->GetOnlyTracePacket();
+  ASSERT_TRUE(packet.has_sys_stats());
+  const auto& sys_stats = packet.sys_stats();
+  ASSERT_EQ(sys_stats.psi_size(), 6);
+
+  using PsiSample = protos::gen::SysStats::PsiSample;
+  EXPECT_EQ(sys_stats.psi()[0].resource(), PsiSample::PSI_RESOURCE_CPU_SOME);
+  EXPECT_EQ(sys_stats.psi()[0].total_ns(), 417963000u);
+  EXPECT_EQ(sys_stats.psi()[1].resource(), PsiSample::PSI_RESOURCE_CPU_FULL);
+  EXPECT_EQ(sys_stats.psi()[1].total_ns(), 205933000U);
+  EXPECT_EQ(sys_stats.psi()[2].resource(), PsiSample::PSI_RESOURCE_IO_SOME);
+  EXPECT_EQ(sys_stats.psi()[2].total_ns(), 417963000u);
+  EXPECT_EQ(sys_stats.psi()[3].resource(), PsiSample::PSI_RESOURCE_IO_FULL);
+  EXPECT_EQ(sys_stats.psi()[3].total_ns(), 205933000U);
+  EXPECT_EQ(sys_stats.psi()[4].resource(), PsiSample::PSI_RESOURCE_MEMORY_SOME);
+  EXPECT_EQ(sys_stats.psi()[4].total_ns(), 417963000u);
+  EXPECT_EQ(sys_stats.psi()[5].resource(), PsiSample::PSI_RESOURCE_MEMORY_FULL);
+  EXPECT_EQ(sys_stats.psi()[5].total_ns(), 205933000U);
 }
 
 }  // namespace

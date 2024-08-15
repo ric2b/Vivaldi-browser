@@ -19,9 +19,10 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
-#include "components/content_settings/core/browser/content_settings_origin_identifier_value_map.h"
+#include "components/content_settings/core/browser/content_settings_origin_value_map.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
+#include "components/content_settings/core/browser/content_settings_uma_util.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -34,9 +35,9 @@
 
 using content::BrowserThread;
 using content_settings::ConcatenationIterator;
+using content_settings::OriginValueMap;
 using content_settings::Rule;
 using content_settings::RuleIterator;
-using content_settings::OriginIdentifierValueMap;
 
 namespace extensions {
 
@@ -48,11 +49,11 @@ struct ContentSettingsStore::ExtensionEntry {
   // Whether extension is enabled in the profile.
   bool enabled;
   // Content settings.
-  OriginIdentifierValueMap settings;
+  OriginValueMap settings;
   // Persistent incognito content settings.
-  OriginIdentifierValueMap incognito_persistent_settings;
+  OriginValueMap incognito_persistent_settings;
   // Session-only incognito content settings.
-  OriginIdentifierValueMap incognito_session_only_settings;
+  OriginValueMap incognito_session_only_settings;
 };
 
 ContentSettingsStore::ContentSettingsStore() {
@@ -106,9 +107,39 @@ void ContentSettingsStore::SetExtensionContentSetting(
     ContentSettingsType type,
     ContentSetting setting,
     ChromeSettingScope scope) {
+  if (primary_pattern == ContentSettingsPattern::Wildcard()) {
+    if (secondary_pattern == ContentSettingsPattern::Wildcard()) {
+      content_settings_uma_util::RecordContentSettingsHistogram(
+          "Extensions.ContentSettings."
+          "PrimaryPatternWildcardSecondaryPatternWildcard",
+          type);
+    } else {
+      content_settings_uma_util::RecordContentSettingsHistogram(
+          "Extensions.ContentSettings."
+          "PrimaryPatternWildcardSecondaryPatternUnique",
+          type);
+    }
+  } else {  // primary_pattern != Wildcard
+    if (secondary_pattern == ContentSettingsPattern::Wildcard()) {
+      content_settings_uma_util::RecordContentSettingsHistogram(
+          "Extensions.ContentSettings."
+          "PrimaryPatternUniqueSecondaryPatternWildcard",
+          type);
+    } else if (secondary_pattern == primary_pattern) {
+      content_settings_uma_util::RecordContentSettingsHistogram(
+          "Extensions.ContentSettings."
+          "PrimaryPatternUniqueSecondaryPatternIdentical",
+          type);
+    } else {
+      content_settings_uma_util::RecordContentSettingsHistogram(
+          "Extensions.ContentSettings."
+          "PrimaryPatternUniqueSecondaryPatternDifferent",
+          type);
+    }
+  }
   {
     base::AutoLock lock(lock_);
-    OriginIdentifierValueMap* map = GetValueMap(ext_id, scope);
+    OriginValueMap* map = GetValueMap(ext_id, scope);
     base::AutoLock map_lock(map->GetLock());
     if (setting == CONTENT_SETTING_DEFAULT) {
       map->DeleteValue(primary_pattern, secondary_pattern, type);
@@ -208,16 +239,15 @@ void ContentSettingsStore::SetExtensionState(
     NotifyOfContentSettingChanged(ext_id, true);
 }
 
-OriginIdentifierValueMap* ContentSettingsStore::GetValueMap(
-    const std::string& ext_id,
-    ChromeSettingScope scope) {
-  const OriginIdentifierValueMap* result =
+OriginValueMap* ContentSettingsStore::GetValueMap(const std::string& ext_id,
+                                                  ChromeSettingScope scope) {
+  const OriginValueMap* result =
       static_cast<const ContentSettingsStore*>(this)->GetValueMap(ext_id,
                                                                   scope);
-  return const_cast<OriginIdentifierValueMap*>(result);
+  return const_cast<OriginValueMap*>(result);
 }
 
-const OriginIdentifierValueMap* ContentSettingsStore::GetValueMap(
+const OriginValueMap* ContentSettingsStore::GetValueMap(
     const std::string& ext_id,
     ChromeSettingScope scope) const {
   ExtensionEntry* entry = FindEntry(ext_id);
@@ -249,7 +279,7 @@ void ContentSettingsStore::ClearContentSettingsForExtension(
   bool notify = false;
   {
     base::AutoLock lock(lock_);
-    OriginIdentifierValueMap* map = GetValueMap(ext_id, scope);
+    OriginValueMap* map = GetValueMap(ext_id, scope);
     DCHECK(map);
     base::AutoLock map_lock(map->GetLock());
     notify = !map->empty();
@@ -267,7 +297,7 @@ void ContentSettingsStore::ClearContentSettingsForExtensionAndContentType(
     ContentSettingsType content_type) {
   {
     base::AutoLock lock(lock_);
-    OriginIdentifierValueMap* map = GetValueMap(ext_id, scope);
+    OriginValueMap* map = GetValueMap(ext_id, scope);
     DCHECK(map);
 
     base::AutoLock map_lock(map->GetLock());
@@ -283,12 +313,12 @@ base::Value::List ContentSettingsStore::GetSettingsForExtension(
     const std::string& extension_id,
     ChromeSettingScope scope) const {
   base::AutoLock lock(lock_);
-  const OriginIdentifierValueMap* map = GetValueMap(extension_id, scope);
+  const OriginValueMap* map = GetValueMap(extension_id, scope);
   if (!map)
     return {};
   std::vector<ContentSettingsType> keys;
   {
-    // Grab the set of keys first as OriginIdentifierValueMap::GetRuleIterator
+    // Grab the set of keys first as OriginValueMap::GetRuleIterator
     // requires that the lock isn't already held.
     base::AutoLock map_lock(map->GetLock());
     // Range-based for loops break locking annotations.
@@ -314,7 +344,7 @@ base::Value::List ContentSettingsStore::GetSettingsForExtension(
           kContentSettingsTypeKey,
           content_settings_helpers::ContentSettingsTypeToString(key));
       ContentSetting content_setting =
-          content_settings::ValueToContentSetting(rule->value());
+          content_settings::ValueToContentSetting(rule->value);
       DCHECK_NE(CONTENT_SETTING_DEFAULT, content_setting);
 
       std::string setting_string =

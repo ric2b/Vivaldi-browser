@@ -53,14 +53,15 @@ class AttachmentState final : public ObjectBase,
     // Note: Descriptors must be validated before the AttachmentState is constructed.
     explicit AttachmentState(DeviceBase* device, const RenderBundleEncoderDescriptor* descriptor);
     explicit AttachmentState(DeviceBase* device,
-                             const RenderPipelineDescriptor* descriptor,
+                             const UnpackedPtr<RenderPipelineDescriptor>& descriptor,
                              const PipelineLayoutBase* layout);
-    explicit AttachmentState(DeviceBase* device, const RenderPassDescriptor* descriptor);
+    explicit AttachmentState(DeviceBase* device,
+                             const UnpackedPtr<RenderPassDescriptor>& descriptor);
 
     // Constructor used to avoid re-parsing descriptors when we already parsed them for cache keys.
     AttachmentState(const AttachmentState& blueprint);
 
-    ityp::bitset<ColorAttachmentIndex, kMaxColorAttachments> GetColorAttachmentsMask() const;
+    ColorAttachmentMask GetColorAttachmentsMask() const;
     wgpu::TextureFormat GetColorAttachmentFormat(ColorAttachmentIndex index) const;
     bool HasDepthStencilAttachment() const;
     wgpu::TextureFormat GetDepthStencilFormat() const;
@@ -68,6 +69,7 @@ class AttachmentState final : public ObjectBase,
     bool IsMSAARenderToSingleSampledEnabled() const;
     bool HasPixelLocalStorage() const;
     const std::vector<wgpu::TextureFormat>& GetStorageAttachmentSlots() const;
+    std::vector<ColorAttachmentIndex> ComputeStorageAttachmentPackingInColorAttachments() const;
 
     struct EqualityFunc {
         bool operator()(const AttachmentState* a, const AttachmentState* b) const;
@@ -78,8 +80,8 @@ class AttachmentState final : public ObjectBase,
     void DeleteThis() override;
 
   private:
-    ityp::bitset<ColorAttachmentIndex, kMaxColorAttachments> mColorAttachmentsSet;
-    ityp::array<ColorAttachmentIndex, wgpu::TextureFormat, kMaxColorAttachments> mColorFormats;
+    ColorAttachmentMask mColorAttachmentsSet;
+    PerColorAttachment<wgpu::TextureFormat> mColorFormats;
     // Default (texture format Undefined) indicates there is no depth stencil attachment.
     wgpu::TextureFormat mDepthStencilFormat = wgpu::TextureFormat::Undefined;
     uint32_t mSampleCount = 0;

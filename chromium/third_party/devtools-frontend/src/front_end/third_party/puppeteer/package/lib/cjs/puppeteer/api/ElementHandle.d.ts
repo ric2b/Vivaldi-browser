@@ -1,17 +1,7 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /// <reference types="node" />
 import type { Protocol } from 'devtools-protocol';
@@ -84,7 +74,7 @@ export interface Point {
  */
 export interface ElementScreenshotOptions extends ScreenshotOptions {
     /**
-     * @defaultValue true
+     * @defaultValue `true`
      */
     scrollIntoView?: boolean;
 }
@@ -254,7 +244,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      *
      * JavaScript:
      *
-     * ```js
+     * ```ts
      * const feedHandle = await page.$('.feed');
      * expect(
      *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText))
@@ -495,7 +485,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * For locals script connecting to remote chrome environments, paths must be
      * absolute.
      */
-    uploadFile(this: ElementHandle<HTMLInputElement>, ...paths: string[]): Promise<void>;
+    abstract uploadFile(this: ElementHandle<HTMLInputElement>, ...paths: string[]): Promise<void>;
     /**
      * This method scrolls element into view if needed, and then uses
      * {@link Touchscreen.tap} to tap in the center of the element.
@@ -552,11 +542,14 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
     press(key: KeyInput, options?: Readonly<KeyPressOptions>): Promise<void>;
     /**
      * This method returns the bounding box of the element (relative to the main frame),
-     * or `null` if the element is not visible.
+     * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+     * (example: `display: none`).
      */
     boundingBox(): Promise<BoundingBox | null>;
     /**
-     * This method returns boxes of the element, or `null` if the element is not visible.
+     * This method returns boxes of the element,
+     * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+     * (example: `display: none`).
      *
      * @remarks
      *
@@ -569,7 +562,10 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * {@link Page.(screenshot:2) } to take a screenshot of the element.
      * If the element is detached from DOM, the method throws an error.
      */
-    screenshot(this: ElementHandle<Element>, options?: Readonly<ElementScreenshotOptions>): Promise<string | Buffer>;
+    screenshot(options: Readonly<ScreenshotOptions> & {
+        encoding: 'base64';
+    }): Promise<string>;
+    screenshot(options?: Readonly<ScreenshotOptions>): Promise<Buffer>;
     /**
      * @internal
      */

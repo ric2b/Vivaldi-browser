@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::unwrap_used)]
+
 extern crate std;
 
 use crate::legacy::{
@@ -294,14 +296,14 @@ fn context_sync_seq_num_works() {
     let mut action_bits = ActionBits::<Plaintext>::default();
     action_bits.set_action(ContextSyncSeqNum::try_from(15).unwrap());
     let action_de = ActionsDataElement::from(action_bits);
-    assert_eq!(15, action_de.context_sync_seq_num().as_u8());
+    assert_eq!(15, action_de.action.context_sync_seq_num().as_u8());
 }
 
 #[test]
 fn context_sync_seq_num_default_zero() {
     let action_bits = ActionBits::<Plaintext>::default();
     let action_de = ActionsDataElement::from(action_bits);
-    assert_eq!(0, action_de.context_sync_seq_num().as_u8());
+    assert_eq!(0, action_de.action.context_sync_seq_num().as_u8());
 }
 
 #[test]
@@ -310,9 +312,9 @@ fn has_action_plaintext_works() {
     action_bits.set_action(ContextSyncSeqNum::try_from(15).unwrap());
     action_bits.set_action(NearbyShare::from(true));
     let action_de = ActionsDataElement::from(action_bits);
-    assert_eq!(action_de.has_action(&ActionType::NearbyShare), Some(true));
-    assert_eq!(action_de.has_action(&ActionType::ActiveUnlock), Some(false));
-    assert_eq!(action_de.has_action(&ActionType::PhoneHub), Some(false));
+    assert_eq!(action_de.action.has_action(&ActionType::NearbyShare), Some(true));
+    assert_eq!(action_de.action.has_action(&ActionType::ActiveUnlock), Some(false));
+    assert_eq!(action_de.action.has_action(&ActionType::PhoneHub), Some(false));
 }
 
 #[test]
@@ -322,10 +324,10 @@ fn has_action_encrypted_works() {
     action_bits.set_action(NearbyShare::from(true));
     action_bits.set_action(ActiveUnlock::from(true));
     let action_de = ActionsDataElement::from(action_bits);
-    assert_eq!(action_de.has_action(&ActionType::NearbyShare), Some(true));
-    assert_eq!(action_de.has_action(&ActionType::ActiveUnlock), Some(true));
-    assert_eq!(action_de.has_action(&ActionType::PhoneHub), Some(false));
-    assert_eq!(action_de.has_action(&ActionType::ContextSyncSeqNum), None);
+    assert_eq!(action_de.action.has_action(&ActionType::NearbyShare), Some(true));
+    assert_eq!(action_de.action.has_action(&ActionType::ActiveUnlock), Some(true));
+    assert_eq!(action_de.action.has_action(&ActionType::PhoneHub), Some(false));
+    assert_eq!(action_de.action.has_action(&ActionType::ContextSyncSeqNum), None);
 }
 
 // hypothetical action using the last bit

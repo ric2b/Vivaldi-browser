@@ -4,13 +4,14 @@
 
 #include "chrome/browser/ui/tabs/organization/tab_organization.h"
 
+#include <optional>
 #include <string>
 
+#include "base/debug/dump_without_crashing.h"
 #include "chrome/browser/ui/tabs/organization/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace {
@@ -22,16 +23,36 @@ TabOrganization::TabOrganization(
     TabDatas tab_datas,
     std::vector<std::u16string> names,
     absl::variant<size_t, std::u16string> current_name,
-    absl::optional<UserChoice> choice)
-    : tab_datas_(std::move(tab_datas)),
-      names_(names),
+    UserChoice choice)
+    : names_(names),
       current_name_(current_name),
       choice_(choice),
       organization_id_(kNextOrganizationID) {
+  for (auto& tab_data : tab_datas_) {
+    tab_data->AddObserver(this);
+  }
   kNextOrganizationID++;
+
+  // TabDatas must not be duplicates, immediately destroy TabDatas that are.
+  std::vector<content::WebContents*> existing_contents;
+  for (auto& tab_data : tab_datas) {
+    if (!base::Contains(existing_contents, tab_data->web_contents())) {
+      existing_contents.emplace_back(tab_data->web_contents());
+      tab_data->AddObserver(this);
+      tab_datas_.emplace_back(std::move(tab_data));
+    }
+  }
 }
-TabOrganization::TabOrganization(TabOrganization&& organization) = default;
-TabOrganization::~TabOrganization() = default;
+
+TabOrganization::~TabOrganization() {
+  for (auto& tab_data : tab_datas_) {
+    tab_data->RemoveObserver(this);
+  }
+
+  for (auto& observer : observers_) {
+    observer.OnTabOrganizationDestroyed(organization_id_);
+  }
+}
 
 const std::u16string TabOrganization::GetDisplayName() const {
   if (absl::holds_alternative<size_t>(current_name())) {
@@ -44,7 +65,19 @@ const std::u16string TabOrganization::GetDisplayName() const {
   return u"";
 }
 
+void TabOrganization::AddObserver(TabOrganization::Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void TabOrganization::RemoveObserver(TabOrganization::Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 bool TabOrganization::IsValidForOrganizing() const {
+  if (invalidated_by_tab_change_) {
+    return false;
+  }
+
   // there must be at least 2 tabs that are valid for organization.
   int valid_tab_count = 0;
   for (const std::unique_ptr<TabData>& tab_data : tab_datas_) {
@@ -59,8 +92,17 @@ bool TabOrganization::IsValidForOrganizing() const {
 }
 
 // TODO(1469128) Add UKM/UMA Logging on user add.
-void TabOrganization::AddTabData(std::unique_ptr<TabData> tab_data) {
-  tab_datas_.emplace_back(std::move(tab_data));
+void TabOrganization::AddTabData(std::unique_ptr<TabData> new_tab_data) {
+  // Guarantee uniqueness. early return and drop the new tab data if not unique.
+  for (std::unique_ptr<TabData>& existing_tab_data : tab_datas_) {
+    if (existing_tab_data->web_contents() == new_tab_data->web_contents()) {
+      return;
+    }
+  }
+
+  new_tab_data->AddObserver(this);
+  tab_datas_.emplace_back(std::move(new_tab_data));
+  NotifyObserversOfUpdate();
 }
 
 // TODO(1469128) Add UKM/UMA Logging on user remove.
@@ -71,19 +113,28 @@ void TabOrganization::RemoveTabData(TabData::TabID tab_id) {
                      return tab_data->tab_id() == tab_id;
                    });
   CHECK(position != tab_datas_.end());
+
+  user_removed_tab_ids_.push_back(tab_id);
   tab_datas_.erase(position);
+  NotifyObserversOfUpdate();
 }
 
 void TabOrganization::SetCurrentName(
     absl::variant<size_t, std::u16string> new_current_name) {
   current_name_ = new_current_name;
+  NotifyObserversOfUpdate();
+}
+
+void TabOrganization::SetFeedback(
+    optimization_guide::proto::UserFeedback feedback) {
+  feedback_ = feedback;
 }
 
 // TODO(1469128) Add UKM/UMA Logging on user accept.
 void TabOrganization::Accept() {
-  CHECK(!choice_.has_value());
+  CHECK(choice_ == UserChoice::kNoChoice);
   CHECK(IsValidForOrganizing());
-  choice_ = UserChoice::ACCEPTED;
+  choice_ = UserChoice::kAccepted;
 
   CHECK(tab_datas_.size() > 0);
   TabStripModel* tab_strip_model = tab_datas_[0]->original_tab_strip_model();
@@ -93,12 +144,26 @@ void TabOrganization::Accept() {
     // Individual tabs may become invalid. in those cases, where the tab is
     // invalid but the organization is not, do not include the tab in the
     // organization, but still create the organization.
-    if (tab_data->IsValidForOrganizing()) {
-      valid_indices.emplace_back(
-          tab_strip_model->GetIndexOfWebContents(tab_data->web_contents()));
+
+    const int index =
+        tab_strip_model->GetIndexOfWebContents(tab_data->web_contents());
+    if (tab_data->IsValidForOrganizing() &&
+        !base::Contains(valid_indices, index)) {
+      valid_indices.emplace_back(index);
     }
   }
+  std::sort(valid_indices.begin(), valid_indices.end());
 
+  // TODO(b/319273296): Find a more permanent fix.
+  // From this point on, we start modifying the tab strip, which
+  // potentially notifies a large set of observers. TabOrganizationSession
+  // (which owns |this|) gets destroyed when a tab is added or removed
+  // from the tab strip. There is a risk that a tab strip observer modifies
+  // the tab strip and therefore causes |this| to be deleted. So we keep
+  // a WeakPtr to |this| to detect this case and avoid accessing member
+  // variables, just in case.
+  base::WeakPtr<TabOrganization> this_weak_ref =
+      weak_ptr_factory_.GetWeakPtr();
   tab_groups::TabGroupId group_id =
       tab_strip_model->AddToNewGroup(valid_indices);
   TabGroup* const tab_group =
@@ -107,10 +172,65 @@ void TabOrganization::Accept() {
       GetDisplayName(), tab_group->visual_data()->color());
   tab_group->SetVisualData(std::move(new_visual_data),
                            tab_group->IsCustomized());
+
+  // Move the entire group to the start left of the tabstrip.
+  // Iterate through the tabstrip model looking for the first non pinned, non
+  // grouped tab. If this group is already in the leftmost position then leave
+  // it there. Else move the group at the index of that tab.
+  int move_index = tab_strip_model->IndexOfFirstNonPinnedTab();
+  while (move_index < tab_strip_model->GetTabCount() &&
+         (tab_strip_model->GetTabGroupForTab(move_index).has_value() &&
+          tab_strip_model->GetTabGroupForTab(move_index).value() !=
+              tab_group->id())) {
+    move_index++;
+  }
+  CHECK(move_index < tab_strip_model->GetTabCount());
+
+  if (tab_strip_model->GetTabGroupForTab(move_index) != tab_group->id()) {
+    tab_strip_model->MoveGroupTo(tab_group->id(), move_index);
+  }
+  // If |this| has been destroyed, there is no need to notify the observers:
+  // in practice, the only observer is the TabOrganizationSession which owns
+  // this object (and therefore has been destroyed) and who will just
+  // notify WebUI it has been updated (of which there is no need because
+  // WebUI is now tracking the new TabOrganizationSession which has replaced
+  // the destroyed one).
+  if (this_weak_ref) {
+    NotifyObserversOfUpdate();
+  } else {
+    // We'd like to know if this really happens: if so, we should really
+    // change the ownership model of TabOrganizationSession.
+    base::debug::DumpWithoutCrashing();
+  }
 }
 
-// TODO(1469128) Add UKM/UMA Logging on user reject.
 void TabOrganization::Reject() {
-  CHECK(!choice_.has_value());
-  choice_ = UserChoice::REJECTED;
+  CHECK(choice_ == UserChoice::kNoChoice);
+  choice_ = UserChoice::kRejected;
+
+  NotifyObserversOfUpdate();
+}
+
+void TabOrganization::OnTabDataUpdated(const TabData* tab_data) {
+  if (!tab_data->IsValidForOrganizing()) {
+    invalidated_by_tab_change_ = true;
+  }
+  NotifyObserversOfUpdate();
+}
+
+void TabOrganization::OnTabDataDestroyed(TabData::TabID tab_id) {
+  // Only invalidate if RemoveTabData was not previously called on this tab id.
+  // Closure of a tab that is a part of an organization should invalidate it,
+  // but removal of the tab from the organization should not.
+  if (std::find(user_removed_tab_ids_.begin(), user_removed_tab_ids_.end(),
+                tab_id) == user_removed_tab_ids_.end()) {
+    invalidated_by_tab_change_ = true;
+    NotifyObserversOfUpdate();
+  }
+}
+
+void TabOrganization::NotifyObserversOfUpdate() {
+  for (auto& observer : observers_) {
+    observer.OnTabOrganizationUpdated(this);
+  }
 }

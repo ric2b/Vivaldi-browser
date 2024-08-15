@@ -37,6 +37,7 @@
 #endif
 
 #if TINT_BUILD_WGSL_WRITER
+#include "src/tint/lang/wgsl/writer/ir_to_program/ir_to_program.h"
 #include "src/tint/lang/wgsl/writer/writer.h"
 #endif
 
@@ -109,6 +110,38 @@ void PrintBindings(tint::inspector::Inspector& inspector, const std::string& ep_
     }
 }
 
+#if TINT_BUILD_SPV_READER
+tint::Program ReadSpirv(const std::vector<uint32_t>& data, const LoadProgramOptions& opts) {
+    if (opts.use_ir) {
+#if TINT_BUILD_WGSL_WRITER
+        // Parse the SPIR-V binary to a core Tint IR module.
+        auto result = tint::spirv::reader::ReadIR(data);
+        if (result != Success) {
+            std::cerr << "Failed to parse SPIR-V: " << result.Failure() << "\n";
+            exit(1);
+        }
+
+        // Convert the IR module to a WGSL AST program.
+        tint::wgsl::writer::ProgramOptions options;
+        options.allow_non_uniform_derivatives =
+            opts.spirv_reader_options.allow_non_uniform_derivatives;
+        options.allowed_features = opts.spirv_reader_options.allowed_features;
+        auto ast = tint::wgsl::writer::IRToProgram(result.Get(), options);
+        if (!ast.IsValid() || ast.Diagnostics().contains_errors()) {
+            std::cerr << "Failed to convert IR to AST:\n\n" << ast.Diagnostics() << "\n";
+            exit(1);
+        }
+        return ast;
+#else
+        std::cerr << "Tint not built with the WGSL writer enabled" << std::endl;
+        exit(1);
+#endif  // TINT_BUILD_WGSL_READER
+    } else {
+        return tint::spirv::reader::Read(data, opts.spirv_reader_options);
+    }
+}
+#endif  // TINT_BUILD_SPV_READER
+
 }  // namespace
 
 [[noreturn]] void TintInternalCompilerErrorReporter(const InternalCompilerError& err) {
@@ -131,7 +164,7 @@ void PrintWGSL(std::ostream& out, const tint::Program& program) {
 #if TINT_BUILD_WGSL_WRITER
     tint::wgsl::writer::Options options;
     auto result = tint::wgsl::writer::Generate(program, options);
-    if (result) {
+    if (result == Success) {
         out << std::endl << result->wgsl << std::endl;
     } else {
         out << result.Failure() << std::endl;
@@ -157,11 +190,14 @@ ProgramInfo LoadProgramInfo(const LoadProgramOptions& opts) {
                     exit(1);
                 }
 
+                tint::wgsl::reader::Options options;
+                options.allowed_features = tint::wgsl::AllowedFeatures::Everything();
+
                 auto file = std::make_unique<tint::Source::File>(
                     opts.filename, std::string(data.begin(), data.end()));
 
                 return ProgramInfo{
-                    /* program */ tint::wgsl::reader::Parse(file.get()),
+                    /* program */ tint::wgsl::reader::Parse(file.get(), options),
                     /* source_file */ std::move(file),
                 };
 #else
@@ -177,7 +213,7 @@ ProgramInfo LoadProgramInfo(const LoadProgramOptions& opts) {
                 }
 
                 return ProgramInfo{
-                    /* program */ tint::spirv::reader::Read(data, opts.spirv_reader_options),
+                    /* program */ ReadSpirv(data, opts),
                     /* source_file */ nullptr,
                 };
 #else
@@ -208,7 +244,7 @@ ProgramInfo LoadProgramInfo(const LoadProgramOptions& opts) {
                     opts.filename, std::string(text.begin(), text.end()));
 
                 return ProgramInfo{
-                    /* program */ tint::spirv::reader::Read(data, opts.spirv_reader_options),
+                    /* program */ ReadSpirv(data, opts),
                     /* source_file */ std::move(file),
                 };
 #else
@@ -267,8 +303,12 @@ void PrintInspectorData(tint::inspector::Inspector& inspector) {
             for (const auto& var : entry_point.input_variables) {
                 std::cout << "\t";
 
-                if (var.has_location_attribute) {
-                    std::cout << "@location(" << var.location_attribute << ") ";
+                if (auto location = var.attributes.location) {
+                    std::cout << "@location(" << location.value() << ") ";
+                }
+
+                if (auto color = var.attributes.color) {
+                    std::cout << "@color(" << color.value() << ") ";
                 }
                 std::cout << var.name << std::endl;
             }
@@ -279,8 +319,8 @@ void PrintInspectorData(tint::inspector::Inspector& inspector) {
             for (const auto& var : entry_point.output_variables) {
                 std::cout << "\t";
 
-                if (var.has_location_attribute) {
-                    std::cout << "@location(" << var.location_attribute << ") ";
+                if (auto location = var.attributes.location) {
+                    std::cout << "@location(" << location.value() << ") ";
                 }
                 std::cout << var.name << std::endl;
             }

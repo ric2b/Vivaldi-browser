@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/app_list_util.h"
 #include "ash/app_list/model/app_list_folder_item.h"
@@ -42,8 +42,10 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
+#include "chromeos/ash/services/assistant/public/cpp/assistant_enums.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -96,6 +98,8 @@ bool IsSpokenFeedbackEnabled() {
 // This is more efficient than using a views::Separator, which would require
 // SetPaintToLayer(ui::LAYER_TEXTURED).
 class SeparatorWithLayer : public views::View {
+  METADATA_HEADER(SeparatorWithLayer, views::View)
+
  public:
   SeparatorWithLayer() {
     SetPaintToLayer(ui::LAYER_SOLID_COLOR);
@@ -118,6 +122,9 @@ class SeparatorWithLayer : public views::View {
         ColorProvider::ContentLayerType::kSeparatorColor));
   }
 };
+
+BEGIN_METADATA(SeparatorWithLayer)
+END_METADATA
 
 // Returns the layer bounds to use for the start of the show animation and the
 // end of the hide animation.
@@ -193,7 +200,7 @@ class ButtonFocusSkipper : public ui::EventHandler {
   }
 
  private:
-  std::vector<views::View*> buttons_;
+  std::vector<raw_ptr<views::View, VectorExperimental>> buttons_;
 };
 
 AppListBubbleView::AppListBubbleView(
@@ -398,7 +405,7 @@ void AppListBubbleView::StartShowAnimation(bool is_side_shelf) {
 
   ui::AnimationThroughputReporter reporter(
       layer()->GetAnimator(),
-      metrics_util::ForSmoothness(base::BindRepeating([](int value) {
+      metrics_util::ForSmoothnessV3(base::BindRepeating([](int value) {
         base::UmaHistogramPercentage(
             "Apps.ClamshellLauncher.AnimationSmoothness.Open", value);
       })));
@@ -472,7 +479,7 @@ void AppListBubbleView::StartHideAnimation(
 
   ui::AnimationThroughputReporter reporter(
       layer()->GetAnimator(),
-      metrics_util::ForSmoothness(base::BindRepeating([](int value) {
+      metrics_util::ForSmoothnessV3(base::BindRepeating([](int value) {
         base::UmaHistogramPercentage(
             "Apps.ClamshellLauncher.AnimationSmoothness.Close", value);
       })));
@@ -516,6 +523,17 @@ bool AppListBubbleView::Back() {
     return true;
   }
   if (search_box_view_->HasSearch()) {
+    // When showing the `AppListBubblePage::kAssistant`, it will not change the
+    // search box text. Therefore, if the `AppListBubblePage::kAssistant` is
+    // from search result, the search query is not empty, Back() here will clear
+    // the search, QueryChanged() will set the page to
+    // `AppListBubblePage::kApps`. If the `AppListBubblePage::kAssistant` is
+    // from other `AssistantVisibilityEntryPoint`, the search box is empty,
+    // Back() will return false and then the AppList will be closed.
+    if (IsShowingEmbeddedAssistantUI()) {
+      view_delegate_->EndAssistant(
+          assistant::AssistantExitPoint::kBackInLauncher);
+    }
     search_box_view_->ClearSearch();
     return true;
   }
@@ -557,9 +575,6 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
       }
       a11y_announcer_->AnnounceAppListShown();
       MaybeFocusAndActivateSearchBox();
-      // As `current_page_` is reset to `kNone` in `OnHideAnimationEnded`, we
-      // can expect that this gets called every time a launcher gets shown.
-      search_box_view_->SetIsIphAllowed(true);
       break;
     case AppListBubblePage::kSearch:
       if (previous_page == AppListBubblePage::kApps) {
@@ -570,7 +585,6 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
         search_page_->SetVisible(true);
       }
       MaybeFocusAndActivateSearchBox();
-      search_box_view_->SetIsIphAllowed(false);
       break;
     case AppListBubblePage::kAssistant:
       if (showing_folder_)
@@ -585,7 +599,6 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
       search_box_view_->SetSearchBoxActive(false,
                                            /*event_type=*/ui::ET_UNKNOWN);
       assistant_page_->RequestFocus();
-      search_box_view_->SetIsIphAllowed(false);
       break;
   }
 }
@@ -612,7 +625,7 @@ void AppListBubbleView::UpdateContinueSectionVisibility() {
 }
 
 void AppListBubbleView::UpdateForNewSortingOrder(
-    const absl::optional<AppListSortOrder>& new_order,
+    const std::optional<AppListSortOrder>& new_order,
     bool animate,
     base::OnceClosure update_position_closure) {
   // If app list sort order change is animated, hide any open folders as part of
@@ -701,7 +714,8 @@ void AppListBubbleView::QueryChanged(const std::u16string& trimmed_query,
 void AppListBubbleView::AssistantButtonPressed() {
   // Showing the assistant via the delegate triggers the assistant's visibility
   // change notification and ensures its initial visual state is correct.
-  view_delegate_->StartAssistant();
+  view_delegate_->StartAssistant(
+      assistant::AssistantEntryPoint::kLauncherSearchBoxIcon);
 }
 
 void AppListBubbleView::CloseButtonPressed() {
@@ -836,7 +850,6 @@ void AppListBubbleView::OnHideAnimationEnded(const gfx::Rect& layer_bounds) {
   apps_page_->SetVisible(true);
   search_page_->SetVisible(false);
   assistant_page_->SetVisible(false);
-  search_box_view_->SetIsIphAllowed(false);
 
   is_hiding_ = false;
   if (on_hide_animation_ended_) {

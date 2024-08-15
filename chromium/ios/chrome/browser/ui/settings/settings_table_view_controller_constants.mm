@@ -5,6 +5,8 @@
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 
 NSString* const kSettingsTableViewId = @"kSettingsTableViewId";
+NSString* const kSearchEngineTableViewControllerId =
+    @"kSearchEngineTableViewControllerId";
 NSString* const kSettingsSignInCellId = @"kSettingsSignInCellId";
 NSString* const kSettingsSignInDisabledCellId =
     @"kSettingsSignInDisabledCellId";
@@ -63,8 +65,11 @@ NSString* const kSettingsIncognitoInterstitialId =
 NSString* const kSettingsIncognitoInterstitialDisabledId =
     @"kSettingsIncognitoInterstitialDisabledId";
 NSString* const kSettingsNotificationsId = @"kSettingsNotificationsId";
+NSString* const kSettingsWaitButtonId = @"kSettingsWaitButtonId";
 NSString* const kSettingsTabsCellId = @"kSettingsTabsCellId";
 NSString* const kSettingsMoveInactiveTabsCellId =
     @"kSettingsMoveInactiveTabsCellId";
 NSString* const kSettingsTabPickupCellId = @"kSettingsTabPickupCellId";
 NSString* const kSettingsPrivacyGuideCellId = @"kSettingsPrivacyGuideCellId";
+NSString* const kSettingsDetectUnitsCellId = @"kSettingsDetectUnitsCellId";
+NSString* const kSettingsSafetyCheckCellId = @"SettingsSafetyCheckCellId";

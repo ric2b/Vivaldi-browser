@@ -138,7 +138,7 @@ const std::string& GetPublicKey() {
 }
 
 const std::vector<uint8_t>& GetPublicKeyBin() {
-  static absl::optional<std::vector<uint8_t>> public_key;
+  static std::optional<std::vector<uint8_t>> public_key;
   if (!public_key.has_value()) {
     public_key = base::Base64Decode(kPublicKeyBase64);
     CHECK(public_key.has_value());
@@ -209,26 +209,26 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
         .WillOnce(RunOnceCallback<0>(register_key_result));               \
   }
 
-#define EXPECT_START_CSR_OK(START_CSR_FUNC, HASHING_ALGO)             \
-  {                                                                   \
-    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)            \
-        .Times(1)                                                     \
-        .WillOnce(RunOnceCallback<1>(                                 \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS,        \
-            /*response_error=*/absl::nullopt,                         \
-            /*try_again_later_ms=*/absl::nullopt, kInvalidationTopic, \
-            kChallenge, HASHING_ALGO, GetDataToSign()));              \
+#define EXPECT_START_CSR_OK(START_CSR_FUNC, HASHING_ALGO)            \
+  {                                                                  \
+    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)           \
+        .Times(1)                                                    \
+        .WillOnce(RunOnceCallback<1>(                                \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS,       \
+            /*response_error=*/std::nullopt,                         \
+            /*try_again_later_ms=*/std::nullopt, kInvalidationTopic, \
+            kChallenge, HASHING_ALGO, GetDataToSign()));             \
   }
 
-#define EXPECT_START_CSR_OK_WITHOUT_VA(START_CSR_FUNC, HASHING_ALGO)  \
-  {                                                                   \
-    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)            \
-        .Times(1)                                                     \
-        .WillOnce(RunOnceCallback<1>(                                 \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS,        \
-            /*response_error=*/absl::nullopt,                         \
-            /*try_again_later_ms=*/absl::nullopt, kInvalidationTopic, \
-            /*va_challenge=*/"", HASHING_ALGO, GetDataToSign()));     \
+#define EXPECT_START_CSR_OK_WITHOUT_VA(START_CSR_FUNC, HASHING_ALGO) \
+  {                                                                  \
+    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)           \
+        .Times(1)                                                    \
+        .WillOnce(RunOnceCallback<1>(                                \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS,       \
+            /*response_error=*/std::nullopt,                         \
+            /*try_again_later_ms=*/std::nullopt, kInvalidationTopic, \
+            /*va_challenge=*/"", HASHING_ALGO, GetDataToSign()));    \
   }
 
 #define EXPECT_START_CSR_TRY_LATER(START_CSR_FUNC, DELAY_MS)       \
@@ -237,7 +237,7 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
         .Times(1)                                                  \
         .WillOnce(RunOnceCallback<1>(                              \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS,     \
-            /*response_error=*/absl::nullopt,                      \
+            /*response_error=*/std::nullopt,                       \
             /*try_again_later_ms=*/(DELAY_MS), kInvalidationTopic, \
             /*va_challenge=*/"",                                   \
             enterprise_management::HashingAlgorithm::              \
@@ -245,32 +245,32 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
             /*data_to_sign=*/std::vector<uint8_t>()));             \
   }
 
-#define EXPECT_START_CSR_INVALID_REQUEST(START_CSR_FUNC)                     \
-  {                                                                          \
-    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)                   \
-        .Times(1)                                                            \
-        .WillOnce(RunOnceCallback<1>(                                        \
-            policy::DeviceManagementStatus::DM_STATUS_REQUEST_INVALID,       \
-            /*response_error=*/absl::nullopt,                                \
-            /*try_again_later_ms=*/absl::nullopt, /*invalidation_topic=*/"", \
-            /*va_challenge=*/"",                                             \
-            enterprise_management::HashingAlgorithm::                        \
-                HASHING_ALGORITHM_UNSPECIFIED,                               \
-            /*data_to_sign=*/std::vector<uint8_t>()));                       \
+#define EXPECT_START_CSR_INVALID_REQUEST(START_CSR_FUNC)                    \
+  {                                                                         \
+    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)                  \
+        .Times(1)                                                           \
+        .WillOnce(RunOnceCallback<1>(                                       \
+            policy::DeviceManagementStatus::DM_STATUS_REQUEST_INVALID,      \
+            /*response_error=*/std::nullopt,                                \
+            /*try_again_later_ms=*/std::nullopt, /*invalidation_topic=*/"", \
+            /*va_challenge=*/"",                                            \
+            enterprise_management::HashingAlgorithm::                       \
+                HASHING_ALGORITHM_UNSPECIFIED,                              \
+            /*data_to_sign=*/std::vector<uint8_t>()));                      \
   }
 
-#define EXPECT_START_CSR_CA_ERROR(START_CSR_FUNC)                            \
-  {                                                                          \
-    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)                   \
-        .Times(1)                                                            \
-        .WillOnce(RunOnceCallback<1>(                                        \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS,               \
-            /*response_error=*/CertProvisioningResponseError::CA_ERROR,      \
-            /*try_again_later_ms=*/absl::nullopt, /*invalidation_topic=*/"", \
-            /*va_challenge=*/"",                                             \
-            enterprise_management::HashingAlgorithm::                        \
-                HASHING_ALGORITHM_UNSPECIFIED,                               \
-            /*data_to_sign=*/std::vector<uint8_t>()));                       \
+#define EXPECT_START_CSR_CA_ERROR(START_CSR_FUNC)                           \
+  {                                                                         \
+    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)                  \
+        .Times(1)                                                           \
+        .WillOnce(RunOnceCallback<1>(                                       \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS,              \
+            /*response_error=*/CertProvisioningResponseError::CA_ERROR,     \
+            /*try_again_later_ms=*/std::nullopt, /*invalidation_topic=*/"", \
+            /*va_challenge=*/"",                                            \
+            enterprise_management::HashingAlgorithm::                       \
+                HASHING_ALGORITHM_UNSPECIFIED,                              \
+            /*data_to_sign=*/std::vector<uint8_t>()));                      \
   }
 
 #define EXPECT_START_CSR_TEMPORARY_UNAVAILABLE(START_CSR_FUNC)               \
@@ -279,8 +279,8 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
         .Times(1)                                                            \
         .WillOnce(RunOnceCallback<1>(                                        \
             policy::DeviceManagementStatus::DM_STATUS_TEMPORARY_UNAVAILABLE, \
-            /*response_error=*/absl::nullopt,                                \
-            /*try_again_later_ms=*/absl::nullopt, /*invalidation_topic=*/"", \
+            /*response_error=*/std::nullopt,                                 \
+            /*try_again_later_ms=*/std::nullopt, /*invalidation_topic=*/"",  \
             /*va_challenge=*/"",                                             \
             enterprise_management::HashingAlgorithm::                        \
                 HASHING_ALGORITHM_UNSPECIFIED,                               \
@@ -294,48 +294,48 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
         .WillOnce(                                                             \
             RunOnceCallback<1>(policy::DeviceManagementStatus::                \
                                    DM_STATUS_SERVICE_ACTIVATION_PENDING,       \
-                               /*response_error=*/absl::nullopt,               \
-                               /*try_again_later_ms=*/absl::nullopt,           \
+                               /*response_error=*/std::nullopt,                \
+                               /*try_again_later_ms=*/std::nullopt,            \
                                /*invalidation_topic=*/"", /*va_challenge=*/"", \
                                enterprise_management::HashingAlgorithm::       \
                                    HASHING_ALGORITHM_UNSPECIFIED,              \
                                /*data_to_sign=*/std::vector<uint8_t>()));      \
   }
 
-#define EXPECT_START_CSR_INCONSISTENT_DATA(START_CSR_FUNC)                   \
-  {                                                                          \
-    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)                   \
-        .Times(1)                                                            \
-        .WillOnce(RunOnceCallback<1>(                                        \
-            policy::DeviceManagementStatus::                                 \
-                DM_STATUS_SUCCESS, /*response_error=*/                       \
-            CertProvisioningResponseError::INCONSISTENT_DATA,                \
-            /*try_again_later_ms=*/absl::nullopt, /*invalidation_topic=*/"", \
-            /*va_challenge=*/"",                                             \
-            enterprise_management::HashingAlgorithm::                        \
-                HASHING_ALGORITHM_UNSPECIFIED,                               \
-            /*data_to_sign=*/std::vector<uint8_t>()));                       \
+#define EXPECT_START_CSR_INCONSISTENT_DATA(START_CSR_FUNC)                  \
+  {                                                                         \
+    EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC)                  \
+        .Times(1)                                                           \
+        .WillOnce(RunOnceCallback<1>(                                       \
+            policy::DeviceManagementStatus::                                \
+                DM_STATUS_SUCCESS, /*response_error=*/                      \
+            CertProvisioningResponseError::INCONSISTENT_DATA,               \
+            /*try_again_later_ms=*/std::nullopt, /*invalidation_topic=*/"", \
+            /*va_challenge=*/"",                                            \
+            enterprise_management::HashingAlgorithm::                       \
+                HASHING_ALGORITHM_UNSPECIFIED,                              \
+            /*data_to_sign=*/std::vector<uint8_t>()));                      \
   }
 
 #define EXPECT_START_CSR_NO_OP(START_CSR_FUNC) \
   { EXPECT_CALL(cert_provisioning_client_, START_CSR_FUNC).Times(1); }
 
-#define EXPECT_FINISH_CSR_OK(FINISH_CSR_FUNC)                                 \
-  {                                                                           \
-    EXPECT_CALL(cert_provisioning_client_, FINISH_CSR_FUNC)                   \
-        .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<3>(                                         \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, absl::nullopt, \
-            absl::nullopt));                                                  \
+#define EXPECT_FINISH_CSR_OK(FINISH_CSR_FUNC)                                \
+  {                                                                          \
+    EXPECT_CALL(cert_provisioning_client_, FINISH_CSR_FUNC)                  \
+        .Times(1)                                                            \
+        .WillOnce(RunOnceCallback<3>(                                        \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, std::nullopt, \
+            std::nullopt));                                                  \
   }
 
-#define EXPECT_FINISH_CSR_TRY_LATER(FINISH_CSR_FUNC, DELAY_MS)                \
-  {                                                                           \
-    EXPECT_CALL(cert_provisioning_client_, FINISH_CSR_FUNC)                   \
-        .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<3>(                                         \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, absl::nullopt, \
-            /*try_again_later_ms=*/(DELAY_MS)));                              \
+#define EXPECT_FINISH_CSR_TRY_LATER(FINISH_CSR_FUNC, DELAY_MS)               \
+  {                                                                          \
+    EXPECT_CALL(cert_provisioning_client_, FINISH_CSR_FUNC)                  \
+        .Times(1)                                                            \
+        .WillOnce(RunOnceCallback<3>(                                        \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, std::nullopt, \
+            /*try_again_later_ms=*/(DELAY_MS)));                             \
   }
 
 #define EXPECT_FINISH_CSR_SERVICE_ACTIVATION_PENDING(FINISH_CSR_FUNC)          \
@@ -344,16 +344,16 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
         .Times(1)                                                              \
         .WillOnce(RunOnceCallback<3>(policy::DeviceManagementStatus::          \
                                          DM_STATUS_SERVICE_ACTIVATION_PENDING, \
-                                     absl::nullopt, absl::nullopt));           \
+                                     std::nullopt, std::nullopt));             \
   }
 
-#define EXPECT_DOWNLOAD_CERT_OK(DOWNLOAD_CERT_FUNC, CERTIFICATE_PEM)          \
-  {                                                                           \
-    EXPECT_CALL(cert_provisioning_client_, DOWNLOAD_CERT_FUNC)                \
-        .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<1>(                                         \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, absl::nullopt, \
-            absl::nullopt, CERTIFICATE_PEM));                                 \
+#define EXPECT_DOWNLOAD_CERT_OK(DOWNLOAD_CERT_FUNC, CERTIFICATE_PEM)         \
+  {                                                                          \
+    EXPECT_CALL(cert_provisioning_client_, DOWNLOAD_CERT_FUNC)               \
+        .Times(1)                                                            \
+        .WillOnce(RunOnceCallback<1>(                                        \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, std::nullopt, \
+            std::nullopt, CERTIFICATE_PEM));                                 \
   }
 
 #define EXPECT_DOWNLOAD_CERT_SERVICE_ACTIVATION_PENDING(DOWNLOAD_CERT_FUNC)    \
@@ -362,17 +362,17 @@ void VerifyDeleteKeyCalledOnce(CertScope cert_scope) {
         .Times(1)                                                              \
         .WillOnce(RunOnceCallback<1>(policy::DeviceManagementStatus::          \
                                          DM_STATUS_SERVICE_ACTIVATION_PENDING, \
-                                     absl::nullopt, absl::nullopt,             \
+                                     std::nullopt, std::nullopt,               \
                                      kFakeCertificate));                       \
   }
 
-#define EXPECT_DOWNLOAD_CERT_TRY_LATER(DOWNLOAD_CERT_FUNC, DELAY_MS)          \
-  {                                                                           \
-    EXPECT_CALL(cert_provisioning_client_, DOWNLOAD_CERT_FUNC)                \
-        .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<1>(                                         \
-            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, absl::nullopt, \
-            /*try_again_later_ms=*/(DELAY_MS), /*certificate=*/""));          \
+#define EXPECT_DOWNLOAD_CERT_TRY_LATER(DOWNLOAD_CERT_FUNC, DELAY_MS)         \
+  {                                                                          \
+    EXPECT_CALL(cert_provisioning_client_, DOWNLOAD_CERT_FUNC)               \
+        .Times(1)                                                            \
+        .WillOnce(RunOnceCallback<1>(                                        \
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS, std::nullopt, \
+            /*try_again_later_ms=*/(DELAY_MS), /*certificate=*/""));         \
   }
 
 #define EXPECT_DOWNLOAD_CERT_NO_OP(DOWNLOAD_CERT_FUNC) \
@@ -426,7 +426,7 @@ class CallbackObserver {
  public:
   MOCK_METHOD(void,
               Callback,
-              (const CertProfile& profile, CertProvisioningWorkerState state));
+              (CertProfile profile, CertProvisioningWorkerState state));
 };
 
 // A mock for observing the state change callback of the worker.
@@ -548,8 +548,8 @@ class CertProvisioningWorkerStaticTest : public ::testing::Test {
   TestingPrefServiceSimple testing_pref_service_;
 
   MockCertProvisioningClient cert_provisioning_client_;
-  raw_ptr<platform_keys::MockPlatformKeysService, ExperimentalAsh>
-      platform_keys_service_ = nullptr;
+  raw_ptr<platform_keys::MockPlatformKeysService> platform_keys_service_ =
+      nullptr;
   std::unique_ptr<platform_keys::MockKeyPermissionsManager>
       key_permissions_manager_;
 };
@@ -574,7 +574,7 @@ TEST_F(CertProvisioningWorkerStaticTest, Success) {
       GetStateChangeCallback(), GetResultCallback());
 
   auto VerifyNoBackendErrorsSeen = [&worker]() {
-    EXPECT_EQ(worker.GetLastBackendServerError(), absl::nullopt);
+    EXPECT_EQ(worker.GetLastBackendServerError(), std::nullopt);
   };
   {
     testing::InSequence seq;
@@ -1238,7 +1238,8 @@ TEST_F(CertProvisioningWorkerStaticTest, ServiceActivationPendingResponse) {
 }
 
 // Checks that when the server returns try_again_later field, the worker will
-// retry when the invalidation is triggered.
+// retry when successfully subscribed for the invalidation or when the
+// invalidation is triggered.
 TEST_F(CertProvisioningWorkerStaticTest, InvalidationRespected) {
   CertProfile cert_profile(kCertProfileId, kCertProfileName,
                            kCertProfileVersion,
@@ -1281,7 +1282,7 @@ TEST_F(CertProvisioningWorkerStaticTest, InvalidationRespected) {
               CertProvisioningWorkerState::kKeypairGenerated);
   }
 
-  base::RepeatingClosure on_invalidation_callback;
+  OnInvalidationEventCallback on_invalidation_event_callback;
   {
     testing::InSequence seq;
 
@@ -1289,7 +1290,7 @@ TEST_F(CertProvisioningWorkerStaticTest, InvalidationRespected) {
         StartCsr(Eq(std::ref(provisioning_process)), /*callback=*/_),
         em::HashingAlgorithm::SHA256);
     EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _))
-        .WillOnce(SaveArg<1>(&on_invalidation_callback));
+        .WillOnce(SaveArg<1>(&on_invalidation_event_callback));
 
     EXPECT_SIGN_CHALLENGE_OK(*mock_tpm_challenge_key,
                              StartSignChallengeStep(kChallenge,
@@ -1341,6 +1342,20 @@ TEST_F(CertProvisioningWorkerStaticTest, InvalidationRespected) {
 
     testing::InSequence seq;
 
+    EXPECT_DOWNLOAD_CERT_TRY_LATER(
+        DownloadCert(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        download_cert_server_delay.InMilliseconds());
+
+    on_invalidation_event_callback.Run(
+        InvalidationEvent::kSuccessfullySubscribed);
+  }
+
+  {
+    EXPECT_EQ(worker.GetState(),
+              CertProvisioningWorkerState::kFinishCsrResponseReceived);
+
+    testing::InSequence seq;
+
     EXPECT_DOWNLOAD_CERT_OK(DownloadCert, kFakeCertificate);
 
     EXPECT_IMPORT_CERTIFICATE_OK(
@@ -1352,7 +1367,8 @@ TEST_F(CertProvisioningWorkerStaticTest, InvalidationRespected) {
                 Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
         .Times(1);
 
-    on_invalidation_callback.Run();
+    on_invalidation_event_callback.Run(
+        InvalidationEvent::kInvalidationReceived);
     EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceeded);
   }
 }
@@ -1591,7 +1607,7 @@ TEST_F(CertProvisioningWorkerStaticTest, ProcessBackendServerErrorResponse) {
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
         .WillOnce([&worker]() {
           EXPECT_THAT(worker.GetLastBackendServerError(),
-                      testing::Ne(absl::nullopt));
+                      testing::Ne(std::nullopt));
         });
     worker.DoStep();
   }
@@ -1606,7 +1622,7 @@ TEST_F(CertProvisioningWorkerStaticTest, ProcessBackendServerErrorResponse) {
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
         .WillOnce([&worker]() {
           EXPECT_THAT(worker.GetLastBackendServerError(),
-                      testing::Eq(absl::nullopt));
+                      testing::Eq(std::nullopt));
         });
     worker.DoStep();
   }
@@ -1648,7 +1664,7 @@ TEST_F(CertProvisioningWorkerStaticTest, ClearBackendServerError) {
   }
 
   Mock::VerifyAndClearExpectations(&cert_provisioning_client_);
-  EXPECT_THAT(worker.GetLastBackendServerError(), testing::Eq(absl::nullopt));
+  EXPECT_THAT(worker.GetLastBackendServerError(), testing::Eq(std::nullopt));
 }
 // Checks that the worker removes a key when an error occurs after the key was
 // registered.
@@ -1727,6 +1743,22 @@ TEST_F(CertProvisioningWorkerStaticTest, RemoveRegisteredKey) {
       CertProvisioningWorkerState::kKeyRegistered, 1);
   histogram_tester.ExpectTotalCount("ChromeOS.CertProvisioning.Result.User", 2);
 }
+// Checks that the worker reset flag is raised once it is marked for reset.
+TEST_F(CertProvisioningWorkerStaticTest, ResetWorker) {
+  const CertScope kCertScope = CertScope::kDevice;
+  CertProfile cert_profile(kCertProfileId, kCertProfileName,
+                           kCertProfileVersion,
+                           /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
+                           ProtocolVersion::kStatic);
+
+  auto worker = CertProvisioningWorkerFactory::Get()->Create(
+      kCertScope, GetProfile(), &testing_pref_service_, cert_profile,
+      &cert_provisioning_client_, MakeInvalidator(), GetStateChangeCallback(),
+      GetResultCallback());
+
+  worker->MarkWorkerForReset();
+  ASSERT_EQ(worker->IsWorkerMarkedForReset(), true);
+}
 
 class PrefServiceObserver {
  public:
@@ -1747,7 +1779,7 @@ class PrefServiceObserver {
   MOCK_METHOD(void, OnPrefValueUpdated, (const base::Value& value));
 
  private:
-  raw_ptr<PrefService, ExperimentalAsh> service_ = nullptr;
+  raw_ptr<PrefService> service_ = nullptr;
   const char* pref_name_ = nullptr;
   PrefChangeRegistrar pref_change_registrar_;
   base::WeakPtrFactory<PrefServiceObserver> weak_factory_{this};

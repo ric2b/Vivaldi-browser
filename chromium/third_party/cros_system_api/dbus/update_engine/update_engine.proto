@@ -156,4 +156,7 @@ message InstallParams {
 
   // Boolean indicating whether or not the DLC is scaled.
   bool scaled = 3;
+
+  // Boolean indicating forced OTA installations.
+  bool force_ota = 4;
 }

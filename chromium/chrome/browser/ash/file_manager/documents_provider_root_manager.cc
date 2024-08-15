@@ -55,11 +55,8 @@ GURL EncodeIconAsUrl(const SkBitmap& bitmap) {
   // bitmaps without resizing in Chrome side.
   std::vector<unsigned char> output;
   gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &output);
-  std::string encoded;
-  base::Base64Encode(
-      base::StringPiece(reinterpret_cast<const char*>(output.data()),
-                        output.size()),
-      &encoded);
+  std::string encoded = base::Base64Encode(base::StringPiece(
+      reinterpret_cast<const char*>(output.data()), output.size()));
   return GURL("data:image/png;base64," + encoded);
 }
 
@@ -85,7 +82,7 @@ class BitmapWrapper {
   }
 
  private:
-  const raw_ptr<const SkBitmap, ExperimentalAsh> bitmap_;
+  const raw_ptr<const SkBitmap> bitmap_;
 };
 
 }  // namespace
@@ -180,7 +177,7 @@ void DocumentsProviderRootManager::RequestGetRoots() {
 }
 
 void DocumentsProviderRootManager::OnGetRoots(
-    absl::optional<std::vector<arc::mojom::RootPtr>> maybe_roots) {
+    std::optional<std::vector<arc::mojom::RootPtr>> maybe_roots) {
   if (!maybe_roots.has_value()) {
     return;
   }

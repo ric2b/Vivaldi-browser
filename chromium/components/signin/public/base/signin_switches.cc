@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/signin/public/base/signin_switches.h"
+
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 
@@ -28,7 +29,7 @@ BASE_FEATURE(kEnableBoundSessionCredentials,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsBoundSessionCredentialsEnabled() {
-  return base::FeatureList::IsEnabled(switches::kEnableBoundSessionCredentials);
+  return base::FeatureList::IsEnabled(kEnableBoundSessionCredentials);
 }
 
 const base::FeatureParam<EnableBoundSessionCredentialsDiceSupport>::Option
@@ -40,6 +41,17 @@ const base::FeatureParam<EnableBoundSessionCredentialsDiceSupport>
         &kEnableBoundSessionCredentials, "dice-support",
         EnableBoundSessionCredentialsDiceSupport::kDisabled,
         &enable_bound_session_credentials_dice_support};
+
+// Enables Chrome refresh tokens binding to a device. Requires
+// "EnableBoundSessionCredentials" being enabled as a prerequisite.
+BASE_FEATURE(kEnableChromeRefreshTokenBinding,
+             "EnableChromeRefreshTokenBinding",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsChromeRefreshTokenBindingEnabled() {
+  return IsBoundSessionCredentialsEnabled() &&
+         base::FeatureList::IsEnabled(kEnableChromeRefreshTokenBinding);
+}
 #endif
 
 // Enables fetching account capabilities and populating AccountInfo with the
@@ -60,6 +72,15 @@ BASE_FEATURE(kForceStartupSigninPromo,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+#if BUILDFLAG(IS_ANDROID)
+// Flag guarding the restoration of the signed-in only account instead of
+// the syncing one and the restoration of account settings after device
+// restore.
+BASE_FEATURE(kRestoreSignedInAccountAndSettingsFromBackup,
+             "RestoreSignedInAccountAndSettingsFromBackup",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // Enables a new version of the sync confirmation UI.
 BASE_FEATURE(kTangibleSync,
              "TangibleSync",
@@ -72,22 +93,22 @@ BASE_FEATURE(kTangibleSync,
 
 );
 
+#if BUILDFLAG(IS_ANDROID)
 // Enables the search engine choice feature for existing users.
+// TODO(b/316859558): Not used for shipping purposes, remove this feature.
 BASE_FEATURE(kSearchEngineChoice,
              "SearchEngineChoice",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables the search engine choice feature in the FRE.
-BASE_FEATURE(kSearchEngineChoiceFre,
-             "SearchEngineChoiceFre",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables the new search engine choice setting UI.
-BASE_FEATURE(kSearchEngineChoiceSettingsUi,
-             "SearchEngineChoiceSettingsUi",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kUnoDesktop, "UnoDesktop", base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || \
+    BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+BASE_FEATURE(kMinorModeRestrictionsForHistorySyncOptIn,
+             "MinorModeRestrictionsForHistorySyncOptIn",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 #if BUILDFLAG(IS_IOS)
 BASE_FEATURE(kRemoveSignedInAccountsDialog,

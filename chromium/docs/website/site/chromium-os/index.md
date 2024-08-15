@@ -1,16 +1,16 @@
 ---
 breadcrumbs: []
 page_name: chromium-os
-title: Chromium OS
+title: ChromiumOS
 ---
 
 <div class="two-column-container">
 <div class="column">
 
-Chromium OS is an open-source project that aims to build an operating system
+ChromiumOS is an open-source project that aims to build an operating system
 that provides a fast, simple, and more secure computing experience for people
 who spend most of their time on the web. Here you can review the project's
-[design docs](http://www.chromium.org/chromium-os/chromiumos-design-docs),
+[design docs](/chromium-os/chromiumos-design-docs),
 obtain the source code, and contribute. To learn more about the project goals,
 read the [announcement blog
 post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.html).
@@ -19,24 +19,22 @@ post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.h
 
 *   [What is Google Chrome
             OS?](https://www.youtube.com/watch?v=LwVX42Amcak)
-*   [Chromium OS Security](http://www.youtube.com/watch?v=A9WVmNfgjtQ)
-*   [Chromium OS & Open
-            Source](http://www.youtube.com/watch?v=KA5RQv9mBoY)
-*   [Chromium OS Fast Boot](http://www.youtube.com/watch?v=mTFfl7AjNfI)
+*   [ChromiumOS Security](http://www.youtube.com/watch?v=A9WVmNfgjtQ)
+*   [ChromiumOS & Open Source](http://www.youtube.com/watch?v=KA5RQv9mBoY)
+*   [ChromiumOS Fast Boot](http://www.youtube.com/watch?v=mTFfl7AjNfI)
 
 ### For contributors
 
 *   [Getting developer hardware](/chromium-os/getting-dev-hardware)
-*   [Official Chrome OS
+*   [Official ChromeOS
             Devices](/chromium-os/developer-information-for-chrome-os-devices)
 *   [Process for Getting
             Involved/Contributing](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/contributing.md)
-*   [Tree
-            sheriffs](http://www.chromium.org/developers/tree-sheriffs/sheriff-details-chromium-os)
+*   [Tree sheriffs](/developers/tree-sheriffs/sheriff-details-chromium-os)
 *   [Useful developer related Chrome
             extensions](/developers/useful-extensions)
-*   [2014 Chrome OS Firmware Summit](/chromium-os/2014-firmware-summit)
-*   [2017 Chrome OS Intel Firmware Architecture
+*   [2014 ChromeOS Firmware Summit](/chromium-os/2014-firmware-summit)
+*   [2017 ChromeOS Intel Firmware Architecture
             Presentation](https://docs.google.com/a/chromium.org/viewer?a=v&pid=sites&srcid=Y2hyb21pdW0ub3JnfGRldnxneDo1NGY1YWViZDBkN2JjOTky)
 
 ### For UI designers
@@ -45,23 +43,22 @@ post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.h
 
 ### For developers
 
-*   [Optimize Android Apps for Chrome OS
-            device](/chromium-os/android-apps)
+*   [Optimize Android Apps for ChromeOS device](/chromium-os/android-apps)
 *   [Sideload Android apps on your
             Chromebook](/chromium-os/sideload-android-apps-on-chromebook)
-*   [Developing apps on your Chromium OS
+*   [Developing apps on your ChromiumOS
             device](/chromium-os/developing-apps-on-your-chromium-os-device)
-*   [Chromium OS Build](/chromium-os/build)
+*   [ChromiumOS Build](/chromium-os/build)
 
 ### For everyone
 
-*   [Chromium OS FAQ](/chromium-os/chromium-os-faq)
+*   [ChromiumOS FAQ](/chromium-os/chromium-os-faq)
 *   [Project contact
             details](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/contact.md)
             (groups/etc...)
 *   [Report
             bugs](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/reporting_bugs.md)
-*   [Steam on Chrome OS](/chromium-os/steam-on-chromeos)
+*   [Steam on ChromeOS](/chromium-os/steam-on-chromeos)
 
 </div>
 <div class="column">
@@ -70,9 +67,9 @@ post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.h
 
 ### Source code
 
-*   First time? Use the [Chromium OS Quick Start
+*   First time? Use the [ChromiumOS Quick Start
             Guide](/chromium-os/quick-start-guide)
-*   Read the [Chromium OS Developer
+*   Read the [ChromiumOS Developer
             Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md)
             to learn how to build the source
 *   [Overview](/chromium-os/developer-guide/directory-structure) of the
@@ -80,9 +77,9 @@ post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.h
 *   [Browse](https://chromium.googlesource.com/) the source
 *   [Coding Style
             Guidelines](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/styleguide/)
-    *   [Chromium OS Python Style
+    *   [ChromiumOS Python Style
                 Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/styleguide/python.md)
-    *   [Chromium OS Shell Style
+    *   [ChromiumOS Shell Style
                 Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/styleguide/shell.md)
     *   For other languages, follow the [Google Style
                 Guide](https://github.com/google/styleguide/#google-style-guides)
@@ -91,7 +88,7 @@ post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.h
 
 ### Developer docs
 
-*   [Chromium OS Developer
+*   [ChromiumOS Developer
             Guide](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_guide.md)
 *   [CrOS Developer Library](/chromium-os/developer-library)
 *   [High-Level Developer
@@ -106,10 +103,9 @@ post](http://googleblog.blogspot.com/2009/11/releasing-chromium-os-open-source.h
             Development](https://chromium.googlesource.com/chromiumos/platform/ec/+/HEAD/README.md)
 *   [All How Tos and
             Troubleshooting](/chromium-os/how-tos-and-troubleshooting)
-*   [Poking around Your Chrome OS
+*   [Poking around Your ChromeOS
             Device](https://chromium.googlesource.com/chromiumos/docs/+/HEAD/developer_mode.md)
-*   [Design
-            docs](http://www.chromium.org/chromium-os/chromiumos-design-docs)
+*   [Design docs](/chromium-os/chromiumos-design-docs)
 
 ### Hardware Reference docs and schematics
 

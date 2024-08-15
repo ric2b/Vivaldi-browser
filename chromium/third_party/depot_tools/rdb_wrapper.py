@@ -31,12 +31,12 @@ class ResultSink(object):
     def report(self, function_name, status, elapsed_time, failure_reason=None):
         """Reports the result and elapsed time of a presubmit function call.
 
-    Args:
-      function_name (str): The name of the presubmit function
-      status: the status to report the function call with
-      elapsed_time: the time taken to invoke the presubmit function
-      failure_reason (str or None): if set, the failure reason
-    """
+        Args:
+            function_name (str): The name of the presubmit function
+            status: the status to report the function call with
+            elapsed_time: the time taken to invoke the presubmit function
+            failure_reason (str or None): if set, the failure reason
+        """
         tr = {
             'testId': self._prefix + function_name,
             'status': status,
@@ -56,19 +56,20 @@ class ResultSink(object):
 def client(prefix):
     """Returns a client for ResultSink.
 
-  This is a context manager that returns a client for ResultSink,
-  if LUCI_CONTEXT with a section of result_sink is present. When the context
-  is closed, all the connetions to the SinkServer are closed.
+    This is a context manager that returns a client for ResultSink,
+    if LUCI_CONTEXT with a section of result_sink is present. When the context
+    is closed, all the connetions to the SinkServer are closed.
 
-  Args:
-    prefix: A prefix to be added to the test ID of reported function names.
-      The format for this is
-          presubmit:gerrit_host/folder/to/repo:path/to/file/
-      for example,
-          presubmit:chromium-review.googlesource.com/chromium/src/:services/viz/
-  Returns:
-    An instance of ResultSink() if the luci context is present. None, otherwise.
-  """
+    Args:
+        prefix: A prefix to be added to the test ID of reported function names.
+        The format for this is
+            presubmit:gerrit_host/folder/to/repo:path/to/file/
+        for example,
+            presubmit:chromium-review.googlesource.com/chromium/src/:services/viz/  # pylint: disable=line-too-long
+    Returns:
+        An instance of ResultSink() if the luci context is present. None,
+        otherwise.
+    """
     luci_ctx = os.environ.get('LUCI_CONTEXT')
     if not luci_ctx:
         yield None

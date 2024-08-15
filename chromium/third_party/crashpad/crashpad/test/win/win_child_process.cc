@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 
+#include "base/check.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -43,7 +44,6 @@ bool GetSwitch(const char* switch_name, std::string* value) {
   ScopedLocalAlloc scoped_args(args);  // Take ownership.
   if (!args) {
     PLOG(FATAL) << "CommandLineToArgvW";
-    return false;
   }
 
   std::string switch_name_with_equals(switch_name);

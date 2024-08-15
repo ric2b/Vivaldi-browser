@@ -4,9 +4,10 @@
 
 #include "extensions/renderer/api/runtime_hooks_delegate.h"
 
+#include <string_view>
+
 #include "base/check.h"
 #include "base/containers/span.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/v8_value_converter.h"
@@ -197,7 +198,7 @@ RequestResult RuntimeHooksDelegate::HandleRequest(
       ScriptContext*, const APISignature::V8ParseResult&);
   static const struct {
     Handler handler;
-    base::StringPiece method;
+    std::string_view method;
   } kHandlers[] = {
       {&RuntimeHooksDelegate::HandleSendMessage, kSendMessage},
       {&RuntimeHooksDelegate::HandleConnect, kConnect},
@@ -480,7 +481,7 @@ RequestResult RuntimeHooksDelegate::HandleGetPackageDirectoryEntryCallback(
     // allow native code to run in the background page, we'll also need a
     // NativesEnabledScope for that context.
     DCHECK(v8_context == isolate->GetCurrentContext());
-    absl::optional<ModuleSystem::NativesEnabledScope> background_page_natives;
+    std::optional<ModuleSystem::NativesEnabledScope> background_page_natives;
     if (background_page &&
         background_page != script_context->GetRenderFrame() &&
         blink::WebFrame::ScriptCanAccess(isolate,

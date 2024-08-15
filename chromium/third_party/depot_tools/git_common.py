@@ -137,19 +137,21 @@ class BadCommitRefException(Exception):
 def memoize_one(**kwargs):
     """Memoizes a single-argument pure function.
 
-  Values of None are not cached.
+    Values of None are not cached.
 
-  Kwargs:
-    threadsafe (bool) - REQUIRED. Specifies whether to use locking around
-      cache manipulation functions. This is a kwarg so that users of memoize_one
-      are forced to explicitly and verbosely pick True or False.
+    Kwargs:
+        threadsafe (bool) - REQUIRED. Specifies whether to use locking around
+            cache manipulation functions. This is a kwarg so that users of
+            memoize_one are forced to explicitly and verbosely pick True or
+            False.
 
-  Adds three methods to the decorated function:
-    * get(key, default=None) - Gets the value for this key from the cache.
-    * set(key, value) - Sets the value for this key from the cache.
-    * clear() - Drops the entire contents of the cache.  Useful for unittests.
-    * update(other) - Updates the contents of the cache from another dict.
-  """
+    Adds three methods to the decorated function:
+        * get(key, default=None) - Gets the value for this key from the cache.
+        * set(key, value) - Sets the value for this key from the cache.
+        * clear() - Drops the entire contents of the cache.  Useful for
+            unittests.
+        * update(other) - Updates the contents of the cache from another dict.
+    """
     assert 'threadsafe' in kwargs, 'Must specify threadsafe={True,False}'
     threadsafe = kwargs['threadsafe']
 
@@ -203,8 +205,8 @@ def memoize_one(**kwargs):
 def _ScopedPool_initer(orig, orig_args):  # pragma: no cover
     """Initializer method for ScopedPool's subprocesses.
 
-  This helps ScopedPool handle Ctrl-C's correctly.
-  """
+    This helps ScopedPool handle Ctrl-C's correctly.
+    """
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     if orig:
         orig(*orig_args)
@@ -213,14 +215,14 @@ def _ScopedPool_initer(orig, orig_args):  # pragma: no cover
 @contextlib.contextmanager
 def ScopedPool(*args, **kwargs):
     """Context Manager which returns a multiprocessing.pool instance which
-  correctly deals with thrown exceptions.
+    correctly deals with thrown exceptions.
 
-  *args - Arguments to multiprocessing.pool
+    *args - Arguments to multiprocessing.pool
 
-  Kwargs:
-    kind ('threads', 'procs') - The type of underlying coprocess to use.
-    **etc - Arguments to multiprocessing.pool
-  """
+    Kwargs:
+        kind ('threads', 'procs') - The type of underlying coprocess to use.
+        **etc - Arguments to multiprocessing.pool
+    """
     if kwargs.pop('kind', None) == 'threads':
         pool = multiprocessing.pool.ThreadPool(*args, **kwargs)
     else:
@@ -244,23 +246,23 @@ class ProgressPrinter(object):
     def __init__(self, fmt, enabled=None, fout=sys.stderr, period=0.5):
         """Create a ProgressPrinter.
 
-    Use it as a context manager which produces a simple 'increment' method:
+        Use it as a context manager which produces a simple 'increment' method:
 
-      with ProgressPrinter('(%%(count)d/%d)' % 1000) as inc:
-        for i in xrange(1000):
-          # do stuff
-          if i % 10 == 0:
-            inc(10)
+        with ProgressPrinter('(%%(count)d/%d)' % 1000) as inc:
+            for i in xrange(1000):
+            # do stuff
+            if i % 10 == 0:
+                inc(10)
 
-    Args:
-      fmt - String format with a single '%(count)d' where the counter value
-        should go.
-      enabled (bool) - If this is None, will default to True if
-        logging.getLogger() is set to INFO or more verbose.
-      fout (file-like) - The stream to print status messages to.
-      period (float) - The time in seconds for the printer thread to wait
-        between printing.
-    """
+        Args:
+        fmt - String format with a single '%(count)d' where the counter value
+            should go.
+        enabled (bool) - If this is None, will default to True if
+            logging.getLogger() is set to INFO or more verbose.
+        fout (file-like) - The stream to print status messages to.
+        period (float) - The time in seconds for the printer thread to wait
+            between printing.
+        """
         self.fmt = fmt
         if enabled is None:  # pragma: no cover
             self.enabled = logging.getLogger().isEnabledFor(logging.INFO)
@@ -303,7 +305,7 @@ class ProgressPrinter(object):
 
 def once(function):
     """@Decorates |function| so that it only performs its action once, no matter
-  how many times the decorated |function| is called."""
+    how many times the decorated |function| is called."""
     has_run = [False]
 
     def _wrapper(*args, **kwargs):
@@ -556,9 +558,9 @@ def freeze():
 def get_branch_tree(use_limit=False):
     """Get the dictionary of {branch: parent}, compatible with topo_iter.
 
-  Returns a tuple of (skipped, <branch_tree dict>) where skipped is a set of
-  branches without upstream branches defined.
-  """
+    Returns a tuple of (skipped, <branch_tree dict>) where skipped is a set of
+    branches without upstream branches defined.
+    """
     skipped = set()
     branch_tree = {}
 
@@ -575,8 +577,8 @@ def get_branch_tree(use_limit=False):
 def get_or_create_merge_base(branch, parent=None):
     """Finds the configured merge base for branch.
 
-  If parent is supplied, it's used instead of calling upstream(branch).
-  """
+    If parent is supplied, it's used instead of calling upstream(branch).
+    """
     base = branch_config(branch, 'base')
     base_upstream = branch_config(branch, 'base-upstream')
     parent = parent or upstream(branch)
@@ -630,12 +632,12 @@ def in_rebase():
 def intern_f(f, kind='blob'):
     """Interns a file object into the git object store.
 
-  Args:
-    f (file-like object) - The file-like object to intern
-    kind (git object type) - One of 'blob', 'commit', 'tree', 'tag'.
+    Args:
+        f (file-like object) - The file-like object to intern
+        kind (git object type) - One of 'blob', 'commit', 'tree', 'tag'.
 
-  Returns the git hash of the interned object (hex encoded).
-  """
+    Returns the git hash of the interned object (hex encoded).
+    """
     ret = run('hash-object', '-t', kind, '-w', '--stdin', stdin=f)
     f.close()
     return ret
@@ -660,11 +662,11 @@ def manual_merge_base(branch, base, parent):
 def mktree(treedict):
     """Makes a git tree object and returns its hash.
 
-  See |tree()| for the values of mode, type, and ref.
+    See |tree()| for the values of mode, type, and ref.
 
-  Args:
-    treedict - { name: (mode, type, ref) }
-  """
+    Args:
+        treedict - { name: (mode, type, ref) }
+    """
     with tempfile.TemporaryFile() as f:
         for name, (mode, typ, ref) in treedict.items():
             f.write(('%s %s %s\t%s\0' % (mode, typ, ref, name)).encode('utf-8'))
@@ -675,15 +677,19 @@ def mktree(treedict):
 def parse_commitrefs(*commitrefs):
     """Returns binary encoded commit hashes for one or more commitrefs.
 
-  A commitref is anything which can resolve to a commit. Popular examples:
-    * 'HEAD'
-    * 'origin/main'
-    * 'cool_branch~2'
-  """
+    A commitref is anything which can resolve to a commit. Popular examples:
+        * 'HEAD'
+        * 'origin/main'
+        * 'cool_branch~2'
+    """
+    hashes = []
     try:
-        return [binascii.unhexlify(h) for h in hash_multi(*commitrefs)]
+        hashes = hash_multi(*commitrefs)
+        return [binascii.unhexlify(h) for h in hashes]
     except subprocess2.CalledProcessError:
         raise BadCommitRefException(commitrefs)
+    except binascii.Error as e:
+        raise binascii.Error(f'{e}. Invalid hashes are {hashes}')
 
 
 RebaseRet = collections.namedtuple('RebaseRet', 'success stdout stderr')
@@ -692,26 +698,26 @@ RebaseRet = collections.namedtuple('RebaseRet', 'success stdout stderr')
 def rebase(parent, start, branch, abort=False, allow_gc=False):
     """Rebases |start|..|branch| onto the branch |parent|.
 
-  Sets 'gc.auto=0' for the duration of this call to prevent the rebase from
-  running a potentially slow garbage collection cycle.
+    Sets 'gc.auto=0' for the duration of this call to prevent the rebase from
+    running a potentially slow garbage collection cycle.
 
-  Args:
-    parent - The new parent ref for the rebased commits.
-    start  - The commit to start from
-    branch - The branch to rebase
-    abort  - If True, will call git-rebase --abort in the event that the rebase
-             doesn't complete successfully.
-    allow_gc - If True, sets "-c gc.auto=1" on the rebase call, rather than
-               "-c gc.auto=0". Usually if you're doing a series of rebases,
-               you'll only want to run a single gc pass at the end of all the
-               rebase activity.
+    Args:
+        parent - The new parent ref for the rebased commits.
+        start  - The commit to start from
+        branch - The branch to rebase
+        abort  - If True, will call git-rebase --abort in the event that the
+            rebase doesn't complete successfully.
+        allow_gc - If True, sets "-c gc.auto=1" on the rebase call, rather than
+            "-c gc.auto=0". Usually if you're doing a series of rebases,
+            you'll only want to run a single gc pass at the end of all the
+            rebase activity.
 
-  Returns a namedtuple with fields:
-    success - a boolean indicating that the rebase command completed
-              successfully.
-    message - if the rebase failed, this contains the stdout of the failed
-              rebase.
-  """
+    Returns a namedtuple with fields:
+        success - a boolean indicating that the rebase command completed
+            successfully.
+        message - if the rebase failed, this contains the stdout of the failed
+            rebase.
+    """
     try:
         args = [
             '-c',
@@ -770,11 +776,11 @@ def root():
 def less():  # pragma: no cover
     """Runs 'less' as context manager yielding its stdin as a PIPE.
 
-  Automatically checks if sys.stdout is a non-TTY stream. If so, it avoids
-  running less and just yields sys.stdout.
+    Automatically checks if sys.stdout is a non-TTY stream. If so, it avoids
+    running less and just yields sys.stdout.
 
-  The returned PIPE is opened on binary mode.
-  """
+    The returned PIPE is opened on binary mode.
+    """
     if not setup_color.IS_TTY:
         # On Python 3, sys.stdout doesn't accept bytes, and sys.stdout.buffer
         # must be used.
@@ -815,9 +821,9 @@ def run_with_retcode(*cmd, **kwargs):
 def run_stream(*cmd, **kwargs):
     """Runs a git command. Returns stdout as a PIPE (file-like object).
 
-  stderr is dropped to avoid races if the process outputs to both stdout and
-  stderr.
-  """
+    stderr is dropped to avoid races if the process outputs to both stdout and
+    stderr.
+    """
     kwargs.setdefault('stderr', subprocess2.DEVNULL)
     kwargs.setdefault('stdout', subprocess2.PIPE)
     kwargs.setdefault('shell', False)
@@ -830,11 +836,11 @@ def run_stream(*cmd, **kwargs):
 def run_stream_with_retcode(*cmd, **kwargs):
     """Runs a git command as context manager yielding stdout as a PIPE.
 
-  stderr is dropped to avoid races if the process outputs to both stdout and
-  stderr.
+    stderr is dropped to avoid races if the process outputs to both stdout and
+    stderr.
 
-  Raises subprocess2.CalledProcessError on nonzero return code.
-  """
+    Raises subprocess2.CalledProcessError on nonzero return code.
+    """
     kwargs.setdefault('stderr', subprocess2.DEVNULL)
     kwargs.setdefault('stdout', subprocess2.PIPE)
     kwargs.setdefault('shell', False)
@@ -852,12 +858,12 @@ def run_stream_with_retcode(*cmd, **kwargs):
 def run_with_stderr(*cmd, **kwargs):
     """Runs a git command.
 
-  Returns (stdout, stderr) as a pair of strings.
+    Returns (stdout, stderr) as a pair of strings.
 
-  kwargs
-    autostrip (bool) - Strip the output. Defaults to True.
-    indata (str) - Specifies stdin data for the process.
-  """
+    kwargs
+        autostrip (bool) - Strip the output. Defaults to True.
+        indata (str) - Specifies stdin data for the process.
+    """
     kwargs.setdefault('stdin', subprocess2.PIPE)
     kwargs.setdefault('stdout', subprocess2.PIPE)
     kwargs.setdefault('stderr', subprocess2.PIPE)
@@ -897,7 +903,8 @@ def set_config(option, value, scope='local'):
 def get_dirty_files():
     # Make sure index is up-to-date before running diff-index.
     run_with_retcode('update-index', '--refresh', '-q')
-    return run('diff-index', '--ignore-submodules', '--name-status', 'HEAD')
+    return run('diff-index', '--ignore-submodules', '--name-status', 'HEAD',
+               '--')
 
 
 def is_dirty_git_tree(cmd):
@@ -919,17 +926,17 @@ def is_dirty_git_tree(cmd):
 def status(ignore_submodules=None):
     """Returns a parsed version of git-status.
 
-  Args:
-   ignore_submodules (str|None): "all", "none", or None.
-                                 None is equivalent to "none".
+    Args:
+        ignore_submodules (str|None): "all", "none", or None.
+            None is equivalent to "none".
 
-  Returns a generator of (current_name, (lstat, rstat, src)) pairs where:
-    * current_name is the name of the file
-    * lstat is the left status code letter from git-status
-    * rstat is the right status code letter from git-status
-    * src is the current name of the file, or the original name of the file
-      if lstat == 'R'
-  """
+    Returns a generator of (current_name, (lstat, rstat, src)) pairs where:
+        * current_name is the name of the file
+        * lstat is the left status code letter from git-status
+        * rstat is the right status code letter from git-status
+        * src is the current name of the file, or the original name of the file
+        if lstat == 'R'
+    """
 
     ignore_submodules = ignore_submodules or 'none'
     assert ignore_submodules in (
@@ -1006,10 +1013,10 @@ def tags(*args):
 
 def thaw():
     took_action = False
-    with run_stream('rev-list', 'HEAD') as stream:
+    with run_stream('rev-list', 'HEAD', '--') as stream:
         for sha in stream:
             sha = sha.strip().decode('utf-8')
-            msg = run('show', '--format=%f%b', '-s', 'HEAD')
+            msg = run('show', '--format=%f%b', '-s', 'HEAD', '--')
             match = FREEZE_MATCHER.match(msg)
             if not match:
                 if not took_action:
@@ -1023,27 +1030,27 @@ def thaw():
 def topo_iter(branch_tree, top_down=True):
     """Generates (branch, parent) in topographical order for a branch tree.
 
-  Given a tree:
+    Given a tree:
 
-            A1
-        B1      B2
-      C1  C2    C3
-                D1
+                A1
+            B1      B2
+        C1  C2    C3
+                    D1
 
-  branch_tree would look like: {
-    'D1': 'C3',
-    'C3': 'B2',
-    'B2': 'A1',
-    'C1': 'B1',
-    'C2': 'B1',
-    'B1': 'A1',
-  }
+    branch_tree would look like: {
+        'D1': 'C3',
+        'C3': 'B2',
+        'B2': 'A1',
+        'C1': 'B1',
+        'C2': 'B1',
+        'B1': 'A1',
+    }
 
-  It is OK to have multiple 'root' nodes in your graph.
+    It is OK to have multiple 'root' nodes in your graph.
 
-  if top_down is True, items are yielded from A->D. Otherwise they're yielded
-  from D->A. Within a layer the branches will be yielded in sorted order.
-  """
+    if top_down is True, items are yielded from A->D. Otherwise they're yielded
+    from D->A. Within a layer the branches will be yielded in sorted order.
+    """
     branch_tree = branch_tree.copy()
 
     # TODO(iannucci): There is probably a more efficient way to do these.
@@ -1073,26 +1080,27 @@ def topo_iter(branch_tree, top_down=True):
 def tree(treeref, recurse=False):
     """Returns a dict representation of a git tree object.
 
-  Args:
-    treeref (str) - a git ref which resolves to a tree (commits count as trees).
-    recurse (bool) - include all of the tree's descendants too. File names will
-      take the form of 'some/path/to/file'.
+    Args:
+        treeref (str) - a git ref which resolves to a tree (commits count as
+            trees).
+        recurse (bool) - include all of the tree's descendants too. File names
+            will take the form of 'some/path/to/file'.
 
-  Return format:
-    { 'file_name': (mode, type, ref) }
+    Return format:
+        { 'file_name': (mode, type, ref) }
 
-    mode is an integer where:
-      * 0040000 - Directory
-      * 0100644 - Regular non-executable file
-      * 0100664 - Regular non-executable group-writeable file
-      * 0100755 - Regular executable file
-      * 0120000 - Symbolic link
-      * 0160000 - Gitlink
+        mode is an integer where:
+        * 0040000 - Directory
+        * 0100644 - Regular non-executable file
+        * 0100664 - Regular non-executable group-writeable file
+        * 0100755 - Regular executable file
+        * 0120000 - Symbolic link
+        * 0160000 - Gitlink
 
-    type is a string where it's one of 'blob', 'commit', 'tree', 'tag'.
+        type is a string where it's one of 'blob', 'commit', 'tree', 'tag'.
 
-    ref is the hex encoded hash of the entry.
-  """
+        ref is the hex encoded hash of the entry.
+    """
     ret = {}
     opts = ['ls-tree', '--full-tree']
     if recurse:
@@ -1124,7 +1132,7 @@ def upstream(branch):
 
 def get_git_version():
     """Returns a tuple that contains the numeric components of the current git
-  version."""
+    version."""
     version_string = run('--version')
     return _extract_git_tuple(version_string)
 
@@ -1134,6 +1142,14 @@ def _extract_git_tuple(version_string):
     version = version_match.group() if version_match else ''
 
     return tuple(int(x) for x in version.split('.'))
+
+
+def get_num_commits(branch):
+    base = get_or_create_merge_base(branch)
+    if base:
+        commits_list = run('rev-list', '--count', branch, '^%s' % base, '--')
+        return int(commits_list) or None
+    return None
 
 
 def get_branches_info(include_tracking_status):
@@ -1155,11 +1171,7 @@ def get_branches_info(include_tracking_status):
 
         commits = None
         if include_tracking_status:
-            base = get_or_create_merge_base(branch)
-            if base:
-                commits_list = run('rev-list', '--count', branch, '^%s' % base,
-                                   '--')
-                commits = int(commits_list) or None
+            commits = get_num_commits(branch)
 
         behind_match = re.search(r'behind (\d+)', tracking_status)
         behind = int(behind_match.group(1)) if behind_match else None

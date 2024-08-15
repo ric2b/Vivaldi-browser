@@ -7,7 +7,7 @@
 
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_delegate.h"
-#import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 
 // A view to hold the top menu items of the start page.
 @interface VivaldiSpeedDialContainerView : UIView

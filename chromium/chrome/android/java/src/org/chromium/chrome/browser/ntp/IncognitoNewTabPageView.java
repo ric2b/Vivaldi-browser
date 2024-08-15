@@ -13,20 +13,14 @@ import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.FrameLayout;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
-import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.base.ViewUtils;
 
 // Vivaldi
 import android.view.MotionEvent;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
-/**
- * The New Tab Page for use in the incognito profile.
- */
+/** The New Tab Page for use in the incognito profile. */
 public class IncognitoNewTabPageView extends FrameLayout {
     private IncognitoNewTabPageManager mManager;
     private boolean mFirstShow = true;
@@ -37,26 +31,26 @@ public class IncognitoNewTabPageView extends FrameLayout {
     private int mSnapshotHeight;
     private int mSnapshotScrollY;
 
-    /**
-     * Manages the view interaction with the rest of the system.
-     */
+    /** Manages the view interaction with the rest of the system. */
     interface IncognitoNewTabPageManager {
         /** Loads a page explaining details about incognito mode in the current tab. */
         void loadIncognitoLearnMore();
 
         /**
          * Initializes the cookie controls manager for interaction with the cookie controls toggle.
-         * */
+         */
         void initCookieControlsManager();
 
-        /**
-         * Tells the caller whether a new snapshot is required or not.
-         * */
+        /** Tells the caller whether a new snapshot is required or not. */
         boolean shouldCaptureThumbnail();
 
-        /**
-         * Cleans up the manager after it is finished being used.
-         * */
+        /** Whether the new version of the Incognito NTP should be shown. */
+        boolean shouldShowRevampedIncognitoNtp();
+
+        /** Whether to show the tracking protection UI on the NTP. */
+        boolean shouldShowTrackingProtectionNtp();
+
+        /** Cleans up the manager after it is finished being used. */
         void destroy();
 
         /**
@@ -87,33 +81,36 @@ public class IncognitoNewTabPageView extends FrameLayout {
         // FOCUS_BEFORE_DESCENDANTS is needed to support keyboard shortcuts. Otherwise, pressing
         // any shortcut causes the UrlBar to be focused. See ViewRootImpl.leaveTouchMode().
         mScrollView.setDescendantFocusability(FOCUS_BEFORE_DESCENDANTS);
+    }
 
+    private void inflateConditionalLayouts() {
         ViewStub viewStub = findViewById(R.id.incognito_description_layout_stub);
-        if (shouldShowRevampedIncognitoNTP()) {
+        if (mManager.shouldShowRevampedIncognitoNtp()) {
             viewStub.setLayoutResource(R.layout.revamped_incognito_description_layout);
         } else {
             viewStub.setLayoutResource(R.layout.incognito_description_layout);
         }
 
         mDescriptionView = (IncognitoDescriptionView) viewStub.inflate();
-        mDescriptionView.setLearnMoreOnclickListener(new OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                mManager.loadIncognitoLearnMore();
-            }
-        });
+        mDescriptionView.setLearnMoreOnclickListener(
+                new OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        mManager.loadIncognitoLearnMore();
+                    }
+                });
 
         // Inflate the correct cookie/tracking protection card.
         ViewStub cardStub = findViewById(R.id.cookie_card_stub);
         if (cardStub == null) return;
-        if (shouldShowTrackingProtectionNTP()) {
+        if (mManager.shouldShowTrackingProtectionNtp()) {
             cardStub.setLayoutResource(
-                    shouldShowRevampedIncognitoNTP()
+                    mManager.shouldShowRevampedIncognitoNtp()
                             ? R.layout.revamped_incognito_tracking_protection_card
                             : R.layout.incognito_tracking_protection_card);
         } else {
             cardStub.setLayoutResource(
-                    shouldShowRevampedIncognitoNTP()
+                    mManager.shouldShowRevampedIncognitoNtp()
                             ? R.layout.revamped_incognito_cookie_controls_card
                             : R.layout.incognito_cookie_controls_card);
         }
@@ -137,6 +134,7 @@ public class IncognitoNewTabPageView extends FrameLayout {
      */
     void initialize(IncognitoNewTabPageManager manager) {
         mManager = manager;
+        inflateConditionalLayouts();
         mManager.initCookieControlsManager();
     }
 
@@ -152,20 +150,10 @@ public class IncognitoNewTabPageView extends FrameLayout {
     boolean shouldCaptureThumbnail() {
         if (getWidth() == 0 || getHeight() == 0) return false;
 
-        return mManager.shouldCaptureThumbnail() || getWidth() != mSnapshotWidth
-                || getHeight() != mSnapshotHeight || mScrollView.getScrollY() != mSnapshotScrollY;
-    }
-
-    boolean shouldShowRevampedIncognitoNTP() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.INCOGNITO_NTP_REVAMP);
-    }
-
-    boolean shouldShowTrackingProtectionNTP() {
-        Profile profile =
-                Profile.getLastUsedRegularProfile()
-                        .getPrimaryOTRProfile(/* createIfNeeded= */ true);
-        return (UserPrefs.get(profile).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD));
+        return mManager.shouldCaptureThumbnail()
+                || getWidth() != mSnapshotWidth
+                || getHeight() != mSnapshotHeight
+                || mScrollView.getScrollY() != mSnapshotScrollY;
     }
 
     /**

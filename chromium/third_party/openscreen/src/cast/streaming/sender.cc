@@ -310,7 +310,7 @@ void Sender::CancelInFlightData() {
 
   while (checkpoint_frame_id_ < last_enqueued_frame_id_) {
     ++checkpoint_frame_id_;
-    CancelPendingFrame(checkpoint_frame_id_);
+    CancelPendingFrame(checkpoint_frame_id_, /*was_acked*/ false);
   }
   DispatchCancellations();
 }
@@ -513,7 +513,7 @@ void Sender::OnReceiverCheckpoint(FrameId frame_id,
       const RtpTimeTicks rtp_timestamp = slot->frame->rtp_timestamp;
       DispatchAckEvent(config_.stream_type, rtp_timestamp, checkpoint_frame_id_,
                        *environment_);
-      CancelPendingFrame(checkpoint_frame_id_);
+      CancelPendingFrame(checkpoint_frame_id_, /*was_acked*/ true);
     }
   }
   latest_expected_frame_id_ = std::max(latest_expected_frame_id_, frame_id);
@@ -547,7 +547,7 @@ void Sender::OnReceiverHasFrames(std::vector<FrameId> acks) {
       const RtpTimeTicks rtp_timestamp = slot->frame->rtp_timestamp;
       DispatchAckEvent(config_.stream_type, rtp_timestamp, id, *environment_);
     }
-    CancelPendingFrame(id);
+    CancelPendingFrame(id, /*was_acked*/ true);
   }
   latest_expected_frame_id_ = std::max(latest_expected_frame_id_, acks.back());
   DispatchCancellations();
@@ -691,7 +691,7 @@ Sender::ChosenPacketAndWhen Sender::ChooseKickstartPacket() {
   return chosen;
 }
 
-void Sender::CancelPendingFrame(FrameId frame_id) {
+void Sender::CancelPendingFrame(FrameId frame_id, bool was_acked) {
   TRACE_SCOPED1(TraceCategory::kSender, "CancelPendingFrame", "frame_id",
                 frame_id.ToString());
 
@@ -700,8 +700,10 @@ void Sender::CancelPendingFrame(FrameId frame_id) {
     return;  // Frame was already canceled.
   }
 
-  packet_router_->OnPayloadReceived(
-      slot->frame->data.size(), rtcp_packet_arrival_time_, round_trip_time_);
+  if (was_acked) {
+    packet_router_->OnPayloadReceived(
+        slot->frame->data.size(), rtcp_packet_arrival_time_, round_trip_time_);
+  }
 
   slot->frame.reset();
   OSP_DCHECK_GT(num_frames_in_flight_, 0);

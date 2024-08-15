@@ -5,13 +5,11 @@
 #include "media/gpu/android/ndk_video_encode_accelerator.h"
 
 #include "base/bits.h"
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
-#include "build/build_config.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/bitstream_buffer.h"
 #include "media/base/encoder_status.h"
@@ -21,6 +19,8 @@
 #include "media/gpu/android/video_accelerator_util.h"
 #include "third_party/libyuv/include/libyuv.h"
 
+#pragma clang attribute push DEFAULT_REQUIRES_ANDROID_API( \
+    NDK_MEDIA_CODEC_MIN_API)
 namespace media {
 
 using EncoderType = VideoEncodeAccelerator::Config::EncoderType;
@@ -166,10 +166,6 @@ MediaFormatPtr CreateVideoFormat(const std::string& mime,
   return result;
 }
 
-BASE_FEATURE(kAndroidNdkVideoEncoder,
-             "AndroidNdkVideoEncoder",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 absl::optional<std::string> FindMediaCodecFor(
     const VideoEncodeAccelerator::Config& config) {
   absl::optional<std::string> encoder_name;
@@ -239,19 +235,11 @@ NdkVideoEncodeAccelerator::~NdkVideoEncodeAccelerator() {
   DCHECK(!media_codec_);
 }
 
-bool NdkVideoEncodeAccelerator::IsSupported() {
-  return base::FeatureList::IsEnabled(kAndroidNdkVideoEncoder) &&
-         NdkMediaCodecWrapper::IsSupported();
-}
-
 VideoEncodeAccelerator::SupportedProfiles
 NdkVideoEncodeAccelerator::GetSupportedProfiles() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   SupportedProfiles profiles;
-  if (!IsSupported())
-    return profiles;
-
   for (auto& info : GetEncoderInfoCache()) {
     const auto codec = VideoCodecProfileToVideoCodec(info.profile.profile);
     switch (codec) {
@@ -284,11 +272,6 @@ bool NdkVideoEncodeAccelerator::Initialize(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!media_codec_);
   DCHECK(client);
-
-  if (!IsSupported()) {
-    MEDIA_LOG(ERROR, log_) << "Unsupported Android version.";
-    return false;
-  }
 
   client_ptr_factory_ =
       std::make_unique<base::WeakPtrFactory<VideoEncodeAccelerator::Client>>(
@@ -351,14 +334,23 @@ void NdkVideoEncodeAccelerator::UseOutputBitstreamBuffer(
 
 void NdkVideoEncodeAccelerator::RequestEncodingParametersChange(
     const Bitrate& bitrate,
-    uint32_t framerate) {
+    uint32_t framerate,
+    const absl::optional<gfx::Size>& size) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (size.has_value()) {
+    NotifyErrorStatus({EncoderStatus::Codes::kEncoderUnsupportedConfig,
+                       "Update output frame size is not supported"});
+    return;
+  }
+
   MediaFormatPtr format(AMediaFormat_new());
 
   if (effective_framerate_ != framerate)
     AMediaFormat_setInt32(format.get(), AMEDIAFORMAT_KEY_FRAME_RATE, framerate);
   if (effective_bitrate_ != bitrate) {
-    AMediaFormat_setInt32(format.get(), AMEDIACODEC_KEY_VIDEO_BITRATE,
+    // AMEDIACODEC_KEY_VIDEO_BITRATE is not exposed until SDK 31.
+    AMediaFormat_setInt32(format.get(),
+                          "video-bitrate" /*AMEDIACODEC_KEY_VIDEO_BITRATE*/,
                           bitrate.target_bps());
   }
   media_status_t status =
@@ -417,9 +409,9 @@ bool NdkVideoEncodeAccelerator::SetInputBufferLayout(
   // Non 16x16 aligned resolutions don't work well with MediaCodec
   // unfortunately, see https://crbug.com/1084702 for details. It seems they
   // only work when stride/y_plane_height information is provided.
-  const auto aligned_size =
-      gfx::Size(base::bits::AlignDown(configured_size.width(), 16),
-                base::bits::AlignDown(configured_size.height(), 16));
+  const auto aligned_size = gfx::Size(
+      base::bits::AlignDownDeprecatedDoNotUse(configured_size.width(), 16),
+      base::bits::AlignDownDeprecatedDoNotUse(configured_size.height(), 16));
 
   bool require_aligned_resolution = false;
   if (!AMediaFormat_getInt32(input_format.get(), AMEDIAFORMAT_KEY_STRIDE,
@@ -521,9 +513,11 @@ void NdkVideoEncodeAccelerator::FeedInput() {
   pending_frames_.pop_front();
 
   if (key_frame) {
+    // AMEDIACODEC_KEY_REQUEST_SYNC_FRAME is not exposed until SDK 31.
     // Signal to the media codec that it needs to include a key frame
     MediaFormatPtr format(AMediaFormat_new());
-    AMediaFormat_setInt32(format.get(), AMEDIACODEC_KEY_REQUEST_SYNC_FRAME, 0);
+    AMediaFormat_setInt32(
+        format.get(), "request-sync" /*AMEDIACODEC_KEY_REQUEST_SYNC_FRAME*/, 0);
     media_status_t status =
         AMediaCodec_setParameters(media_codec_->codec(), format.get());
 
@@ -915,3 +909,4 @@ void NdkVideoEncodeAccelerator::SetEncoderColorSpace() {
 }
 
 }  // namespace media
+#pragma clang attribute pop

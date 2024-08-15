@@ -113,10 +113,10 @@ struct WebSocketHandshakeResponseInfo;
 
 using ::net::test::IsError;
 using ::net::test::IsOk;
+using ::testing::_;
 using ::testing::StrictMock;
 using ::testing::TestWithParam;
 using ::testing::Values;
-using ::testing::_;
 
 namespace net {
 namespace {
@@ -133,19 +133,24 @@ class MockClientSocketHandleFactory {
   MockClientSocketHandleFactory()
       : common_connect_job_params_(
             socket_factory_maker_.factory(),
-            nullptr /* host_resolver */,
-            nullptr /* http_auth_cache */,
-            nullptr /* http_auth_handler_factory */,
-            nullptr /* spdy_session_pool */,
-            nullptr /* quic_supported_versions */,
-            nullptr /* quic_stream_factory */,
-            nullptr /* proxy_delegate */,
-            nullptr /* http_user_agent_settings */,
-            nullptr /* ssl_client_context */,
-            nullptr /* socket_performance_watcher_factory */,
-            nullptr /* network_quality_estimator */,
-            nullptr /* net_log */,
-            nullptr /* websocket_endpoint_lock_manager */),
+            /*host_resolver=*/nullptr,
+            /*http_auth_cache=*/nullptr,
+            /*http_auth_handler_factory=*/nullptr,
+            /*spdy_session_pool=*/nullptr,
+            /*quic_supported_versions=*/nullptr,
+            /*quic_session_pool=*/nullptr,
+            /*proxy_delegate=*/nullptr,
+            /*http_user_agent_settings=*/nullptr,
+            /*ssl_client_context=*/nullptr,
+            /*socket_performance_watcher_factory=*/nullptr,
+            /*network_quality_estimator=*/nullptr,
+            /*net_log=*/nullptr,
+            /*websocket_endpoint_lock_manager=*/nullptr,
+            /*http_server_properties=*/nullptr,
+            /*alpn_protos=*/nullptr,
+            /*application_settings=*/nullptr,
+            /*ignore_certificate_errors=*/nullptr,
+            /*early_data_enabled=*/nullptr),
         pool_(1, 1, &common_connect_job_params_) {}
 
   MockClientSocketHandleFactory(const MockClientSocketHandleFactory&) = delete;
@@ -164,7 +169,7 @@ class MockClientSocketHandleFactory {
         ClientSocketPool::GroupId(
             url::SchemeHostPort(url::kHttpScheme, "a", 80),
             PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
-            SecureDnsPolicy::kAllow),
+            SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false),
         scoped_refptr<ClientSocketPool::SocketParams>(),
         absl::nullopt /* proxy_annotation_tag */, MEDIUM, SocketTag(),
         ClientSocketPool::RespectLimits::ENABLED, CompletionOnceCallback(),
@@ -486,7 +491,8 @@ class WebSocketHandshakeStreamCreateHelperTest
             quic::QuicTime::Delta::FromMilliseconds(
                 kDefaultRetransmittableOnWireTimeout.InMilliseconds()),
             /*migrate_idle_session=*/true, /*allow_port_migration=*/false,
-            kDefaultIdleSessionMigrationPeriod, kMaxTimeOnNonDefaultNetwork,
+            kDefaultIdleSessionMigrationPeriod,
+            /*multi_port_probing_interval=*/0, kMaxTimeOnNonDefaultNetwork,
             kMaxMigrationsToNonDefaultNetworkOnWriteError,
             kMaxMigrationsToNonDefaultNetworkOnPathDegrading,
             kQuicYieldAfterPacketsRead,
@@ -494,8 +500,7 @@ class WebSocketHandshakeStreamCreateHelperTest
                 kQuicYieldAfterDurationMilliseconds),
             /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
             std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config),
-            dns_start, dns_end,
-            base::DefaultTickClock::GetInstance(),
+            dns_start, dns_end, base::DefaultTickClock::GetInstance(),
             base::SingleThreadTaskRunner::GetCurrentDefault().get(),
             /*socket_performance_watcher=*/nullptr,
             HostResolverEndpointResult(), NetLog::Get());

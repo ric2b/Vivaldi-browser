@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/net/profile_network_context_service.h"
+
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,7 +32,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/net/profile_network_context_service_test_utils.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -85,7 +87,6 @@
 #include "services/network/test/trust_token_test_server_handler_registration.h"
 #include "services/network/test/trust_token_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/constants/chromeos_features.h"
@@ -155,7 +156,7 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
                                        TRAFFIC_ANNOTATION_FOR_TESTS);
 
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
-      loader_factory(), simple_loader_helper.GetCallback());
+      loader_factory(), simple_loader_helper.GetCallbackDeprecated());
   simple_loader_helper.WaitForCallback();
   ASSERT_TRUE(simple_loader_helper.response_body());
 
@@ -237,7 +238,7 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, BrotliEnabled) {
       network::SimpleURLLoader::Create(std::move(request),
                                        TRAFFIC_ANNOTATION_FOR_TESTS);
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
-      loader_factory(), simple_loader_helper.GetCallback());
+      loader_factory(), simple_loader_helper.GetCallbackDeprecated());
   simple_loader_helper.WaitForCallback();
   ASSERT_TRUE(simple_loader_helper.response_body());
   std::vector<std::string> encodings =
@@ -647,7 +648,7 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceDiskCacheBrowsertest,
                                        TRAFFIC_ANNOTATION_FOR_TESTS);
 
   simple_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
-      loader_factory(), simple_loader_helper.GetCallback());
+      loader_factory(), simple_loader_helper.GetCallbackDeprecated());
   simple_loader_helper.WaitForCallback();
   ASSERT_TRUE(simple_loader_helper.response_body());
 
@@ -685,7 +686,7 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceDiskCacheBrowsertest,
 #if BUILDFLAG(IS_CHROMEOS)
 class ProfileNetworkContextServiceMemoryPressureFeatureBrowsertest
     : public ProfileNetworkContextServiceBrowsertest,
-      public ::testing::WithParamInterface<absl::optional<bool>> {
+      public ::testing::WithParamInterface<std::optional<bool>> {
  public:
   ProfileNetworkContextServiceMemoryPressureFeatureBrowsertest() = default;
   ~ProfileNetworkContextServiceMemoryPressureFeatureBrowsertest() override =
@@ -735,7 +736,7 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     ProfileNetworkContextServiceMemoryPressureFeatureBrowsertest,
     /*disable_idle_sockets_close_on_memory_pressure=*/
-    ::testing::Values(absl::nullopt, true, false));
+    ::testing::Values(std::nullopt, true, false));
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 class ProfileNetworkContextTrustTokensBrowsertest
@@ -746,8 +747,7 @@ class ProfileNetworkContextTrustTokensBrowsertest
         network::features::kTrustTokenOperationsRequiringOriginTrial;
     feature_list_.InitWithFeaturesAndParameters(
         // Enabled Features:
-        {{privacy_sandbox::kPrivacySandboxSettings3, {}},
-         {network::features::kPrivateStateTokens,
+        {{network::features::kPrivateStateTokens,
           {{field_trial_param.name,
             field_trial_param.GetName(
                 network::features::TrustTokenOriginTrialSpec::

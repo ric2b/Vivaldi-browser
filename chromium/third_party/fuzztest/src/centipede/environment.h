@@ -18,6 +18,7 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -80,8 +81,8 @@ struct Environment {
   bool distill = false;
   size_t log_features_shards = 0;
   std::string knobs_file;
-  std::string save_corpus_to_local_dir;
-  std::string export_corpus_from_local_dir;
+  std::string corpus_to_files;
+  std::string corpus_from_files;
   std::vector<std::string> corpus_dir;
   std::string symbolizer_path = "llvm-symbolizer";
   std::string objdump_path = "objdump";
@@ -100,6 +101,16 @@ struct Environment {
   bool dry_run = false;
   bool save_binary_info = false;
   bool populate_binary_info = true;
+#ifdef CENTIPEDE_DISABLE_RIEGELI
+  bool riegeli = false;
+#else
+  bool riegeli = true;
+#endif  // CENTIPEDE_DISABLE_RIEGELI
+
+  // Internal settings without global flags ------------------------------------
+
+  // If set, treat the first entry of `corpus_dir` as output-only.
+  bool first_corpus_dir_output_only = false;
 
   // Command line-related fields -----------------------------------------------
 

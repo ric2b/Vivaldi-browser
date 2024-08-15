@@ -407,6 +407,10 @@ const UIStrings = {
    */
   domGc: 'DOM GC',
   /**
+   *@description Event category in the Performance panel for time spent to perform Garbage Collection for C++: https://chromium.googlesource.com/v8/v8/+/main/include/cppgc/README.md
+   */
+  cppGc: 'CPP GC',
+  /**
    *@description Event category in the Performance panel for time spent to perform encryption
    */
   encrypt: 'Encrypt',
@@ -490,7 +494,7 @@ export class TimelineCategory {
   title: string;
   visible: boolean;
   childColor: string;
-  color: string;
+  colorInternal: string;
   private hiddenInternal?: boolean;
 
   constructor(name: string, title: string, visible: boolean, childColor: string, color: string) {
@@ -498,7 +502,7 @@ export class TimelineCategory {
     this.title = title;
     this.visible = visible;
     this.childColor = childColor;
-    this.color = color;
+    this.colorInternal = color;
     this.hidden = false;
   }
 
@@ -506,12 +510,15 @@ export class TimelineCategory {
     return Boolean(this.hiddenInternal);
   }
 
+  get color(): string {
+    return this.getComputedColorValue();
+  }
   getCSSValue(): string {
-    return `var(${this.color})`;
+    return `var(${this.colorInternal})`;
   }
 
-  getComputedValue(): string {
-    return ThemeSupport.ThemeSupport.instance().getComputedValue(this.color);
+  getComputedColorValue(): string {
+    return ThemeSupport.ThemeSupport.instance().getComputedValue(this.colorInternal);
   }
 
   set hidden(hidden: boolean) {
@@ -761,7 +768,7 @@ function maybeInitSylesMap(): EventStylesMap {
       new TimelineRecordStyle(i18nString(UIStrings.xhrLoad), defaultCategoryStyles.Scripting),
     ],
     [
-      TraceEngine.Types.TraceEvents.KnownEventName.CompileScript,
+      TraceEngine.Types.TraceEvents.KnownEventName.Compile,
       new TimelineRecordStyle(i18nString(UIStrings.compileScript), defaultCategoryStyles.Scripting),
     ],
     [
@@ -942,6 +949,14 @@ function maybeInitSylesMap(): EventStylesMap {
       new TimelineRecordStyle(i18nString(UIStrings.minorGc), defaultCategoryStyles.Scripting),
     ],
     [
+      TraceEngine.Types.TraceEvents.KnownEventName.IncrementalGCMarking,
+      new TimelineRecordStyle(i18nString(UIStrings.gcEvent), defaultCategoryStyles.Scripting),
+    ],
+    [
+      TraceEngine.Types.TraceEvents.KnownEventName.CPPGCSweep,
+      new TimelineRecordStyle(i18nString(UIStrings.cppGc), defaultCategoryStyles.Scripting),
+    ],
+    [
       TraceEngine.Types.TraceEvents.KnownEventName.RequestAnimationFrame,
       new TimelineRecordStyle(
           i18nString(UIStrings.requestAnimationFrame),
@@ -1017,6 +1032,10 @@ function maybeInitSylesMap(): EventStylesMap {
     ],
     [
       TraceEngine.Types.TraceEvents.KnownEventName.GCCollectGarbage,
+      new TimelineRecordStyle(i18nString(UIStrings.domGc), defaultCategoryStyles.Scripting),
+    ],
+    [
+      TraceEngine.Types.TraceEvents.KnownEventName.DOMGC,
       new TimelineRecordStyle(i18nString(UIStrings.domGc), defaultCategoryStyles.Scripting),
     ],
     [

@@ -30,7 +30,7 @@ import("../../../scripts/dawn_overrides_with_defaults.gni")
 import("${dawn_root}/generator/dawn_generator.gni")
 import("${dawn_root}/scripts/dawn_component.gni")
 
-# Public dawn wire headers so they can be publically visible for dependencies of
+# Public dawn wire headers so they can be publicly visible for dependencies of
 # dawn/wire
 source_set("headers") {
   public_deps = [ "${dawn_root}/include/dawn:headers" ]
@@ -61,12 +61,27 @@ dawn_json_generator("gen") {
   ]
 }
 
+group("abseil") {
+  # When build_with_chromium=true we need to include "//third_party/abseil-cpp:absl" while
+  # it's beneficial to be more specific with standalone Dawn, especially when it comes to
+  # including it as a dependency in other projects (such as Skia).
+  if (build_with_chromium) {
+    public_deps = [ "$dawn_abseil_dir:absl" ]
+  } else {
+    public_deps = [
+      "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_map",
+      "${dawn_root}/third_party/gn/abseil-cpp:flat_hash_set",
+    ]
+  }
+}
+
 dawn_component("wire") {
   DEFINE_PREFIX = "DAWN_WIRE"
 
   deps = [
     ":gen",
     "${dawn_root}/src/dawn/common",
+    "${dawn_root}/src/tint/lang/wgsl/features",
   ]
 
   configs = [ "${dawn_root}/src/dawn/common:internal_config" ]
@@ -133,5 +148,9 @@ dawn_component("wire") {
   ]
 
   # Make headers publicly visible
-  public_deps = [ ":headers" ]
+  public_deps = [
+    ":abseil",
+    ":headers",
+    "${dawn_root}/src/dawn/partition_alloc:raw_ptr",
+  ]
 }

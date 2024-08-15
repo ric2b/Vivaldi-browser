@@ -287,10 +287,10 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       BfcacheStrategy bfcache_strategy) const override;
   const NormalizedCLSData& GetSoftNavigationIntervalNormalizedCLSData()
       const override;
-  const NormalizedResponsivenessMetrics& GetNormalizedResponsivenessMetrics()
-      const override;
-  const NormalizedResponsivenessMetrics&
-  GetSoftNavigationIntervalNormalizedResponsivenessMetrics() const override;
+  const ResponsivenessMetricsNormalization&
+  GetResponsivenessMetricsNormalization() const override;
+  const ResponsivenessMetricsNormalization&
+  GetSoftNavigationIntervalResponsivenessMetricsNormalization() const override;
   const mojom::InputTiming& GetPageInputTiming() const override;
   const absl::optional<blink::SubresourceLoadMetrics>&
   GetSubresourceLoadMetrics() const override;
@@ -355,7 +355,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       const GURL& first_party_url,
       bool blocked_by_policy,
       bool is_ad_tagged,
-      const net::CookieSettingOverrides& cookie_setting_overrides);
+      const net::CookieSettingOverrides& cookie_setting_overrides,
+      bool is_partitioned_access);
 
   void OnCookieChange(
       const GURL& url,
@@ -363,7 +364,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
       const net::CanonicalCookie& cookie,
       bool blocked_by_policy,
       bool is_ad_tagged,
-      const net::CookieSettingOverrides& cookie_setting_overrides);
+      const net::CookieSettingOverrides& cookie_setting_overrides,
+      bool is_partitioned_access);
 
   void OnStorageAccessed(const GURL& url,
                          const GURL& first_party_url,
@@ -432,12 +434,11 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client,
   void OnRestoreFromBackForwardCache(
       content::NavigationHandle* navigation_handle);
 
-  // Called when the page tracked was just activated after being loaded inside a
-  // portal.
-  void DidActivatePortal(base::TimeTicks activation_time);
-
   // Called when the page tracked was just activated after being prerendered.
   void DidActivatePrerenderedPage(content::NavigationHandle* navigation_handle);
+
+  // Called when the previewed page was activated for the tab promotion.
+  void DidActivatePreviewedPage(base::TimeTicks activation_time);
 
   // Called when V8 per-frame memory usage updates are available.
   void OnV8MemoryChanged(const std::vector<MemoryUpdate>& memory_updates);

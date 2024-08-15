@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_BUBBLE_SECURITY_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_DOWNLOAD_BUBBLE_DOWNLOAD_BUBBLE_SECURITY_VIEW_H_
 
+#include <optional>
+
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -13,18 +15,15 @@
 #include "chrome/browser/download/download_ui_model.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/offline_items_collection/core/offline_item.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/progress_bar.h"
 #include "ui/views/view.h"
 
 namespace views {
-class Checkbox;
 class ImageView;
 class StyledLabel;
 class ImageButton;
 class BubbleDialogDelegate;
-class LabelButton;
 }  // namespace views
 
 class DownloadBubbleNavigationHandler;
@@ -33,6 +32,8 @@ class DownloadBubblePasswordPromptView;
 
 class DownloadBubbleSecurityView : public views::View,
                                    public download::DownloadItem::Observer {
+  METADATA_HEADER(DownloadBubbleSecurityView, views::View)
+
  public:
   // Interface allowing this to interact with the download item/model its was
   // created for.
@@ -55,6 +56,16 @@ class DownloadBubbleSecurityView : public views::View,
         const offline_items_collection::ContentId& id,
         base::optional_ref<const std::string> password) = 0;
 
+    // Processes the local decryption prompt being accepted/ignored.
+    virtual void ProcessLocalDecryptionPress(
+        const offline_items_collection::ContentId& id,
+        base::optional_ref<const std::string> password) = 0;
+
+    // Processes clicks on the in-progress view for local decryption scans.
+    virtual void ProcessLocalPasswordInProgressClick(
+        const offline_items_collection::ContentId& id,
+        DownloadCommands::Command command) = 0;
+
     // Return whether the download item is an encrypted archive.
     virtual bool IsEncryptedArchive(
         const offline_items_collection::ContentId& id) = 0;
@@ -65,12 +76,10 @@ class DownloadBubbleSecurityView : public views::View,
         const offline_items_collection::ContentId& id) = 0;
   };
 
-  METADATA_HEADER(DownloadBubbleSecurityView);
   DownloadBubbleSecurityView(
       Delegate* delegate,
       base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler,
-      views::BubbleDialogDelegate* bubble_delegate,
-      bool is_bubble_v2);
+      views::BubbleDialogDelegate* bubble_delegate);
   DownloadBubbleSecurityView(const DownloadBubbleSecurityView&) = delete;
   DownloadBubbleSecurityView& operator=(const DownloadBubbleSecurityView&) =
       delete;
@@ -106,6 +115,10 @@ class DownloadBubbleSecurityView : public views::View,
   bool ProcessButtonClick(DownloadCommands::Command command,
                           bool is_secondary_button);
 
+  // Logs the DISMISS action on the DownloadItemWarningData, if initialized.
+  // Should be called when the security view is about to be destroyed.
+  void MaybeLogDismiss();
+
   const offline_items_collection::ContentId& content_id() const {
     return content_id_;
   }
@@ -120,25 +133,19 @@ class DownloadBubbleSecurityView : public views::View,
   void BackButtonPressed();
   void AddHeader();
   void CloseBubble();
-  void OnCheckboxClicked();
   void AddIconAndContents();
   void AddSecondaryIconAndText();
   void AddProgressBar();
   void AddPasswordPrompt(views::View* parent);
 
-  // `old_danger_type` is the previous danger type before the update, which is
-  // used for debugging only.
-  void UpdateViews(
-      download::DownloadDangerType old_danger_type =
-          download::DownloadDangerType::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
+  void UpdateViews();
   void UpdateHeader();
   void UpdateIconAndText();
   void UpdateSecondaryIconAndText();
   // Updates the subpage button. Setting initial state and color for enabled
   // state, if it is a secondary button.
   void UpdateButton(DownloadUIModel::BubbleUIInfo::SubpageButton button,
-                    bool is_secondary_button,
-                    bool has_checkbox);
+                    bool is_secondary_button);
   void UpdateButtons();
   void UpdateProgressBar();
   void UpdatePasswordPrompt();
@@ -158,12 +165,17 @@ class DownloadBubbleSecurityView : public views::View,
   // the others. Returns whether the dialog should close.
   bool ProcessDeepScanClick();
 
+  // Prompting for local archive decryption is complicated enough that handling
+  // these button presses is handled separately.
+  bool ProcessLocalPasswordDecryptionClick();
+
   // Must outlive this.
   const raw_ptr<Delegate> delegate_;
 
   // Following 4 fields are cached when the download/model is updated.
 
-  // ContentId of the download this refers to.
+  // ContentId of the download this refers to, if initialized.
+  // TODO: This should be std::optional<offline_items_collection::ContentId>.
   offline_items_collection::ContentId content_id_;
   // UI info at the last time this was created/updated.
   DownloadUIModel::BubbleUIInfo ui_info_;
@@ -175,15 +187,10 @@ class DownloadBubbleSecurityView : public views::View,
   download::DownloadDangerType danger_type_ =
       download::DOWNLOAD_DANGER_TYPE_MAX;
 
-  // Whether V2 of the download bubble is enabled.
-  const bool is_bubble_v2_;
   base::WeakPtr<DownloadBubbleNavigationHandler> navigation_handler_ = nullptr;
   raw_ptr<views::BubbleDialogDelegate, DanglingUntriaged> bubble_delegate_ =
       nullptr;
 
-  // The secondary button is the one that may be protected by the checkbox.
-  raw_ptr<views::LabelButton, DanglingUntriaged> secondary_button_ = nullptr;
-  raw_ptr<views::Checkbox> checkbox_ = nullptr;
   raw_ptr<views::StyledLabel> title_ = nullptr;
   raw_ptr<views::ImageView> icon_ = nullptr;
   raw_ptr<ParagraphsView> paragraphs_ = nullptr;
@@ -198,7 +205,7 @@ class DownloadBubbleSecurityView : public views::View,
 
   // Records the last time this was shown or updated for a new download. Used
   // for metrics.
-  absl::optional<base::Time> warning_time_;
+  std::optional<base::Time> warning_time_;
   // Tracks whether metrics were logged for this impression, to avoid
   // double-logging.
   bool did_log_action_ = false;

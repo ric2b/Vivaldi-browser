@@ -6,13 +6,13 @@
 #define CONTENT_PUBLIC_TEST_BROWSER_TEST_UTILS_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/containers/flat_set.h"
 #include "base/containers/queue.h"
-#include "base/cxx20_to_address.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback.h"
 #include "base/json/json_writer.h"
@@ -29,14 +29,15 @@
 #include "build/build_config.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/quads/compositor_frame.h"
-#include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/commit_deferring_condition.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/browser/web_contents_media_capture_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/page_type.h"
@@ -52,7 +53,6 @@
 #include "net/cookies/cookie_partition_key_collection.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/context_menu_data/untrustworthy_context_menu_params.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -76,6 +76,10 @@
 #if BUILDFLAG(IS_WIN)
 #include "base/win/scoped_handle.h"
 #endif
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#include "content/public/test/mock_captured_surface_controller.h"
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 namespace gfx {
 class Point;
@@ -551,15 +555,13 @@ class ToRenderFrameHost {
   // NOLINTNEXTLINE(google-explicit-constructor)
   ToRenderFrameHost(Ptr frame_convertible_value)
       : render_frame_host_(ConvertToRenderFrameHost(
-            base::to_address(frame_convertible_value))) {}
+            std::to_address(frame_convertible_value))) {}
 
   // Extract the underlying frame.
   RenderFrameHost* render_frame_host() const { return render_frame_host_; }
 
  private:
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #union
-  RAW_PTR_EXCLUSION RenderFrameHost* render_frame_host_;
+  raw_ptr<RenderFrameHost> render_frame_host_;
 };
 
 RenderFrameHost* ConvertToRenderFrameHost(RenderFrameHost* render_view_host);
@@ -620,7 +622,7 @@ struct JsLiteralHelper<url::Origin> {
 template <typename... Args>
 base::Value ListValueOf(Args&&... args) {
   base::Value::List values;
-  (values.Append(JsLiteralHelper<base::remove_cvref_t<Args>>::Convert(
+  (values.Append(JsLiteralHelper<std::remove_cvref_t<Args>>::Convert(
        std::forward<Args>(args))),
    ...);
   return base::Value(std::move(values));
@@ -698,6 +700,12 @@ struct EvalJsResult {
 
   // Copy ctor.
   EvalJsResult(const EvalJsResult& value);
+
+  // Matchers for successful & unsuccessful runs.
+  static auto IsOk() {
+    return testing::Field(&EvalJsResult::error, testing::Eq(""));
+  }
+  static auto IsError() { return testing::Not(IsOk()); }
 
   // Extract a result value of the requested type, or die trying.
   //
@@ -903,6 +911,9 @@ RenderFrameHost* ChildFrameAt(const ToRenderFrameHost& adapter, size_t index);
 // OriginAgentCluster header.
 bool HasOriginKeyedProcess(RenderFrameHost* frame);
 
+// Returns true if `frame` has a sandboxed SiteInstance.
+bool HasSandboxedSiteInstance(RenderFrameHost* frame);
+
 // Returns the frames visited by |RenderFrameHost::ForEachRenderFrameHost| in
 // the same order.
 std::vector<RenderFrameHost*> CollectAllRenderFrameHosts(
@@ -946,23 +957,14 @@ std::vector<net::CanonicalCookie> GetCanonicalCookies(
         net::CookiePartitionKeyCollection::ContainsAll());
 
 // Sets a cookie for the given url. Uses inclusive SameSiteCookieContext by
-// default, which gets cookies regardless of their SameSite attribute. Returns
-// true on success.
+// default, which gets cookies regardless of their SameSite attribute. The
+// cookie is unpartitioned by default. Returns true on success.
 bool SetCookie(BrowserContext* browser_context,
                const GURL& url,
                const std::string& value,
                net::CookieOptions::SameSiteCookieContext context =
-                   net::CookieOptions::SameSiteCookieContext::MakeInclusive());
-
-// Same as `SetCookie`, but sets a Partitioned cookie with the given partition
-// key. `value` is expected to use the `Partitioned` attribute.
-bool SetPartitionedCookie(
-    BrowserContext* browser_context,
-    const GURL& url,
-    const std::string& value,
-    const net::CookiePartitionKey& cookie_partition_key,
-    net::CookieOptions::SameSiteCookieContext context =
-        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
+                   net::CookieOptions::SameSiteCookieContext::MakeInclusive(),
+               net::CookiePartitionKey* cookie_partition_key = nullptr);
 
 // Deletes cookies matching the provided filter. Returns the number of cookies
 // that were deleted.
@@ -1041,8 +1043,8 @@ ui::AXPlatformNodeDelegate* GetRootAccessibilityNode(WebContents* web_contents);
 struct FindAccessibilityNodeCriteria {
   FindAccessibilityNodeCriteria();
   ~FindAccessibilityNodeCriteria();
-  absl::optional<ax::mojom::Role> role;
-  absl::optional<std::string> name;
+  std::optional<ax::mojom::Role> role;
+  std::optional<std::string> name;
 };
 ui::AXPlatformNodeDelegate* FindAccessibilityNode(
     WebContents* web_contents,
@@ -1079,7 +1081,7 @@ RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents);
 // all keys will be considered locked.  If |codes| has a value, then at least
 // one key must be specified.
 bool RequestKeyboardLock(WebContents* web_contents,
-                         absl::optional<base::flat_set<ui::DomCode>> codes);
+                         std::optional<base::flat_set<ui::DomCode>> codes);
 void CancelKeyboardLock(WebContents* web_contents);
 
 // Returns the screen orientation provider that's been set via
@@ -1203,9 +1205,9 @@ class RenderProcessHostKillWaiter {
 
   // Waits until the renderer process exits.  Extracts and returns the bad
   // message reason that should be logged in the |uma_name_| histogram.
-  // Returns |absl::nullopt| if the renderer exited normally or didn't log
+  // Returns |std::nullopt| if the renderer exited normally or didn't log
   // the |uma_name_| histogram.
-  [[nodiscard]] absl::optional<int> Wait();
+  [[nodiscard]] std::optional<int> Wait();
 
  private:
   RenderProcessHostWatcher exit_watcher_;
@@ -1233,15 +1235,15 @@ class RenderProcessHostBadMojoMessageWaiter {
 
   // Waits until |render_process_host| from the constructor is terminated
   // because of a bad/invalid mojo message and returns the associated error
-  // string.  Returns absl::nullopt if the process was terminated for an
+  // string.  Returns std::nullopt if the process was terminated for an
   // unrelated reason.
-  [[nodiscard]] absl::optional<std::string> Wait();
+  [[nodiscard]] std::optional<std::string> Wait();
 
  private:
   void OnBadMojoMessage(int render_process_id, const std::string& error);
 
   int monitored_render_process_id_;
-  absl::optional<std::string> observed_mojo_error_;
+  std::optional<std::string> observed_mojo_error_;
   RenderProcessHostKillWaiter kill_waiter_;
 };
 
@@ -1276,6 +1278,12 @@ class DOMMessageQueue {
   // message. Returns true on success.
   [[nodiscard]] bool WaitForMessage(std::string* message);
 
+  // Facilitates asynchronous use of the DOMMessageQueue. The given callback
+  // will be called once a message was put into the queue (or when there is a
+  // renderer crash).
+  // NOTE: This is incompatible with the DOMMessageQueue(RenderFrameHost*) ctor.
+  void SetOnMessageAvailableCallback(base::OnceClosure callback);
+
   // If there is a message in the queue, then copies it to |message| and returns
   // true.  Otherwise (if the queue is empty), returns false.
   [[nodiscard]] bool PopMessage(std::string* message);
@@ -1297,7 +1305,7 @@ class DOMMessageQueue {
   std::set<std::unique_ptr<MessageObserver>> observers_;
   base::CallbackListSubscription web_contents_creation_subscription_;
   base::queue<std::string> message_queue_;
-  base::OnceClosure quit_closure_;
+  base::OnceClosure callback_;
   bool renderer_crashed_ = false;
   raw_ptr<RenderFrameHost, DanglingUntriaged> render_frame_host_ = nullptr;
 };
@@ -1703,8 +1711,8 @@ class TestNavigationManager : public WebContentsObserver {
   void ResumeIfPaused();
 
   const GURL url_;
-  // This field is not a raw_ptr<> because of incompatibilities with tracing
-  // (TRACE_EVENT*), perfetto::TracedDictionary::Add and gmock/EXPECT_THAT.
+  // RAW_PTR_EXCLUSION: Incompatible with tracing (TRACE_EVENT*),
+  // perfetto::TracedDictionary::Add and gmock/EXPECT_THAT.
   RAW_PTR_EXCLUSION NavigationRequest* request_ = nullptr;
   bool navigation_paused_ = false;
   NavigationState current_state_ = NavigationState::INITIAL;
@@ -1903,7 +1911,7 @@ class WebContentsConsoleObserver : public WebContentsObserver {
       const std::u16string& message,
       int32_t line_no,
       const std::u16string& source_id,
-      const absl::optional<std::u16string>& untrusted_stack_trace) override;
+      const std::optional<std::u16string>& untrusted_stack_trace) override;
 
   Filter filter_;
   std::string pattern_;
@@ -2064,7 +2072,7 @@ class BlobURLStoreInterceptor
       const GURL& url,
       // TODO(https://crbug.com/1224926): Remove these once experiment is over.
       const base::UnguessableToken& unsafe_agent_cluster_id,
-      const absl::optional<net::SchemefulSite>& unsafe_top_level_site,
+      const std::optional<net::SchemefulSite>& unsafe_top_level_site,
       RegisterCallback callback) override;
 
  private:
@@ -2338,7 +2346,7 @@ class CreateAndLoadWebContentsObserver {
   // be called multiple times.
   void UnregisterIfNeeded();
 
-  absl::optional<LoadStopObserver> load_stop_observer_;
+  std::optional<LoadStopObserver> load_stop_observer_;
   base::CallbackListSubscription creation_subscription_;
 
   raw_ptr<WebContents, DanglingUntriaged> web_contents_ = nullptr;
@@ -2391,6 +2399,14 @@ RegisterWebContentsCreationCallback(
 // is a standalone executable without an Info.plist.
 bool EnableNativeWindowActivation();
 #endif  // BUILDFLAG(IS_MAC)
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+// Set the global factory for CapturedSurfaceController objects.
+void SetCapturedSurfaceControllerFactoryForTesting(
+    base::RepeatingCallback<std::unique_ptr<MockCapturedSurfaceController>(
+        GlobalRenderFrameHostId,
+        WebContentsMediaCaptureId)> factory);
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace content
 

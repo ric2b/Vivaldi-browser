@@ -33,7 +33,7 @@
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
 #include "src/tint/lang/wgsl/reader/lower/lower.h"
 
-namespace tint::wgsl::reader::lower {
+namespace tint::wgsl::reader {
 namespace {
 
 using namespace tint::core::fluent_types;     // NOLINT
@@ -85,7 +85,7 @@ TEST_F(Wgslreader_LowerTest, WorkgroupUniformLoad) {
     b.Append(f->Block(), [&] {  //
         auto* result = b.InstructionResult(ty.i32());
         b.Append(b.ir.instructions.Create<wgsl::ir::BuiltinCall>(
-            result, wgsl::BuiltinFn::kWorkgroupUniformLoad, Vector{wgvar->Result()}));
+            result, wgsl::BuiltinFn::kWorkgroupUniformLoad, Vector{wgvar->Result(0)}));
         b.Return(f, result);
     });
 
@@ -124,4 +124,4 @@ TEST_F(Wgslreader_LowerTest, WorkgroupUniformLoad) {
 }
 
 }  // namespace
-}  // namespace tint::wgsl::reader::lower
+}  // namespace tint::wgsl::reader

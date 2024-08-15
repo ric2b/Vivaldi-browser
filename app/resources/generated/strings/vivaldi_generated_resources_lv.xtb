@@ -3,7 +3,6 @@
 <translationbundle lang="lv">
 <translation id="1056898198331236512">Brīdinājums</translation>
 <translation id="1165039591588034296">Kļūda</translation>
-<translation id="1175364870820465910">Drukāt...</translation>
 <translation id="1244303850296295656">Paplašinājuma kļūda</translation>
 <translation id="1546280085599573572">Šis paplašinājums mainīja iestatījumu, kura lapa tiek parādīta, noklikšķinot uz pogas Sākums.</translation>
 <translation id="1588438908519853928">Parasts</translation>
@@ -27,7 +26,6 @@
 <translation id="2861941300086904918">Native Client drošības pārvaldnieks</translation>
 <translation id="2932883381142163287">Ziņot par ļaunprātīgu izmantošanu</translation>
 <translation id="2941112035454246133">Zema</translation>
-<translation id="2972581237482394796">&amp;Pāratsaukt</translation>
 <translation id="3080207940057008665">Cita datorā instalēta programma ir izraisījusi tāda motīva pievienošanu, kas var ietekmēt pārlūkprogrammas Vivaldi darbību.</translation>
 <translation id="3122464029669770682">Maksa par daļas vienību</translation>
 <translation id="3222066309010235055">Iepriekšēja atveide: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -37,9 +35,7 @@
 <translation id="3678156199662914018">Paplašinājums: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Lietotnes labošana</translation>
 <translation id="3908501907586732282">Iespējot paplašinājumu</translation>
-<translation id="3909791450649380159">Izgrie&amp;zt</translation>
 <translation id="3927932062596804919">Neatļaut</translation>
-<translation id="3943582379552582368">Atpakaļ</translation>
 <translation id="3979395879372752341">Ir pievienots jauns paplašinājums (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">—</translation>
 <translation id="4087089424473531098">Izveidots paplašinājums:
@@ -47,12 +43,9 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Izstrādātāja režīma paplašinājumu atspējošana</translation>
 <translation id="4100839878934973028">Cita datorā instalēta programma ir izraisījusi tādas lietotnes pievienošanu, kas var ietekmēt pārlūkprogrammas Vivaldi darbību.</translation>
-<translation id="4130207949184424187">Šis paplašinājums mainīja iestatījumu, kura lapa tiek parādīta, kad veicat meklēšanu, izmantojot universālo lodziņu.</translation>
 <translation id="4176463684765177261">Atspējots</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB tiešsaistē)</translation>
 <translation id="4384652540891215547">Aktivizēt paplašinājumu</translation>
-<translation id="4394049700291259645">Atspējot</translation>
-<translation id="4593021220803146968">Doties uz <ph name="URL" /></translation>
 <translation id="4595560905247879544">Lietotnes un paplašinājumus var pārveidot tikai pārvaldnieks (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Paplašinājums ir mainījis lapu, kas tiek parādīta, atverot jaunu cilni.</translation>
 <translation id="488785315393301722">Rādīt detaļas</translation>
@@ -62,22 +55,16 @@
 <translation id="5233231016133573565">Procesa ID</translation>
 <translation id="52912272896845572">Privātās atslēgas fails ir nederīgs.</translation>
 <translation id="5301954838959518834">Es sapratu</translation>
-<translation id="5355926466126177564">Paplašinājums “<ph name="EXTENSION_NAME" />” mainīja iestatījumu, kura lapa tiek parādīta, kad veicat meklēšanu, izmantojot universālo lodziņu.</translation>
 <translation id="5362741141255528695">Atlasiet privātās atslēgas failu.</translation>
-<translation id="5370819323174483825">&amp;Atkārtoti ielādēt</translation>
 <translation id="5485102783864353244">Pievienot lietotni</translation>
 <translation id="5521078259930077036">Vai šī ir lapa “Sākums”, ko bijāt gaidījis?</translation>
 <translation id="5542132724887566711">Profils</translation>
 <translation id="5556459405103347317">Pārlādēt</translation>
 <translation id="5575473780076478375">Inkognito paplašinājums: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5627086634964711283">Tas nosaka arī to, kāda lapa tiks rādīta, kad noklikšķināsiet uz pogas “Sākums”.</translation>
 <translation id="5715711091495208045">Spraudņa starpnieks: <ph name="PLUGIN_NAME" /></translation>
 <translation id="583281660410589416">Nezināms</translation>
-<translation id="5956585768868398362">Vai šī ir meklēšanas lapa, ko bijāt gaidījis?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maks. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">Tas nosaka arī to, kāda lapa tiks rādīta, kad noklikšķināsiet uz pogas “Sākums” vai meklēsiet, izmantojot universālo lodziņu.</translation>
 <translation id="6101226222197207147">Ir pievienota jauna lietotne (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">Jūsu interneta savienojums tiek pārvaldīts</translation>
 <translation id="6196854373336333322">Paplašinājums “<ph name="EXTENSION_NAME" />” pārvalda jūsu starpniekservera iestatījumus. Tas nozīmē, ka tas var mainīt, pārtraukt vai izsekot visas jūsu darbības tiešsaistē. Ja neesat pārliecināts, kāpēc notika šīs izmaiņas, visticamāk, jūs tās nevēlaties.</translation>
 <translation id="6247802389331535091">Sistēma: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6445450263907939268">Ja nevēlējāties veikt šīs izmaiņas, varat atjaunot iepriekšējos iestatījumus.</translation>
@@ -85,7 +72,6 @@
 <translation id="6498249116389603658">&amp;Visas valodas</translation>
 <translation id="6503077044568424649">Visapmeklētākais</translation>
 <translation id="6508261954199872201">Lietojumprogramma: <ph name="APP_NAME" /></translation>
-<translation id="6691936601825168937">Pārsūtīt</translation>
 <translation id="6798954102094737107">Spraudnis: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">Fona lietotne: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">Piekļuve liegta.</translation>
@@ -93,10 +79,8 @@
 <translation id="7629827748548208700">Cilne: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Uztvērējs: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Uzdevums</translation>
-<translation id="7760004034676677601">Vai šī ir sākumlapa, ko bijāt gaidījis?</translation>
 <translation id="7791543448312431591">Pievienot</translation>
 <translation id="7818135753970109980">Ir pievienots jauns motīvs (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="7857949311770343000">Vai šī ir jaunas cilnes lapa, ko gaidījāt?</translation>
 <translation id="786073089922909430">Pakalpojums: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Utilīta: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7978412674231730200">Privātā atslēga</translation>
@@ -116,9 +100,7 @@ Glabājiet atslēgas failu drošā vietā. Tas būs vajadzīgs, lai izveidotu ja
 <translation id="8859174528519900719">Apakšrāmis: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8916476537757519021">Inkognito apakšrāmis: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Slēpt detaļas</translation>
-<translation id="9170848237812810038">&amp;Atsaukt</translation>
 <translation id="9215293857209265904">Ir pievienots paplašinājums <ph name="EXTENSION_NAME" /></translation>
 <translation id="93766956588638423">Labot paplašinājumu</translation>
-<translation id="994289308992179865">A&amp;utomātiski atkārtot</translation>
 <translation id="998747458861718449">Pārbaudīt</translation>
 </translationbundle>

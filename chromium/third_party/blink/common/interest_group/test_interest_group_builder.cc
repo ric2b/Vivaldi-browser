@@ -113,6 +113,15 @@ TestInterestGroupBuilder& TestInterestGroupBuilder::SetTrustedBiddingSignalsUrl(
 }
 
 TestInterestGroupBuilder&
+TestInterestGroupBuilder::SetTrustedBiddingSignalsSlotSizeMode(
+    InterestGroup::TrustedBiddingSignalsSlotSizeMode
+        trusted_bidding_signals_slot_size_mode) {
+  interest_group_.trusted_bidding_signals_slot_size_mode =
+      std::move(trusted_bidding_signals_slot_size_mode);
+  return *this;
+}
+
+TestInterestGroupBuilder&
 TestInterestGroupBuilder::SetTrustedBiddingSignalsKeys(
     absl::optional<std::vector<std::string>> trusted_bidding_signals_keys) {
   interest_group_.trusted_bidding_signals_keys =
@@ -123,6 +132,14 @@ TestInterestGroupBuilder::SetTrustedBiddingSignalsKeys(
 TestInterestGroupBuilder& TestInterestGroupBuilder::SetUserBiddingSignals(
     absl::optional<std::string> user_bidding_signals) {
   interest_group_.user_bidding_signals = std::move(user_bidding_signals);
+  return *this;
+}
+
+TestInterestGroupBuilder&
+TestInterestGroupBuilder::SetMaxTrustedBiddingSignalsURLLength(
+    int32_t max_trusted_bidding_signals_url_length) {
+  interest_group_.max_trusted_bidding_signals_url_length =
+      max_trusted_bidding_signals_url_length;
   return *this;
 }
 

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <list>
+#include <optional>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -22,8 +23,8 @@
 #include "chrome/services/sharing/webrtc/p2p_socket_client_delegate.h"
 #include "components/webrtc/net_address_utils.h"
 #include "net/base/ip_address.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/webrtc/rtc_base/async_packet_socket.h"
+#include "third_party/webrtc/rtc_base/network/received_packet.h"
 
 namespace sharing {
 
@@ -603,10 +604,9 @@ void IpcPacketSocket::OnDataReceived(const net::IPEndPoint& address,
       return;
     }
   }
-
-  SignalReadPacket(this, reinterpret_cast<const char*>(data.data()),
-                   data.size(), address_lj,
-                   timestamp.since_origin().InMicroseconds());
+  NotifyPacketReceived(rtc::ReceivedPacket(
+      data, address_lj,
+      webrtc::Timestamp::Micros(timestamp.since_origin().InMicroseconds())));
 }
 
 AsyncDnsAddressResolverImpl::AsyncDnsAddressResolverImpl(
@@ -626,7 +626,7 @@ void AsyncDnsAddressResolverImpl::Start(const rtc::SocketAddress& addr,
   addr_ = addr;
   callback_ = std::move(callback);
   resolver_.Start(
-      addr, absl::nullopt,
+      addr, std::nullopt,
       base::BindOnce(&AsyncDnsAddressResolverImpl::OnAddressResolved,
                      base::Unretained(this)));
 }

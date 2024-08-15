@@ -33,6 +33,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.MathUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
@@ -40,6 +41,8 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -58,8 +61,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
@@ -72,9 +73,7 @@ import java.util.concurrent.TimeoutException;
 
 /** Integration tests of showing a NTP with Start surface UI at startup. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@Restriction({
-    Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE
-})
+@Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 @EnableFeatures({
     ChromeFeatureList.START_SURFACE_ON_TABLET,
     ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID,
@@ -104,7 +103,11 @@ public class ShowNtpAtStartupTest {
         StartSurfaceTestUtils.waitForTabModel(mActivityTestRule.getActivity());
 
         verifyTabCountAndActiveTabUrl(
-                mActivityTestRule.getActivity(), 1, TAB_URL, /* expectHomeSurfaceUiShown= */ null);
+                mActivityTestRule.getActivity(),
+                1,
+                TAB_URL,
+                /* expectHomeSurfaceUiShown= */ null,
+                /* magicStackEnabled= */ false);
     }
 
     @Test
@@ -119,7 +122,11 @@ public class ShowNtpAtStartupTest {
         StartSurfaceTestUtils.waitForTabModel(mActivityTestRule.getActivity());
 
         verifyTabCountAndActiveTabUrl(
-            mActivityTestRule.getActivity(), 1, TAB_URL, /* expectHomeSurfaceUiShown */null);
+                mActivityTestRule.getActivity(),
+                1,
+                TAB_URL,
+                /* expectHomeSurfaceUiShown= */ null,
+                /* magicStackEnabled= */ false);
     }
 
     @Test
@@ -141,7 +148,8 @@ public class ShowNtpAtStartupTest {
                 mActivityTestRule.getActivity(),
                 2,
                 UrlConstants.NTP_URL,
-                /* expectHomeSurfaceUiShown= */ true);
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ false);
         histogram.assertExpected();
     }
 
@@ -152,7 +160,7 @@ public class ShowNtpAtStartupTest {
     public void testShowNtpAtStartupWithNtpExist() throws IOException {
         // The existing NTP isn't the last active Tab.
         String modifiedNtpUrl = UrlConstants.NTP_URL + "/1";
-        Assert.assertTrue(UrlUtilities.isNTPUrl(modifiedNtpUrl));
+        Assert.assertTrue(UrlUtilities.isNtpUrl(modifiedNtpUrl));
 
         HistogramWatcher histogram =
                 HistogramWatcher.newBuilder()
@@ -169,7 +177,8 @@ public class ShowNtpAtStartupTest {
                 mActivityTestRule.getActivity(),
                 3,
                 UrlConstants.NTP_URL,
-                /* expectHomeSurfaceUiShown= */ true);
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ false);
         histogram.assertExpected();
     }
 
@@ -180,7 +189,7 @@ public class ShowNtpAtStartupTest {
     public void testShowNtpAtStartupWithActiveNtpExist() throws IOException {
         // The existing NTP is set as the last active Tab.
         String modifiedNtpUrl = UrlConstants.NTP_URL + "/1";
-        Assert.assertTrue(UrlUtilities.isNTPUrl(modifiedNtpUrl));
+        Assert.assertTrue(UrlUtilities.isNtpUrl(modifiedNtpUrl));
         HistogramWatcher histogram =
                 HistogramWatcher.newBuilder()
                         .expectBooleanRecord(HOME_SURFACE_SHOWN_AT_STARTUP_UMA, true)
@@ -198,7 +207,8 @@ public class ShowNtpAtStartupTest {
                 mActivityTestRule.getActivity(),
                 2,
                 modifiedNtpUrl,
-                /* expectHomeSurfaceUiShown= */ false);
+                /* expectHomeSurfaceUiShown= */ false,
+                /* magicStackEnabled= */ false);
         histogram.assertExpected();
     }
 
@@ -215,12 +225,15 @@ public class ShowNtpAtStartupTest {
         StartSurfaceTestUtils.waitForTabModel(cta);
         // Verifies that a NTP is created and set as the current Tab.
         verifyTabCountAndActiveTabUrl(
-                cta, 2, UrlConstants.NTP_URL, /* expectHomeSurfaceUiShown= */ true);
+                cta,
+                2,
+                UrlConstants.NTP_URL,
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ false);
 
         waitForNtpLoaded(cta.getActivityTab());
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
-        ViewGroup mvTilesLayout =
-                ntp.getView().findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        ViewGroup mvTilesLayout = ntp.getView().findViewById(R.id.mv_tiles_layout);
         // Verifies that 1 row MV tiles are shown when "Start surface on tablet" flag is enabled.
         Assert.assertTrue(mvTilesLayout instanceof MostVisitedTilesCarouselLayout);
     }
@@ -238,8 +251,7 @@ public class ShowNtpAtStartupTest {
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
-        ViewGroup mvTilesLayout =
-                ntp.getView().findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        ViewGroup mvTilesLayout = ntp.getView().findViewById(R.id.mv_tiles_layout);
         // Verifies that 2 row MV tiles are shown when "Start surface on tablet" flag is disabled.
         Assert.assertTrue(mvTilesLayout instanceof MostVisitedTilesGridLayout);
     }
@@ -258,7 +270,11 @@ public class ShowNtpAtStartupTest {
 
         // Verifies that a new NTP is created and set as the active Tab.
         verifyTabCountAndActiveTabUrl(
-                cta, 3, UrlConstants.NTP_URL, /* expectHomeSurfaceUiShown= */ true);
+                cta,
+                3,
+                UrlConstants.NTP_URL,
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ false);
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
@@ -306,12 +322,47 @@ public class ShowNtpAtStartupTest {
 
         // Verifies that a new NTP is created and set as the active Tab.
         verifyTabCountAndActiveTabUrl(
-                cta, 3, UrlConstants.NTP_URL, /* expectHomeSurfaceUiShown= */ true);
+                cta,
+                3,
+                UrlConstants.NTP_URL,
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ false);
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
         Assert.assertTrue(ntp.isSingleTabCardVisibleForTesting());
         onViewWaiting(allOf(withId(R.id.single_tab_view), isDisplayed()));
+        View singleTabModule = cta.findViewById(R.id.single_tab_view);
+        Assert.assertEquals(
+                View.VISIBLE, singleTabModule.findViewById(R.id.tab_thumbnail).getVisibility());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    @EnableFeatures({
+        ChromeFeatureList.SURFACE_POLISH,
+        ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID,
+        ChromeFeatureList.MAGIC_STACK_ANDROID + "<Study"
+    })
+    @CommandLineFlags.Add({START_SURFACE_ON_TABLET_TEST_PARAMS})
+    public void testSingleTabModule_MagicStack() throws IOException {
+        StartSurfaceTestUtils.prepareTabStateMetadataFile(
+                new int[] {0, 1}, new String[] {TAB_URL, TAB_URL_1}, 0);
+        StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        StartSurfaceTestUtils.waitForTabModel(cta);
+
+        // Verifies that a new NTP is created and set as the active Tab.
+        verifyTabCountAndActiveTabUrl(
+                cta,
+                3,
+                UrlConstants.NTP_URL,
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ true);
+        waitForNtpLoaded(cta.getActivityTab());
+
+        onViewWaiting(allOf(withId(R.id.home_modules_recycler_view), isDisplayed()));
         View singleTabModule = cta.findViewById(R.id.single_tab_view);
         Assert.assertEquals(
                 View.VISIBLE, singleTabModule.findViewById(R.id.tab_thumbnail).getVisibility());
@@ -333,17 +384,15 @@ public class ShowNtpAtStartupTest {
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
-        ViewGroup mvTilesLayout =
-                ntp.getView().findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        ViewGroup mvTilesLayout = ntp.getView().findViewById(R.id.mv_tiles_layout);
         // Verifies that 1 row MV tiles are shown when "Start surface on tablet" flag is enabled.
         Assert.assertTrue(mvTilesLayout instanceof MostVisitedTilesCarouselLayout);
 
         Resources res = cta.getResources();
         int expectedTwoSideMarginPortrait =
-                res.getDimensionPixelSize(org.chromium.chrome.R.dimen.tile_grid_layout_bleed);
+                res.getDimensionPixelSize(R.dimen.tile_grid_layout_bleed);
         int expectedTwoSideMarginLandscape =
-                res.getDimensionPixelSize(org.chromium.chrome.R.dimen.ntp_search_box_start_margin)
-                                * 2
+                res.getDimensionPixelSize(R.dimen.ntp_search_box_start_margin) * 2
                         + expectedTwoSideMarginPortrait;
 
         // Verifies there is additional margin added for the fake search box in landscape mode,
@@ -368,17 +417,14 @@ public class ShowNtpAtStartupTest {
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
-        ViewGroup mvTilesLayout =
-                ntp.getView().findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        ViewGroup mvTilesLayout = ntp.getView().findViewById(R.id.mv_tiles_layout);
         // Verifies that 2 row MV tiles are shown when "Start surface on tablet" flag is disabled.
         Assert.assertTrue(mvTilesLayout instanceof MostVisitedTilesGridLayout);
 
         Resources res = cta.getResources();
         int expectedTwoSideMargin =
-                res.getDimensionPixelSize(org.chromium.chrome.R.dimen.ntp_search_box_start_margin)
-                                * 2
-                        + res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.tile_grid_layout_bleed);
+                res.getDimensionPixelSize(R.dimen.ntp_search_box_start_margin) * 2
+                        + res.getDimensionPixelSize(R.dimen.tile_grid_layout_bleed);
 
         // Verifies there is additional margin added for the fake search box in both landscape
         // and portrait modes.
@@ -459,20 +505,13 @@ public class ShowNtpAtStartupTest {
         Resources res = cta.getResources();
 
         int expectedContainerTwoSideMarginLandscape =
-                res.getDimensionPixelSize(org.chromium.chrome.R.dimen.ntp_search_box_start_margin)
-                                * 2
-                        + res.getDimensionPixelSize(
-                                        org.chromium.chrome.R.dimen.tile_grid_layout_bleed)
-                                / 2
-                                * 2;
+                res.getDimensionPixelSize(R.dimen.ntp_search_box_start_margin) * 2
+                        + res.getDimensionPixelSize(R.dimen.tile_grid_layout_bleed) / 2 * 2;
         int expectedContainerTwoSideMarginPortrait =
-                res.getDimensionPixelSize(org.chromium.chrome.R.dimen.tile_grid_layout_bleed)
-                        / 2
-                        * 2;
+                res.getDimensionPixelSize(R.dimen.tile_grid_layout_bleed) / 2 * 2;
         int expectedContainerRightExtraMargin =
                 res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen
-                                .mvt_container_to_ntp_right_extra_margin_two_feed_tablet);
+                        R.dimen.mvt_container_to_ntp_right_extra_margin_two_feed_tablet);
         // Verifies the margins of the module most visited tiles and its inner view are correct.
         verifyMostVisitedTileMargin(
                 expectedContainerTwoSideMarginLandscape,
@@ -484,17 +523,13 @@ public class ShowNtpAtStartupTest {
                 ntp);
 
         int expectedMvtBottomMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.mvt_container_bottom_margin_tablet);
+                res.getDimensionPixelSize(R.dimen.mvt_container_bottom_margin_tablet);
         int expectedSingleTabCardTopMargin =
-                -res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.ntp_single_tab_card_top_margin);
+                -res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_top_margin);
         int expectedSingleTabCardBottomMargin =
-                res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.ntp_single_tab_card_bottom_margin)
+                res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_bottom_margin)
                         - res.getDimensionPixelOffset(
-                                org.chromium.chrome.R.dimen
-                                        .feed_header_tab_list_view_top_bottom_margin);
+                                R.dimen.feed_header_tab_list_view_top_bottom_margin);
         // Verifies the vertical margins of the module most visited tiles and single tab card are
         // correct.
         verifyMvtAndSingleTabCardVerticalMargins(
@@ -523,8 +558,7 @@ public class ShowNtpAtStartupTest {
         Resources res = cta.getResources();
 
         int expectedMvtBottomMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.mvt_container_bottom_margin_tablet);
+                res.getDimensionPixelSize(R.dimen.mvt_container_bottom_margin_tablet);
         // Verifies the vertical margins of the module most visited tiles is correct.
         verifyMvtAndSingleTabCardVerticalMargins(
                 expectedMvtBottomMargin, 0, 0, /* isNtpHomepage= */ false, ntp);
@@ -548,16 +582,12 @@ public class ShowNtpAtStartupTest {
         Resources res = cta.getResources();
 
         int expectedContainerTwoSideMargin =
-                res.getDimensionPixelSize(org.chromium.chrome.R.dimen.ntp_search_box_start_margin)
-                                * 2
-                        + res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.tile_grid_layout_bleed);
+                res.getDimensionPixelSize(R.dimen.ntp_search_box_start_margin) * 2
+                        + res.getDimensionPixelSize(R.dimen.tile_grid_layout_bleed);
         int expectedLandScapeEdgeMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.tile_grid_layout_landscape_edge_margin_tablet);
+                res.getDimensionPixelSize(R.dimen.tile_grid_layout_landscape_edge_margin_tablet);
         int expectedPortraitEdgeMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.tile_grid_layout_portrait_edge_margin_tablet);
+                res.getDimensionPixelSize(R.dimen.tile_grid_layout_portrait_edge_margin_tablet);
         // Verifies the margins of the module most visited tiles and its inner view are correct.
         verifyMostVisitedTileMargin(
                 expectedContainerTwoSideMargin,
@@ -569,17 +599,13 @@ public class ShowNtpAtStartupTest {
                 ntp);
 
         int expectedMvtBottomMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.mvt_container_bottom_margin_tablet);
+                res.getDimensionPixelSize(R.dimen.mvt_container_bottom_margin_tablet);
         int expectedSingleTabCardTopMargin =
-                -res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.ntp_single_tab_card_top_margin);
+                -res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_top_margin);
         int expectedSingleTabCardBottomMargin =
-                res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.ntp_single_tab_card_bottom_margin)
+                res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_bottom_margin)
                         - res.getDimensionPixelOffset(
-                                org.chromium.chrome.R.dimen
-                                        .feed_header_tab_list_view_top_bottom_margin);
+                                R.dimen.feed_header_tab_list_view_top_bottom_margin);
         // Verifies the vertical margins of the module most visited tiles and single tab card are
         // correct.
         verifyMvtAndSingleTabCardVerticalMargins(
@@ -611,14 +637,11 @@ public class ShowNtpAtStartupTest {
         Resources res = cta.getResources();
 
         int expectedSingleTabCardTopMargin =
-                -res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.ntp_single_tab_card_top_margin);
+                -res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_top_margin);
         int expectedSingleTabCardBottomMargin =
-                res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.ntp_single_tab_card_bottom_margin)
+                res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_bottom_margin)
                         - res.getDimensionPixelOffset(
-                                org.chromium.chrome.R.dimen
-                                        .feed_header_tab_list_view_top_bottom_margin);
+                                R.dimen.feed_header_tab_list_view_top_bottom_margin);
         // Verifies the vertical margins of the module most visited tiles and single tab card are
         // correct.
         verifySingleTabCardVerticalMargins(
@@ -649,14 +672,11 @@ public class ShowNtpAtStartupTest {
         Resources res = cta.getResources();
 
         int expectedSingleTabCardTopMargin =
-                -res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.ntp_single_tab_card_top_margin);
+                -res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_top_margin);
         int expectedSingleTabCardBottomMargin =
-                res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen.ntp_single_tab_card_bottom_margin)
+                res.getDimensionPixelSize(R.dimen.ntp_single_tab_card_bottom_margin)
                         - res.getDimensionPixelOffset(
-                                org.chromium.chrome.R.dimen
-                                        .feed_header_tab_list_view_top_bottom_margin);
+                                R.dimen.feed_header_tab_list_view_top_bottom_margin);
         // Verifies the vertical margins of the module most visited tiles and single tab card are
         // correct.
         verifySingleTabCardVerticalMargins(
@@ -671,6 +691,24 @@ public class ShowNtpAtStartupTest {
     @Feature({"StartSurface"})
     @CommandLineFlags.Add({START_SURFACE_ON_TABLET_TEST_PARAMS})
     public void testClickSingleTabCardCloseNtpHomeSurface() throws IOException {
+        testClickSingleTabCardCloseNtpHomeSurfaceImpl(/* magicStackEnabled= */ false);
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"StartSurface"})
+    @EnableFeatures({
+        ChromeFeatureList.SURFACE_POLISH,
+        ChromeFeatureList.MAGIC_STACK_ANDROID,
+        ChromeFeatureList.SHOW_NTP_AT_STARTUP_ANDROID
+    })
+    @CommandLineFlags.Add({START_SURFACE_ON_TABLET_TEST_PARAMS})
+    public void testClickSingleTabCardCloseNtpHomeSurface_MagicStack() throws IOException {
+        testClickSingleTabCardCloseNtpHomeSurfaceImpl(/* magicStackEnabled= */ true);
+    }
+
+    private void testClickSingleTabCardCloseNtpHomeSurfaceImpl(boolean magicStackEnabled)
+            throws IOException {
         StartSurfaceTestUtils.prepareTabStateMetadataFile(new int[] {0}, new String[] {TAB_URL}, 0);
         StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -678,7 +716,11 @@ public class ShowNtpAtStartupTest {
 
         // Verifies that a new NTP is created and set as the active Tab.
         verifyTabCountAndActiveTabUrl(
-                cta, 2, UrlConstants.NTP_URL, /* expectHomeSurfaceUiShown= */ true);
+                cta,
+                2,
+                UrlConstants.NTP_URL,
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ magicStackEnabled);
         waitForNtpLoaded(cta.getActivityTab());
 
         try {
@@ -689,7 +731,12 @@ public class ShowNtpAtStartupTest {
         }
 
         // Verifies that the last active Tab is showing, and NTP home surface is closed.
-        verifyTabCountAndActiveTabUrl(cta, 1, TAB_URL, /* expectHomeSurfaceUiShown= */ null);
+        verifyTabCountAndActiveTabUrl(
+                cta,
+                1,
+                TAB_URL,
+                /* expectHomeSurfaceUiShown= */ null,
+                /* magicStackEnabled= */ false);
     }
 
     /**
@@ -699,7 +746,8 @@ public class ShowNtpAtStartupTest {
     @Test
     @LargeTest
     @Feature({"StartSurface"})
-    @CommandLineFlags.Add({START_SURFACE_ON_TABLET_TEST_PARAMS})
+    @CommandLineFlags.Add({START_SURFACE_ON_TABLET_TEST_PARAMS + "/scrollable_mvt/true"})
+    @EnableFeatures({ChromeFeatureList.SURFACE_POLISH})
     public void testThumbnailRecaptureForSingleTabCardAfterMostRecentTabClosed()
             throws IOException {
         StartSurfaceTestUtils.prepareTabStateMetadataFile(new int[] {0}, new String[] {TAB_URL}, 0);
@@ -708,7 +756,11 @@ public class ShowNtpAtStartupTest {
         StartSurfaceTestUtils.waitForTabModel(cta);
         // Verifies that a new NTP is created and set as the active Tab.
         verifyTabCountAndActiveTabUrl(
-                cta, 2, UrlConstants.NTP_URL, /* expectHomeSurfaceUiShown= */ true);
+                cta,
+                2,
+                UrlConstants.NTP_URL,
+                /* expectHomeSurfaceUiShown= */ true,
+                /* magicStackEnabled= */ false);
         waitForNtpLoaded(cta.getActivityTab());
 
         Tab lastActiveTab = cta.getCurrentTabModel().getTabAt(0);
@@ -767,17 +819,13 @@ public class ShowNtpAtStartupTest {
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
-        ViewGroup mvTilesLayout =
-                ntp.getView().findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        ViewGroup mvTilesLayout = ntp.getView().findViewById(R.id.mv_tiles_layout);
         // Verifies that 1 row MV tiles are shown when "Start surface on tablet" flag is enabled.
         Assert.assertTrue(mvTilesLayout instanceof MostVisitedTilesCarouselLayout);
 
         Resources res = cta.getResources();
         int expectedTwoSideMargin =
-                2
-                        * res.getDimensionPixelSize(
-                                org.chromium.chrome.R.dimen
-                                        .ntp_search_box_lateral_margin_tablet_polish);
+                2 * res.getDimensionPixelSize(R.dimen.ntp_search_box_lateral_margin_tablet_polish);
 
         // Verifies there is additional margin added for the fake search box.
         verifyFakeSearchBoxWidth(expectedTwoSideMargin, expectedTwoSideMargin, ntp);
@@ -800,19 +848,16 @@ public class ShowNtpAtStartupTest {
         waitForNtpLoaded(cta.getActivityTab());
 
         NewTabPage ntp = (NewTabPage) cta.getActivityTab().getNativePage();
-        ViewGroup mvTilesLayout =
-                ntp.getView().findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        ViewGroup mvTilesLayout = ntp.getView().findViewById(R.id.mv_tiles_layout);
         // Verifies that 1 row MV tiles are shown when "Start surface on tablet" flag is enabled.
         Assert.assertTrue(mvTilesLayout instanceof MostVisitedTilesCarouselLayout);
 
         Resources res = cta.getResources();
         int expectedContainerTwoSideMargin = 0;
         int expectedMvtLayoutEdgeMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.tile_view_padding_edge_tablet_polish);
+                res.getDimensionPixelSize(R.dimen.tile_view_padding_edge_tablet_polish);
         int expectedMvtLayoutIntervalMargin =
-                res.getDimensionPixelSize(
-                        org.chromium.chrome.R.dimen.tile_view_padding_interval_tablet_polish);
+                res.getDimensionPixelSize(R.dimen.tile_view_padding_interval_tablet_polish);
 
         verifyMostVisitedTileMarginForSurfacePolish(
                 expectedContainerTwoSideMargin,
@@ -848,12 +893,28 @@ public class ShowNtpAtStartupTest {
             boolean isScrollable,
             NewTabPage ntp) {
         NewTabPageLayout ntpLayout = ntp.getNewTabPageLayout();
-        View mvTilesContainer =
-                ntpLayout.findViewById(org.chromium.chrome.test.R.id.mv_tiles_container);
-        View mvTilesLayout = ntpLayout.findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        View mvTilesContainer = ntpLayout.findViewById(R.id.mv_tiles_container);
+        View mvTilesLayout = ntpLayout.findViewById(R.id.mv_tiles_layout);
         View mvTileItem1 = ((ViewGroup) mvTilesLayout).getChildAt(0);
         View mvTileItem2 = ((ViewGroup) mvTilesLayout).getChildAt(1);
         int mvTilesItemWidth = mvTileItem1.getWidth();
+
+        // Orientation changes are not supported on automotive.
+        if (BuildInfo.getInstance().isAutomotive) {
+            // Verifies the margins added for the most visited tiles are correct.
+            verifyMostVisitedTileMarginImpl(
+                    ntpLayout,
+                    mvTilesContainer,
+                    mvTilesLayout,
+                    mvTileItem1,
+                    mvTileItem2,
+                    expectedContainerTwoSideMarginLandScape,
+                    expectedContainerRightExtraMargin,
+                    expectedEdgeMarginLandScape,
+                    mvTilesItemWidth,
+                    isScrollable);
+            return;
+        }
 
         // Start off in landscape screen orientation.
         mActivityTestRule
@@ -932,14 +993,12 @@ public class ShowNtpAtStartupTest {
                     "The width of the most visited tiles layout is wrong.",
                     mvtContainerWidth <= mvTilesLayoutWidth);
             int tileNum =
-                    ((ViewGroup) ntpLayout.findViewById(org.chromium.chrome.R.id.mv_tiles_layout))
-                            .getChildCount();
+                    ((ViewGroup) ntpLayout.findViewById(R.id.mv_tiles_layout)).getChildCount();
             int minIntervalMargin =
                     ntpLayout
                             .getResources()
                             .getDimensionPixelOffset(
-                                    org.chromium.chrome.R.dimen
-                                            .tile_carousel_layout_min_interval_margin_tablet);
+                                    R.dimen.tile_carousel_layout_min_interval_margin_tablet);
             boolean isHalfMvt =
                     tileNum * mvTilesItemWidth + (tileNum - 1) * minIntervalMargin
                             > mvtContainerWidth;
@@ -1037,8 +1096,7 @@ public class ShowNtpAtStartupTest {
             boolean isNtpHomepage,
             NewTabPage ntp) {
         NewTabPageLayout ntpLayout = ntp.getNewTabPageLayout();
-        View mvTilesContainer =
-                ntpLayout.findViewById(org.chromium.chrome.test.R.id.mv_tiles_container);
+        View mvTilesContainer = ntpLayout.findViewById(R.id.mv_tiles_container);
         Assert.assertEquals(
                 "The bottom margin of the most visited tiles container is wrong.",
                 expectedMvtBottomMargin,
@@ -1057,8 +1115,7 @@ public class ShowNtpAtStartupTest {
             NewTabPage ntp) {
         if (!isNtpHomepage) return;
         View singleTabCardContainer =
-                ntp.getNewTabPageLayout()
-                        .findViewById(org.chromium.chrome.test.R.id.tab_switcher_module_container);
+                ntp.getNewTabPageLayout().findViewById(R.id.tab_switcher_module_container);
         MarginLayoutParams singleTabCardContainerMarginParams =
                 (MarginLayoutParams) singleTabCardContainer.getLayoutParams();
         Assert.assertEquals(
@@ -1072,7 +1129,11 @@ public class ShowNtpAtStartupTest {
     }
 
     private void verifyTabCountAndActiveTabUrl(
-            ChromeTabbedActivity cta, int tabCount, String url, Boolean expectHomeSurfaceUiShown) {
+            ChromeTabbedActivity cta,
+            int tabCount,
+            String url,
+            Boolean expectHomeSurfaceUiShown,
+            boolean magicStackEnabled) {
         Assert.assertEquals(tabCount, cta.getCurrentTabModel().getCount());
         Tab tab = StartSurfaceTestUtils.getCurrentTabFromUIThread(cta);
         TestThreadUtils.runOnUiThreadBlocking(
@@ -1080,9 +1141,15 @@ public class ShowNtpAtStartupTest {
                     Assert.assertTrue(TextUtils.equals(url, tab.getUrl().getSpec()));
                 });
         if (expectHomeSurfaceUiShown != null) {
-            Assert.assertEquals(
-                    expectHomeSurfaceUiShown,
-                    ((NewTabPage) tab.getNativePage()).isSingleTabCardVisibleForTesting());
+            if (magicStackEnabled) {
+                Assert.assertEquals(
+                        expectHomeSurfaceUiShown,
+                        ((NewTabPage) tab.getNativePage()).isMagicStackVisibleForTesting());
+            } else {
+                Assert.assertEquals(
+                        expectHomeSurfaceUiShown,
+                        ((NewTabPage) tab.getNativePage()).isSingleTabCardVisibleForTesting());
+            }
         }
     }
 
@@ -1100,7 +1167,14 @@ public class ShowNtpAtStartupTest {
     private void verifyFakeSearchBoxWidth(
             int expectedLandScapeWidth, int expectedPortraitWidth, NewTabPage ntp) {
         NewTabPageLayout ntpLayout = ntp.getNewTabPageLayout();
-        View searchBoxLayout = ntpLayout.findViewById(org.chromium.chrome.test.R.id.search_box);
+        View searchBoxLayout = ntpLayout.findViewById(R.id.search_box);
+
+        // Orientation changes are not supported on automotive.
+        if (BuildInfo.getInstance().isAutomotive) {
+            verifyFakeSearchBoxWidthForCurrentOrientation(
+                    expectedLandScapeWidth, expectedPortraitWidth, ntpLayout, searchBoxLayout);
+            return;
+        }
 
         // Start off in landscape screen orientation.
         mActivityTestRule
@@ -1121,15 +1195,37 @@ public class ShowNtpAtStartupTest {
                 expectedPortraitWidth, ntpLayout.getWidth() - searchBoxLayout.getWidth());
     }
 
+    private void verifyFakeSearchBoxWidthForCurrentOrientation(
+            int expectedLandScapeWidth,
+            int expectedPortraitWidth,
+            NewTabPageLayout ntpLayout,
+            View searchBoxLayout) {
+        int expectedWidth;
+        try {
+            String orientation = screenOrientation();
+            if ("\"landscape\"".equals(orientation)) {
+                expectedWidth = expectedLandScapeWidth;
+            } else if ("\"portrait\"".equals(orientation)) {
+                expectedWidth = expectedPortraitWidth;
+            } else {
+                throw new IllegalStateException(
+                        "The device should either be in portrait or landscape mode.");
+            }
+        } catch (TimeoutException ex) {
+            throw new CriteriaNotSatisfiedException(ex);
+        }
+
+        Assert.assertEquals(expectedWidth, ntpLayout.getWidth() - searchBoxLayout.getWidth());
+    }
+
     private void verifyMostVisitedTileMarginForSurfacePolish(
             int expectedContainerWidth,
             int expectedEdgeMargin,
             int expectedIntervalMargin,
             NewTabPage ntp) {
         NewTabPageLayout ntpLayout = ntp.getNewTabPageLayout();
-        View mvtContainer =
-                ntpLayout.findViewById(org.chromium.chrome.test.R.id.mv_tiles_container);
-        View mvTilesLayout = ntpLayout.findViewById(org.chromium.chrome.test.R.id.mv_tiles_layout);
+        View mvtContainer = ntpLayout.findViewById(R.id.mv_tiles_container);
+        View mvTilesLayout = ntpLayout.findViewById(R.id.mv_tiles_layout);
         int mvt1LeftMargin =
                 ((MarginLayoutParams) ((ViewGroup) mvTilesLayout).getChildAt(0).getLayoutParams())
                         .leftMargin;
@@ -1137,22 +1233,56 @@ public class ShowNtpAtStartupTest {
                 ((MarginLayoutParams) ((ViewGroup) mvTilesLayout).getChildAt(1).getLayoutParams())
                         .leftMargin;
 
+        // Orientation changes are not supported on automotive.
+        if (BuildInfo.getInstance().isAutomotive) {
+            verifyTileMargin(
+                    expectedContainerWidth,
+                    expectedEdgeMargin,
+                    expectedIntervalMargin,
+                    ntpLayout,
+                    mvtContainer,
+                    mvt1LeftMargin,
+                    mvt2LeftMargin);
+            return;
+        }
+
         // Start off in landscape screen orientation.
         mActivityTestRule
                 .getActivity()
                 .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         waitForScreenOrientation("\"landscape\"");
-        // Verifies there is no additional margins added for the mv tiles container.
-        Assert.assertEquals(expectedContainerWidth, ntpLayout.getWidth() - mvtContainer.getWidth());
-        // Verifies the inner margins of the mv tiles module.
-        assertTrue(mvt1LeftMargin >= expectedEdgeMargin);
-        Assert.assertEquals(expectedIntervalMargin, mvt2LeftMargin);
+        verifyTileMargin(
+                expectedContainerWidth,
+                expectedEdgeMargin,
+                expectedIntervalMargin,
+                ntpLayout,
+                mvtContainer,
+                mvt1LeftMargin,
+                mvt2LeftMargin);
 
         // Start off in portrait screen orientation.
         mActivityTestRule
                 .getActivity()
                 .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         waitForScreenOrientation("\"portrait\"");
+        verifyTileMargin(
+                expectedContainerWidth,
+                expectedEdgeMargin,
+                expectedIntervalMargin,
+                ntpLayout,
+                mvtContainer,
+                mvt1LeftMargin,
+                mvt2LeftMargin);
+    }
+
+    private void verifyTileMargin(
+            int expectedContainerWidth,
+            int expectedEdgeMargin,
+            int expectedIntervalMargin,
+            NewTabPageLayout ntpLayout,
+            View mvtContainer,
+            int mvt1LeftMargin,
+            int mvt2LeftMargin) {
         // Verifies there is no additional margins added for the mv tiles container.
         Assert.assertEquals(expectedContainerWidth, ntpLayout.getWidth() - mvtContainer.getWidth());
         // Verifies the inner margins of the mv tiles module.

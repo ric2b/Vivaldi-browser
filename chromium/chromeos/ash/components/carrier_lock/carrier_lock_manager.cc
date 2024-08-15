@@ -14,10 +14,12 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/network_3gpp_handler.h"
+#include "chromeos/ash/components/network/network_connect.h"
 #include "chromeos/ash/components/network/network_device_handler.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
@@ -31,18 +33,20 @@ namespace ash::carrier_lock {
 
 namespace {
 
+CarrierLockManager* g_instance = nullptr;
+
 // test configuration
 const char kFcmAppId[] = "com.google.chromeos.carrier_lock";
 const char kFcmSenderId[] = "727210445342";
-const char kManufacturer[] = "Google";
-const char kModel[] = "Pixel 20";
-const char kAndroidId[] = "123";
 
 // const values
 constexpr base::TimeDelta kFcmTimeout = base::Days(30);
 const char kCarrierLockType[] = "network-pin";
 const char kFirmwareVariantPath[] =
     "/run/chromeos-config/v1/modem/firmware-variant";
+const char kManufacturerNamePath[] =
+    "/run/chromeos-config/v1/branding/oem-name";
+const char kModelNamePath[] = "/run/chromeos-config/v1/name";
 
 // values of feature parameter LastConfigDateDelta
 const int kLastConfigDefault = -2;
@@ -207,6 +211,7 @@ std::unique_ptr<CarrierLockManager> CarrierLockManager::Create(
 
   manager->Initialize();
 
+  g_instance = manager.get();
   return manager;
 }
 
@@ -226,10 +231,13 @@ std::unique_ptr<CarrierLockManager> CarrierLockManager::CreateForTesting(
   manager->config_ = std::move(provisioning_config_fetcher);
   manager->psm_ = std::move(psm_claim_verifier);
   manager->fcm_ = std::move(fcm_topic_subscriber);
+  manager->manufacturer_ = "Google";
+  manager->model_ = "Pixel 20";
 
   // Start with PSM check.
   manager->RunStep(ConfigurationState::kPsmCheckClaim);
 
+  g_instance = manager.get();
   return manager;
 }
 
@@ -243,17 +251,18 @@ void CarrierLockManager::RegisterLocalPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kSignedConfigPref, std::string());
 }
 
+// static
 ModemLockStatus CarrierLockManager::GetModemLockStatus() {
   if (!ash::features::IsCellularCarrierLockEnabled()) {
     return ModemLockStatus::kNotLocked;
   }
-  if (!local_state_) {
+  if (!g_instance || !g_instance->local_state_) {
     return ModemLockStatus::kUnknown;
   }
-  if (local_state_->GetBoolean(kDisableManagerPref)) {
+  if (g_instance->local_state_->GetBoolean(kDisableManagerPref)) {
     return ModemLockStatus::kNotLocked;
   }
-  if (!local_state_->GetString(kFcmTopicPref).empty()) {
+  if (!g_instance->local_state_->GetString(kFcmTopicPref).empty()) {
     return ModemLockStatus::kCarrierLocked;
   }
   return ModemLockStatus::kUnknown;
@@ -263,6 +272,7 @@ CarrierLockManager::CarrierLockManager(PrefService* local_state)
     : local_state_(local_state), retry_backoff_(&kRetryBackoffPolicy) {}
 
 CarrierLockManager::~CarrierLockManager() {
+  g_instance = nullptr;
   if (session_manager_) {
     session_manager_->RemoveObserver(this);
   }
@@ -346,6 +356,31 @@ void CarrierLockManager::Initialize() {
     LogError(Result::kInvalidAuxHandlers);
     RunStep(ConfigurationState::kFatalError);
     return;
+  }
+
+  // Load manufacturer and model.
+  const base::FilePath oem_path(kManufacturerNamePath);
+  if (base::PathExists(oem_path)) {
+    base::File file(oem_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+    int64_t length = file.GetLength();
+    std::unique_ptr<char[]> buffer(new char[length + 1]);
+    file.Read(0, buffer.get(), length);
+    buffer[length] = '\0';
+    manufacturer_ = buffer.get();
+  } else {
+    LOG(ERROR) << "Manufacturer name file doesn't exist!";
+  }
+
+  const base::FilePath model_path(kModelNamePath);
+  if (base::PathExists(model_path)) {
+    base::File file(model_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+    int64_t length = file.GetLength();
+    std::unique_ptr<char[]> buffer(new char[length + 1]);
+    file.Read(0, buffer.get(), length);
+    buffer[length] = '\0';
+    model_ = buffer.get();
+  } else {
+    LOG(ERROR) << "Model name file doesn't exist!";
   }
 
   DCHECK(base::SingleThreadTaskRunner::HasCurrentDefault());
@@ -615,7 +650,8 @@ void CarrierLockManager::CheckState() {
 }
 
 void CarrierLockManager::CheckPsmClaim() {
-  psm_->CheckPsmClaim(serial_, kManufacturer, kModel,
+  psm_->CheckPsmClaim(serial_, base::ToLowerASCII(manufacturer_),
+                      base::ToLowerASCII(model_),
                       base::BindOnce(&CarrierLockManager::PsmCallback,
                                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -623,22 +659,17 @@ void CarrierLockManager::CheckPsmClaim() {
 void CarrierLockManager::PsmCallback(Result result) {
   if (result != Result::kSuccess) {
     LogError(result);
-    if (result == Result::kHandlerBusy) {
-      return;
-    }
-    if (remaining_retries_ > 0) {
+    if (result != Result::kHandlerBusy) {
       RetryStep();
-      return;
     }
+    return;
   }
 
-  if (result != Result::kSuccess) {
-    RunStep(ConfigurationState::kFcmGetToken);
-  } else if (psm_->GetMembership()) {
+  if (psm_->GetMembership()) {
     base::UmaHistogramEnumeration(kPsmClaimResponse, PsmResult::kDeviceLocked);
     RunStep(ConfigurationState::kFcmGetToken);
   } else {
-    VLOG(2) << "Not a memeber in PSM group, manager will be disabled.";
+    VLOG(2) << "Not a member in PSM group, manager will be disabled.";
     base::UmaHistogramEnumeration(kPsmClaimResponse,
                                   PsmResult::kDeviceUnlocked);
     RunStep(ConfigurationState::kDeviceUnlocked);
@@ -646,8 +677,7 @@ void CarrierLockManager::PsmCallback(Result result) {
 }
 
 void CarrierLockManager::RequestConfig() {
-  config_->RequestConfig(serial_, imei_, kAndroidId, kManufacturer, kModel,
-                         fcm_token_,
+  config_->RequestConfig(serial_, imei_, manufacturer_, model_, fcm_token_,
                          base::BindOnce(&CarrierLockManager::ConfigCallback,
                                         weak_ptr_factory_.GetWeakPtr()));
 }
@@ -662,9 +692,7 @@ void CarrierLockManager::ConfigCallback(Result result) {
   }
 
   RestrictedNetworks networks = config_->GetNumberOfNetworks();
-  bool is_config_unlocked =
-      !networks.allowed && !networks.disallowed &&
-      (config_->GetRestrictionMode() == ::carrier_lock::DEFAULT_ALLOW);
+  bool is_config_unlocked = !networks.allowed && !networks.disallowed;
   if (config_->GetFcmTopic().empty()) {
     // Unlocked or Invalid configuration.
     base::UmaHistogramEnumeration(kProvisioningServerResponse,
@@ -767,6 +795,7 @@ void CarrierLockManager::CheckFcmTopic() {
     VLOG(2) << "FCM topic not provided with config, modem was unlocked.";
     base::UmaHistogramCounts100(kNumConsecutiveFailuresBeforeUnlock,
                                 error_counter_);
+    NetworkConnect::Get()->ShowCarrierUnlockNotification();
     RunStep(ConfigurationState::kDeviceUnlocked);
     return;
   }

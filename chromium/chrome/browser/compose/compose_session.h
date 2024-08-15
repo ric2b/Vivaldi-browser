@@ -10,17 +10,45 @@
 #include <string>
 
 #include "base/check_op.h"
+#include "base/timer/elapsed_timer.h"
+#include "chrome/browser/content_extraction/inner_text.h"
 #include "chrome/common/compose/compose.mojom.h"
 #include "components/autofill/core/common/unique_ids.h"
+#include "components/compose/core/browser/compose_metrics.h"
+#include "components/optimization_guide/core/model_quality/model_quality_logs_uploader.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+
+namespace base {
+class ElapsedTimer;
+}  // namespace base
 
 namespace content {
 class WebContents;
 }  // namespace content
+
+namespace content_extraction {
+struct InnerTextResult;
+}  // namespace content_extraction
+
+// A simple interface to reroute inner text calls to allow for test mocks.
+class InnerTextProvider {
+ public:
+  virtual void GetInnerText(content::RenderFrameHost& host,
+                            absl::optional<int> node_id,
+                            content_extraction::InnerTextCallback callback) = 0;
+
+ protected:
+  virtual ~InnerTextProvider() = default;
+};
+
+// The state of a compose session. This currently includes the model quality log
+// entry, and the mojo based compose state.
+class ComposeState;
 
 // A class for managing a Compose Session. This session begins when a Compose
 // Dialog is opened for a given field in a WebContents, and ends when one of the
@@ -36,29 +64,38 @@ class WebContents;
 //
 //  This should be owned (indirectly) by the WebContents passed into its
 //  constructor, and the `executor` MUST outlive that WebContents.
-class ComposeSession : public compose::mojom::ComposeDialogPageHandler {
+class ComposeSession : public compose::mojom::ComposeSessionPageHandler {
  public:
   // The callback to Autofill. When run, it fills the passed string into the
   // form field on which it was triggered.
   using ComposeCallback = base::OnceCallback<void(const std::u16string&)>;
 
-  ComposeSession(content::WebContents* web_contents,
-                 optimization_guide::OptimizationGuideModelExecutor* executor,
-                 ComposeCallback callback = base::NullCallback());
+  ComposeSession(
+      content::WebContents* web_contents,
+      optimization_guide::OptimizationGuideModelExecutor* executor,
+      optimization_guide::ModelQualityLogsUploader* model_quality_logs_uploader,
+      base::Token session_id,
+      InnerTextProvider* inner_text,
+      autofill::FieldRendererId node_id,
+      ComposeCallback callback = base::NullCallback());
   ~ComposeSession() override;
 
   // Binds this to a Compose webui.
   void Bind(
-      mojo::PendingReceiver<compose::mojom::ComposeDialogPageHandler> handler,
+      mojo::PendingReceiver<compose::mojom::ComposeSessionPageHandler> handler,
       mojo::PendingRemote<compose::mojom::ComposeDialog> dialog);
 
-  // ComposeDialogPageHandler
+  // ComposeSessionPageHandler
 
   // Requests a compose response for `input`. The result will be sent through
   // the ComposeDialog interface rather than through a callback, as it might
   // complete after the originating WebUI has been destroyed.
-  void Compose(compose::mojom::StyleModifiersPtr style,
-               const std::string& input) override;
+  void Compose(const std::string& input, bool is_input_edited) override;
+
+  // Requests a rewrite the last response. `style` specifies how the response
+  // should be changed. An empty `style` without a tone or length requests a
+  // rewrite without changes to the tone or length.
+  void Rewrite(compose::mojom::StyleModifiersPtr style) override;
 
   // Retrieves and returns (through `callback`) state information for the last
   // field the user selected compose on.
@@ -80,10 +117,33 @@ class ComposeSession : public compose::mojom::ComposeDialogPageHandler {
   // Down button is clicked. This implementation is designed for Fishfood only.
   void OpenBugReportingLink() override;
 
-  // Non-ComposeDialogPageHandler Methods
+  // Opens the Compose Learn More page in a new tab when the "Learn more" link
+  // is clicked in the FRE or Compose dialog.
+  void OpenComposeLearnMorePage() override;
+
+  // Opens the Compose feedback survey page in a new tab. This implementation is
+  // designed for Dogfood only.
+  void OpenFeedbackSurveyLink() override;
+
+  // Opens the sign in page in a new tab when the "Sign in" link is clicked.
+  void OpenSignInPage() override;
+
+  // Saves the user feedback supplied form the UI to include in quality logs.
+  void SetUserFeedback(compose::mojom::UserFeedback feedback) override;
+
+  // Non-ComposeSessionPageHandler Methods
+
+  // Notifies the session that a new dialog is opening and starts refreshing
+  // inner text. Calls Compose immediately if the initial input is valid.
+  void InitializeWithText(const std::optional<std::string>& text,
+                          const bool text_selected);
+
+  // Opens the Chrome Feedback UI for Compose. |feedback_id| is returned from
+  // OptimizationGuideModel result.
+  void OpenFeedbackPage(std::string feedback_id);
 
   // Saves the last OK response state to the undo stack.
-  void SaveLastOKStateToUndoStack();
+  void SaveMostRecentOkStateToUndoStack();
 
   void set_compose_callback(ComposeCallback callback) {
     callback_ = std::move(callback);
@@ -92,29 +152,120 @@ class ComposeSession : public compose::mojom::ComposeDialogPageHandler {
   // Sets an initial input value for the session given by the renderer.
   void set_initial_input(const std::string input) { initial_input_ = input; }
 
+  void set_collect_inner_text(bool collect_inner_text) {
+    collect_inner_text_ = collect_inner_text;
+  }
+
+  bool get_current_msbb_state() { return current_msbb_state_; }
+
+  void set_current_msbb_state(bool current_msbb_state);
+
+  void set_fre_complete(bool fre_complete) { fre_complete_ = fre_complete; }
+
+  void set_msbb_settings_opened() {
+    session_events_.msbb_settings_opened = true;
+  }
+
+  bool get_fre_complete() { return fre_complete_; }
+
+  void SetFirstRunCompleted();
+
+  // Refresh the inner text on session resumption.
+  void RefreshInnerText();
+
+  void SetFirstRunCloseReason(
+      compose::ComposeFirstRunSessionCloseReason close_reason);
+
+  void SetMSBBCloseReason(compose::ComposeMSBBSessionCloseReason close_reason);
+
+  void SetCloseReason(compose::ComposeSessionCloseReason close_reason);
+
  private:
   void ProcessError(compose::mojom::ComposeStatus status);
   void ModelExecutionCallback(
-      optimization_guide::OptimizationGuideModelExecutionResult result);
+      const base::ElapsedTimer& request_start,
+      int request_id,
+      bool was_input_edited,
+      optimization_guide::OptimizationGuideModelStreamingExecutionResult result,
+      std::unique_ptr<optimization_guide::ModelQualityLogEntry> log_entry);
+  void ModelExecutionProgress(
+      optimization_guide::OptimizationGuideModelStreamingExecutionResult
+          result);
+  void ModelExecutionComplete(
+      base::TimeDelta request_delta,
+      bool was_input_edited,
+      optimization_guide::OptimizationGuideModelStreamingExecutionResult result,
+      std::unique_ptr<optimization_guide::ModelQualityLogEntry> log_entry);
+
+  // Adds page content to the session context.
+  void AddPageContentToSession(std::string inner_text,
+                               std::optional<uint64_t> node_offset);
+
+  // Makes compose or rewrite request.
+  void MakeRequest(optimization_guide::proto::ComposeRequest request,
+                   bool is_input_edited);
+
+  // RequestWithSession can either be called synchronously or on a later event
+  // loop
+  void RequestWithSession(
+      const optimization_guide::proto::ComposeRequest& request,
+      bool is_input_edited);
+
+  // This function is bound to the callback for requesting inner-text.
+  // `request_id` is used to identify the request.
+  void UpdateInnerTextAndContinueComposeIfNecessary(
+      int request_id,
+      std::unique_ptr<content_extraction::InnerTextResult> result);
+
+  void SetQualityLogEntryUponError(
+      std::unique_ptr<optimization_guide::ModelQualityLogEntry>,
+      base::TimeDelta request_time,
+      bool was_input_edited);
 
   // Outlives `this`.
   raw_ptr<optimization_guide::OptimizationGuideModelExecutor> executor_;
 
-  mojo::Receiver<compose::mojom::ComposeDialogPageHandler> handler_receiver_;
+  mojo::Receiver<compose::mojom::ComposeSessionPageHandler> handler_receiver_;
   mojo::Remote<compose::mojom::ComposeDialog> dialog_remote_;
 
   // Initialized during construction, and always remains valid during the
   // lifetime of ComposeSession.
   compose::mojom::ComposeStatePtr current_state_;
 
-  // The last state that received a kOk status and valid response text.
-  compose::mojom::ComposeStatePtr last_ok_state_;
+  // The most recent state that was received via a request/response pair.
+  std::unique_ptr<ComposeState> most_recent_ok_state_;
+
+  // the most recent log that wont be stored in the undo stack.
+  std::unique_ptr<optimization_guide::ModelQualityLogEntry>
+      most_recent_error_log_;
 
   // The state returned when user clicks undo.
-  std::stack<compose::mojom::ComposeStatePtr> undo_states_;
+  std::stack<std::unique_ptr<ComposeState>> undo_states_;
 
   // Renderer provided text selection.
   std::string initial_input_;
+  // True if the user selected text when the dialog is opened.
+  bool text_selected_;
+
+  // The state of the MSBB preference
+  bool current_msbb_state_;
+  bool msbb_initially_off_;
+
+  // Reason that a compose msbb session was exited, used for metrics.
+  compose::ComposeMSBBSessionCloseReason msbb_close_reason_;
+  // State tracking whether the FRE has been completed
+  bool fre_complete_ = false;
+
+  // Reason that a FRE session was exited, used for metrics.
+  compose::ComposeFirstRunSessionCloseReason fre_close_reason_;
+
+  // Reason that a compose session was exited, used for metrics.
+  compose::ComposeSessionCloseReason close_reason_;
+  // Reason that a compose session was exited, used for quality logging.
+  optimization_guide::proto::FinalStatus final_status_;
+
+  // Tracks how long a session has been open.
+  std::unique_ptr<base::ElapsedTimer> session_duration_;
 
   // ComposeSession is owned by WebContentsUserData, so `web_contents_` outlives
   // `this`.
@@ -122,6 +273,43 @@ class ComposeSession : public compose::mojom::ComposeDialogPageHandler {
 
   // A callback to Autofill that triggers filling the field.
   ComposeCallback callback_;
+
+  // A session which allows for building context and streaming output.
+  std::unique_ptr<optimization_guide::OptimizationGuideModelExecutor::Session>
+      session_;
+  // This is incremented every request to avoid handling responses from previous
+  // requests.
+  int request_id_ = 0;
+
+  // Increasing counter used to identify most recent request for inner-text.
+  int current_inner_text_request_id_ = 0;
+
+  bool collect_inner_text_;
+
+  // This pointer is to a class that owns and creates this class, so will
+  // outlive the session.
+  raw_ptr<InnerTextProvider> inner_text_caller_;
+
+  // Logging counters.
+  compose::ComposeSessionEvents session_events_;
+
+  // UKM source ID.
+  ukm::SourceId ukm_source_id_;
+
+  // If true, the inner-text was received.
+  bool got_inner_text_ = false;
+
+  autofill::FieldRendererId node_id_;
+
+  base::OnceClosure continue_compose_;
+
+  // This pointer is obtained form a BrowserContextKeyedService.
+  // TODO(b/314328835) Add a BrowserContextKeyedServiceShutdownNotifierFactory
+  // to nullify when keyed service is destyroyed.
+  raw_ptr<optimization_guide::ModelQualityLogsUploader>
+      model_quality_logs_uploader_;
+
+  base::Token session_id_;
 
   base::WeakPtrFactory<ComposeSession> weak_ptr_factory_;
 };

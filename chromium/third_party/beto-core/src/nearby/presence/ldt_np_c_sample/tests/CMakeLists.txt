@@ -25,7 +25,6 @@ target_link_libraries(
   "${CMAKE_SOURCE_DIR}/ldt_np_adv_ffi/target/release/${CMAKE_STATIC_LIBRARY_PREFIX}ldt_np_adv_ffi${CMAKE_STATIC_LIBRARY_SUFFIX}"
   jsoncpp
   GTest::gtest_main
-  OpenSSL::SSL
 )
 if(UNIX)
   target_link_libraries(
@@ -51,7 +50,6 @@ target_link_libraries(
   ldt_benchmarks
   "${CMAKE_SOURCE_DIR}/ldt_np_adv_ffi/target/release/${CMAKE_STATIC_LIBRARY_PREFIX}ldt_np_adv_ffi${CMAKE_STATIC_LIBRARY_SUFFIX}"
   benchmark::benchmark
-  OpenSSL::SSL
 )
 
 if(UNIX)

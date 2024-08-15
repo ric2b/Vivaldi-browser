@@ -81,11 +81,11 @@ bool OpenNewTab(const GURL& url) {
   return true;
 }
 
-absl::optional<std::string> GetAppIdFromFilePath(
+std::optional<std::string> GetAppIdFromFilePath(
     const GURL& url,
     const base::FilePath& file_path) {
   if (url.SchemeIsFile()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   const std::string& file_extension = file_path.FinalExtension();
   if (file_extension == ".gdoc") {
@@ -95,7 +95,7 @@ absl::optional<std::string> GetAppIdFromFilePath(
   } else if (file_extension == ".gslides") {
     return web_app::kGoogleSlidesAppId;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool OpenHostedFileInNewTabOrApp(Profile* profile,
@@ -104,9 +104,9 @@ bool OpenHostedFileInNewTabOrApp(Profile* profile,
                                  const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  absl::optional<std::string> app_id = GetAppIdFromFilePath(url, file_path);
+  std::optional<std::string> app_id = GetAppIdFromFilePath(url, file_path);
   if (!app_id.has_value()) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return OpenNewTab(url);
   }
   apps::AppServiceProxy* app_service =
@@ -120,13 +120,13 @@ bool OpenHostedFileInNewTabOrApp(Profile* profile,
       });
 
   if (!is_app_available) {
-    std::move(callback).Run(absl::nullopt);
+    std::move(callback).Run(std::nullopt);
     return OpenNewTab(url);
   }
 
   auto chained_callback =
       base::BindOnce([](apps::LaunchResult&& result) {
-        LOG_IF(ERROR, result.state != apps::LaunchResult::SUCCESS)
+        LOG_IF(ERROR, result.state != apps::LaunchResult::State::kSuccess)
             << "Failed to launch hosted file via app despite "
                "it being ready";
         return result.state;

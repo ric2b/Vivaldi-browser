@@ -16,6 +16,9 @@ import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.content_public.browser.WebContents;
 
+// Vivaldi
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /** Launches autofill settings subpages. */
 public class SettingsLauncherHelper {
     private static SettingsLauncher sLauncherForTesting;
@@ -30,6 +33,12 @@ public class SettingsLauncherHelper {
         if (context == null) {
             return false;
         }
+        // Vivaldi
+        if (!VivaldiUtils.isDeviceSecure()) {
+            VivaldiUtils.showMissingDeviceLockDialog(context);
+            return true;
+        }
+
         RecordUserAction.record("AutofillAddressesViewed");
         getLauncher().launchSettingsActivity(context, AutofillProfilesFragment.class);
         return true;
@@ -45,6 +54,12 @@ public class SettingsLauncherHelper {
         if (context == null) {
             return false;
         }
+        // Vivaldi
+        if (!VivaldiUtils.isDeviceSecure()) {
+            VivaldiUtils.showMissingDeviceLockDialog(context);
+            return true;
+        }
+
         RecordUserAction.record("AutofillCreditCardsViewed");
         getLauncher().launchSettingsActivity(context, AutofillPaymentMethodsFragment.class);
         return true;

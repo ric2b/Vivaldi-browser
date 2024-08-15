@@ -6,10 +6,10 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <set>
 #include <utility>
 
-#include "base/containers/cxx20_erase.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -236,10 +236,7 @@ bool SortByVersion(const LoopbackServerEntity* lhs,
 }  // namespace
 
 LoopbackServer::LoopbackServer(const base::FilePath& persistent_file)
-    : strong_consistency_model_enabled_(false),
-      version_(0),
-      store_birthday_(0),
-      persistent_file_(persistent_file),
+    : persistent_file_(persistent_file),
       writer_(
           persistent_file_,
           base::ThreadPool::CreateSequencedTaskRunner(
@@ -249,8 +246,7 @@ LoopbackServer::LoopbackServer(const base::FilePath& persistent_file)
 }
 
 LoopbackServer::~LoopbackServer() {
-  if (writer_.HasPendingWrite())
-    writer_.DoScheduledWrite();
+  FlushToDisk();
 }
 
 void LoopbackServer::Init() {
@@ -400,6 +396,12 @@ void LoopbackServer::AddNewKeystoreKeyForTesting() {
   keystore_keys_.push_back(GenerateNewKeystoreKey());
 }
 
+void LoopbackServer::FlushToDisk() {
+  if (writer_.HasPendingWrite()) {
+    writer_.DoScheduledWrite();
+  }
+}
+
 bool LoopbackServer::HandleGetUpdatesRequest(
     const sync_pb::GetUpdatesMessage& get_updates,
     const std::string& store_birthday,
@@ -527,7 +529,7 @@ bool LoopbackServer::HandleGetUpdatesRequest(
   // During initial bookmark sync, we create new entities for bookmark permanent
   // folders, and hence we should inform the observers.
   if ((is_initial_bookmark_sync || is_initial_notes_sync) && observer_for_tests_) {
-    observer_for_tests_->OnCommit(invalidator_client_id, {syncer::BOOKMARKS});
+    observer_for_tests_->OnCommit({syncer::BOOKMARKS});
   }
 
   return true;
@@ -732,7 +734,7 @@ bool LoopbackServer::HandleCommitRequest(
   }
 
   if (observer_for_tests_)
-    observer_for_tests_->OnCommit(invalidator_client_id, committed_model_types);
+    observer_for_tests_->OnCommit(committed_model_types);
 
   return throttled_datatypes_in_request->Empty();
 }
@@ -748,10 +750,9 @@ void LoopbackServer::ClearServerData() {
 
 void LoopbackServer::DeleteAllEntitiesForModelType(ModelType model_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto should_delete_entry = [model_type](const auto& id_and_entity) {
+  std::erase_if(entities_, [model_type](const auto& id_and_entity) {
     return id_and_entity.second->GetModelType() == model_type;
-  };
-  base::EraseIf(entities_, should_delete_entry);
+  });
   ScheduleSaveStateToFile();
 }
 

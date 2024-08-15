@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -67,7 +68,7 @@ class RequestFilterProxyingURLLoaderFactory
         const std::vector<std::string>& removed_headers,
         const net::HttpRequestHeaders& modified_headers,
         const net::HttpRequestHeaders& modified_cors_exempt_headers,
-        const absl::optional<GURL>& new_url) override;
+        const std::optional<GURL>& new_url) override;
     void SetPriority(net::RequestPriority priority,
                      int32_t intra_priority_value) override;
     void PauseReadingBodyFromNet() override;
@@ -79,7 +80,7 @@ class RequestFilterProxyingURLLoaderFactory
     void OnReceiveResponse(
         network::mojom::URLResponseHeadPtr head,
         mojo::ScopedDataPipeConsumerHandle body,
-        absl::optional<::mojo_base::BigBuffer> cached_metadata) override;
+        std::optional<::mojo_base::BigBuffer> cached_metadata) override;
     void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                            network::mojom::URLResponseHeadPtr head) override;
     void OnUploadProgress(int64_t current_position,
@@ -159,7 +160,7 @@ class RequestFilterProxyingURLLoaderFactory
 
     const raw_ptr<RequestFilterProxyingURLLoaderFactory> factory_;
     network::ResourceRequest request_;
-    const absl::optional<url::Origin> original_initiator_;
+    const std::optional<url::Origin> original_initiator_;
     const uint64_t request_id_ = 0;
     const int32_t network_service_request_id_ = 0;
     const int32_t view_routing_id_ = MSG_ROUTING_NONE;
@@ -169,7 +170,7 @@ class RequestFilterProxyingURLLoaderFactory
     mojo::Receiver<network::mojom::URLLoader> proxied_loader_receiver_;
     mojo::Remote<network::mojom::URLLoaderClient> target_client_;
 
-    absl::optional<FilteredRequestInfo> info_;
+    std::optional<FilteredRequestInfo> info_;
 
     mojo::Receiver<network::mojom::URLLoaderClient> proxied_client_receiver_{
         this};
@@ -182,7 +183,7 @@ class RequestFilterProxyingURLLoaderFactory
     // ExtensionWebRequestEventRouter) through much of the request's lifetime.
     network::mojom::URLResponseHeadPtr current_response_;
     mojo::ScopedDataPipeConsumerHandle current_body_;
-    absl::optional<mojo_base::BigBuffer> current_cached_metadata_;
+    std::optional<mojo_base::BigBuffer> current_cached_metadata_;
     scoped_refptr<net::HttpResponseHeaders> override_headers_;
     std::set<std::string> set_request_headers_;
     std::set<std::string> removed_request_headers_;
@@ -218,7 +219,7 @@ class RequestFilterProxyingURLLoaderFactory
       std::vector<std::string> removed_headers;
       net::HttpRequestHeaders modified_headers;
       net::HttpRequestHeaders modified_cors_exempt_headers;
-      absl::optional<GURL> new_url;
+      std::optional<GURL> new_url;
     };
     std::unique_ptr<FollowRedirectParams> pending_follow_redirect_params_;
     State state_ = State::kInProgress;
@@ -237,7 +238,7 @@ class RequestFilterProxyingURLLoaderFactory
       int view_routing_id,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
-      absl::optional<int64_t> navigation_id,
+      std::optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           target_factory_remote,
@@ -263,7 +264,7 @@ class RequestFilterProxyingURLLoaderFactory
       int view_routing_id,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
-      absl::optional<int64_t> navigation_id,
+      std::optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           target_factory_remote,
@@ -316,7 +317,7 @@ class RequestFilterProxyingURLLoaderFactory
   const int view_routing_id_;
   const raw_ptr<RequestFilterManager::RequestHandler> request_handler_;
   const raw_ptr<RequestFilterManager::RequestIDGenerator> request_id_generator_;
-  absl::optional<int64_t> navigation_id_;
+  std::optional<int64_t> navigation_id_;
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
   mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
   mojo::Receiver<network::mojom::TrustedURLLoaderHeaderClient>

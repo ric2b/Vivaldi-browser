@@ -6,6 +6,7 @@
 
 #import <Foundation/Foundation.h>
 
+#include <optional>
 #include <string>
 
 #include "base/apple/foundation_util.h"
@@ -32,14 +33,16 @@ const CFStringRef kBrowserBundleId =
 bool LoadEnrollmentTokenFromPolicy(std::string* enrollment_token) {
   base::apple::ScopedCFTypeRef<CFPropertyListRef> token_value(
       CFPreferencesCopyAppValue(kEnrollmentTokenKey, kBrowserBundleId));
-  if (!token_value || CFGetTypeID(token_value) != CFStringGetTypeID() ||
+  if (!token_value || CFGetTypeID(token_value.get()) != CFStringGetTypeID() ||
       !CFPreferencesAppValueIsForced(kEnrollmentTokenKey, kBrowserBundleId)) {
     return false;
   }
 
-  CFStringRef value_string = base::apple::CFCast<CFStringRef>(token_value);
-  if (!value_string)
+  CFStringRef value_string =
+      base::apple::CFCast<CFStringRef>(token_value.get());
+  if (!value_string) {
     return false;
+  }
 
   *enrollment_token = base::SysCFStringRefToUTF8(value_string);
   return true;
@@ -188,7 +191,7 @@ DMStorage::DMStorage(const base::FilePath& policy_cache_root,
                                                dm_token_path)) {}
 
 scoped_refptr<DMStorage> GetDefaultDMStorage() {
-  absl::optional<base::FilePath> keystone_path =
+  std::optional<base::FilePath> keystone_path =
       GetKeystoneFolderPath(UpdaterScope::kSystem);
   return keystone_path ? base::MakeRefCounted<DMStorage>(
                              keystone_path->AppendASCII("DeviceManagement"))

@@ -5,6 +5,7 @@
 #include "content/browser/attribution_reporting/aggregatable_attribution_utils.h"
 
 #include <iterator>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/attribution_reporting/aggregatable_trigger_config.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
@@ -30,7 +32,6 @@
 #include "content/browser/attribution_reporting/attribution_info.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "net/base/schemeful_site.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
 
@@ -120,10 +121,10 @@ std::vector<AggregatableHistogramContribution> CreateAggregatableHistogram(
   return contributions;
 }
 
-absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
+std::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
     const AttributionReport& report) {
   base::Time source_time;
-  absl::optional<uint64_t> source_debug_key;
+  std::optional<uint64_t> source_debug_key;
   std::vector<blink::mojom::AggregatableReportHistogramContribution>
       contributions;
   const AttributionReport::CommonAggregatableData* common_aggregatable_data =
@@ -162,7 +163,8 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
 
   base::Value::Dict additional_fields;
   std::string serialized_source_time;
-  switch (common_aggregatable_data->source_registration_time_config) {
+  switch (common_aggregatable_data->aggregatable_trigger_config
+              .source_registration_time_config()) {
     case attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude:
       serialized_source_time =
           SerializeTimeRoundedDownToWholeDayInSeconds(source_time);
@@ -184,9 +186,9 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
           std::move(contributions),
           blink::mojom::AggregationServiceMode::kDefault,
           common_aggregatable_data->aggregation_coordinator_origin
-              ? absl::make_optional(
+              ? std::make_optional(
                     **common_aggregatable_data->aggregation_coordinator_origin)
-              : absl::nullopt,
+              : std::nullopt,
           /*max_contributions_allowed=*/
           attribution_reporting::kMaxAggregationKeysPerSource),
       AggregatableReportSharedInfo(

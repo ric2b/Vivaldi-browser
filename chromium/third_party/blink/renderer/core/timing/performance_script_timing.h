@@ -34,11 +34,11 @@ class PerformanceScriptTiming final : public PerformanceEntry {
   DOMHighResTimeStamp executionStart() const;
   DOMHighResTimeStamp forcedStyleAndLayoutDuration() const;
   DOMHighResTimeStamp pauseDuration() const;
-  DOMHighResTimeStamp desiredExecutionStart() const;
   LocalDOMWindow* window() const;
   WTF::String sourceLocation() const;
   const AtomicString& windowAttribution() const;
-  AtomicString type() const;
+  AtomicString invokerType() const;
+  AtomicString invoker() const;
   void Trace(Visitor*) const override;
 
  private:

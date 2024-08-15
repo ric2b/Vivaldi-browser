@@ -14,11 +14,12 @@
 #include "components/safe_browsing/content/browser/safe_browsing_blocking_page.h"
 #include "components/safe_browsing/content/browser/safe_browsing_blocking_page_factory.h"
 #include "components/safe_browsing/content/browser/safe_browsing_controller_client.h"
+#include "components/safe_browsing/content/browser/unsafe_resource_util.h"
 #include "components/safe_browsing/core/browser/db/util.h"
+#include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/content/settings_page_helper.h"
-#include "components/security_interstitials/content/unsafe_resource_util.h"
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
@@ -56,21 +57,28 @@ class SafeBrowsingCallbackWaiter {
   bool callback_called() const { return callback_called_; }
   bool proceed() const { return proceed_; }
   bool showed_interstitial() const { return showed_interstitial_; }
+  bool has_post_commit_interstitial_skipped() const {
+    return has_post_commit_interstitial_skipped_;
+  }
 
-  void OnBlockingPageDone(bool proceed, bool showed_interstitial) {
+  void OnBlockingPageDone(
+      security_interstitials::UnsafeResource::UrlCheckResult result) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     callback_called_ = true;
-    proceed_ = proceed;
-    showed_interstitial_ = showed_interstitial;
+    proceed_ = result.proceed;
+    showed_interstitial_ = result.showed_interstitial;
+    has_post_commit_interstitial_skipped_ =
+        result.has_post_commit_interstitial_skipped;
     loop_.Quit();
   }
 
-  void OnBlockingPageDoneOnIO(bool proceed, bool showed_interstitial) {
+  void OnBlockingPageDoneOnIO(
+      security_interstitials::UnsafeResource::UrlCheckResult result) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
-                       base::Unretained(this), proceed, showed_interstitial));
+                       base::Unretained(this), result));
   }
 
   void WaitForCallback() {
@@ -82,6 +90,7 @@ class SafeBrowsingCallbackWaiter {
   bool callback_called_ = false;
   bool proceed_ = false;
   bool showed_interstitial_ = false;
+  bool has_post_commit_interstitial_skipped_ = false;
   base::RunLoop loop_;
 };
 
@@ -108,7 +117,8 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
                 manager->default_safe_page(),
                 /*settings_helper=*/nullptr),
             BaseSafeBrowsingErrorUI::SBErrorDisplayOptions(
-                BaseBlockingPage::IsMainPageLoadBlocked(unsafe_resources),
+                BaseBlockingPage::IsMainPageLoadPending(unsafe_resources),
+                BaseBlockingPage::IsSubresource(unsafe_resources),
                 false,                 // is_extended_reporting_opt_in_allowed
                 false,                 // is_off_the_record
                 false,                 // is_extended_reporting_enabled
@@ -264,20 +274,23 @@ class SafeBrowsingUIManagerTest : public content::RenderViewHostTestHarness {
 
   security_interstitials::UnsafeResource MakeUnsafeResource(
       const char* url,
+      bool is_subresource) {
+    auto* primary_main_frame = web_contents()->GetPrimaryMainFrame();
+    return MakeUnsafeResource(url, is_subresource,
+                              primary_main_frame->GetGlobalId(),
+                              primary_main_frame->GetFrameToken());
+  }
+
+  security_interstitials::UnsafeResource MakeUnsafeResource(
+      const char* url,
       bool is_subresource,
-      // TODO(crbug.com/1410253): Delete parameter once the experiment is
-      // complete.
-      absl::optional<content::GlobalRenderFrameHostId>
-          override_primary_main_frame_id = absl::nullopt) {
-    const content::GlobalRenderFrameHostId primary_main_frame_id =
-        override_primary_main_frame_id.has_value()
-            ? override_primary_main_frame_id.value()
-            : web_contents()->GetPrimaryMainFrame()->GetGlobalId();
+      content::GlobalRenderFrameHostId frame_id,
+      const blink::LocalFrameToken& frame_token) {
     security_interstitials::UnsafeResource resource;
     resource.url = GURL(url);
     resource.is_subresource = is_subresource;
-    resource.render_process_id = primary_main_frame_id.child_id;
-    resource.render_frame_id = primary_main_frame_id.frame_routing_id;
+    resource.render_process_id = frame_id.child_id;
+    resource.render_frame_token = frame_token.value();
     resource.threat_type = SB_THREAT_TYPE_URL_MALWARE;
     return resource;
   }
@@ -344,7 +357,7 @@ TEST_F(SafeBrowsingUIManagerTest, AllowlistRemembersThreatType) {
   ASSERT_TRUE(entry);
   EXPECT_TRUE(ui_manager()->IsUrlAllowlistedOrPendingForWebContents(
       resource.url, resource.is_subresource, entry,
-      security_interstitials::GetWebContentsForResource(resource), true,
+      unsafe_resource_util::GetWebContentsForResource(resource), true,
       &threat_type));
   EXPECT_EQ(resource.threat_type, threat_type);
 }
@@ -608,72 +621,26 @@ TEST_F(SafeBrowsingUIManagerTest, DisplayInterstitial) {
   waiter.WaitForCallback();
   EXPECT_FALSE(waiter.proceed());
   EXPECT_TRUE(waiter.showed_interstitial());
+  EXPECT_TRUE(waiter.has_post_commit_interstitial_skipped());
 }
 
-// Same as |DisplayInterstitial| but within the Safe Browsing lookup mechanism
-// experiment, which calls |CheckExperimentEligibilityAndStartBlockingPage|
-// instead of |StartDisplayingBlockingPage|.
-TEST_F(SafeBrowsingUIManagerTest,
-       LookupMechanismExperiment_DisplayInterstitial) {
+TEST_F(SafeBrowsingUIManagerTest, DisplayInterstitial_PostCommitInterstitial) {
   security_interstitials::UnsafeResource resource =
-      MakeUnsafeResource(kBadURL, /*is_subresource=*/false);
+      MakeUnsafeResource(kBadURL, false /* is_subresource */);
+  resource.threat_source = safe_browsing::ThreatSource::REMOTE;
+  // Make it a post commit interstitial.
+  resource.threat_type = SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING;
 
   SafeBrowsingCallbackWaiter waiter;
   resource.callback =
       base::BindRepeating(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
                           base::Unretained(&waiter));
   resource.callback_sequence = content::GetUIThreadTaskRunner({});
-  base::MockCallback<base::OnceCallback<void(bool)>> callback;
-  EXPECT_CALL(callback, Run(/*is_eligible=*/true));
-  ui_manager()->CheckExperimentEligibilityAndStartBlockingPage(
-      resource, callback.Get(), base::SequencedTaskRunner::GetCurrentDefault());
+  ui_manager()->StartDisplayingBlockingPage(resource);
   waiter.WaitForCallback();
-  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(waiter.proceed());
-  EXPECT_TRUE(waiter.showed_interstitial());
-}
-
-TEST_F(SafeBrowsingUIManagerTest, CheckLookupMechanismExperimentEligibility) {
-  auto run_test = [this](
-                      bool expect_is_eligible,
-                      const security_interstitials::UnsafeResource& resource) {
-    base::MockCallback<base::OnceCallback<void(bool)>> callback;
-    EXPECT_CALL(callback, Run(expect_is_eligible));
-    ui_manager()->CheckLookupMechanismExperimentEligibility(
-        resource, callback.Get(),
-        base::SequencedTaskRunner::GetCurrentDefault());
-    base::RunLoop().RunUntilIdle();
-  };
-  {
-    // Eligible: Default configuration.
-    security_interstitials::UnsafeResource resource =
-        MakeUnsafeResource(kBadURL, /*is_subresource=*/false);
-    run_test(/*expect_is_eligible=*/true, /*resource=*/resource);
-  }
-  {
-    // Ineligible: Allowlisted URL.
-    security_interstitials::UnsafeResource resource =
-        MakeUnsafeResource(kBadURL, /*is_subresource=*/false);
-    AddToAllowlist(resource);
-    run_test(/*expect_is_eligible=*/false, /*resource=*/resource);
-  }
-  {
-    // Ineligible: Hosting extension.
-    ui_manager_delegate()->set_is_hosting_extension(true);
-    security_interstitials::UnsafeResource resource =
-        MakeUnsafeResource(kBadURL, /*is_subresource=*/false);
-    run_test(/*expect_is_eligible=*/false, /*resource=*/resource);
-  }
-  {
-    // Ineligible: No web contents.
-    const content::GlobalRenderFrameHostId primary_main_frame_id =
-        web_contents()->GetPrimaryMainFrame()->GetGlobalId();
-    DeleteContents();
-    security_interstitials::UnsafeResource resource = MakeUnsafeResource(
-        kBadURL, /*is_subresource=*/false,
-        /*override_primary_main_frame_id=*/primary_main_frame_id);
-    run_test(/*expect_is_eligible=*/false, /*resource=*/resource);
-  }
+  EXPECT_FALSE(waiter.showed_interstitial());
+  EXPECT_FALSE(waiter.has_post_commit_interstitial_skipped());
 }
 
 TEST_F(SafeBrowsingUIManagerTest, InvalidRenderFrameHostId) {
@@ -686,8 +653,8 @@ TEST_F(SafeBrowsingUIManagerTest, InvalidRenderFrameHostId) {
   // handle.
   content::GlobalRenderFrameHostId invalid_rfh_id;
   resource.render_process_id = invalid_rfh_id.child_id;
-  resource.render_frame_id = invalid_rfh_id.frame_routing_id;
-  ASSERT_FALSE(security_interstitials::GetWebContentsForResource(resource));
+  resource.render_frame_token = base::UnguessableToken::Create();
+  ASSERT_FALSE(unsafe_resource_util::GetWebContentsForResource(resource));
 
   EXPECT_FALSE(IsAllowlisted(resource));
 }

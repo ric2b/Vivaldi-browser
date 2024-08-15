@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(missing_docs, clippy::expect_used)]
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use hex_literal::hex;
 
@@ -26,15 +28,16 @@ fn hkdf_sha256_operations<C: CryptoProvider>(c: &mut Criterion) {
     let salt = hex!("000102030405060708090a0b0c");
     let info = hex!("f0f1f2f3f4f5f6f7f8f9");
 
-    c.bench_function(&format!("bench hkdf with salt {}", std::any::type_name::<C>()), |b| {
-        b.iter(|| {
-            let hk = C::HkdfSha256::new(Some(&salt[..]), &ikm);
-            let mut okm = [0u8; 42];
-            hk.expand(&info, &mut okm).expect("42 is a valid length for Sha256 to output");
+    let _ =
+        c.bench_function(&format!("bench hkdf with salt {}", std::any::type_name::<C>()), |b| {
+            b.iter(|| {
+                let hk = C::HkdfSha256::new(Some(&salt[..]), &ikm);
+                let mut okm = [0u8; 42];
+                hk.expand(&info, &mut okm).expect("42 is a valid length for Sha256 to output");
+            });
         });
-    });
 
-    c.bench_function(&format!("bench hkdf no salt {}", std::any::type_name::<C>()), |b| {
+    let _ = c.bench_function(&format!("bench hkdf no salt {}", std::any::type_name::<C>()), |b| {
         b.iter(|| {
             let hk = C::HkdfSha256::new(None, &ikm);
             let mut okm = [0u8; 42];

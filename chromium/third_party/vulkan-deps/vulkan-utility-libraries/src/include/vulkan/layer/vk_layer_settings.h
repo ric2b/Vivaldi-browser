@@ -11,9 +11,9 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif 
+#endif
 
-#include "vk_layer_settings_ext.h"
+#include <vulkan/vulkan.h>
 
 typedef enum VkuLayerSettingType {
     VKU_LAYER_SETTING_TYPE_BOOL32 = VK_LAYER_SETTING_TYPE_BOOL32_EXT,

@@ -159,6 +159,14 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
          traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular;
 }
 
+- (void)primesStopLogging {
+  [ChromeEarlGreyAppInterface primesStopLogging];
+}
+
+- (void)primesTakeMemorySnapshot:(NSString*)eventName {
+  [ChromeEarlGreyAppInterface primesTakeMemorySnapshot:eventName];
+}
+
 #pragma mark - History Utilities (EG2)
 
 - (void)clearBrowsingHistory {
@@ -542,8 +550,12 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
       @"document.cookie ? document.cookie.split(/;\\s*/) : [];";
   base::Value result = [self evaluateJavaScript:kGetCookiesScript];
 
-  EG_TEST_HELPER_ASSERT_TRUE(result.is_list(),
-                             @"The script response is not iterable.");
+  if (!result.is_list()) {
+    EG_TEST_HELPER_ASSERT_TRUE(
+        false,
+        @"The script response is not iterable. Cookies can not be retrieved.");
+    return nil;
+  }
 
   NSMutableDictionary* cookies = [NSMutableDictionary dictionary];
   for (const auto& option : result.GetList()) {
@@ -769,21 +781,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   [self waitForPageToFinishLoading];
 }
 
-- (void)triggerRestoreViaTabGridRemoveAllUndo {
-  [ChromeEarlGrey showTabSwitcher];
-  GREYWaitForAppToIdle(@"App failed to idle");
-  [ChromeEarlGrey
-      waitForAndTapButton:grey_allOf(chrome_test_util::TabGridEditButton(),
-                                     grey_sufficientlyVisible(), nil)];
-  [ChromeEarlGrey
-      waitForAndTapButton:chrome_test_util::TabGridEditMenuCloseAllButton()];
-  [ChromeEarlGrey
-      waitForAndTapButton:chrome_test_util::TabGridUndoCloseAllButton()];
-  [ChromeEarlGrey waitForAndTapButton:chrome_test_util::TabGridDoneButton()];
-  [self waitForRestoreSessionToFinish];
-  [self waitForPageToFinishLoading];
-}
-
 - (BOOL)webStateWebViewUsesContentInset {
   return [ChromeEarlGreyAppInterface webStateWebViewUsesContentInset];
 }
@@ -811,10 +808,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 }
 
 #pragma mark - Sync Utilities (EG2)
-
-- (void)clearSyncServerData {
-  [ChromeEarlGreyAppInterface clearSyncServerData];
-}
 
 - (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity {
   [ChromeEarlGreyAppInterface signInWithoutSyncWithIdentity:identity];
@@ -859,6 +852,14 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 - (void)tearDownFakeSyncServer {
   [ChromeEarlGreyAppInterface tearDownFakeSyncServer];
+}
+
+- (void)clearFakeSyncServerData {
+  [ChromeEarlGreyAppInterface clearFakeSyncServerData];
+}
+
+- (void)flushFakeSyncServerToDisk {
+  [ChromeEarlGreyAppInterface flushFakeSyncServerToDisk];
 }
 
 - (int)numberOfSyncEntitiesWithType:(syncer::ModelType)type {
@@ -1246,6 +1247,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   GREYCondition* signOutFinished = [GREYCondition
       conditionWithName:@"Sign-out done, and identities & browsing data cleared"
                   block:^{
+                    // Spin run loop to ensure observers are notified when
+                    // webstate loading stops.
+                    base::test::ios::SpinRunLoopWithMinDelay(
+                        base::Milliseconds(100));
                     return isSignoutFinished;
                   }];
   bool success =
@@ -1376,10 +1381,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 - (BOOL)isWebChannelsEnabled {
   return [ChromeEarlGreyAppInterface isWebChannelsEnabled];
-}
-
-- (BOOL)isUIButtonConfigurationEnabled {
-  return [ChromeEarlGreyAppInterface isUIButtonConfigurationEnabled];
 }
 
 - (BOOL)isBottomOmniboxSteadyStateEnabled {
@@ -1535,6 +1536,16 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   NSString* prefName = base::SysUTF8ToNSString(UTF8PrefName);
   return [ChromeEarlGreyAppInterface setIntegerValue:value
                                          forUserPref:prefName];
+}
+
+- (bool)prefWithNameIsDefaultValue:(const std::string&)prefName {
+  return [ChromeEarlGreyAppInterface
+      prefWithNameIsDefaultValue:base::SysUTF8ToNSString(prefName)];
+}
+
+- (void)clearUserPrefWithName:(const std::string&)prefName {
+  [ChromeEarlGreyAppInterface
+      clearUserPrefWithName:base::SysUTF8ToNSString(prefName)];
 }
 
 - (void)resetBrowsingDataPrefs {

@@ -33,12 +33,13 @@ import org.robolectric.shadows.ShadowLooper;
 import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ui.fast_checkout.data.FastCheckoutAutofillProfile;
 import org.chromium.chrome.browser.ui.fast_checkout.data.FastCheckoutCreditCard;
 import org.chromium.chrome.browser.ui.fast_checkout.home_screen.HomeScreenCoordinator;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
+import org.chromium.chrome.browser.ui.suggestion.Icon;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -80,7 +81,7 @@ public class FastCheckoutHomeScreenViewTest {
                     /* obfuscatedNumber= */ "5656",
                     /* month= */ "05",
                     /* year= */ "2031",
-                    /* issuerIconString= */ "visaCC");
+                    /* issuerIcon= */ Icon.CARD_VISA);
 
     @Before
     public void setUp() {

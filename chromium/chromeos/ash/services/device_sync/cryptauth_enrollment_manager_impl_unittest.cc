@@ -140,7 +140,7 @@ class TestCryptAuthEnrollmentManager : public CryptAuthEnrollmentManagerImpl {
  private:
   // Ownership is passed to |CryptAuthEnrollmentManager| super class when
   // |CreateSyncScheduler()| is called.
-  raw_ptr<NiceMock<MockSyncScheduler>, ExperimentalAsh> scoped_sync_scheduler_;
+  raw_ptr<NiceMock<MockSyncScheduler>> scoped_sync_scheduler_;
 
   // Stores the pointer of |scoped_sync_scheduler_| after ownership is passed to
   // the super class.
@@ -255,12 +255,10 @@ class DeviceSyncCryptAuthEnrollmentManagerImplTest
   base::SimpleTestClock clock_;
 
   // Owned by |enrollment_manager_|.
-  raw_ptr<MockCryptAuthEnrollerFactory, DanglingUntriaged | ExperimentalAsh>
-      enroller_factory_;
+  raw_ptr<MockCryptAuthEnrollerFactory, DanglingUntriaged> enroller_factory_;
 
   // Ownered by |enrollment_manager_|.
-  raw_ptr<multidevice::FakeSecureMessageDelegate,
-          DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<multidevice::FakeSecureMessageDelegate, DanglingUntriaged>
       secure_message_delegate_;
 
   cryptauth::GcmDeviceInfo device_info_;
@@ -366,7 +364,7 @@ TEST_F(DeviceSyncCryptAuthEnrollmentManagerImplTest, ForceEnrollment) {
   EXPECT_CALL(*sync_scheduler(), ForceSync());
   enrollment_manager_.ForceEnrollmentNow(
       cryptauth::INVOCATION_REASON_SERVER_INITIATED,
-      absl::nullopt /* session_id */);
+      std::nullopt /* session_id */);
 
   auto completion_callback =
       FireSchedulerForEnrollment(cryptauth::INVOCATION_REASON_SERVER_INITIATED);
@@ -471,8 +469,8 @@ TEST_F(DeviceSyncCryptAuthEnrollmentManagerImplTest, ReenrollOnGCMPushMessage) {
   enrollment_manager_.Start();
 
   // Simulate receiving a GCM push message, forcing the device to re-enroll.
-  gcm_manager_.PushReenrollMessage(absl::nullopt /* session_id */,
-                                   absl::nullopt /* feature_type */);
+  gcm_manager_.PushReenrollMessage(std::nullopt /* session_id */,
+                                   std::nullopt /* feature_type */);
   auto completion_callback =
       FireSchedulerForEnrollment(cryptauth::INVOCATION_REASON_SERVER_INITIATED);
 

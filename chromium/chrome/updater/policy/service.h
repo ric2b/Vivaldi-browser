@@ -5,6 +5,7 @@
 #ifndef CHROME_UPDATER_POLICY_SERVICE_H_
 #define CHROME_UPDATER_POLICY_SERVICE_H_
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -15,9 +16,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/updater/external_constants.h"
 #include "chrome/updater/policy/manager.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 
@@ -42,37 +43,38 @@ class PolicyStatus {
   void AddPolicyIfNeeded(bool is_managed,
                          const std::string& source,
                          const T& policy) {
-    if (conflict_policy_)
+    if (conflict_policy_) {
       return;  // We already have enough policies.
+    }
 
     if (!effective_policy_ && is_managed) {
-      effective_policy_ = absl::make_optional<Entry>(source, policy);
+      effective_policy_ = std::make_optional<Entry>(source, policy);
     } else if (effective_policy_ &&
                policy != effective_policy_.value().policy) {
-      conflict_policy_ = absl::make_optional<Entry>(source, policy);
+      conflict_policy_ = std::make_optional<Entry>(source, policy);
     }
   }
 
-  const absl::optional<Entry>& effective_policy() const {
+  const std::optional<Entry>& effective_policy() const {
     return effective_policy_;
   }
-  const absl::optional<Entry>& conflict_policy() const {
+  const std::optional<Entry>& conflict_policy() const {
     return conflict_policy_;
   }
 
   explicit operator bool() const { return effective_policy_.has_value(); }
   // Convenience method to extract the effective policy's value.
-  const T& policy() {
+  const T& policy() const {
     CHECK(effective_policy_);
     return effective_policy_->policy;
   }
-  const T& policy_or(const T& fallback) {
+  const T& policy_or(const T& fallback) const {
     return effective_policy_ ? policy() : fallback;
   }
 
  private:
-  absl::optional<Entry> effective_policy_;
-  absl::optional<Entry> conflict_policy_;
+  std::optional<Entry> effective_policy_;
+  std::optional<Entry> conflict_policy_;
 };
 
 // The PolicyService returns policies for enterprise managed machines from the
@@ -128,6 +130,7 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   PolicyStatus<int> DeprecatedGetLastCheckPeriodMinutes() const;
 
   // Helper methods.
+  base::Value GetAllPolicies() const;
   std::string GetAllPoliciesAsString() const;
   bool AreUpdatesSuppressedNow(const base::Time& now = base::Time::Now()) const;
 
@@ -135,6 +138,13 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   virtual ~PolicyService();
 
  private:
+  template <typename T>
+  using PolicyQueryFunction =
+      std::optional<T> (PolicyManagerInterface::*)() const;
+  template <typename T>
+  using AppPolicyQueryFunction =
+      std::optional<T> (PolicyManagerInterface::*)(const std::string&) const;
+
   friend class base::RefCountedThreadSafe<PolicyService>;
 
   SEQUENCE_CHECKER(sequence_checker_);
@@ -158,21 +168,20 @@ class PolicyService : public base::RefCountedThreadSafe<PolicyService> {
   const scoped_refptr<ExternalConstants> external_constants_;
 
   // Helper function to query the policy from the managed policy providers and
-  // determines the policy status.
-  template <typename T>
-  PolicyStatus<T> QueryPolicy(
-      const base::RepeatingCallback<absl::optional<T>(
-          const PolicyManagerInterface*)>& policy_query_callback,
-      const base::RepeatingCallback<bool(const T&)>& validator =
-          base::NullCallback()) const;
+  // determines the policy status. The provided `transform` can be used to
+  // modify the queried value to be a different type, or to nullify it when
+  // invalid.
+  template <typename T, typename U = T>
+  PolicyStatus<U> QueryPolicy(
+      PolicyQueryFunction<T> policy_query_function,
+      const base::RepeatingCallback<std::optional<U>(std::optional<T>)>&
+          transform = base::NullCallback()) const;
 
   // Helper function to query app policy from the managed policy providers and
   // determines the policy status.
   template <typename T>
   PolicyStatus<T> QueryAppPolicy(
-      const base::RepeatingCallback<
-          absl::optional<T>(const PolicyManagerInterface*,
-                            const std::string& app_id)>& policy_query_callback,
+      AppPolicyQueryFunction<T> policy_query_function,
       const std::string& app_id) const;
 
   std::set<std::string> GetAppsWithPolicy() const;
@@ -186,12 +195,12 @@ struct PolicyServiceProxyConfiguration {
   PolicyServiceProxyConfiguration& operator=(
       const PolicyServiceProxyConfiguration&);
 
-  static absl::optional<PolicyServiceProxyConfiguration> Get(
+  static std::optional<PolicyServiceProxyConfiguration> Get(
       scoped_refptr<PolicyService> policy_service);
 
-  absl::optional<bool> proxy_auto_detect;
-  absl::optional<std::string> proxy_pac_url;
-  absl::optional<std::string> proxy_url;
+  std::optional<bool> proxy_auto_detect;
+  std::optional<std::string> proxy_pac_url;
+  std::optional<std::string> proxy_url;
 };
 
 PolicyService::PolicyManagerVector CreatePolicyManagerVector(

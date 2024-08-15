@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
+#include "skia/ext/font_utils.h"
 #include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkFont.h"
@@ -62,14 +63,12 @@ bool SkiaGlRenderer::Initialize() {
                                           gl::GLContextAttribs());
   if (!gl_context_.get()) {
     LOG(FATAL) << "Failed to create GL context";
-    return false;
   }
 
   gl_surface_->Resize(size_, 1.f, gfx::ColorSpace(), true);
 
   if (!gl_context_->MakeCurrent(gl_surface_.get())) {
     LOG(FATAL) << "Failed to make GL context current";
-    return false;
   }
 
   sk_sp<const GrGLInterface> native_interface = GrGLMakeAssembledInterface(
@@ -167,7 +166,7 @@ void SkiaGlRenderer::Draw(SkCanvas* canvas, float fraction) {
   // Draw a message with a nice black paint
   paint.setColor(SK_ColorBLACK);
 
-  SkFont font;
+  SkFont font = skia::DefaultFont();
   font.setSize(32);
   font.setSubpixel(true);
 

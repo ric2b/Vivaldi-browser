@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/no_destructor.h"
-#include "base/strings/string_piece_forward.h"
 #include "base/values.h"
 #include "components/sync_preferences/syncable_prefs_database.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"

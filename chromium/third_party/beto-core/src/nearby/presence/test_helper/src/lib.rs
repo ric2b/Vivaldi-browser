@@ -11,10 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![forbid(unsafe_code)]
-#![deny(missing_docs)]
 
 //! Helper crate for common functions used in testing
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::fs;
 use std::io::Read;
@@ -33,7 +33,7 @@ pub fn load_data_file_contents_as_string(file: &str) -> String {
     let full_path = get_data_file(file);
     let mut file = fs::File::open(full_path).expect("Should be able to open data file");
     let mut data = String::new();
-    file.read_to_string(&mut data).expect("should be able to read data file");
+    let _ = file.read_to_string(&mut data).expect("should be able to read data file");
     data
 }
 
@@ -45,12 +45,12 @@ pub fn parse_json_data_file(file: &str) -> serde_json::Value {
 
 /// extract a string from a jsonvalue
 pub fn extract_key_str<'a>(value: &'a serde_json::Value, key: &str) -> &'a str {
-    value[key].as_str().unwrap()
+    value.get(key).unwrap().as_str().unwrap()
 }
 
 /// Decode a hex-encoded vec at `key`
 pub fn extract_key_vec(value: &serde_json::Value, key: &str) -> Vec<u8> {
-    hex::decode(value[key].as_str().unwrap()).unwrap()
+    hex::decode(value.get(key).unwrap().as_str().unwrap()).unwrap()
 }
 
 /// Decode a hex-encoded array at `key`

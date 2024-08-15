@@ -90,6 +90,19 @@ BASE_FEATURE(kEnableSessionSerializationOptimizations,
              "EnableSessionSerializationOptimizations",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// This feature will always be disabled and will only be enabled by tests.
+BASE_FEATURE(kForceSynthesizedRestoreSession,
+             "ForceSynthesizedRestoreSession",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kRemoveOldWebStateRestoration,
+             "RemoveOldWebStateRestoration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableViewportIntents,
+             "EnableViewportIntents",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool IsLoadSimulatedRequestAPIEnabled() {
   if (@available(iOS 15, *)) {
     return base::FeatureList::IsEnabled(kUseLoadSimulatedRequestForOfflinePage);

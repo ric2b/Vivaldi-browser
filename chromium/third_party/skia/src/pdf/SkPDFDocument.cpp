@@ -217,7 +217,7 @@ SkPDFDocument::SkPDFDocument(SkWStream* stream,
         fRasterScale        = fMetadata.fRasterDPI / kDpiForRasterScaleOne;
     }
     if (fMetadata.fStructureElementTreeRoot) {
-        fTagTree.init(fMetadata.fStructureElementTreeRoot);
+        fTagTree.init(fMetadata.fStructureElementTreeRoot, fMetadata.fOutline);
     }
     fExecutor = fMetadata.fExecutor;
 }
@@ -524,14 +524,32 @@ SkPDFIndirectReference SkPDFDocument::getPage(size_t pageIndex) const {
 }
 
 const SkMatrix& SkPDFDocument::currentPageTransform() const {
+    static constexpr const SkMatrix gIdentity;
+    // If not on a page (like when emitting a Type3 glyph) return identity.
+    if (!this->hasCurrentPage()) {
+        return gIdentity;
+    }
     return fPageDevice->initialTransform();
 }
 
-int SkPDFDocument::createMarkIdForNodeId(int nodeId) {
-    return fTagTree.createMarkIdForNodeId(nodeId, SkToUInt(this->currentPageIndex()));
+SkPDFTagTree::Mark SkPDFDocument::createMarkIdForNodeId(int nodeId, SkPoint p) {
+    // If the mark isn't on a page (like when emitting a Type3 glyph)
+    // return a temporary mark not attached to the tag tree, node id, or page.
+    if (!this->hasCurrentPage()) {
+        return SkPDFTagTree::Mark();
+    }
+    return fTagTree.createMarkIdForNodeId(nodeId, SkToUInt(this->currentPageIndex()), p);
+}
+
+void SkPDFDocument::addNodeTitle(int nodeId, SkSpan<const char> title) {
+    fTagTree.addNodeTitle(nodeId, std::move(title));
 }
 
 int SkPDFDocument::createStructParentKeyForNodeId(int nodeId) {
+    // Structure elements are tied to pages, so don't emit one if not on a page.
+    if (!this->hasCurrentPage()) {
+        return -1;
+    }
     return fTagTree.createStructParentKeyForNodeId(nodeId, SkToUInt(this->currentPageIndex()));
 }
 
@@ -594,6 +612,18 @@ void SkPDFDocument::onClose(SkWStream* stream) {
         markInfo->insertBool("Marked", true);
         docCatalog->insertObject("MarkInfo", std::move(markInfo));
         docCatalog->insertRef("StructTreeRoot", root);
+
+        if (SkPDFIndirectReference outline = fTagTree.makeOutline(this)) {
+            docCatalog->insertRef("Outlines", outline);
+        }
+    }
+
+    SkString lang = fMetadata.fLang;
+    if (lang.isEmpty()) {
+        lang = fTagTree.getRootLanguage();
+    }
+    if (!lang.isEmpty()) {
+        docCatalog->insertTextString("Lang", lang);
     }
 
     auto docCatalogRef = this->emit(*docCatalog);

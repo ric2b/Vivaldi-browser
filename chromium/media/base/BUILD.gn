@@ -138,6 +138,7 @@ source_set("base") {
     "channel_mixer.h",
     "channel_mixing_matrix.cc",
     "channel_mixing_matrix.h",
+    "codec_worker_impl.h",
     "color_plane_layout.cc",
     "color_plane_layout.h",
     "container_names.cc",
@@ -187,14 +188,17 @@ source_set("base") {
     "flinging_controller.h",
     "format_utils.cc",
     "format_utils.h",
+    "frame_buffer_pool.cc",
+    "frame_buffer_pool.h",
     "frame_rate_estimator.cc",
     "frame_rate_estimator.h",
     "key_system_info.cc",
     "key_system_info.h",
     "key_system_names.cc",
     "key_system_names.h",
-    "key_systems.cc",
     "key_systems.h",
+    "key_systems_impl.cc",
+    "key_systems_impl.h",
     "localized_strings.cc",
     "localized_strings.h",
     "logging_override_if_enabled.h",
@@ -292,6 +296,8 @@ source_set("base") {
     "seekable_buffer.h",
     "serial_runner.cc",
     "serial_runner.h",
+    "silence_detector.cc",
+    "silence_detector.h",
     "silent_sink_suspender.cc",
     "silent_sink_suspender.h",
     "simple_sync_token_client.cc",
@@ -327,6 +333,8 @@ source_set("base") {
     "video_aspect_ratio.h",
     "video_bitrate_allocation.cc",
     "video_bitrate_allocation.h",
+    "video_codec_string_parsers.cc",
+    "video_codec_string_parsers.h",
     "video_codecs.cc",
     "video_codecs.h",
     "video_color_space.cc",
@@ -340,6 +348,10 @@ source_set("base") {
     "video_encoder_metrics_provider.h",
     "video_frame.cc",
     "video_frame.h",
+    "video_frame_converter.cc",
+    "video_frame_converter.h",
+    "video_frame_converter_internals.cc",
+    "video_frame_converter_internals.h",
     "video_frame_layout.cc",
     "video_frame_layout.h",
     "video_frame_metadata.cc",
@@ -413,7 +425,19 @@ source_set("base") {
   }
 
   if (media_use_libvpx) {
+    sources += [
+      "libvpx_thread_wrapper.cc",
+      "libvpx_thread_wrapper.h",
+    ]
     deps += [ "//third_party/libvpx" ]
+  }
+
+  if (enable_libaom) {
+    sources += [
+      "libaom_thread_wrapper.cc",
+      "libaom_thread_wrapper.h",
+    ]
+    deps += [ "//third_party/libaom" ]
   }
 
   if (is_linux && !is_castos) {
@@ -435,14 +459,6 @@ source_set("base") {
     deps += [ "//ui/ozone" ]
   }
 
-  # Note: should also work on is_posix || is_fuchsia
-  if (is_linux || is_chromeos) {
-    sources += [
-      "scopedfd_helper.cc",
-      "scopedfd_helper.h",
-    ]
-  }
-
   if (is_win) {
     public_deps += [
       "//media/base/win:dcomp_texture_wrapper",
@@ -450,6 +466,8 @@ source_set("base") {
       "//media/base/win:overlay_state_observer_subscription",
     ]
     sources += [
+      "win/media_foundation_package_locator_helper.cc",
+      "win/media_foundation_package_locator_helper.h",
       "win/mf_feature_checks.cc",
       "win/mf_feature_checks.h",
     ]
@@ -597,6 +615,7 @@ source_set("unit_tests") {
     "fake_audio_worker_unittest.cc",
     "fake_demuxer_stream_unittest.cc",
     "feedback_signal_accumulator_unittest.cc",
+    "frame_buffer_pool_unittest.cc",
     "frame_rate_estimator_unittest.cc",
     "key_systems_unittest.cc",
     "media_log_unittest.cc",
@@ -612,6 +631,7 @@ source_set("unit_tests") {
     "renderer_factory_selector_unittest.cc",
     "seekable_buffer_unittest.cc",
     "serial_runner_unittest.cc",
+    "silence_detector_unittest.cc",
     "silent_sink_suspender_unittest.cc",
     "sinc_resampler_unittest.cc",
     "status_unittest.cc",
@@ -625,9 +645,10 @@ source_set("unit_tests") {
     "vector_math_unittest.cc",
     "video_aspect_ratio_unittest.cc",
     "video_bitrate_allocation_unittest.cc",
-    "video_codecs_unittest.cc",
+    "video_codec_string_parsers_unittest.cc",
     "video_color_space_unittest.cc",
     "video_decoder_config_unittest.cc",
+    "video_frame_converter_unittest.cc",
     "video_frame_layout_unittest.cc",
     "video_frame_pool_unittest.cc",
     "video_frame_unittest.cc",
@@ -657,7 +678,10 @@ source_set("unit_tests") {
   }
 
   if (is_win) {
-    sources += [ "win/dxgi_device_scope_handle_unittest.cc" ]
+    sources += [
+      "win/dxgi_device_scope_handle_unittest.cc",
+      "win/media_foundation_package_locator_unittest.cc",
+    ]
     deps += [
       "//media",
       "//ui/events:test_support",

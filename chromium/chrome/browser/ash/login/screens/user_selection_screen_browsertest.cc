@@ -22,6 +22,7 @@
 #include "chrome/browser/ash/login/test/offline_login_test_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/test_predicate_waiter.h"
+#include "chrome/browser/ash/login/test/user_auth_config.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
@@ -217,16 +218,13 @@ class UserSelectionScreenBlockOfflineTest : public LoginManagerTest,
 
   const LoginManagerMixin::TestUserInfo test_user_over_the_limit_{
       AccountId::FromUserEmailGaiaId(kUser1Email, kGaia1ID),
-      user_manager::UserType::USER_TYPE_REGULAR,
-      user_manager::User::OAuthTokenStatus::OAUTH2_TOKEN_STATUS_INVALID};
+      test::UserAuthConfig::Create(test::kDefaultAuthSetup).RequireReauth()};
   const LoginManagerMixin::TestUserInfo test_user_under_the_limit_{
       AccountId::FromUserEmailGaiaId(kUser2Email, kGaia2ID),
-      user_manager::UserType::USER_TYPE_REGULAR,
-      user_manager::User::OAuthTokenStatus::OAUTH2_TOKEN_STATUS_INVALID};
+      test::UserAuthConfig::Create(test::kDefaultAuthSetup).RequireReauth()};
   const LoginManagerMixin::TestUserInfo test_user_limit_not_set_{
       AccountId::FromUserEmailGaiaId(kUser3Email, kGaia3ID),
-      user_manager::UserType::USER_TYPE_REGULAR,
-      user_manager::User::OAuthTokenStatus::OAUTH2_TOKEN_STATUS_INVALID};
+      test::UserAuthConfig::Create(test::kDefaultAuthSetup).RequireReauth()};
   LoginManagerMixin login_mixin_{
       &mixin_host_,
       {test_user_over_the_limit_, test_user_under_the_limit_,
@@ -265,7 +263,8 @@ IN_PROC_BROWSER_TEST_F(UserSelectionScreenBlockOfflineTest,
   test::OobeJS().ExpectVisiblePath(kErrorMessageOfflineSigninLink);
 }
 
-class DarkLightEnabledTest : public LoginManagerTest {
+// Disabled due to high flake rate; see https://crbug.com/1406789.
+class DISABLED_DarkLightEnabledTest : public LoginManagerTest {
  protected:
   void StartLogin(const AccountId& account_id) {
     LoginDisplayHost::default_host()
@@ -288,7 +287,7 @@ class DarkLightEnabledTest : public LoginManagerTest {
 };
 
 // OOBE + login of the first user.
-IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, PRE_PRE_OobeLogin) {
+IN_PROC_BROWSER_TEST_F(DISABLED_DarkLightEnabledTest, PRE_PRE_OobeLogin) {
   OobeScreenWaiter(UserCreationView::kScreenId).Wait();
   auto* dark_light_mode_controller = DarkLightModeControllerImpl::Get();
   EXPECT_FALSE(dark_light_mode_controller->IsDarkModeEnabled());
@@ -306,7 +305,7 @@ IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, PRE_PRE_OobeLogin) {
 }
 
 // "Add person" flow.
-IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, PRE_OobeLogin) {
+IN_PROC_BROWSER_TEST_F(DISABLED_DarkLightEnabledTest, PRE_OobeLogin) {
   // Oobe is hidden - prefs of the focused user are applied.
   EXPECT_FALSE(LoginScreenTestApi::IsOobeDialogVisible());
   auto* dark_light_mode_controller = DarkLightModeControllerImpl::Get();
@@ -344,7 +343,7 @@ IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, PRE_OobeLogin) {
 }
 
 // Test focusing different pods.
-IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, OobeLogin) {
+IN_PROC_BROWSER_TEST_F(DISABLED_DarkLightEnabledTest, OobeLogin) {
   ASSERT_EQ(LoginScreenTestApi::GetFocusedUser(), user2);
   auto* dark_light_mode_controller = DarkLightModeControllerImpl::Get();
   EXPECT_FALSE(dark_light_mode_controller->IsDarkModeEnabled());

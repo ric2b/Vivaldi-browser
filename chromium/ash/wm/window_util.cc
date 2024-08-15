@@ -8,16 +8,17 @@
 #include <tuple>
 
 #include "ash/constants/app_types.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/multi_user/multi_user_window_manager_impl.h"
 #include "ash/public/cpp/app_types_util.h"
+#include "ash/public/cpp/input_device_settings_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/scoped_animation_disabler.h"
 #include "ash/screen_util.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
@@ -31,15 +32,18 @@
 #include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_overview_session.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
+#include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "chromeos/ui/frame/interior_resize_handler_targeter.h"
 #include "components/prefs/pref_service.h"
 #include "ui/aura/client/aura_constants.h"
@@ -104,7 +108,7 @@ bool ContainsSystemModalWindow(const aura::Window* window) {
     return true;
   }
 
-  for (const auto* child : window->children()) {
+  for (const aura::Window* child : window->children()) {
     if (ContainsSystemModalWindow(child)) {
       return true;
     }
@@ -162,6 +166,38 @@ aura::Window* FindTopMostChild(aura::Window* parent,
   return nullptr;
 }
 
+// Returns true if there is another window snapped to the opposite side of
+// `window` and we can't start partial overview.
+bool IsAnotherWindowSnappedOppositeOf(aura::Window* window) {
+  const auto windows =
+      Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
+  const auto snap_type = WindowState::Get(window)->GetStateType();
+  const auto opposite_snap_type = GetOppositeSnapType(window);
+  for (aura::Window* top_window : base::Reversed(windows)) {
+    if (top_window == window) {
+      // Skip `window` itself.
+      continue;
+    }
+    auto* top_window_state = WindowState::Get(top_window);
+    if (top_window_state->IsFloated()) {
+      // Skip any floated windows that are on top of the snapped windows.
+      continue;
+    }
+    if (!top_window_state->IsSnapped()) {
+      // Otherwise if `top_window` is not snapped, return false.
+      return false;
+    }
+    if (top_window_state->GetStateType() == snap_type) {
+      // Skip any windows that are snapped to the *same* side as `window`.
+      continue;
+    }
+    // Else `top_window` is snapped to the opposite side of `window`.
+    CHECK_EQ(top_window_state->GetStateType(), opposite_snap_type);
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 aura::Window* GetActiveWindow() {
@@ -194,6 +230,41 @@ aura::Window* GetTopMostWindow(const aura::Window::Windows& windows) {
   CHECK(lowest_common_parent);
 
   return FindTopMostChild(lowest_common_parent, windows);
+}
+
+std::vector<aura::Window*> SortWindowsBottomToTop(
+    std::set<aura::Window*> window_set) {
+  std::vector<aura::Window*> ordered;
+  std::vector<aura::Window*> root_windows;
+  std::stack<aura::Window*> stack;
+
+  // Collect unique root windows and put them on the stack.
+  for (auto* window : window_set) {
+    // The call to `GetRootWindow` here traverses up the window tree to the
+    // root, so this is technically quadratic time in the worst case, but is
+    // effectively linear time for shallow trees, which are common.
+    root_windows.push_back(window->GetRootWindow());
+  }
+  for (auto* window : base::flat_set<aura::Window*>(std::move(root_windows))) {
+    stack.push(window);
+  }
+
+  // Pre-order DFS from bottom-most to top-most windows.
+  while (!stack.empty()) {
+    auto* window = stack.top();
+    stack.pop();
+
+    if (window_set.erase(window)) {
+      ordered.push_back(window);
+    }
+
+    // Push so bottom-most is on the top of the stack.
+    for (aura::Window* child : base::Reversed(window->children())) {
+      stack.push(child);
+    }
+  }
+
+  return ordered;
 }
 
 aura::Window* GetCaptureWindow() {
@@ -330,14 +401,12 @@ bool ShouldExcludeForCycleList(const aura::Window* window) {
 
 bool ShouldExcludeForOverview(const aura::Window* window) {
   // If we're currently in tablet splitview or in clamshell mode with
-  // `IsArm1AutomaticallyLockEnabled()` (see SnapGroupController for more
-  // details), remove the default snapped window from the window list. The
-  // default snapped window occupies one side of the screen, while the other
-  // windows occupy the other side of the screen in overview mode. The default
-  // snap position is the position where the window was first snapped. See
-  // `default_snap_position_` in SplitViewController for more details.
-  auto* split_view_controller =
-      SplitViewController::Get(window->GetRootWindow());
+  // `IsFasterSplitScreenOrSnapGroupEnabledInClamshell()`, remove the default
+  // snapped window from the window list. The default snapped window occupies
+  // one side of the screen, while the other windows occupy the other side of
+  // the screen in overview mode. The default snap position is the position
+  // where the window was first snapped. See `default_snap_position_` in
+  // SplitViewController for more details.
 
   // A window should be excluded from being shown in overview when:
   // 1. In tablet split view mode on one window snapped;
@@ -345,7 +414,7 @@ bool ShouldExcludeForOverview(const aura::Window* window) {
   // 3. If the window is not the mru window in snap group i.e. the corresponding
   // overview item representation for the snap group has been created.
   auto should_exclude_in_clamshell = [&]() -> bool {
-    if (IsFasterSplitScreenOrSnapGroupArm1Enabled()) {
+    if (IsFasterSplitScreenOrSnapGroupEnabledInClamshell()) {
       if (auto* split_view_overview_session =
               RootWindowController::ForWindow(window)
                   ->split_view_overview_session();
@@ -369,12 +438,14 @@ bool ShouldExcludeForOverview(const aura::Window* window) {
     return true;
   }
 
-  return Shell::Get()->tablet_mode_controller()->InTabletMode()
-             ? (window == split_view_controller->GetDefaultSnappedWindow())
+  return display::Screen::GetScreen()->InTabletMode()
+             ? (window == SplitViewController::Get(window->GetRootWindow())
+                              ->GetDefaultSnappedWindow())
              : should_exclude_in_clamshell();
 }
 
-void EnsureTransientRoots(std::vector<aura::Window*>* out_window_list) {
+void EnsureTransientRoots(
+    std::vector<raw_ptr<aura::Window, VectorExperimental>>* out_window_list) {
   for (auto it = out_window_list->begin(); it != out_window_list->end();) {
     aura::Window* transient_root = ::wm::GetTransientRoot(*it);
     if (*it != transient_root) {
@@ -391,8 +462,8 @@ void EnsureTransientRoots(std::vector<aura::Window*>* out_window_list) {
 }
 
 void MinimizeAndHideWithoutAnimation(
-    const std::vector<aura::Window*>& windows) {
-  for (auto* window : windows) {
+    const std::vector<raw_ptr<aura::Window, VectorExperimental>>& windows) {
+  for (aura::Window* window : windows) {
     ScopedAnimationDisabler disable(window);
 
     // ARC windows are minimized asynchronously, so we hide them after
@@ -501,15 +572,18 @@ aura::Window* GetFloatedWindowForActiveDesk() {
 bool ShouldMinimizeTopWindowOnBack() {
   Shell* shell = Shell::Get();
   // We never want to minimize the main app window in the Kiosk session.
-  if (shell->session_controller()->IsRunningInAppMode())
+  if (shell->session_controller()->IsRunningInAppMode()) {
     return false;
+  }
 
-  if (!shell->tablet_mode_controller()->InTabletMode())
+  if (!display::Screen::GetScreen()->InTabletMode()) {
     return false;
+  }
 
   aura::Window* window = GetTopWindow();
-  if (!window)
+  if (!window) {
     return false;
+  }
 
   // Do not minimize the window if it is in overview. This can avoid unnecessary
   // window minimize animation.
@@ -572,6 +646,25 @@ WindowTransientDescendantIteratorRange GetVisibleTransientTreeIterator(
   return GetTransientTreeIterator(window, base::BindRepeating(hide_predicate));
 }
 
+void SetTransform(aura::Window* window, const gfx::Transform& transform) {
+  const gfx::PointF target_origin(
+      GetUnionScreenBoundsForWindow(window).origin());
+  for (auto* window_iter :
+       window_util::GetVisibleTransientTreeIterator(window)) {
+    if (window_iter->GetProperty(kExcludeFromTransientTreeTransformKey)) {
+      continue;
+    }
+    aura::Window* parent_window = window_iter->parent();
+    gfx::RectF original_bounds(window_iter->GetTargetBounds());
+    ::wm::TranslateRectToScreen(parent_window, &original_bounds);
+    const gfx::Transform new_transform = TransformAboutPivot(
+        gfx::PointF(target_origin.x() - original_bounds.x(),
+                    target_origin.y() - original_bounds.y()),
+        transform);
+    window_iter->SetTransform(new_transform);
+  }
+}
+
 gfx::RectF GetTransformedBounds(aura::Window* transformed_window,
                                 int top_inset) {
   gfx::RectF bounds;
@@ -596,7 +689,7 @@ gfx::RectF GetTransformedBounds(aura::Window* transformed_window,
       header_bounds = new_transform.MapRect(header_bounds);
       window_bounds.Inset(gfx::InsetsF::TLBR(header_bounds.height(), 0, 0, 0));
     }
-    ::wm::TranslateRectToScreen(window->parent(), &window_bounds);
+    wm::TranslateRectToScreen(window->parent(), &window_bounds);
     bounds.Union(window_bounds);
   }
   return bounds;
@@ -634,6 +727,19 @@ bool IsNaturalScrollOn() {
          pref->GetBoolean(prefs::kNaturalScroll);
 }
 
+bool IsNaturalScrollOn(const ui::ScrollEvent& event) {
+  if (auto* touchpad_device_settings =
+          InputDeviceSettingsController::Get()->GetTouchpadSettings(
+              event.source_device_id())) {
+    return touchpad_device_settings->reverse_scrolling;
+  }
+  // This case mainly happens in the unit tests which generate fake touch
+  // events but have no touch devices.
+  // TODO(zxdan): We should `CHECK` the setting's ptr after we fix corresponding
+  // unit tests.
+  return IsNaturalScrollOn();
+}
+
 bool ShouldRoundThumbnailWindow(views::View* backdrop_view,
                                 const gfx::RectF& thumbnail_bounds_in_screen) {
   // If the backdrop is not created or not visible, round the thumbnail.
@@ -653,25 +759,67 @@ bool ShouldRoundThumbnailWindow(views::View* backdrop_view,
   return !backdrop_bounds_in_screen.Contains(thumbnail_bounds_in_screen);
 }
 
-bool IsFasterSplitScreenOrSnapGroupArm1Enabled() {
-  if (Shell::Get()->IsInTabletMode()) {
-    // FasterSplitScreen is not supported in tablet mode.
-    return false;
-  }
-  if (features::IsFasterSplitScreenSetupEnabled()) {
-    return true;
-  }
-  auto* snap_group_controller = SnapGroupController::Get();
-  return snap_group_controller &&
-         snap_group_controller->IsArm1AutomaticallyLockEnabled();
+float GetSnapRatioForWindow(aura::Window* window) {
+  WindowState* window_state = WindowState::Get(window);
+  return window_state->snap_ratio().value_or(chromeos::kDefaultSnapRatio);
+}
+
+bool IsFasterSplitScreenOrSnapGroupEnabledInClamshell() {
+  return !Shell::Get()->IsInTabletMode() &&
+         (features::IsFasterSplitScreenSetupEnabled() ||
+          SnapGroupController::Get());
+}
+
+chromeos::WindowStateType GetOppositeSnapType(aura::Window* window) {
+  CHECK(window);
+  WindowState* window_state = WindowState::Get(window);
+  CHECK(window_state->IsSnapped());
+  return window_state->GetStateType() ==
+                 chromeos::WindowStateType::kPrimarySnapped
+             ? chromeos::WindowStateType::kSecondarySnapped
+             : chromeos::WindowStateType::kPrimarySnapped;
 }
 
 void MaybeStartSplitViewOverview(aura::Window* window,
                                  WindowSnapActionSource snap_action_source) {
+  if (!IsFasterSplitScreenOrSnapGroupEnabledInClamshell()) {
+    return;
+  }
+
+  switch (snap_action_source) {
+    case WindowSnapActionSource::kDragWindowToEdgeToSnap:
+    case WindowSnapActionSource::kSnapByWindowLayoutMenu:
+    case WindowSnapActionSource::kLongPressCaptionButtonToSnap:
+    case WindowSnapActionSource::kTest:
+      // We only start partial overview for the above snap sources.
+      break;
+    default:
+      return;
+  }
+
+  auto* snap_group_controller = SnapGroupController::Get();
+  if (snap_group_controller &&
+      snap_group_controller->GetSnapGroupForGivenWindow(window)) {
+    // `SnapGroupController` needs to check if the window belongs to a snap
+    // group first.
+    return;
+  }
+
   auto* root_window_controller = RootWindowController::ForWindow(window);
-  if (root_window_controller->split_view_overview_session()) {
+  if (auto* split_view_overview_session =
+          root_window_controller->split_view_overview_session();
+      split_view_overview_session) {
     // If split view overview is already active, which may be the case if this
     // was the selected window from overview, return.
+    return;
+  }
+
+  // If `SnapGroups` is not enabled and the topmost window (excluding
+  // `window` itself) is snapped on the opposite side, don't start partial
+  // overview.
+  // TODO(b/319295505): We still need to define the behavior when there is
+  // another snapped window for `SnapGroups`.
+  if (!snap_group_controller && IsAnotherWindowSnappedOppositeOf(window)) {
     return;
   }
 

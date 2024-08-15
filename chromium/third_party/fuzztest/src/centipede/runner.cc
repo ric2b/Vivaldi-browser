@@ -30,6 +30,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cinttypes>
 #include <cstddef>
@@ -39,13 +40,17 @@
 #include <cstring>
 #include <ctime>
 #include <functional>
+#include <memory>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "./centipede/byte_array_mutator.h"
 #include "./centipede/defs.h"
+#include "./centipede/execution_metadata.h"
 #include "./centipede/feature.h"
-#include "./centipede/foreach_nonzero.h"
+#include "./centipede/int_utils.h"
+#include "./centipede/mutation_input.h"
 #include "./centipede/pc_info.h"
 #include "./centipede/runner_dl_info.h"
 #include "./centipede/runner_interface.h"
@@ -74,6 +79,17 @@ size_t LengthOfCommonPrefix(const void *s1, const void *s2, size_t n) {
   }
   return n;
 }
+
+class ThreadTerminationDetector {
+ public:
+  // A dummy method to trigger the construction and make sure that the
+  // destructor will be called on the thread termination.
+  __attribute__((optnone)) void EnsureAlive() {}
+
+  ~ThreadTerminationDetector() { tls.OnThreadStop(); }
+};
+
+thread_local ThreadTerminationDetector termination_detector;
 
 }  // namespace
 
@@ -126,8 +142,14 @@ void ThreadLocalRunnerState::TraceMemCmp(uintptr_t caller_pc, const uint8_t *s1,
 }
 
 void ThreadLocalRunnerState::OnThreadStart() {
+  termination_detector.EnsureAlive();
   tls.lowest_sp = tls.top_frame_sp =
       reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+  tls.stack_region_low = GetCurrentThreadStackRegionLow();
+  if (tls.stack_region_low == 0) {
+    fprintf(stderr,
+            "Disabling stack limit check due to missing stack region info.\n");
+  }
   tls.call_stack.Reset(state.run_time_flags.callstack_level);
   tls.path_ring_buffer.Reset(state.run_time_flags.path_level);
   LockGuard lock(state.tls_list_mu);
@@ -151,6 +173,18 @@ void ThreadLocalRunnerState::OnThreadStop() {
     prev_tls->next = next_tls;
     if (next_tls != nullptr) next_tls->prev = prev_tls;
   }
+  tls.next = tls.prev = nullptr;
+  if (tls.ignore) return;
+  // Create a detached copy on heap and add it to detached_tls_list to
+  // collect its coverage later.
+  //
+  // TODO(xinhaoyuan): Consider refactoring the list operations into class
+  // methods instead of duplicating them.
+  ThreadLocalRunnerState *detached_tls = new ThreadLocalRunnerState(tls);
+  auto *old_list = state.detached_tls_list;
+  detached_tls->next = old_list;
+  state.detached_tls_list = detached_tls;
+  if (old_list != nullptr) old_list->prev = detached_tls;
 }
 
 static size_t GetPeakRSSMb() {
@@ -177,18 +211,21 @@ static void CheckWatchdogLimits() {
     uint64_t limit;
     const char *failure;
   };
+  const uint64_t input_start_time = state.input_start_time;
+  const uint64_t batch_start_time = state.batch_start_time;
+  if (input_start_time == 0 || batch_start_time == 0) return;
   const Resource resources[] = {
       {
           .what = "Per-input timeout",
           .units = "sec",
-          .value = curr_time - state.input_start_time,
+          .value = curr_time - input_start_time,
           .limit = state.run_time_flags.timeout_per_input,
           .failure = kExecutionFailurePerInputTimeout.data(),
       },
       {
           .what = "Per-batch timeout",
           .units = "sec",
-          .value = curr_time - state.batch_start_time,
+          .value = curr_time - batch_start_time,
           .limit = state.run_time_flags.timeout_per_batch,
           .failure = kExecutionFailurePerBatchTimeout.data(),
       },
@@ -212,7 +249,7 @@ static void CheckWatchdogLimits() {
                 " (%s); exiting\n",
                 resource.what, resource.value, resource.limit, resource.units);
         WriteFailureDescription(resource.failure);
-        _exit(EXIT_FAILURE);
+        abort();
       }
     }
   }
@@ -233,19 +270,39 @@ static void CheckWatchdogLimits() {
   }
 }
 
-void GlobalRunnerState::StartWatchdogThread() {
-  if (state.run_time_flags.timeout_per_input == 0 &&
-      state.run_time_flags.timeout_per_batch == 0 &&
-      state.run_time_flags.rss_limit_mb == 0) {
-    return;
+__attribute__((noinline)) void CheckStackLimit(uintptr_t sp) {
+  const size_t stack_limit = state.run_time_flags.stack_limit_kb.load() << 10;
+  // Check for the stack limit only if sp is inside the stack region.
+  if (stack_limit > 0 && tls.stack_region_low &&
+      tls.top_frame_sp - sp > stack_limit) {
+    fprintf(stderr,
+            "========= Stack limit exceeded: %" PRIuPTR " > %" PRIu64
+            " (byte); aborting\n",
+            tls.top_frame_sp - sp, stack_limit);
+    centipede::WriteFailureDescription(
+        centipede::kExecutionFailureStackLimitExceeded.data());
+    abort();
   }
+}
+
+void GlobalRunnerState::CleanUpDetachedTls() {
+  LockGuard lock(tls_list_mu);
+  ThreadLocalRunnerState *it_next = nullptr;
+  for (auto *it = detached_tls_list; it; it = it_next) {
+    it_next = it->next;
+    delete it;
+  }
+  detached_tls_list = nullptr;
+}
+
+void GlobalRunnerState::StartWatchdogThread() {
   fprintf(stderr,
           "Starting watchdog thread: timeout_per_input: %" PRIu64
           " sec; timeout_per_batch: %" PRIu64 " sec; rss_limit_mb: %" PRIu64
           " MB\n",
-          state.run_time_flags.timeout_per_input,
+          state.run_time_flags.timeout_per_input.load(),
           state.run_time_flags.timeout_per_batch,
-          state.run_time_flags.rss_limit_mb);
+          state.run_time_flags.rss_limit_mb.load());
   pthread_t watchdog_thread;
   pthread_create(&watchdog_thread, nullptr, WatchdogThread, nullptr);
   pthread_detach(watchdog_thread);
@@ -313,6 +370,7 @@ static void WriteFeaturesToFile(FILE *file, const feature_t *features,
 __attribute__((noinline))  // so that we see it in profile.
 static void
 PrepareCoverage(bool full_clear) {
+  state.CleanUpDetachedTls();
   if (state.run_time_flags.path_level != 0) {
     state.ForEachTls([](ThreadLocalRunnerState &tls) {
       tls.path_ring_buffer.Reset(state.run_time_flags.path_level);
@@ -320,8 +378,15 @@ PrepareCoverage(bool full_clear) {
       tls.lowest_sp = tls.top_frame_sp;
     });
   }
-  // TODO(kcc): do we need to clear tls.cmp_trace2 and others here?
   if (!full_clear) return;
+  state.ForEachTls([](ThreadLocalRunnerState &tls) {
+    if (state.run_time_flags.use_auto_dictionary) {
+      tls.cmp_trace2.Clear();
+      tls.cmp_trace4.Clear();
+      tls.cmp_trace8.Clear();
+      tls.cmp_traceN.Clear();
+    }
+  });
   state.pc_counter_set.ForEachNonZeroByte([](size_t idx, uint8_t value) {});
   if (state.run_time_flags.use_dataflow_features)
     state.data_flow_feature_set.ForEachNonZeroBit([](size_t idx) {});
@@ -342,15 +407,24 @@ PrepareCoverage(bool full_clear) {
   state.sancov_objects.ClearInlineCounters();
 }
 
+static void MaybeAddFeature(feature_t feature) {
+  if (!state.run_time_flags.skip_seen_features) {
+    state.g_features.push_back(feature);
+  } else if (!state.seen_features.get(feature)) {
+    state.g_features.push_back(feature);
+    state.seen_features.set(feature);
+  }
+}
+
 // Adds a kPCs and/or k8bitCounters feature to `g_features` based on arguments.
 // `idx` is a pc_index.
 // `counter_value` (non-zero) is a counter value associated with that PC.
 static void AddPcIndxedAndCounterToFeatures(size_t idx, uint8_t counter_value) {
   if (state.run_time_flags.use_pc_features) {
-    state.g_features.push_back(feature_domains::kPCs.ConvertToMe(idx));
+    MaybeAddFeature(feature_domains::kPCs.ConvertToMe(idx));
   }
   if (state.run_time_flags.use_counter_features) {
-    state.g_features.push_back(feature_domains::k8bitCounters.ConvertToMe(
+    MaybeAddFeature(feature_domains::k8bitCounters.ConvertToMe(
         Convert8bitCounterToNumber(idx, counter_value)));
   }
 }
@@ -379,7 +453,7 @@ PostProcessCoverage(int target_return_value) {
   // Convert data flow bit set to features.
   if (state.run_time_flags.use_dataflow_features) {
     state.data_flow_feature_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kDataFlow.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kDataFlow.ConvertToMe(idx));
     });
   }
 
@@ -387,27 +461,26 @@ PostProcessCoverage(int target_return_value) {
   if (state.run_time_flags.use_cmp_features) {
     // TODO(kcc): remove cmp_feature_set.
     state.cmp_feature_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kCMP.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kCMP.ConvertToMe(idx));
     });
     state.cmp_eq_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kCMPEq.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kCMPEq.ConvertToMe(idx));
     });
     state.cmp_moddiff_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kCMPModDiff.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kCMPModDiff.ConvertToMe(idx));
     });
     state.cmp_hamming_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kCMPHamming.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kCMPHamming.ConvertToMe(idx));
     });
     state.cmp_difflog_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kCMPDiffLog.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kCMPDiffLog.ConvertToMe(idx));
     });
   }
 
   // Convert path bit set to features.
   if (state.run_time_flags.path_level != 0) {
     state.path_feature_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(
-          feature_domains::kBoundedPath.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kBoundedPath.ConvertToMe(idx));
     });
   }
 
@@ -417,14 +490,13 @@ PostProcessCoverage(int target_return_value) {
       RunnerCheck(tls.top_frame_sp >= tls.lowest_sp,
                   "bad values of tls.top_frame_sp and tls.lowest_sp");
       size_t sp_diff = tls.top_frame_sp - tls.lowest_sp;
-      state.g_features.push_back(
-          feature_domains::kCallStack.ConvertToMe(sp_diff));
+      MaybeAddFeature(feature_domains::kCallStack.ConvertToMe(sp_diff));
     }
   });
 
   if (state.run_time_flags.callstack_level != 0) {
     state.callstack_set.ForEachNonZeroBit([](size_t idx) {
-      state.g_features.push_back(feature_domains::kCallStack.ConvertToMe(idx));
+      MaybeAddFeature(feature_domains::kCallStack.ConvertToMe(idx));
     });
   }
 
@@ -440,9 +512,8 @@ PostProcessCoverage(int target_return_value) {
       // available. If a user domain ID is out of range, alias it to an existing
       // domain. This is kinder than silently dropping the feature.
       user_domain_id %= std::size(feature_domains::kUserDomains);
-      state.g_features.push_back(
-          feature_domains::kUserDomains[user_domain_id].ConvertToMe(
-              user_feature_id));
+      MaybeAddFeature(feature_domains::kUserDomains[user_domain_id].ConvertToMe(
+          user_feature_id));
       *p = 0;  // cleanup for the next iteration.
     }
   }
@@ -578,6 +649,16 @@ __attribute__((noinline)) bool AppendCmpEntries(CmpTrace &cmp_trace,
 // Returns true on success.
 static bool StartSendingOutputsToEngine(BlobSequence &outputs_blobseq) {
   return BatchResult::WriteInputBegin(outputs_blobseq);
+}
+
+// Copy all the `g_features` to `data` with given `capacity` in bytes.
+// Returns the byte size of `g_features`.
+static size_t CopyFeatures(uint8_t *data, size_t capacity) {
+  const size_t features_len_in_bytes =
+      state.g_features.size() * sizeof(feature_t);
+  if (features_len_in_bytes > capacity) return 0;
+  memcpy(data, state.g_features.data(), features_len_in_bytes);
+  return features_len_in_bytes;
 }
 
 // Finishes sending the outputs (coverage, etc.) to `outputs_blobseq`.
@@ -873,9 +954,10 @@ extern void ForkServerCallMeVeryEarly();
 // * linker sees them and decides to drop runner_sancov.o.
 extern void RunnerSancov();
 [[maybe_unused]] auto fake_reference_for_runner_sancov = &RunnerSancov;
-// Same for runner_sanitizer.cc.
-extern void RunnerSanitizer();
-[[maybe_unused]] auto fake_reference_for_runner_sanitizer = &RunnerSanitizer;
+// Same for runner_interceptor.cc.
+extern void RunnerInterceptor();
+[[maybe_unused]] auto fake_reference_for_runner_interceptor =
+    &RunnerInterceptor;
 
 GlobalRunnerState::GlobalRunnerState() {
   // TODO(kcc): move some code from CentipedeRunnerMain() here so that it works
@@ -929,6 +1011,8 @@ GlobalRunnerState::~GlobalRunnerState() {
     StartSendingOutputsToEngine(outputs_blobseq);
     FinishSendingOutputsToEngine(outputs_blobseq);
   }
+  // Always clean up detached TLSs to avoid leakage.
+  CleanUpDetachedTls();
 }
 
 // If HasFlag(:shmem:), state.arg1 and state.arg2 are the names
@@ -1001,15 +1085,74 @@ extern "C" int LLVMFuzzerRunDriver(
 extern "C" __attribute__((used)) void CentipedeIsPresent() {}
 extern "C" __attribute__((used)) void __libfuzzer_is_present() {}
 
-extern "C" void CentipedeClearExecutionResult() {
-  // TODO: full_clear=true is expensive - performance may suffer.
+extern "C" void CentipedeSetRssLimit(size_t rss_limit_mb) {
+  fprintf(stderr, "CentipedeSetRssLimit: changing rss_limit_mb to %zu\n",
+          rss_limit_mb);
+  centipede::state.run_time_flags.rss_limit_mb = rss_limit_mb;
+}
+
+extern "C" void CentipedeSetStackLimit(size_t stack_limit_kb) {
+  fprintf(stderr, "CentipedeSetStackLimit: changing stack_limit_kb to %zu\n",
+          stack_limit_kb);
+  centipede::state.run_time_flags.stack_limit_kb = stack_limit_kb;
+}
+
+extern "C" void CentipedeSetTimeoutPerInput(uint64_t timeout_per_input) {
+  fprintf(stderr,
+          "CentipedeSetTimeoutPerInput: changing timeout_per_input to %" PRIu64
+          "\n",
+          timeout_per_input);
+  centipede::state.run_time_flags.timeout_per_input = timeout_per_input;
+}
+
+extern "C" __attribute__((weak)) const char *CentipedeGetRunnerFlags() {
+  if (const char *runner_flags_env = getenv("CENTIPEDE_RUNNER_FLAGS"))
+    return strdup(runner_flags_env);
+  return nullptr;
+}
+
+static std::atomic<bool> in_execution_batch = false;
+
+extern "C" void CentipedeBeginExecutionBatch() {
+  if (in_execution_batch) {
+    fprintf(stderr,
+            "CentipedeBeginExecutionBatch called twice without calling "
+            "CentipedeEndExecutionBatch in between\n");
+    _exit(EXIT_FAILURE);
+  }
+  in_execution_batch = true;
   centipede::PrepareCoverage(/*full_clear=*/true);
 }
 
-extern "C" size_t CentipedeGetExecutionResult(uint8_t *data, size_t capacity) {
+extern "C" void CentipedeEndExecutionBatch() {
+  if (!in_execution_batch) {
+    fprintf(stderr,
+            "CentipedeEndExecutionBatch called without calling "
+            "CentipedeBeginExecutionBatch before\n");
+    _exit(EXIT_FAILURE);
+  }
+  in_execution_batch = false;
+  centipede::state.input_start_time = 0;
+  centipede::state.batch_start_time = 0;
+}
+
+extern "C" void CentipedePrepareProcessing() {
+  centipede::PrepareCoverage(/*full_clear=*/!in_execution_batch);
+  centipede::state.ResetTimers();
+}
+
+extern "C" void CentipedeFinalizeProcessing() {
+  centipede::CheckWatchdogLimits();
   centipede::PostProcessCoverage(/*target_return_value=*/0);
+}
+
+extern "C" size_t CentipedeGetExecutionResult(uint8_t *data, size_t capacity) {
   centipede::BlobSequence outputs_blobseq(data, capacity);
   if (!centipede::StartSendingOutputsToEngine(outputs_blobseq)) return 0;
   if (!centipede::FinishSendingOutputsToEngine(outputs_blobseq)) return 0;
   return outputs_blobseq.offset();
+}
+
+extern "C" size_t CentipedeGetCoverageData(uint8_t *data, size_t capacity) {
+  return centipede::CopyFeatures(data, capacity);
 }

@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "./centipede/defs.h"
 #include "./centipede/mutation_input.h"
@@ -60,12 +61,52 @@ extern "C" int LLVMFuzzerRunDriver(
 extern "C" __attribute__((weak)) void CentipedeIsPresent();
 extern "C" __attribute__((weak)) void __libfuzzer_is_present();
 
-// Clears all the accumulated execution result.
-extern "C" void CentipedeClearExecutionResult();
+// Reconfigures the RSS limit to `rss_limit_mb` - 0 indicates no limit.
+extern "C" void CentipedeSetRssLimit(size_t rss_limit_mb);
 
-// Saves the execution result (coverage, etc.) to `data` with given `capacity`
-// in bytes. Returns the size of saved data.
+// Reconfigures the stack limit to `stack_limit_kb` - 0 indicates no limit.
+extern "C" void CentipedeSetStackLimit(size_t stack_limit_kb);
+
+// Reconfigures `timeout_per_input` accordingly in seconds - 0 means no timeout.
+extern "C" void CentipedeSetTimeoutPerInput(uint64_t timeout_per_input);
+
+// An overridable function to get the runner flags for configuring the runner
+// during the initialization. The default implementation (as a weak function)
+// gets the flags from CENTIPEDE_RUNNER_FLAGS env var.
+//
+// It should return either a nullptr or a constant string that is valid
+// throughout the entire process life-time.
+extern "C" const char *CentipedeGetRunnerFlags();
+
+// Prepares to run a batch of test executions that ends with calling
+// `CentipedeEndExecutionBatch`.
+//
+// `CentipedeBeginExecutionBatch` would abort if it was previously called
+// without a matching `CentipedeEndExecutionBatch` call.
+extern "C" void CentipedeBeginExecutionBatch();
+
+// Finalizes the current batch of test executions. It would abort if no
+// `CentipedeBeginExecutionBatch` was called before without a matching
+// `CentipedeEndExecutionBatch` call.
+extern "C" void CentipedeEndExecutionBatch();
+
+// Resets the internal state of the runner to process a new input.
+extern "C" void CentipedePrepareProcessing();
+
+// Finalizes the processing of an input and stores the state internally.
+extern "C" void CentipedeFinalizeProcessing();
+
+// Retrieves the execution results (including coverage information) after
+// processing an input. This function saves the data to the provided buffer and
+// returns the size of the saved data. It may be called after
+// CentipedeFinalizeProcessing().
 extern "C" size_t CentipedeGetExecutionResult(uint8_t *data, size_t capacity);
+
+// Retrieves the coverage data collected during the processing of an input.
+// This function saves the raw coverage data to the provided buffer and returns
+// the size of the saved data. It may be called after
+// CentipedeFinalizeProcessing().
+extern "C" size_t CentipedeGetCoverageData(uint8_t *data, size_t capacity);
 
 namespace centipede {
 

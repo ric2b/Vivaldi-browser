@@ -335,6 +335,23 @@ mojom::RendererHost* ExtensionFrameHelper::GetRendererHost() {
   return renderer_host_remote_.get();
 }
 
+mojom::EventRouter* ExtensionFrameHelper::GetEventRouter() {
+  if (!event_router_remote_.is_bound()) {
+    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(
+        &event_router_remote_);
+  }
+  return event_router_remote_.get();
+}
+
+mojom::RendererAutomationRegistry*
+ExtensionFrameHelper::GetRendererAutomationRegistry() {
+  if (!renderer_automation_registry_remote_.is_bound()) {
+    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(
+        &renderer_automation_registry_remote_);
+  }
+  return renderer_automation_registry_remote_.get();
+}
+
 void ExtensionFrameHelper::ReadyToCommitNavigation(
     blink::WebDocumentLoader* document_loader) {
   blink::WebLocalFrame* web_frame = render_frame()->GetWebFrame();
@@ -490,7 +507,13 @@ void ExtensionFrameHelper::OnExtensionDispatchOnDisconnect(
 void ExtensionFrameHelper::SetTabId(int32_t tab_id) {
   CHECK_EQ(tab_id_, -1);
   CHECK_GE(tab_id, 0);
+  DCHECK(!vivaldi_panel_);
   tab_id_ = tab_id;
+}
+
+void ExtensionFrameHelper::SetVivaldiPanelId(int32_t vivaldi_panel_id) {
+  vivaldi_panel_ = true;
+  tab_id_ = vivaldi_panel_id;
 }
 
 void ExtensionFrameHelper::NotifyRenderViewType(mojom::ViewType type) {
@@ -651,6 +674,29 @@ void ExtensionFrameHelper::DidClearWindowObject() {
     if (GetExtensionFromFrame(frame))
       frame->SetAllowsCrossBrowsingInstanceFrameLookup();
   }
+}
+
+content::RenderFrame* ExtensionFrameHelper::FindFrameFromFrameTokenString(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> v8_string) {
+  CHECK(v8_string->IsString());
+
+  std::string frame_token;
+  if (!gin::Converter<std::string>::FromV8(isolate, v8_string, &frame_token)) {
+    return nullptr;
+  }
+  auto token = base::Token::FromString(frame_token);
+  if (!token) {
+    return nullptr;
+  }
+  auto unguessable_token =
+      base::UnguessableToken::Deserialize(token->high(), token->low());
+  if (!unguessable_token) {
+    return nullptr;
+  }
+  auto* web_frame = blink::WebLocalFrame::FromFrameToken(
+      blink::LocalFrameToken(unguessable_token.value()));
+  return content::RenderFrame::FromWebFrame(web_frame);
 }
 
 }  // namespace extensions

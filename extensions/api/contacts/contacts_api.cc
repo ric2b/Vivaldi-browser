@@ -50,9 +50,9 @@ bool GetIdAsInt64(const std::string& id_string, int64_t* id) {
 ContactPropertyNameEnum APIAddpropertyTypeToInternal(
     ContactPropertyName transition) {
   switch (transition) {
-    case vivaldi::contacts::CONTACT_PROPERTY_NAME_PHONENUMBER:
+    case vivaldi::contacts::ContactPropertyName::kPhoneNumber:
       return ContactPropertyNameEnum::PHONENUMBER;
-    case vivaldi::contacts::CONTACT_PROPERTY_NAME_POSTALADDRESS:
+    case vivaldi::contacts::ContactPropertyName::kPostalAddress:
       return ContactPropertyNameEnum::POSTAL_ADDRESS;
     default:
       NOTREACHED();

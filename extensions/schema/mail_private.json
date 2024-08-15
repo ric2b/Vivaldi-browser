@@ -18,34 +18,43 @@
             "type": "integer"
           },
           "subject": {
-            "optional": "true",
             "description": "The message subject.",
             "type": "string"
           },
           "body": {
-            "optional": "true",
             "type": "string",
             "description": "The message body."
           },
           "to": {
-            "optional": "true",
             "description": "The message to address .",
             "type": "string"
           },
           "cc": {
-            "optional": "true",
             "type": "string",
             "description": "The message cc address ."
           },
           "from": {
-            "optional": "true",
             "type": "string",
             "description": "The message from address ."
           },
           "replyTo": {
-            "optional": "true",
             "type": "string",
             "description": "The message reply address ."
+          }
+        }
+      },
+      {
+        "id": "migration",
+        "type": "object",
+        "description": "Migration object. Returns search db version and if migration of search db is needed.",
+        "properties": {
+          "dbVersion": {
+            "description": "The mail search db version.",
+            "type": "integer"
+          },
+          "migrationNeeded": {
+            "description": "If database migration is needed.",
+            "type": "boolean"
           }
         }
       }
@@ -221,6 +230,41 @@
             {
               "name": "result",
               "type": "string"
+            }
+          ]
+        }
+      },
+      {
+        "name": "renameMessageFile",
+        "type": "function",
+        "description": "Renames a file. The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to build path to the file. Starting at user default profile/Mail.",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be renamed."
+          },
+          {
+            "name": "newFileName",
+            "type": "string",
+            "description": "The new name for the file."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
             }
           ]
         }
@@ -408,7 +452,7 @@
         "description": "Deletes messages from full text search.",
         "parameters": [
           {
-            "name": "searchListIds",
+            "name": "messages",
             "type": "array",
             "items": {
               "type": "integer"
@@ -428,19 +472,13 @@
         }
       },
       {
-        "name": "addMessageBody",
+        "name": "updateMessage",
         "type": "function",
-        "description": "Adds a message body to the message.",
+        "description": "Updates a message. All properties needs to be specified both new and previous ones.",
         "parameters": [
           {
-            "type": "integer",
-            "name": "searchListId",
-            "description": "The searchListId of the message to be deleted"
-          },
-          {
-            "type": "string",
-            "name": "body",
-            "description": "The message body to add"
+            "$ref": "message",
+            "name": "message"
           }
         ],
         "returns_async": {
@@ -508,9 +546,25 @@
         }
       },
       {
-        "name": "rebuildAndVacuumDatabase",
+        "name": "getDBVersion",
         "type": "function",
-        "description": "Rebuilds the full text database index. Defragments and frees up unused space in the db file. This can be very slow.",
+        "description": "Returns SQLite database version for MailDB.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "$ref": "migration",
+              "name": "version"
+            }
+          ]
+        }
+      },
+      {
+        "name": "startMigration",
+        "type": "function",
+        "description": "Migrates the full text database index to contentless. Track progress in the listener: onUpgradeProgress. This can be slow.",
         "parameters": [],
         "returns_async": {
           "name": "callback",
@@ -518,11 +572,46 @@
           "parameters": [
             {
               "name": "result",
-              "type": "boolean",
-              "description": "Returns true if the operation is successful, false otherwise."
+              "type": "boolean"
             }
           ]
         }
+      }
+    ],
+    "events": [
+      {
+        "name": "onUpgradeProgress",
+        "type": "function",
+        "description": "Reports import progress.",
+        "parameters": [
+          {
+            "name": "progress",
+            "type": "integer",
+            "description": "Number of rows upgraded."
+          },
+          {
+            "name": "total",
+            "type": "integer",
+            "description": "Total number of rows to be upgraded."
+          },
+          {
+            "name": "msg",
+            "type": "string",
+            "description": "Message to be printed out."
+          }
+        ]
+      },
+      {
+        "name": "onDeleteMessagesProgress",
+        "type": "function",
+        "description": "Reports progress when deleting messages.",
+        "parameters": [
+          {
+            "name": "delete_progress_count",
+            "type": "integer",
+            "description": "Number of messages deleted."
+          }
+        ]
       }
     ]
   }

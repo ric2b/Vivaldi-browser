@@ -163,15 +163,16 @@ Wrappers* Wrappers::instance = nullptr;
 {{   if $s := SetlikeOf $}}
         InstanceMethod("has", &W{{$.Name}}::has),
         InstanceMethod("keys", &W{{$.Name}}::keys),
+        InstanceAccessor("size", &W{{$.Name}}::getSize, nullptr),
 {{-  end}}
 {{-  range $m := $methods}}
-        InstanceMethod("{{$m.Name}}", &W{{$.Name}}::{{$m.Name}}),
+        InstanceMethod("{{$m.Name}}", &W{{$.Name}}::{{$m.Name}}, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
 {{-  end}}
 {{-  range $a := $attributes}}
 {{-   if not (HasAnnotation $a "SameObject")}}
         InstanceAccessor("{{$a.Name}}", &W{{$.Name}}::get{{Title $a.Name}},
-{{-    if $a.Readonly}} nullptr{{else}} &W{{$.Name}}::set{{Title $a.Name}}{{end -}}
-        ),
+{{-    if $a.Readonly}} nullptr,{{else}} &W{{$.Name}}::set{{Title $a.Name}},{{end -}}
+        napi_enumerable),
 {{-   end}}
 {{-  end}}
 {{-  range $c := $constants}}
@@ -195,9 +196,19 @@ Wrappers* Wrappers::instance = nullptr;
     Napi::Value keys(const Napi::CallbackInfo& info) {
       return ToJS(info.Env(), impl->keys(info.Env()));
     }
+    Napi::Value getSize(const Napi::CallbackInfo& info) {
+      return ToJS(info.Env(), impl->getSize(info.Env()));
+    }
 {{-  end}}
 {{-  range $m := $methods}}
+{{-    $implSuffix := ""}}
+{{-    if ReturnsPromise $m}}
+{{-      $implSuffix = "Inner"}}
     Napi::Value {{$m.Name}}(const Napi::CallbackInfo& info) {
+      return CatchExceptionIntoPromise(info.Env(), [&]() -> auto { return {{$m.Name}}Inner(info); });
+    }
+{{-    end}}
+    Napi::Value {{$m.Name}}{{$implSuffix}}(const Napi::CallbackInfo& info) {
       std::string error;
 {{-    range $overload_idx, $o := $m.Overloads}}
 {{- $overloaded := gt (len $m.Overloads) 1}}

@@ -7,6 +7,9 @@
 #include <memory>
 
 #include "ash/style/icon_button.h"
+#include "ash/system/toast/anchored_nudge.h"
+#include "ash/system/toast/anchored_nudge_manager_impl.h"
+#include "base/check.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "chrome/browser/ash/arc/input_overlay/test/overlay_view_test_base.h"
@@ -17,12 +20,14 @@
 #include "chrome/browser/ash/arc/input_overlay/ui/button_options_menu.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/delete_edit_shortcut.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/input_mapping_view.h"
+#include "chrome/browser/ash/arc/input_overlay/ui/target_view.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/touch_point.h"
 #include "ui/aura/window.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace arc::input_overlay {
@@ -32,28 +37,9 @@ class EditingListTest : public OverlayViewTestBase {
   EditingListTest() = default;
   ~EditingListTest() override = default;
 
-  size_t GetActionListItemsSize() {
-    DCHECK(editing_list_->scroll_content_);
-    DCHECK(editing_list_);
-    if (editing_list_->HasControls()) {
-      return editing_list_->scroll_content_->children().size();
-    }
-    return 0;
-  }
-
-  size_t GetActionViewSize() {
-    DCHECK(input_mapping_view_);
-    return input_mapping_view_->children().size();
-  }
-
   size_t GetTouchInjectorActionSize() {
     DCHECK(touch_injector_);
     return touch_injector_->actions().size();
-  }
-
-  void PressAddButton() {
-    DCHECK(editing_list_);
-    editing_list_->OnAddButtonPressed();
   }
 
   void LeftClickAtActionViewListItem(int index) {
@@ -67,27 +53,13 @@ class EditingListTest : public OverlayViewTestBase {
     }
 
     auto* event_generator = GetEventGenerator();
-    auto view_bounds = scroll_content->children()[index]->GetBoundsInScreen();
+    const auto view_bounds =
+        scroll_content->children()[index]->GetBoundsInScreen();
     // `ButtonOptionsMenu` may cover `EditingList`, so left-click on the left
     // side of the list item to avoid UI overlapping.
     event_generator->MoveMouseTo(view_bounds.x() + view_bounds.width() / 4,
                                  view_bounds.y() + view_bounds.height() / 2);
     event_generator->ClickLeftButton();
-  }
-
-  void HoverAtActionViewListItem(int index) {
-    if (!editing_list_ || editing_list_->is_zero_state_ || index < 0) {
-      return;
-    }
-    views::View* scroll_content = editing_list_->scroll_content_;
-    DCHECK(scroll_content);
-    if (index >= static_cast<int>(scroll_content->children().size())) {
-      return;
-    }
-
-    auto* event_generator = GetEventGenerator();
-    auto view_bounds = scroll_content->children()[index]->GetBoundsInScreen();
-    event_generator->MoveMouseTo(view_bounds.CenterPoint());
   }
 
   void MouseDragEditingListBy(int x, int y) {
@@ -104,7 +76,7 @@ class EditingListTest : public OverlayViewTestBase {
   // button.
   void MouseDraggingActionViewBy(Action* action, int x, int y) {
     auto* event_generator = GetEventGenerator();
-    auto* touch_point = action->action_view()->touch_point();
+    const auto* touch_point = action->action_view()->touch_point();
     if (!touch_point) {
       LOG(WARNING) << "Mouse dragging has no valid touch point.";
       return;
@@ -126,12 +98,12 @@ class EditingListTest : public OverlayViewTestBase {
   }
 
   void ScrollTo(bool top) {
-    if (!editing_list_) {
+    if (!editing_list_ || !editing_list_->GetVisible()) {
       return;
     }
     views::View* scroll_content = editing_list_->scroll_content_;
     DCHECK(scroll_content);
-    int scroll_height = scroll_content->GetPreferredSize().height();
+    const int scroll_height = scroll_content->GetPreferredSize().height();
     editing_list_->scroll_view_->ScrollByOffset(
         gfx::PointF(0, top ? -scroll_height : scroll_height));
   }
@@ -148,60 +120,40 @@ class EditingListTest : public OverlayViewTestBase {
     return controller_->input_mapping_widget_.get();
   }
 
-  bool ButtonOptionsMenuExists() {
-    return !!controller_->button_options_widget_;
-  }
-
-  bool DeleteEditShortcutExists() {
-    return !!controller_->delete_edit_shortcut_widget_;
+  bool IsActionHighlightVisible() {
+    DCHECK(controller_);
+    if (const auto* highlight_widget =
+            controller_->action_highlight_widget_.get()) {
+      return highlight_widget->IsVisible();
+    }
+    return false;
   }
 
   bool IsButtonOptionsMenuVisible() {
-    auto* menu_widget = controller_->button_options_widget_.get();
+    const auto* menu_widget = controller_->button_options_widget_.get();
     return menu_widget && menu_widget->IsVisible();
   }
 
-  void PressDoneButtonOnButtonOptionsMenu() {
-    auto* menu = controller_->GetButtonOptionsMenu();
-    if (menu) {
-      LeftClickOn(menu->done_button_);
-    }
-  }
-
-  void PressEditButton() {
-    DCHECK(controller_->delete_edit_shortcut_widget_);
-    static_cast<DeleteEditShortcut*>(
-        controller_->delete_edit_shortcut_widget_->GetContentsView())
-        ->OnEditButtonPressed();
-  }
-
-  void PressDeleteButton() {
-    DCHECK(controller_->delete_edit_shortcut_widget_);
-    static_cast<DeleteEditShortcut*>(
-        controller_->delete_edit_shortcut_widget_->GetContentsView())
-        ->OnDeleteButtonPressed();
-  }
-
-  Action* GetButtonOptionsAction() {
-    auto* menu = controller_->GetButtonOptionsMenu();
-    if (!menu) {
-      return nullptr;
-    }
-    return menu->action();
-  }
-
-  Action* GetDeleteEditShortcutAction() {
-    return static_cast<DeleteEditShortcut*>(
-               controller_->delete_edit_shortcut_widget_->GetContentsView())
-        ->anchor_view()
-        ->action();
-  }
-
-  views::Widget* GetEducationNudge(views::Widget* widget) {
+  bool IsEditingListVisible() {
     DCHECK(controller_);
-    auto& widgets_map = controller_->nudge_widgets_;
-    return widgets_map.contains(widget) ? widgets_map.find(widget)->second.get()
-                                        : nullptr;
+    if (auto* editing_list_widget = controller_->editing_list_widget_.get()) {
+      return editing_list_widget->IsVisible();
+    }
+    return false;
+  }
+
+  bool IsKeyEditNudgeShown() const {
+    DCHECK(controller_);
+    auto* editing_list = controller_->GetEditingList();
+    DCHECK(editing_list);
+    return editing_list->IsKeyEditNudgeShownForTesting();
+  }
+
+  ash::AnchoredNudge* GetKeyEditNudge() const {
+    DCHECK(controller_);
+    auto* editing_list = controller_->GetEditingList();
+    DCHECK(editing_list);
+    return editing_list->GetKeyEditNudgeForTesting();
   }
 };
 
@@ -212,9 +164,14 @@ TEST_F(EditingListTest, TestAddNewAction) {
   EXPECT_EQ(3u, GetActionListItemsSize());
   EXPECT_EQ(3u, GetActionViewSize());
   EXPECT_EQ(3u, GetTouchInjectorActionSize());
-  EXPECT_FALSE(ButtonOptionsMenuExists());
-  // Add a new action by pressing add button.
+  EXPECT_FALSE(GetButtonOptionsMenu());
+  // Press add button and it enters into the button placement mode.
   PressAddButton();
+  auto* target_view = GetTargetView();
+  EXPECT_TRUE(target_view);
+  // Click on the `target_widget` and then the new action is added.
+  LeftClickOn(target_view);
+  EXPECT_FALSE(GetTargetView());
   CheckActions(
       touch_injector_, /*expect_size=*/4u, /*expect_types=*/
       {ActionType::TAP, ActionType::TAP, ActionType::MOVE, ActionType::TAP},
@@ -222,20 +179,57 @@ TEST_F(EditingListTest, TestAddNewAction) {
   EXPECT_EQ(4u, GetActionListItemsSize());
   EXPECT_EQ(4u, GetActionViewSize());
   EXPECT_EQ(4u, GetTouchInjectorActionSize());
-  EXPECT_TRUE(ButtonOptionsMenuExists());
+  EXPECT_TRUE(GetButtonOptionsMenu());
 
   // Make sure `Action::touch_down_positions_` is not empty for the new action.
   auto* new_action = touch_injector_->actions()[3].get();
   EXPECT_FALSE(new_action->touch_down_positions().empty());
 }
 
+TEST_F(EditingListTest, TestVisibilityForButtonPlacementMode) {
+  EXPECT_TRUE(IsEditingListVisible());
+  // Enter into the button placement mode and press key `esc` to give up adding
+  // a new action.
+  PressAddButton();
+  EXPECT_FALSE(IsEditingListVisible());
+  auto* event_generator = GetEventGenerator();
+  event_generator->PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  EXPECT_TRUE(IsEditingListVisible());
+
+  // Enter into the button placement mode and press key `enter` to add a new
+  // action.
+  PressAddButton();
+  EXPECT_FALSE(IsEditingListVisible());
+  event_generator->PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  EXPECT_FALSE(IsEditingListVisible());
+  PressDoneButtonOnButtonOptionsMenu();
+  EXPECT_TRUE(IsEditingListVisible());
+
+  // Enter into the button placement mode and press key `enter` to add a new
+  // action.
+  PressAddButton();
+  EXPECT_FALSE(IsEditingListVisible());
+  event_generator->PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  EXPECT_FALSE(IsEditingListVisible());
+  PressDeleteButtonOnButtonOptionsMenu();
+  EXPECT_TRUE(IsEditingListVisible());
+
+  // Shows any button options menu and the editing list is hidden.
+  const auto& actions = touch_injector_->actions();
+  DCHECK_GT(actions.size(), 1u);
+  EXPECT_TRUE(ShowButtonOptionsMenu(actions[actions.size() - 1].get()));
+  EXPECT_FALSE(IsEditingListVisible());
+  PressDoneButtonOnButtonOptionsMenu();
+  EXPECT_TRUE(IsEditingListVisible());
+}
+
 TEST_F(EditingListTest, TestDragAtNewAction) {
   CheckActions(touch_injector_, /*expect_size=*/3u, /*expect_types=*/
                {ActionType::TAP, ActionType::TAP, ActionType::MOVE},
                /*expect_ids=*/{0, 1, 2});
-  PressAddButton();
+  AddNewActionInCenter();
   EXPECT_TRUE(IsButtonOptionsMenuVisible());
-  auto* action = GetButtonOptionsAction();
+  auto* action = GetButtonOptionsMenuAction();
   EXPECT_TRUE(action->is_new());
   MouseDraggingActionViewBy(action, /*x=*/10, /*y=*/10);
   EXPECT_FALSE(IsButtonOptionsMenuVisible());
@@ -250,37 +244,40 @@ TEST_F(EditingListTest, TestPressAtActionViewListItem) {
                {ActionType::TAP, ActionType::TAP, ActionType::MOVE},
                /*expect_ids=*/{0, 1, 2});
   // Test action view list press.
-  PressAddButton();
-  EXPECT_TRUE(ButtonOptionsMenuExists());
-  auto* action_1 = GetButtonOptionsAction();
+  AddNewActionInCenter();
+  EXPECT_TRUE(GetButtonOptionsMenu());
+  auto* action_1 = GetButtonOptionsMenuAction();
+  PressDoneButtonOnButtonOptionsMenu();
   // Scroll back to top to click the first list item.
   ScrollTo(/*top=*/true);
   LeftClickAtActionViewListItem(/*index=*/0);
-  EXPECT_TRUE(ButtonOptionsMenuExists());
-  auto* action_2 = GetButtonOptionsAction();
+  EXPECT_TRUE(GetButtonOptionsMenu());
+  auto* action_2 = GetButtonOptionsMenuAction();
   EXPECT_NE(action_1, action_2);
+  PressDoneButtonOnButtonOptionsMenu();
+  LeftClickAtActionViewListItem(/*index=*/1);
+  EXPECT_TRUE(GetButtonOptionsMenu());
+  auto* action_3 = GetButtonOptionsMenuAction();
+  EXPECT_NE(action_3, action_2);
 }
 
-TEST_F(EditingListTest, TestHoverAtActionViewListItem) {
-  CheckActions(touch_injector_, /*expect_size=*/3u, /*expect_types=*/
-               {ActionType::TAP, ActionType::TAP, ActionType::MOVE},
-               /*expect_ids=*/{0, 1, 2});
-  HoverAtActionViewListItem(/*index=*/0);
-  EXPECT_TRUE(DeleteEditShortcutExists());
-  auto* action = GetDeleteEditShortcutAction();
+TEST_F(EditingListTest, TestHoverAtListItem) {
+  EXPECT_FALSE(IsActionHighlightVisible());
 
-  PressEditButton();
-  EXPECT_TRUE(ButtonOptionsMenuExists());
-  EXPECT_FALSE(DeleteEditShortcutExists());
-  EXPECT_EQ(action, GetButtonOptionsAction());
-  PressDoneButtonOnButtonOptionsMenu();
+  HoverAtActionViewListItem(/*index=*/0u);
+  EXPECT_TRUE(IsActionHighlightVisible());
 
-  HoverAtActionViewListItem(/*index=*/0);
-  EXPECT_TRUE(DeleteEditShortcutExists());
-  PressDeleteButton();
-  EXPECT_FALSE(DeleteEditShortcutExists());
-  EXPECT_EQ(2u, GetActionListItemsSize());
-  EXPECT_EQ(2u, GetActionViewSize());
+  HoverAtActionViewListItem(/*index=*/1u);
+  EXPECT_TRUE(IsActionHighlightVisible());
+
+  // Hover outside of the list item and the view highlight is also removed.
+  auto* list_item = GetEditingListItem(/*index=*/1u);
+  DCHECK(list_item);
+  auto item_origin = list_item->GetBoundsInScreen().origin();
+  item_origin.Offset(-2, -2);
+  auto* event_generator = GetEventGenerator();
+  event_generator->MoveMouseTo(item_origin);
+  EXPECT_FALSE(IsActionHighlightVisible());
 }
 
 TEST_F(EditingListTest, TestReposition) {
@@ -359,53 +356,48 @@ TEST_F(EditingListTest, TestReposition) {
   EXPECT_EQ(content_bounds_origin, final_list_bounds.origin());
 }
 
-TEST_F(EditingListTest, TestEducationNudge) {
-  // 1. Education nudge shows up for `EditingList` by "+" button when there is
-  // no active action in the list.
-  // 2. After adding the first action, the education nudge shows up for input
-  // mapping by the touch point.
-  // 3. After closing `ButtonOptionsMenu`, the education nudge shows up for
-  // `EditingList`.
-  auto* editing_list = GetEditingListWidget();
-  auto* input_mapping = GetInputMappingWidget();
-  DCHECK(editing_list);
-  DCHECK(input_mapping);
-  EXPECT_FALSE(GetEducationNudge(editing_list));
-  EXPECT_FALSE(GetEducationNudge(input_mapping));
+TEST_F(EditingListTest, TestKeyEditNudge) {
+  // Key edit nudge shows up after the first action's `ButtonOptionsMenu`.
+  EXPECT_FALSE(IsKeyEditNudgeShown());
+
   // Remove all actions.
   for (const auto& action : touch_injector_->actions()) {
     controller_->RemoveAction(action.get());
   }
-  // The education nudge for `editing_list` shows up.
-  auto* editing_list_nudge = GetEducationNudge(editing_list);
-  EXPECT_TRUE(editing_list);
-  EXPECT_TRUE(
-      editing_list_nudge->IsStackedAbove(editing_list->GetNativeView()));
-  EXPECT_FALSE(GetEducationNudge(input_mapping));
 
-  // Add an action, the previous education nudge for `editing_list` is removed.
-  PressAddButton();
-  EXPECT_FALSE(GetEducationNudge(editing_list));
-  // The education nudge for `input_mapping` shows up.
-  auto* input_mapping_nudge = GetEducationNudge(input_mapping);
-  EXPECT_TRUE(input_mapping_nudge);
-  EXPECT_TRUE(
-      input_mapping_nudge->IsStackedAbove(input_mapping->GetNativeView()));
-
-  // After editing the first action, which means closing `ButtonOptionsMenu`,
-  // education nudge shows up for editing tip.
+  // Add the first action.
+  AddNewActionInCenter();
   PressDoneButtonOnButtonOptionsMenu();
-  editing_list_nudge = GetEducationNudge(editing_list);
-  EXPECT_TRUE(editing_list_nudge);
-  EXPECT_TRUE(
-      editing_list_nudge->IsStackedAbove(editing_list->GetNativeView()));
-  EXPECT_FALSE(GetEducationNudge(input_mapping));
+  EXPECT_TRUE(IsKeyEditNudgeShown());
 
-  // No education nudge after adding another action.
-  PressAddButton();
+  // Click on key edit nudge and it still shows GC UIs.
+  auto* key_edit_nudge = GetKeyEditNudge();
+  EXPECT_TRUE(key_edit_nudge);
+  LeftClickOn(key_edit_nudge->GetContentsView());
+  EXPECT_TRUE(GetEditingListWidget());
+
+  // Move mouse outside of the nudge and it will close in 10 seconds.
+  auto* event_generator = GetEventGenerator();
+  event_generator->MoveMouseTo(gfx::Point(0, 0));
+  task_environment()->FastForwardBy(
+      ash::AnchoredNudgeManagerImpl::kNudgeDefaultDuration);
+  EXPECT_TRUE(IsKeyEditNudgeShown());
+  task_environment()->FastForwardBy(
+      ash::AnchoredNudgeManagerImpl::kNudgeMediumDuration);
+  EXPECT_FALSE(IsKeyEditNudgeShown());
+
+  // Open the button options menu and close it again, it won't show eidt nudge
+  // again because it only shows once.
+  const auto& actions = touch_injector_->actions();
+  EXPECT_EQ(1u, GetActionListItemsSize());
+  ShowButtonOptionsMenu(actions[actions.size() - 1].get());
   PressDoneButtonOnButtonOptionsMenu();
-  EXPECT_FALSE(GetEducationNudge(editing_list));
-  EXPECT_FALSE(GetEducationNudge(input_mapping));
+  EXPECT_FALSE(IsKeyEditNudgeShown());
+
+  // No key edit nudge after adding another action.
+  AddNewActionInCenter();
+  PressDoneButtonOnButtonOptionsMenu();
+  EXPECT_FALSE(IsKeyEditNudgeShown());
 }
 
 TEST_F(EditingListTest, TestScrollView) {
@@ -417,16 +409,21 @@ TEST_F(EditingListTest, TestScrollView) {
   EXPECT_LE(list_window->bounds().height(), window_content_height);
   EXPECT_FALSE(GetScrollBarVisible());
   // Add new actions until it shows scroll bar.
-  PressAddButton();
+  AddNewActionInCenter();
+  PressDoneButtonOnButtonOptionsMenu();
   EXPECT_GT(list_window->bounds().height(), original_height);
-  PressAddButton();
-  PressAddButton();
+  AddNewActionInCenter();
+  PressDoneButtonOnButtonOptionsMenu();
+  AddNewActionInCenter();
+  PressDoneButtonOnButtonOptionsMenu();
   EXPECT_TRUE(GetScrollBarVisible());
   EXPECT_EQ(window_content_height, list_window->bounds().height());
-  PressAddButton();
+  AddNewActionInCenter();
+  PressDoneButtonOnButtonOptionsMenu();
   EXPECT_TRUE(GetScrollBarVisible());
   EXPECT_EQ(window_content_height, list_window->bounds().height());
-  PressAddButton();
+  AddNewActionInCenter();
+  PressDoneButtonOnButtonOptionsMenu();
   EXPECT_TRUE(GetScrollBarVisible());
   EXPECT_EQ(window_content_height, list_window->bounds().height());
 

@@ -1,17 +1,20 @@
 {
   "$build/chromium_orchestrator": {
     "compilator": "linux_chromium_tsan_rel_ng-compilator",
-    "compilator_watcher_git_revision": "039b345114555dea8996630f1fc6e08319fa0422"
+    "compilator_watcher_git_revision": "27c191f304c8d7329a393d8a69020fc14032c3c3"
   },
   "$build/chromium_tests_builder_config": {
     "builder_config": {
+      "additional_exclusions": [
+        "infra/config/generated/builders/try/linux_chromium_tsan_rel_ng/gn-args.json"
+      ],
       "builder_db": {
         "entries": [
           {
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux TSan Builder",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-memory-archive",
@@ -23,7 +26,8 @@
                 ],
                 "build_config": "Release",
                 "config": "chromium_tsan2",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "config": "chromium"
@@ -34,7 +38,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux TSan Tests",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-memory-archive",
@@ -46,7 +50,8 @@
                 ],
                 "build_config": "Release",
                 "config": "chromium_tsan2",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "config": "chromium"
@@ -54,7 +59,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Linux TSan Builder",
-                "project": "chromium-m120"
+                "project": "chromium-m122"
               }
             }
           }
@@ -64,14 +69,14 @@
         {
           "bucket": "ci",
           "builder": "Linux TSan Builder",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Linux TSan Tests",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
       ]
     }

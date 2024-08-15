@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Element yeniləndi</translation>
 <translation id="1041637248958093184">Gizli vərəq rejimindən istifadə edildikdə axtarış nəticələri, kukilər və müvəqqəti fayllar Vivaldidə saxlanılmayacaq.</translation>
 <translation id="1066692930984703744">Sürətli və təhlükəsiz səyahət üçün izləyici və reklam əngəlləyicisini aktiv edin</translation>
-<translation id="1076258485383101882">Daxil edilmiş ünvanları eyniləşdirin</translation>
 <translation id="1116694919640316211">Haqqında</translation>
 <translation id="1123707809902612118">İzləyiciləri və reklamları əngəlləmək</translation>
 <translation id="1151972924205500581">Şifrə tələb olunur</translation>
@@ -278,7 +277,6 @@
 <translation id="7041964446309059643">Əl ilə</translation>
 <translation id="7110758301321962823">İstifadəçi adını bərpa edin</translation>
 <translation id="7194677467200983873">Sonuncu eyniləşmə:</translation>
-<translation id="7196846668589096106">İş masası vərəqləri</translation>
 <translation id="7210372243397300116">Qovluğu axtar</translation>
 <translation id="7215420652436283416">Ünvana görə</translation>
 <translation id="7229439505896086266">Qeyd yaradın</translation>
@@ -326,6 +324,7 @@
 <translation id="8273666073173891138">Qeyd <ph name="FOLDER_TITLE" /> qovluğunda saxlanıldı</translation>
 <translation id="8275038454117074363">İdxal edin</translation>
 <translation id="8284356787013856231">Faylı açmaq icazənin ləğv edildi</translation>
+<translation id="8326104954595890674">Yeni məxfi vərəq</translation>
 <translation id="8329813750766387010">Yeniləndi: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Kuki xəbərdarlıqlarını ləğv edin (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Başqa cihazlardakı vərəqləri görmək çün eyniləşdirməyə daxil olmalısınız.</translation>

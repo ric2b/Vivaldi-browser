@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 
-import type {EntryLocation} from '../../externs/entry_location.js';
-import type {FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
+import type {EntryLocation} from '../../background/js/entry_location_impl.js';
+import type {FilesAppEntry} from '../../common/js/files_app_entry_types.js';
 
-import {VolumeManagerCommon} from './volume_manager_types.js';
+import {getMediaViewRootTypeFromVolumeId, MediaViewRootType, RootType} from './volume_manager_types.js';
+
 
 /**
  * Returns a translated string.
@@ -122,9 +124,9 @@ export function bytesToString(bytes: number, addedPrecision: number = 0) {
 export function getRootTypeLabel(locationInfo: EntryLocation) {
   const volumeInfoLabel = locationInfo.volumeInfo?.label || '';
   switch (locationInfo.rootType) {
-    case VolumeManagerCommon.RootType.DOWNLOADS:
+    case RootType.DOWNLOADS:
       return volumeInfoLabel;
-    case VolumeManagerCommon.RootType.DRIVE:
+    case RootType.DRIVE:
       return str('DRIVE_MY_DRIVE_LABEL');
     // |locationInfo| points to either the root directory of an individual Team
     // Drive or sub-directory under it, but not the Shared Drives grand
@@ -135,52 +137,54 @@ export function getRootTypeLabel(locationInfo: EntryLocation) {
     //   Shared Drives > ABC Shared Drive > Folder1
     //   ^^^^^^^^^^^
     // By this reason, we return the label of the Shared Drives grand root here.
-    case VolumeManagerCommon.RootType.SHARED_DRIVE:
-    case VolumeManagerCommon.RootType.SHARED_DRIVES_GRAND_ROOT:
+    case RootType.SHARED_DRIVE:
+    case RootType.SHARED_DRIVES_GRAND_ROOT:
       return str('DRIVE_SHARED_DRIVES_LABEL');
-    case VolumeManagerCommon.RootType.COMPUTER:
-    case VolumeManagerCommon.RootType.COMPUTERS_GRAND_ROOT:
+    case RootType.COMPUTER:
+    case RootType.COMPUTERS_GRAND_ROOT:
       return str('DRIVE_COMPUTERS_LABEL');
-    case VolumeManagerCommon.RootType.DRIVE_OFFLINE:
+    case RootType.DRIVE_OFFLINE:
       return str('DRIVE_OFFLINE_COLLECTION_LABEL');
-    case VolumeManagerCommon.RootType.DRIVE_SHARED_WITH_ME:
+    case RootType.DRIVE_SHARED_WITH_ME:
       return str('DRIVE_SHARED_WITH_ME_COLLECTION_LABEL');
-    case VolumeManagerCommon.RootType.DRIVE_RECENT:
+    case RootType.DRIVE_RECENT:
       return str('DRIVE_RECENT_COLLECTION_LABEL');
-    case VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT:
+    case RootType.DRIVE_FAKE_ROOT:
       return str('DRIVE_DIRECTORY_LABEL');
-    case VolumeManagerCommon.RootType.RECENT:
+    case RootType.RECENT:
       return str('RECENT_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.CROSTINI:
+    case RootType.CROSTINI:
       return str('LINUX_FILES_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.MY_FILES:
+    case RootType.MY_FILES:
       return str('MY_FILES_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.TRASH:
+    case RootType.TRASH:
       return str('TRASH_ROOT_LABEL');
-    case VolumeManagerCommon.RootType.MEDIA_VIEW:
-      const mediaViewRootType =
-          VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
-              locationInfo.volumeInfo?.volumeId || '');
+    case RootType.MEDIA_VIEW:
+      const mediaViewRootType = getMediaViewRootTypeFromVolumeId(
+          locationInfo.volumeInfo?.volumeId || '');
       switch (mediaViewRootType) {
-        case VolumeManagerCommon.MediaViewRootType.IMAGES:
+        case MediaViewRootType.IMAGES:
           return str('MEDIA_VIEW_IMAGES_ROOT_LABEL');
-        case VolumeManagerCommon.MediaViewRootType.VIDEOS:
+        case MediaViewRootType.VIDEOS:
           return str('MEDIA_VIEW_VIDEOS_ROOT_LABEL');
-        case VolumeManagerCommon.MediaViewRootType.AUDIO:
+        case MediaViewRootType.AUDIO:
           return str('MEDIA_VIEW_AUDIO_ROOT_LABEL');
-        case VolumeManagerCommon.MediaViewRootType.DOCUMENTS:
+        case MediaViewRootType.DOCUMENTS:
           return str('MEDIA_VIEW_DOCUMENTS_ROOT_LABEL');
+        default:
+          console.error(
+              'Unsupported media view root type: ' + mediaViewRootType);
+          return volumeInfoLabel;
       }
-      console.error('Unsupported media view root type: ' + mediaViewRootType);
-      return volumeInfoLabel;
-    case VolumeManagerCommon.RootType.ARCHIVE:
-    case VolumeManagerCommon.RootType.REMOVABLE:
-    case VolumeManagerCommon.RootType.MTP:
-    case VolumeManagerCommon.RootType.PROVIDED:
-    case VolumeManagerCommon.RootType.ANDROID_FILES:
-    case VolumeManagerCommon.RootType.DOCUMENTS_PROVIDER:
-    case VolumeManagerCommon.RootType.SMB:
-    case VolumeManagerCommon.RootType.GUEST_OS:
+
+    case RootType.ARCHIVE:
+    case RootType.REMOVABLE:
+    case RootType.MTP:
+    case RootType.PROVIDED:
+    case RootType.ANDROID_FILES:
+    case RootType.DOCUMENTS_PROVIDER:
+    case RootType.SMB:
+    case RootType.GUEST_OS:
       return volumeInfoLabel;
     default:
       console.error('Unsupported root type: ' + locationInfo.rootType);
@@ -204,15 +208,14 @@ export function getEntryLabel(
   }
 
   // Special case for MyFiles/Downloads, MyFiles/PvmDefault and MyFiles/Camera.
-  if (locationInfo &&
-      locationInfo.rootType == VolumeManagerCommon.RootType.DOWNLOADS) {
-    if (entry.fullPath == '/Downloads') {
+  if (locationInfo && locationInfo.rootType === RootType.DOWNLOADS) {
+    if (entry.fullPath === '/Downloads') {
       return str('DOWNLOADS_DIRECTORY_LABEL');
     }
-    if (entry.fullPath == '/PvmDefault') {
+    if (entry.fullPath === '/PvmDefault') {
       return str('PLUGIN_VM_DIRECTORY_LABEL');
     }
-    if (entry.fullPath == '/Camera') {
+    if (entry.fullPath === '/Camera') {
       return str('CAMERA_DIRECTORY_LABEL');
     }
   }
@@ -247,7 +250,7 @@ export function secondsToRemainingTimeString(seconds: number) {
       locale, {style: 'unit', unit: 'minute', unitDisplay: 'long'});
 
   const hours = Math.floor(minutes / 60);
-  if (hours == 0) {
+  if (hours === 0) {
     // Less than one hour. Display remaining time in minutes.
     return strf('TIME_REMAINING_ESTIMATE', minuteFormatter.format(minutes));
   }
@@ -257,7 +260,7 @@ export function secondsToRemainingTimeString(seconds: number) {
   const hourFormatter = new Intl.NumberFormat(
       locale, {style: 'unit', unit: 'hour', unitDisplay: 'long'});
 
-  if (minutes == 0) {
+  if (minutes === 0) {
     // Hours but no minutes.
     return strf('TIME_REMAINING_ESTIMATE', hourFormatter.format(hours));
   }
@@ -290,4 +293,43 @@ export function getFileErrorString(name: string|null|undefined) {
       FileErrorLocalizedName[name] :
       'FILE_ERROR_GENERIC';
   return loadTimeData.getString(error!);
+}
+
+/**
+ * Get the plural string with a specified count.
+ * Note: the string id to get must be handled by `PluralStringHandler` in C++
+ * side.
+ *
+ * @param id The translation string resource id.
+ * @param count The number count to get the plural.
+ */
+export async function getPluralString(
+    id: string, count: number): Promise<string> {
+  return PluralStringProxyImpl.getInstance().getPluralString(id, count);
+}
+
+/**
+ * Get the plural string with a specified count and placeholder values.
+ * Note: the string id to get must be handled by `PluralStringHandler` in C++
+ * side.
+ *
+ * ```
+ * {NUM_FILE, plural,
+ *    = 1 {1 file with <ph name="FILE_SIZE">$1<ex>44 MB</ex></ph> size.},
+ *    other {# files with <ph name="FILE_SIZE">$1<ex>44 MB</ex></ph> size.}}
+ *
+ * await getPluralStringWithPlaceHolders(id, 2, '44 MB')
+ * => "2 files with 44 MB size"
+ * ```
+ *
+ * @param id The translation string resource id.
+ * @param count The number count to get the plural.
+ * @param placeholders The placeholder value to replace.
+ */
+export async function getPluralStringWithPlaceHolders(
+    id: string, count: number,
+    ...placeholders: Array<string|number>): Promise<string> {
+  const strWithPlaceholders =
+      await PluralStringProxyImpl.getInstance().getPluralString(id, count);
+  return loadTimeData.substituteString(strWithPlaceholders, ...placeholders);
 }

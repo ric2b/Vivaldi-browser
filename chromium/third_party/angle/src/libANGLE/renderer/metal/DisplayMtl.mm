@@ -456,9 +456,9 @@ Optional<gl::Version> DisplayMtl::getMaxSupportedDesktopVersion() const
     return Optional<gl::Version>::Invalid();
 }
 
-EGLSyncImpl *DisplayMtl::createSync(const egl::AttributeMap &attribs)
+EGLSyncImpl *DisplayMtl::createSync()
 {
-    return new EGLSyncMtl(attribs);
+    return new EGLSyncMtl();
 }
 
 egl::Error DisplayMtl::makeCurrent(egl::Display *display,
@@ -514,6 +514,9 @@ void DisplayMtl::generateCaps(egl::Caps *outCaps) const
 
 void DisplayMtl::initializeFrontendFeatures(angle::FrontendFeatures *features) const
 {
+    // The Metal backend's handling of compile is thread-safe
+    ANGLE_FEATURE_CONDITION(features, compileJobIsThreadSafe, true);
+
     // The link job in this backend references gl::Context and ContextMtl, and thread-safety is not
     // guaranteed.  The link subtasks are safe however, they are still parallelized.
     //
@@ -1152,7 +1155,7 @@ void DisplayMtl::initializeExtensions() const
                 !mFeatures.disableRWTextureTier2Support.enabled &&
                 readWriteTextureTier == MTLReadWriteTextureTier2;
 
-            if (isAMD())
+            if (rasterOrderGroupsSupported && isAMD())
             {
                 // anglebug.com/7792 -- [[raster_order_group()]] does not work for read_write
                 // textures on AMD when the render pass doesn't have a color attachment on slot 0.
@@ -1301,6 +1304,8 @@ void DisplayMtl::initializeFeatures()
     ANGLE_FEATURE_CONDITION((&mFeatures), emulateAlphaToCoverage,
                             isSimulator || !supportsAppleGPUFamily(1));
 
+    ANGLE_FEATURE_CONDITION((&mFeatures), writeHelperSampleMask, supportsAppleGPUFamily(1));
+
     ANGLE_FEATURE_CONDITION((&mFeatures), multisampleColorFormatShaderReadWorkaround, isAMD());
     ANGLE_FEATURE_CONDITION((&mFeatures), copyIOSurfaceToNonIOSurfaceForReadOptimization,
                             isIntel() || isAMD());
@@ -1355,6 +1360,10 @@ void DisplayMtl::initializeFeatures()
     // http://anglebug.com/8311: Rescope global variables which are only used in one function to be
     // function local. Disabled on AMD FirePro devices: http://anglebug.com/8317
     ANGLE_FEATURE_CONDITION((&mFeatures), rescopeGlobalVariables, !isAMDFireProDevice());
+
+    // Apple-specific pre-transform for explicit cubemap derivatives
+    ANGLE_FEATURE_CONDITION((&mFeatures), preTransformTextureCubeGradDerivatives,
+                            supportsAppleGPUFamily(1));
 
     // On tile-based GPUs, always resolving MSAA render buffers to single-sampled
     // is preferred. Because it would save bandwidth by avoiding the cost of storing the MSAA

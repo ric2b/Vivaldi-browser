@@ -164,6 +164,7 @@
 #include "content/public/common/user_agent.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/cookies/cookie_util.h"
+#include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "rlz/buildflags/buildflags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -187,6 +188,11 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PDF)
+#include "chrome/browser/pdf/pdf_extension_util.h"
+#include "pdf/pdf_features.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -929,27 +935,28 @@ void CloseWindow(Browser* browser) {
   browser->window()->Close();
 }
 
-void NewTab(Browser* browser) {
+content::WebContents& NewTab(Browser* browser) {
   base::RecordAction(UserMetricsAction("NewTab"));
   // TODO(asvitkine): This is invoked programmatically from several places.
   // Audit the code and change it so that the histogram only gets collected for
   // user-initiated commands.
   UMA_HISTOGRAM_ENUMERATION("Tab.NewTab", NewTabTypes::NEW_TAB_COMMAND,
                             NewTabTypes::NEW_TAB_ENUM_COUNT);
-
   if (browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP)) {
-    AddTabAt(browser, GURL(), -1, true);
-  } else {
-    ScopedTabbedBrowserDisplayer displayer(browser->profile());
-    Browser* b = displayer.browser();
-    AddTabAt(b, GURL(), -1, true);
-    b->window()->Show();
-    // The call to AddBlankTabAt above did not set the focus to the tab as its
-    // window was not active, so we have to do it explicitly.
-    // See http://crbug.com/6380.
-    if (!b->is_vivaldi())
-    b->tab_strip_model()->GetActiveWebContents()->RestoreFocus();
+    return *AddAndReturnTabAt(browser, GURL(), -1, true);
   }
+
+  ScopedTabbedBrowserDisplayer displayer(browser->profile());
+  Browser* b = displayer.browser();
+  auto* contents = AddAndReturnTabAt(b, GURL(), -1, true);
+  b->window()->Show();
+  // The call to AddBlankTabAt above did not set the focus to the tab as its
+  // window was not active, so we have to do it explicitly.
+  // See http://crbug.com/6380.
+  if (!b->is_vivaldi())
+  b->tab_strip_model()->GetActiveWebContents()->RestoreFocus();
+
+  return *contents;
 }
 
 void NewTabToRight(Browser* browser) {
@@ -1076,7 +1083,7 @@ bool CanMoveTabsToNewWindow(Browser* browser,
 
 void MoveTabsToNewWindow(Browser* browser,
                          const std::vector<int>& tab_indices,
-                         absl::optional<tab_groups::TabGroupId> group) {
+                         std::optional<tab_groups::TabGroupId> group) {
   if (tab_indices.empty()) {
     return;
   }
@@ -1478,7 +1485,7 @@ void SaveCreditCard(Browser* browser) {
       browser->tab_strip_model()->GetActiveWebContents();
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
-  controller->ReshowBubble();
+  controller->ReshowBubble(/*is_user_gesture=*/true);
 }
 
 void SaveIban(Browser* browser) {
@@ -1541,7 +1548,10 @@ void ShowVirtualCardEnrollBubble(Browser* browser) {
 void StartTabOrganizationRequest(Browser* browser) {
   TabOrganizationService* service =
       TabOrganizationServiceFactory::GetForProfile(browser->profile());
-  service->StartRequest(browser);
+  UMA_HISTOGRAM_BOOLEAN("Tab.Organization.AllEntrypoints.Clicked", true);
+  UMA_HISTOGRAM_BOOLEAN("Tab.Organization.ThreeDotMenu.Clicked", true);
+
+  service->RestartSessionAndShowUI(browser);
 }
 
 void ShowTranslateBubble(Browser* browser) {
@@ -1658,6 +1668,14 @@ void SavePage(Browser* browser) {
   DCHECK(current_tab);
   if (current_tab->GetContentsMimeType() == "application/pdf") {
     base::RecordAction(UserMetricsAction("PDF.SavePage"));
+#if BUILDFLAG(ENABLE_PDF)
+    // The PDF viewer may handle the event by itself.
+    if (base::FeatureList::IsEnabled(chrome_pdf::features::kPdfOopif) &&
+        pdf_extension_util::MaybeDispatchSaveEvent(
+            current_tab->GetPrimaryMainFrame())) {
+      return;
+    }
+#endif  // BUILDFLAG(ENABLE_PDF)
   }
   current_tab->OnSavePage();
 }
@@ -1780,7 +1798,8 @@ void FindInPage(Browser* browser, bool find_next, bool forward_direction) {
 }
 
 void ShowTabSearch(Browser* browser) {
-  browser->window()->CreateTabSearchBubble();
+  const int tab_search_tab_index = 0;
+  browser->window()->CreateTabSearchBubble(tab_search_tab_index);
 }
 
 void CloseTabSearch(Browser* browser) {
@@ -1999,8 +2018,7 @@ void SetAndroidOsForTabletSite(content::WebContents* current_tab) {
     ua_override.ua_metadata_override = embedder_support::GetUserAgentMetadata(
         g_browser_process->local_state());
     ua_override.ua_metadata_override->mobile = true;
-    ua_override.ua_metadata_override->form_factor =
-        embedder_support::kMobileFormFactor;
+    ua_override.ua_metadata_override->form_factor = {blink::kTabletFormFactor};
     ua_override.ua_metadata_override->platform =
         kChPlatformOverrideForTabletSite;
     ua_override.ua_metadata_override->platform_version = std::string();
@@ -2176,8 +2194,8 @@ void ToggleCommander(Browser* browser) {
 }
 
 #if !defined(TOOLKIT_VIEWS)
-absl::optional<int> GetKeyboardFocusedTabIndex(const Browser* browser) {
-  return absl::nullopt;
+std::optional<int> GetKeyboardFocusedTabIndex(const Browser* browser) {
+  return std::nullopt;
 }
 #endif
 

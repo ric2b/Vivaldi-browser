@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-import static org.chromium.components.browser_ui.widget.listmenu.BasicListMenu.buildMenuListItem;
+import static org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils.buildMenuListItem;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -27,14 +27,14 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
-import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton.PopupMenuShownListener;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButtonDelegate;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
+import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.CheckableSelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListUtils;
+import org.chromium.ui.listmenu.ListMenu;
+import org.chromium.ui.listmenu.ListMenuButton;
+import org.chromium.ui.listmenu.ListMenuButton.PopupMenuShownListener;
+import org.chromium.ui.listmenu.ListMenuButtonDelegate;
+import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 
 import java.lang.annotation.Retention;
@@ -306,7 +306,7 @@ public abstract class BookmarkRow extends CheckableSelectableItemView<BookmarkId
                         mDelegate
                                 .getModel()
                                 .setReadStatusForReadingList(
-                                        bookmarkItem.getUrl(), /* read= */ true);
+                                        bookmarkItem.getId(), /* read= */ true);
                         RecordUserAction.record("Android.BookmarkPage.ReadingList.MarkAsRead");
                     } else if (textId == R.string.reading_list_mark_as_unread) {
                         BookmarkItem bookmarkItem =
@@ -314,7 +314,7 @@ public abstract class BookmarkRow extends CheckableSelectableItemView<BookmarkId
                         mDelegate
                                 .getModel()
                                 .setReadStatusForReadingList(
-                                        bookmarkItem.getUrl(), /* read= */ false);
+                                        bookmarkItem.getId(), /* read= */ false);
                         RecordUserAction.record("Android.BookmarkPage.ReadingList.MarkAsUnread");
                     } else if (textId == R.string.bookmark_item_move) {
                         BookmarkFolderSelectActivity.startFolderSelectActivity(
@@ -343,7 +343,7 @@ public abstract class BookmarkRow extends CheckableSelectableItemView<BookmarkId
                         RecordUserAction.record("MobileBookmarkManagerMoveDown");
                     }
                 };
-        return new BasicListMenu(getContext(), listItems, delegate);
+        return BrowserUiListMenuUtils.getBasicListMenu(getContext(), listItems, delegate);
     }
 
     // FrameLayout implementation.

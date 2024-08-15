@@ -75,7 +75,7 @@ update_target("//components/history/core/browser:browser") {
 }
 
 update_target("//content/common:common") {
-  deps += [ "//components/version_info:generate_version_info" ]
+  deps += [ "//base/version_info:generate_version_info" ]
 }
 
 update_target("//chrome/browser/apps/platform_apps:platform_apps") {

@@ -19,7 +19,7 @@ namespace content {
 PrefetchURLLoaderServiceContext::PrefetchURLLoaderServiceContext(
     BrowserContext* browser_context,
     mojo::ReceiverSet<network::mojom::URLLoaderFactory,
-                      std::unique_ptr<BindContext>>& loader_factory_receivers)
+                      scoped_refptr<BindContext>>& loader_factory_receivers)
     : browser_context_(browser_context),
       loader_factory_receivers_(loader_factory_receivers) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -280,7 +280,8 @@ PrefetchURLLoaderServiceContext::CreateURLLoaderThrottles(
       request, browser_context_,
       base::BindRepeating(&WebContents::FromFrameTreeNodeId,
                           frame_tree_node_id),
-      nullptr /* navigation_ui_data */, frame_tree_node_id);
+      nullptr /* navigation_ui_data */, frame_tree_node_id,
+      /*navigation_id=*/absl::nullopt);
 }
 
 }  // namespace content

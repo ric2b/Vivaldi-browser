@@ -50,7 +50,6 @@ DXGI_FORMAT GetDXGIFormatForCreateTexture(viz::SharedImageFormat format) {
     return DXGI_FORMAT_NV12;
   }
 
-  NOTREACHED() << "Unsupported format: " << format.ToString();
   return DXGI_FORMAT_UNKNOWN;
 }
 
@@ -84,11 +83,12 @@ DXGI_FORMAT GetDXGITypelessFormat(viz::SharedImageFormat format) {
 }
 
 constexpr uint32_t kSupportedUsage =
-    SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+    SHARED_IMAGE_USAGE_GLES2_READ | SHARED_IMAGE_USAGE_GLES2_WRITE |
+    SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
-    SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
-    SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_WEBGPU |
-    SHARED_IMAGE_USAGE_VIDEO_DECODE |
+    SHARED_IMAGE_USAGE_RASTER_READ | SHARED_IMAGE_USAGE_RASTER_WRITE |
+    SHARED_IMAGE_USAGE_OOP_RASTERIZATION | SHARED_IMAGE_USAGE_SCANOUT |
+    SHARED_IMAGE_USAGE_WEBGPU | SHARED_IMAGE_USAGE_VIDEO_DECODE |
     SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
     SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE;
@@ -97,12 +97,13 @@ constexpr uint32_t kSupportedUsage =
 
 D3DImageBackingFactory::D3DImageBackingFactory(
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
-    scoped_refptr<DXGISharedHandleManager> dxgi_shared_handle_manager)
+    scoped_refptr<DXGISharedHandleManager> dxgi_shared_handle_manager,
+    const GLFormatCaps& gl_format_caps)
     : SharedImageBackingFactory(kSupportedUsage),
       d3d11_device_(std::move(d3d11_device)),
       dxgi_shared_handle_manager_(std::move(dxgi_shared_handle_manager)),
-      angle_d3d11_device_(gl::QueryD3D11DeviceObjectFromANGLE()) {
-  CHECK(d3d11_device_);
+      angle_d3d11_device_(gl::QueryD3D11DeviceObjectFromANGLE()),
+      gl_format_caps_(gl_format_caps) {
   CHECK(angle_d3d11_device_);
 }
 
@@ -147,9 +148,13 @@ bool D3DImageBackingFactory::IsD3DSharedImageSupported(
 }
 
 // static
-bool D3DImageBackingFactory::IsSwapChainSupported() {
+bool D3DImageBackingFactory::IsSwapChainSupported(
+    const GpuPreferences& gpu_preferences) {
+  // TODO(crbug.com/1492685): enable swapchain support when d3d11 is shared with
+  // ANGLE.
   return gl::DirectCompositionSupported() &&
-         gl::DXGISwapChainTearingSupported();
+         gl::DXGISwapChainTearingSupported() &&
+         gpu_preferences.gr_context_type == GrContextType::kGL;
 }
 
 // static
@@ -175,9 +180,6 @@ D3DImageBackingFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
                                         GrSurfaceOrigin surface_origin,
                                         SkAlphaType alpha_type,
                                         uint32_t usage) {
-  if (!D3DImageBackingFactory::IsSwapChainSupported())
-    return {nullptr, nullptr};
-
   DXGI_FORMAT swap_chain_format;
   if ((format == viz::SinglePlaneFormat::kRGBA_8888) ||
       (format == viz::SinglePlaneFormat::kRGBX_8888) ||
@@ -268,7 +270,7 @@ D3DImageBackingFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
   auto back_buffer_backing = D3DImageBacking::CreateFromSwapChainBuffer(
       back_buffer_mailbox, format, size, color_space, surface_origin,
       alpha_type, usage, std::move(back_buffer_texture), swap_chain,
-      /*is_back_buffer=*/true);
+      gl_format_caps_, /*is_back_buffer=*/true);
   if (!back_buffer_backing)
     return {nullptr, nullptr};
   back_buffer_backing->SetCleared();
@@ -282,7 +284,7 @@ D3DImageBackingFactory::CreateSwapChain(const Mailbox& front_buffer_mailbox,
   auto front_buffer_backing = D3DImageBacking::CreateFromSwapChainBuffer(
       front_buffer_mailbox, format, size, color_space, surface_origin,
       alpha_type, usage, std::move(front_buffer_texture), swap_chain,
-      /*is_back_buffer=*/false);
+      gl_format_caps_, /*is_back_buffer=*/false);
   if (!front_buffer_backing)
     return {nullptr, nullptr};
   front_buffer_backing->SetCleared();
@@ -304,8 +306,8 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
   DCHECK(!is_thread_safe);
 
   // Without D3D11, we cannot do shared images. This will happen if we're
-  // running with Vulkan, D3D9, GL or with the non-passthrough command decoder
-  // in tests.
+  // running with Vulkan, D3D12, D3D9, GL or with the non-passthrough command
+  // decoder in tests.
   if (!d3d11_device_) {
     return nullptr;
   }
@@ -356,18 +358,21 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
   }
   // D3D doesn't support mappable+default shared resource or YUV textures.
   const bool has_webgpu_usage = usage & SHARED_IMAGE_USAGE_WEBGPU;
-  const bool has_gl_usage = usage & SHARED_IMAGE_USAGE_GLES2;
+  const bool has_gl_usage = HasGLES2ReadOrWriteUsage(usage);
   const bool needs_shared_handle =
       has_webgpu_usage ||
       (has_gl_usage && (d3d11_device_ != angle_d3d11_device_));
-  if (is_shm_gmb && format.is_single_plane() && !needs_shared_handle &&
-      UseMapOnDefaultTextures()) {
-    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
-  } else {
+  if (needs_shared_handle) {
+    // TODO(crbug.com/1468604): Many texture formats cannot be shared on old
+    // GPUs/drivers to try to detect that and implement a fallback path or
+    // disallow Graphite/WebGPU in those cases.
     desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE |
                      (gfx::D3DSharedFence::IsSupported(d3d11_device_.Get())
                           ? D3D11_RESOURCE_MISC_SHARED
                           : D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX);
+  } else if (is_shm_gmb && format.is_single_plane() &&
+             !format.IsLegacyMultiplanar() && UseMapOnDefaultTextures()) {
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
   }
 
   Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture;
@@ -385,7 +390,9 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
     // Early return before creating D3D shared handle resources.
     return D3DImageBacking::Create(
         mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-        std::move(d3d11_texture), nullptr, texture_target);
+        std::move(d3d11_texture), /*dxgi_shared_handle_state=*/nullptr,
+        gl_format_caps_, texture_target, /*array_slice=*/0u,
+        /*plane_index=*/0u);
   }
 
   Microsoft::WRL::ComPtr<IDXGIResource1> dxgi_resource;
@@ -413,7 +420,7 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
   return D3DImageBacking::Create(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
       std::move(d3d11_texture), std::move(dxgi_shared_handle_state),
-      texture_target);
+      gl_format_caps_, texture_target, /*array_slice=*/0u, /*plane_index=*/0u);
 }
 
 std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
@@ -615,13 +622,14 @@ D3DImageBackingFactory::CreateSharedImageGMBs(
     backing = D3DImageBacking::Create(
         mailbox, plane_format, plane_size, color_space, surface_origin,
         alpha_type, usage, std::move(d3d11_texture),
-        std::move(dxgi_shared_handle_state), texture_target, /*array_slice=*/0u,
+        std::move(dxgi_shared_handle_state), gl_format_caps_, texture_target,
+        /*array_slice=*/0u,
         /*plane_index=*/plane_index);
   } else {
     backing = D3DImageBacking::Create(
         mailbox, format, size, color_space, surface_origin, alpha_type, usage,
         std::move(d3d11_texture), std::move(dxgi_shared_handle_state),
-        texture_target, /*array_slice=*/0u,
+        gl_format_caps_, texture_target, /*array_slice=*/0u,
         /*plane_index=*/0);
   }
 

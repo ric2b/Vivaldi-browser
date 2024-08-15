@@ -5,14 +5,17 @@
 #ifndef ASH_USER_EDUCATION_WELCOME_TOUR_WELCOME_TOUR_PREFS_H_
 #define ASH_USER_EDUCATION_WELCOME_TOUR_WELCOME_TOUR_PREFS_H_
 
+#include <optional>
+
 #include "ash/ash_export.h"
 #include "base/time/time.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefRegistrySimple;
 class PrefService;
 
 namespace ash {
+
+enum class TimeBucket;
 
 namespace welcome_tour_metrics {
 enum class Interaction;
@@ -21,19 +24,31 @@ enum class PreventedReason;
 
 namespace welcome_tour_prefs {
 
+// Retrieves the time that the given `interaction` first occurred after the tour
+// in terms of `TimeBucket`. If it has not been set, returns `std::nullopt`.
+ASH_EXPORT std::optional<TimeBucket> GetTimeBucketOfFirstInteraction(
+    PrefService* prefs,
+    welcome_tour_metrics::Interaction interaction);
+
+// Retrieves the time that the given `interaction` first occurred after the
+// tour. If the time has not been set, returns `std::nullopt`.
+ASH_EXPORT std::optional<base::Time> GetTimeOfFirstInteraction(
+    PrefService* prefs,
+    welcome_tour_metrics::Interaction interaction);
+
 // Retrieves the time that the tour was first completed. If the time has not
-// been set, returns `absl::nullopt`.
-ASH_EXPORT absl::optional<base::Time> GetTimeOfFirstTourCompletion(
+// been set, returns `std::nullopt`.
+ASH_EXPORT std::optional<base::Time> GetTimeOfFirstTourCompletion(
     PrefService* prefs);
 
 // Retrieves the time that the tour was first prevented. If the time has not
-// been set, returns `absl::nullopt`.
-ASH_EXPORT absl::optional<base::Time> GetTimeOfFirstTourPrevention(
+// been set, returns `std::nullopt`.
+ASH_EXPORT std::optional<base::Time> GetTimeOfFirstTourPrevention(
     PrefService* prefs);
 
 // Retrieves the reason the tour was first prevented. If the tour has not been
-// prevented, returns `absl::nullopt`.
-ASH_EXPORT absl::optional<welcome_tour_metrics::PreventedReason>
+// prevented, returns `std::nullopt`.
+ASH_EXPORT std::optional<welcome_tour_metrics::PreventedReason>
 GetReasonForFirstTourPrevention(PrefService* prefs);
 
 // Marks now as the first time the tour was prevented, with the given `reason`.
@@ -54,6 +69,13 @@ ASH_EXPORT bool MarkTimeOfFirstTourCompletion(PrefService* prefs);
 
 // Registers the Welcome Tour prefs to the given `registry`.
 ASH_EXPORT void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
+// Syncs the interaction prefs, filling in any `TimeBucket` prefs that are not
+// set if the corresponding `base::Time` pref is set, or if the interaction has
+// not happened after the max `TimeBucket` has been reached. Returns a
+// `std:vector` containing all interactions whose prefs were updated.
+ASH_EXPORT std::vector<welcome_tour_metrics::Interaction> SyncInteractionPrefs(
+    PrefService* prefs);
 
 }  // namespace welcome_tour_prefs
 }  // namespace ash

@@ -37,6 +37,7 @@ const char kEnrollSessionCancelMethod[] = "Cancel";
 const char kRecordRemoveMethod[] = "Remove";
 const char kRecordSetLabelMethod[] = "SetLabel";
 
+const char kAuthStackManagerGetNonceMethod[] = "GetNonce";
 const char kAuthStackManagerStartEnrollSessionMethod[] = "StartEnrollSession";
 const char kAuthStackManagerStartAuthSessionMethod[] = "StartAuthSession";
 const char kAuthStackManagerCreateCredentialMethod[] = "CreateCredential";

@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+#include "np_ldt.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "np_ldt.h"
 
 static const uint8_t KEY_SEED_BYTES[] = {204, 219, 36, 137, 233, 252, 172, 66, 179, 147, 72, 184, 148, 30, 209, 154, 29, 54, 14, 117, 224, 152, 200, 193, 94, 107, 28, 194, 182, 32, 205, 57};
 static const uint8_t KNOWN_HMAC_BYTES[] = {223, 185, 10, 31, 155, 31, 226, 141, 24, 187, 204, 165, 34, 64, 181, 204, 44, 203, 95, 141, 82, 137, 163, 203, 100, 235, 53, 65, 202, 97, 75, 180};

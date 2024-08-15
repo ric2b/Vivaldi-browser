@@ -132,11 +132,12 @@ int sqlite3_found_count = 0;
 **   sqlite3CantopenError(lineno)
 */
 static void test_trace_breakpoint(int pc, Op *pOp, Vdbe *v){
-  static int n = 0;
+  static u64 n = 0;
   (void)pc;
   (void)pOp;
   (void)v;
   n++;
+  if( n==LARGEST_UINT64 ) abort(); /* So that n is used, preventing a warning */
 }
 #endif
 
@@ -2033,7 +2034,7 @@ case OP_AddImm: {            /* in1 */
   pIn1 = &aMem[pOp->p1];
   memAboutToChange(p, pIn1);
   sqlite3VdbeMemIntegerify(pIn1);
-  pIn1->u.i += pOp->p2;
+  *(u64*)&pIn1->u.i += (u64)pOp->p2;
   break;
 }
 
@@ -3641,7 +3642,6 @@ case OP_MakeRecord: {
         /* NULL value.  No change in zPayload */
       }else{
         u64 v;
-        u32 i;
         if( serial_type==7 ){
           assert( sizeof(v)==sizeof(pRec->u.r) );
           memcpy(&v, &pRec->u.r, sizeof(v));
@@ -3649,12 +3649,17 @@ case OP_MakeRecord: {
         }else{
           v = pRec->u.i;
         }
-        len = i = sqlite3SmallTypeSizes[serial_type];
-        assert( i>0 );
-        while( 1 /*exit-by-break*/ ){
-          zPayload[--i] = (u8)(v&0xFF);
-          if( i==0 ) break;
-          v >>= 8;
+        len = sqlite3SmallTypeSizes[serial_type];
+        assert( len>=1 && len<=8 && len!=5 && len!=7 );
+        switch( len ){
+          default: zPayload[7] = (u8)(v&0xff); v >>= 8;
+                   zPayload[6] = (u8)(v&0xff); v >>= 8;
+          case 6:  zPayload[5] = (u8)(v&0xff); v >>= 8;
+                   zPayload[4] = (u8)(v&0xff); v >>= 8;
+          case 4:  zPayload[3] = (u8)(v&0xff); v >>= 8;
+          case 3:  zPayload[2] = (u8)(v&0xff); v >>= 8;
+          case 2:  zPayload[1] = (u8)(v&0xff); v >>= 8;
+          case 1:  zPayload[0] = (u8)(v&0xff);
         }
         zPayload += len;
       }
@@ -5771,8 +5776,13 @@ case OP_RowCell: {
 ** the "primary" delete.  The others are all on OPFLAG_FORDELETE
 ** cursors or else are marked with the AUXDELETE flag.
 **
-** If the OPFLAG_NCHANGE flag of P2 (NB: P2 not P5) is set, then the row
-** change count is incremented (otherwise not).
+** If the OPFLAG_NCHANGE (0x01) flag of P2 (NB: P2 not P5) is set, then
+** the row change count is incremented (otherwise not).
+**
+** If the OPFLAG_ISNOOP (0x40) flag of P2 (not P5!) is set, then the
+** pre-update-hook for deletes is run, but the btree is otherwise unchanged.
+** This happens when the OP_Delete is to be shortly followed by an OP_Insert
+** with the same key, causing the btree entry to be overwritten.
 **
 ** P1 must not be pseudo-table.  It has to be a real table with
 ** multiple rows.
@@ -6897,13 +6907,41 @@ case OP_CreateBtree: {          /* out2 */
 /* Opcode: SqlExec * * * P4 *
 **
 ** Run the SQL statement or statements specified in the P4 string.
+** Disable Auth and Trace callbacks while those statements are running if
+** P1 is true.
 */
 case OP_SqlExec: {
+  char *zErr;
+#ifndef SQLITE_OMIT_AUTHORIZATION
+  sqlite3_xauth xAuth;
+#endif
+  u8 mTrace;
+
   sqlite3VdbeIncrWriteCounter(p, 0);
   db->nSqlExec++;
-  rc = sqlite3_exec(db, pOp->p4.z, 0, 0, 0);
+  zErr = 0;
+#ifndef SQLITE_OMIT_AUTHORIZATION
+  xAuth = db->xAuth;
+#endif
+  mTrace = db->mTrace;
+  if( pOp->p1 ){
+#ifndef SQLITE_OMIT_AUTHORIZATION
+    db->xAuth = 0;
+#endif
+    db->mTrace = 0;
+  }
+  rc = sqlite3_exec(db, pOp->p4.z, 0, 0, &zErr);
   db->nSqlExec--;
-  if( rc ) goto abort_due_to_error;
+#ifndef SQLITE_OMIT_AUTHORIZATION
+  db->xAuth = xAuth;
+#endif
+  db->mTrace = mTrace;
+  if( zErr || rc ){
+    sqlite3VdbeError(p, "%s", zErr);
+    sqlite3_free(zErr);
+    if( rc==SQLITE_NOMEM ) goto no_mem;
+    goto abort_due_to_error;
+  }
   break;
 }
 
@@ -8119,6 +8157,53 @@ case OP_VOpen: {             /* ncycle */
     assert( db->mallocFailed );
     pModule->xClose(pVCur);
     goto no_mem;
+  }
+  break;
+}
+#endif /* SQLITE_OMIT_VIRTUALTABLE */
+
+#ifndef SQLITE_OMIT_VIRTUALTABLE
+/* Opcode: VCheck P1 P2 P3 P4 *
+**
+** P4 is a pointer to a Table object that is a virtual table in schema P1
+** that supports the xIntegrity() method.  This opcode runs the xIntegrity()
+** method for that virtual table, using P3 as the integer argument.  If
+** an error is reported back, the table name is prepended to the error
+** message and that message is stored in P2.  If no errors are seen,
+** register P2 is set to NULL.
+*/
+case OP_VCheck: {             /* out2 */
+  Table *pTab;
+  sqlite3_vtab *pVtab;
+  const sqlite3_module *pModule;
+  char *zErr = 0;
+
+  pOut = &aMem[pOp->p2];
+  sqlite3VdbeMemSetNull(pOut);  /* Innocent until proven guilty */
+  assert( pOp->p4type==P4_TABLE );
+  pTab = pOp->p4.pTab;
+  assert( pTab!=0 );
+  assert( IsVirtual(pTab) );
+  if( pTab->u.vtab.p==0 ) break;
+  pVtab = pTab->u.vtab.p->pVtab;
+  assert( pVtab!=0 );
+  pModule = pVtab->pModule;
+  assert( pModule!=0 );
+  assert( pModule->iVersion>=4 );
+  assert( pModule->xIntegrity!=0 );
+  pTab->nTabRef++;
+  sqlite3VtabLock(pTab->u.vtab.p);
+  assert( pOp->p1>=0 && pOp->p1<db->nDb );
+  rc = pModule->xIntegrity(pVtab, db->aDb[pOp->p1].zDbSName, pTab->zName,
+                           pOp->p3, &zErr);
+  sqlite3VtabUnlock(pTab->u.vtab.p);
+  sqlite3DeleteTable(db, pTab);
+  if( rc ){
+    sqlite3_free(zErr);
+    goto abort_due_to_error;
+  }
+  if( zErr ){
+    sqlite3VdbeMemSetStr(pOut, zErr, -1, SQLITE_UTF8, sqlite3_free);
   }
   break;
 }

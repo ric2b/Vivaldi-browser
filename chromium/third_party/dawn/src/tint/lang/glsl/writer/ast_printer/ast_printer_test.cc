@@ -40,7 +40,7 @@ TEST_F(GlslASTPrinterTest, InvalidProgram) {
     auto program = resolver::Resolve(*this);
     ASSERT_FALSE(program.IsValid());
     auto result = Generate(program, Options{}, "");
-    EXPECT_FALSE(result);
+    EXPECT_NE(result, Success);
     EXPECT_EQ(result.Failure().reason.str(), "error: make the program invalid");
 }
 
@@ -122,13 +122,25 @@ int my_func() {
 }
 
 TEST_F(GlslASTPrinterTest, UnsupportedExtension) {
-    Enable(Source{{12, 34}}, wgsl::Extension::kUndefined);
+    Enable(Source{{12, 34}}, wgsl::Extension::kChromiumInternalRelaxedUniformLayout);
 
     ASTPrinter& gen = Build();
 
     ASSERT_FALSE(gen.Generate());
-    EXPECT_EQ(gen.Diagnostics().str(),
-              R"(12:34 error: GLSL backend does not support extension 'undefined')");
+    EXPECT_EQ(
+        gen.Diagnostics().str(),
+        R"(12:34 error: GLSL backend does not support extension 'chromium_internal_relaxed_uniform_layout')");
+}
+
+TEST_F(GlslASTPrinterTest, RequiresDirective) {
+    Require(wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures);
+
+    ASTPrinter& gen = Build();
+
+    ASSERT_TRUE(gen.Generate()) << gen.Diagnostics();
+    EXPECT_EQ(gen.Result(), R"(#version 310 es
+
+)");
 }
 
 }  // namespace

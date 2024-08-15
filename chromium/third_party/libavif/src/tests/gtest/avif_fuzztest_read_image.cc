@@ -18,13 +18,11 @@
 using ::fuzztest::Arbitrary;
 using ::fuzztest::ElementOf;
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 namespace {
 
-::testing::Environment* const stack_limit_env =
-    ::testing::AddGlobalTestEnvironment(
-        new FuzztestStackLimitEnvironment("524288"));  // 512 * 1024
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo512x1024Bytes();
 
 //------------------------------------------------------------------------------
 
@@ -48,6 +46,8 @@ void ReadImageFile(const std::string& arbitrary_bytes,
                    bool ignore_color_profile, bool ignore_exif, bool ignore_xmp,
                    bool allow_changing_cicp, bool ignore_gain_map,
                    avifMatrixCoefficients matrix_coefficients) {
+  ASSERT_FALSE(GetSeedDataDirs().empty());  // Make sure seeds are available.
+
   // Write the byte stream to a temp file since avifReadImage() takes a file
   // path as input.
   const std::string file_path = testing::TempDir() + "inputimage";
@@ -57,13 +57,23 @@ void ReadImageFile(const std::string& arbitrary_bytes,
 
   uint32_t out_depth;
   avifAppSourceTiming timing;
-  testutil::AvifImagePtr avif_image(avifImageCreateEmpty(), avifImageDestroy);
+  ImagePtr avif_image(avifImageCreateEmpty());
   avif_image->matrixCoefficients = matrix_coefficients;
+
+  // OSS-Fuzz limits the allocated memory to 2560 MB. Consider 16-bit samples.
+  constexpr uint32_t kImageSizeLimit =
+      2560u * 1024 * 1024 / AVIF_MAX_AV1_LAYER_COUNT / sizeof(uint16_t);
+  // SharpYUV is computationally expensive. Avoid timeouts.
+  const uint32_t imageSizeLimit =
+      (chroma_downsampling == AVIF_CHROMA_DOWNSAMPLING_SHARP_YUV &&
+       requested_format == AVIF_PIXEL_FORMAT_YUV420)
+          ? kImageSizeLimit / 4
+          : kImageSizeLimit;
 
   const avifAppFileFormat file_format = avifReadImage(
       file_path.c_str(), requested_format, requested_depth, chroma_downsampling,
       ignore_color_profile, ignore_exif, ignore_xmp, allow_changing_cicp,
-      ignore_gain_map, avif_image.get(), &out_depth, &timing,
+      ignore_gain_map, imageSizeLimit, avif_image.get(), &out_depth, &timing,
       /*frameIter=*/nullptr);
 
   if (file_format != AVIF_APP_FILE_FORMAT_UNKNOWN) {
@@ -90,42 +100,39 @@ void ReadImageFile(const std::string& arbitrary_bytes,
   }
 }
 
-constexpr uint32_t kMaxFileSize = 1024 * 1024;  // 1MB.
-
 FUZZ_TEST(ReadImageFuzzTest, ReadImageFile)
-    .WithDomains(
-        Arbitrary<std::string>()
-            .WithMaxSize(kMaxFileSize)
-            .WithSeeds(GetTestImagesContents(kMaxFileSize,
-                                             {AVIF_APP_FILE_FORMAT_JPEG,
-                                              AVIF_APP_FILE_FORMAT_PNG,
-                                              AVIF_APP_FILE_FORMAT_Y4M})),
-        ArbitraryPixelFormat(),
-        /*requested_depth=*/ElementOf({0, 8, 10, 12}),
-        ElementOf({AVIF_CHROMA_DOWNSAMPLING_AUTOMATIC,
-                   AVIF_CHROMA_DOWNSAMPLING_FASTEST,
-                   AVIF_CHROMA_DOWNSAMPLING_BEST_QUALITY,
-                   AVIF_CHROMA_DOWNSAMPLING_AVERAGE,
-                   AVIF_CHROMA_DOWNSAMPLING_SHARP_YUV}),
-        /*ignore_color_profile=*/Arbitrary<bool>(),
-        /*ignore_exif=*/Arbitrary<bool>(),
-        /*ignore_xmp=*/Arbitrary<bool>(),
-        /*allow_changing_cicp=*/Arbitrary<bool>(),
-        /*ignore_gain_map=*/Arbitrary<bool>(),
-        ElementOf(
-            {AVIF_MATRIX_COEFFICIENTS_IDENTITY, AVIF_MATRIX_COEFFICIENTS_BT709,
-             AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED, AVIF_MATRIX_COEFFICIENTS_FCC,
-             AVIF_MATRIX_COEFFICIENTS_BT470BG, AVIF_MATRIX_COEFFICIENTS_BT601,
-             AVIF_MATRIX_COEFFICIENTS_SMPTE240, AVIF_MATRIX_COEFFICIENTS_YCGCO,
-             AVIF_MATRIX_COEFFICIENTS_BT2020_NCL,
-             AVIF_MATRIX_COEFFICIENTS_BT2020_CL,
-             AVIF_MATRIX_COEFFICIENTS_SMPTE2085,
-             AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL,
-             AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_CL,
-             AVIF_MATRIX_COEFFICIENTS_ICTCP}));
+    .WithDomains(ArbitraryImageWithSeeds({AVIF_APP_FILE_FORMAT_JPEG,
+                                          AVIF_APP_FILE_FORMAT_PNG,
+                                          AVIF_APP_FILE_FORMAT_Y4M}),
+                 ArbitraryPixelFormat(),
+                 /*requested_depth=*/ElementOf({0, 8, 10, 12}),
+                 ElementOf({AVIF_CHROMA_DOWNSAMPLING_AUTOMATIC,
+                            AVIF_CHROMA_DOWNSAMPLING_FASTEST,
+                            AVIF_CHROMA_DOWNSAMPLING_BEST_QUALITY,
+                            AVIF_CHROMA_DOWNSAMPLING_AVERAGE,
+                            AVIF_CHROMA_DOWNSAMPLING_SHARP_YUV}),
+                 /*ignore_color_profile=*/Arbitrary<bool>(),
+                 /*ignore_exif=*/Arbitrary<bool>(),
+                 /*ignore_xmp=*/Arbitrary<bool>(),
+                 /*allow_changing_cicp=*/Arbitrary<bool>(),
+                 /*ignore_gain_map=*/Arbitrary<bool>(),
+                 ElementOf({AVIF_MATRIX_COEFFICIENTS_IDENTITY,
+                            AVIF_MATRIX_COEFFICIENTS_BT709,
+                            AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED,
+                            AVIF_MATRIX_COEFFICIENTS_FCC,
+                            AVIF_MATRIX_COEFFICIENTS_BT470BG,
+                            AVIF_MATRIX_COEFFICIENTS_BT601,
+                            AVIF_MATRIX_COEFFICIENTS_SMPTE240,
+                            AVIF_MATRIX_COEFFICIENTS_YCGCO,
+                            AVIF_MATRIX_COEFFICIENTS_BT2020_NCL,
+                            AVIF_MATRIX_COEFFICIENTS_BT2020_CL,
+                            AVIF_MATRIX_COEFFICIENTS_SMPTE2085,
+                            AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL,
+                            AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_CL,
+                            AVIF_MATRIX_COEFFICIENTS_ICTCP}));
 
 //------------------------------------------------------------------------------
 
 }  // namespace
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif

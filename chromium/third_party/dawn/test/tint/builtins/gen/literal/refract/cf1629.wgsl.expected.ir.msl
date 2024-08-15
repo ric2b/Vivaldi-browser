@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void refract_cf1629() {
+  float2 res = float2(-3.0f);
+}
+vertex float4 vertex_main() {
+  refract_cf1629();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  refract_cf1629();
+}
+kernel void compute_main() {
+  refract_cf1629();
+}

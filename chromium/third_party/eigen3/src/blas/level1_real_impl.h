@@ -11,91 +11,101 @@
 
 // computes the sum of magnitudes of all vector elements or, for a complex vector x, the sum
 // res = |Rex1| + |Imx1| + |Rex2| + |Imx2| + ... + |Rexn| + |Imxn|, where x is a vector of order n
-RealScalar EIGEN_BLAS_FUNC(asum)(int *n, RealScalar *px, int *incx)
-{
-//   std::cerr << "_asum " << *n << " " << *incx << "\n";
+RealScalar EIGEN_BLAS_FUNC(asum)(int *n, RealScalar *px, int *incx) {
+  //   std::cerr << "_asum " << *n << " " << *incx << "\n";
 
-  Scalar* x = reinterpret_cast<Scalar*>(px);
+  Scalar *x = reinterpret_cast<Scalar *>(px);
 
-  if(*n<=0) return 0;
+  if (*n <= 0) return 0;
 
-  if(*incx==1)  return make_vector(x,*n).cwiseAbs().sum();
-  else          return make_vector(x,*n,std::abs(*incx)).cwiseAbs().sum();
+  if (*incx == 1)
+    return make_vector(x, *n).cwiseAbs().sum();
+  else
+    return make_vector(x, *n, std::abs(*incx)).cwiseAbs().sum();
 }
 
-int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amax))(int *n, RealScalar *px, int *incx)
-{
-  if(*n<=0) return 0;
-  Scalar* x = reinterpret_cast<Scalar*>(px);
+int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amax))(int *n, RealScalar *px, int *incx) {
+  if (*n <= 0) return 0;
+  Scalar *x = reinterpret_cast<Scalar *>(px);
 
   DenseIndex ret;
-  if(*incx==1)  make_vector(x,*n).cwiseAbs().maxCoeff(&ret);
-  else          make_vector(x,*n,std::abs(*incx)).cwiseAbs().maxCoeff(&ret);
-  return int(ret)+1;
+  if (*incx == 1)
+    make_vector(x, *n).cwiseAbs().maxCoeff(&ret);
+  else
+    make_vector(x, *n, std::abs(*incx)).cwiseAbs().maxCoeff(&ret);
+  return int(ret) + 1;
 }
 
-int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amin))(int *n, RealScalar *px, int *incx)
-{
-  if(*n<=0) return 0;
-  Scalar* x = reinterpret_cast<Scalar*>(px);
+int EIGEN_CAT(i, EIGEN_BLAS_FUNC(amin))(int *n, RealScalar *px, int *incx) {
+  if (*n <= 0) return 0;
+  Scalar *x = reinterpret_cast<Scalar *>(px);
 
   DenseIndex ret;
-  if(*incx==1)  make_vector(x,*n).cwiseAbs().minCoeff(&ret);
-  else          make_vector(x,*n,std::abs(*incx)).cwiseAbs().minCoeff(&ret);
-  return int(ret)+1;
+  if (*incx == 1)
+    make_vector(x, *n).cwiseAbs().minCoeff(&ret);
+  else
+    make_vector(x, *n, std::abs(*incx)).cwiseAbs().minCoeff(&ret);
+  return int(ret) + 1;
 }
 
 // computes a vector-vector dot product.
-Scalar EIGEN_BLAS_FUNC(dot)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy)
-{
-//   std::cerr << "_dot " << *n << " " << *incx << " " << *incy << "\n";
+Scalar EIGEN_BLAS_FUNC(dot)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy) {
+  //   std::cerr << "_dot " << *n << " " << *incx << " " << *incy << "\n";
 
-  if(*n<=0) return 0;
+  if (*n <= 0) return 0;
 
-  Scalar* x = reinterpret_cast<Scalar*>(px);
-  Scalar* y = reinterpret_cast<Scalar*>(py);
+  Scalar *x = reinterpret_cast<Scalar *>(px);
+  Scalar *y = reinterpret_cast<Scalar *>(py);
 
-  if(*incx==1 && *incy==1)    return (make_vector(x,*n).cwiseProduct(make_vector(y,*n))).sum();
-  else if(*incx>0 && *incy>0) return (make_vector(x,*n,*incx).cwiseProduct(make_vector(y,*n,*incy))).sum();
-  else if(*incx<0 && *incy>0) return (make_vector(x,*n,-*incx).reverse().cwiseProduct(make_vector(y,*n,*incy))).sum();
-  else if(*incx>0 && *incy<0) return (make_vector(x,*n,*incx).cwiseProduct(make_vector(y,*n,-*incy).reverse())).sum();
-  else if(*incx<0 && *incy<0) return (make_vector(x,*n,-*incx).reverse().cwiseProduct(make_vector(y,*n,-*incy).reverse())).sum();
-  else return 0;
+  if (*incx == 1 && *incy == 1)
+    return (make_vector(x, *n).cwiseProduct(make_vector(y, *n))).sum();
+  else if (*incx > 0 && *incy > 0)
+    return (make_vector(x, *n, *incx).cwiseProduct(make_vector(y, *n, *incy))).sum();
+  else if (*incx < 0 && *incy > 0)
+    return (make_vector(x, *n, -*incx).reverse().cwiseProduct(make_vector(y, *n, *incy))).sum();
+  else if (*incx > 0 && *incy < 0)
+    return (make_vector(x, *n, *incx).cwiseProduct(make_vector(y, *n, -*incy).reverse())).sum();
+  else if (*incx < 0 && *incy < 0)
+    return (make_vector(x, *n, -*incx).reverse().cwiseProduct(make_vector(y, *n, -*incy).reverse())).sum();
+  else
+    return 0;
 }
 
 // computes the Euclidean norm of a vector.
 // FIXME
-Scalar EIGEN_BLAS_FUNC(nrm2)(int *n, RealScalar *px, int *incx)
-{
-//   std::cerr << "_nrm2 " << *n << " " << *incx << "\n";
-  if(*n<=0) return 0;
+Scalar EIGEN_BLAS_FUNC(nrm2)(int *n, RealScalar *px, int *incx) {
+  //   std::cerr << "_nrm2 " << *n << " " << *incx << "\n";
+  if (*n <= 0) return 0;
 
-  Scalar* x = reinterpret_cast<Scalar*>(px);
+  Scalar *x = reinterpret_cast<Scalar *>(px);
 
-  if(*incx==1)  return make_vector(x,*n).stableNorm();
-  else          return make_vector(x,*n,std::abs(*incx)).stableNorm();
+  if (*incx == 1)
+    return make_vector(x, *n).stableNorm();
+  else
+    return make_vector(x, *n, std::abs(*incx)).stableNorm();
 }
 
-int EIGEN_BLAS_FUNC(rot)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy, RealScalar *pc, RealScalar *ps)
-{
-//   std::cerr << "_rot " << *n << " " << *incx << " " << *incy << "\n";
-  if(*n<=0) return 0;
+int EIGEN_BLAS_FUNC(rot)(int *n, RealScalar *px, int *incx, RealScalar *py, int *incy, RealScalar *pc, RealScalar *ps) {
+  //   std::cerr << "_rot " << *n << " " << *incx << " " << *incy << "\n";
+  if (*n <= 0) return 0;
 
-  Scalar* x = reinterpret_cast<Scalar*>(px);
-  Scalar* y = reinterpret_cast<Scalar*>(py);
-  Scalar c = *reinterpret_cast<Scalar*>(pc);
-  Scalar s = *reinterpret_cast<Scalar*>(ps);
+  Scalar *x = reinterpret_cast<Scalar *>(px);
+  Scalar *y = reinterpret_cast<Scalar *>(py);
+  Scalar c = *reinterpret_cast<Scalar *>(pc);
+  Scalar s = *reinterpret_cast<Scalar *>(ps);
 
-  StridedVectorType vx(make_vector(x,*n,std::abs(*incx)));
-  StridedVectorType vy(make_vector(y,*n,std::abs(*incy)));
+  StridedVectorType vx(make_vector(x, *n, std::abs(*incx)));
+  StridedVectorType vy(make_vector(y, *n, std::abs(*incy)));
 
   Reverse<StridedVectorType> rvx(vx);
   Reverse<StridedVectorType> rvy(vy);
 
-       if(*incx<0 && *incy>0) internal::apply_rotation_in_the_plane(rvx, vy, JacobiRotation<Scalar>(c,s));
-  else if(*incx>0 && *incy<0) internal::apply_rotation_in_the_plane(vx, rvy, JacobiRotation<Scalar>(c,s));
-  else                        internal::apply_rotation_in_the_plane(vx, vy,  JacobiRotation<Scalar>(c,s));
-
+  if (*incx < 0 && *incy > 0)
+    internal::apply_rotation_in_the_plane(rvx, vy, JacobiRotation<Scalar>(c, s));
+  else if (*incx > 0 && *incy < 0)
+    internal::apply_rotation_in_the_plane(vx, rvy, JacobiRotation<Scalar>(c, s));
+  else
+    internal::apply_rotation_in_the_plane(vx, vy, JacobiRotation<Scalar>(c, s));
 
   return 0;
 }

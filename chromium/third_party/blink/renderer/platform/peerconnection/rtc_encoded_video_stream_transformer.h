@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/threading_primitives.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
+#include "third_party/webrtc/api/metronome/metronome.h"
 #include "third_party/webrtc/api/scoped_refptr.h"
 
 namespace base {
@@ -69,6 +70,8 @@ class PLATFORM_EXPORT RTCEncodedVideoStreamTransformer {
     void SendFrameToSink(
         std::unique_ptr<webrtc::TransformableVideoFrameInterface> frame);
 
+    void StartShortCircuiting();
+
    private:
     explicit Broker(RTCEncodedVideoStreamTransformer* transformer_);
     void ClearTransformer();
@@ -79,8 +82,15 @@ class PLATFORM_EXPORT RTCEncodedVideoStreamTransformer {
         GUARDED_BY(transformer_lock_);
   };
 
+  // Once an encoded Video frame is ready in WebRTC, it will be posted to the
+  // realm_task_runner to be transformed - usually a JS thread where the JS
+  // transform will execute.
+  // If metronome is non-null, we will wait for the next tick before posting,
+  // to reduce the wakeups of the target thread. Frames passed back from JS
+  // after the transform are not delayed.
   explicit RTCEncodedVideoStreamTransformer(
-      scoped_refptr<base::SingleThreadTaskRunner> realm_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> realm_task_runner,
+      std::unique_ptr<webrtc::Metronome> metronome);
   ~RTCEncodedVideoStreamTransformer();
 
   // Called by WebRTC to let us know about a callback object to send
@@ -138,6 +148,8 @@ class PLATFORM_EXPORT RTCEncodedVideoStreamTransformer {
 
   scoped_refptr<Broker> GetBroker();
 
+  void StartShortCircuiting();
+
  private:
   const scoped_refptr<Broker> broker_;
   const rtc::scoped_refptr<webrtc::FrameTransformerInterface> delegate_;
@@ -147,6 +159,7 @@ class PLATFORM_EXPORT RTCEncodedVideoStreamTransformer {
       send_frame_to_sink_callbacks_ GUARDED_BY(sink_lock_);
   base::Lock source_lock_;
   TransformerCallback transformer_callback_ GUARDED_BY(source_lock_);
+  bool short_circuit_ GUARDED_BY(sink_lock_) = false;
 };
 
 }  // namespace blink

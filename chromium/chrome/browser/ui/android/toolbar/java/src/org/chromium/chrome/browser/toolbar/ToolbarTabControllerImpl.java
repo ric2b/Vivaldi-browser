@@ -22,9 +22,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.PageTransition;
 
-/**
- * Implementation of {@link ToolbarTabController}.
- */
+/** Implementation of {@link ToolbarTabController}. */
 public class ToolbarTabControllerImpl implements ToolbarTabController {
     private final Supplier<Tab> mTabSupplier;
     private final Supplier<Boolean> mOverrideHomePageSupplier;
@@ -33,6 +31,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
     private final Supplier<String> mHomepageUrlSupplier;
     private final Runnable mOnSuccessRunnable;
     private final Supplier<Tab> mActivityTabSupplier;
+
     /**
      *
      * @param tabSupplier Supplier for the currently active tab.
@@ -47,10 +46,13 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
      *         interactable. But activityTabSupplier will return null if it is non-interactable,
      *         such as on overview mode.
      */
-    public ToolbarTabControllerImpl(Supplier<Tab> tabSupplier,
-            Supplier<Boolean> overrideHomePageSupplier, Supplier<Tracker> trackerSupplier,
+    public ToolbarTabControllerImpl(
+            Supplier<Tab> tabSupplier,
+            Supplier<Boolean> overrideHomePageSupplier,
+            Supplier<Tracker> trackerSupplier,
             ObservableSupplier<BottomControlsCoordinator> bottomControlsCoordinatorSupplier,
-            Supplier<String> homepageUrlSupplier, Runnable onSuccessRunnable,
+            Supplier<String> homepageUrlSupplier,
+            Runnable onSuccessRunnable,
             Supplier<Tab> activityTabSupplier) {
         mTabSupplier = tabSupplier;
         mOverrideHomePageSupplier = overrideHomePageSupplier;
@@ -67,8 +69,10 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
         if (controlsCoordinator != null && controlsCoordinator.onBackPressed()) {
             return true;
         }
-        Tab tab = BackPressManager.shouldUseActivityTabProvider() ? mActivityTabSupplier.get()
-                                                                  : mTabSupplier.get();
+        Tab tab =
+                BackPressManager.shouldUseActivityTabProvider()
+                        ? mActivityTabSupplier.get()
+                        : mTabSupplier.get();
         if (tab != null && tab.canGoBack()) {
             NativePage nativePage = tab.getNativePage();
             if (nativePage != null) {
@@ -126,12 +130,12 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
 
         // Note(david@vivaldi.com): Migrate legacy NTP URLs (chrome://newtab) to the newer format
         // (chrome-native://newtab)
-        if (UrlUtilities.isNTPUrl(homePageUrl)) homePageUrl = UrlConstants.NTP_URL;
+        if (UrlUtilities.isNtpUrl(homePageUrl)) homePageUrl = UrlConstants.NTP_URL;
 
         boolean is_chrome_internal =
                 homePageUrl.startsWith(ContentUrlConstants.ABOUT_URL_SHORT_PREFIX)
-                || homePageUrl.startsWith(UrlConstants.CHROME_URL_SHORT_PREFIX)
-                || homePageUrl.startsWith(UrlConstants.CHROME_NATIVE_URL_SHORT_PREFIX);
+                        || homePageUrl.startsWith(UrlConstants.CHROME_URL_SHORT_PREFIX)
+                        || homePageUrl.startsWith(UrlConstants.CHROME_NATIVE_URL_SHORT_PREFIX);
         RecordHistogram.recordBooleanHistogram(
                 "Navigation.Home.IsChromeInternal", is_chrome_internal);
         // Log a user action for the !is_chrome_internal case. This value is used as part of a
@@ -155,8 +159,10 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
                         controlsCoordinator.getHandleBackPressChangedSupplier().get())) {
             return true;
         }
-        Tab tab = BackPressManager.shouldUseActivityTabProvider() ? mActivityTabSupplier.get()
-                                                                  : mTabSupplier.get();
+        Tab tab =
+                BackPressManager.shouldUseActivityTabProvider()
+                        ? mActivityTabSupplier.get()
+                        : mTabSupplier.get();
         return tab != null && tab.canGoBack();
     }
 
@@ -173,8 +179,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
         Tab tab = mTabSupplier.get();
         if (tab == null) return;
         Profile profile = tab.getProfile();
-        @BrowserProfileType
-        int type = Profile.getBrowserProfileTypeFromProfile(profile);
+        @BrowserProfileType int type = Profile.getBrowserProfileTypeFromProfile(profile);
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.HomeButton.PerProfileType", type, BrowserProfileType.MAX_VALUE + 1);
     }

@@ -1,7 +1,6 @@
 /// <reference types="node" />
 
 import type { ChildProcess } from 'child_process';
-import { EventType } from 'mitt';
 import { PassThrough } from 'stream';
 import { Protocol } from 'devtools-protocol';
 import type { ProtocolMapping } from 'devtools-protocol/types/protocol-mapping.js';
@@ -143,6 +142,8 @@ declare type BeginSubclassSelectorTokens = ['.', '#', '[', ':'];
 
 /* Excluded from this release type: BidiBrowserOptions */
 
+/* Excluded from this release type: BiDiBrowsingContextTarget */
+
 /* Excluded from this release type: BidiConnection */
 
 /* Excluded from this release type: BidiEvents */
@@ -163,9 +164,13 @@ declare type BeginSubclassSelectorTokens = ['.', '#', '[', ':'];
 
 /* Excluded from this release type: BidiMouseMoveOptions */
 
+/* Excluded from this release type: BiDiNetworkIdle */
+
 /* Excluded from this release type: BidiNetworkManager */
 
 /* Excluded from this release type: BidiPage */
+
+/* Excluded from this release type: BiDiPageTarget */
 
 /* Excluded from this release type: BidiRealm */
 
@@ -234,7 +239,7 @@ export declare interface BoxModel {
  * // Store the endpoint to be able to reconnect to the browser.
  * const browserWSEndpoint = browser.wsEndpoint();
  * // Disconnect puppeteer from the browser.
- * browser.disconnect();
+ * await browser.disconnect();
  *
  * // Use the endpoint to reestablish a connection
  * const browser2 = await puppeteer.connect({browserWSEndpoint});
@@ -246,8 +251,6 @@ export declare interface BoxModel {
  */
 export declare abstract class Browser extends EventEmitter<BrowserEvents> {
     /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: _attach */
-    /* Excluded from this release type: _detach */
     /**
      * Gets the associated
      * {@link https://nodejs.org/api/child_process.html#class-childprocess | ChildProcess}.
@@ -255,8 +258,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * @returns `null` if this instance was connected to via
      * {@link Puppeteer.connect}.
      */
-    process(): ChildProcess | null;
-    /* Excluded from this release type: _getIsPageTargetCallback */
+    abstract process(): ChildProcess | null;
     /**
      * Creates a new incognito {@link BrowserContext | browser context}.
      *
@@ -291,20 +293,19 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * closed.
      */
     abstract defaultBrowserContext(): BrowserContext;
-    /* Excluded from this release type: _disposeContext */
     /**
      * Gets the WebSocket URL to connect to this {@link Browser | browser}.
      *
      * This is usually used with {@link Puppeteer.connect}.
      *
      * You can find the debugger URL (`webSocketDebuggerUrl`) from
-     * `http://${host}:${port}/json/version`.
+     * `http://HOST:PORT/json/version`.
      *
      * See {@link
      * https://chromedevtools.github.io/devtools-protocol/#how-do-i-access-the-browser-target
      * | browser endpoint} for more information.
      *
-     * @remarks The format is always `ws://${host}:${port}/devtools/browser/<id>`.
+     * @remarks The format is always `ws://HOST:PORT/devtools/browser/<id>`.
      */
     abstract wsEndpoint(): string;
     /**
@@ -312,7 +313,6 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * {@link Browser.defaultBrowserContext | default browser context}.
      */
     abstract newPage(): Promise<Page>;
-    /* Excluded from this release type: _createPageInContext */
     /**
      * Gets all active {@link Target | targets}.
      *
@@ -370,8 +370,9 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      *
      * {@link Page | Pages} can override the user agent with
      * {@link Page.setUserAgent}.
+     *
      */
-    userAgent(): Promise<string>;
+    abstract userAgent(): Promise<string>;
     /**
      * Closes this {@link Browser | browser} and all associated
      * {@link Page | pages}.
@@ -381,7 +382,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * Disconnects Puppeteer from this {@link Browser | browser}, but leaves the
      * process running.
      */
-    disconnect(): void;
+    abstract disconnect(): Promise<void>;
     /**
      * Whether Puppeteer is connected to this {@link Browser | browser}.
      *
@@ -394,6 +395,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
     abstract get connected(): boolean;
     /* Excluded from this release type: [disposeSymbol] */
     /* Excluded from this release type: [asyncDisposeSymbol] */
+    /* Excluded from this release type: protocol */
 }
 
 /* Excluded from this release type: BrowserCloseCallback */
@@ -411,6 +413,8 @@ export declare interface BrowserConnectOptions {
     ignoreHTTPSErrors?: boolean;
     /**
      * Sets the viewport for each page.
+     *
+     * @defaultValue '\{width: 800, height: 600\}'
      */
     defaultViewport?: Viewport | null;
     /**
@@ -423,7 +427,11 @@ export declare interface BrowserConnectOptions {
      */
     targetFilter?: TargetFilterCallback;
     /* Excluded from this release type: _isPageTarget */
-    /* Excluded from this release type: protocol */
+    /**
+     * @defaultValue 'cdp'
+     * @public
+     */
+    protocol?: ProtocolType;
     /**
      * Timeout setting for individual protocol (CDP) calls.
      *
@@ -468,7 +476,7 @@ export declare abstract class BrowserContext extends EventEmitter<BrowserContext
      * Gets all active {@link Target | targets} inside this
      * {@link BrowserContext | browser context}.
      */
-    targets(): Target[];
+    abstract targets(): Target[];
     /**
      * Waits until a {@link Target | target} matching the given `predicate`
      * appears and returns it.
@@ -519,7 +527,7 @@ export declare abstract class BrowserContext extends EventEmitter<BrowserContext
      * @param permissions - An array of permissions to grant. All permissions that
      * are not listed here will be automatically denied.
      */
-    overridePermissions(origin: string, permissions: Permission[]): Promise<void>;
+    abstract overridePermissions(origin: string, permissions: Permission[]): Promise<void>;
     /**
      * Clears all permission overrides for this
      * {@link BrowserContext | browser context}.
@@ -534,7 +542,7 @@ export declare abstract class BrowserContext extends EventEmitter<BrowserContext
      * context.clearPermissionOverrides();
      * ```
      */
-    clearPermissionOverrides(): Promise<void>;
+    abstract clearPermissionOverrides(): Promise<void>;
     /**
      * Creates a new {@link Page | page} in this
      * {@link BrowserContext | browser context}.
@@ -782,18 +790,18 @@ export declare type CDPEvents = {
  */
 export declare abstract class CDPSession extends EventEmitter<CDPSessionEvents> {
     /* Excluded from this release type: __constructor */
-    connection(): Connection | undefined;
+    abstract connection(): Connection | undefined;
     /* Excluded from this release type: parentSession */
-    send<T extends keyof ProtocolMapping.Commands>(method: T, ...paramArgs: ProtocolMapping.Commands[T]['paramsType']): Promise<ProtocolMapping.Commands[T]['returnType']>;
+    abstract send<T extends keyof ProtocolMapping.Commands>(method: T, params?: ProtocolMapping.Commands[T]['paramsType'][0], options?: CommandOptions): Promise<ProtocolMapping.Commands[T]['returnType']>;
     /**
      * Detaches the cdpSession from the target. Once detached, the cdpSession object
      * won't emit any events and can't be used to send messages.
      */
-    detach(): Promise<void>;
+    abstract detach(): Promise<void>;
     /**
      * Returns the session's id.
      */
-    id(): string;
+    abstract id(): string;
 }
 
 /**
@@ -823,6 +831,8 @@ export declare interface CDPSessionEvents extends CDPEvents, Record<EventType, u
 /* Excluded from this release type: CdpTarget */
 
 /* Excluded from this release type: CdpTouchscreen */
+
+/* Excluded from this release type: CdpWebWorker */
 
 /* Excluded from this release type: ChromeLauncher */
 
@@ -854,6 +864,13 @@ export declare interface ClickOptions extends MouseClickOptions {
 /* Excluded from this release type: ClientProvider */
 
 declare type CombinatorTokens = [' ', '>', '+', '~', '|', '|'];
+
+/**
+ * @public
+ */
+export declare interface CommandOptions {
+    timeout: number;
+}
 
 /* Excluded from this release type: Commands */
 
@@ -995,7 +1012,7 @@ export declare class Connection extends EventEmitter<CDPSessionEvents> {
      */
     session(sessionId: string): CDPSession | null;
     url(): string;
-    send<T extends keyof ProtocolMapping.Commands>(method: T, ...paramArgs: ProtocolMapping.Commands[T]['paramsType']): Promise<ProtocolMapping.Commands[T]['returnType']>;
+    send<T extends keyof ProtocolMapping.Commands>(method: T, params?: ProtocolMapping.Commands[T]['paramsType'][0], options?: CommandOptions): Promise<ProtocolMapping.Commands[T]['returnType']>;
     /* Excluded from this release type: _rawSend */
     /* Excluded from this release type: closeBrowser */
     /* Excluded from this release type: onMessage */
@@ -1010,19 +1027,9 @@ export declare class Connection extends EventEmitter<CDPSessionEvents> {
 }
 
 /**
- * Copyright 2020 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2020 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * @public
@@ -1233,6 +1240,8 @@ export declare interface CoverageEntry {
 
 /* Excluded from this release type: createEvaluationError */
 
+/* Excluded from this release type: createIncrementalIdGenerator */
+
 /* Excluded from this release type: createProtocolErrorMessage */
 
 /**
@@ -1268,19 +1277,9 @@ export declare interface CSSCoverageOptions {
 }
 
 /**
- * Copyright 2018 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2018 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * @deprecated Do not use.
@@ -1353,6 +1352,8 @@ declare const customQuerySelectors: CustomQuerySelectorRegistry;
  * @public
  */
 export declare const DEFAULT_INTERCEPT_RESOLUTION_PRIORITY = 0;
+
+/* Excluded from this release type: DEFAULT_VIEWPORT */
 
 /**
  * @public
@@ -1635,7 +1636,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      *
      * JavaScript:
      *
-     * ```js
+     * ```ts
      * const feedHandle = await page.$('.feed');
      * expect(
      *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText))
@@ -1876,7 +1877,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * For locals script connecting to remote chrome environments, paths must be
      * absolute.
      */
-    uploadFile(this: ElementHandle<HTMLInputElement>, ...paths: string[]): Promise<void>;
+    abstract uploadFile(this: ElementHandle<HTMLInputElement>, ...paths: string[]): Promise<void>;
     /**
      * This method scrolls element into view if needed, and then uses
      * {@link Touchscreen.tap} to tap in the center of the element.
@@ -1933,11 +1934,14 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
     press(key: KeyInput, options?: Readonly<KeyPressOptions>): Promise<void>;
     /**
      * This method returns the bounding box of the element (relative to the main frame),
-     * or `null` if the element is not visible.
+     * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+     * (example: `display: none`).
      */
     boundingBox(): Promise<BoundingBox | null>;
     /**
-     * This method returns boxes of the element, or `null` if the element is not visible.
+     * This method returns boxes of the element,
+     * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+     * (example: `display: none`).
      *
      * @remarks
      *
@@ -1950,7 +1954,10 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * {@link Page.(screenshot:2) } to take a screenshot of the element.
      * If the element is detached from DOM, the method throws an error.
      */
-    screenshot(this: ElementHandle<Element>, options?: Readonly<ElementScreenshotOptions>): Promise<string | Buffer>;
+    screenshot(options: Readonly<ScreenshotOptions> & {
+        encoding: 'base64';
+    }): Promise<string>;
+    screenshot(options?: Readonly<ScreenshotOptions>): Promise<Buffer>;
     /* Excluded from this release type: assertConnectedElement */
     /* Excluded from this release type: scrollIntoViewIfNeeded */
     /**
@@ -2002,7 +2009,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
  */
 export declare interface ElementScreenshotOptions extends ScreenshotOptions {
     /**
-     * @defaultValue true
+     * @defaultValue `true`
      */
     scrollIntoView?: boolean;
 }
@@ -2141,7 +2148,10 @@ export declare type EventsWithWildcard<Events extends Record<EventType, unknown>
     '*': Events[keyof Events];
 };
 
-export { EventType }
+/**
+ * @public
+ */
+export declare type EventType = string | symbol;
 
 /* Excluded from this release type: ExceptionThrownCallback */
 
@@ -2304,7 +2314,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * Is `true` if the frame is an out-of-process (OOP) frame. Otherwise,
      * `false`.
      */
-    isOOPFrame(): boolean;
+    abstract isOOPFrame(): boolean;
     /**
      * Navigates the frame to the given `url`.
      *
@@ -2451,7 +2461,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      *
      * @example
      *
-     * ```js
+     * ```ts
      * const divsCounts = await frame.$$eval('div', divs => divs.length);
      * ```
      *
@@ -2582,6 +2592,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
         timeout?: number;
         waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
     }): Promise<void>;
+    /* Excluded from this release type: setFrameContent */
     /**
      * The frame's `name` attribute as specified in the tag.
      *
@@ -2745,31 +2756,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * The frame's title.
      */
     title(): Promise<string>;
-    /**
-     * This method is typically coupled with an action that triggers a device
-     * request from an api such as WebBluetooth.
-     *
-     * :::caution
-     *
-     * This must be called before the device request is made. It will not return a
-     * currently active device prompt.
-     *
-     * :::
-     *
-     * @example
-     *
-     * ```ts
-     * const [devicePrompt] = Promise.all([
-     *   frame.waitForDevicePrompt(),
-     *   frame.click('#connect-bluetooth'),
-     * ]);
-     * await devicePrompt.select(
-     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device'))
-     * );
-     * ```
-     */
-    waitForDevicePrompt(options?: WaitTimeoutOptions): Promise<DeviceRequestPrompt>;
-    /* Excluded from this release type: exposeFunction */
+    /* Excluded from this release type: waitForDevicePrompt */
 }
 
 /**
@@ -2902,6 +2889,8 @@ export declare interface GeolocationOptions {
 
 /* Excluded from this release type: getFetch */
 
+/* Excluded from this release type: GetIdFn */
+
 /* Excluded from this release type: getPageContent */
 
 /* Excluded from this release type: getQueryHandlerAndSelector */
@@ -2982,7 +2971,7 @@ export declare type Handler<T = unknown> = (event: T) => void;
  *
  * @public
  */
-export declare class HTTPRequest {
+export declare abstract class HTTPRequest {
     /* Excluded from this release type: _requestId */
     /* Excluded from this release type: _interceptionId */
     /* Excluded from this release type: _failureText */
@@ -2994,27 +2983,27 @@ export declare class HTTPRequest {
      *
      * @experimental
      */
-    get client(): CDPSession;
+    abstract get client(): CDPSession;
     /* Excluded from this release type: __constructor */
     /**
      * The URL of the request
      */
-    url(): string;
+    abstract url(): string;
     /**
      * The `ContinueRequestOverrides` that will be used
      * if the interception is allowed to continue (ie, `abort()` and
      * `respond()` aren't called).
      */
-    continueRequestOverrides(): ContinueRequestOverrides;
+    abstract continueRequestOverrides(): ContinueRequestOverrides;
     /**
      * The `ResponseForRequest` that gets used if the
      * interception is allowed to respond (ie, `abort()` is not called).
      */
-    responseForRequest(): Partial<ResponseForRequest> | null;
+    abstract responseForRequest(): Partial<ResponseForRequest> | null;
     /**
      * The most recent reason for aborting the request
      */
-    abortErrorReason(): Protocol.Network.ErrorReason | null;
+    abstract abortErrorReason(): Protocol.Network.ErrorReason | null;
     /**
      * An InterceptResolutionState object describing the current resolution
      * action and priority.
@@ -3026,60 +3015,71 @@ export declare class HTTPRequest {
      * InterceptResolutionAction is one of: `abort`, `respond`, `continue`,
      * `disabled`, `none`, or `already-handled`.
      */
-    interceptResolutionState(): InterceptResolutionState;
+    abstract interceptResolutionState(): InterceptResolutionState;
     /**
      * Is `true` if the intercept resolution has already been handled,
      * `false` otherwise.
      */
-    isInterceptResolutionHandled(): boolean;
+    abstract isInterceptResolutionHandled(): boolean;
     /**
      * Adds an async request handler to the processing queue.
      * Deferred handlers are not guaranteed to execute in any particular order,
      * but they are guaranteed to resolve before the request interception
      * is finalized.
      */
-    enqueueInterceptAction(pendingHandler: () => void | PromiseLike<unknown>): void;
+    abstract enqueueInterceptAction(pendingHandler: () => void | PromiseLike<unknown>): void;
     /**
      * Awaits pending interception handlers and then decides how to fulfill
      * the request interception.
      */
-    finalizeInterceptions(): Promise<void>;
+    abstract finalizeInterceptions(): Promise<void>;
     /**
      * Contains the request's resource type as it was perceived by the rendering
      * engine.
      */
-    resourceType(): ResourceType;
+    abstract resourceType(): ResourceType;
     /**
      * The method used (`GET`, `POST`, etc.)
      */
-    method(): string;
+    abstract method(): string;
     /**
      * The request's post body, if any.
      */
-    postData(): string | undefined;
+    abstract postData(): string | undefined;
+    /**
+     * True when the request has POST data. Note that {@link HTTPRequest.postData}
+     * might still be undefined when this flag is true when the data is too long
+     * or not readily available in the decoded form. In that case, use
+     * {@link HTTPRequest.fetchPostData}.
+     */
+    abstract hasPostData(): boolean;
+    /**
+     * Fetches the POST data for the request from the browser.
+     */
+    abstract fetchPostData(): Promise<string | undefined>;
     /**
      * An object with HTTP headers associated with the request. All
      * header names are lower-case.
      */
-    headers(): Record<string, string>;
+    abstract headers(): Record<string, string>;
     /**
      * A matching `HTTPResponse` object, or null if the response has not
      * been received yet.
      */
-    response(): HTTPResponse | null;
+    abstract response(): HTTPResponse | null;
     /**
      * The frame that initiated the request, or null if navigating to
      * error pages.
      */
-    frame(): Frame | null;
+    abstract frame(): Frame | null;
     /**
      * True if the request is the driver of the current frame's navigation.
      */
-    isNavigationRequest(): boolean;
+    abstract isNavigationRequest(): boolean;
     /**
      * The initiator of the request.
      */
-    initiator(): Protocol.Network.Initiator | undefined;
+    abstract initiator(): Protocol.Network.Initiator | undefined;
     /**
      * A `redirectChain` is a chain of requests initiated to fetch a resource.
      * @remarks
@@ -3107,7 +3107,7 @@ export declare class HTTPRequest {
      * @returns the chain of requests - if a server responds with at least a
      * single redirect, this chain will contain all requests that were redirected.
      */
-    redirectChain(): HTTPRequest[];
+    abstract redirectChain(): HTTPRequest[];
     /**
      * Access information about the request's failure.
      *
@@ -3128,18 +3128,11 @@ export declare class HTTPRequest {
      * message, e.g. `net::ERR_FAILED`. It is not guaranteed that there will be
      * failure text if the request fails.
      */
-    failure(): {
+    abstract failure(): {
         errorText: string;
     } | null;
     /**
      * Continues request with optional request overrides.
-     *
-     * @remarks
-     *
-     * To use this, request
-     * interception should be enabled with {@link Page.setRequestInterception}.
-     *
-     * Exception is immediately thrown if the request interception is not enabled.
      *
      * @example
      *
@@ -3156,20 +3149,19 @@ export declare class HTTPRequest {
      * ```
      *
      * @param overrides - optional overrides to apply to the request.
-     * @param priority - If provided, intercept is resolved using
-     * cooperative handling rules. Otherwise, intercept is resolved
-     * immediately.
-     */
-    continue(overrides?: ContinueRequestOverrides, priority?: number): Promise<void>;
-    /**
-     * Fulfills a request with the given response.
+     * @param priority - If provided, intercept is resolved using cooperative
+     * handling rules. Otherwise, intercept is resolved immediately.
      *
      * @remarks
      *
-     * To use this, request
-     * interception should be enabled with {@link Page.setRequestInterception}.
+     * To use this, request interception should be enabled with
+     * {@link Page.setRequestInterception}.
      *
      * Exception is immediately thrown if the request interception is not enabled.
+     */
+    abstract continue(overrides?: ContinueRequestOverrides, priority?: number): Promise<void>;
+    /**
+     * Fulfills a request with the given response.
      *
      * @example
      * An example of fulfilling all requests with 404 responses:
@@ -3192,22 +3184,30 @@ export declare class HTTPRequest {
      * @param priority - If provided, intercept is resolved using
      * cooperative handling rules. Otherwise, intercept is resolved
      * immediately.
-     */
-    respond(response: Partial<ResponseForRequest>, priority?: number): Promise<void>;
-    /**
-     * Aborts a request.
      *
      * @remarks
-     * To use this, request interception should be enabled with
-     * {@link Page.setRequestInterception}. If it is not enabled, this method will
-     * throw an exception immediately.
+     *
+     * To use this, request
+     * interception should be enabled with {@link Page.setRequestInterception}.
+     *
+     * Exception is immediately thrown if the request interception is not enabled.
+     */
+    abstract respond(response: Partial<ResponseForRequest>, priority?: number): Promise<void>;
+    /**
+     * Aborts a request.
      *
      * @param errorCode - optional error code to provide.
      * @param priority - If provided, intercept is resolved using
      * cooperative handling rules. Otherwise, intercept is resolved
      * immediately.
+     *
+     * @remarks
+     *
+     * To use this, request interception should be enabled with
+     * {@link Page.setRequestInterception}. If it is not enabled, this method will
+     * throw an exception immediately.
      */
-    abort(errorCode?: ErrorCode, priority?: number): Promise<void>;
+    abstract abort(errorCode?: ErrorCode, priority?: number): Promise<void>;
 }
 
 /**
@@ -3216,18 +3216,17 @@ export declare class HTTPRequest {
  *
  * @public
  */
-export declare class HTTPResponse {
+export declare abstract class HTTPResponse {
     /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: _resolveBody */
     /**
      * The IP address and port number used to connect to the remote
      * server.
      */
-    remoteAddress(): RemoteAddress;
+    abstract remoteAddress(): RemoteAddress;
     /**
      * The URL of the response.
      */
-    url(): string;
+    abstract url(): string;
     /**
      * True if the response was successful (status in the range 200-299).
      */
@@ -3235,30 +3234,30 @@ export declare class HTTPResponse {
     /**
      * The status code of the response (e.g., 200 for a success).
      */
-    status(): number;
+    abstract status(): number;
     /**
      * The status text of the response (e.g. usually an "OK" for a
      * success).
      */
-    statusText(): string;
+    abstract statusText(): string;
     /**
      * An object with HTTP headers associated with the response. All
      * header names are lower-case.
      */
-    headers(): Record<string, string>;
+    abstract headers(): Record<string, string>;
     /**
      * {@link SecurityDetails} if the response was received over the
      * secure connection, or `null` otherwise.
      */
-    securityDetails(): SecurityDetails | null;
+    abstract securityDetails(): SecurityDetails | null;
     /**
      * Timing information related to the response.
      */
-    timing(): Protocol.Network.ResourceTiming | null;
+    abstract timing(): Protocol.Network.ResourceTiming | null;
     /**
      * Promise which resolves to a buffer with response body.
      */
-    buffer(): Promise<Buffer>;
+    abstract buffer(): Promise<Buffer>;
     /**
      * Promise which resolves to a text representation of response body.
      */
@@ -3275,21 +3274,21 @@ export declare class HTTPResponse {
     /**
      * A matching {@link HTTPRequest} object.
      */
-    request(): HTTPRequest;
+    abstract request(): HTTPRequest;
     /**
      * True if the response was served from either the browser's disk
      * cache or memory cache.
      */
-    fromCache(): boolean;
+    abstract fromCache(): boolean;
     /**
      * True if the response was served by a service worker.
      */
-    fromServiceWorker(): boolean;
+    abstract fromServiceWorker(): boolean;
     /**
      * A {@link Frame} that initiated this response, or `null` if
      * navigating to error pages.
      */
-    frame(): Frame | null;
+    abstract frame(): Frame | null;
 }
 
 /* Excluded from this release type: importDebug */
@@ -4086,13 +4085,13 @@ export declare interface Metrics {
  *
  * @public
  */
-export declare class Mouse {
+export declare abstract class Mouse {
     /* Excluded from this release type: __constructor */
     /**
      * Resets the mouse to the default state: No buttons pressed; position at
      * (0,0).
      */
-    reset(): Promise<void>;
+    abstract reset(): Promise<void>;
     /**
      * Moves the mouse to the given coordinate.
      *
@@ -4100,19 +4099,19 @@ export declare class Mouse {
      * @param y - Vertical position of the mouse.
      * @param options - Options to configure behavior.
      */
-    move(x: number, y: number, options?: Readonly<MouseMoveOptions>): Promise<void>;
+    abstract move(x: number, y: number, options?: Readonly<MouseMoveOptions>): Promise<void>;
     /**
      * Presses the mouse.
      *
      * @param options - Options to configure behavior.
      */
-    down(options?: Readonly<MouseOptions>): Promise<void>;
+    abstract down(options?: Readonly<MouseOptions>): Promise<void>;
     /**
      * Releases the mouse.
      *
      * @param options - Options to configure behavior.
      */
-    up(options?: Readonly<MouseOptions>): Promise<void>;
+    abstract up(options?: Readonly<MouseOptions>): Promise<void>;
     /**
      * Shortcut for `mouse.move`, `mouse.down` and `mouse.up`.
      *
@@ -4120,7 +4119,7 @@ export declare class Mouse {
      * @param y - Vertical position of the mouse.
      * @param options - Options to configure behavior.
      */
-    click(x: number, y: number, options?: Readonly<MouseClickOptions>): Promise<void>;
+    abstract click(x: number, y: number, options?: Readonly<MouseClickOptions>): Promise<void>;
     /**
      * Dispatches a `mousewheel` event.
      * @param options - Optional: `MouseWheelOptions`.
@@ -4143,31 +4142,31 @@ export declare class Mouse {
      * await page.mouse.wheel({deltaY: -100});
      * ```
      */
-    wheel(options?: Readonly<MouseWheelOptions>): Promise<void>;
+    abstract wheel(options?: Readonly<MouseWheelOptions>): Promise<void>;
     /**
      * Dispatches a `drag` event.
      * @param start - starting point for drag
      * @param target - point to drag to
      */
-    drag(start: Point, target: Point): Promise<Protocol.Input.DragData>;
+    abstract drag(start: Point, target: Point): Promise<Protocol.Input.DragData>;
     /**
      * Dispatches a `dragenter` event.
      * @param target - point for emitting `dragenter` event
      * @param data - drag data containing items and operations mask
      */
-    dragEnter(target: Point, data: Protocol.Input.DragData): Promise<void>;
+    abstract dragEnter(target: Point, data: Protocol.Input.DragData): Promise<void>;
     /**
      * Dispatches a `dragover` event.
      * @param target - point for emitting `dragover` event
      * @param data - drag data containing items and operations mask
      */
-    dragOver(target: Point, data: Protocol.Input.DragData): Promise<void>;
+    abstract dragOver(target: Point, data: Protocol.Input.DragData): Promise<void>;
     /**
      * Performs a dragenter, dragover, and drop in sequence.
      * @param target - point to drop on
      * @param data - drag data containing items and operations mask
      */
-    drop(target: Point, data: Protocol.Input.DragData): Promise<void>;
+    abstract drop(target: Point, data: Protocol.Input.DragData): Promise<void>;
     /**
      * Performs a drag, dragenter, dragover, and drop in sequence.
      * @param start - point to drag from
@@ -4176,7 +4175,7 @@ export declare class Mouse {
      * if specified, is the time to wait between `dragover` and `drop` in milliseconds.
      * Defaults to 0.
      */
-    dragAndDrop(start: Point, target: Point, options?: {
+    abstract dragAndDrop(start: Point, target: Point, options?: {
         delay?: number;
     }): Promise<void>;
 }
@@ -4239,11 +4238,10 @@ export declare interface MouseOptions {
      */
     button?: MouseButton;
     /**
-     * @deprecated Use {@link MouseClickOptions.count}.
-     *
      * Determines the click count for the mouse event. This does not perform
      * multiple clicks.
      *
+     * @deprecated Use {@link MouseClickOptions.count}.
      * @defaultValue `1`
      */
     clickCount?: number;
@@ -4268,6 +4266,8 @@ export declare interface Moveable {
 }
 
 /* Excluded from this release type: MutationPoller */
+
+/* Excluded from this release type: NETWORK_IDLE_TIME */
 
 /**
  * @public
@@ -4387,7 +4387,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
     /**
      * `true` if the service worker are being bypassed, `false` otherwise.
      */
-    isServiceWorkerBypassed(): boolean;
+    abstract isServiceWorkerBypassed(): boolean;
     /**
      * `true` if drag events are being intercepted, `false` otherwise.
      *
@@ -4395,11 +4395,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * drag APIs found on {@link ElementHandle} to drag (or just use the
      * {@link Page.mouse}).
      */
-    isDragInterceptionEnabled(): boolean;
+    abstract isDragInterceptionEnabled(): boolean;
     /**
      * `true` if the page has JavaScript enabled, `false` otherwise.
      */
-    isJavaScriptEnabled(): boolean;
+    abstract isJavaScriptEnabled(): boolean;
     /* Excluded from this release type: on */
     /* Excluded from this release type: off */
     /**
@@ -4430,7 +4430,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await fileChooser.accept(['/tmp/myfile.pdf']);
      * ```
      */
-    waitForFileChooser(options?: WaitTimeoutOptions): Promise<FileChooser>;
+    abstract waitForFileChooser(options?: WaitTimeoutOptions): Promise<FileChooser>;
     /**
      * Sets the page's geolocation.
      *
@@ -4444,11 +4444,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await page.setGeolocation({latitude: 59.95, longitude: 30.31667});
      * ```
      */
-    setGeolocation(options: GeolocationOptions): Promise<void>;
+    abstract setGeolocation(options: GeolocationOptions): Promise<void>;
     /**
      * A target this page was created from.
      */
-    target(): Target;
+    abstract target(): Target;
     /**
      * Get the browser the page belongs to.
      */
@@ -4467,7 +4467,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
     /**
      * Creates a Chrome Devtools Protocol session attached to the page.
      */
-    createCDPSession(): Promise<CDPSession>;
+    abstract createCDPSession(): Promise<CDPSession>;
     /**
      * {@inheritDoc Keyboard}
      */
@@ -4475,7 +4475,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
     /**
      * {@inheritDoc Touchscreen}
      */
-    get touchscreen(): Touchscreen;
+    abstract get touchscreen(): Touchscreen;
     /**
      * {@inheritDoc Coverage}
      */
@@ -4500,7 +4500,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @remarks
      * This does not contain ServiceWorkers
      */
-    workers(): WebWorker[];
+    abstract workers(): WebWorker[];
     /**
      * Activating request interception enables {@link HTTPRequest.abort},
      * {@link HTTPRequest.continue} and {@link HTTPRequest.respond} methods. This
@@ -4537,13 +4537,13 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @param value - Whether to enable request interception.
      */
-    setRequestInterception(value: boolean): Promise<void>;
+    abstract setRequestInterception(value: boolean): Promise<void>;
     /**
      * Toggles ignoring of service worker for each request.
      *
      * @param bypass - Whether to bypass service worker and load from network.
      */
-    setBypassServiceWorker(bypass: boolean): Promise<void>;
+    abstract setBypassServiceWorker(bypass: boolean): Promise<void>;
     /**
      * @param enabled - Whether to enable drag interception.
      *
@@ -4551,7 +4551,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * drag APIs found on {@link ElementHandle} to drag (or just use the
      * {@link Page.mouse}).
      */
-    setDragInterception(enabled: boolean): Promise<void>;
+    abstract setDragInterception(enabled: boolean): Promise<void>;
     /**
      * Sets the network connection to offline.
      *
@@ -4559,7 +4559,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @param enabled - When `true`, enables offline mode for the page.
      */
-    setOfflineMode(enabled: boolean): Promise<void>;
+    abstract setOfflineMode(enabled: boolean): Promise<void>;
     /**
      * This does not affect WebSockets and WebRTC PeerConnections (see
      * https://crbug.com/563644). To set the page offline, you can use
@@ -4587,7 +4587,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @param networkConditions - Passing `null` disables network condition
      * emulation.
      */
-    emulateNetworkConditions(networkConditions: NetworkConditions | null): Promise<void>;
+    abstract emulateNetworkConditions(networkConditions: NetworkConditions | null): Promise<void>;
     /**
      * This setting will change the default maximum navigation time for the
      * following methods and related shortcuts:
@@ -4645,9 +4645,12 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
     /**
      * The method runs `document.querySelectorAll` within the page. If no elements
      * match the selector, the return value resolves to `[]`.
-     * @remarks
-     * Shortcut for {@link Frame.$$ | Page.mainFrame().$$(selector) }.
+     *
      * @param selector - A `selector` to query page for
+     *
+     * @remarks
+     *
+     * Shortcut for {@link Frame.$$ | Page.mainFrame().$$(selector) }.
      */
     $$<Selector extends string>(selector: Selector): Promise<Array<ElementHandle<NodeFor<Selector>>>>;
     /**
@@ -4873,8 +4876,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * If no URLs are specified, this method returns cookies for the current page
      * URL. If URLs are specified, only cookies for those URLs are returned.
      */
-    cookies(...urls: string[]): Promise<Protocol.Network.Cookie[]>;
-    deleteCookie(...cookies: Protocol.Network.DeleteCookiesRequest[]): Promise<void>;
+    abstract cookies(...urls: string[]): Promise<Protocol.Network.Cookie[]>;
+    abstract deleteCookie(...cookies: Protocol.Network.DeleteCookiesRequest[]): Promise<void>;
     /**
      * @example
      *
@@ -4882,7 +4885,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await page.setCookie(cookieObject1, cookieObject2);
      * ```
      */
-    setCookie(...cookies: Protocol.Network.CookieParam[]): Promise<void>;
+    abstract setCookie(...cookies: Protocol.Network.CookieParam[]): Promise<void>;
     /**
      * Adds a `<script>` tag into the page with the desired URL or content.
      *
@@ -4984,14 +4987,14 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * The method removes a previously added function via ${@link Page.exposeFunction}
      * called `name` from the page's `window` object.
      */
-    removeExposedFunction(name: string): Promise<void>;
+    abstract removeExposedFunction(name: string): Promise<void>;
     /**
      * Provide credentials for `HTTP authentication`.
      *
      * @remarks
      * To disable authentication, pass `null`.
      */
-    authenticate(credentials: Credentials): Promise<void>;
+    abstract authenticate(credentials: Credentials): Promise<void>;
     /**
      * The extra HTTP headers will be sent with every request the page initiates.
      *
@@ -5012,7 +5015,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @param headers - An object containing additional HTTP headers to be sent
      * with every request. All header values must be strings.
      */
-    setExtraHTTPHeaders(headers: Record<string, string>): Promise<void>;
+    abstract setExtraHTTPHeaders(headers: Record<string, string>): Promise<void>;
     /**
      * @param userAgent - Specific user agent to use in this page
      * @param userAgentData - Specific user agent client hint data to use in this
@@ -5056,11 +5059,13 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * All timestamps are in monotonic time: monotonically increasing time
      * in seconds since an arbitrary point in the past.
      */
-    metrics(): Promise<Metrics>;
+    abstract metrics(): Promise<Metrics>;
     /**
      * The page's URL.
-     * @remarks Shortcut for
-     * {@link Frame.url | page.mainFrame().url()}.
+     *
+     * @remarks
+     *
+     * Shortcut for {@link Frame.url | page.mainFrame().url()}.
      */
     url(): string;
     /**
@@ -5072,7 +5077,9 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @param html - HTML markup to assign to the page.
      * @param options - Parameters that has some properties.
+     *
      * @remarks
+     *
      * The parameter `options` might have the following options.
      *
      * - `timeout` : Maximum time in milliseconds for resources to load, defaults
@@ -5098,6 +5105,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * Navigates the page to the given `url`.
      *
      * @remarks
+     *
      * Navigation to `about:blank` or navigation to the same URL with a different
      * hash will succeed and return `null`.
      *
@@ -5154,6 +5162,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * ```
      *
      * @remarks
+     *
      * Usage of the
      * {@link https://developer.mozilla.org/en-US/docs/Web/API/History_API | History API}
      * to change the URL is considered a navigation.
@@ -5271,7 +5280,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * - `networkidle2` : consider navigation to be finished when there are no
      *   more than 2 network connections for at least `500` ms.
      */
-    goBack(options?: WaitForOptions): Promise<HTTPResponse | null>;
+    abstract goBack(options?: WaitForOptions): Promise<HTTPResponse | null>;
     /**
      * This method navigate to the next page in history.
      * @param options - Navigation Parameter
@@ -5298,7 +5307,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * - `networkidle2` : consider navigation to be finished when there are no
      *   more than 2 network connections for at least `500` ms.
      */
-    goForward(options?: WaitForOptions): Promise<HTTPResponse | null>;
+    abstract goForward(options?: WaitForOptions): Promise<HTTPResponse | null>;
     /**
      * Brings page to front (activates tab).
      */
@@ -5313,7 +5322,6 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * This method is a shortcut for calling two methods:
      * {@link Page.setUserAgent} and {@link Page.setViewport}.
      *
-     * @remarks
      * This method will resize the page. A lot of websites don't expect phones to
      * change size, so you should emulate before navigating to the page.
      *
@@ -5340,7 +5348,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * NOTE: changing this value won't affect scripts that have already been run.
      * It will take full effect on the next navigation.
      */
-    setJavaScriptEnabled(enabled: boolean): Promise<void>;
+    abstract setJavaScriptEnabled(enabled: boolean): Promise<void>;
     /**
      * Toggles bypassing page's Content-Security-Policy.
      * @param enabled - sets bypassing of page's Content-Security-Policy.
@@ -5375,12 +5383,12 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * // → false
      * ```
      */
-    emulateMediaType(type?: string): Promise<void>;
+    abstract emulateMediaType(type?: string): Promise<void>;
     /**
      * Enables CPU throttling to emulate slow CPUs.
      * @param factor - slowdown factor (1 is no throttle, 2 is 2x slowdown, etc).
      */
-    emulateCPUThrottling(factor: number | null): Promise<void>;
+    abstract emulateCPUThrottling(factor: number | null): Promise<void>;
     /**
      * @param features - `<?Array<Object>>` Given an array of media feature
      * objects, emulates CSS media features on the page. Each media feature object
@@ -5442,14 +5450,14 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * // → false
      * ```
      */
-    emulateMediaFeatures(features?: MediaFeature[]): Promise<void>;
+    abstract emulateMediaFeatures(features?: MediaFeature[]): Promise<void>;
     /**
      * @param timezoneId - Changes the timezone of the page. See
      * {@link https://source.chromium.org/chromium/chromium/deps/icu.git/+/faee8bc70570192d82d2978a71e2a615788597d1:source/data/misc/metaZones.txt | ICU’s metaZones.txt}
      * for a list of supported timezone IDs. Passing
      * `null` disables timezone emulation.
      */
-    emulateTimezone(timezoneId?: string): Promise<void>;
+    abstract emulateTimezone(timezoneId?: string): Promise<void>;
     /**
      * Emulates the idle state.
      * If no arguments set, clears idle state emulation.
@@ -5469,7 +5477,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @param overrides - Mock idle state. If not set, clears idle overrides
      */
-    emulateIdleState(overrides?: {
+    abstract emulateIdleState(overrides?: {
         isUserActive: boolean;
         isScreenUnlocked: boolean;
     }): Promise<void>;
@@ -5501,7 +5509,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @param type - the type of deficiency to simulate, or `'none'` to reset.
      */
-    emulateVisionDeficiency(type?: Protocol.Emulation.SetEmulatedVisionDeficiencyRequest['type']): Promise<void>;
+    abstract emulateVisionDeficiency(type?: Protocol.Emulation.SetEmulatedVisionDeficiencyRequest['type']): Promise<void>;
     /**
      * `page.setViewport` will resize the page. A lot of websites don't expect
      * phones to change size, so you should set the viewport before navigating to
@@ -5523,46 +5531,17 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @param viewport -
      * @remarks
-     * Argument viewport have following properties:
-     *
-     * - `width`: page width in pixels. required
-     *
-     * - `height`: page height in pixels. required
-     *
-     * - `deviceScaleFactor`: Specify device scale factor (can be thought of as
-     *   DPR). Defaults to `1`.
-     *
-     * - `isMobile`: Whether the meta viewport tag is taken into account. Defaults
-     *   to `false`.
-     *
-     * - `hasTouch`: Specifies if viewport supports touch events. Defaults to `false`
-     *
-     * - `isLandScape`: Specifies if viewport is in landscape mode. Defaults to false.
-     *
      * NOTE: in certain cases, setting viewport will reload the page in order to
      * set the isMobile or hasTouch properties.
      */
     abstract setViewport(viewport: Viewport): Promise<void>;
     /**
-     * Current page viewport settings.
+     * Returns the current page viewport settings without checking the actual page
+     * viewport.
      *
-     * @returns
-     *
-     * - `width`: page's width in pixels
-     *
-     * - `height`: page's height in pixels
-     *
-     * - `deviceScaleFactor`: Specify device scale factor (can be though of as
-     *   dpr). Defaults to `1`.
-     *
-     * - `isMobile`: Whether the meta viewport tag is taken into account. Defaults
-     *   to `false`.
-     *
-     * - `hasTouch`: Specifies if viewport supports touch events. Defaults to
-     *   `false`.
-     *
-     * - `isLandScape`: Specifies if viewport is in landscape mode. Defaults to
-     *   `false`.
+     * This is either the viewport set with the previous {@link Page.setViewport}
+     * call or the default viewport set via
+     * {@link BrowserConnectOptions.defaultViewport}.
      */
     abstract viewport(): Viewport | null;
     /**
@@ -5663,13 +5642,6 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
     /**
      * Captures a screencast of this {@link Page | page}.
      *
-     * @remarks
-     *
-     * All recordings will be {@link https://www.webmproject.org/ | WebM} format using
-     * the {@link https://www.webmproject.org/vp9/ | VP9} video codec. The FPS is 30.
-     *
-     * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
-     *
      * @example
      * Recording a {@link Page | page}:
      *
@@ -5699,6 +5671,13 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @param options - Configures screencast behavior.
      *
      * @experimental
+     *
+     * @remarks
+     *
+     * All recordings will be {@link https://www.webmproject.org/ | WebM} format using
+     * the {@link https://www.webmproject.org/vp9/ | VP9} video codec. The FPS is 30.
+     *
+     * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
      */
     screencast(options?: Readonly<ScreencastOptions>): Promise<ScreenRecorder>;
     /* Excluded from this release type: _startScreencast */
@@ -5713,10 +5692,12 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
     }): Promise<string>;
     screenshot(options?: Readonly<ScreenshotOptions>): Promise<Buffer>;
     /* Excluded from this release type: _screenshot */
-    /* Excluded from this release type: _createTemporaryViewportContainingBox */
     /* Excluded from this release type: _getPDFOptions */
     /**
      * Generates a PDF of the page with the `print` CSS media type.
+     *
+     * @param options - options for generating the PDF.
+     *
      * @remarks
      *
      * To generate a PDF with the `screen` media type, call
@@ -5727,10 +5708,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * Use the
      * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-print-color-adjust | `-webkit-print-color-adjust`}
      * property to force rendering of exact colors.
-     *
-     * @param options - options for generating the PDF.
      */
-    createPDFStream(options?: PDFOptions): Promise<Readable>;
+    abstract createPDFStream(options?: PDFOptions): Promise<Readable>;
     /**
      * {@inheritDoc Page.createPDFStream}
      */
@@ -5739,6 +5718,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * The page's title
      *
      * @remarks
+     *
      * Shortcut for {@link Frame.title | page.mainFrame().title()}.
      */
     title(): Promise<string>;
@@ -5759,7 +5739,10 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * needed, and then uses {@link Page | Page.mouse} to click in the center of the
      * element. If there's no element matching `selector`, the method throws an
      * error.
-     * @remarks Bear in mind that if `click()` triggers a navigation event and
+     *
+     * @remarks
+     *
+     * Bear in mind that if `click()` triggers a navigation event and
      * there's a separate `page.waitForNavigation()` promise to be resolved, you
      * may end up with a race condition that yields unexpected results. The
      * correct pattern for click and wait for navigation is the following:
@@ -5790,7 +5773,9 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @returns Promise which resolves when the element matching selector is
      * successfully focused. The promise will be rejected if there is no element
      * matching selector.
+     *
      * @remarks
+     *
      * Shortcut for {@link Frame.focus | page.mainFrame().focus(selector)}.
      */
     focus(selector: string): Promise<void>;
@@ -5806,7 +5791,9 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @returns Promise which resolves when the element matching `selector` is
      * successfully hovered. Promise gets rejected if there's no element matching
      * `selector`.
+     *
      * @remarks
+     *
      * Shortcut for {@link Page.hover | page.mainFrame().hover(selector)}.
      */
     hover(selector: string): Promise<void>;
@@ -5831,6 +5818,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @returns
      *
      * @remarks
+     *
      * Shortcut for {@link Frame.select | page.mainFrame().select()}
      */
     select(selector: string, ...values: string[]): Promise<string[]>;
@@ -5843,8 +5831,9 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors | Selector}
      * to search for element to tap. If there are multiple elements satisfying the
      * selector, the first will be tapped.
-     * @returns
+     *
      * @remarks
+     *
      * Shortcut for {@link Frame.tap | page.mainFrame().tap(selector)}.
      */
     tap(selector: string): Promise<void>;
@@ -5870,7 +5859,6 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @param options - have property `delay` which is the Time to wait between
      * key presses in milliseconds. Defaults to `0`.
      * @returns
-     * @remarks
      */
     type(selector: string, text: string, options?: Readonly<KeyboardTypeOptions>): Promise<void>;
     /**
@@ -5879,6 +5867,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * Causes your script to wait for the given number of milliseconds.
      *
      * @remarks
+     *
      * It's generally recommended to not wait for a number of seconds, but instead
      * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
      * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
@@ -5930,6 +5919,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @returns Promise which resolves when element specified by selector string
      * is added to DOM. Resolves to `null` if waiting for hidden: `true` and
      * selector is not found in DOM.
+     *
      * @remarks
      * The optional Parameter in Arguments `options` are:
      *
@@ -5999,10 +5989,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      */
     waitForXPath(xpath: string, options?: WaitForSelectorOptions): Promise<ElementHandle<Node> | null>;
     /**
-     * Waits for a function to finish evaluating in the page's context.
+     * Waits for the provided function, `pageFunction`, to return a truthy value when
+     * evaluated in the page's context.
      *
      * @example
-     * The {@link Page.waitForFunction} can be used to observe viewport size change:
+     * {@link Page.waitForFunction} can be used to observe a viewport size change:
      *
      * ```ts
      * import puppeteer from 'puppeteer';
@@ -6017,8 +6008,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * ```
      *
      * @example
-     * To pass arguments from node.js to the predicate of
-     * {@link Page.waitForFunction} function:
+     * Arguments can be passed from Node.js to `pageFunction`:
      *
      * ```ts
      * const selector = '.foo';
@@ -6030,7 +6020,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * ```
      *
      * @example
-     * The predicate of {@link Page.waitForFunction} can be asynchronous too:
+     * The provided `pageFunction` can be asynchronous:
      *
      * ```ts
      * const username = 'github-username';
@@ -6052,7 +6042,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * );
      * ```
      *
-     * @param pageFunction - Function to be evaluated in browser context
+     * @param pageFunction - Function to be evaluated in browser context until it returns a
+     * truthy value.
      * @param options - Options for configuring waiting behavior.
      */
     waitForFunction<Params extends unknown[], Func extends EvaluateFunc<Params> = EvaluateFunc<Params>>(pageFunction: Func | string, options?: FrameWaitForFunctionOptions, ...args: Params): Promise<HandleFor<Awaited<ReturnType<Func>>>>;
@@ -6079,7 +6070,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * );
      * ```
      */
-    waitForDevicePrompt(options?: WaitTimeoutOptions): Promise<DeviceRequestPrompt>;
+    abstract waitForDevicePrompt(options?: WaitTimeoutOptions): Promise<DeviceRequestPrompt>;
     /* Excluded from this release type: [disposeSymbol] */
     /* Excluded from this release type: [asyncDisposeSymbol] */
 }
@@ -6321,19 +6312,9 @@ export declare type PaperFormat = Uppercase<LowerCasePaperFormat> | Capitalize<L
 /* Excluded from this release type: ParsedPDFOptionsInterface */
 
 /**
- * Copyright 2020 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2020 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * @public
@@ -6502,19 +6483,9 @@ export declare const PredefinedNetworkConditions: Readonly<{
 export declare type Predicate<From, To extends From = From> = ((value: From) => value is To) | ((value: From) => Awaitable<boolean>);
 
 /**
- * Copyright 2020 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2020 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * Supported products.
@@ -6527,15 +6498,15 @@ export declare type Product = 'chrome' | 'firefox';
  *
  * @public
  */
-export declare class ProductLauncher {
+export declare abstract class ProductLauncher {
     #private;
     /* Excluded from this release type: puppeteer */
     /* Excluded from this release type: actualBrowserRevision */
     /* Excluded from this release type: __constructor */
     get product(): Product;
     launch(options?: PuppeteerNodeLaunchOptions): Promise<Browser>;
-    executablePath(channel?: ChromeReleaseChannel): string;
-    defaultArgs(object: BrowserLaunchArgumentOptions): string[];
+    abstract executablePath(channel?: ChromeReleaseChannel): string;
+    abstract defaultArgs(object: BrowserLaunchArgumentOptions): string[];
     /* Excluded from this release type: getActualBrowserRevision */
     /* Excluded from this release type: computeLaunchArguments */
     /* Excluded from this release type: cleanUserDataDir */
@@ -6578,6 +6549,11 @@ export declare class ProtocolError extends CustomError {
 export declare type ProtocolLifeCycleEvent = 'load' | 'DOMContentLoaded' | 'networkIdle' | 'networkAlmostIdle';
 
 export { ProtocolMapping }
+
+/**
+ * @public
+ */
+export declare type ProtocolType = 'cdp' | 'webDriverBiDi';
 
 /**
  * The main Puppeteer class.
@@ -6771,7 +6747,7 @@ export declare class PuppeteerNode extends Puppeteer {
      * for a description of the differences between Chromium and Chrome.
      * {@link https://chromium.googlesource.com/chromium/src/+/lkgr/docs/chromium_browser_vs_google_chrome.md | This article}
      * describes some differences for Linux users. See
-     * {@link https://goo.gle/chrome-for-testing | this doc} for the description
+     * {@link https://developer.chrome.com/blog/chrome-for-testing/ | this doc} for the description
      * of Chrome for Testing.
      *
      * @param options - Options to configure launching behavior.
@@ -6912,6 +6888,7 @@ export declare interface ResponseForRequest {
 /* Excluded from this release type: SandboxChart */
 
 /**
+ * @public
  * @experimental
  */
 export declare interface ScreencastOptions {
@@ -7030,10 +7007,9 @@ export declare interface ScreenshotOptions {
     /**
      * Capture the screenshot beyond the viewport.
      *
-     * @defaultValue `true`
+     * @defaultValue `false` if there is no `clip`. `true` otherwise.
      */
     captureBeyondViewport?: boolean;
-    /* Excluded from this release type: allowViewportExpansion */
 }
 
 /* Excluded from this release type: ScriptInjector */
@@ -7154,8 +7130,6 @@ export declare interface SerializedAXNode {
 
 /* Excluded from this release type: setLogCapture */
 
-/* Excluded from this release type: setPageContent */
-
 /**
  * @public
  */
@@ -7189,7 +7163,7 @@ declare type SplitWithDelemiters<Input extends string, Delemiters extends readon
  * worker.
  * @public
  */
-export declare class Target {
+export declare abstract class Target {
     /* Excluded from this release type: __constructor */
     /**
      * If the target is not of type `"service_worker"` or `"shared_worker"`, returns `null`.
@@ -7200,11 +7174,17 @@ export declare class Target {
      * returns `null`.
      */
     page(): Promise<Page | null>;
-    url(): string;
+    /**
+     * Forcefully creates a page for a target of any type. It is useful if you
+     * want to handle a CDP target of type `other` as a page. If you deal with a
+     * regular page target, use {@link Target.page}.
+     */
+    abstract asPage(): Promise<Page>;
+    abstract url(): string;
     /**
      * Creates a Chrome Devtools Protocol session attached to the target.
      */
-    createCDPSession(): Promise<CDPSession>;
+    abstract createCDPSession(): Promise<CDPSession>;
     /**
      * Identifies what kind of target this is.
      *
@@ -7212,19 +7192,19 @@ export declare class Target {
      *
      * See {@link https://developer.chrome.com/extensions/background_pages | docs} for more info about background pages.
      */
-    type(): TargetType;
+    abstract type(): TargetType;
     /**
      * Get the browser the target belongs to.
      */
-    browser(): Browser;
+    abstract browser(): Browser;
     /**
      * Get the browser context the target belongs to.
      */
-    browserContext(): BrowserContext;
+    abstract browserContext(): BrowserContext;
     /**
      * Get the target that opened this target. Top-level targets return `null`.
      */
-    opener(): Target | undefined;
+    abstract opener(): Target | undefined;
 }
 
 /* Excluded from this release type: TargetCloseError */
@@ -7380,6 +7360,15 @@ declare type TypeSelectorOfCompoundSelector<CompoundSelector extends string> = S
  */
 export declare function unregisterCustomQueryHandler(name: string): void;
 
+/**
+ * Puppeteer will throw this error if a method is not
+ * supported by the currently used protocol
+ *
+ * @public
+ */
+export declare class UnsupportedOperation extends CustomError {
+}
+
 /* Excluded from this release type: UTILITY_WORLD_NAME */
 
 /* Excluded from this release type: validateDialogType */
@@ -7387,30 +7376,26 @@ export declare function unregisterCustomQueryHandler(name: string): void;
 /* Excluded from this release type: valueFromRemoteObject */
 
 /**
- * Copyright 2020 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2020 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * @public
  */
 export declare interface Viewport {
     /**
-     * The page width in pixels.
+     * The page width in CSS pixels.
+     *
+     * @remarks
+     * Setting this value to `0` will reset this value to the system default.
      */
     width: number;
     /**
-     * The page height in pixels.
+     * The page height in CSS pixels.
+     *
+     * @remarks
+     * Setting this value to `0` will reset this value to the system default.
      */
     height: number;
     /**
@@ -7418,7 +7403,7 @@ export declare interface Viewport {
      * See {@link https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio | devicePixelRatio} for more info.
      *
      * @remarks
-     * Setting this value to `0` will set the deviceScaleFactor to the system default.
+     * Setting this value to `0` will reset this value to the system default.
      *
      * @defaultValue `1`
      */
@@ -7533,8 +7518,6 @@ export declare interface WaitTimeoutOptions {
     timeout?: number;
 }
 
-/* Excluded from this release type: waitWithTimeout */
-
 /* Excluded from this release type: WEB_PERMISSION_TO_PROTOCOL_PERMISSION */
 
 /**
@@ -7563,7 +7546,7 @@ export declare interface WaitTimeoutOptions {
  *
  * @public
  */
-export declare class WebWorker extends EventEmitter<Record<EventType, unknown>> {
+export declare abstract class WebWorker extends EventEmitter<Record<EventType, unknown>> {
     #private;
     /* Excluded from this release type: timeoutSettings */
     /* Excluded from this release type: __constructor */
@@ -7575,35 +7558,48 @@ export declare class WebWorker extends EventEmitter<Record<EventType, unknown>> 
     /**
      * The CDP session client the WebWorker belongs to.
      */
-    get client(): CDPSession;
+    abstract get client(): CDPSession;
     /**
-     * If the function passed to the `worker.evaluate` returns a Promise, then
-     * `worker.evaluate` would wait for the promise to resolve and return its
-     * value. If the function passed to the `worker.evaluate` returns a
-     * non-serializable value, then `worker.evaluate` resolves to `undefined`.
-     * DevTools Protocol also supports transferring some additional values that
-     * are not serializable by `JSON`: `-0`, `NaN`, `Infinity`, `-Infinity`, and
-     * bigint literals.
-     * Shortcut for `await worker.executionContext()).evaluate(pageFunction, ...args)`.
+     * Evaluates a given function in the {@link WebWorker | worker}.
      *
-     * @param pageFunction - Function to be evaluated in the worker context.
-     * @param args - Arguments to pass to `pageFunction`.
-     * @returns Promise which resolves to the return value of `pageFunction`.
+     * @remarks If the given function returns a promise,
+     * {@link WebWorker.evaluate | evaluate} will wait for the promise to resolve.
+     *
+     * As a rule of thumb, if the return value of the given function is more
+     * complicated than a JSON object (e.g. most classes), then
+     * {@link WebWorker.evaluate | evaluate} will _likely_ return some truncated
+     * value (or `{}`). This is because we are not returning the actual return
+     * value, but a deserialized version as a result of transferring the return
+     * value through a protocol to Puppeteer.
+     *
+     * In general, you should use
+     * {@link WebWorker.evaluateHandle | evaluateHandle} if
+     * {@link WebWorker.evaluate | evaluate} cannot serialize the return value
+     * properly or you need a mutable {@link JSHandle | handle} to the return
+     * object.
+     *
+     * @param func - Function to be evaluated.
+     * @param args - Arguments to pass into `func`.
+     * @returns The result of `func`.
      */
-    evaluate<Params extends unknown[], Func extends EvaluateFunc<Params> = EvaluateFunc<Params>>(pageFunction: Func | string, ...args: Params): Promise<Awaited<ReturnType<Func>>>;
+    evaluate<Params extends unknown[], Func extends EvaluateFunc<Params> = EvaluateFunc<Params>>(func: Func | string, ...args: Params): Promise<Awaited<ReturnType<Func>>>;
     /**
-     * The only difference between `worker.evaluate` and `worker.evaluateHandle`
-     * is that `worker.evaluateHandle` returns in-page object (JSHandle). If the
-     * function passed to the `worker.evaluateHandle` returns a `Promise`, then
-     * `worker.evaluateHandle` would wait for the promise to resolve and return
-     * its value. Shortcut for
-     * `await worker.executionContext()).evaluateHandle(pageFunction, ...args)`
+     * Evaluates a given function in the {@link WebWorker | worker}.
      *
-     * @param pageFunction - Function to be evaluated in the page context.
-     * @param args - Arguments to pass to `pageFunction`.
-     * @returns Promise which resolves to the return value of `pageFunction`.
+     * @remarks If the given function returns a promise,
+     * {@link WebWorker.evaluate | evaluate} will wait for the promise to resolve.
+     *
+     * In general, you should use
+     * {@link WebWorker.evaluateHandle | evaluateHandle} if
+     * {@link WebWorker.evaluate | evaluate} cannot serialize the return value
+     * properly or you need a mutable {@link JSHandle | handle} to the return
+     * object.
+     *
+     * @param func - Function to be evaluated.
+     * @param args - Arguments to pass into `func`.
+     * @returns A {@link JSHandle | handle} to the return value of `func`.
      */
-    evaluateHandle<Params extends unknown[], Func extends EvaluateFunc<Params> = EvaluateFunc<Params>>(pageFunction: Func | string, ...args: Params): Promise<HandleFor<Awaited<ReturnType<Func>>>>;
+    evaluateHandle<Params extends unknown[], Func extends EvaluateFunc<Params> = EvaluateFunc<Params>>(func: Func | string, ...args: Params): Promise<HandleFor<Awaited<ReturnType<Func>>>>;
 }
 
 /* Excluded from this release type: withSourcePuppeteerURLIfNone */

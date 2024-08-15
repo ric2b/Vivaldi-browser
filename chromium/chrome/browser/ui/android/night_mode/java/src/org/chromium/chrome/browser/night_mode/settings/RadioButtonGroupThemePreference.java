@@ -17,7 +17,6 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.night_mode.NightModeMetrics;
 import org.chromium.chrome.browser.night_mode.R;
 import org.chromium.chrome.browser.night_mode.ThemeType;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
@@ -33,8 +32,8 @@ import org.chromium.build.BuildConfig;
  * there is an option added underneath the currently selected preference to allow website contents
  * to be darkened (active for System default and Dark).
  */
-public class RadioButtonGroupThemePreference
-        extends Preference implements RadioGroup.OnCheckedChangeListener {
+public class RadioButtonGroupThemePreference extends Preference
+        implements RadioGroup.OnCheckedChangeListener {
     private @ThemeType int mSetting;
     private RadioButtonWithDescription mSettingRadioButton;
     private RadioButtonWithDescriptionLayout mGroup;
@@ -72,15 +71,17 @@ public class RadioButtonGroupThemePreference
         mGroup = (RadioButtonWithDescriptionLayout) holder.findViewById(R.id.radio_button_layout);
         mGroup.setOnCheckedChangeListener(this);
 
-        mCheckboxContainer.setOnClickListener(x -> {
-            mCheckBox.setChecked(!mCheckBox.isChecked());
-            callChangeListener(mSetting);
-        });
+        mCheckboxContainer.setOnClickListener(
+                x -> {
+                    mCheckBox.setChecked(!mCheckBox.isChecked());
+                    callChangeListener(mSetting);
+                });
 
         mCheckBox.setChecked(mDarkenWebsitesEnabled);
 
         assert ThemeType.NUM_ENTRIES == 3;
-        mButtons.set(ThemeType.SYSTEM_DEFAULT,
+        mButtons.set(
+                ThemeType.SYSTEM_DEFAULT,
                 (RadioButtonWithDescription) holder.findViewById(R.id.system_default));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             mButtons.get(ThemeType.SYSTEM_DEFAULT)
@@ -95,12 +96,10 @@ public class RadioButtonGroupThemePreference
         positionCheckbox();
     }
 
-    /**
-     * Remove and insert the checkbox to the view, based on the current theme preference.
-     */
+    /** Remove and insert the checkbox to the view, based on the current theme preference. */
     private void positionCheckbox() {
         if (ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
+                ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
             // Note(david@vivaldi.com): We never show the checkbox container.
             if (BuildConfig.IS_VIVALDI) return;
             if (mSetting == ThemeType.SYSTEM_DEFAULT || mSetting == ThemeType.DARK) {
@@ -125,7 +124,6 @@ public class RadioButtonGroupThemePreference
 
         positionCheckbox();
         callChangeListener(mSetting);
-        NightModeMetrics.recordThemePreferencesChanged(mSetting);
     }
 
     public boolean isDarkenWebsitesEnabled() {

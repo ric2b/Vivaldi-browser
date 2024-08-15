@@ -169,7 +169,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
         GetChromeClient()->GetDeviceEmulationTransform();
     if (!device_emulation_transform.IsIdentity()) {
       TransformPaintPropertyNode::State state{{device_emulation_transform}};
-      state.flags.in_subtree_of_page_scale = false;
+      state.in_subtree_of_page_scale = false;
       if (!device_emulation_transform_node_) {
         device_emulation_transform_node_ = TransformPaintPropertyNode::Create(
             *transform_parent, std::move(state));
@@ -189,7 +189,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     DCHECK(!transform_parent->Unalias().IsInSubtreeOfPageScale());
 
     TransformPaintPropertyNode::State state;
-    state.flags.in_subtree_of_page_scale = false;
+    state.in_subtree_of_page_scale = false;
     // TODO(crbug.com/877794) Should create overscroll elasticity transform node
     // based on settings.
     if (!overscroll_elasticity_transform_node_) {
@@ -214,7 +214,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     TransformPaintPropertyNode::State state;
     if (scale_ != 1.f)
       state.transform_and_origin.matrix = gfx::Transform::MakeScale(scale_);
-    state.flags.in_subtree_of_page_scale = false;
+    state.in_subtree_of_page_scale = false;
     state.direct_compositing_reasons = CompositingReason::kViewport;
     state.compositor_element_id = page_scale_element_id_;
 
@@ -752,7 +752,7 @@ SmoothScrollSequencer* VisualViewport::GetSmoothScrollSequencer() const {
   return LocalMainFrame().GetSmoothScrollSequencer();
 }
 
-void VisualViewport::SetScrollOffset(
+bool VisualViewport::SetScrollOffset(
     const ScrollOffset& offset,
     mojom::blink::ScrollType scroll_type,
     mojom::blink::ScrollBehavior scroll_behavior,
@@ -766,15 +766,16 @@ void VisualViewport::SetScrollOffset(
   // stores fractional offsets and that truncation happens elsewhere, see
   // crbug.com/626315.
   ScrollOffset new_scroll_offset = ClampScrollOffset(offset);
-  ScrollableArea::SetScrollOffset(new_scroll_offset, scroll_type,
-                                  scroll_behavior, std::move(on_finish));
+  return ScrollableArea::SetScrollOffset(new_scroll_offset, scroll_type,
+                                         scroll_behavior, std::move(on_finish));
 }
 
-void VisualViewport::SetScrollOffset(
+bool VisualViewport::SetScrollOffset(
     const ScrollOffset& offset,
     mojom::blink::ScrollType scroll_type,
     mojom::blink::ScrollBehavior scroll_behavior) {
-  SetScrollOffset(offset, scroll_type, scroll_behavior, ScrollCallback());
+  return SetScrollOffset(offset, scroll_type, scroll_behavior,
+                         ScrollCallback());
 }
 
 PhysicalRect VisualViewport::ScrollIntoView(
@@ -985,11 +986,8 @@ bool VisualViewport::IsActiveViewport() const {
   if (!main_frame->IsLocalFrame())
     return false;
 
-  // Only the outermost main frame should have an active viewport. A portal is
-  // the only exception since it may eventually become the outermost main frame
-  // so its viewport should be active (e.g. it should be able to independently
-  // scale based on a viewport <meta> tag).
-  return main_frame->IsOutermostMainFrame() || GetPage().InsidePortal();
+  // Only the outermost main frame should have an active viewport.
+  return main_frame->IsOutermostMainFrame();
 }
 
 LocalFrame& VisualViewport::LocalMainFrame() const {

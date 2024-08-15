@@ -43,7 +43,7 @@ thread_local Tagged<HeapObject> pending_layout_change_object =
 class VerifySmisVisitor final : public RootVisitor {
  public:
   void VisitRootPointers(Root root, const char* description,
-                         FullObjectSlot start, FullObjectSlot end) override {
+                         FullObjectSlot start, FullObjectSlot end) final {
     for (FullObjectSlot current = start; current < end; ++current) {
       CHECK(IsSmi(*current));
     }
@@ -570,8 +570,10 @@ class OldToSharedSlotVerifyingVisitor : public SlotVerifyingVisitor {
 
   bool ShouldHaveBeenRecorded(Tagged<HeapObject> host,
                               MaybeObject target) override {
-    return target->IsStrongOrWeak() && Heap::InWritableSharedSpace(target) &&
-           !Heap::InYoungGeneration(host) && !host.InWritableSharedSpace();
+    Tagged<HeapObject> target_heap_object;
+    return target.GetHeapObject(&target_heap_object) &&
+           InWritableSharedSpace(target_heap_object) &&
+           !Heap::InYoungGeneration(host) && !InWritableSharedSpace(host);
   }
 };
 
@@ -629,7 +631,8 @@ class SlotCollectingVisitor final : public ObjectVisitor {
   }
 
   void VisitMapPointer(Tagged<HeapObject> object) override {
-  }  // do nothing by default
+    slots_.push_back(MaybeObjectSlot(object->map_slot()));
+  }
 
   int number_of_slots() { return static_cast<int>(slots_.size()); }
 
@@ -676,7 +679,7 @@ void HeapVerification::VerifyRememberedSetFor(Tagged<HeapObject> object) {
       isolate(), &old_to_shared, &typed_old_to_shared);
   object->IterateBody(cage_base_, &old_to_shared_visitor);
 
-  if (object.InWritableSharedSpace()) {
+  if (InWritableSharedSpace(object)) {
     CHECK_NULL(chunk->slot_set<OLD_TO_SHARED>());
     CHECK_NULL(chunk->typed_slot_set<OLD_TO_SHARED>());
 
@@ -721,7 +724,7 @@ void HeapVerifier::VerifyReadOnlyHeap(Heap* heap) {
 // static
 void HeapVerifier::VerifyObjectLayoutChangeIsAllowed(
     Heap* heap, Tagged<HeapObject> object) {
-  if (object.InWritableSharedSpace()) {
+  if (InWritableSharedSpace(object)) {
     // Out of objects in the shared heap, only strings can change layout.
     DCHECK(IsString(object));
     // Shared strings only change layout under GC, never concurrently.

@@ -18,9 +18,11 @@
 #include <chrono>
 #include <vector>
 
+struct AHardwareBuffer;
 class SkCanvas;
 struct SkImageInfo;
 class SkPixmap;
+class SkTraceMemoryDump;
 
 namespace skgpu {
 class RefCntedCallback;
@@ -79,6 +81,8 @@ public:
 
     ~Recorder();
 
+    BackendApi backend() const;
+
     std::unique_ptr<Recording> snap();
 
     ImageProvider* clientImageProvider() { return fClientImageProvider.get(); }
@@ -96,6 +100,14 @@ public:
      * same Context to call deleteBackendTexture.
      */
     BackendTexture createBackendTexture(SkISize dimensions, const TextureInfo&);
+
+#ifdef SK_BUILD_FOR_ANDROID
+    BackendTexture createBackendTexture(AHardwareBuffer*,
+                                        bool isRenderable,
+                                        bool isProtectedContent,
+                                        SkISize dimensions,
+                                        bool fromAndroidWindow = false) const;
+#endif
 
     /**
      * If possible, updates a backend texture with the provided pixmap data. The client
@@ -159,6 +171,12 @@ public:
      */
     size_t currentBudgetedBytes() const;
 
+    /**
+     * Enumerates all cached GPU resources owned by the Recorder and dumps their memory to
+     * traceMemoryDump.
+     */
+    void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const;
+
     // Provides access to functions that aren't part of the public API.
     RecorderPriv priv();
     const RecorderPriv priv() const;  // NOLINT(readability-const-return-type)
@@ -171,8 +189,6 @@ private:
     Recorder(sk_sp<SharedContext>, const RecorderOptions&);
 
     SingleOwner* singleOwner() const { return &fSingleOwner; }
-
-    BackendApi backend() const;
 
     // We keep track of all Devices that are connected to a Recorder. This allows the client to
     // safely delete an SkSurface or a Recorder in any order. If the client deletes the Recorder

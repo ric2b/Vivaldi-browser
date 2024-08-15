@@ -84,13 +84,11 @@ class AutofillWebDataService : public WebDataServiceBase {
   void RemoveAutofillProfile(const std::string& guid,
                              AutofillProfile::Source profile_source);
 
-  // Initiates the request for local/server Autofill profiles.  The method
+  // Initiates the request for Autofill profiles. The method
   // OnWebDataServiceRequestDone of |consumer| gets called when the request is
-  // finished, with the profiles included in the argument |result|.  The
+  // finished, with the profiles included in the argument |result|.
   WebDataServiceBase::Handle GetAutofillProfiles(
       AutofillProfile::Source profile_source,
-      WebDataServiceConsumer* consumer);
-  WebDataServiceBase::Handle GetServerProfiles(
       WebDataServiceConsumer* consumer);
 
   // Schedules a task to count the number of unique autofill values contained
@@ -125,6 +123,9 @@ class AutofillWebDataService : public WebDataServiceBase {
   // `guid` is the identifier of the IBAN to remove.
   void RemoveLocalIban(const std::string& guid);
 
+  // Updates the metadata for a server IBAN.
+  void UpdateServerIbanMetadata(const Iban& iban);
+
   // Schedules a task to add credit card to the web database.
   void AddCreditCard(const CreditCard& credit_card);
 
@@ -147,6 +148,9 @@ class AutofillWebDataService : public WebDataServiceBase {
   void UpdateServerCvc(int64_t instrument_id, const std::u16string& cvc);
   void RemoveServerCvc(int64_t instrument_id);
   void ClearServerCvcs();
+
+  // Method to clear all the local CVCs from the web database.
+  void ClearLocalCvcs();
 
   // Initiates the request for local/server credit cards.  The method
   // OnWebDataServiceRequestDone of |consumer| gets called when the request is
@@ -195,9 +199,6 @@ class AutofillWebDataService : public WebDataServiceBase {
 
   // Updates the metadata for a server card (masked or not).
   void UpdateServerCardMetadata(const CreditCard& credit_card);
-
-  // Updates the metadata for a server address.
-  void UpdateServerAddressMetadata(const AutofillProfile& profile);
 
   // Removes Autofill records from the database.
   void RemoveAutofillDataModifiedBetween(const base::Time& delete_begin,

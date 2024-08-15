@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_ambient_provider_impl.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -13,6 +14,8 @@
 #include "ash/ambient/util/ambient_util.h"
 #include "ash/constants/ambient_video.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
+#include "ash/constants/geolocation_access_level.h"
 #include "ash/controls/contextual_tooltip.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
@@ -43,7 +46,6 @@
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/base/backoff_entry.h"
 #include "personalization_app_ambient_provider_impl.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
 
@@ -112,6 +114,11 @@ PersonalizationAppAmbientProviderImpl::PersonalizationAppAmbientProviderImpl(
       base::BindRepeating(
           &PersonalizationAppAmbientProviderImpl::OnAmbientUiSettingsChanged,
           base::Unretained(this)));
+  pref_change_registrar_.Add(
+      ash::prefs::kUserGeolocationAccessLevel,
+      base::BindRepeating(&PersonalizationAppAmbientProviderImpl::
+                              NotifyGeolocationPermissionChanged,
+                          base::Unretained(this)));
   ambient_ui_model_observer_.Observe(
       Shell::Get()->ambient_controller()->ambient_ui_model());
 }
@@ -139,6 +146,29 @@ void PersonalizationAppAmbientProviderImpl::IsAmbientModeEnabled(
   DCHECK(pref_service);
   std::move(callback).Run(
       pref_service->GetBoolean(ash::ambient::prefs::kAmbientModeEnabled));
+}
+
+bool PersonalizationAppAmbientProviderImpl::
+    IsGeolocationEnabledForSystemServices() {
+  PrefService* pref_service = profile_->GetPrefs();
+  CHECK(pref_service);
+  const auto access_level = static_cast<GeolocationAccessLevel>(
+      pref_service->GetInteger(prefs::kUserGeolocationAccessLevel));
+
+  switch (access_level) {
+    case ash::GeolocationAccessLevel::kAllowed:
+    case ash::GeolocationAccessLevel::kOnlyAllowedForSystem:
+      return true;
+    case ash::GeolocationAccessLevel::kDisallowed:
+      return false;
+  }
+}
+
+void PersonalizationAppAmbientProviderImpl::
+    NotifyGeolocationPermissionChanged() {
+  CHECK(ambient_observer_remote_.is_bound());
+  ambient_observer_remote_->OnGeolocationPermissionForSystemServicesChanged(
+      IsGeolocationEnabledForSystemServices());
 }
 
 void PersonalizationAppAmbientProviderImpl::SetAmbientObserver(
@@ -311,7 +341,7 @@ void PersonalizationAppAmbientProviderImpl::SetAlbumSelected(
                     "unselects all other videos.";
         return;
       }
-      absl::optional<AmbientVideo> video = FindAmbientVideoByAlbumId(id);
+      std::optional<AmbientVideo> video = FindAmbientVideoByAlbumId(id);
       if (!video) {
         ambient_receiver_.ReportBadMessage("Invalid album id.");
         return;
@@ -562,7 +592,7 @@ void PersonalizationAppAmbientProviderImpl::OnUpdateSettings(
 }
 
 void PersonalizationAppAmbientProviderImpl::OnSettingsAndAlbumsFetched(
-    const absl::optional<ash::AmbientSettings>& settings,
+    const std::optional<ash::AmbientSettings>& settings,
     ash::PersonalAlbums personal_albums) {
   // `settings` value implies success.
   if (!settings) {
@@ -650,7 +680,7 @@ void PersonalizationAppAmbientProviderImpl::FetchPreviewImages() {
   needs_update_previews_ = false;
   previews_weak_factory_.InvalidateWeakPtrs();
   if (GetCurrentUiSettings().theme() == mojom::AmbientTheme::kVideo) {
-    absl::optional<AmbientVideo> video = GetCurrentUiSettings().video();
+    std::optional<AmbientVideo> video = GetCurrentUiSettings().video();
     DCHECK(video.has_value());
     auto url_arr =
         AmbientBackendController::Get()->GetTimeOfDayVideoPreviewImageUrls(
@@ -739,6 +769,20 @@ void PersonalizationAppAmbientProviderImpl::HandleTimeOfDayBannerDismissed() {
   contextual_tooltip::HandleGesturePerformed(
       profile_->GetPrefs(),
       contextual_tooltip::TooltipType::kTimeOfDayFeatureBanner);
+}
+
+void PersonalizationAppAmbientProviderImpl::
+    IsGeolocationEnabledForSystemServices(
+        IsGeolocationEnabledForSystemServicesCallback callback) {
+  std::move(callback).Run(IsGeolocationEnabledForSystemServices());
+}
+
+void PersonalizationAppAmbientProviderImpl::
+    EnableGeolocationForSystemServices() {
+  PrefService* pref_service = profile_->GetPrefs();
+  pref_service->SetInteger(
+      prefs::kUserGeolocationAccessLevel,
+      static_cast<int>(GeolocationAccessLevel::kOnlyAllowedForSystem));
 }
 
 void PersonalizationAppAmbientProviderImpl::OnAmbientUiVisibilityChanged(

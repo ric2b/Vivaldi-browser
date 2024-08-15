@@ -25,6 +25,14 @@ class MailClientModelObserver : public base::CheckedObserver {
   }
   virtual void ExtensiveMailClientChangesEnded(MailClientService* service) {}
 
+  virtual void OnMigrationProgress(MailClientService* service,
+                                   int progress,
+                                   int total,
+                                   std::string msg) {}
+
+  virtual void OnDeleteMessagesProgress(MailClientService* service,
+                                        int delete_progress_count) {}
+
   // Invoked from the destructor of the MailClientService.
   virtual void OnMailClientModelBeingDeleted(MailClientService* service) {}
 

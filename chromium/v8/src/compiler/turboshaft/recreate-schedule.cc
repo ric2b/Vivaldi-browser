@@ -27,6 +27,7 @@
 #include "src/compiler/turboshaft/deopt-data.h"
 #include "src/compiler/turboshaft/graph.h"
 #include "src/compiler/turboshaft/operations.h"
+#include "src/compiler/turboshaft/opmasks.h"
 #include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/representations.h"
 #include "src/compiler/write-barrier-kind.h"
@@ -61,8 +62,8 @@ struct ScheduleBuilder {
   compiler::SimplifiedOperatorBuilder simplified{graph_zone};
   compiler::BasicBlock* current_block = schedule->start();
   const Block* current_input_block = nullptr;
-  ZoneUnorderedMap<int, Node*> parameters{phase_zone};
-  ZoneUnorderedMap<int, Node*> osr_values{phase_zone};
+  ZoneAbslFlatHashMap<int, Node*> parameters{phase_zone};
+  ZoneAbslFlatHashMap<int, Node*> osr_values{phase_zone};
   std::vector<BasicBlock*> blocks = {};
   std::vector<Node*> nodes{input_graph.op_id_count()};
   std::vector<std::pair<Node*, OpIndex>> loop_phis = {};
@@ -187,6 +188,7 @@ void ScheduleBuilder::ProcessOperation(const Operation& op) {
 #define SHOULD_HAVE_BEEN_LOWERED(op) \
   Node* ScheduleBuilder::ProcessOperation(const op##Op&) { UNREACHABLE(); }
 // These operations should have been lowered in previous reducers already.
+TURBOSHAFT_JS_OPERATION_LIST(SHOULD_HAVE_BEEN_LOWERED)
 TURBOSHAFT_SIMPLIFIED_OPERATION_LIST(SHOULD_HAVE_BEEN_LOWERED)
 TURBOSHAFT_OTHER_OPERATION_LIST(SHOULD_HAVE_BEEN_LOWERED)
 TURBOSHAFT_WASM_OPERATION_LIST(SHOULD_HAVE_BEEN_LOWERED)
@@ -526,6 +528,19 @@ Node* ScheduleBuilder::ProcessOperation(const ShiftOp& op) {
   DCHECK(op.rep == WordRepresentation::Word32() ||
          op.rep == WordRepresentation::Word64());
   bool word64 = op.rep == WordRepresentation::Word64();
+  Node* right = GetNode(op.right());
+  if (word64) {
+    // In Turboshaft's ShiftOp, the right hand side always has Word32
+    // representation, so for 64 bit shifts, we have to zero-extend when
+    // constructing Turbofan.
+    if (const ConstantOp* constant =
+            input_graph.Get(op.right()).TryCast<Opmask::kWord32Constant>()) {
+      int64_t value = static_cast<int64_t>(constant->word32());
+      right = AddNode(common.Int64Constant(value), {});
+    } else {
+      right = AddNode(machine.ChangeUint32ToUint64(), {right});
+    }
+  }
   const Operator* o;
   switch (op.kind) {
     case ShiftOp::Kind::kShiftRightArithmeticShiftOutZeros:
@@ -548,36 +563,16 @@ Node* ScheduleBuilder::ProcessOperation(const ShiftOp& op) {
       o = word64 ? machine.Word64Ror() : machine.Word32Ror();
       break;
   }
-  return AddNode(o, {GetNode(op.left()), GetNode(op.right())});
-}
-Node* ScheduleBuilder::ProcessOperation(const EqualOp& op) {
-  const Operator* o;
-  switch (op.rep.value()) {
-    case RegisterRepresentation::Word32():
-      o = machine.Word32Equal();
-      break;
-    case RegisterRepresentation::Word64():
-      o = machine.Word64Equal();
-      break;
-    case RegisterRepresentation::Float32():
-      o = machine.Float32Equal();
-      break;
-    case RegisterRepresentation::Float64():
-      o = machine.Float64Equal();
-      break;
-    case RegisterRepresentation::Tagged():
-      o = machine.TaggedEqual();
-      break;
-    default:
-      UNREACHABLE();
-  }
-  return AddNode(o, {GetNode(op.left()), GetNode(op.right())});
+  return AddNode(o, {GetNode(op.left()), right});
 }
 Node* ScheduleBuilder::ProcessOperation(const ComparisonOp& op) {
   const Operator* o;
   switch (op.rep.value()) {
     case RegisterRepresentation::Word32():
       switch (op.kind) {
+        case ComparisonOp::Kind::kEqual:
+          o = machine.Word32Equal();
+          break;
         case ComparisonOp::Kind::kSignedLessThan:
           o = machine.Int32LessThan();
           break;
@@ -594,6 +589,9 @@ Node* ScheduleBuilder::ProcessOperation(const ComparisonOp& op) {
       break;
     case RegisterRepresentation::Word64():
       switch (op.kind) {
+        case ComparisonOp::Kind::kEqual:
+          o = machine.Word64Equal();
+          break;
         case ComparisonOp::Kind::kSignedLessThan:
           o = machine.Int64LessThan();
           break;
@@ -610,6 +608,9 @@ Node* ScheduleBuilder::ProcessOperation(const ComparisonOp& op) {
       break;
     case RegisterRepresentation::Float32():
       switch (op.kind) {
+        case ComparisonOp::Kind::kEqual:
+          o = machine.Float32Equal();
+          break;
         case ComparisonOp::Kind::kSignedLessThan:
           o = machine.Float32LessThan();
           break;
@@ -623,12 +624,27 @@ Node* ScheduleBuilder::ProcessOperation(const ComparisonOp& op) {
       break;
     case RegisterRepresentation::Float64():
       switch (op.kind) {
+        case ComparisonOp::Kind::kEqual:
+          o = machine.Float64Equal();
+          break;
         case ComparisonOp::Kind::kSignedLessThan:
           o = machine.Float64LessThan();
           break;
         case ComparisonOp::Kind::kSignedLessThanOrEqual:
           o = machine.Float64LessThanOrEqual();
           break;
+        case ComparisonOp::Kind::kUnsignedLessThan:
+        case ComparisonOp::Kind::kUnsignedLessThanOrEqual:
+          UNREACHABLE();
+      }
+      break;
+    case RegisterRepresentation::Tagged():
+      switch (op.kind) {
+        case ComparisonOp::Kind::kEqual:
+          o = machine.TaggedEqual();
+          break;
+        case ComparisonOp::Kind::kSignedLessThan:
+        case ComparisonOp::Kind::kSignedLessThanOrEqual:
         case ComparisonOp::Kind::kUnsignedLessThan:
         case ComparisonOp::Kind::kUnsignedLessThanOrEqual:
           UNREACHABLE();
@@ -849,17 +865,34 @@ Node* ScheduleBuilder::ProcessOperation(
                  {temp, GetNode(op.low_word32())});
 }
 Node* ScheduleBuilder::ProcessOperation(const TaggedBitcastOp& op) {
+  using Rep = RegisterRepresentation;
   const Operator* o;
-  if (op.from == RegisterRepresentation::Tagged() &&
-      op.to == RegisterRepresentation::PointerSized()) {
-    o = machine.BitcastTaggedToWord();
-  } else if (op.from.IsWord() && op.to == RegisterRepresentation::Tagged()) {
-    o = machine.BitcastWordToTagged();
-  } else if (op.from == RegisterRepresentation::Compressed() &&
-             op.to == RegisterRepresentation::Word32()) {
-    o = machine.BitcastTaggedToWord();
-  } else {
-    UNIMPLEMENTED();
+  switch (multi(op.from, op.to)) {
+    case multi(Rep::Tagged(), Rep::Word32()):
+      if constexpr (Is64()) {
+        DCHECK_EQ(op.kind, TaggedBitcastOp::Kind::kSmi);
+        DCHECK(SmiValuesAre31Bits());
+        o = machine.TruncateInt64ToInt32();
+      } else {
+        o = machine.BitcastTaggedToWord();
+      }
+      break;
+    case multi(Rep::Tagged(), Rep::Word64()):
+      o = machine.BitcastTaggedToWord();
+      break;
+    case multi(Rep::Word32(), Rep::Tagged()):
+    case multi(Rep::Word64(), Rep::Tagged()):
+      if (op.kind == TaggedBitcastOp::Kind::kSmi) {
+        o = machine.BitcastWordToTaggedSigned();
+      } else {
+        o = machine.BitcastWordToTagged();
+      }
+      break;
+    case multi(Rep::Compressed(), Rep::Word32()):
+      o = machine.BitcastTaggedToWord();
+      break;
+    default:
+      UNIMPLEMENTED();
   }
   return AddNode(o, {GetNode(op.input())});
 }
@@ -1051,14 +1084,7 @@ Node* ScheduleBuilder::ProcessOperation(const LoadOp& op) {
     index = IntPtrConstant(offset);
   }
 
-  MachineType loaded_rep = op.loaded_rep.ToMachineType();
-  if (op.result_rep == RegisterRepresentation::Compressed()) {
-    if (loaded_rep == MachineType::AnyTagged()) {
-      loaded_rep = MachineType::AnyCompressed();
-    } else if (loaded_rep == MachineType::TaggedPointer()) {
-      loaded_rep = MachineType::CompressedPointer();
-    }
-  }
+  MachineType loaded_rep = op.machine_type();
   const Operator* o;
   if (op.kind.maybe_unaligned) {
     DCHECK(!op.kind.with_trap_handler);
@@ -1258,8 +1284,8 @@ Node* ScheduleBuilder::ProcessOperation(const PhiOp& op) {
     // Predecessors of {current_input_block} and the TF's matching block might
     // not be in the same order, so Phi inputs might need to be reordered to
     // match the new order.
-    // This is similar to what AssembleOutputGraphPhi in OptimizationPhase does,
-    // except that OptimizationPhase has a new->old block mapping, which we
+    // This is similar to what AssembleOutputGraphPhi in CopyingPhase does,
+    // except that CopyingPhase has a new->old block mapping, which we
     // don't have here in RecreateSchedule, so the implementation is slightly
     // different (relying on std::lower_bound rather than looking up the
     // old->new mapping).
@@ -1591,6 +1617,10 @@ Node* ScheduleBuilder::ProcessOperation(const Word32PairBinopOp& op) {
                   GetNode(op.right_low()), GetNode(op.right_high())});
 }
 
+Node* ScheduleBuilder::ProcessOperation(const CommentOp& op) {
+  return AddNode(machine.Comment(op.message), {});
+}
+
 #ifdef V8_ENABLE_WEBASSEMBLY
 Node* ScheduleBuilder::ProcessOperation(const Simd128ConstantOp& op) {
   return AddNode(machine.S128Const(op.value), {});
@@ -1773,6 +1803,14 @@ Node* ScheduleBuilder::ProcessOperation(const Simd128LoadTransformOp& op) {
 Node* ScheduleBuilder::ProcessOperation(const Simd128ShuffleOp& op) {
   return AddNode(machine.I8x16Shuffle(op.shuffle),
                  {GetNode(op.left()), GetNode(op.right())});
+}
+
+Node* ScheduleBuilder::ProcessOperation(const LoadStackPointerOp& op) {
+  return AddNode(machine.LoadStackPointer(), {});
+}
+
+Node* ScheduleBuilder::ProcessOperation(const SetStackPointerOp& op) {
+  return AddNode(machine.SetStackPointer(op.fp_scope), {GetNode(op.value())});
 }
 
 #endif  // V8_ENABLE_WEBASSEMBLY

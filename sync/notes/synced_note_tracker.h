@@ -262,7 +262,8 @@ class SyncedNoteTracker {
   // server in the same order as stored in the list. The same order should also
   // be maintained across browser restarts (i.e. across calls to the ctor() and
   // BuildNoteModelMetadata().
-  std::vector<SyncedNoteTrackerEntity*> ordered_local_tombstones_;
+  std::vector<raw_ptr<SyncedNoteTrackerEntity, VectorExperimental>>
+      ordered_local_tombstones_;
 
   // The model metadata (progress marker, initial sync done, etc).
   sync_pb::ModelTypeState model_type_state_;

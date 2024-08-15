@@ -29,9 +29,9 @@
 
 #include <cstring>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
+#include "absl/container/flat_hash_map.h"
 #include "dawn/native/vulkan/BackendVk.h"
 #include "dawn/native/vulkan/PhysicalDeviceVk.h"
 #include "dawn/native/vulkan/UtilsVulkan.h"
@@ -43,7 +43,7 @@ namespace {
 ResultOrError<InstanceExtSet> GatherInstanceExtensions(
     const char* layerName,
     const dawn::native::vulkan::VulkanFunctions& vkFunctions,
-    const std::unordered_map<std::string, InstanceExt>& knownExts) {
+    const absl::flat_hash_map<std::string, InstanceExt>& knownExts) {
     uint32_t count = 0;
     VkResult vkResult = VkResult::WrapUnsafe(
         vkFunctions.EnumerateInstanceExtensionProperties(layerName, &count, nullptr));
@@ -88,6 +88,10 @@ ResultOrError<VulkanGlobalInfo> GatherGlobalInfo(const VulkanFunctions& vkFuncti
         }
     }
 
+    DAWN_INVALID_IF(info.apiVersion < VK_API_VERSION_1_1,
+                    "Vulkan API version (%x) was not at least VK_API_VERSION_1_1 (%x).",
+                    info.apiVersion, VK_API_VERSION_1_1);
+
     // Gather the info about the instance layers
     {
         uint32_t count = 0;
@@ -105,7 +109,7 @@ ResultOrError<VulkanGlobalInfo> GatherGlobalInfo(const VulkanFunctions& vkFuncti
             vkFunctions.EnumerateInstanceLayerProperties(&count, layersProperties.data()),
             "vkEnumerateInstanceLayerProperties"));
 
-        std::unordered_map<std::string, VulkanLayer> knownLayers = CreateVulkanLayerNameMap();
+        absl::flat_hash_map<std::string, VulkanLayer> knownLayers = CreateVulkanLayerNameMap();
         for (const VkLayerProperties& layer : layersProperties) {
             auto it = knownLayers.find(layer.layerName);
             if (it != knownLayers.end()) {
@@ -116,7 +120,7 @@ ResultOrError<VulkanGlobalInfo> GatherGlobalInfo(const VulkanFunctions& vkFuncti
 
     // Gather the info about the instance extensions
     {
-        std::unordered_map<std::string, InstanceExt> knownExts = CreateInstanceExtNameMap();
+        absl::flat_hash_map<std::string, InstanceExt> knownExts = CreateInstanceExtNameMap();
 
         DAWN_TRY_ASSIGN(info.extensions, GatherInstanceExtensions(nullptr, vkFunctions, knownExts));
         MarkPromotedExtensions(&info.extensions, info.apiVersion);
@@ -216,7 +220,7 @@ ResultOrError<VulkanDeviceInfo> GatherDeviceInfo(const PhysicalDevice& device) {
                                     vkPhysicalDevice, nullptr, &count, extensionsProperties.data()),
                                 "vkEnumerateDeviceExtensionProperties"));
 
-        std::unordered_map<std::string, DeviceExt> knownExts = CreateDeviceExtNameMap();
+        absl::flat_hash_map<std::string, DeviceExt> knownExts = CreateDeviceExtNameMap();
 
         for (const VkExtensionProperties& extension : extensionsProperties) {
             auto it = knownExts.find(extension.extensionName);

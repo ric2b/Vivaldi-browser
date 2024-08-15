@@ -5,12 +5,19 @@
 #ifndef COMPONENTS_ENTERPRISE_DATA_CONTROLS_RULE_H_
 #define COMPONENTS_ENTERPRISE_DATA_CONTROLS_RULE_H_
 
+#include <optional>
 #include <string>
 
+#include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "components/enterprise/data_controls/action_context.h"
 #include "components/enterprise/data_controls/condition.h"
+#include "components/policy/core/common/schema.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+namespace policy {
+class PolicyErrorMap;
+}  // namespace policy
 
 namespace data_controls {
 
@@ -53,7 +60,6 @@ class Rule {
   // numeric values should never be reused.
   // When new entries are added, EnterpriseDlpPolicyRestriction enum in
   // histograms/enums.xml should be updated.
-  // TODO(b/280449704): Merge this enum with the one in dlp_rules_manager_base.h
   enum class Restriction {
     kUnknownRestriction = 0,
     kClipboard = 1,      // Restricts sharing the data via clipboard and
@@ -74,7 +80,6 @@ class Rule {
   // Should be listed in the order of increased priority.
   // When new entries are added, EnterpriseDlpPolicyLevel enum in
   // histograms/enums.xml should be updated.
-  // TODO(b/280449704): Merge this enum with the one in dlp_rules_manager_base.h
   enum class Level {
     kNotSet = 0,  // Restriction level is not set.
     kReport = 1,  // Restriction level to only report on every action.
@@ -85,14 +90,22 @@ class Rule {
   };
 
   // Returns nullopt if the passed JSON doesn't match the expected schema.
-  static absl::optional<Rule> Create(const base::Value& value);
-  static absl::optional<Rule> Create(const base::Value::Dict& value);
+  static std::optional<Rule> Create(const base::Value& value);
+  static std::optional<Rule> Create(const base::Value::Dict& value);
 
   // Helpers to help conversions when parsing JSON.
   static Restriction StringToRestriction(const std::string& restriction);
   static Level StringToLevel(const std::string& level);
   static const char* RestrictionToString(Restriction restriction);
   static const char* LevelToString(Level level);
+
+  // Helpers used by Data Controls's policy handler to validate rules, and add
+  // relevant context to `errors. It is assumed `value` has had its schema
+  // validated by SchemaValidatingPolicyHandler.
+  static bool ValidateRuleValue(const char* policy_name,
+                                const base::Value::Dict& value,
+                                policy::PolicyErrorPath error_path,
+                                policy::PolicyErrorMap* errors);
 
   Rule(Rule&& other);
   ~Rule();
@@ -125,6 +138,15 @@ class Rule {
   // still included in the output.
   static base::flat_map<Rule::Restriction, Rule::Level> GetRestrictions(
       const base::Value::Dict& value);
+
+  // Helper called by `ValidateRuleValue` to populate errors related to mutually
+  // exclusive fields being used in a rule.
+  static void AddMutuallyExclusiveErrors(
+      const std::vector<base::StringPiece>& oneof_conditions,
+      const std::vector<base::StringPiece>& anyof_conditions,
+      const char* policy_name,
+      policy::PolicyErrorPath error_path,
+      policy::PolicyErrorMap* errors);
 
   // Metadata fields directly taken from the rule's JSON.
   const std::string name_;

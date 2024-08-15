@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/base_paths.h"
 #include "base/base_switches.h"
@@ -23,7 +24,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -54,7 +54,7 @@ typedef int (*DLL_MAIN)(HINSTANCE, sandbox::SandboxInterfaceInfo*, int64_t);
 typedef void (*RelaunchChromeBrowserWithNewCommandLineIfNeededFunc)();
 
 void RecordDidRun(const base::FilePath& dll_path) {
-  installer::UpdateDidRunState(true);
+  installer::UpdateDidRunState();
 }
 
 // Indicates whether a file can be opened using the same flags that
@@ -67,8 +67,8 @@ bool ModuleCanBeRead(const base::FilePath& file_path) {
 // Returns the full path to |module_name|. Both dev builds (where |module_name|
 // is in the current executable's directory) and proper installs (where
 // |module_name| is in a versioned sub-directory of the current executable's
-// directory) are suported. The identified file is not guaranteed to exist.
-base::FilePath GetModulePath(base::WStringPiece module_name) {
+// directory) are supported. The identified file is not guaranteed to exist.
+base::FilePath GetModulePath(std::wstring_view module_name) {
   base::FilePath exe_dir;
   const bool has_path = base::PathService::Get(base::DIR_EXE, &exe_dir);
   DCHECK(has_path);

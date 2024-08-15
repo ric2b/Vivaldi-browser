@@ -24,7 +24,8 @@ namespace sync_bookmarks {
 // permanent folders map to server-side permanent folders.
 class BookmarkModelView {
  public:
-  // `bookmark_model` must not be null and must outlive this object.
+  // `bookmark_model` must not be null and must outlive any usage of this
+  // object.
   explicit BookmarkModelView(bookmarks::BookmarkModel* bookmark_model);
   BookmarkModelView(const BookmarkModelView&) = delete;
   virtual ~BookmarkModelView();
@@ -42,6 +43,21 @@ class BookmarkModelView {
   virtual const bookmarks::BookmarkNode* other_node() const = 0;
   virtual const bookmarks::BookmarkNode* mobile_node() const = 0;
 
+  // Ensures that bookmark_bar_node(), other_node() and mobile_node() return
+  // non-null. This is always the case for local-or-syncable permanent folders,
+  // and the function a no-op, but for account permanent folders it is necessary
+  // to create them explicitly.
+  virtual void EnsurePermanentNodesExist() = 0;
+
+  // Deletes all nodes that would return true for IsNodeSyncable(). Permanent
+  // folders may or may not be deleted depending on precise mapping (only
+  // account permanent folders can be deleted).
+  virtual void RemoveAllSyncableNodes() = 0;
+
+  // Uses `uuid` to find a node that is relevant in the context of this view.
+  virtual const bookmarks::BookmarkNode* GetNodeByUuid(
+      const base::Uuid& uuid) const = 0;
+
   // See bookmarks::BookmarkModel for documentation, as all functions below
   // mimic the same API.
   bool loaded() const;
@@ -52,7 +68,6 @@ class BookmarkModelView {
   void BeginExtensiveChanges();
   void EndExtensiveChanges();
   void Remove(const bookmarks::BookmarkNode* node);
-  void RemoveAllUserBookmarks();
   void Move(const bookmarks::BookmarkNode* node,
             const bookmarks::BookmarkNode* new_parent,
             size_t index);
@@ -60,7 +75,6 @@ class BookmarkModelView {
   void SetTitle(const bookmarks::BookmarkNode* node,
                 const std::u16string& title);
   void SetURL(const bookmarks::BookmarkNode* node, const GURL& url);
-  const bookmarks::BookmarkNode* GetNodeByUuid(const base::Uuid& uuid) const;
   const bookmarks::BookmarkNode* AddFolder(
       const bookmarks::BookmarkNode* parent,
       size_t index,
@@ -106,7 +120,8 @@ class BookmarkModelView {
 
 class BookmarkModelViewUsingLocalOrSyncableNodes : public BookmarkModelView {
  public:
-  // `bookmark_model` must not be null and must outlive this object.
+  // `bookmark_model` must not be null and must outlive any usage of this
+  // object.
   explicit BookmarkModelViewUsingLocalOrSyncableNodes(
       bookmarks::BookmarkModel* bookmark_model);
   ~BookmarkModelViewUsingLocalOrSyncableNodes() override;
@@ -115,6 +130,31 @@ class BookmarkModelViewUsingLocalOrSyncableNodes : public BookmarkModelView {
   const bookmarks::BookmarkNode* bookmark_bar_node() const override;
   const bookmarks::BookmarkNode* other_node() const override;
   const bookmarks::BookmarkNode* mobile_node() const override;
+  void EnsurePermanentNodesExist() override;
+  void RemoveAllSyncableNodes() override;
+  const bookmarks::BookmarkNode* GetNodeByUuid(
+      const base::Uuid& uuid) const override;
+
+  // Vivaldi
+  const bookmarks::BookmarkNode* trash_node() const override;
+};
+
+class BookmarkModelViewUsingAccountNodes : public BookmarkModelView {
+ public:
+  // `bookmark_model` must not be null and must outlive any usage of this
+  // object.
+  explicit BookmarkModelViewUsingAccountNodes(
+      bookmarks::BookmarkModel* bookmark_model);
+  ~BookmarkModelViewUsingAccountNodes() override;
+
+  // BookmarkModelView overrides.
+  const bookmarks::BookmarkNode* bookmark_bar_node() const override;
+  const bookmarks::BookmarkNode* other_node() const override;
+  const bookmarks::BookmarkNode* mobile_node() const override;
+  void EnsurePermanentNodesExist() override;
+  void RemoveAllSyncableNodes() override;
+  const bookmarks::BookmarkNode* GetNodeByUuid(
+      const base::Uuid& uuid) const override;
 
   // Vivaldi
   const bookmarks::BookmarkNode* trash_node() const override;

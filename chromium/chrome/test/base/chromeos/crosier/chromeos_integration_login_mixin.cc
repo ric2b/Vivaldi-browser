@@ -5,18 +5,21 @@
 #include "chrome/test/base/chromeos/crosier/chromeos_integration_login_mixin.h"
 
 #include "ash/constants/ash_switches.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/ash/dbus/ash_dbus_helper.h"
-#include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
+#include "chrome/test/base/chromeos/crosier/gaia_host_util.h"
 #include "chrome/test/base/chromeos/crosier/test_accounts.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 
 namespace {
 
@@ -51,23 +54,9 @@ class FakeSessionManagerClientBrowserHelper
  private:
   // Optionally, use FakeSessionManagerClient if a test only needs the stub
   // user session.
-  absl::optional<ash::ScopedFakeSessionManagerClient>
+  std::optional<ash::ScopedFakeSessionManagerClient>
       scoped_fake_session_manager_client_;
 };
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-content::RenderFrameHost* GetGaiaHost() {
-  constexpr char kGaiaFrameParentId[] = "signin-frame";
-  return signin::GetAuthFrame(
-      ash::LoginDisplayHost::default_host()->GetOobeWebContents(),
-      kGaiaFrameParentId);
-}
-
-ash::test::JSChecker GaiaFrameJS() {
-  return ash::test::JSChecker(GetGaiaHost());
-}
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
 }  // namespace
 
 ChromeOSIntegrationLoginMixin::ChromeOSIntegrationLoginMixin(
@@ -81,6 +70,10 @@ ChromeOSIntegrationLoginMixin::~ChromeOSIntegrationLoginMixin() {
 void ChromeOSIntegrationLoginMixin::SetMode(Mode mode) {
   CHECK(!setup_called_);
   mode_ = mode;
+}
+
+bool ChromeOSIntegrationLoginMixin::IsGaiaLoginMode() const {
+  return mode_ == Mode::kGaiaLogin || mode_ == Mode::kCustomGaiaLogin;
 }
 
 void ChromeOSIntegrationLoginMixin::Login() {
@@ -97,7 +90,48 @@ void ChromeOSIntegrationLoginMixin::Login() {
       DoGaiaLogin();
       break;
     }
+    case Mode::kCustomGaiaLogin: {
+      if (gaia_login_delegate_) {
+        gaia_login_delegate_->DoCustomGaiaLogin(username_);
+      } else {
+        CHECK(false)
+            << "CustomGaiaDelegate must be set for kCustomGaiaLogin mode.";
+      }
+      break;
+    }
   }
+}
+
+bool ChromeOSIntegrationLoginMixin::IsCryptohomeMounted() const {
+  // No cryptohome mount for kStubLogin.
+  if (mode_ == Mode::kStubLogin) {
+    return false;
+  }
+
+  if (username_.empty()) {
+    return false;
+  }
+
+  user_data_auth::IsMountedRequest request;
+  request.set_username(gaia::CanonicalizeEmail(gaia::SanitizeEmail(username_)));
+
+  bool is_mounted = false;
+  base::RunLoop run_loop;
+  ash::UserDataAuthClient::Get()->IsMounted(
+      request, base::BindLambdaForTesting(
+                   [&](std::optional<user_data_auth::IsMountedReply> result) {
+                     if (!result.has_value()) {
+                       LOG(ERROR) << "Failed to call IsMounted.";
+                       is_mounted = false;
+                     } else {
+                       is_mounted = result->is_mounted();
+                     }
+
+                     run_loop.Quit();
+                   }));
+  run_loop.Run();
+
+  return is_mounted;
 }
 
 void ChromeOSIntegrationLoginMixin::SetUp() {
@@ -112,7 +146,8 @@ void ChromeOSIntegrationLoginMixin::SetUp() {
     case Mode::kTestLogin: {
       [[fallthrough]];
     }
-    case Mode::kGaiaLogin: {
+    case Mode::kGaiaLogin:
+    case Mode::kCustomGaiaLogin: {
       PrepareForNewUserLogin();
       break;
     }
@@ -124,7 +159,7 @@ void ChromeOSIntegrationLoginMixin::SetUpCommandLine(
   command_line->AppendSwitch(
       ash::switches::kDisableHIDDetectionOnOOBEForTesting);
 
-  if (mode_ != Mode::kGaiaLogin) {
+  if (!IsGaiaLoginMode()) {
     command_line->AppendSwitch(ash::switches::kDisableGaiaServices);
   }
 
@@ -143,7 +178,7 @@ void ChromeOSIntegrationLoginMixin::SetUpCommandLine(
 }
 
 bool ChromeOSIntegrationLoginMixin::ShouldStartLoginScreen() const {
-  return mode_ == Mode::kTestLogin || mode_ == Mode::kGaiaLogin;
+  return mode_ == Mode::kTestLogin || IsGaiaLoginMode();
 }
 
 void ChromeOSIntegrationLoginMixin::PrepareForNewUserLogin() {
@@ -174,6 +209,8 @@ void ChromeOSIntegrationLoginMixin::DoTestLogin() {
   constexpr char kTestPassword[] = "testpass";
   constexpr char kTestGaiaId[] = "12345";
 
+  username_ = kTestUser;
+
   ash::test::OobeJS().Evaluate(
       base::StringPrintf("Oobe.loginForTesting(\"%s\", \"%s\",\"%s\")",
                          kTestUser, kTestPassword, kTestGaiaId));
@@ -189,7 +226,7 @@ void ChromeOSIntegrationLoginMixin::DoGaiaLogin() {
   ash::OobeScreenWaiter(ash::GaiaView::kScreenId).Wait();
 
   // Wait for Gaia page to load.
-  while (!GetGaiaHost()) {
+  while (!crosier::GetGaiaHost()) {
     base::RunLoop run_loop;
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(500));
@@ -207,17 +244,19 @@ void ChromeOSIntegrationLoginMixin::DoGaiaLogin() {
     CHECK(!email.empty() && !password.empty());
   }
 
-  GaiaFrameJS()
+  username_ = email;
+
+  crosier::GaiaFrameJS()
       .CreateWaiter("!!document.querySelector('#identifierId')")
       ->Wait();
-  GaiaFrameJS().Evaluate(base::StrCat(
+  crosier::GaiaFrameJS().Evaluate(base::StrCat(
       {"document.querySelector('#identifierId').value=\"", email, "\""}));
   ash::test::OobeJS().Evaluate("Oobe.clickGaiaPrimaryButtonForTesting()");
 
-  GaiaFrameJS()
+  crosier::GaiaFrameJS()
       .CreateWaiter("!!document.querySelector('input[type=password]')")
       ->Wait();
-  GaiaFrameJS().Evaluate(
+  crosier::GaiaFrameJS().Evaluate(
       base::StrCat({"document.querySelector('input[type=password]').value=\"",
                     password, "\""}));
   ash::test::OobeJS().Evaluate("Oobe.clickGaiaPrimaryButtonForTesting()");

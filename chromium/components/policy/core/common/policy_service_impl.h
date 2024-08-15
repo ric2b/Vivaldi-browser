@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
@@ -36,7 +37,8 @@ class POLICY_EXPORT PolicyServiceImpl
     : public PolicyService,
       public ConfigurationPolicyProvider::Observer {
  public:
-  using Providers = std::vector<ConfigurationPolicyProvider*>;
+  using Providers =
+      std::vector<raw_ptr<ConfigurationPolicyProvider, VectorExperimental>>;
   using Migrators = std::vector<std::unique_ptr<PolicyMigrator>>;
 
   // Creates a new PolicyServiceImpl with the list of
@@ -83,6 +85,8 @@ class POLICY_EXPORT PolicyServiceImpl
   // notified yet because it was throttled, will notify observers synchronously.
   // Has no effect if initialization was not throttled.
   void UnthrottleInitialization();
+  void UseLocalTestPolicyProvider(
+      ConfigurationPolicyProvider* provider) override;
 
   // Precedence policies cannot be set at the user cloud level regardless of
   // affiliation status. This is done to prevent cloud users from potentially
@@ -144,6 +148,7 @@ class POLICY_EXPORT PolicyServiceImpl
 
   // The providers, in order of decreasing priority.
   Providers providers_;
+  raw_ptr<ConfigurationPolicyProvider> local_test_policy_provider_ = nullptr;
 
   Migrators migrators_;
 

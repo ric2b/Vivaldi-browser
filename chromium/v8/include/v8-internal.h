@@ -175,11 +175,15 @@ using SandboxedPointer_t = Address;
 #ifdef V8_ENABLE_SANDBOX
 
 // Size of the sandbox, excluding the guard regions surrounding it.
-#ifdef V8_TARGET_OS_ANDROID
+#if defined(V8_TARGET_OS_ANDROID)
 // On Android, most 64-bit devices seem to be configured with only 39 bits of
 // virtual address space for userspace. As such, limit the sandbox to 128GB (a
 // quarter of the total available address space).
 constexpr size_t kSandboxSizeLog2 = 37;  // 128 GB
+#elif defined(V8_TARGET_ARCH_LOONG64)
+// Some Linux distros on LoongArch64 configured with only 40 bits of virtual
+// address space for userspace. Limit the sandbox to 256GB here.
+constexpr size_t kSandboxSizeLog2 = 38;  // 256 GB
 #else
 // Everywhere else use a 1TB sandbox.
 constexpr size_t kSandboxSizeLog2 = 40;  // 1 TB
@@ -468,6 +472,15 @@ V8_INLINE static constexpr bool IsSharedExternalPointerType(
   return tag >= kFirstSharedTag && tag <= kLastSharedTag;
 }
 
+// True if the external pointer may live in a read-only object, in which case
+// the table entry will be in the shared read-only segment of the external
+// pointer table.
+V8_INLINE static constexpr bool IsMaybeReadOnlyExternalPointerType(
+    ExternalPointerTag tag) {
+  return tag == kAccessorInfoGetterTag || tag == kAccessorInfoSetterTag ||
+         tag == kCallHandlerInfoCallbackTag;
+}
+
 // Sanity checks.
 #define CHECK_SHARED_EXTERNAL_POINTER_TAGS(Tag, ...) \
   static_assert(IsSharedExternalPointerType(Tag));
@@ -572,6 +585,17 @@ constexpr uint32_t kCodePointerHandleShift = 12;
 // A null handle always references an entry that contains nullptr.
 constexpr CodePointerHandle kNullCodePointerHandle = kNullIndirectPointerHandle;
 
+// It can sometimes be necessary to distinguish a code pointer handle from a
+// trusted pointer handle. A typical example would be a union trusted pointer
+// field that can refer to both Code objects and other trusted objects. To
+// support these use-cases, we use a simple marking scheme where some of the
+// low bits of a code pointer handle are set, while they will be unset on a
+// trusted pointer handle. This way, the correct table to resolve the handle
+// can be determined even in the absence of a type tag.
+constexpr uint32_t kCodePointerHandleMarker = 0x1;
+static_assert(kCodePointerHandleShift > 0);
+static_assert(kTrustedPointerHandleShift > 0);
+
 // The maximum number of entries in a code pointer table.
 constexpr int kCodePointerTableEntrySize = 16;
 constexpr int kCodePointerTableEntrySizeLog2 = 4;
@@ -583,6 +607,16 @@ static_assert(
 
 constexpr int kCodePointerTableEntryEntrypointOffset = 0;
 constexpr int kCodePointerTableEntryCodeObjectOffset = 8;
+
+// Constants that can be used to mark places that should be modified once
+// certain types of objects are moved out of the sandbox and into trusted space.
+constexpr bool kRuntimeGeneratedCodeObjectsLiveInTrustedSpace = true;
+constexpr bool kBuiltinCodeObjectsLiveInTrustedSpace = false;
+constexpr bool kAllCodeObjectsLiveInTrustedSpace =
+    kRuntimeGeneratedCodeObjectsLiveInTrustedSpace &&
+    kBuiltinCodeObjectsLiveInTrustedSpace;
+
+constexpr bool kInterpreterDataObjectsLiveInTrustedSpace = false;
 
 // {obj} must be the raw tagged pointer representation of a HeapObject
 // that's guaranteed to never be in ReadOnlySpace.
@@ -631,6 +665,9 @@ class Internals {
 
   static const uint32_t kNumIsolateDataSlots = 4;
   static const int kStackGuardSize = 8 * kApiSystemPointerSize;
+  static const int kNumberOfBooleanFlags = 6;
+  static const int kErrorMessageParamSize = 1;
+  static const int kTablesAlignmentPaddingSize = 1;
   static const int kBuiltinTier0EntryTableSize = 7 * kApiSystemPointerSize;
   static const int kBuiltinTier0TableSize = 7 * kApiSystemPointerSize;
   static const int kLinearAllocationAreaSize = 3 * kApiSystemPointerSize;
@@ -650,16 +687,23 @@ class Internals {
       kIsolateCageBaseOffset + kApiSystemPointerSize;
   static const int kVariousBooleanFlagsOffset =
       kIsolateStackGuardOffset + kStackGuardSize;
-  static const int kBuiltinTier0EntryTableOffset =
-      kVariousBooleanFlagsOffset + 8;
+  static const int kErrorMessageParamOffset =
+      kVariousBooleanFlagsOffset + kNumberOfBooleanFlags;
+  static const int kBuiltinTier0EntryTableOffset = kErrorMessageParamOffset +
+                                                   kErrorMessageParamSize +
+                                                   kTablesAlignmentPaddingSize;
   static const int kBuiltinTier0TableOffset =
       kBuiltinTier0EntryTableOffset + kBuiltinTier0EntryTableSize;
   static const int kNewAllocationInfoOffset =
       kBuiltinTier0TableOffset + kBuiltinTier0TableSize;
   static const int kOldAllocationInfoOffset =
       kNewAllocationInfoOffset + kLinearAllocationAreaSize;
+
+  static const int kFastCCallAlignmentPaddingSize =
+      kApiSystemPointerSize == 8 ? 0 : kApiSystemPointerSize;
   static const int kIsolateFastCCallCallerFpOffset =
-      kOldAllocationInfoOffset + kLinearAllocationAreaSize;
+      kOldAllocationInfoOffset + kLinearAllocationAreaSize +
+      kFastCCallAlignmentPaddingSize;
   static const int kIsolateFastCCallCallerPcOffset =
       kIsolateFastCCallCallerFpOffset + kApiSystemPointerSize;
   static const int kIsolateFastApiCallTargetOffset =
@@ -677,16 +721,30 @@ class Internals {
       kIsolateEmbedderDataOffset + kNumIsolateDataSlots * kApiSystemPointerSize;
   static const int kIsolateSharedExternalPointerTableAddressOffset =
       kIsolateExternalPointerTableOffset + kExternalPointerTableSize;
-  static const int kIsolateTrustedPointerTableOffset =
+#ifdef V8_ENABLE_SANDBOX
+  static const int kIsolateTrustedCageBaseOffset =
       kIsolateSharedExternalPointerTableAddressOffset + kApiSystemPointerSize;
+  static const int kIsolateTrustedPointerTableOffset =
+      kIsolateTrustedCageBaseOffset + kApiSystemPointerSize;
   static const int kIsolateApiCallbackThunkArgumentOffset =
       kIsolateTrustedPointerTableOffset + kTrustedPointerTableSize;
 #else
   static const int kIsolateApiCallbackThunkArgumentOffset =
+      kIsolateSharedExternalPointerTableAddressOffset + kApiSystemPointerSize;
+#endif  // V8_ENABLE_SANDBOX
+#else
+  static const int kIsolateApiCallbackThunkArgumentOffset =
       kIsolateEmbedderDataOffset + kNumIsolateDataSlots * kApiSystemPointerSize;
-#endif
-  static const int kIsolateRootsOffset =
+#endif  // V8_COMPRESS_POINTERS
+  static const int kContinuationPreservedEmbedderDataOffset =
       kIsolateApiCallbackThunkArgumentOffset + kApiSystemPointerSize;
+
+  static const int kWasm64OOBOffsetAlignmentPaddingSize = 0;
+  static const int kWasm64OOBOffsetOffset =
+      kContinuationPreservedEmbedderDataOffset + kApiSystemPointerSize +
+      kWasm64OOBOffsetAlignmentPaddingSize;
+  static const int kIsolateRootsOffset =
+      kWasm64OOBOffsetOffset + sizeof(int64_t);
 
 #if V8_STATIC_ROOTS_BOOL
 
@@ -1237,6 +1295,91 @@ constexpr WrappedIterator<Iterator> operator+(
   x += n;
   return x;
 }
+
+// Helper functions about values contained in handles.
+// A value is either an indirect pointer or a direct pointer, depending on
+// whether direct local support is enabled.
+class ValueHelper final {
+ public:
+#ifdef V8_ENABLE_DIRECT_LOCAL
+  static constexpr Address kTaggedNullAddress = 1;
+  static constexpr Address kEmpty = kTaggedNullAddress;
+#else
+  static constexpr Address kEmpty = kNullAddress;
+#endif  // V8_ENABLE_DIRECT_LOCAL
+
+  template <typename T>
+  V8_INLINE static bool IsEmpty(T* value) {
+    return reinterpret_cast<Address>(value) == kEmpty;
+  }
+
+  // Returns a handle's "value" for all kinds of abstract handles. For Local,
+  // it is equivalent to `*handle`. The variadic parameters support handle
+  // types with extra type parameters, like `Persistent<T, M>`.
+  template <template <typename T, typename... Ms> typename H, typename T,
+            typename... Ms>
+  V8_INLINE static T* HandleAsValue(const H<T, Ms...>& handle) {
+    return handle.template value<T>();
+  }
+
+#ifdef V8_ENABLE_DIRECT_LOCAL
+
+  template <typename T>
+  V8_INLINE static Address ValueAsAddress(const T* value) {
+    return reinterpret_cast<Address>(value);
+  }
+
+  template <typename T, bool check_null = true, typename S>
+  V8_INLINE static T* SlotAsValue(S* slot) {
+    if (check_null && slot == nullptr) {
+      return reinterpret_cast<T*>(kTaggedNullAddress);
+    }
+    return *reinterpret_cast<T**>(slot);
+  }
+
+#else  // !V8_ENABLE_DIRECT_LOCAL
+
+  template <typename T>
+  V8_INLINE static Address ValueAsAddress(const T* value) {
+    return *reinterpret_cast<const Address*>(value);
+  }
+
+  template <typename T, bool check_null = true, typename S>
+  V8_INLINE static T* SlotAsValue(S* slot) {
+    return reinterpret_cast<T*>(slot);
+  }
+
+#endif  // V8_ENABLE_DIRECT_LOCAL
+};
+
+/**
+ * Helper functions about handles.
+ */
+class HandleHelper final {
+ public:
+  /**
+   * Checks whether two handles are equal.
+   * They are equal iff they are both empty or they are both non-empty and the
+   * objects to which they refer are physically equal.
+   *
+   * If both handles refer to JS objects, this is the same as strict equality.
+   * For primitives, such as numbers or strings, a `false` return value does not
+   * indicate that the values aren't equal in the JavaScript sense.
+   * Use `Value::StrictEquals()` to check primitives for equality.
+   */
+  template <typename T1, typename T2>
+  V8_INLINE static bool EqualHandles(const T1& lhs, const T2& rhs) {
+    if (lhs.IsEmpty()) return rhs.IsEmpty();
+    if (rhs.IsEmpty()) return false;
+    return lhs.ptr() == rhs.ptr();
+  }
+
+  static V8_EXPORT bool IsOnStack(const void* ptr);
+  static V8_EXPORT void VerifyOnStack(const void* ptr);
+  static V8_EXPORT void VerifyOnMainThread();
+};
+
+V8_EXPORT void VerifyHandleIsNonEmpty(bool is_empty);
 
 }  // namespace internal
 }  // namespace v8

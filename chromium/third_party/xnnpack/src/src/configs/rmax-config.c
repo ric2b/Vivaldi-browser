@@ -15,7 +15,7 @@
 #include <xnnpack/common.h>
 #include <xnnpack/config.h>
 #include <xnnpack/microparams-init.h>
-#include <xnnpack/rmax.h>
+#include <xnnpack/reduce.h>
 
 
 static struct xnn_rmax_config f16_rmax_config = {0};
@@ -37,19 +37,19 @@ static void init_f16_rmax_config(void) {
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon_fp16_arith) {
-      f16_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f16_rmax_ukernel__neonfp16arith;
+      f16_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f16_rmax_ukernel__neonfp16arith_u32_acc2;
     }
   #elif XNN_ARCH_ARM64 && XNN_ENABLE_ARM_FP16_VECTOR
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon_fp16_arith) {
-      f16_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f16_rmax_ukernel__neonfp16arith;
+      f16_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f16_rmax_ukernel__neonfp16arith_u32_acc2;
     }
   #elif (XNN_ARCH_X86 || XNN_ARCH_X86_64) && !XNN_PLATFORM_MOBILE
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     assert(hardware_config != NULL);
     if (hardware_config->use_x86_avx2) {
-      f16_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f16_rmax_ukernel__f16c;
+      f16_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f16_rmax_ukernel__f16c_u32;
     }
   #endif
 }
@@ -59,26 +59,31 @@ static void init_f32_rmax_config(void) {
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon) {
-      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__neon;
+      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__neon_u16_acc4;
     } else if (!XNN_PLATFORM_MOBILE) {
-      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar;
+      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar_u4_acc4;
     }
   #elif XNN_ARCH_ARM64
-    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__neon;
+    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__neon_u16_acc4;
   #elif XNN_ARCH_X86 || XNN_ARCH_X86_64
-    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__sse;
-  #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     assert(hardware_config != NULL);
-    if (hardware_config->is_x86) {
-      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__wasmsimd_x86;
+    if (hardware_config->use_x86_avx512f) {
+      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__avx512f_u64_acc4;
+    } else if (hardware_config->use_x86_avx) {
+      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__avx_u32_acc4;
+      f32_rmax_config.init.f32 = xnn_init_f32_default_avx_params;
     } else {
-      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__wasmsimd_arm;
+      f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__sse_u16_acc4;
     }
+  #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
+    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__wasmsimd_pminmax_u16_acc4;
   #elif XNN_ARCH_WASM
-    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar;
+    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar_u4_acc4;
   #elif XNN_ARCH_RISCV
-    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar;
+    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar_u4_acc4;
+  #elif XNN_ARCH_PPC64
+    f32_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_f32_rmax_ukernel__scalar_u4_acc4;
   #endif
 }
 
@@ -87,20 +92,22 @@ static void init_u8_rmax_config(void) {
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon) {
-      u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__neon;
+      u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__neon_u16;
     } else if (!XNN_PLATFORM_MOBILE) {
-      u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar;
+      u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar_u2;
     }
   #elif XNN_ARCH_ARM64
-    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__neon;
+    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__neon_u16;
   #elif XNN_ARCH_X86 || XNN_ARCH_X86_64
-    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__sse2;
+    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__sse2_u16;
   #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
-    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar;
+    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar_u2;
   #elif XNN_ARCH_WASM
-    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar;
+    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar_u2;
   #elif XNN_ARCH_RISCV
-    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar;
+    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar_u2;
+  #elif XNN_ARCH_PPC64
+    u8_rmax_config.ukernel = (xnn_rmax_ukernel_fn) xnn_u8_rmax_ukernel__scalar_u2;
   #endif
 }
 

@@ -5,14 +5,31 @@
 #ifndef QUICHE_QUIC_MASQUE_MASQUE_CLIENT_SESSION_H_
 #define QUICHE_QUIC_MASQUE_MASQUE_CLIENT_SESSION_H_
 
+#include <list>
+#include <optional>
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
+#include "quiche/quic/core/crypto/quic_crypto_client_config.h"
+#include "quiche/quic/core/frames/quic_connection_close_frame.h"
+#include "quiche/quic/core/http/http_frames.h"
 #include "quiche/quic/core/http/quic_spdy_client_session.h"
+#include "quiche/quic/core/http/quic_spdy_client_stream.h"
+#include "quiche/quic/core/http/quic_spdy_session.h"
+#include "quiche/quic/core/http/quic_spdy_stream.h"
+#include "quiche/quic/core/quic_config.h"
+#include "quiche/quic/core/quic_error_codes.h"
+#include "quiche/quic/core/quic_time.h"
+#include "quiche/quic/core/quic_types.h"
+#include "quiche/quic/core/quic_versions.h"
 #include "quiche/quic/masque/masque_utils.h"
 #include "quiche/quic/platform/api/quic_export.h"
 #include "quiche/quic/platform/api/quic_socket_address.h"
+#include "quiche/quic/tools/quic_url.h"
+#include "quiche/common/capsule.h"
+#include "quiche/common/quiche_ip_address.h"
+#include "quiche/spdy/core/http2_header_block.h"
 
 namespace quic {
 
@@ -21,7 +38,8 @@ namespace quic {
 // frames for operation of the MASQUE protocol. Multiple end-to-end encapsulated
 // sessions can then coexist inside this session. Once these are created, they
 // need to be registered with this session.
-class QUIC_NO_EXPORT MasqueClientSession : public QuicSpdyClientSession {
+class QUIC_NO_EXPORT MasqueClientSession : public QuicSpdyClientSession,
+                                           public QuicSpdyStream::Visitor {
  public:
   // Interface meant to be implemented by the owner of the
   // MasqueClientSession instance.
@@ -93,8 +111,7 @@ class QUIC_NO_EXPORT MasqueClientSession : public QuicSpdyClientSession {
                       const QuicConfig& config,
                       const ParsedQuicVersionVector& supported_versions,
                       QuicConnection* connection, const QuicServerId& server_id,
-                      QuicCryptoClientConfig* crypto_config,
-                      Owner* owner);
+                      QuicCryptoClientConfig* crypto_config, Owner* owner);
 
   // Disallow copy and assign.
   MasqueClientSession(const MasqueClientSession&) = delete;
@@ -144,6 +161,26 @@ class QUIC_NO_EXPORT MasqueClientSession : public QuicSpdyClientSession {
 
   // Removes a fake address that was previously created by GetFakeAddress().
   void RemoveFakeAddress(const quiche::QuicheIpAddress& fake_address);
+
+  // Set additional HTTP headers that will be sent on all requests to the MASQUE
+  // proxy. Separated with colons and semicolons.
+  // For example: "name1:value1;name2:value2".
+  void set_additional_headers(absl::string_view additional_headers) {
+    additional_headers_ = additional_headers;
+  }
+
+  // Send a GET request to the MASQUE proxy itself.
+  QuicSpdyClientStream* SendGetRequest(absl::string_view path);
+
+  // QuicSpdyStream::Visitor
+  void OnClose(QuicSpdyStream* stream) override;
+
+  // Set the signature auth key ID and private key. key_id MUST be non-empty,
+  // private_key MUST be ED25519_PRIVATE_KEY_LEN bytes long and public_key MUST
+  // be ED25519_PUBLIC_KEY_LEN bytes long.
+  void EnableSignatureAuth(absl::string_view key_id,
+                           absl::string_view private_key,
+                           absl::string_view public_key);
 
  private:
   // State that the MasqueClientSession keeps for each CONNECT-UDP request.
@@ -284,8 +321,16 @@ class QUIC_NO_EXPORT MasqueClientSession : public QuicSpdyClientSession {
   const ConnectEthernetClientState* GetOrCreateConnectEthernetClientState(
       EncapsulatedEthernetSession* encapsulated_ethernet_session);
 
+  std::optional<std::string> ComputeSignatureAuthHeader(const QuicUrl& url);
+  void AddAdditionalHeaders(spdy::Http2HeaderBlock& headers,
+                            const QuicUrl& url);
+
   MasqueMode masque_mode_;
   std::string uri_template_;
+  std::string additional_headers_;
+  std::string signature_auth_key_id_;
+  std::string signature_auth_private_key_;
+  std::string signature_auth_public_key_;
   std::list<ConnectUdpClientState> connect_udp_client_states_;
   std::list<ConnectIpClientState> connect_ip_client_states_;
   std::list<ConnectEthernetClientState> connect_ethernet_client_states_;

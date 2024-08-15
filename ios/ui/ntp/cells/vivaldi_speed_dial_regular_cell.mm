@@ -2,8 +2,6 @@
 
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
 
-#import "Foundation/Foundation.h"
-
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_style_helper.h"
@@ -27,6 +25,14 @@ const UIEdgeInsets titleLabelPadding =
     UIEdgeInsetsMake(0.f, 8.f, 0.f, 8.f);
 const UIEdgeInsets titleLabelMaskPadding =
     UIEdgeInsetsMake(2.f, 10.f, 2.f, 16.f);
+
+const UIEdgeInsets activityIndicatorPadding =
+    UIEdgeInsetsMake(8.f, 8.f, 0.f, 0.f);
+const CGSize activityIndicatorSize = CGSizeMake(24.f, 24.f);
+const CGFloat activityIndicatorRadius = 4.f;
+const CGFloat activityIndicatorBGOpacity = 0.8;
+
+const CGFloat thumbnailCropYOffset = 14.f;
 }
 
 @interface VivaldiSpeedDialRegularCell()
@@ -43,6 +49,8 @@ const UIEdgeInsets titleLabelMaskPadding =
 @property(nonatomic,weak) UIImageView* faviconView;
 // The fallback label when there's no favicon available.
 @property(nonatomic,weak) UILabel* fallbackFaviconLabel;
+// Activity indicator visible when thumbnail is updating.
+@property(nonatomic,weak) UIActivityIndicatorView* activityIndicator;
 // Property to hold the resource path
 @property(nonatomic,strong) NSString* resourcePath;
 @end
@@ -55,6 +63,7 @@ const UIEdgeInsets titleLabelMaskPadding =
 @synthesize thumbView = _thumbView;
 @synthesize faviconView = _faviconView;
 @synthesize fallbackFaviconLabel = _fallbackFaviconLabel;
+@synthesize activityIndicator = _activityIndicator;
 @synthesize resourcePath = _resourcePath;
 
 #pragma mark - INITIALIZER
@@ -138,6 +147,25 @@ const UIEdgeInsets titleLabelMaskPadding =
   [container addSubview:_fallbackTitleLabel];
   [_fallbackTitleLabel matchToView:_thumbView
                            padding:titleLabelPadding];
+
+  // Loading spinner
+  UIActivityIndicatorView* indicator =
+      [[UIActivityIndicatorView alloc] initWithFrame:CGRectZero];
+  _activityIndicator = indicator;
+  indicator.color = UIColor.whiteColor;
+  indicator.backgroundColor =
+      [[UIColor blackColor] colorWithAlphaComponent:activityIndicatorBGOpacity];
+  indicator.hidesWhenStopped = YES;
+  indicator.layer.cornerRadius = activityIndicatorRadius;
+  indicator.activityIndicatorViewStyle = UIActivityIndicatorViewStyleMedium;
+
+  [container addSubview:indicator];
+  [indicator anchorTop:container.topAnchor
+               leading:container.leadingAnchor
+                bottom:nil
+              trailing:nil
+               padding:activityIndicatorPadding
+                  size:activityIndicatorSize];
 
   // Favicon view
   UIImageView* faviconView = [[UIImageView alloc] initWithImage:nil];
@@ -226,7 +254,7 @@ const UIEdgeInsets titleLabelMaskPadding =
   }
 
   // Thumbnail: Initially we will check check whether the speed dial has a
-  // thumbnail in bundle. If not available we will see if device document
+  // thumbnail in bundle. If not available we will see if application support
   // directory has any stored for the item. If both case fails we will go
   // fallback and show the item title instead.
   NSString* bundlePath =
@@ -239,7 +267,10 @@ const UIEdgeInsets titleLabelMaskPadding =
     UIImage* thumbnailLocal =
       [[[VivaldiThumbnailService alloc] init] thumbnailForSDItem:item];
     if (thumbnailLocal) {
-      [self.thumbView setImage: thumbnailLocal];
+      UIImage* thumbnailImage =
+          [self cropTopAndResizeImage:thumbnailLocal
+                               toSize:self.bounds.size];
+      [self.thumbView setImage: thumbnailImage];
     } else {
       self.thumbView.backgroundColor =
         [UIColor colorNamed: vSearchbarBackgroundColor];
@@ -258,6 +289,14 @@ const UIEdgeInsets titleLabelMaskPadding =
     self.faviconView.image = attributes.faviconImage;
   } else {
     [self showFallbackFavicon:item];
+  }
+}
+
+- (void)setActivityIndicatorLoading:(BOOL)isLoading {
+  if (isLoading) {
+    [self.activityIndicator startAnimating];
+  } else {
+    [self.activityIndicator stopAnimating];
   }
 }
 
@@ -284,6 +323,26 @@ const UIEdgeInsets titleLabelMaskPadding =
     NSString *firstLetter = [[sdItem.host substringToIndex:1] uppercaseString];
     self.fallbackFaviconLabel.text = firstLetter;
   }
+}
+
+- (UIImage*)cropTopAndResizeImage:(UIImage*)image
+                           toSize:(CGSize)newSize {
+  // Determine the aspect ratio to scale the height appropriately
+  CGFloat aspectWidth = newSize.width / image.size.width;
+  CGFloat scaledHeight = image.size.height * aspectWidth;
+  CGFloat offsetY = thumbnailCropYOffset;
+  // Start drawing in a context
+  UIGraphicsBeginImageContextWithOptions(newSize, NO, 0.0);
+  // Create a rect for the scaled image, starting from the top
+  CGRect drawRect = CGRectMake(0, offsetY, newSize.width, scaledHeight);
+  // Draw the image in the new rect, effectively cropping the top part and
+  // scaling it
+  [image drawInRect:drawRect];
+  // Capture the new image
+  UIImage *newImage = UIGraphicsGetImageFromCurrentImageContext();
+  // End the context
+  UIGraphicsEndImageContext();
+  return newImage;
 }
 
 @end

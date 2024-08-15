@@ -17,7 +17,6 @@
 #include "src/maglev/maglev-assembler.h"
 #include "src/maglev/maglev-basic-block.h"
 #include "src/maglev/maglev-code-gen-state.h"
-#include "v8-internal.h"
 
 namespace v8 {
 namespace internal {
@@ -232,7 +231,9 @@ void MaglevAssembler::PushReverse(T... vals) {
   detail::PushAllHelper<T...>::PushReverse(this, vals...);
 }
 
-inline void MaglevAssembler::BindJumpTarget(Label* label) { bind(label); }
+inline void MaglevAssembler::BindJumpTarget(Label* label) {
+  MacroAssembler::BindJumpTarget(label);
+}
 
 inline void MaglevAssembler::BindBlock(BasicBlock* block) {
   bind(block->label());
@@ -521,11 +522,7 @@ inline void MaglevAssembler::LoadAddress(Register dst, MemOperand location) {
   leaq(dst, location);
 }
 
-inline int MaglevAssembler::PushOrSetReturnAddressTo(Label* target) {
-  leaq(kScratchRegister, Operand(target));
-  pushq(kScratchRegister);
-  return 1;
-}
+inline void MaglevAssembler::Call(Label* target) { call(target); }
 
 inline void MaglevAssembler::EmitEnterExitFrame(int extra_slots,
                                                 StackFrame::Type frame_type,
@@ -583,6 +580,11 @@ inline void MaglevAssembler::Move(Register dst, int32_t i) {
   MacroAssembler::Move(dst, static_cast<uint32_t>(i));
 }
 
+inline void MaglevAssembler::Move(Register dst, uint32_t i) {
+  // Move as a uint32 to avoid sign extension.
+  MacroAssembler::Move(dst, i);
+}
+
 inline void MaglevAssembler::Move(DoubleRegister dst, double n) {
   MacroAssembler::Move(dst, n);
 }
@@ -593,6 +595,14 @@ inline void MaglevAssembler::Move(DoubleRegister dst, Float64 n) {
 
 inline void MaglevAssembler::Move(Register dst, Handle<HeapObject> obj) {
   MacroAssembler::Move(dst, obj);
+}
+
+void MaglevAssembler::MoveTagged(Register dst, Handle<HeapObject> obj) {
+#ifdef V8_COMPRESS_POINTERS
+  MacroAssembler::Move(dst, obj, RelocInfo::COMPRESSED_EMBEDDED_OBJECT);
+#else
+  MacroAssembler::Move(dst, obj);
+#endif
 }
 
 inline void MaglevAssembler::LoadFloat32(DoubleRegister dst, MemOperand src) {
@@ -660,19 +670,14 @@ template <typename NodeT>
 inline void MaglevAssembler::DeoptIfBufferDetached(Register array,
                                                    Register scratch,
                                                    NodeT* node) {
-  if (!code_gen_state()
-           ->broker()
-           ->dependencies()
-           ->DependOnArrayBufferDetachingProtector()) {
-    // A detached buffer leads to megamorphic feedback, so we won't have a deopt
-    // loop if we deopt here.
-    LoadTaggedField(scratch,
-                    FieldOperand(array, JSArrayBufferView::kBufferOffset));
-    LoadTaggedField(scratch,
-                    FieldOperand(scratch, JSArrayBuffer::kBitFieldOffset));
-    testl(scratch, Immediate(JSArrayBuffer::WasDetachedBit::kMask));
-    EmitEagerDeoptIf(not_zero, DeoptimizeReason::kArrayBufferWasDetached, node);
-  }
+  // A detached buffer leads to megamorphic feedback, so we won't have a deopt
+  // loop if we deopt here.
+  LoadTaggedField(scratch,
+                  FieldOperand(array, JSArrayBufferView::kBufferOffset));
+  LoadTaggedField(scratch,
+                  FieldOperand(scratch, JSArrayBuffer::kBitFieldOffset));
+  testl(scratch, Immediate(JSArrayBuffer::WasDetachedBit::kMask));
+  EmitEagerDeoptIf(not_zero, DeoptimizeReason::kArrayBufferWasDetached, node);
 }
 
 inline void MaglevAssembler::LoadByte(Register dst, MemOperand src) {
@@ -950,6 +955,13 @@ void MaglevAssembler::CompareInt32AndJumpIf(Register r1, Register r2,
   JumpIf(cond, target, distance);
 }
 
+void MaglevAssembler::CompareIntPtrAndJumpIf(Register r1, Register r2,
+                                             Condition cond, Label* target,
+                                             Label::Distance distance) {
+  cmpq(r1, r2);
+  JumpIf(cond, target, distance);
+}
+
 inline void MaglevAssembler::CompareInt32AndJumpIf(Register r1, int32_t value,
                                                    Condition cond,
                                                    Label* target,
@@ -1085,7 +1097,7 @@ inline void MaglevAssembler::TestInt32AndJumpIfAllClear(
 
 inline void MaglevAssembler::LoadHeapNumberValue(DoubleRegister result,
                                                  Register heap_number) {
-  Movsd(result, FieldOperand(heap_number, HeapNumber::kValueOffset));
+  Movsd(result, FieldOperand(heap_number, offsetof(HeapNumber, value_)));
 }
 
 inline void MaglevAssembler::Int32ToDouble(DoubleRegister result,
@@ -1143,6 +1155,7 @@ inline void MaglevAssembler::MoveRepr(MachineRepresentation repr, Dest dst,
     case MachineRepresentation::kTagged:
     case MachineRepresentation::kTaggedPointer:
     case MachineRepresentation::kTaggedSigned:
+    case MachineRepresentation::kWord64:
       return movq(dst, src);
     default:
       UNREACHABLE();

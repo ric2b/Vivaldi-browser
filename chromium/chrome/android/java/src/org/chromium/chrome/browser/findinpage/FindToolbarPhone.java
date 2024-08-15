@@ -22,9 +22,7 @@ import android.view.ViewGroup;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
-/**
- * A phone specific version of the {@link FindToolbar}.
- */
+/** A phone specific version of the {@link FindToolbar}. */
 public class FindToolbarPhone extends FindToolbar {
     /**
      * Creates an instance of a {@link FindToolbarPhone}.

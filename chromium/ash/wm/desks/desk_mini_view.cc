@@ -7,7 +7,8 @@
 #include <algorithm>
 
 #include "ash/accelerators/keyboard_code_util.h"
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
+#include "ash/public/cpp/desk_profiles_delegate.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shelf/shelf.h"
@@ -21,14 +22,15 @@
 #include "ash/wm/desks/desk_bar_view_base.h"
 #include "ash/wm/desks/desk_name_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
+#include "ash/wm/desks/desk_profiles_view.h"
 #include "ash/wm/desks/desk_textfield.h"
 #include "ash/wm/desks/desks_constants.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_restore_util.h"
 #include "ash/wm/float/float_controller.h"
-#include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_utils.h"
+#include "ash/wm/wm_constants.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
@@ -39,11 +41,14 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -58,16 +63,15 @@ namespace {
 constexpr int kLabelPreviewSpacing = 8;
 constexpr int kCloseButtonMargin = 4;
 constexpr int kMinDeskNameViewWidth = 56;
-constexpr int kPreviewFocusRingRadiusOld = 6;
+constexpr int kPreviewFocusRingRadius = 10;
+constexpr int kProfileButtonMargin = 4;
 constexpr int kShortcutViewBorderWidth = 6;
 constexpr int kShortcutViewBorderHeight = 3;
 constexpr int kShortcutViewHeight = 20;
 constexpr int kShortcutViewIconSize = 14;
 constexpr int kShortcutViewDistanceFromBottom = 4;
 
-// TODO(http://b/291622042): After CrOS Next is launched, remove
-// `kPreviewFocusRingRadiusOld`.
-constexpr int kPreviewFocusRingRadius = 10;
+bool g_force_show_desk_profiles_button = false;
 
 gfx::Rect ConvertScreenRect(views::View* view, const gfx::Rect& screen_rect) {
   gfx::Point origin = screen_rect.origin();
@@ -138,9 +142,8 @@ DeskMiniView::DeskMiniView(DeskBarViewBase* owner_bar,
   views::FocusRing* preview_focus_ring = views::FocusRing::Get(desk_preview_);
   preview_focus_ring->SetOutsetFocusRingDisabled(true);
   views::InstallRoundRectHighlightPathGenerator(
-      desk_preview_, gfx::Insets(kFocusRingHaloInset),
-      chromeos::features::IsJellyrollEnabled() ? kPreviewFocusRingRadius
-                                               : kPreviewFocusRingRadiusOld);
+      desk_preview_, gfx::Insets(kWindowMiniViewFocusRingHaloInset),
+      kPreviewFocusRingRadius);
 
   preview_focus_ring->SetHasFocusPredicate(base::BindRepeating(
       [](const DeskMiniView* mini_view, const views::View* view) {
@@ -183,6 +186,19 @@ DeskMiniView::DeskMiniView(DeskBarViewBase* owner_bar,
         }
       },
       base::Unretained(this)));
+
+  // Only show profile avatar button when there is more than one profile logged
+  // in.
+  auto* desk_profile_delegate = Shell::Get()->GetDeskProfilesDelegate();
+  if (chromeos::features::IsDeskProfilesEnabled() &&
+      (g_force_show_desk_profiles_button ||
+       (desk_profile_delegate &&
+        desk_profile_delegate->GetProfilesSnapshot().size() > 1))) {
+    desk_profile_button_ = AddChildView(std::make_unique<DeskProfilesButton>(
+        base::BindRepeating(&DeskMiniView::OnDeskProfilesButtonPressed,
+                            base::Unretained(this)),
+        desk));
+  }
 
   desk_action_view_ = AddChildView(std::make_unique<DeskActionView>(
       desks_controller->GetCombineDesksTargetName(desk_),
@@ -269,6 +285,8 @@ void DeskMiniView::UpdateDeskButtonVisibility() {
 
   auto* controller = DesksController::Get();
 
+  bool desk_profile_button_is_focused =
+      desk_profile_button_ && desk_profile_button_->HasFocus();
   // Don't show desk buttons when hovered while the dragged window is on
   // the desk bar view.
   // For switch access, setting desk buttons to visible allows users to
@@ -279,7 +297,8 @@ void DeskMiniView::UpdateDeskButtonVisibility() {
       (IsMouseHovered() || force_show_desk_buttons_ ||
        Shell::Get()->accessibility_controller()->IsSwitchAccessRunning() ||
        (owner_bar_->type() == DeskBarViewBase::Type::kDeskButton &&
-        (desk_preview_->HasFocus() || desk_action_view_->ChildHasFocus())));
+        (desk_preview_->HasFocus() || desk_profile_button_is_focused ||
+         desk_action_view_->ChildHasFocus())));
 
   // Only show the combine desks button if there are app windows in the desk,
   // or if the desk is active and there are windows that should be visible on
@@ -306,7 +325,7 @@ void DeskMiniView::OnWidgetGestureTap(const gfx::Rect& screen_rect,
   // the desk.
   const bool old_force_show_desk_buttons = force_show_desk_buttons_;
   force_show_desk_buttons_ =
-      !Shell::Get()->tablet_mode_controller()->InTabletMode() &&
+      !display::Screen::GetScreen()->InTabletMode() &&
       ((is_long_gesture && IsPointOnMiniView(screen_rect.CenterPoint())) ||
        (!is_long_gesture && desk_action_view_->GetVisible() &&
         desk_action_view_->HitTestRect(
@@ -316,13 +335,10 @@ void DeskMiniView::OnWidgetGestureTap(const gfx::Rect& screen_rect,
     UpdateDeskButtonVisibility();
 }
 
-absl::optional<ui::ColorId> DeskMiniView::GetFocusColor() const {
+std::optional<ui::ColorId> DeskMiniView::GetFocusColor() const {
   CHECK(desk_);
   const ui::ColorId focused_desk_color_id = ui::kColorAshFocusRing;
-  const ui::ColorId active_desk_color_id =
-      chromeos::features::IsJellyrollEnabled()
-          ? cros_tokens::kCrosSysTertiary
-          : static_cast<ui::ColorId>(kColorAshCurrentDeskColor);
+  const ui::ColorId active_desk_color_id = cros_tokens::kCrosSysTertiary;
 
   switch (owner_bar_->type()) {
     case DeskBarViewBase::Type::kOverview:
@@ -345,11 +361,11 @@ absl::optional<ui::ColorId> DeskMiniView::GetFocusColor() const {
       break;
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void DeskMiniView::UpdateFocusColor() {
-  absl::optional<ui::ColorId> new_focus_color_id = GetFocusColor();
+  std::optional<ui::ColorId> new_focus_color_id = GetFocusColor();
 
   if (desk_preview_->focus_color_id() == new_focus_color_id) {
     return;
@@ -401,9 +417,9 @@ void DeskMiniView::OpenContextMenu(ui::MenuSourceType source) {
 
   context_menu_ = std::make_unique<DeskActionContextMenu>(
       ContainsAppWindows(desk_)
-          ? absl::make_optional(
+          ? std::make_optional(
                 desk_controller->GetCombineDesksTargetName(desk_))
-          : absl::nullopt,
+          : std::nullopt,
       show_on_top ? views::MenuAnchorPosition::kBubbleTopRight
                   : views::MenuAnchorPosition::kBubbleBottomRight,
       /*combine_desks_callback=*/
@@ -430,6 +446,10 @@ void DeskMiniView::OpenContextMenu(ui::MenuSourceType source) {
 void DeskMiniView::MaybeCloseContextMenu() {
   if (context_menu_)
     context_menu_->MaybeCloseMenu();
+}
+
+void DeskMiniView::OnDeskProfilesButtonPressed() {
+  desk_profile_button_->RequestFocus();
 }
 
 void DeskMiniView::OnRemovingDesk(DeskCloseType close_type) {
@@ -481,10 +501,6 @@ void DeskMiniView::OnPreviewAboutToBeFocusedByReverseTab() {
   }
 }
 
-const char* DeskMiniView::GetClassName() const {
-  return "DeskMiniView";
-}
-
 void DeskMiniView::Layout() {
   const gfx::Rect preview_bounds = GetDeskPreviewBounds(root_window_);
   desk_preview_->SetBoundsRect(preview_bounds);
@@ -505,6 +521,14 @@ void DeskMiniView::Layout() {
         preview_bounds.height() - kShortcutViewHeight -
             kShortcutViewDistanceFromBottom,
         desk_shortcut_view_width, kShortcutViewHeight);
+  }
+  if (desk_profile_button_) {
+    const gfx::Size desk_profile_button_size =
+        desk_profile_button_->GetPreferredSize();
+    desk_profile_button_->SetBoundsRect(
+        gfx::Rect(gfx::Point(preview_bounds.x() + kProfileButtonMargin,
+                             preview_bounds.y() + kProfileButtonMargin),
+                  desk_profile_button_size));
   }
 }
 
@@ -537,7 +561,11 @@ void DeskMiniView::OnThemeChanged() {
 }
 
 void DeskMiniView::OnContentChanged() {
-  DCHECK(desk_preview_);
+  // Bail out if the desk preview has not been set yet.
+  if (!desk_preview_) {
+    return;
+  }
+
   desk_preview_->RecreateDeskContentsMirrorLayers();
 }
 
@@ -588,6 +616,16 @@ void DeskMiniView::ContentsChanged(views::Textfield* sender,
   }
 
   Layout();
+}
+
+void DeskMiniView::OnDeskProfileChanged(uint64_t new_lacros_profile_id) {
+  if (!desk_) {
+    return;
+  }
+  if (desk_profile_button_) {
+    desk_profile_button_->UpdateIcon();
+    Layout();
+  }
 }
 
 bool DeskMiniView::HandleKeyEvent(views::Textfield* sender,
@@ -720,6 +758,12 @@ void DeskMiniView::OnViewBlurred(views::View* observed_view) {
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 }
 
+// static
+base::AutoReset<bool>
+DeskMiniView::SetShouldShowDeskProfilesButtonForTesting() {
+  return base::AutoReset<bool>(&g_force_show_desk_profiles_button, true);
+}
+
 void DeskMiniView::OnContextMenuClosed() {
   is_context_menu_open_ = false;
 
@@ -770,5 +814,8 @@ void DeskMiniView::LayoutDeskNameView(const gfx::Rect& preview_bounds) {
                                   text_width, desk_name_view_size.height()};
   desk_name_view_->SetBoundsRect(desk_name_view_bounds);
 }
+
+BEGIN_METADATA(DeskMiniView)
+END_METADATA
 
 }  // namespace ash

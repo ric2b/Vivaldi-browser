@@ -2,14 +2,6 @@
 
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-#pragma mark - NOTIFICATIONS
-// Notification name for observing when tab setting is changed.
-NSString* vTabSettingsDidChange = @"vTabSettingsDidChange";
-
 #pragma mark - ICONS
 // Image name for sync setting
 NSString* vSyncSetting = @"vivaldi_setting_sync";
@@ -26,10 +18,12 @@ NSString* vPaymentMethodSetting = @"vivaldi_setting_payment_methods";
 // Image name for address setting
 NSString* vAddressSetting = @"vivaldi_setting_addresses";
 
+// Image name for appearance setting
+NSString* vAppearanceSetting  = @"vivaldi_setting_appearance";
 // Image name for tabs setting
 NSString* vTabsSetting = @"vivaldi_setting_tabs";
-// Image name for start page layout setting
-NSString* vStartPageLayoutSetting = @"vivaldi_setting_start_page_layout";
+// Image name for start page setting
+NSString* vStartPageSetting = @"vivaldi_setting_start_page";
 
 // Image name for privacy setting
 NSString* vPrivacySetting = @"vivaldi_setting_privacy";
@@ -45,6 +39,3 @@ NSString* vAboutSetting  = @"vivaldi_setting_version";
 
 // Image name for toolbar menu
 NSString* vToolbarMenu  = @"toolbar_menu";
-
-// Image name for appearance setting
-NSString* vAppearanceSetting  = @"settings_theme";

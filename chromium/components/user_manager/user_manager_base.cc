@@ -10,6 +10,7 @@
 #include <set>
 #include <utility>
 
+#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "base/check_is_test.h"
 #include "base/command_line.h"
@@ -98,34 +99,13 @@ UserType GetStoredUserType(const base::Value::Dict& prefs_user_types,
     return USER_TYPE_REGULAR;
 
   int int_user_type = stored_user_type->GetInt();
-  if (int_user_type < 0 || int_user_type >= NUM_USER_TYPES ||
+  if (int_user_type < 0 ||
+      int_user_type > static_cast<int>(UserType::kMaxValue) ||
       int_user_type == 2) {
     LOG(ERROR) << "Bad user type " << int_user_type;
     return USER_TYPE_REGULAR;
   }
   return static_cast<UserType>(int_user_type);
-}
-
-std::string UserTypeToString(UserType user_type) {
-  switch (user_type) {
-    case USER_TYPE_REGULAR:
-      return "regular";
-    case USER_TYPE_CHILD:
-      return "child";
-    case USER_TYPE_GUEST:
-      return "guest";
-    case USER_TYPE_PUBLIC_ACCOUNT:
-      return "managed-guest-session";
-    case USER_TYPE_KIOSK_APP:
-      return "chrome-app-kiosk";
-    case USER_TYPE_ARC_KIOSK_APP:
-      return "arc-kiosk";
-    case USER_TYPE_WEB_KIOSK_APP:
-      return "web-kiosk";
-    case NUM_USER_TYPES:
-      NOTREACHED();
-      return "";
-  }
 }
 
 }  // namespace
@@ -272,7 +252,7 @@ void UserManagerBase::UserLoggedIn(const AccountId& account_id,
   active_user_->set_is_active(true);
   active_user_->set_username_hash(username_hash);
 
-  logged_in_users_.push_back(active_user_);
+  logged_in_users_.push_back(active_user_.get());
   SetLRUUser(active_user_);
 
   if (!primary_user_) {
@@ -287,8 +267,8 @@ void UserManagerBase::UserLoggedIn(const AccountId& account_id,
     NotifyUserAddedToSession(active_user_, false /* user switch pending */);
   }
 
-  UMA_HISTOGRAM_ENUMERATION(
-      "UserManager.LoginUserType", active_user_->GetType(), NUM_USER_TYPES);
+  base::UmaHistogramEnumeration("UserManager.LoginUserType",
+                                active_user_->GetType());
 
   static crash_reporter::CrashKeyString<32> session_type("session-type");
   session_type.Set(UserTypeToString(active_user_->GetType()));
@@ -1033,7 +1013,7 @@ void UserManagerBase::EnsureUsersLoaded() {
     users_.push_back(user);
   }
 
-  for (auto* user : users_) {
+  for (user_manager::User* user : users_) {
     auto& account_id = user->GetAccountId();
     const std::string* display_name =
         prefs_display_names.FindString(account_id.GetUserEmail());
@@ -1156,6 +1136,53 @@ void UserManagerBase::RegularUserLoggedInAsEphemeral(
   active_user_ = user;
   KnownUser(local_state_.get())
       .SetIsEphemeralUser(active_user_->GetAccountId(), true);
+}
+
+bool UserManagerBase::OnUserProfileCreated(const AccountId& account_id,
+                                           PrefService* prefs) {
+  // Find a User from `user_storage_`.
+  // FindUserAndModify may overlook some existing User instance, because
+  // the list may not contain ephemeral users that are getting stale.
+  auto it = base::ranges::find(user_storage_, account_id,
+                               [](auto& ptr) { return ptr->GetAccountId(); });
+  auto* user = it == user_storage_.end() ? nullptr : it->get();
+  CHECK(user);
+  if (user->is_profile_created()) {
+    // This happens sometimes in browser_tests.
+    // See also kIgnoreUserProfileMappingForTests and its uses.
+    // TODO(b/294452567): Consider how to remove this workaround for testing.
+    LOG(ERROR) << "user profile duplicated";
+    CHECK_IS_TEST();
+    return false;
+  }
+
+  CHECK(!user->GetProfilePrefs());
+  user->SetProfileIsCreated();
+  user->SetProfilePrefs(prefs);
+
+  // Managed Guest Sessions can be lockable if launched via the chrome.login
+  // extension API.
+  if (user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT && prefs &&
+      prefs->GetBoolean(
+          ash::prefs::kLoginExtensionApiCanLockManagedGuestSession)) {
+    user->set_can_lock(true);
+  }
+
+  for (auto& observer : observer_list_) {
+    observer.OnUserProfileCreated(*user);
+  }
+  return true;
+}
+
+void UserManagerBase::OnUserProfileWillBeDestroyed(
+    const AccountId& account_id) {
+  // Find from user_stroage_. See OnUserProfileCreated for the reason why not
+  // using FindUserAndModify.
+  auto it = base::ranges::find(user_storage_, account_id,
+                               [](auto& ptr) { return ptr->GetAccountId(); });
+  auto* user = it == user_storage_.end() ? nullptr : it->get();
+  CHECK(user);
+  user->SetProfilePrefs(nullptr);
 }
 
 void UserManagerBase::NotifyActiveUserChanged(User* active_user) {

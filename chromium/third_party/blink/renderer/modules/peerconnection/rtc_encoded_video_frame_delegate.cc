@@ -46,7 +46,7 @@ void RTCEncodedVideoFrameDelegate::SetRtpTimestamp(
 }
 
 absl::optional<webrtc::Timestamp>
-RTCEncodedVideoFrameDelegate::CaptureTimeIdentifier() const {
+RTCEncodedVideoFrameDelegate::PresentationTimestamp() const {
   base::AutoLock lock(lock_);
   return webrtc_frame_ ? webrtc_frame_->GetCaptureTimeIdentifier()
                        : absl::nullopt;
@@ -81,6 +81,12 @@ void RTCEncodedVideoFrameDelegate::SetData(const DOMArrayBuffer* data) {
 absl::optional<uint8_t> RTCEncodedVideoFrameDelegate::PayloadType() const {
   base::AutoLock lock(lock_);
   return webrtc_frame_ ? absl::make_optional(webrtc_frame_->GetPayloadType())
+                       : absl::nullopt;
+}
+
+absl::optional<std::string> RTCEncodedVideoFrameDelegate::MimeType() const {
+  base::AutoLock lock(lock_);
+  return webrtc_frame_ ? absl::make_optional(webrtc_frame_->GetMimeType())
                        : absl::nullopt;
 }
 

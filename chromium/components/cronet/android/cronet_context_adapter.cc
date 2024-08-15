@@ -205,10 +205,10 @@ void CronetContextAdapter::StopNetLog(JNIEnv* env,
   context_->StopNetLog();
 }
 
-bool CronetContextAdapter::GetEnableTelemetry(
+void CronetContextAdapter::FlushWritePropertiesForTesting(
     JNIEnv* env,
-    const JavaParamRef<jobject>& jcaller) {
-  return context_->enable_telemetry() ? JNI_TRUE : JNI_FALSE;
+    const base::android::JavaParamRef<jobject>& jcaller) {
+  context_->FlushWritePropertiesForTesting();  // IN-TEST
 }
 
 int CronetContextAdapter::default_load_flags() const {
@@ -224,7 +224,8 @@ static jlong JNI_CronetUrlRequestContext_CreateRequestContextConfig(
 
   std::vector<uint8_t> serializedProto;
 
-  JavaByteArrayToByteVector(env, javaSerializedProto, &serializedProto);
+  base::android::JavaByteArrayToByteVector(env, javaSerializedProto,
+                                           &serializedProto);
 
   if (!configOptions.ParseFromArray(serializedProto.data(),
                                     serializedProtoLength)) {

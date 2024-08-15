@@ -20,7 +20,10 @@ namespace ash {
 struct VendorProductId {
   uint16_t vendor_id;
   uint16_t product_id;
-  constexpr bool operator<(const VendorProductId& other) const;
+  constexpr bool operator<(const VendorProductId& other) const {
+    return vendor_id == other.vendor_id ? product_id < other.product_id
+                                        : vendor_id < other.vendor_id;
+  }
   bool operator==(const VendorProductId& other) const;
 };
 
@@ -74,7 +77,7 @@ ASH_EXPORT bool ShouldPersistSetting(
 ASH_EXPORT bool ShouldPersistFkeySetting(
     const mojom::InputDeviceSettingsFkeyPolicyPtr& policy,
     base::StringPiece setting_key,
-    absl::optional<ui::mojom::ExtendedFkeysModifier> new_value,
+    std::optional<ui::mojom::ExtendedFkeysModifier> new_value,
     ui::mojom::ExtendedFkeysModifier default_value,
     const base::Value::Dict* existing_settings_dict);
 
@@ -109,7 +112,8 @@ ASH_EXPORT const base::Value::List* GetLoginScreenButtonRemappingList(
 // in order to save the mojom object to the prefs as a dict.
 ASH_EXPORT base::Value::Dict ConvertButtonRemappingToDict(
     const mojom::ButtonRemapping& remapping,
-    mojom::CustomizationRestriction customization_restriction);
+    mojom::CustomizationRestriction customization_restriction,
+    bool redact_button_names = false);
 ASH_EXPORT mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
     const base::Value::Dict& dict,
     mojom::CustomizationRestriction customization_restriction);
@@ -118,7 +122,8 @@ ASH_EXPORT mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
 // to a list of dicts to be stored in prefs.
 ASH_EXPORT base::Value::List ConvertButtonRemappingArrayToList(
     const std::vector<mojom::ButtonRemappingPtr>& remappings,
-    mojom::CustomizationRestriction customization_restriction);
+    mojom::CustomizationRestriction customization_restriction,
+    bool redact_button_names = false);
 
 // This helper function converts a list of dicts to
 // a button remapping object array. The dicts will be stored in prefs.
@@ -131,9 +136,6 @@ ASH_EXPORT bool IsKeyboardPretendingToBeMouse(const ui::InputDevice& device);
 
 // Returns whether the given keyboard is ChromeOS layout keyboard.
 ASH_EXPORT bool IsChromeOSKeyboard(const mojom::Keyboard& keyboard);
-
-// This helper function checks if the mouse is customizable.
-ASH_EXPORT bool IsMouseCustomizable(const ui::InputDevice& device);
 
 }  // namespace ash
 

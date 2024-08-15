@@ -45,7 +45,7 @@ if (!is_ios) {
   }
 
   update_target("//content/common:common") {
-    deps += [ "//components/version_info:generate_version_info" ]
+    deps += [ "//base/version_info:generate_version_info" ]
   }
 
   update_target("//components/url_formatter:url_formatter") {
@@ -80,7 +80,7 @@ if (!is_ios) {
 
     foreach(_target, _targets) {
       update_target(_target) {
-        deps += [ "//components/version_info:generate_version_info" ]
+        deps += [ "//base/version_info:generate_version_info" ]
       }
     }
   }
@@ -126,6 +126,12 @@ if (!is_ios) {
         "//vivaldi/prefs:prefs_files_generated",
       ]
     }
+
+    if(is_linux) {
+      update_template_instance("//chrome/test:browser_tests") {
+        data_deps -= [ "//third_party/screen-ai:screen_ai_linux" ]
+      }
+    }
   }
 
   update_target("//components/autofill/core/browser:browser") {
@@ -142,14 +148,14 @@ if (!is_ios) {
 
   update_target("//chrome/common:common") {
     public_deps += [
-      "//components/version_info:generate_version_info",
+      "//base/version_info:generate_version_info",
       #"//third_party/libxml",
     ]
   }
 
   update_target("//chrome/common:common_lib") {
     public_deps += [
-      "//components/version_info:generate_version_info",
+      "//base/version_info:generate_version_info",
       #"//third_party/libxml",
     ]
   }
@@ -211,7 +217,7 @@ if (!is_ios) {
     }
   }
 
-  update_target("//content/browser/aggregation_service:mojo_bindings") {
+  update_target("//content/browser/private_aggregation:mojo_bindings") {
     deps += [ "//components/services/storage" ]
   }
 

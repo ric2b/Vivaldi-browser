@@ -81,10 +81,6 @@ void NoteModelView::Remove(const vivaldi::NoteNode* node) {
   note_model_->Remove(node);
 }
 
-void NoteModelView::RemoveAllUserNotes() {
-  note_model_->RemoveAllUserNotes();
-}
-
 void NoteModelView::Move(const vivaldi::NoteNode* node,
                          const vivaldi::NoteNode* new_parent,
                          size_t index) {
@@ -93,16 +89,21 @@ void NoteModelView::Move(const vivaldi::NoteNode* node,
 
 void NoteModelView::SetTitle(const vivaldi::NoteNode* node,
                              const std::u16string& title) {
-  note_model_->SetTitle(node, title);
+  note_model_->SetTitle(node, title, false);
 }
 
 void NoteModelView::SetContent(const vivaldi::NoteNode* node,
                                const std::u16string& content) {
-  note_model_->SetContent(node, content);
+  note_model_->SetContent(node, content, false);
 }
 
 void NoteModelView::SetURL(const vivaldi::NoteNode* node, const GURL& url) {
-  note_model_->SetURL(node, url);
+  note_model_->SetURL(node, url, false);
+}
+
+void NoteModelView::SetLastModificationTime(const vivaldi::NoteNode* node,
+                                            const base::Time time) {
+  note_model_->SetLastModificationTime(node, time);
 }
 
 const vivaldi::NoteNode* NoteModelView::AddFolder(
@@ -110,8 +111,10 @@ const vivaldi::NoteNode* NoteModelView::AddFolder(
     size_t index,
     const std::u16string& name,
     absl::optional<base::Time> creation_time,
+    absl::optional<base::Time> last_modified_time,
     absl::optional<base::Uuid> uuid) {
-  return note_model_->AddFolder(parent, index, name, creation_time, uuid);
+  return note_model_->AddFolder(parent, index, name, creation_time,
+                                last_modified_time, uuid);
 }
 
 const vivaldi::NoteNode* NoteModelView::AddNote(
@@ -121,9 +124,10 @@ const vivaldi::NoteNode* NoteModelView::AddNote(
     const GURL& url,
     const std::u16string& content,
     absl::optional<base::Time> creation_time,
+    absl::optional<base::Time> last_modified_time,
     absl::optional<base::Uuid> uuid) {
   return note_model_->AddNote(parent, index, title, url, content, creation_time,
-                              uuid);
+                              last_modified_time, uuid);
 }
 
 const vivaldi::NoteNode* NoteModelView::AddSeparator(
@@ -173,6 +177,19 @@ const vivaldi::NoteNode* NoteModelViewUsingLocalOrSyncableNodes::other_node()
 const vivaldi::NoteNode* NoteModelViewUsingLocalOrSyncableNodes::trash_node()
     const {
   return underlying_model()->trash_node();
+}
+
+void NoteModelViewUsingLocalOrSyncableNodes::EnsurePermanentNodesExist() {
+  // Local-or-syncable permanent folders always exist, nothing to be done.
+  CHECK(main_node());
+  CHECK(other_node());
+  CHECK(trash_node());
+}
+
+void NoteModelViewUsingLocalOrSyncableNodes::RemoveAllSyncableNodes() {
+  // Relevant on iOS only, to delete all account notes in a dedicated
+  // NotesModel instance.
+  underlying_model()->RemoveAllUserNotes();
 }
 
 }  // namespace sync_notes

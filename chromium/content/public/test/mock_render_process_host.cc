@@ -125,9 +125,6 @@ void MockRenderProcessHost::SimulateRenderProcessExit(
 #if BUILDFLAG(IS_ANDROID)
   termination_info.renderer_has_visible_clients = VisibleClientCount() > 0;
 #endif
-  NotificationService::current()->Notify(
-      NOTIFICATION_RENDERER_PROCESS_CLOSED, Source<RenderProcessHost>(this),
-      Details<ChildProcessTerminationInfo>(&termination_info));
 
   for (auto& observer : observers_)
     observer.RenderProcessExited(this, termination_info);
@@ -383,7 +380,9 @@ IPC::ChannelProxy* MockRenderProcessHost::GetChannel() {
   return nullptr;
 }
 
+#if BUILDFLAG(CONTENT_ENABLE_LEGACY_IPC)
 void MockRenderProcessHost::AddFilter(BrowserMessageFilter* filter) {}
+#endif
 
 base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() {
   return base::Milliseconds(0);
@@ -445,7 +444,7 @@ void MockRenderProcessHost::UnregisterRenderFrameHost(
 }
 
 void MockRenderProcessHost::ForEachRenderFrameHost(
-    base::RepeatingCallback<void(RenderFrameHost*)> on_render_frame_host) {
+    base::FunctionRef<void(RenderFrameHost*)> on_render_frame_host) {
   // TODO(crbug.com/652474): Clean up MockRenderProcessHost usage and merge this
   // implementation with RenderProcessHostImpl::ForEachRenderFrameHost().
   for (auto rfh_id : render_frame_host_id_set_) {
@@ -463,7 +462,7 @@ void MockRenderProcessHost::ForEachRenderFrameHost(
         RenderFrameHostImpl::LifecycleStateImpl::kSpeculative) {
       continue;
     }
-    on_render_frame_host.Run(rfh);
+    on_render_frame_host(rfh);
   }
 }
 
@@ -547,6 +546,10 @@ void MockRenderProcessHost::SetIsUsed() {
 
 bool MockRenderProcessHost::HostHasNotBeenUsed() {
   return IsUnused() && listeners_.IsEmpty() && GetKeepAliveRefCount() == 0;
+}
+
+bool MockRenderProcessHost::IsSpare() const {
+  return this == RenderProcessHostImpl::GetSpareRenderProcessHostForTesting();
 }
 
 void MockRenderProcessHost::SetProcessLock(

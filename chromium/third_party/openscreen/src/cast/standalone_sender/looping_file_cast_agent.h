@@ -23,7 +23,6 @@
 #include "cast/standalone_sender/remoting_sender.h"
 #include "cast/streaming/environment.h"
 #include "cast/streaming/sender_session.h"
-#include "cast/streaming/statistics_defines.h"
 #include "platform/base/error.h"
 #include "platform/base/interface_info.h"
 #include "platform/impl/task_runner.h"

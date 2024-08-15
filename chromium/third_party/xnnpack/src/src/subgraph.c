@@ -725,13 +725,20 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       continue;
     }
 
-    if (node->compute_type != xnn_compute_type_fp32) {
-      xnn_log_warning("FP16 rewrite aborted: node #%" PRIu32 " (%s) is not FP32", n, xnn_node_type_to_string(node->type));
-      return false;
+    switch (node->compute_type) {
+      case xnn_compute_type_fp32:
+      case xnn_compute_type_fp32_to_qd8:
+      case xnn_compute_type_qd8_to_fp32:
+      case xnn_compute_type_qs8_to_fp32:
+        break;
+      default:
+        xnn_log_warning("FP16 rewrite aborted: node #%" PRIu32 " (%s) is not FP32", n, xnn_node_type_to_string(node->type));
+        return false;
     }
     switch (node->type) {
       case xnn_node_type_abs:
       case xnn_node_type_add2:
+      case xnn_node_type_batch_matrix_multiply:
       case xnn_node_type_divide:
       case xnn_node_type_maximum2:
       case xnn_node_type_minimum2:
@@ -739,6 +746,7 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       case xnn_node_type_concatenate2:
       case xnn_node_type_concatenate3:
       case xnn_node_type_concatenate4:
+      case xnn_node_type_convert:
       case xnn_node_type_squared_difference:
       case xnn_node_type_subtract:
       case xnn_node_type_average_pooling_2d:
@@ -757,6 +765,7 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       case xnn_node_type_floor:
       case xnn_node_type_fully_connected:
       case xnn_node_type_global_average_pooling_2d:
+      case xnn_node_type_global_sum_pooling_2d:
       case xnn_node_type_hardswish:
       case xnn_node_type_leaky_relu:
       case xnn_node_type_max_pooling_2d:
@@ -764,6 +773,7 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       case xnn_node_type_prelu:
       case xnn_node_type_sigmoid:
       case xnn_node_type_softmax:
+      case xnn_node_type_space_to_depth_2d:
       case xnn_node_type_static_constant_pad:
       case xnn_node_type_static_mean:
       case xnn_node_type_static_slice:
@@ -773,6 +783,7 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       case xnn_node_type_square:
       case xnn_node_type_square_root:
       case xnn_node_type_tanh:
+      case xnn_node_type_rope:
         break;
       default:
         xnn_log_warning("FP16 rewrite aborted: node #%" PRIu32 " (%s) is not supported for FP16 inference",
@@ -787,13 +798,38 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
   for (uint32_t n = 0; n < subgraph->num_nodes; n++) {
     struct xnn_node* node = &subgraph->nodes[n];
     switch (node->type) {
-      case xnn_node_type_convolution_2d:
       case xnn_node_type_deconvolution_2d:
       case xnn_node_type_depthwise_convolution_2d:
-      case xnn_node_type_fully_connected:
       case xnn_node_type_prelu:
         subgraph->values[node->inputs[0]].fp16_compatible = true;
         subgraph->values[node->outputs[0]].fp16_compatible = true;
+        break;
+      case xnn_node_type_convolution_2d:
+        if (node->compute_type == xnn_compute_type_qd8_to_fp32) {
+          subgraph->values[node->outputs[0]].fp16_compatible = true;
+        } else {
+          subgraph->values[node->inputs[0]].fp16_compatible = true;
+          subgraph->values[node->outputs[0]].fp16_compatible = true;
+        }
+        break;
+      case xnn_node_type_fully_connected:
+        if (node->compute_type == xnn_compute_type_qd8_to_fp32) {
+          subgraph->values[node->outputs[0]].fp16_compatible = true;
+        } else if (node->compute_type == xnn_compute_type_fp32) {
+          subgraph->values[node->inputs[0]].fp16_compatible = true;
+          subgraph->values[node->outputs[0]].fp16_compatible = true;
+        } else {
+          xnn_log_warning("FP16 rewrite aborted: node #%" PRIu32 " (%s). Invalid compute type: %d",
+            n, xnn_node_type_to_string(node->type), node->compute_type);
+          return false;
+        }
+        break;
+      case xnn_node_type_convert:
+        if (node->compute_type == xnn_compute_type_fp32_to_qd8) {
+          subgraph->values[node->inputs[0]].fp16_compatible = true;
+        } else if (node->compute_type == xnn_compute_type_fp32_to_qs8) {
+          subgraph->values[node->inputs[0]].fp16_compatible = true;
+        }
         break;
       default:
         for (uint32_t i = 0; i < node->num_inputs; i++) {
@@ -839,6 +875,9 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
           fp16_value->allocation_type = xnn_allocation_type_workspace;
           value->fp16_id = fp16_value->id;
         }
+      } else if (xnn_value_is_internal(value)) {
+        // fp16 tensors only need half the memory of fp32 tensors.
+        value->size /= 2;
       }
     }
   }
@@ -920,8 +959,22 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       continue;
     }
 
-    assert(node->compute_type == xnn_compute_type_fp32);
-    node->compute_type = xnn_compute_type_fp16;
+    switch (node->compute_type) {
+      case xnn_compute_type_fp32:
+        node->compute_type = xnn_compute_type_fp16;
+        break;
+      case xnn_compute_type_fp32_to_qd8:
+        node->compute_type = xnn_compute_type_fp16_to_qd8;
+        break;
+      case xnn_compute_type_qd8_to_fp32:
+        node->compute_type = xnn_compute_type_qd8_to_fp16;
+        break;
+      case xnn_compute_type_qs8_to_fp32:
+        node->compute_type = xnn_compute_type_qs8_to_fp16;
+        break;
+      default:
+        XNN_UNREACHABLE;
+    }
     if (node->type == xnn_node_type_static_constant_pad) {
       node->params.static_pad.padding_value =
         fp16_ieee_from_fp32_value(uint32_as_float(node->params.static_pad.padding_value));

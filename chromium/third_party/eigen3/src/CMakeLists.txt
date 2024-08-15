@@ -278,7 +278,7 @@ if(NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512dq -mfma")
     message(STATUS "Enabling AVX512DQ in tests/examples")
   endif()
-  
+
   option(EIGEN_TEST_AVX512FP16 "Enable/Disable AVX512-FP16 in tests/examples" OFF)
   if(EIGEN_TEST_AVX512FP16)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f -mfma -mavx512vl -mavx512fp16")
@@ -491,7 +491,15 @@ endif()
 install(DIRECTORY Eigen DESTINATION ${INCLUDE_INSTALL_DIR} COMPONENT Devel)
 
 
-option(EIGEN_BUILD_DOC "Enable creation of Eigen documentation" ON)
+# Avoid building docs if included from another project.
+# Building documentation requires creating and running executables on the host
+# platform.  We shouldn't do this if cross-compiling.
+if (${PROJECT_IS_TOP_LEVEL} AND NOT ${CMAKE_CROSSCOMPILING})
+  set(EIGEN_BUILD_DOC_DEFAULT ON)
+else()
+  set(EIGEN_BUILD_DOC_DEFAULT OFF)
+endif()
+option(EIGEN_BUILD_DOC "Enable creation of Eigen documentation" ${EIGEN_BUILD_DOC_DEFAULT})
 if(EIGEN_BUILD_DOC)
   add_subdirectory(doc EXCLUDE_FROM_ALL)
 endif()

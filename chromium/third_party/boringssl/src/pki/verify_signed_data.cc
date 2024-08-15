@@ -4,27 +4,26 @@
 
 #include "verify_signed_data.h"
 
-#include "fillins/openssl_util.h"
-#include "cert_errors.h"
-#include "signature_algorithm.h"
-#include "signature_verify_cache.h"
-#include "input.h"
-#include "parse_values.h"
-#include "parser.h"
 #include <openssl/bytestring.h>
 #include <openssl/digest.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
+#include "cert_errors.h"
+#include "input.h"
+#include "parse_values.h"
+#include "parser.h"
+#include "signature_algorithm.h"
+#include "signature_verify_cache.h"
 
 namespace bssl {
 
 namespace {
 
-bool SHA256UpdateWithLengthPrefixedData(SHA256_CTX* s_ctx,
-                                        const uint8_t* data,
+bool SHA256UpdateWithLengthPrefixedData(SHA256_CTX *s_ctx, const uint8_t *data,
                                         uint64_t length) {
-  return (SHA256_Update(s_ctx, reinterpret_cast<uint8_t*>(&length),
+  return (SHA256_Update(s_ctx, reinterpret_cast<uint8_t *>(&length),
                         sizeof(length)) &&
           SHA256_Update(s_ctx, data, length));
 }
@@ -34,9 +33,9 @@ bool SHA256UpdateWithLengthPrefixedData(SHA256_CTX* s_ctx,
 constexpr uint32_t VerifyCacheKeyVersion = 1;
 
 std::string SignatureVerifyCacheKey(std::string_view algorithm_name,
-                                    const der::Input& signed_data,
-                                    const der::Input& signature_value_bytes,
-                                    EVP_PKEY* public_key) {
+                                    const der::Input &signed_data,
+                                    const der::Input &signature_value_bytes,
+                                    EVP_PKEY *public_key) {
   SHA256_CTX s_ctx;
   bssl::ScopedCBB public_key_cbb;
   uint8_t digest[SHA256_DIGEST_LENGTH];
@@ -44,10 +43,10 @@ std::string SignatureVerifyCacheKey(std::string_view algorithm_name,
   if (CBB_init(public_key_cbb.get(), 128) &&
       EVP_marshal_public_key(public_key_cbb.get(), public_key) &&
       SHA256_Init(&s_ctx) &&
-      SHA256_Update(&s_ctx, reinterpret_cast<uint8_t*>(&version),
+      SHA256_Update(&s_ctx, reinterpret_cast<uint8_t *>(&version),
                     sizeof(version)) &&
       SHA256UpdateWithLengthPrefixedData(
-          &s_ctx, reinterpret_cast<const uint8_t*>(algorithm_name.data()),
+          &s_ctx, reinterpret_cast<const uint8_t *>(algorithm_name.data()),
           algorithm_name.length()) &&
       SHA256UpdateWithLengthPrefixedData(&s_ctx, CBB_data(public_key_cbb.get()),
                                          CBB_len(public_key_cbb.get())) &&
@@ -57,10 +56,19 @@ std::string SignatureVerifyCacheKey(std::string_view algorithm_name,
       SHA256UpdateWithLengthPrefixedData(&s_ctx, signed_data.UnsafeData(),
                                          signed_data.Length()) &&
       SHA256_Final(digest, &s_ctx)) {
-    return std::string(reinterpret_cast<char*>(digest), sizeof(digest));
+    return std::string(reinterpret_cast<char *>(digest), sizeof(digest));
   }
   return std::string();
 }
+
+// Place an instance of this class on the call stack to automatically clear
+// the OpenSSL error stack on function exit.
+// TODO(crbug.com/boringssl/38): Remove this when the library is more robust to
+// leaving things in the error queue.
+class OpenSSLErrStackTracer {
+ public:
+  ~OpenSSLErrStackTracer() { ERR_clear_error(); };
+};
 
 }  // namespace
 
@@ -129,10 +137,10 @@ std::string SignatureVerifyCacheKey(std::string_view algorithm_name,
 //     { ID secp521r1 } | { ID sect571k1 } | { ID sect571r1 },
 //     ... -- Extensible
 //     }
-bool ParsePublicKey(const der::Input& public_key_spki,
-                    bssl::UniquePtr<EVP_PKEY>* public_key) {
+bool ParsePublicKey(const der::Input &public_key_spki,
+                    bssl::UniquePtr<EVP_PKEY> *public_key) {
   // Parse the SPKI to an EVP_PKEY.
-  fillins::OpenSSLErrStackTracer err_tracer;
+  OpenSSLErrStackTracer err_tracer;
 
   CBS cbs;
   CBS_init(&cbs, public_key_spki.UnsafeData(), public_key_spki.Length());
@@ -145,12 +153,11 @@ bool ParsePublicKey(const der::Input& public_key_spki,
 }
 
 bool VerifySignedData(SignatureAlgorithm algorithm,
-                      const der::Input& signed_data,
-                      const der::BitString& signature_value,
-                      EVP_PKEY* public_key,
-                      SignatureVerifyCache* cache) {
+                      const der::Input &signed_data,
+                      const der::BitString &signature_value,
+                      EVP_PKEY *public_key, SignatureVerifyCache *cache) {
   int expected_pkey_id = 1;
-  const EVP_MD* digest = nullptr;
+  const EVP_MD *digest = nullptr;
   bool is_rsa_pss = false;
   std::string_view cache_algorithm_name;
   switch (algorithm) {
@@ -216,14 +223,16 @@ bool VerifySignedData(SignatureAlgorithm algorithm,
       break;
   }
 
-  if (expected_pkey_id != EVP_PKEY_id(public_key))
+  if (expected_pkey_id != EVP_PKEY_id(public_key)) {
     return false;
+  }
 
   // For the supported algorithms the signature value must be a whole
   // number of bytes.
-  if (signature_value.unused_bits() != 0)
+  if (signature_value.unused_bits() != 0) {
     return false;
-  const der::Input& signature_value_bytes = signature_value.bytes();
+  }
+  const der::Input &signature_value_bytes = signature_value.bytes();
 
   std::string cache_key;
   if (cache) {
@@ -241,13 +250,14 @@ bool VerifySignedData(SignatureAlgorithm algorithm,
     }
   }
 
-  fillins::OpenSSLErrStackTracer err_tracer;
+  OpenSSLErrStackTracer err_tracer;
 
   bssl::ScopedEVP_MD_CTX ctx;
-  EVP_PKEY_CTX* pctx = nullptr;  // Owned by |ctx|.
+  EVP_PKEY_CTX *pctx = nullptr;  // Owned by |ctx|.
 
-  if (!EVP_DigestVerifyInit(ctx.get(), &pctx, digest, nullptr, public_key))
+  if (!EVP_DigestVerifyInit(ctx.get(), &pctx, digest, nullptr, public_key)) {
     return false;
+  }
 
   if (is_rsa_pss) {
     // All supported RSASSA-PSS algorithms match signing and MGF-1 digest. They
@@ -276,15 +286,16 @@ bool VerifySignedData(SignatureAlgorithm algorithm,
 }
 
 bool VerifySignedData(SignatureAlgorithm algorithm,
-                      const der::Input& signed_data,
-                      const der::BitString& signature_value,
-                      const der::Input& public_key_spki,
-                      SignatureVerifyCache* cache) {
+                      const der::Input &signed_data,
+                      const der::BitString &signature_value,
+                      const der::Input &public_key_spki,
+                      SignatureVerifyCache *cache) {
   bssl::UniquePtr<EVP_PKEY> public_key;
-  if (!ParsePublicKey(public_key_spki, &public_key))
+  if (!ParsePublicKey(public_key_spki, &public_key)) {
     return false;
+  }
   return VerifySignedData(algorithm, signed_data, signature_value,
                           public_key.get(), cache);
 }
 
-}  // namespace net
+}  // namespace bssl

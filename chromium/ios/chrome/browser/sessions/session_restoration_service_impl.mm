@@ -10,7 +10,9 @@
 #import "base/files/file_util.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback_helpers.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
+#import "base/ranges/algorithm.h"
 #import "ios/chrome/browser/sessions/proto/storage.pb.h"
 #import "ios/chrome/browser/sessions/session_constants.h"
 #import "ios/chrome/browser/sessions/session_internal_util.h"
@@ -26,11 +28,14 @@
 
 namespace {
 
-using WebStateMetadataStorageMap =
-    ios::sessions::SessionStorage::WebStateMetadataStorageMap;
-
 // Maximum size of session state NSData objects.
 const int kMaxSessionState = 5 * 1024 * 1024;
+
+// Information about an orphaned WebState.
+struct OrphanInfo {
+  std::string session_id;
+  web::proto::WebStateMetadataStorage metadata;
+};
 
 // Deletes all files and directory in `path` not present in `items_to_keep`.
 void DeleteUnknownContent(const base::FilePath& path,
@@ -67,11 +72,8 @@ NSData* LoadWebStateSession(const base::FilePath& path) {
 std::unique_ptr<web::WebState> CreateWebState(
     const base::FilePath& session_dir,
     ChromeBrowserState* browser_state,
-    const WebStateMetadataStorageMap& mapping,
-    web::WebStateID web_state_id) {
-  auto iter = mapping.find(web_state_id);
-  DCHECK(iter != mapping.end());
-
+    web::WebStateID web_state_id,
+    web::proto::WebStateMetadataStorage metadata) {
   const base::FilePath web_state_dir =
       ios::sessions::WebStateDirectory(session_dir, web_state_id);
 
@@ -82,11 +84,89 @@ std::unique_ptr<web::WebState> CreateWebState(
       web_state_dir.Append(kWebStateSessionFilename);
 
   auto web_state = web::WebState::CreateWithStorage(
-      browser_state, web_state_id, iter->second,
+      browser_state, web_state_id, std::move(metadata),
       base::BindOnce(&LoadWebStateStorage, web_state_storage_path),
       base::BindOnce(&LoadWebStateSession, web_state_session_path));
 
   return web_state;
+}
+
+// Delete data for discarded sessions with `identifiers` in `storage_path`
+// on a background thread.
+void DeleteDataForSessions(const base::FilePath& storage_path,
+                           const std::set<std::string>& identifiers) {
+  for (const std::string& identifier : identifiers) {
+    const base::FilePath path = storage_path.Append(identifier);
+    std::ignore = ios::sessions::DeleteRecursively(path);
+  }
+}
+
+// An output iterator that counts how many time it has been incremented.
+// Allows to check if sets has non-empty intersection without allocating.
+template <typename T1, typename T2>
+struct CountingOutputIterator {
+  CountingOutputIterator& operator++() {
+    ++count;
+    return *this;
+  }
+  CountingOutputIterator& operator++(int) {
+    ++count;
+    return *this;
+  }
+
+  CountingOutputIterator& operator*() { return *this; }
+  CountingOutputIterator& operator=(const T1&) { return *this; }
+  CountingOutputIterator& operator=(const T2&) { return *this; }
+
+  uint32_t count = 0;
+};
+
+// Override of CountingOutputIterator<T1, T2> when types are identical.
+template <typename T>
+struct CountingOutputIterator<T, T> {
+  CountingOutputIterator& operator++() {
+    ++count;
+    return *this;
+  }
+  CountingOutputIterator& operator++(int) {
+    ++count;
+    return *this;
+  }
+
+  CountingOutputIterator& operator*() { return *this; }
+  CountingOutputIterator& operator=(const T&) { return *this; }
+
+  uint32_t count = 0;
+};
+
+// Returns whether the two sets have non-empty intersection.
+template <typename Range1, typename Range2>
+constexpr bool HasIntersection(Range1&& range1, Range2&& range2) {
+  auto result = base::ranges::set_intersection(
+      std::forward<Range1>(range1), std::forward<Range2>(range2),
+      CountingOutputIterator<decltype(*range1.begin()),
+                             decltype(*range2.begin())>{});
+  return result.count != 0;
+}
+
+// Returns a WebStateMetadataMap from `storage`.
+WebStateMetadataMap MetadataMapFromStorage(
+    const ios::proto::WebStateListStorage& storage) {
+  WebStateMetadataMap result;
+  for (const auto& item : storage.items()) {
+    // Ignore the item if it has no metadata or no navigation (since it
+    // will be dropped when restoring the session).
+    if (!item.has_metadata() || !item.metadata().navigation_item_count()) {
+      continue;
+    }
+
+    DCHECK(web::WebStateID::IsValidValue(item.identifier()));
+    const web::WebStateID web_state_id =
+        web::WebStateID::FromSerializedValue(item.identifier());
+
+    result.insert(std::make_pair(web_state_id, item.metadata()));
+  }
+  return result;
 }
 
 }  // anonymous namespace
@@ -101,8 +181,14 @@ class SessionRestorationServiceImpl::WebStateListInfo {
   // Constructor taking the `identifier` used to derive the path to the
   // storage on disk, the `web_state_list` to observe and a `callback`
   // invoked when the list or its content is considered dirty.
+  //
+  // If `original_info` is not null, then this objects corresponds to a
+  // backup Browser (see SessionRestorationService::AttachBackup(...) for
+  // more details). The pointer is used to represents the `has_backup` and
+  // to ensure the objects are destroyed in the correct order.
   WebStateListInfo(const std::string& identifier,
                    WebStateList* web_state_list,
+                   WebStateListInfo* original_info,
                    WebStateListDirtyCallback callback);
   ~WebStateListInfo();
 
@@ -113,6 +199,12 @@ class SessionRestorationServiceImpl::WebStateListInfo {
 
   // Returns the `identifier` used to derive the path to the storage.
   const std::string& identifier() const { return identifier_; }
+
+  // Returns whether the Browser is registered as backup for another Browser.
+  bool is_backup() const { return original_info_.get() != nullptr; }
+
+  // Returns whether the Browser has an attached backup.
+  bool has_backup() const { return backup_info_.get() != nullptr; }
 
   // Adds `web_state_id` to the list of expected unrealized WebState. This
   // correspond to a WebState created via `CreateUnrealizedWebState()`.
@@ -135,22 +227,42 @@ class SessionRestorationServiceImpl::WebStateListInfo {
   // Returns the `observer`.
   SessionRestorationWebStateListObserver& observer() { return observer_; }
 
+  // Returns the WebStateMetadataMap.
+  WebStateMetadataMap& metadata_map() { return metadata_map_; }
+
  private:
   const std::string identifier_;
+  WebStateMetadataMap metadata_map_;
   SessionRestorationWebStateListObserver observer_;
   std::set<web::WebStateID> expected_ids_;
   bool can_load_synchronously_ = true;
+  raw_ptr<WebStateListInfo> original_info_;
+  raw_ptr<WebStateListInfo> backup_info_;
 };
 
 SessionRestorationServiceImpl::WebStateListInfo::WebStateListInfo(
     const std::string& identifier,
     WebStateList* web_state_list,
+    WebStateListInfo* original_info,
     WebStateListDirtyCallback callback)
-    : identifier_(identifier), observer_(web_state_list, std::move(callback)) {
+    : identifier_(identifier),
+      observer_(web_state_list, std::move(callback)),
+      original_info_(original_info) {
   DCHECK(!identifier_.empty());
+  if (original_info_) {
+    DCHECK(!original_info_->has_backup());
+    original_info_->backup_info_ = this;
+  }
 }
 
-SessionRestorationServiceImpl::WebStateListInfo::~WebStateListInfo() = default;
+SessionRestorationServiceImpl::WebStateListInfo::~WebStateListInfo() {
+  DCHECK(!backup_info_);
+  if (original_info_) {
+    DCHECK_EQ(original_info_->backup_info_.get(), this);
+    original_info_->backup_info_ = nullptr;
+    original_info_ = nullptr;
+  }
+}
 
 // Safety considerations of SessionRestorationServiceImpl:
 //
@@ -184,7 +296,7 @@ SessionRestorationServiceImpl::SessionRestorationServiceImpl(
     base::TimeDelta save_delay,
     bool enable_pinned_web_states,
     const base::FilePath& storage_path,
-    const scoped_refptr<base::SequencedTaskRunner> task_runner)
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
     : save_delay_(save_delay),
       enable_pinned_web_states_(enable_pinned_web_states),
       storage_path_(storage_path.Append(kSessionRestorationDirname)),
@@ -196,6 +308,7 @@ SessionRestorationServiceImpl::SessionRestorationServiceImpl(
 SessionRestorationServiceImpl::~SessionRestorationServiceImpl() {}
 
 void SessionRestorationServiceImpl::Shutdown() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(infos_.empty()) << "Disconnect() must be called for all Browser";
 }
 
@@ -203,26 +316,34 @@ void SessionRestorationServiceImpl::Shutdown() {
 
 void SessionRestorationServiceImpl::AddObserver(
     SessionRestorationObserver* observer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.AddObserver(observer);
 }
 
 void SessionRestorationServiceImpl::RemoveObserver(
     SessionRestorationObserver* observer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.RemoveObserver(observer);
 }
 
 void SessionRestorationServiceImpl::SaveSessions() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   SaveDirtySessions();
+}
+
+void SessionRestorationServiceImpl::ScheduleSaveSessions() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Nothing to do, the service automatically schedule a save as soon
+  // as changes are detected.
 }
 
 void SessionRestorationServiceImpl::SetSessionID(
     Browser* browser,
     const std::string& identifier) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   WebStateList* web_state_list = browser->GetWebStateList();
 
-  auto iterator = infos_.find(web_state_list);
-  DCHECK(iterator == infos_.end());
-
+  DCHECK(!base::Contains(infos_, web_state_list));
   DCHECK(!base::Contains(identifiers_, identifier));
   identifiers_.insert(identifier);
 
@@ -232,15 +353,17 @@ void SessionRestorationServiceImpl::SetSessionID(
   infos_.insert(std::make_pair(
       web_state_list,
       std::make_unique<WebStateListInfo>(
-          identifier, web_state_list,
+          identifier, web_state_list, /*original_info=*/nullptr,
           base::BindRepeating(
               &SessionRestorationServiceImpl::MarkWebStateListDirty,
               base::Unretained(this)))));
 }
 
 void SessionRestorationServiceImpl::LoadSession(Browser* browser) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(base::Contains(infos_, browser->GetWebStateList()));
   WebStateListInfo& info = *infos_[browser->GetWebStateList()];
+  DCHECK(!info.is_backup());
 
   const base::TimeTicks start_time = base::TimeTicks::Now();
 
@@ -257,14 +380,17 @@ void SessionRestorationServiceImpl::LoadSession(Browser* browser) {
 
   // Load the session for the Browser.
   const base::FilePath session_dir = storage_path_.Append(info.identifier());
-  ios::sessions::SessionStorage session =
+  ios::proto::WebStateListStorage session =
       ios::sessions::LoadSessionStorage(session_dir);
+
+  // Updates `info`'s WebStateMetadataMap from `session`.
+  info.metadata_map() = MetadataMapFromStorage(session);
 
   // Since this is the first session load, it is safe to delete any
   // unreferenced files from the Browser's storage path.
   std::set<base::FilePath> files_to_keep;
   files_to_keep.insert(session_dir.Append(kSessionMetadataFilename));
-  for (const auto& item : session.session_metadata.items()) {
+  for (const auto& item : session.items()) {
     files_to_keep.insert(ios::sessions::WebStateDirectory(
         session_dir, web::WebStateID::FromSerializedValue(item.identifier())));
   }
@@ -275,12 +401,10 @@ void SessionRestorationServiceImpl::LoadSession(Browser* browser) {
 
   // Deserialize the session from storage.
   const std::vector<web::WebState*> restored_web_states =
-      DeserializeWebStateList(
-          browser->GetWebStateList(), std::move(session.session_metadata),
-          SessionRestorationScope::kAll, enable_pinned_web_states_,
-          base::BindRepeating(&CreateWebState, session_dir,
-                              browser->GetBrowserState(),
-                              std::move(session.web_state_storage_map)));
+      DeserializeWebStateList(browser->GetWebStateList(), std::move(session),
+                              enable_pinned_web_states_,
+                              base::BindRepeating(&CreateWebState, session_dir,
+                                                  browser->GetBrowserState()));
 
   // Loading the session may have marked the Browser as dirty (unless the
   // session was empty). There is no need to serialize the WebStates that
@@ -289,9 +413,13 @@ void SessionRestorationServiceImpl::LoadSession(Browser* browser) {
   info.observer().ClearDirty();
   dirty_web_state_lists_.erase(browser->GetWebStateList());
 
-  DCHECK(dirty_web_state_lists_.empty());
-  if (timer_.IsRunning()) {
-    timer_.Stop();
+  // If multiple windows are open, it is possible for some other Browsers
+  // to be dirty. Check if this is the case or not. If there are no dirty
+  // Browsers, cancel the timer.
+  if (dirty_web_state_lists_.empty()) {
+    if (timer_.IsRunning()) {
+      timer_.Stop();
+    }
   }
 
   for (auto& observer : observers_) {
@@ -299,11 +427,60 @@ void SessionRestorationServiceImpl::LoadSession(Browser* browser) {
   }
 
   // Record the time spent blocking the main thread to load the session.
-  base::UmaHistogramTimes("Session.WebStates.LoadingTimeOnMainThread",
+  base::UmaHistogramTimes(kSessionHistogramLoadingTime,
                           base::TimeTicks::Now() - start_time);
 }
 
+void SessionRestorationServiceImpl::LoadWebStateStorage(
+    Browser* browser,
+    web::WebState* web_state,
+    WebStateStorageCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  auto iterator = infos_.find(browser->GetWebStateList());
+  if (iterator == infos_.end()) {
+    return;
+  }
+
+  WebStateListInfo& info = *iterator->second;
+  const web::WebStateID web_state_id = web_state->GetUniqueIdentifier();
+  const base::FilePath web_state_dir = ios::sessions::WebStateDirectory(
+      storage_path_.Append(info.identifier()), web_state_id);
+  const base::FilePath storage_path =
+      web_state_dir.Append(kWebStateStorageFilename);
+
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&::LoadWebStateStorage, storage_path),
+      std::move(callback));
+}
+
+void SessionRestorationServiceImpl::AttachBackup(Browser* browser,
+                                                 Browser* backup) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  WebStateList* web_state_list = backup->GetWebStateList();
+
+  DCHECK(!base::Contains(infos_, web_state_list));
+
+  auto iterator = infos_.find(browser->GetWebStateList());
+  DCHECK(iterator != infos_.end());
+  WebStateListInfo* info = iterator->second.get();
+
+  DCHECK(!info->is_backup());
+  DCHECK(!info->has_backup());
+
+  // It is safe to use base::Unretained(this) as the callback is never called
+  // after SessionRestorationWebStateListObserver is destroyed. Those objects
+  // are owned by the current instance, and destroyed before `this`.
+  infos_.insert(std::make_pair(
+      web_state_list,
+      std::make_unique<WebStateListInfo>(
+          info->identifier(), web_state_list, info,
+          base::BindRepeating(
+              &SessionRestorationServiceImpl::MarkWebStateListDirty,
+              base::Unretained(this)))));
+}
+
 void SessionRestorationServiceImpl::Disconnect(Browser* browser) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   SaveDirtySessions();
   DCHECK(dirty_web_state_lists_.empty());
 
@@ -311,8 +488,12 @@ void SessionRestorationServiceImpl::Disconnect(Browser* browser) {
   DCHECK(iterator != infos_.end());
 
   WebStateListInfo& info = *iterator->second;
-  DCHECK(base::Contains(identifiers_, info.identifier()));
-  identifiers_.erase(info.identifier());
+  DCHECK(!info.has_backup());
+
+  if (!info.is_backup()) {
+    DCHECK(base::Contains(identifiers_, info.identifier()));
+    identifiers_.erase(info.identifier());
+  }
 
   infos_.erase(iterator);
 }
@@ -321,6 +502,7 @@ std::unique_ptr<web::WebState>
 SessionRestorationServiceImpl::CreateUnrealizedWebState(
     Browser* browser,
     web::proto::WebStateStorage storage) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto iterator = infos_.find(browser->GetWebStateList());
   DCHECK(iterator != infos_.end());
 
@@ -338,22 +520,22 @@ SessionRestorationServiceImpl::CreateUnrealizedWebState(
   const base::FilePath web_state_dir = ios::sessions::WebStateDirectory(
       storage_path_.Append(info.identifier()), web_state_id);
 
-  // Create requests to serialize WebState storage and metadata storage,
-  // and then post them to the background sequence.
+  // Add the metadata to `info`'s WebStateMetadataMap. It will be saved when
+  // the WebState is inserted in the WebStateList.
+  DCHECK(storage.has_metadata());
   web::proto::WebStateMetadataStorage metadata;
   metadata.Swap(storage.mutable_metadata());
 
-  ios::sessions::IORequestList requests;
-  requests.push_back(std::make_unique<ios::sessions::WriteProtoIORequest>(
-      web_state_dir.Append(kWebStateMetadataStorageFilename),
-      std::make_unique<web::proto::WebStateMetadataStorage>(metadata)));
-  requests.push_back(std::make_unique<ios::sessions::WriteProtoIORequest>(
-      web_state_dir.Append(kWebStateStorageFilename),
-      std::make_unique<web::proto::WebStateStorage>(storage)));
+  DCHECK(!base::Contains(info.metadata_map(), web_state_id));
+  info.metadata_map().insert(std::make_pair(web_state_id, metadata));
 
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ios::sessions::ExecuteIORequests, std::move(requests)));
+  // Create the request to serialize WebState storage and add it to the
+  // list of pending requests (they will be scheduled once the WebState
+  // is inserted in the Browser's WebStateList).
+  pending_requests_.push_back(
+      std::make_unique<ios::sessions::WriteProtoIORequest>(
+          web_state_dir.Append(kWebStateStorageFilename),
+          std::make_unique<web::proto::WebStateStorage>(storage)));
 
   // Create the WebState with callback that return the data from memory. This
   // ensure there is no race condition while trying to read the data from the
@@ -364,10 +546,40 @@ SessionRestorationServiceImpl::CreateUnrealizedWebState(
       base::ReturnValueOnce<NSData*>(nil));
 }
 
+void SessionRestorationServiceImpl::DeleteDataForDiscardedSessions(
+    const std::set<std::string>& identifiers,
+    base::OnceClosure closure) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!HasIntersection(identifiers, identifiers_));
+  task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce(&DeleteDataForSessions, storage_path_, identifiers),
+      std::move(closure));
+}
+
+void SessionRestorationServiceImpl::InvokeClosureWhenBackgroundProcessingDone(
+    base::OnceClosure closure) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  task_runner_->PostTask(FROM_HERE, std::move(closure));
+}
+
+void SessionRestorationServiceImpl::PurgeUnassociatedData(
+    base::OnceClosure closure) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                           std::move(closure));
+}
+
+bool SessionRestorationServiceImpl::PlaceholderTabsEnabled() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return true;
+}
+
 #pragma mark - Private
 
 void SessionRestorationServiceImpl::MarkWebStateListDirty(
     WebStateList* web_state_list) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   dirty_web_state_lists_.insert(web_state_list);
   if (!timer_.IsRunning()) {
     timer_.Start(
@@ -378,6 +590,7 @@ void SessionRestorationServiceImpl::MarkWebStateListDirty(
 }
 
 void SessionRestorationServiceImpl::SaveDirtySessions() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (timer_.IsRunning()) {
     timer_.Stop();
   }
@@ -388,19 +601,38 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
 
   const base::TimeTicks start_time = base::TimeTicks::Now();
 
+  // Initialize the list of requests with all pending request. This ensures
+  // that any WebState created by CreateUnrealizedWebState(...) will have
+  // its state saved.
   ios::sessions::IORequestList requests;
+  std::swap(requests, pending_requests_);
 
   // Create a map of orphaned WebStates (i.e. "unrealized" WebStates detached
   // from a WebStateList).
-  std::map<web::WebStateID, std::string> orphaned_map;
+  std::map<web::WebStateID, OrphanInfo> orphaned_map;
   for (WebStateList* web_state_list : dirty_web_state_lists_) {
     DCHECK(base::Contains(infos_, web_state_list));
     WebStateListInfo& info = *infos_[web_state_list];
 
     const auto& detached_web_states = info.observer().detached_web_states();
     if (!detached_web_states.empty()) {
+      WebStateMetadataMap& metadata_map = info.metadata_map();
+      const std::string& identifier = info.identifier();
+
       for (const auto web_state_id : detached_web_states) {
-        orphaned_map.insert(std::make_pair(web_state_id, info.identifier()));
+        auto iter = metadata_map.find(web_state_id);
+        DCHECK(iter != metadata_map.end());
+
+        OrphanInfo orphan_info{
+            .session_id = identifier,
+            .metadata = std::move(iter->second),
+        };
+
+        DCHECK(!base::Contains(orphaned_map, web_state_id));
+        orphaned_map.insert(
+            std::make_pair(web_state_id, std::move(orphan_info)));
+
+        metadata_map.erase(iter);
       }
     }
   }
@@ -415,6 +647,7 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
     if (!inserted_web_states.empty()) {
       const base::FilePath dest_dir = storage_path_.Append(info.identifier());
 
+      WebStateMetadataMap& metadata_map = info.metadata_map();
       for (const auto web_state_id : inserted_web_states) {
         // Check whether the `web_state_id` is expected. If this is the case,
         // then `CreateUnrealizedWebState()` took care of scheduling tasks to
@@ -427,9 +660,23 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
         // If the `web_state_id` is not expected, then it must be adopted
         // from another Browser, thus needs to be in the `orphaned_map`.
         DCHECK(base::Contains(orphaned_map, web_state_id));
-        const base::FilePath from_dir =
-            storage_path_.Append(orphaned_map[web_state_id]);
+        auto iter = orphaned_map.find(web_state_id);
+        OrphanInfo& orphan_info = iter->second;
 
+        // Move the orphan metadata information to its new owner's `info`.
+        DCHECK(!base::Contains(metadata_map, web_state_id));
+        metadata_map.insert(
+            std::make_pair(web_state_id, std::move(orphan_info.metadata)));
+
+        // No need to copy if this is moving to/from the backup.
+        if (orphan_info.session_id == info.identifier()) {
+          continue;
+        }
+
+        const base::FilePath from_dir =
+            storage_path_.Append(orphan_info.session_id);
+
+        // Create a request to copy the orphaned data.
         requests.push_back(std::make_unique<ios::sessions::CopyPathIORequest>(
             ios::sessions::WebStateDirectory(from_dir, web_state_id),
             ios::sessions::WebStateDirectory(dest_dir, web_state_id)));
@@ -441,6 +688,7 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
   for (WebStateList* web_state_list : dirty_web_state_lists_) {
     DCHECK(base::Contains(infos_, web_state_list));
     WebStateListInfo& info = *infos_[web_state_list];
+    WebStateMetadataMap& metadata_map = info.metadata_map();
 
     // Asynchronous operation will be scheduled for this Browser, so it is
     // no longer safe to perform synchronous operation on it anymore.
@@ -457,8 +705,9 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
     // to WebStates that have been saved.
     const auto& dirty_web_states = observer.dirty_web_states();
     for (web::WebState* web_state : dirty_web_states) {
-      const base::FilePath web_state_dir = ios::sessions::WebStateDirectory(
-          dest_dir, web_state->GetUniqueIdentifier());
+      const web::WebStateID web_state_id = web_state->GetUniqueIdentifier();
+      const base::FilePath web_state_dir =
+          ios::sessions::WebStateDirectory(dest_dir, web_state_id);
 
       // Serialize the WebState to protobuf message.
       auto storage = std::make_unique<web::proto::WebStateStorage>();
@@ -470,10 +719,16 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
       auto metadata = base::WrapUnique(storage->release_metadata());
       DCHECK(metadata);
 
-      // Create requests to serialize both `metadata` and `storage`.
-      requests.push_back(std::make_unique<ios::sessions::WriteProtoIORequest>(
-          web_state_dir.Append(kWebStateMetadataStorageFilename),
-          std::move(metadata)));
+      // Update the metadata in `info`'s WebStateMetadataMap. It will be
+      // saved inside the WebStateListStorage.
+      auto iter = metadata_map.find(web_state_id);
+      if (iter == metadata_map.end()) {
+        metadata_map.insert(std::make_pair(web_state_id, std::move(*metadata)));
+      } else {
+        iter->second = std::move(*metadata);
+      }
+
+      // Create a request to serialize the `storage`.
       requests.push_back(std::make_unique<ios::sessions::WriteProtoIORequest>(
           web_state_dir.Append(kWebStateStorageFilename), std::move(storage)));
 
@@ -490,16 +745,43 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
       }
     }
 
-    // Serialize the state of the WebStateList if it is considered dirty.
-    if (observer.is_web_state_list_dirty()) {
-      auto storage = std::make_unique<ios::proto::WebStateListStorage>();
-      SerializeWebStateList(*web_state_list, *storage);
+    // Delete the storage of any WebState that has been closed (the data is
+    // now unreachable, and thus can safely be deleted).
+    const auto& closed_web_states = observer.closed_web_states();
+    for (web::WebStateID web_state_id : closed_web_states) {
+      // It is possible (though unlikely) for a WebState to be closed just
+      // after being moved between Browser. Support that case by deleting
+      // the data from the Browser that listed the WebState for adoption.
+      base::FilePath browser_dir = dest_dir;
 
-      requests.push_back(std::make_unique<ios::sessions::WriteProtoIORequest>(
-          dest_dir.Append(kSessionMetadataFilename), std::move(storage)));
+      auto iter = orphaned_map.find(web_state_id);
+      if (iter != orphaned_map.end()) {
+        const OrphanInfo& orphan_info = iter->second;
+        browser_dir = storage_path_.Append(orphan_info.session_id);
+      } else {
+        metadata_map.erase(web_state_id);
+      }
+
+      requests.push_back(std::make_unique<ios::sessions::DeletePathIORequest>(
+          ios::sessions::WebStateDirectory(browser_dir, web_state_id)));
     }
 
+    // Clear the "dirty" bit.
     observer.ClearDirty();
+
+    // No need to serialize if this is a backup.
+    if (info.is_backup()) {
+      continue;
+    }
+
+    // Always serialize the WebStateList as it includes the WebStates'
+    // metadata (and thus needs to be saved either the list or one of
+    // the WebState is dirty).
+    auto storage = std::make_unique<ios::proto::WebStateListStorage>();
+    SerializeWebStateList(*web_state_list, info.metadata_map(), *storage);
+
+    requests.push_back(std::make_unique<ios::sessions::WriteProtoIORequest>(
+        dest_dir.Append(kSessionMetadataFilename), std::move(storage)));
   }
 
   // Post the IORequests on the background sequence as writing to disk
@@ -511,6 +793,6 @@ void SessionRestorationServiceImpl::SaveDirtySessions() {
   dirty_web_state_lists_.clear();
 
   // Record the time spent blocking the main thread to save the session.
-  base::UmaHistogramTimes("Session.WebStates.SavingTimeOnMainThread",
+  base::UmaHistogramTimes(kSessionHistogramSavingTime,
                           base::TimeTicks::Now() - start_time);
 }

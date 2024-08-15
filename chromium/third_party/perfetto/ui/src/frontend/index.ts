@@ -13,28 +13,28 @@
 // limitations under the License.
 
 // Keep this import first.
-import '../core/static_initializers';
+import '../base/static_initializers';
 import '../gen/all_plugins';
 
 import {Draft} from 'immer';
 import m from 'mithril';
 
 import {defer} from '../base/deferred';
-import {reportError, setErrorHandler} from '../base/logging';
+import {addErrorHandler, reportError} from '../base/logging';
 import {Actions, DeferredAction, StateActions} from '../common/actions';
 import {CommandManager} from '../common/commands';
 import {createEmptyState} from '../common/empty_state';
-import {RECORDING_V2_FLAG} from '../common/feature_flags';
 import {flattenArgs, traceEvent} from '../common/metatracing';
 import {pluginManager, pluginRegistry} from '../common/plugins';
 import {State} from '../common/state';
-import {ViewerImpl} from '../common/viewer';
-import {initWasm} from '../common/wasm_engine_proxy';
 import {initController, runControllers} from '../controller';
 import {
   isGetCategoriesResponse,
 } from '../controller/chrome_proxy_record_controller';
+import {RECORDING_V2_FLAG} from '../core/feature_flags';
+import {initLiveReloadIfLocalhost} from '../core/live_reload';
 import {raf} from '../core/raf_scheduler';
+import {initWasm} from '../trace_processor/wasm_engine_proxy';
 import {setScheduleFullRedraw} from '../widgets/raf';
 
 import {App} from './app';
@@ -46,14 +46,15 @@ import {FlagsPage} from './flags_page';
 import {globals} from './globals';
 import {HomePage} from './home_page';
 import {InsightsPage} from './insights_page';
-import {initLiveReloadIfLocalhost} from './live_reload';
 import {MetricsPage} from './metrics_page';
+import {PluginsPage} from './plugins_page';
 import {postMessageHandler} from './post_message_handler';
 import {QueryPage} from './query_page';
 import {RecordPage, updateAvailableAdbDevices} from './record_page';
 import {RecordPageV2} from './record_page_v2';
 import {Route, Router} from './router';
 import {CheckHttpRpcConnection} from './rpc_http_dialog';
+import {Store} from './store';
 import {TraceInfoPage} from './trace_info_page';
 import {maybeOpenTraceFromRoute} from './trace_url_handler';
 import {ViewerPage} from './viewer_page';
@@ -67,24 +68,25 @@ class FrontendApi {
     globals.store.subscribe(this.handleStoreUpdate);
   }
 
-  private handleStoreUpdate = (state: State, oldState: State) => {
+  private handleStoreUpdate = (store: Store<State>, oldState: State) => {
+    const newState = store.state;
+
     // If the visible time in the global state has been updated more
     // recently than the visible time handled by the frontend @ 60fps,
     // update it. This typically happens when restoring the state from a
     // permalink.
-    globals.frontendLocalState.mergeState(state.frontendLocalState);
+    globals.timeline.mergeState(newState.frontendLocalState);
 
     // Only redraw if something other than the frontendLocalState changed.
     let key: keyof State;
-    for (key in state) {
-      if (key !== 'frontendLocalState' && key !== 'visibleTracks' &&
-          oldState[key] !== state[key]) {
+    for (key in store.state) {
+      if (key !== 'frontendLocalState' && oldState[key] !== newState[key]) {
         raf.scheduleFullRedraw();
         break;
       }
     }
 
-    // Run in microtask to aboid avoid reentry
+    // Run in microtask to avoid avoid reentry
     setTimeout(runControllers, 0);
   };
 
@@ -92,6 +94,7 @@ class FrontendApi {
     const edits = actions.map((action) => {
       return traceEvent(`action.${action.type}`, () => {
         return (draft: Draft<State>) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (StateActions as any)[action.type](draft, action.args);
         };
       }, {
@@ -191,8 +194,10 @@ function main() {
   css.href = globals.root + 'perfetto.css';
   css.onload = () => cssLoadPromise.resolve();
   css.onerror = (err) => cssLoadPromise.reject(err);
-  const favicon = document.head.querySelector('#favicon') as HTMLLinkElement;
-  if (favicon) favicon.href = globals.root + 'assets/favicon.png';
+  const favicon = document.head.querySelector('#favicon');
+  if (favicon instanceof HTMLLinkElement) {
+    favicon.href = globals.root + 'assets/favicon.png';
+  }
 
   // Load the script to detect if this is a Googler (see comments on globals.ts)
   // and initialize GA after that (or after a timeout if something goes wrong).
@@ -206,8 +211,11 @@ function main() {
 
   document.head.append(script, css);
 
+  // Route errors to both the UI bugreport dialog and Analytics (if enabled).
+  addErrorHandler(maybeShowErrorDialog);
+  addErrorHandler((e) => globals.logging.logError(e));
+
   // Add Error handlers for JS error and for uncaught exceptions in promises.
-  setErrorHandler((err: string) => maybeShowErrorDialog(err));
   window.addEventListener('error', (e) => reportError(e));
   window.addEventListener('unhandledrejection', (e) => reportError(e));
 
@@ -231,6 +239,7 @@ function main() {
     '/info': TraceInfoPage,
     '/widgets': WidgetsPage,
     '/viz': VizPage,
+    '/plugins': PluginsPage,
   });
   router.onRouteChanged = routeChange;
 
@@ -250,6 +259,7 @@ function main() {
 
   // We proxy messages between the extension and the controller because the
   // controller's worker can't access chrome.runtime.
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
   const extensionPort = window.chrome && chrome.runtime ?
       chrome.runtime.connect(EXTENSION_ID) :
       undefined;
@@ -291,10 +301,8 @@ function main() {
     document.body.classList.add('testing');
   }
 
-  // Initialize all plugins:
-  const viewer = new ViewerImpl();
   for (const plugin of pluginRegistry.values()) {
-    pluginManager.activatePlugin(plugin.pluginId, viewer);
+    pluginManager.activatePlugin(plugin.pluginId);
   }
 
   cmdManager.registerCommandSource(pluginManager);
@@ -310,7 +318,7 @@ function onCssLoaded() {
     m.render(document.body, m(App, globals.router.resolve()));
   };
 
-  initLiveReloadIfLocalhost();
+  initLiveReloadIfLocalhost(globals.embeddedMode);
 
   if (!RECORDING_V2_FLAG.get()) {
     updateAvailableAdbDevices();

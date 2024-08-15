@@ -33,13 +33,11 @@
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/subresource_load_metrics.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/loader/resource_cache.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
@@ -51,6 +49,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/loader_freeze_mode.h"
 #include "third_party/blink/renderer/platform/loader/fetch/preload_key.h"
+#include "third_party/blink/renderer/platform/loader/fetch/render_blocking_behavior.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_priority.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_scheduler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader.h"
@@ -61,6 +60,10 @@
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
+
+namespace network {
+struct ResourceRequest;
+}  // namespace network
 
 namespace blink {
 
@@ -111,11 +114,14 @@ class PLATFORM_EXPORT ResourceFetcher
     // TODO(yuzus): Take only unfreezable task runner once both
     // URLLoaderClientImpl and ResponseBodyLoader use unfreezable task runner.
     virtual std::unique_ptr<URLLoader> CreateURLLoader(
-        const ResourceRequest&,
+        const network::ResourceRequest&,
         const ResourceLoaderOptions&,
         scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner,
         scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner,
-        BackForwardCacheLoaderHelper*) = 0;
+        BackForwardCacheLoaderHelper*,
+        const absl::optional<base::UnguessableToken>&
+            service_worker_race_network_request_token,
+        bool is_from_origin_dirty_style_sheet) = 0;
 
     // Get a code cache host to fetch data from code caches.
     virtual CodeCacheHost* GetCodeCacheHost() = 0;
@@ -172,12 +178,19 @@ class PLATFORM_EXPORT ResourceFetcher
   }
 
   // Create a loader. This cannot be called after ClearContext is called.
-  std::unique_ptr<URLLoader> CreateURLLoader(const ResourceRequestHead&,
-                                             const ResourceLoaderOptions&);
+  std::unique_ptr<URLLoader> CreateURLLoader(
+      const network::ResourceRequest&,
+      const ResourceLoaderOptions&,
+      const mojom::blink::RequestContextType,
+      const RenderBlockingBehavior,
+      const absl::optional<base::UnguessableToken>&
+          service_worker_race_network_request_token,
+      bool is_from_origin_dirty_style_sheet);
   // Get a code cache host. This cannot be called after ClearContext is called.
   CodeCacheHost* GetCodeCacheHost();
 
   Resource* CachedResource(const KURL&) const;
+  bool ResourceHasBeenEmulatedLoadStartedForInspector(const KURL&) const;
 
   // Registers an callback to be called with the resource priority of the fetch
   // made to the specified URL. When `new_load_only` is set to false,
@@ -352,9 +365,6 @@ class PLATFORM_EXPORT ResourceFetcher
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel) override;
 
-  void SetResourceCache(
-      mojo::PendingRemote<mojom::blink::ResourceCache> remote);
-
   void RecordLCPPSubresourceMetrics();
 
   // Vivaldi
@@ -371,8 +381,7 @@ class PLATFORM_EXPORT ResourceFetcher
   bool StartLoad(Resource*,
                  ResourceRequestBody,
                  ImageLoadBlockingPolicy,
-                 RenderBlockingBehavior,
-                 absl::optional<mojom::blink::WebFeature> count_orb_block_as);
+                 RenderBlockingBehavior);
 
   void InitializeRevalidation(ResourceRequest&, Resource*);
   void AddToMemoryCacheIfNeeded(const FetchParameters&, Resource*);
@@ -549,11 +558,6 @@ class PLATFORM_EXPORT ResourceFetcher
                                ResourceType type,
                                RevalidationPolicyForMetrics policy) const;
 
-  void OnResourceCacheContainsFinished(
-      base::TimeTicks ipc_send_time,
-      network::mojom::RequestDestination,
-      mojom::blink::ResourceCacheContainsResultPtr);
-
   Member<DetachableResourceFetcherProperties> properties_;
   Member<ResourceLoadObserver> resource_load_observer_;
   Member<FetchContext> context_;
@@ -568,17 +572,24 @@ class PLATFORM_EXPORT ResourceFetcher
   // Weak reference to all the fetched resources.
   DocumentResourceMap cached_resources_map_;
 
+  // When a resource is in the global memory cache but not in the
+  // cached_resources_map_ and it is referenced (e.g. when the StyleEngine
+  // processes a @font-face rule), the resource will be emulated via
+  // `EmulateLoadStartedForInspector` so that it shows up in DevTools.
+  // In order to ensure that this only occurs once per resource, we keep
+  // a weak reference to all emulated resources and only emulate resources
+  // that have not been previously emulated.
+  DocumentResourceMap emulated_load_started_for_inspector_resources_map_;
+
   // document_resource_strong_refs_ keeps strong references for fonts, images,
   // scripts and stylesheets within their freshness lifetime.
   HeapHashSet<Member<Resource>> document_resource_strong_refs_;
   size_t document_resource_strong_refs_total_size_ = 0;
 
-  // |image_resources_| is the subset of all image resources for the document.
-  HeapHashSet<WeakMember<Resource>> image_resources_;
-
-  // |not_loaded_image_resources_| is a subset of |image_resources_| where
-  // |Resource::IsLoaded| might be false. The is used for performance
-  // optimizations and might still contain images which are actually loaded.
+  // |not_loaded_image_resources_| is a subset of all image resources for the
+  // document where |Resource::IsLoaded| might be false. The is used for
+  // performance optimizations and might still contain images which are actually
+  // loaded.
   HeapHashSet<WeakMember<Resource>> not_loaded_image_resources_;
 
   HeapHashMap<PreloadKey, Member<Resource>> preloads_;
@@ -618,10 +629,6 @@ class PLATFORM_EXPORT ResourceFetcher
 
   // Lazily initialized when the first <script type=webbundle> is inserted.
   Member<SubresourceWebBundleList> subresource_web_bundles_;
-
-  // Used to look for cached responses in a different renderer. Currently
-  // used only for histogram recordings.
-  HeapMojoRemote<mojom::blink::ResourceCache> resource_cache_remote_;
 
   // The context lifecycle notifier. Used for GC lifetime management
   // purpose of the ResourceLoader used internally.

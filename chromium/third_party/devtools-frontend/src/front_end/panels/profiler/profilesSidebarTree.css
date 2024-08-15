@@ -50,21 +50,6 @@ ol.tree-outline {
 }
 /* Generic items styling */
 
-.title-container > .save-link {
-  text-decoration: underline;
-  margin-left: auto;
-  display: none;
-}
-
-.title-container > .save-link:focus-visible {
-  outline-width: unset;
-}
-
-li.selected .title-container > .save-link {
-  display: block;
-  cursor: pointer;
-}
-
 li .icon {
   width: 20px;
   height: 20px;
@@ -137,6 +122,17 @@ li .subtitle {
 li.small .subtitle {
   display: none;
 }
+
+li button {
+  border: none;
+  background: none;
+  visibility: hidden;
+}
+
+li.selected:hover button {
+  visibility: visible;
+}
+
 /* Launcher */
 
 .profile-launcher-view-tree-item {
@@ -150,12 +146,12 @@ li.small .subtitle {
 /* Heap profiles and CPU profiles */
 .heap-snapshot-sidebar-tree-item .icon,
 .profile-sidebar-tree-item .icon {
-  -webkit-mask-image: var(--image-file-heap-snapshot);
+  mask-image: var(--image-file-heap-snapshot);
   background: var(--icon-default);
 }
 
 .profile-group-sidebar-tree-item .icon {
-  -webkit-mask-image: var(--image-file-heap-snapshots);
+  mask-image: var(--image-file-heap-snapshots);
   background: var(--icon-default);
 }
 
@@ -169,17 +165,17 @@ li.wait .icon {
 }
 
 .heap-snapshot-sidebar-tree-item.wait .icon {
-  -webkit-mask-image: unset;
+  mask-image: unset;
   background-color: inherit;
 }
 
 .heap-snapshot-sidebar-tree-item.small .icon {
-  -webkit-mask-image: var(--image-file-heap-snapshots);
+  mask-image: var(--image-file-heap-snapshots);
   background: var(--icon-default);
 }
 
 .profile-sidebar-tree-item.small .icon {
-  -webkit-mask-image: var(--image-file-heap-snapshots);
+  mask-image: var(--image-file-heap-snapshots);
   background: var(--icon-default);
 }
 

@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/browser_user_data.h"
 #include "chrome/browser/ui/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
-#include "chrome/browser/ui/toolbar/pinned_toolbar_actions_model.h"
+#include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "components/search_engines/template_url_service.h"
@@ -39,6 +39,7 @@ class SearchCompanionSidePanelCoordinator
   static bool IsSupported(Profile* profile, bool include_runtime_checks);
 
   bool Show(SidePanelOpenTrigger side_panel_open_trigger);
+  void ShowLens(const content::OpenURLParams& url_params);
   BrowserView* GetBrowserView() const;
   std::u16string GetTooltipForToolbarButton() const;
   static void SetAccessibleNameForToolbarButton(BrowserView* browser_view,
@@ -60,7 +61,7 @@ class SearchCompanionSidePanelCoordinator
 
   // For metrics only. Notifies the companion of the side panel open trigger.
   void NotifyCompanionOfSidePanelOpenTrigger(
-      absl::optional<SidePanelOpenTrigger> side_panel_open_trigger);
+      std::optional<SidePanelOpenTrigger> side_panel_open_trigger);
 
  private:
   friend class BrowserUserData<SearchCompanionSidePanelCoordinator>;
@@ -97,8 +98,8 @@ class SearchCompanionSidePanelCoordinator
   raw_ptr<Browser> browser_;
   std::u16string accessible_name_;
   std::u16string name_;
-  const raw_ref<const gfx::VectorIcon, ExperimentalAsh> icon_;
-  const raw_ref<const gfx::VectorIcon, ExperimentalAsh> disabled_icon_;
+  const raw_ref<const gfx::VectorIcon> icon_;
+  const raw_ref<const gfx::VectorIcon> disabled_icon_;
   raw_ptr<PrefService> pref_service_;
   bool is_currently_observing_tab_changes_ = false;
 

@@ -442,6 +442,11 @@ by a child template that "extends" this file.
             <intent-filter>
                 <action android:name="com.sec.android.airview.HOVER" />
             </intent-filter>
+            <!-- Web Search Intent -->
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
         </activity-alias>
@@ -1387,15 +1392,6 @@ by a child template that "extends" this file.
             </intent-filter>
         </service>
 
-        <service
-            android:name="org.chromium.chrome.browser.webapps.WebApkInstallCoordinatorService"
-            android:exported="true"
-            tools:ignore="ExportedService">
-            <intent-filter>
-              <action android:name="org.chromium.intent.action.INSTALL_WEB_APK" />
-            </intent-filter>
-        </service>
-
 
         <receiver android:name="org.chromium.chrome.browser.announcement.AnnouncementNotificationManager$Receiver"
             android:exported="false"/>
@@ -1516,6 +1512,8 @@ by a child template that "extends" this file.
             android:label="WebXR"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             tools:ignore="NonResizeableActivity">
+            <property android:name="android.window.PROPERTY_ACTIVITY_STARTS_IN_IMMERSIVE_XR"
+                android:value="true" />
             <intent-filter>
               <category android:name="android.intent.category.XR" />
             </intent-filter>

@@ -21,6 +21,11 @@ void BrowserParamsProxy::WaitForLogin() {
   BrowserPostLoginParams::WaitForLogin();
 }
 
+// static
+bool BrowserParamsProxy::IsLoggedIn() {
+  return BrowserPostLoginParams::IsLoggedIn();
+}
+
 bool BrowserParamsProxy::IsCrosapiDisabledForTesting() const {
   return BrowserInitParams::is_crosapi_disabled_for_testing();
 }
@@ -48,7 +53,7 @@ crosapi::mojom::DeviceMode BrowserParamsProxy::DeviceMode() const {
   return BrowserInitParams::Get()->device_mode;
 }
 
-const absl::optional<base::flat_map<base::Token, uint32_t>>&
+const std::optional<base::flat_map<base::Token, uint32_t>>&
 BrowserParamsProxy::InterfaceVersions() const {
   return BrowserInitParams::Get()->interface_versions;
 }
@@ -70,14 +75,14 @@ crosapi::mojom::ExoImeSupport BrowserParamsProxy::ExoImeSupport() const {
   return BrowserInitParams::Get()->exo_ime_support;
 }
 
-const absl::optional<std::string>& BrowserParamsProxy::CrosUserIdHash() const {
+const std::optional<std::string>& BrowserParamsProxy::CrosUserIdHash() const {
   if (IsLaunchedWithPostLoginParams()) {
     return BrowserPostLoginParams::Get()->cros_user_id_hash;
   }
   return BrowserInitParams::Get()->cros_user_id_hash;
 }
 
-const absl::optional<std::vector<uint8_t>>&
+const std::optional<std::vector<uint8_t>>&
 BrowserParamsProxy::DeviceAccountPolicy() const {
   if (IsLaunchedWithPostLoginParams()) {
     return BrowserPostLoginParams::Get()->device_account_policy;
@@ -111,20 +116,6 @@ const crosapi::mojom::AccountPtr& BrowserParamsProxy::DeviceAccount() const {
   return BrowserInitParams::Get()->device_account;
 }
 
-bool BrowserParamsProxy::WebAppsEnabled() const {
-  if (IsLaunchedWithPostLoginParams()) {
-    return BrowserPostLoginParams::Get()->web_apps_enabled;
-  }
-  return BrowserInitParams::Get()->web_apps_enabled;
-}
-
-bool BrowserParamsProxy::StandaloneBrowserIsPrimary() const {
-  if (IsLaunchedWithPostLoginParams()) {
-    return BrowserPostLoginParams::Get()->standalone_browser_is_primary;
-  }
-  return BrowserInitParams::Get()->standalone_browser_is_primary;
-}
-
 const crosapi::mojom::NativeThemeInfoPtr& BrowserParamsProxy::NativeThemeInfo()
     const {
   return BrowserInitParams::Get()->native_theme_info;
@@ -140,7 +131,7 @@ BrowserParamsProxy::OndeviceHandwritingSupport() const {
   return BrowserInitParams::Get()->ondevice_handwriting_support;
 }
 
-const absl::optional<std::vector<crosapi::mojom::BuildFlag>>&
+const std::optional<std::vector<crosapi::mojom::BuildFlag>>&
 BrowserParamsProxy::BuildFlags() const {
   return BrowserInitParams::Get()->build_flags;
 }
@@ -157,7 +148,7 @@ const crosapi::mojom::DeviceSettingsPtr& BrowserParamsProxy::DeviceSettings()
   return BrowserInitParams::Get()->device_settings;
 }
 
-const absl::optional<std::string>& BrowserParamsProxy::MetricsServiceClientId()
+const std::optional<std::string>& BrowserParamsProxy::MetricsServiceClientId()
     const {
   return BrowserInitParams::Get()->metrics_service_client_id;
 }
@@ -169,13 +160,6 @@ const crosapi::mojom::EntropySourcePtr& BrowserParamsProxy::EntropySource()
 
 uint64_t BrowserParamsProxy::UkmClientId() const {
   return BrowserInitParams::Get()->ukm_client_id;
-}
-
-bool BrowserParamsProxy::StandaloneBrowserIsOnlyBrowser() const {
-  if (IsLaunchedWithPostLoginParams()) {
-    return BrowserPostLoginParams::Get()->standalone_browser_is_only_browser;
-  }
-  return BrowserInitParams::Get()->standalone_browser_is_only_browser;
 }
 
 bool BrowserParamsProxy::PublishChromeApps() const {
@@ -201,12 +185,12 @@ bool BrowserParamsProxy::IsUnfilteredBluetoothDeviceEnabled() const {
   return BrowserInitParams::Get()->is_unfiltered_bluetooth_device_enabled;
 }
 
-const absl::optional<std::vector<std::string>>&
+const std::optional<std::vector<std::string>>&
 BrowserParamsProxy::AshCapabilities() const {
   return BrowserInitParams::Get()->ash_capabilities;
 }
 
-const absl::optional<std::vector<GURL>>&
+const std::optional<std::vector<GURL>>&
 BrowserParamsProxy::AcceptedInternalAshUrls() const {
   return BrowserInitParams::Get()->accepted_internal_ash_urls;
 }
@@ -224,7 +208,7 @@ bool BrowserParamsProxy::IsOndeviceSpeechSupported() const {
   return BrowserInitParams::Get()->is_ondevice_speech_supported;
 }
 
-const absl::optional<base::flat_map<policy::PolicyNamespace, base::Value>>&
+const std::optional<base::flat_map<policy::PolicyNamespace, base::Value>>&
 BrowserParamsProxy::DeviceAccountComponentPolicy() const {
   if (IsLaunchedWithPostLoginParams()) {
     return BrowserPostLoginParams::Get()->device_account_component_policy;
@@ -232,8 +216,7 @@ BrowserParamsProxy::DeviceAccountComponentPolicy() const {
   return BrowserInitParams::Get()->device_account_component_policy;
 }
 
-const absl::optional<std::string>& BrowserParamsProxy::AshChromeVersion()
-    const {
+const std::optional<std::string>& BrowserParamsProxy::AshChromeVersion() const {
   return BrowserInitParams::Get()->ash_chrome_version;
 }
 
@@ -277,10 +260,6 @@ bool BrowserParamsProxy::EnableLacrosTtsSupport() const {
 crosapi::mojom::BrowserInitParams::LacrosSelection
 BrowserParamsProxy::LacrosSelection() const {
   return BrowserInitParams::Get()->lacros_selection;
-}
-
-bool BrowserParamsProxy::IsWindowLayoutMenuEnabled() const {
-  return BrowserInitParams::Get()->enable_window_layout_menu;
 }
 
 bool BrowserParamsProxy::IsCloudGamingDevice() const {
@@ -354,6 +333,14 @@ bool BrowserParamsProxy::IsDeskProfilesEnabled() const {
 
 bool BrowserParamsProxy::IsCrosWebAppShortcutUiUpdateEnabled() const {
   return BrowserInitParams::Get()->is_cros_web_app_shortcut_ui_update_enabled;
+}
+
+bool BrowserParamsProxy::IsCrosShortstandEnabled() const {
+  return BrowserInitParams::Get()->is_cros_shortstand_enabled;
+}
+
+bool BrowserParamsProxy::ShouldDisableChromeComposeOnChromeOS() const {
+  return BrowserInitParams::Get()->should_disable_chrome_compose_on_chromeos;
 }
 
 }  // namespace chromeos

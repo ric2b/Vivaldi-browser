@@ -38,7 +38,6 @@
 #include "absl/strings/str_replace.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "absl/types/span.h"
 #include "./centipede/analyze_corpora.h"
 #include "./centipede/binary_info.h"
 #include "./centipede/blob_file.h"
@@ -49,13 +48,12 @@
 #include "./centipede/coverage.h"
 #include "./centipede/defs.h"
 #include "./centipede/distill.h"
+#include "./centipede/early_exit.h"
 #include "./centipede/environment.h"
-#include "./centipede/feature.h"
 #include "./centipede/logging.h"  // IWYU pragma: keep
 #include "./centipede/minimize_crash.h"
 #include "./centipede/pc_info.h"
 #include "./centipede/remote_file.h"
-#include "./centipede/shard_reader.h"
 #include "./centipede/stats.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
@@ -114,7 +112,7 @@ int ForEachBlob(const Environment &env) {
       LOG(INFO) << "Failed to open " << arg << ": " << open_status;
       return EXIT_FAILURE;
     }
-    absl::Span<uint8_t> blob;
+    ByteSpan blob;
     while (blob_reader->Read(blob) == absl::OkStatus()) {
       ByteArray bytes;
       bytes.insert(bytes.begin(), blob.data(), blob.end());
@@ -187,8 +185,8 @@ int CentipedeMain(const Environment &env,
                   CentipedeCallbacksFactory &callbacks_factory) {
   SetSignalHandlers(env.stop_at);
 
-  if (!env.save_corpus_to_local_dir.empty()) {
-    Centipede::SaveCorpusToLocalDir(env, env.save_corpus_to_local_dir);
+  if (!env.corpus_to_files.empty()) {
+    Centipede::CorpusToFiles(env, env.corpus_to_files);
     return EXIT_SUCCESS;
   }
 
@@ -201,15 +199,17 @@ int CentipedeMain(const Environment &env,
   }
 
   // Just export the corpus from a local dir and exit.
-  if (!env.export_corpus_from_local_dir.empty()) {
-    Centipede::ExportCorpusFromLocalDir(env, env.export_corpus_from_local_dir);
+  if (!env.corpus_from_files.empty()) {
+    Centipede::CorpusFromFiles(env, env.corpus_from_files);
     return EXIT_SUCCESS;
   }
 
   // Export the corpus from a local dir and then fuzz.
   if (!env.corpus_dir.empty()) {
-    for (const auto &corpus_dir : env.corpus_dir) {
-      Centipede::ExportCorpusFromLocalDir(env, corpus_dir);
+    for (size_t i = 0; i < env.corpus_dir.size(); ++i) {
+      const auto &corpus_dir = env.corpus_dir[i];
+      if (i > 0 || !env.first_corpus_dir_output_only)
+        Centipede::CorpusFromFiles(env, corpus_dir);
     }
   }
 

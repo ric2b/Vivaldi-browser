@@ -12,7 +12,6 @@
 #include "main.h"
 #include <unsupported/Eigen/NNLS>
 
-
 /// Check that 'x' solves the NNLS optimization problem `min ||A*x-b|| s.t. 0 <= x`.
 /// The \p tolerance parameter is the absolute tolerance on the gradient, A'*(A*x-b).
 template <typename MatrixType, typename VectorB, typename VectorX, typename Scalar>
@@ -54,7 +53,7 @@ void test_nnls_known_solution(const MatrixType &A, const VectorB &b, const Vecto
 }
 
 template <typename MatrixType>
-void test_nnls_random_problem(const MatrixType&) {
+void test_nnls_random_problem(const MatrixType &) {
   //
   // SETUP
   //

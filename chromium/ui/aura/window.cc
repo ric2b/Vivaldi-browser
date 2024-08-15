@@ -941,10 +941,17 @@ void Window::AfterPropertyChange(const void* key, int64_t old_value) {
 // Window, private:
 
 void Window::SetEmbedFrameSinkIdImpl(const viz::FrameSinkId& frame_sink_id) {
+  if (frame_sink_id_ == frame_sink_id) {
+    return;
+  }
+
   UnregisterFrameSinkId();
 
-  DCHECK(frame_sink_id.is_valid());
   frame_sink_id_ = frame_sink_id;
+  if (!frame_sink_id_.is_valid()) {
+    return;
+  }
+
   RegisterFrameSinkId();
 }
 
@@ -1387,8 +1394,12 @@ const std::u16string Window::OcclusionStateToString(OcclusionState state) {
 
 void Window::SetOpaqueRegionsForOcclusion(
     const std::vector<gfx::Rect>& opaque_regions_for_occlusion) {
-  // Only transparent windows should try to set opaque regions for occlusion.
-  DCHECK(GetTransparent() || opaque_regions_for_occlusion.empty());
+  // Opaque regions for occlusion do not apply to opaque windows, so only
+  // allow opaque regions for occlusion to be set for them if they are the
+  // same as the window bounds size.
+  DCHECK(GetTransparent() || opaque_regions_for_occlusion.empty() ||
+         (opaque_regions_for_occlusion.size() == 1 &&
+          opaque_regions_for_occlusion[0] == gfx::Rect(bounds().size())));
   if (opaque_regions_for_occlusion == opaque_regions_for_occlusion_)
     return;
   opaque_regions_for_occlusion_ = opaque_regions_for_occlusion;

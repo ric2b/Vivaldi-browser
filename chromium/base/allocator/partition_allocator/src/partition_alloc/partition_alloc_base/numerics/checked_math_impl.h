@@ -5,17 +5,16 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_NUMERICS_CHECKED_MATH_IMPL_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_ALLOC_BASE_NUMERICS_CHECKED_MATH_IMPL_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <climits>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
 #include <type_traits>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/numerics/safe_conversions.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/numerics/safe_math_shared_impl.h"
+#include "partition_alloc/partition_alloc_base/numerics/safe_conversions.h"
+#include "partition_alloc/partition_alloc_base/numerics/safe_math_shared_impl.h"
 
 namespace partition_alloc::internal::base::internal {
 

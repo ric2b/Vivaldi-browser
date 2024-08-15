@@ -11,6 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
 #include "chrome/browser/ash/arc/input_overlay/db/proto/app_data.pb.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/views/view.h"
@@ -30,6 +31,8 @@ constexpr int kDefaultLabelIndex = -1;
 
 // ActionView is the view for each action.
 class ActionView : public views::View {
+  METADATA_HEADER(ActionView, views::View)
+
  public:
   ActionView(Action* action,
              DisplayOverlayController* display_overlay_controller);
@@ -119,7 +122,9 @@ class ActionView : public views::View {
   void AddedToWidget() override;
 
   Action* action() { return action_; }
-  const std::vector<ActionLabel*>& labels() const { return labels_; }
+  const std::vector<raw_ptr<ActionLabel, VectorExperimental>>& labels() const {
+    return labels_;
+  }
   TouchPoint* touch_point() { return touch_point_; }
   DisplayOverlayController* display_overlay_controller() {
     return display_overlay_controller_;
@@ -129,7 +134,7 @@ class ActionView : public views::View {
   }
   int unbind_label_index() { return unbind_label_index_; }
 
-  absl::optional<gfx::Point> touch_point_center() const {
+  std::optional<gfx::Point> touch_point_center() const {
     return touch_point_center_;
   }
 
@@ -143,11 +148,11 @@ class ActionView : public views::View {
   // Reference to the owner class.
   const raw_ptr<DisplayOverlayController> display_overlay_controller_ = nullptr;
   // Labels for mapping hints.
-  std::vector<ActionLabel*> labels_;
+  std::vector<raw_ptr<ActionLabel, VectorExperimental>> labels_;
   // Current display mode.
   DisplayMode current_display_mode_ = DisplayMode::kNone;
   // Local center position of the touch point view.
-  absl::optional<gfx::Point> touch_point_center_;
+  std::optional<gfx::Point> touch_point_center_;
 
   // Touch point only shows up in the edit mode for users to align the position.
   // This view owns the touch point as one of its children and `touch_point_`

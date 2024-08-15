@@ -43,8 +43,7 @@ mojom::blink::ColorScheme UsedColorScheme(
 
 Color PreviousLayerColor(const ComputedStyle& originating_style,
                          absl::optional<Color> previous_layer_color) {
-  if (previous_layer_color &&
-      RuntimeEnabledFeatures::HighlightOverlayPaintingEnabled()) {
+  if (previous_layer_color) {
     return *previous_layer_color;
   }
   return originating_style.VisitedDependentColor(GetCSSPropertyColor());
@@ -52,7 +51,8 @@ Color PreviousLayerColor(const ComputedStyle& originating_style,
 
 // Returns the forced foreground color for the given |pseudo|.
 Color ForcedForegroundColor(PseudoId pseudo,
-                            mojom::blink::ColorScheme color_scheme) {
+                            mojom::blink::ColorScheme color_scheme,
+                            const ui::ColorProvider* color_provider) {
   CSSValueID keyword = CSSValueID::kHighlighttext;
   switch (pseudo) {
     case kPseudoIdTargetText:
@@ -73,12 +73,14 @@ Color ForcedForegroundColor(PseudoId pseudo,
       NOTREACHED();
       break;
   }
-  return LayoutTheme::GetTheme().SystemColor(keyword, color_scheme);
+  return LayoutTheme::GetTheme().SystemColor(keyword, color_scheme,
+                                             color_provider);
 }
 
 // Returns the forced ‘background-color’ for the given |pseudo|.
 Color ForcedBackgroundColor(PseudoId pseudo,
-                            mojom::blink::ColorScheme color_scheme) {
+                            mojom::blink::ColorScheme color_scheme,
+                            const ui::ColorProvider* color_provider) {
   CSSValueID keyword = CSSValueID::kHighlight;
   switch (pseudo) {
     case kPseudoIdTargetText:
@@ -99,7 +101,8 @@ Color ForcedBackgroundColor(PseudoId pseudo,
       NOTREACHED();
       break;
   }
-  return LayoutTheme::GetTheme().SystemColor(keyword, color_scheme);
+  return LayoutTheme::GetTheme().SystemColor(keyword, color_scheme,
+                                             color_provider);
 }
 
 // Returns the forced background color if |property| is ‘background-color’,
@@ -108,13 +111,14 @@ Color ForcedBackgroundColor(PseudoId pseudo,
 Color ForcedColor(const ComputedStyle& originating_style,
                   const ComputedStyle* pseudo_style,
                   PseudoId pseudo,
-                  const CSSProperty& property) {
+                  const CSSProperty& property,
+                  const ui::ColorProvider* color_provider) {
   mojom::blink::ColorScheme color_scheme =
       UsedColorScheme(originating_style, pseudo_style);
   if (property.IDEquals(CSSPropertyID::kBackgroundColor)) {
-    return ForcedBackgroundColor(pseudo, color_scheme);
+    return ForcedBackgroundColor(pseudo, color_scheme, color_provider);
   }
-  return ForcedForegroundColor(pseudo, color_scheme);
+  return ForcedForegroundColor(pseudo, color_scheme, color_provider);
 }
 
 // Returns the UA default ‘color’ for the given |pseudo|.
@@ -122,20 +126,10 @@ absl::optional<Color> DefaultForegroundColor(
     const Document& document,
     PseudoId pseudo,
     mojom::blink::ColorScheme color_scheme) {
-  // TODO(crbug.com/1295264): unstyled custom highlights should not change
-  // the foreground color, but for now the best we can do is defaulting to
-  // transparent (pre-HighlightOverlayPainting with double painting). The
-  // correct behaviour is to use the ‘color’ of the next topmost active
-  // highlight (equivalent to 'currentColor').
-  absl::optional<Color> previous_layer_color =
-      RuntimeEnabledFeatures::HighlightOverlayPaintingEnabled()
-          ? absl::nullopt
-          : absl::make_optional(Color::kTransparent);
-
   switch (pseudo) {
     case kPseudoIdSelection:
       if (!LayoutTheme::GetTheme().SupportsSelectionForegroundColors()) {
-        return previous_layer_color;
+        return absl::nullopt;
       }
       if (document.GetFrame()->Selection().FrameIsFocusedAndActive()) {
         return LayoutTheme::GetTheme().ActiveSelectionForegroundColor(
@@ -145,11 +139,12 @@ absl::optional<Color> DefaultForegroundColor(
           color_scheme);
     case kPseudoIdTargetText:
       return LayoutTheme::GetTheme().PlatformTextSearchColor(
-          false /* active match */, color_scheme);
+          false /* active match */, color_scheme,
+          document.GetColorProviderForPainting(color_scheme));
     case kPseudoIdSpellingError:
     case kPseudoIdGrammarError:
     case kPseudoIdHighlight:
-      return previous_layer_color;
+      return absl::nullopt;
     default:
       NOTREACHED();
       return absl::nullopt;
@@ -215,7 +210,7 @@ const ComputedStyle* HighlightPseudoStyleWithOriginatingInheritance(
   Element* element = nullptr;
 
   // In Blink, highlight pseudo style only applies to direct children of the
-  // element on which the highligh pseudo is matched. In order to be able to
+  // element on which the highlight pseudo is matched. In order to be able to
   // style highlight inside elements implemented with a UA shadow tree, like
   // input::selection, we calculate highlight style on the shadow host for
   // elements inside the UA shadow.
@@ -298,7 +293,9 @@ Color HighlightStyleUtils::ResolveColor(
     const CSSProperty& property,
     absl::optional<Color> previous_layer_color) {
   if (UseForcedColors(document, originating_style, pseudo_style)) {
-    return ForcedColor(originating_style, pseudo_style, pseudo, property);
+    return ForcedColor(originating_style, pseudo_style, pseudo, property,
+                       document.GetColorProviderForPainting(
+                           UsedColorScheme(originating_style, pseudo_style)));
   }
   if (UseDefaultHighlightColors(pseudo_style, pseudo, property)) {
     return DefaultHighlightColor(document, originating_style, pseudo_style,
@@ -506,7 +503,7 @@ bool HighlightStyleUtils::ShouldInvalidateVisualOverflow(
     const Node& node,
     DocumentMarker::MarkerType type) {
   if ((type == DocumentMarker::kSpelling || type == DocumentMarker::kGrammar) &&
-      RuntimeEnabledFeatures::CSSPaintingForSpellingGrammarErrorsEnabled()) {
+      RuntimeEnabledFeatures::CSSSpellingGrammarErrorsEnabled()) {
     return true;
   }
 
@@ -521,9 +518,7 @@ bool HighlightStyleUtils::ShouldInvalidateVisualOverflow(
   const ComputedStyle* pseudo_style = nullptr;
   switch (type) {
     case DocumentMarker::kTextFragment:
-      if (RuntimeEnabledFeatures::HighlightOverlayPaintingEnabled()) {
-        pseudo_style = style->HighlightData().TargetText();
-      }
+      pseudo_style = style->HighlightData().TargetText();
       break;
 
     case DocumentMarker::kSpelling:

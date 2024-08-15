@@ -34,6 +34,11 @@ the standalone runner.)
 Note: The first load of a test suite may take some time as generating the test suite listing can
 take a few seconds.
 
+## Documentation
+
+In addition to the documentation pages you're reading, there is TSDoc documentation.
+Start at the [helper index](https://gpuweb.github.io/cts/docs/tsdoc/).
+
 ## Standalone Test Runner / Test Plan Viewer
 
 **The standalone test runner also serves as a test plan viewer.**

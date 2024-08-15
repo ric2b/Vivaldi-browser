@@ -10,15 +10,12 @@ import org.jni_zero.NativeMethods;
 
 import org.chromium.mojo.system.RunLoop;
 
-/**
- * Implementation of {@link RunLoop} suitable for the base:: message loop implementation.
- */
+/** Implementation of {@link RunLoop} suitable for the base:: message loop implementation. */
 @JNINamespace("mojo::android")
 class BaseRunLoop implements RunLoop {
-    /**
-     * Pointer to the C run loop.
-     */
+    /** Pointer to the C run loop. */
     private long mRunLoopID;
+
     private final CoreImpl mCore;
 
     BaseRunLoop(CoreImpl core) {
@@ -36,12 +33,6 @@ class BaseRunLoop implements RunLoop {
     public void runUntilIdle() {
         assert mRunLoopID != 0 : "The run loop cannot run once closed";
         BaseRunLoopJni.get().runUntilIdle(BaseRunLoop.this);
-    }
-
-    @Override
-    public void quit() {
-        assert mRunLoopID != 0 : "The run loop cannot be quitted run once closed";
-        BaseRunLoopJni.get().quit(BaseRunLoop.this);
     }
 
     @Override
@@ -70,10 +61,13 @@ class BaseRunLoop implements RunLoop {
     @NativeMethods
     interface Natives {
         long createBaseRunLoop(BaseRunLoop caller);
+
         void run(BaseRunLoop caller);
+
         void runUntilIdle(BaseRunLoop caller);
-        void quit(BaseRunLoop caller);
+
         void postDelayedTask(BaseRunLoop caller, long runLoopID, Runnable runnable, long delay);
+
         void deleteMessageLoop(BaseRunLoop caller, long runLoopID);
     }
 }

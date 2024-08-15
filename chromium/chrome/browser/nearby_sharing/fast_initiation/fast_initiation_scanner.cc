@@ -5,6 +5,8 @@
 #include "chrome/browser/nearby_sharing/fast_initiation/fast_initiation_scanner.h"
 
 #include <stdint.h>
+
+#include <optional>
 #include <vector>
 
 #include "base/time/time.h"
@@ -12,7 +14,6 @@
 #include "chrome/browser/nearby_sharing/nearby_share_metrics.h"
 #include "components/cross_device/logging/logging.h"
 #include "device/bluetooth/bluetooth_low_energy_scan_filter.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 
@@ -46,9 +47,11 @@ bool FastInitiationScanner::Factory::IsHardwareSupportAvailable(
   if (factory_instance_)
     return factory_instance_->IsHardwareSupportAvailable();
 
-  return adapter->GetLowEnergyScanSessionHardwareOffloadingStatus() ==
-         device::BluetoothAdapter::
-             LowEnergyScanSessionHardwareOffloadingStatus::kSupported;
+  // The function only returns correct status when adapter is powered.
+  return adapter->IsPowered() &&
+         adapter->GetLowEnergyScanSessionHardwareOffloadingStatus() ==
+             device::BluetoothAdapter::
+                 LowEnergyScanSessionHardwareOffloadingStatus::kSupported;
 }
 
 // static
@@ -90,7 +93,7 @@ void FastInitiationScanner::StartScanning(
       device::BluetoothLowEnergyScanFilter::Range::kNear,
       kBackgroundScanningDeviceFoundTimeout,
       kBackgroundScanningDeviceLostTimeout, {pattern},
-      /*rssi_sampling_period=*/absl::nullopt);
+      /*rssi_sampling_period=*/std::nullopt);
   if (!filter) {
     CD_LOG(ERROR, Feature::NS)
         << __func__
@@ -106,7 +109,7 @@ void FastInitiationScanner::StartScanning(
 
 void FastInitiationScanner::OnSessionStarted(
     device::BluetoothLowEnergyScanSession* scan_session,
-    absl::optional<device::BluetoothLowEnergyScanSession::ErrorCode>
+    std::optional<device::BluetoothLowEnergyScanSession::ErrorCode>
         error_code) {
   if (error_code) {
     CD_LOG(WARNING, Feature::NS)

@@ -11,24 +11,31 @@ import android.os.Bundle;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
+import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.site_settings.AllSiteSettings;
 import org.chromium.components.browser_ui.site_settings.ContentSettingsResources;
-import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference;
-import org.chromium.components.browser_ui.site_settings.FourStateCookieSettingsPreference.CookieSettingsState;
 import org.chromium.components.browser_ui.site_settings.GroupedWebsitesSettings;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
+import org.chromium.components.browser_ui.site_settings.StorageAccessSubpageSettings;
+import org.chromium.components.browser_ui.site_settings.TriStateCookieSettingsPreference;
 import org.chromium.components.browser_ui.site_settings.Website;
 import org.chromium.components.browser_ui.site_settings.WebsiteGroup;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionAndAuxButton;
+import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+
+import java.util.concurrent.TimeoutException;
 
 /** Util functions for testing SiteSettings functionality. */
 public class SiteSettingsTestUtils {
@@ -69,6 +76,20 @@ public class SiteSettingsTestUtils {
                         ApplicationProvider.getApplicationContext(),
                         SingleCategorySettings.class.getName(),
                         fragmentArgs);
+        return (SettingsActivity)
+                InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
+    }
+
+    public static SettingsActivity startStorageAccessSettingsActivity(Website site) {
+        Bundle fragmentArgs = new Bundle();
+        fragmentArgs.putSerializable(StorageAccessSubpageSettings.EXTRA_STORAGE_ACCESS_STATE, site);
+        fragmentArgs.putBoolean(StorageAccessSubpageSettings.EXTRA_ALLOWED, true);
+
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        Context context = ApplicationProvider.getApplicationContext();
+        Intent intent =
+                settingsLauncher.createSettingsActivityIntent(
+                        context, StorageAccessSubpageSettings.class.getName(), fragmentArgs);
         return (SettingsActivity)
                 InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
     }
@@ -114,9 +135,25 @@ public class SiteSettingsTestUtils {
     }
 
     public static RadioButtonWithDescriptionAndAuxButton getCookieRadioButtonFrom(
-            FourStateCookieSettingsPreference cookiePage, CookieSettingsState cookieSettingsState) {
-        RadioButtonWithDescription button = cookiePage.getButton(cookieSettingsState);
+            TriStateCookieSettingsPreference cookiePage,
+            @CookieControlsMode int cookieControlsMode) {
+        RadioButtonWithDescription button = cookiePage.getButton(cookieControlsMode);
 
         return ((RadioButtonWithDescriptionAndAuxButton) button);
+    }
+
+    public static void cleanUpCookiesAndPermissions() throws TimeoutException {
+        CallbackHelper helper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    BrowsingDataBridge.getInstance()
+                            .clearBrowsingData(
+                                    helper::notifyCalled,
+                                    new int[] {
+                                        BrowsingDataType.COOKIES, BrowsingDataType.SITE_SETTINGS
+                                    },
+                                    TimePeriod.ALL_TIME);
+                });
+        helper.waitForCallback(0);
     }
 }

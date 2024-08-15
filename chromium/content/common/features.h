@@ -15,11 +15,8 @@ namespace features {
 // Please keep features in alphabetical order.
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kAllowContentInitiatedDataUrlNavigations);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kAndroidDownloadableFontsMatching);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kAvoidUnnecessaryBeforeUnloadCheckSync);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kAttributionReportingCrossAppWebOverride);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kBackForwardCacheTimeToLiveControl);
-#if BUILDFLAG(IS_ANDROID)
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kBackgroundMediaRendererHasModerateBinding);
-#endif
 BASE_DECLARE_FEATURE(kBeforeUnloadBrowserResponseQueue);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(
     kBlockInsecurePrivateNetworkRequestsFromUnknown);
@@ -30,18 +27,20 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kCodeCacheDeletionWithoutFilter);
 BASE_DECLARE_FEATURE(kConsolidatedIPCForProxyCreation);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kConsolidatedMovementXY);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kCriticalClientHint);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kDataUrlsHaveStableNonce);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kDataUrlsHaveOriginAsUrl);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kDesktopCaptureChangeSource);
 #if BUILDFLAG(IS_MAC)
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kDeviceMonitorMac);
 #endif
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kDocumentPolicyNegotiation);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kEnumerateDevicesHideDeviceIDs);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kEnableBackForwardCacheForScreenReader);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(
+    kEnableBackForwardCacheForOngoingSubframeNavigation);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kEnableDevToolsJsErrorReporting);
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kEnsureAllowBindingsIsAlwaysForWebUI);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kEnumerateDevicesHideDeviceIDs);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kEmbeddingRequiresOptIn);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kExperimentalContentSecurityPolicyFeatures);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kFedCmIdAssertionCORS);
@@ -50,6 +49,7 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeLimitNumAuctions);
 CONTENT_EXPORT extern const base::FeatureParam<int>
     kFledgeLimitNumAuctionsParam;
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeUseInterestGroupCache);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeDelayPostAuctionInterestGroupUpdate);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kFontSrcLocalMatching);
 #if !BUILDFLAG(IS_ANDROID)
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kForwardMemoryPressureEventsToGpuProcess);
@@ -62,14 +62,15 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kGroupNIKByJoiningOrigin);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kHandleChildThreadTypeChangesInBrowser);
 #endif
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kHighPriorityBeforeUnload);
+
+BASE_DECLARE_FEATURE(kHistoryInterventionSameDocumentFix);
+
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kInMemoryCodeCache);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kInnerFrameCompositorSurfaceEviction);
 #if BUILDFLAG(IS_MAC)
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kIOSurfaceCapturer);
 #endif
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kJavaScriptArrayGrouping);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kLazyFrameLoading);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kMacImeLiveConversionFix);
 #if BUILDFLAG(IS_MAC)
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kMacWebContentsOcclusion);
 #endif
@@ -79,10 +80,14 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kMojoDedicatedThread);
 #if BUILDFLAG(IS_ANDROID)
 BASE_DECLARE_FEATURE(kOptimizeImmHideCalls);
 #endif
+#if !BUILDFLAG(IS_ANDROID)
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kPermissionsPolicyVerificationInContent);
+#endif
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kPreloadingConfig);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kPreloadCookies);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrivacySandboxAdsAPIsM1Override);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrivateNetworkAccessForIframesWarningOnly);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(
+    kPrivateNetworkAccessForNavigationsWarningOnly);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kProactivelySwapBrowsingInstance);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kProcessSharingWithDefaultSiteInstances);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kProcessSharingWithStrictSiteInstances);
@@ -91,6 +96,7 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(
     kRunStableVideoDecoderFactoryProcessServiceOnIOThread);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(
     kResourceTimingForCancelledNavigationInFrame);
+CONTENT_EXPORT BASE_DECLARE_FEATURE(kRequestFileSetCheckedInCanRequestURL);
 BASE_DECLARE_FEATURE(kRestrictCanAccessDataForOriginToUIThread);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kReuseInitialRenderFrameHostForWebUI);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kSendBeaconThrowForBlobWithNonSimpleType);
@@ -119,7 +125,6 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kVideoPlaybackQuality);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kWarmUpNetworkProcess);
 #endif
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyDynamicTiering);
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kWebGLImageChromium);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kWebOTPAssertionFeaturePolicy);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kWebRtcUseGpuMemoryBufferVideoFrames);
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kWindowOpenFileSelectFix);

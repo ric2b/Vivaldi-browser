@@ -450,20 +450,29 @@ void GpuHostImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
 
   TRACE_EVENT1("gpu", "GpuHostImpl::LoadedBlob", "handle_type",
                GetHandleType(handle));
-  switch (gpu::GetHandleType(handle)) {
-    case gpu::GpuDiskCacheType::kGlShaders: {
-      std::string prefix = GetShaderPrefixKey();
-      bool prefix_ok = !key.compare(0, prefix.length(), prefix);
-      if (prefix_ok) {
-        // Remove the prefix from the key before load.
-        std::string key_no_prefix = key.substr(prefix.length() + 1);
-        gpu_service_remote_->LoadedBlob(handle, key_no_prefix, data);
+
+  // If cache key prefix is being generated in service side, we don't need to
+  // generate it here.
+  if (base::FeatureList::IsEnabled(
+          features::kGenGpuDiskCacheKeyPrefixInGpuService)) {
+    gpu_service_remote_->LoadedBlob(handle, key, data);
+  } else {
+    switch (gpu::GetHandleType(handle)) {
+      case gpu::GpuDiskCacheType::kGlShaders: {
+        std::string prefix = GetShaderPrefixKey();
+        bool prefix_ok = !key.compare(0, prefix.length(), prefix);
+        UMA_HISTOGRAM_BOOLEAN("GPU.ShaderLoadPrefixOK", prefix_ok);
+        if (prefix_ok) {
+          // Remove the prefix from the key before load.
+          std::string key_no_prefix = key.substr(prefix.length() + 1);
+          gpu_service_remote_->LoadedBlob(handle, key_no_prefix, data);
+        }
+        break;
       }
-      break;
-    }
-    case gpu::GpuDiskCacheType::kDawnWebGPU: {
-      gpu_service_remote_->LoadedBlob(handle, key, data);
-      break;
+      case gpu::GpuDiskCacheType::kDawnWebGPU: {
+        gpu_service_remote_->LoadedBlob(handle, key, data);
+        break;
+      }
     }
   }
 }
@@ -504,7 +513,7 @@ void GpuHostImpl::OnChannelEstablished(
                             gpu::GpuFeatureInfo(),
                             gpu::SharedImageCapabilities(),
                             EstablishChannelStatus::kGpuAccessDenied);
-    RecordLogMessage(logging::LOG_WARNING, "WARNING",
+    RecordLogMessage(logging::LOGGING_WARNING, "WARNING",
                      "Hardware acceleration is unavailable.");
     return;
   }
@@ -533,8 +542,6 @@ void GpuHostImpl::DidInitialize(
     const absl::optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu,
     const gfx::GpuExtraInfo& gpu_extra_info) {
-  UMA_HISTOGRAM_BOOLEAN("GPU.GPUProcessInitialized", true);
-
   delegate_->DidInitialize(gpu_info, gpu_feature_info,
                            gpu_info_for_hardware_gpu,
                            gpu_feature_info_for_hardware_gpu, gpu_extra_info);
@@ -550,7 +557,6 @@ void GpuHostImpl::DidInitialize(
 }
 
 void GpuHostImpl::DidFailInitialize() {
-  UMA_HISTOGRAM_BOOLEAN("GPU.GPUProcessInitialized", false);
   delegate_->DidFailInitialize();
 }
 
@@ -591,10 +597,8 @@ void GpuHostImpl::MaybeShutdownGpuProcess() {
   delegate_->MaybeShutdownGpuProcess();
 }
 
-void GpuHostImpl::DidLoseContext(bool offscreen,
-                                 gpu::error::ContextLostReason reason,
+void GpuHostImpl::DidLoseContext(gpu::error::ContextLostReason reason,
                                  const GURL& active_url) {
-  // TODO(kbr): would be nice to see the "offscreen" flag too.
   TRACE_EVENT2("gpu", "GpuHostImpl::DidLoseContext", "reason", reason, "url",
                active_url.possibly_invalid_spec());
 
@@ -671,15 +675,23 @@ void GpuHostImpl::StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
 
   TRACE_EVENT1("gpu", "GpuHostImpl::StoreBlobToDisk", "handle_type",
                GetHandleType(handle));
-  switch (GetHandleType(handle)) {
-    case gpu::GpuDiskCacheType::kGlShaders: {
-      std::string prefix = GetShaderPrefixKey();
-      cache->Cache(base::StrCat({prefix, ":", key}), blob);
-      break;
-    }
-    case gpu::GpuDiskCacheType::kDawnWebGPU: {
-      cache->Cache(key, blob);
-      break;
+
+  // If cache key prefix is being generated in service side, we don't need to
+  // generate it here.
+  if (base::FeatureList::IsEnabled(
+          features::kGenGpuDiskCacheKeyPrefixInGpuService)) {
+    cache->Cache(key, blob);
+  } else {
+    switch (GetHandleType(handle)) {
+      case gpu::GpuDiskCacheType::kGlShaders: {
+        std::string prefix = GetShaderPrefixKey();
+        cache->Cache(base::StrCat({prefix, ":", key}), blob);
+        break;
+      }
+      case gpu::GpuDiskCacheType::kDawnWebGPU: {
+        cache->Cache(key, blob);
+        break;
+      }
     }
   }
 }

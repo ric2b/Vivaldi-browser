@@ -51,9 +51,7 @@ RTCError VerifyCodecPreferences(
   // transceiver.direction.
 
   if (!absl::c_any_of(codecs, [&recv_codecs](const RtpCodecCapability& codec) {
-        return codec.name != cricket::kRtxCodecName &&
-               codec.name != cricket::kRedCodecName &&
-               codec.name != cricket::kFlexfecCodecName &&
+        return codec.IsMediaCodec() &&
                absl::c_any_of(recv_codecs,
                               [&codec](const cricket::Codec& recv_codec) {
                                 return recv_codec.MatchesRtpCodec(codec);
@@ -65,9 +63,7 @@ RTCError VerifyCodecPreferences(
   }
 
   if (!absl::c_any_of(codecs, [&send_codecs](const RtpCodecCapability& codec) {
-        return codec.name != cricket::kRtxCodecName &&
-               codec.name != cricket::kRedCodecName &&
-               codec.name != cricket::kFlexfecCodecName &&
+        return codec.IsMediaCodec() &&
                absl::c_any_of(send_codecs,
                               [&codec](const cricket::Codec& send_codec) {
                                 return send_codec.MatchesRtpCodec(codec);
@@ -101,11 +97,9 @@ RTCError VerifyCodecPreferences(
     }
   }
 
-  // Check we have a real codec (not just rtx, red or fec)
+  // Check we have a real codec (not just rtx, red, fec or CN)
   if (absl::c_all_of(codecs, [](const RtpCodecCapability& codec) {
-        return codec.name == cricket::kRtxCodecName ||
-               codec.name == cricket::kRedCodecName ||
-               codec.name == cricket::kUlpfecCodecName;
+        return !codec.IsMediaCodec();
       })) {
     LOG_AND_RETURN_ERROR(
         RTCErrorType::INVALID_MODIFICATION,
@@ -542,7 +536,7 @@ bool RtpTransceiver::stopping() const {
 
 RtpTransceiverDirection RtpTransceiver::direction() const {
   if (unified_plan_ && stopping())
-    return webrtc::RtpTransceiverDirection::kStopped;
+    return RtpTransceiverDirection::kStopped;
 
   return direction_;
 }
@@ -570,7 +564,7 @@ RTCError RtpTransceiver::SetDirectionWithError(
 absl::optional<RtpTransceiverDirection> RtpTransceiver::current_direction()
     const {
   if (unified_plan_ && stopped())
-    return webrtc::RtpTransceiverDirection::kStopped;
+    return RtpTransceiverDirection::kStopped;
 
   return current_direction_;
 }
@@ -604,7 +598,7 @@ void RtpTransceiver::StopSendingAndReceiving() {
   });
 
   stopping_ = true;
-  direction_ = webrtc::RtpTransceiverDirection::kInactive;
+  direction_ = RtpTransceiverDirection::kInactive;
 }
 
 RTCError RtpTransceiver::StopStandard() {

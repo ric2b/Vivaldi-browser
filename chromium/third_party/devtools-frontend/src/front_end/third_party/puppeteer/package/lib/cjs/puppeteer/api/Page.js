@@ -1,18 +1,8 @@
 "use strict";
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -140,7 +130,6 @@ function setDefaultScreenshotOptions(options) {
     options.omitBackground ??= false;
     options.encoding ??= 'binary';
     options.captureBeyondViewport ??= true;
-    options.allowViewportExpansion ??= options.captureBeyondViewport;
 }
 exports.setDefaultScreenshotOptions = setDefaultScreenshotOptions;
 /**
@@ -218,28 +207,6 @@ let Page = (() => {
             super();
         }
         /**
-         * `true` if the service worker are being bypassed, `false` otherwise.
-         */
-        isServiceWorkerBypassed() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * `true` if drag events are being intercepted, `false` otherwise.
-         *
-         * @deprecated We no longer support intercepting drag payloads. Use the new
-         * drag APIs found on {@link ElementHandle} to drag (or just use the
-         * {@link Page.mouse}).
-         */
-        isDragInterceptionEnabled() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * `true` if the page has JavaScript enabled, `false` otherwise.
-         */
-        isJavaScriptEnabled() {
-            throw new Error('Not implemented');
-        }
-        /**
          * Listen to page events.
          *
          * @remarks
@@ -274,56 +241,6 @@ let Page = (() => {
             }
             return super.off(type, handler);
         }
-        waitForFileChooser() {
-            throw new Error('Not implemented');
-        }
-        async setGeolocation() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * A target this page was created from.
-         */
-        target() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * Creates a Chrome Devtools Protocol session attached to the page.
-         */
-        createCDPSession() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * {@inheritDoc Touchscreen}
-         */
-        get touchscreen() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * All of the dedicated {@link
-         * https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API |
-         * WebWorkers} associated with the page.
-         *
-         * @remarks
-         * This does not contain ServiceWorkers
-         */
-        workers() {
-            throw new Error('Not implemented');
-        }
-        async setRequestInterception() {
-            throw new Error('Not implemented');
-        }
-        async setBypassServiceWorker() {
-            throw new Error('Not implemented');
-        }
-        async setDragInterception() {
-            throw new Error('Not implemented');
-        }
-        setOfflineMode() {
-            throw new Error('Not implemented');
-        }
-        emulateNetworkConditions() {
-            throw new Error('Not implemented');
-        }
         locator(selectorOrFunc) {
             if (typeof selectorOrFunc === 'string') {
                 return locators_js_1.NodeLocator.create(this, selectorOrFunc);
@@ -354,9 +271,12 @@ let Page = (() => {
         /**
          * The method runs `document.querySelectorAll` within the page. If no elements
          * match the selector, the return value resolves to `[]`.
-         * @remarks
-         * Shortcut for {@link Frame.$$ | Page.mainFrame().$$(selector) }.
+         *
          * @param selector - A `selector` to query page for
+         *
+         * @remarks
+         *
+         * Shortcut for {@link Frame.$$ | Page.mainFrame().$$(selector) }.
          */
         async $$(selector) {
             return await this.mainFrame().$$(selector);
@@ -567,15 +487,6 @@ let Page = (() => {
         async $x(expression) {
             return await this.mainFrame().$x(expression);
         }
-        async cookies() {
-            throw new Error('Not implemented');
-        }
-        async deleteCookie() {
-            throw new Error('Not implemented');
-        }
-        async setCookie() {
-            throw new Error('Not implemented');
-        }
         /**
          * Adds a `<script>` tag into the page with the desired URL or content.
          *
@@ -593,58 +504,12 @@ let Page = (() => {
         async addStyleTag(options) {
             return await this.mainFrame().addStyleTag(options);
         }
-        async removeExposedFunction() {
-            throw new Error('Not implemented');
-        }
-        async authenticate() {
-            throw new Error('Not implemented');
-        }
-        async setExtraHTTPHeaders() {
-            throw new Error('Not implemented');
-        }
-        /**
-         * Object containing metrics as key/value pairs.
-         *
-         * @returns
-         *
-         * - `Timestamp` : The timestamp when the metrics sample was taken.
-         *
-         * - `Documents` : Number of documents in the page.
-         *
-         * - `Frames` : Number of frames in the page.
-         *
-         * - `JSEventListeners` : Number of events in the page.
-         *
-         * - `Nodes` : Number of DOM nodes in the page.
-         *
-         * - `LayoutCount` : Total number of full or partial page layout.
-         *
-         * - `RecalcStyleCount` : Total number of page style recalculations.
-         *
-         * - `LayoutDuration` : Combined durations of all page layouts.
-         *
-         * - `RecalcStyleDuration` : Combined duration of all page style
-         *   recalculations.
-         *
-         * - `ScriptDuration` : Combined duration of JavaScript execution.
-         *
-         * - `TaskDuration` : Combined duration of all tasks performed by the browser.
-         *
-         * - `JSHeapUsedSize` : Used JavaScript heap size.
-         *
-         * - `JSHeapTotalSize` : Total JavaScript heap size.
-         *
-         * @remarks
-         * All timestamps are in monotonic time: monotonically increasing time
-         * in seconds since an arbitrary point in the past.
-         */
-        async metrics() {
-            throw new Error('Not implemented');
-        }
         /**
          * The page's URL.
-         * @remarks Shortcut for
-         * {@link Frame.url | page.mainFrame().url()}.
+         *
+         * @remarks
+         *
+         * Shortcut for {@link Frame.url | page.mainFrame().url()}.
          */
         url() {
             return this.mainFrame().url();
@@ -660,7 +525,9 @@ let Page = (() => {
          *
          * @param html - HTML markup to assign to the page.
          * @param options - Parameters that has some properties.
+         *
          * @remarks
+         *
          * The parameter `options` might have the following options.
          *
          * - `timeout` : Maximum time in milliseconds for resources to load, defaults
@@ -688,6 +555,7 @@ let Page = (() => {
          * Navigates the page to the given `url`.
          *
          * @remarks
+         *
          * Navigation to `about:blank` or navigation to the same URL with a different
          * hash will succeed and return `null`.
          *
@@ -737,6 +605,7 @@ let Page = (() => {
          * ```
          *
          * @remarks
+         *
          * Usage of the
          * {@link https://developer.mozilla.org/en-US/docs/Web/API/History_API | History API}
          * to change the URL is considered a navigation.
@@ -756,12 +625,12 @@ let Page = (() => {
         /**
          * @internal
          */
-        async _waitForNetworkIdle(networkManager, idleTime, ms, closedDeferred) {
-            await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.merge)((0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Request), (0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Response), (0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.RequestFailed)).pipe((0, rxjs_js_1.startWith)(null), (0, rxjs_js_1.filter)(() => {
-                return networkManager.inFlightRequestsCount() === 0;
+        _waitForNetworkIdle(networkManager, idleTime, requestsInFlight = 0) {
+            return (0, rxjs_js_1.merge)((0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Request), (0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.Response), (0, rxjs_js_1.fromEvent)(networkManager, NetworkManagerEvents_js_1.NetworkManagerEvent.RequestFailed)).pipe((0, rxjs_js_1.startWith)(undefined), (0, rxjs_js_1.filter)(() => {
+                return networkManager.inFlightRequestsCount() <= requestsInFlight;
             }), (0, rxjs_js_1.switchMap)(v => {
                 return (0, rxjs_js_1.of)(v).pipe((0, rxjs_js_1.delay)(idleTime));
-            }), (0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms), (0, rxjs_js_1.from)(closedDeferred.valueOrThrow()))));
+            }));
         }
         /**
          * Waits for a frame matching the given conditions to appear.
@@ -785,12 +654,6 @@ let Page = (() => {
                 throw new Errors_js_1.TargetCloseError('Page closed.');
             })))));
         }
-        async goBack() {
-            throw new Error('Not implemented');
-        }
-        async goForward() {
-            throw new Error('Not implemented');
-        }
         /**
          * Emulates a given device's metrics and user agent.
          *
@@ -801,7 +664,6 @@ let Page = (() => {
          * This method is a shortcut for calling two methods:
          * {@link Page.setUserAgent} and {@link Page.setViewport}.
          *
-         * @remarks
          * This method will resize the page. A lot of websites don't expect phones to
          * change size, so you should emulate before navigating to the page.
          *
@@ -826,27 +688,6 @@ let Page = (() => {
                 this.setUserAgent(device.userAgent),
                 this.setViewport(device.viewport),
             ]);
-        }
-        async setJavaScriptEnabled() {
-            throw new Error('Not implemented');
-        }
-        async emulateMediaType() {
-            throw new Error('Not implemented');
-        }
-        async emulateCPUThrottling() {
-            throw new Error('Not implemented');
-        }
-        async emulateMediaFeatures() {
-            throw new Error('Not implemented');
-        }
-        async emulateTimezone() {
-            throw new Error('Not implemented');
-        }
-        async emulateIdleState() {
-            throw new Error('Not implemented');
-        }
-        async emulateVisionDeficiency() {
-            throw new Error('Not implemented');
         }
         /**
          * Evaluates a function in the page's context and returns the result.
@@ -912,13 +753,6 @@ let Page = (() => {
         /**
          * Captures a screencast of this {@link Page | page}.
          *
-         * @remarks
-         *
-         * All recordings will be {@link https://www.webmproject.org/ | WebM} format using
-         * the {@link https://www.webmproject.org/vp9/ | VP9} video codec. The FPS is 30.
-         *
-         * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
-         *
          * @example
          * Recording a {@link Page | page}:
          *
@@ -948,6 +782,13 @@ let Page = (() => {
          * @param options - Configures screencast behavior.
          *
          * @experimental
+         *
+         * @remarks
+         *
+         * All recordings will be {@link https://www.webmproject.org/ | WebM} format using
+         * the {@link https://www.webmproject.org/vp9/ | VP9} video codec. The FPS is 30.
+         *
+         * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
          */
         async screencast(options = {}) {
             const [{ ScreenRecorder }, [width, height, devicePixelRatio]] = await Promise.all([
@@ -964,7 +805,7 @@ let Page = (() => {
                     throw new Error(`\`crop.height\` and \`crop.width\` must be greater than or equal to 0.`);
                 }
                 const viewportWidth = width / devicePixelRatio;
-                const viewportHeight = width / devicePixelRatio;
+                const viewportHeight = height / devicePixelRatio;
                 if (x + cropWidth > viewportWidth) {
                     throw new Error(`\`crop.width\` cannot be larger than the viewport width (${viewportWidth}).`);
                 }
@@ -1073,7 +914,7 @@ let Page = (() => {
             const env_2 = { stack: [], error: void 0, hasError: false };
             try {
                 await this.bringToFront();
-                // TODO: use structuredClone after Node 16 support is dropped.«
+                // TODO: use structuredClone after Node 16 support is dropped.
                 const options = {
                     ...userOptions,
                     clip: userOptions.clip
@@ -1110,7 +951,6 @@ let Page = (() => {
                         throw new Error(`${options.type ?? 'png'} screenshots do not support 'quality'.`);
                     }
                 }
-                (0, assert_js_1.assert)(!options.clip || !options.fullPage, "'clip' and 'fullPage' are exclusive");
                 if (options.clip) {
                     if (options.clip.width <= 0) {
                         throw new Error("'width' in 'clip' must be positive.");
@@ -1120,29 +960,47 @@ let Page = (() => {
                     }
                 }
                 setDefaultScreenshotOptions(options);
-                options.clip =
-                    options.clip && roundRectangle(normalizeRectangle(options.clip));
                 const stack = __addDisposableResource(env_2, new disposable_js_1.AsyncDisposableStack(), true);
-                if (options.allowViewportExpansion || options.captureBeyondViewport) {
+                if (options.clip) {
                     if (options.fullPage) {
-                        const dimensions = await this.mainFrame()
-                            .isolatedRealm()
-                            .evaluate(() => {
-                            const { scrollHeight, scrollWidth } = document.documentElement;
-                            const { height: viewportHeight, width: viewportWidth } = window.visualViewport;
-                            return {
-                                height: Math.max(scrollHeight, viewportHeight),
-                                width: Math.max(scrollWidth, viewportWidth),
-                            };
-                        });
-                        options.clip = { ...dimensions, x: 0, y: 0 };
-                        stack.use(await this._createTemporaryViewportContainingBox(options.clip));
+                        throw new Error("'clip' and 'fullPage' are mutually exclusive");
                     }
-                    else if (options.clip && !options.captureBeyondViewport) {
-                        stack.use(options.clip &&
-                            (await this._createTemporaryViewportContainingBox(options.clip)));
+                    options.clip = roundRectangle(normalizeRectangle(options.clip));
+                }
+                else {
+                    if (options.fullPage) {
+                        // If `captureBeyondViewport` is `false`, then we set the viewport to
+                        // capture the full page. Note this may be affected by on-page CSS and
+                        // JavaScript.
+                        if (!options.captureBeyondViewport) {
+                            const scrollDimensions = await this.mainFrame()
+                                .isolatedRealm()
+                                .evaluate(() => {
+                                const element = document.documentElement;
+                                return {
+                                    width: element.scrollWidth,
+                                    height: element.scrollHeight,
+                                };
+                            });
+                            const viewport = this.viewport();
+                            await this.setViewport({
+                                ...viewport,
+                                ...scrollDimensions,
+                            });
+                            stack.defer(async () => {
+                                if (viewport) {
+                                    await this.setViewport(viewport).catch(util_js_1.debugError);
+                                }
+                                else {
+                                    await this.setViewport({
+                                        width: 0,
+                                        height: 0,
+                                    }).catch(util_js_1.debugError);
+                                }
+                            });
+                        }
                     }
-                    else if (!options.clip) {
+                    else {
                         options.captureBeyondViewport = false;
                     }
                 }
@@ -1162,60 +1020,6 @@ let Page = (() => {
                 const result_1 = __disposeResources(env_2);
                 if (result_1)
                     await result_1;
-            }
-        }
-        /**
-         * @internal
-         */
-        async _createTemporaryViewportContainingBox(clip) {
-            const env_3 = { stack: [], error: void 0, hasError: false };
-            try {
-                const viewport = await this.mainFrame()
-                    .isolatedRealm()
-                    .evaluate(() => {
-                    return {
-                        pageLeft: window.visualViewport.pageLeft,
-                        pageTop: window.visualViewport.pageTop,
-                        width: window.visualViewport.width,
-                        height: window.visualViewport.height,
-                    };
-                });
-                const stack = __addDisposableResource(env_3, new disposable_js_1.AsyncDisposableStack(), true);
-                if (clip.x < viewport.pageLeft || clip.y < viewport.pageTop) {
-                    await this.evaluate((left, top) => {
-                        window.scroll({ left, top, behavior: 'instant' });
-                    }, Math.floor(clip.x), Math.floor(clip.y));
-                    stack.defer(async () => {
-                        await this.evaluate((left, top) => {
-                            window.scroll({ left, top, behavior: 'instant' });
-                        }, viewport.pageLeft, viewport.pageTop).catch(util_js_1.debugError);
-                    });
-                }
-                if (clip.width + clip.x > viewport.width ||
-                    clip.height + clip.y > viewport.height) {
-                    const originalViewport = this.viewport() ?? {
-                        width: 0,
-                        height: 0,
-                    };
-                    // We add 1 for fractional x and y.
-                    await this.setViewport({
-                        width: Math.max(viewport.width, Math.ceil(clip.width + clip.x)),
-                        height: Math.max(viewport.height, Math.ceil(clip.height + clip.y)),
-                    });
-                    stack.defer(async () => {
-                        await this.setViewport(originalViewport).catch(util_js_1.debugError);
-                    });
-                }
-                return stack.move();
-            }
-            catch (e_3) {
-                env_3.error = e_3;
-                env_3.hasError = true;
-            }
-            finally {
-                const result_2 = __disposeResources(env_3);
-                if (result_2)
-                    await result_2;
             }
         }
         /**
@@ -1262,13 +1066,11 @@ let Page = (() => {
                 margin,
             };
         }
-        async createPDFStream() {
-            throw new Error('Not implemented');
-        }
         /**
          * The page's title
          *
          * @remarks
+         *
          * Shortcut for {@link Frame.title | page.mainFrame().title()}.
          */
         async title() {
@@ -1279,7 +1081,10 @@ let Page = (() => {
          * needed, and then uses {@link Page | Page.mouse} to click in the center of the
          * element. If there's no element matching `selector`, the method throws an
          * error.
-         * @remarks Bear in mind that if `click()` triggers a navigation event and
+         *
+         * @remarks
+         *
+         * Bear in mind that if `click()` triggers a navigation event and
          * there's a separate `page.waitForNavigation()` promise to be resolved, you
          * may end up with a race condition that yields unexpected results. The
          * correct pattern for click and wait for navigation is the following:
@@ -1312,7 +1117,9 @@ let Page = (() => {
          * @returns Promise which resolves when the element matching selector is
          * successfully focused. The promise will be rejected if there is no element
          * matching selector.
+         *
          * @remarks
+         *
          * Shortcut for {@link Frame.focus | page.mainFrame().focus(selector)}.
          */
         focus(selector) {
@@ -1330,7 +1137,9 @@ let Page = (() => {
          * @returns Promise which resolves when the element matching `selector` is
          * successfully hovered. Promise gets rejected if there's no element matching
          * `selector`.
+         *
          * @remarks
+         *
          * Shortcut for {@link Page.hover | page.mainFrame().hover(selector)}.
          */
         hover(selector) {
@@ -1357,6 +1166,7 @@ let Page = (() => {
          * @returns
          *
          * @remarks
+         *
          * Shortcut for {@link Frame.select | page.mainFrame().select()}
          */
         select(selector, ...values) {
@@ -1371,8 +1181,9 @@ let Page = (() => {
          * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors | Selector}
          * to search for element to tap. If there are multiple elements satisfying the
          * selector, the first will be tapped.
-         * @returns
+         *
          * @remarks
+         *
          * Shortcut for {@link Frame.tap | page.mainFrame().tap(selector)}.
          */
         tap(selector) {
@@ -1400,7 +1211,6 @@ let Page = (() => {
          * @param options - have property `delay` which is the Time to wait between
          * key presses in milliseconds. Defaults to `0`.
          * @returns
-         * @remarks
          */
         type(selector, text, options) {
             return this.mainFrame().type(selector, text, options);
@@ -1411,6 +1221,7 @@ let Page = (() => {
          * Causes your script to wait for the given number of milliseconds.
          *
          * @remarks
+         *
          * It's generally recommended to not wait for a number of seconds, but instead
          * use {@link Frame.waitForSelector}, {@link Frame.waitForXPath} or
          * {@link Frame.waitForFunction} to wait for exactly the conditions you want.
@@ -1464,6 +1275,7 @@ let Page = (() => {
          * @returns Promise which resolves when element specified by selector string
          * is added to DOM. Resolves to `null` if waiting for hidden: `true` and
          * selector is not found in DOM.
+         *
          * @remarks
          * The optional Parameter in Arguments `options` are:
          *
@@ -1537,10 +1349,11 @@ let Page = (() => {
             return this.mainFrame().waitForXPath(xpath, options);
         }
         /**
-         * Waits for a function to finish evaluating in the page's context.
+         * Waits for the provided function, `pageFunction`, to return a truthy value when
+         * evaluated in the page's context.
          *
          * @example
-         * The {@link Page.waitForFunction} can be used to observe viewport size change:
+         * {@link Page.waitForFunction} can be used to observe a viewport size change:
          *
          * ```ts
          * import puppeteer from 'puppeteer';
@@ -1555,8 +1368,7 @@ let Page = (() => {
          * ```
          *
          * @example
-         * To pass arguments from node.js to the predicate of
-         * {@link Page.waitForFunction} function:
+         * Arguments can be passed from Node.js to `pageFunction`:
          *
          * ```ts
          * const selector = '.foo';
@@ -1568,7 +1380,7 @@ let Page = (() => {
          * ```
          *
          * @example
-         * The predicate of {@link Page.waitForFunction} can be asynchronous too:
+         * The provided `pageFunction` can be asynchronous:
          *
          * ```ts
          * const username = 'github-username';
@@ -1590,14 +1402,12 @@ let Page = (() => {
          * );
          * ```
          *
-         * @param pageFunction - Function to be evaluated in browser context
+         * @param pageFunction - Function to be evaluated in browser context until it returns a
+         * truthy value.
          * @param options - Options for configuring waiting behavior.
          */
         waitForFunction(pageFunction, options, ...args) {
             return this.mainFrame().waitForFunction(pageFunction, options, ...args);
-        }
-        waitForDevicePrompt() {
-            throw new Error('Not implemented');
         }
         /** @internal */
         [(_screenshot_decorators = [(0, decorators_js_1.guarded)(function () {

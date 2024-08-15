@@ -232,8 +232,7 @@ class FakeFastPairAdvertiserFactory : public FastPairAdvertiser::Factory {
   bool StopAdvertisingCalled() { return stop_advertising_called_; }
 
  private:
-  raw_ptr<FakeFastPairAdvertiser, ExperimentalAsh>
-      last_fake_fast_pair_advertiser_ = nullptr;
+  raw_ptr<FakeFastPairAdvertiser> last_fake_fast_pair_advertiser_ = nullptr;
   bool should_succeed_on_start_ = false;
   bool stop_advertising_called_ = false;
   bool fast_pair_advertiser_destroyed_ = false;
@@ -262,7 +261,7 @@ class FakeConnectionLifecycleListener
     connection_closed_reason_ = reason;
   }
 
-  absl::optional<std::string> pin_;
+  std::optional<std::string> pin_;
   bool connection_authenticated_ = false;
   base::WeakPtr<TargetDeviceConnectionBroker::AuthenticatedConnection>
       authenticated_connection_;
@@ -381,8 +380,7 @@ class TargetDeviceConnectionBrokerImplTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   FakeConnectionLifecycleListener connection_lifecycle_listener_;
-  raw_ptr<FakeConnection::Factory, ExperimentalAsh> connection_factory_ =
-      nullptr;
+  raw_ptr<FakeConnection::Factory> connection_factory_ = nullptr;
   base::HistogramTester histogram_tester_;
 
   std::unique_ptr<FakeQuickStartDecoder> fake_quick_start_decoder_ =
@@ -692,7 +690,6 @@ TEST_F(TargetDeviceConnectionBrokerImplTest, Handshake_Success) {
 
   connection()->HandleHandshakeResult(/*success=*/true);
   EXPECT_TRUE(connection_lifecycle_listener_.connection_authenticated_);
-  histogram_tester_.ExpectBucketCount("QuickStart.HandshakeStarted", true, 1);
 }
 
 TEST_F(TargetDeviceConnectionBrokerImplTest, Handshake_Failed) {
@@ -715,7 +712,6 @@ TEST_F(TargetDeviceConnectionBrokerImplTest, Handshake_Failed) {
 
   connection()->HandleHandshakeResult(/*success=*/false);
   EXPECT_FALSE(connection_lifecycle_listener_.connection_authenticated_);
-  histogram_tester_.ExpectBucketCount("QuickStart.HandshakeStarted", true, 1);
 }
 
 TEST_F(TargetDeviceConnectionBrokerImplTest,
@@ -736,7 +732,6 @@ TEST_F(TargetDeviceConnectionBrokerImplTest,
   ASSERT_TRUE(connection());
   EXPECT_TRUE(connection_lifecycle_listener_.connection_authenticated_);
   EXPECT_NE(connection_lifecycle_listener_.authenticated_connection_, nullptr);
-  histogram_tester_.ExpectBucketCount("QuickStart.HandshakeStarted", false, 1);
 }
 
 TEST_F(TargetDeviceConnectionBrokerImplTest,

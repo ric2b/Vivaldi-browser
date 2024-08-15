@@ -90,7 +90,7 @@ class ChildViewCollector {
       Get(child, result);
   }
 
-  raw_ptr<const views::View, ExperimentalAsh> parent_;
+  raw_ptr<const views::View> parent_;
 };
 
 }  // namespace
@@ -261,7 +261,7 @@ void AssistantAshTestBase::ClickOnAndWait(
   base::RunLoop().RunUntilIdle();
 }
 
-absl::optional<assistant::AssistantInteractionMetadata>
+std::optional<assistant::AssistantInteractionMetadata>
 AssistantAshTestBase::current_interaction() {
   return assistant_service()->current_interaction();
 }

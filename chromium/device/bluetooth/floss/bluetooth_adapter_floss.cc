@@ -545,6 +545,14 @@ void BluetoothAdapterFloss::OnInitializeDeviceProperties(
     observer.DeviceAdded(this, device_ptr);
 }
 
+void BluetoothAdapterFloss::OnDeviceUuidsChanged(
+    BluetoothDeviceFloss* device_ptr) {
+  // SDP done. Calling |SetGattServicesDiscoveryComplete| because it actually
+  // refers to all services including SDP, not just GATT.
+  device_ptr->SetGattServicesDiscoveryComplete(true);
+  NotifyDeviceChanged(device_ptr);
+}
+
 void BluetoothAdapterFloss::OnGetConnectionState(const FlossDeviceId& device_id,
                                                  DBusResult<uint32_t> ret) {
   BluetoothDeviceFloss* device =
@@ -688,6 +696,19 @@ void BluetoothAdapterFloss::AdapterPresent(int adapter, bool present) {
   // If default adapter isn't present, we need to clean up the dbus manager
   if (!present) {
     RemoveAdapter();
+    return;
+  }
+
+  if (FlossDBusManager::Get()->GetManagerClient()->GetAdapterEnabled(adapter) &&
+      adapter != FlossDBusManager::Get()->GetActiveAdapter()) {
+    // If the adapter is already enabled in platform layer, defer the present
+    // changed until the clients are ready, so the observers could get the
+    // correct power state right after present.
+    FlossDBusManager::Get()->SwitchAdapter(
+        adapter,
+        base::BindOnce(&BluetoothAdapterFloss::OnAdapterClientsReady,
+                       weak_ptr_factory_.GetWeakPtr(), /* enabled = */ true,
+                       /* is_newly_present = */ true));
   } else {
     // Notify observers
     PresentChanged(present);
@@ -703,19 +724,22 @@ void BluetoothAdapterFloss::AdapterEnabledChanged(int adapter, bool enabled) {
     return;
   }
 
-  if (enabled && !FlossDBusManager::Get()->HasActiveAdapter()) {
+  if (enabled && adapter != FlossDBusManager::Get()->GetActiveAdapter()) {
     FlossDBusManager::Get()->SwitchAdapter(
         adapter, base::BindOnce(&BluetoothAdapterFloss::OnAdapterClientsReady,
-                                weak_ptr_factory_.GetWeakPtr(), enabled));
+                                weak_ptr_factory_.GetWeakPtr(), enabled,
+                                /* is_newly_present = */ false));
   } else if (!enabled && FlossDBusManager::Get()->HasActiveAdapter()) {
     FlossDBusManager::Get()->SwitchAdapter(
         FlossDBusManager::kInvalidAdapter,
         base::BindOnce(&BluetoothAdapterFloss::OnAdapterClientsReady,
-                       weak_ptr_factory_.GetWeakPtr(), enabled));
+                       weak_ptr_factory_.GetWeakPtr(), enabled,
+                       /* is_newly_present = */ false));
   }
 }
 
-void BluetoothAdapterFloss::OnAdapterClientsReady(bool enabled) {
+void BluetoothAdapterFloss::OnAdapterClientsReady(bool enabled,
+                                                  bool is_newly_present) {
   if (enabled) {
     AddAdapterObservers();
     PopulateInitialDevices();
@@ -734,6 +758,10 @@ void BluetoothAdapterFloss::OnAdapterClientsReady(bool enabled) {
     RemoveAdapterObservers();
   }
 
+  if (is_newly_present) {
+    PresentChanged(true);
+  }
+
   NotifyAdapterPoweredChanged(enabled);
 }
 
@@ -748,7 +776,7 @@ void BluetoothAdapterFloss::AdapterFoundDevice(
   DCHECK(FlossDBusManager::Get());
   DCHECK(IsPresent());
 
-  BLUETOOTH_LOG(EVENT) << __func__ << device_found;
+  BLUETOOTH_LOG(EVENT) << __func__ << ": " << device_found;
 
   UpdateDeviceProperties(true, device_found);
 }
@@ -839,7 +867,7 @@ void BluetoothAdapterFloss::AdapterClearedDevice(
       observer.DeviceRemoved(this, device_ptr);
   }
 
-  BLUETOOTH_LOG(EVENT) << __func__ << device_cleared;
+  BLUETOOTH_LOG(EVENT) << __func__ << ": " << device_cleared;
 }
 
 void BluetoothAdapterFloss::AdapterDevicePropertyChanged(
@@ -848,7 +876,8 @@ void BluetoothAdapterFloss::AdapterDevicePropertyChanged(
   DCHECK(FlossDBusManager::Get());
   DCHECK(IsPresent());
 
-  BLUETOOTH_LOG(EVENT) << __func__ << device;
+  BLUETOOTH_LOG(EVENT) << __func__ << ": " << device
+                       << ": prop_type = " << static_cast<uint32_t>(prop_type);
 
   BluetoothDeviceFloss* device_ptr =
       static_cast<BluetoothDeviceFloss*>(GetDevice(device.address));
@@ -859,14 +888,34 @@ void BluetoothAdapterFloss::AdapterDevicePropertyChanged(
 
   switch (prop_type) {
     case FlossAdapterClient::BtPropertyType::kBdName:
-    case FlossAdapterClient::BtPropertyType::kUuids:
-      if (device.name.size() != 0) {
+      if (device.name.size() != 0 &&
+          device.name != device_ptr->GetName().value_or("")) {
         device_ptr->SetName(device.name);
         device_ptr->InitializeDeviceProperties(
             BluetoothDeviceFloss::PropertiesState::kTriggeredByScan,
             base::BindOnce(&BluetoothAdapterFloss::NotifyDeviceChanged,
                            weak_ptr_factory_.GetWeakPtr(), device_ptr));
       }
+      break;
+    case FlossAdapterClient::BtPropertyType::kTypeOfDevice:
+      device_ptr->FetchRemoteType(
+          base::BindOnce(&BluetoothAdapterFloss::NotifyDeviceChanged,
+                         weak_ptr_factory_.GetWeakPtr(), device_ptr));
+      break;
+    case FlossAdapterClient::BtPropertyType::kUuids:
+      device_ptr->FetchRemoteUuids(
+          base::BindOnce(&BluetoothAdapterFloss::OnDeviceUuidsChanged,
+                         weak_ptr_factory_.GetWeakPtr(), device_ptr));
+      break;
+    case FlossAdapterClient::BtPropertyType::kAppearance:
+      device_ptr->FetchRemoteAppearance(
+          base::BindOnce(&BluetoothAdapterFloss::NotifyDeviceChanged,
+                         weak_ptr_factory_.GetWeakPtr(), device_ptr));
+      break;
+    case FlossAdapterClient::BtPropertyType::kVendorProductInfo:
+      device_ptr->FetchRemoteVendorProductInfo(
+          base::BindOnce(&BluetoothAdapterFloss::NotifyDeviceChanged,
+                         weak_ptr_factory_.GetWeakPtr(), device_ptr));
       break;
     default:;  // Do nothing for other property types for now
   }
@@ -1507,7 +1556,7 @@ void BluetoothAdapterFloss::ScannerRegistered(device::BluetoothUUID uuid,
   FlossDBusManager::Get()->GetLEScanClient()->StartScan(
       base::BindOnce(&BluetoothAdapterFloss::OnStartScan,
                      weak_ptr_factory_.GetWeakPtr(), uuid, scanner_id),
-      scanner_id, ScanSettings{}, scanners_[uuid]->GetFlossScanFilter());
+      scanner_id, absl::nullopt, scanners_[uuid]->GetFlossScanFilter());
 }
 
 void BluetoothAdapterFloss::ScanResultReceived(ScanResult scan_result) {
@@ -1519,14 +1568,17 @@ void BluetoothAdapterFloss::ScanResultReceived(ScanResult scan_result) {
   BluetoothDeviceFloss* device_ptr =
       CreateOrGetDeviceForUpdate(scan_result.address, scan_result.name);
 
+  std::vector<device::BluetoothUUID> service_uuids = scan_result.service_uuids;
   device::BluetoothDevice::ServiceDataMap service_data_map;
-  for (const auto& [uuid, bytes] : scan_result.service_data) {
-    service_data_map[device::BluetoothUUID(uuid)] = bytes;
+  for (const auto& [uuid_str, bytes] : scan_result.service_data) {
+    auto uuid = device::BluetoothUUID(uuid_str);
+    service_uuids.push_back(uuid);
+    service_data_map[uuid] = bytes;
   }
 
   device_ptr->UpdateAdvertisementData(
-      scan_result.rssi, scan_result.flags, scan_result.service_uuids,
-      scan_result.tx_power, service_data_map,
+      scan_result.rssi, scan_result.flags, service_uuids, scan_result.tx_power,
+      service_data_map,
       device::BluetoothDevice::ManufacturerDataMap(
           scan_result.manufacturer_data.begin(),
           scan_result.manufacturer_data.end()));
@@ -1583,15 +1635,6 @@ void BluetoothAdapterFloss::AdvertisementLost(uint8_t scanner_id,
   }
 
   BluetoothDeviceFloss* device_ptr = device.get();
-  BluetoothDeviceFloss* deleted_ptr =
-      static_cast<BluetoothDeviceFloss*>(GetDevice(device->GetAddress()));
-
-  // Only remove devices from devices_ that are not paired or connected.
-  if (!deleted_ptr ||
-      (!deleted_ptr->IsPaired() && !deleted_ptr->IsConnected())) {
-    devices_.erase(canonical_address);
-  }
-
   for (const auto& [key, scanner] : scanners_) {
     if (scanner->GetScannerId() == scanner_id) {
       scanner->OnDeviceLost(device_ptr);
@@ -1689,8 +1732,8 @@ void BluetoothAdapterFloss::OnRegisterScanner(
         << "Scan session removed before registration completed.";
     return;
   }
-  if (!ret.has_value()) {
-    BLUETOOTH_LOG(ERROR) << "Failed RegisterScanner: " << ret.error();
+  if (!ret.has_value() || ret.value().canonical_value() == kEmptyUuidStr) {
+    BLUETOOTH_LOG(ERROR) << "Failed RegisterScanner.";
     scan_session->OnRelease();
     return;
   }

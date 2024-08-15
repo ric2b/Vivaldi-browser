@@ -36,10 +36,8 @@ pub trait AesCtr {
     /// Build a `Self` from key material.
     fn new(key: &Self::Key, nonce_and_counter: NonceAndCounter) -> Self;
 
-    /// Encrypt the data in place, advancing the counter state appropriately.
-    fn encrypt(&mut self, data: &mut [u8]);
-    /// Decrypt the data in place, advancing the counter state appropriately.
-    fn decrypt(&mut self, data: &mut [u8]);
+    /// Applies the key stream to the data in place, advancing the counter state appropriately.
+    fn apply_keystream(&mut self, data: &mut [u8]);
 }
 
 /// The combined nonce and counter that CTR increments and encrypts to form the keystream.

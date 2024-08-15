@@ -11,16 +11,20 @@ namespace autofill {
 std::vector<PatternProviderFeatureState> PatternProviderFeatureState::All() {
   return {
     {.enable = false, .active_source = nullptr},
-        {.enable = true, .active_source = "legacy"},
 #if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
         {.enable = true, .active_source = "default"},
         {.enable = true, .active_source = "experimental"},
         {.enable = true, .active_source = "nextgen"},
+#else
+      // Builds without Autofill internal patterns default to the legacy
+      // patterns. The `active_source` feature parameter is in fact not read
+      // in this case.
+      {.enable = true, .active_source = "legacy"},
 #endif
   };
 }
 
-FormFieldTestBase::FormFieldTestBase(
+FormFieldParserTestBase::FormFieldParserTestBase(
     PatternProviderFeatureState pattern_provider_feature_state) {
   std::vector<base::test::FeatureRefAndParams> enabled;
   std::vector<base::test::FeatureRef> disabled;
@@ -36,22 +40,22 @@ FormFieldTestBase::FormFieldTestBase(
   scoped_feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
 }
 
-FormFieldTestBase::~FormFieldTestBase() = default;
+FormFieldParserTestBase::~FormFieldParserTestBase() = default;
 
-void FormFieldTestBase::AddFormFieldData(FormControlType control_type,
-                                         std::string name,
-                                         std::string label,
-                                         ServerFieldType expected_type) {
+void FormFieldParserTestBase::AddFormFieldData(FormControlType control_type,
+                                               std::string name,
+                                               std::string label,
+                                               FieldType expected_type) {
   AddFormFieldDataWithLength(control_type, name, label, /*max_length=*/0,
                              expected_type);
 }
 
-void FormFieldTestBase::AddFormFieldDataWithLength(
+void FormFieldParserTestBase::AddFormFieldDataWithLength(
     FormControlType control_type,
     std::string name,
     std::string label,
     int max_length,
-    ServerFieldType expected_type) {
+    FieldType expected_type) {
   FormFieldData field_data;
   field_data.form_control_type = control_type;
   field_data.name = base::UTF8ToUTF16(name);
@@ -63,20 +67,20 @@ void FormFieldTestBase::AddFormFieldDataWithLength(
       std::make_pair(field_data.global_id(), expected_type));
 }
 
-void FormFieldTestBase::AddSelectOneFormFieldData(
+void FormFieldParserTestBase::AddSelectOneFormFieldData(
     std::string name,
     std::string label,
     const std::vector<SelectOption>& options,
-    ServerFieldType expected_type) {
+    FieldType expected_type) {
   AddFormFieldData(FormControlType::kSelectOne, name, label, expected_type);
   FormFieldData* field_data = list_.back().get();
   field_data->options = options;
 }
 
 // Convenience wrapper for text control elements.
-void FormFieldTestBase::AddTextFormFieldData(std::string name,
-                                             std::string label,
-                                             ServerFieldType expected_type) {
+void FormFieldParserTestBase::AddTextFormFieldData(std::string name,
+                                                   std::string label,
+                                                   FieldType expected_type) {
   AddFormFieldData(FormControlType::kInputText, name, label, expected_type);
 }
 
@@ -84,10 +88,14 @@ void FormFieldTestBase::AddTextFormFieldData(std::string name,
 // |parsed| indicates if at least one field could be parsed successfully.
 // |page_language| the language to be used for parsing, default empty value
 // means the language is unknown and patterns of all languages are used.
-void FormFieldTestBase::ClassifyAndVerify(ParseResult parse_result,
-                                          const LanguageCode& page_language) {
+void FormFieldParserTestBase::ClassifyAndVerify(
+    ParseResult parse_result,
+    const GeoIpCountryCode& client_country,
+    const LanguageCode& page_language) {
   AutofillScanner scanner(list_);
-  field_ = Parse(&scanner, GeoIpCountryCode(""), page_language);
+  ParsingContext context(client_country, page_language,
+                         *GetActivePatternSource());
+  field_ = Parse(context, &scanner);
 
   if (parse_result == ParseResult::NOT_PARSED) {
     ASSERT_EQ(nullptr, field_.get());
@@ -99,10 +107,10 @@ void FormFieldTestBase::ClassifyAndVerify(ParseResult parse_result,
   TestClassificationExpectations();
 }
 
-void FormFieldTestBase::TestClassificationExpectations() {
+void FormFieldParserTestBase::TestClassificationExpectations() {
   size_t num_classifications = 0;
   for (const auto [field_id, expected_field_type] : expected_classifications_) {
-    ServerFieldType actual_field_type =
+    FieldType actual_field_type =
         field_candidates_map_.contains(field_id)
             ? field_candidates_map_[field_id].BestHeuristicType()
             : UNKNOWN_TYPE;
@@ -117,8 +125,15 @@ void FormFieldTestBase::TestClassificationExpectations() {
   EXPECT_EQ(num_classifications, field_candidates_map_.size());
 }
 
-FieldRendererId FormFieldTestBase::MakeFieldRendererId() {
+FieldRendererId FormFieldParserTestBase::MakeFieldRendererId() {
   return FieldRendererId(++id_counter_);
+}
+
+void FormFieldParserTestBase::ClearFieldsAndExpectations() {
+  field_ = nullptr;
+  list_.clear();
+  expected_classifications_.clear();
+  field_candidates_map_.clear();
 }
 
 }  // namespace autofill

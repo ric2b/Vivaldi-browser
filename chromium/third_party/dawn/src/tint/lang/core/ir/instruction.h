@@ -32,6 +32,7 @@
 
 #include "src/tint/lang/core/ir/instruction_result.h"
 #include "src/tint/lang/core/ir/value.h"
+#include "src/tint/utils/containers/const_propagating_ptr.h"
 #include "src/tint/utils/containers/enum_set.h"
 #include "src/tint/utils/rtti/castable.h"
 
@@ -57,24 +58,29 @@ class Instruction : public Castable<Instruction> {
     /// @returns the operands of the instruction
     virtual VectorRef<ir::Value*> Operands() = 0;
 
-    /// @returns true if the instruction has result values
-    virtual bool HasResults() { return false; }
-    /// @returns true if the instruction has multiple values
-    virtual bool HasMultiResults() { return false; }
+    /// @returns the operands of the instruction
+    virtual VectorRef<const ir::Value*> Operands() const = 0;
 
-    /// @returns the first result. Returns `nullptr` if there are no results, or if ther are
-    /// multi-results
-    virtual InstructionResult* Result() { return nullptr; }
+    /// Replaces the operands of the instruction
+    /// @param operands the new operands of the instruction
+    virtual void SetOperands(VectorRef<ir::Value*> operands) = 0;
+
+    /// Replaces the results of the instruction
+    /// @param results the new results of the instruction
+    virtual void SetResults(VectorRef<ir::InstructionResult*> results) = 0;
 
     /// @returns the result values for this instruction
-    virtual VectorRef<InstructionResult*> Results() { return tint::Empty; }
+    virtual VectorRef<InstructionResult*> Results() = 0;
+
+    /// @returns the result values for this instruction
+    virtual VectorRef<const InstructionResult*> Results() const = 0;
 
     /// Removes the instruction from the block, and destroys all the result values.
     /// The result values must not be in use.
     virtual void Destroy();
 
     /// @returns the friendly name for the instruction
-    virtual std::string FriendlyName() = 0;
+    virtual std::string FriendlyName() const = 0;
 
     /// @param ctx the CloneContext used to clone this instruction
     /// @returns a clone of this instruction
@@ -94,6 +100,9 @@ class Instruction : public Castable<Instruction> {
     /// @returns the block that owns this instruction
     ir::Block* Block() { return block_; }
 
+    /// @returns the block that owns this instruction
+    const ir::Block* Block() const { return block_; }
+
     /// Adds the new instruction before the given instruction in the owning block
     /// @param before the instruction to insert before
     void InsertBefore(Instruction* before);
@@ -106,18 +115,42 @@ class Instruction : public Castable<Instruction> {
     /// Removes this instruction from the owning block
     void Remove();
 
+    /// @param idx the index of the operand
+    /// @returns the operand with index @p idx, or `nullptr` if there are no operands or the index
+    /// is out of bounds.
+    Value* Operand(size_t idx) {
+        auto res = Operands();
+        return idx < res.Length() ? res[idx] : nullptr;
+    }
+
+    /// @param idx the index of the operand
+    /// @returns the operand with index @p idx, or `nullptr` if there are no operands or the index
+    /// is out of bounds.
+    const Value* Operand(size_t idx) const {
+        auto res = Operands();
+        return idx < res.Length() ? res[idx] : nullptr;
+    }
+
     /// @param idx the index of the result
     /// @returns the result with index @p idx, or `nullptr` if there are no results or the index is
     /// out of bounds.
-    Value* Result(size_t idx) {
+    InstructionResult* Result(size_t idx) {
+        auto res = Results();
+        return idx < res.Length() ? res[idx] : nullptr;
+    }
+
+    /// @param idx the index of the result
+    /// @returns the result with index @p idx, or `nullptr` if there are no results or the index is
+    /// out of bounds.
+    const InstructionResult* Result(size_t idx) const {
         auto res = Results();
         return idx < res.Length() ? res[idx] : nullptr;
     }
 
     /// Pointer to the next instruction in the list
-    Instruction* next = nullptr;
+    ConstPropagatingPtr<Instruction> next;
     /// Pointer to the previous instruction in the list
-    Instruction* prev = nullptr;
+    ConstPropagatingPtr<Instruction> prev;
 
   protected:
     /// Flags applied to an Instruction
@@ -132,7 +165,7 @@ class Instruction : public Castable<Instruction> {
     Instruction();
 
     /// The block that owns this instruction
-    ir::Block* block_ = nullptr;
+    ConstPropagatingPtr<ir::Block> block_;
 
     /// Bitset of instruction flags
     tint::EnumSet<Flag> flags_;

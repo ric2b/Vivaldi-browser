@@ -16,7 +16,6 @@ import m from 'mithril';
 
 import {duration, Time, time} from '../../base/time';
 import {exists} from '../../base/utils';
-import {LONG, NUM, STR} from '../../common/query_result';
 import {raf} from '../../core/raf_scheduler';
 import {
   BottomTab,
@@ -32,33 +31,30 @@ import {
   numberColumn,
   Table,
   TableData,
+  widgetColumn,
 } from '../../frontend/tables/table';
+import {DurationWidget} from '../../frontend/widgets/duration';
 import {Timestamp} from '../../frontend/widgets/timestamp';
+import {LONG, NUM, STR} from '../../trace_processor/query_result';
 import {DetailsShell} from '../../widgets/details_shell';
-import {DurationWidget} from '../../widgets/duration';
 import {GridLayout, GridLayoutColumn} from '../../widgets/grid_layout';
 import {Section} from '../../widgets/section';
 import {SqlRef} from '../../widgets/sql_ref';
 import {MultiParagraphText, TextParagraph} from '../../widgets/text_paragraph';
 import {dictToTreeNodes, Tree} from '../../widgets/tree';
+
 import {
   buildScrollOffsetsGraph,
   getAppliedScrollDeltas,
   getJankIntervals,
   getUserScrollDeltas,
 } from './scroll_delta_graph';
-
 import {
   getScrollJankSlices,
   getSliceForTrack,
   ScrollJankSlice,
 } from './scroll_jank_slice';
 import {ScrollJankV3Track} from './scroll_jank_v3_track';
-
-function widgetColumn<T>(
-    name: string, getter: (t: T) => m.Child): ColumnDescriptor<T> {
-  return new ColumnDescriptor<T>(name, getter);
-}
 
 interface Data {
   // Scroll ID.

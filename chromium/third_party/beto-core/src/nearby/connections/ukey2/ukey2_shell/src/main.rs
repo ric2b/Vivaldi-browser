@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Provides a sample ukey2 shell app which can be run from the command line
+
+#![allow(clippy::expect_used)]
+//TODO: remove this and fix instances of unwrap
+#![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
+
 use std::io::{Read, Write};
 use std::process::exit;
 
@@ -191,9 +197,9 @@ fn main() {
     let args = Ukey2Cli::parse();
     let shell = Ukey2Shell::new(args.verification_string_length);
     if args.mode == MODE_INITIATOR {
-        shell.run_as_initiator();
+        let _ = shell.run_as_initiator();
     } else if args.mode == MODE_RESPONDER {
-        shell.run_as_responder();
+        let _ = shell.run_as_responder();
     } else {
         exit(1);
     }

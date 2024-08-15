@@ -22,8 +22,8 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>  // NOLINT(popen)
 #include <cstdlib>
@@ -31,7 +31,11 @@
 #include <ctime>
 #include <filesystem>  // NOLINT
 #include <fstream>
+#include <functional>
+#include <ios>
 #include <queue>
+#include <random>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>  // NOLINT(build/c++11)
@@ -41,7 +45,7 @@
 #include "absl/base/attributes.h"
 #include "absl/base/const_init.h"
 #include "absl/base/thread_annotations.h"
-#include "absl/strings/ascii.h"
+#include "absl/log/check.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/str_split.h"
@@ -50,6 +54,7 @@
 #include "./centipede/defs.h"
 #include "./centipede/feature.h"
 #include "./centipede/logging.h"
+#include "./centipede/remote_file.h"
 
 namespace centipede {
 
@@ -85,7 +90,8 @@ void ReadFromLocalFile(std::string_view file_path, Container &data) {
   CHECK_EQ(size % sizeof(data[0]), 0);
   data.resize(size / sizeof(data[0]));
   f.read(reinterpret_cast<char *>(data.data()), size);
-  CHECK(f) << "Failed to read from local file: " << file_path;
+  CHECK(f) << "Failed to read from local file: " << VV(file_path) << VV(f.eof())
+           << VV(f.bad()) << VV(f.fail()) << VV(size);
   f.close();
 }
 
@@ -103,8 +109,7 @@ void ReadFromLocalFile(std::string_view file_path,
   return ReadFromLocalFile<std::vector<uint32_t> &>(file_path, data);
 }
 
-void WriteToLocalFile(std::string_view file_path,
-                      absl::Span<const uint8_t> data) {
+void WriteToLocalFile(std::string_view file_path, ByteSpan data) {
   std::ofstream f(std::string{file_path.data()});
   CHECK(f) << "Failed to open local file: " << file_path;
   f.write(reinterpret_cast<const char *>(data.data()),
@@ -117,28 +122,32 @@ void WriteToLocalFile(std::string_view file_path, std::string_view data) {
   static_assert(sizeof(decltype(data)::value_type) == sizeof(uint8_t));
   WriteToLocalFile(
       file_path,
-      absl::Span<const uint8_t>(reinterpret_cast<const uint8_t *>(data.data()),
-                                data.size()));
+      ByteSpan(reinterpret_cast<const uint8_t *>(data.data()), data.size()));
 }
 
 void WriteToLocalFile(std::string_view file_path, const FeatureVec &data) {
-  WriteToLocalFile(
-      file_path,
-      absl::Span<const uint8_t>(reinterpret_cast<const uint8_t *>(data.data()),
-                                sizeof(data[0]) * data.size()));
+  WriteToLocalFile(file_path,
+                   ByteSpan(reinterpret_cast<const uint8_t *>(data.data()),
+                            sizeof(data[0]) * data.size()));
 }
 
-void WriteToLocalHashedFileInDir(std::string_view dir_path,
-                                 absl::Span<const uint8_t> data) {
+void WriteToLocalHashedFileInDir(std::string_view dir_path, ByteSpan data) {
   if (dir_path.empty()) return;
   std::string file_path = std::filesystem::path(dir_path).append(Hash(data));
   WriteToLocalFile(file_path, data);
 }
 
+void WriteToRemoteHashedFileInDir(std::string_view dir_path, ByteSpan data) {
+  if (dir_path.empty()) return;
+  std::string file_path = std::filesystem::path(dir_path).append(Hash(data));
+  RemoteFileSetContents(file_path, std::string(data.begin(), data.end()));
+}
+
 std::string HashOfFileContents(std::string_view file_path) {
-  ByteArray ba;
-  ReadFromLocalFile(file_path, ba);
-  return Hash(ba);
+  if (file_path.empty()) return "";
+  std::string file_contents;
+  RemoteFileGetContents(std::filesystem::path(file_path), file_contents);
+  return Hash(file_contents);
 }
 
 std::string ProcessAndThreadUniqueID(std::string_view prefix) {
@@ -268,13 +277,18 @@ std::string ExtractHashFromArray(ByteArray &ba) {
 
 ByteArray PackFeaturesAndHash(const ByteArray &data,
                               const FeatureVec &features) {
-  size_t features_len_in_bytes = features.size() * sizeof(feature_t);
-  ByteArray feature_bytes_with_hash(features_len_in_bytes + kHashLen);
-  memcpy(feature_bytes_with_hash.data(), features.data(),
-         features_len_in_bytes);
+  ByteSpan feature_bytes(reinterpret_cast<const uint8_t *>(features.data()),
+                         features.size() * sizeof(feature_t));
+  return PackFeaturesAndHashAsRawBytes(data, feature_bytes);
+}
+
+ByteArray PackFeaturesAndHashAsRawBytes(const ByteArray &data,
+                                        ByteSpan features) {
+  ByteArray feature_bytes_with_hash(features.size() + kHashLen);
   auto hash = Hash(data);
   CHECK_EQ(hash.size(), kHashLen);
-  memcpy(feature_bytes_with_hash.data() + features_len_in_bytes, hash.data(),
+  memcpy(feature_bytes_with_hash.data(), features.data(), features.size());
+  memcpy(feature_bytes_with_hash.data() + features.size(), hash.data(),
          kHashLen);
   return feature_bytes_with_hash;
 }
@@ -394,20 +408,6 @@ std::vector<size_t> RandomWeightedSubset(absl::Span<const uint64_t> set,
   std::sort(res.begin(), res.end());
   return res;
 }
-
-namespace {
-std::atomic<int> requested_exit_code = EXIT_SUCCESS;
-std::atomic<bool> early_exit_requested = false;
-}  // namespace
-
-void RequestEarlyExit(int exit_code) {
-  requested_exit_code = exit_code;
-  early_exit_requested = true;
-}
-
-bool EarlyExitRequested() { return early_exit_requested; }
-
-int ExitCode() { return requested_exit_code; }
 
 uint8_t *MmapNoReserve(size_t size) {
   auto result = mmap(0, size, PROT_READ | PROT_WRITE,

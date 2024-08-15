@@ -94,7 +94,7 @@ tools/xngen src/x32-transposec/avx.c.in -D SIZE=64 ARCH=AVX IN_PTRS=MULTI OUT_PT
 tools/xngen src/x32-transposec/avx2.c.in -D SIZE=8  IN_PTRS=REUSE OUT_PTRS=MOV    -o src/x8-transposec/gen/x8-transposec-32x32-reuse-mov-avx2.c &
 tools/xngen src/x32-transposec/avx2.c.in -D SIZE=8  IN_PTRS=REUSE OUT_PTRS=SWITCH -o src/x8-transposec/gen/x8-transposec-32x32-reuse-switch-avx2.c &
 tools/xngen src/x32-transposec/avx2.c.in -D SIZE=16 IN_PTRS=REUSE OUT_PTRS=MOV    -o src/x16-transposec/gen/x16-transposec-16x16-reuse-mov-avx2.c &
-tools/xngen src/x32-transposec/avx2.c.in -D SIZE=16 IN_PTRS=REUSE OUT_PTRS=SWITCH -o src/x16-transposec/gen/x16-transposec-16x16-reuse-switch-avx2.c &:
+tools/xngen src/x32-transposec/avx2.c.in -D SIZE=16 IN_PTRS=REUSE OUT_PTRS=SWITCH -o src/x16-transposec/gen/x16-transposec-16x16-reuse-switch-avx2.c &
 
 #################################### ARM NEON ###############################
 tools/xngen src/x32-transposec/neon-zip.c.in -D SIZE=8 VECTOR_SIZE=64  IN_PTRS=MULTI OUT_PTRS=DEC    -o src/x8-transposec/gen/x8-transposec-8x8-multi-dec-zip-neon.c &
@@ -164,13 +164,5 @@ tools/xngen src/x32-transposec/wasmsimd.c.in -D SIZE=32 IN_PTRS=REUSE OUT_PTRS=M
 tools/xngen src/x32-transposec/wasmsimd.c.in -D SIZE=32 IN_PTRS=MULTI OUT_PTRS=SWITCH -o src/x32-transposec/gen/x32-transposec-4x4-multi-switch-wasmsimd.c &
 tools/xngen src/x32-transposec/wasmsimd.c.in -D SIZE=32 IN_PTRS=MULTI OUT_PTRS=MULTI  -o src/x32-transposec/gen/x32-transposec-4x4-multi-multi-wasmsimd.c &
 tools/xngen src/x32-transposec/wasmsimd.c.in -D SIZE=32 IN_PTRS=MULTI OUT_PTRS=MOV    -o src/x32-transposec/gen/x32-transposec-4x4-multi-mov-wasmsimd.c &
-
-################################## Unit tests #################################
-tools/generate-transpose-test.py --spec test/x8-transpose.yaml  --output test/x8-transpose.cc &
-tools/generate-transpose-test.py --spec test/x16-transpose.yaml --output test/x16-transpose.cc &
-tools/generate-transpose-test.py --spec test/x24-transpose.yaml --output test/x24-transpose.cc &
-tools/generate-transpose-test.py --spec test/x32-transpose.yaml --output test/x32-transpose.cc &
-tools/generate-transpose-test.py --spec test/x64-transpose.yaml --output test/x64-transpose.cc &
-tools/generate-transpose-test.py --spec test/xx-transposev.yaml  --output test/xx-transposev.cc &
 
 wait

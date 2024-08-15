@@ -93,7 +93,8 @@ void ScopedClipboardWriter::WriteHTML(const std::u16string& markup,
 
   Clipboard::HtmlData html_data;
   html_data.markup = base::UTF16ToUTF8(markup);
-  if (!source_url.empty()) {
+  if (!source_url.empty() && // Added by Vivaldi in VB-102863.
+      GURL(source_url).scheme() != url::kDataScheme) {
     html_data.source_url = source_url;
   }
   Clipboard::Data data(std::move(html_data));
@@ -190,7 +191,7 @@ void ScopedClipboardWriter::WritePickledData(
     const ClipboardFormatType& format) {
   RecordWrite(ClipboardFormatMetric::kCustomData);
   Clipboard::RawData raw_data;
-  raw_data.format = format.Serialize();
+  raw_data.format = format;
   raw_data.data = std::vector<uint8_t>(
       reinterpret_cast<const uint8_t*>(pickle.data()),
       reinterpret_cast<const uint8_t*>(pickle.data()) + pickle.size());

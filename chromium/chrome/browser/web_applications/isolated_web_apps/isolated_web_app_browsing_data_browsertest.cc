@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/check_deref.h"
@@ -16,13 +17,14 @@
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/commands/web_app_uninstall_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
-#include "chrome/browser/web_applications/isolated_web_apps/remove_isolated_web_app_browsing_data.h"
+#include "chrome/browser/web_applications/isolated_web_apps/remove_isolated_web_app_data.h"
 #include "chrome/browser/web_applications/jobs/uninstall/remove_web_app_job.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
@@ -32,6 +34,8 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/browsing_data/core/pref_names.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/services/storage/public/mojom/local_storage_control.mojom.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -45,7 +49,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "extensions/common/features/feature_channel.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/cookies/canonical_cookie.h"
@@ -53,7 +56,6 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/test/test_network_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -150,11 +152,6 @@ class IsolatedWebAppBrowsingDataTest : public IsolatedWebAppBrowserTestHarness {
 
  private:
   std::unique_ptr<net::EmbeddedTestServer> server_;
-
-  // Various IsolatedWebAppBrowsing tests fail on official builds because
-  // stable channel doesn't enable a required feature.
-  // TODO(b/309153867): Remove this when underlying issue is figured out.
-  extensions::ScopedCurrentChannel channel_{version_info::Channel::CANARY};
 };
 
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataTest,
@@ -272,10 +269,6 @@ class IsolatedWebAppBrowsingDataClearingTest
         }));
 
     base::test::TestFuture<webapps::UninstallResultCode> future;
-    auto job = std::make_unique<RemoveWebAppJob>(
-        webapps::WebappUninstallSource::kAppsPage, *profile(),
-        url_info.app_id());
-
     provider().scheduler().UninstallWebApp(
         url_info.app_id(), webapps::WebappUninstallSource::kAppsPage,
         future.GetCallback());
@@ -307,14 +300,14 @@ class IsolatedWebAppBrowsingDataClearingTest
       const GURL& url,
       const base::Time time,
       const std::string& cookie_line,
-      const absl::optional<net::CookiePartitionKey>& cookie_partition_key) {
+      const std::optional<net::CookiePartitionKey>& cookie_partition_key) {
     mojo::Remote<network::mojom::CookieManager> cookie_manager;
     storage_partition->GetNetworkContext()->GetCookieManager(
         cookie_manager.BindNewPipeAndPassReceiver());
 
-    auto cookie_obj = net::CanonicalCookie::Create(
-        url, cookie_line, time, /*server_time=*/absl::nullopt,
-        cookie_partition_key);
+    auto cookie_obj = net::CanonicalCookie::Create(url, cookie_line, time,
+                                                   /*server_time=*/std::nullopt,
+                                                   cookie_partition_key);
 
     base::test::TestFuture<net::CookieAccessResult> future;
     cookie_manager->SetCanonicalCookie(*cookie_obj, url,
@@ -443,7 +436,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest, CookieCleared) {
     ASSERT_TRUE(partition);
     // Unpartitioned Cookie
     ASSERT_TRUE(SetCookie(partition, GURL("http://a.com"), base::Time::Now(),
-                          "A=0", absl::nullopt));
+                          "A=0", std::nullopt));
     // Partitioned Cookie
     ASSERT_TRUE(SetCookie(
         partition, GURL("https://c.com"), base::Time::Now(),
@@ -500,7 +493,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
     ASSERT_TRUE(partition);
     // Unpartitioned Cookie
     ASSERT_TRUE(SetCookie(partition, GURL("http://a.com"), base::Time::Now(),
-                          "A=0", absl::nullopt));
+                          "A=0", std::nullopt));
     // Partitioned Cookie
     ASSERT_TRUE(SetCookie(
         partition, GURL("https://c.com"), base::Time::Now(),
@@ -603,7 +596,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
     ASSERT_TRUE(partition);
     // Unpartitioned Cookie
     ASSERT_TRUE(SetCookie(partition, GURL("http://a.com"), base::Time::Now(),
-                          "A=0", absl::nullopt));
+                          "A=0", std::nullopt));
     // Partitioned Cookie
     ASSERT_TRUE(SetCookie(
         partition, GURL("https://c.com"), base::Time::Now(),
@@ -638,8 +631,14 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
   EXPECT_THAT(GetIwaUsage(url_info2), 0);
 }
 
+// TODO(crbug.com/1504250): Re-enable this test
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_ClearBrowserDataTimeRanged DISABLED_ClearBrowserDataTimeRanged
+#else
+#define MAYBE_ClearBrowserDataTimeRanged ClearBrowserDataTimeRanged
+#endif
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
-                       ClearBrowserDataTimeRanged) {
+                       MAYBE_ClearBrowserDataTimeRanged) {
   auto cache_test_server = std::make_unique<net::EmbeddedTestServer>();
   cache_test_server->AddDefaultHandlers(
       base::FilePath(FILE_PATH_LITERAL("content/test/data")));
@@ -679,7 +678,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
       // Set a partitioned and an unpartitioned cookie for each storage
       // partition. Unpartitioned Cookie
       ASSERT_TRUE(SetCookie(partition, GURL("http://a.com"), cookie.time,
-                            cookie.data, absl::nullopt));
+                            cookie.data, std::nullopt));
       // Partitioned Cookie
       ASSERT_TRUE(SetCookie(
           partition, GURL("https://c.com"), cookie.time,
@@ -733,6 +732,8 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
 
   GURL cookie_url =
       https_server()->GetURL("/web_apps/simple_isolated_app/cookie.html");
+  CookieSettingsFactory::GetForProfile(browser->profile())
+      ->SetCookieSetting(cookie_url, CONTENT_SETTING_ALLOW);
   CreateIframe(rfh, "child_0", cookie_url, "");
   auto* iframe_rfh = content::ChildFrameAt(rfh, 0);
 

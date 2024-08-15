@@ -57,17 +57,24 @@ class SyncUserSettings {
   virtual bool IsTypeManagedByPolicy(UserSelectableType type) const = 0;
   virtual bool IsTypeManagedByCustodian(UserSelectableType type) const = 0;
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // On Desktop, kPasswords isn't considered "selected" by default in transport
+  // mode. This method returns how many accounts selected (enabled) the type.
+  // TODO(crbug.com/1503669): Remove this once the type is enabled by default.
+  virtual int GetNumberOfAccountsWithPasswordsSelected() const = 0;
+#endif
+
   // Whether the "Sync everything" is enabled. This only has an effect if
   // Sync-the-feature is enabled. Note that even if this is true, some types may
   // be disabled e.g. due to enterprise policy.
   virtual bool IsSyncEverythingEnabled() const = 0;
-  // Sets user's selected types. Should only be called if Sync-the-feature is
-  // active, or in the process of being configured; otherwise use the singular
-  // SetSelectedType().
+  // Sets user's selected types to all types if `sync_everything` is true (in
+  // this case `types` is ignored). Otherwise, sets user's selected types to the
+  // `types` set only.
   virtual void SetSelectedTypes(bool sync_everything,
                                 UserSelectableTypeSet types) = 0;
 
-  // Sets an individual type selection. For non-transport-mode cases, invoking
+  // Sets an individual type selection. For Sync-the-feature mode, invoking
   // this function is only allowed while IsSyncEverythingEnabled() returns
   // false.
   virtual void SetSelectedType(UserSelectableType type, bool is_type_on) = 0;
@@ -168,11 +175,13 @@ class SyncUserSettings {
   // Asynchronously decrypts pending keys using |nigori|. |nigori| must not be
   // null. It's safe to call this method with wrong |nigori| and, unlike
   // SetDecryptionPassphrase(), when passphrase isn't required.
-  virtual void SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori) = 0;
+  virtual void SetExplicitPassphraseDecryptionNigoriKey(
+      std::unique_ptr<Nigori> nigori) = 0;
   // Returns stored decryption key, corresponding to the last successfully
   // decrypted explicit passphrase Nigori. Returns nullptr if there is no such
   // stored decryption key.
-  virtual std::unique_ptr<Nigori> GetDecryptionNigoriKey() const = 0;
+  virtual std::unique_ptr<Nigori> GetExplicitPassphraseDecryptionNigoriKey()
+      const = 0;
 };
 
 }  // namespace syncer

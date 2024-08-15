@@ -48,6 +48,8 @@ def _FindChromite(path: Path) -> Optional[Checkout]:
         ('../.citc', 'chromite/__init__.py'),
         # Chromium checkout using gclient+DEPS.
         ('.gclient', 'src/third_party/chromite/.git'),
+        # Chromium checkout using git submodules (submodules at root).
+        ('.gitmodules', 'chromite/.git'),
         # Chromium checkout using git submodules.
         ('src/.gitmodules', 'src/third_party/chromite/.git'),
         # Chromium checkout using CitC.

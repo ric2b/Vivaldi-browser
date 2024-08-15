@@ -30,6 +30,7 @@
 
 #include "codec_id.h"
 #include "defs.h"
+#include "packet.h"
 
 /**
  * @addtogroup lavc_core
@@ -215,6 +216,19 @@ typedef struct AVCodecParameters {
      * when no higher-level timing information is available.
      */
     AVRational framerate;
+
+    /**
+     * Additional data associated with the entire stream.
+     *
+     * Should be allocated with av_packet_side_data_new() or
+     * av_packet_side_data_add(), and will be freed by avcodec_parameters_free().
+     */
+    AVPacketSideData *coded_side_data;
+
+    /**
+     * Amount of entries in @ref coded_side_data.
+     */
+    int nb_coded_side_data;
 } AVCodecParameters;
 
 /**

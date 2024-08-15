@@ -9,6 +9,7 @@
 #include <wrl.h>
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -23,7 +24,7 @@ class CommandQueue;
 // a DirectML graph. It wraps a DirectML command recorder, and manages the
 // Direct3D 12 command list and command allocator for GPU work recording and
 // submission.
-class CommandRecorder final {
+class COMPONENT_EXPORT(WEBNN_SERVICE) CommandRecorder final {
  public:
   static std::unique_ptr<CommandRecorder> Create(
       scoped_refptr<CommandQueue> queue,
@@ -54,6 +55,13 @@ class CommandRecorder final {
   // delete this command recorder that ensures to release the references of all
   // recorded commands and their resources.
   HRESULT Open();
+
+  // Close the command list.
+  HRESULT Close();
+  // Submit the command list for execution and reference all resources required
+  // by this execution.
+  HRESULT Execute();
+  // This method will call the above `Close()` and `Execute()` methods.
   HRESULT CloseAndExecute();
 
   void ResourceBarrier(base::span<const D3D12_RESOURCE_BARRIER> barriers);

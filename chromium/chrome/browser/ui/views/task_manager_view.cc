@@ -339,7 +339,7 @@ void TaskManagerView::Init() {
 
   // Create the table view.
   auto tab_table = std::make_unique<views::TableView>(
-      nullptr, columns_, views::ICON_AND_TEXT, false);
+      nullptr, columns_, views::TableType::kIconAndText, false);
   tab_table_ = tab_table.get();
   table_model_ = std::make_unique<TaskManagerTableModel>(this);
   tab_table->SetModel(table_model_.get());
@@ -386,7 +386,7 @@ void TaskManagerView::InitAlwaysOnTopState() {
 }
 
 void TaskManagerView::ActivateSelectedTab() {
-  const absl::optional<size_t> active_row =
+  const std::optional<size_t> active_row =
       tab_table_->selection_model().active();
   if (active_row.has_value())
     table_model_->ActivateTask(active_row.value());
@@ -410,7 +410,7 @@ void TaskManagerView::RetrieveSavedAlwaysOnTopState() {
   is_always_on_top_ = dictionary.FindBool("always_on_top").value_or(false);
 }
 
-BEGIN_METADATA(TaskManagerView, views::DialogDelegateView)
+BEGIN_METADATA(TaskManagerView)
 END_METADATA
 
 }  // namespace task_manager

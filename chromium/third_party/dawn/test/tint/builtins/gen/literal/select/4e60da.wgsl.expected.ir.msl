@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void select_4e60da() {
+  float2 res = float2(1.0f);
+}
+vertex float4 vertex_main() {
+  select_4e60da();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  select_4e60da();
+}
+kernel void compute_main() {
+  select_4e60da();
+}

@@ -215,7 +215,9 @@ void WasmInliner::Finalize() {
     int inlining_position_id =
         static_cast<int>(inlining_positions_->size()) - 1;
     WasmGraphBuilder builder(env_, zone(), mcgraph_, inlinee_body.sig,
-                             data_.source_positions);
+                             data_.source_positions,
+                             WasmGraphBuilder::kInstanceParameterMode,
+                             nullptr /* isolate */, env_->enabled_features);
     builder.set_inlining_id(inlining_position_id);
     {
       Graph::SubgraphScope scope(graph());
@@ -423,7 +425,7 @@ void WasmInliner::InlineCall(Node* call, Node* callee_start, Node* callee_end,
     }
   }
 
-  if (return_nodes.size() > 0) {
+  if (!return_nodes.empty()) {
     /* 4) Collect all return site value, effect, and control inputs into phis
      * and merges. */
     int const return_count = static_cast<int>(return_nodes.size());

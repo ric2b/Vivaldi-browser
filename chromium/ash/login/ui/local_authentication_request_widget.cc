@@ -30,8 +30,48 @@ LocalAuthenticationRequestWidget* g_instance = nullptr;
 }  // namespace
 
 // static
+LocalAuthenticationRequestView*
+LocalAuthenticationRequestWidget::TestApi::GetView() {
+  LocalAuthenticationRequestWidget* widget =
+      LocalAuthenticationRequestWidget::Get();
+  return widget ? widget->GetView() : nullptr;
+}
+
+// static
+bool LocalAuthenticationRequestWidget::TestApi::IsVisible() {
+  LocalAuthenticationRequestView* lad_view = GetView();
+  if (lad_view == nullptr) {
+    return false;
+  }
+  return lad_view->GetVisible();
+}
+
+// static
+bool LocalAuthenticationRequestWidget::TestApi::CancelDialog() {
+  LocalAuthenticationRequestView* lad_view = GetView();
+  if (lad_view == nullptr) {
+    return false;
+  }
+  LocalAuthenticationRequestView::TestApi lad_test_api(lad_view);
+  lad_test_api.Close();
+  return true;
+}
+
+// static
+bool LocalAuthenticationRequestWidget::TestApi::SubmitPassword(
+    const std::string& password) {
+  LocalAuthenticationRequestView* lad_view = GetView();
+  if (lad_view == nullptr) {
+    return false;
+  }
+  LocalAuthenticationRequestView::TestApi lad_test_api(lad_view);
+  lad_test_api.SubmitPassword(password);
+  return true;
+}
+
+// static
 void LocalAuthenticationRequestWidget::Show(
-    OnLocalAuthenticationCompleted on_local_authentication_completed,
+    LocalAuthenticationCallback local_authentication_callback,
     const std::u16string& title,
     const std::u16string& description,
     LocalAuthenticationRequestView::Delegate* delegate,
@@ -39,8 +79,8 @@ void LocalAuthenticationRequestWidget::Show(
   CHECK(!g_instance);
 
   g_instance = new LocalAuthenticationRequestWidget(
-      std::move(on_local_authentication_completed), title, description,
-      delegate, std::move(user_context));
+      std::move(local_authentication_callback), title, description, delegate,
+      std::move(user_context));
 }
 
 // static
@@ -67,23 +107,25 @@ void LocalAuthenticationRequestWidget::ClearInput() {
   GetView()->ClearInput();
 }
 
-void LocalAuthenticationRequestWidget::Close(bool success) {
+void LocalAuthenticationRequestWidget::Close(
+    bool success,
+    std::unique_ptr<UserContext> user_context) {
   CHECK_EQ(g_instance, this);
   LocalAuthenticationRequestWidget* instance = g_instance;
   g_instance = nullptr;
-  std::move(on_local_authentication_completed_).Run(success);
+  std::move(local_authentication_callback_)
+      .Run(success, std::move(user_context));
   widget_->Close();
   delete instance;
 }
 
 LocalAuthenticationRequestWidget::LocalAuthenticationRequestWidget(
-    OnLocalAuthenticationCompleted on_local_authentication_completed,
+    LocalAuthenticationCallback local_authentication_callback,
     const std::u16string& title,
     const std::u16string& description,
     LocalAuthenticationRequestView::Delegate* delegate,
     std::unique_ptr<UserContext> user_context)
-    : on_local_authentication_completed_(
-          std::move(on_local_authentication_completed)) {
+    : local_authentication_callback_(std::move(local_authentication_callback)) {
   views::Widget::InitParams widget_params;
   // Using window frameless to be able to get focus on the view input fields,
   // which does not work with popup type.

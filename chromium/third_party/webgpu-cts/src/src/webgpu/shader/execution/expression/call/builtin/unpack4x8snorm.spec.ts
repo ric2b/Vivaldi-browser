@@ -8,31 +8,12 @@ bits 8×i through 8×i+7 of e as a twos-complement signed integer.
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
 import { TypeF32, TypeU32, TypeVec } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { fullU32Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
 import { allInputSources, run } from '../../expression.js';
 
 import { builtin } from './builtin.js';
+import { d } from './unpack4x8snorm.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('unpack4x8snorm', {
-  u32_const: () => {
-    return FP.f32.generateU32ToIntervalCases(
-      fullU32Range(),
-      'finite',
-      FP.f32.unpack4x8snormInterval
-    );
-  },
-  u32_non_const: () => {
-    return FP.f32.generateU32ToIntervalCases(
-      fullU32Range(),
-      'unfiltered',
-      FP.f32.unpack4x8snormInterval
-    );
-  },
-});
 
 g.test('unpack')
   .specURL('https://www.w3.org/TR/WGSL/#unpack-builtin-functions')

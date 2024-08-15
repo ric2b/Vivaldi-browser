@@ -23,6 +23,8 @@
 #include <sys/mman.h>
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 constexpr size_t kAllocSize = 1 << 20;  // 1 MiB
@@ -65,6 +67,10 @@ PersistentHistogramStorage::PersistentHistogramStorage(
     StringPiece allocator_name,
     StorageDirManagement storage_dir_management)
     : storage_dir_management_(storage_dir_management) {
+  if (vivaldi::IsVivaldiRunning()) {
+    disabled_ = true;
+    return;
+  }
   DCHECK(!allocator_name.empty());
   DCHECK(IsStringASCII(allocator_name));
 

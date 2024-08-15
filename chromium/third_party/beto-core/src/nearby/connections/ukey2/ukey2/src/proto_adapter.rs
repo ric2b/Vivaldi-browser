@@ -17,7 +17,6 @@
 use crypto_provider::elliptic_curve::EcdhProvider;
 use crypto_provider::p256::{P256EcdhProvider, P256PublicKey, P256};
 use crypto_provider::CryptoProvider;
-use derive_getters::Getters;
 use ukey2_proto::ukey2_all_proto::{securemessage, ukey};
 
 /// For generated proto types for UKEY2 messages
@@ -79,21 +78,42 @@ pub(crate) enum MessageType {
     ClientFinish,
 }
 
-#[derive(Getters)]
 pub(crate) struct ClientInit {
     version: i32,
     commitments: Vec<CipherCommitment>,
     next_protocol: String,
 }
 
+impl ClientInit {
+    pub fn version(&self) -> i32 {
+        self.version
+    }
+
+    pub fn commitments(&self) -> &[CipherCommitment] {
+        &self.commitments
+    }
+
+    pub fn next_protocol(&self) -> &str {
+        &self.next_protocol
+    }
+}
+
 #[allow(dead_code)]
-#[derive(Getters)]
 pub(crate) struct ServerInit {
     version: i32,
     random: [u8; 32],
     handshake_cipher: HandshakeCipher,
-    #[getter(skip)]
     pub(crate) public_key: Vec<u8>,
+}
+
+impl ServerInit {
+    pub fn version(&self) -> i32 {
+        self.version
+    }
+
+    pub fn handshake_cipher(&self) -> HandshakeCipher {
+        self.handshake_cipher
+    }
 }
 
 pub(crate) struct ClientFinished {
@@ -119,10 +139,20 @@ impl HandshakeCipher {
     }
 }
 
-#[derive(Clone, Getters)]
+#[derive(Clone)]
 pub(crate) struct CipherCommitment {
     cipher: HandshakeCipher,
     commitment: Vec<u8>,
+}
+
+impl CipherCommitment {
+    pub fn cipher(&self) -> HandshakeCipher {
+        self.cipher
+    }
+
+    pub fn commitment(&self) -> &[u8] {
+        &self.commitment
+    }
 }
 
 pub(crate) enum GenericPublicKey<C: CryptoProvider> {
@@ -256,6 +286,7 @@ impl<C: CryptoProvider> IntoAdapter<GenericPublicKey<C>> for securemessage::Gene
 /// representation. If the input byte array is not positive or cannot be fit into 32 byte unsigned
 /// int range, then `None` is returned.
 fn positive_twos_complement_to_32_byte_unsigned(twos_complement: &[u8]) -> Option<[u8; 32]> {
+    #[allow(clippy::indexing_slicing)]
     if !twos_complement.is_empty() && (twos_complement[0] & 0x80) == 0 {
         let mut twos_complement_iter = twos_complement.iter().rev();
         let mut result = [0_u8; 32];

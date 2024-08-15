@@ -56,6 +56,7 @@
 #include "net/base/features.h"
 #include "net/base/schemeful_site.h"
 #include "net/disk_cache/disk_cache.h"
+#include "net/http/http_connection_info.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/quota_client_type.h"
@@ -673,18 +674,17 @@ class CacheStorageManagerTest : public testing::Test {
     auto response = blink::mojom::FetchAPIResponse::New(
         std::vector<GURL>({request->url}), status_code, "OK", response_type,
         padding, network::mojom::FetchResponseSource::kUnspecified,
-        response_headers, /*mime_type=*/absl::nullopt,
+        response_headers, /*mime_type=*/std::nullopt,
         net::HttpRequestHeaders::kGetMethod, std::move(blob),
         blink::mojom::ServiceWorkerResponseError::kUnknown, base::Time(),
         /*cache_storage_cache_name=*/std::string(),
         /*cors_exposed_header_names=*/std::vector<std::string>(),
         /*side_data_blob=*/nullptr,
         /*side_data_blob_for_cache_put=*/nullptr,
-        network::mojom::ParsedHeaders::New(),
-        net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
+        network::mojom::ParsedHeaders::New(), net::HttpConnectionInfo::kUNKNOWN,
         /*alpn_negotiated_protocol=*/"unknown",
         /*was_fetched_via_spdy=*/false, /*has_range_requested=*/false,
-        /*auth_challenge_info=*/absl::nullopt,
+        /*auth_challenge_info=*/std::nullopt,
         /*request_include_credentials=*/true);
 
     blink::mojom::BatchOperationPtr operation =
@@ -3384,7 +3384,7 @@ TEST_F(CacheStorageIndexMigrationTest, BucketMigration) {
                EXPECT_TRUE(upgraded_index.has_bucket_id());
                EXPECT_TRUE(upgraded_index.has_bucket_is_default());
 
-               absl::optional<blink::StorageKey> result =
+               std::optional<blink::StorageKey> result =
                    blink::StorageKey::Deserialize(upgraded_index.storage_key());
                ASSERT_TRUE(result.has_value());
                EXPECT_EQ(this->storage_key1_, result.value());
@@ -3412,7 +3412,7 @@ TEST_F(CacheStorageIndexMigrationTest, InvalidBucketId) {
             EXPECT_EQ(original_index.bucket_id(), 999);
             EXPECT_GT(original_index.bucket_id(), upgraded_index.bucket_id());
 
-            absl::optional<blink::StorageKey> result =
+            std::optional<blink::StorageKey> result =
                 blink::StorageKey::Deserialize(upgraded_index.storage_key());
             ASSERT_TRUE(result.has_value());
             EXPECT_EQ(this->storage_key1_, result.value());

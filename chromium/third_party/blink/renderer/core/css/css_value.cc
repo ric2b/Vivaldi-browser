@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_cyclic_variable_value.h"
+#include "third_party/blink/renderer/core/css/css_dynamic_range_limit_mix_value.h"
 #include "third_party/blink/renderer/core/css/css_font_face_src_value.h"
 #include "third_party/blink/renderer/core/css/css_font_family_value.h"
 #include "third_party/blink/renderer/core/css/css_font_feature_value.h"
@@ -206,6 +207,9 @@ bool CSSValue::operator==(const CSSValue& other) const {
         return CompareCSSValues<cssvalue::CSSCounterValue>(*this, other);
       case kCursorImageClass:
         return CompareCSSValues<cssvalue::CSSCursorImageValue>(*this, other);
+      case kDynamicRangeLimitMixClass:
+        return CompareCSSValues<cssvalue::CSSDynamicRangeLimitMixValue>(*this,
+                                                                        other);
       case kFontFaceSrcClass:
         return CompareCSSValues<CSSFontFaceSrcValue>(*this, other);
       case kFontFamilyClass:
@@ -230,6 +234,9 @@ bool CSSValue::operator==(const CSSValue& other) const {
         return CompareCSSValues<cssvalue::CSSConicGradientValue>(*this, other);
       case kCrossfadeClass:
         return CompareCSSValues<cssvalue::CSSCrossfadeValue>(*this, other);
+      case kConstantGradientClass:
+        return CompareCSSValues<cssvalue::CSSConstantGradientValue>(*this,
+                                                                    other);
       case kPaintClass:
         return CompareCSSValues<CSSPaintValue>(*this, other);
       case kCustomIdentClass:
@@ -363,6 +370,8 @@ String CSSValue::CssText() const {
       return To<cssvalue::CSSCounterValue>(this)->CustomCSSText();
     case kCursorImageClass:
       return To<cssvalue::CSSCursorImageValue>(this)->CustomCSSText();
+    case kDynamicRangeLimitMixClass:
+      return To<cssvalue::CSSDynamicRangeLimitMixValue>(this)->CustomCSSText();
     case kFontFaceSrcClass:
       return To<CSSFontFaceSrcValue>(this)->CustomCSSText();
     case kFontFamilyClass:
@@ -385,6 +394,8 @@ String CSSValue::CssText() const {
       return To<cssvalue::CSSRadialGradientValue>(this)->CustomCSSText();
     case kConicGradientClass:
       return To<cssvalue::CSSConicGradientValue>(this)->CustomCSSText();
+    case kConstantGradientClass:
+      return To<cssvalue::CSSConstantGradientValue>(this)->CustomCSSText();
     case kCrossfadeClass:
       return To<cssvalue::CSSCrossfadeValue>(this)->CustomCSSText();
     case kPaintClass:
@@ -543,6 +554,10 @@ void CSSValue::Trace(Visitor* visitor) const {
     case kCursorImageClass:
       To<cssvalue::CSSCursorImageValue>(this)->TraceAfterDispatch(visitor);
       return;
+    case kDynamicRangeLimitMixClass:
+      To<cssvalue::CSSDynamicRangeLimitMixValue>(this)->TraceAfterDispatch(
+          visitor);
+      return;
     case kFontFaceSrcClass:
       To<CSSFontFaceSrcValue>(this)->TraceAfterDispatch(visitor);
       return;
@@ -575,6 +590,9 @@ void CSSValue::Trace(Visitor* visitor) const {
       return;
     case kConicGradientClass:
       To<cssvalue::CSSConicGradientValue>(this)->TraceAfterDispatch(visitor);
+      return;
+    case kConstantGradientClass:
+      To<cssvalue::CSSConstantGradientValue>(this)->TraceAfterDispatch(visitor);
       return;
     case kCrossfadeClass:
       To<cssvalue::CSSCrossfadeValue>(this)->TraceAfterDispatch(visitor);
@@ -788,6 +806,8 @@ String CSSValue::ClassTypeToString() const {
       return "RadialGradientClass";
     case kConicGradientClass:
       return "ConicGradientClass";
+    case kConstantGradientClass:
+      return "ConstantGradientClass";
     case kLinearTimingFunctionClass:
       return "LinearTimingFunctionClass";
     case kCubicBezierTimingFunctionClass:

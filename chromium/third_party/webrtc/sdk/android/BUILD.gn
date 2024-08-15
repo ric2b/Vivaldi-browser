@@ -109,6 +109,7 @@ if (is_android) {
     visibility = [ "*" ]
     allow_poison = [
       "audio_codecs",  # TODO(bugs.webrtc.org/8396): Remove.
+      "environment_construction",
       "software_video_codecs",  # TODO(bugs.webrtc.org/7925): Remove.
     ]
     public_deps = [  # no-presubmit-check TODO(webrtc:8603)
@@ -707,6 +708,7 @@ if (current_os == "linux" || is_android) {
     # made public because we don't have a proper NDK yet. Header APIs here are not
     # considered public and are subject to change.
     visibility = [ "*" ]
+    allow_poison = [ "environment_construction" ]
 
     sources = [
       "src/jni/pc/add_ice_candidate_observer.cc",
@@ -768,11 +770,12 @@ if (current_os == "linux" || is_android) {
       ":native_api_jni",
       ":native_api_stacktrace",
       "..:media_constraints",
-      "../../api:callfactory_api",
       "../../api:dtmf_sender_interface",
+      "../../api:enable_media",
       "../../api:libjingle_peerconnection_api",
       "../../api:media_stream_interface",
       "../../api:rtc_event_log_output_file",
+      "../../api:rtc_stats_api",
       "../../api:rtp_parameters",
       "../../api:rtp_sender_interface",
       "../../api:turn_customizer",
@@ -781,12 +784,12 @@ if (current_os == "linux" || is_android) {
       "../../api/task_queue:default_task_queue_factory",
       "../../api/video_codecs:video_codecs_api",
       "../../call:call_interfaces",
-      "../../media:rtc_audio_video",
       "../../media:rtc_media_base",
       "../../modules/audio_device",
       "../../modules/audio_processing:api",
       "../../modules/utility",
       "../../pc:media_stream_observer",
+      "../../pc:peer_connection_factory",
       "../../pc:webrtc_sdp",
       "../../rtc_base:checks",
       "../../rtc_base:event_tracer",
@@ -799,6 +802,7 @@ if (current_os == "linux" || is_android) {
       "../../rtc_base:ssl",
       "../../rtc_base:stringutils",
       "../../rtc_base:threading",
+      "../../stats:rtc_stats",
       "../../system_wrappers:field_trial",
     ]
     absl_deps = [
@@ -822,12 +826,12 @@ if (current_os == "linux" || is_android) {
   rtc_library("libjingle_peerconnection_metrics_default_jni") {
     visibility = [ "*" ]
     sources = [ "src/jni/android_metrics.cc" ]
+    allow_poison = [ "environment_construction" ]
     deps = [
       ":base_jni",
       ":generated_metrics_jni",
       ":native_api_jni",
       ":peerconnection_jni",
-      "../../pc:peerconnection",
       "../../rtc_base:stringutils",
       "../../system_wrappers:metrics",
     ]
@@ -1027,6 +1031,8 @@ if (current_os == "linux" || is_android) {
   # API for creating Java PeerConnectionFactory from C++ equivalents.
   rtc_library("native_api_peerconnection") {
     visibility = [ "*" ]
+    allow_poison = [ "environment_construction" ]
+
     sources = [
       "native_api/peerconnection/peer_connection_factory.cc",
       "native_api/peerconnection/peer_connection_factory.h",
@@ -1632,6 +1638,7 @@ if (is_android) {
       ":native_test_jni_onload",
       ":opensles_audio_device_module",
       ":video_jni",
+      "../../api:enable_media_with_defaults",
       "../../api:field_trials_view",
       "../../api:scoped_refptr",
       "../../api/rtc_event_log:rtc_event_log_factory",
@@ -1642,7 +1649,6 @@ if (is_android) {
       "../../media:rtc_audio_video",
       "../../media:rtc_internal_video_codecs",
       "../../media:rtc_media_base",
-      "../../media:rtc_media_engine_defaults",
       "../../modules/audio_device",
       "../../modules/audio_device:mock_audio_device",
       "../../modules/audio_processing:api",
@@ -1721,6 +1727,7 @@ if (is_android) {
       "tests/src/org/webrtc/HardwareVideoEncoderTest.java",
       "tests/src/org/webrtc/IceCandidateTest.java",
       "tests/src/org/webrtc/RefCountDelegateTest.java",
+      "tests/src/org/webrtc/RenderSynchronizerTest.java",
       "tests/src/org/webrtc/ScalingSettingsTest.java",
       "tests/src/org/webrtc/audio/LowLatencyAudioBufferManagerTest.java",
     ]

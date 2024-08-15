@@ -48,7 +48,6 @@ import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.AndroidTaskUtils;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
-import org.chromium.components.browser_ui.media.MediaNotificationUma;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.widget.Toast;
 
@@ -56,18 +55,20 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Set;
 
+// Vivaldi
+import static org.vivaldi.browser.common.VivaldiUtils.vivaldiSetupWebSearchActionIntent;
+import org.chromium.build.BuildConfig;
+
 /**
  * Dispatches incoming intents to the appropriate activity based on the current configuration and
  * Intent fired.
  */
 public class LaunchIntentDispatcher {
-    /**
-     * Extra indicating launch mode used.
-     */
+    /** Extra indicating launch mode used. */
     public static final String EXTRA_LAUNCH_MODE =
             "com.google.android.apps.chrome.EXTRA_LAUNCH_MODE";
 
-    private static final String TAG = "ActivitiyDispatcher";
+    private static final String TAG = "ActivityDispatcher";
 
     private final Activity mActivity;
     private Intent mIntent;
@@ -130,8 +131,6 @@ public class LaunchIntentDispatcher {
         if (mIntent != null && BrowserIntentUtils.getStartupRealtimeMillis(mIntent) == -1) {
             BrowserIntentUtils.addStartupTimestampsToIntent(mIntent);
         }
-
-        recordIntentMetrics();
     }
 
     /**
@@ -143,8 +142,8 @@ public class LaunchIntentDispatcher {
         // Read partner browser customizations information asynchronously.
         // We want to initialize early because when there are no tabs to restore, we should possibly
         // show homepage, which might require reading PartnerBrowserCustomizations provider.
-        PartnerBrowserCustomizations.getInstance().initializeAsync(
-                mActivity.getApplicationContext());
+        PartnerBrowserCustomizations.getInstance()
+                .initializeAsync(mActivity.getApplicationContext());
 
         boolean isCustomTabIntent = isCustomTabIntent(mIntent);
 
@@ -162,7 +161,9 @@ public class LaunchIntentDispatcher {
         }
 
         // Check if a web search Intent is being handled.
-        if (url == null && tabId == Tab.INVALID_TAB_ID && !incognito
+        if (url == null
+                && tabId == Tab.INVALID_TAB_ID
+                && !incognito
                 && processWebSearchIntent(mIntent)) {
             return Action.FINISH_ACTIVITY;
         }
@@ -184,7 +185,7 @@ public class LaunchIntentDispatcher {
         }
 
         // Check if we should push the user through First Run.
-        if (FirstRunFlowSequencer.launch(mActivity, mIntent, false /* preferLightweightFre */)) {
+        if (FirstRunFlowSequencer.launch(mActivity, mIntent, /* preferLightweightFre= */ false)) {
             return Action.FINISH_ACTIVITY;
         }
 
@@ -203,7 +204,9 @@ public class LaunchIntentDispatcher {
         String query = null;
         final String action = intent.getAction();
         if (Intent.ACTION_SEARCH.equals(action)
-                || MediaStore.INTENT_ACTION_MEDIA_SEARCH.equals(action)) {
+                || MediaStore.INTENT_ACTION_MEDIA_SEARCH.equals(action) ||
+                // Vivaldi to also update query on outside Web Search
+                Intent.ACTION_WEB_SEARCH.equals(action)) {
             query = IntentUtils.safeGetStringExtra(intent, SearchManager.QUERY);
         }
         if (TextUtils.isEmpty(query)) return false;
@@ -217,7 +220,8 @@ public class LaunchIntentDispatcher {
 
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
             if (PackageManagerUtils.canResolveActivity(
-                        searchIntent, PackageManager.GET_RESOLVED_FILTER)) {
+                    searchIntent, PackageManager.GET_RESOLVED_FILTER) &&
+                  !BuildConfig.IS_VIVALDI) {
                 mActivity.startActivity(searchIntent);
             } else {
                 // Phone doesn't have a WEB_SEARCH action handler, open Search Activity with
@@ -226,6 +230,9 @@ public class LaunchIntentDispatcher {
                 searchActivityIntent.setClass(
                         ContextUtils.getApplicationContext(), SearchActivity.class);
                 searchActivityIntent.putExtra(SearchManager.QUERY, query);
+                // Vivaldi sets the correct intent if web search from outside of app.
+                searchActivityIntent = BuildConfig.IS_VIVALDI ?
+                        vivaldiSetupWebSearchActionIntent(query) : searchActivityIntent;
                 mActivity.startActivity(searchActivityIntent);
             }
         }
@@ -247,6 +254,10 @@ public class LaunchIntentDispatcher {
      */
     public static boolean isCustomTabIntent(Intent intent) {
         if (intent == null) return false;
+        Log.w(
+                TAG,
+                "CustomTabsIntent#shouldAlwaysUseBrowserUI() = "
+                        + CustomTabsIntent.shouldAlwaysUseBrowserUI(intent));
         if (CustomTabsIntent.shouldAlwaysUseBrowserUI(intent)
                 || !intent.hasExtra(CustomTabsIntent.EXTRA_SESSION)) {
             return false;
@@ -254,9 +265,7 @@ public class LaunchIntentDispatcher {
         return IntentHandler.getUrlFromIntent(intent) != null;
     }
 
-    /**
-     * Creates an Intent that can be used to launch a {@link CustomTabActivity}.
-     */
+    /** Creates an Intent that can be used to launch a {@link CustomTabActivity}. */
     public static Intent createCustomTabActivityIntent(Context context, Intent intent) {
         // Use the copy constructor to carry over the myriad of extras.
         Uri uri = Uri.parse(IntentHandler.getUrlFromIntent(intent));
@@ -283,8 +292,8 @@ public class LaunchIntentDispatcher {
                     getSessionDataHolder().getActiveHandlerClassInCurrentTask(intent, context);
             if (handlerClass != null) {
                 newIntent.setClassName(context, handlerClass.getName());
-                newIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP |
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                newIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             }
         }
 
@@ -340,8 +349,9 @@ public class LaunchIntentDispatcher {
      * in the same task. Returns whether an Activity was launched (or brought to the foreground).
      */
     private boolean launchCustomTabActivity() {
-        CustomTabsConnection.getInstance().onHandledIntent(
-                CustomTabsSessionToken.getSessionTokenFromIntent(mIntent), mIntent);
+        CustomTabsConnection.getInstance()
+                .onHandledIntent(
+                        CustomTabsSessionToken.getSessionTokenFromIntent(mIntent), mIntent);
 
         boolean isCustomTab = true;
         if (IntentHandler.shouldIgnoreIntent(mIntent, isCustomTab)) {
@@ -400,9 +410,7 @@ public class LaunchIntentDispatcher {
         return BuildCompat.isAtLeastU() ? mActivity.getLaunchedFromPackage() : null;
     }
 
-    /**
-     * Handles launching a {@link ChromeTabbedActivity}.
-     */
+    /** Handles launching a {@link ChromeTabbedActivity}. */
     @SuppressLint("InlinedApi")
     @SuppressWarnings("checkstyle:SystemExitCheck") // Allowed due to https://crbug.com/847921#c17.
     private @Action int dispatchToTabbedActivity() {
@@ -425,18 +433,25 @@ public class LaunchIntentDispatcher {
                     "Android.Intent.HasNonSpoofablePackageName", hasNonSpoofablePackageName());
         }
 
+        if (mActivity instanceof ChromeLauncherActivity) {
+            newIntent.putExtra(IntentHandler.EXTRA_LAUNCHED_VIA_CHROME_LAUNCHER_ACTIVITY, true);
+        }
+
         Uri extraReferrer = mActivity.getReferrer();
         if (extraReferrer != null) {
             newIntent.putExtra(IntentHandler.EXTRA_ACTIVITY_REFERRER, extraReferrer.toString());
         }
 
-        String targetActivityClassName = MultiWindowUtils.getInstance()
-                                                 .getTabbedActivityForIntent(newIntent, mActivity)
-                                                 .getName();
+        String targetActivityClassName =
+                MultiWindowUtils.getInstance()
+                        .getTabbedActivityForIntent(newIntent, mActivity)
+                        .getName();
         newIntent.setClassName(
                 mActivity.getApplicationContext().getPackageName(), targetActivityClassName);
-        newIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK
-                | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
+        newIntent.setFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
 
         // If the source of an intent containing FLAG_ACTIVITY_MULTIPLE_TASK is Chrome, retain the
         // flag to support multi-instance launch.
@@ -462,9 +477,10 @@ public class LaunchIntentDispatcher {
             mActivity.startActivity(newIntent);
         } catch (SecurityException ex) {
             if (isContentScheme) {
-                Toast.makeText(mActivity,
-                             org.chromium.chrome.R.string.external_app_restricted_access_error,
-                             Toast.LENGTH_LONG)
+                Toast.makeText(
+                                mActivity,
+                                org.chromium.chrome.R.string.external_app_restricted_access_error,
+                                Toast.LENGTH_LONG)
                         .show();
             } else {
                 throw ex;
@@ -500,13 +516,6 @@ public class LaunchIntentDispatcher {
         }
         return !TextUtils.isEmpty(packageName)
                 || !TextUtils.isEmpty(getClientPackageNameFromIdentitySharing());
-    }
-
-    /**
-     * Records metrics gleaned from the Intent.
-     */
-    private void recordIntentMetrics() {
-        MediaNotificationUma.recordClickSource(mIntent);
     }
 
     private static boolean clearTopIntentsForCustomTabsEnabled(Intent intent) {

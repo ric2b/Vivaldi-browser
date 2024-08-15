@@ -14,14 +14,6 @@
 
 //! Nearby Presence-specific usage of LDT.
 #![no_std]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used
-)]
 
 #[cfg(feature = "std")]
 extern crate std;
@@ -41,10 +33,13 @@ use xts_aes::XtsAes128;
 
 /// Max LDT-XTS-AES data size: `(2 * AES block size) - 1`
 pub const LDT_XTS_AES_MAX_LEN: usize = 31;
-/// Legacy (v0) format uses 14-byte metadata key
+
+/// Legacy (v0) format uses a 14-byte metadata key
 pub const NP_LEGACY_METADATA_KEY_LEN: usize = 14;
 
-/// The salt included in an NP advertisement
+/// The salt included in an NP advertisement.
+/// LDT does not use an IV but can instead incorporate the 2 byte, regularly rotated,
+/// salt from the advertisement payload and XOR it with the padded tweak data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LegacySalt {
     /// Salt bytes extracted from the incoming NP advertisement
@@ -104,6 +99,20 @@ type LdtXtsAes128Decrypter<C> = LdtDecryptCipher<{ BLOCK_SIZE }, XtsAes128<C>, S
 
 /// Decrypts and validates a NP legacy format advertisement encrypted with LDT.
 ///
+/// A NP legacy advertisement will always be in the format of:
+///
+/// Header (1 byte) | Identity DE header (1 byte) | Salt (2 bytes) | Identity (14 bytes) | repeated
+/// { DE header | DE payload }
+///
+/// Example:
+/// Header (1 byte) | Identity DE header (1 byte) | Salt (2 bytes) | Identity (14 bytes) |
+/// Tx power DE header (1 byte) | Tx power (1 byte) | Action DE header(1 byte) | action (1-3 bytes)
+///
+/// The ciphertext bytes will always start with the Identity through the end of the
+/// advertisement, for example in the above [ Identity (14 bytes) | Tx power DE header (1 byte) |
+/// Tx power (1 byte) | Action DE header(1 byte) | action (1-3 bytes) ] will be the ciphertext section
+/// passed as the input to `decrypt_and_verify`
+///
 /// `B` is the underlying block cipher block size.
 /// `O` is the max output size (must be 2 * B - 1).
 /// `T` is the tweakable block cipher used by LDT.
@@ -129,6 +138,10 @@ where
     /// Decrypt an advertisement payload using the provided padder.
     ///
     /// If the plaintext's metadata key matches this item's MAC, return the plaintext, otherwise `None`.
+    ///
+    /// NOTE: because LDT acts as a PRP over the entire message, tampering with any bit scrambles
+    /// the whole message, so we can leverage the MAC on just the metadata key to ensure integrity
+    /// for the whole message.
     ///
     /// # Errors
     /// - If `payload` has a length outside of `[B, B * 2)`.

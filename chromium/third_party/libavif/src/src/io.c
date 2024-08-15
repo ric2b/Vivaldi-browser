@@ -44,7 +44,9 @@ static avifResult avifIOMemoryReaderRead(struct avifIO * io, uint32_t readFlags,
         size = (size_t)availableSize;
     }
 
-    out->data = reader->rodata.data + offset;
+    // Prevent the offset addition from triggering an undefined behavior
+    // sanitizer error if data is NULL (happens even with offset zero).
+    out->data = offset ? reader->rodata.data + offset : reader->rodata.data;
     out->size = size;
     return AVIF_RESULT_OK;
 }
@@ -57,6 +59,9 @@ static void avifIOMemoryReaderDestroy(struct avifIO * io)
 avifIO * avifIOCreateMemoryReader(const uint8_t * data, size_t size)
 {
     avifIOMemoryReader * reader = avifAlloc(sizeof(avifIOMemoryReader));
+    if (reader == NULL) {
+        return NULL;
+    }
     memset(reader, 0, sizeof(avifIOMemoryReader));
     reader->io.destroy = avifIOMemoryReaderDestroy;
     reader->io.read = avifIOMemoryReaderRead;

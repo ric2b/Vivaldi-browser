@@ -207,10 +207,11 @@ RUNTIME_FUNCTION(Runtime_UnwindAndFindExceptionHandler) {
   return isolate->UnwindAndFindHandler();
 }
 
-RUNTIME_FUNCTION(Runtime_PromoteScheduledException) {
+RUNTIME_FUNCTION(Runtime_PropagateException) {
   SealHandleScope shs(isolate);
   DCHECK_EQ(0, args.length());
-  return isolate->PromoteScheduledException();
+  DCHECK(isolate->has_exception());
+  return ReadOnlyRoots(isolate).exception();
 }
 
 RUNTIME_FUNCTION(Runtime_ThrowReferenceError) {
@@ -483,6 +484,7 @@ class SaveAndClearThreadInWasmFlag {};
 
 RUNTIME_FUNCTION(Runtime_AllocateInYoungGeneration) {
   HandleScope scope(isolate);
+  DCHECK(isolate->IsOnCentralStack());
   DCHECK_EQ(2, args.length());
   // TODO(v8:13070): Align allocations in the builtins that call this.
   int size = ALIGN_TO_ALLOCATION_ALIGNMENT(args.smi_value_at(0));
@@ -774,13 +776,13 @@ RUNTIME_FUNCTION(Runtime_ReportMessageFromMicrotask) {
 
   Handle<Object> exception = args.at(0);
 
-  DCHECK(!isolate->has_pending_exception());
-  isolate->set_pending_exception(*exception);
+  DCHECK(!isolate->has_exception());
+  isolate->set_exception(*exception);
   MessageLocation* no_location = nullptr;
   Handle<JSMessageObject> message =
       isolate->CreateMessageOrAbort(exception, no_location);
   MessageHandler::ReportMessage(isolate, no_location, message);
-  isolate->clear_pending_exception();
+  isolate->clear_exception();
   return ReadOnlyRoots(isolate).undefined_value();
 }
 

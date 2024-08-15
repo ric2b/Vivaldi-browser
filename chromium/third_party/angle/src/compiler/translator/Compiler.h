@@ -39,6 +39,7 @@ class TranslatorHLSL;
 class TranslatorMSL;
 #endif  // ANGLE_ENABLE_METAL
 
+using MetadataFlagBits   = angle::PackedEnumBitSet<sh::MetadataFlags, uint32_t>;
 using SpecConstUsageBits = angle::PackedEnumBitSet<vk::SpecConstUsage, uint32_t>;
 
 //
@@ -113,8 +114,7 @@ class TCompiler : public TShHandleBase
 
     bool specifyEarlyFragmentTests() { return mEarlyFragmentTestsSpecified = true; }
     bool isEarlyFragmentTestsSpecified() const { return mEarlyFragmentTestsSpecified; }
-    bool hasDiscard() const { return mHasDiscard; }
-    bool enablesPerSampleShading() const { return mEnablesPerSampleShading; }
+    MetadataFlagBits getMetadataFlags() const { return mMetadataFlags; }
     SpecConstUsageBits getSpecConstUsageBits() const { return mSpecConstUsageBits; }
 
     bool isComputeShaderLocalSizeDeclared() const { return mComputeShaderLocalSizeDeclared; }
@@ -191,6 +191,8 @@ class TCompiler : public TShHandleBase
 
     bool hasPixelLocalStorageUniforms() const { return mHasPixelLocalStorageUniforms; }
 
+    ShPixelLocalStorageType getPixelLocalStorageType() const { return mCompileOptions.pls.type; }
+
     unsigned int getSharedMemorySize() const;
 
     sh::GLenum getShaderType() const { return mShaderType; }
@@ -225,7 +227,12 @@ class TCompiler : public TShHandleBase
 
     bool isClipDistanceRedeclared() const { return mClipDistanceRedeclared; }
 
-    bool hasClipDistance() const { return mClipDistanceUsed; }
+    bool usesDerivatives() const { return mUsesDerivatives; }
+
+    bool supportsAttributeAliasing() const
+    {
+        return mShaderVersion == 100 && !IsWebGLBasedSpec(mShaderSpec);
+    }
 
   protected:
     // Add emulated functions to the built-in function emulator.
@@ -258,6 +265,8 @@ class TCompiler : public TShHandleBase
 
     // Track what should be validated given passes currently applied.
     ValidateASTOptions mValidateASTOptions;
+
+    MetadataFlagBits mMetadataFlags;
 
     // Specialization constant usage bits
     SpecConstUsageBits mSpecConstUsageBits;
@@ -345,13 +354,6 @@ class TCompiler : public TShHandleBase
     // Fragment shader early fragment tests
     bool mEarlyFragmentTestsSpecified;
 
-    // Fragment shader has the discard instruction
-    bool mHasDiscard;
-
-    // Whether per-sample shading is enabled by the shader.  In OpenGL, this keyword should
-    // implicitly trigger per-sample shading without the API enabling it.
-    bool mEnablesPerSampleShading;
-
     // compute shader local group size
     bool mComputeShaderLocalSizeDeclared;
     sh::WorkGroupSize mComputeShaderLocalSize;
@@ -364,7 +366,6 @@ class TCompiler : public TShHandleBase
     uint8_t mCullDistanceSize;
     bool mClipDistanceRedeclared;
     bool mCullDistanceRedeclared;
-    bool mClipDistanceUsed;
 
     // geometry shader parameters.
     int mGeometryShaderMaxVertices;
@@ -386,6 +387,9 @@ class TCompiler : public TShHandleBase
 
     // ANGLE_shader_pixel_local_storage.
     bool mHasPixelLocalStorageUniforms;
+
+    // Fragment shader uses screen-space derivatives
+    bool mUsesDerivatives;
 
     // name hashing.
     NameMap mNameMap;

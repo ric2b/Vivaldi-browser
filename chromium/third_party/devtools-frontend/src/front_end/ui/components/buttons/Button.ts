@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as LitHtml from '../../lit-html/lit-html.js';
+import * as VisualLogging from '../../visual_logging/visual_logging.js';
 import * as ComponentHelpers from '../helpers/helpers.js';
 import * as IconButton from '../icon_button/icon_button.js';
 
@@ -16,6 +17,7 @@ declare global {
 
 export const enum Variant {
   PRIMARY = 'primary',
+  TONAL = 'tonal',
   SECONDARY = 'secondary',
   TOOLBAR = 'toolbar',
   // Just like toolbar but has a style similar to a primary button.
@@ -43,9 +45,8 @@ interface ButtonState {
   type: ButtonType;
   value?: string;
   title?: string;
-  iconWidth?: string;
-  iconHeight?: string;
   iconName?: string;
+  jslogContext?: string;
 }
 
 interface CommonButtonData {
@@ -59,8 +60,7 @@ interface CommonButtonData {
   type?: ButtonType;
   value?: string;
   title?: string;
-  iconWidth?: string;
-  iconHeight?: string;
+  jslogContext?: string;
 }
 
 export type ButtonData = CommonButtonData&(|{
@@ -70,7 +70,7 @@ export type ButtonData = CommonButtonData&(|{
   variant: Variant.PRIMARY_TOOLBAR | Variant.TOOLBAR | Variant.ROUND,
   iconName: string,
 }|{
-  variant: Variant.PRIMARY | Variant.SECONDARY,
+  variant: Variant.PRIMARY | Variant.SECONDARY | Variant.TONAL,
 });
 
 export class Button extends HTMLElement {
@@ -108,12 +108,6 @@ export class Button extends HTMLElement {
     if ('size' in data && data.size) {
       this.#props.size = data.size;
     }
-    if ('iconWidth' in data && data.iconWidth) {
-      this.#props.iconWidth = data.iconWidth;
-    }
-    if ('iconHeight' in data && data.iconHeight) {
-      this.#props.iconHeight = data.iconHeight;
-    }
 
     this.#props.active = Boolean(data.active);
     this.#props.spinner = Boolean('spinner' in data ? data.spinner : false);
@@ -124,6 +118,7 @@ export class Button extends HTMLElement {
     }
     this.#setDisabledProperty(data.disabled || false);
     this.#props.title = data.title;
+    this.#props.jslogContext = data.jslogContext;
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
   }
 
@@ -144,16 +139,6 @@ export class Button extends HTMLElement {
 
   set size(size: Size) {
     this.#props.size = size;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
-  }
-
-  set iconWidth(iconWidth: string) {
-    this.#props.iconWidth = iconWidth;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
-  }
-
-  set iconHeight(iconHeight: string) {
-    this.#props.iconHeight = iconHeight;
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
   }
 
@@ -183,6 +168,15 @@ export class Button extends HTMLElement {
 
   set spinner(spinner: boolean) {
     this.#props.spinner = spinner;
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+  }
+
+  get jslogContext(): string|undefined {
+    return this.#props.jslogContext;
+  }
+
+  set jslogContext(jslogContext: string|undefined) {
+    this.#props.jslogContext = jslogContext;
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
   }
 
@@ -255,37 +249,35 @@ export class Button extends HTMLElement {
     const hasIcon = Boolean(this.#props.iconUrl) || Boolean(this.#props.iconName);
     const classes = {
       primary: this.#props.variant === Variant.PRIMARY,
+      tonal: this.#props.variant === Variant.TONAL,
       secondary: this.#props.variant === Variant.SECONDARY,
       toolbar: this.#isToolbarVariant(),
       'primary-toolbar': this.#props.variant === Variant.PRIMARY_TOOLBAR,
       round: this.#props.variant === Variant.ROUND,
       'text-with-icon': hasIcon && !this.#isEmpty,
       'only-icon': hasIcon && this.#isEmpty,
+      'only-text': !hasIcon && !this.#isEmpty,
       small: Boolean(this.#props.size === Size.SMALL || this.#props.size === Size.TINY),
       tiny: Boolean(this.#props.size === Size.TINY),
       active: this.#props.active,
-      'explicit-size': Boolean(this.#props.iconHeight || this.#props.iconWidth),
     };
     const spinnerClasses = {
       primary: this.#props.variant === Variant.PRIMARY,
       secondary: this.#props.variant === Variant.SECONDARY,
       disabled: Boolean(this.#props.disabled),
-      'spinner-component': true,
+      spinner: true,
     };
+    const jslog =
+        this.#props.jslogContext && VisualLogging.action().track({click: true}).context(this.#props.jslogContext);
     // clang-format off
     LitHtml.render(
       LitHtml.html`
-        <button title=${LitHtml.Directives.ifDefined(this.#props.title)} .disabled=${this.#props.disabled} class=${LitHtml.Directives.classMap(classes)}>
-          ${hasIcon ? LitHtml.html`<${IconButton.Icon.Icon.litTagName}
-            .data=${{
-              iconPath: this.#props.iconUrl,
-              iconName: this.#props.iconName,
-              color: 'var(--sys-color-cdt-base-container)',
-              width: this.#props.iconWidth || undefined,
-              height: this.#props.iconHeight || undefined,
-            } as IconButton.Icon.IconData}
-          >
-          </${IconButton.Icon.Icon.litTagName}>` : ''}
+        <button title=${LitHtml.Directives.ifDefined(this.#props.title)} .disabled=${this.#props.disabled} class=${LitHtml.Directives.classMap(classes)} jslog=${LitHtml.Directives.ifDefined(jslog)}>
+          ${hasIcon
+            ? LitHtml.html`
+                <${IconButton.Icon.Icon.litTagName} name=${this.#props.iconName || this.#props.iconUrl}>
+                </${IconButton.Icon.Icon.litTagName}>`
+            : ''}
           ${this.#props.spinner ? LitHtml.html`<span class=${LitHtml.Directives.classMap(spinnerClasses)}></span>` : ''}
           <slot @slotchange=${this.#onSlotChange}></slot>
         </button>

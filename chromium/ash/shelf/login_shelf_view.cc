@@ -48,6 +48,7 @@
 #include "components/account_id/account_id.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/manager/display_configurator.h"
 #include "ui/events/types/event_type.h"
@@ -197,6 +198,14 @@ void LoginShelfView::OnRequestShutdownCancelled() {
 }
 
 void LoginShelfView::RequestShutdown() {
+  // If the shutdown bubble already on the screen, on the button click
+  // the bubble should be closed to match the right hand side (tray)
+  // behavior.
+  if (test_shutdown_confirmation_bubble_ != nullptr) {
+    test_shutdown_confirmation_bubble_->GetWidget()->CloseWithReason(
+        views::Widget::ClosedReason::kUnspecified);
+    return;
+  }
   base::RecordAction(base::UserMetricsAction("Shelf_ShutDown"));
   if (base::FeatureList::IsEnabled(features::kShutdownConfirmationBubble)) {
     Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
@@ -206,8 +215,10 @@ void LoginShelfView::RequestShutdown() {
     // cleaned up.
     // And ShelfShutdownConfirmationBubble would be destroyed when it's
     // dismissed or its buttons were presses.
+    shutdown_confirmation_button_->SetIsActive(true);
+
     test_shutdown_confirmation_bubble_ = new ShelfShutdownConfirmationBubble(
-        GetViewByID(kShutdown), shelf->alignment(),
+        shutdown_confirmation_button_, shelf->alignment(),
         base::BindOnce(&LoginShelfView::OnRequestShutdownConfirmed,
                        weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&LoginShelfView::OnRequestShutdownCancelled,
@@ -251,6 +262,8 @@ LoginShelfView::LoginShelfView(
       base::BindRepeating(&LoginShelfView::CallIfDisplayIsOn,
                           weak_ptr_factory_.GetWeakPtr(), shutdown_callback),
       IDS_ASH_SHELF_SHUTDOWN_BUTTON, kShelfShutdownButtonIcon);
+  shutdown_confirmation_button_ =
+      static_cast<LoginShelfButton*>(login_shelf_buttons_.back());
   const auto restart_callback = base::BindRepeating(
       &LockStateController::RequestShutdown,
       base::Unretained(Shell::Get()->lock_state_controller()),
@@ -434,7 +447,7 @@ void LoginShelfView::OnKioskMenuShown(
   if (kiosk_instruction_bubble_) {
     kiosk_instruction_bubble_->GetWidget()->Hide();
   }
-
+  kiosk_apps_button_->SetIsActive(true);
   on_kiosk_menu_shown.Run();
 }
 
@@ -442,6 +455,7 @@ void LoginShelfView::OnKioskMenuclosed() {
   if (kiosk_instruction_bubble_) {
     kiosk_instruction_bubble_->GetWidget()->Show();
   }
+  kiosk_apps_button_->SetIsActive(false);
 }
 
 void LoginShelfView::SetKioskApps(
@@ -490,7 +504,7 @@ void LoginShelfView::SetAddUserButtonEnabled(bool enable_add_user) {
 }
 
 void LoginShelfView::SetShutdownButtonEnabled(bool enable_shutdown_button) {
-  GetViewByID(kShutdown)->SetEnabled(enable_shutdown_button);
+  shutdown_confirmation_button_->SetEnabled(enable_shutdown_button);
 }
 
 void LoginShelfView::SetButtonEnabled(bool enabled) {
@@ -632,7 +646,7 @@ void LoginShelfView::UpdateUi() {
       session_state == SessionState::RMA) {
     // The entire view was set invisible. The buttons are also set invisible
     // to avoid affecting calculation of the shelf size.
-    for (auto* child : children()) {
+    for (views::View* child : children()) {
       child->SetVisible(false);
     }
 
@@ -700,7 +714,7 @@ void LoginShelfView::UpdateUi() {
   // LoginShelfView. We update it here, so we don't need to check visibility
   // every time we move focus to system tray.
   bool is_anything_focusable = false;
-  for (auto* child : login_shelf_buttons_) {
+  for (ash::LoginShelfButton* child : login_shelf_buttons_) {
     if (child->IsFocusable()) {
       is_anything_focusable = true;
       break;
@@ -723,7 +737,7 @@ void LoginShelfView::UpdateUi() {
 void LoginShelfView::UpdateButtonUnionBounds() {
   button_union_bounds_ = gfx::Rect();
   View::Views children = GetChildrenInZOrder();
-  for (auto* child : children) {
+  for (views::View* child : children) {
     if (child->GetVisible()) {
       button_union_bounds_.Union(child->bounds());
     }
@@ -890,5 +904,8 @@ bool LoginShelfView::ShouldShowOsInstallButton() const {
 
   return true;
 }
+
+BEGIN_METADATA(LoginShelfView)
+END_METADATA
 
 }  // namespace ash

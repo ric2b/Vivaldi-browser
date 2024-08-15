@@ -41,9 +41,7 @@ message_center::Notification* GetDoNotDisturbNotification() {
 
 }  // namespace
 
-class DoNotDisturbNotificationControllerTest
-    : public AshTestBase,
-      public testing::WithParamInterface<bool> {
+class DoNotDisturbNotificationControllerTest : public AshTestBase {
  public:
   DoNotDisturbNotificationControllerTest() = default;
   DoNotDisturbNotificationControllerTest(
@@ -51,39 +49,19 @@ class DoNotDisturbNotificationControllerTest
   DoNotDisturbNotificationControllerTest& operator=(
       const DoNotDisturbNotificationControllerTest&) = delete;
   ~DoNotDisturbNotificationControllerTest() override = default;
-
-  void SetUp() override {
-    scoped_feature_list_.InitWithFeatureState(features::kQsRevamp,
-                                              /*enabled=*/IsQsRevampEnabled());
-    AshTestBase::SetUp();
-  }
-
-  // TODO(b/305075031) clean up after the flag is removed.
-  bool IsQsRevampEnabled() { return true; }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         DoNotDisturbNotificationControllerTest,
-                         testing::Bool() /* IsQsRevampEnabled() */);
 
 // Tests that enabling/disabling Do not disturb mode adds/removes the Do not
 // disturb notification.
-TEST_P(DoNotDisturbNotificationControllerTest, AddRemoveNotification) {
+TEST_F(DoNotDisturbNotificationControllerTest, AddRemoveNotification) {
   auto* message_center = MessageCenter::Get();
   ASSERT_FALSE(GetDoNotDisturbNotification());
 
   // Turn on Do not disturb mode.
   message_center->SetQuietMode(true);
   auto* notification = GetDoNotDisturbNotification();
-  if (IsQsRevampEnabled()) {
     EXPECT_TRUE(notification);
     EXPECT_EQ(notification->message(), GetDoNotDisturbDescription());
-  } else {
-    EXPECT_FALSE(notification);
-  }
 
   // Turn off Do not disturb mode.
   message_center->SetQuietMode(false);
@@ -92,13 +70,8 @@ TEST_P(DoNotDisturbNotificationControllerTest, AddRemoveNotification) {
 
 // Tests that clicking the notification's "Turn off" button turns off Do not
 // disturb mode and dismisses the Do not disturb notification.
-TEST_P(DoNotDisturbNotificationControllerTest,
+TEST_F(DoNotDisturbNotificationControllerTest,
        NotificationButtonTurnsOffDoNotDisturbMode) {
-  if (!IsQsRevampEnabled()) {
-    // The notification only appears when QsRevamp is enabled.
-    return;
-  }
-
   // Show the notification by turning on Do not disturb mode.
   auto* message_center = MessageCenter::Get();
   message_center->SetQuietMode(true);
@@ -107,7 +80,7 @@ TEST_P(DoNotDisturbNotificationControllerTest,
   ASSERT_EQ(notification->message(), GetDoNotDisturbDescription());
 
   // Simulate a click on the notification's "Turn off" button.
-  notification->delegate()->Click(0, absl::nullopt);
+  notification->delegate()->Click(0, std::nullopt);
   EXPECT_FALSE(GetDoNotDisturbNotification());
   EXPECT_FALSE(message_center->IsQuietMode());
 }
@@ -146,7 +119,7 @@ TEST_F(DoNotDisturbNotificationControllerWithFocusModeTest,
 
   // Check the notification creation during the focus session. First, disable
   // the DND mode in the focus session.
-  notification->delegate()->Click(0, absl::nullopt);
+  notification->delegate()->Click(0, std::nullopt);
   EXPECT_FALSE(GetDoNotDisturbNotification());
   EXPECT_FALSE(message_center->IsQuietMode());
   // Second, enable the DND mode.
@@ -168,9 +141,13 @@ TEST_F(DoNotDisturbNotificationControllerWithFocusModeTest,
 TEST_F(DoNotDisturbNotificationControllerWithFocusModeTest,
        CheckNotificationTypesIfSystemDNDIsOffInitially) {
   auto* focus_mode_controller = FocusModeController::Get();
+  auto* message_center = MessageCenter::Get();
 
   // The system DND is off before starting a focus session.
   ASSERT_FALSE(GetDoNotDisturbNotification());
+  EXPECT_FALSE(message_center->IsQuietMode());
+  EXPECT_NE(message_center::QuietModeSourceType::kFocusMode,
+            message_center->GetLastQuietModeChangeSourceType());
 
   // Start a focus session where `turn_on_do_not_disturb` is defaulted to
   // `true`.
@@ -180,12 +157,21 @@ TEST_F(DoNotDisturbNotificationControllerWithFocusModeTest,
   auto* notification = GetDoNotDisturbNotification();
   EXPECT_TRUE(notification);
   EXPECT_EQ(notification->message(), GetDoNotDisturbInFocusModeDescription());
+  // Check that quiet mode is active, and it was triggered by focus mode.
+  EXPECT_TRUE(message_center->IsQuietMode());
+  EXPECT_EQ(message_center::QuietModeSourceType::kFocusMode,
+            message_center->GetLastQuietModeChangeSourceType());
 
   // End the focus session, and the system DND state will be restored to
   // `false`.
   focus_mode_controller->ToggleFocusMode();
   EXPECT_FALSE(focus_mode_controller->in_focus_session());
   EXPECT_FALSE(GetDoNotDisturbNotification());
+  // Check that quiet mode is no longer active, and it was triggered by focus
+  // mode.
+  EXPECT_FALSE(message_center->IsQuietMode());
+  EXPECT_EQ(message_center::QuietModeSourceType::kFocusMode,
+            message_center->GetLastQuietModeChangeSourceType());
 }
 
 // Tests that if the focus session is extended by 10 minutes; correspondingly,
@@ -202,7 +188,7 @@ TEST_F(DoNotDisturbNotificationControllerWithFocusModeTest,
   EXPECT_TRUE(focus_mode_controller->turn_on_do_not_disturb());
   focus_mode_controller->ToggleFocusMode();
   EXPECT_TRUE(focus_mode_controller->in_focus_session());
-  const base::Time end_time1 = focus_mode_controller->end_time();
+  const base::Time end_time1 = focus_mode_controller->GetActualEndTime();
 
   auto* notification = GetDoNotDisturbNotification();
   EXPECT_TRUE(notification);
@@ -210,8 +196,8 @@ TEST_F(DoNotDisturbNotificationControllerWithFocusModeTest,
             focus_mode_util::GetNotificationTitleForFocusSession(end_time1));
 
   // Extend the focus duration.
-  focus_mode_controller->ExtendActiveSessionDuration();
-  const base::Time end_time2 = focus_mode_controller->end_time();
+  focus_mode_controller->ExtendSessionDuration();
+  const base::Time end_time2 = focus_mode_controller->GetActualEndTime();
   EXPECT_EQ(end_time2 - end_time1, base::Minutes(10));
 
   notification = GetDoNotDisturbNotification();

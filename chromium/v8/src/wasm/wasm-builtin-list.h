@@ -45,6 +45,7 @@ namespace v8::internal::wasm {
   V(WasmTableSet)                                                              \
   V(WasmTableGetFuncRef)                                                       \
   V(WasmTableSetFuncRef)                                                       \
+  V(WasmFunctionTableGet)                                                      \
   V(WasmStackGuard)                                                            \
   V(WasmStackOverflow)                                                         \
   V(WasmAllocateFixedArray)                                                    \
@@ -63,66 +64,9 @@ namespace v8::internal::wasm {
   V(RecordWriteSaveFP)                                                         \
   V(RecordWriteIgnoreFP)                                                       \
   V(ToNumber)                                                                  \
-  V(ThrowDataViewGetBigInt64DetachedError)                                     \
-  V(ThrowDataViewGetBigInt64OutOfBounds)                                       \
-  V(ThrowDataViewGetBigInt64TypeError)                                         \
-  V(ThrowDataViewGetBigUint64DetachedError)                                    \
-  V(ThrowDataViewGetBigUint64OutOfBounds)                                      \
-  V(ThrowDataViewGetBigUint64TypeError)                                        \
-  V(ThrowDataViewGetFloat32DetachedError)                                      \
-  V(ThrowDataViewGetFloat32OutOfBounds)                                        \
-  V(ThrowDataViewGetFloat32TypeError)                                          \
-  V(ThrowDataViewGetFloat64DetachedError)                                      \
-  V(ThrowDataViewGetFloat64OutOfBounds)                                        \
-  V(ThrowDataViewGetFloat64TypeError)                                          \
-  V(ThrowDataViewGetInt8DetachedError)                                         \
-  V(ThrowDataViewGetInt8OutOfBounds)                                           \
-  V(ThrowDataViewGetInt8TypeError)                                             \
-  V(ThrowDataViewGetInt16DetachedError)                                        \
-  V(ThrowDataViewGetInt16OutOfBounds)                                          \
-  V(ThrowDataViewGetInt16TypeError)                                            \
-  V(ThrowDataViewGetInt32DetachedError)                                        \
-  V(ThrowDataViewGetInt32OutOfBounds)                                          \
-  V(ThrowDataViewGetInt32TypeError)                                            \
-  V(ThrowDataViewGetUint8DetachedError)                                        \
-  V(ThrowDataViewGetUint8OutOfBounds)                                          \
-  V(ThrowDataViewGetUint8TypeError)                                            \
-  V(ThrowDataViewGetUint16DetachedError)                                       \
-  V(ThrowDataViewGetUint16OutOfBounds)                                         \
-  V(ThrowDataViewGetUint16TypeError)                                           \
-  V(ThrowDataViewGetUint32DetachedError)                                       \
-  V(ThrowDataViewGetUint32OutOfBounds)                                         \
-  V(ThrowDataViewGetUint32TypeError)                                           \
-  V(ThrowDataViewSetBigInt64DetachedError)                                     \
-  V(ThrowDataViewSetBigInt64OutOfBounds)                                       \
-  V(ThrowDataViewSetBigInt64TypeError)                                         \
-  V(ThrowDataViewSetBigUint64DetachedError)                                    \
-  V(ThrowDataViewSetBigUint64OutOfBounds)                                      \
-  V(ThrowDataViewSetBigUint64TypeError)                                        \
-  V(ThrowDataViewSetFloat32DetachedError)                                      \
-  V(ThrowDataViewSetFloat32OutOfBounds)                                        \
-  V(ThrowDataViewSetFloat32TypeError)                                          \
-  V(ThrowDataViewSetFloat64DetachedError)                                      \
-  V(ThrowDataViewSetFloat64OutOfBounds)                                        \
-  V(ThrowDataViewSetFloat64TypeError)                                          \
-  V(ThrowDataViewSetInt8DetachedError)                                         \
-  V(ThrowDataViewSetInt8OutOfBounds)                                           \
-  V(ThrowDataViewSetInt8TypeError)                                             \
-  V(ThrowDataViewSetInt16DetachedError)                                        \
-  V(ThrowDataViewSetInt16OutOfBounds)                                          \
-  V(ThrowDataViewSetInt16TypeError)                                            \
-  V(ThrowDataViewSetInt32DetachedError)                                        \
-  V(ThrowDataViewSetInt32OutOfBounds)                                          \
-  V(ThrowDataViewSetInt32TypeError)                                            \
-  V(ThrowDataViewSetUint8DetachedError)                                        \
-  V(ThrowDataViewSetUint8OutOfBounds)                                          \
-  V(ThrowDataViewSetUint8TypeError)                                            \
-  V(ThrowDataViewSetUint16DetachedError)                                       \
-  V(ThrowDataViewSetUint16OutOfBounds)                                         \
-  V(ThrowDataViewSetUint16TypeError)                                           \
-  V(ThrowDataViewSetUint32DetachedError)                                       \
-  V(ThrowDataViewSetUint32OutOfBounds)                                         \
-  V(ThrowDataViewSetUint32TypeError)                                           \
+  V(ThrowDataViewTypeError)                                                    \
+  V(ThrowDataViewDetachedError)                                                \
+  V(ThrowDataViewOutOfBounds)                                                  \
   V(ThrowIndexOfCalledOnNull)                                                  \
   V(ThrowToLowerCaseCalledOnNull)                                              \
   IF_INTL(V, StringToLowerCaseIntl)                                            \
@@ -190,7 +134,11 @@ namespace v8::internal::wasm {
   V(WasmStringFromDataSegment)                                                 \
   V(StringAdd_CheckNone)                                                       \
   V(DebugPrintFloat64)                                                         \
-  V(DebugPrintWordPtr)
+  V(DebugPrintWordPtr)                                                         \
+  V(WasmAllocateInYoungGeneration)                                             \
+  V(WasmAllocateInOldGeneration)                                               \
+  V(IterableToFixedArrayForWasm)                                               \
+  V(WasmAllocateZeroedFixedArray)
 
 namespace detail {
 constexpr std::array<uint8_t, static_cast<int>(Builtin::kFirstBytecodeHandler)>
@@ -222,6 +170,20 @@ class BuiltinLookup {
   }
 
   static constexpr int BuiltinCount() { return kBuiltinCount; }
+
+  static bool IsWasmBuiltinId(Builtin id) {
+    switch (id) {
+#define BUILTIN_ID(Name) \
+  case Builtin::k##Name: \
+    return true;
+#define BUILTIN_ID_TRAP(Name)     \
+  case Builtin::kThrowWasm##Name: \
+    return true;
+      WASM_BUILTIN_LIST(BUILTIN_ID, BUILTIN_ID_TRAP)
+      default:
+        return false;
+    }
+  }
 
  private:
 #define BUILTIN_COUNTER(NAME) +1

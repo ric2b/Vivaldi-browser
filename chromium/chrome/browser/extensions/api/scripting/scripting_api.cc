@@ -18,9 +18,9 @@
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/api/scripting/scripting_constants.h"
 #include "extensions/browser/api/scripting/scripting_utils.h"
-#include "extensions/browser/api/scripts_internal/script_serialization.h"
 #include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_file_task_runner.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_user_script_loader.h"
 #include "extensions/browser/extension_util.h"
@@ -29,6 +29,7 @@
 #include "extensions/browser/user_script_manager.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/api/scripts_internal.h"
+#include "extensions/common/api/scripts_internal/script_serialization.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
@@ -65,11 +66,11 @@ mojom::CSSOrigin ConvertStyleOriginToCSSOrigin(
     api::scripting::StyleOrigin style_origin) {
   mojom::CSSOrigin css_origin = mojom::CSSOrigin::kAuthor;
   switch (style_origin) {
-    case api::scripting::STYLE_ORIGIN_NONE:
-    case api::scripting::STYLE_ORIGIN_AUTHOR:
+    case api::scripting::StyleOrigin::kNone:
+    case api::scripting::StyleOrigin::kAuthor:
       css_origin = mojom::CSSOrigin::kAuthor;
       break;
-    case api::scripting::STYLE_ORIGIN_USER:
+    case api::scripting::StyleOrigin::kUser:
       css_origin = mojom::CSSOrigin::kUser;
       break;
   }
@@ -81,10 +82,10 @@ mojom::ExecutionWorld ConvertExecutionWorld(
     api::scripting::ExecutionWorld world) {
   mojom::ExecutionWorld execution_world = mojom::ExecutionWorld::kIsolated;
   switch (world) {
-    case api::scripting::EXECUTION_WORLD_NONE:
-    case api::scripting::EXECUTION_WORLD_ISOLATED:
+    case api::scripting::ExecutionWorld::kNone:
+    case api::scripting::ExecutionWorld::kIsolated:
       break;  // Default to mojom::ExecutionWorld::kIsolated.
-    case api::scripting::EXECUTION_WORLD_MAIN:
+    case api::scripting::ExecutionWorld::kMain:
       execution_world = mojom::ExecutionWorld::kMain;
   }
 
@@ -196,14 +197,14 @@ bool GetFileResources(const std::vector<std::string>& files,
 
 using ResourcesLoadedCallback =
     base::OnceCallback<void(std::vector<InjectedFileSource>,
-                            absl::optional<std::string>)>;
+                            std::optional<std::string>)>;
 
 // Checks the loaded content of extension resources. Invokes `callback` with
 // the constructed file sources on success or with an error on failure.
 void CheckLoadedResources(std::vector<std::string> file_names,
                           ResourcesLoadedCallback callback,
                           std::vector<std::unique_ptr<std::string>> file_data,
-                          absl::optional<std::string> load_error) {
+                          std::optional<std::string> load_error) {
   if (load_error) {
     std::move(callback).Run({}, std::move(load_error));
     return;
@@ -226,7 +227,7 @@ void CheckLoadedResources(std::vector<std::string> file_names,
     }
   }
 
-  std::move(callback).Run(std::move(file_sources), absl::nullopt);
+  std::move(callback).Run(std::move(file_sources), std::nullopt);
 }
 
 // Checks the specified `files` for validity, and attempts to load and localize
@@ -444,23 +445,12 @@ bool CanAccessTarget(const PermissionsData& permissions,
 api::scripts_internal::SerializedUserScript
 ConvertRegisteredContentScriptToSerializedUserScript(
     api::scripting::RegisteredContentScript content_script) {
-  auto convert_source_files = [](std::vector<std::string> files) {
-    std::vector<api::scripts_internal::ScriptSource> converted;
-    converted.reserve(files.size());
-    for (auto& file : files) {
-      api::scripts_internal::ScriptSource converted_source;
-      converted_source.file = std::move(file);
-      converted.push_back(std::move(converted_source));
-    }
-    return converted;
-  };
-
   auto convert_execution_world = [](api::scripting::ExecutionWorld world) {
     switch (world) {
-      case api::scripting::EXECUTION_WORLD_NONE:
-      case api::scripting::EXECUTION_WORLD_ISOLATED:
+      case api::scripting::ExecutionWorld::kNone:
+      case api::scripting::ExecutionWorld::kIsolated:
         return api::extension_types::ExecutionWorld::kIsolated;
-      case api::scripting::EXECUTION_WORLD_MAIN:
+      case api::scripting::ExecutionWorld::kMain:
         return api::extension_types::ExecutionWorld::kMain;
     }
   };
@@ -475,11 +465,12 @@ ConvertRegisteredContentScriptToSerializedUserScript(
   serialized_script.matches = std::move(*content_script.matches);
   serialized_script.exclude_matches = std::move(content_script.exclude_matches);
   if (content_script.css) {
-    serialized_script.css =
-        convert_source_files(std::move(*content_script.css));
+    serialized_script.css = script_serialization::GetSourcesFromFileNames(
+        std::move(*content_script.css));
   }
   if (content_script.js) {
-    serialized_script.js = convert_source_files(std::move(*content_script.js));
+    serialized_script.js = script_serialization::GetSourcesFromFileNames(
+        std::move(*content_script.js));
   }
   serialized_script.all_frames = content_script.all_frames;
   serialized_script.match_origin_as_fallback =
@@ -541,12 +532,12 @@ api::scripting::RegisteredContentScript CreateRegisteredContentScriptInfo(
             NOTREACHED_NORETURN()
                 << "Execution world should always be present in serialization.";
           case api::extension_types::ExecutionWorld::kIsolated:
-            return api::scripting::EXECUTION_WORLD_ISOLATED;
+            return api::scripting::ExecutionWorld::kIsolated;
           case api::extension_types::ExecutionWorld::kUserScript:
             NOTREACHED_NORETURN()
                 << "ISOLATED worlds are not supported in this API.";
           case api::extension_types::ExecutionWorld::kMain:
-            return api::scripting::EXECUTION_WORLD_MAIN;
+            return api::scripting::ExecutionWorld::kMain;
         }
       };
 
@@ -583,7 +574,7 @@ ScriptingExecuteScriptFunction::ScriptingExecuteScriptFunction() = default;
 ScriptingExecuteScriptFunction::~ScriptingExecuteScriptFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingExecuteScriptFunction::Run() {
-  absl::optional<api::scripting::ExecuteScript::Params> params =
+  std::optional<api::scripting::ExecuteScript::Params> params =
       api::scripting::ExecuteScript::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   injection_ = std::move(params->injection);
@@ -655,7 +646,7 @@ ExtensionFunction::ResponseAction ScriptingExecuteScriptFunction::Run() {
 
 void ScriptingExecuteScriptFunction::DidLoadResources(
     std::vector<InjectedFileSource> file_sources,
-    absl::optional<std::string> load_error) {
+    std::optional<std::string> load_error) {
   if (load_error) {
     Respond(Error(std::move(*load_error)));
     return;
@@ -750,7 +741,7 @@ ScriptingInsertCSSFunction::ScriptingInsertCSSFunction() = default;
 ScriptingInsertCSSFunction::~ScriptingInsertCSSFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingInsertCSSFunction::Run() {
-  absl::optional<api::scripting::InsertCSS::Params> params =
+  std::optional<api::scripting::InsertCSS::Params> params =
       api::scripting::InsertCSS::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -794,7 +785,7 @@ ExtensionFunction::ResponseAction ScriptingInsertCSSFunction::Run() {
 
 void ScriptingInsertCSSFunction::DidLoadResources(
     std::vector<InjectedFileSource> file_sources,
-    absl::optional<std::string> load_error) {
+    std::optional<std::string> load_error) {
   if (load_error) {
     Respond(Error(std::move(*load_error)));
     return;
@@ -851,7 +842,7 @@ ScriptingRemoveCSSFunction::ScriptingRemoveCSSFunction() = default;
 ScriptingRemoveCSSFunction::~ScriptingRemoveCSSFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingRemoveCSSFunction::Run() {
-  absl::optional<api::scripting::RemoveCSS::Params> params =
+  std::optional<api::scripting::RemoveCSS::Params> params =
       api::scripting::RemoveCSS::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -931,7 +922,7 @@ ScriptingRegisterContentScriptsFunction::
 
 ExtensionFunction::ResponseAction
 ScriptingRegisterContentScriptsFunction::Run() {
-  absl::optional<api::scripting::RegisterContentScripts::Params> params =
+  std::optional<api::scripting::RegisterContentScripts::Params> params =
       api::scripting::RegisterContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -957,13 +948,13 @@ ScriptingRegisterContentScriptsFunction::Run() {
 
   // Parse content scripts.
   std::u16string parse_error;
-  auto parsed_scripts = std::make_unique<UserScriptList>();
+  UserScriptList parsed_scripts;
   std::set<std::string> persistent_script_ids;
 
   bool allowed_in_incognito = scripting::ScriptsShouldBeAllowedInIncognito(
       extension()->id(), browser_context());
 
-  parsed_scripts->reserve(scripts.size());
+  parsed_scripts.reserve(scripts.size());
   for (auto& script : scripts) {
     if (!script.matches) {
       return RespondNow(Error(ErrorUtils::FormatErrorMessage(
@@ -984,7 +975,7 @@ ScriptingRegisterContentScriptsFunction::Run() {
     if (persist_across_sessions) {
       persistent_script_ids.insert(user_script->id());
     }
-    parsed_scripts->push_back(std::move(user_script));
+    parsed_scripts.push_back(std::move(user_script));
   }
   // The contents of `scripts` have all been std::move()'d.
   scripts.clear();
@@ -1018,6 +1009,17 @@ void ScriptingRegisterContentScriptsFunction::OnContentScriptFilesValidated(
     return;
   }
 
+  // We cannot proceed if the extension is uninstalled or unloaded in the middle
+  // of validating its script files.
+  ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
+  if (!extension() ||
+      !registry->enabled_extensions().Contains(extension_id())) {
+    // Note: a Respond() is not needed if the system is shutting down or if the
+    // extension is no longer enabled.
+    Release();  // Matches the `AddRef()` in `Run()`.
+    return;
+  }
+
   auto error = std::move(result.second);
   auto scripts = std::move(result.first);
   ExtensionUserScriptLoader* loader =
@@ -1027,7 +1029,7 @@ void ScriptingRegisterContentScriptsFunction::OnContentScriptFilesValidated(
 
   if (error.has_value()) {
     std::set<std::string> ids_to_remove;
-    for (const auto& script : *scripts) {
+    for (const auto& script : scripts) {
       ids_to_remove.insert(script->id());
     }
 
@@ -1045,7 +1047,7 @@ void ScriptingRegisterContentScriptsFunction::OnContentScriptFilesValidated(
 }
 
 void ScriptingRegisterContentScriptsFunction::OnContentScriptsRegistered(
-    const absl::optional<std::string>& error) {
+    const std::optional<std::string>& error) {
   if (error.has_value())
     Respond(Error(std::move(*error)));
   else
@@ -1060,11 +1062,11 @@ ScriptingGetRegisteredContentScriptsFunction::
 
 ExtensionFunction::ResponseAction
 ScriptingGetRegisteredContentScriptsFunction::Run() {
-  absl::optional<api::scripting::GetRegisteredContentScripts::Params> params =
+  std::optional<api::scripting::GetRegisteredContentScripts::Params> params =
       api::scripting::GetRegisteredContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  const absl::optional<api::scripting::ContentScriptFilter>& filter =
+  const std::optional<api::scripting::ContentScriptFilter>& filter =
       params->filter;
   std::set<std::string> id_filter;
   if (filter && filter->ids) {
@@ -1118,8 +1120,8 @@ ScriptingUnregisterContentScriptsFunction::Run() {
       api::scripting::UnregisterContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  absl::optional<api::scripting::ContentScriptFilter>& filter = params->filter;
-  absl::optional<std::vector<std::string>> ids = absl::nullopt;
+  std::optional<api::scripting::ContentScriptFilter>& filter = params->filter;
+  std::optional<std::vector<std::string>> ids = std::nullopt;
   // TODO(crbug.com/1300657): `ids` should have an empty list when filter ids is
   // empty, instead of a nullopt. Otherwise, we are incorrectly removing all
   // content scripts when ids is empty.
@@ -1145,7 +1147,7 @@ ScriptingUnregisterContentScriptsFunction::Run() {
 }
 
 void ScriptingUnregisterContentScriptsFunction::OnContentScriptsUnregistered(
-    const absl::optional<std::string>& error) {
+    const std::optional<std::string>& error) {
   if (error.has_value())
     Respond(Error(std::move(*error)));
   else
@@ -1158,7 +1160,7 @@ ScriptingUpdateContentScriptsFunction::
     ~ScriptingUpdateContentScriptsFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingUpdateContentScriptsFunction::Run() {
-  absl::optional<api::scripting::UpdateContentScripts::Params> params =
+  std::optional<api::scripting::UpdateContentScripts::Params> params =
       api::scripting::UpdateContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -1183,7 +1185,7 @@ ExtensionFunction::ResponseAction ScriptingUpdateContentScriptsFunction::Run() {
           ->GetUserScriptLoaderForExtension(extension()->id());
 
   std::set<std::string> updated_script_ids_to_persist;
-  std::unique_ptr<UserScriptList> parsed_scripts = scripting::UpdateScripts(
+  UserScriptList parsed_scripts = scripting::UpdateScripts(
       scripts_to_update, UserScript::Source::kDynamicContentScript, *loader,
       base::BindRepeating(&CreateRegisteredContentScriptInfo),
       base::BindRepeating(&ScriptingUpdateContentScriptsFunction::ApplyUpdate,
@@ -1191,7 +1193,7 @@ ExtensionFunction::ResponseAction ScriptingUpdateContentScriptsFunction::Run() {
       &error);
 
   if (!error.empty()) {
-    CHECK(!parsed_scripts);
+    CHECK(parsed_scripts.empty());
     return RespondNow(Error(std::move(error)));
   }
 
@@ -1281,6 +1283,17 @@ void ScriptingUpdateContentScriptsFunction::OnContentScriptFilesValidated(
     return;
   }
 
+  // We cannot proceed if the extension is uninstalled or unloaded in the middle
+  // of validating its script files.
+  ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
+  if (!extension() ||
+      !registry->enabled_extensions().Contains(extension_id())) {
+    // Note: a Respond() is not needed if the system is shutting down or if the
+    // extension is no longer enabled.
+    Release();  // Matches the `AddRef()` in `Run()`.
+    return;
+  }
+
   auto error = std::move(result.second);
   auto scripts = std::move(result.first);
   ExtensionUserScriptLoader* loader =
@@ -1292,7 +1305,7 @@ void ScriptingUpdateContentScriptsFunction::OnContentScriptFilesValidated(
       extension()->id(), browser_context());
 
   std::set<std::string> script_ids;
-  for (const auto& script : *scripts) {
+  for (const auto& script : scripts) {
     script_ids.insert(script->id());
 
     script->set_incognito_enabled(allowed_in_incognito);
@@ -1314,7 +1327,7 @@ void ScriptingUpdateContentScriptsFunction::OnContentScriptFilesValidated(
 }
 
 void ScriptingUpdateContentScriptsFunction::OnContentScriptsUpdated(
-    const absl::optional<std::string>& error) {
+    const std::optional<std::string>& error) {
   if (error.has_value())
     Respond(Error(std::move(*error)));
   else

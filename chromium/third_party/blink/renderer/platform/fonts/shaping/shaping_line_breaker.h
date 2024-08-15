@@ -77,14 +77,14 @@ class PLATFORM_EXPORT ShapingLineBreaker {
   // suppress if ShapeResult is not needed when this line overflows.
   bool NoResultIfOverflow() const { return no_result_if_overflow_; }
   void SetNoResultIfOverflow() { no_result_if_overflow_ = true; }
+  void SetIsAfterForcedBreak(bool value) { is_after_forced_break_ = value; }
   void SetTextSpacingTrim(TextSpacingTrim value) { text_spacing_trim_ = value; }
 
-  scoped_refptr<const ShapeResultView> ShapeLine(unsigned start_offset,
-                                                 LayoutUnit available_space,
-                                                 Result* result_out);
+  const ShapeResultView* ShapeLine(unsigned start_offset,
+                                   LayoutUnit available_space,
+                                   Result* result_out);
 
-  scoped_refptr<const ShapeResultView> ShapeLineAt(unsigned start,
-                                                   unsigned end);
+  const ShapeResultView* ShapeLineAt(unsigned start, unsigned end);
 
  protected:
   const ShapeResult& GetShapeResult() const { return *result_; }
@@ -103,7 +103,7 @@ class PLATFORM_EXPORT ShapingLineBreaker {
 
   // True if the `offset` is start of a line, except the first line.
   bool IsStartOfWrappedLine(unsigned offset) const {
-    return offset && offset == line_start_;
+    return offset && offset == line_start_ && !is_after_forced_break_;
   }
   EdgeOffset FirstSafeOffset(unsigned start) const;
 
@@ -138,11 +138,13 @@ class PLATFORM_EXPORT ShapingLineBreaker {
                      unsigned word_end,
                      bool backwards) const;
 
-  scoped_refptr<const ShapeResultView> ShapeToEnd(unsigned start,
-                                                  const EdgeOffset& first_safe,
-                                                  unsigned range_start,
-                                                  unsigned range_end);
-  scoped_refptr<const ShapeResultView> ConcatShapeResults(
+  const ShapeResultView* ShapeToEnd(
+      unsigned start,
+      scoped_refptr<const ShapeResult> line_start_result,
+      unsigned first_safe,
+      unsigned range_start,
+      unsigned range_end);
+  const ShapeResultView* ConcatShapeResults(
       unsigned start,
       unsigned end,
       unsigned first_safe,
@@ -159,7 +161,8 @@ class PLATFORM_EXPORT ShapingLineBreaker {
   unsigned line_start_ = 0;
   bool dont_reshape_end_if_at_space_ = false;
   bool no_result_if_overflow_ = false;
-  TextSpacingTrim text_spacing_trim_ = TextSpacingTrim::kSpaceFirst;
+  bool is_after_forced_break_ = false;
+  TextSpacingTrim text_spacing_trim_ = TextSpacingTrim::kInitial;
 
   friend class ShapingLineBreakerTest;
 };

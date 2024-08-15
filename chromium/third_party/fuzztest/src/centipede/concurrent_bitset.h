@@ -39,8 +39,6 @@
 #include <climits>
 #include <cstdint>
 #include <functional>
-#include <limits>
-#include <memory>
 
 #include "absl/base/const_init.h"
 #include "./centipede/concurrent_byteset.h"
@@ -85,6 +83,16 @@ class ConcurrentBitSet {
     }
   }
 
+  // Gets the bit at `idx % kSizeInBits`.
+  uint8_t get(size_t idx) {
+    idx %= kSizeInBits;
+    size_t word_idx = idx / kBitsInWord;
+    size_t bit_idx = idx % kBitsInWord;
+    word_t word = __atomic_load_n(&words_[word_idx], __ATOMIC_RELAXED);
+    word_t mask = 1ULL << bit_idx;
+    return (word & mask) != 0;
+  }
+
   // Calls `action(index)` for every index of a non-zero bit in the set,
   // then sets all those bits to zero.
   __attribute__((noinline)) void ForEachNonZeroBit(
@@ -114,19 +122,19 @@ class ConcurrentBitSet {
     }
   }
 
-  // A word is the largest integer type convenient for bit-wise operations.
+  // A word is the largest integer type convenient for bitwise operations.
   using word_t = uintptr_t;
-  static const size_t kBytesInWord = sizeof(word_t);
-  static const size_t kBitsInWord = CHAR_BIT * kBytesInWord;
-  static const size_t kSizeInWords = kSizeInBits / kBitsInWord;
+  static constexpr size_t kBytesInWord = sizeof(word_t);
+  static constexpr size_t kBitsInWord = CHAR_BIT * kBytesInWord;
+  static constexpr size_t kSizeInWords = kSizeInBits / kBitsInWord;
 
   // All words are logically split into lines.
   // When Set() is called, we set the corresponding element of lines_ to 1, so
   // that we now know that at least 1 bit in that line is set. Then, in
   // ForEachNonZeroBit, we iterate only those lines that have non-zero bits.
-  static const size_t kBytesInLine = 64 * 8;
-  static const size_t kWordsInLine = kBytesInLine / kBytesInWord;
-  static const size_t kSizeInLines = kSizeInWords / kWordsInLine;
+  static constexpr size_t kBytesInLine = 64 * 8;
+  static constexpr size_t kWordsInLine = kBytesInLine / kBytesInWord;
+  static constexpr size_t kSizeInLines = kSizeInWords / kWordsInLine;
   ConcurrentByteSet<kSizeInLines> lines_;
   word_t words_[kSizeInWords];  // No initializer.
 };

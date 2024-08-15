@@ -59,4 +59,5 @@ message NotesSpecifics {
   // redundant to the similar field in SyncEntity. If this field in specifics is
   // set, it takes precedence over the one in SyncEntity.
   optional UniquePosition unique_position = 14;
+  optional int64 last_modification_time_us = 15;
 }

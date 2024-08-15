@@ -977,14 +977,17 @@ Favor improved speech intelligibility.
 @item audio
 Favor faithfulness to the input (the default).
 @item lowdelay
-Restrict to only the lowest delay modes.
+Restrict to only the lowest delay modes by disabling voice-optimized
+modes.
 @end table
 
 @item cutoff (N.A.)
 Set cutoff bandwidth in Hz. The argument must be exactly one of the
 following: 4000, 6000, 8000, 12000, or 20000, corresponding to
 narrowband, mediumband, wideband, super wideband, and fullband
-respectively. The default is 0 (cutoff disabled).
+respectively. The default is 0 (cutoff disabled). Note that libopus
+forces a wideband cutoff for bitrates < 15 kbps, unless CELT-only
+(@option{application} set to @samp{lowdelay}) mode is used.
 
 @item mapping_family (@emph{mapping_family})
 Set channel mapping family to be used by the encoder. The default value of -1
@@ -2446,6 +2449,20 @@ Quantizer curve compression factor
 @item refs (@emph{ref})
 Number of reference frames each P-frame can use. The range is from @var{0-16}.
 
+@item level (@emph{level})
+Set the @code{x264_param_t.i_level_idc} value in case the value is
+positive, it is ignored otherwise.
+
+This value can be set using the @code{AVCodecContext} API (e.g. by
+setting the @code{AVCodecContext} value directly), and is specified as
+an integer mapped on a corresponding level (e.g. the value 31 maps
+to H.264 level IDC "3.1", as defined in the @code{x264_levels}
+table). It is ignored when set to a non positive value.
+
+Alternatively it can be set as a private option, overriding the value
+set in @code{AVCodecContext}, and in this case must be specified as
+the level IDC identifier (e.g. "3.1"), as defined by H.264 Annex A.
+
 @item sc_threshold (@emph{scenecut})
 Sets the threshold for the scene change detection.
 
@@ -2894,6 +2911,75 @@ ffmpeg -i input -c:v libxavs2 -xavs2-params RdoqLevel=0 output.avs2
 @end example
 @end table
 
+@section libxeve
+
+eXtra-fast Essential Video Encoder (XEVE) MPEG-5 EVC encoder wrapper.
+The xeve-equivalent options or values are listed in parentheses for easy migration.
+
+This encoder requires the presence of the libxeve headers and library
+during configuration. You need to explicitly configure the build with
+@option{--enable-libxeve}.
+
+@float NOTE
+Many libxeve encoder options are mapped to FFmpeg global codec options,
+while unique encoder options are provided through private options.
+Additionally the xeve-params private options allows one to pass a list
+of key=value tuples as accepted by the libxeve @code{parse_xeve_params} function.
+@end float
+
+The xeve project website is at @url{https://github.com/mpeg5/xeve}.
+
+@subsection Options
+
+The following options are supported by the libxeve wrapper.
+The xeve-equivalent options or values are listed in parentheses for easy migration.
+
+@float NOTE
+To reduce the duplication of documentation, only the private options
+and some others requiring special attention are documented here. For
+the documentation of the undocumented generic options, see
+@ref{codec-options,,the Codec Options chapter}.
+@end float
+
+@float NOTE
+To get a more accurate and extensive documentation of the libxeve options,
+invoke the command  @code{xeve_app --help} or consult the libxeve documentation.
+@end float
+
+@table @option
+@item b (@emph{bitrate})
+Set target video bitrate in bits/s.
+Note that FFmpeg's b option is expressed in bits/s, while xeve's bitrate is in kilobits/s.
+
+@item bf (@emph{bframes})
+Set the maximum number of B frames (1,3,7,15).
+
+@item g (@emph{keyint})
+Set the GOP size (I-picture period).
+
+@item preset (@emph{preset})
+Set the xeve preset.
+Set the encoder preset value to determine encoding speed [fast, medium, slow, placebo]
+
+@item tune (@emph{tune})
+Set the encoder tune parameter [psnr, zerolatency]
+
+@item profile (@emph{profile})
+Set the encoder profile [0: baselie; 1: main]
+
+@item crf (@emph{crf})
+Set the quality for constant quality mode.
+Constant rate factor <10..49> [default: 32]
+
+@item qp (@emph{qp})
+Set constant quantization rate control method parameter.
+Quantization parameter qp <0..51> [default: 32]
+
+@item threads (@emph{threads})
+Force to use a specific number of threads
+
+@end table
+
 @section libxvid
 
 Xvid MPEG-4 Part 2 encoder wrapper.
@@ -2962,27 +3048,24 @@ Place global headers in extradata instead of every keyframe.
 
 @item trellis
 
-@item me_method
-Set motion estimation method. Possible values in decreasing order of
+@item me_quality
+Set motion estimation quality level. Possible values in decreasing order of
 speed and increasing order of quality:
 
 @table @samp
-@item zero
+@item 0
 Use no motion estimation (default).
 
-@item phods
-@item x1
-@item log
+@item 1, 2
 Enable advanced diamond zonal search for 16x16 blocks and half-pixel
-refinement for 16x16 blocks. @samp{x1} and @samp{log} are aliases for
-@samp{phods}.
+refinement for 16x16 blocks.
 
-@item epzs
+@item 3, 4
 Enable all of the things described above, plus advanced diamond zonal
-search for 8x8 blocks, half-pixel refinement for 8x8 blocks, and motion
-estimation on chroma planes.
+search for 8x8 blocks and half-pixel refinement for 8x8 blocks, also
+enable motion estimation on chroma planes for P and B-frames.
 
-@item full
+@item 5, 6
 Enable all of the things described above, plus extended 16x16 and 8x8
 blocks search.
 @end table

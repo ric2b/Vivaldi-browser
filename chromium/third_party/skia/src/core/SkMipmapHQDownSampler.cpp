@@ -5,6 +5,10 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkTypes.h"
+
+#ifndef SK_USE_DRAWING_MIPMAP_DOWNSAMPLER
+
 #include "include/private/SkColorData.h"
 #include "src/base/SkHalf.h"
 #include "src/base/SkVx.h"
@@ -57,12 +61,12 @@ struct ColorTypeFilter_8 {
 struct ColorTypeFilter_Alpha_F16 {
     typedef uint16_t Type;
     static skvx::float4 Expand(uint16_t x) {
-        return SkHalfToFloat_finite_ftz((uint64_t) x); // expand out to four lanes
-
+        uint64_t x4 = (uint64_t)x; // add 0s out to four lanes (0,0,0,x)
+        return from_half(skvx::half4::Load(&x4));
     }
     static uint16_t Compact(const skvx::float4& x) {
         uint64_t r;
-        SkFloatToHalf_finite_ftz(x).store(&r);
+        to_half(x).store(&r);
         return r & 0xFFFF;  // but ignore the extra 3 here
     }
 };
@@ -70,11 +74,11 @@ struct ColorTypeFilter_Alpha_F16 {
 struct ColorTypeFilter_RGBA_F16 {
     typedef uint64_t Type; // SkHalf x4
     static skvx::float4 Expand(uint64_t x) {
-        return SkHalfToFloat_finite_ftz(x);
+        return from_half(skvx::half4::Load(&x));
     }
     static uint64_t Compact(const skvx::float4& x) {
         uint64_t r;
-        SkFloatToHalf_finite_ftz(x).store(&r);
+        to_half(x).store(&r);
         return r;
     }
 };
@@ -102,11 +106,12 @@ struct ColorTypeFilter_1616 {
 struct ColorTypeFilter_F16F16 {
     typedef uint32_t Type;
     static skvx::float4 Expand(uint32_t x) {
-        return SkHalfToFloat_finite_ftz((uint64_t) x); // expand out to four lanes
+        uint64_t x4 = (uint64_t)x; // // add 0s out to four lanes (0,0,x,x)
+        return from_half(skvx::half4::Load(&x4));
     }
     static uint32_t Compact(const skvx::float4& x) {
         uint64_t r;
-        SkFloatToHalf_finite_ftz(x).store(&r);
+        to_half(x).store(&r);
         return (uint32_t) (r & 0xFFFFFFFF);  // but ignore the extra 2 here
     }
 };
@@ -426,14 +431,14 @@ void HQDownSampler::buildLevel(const SkPixmap& dst, const SkPixmap& src) {
 
     for (int y = 0; y < dst.height(); y++) {
         proc(dstBasePtr, srcBasePtr, srcRB, dst.width());
-        srcBasePtr = (char*)srcBasePtr + srcRB * 2; // jump two rows
-        dstBasePtr = (char*)dstBasePtr + dst.rowBytes();
+        srcBasePtr = (const char*)srcBasePtr + srcRB * 2; // jump two rows
+        dstBasePtr = (      char*)dstBasePtr + dst.rowBytes();
     }
 }
 
 } // namespace
 
-std::unique_ptr<SkMipmapDownSampler> SkMakeHQDownSampler(const SkPixmap& root) {
+std::unique_ptr<SkMipmapDownSampler> SkMipmap::MakeDownSampler(const SkPixmap& root) {
     FilterProc* proc_1_2 = nullptr;
     FilterProc* proc_1_3 = nullptr;
     FilterProc* proc_2_1 = nullptr;
@@ -595,3 +600,4 @@ std::unique_ptr<SkMipmapDownSampler> SkMakeHQDownSampler(const SkPixmap& root) {
     return sampler;
 }
 
+#endif

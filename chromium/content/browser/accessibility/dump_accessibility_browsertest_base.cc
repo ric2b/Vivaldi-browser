@@ -179,8 +179,7 @@ using ui::AXTreeFormatter;
 
 // DumpAccessibilityTestBase
 DumpAccessibilityTestBase::DumpAccessibilityTestBase()
-    : enable_accessibility_after_navigating_(false),
-      test_helper_(GetParam().first) {}
+    : enable_accessibility_after_navigating_(false), test_helper_(GetParam()) {}
 
 DumpAccessibilityTestBase::~DumpAccessibilityTestBase() {}
 
@@ -232,11 +231,6 @@ void DumpAccessibilityTestBase::ChooseFeatures(
   // corresponding code in AXPosition on the browser that collects those
   // markers.
   enabled_features->emplace_back(features::kUseAXPositionForDocumentMarkers);
-
-  enabled_features->emplace_back(blink::features::kPortals);
-
-  auto* vec = GetParam().second ? enabled_features : disabled_features;
-  vec->emplace_back(blink::features::kSerializeAccessibilityPostLifecycle);
 }
 
 std::string DumpAccessibilityTestBase::DumpTreeAsString() const {
@@ -255,16 +249,6 @@ DumpAccessibilityTestBase::DumpUnfilteredAccessibilityTreeAsString() {
   formatter->SetPropertyFilters({{"*", AXPropertyFilter::ALLOW}});
   formatter->set_show_ids(true);
   return formatter->Format(GetRootAccessibilityNode(GetWebContents()));
-}
-
-DumpAccessibilityTestBase::ParamVector DumpAccessibilityTestBase::TestParams(
-    const ApiTypeVector& api_types) {
-  return std::accumulate(api_types.begin(), api_types.end(), ParamVector(),
-                         [](ParamVector&& v, ui::AXApiType::Type api_type) {
-                           v.push_back({api_type, true});
-                           v.push_back({api_type, false});
-                           return v;
-                         });
 }
 
 void DumpAccessibilityTestBase::RunTest(
@@ -413,7 +397,7 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
 
-  absl::optional<ui::AXInspectScenario> scenario =
+  std::optional<ui::AXInspectScenario> scenario =
       test_helper_.ParseScenario(file_path, DefaultFilters());
   if (!scenario) {
     ADD_FAILURE()
@@ -423,7 +407,7 @@ void DumpAccessibilityTestBase::RunTestForPlatform(
   }
   scenario_ = std::move(*scenario);
 
-  absl::optional<std::vector<std::string>> expected_lines;
+  std::optional<std::vector<std::string>> expected_lines;
 
   // Get expectation lines from expectation file if any.
   base::FilePath expected_file =
@@ -521,15 +505,10 @@ std::map<std::string, unsigned> DumpAccessibilityTestBase::CollectAllFrameUrls(
     //
     // In this scenario, B's contentWindow.location.href matches A's url,
     // but B's url in the browser frame tree is still "about:blank".
-    //
-    // We also ignore frame tree nodes created for portals in the outer
-    // WebContents as the node doesn't have a url set.
 
     std::string url = node->current_url().spec();
     if (url != url::kAboutBlankURL && url != url::kAboutSrcdocURL &&
-        !url.empty() && !SkipUrlMatch(skip_urls, url) &&
-        node->frame_owner_element_type() !=
-            blink::FrameOwnerElementType::kPortal) {
+        !url.empty() && !SkipUrlMatch(skip_urls, url)) {
       all_frame_urls[url] += 1;
     }
   }
@@ -604,7 +583,7 @@ WebContentsImpl* DumpAccessibilityTestBase::GetWebContents() const {
 
 std::unique_ptr<AXTreeFormatter> DumpAccessibilityTestBase::CreateFormatter()
     const {
-  return AXInspectFactory::CreateFormatter(GetParam().first);
+  return AXInspectFactory::CreateFormatter(GetParam());
 }
 
 std::pair<EvalJsResult, std::vector<std::string>>
@@ -615,7 +594,7 @@ DumpAccessibilityTestBase::CaptureEvents(InvokeAction invoke_action,
   ui::AXTreeSelector selector(manager->GetBrowserAccessibilityRoot()
                                   ->GetTargetForNativeAccessibilityEvent());
   std::unique_ptr<ui::AXEventRecorder> event_recorder =
-      AXInspectFactory::CreateRecorder(GetParam().first, manager,
+      AXInspectFactory::CreateRecorder(GetParam(), manager,
                                        base::GetCurrentProcId(), selector);
   event_recorder->SetOnlyWebEvents(true);
 

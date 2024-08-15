@@ -235,25 +235,42 @@ NoteNode* NotesModel::AddNode(NoteNode* parent,
   return node_ptr;
 }
 
-const NoteNode* NotesModel::AddNote(const NoteNode* parent,
-                                    size_t index,
-                                    const std::u16string& title,
-                                    const GURL& url,
-                                    const std::u16string& content,
-                                    absl::optional<base::Time> creation_time,
-                                    absl::optional<base::Uuid> uuid) {
+void NotesModel::UpdateLastModificationTime(const NoteNode* node) {
+  DCHECK(node);
+
+  const base::Time time = base::Time::Now();
+  if (node->GetLastModificationTime() == time || is_permanent_node(node))
+    return;
+
+  AsMutable(node)->SetLastModificationTime(time);
+  if (store_.get())
+    store_->ScheduleSave();
+}
+
+const NoteNode* NotesModel::AddNote(
+    const NoteNode* parent,
+    size_t index,
+    const std::u16string& title,
+    const GURL& url,
+    const std::u16string& content,
+    absl::optional<base::Time> creation_time,
+    absl::optional<base::Time> last_modification_time,
+    absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(!uuid || uuid->is_valid());
   DCHECK(parent);
 
   if (!creation_time)
     creation_time = Time::Now();
+  if (!last_modification_time)
+    last_modification_time = creation_time;
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
       generate_next_node_id(), uuid ? *uuid : base::Uuid::GenerateRandomV4(),
       NoteNode::NOTE);
   new_node->SetTitle(title);
   new_node->SetCreationTime(*creation_time);
+  new_node->SetLastModificationTime(*last_modification_time);
   new_node->SetContent(content);
   new_node->SetURL(url);
 
@@ -279,6 +296,7 @@ const NoteNode* NotesModel::ImportNote(const NoteNode* parent,
       note.is_folder ? NoteNode::FOLDER : NoteNode::NOTE);
   new_node->SetTitle(note.title);
   new_node->SetCreationTime(note.creation_time);
+  new_node->SetLastModificationTime(note.last_modification_time);
 
   if (!note.is_folder) {
     new_node->SetURL(note.url);
@@ -287,21 +305,26 @@ const NoteNode* NotesModel::ImportNote(const NoteNode* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-const NoteNode* NotesModel::AddFolder(const NoteNode* parent,
-                                      size_t index,
-                                      const std::u16string& name,
-                                      absl::optional<base::Time> creation_time,
-                                      absl::optional<base::Uuid> uuid) {
+const NoteNode* NotesModel::AddFolder(
+    const NoteNode* parent,
+    size_t index,
+    const std::u16string& name,
+    absl::optional<base::Time> creation_time,
+    absl::optional<base::Time> last_modification_time,
+    absl::optional<base::Uuid> uuid) {
   DCHECK(loaded_);
   DCHECK(!uuid || uuid->is_valid());
 
   const base::Time provided_creation_time_or_now =
       creation_time.value_or(Time::Now());
+  if (!last_modification_time)
+    last_modification_time = provided_creation_time_or_now;
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
       generate_next_node_id(), uuid.value_or(base::Uuid::GenerateRandomV4()),
       NoteNode::FOLDER);
   new_node->SetCreationTime(provided_creation_time_or_now);
+  new_node->SetLastModificationTime(*last_modification_time);
 
   new_node->SetTitle(name);
   DCHECK(new_node->GetTitle() == name);
@@ -408,7 +431,9 @@ const NoteNode* NotesModel::AddAttachment(
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
+void NotesModel::SetTitle(const NoteNode* node,
+                          const std::u16string& title,
+                          bool updateLastModificationTime) {
   DCHECK(node);
 
   if (node->GetTitle() == title)
@@ -424,6 +449,9 @@ void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
 
   AsMutable(node)->SetTitle(title);
 
+  if (updateLastModificationTime)
+    UpdateLastModificationTime(node);
+
   if (store_.get())
     store_->ScheduleSave();
 
@@ -431,8 +459,26 @@ void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
     observer.NotesNodeChanged(this, node);
 }
 
+void NotesModel::SetLastModificationTime(const NoteNode* node, const base::Time time) {
+  DCHECK(node);
+
+  if (node->GetLastModificationTime() == time || is_permanent_node(node))
+    return;
+
+  for (auto& observer : observers_)
+    observer.OnWillChangeNotesNode(this, node);
+
+  AsMutable(node)->SetLastModificationTime(time);
+  if (store_.get())
+      store_->ScheduleSave();
+
+  for (auto& observer : observers_)
+    observer.NotesNodeChanged(this, node);
+}
+
 void NotesModel::SetContent(const NoteNode* node,
-                            const std::u16string& content) {
+                            const std::u16string& content,
+                            bool updateLastModificationTime) {
   DCHECK(node);
   DCHECK(!node->is_folder());
   if (node->GetContent() == content)
@@ -445,6 +491,9 @@ void NotesModel::SetContent(const NoteNode* node,
 
   AsMutable(node)->SetContent(content);
 
+  if (updateLastModificationTime)
+    UpdateLastModificationTime(node);
+
   if (store_.get())
     store_->ScheduleSave();
 
@@ -452,7 +501,9 @@ void NotesModel::SetContent(const NoteNode* node,
     observer.NotesNodeChanged(this, node);
 }
 
-void NotesModel::SetURL(const NoteNode* node, const GURL& url) {
+void NotesModel::SetURL(const NoteNode* node,
+                        const GURL& url,
+                        bool updateLastModificationTime) {
   DCHECK(node);
   DCHECK(!node->is_folder());
   DCHECK(!node->is_separator());
@@ -472,20 +523,14 @@ void NotesModel::SetURL(const NoteNode* node, const GURL& url) {
     nodes_ordered_by_url_set_.insert(mutable_node);
   }
 
+  if (updateLastModificationTime)
+    UpdateLastModificationTime(node);
+
   if (store_.get())
     store_->ScheduleSave();
 
   for (auto& observer : observers_)
     observer.NotesNodeChanged(this, node);
-}
-
-void NotesModel::SetDateFolderModified(const NoteNode* parent,
-                                       const Time time) {
-  DCHECK(parent);
-  AsMutable(parent)->SetCreationTime(time);
-
-  if (store_.get())
-    store_->ScheduleSave();
 }
 
 void NotesModel::SetDateAdded(const NoteNode* node, base::Time date_added) {
@@ -500,7 +545,7 @@ void NotesModel::SetDateAdded(const NoteNode* node, base::Time date_added) {
   // Syncing might result in dates newer than the folder's last modified date.
   if (date_added > node->parent()->GetCreationTime()) {
     // Will trigger store_->ScheduleSave().
-    SetDateFolderModified(node->parent(), date_added);
+    SetLastModificationTime(node->parent(), date_added);
   } else if (store_.get()) {
     store_->ScheduleSave();
   }
@@ -547,6 +592,7 @@ void NotesModel::Remove(const NoteNode* node) {
     owned_node = AsMutable(parent)->Remove(index);
   }
 
+  SetLastModificationTime(parent);
   if (store_.get())
     store_->ScheduleSave();
 
@@ -664,7 +710,8 @@ void NotesModel::Move(const NoteNode* node,
     return;
   }
 
-  SetDateFolderModified(new_parent, Time::Now());
+  UpdateLastModificationTime(old_parent);
+  UpdateLastModificationTime(new_parent);
 
   if (old_parent == new_parent && index > old_index)
     index--;

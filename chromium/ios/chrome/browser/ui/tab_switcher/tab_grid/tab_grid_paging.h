@@ -23,6 +23,7 @@ typedef NS_ENUM(NSUInteger, TabGridMode) {
   TabGridModeSelection = 1,
   TabGridModeSearch = 2,
   TabGridModeInactive = 3,
+  TabGridModeGroup = 4,
 };
 
 // An object implementing this protocol can change the active "page" or the mode

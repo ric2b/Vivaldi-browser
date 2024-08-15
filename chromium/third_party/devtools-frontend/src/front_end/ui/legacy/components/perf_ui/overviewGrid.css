@@ -91,13 +91,26 @@
 
 .create-breadcrumb-button-container {
   visibility: hidden;
+  opacity: 0%;
+  transition: opacity 100ms 250ms;
   display: flex;
   position: absolute;
-  top: 20px;
+  top: 15px;
   justify-content: center;
   z-index: 600;
   left: 0;
   right: 0;
+}
+
+.is-breadcrumb-button-visible {
+  visibility: visible;
+  opacity: 100%;
+}
+
+.create-breadcrumb-button-container.with-screenshots {
+  /* We have more room when screenshots are enabled,
+   * so push the button down slightly */
+  top: 20px;
 }
 
 .create-breadcrumb-button {
@@ -109,6 +122,16 @@
   border-radius: 50px;
   padding: 5px 10px;
   gap: 2px;
+}
+
+.create-breadcrumb-button:active {
+  /* On minimap cursor changes to text to selected an area,
+  * so keep it as default on the breadcrumb button */
+  cursor: default;
+}
+
+.create-breadcrumb-button:hover {
+  background: var(--sys-color-neutral-container);
 }
 
 @media (forced-colors: active) {

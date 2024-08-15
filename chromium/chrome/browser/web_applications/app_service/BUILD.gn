@@ -63,6 +63,8 @@ source_set("app_service") {
   if (is_chromeos_lacros) {
     assert(enable_system_notifications)
     sources += [
+      "lacros_browser_shortcuts_controller.cc",
+      "lacros_browser_shortcuts_controller.h",
       "lacros_web_apps_controller.cc",
       "lacros_web_apps_controller.h",
     ]
@@ -71,6 +73,8 @@ source_set("app_service") {
       "//chromeos/constants",
       "//chromeos/crosapi/mojom",
       "//chromeos/lacros",
+      "//chromeos/startup",
+      "//components/app_constants",
     ]
   }
 }
@@ -79,6 +83,7 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "publisher_helper_unittest.cc",
     "web_app_publisher_helper_unittest.cc",
     "web_app_publisher_unittest.cc",
     "web_apps_with_shortcuts_test.cc",
@@ -117,10 +122,13 @@ source_set("unit_tests") {
   }
 
   if (is_chromeos_lacros) {
+    sources += [ "lacros_browser_shortcuts_controller_unittest.cc" ]
     deps += [
       ":test_support",
       "//chromeos/lacros",
+      "//chromeos/lacros:test_support",
       "//chromeos/startup",
+      "//components/app_constants",
     ]
   }
 }

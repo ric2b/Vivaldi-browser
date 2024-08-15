@@ -4,13 +4,14 @@
 
 #include "chromeos/ui/frame/highlight_border_overlay.h"
 
-#include "base/containers/cxx20_erase.h"
+#include <map>
+
 #include "base/memory/raw_ptr.h"
-#include "chromeos/ui/base/tablet_state.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/frame/frame_utils.h"
 #include "ui/aura/window.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/views/highlight_border.h"
 #include "ui/views/widget/widget.h"
@@ -152,8 +153,8 @@ void HighlightBorderOverlay::UpdateLayerVisibilityAndBounds() {
       window_->GetProperty(chromeos::kWindowStateTypeKey);
 
   // TabletState might be nullptr in some tests.
-  const bool in_tablet_mode = chromeos::TabletState::Get() &&
-                              chromeos::TabletState::Get()->InTabletMode();
+  const bool in_tablet_mode = display::Screen::GetScreen()->InTabletMode();
+
   if ((in_tablet_mode &&
        window_state_type != chromeos::WindowStateType::kFloated &&
        window_state_type != chromeos::WindowStateType::kPip) ||
@@ -187,7 +188,7 @@ void HighlightBorderOverlay::UpdateNinePatchLayer() {
   auto iter = image_source_map->find(key);
   if (iter == image_source_map->end()) {
     // Evict the image source which has no owners.
-    base::EraseIf(*image_source_map, [](auto& key_and_image_source) {
+    std::erase_if(*image_source_map, [](auto& key_and_image_source) {
       return key_and_image_source.second.IsUniquelyOwned();
     });
     // Create a new image.

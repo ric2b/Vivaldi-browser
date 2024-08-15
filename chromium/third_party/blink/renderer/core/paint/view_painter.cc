@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/paint/background_image_geometry.h"
+#include "third_party/blink/renderer/core/paint/box_background_paint_context.h"
 #include "third_party/blink/renderer/core/paint/box_decoration_data.h"
 #include "third_party/blink/renderer/core/paint/box_model_object_painter.h"
 #include "third_party/blink/renderer/core/paint/box_painter.h"
@@ -119,7 +119,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   const DisplayItemClient* background_client = &layout_view_;
 
   if (painting_background_in_contents_space) {
-    // Layout overflow, combined with the visible content size.
+    // Scrollable overflow, combined with the visible content size.
     auto document_rect = layout_view_.DocumentRect();
     // DocumentRect is relative to ScrollOrigin. Add ScrollOrigin to let it be
     // in the space of ContentsProperties(). See ScrollTranslation in
@@ -408,13 +408,14 @@ void ViewPainter::PaintRootElementGroup(
     context.FillRect(paint_rect, Color(), auto_dark_mode, SkBlendMode::kClear);
   }
 
-  BackgroundImageGeometry geometry(layout_view_, background_image_offset);
+  BoxBackgroundPaintContext bg_paint_context(layout_view_,
+                                             background_image_offset);
   BoxModelObjectPainter box_model_painter(layout_view_);
   for (const auto* fill_layer : base::Reversed(reversed_paint_list)) {
     DCHECK(fill_layer->Clip() == EFillBox::kBorder);
     box_model_painter.PaintFillLayer(paint_info, Color(), *fill_layer,
                                      PhysicalRect(paint_rect),
-                                     kBackgroundBleedNone, geometry);
+                                     kBackgroundBleedNone, bg_paint_context);
   }
 
   if (should_draw_background_in_separate_buffer && !painted_separate_effect)

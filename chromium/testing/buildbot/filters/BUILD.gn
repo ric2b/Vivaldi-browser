@@ -43,6 +43,13 @@ source_set("blink_platform_unittests") {
   data = []
 }
 
+bundle_data("blink_platform_unittests_filters_bundle_data") {
+  testonly = true
+  sources = [ "//testing/buildbot/filters/ios.blink_platform_unittests.filter" ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
+}
+
 source_set("blink_web_tests_filter") {
   testonly = true
 
@@ -110,9 +117,8 @@ source_set("chrome_public_unit_test_apk_filters") {
 
 source_set("chromeos_filters") {
   data = [
-    "//testing/buildbot/filters/chromeos.base_unittests.filter",
     "//testing/buildbot/filters/chromeos.browser_tests.filter",
-    "//testing/buildbot/filters/chromeos.amd64-generic.gl_tests_validating.filter",
+    "//testing/buildbot/filters/chromeos.amd64-generic.gl_tests_passthrough.filter",
     "//testing/buildbot/filters/chromeos.kevin.gl_tests_validating.filter",
     "//testing/buildbot/filters/chromeos.gl_unittests.filter",
     "//testing/buildbot/filters/chromeos.media_unittests.filter",
@@ -130,6 +136,28 @@ source_set("components_unittests_filters") {
   ]
 }
 
+bundle_data("compositor_unittests_filters_bundle_data") {
+  testonly = true
+  sources = [ "//testing/buildbot/filters/ios.compositor_unittests.filter" ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
+}
+
+bundle_data("components_unittests_use_blink_filters_bundle_data") {
+  testonly = true
+  sources =
+      [ "//testing/buildbot/filters/ios.use_blink.components_unittests.filter" ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
+}
+
+bundle_data("content_unittests_filters_bundle_data") {
+  testonly = true
+  sources = [ "//testing/buildbot/filters/ios.content_unittests.filter" ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
+}
+
 source_set("content_browsertests_filters") {
   testonly = true
 
@@ -137,7 +165,8 @@ source_set("content_browsertests_filters") {
     "//testing/buildbot/filters/accessibility-linux.content_browsertests.filter",
     "//testing/buildbot/filters/android.asan.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_12.content_browsertests.filter",
-    "//testing/buildbot/filters/android.emulator_12l_13.content_browsertests.filter",
+    "//testing/buildbot/filters/android.emulator_12l.content_browsertests.filter",
+    "//testing/buildbot/filters/android.emulator_13.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_o.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_p.content_browsertests.filter",
     "//testing/buildbot/filters/android.pie_arm64.content_browsertests_coverage.filter",
@@ -187,6 +216,7 @@ source_set("crashpad_tests_filters") {
   testonly = true
 
   data = [
+    "//testing/buildbot/filters/android.arm64_proguard_rel.crashpad_tests.filter",
     "//testing/buildbot/filters/android.emulator.crashpad_tests.filter",
     "//testing/buildbot/filters/android.pie_tot.crashpad_tests.filter",
   ]
@@ -394,8 +424,5 @@ source_set("webview_cts_tests_filters") {
 source_set("webview_instrumentation_test_apk_filters") {
   testonly = true
 
-  data = [
-    "//testing/buildbot/filters/android.emulator.webview_instrumentation_test_apk.filter",
-    "//testing/buildbot/filters/android.emulator_12l.webview_instrumentation_test_apk.filter",
-  ]
+  data = [ "//testing/buildbot/filters/android.emulator.webview_instrumentation_test_apk.filter" ]
 }

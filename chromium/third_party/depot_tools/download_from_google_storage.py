@@ -48,7 +48,7 @@ class InvalidPlatformError(Exception):
 
 def GetNormalizedPlatform():
     """Returns the result of sys.platform accounting for cygwin.
-  Under cygwin, this will always return "win32" like the native Python."""
+    Under cygwin, this will always return "win32" like the native Python."""
     if sys.platform == 'cygwin':
         return 'win32'
     return sys.platform
@@ -57,11 +57,11 @@ def GetNormalizedPlatform():
 # Common utilities
 class Gsutil(object):
     """Call gsutil with some predefined settings.  This is a convenience object,
-  and is also immutable.
+    and is also immutable.
 
-  HACK: This object is used directly by the external script
-    `<depot_tools>/win_toolchain/get_toolchain_if_necessary.py`
-  """
+    HACK: This object is used directly by the external script
+        `<depot_tools>/win_toolchain/get_toolchain_if_necessary.py`
+    """
 
     MAX_TRIES = 5
     RETRY_BASE_DELAY = 5.0
@@ -402,18 +402,18 @@ class PrinterThread(threading.Thread):
 def _data_exists(input_sha1_sum, output_filename, extract):
     """Returns True if the data exists locally and matches the sha1.
 
-  This conservatively returns False for error cases.
+    This conservatively returns False for error cases.
 
-  Args:
-    input_sha1_sum: Expected sha1 stored on disk.
-    output_filename: The file to potentially download later. Its sha1 will be
-        compared to input_sha1_sum.
-    extract: Whether or not a downloaded file should be extracted. If the file
-        is not extracted, this just compares the sha1 of the file. If the file
-        is to be extracted, this only compares the sha1 of the target archive if
-        the target directory already exists. The content of the target directory
-        is not checked.
-  """
+    Args:
+        input_sha1_sum: Expected sha1 stored on disk.
+        output_filename: The file to potentially download later. Its sha1 will
+            be compared to input_sha1_sum.
+        extract: Whether or not a downloaded file should be extracted. If the
+            file is not extracted, this just compares the sha1 of the file. If
+            the file is to be extracted, this only compares the sha1 of the
+            target archive if the target directory already exists. The content
+            of the target directory is not checked.
+    """
     extract_dir = None
     if extract:
         if not output_filename.endswith('.tar.gz'):
@@ -537,7 +537,7 @@ def main(args):
                       'Must be used with -d/--directory')
     parser.add_option('-t',
                       '--num_threads',
-                      default=1,
+                      default=0,
                       type='int',
                       help='Number of downloader threads to run.')
     parser.add_option('-d',
@@ -661,6 +661,10 @@ def main(args):
                      '--sha1_file or --directory')
 
     input_filename = args[0]
+    num_threads = options.num_threads
+    if not num_threads:
+        num_threads = max(
+            int(os.environ.get('DOWNLOAD_FROM_GOOGLE_STORAGE_THREADS', 1)), 1)
 
     # Set output filename if not specified.
     if not options.output and not options.directory:
@@ -684,8 +688,8 @@ def main(args):
 
     try:
         return download_from_google_storage(
-            input_filename, base_url, gsutil, options.num_threads,
-            options.directory, options.recursive, options.force, options.output,
+            input_filename, base_url, gsutil, num_threads, options.directory,
+            options.recursive, options.force, options.output,
             options.ignore_errors, options.sha1_file, options.verbose,
             options.auto_platform, options.extract)
     except FileNotFoundError as e:

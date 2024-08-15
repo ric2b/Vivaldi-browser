@@ -13,6 +13,7 @@
 #include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -394,7 +395,7 @@ class PLATFORM_EXPORT CanvasResourceRasterSharedImage final
   // before a resource is used on a different thread.
   struct OwningThreadData {
     bool mailbox_needs_new_sync_token = true;
-    gpu::Mailbox shared_image_mailbox;
+    scoped_refptr<gpu::ClientSharedImage> client_shared_image;
     gpu::SyncToken sync_token;
     size_t bitmap_image_read_refs = 0u;
     MailboxSyncMode mailbox_sync_mode = kUnverifiedSyncToken;
@@ -441,9 +442,9 @@ class PLATFORM_EXPORT CanvasResourceRasterSharedImage final
     return owning_thread_data_;
   }
 
-  // Can be read on any thread but updated only on the owning thread.
-  const gpu::Mailbox& mailbox() const {
-    return owning_thread_data_.shared_image_mailbox;
+  // Can be read on any thread.
+  gpu::ClientSharedImage* client_shared_image() const {
+    return owning_thread_data_.client_shared_image.get();
   }
   bool mailbox_needs_new_sync_token() const {
     return owning_thread_data_.mailbox_needs_new_sync_token;
@@ -472,20 +473,9 @@ class PLATFORM_EXPORT CanvasResourceRasterSharedImage final
   const bool supports_display_compositing_;
   const GLenum texture_target_;
   const bool use_oop_rasterization_;
-
-  // Note that SharedImageInterface is supposed to be used via
-  // |context_provider_wrapper_| to ensure that only owning thread can access
-  // this interface to modify the owning thread data like mailbox and non owning
-  // thread can only read the mailbox.
-  // With MappableSI, we added a new interface MapSharedImage() which provides
-  // CPU mapped memory to client and hence replacing use of GpuMemoryBuffer
-  // directly. As a result, CanvasResourceRasterSharedImage::Bitmap() will need
-  // to use the SharedImageInterface on non-owning thread to call
-  // MapSharedImage() which should be fine since we are preserving legacy
-  // behavior of not modifying the CPU mapped memory content on non owning
-  // thread. Note that this will be only used when MappableSI is enabled.
-  const raw_ptr<gpu::SharedImageInterface, ExperimentalRenderer> sii_;
-
+  // TODO(crbug.com/1494911): Remove this field once GetOrCreateGpuMailbox() is
+  // converted to return ClientSharedImage.
+  const gpu::Mailbox empty_mailbox_;
   OwningThreadData owning_thread_data_;
 };
 
@@ -600,7 +590,10 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
   GLenum TextureTarget() const final { return GL_TEXTURE_2D; }
 
   GLuint GetBackBufferTextureId() const { return back_buffer_texture_id_; }
-  const gpu::Mailbox& GetBackBufferMailbox() { return back_buffer_mailbox_; }
+  const gpu::Mailbox& GetBackBufferMailbox() {
+    CHECK(back_buffer_shared_image_);
+    return back_buffer_shared_image_->mailbox();
+  }
 
   void PresentSwapChain();
   const gpu::Mailbox& GetOrCreateGpuMailbox(MailboxSyncMode) override;
@@ -621,11 +614,12 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
   const base::WeakPtr<WebGraphicsContext3DProviderWrapper>
       context_provider_wrapper_;
   const gfx::Size size_;
-  gpu::Mailbox front_buffer_mailbox_;
-  gpu::Mailbox back_buffer_mailbox_;
+  scoped_refptr<gpu::ClientSharedImage> front_buffer_shared_image_;
+  scoped_refptr<gpu::ClientSharedImage> back_buffer_shared_image_;
   GLuint back_buffer_texture_id_ = 0u;
   gpu::SyncToken sync_token_;
   const bool use_oop_rasterization_;
+  const gpu::Mailbox empty_mailbox_;
 
   bool is_origin_clean_ = true;
 };

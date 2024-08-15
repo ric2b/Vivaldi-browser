@@ -6,6 +6,7 @@
 #define ASH_LOGIN_UI_LOCAL_AUTHENTICATION_REQUEST_VIEW_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "ash/ash_export.h"
@@ -21,7 +22,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "chromeos/ash/components/login/auth/auth_performer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -45,9 +45,6 @@ enum class LocalAuthenticationRequestViewState {
 class ASH_EXPORT LocalAuthenticationRequestView
     : public views::DialogDelegateView {
  public:
-  using OnLocalAuthenticationRequestDone =
-      base::OnceCallback<void(bool success)>;
-
   class Delegate {
    public:
     virtual void OnClose() = 0;
@@ -61,6 +58,9 @@ class ASH_EXPORT LocalAuthenticationRequestView
     explicit TestApi(LocalAuthenticationRequestView* view);
     ~TestApi();
 
+    void SubmitPassword(const std::string& password);
+    void Close();
+
     LoginButton* close_button();
     views::Label* title_label();
     views::Label* description_label();
@@ -69,13 +69,13 @@ class ASH_EXPORT LocalAuthenticationRequestView
     LocalAuthenticationRequestViewState state() const;
 
    private:
-    raw_ptr<LocalAuthenticationRequestView, ExperimentalAsh> view_;
+    raw_ptr<LocalAuthenticationRequestView> view_;
   };
 
   // Creates local authentication request view that will enable the user to
   // authenticate with a local authentication.
   LocalAuthenticationRequestView(
-      OnLocalAuthenticationCompleted on_local_authentication_completed,
+      LocalAuthenticationCallback local_authentication_callback,
       const std::u16string& title,
       const std::u16string& description,
       Delegate* delegate,
@@ -89,6 +89,7 @@ class ASH_EXPORT LocalAuthenticationRequestView
   ~LocalAuthenticationRequestView() override;
 
   // views::DialogDelegateView:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void RequestFocus() override;
   gfx::Size CalculatePreferredSize() const override;
   views::View* GetInitiallyFocusedView() override;
@@ -110,7 +111,7 @@ class ASH_EXPORT LocalAuthenticationRequestView
   void OnAuthSubmit(bool authenticated_by_pin, const std::u16string& password);
 
   void OnAuthComplete(std::unique_ptr<UserContext> user_context,
-                      absl::optional<AuthenticationError> authentication_error);
+                      std::optional<AuthenticationError> authentication_error);
 
   void OnInputTextChanged(bool is_empty);
 
@@ -123,24 +124,24 @@ class ASH_EXPORT LocalAuthenticationRequestView
   void UpdatePreferredSize();
 
   // Callback to close the UI.
-  OnLocalAuthenticationCompleted on_local_authentication_completed_ =
+  LocalAuthenticationCallback local_authentication_callback_ =
       base::NullCallback();
 
   // Returns the view dimensions.
   gfx::Size GetLocalAuthenticationRequestViewSize() const;
 
   // Unowned pointer to the delegate. The delegate should outlive this instance.
-  raw_ptr<Delegate, ExperimentalAsh> delegate_;
+  raw_ptr<Delegate> delegate_;
 
   // Strings as on view construction to enable restoring the original state.
   std::u16string default_title_;
   std::u16string default_description_;
 
   // Correspononding labels and other UI elements.
-  raw_ptr<views::Label, ExperimentalAsh> title_label_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> description_label_ = nullptr;
-  raw_ptr<LoginButton, ExperimentalAsh> close_button_ = nullptr;
-  raw_ptr<LoginPasswordView, ExperimentalAsh> login_password_view_ = nullptr;
+  raw_ptr<views::Label> title_label_ = nullptr;
+  raw_ptr<views::Label> description_label_ = nullptr;
+  raw_ptr<LoginButton> close_button_ = nullptr;
+  raw_ptr<LoginPasswordView> login_password_view_ = nullptr;
   std::unique_ptr<SystemShadow> shadow_;
 
   // Current local authentication state.

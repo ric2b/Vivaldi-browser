@@ -266,19 +266,23 @@ static constexpr std::array<wgpu::TextureFormat, 2> kDepthAndStencilFormats = {
     wgpu::TextureFormat::Depth32FloatStencil8,
 };
 
-bool TextureFormatSupportsStorageTexture(wgpu::TextureFormat format, bool isCompatibilityMode);
+bool TextureFormatSupportsStorageTexture(wgpu::TextureFormat format,
+                                         const wgpu::Device& device,
+                                         bool isCompatibilityMode);
 bool TextureFormatSupportsReadWriteStorageTexture(wgpu::TextureFormat format);
 
 bool IsBCTextureFormat(wgpu::TextureFormat textureFormat);
 bool IsETC2TextureFormat(wgpu::TextureFormat textureFormat);
 bool IsASTCTextureFormat(wgpu::TextureFormat textureFormat);
 bool IsNorm16TextureFormat(wgpu::TextureFormat textureFormat);
+bool IsCompressedTextureFormat(wgpu::TextureFormat textureFormat);
 
 bool IsDepthOnlyFormat(wgpu::TextureFormat textureFormat);
 bool IsStencilOnlyFormat(wgpu::TextureFormat textureFormat);
 bool IsDepthOrStencilFormat(wgpu::TextureFormat textureFormat);
 
 bool IsMultiPlanarFormat(wgpu::TextureFormat textureFormat);
+bool IsRenderableFormat(const wgpu::Device& device, wgpu::TextureFormat textureFormat);
 
 bool TextureFormatSupportsMultisampling(const wgpu::Device& device,
                                         wgpu::TextureFormat textureFormat);

@@ -11,6 +11,26 @@
 
 namespace supervised_user {
 
+// This enum describes the filter types of Chrome, which is
+// set by Family Link App or at families.google.com/families. These values
+// are logged to UMA. Entries should not be renumbered and numeric values
+// should never be reused. Please keep in sync with "FamilyLinkWebFilterType"
+// in src/tools/metrics/histograms/enums.xml.
+enum class WebFilterType {
+  // The web filter is set to "Allow all sites".
+  kAllowAllSites = 0,
+
+  // The web filter is set to "Try to block mature sites".
+  kTryToBlockMatureSites = 1,
+
+  // The web filter is set to "Only allow certain sites".
+  kCertainSites = 2,
+
+  // Used for UMA. Update kMaxValue to the last value. Add future entries
+  // above this comment. Sync with enums.xml.
+  kMaxValue = kCertainSites,
+};
+
 // These values corresponds to SupervisedUserSafetyFilterResult in
 // tools/metrics/histograms/enums.xml. If you change anything here, make
 // sure to also update enums.xml accordingly.
@@ -31,14 +51,14 @@ enum SupervisedUserSafetyFilterResult {
 enum class SupervisedUserFilterTopLevelResult {
   // A parent has explicitly allowed the domain on the allowlist or all sites
   // are allowed through parental controls.
-  kAllow = 1,
+  kAllow = 0,
   // Site is blocked by the safe sites filter
-  kBlockSafeSites = 2,
+  kBlockSafeSites = 1,
   // Sites that were blocked due to being on the blocklist
-  kBlockManual = 3,
+  kBlockManual = 2,
   // Sites are blocked by default when the "Only allow certain sites" setting is
   // enabled for the supervised user. Sites on the allowlist are not blocked.
-  kBlockNotInAllowlist = 4,
+  kBlockNotInAllowlist = 3,
 };
 
 // Constants used by SupervisedUserURLFilter::RecordFilterResultEvent.

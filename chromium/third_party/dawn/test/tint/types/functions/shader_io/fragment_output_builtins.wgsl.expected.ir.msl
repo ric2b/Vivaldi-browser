@@ -1,0 +1,13 @@
+SKIP: FAILED
+
+### Missing output value
+
+#include <metal_stdlib>
+using namespace metal;
+
+fragment float main1() {
+  return 1.0f;
+}
+fragment uint main2() {
+  return 1u;
+}

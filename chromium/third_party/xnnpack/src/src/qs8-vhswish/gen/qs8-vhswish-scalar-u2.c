@@ -13,7 +13,7 @@
 #include <xnnpack/vhswish.h>
 
 
-void xnn_qs8_vhswish_ukernel__scalar_x2(
+void xnn_qs8_vhswish_ukernel__scalar_u2(
     size_t batch,
     const int8_t* input,
     int8_t* output,
@@ -54,11 +54,11 @@ void xnn_qs8_vhswish_ukernel__scalar_x2(
     vin0 = math_max_s32(vin0, -32768);
     vin1 = math_max_s32(vin1, -32768);
 
-    int32_t vout0 = math_asr_s32(vacc0 * vscale_ratio, 15);
-    int32_t vout1 = math_asr_s32(vacc1 * vscale_ratio, 15);
+    int32_t vout0 = math_asr_s32(vacc0 * vscale_ratio + INT32_C(0x4000), 15);
+    int32_t vout1 = math_asr_s32(vacc1 * vscale_ratio + INT32_C(0x4000), 15);
 
-    vout0 = math_asr_s32(vin0 * vout0, 15) + voutput_zero_point;
-    vout1 = math_asr_s32(vin1 * vout1, 15) + voutput_zero_point;
+    vout0 = math_asr_s32(vin0 * vout0 + INT32_C(0x4000), 15) + voutput_zero_point;
+    vout1 = math_asr_s32(vin1 * vout1 + INT32_C(0x4000), 15) + voutput_zero_point;
 
     vout0 = math_max_s32(vout0, -128);
     vout1 = math_max_s32(vout1, -128);
@@ -82,10 +82,10 @@ void xnn_qs8_vhswish_ukernel__scalar_x2(
     vin = math_min_s32(vin, 0);
     vin = math_max_s32(vin, -32768);
 
-    int32_t vout = math_asr_s32(vacc * vscale_ratio, 15);
+    int32_t vout = math_asr_s32(vacc * vscale_ratio + INT32_C(0x4000), 15);
     vout = math_asr_s32(vin * vout, 15) + voutput_zero_point;
     vout = math_max_s32(vout, -128);
     vout = math_min_s32(vout, 127);
-    *output++ = (int8_t) vout;
+    *output = (int8_t) vout;
   }
 }

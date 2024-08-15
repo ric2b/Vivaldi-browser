@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SIGNIN_PUBLIC_BASE_SIGNIN_SWITCHES_H_
 #define COMPONENTS_SIGNIN_PUBLIC_BASE_SIGNIN_SWITCHES_H_
 
+#include "base/component_export.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
@@ -20,14 +21,22 @@ namespace switches {
 // All switches in alphabetical order. The switches should be documented
 // alongside the definition of their values in the .cc file.
 
+// Symbols must be annotated with COMPONENT_EXPORT(SIGNIN_SWITCHES) so that they
+// can be exported by the signin_switches component. This prevents issues with
+// component layering.
+
 #if BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kSeedAccountsRevamp);
 #endif
 
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kClearTokenService[];
 
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnableBoundSessionCredentials);
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsBoundSessionCredentialsEnabled();
 
 // This parameter is applicable only to the platforms that use DICE as an
@@ -41,31 +50,54 @@ enum class EnableBoundSessionCredentialsDiceSupport {
   // DICE-enabled profiles.
   kEnabled,
 };
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const base::FeatureParam<EnableBoundSessionCredentialsDiceSupport>
     kEnableBoundSessionCredentialsDiceSupport;
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableChromeRefreshTokenBinding);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+bool IsChromeRefreshTokenBindingEnabled();
 #endif
 
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnableFetchingAccountCapabilities);
 
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceDisableExtendedSyncPromos);
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceStartupSigninPromo);
 #endif
 
+#if BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kRestoreSignedInAccountAndSettingsFromBackup);
+#endif
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kTangibleSync);
 
+#if BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kSearchEngineChoice);
-
-BASE_DECLARE_FEATURE(kSearchEngineChoiceFre);
-
-BASE_DECLARE_FEATURE(kSearchEngineChoiceSettingsUi);
+#endif
 
 // Used to experiment and validate the UNO model on Desktop. Not meant to be
 // launched to stable for the moment, while it's still in a prototype state.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kUnoDesktop);
 
+// Controls the view mode for (history) sync screen.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || \
+    BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+BASE_DECLARE_FEATURE(kMinorModeRestrictionsForHistorySyncOptIn);
+#endif
+
 #if BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kRemoveSignedInAccountsDialog);
 #endif
 

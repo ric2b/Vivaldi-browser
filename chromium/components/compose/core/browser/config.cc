@@ -4,43 +4,70 @@
 
 #include "components/compose/core/browser/config.h"
 
+#include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/no_destructor.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "components/compose/core/browser/compose_features.h"
 
 namespace compose {
+
 namespace {
-Config g_config;
 
-// Override any parameters that may be provided by Finch.
-void OverrideFieldTrialParams(Config& config) {
-  config.input_min_words = base::GetFieldTrialParamByFeatureAsInt(
-      features::kEnableCompose, "input_min_words", config.input_min_words);
-
-  config.input_max_words = base::GetFieldTrialParamByFeatureAsInt(
-      features::kEnableCompose, "input_max_words", config.input_max_words);
-
-  config.input_max_chars = base::GetFieldTrialParamByFeatureAsInt(
-      features::kEnableCompose, "input_max_chars", config.input_max_chars);
+Config& GetMutableConfig() {
+  static base::NoDestructor<Config> s_config;
+  return *s_config;
 }
 
 }  // namespace
 
 const Config& GetComposeConfig() {
-  static base::NoDestructor<Config> s_config;
-  OverrideFieldTrialParams(*s_config);
-  return *s_config;
+  return GetMutableConfig();
 }
 
-void SetComposeConfigForTesting(const Config& config) {
-  const_cast<Config&>(GetComposeConfig()) = config;
+Config& GetMutableConfigForTesting() {
+  return GetMutableConfig();
 }
 
-void OverrideFieldTrialParamsForTesting() {
-  OverrideFieldTrialParams(const_cast<Config&>(GetComposeConfig()));
+void ResetConfigForTesting() {
+  GetMutableConfig() = Config();
 }
 
-Config::Config() = default;
+Config::Config() {
+  input_min_words = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeInputParams, "min_words", input_min_words);
+
+  input_max_words = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeInputParams, "max_words", input_max_words);
+
+  input_max_chars = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeInputParams, "max_chars", input_max_chars);
+
+  inner_text_max_bytes = base::GetFieldTrialParamByFeatureAsInt(
+      features::kComposeInnerText, "inner_text_max_bytes",
+      inner_text_max_bytes);
+
+  auto_submit_with_selection =
+      base::FeatureList::IsEnabled(features::kComposeAutoSubmit);
+
+  popup_with_saved_state = base::GetFieldTrialParamByFeatureAsBool(
+      features::kEnableComposeNudge, "popup_with_saved_state",
+      popup_with_saved_state);
+
+  popup_with_no_saved_state = base::GetFieldTrialParamByFeatureAsBool(
+      features::kEnableComposeNudge, "popup_with_no_saved_state",
+      popup_with_no_saved_state);
+
+  saved_state_timeout_milliseconds = base::GetFieldTrialParamByFeatureAsInt(
+      features::kEnableComposeSavedStateNotification,
+      "saved_state_timeout_milliseconds", saved_state_timeout_milliseconds);
+
+  positioning_strategy = static_cast<DialogFallbackPositioningStrategy>(
+      base::GetFieldTrialParamByFeatureAsInt(
+          features::kComposeUiParams, "positioning_strategy",
+          base::to_underlying(positioning_strategy)));
+}
+
 Config::Config(const Config& other) = default;
 Config::~Config() = default;
 

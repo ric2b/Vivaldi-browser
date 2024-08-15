@@ -22,13 +22,13 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_model.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/authentication_service_factory.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
-#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
-#import "ios/chrome/browser/signin/fake_system_identity.h"
-#import "ios/chrome/browser/signin/fake_system_identity_manager.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
+#import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/mock_sync_service_utils.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/sync/model/sync_setup_service_factory.h"
@@ -124,6 +124,9 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     account_info.email = base::SysNSStringToUTF8(fakeSystemIdentity_.userEmail);
     ON_CALL(*sync_service_mock_, GetAccountInfo())
         .WillByDefault(Return(account_info));
+    ON_CALL(*sync_service_mock_->GetMockUserSettings(),
+            IsCustomPassphraseAllowed())
+        .WillByDefault(Return(true));
   }
 
   void SimulateFirstSetupSyncOff() {
@@ -137,6 +140,9 @@ class ManageSyncSettingsMediatorTest : public PlatformTest {
     account_info.email = base::SysNSStringToUTF8(fakeSystemIdentity_.userEmail);
     ON_CALL(*sync_service_mock_, GetAccountInfo())
         .WillByDefault(Return(account_info));
+    ON_CALL(*sync_service_mock_->GetMockUserSettings(),
+            IsCustomPassphraseAllowed())
+        .WillByDefault(Return(true));
   }
 
   void SimulateFirstSetupSyncOffWithSignedInAccount() {
@@ -236,6 +242,28 @@ TEST_F(ManageSyncSettingsMediatorTest, SyncServiceEnabledWithEncryption) {
 
   EXPECT_FALSE([mediator_.consumer.tableViewModel
       hasSectionForSectionIdentifier:SyncErrorsSectionIdentifier]);
+}
+
+// Tests that encryption is not accessible when disabled by user settings.
+TEST_F(ManageSyncSettingsMediatorTest,
+       SyncServiceEnabledWithEncryptionDisabledByUserSettings) {
+  CreateManageSyncSettingsMediator(SyncSettingsAccountState::kSyncing);
+  SimulateFirstSetupSyncOnWithConsentEnabled();
+
+  ON_CALL(*sync_service_mock_->GetMockUserSettings(),
+          IsCustomPassphraseAllowed())
+      .WillByDefault(Return(false));
+
+  [mediator_ manageSyncSettingsTableViewControllerLoadModel:mediator_.consumer];
+
+  NSArray* advanced_settings_items = [mediator_.consumer.tableViewModel
+      itemsInSectionWithIdentifier:SyncSettingsSectionIdentifier::
+                                       AdvancedSettingsSectionIdentifier];
+  ASSERT_EQ(3UL, advanced_settings_items.count);
+
+  TableViewImageItem* encryption_item = advanced_settings_items[0];
+  EXPECT_EQ(encryption_item.type, SyncSettingsItemType::EncryptionItemType);
+  EXPECT_FALSE(encryption_item.enabled);
 }
 
 // Tests that "Turn off Sync" is hidden when Sync is disabled.

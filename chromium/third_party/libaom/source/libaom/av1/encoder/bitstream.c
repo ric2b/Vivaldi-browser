@@ -1028,10 +1028,10 @@ static AOM_INLINE void write_intra_prediction_modes(const AV1_COMMON *cm,
     write_intra_uv_mode(ec_ctx, uv_mode, mode, is_cfl_allowed(xd), w);
     if (uv_mode == UV_CFL_PRED)
       write_cfl_alphas(ec_ctx, mbmi->cfl_alpha_idx, mbmi->cfl_alpha_signs, w);
-    const PREDICTION_MODE equiv_mode = get_uv_mode(uv_mode);
-    if (use_angle_delta && av1_is_directional_mode(equiv_mode)) {
+    const PREDICTION_MODE intra_mode = get_uv_mode(uv_mode);
+    if (use_angle_delta && av1_is_directional_mode(intra_mode)) {
       write_angle_delta(w, mbmi->angle_delta[PLANE_TYPE_UV],
-                        ec_ctx->angle_delta_cdf[equiv_mode - V_PRED]);
+                        ec_ctx->angle_delta_cdf[intra_mode - V_PRED]);
     }
   }
 
@@ -3642,7 +3642,9 @@ static void write_large_scale_tile_obu(
           mode_bc.allow_update_cdf && !cm->features.disable_cdf_update;
       aom_start_encode(&mode_bc, buf->data + data_offset);
       write_modes(cpi, &cpi->td, &tile_info, &mode_bc, tile_row, tile_col);
-      aom_stop_encode(&mode_bc);
+      if (aom_stop_encode(&mode_bc) < 0) {
+        aom_internal_error(cm->error, AOM_CODEC_ERROR, "Error writing modes");
+      }
       tile_size = mode_bc.pos;
       buf->size = tile_size;
 
@@ -3778,7 +3780,10 @@ void av1_pack_tile_info(AV1_COMP *const cpi, ThreadData *const td,
   // Pack tile data
   aom_start_encode(&mode_bc, pack_bs_params->dst + *total_size);
   write_modes(cpi, td, &tile_info, &mode_bc, tile_row, tile_col);
-  aom_stop_encode(&mode_bc);
+  if (aom_stop_encode(&mode_bc) < 0) {
+    aom_internal_error(td->mb.e_mbd.error_info, AOM_CODEC_ERROR,
+                       "Error writing modes");
+  }
   tile_size = mode_bc.pos;
   assert(tile_size >= AV1_MIN_TILE_SIZE_BYTES);
 

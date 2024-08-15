@@ -158,31 +158,25 @@ void AutoUpdateGetUpdateStatusFunction::SendResult(
     switch (*status) {
       case AutoUpdateStatus::kNoUpdate:
         status_object.status =
-            vivaldi::auto_update::UPDATE_OPERATION_STATUS_ENUM_NOUPDATE;
+            vivaldi::auto_update::UpdateOperationStatusEnum::kNoUpdate;
         break;
       case AutoUpdateStatus::kDidAbortWithError:
-        status_object.status = vivaldi::auto_update::
-            UPDATE_OPERATION_STATUS_ENUM_DIDABORTWITHERROR;
+        status_object.status = vivaldi::auto_update::UpdateOperationStatusEnum::kDidAbortWithError;
         break;
       case AutoUpdateStatus::kDidFindValidUpdate:
-        status_object.status = vivaldi::auto_update::
-            UPDATE_OPERATION_STATUS_ENUM_DIDFINDVALIDUPDATE;
+        status_object.status = vivaldi::auto_update::UpdateOperationStatusEnum::kDidFindValidUpdate;
         break;
       case AutoUpdateStatus::kWillDownloadUpdate:
-        status_object.status = vivaldi::auto_update::
-            UPDATE_OPERATION_STATUS_ENUM_WILLDOWNLOADUPDATE;
+        status_object.status = vivaldi::auto_update::UpdateOperationStatusEnum::kWillDownloadUpdate;
         break;
       case AutoUpdateStatus::kDidDownloadUpdate:
-        status_object.status = vivaldi::auto_update::
-            UPDATE_OPERATION_STATUS_ENUM_DIDDOWNLOADUPDATE;
+        status_object.status = vivaldi::auto_update::UpdateOperationStatusEnum::kDidDownloadUpdate;
         break;
       case AutoUpdateStatus::kWillInstallUpdateOnQuit:
-        status_object.status = vivaldi::auto_update::
-            UPDATE_OPERATION_STATUS_ENUM_WILLINSTALLUPDATEONQUIT;
+        status_object.status = vivaldi::auto_update::UpdateOperationStatusEnum::kWillInstallUpdateOnQuit;
         break;
       case AutoUpdateStatus::kUpdaterDidRelaunchApplication:
-        status_object.status = vivaldi::auto_update::
-            UPDATE_OPERATION_STATUS_ENUM_UPDATERDIDRELAUNCHAPPLICATION;
+        status_object.status = vivaldi::auto_update::UpdateOperationStatusEnum::kUpdaterDidRelaunchApplication;
         break;
     }
   }

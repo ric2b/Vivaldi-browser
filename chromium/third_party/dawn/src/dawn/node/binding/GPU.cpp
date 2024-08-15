@@ -30,9 +30,12 @@
 #include <algorithm>
 #include <cstdlib>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "dawn/webgpu_cpp_print.h"
+#include "src/dawn/node/binding/Converter.h"
 #include "src/dawn/node/binding/GPUAdapter.h"
 #include "src/dawn/node/binding/TogglesLoader.h"
 
@@ -110,15 +113,25 @@ namespace wgpu::binding {
 // wgpu::bindings::GPU
 ////////////////////////////////////////////////////////////////////////////////
 GPU::GPU(Flags flags) : flags_(std::move(flags)) {
-    if (auto validate = flags_.Get("validate"); validate == "1" || validate == "true") {
-        instance_.EnableBackendValidation(true);
-        instance_.SetBackendValidationLevel(dawn::native::BackendValidationLevel::Full);
-    }
-
     // Setting the DllDir changes where we load adapter DLLs from (e.g. d3dcompiler_47.dll)
     if (auto dir = flags_.Get("dlldir")) {
         SetDllDir(dir->c_str());
     }
+
+    // Set up the chained descriptor for the various instance extensions.
+    dawn::native::DawnInstanceDescriptor dawnDesc;
+    if (auto validate = flags_.Get("validate"); validate == "1" || validate == "true") {
+        dawnDesc.backendValidationLevel = dawn::native::BackendValidationLevel::Full;
+    }
+
+    TogglesLoader togglesLoader(flags_);
+    DawnTogglesDescriptor togglesDesc = togglesLoader.GetDescriptor();
+    togglesDesc.nextInChain = &dawnDesc;
+
+    wgpu::InstanceDescriptor desc;
+    desc.nextInChain = &togglesDesc;
+    instance_ = std::make_unique<dawn::native::Instance>(
+        reinterpret_cast<const WGPUInstanceDescriptor*>(&desc));
 }
 
 interop::Promise<std::optional<interop::Interface<interop::GPUAdapter>>> GPU::requestAdapter(
@@ -189,7 +202,7 @@ interop::Promise<std::optional<interop::Interface<interop::GPUAdapter>>> GPU::re
     DawnTogglesDescriptor togglesDescriptor = togglesLoader.GetDescriptor();
     nativeOptions.nextInChain = &togglesDescriptor;
 
-    auto adapters = instance_.EnumerateAdapters(&nativeOptions);
+    auto adapters = instance_->EnumerateAdapters(&nativeOptions);
     if (adapters.empty()) {
         promise.Resolve({});
         return promise;
@@ -261,13 +274,52 @@ interop::GPUTextureFormat GPU::getPreferredCanvasFormat(Napi::Env) {
 }
 
 interop::Interface<interop::WGSLLanguageFeatures> GPU::getWgslLanguageFeatures(Napi::Env env) {
-    // TODO(crbug.com/dawn/1777)
+    using InteropWGSLFeatureSet = std::unordered_set<interop::WGSLFeatureName>;
+
     struct Features : public interop::WGSLLanguageFeatures {
+        explicit Features(InteropWGSLFeatureSet features) : features_(features) {}
         ~Features() = default;
-        bool has(Napi::Env env, std::string) { UNIMPLEMENTED(env, {}); }
-        std::vector<std::string> keys(Napi::Env env) { UNIMPLEMENTED(env, {}); }
+
+        bool has(Napi::Env env, std::string name) {
+            interop::WGSLFeatureName feature;
+            if (!interop::Converter<interop::WGSLFeatureName>::FromString(name, feature)) {
+                return false;
+            }
+            return features_.count(feature);
+        }
+        std::vector<std::string> keys(Napi::Env env) {
+            std::vector<std::string> out;
+            out.reserve(features_.size());
+            for (auto feature : features_) {
+                out.push_back(interop::Converter<interop::WGSLFeatureName>::ToString(feature));
+            }
+            return out;
+        }
+        size_t getSize(Napi::Env env) { return features_.size(); }
+
+        InteropWGSLFeatureSet features_;
     };
-    return interop::WGSLLanguageFeatures::Create<Features>(env);
+
+    wgpu::Instance instance = instance_->Get();
+    size_t count = instance.EnumerateWGSLLanguageFeatures(nullptr);
+
+    std::vector<wgpu::WGSLFeatureName> features(count);
+    instance.EnumerateWGSLLanguageFeatures(features.data());
+
+    // Add all known WGSLLangaugeFeatures known by dawn.node but warn loudly when there are unknown
+    // ones.
+    InteropWGSLFeatureSet featureSet;
+    Converter conv(env);
+    for (auto feature : features) {
+        interop::WGSLFeatureName wgslFeature;
+        if (conv(wgslFeature, feature)) {
+            featureSet.emplace(wgslFeature);
+        } else {
+            LOG("Unknown WGSLFeatureName ", feature);
+        }
+    }
+
+    return interop::WGSLLanguageFeatures::Create<Features>(env, std::move(featureSet));
 }
 
 }  // namespace wgpu::binding

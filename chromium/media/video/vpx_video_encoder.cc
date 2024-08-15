@@ -202,8 +202,8 @@ EncoderStatus ReallocateVpxImageIfNeeded(vpx_image_t* vpx_image,
                                          const vpx_img_fmt fmt,
                                          int width,
                                          int height) {
-  if (vpx_image->fmt != fmt || static_cast<int>(vpx_image->w) != width ||
-      static_cast<int>(vpx_image->h) != height) {
+  if (vpx_image->fmt != fmt || static_cast<int>(vpx_image->d_w) != width ||
+      static_cast<int>(vpx_image->d_h) != height) {
     vpx_img_free(vpx_image);
     if (vpx_image != vpx_img_alloc(vpx_image, fmt, width, height, 1)) {
       return EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
@@ -475,7 +475,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
     }
 
     auto convert_status =
-        ConvertAndScaleFrame(*frame, *resized_frame, resize_buf_);
+        frame_converter_.ConvertAndScale(*frame, *resized_frame);
     if (!convert_status.is_ok()) {
       std::move(done_cb).Run(
           EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode)
@@ -523,7 +523,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
             const_cast<uint8_t*>(frame->visible_data(VideoFrame::kYPlane));
         vpx_image_.planes[VPX_PLANE_U] =
             const_cast<uint8_t*>(frame->visible_data(VideoFrame::kUVPlane));
-        // In NV12 Y and U samples are combined in one plane (bytes go YUYUYU),
+        // In NV12 U and V samples are combined in one plane (bytes go UVUVUV),
         // but libvpx treats them as two planes with the same stride but shifted
         // by one byte.
         vpx_image_.planes[VPX_PLANE_V] = vpx_image_.planes[VPX_PLANE_U] + 1;
@@ -560,11 +560,11 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
   int temporal_id = 0;
   if (codec_config_.ts_number_layers > 1) {
     if (key_frame)
-      temporal_svc_frame_index = 0;
-    int index_in_temp_cycle =
-        temporal_svc_frame_index % codec_config_.ts_periodicity;
+      temporal_svc_frame_index_ = 0;
+    unsigned int index_in_temp_cycle =
+        temporal_svc_frame_index_ % codec_config_.ts_periodicity;
     temporal_id = codec_config_.ts_layer_id[index_in_temp_cycle];
-    temporal_svc_frame_index++;
+    temporal_svc_frame_index_++;
 
     if (profile_ == VP8PROFILE_ANY) {
       auto* vp8_layers_flags = codec_config_.ts_number_layers == 2
@@ -612,11 +612,11 @@ void VpxVideoEncoder::ChangeOptions(const Options& options,
   }
 
   // Libvpx is very peculiar about encoded frame size changes,
-  // - VP8: As long as the frame area doesn't increase, internal codec
-  //        structures don't need to be reallocated and codec can be simply
-  //        reconfigured.
-  // - VP9: The codec cannot increase encoded width or height larger than their
-  //        initial values.
+  // - VP8: vpx_codec_enc_config_set() returns VPX_CODEC_INVALID_PARAM if we
+  //        try to increase encoded width or height larger than their initial
+  //        values.
+  // - VP9: The codec may crash if we try to increase encoded width or height
+  //        larger than their initial values.
   //
   // Mind the difference between old frame sizes:
   // - |originally_configured_size_| is set only once when the vpx_codec_ctx_t
@@ -625,19 +625,7 @@ void VpxVideoEncoder::ChangeOptions(const Options& options,
   // More info can be found here:
   //   https://bugs.chromium.org/p/webm/issues/detail?id=1642
   //   https://bugs.chromium.org/p/webm/issues/detail?id=912
-  if (profile_ == VP8PROFILE_ANY) {
-    // VP8 resize restrictions
-    auto old_area = originally_configured_size_.GetCheckedArea();
-    auto new_area = options.frame_size.GetCheckedArea();
-    DCHECK(old_area.IsValid());
-    if (!new_area.IsValid() || new_area.ValueOrDie() > old_area.ValueOrDie()) {
-      auto status = EncoderStatus(
-          EncoderStatus::Codes::kEncoderUnsupportedConfig,
-          "libvpx/VP8 doesn't support dynamically increasing frame area");
-      std::move(done_cb).Run(std::move(status));
-      return;
-    }
-  } else {
+  if (profile_ != VP8PROFILE_ANY) {
     // VP9 resize restrictions
     if (options.frame_size.width() > originally_configured_size_.width() ||
         options.frame_size.height() > originally_configured_size_.height()) {
@@ -746,7 +734,7 @@ void VpxVideoEncoder::DrainOutputs(int temporal_id,
       if (result.key_frame) {
         // If we got an unexpected key frame, temporal_svc_frame_index needs to
         // be adjusted, because the next frame should have index 1.
-        temporal_svc_frame_index = 1;
+        temporal_svc_frame_index_ = 1;
         result.temporal_id = 0;
       } else {
         result.temporal_id = temporal_id;

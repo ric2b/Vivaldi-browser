@@ -64,18 +64,18 @@ nomination email.
 *   embedded list of links to revisions (about top 10) containing your
             patches
 
-Two other committers need to second your nomination. If no one objects in 5
-working days (U.S.), you're a committer. If anyone objects or wants more
-information, the committers discuss and usually come to a consensus (within the
-5 working days). If issues can't be resolved, there's a vote among current
-committers.
+Two other committers need to second your nomination. 5 working days (U.S.) after
+the nomination, or 2 working days (U.S.) after the last message in the
+discussion, whichever is later, you're a committer. If anyone objects or wants
+more information, the committers discuss and usually come to a consensus. If
+issues can't be resolved, there's a vote among current committers.
 
 That's it! There is no further action you need to take on your part. The
 committers will get back to you once they make a decision.
 
-In the worst case, this can drag out for two weeks. Keep writing patches! Even
-in the rare cases where a nomination fails, the objection is usually something
-easy to address like "more patches" or "not enough people are familiar with this
+This usually won't take longer than two weeks. Keep writing patches! Even in the
+rare cases where a nomination fails, the objection is usually something easy to
+address like "more patches" or "not enough people are familiar with this
 person's work."
 
 Once you get approval from the existing committers, we'll send you instructions

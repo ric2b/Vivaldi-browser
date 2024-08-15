@@ -40,11 +40,10 @@ cc_library(
   name = "ir_to_program",
   srcs = [
     "ir_to_program.cc",
-    "rename_conflicts.cc",
   ],
   hdrs = [
     "ir_to_program.h",
-    "rename_conflicts.h",
+    "program_options.h",
   ],
   deps = [
     "//src/tint/api/common",
@@ -55,6 +54,8 @@ cc_library(
     "//src/tint/lang/core/type",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
+    "//src/tint/lang/wgsl/common",
+    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/intrinsic",
     "//src/tint/lang/wgsl/ir",
     "//src/tint/lang/wgsl/program",
@@ -82,7 +83,6 @@ cc_library(
   alwayslink = True,
   srcs = [
     "ir_to_program_test.h",
-    "rename_conflicts_test.cc",
   ] + select({
     ":tint_build_wgsl_writer": [
       "inlining_test.cc",
@@ -100,6 +100,8 @@ cc_library(
     "//src/tint/lang/core/type",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
+    "//src/tint/lang/wgsl/common",
+    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/intrinsic",
     "//src/tint/lang/wgsl/ir",
     "//src/tint/lang/wgsl/program",

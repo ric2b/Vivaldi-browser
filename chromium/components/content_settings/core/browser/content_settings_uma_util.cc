@@ -91,7 +91,7 @@ constexpr auto kHistogramValue = base::MakeFixedFlatMap<ContentSettingsType,
     {ContentSettingsType::JAVASCRIPT_JIT, 79},
     {ContentSettingsType::HTTP_ALLOWED, 80},
     {ContentSettingsType::FORMFILL_METADATA, 81},
-    {ContentSettingsType::FEDERATED_IDENTITY_ACTIVE_SESSION, 82},
+    {ContentSettingsType::DEPRECATED_FEDERATED_IDENTITY_ACTIVE_SESSION, 82},
     {ContentSettingsType::AUTO_DARK_WEB_CONTENT, 83},
     {ContentSettingsType::REQUEST_DESKTOP_SITE, 84},
     {ContentSettingsType::FEDERATED_IDENTITY_API, 85},
@@ -116,21 +116,26 @@ constexpr auto kHistogramValue = base::MakeFixedFlatMap<ContentSettingsType,
     {ContentSettingsType::MIDI, 102},
     {ContentSettingsType::ALL_SCREEN_CAPTURE, 103},
     {ContentSettingsType::COOKIE_CONTROLS_METADATA, 104},
-    {ContentSettingsType::TPCD_SUPPORT, 105},
+    {ContentSettingsType::TPCD_TRIAL, 105},
     {ContentSettingsType::AUTO_PICTURE_IN_PICTURE, 106},
     {ContentSettingsType::TPCD_METADATA_GRANTS, 107},
     {ContentSettingsType::FILE_SYSTEM_ACCESS_EXTENDED_PERMISSION, 108},
     {ContentSettingsType::TPCD_HEURISTICS_GRANTS, 109},
+    {ContentSettingsType::FILE_SYSTEM_ACCESS_RESTORE_PERMISSION, 110},
+    {ContentSettingsType::CAPTURED_SURFACE_CONTROL, 111},
+    {ContentSettingsType::SMART_CARD_GUARD, 112},
+    {ContentSettingsType::SMART_CARD_DATA, 113},
+    {ContentSettingsType::WEB_PRINTING, 114},
+    {ContentSettingsType::TOP_LEVEL_TPCD_TRIAL, 115},
 
     // As mentioned at the top, please don't forget to update ContentType in
     // enums.xml when you add entries here!
 });
 
 constexpr int kkHistogramValueMax =
-    std::max_element(
-        kHistogramValue.begin(),
-        kHistogramValue.end(),
-        [](const auto a, const auto b) { return a.second < b.second; })
+    base::ranges::max_element(kHistogramValue,
+                              base::ranges::less{},
+                              &decltype(kHistogramValue)::value_type::second)
         ->second;
 
 std::string GetProviderNameForHistograms(

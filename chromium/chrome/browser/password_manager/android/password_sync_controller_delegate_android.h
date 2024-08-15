@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PASSWORD_MANAGER_ANDROID_PASSWORD_SYNC_CONTROLLER_DELEGATE_ANDROID_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback.h"
@@ -14,11 +15,10 @@
 #include "base/scoped_observation.h"
 #include "base/types/strong_alias.h"
 #include "chrome/browser/password_manager/android/password_sync_controller_delegate_bridge.h"
-#include "components/password_manager/core/browser/password_store_backend.h"
+#include "components/password_manager/core/browser/password_store/password_store_backend.h"
 #include "components/sync/model/model_type_controller_delegate.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_service_observer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace syncer {
 class ModelTypeControllerDelegate;
@@ -53,7 +53,8 @@ class PasswordSyncControllerDelegateAndroid
       base::OnceCallback<void(const syncer::TypeEntitiesCount&)> callback)
       const override;
   void RecordMemoryUsageAndCountsHistograms() override;
-  void ClearMetadataWhileStopped() override;
+  void ClearMetadataIfStopped() override;
+  void ReportBridgeErrorForTest() override;
 
   // syncer::SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;
@@ -81,13 +82,13 @@ class PasswordSyncControllerDelegateAndroid
 
   const std::unique_ptr<PasswordSyncControllerDelegateBridge> bridge_;
 
-  // Current sync status, absl::nullopt until OnSyncServiceInitialized() is
+  // Current sync status, std::nullopt until OnSyncServiceInitialized() is
   // called. This value is used to distinguish between sync setup on startup and
   // when user turns on sync manually.
-  absl::optional<IsSyncEnabled> is_sync_enabled_;
+  std::optional<IsSyncEnabled> is_sync_enabled_;
 
   // Last sync status set in CredentialManager.
-  absl::optional<IsSyncEnabled> credential_manager_sync_setting_;
+  std::optional<IsSyncEnabled> credential_manager_sync_setting_;
 
   base::OnceClosure on_sync_shutdown_;
 

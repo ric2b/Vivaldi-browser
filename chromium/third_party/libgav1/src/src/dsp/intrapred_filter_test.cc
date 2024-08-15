@@ -158,9 +158,8 @@ class FilterIntraPredTest : public IntraPredTestBase<bitdepth, Pixel> {
       // No need to compare C with itself.
       base_filter_intra_pred_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        IntraPredFilterInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      IntraPredFilterInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       IntraPredFilterInit_NEON();
     } else {

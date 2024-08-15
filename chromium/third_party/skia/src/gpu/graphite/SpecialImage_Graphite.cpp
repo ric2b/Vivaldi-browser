@@ -14,7 +14,6 @@
 #include "src/gpu/graphite/Image_Graphite.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/gpu/graphite/TextureUtils.h"
-#include "src/shaders/SkImageShader.h"
 
 namespace skgpu::graphite {
 
@@ -38,30 +37,6 @@ public:
 
     TextureProxyView textureProxyView() const { return fTextureProxyView; }
 
-    void onDraw(SkCanvas* canvas,
-                SkScalar x, SkScalar y,
-                const SkSamplingOptions& sampling,
-                const SkPaint* paint) const override {
-        SkRect dst = SkRect::MakeXYWH(x, y,
-                                      this->subset().width(), this->subset().height());
-
-        sk_sp<SkImage> img = sk_sp<SkImage>(new skgpu::graphite::Image(this->uniqueID(),
-                                                                       fTextureProxyView,
-                                                                       this->colorInfo()));
-
-        canvas->drawImageRect(img, SkRect::Make(this->subset()), dst,
-                              sampling, paint, SkCanvas::kStrict_SrcRectConstraint);
-    }
-
-    bool onGetROPixels(SkBitmap* dst) const override {
-        // This should never be called: All GPU image filters are implemented entirely on the GPU,
-        // so we never perform read-back.
-        // TODO: re-enabled this assert once Graphite has image filter support. Right now image
-        // filters will fallback to the raster backend in Graphite.
-        //SkASSERT(false);
-        return false;
-    }
-
     sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const override {
         return SkSpecialImages::MakeGraphite(subset,
                                              this->uniqueID(),
@@ -70,30 +45,8 @@ public:
                                              this->props());
     }
 
-    sk_sp<SkImage> onAsImage(const SkIRect* subset) const override {
-        if (subset) {
-            // TODO: fill this in
-            return nullptr;
-        }
-
+    sk_sp<SkImage> asImage() const override {
         return sk_make_sp<Image>(this->uniqueID(), fTextureProxyView, this->colorInfo());
-    }
-
-    sk_sp<SkShader> onAsShader(SkTileMode tileMode,
-                               const SkSamplingOptions& sampling,
-                               const SkMatrix& lm) const override {
-        // The special image's logical (0,0) is at its subset's topLeft() so we need to account for
-        // that in the local matrix used when sampling.
-        SkMatrix subsetOrigin = SkMatrix::Translate(-this->subset().topLeft());
-        subsetOrigin.postConcat(lm);
-        // However, we don't need to modify the subset itself since that is defined with respect to
-        // the base image, and the local matrix is applied before any tiling/clamping.
-        const SkRect subset = SkRect::Make(this->subset());
-
-        // asImage() w/o a subset makes no copy; create the SkImageShader directly to remember the
-        // subset used to access the image.
-        return SkImageShader::MakeSubset(this->asImage(), subset, tileMode, tileMode,
-                                         sampling, &subsetOrigin);
     }
 
 private:

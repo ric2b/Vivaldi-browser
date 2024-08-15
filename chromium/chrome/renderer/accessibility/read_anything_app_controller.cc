@@ -15,7 +15,6 @@
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/common/accessibility/read_anything_constants.h"
 #include "chrome/renderer/accessibility/ax_tree_distiller.h"
 #include "components/language/core/common/locale_util.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
@@ -38,8 +37,10 @@
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/accessibility/ax_tree.h"
+#include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/ax_tree_serializer.h"
 #include "ui/accessibility/ax_tree_update.h"
+#include "url/url_util.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-microtask-queue.h"
 
@@ -339,6 +340,24 @@ bool GetSelectable(const GURL& url) {
   return true;
 }
 
+bool GetIsGoogleDocs(const GURL& url) {
+  // A Google Docs URL is in the form of "https://docs.google.com/document*" or
+  // "https://docs.sandbox.google.com/document*".
+  constexpr const char* kDocsURLDomain[] = {"docs.google.com",
+                                            "docs.sandbox.google.com"};
+  if (url.SchemeIsHTTPOrHTTPS()) {
+    for (const std::string& google_docs_url : kDocsURLDomain) {
+      if (url.DomainIs(google_docs_url) && url.has_path() &&
+          url.path().starts_with("/document") &&
+          !url.ExtractFileName().empty()) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 }  // namespace
 
 // static
@@ -378,14 +397,24 @@ ReadAnythingAppController* ReadAnythingAppController::Install(
 
 ReadAnythingAppController::ReadAnythingAppController(
     content::RenderFrame* render_frame)
-    : render_frame_id_(render_frame->GetRoutingID()) {
+    : frame_token_(render_frame->GetWebFrame()->GetLocalFrameToken()) {
   distiller_ = std::make_unique<AXTreeDistiller>(
-      render_frame,
       base::BindRepeating(&ReadAnythingAppController::OnAXTreeDistilled,
                           weak_ptr_factory_.GetWeakPtr()));
 }
 
 ReadAnythingAppController::~ReadAnythingAppController() = default;
+ReadAnythingAppController::ReadAloudCurrentGranularity::
+    ReadAloudCurrentGranularity() {
+  segments = std::map<ui::AXNodeID, ReadAloudTextSegment>();
+}
+
+ReadAnythingAppController::ReadAloudCurrentGranularity::
+    ReadAloudCurrentGranularity(const ReadAloudCurrentGranularity& other) =
+        default;
+
+ReadAnythingAppController::ReadAloudCurrentGranularity::
+    ~ReadAloudCurrentGranularity() = default;
 
 void ReadAnythingAppController::AccessibilityEventReceived(
     const ui::AXTreeID& tree_id,
@@ -428,8 +457,7 @@ void ReadAnythingAppController::AccessibilityEventReceived(
 }
 
 void ReadAnythingAppController::ExecuteJavaScript(std::string script) {
-  content::RenderFrame* render_frame =
-      content::RenderFrame::FromRoutingID(render_frame_id_);
+  content::RenderFrame* render_frame = GetRenderFrame();
   if (!render_frame) {
     return;
   }
@@ -450,6 +478,7 @@ void ReadAnythingAppController::OnActiveAXTreeIDChanged(
   model_.SetActiveUkmSourceId(ukm_source_id);
   model_.SetActiveTreeSelectable(GetSelectable(url));
   model_.SetIsPdf(url);
+  model_.set_is_google_docs(GetIsGoogleDocs(url));
   // Delete all pending updates on the formerly active AXTree.
   // TODO(crbug.com/1266555): If distillation is in progress, cancel the
   // distillation request.
@@ -508,6 +537,12 @@ void ReadAnythingAppController::Distill() {
 void ReadAnythingAppController::OnAXTreeDistilled(
     const ui::AXTreeID& tree_id,
     const std::vector<ui::AXNodeID>& content_node_ids) {
+  // Update Read Aloud state.
+  ax_position_ = ui::AXNodePosition::AXPosition::CreateNullPosition();
+  current_text_index_ = 0;
+  processed_granularity_index_ = -1;
+  processed_granularities_on_current_page_.clear();
+
   // Reset state, including the current side panel selection so we can update
   // it based on the new main panel selection in PostProcessSelection below.
   model_.Reset(content_node_ids);
@@ -588,8 +623,16 @@ void ReadAnythingAppController::DrawSelection() {
 }
 
 void ReadAnythingAppController::OnThemeChanged(ReadAnythingThemePtr new_theme) {
+  bool needs_redraw_for_links =
+      model_.links_enabled() != new_theme->links_enabled;
   model_.OnThemeChanged(std::move(new_theme));
   ExecuteJavaScript("chrome.readingMode.updateTheme();");
+
+  // Only redraw if there is an active tree.
+  if (needs_redraw_for_links &&
+      model_.GetActiveTreeId() != ui::AXTreeIDUnknown()) {
+    Draw();
+  }
 }
 
 void ReadAnythingAppController::OnSettingsRestoredFromPrefs(
@@ -597,19 +640,26 @@ void ReadAnythingAppController::OnSettingsRestoredFromPrefs(
     read_anything::mojom::LetterSpacing letter_spacing,
     const std::string& font,
     double font_size,
+    bool links_enabled,
     read_anything::mojom::Colors color,
     double speech_rate,
     base::Value::Dict voices,
     read_anything::mojom::HighlightGranularity granularity) {
+  bool needs_redraw_for_links = model_.links_enabled() != links_enabled;
   model_.OnSettingsRestoredFromPrefs(line_spacing, letter_spacing, font,
-                                     font_size, color, speech_rate, &voices,
-                                     granularity);
+                                     font_size, links_enabled, color,
+                                     speech_rate, &voices, granularity);
   ExecuteJavaScript("chrome.readingMode.restoreSettingsFromPrefs();");
+  // Only redraw if there is an active tree.
+  if (needs_redraw_for_links &&
+      model_.GetActiveTreeId() != ui::AXTreeIDUnknown()) {
+    Draw();
+  }
 }
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 void ReadAnythingAppController::ScreenAIServiceReady() {
-  distiller_->ScreenAIServiceReady();
+  distiller_->ScreenAIServiceReady(GetRenderFrame());
 }
 #endif
 
@@ -626,6 +676,7 @@ gin::ObjectTemplateBuilder ReadAnythingAppController::GetObjectTemplateBuilder(
                    &ReadAnythingAppController::BackgroundColor)
       .SetProperty("fontName", &ReadAnythingAppController::FontName)
       .SetProperty("fontSize", &ReadAnythingAppController::FontSize)
+      .SetProperty("linksEnabled", &ReadAnythingAppController::LinksEnabled)
       .SetProperty("foregroundColor",
                    &ReadAnythingAppController::ForegroundColor)
       .SetProperty("letterSpacing", &ReadAnythingAppController::LetterSpacing)
@@ -660,6 +711,7 @@ gin::ObjectTemplateBuilder ReadAnythingAppController::GetObjectTemplateBuilder(
       .SetProperty("speechSynthesisLanguageCode",
                    &ReadAnythingAppController::GetLanguageCodeForSpeech)
       .SetMethod("getChildren", &ReadAnythingAppController::GetChildren)
+      .SetMethod("getDataFontCss", &ReadAnythingAppController::GetDataFontCss)
       .SetMethod("getTextDirection",
                  &ReadAnythingAppController::GetTextDirection)
       .SetMethod("getHtmlTag", &ReadAnythingAppController::GetHtmlTag)
@@ -668,6 +720,8 @@ gin::ObjectTemplateBuilder ReadAnythingAppController::GetObjectTemplateBuilder(
       .SetMethod("getUrl", &ReadAnythingAppController::GetUrl)
       .SetMethod("shouldBold", &ReadAnythingAppController::ShouldBold)
       .SetMethod("isOverline", &ReadAnythingAppController::IsOverline)
+      .SetMethod("isLeafNode", &ReadAnythingAppController::IsLeafNode)
+      .SetMethod("isGoogleDocs", &ReadAnythingAppController::IsGoogleDocs)
       .SetMethod("onConnected", &ReadAnythingAppController::OnConnected)
       .SetMethod("onCopy", &ReadAnythingAppController::OnCopy)
       .SetMethod("onFontSizeChanged",
@@ -717,8 +771,15 @@ gin::ObjectTemplateBuilder ReadAnythingAppController::GetObjectTemplateBuilder(
                  &ReadAnythingAppController::SetThemeForTesting)
       .SetMethod("setLanguageForTesting",
                  &ReadAnythingAppController::SetLanguageForTesting)
-      .SetMethod("getNextSentence",
-                 &ReadAnythingAppController::GetNextSentence);
+      .SetMethod("initAXPositionWithNode",
+                 &ReadAnythingAppController::InitAXPositionWithNode)
+      .SetMethod("getNextTextStartIndex",
+                 &ReadAnythingAppController::GetNextTextStartIndex)
+      .SetMethod("getNextTextEndIndex",
+                 &ReadAnythingAppController::GetNextTextEndIndex)
+      .SetMethod("getNextText", &ReadAnythingAppController::GetNextText)
+      .SetMethod("getPreviousText", &ReadAnythingAppController::GetPreviousText)
+      .SetMethod("shouldShowUI", &ReadAnythingAppController::ShouldShowUI);
 }
 
 ui::AXNodeID ReadAnythingAppController::RootId() const {
@@ -753,6 +814,10 @@ std::string ReadAnythingAppController::FontName() const {
 
 float ReadAnythingAppController::FontSize() const {
   return model_.font_size();
+}
+
+bool ReadAnythingAppController::LinksEnabled() const {
+  return model_.links_enabled();
 }
 
 SkColor ReadAnythingAppController::ForegroundColor() const {
@@ -853,10 +918,27 @@ std::vector<ui::AXNodeID> ReadAnythingAppController::GetChildren(
   return child_ids;
 }
 
+std::string ReadAnythingAppController::GetDataFontCss(
+    ui::AXNodeID ax_node_id) const {
+  ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
+  DCHECK(ax_node);
+
+  std::string data_font_css;
+  ax_node->GetHtmlAttribute("data-font-css", &data_font_css);
+  return data_font_css;
+}
+
 std::string ReadAnythingAppController::GetHtmlTag(
     ui::AXNodeID ax_node_id) const {
   ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
   DCHECK(ax_node);
+
+  std::string html_tag =
+      ax_node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
+
+  if (model_.is_pdf()) {
+    return GetHtmlTagForPDF(ax_node, html_tag);
+  }
 
   if (ui::IsTextField(ax_node->GetRole())) {
     return "div";
@@ -865,22 +947,93 @@ std::string ReadAnythingAppController::GetHtmlTag(
   // Some divs are marked with role=heading and aria-level=# to indicate
   // the heading level, so use the <h#> tag directly.
   if (ax_node->GetRole() == ax::mojom::Role::kHeading) {
-    std::string aria_level;
-    ax_node->GetHtmlAttribute("aria-level", &aria_level);
+    std::string aria_level = GetAriaLevel(ax_node);
     if (!aria_level.empty()) {
       return "h" + aria_level;
     }
   }
 
-  // Replace embedded objects with div to display PDF content.
-  if (ax_node->GetRole() == ax::mojom::Role::kEmbeddedObject) {
-    return "div";
+  if (html_tag == ui::ToString(ax::mojom::Role::kMark)) {
+    // Replace mark element with bold element for readability.
+    html_tag = "b";
+  } else if (IsGoogleDocs()) {
+    // Change HTML tags for SVG elements to allow Reading Mode to render text
+    // for the Annotated Canvas elements in a Google Doc.
+    if (html_tag == "svg") {
+      html_tag = "div";
+    }
+    if (html_tag == "g" && ax_node->GetRole() == ax::mojom::Role::kParagraph) {
+      html_tag = "p";
+    }
   }
 
-  // Replace mark element with bold element for readability
-  std::string html_tag =
-      ax_node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
-  return html_tag == ui::ToString(ax::mojom::Role::kMark) ? "b" : html_tag;
+  return html_tag;
+}
+
+std::string ReadAnythingAppController::GetAriaLevel(ui::AXNode* ax_node) const {
+  std::string aria_level;
+  ax_node->GetHtmlAttribute("aria-level", &aria_level);
+  return aria_level;
+}
+
+std::string ReadAnythingAppController::GetHtmlTagForPDF(
+    ui::AXNode* ax_node,
+    std::string html_tag) const {
+  ax::mojom::Role role = ax_node->GetRole();
+
+  // Some nodes in PDFs don't have an HTML tag so use role instead.
+  switch (role) {
+    case ax::mojom::Role::kEmbeddedObject:
+    case ax::mojom::Role::kRegion:
+    case ax::mojom::Role::kPdfRoot:
+    case ax::mojom::Role::kRootWebArea:
+      return "span";
+    case ax::mojom::Role::kParagraph:
+      return "p";
+    case ax::mojom::Role::kLink:
+      return "a";
+    case ax::mojom::Role::kStaticText:
+      return "";
+    case ax::mojom::Role::kHeading:
+      return GetHeadingHtmlTagForPDF(ax_node, html_tag);
+    // Add a line break after each page of an inaccessible PDF for readability
+    // since there is no other formatting included in the OCR output.
+    case ax::mojom::Role::kContentInfo:
+      if (ax_node->GetTextContentUTF8() == string_constants::kPDFPageEnd) {
+        return "br";
+      }
+      ABSL_FALLTHROUGH_INTENDED;
+    default:
+      return html_tag;
+  }
+}
+
+std::string ReadAnythingAppController::GetHeadingHtmlTagForPDF(
+    ui::AXNode* ax_node,
+    std::string html_tag) const {
+  // Sometimes whole paragraphs can be formatted as a heading. If the text is
+  // longer than 2 lines, assume it was meant to be a paragragh,
+  if (ax_node->GetTextContentUTF8().length() > (2 * kMaxLineWidth)) {
+    return "p";
+  }
+
+  // A single block of text could be incorrectly formatted with multiple heading
+  // nodes (one for each line of text) instead of a single paragraph node. This
+  // case should be detected to improve readability. If there are multiple
+  // consecutive nodes with the same heading level, assume that they are all a
+  // part of one paragraph.
+  ui::AXNode* next = ax_node->GetNextUnignoredSibling();
+  ui::AXNode* prev = ax_node->GetPreviousUnignoredSibling();
+
+  if ((next && next->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag) ==
+                   html_tag) ||
+      (prev && prev->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag) ==
+                   html_tag)) {
+    return "span";
+  }
+
+  std::string aria_level = GetAriaLevel(ax_node);
+  return !aria_level.empty() ? "h" + aria_level : html_tag;
 }
 
 std::string ReadAnythingAppController::GetLanguage(
@@ -893,10 +1046,35 @@ std::string ReadAnythingAppController::GetLanguage(
   return ax_node->GetStringAttribute(ax::mojom::StringAttribute::kLanguage);
 }
 
+std::string ReadAnythingAppController::GetNameAttributeText(
+    ui::AXNode* ax_node) const {
+  DCHECK(ax_node);
+  std::string node_text;
+  if (ax_node->HasStringAttribute(ax::mojom::StringAttribute::kName)) {
+    node_text = ax_node->GetStringAttribute(ax::mojom::StringAttribute::kName);
+  }
+
+  for (auto it = ax_node->UnignoredChildrenBegin();
+       it != ax_node->UnignoredChildrenEnd(); ++it) {
+    if (node_text.empty()) {
+      node_text = GetNameAttributeText(it.get());
+    } else {
+      node_text += " " + GetNameAttributeText(it.get());
+    }
+  }
+  return node_text;
+}
+
 std::string ReadAnythingAppController::GetTextContent(
     ui::AXNodeID ax_node_id) const {
   ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
   DCHECK(ax_node);
+  if ((ax_node->GetTextContentUTF8()).empty() && IsGoogleDocs()) {
+    // For Google Docs, we distill text from the aria-labels of annotated
+    // canvas's rect elements. Therefore, we need to explicitly read the name
+    // attribute to get the text.
+    return GetNameAttributeText(ax_node);
+  }
   return ax_node->GetTextContentUTF8();
 }
 
@@ -928,22 +1106,39 @@ std::string ReadAnythingAppController::GetTextDirection(
 std::string ReadAnythingAppController::GetUrl(ui::AXNodeID ax_node_id) const {
   ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
   DCHECK(ax_node);
-  return ax_node->GetStringAttribute(ax::mojom::StringAttribute::kUrl);
+  const char* url =
+      ax_node->GetStringAttribute(ax::mojom::StringAttribute::kUrl).c_str();
+
+  // Prevent XSS from href attribute, which could be set to a script instead of
+  // a valid website.
+  if (url::FindAndCompareScheme(url, static_cast<int>(strlen(url)), "http",
+                                nullptr) ||
+      url::FindAndCompareScheme(url, static_cast<int>(strlen(url)), "https",
+                                nullptr)) {
+    return url;
+  }
+  return "";
 }
 
 bool ReadAnythingAppController::ShouldBold(ui::AXNodeID ax_node_id) const {
   ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
   DCHECK(ax_node);
-  bool isBold = ax_node->HasTextStyle(ax::mojom::TextStyle::kBold);
-  bool isItalic = ax_node->HasTextStyle(ax::mojom::TextStyle::kItalic);
-  bool isUnderline = ax_node->HasTextStyle(ax::mojom::TextStyle::kUnderline);
-  return isBold || isItalic || isUnderline;
+  bool is_bold = ax_node->HasTextStyle(ax::mojom::TextStyle::kBold);
+  bool is_italic = ax_node->HasTextStyle(ax::mojom::TextStyle::kItalic);
+  bool is_underline = ax_node->HasTextStyle(ax::mojom::TextStyle::kUnderline);
+  return is_bold || is_italic || is_underline;
 }
 
 bool ReadAnythingAppController::IsOverline(ui::AXNodeID ax_node_id) const {
   ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
   DCHECK(ax_node);
   return ax_node->HasTextStyle(ax::mojom::TextStyle::kOverline);
+}
+
+bool ReadAnythingAppController::IsLeafNode(ui::AXNodeID ax_node_id) const {
+  ui::AXNode* ax_node = model_.GetAXNode(ax_node_id);
+  DCHECK(ax_node);
+  return ax_node->IsLeaf();
 }
 
 bool ReadAnythingAppController::IsSelectable() const {
@@ -956,6 +1151,10 @@ bool ReadAnythingAppController::IsWebUIToolbarEnabled() const {
 
 bool ReadAnythingAppController::IsReadAloudEnabled() const {
   return features::IsReadAnythingReadAloudEnabled();
+}
+
+bool ReadAnythingAppController::IsGoogleDocs() const {
+  return model_.is_docs();
 }
 
 std::vector<std::string> ReadAnythingAppController::GetSupportedFonts() const {
@@ -975,8 +1174,7 @@ void ReadAnythingAppController::OnConnected() {
   page_handler_factory_->CreateUntrustedPageHandler(
       receiver_.BindNewPipeAndPassRemote(),
       page_handler_.BindNewPipeAndPassReceiver());
-  content::RenderFrame* render_frame =
-      content::RenderFrame::FromRoutingID(render_frame_id_);
+  content::RenderFrame* render_frame = GetRenderFrame();
   if (!render_frame) {
     return;
   }
@@ -1151,7 +1349,8 @@ void ReadAnythingAppController::OnSelectionChange(ui::AXNodeID anchor_node_id,
   // be before the anchor node and set to a non-text node, which can cause
   // page_handler_->OnSelectionChange to be incorrectly triggered, resulting in
   // a failing DCHECK. Therefore, return early if this happens.
-  if (!focus_node->IsText() || !anchor_node->IsText()) {
+  // This check does not apply to pdfs.
+  if (!model_.is_pdf() && (!focus_node->IsText() || !anchor_node->IsText())) {
     return;
   }
 
@@ -1173,18 +1372,374 @@ void ReadAnythingAppController::OnSelectionChange(ui::AXNodeID anchor_node_id,
 void ReadAnythingAppController::OnCollapseSelection() const {
   page_handler_->OnCollapseSelection();
 }
+void ReadAnythingAppController::InitAXPositionWithNode(
+    const ui::AXNodeID starting_node_id) {
+  ui::AXNode* ax_node = model_.GetAXNode(starting_node_id);
+
+  // If instance is Null or Empty, create the next AxPosition
+  if (ax_node != nullptr && (!ax_position_ || ax_position_->IsNullPosition())) {
+    ax_position_ =
+        ui::AXNodePosition::CreateTreePositionAtStartOfAnchor(*ax_node);
+    current_text_index_ = 0;
+    processed_granularity_index_ = -1;
+    processed_granularities_on_current_page_.clear();
+  }
+}
+
+bool ReadAnythingAppController::NodeBeenOrWillBeSpoken(
+    ReadAnythingAppController::ReadAloudCurrentGranularity current_granularity,
+    ui::AXNodeID id) {
+  if (base::Contains(current_granularity.segments, id)) {
+    return true;
+  }
+  for (ReadAnythingAppController::ReadAloudCurrentGranularity granularity :
+       processed_granularities_on_current_page_) {
+    if (base::Contains(granularity.segments, id)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::vector<ui::AXNodeID> ReadAnythingAppController::GetNextText(
+    int max_text_length) {
+  bool was_previously_processed =
+      processed_granularity_index_ <
+      processed_granularities_on_current_page_.size() - 1;
+
+  // If we've previously processed the triples at this location, return the
+  // previously processed node information. Otherwise, get this information
+  // GetNextNodes.
+  ReadAnythingAppController::ReadAloudCurrentGranularity current_granularity =
+      (was_previously_processed) ? processed_granularities_on_current_page_
+                                       [processed_granularity_index_ + 1]
+                                 : GetNextNodes(max_text_length);
+
+  // If the list of nodes is empty, don't adjust the processed nodes
+  // information.
+  if (current_granularity.node_ids.size() == 0) {
+    return current_granularity.node_ids;
+  }
+
+  if (!was_previously_processed) {
+    processed_granularities_on_current_page_.push_back(current_granularity);
+  }
+  processed_granularity_index_++;
+
+  return current_granularity.node_ids;
+}
+
+// TODO(crbug.com/1474951): Update to use AXRange to better handle multiple
+// nodes. This may require updating GetText in ax_range.h to return AXNodeIds.
+// AXRangeType#ExpandToEnclosingTextBoundary may also be useful.
+ReadAnythingAppController::ReadAloudCurrentGranularity
+ReadAnythingAppController::GetNextNodes(int max_text_length) {
+  ReadAnythingAppController::ReadAloudCurrentGranularity current_granularity =
+      ReadAnythingAppController::ReadAloudCurrentGranularity();
+
+  // Make sure we're adequately returning at the end of content.
+  if (!ax_position_ || ax_position_->AtEndOfAXTree() ||
+      ax_position_->IsNullPosition()) {
+    return current_granularity;
+  }
+
+  std::u16string current_text;
+
+  // Loop through the tree in order to group nodes together into the same
+  // granularity segment until there are no more pieces that can be added
+  // to the current segment or we've reached the end of the tree.
+  // e.g. if the following two nodes are next to one another in the tree:
+  //  AXNode: id=1, text = "This is a "
+  //  AXNode: id=2, text = "link. "
+  // both AXNodes should be added to the current granularity, as the
+  // combined text across the two nodes forms a complete sentence with sentence
+  // granularity.
+  // This allows text to be spoken smoothly across nodes with broken sentences,
+  // such as links and formatted text.
+  // TODO(crbug.com/1474951): Investigate how much of this can be pulled into
+  // AXPosition to simplify Read Aloud-specific code and allow improvements
+  // to be used by other places where AXPosition is used.
+  while (!ax_position_->IsNullPosition() && !ax_position_->AtEndOfAXTree()) {
+    ui::AXNode* anchor_node = GetNodeFromCurrentPosition();
+    std::u16string text = anchor_node->GetTextContentUTF16();
+    std::u16string text_substr = text.substr(current_text_index_);
+    int prev_index = current_text_index_;
+    // Gets the starting index for the next sentence in the current node.
+    int next_sentence_index =
+        GetNextSentence(text_substr, max_text_length) + prev_index;
+    // If our current index within the current node is greater than that node's
+    // text, look at the next node. If the starting index of the next sentence
+    // in the node is the same the current index within the node, this means
+    // that we've reached the end of all possible sentences within the current
+    // node, and should move to the next node.
+    if ((size_t)current_text_index_ >= text.size() ||
+        (current_text_index_ == next_sentence_index)) {
+      // Move the AXPosition to the next node.
+      ax_position_ =
+          GetNextValidPositionFromCurrentPosition(current_granularity);
+      // Reset the current text index within the current node since we just
+      // moved to a new node.
+      current_text_index_ = 0;
+      // If we've reached the end of the content, go ahead and return the
+      // current list of nodes because there are no more nodes to look through.
+      if (ax_position_->IsNullPosition() || ax_position_->AtEndOfAXTree() ||
+          !ax_position_->GetAnchor()) {
+        return current_granularity;
+      }
+
+      // If the position is now at the start of a paragraph and we already have
+      // nodes to return, return the current list of nodes so that we don't
+      // cross paragraph boundaries with text.
+      if (ax_position_->AtStartOfParagraph() &&
+          current_granularity.node_ids.size() > 0) {
+        return current_granularity;
+      }
+
+      std::u16string base_text =
+          GetNodeFromCurrentPosition()->GetTextContentUTF16();
+
+      // Look at the text of the items we've already added to the
+      // current sentence (current_text) combined with the text of the next
+      // node (base_text).
+      const std::u16string& combined_text = current_text + base_text;
+      // Get the index of the next sentence if we're looking at the combined
+      // previous and current node text.
+      int combined_sentence_index =
+          GetNextSentence(combined_text, max_text_length);
+      // If the combined_sentence_index is the same as the current_text length,
+      // the new node should not be considered part of the current sentence.
+      // If these values differ, add the current node's text to the list of
+      // nodes in the current sentence.
+      // Consider these two examples:
+      // Example 1:
+      //  current text: Hello
+      //  current node's text: , how are you?
+      //    The current text length is 5, but the index of the next sentence of
+      //    the combined text is 19, so the current node should be added to
+      //    the current sentence.
+      // Example 2:
+      //  current text: Hello.
+      //  current node: Goodbye.
+      //    The current text length is 6, and the next sentence index of
+      //    "Hello. Goodbye." is still 6, so the current node's text shouldn't
+      //    be added to the current sentence.
+      if ((int)current_text.length() != combined_sentence_index) {
+        anchor_node = GetNodeFromCurrentPosition();
+        // Calculate the new sentence index.
+        int index_in_new_node = combined_sentence_index - current_text.length();
+        // Add the current node to the list of nodes to be returned, with a
+        // text range from 0 to the start of the next sentence
+        // (index_in_new_node);
+        ReadAnythingAppController::ReadAloudTextSegment segment;
+        segment.id = anchor_node->id();
+        segment.text_start = 0;
+        segment.text_end = index_in_new_node;
+        current_granularity.AddSegment(segment);
+        current_text +=
+            anchor_node->GetTextContentUTF16().substr(0, index_in_new_node);
+        current_text_index_ = index_in_new_node;
+        if (current_text_index_ != (int)base_text.length()) {
+          // If we're in the middle of the node, there's no need to attempt
+          // to find another segment, as we're at the end of the current
+          // segment.
+          return current_granularity;
+        }
+        continue;
+      } else if (current_granularity.node_ids.size() > 0) {
+        // If nothing has been added to the list of current nodes, we should
+        // look at the next sentence within the current node. However, if
+        // there have already been nodes added to the list of nodes to return
+        // and we determine that the next node shouldn't be added to the
+        // current sentence, we've completed the current sentence, so we can
+        // return the current list.
+        return current_granularity;
+      }
+    }
+
+    // Add the next granularity piece within the current node.
+    anchor_node = GetNodeFromCurrentPosition();
+    text = anchor_node->GetTextContentUTF16();
+    prev_index = current_text_index_;
+    text_substr = text.substr(current_text_index_);
+    // Find the next sentence within the current node.
+    int new_current_text_index =
+        GetNextSentence(text_substr, max_text_length) + prev_index;
+    // If adding the next piece of the sentence from the current node doesn't
+    // make the returned text too long, add it to the list of nodes.
+    if ((current_text.length() + new_current_text_index - prev_index) <
+        (size_t)max_text_length) {
+      int start_index = current_text_index_;
+      current_text_index_ = new_current_text_index;
+      // Add the current node to the list of nodes to be returned, with a
+      // text range from the starting index (the end of the previous piece of
+      // the sentence) to the start of the next sentence.
+      ReadAnythingAppController::ReadAloudTextSegment segment;
+      segment.id = anchor_node->id();
+      segment.text_start = start_index;
+      segment.text_end = new_current_text_index;
+      current_granularity.AddSegment(segment);
+      current_text += anchor_node->GetTextContentUTF16().substr(
+          start_index, current_text_index_ - start_index);
+    } else {
+      // If adding the next segment to the list of nodes is greater than the
+      // maximum text length, return the current nodes.
+      // TODO(crbug.com/1474951): Find a better way of segmenting granularities
+      // that are too long.
+      return current_granularity;
+    }
+
+    // After adding the most recent granularity segment, if we're not at the
+    //  end of the node, the current nodes can be returned, as we know there's
+    // no further segments remaining.
+    if ((size_t)current_text_index_ != text.length()) {
+      return current_granularity;
+    }
+  }
+  return current_granularity;
+}
+
+// TODO(crbug.com/1474951): Random access to processed nodes might not always
+// work (e.g. if we're switching granularities or jumping to a specific node),
+// so we should implement a method of retrieving previous text from AXPosition
+std::vector<ui::AXNodeID> ReadAnythingAppController::GetPreviousText(
+    int max_text_length) {
+  // If GetPreviousText is called before the tree is initialized or before
+  // there are any processed granularities, return an empty vector.
+  if (processed_granularities_on_current_page_.size() == 0) {
+    return std::vector<ui::AXNodeID>();
+  }
+
+  // If we've reached the beginning of the content, we should continue to return
+  // the text grouping, so don't decrement below 0.
+  if (processed_granularity_index_ > 0) {
+    processed_granularity_index_--;
+  }
+
+  return processed_granularities_on_current_page_[processed_granularity_index_]
+      .node_ids;
+}
+
+// Returns either the node or the lowest platform ancestor of the node, if it's
+// a leaf.
+ui::AXNode* ReadAnythingAppController::GetNodeFromCurrentPosition() {
+  if (ax_position_->GetAnchor()->IsChildOfLeaf()) {
+    return ax_position_->GetAnchor()->GetLowestPlatformAncestor();
+  }
+
+  return ax_position_->GetAnchor();
+}
+
+// Gets the next valid position from our current position within AXPosition
+// AXPosition returns nodes that aren't supported by Reading Mode, so we
+// need to have a bit of extra logic to ensure we're only passing along valid
+// nodes.
+// Some of the checks here right now are probably unneeded.
+ui::AXNodePosition::AXPositionInstance
+ReadAnythingAppController::GetNextValidPositionFromCurrentPosition(
+    ReadAnythingAppController::ReadAloudCurrentGranularity
+        current_granularity) {
+  ui::AXNodePosition::AXPositionInstance new_position =
+      ui::AXNodePosition::CreateNullPosition();
+
+  ui::AXMovementOptions movement_options(
+      ui::AXBoundaryBehavior::kCrossBoundary,
+      ui::AXBoundaryDetection::kDontCheckInitialPosition);
+
+  new_position = ax_position_->CreatePositionAtTextBoundary(
+      ax::mojom::TextBoundary::kSentenceStart,
+      ax::mojom::MoveDirection::kForward, movement_options);
+
+  if (new_position->IsNullPosition() || new_position->AtEndOfAXTree() ||
+      !new_position->GetAnchor()) {
+    return new_position;
+  }
+
+  bool is_leaf = new_position->GetAnchor()->IsChildOfLeaf();
+  // If the node is a leaf, use the parent node instead.
+  ui::AXNode* anchor_node =
+      is_leaf ? new_position->GetAnchor()->GetLowestPlatformAncestor()
+              : new_position->GetAnchor();
+  bool was_previously_spoken =
+      NodeBeenOrWillBeSpoken(current_granularity, anchor_node->id());
+  // TODO(crbug.com/1474951): Can this be updated to IsText() instead?
+  bool is_text_node = (GetHtmlTag((anchor_node->id())).length() == 0);
+  const std::set<ui::AXNodeID>* node_ids = model_.selection_node_ids().empty()
+                                               ? &model_.display_node_ids()
+                                               : &model_.selection_node_ids();
+  bool contains_node = base::Contains(*node_ids, anchor_node->id());
+
+  while (was_previously_spoken || !is_text_node || !contains_node) {
+    ui::AXNodePosition::AXPositionInstance possible_new_position =
+        new_position->CreateNextSentenceStartPosition(movement_options);
+    anchor_node = possible_new_position->GetAnchor();
+    if (!anchor_node) {
+      if (was_previously_spoken) {
+        // If the previous position we were looking at was previously spoken,
+        // go ahead and return the null position to avoid duplicate nodes
+        // being added.
+        return possible_new_position;
+      }
+      return new_position;
+    }
+
+    new_position =
+        new_position->CreateNextSentenceStartPosition(movement_options);
+
+    is_leaf = anchor_node->IsChildOfLeaf();
+    if (is_leaf) {
+      anchor_node = anchor_node->GetLowestPlatformAncestor();
+    }
+    was_previously_spoken =
+        NodeBeenOrWillBeSpoken(current_granularity, anchor_node->id());
+    is_text_node = (GetHtmlTag((anchor_node->id())).length() == 0);
+    contains_node = base::Contains(*node_ids, anchor_node->id());
+  }
+
+  return new_position;
+}
+
+int ReadAnythingAppController::GetNextTextStartIndex(ui::AXNodeID node_id) {
+  if (processed_granularities_on_current_page_.size() < 1) {
+    return -1;
+  }
+
+  ReadAnythingAppController::ReadAloudCurrentGranularity current_granularity =
+      processed_granularities_on_current_page_[processed_granularity_index_];
+  if (!current_granularity.segments.count(node_id)) {
+    return -1;
+  }
+  ReadAnythingAppController::ReadAloudTextSegment segment =
+      current_granularity.segments[node_id];
+
+  return segment.text_start;
+}
+
+int ReadAnythingAppController::GetNextTextEndIndex(ui::AXNodeID node_id) {
+  if (processed_granularities_on_current_page_.size() < 1) {
+    return -1;
+  }
+
+  ReadAnythingAppController::ReadAloudCurrentGranularity current_granularity =
+      processed_granularities_on_current_page_[processed_granularity_index_];
+  if (!current_granularity.segments.count(node_id)) {
+    return -1;
+  }
+  ReadAnythingAppController::ReadAloudTextSegment segment =
+      current_granularity.segments[node_id];
+
+  return segment.text_end;
+}
 
 int ReadAnythingAppController::GetNextSentence(const std::u16string& text,
-                                               int maxTextLength) {
-  // TODO(crbug.com/1474951): Investigate using getting text from the model,
-  // rather than passing it through typescript.
+                                               int max_text_length) {
   // TODO(crbug.com/1474941): Investigate providing correct line breaks
   // or alternatively making adjustments to ax_text_utils to return boundaries
   // that minimize choppiness.
   std::vector<int> offsets;
-  const std::u16string shorterString = text.substr(0, maxTextLength);
+  const std::u16string shorter_string = text.substr(0, max_text_length);
   size_t sentence_ends_short = ui::FindAccessibleTextBoundary(
-      shorterString, offsets, ax::mojom::TextBoundary::kSentenceStart, 0,
+      shorter_string, offsets, ax::mojom::TextBoundary::kSentenceStart, 0,
       ax::mojom::MoveDirection::kForward,
       ax::mojom::TextAffinity::kDefaultValue);
   size_t sentence_ends_long = ui::FindAccessibleTextBoundary(
@@ -1203,8 +1758,8 @@ int ReadAnythingAppController::GetNextSentence(const std::u16string& text,
   }
 
   size_t word_ends = ui::FindAccessibleTextBoundary(
-      shorterString, offsets, ax::mojom::TextBoundary::kWordStart,
-      shorterString.length() - 1, ax::mojom::MoveDirection::kBackward,
+      shorter_string, offsets, ax::mojom::TextBoundary::kWordStart,
+      shorter_string.length() - 1, ax::mojom::MoveDirection::kBackward,
       ax::mojom::TextAffinity::kDefaultValue);
   return word_ends;
 }
@@ -1213,6 +1768,7 @@ int ReadAnythingAppController::GetNextSentence(const std::u16string& text,
 // int to their corresponding enums.
 void ReadAnythingAppController::SetThemeForTesting(const std::string& font_name,
                                                    float font_size,
+                                                   bool links_enabled,
                                                    SkColor foreground_color,
                                                    SkColor background_color,
                                                    int line_spacing,
@@ -1221,9 +1777,9 @@ void ReadAnythingAppController::SetThemeForTesting(const std::string& font_name,
       static_cast<read_anything::mojom::LineSpacing>(line_spacing);
   auto letter_spacing_enum =
       static_cast<read_anything::mojom::LetterSpacing>(letter_spacing);
-  OnThemeChanged(ReadAnythingTheme::New(font_name, font_size, foreground_color,
-                                        background_color, line_spacing_enum,
-                                        letter_spacing_enum));
+  OnThemeChanged(ReadAnythingTheme::New(
+      font_name, font_size, links_enabled, foreground_color, background_color,
+      line_spacing_enum, letter_spacing_enum));
 }
 
 void ReadAnythingAppController::SetLanguageForTesting(
@@ -1242,8 +1798,7 @@ void ReadAnythingAppController::SetDefaultLanguageCode(
 void ReadAnythingAppController::SetContentForTesting(
     v8::Local<v8::Value> v8_snapshot_lite,
     std::vector<ui::AXNodeID> content_node_ids) {
-  content::RenderFrame* render_frame =
-      content::RenderFrame::FromRoutingID(render_frame_id_);
+  content::RenderFrame* render_frame = GetRenderFrame();
   if (!render_frame) {
     return;
   }
@@ -1251,9 +1806,9 @@ void ReadAnythingAppController::SetContentForTesting(
       render_frame->GetWebFrame()->GetAgentGroupScheduler()->Isolate();
   ui::AXTreeUpdate snapshot =
       GetSnapshotFromV8SnapshotLite(isolate, v8_snapshot_lite);
-  ui::AXEvent selectionEvent;
-  selectionEvent.event_type = ax::mojom::Event::kDocumentSelectionChanged;
-  selectionEvent.event_from = ax::mojom::EventFrom::kUser;
+  ui::AXEvent selection_event;
+  selection_event.event_type = ax::mojom::Event::kDocumentSelectionChanged;
+  selection_event.event_from = ax::mojom::EventFrom::kUser;
   AccessibilityEventReceived(snapshot.tree_data.tree_id, {snapshot}, {});
   OnActiveAXTreeIDChanged(snapshot.tree_data.tree_id, ukm::kInvalidSourceId,
                           GURL::EmptyGURL(), false);
@@ -1261,5 +1816,17 @@ void ReadAnythingAppController::SetContentForTesting(
 
   // Trigger a selection event (for testing selections).
   AccessibilityEventReceived(snapshot.tree_data.tree_id, {snapshot},
-                             {selectionEvent});
+                             {selection_event});
+}
+
+content::RenderFrame* ReadAnythingAppController::GetRenderFrame() {
+  auto* web_frame = blink::WebLocalFrame::FromFrameToken(frame_token_);
+  if (!web_frame) {
+    return nullptr;
+  }
+  return content::RenderFrame::FromWebFrame(web_frame);
+}
+
+void ReadAnythingAppController::ShouldShowUI() {
+  page_handler_factory_->ShouldShowUI();
 }

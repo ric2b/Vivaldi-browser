@@ -36,9 +36,11 @@ pub mod x25519;
 /// Common items that needs to be imported to use these test cases
 pub mod prelude {
     pub use super::CryptoProviderTestCase;
+    pub use ::rstest;
     pub use rstest::rstest;
     pub use rstest_reuse;
     pub use rstest_reuse::apply;
+    pub extern crate std;
 }
 
 /// A test case for Crypto Provider. A test case is a function that panics if the test fails.

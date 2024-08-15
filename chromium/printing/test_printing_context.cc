@@ -54,6 +54,10 @@ void TestPrintingContext::SetDeviceSettings(
   device_settings_.emplace(device_name, std::move(settings));
 }
 
+void TestPrintingContext::SetNewDocumentJobId(int job_id) {
+  new_document_job_id_ = job_id;
+}
+
 void TestPrintingContext::SetUserSettings(const PrintSettings& settings) {
   user_settings_ = settings;
 }
@@ -136,6 +140,10 @@ mojom::ResultCode TestPrintingContext::UpdatePrinterSettings(
     const PrinterSettings& printer_settings) {
   DCHECK(!in_print_job_);
 
+  if (update_printer_settings_fails_) {
+    return mojom::ResultCode::kFailed;
+  }
+
   // The printer name is to be embedded in the printing context's existing
   // settings.
   const std::string& device_name = base::UTF16ToUTF8(settings_->device_name());
@@ -151,6 +159,7 @@ mojom::ResultCode TestPrintingContext::UpdatePrinterSettings(
   DVLOG(1) << "Updating context settings for device `" << device_name << "`";
   std::unique_ptr<PrintSettings> existing_settings = std::move(settings_);
   settings_ = std::make_unique<PrintSettings>(*found->second);
+  settings_->set_copies(existing_settings->copies());
   settings_->set_dpi(existing_settings->dpi());
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   for (const auto& item : existing_settings->advanced_settings())
@@ -213,6 +222,11 @@ mojom::ResultCode TestPrintingContext::NewDocument(
       return mojom::ResultCode::kFailed;
     if (new_document_blocked_by_permissions_)
       return mojom::ResultCode::kAccessDenied;
+
+    // A print job is now active, so potentially update `job_id`.
+    if (new_document_job_id_.has_value()) {
+      job_id_ = new_document_job_id_.value();
+    }
   }
 
   // No-op.

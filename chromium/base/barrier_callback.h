@@ -5,6 +5,7 @@
 #ifndef BASE_BARRIER_CALLBACK_H_
 #define BASE_BARRIER_CALLBACK_H_
 
+#include <concepts>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -40,7 +41,7 @@ class BarrierCallbackInfo {
     --num_callbacks_left_;
 
     if (num_callbacks_left_ == 0) {
-      std::vector<base::remove_cvref_t<T>> results = std::move(results_);
+      std::vector<std::remove_cvref_t<T>> results = std::move(results_);
       lock.Release();
       std::move(done_callback_).Run(std::move(results));
     }
@@ -49,7 +50,7 @@ class BarrierCallbackInfo {
  private:
   Lock mutex_;
   size_t num_callbacks_left_ GUARDED_BY(mutex_);
-  std::vector<base::remove_cvref_t<T>> results_ GUARDED_BY(mutex_);
+  std::vector<std::remove_cvref_t<T>> results_ GUARDED_BY(mutex_);
   OnceCallback<void(DoneArg)> done_callback_;
 };
 
@@ -92,15 +93,13 @@ void ShouldNeverRun(T t) {
 //
 // See also
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/callback.md
-template <
-    typename T,
-    typename RawArg = base::remove_cvref_t<T>,
-    typename DoneArg = std::vector<RawArg>,
-    template <typename>
-    class CallbackType,
-    std::enable_if_t<std::is_same_v<std::vector<RawArg>,
-                                    base::remove_cvref_t<DoneArg>>>* = nullptr,
-    typename = base::EnableIfIsBaseCallback<CallbackType>>
+template <typename T,
+          typename RawArg = std::remove_cvref_t<T>,
+          typename DoneArg = std::vector<RawArg>,
+          template <typename>
+          class CallbackType>
+  requires(std::same_as<std::vector<RawArg>, std::remove_cvref_t<DoneArg>> &&
+           IsBaseCallback<CallbackType<void()>>)
 RepeatingCallback<void(T)> BarrierCallback(
     size_t num_callbacks,
     CallbackType<void(DoneArg)> done_callback) {

@@ -350,11 +350,11 @@ class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
 
   base::ScopedTempDir temp_dir_;
   base::ScopedTempDir non_watchable_dir_;
-  raw_ptr<ash::disks::MockDiskMountManager, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<ash::disks::MockDiskMountManager, DanglingUntriaged>
       disk_mount_manager_mock_ = nullptr;
   DiskMountManager::Disks volumes_;
   DiskMountManager::MountPoints mount_points_;
-  raw_ptr<file_manager::EventRouter, ExperimentalAsh> event_router_ = nullptr;
+  raw_ptr<file_manager::EventRouter> event_router_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Mount) {
@@ -520,6 +520,11 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Recent) {
     base::File video_file(downloads_dir.Append("all-justice.mp4"),
                           base::File::FLAG_CREATE | base::File::FLAG_WRITE);
     ASSERT_TRUE(video_file.IsValid());
+    base::File text_file(downloads_dir.Append("all-justice.txt"),
+                         base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+    ASSERT_TRUE(text_file.IsValid());
+    ASSERT_TRUE(text_file.SetTimes(base::Time::Now(),
+                                   base::Time::Now() - base::Days(60)));
   }
 
   ASSERT_TRUE(RunExtensionTest("file_browser/recent_test", {},
@@ -804,8 +809,8 @@ class FileManagerPrivateApiDlpTest : public FileManagerPrivateApiTest {
 
  protected:
   base::ScopedTempDir drive_path_;
-  raw_ptr<policy::MockDlpRulesManager, DanglingUntriaged | ExperimentalAsh>
-      mock_rules_manager_ = nullptr;
+  raw_ptr<policy::MockDlpRulesManager, DanglingUntriaged> mock_rules_manager_ =
+      nullptr;
   std::unique_ptr<policy::DlpFilesControllerAsh> files_controller_;
   raw_ptr<policy::MockFilesPolicyNotificationManager, DanglingUntriaged> fpnm_;
   base::test::ScopedFeatureList scoped_feature_list_;

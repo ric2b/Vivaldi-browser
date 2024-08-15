@@ -38,7 +38,8 @@ impl crypto_provider::sha2::Sha256 for OpenSslSha256 {
         mdctx.digest_init(Self::get_md()).unwrap();
         mdctx.digest_update(input).unwrap();
         let mut buf = [0_u8; 32];
-        mdctx.digest_final(&mut buf).unwrap();
+        let size = mdctx.digest_final(&mut buf).unwrap();
+        debug_assert_eq!(size, 32);
         buf
     }
 }
@@ -63,7 +64,8 @@ impl crypto_provider::sha2::Sha512 for OpenSslSha512 {
         mdctx.digest_init(Self::get_md()).unwrap();
         mdctx.digest_update(input).unwrap();
         let mut buf = [0_u8; 64];
-        mdctx.digest_final(&mut buf).unwrap();
+        let size = mdctx.digest_final(&mut buf).unwrap();
+        debug_assert_eq!(size, 64);
         buf
     }
 }

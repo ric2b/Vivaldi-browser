@@ -262,6 +262,12 @@ js_module_in_files: The names of the root files to bundle. These files should
                     located at the same relative path as the inputs.
 out_manifest: File location to write the manifest of all output files created
               by bundle_js(). Useful for generating grds.
+rollup_config: Optional parameter. The path to a custom Rollup configuration
+               file. When specified it overrides the default auto-generated
+               configuration file.
+               Note: The custom configuration should not refer to other files
+               (like plugin files), because such files are not automatically
+               declared as `inputs`.
 deps: Targets generating any files being bundled. Note that this should include
       targets generating shared resources that are expected to be bundled in
       the UI, e.g. //ui/webui/resources/js:build_ts.
@@ -650,6 +656,10 @@ to from other parts of the build.
 
 #### **Arguments**
 ```
+is_chrome_untrusted: Set to true if testing a chrome-untrusted:// UI. Optional
+                     parameter. Allows importing shared test files from
+                     chrome-untrusted://webui-test/ instead of
+                     chrome://webui-test.
 
 List of files params:
 files: Required parameter. List of all test related files.
@@ -661,6 +671,11 @@ ts_tsconfig_base: See |tsconfig_base| in ts_library(). Optional parameter. If
 ts_definitions: See |definitions| in ts_library(). Optional parameter.
 ts_deps: See |deps| in ts_library(). Required parameter.
 ts_path_mappings: See |path_mappings| in ts_library(). Optional parameter.
+
+Grit (generate_grd()) related params:
+resource_path_prefix: See |resource_path_prefix| in generate_grd(). Optional
+                      parameter. Only specify it for targets residing outside of
+                      //chrome/test/data/webui.
 ```
 
 #### **Example**

@@ -37,6 +37,7 @@
 #include "components/content_settings/core/common/features.h"
 #include "components/page_info/page_info_delegate.h"
 #include "components/page_info/page_info_ui.h"
+#include "components/permissions/constants.h"
 #include "components/permissions/features.h"
 #include "components/permissions/object_permission_context_base.h"
 #include "components/permissions/origin_keyed_permission_action_service.h"
@@ -280,7 +281,6 @@ PageInfo::PageInfo(std::unique_ptr<PageInfoDelegate> delegate,
   if (web_contents) {
     controller_ = delegate_->CreateCookieControlsController();
     observation_.Observe(controller_.get());
-    old_observation_.Observe(controller_.get());
 
     // TODO(crbug.com/1430440): SetCookieInfo is called twice, once from here
     // and once from InitializeUiState. This should be cleaned up.
@@ -331,29 +331,17 @@ PageInfo::~PageInfo() {
 }
 
 void PageInfo::OnStatusChanged(CookieControlsStatus status,
-                               CookieControlsEnforcement enforcement,
-                               int allowed_cookies,
-                               int blocked_cookies) {
-  if (status != status_ || enforcement != enforcement_) {
-    status_ = status;
-    enforcement_ = enforcement;
-    PresentSiteData(base::DoNothing());
-  }
-}
-
-void PageInfo::OnCookiesCountChanged(int allowed_cookies, int blocked_cookies) {
-}
-
-void PageInfo::OnStatefulBounceCountChanged(int bounce_count) {}
-
-void PageInfo::OnStatusChanged(CookieControlsStatus status,
+                               bool controls_visible,
+                               bool protections_on,
                                CookieControlsEnforcement enforcement,
                                CookieBlocking3pcdStatus blocking_status,
                                base::Time expiration) {
-  if (status != status_ || enforcement != enforcement_ ||
+  if (controls_visible_ != controls_visible ||
+      protections_on_ != protections_on || enforcement != enforcement_ ||
       blocking_status != blocking_status_ ||
       expiration != cookie_exception_expiration_) {
-    status_ = status;
+    controls_visible_ = controls_visible;
+    protections_on_ = protections_on;
     enforcement_ = enforcement;
     blocking_status_ = blocking_status;
     cookie_exception_expiration_ = expiration;
@@ -380,8 +368,7 @@ void PageInfo::OnBreakageConfidenceLevelChanged(
 }
 
 void PageInfo::OnThirdPartyToggleClicked(bool block_third_party_cookies) {
-  DCHECK(status_ != CookieControlsStatus::kDisabled);
-  DCHECK(status_ != CookieControlsStatus::kUninitialized);
+  DCHECK(controls_visible_);
   RecordPageInfoAction(block_third_party_cookies
                            ? PAGE_INFO_COOKIES_BLOCKED_FOR_SITE
                            : PAGE_INFO_COOKIES_ALLOWED_FOR_SITE);
@@ -684,7 +671,7 @@ void PageInfo::OnSitePermissionChanged(
   }
   if (type == ContentSettingsType::STORAGE_ACCESS) {
     constraints.set_lifetime(
-        blink::features::kStorageAccessAPIExplicitPermissionLifetime.Get());
+        permissions::kStorageAccessAPIExplicitPermissionLifetime);
   }
 
   map->SetNarrowestContentSetting(primary_url, site_url_, type, setting,
@@ -1163,9 +1150,8 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
   // revocation button for HTTP allowlist entries added because HTTPS was
   // enforced by HTTPS-First Mode.
   bool is_https_enforced =
-      delegate->IsHttpsEnforcedForHost(
-          url.host(),
-          web_contents_->GetPrimaryMainFrame()->GetStoragePartition()) ||
+      delegate->IsHttpsEnforcedForUrl(
+          url, web_contents_->GetPrimaryMainFrame()->GetStoragePartition()) ||
       delegate_->IsHttpsFirstModeEnabled();
 
   bool has_warning_bypass_exception =
@@ -1338,8 +1324,7 @@ bool PageInfo::ShouldShowPermission(
     return true;
   }
 
-  if (base::FeatureList::IsEnabled(
-          permissions::features::kBlockMidiByDefault)) {
+  if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
     ContentSetting midi_sysex_setting = GetContentSettings()->GetContentSetting(
         site_url_, site_url_, ContentSettingsType::MIDI_SYSEX);
     // At most one of MIDI and MIDI-SysEx should be displayed in the page info
@@ -1518,7 +1503,8 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
   }
 #endif
 
-  cookies_info.status = status_;
+  cookies_info.controls_visible = controls_visible_;
+  cookies_info.protections_on = protections_on_;
   cookies_info.enforcement = enforcement_;
   cookies_info.blocking_status = blocking_status_;
   cookies_info.expiration = cookie_exception_expiration_;

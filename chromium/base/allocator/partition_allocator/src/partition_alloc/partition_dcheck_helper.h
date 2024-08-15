@@ -5,10 +5,10 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_DCHECK_HELPER_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_DCHECK_HELPER_H_
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_forward.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_lock.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_forward.h"
+#include "partition_alloc/partition_lock.h"
 
 namespace partition_alloc::internal {
 
@@ -52,8 +52,7 @@ void DCheckIsValidShiftFromSlotStart(internal::SlotSpanMetadata* slot_span,
                                      size_t shift_from_slot_start)
     PA_EMPTY_BODY_IF_DCHECK_IS_OFF();
 
-// Checks that the object is exactly |extras_offset| away from a multiple of
-// slot size (i.e. from a slot start).
+// Checks that the object is a multiple of slot size (i.e. at a slot start).
 PA_EXPORT_IF_DCHECK_IS_ON()
 void DCheckIsValidObjectAddress(internal::SlotSpanMetadata* slot_span,
                                 uintptr_t object_addr)

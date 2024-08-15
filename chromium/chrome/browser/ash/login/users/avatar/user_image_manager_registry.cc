@@ -38,13 +38,13 @@ void UserImageManagerRegistry::Shutdown() {
 }
 
 void UserImageManagerRegistry::OnUserListLoaded() {
-  for (const auto* user : user_manager_->GetUsers()) {
+  for (const user_manager::User* user : user_manager_->GetUsers()) {
     GetManager(user->GetAccountId())->LoadUserImage();
   }
 }
 
 void UserImageManagerRegistry::OnDeviceLocalUserListUpdated() {
-  for (const auto* user : user_manager_->GetUsers()) {
+  for (const user_manager::User* user : user_manager_->GetUsers()) {
     if (user->IsDeviceLocalAccount()) {
       GetManager(user->GetAccountId())->LoadUserImage();
     }
@@ -73,9 +73,6 @@ void UserImageManagerRegistry::OnUserLoggedIn(const user_manager::User& user) {
     case user_manager::USER_TYPE_ARC_KIOSK_APP:
     case user_manager::USER_TYPE_WEB_KIOSK_APP:
       // Ignore these users.
-      return;
-    case user_manager::NUM_USER_TYPES:
-      NOTREACHED();
       return;
   }
 

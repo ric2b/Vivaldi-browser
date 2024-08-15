@@ -37,6 +37,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -72,8 +73,6 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/coalescing_cert_verifier.h"
 #include "net/cert/crl_set.h"
-#include "net/cert/ct_policy_enforcer.h"
-#include "net/cert/ct_policy_status.h"
 #include "net/cert/do_nothing_ct_verifier.h"
 #include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/mock_cert_verifier.h"
@@ -94,6 +93,7 @@
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_byte_range.h"
 #include "net/http/http_cache.h"
+#include "net/http/http_connection_info.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
@@ -586,40 +586,6 @@ int BlockingNetworkDelegate::MaybeBlockStage(
   NOTREACHED();
   return 0;
 }
-
-// A mock ReportSenderInterface that just remembers the latest report
-// URI and report to be sent.
-class MockCertificateReportSender
-    : public TransportSecurityState::ReportSenderInterface {
- public:
-  MockCertificateReportSender() = default;
-  ~MockCertificateReportSender() override = default;
-
-  void Send(
-      const GURL& report_uri,
-      base::StringPiece content_type,
-      base::StringPiece report,
-      const NetworkAnonymizationKey& network_anonymization_key,
-      base::OnceCallback<void()> success_callback,
-      base::OnceCallback<void(const GURL&, int, int)> error_callback) override {
-    latest_report_uri_ = report_uri;
-    latest_report_.assign(report.data(), report.size());
-    latest_content_type_.assign(content_type.data(), content_type.size());
-    latest_network_anonymization_key_ = network_anonymization_key;
-  }
-  const GURL& latest_report_uri() { return latest_report_uri_; }
-  const std::string& latest_report() { return latest_report_; }
-  const std::string& latest_content_type() { return latest_content_type_; }
-  const NetworkAnonymizationKey& latest_network_anonymization_key() {
-    return latest_network_anonymization_key_;
-  }
-
- private:
-  GURL latest_report_uri_;
-  std::string latest_report_;
-  std::string latest_content_type_;
-  NetworkAnonymizationKey latest_network_anonymization_key_;
-};
 
 // OCSPErrorTestDelegate caches the SSLInfo passed to OnSSLCertificateError.
 // This is needed because after the certificate failure, the URLRequest will
@@ -1811,6 +1777,7 @@ TEST_F(URLRequestTest, OnConnected) {
   TransportInfo expected_transport;
   expected_transport.endpoint =
       IPEndPoint(IPAddress::IPv4Localhost(), test_server.port());
+  expected_transport.negotiated_protocol = kProtoUnknown;
   EXPECT_THAT(delegate.transports(), ElementsAre(expected_transport));
 
   // Make sure URL_REQUEST_DELEGATE_CONNECTED is logged correctly.
@@ -1848,6 +1815,7 @@ TEST_F(URLRequestTest, OnConnectedRedirect) {
   TransportInfo expected_transport;
   expected_transport.endpoint =
       IPEndPoint(IPAddress::IPv4Localhost(), test_server.port());
+  expected_transport.negotiated_protocol = kProtoUnknown;
   EXPECT_THAT(delegate.transports(), ElementsAre(expected_transport));
 
   request->FollowDeferredRedirect(/*removed_headers=*/{},
@@ -1877,6 +1845,7 @@ TEST_F(URLRequestTest, OnConnectedError) {
   TransportInfo expected_transport;
   expected_transport.endpoint =
       IPEndPoint(IPAddress::IPv4Localhost(), test_server.port());
+  expected_transport.negotiated_protocol = kProtoUnknown;
   EXPECT_THAT(delegate.transports(), ElementsAre(expected_transport));
 
   EXPECT_TRUE(delegate.request_failed());
@@ -3568,6 +3537,87 @@ INSTANTIATE_TEST_SUITE_P(/* no label */,
                          URLRequestSameSiteCookiesTest,
                          ::testing::Bool());
 
+TEST_F(URLRequestTest, PartitionedCookiesRedirect) {
+  EmbeddedTestServer https_server(EmbeddedTestServer::TYPE_HTTPS);
+  https_server.SetSSLConfig(EmbeddedTestServer::CERT_TEST_NAMES);
+  RegisterDefaultHandlers(&https_server);
+  ASSERT_TRUE(https_server.Start());
+
+  const std::string kHost = "a.test";
+  const std::string kCrossSiteHost = "b.test";
+
+  const GURL create_cookie_url = https_server.GetURL(kHost, "/");
+
+  auto context_builder = CreateTestURLRequestContextBuilder();
+  context_builder->SetCookieStore(
+      std::make_unique<CookieMonster>(nullptr, nullptr));
+  auto context = context_builder->Build();
+  auto& cm = *static_cast<CookieMonster*>(context->cookie_store());
+
+  // Set partitioned cookie with same-site partitionkey.
+  {
+    auto same_site_partitioned_cookie = CanonicalCookie::Create(
+        create_cookie_url, "samesite_partitioned=1;Secure;Partitioned",
+        base::Time::Now(), absl::nullopt,
+        CookiePartitionKey::FromURLForTesting(create_cookie_url));
+    ASSERT_TRUE(same_site_partitioned_cookie);
+    ASSERT_TRUE(same_site_partitioned_cookie->IsPartitioned());
+    base::test::TestFuture<CookieAccessResult> future;
+    cm.SetCanonicalCookieAsync(
+        std::move(same_site_partitioned_cookie), create_cookie_url,
+        CookieOptions::MakeAllInclusive(), future.GetCallback());
+    ASSERT_TRUE(future.Get().status.IsInclude());
+  }
+
+  // Set a partitioned cookie with a cross-site partition key.
+  // In the redirect below from site B to A, this cookie's partition key is site
+  // B it should not be sent in the redirected request.
+  {
+    auto cross_site_partitioned_cookie = CanonicalCookie::Create(
+        create_cookie_url, "xsite_partitioned=1;Secure;Partitioned",
+        base::Time::Now(), absl::nullopt,
+        CookiePartitionKey::FromURLForTesting(
+            https_server.GetURL(kCrossSiteHost, "/")));
+    ASSERT_TRUE(cross_site_partitioned_cookie);
+    ASSERT_TRUE(cross_site_partitioned_cookie->IsPartitioned());
+    base::test::TestFuture<CookieAccessResult> future;
+    cm.SetCanonicalCookieAsync(
+        std::move(cross_site_partitioned_cookie), create_cookie_url,
+        CookieOptions::MakeAllInclusive(), future.GetCallback());
+    ASSERT_TRUE(future.Get().status.IsInclude());
+  }
+
+  const auto kCrossSiteOrigin =
+      url::Origin::Create(https_server.GetURL(kCrossSiteHost, "/"));
+  const auto kCrossSiteSiteForCookies =
+      SiteForCookies::FromOrigin(kCrossSiteOrigin);
+
+  // Test that when a request is redirected that the partitioned cookies
+  // attached to the redirected request match the partition key of the new
+  // request.
+  TestDelegate d;
+  GURL url = https_server.GetURL(
+      kCrossSiteHost,
+      "/server-redirect?" +
+          https_server.GetURL(kHost, "/echoheader?Cookie").spec());
+  std::unique_ptr<URLRequest> req = context->CreateRequest(
+      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS);
+  req->set_isolation_info(IsolationInfo::Create(
+      IsolationInfo::RequestType::kMainFrame, kCrossSiteOrigin,
+      kCrossSiteOrigin, kCrossSiteSiteForCookies));
+  req->set_first_party_url_policy(
+      RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT);
+  req->set_site_for_cookies(kCrossSiteSiteForCookies);
+  req->set_initiator(kCrossSiteOrigin);
+  req->Start();
+  d.RunUntilComplete();
+
+  EXPECT_EQ(2u, req->url_chain().size());
+  EXPECT_NE(std::string::npos,
+            d.data_received().find("samesite_partitioned=1"));
+  EXPECT_EQ(std::string::npos, d.data_received().find("xsite_partitioned=1"));
+}
+
 // Tests that __Secure- cookies can't be set on non-secure origins.
 TEST_F(URLRequestTest, SecureCookiePrefixOnNonsecureOrigin) {
   EmbeddedTestServer http_server;
@@ -3877,10 +3927,6 @@ class URLRequestTestHTTP : public URLRequestTest {
         isolation_info1_(IsolationInfo::CreateForInternalRequest(origin1_)),
         isolation_info2_(IsolationInfo::CreateForInternalRequest(origin2_)),
         test_server_(base::FilePath(kTestFilePath)) {
-    // Needed for NetworkAnonymizationKey to make it down to the socket layer,
-    // for the PKP violation report test.
-    feature_list_.InitAndEnableFeature(
-        net::features::kPartitionConnectionsByNetworkIsolationKey);
   }
 
  protected:
@@ -6178,140 +6224,6 @@ TEST_F(URLRequestTestHTTP, STSNotProcessedOnIP) {
       security_state->GetDynamicSTSState(test_server_hostname, &sts_state));
 }
 
-namespace {
-const char kPKPReportUri[] = "http://report-uri.preloaded.test/pkp";
-const char kPKPHost[] = "with-report-uri-pkp.preloaded.test";
-}  // namespace
-
-// Tests that reports get sent on PKP violations when a report-uri is set.
-TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      net::features::kStaticKeyPinningEnforcement);
-  GURL report_uri(kPKPReportUri);
-  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.SetSSLConfig(
-      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
-  https_test_server.ServeFilesFromSourceDirectory(
-      base::FilePath(kTestFilePath));
-  ASSERT_TRUE(https_test_server.Start());
-
-  std::string test_server_hostname = kPKPHost;
-
-  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
-
-  // Set up a MockCertVerifier to trigger a violation of the previously
-  // set pin.
-  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
-  ASSERT_TRUE(cert);
-
-  CertVerifyResult verify_result;
-  verify_result.verified_cert = cert;
-  verify_result.is_issued_by_known_root = true;
-  HashValue hash3;
-  ASSERT_TRUE(
-      hash3.FromString("sha256/3333333333333333333333333333333333333333333="));
-  verify_result.public_key_hashes.push_back(hash3);
-  auto cert_verifier = std::make_unique<MockCertVerifier>();
-  cert_verifier->AddResultForCert(cert.get(), verify_result, OK);
-
-  MockCertificateReportSender mock_report_sender;  // Must outlive `context`.
-  auto context_builder = CreateTestURLRequestContextBuilder();
-  context_builder->SetCertVerifier(std::move(cert_verifier));
-  auto context = context_builder->Build();
-  context->transport_security_state()->EnableStaticPinsForTesting();
-  context->transport_security_state()->SetPinningListAlwaysTimelyForTesting(
-      true);
-  context->transport_security_state()->SetReportSender(&mock_report_sender);
-
-  IsolationInfo isolation_info = IsolationInfo::CreateTransient();
-
-  // Now send a request to trigger the violation.
-  TestDelegate d;
-  std::unique_ptr<URLRequest> violating_request(context->CreateRequest(
-      https_test_server.GetURL(test_server_hostname, "/simple.html"),
-      DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-  violating_request->set_isolation_info(isolation_info);
-  violating_request->Start();
-  d.RunUntilComplete();
-
-  // Check that a report was sent.
-  EXPECT_EQ(report_uri, mock_report_sender.latest_report_uri());
-  ASSERT_FALSE(mock_report_sender.latest_report().empty());
-  EXPECT_EQ("application/json; charset=utf-8",
-            mock_report_sender.latest_content_type());
-  base::Value::Dict report_dict =
-      base::test::ParseJsonDict(mock_report_sender.latest_report());
-  ASSERT_FALSE(report_dict.empty());
-  std::string* report_hostname = report_dict.FindString("hostname");
-  ASSERT_TRUE(report_hostname);
-  EXPECT_EQ(test_server_hostname, *report_hostname);
-  EXPECT_EQ(isolation_info.network_anonymization_key(),
-            mock_report_sender.latest_network_anonymization_key());
-}
-
-// Tests that reports do not get sent on requests to static pkp hosts that
-// don't have pin violations.
-TEST_F(URLRequestTestHTTP, ProcessPKPWithNoViolation) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      net::features::kStaticKeyPinningEnforcement);
-  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.SetSSLConfig(
-      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
-  https_test_server.ServeFilesFromSourceDirectory(
-      base::FilePath(kTestFilePath));
-  ASSERT_TRUE(https_test_server.Start());
-
-  std::string test_server_hostname = kPKPHost;
-
-  SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
-
-  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
-  ASSERT_TRUE(cert);
-  CertVerifyResult verify_result;
-  verify_result.verified_cert = cert;
-  verify_result.is_issued_by_known_root = true;
-  HashValue hash;
-  // The expected value of GoodPin1 used by |test_default::kHSTSSource|.
-  ASSERT_TRUE(
-      hash.FromString("sha256/Nn8jk5By4Vkq6BeOVZ7R7AC6XUUBZsWmUbJR1f1Y5FY="));
-  verify_result.public_key_hashes.push_back(hash);
-  auto mock_cert_verifier = std::make_unique<MockCertVerifier>();
-  mock_cert_verifier->AddResultForCert(cert.get(), verify_result, OK);
-
-  MockCertificateReportSender mock_report_sender;  // Must outlive `context`.
-  auto context_builder = CreateTestURLRequestContextBuilder();
-  context_builder->SetCertVerifier(std::move(mock_cert_verifier));
-  auto context = context_builder->Build();
-  context->transport_security_state()->EnableStaticPinsForTesting();
-  context->transport_security_state()->SetPinningListAlwaysTimelyForTesting(
-      true);
-  context->transport_security_state()->SetReportSender(&mock_report_sender);
-
-  // Now send a request that does not trigger the violation.
-  TestDelegate d;
-  std::unique_ptr<URLRequest> request(context->CreateRequest(
-      https_test_server.GetURL(test_server_hostname, "/simple.html"),
-      DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-  request->set_isolation_info(IsolationInfo::CreateTransient());
-  request->Start();
-  d.RunUntilComplete();
-
-  // Check that the request succeeded, a report was not sent and the pkp was
-  // not bypassed.
-  EXPECT_EQ(OK, d.request_status());
-  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
-  EXPECT_EQ(std::string(), mock_report_sender.latest_report());
-  EXPECT_EQ(NetworkAnonymizationKey(),
-            mock_report_sender.latest_network_anonymization_key());
-  TransportSecurityState::PKPState pkp_state;
-  EXPECT_TRUE(context->transport_security_state()->GetStaticPKPState(
-      test_server_hostname, &pkp_state));
-  EXPECT_TRUE(pkp_state.HasPublicKeyPins());
-  EXPECT_FALSE(request->ssl_info().pkp_bypassed);
-}
-
 TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(
@@ -6337,18 +6249,16 @@ TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
   auto cert_verifier = std::make_unique<MockCertVerifier>();
   cert_verifier->AddResultForCert(cert.get(), verify_result, OK);
 
-  std::string test_server_hostname = kPKPHost;
+  std::string test_server_hostname = "www.example.org";
 
   SetTransportSecurityStateSourceForTesting(&test_default::kHSTSSource);
 
-  MockCertificateReportSender mock_report_sender;  // Must outlive `context`.
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->SetCertVerifier(std::move(cert_verifier));
   auto context = context_builder->Build();
   context->transport_security_state()->EnableStaticPinsForTesting();
   context->transport_security_state()->SetPinningListAlwaysTimelyForTesting(
       true);
-  context->transport_security_state()->SetReportSender(&mock_report_sender);
 
   TestDelegate d;
   std::unique_ptr<URLRequest> request(context->CreateRequest(
@@ -6358,13 +6268,8 @@ TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
   request->Start();
   d.RunUntilComplete();
 
-  // Check that the request succeeded, a report was not sent and the PKP was
-  // bypassed.
+  // Check that the request succeeded and that PKP was bypassed.
   EXPECT_EQ(OK, d.request_status());
-  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
-  EXPECT_EQ(std::string(), mock_report_sender.latest_report());
-  EXPECT_EQ(NetworkAnonymizationKey(),
-            mock_report_sender.latest_network_anonymization_key());
   TransportSecurityState::PKPState pkp_state;
   EXPECT_TRUE(context->transport_security_state()->GetStaticPKPState(
       test_server_hostname, &pkp_state));
@@ -10547,9 +10452,10 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
   }
 
   void UpdateCertVerifier(scoped_refptr<CRLSet> crl_set) {
-    net::CertVerifyProcFactory::ImplParams params;
+    net::CertVerifyProc::ImplParams params;
     params.crl_set = std::move(crl_set);
-    updatable_cert_verifier_->UpdateVerifyProcData(cert_net_fetcher_, params);
+    updatable_cert_verifier_->UpdateVerifyProcData(cert_net_fetcher_, params,
+                                                   {});
   }
 
   scoped_refptr<CertNetFetcherURLRequest> cert_net_fetcher_;
@@ -10680,7 +10586,7 @@ TEST_F(HTTPSOCSPTest, Valid) {
 
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10699,7 +10605,7 @@ TEST_F(HTTPSOCSPTest, Revoked) {
 
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10739,10 +10645,10 @@ TEST_F(HTTPSOCSPTest, IntermediateValid) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10762,12 +10668,12 @@ TEST_F(HTTPSOCSPTest, IntermediateResponseOldButStillValid) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   // Use an OCSP response for the intermediate that would be too old for a leaf
   // cert, but is still valid for an intermediate.
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong}});
 
   CertStatus cert_status;
@@ -10791,10 +10697,10 @@ TEST_F(HTTPSOCSPTest, IntermediateResponseTooOldKnownRoot) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
   cert_config.dns_names = {"example.com"};
 
@@ -10822,10 +10728,10 @@ TEST_F(HTTPSOCSPTest, IntermediateResponseTooOld) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
 
   CertStatus cert_status;
@@ -10847,10 +10753,10 @@ TEST_F(HTTPSOCSPTest, IntermediateRevoked) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10874,7 +10780,7 @@ TEST_F(HTTPSOCSPTest, ValidStapled) {
       EmbeddedTestServer::OCSPConfig::ResponseType::kTryLater);
 
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10898,7 +10804,7 @@ TEST_F(HTTPSOCSPTest, RevokedStapled) {
       EmbeddedTestServer::OCSPConfig::ResponseType::kTryLater);
 
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10919,7 +10825,7 @@ TEST_F(HTTPSOCSPTest, OldStapledAndInvalidAIA) {
 
   // Stapled response indicates good, but is too old.
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}});
 
   // AIA OCSP url is included, but does not return a successful ocsp response.
@@ -10944,12 +10850,12 @@ TEST_F(HTTPSOCSPTest, OldStapledButValidAIA) {
 
   // Stapled response indicates good, but response is too old.
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}});
 
   // AIA OCSP url is included, and returns a successful ocsp response.
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -10961,202 +10867,208 @@ TEST_F(HTTPSOCSPTest, OldStapledButValidAIA) {
 
 static const struct OCSPVerifyTestData {
   EmbeddedTestServer::OCSPConfig ocsp_config;
-  OCSPVerifyResult::ResponseStatus expected_response_status;
+  bssl::OCSPVerifyResult::ResponseStatus expected_response_status;
   // |expected_cert_status| is only used if |expected_response_status| is
   // PROVIDED.
-  OCSPRevocationStatus expected_cert_status;
+  bssl::OCSPRevocationStatus expected_cert_status;
 } kOCSPVerifyData[] = {
     // 0
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::GOOD},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::GOOD},
 
     // 1
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 2
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kEarly}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 3
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 4
     {EmbeddedTestServer::OCSPConfig(
          EmbeddedTestServer::OCSPConfig::ResponseType::kTryLater),
-     OCSPVerifyResult::ERROR_RESPONSE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::ERROR_RESPONSE,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 5
     {EmbeddedTestServer::OCSPConfig(
          EmbeddedTestServer::OCSPConfig::ResponseType::kInvalidResponse),
-     OCSPVerifyResult::PARSE_RESPONSE_ERROR, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::PARSE_RESPONSE_ERROR,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 6
     {EmbeddedTestServer::OCSPConfig(
          EmbeddedTestServer::OCSPConfig::ResponseType::kInvalidResponseData),
-     OCSPVerifyResult::PARSE_RESPONSE_DATA_ERROR,
-     OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::PARSE_RESPONSE_DATA_ERROR,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 7
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::REVOKED,
+         {{bssl::OCSPRevocationStatus::REVOKED,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kEarly}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 8
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::UNKNOWN,
+         {{bssl::OCSPRevocationStatus::UNKNOWN,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 9
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::UNKNOWN,
+         {{bssl::OCSPRevocationStatus::UNKNOWN,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 10
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::UNKNOWN,
+         {{bssl::OCSPRevocationStatus::UNKNOWN,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kEarly}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 11
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kBeforeCert),
-     OCSPVerifyResult::BAD_PRODUCED_AT, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::BAD_PRODUCED_AT,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 12
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kAfterCert),
-     OCSPVerifyResult::BAD_PRODUCED_AT, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::BAD_PRODUCED_AT,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 13
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::GOOD},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::GOOD},
 
     // 14
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kEarly},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::GOOD},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::GOOD},
 
     // 15
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::GOOD},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::GOOD},
 
     // 16
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kEarly},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 17
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::UNKNOWN,
+         {{bssl::OCSPRevocationStatus::UNKNOWN,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid},
-          {OCSPRevocationStatus::REVOKED,
+          {bssl::OCSPRevocationStatus::REVOKED,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::REVOKED},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::REVOKED},
 
     // 18
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::UNKNOWN,
+         {{bssl::OCSPRevocationStatus::UNKNOWN,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 19
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::UNKNOWN,
+         {{bssl::OCSPRevocationStatus::UNKNOWN,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid},
-          {OCSPRevocationStatus::REVOKED,
+          {bssl::OCSPRevocationStatus::REVOKED,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong},
-          {OCSPRevocationStatus::GOOD,
+          {bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 20
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Serial::kMismatch}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::NO_MATCHING_RESPONSE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::NO_MATCHING_RESPONSE,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 21
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::GOOD,
+         {{bssl::OCSPRevocationStatus::GOOD,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kEarly,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Serial::kMismatch}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::NO_MATCHING_RESPONSE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::NO_MATCHING_RESPONSE,
+     bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 22
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::REVOKED,
+         {{bssl::OCSPRevocationStatus::REVOKED,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::PROVIDED, OCSPRevocationStatus::REVOKED},
+     bssl::OCSPVerifyResult::PROVIDED, bssl::OCSPRevocationStatus::REVOKED},
 
     // 23
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::REVOKED,
+         {{bssl::OCSPRevocationStatus::REVOKED,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 
     // 24
     {EmbeddedTestServer::OCSPConfig(
-         {{OCSPRevocationStatus::REVOKED,
+         {{bssl::OCSPRevocationStatus::REVOKED,
            EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong}},
          EmbeddedTestServer::OCSPConfig::Produced::kValid),
-     OCSPVerifyResult::INVALID_DATE, OCSPRevocationStatus::UNKNOWN},
+     bssl::OCSPVerifyResult::INVALID_DATE, bssl::OCSPRevocationStatus::UNKNOWN},
 };
 
 class HTTPSOCSPVerifyTest
@@ -11190,7 +11102,7 @@ TEST_P(HTTPSOCSPVerifyTest, VerifyResult) {
   EXPECT_EQ(test.expected_response_status,
             ssl_info.ocsp_result.response_status);
 
-  if (test.expected_response_status == OCSPVerifyResult::PROVIDED) {
+  if (test.expected_response_status == bssl::OCSPVerifyResult::PROVIDED) {
     EXPECT_EQ(test.expected_cert_status,
               ssl_info.ocsp_result.revocation_status);
   }
@@ -11255,7 +11167,7 @@ TEST_F(HTTPSHardFailTest, Valid) {
 
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -11279,7 +11191,7 @@ TEST_F(HTTPSHardFailTest, Revoked) {
 
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -11329,12 +11241,12 @@ TEST_F(HTTPSHardFailTest, IntermediateResponseOldButStillValid) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   // Use an OCSP response for the intermediate that would be too old for a leaf
   // cert, but is still valid for an intermediate.
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLong}});
 
   CertStatus cert_status;
@@ -11359,12 +11271,12 @@ TEST_F(HTTPSHardFailTest, IntermediateResponseTooOld) {
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   // Use an OCSP response for the intermediate that is too old according to
   // BRs, but is fine for a locally trusted root.
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
 
   CertStatus cert_status;
@@ -11394,7 +11306,7 @@ TEST_F(HTTPSHardFailTest, ValidStapled) {
       EmbeddedTestServer::OCSPConfig::ResponseType::kTryLater);
 
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -11424,7 +11336,7 @@ TEST_F(HTTPSHardFailTest, RevokedStapled) {
       EmbeddedTestServer::OCSPConfig::ResponseType::kTryLater);
 
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -11451,7 +11363,7 @@ TEST_F(HTTPSHardFailTest, OldStapledAndInvalidAIA) {
 
   // Stapled response indicates good, but is too old.
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}});
 
   // AIA OCSP url is included, but does not return a successful ocsp response.
@@ -11483,12 +11395,12 @@ TEST_F(HTTPSHardFailTest, OldStapledButValidAIA) {
 
   // Stapled response indicates good, but response is too old.
   cert_config.stapled_ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kOld}});
 
   // AIA OCSP url is included, and returns a successful ocsp response.
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   CertStatus cert_status;
@@ -11527,7 +11439,7 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSetAndRevoked) {
 
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::REVOKED,
+      {{bssl::OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
   UpdateCertVerifier(CRLSet::ExpiredCRLSetForTesting());
@@ -11550,7 +11462,7 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   test_server.SetSSLConfig(cert_config);
   RegisterDefaultHandlers(&test_server);
@@ -11592,7 +11504,7 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
-      {{OCSPRevocationStatus::GOOD,
+      {{bssl::OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
   test_server.SetSSLConfig(cert_config);
   RegisterDefaultHandlers(&test_server);
@@ -11691,7 +11603,7 @@ TEST_F(HTTPSLocalCRLSetTest, KnownInterceptionBlocked) {
   // Configure a CRL that will mark |root_ca_cert| as a blocked interception
   // root.
   std::string crl_set_bytes;
-  net::CertVerifyProcFactory::ImplParams params;
+  net::CertVerifyProc::ImplParams params;
   ASSERT_TRUE(
       base::ReadFileToString(GetTestCertsDirectory().AppendASCII(
                                  "crlset_blocked_interception_by_root.raw"),
@@ -11699,7 +11611,7 @@ TEST_F(HTTPSLocalCRLSetTest, KnownInterceptionBlocked) {
   ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &params.crl_set));
 
   updatable_cert_verifier_->UpdateVerifyProcData(
-      /*cert_net_fetcher=*/nullptr, params);
+      /*cert_net_fetcher=*/nullptr, params, {});
 
   // Verify the connection fails as being a known interception root.
   {
@@ -11894,7 +11806,7 @@ TEST_F(URLRequestTest, URLRequestRedirectJobCancelRequest) {
 
   req->Start();
   req->Cancel();
-  base::RunLoop().RunUntilIdle();
+  d.RunUntilComplete();
   EXPECT_EQ(ERR_ABORTED, d.request_status());
   EXPECT_EQ(0, d.received_redirect_count());
 }
@@ -11926,8 +11838,7 @@ TEST_F(URLRequestTestHTTP, MAYBE_HeadersCallbacks) {
         base::Unretained(&raw_resp_headers)));
     r->set_isolation_info(isolation_info1_);
     r->Start();
-    while (!delegate.response_started_count())
-      base::RunLoop().RunUntilIdle();
+    delegate.RunUntilComplete();
     EXPECT_FALSE(raw_req_headers.headers().empty());
     std::string value;
     EXPECT_TRUE(raw_req_headers.FindHeaderForTest("X-Foo", &value));
@@ -12383,7 +12294,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12421,7 +12332,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12450,7 +12361,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataPOSTTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12477,7 +12388,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataPOSTTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12508,7 +12419,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataIdempotentPOSTTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12536,7 +12447,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataIdempotentPOSTTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12565,7 +12476,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataNonIdempotentRequestTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 
@@ -12593,7 +12504,7 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataNonIdempotentRequestTest) {
     r->Start();
     EXPECT_TRUE(r->is_pending());
 
-    base::RunLoop().Run();
+    d.RunUntilComplete();
 
     EXPECT_EQ(1, d.response_started_count());
 

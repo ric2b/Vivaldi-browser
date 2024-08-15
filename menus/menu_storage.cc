@@ -160,7 +160,7 @@ void OnLoad(const base::FilePath& profile_file,
             if (!codec.Decode(details->mainmenu_node(), details->control(),
                               *root.get(), false, "")) {
               LOG(ERROR) << "Menu Storage: Failed to decode JSON content after "
-                            "upgrade";
+                            "upgrade. Upgrade ignored.";
             } else {
               details->SetUpgradeRoot(std::move(root));
             }

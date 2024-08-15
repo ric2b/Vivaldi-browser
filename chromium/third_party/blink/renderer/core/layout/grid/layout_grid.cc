@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/layout/grid/layout_grid.h"
 
-#include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
+#include "third_party/blink/renderer/core/layout/layout_result.h"
 
 namespace blink {
 
@@ -102,9 +102,25 @@ const GridPlacementData& LayoutGrid::CachedPlacementData() const {
 }
 
 void LayoutGrid::SetCachedPlacementData(GridPlacementData&& placement_data) {
-  cached_placement_data_ =
-      std::make_unique<GridPlacementData>(std::move(placement_data));
+  cached_placement_data_ = std::move(placement_data);
   SetGridPlacementDirty(false);
+}
+
+bool LayoutGrid::HasCachedMinMaxSizes() const {
+  return cached_min_max_sizes_.has_value();
+}
+
+const MinMaxSizes& LayoutGrid::CachedMinMaxSizes() const {
+  DCHECK(HasCachedMinMaxSizes());
+  return *cached_min_max_sizes_;
+}
+
+void LayoutGrid::SetCachedMinMaxSizes(MinMaxSizes&& min_max_sizes) {
+  cached_min_max_sizes_ = std::move(min_max_sizes);
+}
+
+void LayoutGrid::InvalidateCachedMinMaxSizes() {
+  cached_min_max_sizes_.reset();
 }
 
 const GridLayoutData* LayoutGrid::LayoutData() const {
@@ -121,7 +137,6 @@ wtf_size_t LayoutGrid::AutoRepeatCountForDirection(
   NOT_DESTROYED();
   if (!HasCachedPlacementData())
     return 0;
-
   return cached_placement_data_->AutoRepeatTrackCount(track_direction);
 }
 
@@ -130,9 +145,7 @@ wtf_size_t LayoutGrid::ExplicitGridStartForDirection(
   NOT_DESTROYED();
   if (!HasCachedPlacementData())
     return 0;
-  return (track_direction == kForColumns)
-             ? cached_placement_data_->column_start_offset
-             : cached_placement_data_->row_start_offset;
+  return cached_placement_data_->StartOffset(track_direction);
 }
 
 wtf_size_t LayoutGrid::ExplicitGridEndForDirection(

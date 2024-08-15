@@ -106,12 +106,14 @@ net::NetworkTrafficAnnotationTag FetchUtils::GetTrafficAnnotationTag(
     case network::mojom::RequestDestination::kAudioWorklet:
     case network::mojom::RequestDestination::kFont:
     case network::mojom::RequestDestination::kImage:
+    case network::mojom::RequestDestination::kJson:
     case network::mojom::RequestDestination::kManifest:
     case network::mojom::RequestDestination::kPaintWorklet:
     case network::mojom::RequestDestination::kReport:
     case network::mojom::RequestDestination::kScript:
     case network::mojom::RequestDestination::kServiceWorker:
     case network::mojom::RequestDestination::kSharedWorker:
+    case network::mojom::RequestDestination::kSpeculationRules:
     case network::mojom::RequestDestination::kStyle:
     case network::mojom::RequestDestination::kTrack:
     case network::mojom::RequestDestination::kVideo:

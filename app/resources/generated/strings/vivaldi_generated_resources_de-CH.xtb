@@ -8,11 +8,9 @@
 <translation id="1049795001945932310">&amp;Spracheinstellungen</translation>
 <translation id="1054153489933238809">Original &amp;Bild in neuem Tab öffnen</translation>
 <translation id="1056898198331236512">Warnung</translation>
-<translation id="1067048845568873861">Erstellt</translation>
 <translation id="1084824384139382525">Link A&amp;dresse kopieren</translation>
 <translation id="1163931534039071049">&amp;Frame-Quelltext anzeigen</translation>
 <translation id="1165039591588034296">Fehler</translation>
-<translation id="1175364870820465910">&amp;Drucken...</translation>
 <translation id="1181037720776840403">Entfernen</translation>
 <translation id="1187722533808055681">Aktivierungen im Leerlauf</translation>
 <translation id="122082903575839559">Algorithmus für Zertifikatsignatur</translation>
@@ -27,7 +25,6 @@
 <translation id="1451375123200651445">Webseite, Einzeldatei (MHTML)</translation>
 <translation id="1465176863081977902">Audioadresse kopieren</translation>
 <translation id="1476607407192946488">&amp;Spracheinstellungen</translation>
-<translation id="150411034776756821"><ph name="SITE" /> entfernen</translation>
 <translation id="1546280085599573572">Durch diese Erweiterung wurde die Seite geändert, die beim Klick auf die Schaltfläche "Startseite" erscheint.</translation>
 <translation id="1552752544932680961">Erweiterung verwalten</translation>
 <translation id="15662109988763471">Der ausgewählte Drucker ist entweder nicht verfügbar oder nicht ordnungsgemäss installiert. Überprüfen Sie den Drucker oder wählen Sie einen anderen Drucker aus.</translation>
@@ -116,7 +113,6 @@
 <translation id="2932085390869194046">Passwort vorschlagen…</translation>
 <translation id="2932883381142163287">Missbrauch melden</translation>
 <translation id="2941112035454246133">Niedrig</translation>
-<translation id="2972581237482394796">&amp;Wiederholen</translation>
 <translation id="2993517869960930405">App-Informationen</translation>
 <translation id="3003623123441819449">CSS-Cache</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
@@ -130,7 +126,6 @@
 <translation id="3124111068741548686">BENUTZER-Objekte</translation>
 <translation id="3129173833825111527">Linker Rand</translation>
 <translation id="3144647712221361880">Link öffnen als</translation>
-<translation id="3202131003361292969">Pfad</translation>
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
 <translation id="3275778913554317645">In neuem Fenster öffnen</translation>
@@ -165,21 +160,17 @@
 <translation id="3711931198657368127">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="3727187387656390258">Pop-up prüfen</translation>
 <translation id="3760460896538743390">&amp;Hintergrundseite prüfen</translation>
-<translation id="3797900183766075808">Mit <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" suchen</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3810973564298564668">Verwalten</translation>
 <translation id="3838085852053358637">Fehler beim Laden der Erweiterung</translation>
 <translation id="383891835335927981">Keine Websites wurden vergrössert oder verkleinert</translation>
 <translation id="385051799172605136">Zurück</translation>
-<translation id="3858860766373142691">Name</translation>
 <translation id="3867944738977021751">Zertifikatfelder</translation>
 <translation id="3905761538810670789">App reparieren</translation>
 <translation id="3908501907586732282">Erweiterung aktivieren</translation>
 <translation id="3909701002594999354">Alle &amp;Steuerelemente anzeigen</translation>
-<translation id="3909791450649380159">&amp;Ausschneiden</translation>
 <translation id="3927932062596804919">Ablehnen</translation>
 <translation id="3936390757709632190">&amp;Audio in neuem Tab öffnen</translation>
-<translation id="3943582379552582368">&amp;Zurück</translation>
 <translation id="3948116654032448504">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
 <translation id="3979395879372752341">Neue Erweiterung hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Link zum markierten Text kopieren</translation>
@@ -194,7 +185,6 @@
 <translation id="4100839878934973028">Ein anderes Programm auf Ihrem Computer hat eine App hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="4104163789986725820">E&amp;xportieren...</translation>
 <translation id="4109898769411476438">Browser vor dem Import schliessen</translation>
-<translation id="4130207949184424187">Diese Erweiterung hat eine Änderung der Seite vorgenommen, die bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="4131410914670010031">Schwarz-Weiss</translation>
 <translation id="4165986682804962316">Website–Einstellungen</translation>
 <translation id="4170314459383239649">Beim Beenden löschen</translation>
@@ -210,12 +200,10 @@
 <translation id="4348766275249686434">Fehler erfassen</translation>
 <translation id="4363771538994847871">Kein Cast-Empfänger gefunden. Benötigen Sie Hilfe?</translation>
 <translation id="4384652540891215547">Erweiterung aktivieren</translation>
-<translation id="4394049700291259645">Deaktivieren</translation>
 <translation id="4409697491990005945">Ränder</translation>
 <translation id="4423376891418188461">Einstellungen wiederherstellen</translation>
 <translation id="4478664379124702289">Lin&amp;k speichern unter...</translation>
 <translation id="4520385623207007473">Verwendete Cookies</translation>
-<translation id="4593021220803146968"><ph name="URL" /> öffnen</translation>
 <translation id="4595560905247879544">Apps und Erweiterungen können nur vom Administrator, <ph name="CUSTODIAN_NAME" />, geändert werden.</translation>
 <translation id="4613271546271159013">Die Seite, die beim Öffnen eines neuen Tabs angezeigt wird, wurde durch eine Erweiterung geändert.</translation>
 <translation id="4616405296204756919">Sie können gespeicherte Passwörter auf jedem Gerät verwenden. Sie werden im <ph name="VIVALDI_PASSWORD_MANAGER" /> gespeichert.</translation>
@@ -260,12 +248,9 @@
 <translation id="5302932258331363306">Ersetzungen einblenden</translation>
 <translation id="5317780077021120954">Speichern</translation>
 <translation id="5334142896108694079">Skript-Cache</translation>
-<translation id="5355926466126177564">Die Erweiterung <ph name="EXTENSION_NAME" /> hat die Seite geändert, die bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="5360150013186312835">In der Symbolleiste anzeigen</translation>
 <translation id="5362741141255528695">Private Schlüsseldatei auswählen.</translation>
 <translation id="536638840841140142">Keine</translation>
-<translation id="5370819323174483825">&amp;Neu laden</translation>
-<translation id="5390743329570580756">Senden für</translation>
 <translation id="5398572795982417028">Der Seitenbereich ist zu gross. Die maximale Seitenanzahl liegt bei <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Download fortsetzen</translation>
 <translation id="5427459444770871191">Im &amp;Uhrzeigersinn drehen</translation>
@@ -280,14 +265,12 @@
 <translation id="5582839680698949063">Hauptmenü</translation>
 <translation id="5614553682702429503">Passwort speichern?</translation>
 <translation id="5623842676595125836">Protokoll</translation>
-<translation id="5627086634964711283">Die Erweiterung legt auch fest, welche Seite beim Klick auf die Schaltfläche "Startseite" erscheint.</translation>
 <translation id="5638309510554459422">Im <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /> nach Erweiterungen und Designs suchen</translation>
 <translation id="5677928146339483299">Blockiert</translation>
 <translation id="5707185214361380026">Fehler beim Laden der Erweiterung aus:</translation>
 <translation id="5713171467967533494">Im Vivaldi-Browser öffnen</translation>
 <translation id="5715711091495208045">Plug-in-Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Als PDF speichern</translation>
-<translation id="5747552184818312860">Ablaufdatum</translation>
 <translation id="5747809636523347288">Einfügen und <ph name="URL" /> aufrufen</translation>
 <translation id="5759728514498647443">Dokumente, die Sie über <ph name="APP_NAME" /> zum Druck senden, können von <ph name="APP_NAME" /> gelesen werden.</translation>
 <translation id="5764483294734785780">Audio &amp;speichern unter...</translation>
@@ -303,16 +286,12 @@
 
   Öffentlicher Exponent (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> Bits):
   <ph name="EXPONENT_HEX_DUMP" /></translation>
-<translation id="5956585768868398362">Ist dies Ihre erwartete Seite für die Suche?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (Spitzenwert <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">Die Erweiterung legt auch fest, welche Seite bei der Suche über die Adressleiste angezeigt wird oder wenn Sie auf die Schaltfläche "Startseite" klicken.</translation>
 <translation id="5978277834170881274">&amp;Rechtschreibprüfung verwenden</translation>
-<translation id="5979421442488174909">Übersetzen nach <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Mehr</translation>
 <translation id="6059652578941944813">Zertifikathierarchie</translation>
 <translation id="6086846494333236931">Von Ihrem Administrator installiert</translation>
 <translation id="6101226222197207147">Neue App hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">Ihre Internetverbindung wird beeinflusst</translation>
 <translation id="6147020289383635445">Druckvorschau fehlgeschlagen.</translation>
 <translation id="6156863943908443225">Skript-Cache</translation>
 <translation id="6196854373336333322">Die Erweiterung „<ph name="EXTENSION_NAME" />” hat die Kontrolle über Ihre Proxyeinstellungen übernommen, dadurch kann sie alle Onlineaktivitäten ändern, stören oder abhören. Wenn Sie sich nicht sicher sind, warum diese Änderung erfolgt ist, war sie wahrscheinlich nicht gewollt.</translation>
@@ -345,7 +324,6 @@
 <translation id="6655190889273724601">Entwicklermodus</translation>
 <translation id="666731172850799929">In <ph name="APP_NAME" /> öffnen</translation>
 <translation id="6686817083349815241">Passwort speichern</translation>
-<translation id="6691936601825168937">&amp;Vorwärts</translation>
 <translation id="6786747875388722282">Erweiterungen</translation>
 <translation id="6787839852456839824">Tastenkombinationen</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
@@ -374,38 +352,31 @@
 <translation id="7421925624202799674">&amp;Seitenquelltext anzeigen</translation>
 <translation id="7427348830195639090">Hintergrundseite: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Durch die Auswahl dieses Druckers berechtigen Sie die folgende Erweiterung, auf Ihren Drucker zuzugreifen:</translation>
-<translation id="749028671485790643">Profil <ph name="VALUE" /></translation>
 <translation id="7564847347806291057">Prozess beenden</translation>
 <translation id="7576690715254076113">Sortieren</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Abbrechen</translation>
 <translation id="7659154729610375585">Privater Modus trotzdem beenden?</translation>
 <translation id="7661259717474717992">Speichern und Lesen von Cookiedaten zulassen</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Von Ihrem Administrator installiert</translation>
 <translation id="7685049629764448582">JavaScript-Speicher</translation>
 <translation id="7701869757853594372">NUTZER-Handles</translation>
-<translation id="7702907602086592255">Domain</translation>
 <translation id="7704305437604973648">Aufgabe</translation>
 <translation id="7710568461918838723">&amp;Streamen…</translation>
 <translation id="7714464543167945231">Zertifikat</translation>
 <translation id="7750228210027921155">Bild-in-Bild</translation>
-<translation id="7760004034676677601">Ist dies die Seite, die sie beim Start erwartet haben?</translation>
 <translation id="7771452384635174008">Layout</translation>
 <translation id="7782102568078991263">Keine weiteren Vorschläge von Google</translation>
 <translation id="7786889348652477777">&amp;App neu laden</translation>
 <translation id="7791543448312431591">Hinzufügen</translation>
 <translation id="7800518121066352902">&amp;Gegen den Uhrzeigersinn drehen</translation>
-<translation id="7814458197256864873">&amp;Kopieren</translation>
 <translation id="7818135753970109980">Neues Design hinzugefügt (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">Videoadresse kopieren</translation>
 <translation id="7849264908733290972">B&amp;ild in neuem Tab öffnen</translation>
-<translation id="7857949311770343000">Ist dies die “Neuer Tab”-Seite, die Sie erwartet hatten?</translation>
 <translation id="786073089922909430">Dienst: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Dienstprogramm: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">Videoadresse kopieren</translation>
 <translation id="7966241909927244760">Bildadresse kopieren</translation>
-<translation id="7973394300052703468">Neues &amp;privates Fenster</translation>
 <translation id="7978412674231730200">Privater Schlüssel</translation>
 <translation id="7982789257301363584">Netzwerk</translation>
 <translation id="7997826902155442747">Prozesspriorität</translation>
@@ -420,7 +391,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8032244173881942855">Tab kann nicht gestreamt werden.</translation>
 <translation id="8071432093239591881">Als Bild drucken</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
-<translation id="8168435359814927499">Inahlte</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
         =1 {Download wird ausgeführt} other {Downloads werden ausgeführt}}</translation>
 <translation id="8230134520748321204">Passwort für <ph name="ORIGIN" /> speichern?</translation>
@@ -459,19 +429,16 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="895944840846194039">JavaScript-Speicher</translation>
 <translation id="8962083179518285172">Details ausblenden</translation>
 <translation id="8973557916016709913">Zoom zurücksetzen</translation>
-<translation id="897939795688207351">Auf <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Auf allen Webseiten zulassen</translation>
 <translation id="9027459031423301635">Link in neuem Tab öffnen</translation>
 <translation id="9056810968620647706">Keine Übereinstimmungen gefunden.</translation>
 <translation id="9084064520949870008">In Fenster öffnen</translation>
 <translation id="9137916601698928395">Link als <ph name="USER" /> öffnen</translation>
 <translation id="916607977885256133">Bild-in-Bild</translation>
-<translation id="9170848237812810038">&amp;Rückgängig</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" hinzugefügt</translation>
 <translation id="9218430445555521422">Als Standard festlegen</translation>
 <translation id="93766956588638423">Erweiterung reparieren</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
 <translation id="98515147261107953">Querformat</translation>
-<translation id="994289308992179865">&amp;Schleife</translation>
 <translation id="998747458861718449">Untersuchen</translation>
 </translationbundle>

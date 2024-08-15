@@ -125,7 +125,8 @@ class ClientSession : public protocol::HostStub,
                 const DesktopEnvironmentOptions& desktop_environment_options,
                 const base::TimeDelta& max_duration,
                 scoped_refptr<protocol::PairingRegistry> pairing_registry,
-                const std::vector<HostExtension*>& extensions);
+                const std::vector<raw_ptr<HostExtension, VectorExperimental>>&
+                    extensions);
 
   ClientSession(const ClientSession&) = delete;
   ClientSession& operator=(const ClientSession&) = delete;
@@ -275,6 +276,12 @@ class ClientSession : public protocol::HostStub,
   // Sends the new active display to the client. Called by ActiveDisplayMonitor
   // whenever the screen id associated with the active window changes.
   void OnActiveDisplayChanged(webrtc::ScreenId display);
+
+  // Sets the fallback geometry on `fractional_input_filter_` according to the
+  // current display-layout and selected display index. This is only used for
+  // single-stream mode, when the client provides fractional-coordinates without
+  // any screen_id.
+  void UpdateFractionalFilterFallback();
 
   raw_ptr<EventHandler> event_handler_;
 

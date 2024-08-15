@@ -8,7 +8,6 @@
 #import "base/memory/singleton.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
-#import "components/supervised_user/core/browser/kids_chrome_management_client.h"
 #import "components/supervised_user/core/browser/permission_request_creator.h"
 #import "components/supervised_user/core/browser/permission_request_creator_mock.h"
 #import "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
@@ -22,7 +21,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_error_container.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_settings_service_factory.h"
@@ -108,15 +107,14 @@ bool isShowingInterstitialForState(web::WebState* web_state) {
 @implementation SupervisedUserSettingsAppInterface : NSObject
 
 + (void)setSupervisedUserURLFilterBehavior:
-    (supervised_user::SupervisedUserURLFilter::FilteringBehavior)behavior {
+    (supervised_user::FilteringBehavior)behavior {
   supervised_user::SupervisedUserSettingsService* settings_service =
       SupervisedUserSettingsServiceFactory::GetForBrowserState(
           chrome_test_util::GetOriginalBrowserState());
   settings_service->SetLocalSetting(
       supervised_user::kContentPackDefaultFilteringBehavior,
-      base::Value(behavior));
-  if (behavior ==
-      supervised_user::SupervisedUserURLFilter::FilteringBehavior::ALLOW) {
+      base::Value(static_cast<int>(behavior)));
+  if (behavior == supervised_user::FilteringBehavior::kAllow) {
     settings_service->SetLocalSetting(supervised_user::kSafeSitesEnabled,
                                       base::Value(true));
   }
@@ -168,13 +166,13 @@ bool isShowingInterstitialForState(web::WebState* web_state) {
 }
 
 + (void)setFilteringToAllowAllSites {
-  [self setSupervisedUserURLFilterBehavior:supervised_user::
-                                               SupervisedUserURLFilter::ALLOW];
+  [self setSupervisedUserURLFilterBehavior:supervised_user::FilteringBehavior::
+                                               kAllow];
 }
 
 + (void)setFilteringToAllowApprovedSites {
-  [self setSupervisedUserURLFilterBehavior:supervised_user::
-                                               SupervisedUserURLFilter::BLOCK];
+  [self setSupervisedUserURLFilterBehavior:supervised_user::FilteringBehavior::
+                                               kBlock];
 }
 
 + (void)addWebsiteToAllowList:(NSURL*)host {
@@ -221,17 +219,14 @@ bool isShowingInterstitialForState(web::WebState* web_state) {
   // responses.
   ChromeBrowserState* browser_state = ChromeBrowserState::FromBrowserState(
       chrome_test_util::GetOriginalBrowserState());
-  auto* identity_manager =
+  signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForBrowserState(browser_state);
   CHECK(identity_manager);
-  auto kids_chrome_management_client =
-      std::make_unique<KidsChromeManagementClient>(shared_url_loader_factory,
-                                                   identity_manager);
 
   supervised_user::SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForBrowserState(browser_state);
   supervised_user_service->GetURLFilter()->InitAsyncURLChecker(
-      kids_chrome_management_client.get());
+      identity_manager, shared_url_loader_factory);
 }
 
 + (void)setUpTestUrlLoaderFactoryHelper {

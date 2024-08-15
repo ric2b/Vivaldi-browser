@@ -6,11 +6,13 @@
 #define COMPONENTS_SAFE_BROWSING_CONTENT_RENDERER_RENDERER_URL_LOADER_THROTTLE_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "base/types/optional_ref.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "components/safe_browsing/core/common/safe_browsing_url_checker.mojom.h"
 #include "extensions/buildflags/buildflags.h"
@@ -19,6 +21,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/gurl.h"
 
 namespace safe_browsing {
@@ -32,15 +35,16 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle,
  public:
   // |safe_browsing| must stay alive until WillStartRequest() (if it is called)
   // or the end of this object.
-  // |render_frame_id| is used for displaying SafeBrowsing UI when necessary.
-  RendererURLLoaderThrottle(mojom::SafeBrowsing* safe_browsing,
-                            int render_frame_id);
+  // |local_frame_token| is used for displaying SafeBrowsing UI when necessary.
+  RendererURLLoaderThrottle(
+      mojom::SafeBrowsing* safe_browsing,
+      base::optional_ref<const blink::LocalFrameToken> local_frame_token);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // |extension_web_request_reporter_pending_remote| is used for sending
   // extension web requests to the browser.
   RendererURLLoaderThrottle(
       mojom::SafeBrowsing* safe_browsing,
-      int render_frame_id,
+      base::optional_ref<const blink::LocalFrameToken> local_frame_token,
       mojom::ExtensionWebRequestReporter* extension_web_request_reporter);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   ~RendererURLLoaderThrottle() override;
@@ -97,16 +101,12 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle,
       bool showed_interstitial);
 
   // Called by the two methods above.
-  // |slow_check| indicates whether it reports the result of a slow check.
-  // (Please see comments in safe_browsing.mojom for what slow check means).
-  void OnCompleteCheckInternal(bool slow_check,
-                               bool proceed,
-                               bool showed_interstitial);
+  void OnCompleteCheckInternal(bool proceed, bool showed_interstitial);
 
   void OnMojoDisconnect();
 
   raw_ptr<mojom::SafeBrowsing, ExperimentalRenderer> safe_browsing_;
-  const int render_frame_id_;
+  const std::optional<blink::LocalFrameToken> frame_token_;
 
   // These fields hold the connection to this instance's private connection to
   // the Safe Browsing service if DetachFromCurrentThread has been called.
@@ -116,7 +116,6 @@ class RendererURLLoaderThrottle : public blink::URLLoaderThrottle,
   mojo::Remote<mojom::SafeBrowsingUrlChecker> url_checker_;
 
   size_t pending_checks_ = 0;
-  size_t pending_slow_checks_ = 0;
   bool blocked_ = false;
 
   // The time when |WillStartRequest| is called.

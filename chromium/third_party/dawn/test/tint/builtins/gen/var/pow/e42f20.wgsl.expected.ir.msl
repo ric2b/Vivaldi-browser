@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void pow_e42f20() {
+  float3 res = float3(1.0f);
+}
+vertex float4 vertex_main() {
+  pow_e42f20();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  pow_e42f20();
+}
+kernel void compute_main() {
+  pow_e42f20();
+}

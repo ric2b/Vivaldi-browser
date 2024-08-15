@@ -27,7 +27,7 @@
 size_t av1_get_corner_list_size(void) { return sizeof(CornerList); }
 
 CornerList *av1_alloc_corner_list(void) {
-  CornerList *corners = (CornerList *)aom_calloc(1, sizeof(CornerList));
+  CornerList *corners = (CornerList *)aom_calloc(1, sizeof(*corners));
   if (!corners) {
     return NULL;
   }

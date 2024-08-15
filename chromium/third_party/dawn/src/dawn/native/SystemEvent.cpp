@@ -44,100 +44,10 @@
 
 namespace dawn::native {
 
-namespace {
-
-template <typename T, T Infinity>
-T ToMillisecondsGeneric(Nanoseconds timeout) {
-    uint64_t ns = uint64_t{timeout};
-    uint64_t ms = 0;
-    if (ns > 0) {
-        ms = (ns - 1) / 1'000'000 + 1;
-        if (ms > std::numeric_limits<T>::max()) {
-            return Infinity;  // Round long timeout up to infinity
-        }
-    }
-    return static_cast<T>(ms);
-}
-
-#if DAWN_PLATFORM_IS(WINDOWS)
-// #define ToMilliseconds ToMillisecondsGeneric<DWORD, INFINITE>
-#elif DAWN_PLATFORM_IS(POSIX)
-#define ToMilliseconds ToMillisecondsGeneric<int, -1>
-#endif
-
-#if DAWN_PLATFORM_IS(WINDOWS)
-HANDLE AsHANDLE(const SystemEventPrimitive& p) {
-    return reinterpret_cast<HANDLE>(p.value);
-}
-#elif DAWN_PLATFORM_IS(POSIX)
-int AsFD(const SystemEventPrimitive& p) {
-    DAWN_ASSERT(p.value <= std::numeric_limits<int>::max());
-    return p.value;
-}
-#endif
-
-}  // namespace
-
-// SystemEventPrimitive
-
-SystemEventPrimitive::SystemEventPrimitive(void* win32Handle)
-    : value(reinterpret_cast<uintptr_t>(win32Handle)) {
-#if DAWN_PLATFORM_IS(WINDOWS)
-    static_assert(std::is_same_v<void*, HANDLE>);
-    DAWN_ASSERT(win32Handle != nullptr);
-#else
-    DAWN_ASSERT(false);  // Wrong platform.
-#endif
-}
-
-SystemEventPrimitive::SystemEventPrimitive(int posixFd) : value(posixFd) {
-#if DAWN_PLATFORM_IS(POSIX)
-    static_assert(sizeof(uintptr_t) >= sizeof(int));
-    DAWN_ASSERT(posixFd > 0);
-#else
-    DAWN_ASSERT(false);  // Wrong platform.
-#endif
-}
-
-SystemEventPrimitive::~SystemEventPrimitive() {
-    if (IsValid()) {
-        Close();
-    }
-}
-
-SystemEventPrimitive::SystemEventPrimitive(SystemEventPrimitive&& rhs) {
-    *this = std::move(rhs);
-}
-
-SystemEventPrimitive& SystemEventPrimitive::operator=(SystemEventPrimitive&& rhs) {
-    if (this != &rhs) {
-        if (IsValid()) {
-            Close();
-        }
-        std::swap(value, rhs.value);
-    }
-    return *this;
-}
-
-bool SystemEventPrimitive::IsValid() const {
-    return value != kInvalid;
-}
-
-void SystemEventPrimitive::Close() {
-    DAWN_ASSERT(IsValid());
-
-#if DAWN_PLATFORM_IS(WINDOWS)
-    CloseHandle(AsHANDLE(*this));
-#elif DAWN_PLATFORM_IS(POSIX)
-    close(AsFD(*this));
-#else
-    DAWN_CHECK(false);  // Not implemented.
-#endif
-
-    value = kInvalid;
-}
-
 // SystemEventReceiver
+
+SystemEventReceiver::SystemEventReceiver(SystemHandle primitive)
+    : mPrimitive(std::move(primitive)) {}
 
 SystemEventReceiver SystemEventReceiver::CreateAlreadySignaled() {
     SystemEventPipeSender sender;
@@ -155,15 +65,18 @@ SystemEventPipeSender::~SystemEventPipeSender() {
     DAWN_ASSERT(!mPrimitive.IsValid());
 }
 
+bool SystemEventPipeSender::IsValid() const {
+    return mPrimitive.IsValid();
+}
+
 void SystemEventPipeSender::Signal() && {
     DAWN_ASSERT(mPrimitive.IsValid());
 #if DAWN_PLATFORM_IS(WINDOWS)
-    // This is not needed on Windows yet. It's implementable using SetEvent().
-    DAWN_UNREACHABLE();
+    DAWN_CHECK(SetEvent(mPrimitive.Get()));
 #elif DAWN_PLATFORM_IS(POSIX)
     // Send one byte to signal the receiver
     char zero[1] = {0};
-    int status = write(AsFD(mPrimitive), zero, 1);
+    int status = write(mPrimitive.Get(), zero, 1);
     DAWN_CHECK(status >= 0);
 #else
     // Not implemented for this platform.
@@ -173,63 +86,82 @@ void SystemEventPipeSender::Signal() && {
     mPrimitive.Close();
 }
 
-// standalone functions
-
-bool WaitAnySystemEvent(size_t count, TrackedFutureWaitInfo* futures, Nanoseconds timeout) {
-#if DAWN_PLATFORM_IS(WINDOWS)
-    // TODO(crbug.com/dawn/2054): Implement this.
-    DAWN_CHECK(false);
-#elif DAWN_PLATFORM_IS(POSIX)
-    std::vector<pollfd> pollfds(count);
-    for (size_t i = 0; i < count; ++i) {
-        int fd = AsFD(futures[i].event->GetReceiver().mPrimitive);
-        pollfds[i] = pollfd{fd, POLLIN, 0};
-    }
-
-    int status = poll(pollfds.data(), pollfds.size(), ToMilliseconds(timeout));
-
-    DAWN_CHECK(status >= 0);
-    if (status == 0) {
-        return false;
-    }
-
-    for (size_t i = 0; i < count; ++i) {
-        int revents = pollfds[i].revents;
-        static constexpr int kAllowedEvents = POLLIN | POLLHUP;
-        DAWN_CHECK((revents & kAllowedEvents) == revents);
-    }
-
-    for (size_t i = 0; i < count; ++i) {
-        bool ready = (pollfds[i].revents & POLLIN) != 0;
-        futures[i].ready = ready;
-    }
-
-    return true;
-#else
-    DAWN_CHECK(false);  // Not implemented.
-#endif
-}
-
 std::pair<SystemEventPipeSender, SystemEventReceiver> CreateSystemEventPipe() {
 #if DAWN_PLATFORM_IS(WINDOWS)
-    // This is not needed on Windows yet. It's implementable using CreateEvent().
-    DAWN_UNREACHABLE();
+    HANDLE eventDup;
+    HANDLE event = CreateEvent(nullptr, /*bManualReset=*/true, /*bInitialState=*/false, nullptr);
+
+    DAWN_CHECK(event != nullptr);
+    DAWN_CHECK(DuplicateHandle(GetCurrentProcess(), event, GetCurrentProcess(), &eventDup, 0, FALSE,
+                               DUPLICATE_SAME_ACCESS));
+    DAWN_CHECK(eventDup != nullptr);
+
+    SystemEventReceiver receiver;
+    receiver.mPrimitive = SystemHandle::Acquire(event);
+
+    SystemEventPipeSender sender;
+    sender.mPrimitive = SystemHandle::Acquire(eventDup);
+
+    return std::make_pair(std::move(sender), std::move(receiver));
 #elif DAWN_PLATFORM_IS(POSIX)
     int pipeFds[2];
     int status = pipe(pipeFds);
     DAWN_CHECK(status >= 0);
 
     SystemEventReceiver receiver;
-    receiver.mPrimitive = SystemEventPrimitive{pipeFds[0]};
+    receiver.mPrimitive = SystemHandle::Acquire(pipeFds[0]);
 
     SystemEventPipeSender sender;
-    sender.mPrimitive = SystemEventPrimitive{pipeFds[1]};
+    sender.mPrimitive = SystemHandle::Acquire(pipeFds[1]);
 
     return std::make_pair(std::move(sender), std::move(receiver));
 #else
     // Not implemented for this platform.
     DAWN_CHECK(false);
 #endif
+}
+
+// SystemEvent
+
+// static
+Ref<SystemEvent> SystemEvent::CreateSignaled() {
+    auto ev = AcquireRef(new SystemEvent());
+    ev->Signal();
+    return ev;
+}
+
+bool SystemEvent::IsSignaled() const {
+    return mSignaled.load(std::memory_order_acquire);
+}
+
+void SystemEvent::Signal() {
+    if (!mSignaled.exchange(true, std::memory_order_acq_rel)) {
+        mPipe.Use([](auto pipe) {
+            // Check if there is a pipe and the sender is valid.
+            // This function may race with GetOrCreateSystemEventReceiver such that the pipe is
+            // already signaled and the sender is invalid.
+            if (*pipe && pipe->value().first.IsValid()) {
+                std::move(pipe->value().first).Signal();
+            }
+        });
+    }
+}
+
+const SystemEventReceiver& SystemEvent::GetOrCreateSystemEventReceiver() {
+    return mPipe.Use([this](auto pipe) {
+        if (!*pipe) {
+            // Check whether the event was marked as completed. This may have happened if
+            // this function races with another thread performing Signal. If we won
+            // the race, then the pipe we just created will get signaled inside Signal.
+            // If we lost the race, then it will not be signaled and we must do it now.
+            if (IsSignaled()) {
+                *pipe = {SystemEventPipeSender{}, SystemEventReceiver::CreateAlreadySignaled()};
+            } else {
+                *pipe = CreateSystemEventPipe();
+            }
+        }
+        return std::cref(pipe->value().second);
+    });
 }
 
 }  // namespace dawn::native

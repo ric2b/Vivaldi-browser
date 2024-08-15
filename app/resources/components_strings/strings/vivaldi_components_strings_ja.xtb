@@ -6,8 +6,7 @@
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> の権限を選択します</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> により途中で接続が切断されました。</translation>
 <translation id="1161325031994447685">Wi-Fi に再度接続する</translation>
-<translation id="1175364870820465910">印刷... (&amp;P)</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Cookie を消去してみてください<ph name="END_LINK" /></translation>
+<translation id="1175364870820465910">印刷...</translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> からデータが送信されませんでした。</translation>
 <translation id="1559528461873125649">該当するファイルまたはフォルダーがありません</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">システム管理者にお問い合わせください。</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断を試す<ph name="END_LINK" />。</translation>
 <translation id="1834321415901700177">このサイトには有害なプログラムが含まれています</translation>
-<translation id="1916770123977586577">更新後の設定をこのサイトに適用するには、このページを再読み込みしてください</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォールを確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">悪意あるユーザーが、あなたがこのサイトで見ている画像を推測し、修正することで、あなたを騙そうとしているかも知れません。</translation>
 <translation id="2356070529366658676">確認</translation>
 <translation id="2359808026110333948">続ける</translation>
+<translation id="2388886110302389394">ページを新しいプライベートウィンドウで開く(Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断を実行<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">このページは拡張機能によってブロックされています</translation>
 <translation id="2501278716633472235">戻る</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> はブロックされています</translation>
 <translation id="3987940399970879459">1 MB 未満</translation>
+<translation id="4075123085690634698">ページを新しいプライベートウィンドウで開く(⇧⌘N)</translation>
 <translation id="4075732493274867456">クライアントとサーバーの両方がサポートする SSL プロトコルのバージョンまたは暗号化方式が見つかりません。</translation>
 <translation id="4116663294526079822">このサイトでは常に許可</translation>
 <translation id="4130226655945681476">ネットワークケーブル、モデム、ルーターを確認する</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">端末がスリープ状態でした。</translation>
 <translation id="6890956352250146925">Cookies とサイトデータに関するオプション</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
+<translation id="6957624206566198865">ページを新しいプライベートタブで開く</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7079718277001814089">このサイトには悪意あるソフトウェアが含まれています</translation>
 <translation id="7096937462164235847">このウェブサイトの識別情報は確認されていません。</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> では通常、暗号化して情報を保護しています。今回、Vivaldi から <ph name="SITE" /> への接続試行時に、このウェブサイトからいつもとは異なる誤った認証情報が返されました。悪意のあるユーザーが <ph name="SITE" /> になりすまそうとしているか、Wi-Fi ログイン画面で接続が中断された可能性があります。データのやり取りが行われる前に Vivaldi によって接続が停止されたため、情報は引き続き保護されています。</translation>
 <translation id="7878562273885520351">パスワードが不正利用される可能性があります</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">更新した設定をこのサイトに適用するには、このページを再読み込みしてください</translation>
 <translation id="8025119109950072390">このサイトを利用すると、悪意のあるユーザーによってソフトウェアのインストールや個人情報（例: パスワード、電話番号、クレジット カード番号）の入力などの危険な操作を行うよう誘導される可能性があります。</translation>
 <translation id="8037357227543935929">確認（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（[確認]）を使用</translation>

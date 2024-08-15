@@ -24,6 +24,7 @@
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/cert_verify_proc_builtin.h"
 #include "net/cert/crl_set.h"
+#include "net/cert/do_nothing_ct_verifier.h"
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert_net/cert_net_fetcher_url_request.h"
@@ -103,14 +104,11 @@ class CertVerifyImpl {
 
     // TODO(mattm): add command line flags to configure VerifyFlags.
     int flags = 0;
-    // Don't add any additional trust anchors.
-    net::CertificateList x509_additional_trust_anchors;
 
     // TODO(crbug.com/634484): use a real netlog and print the results?
     *error = proc_->Verify(&x509_target_and_intermediates, hostname,
                            /*ocsp_response=*/std::string(),
-                           /*sct_list=*/std::string(), flags,
-                           x509_additional_trust_anchors, result,
+                           /*sct_list=*/std::string(), flags, result,
                            net::NetLogWithSource());
 
     return *error == net::OK;
@@ -141,8 +139,11 @@ std::unique_ptr<CertVerifyImpl> CreateCertVerifyImplFromName(
         "CertVerifyProcBuiltin",
         net::CreateCertVerifyProcBuiltin(
             std::move(cert_net_fetcher), net::CRLSet::BuiltinCRLSet(),
+            std::make_unique<net::DoNothingCTVerifier>(),
+            base::MakeRefCounted<net::DefaultCTPolicyEnforcer>(),
             net::CreateSslSystemTrustStoreChromeRoot(
-                std::make_unique<net::TrustStoreChrome>())));
+                std::make_unique<net::TrustStoreChrome>()),
+            {}));
 #endif
   }
 

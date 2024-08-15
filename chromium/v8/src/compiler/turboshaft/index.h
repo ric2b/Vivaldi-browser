@@ -141,9 +141,14 @@ class OpIndex {
   uint32_t offset_;
 
   static constexpr uint32_t kTurbofanNodeIdFlag = 1;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const OpIndex& idx) {
+    return H::combine(std::move(h), idx.offset_);
+  }
 };
 
-std::ostream& operator<<(std::ostream& os, OpIndex idx);
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os, OpIndex idx);
 
 class OptionalOpIndex : protected OpIndex {
  public:
@@ -165,6 +170,11 @@ class OptionalOpIndex : protected OpIndex {
     return OpIndex(*this);
   }
   constexpr OpIndex value_or_invalid() const { return OpIndex(*this); }
+
+  template <typename H>
+  friend H AbslHashValue(H h, const OptionalOpIndex& idx) {
+    return H::combine(std::move(h), idx.offset_);
+  }
 };
 
 V8_INLINE std::ostream& operator<<(std::ostream& os, OptionalOpIndex idx) {
@@ -506,7 +516,7 @@ struct fast_hash<BlockIndex> {
 
 V8_INLINE size_t hash_value(BlockIndex op) { return base::hash_value(op.id()); }
 
-std::ostream& operator<<(std::ostream& os, BlockIndex b);
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os, BlockIndex b);
 
 #define DEFINE_STRONG_ORDERING_COMPARISON(lhs_type, rhs_type, lhs_access, \
                                           rhs_access)                     \

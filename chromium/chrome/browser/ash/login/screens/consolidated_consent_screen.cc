@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
 
 #include "ash/components/arc/arc_prefs.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -40,6 +41,7 @@
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
+#include "chromeos/ash/components/osauth/public/auth_session_storage.h"
 #include "components/consent_auditor/consent_auditor.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
@@ -230,10 +232,18 @@ void ConsolidatedConsentScreen::ShowImpl() {
            context()->recovery_setup.recovery_factor_opted_in);
 
   view_->Show(std::move(data));
+
+  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
+    if (context()->extra_factors_token) {
+      session_refresher_ = AuthSessionStorage::Get()->KeepAlive(
+          context()->extra_factors_token.value());
+    }
+  }
 }
 
 void ConsolidatedConsentScreen::HideImpl() {
   pref_handler_.reset();
+  session_refresher_.reset();
 }
 
 void ConsolidatedConsentScreen::OnUserAction(const base::Value::List& args) {
@@ -464,7 +474,8 @@ void ConsolidatedConsentScreen::OnAccept(bool enable_stats_usage,
   Profile* profile = ProfileManager::GetActiveUserProfile();
   CHECK(profile);
   consents.record_arc_tos_consent =
-      !chrome::enterprise_util::IsProfileAffiliated(profile);
+      !chrome::enterprise_util::IsProfileAffiliated(profile) &&
+      !tos_content.empty();
   consents.record_backup_consent = !backup_restore_managed_;
   consents.backup_accepted = enable_backup_restore;
   consents.record_location_consent = !location_services_managed_;

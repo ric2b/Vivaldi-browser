@@ -56,7 +56,7 @@ class StatsCounter;
   V(handle_scope_level_address, "HandleScope::level")                          \
   V(handle_scope_next_address, "HandleScope::next")                            \
   V(handle_scope_limit_address, "HandleScope::limit")                          \
-  V(scheduled_exception_address, "Isolate::scheduled_exception")               \
+  V(exception_address, "Isolate::exception")                                   \
   V(address_of_pending_message, "address_of_pending_message")                  \
   V(promise_hook_flags_address, "Isolate::promise_hook_flags_address()")       \
   V(promise_hook_address, "Isolate::promise_hook_address()")                   \
@@ -76,6 +76,8 @@ class StatsCounter;
   V(fast_api_call_target_address, "IsolateData::fast_api_call_target_address") \
   V(api_callback_thunk_argument_address,                                       \
     "IsolateData::api_callback_thunk_argument_address")                        \
+  V(continuation_preserved_embedder_data,                                      \
+    "IsolateData::continuation_preserved_embedder_data")                       \
   V(stack_is_iterable_address, "IsolateData::stack_is_iterable_address")       \
   V(address_of_regexp_stack_limit_address,                                     \
     "RegExpStack::limit_address_address()")                                    \
@@ -260,6 +262,10 @@ class StatsCounter;
           "wasm::switch_to_the_central_stack")                                 \
   IF_WASM(V, wasm_switch_from_the_central_stack,                               \
           "wasm::switch_from_the_central_stack")                               \
+  IF_WASM(V, wasm_switch_to_the_central_stack_for_js,                          \
+          "wasm::switch_to_the_central_stack_for_js")                          \
+  IF_WASM(V, wasm_switch_from_the_central_stack_for_js,                        \
+          "wasm::switch_from_the_central_stack_for_js")                        \
   IF_WASM(V, wasm_f32_ceil, "wasm::f32_ceil_wrapper")                          \
   IF_WASM(V, wasm_f32_floor, "wasm::f32_floor_wrapper")                        \
   IF_WASM(V, wasm_f32_nearest_int, "wasm::f32_nearest_int_wrapper")            \

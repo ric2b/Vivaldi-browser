@@ -29,6 +29,33 @@
 
 namespace policy {
 
+namespace {
+
+// Returns the accessible name for the learn more link of the given block
+// `reason`.
+std::u16string GetAccessibleLearnMoreLinkNameForBlockReason(
+    policy::FilesPolicyDialog::BlockReason reason) {
+  switch (reason) {
+    case FilesPolicyDialog::BlockReason::kDlp:
+      return l10n_util::GetStringUTF16(
+          IDS_POLICY_DLP_FILES_LEARN_MORE_ABOUT_DATA_CONTROLS_ACCESSIBLE_NAME);
+    case FilesPolicyDialog::BlockReason::kEnterpriseConnectorsSensitiveData:
+      return l10n_util::GetStringUTF16(
+          IDS_POLICY_DLP_FILES_LEARN_MORE_ABOUT_SENSITIVE_DATA_PROTECTION_ACCESSIBLE_NAME);
+    case FilesPolicyDialog::BlockReason::kEnterpriseConnectorsMalware:
+      return l10n_util::GetStringUTF16(
+          IDS_POLICY_DLP_FILES_LEARN_MORE_ABOUT_MALWARE_PROTECTION_ACCESSIBLE_NAME);
+    case FilesPolicyDialog::BlockReason::kEnterpriseConnectorsUnknownScanResult:
+    case FilesPolicyDialog::BlockReason::kEnterpriseConnectorsEncryptedFile:
+    case FilesPolicyDialog::BlockReason::kEnterpriseConnectorsLargeFile:
+    case FilesPolicyDialog::BlockReason::kEnterpriseConnectors:
+      // Currently these block reasons cannot have a learn more link.
+      return std::u16string();
+  }
+}
+
+}  // namespace
+
 FilesPolicyDialogFactory* factory_;
 
 // static
@@ -64,11 +91,17 @@ FilesPolicyDialog::Info FilesPolicyDialog::Info::Warn(
   // TODO(b/300705572): we probably want to have a default message for every
   // block reason.
   int message_id = IDS_POLICY_DLP_FILES_WARN_MESSAGE;
-  settings.learn_more_url_ = GURL(dlp::kDlpLearnMoreUrl);
   settings.message_ = base::ReplaceStringPlaceholders(
       l10n_util::GetPluralStringFUTF16(message_id, paths.size()),
       base::NumberToString16(paths.size()),
       /*offset=*/nullptr);
+  // Only DLP has a default learn more URL.
+  if (reason == FilesPolicyDialog::BlockReason::kDlp) {
+    settings.learn_more_url_ = GURL(dlp::kDlpLearnMoreUrl);
+  }
+
+  settings.accessible_learn_more_link_name_ =
+      GetAccessibleLearnMoreLinkNameForBlockReason(reason);
 
   return settings;
 }
@@ -91,6 +124,9 @@ FilesPolicyDialog::Info FilesPolicyDialog::Info::Error(
     settings.learn_more_url_ = GURL(dlp::kDlpLearnMoreUrl);
   }
 
+  settings.accessible_learn_more_link_name_ =
+      GetAccessibleLearnMoreLinkNameForBlockReason(reason);
+
   return settings;
 }
 
@@ -107,7 +143,9 @@ bool FilesPolicyDialog::Info::operator==(const Info& other) const {
   return bypass_requires_justification_ ==
              other.bypass_requires_justification_ &&
          message_ == other.message_ &&
-         learn_more_url_ == other.learn_more_url_ && files_ == other.files_;
+         learn_more_url_ == other.learn_more_url_ && files_ == other.files_ &&
+         accessible_learn_more_link_name_ ==
+             other.accessible_learn_more_link_name_;
 }
 
 bool FilesPolicyDialog::Info::operator!=(const Info& other) const {
@@ -132,7 +170,7 @@ std::u16string FilesPolicyDialog::Info::GetMessage() const {
 }
 
 void FilesPolicyDialog::Info::SetMessage(
-    const absl::optional<std::u16string>& message) {
+    const std::optional<std::u16string>& message) {
   if (message.has_value() && !message->empty()) {
     message_ = l10n_util::GetStringFUTF16(
         IDS_POLICY_DLP_FROM_YOUR_ADMIN_MESSAGE, message.value());
@@ -144,14 +182,18 @@ bool FilesPolicyDialog::Info::HasCustomMessage() const {
   return is_custom_message_;
 }
 
-absl::optional<GURL> FilesPolicyDialog::Info::GetLearnMoreURL() const {
+std::optional<GURL> FilesPolicyDialog::Info::GetLearnMoreURL() const {
   return learn_more_url_;
 }
 
-void FilesPolicyDialog::Info::SetLearnMoreURL(const absl::optional<GURL>& url) {
+void FilesPolicyDialog::Info::SetLearnMoreURL(const std::optional<GURL>& url) {
   if (url.has_value() && url->is_valid()) {
     learn_more_url_ = url.value();
   }
+}
+
+std::u16string FilesPolicyDialog::Info::GetAccessibleLearnMoreLinkName() const {
+  return accessible_learn_more_link_name_;
 }
 
 bool FilesPolicyDialog::Info::HasCustomDetails() const {
@@ -178,7 +220,7 @@ views::Widget* FilesPolicyDialog::CreateWarnDialog(
     dlp::FileAction action,
     gfx::NativeWindow modal_parent,
     Info dialog_info,
-    absl::optional<DlpFileDestination> destination) {
+    std::optional<DlpFileDestination> destination) {
   if (factory_) {
     return factory_->CreateWarnDialog(std::move(callback), action, modal_parent,
                                       destination, std::move(dialog_info));
@@ -264,6 +306,8 @@ void FilesPolicyDialog::AddConfidentialRow(const gfx::ImageSkia& icon,
 
   views::Label* title_label = AddRowTitle(title, row);
   title_label->SetID(PolicyDialogBase::kConfidentialRowTitleViewId);
+  title_label->SetMultiLine(false);
+  title_label->SetElideBehavior(gfx::ElideBehavior::FADE_TAIL);
   title_label->SetFontList(
       ash::TypographyProvider::Get()->ResolveTypographyToken(
           ash::TypographyToken::kCrosBody1));

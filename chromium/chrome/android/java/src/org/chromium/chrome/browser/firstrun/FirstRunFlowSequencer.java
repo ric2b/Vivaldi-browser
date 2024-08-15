@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -35,6 +36,9 @@ import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * A helper to determine what should be the sequence of First Run Experience screens, and whether
  * it should be run.
@@ -44,7 +48,7 @@ import org.chromium.components.signin.identitymanager.IdentityManager;
  *     override onFlowIsKnown
  * }.start();
  */
-public abstract class FirstRunFlowSequencer  {
+public abstract class FirstRunFlowSequencer {
     private static final String TAG = "firstrun";
 
     /**
@@ -53,9 +57,9 @@ public abstract class FirstRunFlowSequencer  {
      */
     @VisibleForTesting
     public static class FirstRunFlowSequencerDelegate {
-        private final OneshotSupplier<Profile> mProfileSupplier;
+        private final OneshotSupplier<ProfileProvider> mProfileSupplier;
 
-        public FirstRunFlowSequencerDelegate(OneshotSupplier<Profile> profileSupplier) {
+        public FirstRunFlowSequencerDelegate(OneshotSupplier<ProfileProvider> profileSupplier) {
             mProfileSupplier = profileSupplier;
         }
 
@@ -66,14 +70,16 @@ public abstract class FirstRunFlowSequencer  {
                 return true;
             }
             assert mProfileSupplier.get() != null;
+            Profile profile = mProfileSupplier.get().getOriginalProfile();
+
             final IdentityManager identityManager =
-                    IdentityServicesProvider.get().getIdentityManager(mProfileSupplier.get());
+                    IdentityServicesProvider.get().getIdentityManager(profile);
             if (identityManager.hasPrimaryAccount(ConsentLevel.SYNC) || !isSyncAllowed()) {
                 // No need to show the sync consent page if users already consented to sync or
                 // if sync is not allowed.
                 return false;
             }
-                // Show the sync consent page only to the signed-in users.
+            // Show the sync consent page only to the signed-in users.
             return identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN);
         }
 
@@ -89,20 +95,23 @@ public abstract class FirstRunFlowSequencer  {
         /** @return true if Sync is allowed for the current user. */
         @VisibleForTesting
         protected boolean isSyncAllowed() {
-            SigninManager signinManager =
-                    IdentityServicesProvider.get().getSigninManager(mProfileSupplier.get());
-            return FirstRunUtils.canAllowSync() && !signinManager.isSigninDisabledByPolicy()
-                    && signinManager.isSigninSupported(/*requireUpdatedPlayServices=*/false);
+            Profile profile = mProfileSupplier.get().getOriginalProfile();
+            SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(profile);
+            return FirstRunUtils.canAllowSync()
+                    && !signinManager.isSigninDisabledByPolicy()
+                    && signinManager.isSigninSupported(/* requireUpdatedPlayServices= */ false);
         }
     }
 
     /** Factory that provides Delegate instances for testing. */
     public interface DelegateFactoryForTesting {
         /** Build a test delegate for the given test. */
-        FirstRunFlowSequencerDelegate buildFactory(OneshotSupplier<Profile> profileSupplier);
+        FirstRunFlowSequencerDelegate buildFactory(
+                OneshotSupplier<ProfileProvider> profileSupplier);
     }
 
     private final Activity mActivity;
+
     /**
      * The delegate to be used by the Sequencer. By default, it's an instance of
      * {@link FirstRunFlowSequencerDelegate}, unless it's overridden by {@code sDelegateForTesting}.
@@ -124,13 +133,16 @@ public abstract class FirstRunFlowSequencer  {
      */
     public abstract void onFlowIsKnown(Bundle freProperties);
 
-    public FirstRunFlowSequencer(Activity activity, OneshotSupplier<Profile> profileSupplier,
+    public FirstRunFlowSequencer(
+            Activity activity,
+            OneshotSupplier<ProfileProvider> profileSupplier,
             OneshotSupplier<Boolean> childAccountStatusSupplier) {
         mActivity = activity;
 
-        mDelegate = sDelegateFactoryForTesting != null
-                ? sDelegateFactoryForTesting.buildFactory(profileSupplier)
-                : new FirstRunFlowSequencerDelegate(profileSupplier);
+        mDelegate =
+                sDelegateFactoryForTesting != null
+                        ? sDelegateFactoryForTesting.buildFactory(profileSupplier)
+                        : new FirstRunFlowSequencerDelegate(profileSupplier);
 
         childAccountStatusSupplier.onAvailable(this::setChildAccountStatus);
     }
@@ -191,10 +203,12 @@ public abstract class FirstRunFlowSequencer  {
      * @param freProperties Resulting FRE properties bundle.
      */
     public void updateFirstRunProperties(Bundle freProperties) {
+        if (!BuildConfig.IS_VIVALDI) {
         freProperties.putBoolean(
                 FirstRunActivity.SHOW_SYNC_CONSENT_PAGE, shouldShowSyncConsentPage());
         freProperties.putBoolean(
                 FirstRunActivity.SHOW_SEARCH_ENGINE_PAGE, shouldShowSearchEnginePage());
+        }
     }
 
     /** Marks a given flow as completed. */
@@ -217,9 +231,10 @@ public abstract class FirstRunFlowSequencer  {
      */
     public static boolean checkIfFirstRunIsNecessary(
             boolean preferLightweightFre, Intent fromIntent) {
-        boolean isCct = fromIntent.getBooleanExtra(
+        boolean isCct =
+                fromIntent.getBooleanExtra(
                                 FirstRunActivityBase.EXTRA_CHROME_LAUNCH_INTENT_IS_CCT, false)
-                || LaunchIntentDispatcher.isCustomTabIntent(fromIntent);
+                        || LaunchIntentDispatcher.isCustomTabIntent(fromIntent);
         return checkIfFirstRunIsNecessary(preferLightweightFre, isCct);
     }
 

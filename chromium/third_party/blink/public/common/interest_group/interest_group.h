@@ -13,6 +13,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/time/time.h"
+#include "base/types/pass_key.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/interest_group/ad_display_size.h"
@@ -23,6 +24,9 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+namespace content {
+class InterestGroupStorage;
+}
 namespace blink {
 
 constexpr char kKAnonKeyForAdComponentBidPrefix[] = "ComponentBid\n";
@@ -42,13 +46,20 @@ constexpr char kKAnonKeyForAdNameReportingNamePrefix[] = "NameReport\n";
 // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#11-joining-interest-groups
 struct BLINK_COMMON_EXPORT InterestGroup {
   using ExecutionMode = blink::mojom::InterestGroup_ExecutionMode;
+  using TrustedBiddingSignalsSlotSizeMode =
+      blink::mojom::InterestGroup_TrustedBiddingSignalsSlotSizeMode;
   using AdditionalBidKey = std::array<uint8_t, ED25519_PUBLIC_KEY_LEN>;
   // An advertisement to display for an interest group. Typemapped to
   // blink::mojom::InterestGroupAd.
   // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#12-interest-group-attributes
-  struct BLINK_COMMON_EXPORT Ad {
+  class BLINK_COMMON_EXPORT Ad {
+   public:
     Ad();
-    Ad(GURL render_url,
+    // Must use https. This string must have been the result of GURL().spec().
+    // DO NOT set this to a value that has never passed through GURL.
+    explicit Ad(base::PassKey<content::InterestGroupStorage>,
+                std::string render_url);
+    Ad(GURL render_gurl,
        absl::optional<std::string> metadata,
        absl::optional<std::string> size_group = absl::nullopt,
        absl::optional<std::string> buyer_reporting_id = absl::nullopt,
@@ -63,8 +74,8 @@ struct BLINK_COMMON_EXPORT InterestGroup {
     // in bytes.
     size_t EstimateSize() const;
 
-    // Must use https.
-    GURL render_url;
+    const std::string& render_url() const { return render_url_; }
+
     // Optional size group assigned to this Ad.
     absl::optional<std::string> size_group;
     // Opaque JSON data, passed as an object to auction worklet.
@@ -86,6 +97,11 @@ struct BLINK_COMMON_EXPORT InterestGroup {
     // IsEqualForTesting() to make it easier to implement InterestGroup's
     // IsEqualForTesting().
     bool operator==(const Ad& other) const;
+
+   private:
+    std::string render_url_;
+    friend struct mojo::StructTraits<blink::mojom::InterestGroupAdDataView,
+                                     blink::InterestGroup::Ad>;
   };
 
   InterestGroup();
@@ -100,6 +116,27 @@ struct BLINK_COMMON_EXPORT InterestGroup {
   size_t EstimateSize() const;
 
   bool IsEqualForTesting(const InterestGroup& other) const;
+
+  // Parses string representation of a TrustedBiddingSignalsSlotSizeMode. A
+  // template so it works on wtf::Strings and std::strings. Returns kNone when
+  // passed an unrecognized mode, for forward compatibility.
+  template <class StringType>
+  static TrustedBiddingSignalsSlotSizeMode
+  ParseTrustedBiddingSignalsSlotSizeMode(const StringType& mode) {
+    if (mode == "slot-size") {
+      return TrustedBiddingSignalsSlotSizeMode::kSlotSize;
+    }
+    if (mode == "all-slots-requested-sizes") {
+      return TrustedBiddingSignalsSlotSizeMode::kAllSlotsRequestedSizes;
+    }
+    // All unrecognized strings (as well as "none") are mapped to kNone.
+    return TrustedBiddingSignalsSlotSizeMode::kNone;
+  }
+
+  // Takes a TrustedBiddingSignalsSlotSizeMode and returns the corresponding
+  // string.
+  static std::string_view TrustedBiddingSignalsSlotSizeModeToString(
+      TrustedBiddingSignalsSlotSizeMode slot_size_mode);
 
   base::Time expiry;
   url::Origin owner;
@@ -120,6 +157,9 @@ struct BLINK_COMMON_EXPORT InterestGroup {
   absl::optional<GURL> update_url;
   absl::optional<GURL> trusted_bidding_signals_url;
   absl::optional<std::vector<std::string>> trusted_bidding_signals_keys;
+  TrustedBiddingSignalsSlotSizeMode trusted_bidding_signals_slot_size_mode =
+      TrustedBiddingSignalsSlotSizeMode::kNone;
+  int32_t max_trusted_bidding_signals_url_length = 0;
   absl::optional<std::string> user_bidding_signals;
   absl::optional<std::vector<InterestGroup::Ad>> ads, ad_components;
   absl::optional<base::flat_map<std::string, blink::AdSize>> ad_sizes;
@@ -131,7 +171,7 @@ struct BLINK_COMMON_EXPORT InterestGroup {
   absl::optional<AdditionalBidKey> additional_bid_key;
   absl::optional<url::Origin> aggregation_coordinator_origin;
 
-  static_assert(__LINE__ == 134, R"(
+  static_assert(__LINE__ == 174, R"(
 If modifying InterestGroup fields, make sure to also modify:
 
 * IsValid(), EstimateSize(), and IsEqualForTesting() in this class
@@ -197,6 +237,9 @@ std::string BLINK_COMMON_EXPORT KAnonKeyForAdBid(const InterestGroup& group,
                                                  const GURL& ad_url);
 std::string BLINK_COMMON_EXPORT
 KAnonKeyForAdBid(const InterestGroup& group,
+                 const std::string& ad_url_from_gurl_spec);
+std::string BLINK_COMMON_EXPORT
+KAnonKeyForAdBid(const InterestGroup& group,
                  const blink::AdDescriptor& ad_descriptor);
 std::string BLINK_COMMON_EXPORT KAnonKeyForAdBid(const url::Origin& owner,
                                                  const GURL& bidding_url,
@@ -205,6 +248,10 @@ std::string BLINK_COMMON_EXPORT
 KAnonKeyForAdBid(const url::Origin& owner,
                  const GURL& bidding_url,
                  const blink::AdDescriptor& ad_descriptor);
+std::string BLINK_COMMON_EXPORT
+KAnonKeyForAdBid(const url::Origin& owner,
+                 const GURL& bidding_url,
+                 const std::string& ad_url_from_gurl_spec);
 
 // Calculates the k-anonymity key for an ad component that is used for
 // determining if an ad component is k-anonymous for the purposes of bidding and
@@ -214,6 +261,8 @@ KAnonKeyForAdBid(const url::Origin& owner,
 std::string BLINK_COMMON_EXPORT KAnonKeyForAdComponentBid(const GURL& ad_url);
 std::string BLINK_COMMON_EXPORT
 KAnonKeyForAdComponentBid(const blink::AdDescriptor& ad_descriptor);
+std::string BLINK_COMMON_EXPORT
+KAnonKeyForAdComponentBid(const std::string& ad_url_from_gurl_spec);
 
 // Calculates the k-anonymity key for reporting the interest group name in
 // reportWin along with the given Ad.

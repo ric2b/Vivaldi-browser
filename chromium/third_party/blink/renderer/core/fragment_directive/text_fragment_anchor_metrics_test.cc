@@ -6,6 +6,7 @@
 
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/test/task_environment.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,6 +35,16 @@ const char kSourceUkmMetric[] = "Source";
 
 class TextFragmentAnchorMetricsTest : public TextFragmentAnchorTestBase {
  public:
+// TODO(crbug.com/1315595): Only have one constructor that initializes the
+// MOCK_TIME for blink::test::TaskEnvironment once migration to
+// blink_unittests_v2 completes.
+#if defined(HAS_BLINK_TASK_ENVIRONMENT)
+  TextFragmentAnchorMetricsTest()
+      : TextFragmentAnchorTestBase(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+#else
+  TextFragmentAnchorMetricsTest() = default;
+#endif
   void SimulateClick(int x, int y) {
     WebMouseEvent event(WebInputEvent::Type::kMouseDown, gfx::PointF(x, y),
                         gfx::PointF(x, y), WebPointerProperties::Button::kLeft,
@@ -643,6 +654,41 @@ TEST_F(TextFragmentAnchorMetricsTest, TextFragmentLinkOpenSource_GoogleDomain) {
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.LinkOpenSource", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.LinkOpenSource", 0,
                                        1);
+}
+
+TEST_F(TextFragmentAnchorMetricsTest, ShadowDOMUseCounter) {
+  {
+    SimRequest request("https://example.com/test.html#:~:text=RegularDOM",
+                       "text/html");
+    LoadURL("https://example.com/test.html#:~:text=RegularDOM");
+    request.Complete(R"HTML(
+      <!DOCTYPE html>
+      <p>This is RegularDOM</p>
+    )HTML");
+    RunUntilTextFragmentFinalization();
+
+    EXPECT_FALSE(
+        GetDocument().IsUseCounted(WebFeature::kTextDirectiveInShadowDOM));
+  }
+
+  {
+    SimRequest request("https://example.com/shadowtest.html#:~:text=ShadowDOM",
+                       "text/html");
+    LoadURL("https://example.com/shadowtest.html#:~:text=ShadowDOM");
+    request.Complete(R"HTML(
+      <!DOCTYPE html>
+      <p>This is RegularDOM</p>
+      <p id="shadow-parent"></p>
+      <script>
+        let shadow = document.getElementById("shadow-parent").attachShadow({mode: 'open'});
+        shadow.innerHTML = '<p id="shadow">This is ShadowDOM</p>';
+      </script>
+    )HTML");
+    RunUntilTextFragmentFinalization();
+
+    EXPECT_TRUE(
+        GetDocument().IsUseCounted(WebFeature::kTextDirectiveInShadowDOM));
+  }
 }
 
 }  // namespace blink

@@ -6,7 +6,7 @@
 
 #import "base/check.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
-#import "ios/chrome/browser/metrics/user_interface_style_recorder.h"
+#import "ios/chrome/browser/metrics/model/user_interface_style_recorder.h"
 #import "ui/base/device_form_factor.h"
 
 @interface ChromeOverlayWindow ()
@@ -58,16 +58,6 @@
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (previousTraitCollection.horizontalSizeClass !=
-      self.traitCollection.horizontalSizeClass) {
-    [self updateCrashKeys];
-  }
-  if ([self.traitCollection
-          hasDifferentColorAppearanceComparedToTraitCollection:
-              previousTraitCollection]) {
-    [self.userInterfaceStyleRecorder
-        userInterfaceStyleDidChange:self.traitCollection.userInterfaceStyle];
-  }
   [self updateCrashKeys];
 }
 

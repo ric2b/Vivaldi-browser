@@ -18,7 +18,7 @@
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
 #include "core/fpdfapi/parser/cpdf_stream.h"
 #include "core/fpdfapi/parser/cpdf_stream_acc.h"
-#include "core/fxcrt/fixed_try_alloc_zeroed_data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/pauseindicator_iface.h"
 #include "core/fxcrt/span_util.h"
@@ -70,7 +70,7 @@ CPDF_ContentParser::CPDF_ContentParser(
   CFX_Matrix form_matrix =
       m_pPageObjectHolder->GetDict()->GetMatrixFor("Matrix");
   if (pGraphicStates)
-    form_matrix.Concat(pGraphicStates->m_CTM);
+    form_matrix.Concat(pGraphicStates->current_transformation_matrix());
 
   RetainPtr<const CPDF_Array> pBBox =
       m_pPageObjectHolder->GetDict()->GetArrayFor("BBox");
@@ -97,18 +97,19 @@ CPDF_ContentParser::CPDF_ContentParser(
       m_pPageObjectHolder->GetMutableResources(), pParentMatrix,
       m_pPageObjectHolder, std::move(pResources), form_bbox, pGraphicStates,
       recursion_state);
-  m_pParser->GetCurStates()->m_CTM = form_matrix;
-  m_pParser->GetCurStates()->m_ParentMatrix = form_matrix;
+  m_pParser->GetCurStates()->set_current_transformation_matrix(form_matrix);
+  m_pParser->GetCurStates()->set_parent_matrix(form_matrix);
   if (ClipPath.HasRef()) {
-    m_pParser->GetCurStates()->m_ClipPath.AppendPathWithAutoMerge(
+    m_pParser->GetCurStates()->mutable_clip_path().AppendPathWithAutoMerge(
         ClipPath, CFX_FillRenderOptions::FillType::kWinding);
   }
   if (m_pPageObjectHolder->GetTransparency().IsGroup()) {
-    CPDF_GeneralState* pState = &m_pParser->GetCurStates()->m_GeneralState;
-    pState->SetBlendType(BlendMode::kNormal);
-    pState->SetStrokeAlpha(1.0f);
-    pState->SetFillAlpha(1.0f);
-    pState->SetSoftMask(nullptr);
+    CPDF_GeneralState& state =
+        m_pParser->GetCurStates()->mutable_general_state();
+    state.SetBlendType(BlendMode::kNormal);
+    state.SetStrokeAlpha(1.0f);
+    state.SetFillAlpha(1.0f);
+    state.SetSoftMask(nullptr);
   }
   m_pSingleStream = pdfium::MakeRetain<CPDF_StreamAcc>(std::move(pStream));
   m_pSingleStream->LoadAllDataFiltered();
@@ -178,14 +179,14 @@ CPDF_ContentParser::Stage CPDF_ContentParser::PrepareContent() {
   }
 
   const size_t buffer_size = safe_size.ValueOrDie();
-  FixedTryAllocZeroedDataVector<uint8_t> buffer(buffer_size);
+  auto buffer = FixedSizeDataVector<uint8_t>::TryZeroed(buffer_size);
   if (buffer.empty()) {
     m_Data.emplace<pdfium::span<const uint8_t>>();
     return Stage::kComplete;
   }
 
   size_t pos = 0;
-  auto data_span = buffer.writable_span();
+  auto data_span = buffer.span();
   for (const auto& stream : m_StreamArray) {
     fxcrt::spancpy(data_span.subspan(pos), stream->GetSpan());
     pos += stream->GetSize();
@@ -205,7 +206,7 @@ CPDF_ContentParser::Stage CPDF_ContentParser::Parse() {
         m_pPageObjectHolder->GetMutablePageResources(), nullptr, nullptr,
         m_pPageObjectHolder, m_pPageObjectHolder->GetMutableResources(),
         m_pPageObjectHolder->GetBBox(), nullptr, &m_RecursionState);
-    m_pParser->GetCurStates()->m_ColorState.SetDefault();
+    m_pParser->GetCurStates()->mutable_color_state().SetDefault();
   }
   if (m_CurrentOffset >= GetData().size())
     return Stage::kCheckClip;
@@ -226,22 +227,27 @@ CPDF_ContentParser::Stage CPDF_ContentParser::CheckClip() {
   }
 
   for (auto& pObj : *m_pPageObjectHolder) {
-    if (!pObj->m_ClipPath.HasRef())
+    CPDF_ClipPath& clip_path = pObj->mutable_clip_path();
+    if (!clip_path.HasRef()) {
       continue;
-    if (pObj->m_ClipPath.GetPathCount() != 1)
+    }
+    if (clip_path.GetPathCount() != 1) {
       continue;
-    if (pObj->m_ClipPath.GetTextCount() > 0)
+    }
+    if (clip_path.GetTextCount() > 0) {
       continue;
+    }
 
-    CPDF_Path ClipPath = pObj->m_ClipPath.GetPath(0);
-    if (!ClipPath.IsRect() || pObj->IsShading())
+    CPDF_Path path = clip_path.GetPath(0);
+    if (!path.IsRect() || pObj->IsShading()) {
       continue;
+    }
 
-    CFX_PointF point0 = ClipPath.GetPoint(0);
-    CFX_PointF point2 = ClipPath.GetPoint(2);
+    CFX_PointF point0 = path.GetPoint(0);
+    CFX_PointF point2 = path.GetPoint(2);
     CFX_FloatRect old_rect(point0.x, point0.y, point2.x, point2.y);
     if (old_rect.Contains(pObj->GetRect()))
-      pObj->m_ClipPath.SetNull();
+      clip_path.SetNull();
   }
   return Stage::kComplete;
 }
@@ -267,7 +273,8 @@ void CPDF_ContentParser::HandlePageContentFailure() {
 }
 
 pdfium::span<const uint8_t> CPDF_ContentParser::GetData() const {
-  if (is_owned())
-    return absl::get<FixedTryAllocZeroedDataVector<uint8_t>>(m_Data).span();
+  if (is_owned()) {
+    return absl::get<FixedSizeDataVector<uint8_t>>(m_Data).span();
+  }
   return absl::get<pdfium::span<const uint8_t>>(m_Data);
 }

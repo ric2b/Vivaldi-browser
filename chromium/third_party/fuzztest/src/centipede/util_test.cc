@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>  // NOLINT
+#include <map>
 #include <string>
 #include <thread>  // NOLINT(build/c++11)
 #include <vector>
@@ -24,10 +25,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/log.h"
 #include "./centipede/defs.h"
 #include "./centipede/feature.h"
-#include "./centipede/logging.h"
-#include "./centipede/test_util.h"
 
 namespace centipede {
 
@@ -112,6 +112,20 @@ TEST(UtilTest, PackAndUnpackEmptyFeatures) {
   FeatureVec unpacked_features;
   std::string unpacked_hash = UnpackFeaturesAndHash(packed, &unpacked_features);
   EXPECT_TRUE(unpacked_features.empty());
+  EXPECT_EQ(hash, unpacked_hash);
+}
+
+TEST(UtilTest, PackAndUnpackFeaturesAsRawBytes) {
+  const ByteArray kData{1, 2, 3, 4};
+  std::string hash = Hash(kData);
+  const FeatureVec kFeatures = {102, 30, 7, 15};
+  ByteSpan feature_bytes(reinterpret_cast<const uint8_t *>(kFeatures.data()),
+                         kFeatures.size() * sizeof(feature_t));
+  ByteArray packed = PackFeaturesAndHashAsRawBytes(kData, feature_bytes);
+
+  FeatureVec unpacked_features;
+  std::string unpacked_hash = UnpackFeaturesAndHash(packed, &unpacked_features);
+  EXPECT_EQ(kFeatures, unpacked_features);
   EXPECT_EQ(hash, unpacked_hash);
 }
 

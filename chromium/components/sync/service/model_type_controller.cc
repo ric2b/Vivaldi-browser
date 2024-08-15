@@ -7,13 +7,10 @@
 #include <utility>
 
 #include "base/functional/bind.h"
-#include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
-#include "components/signin/public/identity_manager/account_info.h"
-#include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/model/data_type_activation_request.h"
@@ -178,6 +175,12 @@ void ModelTypeController::LoadModels(
   delegate_->OnSyncStarting(
       request, base::BindOnce(&ModelTypeController::OnDelegateStarted,
                               base::AsWeakPtr(this)));
+
+  // Ensure that the metadata for any *other* delegate is cleared. Note that
+  // this is a no-op for the delegate that was just started. Note^2 that that
+  // also covers the case of data types using the same underlying delegate for
+  // both modes.
+  ClearMetadataIfStopped();
 }
 
 std::unique_ptr<DataTypeActivationResponse> ModelTypeController::Connect() {
@@ -198,13 +201,17 @@ void ModelTypeController::Stop(SyncStopMetadataFate fate,
 
   switch (state()) {
     case NOT_RUNNING:
-    case FAILED:
       // Nothing to stop.
       std::move(callback).Run();
       // Clear metadata if needed.
       if (fate == CLEAR_METADATA) {
-        ClearMetadataWhileStopped();
+        ClearMetadataIfStopped();
       }
+      return;
+
+    case FAILED:
+      // Nothing to stop.
+      std::move(callback).Run();
       return;
 
     case STOPPING:
@@ -271,6 +278,14 @@ void ModelTypeController::RecordMemoryUsageAndCountsHistograms() {
   if (delegate_) {
     delegate_->RecordMemoryUsageAndCountsHistograms();
   }
+}
+
+void ModelTypeController::ReportBridgeErrorForTest() {
+  DCHECK(CalledOnValidThread());
+
+  // Tests are supposed to call this method when `delegate_` exists.
+  CHECK(delegate_);
+  delegate_->ReportBridgeErrorForTest();  // IN-TEST
 }
 
 ModelTypeControllerDelegate* ModelTypeController::GetDelegateForTesting(
@@ -387,13 +402,12 @@ void ModelTypeController::TriggerCompletionCallbacks(const SyncError& error) {
   }
 }
 
-void ModelTypeController::ClearMetadataWhileStopped() {
-  CHECK(state_ == NOT_RUNNING || state_ == FAILED);
+void ModelTypeController::ClearMetadataIfStopped() {
   for (auto& [sync_mode, delegate] : delegate_map_) {
     // `delegate` can be null during testing.
     // TODO(crbug.com/1418351): Remove test-only code-path.
     if (delegate) {
-      delegate->ClearMetadataWhileStopped();
+      delegate->ClearMetadataIfStopped();
     }
   }
 }

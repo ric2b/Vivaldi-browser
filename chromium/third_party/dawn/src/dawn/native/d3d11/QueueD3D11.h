@@ -28,20 +28,40 @@
 #ifndef SRC_DAWN_NATIVE_D3D11_QUEUED3D11_H_
 #define SRC_DAWN_NATIVE_D3D11_QUEUED3D11_H_
 
-#include "dawn/native/Queue.h"
+#include "dawn/common/MutexProtected.h"
+#include "dawn/common/SerialMap.h"
+#include "dawn/native/SystemEvent.h"
+#include "dawn/native/d3d/QueueD3D.h"
+
+#include "dawn/native/d3d11/CommandRecordingContextD3D11.h"
+#include "dawn/native/d3d11/Forward.h"
 
 namespace dawn::native::d3d11 {
 
 class Device;
+class SharedFence;
 
-class Queue final : public QueueBase {
+class Queue final : public d3d::Queue {
   public:
-    static Ref<Queue> Create(Device* device, const QueueDescriptor* descriptor);
+    static ResultOrError<Ref<Queue>> Create(Device* device, const QueueDescriptor* descriptor);
+
+    ScopedCommandRecordingContext GetScopedPendingCommandContext(SubmitMode submitMode);
+    ScopedSwapStateCommandRecordingContext GetScopedSwapStatePendingCommandContext(
+        SubmitMode submitMode);
+    MaybeError SubmitPendingCommands();
+    MaybeError NextSerial();
+    MaybeError WaitForSerial(ExecutionSerial serial);
+
+    // Separated from creation because it creates resources, which is not valid before the
+    // DeviceBase is fully created.
+    MaybeError InitializePendingContext();
 
   private:
-    using QueueBase::QueueBase;
+    using d3d::Queue::Queue;
 
     ~Queue() override = default;
+
+    MaybeError Initialize();
 
     MaybeError SubmitImpl(uint32_t commandCount, CommandBufferBase* const* commands) override;
     MaybeError WriteBufferImpl(BufferBase* buffer,
@@ -53,10 +73,19 @@ class Queue final : public QueueBase {
                                 const TextureDataLayout& dataLayout,
                                 const Extent3D& writeSizePixel) override;
 
+    void DestroyImpl() override;
     bool HasPendingCommands() const override;
     ResultOrError<ExecutionSerial> CheckAndUpdateCompletedSerials() override;
     void ForceEventualFlushOfCommands() override;
     MaybeError WaitForIdleForDestruction() override;
+
+    ResultOrError<Ref<d3d::SharedFence>> GetOrCreateSharedFence() override;
+    void SetEventOnCompletion(ExecutionSerial serial, HANDLE event) override;
+
+    ComPtr<ID3D11Fence> mFence;
+    HANDLE mFenceEvent = nullptr;
+    Ref<SharedFence> mSharedFence;
+    CommandRecordingContext mPendingCommands;
 };
 
 }  // namespace dawn::native::d3d11

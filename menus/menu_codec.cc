@@ -55,11 +55,11 @@ bool MenuCodec::Decode(Menu_Node* root,
       if (guid_valid) {
         std::map<std::string, bool>::iterator it = guids_.find(*guid);
         if (it != guids_.end()) {
-          LOG(ERROR) << "Menu Codec: guid collision " << *guid;
+          LOG(ERROR) << "Menu Codec: guid menu collision " << *guid;
 #if defined(OFFICIAL_BUILD)
           return false;
 #else
-          return true;  // Do not stop parsing in devel mode.
+          return false; // Return true to continue if needed in devel mode.
 #endif
         }
         guids_[*guid] = true;
@@ -86,6 +86,8 @@ bool MenuCodec::Decode(Menu_Node* root,
           }
           if (parsing_ok) {
             root->Add(std::move(node));
+          } else {
+            return false;
           }
         } else {
           if (!role) {
@@ -94,6 +96,7 @@ bool MenuCodec::Decode(Menu_Node* root,
           if (!action) {
             LOG(ERROR) << "Menu Codec: Action missing";
           }
+          return false;
         }
       } else if (type && *type == "control") {
         const std::string* format = menu.GetDict().FindString("format");
@@ -162,11 +165,11 @@ bool MenuCodec::DecodeNode(Menu_Node* parent,
     if (guid_valid) {
       std::map<std::string, bool>::iterator it = guids_.find(*guid);
       if (it != guids_.end()) {
-        LOG(ERROR) << "Menu Codec: guid collision " << *guid;
+        LOG(ERROR) << "Menu Codec: guid node collision " << *guid;
 #if defined(OFFICIAL_BUILD)
         return false;
 #else
-        return true;    // Do not stop parsing in devel mode.
+        return false; // Return true to continue if needed in devel mode.
 #endif
       }
       guids_[*guid] = true;

@@ -58,6 +58,10 @@ MaybeError ValidateTextureViewFormatCompatibility(const DeviceBase* device,
                     "The texture view format (%s) is not texture view format compatible "
                     "with the texture format (%s).",
                     viewFormatEnum, format.format);
+
+    DAWN_INVALID_IF(device->IsCompatibilityMode() && viewFormat->format != format.format,
+                    "viewFormat (%s) must match format (%s) in compatibility mode.",
+                    viewFormat->format, format.format);
     return {};
 }
 
@@ -131,6 +135,30 @@ bool IsTextureViewDimensionCompatibleWithTextureDimension(
             break;
     }
     DAWN_UNREACHABLE();
+}
+
+MaybeError ValidateDepthOrArrayLayersIsCompatibleWithTextureBindingViewDimension(
+    wgpu::TextureViewDimension textureBindingViewDimension,
+    uint32_t depthOrArrayLayers) {
+    switch (textureBindingViewDimension) {
+        case wgpu::TextureViewDimension::e2D:
+            if (depthOrArrayLayers != 1) {
+                return DAWN_VALIDATION_ERROR(
+                    "A resolved TextureViewDimension of e2D is only "
+                    "compatible with depthOrArrayLayers equals 1.");
+            }
+            break;
+        case wgpu::TextureViewDimension::Cube:
+            if (depthOrArrayLayers != 6) {
+                return DAWN_VALIDATION_ERROR(
+                    "A resolved TextureViewDimension of Cube is only "
+                    "compatible with depthOrArrayLayers equals 6.");
+            }
+            break;
+        default:
+            break;
+    }
+    return {};
 }
 
 bool IsArrayLayerValidForTextureViewDimension(wgpu::TextureViewDimension textureViewDimension,
@@ -255,6 +283,8 @@ MaybeError ValidateTextureSize(const DeviceBase* device,
     const CombinedLimits& limits = device->GetLimits();
     Extent3D maxExtent;
     switch (descriptor->dimension) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
         case wgpu::TextureDimension::e1D:
             maxExtent = {limits.v1.maxTextureDimension1D, 1, 1};
             break;
@@ -273,6 +303,8 @@ MaybeError ValidateTextureSize(const DeviceBase* device,
         "Texture size (%s) exceeded maximum texture size (%s).", &descriptor->size, &maxExtent);
 
     switch (descriptor->dimension) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
         case wgpu::TextureDimension::e1D:
             DAWN_INVALID_IF(descriptor->mipLevelCount != 1,
                             "Texture mip level count (%u) is more than 1 when its dimension is %s.",
@@ -451,23 +483,51 @@ bool CopySrcNeedsInternalTextureBindingUsage(const DeviceBase* device, const For
     return false;
 }
 
+wgpu::TextureViewDimension ResolveDefaultCompatiblityTextureBindingViewDimension(
+    const DeviceBase* device,
+    const UnpackedPtr<TextureDescriptor>& descriptor) {
+    // In non-compatibility mode this value is not used so return undefined so that it is not
+    // used by mistake.
+    if (!device->IsCompatibilityMode()) {
+        return wgpu::TextureViewDimension::Undefined;
+    }
+
+    auto textureBindingViewDimension = wgpu::TextureViewDimension::Undefined;
+    if (auto* subDesc = descriptor.Get<TextureBindingViewDimensionDescriptor>()) {
+        textureBindingViewDimension = subDesc->textureBindingViewDimension;
+    }
+    if (textureBindingViewDimension != wgpu::TextureViewDimension::Undefined) {
+        return textureBindingViewDimension;
+    }
+
+    switch (descriptor->dimension) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
+        case wgpu::TextureDimension::e1D:
+            return wgpu::TextureViewDimension::e1D;
+        case wgpu::TextureDimension::e2D:
+            return descriptor->size.depthOrArrayLayers == 1 ? wgpu::TextureViewDimension::e2D
+                                                            : wgpu::TextureViewDimension::e2DArray;
+        case wgpu::TextureDimension::e3D:
+            return wgpu::TextureViewDimension::e3D;
+    }
+}
+
 }  // anonymous namespace
 
 MaybeError ValidateTextureDescriptor(
     const DeviceBase* device,
-    const TextureDescriptor* descriptor,
+    const UnpackedPtr<TextureDescriptor>& descriptor,
     AllowMultiPlanarTextureFormat allowMultiPlanar,
     std::optional<wgpu::TextureUsage> allowedSharedTextureMemoryUsage) {
-    DAWN_TRY(ValidateSingleSType(descriptor->nextInChain,
-                                 wgpu::SType::DawnTextureInternalUsageDescriptor));
-
-    const DawnTextureInternalUsageDescriptor* internalUsageDesc = nullptr;
-    FindInChain(descriptor->nextInChain, &internalUsageDesc);
-
-    DAWN_INVALID_IF(
-        internalUsageDesc != nullptr && !device->HasFeature(Feature::DawnInternalUsages),
-        "The internalUsageDesc is not empty while the dawn-internal-usages feature is not "
-        "enabled");
+    wgpu::TextureUsage usage = descriptor->usage;
+    if (auto* internalUsageDesc = descriptor.Get<DawnTextureInternalUsageDescriptor>()) {
+        DAWN_INVALID_IF(
+            !device->HasFeature(Feature::DawnInternalUsages),
+            "The internalUsageDesc is not empty while the dawn-internal-usages feature is not "
+            "enabled");
+        usage |= internalUsageDesc->internalUsage;
+    }
 
     const Format* format;
     DAWN_TRY_ASSIGN(format, device->GetInternalFormat(descriptor->format));
@@ -494,15 +554,23 @@ MaybeError ValidateTextureDescriptor(
             "validating viewFormats[%u]", i);
     }
 
-    wgpu::TextureUsage usage = descriptor->usage;
-    if (internalUsageDesc != nullptr) {
-        usage |= internalUsageDesc->internalUsage;
-    }
-
-    DAWN_TRY(ValidateTextureUsage(device, descriptor, usage, format,
+    DAWN_TRY(ValidateTextureUsage(device, *descriptor, usage, format,
                                   std::move(allowedSharedTextureMemoryUsage)));
     DAWN_TRY(ValidateTextureDimension(descriptor->dimension));
-    DAWN_TRY(ValidateSampleCount(descriptor, usage, format));
+    if (device->IsCompatibilityMode()) {
+        const auto textureBindingViewDimension =
+            ResolveDefaultCompatiblityTextureBindingViewDimension(device, descriptor);
+
+        DAWN_INVALID_IF(
+            !IsTextureViewDimensionCompatibleWithTextureDimension(textureBindingViewDimension,
+                                                                  descriptor->dimension),
+            "The textureBindingViewDimension (%s) is not compatible with the dimension (%s)",
+            textureBindingViewDimension, descriptor->dimension);
+
+        DAWN_TRY(ValidateDepthOrArrayLayersIsCompatibleWithTextureBindingViewDimension(
+            textureBindingViewDimension, descriptor->size.depthOrArrayLayers));
+    }
+    DAWN_TRY(ValidateSampleCount(*descriptor, usage, format));
 
     DAWN_INVALID_IF(descriptor->size.width == 0 || descriptor->size.height == 0 ||
                         descriptor->size.depthOrArrayLayers == 0 || descriptor->mipLevelCount == 0,
@@ -520,7 +588,7 @@ MaybeError ValidateTextureDescriptor(
                     "The dimension (%s) of a texture with a depth/stencil format (%s) is not 2D.",
                     descriptor->dimension, format->format);
 
-    DAWN_TRY(ValidateTextureSize(device, descriptor, format));
+    DAWN_TRY(ValidateTextureSize(device, *descriptor, format));
     return {};
 }
 
@@ -577,13 +645,16 @@ ResultOrError<TextureViewDescriptor> GetTextureViewDescriptorWithDefaults(
 
     TextureViewDescriptor desc = {};
     if (descriptor) {
-        desc = *descriptor;
+        desc = descriptor->WithTrivialFrontendDefaults();
     }
 
     // The default value for the view dimension depends on the texture's dimension with a
     // special case for 2DArray being chosen if texture is 2D but has more than one array layer.
     if (desc.dimension == wgpu::TextureViewDimension::Undefined) {
         switch (texture->GetDimension()) {
+            case wgpu::TextureDimension::Undefined:
+                DAWN_UNREACHABLE();
+
             case wgpu::TextureDimension::e1D:
                 desc.dimension = wgpu::TextureViewDimension::e1D;
                 break;
@@ -616,6 +687,7 @@ ResultOrError<TextureViewDescriptor> GetTextureViewDescriptorWithDefaults(
             desc.format = format.format;
         }
     }
+
     if (desc.arrayLayerCount == wgpu::kArrayLayerCountUndefined) {
         switch (desc.dimension) {
             case wgpu::TextureViewDimension::e1D:
@@ -660,9 +732,11 @@ bool IsValidSampleCount(uint32_t sampleCount) {
 
 TextureBase::TextureState::TextureState() : hasAccess(true), destroyed(false) {}
 
-TextureBase::TextureBase(DeviceBase* device, const TextureDescriptor* descriptor)
+TextureBase::TextureBase(DeviceBase* device, const UnpackedPtr<TextureDescriptor>& descriptor)
     : ApiObjectBase(device, descriptor->label),
       mDimension(descriptor->dimension),
+      mCompatibilityTextureBindingViewDimension(
+          ResolveDefaultCompatiblityTextureBindingViewDimension(device, descriptor)),
       mFormat(device->GetValidInternalFormat(descriptor->format)),
       mBaseSize(descriptor->size),
       mMipLevelCount(descriptor->mipLevelCount),
@@ -682,9 +756,7 @@ TextureBase::TextureBase(DeviceBase* device, const TextureDescriptor* descriptor
         mViewFormats[device->GetValidInternalFormat(descriptor->viewFormats[i])] = true;
     }
 
-    const DawnTextureInternalUsageDescriptor* internalUsageDesc = nullptr;
-    FindInChain(descriptor->nextInChain, &internalUsageDesc);
-    if (internalUsageDesc != nullptr) {
+    if (auto* internalUsageDesc = descriptor.Get<DawnTextureInternalUsageDescriptor>()) {
         mInternalUsage |= internalUsageDesc->internalUsage;
     }
     GetObjectTrackingList()->Track(this);
@@ -724,6 +796,8 @@ TextureBase::TextureBase(DeviceBase* device,
                          ObjectBase::ErrorTag tag)
     : ApiObjectBase(device, tag, descriptor->label),
       mDimension(descriptor->dimension),
+      mCompatibilityTextureBindingViewDimension(
+          ResolveDefaultCompatiblityTextureBindingViewDimension(device, Unpack(descriptor))),
       mFormat(kUnusedFormat),
       mBaseSize(descriptor->size),
       mMipLevelCount(descriptor->mipLevelCount),
@@ -749,8 +823,8 @@ void TextureBase::DestroyImpl() {
 }
 
 // static
-TextureBase* TextureBase::MakeError(DeviceBase* device, const TextureDescriptor* descriptor) {
-    return new TextureBase(device, descriptor, ObjectBase::kError);
+Ref<TextureBase> TextureBase::MakeError(DeviceBase* device, const TextureDescriptor* descriptor) {
+    return AcquireRef(new TextureBase(device, descriptor, ObjectBase::kError));
 }
 
 ObjectType TextureBase::GetType() const {
@@ -760,6 +834,11 @@ ObjectType TextureBase::GetType() const {
 wgpu::TextureDimension TextureBase::GetDimension() const {
     DAWN_ASSERT(!IsError());
     return mDimension;
+}
+
+wgpu::TextureViewDimension TextureBase::GetCompatibilityTextureBindingViewDimension() const {
+    DAWN_ASSERT(!IsError());
+    return mCompatibilityTextureBindingViewDimension;
 }
 
 const Format& TextureBase::GetFormat() const {
@@ -785,6 +864,7 @@ Extent3D TextureBase::GetSize(Aspect aspect) const {
         case Aspect::CombinedDepthStencil:
             return mBaseSize;
         case Aspect::Plane0:
+        case Aspect::Plane2:
             DAWN_ASSERT(GetFormat().IsMultiPlanar());
             return mBaseSize;
         case Aspect::Plane1: {
@@ -793,6 +873,7 @@ Extent3D TextureBase::GetSize(Aspect aspect) const {
             switch (GetFormat().format) {
                 case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
                 case wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm:
+                case wgpu::TextureFormat::R8BG8A8Triplanar420Unorm:
                     if (planeSize.width > 1) {
                         planeSize.width >>= 1;
                     }
@@ -878,6 +959,11 @@ void TextureBase::SetHasAccess(bool hasAccess) {
     mState.hasAccess = hasAccess;
 }
 
+bool TextureBase::HasAccess() const {
+    DAWN_ASSERT(!IsError());
+    return mState.hasAccess;
+}
+
 uint32_t TextureBase::GetSubresourceIndex(uint32_t mipLevel,
                                           uint32_t arraySlice,
                                           Aspect aspect) const {
@@ -947,11 +1033,17 @@ bool TextureBase::IsMultisampledTexture() const {
     return mSampleCount > 1;
 }
 
+bool TextureBase::IsReadOnly() const {
+    return IsSubset(mUsage, kReadOnlyTextureUsages);
+}
+
 bool TextureBase::CoversFullSubresource(uint32_t mipLevel,
                                         Aspect aspect,
                                         const Extent3D& size) const {
     Extent3D levelSize = GetMipLevelSingleSubresourcePhysicalSize(mipLevel, aspect);
     switch (GetDimension()) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
         case wgpu::TextureDimension::e1D:
             return size.width == levelSize.width;
         case wgpu::TextureDimension::e2D:
@@ -1026,6 +1118,10 @@ ResultOrError<Ref<TextureViewBase>> TextureBase::CreateView(
     return GetDevice()->CreateTextureView(this, descriptor);
 }
 
+Ref<TextureViewBase> TextureBase::CreateErrorView(const TextureViewDescriptor* descriptor) {
+    return TextureViewBase::MakeError(GetDevice(), descriptor ? descriptor->label : nullptr);
+}
+
 ApiObjectList* TextureBase::GetViewTrackingList() {
     return &mTextureViews;
 }
@@ -1036,9 +1132,13 @@ TextureViewBase* TextureBase::APICreateView(const TextureViewDescriptor* descrip
     Ref<TextureViewBase> result;
     if (device->ConsumedError(CreateView(descriptor), &result, "calling %s.CreateView(%s).", this,
                               descriptor)) {
-        return TextureViewBase::MakeError(device, descriptor ? descriptor->label : nullptr);
+        result = CreateErrorView(descriptor);
     }
-    return result.Detach();
+    return ReturnToAPI(std::move(result));
+}
+
+TextureViewBase* TextureBase::APICreateErrorView(const TextureViewDescriptor* descriptor) {
+    return ReturnToAPI(CreateErrorView(descriptor));
 }
 
 bool TextureBase::IsImplicitMSAARenderTextureViewSupported() const {
@@ -1105,8 +1205,8 @@ TextureViewBase::~TextureViewBase() = default;
 void TextureViewBase::DestroyImpl() {}
 
 // static
-TextureViewBase* TextureViewBase::MakeError(DeviceBase* device, const char* label) {
-    return new TextureViewBase(device, ObjectBase::kError, label);
+Ref<TextureViewBase> TextureViewBase::MakeError(DeviceBase* device, const char* label) {
+    return AcquireRef(new TextureViewBase(device, ObjectBase::kError, label));
 }
 
 ObjectType TextureViewBase::GetType() const {

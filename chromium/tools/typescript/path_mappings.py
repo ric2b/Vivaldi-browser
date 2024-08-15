@@ -48,11 +48,22 @@ def _add_third_party_polymer_mappings(path_mappings, root_src_dir):
   ]
 
 
+def _add_third_party_lit_mappings(path_mappings, root_gen_dir):
+  path_mappings[f'//third_party/lit/v3_0:build_ts'] = [
+      ('//resources/lit/v3_0/lit.rollup.js',
+       f'{root_gen_dir}/third_party/lit/v3_0/lit.d.ts'),
+  ]
+
+
 # Ash-only
 def _add_ash_mappings(path_mappings, root_gen_dir, root_src_dir):
   path_mappings['//ash/webui/common/resources:build_ts'] = [(
       '//resources/ash/common/*',
       f'{root_gen_dir}/ash/webui/common/resources/preprocessed/*',
+  )]
+  path_mappings['//ash/webui/common/resources/cr_elements:build_ts'] = [(
+      '//resources/ash/common/cr_elements/*',
+      f'{root_gen_dir}/ash/webui/common/resources/preprocessed/cr_elements/*',
   )]
   path_mappings['//third_party/cros-components:cros_components_ts'] = [(
       '//resources/cros_components/*',
@@ -74,6 +85,7 @@ def GetDepToPathMappings(root_gen_dir, root_src_dir, platform):
 
   _add_ui_webui_resources_mappings(path_mappings, root_gen_dir)
   _add_third_party_polymer_mappings(path_mappings, root_src_dir)
+  _add_third_party_lit_mappings(path_mappings, root_gen_dir)
 
   if platform == 'chromeos_ash':
     _add_ash_mappings(path_mappings, root_gen_dir, root_src_dir)

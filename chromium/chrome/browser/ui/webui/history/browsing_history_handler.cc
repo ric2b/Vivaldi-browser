@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <set>
 
+#include "base/check_deref.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -59,6 +61,7 @@
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #endif
@@ -89,9 +92,8 @@ void GetDeviceNameAndType(const syncer::DeviceInfoTracker* tracker,
   DCHECK(tracker);
   DCHECK(tracker->IsSyncing());
 
-  std::unique_ptr<syncer::DeviceInfo> device_info =
-      tracker->GetDeviceInfo(client_id);
-  if (device_info.get()) {
+  const syncer::DeviceInfo* device_info = tracker->GetDeviceInfo(client_id);
+  if (device_info) {
     *name = device_info->client_name();
     switch (device_info->form_factor()) {
       case syncer::DeviceInfo::FormFactor::kPhone:
@@ -186,7 +188,7 @@ constexpr UrlIdentity::FormatOptions url_identity_options{
 base::Value::Dict HistoryEntryToValue(
     const BrowsingHistoryService::HistoryEntry& entry,
     BookmarkModel* bookmark_model,
-    Profile* profile,
+    Profile& profile,
     const syncer::DeviceInfoTracker* tracker,
     base::Clock* clock) {
   base::Value::Dict result;
@@ -195,7 +197,7 @@ base::Value::Dict HistoryEntryToValue(
   // UrlIdentity holds a user-identifiable string for a URL. We will display
   // this string to the user.
   std::u16string domain =
-      UrlIdentity::CreateFromUrl(profile, entry.url, allowed_types,
+      UrlIdentity::CreateFromUrl(&profile, entry.url, allowed_types,
                                  url_identity_options)
           .name;
 
@@ -262,16 +264,15 @@ base::Value::Dict HistoryEntryToValue(
   result.Set("deviceType", device_type);
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  supervised_user::SupervisedUserService* supervised_user_service =
-      SupervisedUserServiceFactory::GetForProfile(profile);
-  if (supervised_user_service &&
-      supervised_user_service->IsURLFilteringEnabled()) {
+  if (supervised_user::IsUrlFilteringEnabled(*profile.GetPrefs())) {
+    supervised_user::SupervisedUserService* supervised_user_service =
+        SupervisedUserServiceFactory::GetForProfile(&profile);
     supervised_user::SupervisedUserURLFilter* url_filter =
         supervised_user_service->GetURLFilter();
-    int filtering_behavior =
+    supervised_user::FilteringBehavior filtering_behavior =
         url_filter->GetFilteringBehaviorForURL(entry.url.GetWithEmptyPath());
     is_blocked_visit = entry.blocked_visit;
-    host_filtering_behavior = filtering_behavior;
+    host_filtering_behavior = static_cast<int>(filtering_behavior);
   }
 #endif
 
@@ -319,7 +320,7 @@ void BrowsingHistoryHandler::OnJavascriptAllowed() {
 void BrowsingHistoryHandler::OnJavascriptDisallowed() {
   weak_factory_.InvalidateWeakPtrs();
   browsing_history_service_ = nullptr;
-  initial_results_ = absl::nullopt;
+  initial_results_ = std::nullopt;
   deferred_callbacks_.clear();
   query_history_callback_id_.clear();
   remove_visits_callback_.clear();
@@ -377,7 +378,7 @@ void BrowsingHistoryHandler::HandleQueryHistory(const base::Value::List& args) {
   const base::Value& callback_id = args[0];
   if (initial_results_.has_value()) {
     ResolveJavascriptCallback(callback_id, *initial_results_);
-    initial_results_ = absl::nullopt;
+    initial_results_ = std::nullopt;
     return;
   }
 
@@ -521,6 +522,7 @@ void BrowsingHistoryHandler::OnQueryComplete(
     base::OnceClosure continuation_closure) {
   query_history_continuation_ = std::move(continuation_closure);
   Profile* profile = Profile::FromWebUI(web_ui());
+  CHECK(profile);
   BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForBrowserContext(profile);
 
@@ -535,7 +537,7 @@ void BrowsingHistoryHandler::OnQueryComplete(
   base::Value::List results_value;
   for (const BrowsingHistoryService::HistoryEntry& entry : results) {
     results_value.Append(
-        HistoryEntryToValue(entry, bookmark_model, profile, tracker, clock_));
+        HistoryEntryToValue(entry, bookmark_model, *profile, tracker, clock_));
   }
 
   base::Value::Dict results_info;

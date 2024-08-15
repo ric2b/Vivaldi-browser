@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::unwrap_used)]
+
 extern crate std;
 
+use crate::extended::serialize::AdvertisementType;
 use crate::{
+    credential::{v1::V1, SimpleBroadcastCryptoMaterial},
     de_type::EncryptedIdentityDataElementType,
     extended::serialize::{
         section_tests::{DummyDataElement, SectionBuilderExt},
-        AdvBuilder, MicEncrypted,
+        AdvBuilder, MicEncryptedSectionEncoder,
     },
+    MetadataKey,
 };
 use anyhow::anyhow;
 use crypto_provider::{aes::ctr::AES_CTR_NONCE_LEN, aes::AesKey};
@@ -39,7 +44,7 @@ fn mic_encrypted_test_vectors() -> Result<(), anyhow::Error> {
     );
     let mut file = fs::File::open(full_path)?;
     let mut data = String::new();
-    file.read_to_string(&mut data)?;
+    let _ = file.read_to_string(&mut data)?;
 
     let test_cases = match serde_json::de::from_str(&data)? {
         serde_json::Value::Array(a) => a,
@@ -49,7 +54,7 @@ fn mic_encrypted_test_vectors() -> Result<(), anyhow::Error> {
     for tc in test_cases {
         {
             let key_seed = extract_key_array::<32>(&tc, "key_seed");
-            let metadata_key = extract_key_array::<16>(&tc, "metadata_key");
+            let metadata_key = MetadataKey(extract_key_array::<16>(&tc, "metadata_key"));
             let adv_header_byte = extract_key_array::<1>(&tc, "adv_header_byte")[0];
             let section_salt = v1_salt::V1Salt::<CryptoProviderImpl>::from(
                 extract_key_array::<16>(&tc, "section_salt"),
@@ -65,7 +70,7 @@ fn mic_encrypted_test_vectors() -> Result<(), anyhow::Error> {
                 })
                 .collect::<Vec<_>>();
 
-            let hkdf = np_hkdf::NpKeySeedHkdf::new(&key_seed);
+            let hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
             assert_eq!(
                 extract_key_array::<16>(&tc, "aes_key").as_slice(),
@@ -80,16 +85,17 @@ fn mic_encrypted_test_vectors() -> Result<(), anyhow::Error> {
                 section_salt.derive::<{ AES_CTR_NONCE_LEN }>(Some(1.into())).unwrap()
             );
 
+            let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+
             // make an adv builder in the configuration we need
-            let mut adv_builder = AdvBuilder::new();
+            let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
             assert_eq!(adv_header_byte, adv_builder.header_byte());
 
             let mut section_builder = adv_builder
-                .section_builder(MicEncrypted::new(
+                .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
                     identity_type,
                     section_salt,
-                    &metadata_key,
-                    &hkdf,
+                    &broadcast_cm,
                 ))
                 .unwrap();
 
@@ -127,7 +133,7 @@ fn gen_mic_encrypted_test_vectors() {
             })
             .collect::<Vec<_>>();
 
-        let metadata_key = rng.gen();
+        let metadata_key = MetadataKey(rng.gen());
         let key_seed = rng.gen();
         let adv_header_byte = 0b00100000;
         let identity_type =
@@ -135,15 +141,16 @@ fn gen_mic_encrypted_test_vectors() {
 
         let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
 
-        let mut adv_builder = AdvBuilder::new();
+        let broadcast_cm = SimpleBroadcastCryptoMaterial::<V1>::new(key_seed, metadata_key);
+
+        let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
 
         let section_salt = v1_salt::V1Salt::<CryptoProviderImpl>::from(rng.gen::<[u8; 16]>());
         let mut section_builder = adv_builder
-            .section_builder(MicEncrypted::new(
+            .section_builder(MicEncryptedSectionEncoder::<CryptoProviderImpl>::new(
                 identity_type,
                 V1Salt::from(*section_salt.as_array_ref()),
-                &metadata_key,
-                &key_seed_hkdf,
+                &broadcast_cm,
             ))
             .unwrap();
 
@@ -156,7 +163,7 @@ fn gen_mic_encrypted_test_vectors() {
         array
             .push(json!({
                 "key_seed": hex::encode_upper(key_seed),
-                "metadata_key": hex::encode_upper(metadata_key),
+                "metadata_key": hex::encode_upper(metadata_key.0),
                 "adv_header_byte": hex::encode_upper([adv_header_byte]),
                 "section_salt": hex::encode_upper(section_salt.as_slice()),
                 "identity_type": identity_type_label(identity_type),

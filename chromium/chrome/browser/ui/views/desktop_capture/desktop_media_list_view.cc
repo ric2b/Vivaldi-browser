@@ -163,10 +163,10 @@ bool DesktopMediaListView::OnKeyPressed(const ui::KeyEvent& event) {
   return true;
 }
 
-absl::optional<content::DesktopMediaID> DesktopMediaListView::GetSelection() {
+std::optional<content::DesktopMediaID> DesktopMediaListView::GetSelection() {
   DesktopMediaSourceView* view = GetSelectedView();
-  return view ? absl::optional<content::DesktopMediaID>(view->source_id())
-              : absl::nullopt;
+  return view ? std::optional<content::DesktopMediaID>(view->source_id())
+              : std::nullopt;
 }
 
 DesktopMediaListController::SourceListListener*
@@ -268,8 +268,9 @@ void DesktopMediaListView::SetStyle(DesktopMediaSourceViewStyle* style) {
   active_style_ = style;
   controller_->SetThumbnailSize(style->image_rect.size());
 
-  for (auto* child : children())
+  for (views::View* child : children()) {
     AsDesktopMediaSourceView(child)->SetStyle(*active_style_);
+  }
 }
 
 DesktopMediaSourceView* DesktopMediaListView::GetSelectedView() {

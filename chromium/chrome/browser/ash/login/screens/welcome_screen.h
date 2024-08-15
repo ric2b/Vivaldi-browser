@@ -67,11 +67,11 @@ class WelcomeScreen : public BaseScreen,
   };
 
   enum class Result {
-    NEXT,
-    NEXT_OS_INSTALL,
-    SETUP_DEMO,
-    ENABLE_DEBUGGING,
-    QUICK_START
+    kNext,
+    kNextOSInstall,
+    kSetupDemo,
+    kEnableDebugging,
+    kQuickStart
   };
 
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
@@ -176,6 +176,9 @@ class WelcomeScreen : public BaseScreen,
   void OnAccessibilityStatusChanged(
       const AccessibilityStatusEventDetails& details);
   void UpdateA11yState();
+
+  // Starts the QuickStart flow
+  void OnQuickStartClicked();
 
   // Adds data to the OOBE.WelcomeScreen.UserChangedLocale metric and calls
   // exit_callback with given Result

@@ -213,9 +213,10 @@
 #include <memory>
 #include <ostream>
 #include <string>
-#include <thread>  // NOLINT
+#include <string_view>
 
-#include "absl/strings/str_cat.h"
+#include "absl/base/thread_annotations.h"
+#include "absl/strings/str_cat.h"  // IWYU pragma: keep
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "./centipede/rusage_stats.h"
@@ -224,6 +225,7 @@ namespace centipede::perf {
 
 // A simple source location wrapper. Typically, construct as
 // `SourceLocation{__FILE__, __LINE__}` and pass around by-value.
+// TODO(ussuri): Switch to absl::SourceLocation or std::source_location.
 struct SourceLocation {
   explicit SourceLocation() = default;
   SourceLocation(const char* file, int line) : file{file}, line{line} {}
@@ -289,7 +291,7 @@ class RUsageProfiler {
   class ReportSink {
    public:
     virtual ~ReportSink() = default;
-    virtual ReportSink& operator<<(const std::string& fragment) = 0;
+    virtual ReportSink& operator<<(std::string_view fragment) = 0;
   };
 
   //----------------------------------------------------------------------------
@@ -506,8 +508,8 @@ class RUsageProfiler {
 // be used with `RPROF_SNAPSHOT` and other similar macros below, which normally
 // work with the other `RPROF_THIS_FUNCTION.*` macros.
 // clang-format off
-#define RPROF_THIS_FUNCTION_BY_EXISTING_JPROF(profiler)                 \
-  ::centipede::perf::JitProfiler& FUNCTION_LEVEL_JPROF_NAME = profiler; \
+#define RPROF_THIS_FUNCTION_BY_EXISTING_RPROF(profiler)                 \
+  ::centipede::perf::RUsageProfiler& FUNCTION_LEVEL_RPROF_NAME = profiler;
 // clang-format on
 
 // Records and returns an intermediate snapshot using the profiler defined by an
@@ -518,7 +520,7 @@ class RUsageProfiler {
 // clang-format off
 #define RPROF_SNAPSHOT(...) \
   FUNCTION_LEVEL_RPROF_NAME.TakeSnapshot( \
-      {__FILE__, __LINE__}, ##__VA_ARGS__);
+      {__FILE__, __LINE__}, ##__VA_ARGS__)
 // clang-format on
 
 // Records AND logs an intermediate snapshot using the profiler defined by an
@@ -527,7 +529,7 @@ class RUsageProfiler {
 // clang-format off
 #define RPROF_SNAPSHOT_AND_LOG(...) \
   FUNCTION_LEVEL_RPROF_NAME.TakeSnapshot( \
-      {__FILE__, __LINE__}, ##__VA_ARGS__).Log();
+      {__FILE__, __LINE__}, ##__VA_ARGS__).Log()
 // clang-format on
 
 // Starts taking periodic snapshots using the function-level snapshot created by
@@ -537,7 +539,7 @@ class RUsageProfiler {
 // clang-format off
 #define RPROF_START_TIMELAPSE(interval, also_log, ...) \
   FUNCTION_LEVEL_RPROF_NAME.StartTimelapse( \
-      {__FILE__, __LINE__}, interval, also_log, ##__VA_ARGS__);
+      {__FILE__, __LINE__}, interval, also_log, ##__VA_ARGS__)
 // clang-format on
 
 #define RPROF_STOP_TIMELAPSE() FUNCTION_LEVEL_RPROF_NAME.StopTimelapse()
@@ -547,7 +549,7 @@ class RUsageProfiler {
 // passed as a macro argument.
 // clang-format off
 #define RPROF_DUMP_REPORT_TO_LOG(...) \
-  FUNCTION_LEVEL_RPROF_NAME.PrintReport({__FILE__, __LINE__}, ##__VA_ARGS__);
+  FUNCTION_LEVEL_RPROF_NAME.PrintReport({__FILE__, __LINE__}, ##__VA_ARGS__)
 // clang-format on
 
 // Profiles a given scope: a snapshot and a delta of the system timing and

@@ -99,7 +99,7 @@ class AnimationWaiter : public ui::LayerAnimationObserver,
   void Wait() { run_loop_.Run(); }
 
  private:
-  raw_ptr<ui::Layer, ExperimentalAsh> layer_;
+  raw_ptr<ui::Layer> layer_;
   base::RunLoop run_loop_;
 };
 
@@ -118,9 +118,6 @@ class LockScreenMediaControlsViewTest : public LoginTestBase {
 
   void SetUp() override {
     set_start_session(true);
-
-    // Enable media controls.
-    feature_list.InitAndEnableFeature(features::kLockScreenMediaControls);
 
     LoginTestBase::SetUp();
 
@@ -259,7 +256,8 @@ class LockScreenMediaControlsViewTest : public LoginTestBase {
     return header_row()->close_button_for_testing();
   }
 
-  std::vector<views::Button*>& media_action_buttons() const {
+  std::vector<raw_ptr<views::Button, VectorExperimental>>&
+  media_action_buttons() const {
     return media_controls_view_->media_action_buttons_;
   }
 
@@ -281,8 +279,8 @@ class LockScreenMediaControlsViewTest : public LoginTestBase {
     return media_controls_view_->GetArtworkClipPath();
   }
 
-  raw_ptr<LockScreenMediaControlsView, DanglingUntriaged | ExperimentalAsh>
-      media_controls_view_ = nullptr;
+  raw_ptr<LockScreenMediaControlsView, DanglingUntriaged> media_controls_view_ =
+      nullptr;
   std::unique_ptr<AnimationWaiter> animation_waiter_;
   base::test::ScopedPowerMonitorTestSource test_power_monitor_source_;
 
@@ -294,8 +292,7 @@ class LockScreenMediaControlsViewTest : public LoginTestBase {
 
   base::test::ScopedFeatureList feature_list;
 
-  raw_ptr<LockContentsView, DanglingUntriaged | ExperimentalAsh>
-      lock_contents_view_ = nullptr;
+  raw_ptr<LockContentsView, DanglingUntriaged> lock_contents_view_ = nullptr;
   std::unique_ptr<TestMediaController> media_controller_;
   std::set<MediaSessionAction> actions_;
 };
@@ -383,7 +380,7 @@ TEST_F(LockScreenMediaControlsViewTest, ButtonsSanityCheck) {
   EXPECT_EQ(5u, media_action_buttons().size());
 
   for (int i = 0; i < 5; /* size of |button_row| */ i++) {
-    auto* child = media_action_buttons()[i];
+    auto* child = media_action_buttons()[i].get();
 
     ASSERT_TRUE(IsMediaButtonType(child));
 
@@ -480,7 +477,7 @@ TEST_F(LockScreenMediaControlsViewTest, ProgressBarVisibility) {
   EXPECT_TRUE(progress_view()->GetVisible());
 
   // Simulate position turning null.
-  media_controls_view_->MediaSessionPositionChanged(absl::nullopt);
+  media_controls_view_->MediaSessionPositionChanged(std::nullopt);
 
   // Verify that the progress is hidden again.
   EXPECT_FALSE(progress_view()->GetVisible());

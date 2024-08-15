@@ -74,12 +74,14 @@ ClientProxy::ClientProxy(::nearby::analytics::EventLogger* event_logger)
   supports_safe_to_disconnect_ = NearbyFlags::GetInstance().GetBoolFlag(
       config_package_nearby::nearby_connections_feature::
           kEnableSafeToDisconnect);
+  support_auto_reconnect_ = NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableAutoReconnect);
   local_safe_to_disconnect_version_ = NearbyFlags::GetInstance().GetInt64Flag(
       config_package_nearby::nearby_connections_feature::
           kSafeToDisconnectVersion);
   NEARBY_LOGS(INFO) << "[safe-to-disconnect]: Local enabled: "
                     << supports_safe_to_disconnect_
-                    << "; Version_: " << local_safe_to_disconnect_version_;
+                    << "; Version: " << local_safe_to_disconnect_version_;
 }
 
 ClientProxy::~ClientProxy() { Reset(); }
@@ -118,6 +120,18 @@ std::string ClientProxy::GetConnectionToken(const std::string& endpoint_id) {
     return item->first.connection_token;
   }
   return {};
+}
+
+std::optional<std::string> ClientProxy::GetBluetoothMacAddress(
+    const std::string& endpoint_id) {
+  auto item = bluetooth_mac_addresses_.find(endpoint_id);
+  if (item != bluetooth_mac_addresses_.end()) return item->second;
+  return std::nullopt;
+}
+
+void ClientProxy::SetBluetoothMacAddress(
+    const std::string& endpoint_id, const std::string& bluetooth_mac_address) {
+  bluetooth_mac_addresses_[endpoint_id] = bluetooth_mac_address;
 }
 
 std::string ClientProxy::GenerateLocalEndpointId() {
@@ -386,6 +400,7 @@ void ClientProxy::OnEndpointLost(const std::string& service_id,
 void ClientProxy::OnRequestConnection(
     const Strategy& strategy, const std::string& endpoint_id,
     const ConnectionOptions& connection_options) {
+  NEARBY_LOGS(INFO) << "ClientProxy [RequestConnection]: id=" << endpoint_id;
   analytics_recorder_->OnRequestConnection(strategy, endpoint_id);
 }
 
@@ -437,6 +452,7 @@ void ClientProxy::OnConnectionInitiated(
 }
 
 void ClientProxy::OnConnectionAccepted(const std::string& endpoint_id) {
+  NEARBY_LOGS(INFO) << "ClientProxy [ConnectionAccepted]: id=" << endpoint_id;
   MutexLock lock(&mutex_);
 
   if (!HasPendingConnectionToEndpoint(endpoint_id)) {
@@ -456,6 +472,7 @@ void ClientProxy::OnConnectionAccepted(const std::string& endpoint_id) {
 
 void ClientProxy::OnConnectionRejected(const std::string& endpoint_id,
                                        const Status& status) {
+  NEARBY_LOGS(INFO) << "ClientProxy [ConnectionRejected]: id=" << endpoint_id;
   MutexLock lock(&mutex_);
 
   if (!HasPendingConnectionToEndpoint(endpoint_id)) {
@@ -475,6 +492,7 @@ void ClientProxy::OnConnectionRejected(const std::string& endpoint_id,
 
 void ClientProxy::OnBandwidthChanged(const std::string& endpoint_id,
                                      Medium new_medium) {
+  NEARBY_LOGS(INFO) << "ClientProxy [BandwidthChanged]: id=" << endpoint_id;
   MutexLock lock(&mutex_);
 
   const ConnectionPair* item = LookupConnection(endpoint_id);
@@ -487,6 +505,7 @@ void ClientProxy::OnBandwidthChanged(const std::string& endpoint_id,
 }
 
 void ClientProxy::OnDisconnected(const std::string& endpoint_id, bool notify) {
+  NEARBY_LOGS(INFO) << "ClientProxy [OnDisconnected]: id=" << endpoint_id;
   MutexLock lock(&mutex_);
 
   const ConnectionPair* item = LookupConnection(endpoint_id);
@@ -609,6 +628,24 @@ std::int32_t ClientProxy::GetNumIncomingConnections() const {
                   connection.is_incoming;
          })
       .size();
+}
+
+bool ClientProxy::IsIncomingConnection(const std::string& endpoint_id) const {
+  MutexLock lock(&mutex_);
+  const ConnectionPair* item = LookupConnection(endpoint_id);
+  if (item != nullptr && item->first.status == Connection::kConnected) {
+    return item->first.is_incoming;
+  }
+  return false;
+}
+
+bool ClientProxy::IsOutgoingConnection(const std::string& endpoint_id) const {
+  MutexLock lock(&mutex_);
+  const ConnectionPair* item = LookupConnection(endpoint_id);
+  if (item != nullptr && item->first.status == Connection::kConnected) {
+    return !item->first.is_incoming;
+  }
+  return false;
 }
 
 bool ClientProxy::HasPendingConnectionToEndpoint(
@@ -848,6 +885,15 @@ bool ClientProxy::IsSafeToDisconnectEnabled(absl::string_view endpoint_id) {
               .min_nc_version_supports_safe_to_disconnect);
 }
 
+bool ClientProxy::IsAutoReconnectEnabled(absl::string_view endpoint_id) {
+  return IsSupportAutoReconnect() &&
+         GetRemoteSafeToDisconnectVersion(endpoint_id).has_value() &&
+         (GetRemoteSafeToDisconnectVersion(endpoint_id) >=
+          FeatureFlags::GetInstance()
+              .GetFlags()
+              .min_nc_version_supports_auto_reconnect);
+}
+
 bool ClientProxy::IsPayloadReceivedAckEnabled(absl::string_view endpoint_id) {
   return IsSupportSafeToDisconnect() &&
          GetRemoteSafeToDisconnectVersion(endpoint_id).has_value() &&
@@ -929,6 +975,7 @@ void ClientProxy::RemoveAllEndpoints() {
   // just remove without notifying.
   connections_.clear();
   cancellation_flags_.clear();
+  bluetooth_mac_addresses_.clear();
 
   OnSessionComplete();
 }

@@ -101,10 +101,10 @@ struct State {
         uint32_t next_id = 0;
         for (auto inst : *ir.root_block) {
             if (auto* var = inst->As<Var>()) {
-                auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
+                auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
                 if (ptr && ptr->AddressSpace() == core::AddressSpace::kWorkgroup) {
                     // Record the usage of the variable for each block that references it.
-                    var->Result()->ForEachUse([&](const Usage& use) {
+                    var->Result(0)->ForEachUse([&](const Usage& use) {
                         block_to_direct_vars.GetOrZero(use.instruction->Block())->Add(var);
                     });
                     var_to_id.Add(var, next_id++);
@@ -113,7 +113,7 @@ struct State {
         }
 
         // Process each entry point function.
-        for (auto* func : ir.functions) {
+        for (auto& func : ir.functions) {
             if (func->Stage() == Function::PipelineStage::kCompute) {
                 ProcessEntryPoint(func);
             }
@@ -138,7 +138,7 @@ struct State {
         // Build list of store descriptors for all workgroup variables.
         StoreMap stores;
         for (auto* var : sorted_vars) {
-            PrepareStores(var, var->Result()->Type()->UnwrapPtr(), 1, {}, stores);
+            PrepareStores(var, var->Result(0)->Type()->UnwrapPtr(), 1, {}, stores);
         }
 
         // Sort the iteration counts to get deterministic output in tests.
@@ -279,13 +279,13 @@ struct State {
                                                             BuiltinValue::kLocalInvocationIndex) {
                         auto* access = b.Access(ty.u32(), param, u32(member->Index()));
                         access->InsertBefore(func->Block()->Front());
-                        return access->Result();
+                        return access->Result(0);
                     }
                 }
             } else {
                 // Check if the parameter is the local invocation index.
                 if (param->Builtin() &&
-                    param->Builtin().value() == FunctionParam::Builtin::kLocalInvocationIndex) {
+                    param->Builtin().value() == BuiltinValue::kLocalInvocationIndex) {
                     return param;
                 }
             }
@@ -294,7 +294,7 @@ struct State {
         // No local invocation index was found, so add one to the parameter list and use that.
         Vector<FunctionParam*, 4> params = func->Params();
         auto* param = b.FunctionParam("tint_local_index", ty.u32());
-        param->SetBuiltin(FunctionParam::Builtin::kLocalInvocationIndex);
+        param->SetBuiltin(BuiltinValue::kLocalInvocationIndex);
         params.Push(param);
         func->SetParams(params);
         return param;
@@ -305,7 +305,7 @@ struct State {
     /// @param total_count the total number of elements that will be zeroed
     /// @param linear_index the linear index of the single element that will be zeroed
     void GenerateStore(const Store& store, uint32_t total_count, Value* linear_index) {
-        auto* to = store.var->Result();
+        auto* to = store.var->Result(0);
         if (!store.indices.IsEmpty()) {
             // Build the access indices to get to the target element.
             // We walk backwards along the index list so that adjacent invocation store to
@@ -319,10 +319,10 @@ struct State {
                     auto array_index = std::get<ArrayIndex>(idx);
                     Value* index = linear_index;
                     if (count > 1) {
-                        index = b.Divide(ty.u32(), index, u32(count))->Result();
+                        index = b.Divide(ty.u32(), index, u32(count))->Result(0);
                     }
                     if (total_count > count * array_index.count) {
-                        index = b.Modulo(ty.u32(), index, u32(array_index.count))->Result();
+                        index = b.Modulo(ty.u32(), index, u32(array_index.count))->Result(0);
                     }
                     indices.Push(index);
                     count *= array_index.count;
@@ -332,7 +332,7 @@ struct State {
                 }
             }
             indices.Reverse();
-            to = b.Access(ty.ptr(workgroup, store.store_type), to, indices)->Result();
+            to = b.Access(ty.ptr(workgroup, store.store_type), to, indices)->Result(0);
         }
 
         // Generate the store instruction.
@@ -368,7 +368,7 @@ struct State {
 
 Result<SuccessType> ZeroInitWorkgroupMemory(Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "ZeroInitWorkgroupMemory transform");
-    if (!result) {
+    if (result != Success) {
         return result;
     }
 

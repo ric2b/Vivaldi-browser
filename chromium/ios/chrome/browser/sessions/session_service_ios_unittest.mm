@@ -31,18 +31,16 @@
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 
-// To get access to web::features::kEnableSessionSerializationOptimizations.
-// TODO(crbug.com/1383087): remove once the feature is fully launched.
-#import "ios/web/common/features.h"
-
 namespace {
+
+// The delay before saving.
+constexpr base::TimeDelta kSaveDelay = base::Seconds(2.5);
 
 // Fixture Class. Takes care of deleting the directory used to store test data.
 class SessionServiceTest : public PlatformTest {
  public:
-  SessionServiceTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        web::features::kEnableSessionSerializationOptimizations);
+  SessionServiceTest()
+      : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
   }
 
   SessionServiceTest(const SessionServiceTest&) = delete;
@@ -59,7 +57,8 @@ class SessionServiceTest : public PlatformTest {
     scoped_refptr<base::SequencedTaskRunner> task_runner =
         base::SingleThreadTaskRunner::GetCurrentDefault();
     session_service_ =
-        [[SessionServiceIOS alloc] initWithTaskRunner:task_runner];
+        [[SessionServiceIOS alloc] initWithSaveDelay:kSaveDelay
+                                          taskRunner:task_runner];
   }
 
   void TearDown() override {
@@ -107,10 +106,20 @@ class SessionServiceTest : public PlatformTest {
     return base::apple::FilePathToNSString(directory());
   }
 
+  void WaitForBackgroundTaskComplete() {
+    base::RunLoop run_loop;
+    [session_service_ shutdownWithClosure:run_loop.QuitClosure()];
+    run_loop.Run();
+  }
+
+  void WaitForSessionSaveComplete() {
+    task_environment_.FastForwardBy(kSaveDelay);
+    WaitForBackgroundTaskComplete();
+  }
+
  private:
   base::ScopedTempDir scoped_temp_directory_;
   base::test::TaskEnvironment task_environment_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   SessionServiceIOS* session_service_ = nil;
   FakeWebStateListDelegate web_state_list_delegate_;
   base::FilePath directory_;
@@ -137,7 +146,7 @@ TEST_F(SessionServiceTest, SaveSessionWindowToPath) {
   // Even if `immediately` is YES, the file is created by a task on the task
   // runner passed to SessionServiceIOS initializer (which is the current
   // thread task runner during test). Wait for the task to complete.
-  base::RunLoop().RunUntilIdle();
+  WaitForBackgroundTaskComplete();
 
   NSFileManager* file_manager = [NSFileManager defaultManager];
   EXPECT_TRUE([file_manager removeItemAtPath:directory_as_nsstring()
@@ -163,7 +172,7 @@ TEST_F(SessionServiceTest, SaveSessionWindowToPathDirectoryExists) {
   // Even if `immediately` is YES, the file is created by a task on the task
   // runner passed to SessionServiceIOS initializer (which is the current
   // thread task runner during test). Wait for the task to complete.
-  base::RunLoop().RunUntilIdle();
+  WaitForBackgroundTaskComplete();
 
   NSFileManager* file_manager = [NSFileManager defaultManager];
   EXPECT_TRUE([file_manager removeItemAtPath:directory_as_nsstring()
@@ -192,10 +201,9 @@ TEST_F(SessionServiceTest, SaveExpiredSession) {
                      immediately:NO];
   [factory disconnect];
   factory = nil;
-  // Make sure that the delay for saving a session has passed (at least 2.5
-  // seconds)
-  base::test::ios::SpinRunLoopWithMinDelay(base::Seconds(2.5));
-  base::RunLoop().RunUntilIdle();
+
+  // Make sure that the delay for saving a session has passed.
+  WaitForSessionSaveComplete();
 
   SessionWindowIOS* session =
       [session_service() loadSessionWithSessionID:session_id
@@ -217,7 +225,7 @@ TEST_F(SessionServiceTest, LoadSessionFromDirectory) {
   // Even if `immediately` is YES, the file is created by a task on the task
   // runner passed to SessionServiceIOS initializer (which is the current
   // thread task runner during test). Wait for the task to complete.
-  base::RunLoop().RunUntilIdle();
+  WaitForBackgroundTaskComplete();
 
   SessionWindowIOS* session_window =
       [session_service() loadSessionWithSessionID:session_id
@@ -240,7 +248,7 @@ TEST_F(SessionServiceTest, LoadSessionFromPath) {
   // Even if `immediately` is YES, the file is created by a task on the task
   // runner passed to SessionServiceIOS initializer (which is the current
   // thread task runner during test). Wait for the task to complete.
-  base::RunLoop().RunUntilIdle();
+  WaitForBackgroundTaskComplete();
 
   NSString* session_path =
       [SessionServiceIOS sessionPathForSessionID:session_id

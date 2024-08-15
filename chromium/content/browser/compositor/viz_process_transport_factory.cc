@@ -38,27 +38,37 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/gpu_stream_constants.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
+#include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/viz/privileged/mojom/compositing/display_private.mojom.h"
 #include "services/viz/privileged/mojom/compositing/external_begin_frame_controller.mojom.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "ui/gfx/win/rendering_window_manager.h"
 #endif
 
-#if BUILDFLAG(IS_OZONE)
-#include "ui/ozone/buildflags.h"
-#endif
-
 namespace content {
 namespace {
+
+// Controls if browser main thread context can be backed by raster decoder.
+BASE_FEATURE(kUseRasterDecoderForBrowserContext,
+             "UseRasterDecoderForBrowserContext",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool UseRasterDecoderForBrowserContext() {
+  // Using raster decoder is only possible if VideoResourceUpdater is using
+  // RasterImplementation so check that first.
+  return base::FeatureList::IsEnabled(
+             media::kRasterInterfaceInVideoResourceUpdater) &&
+         base::FeatureList::IsEnabled(kUseRasterDecoderForBrowserContext);
+}
 
 // The client id for the browser process. It must not conflict with any
 // child process client id.
@@ -68,8 +78,6 @@ scoped_refptr<viz::ContextProviderCommandBuffer> CreateContextProvider(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
     bool supports_locking,
     bool supports_gles2_interface,
-    bool supports_raster_interface,
-    bool supports_grcontext,
     bool supports_gpu_rasterization,
     viz::command_buffer_metrics::ContextType type) {
   constexpr bool kAutomaticFlushes = false;
@@ -78,7 +86,7 @@ scoped_refptr<viz::ContextProviderCommandBuffer> CreateContextProvider(
   attributes.bind_generates_resource = false;
   attributes.lose_context_when_out_of_memory = true;
   attributes.enable_gles2_interface = supports_gles2_interface;
-  attributes.enable_raster_interface = supports_raster_interface;
+  attributes.enable_raster_interface = true;
   attributes.enable_oop_rasterization = supports_gpu_rasterization;
 
   gpu::SharedMemoryLimits memory_limits =
@@ -88,11 +96,11 @@ scoped_refptr<viz::ContextProviderCommandBuffer> CreateContextProvider(
   return base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
       std::move(gpu_channel_host), kGpuStreamIdDefault, kGpuStreamPriorityUI,
       gpu::kNullSurfaceHandle, std::move(url), kAutomaticFlushes,
-      supports_locking, supports_grcontext, memory_limits, attributes, type);
+      supports_locking, memory_limits, attributes, type);
 }
 
-bool IsContextLost(viz::ContextProvider* context_provider) {
-  return context_provider->ContextGL()->GetGraphicsResetStatusKHR() !=
+bool IsContextLost(viz::RasterContextProvider* context_provider) {
+  return context_provider->RasterInterface()->GetGraphicsResetStatusKHR() !=
          GL_NO_ERROR;
 }
 
@@ -110,13 +118,11 @@ class HostDisplayClient : public viz::HostDisplayClient {
   HostDisplayClient& operator=(const HostDisplayClient&) = delete;
 
   // viz::HostDisplayClient:
-#if BUILDFLAG(IS_OZONE)
-#if BUILDFLAG(OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE_X11)
   void DidCompleteSwapWithNewSize(const gfx::Size& size) override {
     compositor_->OnCompleteSwapWithNewSize(size);
   }
-#endif  // BUILDFLAG(OZONE_PLATFORM_X11)
-#endif  // BUILFFLAG(IS_OZONE)
+#endif  // BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE_X11)
 
 #if BUILDFLAG(IS_WIN)
   void AddChildWindowToBrowser(gpu::SurfaceHandle child_window) override {
@@ -214,11 +220,23 @@ void VizProcessTransportFactory::CreateLayerTreeFrameSink(
 
 scoped_refptr<viz::ContextProvider>
 VizProcessTransportFactory::SharedMainThreadContextProvider() {
-  if (is_gpu_compositing_disabled_)
+  if (UseRasterDecoderForBrowserContext()) {
     return nullptr;
+  }
 
-  if (main_context_provider_ && IsContextLost(main_context_provider_.get()))
+  SharedMainThreadRasterContextProvider();
+  return main_context_provider_;
+}
+
+scoped_refptr<viz::RasterContextProvider>
+VizProcessTransportFactory::SharedMainThreadRasterContextProvider() {
+  if (is_gpu_compositing_disabled_) {
+    return nullptr;
+  }
+
+  if (main_context_provider_ && IsContextLost(main_context_provider_.get())) {
     main_context_provider_.reset();
+  }
 
   if (!main_context_provider_) {
     auto context_result = gpu::ContextResult::kTransientFailure;
@@ -233,13 +251,6 @@ VizProcessTransportFactory::SharedMainThreadContextProvider() {
     // null.
   }
 
-  return main_context_provider_;
-}
-
-scoped_refptr<viz::RasterContextProvider>
-VizProcessTransportFactory::SharedMainThreadRasterContextProvider() {
-  SharedMainThreadContextProvider();
-  DCHECK(!main_context_provider_ || main_context_provider_->RasterInterface());
   return main_context_provider_;
 }
 
@@ -496,15 +507,19 @@ VizProcessTransportFactory::TryCreateContextsForGpuCompositing(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
   DCHECK(!is_gpu_compositing_disabled_);
 
-  if (!gpu_channel_host) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    // Chrome OS can't fallback to software compositing so treat this as a
-    // transient failure and retry initializing GPU channel.
-    return gpu::ContextResult::kTransientFailure;
-#else
+  // Chrome OS can't fallback to software compositing so retry up to 4 more
+  // times to initialize the GPU channel.
+  constexpr int kNumRetriesEstablishChannel = 4;
+  for (int i = 0; i < kNumRetriesEstablishChannel && !gpu_channel_host; i++) {
+    gpu_channel_host =
+        gpu_channel_establish_factory_->EstablishGpuChannelSync();
+  }
+#endif
+
+  if (!gpu_channel_host) {
     // Fallback to software compositing if there is no IPC channel.
     return gpu::ContextResult::kFatalFailure;
-#endif
   }
 
   const auto& gpu_feature_info = gpu_channel_host->gpu_feature_info();
@@ -517,20 +532,23 @@ VizProcessTransportFactory::TryCreateContextsForGpuCompositing(
     return gpu::ContextResult::kFatalFailure;
 
   if (worker_context_provider_wrapper_ &&
-      IsWorkerContextLost(worker_context_provider_wrapper_->GetContext().get()))
+      IsWorkerContextLost(
+          worker_context_provider_wrapper_->GetContext().get())) {
     worker_context_provider_wrapper_.reset();
+  }
 
-  bool enable_gpu_rasterization =
+  const bool enable_gpu_rasterization =
       features::IsUiGpuRasterizationEnabled() &&
-      gpu_feature_info.status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
+      gpu_feature_info
+              .status_values[gpu::GPU_FEATURE_TYPE_GPU_TILE_RASTERIZATION] ==
           gpu::kGpuFeatureStatusEnabled;
 
   if (!worker_context_provider_wrapper_) {
+    // If the worker context supports GPU rasterization then UI tiles will be
+    // rasterized on the GPU.
     auto worker_context_provider = CreateContextProvider(
         gpu_channel_host, /*supports_locking=*/true,
-        /*supports_gles2_interface=*/false,
-        /*supports_raster_interface=*/true,
-        /*supports_grcontext=*/false, enable_gpu_rasterization,
+        /*supports_gles2_interface=*/false, enable_gpu_rasterization,
         viz::command_buffer_metrics::ContextType::BROWSER_WORKER);
 
     // Don't observer context loss on |worker_context_provider_wrapper_| here,
@@ -547,23 +565,19 @@ VizProcessTransportFactory::TryCreateContextsForGpuCompositing(
                 /*for_renderer=*/false));
   }
 
-  if (main_context_provider_ && IsContextLost(main_context_provider_.get()))
+  if (main_context_provider_ && IsContextLost(main_context_provider_.get())) {
     main_context_provider_.reset();
+  }
 
   if (!main_context_provider_) {
-    constexpr bool kCompositorContextSupportsLocking = false;
-    // TODO(crbug.com/895874): Switch from GLES2Implementation to
-    // RasterImplementation after removing last ContextGL() usage from browser
-    // main thread.
-    constexpr bool kCompositorContextSupportsGLES2 = true;
-    constexpr bool kCompositorContextSupportsRaster = true;
-    constexpr bool kCompositorContextSupportsGrContext = false;
-    constexpr bool kCompositorContextSupportsOOPR = false;
+    bool supports_gles2 = !UseRasterDecoderForBrowserContext();
 
+    // The main thread context is not used for UI tile rasterization. Other UI
+    // code can use the main thread context for GPU rasterization if it's
+    // enabled for tiles.
     main_context_provider_ = CreateContextProvider(
-        std::move(gpu_channel_host), kCompositorContextSupportsLocking,
-        kCompositorContextSupportsGLES2, kCompositorContextSupportsRaster,
-        kCompositorContextSupportsGrContext, kCompositorContextSupportsOOPR,
+        std::move(gpu_channel_host), /*supports_locking=*/false, supports_gles2,
+        enable_gpu_rasterization,
         viz::command_buffer_metrics::ContextType::BROWSER_MAIN_THREAD);
     main_context_provider_->SetDefaultTaskRunner(resize_task_runner_);
 

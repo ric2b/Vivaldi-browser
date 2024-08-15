@@ -36,6 +36,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -138,6 +139,8 @@ const ui::DropTargetEvent GetTranslatedDropTargetEvent(
 // The view is intended to be a wrapper around suggested content views that
 // makes applying identical transforms to suggested content views easier.
 class AppsContainerView::ContinueContainer : public views::View {
+  METADATA_HEADER(ContinueContainer, views::View)
+
  public:
   ContinueContainer(AppListKeyboardController* keyboard_controller,
                     AppListViewDelegate* view_delegate,
@@ -223,12 +226,14 @@ class AppsContainerView::ContinueContainer : public views::View {
                            continue_section_->GetVisible());
   }
 
-  const raw_ptr<AppListViewDelegate, ExperimentalAsh> view_delegate_;
-  raw_ptr<ContinueSectionView, ExperimentalAsh> continue_section_ = nullptr;
-  raw_ptr<RecentAppsView, ExperimentalAsh> recent_apps_ = nullptr;
-  raw_ptr<views::Separator, DanglingUntriaged | ExperimentalAsh> separator_ =
-      nullptr;
+  const raw_ptr<AppListViewDelegate> view_delegate_;
+  raw_ptr<ContinueSectionView> continue_section_ = nullptr;
+  raw_ptr<RecentAppsView> recent_apps_ = nullptr;
+  raw_ptr<views::Separator, DanglingUntriaged> separator_ = nullptr;
 };
+
+BEGIN_METADATA(AppsContainerView, ContinueContainer, views::View)
+END_METADATA
 
 const int AppsContainerView::kHorizontalMargin = 24;
 
@@ -679,7 +684,7 @@ void AppsContainerView::OnNudgeRemoved() {
 }
 
 void AppsContainerView::UpdateForNewSortingOrder(
-    const absl::optional<AppListSortOrder>& new_order,
+    const std::optional<AppListSortOrder>& new_order,
     bool animate,
     base::OnceClosure update_position_closure,
     base::OnceClosure animation_done_closure) {
@@ -1408,7 +1413,7 @@ void AppsContainerView::UpdateGradientMaskBounds() {
 }
 
 void AppsContainerView::OnAppsGridViewFadeOutAnimationEnded(
-    const absl::optional<AppListSortOrder>& new_order,
+    const std::optional<AppListSortOrder>& new_order,
     bool abort) {
   // Update item positions after the fade out animation but before the fade in
   // animation. NOTE: `update_position_closure_` can be empty in some edge

@@ -108,8 +108,8 @@ class SocketPump {
   }
 
   void Pump(net::StreamSocket* from, net::StreamSocket* to) {
-    scoped_refptr<net::IOBuffer> buffer =
-        base::MakeRefCounted<net::IOBuffer>(kSocketPumpBufferSize);
+    auto buffer =
+        base::MakeRefCounted<net::IOBufferWithSize>(kSocketPumpBufferSize);
     int result =
         from->Read(buffer.get(), kSocketPumpBufferSize,
                    base::BindOnce(&SocketPump::OnRead, base::Unretained(this),
@@ -210,7 +210,7 @@ class BoundSocket {
     port_ = port;
     net::IPEndPoint end_point(net::IPAddress::IPv4Localhost(), port);
     int result =
-        socket_->Listen(end_point, kListenBacklog, /*ipv6_only=*/absl::nullopt);
+        socket_->Listen(end_point, kListenBacklog, /*ipv6_only=*/std::nullopt);
     if (result < 0)
       return false;
 

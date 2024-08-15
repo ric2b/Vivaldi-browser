@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "quiche/http2/adapter/header_validator.h"
 #include "quiche/http2/http2_constants.h"
 #include "quiche/quic/core/http/http_constants.h"
 #include "quiche/quic/core/http/http_decoder.h"
@@ -255,7 +257,9 @@ size_t QuicSpdyStream::WriteHeaders(
   MaybeProcessSentWebTransportHeaders(header_block);
 
   if (web_transport_ != nullptr &&
-      spdy_session_->perspective() == Perspective::IS_SERVER) {
+      spdy_session_->perspective() == Perspective::IS_SERVER &&
+      spdy_session_->SupportedWebTransportVersion() ==
+          WebTransportHttp3Version::kDraft02) {
     header_block["sec-webtransport-http3-draft"] = "draft02";
   }
 
@@ -1114,7 +1118,7 @@ void QuicSpdyStream::OnWebTransportStreamFrameType(
   QuicStreamOffset offset = sequencer()->NumBytesConsumed();
   sequencer()->MarkConsumed(header_length);
 
-  absl::optional<WebTransportHttp3Version> version =
+  std::optional<WebTransportHttp3Version> version =
       spdy_session_->SupportedWebTransportVersion();
   QUICHE_DCHECK(version.has_value());
   if (version == WebTransportHttp3Version::kDraft02) {
@@ -1304,7 +1308,10 @@ void QuicSpdyStream::MaybeProcessSentWebTransportHeaders(
     return;
   }
 
-  headers["sec-webtransport-http3-draft02"] = "1";
+  if (spdy_session_->SupportedWebTransportVersion() ==
+      WebTransportHttp3Version::kDraft02) {
+    headers["sec-webtransport-http3-draft02"] = "1";
+  }
 
   web_transport_ =
       std::make_unique<WebTransportHttp3>(spdy_session_, this, id());
@@ -1642,34 +1649,10 @@ void QuicSpdyStream::HandleBodyAvailable() {
 
 namespace {
 
-// Return true if |c| is not allowed in an HTTP/3 wire-encoded header and
-// pseudo-header names according to
-// https://datatracker.ietf.org/doc/html/draft-ietf-quic-http#section-4.1.1 and
-// https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-semantics-19#section-5.6.2
-constexpr bool IsInvalidHeaderNameCharacter(unsigned char c) {
-  if (c == '!' || c == '|' || c == '~' || c == '*' || c == '+' || c == '-' ||
-      c == '.' ||
-      // #, $, %, &, '
-      (c >= '#' && c <= '\'') ||
-      // [0-9], :
-      (c >= '0' && c <= ':') ||
-      // ^, _, `, [a-z]
-      (c >= '^' && c <= 'z')) {
-    return false;
-  }
-  return true;
-}
-
-// Return true if `name` is invalid because it contains a disallowed character.
-bool HeaderNameHasInvalidCharacter(absl::string_view name) {
-  const bool colon_invalid =
-      GetQuicReloadableFlag(quic_colon_invalid_in_header_name);
-  if (colon_invalid) {
-    QUICHE_RELOADABLE_FLAG_COUNT(quic_colon_invalid_in_header_name);
-  }
-
+// Return true if `name` only has allowed characters.
+bool IsValidHeaderName(absl::string_view name) {
   if (name.empty()) {
-    return false;
+    return true;
   }
 
   // Remove leading colon of pseudo-headers.
@@ -1678,16 +1661,7 @@ bool HeaderNameHasInvalidCharacter(absl::string_view name) {
     name.remove_prefix(1);
   }
 
-  if (std::find(name.begin(), name.end(), ':') != name.end()) {
-    // Header name contains colon (other than optional leading colon of
-    // pseudo-headers), which is invalid.
-    QUICHE_CODE_COUNT(quic_colon_in_header_name);
-    if (colon_invalid) {
-      return true;
-    }
-  }
-
-  return std::any_of(name.begin(), name.end(), IsInvalidHeaderNameCharacter);
+  return http2::adapter::HeaderValidator::IsValidHeaderName(name);
 }
 
 }  // namespace
@@ -1706,7 +1680,7 @@ bool QuicSpdyStream::ValidateReceivedHeaders(
   bool is_response = false;
   for (const std::pair<std::string, std::string>& pair : header_list) {
     const std::string& name = pair.first;
-    if (HeaderNameHasInvalidCharacter(name)) {
+    if (!IsValidHeaderName(name)) {
       invalid_request_details_ =
           absl::StrCat("Invalid character in header name ", name);
       QUIC_DLOG(ERROR) << invalid_request_details_;

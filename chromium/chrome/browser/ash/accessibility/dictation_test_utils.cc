@@ -57,8 +57,7 @@ constexpr char kTextAreaUrl[] = R"(
         class='editableForDictation' autofocus></textarea>
 )";
 constexpr char kPumpkinTestFilePath[] =
-    "resources/chromeos/accessibility/accessibility_common/dictation/parse/"
-    "pumpkin";
+    "resources/chromeos/accessibility/accessibility_common/third_party/pumpkin";
 constexpr char kTestSupportPath[] =
     "chrome/browser/resources/chromeos/accessibility/accessibility_common/"
     "dictation/dictation_test_support.js";
@@ -185,7 +184,7 @@ void DictationTestUtils::EnableDictation(
   // Increase Dictation's NO_FOCUSED_IME timeout to reduce flakiness on slower
   // builds.
   std::string script =
-      "dictationTestSupport.setNoFocusedImeTimeout(20 * 1000);";
+      "dictationTestSupport.setNoFocusedImeTimeout(1000 * 1000);";
   ExecuteAccessibilityCommonScript(script);
 
   // Dictation will request a Pumpkin install when it starts up. Wait for

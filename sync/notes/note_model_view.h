@@ -24,7 +24,8 @@ namespace sync_notes {
 // permanent folders map to server-side permanent folders.
 class NoteModelView {
  public:
-  // `note_model` must not be null and must outlive this object.
+  // `note_model` must not be null and must outlive any usage of this
+  // object.
   explicit NoteModelView(vivaldi::NotesModel* note_model);
   NoteModelView(const NoteModelView&) = delete;
   virtual ~NoteModelView();
@@ -42,6 +43,17 @@ class NoteModelView {
   virtual const vivaldi::NoteNode* other_node() const = 0;
   virtual const vivaldi::NoteNode* trash_node() const = 0;
 
+  // Ensures that main_node(), other_node() and trash_node() return
+  // non-null. This is always the case for local-or-syncable permanent folders,
+  // and the function a no-op, but for account permanent folders it is necessary
+  // to create them explicitly.
+  virtual void EnsurePermanentNodesExist() = 0;
+
+  // Deletes all nodes that would return true for IsNodeSyncable(). Permanent
+  // folders may or may not be deleted depending on precise mapping (only
+  // account permanent folders can be deleted).
+  virtual void RemoveAllSyncableNodes() = 0;
+
   // See vivaldi::NotesModel for documentation, as all functions below
   // mimic the same API.
   bool loaded() const;
@@ -52,17 +64,19 @@ class NoteModelView {
   void BeginExtensiveChanges();
   void EndExtensiveChanges();
   void Remove(const vivaldi::NoteNode* node);
-  void RemoveAllUserNotes();
   void Move(const vivaldi::NoteNode* node,
             const vivaldi::NoteNode* new_parent,
             size_t index);
   void SetTitle(const vivaldi::NoteNode* node, const std::u16string& title);
   void SetContent(const vivaldi::NoteNode* node, const std::u16string& content);
+  void SetLastModificationTime(const vivaldi::NoteNode* node,
+                               const base::Time time);
   void SetURL(const vivaldi::NoteNode* node, const GURL& url);
   const vivaldi::NoteNode* AddFolder(const vivaldi::NoteNode* parent,
                                      size_t index,
                                      const std::u16string& name,
                                      absl::optional<base::Time> creation_time,
+                                     absl::optional<base::Time> last_modified_time,
                                      absl::optional<base::Uuid> uuid);
   const vivaldi::NoteNode* AddNote(const vivaldi::NoteNode* parent,
                                    size_t index,
@@ -70,6 +84,7 @@ class NoteModelView {
                                    const GURL& url,
                                    const std::u16string& content,
                                    absl::optional<base::Time> creation_time,
+                                   absl::optional<base::Time> last_modified_time,
                                    absl::optional<base::Uuid> uuid);
   const vivaldi::NoteNode* AddSeparator(
       const vivaldi::NoteNode* parent,
@@ -106,7 +121,8 @@ class NoteModelView {
 
 class NoteModelViewUsingLocalOrSyncableNodes : public NoteModelView {
  public:
-  // `note_model` must not be null and must outlive this object.
+  // `note_model` must not be null and must outlive any usage of this
+  // object.
   explicit NoteModelViewUsingLocalOrSyncableNodes(
       vivaldi::NotesModel* note_model);
   ~NoteModelViewUsingLocalOrSyncableNodes() override;
@@ -115,6 +131,8 @@ class NoteModelViewUsingLocalOrSyncableNodes : public NoteModelView {
   const vivaldi::NoteNode* main_node() const override;
   const vivaldi::NoteNode* other_node() const override;
   const vivaldi::NoteNode* trash_node() const override;
+  void EnsurePermanentNodesExist() override;
+  void RemoveAllSyncableNodes() override;
 };
 
 }  // namespace sync_notes

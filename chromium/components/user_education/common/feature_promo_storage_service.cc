@@ -5,11 +5,14 @@
 #include "components/user_education/common/feature_promo_storage_service.h"
 
 #include "base/feature_list.h"
+#include "base/time/default_clock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace user_education {
 
-FeaturePromoStorageService::FeaturePromoStorageService() = default;
+FeaturePromoStorageService::FeaturePromoStorageService()
+    : clock_(base::DefaultClock::GetInstance()) {}
+
 FeaturePromoStorageService::~FeaturePromoStorageService() = default;
 
 int FeaturePromoStorageService::GetSnoozeCount(
@@ -28,53 +31,8 @@ std::set<std::string> FeaturePromoStorageService::GetShownForApps(
   return data->shown_for_apps;
 }
 
-FeaturePromoStorageService::PromoData::PromoData() = default;
-FeaturePromoStorageService::PromoData::~PromoData() = default;
-FeaturePromoStorageService::PromoData::PromoData(const PromoData&) = default;
-FeaturePromoStorageService::PromoData::PromoData(PromoData&&) = default;
-FeaturePromoStorageService::PromoData&
-FeaturePromoStorageService::PromoData::operator=(const PromoData&) = default;
-FeaturePromoStorageService::PromoData&
-FeaturePromoStorageService::PromoData::operator=(PromoData&&) = default;
-
-std::ostream& operator<<(std::ostream& oss,
-                         FeaturePromoStorageService::CloseReason close_reason) {
-  switch (close_reason) {
-    case FeaturePromoStorageService::CloseReason::kDismiss:
-      oss << "kDismiss";
-      break;
-    case FeaturePromoStorageService::CloseReason::kSnooze:
-      oss << "kSnooze";
-      break;
-    case FeaturePromoStorageService::CloseReason::kAction:
-      oss << "kAction";
-      break;
-    case FeaturePromoStorageService::CloseReason::kCancel:
-      oss << "kCancel";
-      break;
-    case FeaturePromoStorageService::CloseReason::kTimeout:
-      oss << "kTimeout";
-      break;
-    case FeaturePromoStorageService::CloseReason::kAbortPromo:
-      oss << "kAbortPromo";
-      break;
-    case FeaturePromoStorageService::CloseReason::kFeatureEngaged:
-      oss << "kFeatureEngaged";
-      break;
-    case FeaturePromoStorageService::CloseReason::kOverrideForUIRegionConflict:
-      oss << "kOverrideForUIRegionConflict";
-      break;
-    case FeaturePromoStorageService::CloseReason::kOverrideForDemo:
-      oss << "kOverrideForDemo";
-      break;
-    case FeaturePromoStorageService::CloseReason::kOverrideForTesting:
-      oss << "kOverrideForTesting";
-      break;
-    case FeaturePromoStorageService::CloseReason::kOverrideForPrecedence:
-      oss << "kOverrideForPrecedence";
-      break;
-  }
-  return oss;
+base::Time FeaturePromoStorageService::GetCurrentTime() const {
+  return clock_->Now();
 }
 
 }  // namespace user_education

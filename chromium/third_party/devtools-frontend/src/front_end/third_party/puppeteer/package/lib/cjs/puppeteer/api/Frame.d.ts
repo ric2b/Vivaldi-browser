@@ -1,17 +1,7 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import type Protocol from 'devtools-protocol';
 import type { ClickOptions, ElementHandle } from '../api/ElementHandle.js';
@@ -262,7 +252,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * Is `true` if the frame is an out-of-process (OOP) frame. Otherwise,
      * `false`.
      */
-    isOOPFrame(): boolean;
+    abstract isOOPFrame(): boolean;
     /**
      * Navigates the frame to the given `url`.
      *
@@ -426,7 +416,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      *
      * @example
      *
-     * ```js
+     * ```ts
      * const divsCounts = await frame.$$eval('div', divs => divs.length);
      * ```
      *
@@ -557,6 +547,10 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
         timeout?: number;
         waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
     }): Promise<void>;
+    /**
+     * @internal
+     */
+    setFrameContent(content: string): Promise<void>;
     /**
      * The frame's `name` attribute as specified in the tag.
      *
@@ -745,11 +739,9 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device'))
      * );
      * ```
-     */
-    waitForDevicePrompt(options?: WaitTimeoutOptions): Promise<DeviceRequestPrompt>;
-    /**
+     *
      * @internal
      */
-    exposeFunction<Args extends unknown[], Ret>(name: string, fn: (...args: Args) => Awaitable<Ret>): Promise<void>;
+    abstract waitForDevicePrompt(options?: WaitTimeoutOptions): Promise<DeviceRequestPrompt>;
 }
 //# sourceMappingURL=Frame.d.ts.map

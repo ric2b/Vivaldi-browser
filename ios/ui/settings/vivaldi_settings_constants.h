@@ -6,10 +6,6 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#pragma mark - NOTIFICATIONS
-// Notification name for observing when tab setting is changed.
-extern NSString* vTabSettingsDidChange;
-
 #pragma mark - ICONS
 // Image name for sync setting
 extern NSString* vSyncSetting;
@@ -28,8 +24,8 @@ extern NSString* vAddressSetting;
 
 // Image name for tabs setting
 extern NSString* vTabsSetting;
-// Image name for start page layout setting
-extern NSString* vStartPageLayoutSetting;
+// Image name for start page setting
+extern NSString* vStartPageSetting;
 
 // Image name for privacy setting
 extern NSString* vPrivacySetting;

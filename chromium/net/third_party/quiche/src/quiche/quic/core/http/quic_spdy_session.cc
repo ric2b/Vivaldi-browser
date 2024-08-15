@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -16,7 +17,6 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "quiche/quic/core/http/http_constants.h"
 #include "quiche/quic/core/http/http_decoder.h"
 #include "quiche/quic/core/http/http_frames.h"
@@ -158,17 +158,26 @@ class AlpsFrameDecoder : public HttpDecoder::Visitor {
   }
   bool OnUnknownFrameEnd() override { return true; }
 
-  const absl::optional<std::string>& error_detail() const {
+  const std::optional<std::string>& error_detail() const {
     return error_detail_;
   }
 
  private:
   QuicSpdySession* const session_;
-  absl::optional<std::string> error_detail_;
+  std::optional<std::string> error_detail_;
 
   // True if SETTINGS frame has been received via ALPS.
   bool settings_frame_received_via_alps_ = false;
 };
+
+uint64_t GetDefaultQpackMaximumDynamicTableCapacity(Perspective perspective) {
+  if (perspective == Perspective::IS_SERVER &&
+      GetQuicFlag(quic_server_disable_qpack_dynamic_table)) {
+    return 0;
+  }
+
+  return kDefaultQpackMaxDynamicTableCapacity;
+}
 
 }  // namespace
 
@@ -466,7 +475,7 @@ QuicSpdySession::QuicSpdySession(
       qpack_encoder_send_stream_(nullptr),
       qpack_decoder_send_stream_(nullptr),
       qpack_maximum_dynamic_table_capacity_(
-          kDefaultQpackMaxDynamicTableCapacity),
+          GetDefaultQpackMaximumDynamicTableCapacity(perspective())),
       qpack_maximum_blocked_streams_(kDefaultMaximumBlockedStreams),
       max_inbound_header_list_size_(kDefaultMaxUncompressedHeaderSize),
       max_outbound_header_list_size_(std::numeric_limits<size_t>::max()),
@@ -480,11 +489,7 @@ QuicSpdySession::QuicSpdySession(
       destruction_indicator_(123456789),
       allow_extended_connect_(perspective() == Perspective::IS_SERVER &&
                               VersionUsesHttp3(transport_version())),
-      force_buffer_requests_until_settings_(false),
-      quic_enable_h3_datagrams_flag_(
-          GetQuicReloadableFlag(quic_enable_h3_datagrams)),
-      do_not_increase_max_streams_after_h3_goaway_flag_(GetQuicReloadableFlag(
-          quic_do_not_increase_max_streams_after_h3_goaway)) {
+      force_buffer_requests_until_settings_(false) {
   h2_deframer_.set_visitor(spdy_framer_visitor_.get());
   h2_deframer_.set_debug_visitor(spdy_framer_visitor_.get());
   spdy_framer_.set_debug_visitor(spdy_framer_visitor_.get());
@@ -527,7 +532,7 @@ void QuicSpdySession::Initialize() {
   spdy_framer_visitor_->set_max_header_list_size(max_inbound_header_list_size_);
 
   // Limit HPACK buffering to 2x header list size limit.
-  h2_deframer_.GetHpackDecoder()->set_max_decode_buffer_size_bytes(
+  h2_deframer_.GetHpackDecoder().set_max_decode_buffer_size_bytes(
       2 * max_inbound_header_list_size_);
 }
 
@@ -546,7 +551,6 @@ void QuicSpdySession::FillSettingsFrame() {
         settings_.values[SETTINGS_H3_DATAGRAM_DRAFT04] = 1;
         break;
       case HttpDatagramSupport::kRfc:
-        QUIC_RELOADABLE_FLAG_COUNT(quic_enable_h3_datagrams);
         settings_.values[SETTINGS_H3_DATAGRAM] = 1;
         break;
       case HttpDatagramSupport::kRfcAndDraft04:
@@ -823,11 +827,8 @@ void QuicSpdySession::SendHttp3GoAway(QuicErrorCode error_code,
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return;
   }
-  if (do_not_increase_max_streams_after_h3_goaway_flag_) {
-    QUICHE_RELOADABLE_FLAG_COUNT(
-        quic_do_not_increase_max_streams_after_h3_goaway);
-    ietf_streamid_manager().StopIncreasingIncomingMaxStreams();
-  }
+  ietf_streamid_manager().StopIncreasingIncomingMaxStreams();
+
   QuicStreamId stream_id =
       QuicUtils::GetMaxClientInitiatedBidirectionalStreamId(
           transport_version());
@@ -852,7 +853,7 @@ void QuicSpdySession::SendInitialData() {
 }
 
 bool QuicSpdySession::CheckStreamWriteBlocked(QuicStream* stream) const {
-  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data) &&
+  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3) &&
       qpack_decoder_send_stream_ != nullptr &&
       stream->id() == qpack_decoder_send_stream_->id()) {
     // Decoder data is always bundled opportunistically.
@@ -998,8 +999,8 @@ bool QuicSpdySession::ResumeApplicationState(ApplicationState* cached_state) {
   return true;
 }
 
-absl::optional<std::string> QuicSpdySession::OnAlpsData(
-    const uint8_t* alps_data, size_t alps_length) {
+std::optional<std::string> QuicSpdySession::OnAlpsData(const uint8_t* alps_data,
+                                                       size_t alps_length) {
   AlpsFrameDecoder alps_frame_decoder(this);
   HttpDecoder decoder(&alps_frame_decoder);
   decoder.ProcessInput(reinterpret_cast<const char*>(alps_data), alps_length);
@@ -1015,7 +1016,7 @@ absl::optional<std::string> QuicSpdySession::OnAlpsData(
     return "incomplete HTTP/3 frame";
   }
 
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void QuicSpdySession::OnAcceptChFrameReceivedViaAlps(
@@ -1065,7 +1066,7 @@ bool QuicSpdySession::OnSettingsFrame(const SettingsFrame& frame) {
 
 bool QuicSpdySession::ValidateWebTransportSettingsConsistency() {
   // Only apply the following checks to draft-07 or later.
-  absl::optional<WebTransportHttp3Version> version =
+  std::optional<WebTransportHttp3Version> version =
       NegotiatedWebTransportVersion();
   if (!version.has_value() || *version == WebTransportHttp3Version::kDraft02) {
     return true;
@@ -1097,7 +1098,7 @@ bool QuicSpdySession::ValidateWebTransportSettingsConsistency() {
   return true;
 }
 
-absl::optional<std::string> QuicSpdySession::OnSettingsFrameViaAlps(
+std::optional<std::string> QuicSpdySession::OnSettingsFrameViaAlps(
     const SettingsFrame& frame) {
   QUICHE_DCHECK(VersionUsesHttp3(transport_version()));
 
@@ -1112,7 +1113,7 @@ absl::optional<std::string> QuicSpdySession::OnSettingsFrameViaAlps(
       return "error parsing setting";
     }
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 bool QuicSpdySession::VerifySettingIsZeroOrOne(uint64_t id, uint64_t value) {
@@ -1761,10 +1762,10 @@ bool QuicSpdySession::SupportsWebTransport() {
          NegotiatedWebTransportVersion().has_value() && allow_extended_connect_;
 }
 
-absl::optional<WebTransportHttp3Version>
+std::optional<WebTransportHttp3Version>
 QuicSpdySession::SupportedWebTransportVersion() {
   if (!SupportsWebTransport()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return NegotiatedWebTransportVersion();
 }
@@ -1892,20 +1893,17 @@ QuicSpdyStream* QuicSpdySession::CreateOutgoingBidirectionalWebTransportStream(
 }
 
 void QuicSpdySession::OnDatagramProcessed(
-    absl::optional<MessageStatus> /*status*/) {
+    std::optional<MessageStatus> /*status*/) {
   // TODO(b/184598230): make this work with multiple datagram flows.
 }
 
 void QuicSpdySession::DatagramObserver::OnDatagramProcessed(
-    absl::optional<MessageStatus> status) {
+    std::optional<MessageStatus> status) {
   session_->OnDatagramProcessed(status);
 }
 
 HttpDatagramSupport QuicSpdySession::LocalHttpDatagramSupport() {
-  if (quic_enable_h3_datagrams_flag_) {
-    return HttpDatagramSupport::kRfc;
-  }
-  return HttpDatagramSupport::kNone;
+  return HttpDatagramSupport::kRfc;
 }
 
 std::string HttpDatagramSupportToString(

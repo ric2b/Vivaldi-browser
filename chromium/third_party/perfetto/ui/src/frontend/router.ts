@@ -63,8 +63,13 @@ const routeArgs = record({
   // DEPRECATED: for #!/record?p=cpu subpages (b/191255021).
   p: optStr,
 
-  // For fetching traces from Cloud Storage.
+  // For fetching traces from Cloud Storage or local servers
+  // as with record_android_trace.
   url: optStr,
+
+  // Override the referrer. Useful for scripts such as
+  // record_android_trace to record where the trace is coming from.
+  referrer: optStr,
 
   // For the 'mode' of the UI. For example when the mode is 'embedded'
   // some features are disabled.
@@ -233,7 +238,9 @@ export class Router {
     // and foo[bar] is not set at all. Here we need the second case to
     // avoid making the URL ugly.
     for (const key of Object.keys(args)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((args as any)[key] === undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (args as any)[key];
       }
     }
@@ -260,7 +267,9 @@ export class Router {
     // and foo[bar] is not set at all. Here we need the second case to
     // avoid making the URL ugly.
     for (const key of Object.keys(args)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((args as any)[key] === undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (args as any)[key];
       }
     }

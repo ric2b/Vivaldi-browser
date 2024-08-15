@@ -16,8 +16,9 @@ class Profile;
 // price insight information. Upon clicking, it opens the side panel with more
 // price information.
 class PriceInsightsIconView : public PageActionIconView {
+  METADATA_HEADER(PriceInsightsIconView, PageActionIconView)
+
  public:
-  METADATA_HEADER(PriceInsightsIconView);
   PriceInsightsIconView(
       IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
       PageActionIconView::Delegate* page_action_icon_delegate,
@@ -60,7 +61,7 @@ class PriceInsightsIconView : public PageActionIconView {
   void MaybeShowPageActionLabel();
 
   // Gets the label type from the commerce tab helper. This is a proxy method
-  // for ShoppingListUiTabHelper::GetPriceInsightsIconLabelTypeForPage.
+  // for CommerceUiTabHelper::GetPriceInsightsIconLabelTypeForPage.
   PriceInsightsIconView::PriceInsightsIconLabelType GetLabelTypeForPage();
 
   // Update the label for the page action based on the last known label type.
@@ -70,7 +71,6 @@ class PriceInsightsIconView : public PageActionIconView {
   void HidePageActionLabel();
 
   const raw_ptr<Profile> profile_;
-  raw_ptr<const gfx::VectorIcon> icon_;
 
   // Animates out the price tracking icon label after a fixed period of time.
   // This keeps the label visible for long enough to give users an opportunity

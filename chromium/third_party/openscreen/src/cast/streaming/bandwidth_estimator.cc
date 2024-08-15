@@ -67,6 +67,7 @@ void BandwidthEstimator::OnPayloadReceived(
     Clock::time_point ack_arrival_time,
     Clock::duration estimated_round_trip_time) {
   OSP_DCHECK_GE(payload_bytes_acknowledged, 0);
+  OSP_DCHECK_LT(ack_arrival_time, Clock::time_point::max());
   OSP_DCHECK_GE(estimated_round_trip_time, Clock::duration::zero());
   // Track the bytes in terms of when the last packet was sent.
   feedback_history_.Accumulate(payload_bytes_acknowledged,

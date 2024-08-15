@@ -136,6 +136,50 @@ class MODULES_EXPORT MediaStreamTrack
   // ScriptWrappable
   bool HasPendingActivity() const override = 0;
 
+#if !BUILDFLAG(IS_ANDROID)
+  // When called on a "live" video track associated with tab-capture,
+  // asks to deliver a wheel event on the captured tab's viewport.
+  // This is subject to a permission policy on the capturing origin.
+  //
+  // `relative_x` is a value from [0, 1). It denotes the relative position
+  // in the coordinate space of the captured surface, which is unknown to the
+  // capturer. A value of 0 denotes the leftmost pixel; increasing values denote
+  // values further to the right. The sender of the message scales from its own
+  // coordinate space down to the relative values, and the receiver scales back
+  // up to its own coordinates.
+  //
+  // `relative_y` is defined analogously to `relative_x`.
+  //
+  // `wheel_delta_x` and `wheel_delta_y` represent the scroll deltas.
+  virtual void SendWheel(
+      double relative_x,
+      double relative_y,
+      int wheel_delta_x,
+      int wheel_delta_y,
+      base::OnceCallback<void(bool, const String&)> callback) = 0;
+
+  // When called on a "live" video track associated with tab-capture,
+  // returns the zoom level of the capture tab's viewport.
+  // This is subject to a permission policy on the capturing origin.
+  //
+  // If successful, |callback| is invoked with the zoom level in percentage
+  // points and an empty string.
+  // If unsuccessful, it is invoked with `absl::nullopt` and an error message.
+  virtual void GetZoomLevel(
+      base::OnceCallback<void(absl::optional<int>, const String&)>
+          callback) = 0;
+
+  // When called on a "live" video track associated with tab-capture, asks to
+  // set the zoom level on the captured tab's viewport.  This is subject to a
+  // permission policy on the capturing origin.
+  //
+  // If successful, |callback| is invoked with `true` and an empty string.
+  // If unsuccessful, it is invoked with `false` and an error message.
+  virtual void SetZoomLevel(
+      int zoom_level,
+      base::OnceCallback<void(bool, const String&)> callback) = 0;
+#endif
+
   virtual std::unique_ptr<AudioSourceProvider> CreateWebAudioSource(
       int context_sample_rate) = 0;
 

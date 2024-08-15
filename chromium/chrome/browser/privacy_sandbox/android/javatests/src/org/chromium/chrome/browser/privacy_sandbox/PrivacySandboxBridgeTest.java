@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.privacy_sandbox;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -33,7 +32,7 @@ import java.util.List;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-    "enable-features=PrivacySandboxSettings3:show-sample-data/true"
+    "enable-features=PrivacySandboxSettings4:show-sample-data/true"
 })
 @Batch(Batch.PER_CLASS)
 public class PrivacySandboxBridgeTest {
@@ -41,18 +40,6 @@ public class PrivacySandboxBridgeTest {
     public static final ChromeBrowserTestRule sBrowserTestRule = new ChromeBrowserTestRule();
 
     private UserActionTester mUserActionTester;
-
-    @Test
-    @SmallTest
-    public void testToggleSandboxSetting() {
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    PrivacySandboxBridge.setPrivacySandboxEnabled(false);
-                    assertFalse(PrivacySandboxBridge.isPrivacySandboxEnabled());
-                    PrivacySandboxBridge.setPrivacySandboxEnabled(true);
-                    assertTrue(PrivacySandboxBridge.isPrivacySandboxEnabled());
-                });
-    }
 
     @Test
     @SmallTest
@@ -96,6 +83,7 @@ public class PrivacySandboxBridgeTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
+                    PrivacySandboxBridge.setAllPrivacySandboxAllowedForTesting();
                     assertThat(
                             PrivacySandboxBridge.getCurrentTopTopics(), contains(topic2, topic1));
                     assertThat(PrivacySandboxBridge.getBlockedTopics(), contains(topic3, topic4));
@@ -114,7 +102,10 @@ public class PrivacySandboxBridgeTest {
     @Nullable
     private List<String> getFledgeJoiningEtlds() {
         PayloadCallbackHelper<List<String>> callbackHelper = new PayloadCallbackHelper<>();
-        PrivacySandboxBridge.getFledgeJoiningEtldPlusOneForDisplay(callbackHelper::notifyCalled);
+        TestThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        PrivacySandboxBridge.getFledgeJoiningEtldPlusOneForDisplay(
+                                callbackHelper::notifyCalled));
         return callbackHelper.getOnlyPayloadBlocking();
     }
 
@@ -123,7 +114,7 @@ public class PrivacySandboxBridgeTest {
     public void testGetFledgeJoiningEtldPlusOneForDisplay() {
         // Check that this function returns a valid list. We currently can't control from the Java
         // side what they actually return, so just check that it is not null and there is no crash.
-        TestThreadUtils.runOnUiThreadBlocking(() -> assertNotNull(getFledgeJoiningEtlds()));
+        assertNotNull(getFledgeJoiningEtlds());
     }
 
     @Test

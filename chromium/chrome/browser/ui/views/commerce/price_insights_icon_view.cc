@@ -9,7 +9,8 @@
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
-#include "chrome/browser/ui/commerce/price_tracking/shopping_list_ui_tab_helper.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/commerce/commerce_ui_tab_helper.h"
 #include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
 #include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "components/commerce/core/commerce_feature_list.h"
@@ -34,15 +35,17 @@ PriceInsightsIconView::PriceInsightsIconView(
                          icon_label_bubble_delegate,
                          page_action_icon_delegate,
                          "PriceInsights"),
-      profile_(profile),
-      icon_(OmniboxFieldTrial::IsChromeRefreshIconsEnabled()
-                ? &vector_icons::kShoppingBagRefreshIcon
-                : &vector_icons::kShoppingBagIcon) {
+      profile_(profile) {
   SetUpForInOutAnimation();
   SetProperty(views::kElementIdentifierKey, kPriceInsightsChipElementId);
   SetAccessibilityProperties(
-      /*role*/ absl::nullopt,
+      /*role*/ std::nullopt,
       l10n_util::GetStringUTF16(IDS_SHOPPING_INSIGHTS_ICON_TOOLTIP_TEXT));
+
+  if (base::FeatureList::IsEnabled(commerce::kShoppingIconColorVariant)) {
+    SetCustomForegroundColorId(kColorShoppingPageActionIconForegroundVariant);
+    SetCustomBackgroundColorId(kColorShoppingPageActionIconBackgroundVariant);
+  }
 }
 PriceInsightsIconView::~PriceInsightsIconView() = default;
 
@@ -64,6 +67,7 @@ void PriceInsightsIconView::UpdateImpl() {
   } else {
     HidePageActionLabel();
   }
+  UpdateBackground();
 
   SetVisible(should_show);
 }
@@ -78,7 +82,7 @@ void PriceInsightsIconView::MaybeShowPageActionLabel() {
     return;
   }
   auto* tab_helper =
-      commerce::ShoppingListUiTabHelper::FromWebContents(GetWebContents());
+      commerce::CommerceUiTabHelper::FromWebContents(GetWebContents());
 
   if (!tab_helper || !tab_helper->ShouldExpandPageActionIcon(
                          PageActionIconType::kPriceInsights)) {
@@ -88,7 +92,7 @@ void PriceInsightsIconView::MaybeShowPageActionLabel() {
   should_extend_label_shown_duration_ = true;
   UpdatePriceInsightsIconLabel();
 
-  AnimateIn(absl::nullopt);
+  AnimateIn(std::nullopt);
 }
 
 PriceInsightsIconView::PriceInsightsIconLabelType
@@ -99,7 +103,7 @@ PriceInsightsIconView::GetLabelTypeForPage() {
     return PriceInsightsIconView::PriceInsightsIconLabelType::kNone;
   }
   auto* tab_helper =
-      commerce::ShoppingListUiTabHelper::FromWebContents(web_contents);
+      commerce::CommerceUiTabHelper::FromWebContents(web_contents);
   CHECK(tab_helper);
 
   return tab_helper->GetPriceInsightsIconLabelTypeForPage();
@@ -157,7 +161,7 @@ void PriceInsightsIconView::OnExecuting(
     return;
   }
   auto* tab_helper =
-      commerce::ShoppingListUiTabHelper::FromWebContents(web_contents);
+      commerce::CommerceUiTabHelper::FromWebContents(web_contents);
   CHECK(tab_helper);
 
   tab_helper->OnPriceInsightsIconClicked();
@@ -173,7 +177,7 @@ bool PriceInsightsIconView::ShouldShow() const {
     return false;
   }
   auto* tab_helper =
-      commerce::ShoppingListUiTabHelper::FromWebContents(web_contents);
+      commerce::CommerceUiTabHelper::FromWebContents(web_contents);
 
   return tab_helper && tab_helper->ShouldShowPriceInsightsIconView();
 }
@@ -187,5 +191,5 @@ bool PriceInsightsIconView::IsIconHighlightedForTesting() {
          views::InkDropState::ACTIVATED;
 }
 
-BEGIN_METADATA(PriceInsightsIconView, PageActionIconView)
+BEGIN_METADATA(PriceInsightsIconView)
 END_METADATA

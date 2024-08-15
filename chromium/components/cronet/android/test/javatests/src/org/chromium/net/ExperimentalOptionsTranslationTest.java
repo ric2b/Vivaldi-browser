@@ -19,7 +19,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Batch;
 import org.chromium.net.DnsOptions.StaleDnsOptions;
 
 import java.util.Collections;
@@ -31,8 +31,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-@DoNotBatch(reason = "crbug/1459563")
 @RunWith(AndroidJUnit4.class)
+@Batch(Batch.UNIT_TESTS)
 @JNINamespace("cronet")
 @OptIn(
         markerClass = {
@@ -82,7 +82,7 @@ public class ExperimentalOptionsTranslationTest {
             testEnableDefaultNetworkConnectionMigrationApi_noBuilderSupport_setterTakesPrecedence() {
         MockCronetBuilderImpl mockBuilderImpl = MockCronetBuilderImpl.withoutNativeSetterSupport();
         // This test must instantiate an ExperimentalCronetEngine.Builder since we want to call
-        // setExperimentalOptions. We still cast it down to CronetEngine.Builder to confirm
+        // setConnectionMigrationOptions. We still cast it down to CronetEngine.Builder to confirm
         // things work properly when using that (see crbug/1448520).
         CronetEngine.Builder builder = new ExperimentalCronetEngine.Builder(mockBuilderImpl);
 

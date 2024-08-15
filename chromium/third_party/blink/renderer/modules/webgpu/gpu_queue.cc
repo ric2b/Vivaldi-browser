@@ -355,10 +355,20 @@ void GPUQueue::OnWorkDoneCallback(ScriptPromiseResolver* resolver,
       resolver->Resolve();
       break;
     case WGPUQueueWorkDoneStatus_Error:
+      resolver->RejectWithDOMException(
+          DOMExceptionCode::kOperationError,
+          "Unexpected failure in onSubmittedWorkDone");
+      break;
     case WGPUQueueWorkDoneStatus_Unknown:
+      resolver->RejectWithDOMException(
+          DOMExceptionCode::kOperationError,
+          "Unknown failure in onSubmittedWorkDone");
+      break;
     case WGPUQueueWorkDoneStatus_DeviceLost:
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kOperationError));
+      resolver->RejectWithDOMException(
+          DOMExceptionCode::kOperationError,
+          "Device lost during onSubmittedWorkDone (do not use this error for "
+          "recovery - it is NOT guaranteed to happen on device loss)");
       break;
     default:
       NOTREACHED();
@@ -369,9 +379,8 @@ ScriptPromise GPUQueue::onSubmittedWorkDone(ScriptState* script_state) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  auto* callback =
-      BindWGPUOnceCallback(&GPUQueue::OnWorkDoneCallback, WrapPersistent(this),
-                           WrapPersistent(resolver));
+  auto* callback = MakeWGPUOnceCallback(resolver->WrapCallbackInScriptScope(
+      WTF::BindOnce(&GPUQueue::OnWorkDoneCallback, WrapPersistent(this))));
 
   GetProcs().queueOnSubmittedWorkDone(GetHandle(), callback->UnboundCallback(),
                                       callback->AsUserdata());
@@ -772,7 +781,7 @@ bool GPUQueue::CopyFromCanvasSourceImage(
   // due to alpha type has been dropped. Disable that
   // upload path if the image is not texture backed, OOP-R is disabled and image
   // alpha type is unpremultiplied.
-  if (!base::FeatureList::IsEnabled(features::kCanvasOopRasterization) &&
+  if (!features::IsCanvasOopRasterizationEnabled() &&
       !image->IsTextureBacked() && !image->IsPremultiplied()) {
     use_webgpu_mailbox_texture = false;
   }

@@ -15,6 +15,7 @@
 #include "src/heap/read-only-promotion.h"
 #include "src/heap/safepoint.h"
 #include "src/init/bootstrapper.h"
+#include "src/logging/counters-scopes.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/js-regexp-inl.h"
 #include "src/snapshot/context-deserializer.h"
@@ -136,6 +137,8 @@ SnapshotData MaybeDecompress(Isolate* isolate,
 #ifdef V8_SNAPSHOT_COMPRESSION
   TRACE_EVENT0("v8", "V8.SnapshotDecompress");
   RCS_SCOPE(isolate, RuntimeCallCounterId::kSnapshotDecompress);
+  NestedTimedHistogramScope histogram_timer(
+      isolate->counters()->snapshot_decompress());
   return SnapshotCompression::Decompress(snapshot_data);
 #else
   return SnapshotData(snapshot_data);
@@ -280,7 +283,7 @@ void Snapshot::ClearReconstructableDataForSerialization(
       }
 
       // Also, clear out feedback vectors and recompilable code.
-      if (fun->CanDiscardCompiled()) {
+      if (fun->CanDiscardCompiled(isolate)) {
         fun->set_code(*BUILTIN_CODE(isolate, CompileLazy));
       }
       if (!IsUndefined(fun->raw_feedback_cell(cage_base)->value(cage_base))) {
@@ -766,7 +769,7 @@ bool RunExtraCode(v8::Isolate* isolate, v8::Local<v8::Context> context,
   }
   v8::Local<v8::String> resource_name =
       v8::String::NewFromUtf8(isolate, name).ToLocalChecked();
-  v8::ScriptOrigin origin(isolate, resource_name);
+  v8::ScriptOrigin origin(resource_name);
   v8::ScriptCompiler::Source source(source_string, origin);
   v8::Local<v8::Script> script;
   if (!v8::ScriptCompiler::Compile(context, &source).ToLocal(&script)) {
@@ -817,7 +820,13 @@ v8::StartupData WarmUpSnapshotDataBlobInternal(
   //    compilation of executed functions.
   //  - Create a new context. This context will be unpolluted.
   //  - Serialize the isolate and the second context into a new snapshot blob.
-  v8::SnapshotCreator snapshot_creator(nullptr, &cold_snapshot_blob);
+
+  std::unique_ptr<v8::ArrayBuffer::Allocator> allocator(
+      ArrayBuffer::Allocator::NewDefaultAllocator());
+  v8::Isolate::CreateParams params;
+  params.snapshot_blob = &cold_snapshot_blob;
+  params.array_buffer_allocator = allocator.get();
+  v8::SnapshotCreator snapshot_creator(params);
   v8::Isolate* isolate = snapshot_creator.GetIsolate();
   {
     v8::HandleScope scope(isolate);
@@ -837,22 +846,10 @@ v8::StartupData WarmUpSnapshotDataBlobInternal(
       v8::SnapshotCreator::FunctionCodeHandling::kKeep);
 }
 
-SnapshotCreatorImpl::SnapshotCreatorImpl(
-    Isolate* isolate, const intptr_t* api_external_references,
-    const StartupData* existing_blob, bool owns_isolate)
-    : owns_isolate_(owns_isolate),
-      isolate_(isolate == nullptr ? Isolate::New() : isolate),
-      array_buffer_allocator_(ArrayBuffer::Allocator::NewDefaultAllocator()) {
-  DCHECK_NOT_NULL(isolate_);
-
-  isolate_->set_array_buffer_allocator(array_buffer_allocator_);
-  isolate_->set_api_external_references(api_external_references);
+void SnapshotCreatorImpl::InitInternal(const StartupData* blob) {
   isolate_->enable_serializer();
   isolate_->Enter();
 
-  const StartupData* blob = existing_blob != nullptr
-                                ? existing_blob
-                                : Snapshot::DefaultSnapshotBlob();
   if (blob != nullptr && blob->raw_size > 0) {
     isolate_->set_snapshot_blob(blob);
     Snapshot::Initialize(isolate_);
@@ -870,6 +867,58 @@ SnapshotCreatorImpl::SnapshotCreatorImpl(
   DCHECK_EQ(contexts_.size(), kDefaultContextIndex + 1);
 }
 
+SnapshotCreatorImpl::SnapshotCreatorImpl(
+    Isolate* isolate, const intptr_t* api_external_references,
+    const StartupData* existing_blob, bool owns_isolate)
+    : owns_isolate_(owns_isolate),
+      isolate_(isolate == nullptr ? Isolate::New() : isolate),
+      array_buffer_allocator_(ArrayBuffer::Allocator::NewDefaultAllocator()) {
+  DCHECK_NOT_NULL(isolate_);
+
+  isolate_->set_array_buffer_allocator(array_buffer_allocator_.get());
+  isolate_->set_api_external_references(api_external_references);
+
+  InitInternal(existing_blob ? existing_blob : Snapshot::DefaultSnapshotBlob());
+}
+
+SnapshotCreatorImpl::SnapshotCreatorImpl(
+    const v8::Isolate::CreateParams& params)
+    : owns_isolate_(true), isolate_(Isolate::New()) {
+  if (auto allocator = params.array_buffer_allocator_shared) {
+    CHECK(params.array_buffer_allocator == nullptr ||
+          params.array_buffer_allocator == allocator.get());
+    isolate_->set_array_buffer_allocator(allocator.get());
+    isolate_->set_array_buffer_allocator_shared(std::move(allocator));
+  } else {
+    CHECK_NOT_NULL(params.array_buffer_allocator);
+    isolate_->set_array_buffer_allocator(params.array_buffer_allocator);
+  }
+  isolate_->set_api_external_references(params.external_references);
+  isolate_->heap()->ConfigureHeap(params.constraints, params.cpp_heap);
+
+  InitInternal(params.snapshot_blob ? params.snapshot_blob
+                                    : Snapshot::DefaultSnapshotBlob());
+}
+
+SnapshotCreatorImpl::SnapshotCreatorImpl(
+    Isolate* isolate, const v8::Isolate::CreateParams& params)
+    : owns_isolate_(false), isolate_(isolate) {
+  if (auto allocator = params.array_buffer_allocator_shared) {
+    CHECK(params.array_buffer_allocator == nullptr ||
+          params.array_buffer_allocator == allocator.get());
+    isolate_->set_array_buffer_allocator(allocator.get());
+    isolate_->set_array_buffer_allocator_shared(std::move(allocator));
+  } else {
+    CHECK_NOT_NULL(params.array_buffer_allocator);
+    isolate_->set_array_buffer_allocator(params.array_buffer_allocator);
+  }
+  isolate_->set_api_external_references(params.external_references);
+  isolate_->heap()->ConfigureHeap(params.constraints, params.cpp_heap);
+
+  InitInternal(params.snapshot_blob ? params.snapshot_blob
+                                    : Snapshot::DefaultSnapshotBlob());
+}
+
 SnapshotCreatorImpl::~SnapshotCreatorImpl() {
   if (isolate_->heap()->read_only_space()->writable()) {
     // Finalize the RO heap in order to leave the Isolate in a consistent state.
@@ -883,7 +932,6 @@ SnapshotCreatorImpl::~SnapshotCreatorImpl() {
   }
   isolate_->Exit();
   if (owns_isolate_) Isolate::Delete(isolate_);
-  delete array_buffer_allocator_;
 }
 
 void SnapshotCreatorImpl::SetDefaultContext(

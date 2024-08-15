@@ -14,13 +14,13 @@
 #include <vector>
 
 #include "base/base_switches.h"
+#include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
@@ -173,7 +173,7 @@ void SignalHandler(int signal) {
     std::string message("BrowserTestBase received signal: ");
     message += strsignal(signal);
     message += ". Backtrace:\n";
-    logging::RawLog(logging::LOG_ERROR, message.c_str());
+    logging::RawLog(logging::LOGGING_ERROR, message.c_str());
     auto stack_trace = base::debug::StackTrace();
     stack_trace.OutputToStream(&std::cerr);
 #if BUILDFLAG(IS_ANDROID)
@@ -285,11 +285,6 @@ BrowserTestBase::BrowserTestBase() {
   registry_util::RegistryOverrideManager::
       SetAllowHKLMRegistryOverrideForIntegrationTests(/*allow=*/false);
 #endif
-
-  // This is called through base::TestSuite initially. It'll also be called
-  // inside BrowserMain, so tell the code to ignore the check that it's being
-  // called more than once
-  base::i18n::AllowMultipleInitializeCallsForTesting();
 
   embedded_test_server_ = std::make_unique<net::EmbeddedTestServer>();
 
@@ -623,16 +618,13 @@ void BrowserTestBase::SetUp() {
   // again.
   startup_metric_utils::GetBrowser().ResetSessionForTesting();
 
-  base::i18n::AllowMultipleInitializeCallsForTesting();
-  base::i18n::InitializeICU();
-
   // The ContentMainDelegate and ContentClient should have been set by
   // JNI_OnLoad for the test target.
   ContentMainDelegate* delegate = content_main_params.delegate;
   ASSERT_TRUE(delegate);
   ASSERT_TRUE(GetContentClientForTesting());
 
-  absl::optional<int> startup_error = delegate->BasicStartupComplete();
+  std::optional<int> startup_error = delegate->BasicStartupComplete();
   ASSERT_FALSE(startup_error.has_value());
 
   // We can only setup startup tracing after mojo is initialized above.
@@ -661,7 +653,7 @@ void BrowserTestBase::SetUp() {
     const bool has_thread_pool =
         GetContentClientForTesting()->browser()->CreateThreadPool("Browser");
 
-    absl::optional<int> pre_browser_main_exit_code = delegate->PreBrowserMain();
+    std::optional<int> pre_browser_main_exit_code = delegate->PreBrowserMain();
     ASSERT_FALSE(pre_browser_main_exit_code.has_value());
 
     BrowserTaskExecutor::Create();
@@ -672,7 +664,7 @@ void BrowserTestBase::SetUp() {
           variations::VariationsIdsProvider::Mode::kUseSignedInState);
     }
 
-    absl::optional<int> post_early_initialization_exit_code =
+    std::optional<int> post_early_initialization_exit_code =
         delegate->PostEarlyInitialization(invoked_in_browser);
     ASSERT_FALSE(post_early_initialization_exit_code.has_value());
 
@@ -854,7 +846,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
   // set a ScopedRunLoopTimeout from their fixture's constructor (which
   // happens as part of setting up the test factory in gtest while
   // ProxyRunTestOnMainThreadLoop() happens later as part of SetUp()).
-  absl::optional<base::test::ScopedRunLoopTimeout> scoped_run_timeout;
+  std::optional<base::test::ScopedRunLoopTimeout> scoped_run_timeout;
   if (!base::test::ScopedRunLoopTimeout::ExistsForCurrentThread()) {
     // TODO(https://crbug.com/918724): determine whether the timeout can be
     // reduced from action_max_timeout() to action_timeout().
@@ -900,7 +892,6 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
       base::RunLoop flush_startup_tasks;
       flush_startup_tasks.RunUntilIdle();
       // Make sure there isn't an odd caller which reached |flush_startup_tasks|
-      // statically via base::RunLoop::QuitCurrent*Deprecated().
       DCHECK(!flush_startup_tasks.AnyQuitCalled());
     }
 
@@ -918,9 +909,14 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     }
     initial_web_contents_.reset();
 
-    OnRestartNetworkServiceForTesting(
-        base::BindRepeating(&BrowserTestBase::ForceInitializeNetworkProcess,
-                            base::Unretained(this)));
+    base::CallbackListSubscription on_network_service_restarted_subscription =
+        RegisterNetworkServiceProcessGoneHandler(base::BindRepeating(
+            [](BrowserTestBase* browser_test_base, bool crashed) {
+              if (!crashed) {
+                browser_test_base->ForceInitializeNetworkProcess();
+              }
+            },
+            base::Unretained(this)));
 
     SetUpOnMainThread();
 
@@ -951,7 +947,12 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     TearDownOnMainThread();
     AssertThatNetworkServiceDidNotCrash();
 
-    OnRestartNetworkServiceForTesting(base::NullCallback());
+    // The subscription should be reset after asserting that the network service
+    // did not crash, otherwise a network service restart task might be
+    // processed in AssertThatNetworkServiceDidNotCrash() and the network
+    // service will not be correctly initialized, which causes
+    // AssertThatNetworkServiceDidNotCrash() to incorrectly report crashes.
+    on_network_service_restarted_subscription = {};
   }
 
   PostRunTestOnMainThread();

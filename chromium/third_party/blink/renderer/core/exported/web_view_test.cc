@@ -603,8 +603,11 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
                                       ForcedColors::kActive);
   UpdateAllLifecyclePhases();
 
+  mojom::blink::ColorScheme color_scheme = mojom::blink::ColorScheme::kLight;
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, mojom::blink::ColorScheme::kLight);
+      CSSValueID::kCanvas, color_scheme,
+      web_view->GetPage()->GetColorProviderForPainting(
+          color_scheme, /*in_forced_colors=*/true));
   EXPECT_EQ(system_background_color, frame_view->BaseBackgroundColor());
 
   color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
@@ -1655,6 +1658,25 @@ TEST_F(WebViewTest, ExtendSelectionAndDelete) {
   RegisterMockedHttpURLLoad("input_field_populated.html");
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "input_field_populated.html");
+  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+  web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
+  frame->SetEditableSelectionOffsets(10, 10);
+  frame->ExtendSelectionAndDelete(5, 8);
+  WebInputMethodController* active_input_method_controller =
+      frame->GetInputMethodController();
+  WebTextInputInfo info = active_input_method_controller->TextInputInfo();
+  EXPECT_EQ("01234ijklmnopqrstuvwxyz", info.value.Utf8());
+  EXPECT_EQ(5, info.selection_start);
+  EXPECT_EQ(5, info.selection_end);
+  frame->ExtendSelectionAndDelete(10, 0);
+  info = active_input_method_controller->TextInputInfo();
+  EXPECT_EQ("ijklmnopqrstuvwxyz", info.value.Utf8());
+}
+
+TEST_F(WebViewTest, EditContextExtendSelectionAndDelete) {
+  RegisterMockedHttpURLLoad("edit_context.html");
+  WebViewImpl* web_view =
+      web_view_helper_.InitializeAndLoad(base_url_ + "edit_context.html");
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
   frame->SetEditableSelectionOffsets(10, 10);

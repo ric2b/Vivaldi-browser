@@ -189,7 +189,7 @@ class Printer {
 
     /// @returns the generated SPIR-V code on success, or failure
     Result<std::vector<uint32_t>> Code() {
-        if (auto res = Generate(); !res) {
+        if (auto res = Generate(); res != Success) {
             return res.Failure();
         }
 
@@ -202,7 +202,7 @@ class Printer {
 
     /// @returns the generated SPIR-V module on success, or failure
     Result<writer::Module> Module() {
-        if (auto res = Generate(); !res) {
+        if (auto res = Generate(); res != Success) {
             return res.Failure();
         }
 
@@ -261,13 +261,13 @@ class Printer {
     Hashmap<const core::type::Type*, uint32_t, 4> undef_values_;
 
     /// The map of non-constant values to their result IDs.
-    Hashmap<core::ir::Value*, uint32_t, 8> values_;
+    Hashmap<const core::ir::Value*, uint32_t, 8> values_;
 
     /// The map of blocks to the IDs of their label instructions.
-    Hashmap<core::ir::Block*, uint32_t, 8> block_labels_;
+    Hashmap<const core::ir::Block*, uint32_t, 8> block_labels_;
 
     /// The map of control instructions to the IDs of the label of their SPIR-V merge blocks.
-    Hashmap<core::ir::ControlInstruction*, uint32_t, 8> merge_block_labels_;
+    Hashmap<const core::ir::ControlInstruction*, uint32_t, 8> merge_block_labels_;
 
     /// The map of extended instruction set names to their result IDs.
     Hashmap<std::string_view, uint32_t, 2> imports_;
@@ -292,7 +292,7 @@ class Printer {
     /// Builds the SPIR-V from the IR
     Result<SuccessType> Generate() {
         auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "SPIR-V writer");
-        if (!valid) {
+        if (valid != Success) {
             return valid.Failure();
         }
 
@@ -304,7 +304,7 @@ class Printer {
         EmitRootBlock(ir_.root_block);
 
         // Emit functions.
-        for (auto* func : ir_.functions) {
+        for (core::ir::Function* func : ir_.functions) {
             EmitFunction(func);
         }
 
@@ -538,7 +538,7 @@ class Printer {
     /// Get the result ID of the instruction result `value`, emitting its instruction if necessary.
     /// @param inst the instruction to get the ID for
     /// @returns the result ID of the instruction
-    uint32_t Value(core::ir::Instruction* inst) { return Value(inst->Result()); }
+    uint32_t Value(core::ir::Instruction* inst) { return Value(inst->Result(0)); }
 
     /// Get the result ID of the value `value`, emitting its instruction if necessary.
     /// @param value the value to get the ID for
@@ -555,7 +555,7 @@ class Printer {
     /// Get the ID of the label for `block`.
     /// @param block the block to get the label ID for
     /// @returns the ID of the block's label
-    uint32_t Label(core::ir::Block* block) {
+    uint32_t Label(const core::ir::Block* block) {
         return block_labels_.GetOrCreate(block, [&] { return module_.NextId(); });
     }
 
@@ -781,7 +781,7 @@ class Printer {
                 continue;
             }
 
-            auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
+            auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
             if (!(ptr->AddressSpace() == core::AddressSpace::kIn ||
                   ptr->AddressSpace() == core::AddressSpace::kOut)) {
                 continue;
@@ -789,7 +789,7 @@ class Printer {
 
             // Determine if this IO variable is used by the entry point.
             bool used = false;
-            for (const auto& use : var->Result()->Usages()) {
+            for (const auto& use : var->Result(0)->Usages()) {
                 auto* block = use.instruction->Block();
                 while (block->Parent()) {
                     block = block->Parent()->Block();
@@ -837,7 +837,11 @@ class Printer {
         // If there are no instructions in the block, it's a dead end, so we shouldn't be able to
         // get here to begin with.
         if (block->IsEmpty()) {
-            current_function_.push_inst(spv::Op::OpUnreachable, {});
+            if (!block->Parent()->Results().IsEmpty()) {
+                current_function_.push_inst(spv::Op::OpBranch, {GetMergeLabel(block->Parent())});
+            } else {
+                current_function_.push_inst(spv::Op::OpUnreachable, {});
+            }
             return;
         }
 
@@ -875,8 +879,8 @@ class Printer {
             Switch(
                 inst,                                                                 //
                 [&](core::ir::Access* a) { EmitAccess(a); },                          //
-                [&](core::ir::Binary* b) { EmitBinary(b); },                          //
                 [&](core::ir::Bitcast* b) { EmitBitcast(b); },                        //
+                [&](core::ir::CoreBinary* b) { EmitBinary(b); },                      //
                 [&](core::ir::CoreBuiltinCall* b) { EmitCoreBuiltinCall(b); },        //
                 [&](spirv::ir::BuiltinCall* b) { EmitSpirvBuiltinCall(b); },          //
                 [&](core::ir::Construct* c) { EmitConstruct(c); },                    //
@@ -889,7 +893,7 @@ class Printer {
                 [&](core::ir::Store* s) { EmitStore(s); },                            //
                 [&](core::ir::StoreVectorElement* s) { EmitStoreVectorElement(s); },  //
                 [&](core::ir::UserCall* c) { EmitUserCall(c); },                      //
-                [&](core::ir::Unary* u) { EmitUnary(u); },                            //
+                [&](core::ir::CoreUnary* u) { EmitUnary(u); },                        //
                 [&](core::ir::Var* v) { EmitVar(v); },                                //
                 [&](core::ir::Let* l) { EmitLet(l); },                                //
                 [&](core::ir::If* i) { EmitIf(i); },                                  //
@@ -897,7 +901,7 @@ class Printer {
                 TINT_ICE_ON_NO_MATCH);
 
             // Set the name for the SPIR-V result ID if provided in the module.
-            if (inst->Result() && !inst->Is<core::ir::Var>()) {
+            if (inst->Result(0) && !inst->Is<core::ir::Var>()) {
                 if (auto name = ir_.NameOf(inst)) {
                     module_.PushDebug(spv::Op::OpName, {Value(inst), Operand(name.Name())});
                 }
@@ -974,12 +978,12 @@ class Printer {
 
         uint32_t true_label = merge_label;
         uint32_t false_label = merge_label;
-        if (true_block->Length() > 1 || i->HasResults() ||
-            (true_block->HasTerminator() && !true_block->Terminator()->Is<core::ir::ExitIf>())) {
+        if (true_block->Length() > 1 || !i->Results().IsEmpty() ||
+            (true_block->Terminator() && !true_block->Terminator()->Is<core::ir::ExitIf>())) {
             true_label = Label(true_block);
         }
-        if (false_block->Length() > 1 || i->HasResults() ||
-            (false_block->HasTerminator() && !false_block->Terminator()->Is<core::ir::ExitIf>())) {
+        if (false_block->Length() > 1 || !i->Results().IsEmpty() ||
+            (false_block->Terminator() && !false_block->Terminator()->Is<core::ir::ExitIf>())) {
             false_label = Label(false_block);
         }
 
@@ -1006,7 +1010,7 @@ class Printer {
     /// Emit an access instruction
     /// @param access the access instruction to emit
     void EmitAccess(core::ir::Access* access) {
-        auto* ty = access->Result()->Type();
+        auto* ty = access->Result(0)->Type();
 
         auto id = Value(access);
         OperandList operands = {Type(ty), id, Value(access->Object())};
@@ -1056,21 +1060,21 @@ class Printer {
 
     /// Emit a binary instruction.
     /// @param binary the binary instruction to emit
-    void EmitBinary(core::ir::Binary* binary) {
+    void EmitBinary(core::ir::CoreBinary* binary) {
         auto id = Value(binary);
         auto lhs = Value(binary->LHS());
         auto rhs = Value(binary->RHS());
-        auto* ty = binary->Result()->Type();
+        auto* ty = binary->Result(0)->Type();
         auto* lhs_ty = binary->LHS()->Type();
 
         // Determine the opcode.
         spv::Op op = spv::Op::Max;
         switch (binary->Op()) {
-            case core::ir::BinaryOp::kAdd: {
+            case core::BinaryOp::kAdd: {
                 op = ty->is_integer_scalar_or_vector() ? spv::Op::OpIAdd : spv::Op::OpFAdd;
                 break;
             }
-            case core::ir::BinaryOp::kDivide: {
+            case core::BinaryOp::kDivide: {
                 if (ty->is_signed_integer_scalar_or_vector()) {
                     op = spv::Op::OpSDiv;
                 } else if (ty->is_unsigned_integer_scalar_or_vector()) {
@@ -1080,7 +1084,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kMultiply: {
+            case core::BinaryOp::kMultiply: {
                 if (ty->is_integer_scalar_or_vector()) {
                     op = spv::Op::OpIMul;
                 } else if (ty->is_float_scalar_or_vector()) {
@@ -1088,11 +1092,11 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kSubtract: {
+            case core::BinaryOp::kSubtract: {
                 op = ty->is_integer_scalar_or_vector() ? spv::Op::OpISub : spv::Op::OpFSub;
                 break;
             }
-            case core::ir::BinaryOp::kModulo: {
+            case core::BinaryOp::kModulo: {
                 if (ty->is_signed_integer_scalar_or_vector()) {
                     op = spv::Op::OpSRem;
                 } else if (ty->is_unsigned_integer_scalar_or_vector()) {
@@ -1103,7 +1107,7 @@ class Printer {
                 break;
             }
 
-            case core::ir::BinaryOp::kAnd: {
+            case core::BinaryOp::kAnd: {
                 if (ty->is_integer_scalar_or_vector()) {
                     op = spv::Op::OpBitwiseAnd;
                 } else if (ty->is_bool_scalar_or_vector()) {
@@ -1111,7 +1115,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kOr: {
+            case core::BinaryOp::kOr: {
                 if (ty->is_integer_scalar_or_vector()) {
                     op = spv::Op::OpBitwiseOr;
                 } else if (ty->is_bool_scalar_or_vector()) {
@@ -1119,16 +1123,16 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kXor: {
+            case core::BinaryOp::kXor: {
                 op = spv::Op::OpBitwiseXor;
                 break;
             }
 
-            case core::ir::BinaryOp::kShiftLeft: {
+            case core::BinaryOp::kShiftLeft: {
                 op = spv::Op::OpShiftLeftLogical;
                 break;
             }
-            case core::ir::BinaryOp::kShiftRight: {
+            case core::BinaryOp::kShiftRight: {
                 if (ty->is_signed_integer_scalar_or_vector()) {
                     op = spv::Op::OpShiftRightArithmetic;
                 } else if (ty->is_unsigned_integer_scalar_or_vector()) {
@@ -1137,7 +1141,7 @@ class Printer {
                 break;
             }
 
-            case core::ir::BinaryOp::kEqual: {
+            case core::BinaryOp::kEqual: {
                 if (lhs_ty->is_bool_scalar_or_vector()) {
                     op = spv::Op::OpLogicalEqual;
                 } else if (lhs_ty->is_float_scalar_or_vector()) {
@@ -1147,7 +1151,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kNotEqual: {
+            case core::BinaryOp::kNotEqual: {
                 if (lhs_ty->is_bool_scalar_or_vector()) {
                     op = spv::Op::OpLogicalNotEqual;
                 } else if (lhs_ty->is_float_scalar_or_vector()) {
@@ -1157,7 +1161,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kGreaterThan: {
+            case core::BinaryOp::kGreaterThan: {
                 if (lhs_ty->is_float_scalar_or_vector()) {
                     op = spv::Op::OpFOrdGreaterThan;
                 } else if (lhs_ty->is_signed_integer_scalar_or_vector()) {
@@ -1167,7 +1171,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kGreaterThanEqual: {
+            case core::BinaryOp::kGreaterThanEqual: {
                 if (lhs_ty->is_float_scalar_or_vector()) {
                     op = spv::Op::OpFOrdGreaterThanEqual;
                 } else if (lhs_ty->is_signed_integer_scalar_or_vector()) {
@@ -1177,7 +1181,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kLessThan: {
+            case core::BinaryOp::kLessThan: {
                 if (lhs_ty->is_float_scalar_or_vector()) {
                     op = spv::Op::OpFOrdLessThan;
                 } else if (lhs_ty->is_signed_integer_scalar_or_vector()) {
@@ -1187,7 +1191,7 @@ class Printer {
                 }
                 break;
             }
-            case core::ir::BinaryOp::kLessThanEqual: {
+            case core::BinaryOp::kLessThanEqual: {
                 if (lhs_ty->is_float_scalar_or_vector()) {
                     op = spv::Op::OpFOrdLessThanEqual;
                 } else if (lhs_ty->is_signed_integer_scalar_or_vector()) {
@@ -1197,6 +1201,9 @@ class Printer {
                 }
                 break;
             }
+            default:
+                TINT_UNIMPLEMENTED() << binary->Op();
+                break;
         }
 
         // Emit the instruction.
@@ -1206,9 +1213,9 @@ class Printer {
     /// Emit a bitcast instruction.
     /// @param bitcast the bitcast instruction to emit
     void EmitBitcast(core::ir::Bitcast* bitcast) {
-        auto* ty = bitcast->Result()->Type();
+        auto* ty = bitcast->Result(0)->Type();
         if (ty == bitcast->Val()->Type()) {
-            values_.Add(bitcast->Result(), Value(bitcast->Val()));
+            values_.Add(bitcast->Result(0), Value(bitcast->Val()));
             return;
         }
         current_function_.push_inst(spv::Op::OpBitcast,
@@ -1341,8 +1348,8 @@ class Printer {
         }
 
         OperandList operands;
-        if (!builtin->Result()->Type()->Is<core::type::Void>()) {
-            operands = {Type(builtin->Result()->Type()), id};
+        if (!builtin->Result(0)->Type()->Is<core::type::Void>()) {
+            operands = {Type(builtin->Result(0)->Type()), id};
         }
         for (auto* arg : builtin->Args()) {
             operands.push_back(Value(arg));
@@ -1353,19 +1360,19 @@ class Printer {
     /// Emit a builtin function call instruction.
     /// @param builtin the builtin call instruction to emit
     void EmitCoreBuiltinCall(core::ir::CoreBuiltinCall* builtin) {
-        auto* result_ty = builtin->Result()->Type();
+        auto* result_ty = builtin->Result(0)->Type();
 
         if (builtin->Func() == core::BuiltinFn::kAbs &&
             result_ty->is_unsigned_integer_scalar_or_vector()) {
             // abs() is a no-op for unsigned integers.
-            values_.Add(builtin->Result(), Value(builtin->Args()[0]));
+            values_.Add(builtin->Result(0), Value(builtin->Args()[0]));
             return;
         }
         if ((builtin->Func() == core::BuiltinFn::kAll ||
              builtin->Func() == core::BuiltinFn::kAny) &&
             builtin->Args()[0]->Type()->Is<core::type::Bool>()) {
             // all() and any() are passthroughs for scalar arguments.
-            values_.Add(builtin->Result(), Value(builtin->Args()[0]));
+            values_.Add(builtin->Result(0), Value(builtin->Args()[0]));
             return;
         }
 
@@ -1710,12 +1717,12 @@ class Printer {
         // If there is just a single argument with the same type as the result, this is an identity
         // constructor and we can just pass through the ID of the argument.
         if (construct->Args().Length() == 1 &&
-            construct->Result()->Type() == construct->Args()[0]->Type()) {
-            values_.Add(construct->Result(), Value(construct->Args()[0]));
+            construct->Result(0)->Type() == construct->Args()[0]->Type()) {
+            values_.Add(construct->Result(0), Value(construct->Args()[0]));
             return;
         }
 
-        OperandList operands = {Type(construct->Result()->Type()), Value(construct)};
+        OperandList operands = {Type(construct->Result(0)->Type()), Value(construct)};
         for (auto* arg : construct->Args()) {
             operands.push_back(Value(arg));
         }
@@ -1725,10 +1732,10 @@ class Printer {
     /// Emit a convert instruction.
     /// @param convert the convert instruction to emit
     void EmitConvert(core::ir::Convert* convert) {
-        auto* res_ty = convert->Result()->Type();
+        auto* res_ty = convert->Result(0)->Type();
         auto* arg_ty = convert->Args()[0]->Type();
 
-        OperandList operands = {Type(convert->Result()->Type()), Value(convert)};
+        OperandList operands = {Type(convert->Result(0)->Type()), Value(convert)};
         for (auto* arg : convert->Args()) {
             operands.push_back(Value(arg));
         }
@@ -1810,21 +1817,21 @@ class Printer {
     /// @param load the load instruction to emit
     void EmitLoad(core::ir::Load* load) {
         current_function_.push_inst(
-            spv::Op::OpLoad, {Type(load->Result()->Type()), Value(load), Value(load->From())});
+            spv::Op::OpLoad, {Type(load->Result(0)->Type()), Value(load), Value(load->From())});
     }
 
     /// Emit a load vector element instruction.
     /// @param load the load vector element instruction to emit
     void EmitLoadVectorElement(core::ir::LoadVectorElement* load) {
         auto* vec_ptr_ty = load->From()->Type()->As<core::type::Pointer>();
-        auto* el_ty = load->Result()->Type();
+        auto* el_ty = load->Result(0)->Type();
         auto* el_ptr_ty = ir_.Types().ptr(vec_ptr_ty->AddressSpace(), el_ty, vec_ptr_ty->Access());
         auto el_ptr_id = module_.NextId();
         current_function_.push_inst(
             spv::Op::OpAccessChain,
             {Type(el_ptr_ty), el_ptr_id, Value(load->From()), Value(load->Index())});
         current_function_.push_inst(spv::Op::OpLoad,
-                                    {Type(load->Result()->Type()), Value(load), el_ptr_id});
+                                    {Type(load->Result(0)->Type()), Value(load), el_ptr_id});
     }
 
     /// Emit a loop instruction.
@@ -1862,7 +1869,7 @@ class Printer {
         EmitBlockInstructions(loop->Body());
 
         // Emit the loop continuing block.
-        if (loop->Continuing()->HasTerminator()) {
+        if (loop->Continuing()->Terminator()) {
             EmitBlock(loop->Continuing());
         } else {
             // We still need to emit a continuing block with a back-edge, even if it is unreachable.
@@ -1885,7 +1892,7 @@ class Printer {
         for (auto& c : swtch->Cases()) {
             for (auto& sel : c.selectors) {
                 if (sel.IsDefault()) {
-                    default_label = Label(c.Block());
+                    default_label = Label(c.block);
                 }
             }
         }
@@ -1894,7 +1901,7 @@ class Printer {
         // Build the operands to the OpSwitch instruction.
         OperandList switch_operands = {Value(swtch->Condition()), default_label};
         for (auto& c : swtch->Cases()) {
-            auto label = Label(c.Block());
+            auto label = Label(c.block);
             for (auto& sel : c.selectors) {
                 if (sel.IsDefault()) {
                     continue;
@@ -1914,7 +1921,7 @@ class Printer {
 
         // Emit the cases.
         for (auto& c : swtch->Cases()) {
-            EmitBlock(c.Block());
+            EmitBlock(c.block);
         }
 
         // Emit the switch merge block.
@@ -1929,7 +1936,7 @@ class Printer {
     void EmitSwizzle(core::ir::Swizzle* swizzle) {
         auto id = Value(swizzle);
         auto obj = Value(swizzle->Object());
-        OperandList operands = {Type(swizzle->Result()->Type()), id, obj, obj};
+        OperandList operands = {Type(swizzle->Result(0)->Type()), id, obj, obj};
         for (auto idx : swizzle->Indices()) {
             operands.push_back(idx);
         }
@@ -1957,20 +1964,23 @@ class Printer {
 
     /// Emit a unary instruction.
     /// @param unary the unary instruction to emit
-    void EmitUnary(core::ir::Unary* unary) {
+    void EmitUnary(core::ir::CoreUnary* unary) {
         auto id = Value(unary);
-        auto* ty = unary->Result()->Type();
+        auto* ty = unary->Result(0)->Type();
         spv::Op op = spv::Op::Max;
         switch (unary->Op()) {
-            case core::ir::UnaryOp::kComplement:
+            case core::UnaryOp::kComplement:
                 op = spv::Op::OpNot;
                 break;
-            case core::ir::UnaryOp::kNegation:
+            case core::UnaryOp::kNegation:
                 if (ty->is_float_scalar_or_vector()) {
                     op = spv::Op::OpFNegate;
                 } else if (ty->is_signed_integer_scalar_or_vector()) {
                     op = spv::Op::OpSNegate;
                 }
+                break;
+            default:
+                TINT_UNIMPLEMENTED() << unary->Op();
                 break;
         }
         current_function_.push_inst(op, {Type(ty), id, Value(unary->Val())});
@@ -1980,7 +1990,7 @@ class Printer {
     /// @param call the user call instruction to emit
     void EmitUserCall(core::ir::UserCall* call) {
         auto id = Value(call);
-        OperandList operands = {Type(call->Result()->Type()), id, Value(call->Target())};
+        OperandList operands = {Type(call->Result(0)->Type()), id, Value(call->Target())};
         for (auto* arg : call->Args()) {
             operands.push_back(Value(arg));
         }
@@ -2041,7 +2051,7 @@ class Printer {
     /// @param var the var instruction to emit
     void EmitVar(core::ir::Var* var) {
         auto id = Value(var);
-        auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
+        auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
         auto* store_ty = ptr->StoreType();
         auto ty = Type(ptr);
 
@@ -2139,7 +2149,7 @@ class Printer {
     /// @param let the let instruction to emit
     void EmitLet(core::ir::Let* let) {
         auto id = Value(let->Value());
-        values_.Add(let->Result(), id);
+        values_.Add(let->Result(0), id);
     }
 
     /// Emit the OpPhis for the given flow control instruction.
@@ -2162,6 +2172,13 @@ class Printer {
                 branches.Push(Branch{GetTerminatorBlockLabel(exit), exit->Args()[index]});
             }
             branches.Sort();  // Sort the branches by label to ensure deterministic output
+
+            // Also add phi nodes from implicit exit blocks.
+            inst->ForeachBlock([&](core::ir::Block* block) {
+                if (block->IsEmpty()) {
+                    branches.Push(Branch{Label(block), nullptr});
+                }
+            });
 
             OperandList ops{Type(ty), Value(result)};
             for (auto& branch : branches) {
@@ -2188,9 +2205,9 @@ class Printer {
     /// @returns the label ID
     uint32_t GetTerminatorBlockLabel(core::ir::Terminator* t) {
         // Walk backwards from `t` until we find a control instruction.
-        auto* inst = t->prev;
+        auto* inst = t->prev.Get();
         while (inst) {
-            auto* prev = inst->prev;
+            auto* prev = inst->prev.Get();
             if (auto* ci = inst->As<core::ir::ControlInstruction>()) {
                 // This is the last control instruction before `t`, so use its merge block label.
                 return GetMergeLabel(ci);

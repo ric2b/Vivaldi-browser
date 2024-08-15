@@ -27,31 +27,27 @@
 
 #include "dawn/native/d3d/SharedFenceD3D.h"
 
+#include <utility>
+
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/d3d/DeviceD3D.h"
 
 namespace dawn::native::d3d {
 
-SharedFence::SharedFence(Device* device, const char* label, HANDLE ownedHandle)
-    : SharedFenceBase(device, label), mHandle(ownedHandle) {}
+SharedFence::SharedFence(Device* device, const char* label, SystemHandle ownedHandle)
+    : SharedFenceBase(device, label), mHandle(std::move(ownedHandle)) {}
 
-SharedFence::~SharedFence() {
-    if (mHandle) {
-        ::CloseHandle(mHandle);
-    }
+HANDLE SharedFence::GetFenceHandle() const {
+    return mHandle.Get();
 }
 
-MaybeError SharedFence::ExportInfoImpl(SharedFenceExportInfo* info) const {
+MaybeError SharedFence::ExportInfoImpl(UnpackedPtr<SharedFenceExportInfo>& info) const {
     info->type = wgpu::SharedFenceType::DXGISharedHandle;
 
-    DAWN_TRY(
-        ValidateSingleSType(info->nextInChain, wgpu::SType::SharedFenceDXGISharedHandleExportInfo));
-
-    SharedFenceDXGISharedHandleExportInfo* exportInfo = nullptr;
-    FindInChain(info->nextInChain, &exportInfo);
-
+    DAWN_TRY(info.ValidateSubset<SharedFenceDXGISharedHandleExportInfo>());
+    auto* exportInfo = info.Get<SharedFenceDXGISharedHandleExportInfo>();
     if (exportInfo != nullptr) {
-        exportInfo->handle = mHandle;
+        exportInfo->handle = mHandle.Get();
     }
     return {};
 }

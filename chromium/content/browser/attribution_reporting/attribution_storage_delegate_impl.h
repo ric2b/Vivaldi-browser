@@ -15,10 +15,6 @@
 #include "content/browser/attribution_reporting/attribution_storage_delegate.h"
 #include "content/common/content_export.h"
 
-namespace attribution_reporting {
-class EventReportWindows;
-}  // namespace attribution_reporting
-
 namespace base {
 class Time;
 class TimeDelta;
@@ -84,25 +80,25 @@ class CONTENT_EXPORT AttributionStorageDelegateImpl
   base::TimeDelta GetDeleteExpiredSourcesFrequency() const override;
   base::TimeDelta GetDeleteExpiredRateLimitsFrequency() const override;
   base::Uuid NewReportID() const override;
-  absl::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
+  std::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
       const override;
   void ShuffleReports(std::vector<AttributionReport>& reports) override;
   void ShuffleTriggerVerifications(
       std::vector<network::TriggerVerification>& verifications) override;
   double GetRandomizedResponseRate(
-      attribution_reporting::mojom::SourceType,
-      const attribution_reporting::EventReportWindows&,
-      int max_event_level_reports) const override;
+      const attribution_reporting::TriggerSpecs&,
+      attribution_reporting::MaxEventLevelReports,
+      attribution_reporting::EventLevelEpsilon) const override;
   GetRandomizedResponseResult GetRandomizedResponse(
       attribution_reporting::mojom::SourceType,
-      const attribution_reporting::EventReportWindows&,
-      int max_event_level_reports,
+      const attribution_reporting::TriggerSpecs&,
+      attribution_reporting::MaxEventLevelReports,
+      attribution_reporting::EventLevelEpsilon,
       base::Time source_time) const override;
   std::vector<NullAggregatableReport> GetNullAggregatableReports(
       const AttributionTrigger&,
       base::Time trigger_time,
-      absl::optional<base::Time> attributed_source_time) const override;
-
+      std::optional<base::Time> attributed_source_time) const override;
 
  private:
   AttributionStorageDelegateImpl(AttributionNoiseMode noise_mode,
@@ -115,7 +111,7 @@ class CONTENT_EXPORT AttributionStorageDelegateImpl
   std::vector<NullAggregatableReport> GetNullAggregatableReportsImpl(
       const AttributionTrigger&,
       base::Time trigger_time,
-      absl::optional<base::Time> attributed_source_time) const;
+      std::optional<base::Time> attributed_source_time) const;
 };
 
 }  // namespace content

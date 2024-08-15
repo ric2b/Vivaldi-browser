@@ -103,13 +103,13 @@ class TotalDiskSpaceCalculator : public SizeCalculator {
 
   void GetRootDeviceSize();
 
-  void OnGetRootDeviceSize(absl::optional<int64_t> reply);
+  void OnGetRootDeviceSize(std::optional<int64_t> reply);
 
   void GetTotalDiskSpace();
 
   void OnGetTotalDiskSpace(int64_t* total_bytes);
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<TotalDiskSpaceCalculator> weak_ptr_factory_{this};
 };
 
@@ -131,13 +131,13 @@ class FreeDiskSpaceCalculator : public SizeCalculator {
 
   void GetUserFreeDiskSpace();
 
-  void OnGetUserFreeDiskSpace(absl::optional<int64_t> reply);
+  void OnGetUserFreeDiskSpace(std::optional<int64_t> reply);
 
   void GetFreeDiskSpace();
 
   void OnGetFreeDiskSpace(int64_t* available_bytes);
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<FreeDiskSpaceCalculator> weak_ptr_factory_{this};
 };
 
@@ -158,7 +158,7 @@ class DriveOfflineSizeCalculator : public SizeCalculator {
 
   void OnGetOfflineItemsSize(int64_t offline_bytes);
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<DriveOfflineSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -182,7 +182,7 @@ class MyFilesSizeCalculator : public SizeCalculator {
   // Updates the size of My Files and Play files.
   void OnGetMyFilesSize(int64_t total_bytes);
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<MyFilesSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -224,7 +224,7 @@ class BrowsingDataSizeCalculator : public SizeCalculator {
   // Helper to compute the total size of all types of site date.
   std::unique_ptr<SiteDataSizeCollector> site_data_size_collector_;
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<BrowsingDataSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -276,7 +276,7 @@ class AppsSizeCalculator
 
   // Callback to update Borealis apps and cache.
   void OnGetBorealisAppsSize(
-      absl::optional<vm_tools::concierge::ListVmDisksResponse> response);
+      std::optional<vm_tools::concierge::ListVmDisksResponse> response);
 
   // Updates apps and extensions size.
   void UpdateAppsAndExtensionsSize();
@@ -303,7 +303,7 @@ class AppsSizeCalculator
   // True if we have already received the size of Borealis apps.
   bool has_borealis_apps_size_ = false;
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<AppsSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -325,12 +325,12 @@ class CrostiniSizeCalculator : public SizeCalculator {
 
   // Callback to update the size of Crostini VMs.
   void OnGetCrostiniSize(
-      absl::optional<vm_tools::concierge::ListVmDisksResponse>);
+      std::optional<vm_tools::concierge::ListVmDisksResponse>);
 
   // Helper function to simplify updating the reported size of Crostini.
   void UpdateSize(int64_t total_bytes);
 
-  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<CrostiniSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -352,7 +352,7 @@ class OtherUsersSizeCalculator : public SizeCalculator {
 
   // Callback to update the sizes of the other users.
   void OnGetOtherUserSize(
-      absl::optional<::user_data_auth::GetAccountDiskUsageReply> reply);
+      std::optional<::user_data_auth::GetAccountDiskUsageReply> reply);
 
   // The list of other users whose directory sizes will be accumulated as the
   // size of "Other users".

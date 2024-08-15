@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeJni;
 import org.chromium.chrome.browser.page_insights.proto.Config.PageInsightsConfig;
+import org.chromium.chrome.browser.page_insights.proto.IntentParams.PageInsightsIntentParams;
 import org.chromium.chrome.browser.page_insights.proto.PageInsights;
 import org.chromium.chrome.browser.page_insights.proto.PageInsights.AutoPeekConditions;
 import org.chromium.chrome.browser.page_insights.proto.PageInsights.Page;
@@ -83,6 +84,7 @@ import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
+import org.chromium.ui.base.ApplicationViewportInsetSupplier;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
@@ -108,7 +110,6 @@ public class PageInsightsCoordinatorTest {
 
     @Mock private OptimizationGuideBridge.Natives mOptimizationGuideBridgeJniMock;
     @Mock private ObservableSupplierImpl<Tab> mTabProvider;
-    @Captor private ArgumentCaptor<Callback<Tab>> mTabCallbackCaptor;
     @Captor private ArgumentCaptor<EmptyTabObserver> mTabObserverCaptor;
     @Captor private ArgumentCaptor<BottomSheetObserver> mBottomUiObserverCaptor;
 
@@ -133,6 +134,7 @@ public class PageInsightsCoordinatorTest {
     @Mock private BackPressManager mBackPressManager;
     @Mock private ObservableSupplierImpl<Boolean> mInMotionSupplier;
     @Mock private NavigationHandle mNavigationHandle;
+    @Mock private ApplicationViewportInsetSupplier mAppInsetSupplier;
 
     private PageInsightsCoordinator mPageInsightsCoordinator;
     private ManagedBottomSheetController mPageInsightsController;
@@ -223,6 +225,8 @@ public class PageInsightsCoordinatorTest {
                                             () -> rootView());
                         });
         doReturn(true).when(mIsPageInsightsHubEnabled).getAsBoolean();
+        doReturn(mTab).when(mTabProvider).get();
+        doReturn(JUnitTestGURLs.EXAMPLE_URL).when(mTab).getUrl();
         mPageInsightsCoordinator =
                 TestThreadUtils.runOnUiThreadBlocking(
                         () ->
@@ -239,17 +243,17 @@ public class PageInsightsCoordinatorTest {
                                         mBrowserControlsSizer,
                                         mBackPressManager,
                                         mInMotionSupplier,
+                                        mAppInsetSupplier,
+                                        PageInsightsIntentParams.getDefaultInstance(),
                                         mIsPageInsightsHubEnabled,
-                                        (navigationHandle) ->
+                                        (navigationHandle, navigationEntry) ->
                                                 PageInsightsConfig.newBuilder()
+                                                        .setIsInitialPage(true)
                                                         .setShouldAutoTrigger(true)
                                                         .setShouldXsurfaceLog(true)
-                                                        .setShouldAttachGaiaToRequest(true)
+                                                        .setServerShouldNotLogOrPersonalize(false)
+                                                        .setNavigationTimestampMs(1234L)
                                                         .build()));
-        doReturn(mTab).when(mTabProvider).get();
-        doReturn(JUnitTestGURLs.EXAMPLE_URL).when(mTab).getUrl();
-        verify(mTabProvider).addObserver(mTabCallbackCaptor.capture());
-        mTabCallbackCaptor.getValue().onResult(mTab);
         verify(mTab).addObserver(mTabObserverCaptor.capture());
         mTabObserverCaptor
                 .getValue()
@@ -541,7 +545,8 @@ public class PageInsightsCoordinatorTest {
                         eq(new GURL[] {JUnitTestGURLs.EXAMPLE_URL}),
                         eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
                         eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        any());
     }
 
     private static PageInsightsMetadata pageInsights() {

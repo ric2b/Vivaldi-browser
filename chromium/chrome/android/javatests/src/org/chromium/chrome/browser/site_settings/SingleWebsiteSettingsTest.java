@@ -35,14 +35,15 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.site_settings.ChosenObjectInfo;
 import org.chromium.components.browser_ui.site_settings.ContentSettingException;
 import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsUtil;
@@ -87,7 +88,8 @@ public class SingleWebsiteSettingsTest {
         @Override
         public Iterable<ParameterSet> getParameters() {
             ArrayList<ParameterSet> testCases = new ArrayList<>();
-            for (@ContentSettingsType int contentSettings : SiteSettingsUtil.SETTINGS_ORDER) {
+            for (@ContentSettingsType.EnumType
+            int contentSettings : SiteSettingsUtil.SETTINGS_ORDER) {
                 testCases.add(
                         createParameterSet("Allow_", contentSettings, ContentSettingValues.ALLOW));
                 testCases.add(
@@ -99,9 +101,10 @@ public class SingleWebsiteSettingsTest {
 
     @Test
     @SmallTest
+    @EnableFeatures(PermissionsAndroidFeatureList.BLOCK_MIDI_BY_DEFAULT)
     @UseMethodParameter(SingleWebsiteSettingsParams.class)
     public void testExceptionToggleShowing(
-            @ContentSettingsType int contentSettingsType,
+            @ContentSettingsType.EnumType int contentSettingsType,
             @ContentSettingValues int contentSettingValue) {
         // Preference for Notification on O+ is added as a ChromeImageViewPreference. See
         // SingleWebsiteSettings#setUpNotificationsPreference
@@ -110,11 +113,16 @@ public class SingleWebsiteSettingsTest {
                 contentSettingsType == ContentSettingsType.NOTIFICATIONS
                         && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O);
 
-        new SingleExceptionTestCase(contentSettingsType, contentSettingValue).run();
+        // TODO(http://crbug.com/1450349) Remove this conditional once MIDI permissions project is
+        // fully launched
+        if (contentSettingsType != ContentSettingsType.MIDI_SYSEX) {
+            new SingleExceptionTestCase(contentSettingsType, contentSettingValue).run();
+        }
     }
 
     @Test
     @SmallTest
+    @EnableFeatures(PermissionsAndroidFeatureList.BLOCK_MIDI_BY_DEFAULT)
     @DisableIf.Build(
             sdk_is_less_than = Build.VERSION_CODES.O,
             message = "Notification does not have a toggle when disabled.")
@@ -140,6 +148,7 @@ public class SingleWebsiteSettingsTest {
 
     @Test
     @SmallTest
+    @EnableFeatures(PermissionsAndroidFeatureList.BLOCK_MIDI_BY_DEFAULT)
     public void testDesktopSiteException() {
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSingleWebsitePreferences(
@@ -161,7 +170,49 @@ public class SingleWebsiteSettingsTest {
 
     @Test
     @SmallTest
-    @EnableFeatures(PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS)
+    public void testChoosenObjectPermission() {
+        String origin = "https://example.com";
+        Website website = new Website(WebsiteAddress.create(origin), WebsiteAddress.create(origin));
+        String object =
+                """
+                 {"name": "Some device",
+                  "ephemeral-guid": "1",
+                  "product-id": "2",
+                  "serial-number": "3"}""";
+        website.addChosenObjectInfo(
+                new ChosenObjectInfo(
+                        ContentSettingsType.USB_CHOOSER_DATA,
+                        origin,
+                        "Some device",
+                        object,
+                        /* isManaged= */ false));
+        website.addChosenObjectInfo(
+                new ChosenObjectInfo(
+                        ContentSettingsType.USB_CHOOSER_DATA,
+                        origin,
+                        "A managed device",
+                        "not needed",
+                        /* isManaged= */ true));
+
+        // Open site settings and check that permissions are displayed.
+        SettingsActivity activity = SiteSettingsTestUtils.startSingleWebsitePreferences(website);
+        onView(withText("Some device")).check(matches(isDisplayed()));
+        onView(withText("A managed device")).check(matches(isDisplayed()));
+
+        // Reset permission and check that only the non-managed permission is removed.
+        onView(withText(containsString("reset"))).perform(click());
+        onView(withText("Delete & reset")).perform(click());
+        onView(withText("Some device")).check(doesNotExist());
+        onView(withText("A managed device")).check(matches(isDisplayed()));
+        activity.finish();
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({
+        PermissionsAndroidFeatureList.PERMISSION_STORAGE_ACCESS,
+        PermissionsAndroidFeatureList.BLOCK_MIDI_BY_DEFAULT
+    })
     public void testStorageAccessPermission() {
         int type = ContentSettingsType.STORAGE_ACCESS;
         GURL example = new GURL("https://example.com");
@@ -209,7 +260,9 @@ public class SingleWebsiteSettingsTest {
     }
 
     private static int getStorageAccessSetting(
-            @ContentSettingsType int contentSettingType, GURL primaryUrl, GURL secondaryUrl) {
+            @ContentSettingsType.EnumType int contentSettingType,
+            GURL primaryUrl,
+            GURL secondaryUrl) {
         int[] result = {0};
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -228,7 +281,7 @@ public class SingleWebsiteSettingsTest {
      */
     private static ParameterSet createParameterSet(
             String namePrefix,
-            @ContentSettingsType int contentSettingsType,
+            @ContentSettingsType.EnumType int contentSettingsType,
             @ContentSettingValues int contentSettingValue) {
         String prefKey = SingleWebsiteSettings.getPreferenceKey(contentSettingsType);
         Assert.assertNotNull(
@@ -243,12 +296,12 @@ public class SingleWebsiteSettingsTest {
     /** Test case class that check whether a toggle exists for a given content setting. */
     private static class SingleExceptionTestCase {
         @ContentSettingValues int mContentSettingValue;
-        @ContentSettingsType int mContentSettingsType;
+        @ContentSettingsType.EnumType int mContentSettingsType;
 
         private SettingsActivity mSettingsActivity;
 
         SingleExceptionTestCase(
-                @ContentSettingsType int contentSettingsType,
+                @ContentSettingsType.EnumType int contentSettingsType,
                 @ContentSettingValues int contentSettingValue) {
             mContentSettingsType = contentSettingsType;
             mContentSettingValue = contentSettingValue;
@@ -282,7 +335,7 @@ public class SingleWebsiteSettingsTest {
     }
 
     private static Website createWebsiteWithContentSettingException(
-            @ContentSettingsType int type, @ContentSettingValues int value) {
+            @ContentSettingsType.EnumType int type, @ContentSettingValues int value) {
         WebsiteAddress address = WebsiteAddress.create(EXAMPLE_ADDRESS);
         Website website = new Website(address, address);
         website.setContentSettingException(

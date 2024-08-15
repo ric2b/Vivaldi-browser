@@ -73,11 +73,11 @@ void AppServicePromiseAppItem::OnPromiseAppUpdate(
     SetAccessibleName(base::UTF16ToUTF8(
         ShelfControllerHelper::GetAccessibleLabelForPromiseStatus(
             update.Name(), update.Status())));
-    LoadIcon();
   }
   if (update.ProgressChanged() && update.Progress().has_value()) {
     SetProgress(update.Progress().value());
   }
+  LoadIcon();
 }
 
 void AppServicePromiseAppItem::LoadIcon() {

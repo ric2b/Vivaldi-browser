@@ -46,6 +46,9 @@ class ExitIf final : public Castable<ExitIf, Exit> {
     /// The base offset in Operands() for the args
     static constexpr size_t kArgsOperandOffset = 0;
 
+    /// Constructor (no operands, no if)
+    ExitIf();
+
     /// Constructor
     /// @param i the if being exited
     /// @param args the target MultiInBlock arguments
@@ -62,8 +65,11 @@ class ExitIf final : public Castable<ExitIf, Exit> {
     /// @returns the if being exited
     ir::If* If();
 
+    /// @returns the if being exited
+    const ir::If* If() const;
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "exit_if"; }
+    std::string FriendlyName() const override { return "exit_if"; }
 };
 
 }  // namespace tint::core::ir

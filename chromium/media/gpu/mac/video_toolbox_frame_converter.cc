@@ -19,7 +19,7 @@
 #include "media/base/mac/video_frame_mac.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
-#include "media/gpu/mac/video_toolbox_decode_metadata.h"
+#include "media/gpu/mac/video_toolbox_decompression_metadata.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
@@ -33,7 +33,8 @@ namespace {
 constexpr uint32_t kSharedImageUsage =
     gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT |
     gpu::SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX |
-    gpu::SHARED_IMAGE_USAGE_RASTER | gpu::SHARED_IMAGE_USAGE_GLES2;
+    gpu::SHARED_IMAGE_USAGE_RASTER_READ | gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
+    gpu::SHARED_IMAGE_USAGE_GLES2_READ;
 
 constexpr char kSharedImageDebugLabel[] = "VideoToolboxVideoDecoder";
 
@@ -230,11 +231,14 @@ void VideoToolboxFrameConverter::Convert(
   // IOSurface color space. There doesn't seem to be a way to specify it for
   // H.264 unless we create the format description manually.
   frame->set_color_space(metadata->color_space);
+  frame->set_hdr_metadata(metadata->hdr_metadata);
   frame->set_shared_image_format_type(
       IsMultiPlaneFormatForHardwareVideoEnabled()
           ? SharedImageFormatType::kSharedImageFormat
           : SharedImageFormatType::kLegacy);
-  frame->metadata().frame_duration = metadata->duration;
+  if (metadata->duration != kNoTimestamp && !metadata->duration.is_zero()) {
+    frame->metadata().frame_duration = metadata->duration;
+  }
   frame->metadata().allow_overlay = true;
   // Releasing |image| must happen after command buffer commands are complete
   // (not just submitted).

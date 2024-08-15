@@ -1,0 +1,31 @@
+// Copyright 2011 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+package chaps;
+option optimize_for = LITE_RUNTIME;
+
+// Attribute message corresponds to a CK_ATTRIBUTE type in PKCS#11 as defined in
+// the PKCS#11 specification.
+// See documentation on CK_ATTRIBUTE struct in "3.4 Object types" of PKCS#11
+// v3.1 specification:
+// https://docs.oasis-open.org/pkcs11/pkcs11-spec/v3.1/os/pkcs11-spec-v3.1-os.html#_Toc111203194
+message Attribute {
+  // `type` is the attribute type, corresponding to CK_ATTRIBUTE_TYPE in
+  // PKCS#11.
+  required uint32 type = 1;
+  // `value` is a byte array that contains the attribute value.
+  optional bytes value = 2;
+  // `length` is the size of the `value` byte array. Note that in some usages of
+  // the PKCS#11 API the caller can intentionally set this length field to 0 to
+  // query the output size, so it cannot be simply inferred from `value`.
+  optional sint32 length = 3;
+}
+
+// AttributeList is a list of attributes, or more commonly known as a PKCS#11
+// "template". This is usually used as one of the parameters in PKCS#11 calls.
+message AttributeList {
+  repeated Attribute attributes = 1;
+}

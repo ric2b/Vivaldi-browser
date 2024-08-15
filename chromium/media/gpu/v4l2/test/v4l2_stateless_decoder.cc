@@ -15,6 +15,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "media/gpu/v4l2/test/video_decoder.h"
+#include "media/gpu/v4l2/test/vp8_decoder.h"
+#include "media/gpu/v4l2/test/vp9_decoder.h"
+#include "media/media_buildflags.h"
+
 // AV1 stateless decoding not supported upstream yet
 #if BUILDFLAG(IS_CHROMEOS)
 #include "media/gpu/v4l2/test/av1_decoder.h"
@@ -23,9 +28,6 @@
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 #include "media/gpu/v4l2/test/h265_decoder.h"
 #endif
-#include "media/gpu/v4l2/test/video_decoder.h"
-#include "media/gpu/v4l2/test/vp8_decoder.h"
-#include "media/gpu/v4l2/test/vp9_decoder.h"
 
 // AV1 stateless decoding not supported upstream yet
 #if BUILDFLAG(IS_CHROMEOS)
@@ -197,7 +199,7 @@ int main(int argc, char** argv) {
   }
 
   for (int i = 0; i < n_frames || n_frames == 0; i++) {
-    LOG(INFO) << "Frame " << i << "...";
+    VLOG(1) << "Frame " << i << "...";
 
     std::vector<uint8_t> y_plane;
     std::vector<uint8_t> u_plane;
@@ -206,7 +208,7 @@ int main(int argc, char** argv) {
     const VideoDecoder::Result res =
         dec->DecodeNextFrame(i, y_plane, u_plane, v_plane, size);
     if (res == VideoDecoder::kEOStream) {
-      LOG(INFO) << "End of stream.";
+      VLOG(1) << "End of stream.";
       break;
     } else if (res == VideoDecoder::kError) {
       LOG(ERROR) << "Unable to decode next frame.";

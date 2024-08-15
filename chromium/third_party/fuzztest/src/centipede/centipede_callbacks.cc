@@ -32,6 +32,7 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "./centipede/binary_info.h"
+#include "./centipede/blob_file.h"
 #include "./centipede/command.h"
 #include "./centipede/control_flow.h"
 #include "./centipede/defs.h"
@@ -131,7 +132,9 @@ Command &CentipedeCallbacks::GetOrCreateCommandForBinary(
 
   // Allow for the time it takes to fork a subprocess etc.
   const auto amortized_timeout =
-      absl::Seconds(env_.timeout_per_batch) + absl::Seconds(5);
+      env_.timeout_per_batch == 0
+          ? absl::InfiniteDuration()
+          : absl::Seconds(env_.timeout_per_batch) + absl::Seconds(5);
   Command &cmd = commands_.emplace_back(Command(
       /*path=*/binary, /*args=*/{},
       /*env=*/env,
@@ -308,10 +311,17 @@ size_t CentipedeCallbacks::LoadDictionary(std::string_view dictionary_path) {
               << dictionary_path;
     return entries.size();
   }
-  // Didn't parse as plain text. Assume Centipede-native corpus format.
-  ByteArray packed_dictionary(text.begin(), text.end());
+  // Didn't parse as plain text. Assume encoded corpus format.
+  auto reader = DefaultBlobFileReaderFactory();
+  CHECK_OK(reader->Open(dictionary_path))
+      << "Error in opening dictionary file: " << dictionary_path;
   std::vector<ByteArray> unpacked_dictionary;
-  UnpackBytesFromAppendFile(packed_dictionary, &unpacked_dictionary);
+  ByteSpan blob;
+  while (reader->Read(blob).ok()) {
+    unpacked_dictionary.emplace_back(blob.begin(), blob.end());
+  }
+  CHECK_OK(reader->Close())
+      << "Error in closing dictionary file: " << dictionary_path;
   CHECK(!unpacked_dictionary.empty())
       << "Empty or corrupt dictionary file: " << dictionary_path;
   env_.use_legacy_default_mutator

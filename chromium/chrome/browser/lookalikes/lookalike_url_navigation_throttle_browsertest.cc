@@ -327,7 +327,7 @@ class LookalikeUrlNavigationThrottleBrowserTest
     auto entries = test_ukm_recorder()->GetEntriesByName(UkmEntry::kEntryName);
     ASSERT_EQ(navigated_urls.size(), entries.size());
     int entry_count = 0;
-    for (const auto* const entry : entries) {
+    for (const ukm::mojom::UkmEntry* const entry : entries) {
       test_ukm_recorder()->ExpectEntrySourceHasUrl(entry,
                                                    navigated_urls[entry_count]);
       test_ukm_recorder()->ExpectEntryMetric(entry, metric_name,
@@ -1690,9 +1690,9 @@ class LookalikeUrlNavigationThrottleSignedExchangeBrowserTest
     net::CertVerifyResult dummy_result;
     dummy_result.verified_cert = original_cert;
     dummy_result.cert_status = net::OK;
-    dummy_result.ocsp_result.response_status = net::OCSPVerifyResult::PROVIDED;
+    dummy_result.ocsp_result.response_status = bssl::OCSPVerifyResult::PROVIDED;
     dummy_result.ocsp_result.revocation_status =
-        net::OCSPRevocationStatus::GOOD;
+        bssl::OCSPRevocationStatus::GOOD;
     mock_cert_verifier_.mock_cert_verifier()->AddResultForCertAndHost(
         original_cert, "google-com.example.org", dummy_result, net::OK);
   }

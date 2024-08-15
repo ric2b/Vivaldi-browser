@@ -36,6 +36,7 @@
 #include "dawn/native/metal/ShaderModuleMTL.h"
 #include "dawn/native/metal/TextureMTL.h"
 #include "dawn/native/metal/UtilsMetal.h"
+#include "dawn/platform/metrics/HistogramMacros.h"
 
 namespace dawn::native::metal {
 
@@ -116,8 +117,10 @@ MTLVertexStepFunction VertexStepModeFunction(wgpu::VertexStepMode mode) {
         case wgpu::VertexStepMode::Instance:
             return MTLVertexStepFunctionPerInstance;
         case wgpu::VertexStepMode::VertexBufferNotUsed:
-            DAWN_UNREACHABLE();
+        case wgpu::VertexStepMode::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 MTLPrimitiveType MTLPrimitiveTopology(wgpu::PrimitiveTopology primitiveTopology) {
@@ -132,7 +135,10 @@ MTLPrimitiveType MTLPrimitiveTopology(wgpu::PrimitiveTopology primitiveTopology)
             return MTLPrimitiveTypeTriangle;
         case wgpu::PrimitiveTopology::TriangleStrip:
             return MTLPrimitiveTypeTriangleStrip;
+        case wgpu::PrimitiveTopology::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 MTLPrimitiveTopologyClass MTLInputPrimitiveTopology(wgpu::PrimitiveTopology primitiveTopology) {
@@ -145,7 +151,10 @@ MTLPrimitiveTopologyClass MTLInputPrimitiveTopology(wgpu::PrimitiveTopology prim
         case wgpu::PrimitiveTopology::TriangleList:
         case wgpu::PrimitiveTopology::TriangleStrip:
             return MTLPrimitiveTopologyClassTriangle;
+        case wgpu::PrimitiveTopology::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 MTLBlendFactor MetalBlendFactor(wgpu::BlendFactor factor, bool alpha) {
@@ -184,7 +193,10 @@ MTLBlendFactor MetalBlendFactor(wgpu::BlendFactor factor, bool alpha) {
             return MTLBlendFactorSource1Alpha;
         case wgpu::BlendFactor::OneMinusSrc1Alpha:
             return MTLBlendFactorOneMinusSource1Alpha;
+        case wgpu::BlendFactor::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 MTLBlendOperation MetalBlendOperation(wgpu::BlendOperation operation) {
@@ -199,7 +211,10 @@ MTLBlendOperation MetalBlendOperation(wgpu::BlendOperation operation) {
             return MTLBlendOperationMin;
         case wgpu::BlendOperation::Max:
             return MTLBlendOperationMax;
+        case wgpu::BlendOperation::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 MTLColorWriteMask MetalColorWriteMask(wgpu::ColorWriteMask writeMask,
@@ -261,7 +276,10 @@ MTLStencilOperation MetalStencilOperation(wgpu::StencilOperation stencilOperatio
             return MTLStencilOperationIncrementWrap;
         case wgpu::StencilOperation::DecrementWrap:
             return MTLStencilOperationDecrementWrap;
+        case wgpu::StencilOperation::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 NSRef<MTLDepthStencilDescriptor> MakeDepthStencilDesc(const DepthStencilState* descriptor) {
@@ -314,7 +332,10 @@ MTLWinding MTLFrontFace(wgpu::FrontFace face) {
             return MTLWindingClockwise;
         case wgpu::FrontFace::CCW:
             return MTLWindingCounterClockwise;
+        case wgpu::FrontFace::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 MTLCullMode ToMTLCullMode(wgpu::CullMode mode) {
@@ -325,7 +346,10 @@ MTLCullMode ToMTLCullMode(wgpu::CullMode mode) {
             return MTLCullModeFront;
         case wgpu::CullMode::Back:
             return MTLCullModeBack;
+        case wgpu::CullMode::Undefined:
+            break;
     }
+    DAWN_UNREACHABLE();
 }
 
 }  // anonymous namespace
@@ -333,11 +357,11 @@ MTLCullMode ToMTLCullMode(wgpu::CullMode mode) {
 // static
 Ref<RenderPipelineBase> RenderPipeline::CreateUninitialized(
     Device* device,
-    const RenderPipelineDescriptor* descriptor) {
+    const UnpackedPtr<RenderPipelineDescriptor>& descriptor) {
     return AcquireRef(new RenderPipeline(device, descriptor));
 }
 
-RenderPipeline::RenderPipeline(DeviceBase* dev, const RenderPipelineDescriptor* desc)
+RenderPipeline::RenderPipeline(DeviceBase* dev, const UnpackedPtr<RenderPipelineDescriptor>& desc)
     : RenderPipelineBase(dev, desc) {}
 
 RenderPipeline::~RenderPipeline() = default;
@@ -352,7 +376,7 @@ MaybeError RenderPipeline::Initialize() {
         uint32_t mtlVertexBufferIndex =
             ToBackend(GetLayout())->GetBufferBindingCount(SingleShaderStage::Vertex);
 
-        for (VertexBufferSlot slot : IterateBitSet(GetVertexBufferSlotsUsed())) {
+        for (VertexBufferSlot slot : IterateBitSet(GetVertexBuffersUsed())) {
             mMtlVertexBufferIndices[slot] = mtlVertexBufferIndex;
             mtlVertexBufferIndex++;
         }
@@ -392,20 +416,40 @@ MaybeError RenderPipeline::Initialize() {
         ShaderModule::MetalFunctionData fragmentData;
         DAWN_TRY(ToBackend(fragmentStage.module.Get())
                      ->CreateFunction(SingleShaderStage::Fragment, fragmentStage,
-                                      ToBackend(GetLayout()), &fragmentData, GetSampleMask()));
+                                      ToBackend(GetLayout()), &fragmentData, GetSampleMask(),
+                                      this));
 
         descriptorMTL.fragmentFunction = fragmentData.function.Get();
         if (fragmentData.needsStorageBufferLength) {
             mStagesRequiringStorageBufferLength |= wgpu::ShaderStage::Fragment;
         }
 
-        const auto& fragmentOutputsWritten = fragmentStage.metadata->fragmentOutputsWritten;
-        for (ColorAttachmentIndex i : IterateBitSet(GetColorAttachmentsMask())) {
+        const auto& fragmentOutputMask = fragmentStage.metadata->fragmentOutputMask;
+        for (auto i : IterateBitSet(GetColorAttachmentsMask())) {
             descriptorMTL.colorAttachments[static_cast<uint8_t>(i)].pixelFormat =
                 MetalPixelFormat(GetDevice(), GetColorAttachmentFormat(i));
             const ColorTargetState* descriptor = GetColorTargetState(i);
             ComputeBlendDesc(descriptorMTL.colorAttachments[static_cast<uint8_t>(i)], descriptor,
-                             fragmentOutputsWritten[i]);
+                             fragmentOutputMask[i]);
+        }
+
+        if (GetAttachmentState()->HasPixelLocalStorage()) {
+            const std::vector<wgpu::TextureFormat>& storageAttachmentSlots =
+                GetAttachmentState()->GetStorageAttachmentSlots();
+            std::vector<ColorAttachmentIndex> storageAttachmentPacking =
+                GetAttachmentState()->ComputeStorageAttachmentPackingInColorAttachments();
+
+            for (size_t i = 0; i < storageAttachmentSlots.size(); i++) {
+                uint8_t index = static_cast<uint8_t>(storageAttachmentPacking[i]);
+
+                if (storageAttachmentSlots[i] == wgpu::TextureFormat::Undefined) {
+                    descriptorMTL.colorAttachments[index].pixelFormat =
+                        MetalPixelFormat(GetDevice(), kImplicitPLSSlotFormat);
+                } else {
+                    descriptorMTL.colorAttachments[index].pixelFormat =
+                        MetalPixelFormat(GetDevice(), storageAttachmentSlots[i]);
+                }
+            }
         }
     }
 
@@ -436,6 +480,7 @@ MaybeError RenderPipeline::Initialize() {
     descriptorMTL.rasterSampleCount = GetSampleCount();
     descriptorMTL.alphaToCoverageEnabled = IsAlphaToCoverageEnabled();
 
+    platform::metrics::DawnHistogramTimer timer(GetDevice()->GetPlatform());
     NSError* error = nullptr;
     mMtlRenderPipelineState =
         AcquireNSPRef([mtlDevice newRenderPipelineStateWithDescriptor:descriptorMTL error:&error]);
@@ -444,6 +489,7 @@ MaybeError RenderPipeline::Initialize() {
                                    [error.localizedDescription UTF8String]);
     }
     DAWN_ASSERT(mMtlRenderPipelineState != nil);
+    timer.RecordMicroseconds("Metal.newRenderPipelineStateWithDescriptor.CacheMiss");
 
     // Create depth stencil state and cache it, fetch the cached depth stencil state when we
     // call setDepthStencilState() for a given render pipeline in CommandEncoder, in order
@@ -488,7 +534,7 @@ wgpu::ShaderStage RenderPipeline::GetStagesRequiringStorageBufferLength() const 
 NSRef<MTLVertexDescriptor> RenderPipeline::MakeVertexDesc() const {
     MTLVertexDescriptor* mtlVertexDescriptor = [MTLVertexDescriptor new];
 
-    for (VertexBufferSlot slot : IterateBitSet(GetVertexBufferSlotsUsed())) {
+    for (VertexBufferSlot slot : IterateBitSet(GetVertexBuffersUsed())) {
         const VertexBufferInfo& info = GetVertexBuffer(slot);
 
         MTLVertexBufferLayoutDescriptor* layoutDesc = [MTLVertexBufferLayoutDescriptor new];

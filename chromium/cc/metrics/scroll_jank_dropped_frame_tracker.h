@@ -5,12 +5,14 @@
 #ifndef CC_METRICS_SCROLL_JANK_DROPPED_FRAME_TRACKER_H_
 #define CC_METRICS_SCROLL_JANK_DROPPED_FRAME_TRACKER_H_
 
+#include <optional>
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 #include "cc/metrics/event_metrics.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "cc/metrics/scroll_jank_ukm_reporter.h"
 
 namespace cc {
+class ScrollJankUkmReporter;
 
 class CC_EXPORT ScrollJankDroppedFrameTracker {
  public:
@@ -24,6 +26,11 @@ class CC_EXPORT ScrollJankDroppedFrameTracker {
                                     base::TimeTicks presentation_ts,
                                     base::TimeDelta vsync_interval);
   void OnScrollStarted();
+
+  void set_scroll_jank_ukm_reporter(
+      raw_ptr<ScrollJankUkmReporter> scroll_jank_ukm_reporter) {
+    scroll_jank_ukm_reporter_ = scroll_jank_ukm_reporter;
+  }
 
   static constexpr int kHistogramEmitFrequency = 64;
   static constexpr const char* kDelayedFramesWindowHistogram =
@@ -77,8 +84,10 @@ class CC_EXPORT ScrollJankDroppedFrameTracker {
   // TODO(b/306611560): Cleanup experimental per vsync metric or promote to
   // default.
   JankData experimental_vsync_fixed_window_;
-  absl::optional<JankData> per_scroll_;
-  absl::optional<JankData> experimental_per_scroll_vsync_;
+  std::optional<JankData> per_scroll_;
+  std::optional<JankData> experimental_per_scroll_vsync_;
+
+  raw_ptr<ScrollJankUkmReporter> scroll_jank_ukm_reporter_ = nullptr;
 };
 
 }  // namespace cc

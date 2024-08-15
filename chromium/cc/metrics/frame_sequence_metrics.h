@@ -103,9 +103,6 @@ class CC_EXPORT FrameSequenceMetrics {
   void SetScrollingThread(FrameInfo::SmoothEffectDrivingThread thread);
 
   struct CustomReportData {
-    uint32_t frames_expected = 0;
-    uint32_t frames_produced = 0;
-    int jank_count = 0;
     uint32_t frames_expected_v3 = 0;
     uint32_t frames_dropped_v3 = 0;
     uint32_t jank_count_v3 = 0;
@@ -196,7 +193,7 @@ class CC_EXPORT FrameSequenceMetrics {
     base::TimeTicks last_timestamp = base::TimeTicks::Now();
     int frame_count = 0;
     bool enabled = false;
-    raw_ptr<void> trace_id = nullptr;
+    uint64_t trace_id = 0u;
 
     void Advance(base::TimeTicks start_timestamp,
                  base::TimeTicks new_timestamp,
@@ -205,7 +202,8 @@ class CC_EXPORT FrameSequenceMetrics {
                  uint64_t sequence_number,
                  const char* histogram_name);
     void Terminate();
-    void TerminateV3(const V3& v3);
+    void TerminateV3(const V3& v3,
+                     FrameInfo::SmoothEffectDrivingThread effective_thread);
   } trace_data_{this};
 
   TraceData trace_data_v3_{this};

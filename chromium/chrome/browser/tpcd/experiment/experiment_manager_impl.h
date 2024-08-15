@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_TPCD_EXPERIMENT_EXPERIMENT_MANAGER_IMPL_H_
 #define CHROME_BROWSER_TPCD_EXPERIMENT_EXPERIMENT_MANAGER_IMPL_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/functional/callback_forward.h"
@@ -12,7 +13,6 @@
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "chrome/browser/tpcd/experiment/experiment_manager.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 
@@ -33,7 +33,7 @@ class ExperimentManagerImpl : public ExperimentManager {
       bool is_eligible,
       EligibilityDecisionCallback on_eligibility_decision_callback) override;
 
-  absl::optional<bool> IsClientEligible() const override;
+  std::optional<bool> IsClientEligible() const override;
 
   bool DidVersionChange() const override;
 
@@ -44,6 +44,12 @@ class ExperimentManagerImpl : public ExperimentManager {
 
   ExperimentManagerImpl();
   ~ExperimentManagerImpl() override;
+
+  // When both "disable_3p_cookies" and "need_onboarding_for_synthetic_trial"
+  // feature params are true , the synthetic trial can be registered when the
+  // client is either ineligible or onboarded. Otherwise, the synthetical trial
+  // can be registered as long as the client eligibility is set.
+  bool CanRegisterSyntheticTrial() const;
 
  private:
   friend base::NoDestructor<ExperimentManagerImpl>;
@@ -63,11 +69,6 @@ class ExperimentManagerImpl : public ExperimentManager {
   // Uses IsClientEligible() to determine eligibility, so the local state pref
   // must be set when this function is called.
   void MaybeUpdateSyntheticTrialRegistration();
-  // When "disable_3p_cookies" feature param is true, the synthetic trial can be
-  // registered when the client is either ineligible or onboarded. Otherwise,
-  // the synthetical trial can be registered as long as the client eligibility
-  // is set.
-  bool CanRegisterSyntheticTrial() const;
 };
 
 }  // namespace tpcd::experiment

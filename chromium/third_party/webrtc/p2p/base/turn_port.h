@@ -27,6 +27,7 @@
 #include "p2p/base/port.h"
 #include "p2p/client/basic_port_allocator.h"
 #include "rtc_base/async_packet_socket.h"
+#include "rtc_base/network/received_packet.h"
 #include "rtc_base/ssl_certificate.h"
 
 namespace webrtc {
@@ -144,10 +145,7 @@ class TurnPort : public Port {
   int GetError() override;
 
   bool HandleIncomingPacket(rtc::AsyncPacketSocket* socket,
-                            const char* data,
-                            size_t size,
-                            const rtc::SocketAddress& remote_addr,
-                            int64_t packet_time_us) override;
+                            const rtc::ReceivedPacket& packet) override;
   bool CanHandleIncomingPacketsFrom(
       const rtc::SocketAddress& addr) const override;
 
@@ -159,10 +157,7 @@ class TurnPort : public Port {
                                 absl::string_view reason) override;
 
   virtual void OnReadPacket(rtc::AsyncPacketSocket* socket,
-                            const char* data,
-                            size_t size,
-                            const rtc::SocketAddress& remote_addr,
-                            const int64_t& packet_time_us);
+                            const rtc::ReceivedPacket& packet);
 
   void OnSentPacket(rtc::AsyncPacketSocket* socket,
                     const rtc::SentPacket& sent_packet) override;
@@ -307,9 +302,6 @@ class TurnPort : public Port {
   // pruned (a.k.a. write-timed-out). Returns true if a connection is found.
   bool FailAndPruneConnection(const rtc::SocketAddress& address);
 
-  // Reconstruct the URL of the server which the candidate is gathered from.
-  std::string ReconstructedServerUrl();
-
   void MaybeAddTurnLoggingId(StunMessage* message);
 
   void TurnCustomizerMaybeModifyOutgoingStunMessage(StunMessage* message);
@@ -318,6 +310,12 @@ class TurnPort : public Port {
                                       bool payload);
 
   ProtocolAddress server_address_;
+  // Reconstruct the URL of the server which the candidate is gathered from.
+  // A copy needs to be stored as server_address_ will resolve and clear its
+  // hostname field.
+  std::string ReconstructServerUrl();
+  std::string server_url_;
+
   TlsCertPolicy tls_cert_policy_ = TlsCertPolicy::TLS_CERT_POLICY_SECURE;
   std::vector<std::string> tls_alpn_protocols_;
   std::vector<std::string> tls_elliptic_curves_;

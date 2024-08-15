@@ -36,23 +36,38 @@
 
 namespace tint::wgsl::reader {
 
-Program Parse(const Source::File* file) {
+Program Parse(const Source::File* file, const Options& options) {
     Parser parser(file);
     parser.Parse();
-    return resolver::Resolve(parser.builder());
+    return resolver::Resolve(parser.builder(), options.allowed_features);
 }
 
-Result<core::ir::Module> WgslToIR(const Source::File* file) {
-    Program program = Parse(file);
+Result<core::ir::Module> WgslToIR(const Source::File* file, const Options& options) {
+    Program program = Parse(file, options);
     auto module = ProgramToIR(program);
-    if (!module) {
+    if (module != Success) {
         return module.Failure();
     }
     // WGSL-dialect -> core-dialect
-    if (auto res = Lower(module.Get()); !res) {
+    if (auto res = Lower(module.Get()); res != Success) {
         return res.Failure();
     }
     return module;
+}
+
+tint::Result<core::ir::Module> ProgramToLoweredIR(const Program& program) {
+    auto ir = tint::wgsl::reader::ProgramToIR(program);
+    if (ir != Success) {
+        return ir.Failure();
+    }
+
+    // Lower from WGSL-dialect to core-dialect
+    auto res = tint::wgsl::reader::Lower(ir.Get());
+    if (res != Success) {
+        return res.Failure();
+    }
+
+    return ir;
 }
 
 }  // namespace tint::wgsl::reader

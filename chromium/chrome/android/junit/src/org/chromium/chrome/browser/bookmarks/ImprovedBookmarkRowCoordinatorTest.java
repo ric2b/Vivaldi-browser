@@ -11,8 +11,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.bookmarks.SharedBookmarkModelMocks.FOLDER_BOOKMARK_ID_A;
+import static org.chromium.chrome.browser.bookmarks.SharedBookmarkModelMocks.MOBILE_BOOKMARK_ID;
 import static org.chromium.chrome.browser.bookmarks.SharedBookmarkModelMocks.READING_LIST_BOOKMARK_ID;
 import static org.chromium.chrome.browser.bookmarks.SharedBookmarkModelMocks.URL_BOOKMARK_ID_A;
 import static org.chromium.ui.test.util.MockitoHelper.doCallback;
@@ -26,6 +28,7 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
@@ -35,9 +38,15 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.bookmarks.BookmarkItem;
+import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.payments.CurrencyFormatter;
 import org.chromium.components.payments.CurrencyFormatterJni;
@@ -47,6 +56,7 @@ import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
 /** Unit tests for {@link ImprovedBookmarkRowCoordinator}. */
@@ -54,13 +64,13 @@ import org.chromium.url.JUnitTestGURLs;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class ImprovedBookmarkRowCoordinatorTest {
-    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
-
     @Rule
-    public final ActivityScenarioRule<TestActivity> mActivityScenarioRule =
+    public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
             new ActivityScenarioRule<>(TestActivity.class);
 
+    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule public JniMocker mJniMocker = new JniMocker();
+    @Rule public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
 
     @Mock private BookmarkImageFetcher mBookmarkImageFetcher;
     @Mock private BookmarkModel mBookmarkModel;
@@ -136,7 +146,6 @@ public class ImprovedBookmarkRowCoordinatorTest {
                 model.get(ImprovedBookmarkRowProperties.DESCRIPTION));
     }
 
-
     @Test
     public void testShoppingCoordinator() {
         ShoppingFeatures.setShoppingListEligibleForTesting(true);
@@ -188,6 +197,29 @@ public class ImprovedBookmarkRowCoordinatorTest {
     }
 
     @Test
+    public void testFolder_compactConversionString() {
+        // Need to be careful when formatting user generating content, https://crbug.com/1509959.
+        BookmarkId folderId = new BookmarkId(100, BookmarkType.NORMAL);
+        BookmarkItem folder =
+                new BookmarkItem(
+                        folderId,
+                        "Folder %M %d %s",
+                        null,
+                        true,
+                        MOBILE_BOOKMARK_ID,
+                        true,
+                        false,
+                        0,
+                        false,
+                        0,
+                        false);
+        when(mBookmarkModel.getBookmarkById(folderId)).thenReturn(folder);
+        PropertyModel model = mCoordinator.createBasePropertyModel(folderId);
+
+        assertEquals("Folder %M %d %s (0)", model.get(ImprovedBookmarkRowProperties.TITLE));
+    }
+
+    @Test
     public void testFolder_visual() {
         doReturn(BookmarkRowDisplayPref.VISUAL).when(mBookmarkUiPrefs).getBookmarkRowDisplayPref();
         PropertyModel model = mCoordinator.createBasePropertyModel(FOLDER_BOOKMARK_ID_A);
@@ -226,5 +258,35 @@ public class ImprovedBookmarkRowCoordinatorTest {
         assertEquals(
                 new Pair<Drawable, Drawable>(null, null),
                 model.get(ImprovedBookmarkRowProperties.FOLDER_START_IMAGE_FOLDER_DRAWABLES).get());
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.ENABLE_BOOKMARK_FOLDERS_FOR_ACCOUNT_STORAGE)
+    public void testBookmark_accountAndLocal() throws Exception {
+        BookmarkModel bookmarkModel = FakeBookmarkModel.createModel();
+        mCoordinator =
+                new ImprovedBookmarkRowCoordinator(
+                        mActivity,
+                        mBookmarkImageFetcher,
+                        bookmarkModel,
+                        mBookmarkUiPrefs,
+                        mShoppingService);
+        BookmarkId localBookmarkId =
+                bookmarkModel.addBookmark(
+                        bookmarkModel.getMobileFolderId(),
+                        0,
+                        "local",
+                        new GURL("https://local.com/"));
+        BookmarkId accountBookmarkId =
+                bookmarkModel.addToReadingList(
+                        bookmarkModel.getAccountReadingListFolder(),
+                        "account",
+                        new GURL("https://account.com/"));
+
+        PropertyModel model = mCoordinator.createBasePropertyModel(localBookmarkId);
+        assertTrue(model.get(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK));
+
+        model = mCoordinator.createBasePropertyModel(accountBookmarkId);
+        assertFalse(model.get(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK));
     }
 }

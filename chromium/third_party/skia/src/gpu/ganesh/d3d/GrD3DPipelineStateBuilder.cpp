@@ -66,10 +66,6 @@ const GrCaps* GrD3DPipelineStateBuilder::caps() const {
     return fGpu->caps();
 }
 
-SkSL::Compiler* GrD3DPipelineStateBuilder::shaderCompiler() const {
-    return fGpu->shaderCompiler();
-}
-
 void GrD3DPipelineStateBuilder::finalizeFragmentSecondaryColor(GrShaderVar& outputColor) {
     outputColor.addLayoutQualifier("location = 0, index = 1");
 }
@@ -119,7 +115,7 @@ bool GrD3DPipelineStateBuilder::loadHLSLFromCache(SkReadBuffer* reader, gr_cp<ID
     }
 
     auto compile = [&](SkSL::ProgramKind kind, GrShaderType shaderType) {
-        if (intfs[shaderType].fUseFlipRTUniform) {
+        if (intfs[shaderType].fRTFlipUniform != SkSL::Program::Interface::kRTFlip_None) {
             this->addRTFlipUniform(SKSL_RTFLIP_NAME);
         }
         shaders[shaderType] = GrCompileHLSLShader(fGpu, hlsl[shaderType], kind);
@@ -135,7 +131,7 @@ gr_cp<ID3DBlob> GrD3DPipelineStateBuilder::compileD3DProgram(SkSL::ProgramKind k
                                                              const SkSL::ProgramSettings& settings,
                                                              SkSL::Program::Interface* outInterface,
                                                              std::string* outHLSL) {
-    if (!skgpu::SkSLToHLSL(this->shaderCompiler(),
+    if (!skgpu::SkSLToHLSL(this->caps()->shaderCaps(),
                            sksl,
                            kind,
                            settings,
@@ -145,7 +141,7 @@ gr_cp<ID3DBlob> GrD3DPipelineStateBuilder::compileD3DProgram(SkSL::ProgramKind k
         return gr_cp<ID3DBlob>();
     }
 
-    if (outInterface->fUseFlipRTUniform) {
+    if (outInterface->fRTFlipUniform != SkSL::Program::Interface::kRTFlip_None) {
         this->addRTFlipUniform(SKSL_RTFLIP_NAME);
     }
 

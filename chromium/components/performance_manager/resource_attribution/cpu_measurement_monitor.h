@@ -12,7 +12,9 @@
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "components/performance_manager/public/graph/frame_node.h"
+#include "components/performance_manager/public/graph/node_data_describer.h"
 #include "components/performance_manager/public/graph/process_node.h"
 #include "components/performance_manager/public/graph/worker_node.h"
 #include "components/performance_manager/public/resource_attribution/attribution_helpers.h"
@@ -23,6 +25,7 @@
 
 namespace performance_manager {
 class Graph;
+class PageNode;
 }
 
 namespace performance_manager::resource_attribution {
@@ -35,7 +38,8 @@ namespace performance_manager::resource_attribution {
 // components/performance_manager/README.md
 class CPUMeasurementMonitor : public FrameNode::ObserverDefaultImpl,
                               public ProcessNode::ObserverDefaultImpl,
-                              public WorkerNode::ObserverDefaultImpl {
+                              public WorkerNode::ObserverDefaultImpl,
+                              public NodeDataDescriberDefaultImpl {
  public:
   CPUMeasurementMonitor();
   ~CPUMeasurementMonitor() override;
@@ -43,10 +47,9 @@ class CPUMeasurementMonitor : public FrameNode::ObserverDefaultImpl,
   CPUMeasurementMonitor(const CPUMeasurementMonitor& other) = delete;
   CPUMeasurementMonitor& operator=(const CPUMeasurementMonitor&) = delete;
 
-  // The given `factory_callback` will be called to create a
-  // CPUMeasurementDelegate for each ProcessNode to be measured.
-  void SetCPUMeasurementDelegateFactoryForTesting(
-      CPUMeasurementDelegate::FactoryCallback factory_callback);
+  // The given `factory` will be used to create a CPUMeasurementDelegate for
+  // each ProcessNode to be measured.
+  void SetDelegateFactoryForTesting(CPUMeasurementDelegate::Factory* factory);
 
   // Starts monitoring CPU usage for all renderer ProcessNode's in `graph`.
   void StartMonitoring(Graph* graph);
@@ -59,8 +62,9 @@ class CPUMeasurementMonitor : public FrameNode::ObserverDefaultImpl,
 
   // Updates the CPU measurements for each ProcessNode being tracked and returns
   // the estimated CPU usage of each frame and worker in those processes, and
-  // all pages containing them.
-  std::map<ResourceContext, CPUTimeResult> UpdateAndGetCPUMeasurements();
+  // all pages containing them. Each QueryResults object will contain a
+  // CPUTimeResult.
+  QueryResultMap UpdateAndGetCPUMeasurements();
 
   // FrameNode::Observer:
   void OnFrameNodeAdded(const FrameNode* frame_node) override;
@@ -82,6 +86,14 @@ class CPUMeasurementMonitor : public FrameNode::ObserverDefaultImpl,
   void OnBeforeClientWorkerRemoved(
       const WorkerNode* worker_node,
       const WorkerNode* client_worker_node) override;
+
+  // NodeDataDescriber:
+  base::Value::Dict DescribeFrameNodeData(const FrameNode* node) const override;
+  base::Value::Dict DescribePageNodeData(const PageNode* node) const override;
+  base::Value::Dict DescribeProcessNodeData(
+      const ProcessNode* node) const override;
+  base::Value::Dict DescribeWorkerNodeData(
+      const WorkerNode* node) const override;
 
  private:
   friend class CPUMeasurementMonitorTest;
@@ -153,6 +165,10 @@ class CPUMeasurementMonitor : public FrameNode::ObserverDefaultImpl,
       const std::map<ResourceContext, CPUTimeResult>& measurement_deltas,
       GraphChange graph_change = NoGraphChange());
 
+  // Returns description of the most recent measurement of `context` for
+  // NodeDataDescriber, or an empty dict if there is none.
+  base::Value::Dict DescribeContextData(const ResourceContext& context) const;
+
   SEQUENCE_CHECKER(sequence_checker_);
 
   // Map of process nodes to ProcessMetrics used to measure CPU usage.
@@ -163,9 +179,9 @@ class CPUMeasurementMonitor : public FrameNode::ObserverDefaultImpl,
   std::map<ResourceContext, CPUTimeResult> measurement_results_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
-  // Callback that will be invoked to create CPUMeasurementDelegate objects for
-  // each ProcessNode being measured.
-  CPUMeasurementDelegate::FactoryCallback cpu_measurement_delegate_factory_
+  // Factory that creates CPUMeasurementDelegate objects for each ProcessNode
+  // being measured.
+  raw_ptr<CPUMeasurementDelegate::Factory> delegate_factory_
       GUARDED_BY_CONTEXT(sequence_checker_);
 
   // Graph being monitored. This will be only be set if StartMonitoring() was

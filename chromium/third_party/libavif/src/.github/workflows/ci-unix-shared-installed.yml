@@ -19,26 +19,30 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        include:
+          - runs-on: ubuntu-latest
+            compiler: gcc
+            gcc: 13
 
     steps:
-    - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
-    - name: Set GCC & G++ 10 compiler (on Linux)
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+    - name: Set GCC & G++ compiler (on Linux)
       if: runner.os == 'Linux'
-      run: echo "CC=gcc-10" >> $GITHUB_ENV && echo "CXX=g++-10" >> $GITHUB_ENV
+      run: echo "CC=gcc-${{matrix.gcc}}" >> $GITHUB_ENV && echo "CXX=g++-${{matrix.gcc}}" >> $GITHUB_ENV
 
     - name: Cache external dependencies
       id: cache-ext
-      uses: actions/cache@88522ab9f39a2ea568f7027eddc7d8d8bc9d59c8 # v3.3.1
+      uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84 # v3.3.2
       with:
         path: ext
         key: ${{ runner.os }}-shared-installed-${{ hashFiles('ext/*.cmd') }}
     - name: Setup cmake
-      uses: jwlawson/actions-setup-cmake@187efd9581ed20ee4e03c0dfb9ac2cd5896c4835 # v1.14.1
+      uses: jwlawson/actions-setup-cmake@d06b37b47cfd043ec794ffa3e40e0b6b5858a7ec # v1.14.2
       with:
         cmake-version: '3.13.x'
     - name: Print cmake version
       run: cmake --version
-    - uses: seanmiddleditch/gha-setup-ninja@16b940825621068d98711680b6c3ff92201f8fc0 # v3
+    - uses: seanmiddleditch/gha-setup-ninja@8b297075da4cd2a5f1fd21fe011b499edf06e9d2 # v4
     - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
@@ -66,12 +70,13 @@ jobs:
 
         cmake .. -G Ninja
         -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
-        -DAVIF_CODEC_AOM=ON
+        -DAVIF_CODEC_AOM=SYSTEM
         -DAVIF_CODEC_AOM_DECODE=OFF -DAVIF_CODEC_AOM_ENCODE=ON
-        -DAVIF_CODEC_DAV1D=ON
+        -DAVIF_CODEC_DAV1D=SYSTEM
         -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
         -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_LOCAL_GTEST=ON
         -DAVIF_BUILD_GDK_PIXBUF=ON -DCMAKE_INSTALL_PREFIX=./install
+        -DAVIF_ENABLE_WERROR=ON
     - name: Build libavif (ninja)
       working-directory: ./build
       run: ninja
@@ -97,3 +102,19 @@ jobs:
               endif()" >> CMakeLists.txt
 
         cmake . -DCMAKE_PREFIX_PATH=../install
+    - name: Prepare libavif with [[nodiscard]] (cmake)
+      run: >
+        mkdir build_nodiscard && cd build_nodiscard
+
+        cmake .. -G Ninja
+        -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+        -DAVIF_CODEC_AOM=SYSTEM
+        -DAVIF_CODEC_AOM_DECODE=OFF -DAVIF_CODEC_AOM_ENCODE=ON
+        -DAVIF_CODEC_DAV1D=SYSTEM
+        -DAVIF_ENABLE_WUNUSED_RESULT=ON -DAVIF_ENABLE_WERROR=ON
+        -DAVIF_BUILD_EXAMPLES=ON -DAVIF_BUILD_APPS=ON
+        -DAVIF_BUILD_TESTS=ON -DAVIF_ENABLE_GTEST=ON -DAVIF_LOCAL_GTEST=ON
+        -DAVIF_BUILD_GDK_PIXBUF=ON -DCMAKE_INSTALL_PREFIX=./install
+    - name: Build libavif with [[nodiscard]] (ninja)
+      working-directory: ./build_nodiscard
+      run: ninja

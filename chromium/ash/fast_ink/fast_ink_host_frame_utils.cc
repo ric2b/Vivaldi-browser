@@ -47,7 +47,7 @@ std::unique_ptr<UiResource> AcquireUiResource(
   std::unique_ptr<UiResource> resource;
   if (reusable_resource_id != viz::kInvalidResourceId) {
     resource = resource_manager->ReleaseAvailableResource(reusable_resource_id);
-    CHECK(mailbox.IsZero() || mailbox == resource->mailbox);
+    CHECK(mailbox.IsZero() || mailbox == resource->mailbox());
   } else {
     resource = CreateUiResource(size, kFastInkUiSourceId, is_overlay_candidate,
                                 gpu_memory_buffer, mailbox, sync_token);
@@ -70,7 +70,7 @@ void AppendQuad(const viz::TransferableResource& resource,
                      /*layer_rect=*/output_rect,
                      /*visible_layer_rect=*/output_rect,
                      /*filter_info=*/gfx::MaskFilterInfo(),
-                     /*clip=*/absl::nullopt, /*contents_opaque=*/false,
+                     /*clip=*/std::nullopt, /*contents_opaque=*/false,
                      /*opacity_f=*/1.f,
                      /*blend=*/SkBlendMode::kSrcOver,
                      /*sorting_context=*/0,
@@ -79,18 +79,17 @@ void AppendQuad(const viz::TransferableResource& resource,
   viz::TextureDrawQuad* texture_quad =
       render_pass_out.CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
 
-  static constexpr float kVertexOpacity[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   gfx::RectF uv_crop(quad_rect);
   uv_crop.Scale(1.f / buffer_size.width(), 1.f / buffer_size.height());
 
-  texture_quad->SetNew(
-      quad_state, quad_rect, quad_rect,
-      /*needs_blending=*/true, resource.id,
-      /*premultiplied=*/true, uv_crop.origin(), uv_crop.bottom_right(),
-      SkColors::kTransparent, kVertexOpacity,
-      /*flipped=*/false,
-      /*nearest=*/false,
-      /*secure_output=*/false, gfx::ProtectedVideoType::kClear);
+  texture_quad->SetNew(quad_state, quad_rect, quad_rect,
+                       /*needs_blending=*/true, resource.id,
+                       /*premultiplied=*/true, uv_crop.origin(),
+                       uv_crop.bottom_right(), SkColors::kTransparent,
+                       /*flipped=*/false,
+                       /*nearest=*/false,
+                       /*secure_output=*/false,
+                       gfx::ProtectedVideoType::kClear);
 
   texture_quad->set_resource_size_in_pixels(resource.size);
 }
@@ -119,6 +118,16 @@ std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuBuffer(
                               nullptr);
 }
 
+scoped_refptr<gpu::ClientSharedImage> CreateMappableSharedImage(
+    const gfx::Size& size,
+    uint32_t shared_image_usage,
+    gfx::BufferUsage buffer_usage) {
+  return GetContextProvider()->SharedImageInterface()->CreateSharedImage(
+      kFastInkSharedImageFormat, size, gfx::ColorSpace(),
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, shared_image_usage,
+      "FastInkHostUIResource", gpu::kNullSurfaceHandle, buffer_usage);
+}
+
 std::unique_ptr<UiResource> CreateUiResource(
     const gfx::Size& size,
     UiSourceId ui_source_id,
@@ -131,9 +140,7 @@ std::unique_ptr<UiResource> CreateUiResource(
 
   auto resource = std::make_unique<UiResource>();
 
-  resource->context_provider = aura::Env::GetInstance()
-                                   ->context_factory()
-                                   ->SharedMainThreadRasterContextProvider();
+  resource->context_provider = GetContextProvider();
 
   if (!resource->context_provider) {
     LOG(ERROR) << "Failed to acquire a context provider";
@@ -142,8 +149,6 @@ std::unique_ptr<UiResource> CreateUiResource(
 
   if (mailbox.IsZero()) {
     // The UiResource needs to create its own Mailbox, which it will own.
-    resource->owns_mailbox = true;
-
     gpu::SharedImageInterface* sii =
         resource->context_provider->SharedImageInterface();
 
@@ -157,12 +162,11 @@ std::unique_ptr<UiResource> CreateUiResource(
         gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
         "FastInkHostUIResource", gpu_memory_buffer->CloneHandle());
     CHECK(client_shared_image);
-    resource->mailbox = client_shared_image->mailbox();
+    resource->SetClientSharedImage(std::move(client_shared_image));
     resource->sync_token = sii->GenVerifiedSyncToken();
   } else {
     // This UiResource is operating on a shared SharedImage.
-    resource->owns_mailbox = false;
-    resource->mailbox = mailbox;
+    resource->SetExternallyOwnedMailbox(mailbox);
     resource->sync_token = sync_token;
   }
 
@@ -180,9 +184,10 @@ std::unique_ptr<viz::CompositorFrame> CreateCompositorFrame(
     const gfx::Rect& total_damage_rect,
     bool auto_update,
     const aura::Window& host_window,
+    const gfx::Size& buffer_size,
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     UiResourceManager* resource_manager,
-    gpu::Mailbox mailbox,
+    const scoped_refptr<gpu::ClientSharedImage>& shared_image,
     gpu::SyncToken sync_token) {
   float device_scale_factor = host_window.layer()->device_scale_factor();
   const gfx::Transform& window_to_buffer_transform =
@@ -193,7 +198,13 @@ std::unique_ptr<viz::CompositorFrame> CreateCompositorFrame(
   const gfx::Size window_size_in_pixel = gfx::ToFlooredSize(
       gfx::ConvertSizeToPixels(window_size_in_dip, device_scale_factor));
 
-  const gfx::Size buffer_size = gpu_memory_buffer->GetSize();
+  if (gpu_memory_buffer) {
+    CHECK_EQ(gpu_memory_buffer->GetSize(), buffer_size);
+  }
+
+  // If FastInkHost is configured to hold a SharedImage, ensure that that
+  // SharedImage is used when creating compositor frames.
+  auto mailbox = shared_image ? shared_image->mailbox() : gpu::Mailbox();
 
   // In auto_update mode, we use hardware overlays to render the content.
   auto resource = AcquireUiResource(buffer_size, auto_update, gpu_memory_buffer,
@@ -208,7 +219,7 @@ std::unique_ptr<viz::CompositorFrame> CreateCompositorFrame(
     gpu::SharedImageInterface* sii =
         resource->context_provider->SharedImageInterface();
 
-    sii->UpdateSharedImage(resource->sync_token, resource->mailbox);
+    sii->UpdateSharedImage(resource->sync_token, resource->mailbox());
     resource->sync_token = sii->GenVerifiedSyncToken();
     resource->damaged = false;
   }
@@ -268,6 +279,12 @@ std::unique_ptr<viz::CompositorFrame> CreateCompositorFrame(
   frame->render_pass_list.push_back(std::move(render_pass));
 
   return frame;
+}
+
+scoped_refptr<viz::RasterContextProvider> GetContextProvider() {
+  return aura::Env::GetInstance()
+      ->context_factory()
+      ->SharedMainThreadRasterContextProvider();
 }
 
 }  // namespace fast_ink_internal

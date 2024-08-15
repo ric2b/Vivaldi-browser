@@ -33,7 +33,8 @@ import {
   abstractFloat,
   TypeAbstractFloat,
 } from '../../../../../util/conversion.js';
-import { run, CaseList, allInputSources } from '../../expression.js';
+import { CaseList } from '../../case.js';
+import { run, allInputSources } from '../../expression.js';
 
 import { abstractBuiltin, builtin } from './builtin.js';
 

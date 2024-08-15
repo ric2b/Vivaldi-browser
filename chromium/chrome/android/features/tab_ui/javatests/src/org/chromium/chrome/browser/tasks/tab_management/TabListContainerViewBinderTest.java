@@ -47,12 +47,12 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -444,24 +444,6 @@ public class TabListContainerViewBinderTest extends BlankUiTestActivityTestCase 
 
         mContainerModel.set(TabListContainerProperties.BOTTOM_PADDING, CONTAINER_HEIGHT);
         assertThat(mRecyclerView.getPaddingBottom(), equalTo(CONTAINER_HEIGHT));
-    }
-
-    @Test
-    @MediumTest
-    @UiThreadTest
-    public void testSetInitialScrollIndex_Carousel() {
-        setUpLinearLayoutManager();
-        mRecyclerView.layout(0, 0, 1000, 100);
-
-        mContainerModel.set(
-                TabListContainerProperties.MODE, TabListCoordinator.TabListMode.CAROUSEL);
-        mContainerModel.set(TabListContainerProperties.INITIAL_SCROLL_INDEX, 3);
-
-        // Offset will be view width (1000) / 2 - tab card width calculated from dp dimension / 2.
-        verify(mLinearLayoutManager, times(1))
-                .scrollToPositionWithOffset(
-                        eq(3),
-                        intThat(allOf(lessThan(mRecyclerView.getWidth() / 2), greaterThan(0))));
     }
 
     @Test

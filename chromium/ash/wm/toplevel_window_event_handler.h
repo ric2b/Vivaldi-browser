@@ -127,6 +127,8 @@ class ASH_EXPORT ToplevelWindowEventHandler
   // Returns true if there is a drag in progress.
   bool is_drag_in_progress() const { return window_resizer_.get() != nullptr; }
 
+  bool in_pinch() const { return in_pinch_; }
+
   void CompleteDragForTesting(DragResult result) { CompleteDrag(result); }
 
  private:
@@ -211,7 +213,7 @@ class ASH_EXPORT ToplevelWindowEventHandler
   // ET_GESTURE_SCROLL_UPDATE event.
   bool requires_reinitialization_ = false;
 
-  raw_ptr<aura::Window, ExperimentalAsh> gesture_target_ = nullptr;
+  raw_ptr<aura::Window> gesture_target_ = nullptr;
   gfx::PointF event_location_in_gesture_target_;
 
   // True if `this` is receiving pinch events. There is a delay from

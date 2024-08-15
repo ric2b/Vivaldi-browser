@@ -16,31 +16,30 @@
 #import "ios/chrome/browser/find_in_page/model/find_tab_helper.h"
 #import "ios/chrome/browser/find_in_page/model/java_script_find_tab_helper.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
-#import "ios/chrome/browser/lens/lens_browser_agent.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
-#import "ios/chrome/browser/policy/policy_util.h"
+#import "ios/chrome/browser/lens/model/lens_browser_agent.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper_delegate.h"
+#import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/sessions/fake_tab_restore_service.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/tabs/model/closing_web_state_observer_browser_agent.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
-#import "ios/chrome/browser/web/web_navigation_util.h"
+#import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
+#import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_api.h"
 #import "ios/web/common/uikit_ui_util.h"
-#import "ios/web/find_in_page/java_script_find_in_page_manager_impl.h"
+#import "ios/web/public/find_in_page/java_script_find_in_page_manager.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_frames_manager.h"
@@ -54,19 +53,12 @@
 #import "third_party/ocmock/ocmock_extensions.h"
 #import "ui/base/l10n/l10n_util.h"
 
-namespace {
-
-std::unique_ptr<KeyedService> BuildFakeTabRestoreService(
-    web::BrowserState* browser_state) {
-  return std::make_unique<FakeTabRestoreService>();
-}
-
 class KeyCommandsProviderTest : public PlatformTest {
  protected:
   KeyCommandsProviderTest() {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(IOSChromeTabRestoreServiceFactory::GetInstance(),
-                              base::BindRepeating(BuildFakeTabRestoreService));
+                              FakeTabRestoreService::GetTestingFactory());
     builder.AddTestingFactory(
         ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
         ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
@@ -75,8 +67,7 @@ class KeyCommandsProviderTest : public PlatformTest {
     web_state_list_ = browser_->GetWebStateList();
     LensBrowserAgent::CreateForBrowser(browser_.get());
     WebNavigationBrowserAgent::CreateForBrowser(browser_.get());
-    scene_state_ = [[SceneState alloc] initWithAppState:nil];
-    SceneStateBrowserAgent::CreateForBrowser(browser_.get(), scene_state_);
+
     bookmark_model_ =
         ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
             browser_state_.get());
@@ -164,7 +155,6 @@ class KeyCommandsProviderTest : public PlatformTest {
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<TestBrowser> browser_;
   WebStateList* web_state_list_;
-  SceneState* scene_state_;
   base::UserActionTester user_action_tester_;
   bookmarks::BookmarkModel* bookmark_model_;
   KeyCommandsProvider* provider_;
@@ -294,7 +284,7 @@ TEST_F(KeyCommandsProviderTest, CanPerform_FindInPageActions) {
     web_state->SetWebFramesManager(
         web::ContentWorld::kIsolatedWorld,
         std::make_unique<web::FakeWebFramesManager>());
-    web::JavaScriptFindInPageManagerImpl::CreateForWebState(web_state);
+    web::JavaScriptFindInPageManager::CreateForWebState(web_state);
     JavaScriptFindTabHelper::CreateForWebState(web_state);
   }
 
@@ -655,15 +645,15 @@ TEST_F(KeyCommandsProviderTest, ImplementsActions) {
 // Checks the openNewTab logic based on a regular browser state.
 TEST_F(KeyCommandsProviderTest, OpenNewTab_RegularBrowserState) {
   id handler = OCMStrictProtocolMock(@protocol(ApplicationCommands));
-  provider_.dispatcher = handler;
+  provider_.applicationHandler = handler;
   id newTabCommand = [OCMArg checkWithBlock:^BOOL(OpenNewTabCommand* command) {
     return command.shouldFocusOmnibox == YES && command.inIncognito == NO;
   }];
-  OCMExpect([provider_.dispatcher openURLInNewTab:newTabCommand]);
+  OCMExpect([provider_.applicationHandler openURLInNewTab:newTabCommand]);
 
   [provider_ keyCommand_openNewTab];
 
-  EXPECT_OCMOCK_VERIFY(provider_.dispatcher);
+  [handler verify];
 }
 
 // Checks the openNewTab logic based on an incognito browser state.
@@ -673,43 +663,43 @@ TEST_F(KeyCommandsProviderTest, OpenNewTab_IncognitoBrowserState) {
   browser_ = std::make_unique<TestBrowser>(incognito_browser_state);
   provider_ = [[KeyCommandsProvider alloc] initWithBrowser:browser_.get()];
   id handler = OCMStrictProtocolMock(@protocol(ApplicationCommands));
-  provider_.dispatcher = handler;
+  provider_.applicationHandler = handler;
   id newTabCommand = [OCMArg checkWithBlock:^BOOL(OpenNewTabCommand* command) {
     return command.shouldFocusOmnibox == YES && command.inIncognito == YES;
   }];
-  OCMExpect([provider_.dispatcher openURLInNewTab:newTabCommand]);
+  OCMExpect([provider_.applicationHandler openURLInNewTab:newTabCommand]);
 
   [provider_ keyCommand_openNewTab];
 
-  EXPECT_OCMOCK_VERIFY(provider_.dispatcher);
+  [handler verify];
 }
 
 // Checks that openNewRegularTab opens a tab in the regular browser state.
 TEST_F(KeyCommandsProviderTest, OpenNewRegularTab) {
   id handler = OCMStrictProtocolMock(@protocol(ApplicationCommands));
-  provider_.dispatcher = handler;
+  provider_.applicationHandler = handler;
   id newTabCommand = [OCMArg checkWithBlock:^BOOL(OpenNewTabCommand* command) {
     return command.shouldFocusOmnibox == YES && command.inIncognito == NO;
   }];
-  OCMExpect([provider_.dispatcher openURLInNewTab:newTabCommand]);
+  OCMExpect([provider_.applicationHandler openURLInNewTab:newTabCommand]);
 
   [provider_ keyCommand_openNewTab];
 
-  EXPECT_OCMOCK_VERIFY(provider_.dispatcher);
+  [handler verify];
 }
 
 // Checks that openNewIncognitoTab opens a tab in the Incognito browser state.
 TEST_F(KeyCommandsProviderTest, OpenNewIncognitoTab) {
   id handler = OCMStrictProtocolMock(@protocol(ApplicationCommands));
-  provider_.dispatcher = handler;
+  provider_.applicationHandler = handler;
   id newTabCommand = [OCMArg checkWithBlock:^BOOL(OpenNewTabCommand* command) {
     return command.shouldFocusOmnibox == YES && command.inIncognito == YES;
   }];
-  OCMExpect([provider_.dispatcher openURLInNewTab:newTabCommand]);
+  OCMExpect([provider_.applicationHandler openURLInNewTab:newTabCommand]);
 
   [provider_ keyCommand_openNewIncognitoTab];
 
-  EXPECT_OCMOCK_VERIFY(provider_.dispatcher);
+  [handler verify];
 }
 
 // Checks the next/previous tab actions work OK.
@@ -738,8 +728,8 @@ TEST_F(KeyCommandsProviderTest, NextPreviousTab) {
 // Verifies that the Bookmarks are asked to be shown.
 TEST_F(KeyCommandsProviderTest, ShowBookmarks) {
   id handler = OCMStrictProtocolMock(@protocol(BrowserCoordinatorCommands));
-  provider_.browserCoordinatorCommandsHandler = handler;
-  OCMExpect([provider_.browserCoordinatorCommandsHandler showBookmarksManager]);
+  provider_.browserCoordinatorHandler = handler;
+  OCMExpect([provider_.browserCoordinatorHandler showBookmarksManager]);
 
   [provider_ keyCommand_showBookmarks];
 
@@ -748,7 +738,7 @@ TEST_F(KeyCommandsProviderTest, ShowBookmarks) {
 
 // Verifies that nothing is added to Bookmarks when there is no tab.
 TEST_F(KeyCommandsProviderTest, AddToBookmarks_DoesntAddWhenNoTab) {
-  provider_.bookmarksCommandsHandler =
+  provider_.bookmarksHandler =
       OCMStrictProtocolMock(@protocol(BookmarksCommands));
 
   [provider_ keyCommand_addToBookmarks];
@@ -756,7 +746,7 @@ TEST_F(KeyCommandsProviderTest, AddToBookmarks_DoesntAddWhenNoTab) {
 
 // Verifies that nothing is added to Bookmarks when on the NTP.
 TEST_F(KeyCommandsProviderTest, AddToBookmarks_DoesntAddWhenNTP) {
-  provider_.bookmarksCommandsHandler =
+  provider_.bookmarksHandler =
       OCMStrictProtocolMock(@protocol(BookmarksCommands));
   InsertNewWebState(0);
 
@@ -766,13 +756,13 @@ TEST_F(KeyCommandsProviderTest, AddToBookmarks_DoesntAddWhenNTP) {
 // Verifies that the correct URL is added to Bookmarks.
 TEST_F(KeyCommandsProviderTest, AddToBookmarks_AddURL) {
   id handler = OCMStrictProtocolMock(@protocol(BookmarksCommands));
-  provider_.bookmarksCommandsHandler = handler;
+  provider_.bookmarksHandler = handler;
   GURL url = GURL("https://e.test");
   id addCommand = [OCMArg checkWithBlock:^BOOL(URLWithTitle* URL) {
     return URL.URL == url;
   }];
-  OCMExpect([provider_.bookmarksCommandsHandler
-      createOrEditBookmarkWithURL:addCommand]);
+  OCMExpect(
+      [provider_.bookmarksHandler createOrEditBookmarkWithURL:addCommand]);
   web::FakeWebState* web_state = InsertNewWebState(0);
   web_state->SetCurrentURL(url);
 
@@ -784,8 +774,8 @@ TEST_F(KeyCommandsProviderTest, AddToBookmarks_AddURL) {
 // Verifies that the Reading List is asked to be shown.
 TEST_F(KeyCommandsProviderTest, ShowReadingList) {
   id handler = OCMStrictProtocolMock(@protocol(BrowserCoordinatorCommands));
-  provider_.browserCoordinatorCommandsHandler = handler;
-  OCMExpect([provider_.browserCoordinatorCommandsHandler showReadingList]);
+  provider_.browserCoordinatorHandler = handler;
+  OCMExpect([provider_.browserCoordinatorHandler showReadingList]);
 
   [provider_ keyCommand_showReadingList];
 
@@ -794,14 +784,16 @@ TEST_F(KeyCommandsProviderTest, ShowReadingList) {
 
 // Verifies that nothing is added to Reading List when there is no tab.
 TEST_F(KeyCommandsProviderTest, AddToReadingList_DoesntAddWhenNoTab) {
-  provider_.dispatcher = OCMStrictProtocolMock(@protocol(ApplicationCommands));
+  provider_.applicationHandler =
+      OCMStrictProtocolMock(@protocol(ApplicationCommands));
 
   [provider_ keyCommand_addToReadingList];
 }
 
 // Verifies that nothing is added to Reading List when on the NTP.
 TEST_F(KeyCommandsProviderTest, AddToReadingList_DoesntAddWhenNTP) {
-  provider_.dispatcher = OCMStrictProtocolMock(@protocol(ApplicationCommands));
+  provider_.applicationHandler =
+      OCMStrictProtocolMock(@protocol(ApplicationCommands));
   InsertNewWebState(0);
 
   [provider_ keyCommand_addToReadingList];
@@ -926,7 +918,7 @@ TEST_F(KeyCommandsProviderTest, ValidateCommands) {
     web_state->SetWebFramesManager(
         web::ContentWorld::kIsolatedWorld,
         std::make_unique<web::FakeWebFramesManager>());
-    web::JavaScriptFindInPageManagerImpl::CreateForWebState(web_state);
+    web::JavaScriptFindInPageManager::CreateForWebState(web_state);
     JavaScriptFindTabHelper::CreateForWebState(web_state);
   }
 
@@ -1006,5 +998,3 @@ TEST_F(KeyCommandsProviderTest, ClearingBrowserDoesntCrash) {
 
   EXPECT_FALSE(CanPerform(@"keyCommand_showNextTab"));
 }
-
-}  // namespace

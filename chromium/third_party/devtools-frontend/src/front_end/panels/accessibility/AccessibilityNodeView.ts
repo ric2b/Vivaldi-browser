@@ -43,6 +43,10 @@ const UIStrings = {
    */
   elementIsHiddenBy: 'Element is hidden by active modal dialog:\xA0',
   /**
+   *@description Text which appears in the Accessibility Node View of the Accessibility panel when an element is hidden by another accessibility tree.
+   */
+  elementIsHiddenByChildTree: 'Element is hidden by child tree:\xA0',
+  /**
    *@description Reason element in Accessibility Node View of the Accessibility panel
    */
   ancestorChildrenAreAll: 'Ancestor\'s children are all presentational:\xA0',
@@ -125,7 +129,7 @@ export class AXNodeSubPane extends AccessibilitySubPane {
     this.axNode = null;
 
     this.contentElement.classList.add('ax-subpane');
-    this.contentElement.setAttribute('jslog', `${VisualLogging.accessibilityComputedProperties()}`);
+    this.contentElement.setAttribute('jslog', `${VisualLogging.pane().context('computed-properties')}`);
 
     this.noNodeInfo = this.createInfo(i18nString(UIStrings.noAccessibilityNode));
     this.ignoredInfo = this.createInfo(i18nString(UIStrings.accessibilityNodeNotExposed), 'ax-ignored-info hidden');
@@ -629,6 +633,9 @@ export class AXNodeIgnoredReasonTreeElement extends AXNodePropertyTreeElement {
     switch (reason) {
       case 'activeModalDialog':
         reasonElement = i18n.i18n.getFormatLocalizedString(str_, UIStrings.elementIsHiddenBy, {});
+        break;
+      case 'hiddenByChildTree':
+        reasonElement = i18n.i18n.getFormatLocalizedString(str_, UIStrings.elementIsHiddenByChildTree, {});
         break;
       case 'ancestorIsLeafNode':
         reasonElement = i18n.i18n.getFormatLocalizedString(str_, UIStrings.ancestorChildrenAreAll, {});

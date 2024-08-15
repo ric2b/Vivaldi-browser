@@ -8,6 +8,7 @@
 #pragma mark - ICONS
 
 extern NSString* vMenuNewTab;
+extern NSString* vMenuNewBackgroundTab;
 extern NSString* vMenuPrivateTab;
 extern NSString* vMenuLink;
 extern NSString* vMenuEdit;
@@ -15,6 +16,7 @@ extern NSString* vMenuShare;
 extern NSString* vMenuMove;
 extern NSString* vMenuCopy;
 extern NSString* vMenuSave;
+extern NSString* vMenuSaveToPhotos;
 extern NSString* vMenuClose;
 extern NSString* vMenuPin;
 extern NSString* vMenuUnpin;

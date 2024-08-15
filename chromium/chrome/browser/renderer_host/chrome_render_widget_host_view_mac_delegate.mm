@@ -165,26 +165,19 @@
 
 - (BOOL)canNavigateInDirection:(history_swiper::NavigationDirection)direction
                       onWindow:(NSWindow*)window {
+  content::WebContents* webContents = self.webContents;
+
+
   // Vivaldi
   Browser* browser = chrome::FindBrowserWithWindow(window);
-  // Note(tomas@vivaldi.com): See VB-96150 for details.
-  // FromRenderViewHost returns our UI webcontents and this breaks
-  // the history swipe for vivaldi.
+  // Note(tomas@vivaldi.com): VB-70626, VB-96150, VB-101337.
+  // self.webContents is our UI webcontents. This breaks
+  // history swipe, use the active webcontents instead.
   if (browser && vivaldi::IsVivaldiRunning()) {
-    if (browser->is_vivaldi() &&
-      static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
-          VivaldiBrowserWindow::WindowType::SETTINGS) {
-      // VB-70626 Crash when using macOS history gesture in settings window
-      return NO;
-    }
-    if (direction == history_swiper::kForwards) {
-      return chrome::CanGoForward(browser);
-    } else {
-      return chrome::CanGoBack(browser);
-    }
+    webContents = browser->tab_strip_model()->GetActiveWebContents();
   } // end Vivaldi
 
-  content::WebContents* webContents = self.webContents;
+
   if (!webContents) {
     return NO;
   }
@@ -198,21 +191,19 @@
 
 - (void)navigateInDirection:(history_swiper::NavigationDirection)direction
                    onWindow:(NSWindow*)window {
+  content::WebContents* webContents = self.webContents;
+
+
   // Vivaldi
   Browser* browser = chrome::FindBrowserWithWindow(window);
-  // Note(tomas@vivaldi.com): See VB-96150 for details.
-  // FromRenderViewHost returns our UI webcontents and this breaks
-  // the history swipe for vivaldi.
+  // Note(tomas@vivaldi.com): VB-96150.
+  // self.webContents is our UI webcontents. This breaks
+  // history swipe, use the active webcontents instead.
   if (browser && vivaldi::IsVivaldiRunning()) {
-    if (direction == history_swiper::kForwards) {
-      chrome::GoForward(browser, WindowOpenDisposition::CURRENT_TAB);
-    } else {
-      chrome::GoBack(browser, WindowOpenDisposition::CURRENT_TAB);
-    }
-    return;
+    webContents = browser->tab_strip_model()->GetActiveWebContents();
   } // end Vivaldi
 
-  content::WebContents* webContents = self.webContents;
+
   if (!webContents) {
     return;
   }

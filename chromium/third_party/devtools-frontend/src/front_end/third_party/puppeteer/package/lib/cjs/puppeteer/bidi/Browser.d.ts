@@ -1,17 +1,7 @@
 /**
- * Copyright 2022 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2022 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /// <reference types="node" />
 import type { ChildProcess } from 'child_process';
@@ -38,6 +28,7 @@ export interface BidiBrowserOptions {
  */
 export declare class BidiBrowser extends Browser {
     #private;
+    readonly protocol = "webDriverBiDi";
     static readonly subscribeModules: string[];
     static readonly subscribeCdpEvents: Bidi.Cdp.EventNames[];
     static create(opts: BidiBrowserOptions): Promise<BidiBrowser>;
@@ -45,6 +36,7 @@ export declare class BidiBrowser extends Browser {
         browserName: string;
         browserVersion: string;
     });
+    userAgent(): never;
     get connection(): BidiConnection;
     wsEndpoint(): string;
     close(): Promise<void>;
@@ -59,5 +51,6 @@ export declare class BidiBrowser extends Browser {
     targets(): Target[];
     _getTargetById(id: string): BidiTarget;
     target(): Target;
+    disconnect(): Promise<void>;
 }
 //# sourceMappingURL=Browser.d.ts.map

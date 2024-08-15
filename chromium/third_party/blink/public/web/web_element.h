@@ -80,12 +80,20 @@ class BLINK_EXPORT WebElement : public WebNode {
   WebString GetAttribute(const WebString&) const;
   void SetAttribute(const WebString& name, const WebString& value);
   WebString TextContent() const;
+  WebString TextContentAbridged(unsigned int max_length) const;
   WebString InnerHTML() const;
 
   // Returns true if the element's contenteditable attribute is in the true
   // state or in the plaintext-only state:
   // https://html.spec.whatwg.org/multipage/interaction.html#attr-contenteditable
   bool IsContentEditable() const;
+
+  // Returns true if the frame's selection is inside this editable element.
+  bool ContainsFrameSelection() const;
+
+  // Returns the selected text if this element contains the selection.
+  // Otherwise returns the empty string.
+  WebString SelectedText() const;
 
   // Simulates a paste of `text` event into `this` element.
   //

@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void mix_ef3575() {
+  float2 res = float2(1.0f);
+}
+vertex float4 vertex_main() {
+  mix_ef3575();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  mix_ef3575();
+}
+kernel void compute_main() {
+  mix_ef3575();
+}

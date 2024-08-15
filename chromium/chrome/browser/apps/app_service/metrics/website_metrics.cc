@@ -59,7 +59,7 @@ aura::Window* GetWindowWithBrowser(Browser* browser) {
 }
 
 aura::Window* GetWindowWithTabStripModel(TabStripModel* tab_strip_model) {
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->tab_strip_model() == tab_strip_model) {
       return GetWindowWithBrowser(browser);
     }
@@ -135,7 +135,7 @@ WebsiteMetrics::UrlInfo::UrlInfo(const base::Value& value) {
     return;
   }
 
-  absl::optional<base::TimeDelta> running_time_value =
+  std::optional<base::TimeDelta> running_time_value =
       base::ValueToTimeDelta(data_dict->Find(kRunningTimeKey));
   if (!running_time_value.has_value()) {
     return;
@@ -440,13 +440,22 @@ void WebsiteMetrics::OnTabClosed(content::WebContents* web_contents) {
 
 void WebsiteMetrics::OnWebContentsUpdated(content::WebContents* web_contents) {
   // If there is an app for the url, we don't need to record the url, because
-  // the app metrics can record the usage time metrics.
+  // the app metrics can record the usage time metrics. We need to ensure we
+  // notify observers of previous URL being closed if we happen to be tracking
+  // it.
   if (GetInstanceAppIdForWebContents(web_contents).has_value()) {
-    webcontents_to_ukm_key_.erase(web_contents);
+    if (const auto web_contents_it = webcontents_to_ukm_key_.find(web_contents);
+        web_contents_it != webcontents_to_ukm_key_.end()) {
+      for (auto& observer : observers_) {
+        observer.OnUrlClosed(web_contents_it->second, web_contents);
+      }
+      webcontents_to_ukm_key_.erase(web_contents);
+    }
     return;
   }
 
-  auto* window = GetWindowWithBrowser(chrome::FindBrowserWithTab(web_contents));
+  auto* const window =
+      GetWindowWithBrowser(chrome::FindBrowserWithTab(web_contents));
   if (!window) {
     return;
   }

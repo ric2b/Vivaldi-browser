@@ -31,6 +31,8 @@ public:
                                                                           std::move(encoder)));
     }
 
+    const char* getResourceType() const override { return "Metal Render Command Encoder"; }
+
     void setLabel(NSString* label) {
         [(*fCommandEncoder) setLabel:label];
     }
@@ -253,7 +255,11 @@ private:
 
     MtlRenderCommandEncoder(const SharedContext* sharedContext,
                             sk_cfp<id<MTLRenderCommandEncoder>> encoder)
-            : Resource(sharedContext, Ownership::kOwned, skgpu::Budgeted::kYes, /*gpuMemorySize=*/0)
+            : Resource(sharedContext,
+                       Ownership::kOwned,
+                       skgpu::Budgeted::kYes,
+                       /*gpuMemorySize=*/0,
+                       /*label=*/"MtlRenderCommandEncoder")
             , fCommandEncoder(std::move(encoder)) {
         for (int i = 0; i < kMaxExpectedBuffers; i++) {
             fCurrentVertexBuffer[i] = nil;

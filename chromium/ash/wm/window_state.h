@@ -6,6 +6,7 @@
 #define ASH_WM_WINDOW_STATE_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "ash/ash_export.h"
@@ -20,7 +21,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/ui/base/window_state_type.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/display.h"
@@ -139,7 +139,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
     is_moving_to_another_display_ = moving;
   }
 
-  absl::optional<float> snap_ratio() const { return snap_ratio_; }
+  std::optional<float> snap_ratio() const { return snap_ratio_; }
 
   // True if the window should be unminimized to the restore bounds, as
   // opposed to the window's current bounds. |unminimized_to_restore_bounds_| is
@@ -164,19 +164,19 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
   // Gets/Sets the bounds of the window before it was moved by the auto window
   // management. As long as it was not auto-managed, it will return NULL.
-  const absl::optional<gfx::Rect> pre_auto_manage_window_bounds() {
+  const std::optional<gfx::Rect> pre_auto_manage_window_bounds() {
     return pre_auto_manage_window_bounds_;
   }
   void set_pre_auto_manage_window_bounds(const gfx::Rect& bounds) {
-    pre_auto_manage_window_bounds_ = absl::make_optional(bounds);
+    pre_auto_manage_window_bounds_ = std::make_optional(bounds);
   }
 
   // Gets/Sets the property that is used on window added to workspace event.
-  const absl::optional<gfx::Rect> pre_added_to_workspace_window_bounds() {
+  const std::optional<gfx::Rect> pre_added_to_workspace_window_bounds() {
     return pre_added_to_workspace_window_bounds_;
   }
   void set_pre_added_to_workspace_window_bounds(const gfx::Rect& bounds) {
-    pre_added_to_workspace_window_bounds_ = absl::make_optional(bounds);
+    pre_added_to_workspace_window_bounds_ = std::make_optional(bounds);
   }
 
   // Gets the persistent window info that is used on restoring persistent
@@ -199,7 +199,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
   // Whether or not the window's position or size was changed by a user.
   bool bounds_changed_by_user() const { return bounds_changed_by_user_; }
-  void set_bounds_changed_by_user(bool bounds_changed_by_user);
 
   // True if the window should not adjust the window's bounds when
   // virtual keyboard bounds changes.
@@ -324,6 +323,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // state machine.
   void OnWMEvent(const WMEvent* event);
 
+  // Sets `bounds` as is and ensure the layer is aligned with pixel boundary.
+  // For use in unit tests.
+  void SetBoundsDirectForTesting(const gfx::Rect& bounds);
+
   // TODO(oshima): Try hiding these methods and making them accessible only to
   // state impl. State changes should happen through events (as much
   // as possible).
@@ -362,11 +365,6 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // If window is not horizontally shrinkable, return false.
   bool HorizontallyShrinkWindow(const gfx::Rect& work_area);
 
-  // Updates the window bounds. This may get called when a window is resized in
-  // splitview (i.e. a snapped window and overview). Side-by-side snapped
-  // windows will get resized by WorkspaceWindowResizer normally.
-  void UpdateSnappedBounds();
-
   // Replace the State object of a window with a state handler which can
   // implement a new window manager type. The passed object will be owned
   // by this object and the returned object will be owned by the caller.
@@ -376,6 +374,12 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Should be called by snap events and bound events, or when resizing a
   // snapped window.
   void UpdateSnapRatio();
+
+  // Forcefully updates `snap_ratio` based on the given `target_bounds`. You
+  // usually should use `UpdateSnapRatio()` instead. This method does not check
+  // whether `window()` is in the snapped state, so the caller must be sure that
+  // `window()` is to-be-snapped. Use with care.
+  void ForceUpdateSnapRatio(const gfx::Rect& target_bounds);
 
   // Gets/sets whether the shelf should be hidden when this window is
   // fullscreen.
@@ -401,6 +405,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // the top portion of the window through a touch / mouse gesture. It might
   // also allow the shelf to be shown in some situations.
   bool IsInImmersiveFullscreen() const;
+
+  // Sets `bounds_changed_by_user_` to the given value and resets the
+  // corresponding variables.
+  void SetBoundsChangedByUser(bool bounds_changed_by_user);
 
   // Creates and takes ownership of a pointer to DragDetails when resizing is
   // active. This should be done before a resizer gets created.
@@ -477,7 +485,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
     void OnWindowDestroying(aura::Window* window) override;
 
    private:
-    raw_ptr<aura::Window, ExperimentalAsh> window_;
+    raw_ptr<aura::Window> window_;
     BoundsChangeAnimationType previous_bounds_animation_type_;
   };
 
@@ -529,9 +537,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Sets the window's `bounds` and transition to the new bounds with
   // a cross fade animation. If `float_state` has a value, sets a custom
   // float/unfloat cross fade animation.
-  void SetBoundsDirectCrossFade(
-      const gfx::Rect& bounds,
-      absl::optional<bool> float_state = absl::nullopt);
+  void SetBoundsDirectCrossFade(const gfx::Rect& bounds,
+                                std::optional<bool> float_state = std::nullopt);
 
   // Called before the state change and update PIP related state, such as next
   // window animation type, upon state change.
@@ -600,17 +607,16 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool has_ever_been_dragged_to_maximized_ = false;
 
   // The owner of this window settings.
-  raw_ptr<aura::Window, ExperimentalAsh> window_;
+  raw_ptr<aura::Window> window_;
   std::unique_ptr<WindowStateDelegate> delegate_;
 
-  bool bounds_changed_by_user_;
+  bool bounds_changed_by_user_ = false;
   std::unique_ptr<DragDetails> drag_details_;
 
-  bool unminimize_to_restore_bounds_;
+  bool unminimize_to_restore_bounds_ = false;
   bool ignore_keyboard_bounds_change_ = false;
-  bool hide_shelf_when_fullscreen_;
-  bool autohide_shelf_when_maximized_or_fullscreen_;
-  ui::ZOrderLevel cached_z_order_;
+  bool autohide_shelf_when_maximized_or_fullscreen_ = false;
+  ui::ZOrderLevel cached_z_order_ = ui::ZOrderLevel::kNormal;
   bool allow_set_bounds_direct_ = false;
   bool is_moving_to_another_display_ = false;
 
@@ -622,16 +628,16 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // desired snapped window bounds for a WMEvent, or adjust the window's bounds
   // when display or workarea changes, or decide what the window bounds should
   // be if restoring the window back to a snapped window state, etc.
-  absl::optional<float> snap_ratio_;
+  std::optional<float> snap_ratio_;
 
   // A property to remember the window position which was set before the
   // auto window position manager changed the window bounds, so that it can
   // get restored when only this one window gets shown.
-  absl::optional<gfx::Rect> pre_auto_manage_window_bounds_;
+  std::optional<gfx::Rect> pre_auto_manage_window_bounds_;
 
   // A property which resets when bounds is changed by user and sets when it
   // is nullptr, and window is removing from a workspace.
-  absl::optional<gfx::Rect> pre_added_to_workspace_window_bounds_;
+  std::optional<gfx::Rect> pre_added_to_workspace_window_bounds_;
 
   // A property to remember the persistent window info used in multi-displays
   // scenario to attempt to restore windows to their original bounds when
@@ -652,7 +658,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
 
   // True to ignore a property change event to avoid reentrance in
   // UpdateWindowStateType()
-  bool ignore_property_change_;
+  bool ignore_property_change_ = false;
 
   std::unique_ptr<State> current_state_;
 

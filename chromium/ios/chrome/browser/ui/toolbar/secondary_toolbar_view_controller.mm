@@ -22,10 +22,23 @@
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface SecondaryToolbarViewController ()
 
 /// Redefined to be a `SecondaryToolbarView`.
 @property(nonatomic, strong) SecondaryToolbarView* view;
+
+// Vivaldi
+@property(nonatomic, assign) BOOL isNTP;
+// End Vivaldi
 
 @end
 
@@ -113,8 +126,20 @@
 /// Returns the vertical margin to the location bar based on fullscreen
 /// `progress`, aligned to the nearest pixel.
 - (CGFloat)verticalMarginForLocationBarForFullscreenProgress:(CGFloat)progress {
+
+  if (IsVivaldiRunning() && !self.hasOmnibox)
+    return 0; // End Vivaldi
+
   const CGFloat clampedFontSizeMultiplier = ToolbarClampedFontSizeMultiplier(
       self.traitCollection.preferredContentSizeCategory);
+
+  if (IsVivaldiRunning()) {
+    return AlignValueToPixel(
+        (vBottomAdaptiveLocationBarTopMargin * progress +
+         kBottomAdaptiveLocationBarVerticalMarginFullscreen * (1 - progress)) *
+            clampedFontSizeMultiplier +
+        (clampedFontSizeMultiplier - 1) * kLocationBarVerticalMarginDynamicType);
+  } // End Vivaldi
 
   return AlignValueToPixel(
       (kBottomAdaptiveLocationBarTopMargin * progress +
@@ -154,16 +179,109 @@
       // content. This will not evaluate to true each time the keyboard's frame
       // is updating. Thus, update the keyboard's frame even if this is false.
       if (![self.view.locationBarKeyboardConstraint isActive]) {
+
+        // Vivaldi:(prio@vivaldi.com) - Reset the constraint to 0 to move the
+        // location bar container to default position.
+        // TODO: - (@prio@vivaldi.com) -
+        // See why there's a keyboard accessory view on iPads(CR issue)
+        self.view.locationBarKeyboardConstraint.constant = 0;
+        // End Vivaldi
+
         self.view.locationBarKeyboardConstraint.active = YES;
         [self collapseForKeyboard];
         [self.view layoutIfNeeded];
       }
     }
+
+    // Vivaldi:(prio@vivaldi.com) - Important!!!
+    // Chrome moves the location bar container only for input field of webStates
+    // But, we move it when omnibox is activated too. Also, they pin keyboard
+    // top to location bar top. Hence, we will have to add the location bar
+    // height to the constraint to make the omnibox visible over keyboard.
+    else {
+      if (![self.view.locationBarKeyboardConstraint isActive]) {
+        self.view.locationBarKeyboardConstraint.constant =
+            kSecondaryToolbarWithoutOmniboxHeight;
+        self.view.locationBarKeyboardConstraint.active = YES;
+        self.view.bottomSeparator.alpha = 0.0;
+        [self.toolbarHeightDelegate secondaryToolbarMovedAboveKeyboard];
+        [self.view layoutIfNeeded];
+      }
+    }
+    // End Vivaldi
+
   } else if ([self.view.locationBarKeyboardConstraint isActive]) {
     self.view.locationBarKeyboardConstraint.active = NO;
     [self removeFromKeyboard];
     [self.view layoutIfNeeded];
   }
 }
+
+#pragma mark - Vivaldi
+- (UIStackView*)toolbarButtonStackView {
+  return self.view.buttonStackView;
+}
+
+- (void)updateToolbarButtonsTintColor {
+  UIColor* accentColor =
+      [self toolbarBackgroundColorForType:ToolbarType::kSecondary];
+  UIColor* buttonsTintColor = self.isTabBarEnabled ?
+      [UIColor colorNamed:kToolbarButtonColor] :
+          [self.buttonFactory.toolbarConfiguration
+              buttonsTintColorForAccentColor:accentColor];
+  self.buttonFactory.toolbarConfiguration.buttonsTintColor = buttonsTintColor;
+  for (ToolbarButton *button in self.view.buttonStackView.arrangedSubviews) {
+    [button updateTintColor];
+  }
+  [self.view.openNewTabButton updateTintColor];
+}
+
+- (void)setIsNTP:(BOOL)isNTP {
+  if (_isNTP == isNTP)
+    return;
+  [super setIsNTP:isNTP];
+  _isNTP = isNTP;
+
+  [self updateBackgroundColor];
+}
+
+- (void)updateBackgroundColor {
+  [UIView animateWithDuration:0.2 animations:^{
+    self.view.backgroundColor =
+        [self toolbarBackgroundColorForType:ToolbarType::kSecondary];
+    [self updateToolbarButtonsTintColor];
+  }];
+}
+
+- (void)updateLocationBarBackgroundColor {
+  // Update omnibox background color. When tab bar is enabled its not modified
+  // with accent color and rather follows the prefixed color. However, when tab
+  // bar is disabled the color is calculated from the accent color so that its
+  // visible regardless of the accent color.
+  if (self.isTabBarEnabled || self.isOmniboxFocused) {
+    self.view.locationBarContainer.backgroundColor =
+        [self.buttonFactory.toolbarConfiguration
+         locationBarBackgroundColorWithVisibility:1.0];
+  } else {
+    UIColor* accentColor =
+        [self toolbarBackgroundColorForType:ToolbarType::kSecondary];
+    self.view.locationBarContainer.backgroundColor =
+        [self.buttonFactory.toolbarConfiguration
+            locationBarBackgroundColorForAccentColor:accentColor];
+  }
+}
+
+#pragma mark - AdaptiveToolbarViewController (Subclassing)
+- (void)setLocationBarViewController:
+    (UIViewController*)locationBarViewController {
+  [super setLocationBarViewController:locationBarViewController];
+  [self updateForFullscreenProgress:1];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  [self updateToolbarButtonsTintColor];
+}
+// End Vivaldi
 
 @end

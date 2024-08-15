@@ -3,10 +3,8 @@
 <translationbundle lang="ar">
 <translation id="1056898198331236512">تحذير</translation>
 <translation id="1165039591588034296">خطأ</translation>
-<translation id="1175364870820465910">ط&amp;باعة...</translation>
 <translation id="1181037720776840403">حذف</translation>
 <translation id="1244303850296295656">خطأ في الإضافة</translation>
-<translation id="150411034776756821">حذف <ph name="SITE" /></translation>
 <translation id="1546280085599573572">غيّرت هذه الإضافة الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية.</translation>
 <translation id="1588438908519853928">عادي</translation>
 <translation id="1603914832182249871">(المتخفي)</translation>
@@ -34,7 +32,6 @@
 <translation id="2861941300086904918">‏إدارة الأمان لـ Native Client</translation>
 <translation id="2932883381142163287">الإبلاغ عن إساءة الاستخدام</translation>
 <translation id="2941112035454246133">منخفضة</translation>
-<translation id="2972581237482394796">إعا&amp;دة</translation>
 <translation id="3080207940057008665">‏أضاف برنامج آخر بجهاز الكمبيوتر مظهرًا قد يؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
 <translation id="3084548735795614657">إفلات للتثبيت</translation>
 <translation id="3122464029669770682">وحدة المعالجة المركزية</translation>
@@ -48,9 +45,7 @@
 <translation id="3678156199662914018">الإضافة: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">إصلاح التطبيق</translation>
 <translation id="3908501907586732282">تمكين الإضافة</translation>
-<translation id="3909791450649380159">&amp;قص</translation>
 <translation id="3927932062596804919">رفض</translation>
-<translation id="3943582379552582368">&amp;إلى الوراء</translation>
 <translation id="3979395879372752341">تمت إضافة إحدى الإضافات الجديدة (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;إضافة إلى القاموس</translation>
@@ -59,13 +54,10 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">تعطيل إضافات وضع مطور البرامج</translation>
 <translation id="4100839878934973028">‏أضاف برنامج آخر بجهاز الكمبيوتر تطبيقًا قد يؤدي إلى تغيير طريقة عمل Vivaldi.</translation>
-<translation id="4130207949184424187">غيّرت هذه الإضافة الصفحة التي تظهر عند البحث في المربع متعدد الاستخدامات.</translation>
 <translation id="4176463684765177261">معطل</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />كيلوبايت (<ph name="NUM_KILOBYTES_LIVE" />كيلوبايت مباشرة)</translation>
 <translation id="4348766275249686434">جمع الأخطاء</translation>
 <translation id="4384652540891215547">تنشيط الإضافة</translation>
-<translation id="4394049700291259645">تعطيل</translation>
-<translation id="4593021220803146968">&amp;انتقال إلى <ph name="URL" /></translation>
 <translation id="4595560905247879544">لا يمكن تعديل التطبيقات والإضافات إلا من قِبل المدير (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">لقد غيّرت الإضافة الصفحة المعروضة عندما فتحت علامة تبويب جديدة.</translation>
 <translation id="488785315393301722">عرض التفاصيل</translation>
@@ -76,10 +68,8 @@
 <translation id="5233231016133573565">معرِّف العملية</translation>
 <translation id="52912272896845572">ملف المفتاح الخاص غير صالح.</translation>
 <translation id="5301954838959518834">موافق وأعي ذلك</translation>
-<translation id="5355926466126177564">غيّرت الإضافة "<ph name="EXTENSION_NAME" />" الصفحة التي تظهر عند البحث في المربع متعدد الاستخدامات.</translation>
 <translation id="5362741141255528695">حدد ملف المفتاح الخاص.</translation>
 <translation id="536638840841140142">لا شيء</translation>
-<translation id="5370819323174483825">&amp;إعادة تحميل</translation>
 <translation id="5431318178759467895">اللون</translation>
 <translation id="5485102783864353244">إضافة تطبيق</translation>
 <translation id="5521078259930077036">هل هذه هي الصفحة الرئيسية التي كنت تتوقع ظهورها؟</translation>
@@ -87,15 +77,11 @@
 <translation id="5556459405103347317">إعادة تحميل</translation>
 <translation id="5575473780076478375">إضافة وضع التصفح المتخفي: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5623842676595125836">الدخول</translation>
-<translation id="5627086634964711283">كما أنها تتحكم في الصفحة التي تظهر عند  النقر على زر الصفحة الرئيسية.</translation>
 <translation id="5707185214361380026">فشل تحميل الإضافة من:</translation>
 <translation id="5715711091495208045">وسيط المكوّن الإضافي: <ph name="PLUGIN_NAME" /></translation>
 <translation id="583281660410589416">غير معروف</translation>
-<translation id="5956585768868398362">هل هذه هي صفحة البحث التي كنت تتوقع ظهورها؟</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> في الذروة)</translation>
-<translation id="5965661248935608907">كما أنها تتحكم في الصفحة التي تظهر عند النقر على زر الصفحة الرئيسية أو إجراء بحث من المربع متعدد الاستخدامات.</translation>
 <translation id="6101226222197207147">تمت إضافة تطبيق جديد (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">يتم التحكم في اتصال الإنترنت التابع لك</translation>
 <translation id="6196854373336333322">أصبح بإمكان الإضافة "<ph name="EXTENSION_NAME" />" التحكم في إعدادات الخادم الوكيل التابعة لك، مما يعني أن بإمكانها تغيير أي إجراء لك عبر الإنترنت أو قطعه أو التجسس عليه. إذا كنت غير متيقن من سبب حدوث هذا التغيير، فأنت لا ترغب فيه على الأرجح.</translation>
 <translation id="6247802389331535091">النظام: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6445450263907939268">إذا كنت لا تريد هذه التغييرات، فيمكنك استعادة الإعدادات السابقة.</translation>
@@ -103,7 +89,6 @@
 <translation id="6498249116389603658">&amp;جميع اللغات</translation>
 <translation id="6503077044568424649">الأكثر زيارة</translation>
 <translation id="6508261954199872201">التطبيق: <ph name="APP_NAME" /></translation>
-<translation id="6691936601825168937">إعا&amp;دة توجيه</translation>
 <translation id="6798954102094737107">المكوّن الإضافي: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">تطبيق الخلفية: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">تم رفض الدخول</translation>
@@ -111,10 +96,8 @@
 <translation id="7629827748548208700">علامة التبويب: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">المتلقي: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">المهمة</translation>
-<translation id="7760004034676677601">هل هذه هي صفحة بدء التشغيل التي كنت تتوقع ظهورها؟</translation>
 <translation id="7791543448312431591">إضافة</translation>
 <translation id="7818135753970109980">تمت إضافة مظهر جديد (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="7857949311770343000">هل هذه هي صفحة علامة التبويب الجديدة التي كنت تتوقع ظهورها؟</translation>
 <translation id="786073089922909430">الخدمة: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">الأداة: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7978412674231730200">مفتاح خاص</translation>
@@ -136,10 +119,8 @@
 <translation id="8962083179518285172">إخفاء التفاصيل</translation>
 <translation id="8973557916016709913">إزالة مستوى التكبير/ التصغير</translation>
 <translation id="9003647077635673607">السماح في جميع مواقع الويب</translation>
-<translation id="9170848237812810038">&amp;إلغاء</translation>
 <translation id="9215293857209265904">تمت إضافة "<ph name="EXTENSION_NAME" />"</translation>
 <translation id="93766956588638423">إصلاح الإضافة</translation>
 <translation id="98515147261107953">المناظر الطبيعيه</translation>
-<translation id="994289308992179865">ت&amp;كرار</translation>
 <translation id="998747458861718449">ف&amp;حص</translation>
 </translationbundle>

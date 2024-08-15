@@ -34,61 +34,230 @@
 
 #include "dawn/common/Assert.h"
 #include "dawn/common/FutureUtils.h"
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
 #include "dawn/native/IntegerTypes.h"
+#include "dawn/native/Queue.h"
 #include "dawn/native/SystemEvent.h"
+#include "dawn/native/WaitAnySystemEvent.h"
 
 namespace dawn::native {
 
 namespace {
 
-// We can replace the std::vector& when std::span is available via C++20.
-wgpu::WaitStatus WaitImpl(std::vector<TrackedFutureWaitInfo>& futures, Nanoseconds timeout) {
-    // Sort the futures by how they'll be waited (their GetWaitDevice).
-    // This lets us do each wait on a slice of the array.
-    std::sort(futures.begin(), futures.end(), [](const auto& a, const auto& b) {
-        // operator<() is undefined behavior for arbitrary pointers, but std::less{}() is defined.
-        return std::less<DeviceBase*>{}(a.event->GetWaitDevice(), b.event->GetWaitDevice());
-    });
+// Wrapper around an iterator to yield system event receiver and a pointer
+// to the ready bool. We pass this into WaitAnySystemEvent so it can extract
+// the receivers and get pointers to the ready status - without allocating
+// duplicate storage to store the receivers and ready bools.
+class SystemEventAndReadyStateIterator {
+  public:
+    using WrappedIter = std::vector<TrackedFutureWaitInfo>::iterator;
 
-    if (timeout > Nanoseconds(0)) {
-        DAWN_ASSERT(futures.size() <= kTimedWaitAnyMaxCountDefault);
+    // Specify required iterator traits.
+    using value_type = std::pair<const SystemEventReceiver&, bool*>;
+    using difference_type = typename WrappedIter::difference_type;
+    using iterator_category = typename WrappedIter::iterator_category;
+    using pointer = value_type*;
+    using reference = value_type&;
 
-        // If there's a timeout, check that there isn't a mix of wait devices.
-        if (futures.front().event->GetWaitDevice() != futures.back().event->GetWaitDevice()) {
-            return wgpu::WaitStatus::UnsupportedMixedSources;
-        }
+    SystemEventAndReadyStateIterator() = default;
+    SystemEventAndReadyStateIterator(const SystemEventAndReadyStateIterator&) = default;
+    SystemEventAndReadyStateIterator& operator=(const SystemEventAndReadyStateIterator&) = default;
+
+    explicit SystemEventAndReadyStateIterator(WrappedIter wrappedIt) : mWrappedIt(wrappedIt) {}
+
+    bool operator!=(const SystemEventAndReadyStateIterator& rhs) {
+        return rhs.mWrappedIt != mWrappedIt;
+    }
+    bool operator==(const SystemEventAndReadyStateIterator& rhs) {
+        return rhs.mWrappedIt == mWrappedIt;
+    }
+    difference_type operator-(const SystemEventAndReadyStateIterator& rhs) {
+        return mWrappedIt - rhs.mWrappedIt;
     }
 
-    // Actually do the poll or wait to find out if any of the futures became ready.
-    // Here, there's either only one iteration, or timeout is 0, so we know the
-    // timeout won't get stacked multiple times.
-    bool anySuccess = false;
-    // Find each slice of the array (sliced by wait device), and wait on it.
-    for (size_t sliceStart = 0; sliceStart < futures.size();) {
-        DeviceBase* waitDevice = futures[sliceStart].event->GetWaitDevice();
-        size_t sliceLength = 1;
-        while (sliceStart + sliceLength < futures.size() &&
-               (futures[sliceStart + sliceLength].event->GetWaitDevice()) == waitDevice) {
-            sliceLength++;
-        }
+    SystemEventAndReadyStateIterator operator+(difference_type rhs) {
+        return SystemEventAndReadyStateIterator{mWrappedIt + rhs};
+    }
 
-        {
-            bool success;
-            if (waitDevice) {
-                success = waitDevice->WaitAnyImpl(sliceLength, &futures[sliceStart], timeout);
-            } else {
-                success = WaitAnySystemEvent(sliceLength, &futures[sliceStart], timeout);
+    SystemEventAndReadyStateIterator& operator++() {
+        ++mWrappedIt;
+        return *this;
+    }
+
+    value_type operator*() {
+        return {
+            std::get<Ref<SystemEvent>>(mWrappedIt->event->GetCompletionData())
+                ->GetOrCreateSystemEventReceiver(),
+            &mWrappedIt->ready,
+        };
+    }
+
+  private:
+    WrappedIter mWrappedIt;
+};
+
+// Wait/poll the queue for futures in range [begin, end). `waitSerial` should be
+// the serial after which at least one future should be complete. All futures must
+// have completion data of type QueueAndSerial.
+// Returns true if at least one future is ready. If no futures are ready or the wait
+// timed out, returns false.
+bool WaitQueueSerialsImpl(DeviceBase* device,
+                          QueueBase* queue,
+                          ExecutionSerial waitSerial,
+                          std::vector<TrackedFutureWaitInfo>::iterator begin,
+                          std::vector<TrackedFutureWaitInfo>::iterator end,
+                          Nanoseconds timeout) {
+    bool success = false;
+    if (device->ConsumedError([&]() -> MaybeError {
+            if (waitSerial > queue->GetLastSubmittedCommandSerial()) {
+                // Serial has not been submitted yet. Submit it now.
+                // TODO(dawn:1413): This doesn't need to be a full tick. It just needs to
+                // flush work up to `waitSerial`. This should be done after the
+                // ExecutionQueue / ExecutionContext refactor.
+                auto guard = device->GetScopedLock();
+                queue->ForceEventualFlushOfCommands();
+                DAWN_TRY(device->Tick());
             }
-            anySuccess |= success;
+            // Check the completed serial.
+            ExecutionSerial completedSerial = queue->GetCompletedCommandSerial();
+            if (completedSerial < waitSerial) {
+                if (timeout > Nanoseconds(0)) {
+                    // Wait on the serial if it hasn't passed yet.
+                    DAWN_TRY_ASSIGN(success, queue->WaitForQueueSerial(waitSerial, timeout));
+                }
+                // Update completed serials.
+                DAWN_TRY(queue->CheckPassedSerials());
+                completedSerial = queue->GetCompletedCommandSerial();
+            }
+            // Poll futures for completion.
+            for (auto it = begin; it != end; ++it) {
+                ExecutionSerial serial =
+                    std::get<QueueAndSerial>(it->event->GetCompletionData()).completionSerial;
+                if (serial <= completedSerial) {
+                    success = true;
+                    it->ready = true;
+                }
+            }
+            return {};
+        }())) {
+        // There was an error. Pending submit may have failed or waiting for fences
+        // may have lost the device. The device is lost inside ConsumedError.
+        // Mark all futures as ready.
+        for (auto it = begin; it != end; ++it) {
+            it->ready = true;
+        }
+        success = true;
+    }
+    return success;
+}
+
+// We can replace the std::vector& when std::span is available via C++20.
+wgpu::WaitStatus WaitImpl(std::vector<TrackedFutureWaitInfo>& futures, Nanoseconds timeout) {
+    auto begin = futures.begin();
+    const auto end = futures.end();
+    bool anySuccess = false;
+    // The following loop will partition [begin, end) based on the type of wait is required.
+    // After each partition, it will wait/poll on the first partition, then advance `begin`
+    // to the start of the next partition. Note that for timeout > 0 and unsupported mixed
+    // sources, we validate that there is a single partition. If there is only one, then the
+    // loop runs only once and the timeout does not stack.
+    while (begin != end) {
+        const auto& first = begin->event->GetCompletionData();
+
+        DeviceBase* waitDevice;
+        ExecutionSerial lowestWaitSerial;
+        if (std::holds_alternative<Ref<SystemEvent>>(first)) {
+            waitDevice = nullptr;
+        } else {
+            const auto& queueAndSerial = std::get<QueueAndSerial>(first);
+            waitDevice = queueAndSerial.queue->GetDevice();
+            lowestWaitSerial = queueAndSerial.completionSerial;
+        }
+        // Partition the remaining futures based on whether they match the same completion
+        // data type as the first. Also keep track of the lowest wait serial.
+        const auto mid =
+            std::partition(std::next(begin), end, [&](const TrackedFutureWaitInfo& info) {
+                const auto& completionData = info.event->GetCompletionData();
+                if (std::holds_alternative<Ref<SystemEvent>>(completionData)) {
+                    return waitDevice == nullptr;
+                } else {
+                    const auto& queueAndSerial = std::get<QueueAndSerial>(completionData);
+                    if (waitDevice == queueAndSerial.queue->GetDevice()) {
+                        lowestWaitSerial =
+                            std::min(lowestWaitSerial, queueAndSerial.completionSerial);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+            });
+
+        // There's a mix of wait sources if partition yielded an iterator that is not at the end.
+        if (mid != end) {
+            if (timeout > Nanoseconds(0)) {
+                // Multi-source wait is unsupported.
+                // TODO(dawn:2062): Implement support for this when the device supports it.
+                // It should eventually gather the lowest serial from the queue(s), transform them
+                // into completion events, and wait on all of the events. Then for any queues that
+                // saw a completion, poll all futures related to that queue for completion.
+                return wgpu::WaitStatus::UnsupportedMixedSources;
+            }
         }
 
-        sliceStart += sliceLength;
+        bool success;
+        if (waitDevice) {
+            success = WaitQueueSerialsImpl(waitDevice, std::get<QueueAndSerial>(first).queue.Get(),
+                                           lowestWaitSerial, begin, mid, timeout);
+        } else {
+            if (timeout > Nanoseconds(0)) {
+                success = WaitAnySystemEvent(SystemEventAndReadyStateIterator{begin},
+                                             SystemEventAndReadyStateIterator{mid}, timeout);
+            } else {
+                // Poll the completion events.
+                success = false;
+                for (auto it = begin; it != end; ++it) {
+                    if (std::get<Ref<SystemEvent>>(it->event->GetCompletionData())->IsSignaled()) {
+                        it->ready = true;
+                        success = true;
+                    }
+                }
+            }
+        }
+        anySuccess |= success;
+
+        // Advance the iterator to the next partition.
+        begin = mid;
     }
     if (!anySuccess) {
         return wgpu::WaitStatus::TimedOut;
     }
     return wgpu::WaitStatus::Success;
+}
+
+// Reorder callbacks to enforce callback ordering required by the spec.
+// Returns an iterator just past the last ready callback.
+auto PrepareReadyCallbacks(std::vector<TrackedFutureWaitInfo>& futures) {
+    // Partition the futures so the following sort looks at fewer elements.
+    auto endOfReady =
+        std::partition(futures.begin(), futures.end(),
+                       [](const TrackedFutureWaitInfo& future) { return future.ready; });
+
+    // Enforce the following rules from https://gpuweb.github.io/gpuweb/#promise-ordering:
+    // 1. For some GPUQueue q, if p1 = q.onSubmittedWorkDone() is called before
+    //    p2 = q.onSubmittedWorkDone(), then p1 must settle before p2.
+    // 2. For some GPUQueue q and GPUBuffer b on the same GPUDevice,
+    //    if p1 = b.mapAsync() is called before p2 = q.onSubmittedWorkDone(),
+    //    then p1 must settle before p2.
+    //
+    // To satisfy the rules, we need only put lower future ids before higher future
+    // ids. Lower future ids were created first.
+    std::sort(futures.begin(), endOfReady,
+              [](const TrackedFutureWaitInfo& a, const TrackedFutureWaitInfo& b) {
+                  return a.futureID < b.futureID;
+              });
+
+    return endOfReady;
 }
 
 }  // namespace
@@ -103,7 +272,7 @@ EventManager::~EventManager() {
     DAWN_ASSERT(!mEvents.has_value());
 }
 
-MaybeError EventManager::Initialize(const InstanceDescriptor* descriptor) {
+MaybeError EventManager::Initialize(const UnpackedPtr<InstanceDescriptor>& descriptor) {
     if (descriptor) {
         if (descriptor->features.timedWaitAnyMaxCount > kTimedWaitAnyMaxCountDefault) {
             // We don't yet support a higher timedWaitAnyMaxCount because it would be complicated
@@ -159,21 +328,20 @@ void EventManager::ProcessPollEvents() {
         DAWN_ASSERT(waitStatus == wgpu::WaitStatus::Success);
     }
 
+    // Enforce callback ordering.
+    auto readyEnd = PrepareReadyCallbacks(futures);
+
     // For all the futures we are about to complete, first ensure they're untracked. It's OK if
     // something actually isn't tracked anymore (because it completed elsewhere while waiting.)
     mEvents->Use([&](auto events) {
-        for (TrackedFutureWaitInfo& future : futures) {
-            if (future.ready) {
-                events->erase(future.futureID);
-            }
+        for (auto it = futures.begin(); it != readyEnd; ++it) {
+            events->erase(it->futureID);
         }
     });
 
     // Finally, call callbacks.
-    for (TrackedFutureWaitInfo& future : futures) {
-        if (future.ready) {
-            future.event->EnsureComplete(EventCompletionType::Ready);
-        }
+    for (auto it = futures.begin(); it != readyEnd; ++it) {
+        it->event->EnsureComplete(EventCompletionType::Ready);
     }
 }
 
@@ -237,24 +405,22 @@ wgpu::WaitStatus EventManager::WaitAny(size_t count, FutureWaitInfo* infos, Nano
         return waitStatus;
     }
 
+    // Enforce callback ordering
+    auto readyEnd = PrepareReadyCallbacks(futures);
+
     // For any futures that we're about to complete, first ensure they're untracked. It's OK if
     // something actually isn't tracked anymore (because it completed elsewhere while waiting.)
     mEvents->Use([&](auto events) {
-        for (const TrackedFutureWaitInfo& future : futures) {
-            if (future.ready) {
-                events->erase(future.futureID);
-            }
+        for (auto it = futures.begin(); it != readyEnd; ++it) {
+            events->erase(it->futureID);
         }
     });
 
     // Finally, call callbacks and update return values.
-    for (TrackedFutureWaitInfo& future : futures) {
-        if (future.ready) {
-            // Set completed before calling the callback.
-            infos[future.indexInInfos].completed = true;
-            // TODO(crbug.com/dawn/2066): Guarantee the event ordering from the JS spec.
-            future.event->EnsureComplete(EventCompletionType::Ready);
-        }
+    for (auto it = futures.begin(); it != readyEnd; ++it) {
+        // Set completed before calling the callback.
+        infos[it->indexInInfos].completed = true;
+        it->event->EnsureComplete(EventCompletionType::Ready);
     }
 
     return wgpu::WaitStatus::Success;
@@ -262,21 +428,30 @@ wgpu::WaitStatus EventManager::WaitAny(size_t count, FutureWaitInfo* infos, Nano
 
 // EventManager::TrackedEvent
 
-EventManager::TrackedEvent::TrackedEvent(DeviceBase* device,
-                                         wgpu::CallbackMode callbackMode,
-                                         SystemEventReceiver&& receiver)
-    : mDevice(device), mCallbackMode(callbackMode), mReceiver(std::move(receiver)) {}
+EventManager::TrackedEvent::TrackedEvent(wgpu::CallbackMode callbackMode,
+                                         Ref<SystemEvent> completionEvent)
+    : mCallbackMode(callbackMode), mCompletionData(std::move(completionEvent)) {}
+
+EventManager::TrackedEvent::TrackedEvent(wgpu::CallbackMode callbackMode,
+                                         QueueBase* queue,
+                                         ExecutionSerial completionSerial)
+    : mCallbackMode(callbackMode), mCompletionData(QueueAndSerial{queue, completionSerial}) {}
+
+EventManager::TrackedEvent::TrackedEvent(wgpu::CallbackMode callbackMode, Completed tag)
+    : TrackedEvent(callbackMode, [] {
+          // Make a system event that is already signaled.
+          // Note that this won't make a real OS event because the OS
+          // event is lazily created when waited on.
+          return SystemEvent::CreateSignaled();
+      }()) {}
 
 EventManager::TrackedEvent::~TrackedEvent() {
     DAWN_ASSERT(mCompleted);
 }
 
-const SystemEventReceiver& EventManager::TrackedEvent::GetReceiver() const {
-    return mReceiver;
-}
-
-DeviceBase* EventManager::TrackedEvent::GetWaitDevice() const {
-    return MustWaitUsingDevice() ? mDevice.Get() : nullptr;
+const EventManager::TrackedEvent::CompletionData& EventManager::TrackedEvent::GetCompletionData()
+    const {
+    return mCompletionData;
 }
 
 void EventManager::TrackedEvent::EnsureComplete(EventCompletionType completionType) {

@@ -8,6 +8,8 @@ load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "reclient", "sheriff_rotations")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
+load("//lib/gn_args.star", "gn_args")
+load("//lib/builder_health_indicators.star", "health_spec")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -16,6 +18,7 @@ ci.defaults.set(
     sheriff_rotations = sheriff_rotations.CHROMIUM_GPU,
     contact_team_email = "chrome-gpu-infra@google.com",
     execution_timeout = 6 * time.hour,
+    health_spec = health_spec.DEFAULT,
     properties = {
         "perf_dashboard_machine_group": "ChromiumGPUFYI",
     },
@@ -275,6 +278,19 @@ ci.gpu.linux_builder(
         ),
         run_tests_serially = True,
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "chromeos_device",
+            "amd64-generic-vm",
+            "ozone_headless",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "dcheck_off",
+            "no_symbols",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "ChromeOS|LLVM",
         short_name = "gen",
@@ -282,6 +298,56 @@ ci.gpu.linux_builder(
     # Runs a lot of tests + VMs are slower than real hardware, so increase the
     # timeout.
     execution_timeout = 8 * time.hour,
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+)
+
+ci.gpu.linux_builder(
+    name = "ChromeOS FYI Release Skylab (volteer)",
+    description_html = "Runs standard GPU tests on Skylab-hosted volteer devices",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "chromeos",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.CHROMEOS,
+            target_cros_boards = [
+                "volteer",
+            ],
+        ),
+        run_tests_serially = True,
+        skylab_upload_location = builder_config.skylab_upload_location(
+            gs_bucket = "chromium-ci-skylab",
+            gs_extra = "chromeos_gpu",
+        ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "chromeos_device",
+            "volteer",
+            "ozone_headless",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "dcheck_off",
+            "no_symbols",
+            "is_skylab",
+        ],
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "ChromeOS|Intel",
+        short_name = "vlt",
+    ),
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -334,6 +400,16 @@ ci.gpu.linux_builder(
             config = "main_builder_rel_mb",
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "android_builder",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "static_angle",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Android|Builder",
         short_name = "arm",
@@ -362,6 +438,17 @@ ci.gpu.linux_builder(
             config = "arm64_builder_rel_mb",
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "android_builder",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "arm64",
+            "static_angle",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Android|Builder",
         short_name = "arm64",
@@ -383,6 +470,16 @@ ci.gpu.linux_builder(
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_tests",
+            "ozone_linux",
+            "ozone_linux_non_x11",
+            "release_builder",
+            "try_builder",
+            "reclient",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Lacros|Builder",
@@ -408,6 +505,15 @@ ci.gpu.linux_builder(
             target_bits = 64,
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "disable_nacl",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Linux|Builder",
         short_name = "rel",
@@ -429,6 +535,14 @@ ci.gpu.linux_builder(
             build_config = builder_config.build_config.DEBUG,
             target_bits = 64,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "debug_builder",
+            "reclient",
+            "disable_nacl",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Linux|Builder",
@@ -453,6 +567,16 @@ ci.gpu.linux_builder(
         ),
         run_tests_serially = True,
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "tsan",
+            "disable_nacl",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Linux",
         short_name = "tsn",
@@ -474,6 +598,16 @@ ci.gpu.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "disable_nacl",
+            "x64",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Mac|Builder",
@@ -497,6 +631,17 @@ ci.gpu.mac_builder(
             target_platform = builder_config.target_platform.MAC,
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "asan",
+            "disable_nacl",
+            "x64",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Mac|Builder",
         short_name = "asn",
@@ -518,6 +663,15 @@ ci.gpu.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "debug_builder",
+            "reclient",
+            "disable_nacl",
+            "x64",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Mac|Builder",
@@ -541,6 +695,16 @@ ci.gpu.mac_builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "arm64",
+            "disable_nacl",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Mac|Builder",
@@ -1223,10 +1387,10 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     # Uncomment this entry when this experimental tester is actually in use.
-    # console_view_entry = consoles.console_view_entry(
-    #     category = "Windows|10|x64|Nvidia",
-    #     short_name = "exp",
-    # ),
+    console_view_entry = consoles.console_view_entry(
+        category = "Windows|10|x64|Nvidia",
+        short_name = "exp",
+    ),
     list_view = "chromium.gpu.experimental",
 )
 
@@ -1365,6 +1529,16 @@ gpu_fyi_windows_builder(
             target_bits = 32,
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "x86",
+            "disable_nacl",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|Release",
         short_name = "x86",
@@ -1386,6 +1560,18 @@ gpu_fyi_windows_builder(
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "disable_nacl",
+            # Remove this once the decision to use cross-compilation or not in
+            # crbug.com/1510985 is made.
+            "win_cross",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|Release",
@@ -1409,6 +1595,14 @@ gpu_fyi_windows_builder(
             target_bits = 64,
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "debug_builder",
+            "reclient",
+            "disable_nacl",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|Debug",
         short_name = "x64",
@@ -1431,6 +1625,16 @@ gpu_fyi_windows_builder(
             target_bits = 64,
         ),
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "dx12vk",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "disable_nacl",
+        ],
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|dx12vk",
         short_name = "rel",
@@ -1452,6 +1656,15 @@ gpu_fyi_windows_builder(
             build_config = builder_config.build_config.DEBUG,
             target_bits = 64,
         ),
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "dx12vk",
+            "debug_builder",
+            "reclient",
+            "disable_nacl",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|dx12vk",
@@ -1481,6 +1694,15 @@ gpu_fyi_windows_builder(
         # results, and Pinpoint may trigger additional builds on this
         # builder during a bisect.
         perf_isolate_upload = True,
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "gpu_fyi_tests",
+            "release_builder",
+            "try_builder",
+            "reclient",
+            "disable_nacl",
+        ],
     ),
     console_view_entry = consoles.console_view_entry(
         category = "Windows|Builder|XR",

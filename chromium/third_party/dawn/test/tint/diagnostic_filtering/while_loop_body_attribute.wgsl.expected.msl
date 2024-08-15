@@ -1,25 +1,30 @@
-diagnostic_filtering/while_loop_body_attribute.wgsl:8:9 warning: 'textureSample' must only be called from uniform control flow
+<dawn>/test/tint/diagnostic_filtering/while_loop_body_attribute.wgsl:8:9 warning: 'textureSample' must only be called from uniform control flow
     v = textureSample(t, s, vec2(0, 0));
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-diagnostic_filtering/while_loop_body_attribute.wgsl:7:3 note: control flow depends on possibly non-uniform value
+<dawn>/test/tint/diagnostic_filtering/while_loop_body_attribute.wgsl:7:3 note: control flow depends on possibly non-uniform value
   while (x > v.x) @diagnostic(warning, derivative_uniformity) {
   ^^^^^
 
-diagnostic_filtering/while_loop_body_attribute.wgsl:8:9 note: return value of 'textureSample' may be non-uniform
+<dawn>/test/tint/diagnostic_filtering/while_loop_body_attribute.wgsl:8:9 note: return value of 'textureSample' may be non-uniform
     v = textureSample(t, s, vec2(0, 0));
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 #include <metal_stdlib>
 
 using namespace metal;
+
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 struct tint_symbol_2 {
   float x [[user(locn0)]];
 };
 
 void tint_symbol_inner(float x, texture2d<float, access::sample> tint_symbol_3, sampler tint_symbol_4) {
   float4 v = float4(0.0f);
-  while((x > v[0])) {
+  TINT_ISOLATE_UB(tint_volatile_true) while((x > v[0])) {
     v = tint_symbol_3.sample(tint_symbol_4, float2(0.0f));
   }
 }

@@ -140,11 +140,10 @@ UserCloudPolicyManagerAsh::UserCloudPolicyManagerAsh(
     : CloudPolicyManager(
           dm_protocol::kChromeUserPolicyType,
           std::string(),
-          store.get(),
+          std::move(store),
           task_runner,
           base::BindRepeating(content::GetNetworkConnectionTracker)),
       profile_(profile),
-      store_(std::move(store)),
       external_data_manager_(std::move(external_data_manager)),
       component_policy_cache_path_(component_policy_cache_path),
       waiting_for_policy_fetch_(enforcement_type ==
@@ -787,7 +786,7 @@ void UserCloudPolicyManagerAsh::SetUserContextRefreshTokenForTests(
     const std::string& refresh_token) {
   DCHECK(!refresh_token.empty());
   DCHECK(!user_context_refresh_token_for_tests_);
-  user_context_refresh_token_for_tests_ = absl::make_optional(refresh_token);
+  user_context_refresh_token_for_tests_ = std::make_optional(refresh_token);
 }
 
 enterprise_reporting::ReportScheduler*

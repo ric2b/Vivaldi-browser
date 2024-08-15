@@ -27,7 +27,7 @@ const int kMinReadBufferCapacity = 4096;
 
 void DetermineRecipient(const std::string& message,
                         bool* send_to_chromedriver) {
-  absl::optional<base::Value> message_value =
+  std::optional<base::Value> message_value =
       base::JSONReader::Read(message, base::JSON_REPLACE_INVALID_CHARACTERS);
   base::Value::Dict* message_dict =
       message_value ? message_value->GetIfDict() : nullptr;
@@ -240,7 +240,7 @@ class PipeWriter {
       : owning_sequence_(base::SequencedTaskRunner::GetCurrentDefault()),
         pipe_connection_(std::move(pipe_connection)),
         write_buffer_(base::MakeRefCounted<net::DrainableIOBuffer>(
-            base::MakeRefCounted<net::IOBuffer>(),
+            base::MakeRefCounted<net::IOBufferWithSize>(),
             0)),
         thread_(new base::Thread("PipeConnectionPosixWriteThread")) {
     DETACH_FROM_THREAD(io_thread_checker_);

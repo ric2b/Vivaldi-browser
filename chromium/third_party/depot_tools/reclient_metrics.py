@@ -106,7 +106,7 @@ def is_googler(config=None):
 def check_status(ninja_out):
     """Checks metrics collections status and shows notice to user if needed.
 
-  Returns True if metrics should be collected."""
+    Returns True if metrics should be collected."""
     config = load_config()
     if not is_googler(config):
         return False

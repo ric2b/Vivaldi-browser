@@ -71,6 +71,10 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "Clears resource to zero on first usage. This initializes the resource so that no dirty bits "
       "from recycled memory is present in the new resource.",
       "https://crbug.com/dawn/145", ToggleStage::Device}},
+    {Toggle::DisableLazyClearForMappedAtCreationBuffer,
+     {"disable_lazy_clear_for_mapped_at_creation_buffer",
+      "Disable clearing buffers to zero for buffers which are mapped at creation.",
+      "https://crbug.com/dawn/145", ToggleStage::Device}},
     {Toggle::TurnOffVsync,
      {"turn_off_vsync",
       "Turn off vsync when rendering. In order to do performance test or run perf tests, turn off "
@@ -482,6 +486,30 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "workaround issues where FXC can miscompile code that depends on special float values (NaN, "
       "INF, etc).",
       "https://crbug.com/tint/976", ToggleStage::Device}},
+    {Toggle::PolyFillPacked4x8DotProduct,
+     {"polyfill_packed_4x8_dot_product",
+      "Always use the polyfill version of dot4I8Packed() and dot4U8Packed().",
+      "https://crbug.com/tint/1497", ToggleStage::Device}},
+    {Toggle::D3D12PolyFillPackUnpack4x8,
+     {"d3d12_polyfill_pack_unpack_4x8",
+      "Always use the polyfill version of pack4xI8(), pack4xU8(), pack4xI8Clamp(), unpack4xI8() "
+      "and unpack4xU8() on D3D12 backends. Note that these functions are always polyfilled on all "
+      "other backends right now.",
+      "https://crbug.com/tint/1497", ToggleStage::Device}},
+    {Toggle::ExposeWGSLTestingFeatures,
+     {"expose_wgsl_testing_features",
+      "Make the Instance expose the ChromiumTesting* features for testing of "
+      "wgslLanguageFeatures functionality.",
+      "https://crbug.com/dawn/2260", ToggleStage::Instance}},
+    {Toggle::ExposeWGSLExperimentalFeatures,
+     {"expose_wgsl_experimental_features",
+      "Make the Instance expose the experimental features but not the unsage ones, so that safe "
+      "experimental features can be used without the need for allow_unsafe_apis",
+      "https://crbug.com/dawn/2260", ToggleStage::Instance}},
+    {Toggle::DisablePolyfillsOnIntegerDivisonAndModulo,
+     {"disable_polyfills_on_integer_div_and_mod",
+      "Disable the Tint polyfills on integer division and modulo.", "https://crbug.com/tint/2128",
+      ToggleStage::Device}},
     {Toggle::NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget,
      {"no_workaround_sample_mask_becomes_zero_for_all_but_last_color_target",
       "MacOS 12.0+ Intel has a bug where the sample mask is only applied for the last color "

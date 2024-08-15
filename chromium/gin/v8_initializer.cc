@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include <optional>
 #include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/partition_address_space.h"
 #include "base/bits.h"
@@ -39,7 +40,6 @@
 #include "build/build_config.h"
 #include "gin/array_buffer.h"
 #include "gin/gin_features.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "tools/v8_context_snapshot/buildflags.h"
 #include "v8/include/v8-initialization.h"
 #include "v8/include/v8-snapshot.h"
@@ -60,7 +60,7 @@ namespace {
 base::MemoryMappedFile* g_mapped_snapshot = nullptr;
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
-absl::optional<gin::V8SnapshotFileType> g_snapshot_file_type;
+std::optional<gin::V8SnapshotFileType> g_snapshot_file_type;
 #endif
 
 bool GenerateEntropy(unsigned char* buffer, size_t amount) {
@@ -152,52 +152,31 @@ base::File OpenV8File(const char* file_name,
   // Re-try logic here is motivated by http://crbug.com/479537
   // for A/V on Windows (https://support.microsoft.com/en-us/kb/316609).
 
-  // These match tools/metrics/histograms.xml
-  enum OpenV8FileResult {
-    OPENED = 0,
-    OPENED_RETRY,
-    FAILED_IN_USE,
-    FAILED_OTHER,
-    MAX_VALUE
-  };
   base::FilePath path;
   GetV8FilePath(file_name, &path);
 
 #if BUILDFLAG(IS_ANDROID)
   base::File file(base::android::OpenApkAsset(path.value(), region_out));
-  OpenV8FileResult result = file.IsValid() ? OpenV8FileResult::OPENED
-                                           : OpenV8FileResult::FAILED_OTHER;
 #else
   // Re-try logic here is motivated by http://crbug.com/479537
   // for A/V on Windows (https://support.microsoft.com/en-us/kb/316609).
   const int kMaxOpenAttempts = 5;
   const int kOpenRetryDelayMillis = 250;
 
-  OpenV8FileResult result = OpenV8FileResult::FAILED_IN_USE;
   int flags = base::File::FLAG_OPEN | base::File::FLAG_READ;
   base::File file;
   for (int attempt = 0; attempt < kMaxOpenAttempts; attempt++) {
     file.Initialize(path, flags);
     if (file.IsValid()) {
       *region_out = base::MemoryMappedFile::Region::kWholeFile;
-      if (attempt == 0) {
-        result = OpenV8FileResult::OPENED;
-        break;
-      } else {
-        result = OpenV8FileResult::OPENED_RETRY;
-        break;
-      }
+      break;
     } else if (file.error_details() != base::File::FILE_ERROR_IN_USE) {
-      result = OpenV8FileResult::FAILED_OTHER;
       break;
     } else if (kMaxOpenAttempts - 1 != attempt) {
       base::PlatformThread::Sleep(base::Milliseconds(kOpenRetryDelayMillis));
     }
   }
 #endif  // BUILDFLAG(IS_ANDROID)
-
-  UMA_HISTOGRAM_ENUMERATION("V8.Initializer.OpenV8File.Result", result,
-                            OpenV8FileResult::MAX_VALUE);
   return file;
 }
 
@@ -273,6 +252,9 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kV8PerContextMarkingWorklist,
                          "--stress-per-context-marking-worklist",
                          "--no-stress-per-context-marking-worklist");
+  SetV8FlagsIfOverridden(
+      features::kV8ProfileGuidedOptimization, "--profile-guided-optimization",
+      "--profile-guided-optimization-for-empty-feedback-vector");
   SetV8FlagsIfOverridden(features::kV8FlushEmbeddedBlobICache,
                          "--experimental-flush-embedded-blob-icache",
                          "--no-experimental-flush-embedded-blob-icache");
@@ -319,9 +301,6 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kV8SingleThreadedGCInBackground,
                          "--single-threaded-gc-in-background",
                          "--no-single-threaded-gc-in-background");
-  SetV8FlagsIfOverridden(features::kV8MidtierRegallocFallback,
-                         "--turbo-use-mid-tier-regalloc-for-huge-functions",
-                         "--no-turbo-use-mid-tier-regalloc-for-huge-functions");
 
   if (base::FeatureList::IsEnabled(features::kV8ConcurrentSparkplug)) {
     if (int max_threads = features::kV8ConcurrentSparkplugMaxThreads.Get()) {
@@ -342,6 +321,31 @@ void SetFlags(IsolateHolder::ScriptMode mode,
     if (int old_time = features::kV8FlushCodeOldTime.Get()) {
       SetV8FlagsFormatted("--bytecode-old-time=%i", old_time);
     }
+  }
+
+  if (base::FeatureList::IsEnabled(features::kV8EfficiencyModeTiering)) {
+    int delay = features::kV8EfficiencyModeTieringDelayTurbofan.Get();
+    if (delay == 0) {
+      SetV8FlagsFormatted(
+          "--efficiency-mode-for-tiering-heuristics "
+          "--efficiency-mode-disable-turbofan");
+    } else {
+      SetV8FlagsFormatted(
+          "--efficiency-mode-for-tiering-heuristics "
+          "--noefficiency-mode-disable-turbofan "
+          "--efficiency-mode-delay-turbofan=%i",
+          delay);
+    }
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kWebAssemblyMoreAggressiveCodeCaching)) {
+    SetV8FlagsFormatted(
+        "--wasm-caching-threshold=%d --wasm-caching-hard-threshold=%d "
+        "--wasm-caching-timeout-ms=%d",
+        features::kWebAssemblyMoreAggressiveCodeCachingThreshold.Get(),
+        features::kWebAssemblyMoreAggressiveCodeCachingHardThreshold.Get(),
+        features::kWebAssemblyMoreAggressiveCodeCachingTimeoutMs.Get());
   }
 
   // Make sure aliases of kV8SlowHistograms only enable the feature to
@@ -368,9 +372,6 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kJavaScriptSymbolAsWeakMapKey,
                          "--harmony-symbol-as-weakmap-key",
                          "--no-harmony-symbol-as-weakmap-key");
-  SetV8FlagsIfOverridden(features::kJavaScriptChangeArrayByCopy,
-                         "--harmony-change-array-by-copy",
-                         "--no-harmony-change-array-by-copy");
   if (base::FeatureList::IsEnabled(features::kJavaScriptRabGsab)) {
     SetV8Flags("--harmony-rab-gsab");
   } else {
@@ -391,6 +392,16 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kJavaScriptPromiseWithResolvers,
                          "--js-promise-withresolvers",
                          "--no-js-promise-withresolvers");
+  SetV8FlagsIfOverridden(features::kJavaScriptArrayFromAsync,
+                         "--harmony-array-from-async",
+                         "--no-harmony-array-from-async");
+  SetV8FlagsIfOverridden(features::kJavaScriptRegExpModifiers,
+                         "--js-regexp-modifiers", "--no-js-regexp-modifiers");
+  SetV8FlagsIfOverridden(features::kJavaScriptImportAttributes,
+                         "--harmony-import-attributes",
+                         "--no-harmony-import-attributes");
+  SetV8FlagsIfOverridden(features::kJavaScriptSetMethods,
+                         "--harmony-set-methods", "--no-harmony-set-methods");
 
   if (IsolateHolder::kStrictMode == mode) {
     SetV8Flags("--use_strict");
@@ -419,6 +430,9 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--no-experimental-wasm-multi-memory");
   SetV8FlagsIfOverridden(features::kWebAssemblyTurboshaft, "--turboshaft-wasm",
                          "--no-turboshaft-wasm");
+  SetV8FlagsIfOverridden(features::kWebAssemblyTurboshaftInstructionSelection,
+                         "--turboshaft-wasm-instruction-selection-staged",
+                         "--no-turboshaft-wasm-instruction-selection-staged");
 
   if (js_command_line_flags.empty())
     return;
@@ -571,7 +585,6 @@ void V8Initializer::LoadV8SnapshotFromFile(
 
   if (!snapshot_file.IsValid()) {
     LOG(FATAL) << "Error loading V8 startup snapshot file";
-    return;
   }
 
   g_snapshot_file_type = snapshot_file_type;
@@ -583,7 +596,6 @@ void V8Initializer::LoadV8SnapshotFromFile(
 
   if (!MapV8File(std::move(snapshot_file), region, &g_mapped_snapshot)) {
     LOG(FATAL) << "Error mapping V8 startup snapshot file";
-    return;
   }
 }
 

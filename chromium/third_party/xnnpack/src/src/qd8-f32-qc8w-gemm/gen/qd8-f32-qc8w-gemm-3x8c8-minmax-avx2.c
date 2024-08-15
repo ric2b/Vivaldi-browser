@@ -85,45 +85,42 @@ void xnn_qd8_f32_qc8w_gemm_minmax_ukernel_3x8c8__avx2(
     __m256i vacc2x67 = _mm256_mullo_epi32(vinit67, vinput_zero_point2);
     w = (const int32_t*) w + 8;
 
-    size_t k = 0;
-    while (k < kc) {
-      const __m128i va0 = _mm_broadcastq_epi64(_mm_loadl_epi64((const __m128i*) a0));
-      const __m256i vxa0 = _mm256_cvtepi8_epi16(va0);
+    size_t k = kc;
+
+    while (k >= 8 * sizeof(int8_t)) {
+      const __m128i va0 = _mm_cvtepi8_epi16(_mm_loadl_epi64((const __m128i*) a0));
+      const __m256i vxa0 = _mm256_inserti128_si256(_mm256_castsi128_si256(va0), va0, 1);
       a0 += 8;
-      const __m128i va1 = _mm_broadcastq_epi64(_mm_loadl_epi64((const __m128i*) a1));
-      const __m256i vxa1 = _mm256_cvtepi8_epi16(va1);
+      const __m128i va1 = _mm_cvtepi8_epi16(_mm_loadl_epi64((const __m128i*) a1));
+      const __m256i vxa1 = _mm256_inserti128_si256(_mm256_castsi128_si256(va1), va1, 1);
       a1 += 8;
-      const __m128i va2 = _mm_broadcastq_epi64(_mm_loadl_epi64((const __m128i*) a2));
-      const __m256i vxa2 = _mm256_cvtepi8_epi16(va2);
+      const __m128i va2 = _mm_cvtepi8_epi16(_mm_loadl_epi64((const __m128i*) a2));
+      const __m256i vxa2 = _mm256_inserti128_si256(_mm256_castsi128_si256(va2), va2, 1);
       a2 += 8;
 
-      const __m128i vb01 = _mm_load_si128((const __m128i*) w);
-      const __m256i vxb01 = _mm256_cvtepi8_epi16(vb01);
+      const __m256i vxb01 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*) w));
 
       vacc0x01 = _mm256_add_epi32(vacc0x01, _mm256_madd_epi16(vxa0, vxb01));
       vacc1x01 = _mm256_add_epi32(vacc1x01, _mm256_madd_epi16(vxa1, vxb01));
       vacc2x01 = _mm256_add_epi32(vacc2x01, _mm256_madd_epi16(vxa2, vxb01));
-      const __m128i vb23 = _mm_load_si128((const __m128i*) ((const int8_t*) w + 16));
-      const __m256i vxb23 = _mm256_cvtepi8_epi16(vb23);
+      const __m256i vxb23 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*) ((const int8_t*) w + 16)));
 
       vacc0x23 = _mm256_add_epi32(vacc0x23, _mm256_madd_epi16(vxa0, vxb23));
       vacc1x23 = _mm256_add_epi32(vacc1x23, _mm256_madd_epi16(vxa1, vxb23));
       vacc2x23 = _mm256_add_epi32(vacc2x23, _mm256_madd_epi16(vxa2, vxb23));
-      const __m128i vb45 = _mm_load_si128((const __m128i*) ((const int8_t*) w + 32));
-      const __m256i vxb45 = _mm256_cvtepi8_epi16(vb45);
+      const __m256i vxb45 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*) ((const int8_t*) w + 32)));
 
       vacc0x45 = _mm256_add_epi32(vacc0x45, _mm256_madd_epi16(vxa0, vxb45));
       vacc1x45 = _mm256_add_epi32(vacc1x45, _mm256_madd_epi16(vxa1, vxb45));
       vacc2x45 = _mm256_add_epi32(vacc2x45, _mm256_madd_epi16(vxa2, vxb45));
-      const __m128i vb67 = _mm_load_si128((const __m128i*) ((const int8_t*) w + 48));
-      const __m256i vxb67 = _mm256_cvtepi8_epi16(vb67);
+      const __m256i vxb67 = _mm256_cvtepi8_epi16(_mm_load_si128((const __m128i*) ((const int8_t*) w + 48)));
 
       vacc0x67 = _mm256_add_epi32(vacc0x67, _mm256_madd_epi16(vxa0, vxb67));
       vacc1x67 = _mm256_add_epi32(vacc1x67, _mm256_madd_epi16(vxa1, vxb67));
       vacc2x67 = _mm256_add_epi32(vacc2x67, _mm256_madd_epi16(vxa2, vxb67));
 
-      w = (const void*) ((const int8_t*) w + 64);
-      k += 8 * sizeof(int8_t);
+      w = (const int8_t*) w + 64;
+      k -= 8 * sizeof(int8_t);
     }
 
     const __m256i vacc0x0213 = _mm256_hadd_epi32(vacc0x01, vacc0x23);
@@ -171,52 +168,52 @@ void xnn_qd8_f32_qc8w_gemm_minmax_ukernel_3x8c8__avx2(
     vout2x01234567 = _mm256_min_ps(vout2x01234567, vmax);
 
     if XNN_LIKELY(nc >= 8) {
-      _mm256_storeu_ps(c2, vout2x01234567);
-      c2 = (float*) ((uintptr_t) c2 + cn_stride);
-      _mm256_storeu_ps(c1, vout1x01234567);
-      c1 = (float*) ((uintptr_t) c1 + cn_stride);
       _mm256_storeu_ps(c0, vout0x01234567);
       c0 = (float*) ((uintptr_t) c0 + cn_stride);
+      _mm256_storeu_ps(c1, vout1x01234567);
+      c1 = (float*) ((uintptr_t) c1 + cn_stride);
+      _mm256_storeu_ps(c2, vout2x01234567);
+      c2 = (float*) ((uintptr_t) c2 + cn_stride);
 
-      a2 = (const int8_t*) ((uintptr_t) a2 - kc);
-      a1 = (const int8_t*) ((uintptr_t) a1 - kc);
       a0 = (const int8_t*) ((uintptr_t) a0 - kc);
+      a1 = (const int8_t*) ((uintptr_t) a1 - kc);
+      a2 = (const int8_t*) ((uintptr_t) a2 - kc);
 
       nc -= 8;
     } else {
-      __m128 vout2x0123 = _mm256_castps256_ps128(vout2x01234567);
-      __m128 vout1x0123 = _mm256_castps256_ps128(vout1x01234567);
       __m128 vout0x0123 = _mm256_castps256_ps128(vout0x01234567);
+      __m128 vout1x0123 = _mm256_castps256_ps128(vout1x01234567);
+      __m128 vout2x0123 = _mm256_castps256_ps128(vout2x01234567);
       if (nc & 4) {
-        _mm_storeu_ps(c2, vout2x0123);
-        _mm_storeu_ps(c1, vout1x0123);
         _mm_storeu_ps(c0, vout0x0123);
+        _mm_storeu_ps(c1, vout1x0123);
+        _mm_storeu_ps(c2, vout2x0123);
 
-        vout2x0123 = _mm256_extractf128_ps(vout2x01234567, 1);
-        vout1x0123 = _mm256_extractf128_ps(vout1x01234567, 1);
         vout0x0123 = _mm256_extractf128_ps(vout0x01234567, 1);
+        vout1x0123 = _mm256_extractf128_ps(vout1x01234567, 1);
+        vout2x0123 = _mm256_extractf128_ps(vout2x01234567, 1);
 
-        c2 += 4;
-        c1 += 4;
         c0 += 4;
+        c1 += 4;
+        c2 += 4;
       }
       if (nc & 2) {
-        _mm_storel_pi((__m64*) c2, vout2x0123);
-        _mm_storel_pi((__m64*) c1, vout1x0123);
         _mm_storel_pi((__m64*) c0, vout0x0123);
+        _mm_storel_pi((__m64*) c1, vout1x0123);
+        _mm_storel_pi((__m64*) c2, vout2x0123);
 
-        vout2x0123 = _mm_movehl_ps(vout2x0123, vout2x0123);
-        vout1x0123 = _mm_movehl_ps(vout1x0123, vout1x0123);
         vout0x0123 = _mm_movehl_ps(vout0x0123, vout0x0123);
+        vout1x0123 = _mm_movehl_ps(vout1x0123, vout1x0123);
+        vout2x0123 = _mm_movehl_ps(vout2x0123, vout2x0123);
 
-        c2 += 2;
-        c1 += 2;
         c0 += 2;
+        c1 += 2;
+        c2 += 2;
       }
       if (nc & 1) {
-        _mm_store_ss(c2, vout2x0123);
-        _mm_store_ss(c1, vout1x0123);
         _mm_store_ss(c0, vout0x0123);
+        _mm_store_ss(c1, vout1x0123);
+        _mm_store_ss(c2, vout2x0123);
       }
       nc = 0;
     }

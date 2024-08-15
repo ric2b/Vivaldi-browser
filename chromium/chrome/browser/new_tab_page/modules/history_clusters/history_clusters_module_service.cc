@@ -16,6 +16,8 @@
 #include "chrome/browser/new_tab_page/modules/history_clusters/ranking/history_clusters_module_ranking_signals.h"
 #include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history_clusters/core/history_clusters_service.h"
 #include "components/history_clusters/core/history_clusters_service_task.h"
@@ -24,6 +26,7 @@
 #include "components/search/ntp_features.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/segmentation_platform/public/segmentation_platform_service.h"
 
 namespace {
 
@@ -68,9 +71,12 @@ base::Time GetBeginTime() {
 
 HistoryClustersModuleService::HistoryClustersModuleService(
     history_clusters::HistoryClustersService* history_clusters_service,
+    history::HistoryService* history_service,
     CartService* cart_service,
     TemplateURLService* template_url_service,
-    OptimizationGuideKeyedService* optimization_guide_keyed_service)
+    OptimizationGuideKeyedService* optimization_guide_keyed_service,
+    segmentation_platform::SegmentationPlatformService*
+        segmentation_platform_service)
     : max_clusters_to_return_(GetMaxClusters()),
       category_boostlist_(GetCategories(
           ntp_features::kNtpHistoryClustersModuleCategoriesBoostlistParam,
@@ -84,7 +90,8 @@ HistoryClustersModuleService::HistoryClustersModuleService(
           ntp_features::kNtpHistoryClustersModuleUseModelRanking) &&
       optimization_guide_keyed_service) {
     module_ranker_ = std::make_unique<HistoryClustersModuleRanker>(
-        optimization_guide_keyed_service, cart_service_, category_boostlist_);
+        optimization_guide_keyed_service, segmentation_platform_service,
+        history_service, cart_service_, category_boostlist_);
   }
 }
 HistoryClustersModuleService::~HistoryClustersModuleService() = default;
@@ -281,6 +288,11 @@ void HistoryClustersModuleService::OnGetRankedClusters(
     std::vector<history::Cluster> clusters,
     base::flat_map<int64_t, HistoryClustersModuleRankingSignals>
         ranking_signals) {
+  if (clusters.empty()) {
+    std::move(callback).Run(std::move(clusters), std::move(ranking_signals));
+    return;
+  }
+
   // Record metrics for top cluster.
   history::Cluster top_cluster = clusters.front();
   base::UmaHistogramCounts100("NewTabPage.HistoryClusters.NumVisits",

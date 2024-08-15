@@ -4,8 +4,8 @@
 
 #include <algorithm>
 
+#include "base/containers/span.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase_map.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
@@ -182,8 +182,7 @@ std::string SyncedFileStoreImpl::SetLocalFile(base::Uuid owner_uuid,
   // The checskum will be used as a file name for storage on disk. We use base32
   // in order to support case-insensitive file systems.
   std::string checksum = base32::Base32Encode(
-      base::StringPiece(reinterpret_cast<const char*>(hash.data()),
-                        hash.size()),
+      base::make_span(hash),
       base32::Base32EncodePolicy::OMIT_PADDING);
 
   checksum += "." + base::NumberToString(content.size());
@@ -330,7 +329,7 @@ void SyncedFileStoreImpl::RemoveAllSyncRefsForType(
   DCHECK(IsLoaded());
 
   checksums_for_sync_owners_.erase(sync_type);
-  base::EraseIf(files_data_, [this, sync_type](auto& file_data) {
+  std::erase_if(files_data_, [this, sync_type](auto& file_data) {
     file_data.second.sync_references[sync_type].clear();
     if (file_data.second.IsUnreferenced()) {
       if (!file_data.second.has_content_locally)

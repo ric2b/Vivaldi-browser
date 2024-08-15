@@ -14,6 +14,13 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface WhatsNewSceneAgent ()
 
 @property(nonatomic, assign) PromosManager* promosManager;
@@ -36,9 +43,20 @@
     transitionedToActivationLevel:(SceneActivationLevel)level {
   switch (level) {
     case SceneActivationLevelForegroundActive: {
-      if (ShouldRegisterWhatsNewPromo()) {
-        [self registerPromoForSingleDisplay];
+
+      if (IsVivaldiRunning() && ShouldRegisterVivaldiWhatsNewPromo()) {
+        [[NSUserDefaults standardUserDefaults]
+            setBool:YES
+             forKey:vWhatsNewWasShownKey];
+      } else {
+      if (WasWhatsNewUsed()) {
+        return;
       }
+      DCHECK(self.promosManager);
+      self.promosManager->RegisterPromoForContinuousDisplay(
+          promos_manager::Promo::WhatsNew);
+      } // End Vivaldi
+
       break;
     }
     case SceneActivationLevelUnattached:
@@ -57,18 +75,6 @@
       break;
     }
   }
-}
-
-#pragma mark - Private
-
-// Register the What's New promo for a single display in the promo manager.
-- (void)registerPromoForSingleDisplay {
-  DCHECK(self.promosManager);
-
-  self.promosManager->RegisterPromoForSingleDisplay(
-      promos_manager::Promo::WhatsNew);
-
-  setWhatsNewPromoRegistration();
 }
 
 @end

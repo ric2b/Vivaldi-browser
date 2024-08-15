@@ -8,6 +8,8 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
+#include "base/strings/strcat.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/profiles/profile.h"
@@ -166,6 +168,18 @@ void SettingsWindowManager::ShowOSSettings(Profile* profile,
                            display_id);
 }
 
+void SettingsWindowManager::ShowOSSettings(
+    Profile* profile,
+    const std::string& sub_page,
+    const chromeos::settings::mojom::Setting setting_id,
+    int64_t display_id) {
+  std::string path_with_setting_id =
+      base::StrCat({sub_page, std::string("?settingId="),
+                    base::NumberToString(base::to_underlying(setting_id))});
+
+  ShowOSSettings(profile, path_with_setting_id, display_id);
+}
+
 Browser* SettingsWindowManager::FindBrowserForProfile(Profile* profile) {
   if (!UseDeprecatedSettingsWindow(profile)) {
     return ash::FindSystemWebAppBrowser(profile,
@@ -189,7 +203,7 @@ bool SettingsWindowManager::IsSettingsBrowser(Browser* browser) const {
 
     // TODO(calamity): Determine whether, during startup, we need to wait for
     // app install and then provide a valid answer here.
-    absl::optional<std::string> settings_app_id =
+    std::optional<std::string> settings_app_id =
         ash::GetAppIdForSystemWebApp(profile, ash::SystemWebAppType::SETTINGS);
     return settings_app_id &&
            browser->app_controller()->app_id() == settings_app_id.value();

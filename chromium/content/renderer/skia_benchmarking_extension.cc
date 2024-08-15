@@ -188,8 +188,9 @@ void SkiaBenchmarking::Rasterize(gin::Arguments* args) {
     if (params_value && params_value->is_dict()) {
       const base::Value::Dict& params_dict = params_value->GetDict();
       scale = params_dict.FindDouble("scale").value_or(scale);
-      if (absl::optional<int> stop = params_dict.FindInt("stop"))
+      if (std::optional<int> stop = params_dict.FindInt("stop")) {
         stop_index = *stop;
+      }
 
       if (const base::Value* clip_value = params_dict.Find("clip"))
         cc::MathUtil::FromValue(clip_value, &clip_rect);
@@ -234,7 +235,7 @@ void SkiaBenchmarking::Rasterize(gin::Arguments* args) {
                    .Set("width", snapped_clip.width())
                    .Set("height", snapped_clip.height())
                    .Set("data", blink::WebArrayBufferConverter::ToV8Value(
-                                    &buffer, context->Global(), isolate))
+                                    &buffer, isolate))
                    .Build());
 }
 

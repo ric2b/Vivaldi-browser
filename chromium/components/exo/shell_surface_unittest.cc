@@ -10,6 +10,8 @@
 #include "ash/capture_mode/capture_mode_test_util.h"
 #include "ash/constants/app_types.h"
 #include "ash/frame/non_client_frame_view_ash.h"
+#include "ash/frame_throttler/frame_throttling_controller.h"
+#include "ash/frame_throttler/mock_frame_throttling_observer.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
@@ -22,10 +24,12 @@
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller_test_api.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/app_restore/window_properties.h"
 #include "components/exo/buffer.h"
 #include "components/exo/client_controlled_shell_surface.h"
@@ -55,6 +59,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor_extra/shadow.h"
 #include "ui/display/display.h"
+#include "ui/display/display_layout_builder.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -80,13 +85,15 @@ bool HasBackdrop() {
   return !!ash::WorkspaceControllerTestApi(wc).GetBackdropWindow();
 }
 
-uint32_t ConfigureFullscreen(uint32_t serial,
-                             const gfx::Rect& bounds,
-                             chromeos::WindowStateType state_type,
-                             bool resizing,
-                             bool activated,
-                             const gfx::Vector2d& origin_offset,
-                             float raster_scale) {
+uint32_t ConfigureFullscreen(
+    uint32_t serial,
+    const gfx::Rect& bounds,
+    chromeos::WindowStateType state_type,
+    bool resizing,
+    bool activated,
+    const gfx::Vector2d& origin_offset,
+    float raster_scale,
+    std::optional<chromeos::WindowStateType> restore_state_type) {
   EXPECT_EQ(chromeos::WindowStateType::kFullscreen, state_type);
   return serial;
 }
@@ -118,24 +125,48 @@ struct ConfigureData {
   chromeos::WindowStateType state_type = chromeos::WindowStateType::kDefault;
   bool is_resizing = false;
   bool is_active = false;
+  std::optional<chromeos::WindowStateType> restore_state_type = std::nullopt;
   float raster_scale = 1.0f;
+
   size_t count = 0;
 };
 
-uint32_t Configure(ConfigureData* config_data,
-                   const gfx::Rect& bounds,
-                   chromeos::WindowStateType state_type,
-                   bool resizing,
-                   bool activated,
-                   const gfx::Vector2d& origin_offset,
-                   float raster_scale) {
+uint32_t Configure(
+    ConfigureData* config_data,
+    const gfx::Rect& bounds,
+    chromeos::WindowStateType state_type,
+    bool resizing,
+    bool activated,
+    const gfx::Vector2d& origin_offset,
+    float raster_scale,
+    std::optional<chromeos::WindowStateType> restore_state_type) {
   config_data->suggested_bounds = bounds;
   config_data->state_type = state_type;
   config_data->is_resizing = resizing;
   config_data->is_active = activated;
   config_data->raster_scale = raster_scale;
+  config_data->restore_state_type = restore_state_type;
   config_data->count++;
   return 0;
+}
+
+uint32_t ConfigureSerial(
+    ConfigureData* config_data,
+    const gfx::Rect& bounds,
+    chromeos::WindowStateType state_type,
+    bool resizing,
+    bool activated,
+    const gfx::Vector2d& origin_offset,
+    float raster_scale,
+    std::optional<chromeos::WindowStateType> restore_state_type) {
+  config_data->suggested_bounds = bounds;
+  config_data->state_type = state_type;
+  config_data->is_resizing = resizing;
+  config_data->is_active = activated;
+  config_data->raster_scale = raster_scale;
+  config_data->restore_state_type = restore_state_type;
+  config_data->count++;
+  return config_data->count;
 }
 
 bool IsCaptureWindow(ShellSurface* shell_surface) {
@@ -1269,8 +1300,8 @@ TEST_F(ShellSurfaceTest, StartResizeAndDestroyShell) {
   auto configure_callback = base::BindRepeating(
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
-         const gfx::Vector2d& origin_offset,
-         float raster_scale) { return ++(*serial_ptr); },
+         const gfx::Vector2d& origin_offset, float raster_scale,
+         std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
 
   // Map shell surface.
@@ -1290,7 +1321,7 @@ TEST_F(ShellSurfaceTest, StartResizeAndDestroyShell) {
   shell_surface->set_configure_callback(base::BindRepeating(
       [](const gfx::Rect& bounds, chromeos::WindowStateType state_type,
          bool resizing, bool activated, const gfx::Vector2d& origin_offset,
-         float raster_scale) {
+         float raster_scale, std::optional<chromeos::WindowStateType>) {
         ADD_FAILURE() << "Configure Should not be called";
         return uint32_t{0};
       }));
@@ -1456,6 +1487,24 @@ TEST_F(ShellSurfaceTest, SurfaceDestroyedCallback) {
   EXPECT_TRUE(shell_surface.get());
   surface.reset();
   EXPECT_FALSE(shell_surface.get());
+}
+
+TEST_F(ShellSurfaceTest, ConfigureCallbackSendsRestoreState) {
+  ConfigureData config_data;
+  auto shell_surface = test::ShellSurfaceBuilder({256, 256})
+                           .SetMaximumSize(gfx::Size(10, 10))
+                           .BuildShellSurface();
+  shell_surface->set_configure_callback(
+      base::BindRepeating(&Configure, base::Unretained(&config_data)));
+
+  shell_surface->root_surface()->Commit();
+  shell_surface->Maximize();
+  shell_surface->root_surface()->Commit();
+  shell_surface->SetFullscreen(true, display::kInvalidDisplayId);
+  shell_surface->root_surface()->Commit();
+  EXPECT_EQ(chromeos::WindowStateType::kFullscreen, config_data.state_type);
+  EXPECT_EQ(chromeos::WindowStateType::kMaximized,
+            config_data.restore_state_type.value());
 }
 
 TEST_F(ShellSurfaceTest, ConfigureCallback) {
@@ -2453,7 +2502,7 @@ TEST_F(ShellSurfaceTest, DragMaximizedWindow) {
   shell_surface->set_configure_callback(base::BindLambdaForTesting(
       [&](const gfx::Rect& bounds, chromeos::WindowStateType state,
           bool resizing, bool activated, const gfx::Vector2d& origin_offset,
-          float raster_scale) {
+          float raster_scale, std::optional<chromeos::WindowStateType>) {
         configured_state = state;
         return uint32_t{0};
       }));
@@ -2671,8 +2720,8 @@ TEST_F(ShellSurfaceTest, ServerStartResizeComponent) {
   auto configure_callback = base::BindRepeating(
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
-         const gfx::Vector2d& origin_offset,
-         float raster_scale) { return ++(*serial_ptr); },
+         const gfx::Vector2d& origin_offset, float raster_scale,
+         std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
 
   ui::test::EventGenerator* event_generator = GetEventGenerator();
@@ -2854,7 +2903,7 @@ TEST_F(ShellSurfaceTest, ShadowBoundsWithScaleFactor) {
   EXPECT_EQ(gfx::Rect(0, 0, 256, 256), shadow->content_bounds());
 }
 
-TEST_F(ShellSurfaceTest, ShadowRoundedCornersForRoundedWindows) {
+TEST_F(ShellSurfaceTest, ShadowRoundedCorners) {
   constexpr gfx::Point kOrigin(20, 20);
   constexpr int kWindowCornerRadius = 12;
 
@@ -2882,7 +2931,7 @@ TEST_F(ShellSurfaceTest, ShadowRoundedCornersForRoundedWindows) {
   EXPECT_EQ(shadow->rounded_corner_radius_for_testing(), 0);
 
   // Have a window with radius of 12dp.
-  shell_surface->SetWindowCornerRadii(
+  shell_surface->SetWindowCornersRadii(
       gfx::RoundedCornersF(kWindowCornerRadius));
   root_surface->Commit();
 
@@ -2891,7 +2940,7 @@ TEST_F(ShellSurfaceTest, ShadowRoundedCornersForRoundedWindows) {
   EXPECT_EQ(shadow->rounded_corner_radius_for_testing(), kWindowCornerRadius);
 
   // Have a window with radius of 0dp.
-  shell_surface->SetWindowCornerRadii(gfx::RoundedCornersF());
+  shell_surface->SetWindowCornersRadii(gfx::RoundedCornersF());
   root_surface->Commit();
 
   shadow = wm::ShadowController::GetShadowForWindow(window);
@@ -2946,8 +2995,8 @@ TEST_F(ShellSurfaceTest, ResizeShadowIndependentBounds) {
   auto configure_callback = base::BindRepeating(
       [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
          chromeos::WindowStateType state_type, bool resizing, bool activated,
-         const gfx::Vector2d& origin_offset,
-         float raster_scale) { return ++(*serial_ptr); },
+         const gfx::Vector2d& origin_offset, float raster_scale,
+         std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
       &serial);
 
   shell_surface->set_configure_callback(configure_callback);
@@ -3293,10 +3342,13 @@ class TestWindowObserver : public WMHelper::ExoWindowObserver {
     windows_.push_back(window);
   }
 
-  const std::vector<aura::Window*>& observed_windows() { return windows_; }
+  const std::vector<raw_ptr<aura::Window, VectorExperimental>>&
+  observed_windows() {
+    return windows_;
+  }
 
  private:
-  std::vector<aura::Window*> windows_;
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> windows_;
 };
 
 TEST_F(ShellSurfaceTest, NotifyOnWindowCreation) {
@@ -3367,7 +3419,8 @@ TEST_F(ShellSurfaceTest, Reparent) {
 
 TEST_F(ShellSurfaceTest, ThrottleFrameRate) {
   auto shell_surface = test::ShellSurfaceBuilder({20, 20}).BuildShellSurface();
-  SurfaceObserverForTest observer;
+  SurfaceObserverForTest observer(
+      shell_surface->root_surface()->window()->GetOcclusionState());
   shell_surface->root_surface()->AddSurfaceObserver(&observer);
   aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
 
@@ -3380,6 +3433,55 @@ TEST_F(ShellSurfaceTest, ThrottleFrameRate) {
   shell_surface->root_surface()->RemoveSurfaceObserver(&observer);
 }
 
+TEST_F(ShellSurfaceTest, ThrottleFrameRateViaController) {
+  ash::FrameThrottlingController* frame_throttling_controller =
+      ash::Shell::Get()->frame_throttling_controller();
+  for (auto app_type : {ash::AppType::LACROS, ash::AppType::BROWSER,
+                        ash::AppType::CROSTINI_APP}) {
+    auto shell_surface = test::ShellSurfaceBuilder({20, 20})
+                             .SetAppType(app_type)
+                             .BuildShellSurface();
+
+    aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+    frame_throttling_controller->StartThrottling({window});
+
+    // Crostini should not be throttled currently.
+    const auto should_throttle_set =
+        app_type != ash::AppType::CROSTINI_APP
+            ? testing::UnorderedElementsAreArray(
+                  {shell_surface->GetSurfaceId().frame_sink_id()})
+            : testing::UnorderedElementsAreArray<viz::FrameSinkId>({});
+    EXPECT_THAT(frame_throttling_controller->GetFrameSinkIdsToThrottle(),
+                should_throttle_set);
+
+    // ash::kFrameRateThrottleKey is only set for lacros.
+    const bool should_set_property = app_type == ash::AppType::LACROS;
+    EXPECT_EQ(should_set_property,
+              window->GetProperty(ash::kFrameRateThrottleKey));
+  }
+}
+
+TEST_F(ShellSurfaceTest, ThrottleFrameRateViaControllerArc) {
+  ash::MockFrameThrottlingObserver observer;
+  ash::FrameThrottlingController* frame_throttling_controller =
+      ash::Shell::Get()->frame_throttling_controller();
+  frame_throttling_controller->AddArcObserver(&observer);
+
+  auto shell_surface = test::ShellSurfaceBuilder({20, 20})
+                           .SetAppType(ash::AppType::ARC_APP)
+                           .BuildShellSurface();
+
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+
+  EXPECT_CALL(observer,
+              OnThrottlingStarted(
+                  testing::UnorderedElementsAreArray({window}),
+                  frame_throttling_controller->GetCurrentThrottledFrameRate()));
+  frame_throttling_controller->StartThrottling({window});
+
+  frame_throttling_controller->RemoveArcObserver(&observer);
+}
+
 namespace {
 
 struct ShellSurfaceCallbacks {
@@ -3390,12 +3492,14 @@ struct ShellSurfaceCallbacks {
     bool activated;
   };
 
-  uint32_t OnConfigure(const gfx::Rect& bounds,
-                       chromeos::WindowStateType state_type,
-                       bool resizing,
-                       bool activated,
-                       const gfx::Vector2d& origin_offset,
-                       float raster_scale) {
+  uint32_t OnConfigure(
+      const gfx::Rect& bounds,
+      chromeos::WindowStateType state_type,
+      bool resizing,
+      bool activated,
+      const gfx::Vector2d& origin_offset,
+      float raster_scale,
+      std::optional<chromeos::WindowStateType> restore_state_type) {
     configure_state.emplace();
     *configure_state = {bounds, state_type, resizing, activated};
     return ++serial;
@@ -3636,7 +3740,7 @@ TEST_F(ShellSurfaceTest, PostWindowChangeCallback) {
   auto test_callback = base::BindRepeating(
       [](chromeos::WindowStateType* state_type, const gfx::Rect&,
          chromeos::WindowStateType new_type, bool, bool, const gfx::Vector2d&,
-         float) -> uint32_t {
+         float, std::optional<chromeos::WindowStateType>) -> uint32_t {
         *state_type = new_type;
         return 0;
       },
@@ -3669,7 +3773,7 @@ TEST_F(ShellSurfaceTest, ConfigureOnlySentOnceForBoundsAndWindowStateChange) {
   auto test_callback = base::BindRepeating(
       [](int* times_configured, const gfx::Rect&,
          chromeos::WindowStateType new_type, bool, bool, const gfx::Vector2d&,
-         float) -> uint32_t {
+         float, std::optional<chromeos::WindowStateType>) -> uint32_t {
         ++(*times_configured);
         return 0;
       },
@@ -3702,7 +3806,7 @@ TEST_F(ShellSurfaceTest, SetImmersiveModeTriggersConfigure) {
   auto test_callback = base::BindRepeating(
       [](int* times_configured, const gfx::Rect&,
          chromeos::WindowStateType new_type, bool, bool, const gfx::Vector2d&,
-         float) -> uint32_t {
+         float, std::optional<chromeos::WindowStateType>) -> uint32_t {
         ++(*times_configured);
         return 0;
       },
@@ -4150,6 +4254,234 @@ TEST_F(ShellSurfaceTest, WindowPropertyChangedNotificationWithoutRootSurface) {
   shell_surface.reset();
 
   overview_controller->EndOverview(ash::OverviewEndAction::kTests);
+}
+
+TEST_F(ShellSurfaceTest, SurfaceSyncWithShellSurfaceCreatedOnDisplayWithScale) {
+  ash::Shell::GetRootWindowForNewWindows()->layer()->OnDeviceScaleFactorChanged(
+      2.f);
+
+  // Empty means no initial size.
+  constexpr gfx::Size kEmptySize(0, 0);
+  ConfigureData config_data;
+  auto shell_surface =
+      test::ShellSurfaceBuilder(kEmptySize)
+          .SetNoCommit()
+          .SetConfigureCallback(base::BindRepeating(
+              &ConfigureSerial, base::Unretained(&config_data)))
+          .BuildShellSurface();
+  auto* surface = shell_surface->root_surface();
+
+  // Creates the shell widget, and add the surface_tree_host's window as child.
+  surface->Commit();
+
+  EXPECT_EQ(config_data.count, 1u);
+  EXPECT_EQ(config_data.suggested_bounds, gfx::Rect());
+  EXPECT_EQ(shell_surface->GetCommitTargetLayer(),
+            shell_surface->host_window()->layer());
+  EXPECT_EQ(shell_surface->GetSurfaceId(),
+            shell_surface->host_window()->GetSurfaceId());
+}
+
+TEST_F(ShellSurfaceTest,
+       DisplayScaleChangeTakesCompositorLockForMaximizedWindow) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetWindowState(chromeos::WindowStateType::kMaximized)
+          .BuildShellSurface();
+  auto* surface = shell_surface->root_surface();
+
+  uint32_t serial = 0;
+  auto configure_callback = base::BindRepeating(
+      [](uint32_t* const serial_ptr, const gfx::Rect& bounds,
+         chromeos::WindowStateType state_type, bool resizing, bool activated,
+         const gfx::Vector2d& origin_offset, float raster_scale,
+         std::optional<chromeos::WindowStateType>) { return ++(*serial_ptr); },
+      &serial);
+  shell_surface->set_configure_callback(configure_callback);
+
+  ui::Compositor* compositor =
+      shell_surface->GetWidget()->GetNativeWindow()->layer()->GetCompositor();
+  EXPECT_FALSE(compositor->IsLocked());
+
+  auto* display_manager = ash::Shell::Get()->display_manager();
+  const auto display_id = display_manager->GetDisplayAt(0).id();
+  display_manager->ZoomDisplay(display_id, /*up=*/true);
+
+  // Compositor locked until maximized window updates.
+  EXPECT_TRUE(compositor->IsLocked());
+
+  shell_surface->AcknowledgeConfigure(serial);
+  EXPECT_TRUE(compositor->IsLocked());
+
+  surface->Commit();
+  EXPECT_FALSE(compositor->IsLocked());
+
+  display_manager->ZoomDisplay(display_id, /*up=*/false);
+
+  // Compositor locked until maximized window updates.
+  EXPECT_TRUE(compositor->IsLocked());
+
+  shell_surface->AcknowledgeConfigure(serial);
+  EXPECT_TRUE(compositor->IsLocked());
+
+  surface->Commit();
+  EXPECT_FALSE(compositor->IsLocked());
+}
+
+TEST_F(ShellSurfaceTest,
+       DisplayScaleChangeDoesNotTakeCompositorLockForFreeformWindow) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+
+  ui::Compositor* compositor =
+      shell_surface->GetWidget()->GetNativeWindow()->layer()->GetCompositor();
+  EXPECT_FALSE(compositor->IsLocked());
+
+  auto* display_manager = ash::Shell::Get()->display_manager();
+  const auto display_id = display_manager->GetDisplayAt(0).id();
+  display_manager->ZoomDisplay(display_id, /*up=*/true);
+
+  // Should not take compositor lock.
+  EXPECT_FALSE(compositor->IsLocked());
+
+  display_manager->ZoomDisplay(display_id, /*up=*/false);
+
+  // Should not take compositor lock.
+  EXPECT_FALSE(compositor->IsLocked());
+}
+
+// Tests that updates to the display layout configuration update the origin on
+// relevant hosted surfaces.
+TEST_F(ShellSurfaceTest, DisplayLayoutConfigurationUpdatesSurfaceOrigin) {
+  // Start with a single display configuration.
+  UpdateDisplay("800x600");
+
+  // Create the surface.
+  constexpr gfx::Size kBufferSize(256, 256);
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder(kBufferSize).SetNoCommit().BuildShellSurface();
+
+  // Set origin and leave/enter callbacks.
+  gfx::Point client_origin;
+  int64_t old_display_id = display::kInvalidDisplayId;
+  int64_t new_display_id = display::kInvalidDisplayId;
+  shell_surface->set_origin_change_callback(base::BindLambdaForTesting(
+      [&](const gfx::Point& origin) { client_origin = origin; }));
+  shell_surface->root_surface()->set_leave_enter_callback(
+      base::BindLambdaForTesting([&](int64_t old_id, int64_t new_id) {
+        old_display_id = old_id;
+        new_display_id = new_id;
+        return true;
+      }));
+
+  // Creating a new shell surface should notify on which display it is created.
+  constexpr gfx::Point kInitialOrigin = {200, 200};
+  shell_surface->root_surface()->Commit();
+  shell_surface->GetWidget()->SetBounds({kInitialOrigin, kBufferSize});
+  EXPECT_EQ(display::kInvalidDisplayId, old_display_id);
+  EXPECT_EQ(GetPrimaryDisplay().id(), new_display_id);
+  EXPECT_EQ(kInitialOrigin, client_origin);
+
+  // Attaching a second display should not change where the surface is located.
+  UpdateDisplay("800x600,800x600");
+  EXPECT_EQ(kInitialOrigin, client_origin);
+
+  // Move the window to second display.
+  constexpr gfx::Point kNewOrigin = {1000, 200};
+  shell_surface->GetWidget()->SetBounds({kNewOrigin, kBufferSize});
+  EXPECT_EQ(GetPrimaryDisplay().id(), old_display_id);
+  EXPECT_EQ(GetSecondaryDisplay().id(), new_display_id);
+  EXPECT_EQ(kNewOrigin, client_origin);
+
+  // Reposition the second display, the surface should receive an origin change
+  // event representing the updated bounds in screen coordinates.
+  constexpr int kVerticalOffset = 200;
+  display::DisplayLayoutBuilder builder(GetPrimaryDisplay().id());
+  builder.SetSecondaryPlacement(GetSecondaryDisplay().id(),
+                                display::DisplayPlacement::RIGHT,
+                                kVerticalOffset);
+  ash::Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
+      builder.Build());
+
+  EXPECT_EQ(kNewOrigin + gfx::Vector2d(0, kVerticalOffset), client_origin);
+}
+
+TEST_F(ShellSurfaceTest, DisplayScaleChangeDoesNotSendOcclusionUpdates) {
+  std::unique_ptr<ShellSurface> shell_surface1 =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+  std::unique_ptr<ShellSurface> shell_surface2 =
+      test::ShellSurfaceBuilder({256, 256}).BuildShellSurface();
+
+  shell_surface1->GetWidget()->GetNativeWindow()->SetProperty(
+      chromeos::kWindowManagerManagesOpacityKey, true);
+  shell_surface2->GetWidget()->GetNativeWindow()->SetProperty(
+      chromeos::kWindowManagerManagesOpacityKey, true);
+
+  // Do state change after setting kWindowManagerManagesOpacityKey so it
+  // applies properly.
+  shell_surface1->Maximize();
+  shell_surface2->Maximize();
+
+  auto* surface1 = shell_surface1->root_surface();
+  auto* surface2 = shell_surface2->root_surface();
+
+  // Update root surfaces (this happens asynchronously normally) and set
+  // occlusion tracking.
+  surface1->SetOcclusionTracking(true);
+  auto surface1_buffer =
+      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
+          shell_surface1->GetWidget()->GetWindowBoundsInScreen().size()));
+  surface1->Attach(surface1_buffer.get());
+  surface1->Commit();
+  surface2->SetOcclusionTracking(true);
+  auto surface2_buffer =
+      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
+          shell_surface2->GetWidget()->GetWindowBoundsInScreen().size()));
+  surface2->Attach(surface2_buffer.get());
+  surface2->Commit();
+
+  SurfaceObserverForTest observer1(surface1->window()->GetOcclusionState());
+  surface1->AddSurfaceObserver(&observer1);
+  SurfaceObserverForTest observer2(surface2->window()->GetOcclusionState());
+  surface2->AddSurfaceObserver(&observer2);
+
+  EXPECT_EQ(aura::Window::OcclusionState::OCCLUDED,
+            surface1->window()->GetOcclusionState());
+  EXPECT_EQ(aura::Window::OcclusionState::VISIBLE,
+            surface2->window()->GetOcclusionState());
+
+  auto* display_manager = ash::Shell::Get()->display_manager();
+  const auto display_id = display_manager->GetDisplayAt(0).id();
+
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  display_manager->ZoomDisplay(display_id, /*up=*/true);
+
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  // Update root surfaces (this happens asynchronously normally).
+  auto surface1_buffer_zoom =
+      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
+          shell_surface1->GetWidget()->GetWindowBoundsInScreen().size()));
+  surface1->Attach(surface1_buffer_zoom.get());
+  surface1->Commit();
+  auto surface2_buffer_zoom =
+      std::make_unique<Buffer>(exo_test_helper()->CreateGpuMemoryBuffer(
+          shell_surface2->GetWidget()->GetWindowBoundsInScreen().size()));
+  surface2->Attach(surface2_buffer_zoom.get());
+  surface2->Commit();
+
+  display_manager->ZoomDisplay(display_id, /*up=*/false);
+
+  // Should not get any occlusion changes - requires occlusion tracking clip
+  // to the root window and that the shelf occlude what is below it, too.
+  EXPECT_EQ(0, observer1.num_occlusion_state_changes());
+  EXPECT_EQ(0, observer2.num_occlusion_state_changes());
+
+  surface1->RemoveSurfaceObserver(&observer1);
+  surface2->RemoveSurfaceObserver(&observer2);
 }
 
 }  // namespace exo

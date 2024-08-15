@@ -163,6 +163,13 @@ Polymer({
       notify: true,
     },
 
+    /**
+     * The prefilled network configuration. This can be empty if nothing to
+     * prefill or the configuration will be synced according to `this.guid`.
+     * @type {?ConfigProperties}
+     */
+    prefilledProperties: Object,
+
     /** @private {?ManagedProperties} */
     managedProperties_: {
       type: Object,
@@ -525,15 +532,6 @@ Polymer({
   /** @private {?CrosNetworkConfigInterface} */
   networkConfig_: null,
 
-  /*
-   * This value is used to avoid an edge case when configuring a network. We
-   * default to |true| since this is the more privacy-preserving option. This
-   * value is overridden with dialog arguments in specific situations where it
-   * ought be |false|. For more information see b/253247084.
-   * @private {boolean}
-   */
-  isLoggedIn_: true,
-
   /** @override */
   created() {
     this.networkConfig_ =
@@ -557,14 +555,6 @@ Polymer({
     this.cachedUserCerts_ = undefined;
     this.selectedServerCaHash_ = undefined;
     this.selectedUserCertHash_ = undefined;
-
-    const dialogArgs = chrome.getVariableValue('dialogArguments');
-    if (dialogArgs) {
-      const args = JSON.parse(dialogArgs);
-      if ('loggedIn' in args) {
-        this.isLoggedIn_ = args.loggedIn;
-      }
-    }
 
     this.networkConfig_.getSupportedVpnTypes().then(response => {
       this.updateVpnTypeItems_(response.vpnTypes);
@@ -656,13 +646,12 @@ Polymer({
     }
     const propertiesToSet = this.getPropertiesToSet_();
     if (this.managedProperties_.source === OncSource.kNone) {
-      if (this.isLoggedIn_) {
-        // Note: Set hidden SSID mode of new WiFi networks to disabled to avoid
-        // unintentionally marking networks as hidden if not in range or
-        // misspelled, etc.
-        if (this.mojoType_ === NetworkType.kWiFi) {
-          propertiesToSet.typeConfig.wifi.hiddenSsid = HiddenSsidMode.kDisabled;
-        }
+      // Explicitly set the hidden SSID mode of new WiFi networks disabled to
+      // avoid networks being unintentionally marked as hidden in some
+      // situations, e.g., when the network SSID is misspelled or the network is
+      // not within range.
+      if (this.mojoType_ === NetworkType.kWiFi) {
+        propertiesToSet.typeConfig.wifi.hiddenSsid = HiddenSsidMode.kDisabled;
       }
       if (!this.autoConnect_) {
         // Note: Do not set autoConnect to true, the connection manager will do

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <optional>
 #include <set>
 
 #include "base/command_line.h"
@@ -36,7 +37,6 @@
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/wm/core/window_util.h"
 #include "url/gurl.h"
 
@@ -206,7 +206,7 @@ class WebsiteMetricsBrowserTest : public MixinBasedInProcessBrowserTest {
     const auto entries =
         test_ukm_recorder()->GetEntriesByName("ChromeOS.WebsiteUsageTime");
     int count = 0;
-    for (const auto* entry : entries) {
+    for (const ukm::mojom::UkmEntry* entry : entries) {
       const ukm::UkmSource* src =
           test_ukm_recorder()->GetSourceForSourceId(entry->source_id);
       if (src == nullptr || src->url() != url) {
@@ -221,7 +221,7 @@ class WebsiteMetricsBrowserTest : public MixinBasedInProcessBrowserTest {
     const auto entries =
         test_ukm_recorder()->GetEntriesByName("ChromeOS.WebsiteUsageTime");
     int count = 0;
-    for (const auto* entry : entries) {
+    for (const ukm::mojom::UkmEntry* entry : entries) {
       const ukm::UkmSource* src =
           test_ukm_recorder()->GetSourceForSourceId(entry->source_id);
       if (src == nullptr || src->url() != url) {
@@ -1032,7 +1032,7 @@ IN_PROC_BROWSER_TEST_F(WebsiteMetricsBrowserTest, OnURLsDeleted) {
   // cleared.
   auto info = history::DeletionInfo(
       history::DeletionTimeRange(base::Time(), base::Time::Now()),
-      /*is_from_expiration=*/true, {}, {}, absl::optional<std::set<GURL>>());
+      /*is_from_expiration=*/true, {}, {}, std::optional<std::set<GURL>>());
   website_metrics()->OnURLsDeleted(nullptr, info);
   EXPECT_EQ(2u, window_to_web_contents().size());
   EXPECT_EQ(2u, webcontents_to_observer_map().size());
@@ -1176,6 +1176,47 @@ IN_PROC_BROWSER_TEST_F(WebsiteMetricsObserverBrowserTest,
   EXPECT_CALL(observer_, OnUrlOpened(GURL(kNewUrl), active_web_contents))
       .Times(1);
   EXPECT_CALL(observer_, OnUrlClosed(GURL(kOldUrl), active_web_contents))
+      .Times(1);
+  NavigateActiveTab(browser, kNewUrl);
+}
+
+IN_PROC_BROWSER_TEST_F(WebsiteMetricsObserverBrowserTest,
+                       NotifyUrlClosedOnContentNavigationToRegisteredWebApp) {
+  const std::string& kWebAppUrl = "https://b.example.org";
+  InstallWebAppOpeningAsTab(kWebAppUrl);
+
+  auto* const browser = CreateBrowser();
+  auto* const window = browser->window()->GetNativeWindow();
+  const std::string& kOldUrl = "https://a.example.org";
+  NavigateActiveTab(browser, kOldUrl);
+  website_metrics()->AddObserver(&observer_);
+
+  // Navigate to the web app and verify observer is notified of URL close.
+  const auto window_it = window_to_web_contents().find(window);
+  ASSERT_NE(window_it, window_to_web_contents().end());
+  ::content::WebContents* const active_web_contents = window_it->second;
+  EXPECT_CALL(observer_, OnUrlClosed(GURL(kOldUrl), active_web_contents))
+      .Times(1);
+  NavigateActiveTab(browser, kWebAppUrl);
+}
+
+IN_PROC_BROWSER_TEST_F(WebsiteMetricsObserverBrowserTest,
+                       NotifyUrlOpenedOnContentNavigationFromRegisteredWebApp) {
+  const std::string& kWebAppUrl = "https://b.example.org";
+  InstallWebAppOpeningAsTab(kWebAppUrl);
+  website_metrics()->AddObserver(&observer_);
+
+  auto* const browser = CreateBrowser();
+  auto* const window = browser->window()->GetNativeWindow();
+  NavigateActiveTab(browser, kWebAppUrl);
+
+  // Navigate to the URL from the web app and verify observer is notified of URL
+  // open.
+  const std::string& kNewUrl = "https://a.example.org";
+  const auto window_it = window_to_web_contents().find(window);
+  ASSERT_NE(window_it, window_to_web_contents().end());
+  ::content::WebContents* const active_web_contents = window_it->second;
+  EXPECT_CALL(observer_, OnUrlOpened(GURL(kNewUrl), active_web_contents))
       .Times(1);
   NavigateActiveTab(browser, kNewUrl);
 }

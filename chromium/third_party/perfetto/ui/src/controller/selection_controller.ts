@@ -15,17 +15,7 @@
 import {assertTrue} from '../base/logging';
 import {Time, time} from '../base/time';
 import {Args, ArgValue} from '../common/arg_types';
-import {Engine} from '../common/engine';
 import {pluginManager} from '../common/plugins';
-import {
-  durationFromSql,
-  LONG,
-  NUM,
-  NUM_NULL,
-  STR,
-  STR_NULL,
-  timeFromSql,
-} from '../common/query_result';
 import {ChromeSliceSelection} from '../common/state';
 import {
   CounterDetails,
@@ -38,6 +28,16 @@ import {
   publishSliceDetails,
   publishThreadStateDetails,
 } from '../frontend/publish';
+import {Engine} from '../trace_processor/engine';
+import {
+  durationFromSql,
+  LONG,
+  NUM,
+  NUM_NULL,
+  STR,
+  STR_NULL,
+  timeFromSql,
+} from '../trace_processor/query_result';
 import {SLICE_TRACK_KIND} from '../tracks/chrome_slices';
 
 import {Controller} from './controller';
@@ -90,8 +90,7 @@ export class SelectionController extends Controller<'main'> {
     if (selection.kind === 'COUNTER') {
       this.counterDetails(selection.leftTs, selection.rightTs, selection.id)
           .then((results) => {
-            if (results !== undefined && selection &&
-                selection.kind === selectedKind &&
+            if (results !== undefined && selection.kind === selectedKind &&
                 selection.id === selectedId) {
               publishCounterDetails(results);
             }
@@ -189,7 +188,9 @@ export class SelectionController extends Controller<'main'> {
           threadTs = timeFromSql(v);
           break;
         case 'absTime':
+          /* eslint-disable @typescript-eslint/strict-boolean-expressions */
           if (v) absTime = `${v}`;
+          /* eslint-enable */
           break;
         case 'name':
           name = `${v}`;
@@ -309,14 +310,12 @@ export class SelectionController extends Controller<'main'> {
     // UI track id for slice tracks this would be unnecessary.
     let trackKey = '';
     for (const track of Object.values(globals.state.tracks)) {
-      if (track.uri) {
-        const trackInfo = pluginManager.resolveTrackInfo(track.uri);
-        if (trackInfo?.kind === SLICE_TRACK_KIND) {
-          const trackIds = trackInfo?.trackIds;
-          if (trackIds && trackIds.length > 0 && trackIds[0] === trackId) {
-            trackKey = track.key;
-            break;
-          }
+      const trackInfo = pluginManager.resolveTrackInfo(track.uri);
+      if (trackInfo?.kind === SLICE_TRACK_KIND) {
+        const trackIds = trackInfo?.trackIds;
+        if (trackIds && trackIds.length > 0 && trackIds[0] === trackId) {
+          trackKey = track.key;
+          break;
         }
       }
     }
@@ -380,6 +379,7 @@ export class SelectionController extends Controller<'main'> {
       const endState = row.endState;
       const utid = row.utid;
       const cpu = row.cpu;
+      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
       const threadStateId = row.threadStateId || undefined;
       const selected: SliceDetails = {
         ts,
@@ -493,6 +493,7 @@ export class SelectionController extends Controller<'main'> {
       tid: threadInfo.tid,
       threadName: threadInfo.name || undefined,
     };
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (threadInfo.upid) {
       return Object.assign(
           {}, threadDetails, await this.computeProcessDetails(threadInfo.upid));

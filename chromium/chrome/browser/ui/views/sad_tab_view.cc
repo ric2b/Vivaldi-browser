@@ -565,7 +565,7 @@ SadTabView::SadTabView(content::WebContents* web_contents, SadTabKind kind)
           base::BindRepeating(&SadTabView::PerformAction,
                               base::Unretained(this), Action::BUTTON),
           l10n_util::GetStringUTF16(GetButtonTitle())));
-  action_button_->SetProminent(true);
+  action_button_->SetStyle(ui::ButtonStyle::kProminent);
   action_button_->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,
@@ -604,6 +604,11 @@ void SadTabView::ReinstallInWebView() {
     owner_ = nullptr;
   }
   AttachToWebView();
+}
+
+gfx::RoundedCornersF SadTabView::GetBackgroundRadii() const {
+  CHECK(layer());
+  return layer()->rounded_corner_radii();
 }
 
 void SadTabView::SetBackgroundRadii(const gfx::RoundedCornersF& radii) {
@@ -684,5 +689,5 @@ SadTab* SadTab::Create(content::WebContents* web_contents, SadTabKind kind) {
   return new SadTabView(web_contents, kind);
 }
 
-BEGIN_METADATA(SadTabView, views::View)
+BEGIN_METADATA(SadTabView)
 END_METADATA

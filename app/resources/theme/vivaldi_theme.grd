@@ -5,19 +5,26 @@
       <if expr="vivaldi_release_final">
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_final/product_logo_16.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_final/product_logo_32.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="vivaldi_final/product_logo_name_22.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="vivaldi_final/product_logo_name_22_white.png" />
       </if>
       <if expr="vivaldi_release_snapshot">
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_snapshot/product_logo_16.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_snapshot/product_logo_32.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="vivaldi_snapshot/product_logo_name_22.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="vivaldi_snapshot/product_logo_name_22_white.png" />
       </if>
       <if expr="vivaldi_release_sopranos">
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_sopranos/product_logo_16.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_sopranos/product_logo_32.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="vivaldi_sopranos/product_logo_name_22.png" />
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="vivaldi_sopranos/product_logo_name_22_white.png" />
       </if>
       <if expr="not is_android">
         <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD" file="viv_common/save_password.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD_DARK" file="viv_common/save_password_dark.png" />
       </if>
+      <structure type="chrome_scaled_image" name="IDR_PASSWORD_MANAGER_FAVICON" file="viv_common/favicon_password_manager.png" />
       <!-- The Avatar images needs to be here, unless we want to patch chromium/chrome/browser/resources_util.cc -->
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_OFFLINE" file="vivaldi/error_network_offline.png" />
       <structure type="chrome_scaled_image" name="IDR_PROFILE_VIVALDI_AVATAR_0" file="vivaldi/avatars/landscape_1.png" />

@@ -72,6 +72,12 @@ std::string StringNameForDestination(Destination destination) {
       return "overflow_menu::Destination::WhatsNew";
     case overflow_menu::Destination::SpotlightDebugger:
       return "overflow_menu::Destination::SpotlightDebugger";
+
+    // Vivaldi
+    case overflow_menu::Destination::vShare:
+      return "overflow_menu::Destination::vShare";
+    // End Vivaldi
+
   }
 }
 // LINT.ThenChange(:stringToDestination)
@@ -157,6 +163,8 @@ std::string StringNameForActionType(ActionType action) {
     // Vivaldi
     // Note: (prio@vivaldi.com) - These are not utilized for us yet. But, we
     // needed to add these cases because of the modification on the enum class.
+    case overflow_menu::ActionType::vSiteInfo:
+      return "Site Info";
     case overflow_menu::ActionType::vBookmarks:
       return "Bookmarks";
     case overflow_menu::ActionType::vNotes:
@@ -212,6 +220,11 @@ void RecordUmaActionForDestination(Destination destination) {
     case overflow_menu::Destination::SpotlightDebugger:
       // No need to log metrics for a debug-only feature.
       break;
+
+    // Vivaldi
+    case overflow_menu::Destination::vShare:
+      break;
+    // End Vivaldi
   }
 }
 }  // namespace overflow_menu

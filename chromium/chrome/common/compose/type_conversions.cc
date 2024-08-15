@@ -35,19 +35,44 @@ optimization_guide::proto::ComposeTone ComposeTone(compose::mojom::Tone tone) {
 }
 
 compose::mojom::ComposeStatus ComposeStatusFromOptimizationGuideResult(
-    optimization_guide::OptimizationGuideModelExecutionResult result) {
+    optimization_guide::OptimizationGuideModelStreamingExecutionResult result) {
   if (result.has_value()) {
     return compose::mojom::ComposeStatus::kOk;
   }
 
   switch (result.error().error()) {
     case ModelExecutionError::kUnknown:
-    case ModelExecutionError::kRequestThrottled:
     case ModelExecutionError::kGenericFailure:
-      return compose::mojom::ComposeStatus::kTryAgainLater;
+      return compose::mojom::ComposeStatus::kServerError;
+    case ModelExecutionError::kRequestThrottled:
+      return compose::mojom::ComposeStatus::kRequestThrottled;
+    case ModelExecutionError::kRetryableError:
+      return compose::mojom::ComposeStatus::kRetryableError;
     case ModelExecutionError::kInvalidRequest:
-      return compose::mojom::ComposeStatus::kNotSuccessful;
+      return compose::mojom::ComposeStatus::kInvalidRequest;
     case ModelExecutionError::kPermissionDenied:
       return compose::mojom::ComposeStatus::kPermissionDenied;
+    case ModelExecutionError::kNonRetryableError:
+      return compose::mojom::ComposeStatus::kNonRetryableError;
+    case ModelExecutionError::kUnsupportedLanguage:
+      return compose::mojom::ComposeStatus::kUnsupportedLanguage;
+    case ModelExecutionError::kFiltered:
+      return compose::mojom::ComposeStatus::kFiltered;
+    case ModelExecutionError::kDisabled:
+      return compose::mojom::ComposeStatus::kDisabled;
+    case ModelExecutionError::kCancelled:
+      return compose::mojom::ComposeStatus::kCancelled;
+  }
+}
+
+optimization_guide::proto::UserFeedback OptimizationFeedbackFromComposeFeedback(
+    compose::mojom::UserFeedback feedback) {
+  switch (feedback) {
+    case compose::mojom::UserFeedback::kUserFeedbackPositive:
+      return optimization_guide::proto::UserFeedback::USER_FEEDBACK_THUMBS_UP;
+    case compose::mojom::UserFeedback::kUserFeedbackNegative:
+      return optimization_guide::proto::UserFeedback::USER_FEEDBACK_THUMBS_DOWN;
+    default:
+      return optimization_guide::proto::UserFeedback::USER_FEEDBACK_UNSPECIFIED;
   }
 }

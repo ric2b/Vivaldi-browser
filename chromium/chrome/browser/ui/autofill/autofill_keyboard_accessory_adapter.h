@@ -32,7 +32,7 @@ namespace autofill {
 class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
                                          public AutofillPopupController {
  public:
-  AutofillKeyboardAccessoryAdapter(
+  explicit AutofillKeyboardAccessoryAdapter(
       base::WeakPtr<AutofillPopupController> controller);
 
   AutofillKeyboardAccessoryAdapter(const AutofillKeyboardAccessoryAdapter&) =
@@ -60,10 +60,13 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
     // Makes announcement for acessibility.
     virtual void AxAnnounce(const std::u16string& text);
 
-    // Ask to confirm a deletion. Triggers the callback upon confirmation.
-    virtual void ConfirmDeletion(const std::u16string& confirmation_title,
-                                 const std::u16string& confirmation_body,
-                                 base::OnceClosure confirm_deletion) = 0;
+    // Ask to confirm a deletion. Triggers the callback upon the user confirming
+    // or declining the deletion. The detection callback parameter specifies
+    // whether the deletion was confirmed or declined.
+    virtual void ConfirmDeletion(
+        const std::u16string& confirmation_title,
+        const std::u16string& confirmation_body,
+        base::OnceCallback<void(bool)> deletion_callback) = 0;
   };
 
   void SetAccessoryView(std::unique_ptr<AccessoryView> view) {
@@ -86,7 +89,7 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
       const content::NativeWebKeyboardEvent& event) override;
   void OnSuggestionsChanged() override;
   void AxAnnounce(const std::u16string& text) override;
-  absl::optional<int32_t> GetAxUniqueId() override;
+  std::optional<int32_t> GetAxUniqueId() override;
   base::WeakPtr<AutofillPopupView> CreateSubPopupView(
       base::WeakPtr<AutofillPopupController> controller) override;
 
@@ -103,11 +106,13 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
   bool GetRemovalConfirmationText(int index,
                                   std::u16string* title,
                                   std::u16string* body) override;
-  bool RemoveSuggestion(int index) override;
-  void SelectSuggestion(absl::optional<size_t> index) override;
+  bool RemoveSuggestion(
+      int index,
+      AutofillMetrics::SingleEntryRemovalMethod removal_method) override;
+  void SelectSuggestion(int index) override;
+  void UnselectSuggestion() override;
   PopupType GetPopupType() const override;
-  AutofillSuggestionTriggerSource GetAutofillSuggestionTriggerSource()
-      const override;
+  FillingProduct GetMainFillingProduct() const override;
   bool ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const override;
   base::WeakPtr<AutofillPopupController> OpenSubPopup(
       const gfx::RectF& anchor_bounds,
@@ -124,7 +129,7 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
   std::optional<AutofillClient::PopupScreenLocation> GetPopupScreenLocation()
       const override;
 
-  void OnDeletionConfirmed(int index);
+  void OnDeletionDialogClosed(int index, bool confirmed);
 
   // Indices might be offset because a special item is moved to the front. This
   // method returns the index used by the keyboard accessory (may be offset).
@@ -139,7 +144,7 @@ class AutofillKeyboardAccessoryAdapter : public AutofillPopupView,
 
   // Position that the front element has in the suggestion list returned by
   // controller_. It is used to determine the offset suggestions.
-  absl::optional<int> front_element_;
+  std::optional<int> front_element_;
 
   base::WeakPtrFactory<AutofillKeyboardAccessoryAdapter> weak_ptr_factory_{
       this};

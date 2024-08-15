@@ -22,6 +22,7 @@
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/form_data_importer.h"
+#include "components/autofill/core/browser/form_data_importer_test_api.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
@@ -45,18 +46,18 @@ const base::FilePath::CharType kFileNamePattern[] = FILE_PATH_LITERAL("*.in");
 const char kFieldSeparator[] = ":";
 const char kProfileSeparator[] = "---";
 
-const ServerFieldType kProfileFieldTypes[] = {NAME_FIRST,
-                                              NAME_MIDDLE,
-                                              NAME_LAST,
-                                              NAME_FULL,
-                                              EMAIL_ADDRESS,
-                                              COMPANY_NAME,
-                                              ADDRESS_HOME_STREET_ADDRESS,
-                                              ADDRESS_HOME_CITY,
-                                              ADDRESS_HOME_STATE,
-                                              ADDRESS_HOME_ZIP,
-                                              ADDRESS_HOME_COUNTRY,
-                                              PHONE_HOME_WHOLE_NUMBER};
+const FieldType kProfileFieldTypes[] = {NAME_FIRST,
+                                        NAME_MIDDLE,
+                                        NAME_LAST,
+                                        NAME_FULL,
+                                        EMAIL_ADDRESS,
+                                        COMPANY_NAME,
+                                        ADDRESS_HOME_STREET_ADDRESS,
+                                        ADDRESS_HOME_CITY,
+                                        ADDRESS_HOME_STATE,
+                                        ADDRESS_HOME_ZIP,
+                                        ADDRESS_HOME_COUNTRY,
+                                        PHONE_HOME_WHOLE_NUMBER};
 
 const base::FilePath& GetTestDataDir() {
   static base::NoDestructor<base::FilePath> dir([]() {
@@ -95,7 +96,7 @@ std::string SerializeProfiles(const std::vector<AutofillProfile*>& profiles) {
   for (auto* profile : profiles) {
     result += kProfileSeparator;
     result += "\n";
-    for (const ServerFieldType& type : kProfileFieldTypes) {
+    for (const FieldType& type : kProfileFieldTypes) {
       std::u16string value = profile->GetRawInfo(type);
       result += FieldTypeToStringView(type);
       result += kFieldSeparator;
@@ -155,8 +156,7 @@ void AutofillMergeTest::SetUp() {
   test::DisableSystemServices(nullptr);
   personal_data_.set_auto_accept_address_imports_for_testing(true);
   form_data_importer_ = std::make_unique<FormDataImporter>(
-      &autofill_client_,
-      /*payments::PaymentsClient=*/nullptr, &personal_data_, "en");
+      &autofill_client_, &personal_data_, "en");
 }
 
 void AutofillMergeTest::TearDown() {
@@ -216,19 +216,20 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
         // into the field's name.
         AutofillField* field =
             const_cast<AutofillField*>(form_structure.field(j));
-        ServerFieldType type =
-            TypeNameToFieldType(base::UTF16ToUTF8(field->name));
+        FieldType type = TypeNameToFieldType(base::UTF16ToUTF8(field->name));
         field->set_heuristic_type(GetActiveHeuristicSource(), type);
       }
 
       // Extract the profile.
-      auto extracted_data = form_data_importer_->ExtractFormData(
-          form_structure,
-          /*profile_autofill_enabled=*/true,
-          /*payment_methods_autofill_enabled=*/true);
-      form_data_importer_->ProcessAddressProfileImportCandidates(
-          extracted_data.address_profile_import_candidates,
-          /*allow_prompt=*/true);
+      auto extracted_data =
+          test_api(*form_data_importer_)
+              .ExtractFormData(form_structure,
+                               /*profile_autofill_enabled=*/true,
+                               /*payment_methods_autofill_enabled=*/true);
+      test_api(*form_data_importer_)
+          .ProcessAddressProfileImportCandidates(
+              extracted_data.address_profile_import_candidates,
+              /*allow_prompt=*/true);
       EXPECT_FALSE(extracted_data.extracted_credit_card);
 
       // Clear the |form| to start a new profile.

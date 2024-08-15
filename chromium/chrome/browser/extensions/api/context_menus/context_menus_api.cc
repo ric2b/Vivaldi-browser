@@ -42,7 +42,7 @@ ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
   if (id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     id.incognito = false;
 
-  absl::optional<api::context_menus::Create::Params> params =
+  std::optional<api::context_menus::Create::Params> params =
       api::context_menus::Create::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -57,7 +57,7 @@ ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
     EXTENSION_FUNCTION_VALIDATE(args()[0].is_dict());
 
     const base::Value& properties = args()[0];
-    absl::optional<int> result = properties.GetDict().FindInt(
+    std::optional<int> result = properties.GetDict().FindInt(
         extensions::context_menus_api_helpers::kGeneratedIdKey);
     EXTENSION_FUNCTION_VALIDATE(result);
     id.uid = *result;
@@ -78,7 +78,7 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
   if (item_id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     item_id.incognito = false;
 
-  absl::optional<api::context_menus::Update::Params> params =
+  std::optional<api::context_menus::Update::Params> params =
       api::context_menus::Update::Params::Create(args());
 
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -99,7 +99,7 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction ContextMenusRemoveFunction::Run() {
-  absl::optional<api::context_menus::Remove::Params> params =
+  std::optional<api::context_menus::Remove::Params> params =
       api::context_menus::Remove::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 

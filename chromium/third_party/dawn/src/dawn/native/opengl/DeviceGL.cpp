@@ -31,6 +31,7 @@
 
 #include "dawn/common/Log.h"
 #include "dawn/native/BackendConnection.h"
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/ErrorData.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/opengl/BindGroupGL.h"
@@ -117,7 +118,7 @@ namespace dawn::native::opengl {
 
 // static
 ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
-                                          const DeviceDescriptor* descriptor,
+                                          const UnpackedPtr<DeviceDescriptor>& descriptor,
                                           const OpenGLFunctions& functions,
                                           std::unique_ptr<Context> context,
                                           const TogglesState& deviceToggles) {
@@ -128,7 +129,7 @@ ResultOrError<Ref<Device>> Device::Create(AdapterBase* adapter,
 }
 
 Device::Device(AdapterBase* adapter,
-               const DeviceDescriptor* descriptor,
+               const UnpackedPtr<DeviceDescriptor>& descriptor,
                const OpenGLFunctions& functions,
                std::unique_ptr<Context> context,
                const TogglesState& deviceToggles)
@@ -140,7 +141,7 @@ Device::~Device() {
     Destroy();
 }
 
-MaybeError Device::Initialize(const DeviceDescriptor* descriptor) {
+MaybeError Device::Initialize(const UnpackedPtr<DeviceDescriptor>& descriptor) {
     // Directly set the context current and use mGL instead of calling GetGL as GetGL will notify
     // the (yet inexistent) queue that GL was used.
     mContext->MakeCurrent();
@@ -215,14 +216,14 @@ GLenum Device::GetBGRAInternalFormat(const OpenGLFunctions& gl) const {
 
 ResultOrError<Ref<BindGroupBase>> Device::CreateBindGroupImpl(
     const BindGroupDescriptor* descriptor) {
-    DAWN_TRY(ValidateGLBindGroupDescriptor(descriptor));
     return BindGroup::Create(this, descriptor);
 }
 ResultOrError<Ref<BindGroupLayoutInternalBase>> Device::CreateBindGroupLayoutImpl(
     const BindGroupLayoutDescriptor* descriptor) {
     return AcquireRef(new BindGroupLayout(this, descriptor));
 }
-ResultOrError<Ref<BufferBase>> Device::CreateBufferImpl(const BufferDescriptor* descriptor) {
+ResultOrError<Ref<BufferBase>> Device::CreateBufferImpl(
+    const UnpackedPtr<BufferDescriptor>& descriptor) {
     return AcquireRef(new Buffer(this, descriptor));
 }
 ResultOrError<Ref<CommandBufferBase>> Device::CreateCommandBuffer(
@@ -231,25 +232,25 @@ ResultOrError<Ref<CommandBufferBase>> Device::CreateCommandBuffer(
     return AcquireRef(new CommandBuffer(encoder, descriptor));
 }
 Ref<ComputePipelineBase> Device::CreateUninitializedComputePipelineImpl(
-    const ComputePipelineDescriptor* descriptor) {
+    const UnpackedPtr<ComputePipelineDescriptor>& descriptor) {
     return ComputePipeline::CreateUninitialized(this, descriptor);
 }
 ResultOrError<Ref<PipelineLayoutBase>> Device::CreatePipelineLayoutImpl(
-    const PipelineLayoutDescriptor* descriptor) {
+    const UnpackedPtr<PipelineLayoutDescriptor>& descriptor) {
     return AcquireRef(new PipelineLayout(this, descriptor));
 }
 ResultOrError<Ref<QuerySetBase>> Device::CreateQuerySetImpl(const QuerySetDescriptor* descriptor) {
     return AcquireRef(new QuerySet(this, descriptor));
 }
 Ref<RenderPipelineBase> Device::CreateUninitializedRenderPipelineImpl(
-    const RenderPipelineDescriptor* descriptor) {
+    const UnpackedPtr<RenderPipelineDescriptor>& descriptor) {
     return RenderPipeline::CreateUninitialized(this, descriptor);
 }
 ResultOrError<Ref<SamplerBase>> Device::CreateSamplerImpl(const SamplerDescriptor* descriptor) {
     return AcquireRef(new Sampler(this, descriptor));
 }
 ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
-    const ShaderModuleDescriptor* descriptor,
+    const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     ShaderModuleParseResult* parseResult,
     OwnedCompilationMessages* compilationMessages) {
     return ShaderModule::Create(this, descriptor, parseResult, compilationMessages);
@@ -260,7 +261,8 @@ ResultOrError<Ref<SwapChainBase>> Device::CreateSwapChainImpl(
     const SwapChainDescriptor* descriptor) {
     return DAWN_VALIDATION_ERROR("New swapchains not implemented.");
 }
-ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(const TextureDescriptor* descriptor) {
+ResultOrError<Ref<TextureBase>> Device::CreateTextureImpl(
+    const UnpackedPtr<TextureDescriptor>& descriptor) {
     return Texture::Create(this, descriptor);
 }
 ResultOrError<Ref<TextureViewBase>> Device::CreateTextureViewImpl(
@@ -277,7 +279,7 @@ ResultOrError<wgpu::TextureUsage> Device::GetSupportedSurfaceUsageImpl(
     return usages;
 }
 
-MaybeError Device::ValidateTextureCanBeWrapped(const TextureDescriptor* descriptor) {
+MaybeError Device::ValidateTextureCanBeWrapped(const UnpackedPtr<TextureDescriptor>& descriptor) {
     DAWN_INVALID_IF(descriptor->dimension != wgpu::TextureDimension::e2D,
                     "Texture dimension (%s) is not %s.", descriptor->dimension,
                     wgpu::TextureDimension::e2D);
@@ -298,11 +300,15 @@ MaybeError Device::ValidateTextureCanBeWrapped(const TextureDescriptor* descript
     return {};
 }
 
-TextureBase* Device::CreateTextureWrappingEGLImage(const ExternalImageDescriptor* descriptor,
-                                                   ::EGLImage image) {
+Ref<TextureBase> Device::CreateTextureWrappingEGLImage(const ExternalImageDescriptor* descriptor,
+                                                       ::EGLImage image) {
     const OpenGLFunctions& gl = GetGL();
-    const TextureDescriptor* textureDescriptor = FromAPI(descriptor->cTextureDescriptor);
 
+    UnpackedPtr<TextureDescriptor> textureDescriptor;
+    if (ConsumedError(ValidateAndUnpack(FromAPI(descriptor->cTextureDescriptor)),
+                      &textureDescriptor)) {
+        return nullptr;
+    }
     if (ConsumedError(ValidateTextureDescriptor(this, textureDescriptor))) {
         return nullptr;
     }
@@ -332,22 +338,26 @@ TextureBase* Device::CreateTextureWrappingEGLImage(const ExternalImageDescriptor
 
     // TODO(dawn:803): Validate the OpenGL texture format from the EGLImage against the format
     // in the passed-in TextureDescriptor.
-    auto result = new Texture(this, textureDescriptor, tex);
+    auto result = AcquireRef(new Texture(this, textureDescriptor, tex));
     result->SetIsSubresourceContentInitialized(descriptor->isInitialized,
                                                result->GetAllSubresources());
     return result;
 }
 
-TextureBase* Device::CreateTextureWrappingGLTexture(const ExternalImageDescriptor* descriptor,
-                                                    GLuint texture) {
+Ref<TextureBase> Device::CreateTextureWrappingGLTexture(const ExternalImageDescriptor* descriptor,
+                                                        GLuint texture) {
     const OpenGLFunctions& gl = GetGL();
-    const TextureDescriptor* textureDescriptor = FromAPI(descriptor->cTextureDescriptor);
 
-    if (!HasFeature(Feature::ANGLETextureSharing)) {
-        HandleError(DAWN_VALIDATION_ERROR("Device does not support ANGLE GL texture sharing."));
+    UnpackedPtr<TextureDescriptor> textureDescriptor;
+    if (ConsumedError(ValidateAndUnpack(FromAPI(descriptor->cTextureDescriptor)),
+                      &textureDescriptor)) {
         return nullptr;
     }
     if (ConsumedError(ValidateTextureDescriptor(this, textureDescriptor))) {
+        return nullptr;
+    }
+    if (!HasFeature(Feature::ANGLETextureSharing)) {
+        HandleError(DAWN_VALIDATION_ERROR("Device does not support ANGLE GL texture sharing."));
         return nullptr;
     }
     if (ConsumedError(ValidateTextureCanBeWrapped(textureDescriptor))) {
@@ -369,7 +379,7 @@ TextureBase* Device::CreateTextureWrappingGLTexture(const ExternalImageDescripto
         return nullptr;
     }
 
-    auto result = new Texture(this, textureDescriptor, texture);
+    auto result = AcquireRef(new Texture(this, textureDescriptor, texture));
     result->SetIsSubresourceContentInitialized(descriptor->isInitialized,
                                                result->GetAllSubresources());
     return result;

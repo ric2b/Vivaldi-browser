@@ -82,7 +82,6 @@ class BufferValidationTest : public ValidationTest {
 
     wgpu::Queue queue;
 
-  private:
     void SetUp() override {
         ValidationTest::SetUp();
 
@@ -1359,5 +1358,68 @@ TEST_F(BufferValidationTest, GetMapState) {
         EXPECT_EQ(wgpu::BufferMapState::Mapped, buf.GetMapState());
         buf.Destroy();
         EXPECT_EQ(wgpu::BufferMapState::Unmapped, buf.GetMapState());
+    }
+}
+
+class BufferMapExtendedUsagesValidationTest : public BufferValidationTest {
+  protected:
+    void SetUp() override {
+        DAWN_SKIP_TEST_IF(UsesWire());
+        BufferValidationTest::SetUp();
+    }
+
+    WGPUDevice CreateTestDevice(dawn::native::Adapter dawnAdapter,
+                                wgpu::DeviceDescriptor descriptor) override {
+        wgpu::FeatureName requiredFeatures[] = {wgpu::FeatureName::BufferMapExtendedUsages};
+        descriptor.requiredFeatures = requiredFeatures;
+        descriptor.requiredFeatureCount = 1;
+        return dawnAdapter.CreateDevice(&descriptor);
+    }
+};
+
+// Test that MapRead or MapWrite can be combined with any other usage when creating
+// a buffer.
+TEST_F(BufferMapExtendedUsagesValidationTest, CreationMapUsageReadOrWriteNoRestrictions) {
+    constexpr wgpu::BufferUsage kNonMapUsages[] = {
+        wgpu::BufferUsage::CopySrc,  wgpu::BufferUsage::CopyDst,      wgpu::BufferUsage::Index,
+        wgpu::BufferUsage::Vertex,   wgpu::BufferUsage::Uniform,      wgpu::BufferUsage::Storage,
+        wgpu::BufferUsage::Indirect, wgpu::BufferUsage::QueryResolve,
+    };
+
+    // MapRead with anything is ok
+    {
+        wgpu::BufferDescriptor descriptor;
+        descriptor.size = 4;
+
+        for (const auto otherUsage : kNonMapUsages) {
+            descriptor.usage = wgpu::BufferUsage::MapRead | otherUsage;
+
+            device.CreateBuffer(&descriptor);
+        }
+    }
+
+    // MapWrite with anything is ok
+    {
+        wgpu::BufferDescriptor descriptor;
+        descriptor.size = 4;
+
+        for (const auto otherUsage : kNonMapUsages) {
+            descriptor.usage = wgpu::BufferUsage::MapWrite | otherUsage;
+
+            device.CreateBuffer(&descriptor);
+        }
+    }
+
+    // MapRead | MapWrite with anything is ok
+    {
+        wgpu::BufferDescriptor descriptor;
+        descriptor.size = 4;
+
+        for (const auto otherUsage : kNonMapUsages) {
+            descriptor.usage =
+                wgpu::BufferUsage::MapRead | wgpu::BufferUsage::MapWrite | otherUsage;
+
+            device.CreateBuffer(&descriptor);
+        }
     }
 }

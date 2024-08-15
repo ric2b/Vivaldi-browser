@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
@@ -62,8 +63,8 @@
 #include "third_party/blink/renderer/core/layout/flex/layout_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
@@ -334,9 +335,9 @@ void HTMLSelectElement::SetValue(const String& value,
 
 void HTMLSelectElement::SetAutofillValue(const String& value,
                                          WebAutofillState autofill_state) {
-  bool user_has_edited_the_field = user_has_edited_the_field_;
+  auto interacted_state = interacted_state_;
   SetValue(value, true, autofill_state);
-  SetUserHasEditedTheField(user_has_edited_the_field);
+  interacted_state_ = interacted_state;
 }
 
 String HTMLSelectElement::SuggestedValue() const {
@@ -746,15 +747,13 @@ void HTMLSelectElement::OptionSelectionStateChanged(HTMLOptionElement* option,
 
 void HTMLSelectElement::ChildrenChanged(const ChildrenChange& change) {
   HTMLFormControlElementWithState::ChildrenChanged(change);
-  if (change.type == ChildrenChangeType::kElementInserted) {
-    if (auto* option = DynamicTo<HTMLOptionElement>(change.sibling_changed)) {
-      OptionInserted(*option, option->Selected());
-    } else if (auto* optgroup =
-                   DynamicTo<HTMLOptGroupElement>(change.sibling_changed)) {
-      for (auto& child_option :
-           Traversal<HTMLOptionElement>::ChildrenOf(*optgroup))
-        OptionInserted(child_option, child_option.Selected());
+  if (change.type ==
+      ChildrenChangeType::kFinishedBuildingDocumentFragmentTree) {
+    for (Node& node : NodeTraversal::ChildrenOf(*this)) {
+      ElementInserted(node);
     }
+  } else if (change.type == ChildrenChangeType::kElementInserted) {
+    ElementInserted(*change.sibling_changed);
   } else if (change.type == ChildrenChangeType::kElementRemoved) {
     if (auto* option = DynamicTo<HTMLOptionElement>(change.sibling_changed)) {
       OptionRemoved(*option);
@@ -779,6 +778,17 @@ void HTMLSelectElement::ChildrenChanged(const ChildrenChange& change) {
 
 bool HTMLSelectElement::ChildrenChangedAllChildrenRemovedNeedsList() const {
   return true;
+}
+
+void HTMLSelectElement::ElementInserted(Node& node) {
+  if (auto* option = DynamicTo<HTMLOptionElement>(&node)) {
+    OptionInserted(*option, option->Selected());
+  } else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(&node)) {
+    for (auto& child_option :
+         Traversal<HTMLOptionElement>::ChildrenOf(*optgroup)) {
+      OptionInserted(child_option, child_option.Selected());
+    }
+  }
 }
 
 void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
@@ -1107,8 +1117,9 @@ void HTMLSelectElement::DefaultEventHandler(Event& event) {
     return;
 
   if (event.type() == event_type_names::kClick ||
-      event.type() == event_type_names::kChange) {
-    user_has_edited_the_field_ = true;
+      event.type() == event_type_names::kChange ||
+      event.type() == event_type_names::kKeydown) {
+    SetUserHasEditedTheField();
   }
 
   if (IsDisabledFormControl()) {
@@ -1299,8 +1310,9 @@ String HTMLSelectElement::ItemText(const Element& element) const {
   else if (auto* option = DynamicTo<HTMLOptionElement>(element))
     item_string = option->TextIndentedToRespectGroupLabel();
 
-  if (GetLayoutObject() && GetLayoutObject()->Style())
-    GetLayoutObject()->Style()->ApplyTextTransform(&item_string);
+  if (GetLayoutObject() && GetLayoutObject()->Style()) {
+    return GetLayoutObject()->Style()->ApplyTextTransform(item_string);
+  }
   return item_string;
 }
 
@@ -1437,7 +1449,7 @@ void HTMLSelectElement::ResetTypeAheadSessionForTesting() {
 void HTMLSelectElement::CloneNonAttributePropertiesFrom(const Element& source,
                                                         NodeCloningData& data) {
   const auto& source_element = static_cast<const HTMLSelectElement&>(source);
-  user_has_edited_the_field_ = source_element.user_has_edited_the_field_;
+  interacted_state_ = source_element.interacted_state_;
   HTMLFormControlElement::CloneNonAttributePropertiesFrom(source, data);
 }
 
@@ -1459,7 +1471,7 @@ const ComputedStyle* HTMLSelectElement::OptionStyle() const {
 }
 
 // Show the option list for this select element.
-// https://github.com/whatwg/html/pull/9754
+// https://html.spec.whatwg.org/multipage/input.html#dom-select-showpicker
 void HTMLSelectElement::showPicker(ExceptionState& exception_state) {
   Document& document = GetDocument();
   LocalFrame* frame = document.GetFrame();
@@ -1485,7 +1497,75 @@ void HTMLSelectElement::showPicker(ExceptionState& exception_state) {
     return;
   }
 
+  document.UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*this) ||
+      !GetLayoutBox()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "showPicker() requires the select is rendered.");
+    return;
+  }
+
   select_type_->ShowPicker();
+}
+
+bool HTMLSelectElement::HandleInvokeInternal(HTMLElement& invoker,
+                                             AtomicString& action) {
+  if (HTMLElement::HandleInvokeInternal(invoker, action)) {
+    return true;
+  }
+
+  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
+    return false;
+  }
+
+  // Step 3. If action is an ASCII case-insensitive match for showPicker ...
+  // Early return instead of doing this in step 3.
+  if (!EqualIgnoringASCIICase(action, keywords::kShowPicker)) {
+    return false;
+  }
+
+  // Step 1. If this is not mutable, then return.
+  if (IsDisabledFormControl()) {
+    return false;
+  }
+
+  // Step 2. If this's relevant settings object's origin is not same origin with
+  // this's relevant settings object's top-level origin, [...], then return.
+  Document& document = GetDocument();
+  LocalFrame* frame = document.GetFrame();
+  if (frame && !frame->IsSameOrigin()) {
+    String message = "Select cannot be invoked from cross-origin iframe.";
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kJavaScript,
+        mojom::ConsoleMessageLevel::kWarning, message));
+    return false;
+  }
+
+  // If this's relevant global object does not have transient
+  // activation, then return.
+  if (!LocalFrame::HasTransientUserActivation(frame)) {
+    String message = "Select cannot be invoked without a user gesture.";
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kJavaScript,
+        mojom::ConsoleMessageLevel::kWarning, message));
+    return false;
+  }
+
+  document.UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
+  if (DisplayLockUtilities::LockedAncestorPreventingPaint(*this) ||
+      !GetLayoutBox()) {
+    String message = "Select cannot be invoked when not being rendered.";
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kJavaScript,
+        mojom::ConsoleMessageLevel::kWarning, message));
+    return false;
+  }
+
+  // Step 3. ... show the picker, if applicable, for this.
+  select_type_->ShowPicker();
+
+  return true;
 }
 
 }  // namespace blink

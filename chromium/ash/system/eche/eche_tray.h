@@ -10,7 +10,6 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/session/session_observer.h"
-#include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/shelf/shelf_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/system/eche/eche_icon_loading_indicator_view.h"
@@ -24,10 +23,15 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
+#include "ui/display/display_observer.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/button/button.h"
 #include "url/gurl.h"
+
+namespace display {
+enum class TabletState;
+}  // namespace display
 
 namespace views {
 
@@ -55,7 +59,6 @@ namespace ash {
 
 class AshWebView;
 class PhoneHubTray;
-class TabletModeController;
 class TrayBubbleView;
 class TrayBubbleWrapper;
 class SessionControllerImpl;
@@ -70,7 +73,7 @@ class ASH_EXPORT EcheTray
       public ScreenLayoutObserver,
       public ShelfObserver,
       public SystemTrayObserver,
-      public TabletModeObserver,
+      public display::DisplayObserver,
       public KeyboardControllerObserver,
       public ShellObserver,
       public eche_app::EcheConnectionStatusHandler::Observer {
@@ -285,7 +288,7 @@ class ASH_EXPORT EcheTray
     void OnKeyEvent(ui::KeyEvent* event) override;
 
    private:
-    const raw_ptr<EcheTray, ExperimentalAsh> eche_tray_;
+    const raw_ptr<EcheTray> eche_tray_;
   };
 
   // Calculates and returns the size of the Exo bubble based on the screen size
@@ -316,13 +319,15 @@ class ASH_EXPORT EcheTray
   // ShelfObserver:
   void OnAutoHideStateChanged(ShelfAutoHideState new_state) override;
 
-  // TabletModeObserver:
-  void OnTabletModeStarted() override;
-  void OnTabletModeEnded() override;
+  // display::DisplayObserver:
+  void OnDisplayTabletStateChanged(display::TabletState state) override;
 
   // ShellObserver:
   void OnShelfAlignmentChanged(aura::Window* root_window,
                                ShelfAlignment old_alignment) override;
+
+  // Called when the display tablet state is changed to kInTabletMode.
+  void OnTabletModeStarted();
 
   // Processes the accelerator keys and returns true if the accelerator was
   // processed completely in this method and no further processing is needed.
@@ -344,14 +349,14 @@ class ASH_EXPORT EcheTray
   GURL url_;
 
   // Icon of the tray. Unowned.
-  const raw_ptr<views::ImageView, ExperimentalAsh> icon_;
+  const raw_ptr<views::ImageView> icon_;
 
   // The bubble that appears after clicking the tray button.
   std::unique_ptr<TrayBubbleWrapper> bubble_;
 
   // The webview shown in the bubble that contains the Eche SWA.
   // owned by `bubble_`
-  raw_ptr<AshWebView, ExperimentalAsh> web_view_ = nullptr;
+  raw_ptr<AshWebView> web_view_ = nullptr;
 
   // Webview used to create a prewarming channel, before we have a video to
   // attach to.
@@ -361,7 +366,7 @@ class ASH_EXPORT EcheTray
   bool has_reported_initializer_result_ = false;
   bool has_retried_initializer_ = false;
 
-  raw_ptr<eche_app::EcheConnectionStatusHandler, ExperimentalAsh>
+  raw_ptr<eche_app::EcheConnectionStatusHandler>
       eche_connection_status_handler_ = nullptr;
 
   GracefulCloseCallback graceful_close_callback_;
@@ -371,16 +376,15 @@ class ASH_EXPORT EcheTray
   // The unload timer to force close EcheTray in case unload error.
   std::unique_ptr<base::DelayTimer> unload_timer_;
 
-  raw_ptr<views::View, DanglingUntriaged | ExperimentalAsh> header_view_ =
-      nullptr;
-  raw_ptr<views::Button, ExperimentalAsh> close_button_ = nullptr;
-  raw_ptr<views::Button, ExperimentalAsh> minimize_button_ = nullptr;
-  raw_ptr<views::Button, ExperimentalAsh> arrow_back_button_ = nullptr;
+  raw_ptr<views::View, DanglingUntriaged> header_view_ = nullptr;
+  raw_ptr<views::Button> close_button_ = nullptr;
+  raw_ptr<views::Button> minimize_button_ = nullptr;
+  raw_ptr<views::Button> arrow_back_button_ = nullptr;
   std::unique_ptr<EventInterceptor> event_interceptor_;
 
   // The time a stream is initializing. Used to record the elapsed time from
   // when the stream is initializing to when the stream is closed by user.
-  absl::optional<base::TimeTicks> init_stream_timestamp_;
+  std::optional<base::TimeTicks> init_stream_timestamp_;
 
   // The orientation of the stream (portrait vs landscape). The default
   // orientation is portrait.
@@ -393,12 +397,11 @@ class ASH_EXPORT EcheTray
   base::ScopedObservation<SessionControllerImpl, SessionObserver>
       observed_session_{this};
   base::ScopedObservation<Shelf, ShelfObserver> shelf_observation_{this};
-  base::ScopedObservation<TabletModeController, TabletModeObserver>
-      tablet_mode_observation_{this};
   base::ScopedObservation<Shell, ShellObserver> shell_observer_{this};
   base::ScopedObservation<keyboard::KeyboardUIController,
                           KeyboardControllerObserver>
       keyboard_observation_{this};
+  display::ScopedDisplayObserver display_observer_{this};
 
   base::WeakPtrFactory<EcheTray> weak_factory_{this};
 };

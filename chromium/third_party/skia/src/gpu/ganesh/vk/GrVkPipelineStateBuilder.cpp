@@ -60,10 +60,6 @@ const GrCaps* GrVkPipelineStateBuilder::caps() const {
     return fGpu->caps();
 }
 
-SkSL::Compiler* GrVkPipelineStateBuilder::shaderCompiler() const {
-    return fGpu->shaderCompiler();
-}
-
 void GrVkPipelineStateBuilder::finalizeFragmentSecondaryColor(GrShaderVar& outputColor) {
     outputColor.addLayoutQualifier("location = 0, index = 1");
 }
@@ -79,7 +75,7 @@ bool GrVkPipelineStateBuilder::createVkShaderModule(VkShaderStageFlagBits stage,
                                  stageInfo, settings, outSPIRV, outInterface)) {
         return false;
     }
-    if (outInterface->fUseFlipRTUniform) {
+    if (outInterface->fRTFlipUniform != SkSL::Program::Interface::kRTFlip_None) {
         this->addRTFlipUniform(SKSL_RTFLIP_NAME);
     }
     return true;
@@ -94,7 +90,7 @@ bool GrVkPipelineStateBuilder::installVkShaderModule(VkShaderStageFlagBits stage
     if (!GrInstallVkShaderModule(fGpu, spirv, stage, shaderModule, stageInfo)) {
         return false;
     }
-    if (interface.fUseFlipRTUniform) {
+    if (interface.fRTFlipUniform != SkSL::Program::Interface::kRTFlip_None) {
         this->addRTFlipUniform(SKSL_RTFLIP_NAME);
     }
     return true;

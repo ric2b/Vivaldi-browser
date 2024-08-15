@@ -12,7 +12,7 @@ ommodate this, and Python cleanup, we handle Python in two stages:
    fix-ups.
 
 ## Software bootstrapped
-  * Python 2 and 3 (https://www.python.org/)
+  * Python 3 (https://www.python.org/)
   * Git for Windows (https://git-for-windows.github.io/)
 
 ## Mechanism
@@ -60,11 +60,11 @@ than the rest of this README.
 After any modification to this script set, a test sequence should be run on a
 Windows bot.
 
-The post-processing will regenerate "python.bat" and "python3.bat" to point to
-the current Python instance. Any previous Python installations will stick
-around, but new invocations will use the new instance. Old installations will
-die off either due to processes terminating or systems restarting. When this
-happens, they will be cleaned up by the post-processing script.
+The post-processing will regenerate "python3.bat" to point to the current Python
+instance. Any previous Python installations will stick around, but new
+invocations will use the new instance. Old installations will die off either due
+to processes terminating or systems restarting. When this happens, they will be
+cleaned up by the post-processing script.
 
 Testing
 =======
@@ -76,9 +76,6 @@ they are working:
 :: Assert that `gclient` invocation will update (and do the update).
 gclient version
 
-:: Assert that Python fundamentally works.
-python -c "import Queue; print dir(Queue)"
-
 :: Assert that Python 3 fundamentally works.
 python3 -c "import queue; print(dir(queue))"
 
@@ -88,8 +85,6 @@ git map-branches
 :: Assert that `git bash` works.
 git bash
 
-## (Within `git bash`) assert that Python fundamentally works.
-python -c "import Queue; print dir(Queue)"
 ## (Within `git bash`) assert that Python 3 fundamentally works.
 python3 -c "import queue; print(dir(queue))"
 ## (Within `git bash`) assert that Python scripts work.
@@ -102,12 +97,9 @@ Run this sequence through the following upgrade/downgrade procedures:
   - Clean `depot_tools` via: `git clean -x -f -d .`
   - Run through test steps.
   - Test upgrade to bleeding edge (if it differs).
-    - Run `python.bat` in another shell, keep it open
     - Run `python3.bat` in another shell, keep it open
     - Add `.bleeding_edge` to `depot_tools` root.
     - Run through test steps.
-    - In the old `python.bat` shell, run `import Queue`, confirm that it
-      works.
     - In the old `python3.bat` shell, run `import queue`, confirm that it
       works.
     - Close the Python shell, run `gclient version`, ensure that old directory
@@ -117,12 +109,9 @@ Run this sequence through the following upgrade/downgrade procedures:
   - Add `.bleeding_edge` to `depot_tools` root.
   - Run through test steps.
   - Test downgrade to default (if it differs).
-    - Run `python.bat` in another shell, keep it open
     - Run `python3.bat` in another shell, keep it open
     - Delete `.bleeding_edge` from `depot_tools` root.
     - Run through test steps.
-    - In the old `python.bat` shell, run `import Queue`, confirm that it
-      works.
     - In the old `python3.bat` shell, run `import queue`, confirm that it
       works.
     - Close the Python shell, run `gclient version`, ensure that old directory
@@ -130,12 +119,9 @@ Run this sequence through the following upgrade/downgrade procedures:
 * Warm bleeding edge upgrade.
   - Clean `depot_tools` via: `git clean -x -f -d .`
   - Run `gclient version` to load defaults.
-  - Run `python.bat` in another shell, keep it open
   - Run `python3.bat` in another shell, keep it open
   - Add `.bleeding_edge` to `depot_tools` root.
   - Run through test steps.
-  - In the old `python.bat` shell, run `import Queue`, confirm that it
-    works.
   - In the old `python3.bat` shell, run `import queue`, confirm that it
     works.
   - Close the Python shell, run `gclient version`, ensure that old directory is

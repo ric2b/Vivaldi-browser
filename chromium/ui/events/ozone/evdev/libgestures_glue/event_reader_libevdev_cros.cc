@@ -148,11 +148,20 @@ void EventReaderLibevdevCros::ApplyDeviceSettings(
 }
 
 void EventReaderLibevdevCros::ReceivedKeyboardInput(uint64_t key) {
-  if (!IsSuspectedImposter() || !IsValidKeyboardKeyPress(key)) {
+  if (!IsSuspectedKeyboardImposter() || !IsValidKeyboardKeyPress(key)) {
     return;
   }
 
-  SetSuspectedImposter(false);
+  SetSuspectedKeyboardImposter(false);
+  received_valid_input_callback_.Run(this);
+}
+
+void EventReaderLibevdevCros::ReceivedMouseInput(int rel_value) {
+  if (!IsSuspectedMouseImposter() || rel_value == 0) {
+    return;
+  }
+
+  SetSuspectedMouseImposter(false);
   received_valid_input_callback_.Run(this);
 }
 
@@ -160,6 +169,8 @@ void EventReaderLibevdevCros::SetReceivedValidInputCallback(
     ReceivedValidInputCallback callback) {
   delegate_->SetReceivedValidKeyboardInputCallback(base::BindRepeating(
       &EventReaderLibevdevCros::ReceivedKeyboardInput, base::Unretained(this)));
+  delegate_->SetReceivedValidMouseInputCallback(base::BindRepeating(
+      &EventReaderLibevdevCros::ReceivedMouseInput, base::Unretained(this)));
   received_valid_input_callback_ = std::move(callback);
 }
 

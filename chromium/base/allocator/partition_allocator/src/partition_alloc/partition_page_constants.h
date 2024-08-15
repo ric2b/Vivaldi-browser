@@ -5,9 +5,9 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_PAGE_CONSTANTS_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_SRC_PARTITION_ALLOC_PARTITION_PAGE_CONSTANTS_H_
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_constants.h"
 
 namespace partition_alloc::internal {
 
@@ -16,7 +16,7 @@ namespace partition_alloc::internal {
 // (1 << 12 or 1 << 14), as checked in PartitionRoot::Init(). And
 // PartitionPageSize() is 4 times the OS page size.
 static constexpr size_t kMaxSlotsPerSlotSpan = 4 * (1 << 14) / kSmallestBucket;
-#elif BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64)
+#elif (BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)) && defined(ARCH_CPU_ARM64)
 // System page size can be 4, 16, or 64 kiB on Linux on arm64. 64 kiB is
 // currently (kMaxSlotsPerSlotSpanBits == 13) not supported by the code,
 // so we use the 16 kiB maximum (64 kiB will crash).

@@ -3,7 +3,7 @@
 #import "ios/ui/settings/sync/vivaldi_sync_login_view_controller.h"
 
 #import "base/apple/foundation_util.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"

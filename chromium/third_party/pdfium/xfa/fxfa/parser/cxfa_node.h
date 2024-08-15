@@ -112,6 +112,11 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
     UNOWNED_PTR_EXCLUSION void* default_value;  // POD type.
   };
 
+  struct BoolScriptResult {
+    XFA_EventError xfa_event_result;
+    bool script_result;
+  };
+
   // Node is created from cppgc heap.
   static CXFA_Node* Create(CXFA_Document* doc,
                            XFA_Element element,
@@ -301,10 +306,9 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   XFA_EventError ExecuteScript(CXFA_FFDocView* pDocView,
                                CXFA_Script* script,
                                CXFA_EventParam* pEventParam);
-  std::pair<XFA_EventError, bool> ExecuteBoolScript(
-      CXFA_FFDocView* pDocView,
-      CXFA_Script* script,
-      CXFA_EventParam* pEventParam);
+  BoolScriptResult ExecuteBoolScript(CXFA_FFDocView* pDocView,
+                                     CXFA_Script* script,
+                                     CXFA_EventParam* pEventParam);
 
   CXFA_Node* GetUIChildNode();
 
@@ -531,9 +535,9 @@ class CXFA_Node : public CXFA_Object, public GCedTreeNodeMixin<CXFA_Node> {
   Mask<XFA_NodeFlag> m_uNodeFlags = XFA_NodeFlag::kNone;
   uint32_t m_dwNameHash = 0;
   cppgc::Member<CXFA_Node> m_pAuxNode;
-  std::vector<cppgc::Member<CXFA_Node>> binding_nodes_;
   cppgc::Member<CXFA_WidgetLayoutData> m_pLayoutData;
   cppgc::Member<CXFA_Ui> ui_;
+  std::vector<cppgc::Member<CXFA_Node>> binding_nodes_;
 };
 
 #endif  // XFA_FXFA_PARSER_CXFA_NODE_H_

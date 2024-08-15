@@ -125,7 +125,7 @@ def BuildChromeTargetASAN(robo_configuration, target, platform, architecture):
     architecture: arch to build it for (e.g., "x64").
   """
   robo_configuration.chdir_to_chrome_src()
-  if robo_configuration.Call(["ninja", "-j500", "-C",
+  if robo_configuration.Call(["autoninja", "-C",
           robo_configuration.relative_asan_directory(), target]):
       raise Exception("Failed to build %s" % target)
 

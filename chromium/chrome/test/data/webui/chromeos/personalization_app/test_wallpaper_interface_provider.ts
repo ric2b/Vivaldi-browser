@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CurrentAttribution, CurrentWallpaper, DefaultImageSymbol, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, kDefaultImageSymbol, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperSearchThumbnail, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
+import {CurrentAttribution, CurrentWallpaper, DefaultImageSymbol, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, kDefaultImageSymbol, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
@@ -38,6 +38,7 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
       'isInTabletMode',
       'confirmPreviewWallpaper',
       'cancelPreviewWallpaper',
+      'shouldShowTimeOfDayWallpaperDialog',
     ]);
 
     /**
@@ -155,25 +156,6 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
 
     this.collectionId = this.collections_![0]!.id;
     this.timeOfDayCollectionId = this.collections_![3]!.id;
-
-    this.seaPenImageThumbnails = [
-      {
-        id: BigInt(1),
-        url: {url: 'https://images.googleusercontent.com/1'},
-      },
-      {
-        id: BigInt(2),
-        url: {url: 'https://images.googleusercontent.com/2'},
-      },
-      {
-        id: BigInt(3),
-        url: {url: 'https://images.googleusercontent.com/3'},
-      },
-      {
-        id: BigInt(4),
-        url: {url: 'https://images.googleusercontent.com/4'},
-      },
-    ];
   }
 
   private collections_: WallpaperCollection[]|null;
@@ -200,7 +182,6 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
   collectionId: string;
   setDailyRefreshCollectionIdResponse = {success: false};
   timeOfDayCollectionId: string;
-  seaPenImageThumbnails: WallpaperSearchThumbnail[];
   selectWallpaperResponse = true;
   selectGooglePhotosPhotoResponse = true;
   selectGooglePhotosAlbumResponse = true;
@@ -208,6 +189,7 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
   selectLocalImageResponse = true;
   updateDailyRefreshWallpaperResponse = true;
   isInTabletModeResponse = true;
+  shouldShowTimeOfDayWallpaperDialogResponse = true;
   wallpaperObserverUpdateTimeout = 0;
   wallpaperObserverRemote: WallpaperObserverInterface|null = null;
 
@@ -364,6 +346,12 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
 
   cancelPreviewWallpaper() {
     this.methodCalled('cancelPreviewWallpaper');
+  }
+
+  shouldShowTimeOfDayWallpaperDialog() {
+    this.methodCalled('shouldShowTimeOfDayWallpaperDialog');
+    return Promise.resolve(
+        {shouldShowDialog: this.shouldShowTimeOfDayWallpaperDialogResponse});
   }
 
   setCollections(collections: WallpaperCollection[]) {

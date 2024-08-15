@@ -90,14 +90,15 @@ base::span<const uint8_t> MakePixelSpan(const SkBitmap& bitmap) {
                          bitmap.computeByteSize());
 }
 
-void DeleteSharedImage(scoped_refptr<RasterContextProvider> context_provider,
-                       gpu::Mailbox mailbox,
-                       const gpu::SyncToken& sync_token,
-                       bool is_lost) {
+void DeleteSharedImage(
+    scoped_refptr<RasterContextProvider> context_provider,
+    scoped_refptr<gpu::ClientSharedImage> client_shared_image,
+    const gpu::SyncToken& sync_token,
+    bool is_lost) {
   DCHECK(context_provider);
   gpu::SharedImageInterface* sii = context_provider->SharedImageInterface();
   DCHECK(sii);
-  sii->DestroySharedImage(sync_token, mailbox);
+  sii->DestroySharedImage(sync_token, std::move(client_shared_image));
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -508,19 +509,18 @@ class SkiaReadbackPixelTest : public cc::PixelTest {
     gpu::SharedImageInterface* sii =
         child_context_provider_->SharedImageInterface();
     DCHECK(sii);
-    gpu::Mailbox mailbox =
-        sii->CreateSharedImage(format, size, gfx::ColorSpace(),
-                               kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-                               gpu::SHARED_IMAGE_USAGE_DISPLAY_READ,
-                               "TestPixels", pixels)
-            ->mailbox();
+    auto client_shared_image = sii->CreateSharedImage(
+        format, size, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestPixels",
+        pixels);
     gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
 
     TransferableResource gl_resource = TransferableResource::MakeGpu(
-        mailbox, GL_TEXTURE_2D, sync_token, size, format,
+        client_shared_image, GL_TEXTURE_2D, sync_token, size, format,
         /*is_overlay_candidate=*/false);
     auto release_callback =
-        base::BindOnce(&DeleteSharedImage, child_context_provider_, mailbox);
+        base::BindOnce(&DeleteSharedImage, child_context_provider_,
+                       std::move(client_shared_image));
     return child_resource_provider_->ImportResource(
         gl_resource, std::move(release_callback));
   }
@@ -837,6 +837,9 @@ TEST_P(SkiaReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
       use_multiplanar_si() ? 1 : CopyOutputResult::kNV12MaxPlanes;
 
   std::array<gpu::MailboxHolder, CopyOutputResult::kMaxPlanes> mailboxes;
+  std::array<scoped_refptr<gpu::ClientSharedImage>,
+             CopyOutputResult::kMaxPlanes>
+      shared_images;
   std::array<std::vector<uint8_t>, CopyOutputResult::kNV12MaxPlanes> pixels;
   SkPixmap pixmaps[SkYUVAInfo::kMaxPlanes] = {};
   for (size_t i = 0; i < CopyOutputResult::kNV12MaxPlanes; ++i) {
@@ -859,12 +862,13 @@ TEST_P(SkiaReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
                  pixels[i].data(), row_bytes);
 
     if (!use_multiplanar_si() || i == 0) {
-      mailboxes[i].mailbox = sii->CreateSharedImage(
+      shared_images[i] = sii->CreateSharedImage(
           format, plane_size, gfx::ColorSpace::CreateREC709(),
           kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
           gpu::SHARED_IMAGE_USAGE_DISPLAY_READ, "TestLabels",
           gpu::kNullSurfaceHandle);
-      DCHECK(!mailboxes[i].mailbox.IsZero());
+      DCHECK(shared_images[i]);
+      mailboxes[i].mailbox = shared_images[i]->mailbox();
     }
 
     // Populate the data. Note that this is done on the GPU main thread, so it
@@ -932,9 +936,8 @@ TEST_P(SkiaReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
                      chroma_planes);
 
   for (size_t i = 0; i < num_mailboxes; ++i) {
-    sii->DestroySharedImage(
-        result->GetTextureResult()->mailbox_holders[i].sync_token,
-        result->GetTextureResult()->mailbox_holders[i].mailbox);
+    sii->DestroySharedImage(mailboxes[i].sync_token,
+                            std::move(shared_images[i]));
   }
 
   // Allocate new bitmap & populate it with Y & UV data.

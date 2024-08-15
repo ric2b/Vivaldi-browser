@@ -90,7 +90,6 @@ UseCounterMetricsRecorder::GetAllowedUkmFeatures() {
           WebFeature::kV8MediaCapabilities_DecodingInfo_Method,
           WebFeature::kOpenerNavigationDownloadCrossOrigin,
           WebFeature::kLinkRelPrerender,
-          WebFeature::kAdClickNavigation,
           WebFeature::kV8HTMLVideoElement_RequestPictureInPicture_Method,
           WebFeature::kMediaCapabilitiesDecodingInfoWithKeySystemConfig,
           WebFeature::kTextFragmentAnchor,
@@ -270,7 +269,7 @@ UseCounterMetricsRecorder::GetAllowedUkmFeatures() {
           WebFeature::kChromeLoadTimesWasNpnNegotiated,
           WebFeature::kGamepadButtons,
           WebFeature::kWebNfcNdefReaderScan,
-          WebFeature::kWakeLockAcquireScreenLockWithoutActivation,
+          WebFeature::kWakeLockAcquireScreenLockWithoutStickyActivation,
           WebFeature::kDataUrlInSvgUse,
           WebFeature::kExecutedNonTrivialJavaScriptURL,
           WebFeature::kV8DeprecatedStorageQuota_QueryUsageAndQuota_Method,
@@ -338,6 +337,31 @@ UseCounterMetricsRecorder::GetAllowedUkmFeatures() {
               kStorageAccessAPI_requestStorageAccess_BeyondCookies_locks,
           WebFeature::
               kStorageAccessAPI_requestStorageAccess_BeyondCookies_locks_Use,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_caches,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_caches_Use,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_getDirectory,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_getDirectory_Use,
+          WebFeature::kAdClickMainFrameNavigation,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_estimate,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_estimate_Use,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_createObjectURL,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_createObjectURL_Use,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_revokeObjectURL,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_revokeObjectURL_Use,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_BroadcastChannel,
+          WebFeature::
+              kStorageAccessAPI_requestStorageAccess_BeyondCookies_BroadcastChannel_Use,
           WebFeature::kThirdPartyCookieDeprecation_AllowByExplicitSetting,
           WebFeature::kThirdPartyCookieDeprecation_AllowByGlobalSetting,
           WebFeature::kThirdPartyCookieDeprecation_AllowBy3PCDMetadata,
@@ -345,6 +369,12 @@ UseCounterMetricsRecorder::GetAllowedUkmFeatures() {
           WebFeature::kThirdPartyCookieDeprecation_AllowBy3PCDHeuristics,
           WebFeature::kThirdPartyCookieDeprecation_AllowByStorageAccess,
           WebFeature::kThirdPartyCookieDeprecation_AllowByTopLevelStorageAccess,
+          WebFeature::kAutoSpeculationRulesOptedOut,
+          WebFeature::kOverrideFlashEmbedwithHTML,
+          WebFeature::kElementRequestPointerLock,
+          WebFeature::kKeyboardApiLock,
+          WebFeature::kLCPImageWasLazy,
+          WebFeature::kUserFeatureNgOptimizedImage,
       }));
   return *opt_in_features;
 }

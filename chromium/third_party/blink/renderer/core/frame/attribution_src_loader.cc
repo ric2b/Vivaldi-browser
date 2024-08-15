@@ -71,7 +71,6 @@
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
-#include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -131,6 +130,13 @@ Vector<KURL> ParseAttributionSrcUrls(AttributionSrcLoader& loader,
   }
 
   return urls;
+}
+
+bool KeepaliveResponsesHandledInBrowser() {
+  return base::FeatureList::IsEnabled(
+             blink::features::kKeepAliveInBrowserMigration) &&
+         base::FeatureList::IsEnabled(
+             blink::features::kAttributionReportingInBrowserMigration);
 }
 
 }  // namespace
@@ -297,7 +303,9 @@ class AttributionSrcLoader::ResourceClient
   const SourceType source_type_;
 
   // Remote used for registering responses with the browser-process.
-  GC_PLUGIN_IGNORE("https://crbug.com/1381979")
+  // Note that there's no check applied for `SharedRemote`, and it should be
+  // memory safe as long as `SharedRemote::set_disconnect_handler` is not
+  // installed. See https://crbug.com/1512895 for details.
   mojo::SharedRemote<mojom::blink::AttributionDataHost> data_host_;
 
   wtf_size_t num_registrations_ = 0;
@@ -433,17 +441,28 @@ bool AttributionSrcLoader::DoRegistration(
   mojo::SharedRemote<mojom::blink::AttributionDataHost> data_host;
   SourceType source_type;
 
-  if (attribution_src_token.has_value()) {
-    conversion_host->RegisterNavigationDataHost(
-        data_host.BindNewPipeAndPassReceiver(), *attribution_src_token);
-    source_type = SourceType::kNavigation;
+  if (KeepaliveResponsesHandledInBrowser()) {
+    // Since `attribution_src_loader` won't be responsible for handling the
+    // responses, there is no need to open a pipe. We still notify the browser
+    // of the number of expected background registrations tied to a navigation
+    // so that the navigation context be kept long enough (in the browser) for
+    // all background registrations to be processed.
+    if (attribution_src_token.has_value()) {
+      conversion_host->NotifyNavigationWithBackgroundRegistrationsWillStart(
+          *attribution_src_token,
+          /*expected_registrations=*/urls.size());
+    }
   } else {
-    conversion_host->RegisterDataHost(data_host.BindNewPipeAndPassReceiver(),
-                                      eligibility);
-    source_type = SourceType::kEvent;
+    if (attribution_src_token.has_value()) {
+      conversion_host->RegisterNavigationDataHost(
+          data_host.BindNewPipeAndPassReceiver(), *attribution_src_token);
+      source_type = SourceType::kNavigation;
+    } else {
+      conversion_host->RegisterDataHost(data_host.BindNewPipeAndPassReceiver(),
+                                        eligibility);
+      source_type = SourceType::kEvent;
+    }
   }
-
-  network::mojom::AttributionSupport support = GetSupport();
 
   for (const KURL& url : urls) {
     // TODO(apaseltiner): Respect the referrerpolicy attribute of the
@@ -470,14 +489,11 @@ bool AttributionSrcLoader::DoRegistration(
     params.MutableOptions().initiator_info.name =
         fetch_initiator_type_names::kAttributionsrc;
 
-    auto* client = MakeGarbageCollected<ResourceClient>(
-        this, eligibility, source_type, data_host, support);
-    // TODO(https://crbug.com/1374121): If this registration is
-    // `associated_with_navigation`, there is a risk that the navigation will
-    // complete before the resource fetch here is complete. In this case, the
-    // browser will mark the page as frozen. This will cause MojoURLLoaderClient
-    // to store the request and never dispatch it, causing ResponseReceived() to
-    // never be called.
+    auto* client =
+        KeepaliveResponsesHandledInBrowser()
+            ? nullptr
+            : MakeGarbageCollected<ResourceClient>(
+                  this, eligibility, source_type, data_host, GetSupport());
     RawResource::Fetch(params, local_frame_->DomWindow()->Fetcher(), client);
 
     RecordAttributionSrcRequestStatus(AttributionSrcRequestStatus::kRequested);
@@ -547,6 +563,19 @@ AttributionSrcLoader::ReportingOriginForUrlIfValid(
     UseCounter::Count(window, mojom::blink::WebFeature::kPrivacySandboxAdsAPIs);
   }
 
+  // The Attribution-Reporting-Support header is set on the request in the
+  // network service and the context is unavailable. This is an approximate
+  // proxy to when the header is set, and aligned with the counter for regular
+  // Attribution Reporting API that sets the Attribution-Reporting-Eligible
+  // header on the request.
+  if (RuntimeEnabledFeatures::AttributionReportingCrossAppWebEnabled(window) &&
+      base::FeatureList::IsEnabled(
+          network::features::kAttributionReportingCrossAppWeb)) {
+    UseCounter::Count(window,
+                      mojom::blink::WebFeature::
+                          kAttributionReportingCrossAppWebSupportHeader);
+  }
+
   return reporting_origin;
 }
 
@@ -602,6 +631,11 @@ bool AttributionSrcLoader::MaybeRegisterAttributionHeaders(
   // `AttributionSrcLoader::ResourceClient`.
   if (request.GetRequestContext() ==
       mojom::blink::RequestContextType::ATTRIBUTION_SRC) {
+    return false;
+  }
+
+  // Keepalive requests will be serviced by `KeepAliveAttributionRequestHelper`.
+  if (request.GetKeepalive() && KeepaliveResponsesHandledInBrowser()) {
     return false;
   }
 

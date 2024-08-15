@@ -63,9 +63,8 @@ class DistanceWeightedBlendTest : public testing::TestWithParam<BlockSize>,
     if (absl::StartsWith(test_case, "C/")) {
       base_func_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        DistanceWeightedBlendInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      DistanceWeightedBlendInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       DistanceWeightedBlendInit_NEON();
     } else {

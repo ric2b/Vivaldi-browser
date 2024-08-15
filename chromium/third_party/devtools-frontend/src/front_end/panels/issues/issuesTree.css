@@ -65,7 +65,7 @@
 
 .issue.selected,
 .issue.expanded.selected {
-  background-color: var(--sys-color-neutral-container);
+  background-color: var(--sys-color-surface2);
 
   &:focus {
     background-color: var(--sys-color-tonal-container);
@@ -126,7 +126,7 @@ p {
 
 .title {
   flex: 1;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--sys-color-on-surface);
   font-weight: normal;
   user-select: text;
@@ -181,8 +181,8 @@ devtools-icon.leading-issue-icon {
 }
 
 .message {
-  line-height: 20px;
-  font-size: 14px;
+  line-height: 18px;
+  font-size: 12px;
   color: var(--sys-color-token-subtle);
   margin-bottom: 4px;
   user-select: text;
@@ -212,7 +212,7 @@ devtools-icon.leading-issue-icon {
 }
 
 .link {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--sys-color-primary);
 }
 
@@ -247,12 +247,12 @@ devtools-icon.leading-issue-icon {
 /* We inherit all the styles from treeoutline, but these are simple text <li>, so we override some styles */
 .link-list li::before {
   content: none;
-  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .resolutions-list li::before {
   content: "→";
-  -webkit-mask-image: none;
+  mask-image: none;
   padding-right: 5px;
   position: relative;
   top: -1px;
@@ -282,60 +282,60 @@ ul > li.plain-enum::before {
 }
 
 .affected-resource-label {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--sys-color-on-surface);
   position: relative;
   cursor: pointer;
 }
 
 .affected-resource-cookie {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   border: 0;
   border-collapse: collapse;
 }
 
 .affected-resource-element {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--sys-color-primary);
   border: 0;
   border-collapse: collapse;
 }
 
 .affected-resource-row {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   border: 0;
   border-collapse: collapse;
   vertical-align: top;
 }
 
 .affected-resource-mixed-content {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   border: 0;
   border-collapse: collapse;
 }
 
 .affected-resource-heavy-ad {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   border: 0;
   border-collapse: collapse;
 }
 
 .affected-resource-request {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   border: 0;
   border-collapse: collapse;
 }
 
 .affected-resource-source {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--sys-color-primary);
   border: 0;
   border-collapse: collapse;
@@ -430,8 +430,8 @@ ul > li.plain-enum::before {
 }
 
 .affected-resource-directive {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 18px;
   border: 0;
   border-collapse: collapse;
 }

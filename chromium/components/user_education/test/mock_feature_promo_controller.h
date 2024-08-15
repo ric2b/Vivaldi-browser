@@ -8,6 +8,7 @@
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo_data.h"
 #include "components/user_education/common/feature_promo_specification.h"
 #include "components/user_education/common/feature_promo_storage_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -37,6 +38,10 @@ class MockFeaturePromoController : public FeaturePromoController {
               GetPromoStatus,
               (const base::Feature&),
               (const, override));
+  MOCK_METHOD(void,
+              RecordPromoNotShown,
+              (const char*, FeaturePromoResult::Failure),
+              (const, override));
   MOCK_METHOD(const base::Feature*,
               GetCurrentPromoFeature,
               (),
@@ -47,7 +52,7 @@ class MockFeaturePromoController : public FeaturePromoController {
               (const, override));
   MOCK_METHOD(bool,
               EndPromo,
-              (const base::Feature&, FeaturePromoCloseReason),
+              (const base::Feature&, EndFeaturePromoReason),
               (override));
   MOCK_METHOD(FeaturePromoHandle,
               CloseBubbleAndContinuePromo,
@@ -60,7 +65,7 @@ class MockFeaturePromoController : public FeaturePromoController {
   MOCK_METHOD(bool,
               HasPromoBeenDismissed,
               (const base::Feature& iph_feature,
-               FeaturePromoStorageService::CloseReason* close_reason),
+               FeaturePromoClosedReason* close_reason),
               (const, override));
 
   base::WeakPtr<FeaturePromoController> GetAsWeakPtr() override;

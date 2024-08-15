@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_page_handler.h"
+
 #include <cstddef>
 
 #include "base/functional/bind.h"
@@ -50,8 +51,7 @@ void CloudUploadPageHandler::OnMountResponse(
 }
 
 void CloudUploadPageHandler::GetDialogArgs(GetDialogArgsCallback callback) {
-  std::move(callback).Run(dialog_args_ ? dialog_args_.Clone()
-                                       : mojom::DialogArgs::New());
+  std::move(callback).Run(dialog_args_ ? dialog_args_.Clone() : nullptr);
 }
 
 void CloudUploadPageHandler::IsOfficeWebAppInstalled(

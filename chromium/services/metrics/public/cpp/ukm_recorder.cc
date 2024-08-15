@@ -14,7 +14,7 @@
 
 namespace ukm {
 
-BASE_FEATURE(kUkmFeature, "Ukm", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kUkmFeature, "Ukm", base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi - disable UKM
 
 BASE_FEATURE(kUkmReduceAddEntryIPC,
              "UkmReduceAddEntryIPC",
@@ -43,14 +43,6 @@ ukm::SourceId UkmRecorder::GetSourceIdForPaymentAppFromScope(
     const GURL& service_worker_scope) {
   return UkmRecorder::GetSourceIdFromScopeImpl(service_worker_scope,
                                                SourceIdType::PAYMENT_APP_ID);
-}
-
-// static
-ukm::SourceId UkmRecorder::GetSourceIdForWebApkManifestUrl(
-    base::PassKey<WebApkUkmRecorder>,
-    const GURL& manifest_url) {
-  return UkmRecorder::GetSourceIdFromScopeImpl(manifest_url,
-                                               SourceIdType::WEBAPK_ID);
 }
 
 // static
@@ -114,6 +106,20 @@ ukm::SourceId UkmRecorder::GetSourceIdFromScopeImpl(const GURL& scope_url,
       SourceIdObj::FromOtherId(GetNewSourceID(), type).ToInt64();
   UkmRecorder::Get()->UpdateSourceURL(source_id, scope_url);
   return source_id;
+}
+
+void UkmRecorder::NotifyStartShutdown() {
+  for (auto& observer : observers_) {
+    observer.OnStartingShutdown();
+  }
+}
+
+void UkmRecorder::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void UkmRecorder::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 }  // namespace ukm

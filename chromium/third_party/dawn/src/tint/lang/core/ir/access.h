@@ -44,6 +44,9 @@ class Access final : public Castable<Access, OperandInstruction<3, 1>> {
     /// The base offset in Operands() for the access indices
     static constexpr size_t kIndicesOperandOffset = 1;
 
+    /// Constructor (no results, no operands)
+    Access();
+
     /// Constructor
     /// @param result the result value
     /// @param object the accessor object
@@ -57,15 +60,23 @@ class Access final : public Castable<Access, OperandInstruction<3, 1>> {
     /// @returns the object used for the access
     Value* Object() { return operands_[kObjectOperandOffset]; }
 
+    /// @returns the object used for the access
+    const Value* Object() const { return operands_[kObjectOperandOffset]; }
+
     /// Adds the given index to the end of the access chain
     /// @param idx the index to add
     void AddIndex(Value* idx) { AddOperand(operands_.Length(), idx); }
 
     /// @returns the accessor indices
-    tint::Slice<Value*> Indices() { return operands_.Slice().Offset(kIndicesOperandOffset); }
+    tint::Slice<Value* const> Indices() { return operands_.Slice().Offset(kIndicesOperandOffset); }
+
+    /// @returns the accessor indices
+    tint::Slice<const Value* const> Indices() const {
+        return operands_.Slice().Offset(kIndicesOperandOffset);
+    }
 
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "access"; }
+    std::string FriendlyName() const override { return "access"; }
 };
 
 }  // namespace tint::core::ir

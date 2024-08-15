@@ -23,10 +23,13 @@ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
+import {DisplaySettingsProviderInterface, DisplaySettingsType} from '../mojom-webui/display_settings_provider.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
+import {GeolocationAccessLevel} from '../os_privacy_page/privacy_hub_geolocation_subpage.js';
 
 import {getTemplate} from './display_night_light.html.js';
+import {getDisplaySettingsProvider} from './display_settings_mojo_interface_provider.js';
 
 /**
  * The types of Night Light automatic schedule. The values of the enum values
@@ -100,19 +103,49 @@ export class SettingsDisplayNightLightElement extends
         ]),
       },
 
+      shouldShowGeolocationWarningText_: {
+        type: Boolean,
+        computed: 'computeShouldShowGeolocationWarningText_(' +
+            'prefs.ash.night_light.schedule_type.value, ' +
+            'prefs.ash.user.geolocation_access_level.value),',
+      },
+
+      shouldShowEnableGeolocationDialog_: {
+        type: Boolean,
+        value: false,
+      },
+
+      isInternalDisplay: Boolean,
+
+      /**
+       * Current status of night light setting.
+       */
+      currentNightLightStatus: Boolean,
+
+      /**
+       * Current selected night light schedule type.
+       */
+      currentScheduleType: NightLightScheduleType,
     };
   }
 
   static get observers() {
     return [
       'updateNightLightScheduleSettings_(prefs.ash.night_light.schedule_type.*,' +
-          ' prefs.ash.night_light.enabled.*)',
+          ' prefs.ash.night_light.enabled.*),',
     ];
   }
 
+  isInternalDisplay: boolean;
+  private displaySettingsProvider: DisplaySettingsProviderInterface =
+      getDisplaySettingsProvider();
   private nightLightScheduleSubLabel_: string;
   private scheduleTypesList_: ScheduleType[];
   private shouldOpenCustomScheduleCollapse_: boolean;
+  private shouldShowGeolocationDialog_: boolean;
+  private shouldShowGeolocationWarningText_: boolean;
+  private currentNightLightStatus: boolean;
+  private currentScheduleType: NightLightScheduleType;
 
   /**
    * Invoked when the status of Night Light or its schedule type are changed,
@@ -124,14 +157,59 @@ export class SettingsDisplayNightLightElement extends
     this.shouldOpenCustomScheduleCollapse_ =
         scheduleType === NightLightScheduleType.CUSTOM;
 
+    const nightLightStatus: boolean =
+        this.getPref('ash.night_light.enabled').value;
     if (scheduleType === NightLightScheduleType.SUNSET_TO_SUNRISE) {
-      const nightLightStatus = this.getPref('ash.night_light.enabled').value;
       this.nightLightScheduleSubLabel_ = nightLightStatus ?
           this.i18n('displayNightLightOffAtSunrise') :
           this.i18n('displayNightLightOnAtSunset');
     } else {
       this.nightLightScheduleSubLabel_ = '';
     }
+
+    // Records metrics when schedule type or night light status have changed. Do
+    // not record when the page just loads and the current value is still
+    // undefined.
+    if (this.currentScheduleType !== scheduleType &&
+        this.currentScheduleType !== undefined) {
+      this.recordNightLightSettingsMetrics(
+          DisplaySettingsType.kNightLightSchedule, this.isInternalDisplay);
+    }
+    if (this.currentNightLightStatus !== nightLightStatus &&
+        this.currentNightLightStatus !== undefined) {
+      this.recordNightLightSettingsMetrics(
+          DisplaySettingsType.kNightLight, this.isInternalDisplay);
+    }
+
+    // Updates current schedule type and night light status.
+    this.currentScheduleType = scheduleType;
+    this.currentNightLightStatus = nightLightStatus;
+  }
+
+  // Records metrics when users change the night light settings.
+  private recordNightLightSettingsMetrics(
+      displaySettingsType: DisplaySettingsType,
+      isInternalDisplay: boolean): void {
+    this.displaySettingsProvider.recordChangingDisplaySettings(
+        displaySettingsType, {isInternalDisplay});
+  }
+
+  private computeShouldShowGeolocationWarningText_(): boolean {
+    const scheduleType = this.prefs.ash.night_light.schedule_type.value;
+    const geolocationAccessLevel =
+        this.prefs.ash.user.geolocation_access_level.value;
+
+    return (
+        scheduleType === NightLightScheduleType.SUNSET_TO_SUNRISE &&
+        geolocationAccessLevel === GeolocationAccessLevel.DISALLOWED);
+  }
+
+  private openGeolocationDialog_(): void {
+    this.shouldShowGeolocationDialog_ = true;
+  }
+
+  private onGeolocationDialogClose_(): void {
+    this.shouldShowGeolocationDialog_ = false;
   }
 }
 

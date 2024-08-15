@@ -4,6 +4,8 @@
 
 #include "ash/style/radio_button_group.h"
 
+#include <utility>
+
 #include "ash/style/radio_button.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 
@@ -40,7 +42,7 @@ RadioButtonGroup::~RadioButtonGroup() = default;
 RadioButton* RadioButtonGroup::AddButton(RadioButton::PressedCallback callback,
                                          const std::u16string& label) {
   auto* button = AddChildView(std::make_unique<RadioButton>(
-      group_width_ - inside_border_insets_.width(), callback, label,
+      group_width_ - inside_border_insets_.width(), std::move(callback), label,
       icon_direction_, icon_type_, button_padding_, image_label_spacing_));
   button->set_delegate(this);
   buttons_.push_back(button);
@@ -51,7 +53,7 @@ void RadioButtonGroup::OnButtonSelected(OptionButtonBase* button) {
   if (!button->selected())
     return;
 
-  for (auto* b : buttons_) {
+  for (ash::OptionButtonBase* b : buttons_) {
     if (b != button)
       b->SetSelected(false);
   }

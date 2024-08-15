@@ -9,11 +9,12 @@
 #include <vector>
 
 #include "base/check.h"
-#include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
@@ -37,6 +38,7 @@ enum class FilterValuesError {
   kValueWrongType,
   kTooManyKeys,
   kKeyTooLong,
+  kKeyReserved,
   kListTooLong,
   kValueTooLong,
 };
@@ -110,6 +112,10 @@ base::expected<FilterValues, FilterValuesError> ParseFilterValuesFromJSON(
   filter_values.reserve(dict.size());
 
   for (auto [filter, value] : dict) {
+    if (base::StartsWith(filter, FilterConfig::kReservedKeyPrefix)) {
+      return base::unexpected(FilterValuesError::kKeyReserved);
+    }
+
     if (check_sizes && filter.size() > kMaxBytesPerFilterString) {
       return base::unexpected(FilterValuesError::kKeyTooLong);
     }
@@ -139,7 +145,7 @@ base::expected<FilterValues, FilterValuesError> ParseFilterValuesFromJSON(
         return base::unexpected(FilterValuesError::kValueTooLong);
       }
 
-      values.push_back(std::move(*string));
+      values.emplace_back(std::move(*string));
     }
 
     filter_values.emplace_back(filter, std::move(values));
@@ -150,7 +156,7 @@ base::expected<FilterValues, FilterValuesError> ParseFilterValuesFromJSON(
 
 base::Value::Dict FilterValuesToJson(const FilterValues& filter_values) {
   base::Value::Dict dict;
-  for (auto [key, values] : filter_values) {
+  for (const auto& [key, values] : filter_values) {
     base::Value::List list;
     for (const auto& value : values) {
       list.Append(value);
@@ -194,6 +200,8 @@ base::expected<FilterData, SourceRegistrationError> FilterData::FromJSON(
 
   const auto map_errors = [](FilterValuesError error) {
     switch (error) {
+      case FilterValuesError::kKeyReserved:
+        return SourceRegistrationError::kFilterDataKeyReserved;
       case FilterValuesError::kTooManyKeys:
         return SourceRegistrationError::kFilterDataTooManyKeys;
       case FilterValuesError::kKeyTooLong:
@@ -364,37 +372,48 @@ base::expected<FiltersDisjunction, TriggerRegistrationError> FiltersFromJSON(
     return FiltersDisjunction();
   }
 
+  const auto map_errors = [](FilterValuesError error) {
+    switch (error) {
+      case FilterValuesError::kValueWrongType:
+        return TriggerRegistrationError::kFiltersValueWrongType;
+      case FilterValuesError::kKeyReserved:
+        return TriggerRegistrationError::kFiltersUsingReservedKey;
+      case FilterValuesError::kListWrongType:
+        return TriggerRegistrationError::kFiltersListWrongType;
+      case FilterValuesError::kTooManyKeys:
+      case FilterValuesError::kKeyTooLong:
+      case FilterValuesError::kListTooLong:
+      case FilterValuesError::kValueTooLong:
+        NOTREACHED_NORETURN();
+    }
+  };
+
   FiltersDisjunction disjunction;
-  const auto append_if_valid = [&disjunction](base::Value& value)
-      -> base::expected<void, TriggerRegistrationError> {
+
+  using AppendIfValidResult = base::expected<void, TriggerRegistrationError>;
+
+  const auto append_if_valid = [&](base::Value& value) -> AppendIfValidResult {
     base::Value::Dict* dict = value.GetIfDict();
     if (!dict) {
       return base::unexpected(TriggerRegistrationError::kFiltersWrongType);
     }
 
     absl::optional<base::TimeDelta> lookback_window;
-    absl::optional<base::Value> lookback_window_value =
-        dict->Extract(FilterConfig::kLookbackWindowKey);
-    if (lookback_window_value.has_value()) {
-      if (lookback_window_value->is_int()) {
-        lookback_window = base::Seconds(lookback_window_value->GetInt());
+    if (absl::optional<base::Value> lookback_window_value =
+            dict->Extract(FilterConfig::kLookbackWindowKey)) {
+      if (absl::optional<int> int_val = lookback_window_value->GetIfInt()) {
+        lookback_window = base::Seconds(*int_val);
       } else {
         return base::unexpected(
             TriggerRegistrationError::kFiltersValueWrongType);
       }
     }
 
-    const auto map_errors = [](FilterValuesError error) {
-      if (error == FilterValuesError::kValueWrongType) {
-        return TriggerRegistrationError::kFiltersValueWrongType;
-      }
-      CHECK_EQ(FilterValuesError::kListWrongType, error);
-      return TriggerRegistrationError::kFiltersListWrongType;
-    };
     ASSIGN_OR_RETURN(
         auto filter_values,
         ParseFilterValuesFromJSON(std::move(*dict), /*check_sizes=*/false)
             .transform_error(map_errors));
+
     if (!filter_values.empty() || lookback_window.has_value()) {
       auto config =
           FilterConfig::Create(std::move(filter_values), lookback_window);
@@ -402,7 +421,7 @@ base::expected<FiltersDisjunction, TriggerRegistrationError> FiltersFromJSON(
         return base::unexpected(
             TriggerRegistrationError::kFiltersValueWrongType);
       }
-      disjunction.push_back(std::move(config.value()));
+      disjunction.emplace_back(std::move(*config));
     }
     return base::ok();
   };
@@ -415,6 +434,7 @@ base::expected<FiltersDisjunction, TriggerRegistrationError> FiltersFromJSON(
   } else {
     RETURN_IF_ERROR(append_if_valid(*input_value));
   }
+
   return disjunction;
 }
 

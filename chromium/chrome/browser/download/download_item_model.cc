@@ -78,6 +78,7 @@ using safe_browsing::DownloadFileType;
 using ReportThreatDetailsResult =
     safe_browsing::PingManager::ReportThreatDetailsResult;
 using TailoredVerdict = safe_browsing::ClientDownloadResponse::TailoredVerdict;
+using TailoredWarningType = DownloadUIModel::TailoredWarningType;
 
 namespace {
 
@@ -98,21 +99,21 @@ class DownloadItemModelData : public base::SupportsUserData::Data {
 
   // Whether the download should be displayed in the download shelf. True by
   // default.
-  bool should_show_in_shelf_;
+  bool should_show_in_shelf_ = true;
 
   // Whether the UI has been notified about this download.
-  bool was_ui_notified_;
+  bool was_ui_notified_ = false;
 
   // Whether the download should be opened in the browser vs. the system handler
   // for the file type.
-  absl::optional<bool> should_prefer_opening_in_browser_;
+  std::optional<bool> should_prefer_opening_in_browser_;
 
   // Danger level of the file determined based on the file type and whether
   // there was a user action associated with the download.
-  DownloadFileType::DangerLevel danger_level_;
+  DownloadFileType::DangerLevel danger_level_ = DownloadFileType::NOT_DANGEROUS;
 
   // Whether the download is currently being revived.
-  bool is_being_revived_;
+  bool is_being_revived_ = false;
 
   // Whether the safe browsing download warning was shown (and recorded) earlier
   // on the UI.
@@ -121,7 +122,7 @@ class DownloadItemModelData : public base::SupportsUserData::Data {
   // Tracks when an ephemeral warning was first displayed on the UI. Does not
   // persist on restart, though ephemeral warning downloads are canceled by
   // then as all in-progress downloads are.
-  absl::optional<base::Time> ephemeral_warning_ui_shown_time_;
+  std::optional<base::Time> ephemeral_warning_ui_shown_time_;
 
   // Was the UI actioned on. This defaults to true so that we don't show
   // extraneous items in the partial view the first time the bubble pops up
@@ -156,11 +157,7 @@ DownloadItemModelData* DownloadItemModelData::GetOrCreate(
   return data;
 }
 
-DownloadItemModelData::DownloadItemModelData()
-    : should_show_in_shelf_(true),
-      was_ui_notified_(false),
-      danger_level_(DownloadFileType::NOT_DANGEROUS),
-      is_being_revived_(false) {}
+DownloadItemModelData::DownloadItemModelData() = default;
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 bool ShouldSendDownloadReport(download::DownloadDangerType danger_type) {
@@ -185,12 +182,6 @@ void MaybeSendDownloadReport(const GURL& url,
                              bool did_proceed,
                              Profile* profile,
                              download::DownloadItem* download) {
-  // Dangerous download delete report is gated by the new trigger flag.
-  if (!base::FeatureList::IsEnabled(
-          safe_browsing::kSafeBrowsingCsbrrNewDownloadTrigger) &&
-      !did_proceed) {
-    return;
-  }
   // Only sends dangerous download report if :
   // 1. FULL_SAFE_BROWSING is enabled, and
   // 2. Download verdict is one of the dangerous types, and
@@ -205,7 +196,7 @@ void MaybeSendDownloadReport(const GURL& url,
           download,
           safe_browsing::ClientSafeBrowsingReportRequest::
               DANGEROUS_DOWNLOAD_WARNING,
-          did_proceed, /*show_download_in_folder=*/absl::nullopt);
+          did_proceed, /*show_download_in_folder=*/std::nullopt);
       DCHECK(is_successful);
     }
   }
@@ -374,6 +365,7 @@ bool DownloadItemModel::IsMalicious() const {
       [[fallthrough]];
     case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
@@ -500,15 +492,15 @@ void DownloadItemModel::SetWasUIWarningShown(bool was_ui_warning_shown) {
   data->was_ui_warning_shown_ = was_ui_warning_shown;
 }
 
-absl::optional<base::Time> DownloadItemModel::GetEphemeralWarningUiShownTime()
+std::optional<base::Time> DownloadItemModel::GetEphemeralWarningUiShownTime()
     const {
   const DownloadItemModelData* data = DownloadItemModelData::Get(download_);
   return data ? data->ephemeral_warning_ui_shown_time_
-              : absl::optional<base::Time>();
+              : std::optional<base::Time>();
 }
 
 void DownloadItemModel::SetEphemeralWarningUiShownTime(
-    absl::optional<base::Time> ephemeral_warning_ui_shown_time) {
+    std::optional<base::Time> ephemeral_warning_ui_shown_time) {
   DownloadItemModelData* data = DownloadItemModelData::GetOrCreate(download_);
   data->ephemeral_warning_ui_shown_time_ = ephemeral_warning_ui_shown_time;
 }
@@ -517,7 +509,7 @@ bool DownloadItemModel::ShouldPreferOpeningInBrowser() {
   const DownloadItemModelData* data =
       DownloadItemModelData::GetOrCreate(download_);
 #if !BUILDFLAG(IS_ANDROID)
-  if (!data->should_prefer_opening_in_browser_ && IsBubbleV2Enabled()) {
+  if (!data->should_prefer_opening_in_browser_) {
     base::FilePath path = GetTargetFilePath();
     std::string mime_type = GetMimeType();
     DetermineAndSetShouldPreferOpeningInBrowser(
@@ -824,13 +816,8 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
 #if BUILDFLAG(FULL_SAFE_BROWSING)
       CompleteSafeBrowsingScan();
 #endif
-      if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
-        LogDeepScanEvent(download_,
-                         safe_browsing::DeepScanEvent::kScanCanceled);
-      } else {
-        LogDeepScanEvent(download_,
-                         safe_browsing::DeepScanEvent::kPromptBypassed);
-      }
+      LogDeepScanEvent(download_,
+                       safe_browsing::DeepScanEvent::kPromptBypassed);
       [[fallthrough]];
     case DownloadCommands::KEEP:
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -856,6 +843,9 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
 #if BUILDFLAG(FULL_SAFE_BROWSING)
       MaybeSendDownloadReport(GetURL(), GetDangerType(), /*did_proceed=*/false,
                               profile(), download_);
+      if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
+        LogDeepScanEvent(download_, safe_browsing::DeepScanEvent::kScanDeleted);
+      }
       if (MaybeSubmitDownloadToFeedbackService(command, profile(), download_)) {
         // Skip Remove because it is handled by download feedback service.
         break;
@@ -895,7 +885,7 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       break;
     case DownloadCommands::DEEP_SCAN: {
       safe_browsing::DownloadProtectionService::UploadForConsumerDeepScanning(
-          download_, /*password=*/absl::nullopt);
+          download_, /*password=*/std::nullopt);
       break;
     }
     case DownloadCommands::CANCEL_DEEP_SCAN: {
@@ -906,6 +896,7 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       ChromeDownloadManagerDelegate* delegate =
           download_core_service->GetDownloadManagerDelegate();
       DCHECK(delegate);
+      LogDeepScanEvent(download_, safe_browsing::DeepScanEvent::kScanCanceled);
       delegate->CheckClientDownloadDone(
           download_->GetId(),
           safe_browsing::DownloadCheckResult::PROMPT_FOR_SCANNING);
@@ -915,29 +906,20 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
 }
 
 DownloadItemModel::BubbleUIInfo
-DownloadItemModel::GetBubbleUIInfoForTailoredWarning() const {
-  download::DownloadDangerType danger_type = GetDangerType();
-  TailoredVerdict tailored_verdict = safe_browsing::DownloadProtectionService::
-      GetDownloadProtectionTailoredVerdict(download_);
-
-  // Suspicious archives
-  if (danger_type == download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT &&
-      tailored_verdict.tailored_verdict_type() ==
-          TailoredVerdict::SUSPICIOUS_ARCHIVE) {
-    return DownloadUIModel::BubbleUIInfo::SuspiciousUiPattern(
-        l10n_util::GetStringUTF16(
-            IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_WARNING_ARCHIVE_MALWARE),
-        l10n_util::GetStringUTF16(
-            IDS_DOWNLOAD_BUBBLE_CONTINUE_SUSPICIOUS_FILE));
-  }
-
-  // Cookie theft
-  if (danger_type ==
-          download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE &&
-      tailored_verdict.tailored_verdict_type() ==
-          TailoredVerdict::COOKIE_THEFT) {
-    if (base::Contains(tailored_verdict.adjustments(),
-                       TailoredVerdict::ACCOUNT_INFO_STRING)) {
+DownloadItemModel::GetBubbleUIInfoForTailoredWarning(
+    TailoredWarningType tailored_warning_type) const {
+  switch (tailored_warning_type) {
+    case TailoredWarningType::kSuspiciousArchive:
+      return DownloadUIModel::BubbleUIInfo::SuspiciousUiPattern(
+          l10n_util::GetStringUTF16(
+              IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_WARNING_ARCHIVE_MALWARE),
+          l10n_util::GetStringUTF16(
+              IDS_DOWNLOAD_BUBBLE_CONTINUE_SUSPICIOUS_FILE));
+    case TailoredWarningType::kCookieTheft:
+      return DownloadUIModel::BubbleUIInfo::DangerousUiPattern(
+          l10n_util::GetStringUTF16(
+              IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_WARNING_COOKIE_THEFT));
+    case TailoredWarningType::kCookieTheftWithAccountInfo: {
       auto* identity_manager = IdentityManagerFactory::GetForProfile(profile());
       std::string email =
           identity_manager
@@ -954,43 +936,43 @@ DownloadItemModel::GetBubbleUIInfoForTailoredWarning() const {
                 IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_WARNING_COOKIE_THEFT_AND_ACCOUNT,
                 base::ASCIIToUTF16(email)));
       }
+      return DownloadUIModel::BubbleUIInfo::DangerousUiPattern(
+          l10n_util::GetStringUTF16(
+              IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_WARNING_COOKIE_THEFT));
     }
-    return DownloadUIModel::BubbleUIInfo::DangerousUiPattern(
-        l10n_util::GetStringUTF16(
-            IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_WARNING_COOKIE_THEFT));
+    case TailoredWarningType::kNoTailoredWarning: {
+      NOTREACHED();
+      return DownloadUIModel::BubbleUIInfo();
+    }
   }
-
-  NOTREACHED();
-  return DownloadUIModel::BubbleUIInfo();
 }
 
-bool DownloadItemModel::ShouldShowTailoredWarning() const {
-  if (!IsBubbleV2Enabled() ||
-      !base::FeatureList::IsEnabled(safe_browsing::kDownloadTailoredWarnings)) {
-    return false;
+TailoredWarningType DownloadItemModel::GetTailoredWarningType() const {
+  if (!base::FeatureList::IsEnabled(safe_browsing::kDownloadTailoredWarnings)) {
+    return TailoredWarningType::kNoTailoredWarning;
   }
-
-  static const struct ValidCombination {
-    download::DownloadDangerType danger_type;
-    TailoredVerdict::TailoredVerdictType tailored_verdict_type;
-  } kValidTailoredWarningCombinations[]{
-      {download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT,
-       TailoredVerdict::SUSPICIOUS_ARCHIVE},
-      {download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE,
-       TailoredVerdict::COOKIE_THEFT}};
 
   download::DownloadDangerType danger_type = GetDangerType();
   TailoredVerdict tailored_verdict = safe_browsing::DownloadProtectionService::
       GetDownloadProtectionTailoredVerdict(download_);
-  for (const auto& combination : kValidTailoredWarningCombinations) {
-    if (danger_type == combination.danger_type &&
-        tailored_verdict.tailored_verdict_type() ==
-            combination.tailored_verdict_type) {
-      return true;
-    }
+  if (danger_type == download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT &&
+      tailored_verdict.tailored_verdict_type() ==
+          TailoredVerdict::SUSPICIOUS_ARCHIVE) {
+    return TailoredWarningType::kSuspiciousArchive;
   }
 
-  return false;
+  if (danger_type ==
+          download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE &&
+      tailored_verdict.tailored_verdict_type() ==
+          TailoredVerdict::COOKIE_THEFT) {
+    if (base::Contains(tailored_verdict.adjustments(),
+                       TailoredVerdict::ACCOUNT_INFO_STRING)) {
+      return TailoredWarningType::kCookieTheftWithAccountInfo;
+    }
+    return TailoredWarningType::kCookieTheft;
+  }
+
+  return TailoredWarningType::kNoTailoredWarning;
 }
 
 bool DownloadItemModel::ShouldShowInBubble() const {
@@ -1030,10 +1012,6 @@ bool DownloadItemModel::ShouldShowInBubble() const {
 }
 
 bool DownloadItemModel::IsEphemeralWarning() const {
-  if (!IsBubbleV2Enabled()) {
-    return false;
-  }
-
   switch (GetInsecureDownloadStatus()) {
     case download::DownloadItem::InsecureDownloadStatus::BLOCK:
     case download::DownloadItem::InsecureDownloadStatus::WARN:
@@ -1065,6 +1043,7 @@ bool DownloadItemModel::IsEphemeralWarning() const {
     case download::DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
     case download::DOWNLOAD_DANGER_TYPE_MAX:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
@@ -1164,7 +1143,7 @@ void DownloadItemModel::DetermineAndSetShouldPreferOpeningInBrowser(
     return;
 
   if (!target_path.empty() &&
-      delegate->IsOpenInBrowserPreferreredForFile(target_path) &&
+      delegate->IsOpenInBrowserPreferredForFile(target_path) &&
       is_filetype_handled_safely) {
     SetShouldPreferOpeningInBrowser(true);
     return;

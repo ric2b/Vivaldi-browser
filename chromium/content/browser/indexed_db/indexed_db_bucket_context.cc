@@ -14,16 +14,19 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/rand_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/thread_pool.h"
 #include "base/trace_event/base_tracing.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
-#include "components/services/storage/filesystem_proxy_factory.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_database.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_factory.h"
 #include "components/services/storage/indexed_db/transactional_leveldb/transactional_leveldb_transaction.h"
+#include "components/services/storage/privileged/mojom/indexed_db_client_state_checker.mojom.h"
 #include "content/browser/indexed_db/file_stream_reader_to_data_pipe.h"
 #include "content/browser/indexed_db/indexed_db_active_blob_registry.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
@@ -31,8 +34,10 @@
 #include "content/browser/indexed_db/indexed_db_compaction_task.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_database.h"
+#include "content/browser/indexed_db/indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_operations.h"
+#include "content/browser/indexed_db/indexed_db_pending_connection.h"
 #include "content/browser/indexed_db/indexed_db_pre_close_task_queue.h"
 #include "content/browser/indexed_db/indexed_db_tombstone_sweeper.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
@@ -168,9 +173,9 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
             ReadCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-    auto reader = storage::FileStreamReader::CreateForIndexedDBDataItemReader(
-        file_task_runner_.get(), file_path_, storage::CreateFilesystemProxy(),
-        offset, expected_modification_time_);
+    auto reader = storage::FileStreamReader::CreateForLocalFile(
+        file_task_runner_.get(), file_path_, offset,
+        expected_modification_time_);
     auto adapter = std::make_unique<FileStreamReaderToDataPipe>(
         std::move(reader), std::move(pipe));
     auto* raw_adapter = adapter.get();
@@ -258,8 +263,9 @@ constexpr const base::TimeDelta
     IndexedDBBucketContext::kMaxEarliestBucketCompactionFromNow;
 
 IndexedDBBucketContext::Delegate::Delegate()
-    : on_tasks_available(base::DoNothing()),
-      on_fatal_error(base::DoNothing()),
+    : on_fatal_error(base::DoNothing()),
+      on_corruption(base::DoNothing()),
+      on_ready_for_destruction(base::DoNothing()),
       on_content_changed(base::DoNothing()),
       on_writing_transaction_complete(base::DoNothing()),
       for_each_bucket_context(base::DoNothing()) {}
@@ -269,8 +275,6 @@ IndexedDBBucketContext::Delegate::~Delegate() = default;
 
 IndexedDBBucketContext::IndexedDBBucketContext(
     storage::BucketInfo bucket_info,
-    bool persist_for_incognito,
-    base::Clock* clock,
     std::unique_ptr<PartitionedLockManager> lock_manager,
     Delegate&& delegate,
     std::unique_ptr<IndexedDBBackingStore> backing_store,
@@ -282,8 +286,6 @@ IndexedDBBucketContext::IndexedDBBucketContext(
         file_system_access_context,
     InstanceClosure initialize_closure)
     : bucket_info_(std::move(bucket_info)),
-      persist_for_incognito_(persist_for_incognito),
-      clock_(clock),
       lock_manager_(std::move(lock_manager)),
       backing_store_(std::move(backing_store)),
       quota_manager_proxy_(std::move(quota_manager_proxy)),
@@ -293,12 +295,17 @@ IndexedDBBucketContext::IndexedDBBucketContext(
       blob_storage_context_(std::move(blob_storage_context)),
       file_system_access_context_(std::move(file_system_access_context)),
       delegate_(std::move(delegate)) {
-  DCHECK(clock_);
+  // TODO(estade): is `SequencedTaskRunner::GetCurrentDefault()` actually safe?
+  base::trace_event::MemoryDumpManager::GetInstance()
+      ->RegisterDumpProviderWithSequencedTaskRunner(
+          this, "IndexedDBBucketContext",
+          base::SequencedTaskRunner::GetCurrentDefault(),
+          base::trace_event::MemoryDumpProvider::Options());
 
   backing_store_->set_bucket_context(this);
 
   if (!initialize_closure) {
-    base::Time now = clock_->Now();
+    base::Time now = base::Time::Now();
     initialize_closure =
         base::BindRepeating(&IndexedDBBucketContext::SetInternalState,
                             GenerateNextGlobalSweepTime(now),
@@ -310,6 +317,8 @@ IndexedDBBucketContext::IndexedDBBucketContext(
 
 IndexedDBBucketContext::~IndexedDBBucketContext() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
   if (!backing_store_) {
     return;
   }
@@ -323,41 +332,43 @@ IndexedDBBucketContext::~IndexedDBBucketContext() {
   leveldb_destruct_event.Wait();
 }
 
-void IndexedDBBucketContext::ForceClose() {
+void IndexedDBBucketContext::ForceClose(bool doom) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  IndexedDBBucketContextHandle handle(*this);
-  for (const auto& pair : databases_) {
-    // Note: We purposefully ignore the result here as force close needs to
-    // continue tearing things down anyways.
-    pair.second->ForceCloseAndRunTasks();
-  }
-  databases_.clear();
-  if (has_blobs_outstanding_) {
-    backing_store_->active_blob_registry()->ForceShutdown();
-    has_blobs_outstanding_ = false;
+  is_doomed_ = doom;
+
+  {
+    // This handle keeps `this` from closing until it goes out of scope.
+    IndexedDBBucketContextHandle handle(*this);
+    for (const auto& pair : databases_) {
+      // Note: We purposefully ignore the result here as force close needs to
+      // continue tearing things down anyways.
+      pair.second->ForceCloseAndRunTasks();
+    }
+    databases_.clear();
+    if (has_blobs_outstanding_) {
+      backing_store_->active_blob_registry()->ForceShutdown();
+      has_blobs_outstanding_ = false;
+    }
+
+    // Don't run the preclosing tasks after a ForceClose, whether or not we've
+    // started them.  Compaction in particular can run long and cannot be
+    // interrupted, so it can cause shutdown hangs.
+    close_timer_.AbandonAndStop();
+    if (pre_close_task_queue_) {
+      pre_close_task_queue_->Stop(
+          IndexedDBPreCloseTaskQueue::StopReason::FORCE_CLOSE);
+      pre_close_task_queue_.reset();
+    }
+    skip_closing_sequence_ = true;
   }
 
-  // Don't run the preclosing tasks after a ForceClose, whether or not we've
-  // started them.  Compaction in particular can run long and cannot be
-  // interrupted, so it can cause shutdown hangs.
-  close_timer_.AbandonAndStop();
-  if (pre_close_task_queue_) {
-    pre_close_task_queue_->Stop(
-        IndexedDBPreCloseTaskQueue::StopReason::FORCE_CLOSE);
-    pre_close_task_queue_.reset();
-  }
-  skip_closing_sequence_ = true;
+  // Initiate deletion if appropriate.
+  RunTasks();
 }
 
 void IndexedDBBucketContext::ReportOutstandingBlobs(bool blobs_outstanding) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   has_blobs_outstanding_ = blobs_outstanding;
-  MaybeStartClosing();
-}
-
-void IndexedDBBucketContext::StopPersistingForIncognito() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  persist_for_incognito_ = false;
   MaybeStartClosing();
 }
 
@@ -496,10 +507,20 @@ void IndexedDBBucketContext::CreateAllExternalObjects(
   }
 }
 
-std::tuple<IndexedDBBucketContext::RunTasksResult, leveldb::Status>
-IndexedDBBucketContext::RunTasks() {
-  task_run_scheduled_ = false;
-  running_tasks_ = true;
+void IndexedDBBucketContext::QueueRunTasks() {
+  if (task_run_queued_) {
+    return;
+  }
+
+  task_run_queued_ = true;
+  backing_store_->idb_task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&IndexedDBBucketContext::RunTasks,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void IndexedDBBucketContext::RunTasks() {
+  task_run_queued_ = false;
+
   leveldb::Status status;
   for (auto db_it = databases_.begin(); db_it != databases_.end();) {
     IndexedDBDatabase& db = *db_it->second;
@@ -510,19 +531,219 @@ IndexedDBBucketContext::RunTasks() {
       case IndexedDBDatabase::RunTasksResult::kDone:
         ++db_it;
         continue;
+
       case IndexedDBDatabase::RunTasksResult::kError:
-        running_tasks_ = false;
-        return {RunTasksResult::kError, status};
+        delegate().on_fatal_error.Run(status, {});
+        return;
+
       case IndexedDBDatabase::RunTasksResult::kCanBeDestroyed:
         databases_.erase(db_it);
         break;
     }
   }
-  running_tasks_ = false;
   if (CanClose() && closing_stage_ == ClosingState::kClosed) {
-    return {RunTasksResult::kCanBeDestroyed, leveldb::Status::OK()};
+    return delegate().on_ready_for_destruction.Run();
   }
-  return {RunTasksResult::kDone, leveldb::Status::OK()};
+}
+
+void IndexedDBBucketContext::OpenDatabase(
+    const std::u16string& name,
+    int64_t version,
+    mojo::PendingAssociatedRemote<blink::mojom::IDBFactoryClient>
+        pending_factory_client,
+    mojo::PendingAssociatedRemote<blink::mojom::IDBDatabaseCallbacks>
+        database_callbacks_remote,
+    int64_t transaction_id,
+    mojo::PendingAssociatedReceiver<blink::mojom::IDBTransaction>
+        transaction_receiver,
+    bool was_cold_open,
+    IndexedDBDataLossInfo data_loss_info,
+    mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
+        state_checker) {
+  auto connection = std::make_unique<IndexedDBPendingConnection>(
+      std::make_unique<IndexedDBFactoryClient>(
+          std::move(pending_factory_client)),
+      std::make_unique<IndexedDBDatabaseCallbacks>(
+          std::move(database_callbacks_remote)),
+      transaction_id, version, std::move(transaction_receiver));
+  connection->was_cold_open = was_cold_open;
+  connection->data_loss_info = data_loss_info;
+  // Null in unit tests.
+  if (state_checker) {
+    connection->client_state_checker.Bind(std::move(state_checker));
+  }
+
+  IndexedDBDatabase* database_ptr = nullptr;
+  auto it = databases().find(name);
+  if (it == databases().end()) {
+    auto database = std::make_unique<IndexedDBDatabase>(
+        name, *this, IndexedDBDatabase::Identifier(bucket_locator(), name));
+    // The database must be added before the schedule call, as the
+    // CreateDatabaseDeleteClosure can be called synchronously.
+    database_ptr = database.get();
+    AddDatabase(name, std::move(database));
+  } else {
+    database_ptr = it->second.get();
+  }
+
+  database_ptr->ScheduleOpenConnection(std::move(connection));
+}
+
+void IndexedDBBucketContext::DeleteDatabase(
+    mojo::PendingAssociatedRemote<blink::mojom::IDBFactoryClient>
+        pending_factory_client,
+    std::u16string name,
+    bool force_close,
+    base::OnceClosure on_deletion_complete) {
+  // First, check the databases that are already represented by
+  // `IndexedDBDatabase` objects. If one exists, schedule it to be deleted and
+  // we're done.
+  auto it = databases_.find(name);
+  if (it != databases_.end()) {
+    base::WeakPtr<IndexedDBDatabase> database = it->second->AsWeakPtr();
+    it->second->ScheduleDeleteDatabase(std::make_unique<IndexedDBFactoryClient>(
+                                           std::move(pending_factory_client)),
+                                       std::move(on_deletion_complete));
+    if (force_close) {
+      leveldb::Status status = database->ForceCloseAndRunTasks();
+      if (!status.ok()) {
+        delegate().on_fatal_error.Run(status, "Error aborting transactions.");
+      }
+    }
+    return;
+  }
+
+  // Otherwise, verify that a database with the given name exists in the backing
+  // store. If not, report success.
+  std::vector<std::u16string> names;
+  leveldb::Status s = backing_store()->GetDatabaseNames(&names);
+  if (!s.ok()) {
+    IndexedDBDatabaseError error(blink::mojom::IDBException::kUnknownError,
+                                 "Internal error opening backing store for "
+                                 "indexedDB.deleteDatabase.");
+    IndexedDBFactoryClient(std::move(pending_factory_client)).OnError(error);
+    if (s.IsCorruption()) {
+      delegate().on_corruption.Run(error);
+    }
+    return;
+  }
+
+  if (!base::Contains(names, name)) {
+    IndexedDBFactoryClient(std::move(pending_factory_client))
+        .OnDeleteSuccess(/*version=*/0);
+    return;
+  }
+
+  // If it exists but does not already have an `IndexedDBDatabase` object,
+  // create it and initiate deletion.
+  auto database = std::make_unique<IndexedDBDatabase>(
+      name, *this, IndexedDBDatabase::Identifier(bucket_locator(), name));
+  IndexedDBDatabase* database_ptr = AddDatabase(name, std::move(database));
+  database_ptr->ScheduleDeleteDatabase(std::make_unique<IndexedDBFactoryClient>(
+                                           std::move(pending_factory_client)),
+                                       std::move(on_deletion_complete));
+  if (force_close) {
+    leveldb::Status status = database_ptr->ForceCloseAndRunTasks();
+    if (!status.ok()) {
+      delegate().on_fatal_error.Run(status, "Error aborting transactions.");
+    }
+  }
+}
+
+void IndexedDBBucketContext::FillInMetadata(
+    storage::mojom::IdbBucketMetadataPtr info,
+    base::OnceCallback<void(storage::mojom::IdbBucketMetadataPtr)> result) {
+  // TODO(jsbell): Sort by name?
+  std::vector<storage::mojom::IdbDatabaseMetadataPtr> database_list;
+
+  for (const auto& [name, db] : databases_) {
+    storage::mojom::IdbDatabaseMetadataPtr db_info =
+        storage::mojom::IdbDatabaseMetadata::New();
+
+    db_info->name = db->name();
+    db_info->connection_count = db->ConnectionCount();
+    info->connection_count += db->ConnectionCount();
+    db_info->active_open_delete = db->ActiveOpenDeleteCount();
+    db_info->pending_open_delete = db->PendingOpenDeleteCount();
+
+    std::vector<storage::mojom::IdbTransactionMetadataPtr> transaction_list;
+
+    for (IndexedDBConnection* connection : db->connections()) {
+      for (const auto& transaction_id_pair : connection->transactions()) {
+        const content::IndexedDBTransaction* transaction =
+            transaction_id_pair.second.get();
+        storage::mojom::IdbTransactionMetadataPtr transaction_info =
+            storage::mojom::IdbTransactionMetadata::New();
+
+        transaction_info->mode =
+            static_cast<storage::mojom::IdbTransactionMode>(
+                transaction->mode());
+
+        switch (transaction->state()) {
+          case IndexedDBTransaction::CREATED:
+            transaction_info->status =
+                storage::mojom::IdbTransactionState::kBlocked;
+            break;
+          case IndexedDBTransaction::STARTED:
+            if (transaction->diagnostics().tasks_scheduled > 0) {
+              transaction_info->status =
+                  storage::mojom::IdbTransactionState::kRunning;
+            } else {
+              transaction_info->status =
+                  storage::mojom::IdbTransactionState::kStarted;
+            }
+            break;
+          case IndexedDBTransaction::COMMITTING:
+            transaction_info->status =
+                storage::mojom::IdbTransactionState::kCommitting;
+            break;
+          case IndexedDBTransaction::FINISHED:
+            transaction_info->status =
+                storage::mojom::IdbTransactionState::kFinished;
+            break;
+        }
+
+        transaction_info->tid = transaction->id();
+        transaction_info->age =
+            (base::Time::Now() - transaction->diagnostics().creation_time)
+                .InMillisecondsF();
+        transaction_info->runtime =
+            (base::Time::Now() - transaction->diagnostics().start_time)
+                .InMillisecondsF();
+        transaction_info->tasks_scheduled =
+            transaction->diagnostics().tasks_scheduled;
+        transaction_info->tasks_completed =
+            transaction->diagnostics().tasks_completed;
+
+        for (const int64_t& id : transaction->scope()) {
+          auto stores_it = db->metadata().object_stores.find(id);
+          if (stores_it != db->metadata().object_stores.end()) {
+            transaction_info->scope.emplace_back(stores_it->second.name);
+          }
+        }
+
+        transaction_list.push_back(std::move(transaction_info));
+      }
+    }
+    db_info->transactions = std::move(transaction_list);
+
+    database_list.push_back(std::move(db_info));
+  }
+  info->databases = std::move(database_list);
+  std::move(result).Run(std::move(info));
+}
+
+void IndexedDBBucketContext::CompactBackingStoreForTesting() {
+  // Compact the first db's backing store since all the db's are in the same
+  // backing store.
+  for (const auto& [name, db] : databases_) {
+    // The check should always be true, but is necessary to suppress a clang
+    // warning about unreachable loop increment.
+    if (db->backing_store()) {
+      db->backing_store()->Compact();
+      break;
+    }
+  }
 }
 
 // static
@@ -571,7 +792,7 @@ bool IndexedDBBucketContext::CanClose() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_GE(open_handles_, 0);
   return !has_blobs_outstanding_ && open_handles_ <= 0 &&
-         !persist_for_incognito_;
+         (is_doomed_ || !backing_store_->in_memory());
 }
 
 void IndexedDBBucketContext::MaybeStartClosing() {
@@ -654,12 +875,12 @@ void IndexedDBBucketContext::CloseNow() {
   closing_stage_ = ClosingState::kClosed;
   close_timer_.AbandonAndStop();
   pre_close_task_queue_.reset();
-  delegate_.on_tasks_available.Run();
+  QueueRunTasks();
 }
 
 bool IndexedDBBucketContext::ShouldRunTombstoneSweeper() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::Time now = clock_->Now();
+  base::Time now = base::Time::Now();
   // Check that the last sweep hasn't run too recently.
   if (earliest_global_sweep_time_ > now) {
     return false;
@@ -704,7 +925,7 @@ bool IndexedDBBucketContext::ShouldRunTombstoneSweeper() {
 bool IndexedDBBucketContext::ShouldRunCompaction() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  base::Time now = clock_->Now();
+  base::Time now = base::Time::Now();
   // Check that the last compaction hasn't run too recently.
   if (earliest_global_compaction_time_ > now) {
     return false;
@@ -772,6 +993,30 @@ void IndexedDBBucketContext::BindFileReader(
 void IndexedDBBucketContext::RemoveBoundReaders(const base::FilePath& path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   file_reader_map_.erase(path);
+}
+
+bool IndexedDBBucketContext::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  base::CheckedNumeric<uint64_t> total_memory_in_flight = 0;
+  for (const auto& db_name_object_pair : databases()) {
+    for (IndexedDBConnection* connection :
+         db_name_object_pair.second->connections()) {
+      for (const auto& txn_id_pair : connection->transactions()) {
+        total_memory_in_flight += txn_id_pair.second->in_flight_memory();
+      }
+    }
+  }
+  // This pointer is used to match the pointer used in
+  // TransactionalLevelDBDatabase::OnMemoryDump.
+  leveldb::DB* db = backing_store()->db()->db();
+  auto* db_dump = pmd->CreateAllocatorDump(
+      base::StringPrintf("site_storage/index_db/in_flight_0x%" PRIXPTR,
+                         reinterpret_cast<uintptr_t>(db)));
+  db_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                     base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                     total_memory_in_flight.ValueOrDefault(0));
+  return true;
 }
 
 }  // namespace content

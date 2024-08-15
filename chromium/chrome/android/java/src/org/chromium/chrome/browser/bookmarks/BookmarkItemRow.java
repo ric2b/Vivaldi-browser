@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.bookmarks;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
+import android.support.v4.content.ContextCompat;
 import android.util.AttributeSet;
 
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
@@ -25,6 +26,7 @@ import androidx.core.widget.ImageViewCompat;
 
 import org.vivaldi.browser.panels.PanelUtils;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.chrome.R;
@@ -91,14 +93,21 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
         mTitleView.setText(item.getTitle());
         mDescriptionView.setText(item.getUrlForDisplay());
         mFaviconCancelled = false;
+        if (ChromeApplicationImpl.isVivaldi()) {
+            mDelegate.getLargeIconBridge().getLargeIconForUrl(mUrl,
+                    mFetchFaviconSize,
+                    (int) ContextUtils.getApplicationContext().getResources().getDimension(
+                            org.chromium.chrome.R.dimen.default_favicon_desired_size),
+                    this);
+        } else // End Vivaldi
         mDelegate.getLargeIconBridge().getLargeIconForUrl(mUrl, mFetchFaviconSize, this);
         // Vivaldi - change font color for read items in Reading List
         boolean isItemRead = bookmarkId.getType() == BookmarkType.READING_LIST && item.isRead();
         int color = isItemRead
                 ? R.color.vivaldi_disabled_text_color
                 : R.color.default_text_color_baseline;
-        mTitleView.setTextColor(getResources().getColor(color));
-        mDescriptionView.setTextColor(getResources().getColor(color));
+        mTitleView.setTextColor(ContextCompat.getColor(mTitleView.getContext(), color));
+        mDescriptionView.setTextColor(ContextCompat.getColor(mDescriptionView.getContext(), color));
         return item;
     }
 

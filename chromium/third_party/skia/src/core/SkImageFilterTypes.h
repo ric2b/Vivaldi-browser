@@ -394,6 +394,10 @@ public:
         return output;
     }
 
+    // Utility function to calculate the smallest relevant subset of this rect to fill `dstRect`
+    // given the provided tile mode.
+    LayerSpace<SkIRect> relevantSubset(const LayerSpace<SkIRect> dstRect, SkTileMode) const;
+
     // Parrot the SkIRect API while preserving coord space
     bool isEmpty() const { return fData.isEmpty64(); }
     bool contains(const LayerSpace<SkIRect>& r) const { return fData.contains(r.fData); }
@@ -529,6 +533,16 @@ private:
     SkMatrix fData;
 };
 
+/**
+ * Most ImageFilters can natively handle scaling and translate components in the CTM. Only some of
+ * them can handle affine (or more complex) matrices. Some may only handle translation.
+ */
+enum class MatrixCapability {
+    kTranslate,
+    kScaleTranslate,
+    kComplex,
+};
+
 // Mapping is the primary definition of the shared layer space used when evaluating an image filter
 // DAG. It encapsulates any needed decomposition of the total CTM into the parameter-to-layer matrix
 // (that filters use to map their parameters to the layer space), and the layer-to-device matrix
@@ -557,6 +571,9 @@ public:
     // invalid device matrix. Assumes 'ctm' is invertible.
     [[nodiscard]] bool decomposeCTM(const SkMatrix& ctm,
                                     const SkImageFilter* filter,
+                                    const skif::ParameterSpace<SkPoint>& representativePt);
+    [[nodiscard]] bool decomposeCTM(const SkMatrix& ctm,
+                                    MatrixCapability,
                                     const skif::ParameterSpace<SkPoint>& representativePt);
 
     // Update the mapping's parameter-to-layer matrix to be pre-concatenated with the specified
@@ -832,6 +849,19 @@ private:
         return this->analyzeBounds(SkMatrix::I(), SkIRect(dstBounds),
                                    /*blendAffectsTransparentBlack=*/false);
     }
+
+    // Return an equivalent FilterResult such that its backing image dimensions have been reduced
+    // by the X and Y scale factors in 'scale' (assumed to be in [0, 1]). The returned FilterResult
+    // will have a transform that aligns it with the original FilterResult (i.e. a deferred upscale)
+    // and may also have a deferred tilemode. If 'enforceDecal' is true, the returned
+    // FilterResult will be kDecal sampled and any tiling will already be applied.
+    //
+    // All deferred effects, other than potentially tile mode, will be applied. The FilterResult
+    // will also be converted to the color type and color space of 'ctx' so the result is suitable
+    // to pass to the blur engine.
+    FilterResult rescale(const Context& ctx,
+                         const LayerSpace<SkSize>& scale,
+                         bool enforceDecal) const;
 
     // Draw directly to the device, which draws the same image as produced by resolve() but can be
     // useful if multiple operations need to be performed on the canvas.

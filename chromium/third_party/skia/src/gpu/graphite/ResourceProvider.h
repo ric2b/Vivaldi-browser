@@ -16,7 +16,9 @@
 #include "src/gpu/graphite/ResourceCache.h"
 #include "src/gpu/graphite/ResourceTypes.h"
 
+struct AHardwareBuffer;
 struct SkSamplingOptions;
+class SkTraceMemoryDump;
 
 namespace skgpu {
 class SingleOwner;
@@ -82,12 +84,24 @@ public:
         return fResourceCache->currentBudgetedBytes();
     }
 
+    void dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {
+        fResourceCache->dumpMemoryStatistics(traceMemoryDump);
+    }
+
     void freeGpuResources();
     void purgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime);
 
 #if defined(GRAPHITE_TEST_UTILS)
     ResourceCache* resourceCache() { return fResourceCache.get(); }
     const SharedContext* sharedContext() { return fSharedContext; }
+#endif
+
+#ifdef SK_BUILD_FOR_ANDROID
+    virtual BackendTexture createBackendTexture(AHardwareBuffer*,
+                                                bool isRenderable,
+                                                bool isProtectedContent,
+                                                SkISize dimensions,
+                                                bool fromAndroidWindow) const;
 #endif
 
 protected:
@@ -119,6 +133,13 @@ private:
                                               skgpu::Budgeted);
 
     virtual BackendTexture onCreateBackendTexture(SkISize dimensions, const TextureInfo&) = 0;
+#ifdef SK_BUILD_FOR_ANDROID
+    virtual BackendTexture onCreateBackendTexture(AHardwareBuffer*,
+                                                  bool isRenderable,
+                                                  bool isProtectedContent,
+                                                  SkISize dimensions,
+                                                  bool fromAndroidWindow) const;
+#endif
     virtual void onDeleteBackendTexture(const BackendTexture&) = 0;
 };
 

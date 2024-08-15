@@ -27,6 +27,7 @@ supported_files_or_dirs=(
   "gm/"
   "include/private/base/"
   "modules/bentleyottmann/"
+  "modules/skshaper/"
   "modules/skunicode/"
   "src/base/"
   "src/codec/"
@@ -37,6 +38,7 @@ supported_files_or_dirs=(
   "src/gpu/ganesh/surface/"
   "src/image/"
   "src/pathops/"
+  "src/ports/SkFontMgr_fontconfig"
   "src/shaders/"
   "src/sksl/"
   "src/svg/"
@@ -85,6 +87,7 @@ supported_files_or_dirs=(
   "src/core/SkWritePixelsRec.cpp"
   "src/core/SkYUVAInfo.cpp"
   "src/core/SkYUVAPixmaps.cpp"
+  "src/gpu/MutableTextureState.cpp"
   "src/gpu/ganesh/Device.cpp"
   "src/gpu/ganesh/GrBackendSemaphore.cpp"
   "src/gpu/ganesh/GrBackendSurface.cpp"
@@ -118,7 +121,10 @@ supported_files_or_dirs=(
   "src/gpu/ganesh/gl/GrGLGpu.cpp"
   "src/gpu/ganesh/gl/GrGLSemaphore.cpp"
   "src/gpu/ganesh/ops/AtlasTextOp.cpp"
+  "src/gpu/ganesh/text/GrAtlasManager.cpp"
+  "src/gpu/ganesh/vk/GrVkContextThread"
   "src/gpu/ganesh/vk/GrVkDirectContext.cpp"
+  "src/gpu/vk/VulkanMutableTextureState.cpp"
   "src/pdf/SkJpeg"
   "tools/DecodeUtils.cpp"
   "tools/EncodeUtils.cpp"
@@ -142,6 +148,7 @@ excluded_files=(
   "src/core/SkMipmapHQDownSampler.cpp"
   "src/core/SkMaskBlurFilter.cpp"
   "src/core/SkM44.cpp"
+  "src/core/SkPixmap.cpp"
 )
 
 function opted_in_to_IWYU_checks() {

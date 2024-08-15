@@ -18,7 +18,7 @@
 <translation id="1728549374069268714">Вставить и перейти</translation>
 <translation id="1756026472674246267">Открыть ссылку в новой вкладке</translation>
 <translation id="1759842336958782510">Chrome</translation>
-<translation id="1769904678986817931">Свойства изображения</translation>
+<translation id="1769904678986817931">Свойства изображения...</translation>
 <translation id="1920297417712412573">Копировать в заметки</translation>
 <translation id="1921101374471252440">&amp;Обновить картинку</translation>
 <translation id="1924750141060565109">Пейзаж 15</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Вставить</translation>
 <translation id="4005270918754737597">Пропустить эту версию</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Больше не показывать</translation>
 <translation id="4074744496918018786">Открыть картинку в приватном окне</translation>
 <translation id="410351446219883937">Автовоспроизведение</translation>
 <translation id="4281844954008187215">Условия использования</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera версии 15+ (Бета)</translation>
 <translation id="5648110075441906505">Открыть картинку в новом окне</translation>
 <translation id="5656371807944747581">Ошибка обновления!</translation>
-<translation id="5716238312826274098">Отключение уведомлений</translation>
 <translation id="5732584064771442623">Доступна версия Vivaldi <ph name="NEW_VERSION" /> (у вас установлена <ph name="OLD_VERSION" />). Хотите загрузить сейчас?</translation>
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Новая папка</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Ошибка запуска установщика обновления. Проверьте наличие дискового пространства и памяти, повторите попытку.</translation>
 <translation id="7658239707568436148">Отмена</translation>
-<translation id="7715497554424665066">&amp;Не обновляться</translation>
 <translation id="7724603315864178912">Вырезать</translation>
 <translation id="7727481996062361502">Проверка обновления...</translation>
 <translation id="7793738202466490491">Добавить как событие календаря</translation>

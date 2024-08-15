@@ -33,4 +33,13 @@ const (
 
 	// DefaultCacheDir is the default directory for the results cache
 	DefaultCacheDir = "~/.cache/webgpu-cts-results"
+
+	// The dawn-relative path to the ts_sources.txt file
+	TsSourcesRelPath = "third_party/gn/webgpu-cts/ts_sources.txt"
+
+	// The dawn-relative path to the test_list.txt file
+	TestListRelPath = "third_party/gn/webgpu-cts/test_list.txt"
+
+	// The dawn-relative path to the resource_files.txt file
+	ResourceFilesRelPath = "third_party/gn/webgpu-cts/resource_files.txt"
 )

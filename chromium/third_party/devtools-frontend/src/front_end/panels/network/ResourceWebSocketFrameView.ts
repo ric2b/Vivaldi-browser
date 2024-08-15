@@ -29,6 +29,7 @@ import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {BinaryResourceView} from './BinaryResourceView.js';
 import webSocketFrameViewStyles from './webSocketFrameView.css.js';
@@ -163,6 +164,7 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
     super();
 
     this.element.classList.add('websocket-frame-view');
+    this.element.setAttribute('jslog', `${VisualLogging.pane().context('web-socket-messages')}`);
     this.request = request;
 
     this.splitWidget = new UI.SplitWidget.SplitWidget(false, true, 'resourceWebSocketFrameSplitViewState');
@@ -356,9 +358,7 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum OpCodes {
+const enum OpCodes {
   ContinuationFrame = 0,
   TextFrame = 1,
   BinaryFrame = 2,
@@ -368,14 +368,13 @@ export enum OpCodes {
 }
 
 export const opCodeDescriptions: (() => string)[] = (function(): (() => Common.UIString.LocalizedString)[] {
-  const opCodes = OpCodes;
   const map = [];
-  map[opCodes.ContinuationFrame] = i18nLazyString(UIStrings.continuationFrame);
-  map[opCodes.TextFrame] = i18nLazyString(UIStrings.textMessage);
-  map[opCodes.BinaryFrame] = i18nLazyString(UIStrings.binaryMessage);
-  map[opCodes.ConnectionCloseFrame] = i18nLazyString(UIStrings.connectionCloseMessage);
-  map[opCodes.PingFrame] = i18nLazyString(UIStrings.pingMessage);
-  map[opCodes.PongFrame] = i18nLazyString(UIStrings.pongMessage);
+  map[OpCodes.ContinuationFrame] = i18nLazyString(UIStrings.continuationFrame);
+  map[OpCodes.TextFrame] = i18nLazyString(UIStrings.textMessage);
+  map[OpCodes.BinaryFrame] = i18nLazyString(UIStrings.binaryMessage);
+  map[OpCodes.ConnectionCloseFrame] = i18nLazyString(UIStrings.connectionCloseMessage);
+  map[OpCodes.PingFrame] = i18nLazyString(UIStrings.pingMessage);
+  map[OpCodes.PongFrame] = i18nLazyString(UIStrings.pongMessage);
   return map;
 })();
 

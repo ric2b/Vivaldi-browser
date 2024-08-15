@@ -45,7 +45,7 @@ Arg <- QuotedArg / [[0-9a-z%+\-*_@.]]*
 QuotedArg <- '"' QuotedText '"'
 QuotedText <- (EscapedChar / [^"])*
 LabelContainingDirective <- LabelContainingDirectiveName WS SymbolArgs
-LabelContainingDirectiveName <- ".xword" / ".word" / ".long" / ".set" / ".byte" / ".8byte" / ".4byte" / ".quad" / ".tc" / ".localentry" / ".size" / ".type" / ".uleb128" / ".sleb128"
+LabelContainingDirectiveName <- ".xword" / ".word" / ".hword" / ".long" / ".set" / ".byte" / ".8byte" / ".4byte" / ".quad" / ".tc" / ".localentry" / ".size" / ".type" / ".uleb128" / ".sleb128"
 SymbolArgs <- SymbolArg ((WS? ',' WS?) SymbolArg)*
 
 SymbolArg <- SymbolExpr
@@ -68,8 +68,9 @@ LocalLabel <- [0-9][0-9$]*
 LocalLabelRef <- [0-9][0-9$]*[bf]
 Instruction <- InstructionName (WS InstructionArg ((WS? ',' WS?) InstructionArg)*)?
 InstructionName <- [[A-Z]][[A-Z.0-9]]* [.+\-]?
-InstructionArg <- IndirectionIndicator? (ARMConstantTweak / RegisterOrConstant / LocalLabelRef / TOCRefHigh / TOCRefLow / GOTLocation / GOTSymbolOffset / MemoryRef) AVX512Token*
+InstructionArg <- IndirectionIndicator? (ARMConstantTweak / RegisterOrConstant / LocalLabelRef / TOCRefHigh / TOCRefLow / GOTLocation / GOTAddress / GOTSymbolOffset / MemoryRef) AVX512Token*
 GOTLocation <- '$_GLOBAL_OFFSET_TABLE_-' LocalSymbol
+GOTAddress <- '_GLOBAL_OFFSET_TABLE_(%rip)'
 GOTSymbolOffset <- ('$' SymbolName '@GOT' 'OFF'?) / (":got:" SymbolName)
 AVX512Token <- WS? '{' '%'? [0-9a-z]* '}'
 TOCRefHigh <- '.TOC.-' ('0b' / ('.L' [a-zA-Z_0-9]+)) "@ha"

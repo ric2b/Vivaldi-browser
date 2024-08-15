@@ -131,7 +131,7 @@ void TotalDiskSpaceCalculator::GetRootDeviceSize() {
 }
 
 void TotalDiskSpaceCalculator::OnGetRootDeviceSize(
-    absl::optional<int64_t> reply) {
+    std::optional<int64_t> reply) {
   if (reply.has_value()) {
     if (reply.value() < 0) {
       LOG(DFATAL) << "Negative root device size (" << reply.value() << ")";
@@ -191,7 +191,7 @@ void FreeDiskSpaceCalculator::GetUserFreeDiskSpace() {
 }
 
 void FreeDiskSpaceCalculator::OnGetUserFreeDiskSpace(
-    absl::optional<int64_t> reply) {
+    std::optional<int64_t> reply) {
   if (reply.has_value()) {
     if (reply.value() < 0) {
       LOG(DFATAL) << "Negative user free disk space (" << reply.value() << ")";
@@ -234,13 +234,6 @@ DriveOfflineSizeCalculator::DriveOfflineSizeCalculator(Profile* profile)
 DriveOfflineSizeCalculator::~DriveOfflineSizeCalculator() = default;
 
 void DriveOfflineSizeCalculator::PerformCalculation() {
-  if (!drive::util::IsDriveFsBulkPinningAvailable(profile_) &&
-      !base::FeatureList::IsEnabled(
-          ash::features::kFilesGoogleDriveSettingsPage)) {
-    NotifySizeCalculated(0);
-    return;
-  }
-
   drive::DriveIntegrationService* const service =
       drive::util::GetIntegrationServiceByProfile(profile_);
   if (!service) {
@@ -466,7 +459,7 @@ void AppsSizeCalculator::UpdateBorealisAppsSize() {
 }
 
 void AppsSizeCalculator::OnGetBorealisAppsSize(
-    absl::optional<vm_tools::concierge::ListVmDisksResponse> response) {
+    std::optional<vm_tools::concierge::ListVmDisksResponse> response) {
   if (!response) {
     LOG(ERROR) << "Failed to get response from concierge";
     has_borealis_apps_size_ = true;
@@ -525,7 +518,7 @@ void CrostiniSizeCalculator::PerformCalculation() {
 }
 
 void CrostiniSizeCalculator::OnGetCrostiniSize(
-    absl::optional<vm_tools::concierge::ListVmDisksResponse> response) {
+    std::optional<vm_tools::concierge::ListVmDisksResponse> response) {
   if (!response) {
     LOG(ERROR) << "Failed to get list of VM disks. Empty response.";
     UpdateSize(
@@ -574,7 +567,7 @@ void OtherUsersSizeCalculator::PerformCalculation() {
   user_sizes_.clear();
   const user_manager::UserList& users =
       user_manager::UserManager::Get()->GetUsers();
-  for (auto* user : users) {
+  for (user_manager::User* user : users) {
     if (user->is_active()) {
       continue;
     }
@@ -593,7 +586,7 @@ void OtherUsersSizeCalculator::PerformCalculation() {
 }
 
 void OtherUsersSizeCalculator::OnGetOtherUserSize(
-    absl::optional<user_data_auth::GetAccountDiskUsageReply> reply) {
+    std::optional<user_data_auth::GetAccountDiskUsageReply> reply) {
   user_sizes_.push_back(
       user_data_auth::AccountDiskUsageReplyToUsageSize(reply));
   if (user_sizes_.size() != other_users_.size()) {

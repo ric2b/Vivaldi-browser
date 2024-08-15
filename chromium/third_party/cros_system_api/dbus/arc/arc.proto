@@ -63,7 +63,7 @@ message StartArcMiniInstanceRequest {
       [default = false, deprecated = true];
 
   // Option to disable ureadahead, Used in specialized tests.
-  // TODO(b/264585671): Refactore this and host_ureadahead_generation to
+  // TODO(b/264585671): Refactor this and host_ureadahead_generation to
   // mode enum.
   optional bool disable_ureadahead = 7 [default = false];
 
@@ -99,7 +99,7 @@ message StartArcMiniInstanceRequest {
   optional bool enable_consumer_auto_update_toggle = 15 [default = false];
 
   // Flag to indicate mode with active host ureadahead generation.
-  // TODO(b/264585671): Refactore this and disable_ureadahead to mode enum.
+  // TODO(b/264585671): Refactor this and disable_ureadahead to mode enum.
   optional bool host_ureadahead_generation = 16 [default = false];
 
   // Option to enable privacy hub for chrome in android settings.
@@ -116,11 +116,14 @@ message StartArcMiniInstanceRequest {
   // Flag to use dev caches in arccachesetup service.
   optional bool use_dev_caches = 20 [default = false];
 
-  // Flag to set ureadahead mode.
+  // Flag to set host ureadahead mode.
   optional HostUreadaheadMode host_ureadahead_mode = 21
       [default = MODE_DEFAULT];
 
-  // Next ID to use: 22
+  // Flag that indicates whether user is already signed into ARC.
+  optional bool arc_signed_in = 22 [default = false];
+
+  // Next ID to use: 23
 }
 
 // ARC upgrade options sent from Chrome to session manager. This message is used
@@ -162,9 +165,7 @@ message UpgradeArcContainerRequest {
   // managed.
   optional bool is_managed_adb_sideloading_allowed = 16;
 
-  // See description in StartArcMiniContainerRequest.
-  // TODO(b/264585671): Remove, this is never used for upgrade.
-  optional bool disable_ureadahead = 15 [default = false];
+  reserved 15;
 
   // Option to disable ACTION_BOOT_COMPLETED broadcast for 3rd party apps.
   optional bool skip_boot_completed_broadcast = 2 [default = false];

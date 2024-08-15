@@ -20,8 +20,11 @@
 #include <tuple>
 #include <vector>
 
+// IWYU pragma: begin_exports
 #include "./fuzztest/domain.h"
+#include "./fuzztest/internal/registration.h"
 #include "./fuzztest/internal/registry.h"
+// IWYU pragma: end_exports
 
 namespace fuzztest {
 
@@ -122,19 +125,5 @@ std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
     std::string_view dir);
 
 }  // namespace fuzztest
-
-// Temporarily disable fuzz tests under MSVC/iOS/MacOS.
-// They might not support all the C++17 features we are using right now.
-// Disables all registration and disables running the domain expressions by
-// using a ternary expression. The tail code (eg .WithDomains(...)) will not be
-// executed.
-#if defined(__APPLE__) || defined(_MSC_VER)
-#undef FUZZ_TEST
-#define FUZZ_TEST(suite_name, func)                          \
-  [[maybe_unused]] static ::fuzztest::internal::RegisterStub \
-      fuzztest_reg_##suite_name##func =                      \
-          true ? ::fuzztest::internal::RegisterStub()        \
-               : ::fuzztest::internal::RegisterStub()
-#endif  // defined(__APPLE__) || defined(_MSC_VER)
 
 #endif  // FUZZTEST_FUZZTEST_FUZZTEST_H_

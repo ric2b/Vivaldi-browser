@@ -18,6 +18,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwDisplayCutoutController.Insets;
@@ -28,11 +30,12 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
 
 /** Tests for DisplayCutout. */
-@RunWith(AwJUnit4ClassRunner.class)
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
 @MinAndroidSdkLevel(Build.VERSION_CODES.P)
 @CommandLineFlags.Add({"enable-features=" + AwFeatures.WEBVIEW_DISPLAY_CUTOUT})
 @RequiresApi(Build.VERSION_CODES.P)
-public class AwDisplayCutoutTest {
+public class AwDisplayCutoutTest extends AwParameterizedTest {
     private static final String TEST_HTML =
             "<html><head><style>\n"
                     + "body {\n"
@@ -53,15 +56,18 @@ public class AwDisplayCutoutTest {
                     + "</div>\n"
                     + "</body></html>";
 
-    @Rule
-    public AwActivityTestRule mActivityTestRule =
-            new AwActivityTestRule() {
-                @Override
-                public boolean needsHideActionBar() {
-                    // If action bar is showing, WebView cannot be fully occupying the screen.
-                    return true;
-                }
-            };
+    @Rule public AwActivityTestRule mActivityTestRule;
+
+    public AwDisplayCutoutTest(AwSettingsMutation param) {
+        mActivityTestRule =
+                new AwActivityTestRule(param.getMutation()) {
+                    @Override
+                    public boolean needsHideActionBar() {
+                        // If action bar is showing, WebView cannot be fully occupying the screen.
+                        return true;
+                    }
+                };
+    }
 
     private TestWebServer mWebServer;
     private TestAwContentsClient mContentsClient;

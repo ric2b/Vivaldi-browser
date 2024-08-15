@@ -30,14 +30,15 @@ impl PartialEq for X25519PublicKey {
 
 impl PublicKey<X25519> for X25519PublicKey {
     type Error = ErrorStack;
+    type EncodedPublicKey = [u8; 32];
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
         let key = PKey::public_key_from_raw_bytes(bytes, Id::X25519)?;
         Ok(X25519PublicKey(key))
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
-        self.0.raw_public_key().unwrap()
+    fn to_bytes(&self) -> Self::EncodedPublicKey {
+        self.0.raw_public_key().unwrap().try_into().unwrap()
     }
 }
 
@@ -48,14 +49,15 @@ impl EphemeralSecret<X25519> for X25519PrivateKey {
     type Impl = X25519Ecdh;
     type Error = ErrorStack;
     type Rng = ();
+    type EncodedPublicKey = [u8; 32];
 
     fn generate_random(_rng: &mut Self::Rng) -> Self {
         let private_key = openssl::pkey::PKey::generate_x25519().unwrap();
         Self(private_key)
     }
 
-    fn public_key_bytes(&self) -> Vec<u8> {
-        self.0.raw_public_key().unwrap()
+    fn public_key_bytes(&self) -> Self::EncodedPublicKey {
+        self.0.raw_public_key().unwrap().try_into().unwrap()
     }
 
     fn diffie_hellman(

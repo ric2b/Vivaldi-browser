@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <optional>
 #include <string>
 
 #include "ash/constants/ash_features.h"
@@ -12,7 +13,7 @@
 #include "base/test/gtest_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_apps_mixin.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_test_helpers.h"
@@ -61,7 +62,6 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "net/http/http_status_code.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 namespace {
@@ -99,7 +99,7 @@ class EnrollmentEmbeddedPolicyServerBase : public OobeBaseTest {
  public:
   EnrollmentEmbeddedPolicyServerBase() {
     gaia_frame_parent_ = "authView";
-    authenticator_id_ = "$('enterprise-enrollment').authenticator_";
+    authenticator_id_ = "$('enterprise-enrollment').authenticator";
   }
 
   EnrollmentEmbeddedPolicyServerBase(
@@ -235,7 +235,7 @@ class AutoEnrollmentEmbeddedPolicyServer
 
 class AutoEnrollmentWithStatistics : public AutoEnrollmentEmbeddedPolicyServer {
  public:
-  AutoEnrollmentWithStatistics() : AutoEnrollmentEmbeddedPolicyServer() {
+  AutoEnrollmentWithStatistics() {
     // `AutoEnrollmentTypeChecker` assumes that VPD is in valid state if
     // "serial_number" or "Product_S/N" could be read from it.
     fake_statistics_provider_.SetMachineStatistic(
@@ -416,6 +416,18 @@ IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase, ManualEnrollment) {
   test::OobeJS().ExpectTrue("Oobe.isEnrollmentSuccessfulForTest()");
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
   EXPECT_TRUE(InstallAttributes::Get()->IsCloudManaged());
+}
+
+IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase, GetDeviceId) {
+  host()->HandleAccelerator(LoginAcceleratorAction::kStartEnrollment);
+  OobeScreenWaiter(EnrollmentScreenView::kScreenId).Wait();
+  WaitForGaiaPageBackButtonUpdate();
+
+  SigninFrameJS().ExecuteAsync("gaia.chromeOSLogin.sendGetDeviceId()");
+  SigninFrameJS().CreateWaiter("gaia.chromeOSLogin.receivedDeviceId")->Wait();
+  std::string received_device_id =
+      SigninFrameJS().GetString("gaia.chromeOSLogin.receivedDeviceId");
+  EXPECT_TRUE(!received_device_id.empty());
 }
 
 // The test case is the same as
@@ -669,7 +681,7 @@ IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase,
 }
 
 IN_PROC_BROWSER_TEST_F(EnrollmentEmbeddedPolicyServerBase,
-                       EnrollmentErrorEnterpriseTosHasNotBeenAccepeted) {
+                       EnrollmentErrorEnterpriseTosHasNotBeenAccepted) {
   policy_server_.SetDeviceEnrollmentError(
       policy::DeviceManagementService::kTosHasNotBeenAccepted);
 
@@ -1359,9 +1371,9 @@ class KioskEnrollmentTest : public EnrollmentEmbeddedPolicyServerBase {
   }
 
   void SetupAutoLaunchApp(FakeOwnerSettingsService* service) {
-    KioskAppManager::Get()->AddApp(KioskAppsMixin::kKioskAppId, service);
-    KioskAppManager::Get()->SetAutoLaunchApp(KioskAppsMixin::kKioskAppId,
-                                             service);
+    KioskChromeAppManager::Get()->AddApp(KioskAppsMixin::kKioskAppId, service);
+    KioskChromeAppManager::Get()->SetAutoLaunchApp(KioskAppsMixin::kKioskAppId,
+                                                   service);
   }
 
  private:

@@ -46,9 +46,8 @@ class UnifiedSliderListener : public views::SliderListener {
   void TrackValueChangeUMA(bool going_up);
 };
 
-// Base view class of a slider row in `UnifiedSystemTray`. It has a button on
-// the left side and a slider on the right side.
-// For QsRevamp: the slider has an `ImageView` icon on top of the slider.
+// Base view class of a slider row in `UnifiedSystemTray`. The slider has an
+// `ImageView` icon on top of the slider.
 class UnifiedSliderView : public views::View {
  public:
   METADATA_HEADER(UnifiedSliderView);
@@ -83,15 +82,14 @@ class UnifiedSliderView : public views::View {
   void OnEvent(ui::Event* event) override;
 
  private:
-  raw_ptr<const gfx::VectorIcon, ExperimentalAsh> icon_;
-  views::Button::PressedCallback callback_;
+  raw_ptr<const gfx::VectorIcon> icon_;
   const bool is_togglable_;
 
   // Unowned. Owned by views hierarchy.
-  raw_ptr<IconButton, ExperimentalAsh> button_ = nullptr;
-  raw_ptr<views::Slider, ExperimentalAsh> slider_ = nullptr;
-  raw_ptr<IconButton, ExperimentalAsh> slider_button_ = nullptr;
-  raw_ptr<views::View, ExperimentalAsh> container_ = nullptr;
+  raw_ptr<IconButton> button_ = nullptr;
+  raw_ptr<views::Slider> slider_ = nullptr;
+  raw_ptr<IconButton> slider_button_ = nullptr;
+  raw_ptr<views::View> container_ = nullptr;
 };
 
 }  // namespace ash

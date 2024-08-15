@@ -28,9 +28,10 @@ namespace content {
 class DCOMPTextureMailboxResources
     : public base::RefCounted<DCOMPTextureMailboxResources> {
  public:
-  DCOMPTextureMailboxResources(gpu::Mailbox mailbox,
-                               scoped_refptr<DCOMPTextureFactory> factory)
-      : mailbox_(mailbox), factory_(factory) {
+  DCOMPTextureMailboxResources(
+      scoped_refptr<gpu::ClientSharedImage> shared_image,
+      scoped_refptr<DCOMPTextureFactory> factory)
+      : shared_image_(std::move(shared_image)), factory_(factory) {
     DVLOG_FUNC(1);
   }
 
@@ -49,15 +50,15 @@ class DCOMPTextureMailboxResources
       return;
 
     gpu::SharedImageInterface* sii = factory_->SharedImageInterface();
-    sii->DestroySharedImage(last_sync_token_.value(), mailbox_);
+    sii->DestroySharedImage(last_sync_token_.value(), std::move(shared_image_));
   }
 
-  gpu::Mailbox mailbox_;
+  scoped_refptr<gpu::ClientSharedImage> shared_image_;
   scoped_refptr<DCOMPTextureFactory> factory_;
 
   // TODO(xhwang): Follow the example of UpdateReleaseSyncToken to wait for
   // all SyncTokens and create a new one for DestroySharedImage().
-  absl::optional<gpu::SyncToken> last_sync_token_;
+  std::optional<gpu::SyncToken> last_sync_token_;
 };
 
 namespace {
@@ -164,21 +165,30 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
 
   // No need to wait on any sync token as the SharedImage |mailbox_| should be
   // ready for use.
+  scoped_refptr<gpu::ClientSharedImage> shared_image;
   if (!mailbox_added_) {
     DVLOG_FUNC(1) << "AddMailbox";
     mailbox_added_ = true;
     gpu::SharedImageInterface* sii = factory_->SharedImageInterface();
-    sii->NotifyMailboxAdded(mailbox_, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
-                                          gpu::SHARED_IMAGE_USAGE_GLES2 |
-                                          gpu::SHARED_IMAGE_USAGE_RASTER);
+
+    // The SI backing this VideoFrame will be read by the display compositor and
+    // raster. The latter will be over GL if not using OOP-R. NOTE: GL usage can
+    // be eliminated once OOP-R ships definitively.
+    shared_image = sii->NotifyMailboxAdded(
+        mailbox_, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+                      gpu::SHARED_IMAGE_USAGE_GLES2_READ |
+                      gpu::SHARED_IMAGE_USAGE_RASTER_READ |
+                      gpu::SHARED_IMAGE_USAGE_RASTER_WRITE);
   }
 
   gpu::MailboxHolder holders[media::VideoFrame::kMaxPlanes] = {
       gpu::MailboxHolder(mailbox_, gpu::SyncToken(), GL_TEXTURE_EXTERNAL_OES)};
 
   if (!dcomp_texture_resources_) {
+    CHECK(shared_image);
     dcomp_texture_resources_ =
-        base::MakeRefCounted<DCOMPTextureMailboxResources>(mailbox_, factory_);
+        base::MakeRefCounted<DCOMPTextureMailboxResources>(
+            std::move(shared_image), factory_);
   }
 
   auto frame = media::VideoFrame::WrapNativeTextures(
@@ -202,7 +212,8 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   gpu::SharedImageInterface* sii = factory_->SharedImageInterface();
 
-  uint32_t usage = gpu::SHARED_IMAGE_USAGE_RASTER |
+  uint32_t usage = gpu::SHARED_IMAGE_USAGE_RASTER_READ |
+                   gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
                    gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
                    gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                    gpu::SHARED_IMAGE_USAGE_SCANOUT;
@@ -237,7 +248,8 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
   video_frame_texture->AddDestructionObserver(base::BindPostTask(
       media_task_runner_,
       base::BindOnce(&DCOMPTextureWrapperImpl::OnDXVideoFrameDestruction,
-                     weak_factory_.GetWeakPtr(), sync_token, mailbox),
+                     weak_factory_.GetWeakPtr(), sync_token,
+                     std::move(client_shared_image)),
       FROM_HERE));
 
   std::move(create_video_frame_cb).Run(video_frame_texture, mailbox);
@@ -245,10 +257,10 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
 
 void DCOMPTextureWrapperImpl::OnDXVideoFrameDestruction(
     const gpu::SyncToken& sync_token,
-    const gpu::Mailbox& image_mailbox) {
+    scoped_refptr<gpu::ClientSharedImage> shared_image) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   gpu::SharedImageInterface* sii = factory_->SharedImageInterface();
-  sii->DestroySharedImage(sync_token, image_mailbox);
+  sii->DestroySharedImage(sync_token, std::move(shared_image));
 }
 
 void DCOMPTextureWrapperImpl::OnSharedImageMailboxBound(gpu::Mailbox mailbox) {

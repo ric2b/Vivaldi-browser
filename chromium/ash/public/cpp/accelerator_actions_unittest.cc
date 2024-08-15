@@ -7,6 +7,7 @@
 #include "base/containers/fixed_flat_map.h"
 #include "base/hash/md5.h"
 #include "base/hash/md5_boringssl.h"
+#include "base/test/metrics/histogram_enum_reader.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -14,12 +15,12 @@ namespace ash {
 namespace {
 
 // The total number of accelerator actions.
-constexpr int kAcceleratorActionsTotalNum = 156;
+constexpr int kAcceleratorActionsTotalNum = 157;
 // The toal number of debug accelerators, these will not be used for hashing.
 constexpr int kDebugAcceleratorActionsNum = 27;
 // The hash of accelerator actions. Please update this when adding a new
 // accelerator action.
-constexpr char kAcceleratorActionsHash[] = "69ca25642d0ee9a9cf3eee1c3ac14419";
+constexpr char kAcceleratorActionsHash[] = "f4085e1e110f69d5583801915c4c5a1c";
 
 // Define the mapping between an AcceleratorAction and its string name.
 // Example:
@@ -28,8 +29,11 @@ constexpr static auto kAcceleratorActionToName =
     base::MakeFixedFlatMap<AcceleratorAction, const char*>({
 #define ACCELERATOR_ACTION_ENTRY(action) \
   {AcceleratorAction::k##action, #action},
+#define ACCELERATOR_ACTION_ENTRY_FIXED_VALUE(action, value) \
+  {AcceleratorAction::k##action, #action},
         ACCELERATOR_ACTIONS
 #undef ACCELERATOR_ACTION_ENTRY
+#undef ACCELERATOR_ACTION_ENTRY_FIXED_VALUE
     });
 
 class AcceleratorActionsTest : public testing::Test {
@@ -44,14 +48,32 @@ class AcceleratorActionsTest : public testing::Test {
 
 }  // namespace
 
+// Tests that the AcceleratorAction enum in enums.xml exactly matches the
+// AcceleratorAction enum in C++ file.
+TEST_F(AcceleratorActionsTest, CheckHistogramEnum) {
+  const auto enums =
+      base::ReadEnumFromEnumsXml("AcceleratorAction", "chromeos");
+  ASSERT_TRUE(enums);
+  // The number of enums in the histogram entry should be equal to the number of
+  // enums in the C++ file.
+  EXPECT_EQ(enums->size(), kAcceleratorActionToName.size());
+
+  for (const auto& entry : *enums) {
+    // Check that the C++ file has a definition equal to the histogram file.
+    EXPECT_EQ(entry.second, kAcceleratorActionToName.find(entry.first)->second)
+        << "Enum entry name: " << entry.second
+        << " in enums.xml is different from enum entry name: "
+        << kAcceleratorActionToName.find(entry.first)->second << " in C++ file";
+  }
+}
+
 TEST_F(AcceleratorActionsTest, AcceleratorActionsHash) {
   const char kCommonMessage[] =
-      "If you are adding a non-debug accelerator action, please ensure that "
-      "you add the new action to be bottom of the enums but before the"
-      "DEBUG accelerator actions. Please update the values "
-      "`kAcceleratorActionsTotalNum` and `kDebugAcceleratorActionsNum` "
-      "(if applicable)."
-      "Please then update `kAcceleratorActionsHash`";
+      "If you are adding a non-debug accelerator action, please add "
+      "the new action to be bottom of the enums but before "
+      "DEBUG accelerator actions. \n"
+      "Please update the values `kAcceleratorActionsTotalNum` and "
+      "`kDebugAcceleratorActionsNum` (if applicable).";
 
   // First check that the size of the enum is correct.
   const int current_actions_size = kAcceleratorActionToName.size();
@@ -75,8 +97,8 @@ TEST_F(AcceleratorActionsTest, AcceleratorActionsHash) {
   const std::string current_hash = MD5DigestToBase16(digest);
 
   EXPECT_EQ(current_hash, kAcceleratorActionsHash)
-      << kCommonMessage << "kAcceleratorActionsHash=\"" << current_hash
-      << "\"\n";
+      << kCommonMessage << " Please update kAcceleratorActionsHash to: \n"
+      << current_hash << "\n";
 }
 
 }  // namespace ash

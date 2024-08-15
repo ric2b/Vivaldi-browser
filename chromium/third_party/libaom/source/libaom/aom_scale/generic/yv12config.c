@@ -193,7 +193,9 @@ static int realloc_frame_buffer_aligned(
     if (num_pyramid_levels > 0) {
       ybf->y_pyramid = aom_alloc_pyramid(width, height, num_pyramid_levels,
                                          use_highbitdepth);
+      if (!ybf->y_pyramid) return AOM_CODEC_MEM_ERROR;
       ybf->corners = av1_alloc_corner_list();
+      if (!ybf->corners) return AOM_CODEC_MEM_ERROR;
     }
 #endif  // CONFIG_AV1_ENCODER && !CONFIG_REALTIME_ONLY
 

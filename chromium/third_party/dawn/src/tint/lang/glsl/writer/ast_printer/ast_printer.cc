@@ -151,9 +151,8 @@ SanitizedResult Sanitize(const Program& in,
         manager.Add<ast::transform::SingleEntryPoint>();
         data.Add<ast::transform::SingleEntryPoint::Config>(entry_point);
     }
-    manager.Add<ast::transform::Renamer>();
-    data.Add<ast::transform::Renamer::Config>(ast::transform::Renamer::Target::kGlslKeywords,
-                                              /* preserve_unicode */ false);
+
+    data.Add<ast::transform::AddBlockAttribute::Config>(true);
 
     manager.Add<ast::transform::PreservePadding>();  // Must come before DirectVariableAccess
 
@@ -185,10 +184,13 @@ SanitizedResult Sanitize(const Program& in,
         polyfills.first_leading_bit = true;
         polyfills.first_trailing_bit = true;
         polyfills.insert_bits = ast::transform::BuiltinPolyfill::Level::kClampParameters;
-        polyfills.int_div_mod = true;
+        polyfills.int_div_mod = !options.disable_polyfill_integer_div_mod;
         polyfills.saturate = true;
         polyfills.texture_sample_base_clamp_to_edge_2d_f32 = true;
         polyfills.workgroup_uniform_load = true;
+        polyfills.dot_4x8_packed = true;
+        polyfills.pack_unpack_4x8 = true;
+        polyfills.pack_4xu8_clamp = true;
         data.Add<ast::transform::BuiltinPolyfill::Config>(polyfills);
         manager.Add<ast::transform::BuiltinPolyfill>();  // Must come before DirectVariableAccess
     }
@@ -264,10 +266,7 @@ bool ASTPrinter::Generate() {
             "GLSL", builder_.AST(), diagnostics_,
             Vector{
                 wgsl::Extension::kChromiumDisableUniformityAnalysis,
-                wgsl::Extension::kChromiumExperimentalDp4A,
-                wgsl::Extension::kChromiumExperimentalFullPtrParameters,
                 wgsl::Extension::kChromiumInternalDualSourceBlending,
-                wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture,
                 wgsl::Extension::kChromiumExperimentalPushConstant,
                 wgsl::Extension::kF16,
             })) {
@@ -318,6 +317,9 @@ bool ASTPrinter::Generate() {
             [&](const ast::Enable* enable) {
                 // Record the required extension for generating extension directive later
                 RecordExtension(enable);
+            },  //
+            [&](const ast::Requires*) {
+                // Do nothing for requiring language features in GLSL.
             },  //
             TINT_ICE_ON_NO_MATCH);
     }
@@ -1896,9 +1898,7 @@ void ASTPrinter::EmitGlobalVariable(const ast::Variable* global) {
                     EmitIOVariable(sem);
                     return;
                 case core::AddressSpace::kPushConstant:
-                    diagnostics_.add_error(
-                        diag::System::Writer,
-                        "unhandled address space " + tint::ToString(sem->AddressSpace()));
+                    EmitPushConstant(sem);
                     return;
                 default: {
                     TINT_ICE() << "unhandled address space " << sem->AddressSpace();
@@ -1926,7 +1926,7 @@ void ASTPrinter::EmitUniformVariable(const ast::Var* var, const sem::Variable* s
         TINT_ICE() << "storage variable must be of struct type";
         return;
     }
-    auto bp = *sem->As<sem::GlobalVariable>()->BindingPoint();
+    auto bp = *sem->As<sem::GlobalVariable>()->Attributes().binding_point;
     {
         auto out = Line();
         out << "layout(binding = " << bp.binding << ", std140";
@@ -1945,7 +1945,7 @@ void ASTPrinter::EmitStorageVariable(const ast::Var* var, const sem::Variable* s
         TINT_ICE() << "storage variable must be of struct type";
         return;
     }
-    auto bp = *sem->As<sem::GlobalVariable>()->BindingPoint();
+    auto bp = *sem->As<sem::GlobalVariable>()->Attributes().binding_point;
     Line() << "layout(binding = " << bp.binding << ", std430) buffer "
            << UniqueIdentifier(StructName(str) + "_ssbo") << " {";
     EmitStructMembers(current_buffer_, str);
@@ -2077,7 +2077,7 @@ void ASTPrinter::EmitIOVariable(const sem::GlobalVariable* var) {
     }
 
     auto out = Line();
-    EmitAttributes(out, var, decl->attributes);
+    EmitAttributes(out, var);
     EmitInterpolationQualifiers(out, decl->attributes);
 
     auto name = decl->name->symbol.Name();
@@ -2088,6 +2088,17 @@ void ASTPrinter::EmitIOVariable(const sem::GlobalVariable* var) {
         out << " = ";
         EmitExpression(out, initializer);
     }
+    out << ";";
+}
+
+void ASTPrinter::EmitPushConstant(const sem::GlobalVariable* var) {
+    auto* decl = var->Declaration();
+
+    auto out = Line();
+
+    auto name = decl->name->symbol.Name();
+    auto* type = var->Type()->UnwrapRef();
+    EmitTypeAndName(out, type, var->AddressSpace(), var->Access(), name);
     out << ";";
 }
 
@@ -2127,23 +2138,17 @@ void ASTPrinter::EmitInterpolationQualifiers(StringStream& out,
     }
 }
 
-void ASTPrinter::EmitAttributes(StringStream& out,
-                                const sem::GlobalVariable* var,
-                                VectorRef<const ast::Attribute*> attributes) {
-    if (attributes.IsEmpty()) {
-        return;
-    }
+void ASTPrinter::EmitAttributes(StringStream& out, const sem::GlobalVariable* var) {
+    auto& attrs = var->Attributes();
 
     bool first = true;
-    for (auto* attr : attributes) {
-        if (attr->As<ast::LocationAttribute>()) {
-            out << (first ? "layout(" : ", ");
-            out << "location = " << std::to_string(var->Location().value());
-            first = false;
-        }
-        if (attr->As<ast::IndexAttribute>()) {
-            out << ", index = " << std::to_string(var->Index().value());
-        }
+    if (attrs.location.has_value()) {
+        out << (first ? "layout(" : ", ");
+        out << "location = " << std::to_string(attrs.location.value());
+        first = false;
+    }
+    if (attrs.index.has_value()) {
+        out << ", index = " << std::to_string(attrs.index.value());
     }
     if (!first) {
         out << ") ";
@@ -2647,6 +2652,7 @@ void ASTPrinter::EmitType(StringStream& out,
             break;
         }
         case core::AddressSpace::kUniform:
+        case core::AddressSpace::kPushConstant:
         case core::AddressSpace::kHandle: {
             out << "uniform ";
             break;

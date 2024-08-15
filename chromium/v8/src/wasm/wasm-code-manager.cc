@@ -301,6 +301,22 @@ void WasmCode::LogCode(Isolate* isolate, const char* source_url,
                                    name, source_url, code_offset, script_id));
 }
 
+namespace {
+bool ProtectedInstructionDataCompare(const ProtectedInstructionData& left,
+                                     const ProtectedInstructionData& right) {
+  return left.instr_offset < right.instr_offset;
+}
+}  // namespace
+
+bool WasmCode::IsProtectedInstruction(Address pc) {
+  base::Vector<const trap_handler::ProtectedInstructionData> instructions =
+      protected_instructions();
+  ProtectedInstructionData offset{
+      static_cast<uint32_t>(pc - instruction_start())};
+  return std::binary_search(instructions.begin(), instructions.end(), offset,
+                            ProtectedInstructionDataCompare);
+}
+
 void WasmCode::Validate() const {
   // The packing strategy for {tagged_parameter_slots} only works if both the
   // max number of parameters and their max combined stack slot usage fits into
@@ -790,9 +806,9 @@ void WasmCodeAllocator::FreeCode(base::Vector<WasmCode* const> codes) {
 
   auto* code_manager = GetWasmCodeManager();
   for (auto region : regions_to_decommit.regions()) {
-    size_t old_committed = committed_code_space_.fetch_sub(region.size());
+    [[maybe_unused]] size_t old_committed =
+        committed_code_space_.fetch_sub(region.size());
     DCHECK_GE(old_committed, region.size());
-    USE(old_committed);
     for (base::AddressRegion split_range :
          SplitRangeByReservationsIfNeeded(region, owned_code_space_)) {
       code_manager->Decommit(split_range);
@@ -804,7 +820,9 @@ size_t WasmCodeAllocator::GetNumCodeSpaces() const {
   return owned_code_space_.size();
 }
 
-NativeModule::NativeModule(WasmFeatures enabled, DynamicTiering dynamic_tiering,
+NativeModule::NativeModule(WasmFeatures enabled,
+                           CompileTimeImports compile_imports,
+                           DynamicTiering dynamic_tiering,
                            VirtualMemory code_space,
                            std::shared_ptr<const WasmModule> module,
                            std::shared_ptr<Counters> async_counters,
@@ -813,9 +831,8 @@ NativeModule::NativeModule(WasmFeatures enabled, DynamicTiering dynamic_tiering,
           GetWasmEngine()->GetBarrierForBackgroundCompile()->TryLock()),
       code_allocator_(async_counters),
       enabled_features_(enabled),
-      module_(std::move(module)),
-      import_wrapper_cache_(std::unique_ptr<WasmImportWrapperCache>(
-          new WasmImportWrapperCache())) {
+      compile_imports_(compile_imports),
+      module_(std::move(module)) {
   DCHECK(engine_scope_);
   // We receive a pointer to an empty {std::shared_ptr}, and install ourselve
   // there.
@@ -1829,10 +1846,10 @@ NativeModule::~NativeModule() {
   // NativeModule or freeing anything.
   compilation_state_->CancelCompilation();
 
-  // Free the import wrapper cache before releasing the {WasmCode} objects in
-  // {owned_code_}. The destructor of {WasmImportWrapperCache} still needs to
-  // decrease reference counts on the {WasmCode} objects.
-  import_wrapper_cache_.reset();
+  // Clear the import wrapper cache before releasing the {WasmCode} objects in
+  // {owned_code_}. The {WasmImportWrapperCache} still needs to decrement
+  // reference counts on the {WasmCode} objects.
+  import_wrapper_cache_.clear();
 
   GetWasmEngine()->FreeNativeModule(this);
 
@@ -1930,9 +1947,9 @@ void WasmCodeManager::Decommit(base::AddressRegion region) {
   PageAllocator* allocator = GetPlatformPageAllocator();
   DCHECK(IsAligned(region.begin(), allocator->CommitPageSize()));
   DCHECK(IsAligned(region.size(), allocator->CommitPageSize()));
-  size_t old_committed = total_committed_code_space_.fetch_sub(region.size());
+  [[maybe_unused]] size_t old_committed =
+      total_committed_code_space_.fetch_sub(region.size());
   DCHECK_LE(region.size(), old_committed);
-  USE(old_committed);
   TRACE_HEAP("Decommitting system pages 0x%" PRIxPTR ":0x%" PRIxPTR "\n",
              region.begin(), region.end());
   if (V8_UNLIKELY(!allocator->DecommitPages(
@@ -2139,8 +2156,8 @@ bool WasmCodeManager::MemoryProtectionKeyWritable() {
 }
 
 std::shared_ptr<NativeModule> WasmCodeManager::NewNativeModule(
-    Isolate* isolate, WasmFeatures enabled, size_t code_size_estimate,
-    std::shared_ptr<const WasmModule> module) {
+    Isolate* isolate, WasmFeatures enabled, CompileTimeImports compile_imports,
+    size_t code_size_estimate, std::shared_ptr<const WasmModule> module) {
   if (total_committed_code_space_.load() >
       critical_committed_code_space_.load()) {
     (reinterpret_cast<v8::Isolate*>(isolate))
@@ -2188,7 +2205,7 @@ std::shared_ptr<NativeModule> WasmCodeManager::NewNativeModule(
   size_t size = code_space.size();
   Address end = code_space.end();
   std::shared_ptr<NativeModule> ret;
-  new NativeModule(enabled,
+  new NativeModule(enabled, compile_imports,
                    DynamicTiering{v8_flags.wasm_dynamic_tiering.value()},
                    std::move(code_space), std::move(module),
                    isolate->async_counters(), &ret);
@@ -2411,18 +2428,20 @@ NamesProvider* NativeModule::GetNamesProvider() {
 }
 
 size_t NativeModule::EstimateCurrentMemoryConsumption() const {
-  UPDATE_WHEN_CLASS_CHANGES(NativeModule, 440);
+  UPDATE_WHEN_CLASS_CHANGES(NativeModule, 520);
   size_t result = sizeof(NativeModule);
   result += module_->EstimateCurrentMemoryConsumption();
 
-  size_t wire_bytes_size = wire_bytes_ ? wire_bytes_->size() : 0;
+  std::shared_ptr<base::OwnedVector<const uint8_t>> wire_bytes =
+      std::atomic_load(&wire_bytes_);
+  size_t wire_bytes_size = wire_bytes ? wire_bytes->size() : 0;
   result += wire_bytes_size;
 
   if (source_map_) {
     result += source_map_->EstimateCurrentMemoryConsumption();
   }
   result += compilation_state_->EstimateCurrentMemoryConsumption();
-  result += import_wrapper_cache_->EstimateCurrentMemoryConsumption();
+  result += import_wrapper_cache_.EstimateCurrentMemoryConsumption();
   // For {tiering_budgets_}.
   result += module_->num_declared_functions * sizeof(uint32_t);
 
@@ -2440,7 +2459,7 @@ size_t NativeModule::EstimateCurrentMemoryConsumption() const {
       result += names_provider_->EstimateCurrentMemoryConsumption();
     }
     if (cached_code_) {
-      result += ContentSize(*cached_code_.get());
+      result += ContentSize(*cached_code_);
     }
   }
 
@@ -2475,10 +2494,9 @@ void WasmCodeManager::FreeNativeModule(
   DCHECK(IsAligned(committed_size, CommitPageSize()));
   // TODO(v8:8462): Remove this once perf supports remapping.
   if (!v8_flags.perf_prof) {
-    size_t old_committed =
+    [[maybe_unused]] size_t old_committed =
         total_committed_code_space_.fetch_sub(committed_size);
     DCHECK_LE(committed_size, old_committed);
-    USE(old_committed);
   }
 }
 
@@ -2500,6 +2518,47 @@ NativeModule* WasmCodeManager::LookupNativeModule(Address pc) const {
 WasmCode* WasmCodeManager::LookupCode(Address pc) const {
   NativeModule* candidate = LookupNativeModule(pc);
   return candidate ? candidate->Lookup(pc) : nullptr;
+}
+
+WasmCode* WasmCodeManager::LookupCode(Isolate* isolate, Address pc) const {
+  // Since kNullAddress is used as a sentinel value, we should not try
+  // to look it up in the cache
+  if (pc == kNullAddress) return nullptr;
+  // If 'isolate' is nullptr, do not use a cache. This can happen when
+  // called from function V8NameConverter::NameOfAddress
+  if (isolate) {
+    return isolate->wasm_code_look_up_cache()->GetCacheEntry(pc)->code;
+  } else {
+    wasm::WasmCodeRefScope code_ref_scope;
+    return LookupCode(pc);
+  }
+}
+
+std::pair<WasmCode*, SafepointEntry> WasmCodeManager::LookupCodeAndSafepoint(
+    Isolate* isolate, Address pc) {
+  auto* entry = isolate->wasm_code_look_up_cache()->GetCacheEntry(pc);
+  WasmCode* code = entry->code;
+  DCHECK(code);
+  if (!entry->safepoint_entry.is_initialized()) {
+    SafepointTable table(code);
+    entry->safepoint_entry = table.TryFindEntry(pc);
+    if (!entry->safepoint_entry.is_initialized()) {
+      // Only for protected instructions the safepoint entry is not mandatory.
+      // This is rare, so we don't bother caching the result in this case.
+      CHECK(code->IsProtectedInstruction(
+          pc - WasmFrameConstants::kProtectedInstructionReturnAddressOffset));
+    }
+  } else {
+#ifdef DEBUG
+    SafepointTable table(code);
+    DCHECK_EQ(entry->safepoint_entry, table.TryFindEntry(pc));
+#endif  // DEBUG
+  }
+  return std::make_pair(code, entry->safepoint_entry);
+}
+
+void WasmCodeManager::FlushCodeLookupCache(Isolate* isolate) {
+  return isolate->wasm_code_look_up_cache()->Flush();
 }
 
 namespace {
@@ -2524,6 +2583,48 @@ void WasmCodeRefScope::AddRef(WasmCode* code) {
   DCHECK_NOT_NULL(current_scope);
   current_scope->code_ptrs_.push_back(code);
   code->IncRef();
+}
+
+void WasmCodeLookupCache::Flush() {
+  for (int i = 0; i < kWasmCodeLookupCacheSize; i++)
+    cache_[i].pc.store(kNullAddress, std::memory_order_release);
+}
+
+WasmCodeLookupCache::CacheEntry* WasmCodeLookupCache::GetCacheEntry(
+    Address pc) {
+  static_assert(base::bits::IsPowerOfTwo(kWasmCodeLookupCacheSize));
+  DCHECK(pc != kNullAddress);
+  uint32_t hash = ComputeAddressHash(pc);
+  uint32_t index = hash & (kWasmCodeLookupCacheSize - 1);
+  CacheEntry* entry = &cache_[index];
+  if (entry->pc.load(std::memory_order_acquire) == pc) {
+    // Code can be deallocated at two points:
+    // - when the NativeModule that references it is garbage-
+    //   collected;
+    // - when it is no longer referenced by its NativeModule, nor from
+    //   any stack.
+    // The cache is cleared when a NativeModule is destroyed, and when
+    // the isolate reports the set of code referenced from its stacks.
+    // So, if the code is the cache, it is because it was live at some
+    // point (when inserted in the cache), its native module is still
+    // considered live, and it has not yet been reported as no longer
+    // referenced from any stack. It thus cannot have been released
+    // yet.
+#ifdef DEBUG
+    wasm::WasmCodeRefScope code_ref_scope;
+    DCHECK_EQ(entry->code, wasm::GetWasmCodeManager()->LookupCode(pc));
+#endif  // DEBUG
+  } else {
+    // For WebAssembly frames we perform a lookup in the handler table.
+    // This code ref scope is here to avoid a check failure when looking up
+    // the code. It's not actually necessary to keep the code alive as it's
+    // currently being executed.
+    wasm::WasmCodeRefScope code_ref_scope;
+    entry->pc.store(pc, std::memory_order_release);
+    entry->code = wasm::GetWasmCodeManager()->LookupCode(pc);
+    entry->safepoint_entry.Reset();
+  }
+  return entry;
 }
 }  // namespace wasm
 }  // namespace internal

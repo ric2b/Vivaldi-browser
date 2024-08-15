@@ -10,6 +10,7 @@ ckitagawa@chromium.org
 sinansahin@google.com
 mvanouwerkerk@chromium.org
 jinsukkim@chromium.org
+wenyufu@chromium.org
 # apps
 nancylingwang@chromium.org
 tby@chromium.org
@@ -18,6 +19,7 @@ yulunwu@chromium.org
 mhasank@chromium.org
 batoon@google.com
 youkichihosoi@chromium.org
+lingyufeng@chromium.org
 # ash_clipboard
 ckincaid@chromium.org
 dmblack@google.com
@@ -50,6 +52,7 @@ yigu@chromium.org
 # bluetooth
 chadduffin@chromium.org
 crisrael@google.com
+jiajunz@google.com
 julietlevesque@google.com
 khorimoto@chromium.org
 reillyg@chromium.org
@@ -78,6 +81,7 @@ azeemarshad@chromium.org
 chadduffin@chromium.org
 crisrael@google.com
 enlightened@chromium.org
+jiajunz@google.com
 jorgelo@chromium.org
 julietlevesque@google.com
 khorimoto@chromium.org
@@ -147,6 +151,9 @@ poromov@chromium.org
 zmin@chromium.org
 seblalancette@chromium.org
 igorruvinov@chromium.org
+vsavu@google.com
+emaxx@chromium.org
+hendrich@chromium.org
 # event
 jonross@chromium.org
 # extensions
@@ -203,7 +210,6 @@ nyquist@chromium.org
 tby@chromium.org
 # login
 jorgelo@chromium.org
-rsorokin@google.com
 alemate@chromium.org
 # media
 evliu@google.com
@@ -238,6 +244,7 @@ toyoshim@chromium.org
 # network
 azeemarshad@chromium.org
 chadduffin@chromium.org
+jiajunz@google.com
 khorimoto@chromium.org
 nidhijaju@chromium.org
 toyoshim@chromium.org
@@ -255,7 +262,6 @@ ender@google.com
 manukh@chromium.org
 toyoshim@chromium.org
 # oobe
-rsorokin@google.com
 alemate@chromium.org
 # optimization
 mcrouse@chromium.org
@@ -342,6 +348,10 @@ alexilin@chromium.org
 xiaohuic@chromium.org
 # quota
 ayui@chromium.org
+# readaloud
+andreaxg@google.com
+basiaz@google.com
+iwells@google.com
 # renderer4
 schenney@chromium.org
 # renderer
@@ -422,7 +432,6 @@ mlippautz@chromium.org
 # web_apk
 eirage@chromium.org
 hartmanng@chromium.org
-rayankans@chromium.org
 # webapps
 alancutter@chromium.org
 dmurph@chromium.org
@@ -432,6 +441,7 @@ hartmanng@chromium.org
 # web_audio
 hongchan@chromium.org
 mjwilson@chromium.org
+sinafirooz@chromium.org
 # webauthn
 kenrb@chromium.org
 hcyang@google.com
@@ -444,7 +454,5 @@ kron@chromium.org
 # xr
 alcooper@chromium.org
 # Custom: not in any subdirectory
-hujame@google.com
-jihanli@chromium.org
 lyf@chromium.org
 pwnall@chromium.org

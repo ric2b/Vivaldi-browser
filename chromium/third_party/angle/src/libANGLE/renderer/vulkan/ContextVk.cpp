@@ -673,8 +673,7 @@ void DumpPipelineCacheGraph(ContextVk *contextVk, const std::ostringstream &grap
 {
     std::ostream &out = std::cout;
 
-    out << "digraph {\n"
-        << " node [shape=box";
+    out << "digraph {\n" << " node [shape=box";
     if (contextVk->getFeatures().supportsPipelineCreationFeedback.enabled)
     {
         out << ",color=green";
@@ -689,8 +688,10 @@ bool BlendModeSupportsDither(const gl::State &state, size_t colorIndex)
     // Specific combinations of color blend modes are known to work with our dithering emulation.
     // Note we specifically don't check alpha blend, as dither isn't applied to alpha.
     // See http://b/232574868 for more discussion and reasoning.
-    return state.getBlendStateExt().getSrcColorIndexed(colorIndex) == GL_SRC_ALPHA &&
-           state.getBlendStateExt().getDstColorIndexed(colorIndex) == GL_ONE_MINUS_SRC_ALPHA;
+    return state.getBlendStateExt().getSrcColorIndexed(colorIndex) ==
+               gl::BlendFactorType::SrcAlpha &&
+           state.getBlendStateExt().getDstColorIndexed(colorIndex) ==
+               gl::BlendFactorType::OneMinusSrcAlpha;
 }
 
 bool ShouldUseGraphicsDriverUniformsExtended(const vk::Context *context)
@@ -1370,7 +1371,8 @@ angle::Result ContextVk::initialize()
     // Initialize current value/default attribute buffers.
     for (vk::DynamicBuffer &buffer : mStreamedVertexBuffers)
     {
-        buffer.init(mRenderer, kVertexBufferUsage, 1, kDynamicVertexDataSize, true);
+        buffer.init(mRenderer, kVertexBufferUsage, vk::kVertexBufferAlignment,
+                    kDynamicVertexDataSize, true);
     }
 
 #if ANGLE_ENABLE_VULKAN_GPU_TRACE_EVENTS
@@ -1573,24 +1575,25 @@ angle::Result ContextVk::setupDraw(const gl::Context *context,
 
     DirtyBits dirtyBits = mGraphicsDirtyBits & dirtyBitMask;
 
-    if (dirtyBits.none())
+    if (dirtyBits.any())
     {
-        ASSERT(hasActiveRenderPass());
-        return angle::Result::Continue;
-    }
+        // Flush any relevant dirty bits.
+        for (DirtyBits::Iterator dirtyBitIter = dirtyBits.begin(); dirtyBitIter != dirtyBits.end();
+             ++dirtyBitIter)
+        {
+            ASSERT(mGraphicsDirtyBitHandlers[*dirtyBitIter]);
+            ANGLE_TRY(
+                (this->*mGraphicsDirtyBitHandlers[*dirtyBitIter])(&dirtyBitIter, dirtyBitMask));
+        }
 
-    // Flush any relevant dirty bits.
-    for (DirtyBits::Iterator dirtyBitIter = dirtyBits.begin(); dirtyBitIter != dirtyBits.end();
-         ++dirtyBitIter)
-    {
-        ASSERT(mGraphicsDirtyBitHandlers[*dirtyBitIter]);
-        ANGLE_TRY((this->*mGraphicsDirtyBitHandlers[*dirtyBitIter])(&dirtyBitIter, dirtyBitMask));
+        mGraphicsDirtyBits &= ~dirtyBitMask;
     }
-
-    mGraphicsDirtyBits &= ~dirtyBitMask;
 
     // Render pass must be always available at this point.
     ASSERT(hasActiveRenderPass());
+
+    ASSERT(mState.getProgram() == nullptr || !mState.getProgram()->needsSync());
+    ASSERT(mState.getProgramExecutable()->getAndResetDirtyBits().none());
 
     return angle::Result::Continue;
 }
@@ -1814,13 +1817,17 @@ angle::Result ContextVk::setupDispatch(const gl::Context *context)
     DirtyBits dirtyBits = mComputeDirtyBits;
 
     // Flush any relevant dirty bits.
-    for (size_t dirtyBit : dirtyBits)
+    for (DirtyBits::Iterator dirtyBitIter = dirtyBits.begin(); dirtyBitIter != dirtyBits.end();
+         ++dirtyBitIter)
     {
-        ASSERT(mComputeDirtyBitHandlers[dirtyBit]);
-        ANGLE_TRY((this->*mComputeDirtyBitHandlers[dirtyBit])());
+        ASSERT(mComputeDirtyBitHandlers[*dirtyBitIter]);
+        ANGLE_TRY((this->*mComputeDirtyBitHandlers[*dirtyBitIter])(&dirtyBitIter));
     }
 
     mComputeDirtyBits.reset();
+
+    ASSERT(mState.getProgram() == nullptr || !mState.getProgram()->needsSync());
+    ASSERT(mState.getProgramExecutable()->getAndResetDirtyBits().none());
 
     return angle::Result::Continue;
 }
@@ -1831,7 +1838,7 @@ angle::Result ContextVk::handleDirtyGraphicsMemoryBarrier(DirtyBits::Iterator *d
     return handleDirtyMemoryBarrierImpl(dirtyBitsIterator, dirtyBitMask);
 }
 
-angle::Result ContextVk::handleDirtyComputeMemoryBarrier()
+angle::Result ContextVk::handleDirtyComputeMemoryBarrier(DirtyBits::Iterator *dirtyBitsIterator)
 {
     return handleDirtyMemoryBarrierImpl(nullptr, {});
 }
@@ -1972,7 +1979,7 @@ angle::Result ContextVk::handleDirtyGraphicsEventLog(DirtyBits::Iterator *dirtyB
     return handleDirtyEventLogImpl(mRenderPassCommandBuffer);
 }
 
-angle::Result ContextVk::handleDirtyComputeEventLog()
+angle::Result ContextVk::handleDirtyComputeEventLog(DirtyBits::Iterator *dirtyBitsIterator)
 {
     return handleDirtyEventLogImpl(&mOutsideRenderPassCommands->getCommandBuffer());
 }
@@ -2452,7 +2459,7 @@ angle::Result ContextVk::handleDirtyGraphicsPipelineBinding(DirtyBits::Iterator 
     return angle::Result::Continue;
 }
 
-angle::Result ContextVk::handleDirtyComputePipelineDesc()
+angle::Result ContextVk::handleDirtyComputePipelineDesc(DirtyBits::Iterator *dirtyBitsIterator)
 {
     if (mCurrentComputePipeline == nullptr)
     {
@@ -2471,7 +2478,7 @@ angle::Result ContextVk::handleDirtyComputePipelineDesc()
     return angle::Result::Continue;
 }
 
-angle::Result ContextVk::handleDirtyComputePipelineBinding()
+angle::Result ContextVk::handleDirtyComputePipelineBinding(DirtyBits::Iterator *dirtyBitsIterator)
 {
     ASSERT(mCurrentComputePipeline);
 
@@ -2542,7 +2549,7 @@ angle::Result ContextVk::handleDirtyGraphicsTextures(DirtyBits::Iterator *dirtyB
     return handleDirtyTexturesImpl(mRenderPassCommands, PipelineType::Graphics);
 }
 
-angle::Result ContextVk::handleDirtyComputeTextures()
+angle::Result ContextVk::handleDirtyComputeTextures(DirtyBits::Iterator *dirtyBitsIterator)
 {
     return handleDirtyTexturesImpl(mOutsideRenderPassCommands, PipelineType::Compute);
 }
@@ -2671,10 +2678,21 @@ angle::Result ContextVk::handleDirtyGraphicsBlendBarrier(DirtyBits::Iterator *di
 
 template <typename CommandBufferHelperT>
 angle::Result ContextVk::handleDirtyShaderResourcesImpl(CommandBufferHelperT *commandBufferHelper,
-                                                        PipelineType pipelineType)
+                                                        PipelineType pipelineType,
+                                                        DirtyBits::Iterator *dirtyBitsIterator)
 {
     const gl::ProgramExecutable *executable = mState.getProgramExecutable();
     ASSERT(executable);
+
+    // DIRTY_BIT_UNIFORM_BUFFERS is set when uniform buffer bindings change.
+    // DIRTY_BIT_SHADER_RESOURCES gets set when the program executable has changed. In that case,
+    // this function will update entire the shader resource descriptorSet.  This means there is no
+    // need to process uniform buffer bindings again.
+    dirtyBitsIterator->resetLaterBit(DIRTY_BIT_UNIFORM_BUFFERS);
+
+    // This function processes uniform buffers, so it doesn't matter which are dirty.  The following
+    // makes sure the dirty bits are reset.
+    executable->getAndResetDirtyBits();
 
     const bool hasImages               = executable->hasImages();
     const bool hasStorageBuffers       = executable->hasStorageBuffers();
@@ -2762,17 +2780,14 @@ angle::Result ContextVk::handleDirtyShaderResourcesImpl(CommandBufferHelperT *co
 angle::Result ContextVk::handleDirtyGraphicsShaderResources(DirtyBits::Iterator *dirtyBitsIterator,
                                                             DirtyBits dirtyBitMask)
 {
-    // DIRTY_BIT_UNIFORM_BUFFERS will be set when uniform buffer binding changed.
-    // DIRTY_BIT_SHADER_RESOURCES gets set when program executable changed. When program executable
-    // changed, handleDirtyShaderResourcesImpl will update entire shader resource descriptorSet.
-    // This means there is no need to process uniform buffer binding change if it is also set.
-    dirtyBitsIterator->resetLaterBit(DIRTY_BIT_UNIFORM_BUFFERS);
-    return handleDirtyShaderResourcesImpl(mRenderPassCommands, PipelineType::Graphics);
+    return handleDirtyShaderResourcesImpl(mRenderPassCommands, PipelineType::Graphics,
+                                          dirtyBitsIterator);
 }
 
-angle::Result ContextVk::handleDirtyComputeShaderResources()
+angle::Result ContextVk::handleDirtyComputeShaderResources(DirtyBits::Iterator *dirtyBitsIterator)
 {
-    return handleDirtyShaderResourcesImpl(mOutsideRenderPassCommands, PipelineType::Compute);
+    return handleDirtyShaderResourcesImpl(mOutsideRenderPassCommands, PipelineType::Compute,
+                                          dirtyBitsIterator);
 }
 
 template <typename CommandBufferT>
@@ -2818,7 +2833,7 @@ angle::Result ContextVk::handleDirtyGraphicsUniformBuffers(DirtyBits::Iterator *
     return handleDirtyUniformBuffersImpl(mRenderPassCommands);
 }
 
-angle::Result ContextVk::handleDirtyComputeUniformBuffers()
+angle::Result ContextVk::handleDirtyComputeUniformBuffers(DirtyBits::Iterator *dirtyBitsIterator)
 {
     return handleDirtyUniformBuffersImpl(mOutsideRenderPassCommands);
 }
@@ -2984,7 +2999,7 @@ angle::Result ContextVk::handleDirtyGraphicsUniforms(DirtyBits::Iterator *dirtyB
     return handleDirtyUniformsImpl(mRenderPassCommands);
 }
 
-angle::Result ContextVk::handleDirtyComputeUniforms()
+angle::Result ContextVk::handleDirtyComputeUniforms(DirtyBits::Iterator *dirtyBitsIterator)
 {
     return handleDirtyUniformsImpl(mOutsideRenderPassCommands);
 }
@@ -3303,7 +3318,7 @@ void ContextVk::handleDirtyGraphicsDynamicScissorImpl(bool isPrimitivesGenerated
     }
 }
 
-angle::Result ContextVk::handleDirtyComputeDescriptorSets()
+angle::Result ContextVk::handleDirtyComputeDescriptorSets(DirtyBits::Iterator *dirtyBitsIterator)
 {
     return handleDirtyDescriptorSetsImpl(mOutsideRenderPassCommands, PipelineType::Compute);
 }
@@ -4749,6 +4764,10 @@ void ContextVk::updateColorMasks()
                                                  framebufferVk->getEmulatedAlphaAttachmentMask(),
                                                  framebufferVk->getState().getEnabledDrawBuffers());
 
+    // This function may be called outside of ContextVk::syncState, and so invalidates the graphics
+    // pipeline.
+    invalidateCurrentGraphicsPipeline();
+
     onColorAccessChange();
 }
 
@@ -4780,6 +4799,10 @@ void ContextVk::updateBlendFuncsAndEquations()
 
     mGraphicsPipelineDesc->updateBlendEquations(&mGraphicsPipelineTransition, blendStateExt,
                                                 mCachedDrawFramebufferColorAttachmentMask);
+
+    // This function may be called outside of ContextVk::syncState, and so invalidates the graphics
+    // pipeline.
+    invalidateCurrentGraphicsPipeline();
 }
 
 void ContextVk::updateSampleMaskWithRasterizationSamples(const uint32_t rasterizationSamples)
@@ -6323,6 +6346,13 @@ void ContextVk::onDrawFramebufferRenderPassDescChange(FramebufferVk *framebuffer
     if (renderPassDescChangedOut)
     {
         // If render pass desc has changed while processing the dirty bits, notify the caller.
+        // In most paths, |renderPassDescChangedOut| is nullptr and the pipeline will be
+        // invalidated.
+        //
+        // |renderPassDescChangedOut| only serves |ContextVk::handleDirtyGraphicsRenderPass|, which
+        // may need to reprocess the pipeline while processing dirty bits.  At that point, marking
+        // the pipeline dirty is ineffective, and the pipeline dirty bit handler is directly called
+        // as a result of setting this variable to true.
         *renderPassDescChangedOut = true;
     }
     else
@@ -6864,8 +6894,8 @@ angle::Result ContextVk::handleDirtyGraphicsDriverUniforms(DirtyBits::Iterator *
         const gl::BlendStateExt &blendStateExt = mState.getBlendStateExt();
         if (blendStateExt.getUsesAdvancedBlendEquationMask().test(0))
         {
-            advancedBlendEquation = static_cast<uint32_t>(gl::FromGLenum<gl::BlendEquationType>(
-                getState().getBlendStateExt().getEquationColorIndexed(0)));
+            advancedBlendEquation =
+                static_cast<uint32_t>(getState().getBlendStateExt().getEquationColorIndexed(0));
         }
     }
 
@@ -6915,7 +6945,7 @@ angle::Result ContextVk::handleDirtyGraphicsDriverUniforms(DirtyBits::Iterator *
     return angle::Result::Continue;
 }
 
-angle::Result ContextVk::handleDirtyComputeDriverUniforms()
+angle::Result ContextVk::handleDirtyComputeDriverUniforms(DirtyBits::Iterator *dirtyBitsIterator)
 {
     // Create the driver uniform object that will be used as push constant argument.
     ComputeDriverUniforms driverUniforms = {};
@@ -7999,8 +8029,7 @@ void ContextVk::dumpCommandStreamDiagnostics()
     if (mCommandBufferDiagnostics.empty())
         return;
 
-    out << "digraph {\n"
-        << "  node [shape=plaintext fontname=\"Consolas\"]\n";
+    out << "digraph {\n" << "  node [shape=plaintext fontname=\"Consolas\"]\n";
 
     for (size_t index = 0; index < mCommandBufferDiagnostics.size(); ++index)
     {
@@ -8351,8 +8380,8 @@ angle::Result ContextVk::switchToReadOnlyDepthStencilMode(gl::Texture *texture,
     {
         if (mState.isStencilWriteEnabled())
         {
-            WARN() << "Stencil render feedback loop mode detected, content will be undefined per "
-                      "specification";
+            // This looks like a feedback loop, but we don't issue a warning because the application
+            // may have correctly used BASE and MAX levels to avoid it.  ANGLE doesn't track that.
             mDepthStencilAttachmentFlags.set(vk::RenderPassUsage::StencilFeedbackLoop);
         }
         else if (!mDepthStencilAttachmentFlags[vk::RenderPassUsage::StencilFeedbackLoop])
@@ -8365,8 +8394,8 @@ angle::Result ContextVk::switchToReadOnlyDepthStencilMode(gl::Texture *texture,
     // Switch to read-only depth feedback loop if not already
     if (mState.isDepthWriteEnabled())
     {
-        WARN() << "Depth render feedback loop mode detected, content will be undefined per "
-                  "specification";
+        // This looks like a feedback loop, but we don't issue a warning because the application
+        // may have correctly used BASE and MAX levels to avoid it.  ANGLE doesn't track that.
         mDepthStencilAttachmentFlags.set(vk::RenderPassUsage::DepthFeedbackLoop);
     }
     else if (!mDepthStencilAttachmentFlags[vk::RenderPassUsage::DepthFeedbackLoop])

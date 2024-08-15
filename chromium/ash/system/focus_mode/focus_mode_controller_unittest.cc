@@ -6,10 +6,14 @@
 
 #include <memory>
 
+#include "ash/api/tasks/tasks_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/system/focus_mode/focus_mode_controller.h"
+#include "ash/system/focus_mode/focus_mode_session.h"
+#include "ash/system/focus_mode/focus_mode_util.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -25,7 +29,10 @@ constexpr char kUser2Email[] = "user2@focusmode";
 
 class FocusModeControllerMultiUserTest : public NoSessionAshTestBase {
  public:
-  FocusModeControllerMultiUserTest() : scoped_feature_(features::kFocusMode) {}
+  FocusModeControllerMultiUserTest()
+      : NoSessionAshTestBase(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME),
+        scoped_feature_(features::kFocusMode) {}
   ~FocusModeControllerMultiUserTest() override = default;
 
   TestingPrefServiceSimple* user_1_prefs() { return user_1_prefs_; }
@@ -85,6 +92,13 @@ class FocusModeControllerMultiUserTest : public NoSessionAshTestBase {
         session_manager::SessionState::ACTIVE);
   }
 
+  void AdvanceClock(base::TimeDelta time_delta) {
+    // Note that AdvanceClock() is used here instead of FastForwardBy() to
+    // prevent long run time during an ash test session.
+    task_environment()->AdvanceClock(time_delta);
+    task_environment()->RunUntilIdle();
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_;
   raw_ptr<TestingPrefServiceSimple> user_1_prefs_ = nullptr;
@@ -115,14 +129,135 @@ TEST_F(FocusModeControllerMultiUserTest, LoadUserPrefsAndSwitchUsers) {
 
   // Verify that `FocusModeController` has loaded the user prefs.
   auto* controller = FocusModeController::Get();
-  EXPECT_EQ(kDefaultSessionDuration, controller->session_duration());
+  EXPECT_EQ(kDefaultSessionDuration, controller->GetSessionDuration());
   EXPECT_EQ(kDefaultDNDState, controller->turn_on_do_not_disturb());
 
   // Switch users and verify that `FocusModeController` has loaded the new user
   // prefs.
   SwitchActiveUser(GetUser2AccountId());
-  EXPECT_EQ(kUser2SessionDuration, controller->session_duration());
+  EXPECT_EQ(kUser2SessionDuration, controller->GetSessionDuration());
   EXPECT_EQ(kUser2DNDState, controller->turn_on_do_not_disturb());
+}
+
+TEST_F(FocusModeControllerMultiUserTest, ToggleClosesSystemBubble) {
+  SimulateUserLogin(GetUser1AccountId());
+
+  auto* controller = FocusModeController::Get();
+  EXPECT_FALSE(controller->in_focus_session());
+
+  // Show the bubble.
+  auto* system_tray = GetPrimaryUnifiedSystemTray();
+  system_tray->ShowBubble();
+
+  // Toggle focus mode on, and verify that the bubble is closed.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->in_focus_session());
+  EXPECT_FALSE(system_tray->IsBubbleShown());
+
+  // Show the bubble again.
+  system_tray->ShowBubble();
+
+  // Toggle focus mode off, and verify that this doesn't affect the bubble
+  // visibility.
+  controller->ToggleFocusMode();
+  EXPECT_FALSE(controller->in_focus_session());
+  EXPECT_TRUE(system_tray->IsBubbleShown());
+}
+
+// Tests that we can determine if a focus session has started before.
+TEST_F(FocusModeControllerMultiUserTest, FirstTimeUserFlow) {
+  SimulateUserLogin(GetUser1AccountId());
+  auto* controller = FocusModeController::Get();
+  EXPECT_FALSE(controller->HasStartedSessionBefore());
+
+  FocusModeController::Get()->ToggleFocusMode();
+  EXPECT_TRUE(controller->HasStartedSessionBefore());
+}
+
+// Tests adding and completing tasks.
+TEST_F(FocusModeControllerMultiUserTest, TasksFlow) {
+  SimulateUserLogin(GetUser1AccountId());
+
+  // Verify that initially there is no selected task.
+  auto* controller = FocusModeController::Get();
+  EXPECT_FALSE(controller->HasSelectedTask());
+
+  // Select a task, and verify that the task data is accurate.
+  int id = 0;
+  const std::string title = "Focus Task";
+  controller->SetSelectedTask(std::make_unique<api::Task>(
+                                  /*id=*/base::NumberToString(id), title,
+                                  /*completed=*/false,
+                                  /*due=*/absl::nullopt, /*has_subtasks=*/false,
+                                  /*has_email_link=*/false,
+                                  /*has_notes=*/false,
+                                  /*updated=*/base::Time::Now())
+                                  .get());
+  EXPECT_TRUE(controller->HasSelectedTask());
+  EXPECT_EQ(base::NumberToString(id), controller->selected_task_id());
+  EXPECT_EQ(title, controller->selected_task_title());
+
+  // Complete the task, and verify that the task data is cleared.
+  controller->CompleteTask();
+  EXPECT_FALSE(controller->HasSelectedTask());
+}
+
+// Tests basic ending moment functionality. Includes starting a new session
+// after the previous ending moment terminates.
+TEST_F(FocusModeControllerMultiUserTest, EndingMoment) {
+  SimulateUserLogin(GetUser1AccountId());
+  base::TimeDelta kSessionDuration = base::Minutes(20);
+
+  auto* controller = FocusModeController::Get();
+  controller->SetInactiveSessionDuration(kSessionDuration);
+  EXPECT_FALSE(controller->current_session().has_value());
+
+  // Toggling focus mode on creates a `current_session`. Verify that we are not
+  // in the ending moment.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->current_session().has_value());
+  EXPECT_TRUE(controller->in_focus_session());
+
+  // Once the session expires, the ending moment should start.
+  AdvanceClock(kSessionDuration);
+  EXPECT_TRUE(controller->in_ending_moment());
+
+  // Verifies that the ending moment terminates after the specified duration and
+  // that there is no longer an existing `current_session`.
+  AdvanceClock(focus_mode_util::kEndingMomentDuration);
+  EXPECT_FALSE(controller->current_session().has_value());
+
+  // Toggling on a focus session after the previous one expires creates
+  // a new `current_session`.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->current_session().has_value());
+  EXPECT_TRUE(controller->in_focus_session());
+}
+
+// Tests that we can start a new/separate focus session during an ongoing ending
+// moment.
+TEST_F(FocusModeControllerMultiUserTest, StartNewSessionDuringEndingMoment) {
+  SimulateUserLogin(GetUser1AccountId());
+  base::TimeDelta kSessionDuration = base::Minutes(20);
+
+  // Case 1: Normal ending moment timeout.
+  auto* controller = FocusModeController::Get();
+  controller->SetInactiveSessionDuration(kSessionDuration);
+  EXPECT_FALSE(controller->current_session().has_value());
+
+  // Toggle focus mode on, and verify that we are not in the ending moment.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->in_focus_session());
+
+  // Once the session expires, the ending moment should start.
+  AdvanceClock(kSessionDuration);
+  EXPECT_TRUE(controller->in_ending_moment());
+
+  // Toggling focus mode during the ending moment will start a new session and
+  // terminate the ending moment.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->current_session().has_value());
+  EXPECT_TRUE(controller->in_focus_session());
 }
 
 }  // namespace ash

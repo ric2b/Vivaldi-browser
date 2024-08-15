@@ -1,6 +1,6 @@
 {
   "languages": {
-    "description": "Triples of the language code, the language name in English and the native language name. The language code must start with two or three letter ISO code for the language. It must use the lower case. The language variant part of the code, if present, must be either two uppercase letters if the variant is a country, like de-CH, or it should start with a capital letter and the rest is small if the variant is a non-country name, like sr-Latn. The variant part must be separated by the dash, not the underscore.",
+    "description": "List of UI languages. Triples of the language code, the language name in English and the native language name. This list should be the same as all possible languages returned from chrome.i18n.getUILanguage() and use the same format for language code. Language code 'es' is an exception while getUILanguageCode() returns 'es-ES'. TODO: ca-valencia vs. ca@valencia.",
     "note": "Before adding languages here, make sure they do not already appear in locale.js -> TRANSLATION_LOCALES, and if they do, remove them there.",
 
     "list": [

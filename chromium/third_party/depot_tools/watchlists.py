@@ -26,13 +26,13 @@ import sys
 class Watchlists(object):
     """Manage Watchlists.
 
-  This class provides mechanism to load watchlists for a repo and identify
-  watchers.
-  Usage:
-    wl = Watchlists("/path/to/repo/root")
-    watchers = wl.GetWatchersForPaths(["/path/to/file1",
-                                       "/path/to/file2",])
-  """
+    This class provides mechanism to load watchlists for a repo and identify
+    watchers.
+    Usage:
+        wl = Watchlists("/path/to/repo/root")
+        watchers = wl.GetWatchersForPaths(["/path/to/file1",
+                                        "/path/to/file2",])
+    """
 
     _RULES = "WATCHLISTS"
     _RULES_FILENAME = _RULES
@@ -108,12 +108,12 @@ class Watchlists(object):
     def GetWatchersForPaths(self, paths):
         """Fetch the list of watchers for |paths|
 
-    Args:
-      paths: [path1, path2, ...]
+        Args:
+            paths: [path1, path2, ...]
 
-    Returns:
-      [u1@chromium.org, u2@gmail.com, ...]
-    """
+        Returns:
+            [u1@chromium.org, u2@gmail.com, ...]
+        """
         watchers = set()  # A set, to avoid duplicates
         for path in paths:
             path = path.replace(os.sep, '/')

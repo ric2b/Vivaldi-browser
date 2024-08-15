@@ -16,31 +16,30 @@ namespace internal {
 
 class Heap;
 
-HeapAllocator::HeapAllocator(Heap* heap) : heap_(heap) {}
+HeapAllocator::HeapAllocator(LocalHeap* local_heap)
+    : local_heap_(local_heap), heap_(local_heap->heap()) {}
 
-void HeapAllocator::Setup(LinearAllocationArea& new_allocation_info,
-                          LinearAllocationArea& old_allocation_info) {
+void HeapAllocator::Setup(LinearAllocationArea* new_allocation_info,
+                          LinearAllocationArea* old_allocation_info) {
   for (int i = FIRST_SPACE; i <= LAST_SPACE; ++i) {
     spaces_[i] = heap_->space(i);
   }
 
-  if (heap_->new_space()) {
-    new_space_allocator_.emplace(heap_, heap_->new_space(),
+  if (heap_->new_space() && local_heap_->is_main_thread()) {
+    new_space_allocator_.emplace(local_heap_, heap_->new_space(),
                                  new_allocation_info);
   }
 
-  old_space_allocator_.emplace(heap_, heap_->old_space(), old_allocation_info);
-  trusted_space_allocator_.emplace(heap_, heap_->trusted_space());
-  code_space_allocator_.emplace(heap_, heap_->code_space());
+  old_space_allocator_.emplace(local_heap_, heap_->old_space(),
+                               old_allocation_info);
+
+  trusted_space_allocator_.emplace(local_heap_, heap_->trusted_space());
+  code_space_allocator_.emplace(local_heap_, heap_->code_space());
 
   if (heap_->isolate()->has_shared_space()) {
-    Heap* heap = heap_->isolate()->shared_space_isolate()->heap();
-
-    shared_space_allocator_ = std::make_unique<ConcurrentAllocator>(
-        heap_->main_thread_local_heap(), heap->shared_space_,
-        ConcurrentAllocator::Context::kNotGC);
-
-    shared_lo_space_ = heap->shared_lo_allocation_space();
+    shared_space_allocator_.emplace(local_heap_,
+                                    heap_->shared_allocation_space());
+    shared_lo_space_ = heap_->shared_lo_allocation_space();
   }
 }
 
@@ -54,16 +53,15 @@ AllocationResult HeapAllocator::AllocateRawLargeInternal(
   DCHECK_GT(size_in_bytes, heap_->MaxRegularHeapObjectSize(allocation));
   switch (allocation) {
     case AllocationType::kYoung:
-      return new_lo_space()->AllocateRaw(size_in_bytes);
+      return new_lo_space()->AllocateRaw(local_heap_, size_in_bytes);
     case AllocationType::kOld:
-      return lo_space()->AllocateRaw(size_in_bytes);
+      return lo_space()->AllocateRaw(local_heap_, size_in_bytes);
     case AllocationType::kCode:
-      return code_lo_space()->AllocateRaw(size_in_bytes);
+      return code_lo_space()->AllocateRaw(local_heap_, size_in_bytes);
     case AllocationType::kSharedOld:
-      return shared_lo_space()->AllocateRawBackground(
-          heap_->main_thread_local_heap(), size_in_bytes);
+      return shared_lo_space()->AllocateRaw(local_heap_, size_in_bytes);
     case AllocationType::kTrusted:
-      return trusted_lo_space()->AllocateRaw(size_in_bytes);
+      return trusted_lo_space()->AllocateRaw(local_heap_, size_in_bytes);
     case AllocationType::kMap:
     case AllocationType::kReadOnly:
     case AllocationType::kSharedMap:
@@ -342,9 +340,7 @@ void HeapAllocator::UpdateAllocationTimeout() {
   }
 
   int interval = allocation_gc_interval_.load(std::memory_order_relaxed);
-  if (interval >= 0) {
-    allocation_timeout_ = interval;
-  }
+  allocation_timeout_ = std::max(0, interval);
 }
 
 #endif  // V8_ENABLE_ALLOCATION_TIMEOUT

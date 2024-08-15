@@ -121,7 +121,7 @@ namespace internal {
   ASM(CallFunctionForwardVarargs, CallForwardVarargs)                          \
   /* Call an API callback via a {FunctionTemplateInfo}, doing appropriate */   \
   /* access and compatible receiver checks. */                                 \
-  TFC(CallFunctionTemplate_Generic, CallFunctionTemplate)                      \
+  TFC(CallFunctionTemplate_Generic, CallFunctionTemplateGeneric)               \
   TFC(CallFunctionTemplate_CheckAccess, CallFunctionTemplate)                  \
   TFC(CallFunctionTemplate_CheckCompatibleReceiver, CallFunctionTemplate)      \
   TFC(CallFunctionTemplate_CheckAccessAndCompatibleReceiver,                   \
@@ -143,6 +143,10 @@ namespace internal {
   TFC(ConstructWithArrayLike_WithFeedback,                                     \
       ConstructWithArrayLike_WithFeedback)                                     \
   ASM(ConstructForwardVarargs, ConstructForwardVarargs)                        \
+  ASM(ConstructForwardAllArgs, ConstructForwardAllArgs)                        \
+  TFC(ConstructForwardAllArgs_Baseline, ConstructForwardAllArgs_Baseline)      \
+  TFC(ConstructForwardAllArgs_WithFeedback,                                    \
+      ConstructForwardAllArgs_WithFeedback)                                    \
   ASM(ConstructFunctionForwardVarargs, ConstructForwardVarargs)                \
   TFC(Construct_Baseline, Construct_Baseline)                                  \
   TFC(Construct_WithFeedback, Construct_WithFeedback)                          \
@@ -181,6 +185,7 @@ namespace internal {
   /* JSFunction in the form of bytecodes */                                    \
   ASM(InterpreterEntryTrampoline, JSTrampoline)                                \
   ASM(InterpreterEntryTrampolineForProfiling, JSTrampoline)                    \
+  ASM(InterpreterForwardAllArgsThenConstruct, ConstructForwardAllArgs)         \
   ASM(InterpreterPushArgsThenCall, InterpreterPushArgsThenCall)                \
   ASM(InterpreterPushUndefinedAndArgsThenCall, InterpreterPushArgsThenCall)    \
   ASM(InterpreterPushArgsThenCallWithFinalSpread, InterpreterPushArgsThenCall) \
@@ -255,6 +260,8 @@ namespace internal {
   /* Adapters for Turbofan into runtime */                                     \
   TFC(AllocateInYoungGeneration, Allocate)                                     \
   TFC(AllocateInOldGeneration, Allocate)                                       \
+  IF_WASM(TFC, WasmAllocateInYoungGeneration, Allocate)                        \
+  IF_WASM(TFC, WasmAllocateInOldGeneration, Allocate)                          \
                                                                                \
   TFC(NewHeapNumber, NewHeapNumber)                                            \
                                                                                \
@@ -301,17 +308,21 @@ namespace internal {
   TFH(DefineNamedOwnIC_NoFeedback, StoreNoFeedback)                            \
   TFH(KeyedLoadIC_SloppyArguments, LoadWithVector)                             \
   TFH(LoadIndexedInterceptorIC, LoadWithVector)                                \
-  TFH(KeyedStoreIC_SloppyArguments_Standard, StoreWithVector)                  \
-  TFH(KeyedStoreIC_SloppyArguments_GrowNoTransitionHandleCOW, StoreWithVector) \
-  TFH(KeyedStoreIC_SloppyArguments_NoTransitionIgnoreOOB, StoreWithVector)     \
+  TFH(KeyedStoreIC_SloppyArguments_InBounds, StoreWithVector)                  \
+  TFH(KeyedStoreIC_SloppyArguments_NoTransitionGrowAndHandleCOW,               \
+      StoreWithVector)                                                         \
+  TFH(KeyedStoreIC_SloppyArguments_NoTransitionIgnoreTypedArrayOOB,            \
+      StoreWithVector)                                                         \
   TFH(KeyedStoreIC_SloppyArguments_NoTransitionHandleCOW, StoreWithVector)     \
-  TFH(StoreFastElementIC_Standard, StoreWithVector)                            \
-  TFH(StoreFastElementIC_GrowNoTransitionHandleCOW, StoreWithVector)           \
-  TFH(StoreFastElementIC_NoTransitionIgnoreOOB, StoreWithVector)               \
+  TFH(StoreFastElementIC_InBounds, StoreWithVector)                            \
+  TFH(StoreFastElementIC_NoTransitionGrowAndHandleCOW, StoreWithVector)        \
+  TFH(StoreFastElementIC_NoTransitionIgnoreTypedArrayOOB, StoreWithVector)     \
   TFH(StoreFastElementIC_NoTransitionHandleCOW, StoreWithVector)               \
-  TFH(ElementsTransitionAndStore_Standard, StoreTransition)                    \
-  TFH(ElementsTransitionAndStore_GrowNoTransitionHandleCOW, StoreTransition)   \
-  TFH(ElementsTransitionAndStore_NoTransitionIgnoreOOB, StoreTransition)       \
+  TFH(ElementsTransitionAndStore_InBounds, StoreTransition)                    \
+  TFH(ElementsTransitionAndStore_NoTransitionGrowAndHandleCOW,                 \
+      StoreTransition)                                                         \
+  TFH(ElementsTransitionAndStore_NoTransitionIgnoreTypedArrayOOB,              \
+      StoreTransition)                                                         \
   TFH(ElementsTransitionAndStore_NoTransitionHandleCOW, StoreTransition)       \
   TFH(KeyedHasIC_PolymorphicName, LoadWithVector)                              \
   TFH(KeyedHasIC_SloppyArguments, LoadWithVector)                              \
@@ -426,15 +437,6 @@ namespace internal {
   TFJ(ArrayPrototypeValues, kJSArgcReceiverSlots, kReceiver)                   \
   /* ES6 #sec-%arrayiteratorprototype%.next */                                 \
   TFJ(ArrayIteratorPrototypeNext, kJSArgcReceiverSlots, kReceiver)             \
-  /* https://tc39.github.io/proposal-flatMap/#sec-FlattenIntoArray */          \
-  TFS(FlattenIntoArray, NeedsContext::kYes, kTarget, kSource, kSourceLength,   \
-      kStart, kDepth)                                                          \
-  TFS(FlatMapIntoArray, NeedsContext::kYes, kTarget, kSource, kSourceLength,   \
-      kStart, kDepth, kMapperFunction, kThisArg)                               \
-  /* https://tc39.github.io/proposal-flatMap/#sec-Array.prototype.flat */      \
-  TFJ(ArrayPrototypeFlat, kDontAdaptArgumentsSentinel)                         \
-  /* https://tc39.github.io/proposal-flatMap/#sec-Array.prototype.flatMap */   \
-  TFJ(ArrayPrototypeFlatMap, kDontAdaptArgumentsSentinel)                      \
                                                                                \
   /* ArrayBuffer */                                                            \
   /* ES #sec-arraybuffer-constructor */                                        \
@@ -601,6 +603,7 @@ namespace internal {
   CPP(FunctionConstructor)                                                     \
   ASM(FunctionPrototypeApply, JSTrampoline)                                    \
   CPP(FunctionPrototypeBind)                                                   \
+  IF_WASM(CPP, WebAssemblyFunctionPrototypeBind)                               \
   ASM(FunctionPrototypeCall, JSTrampoline)                                     \
   /* ES6 #sec-function.prototype.tostring */                                   \
   CPP(FunctionPrototypeToString)                                               \
@@ -1048,6 +1051,7 @@ namespace internal {
   CPP(AtomicsMutexConstructor)                                                 \
   CPP(AtomicsMutexIsMutex)                                                     \
   CPP(AtomicsMutexLock)                                                        \
+  CPP(AtomicsMutexLockWithTimeout)                                             \
   CPP(AtomicsMutexTryLock)                                                     \
   CPP(AtomicsConditionConstructor)                                             \
   CPP(AtomicsConditionIsCondition)                                             \
@@ -1109,10 +1113,10 @@ namespace internal {
   TFJ(AsyncIteratorValueUnwrap, kJSArgcReceiverSlots + 1, kReceiver, kValue)   \
                                                                                \
   /* CEntry */                                                                 \
-  ASM(CEntry_Return1_ArgvInRegister_NoBuiltinExit, CEntryDummy)                \
+  ASM(CEntry_Return1_ArgvInRegister_NoBuiltinExit, InterpreterCEntry1)         \
   ASM(CEntry_Return1_ArgvOnStack_BuiltinExit, CEntry1ArgvOnStack)              \
   ASM(CEntry_Return1_ArgvOnStack_NoBuiltinExit, CEntryDummy)                   \
-  ASM(CEntry_Return2_ArgvInRegister_NoBuiltinExit, CEntryDummy)                \
+  ASM(CEntry_Return2_ArgvInRegister_NoBuiltinExit, InterpreterCEntry2)         \
   ASM(CEntry_Return2_ArgvOnStack_BuiltinExit, CEntryDummy)                     \
   ASM(CEntry_Return2_ArgvOnStack_NoBuiltinExit, CEntryDummy)                   \
   ASM(WasmCEntry, CEntryDummy)                                                 \

@@ -18,9 +18,7 @@ import java.lang.annotation.RetentionPolicy;
 
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 
-/**
- * An interface for pages that will be using Android views instead of html/rendered Web content.
- */
+/** An interface for pages that will be using Android views instead of html/rendered Web content. */
 public interface NativePage {
     /**
      * @return The View to display the page. This is always non-null.
@@ -64,9 +62,7 @@ public interface NativePage {
         return defaultColor;
     }
 
-    /**
-     * Reloads the native page.
-     */
+    /** Reloads the native page. */
     default void reload() {}
 
     /**
@@ -74,9 +70,7 @@ public interface NativePage {
      */
     boolean needsToolbarShadow();
 
-    /**
-     * Updates the native page based on the given url.
-     */
+    /** Updates the native page based on the given url. */
     void updateForUrl(String url);
 
     /**
@@ -86,19 +80,23 @@ public interface NativePage {
         return false;
     }
 
-    /**
-     * Notify the native page that it is about to be navigated back or hidden by a back press.
-     */
+    /** Notify the native page that it is about to be navigated back or hidden by a back press. */
     default void notifyHidingWithBack() {}
 
-    /**
-     * Called after a page has been removed from the view hierarchy and will no longer be used.
-     */
+    /** Called after a page has been removed from the view hierarchy and will no longer be used. */
     void destroy();
 
-    @IntDef({NativePageType.NONE, NativePageType.CANDIDATE, NativePageType.NTP,
-            NativePageType.BOOKMARKS, NativePageType.RECENT_TABS, NativePageType.DOWNLOADS,
-            NativePageType.HISTORY, NativePageType.EXPLORE, NativePageType.MANAGEMENT})
+    @IntDef({
+        NativePageType.NONE,
+        NativePageType.CANDIDATE,
+        NativePageType.NTP,
+        NativePageType.BOOKMARKS,
+        NativePageType.RECENT_TABS,
+        NativePageType.DOWNLOADS,
+        NativePageType.HISTORY,
+        NativePageType.EXPLORE,
+        NativePageType.MANAGEMENT
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface NativePageType {
         int NONE = 0;
@@ -129,7 +127,7 @@ public interface NativePage {
     static boolean isNativePageUrl(GURL url, boolean isIncognito) {
         return url != null
                 && nativePageType(url.getHost(), url.getScheme(), null, isIncognito)
-                != NativePageType.NONE;
+                        != NativePageType.NONE;
     }
 
     /**

@@ -22,18 +22,18 @@ class MockCannedChecks(object):
                                  error_formatter=_ReportErrorFileAndLine):
         """Find all newly introduced violations of a per-line rule (a callable).
 
-    Arguments:
-      callable_rule: a callable taking a file extension and line of input and
-        returning True if the rule is satisfied and False if there was a
-        problem.
-      input_api: object to enumerate the affected files.
-      source_file_filter: a filter to be passed to the input api.
-      error_formatter: a callable taking (filename, line_number, line) and
-        returning a formatted error string.
+        Arguments:
+            callable_rule: a callable taking a file extension and line of input
+                and returning True if the rule is satisfied and False if there
+                was a problem.
+            input_api: object to enumerate the affected files.
+            source_file_filter: a filter to be passed to the input api.
+            error_formatter: a callable taking (filename, line_number, line)
+                and returning a formatted error string.
 
-    Returns:
-      A list of the newly-introduced violations reported by the rule.
-    """
+        Returns:
+            A list of the newly-introduced violations reported by the rule.
+        """
         errors = []
         for f in input_api.AffectedFiles(include_deletes=False,
                                          file_filter=source_file_filter):
@@ -57,9 +57,9 @@ class MockCannedChecks(object):
 class MockInputApi(object):
     """Mock class for the InputApi class.
 
-  This class can be used for unittests for presubmit by initializing the files
-  attribute as the list of changed files.
-  """
+    This class can be used for unittests for presubmit by initializing the files
+    attribute as the list of changed files.
+    """
 
     DEFAULT_FILES_TO_SKIP = ()
 
@@ -140,9 +140,9 @@ class MockInputApi(object):
 class MockOutputApi(object):
     """Mock class for the OutputApi class.
 
-  An instance of this class can be passed to presubmit unittests for outputing
-  various types of results.
-  """
+    An instance of this class can be passed to presubmit unittests for outputing
+    various types of results.
+    """
     class PresubmitResult(object):
         def __init__(self, message, items=None, long_text=''):
             self.message = message
@@ -186,9 +186,9 @@ class MockOutputApi(object):
 class MockFile(object):
     """Mock class for the File class.
 
-  This class can be used to form the mock list of changed files in
-  MockInputApi for presubmit unittests.
-  """
+    This class can be used to form the mock list of changed files in
+    MockInputApi for presubmit unittests.
+    """
     def __init__(self,
                  local_path,
                  new_contents,
@@ -255,9 +255,9 @@ class MockAffectedFile(MockFile):
 class MockChange(object):
     """Mock class for Change class.
 
-  This class can be used in presubmit unittests to mock the query of the
-  current change.
-  """
+    This class can be used in presubmit unittests to mock the query of the
+    current change.
+    """
     def __init__(self, changed_files, description=''):
         self._changed_files = changed_files
         self.footers = defaultdict(list)

@@ -92,7 +92,7 @@ void CommonTest(CFX_SkiaDeviceDriver* driver, const State& state) {
     driver->SetClip_PathFill(clipPath, &clipMatrix, CFX_FillRenderOptions());
   if (state.m_graphic == State::Graphic::kPath) {
     driver->DrawPath(path1, &matrix, &graphState, 0xFF112233, 0,
-                     {.fill_type = CFX_FillRenderOptions::FillType::kWinding},
+                     CFX_FillRenderOptions::WindingOptions(),
                      BlendMode::kNormal);
   } else if (state.m_graphic == State::Graphic::kText) {
     driver->DrawDeviceText(charPos, &font, matrix, fontSize, 0xFF445566,
@@ -116,7 +116,7 @@ void CommonTest(CFX_SkiaDeviceDriver* driver, const State& state) {
     driver->SetClip_PathFill(clipPath, &clipMatrix2, CFX_FillRenderOptions());
   if (state.m_graphic == State::Graphic::kPath) {
     driver->DrawPath(path2, &matrix2, &graphState, 0xFF112233, 0,
-                     {.fill_type = CFX_FillRenderOptions::FillType::kWinding},
+                     CFX_FillRenderOptions::WindingOptions(),
                      BlendMode::kNormal);
   } else if (state.m_graphic == State::Graphic::kText) {
     driver->DrawDeviceText(charPos, &font, matrix2, fontSize, 0xFF445566,
@@ -159,7 +159,7 @@ void Harness(void (*Test)(CFX_SkiaDeviceDriver*, const State&),
   auto driver = CFX_SkiaDeviceDriver::Create(pBitmap, false, nullptr, false);
   ASSERT_TRUE(driver);
   (*Test)(driver.get(), state);
-  uint32_t pixel = pBitmap->GetPixel(0, 0);
+  uint32_t pixel = pBitmap->GetPixelForTesting(0, 0);
   EXPECT_EQ(state.m_pixel, pixel);
 }
 

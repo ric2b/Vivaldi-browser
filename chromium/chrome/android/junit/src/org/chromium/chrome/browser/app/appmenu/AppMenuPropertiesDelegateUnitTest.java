@@ -56,6 +56,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -91,7 +92,6 @@ import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceCoordinator;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
@@ -247,22 +247,13 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     private void setupFeatureDefaults() {
-        setBookmarkItemRowEnabled(false);
-        setShoppingListItemRowEnabled(false);
+        setShoppingListEligible(false);
+        setShoppingListEligible(false);
         FeatureList.setTestValues(mTestValues);
     }
 
-    private void setBookmarkItemRowEnabled(boolean enabled) {
+    private void setShoppingListEligible(boolean enabled) {
         ShoppingFeatures.setShoppingListEligibleForTesting(enabled);
-        mTestValues.addFeatureFlagOverride(ChromeFeatureList.BOOKMARKS_REFRESH, enabled);
-        FeatureList.setTestValues(mTestValues);
-    }
-
-    private void setShoppingListItemRowEnabled(boolean enabled) {
-        ShoppingFeatures.setShoppingListEligibleForTesting(enabled);
-        when(mPrefService.getBoolean(Pref.WEB_AND_APP_ACTIVITY_ENABLED_FOR_SHOPPING))
-                .thenReturn(true);
-        mTestValues.addFeatureFlagOverride(ChromeFeatureList.BOOKMARKS_REFRESH, enabled);
         FeatureList.setTestValues(mTestValues);
     }
 
@@ -744,7 +735,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void updateBookmarkMenuItemRow() {
-        setBookmarkItemRowEnabled(true);
+        setShoppingListEligible(true);
         doReturn(true).when(mBookmarkModel).isEditBookmarksEnabled();
 
         MenuItem bookmarkMenuItemAdd = mock(MenuItem.class);
@@ -757,7 +748,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void updateBookmarkMenuItemRow_NullTab() {
-        setBookmarkItemRowEnabled(true);
+        setShoppingListEligible(true);
 
         MenuItem bookmarkMenuItemAdd = mock(MenuItem.class);
         MenuItem bookmarkMenuItemEdit = mock(MenuItem.class);
@@ -769,7 +760,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void updateBookmarkMenuItemRow_NullBookmarkModel() {
-        setBookmarkItemRowEnabled(true);
+        setShoppingListEligible(true);
         mBookmarkModelSupplier.set(null);
 
         MenuItem bookmarkMenuItemAdd = mock(MenuItem.class);
@@ -782,7 +773,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void enablePriceTrackingItemRow() {
-        setShoppingListItemRowEnabled(true);
+        setShoppingListEligible(true);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(true);
         doReturn(true).when(mBookmarkModel).isEditBookmarksEnabled();
 
@@ -805,7 +796,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void enablePriceTrackingItemRow_NullBookmarkModel() {
-        setShoppingListItemRowEnabled(true);
+        setShoppingListEligible(true);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(true);
         mBookmarkModelSupplier.set(null);
 
@@ -819,7 +810,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void enablePriceTrackingItemRow_NullBookmarkId() {
-        setShoppingListItemRowEnabled(true);
+        setShoppingListEligible(true);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(true);
         doReturn(true).when(mBookmarkModel).isEditBookmarksEnabled();
 
@@ -842,7 +833,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void enablePriceTrackingItemRow_PriceTrackingEnabled() {
-        setShoppingListItemRowEnabled(true);
+        setShoppingListEligible(true);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(true);
         doReturn(true).when(mBookmarkModel).isEditBookmarksEnabled();
 
@@ -889,7 +880,7 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     @Test
     public void enablePriceTrackingItemRow_PriceTrackingEnabled_NoProductInfo() {
-        setShoppingListItemRowEnabled(true);
+        setShoppingListEligible(true);
 
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(false);
         doReturn(true).when(mBookmarkModel).isEditBookmarksEnabled();
@@ -1139,10 +1130,26 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     @Test
-    public void testShouldShowMoveToOtherWindow_isAutomotive_returnsFalse() {
+    public void testShouldShowMoveToOtherWindow_returnsTrue() {
+        assertTrue(
+                doTestShouldShowMoveToOtherWindowMenu(
+                        /* totalTabCount= */ 1,
+                        /* isInstanceSwitcherEnabled= */ false,
+                        /* currentWindowInstances= */ 1,
+                        /* isTabletSizeScreen= */ true,
+                        /* canEnterMultiWindowMode= */ false,
+                        /* isChromeRunningInAdjacentWindow= */ false,
+                        /* isInMultiWindowMode= */ false,
+                        /* isInMultiDisplayMode= */ false,
+                        /* isMultiInstanceRunning= */ false,
+                        /* isMoveToOtherWindowSupported= */ true));
+    }
+
+    @Test
+    public void testShouldShowMoveToOtherWindow_dispatcherReturnsFalse_returnsFalse() {
         assertFalse(
                 doTestShouldShowMoveToOtherWindowMenu(
-                        /* isAutomotive= */ true,
+                        /* totalTabCount= */ 1,
                         /* isInstanceSwitcherEnabled= */ false,
                         /* currentWindowInstances= */ 1,
                         /* isTabletSizeScreen= */ true,
@@ -1150,7 +1157,8 @@ public class AppMenuPropertiesDelegateUnitTest {
                         /* isChromeRunningInAdjacentWindow= */ false,
                         /* isInMultiWindowMode= */ false,
                         /* isInMultiDisplayMode= */ true,
-                        /* isMultiInstanceRunning= */ false));
+                        /* isMultiInstanceRunning= */ false,
+                        /* isMoveToOtherWindowSupported= */ false));
         verify(mAppMenuPropertiesDelegate, never()).isTabletSizeScreen();
     }
 
@@ -1327,7 +1335,7 @@ public class AppMenuPropertiesDelegateUnitTest {
         mShadowPackageManager.setSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, isAutomotive);
         doReturn(isInstanceSwitcherEnabled)
                 .when(mAppMenuPropertiesDelegate)
-                .instanceSwitcherEnabled();
+                .instanceSwitcherWithMultiInstanceEnabled();
         doReturn(currentWindowInstances).when(mAppMenuPropertiesDelegate).getInstanceCount();
         doReturn(isTabletSizeScreen).when(mAppMenuPropertiesDelegate).isTabletSizeScreen();
         doReturn(canEnterMultiWindowMode)
@@ -1346,7 +1354,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     private boolean doTestShouldShowMoveToOtherWindowMenu(
-            boolean isAutomotive,
+            int totalTabCount,
             boolean isInstanceSwitcherEnabled,
             int currentWindowInstances,
             boolean isTabletSizeScreen,
@@ -1354,11 +1362,11 @@ public class AppMenuPropertiesDelegateUnitTest {
             boolean isChromeRunningInAdjacentWindow,
             boolean isInMultiWindowMode,
             boolean isInMultiDisplayMode,
-            boolean isMultiInstanceRunning) {
-        mShadowPackageManager.setSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, isAutomotive);
+            boolean isMultiInstanceRunning,
+            boolean isMoveToOtherWindowSupported) {
         doReturn(isInstanceSwitcherEnabled)
                 .when(mAppMenuPropertiesDelegate)
-                .instanceSwitcherEnabled();
+                .instanceSwitcherWithMultiInstanceEnabled();
         doReturn(currentWindowInstances).when(mAppMenuPropertiesDelegate).getInstanceCount();
         doReturn(isTabletSizeScreen).when(mAppMenuPropertiesDelegate).isTabletSizeScreen();
         doReturn(canEnterMultiWindowMode)
@@ -1372,6 +1380,9 @@ public class AppMenuPropertiesDelegateUnitTest {
         doReturn(isMultiInstanceRunning)
                 .when(mMultiWindowModeStateDispatcher)
                 .isMultiInstanceRunning();
+        doReturn(isMoveToOtherWindowSupported)
+                .when(mMultiWindowModeStateDispatcher)
+                .isMoveToOtherWindowSupported(any());
 
         return mAppMenuPropertiesDelegate.shouldShowMoveToOtherWindow();
     }
@@ -1601,7 +1612,6 @@ public class AppMenuPropertiesDelegateUnitTest {
                     .withAutoDarkEnabled();
         }
     }
-    ;
 
     private void setMenuOptions(MenuOptions options) {
         when(mTab.getUrl()).thenReturn(JUnitTestGURLs.SEARCH_URL);

@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 #include "third_party/blink/renderer/core/loader/preload_helper.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
-#include "third_party/blink/renderer/core/loader/subresource_filter.h"
 #include "third_party/blink/renderer/platform/bindings/v8_dom_activity_logger.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
@@ -130,7 +129,8 @@ void ResourceLoadObserverForFrame::DidStartRequest(
       Vector<String> argv = {
           Resource::ResourceTypeToString(resource_type, initiator_name),
           params.Url()};
-      activity_logger->LogEvent("blinkRequestResource", argv.size(),
+      activity_logger->LogEvent(document_->GetExecutionContext(),
+                                "blinkRequestResource", argv.size(),
                                 argv.data());
     }
   }
@@ -152,17 +152,11 @@ void ResourceLoadObserverForFrame::WillSendRequest(
                                                 request.Priority());
   }
 
-  if (!redirect_response.IsNull() &&
-      !redirect_response.HttpHeaderField(http_names::kExpectCT).empty()) {
-    Deprecation::CountDeprecation(frame->DomWindow(),
-                                  mojom::blink::WebFeature::kExpectCTHeader);
-  }
-
   frame->GetAttributionSrcLoader()->MaybeRegisterAttributionHeaders(
       request, redirect_response, resource);
 
   probe::WillSendRequest(
-      GetProbe(), document_loader_,
+      document_->domWindow(), document_loader_,
       fetcher_properties_->GetFetchClientSettingsObject().GlobalObjectUrl(),
       request, redirect_response, options, resource_type,
       render_blocking_behavior, base::TimeTicks::Now());
@@ -192,10 +186,6 @@ void ResourceLoadObserverForFrame::DidReceiveResponse(
   LocalFrame* frame = document_->GetFrame();
   DCHECK(frame);
   LocalFrameClient* frame_client = frame->Client();
-  SubresourceFilter* subresource_filter =
-      document_loader_->GetSubresourceFilter();
-  if (subresource_filter && resource->GetResourceRequest().IsAdResource())
-    subresource_filter->ReportAdRequestId(response.RequestId());
 
   DCHECK(frame_client);
   if (response_source == ResponseSource::kFromMemoryCache) {
@@ -219,11 +209,6 @@ void ResourceLoadObserverForFrame::DidReceiveResponse(
   }
 
   RecordAddressSpaceFeature(frame, response);
-
-  if (!response.HttpHeaderField(http_names::kExpectCT).empty()) {
-    Deprecation::CountDeprecation(frame->DomWindow(),
-                                  mojom::blink::WebFeature::kExpectCTHeader);
-  }
 
   document_->Loader()->MaybeRecordServiceWorkerFallbackMainResource(
       response.WasFetchedViaServiceWorker());

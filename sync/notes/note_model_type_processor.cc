@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "app/vivaldi_apptools.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
@@ -20,7 +19,6 @@
 #include "build/build_config.h"
 #include "components/notes/note_node.h"
 #include "components/sync/base/data_type_histogram.h"
-#include "components/sync/base/features.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_queue.h"
@@ -191,7 +189,7 @@ void NoteModelTypeProcessor::OnUpdateReceived(
     absl::optional<sync_pb::GarbageCollectionDirective> gc_directive) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!model_type_state.cache_guid().empty());
-  DCHECK_EQ(model_type_state.cache_guid(), cache_uuid_);
+  CHECK_EQ(model_type_state.cache_guid(), activation_request_.cache_guid);
   DCHECK(syncer::IsInitialSyncDone(model_type_state.initial_sync_state()));
   DCHECK(start_callback_.is_null());
   // Processor should never connect if
@@ -222,12 +220,11 @@ void NoteModelTypeProcessor::OnUpdateReceived(
   }
 
   // Issue error and stop sync if notes count exceeds limit.
-  if (note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_ &&
-      base::FeatureList::IsEnabled(syncer::kSyncEnforceBookmarksCountLimit)) {
+  if (note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_) {
     // Local changes continue to be tracked in order to allow users to delete
     // notes and recover upon restart.
     DisconnectSync();
-    error_handler_.Run(
+    activation_request_.error_handler.Run(
         syncer::ModelError(FROM_HERE, "Local notes count exceed limit."));
     return;
   }
@@ -324,16 +321,14 @@ void NoteModelTypeProcessor::ModelReadyToSync(
               model_metadata.model_type_state().initial_sync_state())) {
         // There used to be a tracker, which is dropped now due to
         // `pending_clear_metadata_`. This isn't very different to
-        // ClearMetadataWhileStopped(), in the sense that the need to wipe the
+        // ClearMetadataIfStopped(), in the sense that the need to wipe the
         // local model needs to be considered.
         TriggerWipeModelUponSyncDisabledBehavior();
       }
       schedule_save_closure_.Run();
     }
   } else if (model_metadata
-                 .last_initial_merge_remote_updates_exceeded_limit() &&
-             base::FeatureList::IsEnabled(
-                 syncer::kSyncEnforceBookmarksCountLimit)) {
+                 .last_initial_merge_remote_updates_exceeded_limit()) {
     // Report error if remote updates fetched last time during initial merge
     // exceeded limit. Note that here we are only setting
     // `last_initial_merge_remote_updates_exceeded_limit_`, the actual error
@@ -346,10 +341,6 @@ void NoteModelTypeProcessor::ModelReadyToSync(
     if (note_tracker_) {
       StartTrackingMetadata();
     } else if (!metadata_str.empty()) {
-      // Even if the field `last_initial_merge_remote_updates_exceeded_limit` is
-      // set and the feature toggle `kSyncEnforceBookmarksCountLimit` not
-      // enabled, making the metadata_str non-empty, scheduling a save shouldn't
-      // cause any problem.
       DLOG(WARNING) << "Persisted note sync metadata invalidated when loading.";
       // Schedule a save to make sure the corrupt metadata is deleted from disk
       // as soon as possible, to avoid reporting again after restart if nothing
@@ -365,7 +356,7 @@ void NoteModelTypeProcessor::ModelReadyToSync(
     // Since the model isn't initially tracking metadata, move away from
     // kOnceIfTrackingMetadata so the behavior doesn't kick in, in case sync is
     // turned on later and back to off. This should be practically unreachable
-    // because usually ClearMetadataWhileStopped() would be invoked earlier,
+    // because usually ClearMetadataIfStopped() would be invoked earlier,
     // but let's be extra safe and avoid relying on this behavior.
     wipe_model_upon_sync_disabled_behavior_ =
         syncer::WipeModelUponSyncDisabledBehavior::kNever;
@@ -380,7 +371,7 @@ size_t NoteModelTypeProcessor::EstimateMemoryUsage() const {
   if (note_tracker_) {
     memory_usage += note_tracker_->EstimateMemoryUsage();
   }
-  memory_usage += EstimateMemoryUsage(cache_uuid_);
+  memory_usage += EstimateMemoryUsage(activation_request_.cache_guid);
   return memory_usage;
 }
 
@@ -394,15 +385,14 @@ void NoteModelTypeProcessor::OnSyncStarting(
     const syncer::DataTypeActivationRequest& request,
     StartCallback start_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(start_callback);
+  CHECK(start_callback);
+  CHECK(request.IsValid());
+  CHECK(!request.cache_guid.empty());
   DVLOG(1) << "Sync is starting for Notes";
 
-  cache_uuid_ = request.cache_guid;
   start_callback_ = std::move(start_callback);
-  error_handler_ = request.error_handler;
+  activation_request_ = request;
 
-  DCHECK(!cache_uuid_.empty());
-  DCHECK(error_handler_);
   ConnectIfReady();
 }
 
@@ -416,7 +406,6 @@ void NoteModelTypeProcessor::ConnectIfReady() {
     return;
   }
 
-  DCHECK(error_handler_);
   // ConnectSync() should not have been called by now.
   DCHECK(!worker_);
 
@@ -427,7 +416,7 @@ void NoteModelTypeProcessor::ConnectIfReady() {
     // case and thus tracker should be empty.
     DCHECK(!note_tracker_);
     start_callback_.Reset();
-    error_handler_.Run(
+    activation_request_.error_handler.Run(
         syncer::ModelError(FROM_HERE,
                            "Latest remote note count exceeded limit. Turn "
                            "off and turn on sync to retry."));
@@ -441,21 +430,20 @@ void NoteModelTypeProcessor::ConnectIfReady() {
   const size_t count = note_tracker_
                            ? note_tracker_->TrackedNotesCount()
                            : CountSyncableNotesFromModel(notes_model_);
-  if (count > max_notes_till_sync_enabled_ &&
-      base::FeatureList::IsEnabled(syncer::kSyncEnforceBookmarksCountLimit)) {
+  if (count > max_notes_till_sync_enabled_) {
     // For the case where a tracker already exists, local changes will continue
     // to be tracked in order order to allow users to delete notes and
     // recover upon restart.
     start_callback_.Reset();
-    error_handler_.Run(
+    activation_request_.error_handler.Run(
         syncer::ModelError(FROM_HERE, "Local notes count exceed limit."));
     return;
   }
 
-  DCHECK(!cache_uuid_.empty());
+  DCHECK(!activation_request_.cache_guid.empty());
 
-  if (note_tracker_ &&
-      note_tracker_->model_type_state().cache_guid() != cache_uuid_) {
+  if (note_tracker_ && note_tracker_->model_type_state().cache_guid() !=
+                           activation_request_.cache_guid) {
     // In case of a cache uuid mismatch, treat it as a corrupted metadata and
     // start clean.
     StopTrackingMetadataAndResetTracker();
@@ -469,7 +457,7 @@ void NoteModelTypeProcessor::ConnectIfReady() {
     sync_pb::ModelTypeState model_type_state;
     model_type_state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromModelType(syncer::NOTES));
-    model_type_state.set_cache_guid(cache_uuid_);
+    model_type_state.set_cache_guid(activation_request_.cache_guid);
     activation_context->model_type_state = model_type_state;
   }
   activation_context->type_processor =
@@ -488,7 +476,8 @@ void NoteModelTypeProcessor::OnSyncStopping(
   DCHECK(notes_model_);
   DCHECK(!start_callback_);
 
-  cache_uuid_.clear();
+  activation_request_ = syncer::DataTypeActivationRequest{};
+
   worker_.reset();
 
   switch (metadata_fate) {
@@ -520,16 +509,15 @@ void NoteModelTypeProcessor::NudgeForCommitIfNeeded() {
   DCHECK(note_tracker_);
 
   // Issue error and stop sync if the number of local notes exceed limit.
-  // If `error_handler_` is not set, the check is ignored because this gets
-  // re-evaluated in ConnectIfReady().
-  if (error_handler_ &&
-      note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_ &&
-      base::FeatureList::IsEnabled(syncer::kSyncEnforceBookmarksCountLimit)) {
+  // If `activation_request_.error_handler` is not set, the check is ignored
+  // because this gets re-evaluated in ConnectIfReady().
+  if (activation_request_.error_handler &&
+      note_tracker_->TrackedNotesCount() > max_notes_till_sync_enabled_) {
     // Local changes continue to be tracked in order to allow users to delete
     // notes and recover upon restart.
     DisconnectSync();
     start_callback_.Reset();
-    error_handler_.Run(
+    activation_request_.error_handler.Run(
         syncer::ModelError(FROM_HERE, "Local notes count exceed limit."));
     return;
   }
@@ -560,7 +548,7 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
     const sync_pb::ModelTypeState& model_type_state,
     syncer::UpdateResponseDataList updates) {
   DCHECK(!note_tracker_);
-  DCHECK(error_handler_);
+  DCHECK(activation_request_.error_handler);
 
   TRACE_EVENT0("sync", "NoteModelTypeProcessor::OnInitialUpdateReceived");
 
@@ -572,11 +560,10 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
   // Report error if count of remote updates is more than the limit.
   // Note that we are not having this check for incremental updates as it is
   // very unlikely that there will be many updates downloaded.
-  if (updates.size() > max_initial_updates_count &&
-      base::FeatureList::IsEnabled(syncer::kSyncEnforceBookmarksCountLimit)) {
+  if (updates.size() > max_initial_updates_count) {
     DisconnectSync();
     last_initial_merge_remote_updates_exceeded_limit_ = true;
-    error_handler_.Run(
+    activation_request_.error_handler.Run(
         syncer::ModelError(FROM_HERE, "Remote notes count exceed limit."));
     schedule_save_closure_.Run();
     return;
@@ -590,6 +577,7 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
     ScopedRemoteUpdateNotes update_notes(notes_model_,
                                          notes_model_observer_.get());
 
+    notes_model_->EnsurePermanentNodesExist();
     NoteModelMerger(std::move(updates), notes_model_, note_tracker_.get())
         .Merge();
   }
@@ -600,7 +588,7 @@ void NoteModelTypeProcessor::OnInitialUpdateReceived(
       !note_tracker_->GetEntityForNoteNode(notes_model_->trash_node())) {
     DisconnectSync();
     StopTrackingMetadataAndResetTracker();
-    error_handler_.Run(
+    activation_request_.error_handler.Run(
         syncer::ModelError(FROM_HERE, "Permanent note entities missing"));
     return;
   }
@@ -671,8 +659,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
   syncer::EntityData data;
   data.id = metadata.server_id();
   data.creation_time = node->GetCreationTime();
-  data.modification_time =
-      syncer::ProtoTimeToTime(metadata.modification_time());
+  data.modification_time = node->GetLastModificationTime();
   data.name = base::UTF16ToUTF8(node->GetTitle().empty() ? node->GetContent()
                                                          : node->GetTitle());
   data.specifics = CreateSpecificsFromNoteNode(node, notes_model_,
@@ -742,8 +729,14 @@ void NoteModelTypeProcessor::SetMaxNotesTillSyncEnabledForTest(size_t limit) {
   max_notes_till_sync_enabled_ = limit;
 }
 
-void NoteModelTypeProcessor::ClearMetadataWhileStopped() {
+void NoteModelTypeProcessor::ClearMetadataIfStopped() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // If Sync is not actually stopped, ignore this call.
+  if (!activation_request_.cache_guid.empty()) {
+    return;
+  }
+
   if (!notes_model_) {
     // Defer the clearing until ModelReadyToSync() is invoked.
     pending_clear_metadata_ = true;
@@ -758,6 +751,14 @@ void NoteModelTypeProcessor::ClearMetadataWhileStopped() {
     // Schedule save empty metadata.
     schedule_save_closure_.Run();
   }
+}
+
+void NoteModelTypeProcessor::ReportBridgeErrorForTest() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  DisconnectSync();
+  activation_request_.error_handler.Run(
+      syncer::ModelError(FROM_HERE, "Report error for test"));
 }
 
 void NoteModelTypeProcessor::StopTrackingMetadataAndResetTracker() {
@@ -786,7 +787,7 @@ void NoteModelTypeProcessor::TriggerWipeModelUponSyncDisabledBehavior() {
           syncer::WipeModelUponSyncDisabledBehavior::kNever;
       [[fallthrough]];
     case syncer::WipeModelUponSyncDisabledBehavior::kAlways:
-      notes_model_->RemoveAllUserNotes();
+      notes_model_->RemoveAllSyncableNodes();
       break;
   }
 }

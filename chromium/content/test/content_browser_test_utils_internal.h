@@ -11,6 +11,7 @@
 // the content public API.
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,6 @@
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-test-utils.h"
@@ -127,7 +127,9 @@ Shell* OpenWindow(WebContentsImpl* web_contents, const GURL& url);
 //             D = http://next.com/
 //
 // SiteInstances are assigned single-letter names (A, B, C) which are remembered
-// across invocations of the pretty-printer.
+// across invocations of the pretty-printer. Port numbers are excluded from the
+// descriptions by default for DepictFrameTree. Isolated sandboxed SiteInstances
+// are denoted with "(sandboxed)".
 class FrameTreeVisualizer {
  public:
   FrameTreeVisualizer();
@@ -143,6 +145,9 @@ class FrameTreeVisualizer {
  private:
   // Assign or retrive the abbreviated short name (A, B, C) for a site instance.
   std::string GetName(SiteInstance* site_instance);
+
+  // Returns an identical URL except the port, if any, has been removed.
+  GURL GetUrlWithoutPort(const GURL& url);
 
   // Elements are site instance ids. The index of the SiteInstance in the vector
   // determines the abbreviated name (0->A, 1->B) for that SiteInstance.
@@ -273,9 +278,9 @@ class RenderProcessHostBadIpcMessageWaiter {
       const RenderProcessHostBadIpcMessageWaiter&) = delete;
 
   // Waits until the renderer process exits.  Returns the bad message that made
-  // //content kill the renderer.  |absl::nullopt| is returned if the renderer
+  // //content kill the renderer.  |std::nullopt| is returned if the renderer
   // was killed outside of //content or exited normally.
-  [[nodiscard]] absl::optional<bad_message::BadMessageReason> Wait();
+  [[nodiscard]] std::optional<bad_message::BadMessageReason> Wait();
 
  private:
   RenderProcessHostKillWaiter internal_waiter_;
@@ -366,6 +371,8 @@ class BeforeUnloadBlockingDelegate : public JavaScriptDialogManager,
 
   JavaScriptDialogManager* GetJavaScriptDialogManager(
       WebContents* source) override;
+
+  bool IsBackForwardCacheSupported() override;
 
   // JavaScriptDialogManager
 
@@ -482,7 +489,7 @@ class FrameNavigateParamsCapturer : public WebContentsObserver {
   // The id of the FrameTreeNode whose navigations to observe. If this is not
   // set, then this FrameNavigateParamsCapturer observes all navigations that
   // happen in the observed WebContents.
-  absl::optional<int> frame_tree_node_id_;
+  std::optional<int> frame_tree_node_id_;
 
   // How many navigations remain to capture.
   int navigations_remaining_ = 1;

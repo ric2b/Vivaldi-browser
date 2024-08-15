@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_TOUCH_INJECTOR_H_
 
 #include <memory>
+#include <optional>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
@@ -15,7 +17,6 @@
 #include "base/values.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
 #include "chrome/browser/ash/arc/input_overlay/db/proto/app_data.pb.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/events/event_rewriter.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
@@ -79,8 +80,9 @@ class TouchInjector : public ui::EventRewriter {
   //   ]
   // }
   void ParseActions(const base::Value::Dict& root);
-  // Update the flags after loading data finished.
-  void UpdateFlags();
+  // Update the flags after loading data finished. `is_o4c` is true if the game
+  // is optimized for ChromeOS.
+  void UpdateFlags(bool is_o4c);
   // Notify the EventRewriter whether the text input is focused or not.
   void NotifyTextInputState(bool active);
   // Register the EventRewriter.
@@ -110,9 +112,11 @@ class TouchInjector : public ui::EventRewriter {
   void NotifyFirstTimeLaunch();
   // Save the menu entry view position when it's changed.
   void SaveMenuEntryLocation(gfx::Point menu_entry_location_point);
-  absl::optional<gfx::Vector2dF> menu_entry_location() const {
+  std::optional<gfx::Vector2dF> menu_entry_location() const {
     return menu_entry_location_;
   }
+
+  void MaybeBindDefaultInputElement(Action* action);
 
   // Update `content_bounds_f_` and touch positions for each `actions_` for
   // different reasons.
@@ -127,7 +131,7 @@ class TouchInjector : public ui::EventRewriter {
   size_t GetActiveActionsSize();
   // Add a new action of type `action_type` from UI without input binding and
   // with default position binding at the center.
-  void AddNewAction(ActionType action_type);
+  void AddNewAction(ActionType action_type, const gfx::Point& target_pos);
   void RemoveAction(Action* action);
   // Create a new action with guidance from the reference action, and delete
   // the reference action.
@@ -343,7 +347,7 @@ class TouchInjector : public ui::EventRewriter {
   bool enable_mouse_lock_ = false;
 
   // Use default position if it is null.
-  absl::optional<gfx::Vector2dF> menu_entry_location_;
+  std::optional<gfx::Vector2dF> menu_entry_location_;
 
   base::WeakPtrFactory<TouchInjector> weak_ptr_factory_{this};
 };

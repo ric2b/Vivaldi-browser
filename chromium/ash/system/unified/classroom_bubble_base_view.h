@@ -9,13 +9,13 @@
 #include "ash/system/unified/glanceable_tray_child_bubble.h"
 #include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/views/layout/flex_layout.h"
 #include "ui/views/view_observer.h"
 
 class GURL;
 
 namespace views {
 class FlexLayout;
+class FlexLayoutView;
 class Label;
 }
 
@@ -36,8 +36,8 @@ class ASH_EXPORT ClassroomBubbleBaseView : public GlanceableTrayChildBubble,
   METADATA_HEADER(ClassroomBubbleBaseView);
 
   // TODO(b:283370907): Add classroom glanceable contents.
-  ClassroomBubbleBaseView(DetailedViewDelegate* delegate,
-                          std::unique_ptr<ui::ComboboxModel> combobox_model);
+  explicit ClassroomBubbleBaseView(
+      std::unique_ptr<ui::ComboboxModel> combobox_model);
   ClassroomBubbleBaseView(const ClassroomBubbleBaseView&) = delete;
   ClassroomBubbleBaseView& operator=(const ClassroomBubbleBaseView&) = delete;
   ~ClassroomBubbleBaseView() override;
@@ -83,14 +83,13 @@ class ASH_EXPORT ClassroomBubbleBaseView : public GlanceableTrayChildBubble,
   size_t total_assignments_ = 0u;
 
   // Owned by views hierarchy.
-  raw_ptr<views::FlexLayoutView, ExperimentalAsh> header_view_ = nullptr;
-  raw_ptr<Combobox, ExperimentalAsh> combo_box_view_ = nullptr;
-  raw_ptr<views::View, ExperimentalAsh> list_container_view_ = nullptr;
-  raw_ptr<GlanceablesListFooterView, ExperimentalAsh> list_footer_view_ =
-      nullptr;
-  raw_ptr<GlanceablesProgressBarView, ExperimentalAsh> progress_bar_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> empty_list_label_ = nullptr;
-  raw_ptr<views::FlexLayout, ExperimentalAsh> layout_manager_ = nullptr;
+  raw_ptr<views::FlexLayoutView> header_view_ = nullptr;
+  raw_ptr<Combobox> combo_box_view_ = nullptr;
+  raw_ptr<views::View> list_container_view_ = nullptr;
+  raw_ptr<GlanceablesListFooterView> list_footer_view_ = nullptr;
+  raw_ptr<GlanceablesProgressBarView> progress_bar_ = nullptr;
+  raw_ptr<views::Label> empty_list_label_ = nullptr;
+  raw_ptr<views::FlexLayout> layout_manager_ = nullptr;
 
   base::ScopedObservation<views::View, views::ViewObserver>
       combobox_view_observation_{this};
@@ -100,7 +99,7 @@ class ASH_EXPORT ClassroomBubbleBaseView : public GlanceableTrayChildBubble,
   base::TimeTicks assignments_requested_time_;
 
   // The start time that a selected assignment list is shown.
-  absl::optional<base::TimeTicks> list_shown_start_time_;
+  std::optional<base::TimeTicks> list_shown_start_time_;
 
   // Whether the first assignment list has been shown in this view's lifetime.
   bool first_assignment_list_shown_ = false;

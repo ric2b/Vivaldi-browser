@@ -557,6 +557,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       kind: ScreenKind.ERROR,
     },
     {
+      id: 'install-attributes-error-message',
+      kind: ScreenKind.ERROR,
+    },
+    {
       id: 'signin-fatal-error',
       kind: ScreenKind.ERROR,
       states: [
@@ -669,7 +673,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
         {
           id: 'online-gaia',
           trigger: (screen) => {
-            screen.loadAuthExtension({
+            screen.loadAuthenticator({
               chromeType: 'chromedevice',
               enterpriseManagedDevice: false,
               forceReload: true,
@@ -856,6 +860,56 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       ],
     },
     {
+      id: 'apply-online-password',
+      kind: ScreenKind.NORMAL,
+    },
+    {
+      id: 'local-data-loss-warning',
+      kind: ScreenKind.NORMAL,
+      states: [
+        {
+          id: 'non-owner',
+          trigger: (screen) => {
+            screen.onBeforeShow({
+              isOwner: false,
+              email: 'someone@example.com',
+            });
+          },
+        },
+        {
+          id: 'owner',
+          trigger: (screen) => {
+            screen.onBeforeShow({
+              isOwner: true,
+              email: 'someone@example.com',
+            });
+          },
+        },
+      ],
+    },
+    {
+      id: 'enter-old-password',
+      kind: ScreenKind.NORMAL,
+      states: [
+        {
+          id: 'no-error',
+          trigger: (screen) => {
+            screen.onBeforeShow({
+              passwordInvalid: false,
+            });
+          },
+        },
+        {
+          id: 'wrong-password',
+          trigger: (screen) => {
+            screen.onBeforeShow({
+              passwordInvalid: true,
+            });
+          },
+        },
+      ],
+    },
+    {
       id: 'local-password-setup',
       kind: ScreenKind.NORMAL,
       states: [
@@ -875,6 +929,30 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
             screen.onBeforeShow({
               showBackButton: true,
             });
+          },
+        },
+      ],
+    },
+    {
+      id: 'osauth-error',
+      kind: ScreenKind.ERROR,
+    },
+    {
+      id: 'factor-setup-success',
+      kind: ScreenKind.NORMAL,
+      states: [
+        {
+          id: 'local-set',
+          data: {
+            modifiedFactors: 'local',
+            changeMode: 'set',
+          },
+        },
+        {
+          id: 'local-update',
+          data: {
+            modifiedFactors: 'local',
+            changeMode: 'update',
           },
         },
       ],
@@ -1079,7 +1157,8 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     {
       id: 'consolidated-consent',
       kind: ScreenKind.NORMAL,
-      handledSteps: 'loaded,loading,error,google-eula,cros-eula,arc,privacy',
+      handledSteps:
+          'loaded,loading,play-load-error,google-eula,cros-eula,arc,privacy',
       // TODO(crbug.com/1247174): Use localized URLs for eulaUrl and
       // additionalTosUrl.
       states: [
@@ -1245,10 +1324,9 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
           },
         },
         {
-          id: 'error',
+          id: 'play-load-error',
           trigger: (screen) => {
-            screen.setUIStep('error');
-            screen.setUsageOptinHidden(false);
+            screen.setUIStep('play-load-error');
           },
           data: {
             isArcEnabled: true,
@@ -1273,14 +1351,14 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     {
       id: 'guest-tos',
       kind: ScreenKind.NORMAL,
-      handledSteps: 'loading,loaded,google-eula,cros-eula',
+      handledSteps: 'loading,overview,google-eula,cros-eula',
       // TODO(crbug.com/1247174): Use localized URLs for googleEulaURL and
       // crosEulaURL.
       states: [
         {
-          id: 'loaded',
+          id: 'overview',
           trigger: (screen) => {
-            screen.setUIStep('loaded');
+            screen.setUIStep('overview');
           },
           data: {
             googleEulaUrl: 'https://policies.google.com/terms/embedded?hl=en',
@@ -1760,6 +1838,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       ],
     },
     {
+      id: 'remote-activity-notification',
+      kind: ScreenKind.NORMAL,
+    },
+    {
       id: 'cryptohome-recovery',
       kind: ScreenKind.NORMAL,
     },
@@ -1767,7 +1849,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       id: 'quick-start',
       kind: ScreenKind.NORMAL,
       handledSteps:
-          'verification,connecting_to_wifi,connected_to_wifi,gaia_credentials,fido_assertion_received',
+          'verification,connecting_to_wifi,signing_in,setup_complete',
       states: [
         {
           id: 'PinVerification',
@@ -1789,21 +1871,26 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
           },
         },
         {
-          id: 'ConnectedToWifi',
+          id: 'SigninInEmailOnly',
           trigger: (screen) => {
-            screen.showConnectedToWifi('TestNetwork', 'TestPassword');
+            screen.showSigningInStep();
+            screen.setUserEmail('test_email@gmail.com');
           },
         },
         {
-          id: 'TransferringGaiaCreds',
+          id: 'SigninInFullAvatar',
           trigger: (screen) => {
-            screen.showTransferringGaiaCredentials();
+            screen.showSigningInStep();
+            screen.setUserEmail('test_email@gmail.com');
+            screen.setUserFullName('Test User');
+            screen.setUserAvatarUrl('https://lh3.googleusercontent.com/a/ACg8ocISjvU-p0Gz_kIBamP3jit_Y8PrQVU4AbIvQrUEZ04d=s96-c');
           },
         },
         {
-          id: 'TransferredGaiaCreds',
+          id: 'SetupComplete',
           trigger: (screen) => {
-            screen.showFidoAssertionReceived('testUser@gmail.com');
+            screen.setUserEmail('test_email@gmail.com');
+            screen.showSetupCompleteStep();
           },
         },
       ],
@@ -1857,6 +1944,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       const panel = /** @type {!HTMLElement} */ (document.createElement('div'));
       panel.className = 'debug-tool-panel';
       panel.id = id;
+      panel.setAttribute('aria-hidden', true);
 
       parent.appendChild(this.titleDiv);
       parent.appendChild(panel);
@@ -1929,7 +2017,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     }
 
     getScreenshotId() {
-      var result = 'unknown';
+      let result = 'unknown';
       if (this.currentScreenId_) {
         result = this.currentScreenId_;
       }
@@ -2139,7 +2227,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       new DebugButton(panel.content, 'Toggle color mode', function() {
         chrome.send('debug.toggleColorMode');
       });
-      var button = new DebugButton(
+      const button = new DebugButton(
           panel.content, 'Toggle gaming mode', this.toggleGameMode.bind(this));
 
       button.element.classList.add('gametoggle-button');
@@ -2188,7 +2276,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       // Disable userActed from triggering chrome.send() and crashing.
       document.getElementById(screenId).userActed = function(){};
       const state = screen.stateMap_[stateId];
-      var data = {};
+      let data = {};
       if (state.data) {
         data = state.data;
       }
@@ -2210,7 +2298,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       this.knownScreens = [];
       this.screenButtons = {};
       /** @suppress {visibility} */
-      for (var id of Oobe.getInstance().screens_) {
+      for (const id of Oobe.getInstance().screens_) {
         if (id in this.screenMap) {
           const screenDef = this.screenMap[id];
           const screenElement = $(id);
@@ -2265,11 +2353,11 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       this.knownScreens = this.knownScreens.sort((a, b) => a.index - b.index);
       const content = this.screensPanel.content;
       this.knownScreens.forEach((screen) => {
-        var name = screen.id;
+        let name = screen.id;
         if (screen.suffix) {
           name = name + ' (' + screen.suffix + ')';
         }
-        var button = new DebugButton(
+        const button = new DebugButton(
             content, name, this.switchToScreen.bind(this, screen));
         button.element.classList.add('debug-button-' + screen.kind);
         this.screenButtons[screen.id] = button;
@@ -2322,7 +2410,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     }
 
     createCssStyle(name, styleSpec) {
-      var style = document.createElement('style');
+      const style = document.createElement('style');
       style.type = 'text/css';
       style.innerHTML = sanitizeInnerHtml('.' + name + ' {' + styleSpec + '}');
       document.getElementsByTagName('head')[0].appendChild(style);
@@ -2362,6 +2450,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
             /** @type {!HTMLElement} */ (document.createElement('div'));
         overlay.id = 'debuggerOverlay';
         overlay.className = 'debugger-overlay';
+        overlay.setAttribute('aria-label', 'OOBE debug overlay');
         overlay.setAttribute('hidden', true);
         this.debuggerOverlay_ = overlay;
       }

@@ -23,10 +23,10 @@ android_library("java") {
   deps = [
     ":features_java",
     "//base:base_java",
+    "//base/version_info/android:version_constants_java",
     "//build/android:build_java",
     "//components/autofill/android:autofill_java",
     "//components/autofill/core/common/mojom:mojo_types_java",
-    "//components/version_info/android:version_constants_java",
     "//content/public/android:content_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/jni_zero:jni_zero_java",
@@ -39,9 +39,11 @@ android_library("java") {
     "java/src/org/chromium/components/autofill/AutofillProvider.java",
     "java/src/org/chromium/components/autofill/AutofillProviderUMA.java",
     "java/src/org/chromium/components/autofill/AutofillRequest.java",
-    "java/src/org/chromium/components/autofill/AutofillSelectionMenuItemProvider.java",
+    "java/src/org/chromium/components/autofill/AutofillSelectionMenuItemHelper.java",
     "java/src/org/chromium/components/autofill/FormData.java",
     "java/src/org/chromium/components/autofill/FormFieldData.java",
+    "java/src/org/chromium/components/autofill/PrefillRequest.java",
+    "java/src/org/chromium/components/autofill/SparseArrayWithWorkaround.java",
     "java/src/org/chromium/components/autofill_public/ViewType.java",
   ]
 }
@@ -110,8 +112,11 @@ static_library("android") {
   deps = [
     ":features",
     ":jni_headers",
+    "//components/autofill/android:keyboard_suppressor",
     "//components/autofill/content/browser",
+    "//components/password_manager/core/browser/form_parsing",
     "//content/public/browser",
+    "//third_party/jni_zero",
     "//ui/android",
   ]
 }
@@ -156,6 +161,9 @@ source_set("test_support") {
   testonly = true
   sources = [
     "autofill_provider_android_test_api.h",
+    "form_data_android_test_api.h",
+    "mock_form_data_android_bridge.cc",
+    "mock_form_data_android_bridge.h",
     "mock_form_field_data_android_bridge.cc",
     "mock_form_field_data_android_bridge.h",
     "test_autofill_provider.cc",

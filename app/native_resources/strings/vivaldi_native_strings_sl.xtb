@@ -52,7 +52,7 @@
 <translation id="3291915639428159043">Samodejno predvajanje je blokirano</translation>
 <translation id="3302905971452834934">Pošast 1</translation>
 <translation id="3334610655141903168">(brez naslova)</translation>
-<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je trenutno na voljo najnovejša različica.</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je trenutno najnovejša razpoložljiva različica.</translation>
 <translation id="3383198080133834965">Ste na tekočem!</translation>
 <translation id="3402602684546832928">Izberite datoteko Opera zaznamkov</translation>
 <translation id="3451317331714872347">Pokrajina 8</translation>
@@ -78,7 +78,6 @@
 <translation id="3943857333388298514">Prilepi</translation>
 <translation id="4005270918754737597">Preskoči to različico</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4073157431025461511">&amp;Ne prikazuj več</translation>
 <translation id="4074744496918018786">Odpri sliko v zasebnem oknu</translation>
 <translation id="410351446219883937">Samodejno predvajanje</translation>
 <translation id="4281844954008187215">Pogoji storitve</translation>
@@ -113,7 +112,6 @@
 <translation id="5615637589913244581">Opera različica 15+ (Beta)</translation>
 <translation id="5648110075441906505">Odpri sliko v novem oknu</translation>
 <translation id="5656371807944747581">Napaka pri posodabljanju!</translation>
-<translation id="5716238312826274098">Onemogočanje obvestil</translation>
 <translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> je zdaj na voljo (imate <ph name="OLD_VERSION" />). Bi jo radi prenesli zdaj?</translation>
 <translation id="5770433027661640693">Pokrajina 10</translation>
 <translation id="5857090052475505287">Nova mapa</translation>
@@ -141,7 +139,6 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Namestitve posodobitve ni uspelo zagnati. Preverite, ali ima računalnik dovolj pomnilnika ali prostora na disku, in poskusite znova pozneje.</translation>
 <translation id="7658239707568436148">Prekliči</translation>
-<translation id="7715497554424665066">&amp;Prezri posodobitev</translation>
 <translation id="7724603315864178912">Izreži</translation>
 <translation id="7727481996062361502">Preverjanje posodobitve...</translation>
 <translation id="7793738202466490491">Dodaj kot dogodek v koledarju</translation>

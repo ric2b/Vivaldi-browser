@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import type * as Protocol from '../../../../front_end/generated/protocol.js';
+import * as CPUProfile from '../../../../front_end/models/cpu_profile/cpu_profile.js';
 import type * as TimelineModel from '../../../../front_end/models/timeline_model/timeline_model.js';
 import * as TraceEngine from '../../../../front_end/models/trace/trace.js';
 import * as Timeline from '../../../../front_end/panels/timeline/timeline.js';
@@ -218,6 +219,24 @@ export function getRootAt(thread: TraceEngine.Handlers.ModelHandlers.Renderer.Re
 }
 
 /**
+ * Gets all nodes in a thread. To finish this task, we Walk through all the nodes, starting from the root node.
+ */
+export function getAllNodes(roots: Set<TraceEngine.Helpers.TreeHelpers.TraceEntryNode>):
+    TraceEngine.Helpers.TreeHelpers.TraceEntryNode[] {
+  const allNodes: TraceEngine.Helpers.TreeHelpers.TraceEntryNode[] = [];
+
+  const children: TraceEngine.Helpers.TreeHelpers.TraceEntryNode[] = Array.from(roots);
+  while (children.length > 0) {
+    const childNode = children.shift();
+    if (childNode) {
+      allNodes.push(childNode);
+      children.push(...childNode.children);
+    }
+  }
+  return allNodes;
+}
+
+/**
  * Gets the node with an id from a tree in a thread.
  * @see RendererHandler.ts
  */
@@ -225,7 +244,21 @@ export function getNodeFor(
     thread: TraceEngine.Handlers.ModelHandlers.Renderer.RendererThread,
     nodeId: TraceEngine.Helpers.TreeHelpers.TraceEntryNodeId): TraceEngine.Helpers.TreeHelpers.TraceEntryNode {
   const tree = getTree(thread);
-  const node = tree.nodes.get(nodeId);
+
+  function findNode(
+      nodes: Set<TraceEngine.Helpers.TreeHelpers.TraceEntryNode>|TraceEngine.Helpers.TreeHelpers.TraceEntryNode[],
+      nodeId: TraceEngine.Helpers.TreeHelpers.TraceEntryNodeId): TraceEngine.Helpers.TreeHelpers.TraceEntryNode|
+      undefined {
+    for (const node of nodes) {
+      const event = node.entry;
+      if (TraceEngine.Types.TraceEvents.isProfileCall(event) && event.nodeId === nodeId) {
+        return node;
+      }
+      return findNode(node.children, nodeId);
+    }
+    return undefined;
+  }
+  const node = findNode(tree.roots, nodeId);
   if (!node) {
     assert(false, `Couldn't get the node with id ${nodeId} in thread ${thread.name}`);
     return null as never;
@@ -245,14 +278,15 @@ export function getEventsIn(nodes: IterableIterator<TraceEngine.Helpers.TreeHelp
  */
 export function prettyPrint(
     tree: TraceEngine.Helpers.TreeHelpers.TraceEntryTree,
-    predicate:
-        (node: TraceEngine.Helpers.TreeHelpers.TraceEntryNode, event: TraceEngine.Types.TraceEvents.TraceEntry) =>
-            boolean = () => true,
+    predicate: (
+        node: TraceEngine.Helpers.TreeHelpers.TraceEntryNode,
+        event: TraceEngine.Types.TraceEvents.SyntheticTraceEntry) => boolean = () => true,
     indentation: number = 2, delimiter: string = ' ', prefix: string = '-', newline: string = '\n',
     out: string = ''): string {
   let skipped = false;
   return printNodes(tree.roots);
-  function printNodes(nodes: Set<TraceEngine.Helpers.TreeHelpers.TraceEntryNode>): string {
+  function printNodes(nodes: Set<TraceEngine.Helpers.TreeHelpers.TraceEntryNode>|
+                      TraceEngine.Helpers.TreeHelpers.TraceEntryNode[]): string {
     for (const node of nodes) {
       const event = node.entry;
       if (!predicate(node, event)) {
@@ -358,7 +392,7 @@ export function makeProfileCall(
     functionName: string, tsMs: number, durMs: number,
     pid: TraceEngine.Types.TraceEvents.ProcessID = TraceEngine.Types.TraceEvents.ProcessID(0),
     tid: TraceEngine.Types.TraceEvents.ThreadID = TraceEngine.Types.TraceEvents.ThreadID(0), nodeId: number = 0,
-    url: string = ''): TraceEngine.Types.TraceEvents.TraceEventSyntheticProfileCall {
+    url: string = ''): TraceEngine.Types.TraceEvents.SyntheticProfileCall {
   return {
     cat: '',
     name: 'ProfileCall',
@@ -376,6 +410,7 @@ export function makeProfileCall(
       lineNumber: -1,
       columnNumber: -1,
     },
+    args: {},
   };
 }
 /**
@@ -468,7 +503,7 @@ export function makeFakeSDKEventFromPayload(payloadOptions: FakeEventPayload): T
  * Mocks an object compatible with the return type of the
  * RendererHandler using only an array of ordered entries.
  */
-export function makeMockRendererHandlerData(entries: TraceEngine.Types.TraceEvents.TraceEntry[]):
+export function makeMockRendererHandlerData(entries: TraceEngine.Types.TraceEvents.SyntheticTraceEntry[]):
     TraceEngine.Handlers.ModelHandlers.Renderer.RendererHandlerData {
   const {tree, entryToNode} = TraceEngine.Helpers.TreeHelpers.treify(entries, {filter: {has: () => true}});
   const mockThread: TraceEngine.Handlers.ModelHandlers.Renderer.RendererThread = {
@@ -494,7 +529,51 @@ export function makeMockRendererHandlerData(entries: TraceEngine.Types.TraceEven
     processes: new Map([[1 as TraceEngine.Types.TraceEvents.ProcessID, mockProcess]]),
     compositorTileWorkers: new Map(),
     entryToNode,
-    allRendererEvents: renderereEvents,
+    allTraceEntries: renderereEvents,
+  };
+}
+
+/**
+ * Mocks an object compatible with the return type of the
+ * SamplesHandler using only an array of ordered profile calls.
+ */
+export function makeMockSamplesHandlerData(profileCalls: TraceEngine.Types.TraceEvents.SyntheticProfileCall[]):
+    TraceEngine.Handlers.ModelHandlers.Samples.SamplesHandlerData {
+  const {tree, entryToNode} = TraceEngine.Helpers.TreeHelpers.treify(profileCalls, {filter: {has: () => true}});
+  const profile: Protocol.Profiler.Profile = {
+    nodes: [],
+    startTime: profileCalls.at(0)?.ts || TraceEngine.Types.Timing.MicroSeconds(0),
+    endTime: profileCalls.at(-1)?.ts || TraceEngine.Types.Timing.MicroSeconds(10e5),
+    samples: [],
+    timeDeltas: [],
+  };
+
+  const nodesIds = new Map<number, Protocol.Profiler.ProfileNode>();
+  const lastTimestamp = profile.startTime;
+  for (const profileCall of profileCalls) {
+    let node = nodesIds.get(profileCall.nodeId);
+    if (!node) {
+      node = {
+        id: profileCall.nodeId,
+        callFrame: profileCall.callFrame,
+      };
+      profile.nodes.push(node);
+      nodesIds.set(profileCall.nodeId, node);
+    }
+    profile.samples?.push(node.id);
+    const timeDelta = profileCall.ts - lastTimestamp;
+    profile.timeDeltas?.push(timeDelta);
+  }
+  const profileData = {
+    rawProfile: profile,
+    parsedProfile: new CPUProfile.CPUProfileDataModel.CPUProfileDataModel(profile),
+    profileCalls,
+    profileTree: tree,
+  };
+  const profilesInThread = new Map([[1 as TraceEngine.Types.TraceEvents.ThreadID, profileData]]);
+  return {
+    profilesInProcess: new Map([[1 as TraceEngine.Types.TraceEvents.ProcessID, profilesInThread]]),
+    entryToNode,
   };
 }
 
@@ -576,4 +655,69 @@ export function getMainThread(data: TraceEngine.Handlers.ModelHandlers.Renderer.
     throw new Error('Could not find main thread.');
   }
   return mainThread;
+}
+
+type TraceParseData = TraceEngine.Handlers.Types.TraceParseData;
+
+export function getBaseTraceParseModelData(overrides: Partial<TraceParseData> = {}): TraceParseData {
+  return {
+    Animations: [],
+    LayoutShifts: {
+      clusters: [],
+      sessionMaxScore: 0,
+      clsWindowID: 0,
+      prePaintEvents: [],
+      layoutInvalidationEvents: [],
+      styleRecalcInvalidationEvents: [],
+      backendNodeIds: [],
+      scoreRecords: [],
+    },
+    Meta: {
+      traceBounds: {
+        min: TraceEngine.Types.Timing.MicroSeconds(0),
+        max: TraceEngine.Types.Timing.MicroSeconds(100),
+        range: TraceEngine.Types.Timing.MicroSeconds(100),
+      },
+      browserProcessId: TraceEngine.Types.TraceEvents.ProcessID(-1),
+      browserThreadId: TraceEngine.Types.TraceEvents.ThreadID(-1),
+      gpuProcessId: TraceEngine.Types.TraceEvents.ProcessID(-1),
+      gpuThreadId: TraceEngine.Types.TraceEvents.ThreadID(-1),
+      threadsInProcess: new Map(),
+      navigationsByFrameId: new Map(),
+      navigationsByNavigationId: new Map(),
+      mainFrameId: '',
+      mainFrameURL: '',
+      rendererProcessesByFrame: new Map(),
+      topLevelRendererIds: new Set(),
+      frameByProcessId: new Map(),
+      mainFrameNavigations: [],
+    },
+    Renderer: {
+      processes: new Map(),
+      compositorTileWorkers: new Map(),
+      entryToNode: new Map(),
+      allTraceEntries: [],
+    },
+    Screenshots: [],
+    Samples: {
+      profiles: new Map(),
+      processes: new Map(),
+    },
+    PageLoadMetrics: {metricScoresByFrameId: new Map(), lcpEventNodeIdToDOMNodeMap: new Map()},
+    UserInteractions: {allEvents: [], interactionEvents: []},
+    NetworkRequests: {
+      byOrigin: new Map(),
+      byTime: [],
+    },
+    GPU: {
+      mainGPUThreadTasks: [],
+      errorsByUseCase: new Map(),
+    },
+    UserTimings: {
+      timings: [],
+    },
+    LargestImagePaint: new Map(),
+    LargestTextPaint: new Map(),
+    ...overrides,
+  } as Partial<TraceParseData>as TraceParseData;
 }

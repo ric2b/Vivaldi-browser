@@ -194,7 +194,7 @@ TableView::TableView() : weak_factory_(this) {
 
 TableView::TableView(ui::TableModel* model,
                      const std::vector<ui::TableColumn>& columns,
-                     TableTypes table_type,
+                     TableType table_type,
                      bool single_selection)
     : TableView() {
   Init(model, std::move(columns), table_type, single_selection);
@@ -230,7 +230,7 @@ Builder<ScrollView> TableView::CreateScrollViewBuilderWithTable(
 
 void TableView::Init(ui::TableModel* model,
                      const std::vector<ui::TableColumn>& columns,
-                     TableTypes table_type,
+                     TableType table_type,
                      bool single_selection) {
   SetColumns(columns);
   SetTableType(table_type);
@@ -268,14 +268,14 @@ void TableView::SetColumns(const std::vector<ui::TableColumn>& columns) {
   }
 }
 
-void TableView::SetTableType(TableTypes table_type) {
+void TableView::SetTableType(TableType table_type) {
   if (table_type_ == table_type)
     return;
   table_type_ = table_type;
   OnPropertyChanged(&table_type_, PropertyEffects::kPropertyEffectsLayout);
 }
 
-TableTypes TableView::GetTableType() const {
+TableType TableView::GetTableType() const {
   return table_type_;
 }
 
@@ -452,6 +452,7 @@ void TableView::SetVisibleColumnWidth(size_t index, int width) {
   }
   PreferredSizeChanged();
   SchedulePaint();
+  UpdateFocusRings();
   UpdateVirtualAccessibilityChildrenBounds();
 }
 
@@ -720,7 +721,7 @@ std::u16string TableView::GetTooltipText(const gfx::Point& p) const {
   }
 
   const int x = GetMirroredXInView(p.x());
-  const absl::optional<size_t> column = GetClosestVisibleColumnIndex(this, x);
+  const absl::optional<size_t> column = GetClosestVisibleColumnIndex(*this, x);
   if (!column.has_value() || x < visible_columns_[column.value()].x ||
       x > (visible_columns_[column.value()].x +
            visible_columns_[column.value()].width)) {
@@ -1002,7 +1003,7 @@ void TableView::OnPaintImpl(gfx::Canvas* canvas) {
       }
 
       // Always paint the icon in the first visible column.
-      if (j == 0 && table_type_ == ICON_AND_TEXT) {
+      if (j == 0 && table_type_ == TableType::kIconAndText) {
         gfx::ImageSkia image =
             model_->GetIcon(model_index).Rasterize(GetColorProvider());
         if (!image.isNull()) {
@@ -1160,8 +1161,9 @@ void TableView::AdjustCellBoundsForText(size_t visible_column_index,
   if (visible_column_index == 0) {
     if (grouper_)
       text_x += kGroupingIndicatorSize + cell_element_spacing;
-    if (table_type_ == ICON_AND_TEXT)
+    if (table_type_ == TableType::kIconAndText) {
       text_x += ui::TableModel::kIconSize + cell_element_spacing;
+    }
   }
   bounds->set_x(text_x);
   bounds->set_width(std::max(0, bounds->right() - cell_margin - text_x));
@@ -1173,7 +1175,8 @@ void TableView::CreateHeaderIfNecessary(ScrollView* scroll_view) {
   if (header_ || (columns_.size() == 1 && columns_[0].title.empty()))
     return;
 
-  header_ = scroll_view->SetHeader(std::make_unique<TableHeader>(this));
+  header_ = scroll_view->SetHeader(
+      std::make_unique<TableHeader>(weak_factory_.GetWeakPtr()));
 
   // The header accessibility view should be the first row, to match the
   // original view accessibility construction.
@@ -1192,8 +1195,9 @@ void TableView::UpdateVisibleColumnSizes() {
   const int cell_margin = GetCellMargin();
   const int cell_element_spacing = GetCellElementSpacing();
   int first_column_padding = 0;
-  if (table_type_ == ICON_AND_TEXT && header_)
+  if (table_type_ == TableType::kIconAndText && header_) {
     first_column_padding += ui::TableModel::kIconSize + cell_element_spacing;
+  }
   if (grouper_)
     first_column_padding += kGroupingIndicatorSize + cell_element_spacing;
 
@@ -1345,15 +1349,20 @@ absl::optional<size_t> TableView::GetActiveVisibleColumnIndex() const {
 }
 
 void TableView::SetActiveVisibleColumnIndex(absl::optional<size_t> index) {
-  if (active_visible_column_index_ == index)
+  if (active_visible_column_index_ == index) {
     return;
+  }
   active_visible_column_index_ = index;
-
-  if (selection_model_.active().has_value() &&
-      active_visible_column_index_.has_value()) {
-    ScrollRectToVisible(
-        GetCellBounds(ModelToView(selection_model_.active().value()),
-                      active_visible_column_index_.value()));
+  if (active_visible_column_index_.has_value()) {
+    if (selection_model_.active().has_value()) {
+      ScrollRectToVisible(
+          GetCellBounds(ModelToView(selection_model_.active().value()),
+                        active_visible_column_index_.value()));
+    } else if (header_row_is_active()) {
+      const TableView::VisibleColumn& column =
+          GetVisibleColumn(active_visible_column_index_.value());
+      ScrollRectToVisible(gfx::Rect(column.x, 0, column.width, height()));
+    }
   }
 
   UpdateFocusRings();
@@ -1382,7 +1391,7 @@ void TableView::SetSelectionModel(ui::ListSelectionModel new_selection) {
 
   // Scroll the group for the active item to visible.
   if (selection_model_.active().has_value()) {
-    gfx::Rect vis_rect(GetVisibleBounds());
+    gfx::Rect vis_rect(GetMirroredRect(GetVisibleBounds()));
     const GroupRange range(GetGroupRange(selection_model_.active().value()));
     const int start_y = GetRowBounds(ModelToView(range.start)).y();
     const int end_y =
@@ -1948,7 +1957,7 @@ AXVirtualView* TableView::GetVirtualAccessibilityCellImpl(
   return i->get();
 }
 
-BEGIN_METADATA(TableView, View)
+BEGIN_METADATA(TableView)
 ADD_READONLY_PROPERTY_METADATA(size_t, RowCount)
 ADD_READONLY_PROPERTY_METADATA(absl::optional<size_t>, FirstSelectedRow)
 ADD_READONLY_PROPERTY_METADATA(bool, HasFocusIndicator)
@@ -1958,12 +1967,12 @@ ADD_PROPERTY_METADATA(TableViewObserver*, Observer)
 ADD_READONLY_PROPERTY_METADATA(int, RowHeight)
 ADD_PROPERTY_METADATA(bool, SingleSelection)
 ADD_PROPERTY_METADATA(bool, SelectOnRemove)
-ADD_PROPERTY_METADATA(TableTypes, TableType)
+ADD_PROPERTY_METADATA(TableType, TableType)
 ADD_PROPERTY_METADATA(bool, SortOnPaint)
 END_METADATA
 
 }  // namespace views
 
-DEFINE_ENUM_CONVERTERS(views::TableTypes,
-                       {views::TableTypes::TEXT_ONLY, u"TEXT_ONLY"},
-                       {views::TableTypes::ICON_AND_TEXT, u"ICON_AND_TEXT"})
+DEFINE_ENUM_CONVERTERS(views::TableType,
+                       {views::TableType::kTextOnly, u"TEXT_ONLY"},
+                       {views::TableType::kIconAndText, u"ICON_AND_TEXT"})

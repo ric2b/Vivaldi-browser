@@ -9,13 +9,9 @@ namespace bssl {
 TrustStoreInMemory::TrustStoreInMemory() = default;
 TrustStoreInMemory::~TrustStoreInMemory() = default;
 
-bool TrustStoreInMemory::IsEmpty() const {
-  return entries_.empty();
-}
+bool TrustStoreInMemory::IsEmpty() const { return entries_.empty(); }
 
-void TrustStoreInMemory::Clear() {
-  entries_.clear();
-}
+void TrustStoreInMemory::Clear() { entries_.clear(); }
 
 void TrustStoreInMemory::AddTrustAnchor(
     std::shared_ptr<const ParsedCertificate> cert) {
@@ -40,34 +36,45 @@ void TrustStoreInMemory::AddDistrustedCertificateForTest(
   AddCertificate(std::move(cert), CertificateTrust::ForDistrusted());
 }
 
+void TrustStoreInMemory::AddDistrustedCertificateBySPKI(std::string spki) {
+  distrusted_spkis_.insert(std::move(spki));
+}
+
 void TrustStoreInMemory::AddCertificateWithUnspecifiedTrust(
     std::shared_ptr<const ParsedCertificate> cert) {
   AddCertificate(std::move(cert), CertificateTrust::ForUnspecified());
 }
 
-void TrustStoreInMemory::SyncGetIssuersOf(const ParsedCertificate* cert,
-                                          ParsedCertificateList* issuers) {
+void TrustStoreInMemory::SyncGetIssuersOf(const ParsedCertificate *cert,
+                                          ParsedCertificateList *issuers) {
   auto range = entries_.equal_range(cert->normalized_issuer().AsStringView());
-  for (auto it = range.first; it != range.second; ++it)
+  for (auto it = range.first; it != range.second; ++it) {
     issuers->push_back(it->second.cert);
+  }
 }
 
-CertificateTrust TrustStoreInMemory::GetTrust(const ParsedCertificate* cert) {
-  const Entry* entry = GetEntry(cert);
+CertificateTrust TrustStoreInMemory::GetTrust(const ParsedCertificate *cert) {
+  // Check SPKI distrust first.
+  if (distrusted_spkis_.find(cert->tbs().spki_tlv.AsString()) !=
+      distrusted_spkis_.end()) {
+    return CertificateTrust::ForDistrusted();
+  }
+
+  const Entry *entry = GetEntry(cert);
   return entry ? entry->trust : CertificateTrust::ForUnspecified();
 }
 
-bool TrustStoreInMemory::Contains(const ParsedCertificate* cert) const {
+bool TrustStoreInMemory::Contains(const ParsedCertificate *cert) const {
   return GetEntry(cert) != nullptr;
 }
 
 TrustStoreInMemory::Entry::Entry() = default;
-TrustStoreInMemory::Entry::Entry(const Entry& other) = default;
+TrustStoreInMemory::Entry::Entry(const Entry &other) = default;
 TrustStoreInMemory::Entry::~Entry() = default;
 
 void TrustStoreInMemory::AddCertificate(
     std::shared_ptr<const ParsedCertificate> cert,
-    const CertificateTrust& trust) {
+    const CertificateTrust &trust) {
   Entry entry;
   entry.cert = std::move(cert);
   entry.trust = trust;
@@ -77,8 +84,8 @@ void TrustStoreInMemory::AddCertificate(
       std::make_pair(entry.cert->normalized_subject().AsStringView(), entry));
 }
 
-const TrustStoreInMemory::Entry* TrustStoreInMemory::GetEntry(
-    const ParsedCertificate* cert) const {
+const TrustStoreInMemory::Entry *TrustStoreInMemory::GetEntry(
+    const ParsedCertificate *cert) const {
   auto range = entries_.equal_range(cert->normalized_subject().AsStringView());
   for (auto it = range.first; it != range.second; ++it) {
     if (cert == it->second.cert.get() ||
@@ -90,4 +97,4 @@ const TrustStoreInMemory::Entry* TrustStoreInMemory::GetEntry(
   return nullptr;
 }
 
-}  // namespace net
+}  // namespace bssl

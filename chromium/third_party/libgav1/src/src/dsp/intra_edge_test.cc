@@ -97,9 +97,8 @@ class IntraEdgeFilterTest : public testing::TestWithParam<EdgeFilterParams> {
     if (absl::StartsWith(test_case, "C/")) {
       base_intra_edge_filter_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        IntraEdgeInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      IntraEdgeInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       IntraEdgeInit_NEON();
     } else {
@@ -356,9 +355,8 @@ class IntraEdgeUpsamplerTest : public testing::TestWithParam<int> {
     if (absl::StartsWith(test_case, "C/")) {
       base_intra_edge_upsampler_ = nullptr;
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        IntraEdgeInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      IntraEdgeInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       IntraEdgeInit_NEON();
     } else {

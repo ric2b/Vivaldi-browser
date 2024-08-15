@@ -15,11 +15,6 @@ inline constexpr char16_t kRegionIgnoredRe[] =
     u"province|region|other"
     u"|provincia"       // es
     u"|bairro|suburb";  // pt-BR, pt-PT
-inline constexpr char16_t kAddressNameIgnoredRe[] =
-    u"address.*nickname|address.*label"
-    u"|adres ([İi]sim|başlığı|adı)"  // tr
-    u"|identificação do endereço"    // pt-BR, pt-PT
-    u"|(label|judul|nama) alamat";   // id
 inline constexpr char16_t kCompanyRe[] =
     u"company|business|organization|organisation"
     u"|(?<!con)firma|firmenname"  // de-DE
@@ -171,7 +166,7 @@ inline constexpr char16_t kCityRe[] =
     u"|^시[^도·・]|시[·・]?군[·・]?구"                   // ko-KR
     u"|kota|kabupaten";                                  // id
 inline constexpr char16_t kStateRe[] =
-    u"(?<!(united|hist|history).?)state|county|region|province"
+    u"(?<!(united|hist|history).?)state|region|province"
     u"|county|principality"  // en-UK
     u"|都道府県"             // ja-JP
     u"|estado|provincia"     // pt-BR, pt-PT
@@ -186,8 +181,9 @@ inline constexpr char16_t kStateRe[] =
     u"|provinci";                                                     // id
 
 inline constexpr char16_t kOverflowRe[] =
-    u"complemento"               // pt-BR, pt-PT
-    u"|informações adicionais";  // pt-BR
+    u"complemento"              // pt-BR, pt-PT
+    u"|informações adicionais"  // pt-BR
+    u"|adresszusatz";           // de-DE
 
 inline constexpr char16_t kOverflowAndLandmarkRe[] =
     u"complement and reference"  // en (but could be generic)
@@ -205,7 +201,13 @@ inline constexpr char16_t kBetweenStreetsOrLandmarkRe[] =
 
 inline constexpr char16_t kBetweenStreetsRe[] =
     u"(cross|between).*street"
-    u"|entre.*calle";  // es
+    u"|entre.*calles";  // es
+
+inline constexpr char16_t kBetweenStreetsLine1Re[] =
+    u"entre.*calle(.*1)?";  // es-MX
+
+inline constexpr char16_t kBetweenStreetsLine2Re[] =
+    u"entre.*calle(.*2)?|y.*calle";  // es-MX
 
 inline constexpr char16_t kAdminLevel2Re[] =
     u"município"                  // pt
@@ -381,13 +383,13 @@ inline constexpr char16_t kEmailRe[] =
 /////////////////////////////////////////////////////////////////////////////
 inline constexpr char16_t kNameIgnoredRe[] =
     u"user.?name|user.?id|nickname|maiden name|title|prefix|suffix|mail"
-    u"|vollständiger.?name"              // de-DE
     u"|用户名"                           // zh-CN
     u"|(?:사용자.?)?아이디|사용자.?ID";  // ko-KR
 inline constexpr char16_t kFullNameRe[] =
     u"^name|full.?name|your.?name|customer.?name|bill.?name|ship.?name"
     u"|name.*first.*last|firstandlastname|contact.?(name|person)"
     u"|receiver"
+    u"|vollständiger.?name"                     // de-DE
     u"|nombre.*y.*apellidos"                    // es
     u"|^nom(?![a-zA-Z])"                        // fr-FR
     u"|お名前|氏名"                             // ja-JP
@@ -686,4 +688,4 @@ inline constexpr char16_t kUrlSearchActionRe[] =
 
 }  // namespace autofill
 
-#endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_AUTOFILL_REGEX_CONSTANTS_H_
+#endif  // COMPONENTS_AUTOFILL_CORE_COMMON_AUTOFILL_REGEX_CONSTANTS_H_

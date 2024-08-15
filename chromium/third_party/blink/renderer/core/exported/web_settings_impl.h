@@ -185,7 +185,6 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetTouchDragDropEnabled(bool) override;
   void SetTouchDragEndContextMenu(bool) override;
   void SetBarrelButtonForDragEnabled(bool) override;
-  void SetUseLegacyBackgroundSizeShorthandBehavior(bool) override;
   void SetViewportStyle(mojom::blink::ViewportStyle) override;
   void SetUseWideViewport(bool) override;
   void SetV8CacheOptions(mojom::blink::V8CacheOptions) override;
@@ -212,12 +211,12 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
   void SetLazyFrameLoadingDistanceThresholdPx2G(int) override;
   void SetLazyFrameLoadingDistanceThresholdPx3G(int) override;
   void SetLazyFrameLoadingDistanceThresholdPx4G(int) override;
-  void SetLazyImageLoadingDistanceThresholdPxUnknown(int) override;
-  void SetLazyImageLoadingDistanceThresholdPxOffline(int) override;
-  void SetLazyImageLoadingDistanceThresholdPxSlow2G(int) override;
-  void SetLazyImageLoadingDistanceThresholdPx2G(int) override;
-  void SetLazyImageLoadingDistanceThresholdPx3G(int) override;
-  void SetLazyImageLoadingDistanceThresholdPx4G(int) override;
+  void SetLazyLoadingImageMarginPxUnknown(int) override;
+  void SetLazyLoadingImageMarginPxOffline(int) override;
+  void SetLazyLoadingImageMarginPxSlow2G(int) override;
+  void SetLazyLoadingImageMarginPx2G(int) override;
+  void SetLazyLoadingImageMarginPx3G(int) override;
+  void SetLazyLoadingImageMarginPx4G(int) override;
 
   void SetForceDarkModeEnabled(bool) override;
   void SetPreferredColorScheme(mojom::blink::PreferredColorScheme) override;

@@ -6,12 +6,12 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/win/static_constants.h"
 #include "base/win/win_util.h"
 #include "sandbox/win/src/win_utils.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace sandbox {
 
@@ -38,11 +38,12 @@ bool HandleCloserAgent::AttemptToStuffHandleSlot(HANDLE closed_handle,
     return true;
   }
 
-  if (!dummy_handle_.IsValid())
+  if (!dummy_handle_.is_valid()) {
     return false;
+  }
 
   // This should never happen, as g_dummy is created before closing to_stuff.
-  DCHECK(dummy_handle_.Get() != closed_handle);
+  DCHECK(dummy_handle_.get() != closed_handle);
 
   std::vector<HANDLE> to_close;
 
@@ -71,7 +72,7 @@ bool HandleCloserAgent::AttemptToStuffHandleSlot(HANDLE closed_handle,
 
       do {
         result =
-            ::DuplicateHandle(::GetCurrentProcess(), dummy_handle_.Get(),
+            ::DuplicateHandle(::GetCurrentProcess(), dummy_handle_.get(),
                               ::GetCurrentProcess(), &dup_dummy, 0, false, 0);
         if (!result) {
           break;
@@ -148,7 +149,7 @@ bool HandleCloserAgent::CloseHandles() {
   if (base::win::IsAppVerifierLoaded())
     return true;
 
-  absl::optional<ProcessHandleMap> handle_map = GetCurrentProcessHandles();
+  std::optional<ProcessHandleMap> handle_map = GetCurrentProcessHandles();
   if (!handle_map)
     return false;
 

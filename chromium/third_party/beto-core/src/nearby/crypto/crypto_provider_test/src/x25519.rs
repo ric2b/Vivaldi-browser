@@ -58,7 +58,7 @@ where
 pub fn x25519_to_bytes_test<E: EcdhProviderForX25519Test>(_: PhantomData<E>) {
     let public_key_bytes = hex!("504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
     let public_key = E::PublicKey::from_bytes(&public_key_bytes).unwrap();
-    assert_eq!(public_key_bytes.to_vec(), public_key.to_bytes());
+    assert_eq!(public_key_bytes.to_vec(), public_key.to_bytes().as_ref());
 }
 
 /// Random test for `PublicKey<X25519>::to_bytes`
@@ -69,9 +69,9 @@ pub fn x25519_to_bytes_random_test<E: EcdhProviderForX25519Test>(_: PhantomData<
                 X25519,
             >>::Rng::new())
             .public_key_bytes();
-        let public_key = E::PublicKey::from_bytes(&public_key_bytes).unwrap();
+        let public_key = E::PublicKey::from_bytes(public_key_bytes.as_ref()).unwrap();
         assert_eq!(
-            E::PublicKey::from_bytes(&public_key.to_bytes()).unwrap(),
+            E::PublicKey::from_bytes(public_key.to_bytes().as_ref()).unwrap(),
             public_key,
             "from_bytes should return the same key for `{public_key_bytes:?}`",
         );
@@ -81,7 +81,7 @@ pub fn x25519_to_bytes_random_test<E: EcdhProviderForX25519Test>(_: PhantomData<
 /// Test for X25519 Diffie-Hellman key exchange.
 pub fn x25519_ecdh_test<E: EcdhProviderForX25519Test>(_: PhantomData<E>) {
     // From wycheproof ecdh_secx25519r1_ecpoint_test.json, tcId 1
-    // http://google3/third_party/wycheproof/testvectors/ecdh_secx25519r1_ecpoint_test.json;l=22;rcl=375894991
+    // https://github.com/google/wycheproof/blob/b063b4a/testvectors/x25519_test.json#L23
     // sec1 public key manually extracted from the ASN encoded test data
     let public_key = hex!("504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
     let private = hex!("c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
@@ -109,20 +109,24 @@ pub fn wycheproof_x25519_test<E: EcdhProviderForX25519Test>(_: PhantomData<E>) {
         for test in test_group.tests {
             let result = x25519_ecdh_test_impl::<E>(
                 &test.public_key,
-                &test.private_key.try_into().expect("Private keys should be 32 bytes long"),
+                &test
+                    .private_key
+                    .as_slice()
+                    .try_into()
+                    .expect("Private keys should be 32 bytes long"),
             );
             match test.result {
                 wycheproof::TestResult::Valid => {
                     let shared_secret =
                         result.unwrap_or_else(|_| panic!("Test {} should succeed", test.tc_id));
-                    assert_eq!(&test.shared_secret, &shared_secret.into());
+                    assert_eq!(&test.shared_secret.as_slice(), &shared_secret.into());
                 }
                 wycheproof::TestResult::Invalid => {
                     result.err().unwrap_or_else(|| panic!("Test {} should fail", test.tc_id));
                 }
                 wycheproof::TestResult::Acceptable => {
                     if let Ok(shared_secret) = result {
-                        assert_eq!(test.shared_secret, shared_secret.into());
+                        assert_eq!(test.shared_secret.as_slice(), shared_secret.into());
                     }
                     // Test passes if `result` is an error because this test is "acceptable"
                 }

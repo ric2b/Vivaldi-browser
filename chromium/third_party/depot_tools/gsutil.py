@@ -36,6 +36,10 @@ LUCI_AUTH_SCOPES = [
 ]
 
 
+# Platforms unsupported by luci-auth.
+LUCI_AUTH_UNSUPPORTED_PLATFORMS = ['aix']
+
+
 class InvalidGsutilError(Exception):
     pass
 
@@ -154,6 +158,12 @@ def _is_luci_context():
         return False
 
 
+def _is_luci_auth_supported_platform():
+    """Returns True if luci-auth is supported in the current platform."""
+    return not any(map(sys.platform.startswith,
+                       LUCI_AUTH_UNSUPPORTED_PLATFORMS))
+
+
 def luci_context(cmd):
     """Helper to call`luci-auth context`."""
     p = _luci_auth_cmd('context', wrapped_cmds=cmd)
@@ -264,8 +274,9 @@ def run_gsutil(target, args, clean=False):
         _print_subprocess_result(p)
         return p.returncode
 
-    # Skip wrapping commands if luci-auth is already being
-    if _is_luci_context():
+    # Skip wrapping commands if luci-auth is already being used or if the
+    # platform is unsupported by luci-auth.
+    if _is_luci_context() or not _is_luci_auth_supported_platform():
         return _run_subprocess(cmd, interactive=True).returncode
 
     # Wrap gsutil with luci-auth context.

@@ -32,6 +32,7 @@
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/platform_window/extensions/workspace_extension.h"
 #include "ui/platform_window/platform_window.h"
+#include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_move_loop_handler.h"
 #include "ui/views/corewm/tooltip_controller.h"
@@ -574,6 +575,17 @@ void DesktopWindowTreeHostPlatform::SetShape(
   platform_window()->SetShape(std::move(native_shape), GetRootTransform());
 }
 
+void DesktopWindowTreeHostPlatform::SetParent(gfx::AcceleratedWidget parent) {
+  // TODO(crbug.com/1490267): hook parent to the accelerated widget.
+  if (window_parent_) {
+    window_parent_->window_children_.erase(this);
+  }
+  window_parent_ = DesktopWindowTreeHostPlatform::GetHostForWidget(parent);
+  if (window_parent_) {
+    window_parent_->window_children_.insert(this);
+  }
+}
+
 void DesktopWindowTreeHostPlatform::Activate() {
   platform_window()->Activate();
 }
@@ -748,8 +760,8 @@ void DesktopWindowTreeHostPlatform::SetFullscreen(bool fullscreen,
 }
 
 bool DesktopWindowTreeHostPlatform::IsFullscreen() const {
-  return platform_window()->GetPlatformWindowState() ==
-         ui::PlatformWindowState::kFullScreen;
+  return ui::IsPlatformWindowStateFullscreen(
+      platform_window()->GetPlatformWindowState());
 }
 
 void DesktopWindowTreeHostPlatform::SetOpacity(float opacity) {
@@ -783,11 +795,6 @@ void DesktopWindowTreeHostPlatform::FlashFrame(bool flash_frame) {
 
 bool DesktopWindowTreeHostPlatform::IsAnimatingClosed() const {
   return platform_window()->IsAnimatingClosed();
-}
-
-bool DesktopWindowTreeHostPlatform::IsTranslucentWindowOpacitySupported()
-    const {
-  return platform_window()->IsTranslucentWindowOpacitySupported();
 }
 
 void DesktopWindowTreeHostPlatform::SizeConstraintsChanged() {
@@ -891,6 +898,7 @@ void DesktopWindowTreeHostPlatform::OnWindowStateChanged(
   // window. (The windows code doesn't need this because their window change is
   // synchronous.)
   ScheduleRelayout();
+  GetWidget()->OnNativeWidgetWindowShowStateChanged();
 }
 
 void DesktopWindowTreeHostPlatform::OnCloseRequest() {

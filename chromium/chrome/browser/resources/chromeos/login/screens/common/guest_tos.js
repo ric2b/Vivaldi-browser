@@ -31,11 +31,13 @@ import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
 import {ContentType, WebViewHelper} from '../../components/web_view_helper.js';
 import {WebViewLoader} from '../../components/web_view_loader.js';
 
+import {getTemplate} from './guest_tos.html.js';
+
 
 // Enum that describes the current state of the Guest ToS screen
 const GuestTosScreenState = {
   LOADING: 'loading',
-  LOADED: 'loaded',
+  OVERVIEW: 'overview',
   GOOGLE_EULA: 'google-eula',
   CROS_EULA: 'cros-eula',
 };
@@ -63,6 +65,15 @@ const GuestTosScreenElementBase = mixinBehaviors(
     [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior], PolymerElement);
 
 /**
+ * Data that is passed to the screen during onBeforeShow.
+ * @typedef {{
+ *   googleEulaUrl: string,
+ *   crosEulaUrl: string,
+ * }}
+ */
+let GuestTosScreenData;
+
+/**
  * @polymer
  */
 class GuestTos extends GuestTosScreenElementBase {
@@ -71,7 +82,7 @@ class GuestTos extends GuestTosScreenElementBase {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {
@@ -83,9 +94,17 @@ class GuestTos extends GuestTosScreenElementBase {
     };
   }
 
+  constructor() {
+    super();
+
+    // Online URLs
+    this.googleEulaUrl_ = '';
+    this.crosEulaUrl_ = '';
+  }
+
   /** @override */
   defaultUIStep() {
-    return GuestTosScreenState.LOADING;
+    return GuestTosScreenState.OVERVIEW;
   }
 
   get UI_STEPS() {
@@ -100,15 +119,12 @@ class GuestTos extends GuestTosScreenElementBase {
     this.updateLocalizedContent();
   }
 
+  /**
+   * @param {GuestTosScreenData} data Screen init payload.
+   */
   onBeforeShow(data) {
-    const googleEulaUrl = data['googleEulaUrl'];
-    const crosEulaUrl = data['crosEulaUrl'];
-
-    this.loadEulaWebview_(
-        this.$.guestTosGoogleEulaWebview, googleEulaUrl,
-        false /* clear_anchors */);
-    this.loadEulaWebview_(
-        this.$.guestTosCrosEulaWebview, crosEulaUrl, true /* clear_anchors */);
+    this.googleEulaUrl_ = data['googleEulaUrl'];
+    this.crosEulaUrl_ = data['crosEulaUrl'];
 
     // Call updateLocalizedContent() to ensure that the listeners of the click
     // events on the ToS links are added.
@@ -127,6 +143,13 @@ class GuestTos extends GuestTosScreenElementBase {
         .addEventListener('click', () => this.onCrosEulaLinkClick_());
   }
 
+  showGoogleEula_() {
+    this.setUIStep(GuestTosScreenState.LOADING);
+    this.loadEulaWebview_(
+        this.$.guestTosGoogleEulaWebview, this.googleEulaUrl_,
+        false /* clear_anchors */);
+  }
+
   loadEulaWebview_(webview, online_tos_url, clear_anchors) {
     const loadFailureCallback = () => {
       WebViewHelper.loadUrlContentToWebView(
@@ -137,6 +160,21 @@ class GuestTos extends GuestTosScreenElementBase {
         webview, GUEST_TOS_ONLINE_LOAD_TIMEOUT_IN_MS, loadFailureCallback,
         clear_anchors, true /* inject_css */);
     tosLoader.setUrl(online_tos_url);
+  }
+
+  onGoogleEulaContentLoad_() {
+    this.setUIStep(GuestTosScreenState.GOOGLE_EULA);
+  }
+
+  showCrosEula_() {
+    this.setUIStep(GuestTosScreenState.LOADING);
+    this.loadEulaWebview_(
+        this.$.guestTosCrosEulaWebview, this.crosEulaUrl_,
+        true /* clear_anchors */);
+  }
+
+  onCrosEulaContentLoad_() {
+    this.setUIStep(GuestTosScreenState.CROS_EULA);
   }
 
   getTerms_(locale) {
@@ -160,17 +198,11 @@ class GuestTos extends GuestTosScreenElementBase {
   }
 
   onGoogleEulaLinkClick_() {
-    this.setUIStep(GuestTosScreenState.GOOGLE_EULA);
+    this.showGoogleEula_();
   }
 
   onCrosEulaLinkClick_() {
-    this.setUIStep(GuestTosScreenState.CROS_EULA);
-  }
-
-  onGoogleEulaContentLoad_() {
-    if (this.uiStep == GuestTosScreenState.LOADING) {
-      this.setUIStep(GuestTosScreenState.LOADED);
-    }
+    this.showCrosEula_();
   }
 
   onUsageLearnMoreClick_() {
@@ -178,7 +210,7 @@ class GuestTos extends GuestTosScreenElementBase {
   }
 
   onTermsStepOkClick_() {
-    this.setUIStep(GuestTosScreenState.LOADED);
+    this.setUIStep(GuestTosScreenState.OVERVIEW);
   }
 
   onAcceptClick_() {

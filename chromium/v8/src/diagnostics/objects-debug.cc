@@ -192,10 +192,8 @@ void HeapObject::HeapObjectVerify(Isolate* isolate) {
   CHECK(CheckRequiredAlignment(isolate));
 
   // Only TrustedObjects live in trusted space. See also TrustedObjectVerify.
-  // TODO(saelo): currently, Code and BytecodeArray objects still outside of
-  // trusted space.
-  CHECK_EQ(IsTrustedObject(*this), IsTrustedSpaceObject(*this) ||
-                                       IsCode(*this) || IsBytecodeArray(*this));
+  CHECK_IMPLIES(!IsTrustedObject(*this) && !IsFreeSpaceOrFiller(*this),
+                !IsTrustedSpaceObject(*this));
 
   switch (map(cage_base)->instance_type()) {
 #define STRING_TYPE_CASE(TYPE, size, name, CamelName) case TYPE:
@@ -270,8 +268,9 @@ void HeapObject::HeapObjectVerify(Isolate* isolate) {
       JSObject::cast(*this)->JSObjectVerify(isolate);
       break;
 #if V8_ENABLE_WEBASSEMBLY
-    case WASM_INSTANCE_OBJECT_TYPE:
-      WasmInstanceObject::cast(*this)->WasmInstanceObjectVerify(isolate);
+    case WASM_TRUSTED_INSTANCE_DATA_TYPE:
+      WasmTrustedInstanceData::cast(*this)->WasmTrustedInstanceDataVerify(
+          isolate);
       break;
     case WASM_VALUE_OBJECT_TYPE:
       WasmValueObject::cast(*this)->WasmValueObjectVerify(isolate);
@@ -293,6 +292,9 @@ void HeapObject::HeapObjectVerify(Isolate* isolate) {
       break;
     case CODE_TYPE:
       Code::cast(*this)->CodeVerify(isolate);
+      break;
+    case CODE_WRAPPER_TYPE:
+      CodeWrapper::cast(*this)->CodeWrapperVerify(isolate);
       break;
 
 #define MAKE_TORQUE_CASE(Name, TYPE)          \
@@ -353,8 +355,14 @@ void HeapObject::VerifyCodePointer(Isolate* isolate, Tagged<Object> p) {
   CHECK(IsInstructionStream(HeapObject::cast(p), cage_base));
 }
 
+void Name::NameVerify(Isolate* isolate) {
+  PrimitiveHeapObjectVerify(isolate);
+  CHECK(IsName(this));
+}
+
 void Symbol::SymbolVerify(Isolate* isolate) {
-  TorqueGeneratedClassVerifiers::SymbolVerify(*this, isolate);
+  NameVerify(isolate);
+  CHECK(IsSymbol(this));
   uint32_t hash;
   const bool has_hash = TryGetHash(&hash);
   CHECK(has_hash);
@@ -380,7 +388,14 @@ void BytecodeArray::BytecodeArrayVerify(Isolate* isolate) {
   {
     auto o = handler_table();
     Object::VerifyPointer(isolate, o);
-    CHECK(IsByteArray(o));
+    CHECK(IsTrustedByteArray(o));
+  }
+  {
+    auto o = wrapper();
+    Object::VerifyPointer(isolate, o);
+    CHECK(IsBytecodeWrapper(o));
+    // Our wrapper must point back to us.
+    CHECK_EQ(o->bytecode(isolate), *this);
   }
   {
     auto o = source_position_table(kAcquireLoad);
@@ -398,6 +413,13 @@ void BytecodeArray::BytecodeArrayVerify(Isolate* isolate) {
   // - Jumps must go to new instructions starts.
   // - No Illegal bytecodes.
   // - No consecutive sequences of prefix Wide / ExtraWide.
+}
+
+void BytecodeWrapper::BytecodeWrapperVerify(Isolate* isolate) {
+  if (!this->has_bytecode()) return;
+  auto bytecode = this->bytecode(isolate);
+  Object::VerifyPointer(isolate, bytecode);
+  CHECK_EQ(bytecode->wrapper(), *this);
 }
 
 bool JSObject::ElementsAreSafeToExamine(PtrComprCageBase cage_base) const {
@@ -537,7 +559,9 @@ void Map::MapVerify(Isolate* isolate) {
     // itself, so it may happen that during a GC the native_context() is still
     // null.
     CHECK(IsNull(native_context_or_null()) ||
-          IsNativeContext(native_context()));
+          IsNativeContext(native_context_or_null()));
+    // The context's meta map is tied to the same native context.
+    CHECK_EQ(native_context_or_null(), map()->native_context_or_null());
   } else {
     if (IsUndefined(GetBackPointer(), isolate)) {
       // Root maps must not have descriptors in the descriptor array that do not
@@ -575,6 +599,36 @@ void Map::MapVerify(Isolate* isolate) {
   // JSFunction objects must have prototype slot.
   CHECK_IMPLIES(has_prototype_slot(), IsJSFunctionMap(*this));
 
+  if (InstanceTypeChecker::IsNativeContextSpecific(instance_type())) {
+    // Native context-specific objects must have their own contextful meta map
+    // modulo the following exceptions.
+    if (instance_type() == NATIVE_CONTEXT_TYPE ||
+        instance_type() == JS_GLOBAL_PROXY_TYPE) {
+      // 1) Diring creation of the NativeContext the native context field might
+      //    be not be initialized yet.
+      // 2) The same applies to the placeholder JSGlobalProxy object created by
+      //    Factory::NewUninitializedJSGlobalProxy.
+      CHECK(IsNull(map()->native_context_or_null()) ||
+            IsNativeContext(map()->native_context_or_null()));
+
+    } else if (instance_type() == JS_SPECIAL_API_OBJECT_TYPE) {
+      // 3) Remote Api objects' maps have the RO meta map (and thus are not
+      //    tied to any native context) while all the other Api objects are
+      //    tied to a native context.
+      CHECK_IMPLIES(map() != GetReadOnlyRoots().meta_map(),
+                    IsNativeContext(map()->native_context_or_null()));
+
+    } else {
+      // For all the other objects native context specific objects the
+      // native context field must already be initialized.
+      CHECK(IsNativeContext(map()->native_context_or_null()));
+    }
+  } else if (InstanceTypeChecker::IsAlwaysSharedSpaceJSObject(
+                 instance_type())) {
+    // Shared objects' maps must use the RO meta map.
+    CHECK_EQ(map(), GetReadOnlyRoots().meta_map());
+  }
+
   if (IsJSObjectMap(*this)) {
     int header_end_offset = JSObject::GetHeaderSize(*this);
     int inobject_fields_start_offset = GetInObjectPropertyOffset(0);
@@ -602,14 +656,14 @@ void Map::MapVerify(Isolate* isolate) {
           CHECK(has_shared_array_elements());
         }
       } else {
-        CHECK(Object::InSharedHeap(*this));
+        CHECK(InAnySharedSpace(*this));
         CHECK(IsUndefined(GetBackPointer(), isolate));
         Tagged<Object> maybe_cell = prototype_validity_cell(kRelaxedLoad);
-        if (IsCell(maybe_cell)) CHECK(Object::InSharedHeap(maybe_cell));
+        if (IsCell(maybe_cell)) CHECK(InAnySharedSpace(Cell::cast(maybe_cell)));
         CHECK(!is_extensible());
         CHECK(!is_prototype_map());
         CHECK(OnlyHasSimpleProperties());
-        CHECK(Object::InSharedHeap(instance_descriptors(isolate)));
+        CHECK(InAnySharedSpace(instance_descriptors(isolate)));
         if (IsJSSharedArrayMap(*this)) {
           CHECK(has_shared_array_elements());
         }
@@ -697,6 +751,16 @@ void FixedArray::FixedArrayVerify(Isolate* isolate) {
   }
 }
 
+void TrustedFixedArray::TrustedFixedArrayVerify(Isolate* isolate) {
+  ExposedTrustedObjectVerify(isolate);
+
+  CHECK(IsSmi(TaggedField<Object>::load(*this, kLengthOffset)));
+
+  for (int i = 0; i < length(); ++i) {
+    Object::VerifyPointer(isolate, get(i));
+  }
+}
+
 void RegExpMatchInfo::RegExpMatchInfoVerify(Isolate* isolate) {
   CHECK(IsSmi(TaggedField<Object>::load(*this, kCapacityOffset)));
   CHECK_GE(capacity(), kMinCapacity);
@@ -765,6 +829,11 @@ void PropertyArray::PropertyArrayVerify(Isolate* isolate) {
 }
 
 void ByteArray::ByteArrayVerify(Isolate* isolate) {
+  CHECK(IsSmi(TaggedField<Object>::load(*this, kLengthOffset)));
+}
+
+void TrustedByteArray::TrustedByteArrayVerify(Isolate* isolate) {
+  TrustedObjectVerify(isolate);
   CHECK(IsSmi(TaggedField<Object>::load(*this, kLengthOffset)));
 }
 
@@ -975,20 +1044,22 @@ void JSDate::JSDateVerify(Isolate* isolate) {
 }
 
 void String::StringVerify(Isolate* isolate) {
-  TorqueGeneratedClassVerifiers::StringVerify(*this, isolate);
+  PrimitiveHeapObjectVerify(isolate);
+  CHECK(IsString(this, isolate));
   CHECK(length() >= 0 && length() <= Smi::kMaxValue);
-  CHECK_IMPLIES(length() == 0, *this == ReadOnlyRoots(isolate).empty_string());
-  if (IsInternalizedString(*this)) {
+  CHECK_IMPLIES(length() == 0, this == ReadOnlyRoots(isolate).empty_string());
+  if (IsInternalizedString(this)) {
     CHECK(HasHashCode());
-    CHECK(!ObjectInYoungGeneration(*this));
+    CHECK(!ObjectInYoungGeneration(this));
   }
 }
 
 void ConsString::ConsStringVerify(Isolate* isolate) {
-  TorqueGeneratedClassVerifiers::ConsStringVerify(*this, isolate);
+  StringVerify(isolate);
+  CHECK(IsConsString(this, isolate));
   CHECK_GE(length(), ConsString::kMinLength);
   CHECK(length() == first()->length() + second()->length());
-  if (IsFlat(isolate)) {
+  if (IsFlat()) {
     // A flat cons can only be created by String::SlowFlatten.
     // Afterwards, the first part may be externalized or internalized.
     CHECK(IsSeqString(first()) || IsExternalString(first()) ||
@@ -997,14 +1068,16 @@ void ConsString::ConsStringVerify(Isolate* isolate) {
 }
 
 void ThinString::ThinStringVerify(Isolate* isolate) {
-  TorqueGeneratedClassVerifiers::ThinStringVerify(*this, isolate);
+  StringVerify(isolate);
+  CHECK(IsThinString(this, isolate));
   CHECK(!HasForwardingIndex(kAcquireLoad));
   CHECK(IsInternalizedString(actual()));
   CHECK(IsSeqString(actual()) || IsExternalString(actual()));
 }
 
 void SlicedString::SlicedStringVerify(Isolate* isolate) {
-  TorqueGeneratedClassVerifiers::SlicedStringVerify(*this, isolate);
+  StringVerify(isolate);
+  CHECK(IsSlicedString(this, isolate));
   CHECK(!IsConsString(parent()));
   CHECK(!IsSlicedString(parent()));
 #ifdef DEBUG
@@ -1018,12 +1091,18 @@ void SlicedString::SlicedStringVerify(Isolate* isolate) {
 #endif
 }
 
-USE_TORQUE_VERIFIER(ExternalString)
+void ExternalString::ExternalStringVerify(Isolate* isolate) {
+  StringVerify(isolate);
+  CHECK(IsExternalString(this, isolate));
+}
 
 void JSBoundFunction::JSBoundFunctionVerify(Isolate* isolate) {
   TorqueGeneratedClassVerifiers::JSBoundFunctionVerify(*this, isolate);
   CHECK(IsCallable(*this));
   CHECK_EQ(IsConstructor(*this), IsConstructor(bound_target_function()));
+  // Ensure that the function's meta map belongs to the same native context
+  // as the target function (i.e. meta maps are the same).
+  CHECK_EQ(map()->map(), bound_target_function()->map()->map());
 }
 
 void JSFunction::JSFunctionVerify(Isolate* isolate) {
@@ -1047,6 +1126,9 @@ void JSFunction::JSFunctionVerify(Isolate* isolate) {
   Object::VerifyPointer(isolate, code(isolate));
   CHECK(IsCode(code(isolate)));
   CHECK(map(isolate)->is_callable());
+  // Ensure that the function's meta map belongs to the same native context.
+  CHECK_EQ(map()->map()->native_context_or_null(), native_context());
+
   Handle<JSFunction> function(*this, isolate);
   LookupIterator it(isolate, function, isolate->factory()->prototype_string(),
                     LookupIterator::OWN_SKIP_INTERCEPTOR);
@@ -1062,6 +1144,13 @@ void JSFunction::JSFunctionVerify(Isolate* isolate) {
     CHECK(!it.IsFound() || it.state() != LookupIterator::ACCESSOR ||
           !IsAccessorInfo(*it.GetAccessors()));
   }
+}
+
+void JSWrappedFunction::JSWrappedFunctionVerify(Isolate* isolate) {
+  TorqueGeneratedClassVerifiers::JSWrappedFunctionVerify(*this, isolate);
+  CHECK(IsCallable(*this));
+  // Ensure that the function's meta map belongs to the same native context.
+  CHECK_EQ(map()->map()->native_context_or_null(), context());
 }
 
 void SharedFunctionInfo::SharedFunctionInfoVerify(Isolate* isolate) {
@@ -1165,9 +1254,18 @@ void JSGlobalObject::JSGlobalObjectVerify(Isolate* isolate) {
   JSObjectVerify(isolate);
 }
 
+void PrimitiveHeapObject::PrimitiveHeapObjectVerify(Isolate* isolate) {
+  CHECK(IsPrimitiveHeapObject(this, isolate));
+}
+
+void HeapNumber::HeapNumberVerify(Isolate* isolate) {
+  PrimitiveHeapObjectVerify(isolate);
+  CHECK(IsHeapNumber(this, isolate));
+}
+
 void Oddball::OddballVerify(Isolate* isolate) {
   PrimitiveHeapObjectVerify(isolate);
-  CHECK(IsOddball(*this, isolate));
+  CHECK(IsOddball(this, isolate));
 
   Heap* heap = isolate->heap();
   Tagged<Object> string = to_string();
@@ -1176,7 +1274,7 @@ void Oddball::OddballVerify(Isolate* isolate) {
   Tagged<Object> type = type_of();
   Object::VerifyPointer(isolate, type);
   CHECK(IsString(type));
-  Tagged<Object> kind_value = TaggedField<Object>::load(*this, kKindOffset);
+  Tagged<Object> kind_value = kind_.load();
   Object::VerifyPointer(isolate, kind_value);
   CHECK(IsSmi(kind_value));
 
@@ -1197,11 +1295,11 @@ void Oddball::OddballVerify(Isolate* isolate) {
 
   ReadOnlyRoots roots(heap);
   if (map() == roots.undefined_map()) {
-    CHECK(*this == roots.undefined_value());
+    CHECK(this == roots.undefined_value());
   } else if (map() == roots.null_map()) {
-    CHECK(*this == roots.null_value());
+    CHECK(this == roots.null_value());
   } else if (map() == roots.boolean_map()) {
-    CHECK(*this == roots.true_value() || *this == roots.false_value());
+    CHECK(this == roots.true_value() || this == roots.false_value());
   } else {
     UNREACHABLE();
   }
@@ -1231,7 +1329,8 @@ void TrustedObject::TrustedObjectVerify(Isolate* isolate) {
 #if defined(V8_ENABLE_SANDBOX)
   // All trusted objects must live in trusted space.
   // TODO(saelo): Some objects are trusted but do not yet live in trusted space.
-  CHECK(IsCode(*this) || IsBytecodeArray(*this) || IsTrustedSpaceObject(*this));
+  CHECK(IsTrustedSpaceObject(*this) || IsCode(*this) ||
+        IsInterpreterData(*this));
 #endif
 }
 
@@ -1285,9 +1384,20 @@ void Code::CodeVerify(Isolate* isolate) {
     CHECK_EQ(istream->instruction_start(), instruction_start());
 #endif  // V8_COMPRESS_POINTERS && V8_SHORT_BUILTIN_CALLS
   }
+
+  // Our wrapper must point back to us.
+  CHECK_EQ(wrapper()->code(isolate), *this);
+}
+
+void CodeWrapper::CodeWrapperVerify(Isolate* isolate) {
+  if (!this->has_code()) return;
+  auto code = this->code(isolate);
+  Object::VerifyPointer(isolate, code);
+  CHECK_EQ(code->wrapper(), *this);
 }
 
 void InstructionStream::InstructionStreamVerify(Isolate* isolate) {
+  TrustedObjectVerify(isolate);
   Tagged<Code> code;
   if (!TryGetCode(&code, kAcquireLoad)) return;
   CHECK(
@@ -1386,7 +1496,6 @@ void JSMapIterator::JSMapIteratorVerify(Isolate* isolate) {
 }
 
 USE_TORQUE_VERIFIER(JSShadowRealm)
-USE_TORQUE_VERIFIER(JSWrappedFunction)
 
 namespace {
 
@@ -1399,7 +1508,7 @@ void VerifyElementIsShared(Tagged<Object> element) {
   // string was in shared space.
   if (IsThinString(element)) {
     CHECK(v8_flags.shared_string_table);
-    CHECK(Object::InWritableSharedSpace(element));
+    CHECK(InWritableSharedSpace(ThinString::cast(element)));
   } else {
     CHECK(IsShared(element));
   }
@@ -1409,34 +1518,46 @@ void VerifyElementIsShared(Tagged<Object> element) {
 
 void JSSharedStruct::JSSharedStructVerify(Isolate* isolate) {
   CHECK(IsJSSharedStruct(*this));
-  CHECK(InWritableSharedSpace());
+  CHECK(InWritableSharedSpace(*this));
   JSObjectVerify(isolate);
   CHECK(HasFastProperties());
   // Shared structs can only point to primitives or other shared HeapObjects,
   // even internally.
   Tagged<Map> struct_map = map();
-  CHECK(Object::InSharedHeap(property_array()));
+  CHECK(InAnySharedSpace(property_array()));
   Tagged<DescriptorArray> descriptors =
       struct_map->instance_descriptors(isolate);
   for (InternalIndex i : struct_map->IterateOwnDescriptors()) {
     PropertyDetails details = descriptors->GetDetails(i);
     CHECK_EQ(PropertyKind::kData, details.kind());
-    CHECK_EQ(PropertyLocation::kField, details.location());
-    CHECK(details.representation().IsTagged());
-    FieldIndex field_index = FieldIndex::ForDetails(struct_map, details);
-    VerifyElementIsShared(RawFastPropertyAt(field_index));
+
+    if (JSSharedStruct::IsRegistryKeyDescriptor(isolate, struct_map, i)) {
+      CHECK_EQ(PropertyLocation::kDescriptor, details.location());
+      CHECK(IsInternalizedString(descriptors->GetStrongValue(i)));
+    } else if (JSSharedStruct::IsElementsTemplateDescriptor(isolate, struct_map,
+                                                            i)) {
+      CHECK_EQ(PropertyLocation::kDescriptor, details.location());
+      CHECK(IsNumberDictionary(descriptors->GetStrongValue(i)));
+    } else {
+      CHECK_EQ(PropertyLocation::kField, details.location());
+      CHECK(details.representation().IsTagged());
+      CHECK(!IsNumberDictionary(descriptors->GetStrongValue(i)));
+      CHECK(!IsInternalizedString(descriptors->GetStrongValue(i)));
+      FieldIndex field_index = FieldIndex::ForDetails(struct_map, details);
+      VerifyElementIsShared(RawFastPropertyAt(field_index));
+    }
   }
 }
 
 void JSAtomicsMutex::JSAtomicsMutexVerify(Isolate* isolate) {
   CHECK(IsJSAtomicsMutex(*this));
-  CHECK(InWritableSharedSpace());
+  CHECK(InWritableSharedSpace(*this));
   JSObjectVerify(isolate);
 }
 
 void JSAtomicsCondition::JSAtomicsConditionVerify(Isolate* isolate) {
   CHECK(IsJSAtomicsCondition(*this));
-  CHECK(Object::InSharedHeap(*this));
+  CHECK(InAnySharedSpace(*this));
   JSObjectVerify(isolate);
 }
 
@@ -1744,9 +1865,9 @@ void JSRegExp::JSRegExpVerify(Isolate* isolate) {
       Tagged<Object> uc16_bytecode =
           arr->get(JSRegExp::kIrregexpUC16BytecodeIndex);
 
-      bool is_compiled = IsCode(latin1_code);
+      bool is_compiled = IsCodeWrapper(latin1_code);
       if (is_compiled) {
-        CHECK_EQ(Code::cast(latin1_code)->builtin_id(),
+        CHECK_EQ(CodeWrapper::cast(latin1_code)->code(isolate)->builtin_id(),
                  Builtin::kRegExpExperimentalTrampoline);
         CHECK_EQ(uc16_code, latin1_code);
 
@@ -1780,11 +1901,11 @@ void JSRegExp::JSRegExpVerify(Isolate* isolate) {
       // interpreter.
       CHECK((IsSmi(one_byte_data) &&
              Smi::ToInt(one_byte_data) == JSRegExp::kUninitializedValue) ||
-            IsCode(one_byte_data));
+            IsCodeWrapper(one_byte_data));
       Tagged<Object> uc16_data = arr->get(JSRegExp::kIrregexpUC16CodeIndex);
       CHECK((IsSmi(uc16_data) &&
              Smi::ToInt(uc16_data) == JSRegExp::kUninitializedValue) ||
-            IsCode(uc16_data));
+            IsCodeWrapper(uc16_data));
 
       Tagged<Object> one_byte_bytecode =
           arr->get(JSRegExp::kIrregexpLatin1BytecodeIndex);
@@ -1963,6 +2084,14 @@ void PrototypeInfo::PrototypeInfoVerify(Isolate* isolate) {
   } else {
     CHECK(IsSmi(prototype_users()));
   }
+  Tagged<HeapObject> derived = derived_maps(isolate);
+  if (!IsUndefined(derived)) {
+    auto derived_list = WeakArrayList::cast(derived);
+    CHECK_GT(derived_list->length(), 0);
+    for (int i = 0; i < derived_list->length(); ++i) {
+      derived_list->Get(i)->IsWeakOrCleared();
+    }
+  }
 }
 
 void PrototypeUsers::Verify(Tagged<WeakArrayList> array) {
@@ -2031,15 +2160,9 @@ void ClassBoilerplate::ClassBoilerplateVerify(Isolate* isolate) {
 
 #if V8_ENABLE_WEBASSEMBLY
 
-void WasmInstanceObject::WasmInstanceObjectVerify(Isolate* isolate) {
-  JSObjectVerify(isolate);
-  CHECK(IsWasmInstanceObject(*this));
-
-  // Just generically check all tagged fields. Don't check the untagged fields,
-  // as some of them might still contain the "undefined" value if the
-  // WasmInstanceObject is not fully set up yet.
-  for (int offset = kHeaderSize; offset < kEndOfStrongFieldsOffset;
-       offset += kTaggedSize) {
+void WasmTrustedInstanceData::WasmTrustedInstanceDataVerify(Isolate* isolate) {
+  // Check all tagged fields.
+  for (uint16_t offset : kTaggedFieldOffsets) {
     VerifyObjectField(isolate, offset);
   }
 }
@@ -2057,12 +2180,12 @@ void WasmExceptionPackage::WasmExceptionPackageVerify(Isolate* isolate) {
 void WasmExportedFunctionData::WasmExportedFunctionDataVerify(
     Isolate* isolate) {
   TorqueGeneratedClassVerifiers::WasmExportedFunctionDataVerify(*this, isolate);
-  CHECK(
-      wrapper_code()->kind() == CodeKind::JS_TO_WASM_FUNCTION ||
-      wrapper_code()->kind() == CodeKind::C_WASM_ENTRY ||
-      (wrapper_code()->is_builtin() &&
-       (wrapper_code()->builtin_id() == Builtin::kJSToWasmWrapper ||
-        wrapper_code()->builtin_id() == Builtin::kWasmReturnPromiseOnSuspend)));
+  Tagged<Code> wrapper = wrapper_code(isolate);
+  CHECK(wrapper->kind() == CodeKind::JS_TO_WASM_FUNCTION ||
+        wrapper->kind() == CodeKind::C_WASM_ENTRY ||
+        (wrapper->is_builtin() &&
+         (wrapper->builtin_id() == Builtin::kJSToWasmWrapper ||
+          wrapper->builtin_id() == Builtin::kWasmReturnPromiseOnSuspend)));
 }
 
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -2435,15 +2558,17 @@ bool TransitionsAccessor::IsSortedNoDuplicates() {
   return transitions()->IsSortedNoDuplicates();
 }
 
-static bool CheckOneBackPointer(Tagged<Map> current_map,
-                                Tagged<Object> target) {
-  return !IsMap(target) || Map::cast(target)->GetBackPointer() == current_map;
+static bool CheckOneBackPointer(Tagged<Map> current_map, Tagged<Map> target) {
+  return target->GetBackPointer() == current_map;
 }
 
 bool TransitionsAccessor::IsConsistentWithBackPointers() {
   int num_transitions = NumberOfTransitions();
   for (int i = 0; i < num_transitions; i++) {
     Tagged<Map> target = GetTarget(i);
+    // Ensure maps belong to the same NativeContext (i.e. have the same
+    // meta map).
+    DCHECK_EQ(map_->map(), target->map());
     if (!CheckOneBackPointer(map_, target)) return false;
   }
   return true;

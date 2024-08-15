@@ -14,6 +14,11 @@
 // The size of the symbol image used in UIActions.
 extern const CGFloat kSymbolActionPointSize;
 
+// Vivaldi
+// The size of the symbol image used in UIActions.
+extern const CGFloat kVivaldiSymbolActionPointSize;
+// End Vivaldi
+
 // The corner radius of the symbol with a colorful background.
 extern const CGFloat kColorfulBackgroundSymbolCornerRadius;
 

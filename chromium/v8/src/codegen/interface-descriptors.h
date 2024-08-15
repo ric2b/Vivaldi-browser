@@ -42,6 +42,7 @@ namespace internal {
   V(BinarySmiOp_Baseline)                            \
   V(CallForwardVarargs)                              \
   V(CallFunctionTemplate)                            \
+  V(CallFunctionTemplateGeneric)                     \
   V(CallTrampoline)                                  \
   V(CallTrampoline_Baseline)                         \
   V(CallTrampoline_Baseline_Compact)                 \
@@ -62,6 +63,9 @@ namespace internal {
   V(Compare_WithFeedback)                            \
   V(Construct_Baseline)                              \
   V(ConstructForwardVarargs)                         \
+  V(ConstructForwardAllArgs)                         \
+  V(ConstructForwardAllArgs_Baseline)                \
+  V(ConstructForwardAllArgs_WithFeedback)            \
   V(ConstructStub)                                   \
   V(ConstructVarargs)                                \
   V(ConstructWithArrayLike)                          \
@@ -1505,6 +1509,21 @@ class CallFunctionTemplateDescriptor
   static constexpr inline auto registers();
 };
 
+class CallFunctionTemplateGenericDescriptor
+    : public StaticCallInterfaceDescriptor<
+          CallFunctionTemplateGenericDescriptor> {
+ public:
+  DEFINE_PARAMETERS_VARARGS(kFunctionTemplateInfo, kArgumentsCount,
+                            kTopmostScriptHavingContext)
+  DEFINE_PARAMETER_TYPES(
+      MachineType::AnyTagged(),  // kFunctionTemplateInfo
+      MachineType::Int32(),      // kArgumentsCount
+      MachineType::AnyTagged())  // kTopmostScriptHavingContext
+  DECLARE_DESCRIPTOR(CallFunctionTemplateGenericDescriptor)
+
+  static constexpr inline auto registers();
+};
+
 class CallWithSpreadDescriptor
     : public StaticCallInterfaceDescriptor<CallWithSpreadDescriptor> {
  public:
@@ -1647,6 +1666,40 @@ class ConstructWithArrayLike_WithFeedbackDescriptor
                          MachineType::UintPtr(),    // kSlot
                          MachineType::AnyTagged())  // kFeedbackVector
   DECLARE_DESCRIPTOR(ConstructWithArrayLike_WithFeedbackDescriptor)
+};
+
+class ConstructForwardAllArgsDescriptor
+    : public StaticCallInterfaceDescriptor<ConstructForwardAllArgsDescriptor> {
+ public:
+  DEFINE_PARAMETERS(kConstructor, kNewTarget)
+  DEFINE_PARAMETER_TYPES(MachineType::AnyTagged(),  // kConstructor
+                         MachineType::AnyTagged())  // kNewTarget
+  DECLARE_DESCRIPTOR(ConstructForwardAllArgsDescriptor)
+
+  static constexpr inline auto registers();
+};
+
+class ConstructForwardAllArgs_BaselineDescriptor
+    : public StaticCallInterfaceDescriptor<
+          ConstructForwardAllArgs_BaselineDescriptor> {
+ public:
+  DEFINE_PARAMETERS(kTarget, kNewTarget, kSlot)
+  DEFINE_PARAMETER_TYPES(MachineType::AnyTagged(),  // kTarget
+                         MachineType::AnyTagged(),  // kNewTarget
+                         MachineType::UintPtr())    // kSlot
+  DECLARE_DESCRIPTOR(ConstructForwardAllArgs_BaselineDescriptor)
+};
+
+class ConstructForwardAllArgs_WithFeedbackDescriptor
+    : public StaticCallInterfaceDescriptor<
+          ConstructForwardAllArgs_WithFeedbackDescriptor> {
+ public:
+  DEFINE_PARAMETERS(kTarget, kNewTarget, kSlot, kVector)
+  DEFINE_PARAMETER_TYPES(MachineType::AnyTagged(),  // kTarget
+                         MachineType::AnyTagged(),  // kNewTarget
+                         MachineType::UintPtr(),    // kSlot
+                         MachineType::AnyTagged())  // kVector
+  DECLARE_DESCRIPTOR(ConstructForwardAllArgs_WithFeedbackDescriptor)
 };
 
 // TODO(ishell): consider merging this with ArrayConstructorDescriptor
@@ -1872,15 +1925,19 @@ class CallApiCallbackOptimizedDescriptor
 class CallApiCallbackGenericDescriptor
     : public StaticCallInterfaceDescriptor<CallApiCallbackGenericDescriptor> {
  public:
-  DEFINE_PARAMETERS_VARARGS(kActualArgumentsCount, kCallHandlerInfo, kHolder)
+  DEFINE_PARAMETERS_VARARGS(kActualArgumentsCount, kTopmostScriptHavingContext,
+                            kCallHandlerInfo, kHolder)
   //                           receiver is implicit stack argument 1
   //                           argv are implicit stack arguments [2, 2 + kArgc[
-  DEFINE_PARAMETER_TYPES(MachineType::Int32(),      // kActualArgumentsCount
-                         MachineType::AnyTagged(),  // kCallHandlerInfo
-                         MachineType::AnyTagged())  // kHolder
+  DEFINE_PARAMETER_TYPES(
+      MachineType::Int32(),      // kActualArgumentsCount
+      MachineType::AnyTagged(),  // kTopmostScriptHavingContext
+      MachineType::AnyTagged(),  // kCallHandlerInfo
+      MachineType::AnyTagged())  // kHolder
   DECLARE_DESCRIPTOR(CallApiCallbackGenericDescriptor)
 
   static constexpr inline Register ActualArgumentsCountRegister();
+  static constexpr inline Register TopmostScriptHavingContextRegister();
   static constexpr inline Register CallHandlerInfoRegister();
   static constexpr inline Register HolderRegister();
 

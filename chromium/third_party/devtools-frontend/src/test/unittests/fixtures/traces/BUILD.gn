@@ -6,8 +6,10 @@ import("../../../../scripts/build/ninja/copy.gni")
 
 copy_to_gen("traces") {
   sources = [
+    "about-blank-first.json.gz",
     "animation.json.gz",
     "basic-stack.json.gz",
+    "basic.cpuprofile.gz",
     "basic.json.gz",
     "changing-priority.json.gz",
     "cls-cluster-max-duration.json.gz",
@@ -34,9 +36,11 @@ copy_to_gen("traces") {
     "missing-process-data.json.gz",
     "missing-tracing-start.json.gz",
     "multiple-lcp-main-frame.json.gz",
+    "multiple-navigations-same-id.json.gz",
     "multiple-navigations-with-iframes.json.gz",
     "multiple-navigations.json.gz",
     "multiple-top-level-renderers.json.gz",
+    "nested-initiators.json.gz",
     "nested-interactions.json.gz",
     "node-fibonacci-website.cpuprofile.gz",
     "one-second-interaction.json.gz",
@@ -48,6 +52,7 @@ copy_to_gen("traces") {
     "reload-and-trace-page.json.gz",
     "reload-no-tti.json.gz",
     "request-with-query-param.json.gz",
+    "set-timeout-long-task.json.gz",
     "simple-js-program.json.gz",
     "slow-interaction-button-click.json.gz",
     "slow-interaction-keydown.json.gz",
@@ -55,10 +60,16 @@ copy_to_gen("traces") {
     "style-invalidation-change-id.json.gz",
     "sync-like-timings.json.gz",
     "threejs-gpu.json.gz",
+    "timer-initiators.json.gz",
     "timings-track.json.gz",
+    "two-functions-recursion.json.gz",
     "two-workers.json.gz",
     "user-timings-complex.json.gz",
     "user-timings.json.gz",
+    "web-dev-initial-url.json.gz",
+    "web-dev-with-advanced-instrumentation.json.gz",
+    "web-dev-with-commit.json.gz",
     "web-dev.json.gz",
+    "web-sockets.json.gz",
   ]
 }

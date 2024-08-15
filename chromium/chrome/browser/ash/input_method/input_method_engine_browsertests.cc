@@ -10,7 +10,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/input_method/assistive_window_controller.h"
@@ -135,8 +135,7 @@ class InputMethodEngineBrowserTest
     return nullptr;
   }
 
-  raw_ptr<const extensions::Extension, DanglingUntriaged | ExperimentalAsh>
-      extension_;
+  raw_ptr<const extensions::Extension, DanglingUntriaged> extension_;
 };
 
 class KeyEventDoneCallback {

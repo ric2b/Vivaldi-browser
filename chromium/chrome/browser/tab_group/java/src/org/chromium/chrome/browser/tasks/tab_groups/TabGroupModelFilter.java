@@ -48,9 +48,7 @@ public class TabGroupModelFilter extends TabModelFilter {
     private static final String SESSIONS_COUNT_FOR_GROUP = "SessionsCountForGroup-";
     private static SharedPreferences sPref;
 
-    /**
-     * An interface to be notified about changes to a {@link TabGroupModelFilter}.
-     */
+    /** An interface to be notified about changes to a {@link TabGroupModelFilter}. */
     public interface Observer {
         /**
          * This method is called before a tab is moved to form a group or moved into an existed
@@ -107,14 +105,26 @@ public class TabGroupModelFilter extends TabModelFilter {
 
         /**
          * This method is called after a group is created manually by user. Either using the
-         * TabSelectionEditor (Group tab menu item) or using drag and drop.
+         * TabListEditor (Group tab menu item) or using drag and drop.
+         *
          * @param tabs The list of modified {@link Tab}s.
          * @param tabOriginalIndex The original tab index for each modified tab.
          * @param tabOriginalRootId The original root id for each modified tab.
          * @param destinationGroupTitle The original destination group title.
          */
-        void didCreateGroup(List<Tab> tabs, List<Integer> tabOriginalIndex,
-                List<Integer> tabOriginalRootId, String destinationGroupTitle);
+        void didCreateGroup(
+                List<Tab> tabs,
+                List<Integer> tabOriginalIndex,
+                List<Integer> tabOriginalRootId,
+                String destinationGroupTitle);
+
+        /**
+         * This method is called after a new tab group is created, either through drag and drop, the
+         * tab selection editor, or by longpressing a link on a tab and using the context menu.
+         *
+         * @param newRootId The new root id of the group after merge.
+         */
+        void didCreateNewGroup(int newRootId);
     }
 
     /**
@@ -187,6 +197,7 @@ public class TabGroupModelFilter extends TabModelFilter {
             return getTabIdList().get(index);
         }
     }
+
     private ObserverList<Observer> mGroupFilterObserver = new ObserverList<>();
     private Map<Integer, Integer> mGroupIdToGroupIndexMap = new HashMap<>();
     private Map<Integer, TabGroup> mGroupIdToGroupMap = new HashMap<>();
@@ -198,8 +209,28 @@ public class TabGroupModelFilter extends TabModelFilter {
     private boolean mIsResetting;
     private boolean mIsUndoing;
 
+    // Not(david@vivaldi.com): This listener dissolves all tab stacks.
+    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener =
+            (sharedPrefs, key) -> {
+        String identifier = "enable_tab_stack";
+        boolean value = ChromeSharedPreferences.getInstance().readBoolean(identifier, true);
+        if (!value && key.equals(identifier)) {
+            List<Tab> tabs = new ArrayList<>();
+            // We create a copy of the tab list here as the tab model gets changed while moving tabs
+            // out of a group. The reverse order is necessary otherwise the dissolved tabs don't
+            // persist after restarting the browser.
+            for (int i = getTabModel().getCount() - 1; i >= 0; i--)
+                tabs.add(getTabModel().getTabAt(i));
+            for (Tab tab : tabs)
+                if (hasOtherRelatedTabs(tab)) moveTabOutOfGroup(tab.getId());
+        }
+    };
+
     public TabGroupModelFilter(TabModel tabModel) {
         super(tabModel);
+        // Vivaldi: Register preference listener.
+        ContextUtils.getAppSharedPreferences()
+                .registerOnSharedPreferenceChangeListener(mPrefsListener);
     }
 
     /**
@@ -278,10 +309,10 @@ public class TabGroupModelFilter extends TabModelFilter {
         Tab sourceTab = TabModelUtils.getTabById(getTabModel(), sourceTabId);
         Tab destinationTab = TabModelUtils.getTabById(getTabModel(), destinationTabId);
 
-        assert sourceTab != null && destinationTab != null
-                && sourceTab.isIncognito()
-                        == destinationTab.isIncognito()
-            : "Attempting to merge groups from different model";
+        assert sourceTab != null
+                        && destinationTab != null
+                        && sourceTab.isIncognito() == destinationTab.isIncognito()
+                : "Attempting to merge groups from different model";
 
         int destinationGroupId = getRootId(destinationTab);
         List<Tab> tabsToMerge = getRelatedTabList(sourceTabId);
@@ -347,6 +378,7 @@ public class TabGroupModelFilter extends TabModelFilter {
         List<Integer> originalIndexes = new ArrayList<>();
         List<Integer> originalRootIds = new ArrayList<>();
         String destinationGroupTitle = TabGroupTitleUtils.getTabGroupTitle(destinationGroupId);
+        boolean isDestinationTabGroup = hasOtherRelatedTabs(destinationTab);
 
         for (int i = 0; i < tabs.size(); i++) {
             Tab tab = tabs.get(i);
@@ -371,14 +403,32 @@ public class TabGroupModelFilter extends TabModelFilter {
                 // TabModelObserver#didMoveTab() and update events will not be triggered. Call the
                 // event manually.
                 int destinationIndex =
-                        MathUtils.clamp(isMergingBackward ? destinationIndexInTabModel
-                                                          : destinationIndexInTabModel++,
-                                0, getTabModel().getCount());
+                        MathUtils.clamp(
+                                isMergingBackward
+                                        ? destinationIndexInTabModel
+                                        : destinationIndexInTabModel++,
+                                0,
+                                getTabModel().getCount());
                 didMoveTab(tab, isMergingBackward ? destinationIndex - 1 : destinationIndex, index);
             } else {
-                getTabModel().moveTab(tab.getId(),
-                        isMergingBackward ? destinationIndexInTabModel
-                                          : destinationIndexInTabModel++);
+                getTabModel()
+                        .moveTab(
+                                tab.getId(),
+                                isMergingBackward
+                                        ? destinationIndexInTabModel
+                                        : destinationIndexInTabModel++);
+            }
+        }
+
+        // If any originalRootIds have duplicates, they are removed. This is to help indicate if a
+        // tab group is part of the tabs to merge.
+        HashSet<Integer> uniqueRootIds = new HashSet<>(originalRootIds);
+
+        // If the destination tab is not part of a tab group and none of the tabs to merge were part
+        // of a tab group, then this action is creating a new tab group.
+        if (!isDestinationTabGroup && (uniqueRootIds.size() == originalRootIds.size())) {
+            for (Observer observer : mGroupFilterObserver) {
+                observer.didCreateNewGroup(destinationGroupId);
             }
         }
 
@@ -405,8 +455,11 @@ public class TabGroupModelFilter extends TabModelFilter {
         TabGroup sourceTabGroup = mGroupIdToGroupMap.get(getRootId(sourceTab));
         int targetIndex;
         if (trailing) {
-            Tab lastTabInSourceGroup = TabModelUtils.getTabById(tabModel,
-                    sourceTabGroup.getTabIdForIndex(sourceTabGroup.getTabIdList().size() - 1));
+            Tab lastTabInSourceGroup =
+                    TabModelUtils.getTabById(
+                            tabModel,
+                            sourceTabGroup.getTabIdForIndex(
+                                    sourceTabGroup.getTabIdList().size() - 1));
             targetIndex = tabModel.indexOf(lastTabInSourceGroup);
         } else {
             Tab firstTabInSourceGroup =
@@ -469,8 +522,10 @@ public class TabGroupModelFilter extends TabModelFilter {
     private int getTabModelDestinationIndex(Tab destinationTab) {
         List<Integer> destinationGroupedTabIds =
                 mGroupIdToGroupMap.get(getRootId(destinationTab)).getTabIdList();
-        int destinationTabIndex = TabModelUtils.getTabIndexById(
-                getTabModel(), destinationGroupedTabIds.get(destinationGroupedTabIds.size() - 1));
+        int destinationTabIndex =
+                TabModelUtils.getTabIndexById(
+                        getTabModel(),
+                        destinationGroupedTabIds.get(destinationGroupedTabIds.size() - 1));
 
         return destinationTabIndex + 1;
     }
@@ -533,8 +588,9 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     private SharedPreferences getSharedPreferences() {
         if (sPref == null) {
-            sPref = ContextUtils.getApplicationContext().getSharedPreferences(
-                    PREFS_FILE, Context.MODE_PRIVATE);
+            sPref =
+                    ContextUtils.getApplicationContext()
+                            .getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE);
         }
         return sPref;
     }
@@ -614,7 +670,8 @@ public class TabGroupModelFilter extends TabModelFilter {
     }
 
     private int getParentId(Tab tab) {
-        if (isTabModelRestored() && !mIsResetting
+        if (isTabModelRestored()
+                && !mIsResetting
                 && ((tab.getLaunchType() == TabLaunchType.FROM_TAB_GROUP_UI
                         || tab.getLaunchType() == TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP
                         // TODO(https://crbug.com/1194287): Investigates a better solution
@@ -634,9 +691,6 @@ public class TabGroupModelFilter extends TabModelFilter {
             throw new IllegalStateException("Attempting to open tab in the wrong model");
         }
 
-        int newTabPositionSetting =
-                ChromeSharedPreferences.getInstance().readInt("new_tab_position", 1);
-
         int parentId = getParentId(tab);
         if (parentId != Tab.INVALID_TAB_ID) {
             setRootId(tab, parentId);
@@ -644,16 +698,23 @@ public class TabGroupModelFilter extends TabModelFilter {
 
         int groupId = getRootId(tab);
         if (mGroupIdToGroupMap.containsKey(groupId)) {
-            if (mGroupIdToGroupMap.get(groupId).size() == 1) {
+            boolean wasGroupSizeOfOne = mGroupIdToGroupMap.get(groupId).size() == 1;
+            mGroupIdToGroupMap.get(groupId).addTab(tab.getId());
+
+            if (wasGroupSizeOfOne) {
                 mActualGroupCount++;
                 // TODO(crbug.com/1188370): Update UMA for Context menu creation.
-                if (mShouldRecordUma
-                        && (tab.getLaunchType()
-                                == TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP)) {
-                    RecordUserAction.record("TabGroup.Created.OpenInNewTab");
+                if (tab.getLaunchType() == TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP) {
+                    if (mShouldRecordUma) {
+                        RecordUserAction.record("TabGroup.Created.OpenInNewTab");
+                    }
+
+                    // When creating a tab group with the context menu longpress, this action runs.
+                    for (Observer observer : mGroupFilterObserver) {
+                        observer.didCreateNewGroup(groupId);
+                    }
                 }
             }
-            mGroupIdToGroupMap.get(groupId).addTab(tab.getId());
         } else {
             TabGroup tabGroup = new TabGroup(getRootId(tab));
             tabGroup.addTab(tab.getId());
@@ -669,8 +730,8 @@ public class TabGroupModelFilter extends TabModelFilter {
                 // resulting in the index map needing to be regenerated.
                 resetGroupIdToGroupIndexMap();
             }
-            // Note(david@vivaldi.com): We need to reoderd the tab filter when a new tab was
-            // created. Magic number used due to dep issues.
+            // Note(david@vivaldi.com): We need to reorder the tab filter when a new tab was
+            // created.
             if (!mIsResetting) reorder();
         }
 
@@ -695,9 +756,9 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void closeTab(Tab tab) {
-        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         int groupId = getRootId(tab);
-        if (tab.isIncognito() != isIncognito() || mGroupIdToGroupMap.get(groupId) == null
+        if (tab.isIncognito() != isIncognito()
+                || mGroupIdToGroupMap.get(groupId) == null
                 || !mGroupIdToGroupMap.get(groupId).contains(tab.getId())) {
             throw new IllegalStateException("Attempting to close tab in the wrong model");
         }
@@ -736,7 +797,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void selectTab(Tab tab) {
-        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         if (!org.chromium.build.BuildConfig.IS_VIVALDI)
         assert mAbsentSelectedTab == null;
         int groupId = getRootId(tab);
@@ -750,7 +810,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void reorder() {
-        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         reorderGroup(TabGroup.INVALID_GROUP_ID);
 
         TabModel tabModel = getTabModel();
@@ -784,7 +843,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void resetFilterStateInternal() {
-        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         mGroupIdToGroupIndexMap.clear();
         mGroupIdToGroupMap.clear();
         mActualGroupCount = 0;
@@ -792,7 +850,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     protected void removeTab(Tab tab) {
-        if (!isTabGroupsAndroidEnabled()) return; // Vivaldi
         closeTab(tab);
     }
 
@@ -878,7 +935,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public int getValidPosition(Tab tab, int proposedPosition) {
-        if (!isTabGroupsAndroidEnabled()) return proposedPosition; // Vivaldi
         final int parentId = getParentId(tab);
         final int rootId = parentId == Tab.INVALID_TAB_ID ? getRootId(tab) : parentId;
         int newPosition = proposedPosition;
@@ -946,14 +1002,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public void didMoveTab(Tab tab, int newIndex, int curIndex) {
-        // Note(david@vivaldi.com) When tab stacking is off, we just inform the observers.
-        if (!isTabGroupsAndroidEnabled()) {
-            for (Observer observer : mGroupFilterObserver) {
-                observer.didMoveTabGroup(tab, curIndex, newIndex);
-            }
-            return;
-        }
-
         // Ignore didMoveTab calls in tab restoring stage.
         if (!isTabModelRestored()) return;
         // Need to cache the flags before resetting the internal data map.
@@ -1062,7 +1110,6 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public int index() {
-        if (!isTabGroupsAndroidEnabled()) return getTabModel().index(); // Vivaldi
         return mCurrentGroupIndex;
     }
 
@@ -1071,14 +1118,11 @@ public class TabGroupModelFilter extends TabModelFilter {
      */
     @Override
     public int getCount() {
-        if (!isTabGroupsAndroidEnabled()) return getTabModel().getCount(); // Vivaldi
         return mGroupIdToGroupMap.size();
     }
 
     @Override
     public Tab getTabAt(int index) {
-        if (!isTabGroupsAndroidEnabled()) // Vivaldi
-            return getTabModel().getTabAt(index);
         if (index < 0 || index >= getCount()) return null;
         int groupId = Tab.INVALID_TAB_ID;
         Set<Integer> groupIdSet = mGroupIdToGroupIndexMap.keySet();
@@ -1096,8 +1140,8 @@ public class TabGroupModelFilter extends TabModelFilter {
 
     @Override
     public int indexOf(Tab tab) {
-        if (!isTabGroupsAndroidEnabled()) return getTabModel().indexOf(tab); // Vivaldi
-        if (tab == null || tab.isIncognito() != isIncognito()
+        if (tab == null
+                || tab.isIncognito() != isIncognito()
                 || getTabModel().indexOf(tab) == TabList.INVALID_TAB_INDEX) {
             return TabList.INVALID_TAB_INDEX;
         }
@@ -1121,12 +1165,5 @@ public class TabGroupModelFilter extends TabModelFilter {
         }
         // By default we consider the first tab in the group as the last one being selected,
         return 0;
-    }
-
-    /**
-     * Vivaldi.
-     */
-    public boolean isTabGroupsAndroidEnabled() {
-        return (ChromeSharedPreferences.getInstance().readBoolean("enable_tab_stack", true));
     }
 }

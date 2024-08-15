@@ -81,7 +81,6 @@
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
-#include "chrome/browser/privacy_budget/active_sampling.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -136,8 +135,8 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/language_experiments.h"
 #include "components/language/core/common/language_util.h"
-#include "components/metrics/call_stack_profile_metrics_provider.h"
-#include "components/metrics/call_stack_profile_params.h"
+#include "components/metrics/call_stacks/call_stack_profile_metrics_provider.h"
+#include "components/metrics/call_stacks/call_stack_profile_params.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/metrics/expired_histogram_util.h"
 #include "components/metrics/metrics_reporting_default_state.h"
@@ -176,6 +175,7 @@
 #include "content/public/browser/first_party_sets_handler.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/synthetic_trial_syncer.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -194,7 +194,6 @@
 #include "rlz/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/blink/public/common/origin_trials/origin_trials_settings_provider.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -263,7 +262,6 @@
 #endif  // defined(ARCH_CPU_X86_64)
 
 #include "chrome/browser/app_controller_mac.h"
-#include "chrome/browser/mac/keystone_glue.h"
 #include "chrome/browser/ui/ui_features.h"
 #endif  // BUILDFLAG(IS_MAC)
 
@@ -352,9 +350,28 @@
 #include "components/spellcheck/common/spellcheck_features.h"
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#include "sql/database.h"
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
+        // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+
 #include "app/vivaldi_apptools.h"
 
 namespace {
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+constexpr base::FilePath::CharType kMediaHistoryDatabaseName[] =
+    FILE_PATH_LITERAL("Media History");
+
+void DeleteMediaHistoryDatabase(const base::FilePath& profile_path) {
+  auto db_path = profile_path.Append(kMediaHistoryDatabaseName);
+  base::UmaHistogramBoolean("Media.MediaHistory.DatabaseExists",
+                            base::PathExists(db_path));
+  sql::Database::Delete(db_path);
+}
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
+        // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
 // Initialized in PreMainMessageLoopRun() and handed off to content:: in
@@ -497,8 +514,6 @@ void ProcessSingletonNotificationCallbackImpl(
     return;
   }
 #endif
-
-  g_browser_process->platform_part()->OnBrowserLaunch();
 
   StartupProfilePathInfo startup_profile_path_info =
       GetStartupProfilePath(current_directory, command_line,
@@ -660,6 +675,12 @@ void ChromeBrowserMainParts::SetupMetrics() {
       variations::VariationsIdsProvider::GetInstance());
   metrics->GetSyntheticTrialRegistry()->AddObserver(
       variations::SyntheticTrialsActiveGroupIdProvider::GetInstance());
+  // TODO(crbug.com/1505638): Investiagte the reason why the mojo connection
+  // is often created and closed for the same render process on lacros-chrome.
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+  synthetic_trial_syncer_ = content::SyntheticTrialSyncer::Create(
+      metrics->GetSyntheticTrialRegistry());
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
   // Now that field trials have been created, initializes metrics recording.
   metrics->InitializeMetricsRecordingState();
 
@@ -751,6 +772,10 @@ int ChromeBrowserMainParts::PreEarlyInitialization() {
   // Create BrowserProcess in PreEarlyInitialization() so that we can load
   // field trials (and all it depends upon).
   browser_process_ = std::make_unique<BrowserProcessImpl>(startup_data_);
+
+#if BUILDFLAG(IS_ANDROID)
+  startup_data_->CreateProfilePrefService();
+#endif
 
   bool failed_to_load_resource_bundle = false;
   const int load_local_state_result =
@@ -1022,9 +1047,11 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
+#if !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
   // This is needed to enable ETW exporting. This is only relevant for the
   // browser process, as other processes enable it separately.
   base::trace_event::TraceEventETWExport::EnableETWExport();
+#endif
 #endif  // BUILDFLAG(IS_WIN)
 
   // Reset the command line in the crash report details, since we may have
@@ -1297,6 +1324,18 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
 #endif  // BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 #endif  // BUILDFLAG(IS_WIN)
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+  // Delete the media history database if it still exists.
+  // TODO(crbug.com/1198344): Remove this.
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&DeleteMediaHistoryDatabase, profile->GetPath()));
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) ||
+        // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+
 #if !BUILDFLAG(IS_ANDROID)
   if (ShouldInstallSodaDuringPostProfileInit(
           *base::CommandLine::ForCurrentProcess())) {
@@ -1366,6 +1405,8 @@ void ChromeBrowserMainParts::PostBrowserStart() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");
   for (auto& chrome_extra_part : chrome_extra_parts_)
     chrome_extra_part->PostBrowserStart();
+
+  browser_process_->browser_policy_connector()->OnBrowserStarted();
 
 #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
   // Allow ProcessSingleton to process messages.
@@ -1716,9 +1757,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
         g_browser_process->profile_manager()->GetLastOpenedProfiles();
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-  // This step is costly and is already measured in
-  // Startup.StartupBrowserCreator_Start.
+  // This step is costly.
   if (browser_creator_->Start(*base::CommandLine::ForCurrentProcess(),
                               base::FilePath(), profile_info,
                               last_opened_profiles)) {
@@ -1820,14 +1859,6 @@ void ChromeBrowserMainParts::OnFirstIdle() {
         base::BindOnce(&base::Process::CleanUpStaleProcessStates));
   }
 #endif  // BUILDFLAG(IS_CHROMEOS)
-
-  if (blink::IdentifiabilityStudySettings::Get()->IsActive()) {
-    base::ThreadPool::PostTask(
-        FROM_HERE,
-        {base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-        base::BindOnce(&ActivelySampleIdentifiableSurfaces));
-  }
 }
 
 void ChromeBrowserMainParts::PostMainMessageLoopRun() {
@@ -1872,6 +1903,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
 
   browser_process_->metrics_service()->Stop();
 
+  // BrowserProcessImpl::StartTearDown() makes SyntheticTrialRegistry
+  // unavailable. Since SyntheticTrialSyncer depends on SyntheticTrialRegistry,
+  // destroy before the tear-down.
+  synthetic_trial_syncer_.reset();
+
   restart_last_session_ = browser_shutdown::ShutdownPreThreadsStop();
   browser_process_->StartTearDown();
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -1883,6 +1919,10 @@ void ChromeBrowserMainParts::PostDestroyThreads() {
   // not finish.
   NOTREACHED();
 #else
+
+  for (auto& chrome_extra_part : chrome_extra_parts_) {
+    chrome_extra_part->PostDestroyThreads();
+  }
 
   browser_shutdown::RestartMode restart_mode =
       browser_shutdown::RestartMode::kNoRestart;

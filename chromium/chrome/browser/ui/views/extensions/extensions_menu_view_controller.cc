@@ -164,8 +164,12 @@ bool CanUserCustomizeExtensionSiteAccess(
     return false;
   }
 
-  bool enterprise_forced_access = HasEnterpriseForcedAccess(extension, profile);
-  if (enterprise_forced_access) {
+  if (extension.permissions_data()->IsPolicyBlockedHost(url)) {
+    // Users can't customize the site access of policy-blocked sites.
+    return false;
+  }
+
+  if (HasEnterpriseForcedAccess(extension, profile)) {
     // Users can't customize the site access of enterprise-installed extensions.
     return false;
   }
@@ -543,7 +547,7 @@ void ExtensionsMenuViewController::UpdatePage(
     return;
   }
 
-  auto* site_permissions_page = GetSitePermissionsPage(current_page_);
+  auto* site_permissions_page = GetSitePermissionsPage(current_page_.view());
   if (site_permissions_page) {
     // Update site permissions page if the extension can have one.
     if (CanUserCustomizeExtensionSiteAccess(
@@ -558,7 +562,7 @@ void ExtensionsMenuViewController::UpdatePage(
     return;
   }
 
-  ExtensionsMenuMainPageView* main_page = GetMainPage(current_page_);
+  ExtensionsMenuMainPageView* main_page = GetMainPage(current_page_.view());
   DCHECK(main_page);
   UpdateMainPage(main_page, web_contents);
 }
@@ -703,12 +707,12 @@ void ExtensionsMenuViewController::OnToolbarActionAdded(
 
   // Do nothing when site permission page is opened as a new extension doesn't
   // affect the site permissions page of another extension.
-  if (GetSitePermissionsPage(current_page_)) {
+  if (GetSitePermissionsPage(current_page_.view())) {
     return;
   }
 
   // Insert a menu item for the extension when main page is opened.
-  auto* main_page = GetMainPage(current_page_);
+  auto* main_page = GetMainPage(current_page_.view());
   DCHECK(main_page);
   int index = FindIndex(*toolbar_model_, action_id);
   InsertMenuItemMainPage(main_page, action_id, index);
@@ -723,7 +727,7 @@ void ExtensionsMenuViewController::OnToolbarActionRemoved(
     const ToolbarActionsModel::ActionId& action_id) {
   DCHECK(current_page_);
 
-  auto* site_permissions_page = GetSitePermissionsPage(current_page_);
+  auto* site_permissions_page = GetSitePermissionsPage(current_page_.view());
   if (site_permissions_page) {
     // Return to the main page if site permissions page belongs to the extension
     // removed.
@@ -734,7 +738,7 @@ void ExtensionsMenuViewController::OnToolbarActionRemoved(
   }
 
   // Remove the menu item for the extension when main page is opened.
-  auto* main_page = GetMainPage(current_page_);
+  auto* main_page = GetMainPage(current_page_.view());
   DCHECK(main_page);
   main_page->RemoveMenuItem(action_id);
 
@@ -754,9 +758,9 @@ void ExtensionsMenuViewController::OnToolbarModelInitialized() {
   // Toolbar model should have been initialized if site permissions page is
   // open, since this page can only be reached after main page was populated
   // after toolbar model was initialized.
-  CHECK(!GetSitePermissionsPage(current_page_));
+  CHECK(!GetSitePermissionsPage(current_page_.view()));
 
-  auto* main_page = GetMainPage(current_page_);
+  auto* main_page = GetMainPage(current_page_.view());
   DCHECK(main_page);
   PopulateMainPage(main_page);
 }
@@ -766,11 +770,11 @@ void ExtensionsMenuViewController::OnToolbarPinnedActionsChanged() {
 
   // Do nothing when site permissions page is opened as it doesn't have pin
   // buttons.
-  if (GetSitePermissionsPage(current_page_)) {
+  if (GetSitePermissionsPage(current_page_.view())) {
     return;
   }
 
-  auto* main_page = GetMainPage(current_page_);
+  auto* main_page = GetMainPage(current_page_.view());
   DCHECK(main_page);
 
   std::vector<ExtensionMenuItemView*> menu_items = main_page->GetMenuItems();
@@ -785,7 +789,7 @@ void ExtensionsMenuViewController::OnUserPermissionsSettingsChanged(
     const PermissionsManager::UserPermissionsSettings& settings) {
   DCHECK(current_page_);
 
-  if (GetSitePermissionsPage(current_page_)) {
+  if (GetSitePermissionsPage(current_page_.view())) {
     // Site permissions page can only be opened when site setting is set to
     // "customize by extension". Thus, when site settings changed, we have to
     // return to main page.
@@ -798,7 +802,7 @@ void ExtensionsMenuViewController::OnUserPermissionsSettingsChanged(
     return;
   }
 
-  ExtensionsMenuMainPageView* main_page = GetMainPage(current_page_);
+  ExtensionsMenuMainPageView* main_page = GetMainPage(current_page_.view());
   DCHECK(main_page);
   UpdateMainPage(main_page, GetActiveWebContents());
 
@@ -816,7 +820,7 @@ void ExtensionsMenuViewController::OnShowAccessRequestsInToolbarChanged(
 
   // Changing whether an extension can show requests access in the toolbar only
   // affects the site permissions page for such extension.
-  auto* site_permissions_page = GetSitePermissionsPage(current_page_);
+  auto* site_permissions_page = GetSitePermissionsPage(current_page_.view());
   if (site_permissions_page &&
       site_permissions_page->extension_id() == extension_id) {
     site_permissions_page->UpdateShowRequestsToggle(can_show_requests);
@@ -831,7 +835,7 @@ void ExtensionsMenuViewController::OnExtensionDismissedRequests(
   // Extension can only dismiss requests from the menu's main page. if it has
   // navigated to another site in between, do nothing (navigation listeners will
   // handle menu updates).
-  auto* main_page = GetMainPage(current_page_);
+  auto* main_page = GetMainPage(current_page_.view());
   if (!main_page ||
       GetActiveWebContents()->GetPrimaryMainFrame()->GetLastCommittedOrigin() !=
           origin) {
@@ -844,32 +848,25 @@ void ExtensionsMenuViewController::OnExtensionDismissedRequests(
   }
 }
 
-void ExtensionsMenuViewController::OnViewIsDeleting(
-    views::View* observed_view) {
-  DCHECK_EQ(observed_view, current_page_);
-  current_page_ = nullptr;
-}
-
 ExtensionsMenuMainPageView*
 ExtensionsMenuViewController::GetMainPageViewForTesting() {
   DCHECK(current_page_);
-  return GetMainPage(current_page_);
+  return GetMainPage(current_page_.view());
 }
 
 ExtensionsMenuSitePermissionsPageView*
 ExtensionsMenuViewController::GetSitePermissionsPageForTesting() {
   DCHECK(current_page_);
-  return GetSitePermissionsPage(current_page_);
+  return GetSitePermissionsPage(current_page_.view());
 }
 
 void ExtensionsMenuViewController::SwitchToPage(
     std::unique_ptr<views::View> page) {
   if (current_page_) {
-    bubble_contents_->RemoveChildViewT(current_page_.get());
+    bubble_contents_->RemoveChildViewT(current_page_.view());
   }
   DCHECK(!current_page_);
-  current_page_ = bubble_contents_->AddChildView(std::move(page));
-  current_page_->AddObserver(this);
+  current_page_.SetView(bubble_contents_->AddChildView(std::move(page)));
 
   // Only resize the menu if the bubble is created, since page could be added to
   // the menu beforehand and delegate wouldn't know the bubble bounds.

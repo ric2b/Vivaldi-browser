@@ -15,13 +15,6 @@
 import m from 'mithril';
 
 import {duration, Time, time} from '../../base/time';
-import {
-  ColumnType,
-  durationFromSql,
-  LONG,
-  STR,
-  timeFromSql,
-} from '../../common/query_result';
 import {raf} from '../../core/raf_scheduler';
 import {
   BottomTab,
@@ -31,6 +24,7 @@ import {
 import {
   GenericSliceDetailsTabConfig,
 } from '../../frontend/generic_slice_details_tab';
+import {hasArgs, renderArguments} from '../../frontend/slice_args';
 import {
   getSlice,
   SliceDetails,
@@ -50,9 +44,16 @@ import {
   ThreadState,
   threadStateRef,
 } from '../../frontend/thread_state';
+import {DurationWidget} from '../../frontend/widgets/duration';
 import {Timestamp} from '../../frontend/widgets/timestamp';
+import {
+  ColumnType,
+  durationFromSql,
+  LONG,
+  STR,
+  timeFromSql,
+} from '../../trace_processor/query_result';
 import {DetailsShell} from '../../widgets/details_shell';
-import {DurationWidget} from '../../widgets/duration';
 import {GridLayout} from '../../widgets/grid_layout';
 import {Section} from '../../widgets/section';
 import {
@@ -162,11 +163,24 @@ export class DebugSliceDetailsTab extends
           left: sliceRef(this.slice, 'Slice'),
           right: '',
         },
-        renderTreeContents({
-          'Name': this.slice.name,
-          'Thread': getThreadName(this.slice.thread),
-          'Process': getProcessName(this.slice.process),
-        }));
+        m(TreeNode, {
+          left: 'Name',
+          right: this.slice.name,
+        }),
+        m(TreeNode, {
+          left: 'Thread',
+          right: getThreadName(this.slice.thread),
+        }),
+        m(TreeNode, {
+          left: 'Process',
+          right: getProcessName(this.slice.process),
+        }),
+        hasArgs(this.slice.args) &&
+            m(TreeNode,
+              {
+                left: 'Args',
+              },
+              renderArguments(this.engine, this.slice.args)));
   }
 
 

@@ -43,12 +43,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/linux/gbm_defines.h"
 
-#if BUILDFLAG(IS_OZONE) && BUILDFLAG(IS_LINUX)
-// GN doesn't understand conditional includes, so we need nogncheck here.
-// See crbug.com/1125897.
-#include "ui/ozone/public/ozone_platform.h"  // nogncheck
-#endif
-
 #ifndef I915_FORMAT_MOD_4_TILED
 #define I915_FORMAT_MOD_4_TILED 0x100000000000009
 #endif
@@ -858,7 +852,8 @@ TEST_P(VaapiMinigbmTest, AllocateAndCompareWithMinigbm) {
           base::checked_cast<uint32_t>(scoped_va_surface->size().width()));
     } else {
       const auto expected_rounded_up_pitch =
-          base::bits::AlignUp(scoped_va_surface->size().width(), 2);
+          base::bits::AlignUpDeprecatedDoNotUse(
+              scoped_va_surface->size().width(), 2);
       EXPECT_GE(va_descriptor.layers[i].pitch[0],
                 base::checked_cast<uint32_t>(expected_rounded_up_pitch));
     }
@@ -958,17 +953,6 @@ INSTANTIATE_TEST_SUITE_P(
 
 int main(int argc, char** argv) {
   base::TestSuite test_suite(argc, argv);
-
-#if BUILDFLAG(IS_OZONE) && BUILDFLAG(IS_LINUX)
-  // Initialize Ozone so that the VADisplayState can decide if we're running
-  // on top of a platform that can deal with VA-API buffers.
-  // TODO(b/230370976): we may no longer need to initialize Ozone since we
-  // don't use it for buffer allocation.
-  ui::OzonePlatform::InitParams params;
-  params.single_process = true;
-  ui::OzonePlatform::InitializeForUI(params);
-  ui::OzonePlatform::InitializeForGPU(params);
-#endif
 
   // PreSandboxInitialization() loads and opens the driver, queries its
   // capabilities and fills in the VASupportedProfiles.

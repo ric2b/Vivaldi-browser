@@ -31,6 +31,7 @@ import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.TooltipCompat;
 
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
@@ -106,14 +107,15 @@ public class StatusView extends LinearLayout {
         mSeparatorView = findViewById(R.id.location_bar_verbose_status_separator);
         mStatusExtraSpace = findViewById(R.id.location_bar_verbose_status_extra_space);
 
-        // Configure icon rounding.
-        mIconView.setOutlineProvider(
-                new RoundedCornerOutlineProvider(
-                        getResources()
-                                        .getDimensionPixelSize(
-                                                R.dimen.omnibox_search_engine_logo_composed_size)
-                                / 2));
-        mIconView.setClipToOutline(true);
+            // Configure icon rounding.
+            mIconView.setOutlineProvider(
+                    new RoundedCornerOutlineProvider(
+                            getResources()
+                                    .getDimensionPixelSize(
+                                            R.dimen.omnibox_search_engine_logo_composed_size)
+                                    / 2));
+            mIconView.setClipToOutline(true);
+            mIconView.setScaleType(ImageView.ScaleType.FIT_CENTER); // Vivaldi
 
         configureAccessibilityDescriptions();
 
@@ -246,8 +248,7 @@ public class StatusView extends LinearLayout {
                     .withEndAction(
                             () -> {
                                 // Set StatusIcon visibility and check whether we should set hover
-                                // action on
-                                // StatusView.
+                                // action on StatusView.
                                 setStatusIconVisibility(View.GONE);
 
                                 mIconView.setAlpha(1f);

@@ -51,7 +51,6 @@ declare_overrides() {
   if (is_linux) {
     if (!is_component_build) {
       enable_linux_installer = is_linux
-      enable_snap_package = is_official_build && (target_cpu == "x64" || target_cpu == "arm64") && (VIVALDI_RELEASE_KIND == "vivaldi_final" || release_kind == "snapshot" || release_kind == "vivaldi-snap")
     }
     if (is_official_build) {
       symbol_level = 1
@@ -62,7 +61,6 @@ declare_overrides() {
     if (is_official_build) {
       symbol_level = 1
     }
-    enable_gvr_services = false
     enable_cardboard = false
     enable_arcore = false
     enable_vr = false

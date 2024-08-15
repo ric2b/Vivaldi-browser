@@ -14,7 +14,6 @@
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #import "components/security_interstitials/core/base_safe_browsing_error_ui.h"
-#import "components/security_interstitials/core/common_string_util.h"
 #import "components/security_interstitials/core/metrics_helper.h"
 #import "components/security_interstitials/core/safe_browsing_loud_error_ui.h"
 #import "ios/chrome/browser/safe_browsing/model/safe_browsing_metrics_collector_factory.h"
@@ -57,7 +56,7 @@ BaseSafeBrowsingErrorUI::SBErrorDisplayOptions GetDefaultDisplayOptions(
             SECURITY_SENSITIVE_SAFE_BROWSING_INTERSTITIAL);
   }
   return BaseSafeBrowsingErrorUI::SBErrorDisplayOptions(
-      resource.IsMainPageLoadBlocked(),
+      resource.IsMainPageLoadPendingWithSyncCheck(), resource.is_subresource,
       /*is_extended_reporting_opt_in_allowed=*/false,
       /*is_off_the_record=*/false,
       /*is_extended_reporting=*/false,
@@ -90,7 +89,7 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
     : IOSSecurityInterstitialPage(resource.weak_web_state.get(),
                                   GetMainFrameUrl(resource),
                                   client),
-      is_main_page_load_blocked_(resource.IsMainPageLoadBlocked()),
+      is_main_page_load_blocked_(resource.IsMainPageLoadPendingWithSyncCheck()),
       error_ui_(std::make_unique<SafeBrowsingLoudErrorUI>(
           resource.url,
           GetMainFrameUrl(resource),
@@ -117,8 +116,7 @@ std::string SafeBrowsingBlockingPage::GetHtmlContents() const {
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           error_ui_->GetHTMLTemplateId());
   webui::AppendWebUiCssTextDefaults(&html);
-  return security_interstitials::common_string_util::GetLocalizedHtml(
-      html, load_time_data);
+  return webui::GetLocalizedHtml(html, load_time_data);
 }
 
 void SafeBrowsingBlockingPage::HandleCommand(

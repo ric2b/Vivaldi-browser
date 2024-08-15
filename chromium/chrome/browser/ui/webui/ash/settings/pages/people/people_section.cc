@@ -297,6 +297,8 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_OS_SETTINGS_PEOPLE_SET_LOCAL_PASSWORD_DIALOG_TITLE},
       {"setLocalPasswordDialogInternalError",
        IDS_OS_SETTINGS_PEOPLE_SET_LOCAL_PASSWORD_DIALOG_INTERNAL_ERROR},
+      {"showPassword", IDS_AUTH_SETUP_SHOW_PASSWORD},
+      {"hidePassword", IDS_AUTH_SETUP_HIDE_PASSWORD},
       {"setLocalPasswordPlaceholder",
        IDS_AUTH_SETUP_SET_LOCAL_PASSWORD_PLACEHOLDER},
       {"setLocalPasswordConfirmPlaceholder",
@@ -326,8 +328,6 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
                              ui::GetChromeOSDeviceName()));
   html_source->AddString("fingerprintLearnMoreLink",
                          chrome::kFingerprintLearnMoreURL);
-  html_source->AddBoolean("cryptohomeRecoveryEnabled",
-                          features::IsCryptohomeRecoveryEnabled());
   html_source->AddString("recoveryLearnMoreUrl", chrome::kRecoveryLearnMoreURL);
 }
 
@@ -476,8 +476,8 @@ PeopleSection::PeopleSection(Profile* profile,
     : OsSettingsSection(profile, search_tag_registry),
       sync_subsection_(
           !ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? absl::make_optional<SyncSection>(profile, search_tag_registry)
-              : absl::nullopt),
+              ? std::make_optional<SyncSection>(profile, search_tag_registry)
+              : std::nullopt),
       identity_manager_(identity_manager),
       pref_service_(pref_service),
       auth_performer_(UserDataAuthClient::Get()),

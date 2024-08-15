@@ -214,7 +214,8 @@ void append_color_output(std::string* mainBody,
 
 // The current, incomplete, model for shader construction is:
 //   - Static code snippets (which can have an arbitrary signature) live in the Graphite
-//     pre-compiled module, which is located at `src/sksl/sksl_graphite_frag.sksl`.
+//     pre-compiled modules, which are located at `src/sksl/sksl_graphite_frag.sksl` and
+//     `src/sksl/sksl_graphite_frag_es2.sksl`.
 //   - Glue code is generated in a `main` method which calls these static code snippets.
 //     The glue code is responsible for:
 //            1) gathering the correct (mangled) uniforms
@@ -224,14 +225,22 @@ void append_color_output(std::string* mainBody,
 //   in the Graphite pre-compiled module.
 std::string ShaderInfo::toSkSL(const Caps* caps,
                                const RenderStep* step,
-                               const bool useStorageBuffers,
+                               bool useStorageBuffers,
                                int* numTexturesAndSamplersUsed,
                                int* numPaintUniforms,
+                               int* renderStepUniformTotalBytes,
+                               int* paintUniformsTotalBytes,
                                Swizzle writeSwizzle) {
+    // If we're doing analytic coverage, we must also be doing shading.
+    SkASSERT(step->coverage() == Coverage::kNone || step->performsShading());
+    const bool hasStepUniforms = step->numUniforms() > 0 && step->coverage() != Coverage::kNone;
+    const bool useStepStorageBuffer = useStorageBuffers && hasStepUniforms;
+    const bool useShadingStorageBuffer = useStorageBuffers && step->performsShading();
+
     const bool defineLocalCoordsVarying = this->needsLocalCoords();
     std::string preamble = EmitVaryings(step,
                                         /*direction=*/"in",
-                                        /*emitShadingSsboIndexVarying=*/useStorageBuffers,
+                                        /*emitSsboIndicesVarying=*/useShadingStorageBuffer,
                                         defineLocalCoordsVarying);
 
     // The uniforms are mangled by having their index in 'fEntries' as a suffix (i.e., "_%d")
@@ -239,25 +248,31 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     // TODO: The use of these indices is Metal-specific. We should replace these functions with
     // API-independent ones.
     const ResourceBindingRequirements& bindingReqs = caps->resourceBindingRequirements();
-    if (step->numUniforms() > 0) {
-        preamble += EmitRenderStepUniforms(/*bufferID=*/1, "Step",
-                                           bindingReqs.fUniformBufferLayout, step->uniforms());
+    if (hasStepUniforms) {
+        if (useStepStorageBuffer) {
+            preamble += EmitRenderStepStorageBuffer(/*bufferID=*/1, step->uniforms());
+        } else {
+            preamble += EmitRenderStepUniforms(/*bufferID=*/1,
+                                               bindingReqs.fUniformBufferLayout,
+                                               step->uniforms(),
+                                               renderStepUniformTotalBytes);
+        }
     }
 
     bool wrotePaintColor = false;
-    if (this->ssboIndex()) {
-        preamble += EmitPaintParamsStorageBuffer(/*bufferID=*/2, "FS", "fs", fRootNodes,
+    if (useShadingStorageBuffer) {
+        preamble += EmitPaintParamsStorageBuffer(/*bufferID=*/2,
+                                                 fRootNodes,
                                                  numPaintUniforms,
                                                  &wrotePaintColor);
+        SkSL::String::appendf(&preamble, "uint %s;\n", this->ssboIndex());
     } else {
-        preamble += EmitPaintParamsUniforms(
-                /*bufferID=*/2,
-                "FS",
-                useStorageBuffers ? bindingReqs.fStorageBufferLayout
-                                  : bindingReqs.fUniformBufferLayout,
-                fRootNodes,
-                numPaintUniforms,
-                &wrotePaintColor);
+        preamble += EmitPaintParamsUniforms(/*bufferID=*/2,
+                                            bindingReqs.fUniformBufferLayout,
+                                            fRootNodes,
+                                            numPaintUniforms,
+                                            paintUniformsTotalBytes,
+                                            &wrotePaintColor);
     }
 
     {
@@ -289,9 +304,20 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
     // specifying a color with a solid color shader.
     mainBody += "half4 initialColor = half4(0);";
 
+    if (useShadingStorageBuffer) {
+        SkSL::String::appendf(&mainBody,
+                              "%s = %s.y;\n",
+                              this->ssboIndex(),
+                              RenderStep::ssboIndicesVarying());
+    }
+
     if (step->emitsPrimitiveColor()) {
         mainBody += step->fragmentColorSkSL();
     }
+
+    // While looping through root nodes to emit shader code, skip the clip shader node if it's found
+    // and keep it to apply later during coverage calculation.
+    const ShaderNode* clipShaderNode = nullptr;
 
     // Emit shader main body code, invoking each root node's expression, forwarding the previous
     // node's output to the next.
@@ -301,6 +327,11 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
                                 kUnusedDstColor,
                                 this->needsLocalCoords() ? "localCoordsVar" : kUnusedLocalCoords};
     for (const ShaderNode* node : fRootNodes) {
+        if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kClipShader) {
+            SkASSERT(!clipShaderNode);
+            clipShaderNode = node;
+            continue;
+        }
         // This exclusion of the final Blend can be removed once we've resolved the final
         // blend parenting issue w/in the key
         if (node->codeSnippetId() >= kBuiltInCodeSnippetIDCount ||
@@ -317,9 +348,22 @@ std::string ShaderInfo::toSkSL(const Caps* caps,
 
     const char* outColor = args.fPriorStageOutput.c_str();
     const Coverage coverage = step->coverage();
-    if (coverage != Coverage::kNone) {
-        mainBody += "half4 outputCoverage;";
+    if (coverage != Coverage::kNone || clipShaderNode) {
+        if (useStepStorageBuffer) {
+            SkSL::String::appendf(&mainBody,
+                                  "uint stepSsboIndex = %s.x;\n",
+                                  RenderStep::ssboIndicesVarying());
+            mainBody += EmitUniformsFromStorageBuffer("step", "stepSsboIndex", step->uniforms());
+        }
+
+        mainBody += "half4 outputCoverage = half4(1);";
         mainBody += step->fragmentCoverageSkSL();
+
+        if (clipShaderNode) {
+            std::string clipShaderOutput =
+                    emit_glue_code_for_entry(*this, clipShaderNode, args, &mainBody);
+            SkSL::String::appendf(&mainBody, "outputCoverage *= %s.a;", clipShaderOutput.c_str());
+        }
 
         // TODO: Determine whether draw is opaque and pass that to GetBlendFormula.
         BlendFormula coverageBlendFormula =
@@ -587,8 +631,6 @@ static constexpr TextureAndSampler kDstReadSampleTexturesAndSamplers[] = {
         {"dstSampler"},
 };
 
-// Call a function from the preamble which initializes the dst color and passes through the prior
-// stage output without modification.
 std::string GenerateDstReadSampleExpression(const ShaderInfo& shaderInfo,
                                             const ShaderNode* node,
                                             const ShaderSnippet::Args& args) {
@@ -639,6 +681,24 @@ std::string GenerateDstReadFetchPreamble(const ShaderInfo& shaderInfo, const Sha
                 "return surfaceColor;"
             "}",
             helperFnName.c_str());
+}
+
+//--------------------------------------------------------------------------------------------------
+static constexpr int kNumClipShaderChildren = 1;
+
+std::string GenerateClipShaderExpression(const ShaderInfo& shaderInfo,
+                                         const ShaderNode* node,
+                                         const ShaderSnippet::Args& args) {
+    SkASSERT(node->numChildren() == kNumClipShaderChildren);
+    static constexpr char kUnusedSrcColor[] = "half4(1)";
+    static constexpr char kUnusedDstColor[] = "half4(1)";
+    return emit_expression_for_entry(
+            shaderInfo, node->child(0), {kUnusedSrcColor, kUnusedDstColor, "sk_FragCoord.xy"});
+}
+
+std::string GenerateClipShaderPreamble(const ShaderInfo& shaderInfo, const ShaderNode* node) {
+    // No preamble is used for clip shaders. The child shader is called directly with sk_FragCoord.
+    return "";
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -790,10 +850,7 @@ static constexpr Uniform kSolidShaderUniforms[] = {
 static constexpr char kSolidShaderName[] = "sk_solid_shader";
 
 //--------------------------------------------------------------------------------------------------
-static constexpr Uniform kPaintColorUniforms[] = {
-        { "paintColorSingleton", SkSLType::kFloat4, Uniform::kNonArray,
-          Uniform::IsPaintColor::kYes }
-};
+static constexpr Uniform kPaintColorUniforms[] = { Uniform::PaintColor() };
 
 static constexpr char kRGBPaintColorName[] = "sk_rgb_opaque";
 static constexpr char kAlphaOnlyPaintColorName[] = "sk_alpha_only";
@@ -836,12 +893,11 @@ std::string GenerateLocalMatrixPreamble(const ShaderInfo& shaderInfo,
 
 //--------------------------------------------------------------------------------------------------
 static constexpr Uniform kImageShaderUniforms[] = {
-        { "imgSize",               SkSLType::kFloat2 },
+        { "invImgSize",            SkSLType::kFloat2 },
         { "subset",                SkSLType::kFloat4 },
         { "tilemodeX",             SkSLType::kInt },
         { "tilemodeY",             SkSLType::kInt },
         { "filterMode",            SkSLType::kInt },
-        { "readSwizzle",           SkSLType::kInt },
         // The next 5 uniforms are for the color space transformation
         { "csXformFlags",          SkSLType::kInt },
         { "csXformSrcKind",        SkSLType::kInt },
@@ -851,12 +907,11 @@ static constexpr Uniform kImageShaderUniforms[] = {
 };
 
 static constexpr Uniform kCubicImageShaderUniforms[] = {
-        { "imgSize",               SkSLType::kFloat2 },
+        { "invImgSize",            SkSLType::kFloat2 },
         { "subset",                SkSLType::kFloat4 },
         { "tilemodeX",             SkSLType::kInt },
         { "tilemodeY",             SkSLType::kInt },
         { "cubicCoeffs",           SkSLType::kHalf4x4 },
-        { "readSwizzle",           SkSLType::kInt },
         // The next 5 uniforms are for the color space transformation
         { "csXformFlags",          SkSLType::kInt },
         { "csXformSrcKind",        SkSLType::kInt },
@@ -866,8 +921,7 @@ static constexpr Uniform kCubicImageShaderUniforms[] = {
 };
 
 static constexpr Uniform kHWImageShaderUniforms[] = {
-        { "imgSize",               SkSLType::kFloat2 },
-        { "readSwizzle",           SkSLType::kInt },
+        { "invImgSize",            SkSLType::kFloat2 },
         // The next 5 uniforms are for the color space transformation
         { "csXformFlags",          SkSLType::kInt },
         { "csXformSrcKind",        SkSLType::kInt },
@@ -894,13 +948,11 @@ static_assert(0 == static_cast<int>(ReadSwizzle::kRGBA),
               "ImageShader code depends on ReadSwizzle");
 static_assert(1 == static_cast<int>(ReadSwizzle::kRGB1),
               "ImageShader code depends on ReadSwizzle");
-static_assert(2 == static_cast<int>(ReadSwizzle::kRRRR),
+static_assert(2 == static_cast<int>(ReadSwizzle::kRRR1),
               "ImageShader code depends on ReadSwizzle");
-static_assert(3 == static_cast<int>(ReadSwizzle::kRRR1),
+static_assert(3 == static_cast<int>(ReadSwizzle::kBGRA),
               "ImageShader code depends on ReadSwizzle");
-static_assert(4 == static_cast<int>(ReadSwizzle::kBGRA),
-              "ImageShader code depends on ReadSwizzle");
-static_assert(5 == static_cast<int>(ReadSwizzle::k000R),
+static_assert(4 == static_cast<int>(ReadSwizzle::k000R),
               "ImageShader code depends on ReadSwizzle");
 
 static constexpr char kImageShaderName[] = "sk_image_shader";
@@ -910,12 +962,30 @@ static constexpr char kHWImageShaderName[] = "sk_hw_image_shader";
 //--------------------------------------------------------------------------------------------------
 
 static constexpr Uniform kYUVImageShaderUniforms[] = {
-        { "imgSize",               SkSLType::kFloat2 },
+        { "invImgSize",            SkSLType::kFloat2 },
         { "subset",                SkSLType::kFloat4 },
         { "tilemodeX",             SkSLType::kInt },
         { "tilemodeY",             SkSLType::kInt },
         { "filterMode",            SkSLType::kInt },
-        { "useCubic",              SkSLType::kInt },
+        { "channelSelectY",        SkSLType::kHalf4 },
+        { "channelSelectU",        SkSLType::kHalf4 },
+        { "channelSelectV",        SkSLType::kHalf4 },
+        { "channelSelectA",        SkSLType::kHalf4 },
+        { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
+        { "yuvToRGBTranslate",     SkSLType::kFloat3 },
+        // The next 5 uniforms are for the color space transformation
+        { "csXformFlags",          SkSLType::kInt },
+        { "csXformSrcKind",        SkSLType::kInt },
+        { "csXformGamutTransform", SkSLType::kHalf3x3 },
+        { "csXformDstKind",        SkSLType::kInt },
+        { "csXformCoeffs",         SkSLType::kHalf4x4 },
+};
+
+static constexpr Uniform kCubicYUVImageShaderUniforms[] = {
+        { "invImgSize",            SkSLType::kFloat2 },
+        { "subset",                SkSLType::kFloat4 },
+        { "tilemodeX",             SkSLType::kInt },
+        { "tilemodeY",             SkSLType::kInt },
         { "cubicCoeffs",           SkSLType::kHalf4x4 },
         { "channelSelectY",        SkSLType::kHalf4 },
         { "channelSelectU",        SkSLType::kHalf4 },
@@ -923,7 +993,7 @@ static constexpr Uniform kYUVImageShaderUniforms[] = {
         { "channelSelectA",        SkSLType::kHalf4 },
         { "yuvToRGBMatrix",        SkSLType::kHalf3x3 },
         { "yuvToRGBTranslate",     SkSLType::kFloat3 },
-        // The next 6 uniforms are for the color space transformation
+        // The next 5 uniforms are for the color space transformation
         { "csXformFlags",          SkSLType::kInt },
         { "csXformSrcKind",        SkSLType::kInt },
         { "csXformGamutTransform", SkSLType::kHalf3x3 },
@@ -939,6 +1009,7 @@ static constexpr TextureAndSampler kYUVISTexturesAndSamplers[] = {
 };
 
 static constexpr char kYUVImageShaderName[] = "sk_yuv_image_shader";
+static constexpr char kCubicYUVImageShaderName[] = "sk_cubic_yuv_image_shader";
 
 //--------------------------------------------------------------------------------------------------
 static constexpr Uniform kCoordClampShaderUniforms[] = {
@@ -1323,10 +1394,12 @@ static SkSLType uniform_type_to_sksl_type(const SkRuntimeEffect::Uniform& u) {
             case Type::kFloat2x2: return SkSLType::kHalf2x2;
             case Type::kFloat3x3: return SkSLType::kHalf3x3;
             case Type::kFloat4x4: return SkSLType::kHalf4x4;
-            case Type::kInt:      return SkSLType::kShort;
-            case Type::kInt2:     return SkSLType::kShort2;
-            case Type::kInt3:     return SkSLType::kShort3;
-            case Type::kInt4:     return SkSLType::kShort4;
+            // NOTE: shorts cannot be uniforms, so we shouldn't ever get here.
+            // Defensively return the full precision integer type.
+            case Type::kInt:      SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt;
+            case Type::kInt2:     SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt2;
+            case Type::kInt3:     SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt3;
+            case Type::kInt4:     SkDEBUGFAIL("unsupported uniform type"); return SkSLType::kInt4;
         }
     } else {
         switch (u.type) {
@@ -1636,6 +1709,16 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
             GenerateDefaultPreamble,
             kNoChildren
     };
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCubicYUVImageShader] = {
+            "CubicYUVImageShader",
+            SkSpan(kCubicYUVImageShaderUniforms),
+            SnippetRequirementFlags::kLocalCoords,
+            SkSpan(kYUVISTexturesAndSamplers),
+            kCubicYUVImageShaderName,
+            GenerateDefaultExpression,
+            GenerateDefaultPreamble,
+            kNoChildren
+    };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCoordClampShader] = {
             "CoordClampShader",
             SkSpan(kCoordClampShaderUniforms),
@@ -1770,6 +1853,18 @@ ShaderCodeDictionary::ShaderCodeDictionary() {
             GenerateDstReadFetchPreamble,
             kNoChildren
     };
+
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kClipShader] = {
+            "ClipShader",
+            { },            // no uniforms
+            SnippetRequirementFlags::kNone,
+            { },            // no samplers
+            "clip shader",  // no static sksl
+            GenerateClipShaderExpression,
+            GenerateClipShaderPreamble,
+            kNumClipShaderChildren
+    };
+
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCompose] = {
             "Compose",
             { },     // no uniforms

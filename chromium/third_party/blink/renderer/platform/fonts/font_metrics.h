@@ -152,16 +152,6 @@ class FontMetrics {
     has_zero_width_ = has_zero_width;
   }
 
-  // The approximated advance of fullwidth ideographic characters. This is
-  // currently used to support the [`ic` unit].
-  // [`ic` unit]: https://drafts.csswg.org/css-values-4/#ic
-  absl::optional<float> IdeographicFullWidth() const {
-    return ideographic_full_width_;
-  }
-  void SetIdeographicFullWidth(absl::optional<float> width) {
-    ideographic_full_width_ = width;
-  }
-
   absl::optional<float> UnderlineThickness() const {
     return underline_thickness_;
   }
@@ -207,8 +197,6 @@ class FontMetrics {
   static void AscentDescentWithHacks(
       float& ascent,
       float& descent,
-      unsigned& visual_overflow_inflation_for_ascent,
-      unsigned& visual_overflow_inflation_for_descent,
       const FontPlatformData&,
       const SkFont&,
       bool subpixel_ascent_descent = false,
@@ -228,7 +216,6 @@ class FontMetrics {
     line_gap_ = 0;
     line_spacing_ = 0;
     x_height_ = 0;
-    ideographic_full_width_.reset();
     has_x_height_ = false;
     underline_thickness_.reset();
     underline_position_.reset();
@@ -252,7 +239,6 @@ class FontMetrics {
   float line_spacing_ = 0;
   float x_height_ = 0;
   float zero_width_ = 0;
-  absl::optional<float> ideographic_full_width_;
   absl::optional<float> underline_thickness_;
   absl::optional<float> underline_position_;
   absl::optional<float> ideographic_baseline_position_;

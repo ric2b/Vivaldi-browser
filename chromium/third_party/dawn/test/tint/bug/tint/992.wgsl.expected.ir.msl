@@ -1,0 +1,8 @@
+#include <metal_stdlib>
+using namespace metal;
+
+fragment float4 frag_main() {
+  float b = 0.0f;
+  float3 v = float3(b);
+  return float4(v, 1.0f);
+}

@@ -52,7 +52,6 @@ wheel: <
 #   tests/gclient_utils_test.py
 #   tests/gerrit_util_test.py
 #   tests/git_cl_test.py
-#   tests/git_drover_test.py
 #   tests/git_footers_test.py
 #   tests/metrics_test.py
 #   tests/presubmit_unittest.py

@@ -65,6 +65,8 @@
 #include "components/viz/test/viz_test_suite.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
+#include "gpu/command_buffer/service/sync_point_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -231,7 +233,8 @@ class DisplayTest : public testing::Test {
     // well, so there is no need to pass in a real
     // DisplayCompositorMemoryAndTaskController.
     auto display = std::make_unique<Display>(
-        &shared_bitmap_manager_, settings, &debug_settings_, frame_sink_id,
+        &shared_bitmap_manager_, &shared_image_manager_, &sync_point_manager_,
+        settings, &debug_settings_, frame_sink_id,
         nullptr /* DisplayCompositorMemoryAndTaskController */,
         std::move(output_surface), std::move(overlay_processor),
         std::move(scheduler), task_runner_);
@@ -279,6 +282,8 @@ class DisplayTest : public testing::Test {
 
   DebugRendererSettings debug_settings_;
   ServerSharedBitmapManager shared_bitmap_manager_;
+  gpu::SharedImageManager shared_image_manager_;
+  gpu::SyncPointManager sync_point_manager_;
   FrameSinkManagerImpl manager_;
   std::unique_ptr<CompositorFrameSinkSupport> support_;
   ParentLocalSurfaceIdAllocator id_allocator_;
@@ -4441,16 +4446,16 @@ TEST_F(DisplayTest, DisplayTransformHint) {
       // Output size is always the display size when output surface does not
       // support display transform hint.
       {false, gfx::OVERLAY_TRANSFORM_NONE, kSize},
-      {false, gfx::OVERLAY_TRANSFORM_ROTATE_90, kSize},
-      {false, gfx::OVERLAY_TRANSFORM_ROTATE_180, kSize},
-      {false, gfx::OVERLAY_TRANSFORM_ROTATE_270, kSize},
+      {false, gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_90, kSize},
+      {false, gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_180, kSize},
+      {false, gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_270, kSize},
 
       // Output size is transposed on 90/270 degree rotation when output surface
       // supports display transform hint.
       {true, gfx::OVERLAY_TRANSFORM_NONE, kSize},
-      {true, gfx::OVERLAY_TRANSFORM_ROTATE_90, kTransposedSize},
-      {true, gfx::OVERLAY_TRANSFORM_ROTATE_180, kSize},
-      {true, gfx::OVERLAY_TRANSFORM_ROTATE_270, kTransposedSize},
+      {true, gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_90, kTransposedSize},
+      {true, gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_180, kSize},
+      {true, gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_270, kTransposedSize},
   };
 
   size_t expected_frame_sent = 0u;

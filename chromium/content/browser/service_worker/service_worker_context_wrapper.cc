@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -61,7 +62,6 @@
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/quota/special_storage_policy.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/service_worker/embedded_worker_status.h"
@@ -84,7 +84,7 @@ BASE_FEATURE(kServiceWorkerStorageControlOnIOThread,
 
 BASE_FEATURE(kServiceWorkerStorageControlOnThreadPool,
              "ServiceWorkerStorageControlOnThreadPool",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<int> kUpdateDelayParam{
     &blink::features::kServiceWorkerUpdateDelay, "update_delay_in_ms", 1000};
@@ -567,6 +567,23 @@ void ServiceWorkerContextWrapper::UnregisterServiceWorker(
     const GURL& scope,
     const blink::StorageKey& key,
     ResultCallback callback) {
+  UnregisterServiceWorkerImpl(scope, key, /*is_immediate=*/false,
+                              std::move(callback));
+}
+
+void ServiceWorkerContextWrapper::UnregisterServiceWorkerImmediately(
+    const GURL& scope,
+    const blink::StorageKey& key,
+    ResultCallback callback) {
+  UnregisterServiceWorkerImpl(scope, key, /*is_immediate=*/true,
+                              std::move(callback));
+}
+
+void ServiceWorkerContextWrapper::UnregisterServiceWorkerImpl(
+    const GURL& scope,
+    const blink::StorageKey& key,
+    bool is_immediate,
+    ResultCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!context_core_) {
@@ -575,7 +592,7 @@ void ServiceWorkerContextWrapper::UnregisterServiceWorker(
     return;
   }
   context()->UnregisterServiceWorker(
-      net::SimplifyUrlForRequest(scope), key, /*is_immediate=*/false,
+      net::SimplifyUrlForRequest(scope), key, is_immediate,
       WrapResultCallbackToTakeStatusCode(std::move(callback)));
 }
 
@@ -768,7 +785,7 @@ void ServiceWorkerContextWrapper::StartServiceWorkerAndDispatchMessage(
 
   // As we don't track tasks between workers and renderers, we can nullify the
   // message's parent task ID.
-  message.parent_task_id = absl::nullopt;
+  message.parent_task_id = std::nullopt;
 
   // TODO(https://crbug.com/1295029): Don't post task to the UI thread. Instead,
   // make all call sites run on the UI thread.
@@ -899,7 +916,7 @@ void ServiceWorkerContextWrapper::StartServiceWorkerForNavigationHint(
 void ServiceWorkerContextWrapper::WarmUpServiceWorker(
     const GURL& document_url,
     const blink::StorageKey& key,
-    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback) {
+    WarmUpServiceWorkerCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!context_core_) {
@@ -913,6 +930,12 @@ void ServiceWorkerContextWrapper::WarmUpServiceWorker(
   // takes time to compute. Hence avoid calling it when the given URL clearly
   // doesn't register service workers.
   if (!OriginCanAccessServiceWorkers(document_url)) {
+    std::move(callback).Run();
+    return;
+  }
+
+  // Only warm-up http or https URLs. Do not warm-up extensions and others.
+  if (!document_url.SchemeIsHTTPOrHTTPS()) {
     std::move(callback).Run();
     return;
   }
@@ -1446,7 +1469,7 @@ void ServiceWorkerContextWrapper::MaybeProcessPendingWarmUpRequest() {
 
   context_core_->EndProcessingWarmingUp();
 
-  absl::optional<ServiceWorkerContextCore::WarmUpRequest> request =
+  std::optional<ServiceWorkerContextCore::WarmUpRequest> request =
       context_core_->PopNextWarmUpRequest();
 
   if (!request) {
@@ -1641,7 +1664,7 @@ void ServiceWorkerContextWrapper::DidStartServiceWorkerForNavigationHint(
 }
 
 void ServiceWorkerContextWrapper::DidFindRegistrationForWarmUp(
-    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback,
+    WarmUpServiceWorkerCallback callback,
     blink::ServiceWorkerStatusCode status,
     scoped_refptr<ServiceWorkerRegistration> registration) {
   TRACE_EVENT1("ServiceWorker", "DidFindRegistrationForWarmUp", "status",
@@ -1669,7 +1692,7 @@ void ServiceWorkerContextWrapper::DidFindRegistrationForWarmUp(
 
 void ServiceWorkerContextWrapper::DidWarmUpServiceWorker(
     const GURL& scope,
-    ServiceWorkerContextCore::WarmUpServiceWorkerCallback callback,
+    WarmUpServiceWorkerCallback callback,
     blink::ServiceWorkerStatusCode code) {
   TRACE_EVENT2("ServiceWorker", "DidWarmUpServiceWorker", "url", scope.spec(),
                "code", blink::ServiceWorkerStatusToString(code));
@@ -1799,7 +1822,7 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForUpdateCheck(
   // devtools? It is currently not recorded at all.
   return GetLoaderFactoryForBrowserInitiatedRequest(
       scope,
-      /*version_id=*/absl::nullopt, std::move(client_security_state));
+      /*version_id=*/std::nullopt, std::move(client_security_state));
 }
 
 // static
@@ -1823,7 +1846,7 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForMainScriptFetch(
 scoped_refptr<network::SharedURLLoaderFactory>
 ServiceWorkerContextWrapper::GetLoaderFactoryForBrowserInitiatedRequest(
     const GURL& scope,
-    absl::optional<int64_t> version_id,
+    std::optional<int64_t> version_id,
     network::mojom::ClientSecurityStatePtr client_security_state) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -1851,7 +1874,7 @@ ServiceWorkerContextWrapper::GetLoaderFactoryForBrowserInitiatedRequest(
       storage_partition_->browser_context(), /*frame=*/nullptr,
       ChildProcessHost::kInvalidUniqueID,
       ContentBrowserClient::URLLoaderFactoryType::kServiceWorkerScript,
-      scope_origin, /*navigation_id=*/absl::nullopt, ukm::kInvalidSourceIdObj,
+      scope_origin, /*navigation_id=*/std::nullopt, ukm::kInvalidSourceIdObj,
       &pending_receiver, &header_client, &bypass_redirect_checks,
       /*disable_secure_dns=*/nullptr,
       /*factory_override=*/nullptr,

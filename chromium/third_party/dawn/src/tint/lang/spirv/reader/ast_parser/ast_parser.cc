@@ -2040,7 +2040,7 @@ TypedExpression ASTParser::MakeConstantExpressionForScalarSpirvConstant(
                                        ast::IntLiteralExpression::Suffix::kU)};
         },
         [&](const F32*) {
-            if (auto f = core::CheckedConvert<f32>(AFloat(spirv_const->GetFloat()))) {
+            if (auto f = core::CheckedConvert<f32>(AFloat(spirv_const->GetFloat())); f == Success) {
                 return TypedExpression{ty_.F32(),
                                        create<ast::FloatLiteralExpression>(
                                            source, static_cast<double>(spirv_const->GetFloat()),
@@ -2584,7 +2584,7 @@ const Type* ASTParser::GetHandleTypeForSpirvHandle(const spvtools::opt::Instruct
             const auto access =
                 usage.IsStorageReadWriteTexture() ? core::Access::kReadWrite : core::Access::kWrite;
             if (access == core::Access::kReadWrite) {
-                Enable(wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture);
+                Require(wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures);
             }
             const auto format = enum_converter_.ToTexelFormat(image_type->format());
             if (format == core::TexelFormat::kUndefined) {

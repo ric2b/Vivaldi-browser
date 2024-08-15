@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_COMMON_DENSE_SET_H_
 
 #include <array>
+#include <bit>
 #include <climits>
 #include <cstddef>
 #include <iterator>
@@ -14,9 +15,8 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
-#include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/raw_ptr.h"
 #include "base/numerics/safe_conversions.h"
-#include "third_party/abseil-cpp/absl/numeric/bits.h"
 
 namespace autofill {
 
@@ -28,7 +28,7 @@ static constexpr size_t kBitsPer = sizeof(T) * CHAR_BIT;
 
 // A bitset represented as `std::array<Word, kNumWords>.
 // There's a specialization further down for `kNumWords == 1`.
-template <typename Word, size_t kNumWords, typename Enable = void>
+template <typename Word, size_t kNumWords>
 class Bitset {
  public:
   constexpr Bitset() = default;
@@ -39,7 +39,7 @@ class Bitset {
     // correct.
     size_t num = 0;
     for (const auto word : words_) {
-      num += absl::popcount(word);
+      num += std::popcount(word);
     }
     return num;
   }
@@ -87,9 +87,8 @@ class Bitset {
     return x;
   }
 
-  friend constexpr bool operator==(const Bitset& lhs, const Bitset& rhs) {
-    return lhs.words_ == rhs.words_;
-  }
+  friend constexpr bool operator==(const Bitset& lhs,
+                                   const Bitset& rhs) = default;
 
   constexpr base::span<const Word, kNumWords> data() const { return words_; }
 
@@ -98,12 +97,12 @@ class Bitset {
 };
 
 // Specialization that uses a single integer instead of an std::array.
-template <typename Word, size_t kNumWords>
-class Bitset<Word, kNumWords, std::enable_if_t<kNumWords == 1>> {
+template <typename Word>
+class Bitset<Word, 1u> {
  public:
   constexpr Bitset() = default;
 
-  constexpr size_t num_set_bits() const { return absl::popcount(word_); }
+  constexpr size_t num_set_bits() const { return std::popcount(word_); }
 
   constexpr bool get_bit(size_t index) const {
     return word_ & (static_cast<Word>(1) << index);
@@ -137,9 +136,7 @@ class Bitset<Word, kNumWords, std::enable_if_t<kNumWords == 1>> {
     return x;
   }
 
-  friend constexpr bool operator==(Bitset lhs, Bitset rhs) {
-    return lhs.word_ == rhs.word_;
-  }
+  friend constexpr bool operator==(Bitset lhs, Bitset rhs) = default;
 
   constexpr base::span<const Word, 1> data() const {
     return base::span<const Word, 1>(&word_, 1u);
@@ -310,9 +307,7 @@ class DenseSet {
       return owner_->bitset_.get_bit(index_);
     }
 
-    // This field is not a raw_ptr<> because it was filtered by the rewriter
-    // for: #constexpr-ctor-field-initializer
-    RAW_PTR_EXCLUSION const DenseSet* owner_ = nullptr;
+    raw_ptr<const DenseSet<T, Traits>> owner_ = nullptr;
 
     // The current index is in the interval [0, owner_->max_size()].
     Index index_ = 0;
@@ -355,13 +350,7 @@ class DenseSet {
     return bitset_.data();
   }
 
-  friend bool operator==(const DenseSet& a, const DenseSet& b) {
-    return a.bitset_ == b.bitset_;
-  }
-
-  friend bool operator!=(const DenseSet& a, const DenseSet& b) {
-    return !(a == b);
-  }
+  friend bool operator==(const DenseSet& a, const DenseSet& b) = default;
 
   // Iterators.
 
@@ -412,6 +401,9 @@ class DenseSet {
 
   // Inserts all values of |xs| into the present set.
   constexpr void insert_all(const DenseSet& xs) { bitset_ |= xs.bitset_; }
+
+  // Erases all elements that are not present in both `*this` and `xs`.
+  constexpr void intersect(const DenseSet& xs) { bitset_ &= xs.bitset_; }
 
   // Erases the element whose index matches the index of |x| and returns the
   // number of erased elements (0 or 1).

@@ -7,7 +7,7 @@
             "sub_dir": "Vulkan-Headers",
             "build_dir": "Vulkan-Headers/build",
             "install_dir": "Vulkan-Headers/build/install",
-            "commit": "v1.3.268"
+            "commit": "v1.3.275"
         },
         {
             "name": "googletest",
@@ -31,7 +31,7 @@
             "sub_dir": "magic_enum",
             "build_dir": "magic_enum/build",
             "install_dir": "magic_enum/build/install",
-            "commit": "v0.9.3",
+            "commit": "v0.9.5",
             "cmake_options": [
                 "-DMAGIC_ENUM_OPT_BUILD_EXAMPLES=OFF",
                 "-DMAGIC_ENUM_OPT_BUILD_TESTS=OFF"

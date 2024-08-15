@@ -22,7 +22,8 @@ class Browser;
                       parent:(VivaldiSpeedDialItem*)parent
                    bookmarks:(BookmarkModel*)bookmarks
                      browser:(Browser*)browser
-               faviconLoader:(FaviconLoader*)faviconLoader;
+               faviconLoader:(FaviconLoader*)faviconLoader
+             backgroundImage:(UIImage*)backgroundImage;
 
 - (instancetype)initWithBookmarks:(BookmarkModel*)bookmarks
                           browser:(Browser*)browser;

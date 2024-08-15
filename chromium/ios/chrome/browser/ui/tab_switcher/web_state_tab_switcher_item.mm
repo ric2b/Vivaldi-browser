@@ -31,8 +31,6 @@ const CGFloat kSymbolSize = 16;
 @implementation WebStateTabSwitcherItem {
   // The web state represented by this item.
   base::WeakPtr<web::WebState> _webState;
-  // The potentially prefetched snapshot for the web state.
-  UIImage* _prefetchedSnapshot;
 }
 
 - (instancetype)initWithWebState:(web::WebState*)webState {
@@ -40,14 +38,15 @@ const CGFloat kSymbolSize = 16;
   self = [super initWithIdentifier:webState->GetUniqueIdentifier()];
   if (self) {
     _webState = webState->GetWeakPtr();
-
-    [[NSNotificationCenter defaultCenter]
-        addObserver:self
-           selector:@selector(lowMemoryWarningReceived:)
-               name:UIApplicationDidReceiveMemoryWarningNotification
-             object:nil];
   }
   return self;
+}
+
+- (GURL)URL {
+  if (!_webState) {
+    return GURL();
+  }
+  return _webState->GetVisibleURL();
 }
 
 - (NSString*)title {
@@ -121,11 +120,6 @@ const CGFloat kSymbolSize = 16;
     return;
   }
 
-  if (_prefetchedSnapshot) {
-    completion(self, _prefetchedSnapshot);
-    return;
-  }
-
   __weak __typeof(self) weakSelf = self;
   SnapshotTabHelper::FromWebState(webState)->RetrieveColorSnapshot(
       ^(UIImage* snapshot) {
@@ -157,33 +151,6 @@ const CGFloat kSymbolSize = 16;
     return [UIImage imageNamed:vToolbarMenu]; // End Vivaldi
 
   return nil;
-}
-
-- (void)prefetchSnapshot {
-  web::WebState* webState = _webState.get();
-  if (!webState) {
-    return;
-  }
-
-  __weak __typeof(self) weakSelf = self;
-  SnapshotTabHelper::FromWebState(webState)->RetrieveColorSnapshot(
-      ^(UIImage* snapshot) {
-        WebStateTabSwitcherItem* strongSelf = weakSelf;
-        if (!strongSelf) {
-          return;
-        }
-        strongSelf->_prefetchedSnapshot = snapshot;
-      });
-}
-
-- (void)clearPrefetchedSnapshot {
-  _prefetchedSnapshot = nil;
-}
-
-#pragma mark - Private
-
-- (void)lowMemoryWarningReceived:(NSNotification*)notification {
-  [self clearPrefetchedSnapshot];
 }
 
 #pragma mark - NSObject

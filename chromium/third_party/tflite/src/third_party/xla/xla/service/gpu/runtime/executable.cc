@@ -43,6 +43,7 @@ limitations under the License.
 #include "xla/service/gpu/runtime/io_feed.h"
 #include "xla/service/gpu/runtime/memcpy.h"
 #include "xla/service/gpu/runtime/memset.h"
+#include "xla/service/gpu/runtime/norm.h"
 #include "xla/service/gpu/runtime/send_recv.h"
 #include "xla/service/gpu/runtime/stream_synchronization.h"
 #include "xla/service/gpu/runtime/support.h"
@@ -86,23 +87,23 @@ void RegisterXlaGpuRuntimeCustomCalls(DirectCustomCallRegistry& registry) {
   RegisterIoFeedCustomCalls(registry);
   RegisterMemsetCustomCalls(registry);
   RegisterSendRecvCustomCalls(registry);
-  RegisterTopkCustomCall(registry);
 
 #if GOOGLE_CUDA || TF_HIPBLASLT
   RegisterMatmulCustomCalls(registry);
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #if GOOGLE_CUDA
+  RegisterNormCustomCalls(registry);
   RegisterFusedAttentionCustomCalls(registry);
   RegisterFusedAttentionBackwardCustomCalls(registry);
-  RegisterCubSortCustomCalls(registry);
 #endif  // GOOGLE_CUDA
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   // Graph launch kernels depend on Cuda Graph API.
   RegisterGraphLaunchCustomCalls(registry);
   RegisterConcurrentRegionCustomCalls(registry);
   RegisterStreamSynchronizationCustomCalls(registry);
-
+  RegisterCubSortCustomCalls(registry);
   RegisterXlaClassicCustomCalls(registry);
+  RegisterTopkCustomCall(registry);
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 }
 
@@ -121,6 +122,7 @@ void RegisterXlaGpuTypeIdNames(TypeIDNameRegistry& registry) {
   registry.Register<Tagged<se::gpu::BlasLt::Epilogue>>(
       "__type_id_se_gpublas_lt_epilogue");
   RegisterFusedAttentionTypeIdNames(registry);
+  RegisterNormTypeIdNames(registry);
 #endif  // GOOGLE_CUDA || TF_HIPBLASLT
 }
 
@@ -135,6 +137,7 @@ void RegisterXlaGpuAttrEncoding(CustomCallAttrEncodingSet& encoding) {
   PopulateFusedAttentionAlgorithmConfigAttrEncoding(encoding);
   PopulateFusedAttentionForwardDAGSignatureAttrEncoding(encoding);
   PopulateFusedAttentionBackwardDAGSignatureAttrEncoding(encoding);
+  PopulateNormAlgorithmConfigAttrEncoding(encoding);
 #endif  // GOOGLE_CUDA || TF_HIPBLASLT
 }
 
@@ -411,6 +414,8 @@ Status GpuRuntimeExecutable::Execute(
 #endif
 
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+  StreamExecutorNormRunners::Snapshot norm_runners =
+      norm_runners_(executor)->snapshot();
   StreamExecutorFusedAttentionRunners::Snapshot fused_attention_runners =
       fused_attention_runners_(executor)->snapshot();
   StreamExecutorFusedAttentionBackwardRunners::Snapshot
@@ -429,7 +434,8 @@ Status GpuRuntimeExecutable::Execute(
 #if GOOGLE_CUDA
       // Auxiliary data that is available only if compiled with CUDA support
       // only.
-      &fused_attention_runners, &fused_attention_backward_runners,
+      &norm_runners, &fused_attention_runners,
+      &fused_attention_backward_runners,
 #endif  // GOOGLE_CUDA
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
       &graph_instances, &execution_count,
@@ -488,7 +494,7 @@ Status GpuRuntimeExecutable::Execute(
 
 //===----------------------------------------------------------------------===//
 
-Executable& GpuRuntimeExecutable::executable() {
+const Executable& GpuRuntimeExecutable::executable() const {
   if (auto* jit = std::get_if<std::unique_ptr<JitExecutable>>(&executable_)) {
     return *(*jit)->DefaultExecutable();
   }
@@ -496,10 +502,7 @@ Executable& GpuRuntimeExecutable::executable() {
 }
 
 StatusOr<std::string_view> GpuRuntimeExecutable::GetObjFile() const {
-  const auto* jit = std::get_if<std::unique_ptr<JitExecutable>>(&executable_);
-  if (!jit) return InternalError("ObjFile is not available");
-
-  if (auto obj_file = (*jit)->DefaultExecutable()->obj_file())
+  if (auto obj_file = executable().obj_file())
     return std::string_view(obj_file->getBuffer());
 
   return InternalError("gpu runtime executable didn't save the obj file");

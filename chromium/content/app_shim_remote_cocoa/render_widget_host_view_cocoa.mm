@@ -24,11 +24,12 @@
 #include "content/browser/accessibility/browser_accessibility_manager_mac.h"
 #import "content/browser/cocoa/system_hotkey_helper_mac.h"
 #import "content/browser/cocoa/system_hotkey_map.h"
-#include "content/browser/renderer_host/input/web_input_event_builders_mac.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
 #import "content/browser/renderer_host/render_widget_host_view_mac_editcommand_helper.h"
 #include "content/common/features.h"
+#include "content/common/input/web_input_event_builders_mac.h"
 #import "content/public/browser/render_widget_host_view_mac_delegate.h"
+#include "content/public/common/content_features.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom.h"
@@ -255,7 +256,7 @@ void ExtractUnderlines(NSAttributedString* string,
 
   // keyCode value of an NSEvent. This field has a value while we're handling
   // a key down event.
-  absl::optional<unsigned short> _currentKeyDownCode;
+  std::optional<unsigned short> _currentKeyDownCode;
 
   // Indicates if a reconversion (which means a piece of committed text becomes
   // part of the composition again) is triggered in Japanese IME when Live
@@ -349,7 +350,7 @@ void ExtractUnderlines(NSAttributedString* string,
   vivaldi::VivaldiScrollType vivaldiScrollType_;
 
   bool _keyboardLockActive;
-  absl::optional<base::flat_set<ui::DomCode>> _lockedKeys;
+  std::optional<base::flat_set<ui::DomCode>> _lockedKeys;
 
   NSCandidateListTouchBarItem* __strong _candidateListTouchBarItem;
   NSInteger _textSuggestionsSequenceNumber;
@@ -1006,7 +1007,7 @@ void ExtractUnderlines(NSAttributedString* string,
   }
 }
 
-- (void)lockKeyboard:(absl::optional<base::flat_set<ui::DomCode>>)keysToLock {
+- (void)lockKeyboard:(std::optional<base::flat_set<ui::DomCode>>)keysToLock {
   // TODO(joedow): Integrate System-level keyboard hook into this method.
   _lockedKeys = std::move(keysToLock);
   _keyboardLockActive = true;
@@ -2260,6 +2261,16 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
     }
 
     if (fixLiveConversion) {
+      CHECK_LE(_markedRange.location + newSelRange.location,
+               std::numeric_limits<uint32_t>::max())
+          << "`start` is too large; _markedRange.location="
+          << _markedRange.location
+          << "; newSelRange.location=" << newSelRange.location;
+      CHECK_LE(_markedRange.location + NSMaxRange(newSelRange),
+               std::numeric_limits<uint32_t>::max())
+          << "`end` is too large; _markedRange.location="
+          << _markedRange.location
+          << "; NSMaxRange(newSelRange)=" << NSMaxRange(newSelRange);
       _textSelectionRange =
           gfx::Range(_markedRange.location + newSelRange.location,
                      _markedRange.location + NSMaxRange(newSelRange));
@@ -2268,6 +2279,8 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
     // An empty text means the composition is about to be cancelled,
     // collapse the selection to the beginning of the current marked range.
     if (fixLiveConversion && _hasMarkedText) {
+      CHECK_LE(_markedRange.location, std::numeric_limits<uint32_t>::max())
+          << "_markedRange.location is too large.";
       _textSelectionRange =
           gfx::Range(_markedRange.location, _markedRange.location);
     }

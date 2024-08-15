@@ -12,7 +12,6 @@
 #include "components/password_manager/core/browser/features/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/smart_bubble_stats_store.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -45,7 +44,12 @@ ui::ImageModel GetPrimaryAccountAvatarFromProfile(Profile* profile,
   }
   AccountInfo primary_account_info = identity_manager->FindExtendedAccountInfo(
       identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin));
-  CHECK(!primary_account_info.IsEmpty());
+  // NOTE(andre@vivaldi.com) : Below was commented by Vivaldi since
+  // primary_account_info always is empty in Vivaldi. Note that empty
+  // AccountInfo might be disallowed elsewhere as well. The case here was that
+  // this dialog was hidden behind a feature in
+  // SaveUpdateBubbleController::ShouldShowPasswordStorePicker. VB-102835.
+  // CHECK(!primary_account_info.IsEmpty());
   gfx::Image account_icon = primary_account_info.account_image;
   if (account_icon.IsEmpty()) {
     account_icon = ui::ResourceBundle::GetSharedInstance().GetImageNamed(

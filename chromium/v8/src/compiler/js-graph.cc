@@ -74,6 +74,8 @@ Node* JSGraph::Constant(ObjectRef ref, JSHeapBroker* broker) {
       return PropertyCellHoleConstant();
     case HoleType::kHashTableHole:
       return HashTableHoleConstant();
+    case HoleType::kPromiseHole:
+      return PromiseHoleConstant();
     case HoleType::kOptimizedOut:
       return OptimizedOutConstant();
     case HoleType::kStaleRegister:
@@ -174,6 +176,16 @@ DEFINE_GETTER(AllocateInOldGenerationStubConstant, Code,
               HeapConstantNoHole(BUILTIN_CODE(isolate(),
                                               AllocateInOldGeneration)))
 
+#if V8_ENABLE_WEBASSEMBLY
+DEFINE_GETTER(WasmAllocateInYoungGenerationStubConstant, Code,
+              HeapConstantNoHole(BUILTIN_CODE(isolate(),
+                                              WasmAllocateInYoungGeneration)))
+
+DEFINE_GETTER(WasmAllocateInOldGenerationStubConstant, Code,
+              HeapConstantNoHole(BUILTIN_CODE(isolate(),
+                                              WasmAllocateInOldGeneration)))
+#endif
+
 DEFINE_GETTER(ArrayConstructorStubConstant, Code,
               HeapConstantNoHole(BUILTIN_CODE(isolate(), ArrayConstructorImpl)))
 
@@ -222,6 +234,9 @@ DEFINE_GETTER(PropertyCellHoleConstant, Hole,
 
 DEFINE_GETTER(HashTableHoleConstant, Hole,
               HeapConstantHole(factory()->hash_table_hole_value()))
+
+DEFINE_GETTER(PromiseHoleConstant, Hole,
+              HeapConstantHole(factory()->promise_hole_value()))
 
 DEFINE_GETTER(UninitializedConstant, Hole,
               HeapConstantHole(factory()->uninitialized_value()))

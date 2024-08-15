@@ -3,34 +3,32 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
-import type * as TraceEngine from '../../models/trace/trace.js';
 import * as PublicExtensions from '../../models/extensions/extensions.js';
+import type * as TraceEngine from '../../models/trace/trace.js';
 import * as Emulation from '../../panels/emulation/emulation.js';
 import * as Timeline from '../../panels/timeline/timeline.js';
+import * as Tracing from '../../services/tracing/tracing.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
+import * as Dialogs from '../../ui/components/dialogs/dialogs.js';
 import * as ComponentHelpers from '../../ui/components/helpers/helpers.js';
-import * as IconButton from '../../ui/components/icon_button/icon_button.js';
+import * as Menus from '../../ui/components/menus/menus.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as LitHtml from '../../ui/lit-html/lit-html.js';
-import * as Tracing from '../../services/tracing/tracing.js';
-import * as Menus from '../../ui/components/menus/menus.js';
-import * as Dialogs from '../../ui/components/dialogs/dialogs.js';
-import type * as Controllers from './controllers/controllers.js';
-import * as Components from './components/components.js';
 
+import * as Components from './components/components.js';
 import {type AddBreakpointEvent, type RemoveBreakpointEvent} from './components/StepView.js';
+import type * as Controllers from './controllers/controllers.js';
 import * as Converters from './converters/converters.js';
 import * as Extensions from './extensions/extensions.js';
-
 import * as Models from './models/models.js';
+import * as Actions from './recorder-actions/recorder-actions.js';
 import recorderControllerStyles from './recorderController.css.js';
 import * as Events from './RecorderEvents.js';
-import * as Actions from './recorder-actions.js';
 
 const {html, Decorators, LitElement} = LitHtml;
 const {customElement, state} = Decorators;
@@ -48,6 +46,15 @@ const UIStrings = {
    * @description The title of the button that deletes the recording
    */
   deleteRecording: 'Delete recording',
+  /**
+   * @description The title of the select if user has no saved recordings
+   */
+  noRecordings: 'No recordings',
+  /**
+   * @description The title of the select option for one or more recording
+   * number followed by this text - `1 recording(s)` or `4 recording(s)`
+   */
+  numberOfRecordings: 'recording(s)',
   /**
    * @description The title of the button that continues the replay
    */
@@ -1176,12 +1183,12 @@ export class RecorderController extends LitElement {
       recordings.length === 0
         ? {
             value: Pages.StartPage,
-            name: 'No recordings',
+            name: i18nString(UIStrings.noRecordings),
             selected: selectValue === Pages.StartPage,
           }
         : {
             value: Pages.AllRecordingsPage,
-            name: `${recordings.length} recording(s)`,
+            name: `${recordings.length} ${i18nString(UIStrings.numberOfRecordings)}`,
             selected: selectValue === Pages.AllRecordingsPage,
           },
       ...recordings.map(recording => ({
@@ -1321,22 +1328,19 @@ export class RecorderController extends LitElement {
               }
             ></${Buttons.Button.Button.litTagName}>
             <div class="separator"></div>
-            <button class="continue-button"
-              .disabled=${
-                !this.recordingPlayer ||
-                !this.#replayState.isPausedOnBreakpoint
+            <${Buttons.Button.Button.litTagName}
+              @click=${(): void => this.recordingPlayer?.continue()}
+              .data=${
+                {
+                  variant: Buttons.Button.Variant.PRIMARY_TOOLBAR,
+                  iconName: 'resume',
+                  disabled:
+                    !this.recordingPlayer ||
+                    !this.#replayState.isPausedOnBreakpoint,
+                  title: i18nString(UIStrings.continueReplay),
+                } as Buttons.Button.ButtonData
               }
-              title=${i18nString(UIStrings.continueReplay)}
-              @click=${(): void => this.recordingPlayer?.continue()}>
-                <${IconButton.Icon.Icon.litTagName}
-                  .data=${
-                    {
-                      iconName: 'resume',
-                      color: 'var(--icon-color)',
-                    } as IconButton.Icon.IconData
-                  }
-                ></${IconButton.Icon.Icon.litTagName}>
-            </button>
+            ></${Buttons.Button.Button.litTagName}>
             <${Buttons.Button.Button.litTagName}
               @click=${(): void => this.recordingPlayer?.stepOver()}
               .data=${

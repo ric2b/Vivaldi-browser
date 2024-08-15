@@ -9,6 +9,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "components/viz/common/overlay_state/win/overlay_state_service.h"
@@ -68,9 +69,10 @@ enum DCLayerResult {
 
 bool IsCompatibleHDRMetadata(
     const absl::optional<gfx::HDRMetadata>& hdr_metadata) {
-  return hdr_metadata && hdr_metadata->smpte_st_2086 &&
-         hdr_metadata->smpte_st_2086->IsValid() && hdr_metadata->cta_861_3 &&
-         hdr_metadata->cta_861_3->IsValid();
+  return hdr_metadata &&
+         ((hdr_metadata->smpte_st_2086 &&
+           hdr_metadata->smpte_st_2086->IsValid()) ||
+          (hdr_metadata->cta_861_3 && hdr_metadata->cta_861_3->IsValid()));
 }
 
 DCLayerResult ValidateYUVOverlay(
@@ -108,10 +110,10 @@ DCLayerResult ValidateYUVOverlay(
 
   if (video_color_space.IsHDR()) {
     // Otherwise, it could be a parser bug like https://crbug.com/1362288 if the
-    // hdr metadata is still missing. Missing `smpte_st_2086` and `cta_861_3`
-    // could always cause intel driver crash when in HDR overlay mode, and
+    // hdr metadata is still missing. Missing `smpte_st_2086` or `cta_861_3`
+    // could always causes intel driver crash when in HDR overlay mode, and
     // technically as long as one of the `smpte_st_2086` or `cta_861_3` exists
-    // could solve the crash issue, but for safe reason, validate both here.
+    // could solve the crash issue.
     if (!IsCompatibleHDRMetadata(hdr_metadata)) {
       return DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA;
     }
@@ -192,10 +194,10 @@ DCLayerResult ValidateYUVQuad(
 
   if (quad->video_color_space.IsHDR()) {
     // Otherwise, it could be a parser bug like https://crbug.com/1362288 if the
-    // hdr metadata is still missing. Missing `smpte_st_2086` and `cta_861_3`
-    // could always cause intel driver crash when in HDR overlay mode, and
+    // hdr metadata is still missing. Missing `smpte_st_2086` or `cta_861_3`
+    // could always causes intel driver crash when in HDR overlay mode, and
     // technically as long as one of the `smpte_st_2086` or `cta_861_3` exists
-    // could solve the crash issue, but for safe reason, validate both here.
+    // could solve the crash issue.
     if (!IsCompatibleHDRMetadata(quad->hdr_metadata)) {
       return DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA;
     }
@@ -290,8 +292,7 @@ DCLayerResult ValidateTextureQuad(
   }
 
   if (quad->is_video_frame) {
-    auto color_space =
-        resource_provider->GetOverlayColorSpace(quad->resource_id());
+    auto color_space = resource_provider->GetColorSpace(quad->resource_id());
     auto buffer_format =
         resource_provider->GetBufferFormat(quad->resource_id());
     auto result = ValidateYUVOverlay(
@@ -338,8 +339,7 @@ void FromTextureQuad(const TextureDrawQuad* quad,
         quad->shared_quad_state->clip_rect.value_or(gfx::Rect()));
   }
 
-  dc_layer->color_space =
-      resource_provider->GetOverlayColorSpace(quad->resource_id());
+  dc_layer->color_space = resource_provider->GetColorSpace(quad->resource_id());
   dc_layer->hdr_metadata = quad->hdr_metadata;
   // Both color space and protected_video_type are hard-coded for stream video.
   // TODO(crbug.com/1384544): Consider using quad->protected_video_type.
@@ -599,6 +599,29 @@ bool IsClearVideoQuad(const QuadList::ConstIterator& it) {
   return IsVideoQuad(it) && !IsOverlayRequiredForQuad(it);
 }
 
+bool AllowRemoveClearVideoQuadCandidatesWhenMoving(
+    DisplayResourceProvider* resource_provider,
+    const QuadList::ConstIterator& it) {
+  if (!IsClearVideoQuad(it)) {
+    return false;
+  }
+  // Do not allow remove clear video quad candidates for HDR videos, since there
+  // will always be a huge visual difference between compositor tone-mapping (by
+  // Chrome) and MPO tone-mapping (by Driver).
+  switch (it->material) {
+    case DrawQuad::Material::kYuvVideoContent: {
+      const YUVVideoDrawQuad* quad = YUVVideoDrawQuad::MaterialCast(*it);
+      return !quad->video_color_space.IsHDR();
+    }
+    case DrawQuad::Material::kTextureContent: {
+      const TextureDrawQuad* quad = TextureDrawQuad::MaterialCast(*it);
+      return !resource_provider->GetColorSpace(quad->resource_id()).IsHDR();
+    }
+    default:
+      NOTREACHED_NORETURN();
+  }
+}
+
 // This is the damage contribution due to previous frame's overlays which can
 // be empty.
 gfx::Rect PreviousFrameOverlayDamageContribution(
@@ -732,7 +755,7 @@ void DCLayerOverlayProcessor::UpdateDamageRect(
         // We only support at most two overlays. The size of
         // damages_to_be_removed will not be bigger than 2. We should revisit
         // this damages_to_be_removed for-loop if we try to support many
-        // overlays. See capabilities.supports_two_yuv_hardware_overlays.
+        // overlays. See capabilities.allowed_yuv_overlay_count.
         for (const auto index_to_be_removed :
              current_frame_state.damages_to_be_removed) {
           // The overlay damages and the damages right below them will not be
@@ -765,6 +788,7 @@ void DCLayerOverlayProcessor::UpdateDamageRect(
 }
 
 void DCLayerOverlayProcessor::RemoveClearVideoQuadCandidatesIfMoving(
+    DisplayResourceProvider* resource_provider,
     RenderPassOverlayDataMap& render_pass_overlay_data_map,
     RenderPassCurrentFrameStateMap& render_pass_state_map) {
   // The number of frames all overlay candidates need to be stable before we
@@ -779,7 +803,8 @@ void DCLayerOverlayProcessor::RemoveClearVideoQuadCandidatesIfMoving(
     current_overlay_candidate_rects.reserve(
         current_overlay_candidate_rects.size() + candidates.size());
     for (auto candidate_it : candidates) {
-      if (IsClearVideoQuad(candidate_it)) {
+      if (AllowRemoveClearVideoQuadCandidatesWhenMoving(resource_provider,
+                                                        candidate_it)) {
         gfx::Rect quad_rect_in_target_space =
             ClippedQuadRectangle(*candidate_it);
         gfx::Rect quad_rect_in_root_space =
@@ -809,7 +834,8 @@ void DCLayerOverlayProcessor::RemoveClearVideoQuadCandidatesIfMoving(
 
       auto candidate_it = candidates.begin();
       while (candidate_it != candidates.end()) {
-        if (IsClearVideoQuad(*candidate_it)) {
+        if (AllowRemoveClearVideoQuadCandidatesWhenMoving(resource_provider,
+                                                          *candidate_it)) {
           RecordDCLayerResult(DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED,
                               *candidate_it);
           candidate_it = candidates.erase(candidate_it);
@@ -1112,8 +1138,8 @@ void DCLayerOverlayProcessor::Process(
   global_overlay_state.processed_yuv_overlay_count = 0;
 
   if (base::FeatureList::IsEnabled(features::kDisableVideoOverlayIfMoving)) {
-    RemoveClearVideoQuadCandidatesIfMoving(render_pass_overlay_data_map,
-                                           render_pass_state_map);
+    RemoveClearVideoQuadCandidatesIfMoving(
+        resource_provider, render_pass_overlay_data_map, render_pass_state_map);
   }
 
   // Swap the entire map into a local variable. For the rest of this function,

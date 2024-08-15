@@ -39,7 +39,8 @@ void LCPCriticalPathPredictorHost::Create(
 LCPCriticalPathPredictorHost::~LCPCriticalPathPredictorHost() = default;
 
 void LCPCriticalPathPredictorHost::SetLcpElementLocator(
-    const std::string& lcp_element_locator) {
+    const std::string& lcp_element_locator,
+    std::optional<uint32_t> predicted_lcp_index) {
   // `LcpCriticalPathPredictorPageLoadMetricsObserver::OnCommit()` stores
   // `LcpCriticalPathPredictorPageLoadMetricsObserver` in `PageData` as a weak
   // pointer. This weak pointer can be deleted at any time.
@@ -48,7 +49,7 @@ void LCPCriticalPathPredictorHost::SetLcpElementLocator(
               render_frame_host().GetPage())) {
     if (auto* plmo =
             page_data->GetLcpCriticalPathPredictorPageLoadMetricsObserver()) {
-      plmo->SetLcpElementLocator(lcp_element_locator);
+      plmo->SetLcpElementLocator(lcp_element_locator, predicted_lcp_index);
     }
   }
 }
@@ -96,6 +97,50 @@ void LCPCriticalPathPredictorHost::NotifyFetchedFont(const GURL& font_url) {
   }
 
   plmo->AppendFetchedFontUrl(font_url);
+}
+
+void LCPCriticalPathPredictorHost::NotifyFetchedSubresource(
+    const GURL& subresource_url,
+    base::TimeDelta subresource_load_start) {
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kHttpDiskCachePrewarming)) {
+    ReportBadMessageAndDeleteThis(
+        "NotifyFetchedSubresource can be called "
+        "only if kHttpDiskCachePrewarming is enabled.");
+    return;
+  }
+  if (!subresource_url.SchemeIsHTTPOrHTTPS()) {
+    ReportBadMessageAndDeleteThis("url scheme must be HTTP or HTTPS.");
+    return;
+  }
+  if (subresource_load_start.is_negative()) {
+    ReportBadMessageAndDeleteThis(
+        "subresource load start must not be negative value.");
+    return;
+  }
+  static size_t max_url_length = base::checked_cast<size_t>(
+      blink::features::kHttpDiskCachePrewarmingMaxUrlLength.Get());
+  if (subresource_url.spec().length() > max_url_length) {
+    // The size can be different between KURL and GURL, not reporting
+    // bad message.
+    return;
+  }
+  // Due to an unresolved bug (crbug.com/1335845), GetForPage can return
+  // nullptr.
+  auto* page_data =
+      LcpCriticalPathPredictorPageLoadMetricsObserver::PageData::GetForPage(
+          render_frame_host().GetPage());
+  if (!page_data) {
+    return;
+  }
+  // `LcpCriticalPathPredictorPageLoadMetricsObserver::OnCommit()` stores
+  // `LcpCriticalPathPredictorPageLoadMetricsObserver` in `PageData` as a weak
+  // pointer. This weak pointer can be deleted at any time.
+  auto* plmo = page_data->GetLcpCriticalPathPredictorPageLoadMetricsObserver();
+  if (!plmo) {
+    return;
+  }
+  plmo->AppendFetchedSubresourceUrl(subresource_url, subresource_load_start);
 }
 
 }  // namespace predictors

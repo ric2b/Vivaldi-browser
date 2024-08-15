@@ -52,6 +52,12 @@
 - (void)setLocationBarView:(UIView*)locationBarView;
 
 // Vivaldi
+@property(nonatomic, assign, readwrite) BOOL bottomOmniboxEnabled;
+@property(nonatomic, assign, readwrite) BOOL tabBarEnabled;
+// Booleans that controls the toolbar overflow menu actions.
+@property(nonatomic, assign, readwrite) BOOL canShowBack;
+@property(nonatomic, assign, readwrite) BOOL canShowForward;
+@property(nonatomic, assign, readwrite) BOOL canShowAdTrackerBlocker;
 @optional
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
                   desktopTabEnabled:(BOOL)desktopTabEnabled;

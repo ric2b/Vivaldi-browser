@@ -5,15 +5,31 @@
 package org.chromium.chrome.browser.tabmodel;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.ActivityManager.AppTask;
+import android.content.Context;
+import android.os.Build.VERSION;
+import android.os.Build.VERSION_CODES;
 import android.util.Pair;
 import android.util.SparseArray;
+
+import androidx.annotation.IntDef;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
+import org.chromium.base.Log;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
+import org.chromium.chrome.browser.util.AndroidTaskUtils;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +41,35 @@ import java.util.Map;
  * Also manages tabs being reparented in AsyncTabParamsManager.
  */
 public class TabWindowManagerImpl implements ActivityStateListener, TabWindowManager {
+
+    public static final String TAG_MULTI_INSTANCE = "MultiInstance";
+
+    /**
+     * Debugging enums representing activity state in {@link #assertIndicesMatch}. These values are
+     * persisted to logs. Entries should not be renumbered and numeric values should never be
+     * reused.
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+        PreAssignedActivityState.UNKNOWN,
+        PreAssignedActivityState.NOT_IN_APP_TASK_IS_FINISHING,
+        PreAssignedActivityState.NOT_IN_APP_TASK_NOT_FINISHING,
+        PreAssignedActivityState.IN_APP_TASK_SAME_TASK_IS_FINISHING,
+        PreAssignedActivityState.IN_APP_TASK_SAME_TASK_NOT_FINISHING,
+        PreAssignedActivityState.IN_APP_TASK_DIFFERENT_TASK_IS_FINISHING,
+        PreAssignedActivityState.IN_APP_TASK_DIFFERENT_TASK_NOT_FINISHING,
+    })
+    @interface PreAssignedActivityState {
+        int UNKNOWN = 0;
+        int NOT_IN_APP_TASK_IS_FINISHING = 1;
+        int NOT_IN_APP_TASK_NOT_FINISHING = 2;
+        int IN_APP_TASK_SAME_TASK_IS_FINISHING = 3;
+        int IN_APP_TASK_SAME_TASK_NOT_FINISHING = 4;
+        int IN_APP_TASK_DIFFERENT_TASK_IS_FINISHING = 5;
+        int IN_APP_TASK_DIFFERENT_TASK_NOT_FINISHING = 6;
+        int NUM_ENTRIES = 7;
+    }
+
     private TabModelSelectorFactory mSelectorFactory;
     private final AsyncTabParamsManager mAsyncTabParamsManager;
     private final int mMaxSelectors;
@@ -33,8 +78,10 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
 
     private Map<Activity, TabModelSelector> mAssignments = new HashMap<>();
 
-    TabWindowManagerImpl(TabModelSelectorFactory selectorFactory,
-            AsyncTabParamsManager asyncTabParamsManager, int maxSelectors) {
+    TabWindowManagerImpl(
+            TabModelSelectorFactory selectorFactory,
+            AsyncTabParamsManager asyncTabParamsManager,
+            int maxSelectors) {
         mSelectorFactory = selectorFactory;
         mAsyncTabParamsManager = asyncTabParamsManager;
         ApplicationStatus.registerStateListenerForAllActivities(this);
@@ -48,8 +95,11 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
     }
 
     @Override
-    public Pair<Integer, TabModelSelector> requestSelector(Activity activity,
-            TabCreatorManager tabCreatorManager, NextTabPolicySupplier nextTabPolicySupplier,
+    public Pair<Integer, TabModelSelector> requestSelector(
+            Activity activity,
+            OneshotSupplier<ProfileProvider> profileProviderSupplier,
+            TabCreatorManager tabCreatorManager,
+            NextTabPolicySupplier nextTabPolicySupplier,
             int index) {
         if (index < 0 || index >= mSelectors.size()) return null;
 
@@ -58,7 +108,15 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
             TabModelSelector assignedSelector = mAssignments.get(activity);
             for (int i = 0; i < mSelectors.size(); i++) {
                 if (mSelectors.get(i) == assignedSelector) {
-                    return Pair.create(i, assignedSelector);
+                    Pair res = Pair.create(i, assignedSelector);
+                    Log.i(
+                            TAG_MULTI_INSTANCE,
+                            "Returning existing selector with index: "
+                                    + res
+                                    + ". Requested index: "
+                                    + index);
+                    assertIndicesMatch(index, i, "Activity already mapped; ", activity);
+                    return res;
                 }
             }
             // The following log statement is used in tools/android/build_speed/benchmark.py. Please
@@ -67,6 +125,7 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
                     "TabModelSelector is assigned to an Activity but has no index.");
         }
 
+        int originalIndex = index;
         if (mSelectors.get(index) != null) {
             for (int i = 0; i < mSelectors.size(); i++) {
                 if (mSelectors.get(i) == null) {
@@ -79,12 +138,148 @@ public class TabWindowManagerImpl implements ActivityStateListener, TabWindowMan
         // Too many activities going at once.
         if (mSelectors.get(index) != null) return null;
 
-        TabModelSelector selector = mSelectorFactory.buildSelector(
-                activity, tabCreatorManager, nextTabPolicySupplier, index);
+        TabModelSelector selector =
+                mSelectorFactory.buildSelector(
+                        activity,
+                        profileProviderSupplier,
+                        tabCreatorManager,
+                        nextTabPolicySupplier);
         mSelectors.set(index, selector);
         mAssignments.put(activity, selector);
 
-        return Pair.create(index, selector);
+        Pair res = Pair.create(index, selector);
+        Log.i(TAG_MULTI_INSTANCE, "Returning new selector for " + activity + " with index: " + res);
+        assertIndicesMatch(originalIndex, index, "Index in use; ", activity);
+        return res;
+    }
+
+    private void assertIndicesMatch(
+            int requestedIndex, int returnedIndex, String type, Activity newActivity) {
+        if (requestedIndex == returnedIndex
+                // Needed for ActivityManager.RecentTaskInfo.taskId
+                || VERSION.SDK_INT < VERSION_CODES.Q) {
+            return;
+        }
+
+        boolean assertMismatch = !BuildConfig.IS_FOR_TEST && BuildConfig.ENABLE_ASSERTS;
+        boolean forceReportMismatch =
+                ChromeFeatureList.sTabWindowManagerReportIndicesMismatch.isEnabled();
+        if (!forceReportMismatch && !assertMismatch) {
+            return;
+        }
+
+        TabModelSelector selectorAtRequestedIndex = mSelectors.get(requestedIndex);
+        Activity activityAtRequestedIndex = null;
+        for (Activity mappedActivity : mAssignments.keySet()) {
+            if (mAssignments.get(mappedActivity).equals(selectorAtRequestedIndex)) {
+                activityAtRequestedIndex = mappedActivity;
+                break;
+            }
+        }
+
+        String message =
+                type
+                        + "Requested "
+                        + requestedIndex
+                        + " and returned "
+                        + returnedIndex
+                        + " new activity: "
+                        + newActivity
+                        + " new activity task id: "
+                        + newActivity.getTaskId()
+                        + " activity at requested index: "
+                        + activityAtRequestedIndex;
+        if (activityAtRequestedIndex == null) {
+            recordUmaForAssertIndicesMatch(PreAssignedActivityState.UNKNOWN);
+        } else {
+            int activityAtRequestedIndexTaskId = activityAtRequestedIndex.getTaskId();
+            boolean isFinishing = activityAtRequestedIndex.isFinishing();
+            message +=
+                    " ApplicationStatus activity state: "
+                            + ApplicationStatus.getStateForActivity(activityAtRequestedIndex)
+                            + " activity task Id: "
+                            + activityAtRequestedIndexTaskId
+                            + " activity is finishing? "
+                            + isFinishing
+                            + " tasks: [";
+            ActivityManager activityManager =
+                    (ActivityManager)
+                            activityAtRequestedIndex.getSystemService(Context.ACTIVITY_SERVICE);
+
+            boolean isInAppTask = false;
+            for (AppTask task : activityManager.getAppTasks()) {
+                ActivityManager.RecentTaskInfo info = AndroidTaskUtils.getTaskInfoFromTask(task);
+                message += info + ";\n";
+                if (info.taskId == activityAtRequestedIndexTaskId) {
+                    isInAppTask = true;
+                }
+            }
+
+            message += "]";
+
+            boolean isSameTask = activityAtRequestedIndexTaskId == newActivity.getTaskId();
+            @PreAssignedActivityState
+            int state = getPreAssignedActivityState(isInAppTask, isSameTask, isFinishing);
+            recordUmaForAssertIndicesMatch(state);
+
+            // Start actively listen to activity status once conflict at index is found.
+            ApplicationStatus.registerStateListenerForActivity(
+                    getActivityStateListenerForPreAssignedActivity(state),
+                    activityAtRequestedIndex);
+        }
+
+        if (!BuildConfig.IS_FOR_TEST) {
+            assert requestedIndex == returnedIndex : message;
+        }
+        Log.i(TAG_MULTI_INSTANCE, message);
+    }
+
+    private @PreAssignedActivityState int getPreAssignedActivityState(
+            boolean isInAppTask, boolean isSameTask, boolean isFinishing) {
+        if (!isInAppTask) {
+            return isFinishing
+                    ? PreAssignedActivityState.NOT_IN_APP_TASK_IS_FINISHING
+                    : PreAssignedActivityState.NOT_IN_APP_TASK_NOT_FINISHING;
+        }
+        if (isSameTask) {
+            return isFinishing
+                    ? PreAssignedActivityState.IN_APP_TASK_SAME_TASK_IS_FINISHING
+                    : PreAssignedActivityState.IN_APP_TASK_SAME_TASK_NOT_FINISHING;
+        }
+        return isFinishing
+                ? PreAssignedActivityState.IN_APP_TASK_DIFFERENT_TASK_IS_FINISHING
+                : PreAssignedActivityState.IN_APP_TASK_DIFFERENT_TASK_NOT_FINISHING;
+    }
+
+    private void recordUmaForAssertIndicesMatch(@PreAssignedActivityState int state) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.MultiWindowMode.AssertIndicesMatch",
+                state,
+                PreAssignedActivityState.NUM_ENTRIES);
+    }
+
+    private ActivityStateListener getActivityStateListenerForPreAssignedActivity(
+            @PreAssignedActivityState int state) {
+        return (activityAtIndex, newState) -> {
+            final int localTaskId = ApplicationStatus.getTaskId(activityAtIndex);
+            Log.i(
+                    TAG_MULTI_INSTANCE,
+                    "ActivityAtRequestedIndex "
+                            + activityAtIndex
+                            + " taskId "
+                            + localTaskId
+                            + " newState "
+                            + newState
+                            + " state during indices mismatch "
+                            + state);
+
+            if (newState == ActivityState.DESTROYED) {
+                RecordHistogram.recordEnumeratedHistogram(
+                        "Android.MultiWindowMode.AssertIndicesMatch.PreExistingActivityDestroyed",
+                        state,
+                        PreAssignedActivityState.NUM_ENTRIES);
+            }
+        };
     }
 
     @Override

@@ -17,7 +17,7 @@ cmake_minimum_required(VERSION 3.14)
 project(NearbyProtocol)
 
 # required for designated initializers on MSVC
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 # root directory of repo
 set(BETO_CORE_ROOT ${CMAKE_SOURCE_DIR}/../..)
@@ -32,20 +32,15 @@ if (UNIX)
     set(CMAKE_CXX_FLAGS_DEBUG "-g ${CMAKE_C_FLAGS_DEBUG}")
 endif ()
 
-if (UNIX)
-    add_compile_options(-Wall -Wextra -Wimplicit-fallthrough -Wextra-semi
-            -Wno-missing-field-initializers -Wno-unused-parameter -Wno-psabi
-            -Wshadow
-            -Wsign-compare)
-elseif (MSVC)
-    add_compile_options(-W4 -O1)
-endif ()
-
 find_package(OpenSSL REQUIRED)
 if (OPENSSL_FOUND)
     message(STATUS "OpenSSL Found: ${OPENSSL_VERSION}")
     message(STATUS "OpenSSL Include: ${OPENSSL_INCLUDE_DIR}")
     message(STATUS "OpenSSL Libraries: ${OPENSSL_LIBRARIES}")
+endif ()
+
+if (MSVC)
+    add_compile_options(-W4 -O1 -MD)
 endif ()
 
 if (ENABLE_TESTS)
@@ -62,8 +57,8 @@ if (ENABLE_TESTS)
     enable_testing()
     include(GoogleTest)
 
-    # Find GoogleBenchmark
-    find_package(benchmark REQUIRED)
+    # Include google benchmark
+    add_subdirectory(${THIRD_PARTY_DIR}/benchmark ${THIRD_PARTY_DIR}/benchmark/build)
 
     # Setup jsoncpp
     set(JSONCPP_DIR ${THIRD_PARTY_DIR}/jsoncpp)
@@ -73,6 +68,15 @@ if (ENABLE_TESTS)
             ${JSONCPP_DIR}/jsoncpp.cpp
     )
 endif ()
+
+# Add these compile options for our own code, not needed for the above deps
+if (UNIX)
+    add_compile_options(-Wall -Wextra -Wimplicit-fallthrough -Wextra-semi
+            -Wno-missing-field-initializers -Wno-unused-parameter -Wno-psabi
+            -Wshadow
+            -Wsign-compare)
+endif()
+
 
 add_subdirectory(np_cpp_ffi)
 add_subdirectory(ldt_np_c_sample)

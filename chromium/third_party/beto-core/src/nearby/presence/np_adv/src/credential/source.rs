@@ -12,139 +12,135 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Traits defining sources for credentials. These are used in the deserialization path to provide
-//! the credentials to try. [`SliceCredentialSource`] and [`OwnedCredentialSource`] implementations
-//! are also defined in this module.
+//! Definitions of traits for structures which supply
+//! credentials for discovering advertisements/advertisement
+//! sections for a _particular_ protocol version.
 
-use super::*;
-use alloc::vec::Vec;
+use crate::credential::{
+    DiscoveryCryptoMaterial, MatchableCredential, MatchedCredential, ProtocolVersion,
+    ReferencedMatchedCredential,
+};
+use core::borrow::Borrow;
 
-/// A source of credentials to try when decrypting advertisements,
-/// which really just wraps an iterator over a given credential type.
-pub trait CredentialSource<C: MatchableCredential> {
-    /// The iterator type produced that emits credentials
-    type Iterator<'a>: Iterator<Item = &'a C>
-    where
-        Self: 'a,
-        C: 'a;
+/// Specialized version of the [`CredentialSource`] trait for
+/// credential-sources which provide discovery credentials
+/// for a specific protocol version.
+///
+/// If you want ready-made structures which can provide
+/// credentials for both V0 and V1 protocol versions,
+/// see [`crate::credential::book::CredentialBook`]
+/// and [`crate::credential::book::CredentialBookBuilder`] instead.
+///
+/// It's preferred to use this kind of credential-source
+/// in client code, if possible, and then lift to a
+/// [`CredentialSource`] using [`AsCredentialSource`]
+/// instead of implementing [`CredentialSource`] directly,
+/// since it's better to trust this crate to handle
+/// the details of what's in [`DiscoveryCryptoMaterial`]s
+/// for specific protocol versions.
+pub trait DiscoveryCredentialSource<'a, V: ProtocolVersion>
+where
+    Self: 'a,
+{
+    /// The kind of data yielded to the caller upon a successful
+    /// identity-match.
+    type Matched: MatchedCredential;
+
+    /// The kind of crypto-material yielded from the wrapped
+    /// iterator, which allows borrowing a discovery credential.
+    type Crypto: DiscoveryCryptoMaterial<V> + Borrow<V::DiscoveryCredential>;
+
+    /// The iterator type produced which emits credentials.
+    /// This is a lending iterator which may borrow things from `self`.
+    type Iterator: Iterator<Item = (Self::Crypto, Self::Matched)>;
 
     /// Iterate over the available credentials
-    fn iter(&self) -> Self::Iterator<'_>;
+    fn iter(&'a self) -> Self::Iterator;
 }
 
-/// Trait for combined credential sources able to yield credential sources for both V0 and V1.
-pub trait BothCredentialSource<C0, C1>
+/// A source of credentials for a particular protocol version,
+/// utilizing any [`DiscoveryCryptoMaterial`] which is usable
+/// for discovering advertisements in that protocol version.
+///
+/// This trait is largely leveraged as a tool for building
+/// new kinds of [`crate::credential::book::CredentialBook`]s
+/// via the [`crate::credential::book::CredentialBookFromSources`]
+/// wrapper. It differs from the [`DiscoveryCredentialSource`]
+/// trait in that the crypto-materials do not have to be
+/// discovery credentials, and can instead be some pre-calculated
+/// crypto-materials.
+///
+/// See [`crate::credential::book::CachedCredentialSource`]
+/// for an example of this pattern.
+pub trait CredentialSource<'a, V: ProtocolVersion>
 where
-    C0: V0Credential,
-    C1: V1Credential,
+    Self: 'a,
 {
-    /// The type of the underlying credential-source for v0 credentials
-    type V0Source: CredentialSource<C0>;
-    /// The type of the underlying credential-source for v1 credentials
-    type V1Source: CredentialSource<C1>;
+    /// The kind of data yielded to the caller upon a successful
+    /// identity-match.
+    type Matched: MatchedCredential;
 
-    /// Gets a source for v0 credentials maintained by this `BothCredentialSource`.
-    fn v0(&self) -> &Self::V0Source;
+    /// The kind of crypto-material yielded from the wrapped
+    /// iterator.
+    type Crypto: DiscoveryCryptoMaterial<V>;
 
-    /// Gets a source for v1 credentials maintained by this `BothCredentialSource`.
-    fn v1(&self) -> &Self::V1Source;
+    /// The iterator type produced which emits credentials.
+    /// This is a lending iterator which may borrow things from `self`.
+    type Iterator: Iterator<Item = (Self::Crypto, Self::Matched)>;
 
-    /// Convenient function alias to [`self.v0().iter()`] for iterating
-    /// over v0 credentials.
-    fn iter_v0(&self) -> <Self::V0Source as CredentialSource<C0>>::Iterator<'_> {
-        self.v0().iter()
-    }
+    /// Iterate over the available credentials
+    fn iter(&'a self) -> Self::Iterator;
+}
 
-    /// Convenient function alias to the [`CredentialSource<C1>#iter()`] for iterating
-    /// over v0 credentials.
-    fn iter_v1(&self) -> <Self::V1Source as CredentialSource<C1>>::Iterator<'_> {
-        self.v1().iter()
+// Note: This is needed to get around coherence problems
+// with the [`CredentialSource`] trait's relationship
+// with [`DiscoveryCredentialSource`] if it were declared
+// as a sub-trait (i.e: conflicting impls)
+/// Wrapper which turns any [`DiscoveryCredentialSource`]
+/// into a [`CredentialSource`].
+pub struct AsCredentialSource<S>(pub S);
+
+impl<'a, V: ProtocolVersion, S: DiscoveryCredentialSource<'a, V>> CredentialSource<'a, V>
+    for AsCredentialSource<S>
+{
+    type Matched = <S as DiscoveryCredentialSource<'a, V>>::Matched;
+    type Crypto = <S as DiscoveryCredentialSource<'a, V>>::Crypto;
+    type Iterator = <S as DiscoveryCredentialSource<'a, V>>::Iterator;
+
+    fn iter(&'a self) -> Self::Iterator {
+        self.0.iter()
     }
 }
 
-/// A simple [CredentialSource] that just iterates over a provided slice of credentials
-pub struct SliceCredentialSource<'c, C: MatchableCredential> {
-    credentials: &'c [C],
+/// A simple [`DiscoveryCredentialSource`] which iterates over a provided slice of credentials
+pub struct SliceCredentialSource<'c, V: ProtocolVersion, M: MatchedCredential> {
+    credentials: &'c [MatchableCredential<V, M>],
 }
 
-impl<'c, C: MatchableCredential> SliceCredentialSource<'c, C> {
-    /// Construct the credential source from the provided credentials.
-    pub fn new(credentials: &'c [C]) -> Self {
+impl<'c, V: ProtocolVersion, M: MatchedCredential> SliceCredentialSource<'c, V, M> {
+    /// Construct the credential supplier from the provided slice of credentials.
+    pub fn new(credentials: &'c [MatchableCredential<V, M>]) -> Self {
         Self { credentials }
     }
 }
 
-impl<'c, C: MatchableCredential> CredentialSource<C> for SliceCredentialSource<'c, C> {
-    type Iterator<'i>  = core::slice::Iter<'i, C>
-    where Self: 'i;
-
-    fn iter(&'_ self) -> Self::Iterator<'_> {
-        self.credentials.iter()
-    }
-}
-
-/// A simple credential source which owns all of its credentials.
-pub struct OwnedCredentialSource<C: MatchableCredential> {
-    credentials: Vec<C>,
-}
-
-impl<C: MatchableCredential> OwnedCredentialSource<C> {
-    /// Constructs an owned credential source from the given credentials
-    pub fn new(credentials: Vec<C>) -> Self {
-        Self { credentials }
-    }
-}
-
-impl<C: MatchableCredential> CredentialSource<C> for OwnedCredentialSource<C> {
-    type Iterator<'i>  = core::slice::Iter<'i, C>
-    where Self: 'i;
-
-    fn iter(&'_ self) -> Self::Iterator<'_> {
-        self.credentials.iter()
-    }
-}
-
-/// An owned credential source for both v0 and v1 credentials,
-pub struct OwnedBothCredentialSource<C0, C1>
+impl<'a, 'b, V: ProtocolVersion, M: MatchedCredential> DiscoveryCredentialSource<'a, V>
+    for SliceCredentialSource<'b, V, M>
 where
-    C0: V0Credential,
-    C1: V1Credential,
+    'b: 'a,
+    Self: 'b,
+    &'a <V as ProtocolVersion>::DiscoveryCredential: DiscoveryCryptoMaterial<V>,
 {
-    v0_source: OwnedCredentialSource<C0>,
-    v1_source: OwnedCredentialSource<C1>,
-}
+    type Matched = ReferencedMatchedCredential<'a, M>;
+    type Crypto = &'a V::DiscoveryCredential;
+    type Iterator = core::iter::Map<
+        core::slice::Iter<'a, MatchableCredential<V, M>>,
+        fn(
+            &'a MatchableCredential<V, M>,
+        ) -> (&'a V::DiscoveryCredential, ReferencedMatchedCredential<M>),
+    >;
 
-impl<C0, C1> OwnedBothCredentialSource<C0, C1>
-where
-    C0: V0Credential,
-    C1: V1Credential,
-{
-    /// Creates a new `OwnedBothCredentialSource` from credential-lists
-    /// for both V0 and V1
-    pub fn new(v0_credentials: Vec<C0>, v1_credentials: Vec<C1>) -> Self {
-        let v0_source = OwnedCredentialSource::new(v0_credentials);
-        let v1_source = OwnedCredentialSource::new(v1_credentials);
-        Self { v0_source, v1_source }
-    }
-
-    /// Creates a new credential source that is empty.
-    pub fn new_empty() -> Self {
-        Self::new(Vec::new(), Vec::new())
-    }
-}
-
-impl<C0, C1> BothCredentialSource<C0, C1> for OwnedBothCredentialSource<C0, C1>
-where
-    C0: V0Credential,
-    C1: V1Credential,
-{
-    type V0Source = OwnedCredentialSource<C0>;
-    type V1Source = OwnedCredentialSource<C1>;
-
-    fn v0(&self) -> &Self::V0Source {
-        &self.v0_source
-    }
-    fn v1(&self) -> &Self::V1Source {
-        &self.v1_source
+    fn iter(&'a self) -> Self::Iterator {
+        self.credentials.iter().map(MatchableCredential::<V, M>::as_pair)
     }
 }

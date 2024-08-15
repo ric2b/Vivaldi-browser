@@ -68,9 +68,9 @@ TEST_F(SpirvWriter_ShaderIOTest, NoInputsOrOutputs) {
 TEST_F(SpirvWriter_ShaderIOTest, Parameters_NonStruct) {
     auto* ep = b.Function("foo", ty.void_());
     auto* front_facing = b.FunctionParam("front_facing", ty.bool_());
-    front_facing->SetBuiltin(core::ir::FunctionParam::Builtin::kFrontFacing);
+    front_facing->SetBuiltin(core::BuiltinValue::kFrontFacing);
     auto* position = b.FunctionParam("position", ty.vec4<f32>());
-    position->SetBuiltin(core::ir::FunctionParam::Builtin::kPosition);
+    position->SetBuiltin(core::BuiltinValue::kPosition);
     position->SetInvariant(true);
     auto* color1 = b.FunctionParam("color1", ty.f32());
     color1->SetLocation(0, {});
@@ -151,27 +151,54 @@ TEST_F(SpirvWriter_ShaderIOTest, Parameters_Struct) {
                                  {
                                      mod.symbols.New("front_facing"),
                                      ty.bool_(),
-                                     {{}, {}, core::BuiltinValue::kFrontFacing, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kFrontFacing,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("position"),
                                      ty.vec4<f32>(),
-                                     {{}, {}, core::BuiltinValue::kPosition, {}, true},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kPosition,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ true,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color1"),
                                      ty.f32(),
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color2"),
                                      ty.f32(),
-                                     {1u,
-                                      {},
-                                      {},
-                                      core::Interpolation{core::InterpolationType::kLinear,
-                                                          core::InterpolationSampling::kSample},
-                                      false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 1u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */
+                                         core::Interpolation{
+                                             core::InterpolationType::kLinear,
+                                             core::InterpolationSampling::kSample,
+                                         },
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
@@ -276,18 +303,32 @@ TEST_F(SpirvWriter_ShaderIOTest, Parameters_Mixed) {
                                  {
                                      mod.symbols.New("position"),
                                      ty.vec4<f32>(),
-                                     {{}, {}, core::BuiltinValue::kPosition, {}, true},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kPosition,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ true,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color1"),
                                      ty.f32(),
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
     auto* ep = b.Function("foo", ty.void_());
     auto* front_facing = b.FunctionParam("front_facing", ty.bool_());
-    front_facing->SetBuiltin(core::ir::FunctionParam::Builtin::kFrontFacing);
+    front_facing->SetBuiltin(core::BuiltinValue::kFrontFacing);
     auto* str_param = b.FunctionParam("inputs", str_ty);
     auto* color2 = b.FunctionParam("color2", ty.f32());
     color2->SetLocation(1, core::Interpolation{core::InterpolationType::kLinear,
@@ -379,7 +420,7 @@ Inputs = struct @align(16) {
 
 TEST_F(SpirvWriter_ShaderIOTest, ReturnValue_NonStructBuiltin) {
     auto* ep = b.Function("foo", ty.vec4<f32>());
-    ep->SetReturnBuiltin(core::ir::Function::ReturnBuiltin::kPosition);
+    ep->SetReturnBuiltin(core::BuiltinValue::kPosition);
     ep->SetReturnInvariant(true);
     ep->SetStage(core::ir::Function::PipelineStage::kVertex);
 
@@ -476,22 +517,42 @@ TEST_F(SpirvWriter_ShaderIOTest, ReturnValue_Struct) {
                                  {
                                      mod.symbols.New("position"),
                                      ty.vec4<f32>(),
-                                     {{}, {}, core::BuiltinValue::kPosition, {}, true},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kPosition,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ true,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color1"),
                                      ty.f32(),
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color2"),
                                      ty.f32(),
-                                     {1u,
-                                      {},
-                                      {},
-                                      core::Interpolation{core::InterpolationType::kLinear,
-                                                          core::InterpolationSampling::kSample},
-                                      false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 1u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */
+                                         core::Interpolation{
+                                             core::InterpolationType::kLinear,
+                                             core::InterpolationSampling::kSample,
+                                         },
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
@@ -561,18 +622,33 @@ Outputs = struct @align(16) {
 }
 
 TEST_F(SpirvWriter_ShaderIOTest, ReturnValue_DualSourceBlending) {
-    auto* str_ty = ty.Struct(mod.symbols.New("Output"), {
-                                                            {
-                                                                mod.symbols.New("color1"),
-                                                                ty.f32(),
-                                                                {0u, 0u, {}, {}, false},
-                                                            },
-                                                            {
-                                                                mod.symbols.New("color2"),
-                                                                ty.f32(),
-                                                                {0u, 1u, {}, {}, false},
-                                                            },
-                                                        });
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("Output"), {
+                                                 {
+                                                     mod.symbols.New("color1"),
+                                                     ty.f32(),
+                                                     core::type::StructMemberAttributes{
+                                                         /* location */ 0u,
+                                                         /* index */ 0u,
+                                                         /* color */ std::nullopt,
+                                                         /* builtin */ std::nullopt,
+                                                         /* interpolation */ std::nullopt,
+                                                         /* invariant */ false,
+                                                     },
+                                                 },
+                                                 {
+                                                     mod.symbols.New("color2"),
+                                                     ty.f32(),
+                                                     core::type::StructMemberAttributes{
+                                                         /* location */ 0u,
+                                                         /* index */ 1u,
+                                                         /* color */ std::nullopt,
+                                                         /* builtin */ std::nullopt,
+                                                         /* interpolation */ std::nullopt,
+                                                         /* invariant */ false,
+                                                     },
+                                                 },
+                                             });
 
     auto* ep = b.Function("foo", str_ty);
     ep->SetStage(core::ir::Function::PipelineStage::kFragment);
@@ -639,12 +715,26 @@ TEST_F(SpirvWriter_ShaderIOTest, Struct_SharedByVertexAndFragment) {
                                  {
                                      mod.symbols.New("position"),
                                      vec4f,
-                                     {{}, {}, core::BuiltinValue::kPosition, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kPosition,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color"),
                                      vec4f,
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
@@ -766,12 +856,26 @@ TEST_F(SpirvWriter_ShaderIOTest, Struct_SharedWithBuffer) {
                                  {
                                      mod.symbols.New("position"),
                                      vec4f,
-                                     {{}, {}, core::BuiltinValue::kPosition, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kPosition,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("color"),
                                      vec4f,
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
@@ -847,17 +951,31 @@ TEST_F(SpirvWriter_ShaderIOTest, SampleMask) {
                                  {
                                      mod.symbols.New("color"),
                                      ty.f32(),
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("mask"),
                                      ty.u32(),
-                                     {{}, {}, core::BuiltinValue::kSampleMask, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kSampleMask,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
     auto* mask_in = b.FunctionParam("mask_in", ty.u32());
-    mask_in->SetBuiltin(core::ir::FunctionParam::Builtin::kSampleMask);
+    mask_in->SetBuiltin(core::BuiltinValue::kSampleMask);
 
     auto* ep = b.Function("foo", str_ty);
     ep->SetStage(core::ir::Function::PipelineStage::kFragment);
@@ -924,24 +1042,30 @@ Outputs = struct @align(4) {
 
 // Test that interpolation attributes are stripped from vertex inputs and fragment outputs.
 TEST_F(SpirvWriter_ShaderIOTest, InterpolationOnVertexInputOrFragmentOutput) {
-    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"),
-                             {
-                                 {
-                                     mod.symbols.New("color"),
-                                     ty.f32(),
-                                     {1u,
-                                      {},
-                                      {},
-                                      core::Interpolation{core::InterpolationType::kLinear,
-                                                          core::InterpolationSampling::kSample},
-                                      false},
-                                 },
-                             });
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("MyStruct"), {
+                                                   {
+                                                       mod.symbols.New("color"),
+                                                       ty.f32(),
+                                                       core::type::StructMemberAttributes{
+                                                           /* location */ 1u,
+                                                           /* index */ std::nullopt,
+                                                           /* color */ std::nullopt,
+                                                           /* builtin */ std::nullopt,
+                                                           /* interpolation */
+                                                           core::Interpolation{
+                                                               core::InterpolationType::kLinear,
+                                                               core::InterpolationSampling::kSample,
+                                                           },
+                                                           /* invariant */ false,
+                                                       },
+                                                   },
+                                               });
 
     // Vertex shader.
     {
         auto* ep = b.Function("vert", ty.vec4<f32>());
-        ep->SetReturnBuiltin(core::ir::Function::ReturnBuiltin::kPosition);
+        ep->SetReturnBuiltin(core::BuiltinValue::kPosition);
         ep->SetReturnInvariant(true);
         ep->SetStage(core::ir::Function::PipelineStage::kVertex);
 
@@ -1071,12 +1195,26 @@ TEST_F(SpirvWriter_ShaderIOTest, ClampFragDepth) {
                                  {
                                      mod.symbols.New("color"),
                                      ty.f32(),
-                                     {0u, {}, {}, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                                  {
                                      mod.symbols.New("depth"),
                                      ty.f32(),
-                                     {{}, {}, core::BuiltinValue::kFragDepth, {}, false},
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kFragDepth,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
                                  },
                              });
 
@@ -1116,7 +1254,7 @@ FragDepthClampArgs = struct @align(4), @block {
 %b1 = block {  # root
   %foo_loc0_Output:ptr<__out, f32, write> = var @location(0)
   %foo_frag_depth_Output:ptr<__out, f32, write> = var @builtin(frag_depth)
-  %tint_frag_depth_clamp_args:ptr<push_constant, FragDepthClampArgs, read_write> = var
+  %tint_frag_depth_clamp_args:ptr<push_constant, FragDepthClampArgs, read> = var
 }
 
 %foo_inner = func():Outputs -> %b2 {
@@ -1148,10 +1286,167 @@ FragDepthClampArgs = struct @align(4), @block {
     EXPECT_EQ(expect, str());
 }
 
+TEST_F(SpirvWriter_ShaderIOTest, ClampFragDepth_MultipleFragmentShaders) {
+    auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
+                             {
+                                 {
+                                     mod.symbols.New("color"),
+                                     ty.f32(),
+                                     core::type::StructMemberAttributes{
+                                         /* location */ 0u,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ std::nullopt,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
+                                 },
+                                 {
+                                     mod.symbols.New("depth"),
+                                     ty.f32(),
+                                     core::type::StructMemberAttributes{
+                                         /* location */ std::nullopt,
+                                         /* index */ std::nullopt,
+                                         /* color */ std::nullopt,
+                                         /* builtin */ core::BuiltinValue::kFragDepth,
+                                         /* interpolation */ std::nullopt,
+                                         /* invariant */ false,
+                                     },
+                                 },
+                             });
+
+    auto make_entry_point = [&](std::string_view name) {
+        auto* ep = b.Function(name, str_ty);
+        ep->SetStage(core::ir::Function::PipelineStage::kFragment);
+        b.Append(ep->Block(), [&] {  //
+            b.Return(ep, b.Construct(str_ty, 0.5_f, 2_f));
+        });
+    };
+    make_entry_point("ep1");
+    make_entry_point("ep2");
+    make_entry_point("ep3");
+
+    auto* src = R"(
+Outputs = struct @align(4) {
+  color:f32 @offset(0), @location(0)
+  depth:f32 @offset(4), @builtin(frag_depth)
+}
+
+%ep1 = @fragment func():Outputs -> %b1 {
+  %b1 = block {
+    %2:Outputs = construct 0.5f, 2.0f
+    ret %2
+  }
+}
+%ep2 = @fragment func():Outputs -> %b2 {
+  %b2 = block {
+    %4:Outputs = construct 0.5f, 2.0f
+    ret %4
+  }
+}
+%ep3 = @fragment func():Outputs -> %b3 {
+  %b3 = block {
+    %6:Outputs = construct 0.5f, 2.0f
+    ret %6
+  }
+}
+)";
+    EXPECT_EQ(src, str());
+
+    auto* expect = R"(
+Outputs = struct @align(4) {
+  color:f32 @offset(0)
+  depth:f32 @offset(4)
+}
+
+FragDepthClampArgs = struct @align(4), @block {
+  min:f32 @offset(0)
+  max:f32 @offset(4)
+}
+
+%b1 = block {  # root
+  %ep1_loc0_Output:ptr<__out, f32, write> = var @location(0)
+  %ep1_frag_depth_Output:ptr<__out, f32, write> = var @builtin(frag_depth)
+  %tint_frag_depth_clamp_args:ptr<push_constant, FragDepthClampArgs, read> = var
+  %ep2_loc0_Output:ptr<__out, f32, write> = var @location(0)
+  %ep2_frag_depth_Output:ptr<__out, f32, write> = var @builtin(frag_depth)
+  %ep3_loc0_Output:ptr<__out, f32, write> = var @location(0)
+  %ep3_frag_depth_Output:ptr<__out, f32, write> = var @builtin(frag_depth)
+}
+
+%ep1_inner = func():Outputs -> %b2 {
+  %b2 = block {
+    %9:Outputs = construct 0.5f, 2.0f
+    ret %9
+  }
+}
+%ep2_inner = func():Outputs -> %b3 {
+  %b3 = block {
+    %11:Outputs = construct 0.5f, 2.0f
+    ret %11
+  }
+}
+%ep3_inner = func():Outputs -> %b4 {
+  %b4 = block {
+    %13:Outputs = construct 0.5f, 2.0f
+    ret %13
+  }
+}
+%ep1 = @fragment func():void -> %b5 {
+  %b5 = block {
+    %15:Outputs = call %ep1_inner
+    %16:f32 = access %15, 0u
+    store %ep1_loc0_Output, %16
+    %17:f32 = access %15, 1u
+    %18:FragDepthClampArgs = load %tint_frag_depth_clamp_args
+    %19:f32 = access %18, 0u
+    %20:f32 = access %18, 1u
+    %21:f32 = clamp %17, %19, %20
+    store %ep1_frag_depth_Output, %21
+    ret
+  }
+}
+%ep2 = @fragment func():void -> %b6 {
+  %b6 = block {
+    %23:Outputs = call %ep2_inner
+    %24:f32 = access %23, 0u
+    store %ep2_loc0_Output, %24
+    %25:f32 = access %23, 1u
+    %26:FragDepthClampArgs = load %tint_frag_depth_clamp_args
+    %27:f32 = access %26, 0u
+    %28:f32 = access %26, 1u
+    %29:f32 = clamp %25, %27, %28
+    store %ep2_frag_depth_Output, %29
+    ret
+  }
+}
+%ep3 = @fragment func():void -> %b7 {
+  %b7 = block {
+    %31:Outputs = call %ep3_inner
+    %32:f32 = access %31, 0u
+    store %ep3_loc0_Output, %32
+    %33:f32 = access %31, 1u
+    %34:FragDepthClampArgs = load %tint_frag_depth_clamp_args
+    %35:f32 = access %34, 0u
+    %36:f32 = access %34, 1u
+    %37:f32 = clamp %33, %35, %36
+    store %ep3_frag_depth_Output, %37
+    ret
+  }
+}
+)";
+
+    ShaderIOConfig config;
+    config.clamp_frag_depth = true;
+    Run(ShaderIO, config);
+
+    EXPECT_EQ(expect, str());
+}
+
 TEST_F(SpirvWriter_ShaderIOTest, EmitVertexPointSize) {
     auto* ep = b.Function("foo", ty.vec4<f32>());
     ep->SetStage(core::ir::Function::PipelineStage::kVertex);
-    ep->SetReturnBuiltin(core::ir::Function::ReturnBuiltin::kPosition);
+    ep->SetReturnBuiltin(core::BuiltinValue::kPosition);
 
     b.Append(ep->Block(), [&] {  //
         b.Return(ep, b.Construct(ty.vec4<f32>(), 0.5_f));

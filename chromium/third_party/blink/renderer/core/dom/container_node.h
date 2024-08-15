@@ -61,8 +61,9 @@ enum class DynamicRestyleFlags {
   kAffectedByLastChildRules = 1 << 11,
   kChildrenOrSiblingsAffectedByFocusWithin = 1 << 12,
   kChildrenOrSiblingsAffectedByFocusVisible = 1 << 13,
+  kChildrenOrSiblingsAffectedByActiveViewTransition = 1 << 14,
 
-  kNumberOfDynamicRestyleFlags = 14,
+  kNumberOfDynamicRestyleFlags = 15,
 
   kChildrenAffectedByStructuralRules =
       kChildrenAffectedByFirstChildRules | kChildrenAffectedByLastChildRules |
@@ -110,12 +111,17 @@ class CORE_EXPORT ContainerNode : public Node {
   bool HasOneChild() const {
     return first_child_ && !first_child_->HasNextSibling();
   }
+
+  bool HasChildCount(unsigned) const;
+  unsigned CountChildren() const;
+
   bool HasOneTextChild() const {
     return HasOneChild() && first_child_->IsTextNode();
   }
-  bool HasChildCount(unsigned) const;
 
-  unsigned CountChildren() const;
+  // Returns true if all children are text nodes and at least one of them is not
+  // empty. Ignores comments.
+  bool HasOnlyText() const;
 
   Element* QuerySelector(const AtomicString& selectors, ExceptionState&);
   Element* QuerySelector(const AtomicString& selectors);
@@ -145,9 +151,21 @@ class CORE_EXPORT ContainerNode : public Node {
   RadioNodeList* GetRadioNodeList(const AtomicString&,
                                   bool only_match_img_elements = false);
 
+  // Returns the contents of the first descendant element, if any, that contains
+  // only text, a part of which is the given substring.
+  String FindTextInElementWith(const AtomicString& substring) const;
+
   // These methods are only used during parsing.
   // They don't send DOM mutation events or accept DocumentFragments.
   void ParserAppendChild(Node*);
+
+  // Called when the parser adds a child to a DocumentFragment as the result
+  // of parsing inner/outer html.
+  void ParserAppendChildInDocumentFragment(Node* new_child);
+  // Called when the parser has finished building a DocumentFragment. This is
+  // not called if the parser fails parsing (if parsing fails, the
+  // DocumentFragment is orphaned and will eventually be gc'd).
+  void ParserFinishedBuildingDocumentFragment();
   void ParserRemoveChild(Node&);
   void ParserInsertBefore(Node* new_child, Node& ref_child);
   void ParserTakeAllChildrenFrom(ContainerNode&);
@@ -204,6 +222,14 @@ class CORE_EXPORT ContainerNode : public Node {
   }
   void SetChildrenOrSiblingsAffectedByActive() {
     SetRestyleFlag(DynamicRestyleFlags::kChildrenOrSiblingsAffectedByActive);
+  }
+  bool ChildrenOrSiblingsAffectedByActiveViewTransition() const {
+    return HasRestyleFlag(
+        DynamicRestyleFlags::kChildrenOrSiblingsAffectedByActiveViewTransition);
+  }
+  void SetChildrenOrSiblingsAffectedByActiveViewTransition() {
+    SetRestyleFlag(
+        DynamicRestyleFlags::kChildrenOrSiblingsAffectedByActiveViewTransition);
   }
 
   bool ChildrenOrSiblingsAffectedByDrag() const {
@@ -308,7 +334,10 @@ class CORE_EXPORT ContainerNode : public Node {
     kElementRemoved,
     kNonElementRemoved,
     kAllChildrenRemoved,
-    kTextChanged
+    kTextChanged,
+    // When the parser builds nodes (because of inner/outer-html or
+    // parseFromString) a single ChildrenChange event is sent at the end.
+    kFinishedBuildingDocumentFragmentTree,
   };
   enum class ChildrenChangeSource : uint8_t { kAPI, kParser };
   enum class ChildrenChangeAffectsElements : uint8_t { kNo, kYes };
@@ -316,6 +345,13 @@ class CORE_EXPORT ContainerNode : public Node {
     STACK_ALLOCATED();
 
    public:
+    static ChildrenChange ForFinishingBuildingDocumentFragmentTree() {
+      return ChildrenChange{
+          .type = ChildrenChangeType::kFinishedBuildingDocumentFragmentTree,
+          .by_parser = ChildrenChangeSource::kParser,
+          .affects_elements = ChildrenChangeAffectsElements::kYes,
+      };
+    }
     static ChildrenChange ForInsertion(Node& node,
                                        Node* unchanged_previous,
                                        Node* unchanged_next,
@@ -355,7 +391,8 @@ class CORE_EXPORT ContainerNode : public Node {
 
     bool IsChildInsertion() const {
       return type == ChildrenChangeType::kElementInserted ||
-             type == ChildrenChangeType::kNonElementInserted;
+             type == ChildrenChangeType::kNonElementInserted ||
+             type == ChildrenChangeType::kFinishedBuildingDocumentFragmentTree;
     }
     bool IsChildRemoval() const {
       return type == ChildrenChangeType::kElementRemoved ||
@@ -363,7 +400,8 @@ class CORE_EXPORT ContainerNode : public Node {
     }
     bool IsChildElementChange() const {
       return type == ChildrenChangeType::kElementInserted ||
-             type == ChildrenChangeType::kElementRemoved;
+             type == ChildrenChangeType::kElementRemoved ||
+             type == ChildrenChangeType::kFinishedBuildingDocumentFragmentTree;
     }
 
     bool ByParser() const { return by_parser == ChildrenChangeSource::kParser; }
@@ -377,11 +415,13 @@ class CORE_EXPORT ContainerNode : public Node {
     //  - siblingChanged.previousSibling after single node insertion
     //  - previousSibling of the first inserted node after multiple node
     //    insertion
+    //  - null for kFinishedBuildingDocumentFragmentTree.
     Node* const sibling_before_change = nullptr;
     // |siblingAfterChange| is
     //  - siblingChanged.nextSibling before node removal
     //  - siblingChanged.nextSibling after single node insertion
     //  - nextSibling of the last inserted node after multiple node insertion.
+    //  - null for kFinishedBuildingDocumentFragmentTree.
     Node* const sibling_after_change = nullptr;
     // List of removed nodes for ChildrenChangeType::kAllChildrenRemoved.
     // Only populated if ChildrenChangedAllChildrenRemovedNeedsList() returns
@@ -463,6 +503,12 @@ class CORE_EXPORT ContainerNode : public Node {
       delete;  // This will catch anyone doing an unnecessary check.
   bool IsTextNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
+
+  // Called from ParserFinishedBuildingDocumentFragment() to notify `node` that
+  // it was inserted.
+  void NotifyNodeAtEndOfBuildingFragmentTree(Node& node,
+                                             const ChildrenChange& change,
+                                             bool may_contain_shadow_roots);
 
   NodeListsNodeData& EnsureNodeLists();
   void RemoveBetween(Node* previous_child, Node* next_child, Node& old_child);

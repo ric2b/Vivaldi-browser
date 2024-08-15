@@ -200,7 +200,7 @@ class TestObserver : public CrasAudioHandler::AudioObserver {
 
   int output_mute_changed_count() const { return output_mute_changed_count_; }
 
-  void reset_output_mute_changed_count() { input_mute_changed_count_ = 0; }
+  void reset_output_mute_changed_count() { output_mute_changed_count_ = 0; }
 
   int input_mute_changed_count() const { return input_mute_changed_count_; }
 
@@ -622,8 +622,8 @@ class CrasAudioHandlerTest : public testing::TestWithParam<int> {
   base::test::SingleThreadTaskEnvironment task_environment_;
   base::SystemMonitor system_monitor_;
   SystemMonitorObserver system_monitor_observer_;
-  raw_ptr<CrasAudioHandler, DanglingUntriaged | ExperimentalAsh>
-      cras_audio_handler_ = nullptr;  // Not owned.
+  raw_ptr<CrasAudioHandler, DanglingUntriaged> cras_audio_handler_ =
+      nullptr;  // Not owned.
   std::unique_ptr<TestObserver> test_observer_;
   scoped_refptr<AudioDevicesPrefHandlerStub> audio_pref_handler_;
   std::unique_ptr<FakeMediaControllerManager> fake_manager_;
@@ -668,8 +668,7 @@ class HDMIRediscoverWaiter {
   }
 
  private:
-  raw_ptr<CrasAudioHandlerTest, ExperimentalAsh>
-      cras_audio_handler_test_;  // not owned
+  raw_ptr<CrasAudioHandlerTest> cras_audio_handler_test_;  // not owned
   int grace_period_duration_in_ms_;
 };
 
@@ -4589,8 +4588,8 @@ TEST_P(CrasAudioHandlerTest, HDMIOutputRediscover) {
   EXPECT_FALSE(cras_audio_handler_->IsOutputMuted());
 }
 
-// This tests the case of output unmuting event is notified after the hdmi
-// output re-discover grace period ends, see crbug.com/512601.
+// This tests the case of output unmuting event is not notified after the hdmi
+// output re-discover grace period ends.
 TEST_P(CrasAudioHandlerTest, HDMIOutputUnplugDuringSuspension) {
   AudioNodeList audio_nodes =
       GenerateAudioNodeList({kInternalSpeaker, kHDMIOutput});
@@ -4624,7 +4623,7 @@ TEST_P(CrasAudioHandlerTest, HDMIOutputUnplugDuringSuspension) {
   EXPECT_TRUE(cras_audio_handler_->IsOutputMuted());
 
   // After HDMI re-discover grace period, verify internal speaker is still the
-  // active output and not muted, and unmute event by system is notified.
+  // active output and not muted.
   test_observer_->reset_output_mute_changed_count();
   HDMIRediscoverWaiter waiter(this, grace_period_in_ms);
   waiter.WaitUntilHDMIRediscoverGracePeriodEnd();
@@ -4634,7 +4633,7 @@ TEST_P(CrasAudioHandlerTest, HDMIOutputUnplugDuringSuspension) {
   EXPECT_EQ(kInternalSpeaker->id,
             cras_audio_handler_->GetPrimaryActiveOutputNode());
   EXPECT_FALSE(cras_audio_handler_->IsOutputMuted());
-  EXPECT_EQ(1, test_observer_->output_mute_changed_count());
+  EXPECT_EQ(0, test_observer_->output_mute_changed_count());
 }
 
 TEST_P(CrasAudioHandlerTest, FrontCameraStartStop) {

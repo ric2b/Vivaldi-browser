@@ -71,8 +71,9 @@ SkColor GetTextColorForEnableState(const Combobox& combobox, bool enabled) {
 
 // The transparent button which holds a button state but is not rendered.
 class TransparentButton : public Button {
+  METADATA_HEADER(TransparentButton, Button)
+
  public:
-  METADATA_HEADER(TransparentButton);
   explicit TransparentButton(PressedCallback callback)
       : Button(std::move(callback)) {
     SetFocusBehavior(FocusBehavior::NEVER);
@@ -116,7 +117,7 @@ class TransparentButton : public Button {
   }
 };
 
-BEGIN_METADATA(TransparentButton, Button)
+BEGIN_METADATA(TransparentButton)
 END_METADATA
 
 }  // namespace
@@ -533,6 +534,10 @@ bool Combobox::HandleAccessibleAction(const ui::AXActionData& action_data) {
 void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
   DCHECK_EQ(model_, model);
 
+  if (IsMenuRunning()) {
+    menu_runner_.reset();
+  }
+
   // If the selection is no longer valid (or the model is empty), restore the
   // default index.
   if (selected_index_ >= model_->GetItemCount() ||
@@ -542,6 +547,7 @@ void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
   }
 
   OnContentSizeMaybeChanged();
+  SchedulePaint();
 }
 
 void Combobox::OnComboboxModelDestroying(ui::ComboboxModel* model) {
@@ -797,7 +803,7 @@ const gfx::FontList& Combobox::GetForegroundFontList() const {
   return GetFontList();
 }
 
-BEGIN_METADATA(Combobox, View)
+BEGIN_METADATA(Combobox)
 ADD_PROPERTY_METADATA(base::RepeatingClosure, Callback)
 ADD_PROPERTY_METADATA(std::unique_ptr<ui::ComboboxModel>, OwnedModel)
 ADD_PROPERTY_METADATA(ui::ComboboxModel*, Model)

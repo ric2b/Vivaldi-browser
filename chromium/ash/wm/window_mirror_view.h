@@ -72,10 +72,10 @@ class ASH_EXPORT WindowMirrorView : public views::View,
   gfx::Rect GetClientAreaBounds() const;
 
   // The original window that is being represented by |this|.
-  raw_ptr<aura::Window, ExperimentalAsh> source_;
+  raw_ptr<aura::Window> source_;
 
   // The window which contains this mirror view.
-  raw_ptr<aura::Window, DanglingUntriaged | ExperimentalAsh> target_ = nullptr;
+  raw_ptr<aura::Window, DanglingUntriaged> target_ = nullptr;
 
   // Retains ownership of the mirror layer tree. This is lazily initialized
   // the first time the view becomes visible.
@@ -92,8 +92,7 @@ class ASH_EXPORT WindowMirrorView : public views::View,
 
   // While a window is mirrored, apply dynamic raster scale to the underlying
   // window. This is used in e.g. alt-tab and overview mode.
-  absl::optional<ScopedRasterScaleLayerObserverLock>
-      raster_scale_observer_lock_;
+  std::optional<ScopedRasterScaleLayerObserverLock> raster_scale_observer_lock_;
 };
 
 }  // namespace ash

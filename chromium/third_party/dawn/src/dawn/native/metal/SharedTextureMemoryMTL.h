@@ -56,9 +56,12 @@ class SharedTextureMemory final : public SharedTextureMemoryBase {
                         IOSurfaceRef ioSurface);
     void DestroyImpl() override;
 
-    ResultOrError<Ref<TextureBase>> CreateTextureImpl(const TextureDescriptor* descriptor) override;
-    MaybeError BeginAccessImpl(TextureBase* texture, const BeginAccessDescriptor*) override;
-    ResultOrError<FenceAndSignalValue> EndAccessImpl(TextureBase* texture) override;
+    ResultOrError<Ref<TextureBase>> CreateTextureImpl(
+        const UnpackedPtr<TextureDescriptor>& descriptor) override;
+    MaybeError BeginAccessImpl(TextureBase* texture,
+                               const UnpackedPtr<BeginAccessDescriptor>& descriptor) override;
+    ResultOrError<FenceAndSignalValue> EndAccessImpl(TextureBase* texture,
+                                                     UnpackedPtr<EndAccessState>& state) override;
 
     CFRef<IOSurfaceRef> mIOSurface;
 };

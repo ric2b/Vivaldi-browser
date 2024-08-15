@@ -125,10 +125,9 @@ static void magicyuv_median_pred16(uint16_t *dst, const uint16_t *src1,
     for (; CACHED_BITSTREAM_READER && x < width-c && get_bits_left(&gb) > 0;) {\
         ret = get_vlc_multi(&gb, (uint8_t *)dst + x * b, multi, \
                             vlc, vlc_bits, 3); \
-        if (ret > 0) \
-            x += ret; \
         if (ret <= 0) \
             return AVERROR_INVALIDDATA; \
+        x += ret; \
     } \
     for (; x < width && get_bits_left(&gb) > 0; x++) \
         dst[x] = get_vlc2(&gb, vlc, vlc_bits, 3); \
@@ -299,7 +298,7 @@ static int magy_decode_slice(AVCodecContext *avctx, void *tdata,
                 return ret;
 
             for (k = 0; k < height; k++)
-                READ_PLANE(dst, i, 1, 5)
+                READ_PLANE(dst, i, 1, 7)
         }
 
         switch (pred) {

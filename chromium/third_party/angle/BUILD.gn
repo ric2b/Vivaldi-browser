@@ -74,7 +74,8 @@ declare_args() {
     angle_use_android_tls_slot = !build_with_chromium
   }
 
-  angle_enable_global_mutex_recursion = is_android && angle_enable_vulkan
+  angle_enable_global_mutex_recursion =
+      is_android && angle_enable_vulkan && !build_with_chromium
 
   # Potentially can be enabled for other platforms, but limiting to Android platform for now.
   # Chromium may have problems (requires verification), disabled for safety.
@@ -148,17 +149,7 @@ config("internal_config") {
     "src",
   ]
 
-  # Handle breaking changes in VulkanMemoryAllocator.
-  angle_vma_version_define = "ANGLE_VMA_VERSION="
-  if (defined(angle_vma_version)) {
-    angle_vma_version_define += angle_vma_version
-  } else {
-    # Default to 2.3.0. This can be bumped and include guards removed when all
-    # clients have migrated to 3.x.
-    angle_vma_version_define += 2003000
-  }
-
-  defines = [ angle_vma_version_define ]
+  defines = []
 
   if (is_win) {
     defines += [ "ANGLE_IS_WIN" ]
@@ -943,6 +934,10 @@ config("angle_backend_config") {
     configs += [ "src/libANGLE/renderer/null:angle_null_backend_config" ]
   }
 
+  if (angle_enable_wgpu) {
+    configs += [ "src/libANGLE/renderer/wgpu:angle_wgpu_backend_config" ]
+  }
+
   if (angle_enable_metal) {
     configs += [ "src/libANGLE/renderer/metal:angle_metal_backend_config" ]
   }
@@ -1091,6 +1086,10 @@ angle_source_set("libANGLE_no_vulkan") {
 
   if (angle_enable_null) {
     public_deps += [ "src/libANGLE/renderer/null:angle_null_backend" ]
+  }
+
+  if (angle_enable_wgpu) {
+    public_deps += [ "src/libANGLE/renderer/wgpu:angle_wgpu_backend" ]
   }
 
   if (angle_is_winuwp) {

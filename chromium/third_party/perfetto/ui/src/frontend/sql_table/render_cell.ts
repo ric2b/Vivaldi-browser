@@ -18,14 +18,15 @@ import {copyToClipboard} from '../../base/clipboard';
 import {isString} from '../../base/object_utils';
 import {Icons} from '../../base/semantic_icons';
 import {sqliteString} from '../../base/string_utils';
-import {duration, Duration, Time} from '../../base/time';
-import {Row, SqlValue} from '../../common/query_result';
+import {Duration, Time} from '../../base/time';
+import {Row, SqlValue} from '../../trace_processor/query_result';
 import {Anchor} from '../../widgets/anchor';
-import {Err} from '../../widgets/error';
+import {renderError} from '../../widgets/error';
 import {MenuItem, PopupMenu2} from '../../widgets/menu';
 import {SliceRef} from '../sql/slice';
 import {asSliceSqlId} from '../sql_types';
 import {sqlValueToString} from '../sql_utils';
+import {DurationWidget} from '../widgets/duration';
 import {Timestamp} from '../widgets/timestamp';
 
 import {Column} from './column';
@@ -84,23 +85,8 @@ function displayValue(value: SqlValue): m.Child {
   return sqlValueToString(value);
 }
 
-function displayDuration(value: duration): string;
-function displayDuration(value: SqlValue): m.Children;
-function displayDuration(value: SqlValue): m.Children {
-  if (typeof value !== 'bigint') return displayValue(value);
-  return Duration.format(value);
-}
-
 function display(column: Column, row: Row): m.Children {
   const value = row[column.alias];
-
-  // Handle all cases when we have non-trivial formatting.
-  switch (column.display?.type) {
-    case 'duration':
-    case 'thread_duration':
-      return displayDuration(value);
-  }
-
   return displayValue(value);
 }
 
@@ -119,13 +105,6 @@ function getContextMenuItems(
   const result: m.Child[] = [];
   const value = row[column.alias];
 
-  if ((column.display?.type === 'duration' ||
-       column.display?.type === 'thread_duration') &&
-      typeof value === 'bigint') {
-    result.push(copyMenuItem('Copy raw duration', `${value}`));
-    result.push(
-        copyMenuItem('Copy formatted duration', displayDuration(value)));
-  }
   if (isString(value)) {
     result.push(copyMenuItem('Copy', value));
   }
@@ -165,6 +144,19 @@ function renderTimestampColumn(
   });
 }
 
+function renderDurationColumn(
+    column: Column, row: Row, state: SqlTableState): m.Children {
+  const value = row[column.alias];
+  if (typeof value !== 'bigint') {
+    return renderStandardColumn(column, row, state);
+  }
+
+  return m(DurationWidget, {
+    dur: Duration.fromRaw(value),
+    extraMenuItems: getContextMenuItems(column, row, state),
+  });
+}
+
 function renderSliceIdColumn(
     column: {alias: string, display: SliceIdDisplayConfig},
     row: Row): m.Children {
@@ -175,11 +167,10 @@ function renderSliceIdColumn(
   const trackId = row[config.trackId];
 
   const columnNotFoundError = (type: string, name: string) =>
-      m(Err, `${type} column ${name} not found`);
+      renderError(`${type} column ${name} not found`);
   const wrongTypeError = (type: string, name: string, value: SqlValue) =>
-      m(Err,
-        `Wrong type for ${type} column ${name}: bigint expected, ${
-            typeof value} found`);
+      renderError(`Wrong type for ${type} column ${name}: bigint expected, ${
+          typeof value} found`);
 
   if (typeof id !== 'bigint') return sqlValueToString(id);
   if (ts === undefined) return columnNotFoundError('Timestamp', config.ts);
@@ -205,11 +196,17 @@ function renderSliceIdColumn(
 
 export function renderCell(
     column: Column, row: Row, state: SqlTableState): m.Children {
-  if (column.display && column.display.type === 'slice_id') {
-    return renderSliceIdColumn(
-        {alias: column.alias, display: column.display}, row);
-  } else if (column.display && column.display.type === 'timestamp') {
-    return renderTimestampColumn(column, row, state);
+  if (column.display) {
+    switch (column.display?.type) {
+      case 'slice_id':
+        return renderSliceIdColumn(
+            {alias: column.alias, display: column.display}, row);
+      case 'timestamp':
+        return renderTimestampColumn(column, row, state);
+      case 'duration':
+      case 'thread_duration':
+        return renderDurationColumn(column, row, state);
+    }
   }
   return renderStandardColumn(column, row, state);
 }

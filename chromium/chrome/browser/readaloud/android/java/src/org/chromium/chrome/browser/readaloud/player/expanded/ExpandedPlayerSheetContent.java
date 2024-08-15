@@ -5,35 +5,55 @@
 package org.chromium.chrome.browser.readaloud.player.expanded;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityEvent;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
+import org.chromium.chrome.browser.readaloud.player.Colors;
 import org.chromium.chrome.browser.readaloud.player.InteractionHandler;
+import org.chromium.chrome.browser.readaloud.player.PlayerProperties;
 import org.chromium.chrome.browser.readaloud.player.R;
+import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.modelutil.PropertyModel;
 
 public class ExpandedPlayerSheetContent implements BottomSheetContent {
     private static final String TAG = "RAPlayerSheet";
-    private static final float DEFAULT_INITIAL_SPEED = 1f;
-    // Note: if these times need to change, the "back 10" and "forward 30" icons
+    // Note: if these times need to change, the "back 10" and "forward 10" icons
     // should also be changed.
     private static final int BACK_SECONDS = 10;
-    private static final int FORWARD_SECONDS = 30;
+    private static final int FORWARD_SECONDS = 10;
 
     private final Context mContext;
     private final BottomSheetController mBottomSheetController;
     private final PropertyModel mModel;
+    private final SeekBar mSeekBar;
+    private final ScrollView mScrollView;
+    private final LinearLayout mPlayerControls;
     private View mContentView;
+    // Effectively final and non null, can be null only in tests
     private OptionsMenuSheetContent mOptionsMenu;
+    private SpeedMenuSheetContent mSpeedMenu;
+    private TextView mSpeedButton;
+    private boolean mHighlightingEnabled;
+    private boolean mHighlightingSupported;
+
+    private LinearLayout mNormalLayout;
+    private LinearLayout mErrorLayout;
 
     public ExpandedPlayerSheetContent(
             Context context, BottomSheetController bottomSheetController, PropertyModel model) {
@@ -46,9 +66,11 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
         mOptionsMenu =
                 new OptionsMenuSheetContent(
                         mContext, /* parent= */ this, mBottomSheetController, mModel);
+        mSpeedMenu =
+                new SpeedMenuSheetContent(
+                        mContext, /* parent= */ this, mBottomSheetController, mModel);
     }
 
-    @SuppressWarnings("SetTextI18n")
     @VisibleForTesting
     ExpandedPlayerSheetContent(
             Context context,
@@ -60,17 +82,63 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
         mContentView = contentView;
         mModel = model;
         Resources res = mContext.getResources();
+        mSpeedButton = (TextView) mContentView.findViewById(R.id.readaloud_playback_speed);
         mContentView
                 .findViewById(R.id.readaloud_seek_back_button)
                 .setContentDescription(res.getString(R.string.readaloud_replay, BACK_SECONDS));
         mContentView
                 .findViewById(R.id.readaloud_seek_forward_button)
                 .setContentDescription(res.getString(R.string.readaloud_forward, FORWARD_SECONDS));
-        setSpeed(DEFAULT_INITIAL_SPEED);
+        mNormalLayout = (LinearLayout) mContentView.findViewById(R.id.normal_layout);
+        mErrorLayout = (LinearLayout) mContentView.findViewById(R.id.error_layout);
+        mSeekBar = (SeekBar) mContentView.findViewById(R.id.readaloud_expanded_player_seek_bar);
+        mScrollView = (ScrollView) mContentView.findViewById(R.id.scroll_view);
+
+        mSeekBar.setAccessibilityDelegate(
+                new View.AccessibilityDelegate() {
+                    @Override
+                    public void onInitializeAccessibilityEvent(
+                            View host, AccessibilityEvent event) {
+                        // Drop progress announcements that repeatedly interrupt playback.
+                        if (event.getEventType()
+                                == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+                            return;
+                        }
+                        super.onInitializeAccessibilityEvent(host, event);
+                    }
+                });
+        mPlayerControls =
+                (LinearLayout) mContentView.findViewById(R.id.readaloud_playback_controls);
+        // Apply dynamic colors.
+        Colors.setBottomSheetContentBackground(mContentView);
+        Colors.setProgressBarColor(mSeekBar);
+
+        onOrientationChange(res.getConfiguration().orientation);
+    }
+
+    public void onPlaybackStateChanged(@PlaybackListener.State int state) {
+        setPlaying(state == PlaybackListener.State.PLAYING);
+        if (state == PlaybackListener.State.ERROR) {
+            showOnly(mErrorLayout);
+        } else {
+            showOnly(mNormalLayout);
+        }
+    }
+
+    // Show `layout` and hide the other layouts.
+    private void showOnly(LinearLayout layout) {
+        setVisibleIfMatch(mNormalLayout, layout);
+        setVisibleIfMatch(mErrorLayout, layout);
+    }
+
+    private static void setVisibleIfMatch(LinearLayout a, LinearLayout b) {
+        a.setVisibility(a == b ? View.VISIBLE : View.GONE);
     }
 
     public void show() {
         mBottomSheetController.requestShowContent(this, /* animate= */ true);
+        // Reset scrolling if needed.
+        mScrollView.scrollTo(0, 0);
     }
 
     public void hide() {
@@ -86,24 +154,56 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
                 .setText(publisher);
     }
 
+    void setElapsed(Long nanos) {
+        ((TextView) mContentView.findViewById(R.id.readaloud_player_time))
+                .setText(formatTimeNanos(nanos));
+    }
+
+    void setDuration(Long nanos) {
+        ((TextView) mContentView.findViewById(R.id.readaloud_player_duration))
+                .setText(formatTimeNanos(nanos));
+    }
+
+    private static String formatTimeNanos(long nanos) {
+        if (nanos <= 0) {
+            return DateUtils.formatElapsedTime(0);
+        }
+        final long nanosPerSecond = 1_000_000_000L;
+        long seconds = nanos / nanosPerSecond;
+        return DateUtils.formatElapsedTime(seconds);
+    }
+
     void setInteractionHandler(InteractionHandler handler) {
-        setOnClickListener(R.id.readaloud_expanded_player_close_button, handler::onCloseClick);
         setOnClickListener(R.id.readaloud_play_pause_button, handler::onPlayPauseClick);
         setOnClickListener(R.id.readaloud_seek_back_button, handler::onSeekBackClick);
         setOnClickListener(R.id.readaloud_seek_forward_button, handler::onSeekForwardClick);
         setOnClickListener(R.id.readaloud_expanded_player_publisher, handler::onPublisherClick);
+        setOnClickListener(R.id.readaloud_playback_speed, this::showSpeedMenu);
         setOnClickListener(R.id.readaloud_more_button, this::showOptionsMenu);
+
+        SeekBar seekBar =
+                (SeekBar) mContentView.findViewById(R.id.readaloud_expanded_player_seek_bar);
+        seekBar.setOnSeekBarChangeListener(handler.getSeekBarChangeListener());
+        mSpeedMenu.setInteractionHandler(handler);
+        mOptionsMenu.setInteractionHandler(handler);
     }
 
-    @SuppressWarnings({"SetTextI18n", "DefaultLocale"})
     public void setSpeed(float speed) {
-        TextView speedButton = (TextView) mContentView.findViewById(R.id.readaloud_playback_speed);
-        speedButton.setText(String.format("%.1fx", speed));
-        speedButton.setContentDescription(
+        mModel.set(PlayerProperties.SPEED, speed);
+        String speedString = SpeedMenuSheetContent.speedFormatter(speed);
+        mSpeedButton.setText(
+                mContext.getResources().getString(R.string.readaloud_speed, speedString));
+        mSpeedButton.setContentDescription(
                 mContext.getResources()
-                        .getString(
-                                R.string.readaloud_speed_menu_button,
-                                String.format("%.1f", speed)));
+                        .getString(R.string.readaloud_speed_menu_button, speedString));
+    }
+
+    void setHighlightingSupported(boolean supported) {
+        mOptionsMenu.setHighlightingSupported(supported);
+    }
+
+    void setHighlightingEnabled(boolean enabled) {
+        mOptionsMenu.setHighlightingEnabled(enabled);
     }
 
     public void setPlaying(boolean playing) {
@@ -121,18 +221,43 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
         }
     }
 
+    /**
+     * @param percentProgress out of 1.0
+     */
+    public void setProgress(float percent) {
+        mSeekBar.setProgress((int) (percent * mSeekBar.getMax()), true);
+    }
+
     @Nullable
     OptionsMenuSheetContent getOptionsMenu() {
         return mOptionsMenu;
     }
 
     public void showOptionsMenu() {
+        // set bit saying we're waiting for another sheet
+        mModel.set(PlayerProperties.SHOW_MINI_PLAYER_ON_DISMISS, false);
         mBottomSheetController.hideContent(this, /* animate= */ false);
         mBottomSheetController.requestShowContent(mOptionsMenu, /* animate= */ true);
     }
 
-    public void notifySheetClosed() {
-        mOptionsMenu.notifySheetClosed();
+    @Nullable
+    VoiceMenuSheetContent getVoiceMenu() {
+        if (mOptionsMenu == null) {
+            return null;
+        }
+        return mOptionsMenu.getVoiceMenu();
+    }
+
+    public void notifySheetClosed(BottomSheetContent contentClosed) {
+        mOptionsMenu.notifySheetClosed(contentClosed);
+        mSpeedMenu.notifySheetClosed(contentClosed);
+    }
+
+    public void showSpeedMenu() {
+        // set bit saying we're waiting for another sheet
+        mModel.set(PlayerProperties.SHOW_MINI_PLAYER_ON_DISMISS, false);
+        mBottomSheetController.hideContent(this, /* animate= */ false);
+        mBottomSheetController.requestShowContent(mSpeedMenu, /* animate= */ true);
     }
 
     // BottomSheetContent implementation
@@ -201,7 +326,7 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
 
     @Override
     public int getSheetContentDescriptionStringId() {
-        // "Read Aloud player."
+        // "'Listen to this page' player."
         // Automatically appended: "Swipe down to close."
         return R.string.readaloud_player_name;
     }
@@ -227,6 +352,12 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
         return R.string.readaloud_player_minimized;
     }
 
+    @Override
+    public boolean canSuppressInAnyState() {
+        // Always immediately hide if a higher-priority sheet content wants to show.
+        return true;
+    }
+
     private void setOnClickListener(int id, Runnable onClick) {
         mContentView
                 .findViewById(id)
@@ -236,8 +367,48 @@ public class ExpandedPlayerSheetContent implements BottomSheetContent {
                         });
     }
 
+    /** Customize portraint and landscape mode sheets. Landscape mode layout is more compressed. */
+    public void onOrientationChange(int orientation) {
+        TextView chromeNowPlaying = mContentView.findViewById(R.id.chrome_now_playing_text);
+        ViewGroup.MarginLayoutParams chromeNowPlayingParams =
+                (ViewGroup.MarginLayoutParams) chromeNowPlaying.getLayoutParams();
+
+        ViewGroup.LayoutParams errorParams = mErrorLayout.getLayoutParams();
+        int bottomPadding = 0;
+        int topMargin = 0;
+        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+            errorParams.height =
+                    mContext.getResources()
+                            .getDimensionPixelSize(R.dimen.error_layour_portrait_height);
+            bottomPadding =
+                    mContext.getResources()
+                            .getDimensionPixelSize(R.dimen.readaloud_controls_portrait_padding);
+            topMargin =
+                    mContext.getResources()
+                            .getDimensionPixelSize(R.dimen.readaloud_now_playing_spacing_portrait);
+
+        } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+
+            errorParams.height =
+                    mContext.getResources()
+                            .getDimensionPixelSize(R.dimen.error_layour_landscape_height);
+            topMargin =
+                    mContext.getResources()
+                            .getDimensionPixelSize(R.dimen.readaloud_now_playing_spacing_landscape);
+        }
+        chromeNowPlayingParams.setMargins(0, topMargin, 0, 0);
+        chromeNowPlaying.setLayoutParams(chromeNowPlayingParams);
+        mErrorLayout.setLayoutParams(errorParams);
+        mPlayerControls.setPadding(0, 0, 0, bottomPadding);
+    }
+
     @VisibleForTesting
-    public void setOptionsMenu(OptionsMenuSheetContent optionsMenu) {
+    public void setOptionsMenuSheetContent(OptionsMenuSheetContent optionsMenu) {
         mOptionsMenu = optionsMenu;
+    }
+
+    @VisibleForTesting
+    public void setSpeedMenuSheetContent(SpeedMenuSheetContent speedMenu) {
+        mSpeedMenu = speedMenu;
     }
 }

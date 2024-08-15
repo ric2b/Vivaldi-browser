@@ -27,8 +27,15 @@
 #define CHECK_RESULTS 0
 
 // Note: Max sum(+ve coefficients) = 1.125 * scale
-static INLINE void get_cubic_kernel_dbl(double x, double *kernel) {
-  assert(0 <= x && x < 1);
+static INLINE void get_cubic_kernel_dbl(double x, double kernel[4]) {
+  // Check that the fractional position is in range.
+  //
+  // Note: x is calculated from, e.g., `u_frac = u - floor(u)`.
+  // Mathematically, this implies that 0 <= x < 1. However, in practice it is
+  // possible to have x == 1 due to floating point rounding. This is fine,
+  // and we still interpolate correctly if we allow x = 1.
+  assert(0 <= x && x <= 1);
+
   double x2 = x * x;
   double x3 = x2 * x;
   kernel[0] = -0.5 * x + x2 - 0.5 * x3;
@@ -37,7 +44,7 @@ static INLINE void get_cubic_kernel_dbl(double x, double *kernel) {
   kernel[3] = -0.5 * x2 + 0.5 * x3;
 }
 
-static INLINE void get_cubic_kernel_int(double x, int16_t *kernel) {
+static INLINE void get_cubic_kernel_int(double x, int16_t kernel[4]) {
   double kernel_dbl[4];
   get_cubic_kernel_dbl(x, kernel_dbl);
 
@@ -48,7 +55,7 @@ static INLINE void get_cubic_kernel_int(double x, int16_t *kernel) {
 }
 
 #if CHECK_RESULTS
-static INLINE int get_cubic_value_int(const int *p, const int16_t *kernel) {
+static INLINE int get_cubic_value_int(const int *p, const int16_t kernel[4]) {
   return kernel[0] * p[0] + kernel[1] * p[1] + kernel[2] * p[2] +
          kernel[3] * p[3];
 }

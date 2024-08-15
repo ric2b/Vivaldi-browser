@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/js/jstemplate_compiled.js';
+
 import {mobileNav} from 'chrome://interstitials/common/resources/interstitial_mobile_nav.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
@@ -74,10 +76,9 @@ function portalSignin() {
 
 // Subframes use a different layout but the same html file.  This is to make it
 // easier to support platforms that load the error page via different
-// mechanisms (Currently just iOS). We also use the subframe style for portals
-// as they are embedded like subframes and can't be interacted with by the user.
+// mechanisms (Currently just iOS).
 let isSubFrame = false;
-if (window.top.location !== window.location || window.portalHost) {
+if (window.top.location !== window.location) {
   document.documentElement.setAttribute('subframe', '');
   isSubFrame = true;
 }
@@ -86,7 +87,7 @@ if (window.top.location !== window.location || window.portalHost) {
 // Used by NetErrorTabHelper to update DNS error pages with probe results.
 function updateForDnsProbe(strings) {
   const context = new JsEvalContext(strings);
-  jstProcess(context, document.getElementById('t'));
+  jstProcess(context, document.body);
   onDocumentLoadOrUpdate();
 }
 
@@ -377,6 +378,7 @@ function onDocumentLoadOrUpdate() {
 function onDocumentLoad() {
   // `loadTimeDataRaw` is injected to the `window` scope from C++.
   loadTimeData.data = window.loadTimeDataRaw;
+  jstProcess(new JsEvalContext(window.loadTimeDataRaw), document.body);
 
   // Sets up the proper button layout for the current platform.
   const buttonsDiv = document.getElementById('buttons');

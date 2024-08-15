@@ -55,6 +55,8 @@ g.test('format')
     const { blockWidth, blockHeight } = kTextureFormatInfo[textureFormat];
 
     t.skipIfTextureFormatNotSupported(textureFormat, viewFormat);
+    // Compatibility mode does not support format reinterpretation.
+    t.skipIf(t.isCompatibility && viewFormat !== undefined && viewFormat !== textureFormat);
 
     const compatible = viewFormat === undefined || viewCompatible(textureFormat, viewFormat);
 
@@ -190,7 +192,7 @@ g.test('array_layers')
   - Defaulting of baseArrayLayer and arrayLayerCount
   - baseArrayLayer+arrayLayerCount must be within the texture`
   )
-  .params(u =>
+  .params(
     kTextureAndViewDimensions
       .beginSubcases()
       .expand('textureLayers', ({ textureDimension: d }) => (d === '2d' ? [1, 6, 18] : [1]))
@@ -253,7 +255,7 @@ g.test('mip_levels')
   - Cases with baseMipLevel or mipLevelCount undefined (compares against reference defaulting impl)
   `
   )
-  .params(u =>
+  .params(
     kTextureAndViewDimensions
       .beginSubcases()
       .combine('textureLevels', [1, kLevels - 2, kLevels])
@@ -270,13 +272,8 @@ g.test('mip_levels')
       })
   )
   .fn(t => {
-    const {
-      textureDimension,
-      viewDimension,
-      textureLevels,
-      baseMipLevel,
-      mipLevelCount,
-    } = t.params;
+    const { textureDimension, viewDimension, textureLevels, baseMipLevel, mipLevelCount } =
+      t.params;
 
     t.skipIfTextureViewDimensionNotSupported(viewDimension);
 

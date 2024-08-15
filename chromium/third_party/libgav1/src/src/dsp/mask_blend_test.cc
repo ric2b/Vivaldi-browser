@@ -270,9 +270,8 @@ class MaskBlendTest : public testing::TestWithParam<MaskBlendTestParam>,
     } else if (absl::StartsWith(test_case, "NEON/")) {
       MaskBlendInit_NEON();
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        MaskBlendInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      MaskBlendInit_SSE4_1();
     } else {
       FAIL() << "Unrecognized architecture prefix in test case name: "
              << test_case;

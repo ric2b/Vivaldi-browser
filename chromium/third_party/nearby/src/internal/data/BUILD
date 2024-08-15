@@ -9,21 +9,19 @@ package(default_visibility = [
 cc_library(
     name = "data_manager",
     hdrs = [
-        "data_manager.h",
         "data_set.h",
         "leveldb_data_set.h",
-        "memory_data_set.h",
     ],
     deps = [
         "//internal/platform:types",
         "//third_party/leveldb:db",
         "//third_party/leveldb:table",
         "//third_party/leveldb:util",
-        "//third_party/protobuf:protobuf_lite",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+        "@com_google_protobuf//:protobuf_lite",
     ],
 )
 
@@ -43,7 +41,6 @@ cc_test(
     timeout = "short",
     srcs = [
         "leveldb_data_set_test.cc",
-        "memory_data_set_test.cc",
     ],
     shard_count = 8,
     deps = [

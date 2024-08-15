@@ -2,12 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {State} from '../../externs/ts/state.js';
 import {Slice} from '../../lib/base_store.js';
+import type {State} from '../../state/state.js';
 
 /**
  * @fileoverview Device slice of the store.
- * @suppress {checkTypes}
  */
 
 const slice = new Slice<State, State['device']>('device');

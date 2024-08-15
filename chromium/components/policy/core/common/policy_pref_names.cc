@@ -114,16 +114,6 @@ const char kUserPolicyNotificationWasShown[] =
     "policy.user_policy_notification_was_shown";
 #endif
 
-// A boolean indicating whether the newly specified behavior for
-// Element.offsetParent is in effect.
-const char kOffsetParentNewSpecBehaviorEnabled[] =
-    "policy.offset_parent_new_spec_behavior_enabled";
-
-// A boolean indicating whether the new behavior for event dispatching on
-// disabled form controls is in effect.
-const char kSendMouseEventsDisabledFormControlsEnabled[] =
-    "policy.send_mouse_events_disabled_form_controls_enabled";
-
 // Boolean controlling whether SafeSearch is mandatory for Google Web Searches.
 const char kForceGoogleSafeSearch[] = "settings.force_google_safesearch";
 
@@ -167,8 +157,11 @@ const char kLocalTestPoliciesForNextStartup[] =
 const char kForcePermissionPolicyUnloadDefaultEnabled[] =
     "policy.force_permission_policy_unload_default_enabled";
 
-const char kPPAPISharedImagesForVideoDecoderAllowed[] =
-    "policy.ppapi_shared_images_for_video_decoder_allowed";
-
+#if BUILDFLAG(IS_CHROMEOS)
+// Allows user browser navigation access to the listed host patterns. Only
+// applied when a AlwaysOn VPN is active but not connected.
+const char kAlwaysOnVpnPreConnectUrlAllowlist[] =
+    "policy.alwayson_vpn_pre_connect_url_allowlist";
+#endif
 }  // namespace policy_prefs
 }  // namespace policy

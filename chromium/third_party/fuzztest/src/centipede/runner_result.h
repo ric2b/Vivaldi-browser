@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -34,6 +35,8 @@ inline constexpr std::string_view kExecutionFailurePerBatchTimeout =
     "per-batch-timeout-exceeded";
 inline constexpr std::string_view kExecutionFailureRssLimitExceeded =
     "rss-limit-exceeded";
+inline constexpr std::string_view kExecutionFailureStackLimitExceeded =
+    "stack-limit-exceeded";
 
 // It represents the results of the execution of one input by the runner.
 class ExecutionResult {
@@ -54,12 +57,7 @@ class ExecutionResult {
     uint64_t peak_rss_mb = 0;     // Peak RSS in Mb after executing the input.
 
     // For tests.
-    bool operator==(const Stats& other) const {  // = default in C++20.
-      return prep_time_usec == other.prep_time_usec &&
-             exec_time_usec == other.exec_time_usec &&
-             peak_rss_mb == other.peak_rss_mb &&
-             post_time_usec == other.post_time_usec;
-    }
+    bool operator==(const Stats&) const = default;
   };
 
   // Accessors.

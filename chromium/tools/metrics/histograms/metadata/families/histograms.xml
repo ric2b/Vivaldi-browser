@@ -30,9 +30,8 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="AddSupervisionDialog.Enrollment"
-    enum="AddSupervisionEnrollment" expires_after="2024-02-20">
+    enum="AddSupervisionEnrollment" expires_after="2024-06-30">
   <owner>courtneywong@chromium.org</owner>
-  <owner>michaelpg@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the number of users who go through the Add Supervision process to
@@ -48,9 +47,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="AddSupervisionDialog.EnrollmentCompletedUserTime" units="ms"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
-  <owner>michaelpg@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Measures the amount of time in milliseconds for users to successfully enroll
@@ -60,9 +58,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="AddSupervisionDialog.EnrollmentNotCompletedUserTime"
-    units="ms" expires_after="2023-12-12">
+    units="ms" expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
-  <owner>michaelpg@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Measures the amount of time in milliseconds for users to exit the Add
@@ -73,9 +70,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="AddSupervisionDialog.SignoutCompletedUserTime" units="ms"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
-  <owner>michaelpg@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Measures the amount of time in milliseconds for users to sign out after
@@ -85,7 +81,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChildAccountReconcilor.ForcedUserExitOnReconcileError"
-    enum="BooleanHit" expires_after="2023-12-12">
+    enum="BooleanHit" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -95,7 +91,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChromeOS.FamilyLink.ChildStatusReportRequest.Size" units="KB"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -107,7 +103,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="ChromeOS.FamilyLink.ChildStatusReportRequest.TimeSinceLastReport"
-    units="minutes" expires_after="2023-12-12">
+    units="minutes" expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -119,7 +115,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChromeOS.FamilyLinkUser.FaviconAvailability"
-    enum="SupervisedUserFaviconAvailability" expires_after="2024-02-11">
+    enum="SupervisedUserFaviconAvailability" expires_after="2024-04-28">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -140,16 +136,13 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-metrics-team@google.com</owner>
   <summary>
     Categorizes the current user for the Family Experiences team's metrics.
-    Other is for all other users that do not fall into any of the below
-    categories. Users under the age of consent automatically have supervision
-    applied to their accounts. Users over the age of consent can opt into
-    supervision. WebApprovals metrics are included from M110 onwards.
-    ExtensionApprovals metrics are included from M115 onwards.
+    WebApprovals metrics are included from M110 onwards. ExtensionApprovals
+    metrics are included from M115 onwards.
   </summary>
 </histogram>
 
 <histogram name="ChromeOS.FamilyLinkUser.ParentAccess.FlowResult.{FlowType}"
-    enum="ParentAccessFlowResult" expires_after="2024-02-20">
+    enum="ParentAccessFlowResult" expires_after="2024-06-30">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -167,7 +160,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChromeOS.FamilyLinkUser.ParentAccessWidgetError.{FlowType}"
-    enum="FamilyLinkUserParentAccessWidgetError" expires_after="2024-02-20">
+    enum="FamilyLinkUserParentAccessWidgetError" expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -201,21 +194,6 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="ChromeOS.FamilyUser.ChildUserTypeMismatchError"
-    enum="ChildUserTypeMismatchError" expires_after="2023-12-12">
-  <owner>agawronska@chromium.org</owner>
-  <owner>galenemco@chromium.org</owner>
-  <owner>cros-families-eng@google.com</owner>
-  <summary>
-    Reports errors that occur when there is a mismatch between child account
-    status detected during online sign-in from the device login screen and the
-    child status read from the ID token. This error results in ChromeOS crashing
-    to prevent an unsupervised experience. Errors can occur when we receive (1)
-    a non-child token for a signed-in child user or (2) a child token for a
-    signed-in non-child user.
-  </summary>
-</histogram>
-
 <histogram name="ChromeOS.FamilyUser.LogSegment2" enum="FamilyUserLogSegment"
     expires_after="never">
 <!-- expires-never: used internally for filtering -->
@@ -238,7 +216,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChromeOS.FamilyUser.NumSecondaryAccounts" units="accounts"
-    expires_after="2024-02-11">
+    expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <owner>chrome-metrics-team@google.com</owner>
@@ -250,7 +228,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChromeOS.LegacySupervisedUsers.HiddenFromLoginScreen"
-    enum="LegacySupervisedUserStatus" expires_after="2023-12-12">
+    enum="LegacySupervisedUserStatus" expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -261,18 +239,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="FamilyLinkUser.ClassifyUrlRequest.AuthError"
-    enum="GoogleServiceAuthError" expires_after="2024-03-03">
-  <owner>tju@google.com</owner>
-  <owner>chrome-kids-eng@google.com</owner>
-  <summary>
-    The detailed reason of GoogleServiceAuthError in calls to Kids Management
-    API::ClassifyURL.
-  </summary>
-</histogram>
-
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.HttpStatusOrNetError"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2024-02-04">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2024-06-30">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -283,7 +251,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.Latency" units="ms"
-    expires_after="2024-03-24">
+    expires_after="2024-05-26">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -295,18 +263,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="FamilyLinkUser.ClassifyUrlRequest.ParsingResult"
-    enum="KidsChromeManagementClientParsingError" expires_after="2024-03-03">
-  <owner>tju@google.com</owner>
-  <owner>chrome-kids-eng@google.com</owner>
-  <summary>
-    Indicates success of a JSON response parsing from Kids Management
-    API::ClassifyURL, or a stage at which it failed.
-  </summary>
-</histogram>
-
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.Status"
-    enum="SupervisedUserProtoFetcherStatus" expires_after="2024-03-24">
+    enum="SupervisedUserProtoFetcherStatus" expires_after="2024-05-26">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -344,7 +302,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.ClassifyUrlRequest.{Status}.Latency" units="ms"
-    expires_after="2023-11-01">
+    expires_after="2024-06-02">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -389,7 +347,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.CreatePermissionRequest.Status"
-    enum="SupervisedUserProtoFetcherStatus" expires_after="2024-02-20">
+    enum="SupervisedUserProtoFetcherStatus" expires_after="2024-06-30">
   <owner>tju@google.com</owner>
   <owner>anthie@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -422,7 +380,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.LocalWebApprovalCompleteRequestTotalDuration"
-    units="ms" expires_after="2024-02-11">
+    units="ms" expires_after="2024-06-30">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -436,7 +394,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.LocalWebApprovalOutcome"
-    enum="FamilyLinkUserLocalWebApprovalOutcome" expires_after="2024-02-11">
+    enum="FamilyLinkUserLocalWebApprovalOutcome" expires_after="2024-06-30">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -448,7 +406,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyLinkUser.LocalWebApprovalResult"
-    enum="FamilyLinkUserLocalWebApprovalResult" expires_after="2024-02-11">
+    enum="FamilyLinkUserLocalWebApprovalResult" expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -464,23 +422,19 @@ chromium-metrics-reviews@google.com.
 <!-- expires-never: used internally for filtering -->
 
   <owner>fernandex@chromium.org</owner>
+  <owner>courtneywong@chromium.org</owner>
+  <owner>agawronska@chromium.org</owner>
   <owner>chrome-kids-eng@google.com</owner>
+  <owner>cros-families-eng@google.com</owner>
   <summary>
-    Categorizes the current user based on Family Link user type. Other is for
-    all unsupervised users. Users under the age of consent automatically have
-    supervision applied to their accounts. Users over the age of consent can opt
-    into supervision. Mixed Profile is for profiles with both supervised and
-    unsupervised users. Recorded for Chrome browser platforms on Android,
-    Desktop and ChromeOS Lacros at the start of a user session, if the state
-    changes during the session this will only be recorded at the start of the
-    next session.
+    Categorizes the current user based on Family Link user type. Recorded for
+    all supervised platforms.
   </summary>
 </histogram>
 
 <histogram name="FamilyUser.ChromeBrowserEngagement.Duration2" units="ms"
-    expires_after="2024-02-11">
+    expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the Chrome OS user Chrome browser usage in milliseconds. Reports
@@ -494,9 +448,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.DeviceOwner" enum="Boolean"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records whether the current primary user is the owner of device. Reports at
@@ -505,9 +458,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.FamilyLinkUsersCount" units="Number of Users"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the number of family link users on a Chrome OS device at the
@@ -516,9 +468,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.GaiaUsersCount" units="Number of Users"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the number of Gaia users on a Chrome OS device, at the beginning of
@@ -528,9 +479,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteList" enum="FamilyLinkManagedSiteList"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records whether managed sites approved list and blocked list are enabled for
@@ -542,7 +492,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteList.Conflict" enum="BooleanHasConflict"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>msalama@chromium.org</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -554,7 +504,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteList.SubdomainConflictType"
-    enum="FamilyLinkFilteringSubdomainConflictType" expires_after="2024-02-11">
+    enum="FamilyLinkFilteringSubdomainConflictType" expires_after="2024-07-14">
   <owner>anthie@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -565,9 +515,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteListCount.Approved"
-    units="Number of approved sites" expires_after="2024-02-11">
+    units="Number of approved sites" expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records number of approved urls and hosts for currently active Family Link
@@ -578,9 +527,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteListCount.Blocked"
-    units="Number of blocked sites" expires_after="2024-02-11">
+    units="Number of blocked sites" expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records number of blocked urls and hosts for currently active Family Link
@@ -591,9 +539,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.NewUserAdded" enum="NewUserAdded"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Reports NewUserAdded enum when a new Family Link user or regular user is
@@ -603,9 +550,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.SessionEngagement.Duration" units="ms"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the Chrome OS user session duration in milliseconds. Reports current
@@ -615,9 +561,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.SessionEngagement.Total" units="Hour of day"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the Chrome OS user engagement hour within the current day (0-23),
@@ -628,9 +573,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.SessionEngagement.Weekday" units="Hour of day"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the Chrome OS user engagement hour of day (0-23) on weekday. Logged
@@ -640,9 +584,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.SessionEngagement.Weekend" units="Hour of day"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the Chrome OS user engagement hour of day (0-23) on weekend. Logged
@@ -652,9 +595,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.TimeLimitPolicyTypes" enum="TimeLimitPolicyType"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records what time limit policy types are enabled for the currently active
@@ -667,9 +609,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.WebFilterType" enum="FamilyLinkWebFilterType"
-    expires_after="2024-02-11">
+    expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
-  <owner>xiqiruan@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Records the web filter type for currently active Family Link user. Prior to
@@ -680,7 +621,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.{AppType}AppsCount2" units="Number of Apps"
-    expires_after="2024-02-20">
+    expires_after="2024-06-30">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -694,7 +635,6 @@ chromium-metrics-reviews@google.com.
     <variant name="Crostini"/>
     <variant name="Extension"/>
     <variant name="Lacros"/>
-    <variant name="MacOs"/>
     <variant name="PluginVm"/>
     <variant name="Remote"/>
     <variant name="SystemWeb"/>
@@ -704,7 +644,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FamilyUser.{ExtensionStatus}ExtensionsCount2"
-    units="Number of Extensions" expires_after="2024-02-20">
+    units="Number of Extensions" expires_after="2024-06-30">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -719,16 +659,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ManagedMode.BlockingInterstitialCommand"
-    enum="ManagedModeBlockingCommand" expires_after="2024-02-11">
+    enum="ManagedModeBlockingCommand" expires_after="2024-06-30">
   <owner>agawronska@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>Which command was selected from the blocking interstitial.</summary>
 </histogram>
 
 <histogram name="ManagedUsers.BlockedIframeCount" units="iframes"
-    expires_after="2024-02-11">
-  <owner>yilkal@chromium.org</owner>
-  <owner>michaelpg@chromium.org</owner>
+    expires_after="2024-06-30">
+  <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     The number of blocked iframes per unblocked main frame load. The value is
@@ -737,7 +676,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ManagedUsers.FilteringResult"
-    enum="SupervisedUserSafetyFilterResult" expires_after="2024-02-11">
+    enum="SupervisedUserSafetyFilterResult" expires_after="2024-06-30">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -748,48 +687,9 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="ManagedUsers.KidsManagementClassifyUrlFailureDelay" units="ms"
-    expires_after="2023-12-12">
-  <owner>escordeiro@chromium.org</owner>
-  <owner>unichrome-eng@google.com</owner>
-  <owner>cros-families-eng@google.com</owner>
-  <summary>
-    The extra page load delays introduced by network requests due to the
-    supervised user url filtering feature, measured once per page load, for
-    failed requests. This is the delay to fetch the token and call the
-    ClassifyUrl rpc, when there is a cache miss.
-  </summary>
-</histogram>
-
-<histogram name="ManagedUsers.KidsManagementClassifyUrlSuccessDelay" units="ms"
-    expires_after="2023-12-12">
-  <owner>escordeiro@chromium.org</owner>
-  <owner>unichrome-eng@google.com</owner>
-  <owner>cros-families-eng@google.com</owner>
-  <summary>
-    The extra page load delays introduced by network requests due to the
-    supervised user url filtering feature, measured once per page load. This is
-    the delay to fetch the token and call the ClassifyUrl rpc, when there is a
-    cache miss. Only recorded for successful requests.
-  </summary>
-</histogram>
-
-<histogram name="ManagedUsers.KidsManagementUrlCheckerResponseStatus"
-    enum="KidsManagementURLCheckerResponseStatus" expires_after="2023-12-12">
-  <owner>escordeiro@chromium.org</owner>
-  <owner>unichrome-eng@google.com</owner>
-  <owner>cros-families-eng@google.com</owner>
-  <summary>
-    The counts of response status from supervised user
-    KidsManagementURLCheckerCLient. Each entry includes the outcome of a request
-    (i.e. success, net error, parsing error).
-  </summary>
-</histogram>
-
 <histogram name="ManagedUsers.RequestPermissionSource"
-    enum="ManagedUserURLRequestPermissionSource" expires_after="2024-02-20">
-  <owner>michaelpg@chromium.org</owner>
-  <owner>yilkal@chromium.org</owner>
+    enum="ManagedUserURLRequestPermissionSource" expires_after="2024-06-30">
+  <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     The counts of request for permission sent from main frame or sub-frame.
@@ -809,7 +709,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.ExtensionEnablement"
-    enum="SupervisedUserExtensionEnablement" expires_after="2024-02-11">
+    enum="SupervisedUserExtensionEnablement" expires_after="2024-06-30">
   <owner>courtneywong@chromium.org</owner>
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -825,7 +725,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.ExtensionInstallDialog"
-    enum="SupervisedUserExtensionInstallDialog" expires_after="2023-12-12">
+    enum="SupervisedUserExtensionInstallDialog" expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -840,7 +740,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.Extensions2" enum="SupervisedUserExtension2"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -855,7 +755,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.ExtensionsMayRequestPermissions"
-    enum="BooleanEnabled" expires_after="2024-02-11">
+    enum="BooleanEnabled" expires_after="2024-06-30">
   <owner>courtneywong@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -876,7 +776,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.ParentPermissionDialog"
-    enum="SupervisedUserParentPermissionDialog" expires_after="2024-02-11">
+    enum="SupervisedUserParentPermissionDialog" expires_after="2024-12-12">
   <owner>courtneywong@chromium.org</owner>
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -894,9 +794,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.PerAppTimeLimits.AppsWithTimeLimit"
-    units="Apps" expires_after="2023-12-12">
+    units="Apps" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>yilkal@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     The count of applications with time limit set by parents. Recorded once per
@@ -905,9 +804,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.PerAppTimeLimits.BlockedAppsCount"
-    units="Apps" expires_after="2023-12-12">
+    units="Apps" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>yilkal@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     The count of applications blocked by parents. It only applies to ARC++
@@ -916,9 +814,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.PerAppTimeLimits.Engagement" units="Apps"
-    expires_after="2023-12-12">
+    expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>yilkal@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     Per-App Time Limits feature engagement measured by the number of apps with
@@ -928,9 +825,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SupervisedUsers.PerAppTimeLimits.PolicyChangeCount"
-    units="Changes" expires_after="2023-12-12">
+    units="Changes" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
-  <owner>yilkal@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
     The total number of PerAppTimeLimits policy changes seen in a session.
@@ -939,7 +835,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Supervision.ParentAccessCode.Action"
-    enum="ParentAccessCodeAction" expires_after="2023-12-12">
+    enum="ParentAccessCodeAction" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -949,7 +845,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Supervision.ParentAccessCode.Usage"
-    enum="ParentAccessCodeUsage" expires_after="2023-12-12">
+    enum="ParentAccessCodeUsage" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -959,7 +855,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Supervision.ParentAccessCode.ValidationResult.{Action}"
-    enum="ParentAccessCodeValidationResult" expires_after="2023-12-12">
+    enum="ParentAccessCodeValidationResult" expires_after="2024-12-12">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -977,7 +873,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Supervision.StatusReport.Event"
-    enum="SupervisionStatusReportEvent" expires_after="2023-12-12">
+    enum="SupervisionStatusReportEvent" expires_after="2024-12-12">
   <owner>escordeiro@google.com</owner>
   <owner>brunoad@google.com</owner>
   <owner>ldaguilar@google.com</owner>

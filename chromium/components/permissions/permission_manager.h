@@ -35,6 +35,7 @@ class RenderFrameHost;
 class RenderProcessHost;
 class WebContents;
 struct PermissionRequestDescription;
+struct PermissionResult;
 }
 
 class GeolocationPermissionContextDelegateTests;
@@ -42,7 +43,6 @@ class SubscriptionInterceptingPermissionManager;
 
 namespace permissions {
 class PermissionContextBase;
-struct PermissionResult;
 class PermissionManagerTest;
 
 class PermissionManager : public KeyedService,
@@ -141,13 +141,13 @@ class PermissionManager : public KeyedService,
   bool IsPermissionOverridable(
       blink::PermissionType permission,
       const absl::optional<url::Origin>& origin) override;
-  SubscriptionId SubscribePermissionStatusChange(
+  SubscriptionId SubscribeToPermissionStatusChange(
       blink::PermissionType permission,
       content::RenderProcessHost* render_process_host,
       content::RenderFrameHost* render_frame_host,
       const GURL& requesting_origin,
       base::RepeatingCallback<void(PermissionStatus)> callback) override;
-  void UnsubscribePermissionStatusChange(
+  void UnsubscribeFromPermissionStatusChange(
       SubscriptionId subscription_id) override;
   absl::optional<gfx::Rect> GetExclusionAreaBoundsInScreen(
       content::WebContents* web_contents) const override;

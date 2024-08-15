@@ -13,3 +13,10 @@ NSString* const kOmniboxShareButtonIdentifier =
 
 NSString* const kOmniboxVoiceSearchButtonIdentifier =
     @"kOmniboxVoiceSearchButtonIdentifier";
+
+// Vivaldi
+NSString* const kOmniboxReloadButtonIdentifier =
+    @"kOmniboxReloadButtonIdentifier";
+NSString* const kOmniboxStopLoadingButtonIdentifier =
+    @"kOmniboxStopLoadingButtonIdentifier";
+// End Vivaldi

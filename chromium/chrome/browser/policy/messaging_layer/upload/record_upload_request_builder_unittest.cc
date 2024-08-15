@@ -20,6 +20,7 @@
 #include "components/policy/core/common/management/management_service.h"
 #include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/reporting/resources/resource_manager.h"
+#include "components/reporting/util/encrypted_reporting_json_keys.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -125,6 +126,55 @@ class RecordUploadRequestBuilderTest : public ::testing::TestWithParam<bool> {
           policy::ManagementServiceFactory::GetForPlatform(),
           policy::EnterpriseManagementAuthority::CLOUD_DOMAIN);
 };
+
+#if !BUILDFLAG(IS_CHROMEOS)
+TEST_F(RecordUploadRequestBuilderTest,
+       GenerationGuidNotRequiredForManagedBrowsersOnNonChromeOSDevices) {
+  // Set up as CBCM enrolled browser on non-ChromeOS device.
+  policy::ScopedManagementServiceOverrideForTesting scoped_management_service =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementServiceFactory::GetForPlatform(),
+          policy::EnterpriseManagementAuthority::CLOUD_DOMAIN);
+
+  ASSERT_THAT(
+      policy::ManagementServiceFactory::GetForPlatform()->IsBrowserManaged(),
+      Eq(true));
+
+  SequenceInformation sequence_info;
+  sequence_info.set_generation_id(12345678);
+  sequence_info.set_priority(IMMEDIATE);
+  sequence_info.set_sequencing_id(0);
+  EXPECT_THAT(
+      SequenceInformationDictionaryBuilder(sequence_info).Build().has_value(),
+      Eq(true));
+}
+#endif  // BUILDFLAG(!IS_CHROMEOS)
+
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(RecordUploadRequestBuilderTest,
+       GenerationGuidRequiredForUnmanagedChromeOSDevices) {
+  // Set up as an unmanaged ChromeOS device.
+  policy::ScopedManagementServiceOverrideForTesting scoped_management_service =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementServiceFactory::GetForPlatform(),
+          policy::EnterpriseManagementAuthority::NONE);
+
+  ASSERT_THAT(
+      policy::ManagementServiceFactory::GetForPlatform()->IsBrowserManaged(),
+      Eq(false));
+
+  EXPECT_THAT(SequenceInformationDictionaryBuilder::GenerationGuidIsRequired(),
+              Eq(true));
+
+  SequenceInformation sequence_info;
+  sequence_info.set_generation_id(12345678);
+  sequence_info.set_priority(IMMEDIATE);
+  sequence_info.set_sequencing_id(0);
+
+  EXPECT_THAT(SequenceInformationDictionaryBuilder(sequence_info).Build(),
+              Eq(std::nullopt));
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 TEST_P(RecordUploadRequestBuilderTest, AcceptEncryptedRecordsList) {
   static constexpr size_t kNumRecords = 10;
@@ -276,8 +326,8 @@ TEST_P(RecordUploadRequestBuilderTest, AcceptRequestId) {
   ASSERT_TRUE(request_payload.has_value());
   EXPECT_THAT(request_payload.value(),
               IsEncryptionKeyRequestUploadRequestValid(need_encryption_key()));
-  auto* payload_request_id = request_payload->FindString(
-      UploadEncryptedReportingRequestBuilder::kRequestId);
+  auto* payload_request_id =
+      request_payload->FindString(reporting::json_keys::kRequestId);
   EXPECT_THAT(*payload_request_id, ::testing::StrEq(request_id));
 }
 
@@ -307,7 +357,7 @@ TEST_P(RecordUploadRequestBuilderTest,
                                        memory_resource_);
   EXPECT_TRUE(record_reservation.reserved());
 
-  absl::optional<base::Value::Dict> compressionless_payload =
+  std::optional<base::Value::Dict> compressionless_payload =
       EncryptedRecordDictionaryBuilder(std::move(compressionless_record),
                                        record_reservation)
           .Build();
@@ -326,7 +376,7 @@ TEST_P(RecordUploadRequestBuilderTest, IncludeCompressionRequest) {
                                        memory_resource_);
   EXPECT_TRUE(record_reservation.reserved());
 
-  absl::optional<base::Value::Dict> compressed_record_payload =
+  std::optional<base::Value::Dict> compressed_record_payload =
       EncryptedRecordDictionaryBuilder(std::move(compressed_record),
                                        record_reservation)
           .Build();

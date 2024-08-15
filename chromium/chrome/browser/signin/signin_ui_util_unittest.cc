@@ -30,10 +30,12 @@
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -104,7 +106,6 @@ class MockSigninUiDelegate : public SigninUiDelegate {
               (Profile * profile,
                signin_metrics::AccessPoint access_point,
                signin_metrics::PromoAction promo_action,
-               signin_metrics::Reason signin_reason,
                const CoreAccountId& account_id,
                TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode),
               ());
@@ -119,7 +120,6 @@ class MockSigninUiDelegate : public SigninUiDelegateImplDice {
               (Profile * profile,
                signin_metrics::AccessPoint access_point,
                signin_metrics::PromoAction promo_action,
-               signin_metrics::Reason signin_reason,
                const CoreAccountId& account_id,
                TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode),
               ());
@@ -158,13 +158,11 @@ class SigninUiUtilTest : public BrowserWithTestWindowTest {
   void ExpectTurnSyncOn(
       signin_metrics::AccessPoint access_point,
       signin_metrics::PromoAction promo_action,
-      signin_metrics::Reason signin_reason,
       const CoreAccountId& account_id,
       TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode) {
-    EXPECT_CALL(
-        mock_delegate_,
-        ShowTurnSyncOnUI(profile(), access_point, promo_action, signin_reason,
-                         account_id, signin_aborted_mode));
+    EXPECT_CALL(mock_delegate_,
+                ShowTurnSyncOnUI(profile(), access_point, promo_action,
+                                 account_id, signin_aborted_mode));
   }
 
   void ExpectNoSigninStartedHistograms(
@@ -256,6 +254,9 @@ TEST_F(SigninUiUtilTest, EnableSyncWithExistingAccount) {
           kMainGaiaID, kMainEmail, "refresh_token", false,
           signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
           signin_metrics::SourceForRefreshTokenOperation::kUnknown);
+  GetIdentityManager()->GetPrimaryAccountMutator()->SetPrimaryAccount(
+      account_id, signin::ConsentLevel::kSignin,
+      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
 
   for (bool is_default_promo_account : {true, false}) {
     base::HistogramTester histogram_tester;
@@ -270,8 +271,7 @@ TEST_F(SigninUiUtilTest, EnableSyncWithExistingAccount) {
             ? signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT
             : signin_metrics::PromoAction::PROMO_ACTION_NOT_DEFAULT;
     ExpectTurnSyncOn(signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE,
-                     expected_promo_action,
-                     signin_metrics::Reason::kSigninPrimaryAccount, account_id,
+                     expected_promo_action, account_id,
                      TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
     EnableSync(
         GetIdentityManager()->FindExtendedAccountInfoByAccountId(account_id),
@@ -679,6 +679,47 @@ TEST_F(SigninUiUtilTest, ShowSigninPromptFromPromoWithExistingAccount) {
   EXPECT_EQ(0, tab_strip->count());
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+class SigninUiUtilWithUnoDesktopTest : public SigninUiUtilTest {
+ private:
+  base::test::ScopedFeatureList feature_list_{switches::kUnoDesktop};
+};
+
+TEST_F(SigninUiUtilWithUnoDesktopTest, EnableSyncWithExistingWebOnlyAccount) {
+  CoreAccountId account_id =
+      GetIdentityManager()->GetAccountsMutator()->AddOrUpdateAccount(
+          kMainGaiaID, kMainEmail, "refresh_token", false,
+          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+          signin_metrics::SourceForRefreshTokenOperation::kUnknown);
+
+  for (bool is_default_promo_account : {true, false}) {
+    base::HistogramTester histogram_tester;
+    base::UserActionTester user_action_tester;
+
+    ExpectNoSigninStartedHistograms(histogram_tester);
+    EXPECT_EQ(0, user_action_tester.GetActionCount(
+                     "Signin_Signin_FromBookmarkBubble"));
+
+    signin_metrics::PromoAction expected_promo_action =
+        is_default_promo_account
+            ? signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT
+            : signin_metrics::PromoAction::PROMO_ACTION_NOT_DEFAULT;
+    ExpectTurnSyncOn(
+        signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE,
+        expected_promo_action, account_id,
+        TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT_ON_WEB_ONLY);
+    EnableSync(
+        GetIdentityManager()->FindExtendedAccountInfoByAccountId(account_id),
+        is_default_promo_account);
+
+    ExpectOneSigninStartedHistograms(histogram_tester, expected_promo_action);
+    EXPECT_EQ(1, user_action_tester.GetActionCount(
+                     "Signin_Signin_FromBookmarkBubble"));
+  }
+}
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -712,13 +753,11 @@ class MirrorSigninUiUtilTest : public BrowserWithTestWindowTest {
   void ExpectTurnSyncOn(
       signin_metrics::AccessPoint access_point,
       signin_metrics::PromoAction promo_action,
-      signin_metrics::Reason signin_reason,
       const CoreAccountId& account_id,
       TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode) {
-    EXPECT_CALL(
-        mock_delegate_,
-        ShowTurnSyncOnUI(profile(), access_point, promo_action, signin_reason,
-                         account_id, signin_aborted_mode));
+    EXPECT_CALL(mock_delegate_,
+                ShowTurnSyncOnUI(profile(), access_point, promo_action,
+                                 account_id, signin_aborted_mode));
   }
 
  protected:
@@ -743,8 +782,7 @@ TEST_F(MirrorSigninUiUtilTest, EnableSyncWithExistingAccount) {
 
     ExpectTurnSyncOn(
         signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN,
-        expected_promo_action, signin_metrics::Reason::kSigninPrimaryAccount,
-        account_info.account_id,
+        expected_promo_action, account_info.account_id,
         TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
     EnableSyncFromMultiAccountPromo(
         profile(), account_info,

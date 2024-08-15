@@ -259,3 +259,10 @@ message IsFilesTransferRestrictedResponse {
   // Check results for the files to be transferred.
   repeated FileRestriction files_restrictions = 4;
 }
+
+message GetDatabaseEntriesResponse {
+  // Error message, empty if no error occurred.
+  optional string error_message = 1;
+  // Files entries.
+  repeated FileMetadata files_entries = 2;
+}

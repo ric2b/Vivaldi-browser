@@ -76,12 +76,12 @@ tint_symbol_1 = struct @align(4), @block {
 }
 
 %b1 = block {  # root
-  %1:ptr<uniform, tint_symbol_1, read_write> = var @binding_point(0, 0)
+  %1:ptr<uniform, tint_symbol_1, read> = var @binding_point(0, 0)
 }
 
 %foo = func():i32 -> %b2 {
   %b2 = block {
-    %3:ptr<uniform, i32, read_write> = access %1, 0u
+    %3:ptr<uniform, i32, read> = access %1, 0u
     %4:i32 = load %3
     ret %4
   }
@@ -140,12 +140,12 @@ tint_symbol_1 = struct @align(4), @block {
 }
 
 %b1 = block {  # root
-  %1:ptr<push_constant, tint_symbol_1, read_write> = var
+  %1:ptr<push_constant, tint_symbol_1, read> = var
 }
 
 %foo = func():i32 -> %b2 {
   %b2 = block {
-    %3:ptr<push_constant, i32, read_write> = access %1, 0u
+    %3:ptr<push_constant, i32, read> = access %1, 0u
     %4:i32 = load %3
     ret %4
   }
@@ -256,7 +256,7 @@ TEST_F(IR_BlockDecoratedStructsTest, RuntimeArray_InStruct_ArrayLengthViaLets) {
 
     auto* func = b.Function("foo", ty.u32());
     b.Append(func->Block(), [&] {
-        auto* let_root = b.Let("root", buffer->Result());
+        auto* let_root = b.Let("root", buffer->Result(0));
         auto* let_arr = b.Let("arr", b.Access(ty.ptr(storage, ty.array<i32>()), let_root, 1_u));
         auto* length = b.Call(ty.u32(), core::BuiltinFn::kArrayLength, let_arr);
         b.Return(func, length);
@@ -343,7 +343,7 @@ TEST_F(IR_BlockDecoratedStructsTest, MultipleBuffers) {
     buffer_a->SetBindingPoint(0, 0);
     buffer_b->SetBindingPoint(0, 1);
     buffer_c->SetBindingPoint(0, 2);
-    auto* root = mod.root_block;
+    auto* root = mod.root_block.Get();
     root->Append(buffer_a);
     root->Append(buffer_b);
     root->Append(buffer_c);

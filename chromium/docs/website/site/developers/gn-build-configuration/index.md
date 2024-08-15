@@ -163,16 +163,6 @@ Possible values for the `target_cpu`:
             "`x86`", "`mipsel`", or "`mips64el`" but the GN builds for these aren't
             regularly tested.
 
-### Goma
-
-Googlers can use this for distributed builds. `goma_dir` is only required if you
-use the Goma tools not in the depot_tools.
-
-```
-use_goma = true
-goma_dir = "/home/me/somewhere/goma" # Optional
-```
-
 ### Official Chrome build
 
 This build requires that you are a Googler with src-internal checked out.
@@ -205,6 +195,11 @@ solutions = [
   },
 ],
 ```
+
+> **Chrome Branding and Experimental Flags**: In unbranded builds,
+> [testing/variations/fieldtrial_testing_config.json](https://source.chromium.org/chromium/chromium/src/+/main:testing/variations/fieldtrial_testing_config.json)
+> is used for default field trial settings. You may also disable field trial
+> experimental flags by building with `disable_fieldtrial_testing_config=true`.
 
 ### You can also set the following GN argument to disable PGO if needed:
 

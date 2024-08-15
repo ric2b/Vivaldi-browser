@@ -40,20 +40,30 @@ class Let final : public Castable<Let, OperandInstruction<1, 1>> {
     /// The offset in Operands() for the value
     static constexpr size_t kValueOperandOffset = 0;
 
+    /// Constructor (no result, no operands)
+    Let();
+
     /// Constructor
     /// @param result the result value
     /// @param value the let's value
     Let(InstructionResult* result, Value* value);
+
     ~Let() override;
 
     /// @copydoc Instruction::Clone()
     Let* Clone(CloneContext& ctx) override;
 
+    /// @param value the new let value
+    void SetValue(ir::Value* value) { SetOperand(kValueOperandOffset, value); }
+
     /// @returns the value
     ir::Value* Value() { return operands_[kValueOperandOffset]; }
 
+    /// @returns the value
+    const ir::Value* Value() const { return operands_[kValueOperandOffset]; }
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "let"; }
+    std::string FriendlyName() const override { return "let"; }
 };
 
 }  // namespace tint::core::ir

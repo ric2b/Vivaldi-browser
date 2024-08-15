@@ -21,7 +21,6 @@
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
-#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -135,8 +134,7 @@
       HandlerForProtocol(self.browser->GetCommandDispatcher(), LensCommands);
   self.mediator.loadQueryCommandsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), LoadQueryCommands);
-  self.mediator.sceneState =
-      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
+  self.mediator.sceneState = self.browser->GetSceneState();
   self.mediator.URLLoadingBrowserAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
   self.viewController.pasteDelegate = self.mediator;
@@ -170,14 +168,16 @@
   _keyboardMediator.omniboxTextField = self.textField;
   _keyboardMediator.delegate = self;
 
-  self.keyboardAccessoryView = ConfigureAssistiveKeyboardViews(
-      self.textField, kDotComTLD, _keyboardMediator, templateURLService,
-      self.bubblePresenter);
+  if (!base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    self.keyboardAccessoryView = ConfigureAssistiveKeyboardViews(
+        self.textField, kDotComTLD, _keyboardMediator, templateURLService,
+        self.bubblePresenter);
+  }
 
   if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching)) {
     self.zeroSuggestPrefetchHelper = [[ZeroSuggestPrefetchHelper alloc]
         initWithWebStateList:self.browser->GetWebStateList()
-                   editModel:_editView->model()];
+                  controller:_editView->controller()];
   }
 
   self.popupCoordinator = [self createPopupCoordinator:self.presenterDelegate];
@@ -217,6 +217,17 @@
 }
 
 - (void)focusOmnibox {
+  if (base::FeatureList::IsEnabled(kEnableStartupImprovements)) {
+    if (!self.keyboardAccessoryView) {
+      TemplateURLService* templateURLService =
+          ios::TemplateURLServiceFactory::GetForBrowserState(
+              self.browser->GetBrowserState());
+      self.keyboardAccessoryView = ConfigureAssistiveKeyboardViews(
+          self.textField, kDotComTLD, _keyboardMediator, templateURLService,
+          self.bubblePresenter);
+    }
+  }
+
   if (![self.textField isFirstResponder]) {
     base::RecordAction(base::UserMetricsAction("MobileOmniboxFocused"));
 

@@ -44,7 +44,7 @@ macro_rules! boolean_element_action_element_impl_shared {
     };
 }
 
-/// Create a struct w/ From<bool> and ActionElement impls.
+/// Create a struct w/ `From<bool>` and [`ActionElement`](super::ActionElement) impls.
 /// Use `plaintext_only`, `ciphertext_only`, or `plaintext_and_ciphertext` to create appropriate
 /// impls.
 macro_rules! boolean_element {
@@ -108,7 +108,7 @@ macro_rules! boolean_element {
     };
 }
 
-/// Create a [ToActionElement<Encrypted>] impl with the given index and length 1.
+/// Create a [`ToActionElement<Encrypted>`](super::ToActionElement) impl with the given index and length 1.
 macro_rules! boolean_element_to_encrypted_element {
     ( $type_name:ident) => {
         impl $crate::legacy::actions::ToActionElement<$crate::legacy::Ciphertext> for $type_name {
@@ -119,7 +119,7 @@ macro_rules! boolean_element_to_encrypted_element {
     };
 }
 
-/// Create a [ToActionElement<Plaintext>] impl with the given index and length 1.
+/// Create a [`ToActionElement<Plaintext>`](super::ToActionElement) impl with the given index and length 1.
 macro_rules! boolean_element_to_plaintext_element {
     ( $type_name:ident) => {
         impl $crate::legacy::actions::ToActionElement<$crate::legacy::Plaintext> for $type_name {

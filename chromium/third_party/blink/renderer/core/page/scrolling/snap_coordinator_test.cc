@@ -18,7 +18,7 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -82,22 +82,15 @@ class SnapCoordinatorTest : public testing::Test,
   }
 
   unsigned SizeOfSnapAreas(const ContainerNode& node) {
-    auto* box = node.GetLayoutBox();
-    if (RuntimeEnabledFeatures::LayoutNewSnapLogicEnabled()) {
-      for (auto& fragment : box->PhysicalFragments()) {
-        if (fragment.PropagatedSnapAreas()) {
-          return 0u;
-        }
-        if (auto* snap_areas = fragment.SnapAreas()) {
-          return snap_areas->size();
-        }
+    for (auto& fragment : node.GetLayoutBox()->PhysicalFragments()) {
+      if (fragment.PropagatedSnapAreas()) {
+        return 0u;
       }
-    } else {
-      if (auto* snap_areas = box->SnapAreas()) {
+      if (auto* snap_areas = fragment.SnapAreas()) {
         return snap_areas->size();
       }
     }
-    return 0U;
+    return 0u;
   }
 
   bool IsUseCounted(mojom::WebFeature feature) {
@@ -929,7 +922,6 @@ TEST_F(SnapCoordinatorTest, NegativeOverflowWithExpandedViewport) {
 }
 
 TEST_F(SnapCoordinatorTest, UseCounterNestedSnap) {
-  ScopedLayoutNewSnapLogicForTest enabled_scope(true);
   ClearUseCounter(WebFeature::kScrollSnapNestedSnapAreas);
   // Create a few sibling areas, no nested snap areas should be reported.
   SetHTML(R"HTML(

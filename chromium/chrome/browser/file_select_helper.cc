@@ -113,6 +113,7 @@ bool IsDownloadAllowedBySafeBrowsing(
     // Safe Browsing should only return these results for client downloads, not
     // for PPAPI downloads.
     case Result::ASYNC_SCANNING:
+    case Result::ASYNC_LOCAL_PASSWORD_SCANNING:
     case Result::BLOCKED_PASSWORD_PROTECTED:
     case Result::BLOCKED_TOO_LARGE:
     case Result::SENSITIVE_CONTENT_BLOCK:
@@ -163,16 +164,9 @@ FileSelectHelper::~FileSelectHelper() {
     select_file_dialog_->ListenerDestroyed();
 }
 
-void FileSelectHelper::FileSelected(const base::FilePath& path,
+void FileSelectHelper::FileSelected(const ui::SelectedFileInfo& file,
                                     int index,
                                     void* params) {
-  FileSelectedWithExtraInfo(ui::SelectedFileInfo(path, path), index, params);
-}
-
-void FileSelectHelper::FileSelectedWithExtraInfo(
-    const ui::SelectedFileInfo& file,
-    int index,
-    void* params) {
   if (IsValidProfile(profile_)) {
     base::FilePath path = file.file_path;
     if (dialog_mode_ != FileChooserParams::Mode::kUploadFolder)
@@ -205,15 +199,6 @@ void FileSelectHelper::FileSelectedWithExtraInfo(
 }
 
 void FileSelectHelper::MultiFilesSelected(
-    const std::vector<base::FilePath>& files,
-    void* params) {
-  std::vector<ui::SelectedFileInfo> selected_files =
-      ui::FilePathListToSelectedFileInfoList(files);
-
-  MultiFilesSelectedWithExtraInfo(selected_files, params);
-}
-
-void FileSelectHelper::MultiFilesSelectedWithExtraInfo(
     const std::vector<ui::SelectedFileInfo>& files,
     void* params) {
   if (!files.empty() && IsValidProfile(profile_)) {
@@ -644,13 +629,9 @@ void FileSelectHelper::CheckDownloadRequestWithSafeBrowsing(
   // Download Protection is not supported on Android.
   safe_browsing::SafeBrowsingService* sb_service =
       g_browser_process->safe_browsing_service();
-  bool real_time_download_protection_request_allowed =
-      safe_browsing::IsRealTimeDownloadProtectionRequestAllowed(
-          *profile_->GetPrefs());
 
   if (!sb_service || !sb_service->download_protection_service() ||
-      !sb_service->download_protection_service()->enabled() ||
-      !real_time_download_protection_request_allowed) {
+      !sb_service->download_protection_service()->enabled()) {
     RunFileChooserOnUIThread(default_file_path, std::move(params));
     return;
   }

@@ -11,18 +11,25 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "chrome/browser/ash/input_method/editor_consent_enums.h"
+#include "chrome/browser/ash/input_method/editor_identity_utils.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/components/standalone_browser/feature_refs.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/mock_network_change_notifier.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/text_input_type.h"
 
 namespace ash::input_method {
 namespace {
 
+using ::testing::ElementsAreArray;
 using ::testing::TestWithParam;
 
 const char kAllowedTestCountry[] = "allowed_country";
@@ -45,6 +52,9 @@ struct EditorSwitchAvailabilityTestCase {
 struct EditorSwitchTriggerTestCase {
   std::string test_name;
 
+  std::vector<base::test::FeatureRef> additional_enabled_flags;
+  std::string email;
+
   std::string active_engine_id;
   std::string url;
   ui::TextInputType input_type;
@@ -57,6 +67,7 @@ struct EditorSwitchTriggerTestCase {
 
   EditorMode expected_editor_mode;
   EditorOpportunityMode expected_editor_opportunity_mode;
+  std::vector<EditorBlockedReason> expected_blocked_reasons;
 };
 
 using EditorSwitchAvailabilityTest =
@@ -73,6 +84,17 @@ TextFieldContextualInfo CreateFakeTextFieldContextualInfo(
   return text_field_contextual_info;
 }
 
+std::unique_ptr<TestingProfile> CreateTestingProfile(std::string email) {
+  std::unique_ptr<TestingProfile> profile = TestingProfile::Builder().Build();
+
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile.get());
+
+  signin::MakePrimaryAccountAvailable(identity_manager, email,
+                                      signin::ConsentLevel::kSync);
+  return profile;
+}
+
 INSTANTIATE_TEST_SUITE_P(
     EditorSwitchAvailabilityTests,
     EditorSwitchAvailabilityTest,
@@ -85,21 +107,21 @@ INSTANTIATE_TEST_SUITE_P(
          .expected_availability = false},
         {.test_name = "FeatureNotAvailableForManagedAccountOnNonDogfoodDevices",
          .enabled_flags = {chromeos::features::kOrca,
-                           features::kFeatureManagementOrca},
+                           chromeos::features::kFeatureManagementOrca},
          .disabled_flags = {},
          .country_code = kAllowedTestCountry,
          .is_managed = true,
          .expected_availability = false},
         {.test_name = "FeatureNotAvailableInACountryNotApprovedYet",
          .enabled_flags = {chromeos::features::kOrca,
-                           features::kFeatureManagementOrca},
+                           chromeos::features::kFeatureManagementOrca},
          .disabled_flags = {},
          .country_code = kDeniedTestCountry,
          .is_managed = false,
          .expected_availability = false},
         {.test_name = "FeatureNotAvailableWithoutFeatureManagementFlag",
          .enabled_flags = {chromeos::features::kOrca},
-         .disabled_flags = {features::kFeatureManagementOrca},
+         .disabled_flags = {chromeos::features::kFeatureManagementOrca},
          .country_code = kAllowedTestCountry,
          .is_managed = false,
          .expected_availability = false},
@@ -112,7 +134,7 @@ INSTANTIATE_TEST_SUITE_P(
         {.test_name = "FeatureAvailableOnUnmanagedDeviceInApprovedCountryWithFe"
                       "atureManagementFlag",
          .enabled_flags = {chromeos::features::kOrca,
-                           features::kFeatureManagementOrca},
+                           chromeos::features::kFeatureManagementOrca},
          .disabled_flags = {},
          .country_code = kAllowedTestCountry,
          .is_managed = false,
@@ -143,6 +165,8 @@ INSTANTIATE_TEST_SUITE_P(
     testing::ValuesIn<EditorSwitchTriggerTestCase>({
         {
             .test_name = "DoNotTriggerFeatureIfConsentDeclined",
+            .additional_enabled_flags = {},
+            .email = "testuser@gmail.com",
             .active_engine_id = "xkb:us::eng",
             .url = kAllowedTestUrl,
             .input_type = ui::TEXT_INPUT_TYPE_TEXT,
@@ -154,9 +178,13 @@ INSTANTIATE_TEST_SUITE_P(
             .num_chars_selected = 0,
             .expected_editor_mode = EditorMode::kBlocked,
             .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+            .expected_blocked_reasons =
+                {EditorBlockedReason::kBlockedByConsent},
         },
         {
             .test_name = "DoNotTriggerFeatureOnAPasswordField",
+            .additional_enabled_flags = {},
+            .email = "testuser@gmail.com",
             .active_engine_id = "xkb:us::eng",
             .url = kAllowedTestUrl,
             .input_type = ui::TEXT_INPUT_TYPE_PASSWORD,
@@ -168,148 +196,196 @@ INSTANTIATE_TEST_SUITE_P(
             .num_chars_selected = 0,
             .expected_editor_mode = EditorMode::kBlocked,
             .expected_editor_opportunity_mode = EditorOpportunityMode::kNone,
+            .expected_blocked_reasons =
+                {EditorBlockedReason::kBlockedByInputType},
         },
-        {
-            .test_name = "DoNotTriggerFeatureOnADeniedWebsite",
-            .active_engine_id = "xkb:us::eng",
-            .url = "https://mail.google.com/mail",
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "DoNotTriggerFeatureWithNonEnglishInputMethod",
-            .active_engine_id = "nacl_mozc_jp",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "DoNotTriggerFeatureOnArcApps",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::ARC_APP,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "DoNotTriggerFeatureIfSettingToggleIsOff",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = false,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "DoNotTriggerFeatureOnTabletMode",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = true,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "DoNotTriggerFeatureWhenOffline",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_NONE,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "DoNotTriggerFeatureWhenSelectingTooLongText",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 10001,
-            .expected_editor_mode = EditorMode::kBlocked,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kRewrite,
-        },
-        {
-            .test_name =
-                "TriggersConsentIfSettingToggleIsOnAndUserHasNotGivenConsent",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kPending,
-            .num_chars_selected = 100,
-            .expected_editor_mode = EditorMode::kConsentNeeded,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kRewrite,
-        },
-        {
-            .test_name = "TriggersWriteModeForNoTextSelection",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 0,
-            .expected_editor_mode = EditorMode::kWrite,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
-        },
-        {
-            .test_name = "TriggersRewriteModeWhenSomeTextIsSelected",
-            .active_engine_id = "xkb:us::eng",
-            .url = kAllowedTestUrl,
-            .input_type = ui::TEXT_INPUT_TYPE_TEXT,
-            .app_type = AppType::BROWSER,
-            .is_in_tablet_mode = false,
-            .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
-            .user_pref = true,
-            .consent_status = ConsentStatus::kApproved,
-            .num_chars_selected = 100,
-            .expected_editor_mode = EditorMode::kRewrite,
-            .expected_editor_opportunity_mode = EditorOpportunityMode::kRewrite,
-        },
+        {.test_name = "DoNotTriggerFeatureOnWorkspaceForNonGooglerAccount",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = "https://mail.google.com/mail",
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons = {EditorBlockedReason::kBlockedByUrl}},
+        {.test_name = "DoNotTriggerFeatureOnWorkspaceForGooglerAccountWithou"
+                      "tOrcaOnWorkspaceFlag",
+         .additional_enabled_flags = {},
+         .email = "testuser@google.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = "https://mail.google.com/mail",
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons = {EditorBlockedReason::kBlockedByUrl}},
+        {.test_name = "TriggerFeatureOnWorkspaceForGooglerAccountWithOrcaOnW"
+                      "orkspaceFlag",
+         .additional_enabled_flags = {features::kOrcaOnWorkspace},
+         .email = "testuser@google.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = "https://mail.google.com/mail",
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kWrite,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons = {}},
+        {.test_name = "DoNotTriggerFeatureWithNonEnglishInputMethod",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "nacl_mozc_jp",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons =
+             {EditorBlockedReason::kBlockedByInputMethod}},
+        {.test_name = "DoNotTriggerFeatureOnArcApps",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::ARC_APP,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons = {EditorBlockedReason::kBlockedByAppType}},
+        {.test_name = "DoNotTriggerFeatureIfSettingToggleIsOff",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = false,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons = {EditorBlockedReason::kBlockedBySetting}},
+        {.test_name = "DoNotTriggerFeatureOnTabletMode",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = true,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons =
+             {EditorBlockedReason::kBlockedByInvalidFormFactor}},
+        {.test_name = "DoNotTriggerFeatureWhenOffline",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_NONE,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons =
+             {EditorBlockedReason::kBlockedByNetworkStatus}},
+        {.test_name = "DoNotTriggerFeatureWhenSelectingTooLongText",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 10001,
+         .expected_editor_mode = EditorMode::kBlocked,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kRewrite,
+         .expected_blocked_reasons =
+             {EditorBlockedReason::kBlockedByTextLength}},
+        {.test_name =
+             "TriggersConsentIfSettingToggleIsOnAndUserHasNotGivenConsent",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kPending,
+         .num_chars_selected = 100,
+         .expected_editor_mode = EditorMode::kConsentNeeded,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kRewrite,
+         .expected_blocked_reasons = {}},
+        {.test_name = "TriggersWriteModeForNoTextSelection",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 0,
+         .expected_editor_mode = EditorMode::kWrite,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kWrite,
+         .expected_blocked_reasons = {}},
+        {.test_name = "TriggersRewriteModeWhenSomeTextIsSelected",
+         .additional_enabled_flags = {},
+         .email = "testuser@gmail.com",
+         .active_engine_id = "xkb:us::eng",
+         .url = kAllowedTestUrl,
+         .input_type = ui::TEXT_INPUT_TYPE_TEXT,
+         .app_type = AppType::BROWSER,
+         .is_in_tablet_mode = false,
+         .network_status = net::NetworkChangeNotifier::CONNECTION_UNKNOWN,
+         .user_pref = true,
+         .consent_status = ConsentStatus::kApproved,
+         .num_chars_selected = 100,
+         .expected_editor_mode = EditorMode::kRewrite,
+         .expected_editor_opportunity_mode = EditorOpportunityMode::kRewrite,
+         .expected_blocked_reasons = {}},
     }),
     [](const testing::TestParamInfo<EditorSwitchTriggerTest::ParamType>& info) {
       return info.param.test_name;
@@ -319,22 +395,27 @@ TEST_P(EditorSwitchTriggerTest, TestEditorMode) {
   const EditorSwitchTriggerTestCase& test_case = GetParam();
   content::BrowserTaskEnvironment task_environment;
   base::test::ScopedFeatureList feature_list;
+  std::vector<base::test::FeatureRef> base_enabled_features = {
+      chromeos::features::kOrca, chromeos::features::kFeatureManagementOrca};
+  base_enabled_features.insert(base_enabled_features.end(),
+                               test_case.additional_enabled_flags.begin(),
+                               test_case.additional_enabled_flags.end());
   feature_list.InitWithFeatures(
-      /*enabled_features=*/{chromeos::features::kOrca,
-                            features::kFeatureManagementOrca},
+      /*enabled_features=*/base_enabled_features,
       /*disabled_features=*/{});
-  TestingProfile profile;
-  EditorSwitch editor_switch(/*profile=*/&profile,
+  std::unique_ptr<TestingProfile> profile =
+      CreateTestingProfile(test_case.email);
+  EditorSwitch editor_switch(/*profile=*/profile.get(),
                              /*country_code=*/kAllowedTestCountry);
 
   auto mock_notifier = net::test::MockNetworkChangeNotifier::Create();
-  profile.GetProfilePolicyConnector()->OverrideIsManagedForTesting(false);
+  profile->GetProfilePolicyConnector()->OverrideIsManagedForTesting(false);
 
   mock_notifier->SetConnectionType(test_case.network_status);
 
-  profile.GetPrefs()->SetBoolean(prefs::kOrcaEnabled, test_case.user_pref);
-  profile.GetPrefs()->SetInteger(prefs::kOrcaConsentStatus,
-                                 base::to_underlying(test_case.consent_status));
+  profile->GetPrefs()->SetBoolean(prefs::kOrcaEnabled, test_case.user_pref);
+  profile->GetPrefs()->SetInteger(
+      prefs::kOrcaConsentStatus, base::to_underlying(test_case.consent_status));
   editor_switch.OnTabletModeUpdated(test_case.is_in_tablet_mode);
   editor_switch.OnActivateIme(test_case.active_engine_id);
   editor_switch.OnInputContextUpdated(
@@ -346,6 +427,9 @@ TEST_P(EditorSwitchTriggerTest, TestEditorMode) {
   EXPECT_EQ(editor_switch.GetEditorMode(), test_case.expected_editor_mode);
   EXPECT_EQ(editor_switch.GetEditorOpportunityMode(),
             test_case.expected_editor_opportunity_mode);
+
+  EXPECT_THAT(editor_switch.GetBlockedReasons(),
+              testing::ElementsAreArray(test_case.expected_blocked_reasons));
 }
 
 }  // namespace

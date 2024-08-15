@@ -76,7 +76,7 @@ COMMAND(BindGraphicsPipeline,
 COMMAND(SetBlendConstants,
             PODArray<float> fBlendConstants);
 COMMAND(BindUniformBuffer,
-            BindBufferInfo fInfo;
+            BindUniformBufferInfo fInfo;
             UniformSlot fSlot);
 COMMAND(BindDrawBuffers,
             BindBufferInfo fVertices;
@@ -140,7 +140,7 @@ public:
         this->add<SetBlendConstants>(this->copy(blendConstants.data(), 4));
     }
 
-    void bindUniformBuffer(BindBufferInfo info, UniformSlot slot) {
+    void bindUniformBuffer(BindUniformBufferInfo info, UniformSlot slot) {
         this->add<BindUniformBuffer>(info, slot);
     }
 
@@ -200,7 +200,7 @@ public:
     }
 
     using Command = std::pair<Type, void*>;
-    using Iter = SkTBlockList<Command>::CIter;
+    using Iter = SkTBlockList<Command, 16>::CIter;
     Iter commands() const { return fCommands.items(); }
 
 private:
@@ -220,7 +220,7 @@ private:
         return dst;
     }
 
-    SkTBlockList<Command> fCommands;
+    SkTBlockList<Command, 16> fCommands{SkBlockAllocator::GrowthPolicy::kFibonacci};
 
     // fAlloc needs to be a data structure which can append variable length data in contiguous
     // chunks, returning a stable handle to that data for later retrieval.

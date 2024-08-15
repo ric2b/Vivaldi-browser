@@ -17,10 +17,10 @@ export interface EduCoexistenceBrowserProxy {
   initializeEduArgs(): Promise<EduCoexistenceParams>;
 
   /**
-   * Sends 'authExtensionReady' message to handle tasks after auth extension
+   * Sends 'authenticatorReady' message to handle tasks after authenticator
    * loads.
    */
-  authExtensionReady(): void;
+  authenticatorReady(): void;
 
   /**
    * Sends 'completeLogin' message to complete login.
@@ -32,6 +32,12 @@ export interface EduCoexistenceBrowserProxy {
    * with the list of emails of accounts in session.
    */
   getAccounts(): Promise<string[]>;
+
+  /**
+   * Sends 'getDeviceId' message to the handler. The promise will be resolved
+   * with the device identifier for this user.
+   */
+  getDeviceId(): Promise<string>;
 
   /**
    * Sends 'consentValid' message to the handler to notify the handler that
@@ -72,8 +78,8 @@ export class EduCoexistenceBrowserProxyImpl implements
     return sendWithPromise('initializeEduArgs');
   }
 
-  authExtensionReady() {
-    chrome.send('authExtensionReady');
+  authenticatorReady() {
+    chrome.send('authenticatorReady');
   }
 
   completeLogin(credentials: AuthCompletedCredentials) {
@@ -82,6 +88,10 @@ export class EduCoexistenceBrowserProxyImpl implements
 
   getAccounts() {
     return sendWithPromise('getAccounts');
+  }
+
+  getDeviceId() {
+    return sendWithPromise('getDeviceId');
   }
 
   consentValid() {

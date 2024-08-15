@@ -17,9 +17,9 @@ import {inflate} from 'pako';
 
 import {assertTrue} from '../base/logging';
 import {isString} from '../base/object_utils';
+import {showModal} from '../widgets/modal';
 
 import {globals} from './globals';
-import {showModal} from './modal';
 
 const CTRACE_HEADER = 'TRACE:\n';
 
@@ -131,7 +131,7 @@ export function openBufferWithLegacyTraceViewer(
   // The location.pathname mangling is to make this code work also when hosted
   // in a non-root sub-directory, for the case of CI artifacts.
   const catapultUrl = globals.root + 'assets/catapult_trace_viewer.html';
-  const newWin = window.open(catapultUrl) as Window;
+  const newWin = window.open(catapultUrl);
   if (newWin) {
     // Popup succeedeed.
     newWin.addEventListener('load', (e: Event) => {

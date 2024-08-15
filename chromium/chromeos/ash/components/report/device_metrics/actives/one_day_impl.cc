@@ -48,9 +48,12 @@ void OneDayImpl::Run(base::OnceCallback<void()> callback) {
   callback_ = std::move(callback);
 
   if (!IsDevicePingRequired()) {
+    utils::RecordIsDevicePingRequired(utils::PsmUseCase::k1DA, false);
     std::move(callback_).Run();
     return;
   }
+
+  utils::RecordIsDevicePingRequired(utils::PsmUseCase::k1DA, true);
 
   // Perform check membership if the local state pref has default value.
   // This is done to avoid duplicate check in if the device pinged already.
@@ -67,9 +70,10 @@ base::WeakPtr<OneDayImpl> OneDayImpl::GetWeakPtr() {
 }
 
 void OneDayImpl::CheckMembershipOprf() {
-  SetPsmRlweClient(kPsmUseCase, GetPsmIdentifiersToQuery());
+  PsmClientManager* psm_client_manager = GetParams()->GetPsmClientManager();
+  psm_client_manager->SetPsmRlweClient(kPsmUseCase, GetPsmIdentifiersToQuery());
 
-  if (!GetPsmRlweClient()) {
+  if (!psm_client_manager->GetPsmRlweClient()) {
     LOG(ERROR) << "Check membership failed since the PSM RLWE client could "
                << "not be initialized.";
     std::move(callback_).Run();
@@ -77,7 +81,7 @@ void OneDayImpl::CheckMembershipOprf() {
   }
 
   // Generate PSM Oprf request body.
-  const auto status_or_oprf_request = GetPsmRlweClient()->CreateOprfRequest();
+  const auto status_or_oprf_request = psm_client_manager->CreateOprfRequest();
   if (!status_or_oprf_request.ok()) {
     LOG(ERROR) << "Failed to create OPRF request.";
     utils::RecordCheckMembershipCases(
@@ -164,9 +168,11 @@ void OneDayImpl::OnCheckMembershipOprfComplete(
 
 void OneDayImpl::CheckMembershipQuery(
     const psm_rlwe::PrivateMembershipRlweOprfResponse& oprf_response) {
+  PsmClientManager* psm_client_manager = GetParams()->GetPsmClientManager();
+
   // Generate PSM Query request body.
   const auto status_or_query_request =
-      GetPsmRlweClient()->CreateQueryRequest(oprf_response);
+      psm_client_manager->CreateQueryRequest(oprf_response);
   if (!status_or_query_request.ok()) {
     LOG(ERROR) << "Failed to create Query request.";
     utils::RecordCheckMembershipCases(
@@ -241,7 +247,7 @@ void OneDayImpl::OnCheckMembershipQueryComplete(
   psm_rlwe::PrivateMembershipRlweQueryResponse query_response =
       psm_query_response.rlwe_query_response();
   auto status_or_response =
-      GetPsmRlweClient()->ProcessQueryResponse(query_response);
+      GetParams()->GetPsmClientManager()->ProcessQueryResponse(query_response);
 
   if (!status_or_response.ok()) {
     LOG(ERROR) << "Failed to process query response.";
@@ -288,7 +294,7 @@ void OneDayImpl::OnCheckMembershipQueryComplete(
 }
 
 void OneDayImpl::CheckIn() {
-  absl::optional<FresnelImportDataRequest> import_request =
+  std::optional<FresnelImportDataRequest> import_request =
       GenerateImportRequestBody();
   if (!import_request.has_value()) {
     LOG(ERROR) << "Failed to create the import request body.";
@@ -347,7 +353,7 @@ void OneDayImpl::SetLastPingTimestamp(base::Time ts) {
 std::vector<psm_rlwe::RlwePlaintextId> OneDayImpl::GetPsmIdentifiersToQuery() {
   std::string window_id =
       utils::TimeToYYYYMMDDString(GetParams()->GetActiveTs());
-  absl::optional<psm_rlwe::RlwePlaintextId> psm_id =
+  std::optional<psm_rlwe::RlwePlaintextId> psm_id =
       utils::GeneratePsmIdentifier(GetParams()->GetHighEntropySeed(),
                                    psm_rlwe::RlweUseCase_Name(kPsmUseCase),
                                    window_id);
@@ -361,7 +367,7 @@ std::vector<psm_rlwe::RlwePlaintextId> OneDayImpl::GetPsmIdentifiersToQuery() {
   return query_psm_ids;
 }
 
-absl::optional<FresnelImportDataRequest>
+std::optional<FresnelImportDataRequest>
 OneDayImpl::GenerateImportRequestBody() {
   // Generate Fresnel PSM import request body.
   FresnelImportDataRequest import_request;
@@ -382,13 +388,13 @@ OneDayImpl::GenerateImportRequestBody() {
 
   std::string window_id =
       utils::TimeToYYYYMMDDString(GetParams()->GetActiveTs());
-  absl::optional<psm_rlwe::RlwePlaintextId> psm_id =
+  std::optional<psm_rlwe::RlwePlaintextId> psm_id =
       utils::GeneratePsmIdentifier(GetParams()->GetHighEntropySeed(),
                                    psm_rlwe::RlweUseCase_Name(kPsmUseCase),
                                    window_id);
 
   if (!psm_id.has_value()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   FresnelImportData* import_data = import_request.add_import_data();

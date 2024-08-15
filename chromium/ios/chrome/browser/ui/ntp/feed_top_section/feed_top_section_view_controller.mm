@@ -7,12 +7,14 @@
 #import "base/check.h"
 #import "base/feature_list.h"
 #import "components/sync/base/features.h"
-#import "ios/chrome/browser/discover_feed/feed_constants.h"
-#import "ios/chrome/browser/ntp/home/features.h"
+#import "ios/chrome/browser/discover_feed/model/feed_constants.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
+#import "ios/chrome/browser/ui/ntp/feed_top_section/notifications_promo_view.h"
+#import "ios/chrome/browser/ui/ntp/feed_top_section/notifications_promo_view_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -25,6 +27,10 @@ namespace {
 // Content stack padding.
 const CGFloat kContentStackHorizontalPadding = 18;
 const CGFloat kContentStackVerticalPadding = 9;
+
+// Content stack padding for the notifications promo view.
+const CGFloat kNotificationsContentStackTopPadding = 17;
+const CGFloat kNotificationsContentStackBottomPadding = 1;
 // Border radius of the promo container.
 const CGFloat kPromoViewContainerBorderRadius = 15;
 
@@ -52,8 +58,15 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 // A vertical StackView which contains all the elements of the top section.
 @property(nonatomic, strong) UIStackView* contentStack;
 
+// The promo view UIView object. Could be `SigninPromoView` or
+// `NotificationsPromoView`.
+@property(nonatomic, strong) UIView* promoView;
+
 // The signin promo view.
-@property(nonatomic, strong) SigninPromoView* promoView;
+@property(nonatomic, strong) SigninPromoView* signinPromoView;
+
+// The notifications promo view.
+@property(nonatomic, strong) NotificationsPromoView* notificationsPromoView;
 
 // View to contain the signin promo.
 @property(nonatomic, strong) UIView* promoViewContainer;
@@ -65,6 +78,8 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 @end
 
 @implementation FeedTopSectionViewController
+
+@synthesize visiblePromoViewType;
 
 - (instancetype)init {
   self = [super init];
@@ -89,7 +104,7 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 #pragma mark - FeedTopSectionConsumer
 
 // Creates the `PromoViewContainer` and adds the SignInPromo.
-- (void)createPromoViewContainer {
+- (void)createPromoViewContainerForPromoType:(PromoViewType)type {
   DCHECK(!self.promoViewContainer);
   DCHECK(!self.promoView);
   self.promoViewContainer = [[UIView alloc] init];
@@ -98,13 +113,22 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 
   // TODO(b/287118358): Cleanup IsMagicStackEnabled() code from the sync promo
   // after experiment.
-  if (IsMagicStackEnabled()) {
+  if (IsMagicStackEnabled() && !IsFeedContainmentEnabled()) {
     self.promoViewContainer.backgroundColor =
         [UIColor colorNamed:kBackgroundColor];
   }
   self.promoViewContainer.layer.cornerRadius = kPromoViewContainerBorderRadius;
-
-  self.promoView = [self createPromoView];
+  self.visiblePromoViewType = type;
+  switch (type) {
+    case PromoViewTypeSignin:
+      self.signinPromoView = [self createSigninPromoView];
+      self.promoView = self.signinPromoView;
+      break;
+    case PromoViewTypeNotifications:
+      self.notificationsPromoView = [self createNotificationsPromoView];
+      self.promoView = self.notificationsPromoView;
+      break;
+  }
   // Add the subview to the promoViewContainer.
   [self.promoViewContainer addSubview:self.promoView];
   [self.contentStack addArrangedSubview:self.promoViewContainer];
@@ -113,15 +137,20 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
 
 - (void)updateSigninPromoWithConfigurator:
     (SigninPromoViewConfigurator*)configurator {
-  [configurator configureSigninPromoView:self.promoView
+  [configurator configureSigninPromoView:self.signinPromoView
                                withStyle:GetTopOfFeedPromoStyle()];
 }
 
 #pragma mark - Properties
 
+- (void)setFeedTopSectionMutator:(id<FeedTopSectionMutator>)mutator {
+  _feedTopSectionMutator = mutator;
+  self.notificationsPromoView.mutator = _feedTopSectionMutator;
+}
+
 - (void)setSigninPromoDelegate:(id<SigninPromoViewDelegate>)delegate {
   _signinPromoDelegate = delegate;
-  self.promoView.delegate = _signinPromoDelegate;
+  self.signinPromoView.delegate = _signinPromoDelegate;
 }
 
 #pragma mark - Private
@@ -133,9 +162,29 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
   if (!visible) {
     return NSDirectionalEdgeInsetsZero;
   }
-  return NSDirectionalEdgeInsetsMake(
-      kContentStackVerticalPadding, kContentStackHorizontalPadding,
-      kContentStackVerticalPadding, kContentStackHorizontalPadding);
+  if (self.notificationsPromoView) {
+    if (IsFeedContainmentEnabled()) {
+      return NSDirectionalEdgeInsetsMake(
+          kNotificationsContentStackTopPadding, kContentStackVerticalPadding,
+          kNotificationsContentStackBottomPadding,
+          kContentStackVerticalPadding);
+    } else {
+      return NSDirectionalEdgeInsetsMake(
+          kNotificationsContentStackTopPadding, kContentStackHorizontalPadding,
+          kNotificationsContentStackBottomPadding,
+          kContentStackHorizontalPadding);
+    }
+  } else {
+    if (IsFeedContainmentEnabled()) {
+      return NSDirectionalEdgeInsetsMake(
+          kContentStackVerticalPadding, kContentStackVerticalPadding,
+          kContentStackVerticalPadding, kContentStackVerticalPadding);
+    } else {
+      return NSDirectionalEdgeInsetsMake(
+          kContentStackVerticalPadding, kContentStackHorizontalPadding,
+          kContentStackVerticalPadding, kContentStackHorizontalPadding);
+    }
+  }
 }
 
 // Applies constraints to the stack view for a specific visibility. `visible`
@@ -152,29 +201,43 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
   [NSLayoutConstraint activateConstraints:self.contentStackConstraints];
 }
 
-- (void)showSigninPromo {
+- (void)showPromo {
+  // Hide any visible promo when `showPromo` is called to display a new one.
+  if (self.promoViewContainer) {
+    [self hidePromo];
+  }
   // Check if the promoViewContainer does not exist. Might not exist if the
   // promo has been "hidden", which involves removing the container.
-  if (!self.promoViewContainer && !self.promoView) {
-    [self createPromoViewContainer];
+  if (!self.promoViewContainer) {
+    [self createPromoViewContainerForPromoType:self.visiblePromoViewType];
   }
   [self applyStackViewConstraintsForTopSectionVisible:YES];
-  [self.ntpDelegate updateFeedLayout];
+  [self.NTPDelegate updateFeedLayout];
 }
 
-- (void)hideSigninPromo {
+- (void)hidePromo {
   [self.contentStack willRemoveSubview:self.promoViewContainer];
   [self.promoViewContainer willRemoveSubview:self.promoView];
   [self.promoView removeFromSuperview];
   [self.promoViewContainer removeFromSuperview];
   self.promoViewContainer = nil;
   self.promoView = nil;
+  self.signinPromoView = nil;
+  self.notificationsPromoView = nil;
   [self applyStackViewConstraintsForTopSectionVisible:NO];
-  [self.ntpDelegate updateFeedLayout];
 }
 
-// Configures and creates a signin promo view.
-- (SigninPromoView*)createPromoView {
+// TODO(b/312248486): Assign configurator and delegate here.
+- (NotificationsPromoView*)createNotificationsPromoView {
+  DCHECK(IsContentPushNotificationsPromoEnabled());
+  NotificationsPromoView* promoView =
+      [[NotificationsPromoView alloc] initWithFrame:CGRectZero];
+  promoView.translatesAutoresizingMaskIntoConstraints = NO;
+  promoView.mutator = self.feedTopSectionMutator;
+  return promoView;
+}
+
+- (SigninPromoView*)createSigninPromoView {
   SigninPromoView* promoView =
       [[SigninPromoView alloc] initWithFrame:CGRectZero];
   promoView.translatesAutoresizingMaskIntoConstraints = NO;

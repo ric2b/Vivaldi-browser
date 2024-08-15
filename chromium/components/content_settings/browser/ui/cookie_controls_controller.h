@@ -31,12 +31,10 @@ namespace content_settings {
 
 class CookieSettings;
 class CookieControlsObserver;
-class OldCookieControlsObserver;
 
 // Handles the tab specific state for cookie controls.
-class CookieControlsController
-    : content_settings::CookieSettings::Observer,
-      public base::SupportsWeakPtr<CookieControlsController> {
+class CookieControlsController final
+    : content_settings::CookieSettings::Observer {
  public:
   CookieControlsController(
       scoped_refptr<content_settings::CookieSettings> cookie_settings,
@@ -65,9 +63,10 @@ class CookieControlsController
   // Returns whether first-party cookies are blocked.
   bool FirstPartyCookiesBlocked();
 
-  // Returns whether the cookie blocking setting for the current site is
-  // different than what it was when last reset.
-  bool HasCookieBlockingChangedForSite();
+  // Returns whether the cookie blocking setting for the current site was
+  // changed by the user via user bypass.
+  bool HasUserChangedCookieBlockingForSite();
+  void SetUserChangedCookieBlockingForSite(bool changed);
 
   // Returns the current breakage confidence level.
   CookieControlsBreakageConfidenceLevel GetBreakageConfidenceLevel();
@@ -75,15 +74,20 @@ class CookieControlsController
   // Returns the current cookie controls status.
   CookieControlsStatus GetCookieControlsStatus();
 
-  void AddObserver(OldCookieControlsObserver* obs);
-  void RemoveObserver(OldCookieControlsObserver* obs);
-
   void AddObserver(CookieControlsObserver* obs);
   void RemoveObserver(CookieControlsObserver* obs);
 
+  base::WeakPtr<CookieControlsController> AsWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
  private:
   struct Status {
+    // TODO(b/317975095): Remove `status` in favor of `control_visible` and
+    // `protections_on`.
     CookieControlsStatus status;
+    bool controls_visible;
+    bool protections_on;
     CookieControlsEnforcement enforcement;
     CookieBlocking3pcdStatus blocking_status;
     base::Time expiration;
@@ -183,8 +187,6 @@ class CookieControlsController
   // Record metrics when third-party cookies are allowed.
   void RecordActivationMetrics();
 
-  void ResetInitialCookieControlsStatus();
-
   content::WebContents* GetWebContents() const;
 
   std::unique_ptr<TabObserver> tab_observer_;
@@ -205,6 +207,7 @@ class CookieControlsController
       cookie_observation_{this};
 
   bool should_reload_ = false;
+  bool user_changed_cookie_blocking_ = false;
 
   // The number of page reloads in last 30 seconds.
   int recent_reloads_count_ = 0;
@@ -213,13 +216,9 @@ class CookieControlsController
 
   bool waiting_for_page_load_finish_ = false;
 
-  // Record the initial control status when the page was navigated to, to allow
-  // querying of whether the effective cookie control status has changed.
-  CookieControlsStatus initial_page_cookie_controls_status_ =
-      CookieControlsStatus::kUninitialized;
-
-  base::ObserverList<OldCookieControlsObserver> old_observers_;
   base::ObserverList<CookieControlsObserver> observers_;
+
+  base::WeakPtrFactory<CookieControlsController> weak_ptr_factory_{this};
 };
 
 }  // namespace content_settings

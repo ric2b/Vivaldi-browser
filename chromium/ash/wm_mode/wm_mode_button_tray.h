@@ -8,6 +8,7 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "base/memory/raw_ptr.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 
 namespace views {
 class ImageView;
@@ -20,6 +21,8 @@ class TrayBubbleView;
 
 // Defines a shelf tray button that is used to toggle WM Mode on and off.
 class WmModeButtonTray : public TrayBackgroundView, public SessionObserver {
+  METADATA_HEADER(WmModeButtonTray, TrayBackgroundView)
+
  public:
   explicit WmModeButtonTray(Shelf* shelf);
   WmModeButtonTray(const WmModeButtonTray&) = delete;
@@ -53,7 +56,7 @@ class WmModeButtonTray : public TrayBackgroundView, public SessionObserver {
   void UpdateButtonVisibility();
 
   // The view that hosts the button icon.
-  const raw_ptr<views::ImageView, ExperimentalAsh> image_view_;
+  const raw_ptr<views::ImageView> image_view_;
 };
 
 }  // namespace ash

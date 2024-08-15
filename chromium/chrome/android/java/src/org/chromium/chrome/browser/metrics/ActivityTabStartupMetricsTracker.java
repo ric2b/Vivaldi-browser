@@ -6,7 +6,9 @@ package org.chromium.chrome.browser.metrics;
 
 import android.os.SystemClock;
 
+import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.page_load_metrics.PageLoadMetrics;
@@ -40,7 +42,9 @@ public class ActivityTabStartupMetricsTracker {
         private boolean mShouldRecordHistograms;
 
         @Override
-        public void onNewNavigation(WebContents webContents, long navigationId,
+        public void onNewNavigation(
+                WebContents webContents,
+                long navigationId,
                 boolean isFirstNavigationInWebContents) {
             if (mNavigationId != NO_NAVIGATION_ID) return;
 
@@ -49,17 +53,21 @@ public class ActivityTabStartupMetricsTracker {
         }
 
         @Override
-        public void onFirstContentfulPaint(WebContents webContents, long navigationId,
-                long navigationStartMicros, long firstContentfulPaintMs) {
+        public void onFirstContentfulPaint(
+                WebContents webContents,
+                long navigationId,
+                long navigationStartMicros,
+                long firstContentfulPaintMs) {
             if (navigationId != mNavigationId || !mShouldRecordHistograms) return;
 
             recordFirstContentfulPaint(navigationStartMicros / 1000 + firstContentfulPaintMs);
         }
-    };
+    }
 
     // The time of the activity onCreate(). All metrics (such as time to first visible content) are
     // reported in milliseconds relative to this value.
     private final long mActivityStartTimeMs;
+    private final long mActivityId;
 
     // Event duration recorded from the |mActivityStartTimeMs|.
     private long mFirstCommitTimeMs;
@@ -70,6 +78,7 @@ public class ActivityTabStartupMetricsTracker {
     private boolean mFirstVisibleContentRecorded;
     private boolean mFirstVisibleContent2Recorded;
     private boolean mVisibleContentRecorded;
+    private boolean mBackPressOccurred;
 
     // Records whether the tracked first navigation commit was recorded pre-the app being in the
     // foreground. Used for investigating crbug.com/1273097.
@@ -95,8 +104,10 @@ public class ActivityTabStartupMetricsTracker {
     private final AtomicLong mFirstSafeBrowsingResponseTimeMicros = new AtomicLong();
 
     public ActivityTabStartupMetricsTracker(
-            ObservableSupplier<TabModelSelector> tabModelSelectorSupplier) {
+            long activityId, ObservableSupplier<TabModelSelector> tabModelSelectorSupplier) {
+        mActivityId = activityId;
         mActivityStartTimeMs = SystemClock.uptimeMillis();
+        TraceEvent.startupActivityStart(mActivityId, mActivityStartTimeMs);
         tabModelSelectorSupplier.addObserver(this::registerObservers);
         SafeBrowsingApiBridge.setOneTimeSafetyNetApiUrlCheckObserver(
                 this::updateSafetyNetCheckTime);
@@ -183,27 +194,28 @@ public class ActivityTabStartupMetricsTracker {
      * @param startupPaintPreviewHelper the helper to register the observer to.
      */
     public void registerPaintPreviewObserver(StartupPaintPreviewHelper startupPaintPreviewHelper) {
-        startupPaintPreviewHelper.addMetricsObserver(new PaintPreviewMetricsObserver() {
-            @Override
-            public void onFirstPaint(long durationMs) {
-                RecordHistogram.recordBooleanHistogram(
-                        FIRST_PAINT_OCCURRED_PRE_FOREGROUND_HISTOGRAM, false);
-                recordFirstVisibleContent(durationMs);
-                recordFirstVisibleContent2(durationMs);
-                recordVisibleContent(durationMs);
-            }
+        startupPaintPreviewHelper.addMetricsObserver(
+                new PaintPreviewMetricsObserver() {
+                    @Override
+                    public void onFirstPaint(long durationMs) {
+                        RecordHistogram.recordBooleanHistogram(
+                                FIRST_PAINT_OCCURRED_PRE_FOREGROUND_HISTOGRAM, false);
+                        recordFirstVisibleContent(durationMs);
+                        recordFirstVisibleContent2(durationMs);
+                        recordVisibleContent(durationMs);
+                    }
 
-            @Override
-            public void onUnrecordedFirstPaint() {
-                // The first paint not being recorded means that either (1) the browser is not
-                // marked as being in the foreground or (2) it has been backgrounded. Update
-                // |mRegisteredFirstPaintPreForeground| if appropriate.
-                if (!UmaUtils.hasComeToForegroundWithNative()
-                        && !UmaUtils.hasComeToBackgroundWithNative()) {
-                    mRegisteredFirstPaintPreForeground = true;
-                }
-            }
-        });
+                    @Override
+                    public void onUnrecordedFirstPaint() {
+                        // The first paint not being recorded means that either (1) the browser is
+                        // not marked as being in the foreground or (2) it has been backgrounded.
+                        // Update |mRegisteredFirstPaintPreForeground| if appropriate.
+                        if (!UmaUtils.hasComeToForegroundWithNative()
+                                && !UmaUtils.hasComeToBackgroundWithNative()) {
+                            mRegisteredFirstPaintPreForeground = true;
+                        }
+                    }
+                });
     }
 
     /**
@@ -217,6 +229,21 @@ public class ActivityTabStartupMetricsTracker {
         assert mFirstCommitTimeMs == 0;
 
         mShouldTrackStartupMetrics = false;
+    }
+
+    /**
+     * TODO(crbug.com/1504020): This is exposed in order to investigate whether back press will
+     * interrupt the recording of first visible content related histograms. Remove this once a
+     * definitive conclusion is reached.
+     *
+     * @return Whether first visible content related histogram is recorded.
+     */
+    public boolean isFirstVisibleContentRecorded() {
+        return mFirstVisibleContent2Recorded;
+    }
+
+    public void onBackPressed() {
+        mBackPressOccurred = true;
     }
 
     public void destroy() {
@@ -244,7 +271,8 @@ public class ActivityTabStartupMetricsTracker {
     private void registerFinishNavigation(boolean isTrackedPage) {
         if (!mShouldTrackStartupMetrics) return;
 
-        if (isTrackedPage && UmaUtils.hasComeToForegroundWithNative()
+        if (isTrackedPage
+                && UmaUtils.hasComeToForegroundWithNative()
                 && !UmaUtils.hasComeToBackgroundWithNative()) {
             mFirstCommitTimeMs = SystemClock.uptimeMillis() - mActivityStartTimeMs;
             RecordHistogram.recordMediumTimesHistogram(
@@ -257,12 +285,14 @@ public class ActivityTabStartupMetricsTracker {
             }
             RecordHistogram.recordBooleanHistogram(
                     FIRST_COMMIT_OCCURRED_PRE_FOREGROUND_HISTOGRAM, false);
-        } else if (isTrackedPage && !UmaUtils.hasComeToForegroundWithNative()
+        } else if (isTrackedPage
+                && !UmaUtils.hasComeToForegroundWithNative()
                 && !UmaUtils.hasComeToBackgroundWithNative()) {
             mRegisteredFirstCommitPreForeground = true;
         }
 
-        if (mHistogramSuffix == ActivityType.TABBED && isTrackedPage
+        if (mHistogramSuffix == ActivityType.TABBED
+                && isTrackedPage
                 && SimpleStartupForegroundSessionDetector.runningCleanForegroundSession()) {
             mFirstCommitTimeMs = SystemClock.uptimeMillis() - mActivityStartTimeMs;
             RecordHistogram.recordMediumTimesHistogram(
@@ -353,6 +383,10 @@ public class ActivityTabStartupMetricsTracker {
         mFirstVisibleContent2Recorded = true;
         RecordHistogram.recordMediumTimesHistogram(
                 "Startup.Android.Cold.TimeToFirstVisibleContent2", durationMs);
+        TraceEvent.startupTimeToFirstVisibleContent2(mActivityId, mActivityStartTimeMs, durationMs);
+        if (mBackPressOccurred) {
+            RecordUserAction.record("FirstVisibleContentAfterBackPress");
+        }
     }
 
     /**

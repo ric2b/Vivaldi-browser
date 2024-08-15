@@ -12,7 +12,6 @@
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_event_exporter.h"
 #import "ios/chrome/browser/promos_manager/promos_manager_event_exporter_factory.h"
-#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 
 namespace {
@@ -41,10 +40,8 @@ std::unique_ptr<KeyedService> CreateFeatureEngagementTracker(
       browser_state->GetProtoDatabaseProvider();
 
   base::WeakPtr<PromosManagerEventExporter> event_exporter =
-      ShouldPromosManagerUseFET()
-          ? PromosManagerEventExporterFactory::GetForBrowserState(browser_state)
-                ->AsWeakPtr()
-          : nullptr;
+      PromosManagerEventExporterFactory::GetForBrowserState(browser_state)
+          ->AsWeakPtr();
 
   return base::WrapUnique(feature_engagement::Tracker::Create(
       storage_dir, background_task_runner, db_provider, event_exporter));

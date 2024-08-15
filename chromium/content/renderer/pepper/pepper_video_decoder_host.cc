@@ -23,6 +23,7 @@
 #include "content/renderer/pepper/ppb_graphics_3d_impl.h"
 #include "content/renderer/pepper/video_decoder_shim.h"
 #include "content/renderer/render_thread_impl.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
@@ -48,18 +49,7 @@ namespace content {
 namespace {
 
 bool UseSharedImagesForPepperVideo() {
-  CHECK(base::CommandLine::ForCurrentProcess());
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableUseSharedImagesForPepperVideo)) {
-    LOG(WARNING) << "UseSharedImagesForPepperVideo: Disabled by policy";
-    return false;
-  }
-
-  const bool enabled =
-      base::FeatureList::IsEnabled(media::kUseSharedImagesForPepperVideo);
-  LOG(WARNING) << "UseSharedImagesForPepperVideo: feature controlled: "
-               << enabled;
-  return enabled;
+  return true;
 }
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -151,6 +141,19 @@ PepperVideoDecoderHost::MappedBuffer::MappedBuffer(MappedBuffer&&) = default;
 PepperVideoDecoderHost::MappedBuffer& PepperVideoDecoderHost::MappedBuffer::
 operator=(MappedBuffer&&) = default;
 
+PepperVideoDecoderHost::SharedImage::SharedImage(
+    gfx::Size size,
+    PictureBufferState state,
+    scoped_refptr<gpu::ClientSharedImage> client_shared_image)
+    : size(size),
+      state(state),
+      client_shared_image(std::move(client_shared_image)) {}
+
+PepperVideoDecoderHost::SharedImage::SharedImage(
+    const SharedImage& shared_image) = default;
+
+PepperVideoDecoderHost::SharedImage::~SharedImage() = default;
+
 PepperVideoDecoderHost::PepperVideoDecoderHost(RendererPpapiHost* host,
                                                PP_Instance instance,
                                                PP_Resource resource)
@@ -178,10 +181,11 @@ PepperVideoDecoderHost::~PepperVideoDecoderHost() {
 
       auto* sii = context_provider->SharedImageInterface();
 
-      for (const auto& shared_image : shared_images_) {
+      for (auto& shared_image : shared_images_) {
         // All assigned textures should have been destroyed by `decoder_`
         CHECK_NE(shared_image.second.state, PictureBufferState::ASSIGNED);
-        sii->DestroySharedImage(sync_token, shared_image.first);
+        sii->DestroySharedImage(
+            sync_token, std::move(shared_image.second.client_shared_image));
       }
     }
   }
@@ -547,19 +551,25 @@ gpu::Mailbox PepperVideoDecoderHost::CreateSharedImage(gfx::Size size) {
   auto* sii = context_provider->SharedImageInterface();
   auto* rii = context_provider->RasterInterface();
 
-  auto mailbox = sii->CreateSharedImage(
+  // These shared images have the contents of VideoFrames copied into them via
+  // the raster interface and then are read and/or written by the plugin via GL.
+  auto client_shared_image = sii->CreateSharedImage(
       viz::SinglePlaneFormat::kRGBA_8888, size, gfx::ColorSpace(),
       kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
-      gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_RASTER,
+      gpu::SHARED_IMAGE_USAGE_GLES2_READ | gpu::SHARED_IMAGE_USAGE_GLES2_WRITE |
+          gpu::SHARED_IMAGE_USAGE_RASTER_READ |
+          gpu::SHARED_IMAGE_USAGE_RASTER_WRITE,
       "PepperVideoDecoder", gpu::SurfaceHandle());
+  CHECK(client_shared_image);
+  auto mailbox = client_shared_image->mailbox();
 
   // This SI will be used on raster interface later, to avoid plumbing
   // SyncTokens just for creation wait on it here.
   rii->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
-  shared_images_.emplace(
-      mailbox,
-      SharedImage{.size = size, .state = PictureBufferState::ASSIGNED});
+  shared_images_.emplace(mailbox,
+                         SharedImage{size, PictureBufferState::ASSIGNED,
+                                     std::move(client_shared_image)});
   return mailbox;
 }
 
@@ -587,7 +597,8 @@ void PepperVideoDecoderHost::DestroySharedImageInternal(
       sync_token.GetData());
 
   auto* sii = context_provider->SharedImageInterface();
-  sii->DestroySharedImage(sync_token, it->first);
+  sii->DestroySharedImage(sync_token,
+                          std::move(it->second.client_shared_image));
   shared_images_.erase(it);
 }
 

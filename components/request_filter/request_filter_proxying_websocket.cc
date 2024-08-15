@@ -52,9 +52,9 @@ class ShutdownNotifierFactory
 
 void ForwardOnBeforeSendHeadersCallback(
     network::mojom::TrustedHeaderClient::OnBeforeSendHeadersCallback callback,
-    const absl::optional<::net::HttpRequestHeaders>& initial_headers,
+    const std::optional<::net::HttpRequestHeaders>& initial_headers,
     int32_t error_code,
-    const absl::optional<::net::HttpRequestHeaders>& headers) {
+    const std::optional<::net::HttpRequestHeaders>& headers) {
   if (headers)
     std::move(callback).Run(error_code, headers);
   else
@@ -63,10 +63,10 @@ void ForwardOnBeforeSendHeadersCallback(
 
 void ForwardOnHeaderReceivedCallback(
     network::mojom::TrustedHeaderClient::OnHeadersReceivedCallback callback,
-    const absl::optional<std::string>& initial_headers,
+    const std::optional<std::string>& initial_headers,
     int32_t error_code,
-    const absl::optional<std::string>& headers,
-    const absl::optional<GURL>& preserve_fragment_on_redirect_url) {
+    const std::optional<std::string>& headers,
+    const std::optional<GURL>& preserve_fragment_on_redirect_url) {
   if (headers)
     std::move(callback).Run(error_code, headers,
                             preserve_fragment_on_redirect_url);
@@ -111,7 +111,7 @@ RequestFilterProxyingWebSocket::RequestFilterProxyingWebSocket(
                 kDocumentSubResource,
             /*is_async=*/true,
             /*is_webtransport=*/false,
-            /*navigation_id=*/absl::nullopt),
+            /*navigation_id=*/std::nullopt),
       proxies_(proxies) {
   // base::Unretained is safe here because the callback will be canceled when
   // |shutdown_notifier_subscription_| is destroyed, and |proxies_| owns this.
@@ -129,11 +129,11 @@ RequestFilterProxyingWebSocket::~RequestFilterProxyingWebSocket() {
   request_handler_->OnRequestWillBeDestroyed(browser_context_, &info_);
   if (on_before_send_headers_callback_) {
     std::move(on_before_send_headers_callback_)
-        .Run(net::ERR_ABORTED, absl::nullopt);
+        .Run(net::ERR_ABORTED, std::nullopt);
   }
   if (on_headers_received_callback_) {
     std::move(on_headers_received_callback_)
-        .Run(net::ERR_ABORTED, absl::nullopt, absl::nullopt);
+        .Run(net::ERR_ABORTED, std::nullopt, std::nullopt);
   }
 }
 
@@ -309,7 +309,7 @@ void RequestFilterProxyingWebSocket::OnHeadersReceived(
 void RequestFilterProxyingWebSocket::StartProxying(
     WebSocketFactory factory,
     const net::SiteForCookies& site_for_cookies,
-    const absl::optional<std::string>& user_agent,
+    const std::optional<std::string>& user_agent,
     const GURL& url,
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -455,7 +455,7 @@ void RequestFilterProxyingWebSocket::OnHeadersReceivedComplete(int error_code) {
   }
 
   if (on_headers_received_callback_) {
-    absl::optional<std::string> headers;
+    std::optional<std::string> headers;
     if (override_headers_)
       headers = override_headers_->raw_headers();
     if (forwarding_header_client_) {
@@ -466,7 +466,7 @@ void RequestFilterProxyingWebSocket::OnHeadersReceivedComplete(int error_code) {
                          std::move(on_headers_received_callback_), headers));
     } else {
       std::move(on_headers_received_callback_)
-          .Run(net::OK, headers, absl::nullopt);
+          .Run(net::OK, headers, std::nullopt);
     }
   }
 
@@ -498,7 +498,7 @@ void RequestFilterProxyingWebSocket::OnHeadersReceivedCompleteForAuth(
         auth_info, response_->headers, response_->remote_endpoint,
         std::move(auth_required_callback_));
   } else {
-    std::move(auth_required_callback_).Run(absl::nullopt);
+    std::move(auth_required_callback_).Run(std::nullopt);
   }
 }
 

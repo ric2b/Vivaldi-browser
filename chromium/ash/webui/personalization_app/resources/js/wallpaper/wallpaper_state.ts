@@ -1,12 +1,13 @@
 // Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+import {emptyState as emptySeaPenState, SeaPenState} from 'chrome://resources/ash/common/sea_pen/sea_pen_state.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
 import {CurrentAttribution, CurrentWallpaper, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, WallpaperCollection, WallpaperImage} from '../../personalization_app.mojom-webui.js';
 
-import {DefaultImageSymbol, DisplayableImage, kDefaultImageSymbol, WallpaperSearchThumbnail} from './constants.js';
+import {DefaultImageSymbol, DisplayableImage, kDefaultImageSymbol} from './constants.js';
 
 /**
  * Stores collections and images from backdrop server.
@@ -85,12 +86,6 @@ export interface LoadingState {
   };
 }
 
-export interface SeaPenState {
-  query: string|null;
-  thumbnails: WallpaperSearchThumbnail[]|null;
-  thumbnailsLoading: boolean;
-}
-
 /**
  * |images| stores the list of images on local disk. The image in index 0 may be
  * a special case for default image thumbnail.
@@ -125,6 +120,7 @@ export interface WallpaperState {
   pendingSelected: DisplayableImage|null;
   dailyRefresh: DailyRefreshState|null;
   fullscreen: boolean;
+  shouldShowTimeOfDayWallpaperDialog: boolean;
   googlePhotos: GooglePhotosState;
   seaPen: SeaPenState;
 }
@@ -156,6 +152,7 @@ export function emptyState(): WallpaperState {
     pendingSelected: null,
     dailyRefresh: null,
     fullscreen: false,
+    shouldShowTimeOfDayWallpaperDialog: false,
     googlePhotos: {
       enabled: undefined,
       albums: undefined,
@@ -165,10 +162,6 @@ export function emptyState(): WallpaperState {
       resumeTokens:
           {albums: null, albumsShared: null, photos: null, photosByAlbumId: {}},
     },
-    seaPen: {
-      query: null,
-      thumbnails: null,
-      thumbnailsLoading: false,
-    },
+    seaPen: emptySeaPenState(),
   };
 }

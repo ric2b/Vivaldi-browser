@@ -28,6 +28,7 @@
 #include "dawn/native/opengl/ShaderModuleGL.h"
 
 #include <sstream>
+#include <unordered_map>
 #include <utility>
 
 #include "dawn/native/BindGroupLayoutInternal.h"
@@ -84,12 +85,17 @@ opengl::CombinedSampler* AppendCombinedSampler(opengl::CombinedSamplerInfo* info
     return combinedSampler;
 }
 
+using InterstageLocationAndName = std::pair<uint32_t, std::string>;
+
 #define GLSL_COMPILATION_REQUEST_MEMBERS(X)                                                      \
     X(const tint::Program*, inputProgram)                                                        \
     X(std::string, entryPointName)                                                               \
     X(SingleShaderStage, stage)                                                                  \
     X(std::optional<tint::ast::transform::SubstituteOverride::Config>, substituteOverrideConfig) \
     X(LimitsForCompilationRequest, limits)                                                       \
+    X(bool, disableSymbolRenaming)                                                               \
+    X(std::vector<InterstageLocationAndName>, interstageVariables)                               \
+    X(std::vector<std::string>, bufferBindingVariables)                                          \
     X(tint::glsl::writer::Options, tintOptions)                                                  \
     X(CacheKey::UnsafeUnkeyedValue<dawn::platform::Platform*>, platform)
 
@@ -142,7 +148,7 @@ std::string CombinedSampler::GetName() const {
 // static
 ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     Device* device,
-    const ShaderModuleDescriptor* descriptor,
+    const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     ShaderModuleParseResult* parseResult,
     OwnedCompilationMessages* compilationMessages) {
     Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor));
@@ -150,7 +156,7 @@ ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     return module;
 }
 
-ShaderModule::ShaderModule(Device* device, const ShaderModuleDescriptor* descriptor)
+ShaderModule::ShaderModule(Device* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor)
     : ShaderModuleBase(device, descriptor) {}
 
 MaybeError ShaderModule::Initialize(ShaderModuleParseResult* parseResult,
@@ -176,13 +182,15 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
 
     const OpenGLVersion& version = ToBackend(GetDevice())->GetGL().GetVersion();
 
+    GLSLCompilationRequest req = {};
+
     using tint::BindingPoint;
     // Since (non-Vulkan) GLSL does not support descriptor sets, generate a
     // mapping from the original group/binding pair to a binding-only
     // value. This mapping will be used by Tint to remap all global
     // variables to the 1D space.
-    const BindingInfoArray& moduleBindingInfo =
-        GetEntryPoint(programmableStage.entryPoint).bindings;
+    const EntryPointMetadata& entryPointMetaData = GetEntryPoint(programmableStage.entryPoint);
+    const BindingInfoArray& moduleBindingInfo = entryPointMetaData.bindings;
     BindingMap glBindings;
     BindingMap externalTextureExpansionMap;
     for (BindGroupIndex group : IterateBitSet(layout->GetBindGroupLayoutsMask())) {
@@ -197,6 +205,13 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
             BindingPoint dstBindingPoint{0, shaderIndex};
             if (srcBindingPoint != dstBindingPoint) {
                 glBindings.emplace(srcBindingPoint, dstBindingPoint);
+            }
+
+            // For buffer bindings that can be sharable across stages, we need to rename them to
+            // avoid GL program link failures due to block naming issues.
+            if (bindingInfo.bindingType == BindingInfoType::Buffer &&
+                stage != SingleShaderStage::Compute) {
+                req.bufferBindingVariables.emplace_back(bindingInfo.name);
             }
         }
 
@@ -227,7 +242,6 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
 
     const CombinedLimits& limits = GetDevice()->GetLimits();
 
-    GLSLCompilationRequest req = {};
     req.inputProgram = GetTintProgram();
     req.stage = stage;
     req.entryPointName = programmableStage.entryPoint;
@@ -239,10 +253,21 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
                                                           version.GetMajor(), version.GetMinor());
 
     req.tintOptions.disable_robustness = false;
+    req.disableSymbolRenaming = GetDevice()->IsToggleEnabled(Toggle::DisableSymbolRenaming);
+
+    req.interstageVariables = {};
+    for (size_t i = 0; i < entryPointMetaData.interStageVariables.size(); i++) {
+        if (entryPointMetaData.usedInterStageVariables[i]) {
+            req.interstageVariables.emplace_back(static_cast<uint32_t>(i),
+                                                 entryPointMetaData.interStageVariables[i].name);
+        }
+    }
 
     req.tintOptions.external_texture_options = BuildExternalTextureTransformBindings(layout);
     req.tintOptions.binding_remapper_options.binding_points = std::move(glBindings);
     req.tintOptions.texture_builtins_from_uniform = std::move(textureBuiltinsFromUniform);
+    req.tintOptions.disable_polyfill_integer_div_mod =
+        GetDevice()->IsToggleEnabled(Toggle::DisablePolyfillsOnIntegerDivisonAndModulo);
 
     // When textures are accessed without a sampler (e.g., textureLoad()),
     // GetSamplerTextureUses() will return this sentinel value.
@@ -294,6 +319,34 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
             transformManager.Add<tint::ast::transform::SingleEntryPoint>();
             transformInputs.Add<tint::ast::transform::SingleEntryPoint::Config>(r.entryPointName);
 
+            {
+                tint::ast::transform::Renamer::Remappings assignedRenamings = {};
+
+                // Give explicit renaming mappings for interstage variables
+                // Because GLSL requires interstage IO names to match.
+                for (const auto& it : r.interstageVariables) {
+                    assignedRenamings.emplace(
+                        it.second, "dawn_interstage_location_" + std::to_string(it.first));
+                }
+
+                // Prepend v_ or f_ to buffer binding variable names in order to avoid collisions in
+                // renamed interface blocks. The AddBlockAttribute transform in the Tint GLSL
+                // printer will always generate wrapper structs from such bindings.
+                for (const auto& variableName : r.bufferBindingVariables) {
+                    assignedRenamings.emplace(
+                        variableName,
+                        (r.stage == SingleShaderStage::Vertex ? "v_" : "f_") + variableName);
+                }
+
+                // Needs to run early so that they can use builtin names safely.
+                // TODO(dawn:2180): move this transform into Tint.
+                transformManager.Add<tint::ast::transform::Renamer>();
+                transformInputs.Add<tint::ast::transform::Renamer::Config>(
+                    r.disableSymbolRenaming ? tint::ast::transform::Renamer::Target::kGlslKeywords
+                                            : tint::ast::transform::Renamer::Target::kAll,
+                    false, std::move(assignedRenamings));
+            }
+
             if (r.substituteOverrideConfig) {
                 // This needs to run after SingleEntryPoint transform which removes unused overrides
                 // for current entry point.
@@ -307,15 +360,33 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
             DAWN_TRY_ASSIGN(program, RunTransforms(&transformManager, r.inputProgram,
                                                    transformInputs, &transformOutputs, nullptr));
 
+            // TODO(dawn:2180): refactor out.
+            // Get the entry point name after the renamer pass.
+            // In the case of the entry-point name being a reserved GLSL keyword
+            // (including `main`) the entry-point would have been renamed
+            // regardless of the `disableSymbolRenaming` flag. Always check the
+            // rename map, and if the name was changed, get the new one.
+            auto* data = transformOutputs.Get<tint::ast::transform::Renamer::Data>();
+            DAWN_ASSERT(data != nullptr);
+            auto it = data->remappings.find(r.entryPointName.data());
+            std::string remappedEntryPoint;
+            if (it != data->remappings.end()) {
+                remappedEntryPoint = it->second;
+            } else {
+                remappedEntryPoint = r.entryPointName;
+            }
+            DAWN_ASSERT(remappedEntryPoint != "");
+
             if (r.stage == SingleShaderStage::Compute) {
                 // Validate workgroup size after program runs transforms.
                 Extent3D _;
-                DAWN_TRY_ASSIGN(_, ValidateComputeStageWorkgroupSize(
-                                       program, r.entryPointName.c_str(), r.limits));
+                DAWN_TRY_ASSIGN(
+                    _, ValidateComputeStageWorkgroupSize(program, remappedEntryPoint.c_str(),
+                                                         r.limits, /* fullSubgroups */ {}));
             }
 
-            auto result = tint::glsl::writer::Generate(program, r.tintOptions, r.entryPointName);
-            DAWN_INVALID_IF(!result, "An error occurred while generating GLSL:\n%s",
+            auto result = tint::glsl::writer::Generate(program, r.tintOptions, remappedEntryPoint);
+            DAWN_INVALID_IF(result != tint::Success, "An error occurred while generating GLSL:\n%s",
                             result.Failure().reason.str());
 
             return GLSLCompilation{{std::move(result->glsl), result->needs_internal_uniform_buffer,

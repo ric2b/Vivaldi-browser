@@ -8,7 +8,7 @@
 using testing::Combine;
 using testing::Values;
 
-namespace libavif {
+namespace avif {
 namespace {
 
 class AvmTest : public testing::TestWithParam<
@@ -22,21 +22,21 @@ TEST_P(AvmTest, EncodeDecode) {
   const avifPixelFormat format = std::get<3>(GetParam());
   const bool alpha = std::get<4>(GetParam());
 
-  testutil::AvifImagePtr image = testutil::CreateImage(
+  ImagePtr image = testutil::CreateImage(
       width, height, depth, format, alpha ? AVIF_PLANES_ALL : AVIF_PLANES_YUV);
   ASSERT_NE(image, nullptr);
   testutil::FillImageGradient(image.get());
 
-  testutil::AvifEncoderPtr encoder(avifEncoderCreate(), avifEncoderDestroy);
+  EncoderPtr encoder(avifEncoderCreate());
   ASSERT_NE(encoder, nullptr);
   encoder->codecChoice = AVIF_CODEC_CHOICE_AVM;
   testutil::AvifRwData encoded;
   ASSERT_EQ(avifEncoderWrite(encoder.get(), image.get(), &encoded),
             AVIF_RESULT_OK);
 
-  testutil::AvifImagePtr decoded(avifImageCreateEmpty(), avifImageDestroy);
+  ImagePtr decoded(avifImageCreateEmpty());
   ASSERT_NE(decoded, nullptr);
-  testutil::AvifDecoderPtr decoder(avifDecoderCreate(), avifDecoderDestroy);
+  DecoderPtr decoder(avifDecoderCreate());
   ASSERT_NE(decoder, nullptr);
   // No need to set AVIF_CODEC_CHOICE_AVM. The decoder should recognize AV2.
   ASSERT_EQ(avifDecoderReadMemory(decoder.get(), decoded.get(), encoded.data,
@@ -51,11 +51,13 @@ TEST_P(AvmTest, EncodeDecode) {
        {AVIF_CODEC_CHOICE_AOM, AVIF_CODEC_CHOICE_DAV1D,
         AVIF_CODEC_CHOICE_LIBGAV1}) {
     decoder->codecChoice = av1_codec;
-    // AVIF_RESULT_NO_CODEC_AVAILABLE is expected because av1_codec is not
-    // enabled or because we are trying to decode an AV2 file with an AV1 codec.
+    // An error is expected because av1_codec is not enabled or because we are
+    // trying to decode an AV2 file with an AV1 codec.
     ASSERT_EQ(avifDecoderReadMemory(decoder.get(), decoded.get(), encoded.data,
                                     encoded.size),
-              AVIF_RESULT_NO_CODEC_AVAILABLE);
+              avifCodecName(av1_codec, AVIF_CODEC_FLAG_CAN_DECODE)
+                  ? AVIF_RESULT_DECODE_COLOR_FAILED
+                  : AVIF_RESULT_NO_CODEC_AVAILABLE);
   }
 }
 
@@ -87,21 +89,21 @@ TEST(AvmTest, Av1StillWorksWhenAvmIsEnabled) {
   }
   // avm is the only AV2 codec, so the default codec will be an AV1 one.
 
-  testutil::AvifImagePtr image =
+  ImagePtr image =
       testutil::CreateImage(/*width=*/64, /*height=*/64, /*depth=*/8,
                             AVIF_PIXEL_FORMAT_YUV420, AVIF_PLANES_ALL);
   ASSERT_NE(image, nullptr);
   testutil::FillImageGradient(image.get());
 
-  testutil::AvifEncoderPtr encoder(avifEncoderCreate(), avifEncoderDestroy);
+  EncoderPtr encoder(avifEncoderCreate());
   ASSERT_NE(encoder, nullptr);
   testutil::AvifRwData encoded;
   ASSERT_EQ(avifEncoderWrite(encoder.get(), image.get(), &encoded),
             AVIF_RESULT_OK);
 
-  testutil::AvifImagePtr decoded(avifImageCreateEmpty(), avifImageDestroy);
+  ImagePtr decoded(avifImageCreateEmpty());
   ASSERT_NE(decoded, nullptr);
-  testutil::AvifDecoderPtr decoder(avifDecoderCreate(), avifDecoderDestroy);
+  DecoderPtr decoder(avifDecoderCreate());
   ASSERT_NE(decoder, nullptr);
   ASSERT_EQ(avifDecoderReadMemory(decoder.get(), decoded.get(), encoded.data,
                                   encoded.size),
@@ -114,8 +116,8 @@ TEST(AvmTest, Av1StillWorksWhenAvmIsEnabled) {
   decoder->codecChoice = AVIF_CODEC_CHOICE_AVM;
   ASSERT_EQ(avifDecoderReadMemory(decoder.get(), decoded.get(), encoded.data,
                                   encoded.size),
-            AVIF_RESULT_NO_CODEC_AVAILABLE);
+            AVIF_RESULT_DECODE_COLOR_FAILED);
 }
 
 }  // namespace
-}  // namespace libavif
+}  // namespace avif

@@ -91,7 +91,7 @@ class ArcCameraBridge::PendingStartCameraServiceResult {
     owner_->pending_start_camera_service_results_.erase(this);
   }
 
-  const raw_ptr<ArcCameraBridge, ExperimentalAsh> owner_;
+  const raw_ptr<ArcCameraBridge> owner_;
   mojo::Remote<mojom::CameraService> service_;
   ArcCameraBridge::StartCameraServiceCallback callback_;
   base::WeakPtrFactory<PendingStartCameraServiceResult> weak_ptr_factory_{this};
@@ -148,8 +148,8 @@ void ArcCameraBridge::StartCameraService(StartCameraServiceCallback callback) {
 
 void ArcCameraBridge::RegisterCameraHalClientLegacy(
     mojo::PendingRemote<cros::mojom::CameraHalClient> client) {
-  media::CameraHalDispatcherImpl::GetInstance()->RegisterClient(
-      std::move(client));
+  NOTREACHED() << "ArcCameraBridge::RegisterCameraHalClientLegacy is "
+                  "deprecated. CameraHalClient will not be registered.";
 }
 
 void ArcCameraBridge::RegisterCameraHalClient(

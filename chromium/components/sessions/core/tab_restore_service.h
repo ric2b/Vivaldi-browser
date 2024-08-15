@@ -282,6 +282,9 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
 
   // Returns true if we're in the process of restoring some entries.
   virtual bool IsRestoring() const = 0;
+
+  // Added by Vivaldi to allow access to saving modified entry list.
+  virtual void VivaldiRequestSave(int num_removed) {}
 };
 
 // A class that is used to associate platform-specific data with

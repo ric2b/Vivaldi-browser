@@ -13,6 +13,7 @@
 #include "include/v8-proxy.h"
 #include "include/v8-typed-array.h"
 #include "include/v8-wasm.h"
+#include "src/base/contextual.h"
 #include "src/execution/isolate.h"
 #include "src/objects/bigint.h"
 #include "src/objects/contexts.h"
@@ -190,9 +191,11 @@ class RegisteredExtension {
 
 class Utils {
  public:
-  static inline bool ApiCheck(bool condition, const char* location,
-                              const char* message) {
-    if (!condition) Utils::ReportApiFailure(location, message);
+  static V8_INLINE bool ApiCheck(bool condition, const char* location,
+                                 const char* message) {
+    if (V8_UNLIKELY(!condition)) {
+      Utils::ReportApiFailure(location, message);
+    }
     return condition;
   }
   static void ReportOOMFailure(v8::internal::Isolate* isolate,
@@ -261,7 +264,8 @@ class Utils {
   }
 
  private:
-  static void ReportApiFailure(const char* location, const char* message);
+  V8_NOINLINE V8_PRESERVE_MOST static void ReportApiFailure(
+      const char* location, const char* message);
 };
 
 template <class T>
@@ -523,6 +527,8 @@ bool ValidateCallbackInfo(const FunctionCallbackInfo<T>& info);
 template <typename T>
 EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
 bool ValidateCallbackInfo(const PropertyCallbackInfo<T>& info);
+
+DECLARE_CONTEXTUAL_VARIABLE_WITH_DEFAULT(StackAllocatedCheck, const bool, true);
 
 }  // namespace internal
 }  // namespace v8

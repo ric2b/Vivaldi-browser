@@ -51,7 +51,7 @@ inline std::string str(const Program& program) {
 
     wgsl::writer::Options options;
     auto result = wgsl::writer::Generate(program, options);
-    if (!result) {
+    if (result != Success) {
         return result.Failure().reason.str();
     }
 
@@ -94,8 +94,10 @@ class TransformTestBase : public BASE {
     /// @return the transformed output
     template <typename... TRANSFORMS>
     Output Run(std::string in, const DataMap& data = {}) {
+        wgsl::reader::Options options;
+        options.allowed_features = wgsl::AllowedFeatures::Everything();
         auto file = std::make_unique<Source::File>("test", in);
-        auto program = wgsl::reader::Parse(file.get());
+        auto program = wgsl::reader::Parse(file.get(), options);
 
         // Keep this pointer alive after Transform() returns
         files_.emplace_back(std::move(file));
@@ -153,8 +155,10 @@ class TransformTestBase : public BASE {
     /// @return true if the transform should be run for the given input.
     template <typename TRANSFORM>
     bool ShouldRun(std::string in, const DataMap& data = {}) {
+        wgsl::reader::Options options;
+        options.allowed_features = wgsl::AllowedFeatures::Everything();
         auto file = std::make_unique<Source::File>("test", in);
-        auto program = wgsl::reader::Parse(file.get());
+        auto program = wgsl::reader::Parse(file.get(), options);
         return ShouldRun<TRANSFORM>(std::move(program), data);
     }
 

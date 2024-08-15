@@ -6,6 +6,7 @@
 #define V8_OBJECTS_JS_OBJECTS_H_
 
 #include "src/base/optional.h"
+#include "src/common/globals.h"
 #include "src/handles/handles.h"
 #include "src/objects/embedder-data-slot.h"
 // TODO(jkummerow): Consider forward-declaring instead.
@@ -99,8 +100,13 @@ class JSReceiver : public TorqueGeneratedJSReceiver<JSReceiver, HeapObject> {
       Isolate* isolate, Handle<JSReceiver> receiver,
       OrdinaryToPrimitiveHint hint);
 
+  // Unwraps the chain of potential function wrappers or JSProxy objects and
+  // return the leaf function's creation context.
+  // Throws TypeError in case there's a revoked JSProxy on the way.
+  // https://tc39.es/ecma262/#sec-getfunctionrealm
   static MaybeHandle<NativeContext> GetFunctionRealm(
       Handle<JSReceiver> receiver);
+
   V8_EXPORT_PRIVATE static MaybeHandle<NativeContext> GetContextForMicrotask(
       Handle<JSReceiver> receiver);
 
@@ -250,9 +256,10 @@ class JSReceiver : public TorqueGeneratedJSReceiver<JSReceiver, HeapObject> {
   static Handle<String> GetConstructorName(Isolate* isolate,
                                            Handle<JSReceiver> receiver);
 
-  V8_EXPORT_PRIVATE base::Optional<Tagged<NativeContext>>
-  GetCreationContextRaw();
-  V8_EXPORT_PRIVATE MaybeHandle<NativeContext> GetCreationContext();
+  V8_EXPORT_PRIVATE inline base::Optional<Tagged<NativeContext>>
+  GetCreationContext();
+  V8_EXPORT_PRIVATE inline MaybeHandle<NativeContext> GetCreationContext(
+      Isolate* isolate);
 
   V8_WARN_UNUSED_RESULT static inline Maybe<PropertyAttributes>
   GetPropertyAttributes(Handle<JSReceiver> object, Handle<Name> name);
@@ -870,6 +877,8 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
   static const int kInitialGlobalObjectUnusedPropertiesCount = 4;
 
   static const int kMaxInstanceSize = 255 * kTaggedSize;
+  // kMaxInstanceSize in words must fit in one byte.
+  static_assert((kMaxInstanceSize >> kTaggedSizeLog2) <= kMaxUInt8);
 
   static const int kMapCacheSize = 128;
 
@@ -899,9 +908,6 @@ class JSObject : public TorqueGeneratedJSObject<JSObject, JSReceiver> {
 
   // Gets the number of currently used elements.
   int GetFastElementsUsage();
-
-  static bool AllCanRead(LookupIterator* it);
-  static bool AllCanWrite(LookupIterator* it);
 
   template <typename Dictionary>
   static void ApplyAttributesToDictionary(Isolate* isolate, ReadOnlyRoots roots,
@@ -1090,7 +1096,7 @@ class JSGlobalProxy
     : public TorqueGeneratedJSGlobalProxy<JSGlobalProxy, JSSpecialObject> {
  public:
   inline bool IsDetachedFrom(Tagged<JSGlobalObject> global) const;
-  V8_EXPORT_PRIVATE bool IsDetached() const;
+  V8_EXPORT_PRIVATE bool IsDetached();
 
   static int SizeWithEmbedderFields(int embedder_field_count);
 
@@ -1111,10 +1117,7 @@ class JSGlobalObject
                                      Handle<Name> name);
 
   inline bool IsDetached();
-
-  // May be called by the concurrent GC when the global object is not
-  // fully initialized.
-  DECL_GETTER(native_context_unchecked, Tagged<Object>)
+  inline Tagged<NativeContext> native_context();
 
   // Dispatched behavior.
   DECL_PRINTER(JSGlobalObject)

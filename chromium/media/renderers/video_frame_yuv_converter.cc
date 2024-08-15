@@ -13,6 +13,7 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
+#include "media/base/video_util.h"
 #include "media/renderers/video_frame_yuv_mailboxes_holder.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
@@ -101,8 +102,8 @@ VideoFrameYUVConverter::~VideoFrameYUVConverter() = default;
 
 bool VideoFrameYUVConverter::IsVideoFrameFormatSupported(
     const VideoFrame& video_frame) {
-  return std::get<0>(VideoFrameYUVMailboxesHolder::VideoPixelFormatToSkiaValues(
-             video_frame.format())) != SkYUVAInfo::PlaneConfig::kUnknown;
+  return std::get<0>(VideoPixelFormatToSkiaValues(video_frame.format())) !=
+         SkYUVAInfo::PlaneConfig::kUnknown;
 }
 
 bool VideoFrameYUVConverter::ConvertYUVVideoFrameNoCaching(
@@ -130,9 +131,15 @@ bool VideoFrameYUVConverter::ConvertYUVVideoFrame(
   if (!holder_)
     holder_ = std::make_unique<VideoFrameYUVMailboxesHolder>();
 
+  // All platforms except android have shipped passthrough command decoder which
+  // supports it. On Android this code path should always use RasterDecoder
+  // which also supports this.
+  DUMP_WILL_BE_CHECK(raster_context_provider->ContextCapabilities()
+                         .supports_yuv_to_rgb_conversion);
+
   if (raster_context_provider->GrContext() &&
       !(raster_context_provider->ContextCapabilities()
-            .supports_yuv_rgb_conversion &&
+            .supports_yuv_to_rgb_conversion &&
         dest_mailbox_holder.mailbox.IsSharedImage())) {
     return ConvertFromVideoFrameYUVWithGrContext(
         video_frame, raster_context_provider, dest_mailbox_holder,

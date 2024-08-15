@@ -9,10 +9,11 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/containers/flat_set.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/files/file.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
@@ -33,7 +34,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/resource/data_pack.h"
@@ -759,7 +759,7 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromDataPack(
     return nullptr;
   }
 
-  absl::optional<base::StringPiece> pointer =
+  std::optional<base::StringPiece> pointer =
       data_pack->GetStringPiece(kHeaderID);
   if (!pointer) {
     return nullptr;
@@ -806,7 +806,7 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromDataPack(
     return nullptr;
   }
   pack->source_images_ =
-      reinterpret_cast<int*>(const_cast<char*>(pointer->data()));
+      reinterpret_cast<SourceImage*>(const_cast<char*>(pointer->data()));
 
   pointer = data_pack->GetStringPiece(kScaleFactorsID);
   if (!pointer) {
@@ -929,9 +929,10 @@ bool BrowserThemePack::WriteToDisk(const base::FilePath& path) const {
       sizeof(DisplayPropertyPair[kDisplayPropertiesSize]));
 
   int source_count = 1;
-  int* end = source_images_;
-  for (; *end != -1; end++)
+  SourceImage* end = source_images_;
+  for (; end->id != -1; end++) {
     source_count++;
+  }
   resources[kSourceImagesID] =
       base::StringPiece(reinterpret_cast<const char*>(source_images_.get()),
                         source_count * sizeof(*source_images_));
@@ -967,36 +968,32 @@ bool BrowserThemePack::GetTint(int id, color_utils::HSL* hsl) const {
 }
 
 bool BrowserThemePack::GetColor(int id, SkColor* color) const {
-  static const base::NoDestructor<
-      base::flat_set<TP::OverwritableByUserThemeProperty>>
-      kOpaqueColors(
-          // Explicitly creating a base::flat_set here is not strictly
-          // necessary according to C++, but we do so to work around
-          // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=84849.
-          base::flat_set<TP::OverwritableByUserThemeProperty>({
-              // Background tabs must be opaque since the tabstrip expects to be
-              // able to render text opaquely atop them.
-              TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE,
-              TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE,
-              TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO,
-              TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO,
-              // The frame colors will be used for background tabs when not
-              // otherwise overridden and thus must be opaque as well.
-              TP::COLOR_FRAME_ACTIVE,
-              TP::COLOR_FRAME_INACTIVE,
-              TP::COLOR_FRAME_ACTIVE_INCOGNITO,
-              TP::COLOR_FRAME_INACTIVE_INCOGNITO,
-              // The toolbar is used as the foreground tab color, so it must be
-              // opaque just like background tabs.
-              TP::COLOR_TOOLBAR,
-          }));
+  static constexpr auto kOpaqueColors =
+      base::MakeFixedFlatSet<TP::OverwritableByUserThemeProperty>({
+          // Background tabs must be opaque since the tabstrip expects to be
+          // able to render text opaquely atop them.
+          TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE,
+          TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE,
+          TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO,
+          TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE_INCOGNITO,
+          // The frame colors will be used for background tabs when not
+          // otherwise overridden and thus must be opaque as well.
+          TP::COLOR_FRAME_ACTIVE,
+          TP::COLOR_FRAME_INACTIVE,
+          TP::COLOR_FRAME_ACTIVE_INCOGNITO,
+          TP::COLOR_FRAME_INACTIVE_INCOGNITO,
+          // The toolbar is used as the foreground tab color, so it must be
+          // opaque just like background tabs.
+          TP::COLOR_TOOLBAR,
+      });
 
   if (colors_) {
     for (size_t i = 0; i < kColorsArrayLength; ++i) {
       if (colors_[i].id == id) {
         *color = colors_[i].color;
-        if (base::Contains(*kOpaqueColors, id))
+        if (base::Contains(kOpaqueColors, id)) {
           *color = SkColorSetA(*color, SK_AlphaOPAQUE);
+        }
         return true;
       }
     }
@@ -1072,10 +1069,11 @@ bool BrowserThemePack::HasCustomImage(int idr_id) const {
   if (prs_id == PersistentID::kInvalid)
     return false;
 
-  int* img = source_images_;
-  for (; *img != -1; ++img) {
-    if (*img == prs_id)
+  SourceImage* img = source_images_;
+  for (; img->id != -1; ++img) {
+    if (img->id == prs_id) {
       return true;
+    }
   }
 
   return false;
@@ -1283,8 +1281,8 @@ void BrowserThemePack::InitDisplayProperties() {
 }
 
 void BrowserThemePack::InitSourceImages() {
-  source_images_ = new int[1];
-  source_images_[0] = -1;
+  source_images_ = new SourceImage[1];
+  source_images_[0].id = -1;
 }
 
 void BrowserThemePack::FinalizePackFromColors() {
@@ -1316,9 +1314,9 @@ void BrowserThemePack::SetTintsFromJSON(const base::Value::Dict* tints_value) {
     if (tint_list.size() != 3)
       continue;
 
-    absl::optional<double> h = tint_list[0].GetIfDouble();
-    absl::optional<double> s = tint_list[1].GetIfDouble();
-    absl::optional<double> l = tint_list[2].GetIfDouble();
+    std::optional<double> h = tint_list[0].GetIfDouble();
+    std::optional<double> s = tint_list[1].GetIfDouble();
+    std::optional<double> l = tint_list[2].GetIfDouble();
     if (!h || !s || !l)
       continue;
 
@@ -1372,9 +1370,9 @@ void BrowserThemePack::ReadColorsFromJSON(const base::Value::Dict& colors_value,
       continue;
 
     SkColor color = SK_ColorWHITE;
-    absl::optional<int> r = color_list[0].GetIfInt();
-    absl::optional<int> g = color_list[1].GetIfInt();
-    absl::optional<int> b = color_list[2].GetIfInt();
+    std::optional<int> r = color_list[0].GetIfInt();
+    std::optional<int> g = color_list[1].GetIfInt();
+    std::optional<int> b = color_list[2].GetIfInt();
     if (!(r.has_value() && r.value() >= 0 && r.value() <= 255 &&
           g.has_value() && g.value() >= 0 && g.value() <= 255 &&
           b.has_value() && b.value() >= 0 && b.value() <= 255)) {
@@ -1499,10 +1497,11 @@ void BrowserThemePack::AddFileAtScaleToMap(const std::string& image_name,
 }
 
 void BrowserThemePack::BuildSourceImagesArray(const FilePathMap& file_paths) {
-  source_images_ = new int[file_paths.size() + 1];
-  base::ranges::transform(file_paths, source_images_.get(),
-                          &FilePathMap::value_type::first);
-  source_images_[file_paths.size()] = -1;
+  source_images_ = new SourceImage[file_paths.size() + 1];
+  base::ranges::transform(
+      file_paths, source_images_.get(),
+      [](const auto& pair) { return SourceImage{pair.first}; });
+  source_images_[file_paths.size()].id = -1;
 }
 
 bool BrowserThemePack::LoadRawBitmapsTo(
@@ -1675,12 +1674,12 @@ void BrowserThemePack::CreateFrameImagesAndColors(ImageCache* images) {
   static constexpr struct FrameValues {
     PersistentID prs_id;
     int tint_id;
-    absl::optional<int> color_id;
+    std::optional<int> color_id;
   } kFrameValues[] = {
       {PRS::kFrame, TP::TINT_FRAME, TP::COLOR_FRAME_ACTIVE},
       {PRS::kFrameInactive, TP::TINT_FRAME_INACTIVE, TP::COLOR_FRAME_INACTIVE},
-      {PRS::kFrameOverlay, TP::TINT_FRAME, absl::nullopt},
-      {PRS::kFrameOverlayInactive, TP::TINT_FRAME_INACTIVE, absl::nullopt},
+      {PRS::kFrameOverlay, TP::TINT_FRAME, std::nullopt},
+      {PRS::kFrameOverlayInactive, TP::TINT_FRAME_INACTIVE, std::nullopt},
       {PRS::kFrameIncognito, TP::TINT_FRAME_INCOGNITO,
        TP::COLOR_FRAME_ACTIVE_INCOGNITO},
       {PRS::kFrameIncognitoInactive, TP::TINT_FRAME_INCOGNITO_INACTIVE,
@@ -1833,7 +1832,7 @@ void BrowserThemePack::CreateTabBackgroundImagesAndColors(ImageCache* images) {
     // For inactive images, the corresponding active image.  If the active
     // images are customized and the inactive ones are not, the inactive ones
     // will be based on the active ones.
-    absl::optional<PersistentID> fallback_tab_id;
+    std::optional<PersistentID> fallback_tab_id;
 
     // The frame image to use as the base of this tab background image.
     PersistentID frame_id;
@@ -1844,12 +1843,12 @@ void BrowserThemePack::CreateTabBackgroundImagesAndColors(ImageCache* images) {
     // The color to compute and store for this image, if not present.
     int color_id;
   } kTabBackgroundMap[] = {
-      {PRS::kTabBackground, absl::nullopt, PRS::kFrame, TP::COLOR_FRAME_ACTIVE,
+      {PRS::kTabBackground, std::nullopt, PRS::kFrame, TP::COLOR_FRAME_ACTIVE,
        TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE},
       {PRS::kTabBackgroundInactive, PRS::kTabBackground, PRS::kFrameInactive,
        TP::COLOR_FRAME_INACTIVE,
        TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE},
-      {PRS::kTabBackgroundIncognito, absl::nullopt, PRS::kFrameIncognito,
+      {PRS::kTabBackgroundIncognito, std::nullopt, PRS::kFrameIncognito,
        TP::COLOR_FRAME_ACTIVE_INCOGNITO,
        TP::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE_INCOGNITO},
       {PRS::kTabBackgroundIncognitoInactive, PRS::kTabBackgroundIncognito,

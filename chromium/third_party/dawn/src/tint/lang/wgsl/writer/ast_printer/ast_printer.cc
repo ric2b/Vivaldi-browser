@@ -27,7 +27,7 @@
 
 #include "src/tint/lang/wgsl/writer/ast_printer/ast_printer.h"
 
-#include <algorithm>
+#include <string>
 
 #include "src/tint/lang/core/texel_format.h"
 #include "src/tint/lang/wgsl/ast/accessor_expression.h"
@@ -40,6 +40,7 @@
 #include "src/tint/lang/wgsl/ast/break_statement.h"
 #include "src/tint/lang/wgsl/ast/call_expression.h"
 #include "src/tint/lang/wgsl/ast/call_statement.h"
+#include "src/tint/lang/wgsl/ast/color_attribute.h"
 #include "src/tint/lang/wgsl/ast/compound_assignment_statement.h"
 #include "src/tint/lang/wgsl/ast/const.h"
 #include "src/tint/lang/wgsl/ast/continue_statement.h"
@@ -102,6 +103,10 @@ bool ASTPrinter::Generate() {
         EmitEnable(enable);
         has_directives = true;
     }
+    for (auto req : program_.AST().Requires()) {
+        EmitRequires(req);
+        has_directives = true;
+    }
     for (auto diagnostic : program_.AST().DiagnosticDirectives()) {
         auto out = Line();
         EmitDiagnosticControl(out, diagnostic->control);
@@ -113,7 +118,7 @@ bool ASTPrinter::Generate() {
     }
     // Generate global declarations in the order they appear in the module.
     for (auto* decl : program_.AST().GlobalDeclarations()) {
-        if (decl->IsAnyOf<ast::DiagnosticDirective, ast::Enable>()) {
+        if (decl->IsAnyOf<ast::DiagnosticDirective, ast::Enable, ast::Requires>()) {
             continue;
         }
         Switch(
@@ -144,6 +149,20 @@ void ASTPrinter::EmitEnable(const ast::Enable* enable) {
             out << ", ";
         }
         out << ext->name;
+    }
+    out << ";";
+}
+
+void ASTPrinter::EmitRequires(const ast::Requires* req) {
+    auto out = Line();
+    out << "requires ";
+    bool first = true;
+    for (auto feature : req->features) {
+        if (!first) {
+            out << ", ";
+        }
+        out << wgsl::ToString(feature);
+        first = false;
     }
     out << ";";
 }
@@ -244,9 +263,9 @@ void ASTPrinter::EmitLiteral(StringStream& out, const ast::LiteralExpression* li
             // and Inf are not allowed to be spelled in literal, it should be fine to emit f16
             // literals in this way.
             if (l->suffix == ast::FloatLiteralExpression::Suffix::kNone) {
-                out << tint::writer::DoubleToBitPreservingString(l->value);
+                out << tint::strconv::DoubleToBitPreservingString(l->value);
             } else {
-                out << tint::writer::FloatToBitPreservingString(static_cast<float>(l->value))
+                out << tint::strconv::FloatToBitPreservingString(static_cast<float>(l->value))
                     << l->suffix;
             }
         },
@@ -485,6 +504,11 @@ void ASTPrinter::EmitAttributes(StringStream& out, VectorRef<const ast::Attribut
             [&](const ast::LocationAttribute* location) {
                 out << "location(";
                 EmitExpression(out, location->expr);
+                out << ")";
+            },
+            [&](const ast::ColorAttribute* color) {
+                out << "color(";
+                EmitExpression(out, color->expr);
                 out << ")";
             },
             [&](const ast::IndexAttribute* index) {

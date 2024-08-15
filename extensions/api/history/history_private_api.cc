@@ -79,27 +79,27 @@ void HistoryPrivateAPI::Shutdown() {
 ui::PageTransition HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
     vivaldi::history_private::TransitionType transition) {
   switch (transition) {
-    case vivaldi::history_private::TRANSITION_TYPE_LINK:
+    case vivaldi::history_private::TransitionType::kLink:
       return ui::PAGE_TRANSITION_LINK;
-    case vivaldi::history_private::TRANSITION_TYPE_TYPED:
+    case vivaldi::history_private::TransitionType::kTyped:
       return ui::PAGE_TRANSITION_TYPED;
-    case vivaldi::history_private::TRANSITION_TYPE_AUTO_BOOKMARK:
+    case vivaldi::history_private::TransitionType::kAutoBookmark:
       return ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-    case vivaldi::history_private::TRANSITION_TYPE_AUTO_SUBFRAME:
+    case vivaldi::history_private::TransitionType::kAutoSubframe:
       return ui::PAGE_TRANSITION_AUTO_SUBFRAME;
-    case vivaldi::history_private::TRANSITION_TYPE_MANUAL_SUBFRAME:
+    case vivaldi::history_private::TransitionType::kManualSubframe:
       return ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
-    case vivaldi::history_private::TRANSITION_TYPE_GENERATED:
+    case vivaldi::history_private::TransitionType::kGenerated:
       return ui::PAGE_TRANSITION_GENERATED;
-    case vivaldi::history_private::TRANSITION_TYPE_AUTO_TOPLEVEL:
+    case vivaldi::history_private::TransitionType::kAutoToplevel:
       return ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
-    case vivaldi::history_private::TRANSITION_TYPE_FORM_SUBMIT:
+    case vivaldi::history_private::TransitionType::kFormSubmit:
       return ui::PAGE_TRANSITION_FORM_SUBMIT;
-    case vivaldi::history_private::TRANSITION_TYPE_RELOAD:
+    case vivaldi::history_private::TransitionType::kReload:
       return ui::PAGE_TRANSITION_RELOAD;
-    case vivaldi::history_private::TRANSITION_TYPE_KEYWORD:
+    case vivaldi::history_private::TransitionType::kKeyword:
       return ui::PAGE_TRANSITION_KEYWORD;
-    case vivaldi::history_private::TRANSITION_TYPE_KEYWORD_GENERATED:
+    case vivaldi::history_private::TransitionType::kKeywordGenerated:
       return ui::PAGE_TRANSITION_KEYWORD_GENERATED;
     default:
       NOTREACHED();
@@ -113,32 +113,32 @@ HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
     ui::PageTransition transition) {
   switch (transition & ui::PAGE_TRANSITION_CORE_MASK) {
     case ui::PAGE_TRANSITION_LINK:
-      return vivaldi::history_private::TRANSITION_TYPE_LINK;
+      return vivaldi::history_private::TransitionType::kLink;
     case ui::PAGE_TRANSITION_TYPED:
-      return vivaldi::history_private::TRANSITION_TYPE_TYPED;
+      return vivaldi::history_private::TransitionType::kTyped;
     case ui::PAGE_TRANSITION_AUTO_BOOKMARK:
-      return vivaldi::history_private::TRANSITION_TYPE_AUTO_BOOKMARK;
+      return vivaldi::history_private::TransitionType::kAutoBookmark;
     case ui::PAGE_TRANSITION_AUTO_SUBFRAME:
-      return vivaldi::history_private::TRANSITION_TYPE_AUTO_SUBFRAME;
+      return vivaldi::history_private::TransitionType::kAutoSubframe;
     case ui::PAGE_TRANSITION_MANUAL_SUBFRAME:
-      return vivaldi::history_private::TRANSITION_TYPE_MANUAL_SUBFRAME;
+      return vivaldi::history_private::TransitionType::kManualSubframe;
     case ui::PAGE_TRANSITION_GENERATED:
-      return vivaldi::history_private::TRANSITION_TYPE_GENERATED;
+      return vivaldi::history_private::TransitionType::kGenerated;
     case ui::PAGE_TRANSITION_AUTO_TOPLEVEL:
-      return vivaldi::history_private::TRANSITION_TYPE_AUTO_TOPLEVEL;
+      return vivaldi::history_private::TransitionType::kAutoToplevel;
     case ui::PAGE_TRANSITION_FORM_SUBMIT:
-      return vivaldi::history_private::TRANSITION_TYPE_FORM_SUBMIT;
+      return vivaldi::history_private::TransitionType::kFormSubmit;
     case ui::PAGE_TRANSITION_RELOAD:
-      return vivaldi::history_private::TRANSITION_TYPE_RELOAD;
+      return vivaldi::history_private::TransitionType::kReload;
     case ui::PAGE_TRANSITION_KEYWORD:
-      return vivaldi::history_private::TRANSITION_TYPE_KEYWORD;
+      return vivaldi::history_private::TransitionType::kKeyword;
     case ui::PAGE_TRANSITION_KEYWORD_GENERATED:
-      return vivaldi::history_private::TRANSITION_TYPE_KEYWORD_GENERATED;
+      return vivaldi::history_private::TransitionType::kKeywordGenerated;
     default:
       NOTREACHED();
   }
   // We have to return something
-  return vivaldi::history_private::TRANSITION_TYPE_LINK;
+  return vivaldi::history_private::TransitionType::kLink;
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<HistoryPrivateAPI>>::
@@ -217,14 +217,14 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
   if (params->query.max_results.has_value())
     options.max_count = params->query.max_results.value();
 
-  if (params->query.result_grouping) {
+  if (params->query.result_grouping !=
+      vivaldi::history_private::HistoryResultSetGrouping::kNone) {
     if (params->query.result_grouping ==
-        vivaldi::history_private::
-            HISTORY_RESULT_SET_GROUPING_KEEP_ALL_DUPLICATES) {
+        vivaldi::history_private::HistoryResultSetGrouping::kKeepAllDuplicates) {
       options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
     } else if (params->query.result_grouping ==
                vivaldi::history_private::
-                   HISTORY_RESULT_SET_GROUPING_REMOVE_DUPLICATES_PER_DAY) {
+                   HistoryResultSetGrouping::kRemoveDuplicatesPerDay) {
       options.duplicate_policy =
           history::QueryOptions::REMOVE_DUPLICATES_PER_DAY;
     }

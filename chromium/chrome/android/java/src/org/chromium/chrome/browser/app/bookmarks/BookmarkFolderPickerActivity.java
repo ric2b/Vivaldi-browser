@@ -15,7 +15,6 @@ import org.chromium.base.IntentUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
 import org.chromium.chrome.browser.back_press.BackPressHelper;
-import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkAddNewFolderCoordinator;
 import org.chromium.chrome.browser.bookmarks.BookmarkFolderPickerCoordinator;
@@ -28,7 +27,6 @@ import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowCoordinator;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
@@ -81,10 +79,10 @@ public class BookmarkFolderPickerActivity extends SynchronousInitializationActiv
                         new LargeIconBridge(profile),
                         BookmarkUtils.getRoundedIconGenerator(this, BookmarkRowDisplayPref.VISUAL),
                         BookmarkUtils.getImageIconSize(res, BookmarkRowDisplayPref.VISUAL),
-                        BookmarkUtils.getFaviconDisplaySize(res),
-                        SyncServiceFactory.getForProfile(profile));
+                        BookmarkUtils.getFaviconDisplaySize(res));
         BookmarkAddNewFolderCoordinator addNewFolderCoordinator =
-                new BookmarkAddNewFolderCoordinator(this,
+                new BookmarkAddNewFolderCoordinator(
+                        this,
                         new ModalDialogManager(new AppModalPresenter(this), ModalDialogType.APP),
                         mBookmarkModel);
         BookmarkUiPrefs bookmarkUiPrefs =
@@ -93,19 +91,26 @@ public class BookmarkFolderPickerActivity extends SynchronousInitializationActiv
         // TODO(crbug.com/1472832): Consider initializing this in #onCreateOptionsMenu to avoid the
         // possibility that the menu is null when the first parent is set.
         mCoordinator =
-                new BookmarkFolderPickerCoordinator(this, mBookmarkModel, mBookmarkImageFetcher,
-                        mBookmarkIds, this::finish, addNewFolderCoordinator, bookmarkUiPrefs,
-                        new ImprovedBookmarkRowCoordinator(this, mBookmarkImageFetcher,
-                                mBookmarkModel, bookmarkUiPrefs, shoppingService),
+                new BookmarkFolderPickerCoordinator(
+                        this,
+                        mBookmarkModel,
+                        mBookmarkIds,
+                        this::finish,
+                        addNewFolderCoordinator,
+                        bookmarkUiPrefs,
+                        new ImprovedBookmarkRowCoordinator(
+                                this,
+                                mBookmarkImageFetcher,
+                                mBookmarkModel,
+                                bookmarkUiPrefs,
+                                shoppingService),
                         shoppingService);
 
-        if (BackPressManager.isSecondaryActivityEnabled()) {
-            BackPressHelper.create(this, getOnBackPressedDispatcher(), mCoordinator,
-                    SecondaryActivity.BOOKMARK_FOLDER_PICKER);
-        } else {
-            BackPressHelper.create(this, getOnBackPressedDispatcher(), mCoordinator::onBackPressed,
-                    SecondaryActivity.BOOKMARK_FOLDER_PICKER);
-        }
+        BackPressHelper.create(
+                this,
+                getOnBackPressedDispatcher(),
+                mCoordinator,
+                SecondaryActivity.BOOKMARK_FOLDER_PICKER);
 
         Toolbar toolbar = mCoordinator.getToolbar();
         setSupportActionBar(toolbar);

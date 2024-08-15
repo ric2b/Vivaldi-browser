@@ -107,12 +107,8 @@ export function registerNoopActions(actionIds: string[]): void {
 }
 
 const REGISTERED_EXPERIMENTS = [
-  'bfcacheDisplayTree',
   'captureNodeCreationStacks',
-  'preciseChanges',
   'protocolMonitor',
-  'sourcesPrettyPrint',
-  'wasmDWARFDebugging',
   'timelineShowAllEvents',
   'timelineV8RuntimeCallStats',
   'timelineInvalidationTracking',
@@ -120,7 +116,6 @@ const REGISTERED_EXPERIMENTS = [
   'instrumentationBreakpoints',
   'cssTypeComponentLength',
   'stylesPaneCSSChanges',
-  'timelineEventInitiators',
   'timelineAsConsoleProfileResultPanel',
   'headerOverrides',
   'highlightErrorsElementsPanel',
@@ -130,8 +125,8 @@ const REGISTERED_EXPERIMENTS = [
   'useSourceMapScopes',
   'fontEditor',
   'networkPanelFilterBarRedesign',
-  'breadcrumbsPerformancePanel',
   'trackContextMenu',
+  'sourcesFrameIndentationMarkersTemporarilyDisable',
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -308,6 +303,7 @@ export async function deinitializeGlobalVars() {
   SDK.TargetManager.TargetManager.removeInstance();
   Root.Runtime.Runtime.removeInstance();
   Common.Settings.Settings.removeInstance();
+  Common.Revealer.RevealerRegistry.removeInstance();
   Common.Console.Console.removeInstance();
   Workspace.Workspace.WorkspaceImpl.removeInstance();
   Bindings.IgnoreListManager.IgnoreListManager.removeInstance();

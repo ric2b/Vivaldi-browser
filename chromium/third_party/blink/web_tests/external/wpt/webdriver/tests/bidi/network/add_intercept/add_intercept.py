@@ -4,11 +4,15 @@ import uuid
 import pytest
 from webdriver.bidi.modules.script import ScriptEvaluateResultException
 
-from .. import assert_before_request_sent_event
-
-PAGE_EMPTY_HTML = "/webdriver/tests/bidi/network/support/empty.html"
-PAGE_EMPTY_TEXT = "/webdriver/tests/bidi/network/support/empty.txt"
-PAGE_OTHER_TEXT = "/webdriver/tests/bidi/network/support/other.txt"
+from .. import (
+    assert_before_request_sent_event,
+    PAGE_EMPTY_HTML,
+    PAGE_EMPTY_TEXT,
+    PAGE_OTHER_TEXT,
+    BEFORE_REQUEST_SENT_EVENT,
+    RESPONSE_COMPLETED_EVENT,
+    RESPONSE_STARTED_EVENT,
+)
 
 
 @pytest.mark.asyncio
@@ -20,13 +24,14 @@ async def test_other_context(
     add_intercept,
     fetch,
     setup_network_test,
+    phase,
 ):
     # Subscribe to network events only in top_context
     await setup_network_test(
         events=[
-            "network.beforeRequestSent",
-            "network.responseStarted",
-            "network.responseCompleted",
+            BEFORE_REQUEST_SENT_EVENT,
+            RESPONSE_STARTED_EVENT,
+            RESPONSE_COMPLETED_EVENT,
         ],
         contexts=[top_context["context"]],
     )
@@ -40,7 +45,7 @@ async def test_other_context(
     # Add an intercept.
     text_url = url(PAGE_EMPTY_TEXT)
     await add_intercept(
-        phases=["beforeRequestSent"],
+        phases=[phase],
         url_patterns=[{"type": "string", "pattern": text_url}],
     )
 
@@ -64,9 +69,9 @@ async def test_other_url(
 ):
     await setup_network_test(
         events=[
-            "network.beforeRequestSent",
-            "network.responseStarted",
-            "network.responseCompleted",
+            BEFORE_REQUEST_SENT_EVENT,
+            RESPONSE_STARTED_EVENT,
+            RESPONSE_COMPLETED_EVENT,
         ],
     )
 
@@ -102,12 +107,13 @@ async def test_two_intercepts(
     add_intercept,
     fetch,
     setup_network_test,
+    wait_for_future_safe,
 ):
     await setup_network_test(
         events=[
-            "network.beforeRequestSent",
-            "network.responseStarted",
-            "network.responseCompleted",
+            BEFORE_REQUEST_SENT_EVENT,
+            RESPONSE_STARTED_EVENT,
+            RESPONSE_COMPLETED_EVENT,
         ],
     )
 
@@ -124,9 +130,9 @@ async def test_two_intercepts(
     )
 
     # Perform a request to PAGE_EMPTY_TEXT, which should match both intercepts
-    on_network_event = wait_for_event("network.beforeRequestSent")
+    on_network_event = wait_for_event(BEFORE_REQUEST_SENT_EVENT)
     asyncio.ensure_future(fetch(text_url))
-    event = await on_network_event
+    event = await wait_for_future_safe(on_network_event)
 
     assert_before_request_sent_event(
         event, is_blocked=True, intercepts=[string_intercept, global_intercept]
@@ -135,9 +141,9 @@ async def test_two_intercepts(
     # Perform a request to PAGE_OTHER_TEXT, which should only match one intercept
     other_url = url(PAGE_OTHER_TEXT)
 
-    on_network_event = wait_for_event("network.beforeRequestSent")
+    on_network_event = wait_for_event(BEFORE_REQUEST_SENT_EVENT)
     asyncio.ensure_future(fetch(other_url))
-    event = await on_network_event
+    event = await wait_for_future_safe(on_network_event)
 
     assert_before_request_sent_event(
         event, is_blocked=True, intercepts=[global_intercept]
@@ -150,9 +156,9 @@ async def test_two_intercepts(
 
     # Requests to PAGE_EMPTY_TEXT should still be blocked, but only by one
     # intercept.
-    on_network_event = wait_for_event("network.beforeRequestSent")
+    on_network_event = wait_for_event(BEFORE_REQUEST_SENT_EVENT)
     asyncio.ensure_future(fetch(text_url))
-    event = await on_network_event
+    event = await wait_for_future_safe(on_network_event)
 
     assert_before_request_sent_event(
         event, is_blocked=True, intercepts=[string_intercept]

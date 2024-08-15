@@ -14,7 +14,7 @@
 #import "components/autofill/ios/form_util/form_util_java_script_feature.h"
 #import "components/password_manager/ios/password_manager_java_script_feature.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/web/chrome_web_client.h"
+#import "ios/chrome/browser/web/model/chrome_web_client.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/test/js_test_util.h"
@@ -60,6 +60,7 @@ base::Value::Dict ParsedField(std::string renderer_id,
                                 .Set("aria_description", "")
                                 .Set("should_autocomplete", true)
                                 .Set("is_focusable", true)
+                                .Set("is_user_edited", true)
                                 .Set("max_length", 524288)
                                 .Set("is_checkable", false)
                                 .Set("value", value)

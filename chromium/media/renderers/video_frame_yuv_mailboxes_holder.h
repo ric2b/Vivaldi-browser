@@ -16,6 +16,10 @@ class SkColorSpace;
 class SkImage;
 class SkSurface;
 
+namespace gpu {
+class ClientSharedImage;
+}  // namespace gpu
+
 namespace viz {
 class RasterContextProvider;
 }  // namespace viz
@@ -58,10 +62,6 @@ class MEDIA_EXPORT VideoFrameYUVMailboxesHolder {
 
   const SkYUVAInfo& yuva_info() const { return yuva_info_; }
 
-  // Utility to convert a media pixel format to SkYUVAInfo.
-  static std::tuple<SkYUVAInfo::PlaneConfig, SkYUVAInfo::Subsampling>
-  VideoPixelFormatToSkiaValues(VideoPixelFormat video_format);
-
   // Utility to populate a SkYUVAInfo from a video frame.
   static SkYUVAInfo VideoFrameGetSkYUVAInfo(const VideoFrame* video_frame);
 
@@ -93,6 +93,7 @@ class MEDIA_EXPORT VideoFrameYUVMailboxesHolder {
 
   // Populated by VideoFrameToMailboxes.
   std::array<gpu::MailboxHolder, kMaxPlanes> holders_;
+  std::array<scoped_refptr<gpu::ClientSharedImage>, kMaxPlanes> shared_images_;
 
   // Populated by ImportTextures.
   struct YUVPlaneTextureInfo {

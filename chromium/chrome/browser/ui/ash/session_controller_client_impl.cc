@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "ash/constants/ash_pref_names.h"
@@ -20,6 +21,8 @@
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/floating_workspace/floating_workspace_service.h"
+#include "chrome/browser/ash/floating_workspace/floating_workspace_util.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/lock/screen_locker.h"
 #include "chrome/browser/ash/login/ui/user_adding_screen.h"
@@ -48,7 +51,6 @@
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_context.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #include "ui/gfx/image/image_skia.h"
@@ -199,6 +201,17 @@ SessionControllerClientImpl* SessionControllerClientImpl::Get() {
 }
 
 void SessionControllerClientImpl::PrepareForLock(base::OnceClosure callback) {
+  if (ash::floating_workspace_util::IsFloatingWorkspaceV2Enabled()) {
+    User* active_user = UserManager::Get()->GetActiveUser();
+    Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(active_user);
+    if (profile) {
+      auto* floating_workspace_service =
+          ash::FloatingWorkspaceService::GetForProfile(profile);
+      if (floating_workspace_service) {
+        floating_workspace_service->CaptureAndUploadActiveDesk();
+      }
+    }
+  }
   session_controller_->PrepareForLock(std::move(callback));
 }
 
@@ -319,15 +332,26 @@ PrefService* SessionControllerClientImpl::GetUserPrefService(
   return user_profile->GetPrefs();
 }
 
+base::FilePath SessionControllerClientImpl::GetProfilePath(
+    const AccountId& account_id) {
+  Profile* const user_profile =
+      multi_user_util::GetProfileFromAccountId(account_id);
+  if (!user_profile) {
+    return base::FilePath();
+  }
+
+  return user_profile->GetPath();
+}
+
 bool SessionControllerClientImpl::IsEnterpriseManaged() const {
   const ash::ChromeUserManager* user_manager = ash::ChromeUserManager::Get();
   return user_manager && user_manager->IsEnterpriseManaged();
 }
 
-absl::optional<int> SessionControllerClientImpl::GetExistingUsersCount() const {
+std::optional<int> SessionControllerClientImpl::GetExistingUsersCount() const {
   const ash::ChromeUserManager* user_manager = ash::ChromeUserManager::Get();
-  return !user_manager ? absl::nullopt
-                       : absl::optional<int>(user_manager->GetUsers().size());
+  return !user_manager ? std::nullopt
+                       : std::optional<int>(user_manager->GetUsers().size());
 }
 
 // static
@@ -396,7 +420,7 @@ bool SessionControllerClientImpl::CanLockScreen() {
 // static
 bool SessionControllerClientImpl::ShouldLockScreenAutomatically() {
   const UserList logged_in_users = UserManager::Get()->GetLoggedInUsers();
-  for (auto* user : logged_in_users) {
+  for (user_manager::User* user : logged_in_users) {
     Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(user);
     if (profile &&
         profile->GetPrefs()->GetBoolean(ash::prefs::kEnableAutoScreenLock)) {
@@ -616,7 +640,7 @@ void SessionControllerClientImpl::SendUserSessionOrder() {
 
   const UserList logged_in_users = user_manager->GetLoggedInUsers();
   std::vector<uint32_t> user_session_ids;
-  for (auto* user : user_manager->GetLRULoggedInUsers()) {
+  for (user_manager::User* user : user_manager->GetLRULoggedInUsers()) {
     const uint32_t user_session_id = GetSessionId(*user);
     DCHECK_NE(0u, user_session_id);
     user_session_ids.push_back(user_session_id);

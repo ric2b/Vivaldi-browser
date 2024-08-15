@@ -3,13 +3,15 @@
 # found in the LICENSE file.
 
 
+PRESUBMIT_VERSION = '2.0.0'
+
 
 _IGNORE_FREEZE_FOOTER = 'Ignore-Freeze'
 
 # The time module's handling of timezones is abysmal, so the boundaries are
 # precomputed in UNIX time
-_FREEZE_START = 1671177600  # 2022/12/16 00:00 -0800
-_FREEZE_END = 1672646400  # 2023/01/02 00:00 -0800
+_FREEZE_START = 1702627200  # 2023/12/15 00:00 -0800
+_FREEZE_END = 1704182400  # 2024/01/02 00:00 -0800
 
 
 def CheckFreeze(input_api, output_api):
@@ -37,57 +39,35 @@ def CheckFreeze(input_api, output_api):
 
 
 def CheckTests(input_api, output_api):
-  glob = input_api.os_path.join(input_api.PresubmitLocalPath(), '*_test.py')
-  tests = input_api.canned_checks.GetUnitTests(input_api, output_api,
-                                               input_api.glob(glob))
-  return input_api.RunTests(tests)
-
-
-def _CommonChecks(input_api, output_api):
-  tests = []
-
-  # Run Pylint over the files in the directory.
-  tests.extend(
-      input_api.canned_checks.GetPylint(
-          input_api,
-          output_api,
-          version='2.7',
-          # pylint complains about Checkfreeze not being defined, its probably
-          # finding a different PRESUBMIT.py. Note that this warning only
-          # appears if the number of Pylint jobs is greater than one.
-          files_to_skip=['PRESUBMIT_test.py'],
-          # Disabling this warning because this pattern involving ToSrcRelPath
-          # seems intrinsic to how mb_unittest.py is implemented.
-          disabled_warnings=[
-              'attribute-defined-outside-init',
-          ]))
-
-  # Run the MB unittests.
-  tests.extend(
+  return input_api.RunTests(
       input_api.canned_checks.GetUnitTestsInDirectory(input_api, output_api,
                                                       '.',
-                                                      [r'^.+_unittest\.py$']))
+                                                      [r'.+_(unit)?test\.py$']))
 
-  # Validate the format of the mb_config.pyl file.
+
+def CheckPylint(input_api, output_api):
+  return input_api.canned_checks.RunPylint(
+      input_api,
+      output_api,
+      version='2.7',
+      # pylint complains about Checkfreeze not being defined, its probably
+      # finding a different PRESUBMIT.py. Note that this warning only
+      # appears if the number of Pylint jobs is greater than one.
+      files_to_skip=['PRESUBMIT_test.py'],
+      # Disabling this warning because this pattern involving ToSrcRelPath
+      # seems intrinsic to how mb_unittest.py is implemented.
+      disabled_warnings=[
+          'attribute-defined-outside-init',
+      ],
+  )
+
+
+def CheckMbValidate(input_api, output_api):
   cmd = [input_api.python3_executable, 'mb.py', 'validate']
   kwargs = {'cwd': input_api.PresubmitLocalPath()}
-  tests.append(
+  return input_api.RunTests([
       input_api.Command(name='mb_validate',
                         cmd=cmd,
                         kwargs=kwargs,
-                        message=output_api.PresubmitError))
-
-  results = []
-  results.extend(input_api.RunTests(tests))
-  results.extend(CheckFreeze(input_api, output_api))
-  results.extend(CheckTests(input_api, output_api))
-
-  return results
-
-
-def CheckChangeOnUpload(input_api, output_api):
-  return _CommonChecks(input_api, output_api)
-
-
-def CheckChangeOnCommit(input_api, output_api):
-  return _CommonChecks(input_api, output_api)
+                        message=output_api.PresubmitError),
+  ])

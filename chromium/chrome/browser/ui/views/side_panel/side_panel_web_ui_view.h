@@ -27,8 +27,10 @@ class MenuRunner;
 // handling visibility updates.
 class SidePanelWebUIView : public views::WebView,
                            public BubbleContentsWrapper::Host {
+  METADATA_HEADER(SidePanelWebUIView, views::WebView)
+
  public:
-  METADATA_HEADER(SidePanelWebUIView);
+  static inline constexpr int kSidePanelWebViewId = 777;
   SidePanelWebUIView(base::RepeatingClosure on_show_cb,
                      base::RepeatingClosure close_cb,
                      BubbleContentsWrapper* contents_wrapper);
@@ -65,6 +67,8 @@ class SidePanelWebUIView : public views::WebView,
 
 template <class T>
 class SidePanelWebUIViewT : public SidePanelWebUIView {
+  METADATA_TEMPLATE_HEADER(SidePanelWebUIViewT, SidePanelWebUIView)
+
  public:
   SidePanelWebUIViewT(
       base::RepeatingClosure on_show_cb,

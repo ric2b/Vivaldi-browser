@@ -63,12 +63,12 @@ class ASH_EXPORT ScrollableAppsGridView : public AppsGridView {
                                   ui::EventType type) override;
   void SetFocusAfterEndDrag(AppListItem* drag_item) override;
   void RecordAppMovingTypeMetrics(AppListAppMovingType type) override;
-  absl::optional<int> GetMaxRowsInPage(int page) const override;
+  std::optional<int> GetMaxRowsInPage(int page) const override;
   gfx::Vector2d GetGridCenteringOffset(int page) const override;
   const gfx::Vector2d CalculateTransitionOffset(
       int page_of_view) const override;
   void EnsureViewVisible(const GridIndex& index) override;
-  absl::optional<VisibleItemIndexRange> GetVisibleItemIndexRange()
+  std::optional<VisibleItemIndexRange> GetVisibleItemIndexRange()
       const override;
   bool ShouldContainerHandleDragEvents() override;
 
@@ -93,7 +93,7 @@ class ASH_EXPORT ScrollableAppsGridView : public AppsGridView {
   int GetAutoScrollOffset() const;
 
   // The scroll view that contains this view (and other views).
-  const raw_ptr<views::ScrollView, ExperimentalAsh> scroll_view_;
+  const raw_ptr<views::ScrollView> scroll_view_;
 
   // Timer to scroll the `scroll_view_`.
   base::OneShotTimer auto_scroll_timer_;

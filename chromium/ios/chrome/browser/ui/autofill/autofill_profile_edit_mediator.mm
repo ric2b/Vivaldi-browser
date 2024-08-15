@@ -139,7 +139,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (BOOL)fieldValueEmptyOnProfileLoadForType:
-    (autofill::ServerFieldType)serverFieldType {
+    (autofill::FieldType)serverFieldType {
   return _autofillProfile
       ->GetInfo(serverFieldType,
                 GetApplicationContext()->GetApplicationLocale())
@@ -148,7 +148,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)updateProfileMetadataWithValue:(NSString*)value
                      forAutofillUIType:(AutofillUIType)autofillUIType {
-  autofill::ServerFieldType serverFieldType =
+  autofill::FieldType serverFieldType =
       AutofillTypeFromAutofillUIType(autofillUIType);
 
   // Since the country field is a text field, we should use SetInfo() to
@@ -243,7 +243,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   autofill::AutofillCountry country(
       base::SysNSStringToUTF8(self.selectedCountryCode),
       GetApplicationContext()->GetApplicationLocale());
-  [self.consumer setNameRequired:country.requires_full_name()];
   [self.consumer setLine1Required:country.requires_line1()];
   [self.consumer setCityRequired:country.requires_city()];
   [self.consumer setStateRequired:country.requires_state()];
@@ -259,9 +258,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
         autofill::AutofillType(field.autofillType),
         GetApplicationContext()->GetApplicationLocale()));
     switch (autofillUIType) {
-      case AutofillUITypeProfileHonorificPrefix:
-        [self.consumer setHonorificPrefix:fieldValue];
-        break;
       case AutofillUITypeProfileCompanyName:
         [self.consumer setCompanyName:fieldValue];
         break;

@@ -27,6 +27,7 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/simple_feature.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_database.mojom-blink-forward.h"
@@ -89,7 +90,8 @@ class MockEventDispatcher : public mojom::EventDispatcher {
   void DispatchEvent(mojom::DispatchEventParamsPtr params,
                      base::Value::List event_args,
                      DispatchEventCallback callback) override {
-    std::move(callback).Run();
+    std::move(callback).Run(
+        /*event_will_run_in_lazy_background_page_script=*/false);
   }
 
  private:
@@ -435,10 +437,10 @@ class EventRouterObserver : public EventRouter::TestObserver {
 // A fake that pretends that all contexts are WebUI.
 class ProcessMapFake : public ProcessMap {
  public:
-  Feature::Context GetMostLikelyContextType(const Extension* extension,
-                                            int process_id,
-                                            const GURL* url) const override {
-    return Feature::WEBUI_CONTEXT;
+  mojom::ContextType GetMostLikelyContextType(const Extension* extension,
+                                              int process_id,
+                                              const GURL* url) const override {
+    return mojom::ContextType::kWebUi;
   }
 };
 
@@ -820,7 +822,7 @@ TEST_F(EventRouterDispatchTest, DISABLED_TestDispatchCallback) {
       mojom::EventListener::New(
           mojom::EventListenerOwner::NewExtensionId(ext3), event_name,
           mojom::ServiceWorkerContext::New(GURL(), sw_version_id, sw_thread_id),
-          /*event_filter=*/absl::nullopt),
+          /*event_filter=*/std::nullopt),
       process4.get());
   event_router()->BindServiceWorkerEventDispatcher(
       process4->GetID(), sw_thread_id, sw_event_dispatcher.BindAndPassRemote());

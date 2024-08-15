@@ -49,8 +49,7 @@ class PageInfoUI;
 // information and allows users to change the permissions. |PageInfo|
 // objects must be created on the heap. They destroy themselves after the UI is
 // closed.
-class PageInfo : private content_settings::CookieControlsObserver,
-                 content_settings::OldCookieControlsObserver {
+class PageInfo : private content_settings::CookieControlsObserver {
  public:
   // Status of a connection to a website.
   enum SiteConnectionStatus {
@@ -353,16 +352,12 @@ class PageInfo : private content_settings::CookieControlsObserver,
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest,
                            ShowInfoBarWhenBlockingThirdPartyCookies);
 
-  // OldCookieControlsObserver:
-  void OnStatusChanged(CookieControlsStatus status,
-                       CookieControlsEnforcement enforcement,
-                       int allowed_cookies,
-                       int blocked_cookies) override;
-  void OnCookiesCountChanged(int allowed_cookies, int blocked_cookies) override;
-  void OnStatefulBounceCountChanged(int bounce_count) override;
-
   // CookieControlsObserver:
+  // TODO(b/317975095): Remove `status` in favor of `control_visible` and
+  // `protections_on`.
   void OnStatusChanged(CookieControlsStatus status,
+                       bool controls_visible,
+                       bool protections_on,
                        CookieControlsEnforcement enforcement,
                        CookieBlocking3pcdStatus blocking_status,
                        base::Time expiration) override;
@@ -456,7 +451,7 @@ class PageInfo : private content_settings::CookieControlsObserver,
   // specific data (local stored objects like cookies), site-specific
   // permissions (location, pop-up, plugin, etc. permissions) and site-specific
   // information (identity, connection status, etc.).
-  raw_ptr<PageInfoUI, DanglingUntriaged> ui_ = nullptr;
+  raw_ptr<PageInfoUI> ui_ = nullptr;
 
   // A web contents getter used to retrieve the associated WebContents object.
   base::WeakPtr<content::WebContents> web_contents_;
@@ -546,11 +541,9 @@ class PageInfo : private content_settings::CookieControlsObserver,
   base::ScopedObservation<content_settings::CookieControlsController,
                           content_settings::CookieControlsObserver>
       observation_{this};
-  base::ScopedObservation<content_settings::CookieControlsController,
-                          content_settings::OldCookieControlsObserver>
-      old_observation_{this};
 
-  CookieControlsStatus status_ = CookieControlsStatus::kUninitialized;
+  bool protections_on_ = true;
+  bool controls_visible_ = true;
 
   CookieControlsEnforcement enforcement_ =
       CookieControlsEnforcement::kNoEnforcement;

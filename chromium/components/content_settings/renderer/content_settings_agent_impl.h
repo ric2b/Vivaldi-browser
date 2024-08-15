@@ -57,10 +57,11 @@ class ContentSettingsAgentImpl
     virtual bool IsSchemeAllowlisted(const std::string& scheme);
 
     // Allows the delegate to override logic for various
-    // blink::WebContentSettingsClient methods. If an optional value is
+    // blink::WebContentSettingsClient methods.
+    virtual bool AllowReadFromClipboard();
+    virtual bool AllowWriteToClipboard();
+    // If an optional value is
     // returned, return absl::nullopt to use the default logic.
-    virtual absl::optional<bool> AllowReadFromClipboard();
-    virtual absl::optional<bool> AllowWriteToClipboard();
     virtual absl::optional<bool> AllowMutationEvents();
   };
 
@@ -91,14 +92,13 @@ class ContentSettingsAgentImpl
   bool AllowScript(bool enabled_per_settings) override;
   bool AllowScriptFromSource(bool enabled_per_settings,
                              const blink::WebURL& script_url) override;
-  bool AllowAutoDarkWebContent(bool enabled_per_settings) override;
-  bool AllowReadFromClipboard(bool default_value) override;
-  bool AllowWriteToClipboard(bool default_value) override;
+  bool AllowReadFromClipboard() override;
+  bool AllowWriteToClipboard() override;
   bool AllowMutationEvents(bool default_value) override;
+  void DidNotAllowImage() override;
   void DidNotAllowScript() override;
   bool AllowRunningInsecureContent(bool allowed_per_settings,
                                    const blink::WebURL& url) override;
-  bool AllowPopupsAndRedirects(bool default_value) override;
   bool ShouldAutoupgradeMixedContent() override;
 
   bool allow_running_insecure_content() const {

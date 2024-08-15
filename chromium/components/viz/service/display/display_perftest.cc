@@ -81,9 +81,11 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
     // TODO(weiliangc): Figure out a better way to set up test without passing
     // in nullptr.
     auto display = std::make_unique<Display>(
-        &bitmap_manager_, RendererSettings(), &debug_settings_, frame_sink_id,
-        nullptr /* gpu::GpuTaskSchedulerHelper */, std::move(output_surface),
-        std::move(overlay_processor), std::move(scheduler), task_runner_.get());
+        &bitmap_manager_, /*shared_image_manager=*/nullptr,
+        /*sync_point_manager=*/nullptr, RendererSettings(), &debug_settings_,
+        frame_sink_id, nullptr /* gpu::GpuTaskSchedulerHelper */,
+        std::move(output_surface), std::move(overlay_processor),
+        std::move(scheduler), task_runner_.get());
     return display;
   }
 
@@ -115,7 +117,6 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
     gfx::PointF uv_top_left(0, 0);
     gfx::PointF uv_bottom_right(1, 1);
     SkColor4f background_color = SkColors::kRed;
-    float vertex_opacity[4] = {1.f, 1.f, 1.f, 1.f};
     bool y_flipped = false;
     bool nearest_neighbor = true;
 
@@ -132,8 +133,8 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
         gfx::Rect rect(i, j, quad_width, quad_height);
         quad->SetNew(shared_quad_state, rect, rect, needs_blending, resource_id,
                      premultiplied_alpha, uv_top_left, uv_bottom_right,
-                     background_color, vertex_opacity, y_flipped,
-                     nearest_neighbor, /*secure_output_only=*/false,
+                     background_color, y_flipped, nearest_neighbor,
+                     /*secure_output_only=*/false,
                      gfx::ProtectedVideoType::kClear);
         j += quad_height;
       }

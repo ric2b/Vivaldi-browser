@@ -301,10 +301,10 @@ bool PerfettoDsImplRegister(struct PerfettoDsImpl* ds_impl,
                             PERFETTO_ATOMIC(bool) * *enabled_ptr,
                             const void* descriptor,
                             size_t descriptor_size) {
+  std::unique_ptr<PerfettoDsImpl> data_source_type(ds_impl);
+
   perfetto::DataSourceDescriptor dsd;
   dsd.ParseFromArray(descriptor, descriptor_size);
-
-  std::unique_ptr<PerfettoDsImpl> data_source_type(ds_impl);
 
   auto factory = [ds_impl]() {
     return std::unique_ptr<perfetto::DataSourceBase>(
@@ -331,7 +331,8 @@ bool PerfettoDsImplRegister(struct PerfettoDsImpl* ds_impl,
   params.requires_callbacks_under_lock = false;
   bool success = data_source_type->cpp_type.Register(
       dsd, factory, params, data_source_type->buffer_exhausted_policy,
-      create_custom_tls_fn, create_incremental_state_fn, cb_ctx);
+      data_source_type->on_flush_cb == nullptr, create_custom_tls_fn,
+      create_incremental_state_fn, cb_ctx);
   if (!success) {
     return false;
   }

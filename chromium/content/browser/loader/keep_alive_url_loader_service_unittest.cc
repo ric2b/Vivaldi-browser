@@ -81,7 +81,7 @@ class MockReceiverURLLoaderClient : public network::mojom::URLLoaderClient {
   MOCK_METHOD3(OnReceiveResponse,
                void(network::mojom::URLResponseHeadPtr,
                     mojo::ScopedDataPipeConsumerHandle,
-                    absl::optional<mojo_base::BigBuffer>));
+                    std::optional<mojo_base::BigBuffer>));
   MOCK_METHOD2(OnReceiveRedirect,
                void(const net::RedirectInfo&,
                     network::mojom::URLResponseHeadPtr));
@@ -260,8 +260,7 @@ network::ResourceRequest CreateResourceRequest(
     const GURL& url,
     bool keepalive = true,
     bool is_trusted = false,
-    absl::optional<network::mojom::RedirectMode> redirect_mode =
-        absl::nullopt) {
+    std::optional<network::mojom::RedirectMode> redirect_mode = std::nullopt) {
   network::ResourceRequest request;
   request.url = url;
   request.keepalive = keepalive;
@@ -337,7 +336,7 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
     network_url_loader_factory_ = nullptr;
     loader_service_ = nullptr;
     mojo::SetDefaultProcessErrorHandler(base::NullCallback());
-    mojo_bad_message_ = absl::nullopt;
+    mojo_bad_message_ = std::nullopt;
     RenderViewHostTestHarness::TearDown();
   }
 
@@ -358,12 +357,14 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
 
     // Remote: `remote_url_loader_factory`
     // Receiver: Held in `loader_service_`.
-    loader_service().BindFactory(
+    auto context = loader_service().BindFactory(
         remote_url_loader_factory.BindNewPipeAndPassReceiver(),
         network::SharedURLLoaderFactory::Create(std::move(pending_factory)),
         static_cast<RenderFrameHostImpl*>(main_rfh())
             ->policy_container_host()
             ->Clone());
+    context->OnDidCommitNavigation(
+        static_cast<RenderFrameHostImpl*>(main_rfh())->GetWeakDocumentPtr());
   }
 
   network::TestURLLoaderFactory::PendingRequest* GetLastPendingRequest() {
@@ -400,7 +401,7 @@ class KeepAliveURLLoaderServiceTestBase : public RenderViewHostTestHarness {
       nullptr;
   // The test target.
   std::unique_ptr<KeepAliveURLLoaderService> loader_service_ = nullptr;
-  absl::optional<std::string> mojo_bad_message_;
+  std::optional<std::string> mojo_bad_message_;
 };
 
 class KeepAliveURLLoaderServiceTest : public KeepAliveURLLoaderServiceTestBase {
@@ -510,6 +511,54 @@ TEST_F(KeepAliveURLLoaderServiceTest, LoadRequestAfterPageIsUnloaded) {
   EXPECT_EQ(loader_service().NumLoadersForTesting(), 1u);
 }
 
+// This test initially provides an unbind factory to KeepAliveURLLoaderService.
+// After that, provides a bound factory via UpdateFactory.
+TEST_F(KeepAliveURLLoaderServiceTest, LoadRequestAfterUpdateFactory) {
+  FakeRemoteURLLoaderFactory renderer_loader_factory;
+
+  // First, bind the service with a PendingSharedURLLoaderFactory that connects
+  // to nothing.
+  auto unbound_factory =
+      std::make_unique<network::WrapperPendingSharedURLLoaderFactory>();
+  auto context = loader_service().BindFactory(
+      renderer_loader_factory.BindNewPipeAndPassReceiver(),
+      network::SharedURLLoaderFactory::Create(std::move(unbound_factory)),
+      static_cast<RenderFrameHostImpl*>(main_rfh())
+          ->policy_container_host()
+          ->Clone());
+  context->OnDidCommitNavigation(
+      static_cast<RenderFrameHostImpl*>(main_rfh())->GetWeakDocumentPtr());
+  {
+    // Load a keepalive request. There should be no network loader created.
+    MockReceiverURLLoaderClient renderer_loader_client;
+    renderer_loader_factory.CreateLoaderAndStart(
+        CreateResourceRequest(GURL(kTestRequestUrl)),
+        renderer_loader_client.BindNewPipeAndPassRemote(),
+        /*expect_success=*/true);
+    EXPECT_EQ(network_url_loader_factory().NumPending(), 0);
+  }
+
+  // Second, update the service with a PendingSharedURLLoaderFactory that
+  // connects to network loader factory as usual.
+  renderer_loader_factory.reset_remote_url_loader();
+  mojo::Remote<network::mojom::URLLoaderFactory> factory;
+  network_url_loader_factory().Clone(factory.BindNewPipeAndPassReceiver());
+  auto pending_factory = std::make_unique<blink::PendingURLLoaderFactoryBundle>(
+      factory.Unbind(), blink::PendingURLLoaderFactoryBundle::SchemeMap(),
+      blink::PendingURLLoaderFactoryBundle::OriginMap(),
+      /*bypass_redirect_checks=*/false);
+  context->UpdateFactory(
+      network::SharedURLLoaderFactory::Create(std::move(pending_factory)));
+  {
+    MockReceiverURLLoaderClient renderer_loader_client;
+    renderer_loader_factory.CreateLoaderAndStart(
+        CreateResourceRequest(GURL(kTestRequestUrl)),
+        renderer_loader_client.BindNewPipeAndPassRemote(),
+        /*expect_success=*/true);
+    EXPECT_EQ(network_url_loader_factory().NumPending(), 1);
+  }
+}
+
 TEST_F(KeepAliveURLLoaderServiceTest, ForwardOnReceiveResponse) {
   FakeRemoteURLLoaderFactory renderer_loader_factory;
   MockReceiverURLLoaderClient renderer_loader_client;
@@ -527,12 +576,12 @@ TEST_F(KeepAliveURLLoaderServiceTest, ForwardOnReceiveResponse) {
   EXPECT_CALL(renderer_loader_client,
               OnReceiveResponse(ResponseHasHeader(kTestResponseHeaderName,
                                                   kTestResponseHeaderValue),
-                                _, Eq(absl::nullopt)))
+                                _, Eq(std::nullopt)))
       .Times(1);
   // Simluates receiving response in the network service.
   GetLastPendingRequest()->client->OnReceiveResponse(
       CreateResponseHead({{kTestResponseHeaderName, kTestResponseHeaderValue}}),
-      /*body=*/{}, absl::nullopt);
+      /*body=*/{}, std::nullopt);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(loader_service().NumLoadersForTesting(), 1u);
 }
@@ -563,7 +612,7 @@ TEST_F(KeepAliveURLLoaderServiceTest,
   // Simluates receiving response in the network service.
   GetLastPendingRequest()->client->OnReceiveResponse(
       CreateResponseHead({{kTestResponseHeaderName, kTestResponseHeaderValue}}),
-      /*body=*/{}, absl::nullopt);
+      /*body=*/{}, std::nullopt);
   base::RunLoop().RunUntilIdle();
   // The loader should have been deleted by the service.
   EXPECT_EQ(loader_service().NumLoadersForTesting(), 0u);
@@ -634,7 +683,7 @@ TEST_F(KeepAliveURLLoaderServiceTest,
   const auto& params =
       GetLastPendingRequest()->test_url_loader->follow_redirect_params();
   EXPECT_THAT(params, SizeIs(1));
-  EXPECT_EQ(params[0].new_url, absl::nullopt);
+  EXPECT_EQ(params[0].new_url, std::nullopt);
   EXPECT_THAT(params[0].removed_headers, IsEmpty());
   EXPECT_TRUE(params[0].modified_headers.IsEmpty());
   EXPECT_TRUE(params[0].modified_cors_exempt_headers.IsEmpty());
@@ -966,7 +1015,7 @@ TEST_F(KeepAliveURLLoaderServiceTest, RendererDisconnectedBeforeOnComplete) {
   // Simluates receiving response in the network service.
   GetLastPendingRequest()->client->OnReceiveResponse(
       CreateResponseHead({{kTestResponseHeaderName, kTestResponseHeaderValue}}),
-      /*body=*/{}, absl::nullopt);
+      /*body=*/{}, std::nullopt);
 
   // Disconnects and unbinds the receiver client & remote loader before
   // OnComplete is triggered.
@@ -1116,13 +1165,15 @@ class FetchLaterKeepAliveURLLoaderServiceTest
 
     // Remote: `remote_fetch_later_loader_factory`
     // Receiver: Held in `loader_service_`.
-    loader_service().BindFetchLaterLoaderFactory(
+    auto context = loader_service().BindFetchLaterLoaderFactory(
         remote_fetch_later_loader_factory
             .BindNewEndpointAndPassDedicatedReceiver(),
         network::SharedURLLoaderFactory::Create(std::move(pending_factory)),
         static_cast<RenderFrameHostImpl*>(main_rfh())
             ->policy_container_host()
             ->Clone());
+    context->OnDidCommitNavigation(
+        static_cast<RenderFrameHostImpl*>(main_rfh())->GetWeakDocumentPtr());
   }
 };
 

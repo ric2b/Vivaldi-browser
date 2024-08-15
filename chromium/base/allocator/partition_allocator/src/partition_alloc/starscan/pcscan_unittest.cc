@@ -6,21 +6,21 @@
 
 #if !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 
-#include "base/allocator/partition_allocator/src/partition_alloc/starscan/pcscan.h"
+#include "partition_alloc/starscan/pcscan.h"
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc-inl.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/bits.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/cpu.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_config.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_for_testing.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/starscan/stack/stack.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/tagging.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc-inl.h"
+#include "partition_alloc/partition_alloc_base/bits.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/cpu.h"
+#include "partition_alloc/partition_alloc_base/logging.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_config.h"
+#include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/partition_alloc_for_testing.h"
+#include "partition_alloc/partition_root.h"
+#include "partition_alloc/starscan/stack/stack.h"
+#include "partition_alloc/tagging.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(USE_STARSCAN)
@@ -51,14 +51,15 @@ struct DisableStackScanningScope final {
 class PartitionAllocPCScanTestBase : public testing::Test {
  public:
   PartitionAllocPCScanTestBase()
-      : allocator_(PartitionOptions{
-            .aligned_alloc = PartitionOptions::kAllowed,
-            .star_scan_quarantine = PartitionOptions::kAllowed,
-            .memory_tagging = {
-                .enabled =
-                    base::CPU::GetInstanceNoAllocation().has_mte()
-                        ? partition_alloc::PartitionOptions::kEnabled
-                        : partition_alloc::PartitionOptions::kDisabled}}) {
+      : allocator_([]() {
+          PartitionOptions opts;
+          opts.star_scan_quarantine = PartitionOptions::kAllowed;
+          opts.memory_tagging = {
+              .enabled = base::CPU::GetInstanceNoAllocation().has_mte()
+                             ? partition_alloc::PartitionOptions::kEnabled
+                             : partition_alloc::PartitionOptions::kDisabled};
+          return opts;
+        }()) {
     PartitionAllocGlobalInit([](size_t) { PA_LOG(FATAL) << "Out of memory"; });
     // Previous test runs within the same process decommit pools, therefore
     // we need to make sure that the card table is recommitted for each run.
@@ -121,10 +122,8 @@ class PartitionAllocPCScanTest : public PartitionAllocPCScanTestBase {
   }
 };
 
-using SlotSpan = PartitionRoot::SlotSpan;
-
 struct FullSlotSpanAllocation {
-  SlotSpan* slot_span;
+  SlotSpanMetadata* slot_span;
   void* first;
   void* last;
 };
@@ -152,7 +151,8 @@ FullSlotSpanAllocation GetFullSlotSpan(PartitionRoot& root,
     }
   }
 
-  EXPECT_EQ(SlotSpan::FromSlotStart(first), SlotSpan::FromSlotStart(last));
+  EXPECT_EQ(SlotSpanMetadata::FromSlotStart(first),
+            SlotSpanMetadata::FromSlotStart(last));
   if (bucket.num_system_pages_per_slot_span ==
       NumSystemPagesPerPartitionPage()) {
     // Pointers are expected to be in the same partition page, but have a
@@ -164,7 +164,7 @@ FullSlotSpanAllocation GetFullSlotSpan(PartitionRoot& root,
   EXPECT_EQ(nullptr, bucket.active_slot_spans_head->get_freelist_head());
   EXPECT_TRUE(bucket.is_valid());
   EXPECT_TRUE(bucket.active_slot_spans_head !=
-              SlotSpan::get_sentinel_slot_span());
+              SlotSpanMetadata::get_sentinel_slot_span());
 
   return {bucket.active_slot_spans_head, root.SlotStartToObject(first),
           root.SlotStartToObject(last)};
@@ -173,7 +173,7 @@ FullSlotSpanAllocation GetFullSlotSpan(PartitionRoot& root,
 bool IsInFreeList(uintptr_t slot_start) {
   // slot_start isn't MTE-tagged, whereas pointers in the freelist are.
   void* slot_start_tagged = SlotStartAddr2Ptr(slot_start);
-  auto* slot_span = SlotSpan::FromSlotStart(slot_start);
+  auto* slot_span = SlotSpanMetadata::FromSlotStart(slot_start);
   for (auto* entry = slot_span->get_freelist_head(); entry;
        entry = entry->GetNext(slot_span->bucket->slot_size)) {
     if (entry == slot_start_tagged) {
@@ -205,6 +205,12 @@ struct List final : ListBase {
 
   static void Destroy(PartitionRoot& root, List* list) { root.Free(list); }
 };
+
+constexpr auto kPartitionOptionWithStarScan = []() {
+  PartitionOptions opts;
+  opts.star_scan_quarantine = PartitionOptions::kAllowed;
+  return opts;
+}();
 
 TEST_F(PartitionAllocPCScanTest, ArbitraryObjectInQuarantine) {
   using ListType = List<8>;
@@ -330,17 +336,19 @@ TEST_F(PartitionAllocPCScanTest, DanglingReferenceDifferentBucketsAligned) {
     size_t i = 0;
     uintptr_t first_slot_span_end = 0;
     uintptr_t second_slot_span_start = 0;
-    IterateSlotSpans(super_page, true, [&](SlotSpan* slot_span) -> bool {
-      if (i == 0) {
-        first_slot_span_end =
-            SlotSpan::ToSlotSpanStart(slot_span) +
-            slot_span->bucket->get_pages_per_slot_span() * PartitionPageSize();
-      } else {
-        second_slot_span_start = SlotSpan::ToSlotSpanStart(slot_span);
-      }
-      ++i;
-      return false;
-    });
+    IterateSlotSpans(
+        super_page, true, [&](SlotSpanMetadata* slot_span) -> bool {
+          if (i == 0) {
+            first_slot_span_end = SlotSpanMetadata::ToSlotSpanStart(slot_span) +
+                                  slot_span->bucket->get_pages_per_slot_span() *
+                                      PartitionPageSize();
+          } else {
+            second_slot_span_start =
+                SlotSpanMetadata::ToSlotSpanStart(slot_span);
+          }
+          ++i;
+          return false;
+        });
     ASSERT_EQ(i, 2u);
     ASSERT_GT(second_slot_span_start, first_slot_span_end);
   }
@@ -363,8 +371,8 @@ TEST_F(PartitionAllocPCScanTest,
   // Assert that the first and the last objects are in the same slot span but on
   // different partition pages.
   // Converting to slot start also takes care of the MTE-tag difference.
-  ASSERT_EQ(SlotSpan::FromObject(full_slot_span.first),
-            SlotSpan::FromObject(full_slot_span.last));
+  ASSERT_EQ(SlotSpanMetadata::FromObject(full_slot_span.first),
+            SlotSpanMetadata::FromObject(full_slot_span.last));
   uintptr_t first_slot_start = root().ObjectToSlotStart(full_slot_span.first);
   uintptr_t last_slot_start = root().ObjectToSlotStart(full_slot_span.last);
   ASSERT_NE(first_slot_start & PartitionPageBaseMask(),
@@ -392,9 +400,10 @@ TEST_F(PartitionAllocPCScanTest, DanglingReferenceFromFullPage) {
 
   // Assert that the first and the last objects are in different slot spans but
   // in the same bucket.
-  SlotSpan* source_slot_span =
-      PartitionRoot::SlotSpan::FromObject(source_buffer);
-  SlotSpan* value_slot_span = PartitionRoot::SlotSpan::FromObject(value_buffer);
+  SlotSpanMetadata* source_slot_span =
+      PartitionRoot::SlotSpanMetadata::FromObject(source_buffer);
+  SlotSpanMetadata* value_slot_span =
+      PartitionRoot::SlotSpanMetadata::FromObject(value_buffer);
   ASSERT_NE(source_slot_span, value_slot_span);
   ASSERT_EQ(source_slot_span->bucket, value_slot_span->bucket);
 
@@ -459,13 +468,9 @@ TEST_F(PartitionAllocPCScanTest, DanglingInterPartitionReference) {
   using SourceList = List<64>;
   using ValueList = SourceList;
 
-  PartitionRoot source_root(PartitionOptions{
-      .star_scan_quarantine = PartitionOptions::kAllowed,
-  });
+  PartitionRoot source_root(kPartitionOptionWithStarScan);
   source_root.UncapEmptySlotSpanMemoryForTesting();
-  PartitionRoot value_root(PartitionOptions{
-      .star_scan_quarantine = PartitionOptions::kAllowed,
-  });
+  PartitionRoot value_root(kPartitionOptionWithStarScan);
   value_root.UncapEmptySlotSpanMemoryForTesting();
 
   PCScan::RegisterScannableRoot(&source_root);
@@ -484,13 +489,9 @@ TEST_F(PartitionAllocPCScanTest, DanglingReferenceToNonScannablePartition) {
   using SourceList = List<64>;
   using ValueList = SourceList;
 
-  PartitionRoot source_root(PartitionOptions{
-      .star_scan_quarantine = PartitionOptions::kAllowed,
-  });
+  PartitionRoot source_root(kPartitionOptionWithStarScan);
   source_root.UncapEmptySlotSpanMemoryForTesting();
-  PartitionRoot value_root(PartitionOptions{
-      .star_scan_quarantine = PartitionOptions::kAllowed,
-  });
+  PartitionRoot value_root(kPartitionOptionWithStarScan);
   value_root.UncapEmptySlotSpanMemoryForTesting();
 
   PCScan::RegisterScannableRoot(&source_root);
@@ -509,13 +510,9 @@ TEST_F(PartitionAllocPCScanTest, DanglingReferenceFromNonScannablePartition) {
   using SourceList = List<64>;
   using ValueList = SourceList;
 
-  PartitionRoot source_root(PartitionOptions{
-      .star_scan_quarantine = PartitionOptions::kAllowed,
-  });
+  PartitionRoot source_root(kPartitionOptionWithStarScan);
   source_root.UncapEmptySlotSpanMemoryForTesting();
-  PartitionRoot value_root(PartitionOptions{
-      .star_scan_quarantine = PartitionOptions::kAllowed,
-  });
+  PartitionRoot value_root(kPartitionOptionWithStarScan);
   value_root.UncapEmptySlotSpanMemoryForTesting();
 
   PCScan::RegisterNonScannableRoot(&source_root);
@@ -729,7 +726,7 @@ TEST_F(PartitionAllocPCScanTest, TwoDanglingPointersToSameObject) {
   EXPECT_TRUE(IsInQuarantine(value));
 
   // Check that accounted size after the cycle is only sizeof ValueList.
-  auto* slot_span_metadata = SlotSpan::FromObject(value);
+  auto* slot_span_metadata = SlotSpanMetadata::FromObject(value);
   const auto& quarantine =
       PCScan::scheduler().scheduling_backend().GetQuarantineData();
   EXPECT_EQ(slot_span_metadata->bucket->slot_size, quarantine.current_size);
@@ -786,7 +783,7 @@ TEST_F(PartitionAllocPCScanTest, DanglingPointerOutsideUsablePart) {
   TestDanglingReference(*this, source, value, root());
 }
 
-#if PA_CONFIG(HAS_MEMORY_TAGGING)
+#if BUILDFLAG(HAS_MEMORY_TAGGING)
 TEST_F(PartitionAllocPCScanWithMTETest, QuarantineOnlyOnTagOverflow) {
   using ListType = List<64>;
 
@@ -828,7 +825,7 @@ TEST_F(PartitionAllocPCScanWithMTETest, QuarantineOnlyOnTagOverflow) {
 
   EXPECT_FALSE(true && "Should never be reached");
 }
-#endif  // PA_CONFIG(HAS_MEMORY_TAGGING)
+#endif  // BUILDFLAG(HAS_MEMORY_TAGGING)
 
 }  // namespace
 

@@ -32,11 +32,11 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "dawn/common/Constants.h"
 #include "dawn/common/ContentLessObjectCacheable.h"
 #include "dawn/common/ityp_array.h"
@@ -68,7 +68,6 @@ class VertexPulling;
 
 namespace dawn::native {
 
-using WGSLExtensionSet = std::unordered_set<std::string>;
 struct EntryPointMetadata;
 
 // Base component type of an inter-stage variable
@@ -103,7 +102,7 @@ using PipelineConstantEntries = std::map<std::string, double>;
 
 // A map from name to EntryPointMetadata.
 using EntryPointMetadataTable =
-    std::unordered_map<std::string, std::unique_ptr<EntryPointMetadata>>;
+    absl::flat_hash_map<std::string, std::unique_ptr<EntryPointMetadata>>;
 
 // Source for a tint program
 class TintSource;
@@ -120,20 +119,27 @@ struct ShaderModuleParseResult {
     std::unique_ptr<TintSource> tintSource;
 };
 
+struct ShaderModuleEntryPoint {
+    bool defaulted;
+    std::string name;
+};
+
 MaybeError ValidateAndParseShaderModule(DeviceBase* device,
-                                        const ShaderModuleDescriptor* descriptor,
+                                        const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
                                         ShaderModuleParseResult* parseResult,
                                         OwnedCompilationMessages* outMessages);
 MaybeError ValidateCompatibilityWithPipelineLayout(DeviceBase* device,
                                                    const EntryPointMetadata& entryPoint,
                                                    const PipelineLayoutBase* layout);
 
-// Return extent3D with workgroup size dimension info if it is valid
-// width = x, height = y, depthOrArrayLength = z
+// Return extent3D with workgroup size dimension info if it is valid. Also validate workgroup_size.x
+// is a multiple of maxSubgroupSizeForFullSubgroups if it holds a value.
+// width = x, height = y, depthOrArrayLength = z.
 ResultOrError<Extent3D> ValidateComputeStageWorkgroupSize(
     const tint::Program& program,
     const char* entryPointName,
-    const LimitsForCompilationRequest& limits);
+    const LimitsForCompilationRequest& limits,
+    std::optional<uint32_t> maxSubgroupSizeForFullSubgroups);
 
 RequiredBufferSizes ComputeRequiredBufferSizesForLayout(const EntryPointMetadata& entryPoint,
                                                         const PipelineLayoutBase* layout);
@@ -166,6 +172,9 @@ struct ShaderBindingInfo {
 
     BindingNumber binding;
     BindingInfoType bindingType;
+
+    // The variable name of the binding resource.
+    std::string name;
 
     BufferBindingLayout buffer;
     ShaderSamplerBindingInfo sampler;
@@ -207,20 +216,23 @@ struct EntryPointMetadata {
     std::vector<SamplerTexturePair> samplerTexturePairs;
 
     // The set of vertex attributes this entryPoint uses.
-    ityp::array<VertexAttributeLocation, VertexFormatBaseType, kMaxVertexAttributes>
-        vertexInputBaseTypes;
-    ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes> usedVertexInputs;
+    PerVertexAttribute<VertexFormatBaseType> vertexInputBaseTypes;
+    VertexAttributeMask usedVertexInputs;
 
-    // An array to record the basic types (float, int and uint) of the fragment shader outputs.
-    struct FragmentOutputVariableInfo {
+    // An array to record the basic types (float, int and uint) of the fragment shader framebuffer
+    // input/outputs (inputs being "framebuffer fetch").
+    struct FragmentRenderAttachmentInfo {
         TextureComponentType baseType;
         uint8_t componentCount;
     };
-    ityp::array<ColorAttachmentIndex, FragmentOutputVariableInfo, kMaxColorAttachments>
-        fragmentOutputVariables;
-    ityp::bitset<ColorAttachmentIndex, kMaxColorAttachments> fragmentOutputsWritten;
+    PerColorAttachment<FragmentRenderAttachmentInfo> fragmentOutputVariables;
+    ColorAttachmentMask fragmentOutputMask;
+
+    PerColorAttachment<FragmentRenderAttachmentInfo> fragmentInputVariables;
+    ColorAttachmentMask fragmentInputMask;
 
     struct InterStageVariableInfo {
+        std::string name;
         InterStageComponentType baseType;
         uint32_t componentCount;
         InterpolationType interpolationType;
@@ -248,7 +260,7 @@ struct EntryPointMetadata {
         bool isInitialized;
     };
 
-    using OverridesMap = std::unordered_map<std::string, Override>;
+    using OverridesMap = absl::flat_hash_map<std::string, Override>;
 
     // Map identifier to override variable
     // Identifier is unique: either the variable name or the numeric ID if specified
@@ -256,12 +268,12 @@ struct EntryPointMetadata {
 
     // Override variables that are not initialized in shaders
     // They need value initialization from pipeline stage or it is a validation error
-    std::unordered_set<std::string> uninitializedOverrides;
+    absl::flat_hash_set<std::string> uninitializedOverrides;
 
     // Store constants with shader initialized values as well
     // This is used by metal backend to set values with default initializers that are not
     // overridden
-    std::unordered_set<std::string> initializedOverrides;
+    absl::flat_hash_set<std::string> initializedOverrides;
 
     // Reflection information about potential `pixel_local` variable use.
     bool usesPixelLocal = false;
@@ -272,6 +284,7 @@ struct EntryPointMetadata {
     bool usesInstanceIndex = false;
     bool usesNumWorkgroups = false;
     bool usesSampleMaskOutput = false;
+    bool usesSampleIndex = false;
     bool usesVertexIndex = false;
 };
 
@@ -280,9 +293,9 @@ class ShaderModuleBase : public ApiObjectBase,
                          public ContentLessObjectCacheable<ShaderModuleBase> {
   public:
     ShaderModuleBase(DeviceBase* device,
-                     const ShaderModuleDescriptor* descriptor,
+                     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
                      ApiObjectBase::UntrackedByDeviceTag tag);
-    ShaderModuleBase(DeviceBase* device, const ShaderModuleDescriptor* descriptor);
+    ShaderModuleBase(DeviceBase* device, const UnpackedPtr<ShaderModuleDescriptor>& descriptor);
     ~ShaderModuleBase() override;
 
     static Ref<ShaderModuleBase> MakeError(DeviceBase* device, const char* label);
@@ -291,6 +304,13 @@ class ShaderModuleBase : public ApiObjectBase,
 
     // Return true iff the program has an entrypoint called `entryPoint`.
     bool HasEntryPoint(const std::string& entryPoint) const;
+
+    // Return the number of entry points for a stage.
+    size_t GetEntryPointCount(SingleShaderStage stage) const { return mEntryPointCounts[stage]; }
+
+    // Return the entry point for a stage. If no entry point name, returns the default one.
+    ShaderModuleEntryPoint ReifyEntryPointName(const char* entryPointName,
+                                               SingleShaderStage stage) const;
 
     // Return the metadata for the given `entryPoint`. HasEntryPoint with the same argument
     // must be true.
@@ -328,7 +348,8 @@ class ShaderModuleBase : public ApiObjectBase,
     std::string mWgsl;
 
     EntryPointMetadataTable mEntryPoints;
-    WGSLExtensionSet mEnabledWGSLExtensions;
+    PerStage<std::string> mDefaultEntryPointNames;
+    PerStage<size_t> mEntryPointCounts;
     std::unique_ptr<tint::Program> mTintProgram;
     std::unique_ptr<TintSource> mTintSource;  // Keep the tint::Source::File alive
 

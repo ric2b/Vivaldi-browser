@@ -8,11 +8,23 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbol_configurations.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 // Returns the default configuration with the given `point_size`.
 UIImageConfiguration* DefaultSymbolConfigurationWithPointSize(
     CGFloat point_size) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return [UIImageSymbolConfiguration
+        configurationWithPointSize:point_size
+                            weight:UIImageSymbolWeightLight
+                             scale:UIImageSymbolScaleDefault];
+  } // End Vivaldi
+
   return [UIImageSymbolConfiguration
       configurationWithPointSize:point_size
                           weight:UIImageSymbolWeightMedium
@@ -39,6 +51,8 @@ UIImage* SymbolWithConfiguration(NSString* symbol_name,
 }
 
 }  // namespace
+
+extern "C" {
 
 UIImage* DefaultSymbolWithConfiguration(NSString* symbol_name,
                                         UIImageConfiguration* configuration) {
@@ -112,3 +126,5 @@ UIImage* CustomSettingsRootMulticolorSymbol(NSString* symbol_name) {
   return MakeSymbolMulticolor(CustomSymbolWithPointSize(
       symbol_name, kSettingsRootSymbolImagePointSize));
 }
+
+}  // extern "C"

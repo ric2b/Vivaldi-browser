@@ -62,6 +62,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/crash/core/app/crashpad.h"
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/language/core/browser/pref_names.h"
@@ -111,10 +112,10 @@
 #include "ui/vivaldi_skia_utils.h"
 #include "ui/vivaldi_ui_utils.h"
 
-#include "net/proxy_resolution/proxy_config_service.h"
 #include "chrome/browser/net/proxy_service_factory.h"
-#include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "chromium/net/proxy_resolution/proxy_config_service.h"
+#include "components/proxy_config/pref_proxy_config_tracker.h"
+#include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
 
 #if defined(ENABLE_RELAY_PROXY)
@@ -176,7 +177,6 @@ ContentSetting vivContentSettingFromString(const std::string& name) {
 
 VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
     : browser_context_(context) {
-
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(this,
                                  vivaldi::utilities::OnScroll::kEventName);
@@ -454,6 +454,36 @@ UtilitiesClearAllRecentlyClosedSessionsFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(result)));
 }
 
+ExtensionFunction::ResponseAction
+UtilitiesClearRecentlyClosedTabsFunction::Run() {
+  using vivaldi::utilities::ClearRecentlyClosedTabs::Params;
+  namespace Results = vivaldi::utilities::ClearRecentlyClosedTabs::Results;
+
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  sessions::TabRestoreService* tab_restore_service =
+      TabRestoreServiceFactory::GetForProfile(
+          Profile::FromBrowserContext(browser_context()));
+  bool result = false;
+  if (tab_restore_service) {
+    result = true;
+    for (std::string id : params->ids) {
+      size_t before = tab_restore_service->entries().size();
+      tab_restore_service->RemoveTabEntryById(
+          SessionID::FromSerializedValue(std::stoi(id)));
+      // We have no direct mechanism to detect errors, so just test that the
+      // number of entries are as expected.
+      if (before - tab_restore_service->entries().size() != 1) {
+        result = false;
+        break;
+      }
+      tab_restore_service->VivaldiRequestSave(1);
+    }
+  }
+  return RespondNow(ArgumentList(Results::Create(result)));
+}
+
 ExtensionFunction::ResponseAction UtilitiesIsTabInLastSessionFunction::Run() {
   using vivaldi::utilities::IsTabInLastSession::Params;
   namespace Results = vivaldi::utilities::IsTabInLastSession::Results;
@@ -596,13 +626,13 @@ ExtensionFunction::ResponseAction UtilitiesSelectFileFunction::Run() {
   FileSelectionOptions options(params->options.window_id);
   options.SetTitle(params->options.title);
   switch (params->options.type) {
-    case vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FOLDER:
+    case vivaldi::utilities::SelectFileDialogType::kFolder:
       options.SetType(ui::SelectFileDialog::SELECT_EXISTING_FOLDER);
       break;
-    case vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FILE:
+    case vivaldi::utilities::SelectFileDialogType::kFile:
       options.SetType(ui::SelectFileDialog::SELECT_OPEN_FILE);
       break;
-    case vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_SAVE_FILE:
+    case vivaldi::utilities::SelectFileDialogType::kSaveFile:
       options.SetType(ui::SelectFileDialog::SELECT_SAVEAS_FILE);
       break;
     default:
@@ -610,7 +640,7 @@ ExtensionFunction::ResponseAction UtilitiesSelectFileFunction::Run() {
   }
 
   if (params->options.type !=
-      vivaldi::utilities::SELECT_FILE_DIALOG_TYPE_FOLDER) {
+      vivaldi::utilities::SelectFileDialogType::kFolder) {
     if (params->options.accepts) {
       for (const auto& item : *params->options.accepts) {
         options.AddExtension(item.ext);
@@ -1316,12 +1346,11 @@ namespace {
 CookieControlsMode ToCookieControlsMode(
     vivaldi::utilities::CookieMode cookie_mode) {
   switch (cookie_mode) {
-    case vivaldi::utilities::CookieMode::COOKIE_MODE_OFF:
+    case vivaldi::utilities::CookieMode::kOff:
       return CookieControlsMode::kOff;
-    case vivaldi::utilities::CookieMode::COOKIE_MODE_BLOCKTHIRDPARTY:
+    case vivaldi::utilities::CookieMode::kBlockThirdParty:
       return CookieControlsMode::kBlockThirdParty;
-    case vivaldi::utilities::CookieMode::
-        COOKIE_MODE_BLOCKTHIRDPARTYINCOGNITOONLY:
+    case vivaldi::utilities::CookieMode::kBlockThirdPartyIncognitoOnly:
       return CookieControlsMode::kIncognitoOnly;
     default:
       NOTREACHED() << "Incorrect cookie mode to the API";
@@ -1334,14 +1363,14 @@ vivaldi::utilities::CookieMode ToCookieMode(CookieControlsMode mode) {
 
   switch (mode) {
     case CookieControlsMode::kOff:
-      return CookieMode::COOKIE_MODE_OFF;
+      return CookieMode::kOff;
     case CookieControlsMode::kBlockThirdParty:
-      return CookieMode::COOKIE_MODE_BLOCKTHIRDPARTY;
+      return CookieMode::kBlockThirdParty;
     case CookieControlsMode::kIncognitoOnly:
-      return CookieMode::COOKIE_MODE_BLOCKTHIRDPARTYINCOGNITOONLY;
+      return CookieMode::kBlockThirdPartyIncognitoOnly;
     default:
       NOTREACHED() << "Incorrect cookie controls mode to the API";
-      return CookieMode::COOKIE_MODE_BLOCKTHIRDPARTY;
+      return CookieMode::kBlockThirdParty;
   }
 }
 
@@ -1666,7 +1695,7 @@ ExtensionFunction::ResponseAction UtilitiesIsDialogOpenFunction::Run() {
   bool visible = false;
 
   switch (params->dialog_name) {
-    case vivaldi::utilities::DialogName::DIALOG_NAME_PASSWORD:
+    case vivaldi::utilities::DialogName::kPassword:
       if (PasswordBubbleViewBase::manage_password_bubble()) {
         visible =
             PasswordBubbleViewBase::manage_password_bubble()->GetVisible();
@@ -1674,7 +1703,7 @@ ExtensionFunction::ResponseAction UtilitiesIsDialogOpenFunction::Run() {
       break;
 
     default:
-    case vivaldi::utilities::DialogName::DIALOG_NAME_CHROMECAST:
+    case vivaldi::utilities::DialogName::kChromecast:
       break;
   }
   return RespondNow(ArgumentList(Results::Create(visible)));
@@ -1689,7 +1718,7 @@ ExtensionFunction::ResponseAction UtilitiesFocusDialogFunction::Run() {
   bool focused = false;
 
   switch (params->dialog_name) {
-    case vivaldi::utilities::DialogName::DIALOG_NAME_PASSWORD:
+    case vivaldi::utilities::DialogName::kPassword:
       if (PasswordBubbleViewBase::manage_password_bubble()) {
         if (PasswordBubbleViewBase::manage_password_bubble()->CanActivate()) {
           PasswordBubbleViewBase::manage_password_bubble()->ActivateBubble();
@@ -1699,7 +1728,7 @@ ExtensionFunction::ResponseAction UtilitiesFocusDialogFunction::Run() {
       break;
 
     default:
-    case vivaldi::utilities::DialogName::DIALOG_NAME_CHROMECAST:
+    case vivaldi::utilities::DialogName::kChromecast:
       break;
   }
   return RespondNow(ArgumentList(Results::Create(focused)));
@@ -1827,14 +1856,14 @@ void UtilitiesGenerateQRCodeFunction::OnCodeGeneratorResponse(
     RespondOnUiThread("");
     return;
   }
-  if (dest_ == vivaldi::utilities::CAPTURE_QR_DESTINATION_CLIPBOARD) {
+  if (dest_ == vivaldi::utilities::CaptureQRDestination::kClipboard) {
     // Ignore everything else, we copy it raw to the clipboard.
     ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
     scw.Reset();
     scw.WriteImage(response->bitmap);
     RespondOnUiThread("");
     return;
-  } else if (dest_ == vivaldi::utilities::CAPTURE_QR_DESTINATION_FILE) {
+  } else if (dest_ == vivaldi::utilities::CaptureQRDestination::kFile) {
     base::FilePath path = DownloadPrefs::GetDefaultDownloadDirectory();
     if (path.empty()) {
       RespondOnUiThread("");
@@ -1938,6 +1967,29 @@ ExtensionFunction::ResponseAction UtilitiesGetYOAuthClientIdFunction::Run() {
 #else
   return RespondNow(Error("No Y client id defined"));
 #endif  // VIVALDI_YAHOO_OAUTH_API_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetAOLOAuthClientIdFunction::Run() {
+  namespace Results = vivaldi::utilities::GetAOLOAuthClientId::Results;
+
+#ifdef VIVALDI_AOL_OAUTH_API_CLIENT_ID
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_AOL_OAUTH_API_CLIENT_ID)));
+#else
+  return RespondNow(Error("No AOL client id defined"));
+#endif  // VIVALDI_AOL_OAUTH_API_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetAOLOAuthClientSecretFunction::Run() {
+  namespace Results = vivaldi::utilities::GetAOLOAuthClientSecret::Results;
+
+#ifdef VIVALDI_AOL_OAUTH_API_CLIENT_SECRET
+  return RespondNow(
+      ArgumentList(Results::Create(VIVALDI_AOL_OAUTH_API_CLIENT_SECRET)));
+#else
+  return RespondNow(Error("No AOL client secret defined"));
+#endif  // VIVALDI_AOL_OAUTH_API_CLIENT_SECRET
 }
 
 ExtensionFunction::ResponseAction
@@ -2106,17 +2158,17 @@ vivaldi::utilities::TranslateError ConvertTranslateErrorCodeToAPIErrorCode(
     ::vivaldi::TranslateError error) {
   switch (error) {
     case ::vivaldi::TranslateError::kNoError:
-      return vivaldi::utilities::TRANSLATE_ERROR_NO_ERROR;
+      return vivaldi::utilities::TranslateError::kNoError;
     case ::vivaldi::TranslateError::kNetwork:
-      return vivaldi::utilities::TRANSLATE_ERROR_NETWORK;
+      return vivaldi::utilities::TranslateError::kNetwork;
     case ::vivaldi::TranslateError::kUnknownLanguage:
-      return vivaldi::utilities::TRANSLATE_ERROR_UNKNOWN_LANGUAGE;
+      return vivaldi::utilities::TranslateError::kUnknownLanguage;
     case ::vivaldi::TranslateError::kUnsupportedLanguage:
-      return vivaldi::utilities::TRANSLATE_ERROR_UNSUPPORTED_LANGUAGE;
+      return vivaldi::utilities::TranslateError::kUnsupportedLanguage;
     case ::vivaldi::TranslateError::kTranslationError:
-      return vivaldi::utilities::TRANSLATE_ERROR_ERROR;
+      return vivaldi::utilities::TranslateError::kError;
     case ::vivaldi::TranslateError::kTranslationTimeout:
-      return vivaldi::utilities::TRANSLATE_ERROR_TIMEOUT;
+      return vivaldi::utilities::TranslateError::kTimeout;
   }
 }
 }  // namespace
@@ -2231,19 +2283,19 @@ ExtensionFunction::ResponseAction UtilitiesGetOtherProxiesFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
 
   std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker =
-    ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
-        profile->GetPrefs(), g_browser_process->local_state());
+      ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
+          profile->GetPrefs(), g_browser_process->local_state());
 
   std::unique_ptr<net::ProxyConfigService> proxy_config_service =
       ProxyServiceFactory::CreateProxyConfigService(
           pref_proxy_config_tracker.get(), profile);
 
   vivaldi::utilities::ProxyInfo info;
-  info.has_other = true; // Assume conflict by default.
+  info.has_other = true;  // Assume conflict by default.
 
   net::ProxyConfigWithAnnotation config;
   net::ProxyConfigService::ConfigAvailability available =
-    proxy_config_service->GetLatestProxyConfig(&config);
+      proxy_config_service->GetLatestProxyConfig(&config);
   if (available != net::ProxyConfigService::CONFIG_VALID) {
     // No conflict.
     info.has_other = false;
@@ -2254,11 +2306,14 @@ ExtensionFunction::ResponseAction UtilitiesGetOtherProxiesFunction::Run() {
              net::ProxyConfig::ProxyRules::Type::PROXY_LIST) {
     const net::ProxyList& list = config.value().proxy_rules().single_proxies;
     if (list.size() == 1) {
-      const net::ProxyServer& server = list.Get();
-      if (server.GetHost() == params->options.host &&
-          server.GetPort() == params->options.port) {
-        // Only one element and it is our proxy. No conflict.
-        info.has_other = false;
+      // Assumne there can only be one proxy in the chain to be ours.
+      if (list.First().is_single_proxy()) {
+        const net::ProxyServer& server = list.First().GetProxyServer(0);
+        if (server.GetHost() == params->options.host &&
+            server.GetPort() == params->options.port) {
+          // Only one element and it is our proxy. No conflict.
+          info.has_other = false;
+        }
       }
     } else {
       // Any other size than one means conflict.
@@ -2359,6 +2414,69 @@ ExtensionFunction::ResponseAction UtilitiesReadImageFunction::Run() {
                      filePath, fileBytes_ptr, mimeType_ptr),
       base::BindOnce(&UtilitiesReadImageFunction::SendResult, this,
                      std::move(fileBytes), std::move(mimeType)));
+  return RespondLater();
+}
+
+std::string UtilitiesDetectNewCrashesFunction::CheckForNewCrashes(
+    const std::string& lastSeenUUID) {
+  std::vector<crash_reporter::Report> reports;
+  crash_reporter::GetReports(&reports);
+  if (reports.empty()) {
+    return "";
+  }
+
+  // Reports are sorted by capture_time
+  const std::string lastCrashUUID = reports.front().local_id;
+  return (lastSeenUUID.empty() || lastCrashUUID != lastSeenUUID) ? lastCrashUUID
+                                                                 : lastSeenUUID;
+}
+
+void UtilitiesDetectNewCrashesFunction::SendResult(
+    const std::string& lastCrashUUID) {
+  namespace Results = vivaldi::utilities::DetectNewCrashes::Results;
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (!profile) {
+    Respond(ArgumentList(Results::Create(false)));
+    return;
+  }
+
+  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
+  if (!prefs) {
+    Respond(ArgumentList(Results::Create(false)));
+    return;
+  }
+
+  if (!lastCrashUUID.empty() &&
+      prefs->GetString(vivaldiprefs::kStartupLastCrashReportSeen) !=
+          lastCrashUUID) {
+    prefs->SetString(vivaldiprefs::kStartupLastCrashReportSeen, lastCrashUUID);
+    Respond(ArgumentList(Results::Create(true)));
+    return;
+  }
+  Respond(ArgumentList(Results::Create(false)));
+  return;
+}
+
+ExtensionFunction::ResponseAction UtilitiesDetectNewCrashesFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (!profile) {
+    return RespondNow(Error("Cannot get profile."));
+  }
+
+  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
+  if (!prefs) {
+    return RespondNow(Error("Cannot get prefs."));
+  }
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(
+          &UtilitiesDetectNewCrashesFunction::CheckForNewCrashes, this,
+          prefs->GetString(vivaldiprefs::kStartupLastCrashReportSeen)),
+      base::BindOnce(&UtilitiesDetectNewCrashesFunction::SendResult, this));
+
   return RespondLater();
 }
 

@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <benchmark/benchmark.h>
+#include "np_ldt.h"
+
 #include <ctime>
 
-#include "np_ldt.h"
+#include "benchmark/benchmark.h"
 
 using std::vector;
 using std::tuple;

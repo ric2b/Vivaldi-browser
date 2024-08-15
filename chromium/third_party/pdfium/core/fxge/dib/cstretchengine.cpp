@@ -278,13 +278,13 @@ bool CStretchEngine::StartStretchHorz() {
   FX_SAFE_SIZE_T safe_size = m_SrcClip.Height();
   safe_size *= m_InterPitch;
   const size_t size = safe_size.ValueOrDefault(0);
-  if (size == 0)
+  if (size == 0) {
     return false;
-
-  m_InterBuf = FixedTryAllocZeroedDataVector<uint8_t>(size);
-  if (m_InterBuf.empty())
+  }
+  m_InterBuf = FixedSizeDataVector<uint8_t>::TryZeroed(size);
+  if (m_InterBuf.empty()) {
     return false;
-
+  }
   if (!m_WeightTable.CalculateWeights(
           m_DestWidth, m_DestClip.left, m_DestClip.right, m_SrcWidth,
           m_SrcClip.left, m_SrcClip.right, m_ResampleOptions)) {
@@ -313,7 +313,7 @@ bool CStretchEngine::ContinueStretchHorz(PauseIndicatorIface* pPause) {
     }
 
     const uint8_t* src_scan = m_pSource->GetScanline(m_CurRow).data();
-    pdfium::span<uint8_t> dest_span = m_InterBuf.writable_span().subspan(
+    pdfium::span<uint8_t> dest_span = m_InterBuf.subspan(
         (m_CurRow - m_SrcClip.top) * m_InterPitch, m_InterPitch);
     size_t dest_span_index = 0;
     // TODO(npm): reduce duplicated code here
@@ -441,7 +441,7 @@ void CStretchEngine::StretchVert() {
       case TransformMethod::k8BppTo8Bpp: {
         for (int col = m_DestClip.left; col < m_DestClip.right; ++col) {
           pdfium::span<const uint8_t> src_span =
-              m_InterBuf.span().subspan((col - m_DestClip.left) * DestBpp);
+              m_InterBuf.subspan((col - m_DestClip.left) * DestBpp);
           uint32_t dest_a = 0;
           for (int j = pWeights->m_SrcStart; j <= pWeights->m_SrcEnd; ++j) {
             uint32_t pixel_weight = pWeights->GetWeightForPosition(j);
@@ -457,7 +457,7 @@ void CStretchEngine::StretchVert() {
       case TransformMethod::kManyBpptoManyBpp: {
         for (int col = m_DestClip.left; col < m_DestClip.right; ++col) {
           pdfium::span<const uint8_t> src_span =
-              m_InterBuf.span().subspan((col - m_DestClip.left) * DestBpp);
+              m_InterBuf.subspan((col - m_DestClip.left) * DestBpp);
           uint32_t dest_r = 0;
           uint32_t dest_g = 0;
           uint32_t dest_b = 0;
@@ -480,7 +480,7 @@ void CStretchEngine::StretchVert() {
         DCHECK(m_bHasAlpha);
         for (int col = m_DestClip.left; col < m_DestClip.right; ++col) {
           pdfium::span<const uint8_t> src_span =
-              m_InterBuf.span().subspan((col - m_DestClip.left) * DestBpp);
+              m_InterBuf.subspan((col - m_DestClip.left) * DestBpp);
           uint32_t dest_a = 0;
           uint32_t dest_r = 0;
           uint32_t dest_g = 0;

@@ -11,6 +11,7 @@
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "base/functional/bind.h"
 #include "base/hash/sha1.h"
 #include "base/run_loop.h"
@@ -72,11 +73,11 @@ using OwnershipStatus = ash::DeviceSettingsService::OwnershipStatus;
 class TestUserMetricsServiceClient
     : public ::metrics::TestMetricsServiceClient {
  public:
-  absl::optional<bool> GetCurrentUserMetricsConsent() const override {
+  std::optional<bool> GetCurrentUserMetricsConsent() const override {
     if (should_use_user_consent_) {
       return current_user_metrics_consent_;
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   void UpdateCurrentUserMetricsConsent(bool metrics_consent) override {
@@ -90,6 +91,15 @@ class TestUserMetricsServiceClient
  private:
   bool should_use_user_consent_ = false;
   bool current_user_metrics_consent_ = false;
+};
+
+class MockErrorDelegate : public ArcSupportHost::ErrorDelegate {
+ public:
+  MOCK_METHOD0(OnWindowClosed, void());
+  MOCK_METHOD0(OnRetryClicked, void());
+  MOCK_METHOD0(OnSendFeedbackClicked, void());
+  MOCK_METHOD0(OnRunNetworkTestsClicked, void());
+  MOCK_METHOD1(OnErrorPageShown, void(bool network_tests_shown));
 };
 
 }  // namespace
@@ -152,6 +162,7 @@ class ArcTermsOfServiceDefaultNegotiatorTest
   void TearDown() override {
     negotiator_.reset();
     fake_arc_support_.reset();
+    support_host_->SetErrorDelegate(nullptr);
     support_host_.reset();
     fake_user_manager_.Reset();
     owner_key_util_->Clear();
@@ -224,6 +235,7 @@ class ArcTermsOfServiceDefaultNegotiatorTest
   std::unique_ptr<ArcSupportHost> support_host_;
   std::unique_ptr<FakeArcSupport> fake_arc_support_;
   std::unique_ptr<ArcTermsOfServiceDefaultNegotiator> negotiator_;
+  std::unique_ptr<MockErrorDelegate> error_delegate_;
 };
 
 class ArcTermsOfServiceDefaultNegotiatorForNonOwnerTest
@@ -243,12 +255,11 @@ class ArcTermsOfServiceDefaultNegotiatorForNonOwnerTest
   }
 
   // BrowserWithTestWindowTest:
-  TestingProfile* CreateProfile() override {
-    const std::string name = "test2@example.com";
-    const AccountId account_id(AccountId::FromUserEmail(name));
+  void LogIn(const std::string& email) override {
+    // TODO(crbug.com/1494005): Merge into BrowserWithTestWindow.
+    const AccountId account_id = AccountId::FromUserEmail(email);
     user_manager()->AddUser(account_id);
     user_manager()->LoginUser(account_id);
-    return profile_manager()->CreateTestingProfile(name);
   }
 };
 
@@ -368,8 +379,9 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Accept) {
       prefs::kArcBackupRestoreEnabled, std::make_unique<base::Value>(false));
   EXPECT_FALSE(fake_arc_support()->backup_and_restore_mode());
   if (base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub)) {
-    profile()->GetTestingPrefService()->SetBoolean(
-        ash::prefs::kUserGeolocationAllowed, false);
+    profile()->GetTestingPrefService()->SetInteger(
+        ash::prefs::kUserGeolocationAccessLevel,
+        static_cast<int>(ash::GeolocationAccessLevel::kDisallowed));
   }
   profile()->GetTestingPrefService()->SetManagedPref(
       prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(false));
@@ -378,9 +390,10 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Accept) {
   if (base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub)) {
     // Toggle kArcLocationServiceEnabled to trigger the computation again as we
     // are listening on it. Now even with kArcLocationServiceEnabled false, we
-    // should still get true as we will now honor kUserGeolocationAllowed.
-    profile()->GetTestingPrefService()->SetBoolean(
-        ash::prefs::kUserGeolocationAllowed, true);
+    // should still get true as we will now honor kUserGeolocationAccessLevel.
+    profile()->GetTestingPrefService()->SetInteger(
+        ash::prefs::kUserGeolocationAccessLevel,
+        static_cast<int>(ash::GeolocationAccessLevel::kAllowed));
     profile()->GetTestingPrefService()->SetManagedPref(
         prefs::kArcLocationServiceEnabled, std::make_unique<base::Value>(true));
     profile()->GetTestingPrefService()->SetManagedPref(
@@ -397,7 +410,7 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Accept) {
   profile()->GetTestingPrefService()->RemoveManagedPref(
       prefs::kArcLocationServiceEnabled);
   // When CrosPrivacyHub is enabled this is true as we set
-  // kUserGeolocationAllowed to be true.
+  // `kUserGeolocationAccessLevel` to be `AccessLevel::kAllowed`.
   EXPECT_TRUE(fake_arc_support()->location_service_mode());
 
   // Make sure preference values are not yet updated.
@@ -426,8 +439,9 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, AcceptWithLocationDisabled) {
   if (base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub)) {
     profile()->GetTestingPrefService()->SetBoolean(
         prefs::kArcInitialLocationSettingSyncRequired, true);
-    profile()->GetTestingPrefService()->SetBoolean(
-        ash::prefs::kUserGeolocationAllowed, true);
+    profile()->GetTestingPrefService()->SetInteger(
+        ash::prefs::kUserGeolocationAccessLevel,
+        static_cast<int>(ash::GeolocationAccessLevel::kAllowed));
   }
 
   // Show Terms of service page.
@@ -459,8 +473,10 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, AcceptWithLocationDisabled) {
   if (base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub)) {
     EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(
         prefs::kArcInitialLocationSettingSyncRequired));
-    EXPECT_FALSE(
-        profile()->GetPrefs()->GetBoolean(ash::prefs::kUserGeolocationAllowed));
+    EXPECT_EQ(ash::GeolocationAccessLevel::kDisallowed,
+              static_cast<ash::GeolocationAccessLevel>(
+                  profile()->GetPrefs()->GetInteger(
+                      ash::prefs::kUserGeolocationAccessLevel)));
   }
 }
 
@@ -729,6 +745,9 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Cancel) {
 }
 
 TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Retry) {
+  error_delegate_ = std::make_unique<MockErrorDelegate>();
+  support_host()->SetErrorDelegate(error_delegate_.get());
+
   // Show Terms of service page.
   Status status = Status::PENDING;
   negotiator()->StartNegotiation(UpdateStatusCallback(&status));
@@ -738,6 +757,7 @@ TEST_F(ArcTermsOfServiceDefaultNegotiatorTest, Retry) {
   EXPECT_EQ(fake_arc_support()->ui_page(), ArcSupportHost::UIPage::TERMS);
 
   // Switch to error page.
+  EXPECT_CALL(*error_delegate_, OnErrorPageShown(true));
   support_host()->ShowError(
       ArcSupportHost::ErrorInfo(ArcSupportHost::Error::SIGN_IN_NETWORK_ERROR),
       false /* should_show_send_feedback */,

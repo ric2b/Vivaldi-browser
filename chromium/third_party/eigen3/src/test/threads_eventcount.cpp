@@ -23,8 +23,7 @@ int rand_reentrant(unsigned int* s) {
 #endif
 }
 
-static void test_basic_eventcount()
-{
+static void test_basic_eventcount() {
   MaxSizeVector<EventCount::Waiter> waiters(1);
   waiters.resize(1);
   EventCount ec(waiters);
@@ -52,8 +51,7 @@ struct TestQueue {
       VERIFY_GE(val, 0);
       VERIFY_LE(val, kQueueSize);
       if (val == kQueueSize) return false;
-      if (val_.compare_exchange_weak(val, val + 1, std::memory_order_relaxed))
-        return true;
+      if (val_.compare_exchange_weak(val, val + 1, std::memory_order_relaxed)) return true;
     }
   }
 
@@ -63,8 +61,7 @@ struct TestQueue {
       VERIFY_GE(val, 0);
       VERIFY_LE(val, kQueueSize);
       if (val == 0) return false;
-      if (val_.compare_exchange_weak(val, val - 1, std::memory_order_relaxed))
-        return true;
+      if (val_.compare_exchange_weak(val, val - 1, std::memory_order_relaxed)) return true;
     }
   }
 
@@ -76,8 +73,7 @@ const int TestQueue::kQueueSize;
 // A number of producers send messages to a set of consumers using a set of
 // fake queues. Ensure that it does not crash, consumers don't deadlock and
 // number of blocked and unblocked threads match.
-static void test_stress_eventcount()
-{
+static void test_stress_eventcount() {
   const int kThreads = std::thread::hardware_concurrency();
   static const int kEvents = 1 << 16;
   static const int kQueues = 10;
@@ -135,8 +131,7 @@ static void test_stress_eventcount()
   }
 }
 
-EIGEN_DECLARE_TEST(cxx11_eventcount)
-{
+EIGEN_DECLARE_TEST(cxx11_eventcount) {
   CALL_SUBTEST(test_basic_eventcount());
   CALL_SUBTEST(test_stress_eventcount());
 }

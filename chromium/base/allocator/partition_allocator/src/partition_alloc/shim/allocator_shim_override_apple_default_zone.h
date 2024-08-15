@@ -13,28 +13,18 @@
 #error This header must be included iff PartitionAlloc-Everywhere is enabled.
 #endif
 
-#include <string.h>
-
 #include <atomic>
+#include <cstring>
 #include <tuple>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/apple/mach_logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/bits.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/shim/early_zone_registration_constants.h"
-
-namespace partition_alloc {
-
-// Defined in
-// base/allocator/partition_allocator/src/partition_alloc/partition_root.cc
-void PartitionAllocMallocHookOnBeforeForkInParent();
-void PartitionAllocMallocHookOnAfterForkInParent();
-void PartitionAllocMallocHookOnAfterForkInChild();
-
-}  // namespace partition_alloc
+#include "partition_alloc/partition_alloc_base/apple/mach_logging.h"
+#include "partition_alloc/partition_alloc_base/bits.h"
+#include "partition_alloc/partition_alloc_base/logging.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/partition_root.h"
+#include "partition_alloc/shim/early_zone_registration_constants.h"
 
 namespace allocator_shim {
 
@@ -54,8 +44,7 @@ kern_return_t MallocIntrospectionEnumerator(task_t task,
 }
 
 size_t MallocIntrospectionGoodSize(malloc_zone_t* zone, size_t size) {
-  return partition_alloc::internal::base::bits::AlignUp(
-      size, partition_alloc::internal::kAlignment);
+  return ShimGoodSize(size, nullptr);
 }
 
 boolean_t MallocIntrospectionCheck(malloc_zone_t* zone) {

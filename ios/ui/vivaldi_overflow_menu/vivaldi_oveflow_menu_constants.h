@@ -7,7 +7,7 @@
 
 #pragma mark - ICONS
 
-extern NSString* vOverflowSiteInfo;
+extern NSString* vOverflowShare;
 extern NSString* vOverflowRecentTabs;
 extern NSString* vOverflowPasswords;
 extern NSString* vOverflowSettings;
@@ -28,6 +28,7 @@ extern NSString* vOverflowDesktopSite;
 extern NSString* vOverflowMobileSite;
 extern NSString* vOverflowFindInPage;
 extern NSString* vOverflowZoom;
+extern NSString* vOverflowSiteInfo;
 
 extern NSString* vOverflowBookmarks;
 extern NSString* vOverflowNotes;

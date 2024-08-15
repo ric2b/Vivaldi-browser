@@ -8,6 +8,7 @@
 #include <set>
 #include <utility>
 
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -18,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "content/browser/file_system/browser_file_system_helper.h"
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
@@ -35,6 +37,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "skia/ext/skia_utils_base.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
 #include "third_party/blink/public/mojom/drag/drag.mojom-forward.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -100,17 +103,14 @@ std::u16string ExtractText(ui::ClipboardBuffer clipboard_buffer,
 // and reused for the same clipboard `seqno`.
 // TODO(b/294844565): Update this once multi-format pastes are handled
 // correctly.
-constexpr base::TimeDelta
-    ClipboardHostImpl::kIsPasteContentAllowedRequestTooOld =
-        base::Milliseconds(5000);
+constexpr base::TimeDelta ClipboardHostImpl::kIsPasteAllowedRequestTooOld =
+    base::Milliseconds(5000);
 
-ClipboardHostImpl::IsPasteContentAllowedRequest::
-    IsPasteContentAllowedRequest() = default;
-ClipboardHostImpl::IsPasteContentAllowedRequest::
-    ~IsPasteContentAllowedRequest() = default;
+ClipboardHostImpl::IsPasteAllowedRequest::IsPasteAllowedRequest() = default;
+ClipboardHostImpl::IsPasteAllowedRequest::~IsPasteAllowedRequest() = default;
 
-bool ClipboardHostImpl::IsPasteContentAllowedRequest::AddCallback(
-    IsClipboardPasteContentAllowedCallback callback) {
+bool ClipboardHostImpl::IsPasteAllowedRequest::AddCallback(
+    IsClipboardPasteAllowedCallback callback) {
   // If this request has already completed, invoke the callback immediately
   // and return.
   if (data_.has_value()) {
@@ -124,24 +124,23 @@ bool ClipboardHostImpl::IsPasteContentAllowedRequest::AddCallback(
   return callbacks_.size() == 1;
 }
 
-void ClipboardHostImpl::IsPasteContentAllowedRequest::Complete(
-    IsClipboardPasteContentAllowedCallbackArgType data) {
+void ClipboardHostImpl::IsPasteAllowedRequest::Complete(
+    IsClipboardPasteAllowedCallbackArgType data) {
   completed_time_ = base::Time::Now();
   data_ = std::move(data);
   InvokeCallbacks();
 }
 
-bool ClipboardHostImpl::IsPasteContentAllowedRequest::IsObsolete(
-    base::Time now) {
-  return (now - completed_time_) > kIsPasteContentAllowedRequestTooOld;
+bool ClipboardHostImpl::IsPasteAllowedRequest::IsObsolete(base::Time now) {
+  return (now - completed_time_) > kIsPasteAllowedRequestTooOld;
 }
 
-base::Time ClipboardHostImpl::IsPasteContentAllowedRequest::completed_time() {
+base::Time ClipboardHostImpl::IsPasteAllowedRequest::completed_time() {
   DCHECK(is_complete());
   return completed_time_;
 }
 
-void ClipboardHostImpl::IsPasteContentAllowedRequest::InvokeCallbacks() {
+void ClipboardHostImpl::IsPasteAllowedRequest::InvokeCallbacks() {
   DCHECK(data_);
 
   auto callbacks = std::move(callbacks_);
@@ -274,7 +273,7 @@ void ClipboardHostImpl::ReadText(ui::ClipboardBuffer clipboard_buffer,
       std::move(clipboard_paste_data),
       base::BindOnce(
           [](std::u16string result, ReadTextCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data) {
               result.clear();
             }
@@ -307,7 +306,7 @@ void ClipboardHostImpl::ReadHtml(ui::ClipboardBuffer clipboard_buffer,
           [](std::u16string markup, std::string src_url_str,
              uint32_t fragment_start, uint32_t fragment_end,
              ReadHtmlCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data) {
               markup.clear();
             }
@@ -335,7 +334,7 @@ void ClipboardHostImpl::ReadSvg(ui::ClipboardBuffer clipboard_buffer,
       std::move(clipboard_paste_data),
       base::BindOnce(
           [](std::u16string markup, ReadSvgCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data) {
               markup.clear();
             }
@@ -362,7 +361,7 @@ void ClipboardHostImpl::ReadRtf(ui::ClipboardBuffer clipboard_buffer,
       std::move(clipboard_paste_data),
       base::BindOnce(
           [](std::string result, ReadRtfCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data) {
               result.clear();
             }
@@ -397,7 +396,7 @@ void ClipboardHostImpl::OnReadPng(ui::ClipboardBuffer clipboard_buffer,
       std::move(clipboard_paste_data),
       base::BindOnce(
           [](std::vector<uint8_t> data, ReadPngCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data.has_value()) {
               std::move(callback).Run(mojo_base::BigBuffer());
               return;
@@ -420,16 +419,15 @@ void ClipboardHostImpl::ReadFiles(ui::ClipboardBuffer clipboard_buffer,
   auto data_dst = CreateDataEndpoint();
   clipboard->ReadFilenames(clipboard_buffer, data_dst.get(), &filenames);
 
-  // Convert the vector of ui::FileInfo into a vector of std::string so that
+  // Convert the vector of ui::FileInfo into a vector of base::FilePath so that
   // it can be passed to PerformPasteIfContentAllowed() for analysis.  When
   // the latter is called with ui::ClipboardFormatType::FilenamesType() the
   // data to be analyzed is expected to be a newline-separated list of full
   // paths.
-  std::vector<std::string> paths;
+  std::vector<base::FilePath> paths;
   paths.reserve(filenames.size());
-  base::ranges::transform(
-      filenames, std::back_inserter(paths),
-      [](const ui::FileInfo& info) { return info.path.AsUTF8Unsafe(); });
+  base::ranges::transform(filenames, std::back_inserter(paths),
+                          [](const ui::FileInfo& info) { return info.path; });
   ClipboardPasteData clipboard_paste_data =
       ClipboardPasteData(std::string(), std::string(), std::move(paths));
 
@@ -452,12 +450,12 @@ void ClipboardHostImpl::ReadFiles(ui::ClipboardBuffer clipboard_buffer,
           process->GetID());
   std::move(files.begin(), files.end(), std::back_inserter(result->files));
 
-  PerformPasteIfContentAllowed(
-      clipboard->GetSequenceNumber(clipboard_buffer),
-      ui::ClipboardFormatType::FilenamesType(), std::move(clipboard_paste_data),
+  PasteIfPolicyAllowed(
+      clipboard_buffer, ui::ClipboardFormatType::FilenamesType(),
+      std::move(clipboard_paste_data),
       base::BindOnce(
           [](blink::mojom::ClipboardFilesPtr result, ReadFilesCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data) {
               result->files.clear();
               result->file_system_id->clear();
@@ -465,15 +463,13 @@ void ClipboardHostImpl::ReadFiles(ui::ClipboardBuffer clipboard_buffer,
               // A subset of the files can be copied.  Remove any files that
               // should be blocked.  First build a list of the files that are
               // allowed.
-              std::vector<std::string> allowed_files_vector =
-                  std::move(clipboard_paste_data->file_paths);
-              std::set<std::string> allowed_files(
-                  std::move_iterator(allowed_files_vector.begin()),
-                  std::move_iterator(allowed_files_vector.end()));
+              std::set<base::FilePath> allowed_files(
+                  std::move_iterator(clipboard_paste_data->file_paths.begin()),
+                  std::move_iterator(clipboard_paste_data->file_paths.end()));
 
               for (auto it = result->files.begin();
                    it != result->files.end();) {
-                if (allowed_files.find(it->get()->path.AsUTF8Unsafe()) !=
+                if (allowed_files.find(it->get()->path) !=
                     allowed_files.end()) {
                   it = std::next(it);
                 } else {
@@ -505,7 +501,7 @@ void ClipboardHostImpl::ReadCustomData(ui::ClipboardBuffer clipboard_buffer,
       std::move(clipboard_paste_data),
       base::BindOnce(
           [](std::u16string result, ReadCustomDataCallback callback,
-             absl::optional<ClipboardPasteData> clipboard_paste_data) {
+             std::optional<ClipboardPasteData> clipboard_paste_data) {
             if (!clipboard_paste_data) {
               result.clear();
             }
@@ -582,18 +578,8 @@ bool ClipboardHostImpl::IsRendererPasteAllowed(
       &render_frame_host);
 }
 
-bool ClipboardHostImpl::IsUnsanitizedCustomFormatContentAllowed() {
-  if (!base::FeatureList::IsEnabled(blink::features::kClipboardCustomFormats)) {
-    mojo::ReportBadMessage("Custom format read/write is not enabled.");
-    return false;
-  }
-  return true;
-}
-
 void ClipboardHostImpl::ReadAvailableCustomAndStandardFormats(
     ReadAvailableCustomAndStandardFormatsCallback callback) {
-  if (!IsUnsanitizedCustomFormatContentAllowed())
-    return;
   std::vector<std::u16string> format_types =
       ui::Clipboard::GetForCurrentThread()
           ->ReadAvailableStandardAndCustomFormatNames(
@@ -604,8 +590,6 @@ void ClipboardHostImpl::ReadAvailableCustomAndStandardFormats(
 void ClipboardHostImpl::ReadUnsanitizedCustomFormat(
     const std::u16string& format,
     ReadUnsanitizedCustomFormatCallback callback) {
-  if (!IsUnsanitizedCustomFormatContentAllowed())
-    return;
   // `kMaxFormatSize` includes the null terminator as well so we check if
   // the `format` size is strictly less than `kMaxFormatSize` or not.
   if (format.length() >= blink::mojom::ClipboardHost::kMaxFormatSize)
@@ -638,8 +622,6 @@ void ClipboardHostImpl::ReadUnsanitizedCustomFormat(
 void ClipboardHostImpl::WriteUnsanitizedCustomFormat(
     const std::u16string& format,
     mojo_base::BigBuffer data) {
-  if (!IsUnsanitizedCustomFormatContentAllowed())
-    return;
   // `kMaxFormatSize` & `kMaxDataSize` includes the null terminator.
   if (format.length() >= blink::mojom::ClipboardHost::kMaxFormatSize)
     return;
@@ -656,57 +638,15 @@ void ClipboardHostImpl::PasteIfPolicyAllowed(
     ui::ClipboardBuffer clipboard_buffer,
     const ui::ClipboardFormatType& data_type,
     ClipboardPasteData clipboard_paste_data,
-    IsClipboardPasteContentAllowedCallback callback) {
-  if (clipboard_paste_data.isEmpty()) {
+    IsClipboardPasteAllowedCallback callback) {
+  if (clipboard_paste_data.empty()) {
     std::move(callback).Run(std::move(clipboard_paste_data));
     return;
   }
 
-  size_t data_size =
-      clipboard_paste_data.text.size() + clipboard_paste_data.image.size();
-  // When the paste data includes files, update data_size to be int_max to
-  // enforce data transfer scanning.
-  if (!clipboard_paste_data.file_paths.empty()) {
-    data_size = INT_MAX;
-  }
-  auto policy_cb = base::BindOnce(
-      &ClipboardHostImpl::PasteIfPolicyAllowedCallback,
-      weak_ptr_factory_.GetWeakPtr(), clipboard_buffer, data_type,
-      std::move(clipboard_paste_data), std::move(callback));
-
-  if (ui::DataTransferPolicyController::HasInstance()) {
-    ui::DataTransferPolicyController::Get()->PasteIfAllowed(
-        ui::Clipboard::GetForCurrentThread()->GetSource(clipboard_buffer),
-        CreateDataEndpoint().get(), data_size, &render_frame_host(),
-        std::move(policy_cb));
-    return;
-  }
-  std::move(policy_cb).Run(/*is_allowed=*/true);
-}
-
-void ClipboardHostImpl::PasteIfPolicyAllowedCallback(
-    ui::ClipboardBuffer clipboard_buffer,
-    const ui::ClipboardFormatType& data_type,
-    ClipboardPasteData clipboard_paste_data,
-    IsClipboardPasteContentAllowedCallback callback,
-    bool is_allowed) {
-  if (is_allowed) {
-    PerformPasteIfContentAllowed(
-        ui::Clipboard::GetForCurrentThread()->GetSequenceNumber(
-            clipboard_buffer),
-        data_type, std::move(clipboard_paste_data), std::move(callback));
-  } else {
-    // If not allowed, then don't proceed with content checks.
-    std::move(callback).Run(absl::nullopt);
-  }
-}
-
-void ClipboardHostImpl::PerformPasteIfContentAllowed(
-    const ui::ClipboardSequenceNumberToken& seqno,
-    const ui::ClipboardFormatType& data_type,
-    ClipboardPasteData clipboard_paste_data,
-    IsClipboardPasteContentAllowedCallback callback) {
   CleanupObsoleteRequests();
+  ui::ClipboardSequenceNumberToken seqno =
+      ui::Clipboard::GetForCurrentThread()->GetSequenceNumber(clipboard_buffer);
 
   // Always allow if the source of the last clipboard commit was this host.
   const LastWriterInfo& info = GetLastWriterInfo();
@@ -719,25 +659,51 @@ void ClipboardHostImpl::PerformPasteIfContentAllowed(
   // an entry to the map if one does not exist.
   auto& request = is_allowed_requests_[seqno];
   if (request.AddCallback(std::move(callback))) {
-    StartIsPasteContentAllowedRequest(seqno, data_type,
-                                      std::move(clipboard_paste_data));
+    StartIsPasteAllowedRequest(seqno, data_type, clipboard_buffer,
+                               std::move(clipboard_paste_data));
   }
 }
 
-void ClipboardHostImpl::StartIsPasteContentAllowedRequest(
+void ClipboardHostImpl::StartIsPasteAllowedRequest(
     const ui::ClipboardSequenceNumberToken& seqno,
     const ui::ClipboardFormatType& data_type,
+    ui::ClipboardBuffer clipboard_buffer,
     ClipboardPasteData clipboard_paste_data) {
+  std::optional<size_t> data_size;
+  if (clipboard_paste_data.file_paths.empty()) {
+    data_size =
+        clipboard_paste_data.text.size() + clipboard_paste_data.image.size();
+  }
+
   static_cast<RenderFrameHostImpl&>(render_frame_host())
-      .IsClipboardPasteContentAllowed(
-          data_type, std::move(clipboard_paste_data),
-          base::BindOnce(&ClipboardHostImpl::FinishPasteIfContentAllowed,
+      .IsClipboardPasteAllowedByPolicy(
+          ClipboardEndpoint(ui::Clipboard::GetForCurrentThread()->GetSource(
+              clipboard_buffer)),
+          ClipboardEndpoint(
+              CreateDataEndpoint(/*include_otr=*/true).get(),
+              base::BindRepeating(
+                  [](GlobalRenderFrameHostId rfh_id) -> BrowserContext* {
+                    auto* rfh = RenderFrameHost::FromID(rfh_id);
+                    if (!rfh) {
+                      return nullptr;
+                    }
+                    return rfh->GetBrowserContext();
+                  },
+                  render_frame_host().GetGlobalId()),
+              render_frame_host()),
+          {
+              .size = data_size,
+              .format_type = data_type,
+              .seqno = seqno,
+          },
+          std::move(clipboard_paste_data),
+          base::BindOnce(&ClipboardHostImpl::FinishPasteIfAllowed,
                          weak_ptr_factory_.GetWeakPtr(), seqno));
 }
 
-void ClipboardHostImpl::FinishPasteIfContentAllowed(
+void ClipboardHostImpl::FinishPasteIfAllowed(
     const ui::ClipboardSequenceNumberToken& seqno,
-    absl::optional<ClipboardPasteData> clipboard_paste_data) {
+    std::optional<ClipboardPasteData> clipboard_paste_data) {
   if (is_allowed_requests_.count(seqno) == 0)
     return;
 
@@ -771,9 +737,10 @@ void ClipboardHostImpl::CleanupObsoleteRequests() {
   }
 }
 
-std::unique_ptr<ui::DataTransferEndpoint>
-ClipboardHostImpl::CreateDataEndpoint() {
-  if (render_frame_host().GetBrowserContext()->IsOffTheRecord()) {
+std::unique_ptr<ui::DataTransferEndpoint> ClipboardHostImpl::CreateDataEndpoint(
+    bool include_otr) {
+  if (render_frame_host().GetBrowserContext()->IsOffTheRecord() &&
+      !include_otr) {
     return nullptr;
   }
   return std::make_unique<ui::DataTransferEndpoint>(

@@ -4,6 +4,7 @@
 
 #include "content/browser/service_worker/embedded_worker_instance.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -52,7 +53,6 @@
 #include "net/cookies/site_for_cookies.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/service_worker/embedded_worker_status.h"
 #include "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom.h"
@@ -514,6 +514,15 @@ void EmbeddedWorkerInstance::Stop() {
     return;
   }
 
+  warm_up_on_stopped_ = false;
+  if (status_ == blink::EmbeddedWorkerStatus::kRunning && context_ &&
+      base::FeatureList::IsEnabled(
+          blink::features::kSpeculativeServiceWorkerWarmUp) &&
+      blink::features::kSpeculativeServiceWorkerWarmUpOnStopped.Get() &&
+      owner_version_->scope().SchemeIsHTTPOrHTTPS()) {
+    warm_up_on_stopped_ = true;
+  }
+
   client_->StopWorker();
   status_ = blink::EmbeddedWorkerStatus::kStopping;
   for (auto& observer : listener_list_)
@@ -668,6 +677,9 @@ void EmbeddedWorkerInstance::OnWorkerVersionInstalled() {
 }
 
 void EmbeddedWorkerInstance::OnWorkerVersionDoomed() {
+  if (!context_) {
+    return;
+  }
   ServiceWorkerDevToolsManager::GetInstance()->WorkerVersionDoomed(
       process_id(), worker_devtools_agent_route_id(),
       base::WrapRefCounted(context_->wrapper()), owner_version_->version_id());
@@ -736,6 +748,23 @@ void EmbeddedWorkerInstance::OnStarted(
 }
 
 void EmbeddedWorkerInstance::OnStopped() {
+  if (warm_up_on_stopped_) {
+    // We need to wait for the complete stop before warming up the service
+    // worker otherwise WarmUpServiceWorker() keeps the service worker running.
+    // Also, we need to post a task before ReleaseProcess(). Hence we are
+    // posting a task here.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<ServiceWorkerContextCore> context,
+               const GURL scope, const blink::StorageKey key) {
+              if (context) {
+                context->wrapper()->WarmUpServiceWorker(scope, key,
+                                                        base::DoNothing());
+              }
+            },
+            context_, owner_version_->scope(), owner_version_->key()));
+  }
   blink::EmbeddedWorkerStatus old_status = status_;
   ReleaseProcess();
   for (auto& observer : listener_list_)
@@ -866,7 +895,7 @@ EmbeddedWorkerInstance::CreateFactoryBundle(
           rph, origin, storage_key.ToPartialNetIsolationInfo(),
           std::move(coep_reporter),
           static_cast<StoragePartitionImpl*>(rph->GetStoragePartition())
-              ->CreateAuthCertObserverForServiceWorker(),
+              ->CreateAuthCertObserverForServiceWorker(rph->GetID()),
           NetworkServiceDevToolsObserver::MakeSelfOwned(devtools_worker_token),
           std::move(client_security_state),
           "EmbeddedWorkerInstance::CreateFactoryBundle");
@@ -880,7 +909,7 @@ EmbeddedWorkerInstance::CreateFactoryBundle(
   bool bypass_redirect_checks = false;
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       rph->GetBrowserContext(), nullptr /* frame_host */, rph->GetID(),
-      factory_type, origin, absl::nullopt /* navigation_id */,
+      factory_type, origin, std::nullopt /* navigation_id */,
       ukm::kInvalidSourceIdObj, &default_factory_receiver,
       &factory_params->header_client, &bypass_redirect_checks,
       nullptr /* disable_secure_dns */, &factory_params->factory_override,
@@ -1032,6 +1061,7 @@ void EmbeddedWorkerInstance::ReleaseProcess() {
   // re-added at this stage.
   status_ = blink::EmbeddedWorkerStatus::kStopping;
   pause_initializing_global_scope_ = false;
+  warm_up_on_stopped_ = false;
   NotifyForegroundServiceWorkerRemoved();
 
   instance_host_receiver_.reset();
@@ -1042,7 +1072,7 @@ void EmbeddedWorkerInstance::ReleaseProcess() {
   status_ = blink::EmbeddedWorkerStatus::kStopped;
   starting_phase_ = NOT_STARTING;
   thread_id_ = ServiceWorkerConsts::kInvalidEmbeddedWorkerThreadId;
-  token_ = absl::nullopt;
+  token_ = std::nullopt;
 
   DCHECK(!foreground_notified_);
 }
@@ -1124,6 +1154,7 @@ void EmbeddedWorkerInstance::NotifyForegroundServiceWorkerRemoved() {
 mojo::PendingRemote<network::mojom::URLLoaderFactory>
 EmbeddedWorkerInstance::MakeScriptLoaderFactoryRemote(
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle) {
+  CHECK(context_);
   mojo::PendingRemote<network::mojom::URLLoaderFactory>
       script_loader_factory_remote;
 

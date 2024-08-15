@@ -2,8 +2,9 @@
 #define HIP_VECTOR_COMPATIBILITY_H
 
 namespace hip_impl {
-  template <typename, typename, unsigned int> struct Scalar_accessor;
-}   // end namespace hip_impl
+template <typename, typename, unsigned int>
+struct Scalar_accessor;
+}  // end namespace hip_impl
 
 // IWYU pragma: private
 #include "./InternalHeaderCheck.h"
@@ -11,19 +12,19 @@ namespace hip_impl {
 namespace Eigen {
 namespace internal {
 
-#define HIP_SCALAR_ACCESSOR_BUILDER(NAME) \
-template <typename T, typename U, unsigned int n> \
-struct NAME <hip_impl::Scalar_accessor<T, U, n>> : NAME <T> {};
+#define HIP_SCALAR_ACCESSOR_BUILDER(NAME)           \
+  template <typename T, typename U, unsigned int n> \
+  struct NAME<hip_impl::Scalar_accessor<T, U, n>> : NAME<T> {};
 
-#define HIP_SCALAR_ACCESSOR_BUILDER_RETVAL(NAME) \
-template <typename T, typename U, unsigned int n> \
-struct NAME##_impl <hip_impl::Scalar_accessor<T, U, n>> : NAME##_impl <T> {}; \
-template <typename T, typename U, unsigned int n> \
-struct NAME##_retval <hip_impl::Scalar_accessor<T, U, n>> : NAME##_retval <T> {};
+#define HIP_SCALAR_ACCESSOR_BUILDER_RETVAL(NAME)                              \
+  template <typename T, typename U, unsigned int n>                           \
+  struct NAME##_impl<hip_impl::Scalar_accessor<T, U, n>> : NAME##_impl<T> {}; \
+  template <typename T, typename U, unsigned int n>                           \
+  struct NAME##_retval<hip_impl::Scalar_accessor<T, U, n>> : NAME##_retval<T> {};
 
-#define HIP_SCALAR_ACCESSOR_BUILDER_IGAMMA(NAME) \
-template <typename T, typename U, unsigned int n, IgammaComputationMode mode> \
-struct NAME <hip_impl::Scalar_accessor<T, U, n>, mode> : NAME <T, mode> {};
+#define HIP_SCALAR_ACCESSOR_BUILDER_IGAMMA(NAME)                                \
+  template <typename T, typename U, unsigned int n, IgammaComputationMode mode> \
+  struct NAME<hip_impl::Scalar_accessor<T, U, n>, mode> : NAME<T, mode> {};
 
 #if EIGEN_HAS_C99_MATH
 HIP_SCALAR_ACCESSOR_BUILDER(betainc_helper)

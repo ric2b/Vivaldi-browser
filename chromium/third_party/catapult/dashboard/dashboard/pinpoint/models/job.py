@@ -540,8 +540,10 @@ class Job(ndb.Model):
     pinpoint_job_queued_time = self.started_time - self.created
 
     cloud_metric.PublishPinpointJobRunTimeMetric(
-        app_identity.get_application_id(), self.job_id, self.comparison_mode,
-        "wait-time-in-queue", self.user, self.origin,
+        app_identity.get_application_id(), self.job_id,
+        self.comparison_mode, "wait-time-in-queue", self.user, self.origin,
+        GetJobTypeByName(self.name), self.configuration,
+        self.benchmark_arguments.benchmark, self.benchmark_arguments.story,
         pinpoint_job_queued_time.total_seconds())
 
     title = _ROUND_PUSHPIN + ' Pinpoint job started.'
@@ -631,9 +633,18 @@ class Job(ndb.Model):
             self.project,
     }
 
-  def _CanSandwich(self):
+  def _CanSandwich(self, differences=None):
     if not self.user or 'appspot.gserviceaccount.com' not in self.user:
       return False
+    # When a culprit is a non-chromium CL, culprit verification will use the
+    # first commit in the roll, which sets up an A/A experiment. Any culprit CL
+    # that is part of a roll will fail to verify. This issue occurs about 30% of
+    # the time.
+    # TODO(crbug/1507128): Re-enable culprit verification for non-chromium culprits.
+    if differences:
+      for _, change_b in differences:
+        if change_b.last_commit.repository != "chromium":
+          return False
     sandwich_subscription = ''
     if self.bug_id:
       issue = perf_issue_service_client.GetIssue(self.bug_id, self.project)
@@ -786,7 +797,7 @@ class Job(ndb.Model):
 
     # If the job is CABE-compatible:
     # call verification workflow for each difference.
-    if self._CanSandwich():
+    if self._CanSandwich(differences):
       regression_cnt, wf_executions = self._StartSandwichAndUpdateWorkflowGroup(
           improvement_dir, differences, result_values)
       if regression_cnt == 0:
@@ -1020,6 +1031,8 @@ class Job(ndb.Model):
         cloud_metric.PublishPinpointJobDetailMetrics(
             app_identity.get_application_id(), self.job_id,
             self.comparison_mode, job_status, self.user, self.origin,
+            GetJobTypeByName(self.name), self.configuration,
+            self.benchmark_arguments.benchmark, self.benchmark_arguments.story,
             self.state.ChangesExamined(), self.state.TotalAttemptsExecuted(),
             0 if self.difference_count is None else self.difference_count)
 
@@ -1141,15 +1154,21 @@ class Job(ndb.Model):
         _retry_options=RETRY_OPTIONS)
 
   def _PrintJobStatusRunTimeMetrics(self, job_status, with_run_time=False):
+    job_type_by_name = GetJobTypeByName(self.name)
+
     cloud_metric.PublishPinpointJobStatusMetric(
         app_identity.get_application_id(), self.job_id, self.comparison_mode,
-        job_status, self.user, self.origin)
+        job_status, self.user, self.origin, job_type_by_name,
+        self.configuration, self.benchmark_arguments.benchmark,
+        self.benchmark_arguments.story)
 
     if with_run_time:
       job_run_time = self.updated - self.started_time
       cloud_metric.PublishPinpointJobRunTimeMetric(
           app_identity.get_application_id(), self.job_id, self.comparison_mode,
-          job_status, self.user, self.origin, job_run_time.total_seconds())
+          job_status, self.user, self.origin, job_type_by_name,
+          self.configuration, self.benchmark_arguments.benchmark,
+          self.benchmark_arguments.story, job_run_time.total_seconds())
 
 
 def _PostBugCommentDeferred(bug_id, *args, **kwargs):
@@ -1161,5 +1180,29 @@ def _PostBugCommentDeferred(bug_id, *args, **kwargs):
 
 def _UpdateGerritDeferred(*args, **kwargs):
   gerrit_service.PostChangeComment(*args, **kwargs)
+
+
+def GetJobTypeByName(name):
+  job_type_by_name = 'Others'
+
+  if name is not None:
+    if _CheckSubstringIn(name, 'Auto-Bisection'):
+      job_type_by_name = 'AutoBisect'
+      if _CheckSubstringIn(name, '[Skia]'):
+        job_type_by_name = 'SkiaAutoBisect'
+    elif _CheckSubstringIn(name, '[Skia]'):
+      job_type_by_name = 'Skia'
+    elif _CheckSubstringIn(name, 'Regression Verification'):
+      job_type_by_name = 'SandwichVerification'
+
+  return job_type_by_name
+
+
+def _CheckSubstringIn(string, sub_string):
+  """Checks if a substring is present in a string using the 'in' operator."""
+  if sub_string in string:
+    return True
+
+  return False
 
 # pylint: disable=too-many-lines

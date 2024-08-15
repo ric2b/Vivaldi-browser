@@ -21,12 +21,14 @@
           <ph name="PROXIES_TITLE" />
           ögesine gidin ve yapılandırmanızın "vekil yok" veya "doğrudan" olarak ayarlandığından emin olun.</translation>
 <translation id="5248344925342018662">Güvenli bir Vivaldi sayfasını görüntülüyorsunuz</translation>
+<translation id="6690242244468452299">Bu sayfa, çökme raporlamasını etkinleştirirseniz son çökmelerinizle ilgili bilgileri gösterir.</translation>
 <translation id="7023871570427738255">Vivaldi menüsü &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
           <ph name="ADVANCED_TITLE" /> öğesine gidin
           ve "<ph name="NO_PREFETCH_DESCRIPTION" />" seçeneğinin işaretini kaldırın.
           Bu işlem sorunu çözmezse performansın iyileşmesi için bu seçeneği tekrar işaretlemenizi öneririz.</translation>
+<translation id="7496505986576158197">Vivaldi, <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> açık kaynak projesi ve diğer <ph name="BEGIN_LINK_OSS" />açık kaynak yazılımları<ph name="END_LINK_OSS" /> tarafından mümkün kılınmıştır.</translation>
 <translation id="8187289872471304532">Uygulamalar &gt; Sistem Tercihleri &gt; Ağ &gt; Gelişmiş &gt; Vekiller
           ögesine gidin ve
           seçilmiş olabilecek proxy'lerin seçimini kaldırın.</translation>

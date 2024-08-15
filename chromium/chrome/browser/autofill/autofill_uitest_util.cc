@@ -23,50 +23,29 @@
 
 namespace autofill {
 
-// This class is used to wait for asynchronous updates to PersonalDataManager
-// to complete.
-class PdmChangeWaiter : public PersonalDataManagerObserver {
- public:
-  explicit PdmChangeWaiter(Profile* base_profile)
-      : alerted_(false),
-        has_run_message_loop_(false),
-        base_profile_(base_profile) {
-    PersonalDataManagerFactory::GetForProfile(base_profile_)->AddObserver(this);
-  }
-
-  PdmChangeWaiter(const PdmChangeWaiter&) = delete;
-  PdmChangeWaiter& operator=(const PdmChangeWaiter&) = delete;
-
-  ~PdmChangeWaiter() override {}
-
-  // PersonalDataManagerObserver:
-  void OnPersonalDataChanged() override {
-    if (has_run_message_loop_) {
-      base::RunLoop::QuitCurrentWhenIdleDeprecated();
-      has_run_message_loop_ = false;
-    }
-    alerted_ = true;
-  }
-
-  void OnInsufficientFormData() override { OnPersonalDataChanged(); }
-
-  void Wait() {
-    if (!alerted_) {
-      has_run_message_loop_ = true;
-      content::RunMessageLoop();
-    }
-    PersonalDataManagerFactory::GetForProfile(base_profile_)
-        ->RemoveObserver(this);
-  }
-
- private:
-  bool alerted_;
-  bool has_run_message_loop_;
-  raw_ptr<Profile> base_profile_;
-};
-
 static PersonalDataManager* GetPersonalDataManager(Profile* profile) {
   return PersonalDataManagerFactory::GetForProfile(profile);
+}
+
+PdmChangeWaiter::PdmChangeWaiter(Profile* base_profile)
+    : base_profile_(base_profile) {
+  obs_.Observe(GetPersonalDataManager(base_profile_));
+}
+
+PdmChangeWaiter::~PdmChangeWaiter() = default;
+
+void PdmChangeWaiter::OnPersonalDataChanged() {
+  if (run_loop_.running()) {
+    run_loop_.Quit();
+  }
+  alerted_ = true;
+}
+
+void PdmChangeWaiter::Wait() {
+  if (!alerted_) {
+    run_loop_.Run();
+  }
+  obs_.Reset();
 }
 
 void AddTestProfile(Profile* base_profile, const AutofillProfile& profile) {
@@ -89,10 +68,10 @@ void AddTestCreditCard(Profile* base_profile, const CreditCard& card) {
 
 void AddTestServerCreditCard(Profile* base_profile, const CreditCard& card) {
   PdmChangeWaiter observer(base_profile);
-  GetPersonalDataManager(base_profile)->AddFullServerCreditCard(card);
+  GetPersonalDataManager(base_profile)->AddFullServerCreditCardForTesting(card);
 
-  // AddCreditCard is asynchronous. Wait for it to finish before continuing the
-  // tests.
+  // AddFullServerCreditCardForTesting is asynchronous. Wait for it to finish
+  // before continuing the tests.
   observer.Wait();
 }
 
@@ -129,7 +108,7 @@ void GenerateTestAutofillPopup(ContentAutofillDriver& driver,
                                    {AutofillManagerEvent::kAskForValuesToFill});
   driver.renderer_events().AskForValuesToFill(
       form, form.fields.front(), element_bounds,
-      AutofillSuggestionTriggerSource::kTextFieldDidChange);
+      AutofillSuggestionTriggerSource::kFormControlElementClicked);
   ASSERT_TRUE(waiter.Wait());
   ASSERT_EQ(1u, driver.GetAutofillManager().form_structures().size());
   // `form.host_frame` and `form.url` have only been set by
@@ -142,9 +121,7 @@ void GenerateTestAutofillPopup(ContentAutofillDriver& driver,
   std::vector<Suggestion> suggestions = {Suggestion(u"Test suggestion")};
   test_api(static_cast<BrowserAutofillManager&>(driver.GetAutofillManager()))
       .external_delegate()
-      ->OnSuggestionsReturned(
-          form.fields.front().global_id(), suggestions,
-          AutofillSuggestionTriggerSource::kFormControlElementClicked);
+      ->OnSuggestionsReturned(form.fields.front().global_id(), suggestions);
 }
 
 }  // namespace autofill

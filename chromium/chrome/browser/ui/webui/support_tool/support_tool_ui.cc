@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/support_tool/support_tool_ui.h"
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -48,10 +49,10 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
 #include "net/base/url_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+#include "ui/shell_dialogs/selected_file_info.h"
 #include "url/gurl.h"
 
 namespace {
@@ -155,7 +156,7 @@ class SupportToolMessageHandler : public content::WebUIMessageHandler,
   void HandleGenerateSupportToken(const base::Value::List& args);
 
   // SelectFileDialog::Listener implementation.
-  void FileSelected(const base::FilePath& path,
+  void FileSelected(const ui::SelectedFileInfo& file,
                     int index,
                     void* params) override;
 
@@ -164,7 +165,7 @@ class SupportToolMessageHandler : public content::WebUIMessageHandler,
  private:
   base::Value::List GetAccountsList();
 
-  void OnScreenshotTaken(absl::optional<SupportToolError> error);
+  void OnScreenshotTaken(std::optional<SupportToolError> error);
 
   void OnDataCollectionDone(const PIIMap& detected_pii,
                             std::set<SupportToolError> errors);
@@ -298,7 +299,7 @@ void SupportToolMessageHandler::HandleTakeScreenshot(
 }
 
 void SupportToolMessageHandler::OnScreenshotTaken(
-    absl::optional<SupportToolError> error) {
+    std::optional<SupportToolError> error) {
   if (error) {
     LOG(ERROR) << error.value().error_message;
   }
@@ -410,7 +411,7 @@ void SupportToolMessageHandler::HandleStartDataExport(
       /*params=*/nullptr);
 }
 
-void SupportToolMessageHandler::FileSelected(const base::FilePath& path,
+void SupportToolMessageHandler::FileSelected(const ui::SelectedFileInfo& file,
                                              int index,
                                              void* params) {
   base::UmaHistogramEnumeration(
@@ -422,7 +423,7 @@ void SupportToolMessageHandler::FileSelected(const base::FilePath& path,
     this->handler_->AddDataCollector(std::move(screenshot_data_collector_));
   }
   this->handler_->ExportCollectedData(
-      std::move(selected_pii_to_keep_), path,
+      std::move(selected_pii_to_keep_), file.path(),
       base::BindOnce(&SupportToolMessageHandler::OnDataExportDone,
                      weak_ptr_factory_.GetWeakPtr()));
 }

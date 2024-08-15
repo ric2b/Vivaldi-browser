@@ -8,6 +8,8 @@ load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "os", "reclient", "sheriff_rotations")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
+load("//lib/gn_args.star", "gn_args")
+load("//lib/builder_health_indicators.star", "health_spec")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -17,6 +19,7 @@ ci.defaults.set(
     os = os.LINUX_DEFAULT,
     sheriff_rotations = sheriff_rotations.FUCHSIA,
     execution_timeout = 10 * time.hour,
+    health_spec = health_spec.DEFAULT,
     notifies = ["cr-fuchsia"],
     reclient_instance = reclient.instance.DEFAULT_TRUSTED,
     reclient_jobs = reclient.jobs.DEFAULT,
@@ -46,6 +49,14 @@ ci.builder(
         ),
         build_gs_bucket = "chromium-fyi-archive",
         run_tests_serially = True,
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "debug_builder",
+            "reclient",
+            "fuchsia_smart_display",
+            "arm64_host",
+        ],
     ),
     console_view_entry = [
         consoles.console_view_entry(
@@ -79,6 +90,15 @@ ci.builder(
         build_gs_bucket = "chromium-fyi-archive",
         run_tests_serially = True,
     ),
+    gn_args = gn_args.config(
+        configs = [
+            "release_builder",
+            "reclient",
+            "fuchsia",
+            "asan",
+            "lsan",
+        ],
+    ),
     console_view_entry = [
         consoles.console_view_entry(
             branch_selector = branches.selector.MAIN,
@@ -110,6 +130,13 @@ ci.builder(
         ),
         build_gs_bucket = "chromium-fyi-archive",
         run_tests_serially = True,
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "debug_builder",
+            "reclient",
+            "fuchsia_smart_display",
+        ],
     ),
     console_view_entry = [
         consoles.console_view_entry(

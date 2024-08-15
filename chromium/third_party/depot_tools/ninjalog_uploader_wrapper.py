@@ -13,43 +13,43 @@ import ninjalog_uploader
 import subprocess2
 
 THIS_DIR = os.path.dirname(__file__)
-UPLOADER = os.path.join(THIS_DIR, 'ninjalog_uploader.py')
-CONFIG = os.path.join(THIS_DIR, 'ninjalog.cfg')
+UPLOADER = os.path.join(THIS_DIR, "ninjalog_uploader.py")
+CONFIG = os.path.join(THIS_DIR, "ninjalog.cfg")
 VERSION = 3
 
 
 def LoadConfig():
     if os.path.isfile(CONFIG):
-        with open(CONFIG, 'r') as f:
+        with open(CONFIG, "r") as f:
             try:
                 config = json.load(f)
             except Exception:
                 # Set default value when failed to load config.
                 config = {
-                    'is-googler': ninjalog_uploader.IsGoogler(),
-                    'countdown': 10,
-                    'version': VERSION,
+                    "is-googler": ninjalog_uploader.IsGoogler(),
+                    "countdown": 10,
+                    "version": VERSION,
                 }
 
-            if config['version'] == VERSION:
-                config['countdown'] = max(0, config['countdown'] - 1)
+            if config["version"] == VERSION:
+                config["countdown"] = max(0, config["countdown"] - 1)
                 return config
 
     return {
-        'is-googler': ninjalog_uploader.IsGoogler(),
-        'countdown': 10,
-        'version': VERSION,
+        "is-googler": ninjalog_uploader.IsGoogler(),
+        "countdown": 10,
+        "version": VERSION,
     }
 
 
 def SaveConfig(config):
-    with open(CONFIG, 'w') as f:
+    with open(CONFIG, "w") as f:
         json.dump(config, f)
 
 
 def ShowMessage(countdown):
-    allowlisted = '\n'.join(
-        ['  * %s' % config for config in ninjalog_uploader.ALLOWLISTED_CONFIGS])
+    allowlisted = "\n".join(
+        ["  * %s" % config for config in ninjalog_uploader.ALLOWLISTED_CONFIGS])
     print("""
 Your ninjalog will be uploaded to build stats server. The uploaded log will be
 used to analyze user side build performance.
@@ -78,27 +78,32 @@ You can find a more detailed explanation in
 or
 https://chromium.googlesource.com/chromium/tools/depot_tools/+/main/ninjalog.README.md
 
-""" % (allowlisted, countdown, __file__, __file__,
-       os.path.abspath(os.path.join(THIS_DIR, "ninjalog.README.md"))))
+""" % (
+        allowlisted,
+        countdown,
+        __file__,
+        __file__,
+        os.path.abspath(os.path.join(THIS_DIR, "ninjalog.README.md")),
+    ))
 
 
 def main():
     config = LoadConfig()
 
-    if len(sys.argv) == 2 and sys.argv[1] == 'opt-in':
-        config['opt-in'] = True
-        config['countdown'] = 0
+    if len(sys.argv) == 2 and sys.argv[1] == "opt-in":
+        config["opt-in"] = True
+        config["countdown"] = 0
         SaveConfig(config)
-        print('ninjalog upload is opted in.')
+        print("ninjalog upload is opted in.")
         return 0
 
-    if len(sys.argv) == 2 and sys.argv[1] == 'opt-out':
-        config['opt-in'] = False
+    if len(sys.argv) == 2 and sys.argv[1] == "opt-out":
+        config["opt-in"] = False
         SaveConfig(config)
-        print('ninjalog upload is opted out.')
+        print("ninjalog upload is opted out.")
         return 0
 
-    if 'opt-in' in config and not config['opt-in']:
+    if "opt-in" in config and not config["opt-in"]:
         # Upload is opted out.
         return 0
 
@@ -121,13 +126,15 @@ def main():
     # Run upload script without wait.
     devnull = open(os.devnull, "w")
     creationflags = 0
-    if platform.system() == 'Windows':
+    if platform.system() == "Windows":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess2.Popen([sys.executable, UPLOADER] + sys.argv[1:],
-                      stdout=devnull,
-                      stderr=devnull,
-                      creationflags=creationflags)
+    subprocess2.Popen(
+        [sys.executable, UPLOADER] + sys.argv[1:],
+        stdout=devnull,
+        stderr=devnull,
+        creationflags=creationflags,
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

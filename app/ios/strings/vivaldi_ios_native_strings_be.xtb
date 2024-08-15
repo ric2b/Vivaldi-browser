@@ -3,14 +3,19 @@
 <translationbundle lang="be">
 <translation id="1116694919640316211">Звесткі</translation>
 <translation id="1123707809902612118">Блакаванне сачэння і рэкламы</translation>
+<translation id="1254117744268754948">Абраць каталог</translation>
 <translation id="1410197035576869800">Значок праграмы</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> нататак</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Умовы выкарыстання ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Палітыка прыватнасці ➔<ph name="END_LINK2" /></translation>
 <translation id="1751280147639351837">Блакаванне сачэння і рэкламы</translation>
+<translation id="1771413903824396513">Па скарочанай назве</translation>
+<translation id="1804522390855853698">Кітайская (<ph name="ORIGIN" />)</translation>
 <translation id="2048247880942380698">Арабская (<ph name="ORIGIN" />)</translation>
+<translation id="2117093051794889870">Па змесце</translation>
 <translation id="2129408066358825297">Узрост</translation>
 <translation id="2272338747456392228">Акаўнт заблакаваны</translation>
 <translation id="2324160330092901720">Код пацвярджэння адпраўлены на <ph name="EMAIL_ID" /></translation>
+<translation id="2359808026110333948">Далей</translation>
 <translation id="2386793615875593361">Абрана 1</translation>
 <translation id="2392369802118427583">Актываваць</translation>
 <translation id="2558801801411970131">Заблакавана сачэння</translation>
@@ -18,30 +23,47 @@
 рэкламы</translation>
 <translation id="2709516037105925701">Аўтазапаўненне</translation>
 <translation id="3229182533910980085">Дадайце сваю першую закладку з дапамогай кнопкі "+" ніжэй</translation>
+<translation id="33451081266695216">Злучэнне абмежавана серверам.</translation>
+<translation id="3530991200302302959">Балгарская (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">Па даце</translation>
 <translation id="3845564230651302310">Ужыванне новых налад блакавання…</translation>
 <translation id="3894427358181296146">Дадаць каталог</translation>
 <translation id="4032606071208172574">(Прадвызначана)</translation>
+<translation id="4276839458685471670">Па даце стварэння</translation>
 <translation id="4316955624679873896">Закладка створана ў</translation>
+<translation id="4640946580087069269">Скапіяваць у нататкі</translation>
 <translation id="4654578955713250802">Блакаванне рэкламы і сачэння</translation>
 <translation id="4852383705713307704">Заблакавана
 рэкламы</translation>
 <translation id="4871370605780490696">Дадаць закладку</translation>
 <translation id="497942794017668482">Заблакавана сачэння і рэкламы</translation>
+<translation id="5037761343305489956">Скапіявана ў нататкі</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Паўторна адправіць код<ph name="END_LINK" /></translation>
+<translation id="5349678548463426691">Па апісанні</translation>
 <translation id="5350737901534958404">Дазволіць рэкламу нашых партнёраў (падтрымка Vivaldi)</translation>
 <translation id="5398772614898833570">Рэкламы заблакавана</translation>
+<translation id="5486261815000869482">Пацвердзіце пароль</translation>
 <translation id="5822336771053074270">Дадаць нататку</translation>
 <translation id="5871497086027727873">Перамешчана 1 нататка</translation>
 <translation id="614539368862754027">Перамешчана <ph name="NUMBER_OF_SELECTED_NOTES" /> нататак</translation>
 <translation id="6438416544409849235">Абрана <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Імпартаванне<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Рэзервовы ключ шыфравання</translation>
+<translation id="659351303388691480">Ачысціць даныя прагляду…</translation>
 <translation id="6614744450826097546">Звесткі пра рэкламу</translation>
+<translation id="6631760746795162665">Калумбійская (<ph name="ORIGIN" />)</translation>
 <translation id="6757792528048321576">Блакаванне сачэння і рэкламы</translation>
+<translation id="6830986331692390764">Выконваецца выдаленне даных сінхранізацыі. Калі ласка, пачакайце.</translation>
+<translation id="7215420652436283416">Па адрасе</translation>
+<translation id="7311118006561484338">Па загалоўку</translation>
 <translation id="7388525939184421699">Дадаць новую крыніцу</translation>
 <translation id="750493650310597496">Абрана 0</translation>
+<translation id="7525067979554623046">Стварыць</translation>
 <translation id="7574321014880720413">Дадаць сайт</translation>
+<translation id="7658239707568436148">Скасаваць</translation>
 <translation id="7801204999757211519">Ужо маеце акаўнт? <ph name="BEGIN_LINK" />Увайдзіце ➔<ph name="END_LINK" /></translation>
+<translation id="8008214489230610096">Пацвердзіце рэзервовы адрас электроннай пошты</translation>
+<translation id="8257908958623224237">Канфлікт з іншымі данымі кліента.</translation>
 <translation id="8458397775385147834">1 нататка выдалена</translation>
 <translation id="8517852590337319813">Актывуйце свой акаўнт</translation>
 <translation id="8677007239430848917">Дадайце сваю першую нататку з дапамогай кнопкі "+" ніжэй</translation>

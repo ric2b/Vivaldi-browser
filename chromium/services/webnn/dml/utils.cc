@@ -4,6 +4,7 @@
 
 #include "services/webnn/dml/utils.h"
 
+#include <string.h>
 #include <set>
 
 #include "base/bits.h"
@@ -18,6 +19,8 @@
 namespace webnn::dml {
 
 namespace {
+
+const char kBackendName[] = "DirectML: ";
 
 // Note that the element count is considered as 1 when the give dimensions is
 // empty.
@@ -196,6 +199,31 @@ void UploadBufferWithBarrier(CommandRecorder* command_recorder,
       CreateTransitionBarrier(dst_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST,
                               D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
   command_recorder->ResourceBarrier(barriers);
+}
+
+void ReadbackBufferWithBarrier(CommandRecorder* command_recorder,
+                               ComPtr<ID3D12Resource> readback_buffer,
+                               ComPtr<ID3D12Resource> default_buffer,
+                               size_t buffer_size) {
+  // Copy the data from source buffer to destination buffer.
+  D3D12_RESOURCE_BARRIER barriers[1];
+  barriers[0] = CreateTransitionBarrier(default_buffer.Get(),
+                                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+                                        D3D12_RESOURCE_STATE_COPY_SOURCE);
+  command_recorder->ResourceBarrier(barriers);
+  command_recorder->CopyBufferRegion(std::move(readback_buffer), 0,
+                                     default_buffer, 0, buffer_size);
+  // The bound resources should be in D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+  // state before the execution of RecordDispatch on the GPU.
+  barriers[0] = CreateTransitionBarrier(default_buffer.Get(),
+                                        D3D12_RESOURCE_STATE_COPY_SOURCE,
+                                        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+  command_recorder->ResourceBarrier(barriers);
+}
+
+mojom::ErrorPtr CreateError(mojom::Error::Code error_code,
+                            const std::string& error_message) {
+  return mojom::Error::New(error_code, kBackendName + error_message);
 }
 
 }  // namespace webnn::dml

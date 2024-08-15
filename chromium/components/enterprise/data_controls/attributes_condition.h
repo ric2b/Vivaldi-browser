@@ -24,12 +24,24 @@ namespace data_controls {
 // representation of the following JSON:
 // {
 //   urls: [string],
+//   incognito: bool,
+//   os_clipboard: bool,
 //   components: [ARC|CROSTINI|PLUGIN_VM|DRIVE|USB], <= CrOS only
 // }
 // This can represent either the `sources` or `destinations` fields of the
 // DataLeakPreventionRulesList policy (see sub-classes below).
 class AttributesCondition {
  public:
+  // Constants used to parse sub-dictionaries of Data Controls policies that
+  // should map to an AttributesCondition. If an attribute is not used outside
+  // of this class, declare it in the anonymous namespace instead.
+  static constexpr char kKeyUrls[] = "urls";
+  static constexpr char kKeyIncognito[] = "incognito";
+  static constexpr char kKeyOsClipboard[] = "os_clipboard";
+#if BUILDFLAG(IS_CHROMEOS)
+  static constexpr char kKeyComponents[] = "components";
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   explicit AttributesCondition(const base::Value::Dict& value);
   AttributesCondition(AttributesCondition&& other);
   ~AttributesCondition();
@@ -49,9 +61,31 @@ class AttributesCondition {
   bool ComponentMatches(Component component) const;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+  // Helpers that compare a given value from a destination/source context to its
+  // corresponding conditions.
+  bool IncognitoMatches(const absl::optional<bool>& incognito) const;
+  bool OsClipboardMatches(bool os_clipboard) const;
+
+  // Helpers to help check which attributes are meaningful to the condition.
+  bool is_os_clipboard_condition() const;
+
  private:
+  // These attributes represent tab-specific conditions, and are only evaluated
+  // for destinations/sources representing tabs. Attributes in a single
+  // `AttributesCondition` must all match for the condition to be triggered and
+  // as such have no precedence between each other. Null/empty values mean the
+  // corresponding attribute was not set in the JSON initializing this
+  // `AttributesCondition`, and such attributes are ignored.
   std::unique_ptr<url_matcher::URLMatcher> url_matcher_;
+  absl::optional<bool> incognito_;
+
+  // This attribute indicates the destination/source condition must/mustn't be
+  // the OS clipboard. It is always null for non-clipboard conditions.
+  absl::optional<bool> os_clipboard_;
+
 #if BUILDFLAG(IS_CHROMEOS)
+  // A destination/source must be in this set to pass the condition, unless the
+  // set is empty.
   std::set<Component> components_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 };

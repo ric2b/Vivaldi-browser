@@ -65,6 +65,7 @@ struct xnn_ukernel_gemm {
   uint8_t nr;
   uint8_t kr;
   uint8_t sr;
+  uint8_t kp;
 };
 
 struct xnn_ukernel_igemm {
@@ -175,6 +176,7 @@ struct xnn_operator {
   size_t output_width;
   size_t output_pixel_stride;
   void* output;
+  const void* quantization_params;
 
   union {
     // Pointer to allocated packed weights. Use this if weights_cache is NULL.
@@ -207,6 +209,8 @@ struct xnn_operator {
   uint32_t block_size;
 
   void* zero_buffer;
+  void** zero_buffers;
+  size_t zero_size;
   void* lookup_table;
   void* pixelwise_buffer;
   struct subconvolution_params* subconvolution_buffer;
@@ -214,6 +218,7 @@ struct xnn_operator {
 
   union {
     union xnn_f16_abs_params f16_abs;
+    union xnn_f16_default_params f16_default;
     union xnn_f16_f32_cvt_params f16_f32_cvt;
     union xnn_f16_hswish_params f16_hswish;
     union xnn_f16_elu_params f16_elu;
@@ -263,6 +268,7 @@ struct xnn_operator {
     union xnn_f32_qs8_cvt_params f32_qs8_cvt;
     union xnn_f32_qu8_cvt_params f32_qu8_cvt;
     union xnn_qs8_cvt_params qs8_cvt;
+    union xnn_qs8_f16_cvt_params qs8_f16_cvt;
     union xnn_qs8_f32_cvt_params qs8_f32_cvt;
     union xnn_qs16_qs8_cvt_params qs16_qs8_cvt;
     union xnn_qu8_cvt_params qu8_cvt;
@@ -315,9 +321,14 @@ struct xnn_operator {
   } params2;
   // Third set of params. Used by scaled dot attention operator.
   union {
+    union xnn_f16_default_params f16_rmax;
+    union xnn_f32_default_params f32_rmax;
+  } params3;
+  // Fourth set of params. Used by scaled dot attention operator.
+  union {
     union xnn_f16_tanh_params f16_tanh;
     union xnn_f32_tanh_params f32_tanh;
-  } params3;
+  } params4;
   size_t num_post_operation_params;
   void* post_operation_params;
   enum xnn_operator_type type;
@@ -357,6 +368,7 @@ struct xnn_operator {
     const struct xnn_x8_lut_config* lut_config;
     const struct xnn_cmul_config* cmul_config;
     const struct xnn_transpose_config* transpose_config;
+    const struct xnn_binary_elementwise_subconfig* binary_elementwise_subconfig;
     struct {
       const struct xnn_unary_elementwise_config* unary_elementwise_config;
       const struct xnn_reduce_config* rminmax_config;  // For dynamic quantization convert operator.
@@ -418,6 +430,7 @@ struct xnn_operator {
     struct transpose_context transpose;
     struct floating_point_softmax_context floating_point_softmax;
     struct u8_softmax_context u8_softmax;
+    struct f16_qd8_convert_context f16_qd8_convert;
     struct f32_qd8_convert_context f32_qd8_convert;
     struct univector_contiguous_context univector_contiguous;
     struct univector_strided_context univector_strided;

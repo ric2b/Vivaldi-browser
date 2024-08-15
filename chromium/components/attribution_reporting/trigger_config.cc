@@ -6,24 +6,25 @@
 
 #include <stdint.h>
 
-#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/check.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_tree.h"
 #include "base/feature_list.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "base/values.h"
-#include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/features.h"
+#include "components/attribution_reporting/parsing_utils.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/trigger_data_matching.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace attribution_reporting {
 
@@ -43,95 +44,59 @@ constexpr char kTriggerDataMatchingModulus[] = "modulus";
 // https://wicg.github.io/attribution-reporting-api/#max-distinct-trigger-data-per-source
 constexpr uint8_t kMaxTriggerDataPerSource = 32;
 
-base::expected<TriggerDataMatching, SourceRegistrationError>
-ParseTriggerDataMatching(const base::Value& value) {
-  const std::string* str = value.GetIfString();
-  if (!str) {
-    return base::unexpected(
-        SourceRegistrationError::kTriggerDataMatchingWrongType);
-  } else if (*str == kTriggerDataMatchingExact) {
-    return TriggerDataMatching::kExact;
-  } else if (*str == kTriggerDataMatchingModulus) {
-    return TriggerDataMatching::kModulus;
-  } else {
-    return base::unexpected(
-        SourceRegistrationError::kTriggerDataMatchingUnknownValue);
+constexpr uint32_t DefaultTriggerDataCardinality(SourceType source_type) {
+  switch (source_type) {
+    case SourceType::kNavigation:
+      return 8;
+    case SourceType::kEvent:
+      return 2;
   }
-}
-
-std::string SerializeTriggerDataMatching(TriggerDataMatching v) {
-  switch (v) {
-    case TriggerDataMatching::kExact:
-      return kTriggerDataMatchingExact;
-    case TriggerDataMatching::kModulus:
-      return kTriggerDataMatchingModulus;
-  }
-}
-
-void SerializeTriggerConfig(const TriggerConfig& config,
-                            base::Value::Dict& dict) {
-  dict.Set(kTriggerDataMatching,
-           SerializeTriggerDataMatching(config.trigger_data_matching()));
 }
 
 // If `dict` contains a valid "trigger_data" field, writes the resulting keys
-// into `trigger_data_indices` using `trigger_data_index` as the value.
+// into `trigger_data_indices` using `spec_index` as the value.
 // `trigger_data_indices` is also used to perform deduplication checks.
-[[nodiscard]] absl::optional<SourceRegistrationError> ParseTriggerData(
+base::expected<void, SourceRegistrationError> ParseTriggerData(
     const base::Value::Dict& dict,
     TriggerSpecs::TriggerDataIndices& trigger_data_indices,
-    const uint8_t trigger_data_index) {
+    const uint8_t spec_index) {
   const base::Value* value = dict.Find(kTriggerData);
   if (!value) {
-    return SourceRegistrationError::kTriggerSpecTriggerDataMissing;
+    return base::unexpected(
+        SourceRegistrationError::kTriggerSpecTriggerDataMissing);
   }
 
   const base::Value::List* list = value->GetIfList();
   if (!list) {
-    return SourceRegistrationError::kTriggerSpecTriggerDataWrongType;
+    return base::unexpected(
+        SourceRegistrationError::kTriggerSpecTriggerDataWrongType);
   }
 
   if (list->empty()) {
-    return SourceRegistrationError::kTriggerSpecTriggerDataEmpty;
+    return base::unexpected(
+        SourceRegistrationError::kTriggerSpecTriggerDataEmpty);
   }
 
-  if (list->size() + trigger_data_index > kMaxTriggerDataPerSource) {
-    return SourceRegistrationError::kExcessiveTriggerData;
+  if (list->size() + trigger_data_indices.size() > kMaxTriggerDataPerSource) {
+    return base::unexpected(SourceRegistrationError::kExcessiveTriggerData);
   }
 
   for (const base::Value& item : *list) {
-    // We use `base::Value::GetIfDouble()`, which coerces if the value is an
-    // integer, because trigger data values are `uint32_t`, but not all
-    // `uint32_t` can be represented by 32-bit `int`. We use `std::modf` to
-    // check that the fractional part of the `double` is 0.
-    //
-    // Assumes that all integers we care to support for trigger data (the full
-    // range of `uint32_t`) can be represented either by `int` or `double`, and
-    // that when represented internally by `base::Value` as an `int`, can be
-    // precisely represented by `double`.
-    //
-    // TODO(apaseltiner): Consider test coverage for all `uint32_t` values, or
-    // some kind of fuzzer.
-    absl::optional<double> double_value = item.GetIfDouble();
-    if (double int_part;
-        !double_value.has_value() || std::modf(*double_value, &int_part) != 0) {
-      return SourceRegistrationError::kTriggerSpecTriggerDataValueWrongType;
-    }
-
-    if (!base::IsValueInRangeForNumericType<uint32_t>(*double_value)) {
-      return SourceRegistrationError::kTriggerSpecTriggerDataValueOutOfRange;
-    }
-
-    uint32_t trigger_data = static_cast<uint32_t>(*double_value);
+    ASSIGN_OR_RETURN(
+        uint32_t trigger_data,
+        ParseUint32(
+            item,
+            SourceRegistrationError::kTriggerSpecTriggerDataValueWrongType,
+            SourceRegistrationError::kTriggerSpecTriggerDataValueOutOfRange));
 
     auto [_, inserted] =
-        trigger_data_indices.try_emplace(trigger_data, trigger_data_index);
+        trigger_data_indices.try_emplace(trigger_data, spec_index);
     if (!inserted) {
-      return SourceRegistrationError::kDuplicateTriggerData;
+      return base::unexpected(SourceRegistrationError::kDuplicateTriggerData);
     }
   }
 
-  return absl::nullopt;
+  return base::ok();
 }
 
 bool AreSpecsValid(const TriggerSpecs::TriggerDataIndices& trigger_data_indices,
@@ -163,48 +128,45 @@ bool AreSpecsValidForTriggerDataMatching(
 
 }  // namespace
 
-TriggerConfig::TriggerConfig() = default;
-
-TriggerConfig::TriggerConfig(TriggerDataMatching trigger_data_matching)
-    : trigger_data_matching_(trigger_data_matching) {}
-
-TriggerConfig::~TriggerConfig() = default;
-
-TriggerConfig::TriggerConfig(const TriggerConfig&) = default;
-
-TriggerConfig& TriggerConfig::operator=(const TriggerConfig&) = default;
-
-TriggerConfig::TriggerConfig(TriggerConfig&&) = default;
-
-TriggerConfig& TriggerConfig::operator=(TriggerConfig&&) = default;
-
-// static
-base::expected<TriggerConfig, SourceRegistrationError> TriggerConfig::Parse(
-    const base::Value::Dict& dict) {
+base::expected<TriggerDataMatching, SourceRegistrationError>
+ParseTriggerDataMatching(const base::Value::Dict& dict) {
   if (!base::FeatureList::IsEnabled(
           features::kAttributionReportingTriggerConfig)) {
-    return TriggerConfig();
+    return TriggerDataMatching::kModulus;
   }
 
-  TriggerConfig config;
-  if (const base::Value* value = dict.Find(kTriggerDataMatching)) {
-    ASSIGN_OR_RETURN(config.trigger_data_matching_,
-                     ParseTriggerDataMatching(*value));
+  const base::Value* value = dict.Find(kTriggerDataMatching);
+  if (!value) {
+    return TriggerDataMatching::kModulus;
   }
 
-  return config;
-}
-
-void TriggerConfig::Serialize(base::Value::Dict& dict) const {
-  if (base::FeatureList::IsEnabled(
-          features::kAttributionReportingTriggerConfig)) {
-    SerializeTriggerConfig(*this, dict);
+  const std::string* str = value->GetIfString();
+  if (!str) {
+    return base::unexpected(
+        SourceRegistrationError::kTriggerDataMatchingWrongType);
+  } else if (*str == kTriggerDataMatchingExact) {
+    return TriggerDataMatching::kExact;
+  } else if (*str == kTriggerDataMatchingModulus) {
+    return TriggerDataMatching::kModulus;
+  } else {
+    return base::unexpected(
+        SourceRegistrationError::kTriggerDataMatchingUnknownValue);
   }
 }
 
-void TriggerConfig::SerializeForTesting(base::Value::Dict& dict) const {
-  SerializeTriggerConfig(*this, dict);
+void Serialize(base::Value::Dict& dict,
+               TriggerDataMatching trigger_data_matching) {
+  switch (trigger_data_matching) {
+    case TriggerDataMatching::kExact:
+      dict.Set(kTriggerDataMatching, kTriggerDataMatchingExact);
+      break;
+    case TriggerDataMatching::kModulus:
+      dict.Set(kTriggerDataMatching, kTriggerDataMatchingModulus);
+      break;
+  }
 }
+
+TriggerSpec::TriggerSpec() = default;
 
 TriggerSpec::TriggerSpec(EventReportWindows event_report_windows)
     : event_report_windows_(std::move(event_report_windows)) {}
@@ -218,6 +180,25 @@ TriggerSpec& TriggerSpec::operator=(const TriggerSpec&) = default;
 TriggerSpec::TriggerSpec(TriggerSpec&&) = default;
 
 TriggerSpec& TriggerSpec::operator=(TriggerSpec&&) = default;
+
+TriggerSpecs::const_iterator TriggerSpecs::find(
+    uint64_t trigger_data,
+    TriggerDataMatching trigger_data_matching) const {
+  switch (trigger_data_matching) {
+    case TriggerDataMatching::kExact:
+      return Iterator(*this, trigger_data_indices_.find(trigger_data));
+    case TriggerDataMatching::kModulus:
+      // Prevent modulus-by-zero.
+      if (trigger_data_indices_.empty()) {
+        return end();
+      }
+      // `std::next()` is constant-time due to the underlying iterator being
+      // random-access.
+      return Iterator(*this,
+                      std::next(trigger_data_indices_.begin(),
+                                trigger_data % trigger_data_indices_.size()));
+  }
+}
 
 base::Value::Dict TriggerSpec::ToJson() const {
   base::Value::Dict dict;
@@ -260,11 +241,9 @@ base::expected<TriggerSpecs, SourceRegistrationError> TriggerSpecs::Parse(
       return base::unexpected(SourceRegistrationError::kTriggerSpecWrongType);
     }
 
-    if (absl::optional<SourceRegistrationError> error = ParseTriggerData(
-            *dict, trigger_data_indices,
-            /*trigger_data_index=*/base::checked_cast<uint8_t>(specs.size()))) {
-      return base::unexpected(*error);
-    }
+    RETURN_IF_ERROR(ParseTriggerData(
+        *dict, trigger_data_indices,
+        /*spec_index=*/base::checked_cast<uint8_t>(specs.size())));
 
     ASSIGN_OR_RETURN(auto event_report_windows,
                      EventReportWindows::ParseWindows(*dict, expiry,
@@ -303,6 +282,16 @@ TriggerSpecs TriggerSpecs::Default(SourceType source_type,
 }
 
 // static
+absl::optional<TriggerSpecs> TriggerSpecs::Create(
+    TriggerDataIndices trigger_data_indices,
+    std::vector<TriggerSpec> specs) {
+  if (!AreSpecsValid(trigger_data_indices, specs)) {
+    return absl::nullopt;
+  }
+  return TriggerSpecs(std::move(trigger_data_indices), std::move(specs));
+}
+
+// static
 TriggerSpecs TriggerSpecs::CreateForTesting(
     TriggerDataIndices trigger_data_indices,
     std::vector<TriggerSpec> specs) {
@@ -328,7 +317,11 @@ TriggerSpecs::TriggerSpecs(TriggerSpecs&&) = default;
 
 TriggerSpecs& TriggerSpecs::operator=(TriggerSpecs&&) = default;
 
-void TriggerSpecs::Serialize(base::Value::Dict& dict) const {
+const TriggerSpec* TriggerSpecs::SingleSharedSpec() const {
+  return specs_.size() == 1 ? &specs_[0] : nullptr;
+}
+
+base::Value::List TriggerSpecs::ToJson() const {
   base::Value::List spec_list;
   spec_list.reserve(specs_.size());
 
@@ -337,19 +330,17 @@ void TriggerSpecs::Serialize(base::Value::Dict& dict) const {
   }
 
   for (const auto& [trigger_data, index] : trigger_data_indices_) {
-    base::Value::List* trigger_data_list =
-        spec_list[index].GetDict().FindList(kTriggerData);
-
-    if (base::IsValueInRangeForNumericType<int>(trigger_data)) {
-      trigger_data_list->Append(static_cast<int>(trigger_data));
-    } else {
-      // This cast is safe because all `uint32_t` can be represented exactly by
-      // `double`.
-      trigger_data_list->Append(static_cast<double>(trigger_data));
-    }
+    spec_list[index]
+        .GetDict()
+        .FindList(kTriggerData)
+        ->Append(Uint32ToJson(trigger_data));
   }
 
-  dict.Set(kTriggerSpecs, std::move(spec_list));
+  return spec_list;
+}
+
+void TriggerSpecs::Serialize(base::Value::Dict& dict) const {
+  dict.Set(kTriggerSpecs, ToJson());
 }
 
 TriggerSpecs::Iterator::Iterator(const TriggerSpecs& specs,

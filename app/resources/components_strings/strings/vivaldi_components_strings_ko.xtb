@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" />와(과)의 연결이 예기치 않게 종료되었습니다.</translation>
 <translation id="1161325031994447685">Wi-Fi에 다시 연결</translation>
 <translation id="1175364870820465910">인쇄... (&amp;P)</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />쿠키 삭제해보기<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">버전 정보</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />에서 전송한 데이터가 없습니다.</translation>
 <translation id="1559528461873125649">해당 파일이나 디렉토리가 없습니다</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">시스템 관리자에게 문의하세요.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행해보기<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">이 사이트에 유해한 프로그램이 있습니다</translation>
-<translation id="1916770123977586577">이 사이트에 업데이트된 설정을 적용하려면 이 페이지를 새로고침하세요</translation>
 <translation id="1974060860693918893">세부정보</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />프록시 및 방화벽 확인<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">발급 대상: <ph name="ORGANIZATION" />[<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">공격자는 사용자가 이 사이트에서 보고 있는 이미지를 볼 수 있으며 이미지를 수정하여 사용자를 속일 수 있습니다.</translation>
 <translation id="2356070529366658676">확인</translation>
 <translation id="2359808026110333948">계속</translation>
+<translation id="2388886110302389394">새 시크릿 창에서 페이지 열기 (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />네트워크 진단 실행<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">확장 프로그램에서 차단한 페이지</translation>
 <translation id="2501278716633472235">이전으로</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">로그인</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />이(가) 차단됨</translation>
 <translation id="3987940399970879459">1MB 미만</translation>
+<translation id="4075123085690634698">새 시크릿 창에서 페이지 열기 (⇧⌘N)</translation>
 <translation id="4075732493274867456">클라이언트와 서버가 일반적인 SSL 프로토콜 버전 또는 암호화 제품군을 지원하지 않습니다.</translation>
 <translation id="4116663294526079822">이 사이트에서 항상 허용</translation>
 <translation id="4130226655945681476">네트워크 케이블, 모뎀, 라우터 확인</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">컴퓨터가 절전 모드 상태입니다.</translation>
 <translation id="6890956352250146925">쿠키 및 사이트 데이터 옵션</translation>
 <translation id="6897140037006041989">사용자 에이전트</translation>
+<translation id="6957624206566198865">새 시크릿 탭에서 페이지 열기</translation>
 <translation id="7053983685419859001">차단</translation>
 <translation id="7079718277001814089">이 사이트에 멀웨어가 있습니다</translation>
 <translation id="7096937462164235847">인증된 웹사이트가 아닙니다.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676"><ph name="SITE" />에서는 사용자 정보를 보호하기 위해 일반적으로 암호화를 사용합니다. 이번에 Vivaldi에서 <ph name="SITE" />에 연결을 시도했을 때 웹사이트에서 비정상적이고 잘못된 사용자 인증 정보를 반환했습니다. 이는 공격자가 <ph name="SITE" />인 것처럼 가장하려고 하거나 Wi-Fi 로그인 화면이 연결을 방해했기 때문일 수 있습니다. 데이터 교환이 발생하기 전에 Vivaldi에서 연결을 중단했으므로 사용자 정보는 안전합니다.</translation>
 <translation id="7878562273885520351">비밀번호가 유출될 수도 있음</translation>
 <translation id="7951415247503192394">(32비트)</translation>
+<translation id="7953236668995583915">이 페이지를 새로고침하여 이 사이트에 업데이트된 설정 적용</translation>
 <translation id="8025119109950072390">이 사이트의 공격자가 소프트웨어를 설치하거나 개인정보(예: 비밀번호, 전화번호, 신용카드)를 공개하는 등의 위험한 행동을 하도록 사용자를 속일 수 있습니다.</translation>
 <translation id="8037357227543935929">요청(기본값)</translation>
 <translation id="8041940743680923270">전체 기본값 사용(요청)</translation>

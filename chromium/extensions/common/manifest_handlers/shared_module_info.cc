@@ -35,6 +35,7 @@ namespace errors = manifest_errors;
 namespace {
 
 const char kSharedModule[] = "shared_module";
+const char kAllowlist[] = "allowlist";
 
 using ManifestKeys = api::shared_module::ManifestKeys;
 
@@ -129,6 +130,8 @@ SharedModuleHandler::SharedModuleHandler() = default;
 SharedModuleHandler::~SharedModuleHandler() = default;
 
 bool SharedModuleHandler::Parse(Extension* extension, std::u16string* error) {
+  CHECK(extension);
+  CHECK(error);
   ManifestKeys manifest_keys;
   if (!ManifestKeys::ParseFromDictionary(
           extension->manifest()->available_values(), manifest_keys, *error)) {
@@ -144,6 +147,17 @@ bool SharedModuleHandler::Parse(Extension* extension, std::u16string* error) {
   if (has_import && has_export) {
     *error = errors::kInvalidImportAndExport;
     return false;
+  }
+
+  // An empty allowlist results in any extension being able to import modules
+  // from this extension. Since the developer included the "allowlist" key,
+  // it implies they wanted to restrict it. Let them know that the empty
+  // list was probably a mistake.
+  if (has_export && manifest_keys.export_->allowlist &&
+      manifest_keys.export_->allowlist->empty()) {
+    extension->AddInstallWarning(
+        extensions::InstallWarning(errors::kInvalidExportAllowlistEmpty,
+                                   ManifestKeys::kExport, kAllowlist));
   }
 
   if (has_export && manifest_keys.export_->allowlist) {
@@ -164,6 +178,8 @@ bool SharedModuleHandler::Parse(Extension* extension, std::u16string* error) {
   if (has_import) {
     std::vector<SharedModuleInfo::ImportInfo> imports;
     imports.reserve(manifest_keys.import->size());
+    std::set<ExtensionId> unique_imports;
+    bool unique_imports_warning = false;
     for (size_t i = 0; i < manifest_keys.import->size(); i++) {
       auto& import = manifest_keys.import->at(i);
       if (!crx_file::id_util::IdIsValid(import.id)) {
@@ -185,7 +201,23 @@ bool SharedModuleHandler::Parse(Extension* extension, std::u16string* error) {
         import_info.minimum_version = std::move(*import.minimum_version);
       }
       imports.push_back(std::move(import_info));
+
+      // The extension system does not have a way to represent different
+      // module versions for the same importer. Repeats of a particular module
+      // ID may be interpreted as "requires a version satisfying both version
+      // strings", but this behavior is not specified. Warn the developer since
+      // this is likely a mistake.
+      if (!unique_imports_warning) {
+        if (unique_imports.contains(import.id)) {
+          unique_imports_warning = true;
+          extension->AddInstallWarning(InstallWarning(
+              errors::kInvalidImportRepeatedImport, ManifestKeys::kImport));
+        } else {
+          unique_imports.insert(import.id);
+        }
+      }
     }
+
     info->set_imports(std::move(imports));
   }
 

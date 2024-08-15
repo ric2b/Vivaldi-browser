@@ -251,13 +251,18 @@ class Sender final : public SenderPacketRouter::Sender,
   ChosenPacketAndWhen ChooseKickstartPacket();
 
   // Cancels sending (or resending) the given frame once it is known to have
-  // been either cancelled by the sender or fully received (e.g., based on the
-  // ACK feedback from the Receiver in a RTCP packet, or the receiver checkpoint
-  // frame). This clears the corresponding entry in `pending_frames_` and
+  // been either:
+  //   1. Cancelled by the sender (was_acked must be false);
+  //   2. Fully received based on the ACK feedback in a receiver RTCP report
+  //      (was_acked must be true);
+  //   3. The receiver sent a checkpoint frame ID (was_acked must be true).
+  //
+  // This clears the corresponding entry in `pending_frames_` and
   // adds `frame_id` to the list of pending cancellations to be dispatched as
-  // part of DispatchCancellations(). NOTE: every frame_id ends up being
-  // "cancelled" at least once.
-  void CancelPendingFrame(FrameId frame_id);
+  // part of DispatchCancellations().
+  //
+  // NOTE: Every frame_id ends up being "cancelled" at least once.
+  void CancelPendingFrame(FrameId frame_id, bool was_acked);
 
   // Must be called after one or a series of CancelPendingFrame() calls in order
   // to notify the observer, if any, about cancellations.

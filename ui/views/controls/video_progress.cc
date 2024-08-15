@@ -56,8 +56,10 @@ VideoProgress::VideoProgress() {
                                views::MaximumFlexSizeRule::kPreferred));
   progress_time_ = AddChildView(std::move(progress_time));
 
-  auto progress_bar =
-      std::make_unique<views::ProgressBar>(kProgressBarHeight, true);
+  auto progress_bar = std::make_unique<views::ProgressBar>();
+  progress_bar->SetPreferredHeight(kProgressBarHeight);
+  progress_bar->SetPreferredCornerRadii(
+      gfx::RoundedCornersF(kProgressBarHeight / 2));
   progress_bar->SetPaintToLayer(ui::LAYER_TEXTURED);
   progress_bar->layer()->SetName("VideoProgressControlsView");
   progress_bar->layer()->SetFillsBoundsOpaquely(false);

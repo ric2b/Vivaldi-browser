@@ -67,16 +67,13 @@ bool BuiltInRecovery::ShouldAttemptRecovery(Database* database,
 }
 
 // static
-SqliteResultCode BuiltInRecovery::RecoverDatabase(
-    Database* database,
-    Strategy strategy,
-    std::string database_uma_name) {
+SqliteResultCode BuiltInRecovery::RecoverDatabase(Database* database,
+                                                  Strategy strategy) {
   if (!BuiltInRecovery::IsSupported()) {
     return SqliteResultCode::kAbort;
   }
 
-  auto recovery =
-      BuiltInRecovery(database, strategy, std::move(database_uma_name));
+  auto recovery = BuiltInRecovery(database, strategy);
   return recovery.RecoverAndReplaceDatabase();
 }
 
@@ -85,8 +82,7 @@ bool BuiltInRecovery::RecoverIfPossible(
     Database* database,
     int extended_error,
     Strategy strategy,
-    const base::Feature* const use_builtin_recovery_if_supported_flag,
-    std::string database_uma_name) {
+    const base::Feature* const use_builtin_recovery_if_supported_flag) {
   // If `BuiltInRecovery` is supported at all, check the flag for this specific
   // database, provided by the feature team.
   bool use_builtin_recovery =
@@ -98,6 +94,7 @@ bool BuiltInRecovery::RecoverIfPossible(
           ? !BuiltInRecovery::ShouldAttemptRecovery(database, extended_error)
           : !database || !database->is_open() ||
                 database->DbPath(InternalApiToken()).empty() ||
+                database->UseWALMode() ||
                 !Recovery::ShouldRecover(extended_error)) {
     return false;
   }
@@ -109,8 +106,7 @@ bool BuiltInRecovery::RecoverIfPossible(
 
   if (use_builtin_recovery) {
     CHECK(BuiltInRecovery::IsSupported());
-    auto result =
-        BuiltInRecovery::RecoverDatabase(database, strategy, database_uma_name);
+    auto result = BuiltInRecovery::RecoverDatabase(database, strategy);
     if (!IsSqliteSuccessCode(result)) {
       DLOG(ERROR) << "Database recovery failed with result code: " << result;
     }
@@ -130,14 +126,10 @@ bool BuiltInRecovery::RecoverIfPossible(
   return true;
 }
 
-BuiltInRecovery::BuiltInRecovery(Database* database,
-                                 Strategy strategy,
-                                 std::string database_uma_name)
+BuiltInRecovery::BuiltInRecovery(Database* database, Strategy strategy)
     : strategy_(strategy),
-      database_uma_name_(std::move(database_uma_name)),
       db_(database),
       recover_db_(sql::DatabaseOptions{
-          .exclusive_locking = false,
           .page_size = database ? database->page_size() : 0,
           .cache_size = 0,
       }) {
@@ -153,6 +145,9 @@ BuiltInRecovery::BuiltInRecovery(Database* database,
 
   // Corruption recovery for in-memory databases is not supported.
   CHECK(!db_path.empty());
+
+  // Cache the database's histogram tag while the database is open.
+  database_uma_name_ = db_->histogram_tag();
 
   recovery_database_path_ = db_path.AddExtensionASCII(".recovery");
 

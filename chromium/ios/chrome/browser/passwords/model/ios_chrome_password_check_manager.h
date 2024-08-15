@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_PASSWORDS_MODEL_IOS_CHROME_PASSWORD_CHECK_MANAGER_H_
 #define IOS_CHROME_BROWSER_PASSWORDS_MODEL_IOS_CHROME_PASSWORD_CHECK_MANAGER_H_
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -13,6 +15,7 @@
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_service.h"
+#include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
 #include "components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
@@ -53,7 +56,7 @@ class IOSChromePasswordCheckManager
   };
 
   // Requests to start a check for insecure passwords.
-  void StartPasswordCheck();
+  void StartPasswordCheck(password_manager::LeakDetectionInitiator initiator);
 
   // Stops checking for insecure passwords.
   void StopPasswordCheck();
@@ -62,7 +65,7 @@ class IOSChromePasswordCheckManager
   PasswordCheckState GetPasswordCheckState() const;
 
   // The elapsed time since one of the insecure checks was last performed.
-  absl::optional<base::Time> GetLastPasswordCheckTime() const;
+  std::optional<base::Time> GetLastPasswordCheckTime() const;
 
   // Obtains all insecure credentials that are present in the password store.
   std::vector<password_manager::CredentialUIEntry> GetInsecureCredentials()
@@ -149,10 +152,14 @@ class IOSChromePasswordCheckManager
   base::Time start_time_;
 
   // Store when the last weak or reuse check was completed.
-  absl::optional<base::Time> last_completed_weak_or_reuse_check_;
+  std::optional<base::Time> last_completed_weak_or_reuse_check_;
 
   // Pref service.
   const raw_ptr<PrefService> user_prefs_;
+
+  // This indicate what was the reason to start the password check.
+  password_manager::LeakDetectionInitiator password_check_initiator_ =
+      password_manager::LeakDetectionInitiator::kClientUseCaseUnspecified;
 
   // A scoped observer for `saved_passwords_presenter_`.
   base::ScopedObservation<password_manager::SavedPasswordsPresenter,

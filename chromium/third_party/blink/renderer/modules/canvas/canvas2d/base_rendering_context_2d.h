@@ -25,8 +25,13 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
+#include "third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+
+namespace ui {
+class ColorProvider;
+}  // namespace ui
 
 namespace blink {
 
@@ -37,6 +42,9 @@ class CanvasColorCache;
 class CanvasImageSource;
 class Color;
 class Image;
+class Mesh2DVertexBuffer;
+class Mesh2DUVBuffer;
+class Mesh2DIndexBuffer;
 class OffscreenCanvas;
 class Path2D;
 class TextMetrics;
@@ -117,7 +125,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                   ExceptionState& exception_state);
   // Pop state stack if top state was pushed by beginLayer, restore state and draw the bitmap.
   void endLayer(ExceptionState& exception_state);
-  void reset();          // Called by the javascript interface
+  virtual void reset();  // Called by the javascript interface
   void ResetInternal();  // Called from within blink
 
   void scale(double sx, double sy);
@@ -158,11 +166,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   bool isPointInStroke(const double x, const double y);
   bool isPointInStroke(Path2D*, const double x, const double y);
 
-  void clearRect(double x,
-                 double y,
-                 double width,
-                 double height,
-                 bool for_reset = false);
+  void clearRect(double x, double y, double width, double height);
   void fillRect(double x, double y, double width, double height);
   void strokeRect(double x, double y, double width, double height);
 
@@ -217,6 +221,18 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   CanvasPattern* createPattern(CanvasImageSource*,
                                const String& repetition_type,
                                ExceptionState&);
+
+  Mesh2DVertexBuffer* createMesh2DVertexBuffer(NotShared<DOMFloat32Array>,
+                                               ExceptionState&);
+  Mesh2DUVBuffer* createMesh2DUVBuffer(NotShared<DOMFloat32Array>,
+                                       ExceptionState&);
+  Mesh2DIndexBuffer* createMesh2DIndexBuffer(NotShared<DOMUint16Array>,
+                                             ExceptionState&);
+  void drawMesh(const Mesh2DVertexBuffer* vertex_buffer,
+                const Mesh2DUVBuffer* uv_buffer,
+                const Mesh2DIndexBuffer* index_buffer,
+                const V8CanvasImageSource* image,
+                ExceptionState&);
 
   ImageData* createImageData(ImageData*, ExceptionState&) const;
   ImageData* createImageData(int sw, int sh, ExceptionState&) const;
@@ -276,6 +292,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
     return const_cast<BaseRenderingContext2D*>(this)->GetPaintCanvas();
   }
   virtual cc::PaintCanvas* GetPaintCanvas() = 0;
+
+  // Returns the paint ops recorder this context uses. Can be `nullptr` if no
+  // recorder is available.
+  virtual MemoryManagedPaintRecorder* Recorder() = 0;
 
   // Called when about to draw. When this is called GetPaintCanvas() has already
   // been called and returned a non-null value.
@@ -448,7 +468,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   void WillUseCurrentFont() const;
   virtual bool WillSetFont() const;
-  virtual bool ResolveFont(const String& new_font);
+  virtual bool ResolveFont(const String& new_font) = 0;
   virtual bool CurrentFontResolvedAndUpToDate() const;
 
   explicit BaseRenderingContext2D(
@@ -550,7 +570,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   virtual bool IsPaint2D() const { return false; }
   void WillOverwriteCanvas(OverdrawOp);
-  virtual void WillOverwriteCanvas() = 0;
 
   void SetColorScheme(mojom::blink::ColorScheme color_scheme) {
     if (color_scheme == color_scheme_) {
@@ -562,6 +581,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
     }
     color_scheme_ = color_scheme;
   }
+
+  // Returns the color provider stored in the Page via the Document.
+  const ui::ColorProvider* GetColorProvider() const;
 
   bool context_restorable_{true};
   CanvasRenderingContext::LostContextMode context_lost_mode_{
@@ -695,7 +717,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
     return false;
   }
 
-  virtual void FlushCanvas(FlushReason) = 0;
+  virtual absl::optional<cc::PaintRecord> FlushCanvas(FlushReason) = 0;
 
   // Only call if identifiability_study_helper_.ShouldUpdateBuilder() returns
   // true.
@@ -712,6 +734,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   // Parses the string as a color and returns the result of parsing.
   ColorParseResult ParseColorOrCurrentColor(const String& color_string,
                                             Color& color) const;
+
+  cc::PaintFlags GetClearFlags() const;
 
   bool origin_tainted_by_content_;
   UsePaintCache path2d_use_paint_cache_;

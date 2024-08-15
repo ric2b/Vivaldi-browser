@@ -21,7 +21,7 @@ import {
   describeWithMockConnection,
   dispatchEvent,
 } from '../../../helpers/MockConnection.js';
-import {getHeaderCells, getValuesOfAllBodyRows} from '../../../ui/components/DataGridHelpers.js';
+import {assertGridContents} from '../../../ui/components/DataGridHelpers.js';
 
 const {assert} = chai;
 
@@ -32,21 +32,6 @@ const zip2 = <T, S>(xs: T[], ys: S[]): [T, S][] => {
 
   return Array.from(xs.map((_, i) => [xs[i], ys[i]]));
 };
-
-function assertGridContents(gridComponent: HTMLElement, headerExpected: string[], rowsExpected: string[][]) {
-  const controller = getElementWithinComponent(
-      gridComponent, 'devtools-data-grid-controller', DataGrid.DataGridController.DataGridController);
-  const grid = getElementWithinComponent(controller, 'devtools-data-grid', DataGrid.DataGrid.DataGrid);
-  assertShadowRoot(grid.shadowRoot);
-
-  const headerGot = Array.from(getHeaderCells(grid.shadowRoot), cell => {
-    assertNotNullOrUndefined(cell.textContent);
-    return cell.textContent.trim();
-  });
-  const rowsGot = getValuesOfAllBodyRows(grid.shadowRoot).map(row => row.map(cell => cell.trim()));
-
-  assert.deepEqual([headerGot, rowsGot], [headerExpected, rowsExpected]);
-}
 
 // Holds targets and ids, and emits events.
 class NavigationEmulator {
@@ -292,10 +277,10 @@ function createAttemptView(target: SDK.Target.Target): Resources.PreloadingView.
   return view;
 }
 
-function createResultView(target: SDK.Target.Target): Resources.PreloadingView.PreloadingResultView {
+function createSummaryView(target: SDK.Target.Target): Resources.PreloadingView.PreloadingSummaryView {
   const model = target.model(SDK.PreloadingModel.PreloadingModel);
   assertNotNullOrUndefined(model);
-  const view = new Resources.PreloadingView.PreloadingResultView(model);
+  const view = new Resources.PreloadingView.PreloadingSummaryView(model);
   const container = new UI.Widget.VBox();
   const div = document.createElement('div');
   renderElementIntoDOM(div);
@@ -960,11 +945,11 @@ describeWithMockConnection('PreloadingAttemptView', async () => {
   });
 });
 
-describeWithMockConnection('PreloadingResultView', async () => {
+describeWithMockConnection('PreloadingSummaryView', async () => {
   it('shows information of preloading of the last page', async () => {
     const emulator = new NavigationEmulator();
     await emulator.openDevTools();
-    const view = createResultView(emulator.primaryTarget);
+    const view = createSummaryView(emulator.primaryTarget);
 
     await emulator.navigateAndDispatchEvents('');
     await emulator.addSpecRules(`

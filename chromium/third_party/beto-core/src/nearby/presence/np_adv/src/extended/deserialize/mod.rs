@@ -14,13 +14,14 @@
 
 //! Deserialization for V1 advertisement contents
 
+#[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
 
+#[cfg(any(test, feature = "alloc", feature = "devtools"))]
 use alloc::vec::Vec;
 use core::array::TryFromSliceError;
-use core::borrow::Borrow;
-use core::slice;
 
+use core::fmt::Debug;
 use nom::{branch, bytes, combinator, error, multi, number, sequence};
 use strum::IntoEnumIterator as _;
 
@@ -28,23 +29,31 @@ use array_view::ArrayView;
 use crypto_provider::CryptoProvider;
 use np_hkdf::v1_salt::{self, V1Salt};
 
-use crate::extended::NP_V1_ADV_MAX_SECTION_COUNT;
+use crate::array_vec::ArrayVecOption;
+#[cfg(any(feature = "devtools", test))]
+use crate::credential::v1::V1DiscoveryCryptoMaterial;
+use crate::credential::v1::V1;
+use crate::deserialization_arena::ArenaOutOfSpace;
+#[cfg(any(feature = "devtools", test))]
+use crate::deserialization_arena::DeserializationArenaAllocator;
+#[cfg(test)]
+use crate::extended::deserialize::encrypted_section::IdentityResolutionOrDeserializationError;
+use crate::extended::{NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT, NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT};
 use crate::{
-    credential::{v1::*, V1Credential},
     de_type::{EncryptedIdentityDataElementType, IdentityDataElementType},
     extended::{
         data_elements::{MIC_ENCRYPTION_SCHEME, SIGNATURE_ENCRYPTION_SCHEME},
         de_type::{DeType, ExtendedDataElementType as _},
         deserialize::encrypted_section::{
-            MicEncryptedSection, MicEncryptedSectionDeserializationError,
-            SignatureEncryptedSection, SignatureEncryptedSectionDeserializationError,
+            DeserializationError, EncryptedSectionContents, MicEncryptedSection,
+            MicVerificationError, SignatureEncryptedSection, SignatureVerificationError,
         },
-        to_array_view, DeLength, ENCRYPTION_INFO_DE_TYPE, METADATA_KEY_LEN, NP_ADV_MAX_SECTION_LEN,
+        DeLength, ENCRYPTION_INFO_DE_TYPE, METADATA_KEY_LEN, NP_ADV_MAX_SECTION_LEN,
     },
-    PlaintextIdentityMode, V1Header,
+    HasIdentityMatch, MetadataKey, PlaintextIdentityMode, V1Header,
 };
 
-mod encrypted_section;
+pub(crate) mod encrypted_section;
 
 #[cfg(test)]
 mod parse_tests;
@@ -57,33 +66,52 @@ mod test_stubs;
 
 /// Parse into [IntermediateSection]s, exposing the underlying parsing errors.
 /// Consumes all of `adv_body`.
-pub(crate) fn parse_sections<'a, 'h: 'a>(
-    adv_header: &'h V1Header,
-    adv_body: &'a [u8],
-) -> Result<Vec<IntermediateSection<'a>>, nom::Err<error::Error<&'a [u8]>>> {
-    combinator::all_consuming(multi::many_m_n(
-        1,
-        NP_V1_ADV_MAX_SECTION_COUNT,
-        IntermediateSection::parser_with_header(adv_header),
-    ))(adv_body)
+pub(crate) fn parse_sections(
+    adv_header: V1Header,
+    adv_body: &[u8],
+) -> Result<
+    ArrayVecOption<IntermediateSection, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT>,
+    nom::Err<error::Error<&[u8]>>,
+> {
+    combinator::all_consuming(branch::alt((
+        // Public advertisement
+        multi::fold_many_m_n(
+            1,
+            NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
+            IntermediateSection::parser_public_section(),
+            ArrayVecOption::default,
+            |mut acc, item| {
+                acc.push(item);
+                acc
+            },
+        ),
+        // Encrypted advertisement
+        multi::fold_many_m_n(
+            1,
+            NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
+            IntermediateSection::parser_encrypted_with_header(adv_header),
+            ArrayVecOption::default,
+            |mut acc, item| {
+                acc.push(item);
+                acc
+            },
+        ),
+    )))(adv_body)
     .map(|(_rem, sections)| sections)
 }
 
 /// A partially processed section that hasn't been decrypted (if applicable) yet.
 #[derive(PartialEq, Eq, Debug)]
-// sections are large because they have a stack allocated buffer for the whole section
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum IntermediateSection<'a> {
     /// A section that was not encrypted, e.g. a public identity or no-identity section.
-    Plaintext(PlaintextSection),
+    Plaintext(PlaintextSection<'a>),
     /// A section whose contents were encrypted, e.g. a private identity section.
     Ciphertext(CiphertextSection<'a>),
 }
 
 impl<'a> IntermediateSection<'a> {
-    fn parser_with_header(
-        adv_header: &'a V1Header,
-    ) -> impl Fn(&'a [u8]) -> nom::IResult<&[u8], IntermediateSection> {
+    fn parser_public_section(
+    ) -> impl Fn(&'a [u8]) -> nom::IResult<&'a [u8], IntermediateSection<'a>> {
         move |adv_body| {
             let (remaining, section_contents_len) =
                 combinator::verify(number::complete::u8, |sec_len| {
@@ -92,29 +120,42 @@ impl<'a> IntermediateSection<'a> {
 
             // Section structure possibilities:
             // - Public Identity DE, all other DEs
-            // - No identity DE, all other DEs (including Salt, excluding identity DEs)
-            // - Encryption information, non-public Identity header, ciphertext
-            // - MIC, encryption information, non-public Identity header, ciphertext
-
             let parse_public_identity = combinator::map(
                 // 1 starting offset because of public identity before it
-                sequence::tuple((PublicIdentity::parse, parse_non_identity_des(1))),
+                sequence::tuple((PublicIdentity::parse, nom::combinator::rest)),
                 // move closure to copy section_len into scope
-                move |(_identity, des)| {
+                move |(_identity, rest)| {
                     IntermediateSection::Plaintext(PlaintextSection::new(
                         PlaintextIdentityMode::Public,
-                        SectionContents::new(/* section_header */ section_contents_len, &des),
+                        SectionContents::new(
+                            /* section_header */ section_contents_len,
+                            rest,
+                            1,
+                        ),
                     ))
                 },
             );
+            combinator::map_parser(
+                bytes::complete::take(section_contents_len),
+                // Guarantee we consume all of the section (not all of the adv body)
+                // Note: `all_consuming` should never fail, since we used the `rest` parser above.
+                combinator::all_consuming(parse_public_identity),
+            )(remaining)
+        }
+    }
 
-            // 0 starting offset because there's no identity DE
-            let parse_no_identity_de = combinator::map(parse_non_identity_des(0), move |des| {
-                IntermediateSection::Plaintext(PlaintextSection::new(
-                    PlaintextIdentityMode::None,
-                    SectionContents::new(/* section_header */ section_contents_len, &des),
-                ))
-            });
+    fn parser_encrypted_with_header(
+        adv_header: V1Header,
+    ) -> impl Fn(&'a [u8]) -> nom::IResult<&[u8], IntermediateSection> {
+        move |adv_body| {
+            let (remaining, section_contents_len) =
+                combinator::verify(number::complete::u8, |sec_len| {
+                    *sec_len as usize <= NP_ADV_MAX_SECTION_LEN && *sec_len as usize > 0
+                })(adv_body)?;
+
+            // Section structure possibilities:
+            // - Encryption information, non-public Identity header, ciphertext
+            // - Encryption information, non-public Identity header, ciphertext, MIC
 
             let parse_encrypted_identity = combinator::map(
                 sequence::tuple((
@@ -139,11 +180,13 @@ impl<'a> IntermediateSection<'a> {
                     let to_skip = identity.header_bytes.len();
                     IntermediateSection::Ciphertext(CiphertextSection::SignatureEncryptedIdentity(
                         SignatureEncryptedSection {
-                            section_header: section_contents_len,
-                            adv_header,
-                            encryption_info,
-                            identity,
-                            all_ciphertext: &identity_and_ciphertext[to_skip..],
+                            contents: EncryptedSectionContents::new(
+                                adv_header,
+                                section_contents_len,
+                                encryption_info,
+                                identity,
+                                &identity_and_ciphertext[to_skip..],
+                            ),
                         },
                     ))
                 },
@@ -179,14 +222,16 @@ impl<'a> IntermediateSection<'a> {
                     let to_skip = identity.header_bytes.len();
                     IntermediateSection::Ciphertext(CiphertextSection::MicEncryptedIdentity(
                         MicEncryptedSection {
-                            section_header: section_contents_len,
-                            adv_header,
+                            contents: EncryptedSectionContents::new(
+                                adv_header,
+                                section_contents_len,
+                                encryption_info,
+                                identity,
+                                &identity_and_ciphertext[to_skip..],
+                            ),
                             mic: mic.try_into().unwrap_or_else(|_| {
                                 panic!("{} is a valid length", SectionMic::CONTENTS_LEN)
                             }),
-                            encryption_info,
-                            identity,
-                            all_ciphertext: &identity_and_ciphertext[to_skip..],
                         },
                     ))
                 },
@@ -198,8 +243,6 @@ impl<'a> IntermediateSection<'a> {
                 combinator::all_consuming(branch::alt((
                     parse_mic_encrypted_identity,
                     parse_encrypted_identity,
-                    parse_public_identity,
-                    parse_no_identity_de,
                 ))),
             )(remaining)
         }
@@ -207,61 +250,59 @@ impl<'a> IntermediateSection<'a> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-struct SectionContents {
+struct SectionContents<'adv> {
     section_header: u8,
-    de_data: ArrayView<u8, NP_ADV_MAX_SECTION_LEN>,
-    data_elements: Vec<OffsetDataElement>,
+    de_region_excl_identity: &'adv [u8],
+    data_element_start_offset: u8,
 }
 
-impl SectionContents {
-    fn new(section_header: u8, data_elements: &[RefDataElement]) -> Self {
-        let (data_elements, de_data) = convert_data_elements(data_elements);
-
-        Self { section_header, de_data, data_elements }
+impl<'adv> SectionContents<'adv> {
+    fn new(
+        section_header: u8,
+        de_region_excl_identity: &'adv [u8],
+        data_element_start_offset: u8,
+    ) -> Self {
+        Self { section_header, de_region_excl_identity, data_element_start_offset }
     }
 
-    fn data_elements(&'_ self) -> DataElements<'_> {
-        DataElements { de_iter: self.data_elements.iter(), de_data: &self.de_data }
-    }
-}
-
-/// An iterator over data elements in a V1 section
-// A concrete type to make it easy to refer to in return types where opaque types aren't available.
-pub struct DataElements<'a> {
-    de_iter: slice::Iter<'a, OffsetDataElement>,
-    de_data: &'a ArrayView<u8, NP_ADV_MAX_SECTION_LEN>,
-}
-
-impl<'a> Iterator for DataElements<'a> {
-    type Item = DataElement<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.de_iter.next().map(|de| DataElement { de_data: self.de_data, de })
+    fn iter_data_elements(&self) -> DataElementParsingIterator<'adv> {
+        DataElementParsingIterator {
+            input: self.de_region_excl_identity,
+            offset: self.data_element_start_offset,
+        }
     }
 }
 
 /// A section deserialized from a V1 advertisement.
-pub trait Section {
+pub trait Section<'adv, E: Debug> {
     /// The iterator type used to iterate over data elements
-    type Iterator<'a>: Iterator<Item = DataElement<'a>>
-    where
-        Self: 'a;
+    type Iterator: Iterator<Item = Result<DataElement<'adv>, E>>;
 
     /// Iterator over the data elements in a section, except for any DEs related to resolving the
     /// identity or otherwise validating the payload (e.g. MIC, Signature, any identity DEs like
     /// Private Identity).
-    fn data_elements(&'_ self) -> Self::Iterator<'_>;
+    fn iter_data_elements(&self) -> Self::Iterator;
+
+    /// Collects the data elements into a vector, eagerly catching and resolving any errors during
+    /// parsing.
+    #[cfg(any(test, feature = "alloc"))]
+    fn collect_data_elements(&self) -> Result<Vec<DataElement<'adv>>, E>
+    where
+        Self: Sized,
+    {
+        self.iter_data_elements().collect()
+    }
 }
 
 /// A plaintext section deserialized from a V1 advertisement.
 #[derive(PartialEq, Eq, Debug)]
-pub struct PlaintextSection {
+pub struct PlaintextSection<'adv> {
     identity: PlaintextIdentityMode,
-    contents: SectionContents,
+    contents: SectionContents<'adv>,
 }
 
-impl PlaintextSection {
-    fn new(identity: PlaintextIdentityMode, contents: SectionContents) -> Self {
+impl<'adv> PlaintextSection<'adv> {
+    fn new(identity: PlaintextIdentityMode, contents: SectionContents<'adv>) -> Self {
         Self { identity, contents }
     }
 
@@ -274,11 +315,11 @@ impl PlaintextSection {
     }
 }
 
-impl Section for PlaintextSection {
-    type Iterator<'a>  = DataElements<'a> where Self: 'a;
+impl<'adv> Section<'adv, DataElementParseError> for PlaintextSection<'adv> {
+    type Iterator = DataElementParsingIterator<'adv>;
 
-    fn data_elements(&'_ self) -> Self::Iterator<'_> {
-        self.contents.data_elements()
+    fn iter_data_elements(&self) -> Self::Iterator {
+        self.contents.iter_data_elements()
     }
 }
 
@@ -300,23 +341,29 @@ impl<C: CryptoProvider> From<RawV1Salt> for V1Salt<C> {
     }
 }
 
-/// The decrypted contents of a ciphertext section.
-#[derive(Debug, PartialEq, Eq)]
-pub struct DecryptedSection {
-    identity_type: EncryptedIdentityDataElementType,
-    verification_mode: VerificationMode,
-    metadata_key: [u8; METADATA_KEY_LEN],
-    salt: RawV1Salt,
-    contents: SectionContents,
+impl<C: CryptoProvider> From<V1Salt<C>> for RawV1Salt {
+    fn from(salt: V1Salt<C>) -> Self {
+        RawV1Salt(salt.into_array())
+    }
 }
 
-impl DecryptedSection {
+/// Fully-parsed and verified decrypted contents from an encrypted section.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DecryptedSection<'adv> {
+    identity_type: EncryptedIdentityDataElementType,
+    verification_mode: VerificationMode,
+    metadata_key: MetadataKey,
+    salt: RawV1Salt,
+    contents: SectionContents<'adv>,
+}
+
+impl<'adv> DecryptedSection<'adv> {
     fn new(
         identity_type: EncryptedIdentityDataElementType,
         verification_mode: VerificationMode,
-        metadata_key: [u8; 16],
+        metadata_key: MetadataKey,
         salt: RawV1Salt,
-        contents: SectionContents,
+        contents: SectionContents<'adv>,
     ) -> Self {
         Self { identity_type, verification_mode, metadata_key, salt, contents }
     }
@@ -331,22 +378,24 @@ impl DecryptedSection {
         self.verification_mode
     }
 
-    /// The decrypted metadata key from the identity DE.
-    pub fn metadata_key(&self) -> &[u8; 16] {
-        &self.metadata_key
-    }
-
     /// The salt used for decryption of this advertisement.
     pub fn salt(&self) -> RawV1Salt {
         self.salt
     }
 }
 
-impl Section for DecryptedSection {
-    type Iterator<'a>  = DataElements<'a> where Self: 'a;
+impl<'adv> HasIdentityMatch for DecryptedSection<'adv> {
+    type Version = V1;
+    fn metadata_key(&self) -> MetadataKey {
+        self.metadata_key
+    }
+}
 
-    fn data_elements(&'_ self) -> Self::Iterator<'_> {
-        self.contents.data_elements()
+impl<'adv> Section<'adv, DataElementParseError> for DecryptedSection<'adv> {
+    type Iterator = DataElementParsingIterator<'adv>;
+
+    fn iter_data_elements(&self) -> Self::Iterator {
+        self.contents.iter_data_elements()
     }
 }
 
@@ -357,96 +406,208 @@ pub(crate) enum CiphertextSection<'a> {
 }
 
 impl<'a> CiphertextSection<'a> {
-    pub(crate) fn try_deserialize<'c, C, P>(
+    /// Tries to match this section's identity using the given crypto-material,
+    /// and if successful, tries to decrypt this section.
+    #[cfg(test)]
+    pub(crate) fn try_resolve_identity_and_deserialize<C, P>(
         &'a self,
-        credential: &'c C,
-    ) -> Result<DecryptedSection, SectionDeserializeError>
+        allocator: &mut DeserializationArenaAllocator<'a>,
+        crypto_material: &C,
+    ) -> Result<DecryptedSection<'a>, SectionDeserializeError>
     where
-        C: V1Credential,
+        C: V1DiscoveryCryptoMaterial,
         P: CryptoProvider,
     {
-        let crypto_material = credential.crypto_material();
         match self {
-            Self::SignatureEncryptedIdentity(contents) => {
+            CiphertextSection::SignatureEncryptedIdentity(contents) => {
                 let identity_resolution_material =
                     crypto_material.signed_identity_resolution_material::<P>();
                 let verification_material = crypto_material.signed_verification_material::<P>();
 
                 contents
-                    .try_deserialize::<P>(
-                        identity_resolution_material.borrow(),
+                    .try_resolve_identity_and_deserialize::<P>(
+                        allocator,
+                        &identity_resolution_material,
                         &verification_material,
                     )
-                    .map_err(|e| match e {
-                        SignatureEncryptedSectionDeserializationError::MetadataKeyMacMismatch
-                        | SignatureEncryptedSectionDeserializationError::SignatureMismatch => {
-                            SectionDeserializeError::IncorrectCredential
-                        }
-                        SignatureEncryptedSectionDeserializationError::SignatureMissing
-                        | SignatureEncryptedSectionDeserializationError::DeParseError => {
-                            SectionDeserializeError::ParseError
-                        }
-                    })
+                    .map_err(|e| e.into())
             }
-            Self::MicEncryptedIdentity(contents) => {
+            CiphertextSection::MicEncryptedIdentity(contents) => {
                 let identity_resolution_material =
                     crypto_material.unsigned_identity_resolution_material::<P>();
                 let verification_material = crypto_material.unsigned_verification_material::<P>();
 
                 contents
-                    .try_deserialize::<P>(
-                        identity_resolution_material.borrow(),
+                    .try_resolve_identity_and_deserialize::<P>(
+                        allocator,
+                        &identity_resolution_material,
                         &verification_material,
                     )
-                    .map_err(|e| match e {
-                        MicEncryptedSectionDeserializationError::MetadataKeyMacMismatch
-                        | MicEncryptedSectionDeserializationError::MicMismatch => {
-                            SectionDeserializeError::IncorrectCredential
-                        }
-                        MicEncryptedSectionDeserializationError::DeParseError => {
-                            SectionDeserializeError::ParseError
-                        }
-                    })
+                    .map_err(|e| e.into())
             }
+        }
+    }
+
+    /// Try decrypting into some raw bytes given some raw unsigned crypto-material.
+    #[cfg(feature = "devtools")]
+    pub(crate) fn try_resolve_identity_and_decrypt<
+        C: V1DiscoveryCryptoMaterial,
+        P: CryptoProvider,
+    >(
+        &self,
+        allocator: &mut DeserializationArenaAllocator<'a>,
+        crypto_material: &C,
+    ) -> Option<Result<ArrayView<u8, NP_ADV_MAX_SECTION_LEN>, ArenaOutOfSpace>> {
+        match self {
+            CiphertextSection::SignatureEncryptedIdentity(x) => {
+                let identity_resolution_material =
+                    crypto_material.signed_identity_resolution_material::<P>();
+                x.try_resolve_identity_and_decrypt::<P>(allocator, &identity_resolution_material)
+            }
+            CiphertextSection::MicEncryptedIdentity(x) => {
+                let identity_resolution_material =
+                    crypto_material.unsigned_identity_resolution_material::<P>();
+                x.try_resolve_identity_and_decrypt::<P>(allocator, &identity_resolution_material)
+            }
+        }
+    }
+
+    pub(crate) fn contents(&self) -> &EncryptedSectionContents<'a> {
+        match self {
+            CiphertextSection::SignatureEncryptedIdentity(x) => &x.contents,
+            CiphertextSection::MicEncryptedIdentity(x) => &x.contents,
         }
     }
 }
 
-/// Errors that can occur when deserializing an advertisement
+/// Errors that can occur when deserializing a section
+/// of a V1 advertisement.
 #[derive(Debug, PartialEq, Eq)]
 pub enum SectionDeserializeError {
     /// The credential supplied did not match the section's identity data
     IncorrectCredential,
     /// Section data is malformed
     ParseError,
+    /// The given arena is not large enough to hold the decrypted contents
+    ArenaOutOfSpace,
 }
 
-/// Returns a parser function that parses data elements whose type is not one of the known identity
-/// DE types, and whose offsets start from the provided `starting_offset`.
-///
-/// Consumes all input.
-fn parse_non_identity_des(
-    starting_offset: usize,
-) -> impl Fn(&[u8]) -> nom::IResult<&[u8], Vec<RefDataElement>> {
-    move |input: &[u8]| {
-        combinator::map_opt(
-            combinator::all_consuming(multi::many0(combinator::verify(
-                ProtoDataElement::parse,
-                |de| IdentityDataElementType::iter().all(|t| t.type_code() != de.header.de_type),
-            ))),
-            |proto_des| {
-                proto_des
-                    .into_iter()
-                    .enumerate()
-                    .map(|(offset, pde)| starting_offset.checked_add(offset).map(|sum| (sum, pde)))
-                    .map(|res| {
-                        res.map(|(offset, pde)| {
-                            pde.into_data_element(v1_salt::DataElementOffset::from(offset))
-                        })
-                    })
-                    .collect::<Option<Vec<_>>>()
-            },
-        )(input)
+#[cfg(test)]
+impl From<IdentityResolutionOrDeserializationError<MicVerificationError>>
+    for SectionDeserializeError
+{
+    fn from(error: IdentityResolutionOrDeserializationError<MicVerificationError>) -> Self {
+        match error {
+            IdentityResolutionOrDeserializationError::IdentityMatchingError => {
+                Self::IncorrectCredential
+            }
+            IdentityResolutionOrDeserializationError::DeserializationError(e) => e.into(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<IdentityResolutionOrDeserializationError<SignatureVerificationError>>
+    for SectionDeserializeError
+{
+    fn from(error: IdentityResolutionOrDeserializationError<SignatureVerificationError>) -> Self {
+        match error {
+            IdentityResolutionOrDeserializationError::IdentityMatchingError => {
+                Self::IncorrectCredential
+            }
+            IdentityResolutionOrDeserializationError::DeserializationError(e) => e.into(),
+        }
+    }
+}
+
+impl From<DeserializationError<MicVerificationError>> for SectionDeserializeError {
+    fn from(mic_deserialization_error: DeserializationError<MicVerificationError>) -> Self {
+        match mic_deserialization_error {
+            DeserializationError::VerificationError(MicVerificationError::MicMismatch) => {
+                Self::IncorrectCredential
+            }
+            DeserializationError::ArenaOutOfSpace => Self::ArenaOutOfSpace,
+        }
+    }
+}
+
+impl From<DeserializationError<SignatureVerificationError>> for SectionDeserializeError {
+    fn from(
+        signature_deserialization_error: DeserializationError<SignatureVerificationError>,
+    ) -> Self {
+        match signature_deserialization_error {
+            DeserializationError::VerificationError(
+                SignatureVerificationError::SignatureMissing,
+            ) => Self::ParseError,
+            DeserializationError::VerificationError(
+                SignatureVerificationError::SignatureMismatch,
+            ) => Self::IncorrectCredential,
+            DeserializationError::ArenaOutOfSpace => Self::ArenaOutOfSpace,
+        }
+    }
+}
+
+/// An iterator that parses the given data elements iteratively. In environments where memory is
+/// not severely constrained, it is usually safer to collect this into `Result<Vec<DataElement>>`
+/// so the validity of the whole advertisement can be checked before proceeding with further
+/// processing.
+#[derive(Debug)]
+pub struct DataElementParsingIterator<'adv> {
+    input: &'adv [u8],
+    // The index of the data element this is currently at
+    offset: u8,
+}
+
+/// The error that may arise while parsing data elements.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DataElementParseError {
+    /// Only one identity data element is allowed in an advertisement, but a duplicate is found
+    /// while parsing.
+    DuplicateIdentityDataElement,
+    /// Unexpected data found after the end of the data elements portion. This means either the
+    /// parser was fed with additional data (it should only be given the bytes within a section,
+    /// not the whole advertisement), or the length field in the header of the data element is
+    /// malformed.
+    UnexpectedDataAfterEnd,
+    /// There are too many data elements in the advertisement. The maximum number supported by the
+    /// current parsing logic is 255.
+    TooManyDataElements,
+    /// A parse error is returned during nom.
+    NomError(nom::error::ErrorKind),
+}
+
+impl<'adv> Iterator for DataElementParsingIterator<'adv> {
+    type Item = Result<DataElement<'adv>, DataElementParseError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match ProtoDataElement::parse(self.input) {
+            Ok((rem, pde)) => {
+                if !IdentityDataElementType::iter().all(|t| t.type_code() != pde.header.de_type) {
+                    return Some(Err(DataElementParseError::DuplicateIdentityDataElement));
+                }
+                self.input = rem;
+                let current_offset = self.offset;
+                self.offset = if let Some(offset) = self.offset.checked_add(1) {
+                    offset
+                } else {
+                    return Some(Err(DataElementParseError::TooManyDataElements));
+                };
+                Some(Ok(pde.into_data_element(v1_salt::DataElementOffset::from(current_offset))))
+            }
+            Err(nom::Err::Failure(e)) => Some(Err(DataElementParseError::NomError(e.code))),
+            Err(nom::Err::Incomplete(_)) => {
+                panic!("Should always complete since we are parsing using the `nom::complete` APIs")
+            }
+            Err(nom::Err::Error(_)) => {
+                // nom `Error` is recoverable, it usually means we should move on the parsing the
+                // next section. There is nothing after data elements within a section, so we just
+                // check that there is no remaining data.
+                if !self.input.is_empty() {
+                    return Some(Err(DataElementParseError::UnexpectedDataAfterEnd));
+                }
+                None
+            }
+        }
     }
 }
 
@@ -533,8 +694,8 @@ impl DeHeader {
 
                 type_bytes
                     .iter()
-                    .fold(Some(0_u32), |accum, b| {
-                        accum.and_then(|n| n.checked_shl(7)).map(|n| n + ((b & 0x7F) as u32))
+                    .try_fold(0_u32, |accum, b| {
+                        accum.checked_shl(7).map(|n| n + ((b & 0x7F) as u32))
                     })
                     .and_then(|type_code| {
                         ArrayView::try_from_slice(header_bytes).map(|header_bytes| DeHeader {
@@ -562,56 +723,14 @@ impl<'d> ProtoDataElement<'d> {
     fn parse(input: &[u8]) -> nom::IResult<&[u8], ProtoDataElement> {
         let (remaining, header) = DeHeader::parse(input)?;
         let len = header.contents_len;
-        combinator::map(bytes::complete::take(len.as_usize()), move |slice| {
+        combinator::map(bytes::complete::take(len.as_u8()), move |slice| {
             let header_clone = header.clone();
             ProtoDataElement { header: header_clone, contents: slice }
         })(remaining)
     }
 
-    fn into_data_element(self, offset: v1_salt::DataElementOffset) -> RefDataElement<'d> {
-        RefDataElement {
-            offset,
-            header_len: self.header.header_bytes.len().try_into().expect("header is <= 6 bytes"),
-            de_type: self.header.de_type,
-            contents: self.contents,
-        }
-    }
-}
-
-/// A data element that holds a slice reference for its contents
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct RefDataElement<'d> {
-    pub(crate) offset: v1_salt::DataElementOffset,
-    pub(crate) header_len: u8,
-    pub(crate) de_type: DeType,
-    pub(crate) contents: &'d [u8],
-}
-
-/// A deserialized data element in a section.
-///
-/// The DE has been processed to the point of exposing a DE type and its contents as a `&[u8]`, but
-/// no DE-type-specific processing has been performed.
-#[derive(Debug)]
-pub struct DataElement<'a> {
-    de_data: &'a ArrayView<u8, NP_ADV_MAX_SECTION_LEN>,
-    de: &'a OffsetDataElement,
-}
-
-impl<'a> DataElement<'a> {
-    /// The offset of the DE in its containing Section.
-    ///
-    /// Used with the section salt to derive per-DE salt.
-    pub fn offset(&self) -> v1_salt::DataElementOffset {
-        self.de.offset
-    }
-    /// The type of the DE
-    pub fn de_type(&self) -> DeType {
-        self.de.de_type
-    }
-    /// The contents of the DE
-    pub fn contents(&self) -> &[u8] {
-        &self.de_data.as_slice()
-            [self.de.start_of_contents..self.de.start_of_contents + self.de.contents_len]
+    fn into_data_element(self, offset: v1_salt::DataElementOffset) -> DataElement<'d> {
+        DataElement { offset, de_type: self.header.de_type, contents: self.contents }
     }
 }
 
@@ -635,7 +754,7 @@ pub enum VerificationMode {
 pub struct EncryptedSectionIdentity {
     identity_type: EncryptedIdentityDataElementType,
     validation_mode: VerificationMode,
-    metadata_key: [u8; METADATA_KEY_LEN],
+    metadata_key: MetadataKey,
 }
 
 impl EncryptedSectionIdentity {
@@ -648,52 +767,37 @@ impl EncryptedSectionIdentity {
         self.validation_mode
     }
     /// The decrypted metadata key from the section's identity DE
-    pub fn metadata_key(&self) -> &[u8; METADATA_KEY_LEN] {
-        &self.metadata_key
+    pub fn metadata_key(&self) -> MetadataKey {
+        self.metadata_key
     }
 }
 
-/// A DE that designates its contents via offset and length to avoid self-referential slices.
-#[derive(Debug, PartialEq, Eq)]
-struct OffsetDataElement {
+/// A deserialized data element in a section.
+///
+/// The DE has been processed to the point of exposing a DE type and its contents as a `&[u8]`, but
+/// no DE-type-specific processing has been performed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DataElement<'adv> {
     offset: v1_salt::DataElementOffset,
     de_type: DeType,
-    start_of_contents: usize,
-    contents_len: usize,
+    contents: &'adv [u8],
 }
 
-/// Convert data elements from holding slices to holding offsets and lengths to avoid
-/// lifetime woes.
-/// This entails some data copying, so if it causes noticeable perf issues we can revisit
-/// it, but it is likely to be much cheaper than decryption.
-///
-/// # Panics
-///
-/// Will panic if handed more data elements than fit in one section. This is only possible if
-/// generating data elements from a source other than parsing a section.
-fn convert_data_elements(
-    elements: &[RefDataElement],
-) -> (Vec<OffsetDataElement>, ArrayView<u8, NP_ADV_MAX_SECTION_LEN>) {
-    let mut buf = tinyvec::ArrayVec::new();
-
-    (
-        elements
-            .iter()
-            .map(|de| {
-                let current_len = buf.len();
-                // won't overflow because these DEs originally came from a section, and now
-                // we're packing only their contents without DE headers
-                buf.extend_from_slice(de.contents);
-                OffsetDataElement {
-                    offset: de.offset,
-                    de_type: de.de_type,
-                    start_of_contents: current_len,
-                    contents_len: de.contents.len(),
-                }
-            })
-            .collect(),
-        to_array_view(buf),
-    )
+impl<'adv> DataElement<'adv> {
+    /// The offset of the DE in its containing Section.
+    ///
+    /// Used with the section salt to derive per-DE salt.
+    pub fn offset(&self) -> v1_salt::DataElementOffset {
+        self.offset
+    }
+    /// The type of the DE
+    pub fn de_type(&self) -> DeType {
+        self.de_type
+    }
+    /// The contents of the DE
+    pub fn contents(&self) -> &'adv [u8] {
+        self.contents
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -741,8 +845,11 @@ impl EncryptionInfo {
     }
 
     fn salt(&self) -> RawV1Salt {
-        // should never panic
-        RawV1Salt(self.bytes[Self::TOTAL_DE_LEN - 16..].try_into().ok().unwrap())
+        RawV1Salt(
+            self.bytes[Self::TOTAL_DE_LEN - 16..]
+                .try_into()
+                .expect("a 16 byte slice will always fit into a 16 byte array"),
+        )
     }
 }
 
@@ -787,7 +894,7 @@ impl PublicIdentity {
         combinator::map(
             combinator::verify(DeHeader::parse, |deh| {
                 deh.de_type == IdentityDataElementType::Public.type_code()
-                    && deh.contents_len.as_usize() == 0
+                    && deh.contents_len.as_u8() == 0
             }),
             |_| PublicIdentity,
         )(input)
@@ -809,7 +916,7 @@ impl EncryptedIdentityMetadata {
     // 2-byte header, 16-byte metadata key
     pub(crate) const TOTAL_DE_LEN: usize = 18;
 
-    /// Returns a parser function that parses an [EncryptedIdentity] using the provided DE `offset`.
+    /// Returns a parser function that parses an [`EncryptedIdentityMetadata`] using the provided DE `offset`.
     fn parser_at_offset(
         offset: v1_salt::DataElementOffset,
     ) -> impl Fn(&[u8]) -> nom::IResult<&[u8], EncryptedIdentityMetadata> {

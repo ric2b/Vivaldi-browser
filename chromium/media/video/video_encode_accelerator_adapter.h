@@ -18,6 +18,8 @@
 #include "base/time/time.h"
 #include "media/base/media_export.h"
 #include "media/base/video_encoder.h"
+#include "media/base/video_frame_converter.h"
+#include "media/media_buildflags.h"
 #include "media/video/video_encode_accelerator.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/color_space.h"
@@ -95,7 +97,8 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
     kWaitingForFirstFrame,
     kInitializing,
     kReadyToEncode,
-    kFlushing
+    kFlushing,
+    kReconfiguring
   };
   struct PendingOp {
     PendingOp();
@@ -180,7 +183,7 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
 
   VideoPixelFormat format_;
   InputBufferKind input_buffer_preference_ = InputBufferKind::Any;
-  std::vector<uint8_t> resize_buf_;
+  VideoFrameConverter frame_converter_;
 
   VideoCodecProfile profile_ = VIDEO_CODEC_PROFILE_UNKNOWN;
   VideoEncodeAccelerator::SupportedRateControlMode supported_rc_modes_ =
@@ -188,11 +191,13 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
   Options options_;
   EncoderInfoCB info_cb_;
   OutputCB output_cb_;
+  EncoderStatusCB reconfigure_cb_;
 
   gfx::Size input_coded_size_;
 
   VideoEncodeAccelerator::Config::EncoderType required_encoder_type_ =
       VideoEncodeAccelerator::Config::EncoderType::kHardware;
+  bool supports_frame_size_change_ = false;
 };
 
 }  // namespace media

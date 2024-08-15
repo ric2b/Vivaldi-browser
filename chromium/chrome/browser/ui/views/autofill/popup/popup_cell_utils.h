@@ -6,8 +6,9 @@
 #define CHROME_BROWSER_UI_VIEWS_AUTOFILL_POPUP_POPUP_CELL_UTILS_H_
 
 #include <memory>
+#include <optional>
 
-#include "base/memory/weak_ptr.h"
+#include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/style/typography.h"
@@ -20,8 +21,7 @@ class ImageView;
 }  // namespace views
 
 namespace autofill {
-class AutofillPopupController;
-class PopupCellView;
+class PopupRowContentView;
 }  // namespace autofill
 
 namespace gfx {
@@ -92,7 +92,7 @@ void AddSuggestionContentTableToView(
     std::unique_ptr<views::Label> minor_text_label,
     std::unique_ptr<views::Label> description_label,
     std::vector<std::unique_ptr<views::View>> subtext_views,
-    PopupCellView& content_view);
+    PopupRowContentView& content_view);
 
 // Creates the content structure shared by autocomplete, address, credit card,
 // and password suggestions.
@@ -106,11 +106,12 @@ void AddSuggestionContentToView(
     std::unique_ptr<views::Label> minor_text_label,
     std::unique_ptr<views::Label> description_label,
     std::vector<std::unique_ptr<views::View>> subtext_views,
-    PopupCellView& content_view);
+    PopupRowContentView& content_view);
 
 void FormatLabel(views::Label& label,
                  const Suggestion::Text& text,
-                 base::WeakPtr<const AutofillPopupController> controller);
+                 FillingProduct main_filling_product,
+                 int maximum_width_single_line);
 
 // Creates a label for the suggestion's main text.
 std::unique_ptr<views::Label> CreateMainTextLabel(
@@ -121,21 +122,16 @@ std::unique_ptr<views::Label> CreateMainTextLabel(
 std::unique_ptr<views::Label> CreateMinorTextLabel(
     const Suggestion::Text& minor_text);
 
+// Creates sub-text views and pass their references to `PopupRowContentView` for
+// centralized style management. If `text_style` is not provided, the default
+// style from GetSecondaryTextStyle() will be used for the label views."
 std::vector<std::unique_ptr<views::View>> CreateAndTrackSubtextViews(
-    PopupCellView& content_view,
-    base::WeakPtr<AutofillPopupController> controller,
-    int line_number,
-    int text_style = views::style::STYLE_SECONDARY);
+    PopupRowContentView& content_view,
+    const Suggestion& suggestion,
+    FillingProduct main_filling_product,
+    std::optional<int> text_style = std::nullopt);
 
-std::unique_ptr<views::Label> CreateDescriptionLabel(
-    PopupCellView& content_view,
-    base::WeakPtr<AutofillPopupController> controller,
-    int line_number);
-
-void AddSuggestionStrategyContentCellChildren(
-    PopupCellView* view,
-    base::WeakPtr<AutofillPopupController> controller,
-    int line_number);
+int GetMaxPopupAddressProfileWidth();
 
 std::unique_ptr<views::ImageView> ImageViewFromVectorIcon(
     const gfx::VectorIcon& vector_icon,

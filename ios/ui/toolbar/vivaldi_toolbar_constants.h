@@ -13,8 +13,19 @@ extern const CGFloat vPrimaryToolbarHorizontalPadding;
 extern const CGFloat vPrimaryToolbarTextFieldLeadingOffsetNoImage;
 // Omnibox textfield leading space when there's image/icon present.
 extern const CGFloat vPrimaryToolbarTextFieldLeadingOffsetImage;
-// Height for the vivaldi sticky top toolbar view
-extern const CGFloat vStickyToolbarViewHeight;
+// Width for leading stack view when no buttons present i.e. iPhone portrait
+// mode.
+extern const CGFloat vPrimaryToolbarLeadingStackViewWidthNoItems;
+// Location container trailing space for contracted state.
+extern const CGFloat vPrimaryToolbarLocationContainerTrailingPadding;
+
+// Seconary toolbar
+extern const CGFloat vBottomButtonsTopMargin;
+extern const CGFloat vBottomAdaptiveLocationBarTopMargin;
+extern const CGFloat vBottomAdaptiveLocationBarBottomMargin;
+extern const CGFloat vAdaptiveToolbarMargin;
+extern const CGFloat vBottomToolbarSteadyViewTopPadding;
+extern const CGFloat vBottomToolbarSteadyViewTopPaddingFullScreen;
 
 #pragma mark - ANIMATIONS
 extern const CGFloat vPrimaryToolbarAnimationDuration;
@@ -33,5 +44,20 @@ extern const CGFloat vStickyToolbarCollapsedAlpha;
 
 extern NSString* vToolbarPanelButtonIcon;
 extern NSString* vToolbarSearchButtonIcon;
+extern NSString* vToolbarForwardButtonIcon;
+extern NSString* vToolbarBackButtonIcon;
+extern NSString* vToolbarTabSwitcherButtonIcon;
+extern NSString* vToolbarTabSwitcherOveflowButtonIcon;
+
+extern NSString* vToolbarButtonColor;
+// Used over dark background
+extern NSString* vToolbarLightButton;
+// Used over light background
+extern NSString* vToolbarDarkButton;
+
+extern NSString* vToolbarMoveToTop;
+extern NSString* vToolbarMoveToBottom;
+extern NSString* vToolbarCopyLink;
+extern NSString* vToolbarPaste;
 
 #endif  // IOS_UI_TOOLBAR_VIVALDI_TOOLBAR_CONSTANTS_H_

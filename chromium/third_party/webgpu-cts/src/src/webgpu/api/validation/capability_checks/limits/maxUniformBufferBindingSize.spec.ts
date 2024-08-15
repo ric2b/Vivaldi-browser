@@ -1,7 +1,7 @@
 import { LimitMode, kMaximumLimitBaseParams, makeLimitTestGroup } from './limit_utils.js';
 
 const kBufferParts = ['wholeBuffer', 'biggerBufferWithOffset'] as const;
-type BufferPart = typeof kBufferParts[number];
+type BufferPart = (typeof kBufferParts)[number];
 
 function getSizeAndOffsetForBufferPart(device: GPUDevice, bufferPart: BufferPart, size: number) {
   const align = device.limits.minUniformBufferOffsetAlignment;

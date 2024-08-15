@@ -119,6 +119,9 @@
       <message name="IDS_VERSION_UI_LICENSE" desc="The label below the copyright message, containing the URLs.">
         Vivaldi is made possible by the <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Chromium<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> open source project and other <ph name="BEGIN_LINK_OSS">&lt;a target="_blank" href="$2"&gt;</ph>open source software<ph name="END_LINK_OSS">&lt;/a&gt;</ph>.
       </message>
+      <message name="IDS_CRASH_DISABLED_MESSAGE" desc="The explanatory message for chrome://crashes when crash reporting is disabled">
+        This page shows information on your recent crashes if you enable crash reporting.
+      </message>
     </messages>
   </release>
 </grit>

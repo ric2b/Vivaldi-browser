@@ -41,13 +41,13 @@ import (
 	"dawn.googlesource.com/dawn/tools/src/subcmd"
 
 	// Register sub-commands
-	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/build_cache"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/export"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/format"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/merge"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/results"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/roll"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/time"
+	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/treemap"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/update"
 	_ "dawn.googlesource.com/dawn/tools/src/cmd/cts/validate"
 )

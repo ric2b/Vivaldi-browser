@@ -50,11 +50,11 @@ import {DeviceStateType, NetworkType} from 'chrome://resources/mojo/chromeos/ser
 import {afterNextRender, DomRepeatEvent, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from '../assert_extras.js';
-import {DeepLinkingMixin, DeepLinkingMixinInterface} from '../deep_linking_mixin.js';
+import {DeepLinkingMixin, DeepLinkingMixinInterface} from '../common/deep_linking_mixin.js';
+import {RouteOriginMixin, RouteOriginMixinInterface} from '../common/route_origin_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
 import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteOriginMixin, RouteOriginMixinInterface} from '../route_origin_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {ApnSubpageElement} from './apn_subpage.js';
@@ -226,6 +226,26 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
         },
       },
 
+      isCellularCarrierLockEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.valueExists('isCellularCarrierLockEnabled') &&
+              loadTimeData.getBoolean('isCellularCarrierLockEnabled');
+        },
+      },
+
+      /**
+       * Return true if instant hotspot rebrand feature flag is enabled
+       */
+      isInstantHotspotRebrandEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.valueExists('isInstantHotspotRebrandEnabled') &&
+              loadTimeData.getBoolean('isInstantHotspotRebrandEnabled');
+        },
+      },
+
+
       /**
        * Page name, if defined, indicating that the next deviceStates update
        * should call attemptShowCellularSetupDialog_().
@@ -301,6 +321,7 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
         value: () => new Set<Setting>([
           Setting.kWifiOnOff,
           Setting.kMobileOnOff,
+          Setting.kCellularAddApn,
         ]),
       },
 
@@ -350,8 +371,10 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
   private globalPolicy_: GlobalPolicy|undefined;
   private hasActiveCellularNetwork_: boolean;
   private isApnRevampEnabled_: boolean;
+  private isCellularCarrierLockEnabled_: boolean;
   private isConnectedToNonCellularNetwork_: boolean;
   private isCreateCustomApnButtonDisabled_: boolean;
+  private isInstantHotspotRebrandEnabled_: boolean;
   private isHotspotFeatureEnabled_: boolean;
   private disableVpnUi_: boolean;
   private knownNetworksType_: NetworkType;
@@ -475,6 +498,8 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
       networkType = NetworkType.kWiFi;
     } else if (settingId === Setting.kMobileOnOff) {
       networkType = NetworkType.kCellular;
+    } else {
+      return true;
     }
 
     afterNextRender(this, () => {
@@ -500,7 +525,7 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
   override currentRouteChanged(newRoute: Route, oldRoute?: Route): void {
     super.currentRouteChanged(newRoute, oldRoute);
 
-    if (newRoute === this.route) {
+    if (newRoute === this.route || newRoute === routes.APN) {
       // Show deep links for the internet page.
       this.attemptDeepLink();
     } else if (newRoute === routes.INTERNET_NETWORKS) {
@@ -729,11 +754,28 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
     // TODO(khorimoto): Remove once Cellular/Tether are split into their own
     // sections.
     if (this.subpageType_ === NetworkType.kCellular ||
-        this.subpageType_ === NetworkType.kTether) {
+        (this.subpageType_ === NetworkType.kTether &&
+         !this.isInstantHotspotRebrandEnabled_)) {
       return this.i18n('OncTypeMobile');
     }
     return this.i18n(
         'OncType' + OncMojo.getNetworkTypeString(this.subpageType_));
+  }
+
+  private isProviderLocked_(): boolean {
+    if (!this.isCellularCarrierLockEnabled_) {
+      return false;
+    }
+    if (this.subpageType_ !== NetworkType.kCellular) {
+      return false;
+    }
+    // Check carrier lock status reported by carrier lock manager.
+    const cellularDeviceState =
+        this.getDeviceState_(NetworkType.kCellular, this.deviceStates);
+    if (!cellularDeviceState || !cellularDeviceState.isCarrierLocked) {
+      return false;
+    }
+    return true;
   }
 
   private getDeviceState_(
@@ -746,7 +788,8 @@ class SettingsInternetPageElement extends SettingsInternetPageElementBase {
     // If both Tether and Cellular are enabled, use the Cellular device state
     // when directly navigating to the Tether page.
     if (subpageType === NetworkType.kTether &&
-        this.deviceStates![NetworkType.kCellular]) {
+        this.deviceStates![NetworkType.kCellular] &&
+        !this.isInstantHotspotRebrandEnabled_) {
       subpageType = NetworkType.kCellular;
     }
     return deviceStates![subpageType];

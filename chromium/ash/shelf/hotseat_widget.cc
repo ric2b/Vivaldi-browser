@@ -24,7 +24,6 @@
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_observer.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
@@ -36,6 +35,7 @@
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/background.h"
 #include "ui/views/highlight_border.h"
@@ -144,7 +144,7 @@ class HotseatStateTransitionAnimation : public ui::LayerAnimationElement {
 
   gfx::Tween::Type tween_type_ = gfx::Tween::LINEAR;
 
-  raw_ptr<HotseatWidget, ExperimentalAsh> hotseat_widget_ = nullptr;
+  raw_ptr<HotseatWidget> hotseat_widget_ = nullptr;
 };
 
 // Animation implemented specifically for the transition between the home
@@ -395,7 +395,7 @@ class HotseatWindowTargeter : public aura::WindowTargeter {
 
  private:
   // Unowned and guaranteed to be not null for the duration of |this|.
-  const raw_ptr<HotseatWidget, ExperimentalAsh> hotseat_widget_;
+  const raw_ptr<HotseatWidget> hotseat_widget_;
 };
 
 }  // namespace
@@ -477,14 +477,12 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
   }
 
  private:
-  raw_ptr<FocusCycler, DanglingUntriaged | ExperimentalAsh> focus_cycler_ =
-      nullptr;
+  raw_ptr<FocusCycler, DanglingUntriaged> focus_cycler_ = nullptr;
   // A background layer that may be visible depending on HotseatState.
-  raw_ptr<views::View, ExperimentalAsh> translucent_background_ = nullptr;
-  raw_ptr<ScrollableShelfView, DanglingUntriaged | ExperimentalAsh>
-      scrollable_shelf_view_ = nullptr;  // unowned.
-  raw_ptr<HotseatWidget, ExperimentalAsh> hotseat_widget_ =
-      nullptr;  // unowned.
+  raw_ptr<views::View> translucent_background_ = nullptr;
+  raw_ptr<ScrollableShelfView, DanglingUntriaged> scrollable_shelf_view_ =
+      nullptr;                                       // unowned.
+  raw_ptr<HotseatWidget> hotseat_widget_ = nullptr;  // unowned.
   // Blur is disabled during animations to improve performance.
   int blur_lock_ = 0;
 
@@ -603,7 +601,7 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
 
   auto* animator = translucent_background_->layer()->GetAnimator();
 
-  absl::optional<ui::AnimationThroughputReporter> reporter;
+  std::optional<ui::AnimationThroughputReporter> reporter;
   if (hotseat_widget_ && hotseat_widget_->state() != HotseatState::kNone) {
     reporter.emplace(animator,
                      hotseat_widget_->GetTranslucentBackgroundReportCallback());
@@ -626,7 +624,7 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
       background_bounds.width() != translucent_background_->bounds().width() &&
       (scrollable_shelf_view_ &&
        !scrollable_shelf_view_->NeedUpdateToTargetBounds());
-  absl::optional<ui::ScopedLayerAnimationSettings> bounds_animation_setter;
+  std::optional<ui::ScopedLayerAnimationSettings> bounds_animation_setter;
   if (animate_bounds) {
     bounds_animation_setter.emplace(animator);
     DoScopedAnimationSetting(&bounds_animation_setter.value());
@@ -752,8 +750,7 @@ HotseatWidget::~HotseatWidget() {
 }
 
 bool HotseatWidget::ShouldShowHotseatBackground() {
-  return Shell::Get()->tablet_mode_controller() &&
-         Shell::Get()->tablet_mode_controller()->InTabletMode();
+  return display::Screen::GetScreen()->InTabletMode();
 }
 
 void HotseatWidget::Initialize(aura::Window* container, Shelf* shelf) {
@@ -1066,7 +1063,7 @@ void HotseatWidget::UpdateLayout(bool animate) {
     animation_setter.SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
 
-    absl::optional<ui::AnimationThroughputReporter> reporter;
+    std::optional<ui::AnimationThroughputReporter> reporter;
     if (animate && state_ != HotseatState::kNone) {
       reporter.emplace(animation_setter.GetAnimator(),
                        shelf_->GetHotseatTransitionReportCallback(state_));
@@ -1290,7 +1287,7 @@ void HotseatWidget::LayoutHotseatByAnimation(double target_opacity,
   animation_setter.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
 
-  absl::optional<ui::AnimationThroughputReporter> reporter;
+  std::optional<ui::AnimationThroughputReporter> reporter;
   if (state_ != HotseatState::kNone) {
     reporter.emplace(animation_setter.GetAnimator(),
                      shelf_->GetHotseatTransitionReportCallback(state_));

@@ -180,15 +180,16 @@ void ReportingService::SendStagedLog() {
   const std::string hash =
       base::HexEncode(log_store()->staged_log_hash().data(),
                       log_store()->staged_log_hash().size());
-  std::string signature;
-  base::Base64Encode(log_store()->staged_log_signature(), &signature);
+  std::string signature =
+      base::Base64Encode(log_store()->staged_log_signature());
 
   if (logs_event_manager_) {
     logs_event_manager_->NotifyLogEvent(
         MetricsLogsEventManager::LogEvent::kLogUploading,
         log_store()->staged_log_hash());
   }
-  log_uploader_->UploadLog(log_store()->staged_log(), hash, signature,
+  log_uploader_->UploadLog(log_store()->staged_log(),
+                           log_store()->staged_log_metadata(), hash, signature,
                            reporting_info_);
 }
 

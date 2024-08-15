@@ -12,6 +12,7 @@
 #include "ash/public/cpp/holding_space/holding_space_client.h"
 #include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
+#include "ash/public/cpp/holding_space/holding_space_controller_observer.h"
 #include "ash/public/cpp/holding_space/holding_space_file.h"
 #include "ash/public/cpp/holding_space/holding_space_image.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
@@ -22,6 +23,7 @@
 #include "ash/public/cpp/holding_space/holding_space_test_api.h"
 #include "ash/public/cpp/holding_space/holding_space_util.h"
 #include "ash/public/cpp/holding_space/mock_holding_space_client.h"
+#include "ash/public/cpp/holding_space/mock_holding_space_controller_observer.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
@@ -228,13 +230,6 @@ std::unique_ptr<HoldingSpaceImage> CreateStubHoldingSpaceImage(
       /*async_bitmap_resolver=*/base::DoNothing());
 }
 
-std::vector<HoldingSpaceItem::Type> GetHoldingSpaceItemTypes() {
-  std::vector<HoldingSpaceItem::Type> types;
-  for (int i = 0; i <= static_cast<int>(HoldingSpaceItem::Type::kMaxValue); ++i)
-    types.push_back(static_cast<HoldingSpaceItem::Type>(i));
-  return types;
-}
-
 std::vector<HoldingSpaceCommandId> GetHoldingSpaceCommandIds() {
   std::vector<HoldingSpaceCommandId> ids;
   for (int i = static_cast<int>(HoldingSpaceCommandId::kMinValue);
@@ -376,8 +371,8 @@ class ScopedTransformRecordingLayerDelegate : public ui::LayerDelegate {
     max_translation_.SetToMax(end_translation_);
   }
 
-  const raw_ptr<ui::Layer, ExperimentalAsh> layer_;
-  const raw_ptr<ui::LayerDelegate, ExperimentalAsh> layer_delegate_;
+  const raw_ptr<ui::Layer> layer_;
+  const raw_ptr<ui::LayerDelegate> layer_delegate_;
 
   bool did_animate_ = false;
   gfx::Vector2dF start_scale_;
@@ -609,6 +604,27 @@ class HoldingSpaceTrayTest : public HoldingSpaceTrayTestBase {
 };
 
 // Tests -----------------------------------------------------------------------
+
+// Holding Space used to own the constant which determines its bubble's width
+// but now shares a constant with the rest of the system UI bubbles. Holding
+// Space UI is not yet implemented to be fully reactive to variable bubble
+// widths, so this test adds a speed bump to (hopefully) prevent the shared
+// constant from being updated and inadvertently breaking Holding Space UI.
+TEST_F(HoldingSpaceTrayTest, BubbleHasExpectedWidth) {
+  // Start session and verify the holding space tray is showing in the shelf.
+  StartSession(/*pre_mark_time_of_first_add=*/true);
+  EXPECT_TRUE(test_api()->IsShowingInShelf());
+
+  // Show the holding space bubble.
+  test_api()->Show();
+  EXPECT_TRUE(test_api()->IsShowing());
+
+  // Verify holding space bubble width.
+  views::View* const bubble = test_api()->GetBubble();
+  ASSERT_TRUE(bubble);
+  ViewDrawnWaiter().Wait(bubble);
+  EXPECT_EQ(bubble->width(), 360);
+}
 
 TEST_F(HoldingSpaceTrayTest, ShowTrayButtonWhenForced) {
   // Case: Force show in shelf prior to session start.
@@ -2111,6 +2127,27 @@ TEST_F(HoldingSpaceTrayTest, EnterAndExitAnimations) {
   UnregisterModelForUser(kSecondaryUserId);
 }
 
+TEST_F(HoldingSpaceTrayTest, FiresBubbleOpenCloseEvents) {
+  StartSession();
+  ASSERT_TRUE(test_api()->IsShowingInShelf());
+
+  MockHoldingSpaceControllerObserver observer;
+  base::ScopedObservation<HoldingSpaceController,
+                          HoldingSpaceControllerObserver>
+      observation(&observer);
+  observation.Observe(HoldingSpaceController::Get());
+
+  EXPECT_CALL(observer, OnHoldingSpaceTrayBubbleVisibilityChanged(
+                            GetTray(), /*visible*/ true));
+  test_api()->Show();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+
+  EXPECT_CALL(observer, OnHoldingSpaceTrayBubbleVisibilityChanged(
+                            GetTray(), /*visible*/ false));
+  test_api()->Close();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+}
+
 // Verifies that the holding space bubble supports scrolling of pinned files.
 TEST_F(HoldingSpaceTrayTest, SupportsScrollingOfPinnedFiles) {
   StartSession();
@@ -2373,10 +2410,12 @@ TEST_F(HoldingSpacePreviewsTrayTest, ShelfAlignmentChangeWithMultipleDisplays) {
   views::View* const secondary_icon_previews_container =
       secondary_tray->GetViewByID(kHoldingSpaceTrayPreviewsIconId)
           ->children()[0];
-  const std::vector<ui::Layer*>& primary_icon_previews =
-      primary_icon_previews_container->layer()->children();
-  const std::vector<ui::Layer*>& secondary_icon_previews =
-      secondary_icon_previews_container->layer()->children();
+  const std::vector<raw_ptr<ui::Layer, VectorExperimental>>&
+      primary_icon_previews =
+          primary_icon_previews_container->layer()->children();
+  const std::vector<raw_ptr<ui::Layer, VectorExperimental>>&
+      secondary_icon_previews =
+          secondary_icon_previews_container->layer()->children();
 
   // Verify each tray contains three previews.
   ASSERT_EQ(primary_icon_previews.size(), 3u);
@@ -3944,9 +3983,10 @@ class HoldingSpaceTrayPrimaryAndSecondaryActionsTest
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         HoldingSpaceTrayPrimaryAndSecondaryActionsTest,
-                         testing::ValuesIn(GetHoldingSpaceItemTypes()));
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    HoldingSpaceTrayPrimaryAndSecondaryActionsTest,
+    testing::ValuesIn(holding_space_util::GetAllItemTypes()));
 
 // Verifies that holding space item views have the expected primary and
 // secondary actions for their state of progress, both inline and in their
@@ -4150,7 +4190,7 @@ class HoldingSpaceTrayVisibilityTest
 INSTANTIATE_TEST_SUITE_P(
     All,
     HoldingSpaceTrayVisibilityTest,
-    testing::Combine(testing::ValuesIn(GetHoldingSpaceItemTypes()),
+    testing::Combine(testing::ValuesIn(holding_space_util::GetAllItemTypes()),
                      /*predictability_enabled=*/testing::Bool(),
                      /*suggestions_enabled=*/testing::Bool()));
 

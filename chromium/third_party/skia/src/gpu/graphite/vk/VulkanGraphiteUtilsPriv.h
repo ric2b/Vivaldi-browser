@@ -10,7 +10,7 @@
 
 #include "include/core/SkSpan.h"
 #include "include/gpu/vk/VulkanTypes.h"
-#include "src/gpu/graphite/DescriptorTypes.h"
+#include "src/gpu/graphite/DescriptorData.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/vk/VulkanInterface.h"
 
@@ -18,6 +18,14 @@
 
 // Helper macros to call functions on the VulkanInterface
 #define VULKAN_CALL(IFACE, X) (IFACE)->fFunctions.f##X
+
+// TODO: This needs to add checks for device lost on calls. See Ganesh version
+#define VULKAN_LOG_IF_NOT_SUCCESS(RESULT, X, ...)                                       \
+    do {                                                                                \
+        if (RESULT != VK_SUCCESS) {                                                     \
+            SkDebugf("Failed vulkan call. Error: %d, " X "\n", RESULT, ##__VA_ARGS__);  \
+        }                                                                               \
+    } while (false)
 
 // TODO: This needs to add checks for device lost on calls. See Ganesh version
 #define VULKAN_CALL_RESULT(IFACE, RESULT, X)                               \
@@ -52,6 +60,8 @@ void DescriptorDataToVkDescSetLayout(const VulkanSharedContext*,
                                      VkDescriptorSetLayout*);
 
 bool vkFormatIsSupported(VkFormat);
+
+VkShaderStageFlags PipelineStageFlagsToVkShaderStageFlags(SkEnumBitMask<PipelineStageFlags>);
 
 } // namespace skgpu::graphite
 

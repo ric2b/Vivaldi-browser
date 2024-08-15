@@ -263,7 +263,8 @@ TEST_F(URLRequestHttpJobWithProxyTest, TestSuccessfulWithOneProxy) {
 
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
       ConfiguredProxyResolutionService::CreateFixedFromPacResultForTest(
-          ProxyChainToPacResultElement(proxy_chain),
+          ProxyServerToPacResultElement(
+              proxy_chain.GetProxyServer(/*chain_index=*/0)),
           TRAFFIC_ANNOTATION_FOR_TESTS);
 
   MockWrite writes[] = {MockWrite(kSimpleProxyGetMockWrite)};
@@ -306,7 +307,9 @@ TEST_F(URLRequestHttpJobWithProxyTest,
   // DIRECT.
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service =
       ConfiguredProxyResolutionService::CreateFixedFromPacResultForTest(
-          ProxyChainToPacResultElement(proxy_chain) + "; DIRECT",
+          ProxyServerToPacResultElement(
+              proxy_chain.GetProxyServer(/*chain_index=*/0)) +
+              "; DIRECT",
           TRAFFIC_ANNOTATION_FOR_TESTS);
 
   MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
@@ -333,7 +336,7 @@ TEST_F(URLRequestHttpJobWithProxyTest,
 
   request->Start();
   ASSERT_TRUE(request->is_pending());
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(ProxyChain::Direct(), request->proxy_chain());
@@ -599,7 +602,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
 
   delegate.set_cancel_in_received_data(true);
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(12, request->received_response_content_length());
@@ -639,7 +642,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
 
   request->Start();
   ASSERT_TRUE(request->is_pending());
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
@@ -662,7 +665,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
 
   delegate.set_cancel_in_response_started(true);
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(0, request->received_response_content_length());
@@ -682,7 +685,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest,
 
   request->Start();
   request->Cancel();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsError(ERR_ABORTED));
   EXPECT_EQ(0, request->received_response_content_length());
@@ -934,7 +937,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest, EncodingAdvertisementOnRange) {
   request->SetExtraRequestHeaders(headers);
 
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
@@ -973,7 +976,7 @@ TEST_F(URLRequestHttpJobWithMockSocketsTest, RangeRequestOverrideEncoding) {
   request->SetExtraRequestHeaders(headers);
 
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
@@ -1387,7 +1390,7 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, NoBrotliAdvertisementOverHttp) {
       context_->CreateRequest(GURL("http://www.example.com"), DEFAULT_PRIORITY,
                               &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
@@ -1421,7 +1424,7 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, BrotliAdvertisement) {
       context_->CreateRequest(GURL("https://www.example.com"), DEFAULT_PRIORITY,
                               &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
   request->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate.RunUntilComplete();
 
   EXPECT_THAT(delegate.request_status(), IsOk());
   EXPECT_EQ(12, request->received_response_content_length());
@@ -1597,7 +1600,7 @@ class URLRequestHttpJobWebSocketTest : public TestWithTaskEnvironment {
 
 TEST_F(URLRequestHttpJobWebSocketTest, RejectedWithoutCreateHelper) {
   req_->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate_.RunUntilComplete();
   EXPECT_THAT(delegate_.request_status(), IsError(ERR_DISALLOWED_URL_SCHEME));
 }
 
@@ -1640,7 +1643,7 @@ TEST_F(URLRequestHttpJobWebSocketTest, CreateHelperPassedThrough) {
                     std::move(websocket_stream_create_helper));
   req_->SetLoadFlags(LOAD_DISABLE_CACHE);
   req_->Start();
-  base::RunLoop().RunUntilIdle();
+  delegate_.RunUntilComplete();
   EXPECT_THAT(delegate_.request_status(), IsOk());
   EXPECT_TRUE(delegate_.response_completed());
 

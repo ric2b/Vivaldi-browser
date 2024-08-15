@@ -52,6 +52,10 @@ BASE_FEATURE(kScrollSnapPreferCloserCovering,
              "ScrollSnapPreferCloserCovering",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kMainRepaintScrollPrefersNewContent,
+             "MainRepaintScrollPrefersNewContent",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kHudDisplayForPerformanceMetrics,
              "HudDisplayForPerformanceMetrics",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -66,7 +70,7 @@ BASE_FEATURE(kDurationEstimatesInCompositorTimingHistory,
 
 BASE_FEATURE(kNonBlockingCommit,
              "NonBlockingCommit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNoPreserveLastMutation,
              "NoPreserveLastMutation",
@@ -96,7 +100,7 @@ BASE_FEATURE(kUseDMSAAForTiles,
 // above flag UseDMSAAForTiles controls the launch on Vulkan backend.
 BASE_FEATURE(kUseDMSAAForTilesAndroidGL,
              "UseDMSAAForTilesAndroidGL",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kUpdateBrowserControlsWithoutProxy,
@@ -163,6 +167,18 @@ const base::FeatureParam<int> kReclaimDelayInSeconds{&kSmallerInterestArea,
 
 BASE_FEATURE(kUseMapRectForPixelMovement,
              "UseMapRectForPixelMovement",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEvictionThrottlesDraw,
+             "EvictionThrottlesDraw",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kResetTimerWhenNoActiveTreeLikely,
+             "ResetTimerWhenNoActiveTreeLikely",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAdjustFastMainThreadThreshold,
+             "AdjustFastMainThreadThreshold",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

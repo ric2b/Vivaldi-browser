@@ -6,17 +6,23 @@ import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_hidden_style.css.js';
 import '//resources/cr_elements/cr_input/cr_input.js';
 import '//resources/cr_elements/cr_shared_vars.css.js';
+import '//resources/cr_elements/cr_textarea/cr_textarea.js';
+import '//resources/cr_elements/cr_expand_button/cr_expand_button.js';
+import '//resources/polymer/v3_0/iron-collapse/iron-collapse.js';
 
 import {CrInputElement} from '//resources/cr_elements/cr_input/cr_input.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
 import {BrowserProxy} from './browser_proxy.js';
-import {OnDeviceModelRemote, PerformanceClass, StreamingResponderCallbackRouter} from './on_device_model.mojom-webui.js';
+import {LoadModelResult, OnDeviceModelRemote, PerformanceClass, ResponseChunk, ResponseSummary, SessionRemote, StreamingResponderCallbackRouter} from './on_device_model.mojom-webui.js';
 
 interface Response {
   text: string;
   response: string;
+  responseClass: string;
+  retracted: boolean;
+  error: boolean;
 }
 
 interface OnDeviceInternalsAppElement {
@@ -38,6 +44,10 @@ function getPerformanceClassText(performanceClass: PerformanceClass): string {
       return 'High';
     case PerformanceClass.kVeryHigh:
       return 'Very High';
+    case PerformanceClass.kGpuBlocked:
+      return 'GPU blocked';
+    case PerformanceClass.kFailedToLoadLibrary:
+      return 'Failed to load native library';
     default:
       return 'Error';
   }
@@ -80,6 +90,9 @@ class OnDeviceInternalsAppElement extends PolymerElement {
         type: String,
         value: 'Loading...',
       },
+      contextExpanded_: Boolean,
+      contextLength_: Number,
+      contextText_: String,
     };
   }
 
@@ -89,6 +102,9 @@ class OnDeviceInternalsAppElement extends PolymerElement {
     ];
   }
 
+  private contextExpanded_: boolean = false;
+  private contextLength_: number = 0;
+  private contextText_: string;
   private currentResponse_: Response|null;
   private error_: string;
   private loadModelDuration_: number;
@@ -97,9 +113,12 @@ class OnDeviceInternalsAppElement extends PolymerElement {
   private model_: OnDeviceModelRemote|null;
   private performanceClassText_: string;
   private responses_: Response[];
+  private session_: SessionRemote|null = null;
   private text_: string;
 
   private proxy_: BrowserProxy = BrowserProxy.getInstance();
+  private responseRouter_: StreamingResponderCallbackRouter =
+      new StreamingResponderCallbackRouter();
 
   override ready() {
     super.ready();
@@ -124,8 +143,23 @@ class OnDeviceInternalsAppElement extends PolymerElement {
     this.onModelSelected_();
   }
 
+  private onServiceCrashed_() {
+    if (this.currentResponse_) {
+      this.currentResponse_.error = true;
+      this.addResponse_();
+    }
+    this.error_ = 'Service crashed, please reload the model.';
+    this.model_ = null;
+    this.modelPath_ = '';
+    this.loadModelStart_ = 0;
+    this.$.modelInput.focus();
+  }
+
   private async onModelSelected_() {
     this.error_ = '';
+    if (this.model_) {
+      this.model_.$.close();
+    }
     this.model_ = null;
     this.loadModelStart_ = new Date().getTime();
     const modelPath = this.$.modelInput.value;
@@ -136,39 +170,82 @@ class OnDeviceInternalsAppElement extends PolymerElement {
     // <if expr="not is_win">
     const processedPath = modelPath;
     // </if>
-    const {result} = await this.proxy_.handler.loadModel({path: processedPath});
-    if (result.error) {
-      this.error_ = result.error;
+    const newModel = new OnDeviceModelRemote();
+    const {result} = await this.proxy_.handler.loadModel(
+        {path: processedPath}, newModel.$.bindNewPipeAndPassReceiver());
+    if (result !== LoadModelResult.kSuccess) {
+      this.error_ = 'Unable to load model';
     } else {
-      this.model_ = result.model || null;
+      this.model_ = newModel;
+      this.model_.onConnectionError.addListener(() => {
+        this.onServiceCrashed_();
+      });
+      this.startNewSession_();
       this.modelPath_ = modelPath;
     }
+  }
+
+  private onAddContextClick_() {
+    if (this.session_ === null) {
+      return;
+    }
+    this.session_.addContext(
+        {text: this.contextText_, ignoreContext: false}, null);
+    this.contextLength_ += this.contextText_.split(/(\s+)/).length;
+    this.contextText_ = '';
+  }
+
+  private startNewSession_() {
+    if (this.model_ === null) {
+      return;
+    }
+    this.contextLength_ = 0;
+    this.session_ = new SessionRemote();
+    this.model_.startSession(this.session_.$.bindNewPipeAndPassReceiver());
+  }
+
+  private onCancelClick_() {
+    this.responseRouter_.$.close();
+    this.responseRouter_ = new StreamingResponderCallbackRouter();
+    this.addResponse_();
   }
 
   private onExecuteClick_() {
     this.onExecute_();
   }
 
+  private addResponse_() {
+    this.unshift('responses_', this.currentResponse_);
+    this.currentResponse_ = null;
+    this.$.textInput.focus();
+  }
+
   private onExecute_() {
-    if (this.model_ === null) {
+    if (this.session_ === null) {
       return;
     }
-    const router = new StreamingResponderCallbackRouter();
-    this.model_.execute(this.text_, router.$.bindNewPipeAndPassRemote());
-    const onResponseId = router.onResponse.addListener((text: string) => {
-      this.set(
-          'currentResponse_.response',
-          (this.currentResponse_?.response + text).trimStart());
-    });
-    const onCompleteId = router.onComplete.addListener(() => {
-      this.unshift('responses_', this.currentResponse_);
-      this.currentResponse_ = null;
-      this.$.textInput.focus();
-
-      router.removeListener(onResponseId);
-      router.removeListener(onCompleteId);
-    });
-    this.currentResponse_ = {text: this.text_, response: ''};
+    this.session_.execute(
+        {text: this.text_, ignoreContext: false},
+        this.responseRouter_.$.bindNewPipeAndPassRemote());
+    const onResponseId =
+        this.responseRouter_.onResponse.addListener((chunk: ResponseChunk) => {
+          this.set(
+              'currentResponse_.response',
+              (this.currentResponse_?.response + chunk.text).trimStart());
+        });
+    const onCompleteId =
+        this.responseRouter_.onComplete.addListener((_: ResponseSummary) => {
+          this.addResponse_();
+          this.responseRouter_.removeListener(onResponseId);
+          this.responseRouter_.removeListener(onCompleteId);
+        });
+    this.currentResponse_ = {
+      text: this.text_,
+      response: '',
+      responseClass: 'response',
+      retracted: false,
+      error: false,
+    };
     this.text_ = '';
   }
 

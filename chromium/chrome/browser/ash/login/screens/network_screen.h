@@ -75,8 +75,7 @@ class NetworkScreen : public BaseScreen,
   FRIEND_TEST_ALL_PREFIXES(NetworkScreenTest, HandsOffTimeout_NotSkipped);
   FRIEND_TEST_ALL_PREFIXES(NetworkScreenTest,
                            DelayedEthernetConnection_Skipped);
-  FRIEND_TEST_ALL_PREFIXES(NetworkScreenUnitTest, ContinuesAutomatically);
-  FRIEND_TEST_ALL_PREFIXES(NetworkScreenUnitTest, ContinuesOnlyOnce);
+  FRIEND_TEST_ALL_PREFIXES(NetworkScreenUnitTest, ContinuesOnUserAction);
 
   // BaseScreen:
   bool MaybeSkip(WizardContext& context) override;
@@ -139,14 +138,15 @@ class NetworkScreen : public BaseScreen,
 
   // Callback of AddWifiNetworkFromQuickStart async call.
   void OnConfigureWifiNetworkResult(
-      const absl::optional<std::string>& network_guid,
+      const std::optional<std::string>& network_guid,
       const std::string& error_message);
 
   void OnStartConnectCompleted(
       chromeos::network_config::mojom::StartConnectResult result,
       const std::string& message);
 
-  void ExitQuickStartFlow();
+  void ExitQuickStartFlow(
+      quick_start::QuickStartController::AbortFlowReason reason);
   void ShowStepsWhenQuickStartOngoing();
 
   // Skip this screen or automatically continue if the device is connected to
@@ -158,12 +158,6 @@ class NetworkScreen : public BaseScreen,
 
   // ID of the network that we are waiting for.
   std::u16string network_id_;
-
-  // Keeps track of the number of times OnContinueButtonClicked was called.
-  // OnContinueButtonClicked is called either in response to the user pressing
-  // the continue button, or automatically during hands-off enrollment after a
-  // network connection is established.
-  int continue_attempts_ = 0;
 
   // True if the user pressed the continue button in the UI.
   // Indicates that we should proceed with OOBE as soon as we are connected.

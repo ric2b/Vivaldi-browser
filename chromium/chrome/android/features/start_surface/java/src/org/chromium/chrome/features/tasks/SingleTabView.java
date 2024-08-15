@@ -18,6 +18,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 
 import org.chromium.chrome.browser.tasks.tab_management.TabThumbnailView;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.start_surface.R;
 
 /** View of the tab on the single tab tab switcher. */
@@ -26,8 +27,7 @@ class SingleTabView extends LinearLayout {
     private ImageView mFavicon;
     private TextView mTitle;
     @Nullable private TabThumbnailView mTabThumbnail;
-    @Nullable
-    private TextView mUrl;
+    @Nullable private TextView mUrl;
 
     /** Default constructor needed to inflate via XML. */
     public SingleTabView(Context context, AttributeSet attrs) {
@@ -45,8 +45,19 @@ class SingleTabView extends LinearLayout {
         mUrl = findViewById(R.id.tab_url_view);
 
         if (mTabThumbnail != null) {
+            if (StartSurfaceConfiguration.useMagicStack()) {
+                MarginLayoutParams marginLayoutParams =
+                        (MarginLayoutParams) mTabThumbnail.getLayoutParams();
+                int size =
+                        getResources()
+                                .getDimensionPixelSize(
+                                        R.dimen.single_tab_module_tab_thumbnail_size_big);
+                marginLayoutParams.width = size;
+                marginLayoutParams.height = size;
+            }
             mTabThumbnail.setScaleType(ScaleType.MATRIX);
-            mTabThumbnail.updateThumbnailPlaceholder(/*isIncognito=*/false, /*isSelected=*/false);
+            mTabThumbnail.updateThumbnailPlaceholder(
+                    /* isIncognito= */ false, /* isSelected= */ false);
         }
     }
 
@@ -114,8 +125,10 @@ class SingleTabView extends LinearLayout {
             return;
         }
 
-        final float scale = Math.max(
-                (float) width / thumbnail.getWidth(), (float) height / thumbnail.getHeight());
+        final float scale =
+                Math.max(
+                        (float) width / thumbnail.getWidth(),
+                        (float) height / thumbnail.getHeight());
         final int xOffset = (int) (width - thumbnail.getWidth() * scale) / 2;
 
         Matrix m = new Matrix();

@@ -434,7 +434,7 @@ class TestRunnerManager(threading.Thread):
                     f"and {len(skipped_tests) - 1} others"
                 )
                 for test in skipped_tests[1:]:
-                    self.logger.debug("Test left in the queue: {test[0].id!r}")
+                    self.logger.debug(f"Test left in the queue: {test.id!r}")
 
             force_stop = (not isinstance(self.state, RunnerManagerState.stop) or
                           self.state.force_stop)
@@ -640,7 +640,7 @@ class TestRunnerManager(threading.Thread):
         self.recording.set(["testrunner", "test"] + self.state.test.id.split("/")[1:])
         self.logger.test_start(self.state.test.id, subsuite=self.state.subsuite)
         if self.rerun > 1:
-            self.logger.info("Run %d/%d" % (self.run_count, self.rerun))
+            self.logger.info(f"Run {self.run_count + 1}/{self.rerun}")
             self.send_message("reset")
         self.run_count += 1
         if self.debug_info is None:
@@ -679,7 +679,7 @@ class TestRunnerManager(threading.Thread):
             # Due to inherent race conditions in EXTERNAL-TIMEOUT, we might
             # receive multiple test_ended for a test (e.g. from both Executor
             # and TestRunner), in which case we ignore the duplicate message.
-            self.logger.error("Received unexpected test_ended for %s" % test)
+            self.logger.warning("Received unexpected test_ended for %s" % test)
             return
         if self.timer is not None:
             self.timer.cancel()
@@ -701,8 +701,15 @@ class TestRunnerManager(threading.Thread):
                 # change result to unexpected if expected_fail_message does not
                 # match
                 expected_fail_message = test.expected_fail_message(result.name)
-                if expected_fail_message is not None and result.message != expected_fail_message:
+                if expected_fail_message is not None and result.message.strip() != expected_fail_message:
                     is_unexpected = True
+                    if result.status in known_intermittent:
+                        known_intermittent.remove(result.status)
+                    elif len(known_intermittent) > 0:
+                        expected = known_intermittent[0]
+                        known_intermittent = known_intermittent[1:]
+                    else:
+                        expected = "PASS"
 
             if is_unexpected:
                 subtest_unexpected = True

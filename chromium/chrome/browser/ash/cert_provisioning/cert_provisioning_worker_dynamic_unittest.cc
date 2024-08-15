@@ -142,7 +142,7 @@ const std::string& GetPublicKey() {
 }
 
 const std::vector<uint8_t>& GetPublicKeyBin() {
-  static absl::optional<std::vector<uint8_t>> public_key;
+  static std::optional<std::vector<uint8_t>> public_key;
   if (!public_key.has_value()) {
     public_key = base::Base64Decode(kPublicKeyBase64);
     CHECK(public_key.has_value());
@@ -349,7 +349,7 @@ class CallbackObserver {
  public:
   MOCK_METHOD(void,
               Callback,
-              (const CertProfile& profile, CertProvisioningWorkerState state));
+              (const CertProfile profile, CertProvisioningWorkerState state));
 };
 
 // A mock for observing the state change callback of the worker.
@@ -471,8 +471,8 @@ class CertProvisioningWorkerDynamicTest : public ::testing::Test {
   TestingPrefServiceSimple testing_pref_service_;
 
   StrictMock<MockCertProvisioningClient> cert_provisioning_client_;
-  raw_ptr<platform_keys::MockPlatformKeysService, ExperimentalAsh>
-      platform_keys_service_ = nullptr;
+  raw_ptr<platform_keys::MockPlatformKeysService> platform_keys_service_ =
+      nullptr;
   std::unique_ptr<platform_keys::MockKeyPermissionsManager>
       key_permissions_manager_;
 };
@@ -498,10 +498,10 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
       &cert_provisioning_client_, MakeInvalidator(&mock_invalidator),
       GetStateChangeCallback(), GetResultCallback());
 
-  base::RepeatingClosure on_invalidation_callback;
+  OnInvalidationEventCallback on_invalidation_event_callback;
 
   auto VerifyNoBackendErrorsSeen = [&worker]() {
-    EXPECT_EQ(worker.GetLastBackendServerError(), absl::nullopt);
+    EXPECT_EQ(worker.GetLastBackendServerError(), std::nullopt);
   };
   {
     testing::InSequence seq;
@@ -523,7 +523,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
                  StartResultOk());
 
     EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _))
-        .WillOnce(SaveArg<1>(&on_invalidation_callback));
+        .WillOnce(SaveArg<1>(&on_invalidation_event_callback));
 
     // kReadyForNextOperation
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
@@ -538,6 +538,27 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
         .WillOnce(VerifyNoBackendErrorsSeen);
 
     worker.DoStep();
+    EXPECT_EQ(worker.GetState(),
+              CertProvisioningWorkerState::kReadyForNextOperation);
+  }
+  {
+    // A signal that the the client has successfully subscribed to the
+    // invalidation topic should result in a retry of the waiting action.
+    // In this particular scenario, the result is still
+    // InstructionNotYetAvailable.
+    testing::InSequence seq;
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        base::unexpected(InstructionNotYetAvailable()));
+
+    // kReadyForNextOperation -> kReadyForNextOperation is still reported as a
+    // state change.
+    EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
+        .WillOnce(VerifyNoBackendErrorsSeen);
+
+    on_invalidation_event_callback.Run(
+        InvalidationEvent::kSuccessfullySubscribed);
     EXPECT_EQ(worker.GetState(),
               CertProvisioningWorkerState::kReadyForNextOperation);
   }
@@ -633,7 +654,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
         .WillOnce(VerifyNoBackendErrorsSeen);
 
-    on_invalidation_callback.Run();
+    on_invalidation_event_callback.Run(
+        InvalidationEvent::kInvalidationReceived);
     EXPECT_EQ(worker.GetState(),
               CertProvisioningWorkerState::kReadyForNextOperation);
   }
@@ -661,7 +683,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
                 Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
         .Times(1);
 
-    on_invalidation_callback.Run();
+    on_invalidation_event_callback.Run(
+        InvalidationEvent::kInvalidationReceived);
     EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceeded);
   }
 
@@ -674,8 +697,11 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
   histogram_tester.ExpectBucketCount(
       "ChromeOS.CertProvisioning.Event.Dynamic.User",
       CertProvisioningEvent::kInvalidationReceived, 2);
+  histogram_tester.ExpectBucketCount(
+      "ChromeOS.CertProvisioning.Event.Dynamic.User",
+      CertProvisioningEvent::kSuccessfullySubscribedToInvalidationTopic, 1);
   histogram_tester.ExpectTotalCount(
-      "ChromeOS.CertProvisioning.Event.Dynamic.User", 3);
+      "ChromeOS.CertProvisioning.Event.Dynamic.User", 4);
   histogram_tester.ExpectTotalCount(
       "ChromeOS.CertProvisioning.KeypairGenerationTime.Dynamic.User", 1);
   histogram_tester.ExpectTotalCount(
@@ -705,7 +731,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllStepsNoWaiting) {
       GetStateChangeCallback(), GetResultCallback());
 
   auto VerifyNoBackendErrorsSeen = [&worker]() {
-    EXPECT_EQ(worker.GetLastBackendServerError(), absl::nullopt);
+    EXPECT_EQ(worker.GetLastBackendServerError(), std::nullopt);
   };
   {
     testing::InSequence seq;
@@ -726,9 +752,9 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllStepsNoWaiting) {
     EXPECT_START(Start(Eq(std::ref(provisioning_process)), /*callback=*/_),
                  StartResultOk());
 
-    base::RepeatingClosure on_invalidation_callback;
+    OnInvalidationEventCallback on_invalidation_event_callback;
     EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _))
-        .WillOnce(SaveArg<1>(&on_invalidation_callback));
+        .WillOnce(SaveArg<1>(&on_invalidation_event_callback));
 
     // kReadyForNextOperation
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
@@ -1979,7 +2005,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, ProcessBackendServerErrorResponse) {
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
         .WillOnce([&worker]() {
           EXPECT_THAT(worker.GetLastBackendServerError(),
-                      testing::Ne(absl::nullopt));
+                      testing::Ne(std::nullopt));
         });
     worker.DoStep();
   }
@@ -1993,7 +2019,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, ProcessBackendServerErrorResponse) {
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
         .WillOnce([&worker]() {
           EXPECT_THAT(worker.GetLastBackendServerError(),
-                      testing::Eq(absl::nullopt));
+                      testing::Eq(std::nullopt));
         });
 
     EXPECT_GET_NEXT_INSTRUCTION(
@@ -2002,7 +2028,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, ProcessBackendServerErrorResponse) {
     EXPECT_CALL(state_change_callback_observer_, StateChangeCallback())
         .WillOnce([&worker]() {
           EXPECT_THAT(worker.GetLastBackendServerError(),
-                      testing::Eq(absl::nullopt));
+                      testing::Eq(std::nullopt));
         });
 
     worker.DoStep();
@@ -2092,6 +2118,22 @@ TEST_F(CertProvisioningWorkerDynamicTest, RemoveRegisteredKey) {
       "ChromeOS.CertProvisioning.Result.Dynamic.User", 2);
 }
 
+TEST_F(CertProvisioningWorkerDynamicTest, ResetWorker) {
+  CertProfile cert_profile(kCertProfileId, kCertProfileName,
+                           kCertProfileVersion,
+                           /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
+                           ProtocolVersion::kDynamic);
+  const CertProvisioningClient::ProvisioningProcess provisioning_process(
+      CertScope::kUser, kCertProfileId, kCertProfileVersion, GetPublicKeyBin());
+  CertProvisioningWorkerDynamic worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cert_provisioning_client_, MakeInvalidator(), GetStateChangeCallback(),
+      GetResultCallback());
+
+  worker.MarkWorkerForReset();
+  ASSERT_EQ(worker.IsWorkerMarkedForReset(), true);
+}
+
 class PrefServiceObserver {
  public:
   PrefServiceObserver(PrefService* service, const char* pref_name)
@@ -2111,7 +2153,7 @@ class PrefServiceObserver {
   MOCK_METHOD(void, OnPrefValueUpdated, (const base::Value& value));
 
  private:
-  raw_ptr<PrefService, ExperimentalAsh> service_ = nullptr;
+  raw_ptr<PrefService> service_ = nullptr;
   const char* pref_name_ = nullptr;
   PrefChangeRegistrar pref_change_registrar_;
   base::WeakPtrFactory<PrefServiceObserver> weak_factory_{this};

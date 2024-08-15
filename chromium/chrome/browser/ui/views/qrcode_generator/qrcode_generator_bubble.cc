@@ -168,7 +168,7 @@ void QRCodeGeneratorBubble::OnCodeGeneratorResponse(
 }
 
 void QRCodeGeneratorBubble::UpdateQRImage(gfx::ImageSkia qr_image) {
-  qr_code_image_->SetImage(qr_image);
+  qr_code_image_->SetImage(ui::ImageModel::FromImageSkia(qr_image));
   const int border_radius = views::LayoutProvider::Get()->GetCornerRadiusMetric(
       views::Emphasis::kHigh);
   qr_code_image_->SetPreferredSize(GetQRCodeImageSize() +
@@ -498,7 +498,7 @@ void QRCodeGeneratorBubble::BackButtonPressed() {
   std::move(on_back_button_pressed_).Run();
 }
 
-BEGIN_METADATA(QRCodeGeneratorBubble, LocationBarBubbleDelegateView)
+BEGIN_METADATA(QRCodeGeneratorBubble)
 END_METADATA
 
 }  // namespace qrcode_generator

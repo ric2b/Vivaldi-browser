@@ -37,13 +37,15 @@ TINT_INSTANTIATE_TYPEINFO(tint::core::ir::Return);
 
 namespace tint::core::ir {
 
+Return::Return() = default;
+
 Return::Return(Function* func) {
     AddOperand(Return::kFunctionOperandOffset, func);
 }
 
 Return::Return(Function* func, ir::Value* arg) {
     AddOperand(Return::kFunctionOperandOffset, func);
-    AddOperand(Return::kArgOperandOffset, arg);
+    AddOperand(Return::kArgsOperandOffset, arg);
 }
 
 Return::~Return() = default;
@@ -56,7 +58,11 @@ Return* Return::Clone(CloneContext& ctx) {
     return ctx.ir.instructions.Create<Return>(fn);
 }
 
-Function* Return::Func() const {
+Function* Return::Func() {
+    return tint::As<Function>(operands_[kFunctionOperandOffset]);
+}
+
+const Function* Return::Func() const {
     return tint::As<Function>(operands_[kFunctionOperandOffset]);
 }
 

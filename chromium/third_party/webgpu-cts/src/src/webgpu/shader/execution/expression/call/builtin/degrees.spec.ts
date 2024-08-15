@@ -10,44 +10,12 @@ Converts radians to degrees, approximating e1 × 180 ÷ π. Component-wise when 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
 import { TypeAbstractFloat, TypeF16, TypeF32 } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { fullF16Range, fullF32Range, fullF64Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
 import { allInputSources, onlyConstInputSource, run } from '../../expression.js';
 
 import { abstractBuiltin, builtin } from './builtin.js';
+import { d } from './degrees.cache.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('degrees', {
-  f32_const: () => {
-    return FP.f32.generateScalarToIntervalCases(fullF32Range(), 'finite', FP.f32.degreesInterval);
-  },
-  f32_non_const: () => {
-    return FP.f32.generateScalarToIntervalCases(
-      fullF32Range(),
-      'unfiltered',
-      FP.f32.degreesInterval
-    );
-  },
-  f16_const: () => {
-    return FP.f16.generateScalarToIntervalCases(fullF16Range(), 'finite', FP.f16.degreesInterval);
-  },
-  f16_non_const: () => {
-    return FP.f16.generateScalarToIntervalCases(
-      fullF16Range(),
-      'unfiltered',
-      FP.f16.degreesInterval
-    );
-  },
-  abstract: () => {
-    return FP.abstract.generateScalarToIntervalCases(
-      fullF64Range(),
-      'finite',
-      FP.abstract.degreesInterval
-    );
-  },
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')
@@ -58,7 +26,7 @@ g.test('abstract_float')
       .combine('vectorize', [undefined, 2, 3, 4] as const)
   )
   .fn(async t => {
-    const cases = await d.get('abstract');
+    const cases = await d.get('abstract_const');
     await run(
       t,
       abstractBuiltin('degrees'),

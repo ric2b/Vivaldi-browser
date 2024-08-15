@@ -14,7 +14,10 @@
 
 //! V0 advertisement support.
 
+use crate::MetadataKey;
 use core::fmt;
+use crypto_provider::CryptoProvider;
+use ldt_np_adv::NP_LEGACY_METADATA_KEY_LEN;
 
 pub mod actions;
 pub mod data_elements;
@@ -30,6 +33,26 @@ mod random_data_elements;
 pub const BLE_ADV_SVC_CONTENT_LEN: usize = 24;
 /// Maximum possible DE content: packet size minus 2 for adv header & DE header
 const NP_MAX_DE_CONTENT_LEN: usize = BLE_ADV_SVC_CONTENT_LEN - 2;
+
+/// "Short" 14-byte metadata key type employed for V0, which needs to be
+/// expanded to a regular-size 16-byte metadata key to decrypt metadata.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct ShortMetadataKey(pub [u8; NP_LEGACY_METADATA_KEY_LEN]);
+
+impl AsRef<[u8]> for ShortMetadataKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl ShortMetadataKey {
+    /// Expand this short 14-byte metadata key to a 16-byte metadata key
+    /// which may be used to decrypt metadata.
+    pub fn expand<C: CryptoProvider>(&self) -> MetadataKey {
+        let expanded_bytes = np_hkdf::legacy_metadata_expanded_key::<C>(&self.0);
+        MetadataKey(expanded_bytes)
+    }
+}
 
 /// Marker type to allow disambiguating between plaintext and encrypted packets at compile time.
 ///

@@ -17,12 +17,15 @@
 #include "chrome/browser/ash/wilco_dtc_supportd/wilco_dtc_supportd_manager.h"
 #include "chrome/browser/chrome_browser_main_linux.h"
 #include "chrome/browser/memory/memory_kills_monitor.h"
-#include "chromeos/ash/components/memory/zram_writeback_controller.h"
 
 class AssistantBrowserDelegateImpl;
 class AssistantStateClient;
 class ChromeKeyboardControllerClient;
 class ImageDownloaderImpl;
+
+namespace app_list {
+class EssentialSearchManager;
+}
 
 namespace arc {
 class ArcServiceLauncher;
@@ -86,6 +89,7 @@ class MemoryMetrics;
 class MisconfiguredUserCleaner;
 class PowerMetricsReporter;
 class RendererFreezer;
+class ReportControllerInitializer;
 class SessionTerminationManager;
 class ShortcutMappingPrefService;
 class ShutdownPolicyForwarder;
@@ -94,7 +98,7 @@ class SystemTokenCertDBInitializer;
 class VideoConferenceAppServiceClient;
 class VideoConferenceAshFeatureClient;
 class WebKioskAppManager;
-class KioskAppManager;
+class KioskChromeAppManager;
 
 namespace carrier_lock {
 class CarrierLockManager;
@@ -102,10 +106,6 @@ class CarrierLockManager;
 
 namespace cros_healthd::internal {
 class DataCollector;
-}
-
-namespace report {
-class ReportController;
 }
 
 namespace internal {
@@ -174,9 +174,6 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   void PostDestroyThreads() override;
 
  private:
-  // Load device policies before initializing the |report_controller_|.
-  void StartReportController();
-
   std::unique_ptr<chromeos::default_app_order::ExternalLoader>
       app_order_loader_;
   std::unique_ptr<NetworkPrefStateObserver> network_pref_state_observer_;
@@ -223,7 +220,7 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<LowDiskNotification> low_disk_notification_;
   std::unique_ptr<ArcKioskAppManager> arc_kiosk_app_manager_;
   std::unique_ptr<WebKioskAppManager> web_kiosk_app_manager_;
-  std::unique_ptr<KioskAppManager> kiosk_app_manager_;
+  std::unique_ptr<KioskChromeAppManager> kiosk_chrome_app_manager_;
   std::unique_ptr<KioskController> kiosk_controller_;
   std::unique_ptr<MultiCaptureNotifications> multi_capture_notifications_;
 
@@ -256,7 +253,7 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<AshUsbDetector> ash_usb_detector_;
   std::unique_ptr<CrosUsbDetector> cros_usb_detector_;
 
-  std::unique_ptr<report::ReportController> report_controller_;
+  std::unique_ptr<ReportControllerInitializer> report_controller_initializer_;
 
   std::unique_ptr<crostini::CrostiniUnsupportedActionNotifier>
       crostini_unsupported_action_notifier_;
@@ -297,8 +294,6 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<CameraGeneralSurveyHandler> camera_general_survey_handler_;
 
-  std::unique_ptr<memory::ZramWritebackController> zram_writeback_controller_;
-
   std::unique_ptr<ApnMigrator> apn_migrator_;
 
   std::unique_ptr<arc::ContainerAppKiller> arc_container_app_killer_;
@@ -317,6 +312,8 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
       video_conference_manager_client_;
 
   std::unique_ptr<MisconfiguredUserCleaner> misconfigured_user_cleaner_;
+
+  std::unique_ptr<::app_list::EssentialSearchManager> essential_search_manager_;
 
   base::WeakPtrFactory<ChromeBrowserMainPartsAsh> weak_ptr_factory_{this};
 };

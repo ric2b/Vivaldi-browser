@@ -6,24 +6,29 @@ page_name: chrome-os-systems-supporting-android-apps
 title: Chrome OS Systems Supporting Android Apps
 ---
 
+## Current status
+
+**Unless specified elsewhere, all devices that launched in or after 2019 support
+Android Apps.**
+
+## Historical notes
+
 Google Play Store and Android apps are available on many Chrome OS devices since
 launching in 2016. To learn more about what we launched in 2016, check out
 [this blog post](https://blog.google/products/chromebooks/the-google-play-store-coming-to/).
 
-The Chromebooks, Chromeboxes, and Chromebases that were launched before 2019
-that are able to install Android apps are listed below. Unless specified
-elsewhere, all devices that have launched in or after 2019 will support Android
-Apps. Roll-out of Android Apps is done on a device-per-device basis as it is
-dependent on a number of factors including the hardware platform that the
-device is based on and each device must be [compatible with
-Android](https://source.android.com/compatibility/). While we won't be able to
-bring Android apps to every Chromebook ever made, we're continuing to evaluate
-more devices and we'll update this list as new devices are added. Even if your
-Chromebook isn't on the list below, it will continue to get other new features
-and improvements.
+Roll-out of Android Apps is done on a device-per-device basis. It depends on a
+number of factors, including the hardware platform that the device is based on,
+and each device must be [compatible with Android](https://source.android.com/compatibility/).
+While we won't be able to bring Android apps to every Chromebook ever made,
+we're continuing to evaluate more devices.
 
 To learn how to install Android apps on supported Chromebooks, [click
 here](https://support.google.com/chromebook/answer/7021273).
+
+The Chromebooks, Chromeboxes, and Chromebases **that were launched before 2019**
+that are able to install Android apps are listed below. Unless specified elsewhere,
+all devices that launched in or after 2019 support Android Apps.
 
 <table>
 <tr>

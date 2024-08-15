@@ -36,8 +36,7 @@ QRCode::~QRCode() = default;
 void QRCode::GeneratePixelData() {
   std::vector<uint8_t> blob = GetQRCodeData();
   qr_code_generator::QRCodeGenerator qr_generator;
-  auto generated_code = qr_generator.Generate(
-      base::as_bytes(base::make_span(blob.data(), blob.size())));
+  auto generated_code = qr_generator.Generate(blob);
   CHECK(generated_code.has_value());
   auto res =
       PixelData{generated_code->data.begin(), generated_code->data.end()};
@@ -48,8 +47,7 @@ void QRCode::GeneratePixelData() {
 
 std::vector<uint8_t> QRCode::GetQRCodeData() {
   std::string shared_secret_str(shared_secret_.begin(), shared_secret_.end());
-  std::string shared_secret_base64;
-  base::Base64Encode(shared_secret_str, &shared_secret_base64);
+  std::string shared_secret_base64 = base::Base64Encode(shared_secret_str);
   url::RawCanonOutputT<char> shared_secret_base64_uriencoded;
   url::EncodeURIComponent(shared_secret_base64,
                           &shared_secret_base64_uriencoded);

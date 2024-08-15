@@ -2,27 +2,28 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time.h"
+#include "partition_alloc/partition_alloc_base/time/time.h"
 
 #import <Foundation/Foundation.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <time.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <ctime>
 
 #if BUILDFLAG(IS_IOS)
-#include <errno.h>
+#include <cerrno>
 #endif
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/numerics/safe_conversions.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time_override.h"
 #include "build/build_config.h"
+#include "partition_alloc/partition_alloc_base/check.h"
+#include "partition_alloc/partition_alloc_base/logging.h"
+#include "partition_alloc/partition_alloc_base/numerics/safe_conversions.h"
+#include "partition_alloc/partition_alloc_base/time/time_override.h"
 
 namespace partition_alloc::internal::base {
 

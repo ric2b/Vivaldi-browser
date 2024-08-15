@@ -12,11 +12,12 @@
 #include "include/core/SkColorType.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
 #include "include/core/SkShader.h"
-#include "include/core/SkTileMode.h"
 #include "include/private/base/SkAssert.h"
 #include "src/core/SkNextID.h"
 #include "src/image/SkImage_Base.h"
+#include "src/shaders/SkImageShader.h"
 
 // Currently, the raster imagefilters can only handle certain imageinfos. Call this to know if
 // a given info is supported.
@@ -35,28 +36,41 @@ SkSpecialImage::SkSpecialImage(const SkIRect& subset,
     , fProps(props) {
 }
 
-sk_sp<SkImage> SkSpecialImage::asImage(const SkIRect* subset) const {
-    if (subset) {
-        SkIRect absolute = subset->makeOffset(this->subset().topLeft());
-        return this->onAsImage(&absolute);
-    } else {
-        return this->onAsImage(nullptr);
-    }
+void SkSpecialImage::draw(SkCanvas* canvas,
+                          SkScalar x, SkScalar y,
+                          const SkSamplingOptions& sampling,
+                          const SkPaint* paint, bool strict) const {
+    SkRect dst = SkRect::MakeXYWH(x, y, this->subset().width(), this->subset().height());
+
+    canvas->drawImageRect(this->asImage(), SkRect::Make(this->subset()), dst,
+                          sampling, paint, strict ? SkCanvas::kStrict_SrcRectConstraint
+                                                  : SkCanvas::kFast_SrcRectConstraint);
 }
 
+// TODO(skbug.com/12784): Once bitmap images work with SkImageShader::MakeSubset(), this does not
+// need to be virtual anymore.
 sk_sp<SkShader> SkSpecialImage::asShader(SkTileMode tileMode,
                                          const SkSamplingOptions& sampling,
-                                         const SkMatrix& lm) const {
-    return this->onAsShader(tileMode, sampling, lm);
-}
+                                         const SkMatrix& lm,
+                                         bool strict) const {
+    // The special image's logical (0,0) is at its subset's topLeft() so we need to account for
+    // that in the local matrix used when sampling.
+    SkMatrix subsetOrigin = SkMatrix::Translate(-this->subset().topLeft());
+    subsetOrigin.postConcat(lm);
 
-sk_sp<SkShader> SkSpecialImage::asShader(const SkSamplingOptions& sampling) const {
-    return this->asShader(sampling, SkMatrix::I());
-}
+    if (strict) {
+        // However, we don't need to modify the subset itself since that is defined with respect
+        // to the base image, and the local matrix is applied before any tiling/clamping.
+        const SkRect subset = SkRect::Make(this->subset());
 
-sk_sp<SkShader> SkSpecialImage::asShader(const SkSamplingOptions& sampling,
-                                         const SkMatrix& lm) const {
-    return this->asShader(SkTileMode::kClamp, sampling, lm);
+        // asImage() w/o a subset makes no copy; create the SkImageShader directly to remember
+        // the subset used to access the image.
+        return SkImageShader::MakeSubset(
+                this->asImage(), subset, tileMode, tileMode, sampling, &subsetOrigin);
+    } else {
+        // Ignore 'subset' other than its origin translation applied to the local matrix.
+        return this->asImage()->makeShader(tileMode, tileMode, sampling, subsetOrigin);
+    }
 }
 
 class SkSpecialImage_Raster final : public SkSpecialImage {
@@ -68,50 +82,39 @@ public:
         SkASSERT(fBitmap.getPixels());
     }
 
-    size_t getSize() const override { return fBitmap.computeByteSize(); }
-
-    void onDraw(SkCanvas* canvas, SkScalar x, SkScalar y, const SkSamplingOptions& sampling,
-                const SkPaint* paint) const override {
-        SkRect dst = SkRect::MakeXYWH(x, y,
-                                      this->subset().width(), this->subset().height());
-
-        canvas->drawImageRect(fBitmap.asImage(), SkRect::Make(this->subset()), dst,
-                              sampling, paint, SkCanvas::kStrict_SrcRectConstraint);
-    }
-
-    bool onGetROPixels(SkBitmap* bm) const override {
+    bool getROPixels(SkBitmap* bm) const {
         return fBitmap.extractSubset(bm, this->subset());
     }
+
+    size_t getSize() const override { return fBitmap.computeByteSize(); }
+
+    sk_sp<SkImage> asImage() const override { return fBitmap.asImage(); }
 
     sk_sp<SkSpecialImage> onMakeSubset(const SkIRect& subset) const override {
         // No need to extract subset, onGetROPixels handles that when needed
         return SkSpecialImages::MakeFromRaster(subset, fBitmap, this->props());
     }
 
-    sk_sp<SkImage> onAsImage(const SkIRect* subset) const override {
-        if (subset) {
+    sk_sp<SkShader> asShader(SkTileMode tileMode,
+                             const SkSamplingOptions& sampling,
+                             const SkMatrix& lm,
+                             bool strict) const override {
+        if (strict) {
+            // TODO(skbug.com/12784): SkImage::makeShader() doesn't support a subset yet, but
+            // SkBitmap supports subset views so create the shader from the subset bitmap instead of
+            // fBitmap.
             SkBitmap subsetBM;
-
-            if (!fBitmap.extractSubset(&subsetBM, *subset)) {
+            if (!this->getROPixels(&subsetBM)) {
                 return nullptr;
             }
-
-            return subsetBM.asImage();
+            return subsetBM.makeShader(tileMode, tileMode, sampling, lm);
+        } else {
+            // The special image's logical (0,0) is at its subset's topLeft() so we need to
+            // account for that in the local matrix used when sampling.
+            SkMatrix subsetOrigin = SkMatrix::Translate(-this->subset().topLeft());
+            subsetOrigin.postConcat(lm);
+            return fBitmap.makeShader(tileMode, tileMode, sampling, subsetOrigin);
         }
-
-        return fBitmap.asImage();
-    }
-
-    sk_sp<SkShader> onAsShader(SkTileMode tileMode,
-                               const SkSamplingOptions& sampling,
-                               const SkMatrix& lm) const override {
-        // TODO(skbug.com/12784): SkImage::makeShader() doesn't support a subset yet, but SkBitmap
-        // supports subset views so create the shader from the subset bitmap instead of fBitmap.
-        SkBitmap subsetBM;
-        if (!this->getROPixels(&subsetBM)) {
-            return nullptr;
-        }
-        return subsetBM.asImage()->makeShader(tileMode, tileMode, sampling, lm);
     }
 
 private:
@@ -188,6 +191,14 @@ sk_sp<SkSpecialImage> MakeFromRaster(const SkIRect& subset,
         return MakeFromRaster(subset, bm, props);
     }
     return nullptr;
+}
+
+bool AsBitmap(const SkSpecialImage* img, SkBitmap* result) {
+    if (!img || img->isGaneshBacked() || img->isGraphiteBacked()) {
+        return false;
+    }
+    auto rasterImg = static_cast<const SkSpecialImage_Raster*>(img);
+    return rasterImg->getROPixels(result);
 }
 
 }  // namespace SkSpecialImages

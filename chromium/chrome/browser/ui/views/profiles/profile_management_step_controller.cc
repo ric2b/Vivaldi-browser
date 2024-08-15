@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/profiles/profile_management_step_controller.h"
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/delete_profile_helper.h"
@@ -13,20 +14,18 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/browser/ui/profiles/profile_customization_util.h"
 #include "chrome/browser/ui/views/profiles/profile_management_types.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_signed_in_flow_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
+#include "chrome/browser/ui/webui/search_engine_choice/search_engine_choice_ui.h"
+#include "components/search_engines/search_engine_choice_utils.h"
 #include "google_apis/gaia/core_account_id.h"
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/ui/views/profiles/profile_picker_dice_sign_in_provider.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
-#include "chrome/browser/ui/webui/search_engine_choice/search_engine_choice_ui.h"
-#include "components/search_engines/search_engine_choice_utils.h"
 #endif
 
 namespace {
@@ -252,29 +251,69 @@ class PostSignInStepController : public ProfileManagementStepController {
   base::WeakPtrFactory<PostSignInStepController> weak_ptr_factory_{this};
 };
 
-#if BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
+class FinishFlowAndRunInBrowserStepController
+    : public ProfileManagementStepController {
+ public:
+  FinishFlowAndRunInBrowserStepController(
+      ProfilePickerWebContentsHost* host,
+      base::OnceClosure finish_flow_and_run_in_browser_callback)
+      : ProfileManagementStepController(host),
+        finish_flow_and_run_in_browser_callback_(
+            std::move(finish_flow_and_run_in_browser_callback)) {
+    CHECK(finish_flow_and_run_in_browser_callback_);
+  }
+
+  void Show(base::OnceCallback<void(bool success)> step_shown_callback,
+            bool reset_state) override {
+    CHECK(reset_state);
+
+    if (step_shown_callback) {
+      std::move(step_shown_callback).Run(true);
+    }
+    std::move(finish_flow_and_run_in_browser_callback_).Run();
+  }
+
+  void OnNavigateBackRequested() override {
+    // Do nothing, navigating back is not allowed.
+    NOTREACHED_NORETURN();
+  }
+
+ private:
+  base::OnceClosure finish_flow_and_run_in_browser_callback_;
+};
 
 class SearchEngineChoiceStepController
     : public ProfileManagementStepController {
  public:
   SearchEngineChoiceStepController(
       ProfilePickerWebContentsHost* host,
-      SearchEngineChoiceService* search_engine_choice_service,
+      SearchEngineChoiceDialogService* search_engine_choice_dialog_service,
+      content::WebContents* web_contents,
+      SearchEngineChoiceDialogService::EntryPoint entry_point,
       base::OnceClosure step_completed_callback)
       : ProfileManagementStepController(host),
-        search_engine_choice_service_(search_engine_choice_service),
-        step_completed_callback_(std::move(step_completed_callback)) {}
+        entry_point_(entry_point),
+        search_engine_choice_dialog_service_(
+            search_engine_choice_dialog_service),
+        step_completed_callback_(std::move(step_completed_callback)),
+        web_contents_(web_contents) {
+    CHECK(web_contents_);
+  }
 
   void Show(base::OnceCallback<void(bool success)> step_shown_callback,
             bool reset_state) override {
     CHECK(reset_state);
 
     bool should_show_search_engine_choice_step =
-        search_engine_choice_service_ &&
+        search_engine_choice_dialog_service_ &&
         search_engines::IsChoiceScreenFlagEnabled(
-            search_engines::ChoicePromo::kFre);
+            search_engines::ChoicePromo::kAny);
 
     if (!should_show_search_engine_choice_step) {
+      if (step_shown_callback) {
+        std::move(step_shown_callback).Run(false);
+      }
+
       std::move(step_completed_callback_).Run();
       return;
     }
@@ -289,12 +328,19 @@ class SearchEngineChoiceStepController
               .Then(std::move(navigation_finished_closure));
     }
 
-    search_engines::RecordChoiceScreenEvent(
+    search_engines::SearchEngineChoiceScreenEvents choice_screen_event =
         search_engines::SearchEngineChoiceScreenEvents::
-            kFreChoiceScreenWasDisplayed);
-    host()->ShowScreenInPickerContents(
-        GURL(chrome::kChromeUISearchEngineChoiceURL),
-        std::move(navigation_finished_closure));
+            kProfileCreationChoiceScreenWasDisplayed;
+    if (entry_point_ ==
+        SearchEngineChoiceDialogService::EntryPoint::kFirstRunExperience) {
+      choice_screen_event = search_engines::SearchEngineChoiceScreenEvents::
+          kFreChoiceScreenWasDisplayed;
+    }
+    search_engines::RecordChoiceScreenEvent(choice_screen_event);
+
+    host()->ShowScreen(web_contents_,
+                       GURL(chrome::kChromeUISearchEngineChoiceURL),
+                       std::move(navigation_finished_closure));
   }
 
   void OnNavigateBackRequested() override {
@@ -304,9 +350,7 @@ class SearchEngineChoiceStepController
 
  private:
   void OnLoadFinished() {
-    auto* search_engine_choice_ui = host()
-                                        ->GetPickerContents()
-                                        ->GetWebUI()
+    auto* search_engine_choice_ui = web_contents_->GetWebUI()
                                         ->GetController()
                                         ->GetAs<SearchEngineChoiceUI>();
     CHECK(search_engine_choice_ui);
@@ -314,18 +358,22 @@ class SearchEngineChoiceStepController
     search_engine_choice_ui->Initialize(
         /*display_dialog_callback=*/base::OnceClosure(),
         /*on_choice_made_callback=*/std::move(step_completed_callback_),
-        SearchEngineChoiceService::EntryPoint::kProfilePicker);
+        entry_point_);
   }
 
-  // May be nullptr.
-  raw_ptr<SearchEngineChoiceService> search_engine_choice_service_;
+  // The entry point from which the search engine choice screen is displayed.
+  // This could be either the FRE or Profile Creation in this case.
+  SearchEngineChoiceDialogService::EntryPoint entry_point_;
+
+  // Can be nullptr.
+  raw_ptr<SearchEngineChoiceDialogService> search_engine_choice_dialog_service_;
 
   // Callback to be executed when the step is completed.
   base::OnceClosure step_completed_callback_;
+
+  // The web contents in which we want to display the screen.
+  raw_ptr<content::WebContents> web_contents_;
 };
-
-#endif  // BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
-
 }  // namespace
 
 // static
@@ -371,17 +419,27 @@ ProfileManagementStepController::CreateForPostSignInFlow(
                                                     std::move(signed_in_flow));
 }
 
-#if BUILDFLAG(ENABLE_SEARCH_ENGINE_CHOICE)
 // static
 std::unique_ptr<ProfileManagementStepController>
 ProfileManagementStepController::CreateForSearchEngineChoice(
     ProfilePickerWebContentsHost* host,
-    SearchEngineChoiceService* search_engine_choice_service,
+    SearchEngineChoiceDialogService* search_engine_choice_dialog_service,
+    content::WebContents* web_contents,
+    SearchEngineChoiceDialogService::EntryPoint entry_point,
     base::OnceClosure callback) {
   return std::make_unique<SearchEngineChoiceStepController>(
-      host, search_engine_choice_service, std::move(callback));
+      host, search_engine_choice_dialog_service, web_contents, entry_point,
+      std::move(callback));
 }
-#endif
+
+// static
+std::unique_ptr<ProfileManagementStepController>
+ProfileManagementStepController::CreateForFinishFlowAndRunInBrowser(
+    ProfilePickerWebContentsHost* host,
+    base::OnceClosure finish_flow_and_run_in_browser_callback) {
+  return std::make_unique<FinishFlowAndRunInBrowserStepController>(
+      host, std::move(finish_flow_and_run_in_browser_callback));
+}
 
 ProfileManagementStepController::ProfileManagementStepController(
     ProfilePickerWebContentsHost* host)

@@ -10,6 +10,7 @@
 
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/accelerators_util.h"
 #include "ash/public/mojom/input_device_settings.mojom-forward.h"
 #include "ash/public/mojom/input_device_settings.mojom-shared.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
@@ -19,6 +20,7 @@
 #include "base/containers/fixed_flat_map.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -28,6 +30,8 @@
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/ozone/evdev/mouse_button_property.h"
+#include "ui/events/ozone/layout/keyboard_layout_engine.h"
+#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point_f.h"
 
@@ -49,6 +53,22 @@ constexpr auto kStaticActionToMouseButtonFlag =
         {mojom::StaticShortcutAction::kRightClick, ui::EF_RIGHT_MOUSE_BUTTON},
         {mojom::StaticShortcutAction::kMiddleClick, ui::EF_MIDDLE_MOUSE_BUTTON},
     });
+
+constexpr char* ToMetricsString(
+    PeripheralCustomizationEventRewriter::PeripheralCustomizationMetricsType
+        peripheral_kind) {
+  switch (peripheral_kind) {
+    case PeripheralCustomizationEventRewriter::
+        PeripheralCustomizationMetricsType::kMouse:
+      return (char*)"Mouse";
+    case PeripheralCustomizationEventRewriter::
+        PeripheralCustomizationMetricsType::kGraphicsTablet:
+      return (char*)"GraphicsTablet";
+    case PeripheralCustomizationEventRewriter::
+        PeripheralCustomizationMetricsType::kGraphicsTabletPen:
+      return (char*)"GraphicsTabletPen";
+  }
+}
 
 mojom::KeyEvent GetStaticShortcutAction(mojom::StaticShortcutAction action) {
   mojom::KeyEvent key_event;
@@ -117,6 +137,7 @@ int ConvertKeyCodeToFlags(ui::KeyboardCode key_code) {
     case ui::VKEY_RWIN:
       return ui::EF_COMMAND_DOWN;
     case ui::VKEY_CONTROL:
+    case ui::VKEY_RCONTROL:
       return ui::EF_CONTROL_DOWN;
     case ui::VKEY_SHIFT:
     case ui::VKEY_LSHIFT:
@@ -272,37 +293,69 @@ int ConvertButtonToFlags(const mojom::Button& button) {
   return ui::EF_NONE;
 }
 
-const mojom::RemappingAction* GetRemappingActionFromMouseSettings(
-    const mojom::Button& button,
-    const mojom::MouseSettings& settings) {
+std::optional<PeripheralCustomizationEventRewriter::RemappingActionResult>
+GetRemappingActionFromMouseSettings(const mojom::Button& button,
+                                    const mojom::MouseSettings& settings) {
   const auto button_remapping_iter = base::ranges::find(
       settings.button_remappings, button,
       [](const mojom::ButtonRemappingPtr& entry) { return *entry->button; });
   if (button_remapping_iter != settings.button_remappings.end()) {
-    return (*button_remapping_iter)->remapping_action.get();
+    const mojom::ButtonRemapping& button_remapping = *(*button_remapping_iter);
+    if (!button_remapping.remapping_action) {
+      return std::nullopt;
+    }
+
+    auto result = PeripheralCustomizationEventRewriter::RemappingActionResult(
+        *button_remapping.remapping_action,
+        PeripheralCustomizationEventRewriter::
+            PeripheralCustomizationMetricsType::kMouse);
+    return result;
   }
 
-  return nullptr;
+  return std::nullopt;
 }
 
-const mojom::RemappingAction* GetRemappingActionFromGraphicsTabletSettings(
+std::optional<PeripheralCustomizationEventRewriter::RemappingActionResult>
+GetRemappingActionFromGraphicsTabletSettings(
     const mojom::Button& button,
     const mojom::GraphicsTabletSettings& settings) {
   const auto pen_button_remapping_iter = base::ranges::find(
       settings.pen_button_remappings, button,
       [](const mojom::ButtonRemappingPtr& entry) { return *entry->button; });
   if (pen_button_remapping_iter != settings.pen_button_remappings.end()) {
-    return (*pen_button_remapping_iter)->remapping_action.get();
+    const mojom::ButtonRemapping& button_remapping =
+        *(*pen_button_remapping_iter);
+    if (!button_remapping.remapping_action) {
+      return std::nullopt;
+    }
+
+    auto pen_action =
+        PeripheralCustomizationEventRewriter::RemappingActionResult(
+            *button_remapping.remapping_action,
+            PeripheralCustomizationEventRewriter::
+                PeripheralCustomizationMetricsType::kGraphicsTabletPen);
+    return std::move(pen_action);
   }
 
   const auto tablet_button_remapping_iter = base::ranges::find(
       settings.tablet_button_remappings, button,
       [](const mojom::ButtonRemappingPtr& entry) { return *entry->button; });
   if (tablet_button_remapping_iter != settings.tablet_button_remappings.end()) {
-    return (*tablet_button_remapping_iter)->remapping_action.get();
+    const mojom::ButtonRemapping& button_remapping =
+        *(*tablet_button_remapping_iter);
+    if (!button_remapping.remapping_action) {
+      return std::nullopt;
+    }
+
+    auto tablet_action =
+        PeripheralCustomizationEventRewriter::RemappingActionResult(
+            *button_remapping.remapping_action,
+            PeripheralCustomizationEventRewriter::
+                PeripheralCustomizationMetricsType::kGraphicsTablet);
+    return std::move(tablet_action);
   }
 
-  return nullptr;
+  return std::nullopt;
 }
 
 int GetRemappedModifiersFromMouseSettings(
@@ -326,6 +379,16 @@ int GetRemappedModifiersFromGraphicsTabletSettings(
     modifiers |= ConvertButtonToFlags(*button_remapping->button);
   }
   return modifiers;
+}
+
+// Verify if the keyboard code is an alphabet letter.
+bool IsAlphaKeyboardCode(ui::KeyboardCode key_code) {
+  return key_code >= ui::VKEY_A && key_code <= ui::VKEY_Z;
+}
+
+// Verify if the keyboard code is a number.
+bool IsNumberKeyboardCode(ui::KeyboardCode key_code) {
+  return key_code >= ui::VKEY_0 && key_code <= ui::VKEY_9;
 }
 
 }  // namespace
@@ -374,13 +437,29 @@ PeripheralCustomizationEventRewriter::DeviceIdButton::operator=(
     PeripheralCustomizationEventRewriter::DeviceIdButton&& device_id_button) =
     default;
 
+PeripheralCustomizationEventRewriter::RemappingActionResult::
+    RemappingActionResult(mojom::RemappingAction& remapping_action,
+                          PeripheralCustomizationMetricsType peripheral_kind)
+    : remapping_action(remapping_action), peripheral_kind(peripheral_kind) {}
+
+PeripheralCustomizationEventRewriter::RemappingActionResult::
+    RemappingActionResult(RemappingActionResult&& result)
+    : remapping_action(std::move(result.remapping_action)),
+      peripheral_kind(result.peripheral_kind) {}
+
+PeripheralCustomizationEventRewriter::RemappingActionResult::
+    ~RemappingActionResult() = default;
+
 PeripheralCustomizationEventRewriter::PeripheralCustomizationEventRewriter(
     InputDeviceSettingsController* input_device_settings_controller)
-    : input_device_settings_controller_(input_device_settings_controller) {}
+    : input_device_settings_controller_(input_device_settings_controller) {
+  metrics_manager_ = std::make_unique<InputDeviceSettingsMetricsManager>();
+}
+
 PeripheralCustomizationEventRewriter::~PeripheralCustomizationEventRewriter() =
     default;
 
-absl::optional<PeripheralCustomizationEventRewriter::DeviceType>
+std::optional<PeripheralCustomizationEventRewriter::DeviceType>
 PeripheralCustomizationEventRewriter::GetDeviceTypeToObserve(int device_id) {
   if (mice_to_observe_.contains(device_id)) {
     return DeviceType::kMouse;
@@ -388,27 +467,25 @@ PeripheralCustomizationEventRewriter::GetDeviceTypeToObserve(int device_id) {
   if (graphics_tablets_to_observe_.contains(device_id)) {
     return DeviceType::kGraphicsTablet;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 void PeripheralCustomizationEventRewriter::StartObservingMouse(
     int device_id,
-    bool can_rewrite_key_event) {
-  if (can_rewrite_key_event) {
-    mice_to_observe_key_events_.insert(device_id);
-  }
-  mice_to_observe_.insert(device_id);
+    mojom::CustomizationRestriction customization_restriction) {
+  mice_to_observe_.insert_or_assign(device_id, customization_restriction);
 }
 
 void PeripheralCustomizationEventRewriter::StartObservingGraphicsTablet(
-    int device_id) {
-  graphics_tablets_to_observe_.insert(device_id);
+    int device_id,
+    mojom::CustomizationRestriction customization_restriction) {
+  graphics_tablets_to_observe_.insert_or_assign(device_id,
+                                                customization_restriction);
 }
 
 void PeripheralCustomizationEventRewriter::StopObserving() {
   graphics_tablets_to_observe_.clear();
   mice_to_observe_.clear();
-  mice_to_observe_key_events_.clear();
 }
 
 bool PeripheralCustomizationEventRewriter::NotifyMouseEventObserving(
@@ -452,13 +529,40 @@ bool PeripheralCustomizationEventRewriter::NotifyMouseEventObserving(
   return true;
 }
 
+bool PeripheralCustomizationEventRewriter::IsButtonCustomizable(
+    const ui::KeyEvent& key_event) {
+  const auto iter = mice_to_observe_.find(key_event.source_device_id());
+  if (iter == mice_to_observe().end()) {
+    return false;
+  }
+  const auto customization_restriction = iter->second;
+  // There are several cases for the customization restriction:
+  // 1. If restriction is kAllowCustomizations, mice are allowed to observe
+  // key events.
+  // 2. If restriction is kAllowAlphabetKeyEventRewrites, mice are allowed to
+  // observe only alphabet letters key event.
+  // 3. If restriction is kAllowAlphabetOrNumberKeyEventRewrites, mice are
+  // allowed to observe alphabet letters or number key event.
+  // 4. Mice are not allowed to observe key event in other cases.
+  switch (customization_restriction) {
+    case mojom::CustomizationRestriction::kAllowCustomizations:
+      return true;
+    case mojom::CustomizationRestriction::kAllowAlphabetKeyEventRewrites:
+      return IsAlphaKeyboardCode(key_event.key_code());
+    case mojom::CustomizationRestriction::
+        kAllowAlphabetOrNumberKeyEventRewrites:
+      return IsAlphaKeyboardCode(key_event.key_code()) ||
+             IsNumberKeyboardCode(key_event.key_code());
+    case mojom::CustomizationRestriction::kDisallowCustomizations:
+    case mojom::CustomizationRestriction::kDisableKeyEventRewrites:
+      return false;
+  }
+}
+
 bool PeripheralCustomizationEventRewriter::NotifyKeyEventObserving(
     const ui::KeyEvent& key_event,
     DeviceType device_type) {
-  // Only mice that are in the mice_to_observe_key_events_ set should be allowed
-  // to observe key events.
-  if (device_type == DeviceType::kMouse &&
-      !mice_to_observe_key_events_.contains(key_event.source_device_id())) {
+  if (device_type == DeviceType::kMouse && !IsButtonCustomizable(key_event)) {
     return false;
   }
 
@@ -486,10 +590,17 @@ bool PeripheralCustomizationEventRewriter::RewriteEventFromButton(
     const ui::Event& event,
     const mojom::Button& button,
     std::unique_ptr<ui::Event>& rewritten_event) {
-  auto* remapping_action = GetRemappingAction(event.source_device_id(), button);
-  if (!remapping_action) {
+  absl::optional<PeripheralCustomizationEventRewriter::RemappingActionResult>
+      remapping_action_result =
+          GetRemappingAction(event.source_device_id(), button);
+  if (!remapping_action_result) {
     return false;
   }
+  auto remapping_action = remapping_action_result->remapping_action;
+
+  metrics_manager_->RecordRemappingActionWhenButtonPressed(
+      *remapping_action,
+      ToMetricsString(remapping_action_result->peripheral_kind));
 
   if (remapping_action->is_accelerator_action()) {
     if (event.type() == ui::ET_KEY_PRESSED ||
@@ -506,7 +617,17 @@ bool PeripheralCustomizationEventRewriter::RewriteEventFromButton(
 
   if (remapping_action->is_key_event()) {
     const auto& key_event = remapping_action->get_key_event();
-    rewritten_event = RewriteEventToKeyEvent(event, *key_event);
+    auto entry = FindKeyCodeEntry(key_event->vkey);
+    // If no entry can be found, use the stored key_event struct.
+    if (!entry) {
+      rewritten_event = RewriteEventToKeyEvent(event, *key_event);
+    } else {
+      rewritten_event = RewriteEventToKeyEvent(
+          event, mojom::KeyEvent(entry->resulting_key_code,
+                                 static_cast<int>(entry->dom_code),
+                                 static_cast<int>(entry->dom_key),
+                                 key_event->modifiers, ""));
+    }
   }
 
   if (remapping_action->is_static_shortcut_action()) {
@@ -551,6 +672,11 @@ ui::EventDispatchDetails PeripheralCustomizationEventRewriter::RewriteKeyEvent(
   if (!rewritten_event || rewritten_event->type() != ui::ET_MOUSE_RELEASED) {
     updated_button_map = true;
     UpdatePressedButtonMap(std::move(button), key_event, rewritten_event);
+  }
+
+  if (!rewritten_event && key_event.key_code() >= ui::VKEY_BUTTON_0 &&
+      key_event.key_code() <= ui::VKEY_BUTTON_Z) {
+    return DiscardEvent(continuation);
   }
 
   if (!rewritten_event) {
@@ -617,7 +743,7 @@ PeripheralCustomizationEventRewriter::RewriteMouseEvent(
     std::unique_ptr<ui::Event> rewritten_event = CloneEvent(mouse_event);
     const int remappable_flags =
         GetRemappableMouseEventFlags(*device_type_to_observe);
-    rewritten_event->set_flags(rewritten_event->flags() & ~remappable_flags);
+    rewritten_event->SetFlags(rewritten_event->flags() & ~remappable_flags);
     if (rewritten_event->IsMouseEvent()) {
       auto& rewritten_mouse_event = *rewritten_event->AsMouseEvent();
       rewritten_mouse_event.set_changed_button_flags(
@@ -659,7 +785,8 @@ PeripheralCustomizationEventRewriter::RewriteMouseEvent(
 ui::EventDispatchDetails PeripheralCustomizationEventRewriter::RewriteEvent(
     const ui::Event& event,
     const Continuation continuation) {
-  DCHECK(features::IsPeripheralCustomizationEnabled());
+  DCHECK(features::IsPeripheralCustomizationEnabled() ||
+         ::features::IsShortcutCustomizationEnabled());
 
   if (event.IsMouseEvent()) {
     return RewriteMouseEvent(*event.AsMouseEvent(), continuation);
@@ -672,7 +799,7 @@ ui::EventDispatchDetails PeripheralCustomizationEventRewriter::RewriteEvent(
   return SendEvent(continuation, &event);
 }
 
-const mojom::RemappingAction*
+std::optional<PeripheralCustomizationEventRewriter::RemappingActionResult>
 PeripheralCustomizationEventRewriter::GetRemappingAction(
     int device_id,
     const mojom::Button& button) {
@@ -689,7 +816,7 @@ PeripheralCustomizationEventRewriter::GetRemappingAction(
         button, *graphics_tablet_settings);
   }
 
-  return nullptr;
+  return absl::nullopt;
 }
 
 void PeripheralCustomizationEventRewriter::RemoveRemappedModifiers(
@@ -713,7 +840,7 @@ void PeripheralCustomizationEventRewriter::RemoveRemappedModifiers(
   // remapped, this will behave incorrectly as it will remove "Ctrl". Instead,
   // this needs to track what keys are being pressed by the device that have
   // modifiers attached to them. For now, this is close enough to being correct.
-  event.set_flags(event.flags() & ~modifier_flags);
+  event.SetFlags(event.flags() & ~modifier_flags);
 }
 
 void PeripheralCustomizationEventRewriter::ApplyRemappedModifiers(
@@ -722,7 +849,7 @@ void PeripheralCustomizationEventRewriter::ApplyRemappedModifiers(
   for (const auto& [_, flag] : device_button_to_flags_) {
     flags |= flag;
   }
-  event.set_flags(event.flags() | flags);
+  event.SetFlags(event.flags() | flags);
 }
 
 std::unique_ptr<ui::Event> PeripheralCustomizationEventRewriter::CloneEvent(

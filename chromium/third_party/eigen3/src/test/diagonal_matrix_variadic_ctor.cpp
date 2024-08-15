@@ -33,9 +33,8 @@
   VERIFY_IS_APPROX(Dense(3, 3), (Scalar)V3);                       \
   VERIFY_IS_APPROX(Dense(4, 4), (Scalar)V4);
 
-template<typename Scalar>
-void constructorTest()
-{
+template <typename Scalar>
+void constructorTest() {
   typedef DiagonalMatrix<Scalar, 0> DiagonalMatrix0;
   typedef DiagonalMatrix<Scalar, 3> DiagonalMatrix3;
   typedef DiagonalMatrix<Scalar, 4> DiagonalMatrix4;
@@ -46,21 +45,21 @@ void constructorTest()
 
   // Fixed-sized matrices
   {
-    DiagonalMatrix0 a {{}};
+    DiagonalMatrix0 a{{}};
     VERIFY(a.rows() == 0);
     VERIFY(a.cols() == 0);
     typename DiagonalMatrix0::DenseMatrixType m = a.toDenseMatrix();
     for (Index k = 0; k < a.rows(); ++k) VERIFY(m(k, k) == raw[k]);
   }
   {
-    DiagonalMatrix3 a {{raw[0], raw[1], raw[2]}};
+    DiagonalMatrix3 a{{raw[0], raw[1], raw[2]}};
     VERIFY(a.rows() == 3);
     VERIFY(a.cols() == 3);
     typename DiagonalMatrix3::DenseMatrixType m = a.toDenseMatrix();
     for (Index k = 0; k < a.rows(); ++k) VERIFY(m(k, k) == raw[k]);
   }
   {
-    DiagonalMatrix4 a {{raw[0], raw[1], raw[2], raw[3]}};
+    DiagonalMatrix4 a{{raw[0], raw[1], raw[2], raw[3]}};
     VERIFY(a.rows() == 4);
     VERIFY(a.cols() == 4);
     typename DiagonalMatrix4::DenseMatrixType m = a.toDenseMatrix();
@@ -84,9 +83,8 @@ void constructorTest()
   }
 }
 
-template<>
-void constructorTest<float>()
-{
+template <>
+void constructorTest<float>() {
   typedef float Scalar;
 
   typedef DiagonalMatrix<Scalar, 0> DiagonalMatrix0;
@@ -100,21 +98,21 @@ void constructorTest<float>()
 
   // Fixed-sized matrices
   {
-    DiagonalMatrix0 a {{}};
+    DiagonalMatrix0 a{{}};
     VERIFY(a.rows() == 0);
     VERIFY(a.cols() == 0);
     typename DiagonalMatrix0::DenseMatrixType m = a.toDenseMatrix();
     for (Index k = 0; k < a.rows(); ++k) VERIFY(m(k, k) == raw[k]);
   }
   {
-    DiagonalMatrix3 a {{raw[0], raw[1], raw[2]}};
+    DiagonalMatrix3 a{{raw[0], raw[1], raw[2]}};
     VERIFY(a.rows() == 3);
     VERIFY(a.cols() == 3);
     typename DiagonalMatrix3::DenseMatrixType m = a.toDenseMatrix();
     for (Index k = 0; k < a.rows(); ++k) VERIFY(m(k, k) == raw[k]);
   }
   {
-    DiagonalMatrix4 a {{raw[0], raw[1], raw[2], raw[3]}};
+    DiagonalMatrix4 a{{raw[0], raw[1], raw[2], raw[3]}};
     VERIFY(a.rows() == 4);
     VERIFY(a.cols() == 4);
     typename DiagonalMatrix4::DenseMatrixType m = a.toDenseMatrix();
@@ -141,8 +139,7 @@ void constructorTest<float>()
   { VERIFY_IMPLICIT_CONVERSION_5(DiagonalMatrix5, 1.2647, 2.56f, -3, 3.23f, 2); }
 }
 
-EIGEN_DECLARE_TEST(diagonal_matrix_variadic_ctor)
-{
+EIGEN_DECLARE_TEST(diagonal_matrix_variadic_ctor) {
   CALL_SUBTEST_2(constructorTest<unsigned char>());
   CALL_SUBTEST_2(constructorTest<float>());
   CALL_SUBTEST_2(constructorTest<Index>());

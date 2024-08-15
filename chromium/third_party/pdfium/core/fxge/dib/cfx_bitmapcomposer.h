@@ -27,7 +27,7 @@ class CFX_BitmapComposer final : public ScanlineComposerIface {
 
   void Compose(const RetainPtr<CFX_DIBitmap>& pDest,
                const CFX_ClipRgn* pClipRgn,
-               int bitmap_alpha,
+               float alpha,
                uint32_t mask_color,
                const FX_RECT& dest_rect,
                bool bVertical,
@@ -40,7 +40,7 @@ class CFX_BitmapComposer final : public ScanlineComposerIface {
   bool SetInfo(int width,
                int height,
                FXDIB_Format src_format,
-               pdfium::span<const uint32_t> src_palette) override;
+               DataVector<uint32_t> src_palette) override;
   void ComposeScanline(int line, pdfium::span<const uint8_t> scanline) override;
 
  private:
@@ -57,7 +57,7 @@ class CFX_BitmapComposer final : public ScanlineComposerIface {
   int m_DestTop;
   int m_DestWidth;
   int m_DestHeight;
-  int m_BitmapAlpha;
+  float m_Alpha;
   uint32_t m_MaskColor;
   RetainPtr<CFX_DIBitmap> m_pClipMask;
   CFX_ScanlineCompositor m_Compositor;

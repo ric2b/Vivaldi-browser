@@ -4,34 +4,34 @@
 
 #include "test_helpers.h"
 
+#include <fstream>
+#include <iostream>
 #include <sstream>
+#include <streambuf>
+#include <string>
 #include <string_view>
 
-#include "fillins/path_service.h"
-#include "fillins/file_util.h"
-
-#include "pem.h"
-#include "cert_error_params.h"
-#include "cert_errors.h"
-#include "simple_path_builder_delegate.h"
-#include "string_util.h"
-#include "trust_store.h"
-#include "parser.h"
 #include <gtest/gtest.h>
 #include <openssl/bytestring.h>
 #include <openssl/mem.h>
 #include <openssl/pool.h>
+#include "cert_error_params.h"
+#include "cert_errors.h"
+#include "parser.h"
+#include "pem.h"
+#include "simple_path_builder_delegate.h"
+#include "string_util.h"
+#include "trust_store.h"
 
 namespace bssl {
 
 namespace {
 
-bool GetValue(std::string_view prefix,
-              std::string_view line,
-              std::string* value,
-              bool* has_value) {
-  if (!bssl::string_util::StartsWith(line, prefix))
+bool GetValue(std::string_view prefix, std::string_view line,
+              std::string *value, bool *has_value) {
+  if (!bssl::string_util::StartsWith(line, prefix)) {
     return false;
+  }
 
   if (*has_value) {
     ADD_FAILURE() << "Duplicated " << prefix;
@@ -56,9 +56,9 @@ std::string OidToString(der::Input oid) {
   return text.get();
 }
 
-std::string StrSetToString(const std::set<std::string>& str_set) {
+std::string StrSetToString(const std::set<std::string> &str_set) {
   std::string out;
-  for (const auto& s : str_set) {
+  for (const auto &s : str_set) {
     EXPECT_FALSE(s.empty());
     if (!out.empty()) {
       out += ", ";
@@ -85,17 +85,52 @@ std::vector<std::string> SplitString(std::string_view str) {
   std::vector<std::string_view> split = string_util::SplitString(str, ',');
 
   std::vector<std::string> out;
-  for (const auto& s : split) {
+  for (const auto &s : split) {
     out.push_back(StripString(s));
   }
   return out;
+}
+
+bool ReadFileToString(const std::string &path, std::string *out) {
+  std::ifstream file(path, std::ios::binary);
+  file.unsetf(std::ios::skipws);
+
+  file.seekg(0, std::ios::end);
+  if (file.tellg() == -1) {
+    return false;
+  }
+  out->reserve(file.tellg());
+  file.seekg(0, std::ios::beg);
+
+  out->assign(std::istreambuf_iterator<char>(file),
+              std::istreambuf_iterator<char>());
+
+  return true;
+}
+
+std::string AppendComponent(const std::string &path,
+                            const std::string &component) {
+  // Append a path component to a path. Use the \ separator if this appears to
+  // be a Windows path, otherwise the Unix one.
+  if (path.find(":\\") != std::string::npos) {
+    return path + "\\" + component;
+  }
+  return path + "/" + component;
+}
+
+std::string GetTestRoot(void) {
+  // We expect our test data to live in "pki" underneath a
+  // test root directory, or in the current directry.
+  char *root_from_env = getenv("BORINGSSL_TEST_DATA_ROOT");
+  std::string root = root_from_env ? root_from_env : ".";
+  return AppendComponent(root, "pki");
 }
 
 }  // namespace
 
 namespace der {
 
-void PrintTo(const Input& data, ::std::ostream* os) {
+void PrintTo(const Input &data, ::std::ostream *os) {
   size_t len;
   if (!EVP_EncodedLength(&len, data.Length())) {
     *os << "[]";
@@ -125,8 +160,7 @@ der::Input SequenceValueFromString(std::string_view s) {
 }
 
 ::testing::AssertionResult ReadTestDataFromPemFile(
-    const std::string& file_path_ascii,
-    const PemBlockMapping* mappings,
+    const std::string &file_path_ascii, const PemBlockMapping *mappings,
     size_t mappings_length) {
   std::string file_data = ReadTestFileToString(file_path_ascii);
 
@@ -138,13 +172,13 @@ der::Input SequenceValueFromString(std::string_view s) {
 
   // Build the |pem_headers| vector needed for PEMTokenzier.
   std::vector<std::string> pem_headers;
-  for (const auto& mapping : mappings_copy) {
+  for (const auto &mapping : mappings_copy) {
     pem_headers.push_back(mapping.block_name);
   }
 
   PEMTokenizer pem_tokenizer(file_data, pem_headers);
   while (pem_tokenizer.GetNext()) {
-    for (auto& mapping : mappings_copy) {
+    for (auto &mapping : mappings_copy) {
       // Find the mapping for this block type.
       if (pem_tokenizer.block_type() == mapping.block_name) {
         if (!mapping.value) {
@@ -162,7 +196,7 @@ der::Input SequenceValueFromString(std::string_view s) {
   }
 
   // Ensure that all specified blocks were found.
-  for (const auto& mapping : mappings_copy) {
+  for (const auto &mapping : mappings_copy) {
     if (mapping.value && !mapping.optional) {
       return ::testing::AssertionFailure()
              << "PEM block missing: " << mapping.block_name;
@@ -192,25 +226,26 @@ bool VerifyCertChainTest::HasHighSeverityErrors() const {
   return expected_errors.find("ERROR: ") != std::string::npos;
 }
 
-bool ReadCertChainFromFile(const std::string& file_path_ascii,
-                           ParsedCertificateList* chain) {
+bool ReadCertChainFromFile(const std::string &file_path_ascii,
+                           ParsedCertificateList *chain) {
   // Reset all the out parameters to their defaults.
   *chain = ParsedCertificateList();
 
   std::string file_data = ReadTestFileToString(file_path_ascii);
-  if (file_data.empty())
+  if (file_data.empty()) {
     return false;
+  }
 
   std::vector<std::string> pem_headers = {"CERTIFICATE"};
 
   PEMTokenizer pem_tokenizer(file_data, pem_headers);
   while (pem_tokenizer.GetNext()) {
-    const std::string& block_data = pem_tokenizer.data();
+    const std::string &block_data = pem_tokenizer.data();
 
     CertErrors errors;
     if (!ParsedCertificate::CreateAndAddToVector(
             bssl::UniquePtr<CRYPTO_BUFFER>(CRYPTO_BUFFER_new(
-                reinterpret_cast<const uint8_t*>(block_data.data()),
+                reinterpret_cast<const uint8_t *>(block_data.data()),
                 block_data.size(), nullptr)),
             {}, chain, &errors)) {
       ADD_FAILURE() << errors.ToDebugString();
@@ -222,23 +257,26 @@ bool ReadCertChainFromFile(const std::string& file_path_ascii,
 }
 
 std::shared_ptr<const ParsedCertificate> ReadCertFromFile(
-    const std::string& file_path_ascii) {
+    const std::string &file_path_ascii) {
   ParsedCertificateList chain;
-  if (!ReadCertChainFromFile(file_path_ascii, &chain))
+  if (!ReadCertChainFromFile(file_path_ascii, &chain)) {
     return nullptr;
-  if (chain.size() != 1)
+  }
+  if (chain.size() != 1) {
     return nullptr;
+  }
   return chain[0];
 }
 
-bool ReadVerifyCertChainTestFromFile(const std::string& file_path_ascii,
-                                     VerifyCertChainTest* test) {
+bool ReadVerifyCertChainTestFromFile(const std::string &file_path_ascii,
+                                     VerifyCertChainTest *test) {
   // Reset all the out parameters to their defaults.
   *test = {};
 
   std::string file_data = ReadTestFileToString(file_path_ascii);
-  if (file_data.empty())
+  if (file_data.empty()) {
     return false;
+  }
 
   bool has_chain = false;
   bool has_trust = false;
@@ -412,26 +450,25 @@ bool ReadVerifyCertChainTestFromFile(const std::string& file_path_ascii,
   return true;
 }
 
-std::string ReadTestFileToString(const std::string& file_path_ascii) {
+std::string ReadTestFileToString(const std::string &file_path_ascii) {
   // Compute the full path, relative to the src/ directory.
-  fillins::FilePath src_root;
-  bssl::fillins::PathService::Get(fillins::BSSL_TEST_DATA_ROOT, &src_root);
-  fillins::FilePath filepath = src_root.AppendASCII(file_path_ascii);
+  std::string src_root = GetTestRoot();
+  std::string filepath = AppendComponent(src_root, file_path_ascii);
 
   // Read the full contents of the file.
   std::string file_data;
-  if (!fillins::ReadFileToString(filepath, &file_data)) {
-    ADD_FAILURE() << "Couldn't read file: " << filepath.value();
+  if (!ReadFileToString(filepath, &file_data)) {
+    ADD_FAILURE() << "Couldn't read file: " << filepath;
     return std::string();
   }
 
   return file_data;
 }
 
-void VerifyCertPathErrors(const std::string& expected_errors_str,
-                          const CertPathErrors& actual_errors,
-                          const ParsedCertificateList& chain,
-                          const std::string& errors_file_path) {
+void VerifyCertPathErrors(const std::string &expected_errors_str,
+                          const CertPathErrors &actual_errors,
+                          const ParsedCertificateList &chain,
+                          const std::string &errors_file_path) {
   std::string actual_errors_str = actual_errors.ToDebugString(chain);
 
   if (expected_errors_str != actual_errors_str) {
@@ -442,14 +479,14 @@ void VerifyCertPathErrors(const std::string& expected_errors_str,
                   << "ACTUAL:\n\n"
                   << actual_errors_str << "\n"
                   << "===> Use "
-                     "testdata/verify_certificate_chain_unittest/"
+                     "pki/testdata/verify_certificate_chain_unittest/"
                      "rebase-errors.py to rebaseline.\n";
   }
 }
 
-void VerifyCertErrors(const std::string& expected_errors_str,
-                      const CertErrors& actual_errors,
-                      const std::string& errors_file_path) {
+void VerifyCertErrors(const std::string &expected_errors_str,
+                      const CertErrors &actual_errors,
+                      const std::string &errors_file_path) {
   std::string actual_errors_str = actual_errors.ToDebugString();
 
   if (expected_errors_str != actual_errors_str) {
@@ -460,17 +497,17 @@ void VerifyCertErrors(const std::string& expected_errors_str,
                   << "ACTUAL:\n\n"
                   << actual_errors_str << "\n"
                   << "===> Use "
-                     "testdata/parse_certificate_unittest/"
+                     "pki/testdata/parse_certificate_unittest/"
                      "rebase-errors.py to rebaseline.\n";
   }
 }
 
 void VerifyUserConstrainedPolicySet(
-    const std::set<std::string>& expected_user_constrained_policy_str_set,
-    const std::set<der::Input>& actual_user_constrained_policy_set,
-    const std::string& errors_file_path) {
+    const std::set<std::string> &expected_user_constrained_policy_str_set,
+    const std::set<der::Input> &actual_user_constrained_policy_set,
+    const std::string &errors_file_path) {
   std::set<std::string> actual_user_constrained_policy_str_set;
-  for (const der::Input& der_oid : actual_user_constrained_policy_set) {
+  for (const der::Input &der_oid : actual_user_constrained_policy_set) {
     actual_user_constrained_policy_str_set.insert(OidToString(der_oid));
   }
   if (expected_user_constrained_policy_str_set !=
@@ -486,4 +523,4 @@ void VerifyUserConstrainedPolicySet(
   }
 }
 
-}  // namespace net
+}  // namespace bssl

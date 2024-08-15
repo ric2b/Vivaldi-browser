@@ -20,12 +20,14 @@
 #include "components/policy/core/common/cloud/dm_token.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/reporting/resources/resource_manager.h"
+#include "components/reporting/util/status.h"
+#include "components/reporting/util/status_macros.h"
 #include "components/reporting/util/test_support_callbacks.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using ::base::EqualsProto;
+using ::base::test::EqualsProto;
 using ::testing::_;
 using ::testing::Eq;
 using ::testing::Invoke;

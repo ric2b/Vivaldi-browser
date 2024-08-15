@@ -83,7 +83,7 @@ TemplateURL* GetTemplateURLById(TemplateURLService* service, TemplateURLID id) {
       service->GetTemplateURLs();
   const auto template_url_iter = std::find_if(
       template_urls.begin(), template_urls.end(),
-      [id](const auto* template_url) { return template_url->id() == id; });
+      [id](const auto template_url) { return template_url->id() == id; });
   if (template_url_iter == template_urls.end())
     return nullptr;
   return *template_url_iter;
@@ -178,7 +178,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
     // Stable sort preserves the order of search engines added by extensions,
     // which have no position.
     std::stable_sort(template_urls.begin(), template_urls.end(),
-                     [](const auto* template_url1, const auto* template_url2) {
+                     [](const auto template_url1, const auto template_url2) {
                        // Important to have the false-returning test first, so
                        // that if both are invalid, they'll be evaluated as
                        // equal.
@@ -189,7 +189,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
                        return template_url1->data().vivaldi_position.LessThan(
                            template_url2->data().vivaldi_position);
                      });
-    for (const auto* template_url : template_urls) {
+    for (const TemplateURL* template_url : template_urls) {
       // We abuse is_active to hide "removed" prepopulated searches.
       if (template_url->is_active() != TemplateURLData::ActiveStatus::kFalse)
         AddTemplateURLToResult(template_url, false, result.template_urls);
@@ -465,19 +465,19 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
   auto default_type = [](vivaldi::search_engines::DefaultType default_type)
       -> absl::optional<TemplateURLService::DefaultSearchType> {
     switch (default_type) {
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTSEARCH:
+      case vivaldi::search_engines::DefaultType::kDefaultSearch:
         return TemplateURLService::kDefaultSearchMain;
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTPRIVATE:
+      case vivaldi::search_engines::DefaultType::kDefaultPrivate:
         return TemplateURLService::kDefaultSearchPrivate;
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTSEARCHFIELD:
+      case vivaldi::search_engines::DefaultType::kDefaultSearchField:
         return TemplateURLService::kDefaultSearchField;
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTSEARCHFIELDPRIVATE:
+      case vivaldi::search_engines::DefaultType::kDefaultSearchFieldPrivate:
         return TemplateURLService::kDefaultSearchFieldPrivate;
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTSPEEDDIALS:
+      case vivaldi::search_engines::DefaultType::kDefaultSpeeddials:
         return TemplateURLService::kDefaultSearchSpeeddials;
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTSPEEDDIALSPRIVATE:
+      case vivaldi::search_engines::DefaultType::kDefaultSpeeddialsPrivate:
         return TemplateURLService::kDefaultSearchSpeeddialsPrivate;
-      case vivaldi::search_engines::DEFAULT_TYPE_DEFAULTIMAGE:
+      case vivaldi::search_engines::DefaultType::kDefaultImage:
         return TemplateURLService::kDefaultSearchImage;
       default:
         NOTREACHED();
@@ -571,7 +571,7 @@ SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
   // it's safe to remove anything that's not prepopulated;
   TemplateURLService::TemplateURLVector template_urls =
       service->GetTemplateURLs();
-  for (const auto* template_url : template_urls) {
+  for (const auto template_url : template_urls) {
     if (template_url->prepopulate_id() == 0)
       service->Remove(template_url);
   }

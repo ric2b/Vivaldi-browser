@@ -41,6 +41,8 @@ if(TINT_BUILD_SPV_WRITER)
 # Condition: TINT_BUILD_SPV_WRITER
 ################################################################################
 tint_add_target(tint_lang_spirv_writer_helpers lib
+  lang/spirv/writer/helpers/ast_generate_bindings.cc
+  lang/spirv/writer/helpers/ast_generate_bindings.h
   lang/spirv/writer/helpers/generate_bindings.cc
   lang/spirv/writer/helpers/generate_bindings.h
 )
@@ -49,9 +51,11 @@ tint_target_add_dependencies(tint_lang_spirv_writer_helpers lib
   tint_api_common
   tint_lang_core
   tint_lang_core_constant
+  tint_lang_core_ir
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
   tint_utils_containers

@@ -263,6 +263,9 @@ struct Extensions
     // GL_MESA_framebuffer_flip_y
     bool framebufferFlipYMESA = false;
 
+    // GL_QCOM_framebuffer_foveated
+    bool framebufferFoveatedQCOM = false;
+
     // GL_EXT_geometry_shader
     bool geometryShaderEXT = false;
 
@@ -530,6 +533,9 @@ struct Extensions
     // GL_EXT_texture_format_sRGB_override
     bool textureFormatSRGBOverrideEXT = false;
 
+    // GL_QCOM_texture_foveated
+    bool textureFoveatedQCOM = false;
+
     // GL_OES_texture_half_float
     bool textureHalfFloatOES = false;
 
@@ -733,9 +739,6 @@ struct Extensions
 
     // GL_ANGLE_texture_external_update
     bool textureExternalUpdateANGLE = false;
-
-    // GL_CHROMIUM_texture_filtering_hint
-    bool textureFilteringHintCHROMIUM = false;
 
     // GL_ANGLE_texture_multisample
     bool textureMultisampleANGLE = false;

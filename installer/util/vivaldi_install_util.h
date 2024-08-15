@@ -111,7 +111,7 @@ void SendQuitUpdateNotifier(const base::FilePath& install_binary_dir,
 // install_binary_dir. If install_binary_dir is empty, use
 // GetDirectoryOfCurrentExe().
 std::wstring GetUpdateNotifierEventName(
-    base::WStringPiece event_prefix,
+    std::wstring_view event_prefix,
     const base::FilePath& install_binary_dir);
 
 base::win::RegKey OpenRegistryKeyToRead(HKEY rootkey, const wchar_t* subkey);

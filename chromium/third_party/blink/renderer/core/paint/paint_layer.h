@@ -133,7 +133,7 @@ enum PaintLayerIteration {
 //   PaintLayers.
 // - If the flag is false, the LayoutObject is painted like normal children (ie
 //   as if it didn't have a PaintLayer). The paint order is handled by
-//   NGBoxFragmentPainter.
+//   BoxFragmentPainter.
 // This means that the self-painting flag changes the painting order in a subtle
 // way, which can potentially have visible consequences. Those bugs are called
 // painting inversion as we invert the order of painting for 2 elements
@@ -224,8 +224,6 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
 
   void UpdateScrollingAfterLayout();
 
-  void UpdateLayerPositionsAfterLayout();
-
   void UpdateTransform();
 
   bool HasVisibleContent() const {
@@ -245,12 +243,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   // of this layer. Normally the parent layer is the containing layer, except
   // for out of flow positioned, floating and multicol spanner layers whose
   // containing layer might be an ancestor of the parent layer.
-  // If |ancestor| is specified, |*skippedAncestor| will be set to true if
-  // |ancestor| is found in the ancestry chain between this layer and the
-  // containing block layer; if not found, it will be set to false. Either both
-  // |ancestor| and |skippedAncestor| should be nullptr, or none of them should.
-  PaintLayer* ContainingLayer(const PaintLayer* ancestor = nullptr,
-                              bool* skipped_ancestor = nullptr) const;
+  PaintLayer* ContainingLayer() const;
 
   // The hitTest() method looks for mouse events by walking layers that
   // intersect the point from front to back.
@@ -534,8 +527,6 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   // Bounding box in the coordinates of this layer.
   PhysicalRect LocalBoundingBox() const;
 
-  void UpdateLayerPositionRecursive();
-
   void SetNextSibling(PaintLayer* next) { next_ = next; }
   void SetPreviousSibling(PaintLayer* prev) { previous_ = prev; }
   void SetFirstChild(PaintLayer* first) { first_ = first; }
@@ -605,7 +596,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
       const HitTestingTransformState* root_transform_state) const;
 
   bool HitTestFragmentWithPhase(HitTestResult&,
-                                const NGPhysicalBoxFragment*,
+                                const PhysicalBoxFragment*,
                                 const PhysicalOffset& fragment_offset,
                                 const HitTestLocation&,
                                 HitTestPhase phase) const;

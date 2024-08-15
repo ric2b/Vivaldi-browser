@@ -5,6 +5,7 @@
 module blink.mojom;
 
 import "cc/mojom/browser_controls_state.mojom";
+import "mojo/public/mojom/base/byte_string.mojom";
 import "mojo/public/mojom/base/shared_memory.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/text_direction.mojom";
@@ -60,7 +61,6 @@ import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_api_history_entry_arrays.mojom";
 import "third_party/blink/public/mojom/opengraph/metadata.mojom";
 import "third_party/blink/public/mojom/page/widget.mojom";
-import "third_party/blink/public/mojom/portal/portal.mojom";
 import "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom";
 import "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom";
 import "third_party/blink/public/mojom/timing/resource_timing.mojom";
@@ -72,6 +72,7 @@ import "ui/base/ime/mojom/virtual_keyboard_types.mojom";
 import "ui/base/mojom/window_open_disposition.mojom";
 import "ui/events/mojom/scroll_granularity.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/image/mojom/image.mojom";
 import "ui/gfx/range/mojom/range.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
@@ -172,8 +173,13 @@ enum FrameOwnerElementType {
   kObject,
   kEmbed,
   kFrame,
-  kPortal,
   kFencedframe
+};
+
+enum NavigationApiEntryRestoreReason {
+  kBFCache,
+  kPrerenderActivationPush,
+  kPrerenderActivationReplace
 };
 
 // The maximum number of characters of the document's title that we're willing
@@ -193,8 +199,10 @@ struct IframeAttributes {
   bool credentialless;
   // 'browsingtopics' attribute of the iframe.
   bool browsing_topics;
+  // 'adauctionheaders' attribute of the iframe.
+  bool ad_auction_headers;
   // 'sharedstoragewritable' attribute of the iframe.
-  bool shared_storage_writable;
+  bool shared_storage_writable_opted_in;
   // 'id' attribute of the iframe. This can be optional because id might not be set.
   string? id;
   // 'name' attribute of the iframe. This is different from window.name, which is
@@ -235,18 +243,6 @@ interface LocalFrameHost {
   // Notifies the browser that the current frame has either become or is no
   // longer fullscreen. |options| is only provided if |is_fullscreen == true|.
   FullscreenStateChanged(bool is_fullscreen, FullscreenOptions? options);
-
-  // Request browser to maximize window. Link to I2P:
-  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
-  Maximize();
-
-  // Request browser to minimize window. Link to I2P:
-  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
-  Minimize();
-
-  // Request browser to restore window. Link to I2P:
-  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
-  Restore();
 
   // Register a new handler for URL requests with the given scheme. |scheme|
   // and |url| are provided directly from javascript. See
@@ -402,6 +398,11 @@ interface LocalFrameHost {
   // initial empty document (and in some tests).
   UpdateTitle(mojo_base.mojom.String16? title,
               mojo_base.mojom.TextDirection title_direction);
+
+  // Updates the app title for a document. If non-empty, a web app displayed in an app
+  // window may use this string instead of the regular title.
+  // See https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/DocumentSubtitle/explainer.md
+  UpdateAppTitle(mojo_base.mojom.String16 app_title);
 
   // Indicates that the user activation state in the current frame has been
   // updated, so the replicated states need to be synced (in the browser process
@@ -633,19 +634,10 @@ interface LocalFrameHost {
   // For the list of available reporting destinations, see enum
   // ReportingDestination defined in:
   // third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom
-  // `attribution_reporting_runtime_features` indicates whether Attribution
-  // Reporting API related runtime features are enabled and is needed for
-  // integration with Attribution Reporting API.
-  //
-  // TODO(crbug.com/1443561): Get rid of
-  // `attribution_reporting_runtime_features` when Runtime Feature State fully
-  // supports runtime feature access from the browser process.
   SendFencedFrameReportingBeacon(
       string event_data,
       string event_type,
-      array<ReportingDestination> destinations,
-      network.mojom.AttributionReportingRuntimeFeatures
-          attribution_reporting_runtime_features);
+      array<ReportingDestination> destinations);
 
   // See:
   // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
@@ -658,13 +650,19 @@ interface LocalFrameHost {
   // in `destinationURL` will be substituted using the values specified by
   // registerAdMacro in the Protected Audience auction's buyer worklet.
   //
-  // TODO(crbug.com/1443561): Get rid of
-  // `attribution_reporting_runtime_features` when Runtime Feature State fully
-  // supports runtime feature access from the browser process.
   SendFencedFrameReportingBeaconToCustomURL(
-      url.mojom.Url destination_url,
-      network.mojom.AttributionReportingRuntimeFeatures
-          attribution_reporting_runtime_features);
+      url.mojom.Url destination_url);
+
+  // See:
+  // https://github.com/WICG/fenced-frame/blob/master/explainer/fenced_frames_with_local_unpartitioned_data_access.md
+  //
+  // This implements the API:
+  // window.fence.disableUntrustedNetwork()
+  //
+  // A document in a fenced frame can invoke the disableUntrustedNetwork API to
+  // disable the frame tree's access to the network (except trusted servers in
+  // the future) and gain access to unpartitioned storage.
+  DisableUntrustedNetworkInFencedFrame() => ();
 
   // Notify the browser that there is a legacy technology used by the page.
   // The event contains the technology `type` and code location from the
@@ -685,20 +683,15 @@ interface LocalFrameHost {
   // will still work, but is deprecated). The `event_data` is installed in the
   // RenderFrameHost and will be sent toward `destinations` on the next
   // cross-document top-frame navigation.
-  // `attribution_reporting_runtime_features` indicates whether Attribution
-  // Reporting API related runtime features are enabled and is needed for
-  // integration with Attribution Reporting API.
-  //
-  // TODO(crbug.com/1443561): Get rid of
-  // `attribution_reporting_runtime_features` when Runtime Feature State fully
-  // supports runtime feature access from the browser process.
+  // `cross_origin_exposed` determines if this data can be used for an automatic
+  // beacon that originates from a cross-origin subframe. See the comment in
+  // "fence_event.idl" for more details.
   SetFencedFrameAutomaticBeaconReportEventData(
       AutomaticBeaconType event_type,
       string event_data,
       array<ReportingDestination> destinations,
-      network.mojom.AttributionReportingRuntimeFeatures
-          attribution_reporting_runtime_features,
-      bool once);
+      bool once,
+      bool cross_origin_exposed);
 
   // See:
   // https://github.com/WICG/turtledove/blob/main/FLEDGE_extended_PA_reporting.md
@@ -710,37 +703,11 @@ interface LocalFrameHost {
   // browser to send private aggregation requests associated with `event_type`.
   SendPrivateAggregationRequestsForFencedFrameEvent(string event_type);
 
-  // Sent by the renderer process to request the creation of a new portal.
-  // |portal| is the pipe to be used for the Portal object, |client| is the pipe
-  // used to communicate back with the caller. Returns:
-  // |initial_replicated_state| - the replicated state associated with that
-  //                              RenderFrameProxy
-  // |portal_token| - the unique identifier for the portal
-  // |frame_token| - the unique identifier of the RenderFrameProxy
-  // |devtools_frame_token| - the unique identifier of the frame node in the
-  //                          frame tree
-  [Sync] CreatePortal(
-      pending_associated_receiver<blink.mojom.Portal> portal,
-      pending_associated_remote<blink.mojom.PortalClient> client,
-      RemoteFrameInterfacesFromRenderer remote_frame_interfaces)
-      => (blink.mojom.FrameReplicationState initial_replicated_state,
-          blink.mojom.PortalToken portal_token,
-          blink.mojom.RemoteFrameToken frame_token,
-          mojo_base.mojom.UnguessableToken devtools_frame_token);
-
-  // Requests that this frame adopts the portal identified by |portal_token|.
-  // Returns:
-  // |replicated_state| - the replicated state associated with that
-  //                      RenderFrameProxy
-  // |frame_token| - the unique identifier of the RenderFrameProxy
-  // |devtools_frame_token| - the unique identifier of the frame node in the
-  //                          frame tree
-  [Sync] AdoptPortal(
-      blink.mojom.PortalToken portal_token,
-      RemoteFrameInterfacesFromRenderer remote_frame_interfaces)
-      => (blink.mojom.FrameReplicationState replicated_state,
-          blink.mojom.RemoteFrameToken frame_token,
-          mojo_base.mojom.UnguessableToken devtools_frame_token);
+  // Indicates whether the Attribution Reporting API's runtime features are
+  // enabled or not for this document, and are required for integration of
+  // fenced frames (and URN iframes) with the Attribution Reporting API.
+  SetAttributionReportingRuntimeFeatures(
+      network.mojom.AttributionReportingRuntimeFeatures features);
 
   // Sent by the frame in a renderer process that hosts/owns a <fencedframe>
   // element, to the browser process requesting the creation of a new fenced
@@ -842,11 +809,6 @@ interface LocalFrame {
   AddMessageToConsole(ConsoleMessageLevel level, string message,
                     bool discard_duplicates);
 
-  // Add devtools issue to the frames issue storage.
-  // Issues offer a more structured way to surface problems in DevTools than
-  // doing so via console messages.
-  AddInspectorIssue(InspectorIssueInfo info);
-
   // Requests that a provisional frame swap itself into the frame tree,
   // immediately replacing the RemoteFrame that it is associated with. Normally,
   // this swap happens when the navigation commits in the provisional frame.
@@ -903,13 +865,32 @@ interface LocalFrame {
   // the beforeunload event is handled. |proceed| matches the return value
   // of the frame's beforeunload handler: true if the user decided to proceed
   // with leaving the page.
+  //
+  // The [SupportsUrgent] attribute enables marking this message as urgent by
+  // calling the method in an UrgentMessageScope. Urgent messages cause the
+  // renderer to prioritize the IPC task queue while there are urgent messages
+  // pending, which increases their priority while maintaining ordering
+  // guarantees. See also mojo/public/tools/bindings/README.md.
+  [SupportsUrgent]
   BeforeUnload(bool is_reload)
       => (bool proceed, mojo_base.mojom.TimeTicks before_unload_start_time,
           mojo_base.mojom.TimeTicks before_unload_end_time);
 
   // Tells the renderer to perform the given action on the media player location
   // at the given point in the view coordinate space.
-  MediaPlayerActionAt(gfx.mojom.Point location, blink.mojom.MediaPlayerAction action);
+  MediaPlayerActionAt(gfx.mojom.Point location,
+                      blink.mojom.MediaPlayerAction action);
+
+  // Requests the current video frame of the media player at `location`, scaled
+  // if needed to be bounded by `max_size` with aspect ratio preserved, unless
+  // the original area is already less than `max_area`, where `max_size` and
+  // `max_area` are both in device-independent pixels. This is to avoid scaling
+  // images with very large/small aspect ratio to avoid losing information. If
+  // any of the dimensions is non-positive, no scaling will be performed.
+  RequestVideoFrameAt(gfx.mojom.Point location,
+                      gfx.mojom.Size max_size,
+                      int32 max_area)
+      => (gfx.mojom.ImageSkia image);
 
   // Tells the renderer to perform the given action on the plugin location at
   // the given point in the view coordinate space.
@@ -1073,7 +1054,8 @@ interface LocalFrame {
   // to this frame, and that subset may have changed while the page was in
   // bfcache.
   SetNavigationApiHistoryEntriesForRestore(
-      NavigationApiHistoryEntryArrays entry_arrays);
+      NavigationApiHistoryEntryArrays entry_arrays,
+      NavigationApiEntryRestoreReason restore_reason);
 
   // Updates navigation.entries() when entries are disposed from the session
   // history.
@@ -1086,6 +1068,15 @@ interface LocalFrame {
   // session history entry for this frame. It is sent back to the renderer here
   // to indicate which traversal failed.
   TraverseCancelled(string navigation_api_key, TraverseCancelledReason reason);
+
+  // Dispatches a (uninterceptable, uncancelable) navigate event to the current
+  // document when the browser process determines that this frame will perform
+  // a same-origin cross-document traversal. `is_browser_initiated` will be
+  // false iff this traversal was triggered by a web API (i.e.,
+  // history.back()/forward()/go() or navigation.back()/forward()/traverseTo()).
+  DispatchNavigateEventForCrossDocumentTraversal(
+      url.mojom.Url url, mojo_base.mojom.ByteString page_state,
+      bool is_browser_initiated);
 
   // Requests a one-time snapshot of the document state for a ViewTransition.
   // See https://drafts.csswg.org/css-view-transitions-1/ for details.
@@ -1181,26 +1172,6 @@ interface LocalMainFrame {
       network.mojom.CrossOriginOpenerPolicyReporterParams coop_reporter_info,
       bool is_in_same_virtual_coop_related_group);
 
-  // Called on the main frame of a page embedded in a Portal when it is
-  // activated. The frame has the option to adopt the previous page as a portal
-  // identified by |portal_token| with the interface |portal|. The activation
-  // can optionally include a message |data| dispatched with the
-  // PortalActivateEvent. The return value |was_adopted| indicates if the portal
-  // for the predecessor (identified by |portal_token|) was adopted by the
-  // current frame. The |trace_id| is used to generate activation flow events.
-  OnPortalActivated(
-      blink.mojom.PortalToken portal_token,
-      pending_associated_remote<blink.mojom.Portal> portal,
-      pending_associated_receiver<blink.mojom.PortalClient> portal_client,
-      blink.mojom.TransferableMessage data,
-      uint64 trace_id)
-      => (blink.mojom.PortalActivateResult result);
-
-  // Forwards a message from a portal's host to the main frame in the portal's
-  // guest contents.
-  ForwardMessageFromHost(blink.mojom.TransferableMessage message,
-                         url.mojom.Origin source_origin);
-
   // Notifies the renderer whether hiding/showing the browser controls is
   // enabled, what the current state should be, and whether or not to
   // animate to the proper state.
@@ -1268,6 +1239,18 @@ interface LocalMainFrameHost {
   // document of a main frame. After this, it is no longer safe to show a
   // pending navigation's URL, because a URL spoof is possible.
   DidAccessInitialMainDocument();
+
+  // Request browser to maximize window. Link to I2P:
+  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
+  Maximize();
+
+  // Request browser to minimize window. Link to I2P:
+  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
+  Minimize();
+
+  // Request browser to restore window. Link to I2P:
+  // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ
+  Restore();
 
   // Set the browser window to resizable or not. Link to I2P:
   // https://groups.google.com/a/chromium.org/g/blink-dev/c/oCxWg8q_OQY/m/LUTw0T5cCQAJ

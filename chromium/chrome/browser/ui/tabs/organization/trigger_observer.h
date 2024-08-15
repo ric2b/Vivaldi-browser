@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_TABS_ORGANIZATION_TRIGGER_OBSERVER_H_
 
 #include <memory>
+#include <unordered_map>
 
 #include "base/functional/callback.h"
 #include "chrome/browser/ui/browser_list_observer.h"
@@ -25,7 +26,7 @@ class TabOrganizationTriggerObserver : public BrowserListObserver,
   explicit TabOrganizationTriggerObserver(
       base::RepeatingCallback<void(const Browser*)> on_trigger,
       content::BrowserContext* browser_context,
-      std::unique_ptr<TabOrganizationTrigger> trigger_logic = MakeMVPTrigger());
+      std::unique_ptr<TabOrganizationTrigger> trigger_logic);
   ~TabOrganizationTriggerObserver() override;
 
   // BrowserListObserver:

@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace ash {
@@ -22,6 +23,8 @@ class TrayNetworkStateModel;
 // implements the functionality shared between the headers of Mobile and Wifi
 // network headers.
 class ASH_EXPORT NetworkListNetworkHeaderView : public NetworkListHeaderView {
+  METADATA_HEADER(NetworkListNetworkHeaderView, NetworkListHeaderView)
+
  public:
   class Delegate {
    public:
@@ -69,13 +72,13 @@ class ASH_EXPORT NetworkListNetworkHeaderView : public NetworkListHeaderView {
   // NetworkListHeaderView:
   void UpdateToggleState(bool has_new_state) override;
 
-  raw_ptr<TrayNetworkStateModel, ExperimentalAsh> model_;
+  raw_ptr<TrayNetworkStateModel> model_;
   int const enabled_label_id_;
 
   // `KnobSwitch` to toggle section on or off.
-  raw_ptr<Switch, ExperimentalAsh> toggle_ = nullptr;
+  raw_ptr<Switch> toggle_ = nullptr;
 
-  raw_ptr<Delegate, ExperimentalAsh> delegate_ = nullptr;
+  raw_ptr<Delegate> delegate_ = nullptr;
 
   base::WeakPtrFactory<NetworkListNetworkHeaderView> weak_factory_{this};
 };

@@ -130,7 +130,8 @@ export const MAX_TIME = 180;
 // 40. Ported counter, process summary/sched, & cpu_freq to plugin tracks.
 // 41. Ported all remaining tracks.
 // 42. Rename trackId -> trackKey.
-export const STATE_VERSION = 42;
+// 43. Remove visibleTracks.
+export const STATE_VERSION = 43;
 
 export const SCROLLING_TRACK_GROUP = 'ScrollingTracks';
 
@@ -167,14 +168,20 @@ export type UtidToTrackSortKey = {
 
 export enum ProfileType {
   HEAP_PROFILE = 'heap_profile',
+  MIXED_HEAP_PROFILE = 'heap_profile:com.android.art,libc.malloc',
   NATIVE_HEAP_PROFILE = 'heap_profile:libc.malloc',
   JAVA_HEAP_SAMPLES = 'heap_profile:com.android.art',
   JAVA_HEAP_GRAPH = 'graph',
   PERF_SAMPLE = 'perf',
 }
 
-export type FlamegraphStateViewingOption =
-    'SPACE'|'ALLOC_SPACE'|'OBJECTS'|'ALLOC_OBJECTS'|'PERF_SAMPLES';
+export enum FlamegraphStateViewingOption {
+  SPACE_MEMORY_ALLOCATED_NOT_FREED_KEY = 'SPACE',
+  ALLOC_SPACE_MEMORY_ALLOCATED_KEY = 'ALLOC_SPACE',
+  OBJECTS_ALLOCATED_NOT_FREED_KEY = 'OBJECTS',
+  OBJECTS_ALLOCATED_KEY = 'ALLOC_OBJECTS',
+  PERF_SAMPLES_KEY = 'PERF_SAMPLES',
+}
 
 export interface CallsiteInfo {
   id: number;
@@ -239,8 +246,7 @@ export interface TrackGroupState {
   id: string;
   name: string;
   collapsed: boolean;
-  tracks: string[];  // Child track ids.
-  state?: unknown;
+  tracks: string[];         // Child track ids.
   fixedOrdering?: boolean;  // Render tracks without sorting.
 }
 
@@ -539,7 +545,6 @@ export interface State {
   utidToThreadSortKey: UtidToTrackSortKey;
   areas: ObjectById<AreaById>;
   aggregatePreferences: ObjectById<AggregationState>;
-  visibleTracks: string[];
   scrollingTracks: string[];
   pinnedTracks: string[];
   debugTrackId?: string;
@@ -613,6 +618,7 @@ export interface State {
   pendingDeeplink?: PendingDeeplinkState;
 
   // Individual plugin states
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins: {[key: string]: any};
 }
 
@@ -947,6 +953,7 @@ export function getBuiltinChromeCategoryList(): string[] {
 export function getContainingTrackId(state: State, trackKey: string): null|
     string {
   const track = state.tracks[trackKey];
+  // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
   if (!track) {
     return null;
   }

@@ -140,7 +140,8 @@ class WebStateImpl::RealizedWebState final : public NavigationManagerDelegate {
   UserAgentType GetUserAgentForSessionRestoration() const;
   void SendChangeLoadProgress(double progress);
   void HandleContextMenu(const ContextMenuParams& params);
-  void ShowRepostFormWarningDialog(base::OnceCallback<void(bool)> callback);
+  void ShowRepostFormWarningDialog(FormWarningType warning_type,
+                                   base::OnceCallback<void(bool)> callback);
   void RunJavaScriptAlertDialog(const GURL& origin_url,
                                 NSString* message_text,
                                 base::OnceClosure callback);
@@ -196,31 +197,27 @@ class WebStateImpl::RealizedWebState final : public NavigationManagerDelegate {
   int GetNavigationItemCount() const;
   const GURL& GetVisibleURL() const;
   const GURL& GetLastCommittedURL() const;
-  absl::optional<GURL> GetLastCommittedURLIfTrusted() const;
+  std::optional<GURL> GetLastCommittedURLIfTrusted() const;
   id<CRWWebViewProxy> GetWebViewProxy() const;
   void DidChangeVisibleSecurityState();
   WebState::InterfaceBinder* GetInterfaceBinderForMainFrame();
   bool HasOpener() const;
   void SetHasOpener(bool has_opener);
   bool CanTakeSnapshot() const;
-  void TakeSnapshot(const gfx::RectF& rect, SnapshotCallback callback);
+  void TakeSnapshot(const CGRect rect, SnapshotCallback callback);
   void CreateFullPagePdf(base::OnceCallback<void(NSData*)> callback);
   void CloseMediaPresentations();
   void CloseWebState();
   bool SetSessionStateData(NSData* data);
   NSData* SessionStateData() const;
-  PermissionState GetStateForPermission(Permission permission) const
-      API_AVAILABLE(ios(15.0));
-  void SetStateForPermission(PermissionState state, Permission permission)
-      API_AVAILABLE(ios(15.0));
-  NSDictionary<NSNumber*, NSNumber*>* GetStatesForAllPermissions() const
-      API_AVAILABLE(ios(15.0));
-  void OnStateChangedForPermission(Permission permission)
-      API_AVAILABLE(ios(15.0));
+  PermissionState GetStateForPermission(Permission permission) const;
+  void SetStateForPermission(PermissionState state, Permission permission);
+  NSDictionary<NSNumber*, NSNumber*>* GetStatesForAllPermissions() const;
+  void OnStateChangedForPermission(Permission permission);
   void RequestPermissionsWithDecisionHandler(
       NSArray<NSNumber*>* permissions,
-      PermissionDecisionHandler web_view_decision_handler)
-      API_AVAILABLE(ios(15.0));
+      const GURL& origin,
+      PermissionDecisionHandler web_view_decision_handler);
 
   // NavigationManagerDelegate:
   void ClearDialogs() final;

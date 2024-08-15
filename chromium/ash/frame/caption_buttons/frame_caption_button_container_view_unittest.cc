@@ -6,10 +6,9 @@
 
 #include "ash/constants/ash_switches.h"
 #include "ash/frame/non_client_frame_view_ash.h"
-#include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/float/float_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "base/test/bind.h"
@@ -191,7 +190,7 @@ TEST_F(FrameCaptionButtonContainerViewTest,
 
   // Size and minimize buttons are hidden in tablet mode and the other buttons
   // should shift accordingly.
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  ash::TabletModeControllerTestApi().EnterTabletMode();
   container.UpdateCaptionButtonState(/*animate=*/false);
   test.EndAnimations();
   // Parent needs to layout in response to size change.
@@ -211,7 +210,7 @@ TEST_F(FrameCaptionButtonContainerViewTest,
             container.GetPreferredSize().width());
 
   // Button positions should be the same when leaving tablet mode.
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
+  ash::TabletModeControllerTestApi().LeaveTabletMode();
   container.UpdateCaptionButtonState(/*animate=*/false);
   // Calling code needs to layout in response to size change.
   views::test::RunScheduledLayout(&container);
@@ -269,6 +268,27 @@ TEST_F(FrameCaptionButtonContainerViewTest, CloseButtonIsEnabled) {
   EXPECT_TRUE(testApi.close_button()->GetEnabled());
   EXPECT_EQ(testApi.close_button()->GetTooltipText(),
             l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
+}
+
+// Test that the close button enablement is changed.
+TEST_F(FrameCaptionButtonContainerViewTest, CloseButtonChanged) {
+  FrameCaptionButtonContainerView container(
+      CreateTestWidget(MAXIMIZE_ALLOWED, MINIMIZE_ALLOWED,
+                       CLOSE_BUTTON_VISIBLE),
+      true /*=is_close_button_enabled*/);
+  InitContainer(&container);
+  views::test::RunScheduledLayout(&container);
+  FrameCaptionButtonContainerView::TestApi testApi(&container);
+  EXPECT_TRUE(testApi.close_button()->GetVisible());
+  EXPECT_TRUE(testApi.close_button()->GetEnabled());
+  EXPECT_EQ(testApi.close_button()->GetTooltipText(),
+            l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
+
+  container.SetCloseButtonEnabled(false);
+  EXPECT_TRUE(testApi.close_button()->GetVisible());
+  EXPECT_FALSE(testApi.close_button()->GetEnabled());
+  EXPECT_EQ(testApi.close_button()->GetTooltipText(),
+            l10n_util::GetStringUTF16(IDS_APP_CLOSE_BUTTON_DISABLED_BY_ADMIN));
 }
 
 // Test that the close button is not visible when
@@ -377,7 +397,7 @@ TEST_F(FrameCaptionButtonContainerViewTest, ResizeButtonRestoreBehavior) {
 }
 
 TEST_F(FrameCaptionButtonContainerViewTest, TabletSizeButtonVisibility) {
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  ash::TabletModeControllerTestApi().EnterTabletMode();
 
   // Create a window in tablet mode. It should be maximized and the size button
   // should be hidden.

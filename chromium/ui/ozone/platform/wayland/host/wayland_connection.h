@@ -62,6 +62,7 @@ class WaylandZwpPointerGestures;
 class WaylandZwpRelativePointerManager;
 class WaylandDataDeviceManager;
 class WaylandCursorPosition;
+class WaylandCursorShape;
 class WaylandWindowDragController;
 class GtkPrimarySelectionDeviceManager;
 class GtkShell1;
@@ -109,6 +110,10 @@ class WaylandConnection {
   // Sets a callback that that shutdowns the browser in case of unrecoverable
   // error. Called by WaylandEventWatcher.
   void SetShutdownCb(base::OnceCallback<void()> shutdown_cb);
+
+  // Returns the dotted number version of the Wayland server. For Lacros, this
+  // is the Ash Chrome version.
+  base::Version GetServerVersion() const;
 
   // A correct display must be chosen when creating objects or calling
   // roundrips.  That is, all the methods that deal with polling, pulling event
@@ -205,6 +210,10 @@ class WaylandConnection {
     return zcr_color_manager_.get();
   }
 
+  WaylandCursorShape* wayland_cursor_shape() const {
+    return cursor_shape_.get();
+  }
+
   WaylandZcrCursorShapes* zcr_cursor_shapes() const {
     return zcr_cursor_shapes_.get();
   }
@@ -279,7 +288,7 @@ class WaylandConnection {
   // available.
   bool SupportsSetWindowGeometry() const;
 
-  // Returns true when dragging is entered or started.
+  // Returns true when there an active outgoing drag-and-drop session.
   bool IsDragInProgress() const;
 
   // Creates a new wl_surface.
@@ -379,6 +388,7 @@ class WaylandConnection {
   friend class WaylandZwpPointerGestures;
   friend class WaylandZwpRelativePointerManager;
   friend class WaylandZcrColorManager;
+  friend class WaylandCursorShape;
   friend class WaylandZcrCursorShapes;
   friend class XdgActivation;
   friend class XdgForeignWrapper;
@@ -387,6 +397,13 @@ class WaylandConnection {
 
   void RegisterGlobalObjectFactory(const char* interface_name,
                                    wl::GlobalObjectFactory factory);
+
+  // Returns true if the required wl_globals are announced by the server.
+  bool WlGlobalsReady() const;
+
+  // Based on the bound globals, returns true if required information are
+  // announced by the server. E.g. server version from zaura-shell.
+  bool WlObjectsReady() const;
 
   // Updates InputDevice structures in Chrome. Currently, Wayland doesn't
   // support such, so the devices are derived from the connected interfaces.
@@ -472,6 +489,7 @@ class WaylandConnection {
   std::unique_ptr<WaylandZAuraOutputManager> zaura_output_manager_;
   std::unique_ptr<WaylandZAuraShell> zaura_shell_;
   std::unique_ptr<WaylandZcrColorManager> zcr_color_manager_;
+  std::unique_ptr<WaylandCursorShape> cursor_shape_;
   std::unique_ptr<WaylandZcrCursorShapes> zcr_cursor_shapes_;
   std::unique_ptr<WaylandZcrTouchpadHaptics> zcr_touchpad_haptics_;
   std::unique_ptr<WaylandZwpPointerConstraints> zwp_pointer_constraints_;

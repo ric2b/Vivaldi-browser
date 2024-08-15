@@ -18,7 +18,7 @@ namespace ui {
 
 // Required by gmock to print TargetedEvent in a human-readable way.
 void PrintTo(const AXEventGenerator::TargetedEvent& event, std::ostream* os) {
-  *os << event.event_params.event << " on " << event.node_id;
+  *os << event.event_params->event << " on " << event.node_id;
 }
 
 namespace {
@@ -29,8 +29,6 @@ using testing::Matches;
 using testing::PrintToString;
 using testing::UnorderedElementsAre;
 
-// TODO(gilmanmh): Improve printing of test failure messages when the expected
-// values are themselves matchers (e.g. Not(3)).
 MATCHER_P2(HasEventAtNode,
            expected_event_type,
            expected_node_id,
@@ -38,8 +36,24 @@ MATCHER_P2(HasEventAtNode,
                PrintToString(expected_event_type) + " on " +
                PrintToString(expected_node_id)) {
   const auto& event = arg;
-  return Matches(expected_event_type)(event.event_params.event) &&
-         Matches(expected_node_id)(event.node_id);
+  std::string failure_message;
+  if (!Matches(expected_event_type)(event.event_params->event)) {
+    failure_message +=
+        "Expected event type: " + PrintToString(expected_event_type) +
+        ", actual event type: " + PrintToString(event.event_params->event);
+  }
+  if (!Matches(expected_node_id)(event.node_id)) {
+    if (!failure_message.empty()) {
+      failure_message += "; ";
+    }
+    failure_message += "Expected node id: " + PrintToString(expected_node_id) +
+                       ", actual node id: " + PrintToString(event.node_id);
+  }
+  if (!failure_message.empty()) {
+    *result_listener << failure_message;
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -158,10 +172,10 @@ TEST(AXEventGeneratorTest, IterateThroughEmptyEventSets) {
         << (map_iter != expected_event_map.end());
 
     std::set<AXEventGenerator::Event>& node_events = map_iter->second;
-    auto event_iter = node_events.find(targeted_event.event_params.event);
+    auto event_iter = node_events.find(targeted_event.event_params->event);
 
     ASSERT_NE(event_iter, node_events.end())
-        << "Event=" << targeted_event.event_params.event
+        << "Event=" << targeted_event.event_params->event
         << ", on node_id=" << targeted_event.node_id
         << " NOT found in |expected_event_map|";
 

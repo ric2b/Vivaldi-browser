@@ -6,11 +6,9 @@
 #define CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_DISPLAY_OVERLAY_CONTROLLER_H_
 
 #include <string>
-#include <vector>
 
 #include "ash/public/cpp/arc_game_controls_flag.h"
 #include "ash/public/cpp/window_properties.h"
-#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/input_element.h"
 #include "ui/aura/window_observer.h"
@@ -31,6 +29,7 @@ class Action;
 class ActionEditMenu;
 class ActionViewListItem;
 class ButtonOptionsMenu;
+class DeleteEditShortcut;
 class EditFinishView;
 class EditingList;
 class EducationalView;
@@ -39,6 +38,8 @@ class InputMenuView;
 class MenuEntryView;
 class MessageView;
 class NudgeView;
+class RichNudge;
+class TargetView;
 class TouchInjector;
 class TouchInjectorObserver;
 
@@ -57,7 +58,7 @@ class DisplayOverlayController : public ui::EventHandler,
   void SetDisplayMode(DisplayMode mode);
 
   // Get the bounds of `menu_entry_` in screen coordinates.
-  absl::optional<gfx::Rect> GetOverlayMenuEntryBounds();
+  std::optional<gfx::Rect> GetOverlayMenuEntryBounds();
 
   void AddEditMessage(const base::StringPiece& message,
                       MessageType message_type);
@@ -84,7 +85,7 @@ class DisplayOverlayController : public ui::EventHandler,
   InputOverlayWindowStateType GetWindowStateType() const;
 
   // For editor.
-  void AddNewAction(ActionType action_type = ActionType::TAP);
+  void AddNewAction(ActionType action_type, const gfx::Point& target_pos);
   void RemoveAction(Action* action);
   // Creates a new action with guidance from the reference action, and deletes
   // the reference action.
@@ -109,21 +110,25 @@ class DisplayOverlayController : public ui::EventHandler,
   void RemoveButtonOptionsMenuWidget();
   void SetButtonOptionsMenuWidgetVisibility(bool is_visible);
 
-  void AddNudgeWidget(views::View* anchor_view, const std::u16string& text);
-  void RemoveNudgeWidget(views::Widget* widget);
-
   void AddDeleteEditShortcutWidget(ActionViewListItem* anchor_view);
   void RemoveDeleteEditShortcutWidget();
 
-  // Show education nudge for editing tip. It only shows up for the first new
-  // action after closing `ButtonOptionsMenu`.
-  void MayShowEduNudgeForEditingTip();
+  void EnterButtonPlaceMode(ActionType action_type);
+  // Exits button placement mode after adding a new action if `is_action_added`
+  // is true or giving up by pressing key `esc` if `is_action_added` is false.
+  void ExitButtonPlaceMode(bool is_action_added);
+  void UpdateButtonPlacementNudgeAnchorRect();
+
+  void AddActionHighlightWidget(Action* action);
+  void RemoveActionHighlightWidget();
+  void HideActionHighlightWidget();
 
   // Update widget bounds if the view content is changed or the app window
   // bounds are changed.
-  void UpdateButtonOptionsMenuWidgetBounds(Action* action);
+  void UpdateButtonOptionsMenuWidgetBounds();
   void UpdateInputMappingWidgetBounds();
   void UpdateEditingListWidgetBounds();
+  void UpdateTargetWidgetBounds();
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
@@ -156,6 +161,7 @@ class DisplayOverlayController : public ui::EventHandler,
   friend class MenuEntryView;
   friend class MenuEntryViewTest;
   friend class OverlayViewTestBase;
+  friend class RichNudgeTest;
 
   // Display overlay is added for starting `display_mode`.
   void AddOverlay(DisplayMode display_mode);
@@ -180,7 +186,7 @@ class DisplayOverlayController : public ui::EventHandler,
   void RemoveMenuEntryView();
   void OnMenuEntryPressed();
   void OnMenuEntryPositionChanged(bool leave_focus,
-                                  absl::optional<gfx::Point> location);
+                                  std::optional<gfx::Point> location);
   void FocusOnMenuEntry();
   void ClearFocus();
   void RemoveInputMenuView();
@@ -233,9 +239,21 @@ class DisplayOverlayController : public ui::EventHandler,
 
   void AddEditingListWidget();
   void RemoveEditingListWidget();
+  void SetEditingListVisibility(bool visible);
   EditingList* GetEditingList();
 
   ButtonOptionsMenu* GetButtonOptionsMenu();
+
+  // Shows or removes target view when in or out button place mode.
+  void AddTargetWidget(ActionType action_type);
+  void RemoveTargetWidget();
+  TargetView* GetTargetView() const;
+
+  void AddRichNudge();
+  void RemoveRichNudge();
+  RichNudge* GetRichNudge() const;
+
+  DeleteEditShortcut* GetDeleteEditShortcut() const;
 
   // `widget` bounds is in screen coordinate. `bounds_in_root_window` is the
   // window bounds in root window. Convert `bounds_in_root_window` in screen
@@ -272,10 +290,10 @@ class DisplayOverlayController : public ui::EventHandler,
   std::unique_ptr<views::Widget> input_mapping_widget_;
   std::unique_ptr<views::Widget> editing_list_widget_;
   std::unique_ptr<views::Widget> button_options_widget_;
-  std::unique_ptr<views::Widget> delete_edit_shortcut_widget_;
-
-  // Each widget can associate with one education nudge widget.
-  base::flat_map<views::Widget*, std::unique_ptr<views::Widget>> nudge_widgets_;
+  std::unique_ptr<views::Widget> target_widget_;
+  std::unique_ptr<views::Widget> action_highlight_widget_;
+  raw_ptr<views::Widget> delete_edit_shortcut_widget_;
+  raw_ptr<views::Widget> rich_nudge_widget_;
 };
 
 }  // namespace arc::input_overlay

@@ -24,6 +24,7 @@
 #include "ash/style/ash_color_id.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
@@ -91,6 +92,7 @@ AppListToastContainerView::AppListToastContainerView(
 }
 
 AppListToastContainerView::~AppListToastContainerView() {
+  set_context_menu_controller(nullptr);
   toast_view_ = nullptr;
 }
 
@@ -183,6 +185,9 @@ void AppListToastContainerView::CreateReorderNudgeView() {
                   IDR_APP_LIST_SORT_NUDGE_IMAGE))
           .SetIconBackground(true)
           .Build());
+  if (available_width_) {
+    toast_view_->SetAvailableWidth(*available_width_);
+  }
   current_toast_ = AppListToastType::kReorderNudge;
 }
 
@@ -242,7 +247,7 @@ void AppListToastContainerView::UpdateVisibilityState(VisibilityState state) {
 }
 
 void AppListToastContainerView::OnTemporarySortOrderChanged(
-    const absl::optional<AppListSortOrder>& new_order) {
+    const std::optional<AppListSortOrder>& new_order) {
   // Remove `toast_view_` when the temporary sorting order is cleared.
   if (!GetVisibilityForSortOrder(new_order)) {
     if (committing_sort_order_) {
@@ -299,11 +304,14 @@ void AppListToastContainerView::OnTemporarySortOrderChanged(
       a11y_text_on_undo_button);
 
   toast_view_->UpdateInteriorMargins(kReorderUndoInteriorMargin);
+  if (available_width_) {
+    toast_view_->SetAvailableWidth(*available_width_);
+  }
   current_toast_ = AppListToastType::kReorderUndo;
 }
 
 bool AppListToastContainerView::GetVisibilityForSortOrder(
-    const absl::optional<AppListSortOrder>& new_order) const {
+    const std::optional<AppListSortOrder>& new_order) const {
   return new_order && *new_order != AppListSortOrder::kCustom &&
          *new_order != AppListSortOrder::kAlphabeticalEphemeralAppFirst;
 }
@@ -315,6 +323,14 @@ void AppListToastContainerView::AnnounceSortOrder(AppListSortOrder new_order) {
 void AppListToastContainerView::AnnounceUndoSort() {
   a11y_announcer_->Announce(
       l10n_util::GetStringUTF16(IDS_ASH_LAUNCHER_UNDO_SORT_DONE_SPOKEN_TEXT));
+}
+
+void AppListToastContainerView::ConfigureLayoutForAvailableWidth(
+    int available_width) {
+  available_width_ = available_width;
+  if (toast_view_) {
+    toast_view_->SetAvailableWidth(available_width);
+  }
 }
 
 views::LabelButton* AppListToastContainerView::GetToastButton() {
@@ -420,5 +436,8 @@ std::u16string AppListToastContainerView::GetA11yTextOnUndoButtonFromOrder(
       return u"";
   }
 }
+
+BEGIN_METADATA(AppListToastContainerView)
+END_METADATA
 
 }  // namespace ash

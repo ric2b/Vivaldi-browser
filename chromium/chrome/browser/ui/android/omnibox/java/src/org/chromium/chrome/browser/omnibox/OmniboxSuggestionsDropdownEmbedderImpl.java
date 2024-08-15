@@ -41,6 +41,7 @@ import org.chromium.ui.display.DisplayUtil;
     private final @NonNull WindowDelegate mWindowDelegate;
     /*Vivaldi*/ public final @NonNull View mAnchorView;
     private final @NonNull View mHorizontalAlignmentView;
+    private final boolean mForcePhoneStyleOmnibox;
     private final @NonNull Context mContext;
     // Reusable int array to pass to positioning methods that operate on a two element int array.
     // Keeping it as a member lets us avoid allocating a temp array every time.
@@ -50,6 +51,9 @@ import org.chromium.ui.display.DisplayUtil;
     private int mWindowHeightDp;
     private WindowInsetsCompat mWindowInsetsCompat;
     private DeferredIMEWindowInsetApplicationCallback mDeferredIMEWindowInsetApplicationCallback;
+
+    // Vivaldi
+    private int mControlsHeight;
 
     /**
      * @param windowAndroid Window object in which the dropdown will be displayed.
@@ -64,16 +68,19 @@ import org.chromium.ui.display.DisplayUtil;
             @NonNull WindowAndroid windowAndroid,
             @NonNull WindowDelegate windowDelegate,
             @NonNull View anchorView,
-            @NonNull View horizontalAlignmentView) {
+            @NonNull View horizontalAlignmentView,
+            boolean forcePhoneStyleOmnibox) {
         mWindowAndroid = windowAndroid;
         mWindowDelegate = windowDelegate;
         mAnchorView = anchorView;
         mHorizontalAlignmentView = horizontalAlignmentView;
+        mForcePhoneStyleOmnibox = forcePhoneStyleOmnibox;
         mContext = mAnchorView.getContext();
         mContext.registerComponentCallbacks(this);
         Configuration configuration = mContext.getResources().getConfiguration();
         mWindowWidthDp = configuration.smallestScreenWidthDp;
         mWindowHeightDp = configuration.screenHeightDp;
+        setControlsHeight(0); // Vivaldi
         recalculateOmniboxAlignment();
     }
 
@@ -95,6 +102,7 @@ import org.chromium.ui.display.DisplayUtil;
 
     @Override
     public boolean isTablet() {
+        if (mForcePhoneStyleOmnibox) return false;
         return mWindowWidthDp >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP
                 && DeviceFormFactor.isWindowOnTablet(mWindowAndroid);
     }
@@ -214,7 +222,7 @@ import org.chromium.ui.display.DisplayUtil;
                         mContext.getResources()
                                 .getDimensionPixelSize(
                                         R.dimen.omnibox_suggestion_list_toolbar_overlap);
-                int sideSpacing = OmniboxResourceProvider.getSideSpacing(mContext);
+                int sideSpacing = OmniboxResourceProvider.getDropdownSideSpacing(mContext);
                 width = mHorizontalAlignmentView.getMeasuredWidth() + 2 * sideSpacing;
 
                 if (mAnchorView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) {
@@ -264,10 +272,14 @@ import org.chromium.ui.display.DisplayUtil;
                 contentView == null
                         ? Integer.MAX_VALUE
                         : contentView.getMeasuredHeight() - keyboardHeight;
+
         int height = Math.min(windowSpace, contentSpace) - top;
 
-        // Note(david@vivaldi.com): Ref.: VAB-8066.
-        if (org.chromium.build.BuildConfig.IS_VIVALDI) height = -1;
+        // Note(david@vivaldi.com): Ref.: VAB-8066. This apply only when |mControlsHeight| is
+        // greater 0 which indicates that the controls are at the bottom.
+        if (org.chromium.build.BuildConfig.IS_VIVALDI && mControlsHeight > 0) {
+            height = contentSpace - keyboardHeight - mControlsHeight;
+        }
 
         // TODO(pnoland@, https://crbug.com/1416985): avoid pushing changes that are identical to
         // the previous alignment value.
@@ -299,5 +311,12 @@ import org.chromium.ui.display.DisplayUtil;
         boolean result = !windowInsetsCompat.equals(mWindowInsetsCompat);
         mWindowInsetsCompat = windowInsetsCompat;
         return result;
+    }
+
+    /**
+     * Vivaldi
+     */
+    public void setControlsHeight(int height) {
+        mControlsHeight = height;
     }
 }

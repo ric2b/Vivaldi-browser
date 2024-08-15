@@ -18,6 +18,10 @@ const char kVivaldiAppIdHex[] = VIVALDI_APP_HEX_ID;
 
 // Defines the prefix URL for the Vivaldi extension
 const char kVivaldiAppURLDomain[] = "chrome-extension://" VIVALDI_APP_ID "/";
+// Defines the URL of the bug report webpage
+const char kVivaldiBugReportUrl[] = VIVALDI_BUGREPORT_URL;
+// Defines the URL that should be used for the crash report upload
+const char kVivaldiCrashReportUploadUrl[] = VIVALDI_CRASH_REPORT_UPLOAD_URL;
 // Defines the URL that should be opened in an empty incognito window.
 const char kVivaldiIncognitoURL[] = "chrome-extension://" VIVALDI_APP_ID
                                  "/components/"

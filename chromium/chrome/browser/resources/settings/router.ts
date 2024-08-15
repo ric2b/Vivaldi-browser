@@ -16,6 +16,7 @@ export interface SettingsRoutes {
   ACCESSIBILITY: Route;
   ADDRESSES: Route;
   ADVANCED: Route;
+  AI: Route;
   APPEARANCE: Route;
   AUTOFILL: Route;
   BASIC: Route;
@@ -48,6 +49,7 @@ export interface SettingsRoutes {
   //PRIVACY_SANDBOX_AD_MEASUREMENT: Route;
   //PRIVACY_SANDBOX_FLEDGE: Route;
   //PRIVACY_SANDBOX_TOPICS: Route;
+  //PRIVACY_SANDBOX_MANAGE_TOPICS: Route;
   RESET: Route;
   RESET_DIALOG: Route;
   SAFETY_CHECK: Route;
@@ -79,6 +81,7 @@ export interface SettingsRoutes {
   SITE_SETTINGS_LOCAL_FONTS: Route;
   SITE_SETTINGS_MIXEDSCRIPT: Route;
   SITE_SETTINGS_JAVASCRIPT: Route;
+  SITE_SETTINGS_JAVASCRIPT_JIT: Route;
   SITE_SETTINGS_SENSORS: Route;
   SITE_SETTINGS_SOUND: Route;
   SITE_SETTINGS_LOCATION: Route;
@@ -99,6 +102,7 @@ export interface SettingsRoutes {
   SITE_SETTINGS_VR: Route;
   SITE_SETTINGS_WINDOW_MANAGEMENT: Route;
   SITE_SETTINGS_ZOOM_LEVELS: Route;
+  SITE_SETTINGS_WEB_PRINTING: Route;
   SPELL_CHECK: Route;
   SYNC: Route;
   SYNC_ADVANCED: Route;

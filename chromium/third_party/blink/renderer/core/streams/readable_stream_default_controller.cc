@@ -15,7 +15,6 @@
 #include "third_party/blink/renderer/core/streams/stream_algorithms.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
-#include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 
 namespace blink {
@@ -201,7 +200,8 @@ void ReadableStreamDefaultController::Enqueue(
   //    ReadableStreamFulfillReadRequest(stream, chunk, false).
   if (ReadableStream::IsLocked(stream) &&
       ReadableStream::GetNumReadRequests(stream) > 0) {
-    ReadableStream::FulfillReadRequest(script_state, stream, chunk, false);
+    ReadableStream::FulfillReadRequest(script_state, stream, chunk, false,
+                                       exception_state);
   } else {
     // 4. Otherwise,
     //   a. Let result be the result of performing controller.
@@ -354,8 +354,10 @@ v8::Local<v8::Promise> ReadableStreamDefaultController::CancelSteps(
   return result;
 }
 
-void ReadableStreamDefaultController::PullSteps(ScriptState* script_state,
-                                                ReadRequest* read_request) {
+void ReadableStreamDefaultController::PullSteps(
+    ScriptState* script_state,
+    ReadRequest* read_request,
+    ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#rs-default-controller-private-pull
   // 1. Let stream be this.[[stream]].
   ReadableStream* stream = controlled_readable_stream_;
@@ -379,7 +381,7 @@ void ReadableStreamDefaultController::PullSteps(ScriptState* script_state,
     }
 
     // d. Perform readRequest’s chunk steps, given chunk.
-    read_request->ChunkSteps(script_state, chunk);
+    read_request->ChunkSteps(script_state, chunk, exception_state);
     // 3. Otherwise,
   } else {
     // a. Perform ! ReadableStreamAddReadRequest(stream, readRequest).
@@ -621,8 +623,7 @@ void ReadableStreamDefaultController::SetUpFromUnderlyingSource(
   // JavaScript. So the execution context should be valid and this call should
   // not crash.
   auto controller_value = ToV8Traits<ReadableStreamDefaultController>::ToV8(
-                              script_state, controller)
-                              .ToLocalChecked();
+      script_state, controller);
 
   // 3. Let startAlgorithm be the following steps:
   //   a. Return ? InvokeOrNoop(underlyingSource, "start", « controller »).

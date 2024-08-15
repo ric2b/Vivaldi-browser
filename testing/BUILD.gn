@@ -17,7 +17,6 @@ if (is_win) {
       "//media:media_unittests",
       "//media/cast:cast_unittests",
       "//net:net_unittests",
-      "//ppapi:ppapi_unittests",
       "//sql:sql_unittests",
       "//ui/gfx:gfx_unittests",
       "//url:url_unittests",

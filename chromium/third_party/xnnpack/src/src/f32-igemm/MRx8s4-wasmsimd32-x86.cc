@@ -18,7 +18,9 @@ class F32IGemmS4Generator : public internal::GemmIGemmS4Commons {
  public:
   using GemmIGemmS4Commons::GemmIGemmS4Commons;
   void generate(const char* name, size_t max_mr, size_t iters, size_t k_per_iteration, size_t full_unroll,
-                size_t nc_mod_nr, const jit_gemm_params* jit_gemm_params) {
+                size_t nc_mod_nr, bool use_fma, const jit_gemm_params* jit_gemm_params) {
+    assert(!use_fma || XNN_ARCH_WASMRELAXEDSIMD);
+    use_fma_ = use_fma;
     ValTypesToInt locals_declaration = {{i32, max_mr * 2 + 5}, {v128, max_mr * 3 + 8}};
     AddFunc<12>({}, name, locals_declaration,
                 [&](auto mr, auto nc, auto kc, const auto ks, auto a, auto w, auto c, auto cm_stride, auto cn_stride,
@@ -109,7 +111,8 @@ xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_x1(xnn_code_bu
                                                                      const void* params) {
   static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd_x86_x1";
   assert(max_mr <= 6);
-  return xnnpack::generate(b, kFunctionName, max_mr, kc, 4, /*full_unroll=*/false, nc_mod_nr, params);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, 4, /*full_unroll=*/false, nc_mod_nr, /*use_fma=*/false,
+                           params);
 }
 
 xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_x2(xnn_code_buffer* b, size_t max_mr,
@@ -118,7 +121,7 @@ xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_x2(xnn_code_bu
   static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd_x86_x2";
   assert(max_mr <= 6);
   return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/8, /*full_unroll=*/false, nc_mod_nr,
-                           params);
+                           /*use_fma=*/false, params);
 }
 
 xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_x4(xnn_code_buffer* b, size_t max_mr,
@@ -127,7 +130,7 @@ xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_x4(xnn_code_bu
   static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd_x86_x4";
   assert(max_mr <= 6);
   return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/16, /*full_unroll=*/false, nc_mod_nr,
-                           params);
+                           /*use_fma=*/false, params);
 }
 
 xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_xinf(xnn_code_buffer* b, size_t max_mr,
@@ -136,6 +139,80 @@ xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd32_x86_xinf(xnn_code_
   static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmsimd_x86_xinf";
   assert(max_mr <= 6);
   return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/kc / sizeof(float), /*full_unroll=*/true,
-                           nc_mod_nr, params);
+                           nc_mod_nr, /*use_fma=*/false, params);
 }
+
+#if XNN_ARCH_WASMRELAXEDSIMD
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_fma_x1(xnn_code_buffer* b, size_t max_mr,
+                                                                     size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                     const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_x1";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, 4, /*full_unroll=*/false, nc_mod_nr, /*use_fma=*/true,
+                           params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_fma_x2(xnn_code_buffer* b, size_t max_mr,
+                                                                     size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                     const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_x2";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/8, /*full_unroll=*/false, nc_mod_nr,
+                           /*use_fma=*/true, params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_fma_x4(xnn_code_buffer* b, size_t max_mr,
+                                                                     size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                     const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_x4";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/16, /*full_unroll=*/false, nc_mod_nr,
+                           /*use_fma=*/true, params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_fma_xinf(xnn_code_buffer* b, size_t max_mr,
+                                                                       size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                       const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_xinf";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/kc / sizeof(float), /*full_unroll=*/true,
+                           nc_mod_nr, /*use_fma=*/true, params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_x1(xnn_code_buffer* b, size_t max_mr,
+                                                                     size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                     const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_x1";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, 4, /*full_unroll=*/false, nc_mod_nr, /*use_fma=*/false,
+                           params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_x2(xnn_code_buffer* b, size_t max_mr,
+                                                                     size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                     const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_x2";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/8, /*full_unroll=*/false, nc_mod_nr,
+                           /*use_fma=*/false, params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_x4(xnn_code_buffer* b, size_t max_mr,
+                                                                     size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                     const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_x4";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/16, /*full_unroll=*/false, nc_mod_nr,
+                           /*use_fma=*/false, params);
+}
+
+xnn_status_t xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd32_x86_xinf(xnn_code_buffer* b, size_t max_mr,
+                                                                       size_t nc_mod_nr, size_t kc, size_t ks,
+                                                                       const void* params) {
+  static const char* kFunctionName = "xnn_generate_f32_igemm_ukernel_6x8s4__wasmrelaxedsimd_x86_xinf";
+  assert(max_mr <= 6);
+  return xnnpack::generate(b, kFunctionName, max_mr, kc, /*k_per_iteration=*/kc / sizeof(float), /*full_unroll=*/true,
+                           nc_mod_nr, /*use_fma=*/false, params);
+}
+#endif
 }

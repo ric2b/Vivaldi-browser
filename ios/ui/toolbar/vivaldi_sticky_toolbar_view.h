@@ -16,7 +16,7 @@
 - (void)setText:(NSString*)text
        clipTail:(BOOL)clipTail;
 - (void)setLocationImage:(UIImage*)locationImage;
-- (void)setTintColor:(BOOL)isPrivateMode;
+- (void)setTintColor:(UIColor*)tintColor;
 - (void)setSecurityLevelAccessibilityString:(NSString*)string;
 
 @end

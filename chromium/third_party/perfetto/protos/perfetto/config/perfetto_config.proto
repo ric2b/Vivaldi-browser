@@ -198,6 +198,15 @@ message DataSourceDescriptor {
   // contents, and knows how to stop referring to the already-emitted data.
   optional bool handles_incremental_state_clear = 4;
 
+  // If true, indicates that the data source does nothing upon Flush. This
+  // allows the service to reduce the flush-related IPC traffic and better deal
+  // with frozen producers (see go/perfetto-frozen). This is usually the case
+  // for data sources like 'track_event' that don't have access to the various
+  // thread task runners to post a flush task and rely purely on server-side
+  // scraping.
+  // Introduced in v39 / Android V.
+  optional bool no_flush = 9;
+
   // Optional specification about available GPU counters.
   optional GpuCounterDescriptor gpu_counter_descriptor = 5 [lazy = true];
 
@@ -537,6 +546,41 @@ message PackagesListConfig {
 
 // End of protos/perfetto/config/android/packages_list_config.proto
 
+// Begin of protos/perfetto/common/protolog_common.proto
+
+enum ProtoLogLevel {
+  PROTOLOG_LEVEL_UNDEFINED = 0;
+  PROTOLOG_LEVEL_DEBUG = 1;
+  PROTOLOG_LEVEL_VERBOSE = 2;
+  PROTOLOG_LEVEL_INFO = 3;
+  PROTOLOG_LEVEL_WARN = 4;
+  PROTOLOG_LEVEL_ERROR = 5;
+  PROTOLOG_LEVEL_WTF = 6;
+}
+// End of protos/perfetto/common/protolog_common.proto
+
+// Begin of protos/perfetto/config/android/protolog_config.proto
+
+// Custom configuration for the "android.protolog" data source.
+// ProtoLog is a logging mechanism that is intented to be more efficient than
+// logcat. This configures what logs to capture in the tracing instance.
+message ProtoLogConfig {
+  // Specified the configurations for each of the logging groups. If none is
+  // specified for a group the defaults will be used.
+  repeated ProtoLogGroup group_overrides = 1;
+}
+
+message ProtoLogGroup {
+  // The ProtoLog tag this configuration entry applies to.
+  optional string tag = 1;
+  // Specify the level from which to start capturing protologs.
+  // e.g. if ProtoLogLevel.WARN is specified only warning, errors and fatal log
+  // message will be traced.
+  optional ProtoLogLevel log_from = 2;
+}
+
+// End of protos/perfetto/config/android/protolog_config.proto
+
 // Begin of protos/perfetto/config/android/surfaceflinger_layers_config.proto
 
 // Custom configuration for the "android.surfaceflinger.layers" data source.
@@ -636,6 +680,43 @@ message ChromeConfig {
 
 // End of protos/perfetto/config/chrome/chrome_config.proto
 
+// Begin of protos/perfetto/config/chrome/v8_config.proto
+
+message V8Config {
+  // Whether to log the actual content of scripts (e.g. content of the JS file
+  // that was compiled to generate code).
+  // ATTENTION: This could considerably increase the size of the resuling trace
+  //            file.
+  optional bool log_script_sources = 1;
+  // Whether to log the generated code for jitted functions (machine code or
+  // bytecode).
+  // ATTENTION: This could considerably increase the size of the resuling trace
+  //            file.
+  optional bool log_instructions = 2;
+}
+
+// End of protos/perfetto/config/chrome/v8_config.proto
+
+// Begin of protos/perfetto/config/etw/etw_config.proto
+
+// Proto definition based on the struct _EVENT_TRACE_PROPERTIES definition
+// See: https://learn.microsoft.com/en-us/windows/win32/api/evntrace/
+// ns-evntrace-event_trace_properties
+message EtwConfig {
+  // The KernelFlag represent list of kernel flags that we are intrested in.
+  // To get a more extensive list run 'xperf -providers k'.
+  enum KernelFlag {
+    CSWITCH = 0;
+    DISPATCHER = 1;
+  }
+
+  // The kernel_flags determines the flags that will be used by the etw tracing
+  // session. These kernel flags have been built to expose the useful events
+  // captured from the kernel mode only.
+  repeated KernelFlag kernel_flags = 1;
+}
+// End of protos/perfetto/config/etw/etw_config.proto
+
 // Begin of protos/perfetto/config/ftrace/ftrace_config.proto
 
 // Next id: 26.
@@ -653,6 +734,10 @@ message FtraceConfig {
   message CompactSchedConfig {
     // If true, and sched_switch or sched_waking ftrace events are enabled,
     // record those events in the compact format.
+    //
+    // If the field is unset, the default is:
+    // * perfetto v42.0+: enabled
+    // * before: disabled
     optional bool enabled = 1;
   }
   optional CompactSchedConfig compact_sched = 12;
@@ -797,7 +882,6 @@ message FtraceConfig {
   // * Introduced in: Android U.
   optional bool use_monotonic_raw_clock = 24;
 
-  // Caution: under development as of 2023/03/01.
   // If |instance_name| is not empty, then attempt to use that tracefs instance
   // for event recording. Normally, this means
   // `/sys/kernel/tracing/instances/$instance_name`.
@@ -810,7 +894,6 @@ message FtraceConfig {
   // at the time of writing:
   //  * ftrace_events
   //  * buffer_size_kb
-  // TODO(b/249050813): reword comment once instance support is stable.
   optional string instance_name = 25;
 }
 
@@ -923,6 +1006,9 @@ message AndroidPowerConfig {
 
     // Avg current.
     BATTERY_COUNTER_CURRENT_AVG = 4;
+
+    // Instantaneous voltage.
+    BATTERY_COUNTER_VOLTAGE = 5;
   }
   optional uint32 battery_poll_ms = 1;
   repeated BatteryCounters battery_counters = 2;
@@ -1938,7 +2024,6 @@ enum AtomId {
   ATOM_PERFETTO_TRIGGER = 329;
   ATOM_TRANSCODING_DATA = 330;
   ATOM_IMS_SERVICE_ENTITLEMENT_UPDATED = 331;
-  ATOM_ART_DATUM_REPORTED = 332;
   ATOM_DEVICE_ROTATED = 333;
   ATOM_SIM_SPECIFIC_SETTINGS_RESTORED = 334;
   ATOM_TEXT_CLASSIFIER_DOWNLOAD_REPORTED = 335;
@@ -1968,7 +2053,6 @@ enum AtomId {
   ATOM_LOCATION_TIME_ZONE_PROVIDER_STATE_CHANGED = 359;
   ATOM_FDTRACK_EVENT_OCCURRED = 364;
   ATOM_TIMEOUT_AUTO_EXTENDED_REPORTED = 365;
-  ATOM_ODREFRESH_REPORTED = 366;
   ATOM_ALARM_BATCH_DELIVERED = 367;
   ATOM_ALARM_SCHEDULED = 368;
   ATOM_CAR_WATCHDOG_IO_OVERUSE_STATS_REPORTED = 369;
@@ -2036,6 +2120,8 @@ enum AtomId {
   ATOM_HOTWORD_DETECTION_SERVICE_RESTARTED = 432;
   ATOM_HOTWORD_DETECTOR_KEYPHRASE_TRIGGERED = 433;
   ATOM_HOTWORD_DETECTOR_EVENTS = 434;
+  ATOM_AD_SERVICES_API_CALLED = 435;
+  ATOM_AD_SERVICES_MESUREMENT_REPORTS_UPLOADED = 436;
   ATOM_BOOT_COMPLETED_BROADCAST_COMPLETION_LATENCY_REPORTED = 437;
   ATOM_CONTACTS_INDEXER_UPDATE_STATS_REPORTED = 440;
   ATOM_APP_BACKGROUND_RESTRICTIONS_INFO = 441;
@@ -2057,24 +2143,47 @@ enum AtomId {
   ATOM_ISOLATED_COMPILATION_SCHEDULED = 457;
   ATOM_ISOLATED_COMPILATION_ENDED = 458;
   ATOM_ONS_OPPORTUNISTIC_ESIM_PROVISIONING_COMPLETE = 459;
+  ATOM_SYSTEM_SERVER_PRE_WATCHDOG_OCCURRED = 460;
   ATOM_TELEPHONY_ANOMALY_DETECTED = 461;
   ATOM_LETTERBOX_POSITION_CHANGED = 462;
   ATOM_REMOTE_KEY_PROVISIONING_ATTEMPT = 463;
   ATOM_REMOTE_KEY_PROVISIONING_NETWORK_INFO = 464;
   ATOM_REMOTE_KEY_PROVISIONING_TIMING = 465;
   ATOM_MEDIAOUTPUT_OP_INTERACTION_REPORT = 466;
-  ATOM_BACKGROUND_DEXOPT_JOB_ENDED = 467;
   ATOM_SYNC_EXEMPTION_OCCURRED = 468;
   ATOM_AUTOFILL_PRESENTATION_EVENT_REPORTED = 469;
   ATOM_DOCK_STATE_CHANGED = 470;
+  ATOM_SAFETY_SOURCE_STATE_COLLECTED = 471;
+  ATOM_SAFETY_CENTER_SYSTEM_EVENT_REPORTED = 472;
+  ATOM_SAFETY_CENTER_INTERACTION_REPORTED = 473;
+  ATOM_SETTINGS_PROVIDER_SETTING_CHANGED = 474;
   ATOM_BROADCAST_DELIVERY_EVENT_REPORTED = 475;
   ATOM_SERVICE_REQUEST_EVENT_REPORTED = 476;
   ATOM_PROVIDER_ACQUISITION_EVENT_REPORTED = 477;
   ATOM_BLUETOOTH_DEVICE_NAME_REPORTED = 478;
+  ATOM_CB_CONFIG_UPDATED = 479;
+  ATOM_CB_MODULE_ERROR_REPORTED = 480;
+  ATOM_CB_SERVICE_FEATURE_CHANGED = 481;
+  ATOM_CB_RECEIVER_FEATURE_CHANGED = 482;
+  ATOM_JSSCRIPTENGINE_LATENCY_REPORTED = 483;
+  ATOM_PRIVACY_SIGNAL_NOTIFICATION_INTERACTION = 484;
+  ATOM_PRIVACY_SIGNAL_ISSUE_CARD_INTERACTION = 485;
+  ATOM_PRIVACY_SIGNALS_JOB_FAILURE = 486;
   ATOM_VIBRATION_REPORTED = 487;
   ATOM_UWB_RANGING_START = 489;
+  ATOM_MOBILE_DATA_DOWNLOAD_FILE_GROUP_STATUS_REPORTED = 490;
+  ATOM_APP_COMPACTED_V2 = 491;
+  ATOM_AD_SERVICES_SETTINGS_USAGE_REPORTED = 493;
   ATOM_DISPLAY_BRIGHTNESS_CHANGED = 494;
   ATOM_ACTIVITY_ACTION_BLOCKED = 495;
+  ATOM_BACKGROUND_FETCH_PROCESS_REPORTED = 496;
+  ATOM_UPDATE_CUSTOM_AUDIENCE_PROCESS_REPORTED = 497;
+  ATOM_RUN_AD_BIDDING_PROCESS_REPORTED = 498;
+  ATOM_RUN_AD_SCORING_PROCESS_REPORTED = 499;
+  ATOM_RUN_AD_SELECTION_PROCESS_REPORTED = 500;
+  ATOM_RUN_AD_BIDDING_PER_CA_PROCESS_REPORTED = 501;
+  ATOM_MOBILE_DATA_DOWNLOAD_DOWNLOAD_RESULT_REPORTED = 502;
+  ATOM_MOBILE_DATA_DOWNLOAD_FILE_GROUP_STORAGE_STATS_REPORTED = 503;
   ATOM_NETWORK_DNS_SERVER_SUPPORT_REPORTED = 504;
   ATOM_VM_BOOTED = 505;
   ATOM_VM_EXITED = 506;
@@ -2083,13 +2192,19 @@ enum AtomId {
   ATOM_MEDIAMETRICS_SPATIALIZERDEVICEENABLED_REPORTED = 509;
   ATOM_MEDIAMETRICS_HEADTRACKERDEVICEENABLED_REPORTED = 510;
   ATOM_MEDIAMETRICS_HEADTRACKERDEVICESUPPORTED_REPORTED = 511;
+  ATOM_AD_SERVICES_MEASUREMENT_REGISTRATIONS = 512;
   ATOM_HEARING_AID_INFO_REPORTED = 513;
   ATOM_DEVICE_WIDE_JOB_CONSTRAINT_CHANGED = 514;
+  ATOM_AMBIENT_MODE_CHANGED = 515;
+  ATOM_ANR_LATENCY_REPORTED = 516;
+  ATOM_RESOURCE_API_INFO = 517;
+  ATOM_SYSTEM_DEFAULT_NETWORK_CHANGED = 518;
   ATOM_IWLAN_SETUP_DATA_CALL_RESULT_REPORTED = 519;
   ATOM_IWLAN_PDN_DISCONNECTED_REASON_REPORTED = 520;
   ATOM_AIRPLANE_MODE_SESSION_REPORTED = 521;
   ATOM_VM_CPU_STATUS_REPORTED = 522;
   ATOM_VM_MEM_STATUS_REPORTED = 523;
+  ATOM_PACKAGE_INSTALLATION_SESSION_REPORTED = 524;
   ATOM_DEFAULT_NETWORK_REMATCH_INFO = 525;
   ATOM_NETWORK_SELECTION_PERFORMANCE = 526;
   ATOM_NETWORK_NSD_REPORTED = 527;
@@ -2099,22 +2214,65 @@ enum AtomId {
   ATOM_BLUETOOTH_LOCAL_SUPPORTED_FEATURES_REPORTED = 532;
   ATOM_BLUETOOTH_GATT_APP_INFO = 533;
   ATOM_BRIGHTNESS_CONFIGURATION_UPDATED = 534;
+  ATOM_AD_SERVICES_GET_TOPICS_REPORTED = 535;
+  ATOM_AD_SERVICES_EPOCH_COMPUTATION_GET_TOP_TOPICS_REPORTED = 536;
+  ATOM_AD_SERVICES_EPOCH_COMPUTATION_CLASSIFIER_REPORTED = 537;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_LAUNCHED = 538;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_FINISHED = 539;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_CONNECTION_REPORTED = 540;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_DEVICE_SCAN_TRIGGERED = 541;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_FIRST_DEVICE_SCAN_LATENCY = 542;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_CONNECT_DEVICE_LATENCY = 543;
+  ATOM_PACKAGE_MANAGER_SNAPSHOT_REPORTED = 544;
+  ATOM_PACKAGE_MANAGER_APPS_FILTER_CACHE_BUILD_REPORTED = 545;
+  ATOM_PACKAGE_MANAGER_APPS_FILTER_CACHE_UPDATE_REPORTED = 546;
   ATOM_LAUNCHER_IMPRESSION_EVENT = 547;
-  ATOM_ODSIGN_REPORTED = 548;
-  ATOM_ART_DEVICE_DATUM_REPORTED = 550;
+  ATOM_WEAR_MEDIA_OUTPUT_SWITCHER_ALL_DEVICES_SCAN_LATENCY = 549;
+  ATOM_WS_WATCH_FACE_EDITED = 551;
+  ATOM_WS_WATCH_FACE_FAVORITE_ACTION_REPORTED = 552;
+  ATOM_WS_WATCH_FACE_SET_ACTION_REPORTED = 553;
+  ATOM_PACKAGE_UNINSTALLATION_REPORTED = 554;
+  ATOM_GAME_MODE_CHANGED = 555;
+  ATOM_GAME_MODE_CONFIGURATION_CHANGED = 556;
+  ATOM_BEDTIME_MODE_STATE_CHANGED = 557;
   ATOM_NETWORK_SLICE_SESSION_ENDED = 558;
   ATOM_NETWORK_SLICE_DAILY_DATA_USAGE_REPORTED = 559;
   ATOM_NFC_TAG_TYPE_OCCURRED = 560;
   ATOM_NFC_AID_CONFLICT_OCCURRED = 561;
   ATOM_NFC_READER_CONFLICT_OCCURRED = 562;
-  ATOM_ART_DATUM_DELTA_REPORTED = 565;
+  ATOM_WS_TILE_LIST_CHANGED = 563;
+  ATOM_GET_TYPE_ACCESSED_WITHOUT_PERMISSION = 564;
+  ATOM_MOBILE_BUNDLED_APP_INFO_GATHERED = 566;
+  ATOM_WS_WATCH_FACE_COMPLICATION_SET_CHANGED = 567;
   ATOM_MEDIA_DRM_CREATED = 568;
   ATOM_MEDIA_DRM_ERRORED = 569;
   ATOM_MEDIA_DRM_SESSION_OPENED = 570;
   ATOM_MEDIA_DRM_SESSION_CLOSED = 571;
+  ATOM_USER_SELECTED_RESOLUTION = 572;
+  ATOM_UNSAFE_INTENT_EVENT_REPORTED = 573;
   ATOM_PERFORMANCE_HINT_SESSION_REPORTED = 574;
+  ATOM_MEDIAMETRICS_MIDI_DEVICE_CLOSE_REPORTED = 576;
+  ATOM_BIOMETRIC_TOUCH_REPORTED = 577;
   ATOM_HOTWORD_AUDIO_EGRESS_EVENT_REPORTED = 578;
+  ATOM_APP_SEARCH_SCHEMA_MIGRATION_STATS_REPORTED = 579;
+  ATOM_LOCATION_ENABLED_STATE_CHANGED = 580;
+  ATOM_IME_REQUEST_FINISHED = 581;
+  ATOM_USB_COMPLIANCE_WARNINGS_REPORTED = 582;
+  ATOM_APP_SUPPORTED_LOCALES_CHANGED = 583;
+  ATOM_GRAMMATICAL_INFLECTION_CHANGED = 584;
+  ATOM_MEDIA_PROVIDER_VOLUME_RECOVERY_REPORTED = 586;
+  ATOM_BIOMETRIC_PROPERTIES_COLLECTED = 587;
+  ATOM_KERNEL_WAKEUP_ATTRIBUTED = 588;
+  ATOM_SCREEN_STATE_CHANGED_V2 = 589;
+  ATOM_WS_BACKUP_ACTION_REPORTED = 590;
+  ATOM_WS_RESTORE_ACTION_REPORTED = 591;
+  ATOM_DEVICE_LOG_ACCESS_EVENT_REPORTED = 592;
+  ATOM_MEDIA_SESSION_UPDATED = 594;
+  ATOM_WEAR_OOBE_STATE_CHANGED = 595;
+  ATOM_WS_NOTIFICATION_UPDATED = 596;
   ATOM_NETWORK_VALIDATION_FAILURE_STATS_DAILY_REPORTED = 601;
+  ATOM_WS_COMPLICATION_TAPPED = 602;
+  ATOM_WS_WEAR_TIME_SESSION = 610;
   ATOM_WIFI_BYTES_TRANSFER = 10000;
   ATOM_WIFI_BYTES_TRANSFER_BY_FG_BG = 10001;
   ATOM_MOBILE_BYTES_TRANSFER = 10002;
@@ -2267,15 +2425,160 @@ enum AtomId {
   ATOM_TELEPHONY_NETWORK_REQUESTS_V2 = 10153;
   ATOM_DEVICE_TELEPHONY_PROPERTIES = 10154;
   ATOM_REMOTE_KEY_PROVISIONING_ERROR_COUNTS = 10155;
+  ATOM_SAFETY_STATE = 10156;
   ATOM_INCOMING_MMS = 10157;
   ATOM_OUTGOING_MMS = 10158;
   ATOM_MULTI_USER_INFO = 10160;
   ATOM_NETWORK_BPF_MAP_INFO = 10161;
+  ATOM_OUTGOING_SHORT_CODE_SMS = 10162;
   ATOM_CONNECTIVITY_STATE_SAMPLE = 10163;
   ATOM_NETWORK_SELECTION_REMATCH_REASONS_INFO = 10164;
+  ATOM_GAME_MODE_INFO = 10165;
+  ATOM_GAME_MODE_CONFIGURATION = 10166;
+  ATOM_GAME_MODE_LISTENER = 10167;
   ATOM_NETWORK_SLICE_REQUEST_COUNT = 10168;
+  ATOM_WS_TILE_SNAPSHOT = 10169;
+  ATOM_WS_ACTIVE_WATCH_FACE_COMPLICATION_SET_SNAPSHOT = 10170;
+  ATOM_PROCESS_STATE = 10171;
+  ATOM_PROCESS_ASSOCIATION = 10172;
   ATOM_ADPF_SYSTEM_COMPONENT_INFO = 10173;
   ATOM_NOTIFICATION_MEMORY_USE = 10174;
+  ATOM_HDR_CAPABILITIES = 10175;
+  ATOM_WS_FAVOURITE_WATCH_FACE_LIST_SNAPSHOT = 10176;
+  ATOM_WIFI_AWARE_NDP_REPORTED = 638;
+  ATOM_WIFI_AWARE_ATTACH_REPORTED = 639;
+  ATOM_WIFI_SELF_RECOVERY_TRIGGERED = 661;
+  ATOM_SOFT_AP_STARTED = 680;
+  ATOM_SOFT_AP_STOPPED = 681;
+  ATOM_WIFI_LOCK_RELEASED = 687;
+  ATOM_WIFI_LOCK_DEACTIVATED = 688;
+  ATOM_WIFI_CONFIG_SAVED = 689;
+  ATOM_WIFI_AWARE_RESOURCE_USING_CHANGED = 690;
+  ATOM_WIFI_AWARE_HAL_API_CALLED = 691;
+  ATOM_WIFI_LOCAL_ONLY_REQUEST_RECEIVED = 692;
+  ATOM_WIFI_LOCAL_ONLY_REQUEST_SCAN_TRIGGERED = 693;
+  ATOM_WIFI_THREAD_TASK_EXECUTED = 694;
+  ATOM_WIFI_STATE_CHANGED = 700;
+  ATOM_WIFI_AWARE_CAPABILITIES = 10190;
+  ATOM_WIFI_MODULE_INFO = 10193;
+  ATOM_SETTINGS_SPA_REPORTED = 622;
+  ATOM_EXPRESS_EVENT_REPORTED = 528;
+  ATOM_EXPRESS_HISTOGRAM_SAMPLE_REPORTED = 593;
+  ATOM_EXPRESS_UID_EVENT_REPORTED = 644;
+  ATOM_EXPRESS_UID_HISTOGRAM_SAMPLE_REPORTED = 658;
+  ATOM_PERMISSION_RATIONALE_DIALOG_VIEWED = 645;
+  ATOM_PERMISSION_RATIONALE_DIALOG_ACTION_REPORTED = 646;
+  ATOM_APP_DATA_SHARING_UPDATES_NOTIFICATION_INTERACTION = 647;
+  ATOM_APP_DATA_SHARING_UPDATES_FRAGMENT_VIEWED = 648;
+  ATOM_APP_DATA_SHARING_UPDATES_FRAGMENT_ACTION_REPORTED = 649;
+  ATOM_WS_INCOMING_CALL_ACTION_REPORTED = 626;
+  ATOM_WS_CALL_DISCONNECTION_REPORTED = 627;
+  ATOM_WS_CALL_DURATION_REPORTED = 628;
+  ATOM_WS_CALL_USER_EXPERIENCE_LATENCY_REPORTED = 629;
+  ATOM_WS_CALL_INTERACTION_REPORTED = 630;
+  ATOM_FULL_SCREEN_INTENT_LAUNCHED = 631;
+  ATOM_BAL_ALLOWED = 632;
+  ATOM_IN_TASK_ACTIVITY_STARTED = 685;
+  ATOM_CACHED_APPS_HIGH_WATERMARK = 10189;
+  ATOM_ODREFRESH_REPORTED = 366;
+  ATOM_ODSIGN_REPORTED = 548;
+  ATOM_ART_DATUM_REPORTED = 332;
+  ATOM_ART_DEVICE_DATUM_REPORTED = 550;
+  ATOM_ART_DATUM_DELTA_REPORTED = 565;
+  ATOM_BACKGROUND_DEXOPT_JOB_ENDED = 467;
+  ATOM_WEAR_ADAPTIVE_SUSPEND_STATS_REPORTED = 619;
+  ATOM_WEAR_POWER_ANOMALY_SERVICE_OPERATIONAL_STATS_REPORTED = 620;
+  ATOM_WEAR_POWER_ANOMALY_SERVICE_EVENT_STATS_REPORTED = 621;
+  ATOM_EMERGENCY_STATE_CHANGED = 633;
+  ATOM_DND_STATE_CHANGED = 657;
+  ATOM_MTE_STATE = 10181;
+  ATOM_AD_SERVICES_BACK_COMPAT_GET_TOPICS_REPORTED = 598;
+  ATOM_AD_SERVICES_BACK_COMPAT_EPOCH_COMPUTATION_CLASSIFIER_REPORTED = 599;
+  ATOM_AD_SERVICES_MEASUREMENT_DEBUG_KEYS = 640;
+  ATOM_AD_SERVICES_ERROR_REPORTED = 662;
+  ATOM_AD_SERVICES_BACKGROUND_JOBS_EXECUTION_REPORTED = 663;
+  ATOM_AD_SERVICES_MEASUREMENT_DELAYED_SOURCE_REGISTRATION = 673;
+  ATOM_AD_SERVICES_MEASUREMENT_ATTRIBUTION = 674;
+  ATOM_AD_SERVICES_MEASUREMENT_JOBS = 675;
+  ATOM_AD_SERVICES_MEASUREMENT_WIPEOUT = 676;
+  ATOM_AD_SERVICES_CONSENT_MIGRATED = 702;
+  ATOM_RKPD_POOL_STATS = 664;
+  ATOM_RKPD_CLIENT_OPERATION = 665;
+  ATOM_AUTOFILL_UI_EVENT_REPORTED = 603;
+  ATOM_AUTOFILL_FILL_REQUEST_REPORTED = 604;
+  ATOM_AUTOFILL_FILL_RESPONSE_REPORTED = 605;
+  ATOM_AUTOFILL_SAVE_EVENT_REPORTED = 606;
+  ATOM_AUTOFILL_SESSION_COMMITTED = 607;
+  ATOM_AUTOFILL_FIELD_CLASSIFICATION_EVENT_REPORTED = 659;
+  ATOM_TEST_EXTENSION_ATOM_REPORTED = 660;
+  ATOM_TEST_RESTRICTED_ATOM_REPORTED = 672;
+  ATOM_STATS_SOCKET_LOSS_REPORTED = 752;
+  ATOM_PLUGIN_INITIALIZED = 655;
+  ATOM_TV_LOW_POWER_STANDBY_POLICY = 679;
+  ATOM_LOCKSCREEN_SHORTCUT_SELECTED = 611;
+  ATOM_LOCKSCREEN_SHORTCUT_TRIGGERED = 612;
+  ATOM_EMERGENCY_NUMBERS_INFO = 10180;
+  ATOM_QUALIFIED_RAT_LIST_CHANGED = 634;
+  ATOM_QNS_IMS_CALL_DROP_STATS = 635;
+  ATOM_QNS_FALLBACK_RESTRICTION_CHANGED = 636;
+  ATOM_QNS_RAT_PREFERENCE_MISMATCH_INFO = 10177;
+  ATOM_QNS_HANDOVER_TIME_MILLIS = 10178;
+  ATOM_QNS_HANDOVER_PINGPONG = 10179;
+  ATOM_SATELLITE_CONTROLLER = 10182;
+  ATOM_SATELLITE_SESSION = 10183;
+  ATOM_SATELLITE_INCOMING_DATAGRAM = 10184;
+  ATOM_SATELLITE_OUTGOING_DATAGRAM = 10185;
+  ATOM_SATELLITE_PROVISION = 10186;
+  ATOM_SATELLITE_SOS_MESSAGE_RECOMMENDER = 10187;
+  ATOM_IKE_SESSION_TERMINATED = 678;
+  ATOM_IKE_LIVENESS_CHECK_SESSION_VALIDATED = 760;
+  ATOM_BLUETOOTH_HASHED_DEVICE_NAME_REPORTED = 613;
+  ATOM_BLUETOOTH_L2CAP_COC_CLIENT_CONNECTION = 614;
+  ATOM_BLUETOOTH_L2CAP_COC_SERVER_CONNECTION = 615;
+  ATOM_BLUETOOTH_LE_SESSION_CONNECTED = 656;
+  ATOM_RESTRICTED_BLUETOOTH_DEVICE_NAME_REPORTED = 666;
+  ATOM_BLUETOOTH_PROFILE_CONNECTION_ATTEMPTED = 696;
+  ATOM_HEALTH_CONNECT_UI_IMPRESSION = 623;
+  ATOM_HEALTH_CONNECT_UI_INTERACTION = 624;
+  ATOM_HEALTH_CONNECT_APP_OPENED_REPORTED = 625;
+  ATOM_HEALTH_CONNECT_API_CALLED = 616;
+  ATOM_HEALTH_CONNECT_USAGE_STATS = 617;
+  ATOM_HEALTH_CONNECT_STORAGE_STATS = 618;
+  ATOM_HEALTH_CONNECT_API_INVOKED = 643;
+  ATOM_EXERCISE_ROUTE_API_CALLED = 654;
+  ATOM_ATOM_9999 = 9999;
+  ATOM_ATOM_99999 = 99999;
+  ATOM_THREADNETWORK_TELEMETRY_DATA_REPORTED = 738;
+  ATOM_THREADNETWORK_TOPO_ENTRY_REPEATED = 739;
+  ATOM_THREADNETWORK_DEVICE_INFO_REPORTED = 740;
+  ATOM_EMERGENCY_NUMBER_DIALED = 637;
+  ATOM_SANDBOX_API_CALLED = 488;
+  ATOM_SANDBOX_ACTIVITY_EVENT_OCCURRED = 735;
+  ATOM_SANDBOX_SDK_STORAGE = 10159;
+  ATOM_CRONET_ENGINE_CREATED = 703;
+  ATOM_CRONET_TRAFFIC_REPORTED = 704;
+  ATOM_CRONET_ENGINE_BUILDER_INITIALIZED = 762;
+  ATOM_CRONET_HTTP_FLAGS_INITIALIZED = 763;
+  ATOM_CRONET_INITIALIZED = 764;
+  ATOM_DAILY_KEEPALIVE_INFO_REPORTED = 650;
+  ATOM_IP_CLIENT_RA_INFO_REPORTED = 778;
+  ATOM_APF_SESSION_INFO_REPORTED = 777;
+  ATOM_CREDENTIAL_MANAGER_API_CALLED = 585;
+  ATOM_CREDENTIAL_MANAGER_INIT_PHASE_REPORTED = 651;
+  ATOM_CREDENTIAL_MANAGER_CANDIDATE_PHASE_REPORTED = 652;
+  ATOM_CREDENTIAL_MANAGER_FINAL_PHASE_REPORTED = 653;
+  ATOM_CREDENTIAL_MANAGER_TOTAL_REPORTED = 667;
+  ATOM_CREDENTIAL_MANAGER_FINALNOUID_REPORTED = 668;
+  ATOM_CREDENTIAL_MANAGER_GET_REPORTED = 669;
+  ATOM_CREDENTIAL_MANAGER_AUTH_CLICK_REPORTED = 670;
+  ATOM_CREDENTIAL_MANAGER_APIV2_CALLED = 671;
+  ATOM_UWB_ACTIVITY_INFO = 10188;
+  ATOM_MEDIA_ACTION_REPORTED = 608;
+  ATOM_MEDIA_CONTROLS_LAUNCHED = 609;
+  ATOM_MEDIA_CODEC_RECLAIM_REQUEST_COMPLETED = 600;
+  ATOM_MEDIA_CODEC_STARTED = 641;
+  ATOM_MEDIA_CODEC_STOPPED = 642;
+  ATOM_MEDIA_CODEC_RENDERED = 684;
 }
 // End of protos/perfetto/config/statsd/atom_ids.proto
 
@@ -2480,7 +2783,68 @@ enum VmstatCounters {
   VMSTAT_SWAP_RA = 126;
   VMSTAT_SWAP_RA_HIT = 127;
   VMSTAT_WORKINGSET_RESTORE = 128;
+  VMSTAT_ALLOCSTALL_DEVICE = 129;
+  VMSTAT_ALLOCSTALL_DMA32 = 130;
+  VMSTAT_BALLOON_DEFLATE = 131;
+  VMSTAT_BALLOON_INFLATE = 132;
+  VMSTAT_BALLOON_MIGRATE = 133;
+  VMSTAT_CMA_ALLOC_FAIL = 134;
+  VMSTAT_CMA_ALLOC_SUCCESS = 135;
+  VMSTAT_NR_FILE_HUGEPAGES = 136;
+  VMSTAT_NR_FILE_PMDMAPPED = 137;
+  VMSTAT_NR_FOLL_PIN_ACQUIRED = 138;
+  VMSTAT_NR_FOLL_PIN_RELEASED = 139;
+  VMSTAT_NR_SEC_PAGE_TABLE_PAGES = 140;
+  VMSTAT_NR_SHADOW_CALL_STACK = 141;
+  VMSTAT_NR_SWAPCACHED = 142;
+  VMSTAT_NR_THROTTLED_WRITTEN = 143;
+  VMSTAT_PGALLOC_DEVICE = 144;
+  VMSTAT_PGALLOC_DMA32 = 145;
+  VMSTAT_PGDEMOTE_DIRECT = 146;
+  VMSTAT_PGDEMOTE_KSWAPD = 147;
+  VMSTAT_PGREUSE = 148;
+  VMSTAT_PGSCAN_ANON = 149;
+  VMSTAT_PGSCAN_FILE = 150;
+  VMSTAT_PGSKIP_DEVICE = 151;
+  VMSTAT_PGSKIP_DMA32 = 152;
+  VMSTAT_PGSTEAL_ANON = 153;
+  VMSTAT_PGSTEAL_FILE = 154;
+  VMSTAT_THP_COLLAPSE_ALLOC = 155;
+  VMSTAT_THP_COLLAPSE_ALLOC_FAILED = 156;
+  VMSTAT_THP_DEFERRED_SPLIT_PAGE = 157;
+  VMSTAT_THP_FAULT_ALLOC = 158;
+  VMSTAT_THP_FAULT_FALLBACK = 159;
+  VMSTAT_THP_FAULT_FALLBACK_CHARGE = 160;
+  VMSTAT_THP_FILE_ALLOC = 161;
+  VMSTAT_THP_FILE_FALLBACK = 162;
+  VMSTAT_THP_FILE_FALLBACK_CHARGE = 163;
+  VMSTAT_THP_FILE_MAPPED = 164;
+  VMSTAT_THP_MIGRATION_FAIL = 165;
+  VMSTAT_THP_MIGRATION_SPLIT = 166;
+  VMSTAT_THP_MIGRATION_SUCCESS = 167;
+  VMSTAT_THP_SCAN_EXCEED_NONE_PTE = 168;
+  VMSTAT_THP_SCAN_EXCEED_SHARE_PTE = 169;
+  VMSTAT_THP_SCAN_EXCEED_SWAP_PTE = 170;
+  VMSTAT_THP_SPLIT_PAGE = 171;
+  VMSTAT_THP_SPLIT_PAGE_FAILED = 172;
+  VMSTAT_THP_SPLIT_PMD = 173;
+  VMSTAT_THP_SWPOUT = 174;
+  VMSTAT_THP_SWPOUT_FALLBACK = 175;
+  VMSTAT_THP_ZERO_PAGE_ALLOC = 176;
+  VMSTAT_THP_ZERO_PAGE_ALLOC_FAILED = 177;
+  VMSTAT_VMA_LOCK_ABORT = 178;
+  VMSTAT_VMA_LOCK_MISS = 179;
+  VMSTAT_VMA_LOCK_RETRY = 180;
+  VMSTAT_VMA_LOCK_SUCCESS = 181;
+  VMSTAT_WORKINGSET_ACTIVATE_ANON = 182;
+  VMSTAT_WORKINGSET_ACTIVATE_FILE = 183;
+  VMSTAT_WORKINGSET_NODES = 184;
+  VMSTAT_WORKINGSET_REFAULT_ANON = 185;
+  VMSTAT_WORKINGSET_REFAULT_FILE = 186;
+  VMSTAT_WORKINGSET_RESTORE_ANON = 187;
+  VMSTAT_WORKINGSET_RESTORE_FILE = 188;
 }
+
 // End of protos/perfetto/common/sys_stats_counters.proto
 
 // Begin of protos/perfetto/config/sys_stats/sys_stats_config.proto
@@ -2540,6 +2904,10 @@ message SysStatsConfig {
   // Polls /proc/diskstats every X ms, if non-zero.
   // This is required to be > 10ms to avoid excessive CPU usage.
   optional uint32 diskstat_period_ms = 10;
+
+  // Polls /proc/pressure/* every X ms, if non-zero.
+  // This is required to be > 10ms to avoid excessive CPU usage.
+  optional uint32 psi_period_ms = 11;
 }
 
 // End of protos/perfetto/config/sys_stats/sys_stats_config.proto
@@ -2690,7 +3058,7 @@ message TrackEventConfig {
 // Begin of protos/perfetto/config/data_source_config.proto
 
 // The configuration that is passed to each data source when starting tracing.
-// Next id: 125
+// Next id: 126
 message DataSourceConfig {
   enum SessionInitiator {
     SESSION_INITIATOR_UNSPECIFIED = 0;
@@ -2798,6 +3166,9 @@ message DataSourceConfig {
   // C++ class for it so it can pass around plain C++ objets.
   optional ChromeConfig chrome_config = 101;
 
+  // Data source name: code.v8.dev
+  optional V8Config v8_config = 127 [lazy = true];
+
   // If an interceptor is specified here, packets for this data source will be
   // rerouted to the interceptor instead of the main trace buffer. This can be
   // used, for example, to write trace data into ETW or for logging trace points
@@ -2825,6 +3196,12 @@ message DataSourceConfig {
   // Introduced in Android 14 (U) QPR1.
   optional AndroidSdkSyspropGuardConfig android_sdk_sysprop_guard_config = 124
       [lazy = true];
+
+  // Data source name: windows.etw
+  optional EtwConfig etw_config = 125 [lazy = true];
+
+  // Data source name: android.protolog
+  optional ProtoLogConfig protolog_config = 126 [lazy = true];
 
   // This is a fallback mechanism to send a free-form text config to the
   // producer. In theory this should never be needed. All the code that
@@ -2978,7 +3355,7 @@ message TraceConfig {
   // long (e.g. 24h) traces, where suspend can inflate them to weeks of
   // wall-time, making them more likely to hit device reboots (and hence loss).
   // This option also changes consistently the semantic of
-  // TrigerConfig.stop_delay_ms.
+  // TriggerConfig.stop_delay_ms.
   optional bool prefer_suspend_clock_for_duration = 36;
 
   // This is set when --dropbox is passed to the Perfetto command line client
@@ -3271,10 +3648,8 @@ message TraceConfig {
   }
   optional CompressionType compression_type = 24;
 
-  // Use the legacy codepath that compresses from perfetto_cmd.cc instead of
-  // using the new codepath that compresses from tracing_service_impl.cc. This
-  // will be removed in the future.
-  optional bool compress_from_cli = 37;
+  // DEPRECATED, was compress_from_cli.
+  reserved 37;
 
   // Android-only. Not for general use. If set, saves the trace into an
   // incident. This field is read by perfetto_cmd, rather than the tracing
@@ -3400,6 +3775,30 @@ message TraceConfig {
       // |atrace_post_tgid_starts_with|. The regex matching is only performed if
       // this check succeeds.
       SFP_ATRACE_MATCH_BREAK = 4;
+
+      // Tries to repeatedly search (i.e. find substrings of) the string field
+      // with |regex_pattern|. For each match, redacts any matching groups (i.e.
+      // replaced with a constant string). Once there are no further matches,
+      // filtering is terminated (i.e. no further rules are checked).
+      //
+      // Note that this is policy is a "search" policy not a "match" policy
+      // unlike the above policies:
+      //  * Match policies require matching the full string i.e. there is an
+      //    implicit leading `^` and trailing `$`.
+      //  * Search policies perform repeated partial matching of the string
+      //    e.g.
+      //      - String: `foo=aaa,bar=123,foo=bbb,baz=456`
+      //      - Pattern: `foo=(\d+)`
+      //      - Output: `foo=P6O,bar=123,foo=P6O,baz=456`
+      //    where P6O is the redaction string
+      //
+      // All of this is only performed after some pre-work where we try to parse
+      // the string field as an atrace tracepoint and check if the post-tgid
+      // field starts with |atrace_post_tgid_starts_with|.
+      //
+      // If there are no partial matches, the string is left unchanged and the
+      // next rule in chain is considered.
+      SFP_ATRACE_REPEATED_SEARCH_REDACT_GROUPS = 5;
     }
 
     // A rule specifies how strings should be filtered.

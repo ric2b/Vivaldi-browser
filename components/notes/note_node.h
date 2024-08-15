@@ -69,6 +69,9 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   // Get the creation time for the node.
   base::Time GetCreationTime() const { return creation_time_; }
 
+  // Get the last modification time for the node.
+  base::Time GetLastModificationTime() const { return last_modification_time_; }
+
   const std::u16string& GetContent() const { return content_; }
 
   const GURL& GetURL() const { return url_; }
@@ -77,6 +80,9 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   void SetURL(const GURL& url) { url_ = url; }
   void SetCreationTime(const base::Time creation_time) {
     creation_time_ = creation_time;
+  }
+  void SetLastModificationTime(const base::Time last_modified_time) {
+    last_modification_time_ = last_modified_time;
   }
 
   void AddAttachmentDeprecated(DeprecatedNoteAttachment&& attachment) {
@@ -100,6 +106,8 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   const Type type_;
   // Time of creation.
   base::Time creation_time_;
+  // Time of last modification.
+  base::Time last_modification_time_;
   // Actual note text.
   std::u16string content_;
   // Attached URL.

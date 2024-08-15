@@ -15,7 +15,7 @@
 namespace data_controls {
 namespace {
 
-using Level = policy::DlpRulesManagerBase::Level;
+using Level = DlpRulesManagerBase::Level;
 using RuleId = ChromeDlpRulesManager::RuleId;
 using UrlConditionId = ChromeDlpRulesManager::UrlConditionId;
 using RulesConditionsMap = std::map<RuleId, UrlConditionId>;
@@ -149,7 +149,7 @@ Level ChromeDlpRulesManager::IsRestrictedDestination(
   return rule_info.level;
 }
 
-policy::DlpRulesManagerBase::AggregatedDestinations
+DlpRulesManagerBase::AggregatedDestinations
 ChromeDlpRulesManager::GetAggregatedDestinations(
     const GURL& source,
     Restriction restriction) const {
@@ -250,6 +250,40 @@ std::string ChromeDlpRulesManager::GetSourceUrlPattern(
   return std::string();
 }
 
+Verdict ChromeDlpRulesManager::GetVerdict(Restriction restriction,
+                                          const ActionContext& context) const {
+  if (!base::FeatureList::IsEnabled(kEnableDesktopDataControls)) {
+    return Verdict::NotSet();
+  }
+
+  Level max_level = Level::kNotSet;
+  std::set<size_t> triggered_rules;
+  for (size_t i = 0; i < rules_.size(); ++i) {
+    Level level = rules_[i].GetLevel(restriction, context);
+    if (level > max_level) {
+      max_level = level;
+    }
+    if (level != Level::kNotSet) {
+      triggered_rules.insert(i);
+    }
+  }
+
+  // TODO(b/303640183): Access `rules_` using the indexes in `triggered_rules`
+  // to populate the reporting callback(s) appropriately.
+  switch (max_level) {
+    case Rule::Level::kNotSet:
+      return Verdict::NotSet();
+    case Rule::Level::kReport:
+      return Verdict::Report(base::DoNothing());
+    case Rule::Level::kWarn:
+      return Verdict::Warn(base::DoNothing(), base::DoNothing());
+    case Rule::Level::kBlock:
+      return Verdict::Block(base::DoNothing());
+    case Rule::Level::kAllow:
+      return Verdict::Allow();
+  }
+}
+
 // static
 RulesConditionsMap ChromeDlpRulesManager::MatchUrlAndGetRulesMapping(
     const GURL& url,
@@ -275,14 +309,14 @@ ChromeDlpRulesManager::GetMaxJoinRestrictionLevelAndRuleId(
     const bool ignore_allow) const {
   auto restriction_it = restrictions_map.find(restriction);
   if (restriction_it == restrictions_map.end()) {
-    return MatchedRuleInfo<T>(Level::kAllow, absl::nullopt, absl::nullopt);
+    return MatchedRuleInfo<T>(Level::kAllow, std::nullopt, std::nullopt);
   }
 
   const std::map<RuleId, Level>& restriction_rules = restriction_it->second;
 
   Level max_level = Level::kNotSet;
-  absl::optional<T> url_condition = absl::nullopt;
-  absl::optional<RuleId> matched_rule_id = absl::nullopt;
+  std::optional<T> url_condition = std::nullopt;
+  std::optional<RuleId> matched_rule_id = std::nullopt;
 
   for (const auto& rule_pair : selected_rules) {
     const auto& restriction_rule_itr = restriction_rules.find(rule_pair.first);
@@ -300,7 +334,7 @@ ChromeDlpRulesManager::GetMaxJoinRestrictionLevelAndRuleId(
   }
 
   if (max_level == Level::kNotSet) {
-    return MatchedRuleInfo<T>(Level::kAllow, absl::nullopt, absl::nullopt);
+    return MatchedRuleInfo<T>(Level::kAllow, std::nullopt, std::nullopt);
   }
 
   return MatchedRuleInfo(max_level, matched_rule_id, url_condition);

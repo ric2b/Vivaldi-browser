@@ -251,10 +251,8 @@ void HTMLPlugInElement::AttachLayoutTree(AttachContext& context) {
     GetDocument().IncrementLoadEventDelayCount();
     GetDocument().LoadPluginsSoon();
   }
-  if (image_loader_ && layout_object->IsLayoutImage()) {
-    LayoutImageResource* image_resource =
-        To<LayoutImage>(layout_object)->ImageResource();
-    image_resource->SetImageResource(image_loader_->GetContent());
+  if (image_loader_ && IsA<LayoutImage>(*layout_object)) {
+    image_loader_->OnAttachLayoutTree();
   }
   if (layout_object->AffectsWhitespaceSiblings())
     context.previous_in_flow = layout_object;
@@ -488,7 +486,6 @@ NamedPropertySetterResult HTMLPlugInElement::AnonymousNamedSetter(
       V8AtomicString(script_state->GetIsolate(), name);
   v8::Local<v8::Object> this_wrapper =
       ToV8Traits<HTMLPlugInElement>::ToV8(script_state, this)
-          .ToLocalChecked()
           .As<v8::Object>();
   bool instance_has_property;
   bool holder_has_property;
@@ -598,9 +595,11 @@ LayoutEmbeddedContent* HTMLPlugInElement::LayoutEmbeddedContentForJSBindings()
   return ExistingLayoutEmbeddedContent();
 }
 
-bool HTMLPlugInElement::IsKeyboardFocusable() const {
-  if (HTMLFrameOwnerElement::IsKeyboardFocusable())
+bool HTMLPlugInElement::IsKeyboardFocusable(
+    UpdateBehavior update_behavior) const {
+  if (HTMLFrameOwnerElement::IsKeyboardFocusable(update_behavior)) {
     return true;
+  }
 
   WebPluginContainerImpl* embedded_content_view = nullptr;
   if (LayoutEmbeddedContent* layout_embedded_content =
@@ -609,7 +608,8 @@ bool HTMLPlugInElement::IsKeyboardFocusable() const {
   }
 
   return GetDocument().IsActive() && embedded_content_view &&
-         embedded_content_view->SupportsKeyboardFocus() && IsFocusable();
+         embedded_content_view->SupportsKeyboardFocus() &&
+         IsFocusable(update_behavior);
 }
 
 bool HTMLPlugInElement::HasCustomFocusLogic() const {
@@ -633,13 +633,16 @@ void HTMLPlugInElement::DisconnectContentFrame() {
   SetPersistedPlugin(nullptr);
 }
 
-bool HTMLPlugInElement::IsFocusableStyle() const {
-  if (HTMLFrameOwnerElement::SupportsFocus() &&
-      HTMLFrameOwnerElement::IsFocusableStyle())
+bool HTMLPlugInElement::IsFocusableStyle(UpdateBehavior update_behavior) const {
+  if (HTMLFrameOwnerElement::SupportsFocus(update_behavior) &&
+      HTMLFrameOwnerElement::IsFocusableStyle(update_behavior)) {
     return true;
+  }
 
-  if (UseFallbackContent() || !HTMLFrameOwnerElement::IsFocusableStyle())
+  if (UseFallbackContent() ||
+      !HTMLFrameOwnerElement::IsFocusableStyle(update_behavior)) {
     return false;
+  }
   return plugin_is_available_;
 }
 

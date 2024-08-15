@@ -89,9 +89,6 @@ class SynthesizedClip : private cc::ContentLayerClient {
 
  private:
   // ContentLayerClient implementation.
-  gfx::Rect PaintableRegion() const final {
-    return gfx::Rect(layer_->bounds());
-  }
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList() final;
   bool FillsBoundsCompletely() const final { return false; }
 
@@ -231,8 +228,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   void SetLayerDebugInfoEnabled(bool);
 
   Vector<cc::Layer*> SynthesizedClipLayersForTesting() const;
-
-  void ClearPropertyTreeChangedState();
 
   size_t ApproximateUnsharedMemoryUsage() const;
 

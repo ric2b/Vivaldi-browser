@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate alloc;
-
 use core::fmt::Debug;
-
-use alloc::vec::Vec;
 
 /// Marker trait for an elliptic curve used for diffie-hellman.
 pub trait Curve {}
@@ -42,12 +38,16 @@ pub trait EphemeralSecret<C: Curve>: Send {
     /// The random number generator to be used for generating a secret
     type Rng: crate::CryptoRng;
 
+    /// The for encoded public key bytes, for example a `[u8; N]` array if the size is fixed, or
+    /// `ArrayVec<[u8; N]>` if the size is bounded but not fixed.
+    type EncodedPublicKey: AsRef<[u8]> + Debug;
+
     /// Generates a new random ephemeral secret.
     fn generate_random(rng: &mut Self::Rng) -> Self;
 
     /// Returns the bytes of the public key for this ephemeral secret that is suitable for sending
     /// over the wire for key exchange.
-    fn public_key_bytes(&self) -> Vec<u8>;
+    fn public_key_bytes(&self) -> Self::EncodedPublicKey;
 
     /// Performs diffie-hellman key exchange using this ephemeral secret with the given public key
     /// `other_pub`.
@@ -59,6 +59,8 @@ pub trait EphemeralSecret<C: Curve>: Send {
 
 /// Trait for a public key used for elliptic curve diffie hellman.
 pub trait PublicKey<E: Curve>: Sized + PartialEq + Debug {
+    /// The type for an encoded public key.
+    type EncodedPublicKey: AsRef<[u8]> + Debug;
     /// The error type associated with Public Key.
     type Error: Debug;
 
@@ -71,5 +73,5 @@ pub trait PublicKey<E: Curve>: Sized + PartialEq + Debug {
     /// the sec1 encoding, may return equivalent but different byte-representations due to point
     /// compression, so it is not necessarily true that `from_bytes(bytes)?.to_bytes() == bytes`
     /// (but it is always true that `from_bytes(key.to_bytes())? == key`).
-    fn to_bytes(&self) -> Vec<u8>;
+    fn to_bytes(&self) -> Self::EncodedPublicKey;
 }

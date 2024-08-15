@@ -928,6 +928,62 @@ TEST_P(VertexAttributeTest, UnsignedPacked1010102ExtensionNormalized)
     };
 }
 
+// Test that mixing array and current vertex attribute values works with the same matrix input
+TEST_P(VertexAttributeTest, MixedMatrixSources)
+{
+    constexpr char kVS[] = R"(
+attribute vec4 a_position;
+attribute mat4 a_matrix;
+varying vec4 v_color;
+void main() {
+    v_color = vec4(0.5, 0.25, 0.125, 0.0625) * a_matrix;
+    gl_Position = a_position;
+})";
+
+    constexpr char kFS[] = R"(
+precision mediump float;
+varying vec4 v_color;
+void main() {
+    gl_FragColor = v_color;
+})";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    glBindAttribLocation(program, 0, "a_position");
+    glBindAttribLocation(program, 1, "a_matrix");
+    glLinkProgram(program);
+    glUseProgram(program);
+    ASSERT_GL_NO_ERROR();
+
+    GLBuffer buffer;
+    for (size_t i = 0; i < 4; ++i)
+    {
+        // Setup current attributes for all columns except one
+        for (size_t col = 0; col < 4; ++col)
+        {
+            GLfloat v[4] = {0.0, 0.0, 0.0, 0.0};
+            v[col]       = col == i ? 0.0 : 1.0;
+            glVertexAttrib4fv(1 + col, v);
+            glDisableVertexAttribArray(1 + col);
+        }
+
+        // Setup vertex array data for the i-th column
+        GLfloat data[16]{};
+        data[0 * 4 + i] = 1.0;
+        data[1 * 4 + i] = 1.0;
+        data[2 * 4 + i] = 1.0;
+        data[3 * 4 + i] = 1.0;
+        glBindBuffer(GL_ARRAY_BUFFER, buffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(data), data, GL_STATIC_DRAW);
+        glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, 0, reinterpret_cast<void *>(0));
+        glEnableVertexAttribArray(1 + i);
+        ASSERT_GL_NO_ERROR();
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        drawIndexedQuad(program, "a_position", 0.0f, 1.0f, true);
+        EXPECT_PIXEL_COLOR_NEAR(0, 0, GLColor(128, 64, 32, 16), 1);
+    }
+}
+
 class VertexAttributeTestES3 : public VertexAttributeTest
 {
   protected:
@@ -1829,17 +1885,14 @@ void main()
 // GL_RG32_SNORM_ANGLEX is used when using glVertexAttribPointer with certain parameters.
 TEST_P(VertexAttributeTestES3, DrawWithUnalignedData)
 {
-    // http://anglebug.com/7068
-    ANGLE_SKIP_TEST_IF(IsMac());
-
     constexpr char kVS[] = R"(#version 300 es
 precision highp float;
 in highp vec4 a_position;
-in highp ivec2 a_ColorTest;
+in highp vec2 a_ColorTest;
 out highp vec2 v_colorTest;
 
 void main() {
-    v_colorTest = vec2(a_ColorTest);
+    v_colorTest = a_ColorTest;
     gl_Position = a_position;
 })";
 
@@ -1849,7 +1902,8 @@ in highp vec2 v_colorTest;
 out vec4 fragColor;
 
 void main() {
-    if(v_colorTest.x > 0.5) {
+    // The input value is 0x01000000 / 0x7FFFFFFF
+    if(abs(v_colorTest.x - 0.0078125) < 0.001) {
         fragColor = vec4(0.0, 1.0, 0.0, 1.0);
     } else {
         fragColor = vec4(1.0, 0.0, 0.0, 1.0);
@@ -2410,10 +2464,10 @@ void main() {
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, kInstanceCount);
 
         EXPECT_GL_NO_ERROR();
-        EXPECT_PIXEL_COLOR_EQ(0, getWindowHeight() / 2, GLColor::red);
-        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, getWindowHeight() / 2, GLColor::green);
-        EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::blue);
-        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, 0, GLColor::yellow);
+        EXPECT_PIXEL_COLOR_EQ(0, getWindowHeight() / 2, GLColor::red) << i;
+        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, getWindowHeight() / 2, GLColor::green) << i;
+        EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::blue) << i;
+        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, 0, GLColor::yellow) << i;
 
         glBindVertexArray(vao[1]);
         glUseProgram(computeProgram.get());
@@ -2424,11 +2478,12 @@ void main() {
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, kInstanceCount);
 
         EXPECT_GL_NO_ERROR();
-        EXPECT_PIXEL_COLOR_EQ(0, getWindowHeight() / 2, GLColor::yellow);
-        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, getWindowHeight() / 2, GLColor::blue);
-        EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
-        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, 0, GLColor::red);
+        EXPECT_PIXEL_COLOR_EQ(0, getWindowHeight() / 2, GLColor::yellow) << i;
+        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, getWindowHeight() / 2, GLColor::blue) << i;
+        EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green) << i;
+        EXPECT_PIXEL_COLOR_EQ(getWindowWidth() / 2, 0, GLColor::red) << i;
     }
+    ASSERT_GL_NO_ERROR();
 }
 
 TEST_P(VertexAttributeTestES31, UseComputeShaderToUpdateVertexBuffer)
@@ -4594,6 +4649,125 @@ TEST_P(VertexAttributeTestES3, InvalidAttribPointer)
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glEnableVertexAttribArray(0);
+}
+
+// Test maxinum attribs full of Client buffers and then switch to mixed.
+TEST_P(VertexAttributeTestES3, fullClientBuffersSwitchToMixed)
+{
+    GLint maxAttribs;
+    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &maxAttribs);
+    ASSERT_GL_NO_ERROR();
+
+    // Reserve one attrib for position
+    GLint drawAttribs = maxAttribs - 1;
+
+    GLuint program = compileMultiAttribProgram(drawAttribs);
+    ASSERT_NE(0u, program);
+
+    const std::array<Vector2, 4> kIndexedQuadVertices = {{
+        Vector2(-1.0f, 1.0f),
+        Vector2(-1.0f, -1.0f),
+        Vector2(1.0f, -1.0f),
+        Vector2(1.0f, 1.0f),
+    }};
+
+    GLsizei stride = (maxAttribs + 1) * sizeof(GLfloat);
+
+    constexpr std::array<GLushort, 6> kIndexedQuadIndices = {{0, 1, 2, 0, 2, 3}};
+    GLuint indexBuffer                                    = 0;
+    glGenBuffers(1, &indexBuffer);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(kIndexedQuadIndices), kIndexedQuadIndices.data(),
+                 GL_STATIC_DRAW);
+
+    // Vertex drawAttribs color attributes plus position (x, y).
+    GLint totalComponents = drawAttribs + 2;
+    std::vector<GLfloat> vertexData(totalComponents * 4, 0.0f);
+    for (GLint index = 0; index < 4; ++index)
+    {
+        vertexData[index * totalComponents + drawAttribs]     = kIndexedQuadVertices[index].x();
+        vertexData[index * totalComponents + drawAttribs + 1] = kIndexedQuadVertices[index].y();
+    }
+
+    GLfloat attributeValue = 0.0f;
+    GLfloat delta          = 1.0f / 256.0f;
+    for (GLint attribIndex = 0; attribIndex < drawAttribs; ++attribIndex)
+    {
+        vertexData[attribIndex]                       = attributeValue;
+        vertexData[attribIndex + totalComponents]     = attributeValue;
+        vertexData[attribIndex + totalComponents * 2] = attributeValue;
+        vertexData[attribIndex + totalComponents * 3] = attributeValue;
+        attributeValue += delta;
+    }
+
+    glUseProgram(program);
+    for (GLint attribIndex = 0; attribIndex < drawAttribs; ++attribIndex)
+    {
+        std::stringstream attribStream;
+        attribStream << "a" << attribIndex;
+        GLint location = glGetAttribLocation(program, attribStream.str().c_str());
+        ASSERT_NE(-1, location);
+        glVertexAttribPointer(location, 1, GL_FLOAT, GL_FALSE, stride,
+                              vertexData.data() + attribIndex);
+        glEnableVertexAttribArray(location);
+    }
+    GLint posLoc = glGetAttribLocation(program, "position");
+    ASSERT_NE(-1, posLoc);
+    glEnableVertexAttribArray(posLoc);
+    glVertexAttribPointer(posLoc, 2, GL_FLOAT, GL_FALSE, stride, vertexData.data() + drawAttribs);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+
+    // the result color should be (0 + 1 + 2 + ... + 14)/256 * 255;
+    EXPECT_GL_NO_ERROR();
+    EXPECT_PIXEL_NEAR(0, 0, 105, 0, 0, 255, 1);
+
+    // disable a few attribute use default attribute color
+    GLint l0  = glGetAttribLocation(program, "a0");
+    GLint l5  = glGetAttribLocation(program, "a5");
+    GLint l13 = glGetAttribLocation(program, "a13");
+    glDisableVertexAttribArray(l0);
+    glVertexAttrib1f(l0, 1.0f / 16.0f);
+    glDisableVertexAttribArray(l5);
+    glVertexAttrib1f(l5, 1.0f / 16.0f);
+    glDisableVertexAttribArray(l13);
+    glVertexAttrib1f(l13, 1.0f / 16.0f);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+
+    EXPECT_GL_NO_ERROR();
+    EXPECT_PIXEL_NEAR(0, 0, 134, 0, 0, 255, 1);
+
+    // disable all the client buffers.
+    for (GLint attribIndex = 0; attribIndex < drawAttribs; ++attribIndex)
+    {
+        std::stringstream attribStream;
+        attribStream << "a" << attribIndex;
+        GLint location = glGetAttribLocation(program, attribStream.str().c_str());
+        ASSERT_NE(-1, location);
+        glDisableVertexAttribArray(location);
+        glVertexAttrib1f(location, 1.0f / 16.0f);
+    }
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+
+    EXPECT_GL_NO_ERROR();
+    EXPECT_PIXEL_NEAR(0, 0, 239, 0, 0, 255, 1);
+
+    // enable all the client buffers.
+    for (GLint attribIndex = 0; attribIndex < drawAttribs; ++attribIndex)
+    {
+        std::stringstream attribStream;
+        attribStream << "a" << attribIndex;
+        GLint location = glGetAttribLocation(program, attribStream.str().c_str());
+        ASSERT_NE(-1, location);
+        glVertexAttribPointer(location, 1, GL_FLOAT, GL_FALSE, stride,
+                              vertexData.data() + attribIndex);
+        glEnableVertexAttribArray(location);
+    }
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+    EXPECT_GL_NO_ERROR();
+    EXPECT_PIXEL_NEAR(0, 0, 105, 0, 0, 255, 1);
 }
 
 // Test bind an empty buffer for vertex attribute does not crash

@@ -229,6 +229,9 @@ void ViewAccessibility::GetAccessibleNodeData(ui::AXNodeData* data) const {
   static constexpr ax::mojom::IntListAttribute kOverridableIntListAttributes[]{
       ax::mojom::IntListAttribute::kLabelledbyIds,
       ax::mojom::IntListAttribute::kDescribedbyIds,
+      ax::mojom::IntListAttribute::kCharacterOffsets,
+      ax::mojom::IntListAttribute::kWordStarts,
+      ax::mojom::IntListAttribute::kWordEnds,
   };
   for (auto attribute : kOverridableIntListAttributes) {
     if (custom_data_.HasIntListAttribute(attribute))
@@ -246,6 +249,12 @@ void ViewAccessibility::GetAccessibleNodeData(ui::AXNodeData* data) const {
                                            ax::mojom::StringAttribute::kName)) {
       data->SetDescription(base::UTF16ToUTF8(tooltip));
     }
+  }
+
+  if (custom_data_.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected)) {
+    data->AddBoolAttribute(
+        ax::mojom::BoolAttribute::kSelected,
+        custom_data_.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
   }
 
   data->relative_bounds.bounds = gfx::RectF(view_->GetBoundsInScreen());
@@ -515,6 +524,10 @@ void ViewAccessibility::ClearPosInSetOverride() {
   custom_data_.RemoveIntAttribute(ax::mojom::IntAttribute::kSetSize);
 }
 
+void ViewAccessibility::OverrideIsSelected(bool selected) {
+  custom_data_.AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, selected);
+}
+
 void ViewAccessibility::OverrideNextFocus(Widget* widget) {
   if (widget)
     next_focus_ = widget->GetWeakPtr();
@@ -548,25 +561,66 @@ ui::AXTreeID ViewAccessibility::GetChildTreeID() const {
   return child_tree_id_ ? *child_tree_id_ : ui::AXTreeIDUnknown();
 }
 
+void ViewAccessibility::OverrideCharacterOffsets(
+    const std::vector<int32_t>& offsets) {
+  custom_data_.AddIntListAttribute(
+      ax::mojom::IntListAttribute::kCharacterOffsets, offsets);
+}
+
+void ViewAccessibility::OverrideWordStarts(
+    const std::vector<int32_t>& offsets) {
+  custom_data_.AddIntListAttribute(ax::mojom::IntListAttribute::kWordStarts,
+                                   offsets);
+}
+
+void ViewAccessibility::OverrideWordEnds(const std::vector<int32_t>& offsets) {
+  custom_data_.AddIntListAttribute(ax::mojom::IntListAttribute::kWordEnds,
+                                   offsets);
+}
+
+void ViewAccessibility::ClearTextOffsets() {
+  custom_data_.RemoveIntListAttribute(
+      ax::mojom::IntListAttribute::kCharacterOffsets);
+  custom_data_.RemoveIntListAttribute(ax::mojom::IntListAttribute::kWordStarts);
+  custom_data_.RemoveIntListAttribute(ax::mojom::IntListAttribute::kWordEnds);
+}
+
 gfx::NativeViewAccessible ViewAccessibility::GetNativeObject() const {
   return nullptr;
 }
 
 void ViewAccessibility::NotifyAccessibilityEvent(ax::mojom::Event event_type) {
+  Widget* const widget = view_->GetWidget();
+  if (!widget || widget->IsClosed()) {
+    return;
+  }
   // Used for unit testing.
   if (accessibility_events_callback_)
     accessibility_events_callback_.Run(nullptr, event_type);
 }
 
+void ViewAccessibility::AnnounceAlert(const std::u16string& text) {
+  if (auto* const widget = view_->GetWidget()) {
+    if (auto* const root_view =
+            static_cast<internal::RootView*>(widget->GetRootView())) {
+      root_view->AnnounceTextAs(text,
+                                ui::AXPlatformNode::AnnouncementType::kAlert);
+    }
+  }
+}
+
+void ViewAccessibility::AnnouncePolitely(const std::u16string& text) {
+  if (auto* const widget = view_->GetWidget()) {
+    if (auto* const root_view =
+            static_cast<internal::RootView*>(widget->GetRootView())) {
+      root_view->AnnounceTextAs(text,
+                                ui::AXPlatformNode::AnnouncementType::kPolite);
+    }
+  }
+}
+
 void ViewAccessibility::AnnounceText(const std::u16string& text) {
-  Widget* const widget = view_->GetWidget();
-  if (!widget)
-    return;
-  auto* const root_view =
-      static_cast<internal::RootView*>(widget->GetRootView());
-  if (!root_view)
-    return;
-  root_view->AnnounceText(text);
+  AnnounceAlert(text);
 }
 
 const ui::AXUniqueId& ViewAccessibility::GetUniqueId() const {

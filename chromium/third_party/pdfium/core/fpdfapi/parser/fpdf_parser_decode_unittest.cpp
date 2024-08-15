@@ -297,76 +297,6 @@ TEST(ParserDecodeTest, A85Decode) {
   }
 }
 
-// NOTE: python's zlib.compress() and zlib.decompress() may be useful for
-// external validation of the FlateDncode/FlateEecode test cases.
-TEST(FPDFParserDecodeEmbedderTest, FlateDecode) {
-  static const pdfium::DecodeTestData flate_decode_cases[] = {
-      STR_IN_OUT_CASE("", "", 0),
-      STR_IN_OUT_CASE("preposterous nonsense", "", 2),
-      STR_IN_OUT_CASE("\x78\x9c\x03\x00\x00\x00\x00\x01", "", 8),
-      STR_IN_OUT_CASE("\x78\x9c\x53\x00\x00\x00\x21\x00\x21", " ", 9),
-      STR_IN_OUT_CASE("\x78\x9c\x33\x34\x32\x06\x00\01\x2d\x00\x97", "123", 11),
-      STR_IN_OUT_CASE("\x78\x9c\x63\xf8\x0f\x00\x01\x01\x01\x00", "\x00\xff",
-                      10),
-      STR_IN_OUT_CASE(
-          "\x78\x9c\x33\x54\x30\x00\x42\x5d\x43\x05\x23\x4b\x05\x73\x33\x63"
-          "\x85\xe4\x5c\x2e\x90\x80\xa9\xa9\xa9\x82\xb9\xb1\xa9\x42\x51\x2a"
-          "\x57\xb8\x42\x1e\x57\x21\x92\xa0\x89\x9e\xb1\xa5\x09\x92\x84\x9e"
-          "\x85\x81\x81\x25\xd8\x14\x24\x26\xd0\x18\x43\x05\x10\x0c\x72\x57"
-          "\x80\x30\x8a\xd2\xb9\xf4\xdd\x0d\x14\xd2\x8b\xc1\x46\x99\x59\x1a"
-          "\x2b\x58\x1a\x9a\x83\x8c\x49\xe3\x0a\x04\x42\x00\x37\x4c\x1b\x42",
-          "1 0 0 -1 29 763 cm\n0 0 555 735 re\nW n\nq\n0 0 555 734.394 re\n"
-          "W n\nq\n0.8009 0 0 0.8009 0 0 cm\n1 1 1 RG 1 1 1 rg\n/G0 gs\n"
-          "0 0 693 917 re\nf\nQ\nQ\n",
-          96),
-  };
-
-  for (size_t i = 0; i < std::size(flate_decode_cases); ++i) {
-    const pdfium::DecodeTestData& data = flate_decode_cases[i];
-    std::unique_ptr<uint8_t, FxFreeDeleter> buf;
-    uint32_t buf_size;
-    EXPECT_EQ(data.processed_size,
-              FlateDecode({data.input, data.input_size}, &buf, &buf_size))
-        << " for case " << i;
-    ASSERT_TRUE(buf);
-    EXPECT_EQ(data.expected_size, buf_size) << " for case " << i;
-    if (data.expected_size != buf_size)
-      continue;
-    EXPECT_EQ(0, memcmp(data.expected, buf.get(), data.expected_size))
-        << " for case " << i;
-  }
-}
-
-TEST(ParserDecodeTest, FlateEncode) {
-  static const pdfium::StrFuncTestData flate_encode_cases[] = {
-      STR_IN_OUT_CASE("", "\x78\x9c\x03\x00\x00\x00\x00\x01"),
-      STR_IN_OUT_CASE(" ", "\x78\x9c\x53\x00\x00\x00\x21\x00\x21"),
-      STR_IN_OUT_CASE("123", "\x78\x9c\x33\x34\x32\x06\x00\01\x2d\x00\x97"),
-      STR_IN_OUT_CASE("\x00\xff", "\x78\x9c\x63\xf8\x0f\x00\x01\x01\x01\x00"),
-      STR_IN_OUT_CASE(
-          "1 0 0 -1 29 763 cm\n0 0 555 735 re\nW n\nq\n0 0 555 734.394 re\n"
-          "W n\nq\n0.8009 0 0 0.8009 0 0 cm\n1 1 1 RG 1 1 1 rg\n/G0 gs\n"
-          "0 0 693 917 re\nf\nQ\nQ\n",
-          "\x78\x9c\x4d\x8c\x3b\x0e\x80\x20\x10\x05\xfb\x3d\xc5\xbb\x80\xb8"
-          "\xc8\xcf\x3d\x01\x35\x36\x1e\x80\x28\x15\x26\xe2\xfd\x13\x83\x36"
-          "\xe4\x35\x93\x79\xc9\x68\x30\x18\x93\xc6\x22\x08\xde\x20\x57\xea"
-          "\xc2\x39\x87\x60\x1c\xda\x41\x3b\x2e\xba\x07\x69\x95\x11\x3b\x1c"
-          "\x6a\x65\x96\xaf\x32\x60\xae\xa4\xd1\xb7\x45\xfc\xd0\x0a\xcd\x91"
-          "\x51\x9e\x2f\xe5\xc5\x40\x74\xe8\x99\x93\x12\x25\x7a\x01\x37\x4c"
-          "\x1b\x42"),
-  };
-
-  for (size_t i = 0; i < std::size(flate_encode_cases); ++i) {
-    const pdfium::StrFuncTestData& data = flate_encode_cases[i];
-    DataVector<uint8_t> result = FlateEncode({data.input, data.input_size});
-    EXPECT_EQ(data.expected_size, result.size()) << " for case " << i;
-    if (data.expected_size != result.size())
-      continue;
-    EXPECT_EQ(0, memcmp(data.expected, result.data(), data.expected_size))
-        << " for case " << i;
-  }
-}
-
 TEST(ParserDecodeTest, HexDecode) {
   const pdfium::DecodeTestData kTestData[] = {
       // Empty src string.
@@ -409,11 +339,15 @@ TEST(ParserDecodeTest, DecodeText) {
   // ASCII text.
   EXPECT_EQ(L"the quick\tfox", PDF_DecodeText(ToSpan("the quick\tfox")));
 
-  // Unicode text.
+  // UTF-8 text.
+  EXPECT_EQ(L"\x0330\x0331",
+            PDF_DecodeText(ToSpan("\xEF\xBB\xBF\xCC\xB0\xCC\xB1")));
+
+  // UTF-16BE text.
   EXPECT_EQ(L"\x0330\x0331",
             PDF_DecodeText(ToSpan("\xFE\xFF\x03\x30\x03\x31")));
 
-  // More Unicode text.
+  // More UTF-16BE text.
   EXPECT_EQ(
       L"\x7F51\x9875\x0020\x56FE\x7247\x0020"
       L"\x8D44\x8BAF\x66F4\x591A\x0020\x00BB",
@@ -421,12 +355,18 @@ TEST(ParserDecodeTest, DecodeText) {
           ToSpan("\xFE\xFF\x7F\x51\x98\x75\x00\x20\x56\xFE\x72\x47\x00"
                  "\x20\x8D\x44\x8B\xAF\x66\xF4\x59\x1A\x00\x20\x00\xBB")));
 
-  // Supplementary Unicode text.
+  // Supplementary UTF-8 text.
+  EXPECT_EQ(L"🎨", PDF_DecodeText(ToSpan("\xEF\xBB\xBF\xF0\x9F\x8E\xA8")));
+
+  // Supplementary UTF-16BE text.
   EXPECT_EQ(L"🎨", PDF_DecodeText(ToSpan("\xFE\xFF\xD8\x3C\xDF\xA8")));
 }
 
 // https://crbug.com/pdfium/182
 TEST(ParserDecodeTest, DecodeTextWithUnicodeEscapes) {
+  EXPECT_EQ(L"\x0020\x5370\x5237",
+            PDF_DecodeText(ToSpan(
+                "\xEF\xBB\xBF\x1B\x6A\x61\x1B\x20\xE5\x8D\xB0\xE5\x88\xB7")));
   EXPECT_EQ(L"\x0020\x5370\x5237",
             PDF_DecodeText(ToSpan(
                 "\xFE\xFF\x00\x1B\x6A\x61\x00\x1B\x00\x20\x53\x70\x52\x37")));
@@ -445,8 +385,10 @@ TEST(ParserDecodeTest, DecodeTextWithUnicodeEscapes) {
 
 // https://crbug.com/1001159
 TEST(ParserDecodeTest, DecodeTextWithInvalidUnicodeEscapes) {
+  EXPECT_EQ(L"", PDF_DecodeText(ToSpan("\xEF\xBB\xBF\x1B\x1B")));
   EXPECT_EQ(L"", PDF_DecodeText(ToSpan("\xFE\xFF\x00\x1B\x00\x1B")));
   EXPECT_EQ(L"", PDF_DecodeText(ToSpan("\xFE\xFF\x00\x1B\x00\x1B\x20")));
+  EXPECT_EQ(L"\x0020", PDF_DecodeText(ToSpan("\xEF\xBB\xBF\x1B\x1B\x20")));
   EXPECT_EQ(L"\x0020",
             PDF_DecodeText(ToSpan("\xFE\xFF\x00\x1B\x00\x1B\x00\x20")));
 }

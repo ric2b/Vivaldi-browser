@@ -67,6 +67,11 @@ void GlobalConfig::SetNumShards(uint8_t num_shards) {
   np_ffi::internal::np_ffi_global_config_set_num_shards(num_shards);
 }
 
+void GlobalConfig::SetMaxNumCredentialSlabs(uint32_t max_num_credential_slabs) {
+  np_ffi::internal::np_ffi_global_config_set_max_num_credential_slabs(
+      max_num_credential_slabs);
+}
+
 void GlobalConfig::SetMaxNumCredentialBooks(uint32_t max_num_credential_books) {
   np_ffi::internal::np_ffi_global_config_set_max_num_credential_books(
       max_num_credential_books);
@@ -86,20 +91,106 @@ void GlobalConfig::SetMaxNumDeserializedV1Advertisements(
           max_num_deserialized_v1_advertisements);
 }
 
-absl::StatusOr<CredentialBook> CredentialBook::TryCreate() {
-  auto result = np_ffi::internal::np_ffi_create_credential_book();
-  auto kind = np_ffi::internal::np_ffi_CreateCredentialBookResult_kind(result);
+absl::StatusOr<CredentialSlab> CredentialSlab::TryCreate() {
+  auto result = np_ffi::internal::np_ffi_create_credential_slab();
+  auto kind = np_ffi::internal::np_ffi_CreateCredentialSlabResult_kind(result);
 
   switch (kind) {
-  case CreateCredentialBookResultKind::Success: {
-    auto book = CredentialBook(
-        np_ffi::internal::np_ffi_CreateCredentialBookResult_into_SUCCESS(
+  case CreateCredentialSlabResultKind::Success: {
+    auto slab = CredentialSlab(
+        np_ffi::internal::np_ffi_CreateCredentialSlabResult_into_SUCCESS(
             result));
-    return book;
+    return slab;
+  }
+  case CreateCredentialSlabResultKind::NoSpaceLeft: {
+    return absl::ResourceExhaustedError(
+        "No space left to create credential slab");
+  }
+  }
+}
+
+CredentialSlab::~CredentialSlab() {
+  if (!this->moved_) {
+    auto result =
+        np_ffi::internal::np_ffi_deallocate_credential_slab(credential_slab_);
+    assert_panic(result == np_ffi::internal::DeallocateResult::Success);
+  }
+}
+
+CredentialSlab::CredentialSlab(CredentialSlab &&other) noexcept
+    : credential_slab_(other.credential_slab_), moved_(other.moved_) {
+  other.credential_slab_ = {};
+  other.moved_ = true;
+}
+
+CredentialSlab &CredentialSlab::operator=(CredentialSlab &&other) noexcept {
+  if (this != &other) {
+    if (!this->moved_) {
+      auto result = np_ffi::internal::np_ffi_deallocate_credential_slab(
+          this->credential_slab_);
+      assert_panic(result == np_ffi::internal::DeallocateResult::Success);
+    }
+
+    this->credential_slab_ = other.credential_slab_;
+    this->moved_ = other.moved_;
+
+    other.credential_slab_ = {};
+    other.moved_ = true;
+  }
+  return *this;
+}
+
+absl::Status CredentialSlab::AddV0Credential(V0MatchableCredential v0_cred) {
+  assert_panic(!this->moved_);
+  auto result = np_ffi::internal::np_ffi_CredentialSlab_add_v0_credential(
+      this->credential_slab_, v0_cred.internal_);
+  switch (result) {
+  case AddCredentialToSlabResult::Success: {
+    return absl::OkStatus();
+  }
+  case AddCredentialToSlabResult::InvalidHandle: {
+    return absl::InvalidArgumentError(
+        "invalid credential slab handle provided");
+  }
+  }
+}
+
+absl::Status CredentialSlab::AddV1Credential(V1MatchableCredential v1_cred) {
+  assert_panic(!this->moved_);
+  auto result = np_ffi::internal::np_ffi_CredentialSlab_add_v1_credential(
+      this->credential_slab_, v1_cred.internal_);
+  switch (result) {
+  case AddCredentialToSlabResult::Success: {
+    return absl::OkStatus();
+  }
+  case AddCredentialToSlabResult::InvalidHandle: {
+    return absl::InvalidArgumentError(
+        "invalid credential slab handle provided");
+  }
+  }
+}
+
+absl::StatusOr<CredentialBook>
+CredentialBook::TryCreateFromSlab(CredentialSlab &slab) {
+  assert_panic(!slab.moved_);
+  auto result = np_ffi::internal::np_ffi_create_credential_book_from_slab(
+      slab.credential_slab_);
+  auto kind = np_ffi::internal::np_ffi_CreateCredentialBookResult_kind(result);
+  switch (kind) {
+  case CreateCredentialBookResultKind::Success: {
+    auto book =
+        np_ffi::internal::np_ffi_CreateCredentialBookResult_into_SUCCESS(
+            result);
+    slab.moved_ = true;
+    return CredentialBook(book);
   }
   case CreateCredentialBookResultKind::NoSpaceLeft: {
     return absl::ResourceExhaustedError(
         "No space left to create credential book");
+  }
+  case CreateCredentialBookResultKind::InvalidSlabHandle: {
+    return absl::NotFoundError(
+        "The slab referenced by the given handle was not found.");
   }
   }
 }
@@ -286,12 +377,13 @@ LegibleDeserializedV0Advertisement::~LegibleDeserializedV0Advertisement() {
   }
 }
 
-DeserializedV0Identity LegibleDeserializedV0Advertisement::GetIdentity() {
+DeserializedV0IdentityKind
+LegibleDeserializedV0Advertisement::GetIdentityKind() {
   assert_panic(!this->moved_);
-  auto result =
-      np_ffi::internal::np_ffi_LegibleDeserializedV0Advertisement_into_identity(
+  auto result = np_ffi::internal::
+      np_ffi_LegibleDeserializedV0Advertisement_get_identity_kind(
           legible_v0_advertisement_);
-  return DeserializedV0Identity(result);
+  return result;
 }
 
 uint8_t LegibleDeserializedV0Advertisement::GetNumberOfDataElements() {
@@ -307,10 +399,6 @@ V0Payload LegibleDeserializedV0Advertisement::IntoPayload() {
       legible_v0_advertisement_);
   this->moved_ = true;
   return V0Payload(result);
-}
-
-np_ffi::internal::DeserializedV0IdentityKind DeserializedV0Identity::GetKind() {
-  return np_ffi::internal::np_ffi_DeserializedV0Identity_kind(v0_identity_);
 }
 
 V0Payload::V0Payload(V0Payload &&other) noexcept
@@ -483,4 +571,40 @@ ByteBuffer<127> V1DataElement::GetPayload() const {
   return ByteBuffer(v1_data_element_.generic._0.payload);
 }
 
+MatchedCredentialData::MatchedCredentialData(
+    uint32_t cred_id, std::span<uint8_t> metadata_bytes) {
+  this->data_ = {cred_id, metadata_bytes.data(), metadata_bytes.size()};
+}
+
+template <typename T, size_t N>
+static void CopyToRawArray(T (&dest)[N], const std::array<T, N> &src) {
+  memcpy(dest, src.data(), sizeof(T) * N);
+}
+
+V0MatchableCredential::V0MatchableCredential(
+    std::array<uint8_t, 32> key_seed,
+    std::array<uint8_t, 32> legacy_metadata_key_hmac,
+    MatchedCredentialData matched_credential_data) {
+  np_ffi::internal::V0DiscoveryCredential discovery_cred{};
+  CopyToRawArray(discovery_cred.key_seed, key_seed);
+  CopyToRawArray(discovery_cred.legacy_metadata_key_hmac,
+                 legacy_metadata_key_hmac);
+  this->internal_ = {discovery_cred, matched_credential_data.data_};
+}
+
+V1MatchableCredential::V1MatchableCredential(
+    std::array<uint8_t, 32> key_seed,
+    std::array<uint8_t, 32> expected_unsigned_metadata_key_hmac,
+    std::array<uint8_t, 32> expected_signed_metadata_key_hmac,
+    std::array<uint8_t, 32> pub_key,
+    MatchedCredentialData matched_credential_data) {
+  np_ffi::internal::V1DiscoveryCredential discovery_cred{};
+  CopyToRawArray(discovery_cred.key_seed, key_seed);
+  CopyToRawArray(discovery_cred.expected_unsigned_metadata_key_hmac,
+                 expected_unsigned_metadata_key_hmac);
+  CopyToRawArray(discovery_cred.expected_signed_metadata_key_hmac,
+                 expected_signed_metadata_key_hmac);
+  CopyToRawArray(discovery_cred.pub_key, pub_key);
+  this->internal_ = {discovery_cred, matched_credential_data.data_};
+}
 } // namespace nearby_protocol

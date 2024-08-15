@@ -15,9 +15,10 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
-/**
- * Bridge between Java and native PasswordManager code.
- */
+// Vivaldi
+import org.vivaldi.browser.common.VivaldiUtils;
+
+/** Bridge between Java and native PasswordManager code. */
 public class PasswordManagerLauncher {
     private PasswordManagerLauncher() {}
 
@@ -29,19 +30,38 @@ public class PasswordManagerLauncher {
      * @param modalDialogManagerSupplier ModalDialogManager supplier to be used by loading dialog.
      * @param managePasskeys the content to be managed
      */
-    public static void showPasswordSettings(Context context, @ManagePasswordsReferrer int referrer,
-            Supplier<ModalDialogManager> modalDialogManagerSupplier, boolean managePasskeys) {
-        PasswordManagerHelper.showPasswordSettings(context, referrer, new SettingsLauncherImpl(),
-                SyncServiceFactory.get(), modalDialogManagerSupplier, managePasskeys);
+    public static void showPasswordSettings(
+            Context context,
+            @ManagePasswordsReferrer int referrer,
+            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            boolean managePasskeys) {
+        // Vivaldi
+        if (!VivaldiUtils.isDeviceSecure()) {
+            VivaldiUtils.showMissingDeviceLockDialog(context);
+            return;
+        }
+
+        PasswordManagerHelper.showPasswordSettings(
+                context,
+                referrer,
+                new SettingsLauncherImpl(),
+                SyncServiceFactory.get(),
+                modalDialogManagerSupplier,
+                managePasskeys);
     }
 
     @CalledByNative
-    private static void showPasswordSettings(WebContents webContents,
-            @ManagePasswordsReferrer int referrer, boolean managePasskeys) {
+    private static void showPasswordSettings(
+            WebContents webContents,
+            @ManagePasswordsReferrer int referrer,
+            boolean managePasskeys) {
         WindowAndroid window = webContents.getTopLevelNativeWindow();
         if (window == null) return;
-        showPasswordSettings(window.getActivity().get(), referrer,
-                () -> window.getModalDialogManager(), managePasskeys);
+        showPasswordSettings(
+                window.getActivity().get(),
+                referrer,
+                () -> window.getModalDialogManager(),
+                managePasskeys);
     }
 
     @CalledByNative

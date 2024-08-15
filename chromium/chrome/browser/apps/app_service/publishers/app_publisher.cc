@@ -88,7 +88,7 @@ void AppPublisher::LaunchAppWithIntent(const std::string& app_id,
                                        WindowInfoPtr window_info,
                                        LaunchCallback callback) {
   NOTIMPLEMENTED();
-  std::move(callback).Run(LaunchResult(State::FAILED));
+  std::move(callback).Run(LaunchResult(State::kFailed));
 }
 
 void AppPublisher::SetPermission(const std::string& app_id,
@@ -122,7 +122,9 @@ void AppPublisher::GetMenuModel(const std::string& app_id,
   NOTIMPLEMENTED();
 }
 
-void AppPublisher::UpdateAppSize(const std::string& app_id) {}
+void AppPublisher::UpdateAppSize(const std::string& app_id) {
+  NOTIMPLEMENTED();
+}
 
 void AppPublisher::ExecuteContextMenuCommand(const std::string& app_id,
                                              int command_id,
@@ -145,6 +147,11 @@ void AppPublisher::SetWindowMode(const std::string& app_id,
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+void AppPublisher::SetAppLocale(const std::string& app_id,
+                                const std::string& locale_tag) {
+  NOTIMPLEMENTED();
+}
+
 // static
 PromiseAppPtr AppPublisher::MakePromiseApp(const PackageId& package_id) {
   return std::make_unique<PromiseApp>(package_id);
@@ -184,8 +191,8 @@ void AppPublisher::Publish(std::vector<AppPtr> apps,
 
 void AppPublisher::ModifyCapabilityAccess(
     const std::string& app_id,
-    absl::optional<bool> accessing_camera,
-    absl::optional<bool> accessing_microphone) {
+    std::optional<bool> accessing_camera,
+    std::optional<bool> accessing_microphone) {
   if (!accessing_camera.has_value() && !accessing_microphone.has_value()) {
     return;
   }

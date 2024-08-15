@@ -19,18 +19,17 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiUnitTestUtils;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -59,10 +58,10 @@ public class PseudoTabUnitTest {
     @Mock TabModelFilterProvider mTabModelFilterProvider;
     @Mock Profile mProfile;
 
-    private TabImpl mTab1;
-    private TabImpl mTab2;
-    private TabImpl mTab3;
-    private TabImpl mTab1Copy;
+    private Tab mTab1;
+    private Tab mTab2;
+    private Tab mTab3;
+    private Tab mTab1Copy;
 
     @Before
     public void setUp() {
@@ -419,8 +418,7 @@ public class PseudoTabUnitTest {
         PseudoTab pseudoTab = PseudoTab.fromTab(tab);
         tab.destroy();
         // Title was not set. Without the isInitialized() check,
-        // pseudoTab.getTitle() would crash here with
-        // UnsupportedOperationException
+        // pseudoTab.getTitle() would crash here with UnsupportedOperationException
         Assert.assertEquals("", pseudoTab.getTitle());
     }
 
@@ -430,8 +428,7 @@ public class PseudoTabUnitTest {
         PseudoTab pseudoTab = PseudoTab.fromTab(tab);
         tab.destroy();
         // Url was not set. Without the isInitialized() check,
-        // pseudoTab.getUrl() would crash here with
-        // UnsupportedOperationException
+        // pseudoTab.getUrl() would crash here with UnsupportedOperationException
         Assert.assertEquals("", pseudoTab.getUrl().getSpec());
     }
 
@@ -441,8 +438,7 @@ public class PseudoTabUnitTest {
         PseudoTab pseudoTab = PseudoTab.fromTab(tab);
         tab.destroy();
         // Root ID was not set. Without the isInitialized() check,
-        // pseudoTab.getRootId() would crash here with
-        // UnsupportedOperationException
+        // pseudoTab.getRootId() would crash here with UnsupportedOperationException
         Assert.assertEquals(Tab.INVALID_TAB_ID, pseudoTab.getRootId());
     }
 

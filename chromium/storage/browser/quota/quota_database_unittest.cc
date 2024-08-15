@@ -151,7 +151,7 @@ class QuotaDatabaseTest : public testing::TestWithParam<bool> {
           quota_database->db_->GetCachedStatement(SQL_FROM_HERE, kSql));
       ASSERT_TRUE(statement.is_valid());
 
-      absl::optional<StorageKey> storage_key =
+      std::optional<StorageKey> storage_key =
           StorageKey::Deserialize(entry->storage_key);
       ASSERT_TRUE(storage_key.has_value());
 
@@ -985,7 +985,7 @@ TEST_F(QuotaDatabaseTest, OpenCorruptedDatabase) {
 
   histograms.ExpectTotalCount("Quota.QuotaDatabaseReset", 1);
   histograms.ExpectBucketCount("Quota.QuotaDatabaseReset",
-                               DatabaseResetReason::kCreateSchema, 1);
+                               DatabaseResetReason::kOpenDatabase, 1);
 }
 
 TEST_F(QuotaDatabaseTest, QuotaDatabasePathMigration) {

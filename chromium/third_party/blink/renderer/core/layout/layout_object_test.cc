@@ -119,8 +119,9 @@ TEST_F(LayoutObjectTest, LayoutDecoratedNameCalledWithPositionedObject) {
   DCHECK(div);
   LayoutObject* obj = div->GetLayoutObject();
   DCHECK(obj);
-  EXPECT_THAT(obj->DecoratedName().Ascii(),
-              MatchesRegex("LayoutN?G?BlockFlow \\(positioned\\)"));
+  EXPECT_THAT(
+      obj->DecoratedName().Ascii(),
+      MatchesRegex("LayoutN?G?BlockFlow \\(positioned, children-inline\\)"));
 }
 
 // Some display checks.
@@ -1006,8 +1007,9 @@ lime'>
   StringBuilder result;
   block->DumpLayoutObject(result, false, 0);
   EXPECT_THAT(result.ToString().Utf8(),
-              MatchesRegex("LayoutN?G?BlockFlow\tDIV id=\"block\" "
-                           "style=\"background:\\\\nlime\""));
+              MatchesRegex(
+                  "LayoutN?G?BlockFlow \\(children-inline\\)\tDIV id=\"block\" "
+                  "style=\"background:\\\\nlime\""));
 
   result.Clear();
   text->DumpLayoutObject(result, false, 0);
@@ -1385,7 +1387,7 @@ TEST_F(LayoutObjectSimTest, FirstLineBackgroundImageDirtyStyleCrash) {
   EXPECT_TRUE(target_object->ShouldDoFullPaintInvalidation());
 }
 
-TEST_F(LayoutObjectTest, NeedsLayoutOverflowRecalc) {
+TEST_F(LayoutObjectTest, NeedsScrollableOverflowRecalc) {
   SetBodyInnerHTML(R"HTML(
     <div id='wrapper'>
       <div id='target'>foo</div>
@@ -1401,17 +1403,17 @@ TEST_F(LayoutObjectTest, NeedsLayoutOverflowRecalc) {
   DCHECK(target);
   DCHECK(other);
 
-  EXPECT_FALSE(wrapper->NeedsLayoutOverflowRecalc());
-  EXPECT_FALSE(target->NeedsLayoutOverflowRecalc());
-  EXPECT_FALSE(other->NeedsLayoutOverflowRecalc());
+  EXPECT_FALSE(wrapper->NeedsScrollableOverflowRecalc());
+  EXPECT_FALSE(target->NeedsScrollableOverflowRecalc());
+  EXPECT_FALSE(other->NeedsScrollableOverflowRecalc());
 
   auto* target_element = GetDocument().getElementById(AtomicString("target"));
   target_element->setInnerHTML("baz");
   UpdateAllLifecyclePhasesForTest();
 
-  EXPECT_FALSE(wrapper->NeedsLayoutOverflowRecalc());
-  EXPECT_FALSE(target->NeedsLayoutOverflowRecalc());
-  EXPECT_FALSE(other->NeedsLayoutOverflowRecalc());
+  EXPECT_FALSE(wrapper->NeedsScrollableOverflowRecalc());
+  EXPECT_FALSE(target->NeedsScrollableOverflowRecalc());
+  EXPECT_FALSE(other->NeedsScrollableOverflowRecalc());
 }
 
 TEST_F(LayoutObjectTest, ContainValueIsRelayoutBoundary) {

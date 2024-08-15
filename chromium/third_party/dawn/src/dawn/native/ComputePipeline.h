@@ -44,10 +44,11 @@ MaybeError ValidateComputePipelineDescriptor(DeviceBase* device,
 class ComputePipelineBase : public PipelineBase,
                             public ContentLessObjectCacheable<ComputePipelineBase> {
   public:
-    ComputePipelineBase(DeviceBase* device, const ComputePipelineDescriptor* descriptor);
+    ComputePipelineBase(DeviceBase* device,
+                        const UnpackedPtr<ComputePipelineDescriptor>& descriptor);
     ~ComputePipelineBase() override;
 
-    static ComputePipelineBase* MakeError(DeviceBase* device, const char* label);
+    static Ref<ComputePipelineBase> MakeError(DeviceBase* device, const char* label);
 
     ObjectType GetType() const override;
 
@@ -56,11 +57,15 @@ class ComputePipelineBase : public PipelineBase,
         bool operator()(const ComputePipelineBase* a, const ComputePipelineBase* b) const;
     };
 
+    bool IsFullSubgroupsRequired() const;
+
   protected:
     void DestroyImpl() override;
 
   private:
     ComputePipelineBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label);
+
+    bool mRequiresFullSubgroups;
 };
 
 }  // namespace dawn::native

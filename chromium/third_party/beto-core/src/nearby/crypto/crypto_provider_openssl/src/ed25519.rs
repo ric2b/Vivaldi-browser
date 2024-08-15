@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crypto_provider::ed25519::{
-    InvalidBytes, RawPrivateKey, RawPublicKey, RawSignature, Signature as _, SignatureError,
+    InvalidBytes, RawPrivateKey, RawPrivateKeyPermit, RawPublicKey, RawSignature, Signature as _,
+    SignatureError,
 };
 use openssl::pkey::{Id, PKey, Private};
 use openssl::sign::{Signer, Verifier};
@@ -32,7 +33,7 @@ impl crypto_provider::ed25519::KeyPair for KeyPair {
     type PublicKey = PublicKey;
     type Signature = Signature;
 
-    fn private_key(&self) -> RawPrivateKey {
+    fn raw_private_key(&self, _permit: &RawPrivateKeyPermit) -> RawPrivateKey {
         let private_key = self.0.raw_private_key().unwrap();
         let mut public_key = self.0.raw_public_key().unwrap();
         let mut result = private_key;
@@ -40,7 +41,7 @@ impl crypto_provider::ed25519::KeyPair for KeyPair {
         result.try_into().unwrap()
     }
 
-    fn from_private_key(bytes: &RawPrivateKey) -> Self {
+    fn from_raw_private_key(bytes: &RawPrivateKey, _permit: &RawPrivateKeyPermit) -> Self {
         Self(PKey::private_key_from_raw_bytes(bytes, Id::ED25519).unwrap())
     }
 

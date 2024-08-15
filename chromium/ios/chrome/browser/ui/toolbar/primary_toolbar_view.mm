@@ -32,7 +32,6 @@
 
 using ui::GetDeviceFormFactor;
 using ui::DEVICE_FORM_FACTOR_PHONE;
-using ui::DEVICE_FORM_FACTOR_TABLET;
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
@@ -106,9 +105,15 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, strong, readwrite) ToolbarButton* panelButton;
 // Button to show tracker blocker summery, this is for iPad only.
 @property(nonatomic, strong, readwrite) ToolbarButton* shieldButton;
-// Button to show more options such as shield, share button when iPhone is on
-// landscape mode.
+// Button to show more options such as panel, adblocker shield button when
+// tab bar is enabled and address bar is the bottom in portrait orientation on
+// iPhone.
 @property(nonatomic, strong, readwrite) ToolbarButton* vivaldiMoreButton;
+
+// Leading stackview width constraint when there's no item on the leading stack
+// view, e.g. toolbar on portrait mode for iPhone.
+@property(nonatomic, strong, readwrite)
+    NSLayoutConstraint* leadingStackViewWidthNoItems;
 // End Vivaldi
 
 @end
@@ -139,6 +144,14 @@ using vivaldi::IsVivaldiRunning;
 @synthesize contractedConstraints = _contractedConstraints;
 @synthesize contractedNoMarginConstraints = _contractedNoMarginConstraints;
 @synthesize contentView = _contentView;
+
+// Vivaldi
+@synthesize bottomOmniboxEnabled = _bottomOmniboxEnabled;
+@synthesize tabBarEnabled = _tabBarEnabled;
+@synthesize canShowBack = _canShowBack;
+@synthesize canShowForward = _canShowForward;
+@synthesize canShowAdTrackerBlocker = _canShowAdTrackerBlocker;
+// End Vivaldi
 
 #pragma mark - Public
 
@@ -213,16 +226,8 @@ using vivaldi::IsVivaldiRunning;
 
 // Sets up the toolbar background.
 - (void)setUpToolbarBackground {
-
-  if (IsVivaldiRunning()) {
-    BOOL isIncognito = self.buttonFactory.style == ToolbarStyle::kIncognito;
-    self.backgroundColor = [UIColor colorNamed: isIncognito ?
-      vPrivateModeToolbarBackgroundColor: vNTPBackgroundColor];
-  } else {
   self.backgroundColor =
       self.buttonFactory.toolbarConfiguration.backgroundColor;
-  } // End Vivaldi
-
   self.contentView = self;
 }
 
@@ -243,10 +248,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)setUpLocationBar {
   self.locationBarContainer = [[UIView alloc] init];
 
-  if (IsVivaldiRunning()) {
-    self.locationBarContainer.backgroundColor =
-      [UIColor colorNamed:vNTPBackgroundColor];;
-  } else {
+  if (!IsVivaldiRunning()) {
   self.locationBarContainer.backgroundColor =
       [self.buttonFactory.toolbarConfiguration
           locationBarBackgroundColorWithVisibility:1];
@@ -270,6 +272,11 @@ using vivaldi::IsVivaldiRunning;
   self.reloadButton = [self.buttonFactory reloadButton];
 
   if (IsVivaldiRunning()) {
+    self.panelButton = [self.buttonFactory panelButton];
+    self.shieldButton = [self.buttonFactory shieldButton];
+    [self.shieldButton setImage:
+        [self shieldIconForSetting:_atbSettingForActiveWebState]
+                          forState:UIControlStateNormal];
     self.leadingStackViewButtons = [self buttonsForLeadingStackView];
   } else {
   self.leadingStackViewButtons = @[
@@ -295,6 +302,7 @@ using vivaldi::IsVivaldiRunning;
   self.toolsMenuButton = [self.buttonFactory toolsMenuButton];
 
   if (IsVivaldiRunning()) {
+    self.vivaldiMoreButton = [self.buttonFactory vivaldiMoreButton];
     self.trailingStackViewButtons = [self buttonsForTrailingStackView];
   } else {
   self.trailingStackViewButtons =
@@ -304,7 +312,11 @@ using vivaldi::IsVivaldiRunning;
   self.trailingStackView = [[UIStackView alloc]
       initWithArrangedSubviews:self.trailingStackViewButtons];
   self.trailingStackView.translatesAutoresizingMaskIntoConstraints = NO;
+
+  if (!IsVivaldiRunning()) {
   self.trailingStackView.spacing = kAdaptiveToolbarStackViewSpacing;
+  } // End Vivaldi
+
   [self.trailingStackView
       setContentHuggingPriority:UILayoutPriorityDefaultHigh
                         forAxis:UILayoutConstraintAxisHorizontal];
@@ -357,6 +369,8 @@ using vivaldi::IsVivaldiRunning;
   ]];
 
   if (IsVivaldiRunning()) {
+    self.leadingStackViewWidthNoItems = [self.leadingStackView.widthAnchor
+        constraintEqualToConstant:vPrimaryToolbarLeadingStackViewWidthNoItems];
     [NSLayoutConstraint activateConstraints:@[
       [self.leadingStackView.leadingAnchor
           constraintEqualToAnchor:safeArea.leadingAnchor
@@ -394,7 +408,7 @@ using vivaldi::IsVivaldiRunning;
     [self.contractedConstraints addObjectsFromArray:@[
       [self.locationBarContainer.trailingAnchor
           constraintEqualToAnchor:self.trailingStackView.leadingAnchor
-                         constant:-kContractedLocationBarHorizontalMargin],
+                         constant:-vLocationBarLeadingPadding],
       [self.locationBarContainer.leadingAnchor
           constraintEqualToAnchor:self.leadingStackView.trailingAnchor
                          constant:vLocationBarLeadingPadding],
@@ -413,7 +427,8 @@ using vivaldi::IsVivaldiRunning;
   if (IsVivaldiRunning()) {
     [self.contractedNoMarginConstraints addObjectsFromArray:@[
       [self.locationBarContainer.trailingAnchor
-          constraintEqualToAnchor:self.trailingStackView.leadingAnchor],
+          constraintEqualToAnchor:self.trailingStackView.leadingAnchor
+                constant:-vPrimaryToolbarLocationContainerTrailingPadding],
       [self.locationBarContainer.leadingAnchor
           constraintEqualToAnchor:self.leadingStackView.trailingAnchor],
     ]];
@@ -560,54 +575,35 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (NSArray*)buttonsForLeadingStackView {
-  BOOL isPhone = GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
-  BOOL isVerticalRegular = VivaldiGlobalHelpers.isVerticalTraitRegular;
-  BOOL isHorizontalNotRegular = !VivaldiGlobalHelpers.isHorizontalTraitRegular;
+  BOOL isSplitToolbarMode = IsSplitToolbarMode(self.traitCollection);
 
-  if (isPhone || !VivaldiGlobalHelpers.canShowSidePanel) {
-    if (isHorizontalNotRegular && isVerticalRegular) {
-      self.shieldButton = [self.buttonFactory shieldButton];
-      return @[ self.shieldButton ];
-    } else {
-      return @[
-        self.backButton,
-        self.forwardButton,
-        self.stopButton,
-        self.reloadButton
-      ];
-    }
+  self.leadingStackViewWidthNoItems.active = NO;
+  if (!VivaldiGlobalHelpers.canShowSidePanel && isSplitToolbarMode) {
+    self.leadingStackViewWidthNoItems.active = YES;
+    return @[];
   } else {
-    self.panelButton = [self.buttonFactory panelButton];
-    self.shieldButton = [self.buttonFactory shieldButton];
     return @[
       self.panelButton,
       self.backButton,
-      self.forwardButton,
-      self.stopButton,
-      self.reloadButton,
-      self.shieldButton
+      self.forwardButton
     ];
   }
 }
 
 - (NSArray*)buttonsForTrailingStackView {
-  BOOL isPhone = GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
-  BOOL isVerticalRegular = VivaldiGlobalHelpers.isVerticalTraitRegular;
-  BOOL isHorizontalNotRegular = !VivaldiGlobalHelpers.isHorizontalTraitRegular;
+  BOOL isSplitToolbarMode = IsSplitToolbarMode(self.traitCollection);
 
-  if (isPhone || !VivaldiGlobalHelpers.canShowSidePanel) {
-    if (isHorizontalNotRegular && isVerticalRegular) {
-      return @[ self.toolsMenuButton ];
+  if (!VivaldiGlobalHelpers.canShowSidePanel && isSplitToolbarMode) {
+    self.trailingStackView.spacing = 0;
+    if (self.bottomOmniboxEnabled && self.tabBarEnabled) {
+      return @[ self.vivaldiMoreButton, self.toolsMenuButton ];
     } else {
-      self.vivaldiMoreButton = [self.buttonFactory vivaldiMoreButton];
-      return @[
-        self.vivaldiMoreButton,
-        self.tabGridButton,
-        self.toolsMenuButton
-      ];
+      return @[ self.shieldButton, self.toolsMenuButton ];
     }
   } else {
+    self.trailingStackView.spacing = kAdaptiveToolbarStackViewSpacing;
     return @[
+      self.shieldButton,
       self.tabGridButton,
       self.toolsMenuButton
     ];
@@ -634,51 +630,68 @@ using vivaldi::IsVivaldiRunning;
   self.trailingStackView.hidden = !show;
 }
 
-- (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled
-                              atbSettingType:(ATBSettingType)type {
-  self.vivaldiMoreButton.menu =
-      [self.buttonFactory contextMenuForMoreWithAllButtons:enabled
-                                            atbSettingType:type];
-}
-
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
                   desktopTabEnabled:(BOOL)desktopTabEnabled {
   // No op.
 }
 
-- (void)updateVivaldiShieldState:(ATBSettingType)setting {
+#pragma mark Setter
+- (void)setAtbSettingForActiveWebState:
+    (ATBSettingType)atbSettingForActiveWebState {
+  _atbSettingForActiveWebState = atbSettingForActiveWebState;
+  [self.shieldButton setImage:
+      [self shieldIconForSetting:atbSettingForActiveWebState]
+                        forState:UIControlStateNormal];
+  [self updateOverflowMenuActions];
+}
+
+- (void)setCanShowBack:(BOOL)canShowBack {
+  if (_canShowBack != canShowBack)
+    _canShowBack = canShowBack;
+  [self updateOverflowMenuActions];
+}
+
+- (void)setCanShowForward:(BOOL)canShowForward {
+  if (_canShowForward != canShowForward)
+    _canShowForward = canShowForward;
+  [self updateOverflowMenuActions];
+}
+
+- (void)setCanShowAdTrackerBlocker:(BOOL)canShowAdTrackerBlocker {
+  if (_canShowAdTrackerBlocker != canShowAdTrackerBlocker)
+    _canShowAdTrackerBlocker = canShowAdTrackerBlocker;
+  [self updateOverflowMenuActions];
+}
+
+#pragma mark Private
+- (void)updateOverflowMenuActions {
+  self.vivaldiMoreButton.menu =
+      [self.buttonFactory
+       overflowMenuWithTrackerBlocker:_canShowAdTrackerBlocker
+                       atbSettingType:_atbSettingForActiveWebState
+             navigationForwardEnabled:_canShowForward
+            navigationBackwordEnabled:_canShowBack];
+}
+
+- (UIImage*)shieldIconForSetting:(ATBSettingType)setting {
+  UIImage* iconImage;
+
   switch (setting) {
-    case ATBSettingNoBlocking: {
-      UIImage* noBlocking =
-        [[UIImage imageNamed:vATBShieldNone]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [self.shieldButton setImage:noBlocking forState:UIControlStateNormal];
+    case ATBSettingNoBlocking:
+      iconImage = [UIImage imageNamed:vATBShieldNone];
       break;
-    }
-    case ATBSettingBlockTrackers: {
-      UIImage* trackersBlocking =
-        [[UIImage imageNamed:vATBShieldTrackers]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [self.shieldButton setImage:trackersBlocking
-                            forState:UIControlStateNormal];
+    case ATBSettingBlockTrackers:
+      iconImage = [UIImage imageNamed:vATBShieldTrackers];
       break;
-    }
-    case ATBSettingBlockTrackersAndAds: {
-      UIImage* allBlocking =
-        [[UIImage imageNamed:vATBShieldTrackesAndAds]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [self.shieldButton setImage:allBlocking forState:UIControlStateNormal];
+    case ATBSettingBlockTrackersAndAds:
+      iconImage = [UIImage imageNamed:vATBShieldTrackesAndAds];
       break;
-    }
-    default: {
-      UIImage* trackersBlocking =
-        [[UIImage imageNamed:vATBShieldNone]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [self.shieldButton setImage:trackersBlocking
-                            forState:UIControlStateNormal];
+    default:
+      iconImage = [UIImage imageNamed:vATBShieldNone];
       break;
-    }
   }
+
+  return [iconImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 @end

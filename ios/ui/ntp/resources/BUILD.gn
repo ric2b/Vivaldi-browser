@@ -44,6 +44,10 @@ colorset("vivaldi_ntp_toolbar_text_highlighted_color") {
   sources = [ "vivaldi_ntp_toolbar_text_highlighted_color.colorset/Contents.json" ]
 }
 
+colorset("vivaldi_regular_toolbar_background_color") {
+  sources = [ "vivaldi_regular_toolbar_background_color.colorset/Contents.json" ]
+}
+
 colorset("vivaldi_private_toolbar_background_color") {
   sources = [ "vivaldi_private_toolbar_background_color.colorset/Contents.json" ]
 }
@@ -102,13 +106,6 @@ imageset("vivaldi_private_tab_ghost") {
   sources = [
     "vivaldi_private_tab_ghost.imageset/Contents.json",
     "vivaldi_private_tab_ghost.imageset/vivaldi_private_tab_ghost.pdf",
-  ]
-}
-
-imageset("vivaldi_ntp_sd_empty_view_icon") {
-  sources = [
-    "vivaldi_ntp_sd_empty_view_icon.imageset/Contents.json",
-    "vivaldi_ntp_sd_empty_view_icon.imageset/vivaldi_ntp_sd_empty_view_icon.pdf",
   ]
 }
 

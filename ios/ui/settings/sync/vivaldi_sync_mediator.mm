@@ -511,6 +511,10 @@ PendingRegistration pendingRegistration;
   [_syncManager updateSettingsType:type isOn:isOn];
 }
 
+- (BOOL)getSyncStatusFor:(NSInteger)type {
+    return [self syncStatusForItemType:type];
+}
+
 #pragma mark - VivaldiSyncSettingsViewControllerModelDelegate
 
 - (void)vivaldiSyncSettingsViewControllerLoadModel:
@@ -873,8 +877,9 @@ PendingRegistration pendingRegistration;
   if (indexPaths.count == 0) {
     return;
   }
-  ChromeTableViewController* tableViewController =
-      base::apple::ObjCCast<ChromeTableViewController>(self.settingsConsumer);
+  LegacyChromeTableViewController* tableViewController =
+      base::apple::ObjCCast<LegacyChromeTableViewController>
+        (self.settingsConsumer);
   [tableViewController removeFromModelItemAtIndexPaths:indexPaths];
   [self.settingsConsumer.tableView deleteRowsAtIndexPaths:indexPaths
                       withRowAnimation:UITableViewRowAnimationAutomatic];
@@ -972,7 +977,7 @@ PendingRegistration pendingRegistration;
   switchItemReadingList.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_READING_LIST_SUBTITLE);
   switchItemReadingList.on = [_syncManager isSyncReadingListEnabled];
-  switchItemReadingList.iconImage = [UIImage imageNamed:@"sync_notes"];
+  switchItemReadingList.iconImage = [UIImage imageNamed:@"sync_readinglist"];
 
   TableViewSwitchItem* switchItemNotes =
     [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncNotesSwitch];
@@ -980,7 +985,7 @@ PendingRegistration pendingRegistration;
   switchItemNotes.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_NOTES_LIST_SUBTITLE);
   switchItemNotes.on = [_syncManager isSyncNotesEnabled];
-  switchItemNotes.iconImage = [UIImage imageNamed:@"sync_readinglist"];
+  switchItemNotes.iconImage = [UIImage imageNamed:@"sync_notes"];
 
   _syncSelectedItems = @[
     switchItemBookmarks,
@@ -999,34 +1004,31 @@ PendingRegistration pendingRegistration;
     return;
 
   for (TableViewSwitchItem* item in _syncSelectedItems) {
-    switch (item.type) {
-      case ItemTypeSyncBookmarksSwitch:
-        item.on = [_syncManager isSyncBookmarksEnabled];
-        break;
-      case ItemTypeSyncSettingsSwitch:
-        item.on = [_syncManager isSyncSettingsEnabled];
-        break;
-      case ItemTypeSyncPasswordsSwitch:
-        item.on = [_syncManager isSyncPasswordsEnabled];
-        break;
-      case ItemTypeSyncAutofillSwitch:
-        item.on = [_syncManager isSyncAutofillEnabled];
-        break;
-      case ItemTypeSyncTabsSwitch:
-        item.on = [_syncManager isSyncTabsEnabled];
-        break;
-      case ItemTypeSyncHistorySwitch:
-        item.on = [_syncManager isSyncHistoryEnabled];
-        break;
-      case ItemTypeSyncReadingListSwitch:
-        item.on = [_syncManager isSyncReadingListEnabled];
-        break;
-      case ItemTypeSyncNotesSwitch:
-        item.on = [_syncManager isSyncNotesEnabled];
-        break;
-      default:
-        break;
-    }
+    BOOL syncStatus = [self syncStatusForItemType:item.type];
+    item.on = syncStatus;
+  }
+}
+
+- (BOOL)syncStatusForItemType:(NSInteger)type {
+  switch (type) {
+    case ItemTypeSyncBookmarksSwitch:
+      return [_syncManager isSyncBookmarksEnabled];
+    case ItemTypeSyncSettingsSwitch:
+      return [_syncManager isSyncSettingsEnabled];
+    case ItemTypeSyncPasswordsSwitch:
+      return [_syncManager isSyncPasswordsEnabled];
+    case ItemTypeSyncAutofillSwitch:
+      return [_syncManager isSyncAutofillEnabled];
+    case ItemTypeSyncTabsSwitch:
+      return [_syncManager isSyncTabsEnabled];
+    case ItemTypeSyncHistorySwitch:
+      return [_syncManager isSyncHistoryEnabled];
+    case ItemTypeSyncReadingListSwitch:
+      return [_syncManager isSyncReadingListEnabled];
+    case ItemTypeSyncNotesSwitch:
+      return [_syncManager isSyncNotesEnabled];
+    default:
+      return NO;
   }
 }
 

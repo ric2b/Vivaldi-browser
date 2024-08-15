@@ -4,6 +4,7 @@
 
 #include "components/autofill/content/browser/content_autofill_driver.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -13,6 +14,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "components/autofill/content/browser/bad_message.h"
@@ -110,7 +112,7 @@ void ContentAutofillDriver::TriggerFormExtractionInAllFrames(
                  form_extraction_finished_callback,
              const std::vector<bool>& successes) {
             std::move(form_extraction_finished_callback)
-                .Run(base::ranges::all_of(successes, base::identity()));
+                .Run(base::ranges::all_of(successes, std::identity()));
           },
           std::move(form_extraction_finished_callback)));
   for (ContentAutofillDriver* driver : drivers) {
@@ -156,7 +158,7 @@ AutofillManager& ContentAutofillDriver::GetAutofillManager() {
   return *autofill_manager_;
 }
 
-absl::optional<LocalFrameToken> ContentAutofillDriver::Resolve(
+std::optional<LocalFrameToken> ContentAutofillDriver::Resolve(
     FrameToken query) {
   if (absl::holds_alternative<LocalFrameToken>(query)) {
     return absl::get<LocalFrameToken>(query);
@@ -169,7 +171,7 @@ absl::optional<LocalFrameToken> ContentAutofillDriver::Resolve(
       content::RenderFrameHost::FromPlaceholderToken(rph->GetID(),
                                                      blink_remote_token);
   if (!remote_rfh) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   return LocalFrameToken(remote_rfh->GetFrameToken().value());
 }
@@ -199,14 +201,6 @@ bool ContentAutofillDriver::CanShowAutofillUi() const {
   return render_frame_host_->IsActive();
 }
 
-bool ContentAutofillDriver::RendererIsAvailable() {
-  if (!render_frame_host_->GetRenderViewHost()) {
-    base::debug::DumpWithoutCrashing();
-    return false;
-  }
-  return true;
-}
-
 void ContentAutofillDriver::PopupHidden() {
   // If the unmask prompt is shown, keep showing the preview. The preview
   // will be cleared when the prompt closes.
@@ -232,22 +226,21 @@ net::IsolationInfo ContentAutofillDriver::IsolationInfo() {
   return render_frame_host_->GetIsolationInfoForSubresources();
 }
 
-std::vector<FieldGlobalId> ContentAutofillDriver::ApplyFormAction(
+base::flat_set<FieldGlobalId> ContentAutofillDriver::ApplyFormAction(
     mojom::ActionType action_type,
     mojom::ActionPersistence action_persistence,
     const FormData& form,
     const url::Origin& triggered_origin,
-    const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map) {
+    const base::flat_map<FieldGlobalId, FieldType>& field_type_map) {
   return router().ApplyFormAction(
       this, action_type, action_persistence, form, triggered_origin,
       field_type_map,
       [](autofill::AutofillDriver* target, mojom::ActionType action_type,
-         mojom::ActionPersistence action_persistence, const FormData& form) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
+         mojom::ActionPersistence action_persistence,
+         FormRendererId form_renderer_id,
+         const std::vector<FormFieldData>& fields) {
         cast(target)->GetAutofillAgent()->ApplyFormAction(
-            action_type, action_persistence, form);
+            action_type, action_persistence, form_renderer_id, fields);
       });
 }
 
@@ -262,9 +255,6 @@ void ContentAutofillDriver::ApplyFieldAction(
          mojom::ActionPersistence action_persistence,
          mojom::TextReplacement text_replacement, const FieldRendererId& field,
          const std::u16string& value) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
         cast(target)->GetAutofillAgent()->ApplyFieldAction(
             action_persistence, text_replacement, field, value);
       });
@@ -318,7 +308,7 @@ void ContentAutofillDriver::ExtractForm(FormGlobalId form_id,
       std::move(final_handler));
 
   using RendererFormHandler =
-      base::OnceCallback<void(const absl::optional<::autofill::FormData>&)>;
+      base::OnceCallback<void(const std::optional<::autofill::FormData>&)>;
   // Called on the autofill driver that hosts the form with `form_id`.
   auto make_request = [](autofill::AutofillDriver* request_target,
                          const FormRendererId& form_id,
@@ -347,7 +337,7 @@ void ContentAutofillDriver::ExtractForm(FormGlobalId form_id,
 }
 
 void ContentAutofillDriver::SendAutofillTypePredictionsToRenderer(
-    const std::vector<FormStructure*>& forms) {
+    const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms) {
   std::vector<FormDataPredictions> type_predictions =
       FormStructure::GetFieldTypePredictions(forms);
   // TODO(crbug.com/1185232) Send the FormDataPredictions object only if the
@@ -356,25 +346,8 @@ void ContentAutofillDriver::SendAutofillTypePredictionsToRenderer(
       this, type_predictions,
       [](autofill::AutofillDriver* target,
          const std::vector<FormDataPredictions>& type_predictions) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
         cast(target)->GetAutofillAgent()->FieldTypePredictionsAvailable(
             type_predictions);
-      });
-}
-
-void ContentAutofillDriver::SendFieldsEligibleForManualFillingToRenderer(
-    const std::vector<FieldGlobalId>& fields) {
-  router().SendFieldsEligibleForManualFillingToRenderer(
-      this, fields,
-      [](autofill::AutofillDriver* target,
-         const std::vector<FieldRendererId>& fields) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
-        cast(target)->GetAutofillAgent()->SetFieldsEligibleForManualFilling(
-            fields);
       });
 }
 
@@ -385,9 +358,6 @@ void ContentAutofillDriver::RendererShouldAcceptDataListSuggestion(
       this, field, value,
       [](autofill::AutofillDriver* target, const FieldRendererId& field,
          const std::u16string& value) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
         cast(target)->GetAutofillAgent()->AcceptDataListSuggestion(field,
                                                                    value);
       });
@@ -396,9 +366,6 @@ void ContentAutofillDriver::RendererShouldAcceptDataListSuggestion(
 void ContentAutofillDriver::RendererShouldClearFilledSection() {
   router().RendererShouldClearFilledSection(
       this, [](autofill::AutofillDriver* target) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
         cast(target)->GetAutofillAgent()->ClearSection();
       });
 }
@@ -406,9 +373,6 @@ void ContentAutofillDriver::RendererShouldClearFilledSection() {
 void ContentAutofillDriver::RendererShouldClearPreviewedForm() {
   router().RendererShouldClearPreviewedForm(
       this, [](autofill::AutofillDriver* target) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
         cast(target)->GetAutofillAgent()->ClearPreviewedForm();
       });
 }
@@ -420,9 +384,6 @@ void ContentAutofillDriver::RendererShouldTriggerSuggestions(
       this, field, trigger_source,
       [](autofill::AutofillDriver* target, const FieldRendererId& field,
          AutofillSuggestionTriggerSource trigger_source) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
         cast(target)->GetAutofillAgent()->TriggerSuggestions(field,
                                                              trigger_source);
       });
@@ -430,16 +391,13 @@ void ContentAutofillDriver::RendererShouldTriggerSuggestions(
 
 void ContentAutofillDriver::RendererShouldSetSuggestionAvailability(
     const FieldGlobalId& field,
-    const mojom::AutofillState state) {
+    mojom::AutofillSuggestionAvailability suggestion_availability) {
   router().RendererShouldSetSuggestionAvailability(
-      this, field, state,
+      this, field, suggestion_availability,
       [](autofill::AutofillDriver* target, const FieldRendererId& field,
-         const mojom::AutofillState state) {
-        if (!cast(target)->RendererIsAvailable()) {
-          return;
-        }
-        cast(target)->GetAutofillAgent()->SetSuggestionAvailability(field,
-                                                                    state);
+         mojom::AutofillSuggestionAvailability suggestion_availability) {
+        cast(target)->GetAutofillAgent()->SetSuggestionAvailability(
+            field, suggestion_availability);
       });
 }
 
@@ -456,7 +414,7 @@ void ContentAutofillDriver::ProbablyFormSubmitted(
 }
 
 void ContentAutofillDriver::SetFormToBeProbablySubmitted(
-    const absl::optional<FormData>& form) {
+    const std::optional<FormData>& form) {
   if (!bad_message::CheckFrameNotPrerendering(render_frame_host())) {
     return;
   }

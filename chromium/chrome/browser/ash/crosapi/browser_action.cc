@@ -39,11 +39,13 @@ class NewWindowAction final : public BrowserAction {
  public:
   NewWindowAction(bool incognito,
                   bool should_trigger_session_restore,
-                  int64_t target_display_id)
+                  int64_t target_display_id,
+                  std::optional<uint64_t> profile_id = std::nullopt)
       : BrowserAction(true),
         incognito_(incognito),
         should_trigger_session_restore_(should_trigger_session_restore),
         target_display_id_(target_display_id),
+        profile_id_(profile_id),
         weak_ptr_factory_(this) {}
 
   void Perform(const VersionedBrowserService& service,
@@ -54,7 +56,7 @@ class NewWindowAction final : public BrowserAction {
         return;
     }
     service.service->NewWindow(incognito_, should_trigger_session_restore_,
-                               target_display_id_,
+                               target_display_id_, profile_id_,
                                base::BindOnce(&NewWindowAction::OnPerformed,
                                               weak_ptr_factory_.GetWeakPtr(),
                                               std::move(on_performed)));
@@ -64,6 +66,7 @@ class NewWindowAction final : public BrowserAction {
   const bool incognito_;
   const bool should_trigger_session_restore_;
   const int64_t target_display_id_;
+  const std::optional<uint64_t> profile_id_;
   base::WeakPtrFactory<NewWindowAction> weak_ptr_factory_;
 };
 
@@ -132,9 +135,11 @@ class NewTabAction final : public BrowserAction {
 
 class LaunchAction final : public BrowserAction {
  public:
-  explicit LaunchAction(int64_t target_display_id)
+  explicit LaunchAction(int64_t target_display_id,
+                        std::optional<uint64_t> profile_id = std::nullopt)
       : BrowserAction(true),
         target_display_id_(target_display_id),
+        profile_id_(profile_id),
         weak_ptr_factory_(this) {}
 
   void Perform(const VersionedBrowserService& service,
@@ -147,7 +152,7 @@ class LaunchAction final : public BrowserAction {
                                              std::move(on_performed)));
       return;
     }
-    service.service->Launch(target_display_id_,
+    service.service->Launch(target_display_id_, profile_id_,
                             base::BindOnce(&LaunchAction::OnPerformed,
                                            weak_ptr_factory_.GetWeakPtr(),
                                            std::move(on_performed)));
@@ -155,6 +160,7 @@ class LaunchAction final : public BrowserAction {
 
  private:
   int64_t target_display_id_;
+  std::optional<uint64_t> profile_id_;
   base::WeakPtrFactory<LaunchAction> weak_ptr_factory_;
 };
 
@@ -338,7 +344,8 @@ class CreateBrowserWithRestoredDataAction final : public BrowserAction {
       int32_t active_tab_index,
       int32_t first_non_pinned_tab_index,
       base::StringPiece app_name,
-      int32_t restore_window_id)
+      int32_t restore_window_id,
+      uint64_t lacros_profile_id)
       : BrowserAction(true),
         urls_(urls),
         bounds_(bounds),
@@ -347,14 +354,15 @@ class CreateBrowserWithRestoredDataAction final : public BrowserAction {
         active_tab_index_(active_tab_index),
         first_non_pinned_tab_index_(first_non_pinned_tab_index),
         app_name_(app_name),
-        restore_window_id_(restore_window_id) {}
+        restore_window_id_(restore_window_id),
+        lacros_profile_id_(lacros_profile_id) {}
 
   void Perform(const VersionedBrowserService& service,
                BrowserManagerCallback on_performed) override {
     crosapi::mojom::DeskTemplateStatePtr additional_state =
         crosapi::mojom::DeskTemplateState::New(
             urls_, active_tab_index_, app_name_, restore_window_id_,
-            first_non_pinned_tab_index_, tab_group_infos_);
+            first_non_pinned_tab_index_, tab_group_infos_, lacros_profile_id_);
     crosapi::CrosapiManager::Get()
         ->crosapi_ash()
         ->desk_template_ash()
@@ -371,15 +379,27 @@ class CreateBrowserWithRestoredDataAction final : public BrowserAction {
   const int32_t first_non_pinned_tab_index_;
   const std::string app_name_;
   const int32_t restore_window_id_;
+  const uint64_t lacros_profile_id_;
+};
+
+class OpenProfileManagerAction final : public BrowserAction {
+ public:
+  OpenProfileManagerAction() : BrowserAction(true) {}
+
+  void Perform(const VersionedBrowserService& service,
+               BrowserManagerCallback on_performed) override {
+    service.service->OpenProfileManager();
+  }
 };
 
 // static
 std::unique_ptr<BrowserAction> BrowserAction::NewWindow(
     bool incognito,
     bool should_trigger_session_restore,
-    int64_t target_display_id) {
+    int64_t target_display_id,
+    std::optional<uint64_t> profile_id) {
   return std::make_unique<NewWindowAction>(
-      incognito, should_trigger_session_restore, target_display_id);
+      incognito, should_trigger_session_restore, target_display_id, profile_id);
 }
 
 // static
@@ -389,8 +409,9 @@ std::unique_ptr<BrowserAction> BrowserAction::NewTab() {
 
 // static
 std::unique_ptr<BrowserAction> BrowserAction::Launch(
-    int64_t target_display_id) {
-  return std::make_unique<LaunchAction>(target_display_id);
+    int64_t target_display_id,
+    std::optional<uint64_t> profile_id) {
+  return std::make_unique<LaunchAction>(target_display_id, profile_id);
 }
 
 // static
@@ -454,10 +475,17 @@ std::unique_ptr<BrowserAction> BrowserAction::CreateBrowserWithRestoredData(
     int32_t active_tab_index,
     int32_t first_non_pinned_tab_index,
     base::StringPiece app_name,
-    int32_t restore_window_id) {
+    int32_t restore_window_id,
+    uint64_t lacros_profile_id) {
   return std::make_unique<CreateBrowserWithRestoredDataAction>(
       urls, bounds, tab_groups, show_state, active_tab_index,
-      first_non_pinned_tab_index, app_name, restore_window_id);
+      first_non_pinned_tab_index, app_name, restore_window_id,
+      lacros_profile_id);
+}
+
+// static
+std::unique_ptr<BrowserAction> BrowserAction::OpenProfileManager() {
+  return std::make_unique<OpenProfileManagerAction>();
 }
 
 // No window will be opened in the following circumstances:

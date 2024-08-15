@@ -7,6 +7,8 @@ package org.chromium.chrome.browser.theme;
 import android.content.Context;
 import android.content.res.ColorStateList;
 
+import androidx.annotation.ColorInt;
+
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.build.BuildConfig;
@@ -52,21 +54,27 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
      *                                night mode.
      * @param allowBrightThemeColors Whether the tab allows bright theme colors.
      */
-    public TopUiThemeColorProvider(Context context, ObservableSupplier<Tab> tabSupplier,
-            Supplier<Integer> activityThemeColorSupplier, boolean isTablet,
-            boolean allowThemingInNightMode, boolean allowBrightThemeColors) {
+    public TopUiThemeColorProvider(
+            Context context,
+            ObservableSupplier<Tab> tabSupplier,
+            Supplier<Integer> activityThemeColorSupplier,
+            boolean isTablet,
+            boolean allowThemingInNightMode,
+            boolean allowBrightThemeColors) {
         super(context);
         mContext = context;
-        mTabObserver = new CurrentTabObserver(tabSupplier,
-                new EmptyTabObserver() {
-                    @Override
-                    public void onDidChangeThemeColor(Tab tab, int themeColor) {
-                        updateColor(tab, themeColor, true);
-                    }
-                },
-                (tab) -> {
-                    if (tab != null) updateColor(tab, tab.getThemeColor(), false);
-                });
+        mTabObserver =
+                new CurrentTabObserver(
+                        tabSupplier,
+                        new EmptyTabObserver() {
+                            @Override
+                            public void onDidChangeThemeColor(Tab tab, int themeColor) {
+                                updateColor(tab, themeColor, true);
+                            }
+                        },
+                        (tab) -> {
+                            if (tab != null) updateColor(tab, tab.getThemeColor(), false);
+                        });
         mActivityThemeColorSupplier = activityThemeColorSupplier;
         mIsTablet = isTablet;
         mAllowThemingInNightMode = allowThemingInNightMode;
@@ -97,17 +105,19 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
 
         final boolean isDarkTheme =
                 ColorUtils.shouldUseLightForegroundOnBackground(getThemeColor());
-        return isDarkTheme ? BrandedColorScheme.DARK_BRANDED_THEME
-                           : BrandedColorScheme.LIGHT_BRANDED_THEME;
+        return isDarkTheme
+                ? BrandedColorScheme.DARK_BRANDED_THEME
+                : BrandedColorScheme.LIGHT_BRANDED_THEME;
     }
 
     /**
      * Calculate theme color to be used for a given tab.
+     *
      * @param tab Tab to get the theme color for.
      * @param themeColor Initial color to calculate the theme color with.
      * @return Final theme color for a given tab, with other signals taken into account.
      */
-    public int calculateColor(Tab tab, int themeColor) {
+    public @ColorInt int calculateColor(Tab tab, @ColorInt int themeColor) {
         // This method is used not only for the current tab but also for
         // any given tab. Therefore it should not alter any class state.
         if (!isUsingTabThemeColor(tab, themeColor)) {
@@ -122,7 +132,7 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
 
         // Ensure there is no alpha component to the theme color as that is not supported in the
         // dependent UI.
-        return themeColor | 0xFF000000;
+        return ColorUtils.getOpaqueColor(themeColor);
     }
 
     private boolean isUsingDefaultColor(Tab tab, int themeColor) {
@@ -152,9 +162,10 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
     private boolean isUsingTabThemeColor(Tab tab, int themeColor) {
         // Note(david@vivaldi.com): We allow theming when native page is shown.
         // Note(david@vivaldi.com): Consider |show_tab_strip|.
-        return (isThemingAllowed(tab) || tab.isNativePage()) && themeColor != TabState.UNSPECIFIED_THEME_COLOR
-                && (mAllowBrightThemeColors || !ColorUtils.isThemeColorTooBright(themeColor))
-               && !ChromeSharedPreferences.getInstance().readBoolean("show_tab_strip", true);
+        return (isThemingAllowed(tab) || tab.isNativePage())
+                && !ChromeSharedPreferences.getInstance().readBoolean("show_tab_strip", true)
+                && themeColor != TabState.UNSPECIFIED_THEME_COLOR
+                && (mAllowBrightThemeColors || !ColorUtils.isThemeColorTooBright(themeColor));
     }
 
     /**
@@ -165,10 +176,12 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
         boolean disallowDueToNightMode =
                 !mAllowThemingInNightMode && ColorUtils.inNightMode(tab.getContext());
 
-        return tab.isThemingAllowed() && !mIsTablet
+        return tab.isThemingAllowed()
+                && !mIsTablet
                 // Vivaldi - We allow coloring in Dark theme also.
                 && (BuildConfig.IS_VIVALDI || !disallowDueToNightMode)
-                && !tab.isNativePage() && !tab.isIncognito();
+                && !tab.isNativePage()
+                && !tab.isIncognito();
     }
 
     /**
@@ -179,8 +192,9 @@ public class TopUiThemeColorProvider extends ThemeColorProvider {
     public int getSceneLayerBackground(Tab tab) {
         NativePage nativePage = tab.getNativePage();
         int defaultColor = calculateColor(tab, tab.getThemeColor());
-        return nativePage != null ? nativePage.getToolbarSceneLayerBackground(defaultColor)
-                                  : defaultColor;
+        return nativePage != null
+                ? nativePage.getToolbarSceneLayerBackground(defaultColor)
+                : defaultColor;
     }
 
     @Override

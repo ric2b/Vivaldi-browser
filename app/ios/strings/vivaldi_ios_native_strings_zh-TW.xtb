@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">已更新筆記</translation>
 <translation id="1041637248958093184">使用無痕式分頁時，Vivaldi 不會儲存搜尋結果、已瀏覽的網站、Cookie 以及臨時檔案。</translation>
 <translation id="1066692930984703744">啟用追蹤器及廣告的攔截功能，以讓瀏覽更快更安全</translation>
-<translation id="1076258485383101882">同步已輸入的網址</translation>
 <translation id="1116694919640316211">關於</translation>
 <translation id="1123707809902612118">攔截追蹤器以及廣告</translation>
 <translation id="1151972924205500581">需要密碼</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">使用條款</translation>
 <translation id="1771413903824396513">依據暱稱</translation>
 <translation id="1804522390855853698">中文（<ph name="ORIGIN" />）</translation>
+<translation id="1807246157184219062">淺色</translation>
 <translation id="1809939268435598390">刪除資料夾</translation>
 <translation id="1813686536470127172">其它資料夾</translation>
 <translation id="1828800626900562968">點擊下方的加號圖示以建立新的分頁。</translation>
@@ -71,12 +71,17 @@
 <translation id="2388224692799337242">當您開始瀏覽網頁後，您的瀏覽紀錄將顯示在此處</translation>
 <translation id="2391028308389203648">土耳其語（<ph name="ORIGIN" />）</translation>
 <translation id="2392369802118427583">啟用</translation>
+<translation id="2414886740292270097">深色</translation>
+<translation id="2433507940547922241">外觀</translation>
 <translation id="2434910957904013691">同步全部</translation>
 <translation id="2448144008809286557">忘記了<ph name="BEGIN_LINK" />使用名稱<ph name="END_LINK" />或是<ph name="BEGIN_LINK" />密碼<ph name="END_LINK" />了嗎？</translation>
 <translation id="2536780277491102902">例外</translation>
 <translation id="2558801801411970131">正在攔截追蹤器</translation>
+<translation id="2562040727226360285">移除嫌惡元素，可能會讓網站無法正常運作（<ph name="ORIGIN" />）</translation>
 <translation id="2577446409661931381">新增筆記</translation>
 <translation id="2619628557366098325">葡萄牙語（<ph name="ORIGIN" />）</translation>
+<translation id="2620436844016719705">系統</translation>
+<translation id="2666092431469916601">頂部</translation>
 <translation id="2677862276555105603">已封鎖的
 廣告</translation>
 <translation id="2678542925523700624">愛沙尼亞語（<ph name="ORIGIN" />）</translation>
@@ -85,6 +90,7 @@
 <translation id="2745324713975967671">加密密碼</translation>
 <translation id="276436995507680929">同步閱讀清單</translation>
 <translation id="2765217105034171413">小</translation>
+<translation id="2767124759205735526">同步瀏覽紀錄以及輸入的網址</translation>
 <translation id="2825232297853754349">您需要同意條款和條件。</translation>
 <translation id="2842985007712546952">上級資料夾</translation>
 <translation id="2843343418360315034">匈牙利語（<ph name="ORIGIN" />）</translation>
@@ -98,6 +104,7 @@
 <translation id="3073196329485613487">登入您的帳號</translation>
 <translation id="307859903981308731">如繼續閱讀，即表示您同意 Vivaldi 的</translation>
 <translation id="3086746722712840547">筆記</translation>
+<translation id="3087734570205094154">底部</translation>
 <translation id="3091563570137981919">攔截追蹤器及廣告</translation>
 <translation id="3134385238404760368">沒有最近的分頁</translation>
 <translation id="3157931365184549694">復原</translation>
@@ -127,12 +134,14 @@
 <translation id="3699026013955941879">驗證碼已逾期。請重新要求新的啟用驗證碼。</translation>
 <translation id="3700829948786686853">歡迎使用 Vivaldi</translation>
 <translation id="3766350025418769949">您可以在您的 iPad 上的其它應用程式中，使用您已儲存在 Vivaldi 密碼管理工具內的密碼。</translation>
+<translation id="3842727926262967527">選擇您偏好的分頁列以及網址欄位的位置。</translation>
 <translation id="3845564230651302310">正在套用新的攔截器設定……</translation>
 <translation id="3858860766373142691">名稱</translation>
 <translation id="3866249974567520381">描述</translation>
 <translation id="3872195896030547485">請輸入有效的電子郵件地址。</translation>
 <translation id="3894427358181296146">新增資料夾</translation>
 <translation id="3897092660631435901">選單</translation>
+<translation id="3921585859122905677">網址列位置</translation>
 <translation id="3953599441418463312">日語（<ph name="ORIGIN" />）</translation>
 <translation id="395506590020066151">個追蹤器已攔截</translation>
 <translation id="3958433364221339259">使用 <ph name="SEARCH_ENGINE" /> 搜尋</translation>
@@ -163,7 +172,9 @@
 <translation id="4394049700291259645">停用</translation>
 <translation id="4413780690230851155">刪除瀏覽紀錄</translation>
 <translation id="4452878871193896747">印度尼西亞語（<ph name="ORIGIN" />）</translation>
+<translation id="445620040230332178">分頁風格</translation>
 <translation id="4474581062946673155">您目前沒有從其它裝置同步的分頁。</translation>
+<translation id="4488900295693536220">適用於網址列在底部時，使其可以更輕鬆的抵達搜尋建議的頂端。</translation>
 <translation id="4493850495402472953">和</translation>
 <translation id="4497115807425788318">位置</translation>
 <translation id="4507213865286211606">大小預覽</translation>
@@ -207,6 +218,7 @@
 <translation id="5238642303473095117">刪除資料</translation>
 <translation id="5245732982828228444">您可以在此處找到您的筆記</translation>
 <translation id="5249199221558969362">請輸入實際的年齡數字。</translation>
+<translation id="5271549068863921519">儲存密碼</translation>
 <translation id="5290452628447338707">暫無筆記</translation>
 <translation id="5317780077021120954">儲存</translation>
 <translation id="5349678548463426691">依據描述</translation>
@@ -221,7 +233,7 @@
 <translation id="5494016731375030300">最近關閉的分頁</translation>
 <translation id="5569279496588266002">起始頁樣式</translation>
 <translation id="5639137028584114536">貴機構要求您私密瀏覽。在無痕模式下分頁不會被儲存。
-        <ph name="BEGIN_LINK" />瞭解更多<ph name="END_LINK" /></translation>
+        <ph name="BEGIN_LINK" />了解更多<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">列表</translation>
 <translation id="574392208103952083">中等</translation>
 <translation id="5787420647064736989">裝置名稱</translation>
@@ -230,7 +242,7 @@
 <translation id="5857090052475505287">新增資料夾</translation>
 <translation id="5859825823508296659">編輯域名</translation>
 <translation id="5867841422488265304">搜尋或輸入網址</translation>
-<translation id="5869217094746242845">瞭解更多隱私及安全政策</translation>
+<translation id="5869217094746242845">了解更多隱私及安全政策</translation>
 <translation id="5871497086027727873">已移動 1 個項目</translation>
 <translation id="5898502570200301364">您可以在您的 iPhone 上的其它應用程式中，使用您已儲存在 Vivaldi 密碼管理工具內的密碼。</translation>
 <translation id="5900160494089383343">這個使用者名稱無法使用。</translation>
@@ -240,6 +252,7 @@
 <translation id="614539368862754027">已移動 <ph name="NUMBER_OF_SELECTED_NOTES" /> 個項目</translation>
 <translation id="6147094071357011481">最近關閉的分頁無法使用</translation>
 <translation id="6193995664633100765">印度（<ph name="ORIGIN" />）</translation>
+<translation id="6278428485366576908">主題</translation>
 <translation id="6365929278691047681">德語（<ph name="ORIGIN" />）</translation>
 <translation id="6404511346730675251">編輯書籤</translation>
 <translation id="6406506848690869874">資料同步</translation>
@@ -278,7 +291,6 @@
 <translation id="7041964446309059643">手動</translation>
 <translation id="7110758301321962823">恢復使用者名稱</translation>
 <translation id="7194677467200983873">最後同步：</translation>
-<translation id="7196846668589096106">桌面分頁</translation>
 <translation id="7210372243397300116">搜尋資料夾</translation>
 <translation id="7215420652436283416">依據網址</translation>
 <translation id="7229439505896086266">建立筆記</translation>
@@ -318,6 +330,7 @@
 <translation id="8076492880354921740">分頁</translation>
 <translation id="8112996065264879835">此啟用碼與我們傳送給您的啟用碼不一樣。
         您已達到最大錯誤嘗試次數限制。請使用下面的重新發送選項申請新的啟用碼。</translation>
+<translation id="8142291334394582384">反向排序搜尋建議順序</translation>
 <translation id="8147118677117542370">請提供您的年齡。</translation>
 <translation id="8165573437634525334">資料已由加密密碼加密</translation>
 <translation id="8182979418912184986">新的無痕式分頁</translation>
@@ -326,6 +339,7 @@
 <translation id="8273666073173891138">已儲存筆記至<ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">匯入</translation>
 <translation id="8284356787013856231">檔案開啟權限被拒絕</translation>
+<translation id="8289933454364510719">頂部或底部</translation>
 <translation id="8326104954595890674">新增無痕式分頁</translation>
 <translation id="8329813750766387010">最後更新於：<ph name="DATE" /></translation>
 <translation id="8347535536909603600">移除 Cookie 警告（<ph name="TYPE" />）</translation>
@@ -349,6 +363,8 @@
 <translation id="8684294196284714094">準備好將 Vivaldi 設為您的預設瀏覽器了嗎？</translation>
 <translation id="8740815429790728127">已刪除 <ph name="NUMBER_OF_SELECTED_NOTES" /> 個項目</translation>
 <translation id="8763006697839582351">以 Vivaldi 無痕模式開啟連結</translation>
+<translation id="8765173886020357878">搜尋建議</translation>
+<translation id="8786689981011401964">桌布</translation>
 <translation id="8804164990146287819">隱私權政策</translation>
 <translation id="8819841443522803117">是時候更換您的預設瀏覽器了吧？選擇 Vivaldi。</translation>
 <translation id="8820817407110198400">書籤</translation>

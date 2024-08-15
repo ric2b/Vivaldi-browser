@@ -19,7 +19,8 @@ type depConfig struct {
 	needsBazelFile    bool
 }
 
-// These are all C++ deps used by the Bazel build. They are a subset of those listed in DEPS.
+// These are all C++ deps or Rust deps (with a compatible C++ FFI) used by the Bazel build.
+// They are a subset of those listed in DEPS.
 // The key is the name of the repo as specified in DEPS.
 var deps = map[string]depConfig{
 	"abseil-cpp":  {bazelNameOverride: "abseil_cpp"},
@@ -29,29 +30,30 @@ var deps = map[string]depConfig{
 	// This name is important because spirv_tools expects @spirv_headers to exist by that name.
 	"spirv-headers": {bazelNameOverride: "spirv_headers"},
 
-	"dawn":                  {needsBazelFile: true},
-	"dng_sdk":               {needsBazelFile: true},
-	"expat":                 {needsBazelFile: true},
-	"freetype":              {needsBazelFile: true},
-	"harfbuzz":              {needsBazelFile: true},
-	"icu":                   {needsBazelFile: true},
-	"imgui":                 {needsBazelFile: true},
-	"libavif":               {needsBazelFile: true},
-	"libgav1":               {needsBazelFile: true},
-	"libjpeg-turbo":         {bazelNameOverride: "libjpeg_turbo", needsBazelFile: true},
-	"libjxl":                {needsBazelFile: true},
-	"libpng":                {needsBazelFile: true},
-	"libwebp":               {needsBazelFile: true},
-	"libyuv":                {needsBazelFile: true},
-	"spirv-cross":           {bazelNameOverride: "spirv_cross", needsBazelFile: true},
-	"perfetto":              {needsBazelFile: true},
-	"piex":                  {needsBazelFile: true},
-	"vello":                 {needsBazelFile: true},
-	"vulkan-headers":        {bazelNameOverride: "vulkan_headers", needsBazelFile: true},
-	"vulkan-tools":          {bazelNameOverride: "vulkan_tools", needsBazelFile: true},
+	"dawn":                     {needsBazelFile: true},
+	"dng_sdk":                  {needsBazelFile: true},
+	"expat":                    {needsBazelFile: true},
+	"freetype":                 {needsBazelFile: true},
+	"harfbuzz":                 {needsBazelFile: true},
+	"icu":                      {needsBazelFile: true},
+	"icu4x":                    {needsBazelFile: true},
+	"imgui":                    {needsBazelFile: true},
+	"libavif":                  {needsBazelFile: true},
+	"libgav1":                  {needsBazelFile: true},
+	"libjpeg-turbo":            {bazelNameOverride: "libjpeg_turbo", needsBazelFile: true},
+	"libjxl":                   {needsBazelFile: true},
+	"libpng":                   {needsBazelFile: true},
+	"libwebp":                  {needsBazelFile: true},
+	"libyuv":                   {needsBazelFile: true},
+	"spirv-cross":              {bazelNameOverride: "spirv_cross", needsBazelFile: true},
+	"perfetto":                 {needsBazelFile: true},
+	"piex":                     {needsBazelFile: true},
+	"vello":                    {needsBazelFile: true},
+	"vulkan-headers":           {bazelNameOverride: "vulkan_headers", needsBazelFile: true},
+	"vulkan-tools":             {bazelNameOverride: "vulkan_tools", needsBazelFile: true},
 	"vulkan-utility-libraries": {bazelNameOverride: "vulkan_utility_libraries", needsBazelFile: true},
-	"vulkanmemoryallocator": {needsBazelFile: true},
-	"wuffs":                 {needsBazelFile: true},
+	"vulkanmemoryallocator":    {needsBazelFile: true},
+	"wuffs":                    {needsBazelFile: true},
 	// Some other dependency downloads zlib but with their own rules
 	"zlib": {bazelNameOverride: "zlib_skia", needsBazelFile: true},
 }
@@ -238,6 +240,7 @@ Instead, do:
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+load("//bazel:download_config_files.bzl", "download_config_files")
 load("//bazel:gcs_mirror.bzl", "gcs_mirror_url")
 
 def c_plus_plus_deps(ws = "@skia"):
@@ -273,6 +276,40 @@ def bazel_deps():
             sha256 = "e52789d4e89c3e2dc0e3446a9684626a626b6bec3fde787d70bae37c6ebcc47f",
             url = "https://github.com/bazelbuild/bazel-toolchains/archive/refs/tags/v5.1.1.tar.gz",
         ),
+    )
+
+def header_based_configs():
+    maybe(
+        download_config_files,
+        name = "freetype_config",
+        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        files = {
+            "BUILD.bazel": "bazel/external/freetype/config/BUILD.bazel",
+            "android/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-android/freetype/config/ftmodule.h",
+            "android/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-android/freetype/config/ftoption.h",
+            "no-type1/freetype/config/ftmodule.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftmodule.h",
+            "no-type1/freetype/config/ftoption.h": "third_party/freetype2/include/freetype-no-type1/freetype/config/ftoption.h",
+        },
+    )
+    maybe(
+        download_config_files,
+        name = "harfbuzz_config",
+        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        files = {
+            "BUILD.bazel": "bazel/external/harfbuzz/config/BUILD.bazel",
+            "config-override.h": "third_party/harfbuzz/config-override.h",
+        },
+    )
+    maybe(
+        download_config_files,
+        name = "icu_utils",
+        skia_revision = "7b730016006e6b66d24a6f94eefe8bec00ac1674",
+        files = {
+            "BUILD.bazel": "bazel/external/icu/utils/BUILD.bazel",
+            "icu/SkLoadICU.cpp": "third_party/icu/SkLoadICU.cpp",
+            "icu/SkLoadICU.h": "third_party/icu/SkLoadICU.h",
+            "icu/make_data_cpp.py": "third_party/icu/make_data_cpp.py",
+        },
     )
 `
 

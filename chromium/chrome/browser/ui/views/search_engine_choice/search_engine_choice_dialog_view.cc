@@ -9,8 +9,8 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/browser/ui/search_engine_choice/search_engine_choice_tab_helper.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
@@ -34,8 +34,8 @@ constexpr int kPreferredMaxDialogHeight = 768;
 }  // namespace
 void ShowSearchEngineChoiceDialog(
     Browser& browser,
-    absl::optional<gfx::Size> boundary_dimensions_for_test,
-    absl::optional<double> zoom_factor_for_test) {
+    std::optional<gfx::Size> boundary_dimensions_for_test,
+    std::optional<double> zoom_factor_for_test) {
   if (boundary_dimensions_for_test.has_value() ||
       zoom_factor_for_test.has_value()) {
     CHECK_IS_TEST();
@@ -56,10 +56,19 @@ void ShowSearchEngineChoiceDialog(
       std::move(delegate), browser.window()->GetNativeWindow());
 }
 
+bool CanWindowHeightFitSearchEngineChoiceDialog(Browser& browser) {
+  int max_dialog_height = browser.window()
+                              ->GetWebContentsModalDialogHost()
+                              ->GetMaximumDialogSize()
+                              .height();
+
+  return max_dialog_height >= kMinHeight;
+}
+
 SearchEngineChoiceDialogView::SearchEngineChoiceDialogView(
     Browser* browser,
-    absl::optional<gfx::Size> boundary_dimensions_for_test,
-    absl::optional<double> zoom_factor_for_test)
+    std::optional<gfx::Size> boundary_dimensions_for_test,
+    std::optional<double> zoom_factor_for_test)
     : browser_(browser),
       boundary_dimensions_for_test_(boundary_dimensions_for_test),
       zoom_factor_for_test_(zoom_factor_for_test) {
@@ -79,9 +88,10 @@ SearchEngineChoiceDialogView::SearchEngineChoiceDialogView(
 SearchEngineChoiceDialogView::~SearchEngineChoiceDialogView() = default;
 
 void SearchEngineChoiceDialogView::Initialize() {
-  auto* search_engine_choice_service =
-      SearchEngineChoiceServiceFactory::GetForProfile(browser_->profile());
-  search_engine_choice_service->NotifyDialogOpened(
+  auto* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(
+          browser_->profile());
+  search_engine_choice_dialog_service->NotifyDialogOpened(
       browser_, /*close_dialog_callback=*/base::BindOnce(
           &SearchEngineChoiceDialogView::CloseView,
           weak_ptr_factory_.GetWeakPtr()));
@@ -136,7 +146,7 @@ void SearchEngineChoiceDialogView::Initialize() {
                          &SearchEngineChoiceDialogView::ShowNativeView,
                          base::Unretained(this)),
                      /*on_choice_made_callback=*/base::OnceClosure(),
-                     SearchEngineChoiceService::EntryPoint::kDialog);
+                     SearchEngineChoiceDialogService::EntryPoint::kDialog);
 
   SetUseDefaultFillLayout(true);
 }
@@ -157,5 +167,5 @@ void SearchEngineChoiceDialogView::CloseView() {
   GetWidget()->Close();
 }
 
-BEGIN_METADATA(SearchEngineChoiceDialogView, views::View)
+BEGIN_METADATA(SearchEngineChoiceDialogView)
 END_METADATA

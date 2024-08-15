@@ -11,6 +11,7 @@
 #include "ash/test/ash_test_base.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/ranges/functional.h"
 #include "base/test/scoped_feature_list.h"
@@ -58,7 +59,7 @@ const ui::InputDevice kSampleMouseBluetooth = {25, ui::INPUT_DEVICE_BLUETOOTH,
 const ui::InputDevice kSampleMouseInternal = {30, ui::INPUT_DEVICE_INTERNAL,
                                               "kSampleMouseInternal"};
 const ui::InputDevice kSampleFlossExtraMouse = {35, ui::INPUT_DEVICE_UNKNOWN,
-                                                "suspend uhid"};
+                                                "VIRTUAL_SUSPEND_UHID"};
 
 template <typename Comp = base::ranges::less>
 void SortDevices(std::vector<ui::KeyboardDevice>& devices, Comp comp = {}) {
@@ -150,7 +151,7 @@ TEST_F(InputDeviceStateNotifierTest, ImpostersRemoved) {
   ui::KeyboardDevice imposter_keyboard = kSampleKeyboardUsb;
   imposter_keyboard.vendor_id = 0x1234;
   imposter_keyboard.product_id = 0x5678;
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
 
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
@@ -158,7 +159,7 @@ TEST_F(InputDeviceStateNotifierTest, ImpostersRemoved) {
   EXPECT_EQ(kSampleKeyboardUsb2.name, devices_to_add_[0].name);
   EXPECT_EQ(kSampleKeyboardUsb2.id, devices_to_add_[0].id);
 
-  imposter_keyboard.suspected_imposter = false;
+  imposter_keyboard.suspected_keyboard_imposter = false;
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
   ASSERT_EQ(2u, devices_to_add_.size());
@@ -172,7 +173,7 @@ TEST_F(InputDeviceStateNotifierTest, ImpostersRemembered) {
   ui::KeyboardDevice imposter_keyboard = kSampleKeyboardUsb;
   imposter_keyboard.vendor_id = 0x1234;
   imposter_keyboard.product_id = 0x5678;
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
 
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
@@ -182,7 +183,7 @@ TEST_F(InputDeviceStateNotifierTest, ImpostersRemembered) {
 
   // Remove imposter flag and make sure the notifier includes the old
   // "imposter".
-  imposter_keyboard.suspected_imposter = false;
+  imposter_keyboard.suspected_keyboard_imposter = false;
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
   ASSERT_EQ(2u, devices_to_add_.size());
@@ -194,7 +195,7 @@ TEST_F(InputDeviceStateNotifierTest, ImpostersRemembered) {
   // Remove the imposter and then add it back and ensure it was remembered as
   // being a previously valid device.
   ui::DeviceDataManagerTestApi().SetKeyboardDevices({kSampleKeyboardUsb2});
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
   ASSERT_EQ(2u, devices_to_add_.size());
@@ -210,7 +211,7 @@ TEST_F(InputDeviceStateNotifierTest, ImpostersRemembered) {
 TEST_F(InputDeviceStateNotifierTest,
        KeyboardWhichImpersonatesMouseAlwaysShown) {
   ui::KeyboardDevice imposter_keyboard = kLogitechMXKeysKeyboard;
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
 
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {kSampleKeyboardUsb, imposter_keyboard});
@@ -220,7 +221,7 @@ TEST_F(InputDeviceStateNotifierTest,
   EXPECT_EQ(imposter_keyboard.name, devices_to_add_[1].name);
   EXPECT_EQ(imposter_keyboard.id, devices_to_add_[1].id);
 
-  imposter_keyboard.suspected_imposter = false;
+  imposter_keyboard.suspected_keyboard_imposter = false;
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {kSampleKeyboardUsb, imposter_keyboard});
   ASSERT_EQ(2u, devices_to_add_.size());
@@ -246,7 +247,8 @@ TEST_F(InputDeviceStateNotifierTest, BluetoothKeyboardTest) {
   ON_CALL(*mock_device, GetProductID)
       .WillByDefault(testing::Return(test_product_id));
 
-  std::vector<const device::BluetoothDevice*> devices;
+  std::vector<raw_ptr<const device::BluetoothDevice, VectorExperimental>>
+      devices;
   devices.push_back(mock_device.get());
   ON_CALL(*bluetooth_adapter_, GetDevices)
       .WillByDefault(testing::Return(devices));
@@ -352,7 +354,7 @@ TEST_F(InputDeviceStateLoginScreenNotifierTest, ImpostersIgnoredOnLoginScreen) {
   ui::KeyboardDevice imposter_keyboard = kSampleKeyboardUsb;
   imposter_keyboard.vendor_id = 0x1234;
   imposter_keyboard.product_id = 0x5678;
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
 
   // On the login screen, assume the imposter flag is invalid and ignore it.
   // Therefore, imposter keyboards should be considered "connected".
@@ -375,7 +377,7 @@ TEST_F(InputDeviceStateLoginScreenNotifierTest,
   ui::KeyboardDevice imposter_keyboard = kSampleKeyboardUsb;
   imposter_keyboard.vendor_id = 0x1234;
   imposter_keyboard.product_id = 0x5678;
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
 
   // On the login screen, assume the imposter flag is invalid and ignore it.
   // Therefore, imposter keyboards should be considered "connected".
@@ -387,7 +389,7 @@ TEST_F(InputDeviceStateLoginScreenNotifierTest,
   EXPECT_EQ(kSampleKeyboardUsb2.name, devices_to_add_[1].name);
   EXPECT_EQ(kSampleKeyboardUsb2.id, devices_to_add_[1].id);
 
-  imposter_keyboard.suspected_imposter = false;
+  imposter_keyboard.suspected_keyboard_imposter = false;
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
   ASSERT_EQ(2u, devices_to_add_.size());
@@ -403,7 +405,7 @@ TEST_F(InputDeviceStateLoginScreenNotifierTest,
   EXPECT_EQ(kSampleKeyboardUsb2.name, devices_to_add_[0].name);
   EXPECT_EQ(kSampleKeyboardUsb2.id, devices_to_add_[0].id);
 
-  imposter_keyboard.suspected_imposter = true;
+  imposter_keyboard.suspected_keyboard_imposter = true;
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {imposter_keyboard, kSampleKeyboardUsb2});
   ASSERT_EQ(2u, devices_to_add_.size());
@@ -665,7 +667,8 @@ TEST_F(InputDeviceMouseNotifierTest, BluetoothMouseTest) {
   ON_CALL(*mock_device, GetProductID)
       .WillByDefault(testing::Return(test_product_id));
 
-  std::vector<const device::BluetoothDevice*> devices;
+  std::vector<raw_ptr<const device::BluetoothDevice, VectorExperimental>>
+      devices;
   devices.push_back(mock_device.get());
   ON_CALL(*bluetooth_adapter_, GetDevices)
       .WillByDefault(testing::Return(devices));
@@ -715,8 +718,9 @@ TEST_F(InputDeviceMouseNotifierTest, BluetoothMouseTest) {
 
   // Needed to reset the `bluetooth_adapter_`.
   ON_CALL(*bluetooth_adapter_, GetDevices)
-      .WillByDefault(
-          testing::Return(std::vector<const device::BluetoothDevice*>()));
+      .WillByDefault(testing::Return(
+          std::vector<
+              raw_ptr<const device::BluetoothDevice, VectorExperimental>>()));
 }
 
 }  // namespace ash

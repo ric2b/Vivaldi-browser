@@ -85,6 +85,22 @@ describeWithEnvironment('NetworkLogView', () => {
     assert.isNull(marker);
   });
 
+  it('does not add a marker to requests which are intercepted but not overridden', async () => {
+    const request = SDK.NetworkRequest.NetworkRequest.create(
+        'requestId' as Protocol.Network.RequestId, 'https://www.example.com' as Platform.DevToolsPath.UrlString,
+        '' as Platform.DevToolsPath.UrlString, null, null, null);
+    request.statusCode = 200;
+
+    request.setWasIntercepted(true);
+
+    const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
+        {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
+    const el = document.createElement('div');
+    networkRequestNode.renderCell(el, 'name');
+    const marker = el.querySelector('.network-override-marker');
+    assert.isNull(marker);
+  });
+
   it('adds an error red icon to the left of the failed requests', async () => {
     const request = SDK.NetworkRequest.NetworkRequest.create(
         'requestId' as Protocol.Network.RequestId, 'https://www.example.com' as Platform.DevToolsPath.UrlString,
@@ -114,7 +130,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/test.mp3' as Platform.DevToolsPath.UrlString, '' as Platform.DevToolsPath.UrlString,
         null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Media);
-    request.mimeType = 'audio/mpeg' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'audio/mpeg';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -136,7 +152,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/test.wasm' as Platform.DevToolsPath.UrlString, '' as Platform.DevToolsPath.UrlString,
         null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Wasm);
-    request.mimeType = 'application/wasm' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'application/wasm';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -157,7 +173,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'requestId' as Protocol.Network.RequestId, 'https://www.example.com/ws' as Platform.DevToolsPath.UrlString,
         '' as Platform.DevToolsPath.UrlString, null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.WebSocket);
-    request.mimeType = '' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = '';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -179,7 +195,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/test.json?keepalive=false' as Platform.DevToolsPath.UrlString,
         '' as Platform.DevToolsPath.UrlString, null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Fetch);
-    request.mimeType = '' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = '';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -201,7 +217,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/test.json?keepalive=false' as Platform.DevToolsPath.UrlString,
         '' as Platform.DevToolsPath.UrlString, null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.XHR);
-    request.mimeType = 'application/octet-stream' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'application/octet-stream';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -223,7 +239,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/test.svg' as Platform.DevToolsPath.UrlString, '' as Platform.DevToolsPath.UrlString,
         null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.XHR);
-    request.mimeType = 'image/svg+xml' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'image/svg+xml';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -242,7 +258,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'requestId' as Protocol.Network.RequestId, 'https://www.example.com/page' as Platform.DevToolsPath.UrlString,
         '' as Platform.DevToolsPath.UrlString, null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Fetch);
-    request.mimeType = 'text/html' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'text/html';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -264,7 +280,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/api/test' as Platform.DevToolsPath.UrlString, '' as Platform.DevToolsPath.UrlString,
         null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Preflight);
-    request.mimeType = 'text/plain' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'text/plain';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -285,7 +301,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'requestId' as Protocol.Network.RequestId, 'https://www.example.com/ping' as Platform.DevToolsPath.UrlString,
         '' as Platform.DevToolsPath.UrlString, null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Other);
-    request.mimeType = 'application/javascript' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'application/javascript';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);
@@ -307,7 +323,7 @@ describeWithEnvironment('NetworkLogView', () => {
         'https://www.example.com/api/list' as Platform.DevToolsPath.UrlString, '' as Platform.DevToolsPath.UrlString,
         null, null, null);
     request.setResourceType(Common.ResourceType.resourceTypes.Fetch);
-    request.mimeType = 'application/json' as SDK.NetworkRequest.MIME_TYPE;
+    request.mimeType = 'application/json';
 
     const networkRequestNode = new Network.NetworkDataGridNode.NetworkRequestNode(
         {} as Network.NetworkDataGridNode.NetworkLogViewInterface, request);

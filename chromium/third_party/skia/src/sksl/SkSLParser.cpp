@@ -20,7 +20,6 @@
 #include "src/sksl/SkSLErrorReporter.h"
 #include "src/sksl/SkSLOperator.h"
 #include "src/sksl/SkSLString.h"
-#include "src/sksl/SkSLThreadContext.h"
 #include "src/sksl/ir/SkSLBinaryExpression.h"
 #include "src/sksl/ir/SkSLBlock.h"
 #include "src/sksl/ir/SkSLBreakStatement.h"
@@ -127,27 +126,38 @@ private:
 
 class Parser::AutoSymbolTable {
 public:
-    AutoSymbolTable(Parser* p) : fParser(p) {
-        SymbolTable::Push(&fParser->symbolTable());
+    AutoSymbolTable(Parser* p, std::unique_ptr<SymbolTable>* newSymbolTable, bool enable = true) {
+        if (enable) {
+            fParser = p;
+            SymbolTable*& ctxSymbols = this->contextSymbolTable();
+            *newSymbolTable = std::make_unique<SymbolTable>(ctxSymbols, ctxSymbols->isBuiltin());
+            ctxSymbols = newSymbolTable->get();
+        }
     }
 
     ~AutoSymbolTable() {
-        SymbolTable::Pop(&fParser->symbolTable());
+        if (fParser) {
+            SymbolTable*& ctxSymbols = this->contextSymbolTable();
+            ctxSymbols = ctxSymbols->fParent;
+        }
     }
 
 private:
-    Parser* fParser;
+    SymbolTable*& contextSymbolTable() { return fParser->fCompiler.context().fSymbolTable; }
+
+    Parser* fParser = nullptr;
 };
 
 class Parser::Checkpoint {
 public:
     Checkpoint(Parser* p) : fParser(p) {
+        Context& context = fParser->fCompiler.context();
         fPushbackCheckpoint = fParser->fPushback;
         fLexerCheckpoint = fParser->fLexer.getCheckpoint();
-        fOldErrorReporter = &ThreadContext::GetErrorReporter();
+        fOldErrorReporter = context.fErrors;
         fOldEncounteredFatalError = fParser->fEncounteredFatalError;
         SkASSERT(fOldErrorReporter);
-        ThreadContext::SetErrorReporter(&fErrorReporter);
+        context.setErrorReporter(&fErrorReporter);
     }
 
     ~Checkpoint() {
@@ -159,7 +169,7 @@ public:
         // Parser errors should have been fatal, but we can encounter other errors like type
         // mismatches despite accepting the parse. Forward those messages to the actual error
         // handler now.
-        fErrorReporter.forwardErrors();
+        fErrorReporter.forwardErrors(fParser);
     }
 
     void rewind() {
@@ -176,9 +186,9 @@ private:
             fErrors.push_back({std::string(msg), pos});
         }
 
-        void forwardErrors() {
-            for (Error& error : fErrors) {
-                ThreadContext::ReportError(error.fMsg, error.fPos);
+        void forwardErrors(Parser* parser) {
+            for (const Error& error : fErrors) {
+                parser->error(error.fPos, error.fMsg);
             }
         }
 
@@ -193,7 +203,7 @@ private:
 
     void restoreErrorReporter() {
         SkASSERT(fOldErrorReporter);
-        ThreadContext::SetErrorReporter(fOldErrorReporter);
+        fParser->fCompiler.context().setErrorReporter(fOldErrorReporter);
         fOldErrorReporter = nullptr;
     }
 
@@ -208,16 +218,18 @@ private:
 Parser::Parser(Compiler* compiler,
                const ProgramSettings& settings,
                ProgramKind kind,
-               std::string text)
+               std::unique_ptr<std::string> text)
         : fCompiler(*compiler)
         , fSettings(settings)
         , fKind(kind)
-        , fText(std::make_unique<std::string>(std::move(text)))
+        , fText(std::move(text))
         , fPushback(Token::Kind::TK_NONE, /*offset=*/-1, /*length=*/-1) {
     fLexer.start(*fText);
 }
 
-std::shared_ptr<SymbolTable>& Parser::symbolTable() {
+Parser::~Parser() = default;
+
+SymbolTable* Parser::symbolTable() {
     return fCompiler.symbolTable();
 }
 
@@ -297,7 +309,7 @@ Token Parser::nextToken() {
 
 void Parser::pushback(Token t) {
     SkASSERT(fPushback.fKind == Token::Kind::TK_NONE);
-    fPushback = std::move(t);
+    fPushback = t;
 }
 
 Token Parser::peek() {
@@ -318,7 +330,7 @@ bool Parser::checkNext(Token::Kind kind, Token* result) {
         }
         return true;
     }
-    this->pushback(std::move(next));
+    this->pushback(next);
     return false;
 }
 
@@ -326,7 +338,7 @@ bool Parser::expect(Token::Kind kind, const char* expected, Token* result) {
     Token next = this->nextToken();
     if (next.fKind == kind) {
         if (result) {
-            *result = std::move(next);
+            *result = next;
         }
         return true;
     } else {
@@ -355,7 +367,7 @@ bool Parser::checkIdentifier(Token* result) {
         return false;
     }
     if (this->symbolTable()->isBuiltinType(this->text(*result))) {
-        this->pushback(std::move(*result));
+        this->pushback(*result);
         return false;
     }
     return true;
@@ -378,7 +390,7 @@ void Parser::error(Token token, std::string_view msg) {
 }
 
 void Parser::error(Position position, std::string_view msg) {
-    ThreadContext::ReportError(msg, position);
+    fCompiler.context().fErrors->error(position, msg);
 }
 
 Position Parser::rangeFrom(Position start) {
@@ -392,34 +404,24 @@ Position Parser::rangeFrom(Token start) {
 }
 
 /* declaration* END_OF_FILE */
-std::unique_ptr<Program> Parser::program() {
-    ErrorReporter* errorReporter = &fCompiler.errorReporter();
-    ThreadContext::Start(&fCompiler, fKind, fSettings);
-    ThreadContext::SetErrorReporter(errorReporter);
-    errorReporter->setSource(*fText);
+std::unique_ptr<Program> Parser::programInheritingFrom(const SkSL::Module* module) {
     this->declarations();
     std::unique_ptr<Program> result;
-    if (!ThreadContext::GetErrorReporter().errorCount()) {
-        result = fCompiler.releaseProgram(std::move(fText));
+    if (fCompiler.errorReporter().errorCount() == 0) {
+        result = fCompiler.releaseProgram(std::move(fText), std::move(fProgramElements));
+    } else {
+        fProgramElements.clear();
     }
-    errorReporter->setSource(std::string_view());
-    ThreadContext::End();
     return result;
 }
 
-std::unique_ptr<SkSL::Module> Parser::moduleInheritingFrom(const SkSL::Module* parent) {
-    ErrorReporter* errorReporter = &fCompiler.errorReporter();
-    ThreadContext::StartModule(&fCompiler, fKind, fSettings, parent);
-    ThreadContext::SetErrorReporter(errorReporter);
-    errorReporter->setSource(*fText);
+std::unique_ptr<SkSL::Module> Parser::moduleInheritingFrom(const SkSL::Module* parentModule) {
     this->declarations();
     this->symbolTable()->takeOwnershipOfString(std::move(*fText));
     auto result = std::make_unique<SkSL::Module>();
-    result->fParent = parent;
-    result->fSymbols = this->symbolTable();
-    result->fElements = std::move(ThreadContext::ProgramElements());
-    errorReporter->setSource(std::string_view());
-    ThreadContext::End();
+    result->fParent = parentModule;
+    result->fSymbols = std::move(fCompiler.fGlobalSymbols);
+    result->fElements = std::move(fProgramElements);
     return result;
 }
 
@@ -439,6 +441,9 @@ void Parser::declarations() {
     }
 
     while (!fEncounteredFatalError) {
+        // We should always be at global scope when processing top-level declarations.
+        SkASSERT(fCompiler.context().fSymbolTable == fCompiler.globalSymbols());
+
         switch (this->peek().fKind) {
             case Token::Kind::TK_END_OF_FILE:
                 return;
@@ -478,7 +483,7 @@ void Parser::extensionDirective(Position start) {
                                                                   this->text(name),
                                                                   this->text(behavior));
         if (ext) {
-            ThreadContext::ProgramElements().push_back(std::move(ext));
+            fProgramElements.push_back(std::move(ext));
         }
     } else {
         this->error(start, "invalid #extension directive");
@@ -535,7 +540,7 @@ bool Parser::modifiersDeclarationEnd(const SkSL::Modifiers& mods) {
     if (!decl) {
         return false;
     }
-    ThreadContext::ProgramElements().push_back(std::move(decl));
+    fProgramElements.push_back(std::move(decl));
     return true;
 }
 
@@ -631,22 +636,29 @@ bool Parser::prototypeFunction(SkSL::FunctionDeclaration* decl) {
     if (!decl) {
         return false;
     }
-    ThreadContext::ProgramElements().push_back(std::make_unique<SkSL::FunctionPrototype>(
+    fProgramElements.push_back(std::make_unique<SkSL::FunctionPrototype>(
             decl->fPosition, decl, fCompiler.context().fConfig->fIsBuiltinCode));
     return true;
 }
 
 bool Parser::defineFunction(SkSL::FunctionDeclaration* decl) {
-    // Create a symbol table for the function parameters.
     const Context& context = fCompiler.context();
-    AutoSymbolTable symbols(this);
-    if (decl) {
-        decl->addParametersToSymbolTable(context);
-    }
-
-    // Parse the function body.
     Token bodyStart = this->peek();
-    std::unique_ptr<Statement> body = this->block();
+
+    std::unique_ptr<SymbolTable> symbolTable;
+    std::unique_ptr<Statement> body;
+    {
+        // Create a symbol table for the function which includes the parameters.
+        AutoSymbolTable symbols(this, &symbolTable);
+        if (decl) {
+            for (Variable* param : decl->parameters()) {
+                symbolTable->addWithoutOwnership(fCompiler.context(), param);
+            }
+        }
+
+        // Parse the function body.
+        body = this->block(/*introduceNewScope=*/false, /*adoptExistingSymbolTable=*/&symbolTable);
+    }
 
     // If there was a problem with the declarations or body, don't actually create a definition.
     if (!decl || !body) {
@@ -667,7 +679,7 @@ bool Parser::defineFunction(SkSL::FunctionDeclaration* decl) {
         return false;
     }
     decl->setDefinition(function.get());
-    ThreadContext::ProgramElements().push_back(std::move(function));
+    fProgramElements.push_back(std::move(function));
     return true;
 }
 
@@ -753,8 +765,7 @@ bool Parser::parseInitializer(Position pos, std::unique_ptr<Expression>* initial
 
 void Parser::addGlobalVarDeclaration(std::unique_ptr<VarDeclaration> decl) {
     if (decl) {
-        ThreadContext::ProgramElements().push_back(
-                std::make_unique<SkSL::GlobalVarDeclaration>(std::move(decl)));
+        fProgramElements.push_back(std::make_unique<SkSL::GlobalVarDeclaration>(std::move(decl)));
     }
 }
 
@@ -977,7 +988,7 @@ const Type* Parser::structDeclaration() {
     }
 
     const Type* result = &def->type();
-    ThreadContext::ProgramElements().push_back(std::move(def));
+    fProgramElements.push_back(std::move(def));
     return result;
 }
 
@@ -1194,14 +1205,12 @@ std::unique_ptr<Statement> Parser::statementOrNop(Position pos, std::unique_ptr<
 }
 
 /* ifStatement | forStatement | doStatement | whileStatement | block | expression */
-std::unique_ptr<Statement> Parser::statement() {
-    Token start = this->nextToken();
+std::unique_ptr<Statement> Parser::statement(bool bracesIntroduceNewScope) {
     AutoDepth depth(this);
     if (!depth.increase()) {
         return nullptr;
     }
-    this->pushback(start);
-    switch (start.fKind) {
+    switch (this->peek().fKind) {
         case Token::Kind::TK_IF:
             return this->ifStatement();
         case Token::Kind::TK_FOR:
@@ -1221,14 +1230,15 @@ std::unique_ptr<Statement> Parser::statement() {
         case Token::Kind::TK_DISCARD:
             return this->discardStatement();
         case Token::Kind::TK_LBRACE:
-            return this->block();
+            return this->block(bracesIntroduceNewScope, /*adoptExistingSymbolTable=*/nullptr);
         case Token::Kind::TK_SEMICOLON:
             this->nextToken();
             return Nop::Make();
+        case Token::Kind::TK_CONST:
+            return this->varDeclarations();
         case Token::Kind::TK_HIGHP:
         case Token::Kind::TK_MEDIUMP:
         case Token::Kind::TK_LOWP:
-        case Token::Kind::TK_CONST:
         case Token::Kind::TK_IDENTIFIER:
             return this->varDeclarationsOrExpressionStatement();
         default:
@@ -1377,7 +1387,7 @@ bool Parser::interfaceBlock(const Modifiers& modifiers) {
                                                                            std::move(fields),
                                                                            instanceName,
                                                                            size)) {
-        ThreadContext::ProgramElements().push_back(std::move(ib));
+        fProgramElements.push_back(std::move(ib));
         return true;
     }
     return false;
@@ -1531,28 +1541,39 @@ std::unique_ptr<Statement> Parser::switchStatement() {
         return nullptr;
     }
 
+    std::unique_ptr<SymbolTable> symbolTable;
     ExpressionArray values;
     StatementArray caseBlocks;
-    while (this->peek().fKind == Token::Kind::TK_CASE) {
-        if (!this->switchCase(&values, &caseBlocks)) {
+    {
+        // Keeping a tight scope around AutoSymbolTable is important here. SwitchStatement::Convert
+        // may end up creating a new symbol table if the HoistSwitchVarDeclarationsAtTopLevel
+        // transform is used. We want ~AutoSymbolTable to happen first, so it can restore the
+        // context's active symbol table to the enclosing block instead of the switch's inner block.
+        AutoSymbolTable symbols(this, &symbolTable);
+
+        while (this->peek().fKind == Token::Kind::TK_CASE) {
+            if (!this->switchCase(&values, &caseBlocks)) {
+                return nullptr;
+            }
+        }
+        // Requiring `default:` to be last (in defiance of C and GLSL) was a deliberate decision.
+        // Other parts of the compiler are allowed to rely upon this assumption.
+        if (this->checkNext(Token::Kind::TK_DEFAULT)) {
+            if (!this->switchCaseBody(&values, &caseBlocks, /*value=*/nullptr)) {
+                return nullptr;
+            }
+        }
+        if (!this->expect(Token::Kind::TK_RBRACE, "'}'")) {
             return nullptr;
         }
     }
-    // Requiring `default:` to be last (in defiance of C and GLSL) was a deliberate decision. Other
-    // parts of the compiler are allowed to rely upon this assumption.
-    if (this->checkNext(Token::Kind::TK_DEFAULT)) {
-        if (!this->switchCaseBody(&values, &caseBlocks, /*value=*/nullptr)) {
-            return nullptr;
-        }
-    }
-    if (!this->expect(Token::Kind::TK_RBRACE, "'}'")) {
-        return nullptr;
-    }
+
     Position pos = this->rangeFrom(start);
     return this->statementOrNop(pos, SwitchStatement::Convert(fCompiler.context(), pos,
                                                               std::move(value),
                                                               std::move(values),
-                                                              std::move(caseBlocks)));
+                                                              std::move(caseBlocks),
+                                                              std::move(symbolTable)));
 }
 
 static Position range_of_at_least_one_char(int start, int end) {
@@ -1570,46 +1591,51 @@ std::unique_ptr<Statement> Parser::forStatement() {
     if (!this->expect(Token::Kind::TK_LPAREN, "'('", &lparen)) {
         return nullptr;
     }
-    AutoSymbolTable symbols(this);
+    std::unique_ptr<SymbolTable> symbolTable;
     std::unique_ptr<Statement> initializer;
-    Token nextToken = this->peek();
-    int firstSemicolonOffset;
-    if (nextToken.fKind == Token::Kind::TK_SEMICOLON) {
-        // An empty init-statement.
-        firstSemicolonOffset = this->nextToken().fOffset;
-    } else {
-        // The init-statement must be an expression or variable declaration.
-        initializer = this->varDeclarationsOrExpressionStatement();
-        if (!initializer) {
-            return nullptr;
-        }
-        firstSemicolonOffset = fLexer.getCheckpoint().fOffset - 1;
-    }
     std::unique_ptr<Expression> test;
-    if (this->peek().fKind != Token::Kind::TK_SEMICOLON) {
-        test = this->expression();
-        if (!test) {
-            return nullptr;
-        }
-    }
-    Token secondSemicolon;
-    if (!this->expect(Token::Kind::TK_SEMICOLON, "';'", &secondSemicolon)) {
-        return nullptr;
-    }
     std::unique_ptr<Expression> next;
-    if (this->peek().fKind != Token::Kind::TK_RPAREN) {
-        next = this->expression();
-        if (!next) {
+    std::unique_ptr<Statement> statement;
+    int firstSemicolonOffset;
+    Token secondSemicolon;
+    Token rparen;
+    {
+        AutoSymbolTable symbols(this, &symbolTable);
+
+        Token nextToken = this->peek();
+        if (nextToken.fKind == Token::Kind::TK_SEMICOLON) {
+            // An empty init-statement.
+            firstSemicolonOffset = this->nextToken().fOffset;
+        } else {
+            // The init-statement must be an expression or variable declaration.
+            initializer = this->varDeclarationsOrExpressionStatement();
+            if (!initializer) {
+                return nullptr;
+            }
+            firstSemicolonOffset = fLexer.getCheckpoint().fOffset - 1;
+        }
+        if (this->peek().fKind != Token::Kind::TK_SEMICOLON) {
+            test = this->expression();
+            if (!test) {
+                return nullptr;
+            }
+        }
+        if (!this->expect(Token::Kind::TK_SEMICOLON, "';'", &secondSemicolon)) {
             return nullptr;
         }
-    }
-    Token rparen;
-    if (!this->expect(Token::Kind::TK_RPAREN, "')'", &rparen)) {
-        return nullptr;
-    }
-    std::unique_ptr<Statement> statement = this->statement();
-    if (!statement) {
-        return nullptr;
+        if (this->peek().fKind != Token::Kind::TK_RPAREN) {
+            next = this->expression();
+            if (!next) {
+                return nullptr;
+            }
+        }
+        if (!this->expect(Token::Kind::TK_RPAREN, "')'", &rparen)) {
+            return nullptr;
+        }
+        statement = this->statement(/*bracesIntroduceNewScope=*/false);
+        if (!statement) {
+            return nullptr;
+        }
     }
     Position pos = this->rangeFrom(start);
     ForLoopPositions loopPositions{
@@ -1621,7 +1647,8 @@ std::unique_ptr<Statement> Parser::forStatement() {
                                                            std::move(initializer),
                                                            std::move(test),
                                                            std::move(next),
-                                                           std::move(statement)));
+                                                           std::move(statement),
+                                                           std::move(symbolTable)));
 }
 
 /* RETURN expression? SEMICOLON */
@@ -1683,7 +1710,11 @@ std::unique_ptr<Statement> Parser::discardStatement() {
 }
 
 /* LBRACE statement* RBRACE */
-std::unique_ptr<Statement> Parser::block() {
+std::unique_ptr<Statement> Parser::block(bool introduceNewScope,
+                                         std::unique_ptr<SymbolTable>* adoptExistingSymbolTable) {
+    // We can't introduce a new scope _and_ adopt an existing symbol table.
+    SkASSERT(!(introduceNewScope && adoptExistingSymbolTable));
+
     AutoDepth depth(this);
     Token start;
     if (!this->expect(Token::Kind::TK_LBRACE, "'{'", &start)) {
@@ -1692,33 +1723,38 @@ std::unique_ptr<Statement> Parser::block() {
     if (!depth.increase()) {
         return nullptr;
     }
-    AutoSymbolTable symbols(this);
+
+    std::unique_ptr<SymbolTable> newSymbolTable;
+    std::unique_ptr<SymbolTable>* symbolTableToUse =
+            adoptExistingSymbolTable ? adoptExistingSymbolTable : &newSymbolTable;
+
     StatementArray statements;
-    for (;;) {
-        switch (this->peek().fKind) {
-            case Token::Kind::TK_RBRACE: {
+    {
+        AutoSymbolTable symbols(this, symbolTableToUse, /*enable=*/introduceNewScope);
+
+        // Consume statements until we reach the closing brace.
+        for (;;) {
+            Token::Kind tokenKind = this->peek().fKind;
+            if (tokenKind == Token::Kind::TK_RBRACE) {
                 this->nextToken();
-                Position pos = this->rangeFrom(start);
-                return SkSL::Block::MakeBlock(pos, std::move(statements),
-                                              Block::Kind::kBracedScope,
-                                              this->symbolTable());
+                break;
             }
-            case Token::Kind::TK_END_OF_FILE: {
+            if (tokenKind == Token::Kind::TK_END_OF_FILE) {
                 this->error(this->peek(), "expected '}', but found end of file");
                 return nullptr;
             }
-            default: {
-                std::unique_ptr<Statement> statement = this->statement();
-                if (fEncounteredFatalError) {
-                    return nullptr;
-                }
-                if (statement) {
-                    statements.push_back(std::move(statement));
-                }
-                break;
+            if (std::unique_ptr<Statement> statement = this->statement()) {
+                statements.push_back(std::move(statement));
+            }
+            if (fEncounteredFatalError) {
+                return nullptr;
             }
         }
     }
+    return SkSL::Block::MakeBlock(this->rangeFrom(start),
+                                  std::move(statements),
+                                  Block::Kind::kBracedScope,
+                                  std::move(*symbolTableToUse));
 }
 
 /* expression SEMICOLON */
@@ -2252,7 +2288,9 @@ std::unique_ptr<Expression> Parser::term() {
             std::string_view text;
             if (this->identifier(&text)) {
                 Position pos = this->position(t);
-                return this->expressionOrPoison(pos, fCompiler.convertIdentifier(pos, text));
+                return this->expressionOrPoison(
+                        pos,
+                        this->symbolTable()->instantiateSymbolRef(fCompiler.context(), text, pos));
             }
             break;
         }

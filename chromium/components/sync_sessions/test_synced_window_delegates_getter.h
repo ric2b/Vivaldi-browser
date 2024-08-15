@@ -46,13 +46,10 @@ class TestSyncedTabDelegate : public SyncedTabDelegate {
       const std::vector<std::unique_ptr<sessions::SerializedNavigationEntry>>&
           navs);
 
-  void SetPageLanguageAtIndex(int i, const std::string& language);
-
   // SyncedTabDelegate overrides.
   bool IsInitialBlankNavigation() const override;
   int GetCurrentEntryIndex() const override;
   GURL GetVirtualURLAtIndex(int i) const override;
-  std::string GetPageLanguageAtIndex(int i) const override;
   void GetSerializedNavigationAtIndex(
       int i,
       sessions::SerializedNavigationEntry* serialized_entry) const override;
@@ -60,7 +57,7 @@ class TestSyncedTabDelegate : public SyncedTabDelegate {
   SessionID GetWindowId() const override;
   SessionID GetSessionId() const override;
   bool IsBeingDestroyed() const override;
-  base::Time GetLastActiveTime() const override;
+  base::Time GetLastActiveTime() override;
   std::string GetExtensionAppId() const override;
   bool ProfileHasChildAccount() const override;
   void set_has_child_account(bool has_child_account);
@@ -85,7 +82,6 @@ class TestSyncedTabDelegate : public SyncedTabDelegate {
       blocked_navigations_;
   std::vector<std::unique_ptr<const sessions::SerializedNavigationEntry>>
       entries_;
-  std::vector<std::string> page_language_per_index_;
 };
 
 // A placeholder delegate. These delegates have no WebContents, simulating a tab
@@ -112,13 +108,12 @@ class PlaceholderTabDelegate : public SyncedTabDelegate {
   // Everything else is invalid to invoke as it depends on a valid WebContents.
   SessionID GetWindowId() const override;
   bool IsBeingDestroyed() const override;
-  base::Time GetLastActiveTime() const override;
+  base::Time GetLastActiveTime() override;
   std::string GetExtensionAppId() const override;
   bool IsInitialBlankNavigation() const override;
   int GetCurrentEntryIndex() const override;
   int GetEntryCount() const override;
   GURL GetVirtualURLAtIndex(int i) const override;
-  std::string GetPageLanguageAtIndex(int i) const override;
   void GetSerializedNavigationAtIndex(
       int i,
       sessions::SerializedNavigationEntry* serialized_entry) const override;
@@ -168,7 +163,7 @@ class TestSyncedWindowDelegate : public SyncedWindowDelegate {
   const SessionID window_id_;
   const sync_pb::SyncEnums_BrowserType window_type_;
 
-  std::vector<SyncedTabDelegate*> tab_delegates_;
+  std::vector<raw_ptr<SyncedTabDelegate, VectorExperimental>> tab_delegates_;
   bool is_session_restore_in_progress_;
 };
 

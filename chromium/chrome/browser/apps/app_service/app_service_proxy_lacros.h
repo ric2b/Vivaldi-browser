@@ -49,10 +49,12 @@ class Profile;
 
 namespace web_app {
 class LacrosWebAppsController;
+class LacrosBrowserShortcutsController;
 }  // namespace web_app
 
 namespace apps {
 
+class AppInstallService;
 class BrowserAppInstanceForwarder;
 class BrowserAppInstanceTracker;
 class WebsiteMetricsServiceLacros;
@@ -103,6 +105,8 @@ class AppServiceProxyLacros : public KeyedService,
 
   apps::WebsiteMetricsServiceLacros* WebsiteMetricsService();
 
+  apps::AppInstallService& AppInstallService();
+
   // crosapi::mojom::AppServiceSubscriber overrides.
   void OnApps(std::vector<AppPtr> deltas,
               AppType app_type,
@@ -111,9 +115,7 @@ class AppServiceProxyLacros : public KeyedService,
   // Convenience method that calls app_icon_loader()->LoadIcon to load app icons
   // with `app_id`. `callback` may be dispatched synchronously if it's possible
   // to quickly return a result.
-  // TODO(crbug.com/1412708): Remove app_type from interface.
   std::unique_ptr<IconLoader::Releaser> LoadIcon(
-      AppType app_type,
       const std::string& app_id,
       const IconType& icon_type,
       int32_t size_hint_in_dip,
@@ -280,7 +282,7 @@ class AppServiceProxyLacros : public KeyedService,
     explicit AppInnerIconLoader(AppServiceProxyLacros* host);
 
     // apps::IconLoader overrides.
-    absl::optional<IconKey> GetIconKey(const std::string& id) override;
+    std::optional<IconKey> GetIconKey(const std::string& id) override;
     std::unique_ptr<IconLoader::Releaser> LoadIconFromIconKey(
         const std::string& id,
         const IconKey& icon_key,
@@ -347,12 +349,17 @@ class AppServiceProxyLacros : public KeyedService,
   base::OnceClosure dialog_created_callback_;
 
   std::unique_ptr<web_app::LacrosWebAppsController> lacros_web_apps_controller_;
+
+  std::unique_ptr<web_app::LacrosBrowserShortcutsController>
+      lacros_browser_shortcuts_controller_;
   mojo::Receiver<crosapi::mojom::AppServiceSubscriber> crosapi_receiver_{this};
   raw_ptr<crosapi::mojom::AppServiceProxy> remote_crosapi_app_service_proxy_ =
       nullptr;
   int crosapi_app_service_proxy_version_ = 0;
 
   std::unique_ptr<apps::WebsiteMetricsServiceLacros> metrics_service_;
+
+  std::unique_ptr<apps::AppInstallService> app_install_service_;
 
   base::WeakPtrFactory<AppServiceProxyLacros> weak_ptr_factory_{this};
 

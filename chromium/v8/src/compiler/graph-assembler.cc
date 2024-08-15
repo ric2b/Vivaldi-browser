@@ -132,18 +132,21 @@ Node* GraphAssembler::LoadFramePointer() {
   return AddNode(graph()->NewNode(machine()->LoadFramePointer()));
 }
 
+#if V8_ENABLE_WEBASSEMBLY
 Node* GraphAssembler::LoadStackPointer() {
   return AddNode(graph()->NewNode(machine()->LoadStackPointer(), effect()));
 }
 
-Node* GraphAssembler::SetStackPointer(Node* node) {
-  return AddNode(graph()->NewNode(machine()->SetStackPointer(), node, effect(),
-                                  control()));
+Node* GraphAssembler::SetStackPointer(Node* node,
+                                      wasm::FPRelativeScope fp_scope) {
+  return AddNode(
+      graph()->NewNode(machine()->SetStackPointer(fp_scope), node, effect()));
 }
+#endif
 
 Node* GraphAssembler::LoadHeapNumberValue(Node* heap_number) {
   return Load(MachineType::Float64(), heap_number,
-              IntPtrConstant(HeapNumber::kValueOffset - kHeapObjectTag));
+              IntPtrConstant(offsetof(HeapNumber, value_) - kHeapObjectTag));
 }
 
 #define SINGLETON_CONST_DEF(Name, Type)              \
@@ -322,6 +325,14 @@ Node* JSGraphAssembler::StoreField(FieldAccess const& access, Node* object,
                                   value, effect(), control()));
 }
 
+Node* JSGraphAssembler::ClearPendingMessage() {
+  ExternalReference const ref =
+      ExternalReference::address_of_pending_message(isolate());
+  return AddNode(graph()->NewNode(
+      simplified()->StoreMessage(), jsgraph()->ExternalConstant(ref),
+      jsgraph()->TheHoleConstant(), effect(), control()));
+}
+
 #ifdef V8_MAP_PACKING
 TNode<Map> GraphAssembler::UnpackMapWord(Node* map_word) {
   map_word = BitcastTaggedToWordForTagAndSmiBits(map_word);
@@ -456,6 +467,13 @@ Node* JSGraphAssembler::CheckIf(Node* cond, DeoptimizeReason reason,
                                 const FeedbackSource& feedback) {
   return AddNode(graph()->NewNode(simplified()->CheckIf(reason, feedback), cond,
                                   effect(), control()));
+}
+
+Node* JSGraphAssembler::Assert(Node* cond, const char* condition_string,
+                               const char* file, int line) {
+  return AddNode(graph()->NewNode(
+      common()->Assert(BranchSemantics::kJS, condition_string, file, line),
+      cond, effect(), control()));
 }
 
 TNode<Boolean> JSGraphAssembler::NumberIsFloat64Hole(TNode<Number> value) {

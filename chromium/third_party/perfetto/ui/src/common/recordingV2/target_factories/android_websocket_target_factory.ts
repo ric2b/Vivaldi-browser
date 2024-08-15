@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {RECORDING_V2_FLAG} from '../../feature_flags';
+import {RECORDING_V2_FLAG} from '../../../core/feature_flags';
 import {
   OnTargetChangeCallback,
   RecordingTargetV2,
@@ -156,6 +156,8 @@ export class WebsocketConnection {
       target.disconnect();
     }
     this.targets.clear();
+
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (this.onTargetChange) {
       this.onTargetChange();
     }

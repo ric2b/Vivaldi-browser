@@ -6,8 +6,9 @@ import {Discount} from 'chrome://new-tab-page/discount.mojom-webui.js';
 import {Cluster, InteractionState, URLVisit} from 'chrome://new-tab-page/history_cluster_types.mojom-webui.js';
 import {LayoutType} from 'chrome://new-tab-page/history_clusters_layout_type.mojom-webui.js';
 import {PageHandlerRemote} from 'chrome://new-tab-page/history_clusters_v2.mojom-webui.js';
-import {DismissModuleInstanceEvent, HistoryClustersProxyImplV2, historyClustersV2Descriptor, HistoryClustersV2ModuleElement, VisitTileModuleElement} from 'chrome://new-tab-page/lazy_load.js';
+import {DismissModuleInstanceEvent, HistoryClustersProxyImplV2, historyClustersV2Descriptor, HistoryClustersV2ModuleElement, HistoryClusterV2ImageDisplayState, PageImageServiceBrowserProxy, VisitTileModuleElement} from 'chrome://new-tab-page/lazy_load.js';
 import {$$} from 'chrome://new-tab-page/new_tab_page.js';
+import {PageImageServiceHandlerRemote} from 'chrome://resources/cr_components/page_image_service/page_image_service.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -24,13 +25,15 @@ function createSampleClusters(count: number): Cluster[] {
       (_, i) => createSampleCluster(2, {id: BigInt(i)}));
 }
 
+const SAMPLE_CLUSTER_ID = BigInt(111);
+
 function createSampleCluster(
     numRelatedSearches: number,
     overrides?: Partial<Cluster>,
     ): Cluster {
   const cluster: Cluster = Object.assign(
       {
-        id: BigInt(111),
+        id: SAMPLE_CLUSTER_ID,
         visits: createSampleVisits(2, 2),
         label: '',
         labelMatchPositions: [],
@@ -60,6 +63,7 @@ function checkInfoDialogContent(
 
 suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
   let handler: TestMock<PageHandlerRemote>;
+  let imageServiceHandler: TestMock<PageImageServiceHandlerRemote>;
   let metrics: MetricsTracker;
 
   setup(() => {
@@ -68,6 +72,10 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
         PageHandlerRemote,
         mock => HistoryClustersProxyImplV2.setInstance(
             new HistoryClustersProxyImplV2(mock)));
+    imageServiceHandler = installMock(
+        PageImageServiceHandlerRemote,
+        mock => PageImageServiceBrowserProxy.setInstance(
+            new PageImageServiceBrowserProxy(mock)));
     metrics = fakeMetricsPrivate();
   });
 
@@ -92,10 +100,11 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
   }
 
   async function assertUpdateClusterVisitsInteractionStateCall(
-      state: InteractionState, count: number) {
-    const [visits, interactionState] =
+      id: bigint, state: InteractionState, count: number) {
+    const [clusterId, visits, interactionState] =
         await handler.whenCalled('updateClusterVisitsInteractionState');
 
+    assertEquals(id, clusterId);
     assertEquals(count, visits.length);
     visits.forEach((visit: URLVisit, index: number) => {
       assertEquals(index, Number(visit.visitId));
@@ -196,7 +205,8 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
           await waitForDismissEvent;
       assertEquals(
           `${sampleCluster.label!} hidden`, dismissEvent.detail.message);
-      assertUpdateClusterVisitsInteractionStateCall(InteractionState.kDone, 3);
+      assertUpdateClusterVisitsInteractionStateCall(
+          SAMPLE_CLUSTER_ID, InteractionState.kDone, 3);
     });
 
     test(
@@ -265,7 +275,7 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
               `${sampleCluster.label!} hidden`, dismissEvent.detail.message);
           assertTrue(!!dismissEvent.detail.restoreCallback);
           assertUpdateClusterVisitsInteractionStateCall(
-              InteractionState.kHidden, 3);
+              SAMPLE_CLUSTER_ID, InteractionState.kHidden, 3);
 
           // Act.
           const restoreCallback = dismissEvent.detail.restoreCallback!;
@@ -273,7 +283,7 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
 
           // Assert.
           assertUpdateClusterVisitsInteractionStateCall(
-              InteractionState.kDefault, 3);
+              SAMPLE_CLUSTER_ID, InteractionState.kDefault, 3);
         });
 
     test(
@@ -303,7 +313,7 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
               `${sampleCluster.label!} hidden`, dismissEvent.detail.message);
           assertTrue(!!dismissEvent.detail.restoreCallback);
           assertUpdateClusterVisitsInteractionStateCall(
-              InteractionState.kDone, 3);
+              SAMPLE_CLUSTER_ID, InteractionState.kDone, 3);
 
           // Act.
           const restoreCallback = dismissEvent.detail.restoreCallback!;
@@ -311,8 +321,27 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
 
           // Assert.
           assertUpdateClusterVisitsInteractionStateCall(
-              InteractionState.kDefault, 3);
+              SAMPLE_CLUSTER_ID, InteractionState.kDefault, 3);
         });
+
+    test('Backend is notified when module is disabled', async () => {
+      // Arrange.
+      const sampleCluster = createSampleCluster(2, {label: '"Sample Journey"'});
+      const moduleElements = await initializeModule([sampleCluster]);
+      const moduleElement = moduleElements[0];
+      assertTrue(!!moduleElement);
+
+      // Act.
+      const disableButton =
+          moduleElement.shadowRoot!.querySelector('history-clusters-header-v2')!
+              .shadowRoot!.querySelector('ntp-module-header-v2')!.shadowRoot!
+              .querySelector('#disable')! as HTMLButtonElement;
+      disableButton.click();
+
+      // Assert.
+      const clusterId = await handler.whenCalled('recordDisabled');
+      assertEquals(BigInt(111), clusterId);
+    });
 
     test('Show History side panel invoked when clicking header', async () => {
       loadTimeData.overrideValues({
@@ -403,40 +432,55 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
     });
   });
 
-  suite('Discounts', () => {
-    test('Discount is not initialized when feature is disabled', async () => {
-      loadTimeData.overrideValues({
-        historyClustersModuleDiscountsEnabled: false,
-      });
+  suite('PagehideMetricNoImages', () => {
+    test('Module records no images state metric on pagehide', async () => {
+      imageServiceHandler.setResultFor(
+          'getPageImageUrl', Promise.resolve(null));
 
-      const instanceCount = 3;
-      const moduleElements =
-          await initializeModule(createSampleClusters(instanceCount));
-      assertEquals(instanceCount, moduleElements.length);
+      const moduleElements = await initializeModule(
+          [createSampleCluster(2, {label: '"Sample"'})],
+      );
+      const moduleElement = moduleElements[0];
+      assertTrue(!!moduleElement);
+      await waitAfterNextRender(moduleElement);
 
-      assertEquals(0, handler.getCallCount('getDiscountsForCluster'));
-      for (const moduleElement of moduleElements) {
-        assertTrue(!!moduleElement);
-        await waitAfterNextRender(moduleElement);
-        for (const discount of moduleElement.discounts) {
-          assertEquals('', discount);
-        }
-        const contentElement =
-            moduleElement.shadowRoot!
-                .querySelector('ntp-history-clusters-visit-tile')!.shadowRoot!
-                .querySelector('#content')! as HTMLElement;
-        assertEquals(
-            contentElement.getAttribute('aria-label'),
-            'Test Title 1, foo.com, 1 min ago');
-      }
-      assertEquals(0, metrics.count(`NewTabPage.HistoryClusters.HasDiscount`));
+      window.dispatchEvent(new Event('pagehide'));
+
+      assertEquals(2, imageServiceHandler.getCallCount('getPageImageUrl'));
+      assertEquals(
+          1,
+          metrics.count(
+              `NewTabPage.HistoryClusters.ImageDisplayState`,
+              HistoryClusterV2ImageDisplayState.NONE));
     });
+  });
 
+  suite('PagehideMetricAllImages', () => {
+    test('Module records all images state metric on pagehide', async () => {
+      imageServiceHandler.setResultFor('getPageImageUrl', Promise.resolve({
+        result: {imageUrl: {url: 'https://example.com/image.png'}},
+      }));
+
+      const moduleElements = await initializeModule(
+          [createSampleCluster(2, {label: '"Sample"'})],
+      );
+      const moduleElement = moduleElements[0];
+      assertTrue(!!moduleElement);
+      await waitAfterNextRender(moduleElement);
+
+      window.dispatchEvent(new Event('pagehide'));
+
+      assertEquals(2, imageServiceHandler.getCallCount('getPageImageUrl'));
+      assertEquals(
+          1,
+          metrics.count(
+              `NewTabPage.HistoryClusters.ImageDisplayState`,
+              HistoryClusterV2ImageDisplayState.ALL));
+    });
+  });
+
+  suite('Discounts', () => {
     test('Discount initialization', async () => {
-      loadTimeData.overrideValues({
-        historyClustersModuleDiscountsEnabled: true,
-      });
-
       const instanceCount = 2;
       const visitCount = 3;
       const clusters = createSampleClusters(instanceCount);
@@ -540,10 +584,6 @@ suite('NewTabPageModulesHistoryClustersV2ModuleTest', () => {
     });
 
     test('Metrics for Discount click', async () => {
-      loadTimeData.overrideValues({
-        historyClustersModuleDiscountsEnabled: true,
-      });
-
       const instanceCount = 1;
       const visitCount = 3;
       const clusters = createSampleClusters(instanceCount);

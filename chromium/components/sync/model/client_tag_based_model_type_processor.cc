@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
@@ -821,19 +820,8 @@ void ClientTagBasedModelTypeProcessor::OnUpdateReceived(
   }
 
   if (is_initial_sync) {
-    base::TimeDelta configuration_duration =
-        base::Time::Now() - activation_request_.configuration_start_time;
-    base::UmaHistogramCustomTimes(
-        base::StringPrintf(
-            "Sync.ModelTypeConfigurationTime.%s.%s",
-            (activation_request_.sync_mode == SyncMode::kTransportOnly)
-                ? "Ephemeral"
-                : "Persistent",
-            ModelTypeToHistogramSuffix(type_)),
-        configuration_duration,
-        /*min=*/base::Milliseconds(1),
-        /*max=*/base::Seconds(60),
-        /*buckets=*/50);
+    LogModelTypeConfigurationTime(type_, activation_request_.sync_mode,
+                                  activation_request_.configuration_start_time);
   }
 
   DCHECK(entity_tracker_);
@@ -1287,7 +1275,7 @@ bool ClientTagBasedModelTypeProcessor::ClearPersistedMetadataIfInvalid(
       metadata.GetModelTypeState();
   const EntityMetadataMap& metadata_map = metadata.GetAllMetadata();
 
-  // Check if ClearMetadataWhileStopped() was called before ModelReadyToSync().
+  // Check if ClearMetadataIfStopped() was called before ModelReadyToSync().
   // If so, clear the metadata from storage (using the bridge's
   // ApplyDisableSyncChanges()).
   if (pending_clear_metadata_) {
@@ -1419,12 +1407,24 @@ ClientTagBasedModelTypeProcessor::GetWeakPtr() {
   return weak_ptr_factory_for_controller_.GetWeakPtr();
 }
 
-void ClientTagBasedModelTypeProcessor::ClearMetadataWhileStopped() {
+void ClientTagBasedModelTypeProcessor::ClearMetadataIfStopped() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // If a model error has been encountered, the local model is assumed to be
+  // unusable, so no way to clear anything.
+  if (model_error_.has_value()) {
+    return;
+  }
+
+  // If Sync is not actually stopped, ignore this call.
+  if (activation_request_.IsValid()) {
+    return;
+  }
+
   if (!model_ready_to_sync_) {
     // Defer clearing metadata until ModelReadyToSync() is invoked.
     pending_clear_metadata_ = true;
-  } else if (!model_error_ && IsTrackingMetadata()) {
+  } else if (IsTrackingMetadata()) {
     // Proceed only if there is metadata to clear and no error has been reported
     // yet.
     LogClearMetadataWhileStoppedHistogram(type_, /*is_delayed_call=*/false);
@@ -1433,6 +1433,13 @@ void ClientTagBasedModelTypeProcessor::ClearMetadataWhileStopped() {
     // metadata in storage.
     ClearAllTrackedMetadataAndResetState();
   }
+}
+
+void ClientTagBasedModelTypeProcessor::ReportBridgeErrorForTest() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  CHECK(!model_error_.has_value());
+  ReportError(ModelError(FROM_HERE, "Reported error from test"));
 }
 
 }  // namespace syncer

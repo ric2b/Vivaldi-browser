@@ -93,10 +93,6 @@ const std::map<uint32_t, std::string> kPlaneRequiredPropertyNames = {
     {kRotationPropId, "rotation"},
 };
 
-const std::map<uint32_t, std::string> kPlaneOptionalPropertyNames = {
-    {kPlaneCtmId, "PLANE_CTM"},
-};
-
 template <class T>
 uint32_t GetNextId(const std::vector<T>& collection, uint32_t base) {
   uint32_t max = 0;
@@ -214,8 +210,6 @@ MockDrmDevice::MockDrmState::CreateStateWithAllProperties() {
 
   // Separately add optional properties that will be used in some tests, but the
   // tests will append the property to the planes on a case-by-case basis.
-  state.property_names.insert(kPlaneOptionalPropertyNames.begin(),
-                              kPlaneOptionalPropertyNames.end());
   state.property_names.insert(kCrtcOptionalPropertyNames.begin(),
                               kCrtcOptionalPropertyNames.end());
 
@@ -897,9 +891,8 @@ bool MockDrmDevice::CommitProperties(
   return true;
 }
 
-bool MockDrmDevice::SetGammaRamp(
-    uint32_t crtc_id,
-    const std::vector<display::GammaRampRGBEntry>& lut) {
+bool MockDrmDevice::SetGammaRamp(uint32_t crtc_id,
+                                 const display::GammaCurve& curve) {
   set_gamma_ramp_count_++;
   return legacy_gamma_ramp_expectation_;
 }

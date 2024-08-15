@@ -3,7 +3,6 @@
 <translationbundle lang="th">
 <translation id="1056898198331236512">คำเตือน</translation>
 <translation id="1165039591588034296">ข้อผิดพลาด</translation>
-<translation id="1175364870820465910">&amp;พิมพ์...</translation>
 <translation id="1244303850296295656">ข้อผิดพลาดของส่วนขยาย</translation>
 <translation id="1546280085599573572">ส่วนขยายนี้ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณคลิกปุ่มหน้าแรก</translation>
 <translation id="1588438908519853928">ปกติ</translation>
@@ -27,7 +26,6 @@
 <translation id="2861941300086904918">ตัวจัดการความปลอดภัยไคลเอ็นต์ในระบบ</translation>
 <translation id="2932883381142163287">รายงานการละเมิด</translation>
 <translation id="2941112035454246133">ต่ำ</translation>
-<translation id="2972581237482394796">&amp;ทำซ้ำ</translation>
 <translation id="3080207940057008665">โปรแกรมอื่นในคอมพิวเตอร์ของคุณเพิ่มธีมที่อาจเปลี่ยนวิธีการทำงานของ Vivaldi</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">Prerender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -37,9 +35,7 @@
 <translation id="3678156199662914018">ส่วนขยาย: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">ซ่อมแอป</translation>
 <translation id="3908501907586732282">เปิดใช้งานส่วนขยาย</translation>
-<translation id="3909791450649380159">&amp;ตัด</translation>
 <translation id="3927932062596804919">ปฏิเสธ</translation>
-<translation id="3943582379552582368">&amp;กลับ</translation>
 <translation id="3979395879372752341">เพิ่มส่วนขยายใหม่แล้ว (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">สร้างส่วนขยายแล้ว:
@@ -47,12 +43,9 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">ปิดส่วนขยายโหมดนักพัฒนาซอฟต์แวร์</translation>
 <translation id="4100839878934973028">โปรแกรมอื่นในคอมพิวเตอร์ของคุณเพิ่มแอปพลิเคชันที่อาจเปลี่ยนวิธีการทำงานของ Vivaldi</translation>
-<translation id="4130207949184424187">ส่วนขยายนี้ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณค้นหาจากแถบอเนกประสงค์</translation>
 <translation id="4176463684765177261">ปิดการใช้งานแล้ว</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (แสดงอยู่ <ph name="NUM_KILOBYTES_LIVE" />K)</translation>
 <translation id="4384652540891215547">เปิดใช้งานส่วนขยาย</translation>
-<translation id="4394049700291259645">ปิดการใช้งาน</translation>
-<translation id="4593021220803146968">&amp;ไปที่ <ph name="URL" /></translation>
 <translation id="4595560905247879544">แอปและส่วนขยายสามารถแก้ไขได้โดยผู้จัดการ (<ph name="CUSTODIAN_NAME" />) เท่านั้น</translation>
 <translation id="4613271546271159013">ส่วนขยายได้เปลี่ยนแปลงหน้าที่แสดงขึ้นเมื่อคุณเปิดแท็บใหม่</translation>
 <translation id="488785315393301722">แสดงรายละเอียด</translation>
@@ -62,22 +55,16 @@
 <translation id="5233231016133573565">รหัสดำเนินการ</translation>
 <translation id="52912272896845572">ไฟล์กุญแจส่วนตัวไม่ถูกต้อง</translation>
 <translation id="5301954838959518834">ตกลง เข้าใจแล้ว</translation>
-<translation id="5355926466126177564">ส่วนขยาย "<ph name="EXTENSION_NAME" />" ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณค้นหาจากแถบอเนกประสงค์</translation>
 <translation id="5362741141255528695">เลือกไฟล์กุญแจส่วนตัว</translation>
-<translation id="5370819323174483825">&amp;โหลดซ้ำ</translation>
 <translation id="5485102783864353244">เพิ่มแอป</translation>
 <translation id="5521078259930077036">นี่คือ "หน้าแรก" ที่คุณต้องการใช่ไหม</translation>
 <translation id="5542132724887566711">โปรไฟล์</translation>
 <translation id="5556459405103347317">โหลดใหม่</translation>
 <translation id="5575473780076478375">ส่วนขยายแบบไม่ระบุตัวตน: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5627086634964711283">อีกทั้งยังควบคุมหน้าที่จะแสดงเมื่อคุณคลิกปุ่ม "หน้าแรก"</translation>
 <translation id="5715711091495208045">โบรกเกอร์ปลั๊กอิน: <ph name="PLUGIN_NAME" /></translation>
 <translation id="583281660410589416">ไม่รู้จัก</translation>
-<translation id="5956585768868398362">นี่คือหน้าค้นหาที่คุณต้องการใช่ไหม</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (สูงสุด <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">อีกทั้งยังควบคุมหน้าที่จะแสดงเมื่อคุณคลิกปุ่ม "หน้าแรก" หรือทำการค้นหาจากแถบอเนกประสงค์</translation>
 <translation id="6101226222197207147">เพิ่มแอปพลิเคชันใหม่แล้ว (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">กำลังมีการควบคุมการเชื่อมต่ออินเทอร์เน็ตของคุณ</translation>
 <translation id="6196854373336333322">ส่วนขยาย "<ph name="EXTENSION_NAME" />" ได้เข้าควบคุมการตั้งค่าพร็อกซีของคุณ ซึ่งหมายความว่าส่วนขยายนี้จะสามารถเปลี่ยนแปลง ทำให้เสียหาย หรือดักฟังทุกอย่างที่คุณทำทางออนไลน์ได้ หากคุณไม่แน่ใจว่าการเปลี่ยนแปลงนี้เกิดขึ้นได้อย่างไร คุณอาจไม่ต้องการส่วนขยายนี้</translation>
 <translation id="6247802389331535091">ระบบ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6445450263907939268">หากคุณไม่ต้องการการเปลี่ยนแปลงเหล่านี้ คุณสามารถกู้คืนการตั้งค่าก่อนหน้าได้</translation>
@@ -85,7 +72,6 @@
 <translation id="6498249116389603658">&amp;ทุกภาษาของคุณ</translation>
 <translation id="6503077044568424649">เข้าชมบ่อยสุด</translation>
 <translation id="6508261954199872201">แอปพลิเคชัน: <ph name="APP_NAME" /></translation>
-<translation id="6691936601825168937">&amp;ส่งต่อ</translation>
 <translation id="6798954102094737107">ปลั๊กอิน: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6900284862687837908">แอปพื้นหลัง: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">ปฏิเสธการเข้าถึง</translation>
@@ -93,11 +79,8 @@
 <translation id="7629827748548208700">แท็บ: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">เครื่องรับ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">งาน</translation>
-<translation id="7760004034676677601">นี่คือหน้าเริ่มต้นใช้งานที่คุณต้องการใช่ไหม</translation>
 <translation id="7791543448312431591">เพิ่ม</translation>
-<translation id="7814458197256864873">&amp;คัดลอก</translation>
 <translation id="7818135753970109980">เพิ่มธีมใหม่แล้ว (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="7857949311770343000">นี่คือหน้าแท็บใหม่ที่คุณคาดไว้ใช่ไหม</translation>
 <translation id="786073089922909430">บริการ: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">ยูทิลิตี: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7978412674231730200">กุญแจส่วนตัว</translation>
@@ -117,9 +100,7 @@
 <translation id="8859174528519900719">เฟรมย่อย: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8916476537757519021">เฟรมย่อยแบบไม่ระบุตัวตน: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">ซ่อนรายละเอียด</translation>
-<translation id="9170848237812810038">เ&amp;ลิกทำ</translation>
 <translation id="9215293857209265904">เพิ่ม "<ph name="EXTENSION_NAME" />" แล้ว</translation>
 <translation id="93766956588638423">ซ่อมส่วนขยาย</translation>
-<translation id="994289308992179865">ว&amp;นกลับ</translation>
 <translation id="998747458861718449">&amp;ตรวจสอบ</translation>
 </translationbundle>

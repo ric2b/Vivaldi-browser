@@ -15,7 +15,6 @@ import androidx.annotation.StringRes;
 
 import org.chromium.chrome.browser.download.home.empty.EmptyProperties.State;
 import org.chromium.chrome.browser.download.internal.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.ui.widget.LoadingView;
 
 // Vivaldi
@@ -30,34 +29,29 @@ class EmptyView {
 
     /** Creates a new {@link EmptyView} instance from {@code context}. */
     public EmptyView(Context context) {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.EMPTY_STATES)) {
-            mView = (ViewGroup) LayoutInflater.from(context).inflate(
-                    R.layout.downloads_empty_state_view, null);
+        mView =
+                (ViewGroup)
+                        LayoutInflater.from(context)
+                                .inflate(R.layout.downloads_empty_state_view, null);
 
-            mEmptyContainer = mView.findViewById(R.id.empty_state_container);
-            mEmptyView = (TextView) mView.findViewById(R.id.empty_state_text_title);
+        mEmptyContainer = mView.findViewById(R.id.empty_state_container);
+        mEmptyView = (TextView) mView.findViewById(R.id.empty_state_text_title);
 
-            if (!BuildConfig.IS_VIVALDI) {
-            ImageView emptyStateIcon = mView.findViewById(R.id.empty_state_icon);
-            emptyStateIcon.setImageResource(R.drawable.downloads_empty_state_illustration);
-            } // End Vivaldi
+        if (!BuildConfig.IS_VIVALDI) {
+        ImageView emptyStateIcon = mView.findViewById(R.id.empty_state_icon);
+        emptyStateIcon.setImageResource(R.drawable.downloads_empty_state_illustration);
+        } // End Vivaldi
 
-            TextView emptyStateSubheadingView =
-                    (TextView) mView.findViewById(R.id.empty_state_text_description);
-            emptyStateSubheadingView.setText(
-                    R.string.download_manager_no_downloads_view_offline_or_share);
+        TextView emptyStateSubheadingView =
+                (TextView) mView.findViewById(R.id.empty_state_text_description);
+        emptyStateSubheadingView.setText(
+                R.string.download_manager_no_downloads_view_offline_or_share);
 
-            mLoadingView = (LoadingView) mView.findViewById(R.id.empty_state_loading);
-        } else {
-            mView = (ViewGroup) LayoutInflater.from(context).inflate(
-                    R.layout.downloads_empty_view, null);
-            mEmptyContainer = mView.findViewById(R.id.empty_container);
-            mEmptyView = (TextView) mView.findViewById(R.id.empty);
-            mLoadingView = (LoadingView) mView.findViewById(R.id.loading);
-        }
+        mLoadingView = (LoadingView) mView.findViewById(R.id.empty_state_loading);
+
         if (BuildConfig.IS_VIVALDI) {
             mEmptyContainer.setBackgroundColor(
-                    mEmptyView.getResources().getColor(R.color.vivaldi_transparent));
+                    mEmptyView.getContext().getColor(R.color.vivaldi_transparent));
             mEmptyView.setCompoundDrawablesWithIntrinsicBounds(null,
                     mEmptyView.getResources().getDrawable(
                             R.drawable.downloads_empty_state,

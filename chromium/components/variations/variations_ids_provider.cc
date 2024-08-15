@@ -162,7 +162,7 @@ VariationsIdsProvider::GetVariationsVectorForWebPropertiesKeys() {
 }
 
 void VariationsIdsProvider::SetLowEntropySourceValue(
-    absl::optional<int> low_entropy_source_value) {
+    std::optional<int> low_entropy_source_value) {
   // The low entropy source value is an integer that is between 0 and 7999,
   // inclusive. See components/metrics/metrics_state_manager.cc for the logic to
   // generate it.
@@ -281,11 +281,11 @@ void VariationsIdsProvider::DestroyInstanceForTesting() {
 }
 
 void VariationsIdsProvider::OnFieldTrialGroupFinalized(
-    const std::string& trial_name,
+    const base::FieldTrial& trial,
     const std::string& group_name) {
   base::AutoLock scoped_lock(lock_);
   const size_t old_size = variation_ids_set_.size();
-  CacheVariationsId(trial_name, group_name);
+  CacheVariationsId(trial.trial_name(), group_name);
   if (variation_ids_set_.size() != old_size)
     UpdateVariationIDsHeaderValue();
 }

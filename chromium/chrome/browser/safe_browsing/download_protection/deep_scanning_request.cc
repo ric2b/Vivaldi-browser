@@ -5,6 +5,7 @@
 #include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/functional/bind.h"
@@ -48,7 +49,6 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/download_item_utils.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace safe_browsing {
 
@@ -197,6 +197,7 @@ EventResult GetEventResult(download::DownloadDangerType danger_type,
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING:
     case download::DOWNLOAD_DANGER_TYPE_MAX:
       NOTREACHED();
       return EventResult::UNKNOWN;
@@ -306,14 +307,31 @@ void LogDeepScanResult(DownloadCheckResult download_result,
   }
 }
 
+bool HasDecryptionFailedResult(
+    enterprise_connectors::ContentAnalysisResponse response) {
+  for (const auto& result : response.results()) {
+    if (result.tag() != "malware") {
+      continue;
+    }
+
+    if (result.status_error_message() ==
+        enterprise_connectors::ContentAnalysisResponse::Result::
+            DECRYPTION_FAILED) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 }  // namespace
 
 /* static */
-absl::optional<enterprise_connectors::AnalysisSettings>
+std::optional<enterprise_connectors::AnalysisSettings>
 DeepScanningRequest::ShouldUploadBinary(download::DownloadItem* item) {
   // Files already on the disk shouldn't be uploaded for scanning.
   if (item->GetURL().SchemeIsFile())
-    return absl::nullopt;
+    return std::nullopt;
 
   auto* service =
       enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
@@ -323,7 +341,7 @@ DeepScanningRequest::ShouldUploadBinary(download::DownloadItem* item) {
   if (!service ||
       !service->IsConnectorEnabled(
           enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // Check that item->GetURL() matches the appropriate URL patterns by getting
@@ -598,9 +616,16 @@ void DeepScanningRequest::OnConsumerScanComplete(
     const base::FilePath& current_path,
     BinaryUploadService::Result result,
     enterprise_connectors::ContentAnalysisResponse response) {
+  bool is_invalid_password =
+      result == BinaryUploadService::Result::FILE_ENCRYPTED ||
+      (result == BinaryUploadService::Result::SUCCESS &&
+       DownloadItemWarningData::IsEncryptedArchive(item_) &&
+       HasDecryptionFailedResult(response));
+  bool is_success =
+      result == BinaryUploadService::Result::SUCCESS && !is_invalid_password;
   CHECK_EQ(trigger_, DeepScanTrigger::TRIGGER_CONSUMER_PROMPT);
   DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
-  if (result == BinaryUploadService::Result::SUCCESS) {
+  if (is_success) {
     request_tokens_.push_back(response.request_token());
     ResponseToDownloadCheckResult(response, &download_result);
     LogDeepScanEvent(item_, DeepScanEvent::kScanCompleted);
@@ -609,7 +634,7 @@ void DeepScanningRequest::OnConsumerScanComplete(
     LogDeepScanEvent(item_, DeepScanEvent::kScanFailed);
 
     if (base::FeatureList::IsEnabled(kDeepScanningEncryptedArchives) &&
-        result == BinaryUploadService::Result::FILE_ENCRYPTED) {
+        is_invalid_password) {
       // Since we now prompt the user for a password, FILE_ENCRYPTED indicates
       // the password was not correct. Instead of failing, ask the user to
       // correct the issue.
@@ -642,10 +667,6 @@ void DeepScanningRequest::OnEnterpriseScanComplete(
   } else if (result == BinaryUploadService::Result::FILE_ENCRYPTED &&
              analysis_settings_.block_password_protected_files) {
     download_result = DownloadCheckResult::BLOCKED_PASSWORD_PROTECTED;
-  } else if (result ==
-                 BinaryUploadService::Result::DLP_SCAN_UNSUPPORTED_FILE_TYPE &&
-             analysis_settings_.block_unsupported_file_types) {
-    download_result = DownloadCheckResult::BLOCKED_UNSUPPORTED_FILE_TYPE;
   }
 
   LogDeepScanResult(download_result, trigger_,
@@ -661,7 +682,7 @@ void DeepScanningRequest::OnEnterpriseScanComplete(
         &MaybeReportDeepScanningVerdict, profile, item_->GetURL(),
         item_->GetTabUrl(), "", "", file_metadata.filename,
         file_metadata.sha256, file_metadata.mime_type,
-        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
+        extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload, "",
         DeepScanAccessPoint::DOWNLOAD, file_metadata.size, result,
         file_metadata.scan_response));
 

@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/views/apps/app_dialog/shortcut_removal_dialog_view.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -44,6 +45,7 @@
 #include "components/sync/test/fake_sync_change_processor.h"
 #include "components/sync/test/sync_change_processor_wrapper_for_test.h"
 #include "components/vector_icons/vector_icons.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -87,14 +89,11 @@ class AppServiceShortcutItemBrowserTest
 
   apps::ShortcutId CreateWebAppBasedShortcut(
       const GURL& shortcut_url,
-      const std::u16string& shortcut_name) {
-    // Create web app based shortcut.
-    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
-    web_app_info->start_url = shortcut_url;
-    web_app_info->title = shortcut_name;
-    auto local_shortcut_id = web_app::test::InstallWebApp(
-        profile(), std::move(web_app_info),
-        /*overwrite_existing_manifest_fields=*/true);
+      const std::u16string& shortcut_name,
+      bool is_policy_install = false) {
+    webapps::AppId local_shortcut_id = web_app::test::InstallShortcut(
+        profile(), base::UTF16ToUTF8(shortcut_name), shortcut_url,
+        /*create_default_icon =*/true, is_policy_install);
     return apps::GenerateShortcutId(app_constants::kChromeAppId,
                                     local_shortcut_id);
   }
@@ -129,18 +128,16 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest,
           sync_processor.get()));
   content::RunAllTasksUntilIdle();
 
-  // Register a shortcut in the shortcut registry cache.
-  apps::ShortcutPtr shortcut =
-      std::make_unique<Shortcut>("host_app_id", "local_id");
-  shortcut->shortcut_source = ShortcutSource::kUser;
-  shortcut->name = "Test";
-  cache()->UpdateShortcut(std::move(shortcut));
-
+  GURL app_url = GURL("https://example.org/");
+  std::u16string shortcut_name = u"Example";
   apps::ShortcutId shortcut_id =
-      apps::GenerateShortcutId("host_app_id", "local_id");
+      CreateWebAppBasedShortcut(app_url, shortcut_name);
+
   ash::AppListItem* item = GetAppListItem(shortcut_id.value());
   ASSERT_TRUE(item);
-  ASSERT_EQ(item->name(), "Test");
+  ASSERT_EQ(item->name(), "Example");
+  ASSERT_EQ(item->accessible_name(),
+            "Example, " + l10n_util::GetStringUTF8(IDS_PRODUCT_NAME));
 
   // Verify that the shortcut item is added to local storage.
   const base::Value::Dict& local_items =
@@ -306,8 +303,9 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, ContextMenuRemove) {
       ->OverrideShortcutInnerIconLoaderForTesting(&shortcut_stub_icon_loader);
   apps::AppServiceProxyFactory::GetForProfile(profile())
       ->OverrideInnerIconLoaderForTesting(&app_stub_icon_loader);
-  shortcut_stub_icon_loader.timelines_by_app_id_[shortcut_id.value()] = 1;
-  app_stub_icon_loader.timelines_by_app_id_[app_constants::kChromeAppId] = 1;
+  shortcut_stub_icon_loader.update_version_by_app_id_[shortcut_id.value()] = 1;
+  app_stub_icon_loader.update_version_by_app_id_[app_constants::kChromeAppId] =
+      1;
 
   menu_model->ActivatedAt(uninstall_command_index.value());
 
@@ -318,6 +316,29 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, ContextMenuRemove) {
   content::RunAllTasksUntilIdle();
   item = model_updater->FindItem(shortcut_id.value());
   EXPECT_FALSE(item);
+}
+
+IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest,
+                       PolicyNoContextMenuRemove) {
+  GURL app_url = GURL("https://example.org/");
+  std::u16string shortcut_name = u"Example";
+  apps::ShortcutId shortcut_id = CreateWebAppBasedShortcut(
+      app_url, shortcut_name, /*is_policy_install = */ true);
+
+  AppListClientImpl* client = AppListClientImpl::GetInstance();
+  AppListModelUpdater* model_updater = test::GetModelUpdater(client);
+  ChromeAppListItem* item = model_updater->FindItem(shortcut_id.value());
+  ASSERT_TRUE(item);
+
+  base::test::TestFuture<std::unique_ptr<ui::SimpleMenuModel>> future;
+  item->GetContextMenuModel(ash::AppListItemContext::kNone,
+                            future.GetCallback());
+
+  std::unique_ptr<ui::SimpleMenuModel> menu_model = future.Take();
+
+  auto uninstall_command_index =
+      menu_model->GetIndexOfCommandId(ash::UNINSTALL);
+  EXPECT_FALSE(uninstall_command_index);
 }
 
 IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, ContextMenuReorder) {
@@ -411,8 +432,9 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, LoadIcon) {
       ->OverrideShortcutInnerIconLoaderForTesting(&shortcut_stub_icon_loader);
   apps::AppServiceProxyFactory::GetForProfile(profile())
       ->OverrideInnerIconLoaderForTesting(&app_stub_icon_loader);
-  shortcut_stub_icon_loader.timelines_by_app_id_[shortcut_id.value()] = 1;
-  app_stub_icon_loader.timelines_by_app_id_[app_constants::kChromeAppId] = 1;
+  shortcut_stub_icon_loader.update_version_by_app_id_[shortcut_id.value()] = 1;
+  app_stub_icon_loader.update_version_by_app_id_[app_constants::kChromeAppId] =
+      1;
 
   EXPECT_EQ(0, shortcut_stub_icon_loader.NumLoadIconFromIconKeyCalls());
   EXPECT_EQ(0, app_stub_icon_loader.NumLoadIconFromIconKeyCalls());
@@ -453,7 +475,8 @@ IN_PROC_BROWSER_TEST_F(AppServiceShortcutItemBrowserTest, IconVersionUpdated) {
   apps::ShortcutPtr delta =
       std::make_unique<Shortcut>(cache()->GetShortcutHostAppId(shortcut_id),
                                  cache()->GetShortcutLocalId(shortcut_id));
-  delta->icon_key = IconKey(100, 0, 0);
+  delta->icon_key = IconKey();
+  delta->icon_key->update_version = true;
   cache()->UpdateShortcut(std::move(delta));
 
   EXPECT_EQ(app_list_item->CloneMetadata()->icon_version, 1);

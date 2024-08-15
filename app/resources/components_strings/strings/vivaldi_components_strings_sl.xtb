@@ -7,7 +7,6 @@
 <translation id="1158211211994409885">Spletno mesto <ph name="HOST_NAME" /> je nepričakovano prekinilo povezavo.</translation>
 <translation id="1161325031994447685">znova vzpostavite povezavo z omrežjem Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Natisni...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Poskusite izbrisati piškotke<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">O različici</translation>
 <translation id="139305205187523129">Spletno mesto <ph name="HOST_NAME" /> ni poslalo nobenih podatkov.</translation>
 <translation id="1559528461873125649">Taka datoteka ali imenik ne obstaja</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Poskusite se obrniti na skrbnika sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Poskusite zagnati Windows diagnostiko omrežja<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Na tem spletnem mestu so škodljivi programi</translation>
-<translation id="1916770123977586577">Če želite uporabiti posodobljene nastavitve za to spletno mesto, znova naložite to stran</translation>
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />preverite strežnik proxy in požarni zid<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Izdano za: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Napadalci morda vidijo slike, ki si jih ogledujete na tem spletnem mestu, in vas ukanijo, tako da jih spremenijo.</translation>
 <translation id="2356070529366658676">Vprašaj</translation>
 <translation id="2359808026110333948">Nadaljuj</translation>
+<translation id="2388886110302389394">Odpri stran v novem zasebnem oknu (Ctrl-Shift-N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Izvajanje omrežne diagnostike<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">To stran je blokirala razširitev</translation>
 <translation id="2501278716633472235">Pojdi nazaj</translation>
@@ -80,6 +79,7 @@
 <translation id="3950820424414687140">Prijava</translation>
 <translation id="3973234410852337861">Spletno mesto <ph name="HOST_NAME" /> je blokirano</translation>
 <translation id="3987940399970879459">Manj kot 1 MB</translation>
+<translation id="4075123085690634698">Odpri stran v novem zasebnem oknu (⇧⌘N)</translation>
 <translation id="4075732493274867456">Odjemalec in strežnik ne podpirata skupne različice protokola SSL ali šifrirne zbirke.</translation>
 <translation id="4116663294526079822">Vedno dovoli na tem spletnem mestu</translation>
 <translation id="4130226655945681476">preverite omrežne kable, modem in usmerjevalnik</translation>
@@ -156,6 +156,7 @@
 <translation id="6757797048963528358">Naprava je prešla v stanje spanja.</translation>
 <translation id="6890956352250146925">Možnosti za piškotke in podatke o spletnih mestih</translation>
 <translation id="6897140037006041989">Uporabnikov posrednik</translation>
+<translation id="6957624206566198865">Odprit stran v novem zasebnem zavihku</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7079718277001814089">To spletno mesto vsebuje zlonamerno programsko opremo</translation>
 <translation id="7096937462164235847">Identiteta tega spletnega mesta ni preverjena.</translation>
@@ -184,6 +185,7 @@
 <translation id="7834399512844817676">Spletno mesto <ph name="SITE" /> za zaščito vaših podatkov običajno uporablja šifriranje. Ko se je Vivaldi tokrat poskusil povezati s spletnim mestom <ph name="SITE" />, je to vrnilo nenavadne in nepravilne poverilnice. Do tega lahko pride, če se napadalec lažno predstavlja za spletno mesto <ph name="SITE" /> ali če je povezavo prekinil zaslon za prijavo v omrežje Wi-Fi. Vaši podatki so še vedno varni, saj je Vivaldi pred izmenjavo podatkov prekinil povezavo.</translation>
 <translation id="7878562273885520351">Vaše geslo je morda ogroženo</translation>
 <translation id="7951415247503192394">(32-bitno)</translation>
+<translation id="7953236668995583915">Znova naložite to stran, da uporabite posodobljene nastavitve na tej strani</translation>
 <translation id="8025119109950072390">Napadalci na tem spletnem mestu vas lahko z zavajanjem morda pripravijo do tega, da storite kaj nevarnega – denimo, da namestite programsko opremo ali razkrijete osebne podatke (na primer gesla, telefonske številke ali podatke kreditnih kartic).</translation>
 <translation id="8037357227543935929">Vprašaj (privzeto)</translation>
 <translation id="8041940743680923270">Uporabi globalno privzeto (Vprašaj)</translation>

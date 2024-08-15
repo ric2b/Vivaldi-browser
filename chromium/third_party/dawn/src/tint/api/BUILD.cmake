@@ -54,11 +54,13 @@ tint_target_add_dependencies(tint_api lib
   tint_lang_core_ir
   tint_lang_core_type
   tint_lang_hlsl_writer_common
-  tint_lang_spirv_reader_common
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
+  tint_lang_wgsl_writer_ir_to_program
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice
@@ -97,6 +99,7 @@ endif(TINT_BUILD_MSL_WRITER)
 if(TINT_BUILD_SPV_READER)
   tint_target_add_dependencies(tint_api lib
     tint_lang_spirv_reader
+    tint_lang_spirv_reader_common
   )
 endif(TINT_BUILD_SPV_READER)
 

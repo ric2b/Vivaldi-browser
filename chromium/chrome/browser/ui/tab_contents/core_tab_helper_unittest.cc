@@ -151,92 +151,34 @@ TEST_F(CoreTabHelperImageProcessingTest,
       /*expected_downscaled_width=*/1, /*expected_downscaled_height=*/300);
 }
 
-TEST(CoreTabHelperUnitTest,
-     EncodeImageIntoSearchArgs_OptimizedImageFormatsDisabled_EncodesAsPng) {
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(lens::features::kLensImageFormatOptimizations);
+TEST(CoreTabHelperUnitTest, EncodeImageIntoSearchArgs_EncodesAsJpeg) {
   gfx::Image image = gfx::test::CreateImage(100, 100);
   TemplateURLRef::SearchTermsArgs search_args =
       TemplateURLRef::SearchTermsArgs(std::u16string());
 
+  size_t encoded_image_size_bytes;
   lens::mojom::ImageFormat image_format =
-      CoreTabHelper::EncodeImageIntoSearchArgs(image, search_args);
-
-  EXPECT_FALSE(search_args.image_thumbnail_content.empty());
-  EXPECT_EQ("image/png", search_args.image_thumbnail_content_type);
-  EXPECT_EQ(lens::mojom::ImageFormat::PNG, image_format);
-}
-
-TEST(CoreTabHelperUnitTest,
-     EncodeImageIntoSearchArgs_WebpEnabledAndEncodingSucceeds_EncodesAsWebp) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      lens::features::kLensImageFormatOptimizations,
-      {{"use-webp-region-search", "true"},
-       {"use-jpeg-region-search", "false"}});
-  gfx::Image image = gfx::test::CreateImage(100, 100);
-  TemplateURLRef::SearchTermsArgs search_args =
-      TemplateURLRef::SearchTermsArgs(std::u16string());
-
-  lens::mojom::ImageFormat image_format =
-      CoreTabHelper::EncodeImageIntoSearchArgs(image, search_args);
-
-  EXPECT_FALSE(search_args.image_thumbnail_content.empty());
-  EXPECT_EQ("image/webp", search_args.image_thumbnail_content_type);
-  EXPECT_EQ(lens::mojom::ImageFormat::WEBP, image_format);
-}
-
-TEST(CoreTabHelperUnitTest,
-     EncodeImageIntoSearchArgs_WebpEnabledAndEncodingFails_EncodesAsPng) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      lens::features::kLensImageFormatOptimizations,
-      {{"use-webp-region-search", "true"},
-       {"use-jpeg-region-search", "false"}});
-  gfx::Image image = gfx::test::CreateImage(0, 0);  // Encoding 0x0 will fail
-  TemplateURLRef::SearchTermsArgs search_args =
-      TemplateURLRef::SearchTermsArgs(std::u16string());
-
-  lens::mojom::ImageFormat image_format =
-      CoreTabHelper::EncodeImageIntoSearchArgs(image, search_args);
-
-  EXPECT_EQ("image/png", search_args.image_thumbnail_content_type);
-  EXPECT_EQ(lens::mojom::ImageFormat::PNG, image_format);
-}
-
-TEST(CoreTabHelperUnitTest,
-     EncodeImageIntoSearchArgs_JpegEnabledAndEncodingSucceeds_EncodesAsJpeg) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      lens::features::kLensImageFormatOptimizations,
-      {{"use-webp-region-search", "false"},
-       {"use-jpeg-region-search", "true"}});
-  gfx::Image image = gfx::test::CreateImage(100, 100);
-  TemplateURLRef::SearchTermsArgs search_args =
-      TemplateURLRef::SearchTermsArgs(std::u16string());
-
-  lens::mojom::ImageFormat image_format =
-      CoreTabHelper::EncodeImageIntoSearchArgs(image, search_args);
+      CoreTabHelper::EncodeImageIntoSearchArgs(image, encoded_image_size_bytes,
+                                               search_args);
 
   EXPECT_FALSE(search_args.image_thumbnail_content.empty());
   EXPECT_EQ("image/jpeg", search_args.image_thumbnail_content_type);
+  EXPECT_EQ(359ul, encoded_image_size_bytes);
   EXPECT_EQ(lens::mojom::ImageFormat::JPEG, image_format);
 }
 
 TEST(CoreTabHelperUnitTest,
-     EncodeImageIntoSearchArgs_JpegEnabledAndEncodingFails_EncodesAsPng) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      lens::features::kLensImageFormatOptimizations,
-      {{"use-webp-region-search", "false"},
-       {"use-jpeg-region-search", "true"}});
+     EncodeImageIntoSearchArgs_JpegEncodingFails_EncodesAsPng) {
   gfx::Image image = gfx::test::CreateImage(0, 0);  // Encoding 0x0 will fail
   TemplateURLRef::SearchTermsArgs search_args =
       TemplateURLRef::SearchTermsArgs(std::u16string());
 
+  size_t encoded_image_size_bytes;
   lens::mojom::ImageFormat image_format =
-      CoreTabHelper::EncodeImageIntoSearchArgs(image, search_args);
+      CoreTabHelper::EncodeImageIntoSearchArgs(image, encoded_image_size_bytes,
+                                               search_args);
 
   EXPECT_EQ("image/png", search_args.image_thumbnail_content_type);
+  EXPECT_EQ(0ul, encoded_image_size_bytes);
   EXPECT_EQ(lens::mojom::ImageFormat::PNG, image_format);
 }

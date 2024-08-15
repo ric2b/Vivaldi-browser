@@ -24,11 +24,11 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
 import {isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
-import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {RouteObserverMixin} from '../common/route_observer_mixin.js';
 import {KeyboardPolicies} from '../mojom-webui/input_device_settings.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
-import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl} from './device_page_browser_proxy.js';
@@ -108,6 +108,7 @@ export class SettingsPerDeviceKeyboardElement extends
         value: () => {
           return isRevampWayfindingEnabled();
         },
+        readOnly: true,
       },
 
       /**
@@ -122,7 +123,7 @@ export class SettingsPerDeviceKeyboardElement extends
   protected shouldShowDiacriticSetting: boolean =
       loadTimeData.getBoolean('allowDiacriticsOnPhysicalKeyboardLongpress');
   private prefs: chrome.settingsPrivate.PrefObject;
-  private isRevampWayfindingEnabled_: boolean;
+  private readonly isRevampWayfindingEnabled_: boolean;
   private autoRepeatDelays: number[];
   private autoRepeatIntervals: number[];
   private browserProxy: DevicePageBrowserProxy =

@@ -8,6 +8,7 @@
 #import "ios/web/public/web_state.h"
 
 #import <memory>
+#import <optional>
 
 #import <UIKit/UIKit.h>
 
@@ -115,7 +116,7 @@ class ContentWebState : public WebState,
   int GetNavigationItemCount() const override;
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
-  absl::optional<GURL> GetLastCommittedURLIfTrusted() const override;
+  std::optional<GURL> GetLastCommittedURLIfTrusted() const override;
   WebFramesManager* GetWebFramesManager(ContentWorld world) override;
   CRWWebViewProxyType GetWebViewProxy() const override;
   void AddObserver(WebStateObserver* observer) override;
@@ -147,7 +148,7 @@ class ContentWebState : public WebState,
   bool HasOpener() const override;
   void SetHasOpener(bool has_opener) override;
   bool CanTakeSnapshot() const override;
-  void TakeSnapshot(const gfx::RectF& rect, SnapshotCallback callback) override;
+  void TakeSnapshot(const CGRect rect, SnapshotCallback callback) override;
   void CreateFullPagePdf(base::OnceCallback<void(NSData*)> callback) override;
   void CloseMediaPresentations() override;
 

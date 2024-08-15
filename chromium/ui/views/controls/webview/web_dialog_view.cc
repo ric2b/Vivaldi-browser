@@ -57,7 +57,7 @@ void ObservableWebView::ResetDelegate() {
   delegate_ = nullptr;
 }
 
-BEGIN_METADATA(ObservableWebView, WebView)
+BEGIN_METADATA(ObservableWebView)
 END_METADATA
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,11 +104,11 @@ content::WebContents* WebDialogView::web_contents() {
 
 void WebDialogView::AddedToWidget() {
   gfx::RoundedCornersF corner_radii(
-      delegate_ && delegate_->GetWebDialogFrameKind() ==
-                       WebDialogDelegate::FrameKind::kDialog
+      GetWebDialogFrameKind() == WebDialogDelegate::FrameKind::kDialog
           ? GetCornerRadius()
           : 0);
-  web_view_->holder()->SetCornerRadii(corner_radii);
+
+  SetWebViewCornersRadii(corner_radii);
 }
 
 gfx::Size WebDialogView::CalculatePreferredSize() const {
@@ -301,10 +301,6 @@ void WebDialogView::OnDialogShown(content::WebUI* webui) {
 
 void WebDialogView::OnDialogClosed(const std::string& json_retval) {
   Detach();
-  if (delegate_) {
-    // Store the dialog content area size.
-    delegate_->StoreDialogSize(GetContentsBounds().size());
-  }
 
   if (GetWidget())
     GetWidget()->Close();
@@ -356,6 +352,14 @@ bool WebDialogView::HandleContextMenu(
     return delegate_->HandleContextMenu(render_frame_host, params);
   return WebDialogWebContentsDelegate::HandleContextMenu(render_frame_host,
                                                          params);
+}
+
+WebDialogView::FrameKind WebDialogView::GetWebDialogFrameKind() const {
+  if (delegate_) {
+    return delegate_->GetWebDialogFrameKind();
+  }
+
+  return WebDialogDelegate::GetWebDialogFrameKind();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -449,13 +453,20 @@ void WebDialogView::RequestMediaAccessPermission(
 
 bool WebDialogView::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
-    const GURL& security_origin,
+    const url::Origin& security_origin,
     blink::mojom::MediaStreamType type) {
   if (delegate_) {
     return delegate_->CheckMediaAccessPermission(render_frame_host,
                                                  security_origin, type);
   }
   return false;
+}
+
+void WebDialogView::SetWebViewCornersRadii(const gfx::RoundedCornersF& radii) {
+  views::NativeViewHost* host = web_view_->holder();
+  DCHECK(host);
+
+  host->SetCornerRadii(radii);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -481,7 +492,7 @@ void WebDialogView::NotifyDialogWillClose() {
     delegate_->OnDialogWillClose();
 }
 
-BEGIN_METADATA(WebDialogView, ClientView)
+BEGIN_METADATA(WebDialogView)
 ADD_READONLY_PROPERTY_METADATA(ObservableWebView*, WebView);
 END_METADATA
 

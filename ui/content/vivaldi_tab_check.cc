@@ -6,13 +6,19 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/helper/vivaldi_panel_helper.h"
 
 const int VivaldiTabCheck::kVivaldiTabObserverContextKey = 0;
 const int VivaldiTabCheck::kDevToolContextKey = 0;
+const int VivaldiTabCheck::kVivaldiPanelHelperContextKey = 0;
 
 // static
 bool VivaldiTabCheck::IsVivaldiTab(content::WebContents* web_contents) {
   return web_contents->GetUserData(&kVivaldiTabObserverContextKey);
+}
+
+bool VivaldiTabCheck::IsVivaldiPanel(content::WebContents* web_contents) {
+  return web_contents->GetUserData(&kVivaldiPanelHelperContextKey);
 }
 
 // static

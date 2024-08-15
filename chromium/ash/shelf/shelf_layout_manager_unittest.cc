@@ -5,11 +5,12 @@
 #include "ash/shelf/shelf_layout_manager.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accelerators/accelerator_table.h"
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/test/app_list_test_helper.h"
@@ -66,6 +67,7 @@
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/splitview/split_view_types.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
@@ -85,7 +87,6 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/prefs/pref_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/window_parenting_client.h"
@@ -467,9 +468,9 @@ TEST_F(ShelfLayoutManagerTest, AutoHide) {
 
   // Switch to tablet mode should hide the AUTO_HIDE_SHOWN shelf even the mouse
   // cursor is inside the shelf area.
-  EXPECT_FALSE(TabletModeControllerTestApi().IsTabletModeStarted());
+  EXPECT_FALSE(display::Screen::GetScreen()->InTabletMode());
   TabletModeControllerTestApi().EnterTabletMode();
-  EXPECT_TRUE(TabletModeControllerTestApi().IsTabletModeStarted());
+  EXPECT_TRUE(display::Screen::GetScreen()->InTabletMode());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 }
 
@@ -2958,8 +2959,7 @@ class ShelfLayoutManagerDragDropTest
   }
 
  private:
-  raw_ptr<ui::test::EventGenerator, DanglingUntriaged | ExperimentalAsh>
-      generator_;
+  raw_ptr<ui::test::EventGenerator, DanglingUntriaged> generator_;
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -3139,7 +3139,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, DraggedMRUWindow) {
   const struct TestCase {
     // The shelf widget whose bounds are used as the base for gesture start and
     // end locations.
-    raw_ptr<const views::Widget, ExperimentalAsh> widget;
+    raw_ptr<const views::Widget> widget;
     // Whether the widget bounds are completely in the left part of the split
     // view.
     const bool left_in_split_view;
@@ -3206,10 +3206,8 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, DraggedMRUWindow) {
     auto window2 = AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
     SplitViewController* split_view_controller =
         SplitViewController::Get(Shell::GetPrimaryRootWindow());
-    split_view_controller->SnapWindow(
-        window.get(), SplitViewController::SnapPosition::kPrimary);
-    split_view_controller->SnapWindow(
-        window2.get(), SplitViewController::SnapPosition::kSecondary);
+    split_view_controller->SnapWindow(window.get(), SnapPosition::kPrimary);
+    split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
     StartScroll(gfx::Point(widget_bounds.x(), shelf_widget_bottom));
     UpdateScroll(
         gfx::Vector2d(0, -shelf_size - hotseat_size - hotseat_padding_size));
@@ -3324,10 +3322,8 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, NoOpInOverview) {
   // screen also does nothing.
   SplitViewController* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller->SnapWindow(window1.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
   EnterOverview();
   EXPECT_TRUE(split_view_controller->InSplitViewMode());
   EXPECT_TRUE(OverviewController::Get()->InOverviewSession());
@@ -3458,10 +3454,8 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest,
 
   SplitViewController* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller->SnapWindow(window1.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
   OverviewController* overview_controller = OverviewController::Get();
 
   base::HistogramTester histogram_tester;
@@ -3535,10 +3529,8 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, FlingHomeInSplitModeWithOverview) {
 
   SplitViewController* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller->SnapWindow(window1.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
   OverviewController* overview_controller = OverviewController::Get();
   EnterOverview();
   EXPECT_TRUE(overview_controller->InOverviewSession());
@@ -3586,10 +3578,8 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, FlingInSplitView) {
 
   SplitViewController* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller->SnapWindow(window1.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
 
   base::HistogramTester histogram_tester;
   HotseatStateWatcher watcher(GetShelfLayoutManager());
@@ -3635,10 +3625,8 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, ShortFlingInSplitView) {
 
   SplitViewController* split_view_controller =
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
-  split_view_controller->SnapWindow(
-      window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller->SnapWindow(
-      window2.get(), SplitViewController::SnapPosition::kSecondary);
+  split_view_controller->SnapWindow(window1.get(), SnapPosition::kPrimary);
+  split_view_controller->SnapWindow(window2.get(), SnapPosition::kSecondary);
 
   base::HistogramTester histogram_tester;
   HotseatStateWatcher watcher(GetShelfLayoutManager());
@@ -4117,11 +4105,11 @@ TEST_F(ShelfLayoutManagerTest, NoShelfUpdateDuringOverviewAnimation) {
   TestDisplayObserver observer;
   EnterOverview();
   WaitForOverviewAnimation(/*enter=*/true);
-  ASSERT_TRUE(TabletModeControllerTestApi().IsTabletModeStarted());
+  ASSERT_TRUE(display::Screen::GetScreen()->InTabletMode());
   EXPECT_EQ(0, observer.metrics_change_count());
   ExitOverview();
   WaitForOverviewAnimation(/*enter=*/false);
-  ASSERT_TRUE(TabletModeControllerTestApi().IsTabletModeStarted());
+  ASSERT_TRUE(display::Screen::GetScreen()->InTabletMode());
   EXPECT_EQ(0, observer.metrics_change_count());
 }
 
@@ -4993,8 +4981,6 @@ TEST_P(NavigationWidgetRTLTest, VerifyHomeButtonBounds) {
   const gfx::Rect display_bounds = GetPrimaryDisplay().bounds();
   Shelf* shelf = GetPrimaryShelf();
   ShelfNavigationWidget* navigation_widget = shelf->navigation_widget();
-  const gfx::Size widget_size_in_home_launcher =
-      navigation_widget->GetWindowBoundsInScreen().size();
 
   auto fetch_home_button_screen_bounds =
       [](const ShelfNavigationWidget* navigation_widget,
@@ -5050,10 +5036,6 @@ TEST_P(NavigationWidgetRTLTest, VerifyHomeButtonBounds) {
   waiter.WaitForAnimation();
 
   ASSERT_EQ(HotseatState::kHidden, GetShelfLayoutManager()->hotseat_state());
-
-  const gfx::Size widget_size_in_hidden_state =
-      navigation_widget->GetWindowBoundsInScreen().size();
-  EXPECT_EQ(widget_size_in_home_launcher, widget_size_in_hidden_state);
 
   // Verify home button bounds in the hidden state.
   {

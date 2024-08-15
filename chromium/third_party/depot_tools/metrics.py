@@ -267,9 +267,9 @@ class MetricsCollector(object):
     def collect_metrics(self, command_name):
         """A decorator used to collect metrics over the life of a function.
 
-    This decorator executes the function and collects metrics about the system
-    environment and the function performance.
-    """
+        This decorator executes the function and collects metrics about the
+        system environment and the function performance.
+        """
         def _decorator(func):
             if not self.config.should_collect_metrics:
                 return func
@@ -287,11 +287,12 @@ class MetricsCollector(object):
     def print_notice_and_exit(self):
         """A context manager used to print the notice and terminate execution.
 
-    This decorator executes the function and prints the monitoring notice if
-    necessary. If an exception is raised, we will catch it, and print it before
-    printing the metrics collection notice.
-    This will call sys.exit() with an appropriate exit code to ensure the notice
-    is the last thing printed."""
+        This decorator executes the function and prints the monitoring notice if
+        necessary. If an exception is raised, we will catch it, and print it
+        before printing the metrics collection notice.
+        This will call sys.exit() with an appropriate exit code to ensure the
+        notice is the last thing printed.
+        """
         # Needed to preserve the __name__ and __doc__ attributes of func.
         try:
             yield

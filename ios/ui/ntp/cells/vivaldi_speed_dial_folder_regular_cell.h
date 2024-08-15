@@ -6,7 +6,7 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
-#import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
+#import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
 
 // The cell that renders the speed dial folder item for all layout except 'List'
 @interface VivaldiSpeedDialFolderRegularCell : UICollectionViewCell

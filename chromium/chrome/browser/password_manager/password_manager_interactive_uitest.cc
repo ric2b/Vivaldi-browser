@@ -6,11 +6,10 @@
 
 #include "base/functional/bind.h"
 #include "base/location.h"
-#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/test_timeouts.h"
+#include "base/test/run_until.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -27,7 +26,7 @@
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
-#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/browser/password_store/test_password_store.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "content/public/test/browser_test.h"
@@ -40,18 +39,6 @@
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 namespace {
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// Wait until |condition| returns true.
-void WaitForCondition(base::RepeatingCallback<bool()> condition) {
-  while (!condition.Run()) {
-    base::RunLoop run_loop;
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
-    run_loop.Run();
-  }
-}
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 constexpr autofill::FieldRendererId kElementId(1000);
 
@@ -259,16 +246,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
   EXPECT_TRUE(BubbleObserver(WebContents()).IsSavePromptShownAutomatically());
 }
 
-// TODO(crbug.com/1241462):
-#if BUILDFLAG(IS_WIN)
-#define MAYBE_PromptForFetchWithNewPasswordsWithoutOnSubmit \
-  DISABLED_PromptForFetchWithNewPasswordsWithoutOnSubmit
-#else
-#define MAYBE_PromptForFetchWithNewPasswordsWithoutOnSubmit \
-  PromptForFetchWithNewPasswordsWithoutOnSubmit
-#endif
 IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTest,
-                       MAYBE_PromptForFetchWithNewPasswordsWithoutOnSubmit) {
+                       PromptForFetchWithNewPasswordsWithoutOnSubmit) {
   NavigateToFile("/password/password_fetch_submit.html");
 
   // Verify that if Fetch navigation occurs and the form is properly filled out,
@@ -628,9 +607,9 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTestWithSigninInterception,
   const PasswordManager* password_manager =
       ChromePasswordManagerClient::FromWebContents(WebContents())
           ->GetPasswordManager();
-  WaitForCondition(
-      base::BindRepeating(&PasswordManager::IsFormManagerPendingPasswordUpdate,
-                          base::Unretained(password_manager)));
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return password_manager->IsFormManagerPendingPasswordUpdate();
+  }));
 
   // Start the navigation.
   PasswordsNavigationObserver navigation_observer(WebContents());
@@ -645,9 +624,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTestWithSigninInterception,
   base::HistogramTester histogram_tester;
   DiceWebSigninInterceptor* signin_interceptor =
       helper_.GetSigninInterceptor(profile);
-  signin_interceptor->MaybeInterceptWebSignin(WebContents(), account_id,
-                                              /*is_new_account=*/true,
-                                              /*is_sync_signin=*/false);
+  signin_interceptor->MaybeInterceptWebSignin(
+      WebContents(), account_id,
+      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      /*is_new_account=*/true,
+      /*is_sync_signin=*/false);
   EXPECT_FALSE(signin_interceptor->is_interception_in_progress());
   histogram_tester.ExpectUniqueSample(
       "Signin.Intercept.HeuristicOutcome",

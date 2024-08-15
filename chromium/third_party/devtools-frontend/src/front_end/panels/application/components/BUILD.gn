@@ -15,16 +15,16 @@ generate_css("css_files") {
     "frameDetailsReportView.css",
     "interestGroupAccessGrid.css",
     "originTrialTokenRows.css",
+    "originTrialTreeView.css",
     "permissionsPolicySection.css",
     "protocolHandlersView.css",
     "reportingApiGrid.css",
+    "serviceWorkerRouterView.css",
     "sharedStorageAccessGrid.css",
     "sharedStorageMetadataView.css",
-    "sharedStorageMetadataViewResetBudgetButton.css",
     "stackTraceLinkButton.css",
     "stackTraceRow.css",
     "trustTokensView.css",
-    "trustTokensViewDeleteButton.css",
   ]
 }
 
@@ -40,6 +40,7 @@ devtools_module("components") {
     "PermissionsPolicySection.ts",
     "ProtocolHandlersView.ts",
     "ReportsGrid.ts",
+    "ServiceWorkerRouterView.ts",
     "SharedStorageAccessGrid.ts",
     "SharedStorageMetadataView.ts",
     "StackTrace.ts",

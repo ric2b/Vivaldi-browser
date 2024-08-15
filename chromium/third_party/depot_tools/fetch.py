@@ -6,7 +6,7 @@
 Tool to perform checkouts in one easy command line!
 
 Usage:
-  fetch <config> [--property=value [--property2=value2 ...]]
+    fetch <config> [--property=value [--property2=value2 ...]]
 
 This script is a wrapper around various version control and repository
 checkout commands. It requires a |config| name, fetches data from that
@@ -37,13 +37,13 @@ SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 class Checkout(object):
     """Base class for implementing different types of checkouts.
 
-  Attributes:
-    |base|: the absolute path of the directory in which this script is run.
-    |spec|: the spec for this checkout as returned by the config. Different
-        subclasses will expect different keys in this dictionary.
-    |root|: the directory into which the checkout will be performed, as returned
-        by the config. This is a relative path from |base|.
-  """
+    Attributes:
+        |base|: the absolute path of the directory in which this script is run.
+        |spec|: the spec for this checkout as returned by the config. Different
+            subclasses will expect different keys in this dictionary.
+        |root|: the directory into which the checkout will be performed, as
+            returnedby the config. This is a relative path from |base|.
+    """
     def __init__(self, options, spec, root):
         self.base = os.getcwd()
         self.options = options
@@ -51,7 +51,7 @@ class Checkout(object):
         self.root = root
 
     def exists(self):
-        """Check does this checkout already exist on desired location"""
+        """Check does this checkout already exist on desired location."""
 
     def init(self):
         pass
@@ -146,11 +146,6 @@ class GclientGitCheckout(GclientCheckout, GitCheckout):
         wd = os.path.join(self.base, self.root)
         if self.options.dry_run:
             print('cd %s' % wd)
-        self.run_git(
-            'submodule',
-            'foreach',
-            'git config -f $toplevel/.git/config submodule.$name.ignore all',
-            cwd=wd)
         if not self.options.nohistory:
             self.run_git('config',
                          '--add',
@@ -244,7 +239,7 @@ def handle_args(argv):
 
 def run_config_fetch(config, props, aliased=False):
     """Invoke a config's fetch method with the passed-through args
-  and return its json output as a python object."""
+    and return its json output as a python object."""
     config_path = os.path.abspath(
         os.path.join(SCRIPT_PATH, 'fetch_configs', config))
     if not os.path.exists(config_path + '.py'):
@@ -269,21 +264,15 @@ def run_config_fetch(config, props, aliased=False):
 def run(options, spec, root):
     """Perform a checkout with the given type and configuration.
 
-    Args:
-      options: Options instance.
-      spec: Checkout configuration returned by the the config's fetch_spec
-          method (checkout type, repository url, etc.).
-      root: The directory into which the repo expects to be checkout out.
-  """
+        Args:
+        options: Options instance.
+        spec: Checkout configuration returned by the the config's fetch_spec
+            method (checkout type, repository url, etc.).
+        root: The directory into which the repo expects to be checkout out.
+    """
     assert 'type' in spec
     checkout_type = spec['type']
     checkout_spec = spec['%s_spec' % checkout_type]
-
-    # Use sso:// by default if the env is cog
-    if not options.protocol_override and \
-      (any(os.getcwd().startswith(x) for x in [
-          '/google/src/cloud', '/google/cog/cloud'])):
-        options.protocol_override = 'sso'
 
     # Update solutions with protocol_override field
     if options.protocol_override is not None:

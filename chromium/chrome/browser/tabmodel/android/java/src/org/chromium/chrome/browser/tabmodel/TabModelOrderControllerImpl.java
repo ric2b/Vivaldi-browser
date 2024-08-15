@@ -141,14 +141,14 @@ public class TabModelOrderControllerImpl implements TabModelOrderController { //
     }
 
     private int getValidPositionConsideringRelatedTabs(Tab newTab, int position) {
-        TabModelFilter filter = mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(
-                newTab.isIncognito());
+        TabModelFilter filter =
+                mTabModelSelector
+                        .getTabModelFilterProvider()
+                        .getTabModelFilter(newTab.isIncognito());
         return filter.getValidPosition(newTab, position);
     }
 
-    /**
-     * Clear the opener attribute on all tabs in the model.
-     */
+    /** Clear the opener attribute on all tabs in the model. */
     void forgetAllOpeners() {
         TabModel currentModel = mTabModelSelector.getCurrentModel();
         int count = currentModel.getCount();
@@ -158,11 +158,10 @@ public class TabModelOrderControllerImpl implements TabModelOrderController { //
         }
     }
 
-    /**
-     * Determine if a launch type is the result of linked being clicked.
-     */
+    /** Determine if a launch type is the result of linked being clicked. */
     static boolean linkClicked(@TabLaunchType int type) {
-        return type == TabLaunchType.FROM_LINK || type == TabLaunchType.FROM_LONGPRESS_FOREGROUND
+        return type == TabLaunchType.FROM_LINK
+                || type == TabLaunchType.FROM_LONGPRESS_FOREGROUND
                 || type == TabLaunchType.FROM_LONGPRESS_BACKGROUND
                 || type == TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP
                 || type == TabLaunchType.FROM_LONGPRESS_INCOGNITO;
@@ -171,13 +170,14 @@ public class TabModelOrderControllerImpl implements TabModelOrderController { //
     @Override
     public boolean willOpenInForeground(@TabLaunchType int type, boolean isNewTabIncognito) {
         // Restore is handling the active index by itself.
-        if (type == TabLaunchType.FROM_RESTORE || type == TabLaunchType.FROM_BROWSER_ACTIONS
+        if (type == TabLaunchType.FROM_RESTORE
+                || type == TabLaunchType.FROM_BROWSER_ACTIONS
                 || type == TabLaunchType.FROM_RESTORE_TABS_UI) {
             return false;
         }
         return type != TabLaunchType.FROM_LONGPRESS_BACKGROUND
-                && type != TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP
-                && type != TabLaunchType.FROM_RECENT_TABS
+                        && type != TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP
+                        && type != TabLaunchType.FROM_RECENT_TABS
                 || (!mTabModelSelector.isIncognitoSelected() && isNewTabIncognito);
     }
 

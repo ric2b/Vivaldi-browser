@@ -1,4 +1,5 @@
-enable chromium_experimental_push_constant, f16;
+// flags: --hlsl_shader_model 62
+enable chromium_disable_uniformity_analysis, f16;
 
 @fragment
 fn main() -> @location(0) vec4<f32> {

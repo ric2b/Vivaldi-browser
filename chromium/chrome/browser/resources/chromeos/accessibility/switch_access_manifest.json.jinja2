@@ -4,6 +4,7 @@
 {% endif %}
 {% if is_manifest_v3 == '1' %}
   "manifest_version": 3,
+  "minimum_chrome_version": "93",
   "background": {
     "service_worker": "switch_access/switch_access_loader.js",
     "type": "module"

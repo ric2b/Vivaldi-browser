@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//chrome/common/features.gni")
-import("//third_party/closure_compiler/compile_js.gni")
 import(
     "//tools/code_coverage/js_source_maps/create_js_source_maps/create_js_source_maps.gni")
 import(
@@ -39,19 +38,6 @@ component("file_manager") {
   defines = [ "FILE_MANAGER_IMPLEMENTATION" ]
 }
 
-group("closure_compile") {
-  # Subfolders' closure_compile groups bundle the non-test "module" type-check
-  # groups as well as unittests and test_support.
-  testonly = true
-
-  deps = [
-    "image_loader:closure_compile",
-    "integration_tests:closure_compile",
-    "integration_tests/file_manager:closure_compile",
-    "integration_tests/file_manager/page_objects:closure_compile",
-  ]
-}
-
 preprocess_folder = "$target_gen_dir/preprocessed"
 
 # Move files to the preprocessed folder to combine all resources in the same
@@ -68,13 +54,6 @@ preprocess_if_expr("preprocess_static") {
   }
 
   in_files = static_js_files + unittest_files
-
-  deps = [
-    "//ui/file_manager/file_manager/background/js:js_modules",
-    "//ui/file_manager/file_manager/common/js:js_modules",
-    "//ui/file_manager/file_manager/foreground/elements:web_components",
-    "//ui/file_manager/file_manager/foreground/js:deferred_elements",
-  ]
 }
 
 if (enable_webui_inline_sourcemaps) {
@@ -106,8 +85,6 @@ preprocess_if_expr("preprocess_static_image_loader") {
   }
 
   in_files = image_loader_static_js_files
-
-  deps = [ "//ui/file_manager/image_loader:js_modules" ]
 }
 
 if (enable_webui_inline_sourcemaps) {
@@ -140,11 +117,22 @@ preprocess_if_expr("preprocess_generated") {
   deps = [
     ":html_wrapper_files",
     "//ui/file_manager/base/gn:file_types_data_gen_js",
-    "//ui/file_manager/file_manager/foreground/elements:elements",
     "//ui/file_manager/file_manager/foreground/elements:polymer_elements",
-    "//ui/file_manager/file_manager/foreground/elements:web_components",
   ]
 }
+
+common_path_mappings = [
+  "chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/*|preprocessed/image_loader/*",
+  "tslib|" + rebase_path(
+          "//third_party/material_web_components/components-chromium/node_modules/tslib/tslib.d.ts",
+          target_gen_dir),
+  "chrome://resources/mwc/*|" + rebase_path(
+          "//third_party/material_web_components/components-chromium/node_modules/*",
+          target_gen_dir),
+  "chrome://resources/cr_components/color_change_listener/*|" + rebase_path(
+          "$root_gen_dir/ui/webui/resources/tsc/cr_components/color_change_listener/*",
+          target_gen_dir),
+]
 
 ts_library("build_ts") {
   root_dir = preprocess_folder
@@ -156,15 +144,7 @@ ts_library("build_ts") {
   tsconfig_base = "tsconfig_base.json"
   composite = true
 
-  path_mappings = [
-    "chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/*|preprocessed/image_loader/*",
-    "tslib|" + rebase_path(
-            "//third_party/material_web_components/components-chromium/node_modules/tslib/tslib.d.ts",
-            target_gen_dir),
-    "chrome://resources/mwc/*|" + rebase_path(
-            "//third_party/material_web_components/components-chromium/node_modules/*",
-            target_gen_dir),
-  ]
+  path_mappings = common_path_mappings
 
   extra_deps = [
     ":copy_definitions_to_gen",
@@ -206,13 +186,7 @@ ts_library("build_ts") {
 
   manifest_excludes = [ "file_manager/externs/file_manager_private.js" ]
 
-  definitions = [
-    "//tools/typescript/definitions/chrome_event.d.ts",
-    "//tools/typescript/definitions/chrome_test.d.ts",
-    "//tools/typescript/definitions/metrics_private.d.ts",
-    "//tools/typescript/definitions/runtime.d.ts",
-    "//tools/typescript/definitions/tabs.d.ts",
-  ]
+  definitions = other_dts_files
   foreach(_file, generate_definitions_js_files) {
     definitions +=
         [ "$target_gen_dir/" + string_replace(_file, ".js", ".d.ts") ]
@@ -253,23 +227,18 @@ ts_library("test_build_ts") {
 
   manifest_excludes = [ "file_manager/externs/test/file_manager_private.js" ]
 
-  path_mappings = [
-    "chrome-extension://pmfjbimdmchhbnneeidfognadeopoehp/*|preprocessed/image_loader/*",
+  path_mappings =
+      common_path_mappings + [
+        # for chai_assert.js.
+        "chrome://webui-test/chromeos/*|" +
+            rebase_path("$root_gen_dir/chrome/test/data/webui/chromeos/tsc/*",
+                        target_gen_dir),
+        "chrome://webui-test/*|" +
+            rebase_path("$root_gen_dir/chrome/test/data/webui/tsc/*",
+                        target_gen_dir),
+      ]
 
-    # for chai_assert.js.
-    "chrome://webui-test/chromeos/*|" +
-        rebase_path("$root_gen_dir/chrome/test/data/webui/chromeos/tsc/*",
-                    target_gen_dir),
-    "chrome://webui-test/*|" +
-        rebase_path("$root_gen_dir/chrome/test/data/webui/tsc/*",
-                    target_gen_dir),
-  ]
-
-  definitions = []
-  foreach(_file, generate_definitions_js_files) {
-    definitions +=
-        [ "$target_gen_dir/" + string_replace(_file, ".js", ".d.ts") ]
-  }
+  definitions = other_dts_files
   foreach(_file, checked_in_dts_files) {
     definitions += [ "$preprocess_folder/$_file" ]
   }
@@ -279,6 +248,11 @@ ts_library("test_build_ts") {
     "//ash/webui/common/resources:build_ts",
     "//chrome/test/data/webui:build_ts",
     "//chrome/test/data/webui/chromeos:build_ts",
+    "//third_party/cros-components:cros_components_ts",
+    "//third_party/material_web_components:bundle_lit_ts",
+    "//third_party/material_web_components:library",
+    "//third_party/polymer/v3_0:library",
+    "//ui/webui/resources/cr_components/color_change_listener:build_ts",
     "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
   ]
@@ -286,7 +260,6 @@ ts_library("test_build_ts") {
     ":copy_definitions_to_gen",
     ":copy_definitions_to_preprocess",
     ":copy_fmp_test",
-    ":generate_definitions",
   ]
   if (enable_webui_inline_sourcemaps) {
     extra_deps += [
@@ -381,20 +354,6 @@ copy("for_image_loader") {
   }
 }
 
-js_library("js_from_ts") {
-  sources = []
-  foreach(_t, ts_files) {
-    sources += [ "$target_gen_dir/tsc/" + string_replace(_t, ".ts", ".js") ]
-  }
-  if (enable_webui_inline_sourcemaps) {
-    extra_deps = [ ":merge_source_maps" ]
-  } else {
-    extra_deps = [ ":build_ts" ]
-  }
-  externs_list =
-      [ "//ui/file_manager/file_manager/externs/app_window_common.js" ]
-}
-
 grd_prefix = "file_manager_gen"
 generated_grd = "$target_gen_dir/${grd_prefix}_resources.grd"
 
@@ -438,7 +397,6 @@ generate_grd("build_grd") {
     deps += [
       ":for_image_loader",
       "//ui/file_manager/file_manager/background/js:build",
-      "//ui/file_manager/file_manager/foreground/elements:elements",
       "//ui/file_manager/file_manager/foreground/js:build",
       "//ui/file_manager/file_manager/foreground/js:build_worker",
     ]

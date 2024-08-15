@@ -11,7 +11,6 @@
 
 #include "ash/constants/ash_switches.h"
 #include "ash/public/ash_interfaces.h"
-#include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
@@ -48,6 +47,8 @@
 #include "net/dns/mock_host_resolver.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/display_switches.h"
@@ -96,6 +97,8 @@ void SynchronizeBrowserWithRenderer(content::WebContents* contents) {
 // A test view that will be added as a child to the BrowserView to verify how
 // many times it's laid out while sliding is in progress.
 class LayoutTestView : public views::View {
+  METADATA_HEADER(LayoutTestView, views::View)
+
  public:
   explicit LayoutTestView(BrowserView* parent) {
     DCHECK(parent);
@@ -120,6 +123,9 @@ class LayoutTestView : public views::View {
  private:
   int layout_count_ = 0;
 };
+
+BEGIN_METADATA(LayoutTestView)
+END_METADATA
 
 class TestControllerObserver {
  public:
@@ -254,7 +260,7 @@ class TopControlsShownRatioWaiter : public TestControllerObserver {
     return false;
   }
 
-  raw_ptr<TestController, ExperimentalAsh> controller_;
+  raw_ptr<TestController> controller_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
 
@@ -300,7 +306,7 @@ class GestureScrollInProgressChangeWaiter : public TestControllerObserver {
   }
 
  private:
-  raw_ptr<TestController, ExperimentalAsh> controller_;
+  raw_ptr<TestController> controller_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
 
@@ -382,7 +388,7 @@ class TopControlsSlideControllerTest : public InProcessBrowserTest {
   }
 
   bool GetTabletModeEnabled() const {
-    return ash::TabletMode::Get()->InTabletMode();
+    return display::Screen::GetScreen()->InTabletMode();
   }
 
   void CheckBrowserLayout(BrowserView* browser_view,
@@ -560,8 +566,8 @@ class TopControlsSlideControllerTest : public InProcessBrowserTest {
     return std::move(controller);
   }
 
-  raw_ptr<TestController, DanglingUntriaged | ExperimentalAsh>
-      test_controller_ = nullptr;  // Not owned.
+  raw_ptr<TestController, DanglingUntriaged> test_controller_ =
+      nullptr;  // Not owned.
 };
 
 namespace {
@@ -908,7 +914,7 @@ class BrowserViewLayoutWaiter : public views::ViewObserver {
   }
 
  private:
-  raw_ptr<BrowserView, ExperimentalAsh> browser_view_;
+  raw_ptr<BrowserView> browser_view_;
 
   bool view_bounds_changed_ = false;
 
@@ -1200,7 +1206,7 @@ class IntermediateShownRatioWaiter : public TestControllerObserver {
   }
 
  private:
-  raw_ptr<TestController, ExperimentalAsh> controller_;
+  raw_ptr<TestController> controller_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
 

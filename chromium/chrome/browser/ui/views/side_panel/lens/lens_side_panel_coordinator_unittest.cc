@@ -7,8 +7,8 @@
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "chrome/browser/companion/core/features.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/frame/browser_actions.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel.h"
@@ -16,8 +16,12 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_util.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/lens/lens_features.h"
+#include "components/vector_icons/vector_icons.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 
 namespace {
 
@@ -38,13 +42,24 @@ constexpr char kLensQuerySidePanelOpenLensAction[] =
 constexpr char kLensHomepageURL[] = "http://foo.com";
 constexpr char kLensAlternateHomepageURL[] = "http://foo.com/alternate1";
 
-class LensSidePanelCoordinatorTest : public TestWithBrowserView {
+class LensSidePanelCoordinatorTest
+    : public TestWithBrowserView,
+      public ::testing::WithParamInterface<bool> {
  public:
   void SetUp() override {
-    features.InitWithFeaturesAndParameters(
-        {{lens::features::kLensStandalone,
-          {{lens::features::kHomepageURLForLens.name, kLensHomepageURL}}}},
-        {});
+    if (GetParam()) {
+      features.InitWithFeaturesAndParameters(
+          {{lens::features::kLensStandalone,
+            {{lens::features::kHomepageURLForLens.name, kLensHomepageURL}}},
+           {features::kSidePanelPinning, {}},
+           {features::kChromeRefresh2023, {}}},
+          {});
+    } else {
+      features.InitWithFeaturesAndParameters(
+          {{lens::features::kLensStandalone,
+            {{lens::features::kHomepageURLForLens.name, kLensHomepageURL}}}},
+          {});
+    }
     TestWithBrowserView::SetUp();
 
     GetSidePanelCoordinator()->SetNoDelaysForTesting(true);
@@ -53,7 +68,8 @@ class LensSidePanelCoordinatorTest : public TestWithBrowserView {
         SidePanelCoordinator::GetGlobalSidePanelRegistry(browser);
     SidePanelUtil::PopulateGlobalEntries(browser, global_registry);
 
-    EXPECT_EQ(global_registry->entries().size(), 2u);
+    // Reading list, bookmarks, reading mode.
+    EXPECT_EQ(global_registry->entries().size(), 3u);
 
     // Create the lens coordinator in Browser.
     lens_side_panel_coordinator_ =
@@ -75,13 +91,19 @@ class LensSidePanelCoordinatorTest : public TestWithBrowserView {
     return browser_view()->unified_side_panel();
   }
 
+  actions::ActionItem* GetActionItem() {
+    BrowserActions* browser_actions = BrowserActions::FromBrowser(browser());
+    return actions::ActionManager::Get().FindAction(
+        kActionSidePanelShowLens, browser_actions->root_action_item());
+  }
+
  protected:
   // If ScopedFeatureList goes out of scope, the features are reset.
   base::test::ScopedFeatureList features;
   raw_ptr<LensSidePanelCoordinator> lens_side_panel_coordinator_;
 };
 
-TEST_F(LensSidePanelCoordinatorTest,
+TEST_P(LensSidePanelCoordinatorTest,
        OpenWithUrlShowsUnifiedSidePanelWithLensSelected) {
   base::UserActionTester user_action_tester;
   EXPECT_EQ(0, user_action_tester.GetActionCount(kNewLensQueryAction));
@@ -103,154 +125,35 @@ TEST_F(LensSidePanelCoordinatorTest,
             user_action_tester.GetActionCount(kLensQuerySidePanelClosedAction));
 }
 
-TEST_F(LensSidePanelCoordinatorTest, OpenWithUrlWhenSidePanelOpenShowsLens) {
-  base::UserActionTester user_action_tester;
-  GetSidePanelCoordinator()->Show(SidePanelEntry::Id::kBookmarks);
-  EXPECT_EQ(0, user_action_tester.GetActionCount(kNewLensQueryAction));
-
-  lens_side_panel_coordinator_->RegisterEntryAndShow(
-      content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
-                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
-
-  EXPECT_TRUE(GetUnifiedSidePanel()->GetVisible());
-  EXPECT_EQ(GetSidePanelCoordinator()
-                ->GetCurrentSidePanelEntryForTesting()
-                ->key()
-                .id(),
-            SidePanelEntry::Id::kLens);
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kNewLensQueryAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(
-                   kLensQuerySidePanelOpenNonLensAction));
-}
-
-TEST_F(LensSidePanelCoordinatorTest,
-       CallingRegisterTwiceOpensNewUrlAndLogsAction) {
-  base::UserActionTester user_action_tester;
-
-  lens_side_panel_coordinator_->RegisterEntryAndShow(
-      content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
-                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
-  lens_side_panel_coordinator_->RegisterEntryAndShow(content::OpenURLParams(
-      GURL(kLensAlternateHomepageURL), content::Referrer(),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
-      false));
-
-  EXPECT_TRUE(GetUnifiedSidePanel()->GetVisible());
-  EXPECT_EQ(GetSidePanelCoordinator()
-                ->GetCurrentSidePanelEntryForTesting()
-                ->key()
-                .id(),
-            SidePanelEntry::Id::kLens);
-  EXPECT_EQ(2, user_action_tester.GetActionCount(kLensQueryAction));
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(kLensQuerySidePanelClosedAction));
-  EXPECT_EQ(
-      1, user_action_tester.GetActionCount(kLensQuerySidePanelOpenLensAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kLensQueryFollowupAction));
-}
-
-TEST_F(LensSidePanelCoordinatorTest, SwitchToDifferentItemTriggersHideEvent) {
-  base::UserActionTester user_action_tester;
-  lens_side_panel_coordinator_->RegisterEntryAndShow(
-      content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
-                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
-
-  GetSidePanelCoordinator()->Show(SidePanelEntry::Id::kBookmarks);
-
-  EXPECT_TRUE(GetUnifiedSidePanel()->GetVisible());
-  EXPECT_EQ(GetSidePanelCoordinator()
-                ->GetCurrentSidePanelEntryForTesting()
-                ->key()
-                .id(),
-            SidePanelEntry::Id::kBookmarks);
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(kLensQuerySidePanelClosedAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kLensEntryHiddenAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kLensEntryShownAction));
-}
-
-TEST_F(LensSidePanelCoordinatorTest, SwitchBackToLensTriggersShowEvent) {
-  base::UserActionTester user_action_tester;
-  lens_side_panel_coordinator_->RegisterEntryAndShow(
-      content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
-                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                             ui::PAGE_TRANSITION_LINK, false));
-
-  GetSidePanelCoordinator()->Show(SidePanelEntry::Id::kBookmarks);
-  GetSidePanelCoordinator()->Show(SidePanelEntry::Id::kLens);
-
-  EXPECT_TRUE(GetUnifiedSidePanel()->GetVisible());
-  EXPECT_EQ(GetSidePanelCoordinator()
-                ->GetCurrentSidePanelEntryForTesting()
-                ->key()
-                .id(),
-            SidePanelEntry::Id::kLens);
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kLensQueryAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kNewLensQueryAction));
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(kLensQuerySidePanelClosedAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kLensEntryHiddenAction));
-  EXPECT_EQ(2, user_action_tester.GetActionCount(kLensEntryShownAction));
-}
-
-class LensSidePanelCoordinatorWithCompanionEnabledTest
-    : public LensSidePanelCoordinatorTest {
- public:
-  void SetUp() override {
-    // This test covers when the companion and standalone features are enabled,
-    // but image search on companion is disabled.
-    features.InitWithFeaturesAndParameters(
-        {{lens::features::kLensStandalone,
-          {{lens::features::kHomepageURLForLens.name, kLensHomepageURL}}},
-         {companion::features::internal::kSidePanelCompanion,
-          {{"open-companion-for-image-search", "false"},
-           {"open-contextual-lens-panel", "true"}}},
-         {lens::features::kEnableImageSearchSidePanelFor3PDse, {{}}}},
-        {});
-    TestWithBrowserView::SetUp();
-
-    GetSidePanelCoordinator()->SetNoDelaysForTesting(true);
-    auto* browser = browser_view()->browser();
-    auto* global_registry =
-        SidePanelCoordinator::GetGlobalSidePanelRegistry(browser);
-    SidePanelUtil::PopulateGlobalEntries(browser, global_registry);
-    EXPECT_EQ(global_registry->entries().size(), 2u);
-
-    // Create the lens coordinator in Browser.
-    lens_side_panel_coordinator_ =
-        LensSidePanelCoordinator::GetOrCreateForBrowser(browser);
-    // Create an active web contents.
-    AddTab(browser, GURL("about:blank"));
+TEST_P(LensSidePanelCoordinatorTest, ActionItemTest) {
+  if (!base::FeatureList::IsEnabled(features::kSidePanelPinning)) {
+    return;
   }
-};
 
-TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
-       OpenWithUrlShowsUnifiedSidePanelWithLensSelected) {
-  base::UserActionTester user_action_tester;
-  EXPECT_EQ(0, user_action_tester.GetActionCount(kNewLensQueryAction));
+  actions::ActionItem* lens_action_item = GetActionItem();
+  EXPECT_TRUE(lens_action_item);
+  EXPECT_EQ(lens_action_item->GetText(),
+            l10n_util::GetStringUTF16(IDS_GOOGLE_LENS_TITLE));
+  EXPECT_EQ(lens_action_item->GetImage(),
+            ui::ImageModel::FromVectorIcon(vector_icons::kGoogleLensLogoIcon));
 
   lens_side_panel_coordinator_->RegisterEntryAndShow(
       content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
                              WindowOpenDisposition::NEW_FOREGROUND_TAB,
                              ui::PAGE_TRANSITION_LINK, false));
-
   EXPECT_TRUE(GetUnifiedSidePanel()->GetVisible());
-  EXPECT_EQ(GetSidePanelCoordinator()
-                ->GetCurrentSidePanelEntryForTesting()
-                ->key()
-                .id(),
-            SidePanelEntry::Id::kLens);
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kLensQueryAction));
-  EXPECT_EQ(1, user_action_tester.GetActionCount(kNewLensQueryAction));
-  EXPECT_EQ(1,
-            user_action_tester.GetActionCount(kLensQuerySidePanelClosedAction));
+  lens_action_item->InvokeAction(
+      actions::ActionInvocationContext::Builder()
+          .SetProperty(
+              kSidePanelOpenTriggerKey,
+              static_cast<std::underlying_type_t<SidePanelOpenTrigger>>(
+                  SidePanelOpenTrigger::kPinnedEntryToolbarButton))
+          .Build());
+  EXPECT_FALSE(GetUnifiedSidePanel()->GetVisible());
+  EXPECT_EQ(lens_action_item->GetInvokeCount(), 1);
 }
 
-TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
-       OpenWithUrlWhenSidePanelOpenShowsLens) {
+TEST_P(LensSidePanelCoordinatorTest, OpenWithUrlWhenSidePanelOpenShowsLens) {
   base::UserActionTester user_action_tester;
   GetSidePanelCoordinator()->Show(SidePanelEntry::Id::kBookmarks);
   EXPECT_EQ(0, user_action_tester.GetActionCount(kNewLensQueryAction));
@@ -271,7 +174,23 @@ TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
                    kLensQuerySidePanelOpenNonLensAction));
 }
 
-TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
+TEST_P(LensSidePanelCoordinatorTest, DeregisterLensWithSidePanelOpen) {
+  lens_side_panel_coordinator_->RegisterEntryAndShow(
+      content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
+  EXPECT_TRUE(GetUnifiedSidePanel()->GetVisible());
+  EXPECT_EQ(GetSidePanelCoordinator()
+                ->GetCurrentSidePanelEntryForTesting()
+                ->key()
+                .id(),
+            SidePanelEntry::Id::kLens);
+  auto* registry = SidePanelCoordinator::GetGlobalSidePanelRegistry(browser());
+  registry->Deregister(SidePanelEntry::Key(SidePanelEntry::Id::kLens));
+  EXPECT_FALSE(GetUnifiedSidePanel()->GetVisible());
+}
+
+TEST_P(LensSidePanelCoordinatorTest,
        CallingRegisterTwiceOpensNewUrlAndLogsAction) {
   base::UserActionTester user_action_tester;
 
@@ -298,8 +217,7 @@ TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
   EXPECT_EQ(1, user_action_tester.GetActionCount(kLensQueryFollowupAction));
 }
 
-TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
-       SwitchToDifferentItemTriggersHideEvent) {
+TEST_P(LensSidePanelCoordinatorTest, SwitchToDifferentItemTriggersHideEvent) {
   base::UserActionTester user_action_tester;
   lens_side_panel_coordinator_->RegisterEntryAndShow(
       content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
@@ -320,8 +238,7 @@ TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
   EXPECT_EQ(1, user_action_tester.GetActionCount(kLensEntryShownAction));
 }
 
-TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
-       SwitchBackToLensTriggersShowEvent) {
+TEST_P(LensSidePanelCoordinatorTest, SwitchBackToLensTriggersShowEvent) {
   base::UserActionTester user_action_tester;
   lens_side_panel_coordinator_->RegisterEntryAndShow(
       content::OpenURLParams(GURL(kLensHomepageURL), content::Referrer(),
@@ -344,5 +261,7 @@ TEST_F(LensSidePanelCoordinatorWithCompanionEnabledTest,
   EXPECT_EQ(1, user_action_tester.GetActionCount(kLensEntryHiddenAction));
   EXPECT_EQ(2, user_action_tester.GetActionCount(kLensEntryShownAction));
 }
+
+INSTANTIATE_TEST_SUITE_P(All, LensSidePanelCoordinatorTest, ::testing::Bool());
 
 }  // namespace

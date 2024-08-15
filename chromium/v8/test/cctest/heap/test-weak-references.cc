@@ -57,15 +57,18 @@ TEST(WeakReferencesBasic) {
         Factory::CodeBuilder(isolate, desc, CodeKind::FOR_TESTING).Build();
     CHECK(IsCode(*code));
 
-    lh->set_data1(HeapObjectReference::Weak(*code));
-    Tagged<HeapObject> code_heap_object;
-    CHECK(lh->data1().GetHeapObjectIfWeak(&code_heap_object));
-    CHECK_EQ(*code, code_heap_object);
+    // We cannot store the Code object itself into the tagged field as it will
+    // be located outside of the main pointer compression cage when the sandbox
+    // is enabled. So instead we use the Code's wrapper object.
+    lh->set_data1(HeapObjectReference::Weak(code->wrapper()));
+    Tagged<HeapObject> code_wrapper_heap_object;
+    CHECK(lh->data1().GetHeapObjectIfWeak(&code_wrapper_heap_object));
+    CHECK_EQ(code->wrapper(), code_wrapper_heap_object);
 
     heap::InvokeMajorGC(CcTest::heap());
 
-    CHECK(lh->data1().GetHeapObjectIfWeak(&code_heap_object));
-    CHECK_EQ(*code, code_heap_object);
+    CHECK(lh->data1().GetHeapObjectIfWeak(&code_wrapper_heap_object));
+    CHECK_EQ(code->wrapper(), code_wrapper_heap_object);
   }  // code will go out of scope.
 
   heap::InvokeMajorGC(CcTest::heap());
@@ -642,7 +645,8 @@ TEST(PrototypeUsersBasic) {
   // Add some objects into the array.
   int index = -1;
   {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
     CHECK_EQ(array->length(), index + 1);
   }
@@ -655,7 +659,8 @@ TEST(PrototypeUsersBasic) {
   int last_index = index;
   int old_capacity = array->capacity();
   while (!array->IsFull()) {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
     CHECK_EQ(index, last_index + 1);
     CHECK_EQ(array->length(), index + 1);
@@ -664,14 +669,16 @@ TEST(PrototypeUsersBasic) {
 
   // The next addition will fill the empty slot.
   {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
   }
   CHECK_EQ(index, empty_index);
 
   // The next addition will make the arrow grow again.
   {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
     CHECK_EQ(array->length(), index + 1);
     last_index = index;
@@ -687,7 +694,8 @@ TEST(PrototypeUsersBasic) {
   // Fill the array (still adding to the end)
   old_capacity = array->capacity();
   while (!array->IsFull()) {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
     CHECK_EQ(index, last_index + 1);
     CHECK_EQ(array->length(), index + 1);
@@ -696,13 +704,15 @@ TEST(PrototypeUsersBasic) {
 
   // Make sure we use the empty slots in (reverse) order.
   {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
   }
   CHECK_EQ(index, empty_index2);
 
   {
-    Handle<Map> map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, map, &index);
   }
   CHECK_EQ(index, empty_index1);
@@ -736,17 +746,18 @@ TEST(PrototypeUsersCompacted) {
 
   // Add some objects into the array.
   int index = -1;
-  Handle<Map> map_cleared_by_user =
-      factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+  Handle<Map> map_cleared_by_user = factory->NewContextfulMapForCurrentContext(
+      JS_OBJECT_TYPE, JSObject::kHeaderSize);
   array = PrototypeUsers::Add(isolate, array, map_cleared_by_user, &index);
   CHECK_EQ(index, 1);
-  Handle<Map> live_map = factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+  Handle<Map> live_map = factory->NewContextfulMapForCurrentContext(
+      JS_OBJECT_TYPE, JSObject::kHeaderSize);
   array = PrototypeUsers::Add(isolate, array, live_map, &index);
   CHECK_EQ(index, 2);
   {
     HandleScope inner_scope(isolate);
-    Handle<Map> soon_dead_map =
-        factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
+    Handle<Map> soon_dead_map = factory->NewContextfulMapForCurrentContext(
+        JS_OBJECT_TYPE, JSObject::kHeaderSize);
     array = PrototypeUsers::Add(isolate, array, soon_dead_map, &index);
     CHECK_EQ(index, 3);
 

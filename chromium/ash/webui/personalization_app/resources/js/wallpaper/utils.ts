@@ -4,25 +4,19 @@
 
 /** @fileoverview Wallpaper related utility functions in personalization app */
 
+import {isNonEmptyArray, isNonEmptyFilePath} from 'chrome://resources/ash/common/sea_pen/sea_pen_utils.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 
 import {CurrentAttribution, CurrentWallpaper, GooglePhotosAlbum, GooglePhotosPhoto, WallpaperImage, WallpaperLayout, WallpaperType} from '../../personalization_app.mojom-webui.js';
-import {getNumberOfGridItemsPerRow, isNonEmptyArray, isNonEmptyString} from '../utils.js';
+import {getNumberOfGridItemsPerRow, isNonEmptyString} from '../utils.js';
 
 import {DefaultImageSymbol, DisplayableImage, kDefaultImageSymbol} from './constants.js';
-import {SeaPenTemplate} from './sea_pen/sea_pen_collection_element.js';
 import {DailyRefreshState} from './wallpaper_state.js';
-
-export const QUERY: string = 'query';
 
 export function isWallpaperImage(obj: any): obj is WallpaperImage {
   return !!obj && typeof obj.unitId === 'bigint';
-}
-
-export function isFilePath(obj: any): obj is FilePath {
-  return !!obj && typeof obj.path === 'string' && obj.path;
 }
 
 export function isDefaultImage(obj: any): obj is DefaultImageSymbol {
@@ -43,7 +37,7 @@ export function isImageAMatchForKey(
   if (isDefaultImage(image)) {
     return key === kDefaultImageSymbol;
   }
-  if (isFilePath(image)) {
+  if (isNonEmptyFilePath(image)) {
     return key === image.path;
   }
   assert(isGooglePhotosPhoto(image));
@@ -75,7 +69,7 @@ export function isImageEqualToSelected(
  */
 export function getPathOrSymbol(image: FilePath|DefaultImageSymbol): string|
     DefaultImageSymbol {
-  if (isFilePath(image)) {
+  if (isNonEmptyFilePath(image)) {
     return image.path;
   }
   assert(image === kDefaultImageSymbol, 'only one symbol should be present');
@@ -203,65 +197,4 @@ export function findAlbumById(
     return albums.find(album => album.id === albumId) ?? null;
   }
   return null;
-}
-
-export function getSampleSeaPenTemplates(): SeaPenTemplate[] {
-  return [
-    {
-      preview: [{
-        url: 'chrome://personalization/images/google_photos.svg',
-      }],
-      text: 'the',
-      id: '1',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/ambient_mode_disabled.svg',
-      }],
-      text: 'faster',
-      id: '2',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/google_photos.svg',
-      }],
-      text: 'you',
-      id: '3',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/no_google_photos_images.svg',
-      }],
-      text: 'go',
-      id: '4',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/ambient_mode_disabled_dark.svg',
-      }],
-      text: 'the',
-      id: '5',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/no_google_photos_images.svg',
-      }],
-      text: 'shorter',
-      id: '6',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/no_images.svg',
-      }],
-      text: 'you',
-      id: '7',
-    },
-    {
-      preview: [{
-        url: 'chrome://personalization/images/no_google_photos_images_dark.svg',
-      }],
-      text: 'are',
-      id: '8',
-    },
-  ];
 }

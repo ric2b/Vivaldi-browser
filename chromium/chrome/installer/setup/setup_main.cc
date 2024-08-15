@@ -4,10 +4,11 @@
 
 #include "chrome/installer/setup/setup_main.h"
 
-// Must be before msi.h.
-#include <windows.h>
-
+// clang-format off
+#include <windows.h> // Must be included before msi.h.
 #include <msi.h>
+// clang-format on
+
 #include <psapi.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -15,6 +16,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/at_exit.h"
@@ -51,6 +53,7 @@
 #include "base/win/current_module.h"
 #include "base/win/process_startup_helper.h"
 #include "base/win/registry.h"
+#include "base/win/resource_exhaustion.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
@@ -104,7 +107,6 @@
 #include "components/crash/core/app/crash_switches.h"
 #include "components/crash/core/app/run_as_crashpad_handler_win.h"
 #include "content/public/common/content_switches.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(CLANG_PROFILING)
@@ -220,12 +222,14 @@ void DelayedOverwriteDisplayVersions(const base::FilePath& setup_exe,
   }
   InstallUtil::AppendModeAndChannelSwitches(&command_line);
   command_line.AppendSwitch(installer::switches::kSystemLevel);
-  if (verbose_logging)
+  if (verbose_logging) {
     command_line.AppendSwitch(installer::switches::kVerboseLogging);
+  }
 
   base::LaunchOptions launch_options;
-  if (start_event.IsValid())
+  if (start_event.IsValid()) {
     launch_options.handles_to_inherit.push_back(start_event.Get());
+  }
   launch_options.force_breakaway_from_job_ = true;
   base::Process writer = base::LaunchProcess(command_line, launch_options);
   if (!writer.IsValid()) {
@@ -235,8 +239,9 @@ void DelayedOverwriteDisplayVersions(const base::FilePath& setup_exe,
     return;
   }
 
-  if (!start_event.IsValid())
+  if (!start_event.IsValid()) {
     return;
+  }
 
   // Wait up to 30 seconds for either the start event to be signaled or for the
   // child process to terminate (i.e., in case it crashes).
@@ -260,6 +265,24 @@ void DelayedOverwriteDisplayVersions(const base::FilePath& setup_exe,
   }
 }
 
+// Signals `event` if it is valid and then closes it.
+void SignalAndCloseEvent(base::win::ScopedHandle event) {
+  if (event.IsValid() && !::SetEvent(event.Get())) {
+    // Failure to signal the event likely means that the handle is invalid.
+    // Clear the ScopedHandle to prevent a crash upon close and proceed with the
+    // operation. The parent process will wait for 30s in this case (see
+    // DelayedOverwriteDisplayVersions) and will then continue on its merry way.
+    if (auto error = ::GetLastError(); error != ERROR_INVALID_HANDLE) {
+      // It is highly unexpected that this would fail for any other reason. Send
+      // diagnostics for analysis just in case.
+      // TODO(grt): Check for data and remove this in June 2024.
+      base::debug::Alias(&error);
+      base::debug::DumpWithoutCrashing();
+    }
+    (void)event.release();
+  }
+}
+
 // Waits for msiexec to release its mutex and then overwrites DisplayVersion in
 // the Windows registry.
 LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
@@ -278,24 +301,7 @@ LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
         ::SetPriorityClass(::GetCurrentProcess(), REALTIME_PRIORITY_CLASS) != 0;
 
     // Notify the parent process that this one is ready to go.
-    if (startup_event.IsValid()) {
-      if (!::SetEvent(startup_event.Get())) {
-        // Failure to signal the event likely means that the handle is invalid.
-        // Clear the ScopedHandle to prevent a crash upon close and proceed with
-        // the operation. The parent process will wait for 30s in this case (see
-        // DelayedOverwriteDisplayVersions) and will then continue on its merry
-        // way.
-        if (auto error = ::GetLastError(); error != ERROR_INVALID_HANDLE) {
-          // It is highly unexpected that this would fail for any other reason.
-          // Send diagnostics for analysis just in case.
-          // TODO(grt): Check for data and remove this in March 2024.
-          base::debug::Alias(&error);
-          base::debug::DumpWithoutCrashing();
-        }
-        (void)startup_event.release();
-      }
-      startup_event.Close();
-    }
+    SignalAndCloseEvent(std::move(startup_event));
 
     const auto wait_result = ::WaitForSingleObject(msi_handle.Get(), INFINITE);
     if (wait_result == WAIT_FAILED) {
@@ -319,19 +325,18 @@ LONG OverwriteDisplayVersionsAfterMsiexec(base::win::ScopedHandle startup_event,
                    "open the MSI mutex";
 
     // Notify the parent process that this one is ready to go.
-    if (startup_event.IsValid()) {
-      ::SetEvent(startup_event.Get());
-      startup_event.Close();
-    }
+    SignalAndCloseEvent(std::move(startup_event));
   }
 
   auto result = OverwriteDisplayVersions(product, value);
 
-  if (adjusted_priority)
+  if (adjusted_priority) {
     ::SetPriorityClass(::GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+  }
 
-  if (acquired_mutex)
+  if (acquired_mutex) {
     ::ReleaseMutex(msi_handle.Get());
+  }
 
   return result;
 }
@@ -687,8 +692,9 @@ bool CheckPreInstallConditions(const InstallationState& original_state,
 
     // Allow upgrades to proceed so that out-of-date versions are not left
     // around.
-    if (user_level_product_state)
+    if (user_level_product_state) {
       return true;
+    }
 
     // This is a new user-level install...
 
@@ -792,11 +798,13 @@ installer::InstallStatus UninstallProducts(InstallationState& original_state,
   // Trigger Active Setup if it was requested for the chrome product. This needs
   // to be done after the UninstallProduct calls as some of them might
   // otherwise terminate the process launched by TriggerActiveSetupCommand().
-  if (cmd_line.HasSwitch(installer::switches::kTriggerActiveSetup))
+  if (cmd_line.HasSwitch(installer::switches::kTriggerActiveSetup)) {
     InstallUtil::TriggerActiveSetupCommand();
+  }
 
-  if (!system_level_cmd.GetProgram().empty())
+  if (!system_level_cmd.GetProgram().empty()) {
     base::LaunchProcess(system_level_cmd, base::LaunchOptions());
+  }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Tell Google Update that an uninstall has taken place if this install did
@@ -804,8 +812,9 @@ installer::InstallStatus UninstallProducts(InstallationState& original_state,
   // MSI-driven uninstalls that conflicts with this. Ignore the return value:
   // success or failure of Google Update has no bearing on the success or
   // failure of Chrome's uninstallation.
-  if (!installer_state.is_msi())
+  if (!installer_state.is_msi()) {
     google_update::UninstallGoogleUpdate(installer_state.system_install());
+  }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   return install_status;
@@ -887,8 +896,9 @@ installer::InstallStatus ShowEulaDialog(const std::wstring& inner_frame) {
 // accepted.
 bool CreateEulaSentinel() {
   base::FilePath eula_sentinel;
-  if (!InstallUtil::GetEulaSentinelFilePath(&eula_sentinel))
+  if (!InstallUtil::GetEulaSentinelFilePath(&eula_sentinel)) {
     return false;
+  }
 
   return (base::CreateDirectory(eula_sentinel.DirName()) &&
           base::WriteFile(eula_sentinel, ""));
@@ -903,8 +913,9 @@ installer::InstallStatus RegisterDevChrome(
   // Only proceed with registering a dev chrome if no real Chrome installation
   // of the same install mode is present on this system.
   const ProductState* existing_chrome = original_state.GetProductState(false);
-  if (!existing_chrome)
+  if (!existing_chrome) {
     existing_chrome = original_state.GetProductState(true);
+  }
   if (existing_chrome) {
     const std::wstring name = InstallUtil::GetDisplayName();
     const std::wstring message = base::StrCat(
@@ -922,10 +933,12 @@ installer::InstallStatus RegisterDevChrome(
 
   base::FilePath chrome_exe(
       cmd_line.GetSwitchValuePath(installer::switches::kRegisterDevChrome));
-  if (chrome_exe.empty())
+  if (chrome_exe.empty()) {
     chrome_exe = setup_exe.DirName().Append(installer::kChromeExe);
-  if (!chrome_exe.IsAbsolute())
+  }
+  if (!chrome_exe.IsAbsolute()) {
     chrome_exe = base::MakeAbsoluteFilePath(chrome_exe);
+  }
 
   installer::InstallStatus status = installer::FIRST_INSTALL_SUCCESS;
   if (base::PathExists(chrome_exe)) {
@@ -1038,8 +1051,9 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
     *exit_code = ShowEulaDialog(inner_frame);
 
     if (installer::EULA_REJECTED != *exit_code) {
-      if (GoogleUpdateSettings::SetEulaConsent(*original_state, true))
+      if (GoogleUpdateSettings::SetEulaConsent(*original_state, true)) {
         CreateEulaSentinel();
+      }
     }
   } else if (cmd_line.HasSwitch(installer::switches::kConfigureUserSettings)) {
     // NOTE: Should the work done here, on kConfigureUserSettings, change:
@@ -1089,7 +1103,7 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
       const std::wstring protocol_associations_value =
           cmd_line.GetSwitchValueNative(
               installer::switches::kRegisterURLProtocol);
-      absl::optional<ShellUtil::ProtocolAssociations> protocol_associations =
+      std::optional<ShellUtil::ProtocolAssociations> protocol_associations =
           ShellUtil::ProtocolAssociations::FromCommandLineArgument(
               protocol_associations_value);
 
@@ -1103,8 +1117,9 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
       }
     } else {
       if (ShellUtil::RegisterChromeBrowser(chrome_exe, suffix,
-                                           /*elevate_if_not_admin=*/false))
+                                           /*elevate_if_not_admin=*/false)) {
         status = installer::IN_USE_UPDATED;
+      }
     }
     *exit_code = InstallUtil::GetInstallReturnCode(status);
   } else if (cmd_line.HasSwitch(installer::switches::kDeleteOldVersions) ||
@@ -1344,8 +1359,9 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
 
   // Check for an uncompressed archive alongside the current executable if one
   // was not given or generated.
-  if (uncompressed_archive.empty())
+  if (uncompressed_archive.empty()) {
     uncompressed_archive = setup_exe.DirName().Append(kChromeArchive);
+  }
 
   if (*archive_type == UNKNOWN_ARCHIVE_TYPE) {
     // An archive was not uncompressed or patched above.
@@ -1477,8 +1493,9 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
         bool do_not_launch_chrome = false;
         prefs.GetBool(initial_preferences::kDoNotLaunchChrome,
                       &do_not_launch_chrome);
-        if (!system_install && !do_not_launch_chrome)
+        if (!system_install && !do_not_launch_chrome) {
           LaunchChromeBrowser(installer_state.target_path());
+        }
       } else if ((install_status == NEW_VERSION_UPDATED) ||
                  (install_status == IN_USE_UPDATED)) {
         DCHECK_NE(chrome_exe.value(), std::wstring());
@@ -1532,14 +1549,28 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
 
 namespace {
 
+class ScopedIgnoreResourceExhaustion {
+ public:
+  ScopedIgnoreResourceExhaustion() {
+    base::win::SetOnResourceExhaustedFunction(&DoNothing);
+  }
+  ~ScopedIgnoreResourceExhaustion() {
+    base::win::SetOnResourceExhaustedFunction(nullptr);
+  }
+
+ private:
+  static void DoNothing() {}
+};
+
 int SetupMain(HINSTANCE instance) {
   vivaldi::g_inside_installer_application = true;
 
   // Check to see if the CPU is supported before doing anything else. There's
   // very little than can safely be accomplished if the CPU isn't supported
   // since dependent libraries (e.g., base) may use invalid instructions.
-  if (!installer::IsProcessorSupported())
+  if (!installer::IsProcessorSupported()) {
     return installer::CPU_NOT_SUPPORTED;
+  }
 
   // Persist histograms so they can be uploaded later. The storage directory is
   // created during installation when the main WorkItemList is evaluated so
@@ -1627,8 +1658,9 @@ int SetupMain(HINSTANCE instance) {
   // Histogram storage is enabled at the very top of this wWinMain. Disable it
   // during uninstall since there's neither a directory in which to write them
   // nor a browser to subsequently upload them.
-  if (is_uninstall)
+  if (is_uninstall) {
     persistent_histogram_storage.Disable();
+  }
 
   // Check to make sure current system is Win10 or later. If not, log
   // error message and get out.
@@ -1641,11 +1673,17 @@ int SetupMain(HINSTANCE instance) {
   }
 
   // Initialize COM for use later.
-  base::win::ScopedCOMInitializer com_initializer;
-  if (!com_initializer.Succeeded()) {
-    installer_state.WriteInstallerResult(installer::OS_ERROR,
-                                         IDS_INSTALL_OS_ERROR_BASE, nullptr);
-    return installer::OS_ERROR;
+  std::optional<base::win::ScopedCOMInitializer> com_initializer;
+  {
+    // Temporarily ignore resource exhaustion to suppress crashes in case there
+    // are no ATOMs left -- the error is handled here by exiting gracefully.
+    ScopedIgnoreResourceExhaustion ignore_resource_exhaustion;
+    com_initializer.emplace();
+    if (!com_initializer->Succeeded()) {
+      installer_state.WriteInstallerResult(installer::OS_ERROR,
+                                           IDS_INSTALL_OS_ERROR_BASE, nullptr);
+      return installer::OS_ERROR;
+    }
   }
 
   // Make sure system_level is supported if requested. For historical reasons,
@@ -1666,8 +1704,9 @@ int SetupMain(HINSTANCE instance) {
     return installer::SXS_OPTION_NOT_SUPPORTED;
   }
   // Some command line options are no longer supported and must error out.
-  if (installer::ContainsUnsupportedSwitch(cmd_line))
+  if (installer::ContainsUnsupportedSwitch(cmd_line)) {
     return installer::UNSUPPORTED_OPTION;
+  }
 
   // A variety of installer operations require the path to the current
   // executable. Get it once here for use throughout these operations. Note that
@@ -1724,8 +1763,9 @@ int SetupMain(HINSTANCE instance) {
       // If system_install became true due to an environment variable, append
       // it to the command line here since env vars may not propagate past the
       // elevation.
-      if (!new_cmd.HasSwitch(installer::switches::kSystemLevel))
+      if (!new_cmd.HasSwitch(installer::switches::kSystemLevel)) {
         new_cmd.AppendSwitch(installer::switches::kSystemLevel);
+      }
 
       DWORD exe_exit_code = installer::UNKNOWN_STATUS;
       InstallUtil::ExecuteExeAsAdmin(new_cmd, &exe_exit_code);

@@ -133,12 +133,6 @@ bool HttpProxyClientSocket::WasEverUsed() const {
   return false;
 }
 
-bool HttpProxyClientSocket::WasAlpnNegotiated() const {
-  // Do not delegate to `socket_`. While `socket_` may negotiate ALPN with the
-  // proxy, this object represents the tunneled TCP connection to the origin.
-  return false;
-}
-
 NextProto HttpProxyClientSocket::GetNegotiatedProtocol() const {
   // Do not delegate to `socket_`. While `socket_` may negotiate ALPN with the
   // proxy, this object represents the tunneled TCP connection to the origin.
@@ -226,7 +220,7 @@ int HttpProxyClientSocket::PrepareForAuthRestart() {
   // If the auth request had a body, need to drain it before reusing the socket.
   if (!http_stream_parser_->IsResponseBodyComplete()) {
     next_state_ = STATE_DRAIN_BODY;
-    drain_buf_ = base::MakeRefCounted<IOBuffer>(kDrainBodyBufferSize);
+    drain_buf_ = base::MakeRefCounted<IOBufferWithSize>(kDrainBodyBufferSize);
     return OK;
   }
 
@@ -354,8 +348,8 @@ int HttpProxyClientSocket::DoSendRequest() {
 
     if (proxy_delegate_) {
       HttpRequestHeaders proxy_delegate_headers;
-      proxy_delegate_->OnBeforeTunnelRequestServerOnly(
-          proxy_chain_, proxy_chain_index_, &proxy_delegate_headers);
+      proxy_delegate_->OnBeforeTunnelRequest(proxy_chain_, proxy_chain_index_,
+                                             &proxy_delegate_headers);
       extra_headers.MergeFrom(proxy_delegate_headers);
     }
 
@@ -406,7 +400,7 @@ int HttpProxyClientSocket::DoReadHeadersComplete(int result) {
       response_.headers.get());
 
   if (proxy_delegate_) {
-    int rv = proxy_delegate_->OnTunnelHeadersReceivedServerOnly(
+    int rv = proxy_delegate_->OnTunnelHeadersReceived(
         proxy_chain_, proxy_chain_index_, *response_.headers);
     if (rv != OK) {
       DCHECK_NE(ERR_IO_PENDING, rv);

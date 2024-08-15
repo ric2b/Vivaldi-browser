@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/public/cpp/system/anchored_nudge_data.h"
@@ -14,17 +13,18 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
+#include "ash/style/keyboard_shortcut_view.h"
 #include "ash/style/pill_button.h"
 #include "ash/style/system_shadow.h"
 #include "ash/style/typography.h"
 #include "ash/system/toast/nudge_constants.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
@@ -33,6 +33,8 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/view.h"
+#include "ui/views/view_tracker.h"
 
 namespace ash {
 
@@ -51,6 +53,7 @@ constexpr gfx::Insets kNudgeWithCloseButton_ButtonContainerInteriorMargin =
     gfx::Insets::TLBR(0, 0, 0, 12);
 
 constexpr float kNudgeCornerRadius = 24.0f;
+constexpr float kNudgePointyCornerRadius = 4.0f;
 
 // Label constants
 constexpr int kBodyLabelMaxLines = 3;
@@ -67,39 +70,82 @@ constexpr int kButtonContainerTopPadding = 16;
 constexpr int kImageViewTrailingPadding = 16;
 constexpr int kTitleBottomPadding = 4;
 
-// Shadow constants
-constexpr gfx::Point kShadowOrigin = gfx::Point(8, 8);
-
 void AddPaddingView(views::View* parent, int width, int height) {
   parent->AddChildView(std::make_unique<views::View>())
       ->SetPreferredSize(gfx::Size(width, height));
 }
 
-void SetupViewCornerRadius(views::View* view, int corner_radius) {
-  view->SetPaintToLayer();
-  view->layer()->SetFillsBoundsOpaquely(false);
-  view->layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(corner_radius));
+// Returns true if the provided arrow is located at a corner.
+bool CalculateIsCornerAnchored(views::BubbleBorder::Arrow arrow) {
+  switch (arrow) {
+    case views::BubbleBorder::Arrow::TOP_LEFT:
+    case views::BubbleBorder::Arrow::TOP_RIGHT:
+    case views::BubbleBorder::Arrow::BOTTOM_LEFT:
+    case views::BubbleBorder::Arrow::BOTTOM_RIGHT:
+    case views::BubbleBorder::Arrow::LEFT_TOP:
+    case views::BubbleBorder::Arrow::RIGHT_TOP:
+    case views::BubbleBorder::Arrow::LEFT_BOTTOM:
+    case views::BubbleBorder::Arrow::RIGHT_BOTTOM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Returns a `gfx::RoundedCornersF` object that has a single pointy corner which
+// is defined based on the nudge's position in relation to its anchor view.
+gfx::RoundedCornersF CalculatePointyAnchoredNudgeCorners(
+    views::View* nudge_view,
+    views::View* anchor_view) {
+  auto nudge_bounds = nudge_view->GetBoundsInScreen();
+  auto anchor_bounds = anchor_view->GetBoundsInScreen();
+
+  bool pointy_bottom = nudge_bounds.bottom() < anchor_bounds.bottom();
+  bool pointy_right = nudge_bounds.right() < anchor_bounds.right();
+
+  auto top_left_radius = !pointy_bottom && !pointy_right
+                             ? kNudgePointyCornerRadius
+                             : kNudgeCornerRadius;
+  auto top_right_radius = !pointy_bottom && pointy_right
+                              ? kNudgePointyCornerRadius
+                              : kNudgeCornerRadius;
+  auto bottom_right_radius = pointy_bottom && pointy_right
+                                 ? kNudgePointyCornerRadius
+                                 : kNudgeCornerRadius;
+  auto bottom_left_radius = pointy_bottom && !pointy_right
+                                ? kNudgePointyCornerRadius
+                                : kNudgeCornerRadius;
+
+  return gfx::RoundedCornersF(top_left_radius, top_right_radius,
+                              bottom_right_radius, bottom_left_radius);
 }
 
 }  // namespace
 
-SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
-  DCHECK(features::IsSystemNudgeV2Enabled());
-
-  SetupViewCornerRadius(this, kNudgeCornerRadius);
+SystemNudgeView::SystemNudgeView(const AnchoredNudgeData& nudge_data)
+    : shadow_(SystemShadow::CreateShadowOnTextureLayer(
+          SystemShadow::Type::kElevation4)),
+      is_corner_anchored_(CalculateIsCornerAnchored(nudge_data.arrow)) {
+  // Painted to layer so the view can be semi-transparent and set rounded
+  // corners.
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
   layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
   layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
-  SetBackground(views::CreateThemedSolidBackground(kColorAshShieldAndBase80));
-  SetBorder(std::make_unique<views::HighlightBorder>(
-      kNudgeCornerRadius,
-      views::HighlightBorder::Type::kHighlightBorderOnShadow));
+  SetBackground(views::CreateThemedSolidBackground(
+      nudge_data.background_color_id.value_or(kColorAshShieldAndBase80)));
   SetNotifyEnterExitOnChild(true);
 
-  // Since nudges have a large corner radius, we use the shadow on texture
-  // layer. Refer to `ash::SystemShadowOnTextureLayer` for more details.
-  shadow_ =
-      SystemShadow::CreateShadowOnTextureLayer(SystemShadow::Type::kElevation4);
-  shadow_->SetRoundedCornerRadius(kNudgeCornerRadius);
+  // Cache the anchor view when the nudge anchors by its corner to set a pointy
+  // corner based on the nudge's position in relation to this anchor view.
+  if (nudge_data.is_anchored() && is_corner_anchored_) {
+    anchor_view_tracker_ = std::make_unique<views::ViewTracker>();
+    anchor_view_tracker_->SetView(nudge_data.GetAnchorView());
+    SetNudgeRoundedCornerRadius(CalculatePointyAnchoredNudgeCorners(
+        /*nudge_view=*/this, anchor_view_tracker_->view()));
+  } else {
+    SetNudgeRoundedCornerRadius(gfx::RoundedCornersF(kNudgeCornerRadius));
+  }
 
   SetOrientation(views::LayoutOrientation::kVertical);
   SetInteriorMargin(kNudgeInteriorMargin);
@@ -107,7 +153,8 @@ SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
 
   const bool nudge_is_text_only = nudge_data.image_model.IsEmpty() &&
                                   nudge_data.title_text.empty() &&
-                                  nudge_data.first_button_text.empty();
+                                  nudge_data.primary_button_text.empty() &&
+                                  nudge_data.keyboard_codes.empty();
 
   // Nudges without an anchor view that are not text-only will have a close
   // button that is visible on view hovered.
@@ -161,12 +208,27 @@ SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
   }
 
   if (!nudge_data.image_model.IsEmpty()) {
-    image_view_ = image_and_text_container->AddChildView(
+    auto* image_view = image_and_text_container->AddChildView(
         views::Builder<views::ImageView>()
+            .SetID(VIEW_ID_SYSTEM_NUDGE_IMAGE_VIEW)
             .SetPreferredSize(gfx::Size(kImageViewSize, kImageViewSize))
             .SetImage(nudge_data.image_model)
+            // Painted to layer to set rounded corners.
+            .SetPaintToLayer()
             .Build());
-    SetupViewCornerRadius(image_view_, kImageViewCornerRadius);
+    // Certain `ImageModels` do not have the ability to set their size in the
+    // constructor, so instead we can do it here.
+    if (nudge_data.fill_image_size) {
+      image_view->SetImageSize(gfx::Size(kImageViewSize, kImageViewSize));
+    }
+    image_view->layer()->SetFillsBoundsOpaquely(false);
+    image_view->layer()->SetRoundedCornerRadius(
+        gfx::RoundedCornersF(kImageViewCornerRadius));
+
+    if (nudge_data.image_background_color_id) {
+      image_view->SetBackground(views::CreateThemedSolidBackground(
+          *nudge_data.image_background_color_id));
+    }
 
     AddPaddingView(image_and_text_container, kImageViewTrailingPadding,
                    kImageViewSize);
@@ -182,8 +244,9 @@ SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
                          : kNudgeLabelWidth_NudgeWithLeadingImage;
 
   if (!nudge_data.title_text.empty()) {
-    title_label_ = text_container->AddChildView(
+    auto* title_label = text_container->AddChildView(
         views::Builder<views::Label>()
+            .SetID(VIEW_ID_SYSTEM_NUDGE_TITLE_LABEL)
             .SetText(nudge_data.title_text)
             .SetTooltipText(nudge_data.title_text)
             .SetHorizontalAlignment(gfx::ALIGN_LEFT)
@@ -195,11 +258,12 @@ SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
             .SetMaximumWidthSingleLine(label_width)
             .Build());
 
-    AddPaddingView(text_container, title_label_->width(), kTitleBottomPadding);
+    AddPaddingView(text_container, title_label->width(), kTitleBottomPadding);
   }
 
-  body_label_ = text_container->AddChildView(
+  auto* body_label = text_container->AddChildView(
       views::Builder<views::Label>()
+          .SetID(VIEW_ID_SYSTEM_NUDGE_BODY_LABEL)
           .SetText(nudge_data.body_text)
           .SetTooltipText(nudge_data.body_text)
           .SetHorizontalAlignment(gfx::ALIGN_LEFT)
@@ -213,16 +277,28 @@ SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
           .SizeToFit(label_width)
           .Build());
 
+  // TODO(b/302368860): Add support for a view to display keyboard shortcuts in
+  // the same style as the launcher and the new keyboard shortcut app.
+  if (!nudge_data.keyboard_codes.empty()) {
+    AddPaddingView(text_container, image_and_text_container->width(),
+                   kTitleBottomPadding);
+
+    text_container
+        ->AddChildView(
+            std::make_unique<KeyboardShortcutView>(nudge_data.keyboard_codes))
+        ->SetID(VIEW_ID_SYSTEM_NUDGE_SHORTCUT_VIEW);
+  }
+
   // Return early if there are no buttons.
-  if (nudge_data.first_button_text.empty()) {
-    CHECK(nudge_data.second_button_text.empty());
+  if (nudge_data.primary_button_text.empty()) {
+    CHECK(nudge_data.secondary_button_text.empty());
 
     // Update nudge margins and body label max width if nudge only has text.
     if (nudge_is_text_only) {
       SetInteriorMargin(kTextOnlyNudgeInteriorMargin);
       // `SizeToFit` is reset to zero so a maximum width can be set.
-      body_label_->SizeToFit(0);
-      body_label_->SetMaximumWidth(kNudgeLabelWidth_TextOnlyNudge);
+      body_label->SizeToFit(0);
+      body_label->SetMaximumWidth(kNudgeLabelWidth_TextOnlyNudge);
     }
     return;
   }
@@ -243,46 +319,54 @@ SystemNudgeView::SystemNudgeView(AnchoredNudgeData& nudge_data) {
           .Build());
   buttons_container->SetDefault(views::kMarginsKey, kButtonsMargins);
 
-  const bool has_second_button = !nudge_data.second_button_text.empty();
+  const bool has_secondary_button = !nudge_data.secondary_button_text.empty();
 
-  first_button_ = buttons_container->AddChildView(
+  buttons_container->AddChildView(
       views::Builder<PillButton>()
-          .SetCallback(std::move(nudge_data.first_button_callback))
-          .SetText(nudge_data.first_button_text)
-          .SetTooltipText(nudge_data.first_button_text)
-          .SetPillButtonType(has_second_button
-                                 ? PillButton::Type::kSecondaryWithoutIcon
-                                 : PillButton::Type::kPrimaryWithoutIcon)
+          .SetID(VIEW_ID_SYSTEM_NUDGE_PRIMARY_BUTTON)
+          .SetCallback(std::move(nudge_data.primary_button_callback))
+          .SetText(nudge_data.primary_button_text)
+          .SetTooltipText(nudge_data.primary_button_text)
+          .SetPillButtonType(PillButton::Type::kPrimaryWithoutIcon)
           .SetFocusBehavior(views::View::FocusBehavior::ALWAYS)
           .Build());
 
-  if (has_second_button) {
-    second_button_ = buttons_container->AddChildView(
+  if (has_secondary_button) {
+    buttons_container->AddChildViewAt(
         views::Builder<PillButton>()
-            .SetCallback(std::move(nudge_data.second_button_callback))
-            .SetText(nudge_data.second_button_text)
-            .SetTooltipText(nudge_data.second_button_text)
-            .SetPillButtonType(PillButton::Type::kPrimaryWithoutIcon)
+            .SetID(VIEW_ID_SYSTEM_NUDGE_SECONDARY_BUTTON)
+            .SetCallback(std::move(nudge_data.secondary_button_callback))
+            .SetText(nudge_data.secondary_button_text)
+            .SetTooltipText(nudge_data.secondary_button_text)
+            .SetPillButtonType(PillButton::Type::kSecondaryWithoutIcon)
             .SetFocusBehavior(views::View::FocusBehavior::ALWAYS)
-            .Build());
+            .Build(),
+        0);
   }
 }
 
-SystemNudgeView::~SystemNudgeView() = default;
-
-void SystemNudgeView::UpdateShadowBounds() {
-  shadow_->SetContentBounds(gfx::Rect(kShadowOrigin, GetPreferredSize()));
+SystemNudgeView::~SystemNudgeView() {
+  auto* widget = GetWidget();
+  if (widget && widget->HasObserver(this)) {
+    widget->RemoveObserver(this);
+  }
 }
 
 void SystemNudgeView::AddedToWidget() {
-  shadow_->SetContentBounds(gfx::Rect(kShadowOrigin, GetPreferredSize()));
+  GetWidget()->AddObserver(this);
 
   // Attach the shadow at the bottom of the widget layer.
   auto* shadow_layer = shadow_->GetLayer();
   auto* widget_layer = GetWidget()->GetLayer();
-
   widget_layer->Add(shadow_layer);
   widget_layer->StackAtBottom(shadow_layer);
+}
+
+void SystemNudgeView::RemovedFromWidget() {
+  auto* widget = GetWidget();
+  if (widget && widget->HasObserver(this)) {
+    widget->RemoveObserver(this);
+  }
 }
 
 void SystemNudgeView::OnMouseEntered(const ui::MouseEvent& event) {
@@ -291,6 +375,32 @@ void SystemNudgeView::OnMouseEntered(const ui::MouseEvent& event) {
 
 void SystemNudgeView::OnMouseExited(const ui::MouseEvent& event) {
   HandleOnMouseHovered(/*mouse_entered=*/false);
+}
+
+void SystemNudgeView::OnWidgetBoundsChanged(views::Widget* widget,
+                                            const gfx::Rect& new_bounds) {
+  // `shadow_` should have the same bounds as the view's layer.
+  shadow_->SetContentBounds(layer()->bounds());
+
+  if (anchor_view_tracker_ && anchor_view_tracker_->view() &&
+      is_corner_anchored_) {
+    SetNudgeRoundedCornerRadius(CalculatePointyAnchoredNudgeCorners(
+        /*nudge_view=*/this, anchor_view_tracker_->view()));
+  }
+}
+
+void SystemNudgeView::OnWidgetDestroying(views::Widget* widget) {
+  if (widget && widget->HasObserver(this)) {
+    widget->RemoveObserver(this);
+  }
+}
+
+void SystemNudgeView::SetNudgeRoundedCornerRadius(
+    gfx::RoundedCornersF rounded_corners) {
+  layer()->SetRoundedCornerRadius(rounded_corners);
+  SetBorder(std::make_unique<views::HighlightBorder>(
+      rounded_corners, views::HighlightBorder::Type::kHighlightBorderOnShadow));
+  shadow_->SetRoundedCorners(rounded_corners);
 }
 
 void SystemNudgeView::HandleOnMouseHovered(const bool mouse_entered) {

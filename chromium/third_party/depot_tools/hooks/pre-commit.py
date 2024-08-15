@@ -27,7 +27,8 @@ def main():
 
     has_deps_diff = False
     staged_gitlinks = []
-    diff = git_common.run('diff-index', '--cached', 'HEAD')
+    diff = git_common.run('diff-index', '--cached', '--ignore-submodules=dirty',
+                          'HEAD')
     for line in diff.splitlines():
         path = line.split()[-1]
         if path == 'DEPS':

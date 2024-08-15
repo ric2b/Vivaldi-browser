@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
@@ -68,13 +69,16 @@ bool IsFillOnAccountSelectFeatureEnabled() {
 }
 #endif
 
-void Autofill(PasswordManagerClient* client,
-              PasswordManagerDriver* driver,
-              const PasswordForm& form_for_autofill,
-              const std::vector<const PasswordForm*>& best_matches,
-              const std::vector<const PasswordForm*>& federated_matches,
-              absl::optional<PasswordForm> preferred_match,
-              bool wait_for_username) {
+void Autofill(
+    PasswordManagerClient* client,
+    PasswordManagerDriver* driver,
+    const PasswordForm& form_for_autofill,
+    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
+        best_matches,
+    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
+        federated_matches,
+    std::optional<PasswordForm> preferred_match,
+    bool wait_for_username) {
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client)) {
     logger = std::make_unique<BrowserSavePasswordProgressLogger>(
@@ -121,8 +125,10 @@ LikelyFormFilling SendFillInformationToRenderer(
     PasswordManagerClient* client,
     PasswordManagerDriver* driver,
     const PasswordForm& observed_form,
-    const std::vector<const PasswordForm*>& best_matches,
-    const std::vector<const PasswordForm*>& federated_matches,
+    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
+        best_matches,
+    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
+        federated_matches,
     const PasswordForm* preferred_match,
     bool blocked_by_user,
     PasswordFormMetricsRecorder* metrics_recorder,
@@ -257,7 +263,7 @@ LikelyFormFilling SendFillInformationToRenderer(
   // done.
   Autofill(
       client, driver, observed_form, best_matches, federated_matches,
-      preferred_match ? absl::make_optional(*preferred_match) : absl::nullopt,
+      preferred_match ? std::make_optional(*preferred_match) : std::nullopt,
       wait_for_username);
 
   return wait_for_username ? LikelyFormFilling::kFillOnAccountSelect
@@ -266,8 +272,8 @@ LikelyFormFilling SendFillInformationToRenderer(
 
 PasswordFormFillData CreatePasswordFormFillData(
     const PasswordForm& form_on_page,
-    const std::vector<const PasswordForm*>& matches,
-    absl::optional<PasswordForm> preferred_match,
+    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>& matches,
+    std::optional<PasswordForm> preferred_match,
     const Origin& main_frame_origin,
     bool wait_for_username) {
   PasswordFormFillData result;

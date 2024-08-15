@@ -20,9 +20,11 @@ class TestGameDashboardDelegate : public GameDashboardDelegate {
       delete;
   ~TestGameDashboardDelegate() override = default;
 
-  // ash::GameDashboardDelegate:
+  // GameDashboardDelegate:
   void GetIsGame(const std::string& app_id, IsGameCallback callback) override;
   std::string GetArcAppName(const std::string& app_id) const override;
+  void RecordGameWindowOpenedEvent(aura::Window* window) override;
+  void ShowResizeToggleMenu(aura::Window* window) override;
 };
 
 }  // namespace ash

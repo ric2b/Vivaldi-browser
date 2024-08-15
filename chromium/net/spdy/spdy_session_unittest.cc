@@ -419,7 +419,7 @@ class StreamRequestDestroyingCallback : public TestCompletionCallbackBase {
 
 }  // namespace
 
-// Request kInitialMaxConcurrentStreams streams.  Request two more
+// Request kH2InitialMaxConcurrentStreamsParam.Get() streams.  Request two more
 // streams, but have the callback for one destroy the second stream
 // request. Close the session. Nothing should blow up. This is a
 // regression test for http://crbug.com/250841 .
@@ -435,7 +435,7 @@ TEST_F(SpdySessionTest, PendingStreamCancellingAnother) {
   CreateSpdySession();
 
   // Create the maximum number of concurrent streams.
-  for (size_t i = 0; i < kInitialMaxConcurrentStreams; ++i) {
+  for (int i = 0; i < kH2InitialMaxConcurrentStreams.Get(); ++i) {
     base::WeakPtr<SpdyStream> spdy_stream =
         CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_,
                                   test_url_, MEDIUM, NetLogWithSource());
@@ -834,6 +834,93 @@ TEST_F(SpdySessionTest, GoAwayWhileDraining) {
   EXPECT_TRUE(delegate.StreamIsClosed());
   EXPECT_THAT(delegate.WaitForClose(), IsOk());
   EXPECT_EQ(kUploadData, delegate.TakeReceivedData());
+  EXPECT_FALSE(session_);
+}
+
+// Regression test for https://crbug.com/1510327.
+// Have a session with active streams receive a GOAWAY frame. Ensure that
+// the session is drained after all streams receive DATA frames of which
+// END_STREAM flag is set, even when the peer doesn't close the connection.
+TEST_F(SpdySessionTest, GoAwayWithActiveStreamsThenEndStreams) {
+  const int kStreamId1 = 1;
+  const int kStreamId2 = 3;
+
+  spdy::SpdySerializedFrame req1(
+      spdy_util_.ConstructSpdyGet(nullptr, 0, kStreamId1, MEDIUM));
+  spdy::SpdySerializedFrame req2(
+      spdy_util_.ConstructSpdyGet(nullptr, 0, kStreamId2, MEDIUM));
+  MockWrite writes[] = {
+      CreateMockWrite(req1, 0),
+      CreateMockWrite(req2, 1),
+  };
+
+  spdy::SpdySerializedFrame resp1(
+      spdy_util_.ConstructSpdyGetReply(nullptr, 0, kStreamId1));
+  spdy::SpdySerializedFrame resp2(
+      spdy_util_.ConstructSpdyGetReply(nullptr, 0, kStreamId2));
+
+  spdy::SpdySerializedFrame body1(
+      spdy_util_.ConstructSpdyDataFrame(kStreamId1, true));
+  spdy::SpdySerializedFrame body2(
+      spdy_util_.ConstructSpdyDataFrame(kStreamId2, true));
+
+  spdy::SpdySerializedFrame goaway(spdy_util_.ConstructSpdyGoAway(kStreamId2));
+
+  MockRead reads[] = {
+      CreateMockRead(resp1, 2),           CreateMockRead(resp2, 3),
+      MockRead(ASYNC, ERR_IO_PENDING, 4),  // (1)
+      CreateMockRead(goaway, 5),          CreateMockRead(body1, 6),
+      MockRead(ASYNC, ERR_IO_PENDING, 7),  // (2)
+      CreateMockRead(body2, 8),
+      // No EOF.
+  };
+
+  SequencedSocketData data(reads, writes);
+  session_deps_.socket_factory->AddSocketDataProvider(&data);
+
+  AddSSLSocketData();
+
+  CreateNetworkSession();
+  CreateSpdySession();
+
+  base::WeakPtr<SpdyStream> spdy_stream1 =
+      CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
+                                test_url_, MEDIUM, NetLogWithSource());
+  test::StreamDelegateDoNothing delegate1(spdy_stream1);
+  spdy_stream1->SetDelegate(&delegate1);
+
+  base::WeakPtr<SpdyStream> spdy_stream2 =
+      CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
+                                test_url_, MEDIUM, NetLogWithSource());
+  test::StreamDelegateDoNothing delegate2(spdy_stream2);
+  spdy_stream2->SetDelegate(&delegate2);
+
+  spdy::Http2HeaderBlock headers(
+      spdy_util_.ConstructGetHeaderBlock(kDefaultUrl));
+  spdy::Http2HeaderBlock headers2(headers.Clone());
+
+  spdy_stream1->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
+  spdy_stream2->SendRequestHeaders(std::move(headers2), NO_MORE_DATA_TO_SEND);
+
+  base::RunLoop().RunUntilIdle();
+
+  // (1) Read and process the GOAWAY frame and the response for kStreamId1.
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(spdy_stream1);
+  EXPECT_TRUE(spdy_stream2);
+
+  // (2) Read and process the response for kStreamId2.
+  data.Resume();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(spdy_stream1);
+  EXPECT_FALSE(spdy_stream2);
+
+  EXPECT_TRUE(data.AllWriteDataConsumed());
+  EXPECT_TRUE(data.AllReadDataConsumed());
+
   EXPECT_FALSE(session_);
 }
 
@@ -1671,7 +1758,7 @@ TEST_F(SpdySessionTestWithMockTime, NoPingSentWhenCheckPingPending) {
   EXPECT_TRUE(data.AllReadDataConsumed());
 }
 
-// Request kInitialMaxConcurrentStreams + 1 streams.  Receive a
+// Request kH2InitialMaxConcurrentStreamsParam.Get() + 1 streams.  Receive a
 // settings frame increasing the max concurrent streams by 1.  Make
 // sure nothing blows up. This is a regression test for
 // http://crbug.com/57331 .
@@ -1680,7 +1767,8 @@ TEST_F(SpdySessionTest, OnSettings) {
       spdy::SETTINGS_MAX_CONCURRENT_STREAMS;
 
   spdy::SettingsMap new_settings;
-  const uint32_t max_concurrent_streams = kInitialMaxConcurrentStreams + 1;
+  const uint32_t max_concurrent_streams =
+      kH2InitialMaxConcurrentStreams.Get() + 1;
   new_settings[kSpdySettingsId] = max_concurrent_streams;
   spdy::SpdySerializedFrame settings_frame(
       spdy_util_.ConstructSpdySettings(new_settings));
@@ -1701,7 +1789,7 @@ TEST_F(SpdySessionTest, OnSettings) {
   CreateSpdySession();
 
   // Create the maximum number of concurrent streams.
-  for (size_t i = 0; i < kInitialMaxConcurrentStreams; ++i) {
+  for (int i = 0; i < kH2InitialMaxConcurrentStreams.Get(); ++i) {
     base::WeakPtr<SpdyStream> spdy_stream =
         CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_,
                                   test_url_, MEDIUM, NetLogWithSource());
@@ -1746,7 +1834,7 @@ TEST_F(SpdySessionTest, CancelPendingCreateStream) {
   CreateSpdySession();
 
   // Leave room for only one more stream to be created.
-  for (size_t i = 0; i < kInitialMaxConcurrentStreams - 1; ++i) {
+  for (int i = 0; i < kH2InitialMaxConcurrentStreams.Get() - 1; ++i) {
     base::WeakPtr<SpdyStream> spdy_stream =
         CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_,
                                   test_url_, MEDIUM, NetLogWithSource());
@@ -2678,7 +2766,7 @@ TEST_F(SpdySessionTest, CancelTwoStalledCreateStream) {
   CreateSpdySession();
 
   // Leave room for only one more stream to be created.
-  for (size_t i = 0; i < kInitialMaxConcurrentStreams - 1; ++i) {
+  for (int i = 0; i < kH2InitialMaxConcurrentStreams.Get() - 1; ++i) {
     base::WeakPtr<SpdyStream> spdy_stream =
         CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_,
                                   test_url_, MEDIUM, NetLogWithSource());
@@ -2708,7 +2796,8 @@ TEST_F(SpdySessionTest, CancelTwoStalledCreateStream) {
                                   TRAFFIC_ANNOTATION_FOR_TESTS));
 
   EXPECT_EQ(0u, num_active_streams());
-  EXPECT_EQ(kInitialMaxConcurrentStreams, num_created_streams());
+  EXPECT_EQ(static_cast<size_t>(kH2InitialMaxConcurrentStreams.Get()),
+            num_created_streams());
   EXPECT_EQ(2u, pending_create_stream_queue_size(LOWEST));
 
   // Cancel the first stream; this will allow the second stream to be created.
@@ -2718,7 +2807,8 @@ TEST_F(SpdySessionTest, CancelTwoStalledCreateStream) {
 
   EXPECT_THAT(callback2.WaitForResult(), IsOk());
   EXPECT_EQ(0u, num_active_streams());
-  EXPECT_EQ(kInitialMaxConcurrentStreams, num_created_streams());
+  EXPECT_EQ(static_cast<size_t>(kH2InitialMaxConcurrentStreams.Get()),
+            num_created_streams());
   EXPECT_EQ(1u, pending_create_stream_queue_size(LOWEST));
 
   // Cancel the second stream; this will allow the third stream to be created.
@@ -2728,7 +2818,8 @@ TEST_F(SpdySessionTest, CancelTwoStalledCreateStream) {
 
   EXPECT_THAT(callback3.WaitForResult(), IsOk());
   EXPECT_EQ(0u, num_active_streams());
-  EXPECT_EQ(kInitialMaxConcurrentStreams, num_created_streams());
+  EXPECT_EQ(static_cast<size_t>(kH2InitialMaxConcurrentStreams.Get()),
+            num_created_streams());
   EXPECT_EQ(0u, pending_create_stream_queue_size(LOWEST));
 
   // Cancel the third stream.
@@ -2736,7 +2827,8 @@ TEST_F(SpdySessionTest, CancelTwoStalledCreateStream) {
   spdy_stream3->Cancel(ERR_ABORTED);
   EXPECT_FALSE(spdy_stream3);
   EXPECT_EQ(0u, num_active_streams());
-  EXPECT_EQ(kInitialMaxConcurrentStreams - 1, num_created_streams());
+  EXPECT_EQ(static_cast<size_t>(kH2InitialMaxConcurrentStreams.Get()) - 1,
+            num_created_streams());
   EXPECT_EQ(0u, pending_create_stream_queue_size(LOWEST));
 }
 
@@ -2758,8 +2850,7 @@ TEST_F(SpdySessionTest, ReadDataWithoutYielding) {
   ASSERT_EQ(32 * 1024, kYieldAfterBytesRead);
   const int kPayloadSize = kYieldAfterBytesRead / 4 - spdy::kFrameHeaderSize;
   TestDataStream test_stream;
-  scoped_refptr<IOBuffer> payload =
-      base::MakeRefCounted<IOBuffer>(kPayloadSize);
+  auto payload = base::MakeRefCounted<IOBufferWithSize>(kPayloadSize);
   char* payload_data = payload->data();
   test_stream.GetBytes(payload_data, kPayloadSize);
 
@@ -2973,8 +3064,7 @@ TEST_F(SpdySessionTest, TestYieldingDuringReadData) {
   ASSERT_EQ(32 * 1024, kYieldAfterBytesRead);
   const int kPayloadSize = kYieldAfterBytesRead / 4 - spdy::kFrameHeaderSize;
   TestDataStream test_stream;
-  scoped_refptr<IOBuffer> payload =
-      base::MakeRefCounted<IOBuffer>(kPayloadSize);
+  auto payload = base::MakeRefCounted<IOBufferWithSize>(kPayloadSize);
   char* payload_data = payload->data();
   test_stream.GetBytes(payload_data, kPayloadSize);
 
@@ -3068,16 +3158,15 @@ TEST_F(SpdySessionTest, TestYieldingDuringAsyncReadData) {
   TestDataStream test_stream;
   const int kEightKPayloadSize =
       kYieldAfterBytesRead / 4 - spdy::kFrameHeaderSize;
-  scoped_refptr<IOBuffer> eightk_payload =
-      base::MakeRefCounted<IOBuffer>(kEightKPayloadSize);
+  auto eightk_payload =
+      base::MakeRefCounted<IOBufferWithSize>(kEightKPayloadSize);
   char* eightk_payload_data = eightk_payload->data();
   test_stream.GetBytes(eightk_payload_data, kEightKPayloadSize);
 
   // Build buffer of 2k size.
   TestDataStream test_stream2;
   const int kTwoKPayloadSize = kEightKPayloadSize - 6 * 1024;
-  scoped_refptr<IOBuffer> twok_payload =
-      base::MakeRefCounted<IOBuffer>(kTwoKPayloadSize);
+  auto twok_payload = base::MakeRefCounted<IOBufferWithSize>(kTwoKPayloadSize);
   char* twok_payload_data = twok_payload->data();
   test_stream2.GetBytes(twok_payload_data, kTwoKPayloadSize);
 
@@ -3257,17 +3346,18 @@ TEST_F(SpdySessionTest, CloseOneIdleConnection) {
   // post a task asynchronously to try and close the session.
   TestCompletionCallback callback2;
   auto connection2 = std::make_unique<ClientSocketHandle>();
-  EXPECT_EQ(ERR_IO_PENDING,
-            connection2->Init(
-                ClientSocketPool::GroupId(
-                    url::SchemeHostPort(url::kHttpScheme, "2.com", 80),
-                    PrivacyMode::PRIVACY_MODE_DISABLED,
-                    NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
-                ClientSocketPool::SocketParams::CreateForHttpForTesting(),
-                absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
-                SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                callback2.callback(), ClientSocketPool::ProxyAuthCallback(),
-                pool, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      connection2->Init(
+          ClientSocketPool::GroupId(
+              url::SchemeHostPort(url::kHttpScheme, "2.com", 80),
+              PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
+              SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false),
+          ClientSocketPool::SocketParams::CreateForHttpForTesting(),
+          absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
+          SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+          callback2.callback(), ClientSocketPool::ProxyAuthCallback(), pool,
+          NetLogWithSource()));
   EXPECT_TRUE(pool->IsStalled());
 
   // The socket pool should close the connection asynchronously and establish a
@@ -3348,17 +3438,18 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   // post a task asynchronously to try and close the session.
   TestCompletionCallback callback3;
   auto connection3 = std::make_unique<ClientSocketHandle>();
-  EXPECT_EQ(ERR_IO_PENDING,
-            connection3->Init(
-                ClientSocketPool::GroupId(
-                    url::SchemeHostPort(url::kHttpScheme, "3.com", 80),
-                    PrivacyMode::PRIVACY_MODE_DISABLED,
-                    NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
-                ClientSocketPool::SocketParams::CreateForHttpForTesting(),
-                absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
-                SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                callback3.callback(), ClientSocketPool::ProxyAuthCallback(),
-                pool, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      connection3->Init(
+          ClientSocketPool::GroupId(
+              url::SchemeHostPort(url::kHttpScheme, "3.com", 80),
+              PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
+              SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false),
+          ClientSocketPool::SocketParams::CreateForHttpForTesting(),
+          absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
+          SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+          callback3.callback(), ClientSocketPool::ProxyAuthCallback(), pool,
+          NetLogWithSource()));
   EXPECT_TRUE(pool->IsStalled());
 
   // The socket pool should close the connection asynchronously and establish a
@@ -3428,17 +3519,18 @@ TEST_F(SpdySessionTest, CloseSessionOnIdleWhenPoolStalled) {
   // post a task asynchronously to try and close the session.
   TestCompletionCallback callback2;
   auto connection2 = std::make_unique<ClientSocketHandle>();
-  EXPECT_EQ(ERR_IO_PENDING,
-            connection2->Init(
-                ClientSocketPool::GroupId(
-                    url::SchemeHostPort(url::kHttpScheme, "2.com", 80),
-                    PrivacyMode::PRIVACY_MODE_DISABLED,
-                    NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
-                ClientSocketPool::SocketParams::CreateForHttpForTesting(),
-                absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
-                SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                callback2.callback(), ClientSocketPool::ProxyAuthCallback(),
-                pool, NetLogWithSource()));
+  EXPECT_EQ(
+      ERR_IO_PENDING,
+      connection2->Init(
+          ClientSocketPool::GroupId(
+              url::SchemeHostPort(url::kHttpScheme, "2.com", 80),
+              PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
+              SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false),
+          ClientSocketPool::SocketParams::CreateForHttpForTesting(),
+          absl::nullopt /* proxy_annotation_tag */, DEFAULT_PRIORITY,
+          SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+          callback2.callback(), ClientSocketPool::ProxyAuthCallback(), pool,
+          NetLogWithSource()));
   EXPECT_TRUE(pool->IsStalled());
 
   // Running the message loop should cause the socket pool to ask the SPDY
@@ -6068,17 +6160,13 @@ TEST(CanPoolTest, CanPool) {
                                      "spdy_pooling.pem");
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "www.example.org",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "www.example.org"));
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "mail.example.org",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "mail.example.org"));
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "mail.example.com",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "mail.example.com"));
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "www.example.org", "mail.google.com",
-                                    NetworkAnonymizationKey()));
+                                    "www.example.org", "mail.google.com"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithCertErrors) {
@@ -6095,8 +6183,7 @@ TEST(CanPoolTest, CanNotPoolWithCertErrors) {
   ssl_info.cert_status = CERT_STATUS_REVOKED;
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "www.example.org", "mail.example.org",
-                                    NetworkAnonymizationKey()));
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithClientCerts) {
@@ -6113,8 +6200,7 @@ TEST(CanPoolTest, CanNotPoolWithClientCerts) {
   ssl_info.client_cert_sent = true;
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "www.example.org", "mail.example.org",
-                                    NetworkAnonymizationKey()));
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithBadPins) {
@@ -6135,8 +6221,7 @@ TEST(CanPoolTest, CanNotPoolWithBadPins) {
   ssl_info.public_key_hashes.push_back(test::GetTestHashValue(bad_pin));
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "www.example.org", "example.test",
-                                    NetworkAnonymizationKey()));
+                                    "www.example.org", "example.test"));
 }
 
 TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
@@ -6164,8 +6249,7 @@ TEST(CanPoolTest, CanNotPoolWithBadCTWhenCTRequired) {
   tss.SetRequireCTDelegate(&require_ct_delegate);
 
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "www.example.org", "mail.example.org",
-                                    NetworkAnonymizationKey()));
+                                    "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
@@ -6193,8 +6277,7 @@ TEST(CanPoolTest, CanPoolWithBadCTWhenCTNotRequired) {
   tss.SetRequireCTDelegate(&require_ct_delegate);
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "mail.example.org",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
@@ -6222,8 +6305,7 @@ TEST(CanPoolTest, CanPoolWithGoodCTWhenCTRequired) {
   tss.SetRequireCTDelegate(&require_ct_delegate);
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "mail.example.org",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithAcceptablePins) {
@@ -6244,8 +6326,7 @@ TEST(CanPoolTest, CanPoolWithAcceptablePins) {
   ssl_info.public_key_hashes.push_back(hash);
 
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "mail.example.org",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "mail.example.org"));
 }
 
 TEST(CanPoolTest, CanPoolWithClientCertsAndPolicy) {
@@ -6265,14 +6346,11 @@ TEST(CanPoolTest, CanPoolWithClientCertsAndPolicy) {
   // CanShareConnectionWithClientCerts returns true for both hostnames, but not
   // just one hostname.
   EXPECT_TRUE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                   "www.example.org", "mail.example.org",
-                                   NetworkAnonymizationKey()));
+                                   "www.example.org", "mail.example.org"));
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "www.example.org", "mail.example.com",
-                                    NetworkAnonymizationKey()));
+                                    "www.example.org", "mail.example.com"));
   EXPECT_FALSE(SpdySession::CanPool(&tss, ssl_info, ssl_config_service,
-                                    "mail.example.com", "www.example.org",
-                                    NetworkAnonymizationKey()));
+                                    "mail.example.com", "www.example.org"));
 }
 
 // Regression test for https://crbug.com/1115492.

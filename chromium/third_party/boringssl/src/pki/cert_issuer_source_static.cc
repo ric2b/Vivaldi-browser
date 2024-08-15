@@ -15,23 +15,21 @@ void CertIssuerSourceStatic::AddCert(
       cert->normalized_subject().AsStringView(), std::move(cert)));
 }
 
-void CertIssuerSourceStatic::Clear() {
-  intermediates_.clear();
-}
+void CertIssuerSourceStatic::Clear() { intermediates_.clear(); }
 
-void CertIssuerSourceStatic::SyncGetIssuersOf(const ParsedCertificate* cert,
-                                              ParsedCertificateList* issuers) {
+void CertIssuerSourceStatic::SyncGetIssuersOf(const ParsedCertificate *cert,
+                                              ParsedCertificateList *issuers) {
   auto range =
       intermediates_.equal_range(cert->normalized_issuer().AsStringView());
-  for (auto it = range.first; it != range.second; ++it)
+  for (auto it = range.first; it != range.second; ++it) {
     issuers->push_back(it->second);
+  }
 }
 
 void CertIssuerSourceStatic::AsyncGetIssuersOf(
-    const ParsedCertificate* cert,
-    std::unique_ptr<Request>* out_req) {
+    const ParsedCertificate *cert, std::unique_ptr<Request> *out_req) {
   // CertIssuerSourceStatic never returns asynchronous results.
   out_req->reset();
 }
 
-}  // namespace net
+}  // namespace bssl

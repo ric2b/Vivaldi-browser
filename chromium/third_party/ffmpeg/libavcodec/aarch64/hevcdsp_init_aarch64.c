@@ -137,20 +137,28 @@ void ff_hevc_put_hevc_qpel_bi_h16_8_neon(uint8_t *_dst, ptrdiff_t _dststride, co
     void ff_hevc_put_hevc_##fn##24_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##32_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##48_8_neon##ext args; \
-    void ff_hevc_put_hevc_##fn##64_8_neon##ext args; \
+    void ff_hevc_put_hevc_##fn##64_8_neon##ext args
 
 #define NEON8_FNPROTO_PARTIAL_4(fn, args, ext) \
     void ff_hevc_put_hevc_##fn##4_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##8_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##16_8_neon##ext args; \
-    void ff_hevc_put_hevc_##fn##64_8_neon##ext args; \
+    void ff_hevc_put_hevc_##fn##64_8_neon##ext args
 
 #define NEON8_FNPROTO_PARTIAL_5(fn, args, ext) \
     void ff_hevc_put_hevc_##fn##4_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##8_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##16_8_neon##ext args; \
     void ff_hevc_put_hevc_##fn##32_8_neon##ext args; \
-    void ff_hevc_put_hevc_##fn##64_8_neon##ext args; \
+    void ff_hevc_put_hevc_##fn##64_8_neon##ext args
+
+NEON8_FNPROTO(pel_pixels, (int16_t *dst,
+        const uint8_t *src, ptrdiff_t srcstride,
+        int height, intptr_t mx, intptr_t my, int width),);
+
+NEON8_FNPROTO(epel_v, (int16_t *dst,
+        const uint8_t *src, ptrdiff_t srcstride,
+        int height, intptr_t mx, intptr_t my, int width),);
 
 NEON8_FNPROTO(pel_uni_pixels, (uint8_t *_dst, ptrdiff_t _dststride,
         const uint8_t *_src, ptrdiff_t _srcstride,
@@ -183,6 +191,10 @@ NEON8_FNPROTO(epel_h, (int16_t *dst,
         const uint8_t *_src, ptrdiff_t _srcstride,
         int height, intptr_t mx, intptr_t my, int width), _i8mm);
 
+NEON8_FNPROTO(epel_hv, (int16_t *dst,
+        const uint8_t *src, ptrdiff_t srcstride,
+        int height, intptr_t mx, intptr_t my, int width), _i8mm);
+
 NEON8_FNPROTO(epel_uni_w_h, (uint8_t *_dst,  ptrdiff_t _dststride,
         const uint8_t *_src, ptrdiff_t _srcstride,
         int height, int denom, int wx, int ox,
@@ -190,6 +202,14 @@ NEON8_FNPROTO(epel_uni_w_h, (uint8_t *_dst,  ptrdiff_t _dststride,
 
 NEON8_FNPROTO(qpel_h, (int16_t *dst,
         const uint8_t *_src, ptrdiff_t _srcstride,
+        int height, intptr_t mx, intptr_t my, int width), _i8mm);
+
+NEON8_FNPROTO(qpel_v, (int16_t *dst,
+        const uint8_t *src, ptrdiff_t srcstride,
+        int height, intptr_t mx, intptr_t my, int width),);
+
+NEON8_FNPROTO(qpel_hv, (int16_t *dst,
+        const uint8_t *src, ptrdiff_t srcstride,
         int height, intptr_t mx, intptr_t my, int width), _i8mm);
 
 NEON8_FNPROTO(qpel_uni_v, (uint8_t *dst,  ptrdiff_t dststride,
@@ -300,6 +320,10 @@ av_cold void ff_hevc_dsp_init_aarch64(HEVCDSPContext *c, const int bit_depth)
         c->put_hevc_qpel_bi[8][0][1]   =
         c->put_hevc_qpel_bi[9][0][1]   = ff_hevc_put_hevc_qpel_bi_h16_8_neon;
 
+        NEON8_FNASSIGN(c->put_hevc_epel, 0, 0, pel_pixels,);
+        NEON8_FNASSIGN(c->put_hevc_epel, 1, 0, epel_v,);
+        NEON8_FNASSIGN(c->put_hevc_qpel, 0, 0, pel_pixels,);
+        NEON8_FNASSIGN(c->put_hevc_qpel, 1, 0, qpel_v,);
         NEON8_FNASSIGN(c->put_hevc_epel_uni, 0, 0, pel_uni_pixels,);
         NEON8_FNASSIGN(c->put_hevc_epel_uni, 1, 0, epel_uni_v,);
         NEON8_FNASSIGN(c->put_hevc_qpel_uni, 0, 0, pel_uni_pixels,);
@@ -311,9 +335,11 @@ av_cold void ff_hevc_dsp_init_aarch64(HEVCDSPContext *c, const int bit_depth)
 
         if (have_i8mm(cpu_flags)) {
             NEON8_FNASSIGN(c->put_hevc_epel, 0, 1, epel_h, _i8mm);
+            NEON8_FNASSIGN(c->put_hevc_epel, 1, 1, epel_hv, _i8mm);
             NEON8_FNASSIGN(c->put_hevc_epel_uni, 1, 1, epel_uni_hv, _i8mm);
             NEON8_FNASSIGN(c->put_hevc_epel_uni_w, 0, 1, epel_uni_w_h ,_i8mm);
             NEON8_FNASSIGN(c->put_hevc_qpel, 0, 1, qpel_h, _i8mm);
+            NEON8_FNASSIGN(c->put_hevc_qpel, 1, 1, qpel_hv, _i8mm);
             NEON8_FNASSIGN(c->put_hevc_qpel_uni, 1, 1, qpel_uni_hv, _i8mm);
             NEON8_FNASSIGN(c->put_hevc_qpel_uni_w, 0, 1, qpel_uni_w_h, _i8mm);
             NEON8_FNASSIGN(c->put_hevc_epel_uni_w, 1, 1, epel_uni_w_hv, _i8mm);

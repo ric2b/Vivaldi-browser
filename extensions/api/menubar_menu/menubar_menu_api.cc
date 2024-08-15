@@ -35,16 +35,16 @@ static bool IsBackgroundCommand(int command) {
 static vivaldi::menubar_menu::Disposition CommandToDisposition(int command) {
   switch (command) {
     case IDC_VIV_BOOKMARK_BAR_OPEN_CURRENT_TAB:
-      return vivaldi::menubar_menu::DISPOSITION_CURRENT;
+      return vivaldi::menubar_menu::Disposition::kCurrent;
     case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_TAB:
     case IDC_VIV_BOOKMARK_BAR_OPEN_BACKGROUND_TAB:
-      return vivaldi::menubar_menu::DISPOSITION_NEW_TAB;
+      return vivaldi::menubar_menu::Disposition::kNewTab;
     case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_WINDOW:
-      return vivaldi::menubar_menu::DISPOSITION_NEW_WINDOW;
+      return vivaldi::menubar_menu::Disposition::kNewWindow;
     case IDC_VIV_BOOKMARK_BAR_OPEN_NEW_PRIVATE_WINDOW:
-      return vivaldi::menubar_menu::DISPOSITION_NEW_PRIVATE_WINDOW;
+      return vivaldi::menubar_menu::Disposition::kNewPrivateWindow;
     default:
-      return vivaldi::menubar_menu::DISPOSITION_NONE;
+      return vivaldi::menubar_menu::Disposition::kNone;
   }
 }
 
@@ -52,23 +52,23 @@ static vivaldi::menubar_menu::Disposition CommandToDisposition(int command) {
 static vivaldi::menubar_menu::BookmarkCommand CommandToAction(int command) {
   switch (command) {
     case IDC_VIV_BOOKMARK_BAR_ADD_ACTIVE_TAB:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDACTIVETAB;
+      return vivaldi::menubar_menu::BookmarkCommand::kAddactivetab;
     case IDC_BOOKMARK_BAR_ADD_NEW_BOOKMARK:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDBOOKMARK;
+      return vivaldi::menubar_menu::BookmarkCommand::kAddbookmark;
     case IDC_BOOKMARK_BAR_NEW_FOLDER:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDFOLDER;
+      return vivaldi::menubar_menu::BookmarkCommand::kAddfolder;
     case IDC_VIV_BOOKMARK_BAR_NEW_SEPARATOR:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_ADDSEPARATOR;
+      return vivaldi::menubar_menu::BookmarkCommand::kAddseparator;
     case IDC_BOOKMARK_BAR_EDIT:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_EDIT;
+      return vivaldi::menubar_menu::BookmarkCommand::kEdit;
     case IDC_CUT:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_CUT;
+      return vivaldi::menubar_menu::BookmarkCommand::kCut;
     case IDC_COPY:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_COPY;
+      return vivaldi::menubar_menu::BookmarkCommand::kCopy;
     case IDC_PASTE:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_PASTE;
+      return vivaldi::menubar_menu::BookmarkCommand::kPaste;
     default:
-      return vivaldi::menubar_menu::BOOKMARK_COMMAND_NONE;
+      return vivaldi::menubar_menu::BookmarkCommand::kNone;
   }
 }
 
@@ -118,7 +118,7 @@ void MenubarMenuAPI::SendOpenBookmark(content::BrowserContext* browser_context,
                                       int event_state) {
   vivaldi::menubar_menu::BookmarkAction action;
   action.id = std::to_string(bookmark_id);
-  action.disposition = vivaldi::menubar_menu::DISPOSITION_SETTING;
+  action.disposition = vivaldi::menubar_menu::Disposition::kSetting;
   action.background = false;
   action.state = FlagToEventState(event_state);
   ::vivaldi::BroadcastEvent(
@@ -137,7 +137,7 @@ void MenubarMenuAPI::SendBookmarkAction(
   // we have a disposition the bookmark should be opened.
   vivaldi::menubar_menu::Disposition disposition =
       CommandToDisposition(command);
-  if (disposition != vivaldi::menubar_menu::DISPOSITION_NONE) {
+  if (disposition != vivaldi::menubar_menu::Disposition::kNone) {
     vivaldi::menubar_menu::BookmarkAction action;
     action.id = std::to_string(bookmark_id);
     action.disposition = disposition;
@@ -284,20 +284,20 @@ std::string MenubarMenuShowFunction::PopulateModel(
       int id = item.id + IDC_VIV_MENU_FIRST + 1;
       const std::u16string label = base::UTF8ToUTF16(item.name);
       switch (item.type) {
-        case menubar_menu::ITEM_TYPE_COMMAND:
+        case menubar_menu::ItemType::kCommand:
           menu_model->AddItem(id, label);
           if (item.enabled && !*item.enabled) {
             id_to_disabled_map_[id] = true;
           }
           break;
-        case menubar_menu::ITEM_TYPE_CHECKBOX:
+        case menubar_menu::ItemType::kCheckbox:
           menu_model->AddCheckItem(id, label);
           id_to_checked_map_[id] = item.checked && *item.checked;
           if (item.enabled && !*item.enabled) {
             id_to_disabled_map_[id] = true;
           }
           break;
-        case menubar_menu::ITEM_TYPE_RADIO:
+        case menubar_menu::ItemType::kRadio:
           if (!item.radiogroup.has_value()) {
             return "Radio button added without group";
           }
@@ -307,7 +307,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
             id_to_disabled_map_[id] = true;
           }
           break;
-        case menubar_menu::ITEM_TYPE_FOLDER: {
+        case menubar_menu::ItemType::kFolder: {
           // We create the SimpleMenuModel sub menu but do not populate it. That
           // will be done in PopulateSubmodel() by the calling menu code when
           // and if this sub menu will be shown to the user.
@@ -325,7 +325,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
             id_to_elementvector_map_[id] = &child.children.value();
           break;
         }
-        case menubar_menu::ITEM_TYPE_NONE:
+        case menubar_menu::ItemType::kNone:
           return "Item type missing";
       }
       if (item.shortcut) {
@@ -370,7 +370,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
       }
     } else if (child.container) {
       if (child.container->type ==
-          vivaldi::menubar_menu::CONTAINER_TYPE_BOOKMARKS) {
+          vivaldi::menubar_menu::ContainerType::kBookmarks) {
         if (bookmark_menu_container_) {
           return "Only one bookmark container supported";
         }
@@ -379,11 +379,11 @@ std::string MenubarMenuShowFunction::PopulateModel(
         bookmark_menu_container_.reset(
             new ::vivaldi::BookmarkMenuContainer(this));
         switch (child.container->edge) {
-          case vivaldi::menubar_menu::EDGE_ABOVE:
+          case vivaldi::menubar_menu::Edge::kAbove:
             bookmark_menu_container_->edge =
                 ::vivaldi::BookmarkMenuContainer::Above;
             break;
-          case vivaldi::menubar_menu::EDGE_BELOW:
+          case vivaldi::menubar_menu::Edge::kBelow:
             bookmark_menu_container_->edge =
                 ::vivaldi::BookmarkMenuContainer::Below;
             break;
@@ -406,41 +406,41 @@ std::string MenubarMenuShowFunction::PopulateModel(
         sibling->folder_group = child.container->group_folders;
         bookmark_menu_container_->support.initIcons(params->properties.icons);
         switch (child.container->sort_field) {
-          case vivaldi::menubar_menu::SORT_FIELD_NONE:
+          case vivaldi::menubar_menu::SortField::kNone:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NONE;
             break;
-          case vivaldi::menubar_menu::SORT_FIELD_TITLE:
+          case vivaldi::menubar_menu::SortField::kTitle:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_TITLE;
             break;
-          case vivaldi::menubar_menu::SORT_FIELD_URL:
+          case vivaldi::menubar_menu::SortField::kUrl:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_URL;
             break;
-          case vivaldi::menubar_menu::SORT_FIELD_NICKNAME:
+          case vivaldi::menubar_menu::SortField::kNickname:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
             break;
-          case vivaldi::menubar_menu::SORT_FIELD_DESCRIPTION:
+          case vivaldi::menubar_menu::SortField::kDescription:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
             break;
-          case vivaldi::menubar_menu::SORT_FIELD_DATEADDED:
+          case vivaldi::menubar_menu::SortField::kDateadded:
             bookmark_menu_container_->sort_field =
                 ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
             break;
         };
         switch (child.container->sort_order) {
-          case vivaldi::menubar_menu::SORT_ORDER_NONE:
+          case vivaldi::menubar_menu::SortOrder::kNone:
             bookmark_menu_container_->sort_order =
                 ::vivaldi::BookmarkSorter::ORDER_NONE;
             break;
-          case vivaldi::menubar_menu::SORT_ORDER_ASCENDING:
+          case vivaldi::menubar_menu::SortOrder::kAscending:
             bookmark_menu_container_->sort_order =
                 ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
             break;
-          case vivaldi::menubar_menu::SORT_ORDER_DESCENDING:
+          case vivaldi::menubar_menu::SortOrder::kDescending:
             bookmark_menu_container_->sort_order =
                 ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
             break;

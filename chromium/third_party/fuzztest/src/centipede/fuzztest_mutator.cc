@@ -14,7 +14,22 @@
 
 #include "./centipede/fuzztest_mutator.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "absl/random/random.h"
+#include "absl/types/span.h"
+#include "./centipede/byte_array_mutator.h"
+#include "./centipede/defs.h"
+#include "./centipede/execution_metadata.h"
+#include "./centipede/knobs.h"
+#include "./centipede/mutation_input.h"
 #include "./fuzztest/domain_core.h"
+#include "./fuzztest/internal/coverage.h"
 
 namespace centipede {
 
@@ -28,21 +43,66 @@ using MutatorDomainBase =
 class FuzzTestMutator::MutatorDomain : public MutatorDomainBase {
  public:
   MutatorDomain()
-      : MutatorDomainBase(fuzztest::VectorOf(fuzztest::Arbitrary<uint8_t>())) {}
+      : MutatorDomainBase(fuzztest::VectorOf(fuzztest::Arbitrary<uint8_t>())) {
+    if (fuzztest::internal::GetExecutionCoverage() == nullptr) {
+      execution_coverage_ = std::make_unique<ExecutionCoverage>(
+          /*counter_map=*/absl::Span<uint8_t>{});
+      execution_coverage_->SetIsTracing(true);
+      fuzztest::internal::SetExecutionCoverage(execution_coverage_.get());
+    }
+  }
+
+  ~MutatorDomain() {
+    if (fuzztest::internal::GetExecutionCoverage() == execution_coverage_.get())
+      fuzztest::internal::SetExecutionCoverage(nullptr);
+  }
+
+ private:
+  using ExecutionCoverage = fuzztest::internal::ExecutionCoverage;
+  std::unique_ptr<ExecutionCoverage> execution_coverage_;
 };
 
-FuzzTestMutator::FuzzTestMutator(uint64_t seed)
-    : prng_(std::seed_seq({seed, seed >> 32})),
-      domain_(std::make_unique<MutatorDomain>()) {
+FuzzTestMutator::FuzzTestMutator(const Knobs &knobs, uint64_t seed)
+    : knobs_(knobs), prng_(seed), domain_(std::make_unique<MutatorDomain>()) {
   domain_->WithMinSize(1).WithMaxSize(max_len_);
-  if (fuzztest::internal::GetExecutionCoverage() == nullptr) {
-    auto* execution_coverage = new fuzztest::internal::ExecutionCoverage({});
-    execution_coverage->SetIsTracing(true);
-    fuzztest::internal::SetExecutionCoverage(execution_coverage);
-  }
 }
 
 FuzzTestMutator::~FuzzTestMutator() = default;
+
+void FuzzTestMutator::CrossOverInsert(ByteArray &data, const ByteArray &other) {
+  // insert other[first:first+size] at data[pos]
+  const auto size = absl::Uniform<size_t>(
+      prng_, 1, std::min(max_len_ - data.size(), other.size()) + 1);
+  const auto first = absl::Uniform<size_t>(prng_, 0, other.size() - size + 1);
+  const auto pos = absl::Uniform<size_t>(prng_, 0, data.size() + 1);
+  data.insert(data.begin() + pos, other.begin() + first,
+              other.begin() + first + size);
+}
+
+void FuzzTestMutator::CrossOverOverwrite(ByteArray &data,
+                                         const ByteArray &other) {
+  // Overwrite data[pos:pos+size] with other[first:first+size].
+  // Overwrite no more than half of data.
+  size_t max_size = std::max(1UL, data.size() / 2);
+  const auto first = absl::Uniform<size_t>(prng_, 0, other.size());
+  max_size = std::min(max_size, other.size() - first);
+  const auto size = absl::Uniform<size_t>(prng_, 1, max_size + 1);
+  const auto pos = absl::Uniform<size_t>(prng_, 0, data.size() - size + 1);
+  std::copy(other.begin() + first, other.begin() + first + size,
+            data.begin() + pos);
+}
+
+void FuzzTestMutator::CrossOver(ByteArray &data, const ByteArray &other) {
+  if (data.size() >= max_len_) {
+    CrossOverOverwrite(data, other);
+  } else {
+    if (knobs_.GenerateBool(knob_cross_over_insert_or_overwrite, prng_())) {
+      CrossOverInsert(data, other);
+    } else {
+      CrossOverOverwrite(data, other);
+    }
+  }
+}
 
 void FuzzTestMutator::MutateMany(const std::vector<MutationInputRef>& inputs,
                                  size_t num_mutants,
@@ -57,7 +117,14 @@ void FuzzTestMutator::MutateMany(const std::vector<MutationInputRef>& inputs,
   for (int i = 0; i < num_mutants; ++i) {
     auto mutant = inputs[absl::Uniform<size_t>(prng_, 0, inputs.size())].data;
     if (mutant.size() > max_len_) mutant.resize(max_len_);
-    domain_->Mutate(mutant, prng_, /*only_shrink=*/false);
+    if (knobs_.GenerateBool(knob_mutate_or_crossover, prng_())) {
+      // Perform crossover with some other input. It may be the same input.
+      const auto &other_input =
+          inputs[absl::Uniform<size_t>(prng_, 0, inputs.size())].data;
+      CrossOver(mutant, other_input);
+    } else {
+      domain_->Mutate(mutant, prng_, /*only_shrink=*/false);
+    }
     mutants.push_back(std::move(mutant));
   }
 }

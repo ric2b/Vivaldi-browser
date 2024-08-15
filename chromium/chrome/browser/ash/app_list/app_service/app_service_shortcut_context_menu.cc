@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/metrics/shortcut_metrics.h"
 #include "chrome/browser/ash/app_list/app_context_menu.h"
 #include "chrome/browser/ash/app_list/app_context_menu_delegate.h"
 #include "chrome/browser/ash/app_list/app_list_controller_delegate.h"
@@ -70,9 +71,11 @@ void AppServiceShortcutContextMenu::GetMenuModel(
                        static_cast<ash::CommandId>(ash::CommandId::TOGGLE_PIN),
                        IDS_APP_LIST_CONTEXT_MENU_PIN);
 
-  AddContextMenuOption(menu_model.get(),
-                       static_cast<ash::CommandId>(ash::UNINSTALL),
-                       IDS_APP_LIST_REMOVE_SHORTCUT);
+  if (shortcut->allow_removal.value_or(true)) {
+    AddContextMenuOption(menu_model.get(),
+                         static_cast<ash::CommandId>(ash::UNINSTALL),
+                         IDS_APP_LIST_REMOVE_SHORTCUT);
+  }
 
   AddReorderMenuOption(menu_model.get());
 
@@ -86,9 +89,15 @@ void AppServiceShortcutContextMenu::ExecuteCommand(int command_id,
       delegate()->ExecuteLaunchCommand(event_flags);
       break;
     case ash::UNINSTALL:
+      RecordShortcutRemovalSource(apps::ShortcutActionSource::kLauncher);
       proxy_->RemoveShortcut(shortcut_id_, apps::UninstallSource::kAppList,
                              controller()->GetAppListWindow());
       break;
+    case ash::TOGGLE_PIN:
+      RecordShortcutPinAction(controller()->IsAppPinned(shortcut_id_.value())
+                                  ? apps::ShortcutPinAction::kUnpin
+                                  : apps::ShortcutPinAction::kPin);
+      [[fallthrough]];
     default:
       AppContextMenu::ExecuteCommand(command_id, event_flags);
   }

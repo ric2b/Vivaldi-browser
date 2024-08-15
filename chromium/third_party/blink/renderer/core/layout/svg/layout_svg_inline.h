@@ -39,10 +39,13 @@ class LayoutSVGInline : public LayoutInline {
     NOT_DESTROYED();
     return kNoPaintLayer;
   }
-  bool IsOfType(LayoutObjectType type) const override {
+  bool IsSVG() const final {
     NOT_DESTROYED();
-    return type == kLayoutObjectSVG || type == kLayoutObjectSVGInline ||
-           LayoutInline::IsOfType(type);
+    return true;
+  }
+  bool IsSVGInline() const final {
+    NOT_DESTROYED();
+    return true;
   }
 
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
@@ -61,7 +64,7 @@ class LayoutSVGInline : public LayoutInline {
   void AddOutlineRects(OutlineRectCollector&,
                        OutlineInfo*,
                        const PhysicalOffset& additional_offset,
-                       NGOutlineType) const final;
+                       OutlineType) const final;
 
  private:
   void WillBeDestroyed() final;

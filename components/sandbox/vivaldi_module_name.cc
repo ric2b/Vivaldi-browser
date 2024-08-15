@@ -171,7 +171,7 @@ DWORD TargetGetModuleFileNameA64(HMODULE hModule,
                                  DWORD nSize) {
   GetModuleFileNameAFunction orig_fn =
       reinterpret_cast<GetModuleFileNameAFunction>(
-          g_originals[GET_MODULE_FILENAME_A]);
+          g_originals.functions[GET_MODULE_FILENAME_A]);
   return TargetGetModuleFileNameA(orig_fn, hModule, lpFilename, nSize);
 }
 
@@ -181,7 +181,7 @@ DWORD TargetGetModuleFileNameExA64(HANDLE hProcess,
                                    DWORD nSize) {
   GetModuleFileNameExAFunction orig_fn =
       reinterpret_cast<GetModuleFileNameExAFunction>(
-          g_originals[GET_MODULE_FILENAME_EX_A]);
+          g_originals.functions[GET_MODULE_FILENAME_EX_A]);
   return TargetGetModuleFileNameExA(orig_fn, hProcess, hModule, lpFilename,
                                     nSize);
 }
@@ -190,7 +190,7 @@ DWORD TargetGetModuleFileNameW64(HMODULE hModule,
                                  DWORD nSize) {
   GetModuleFileNameWFunction orig_fn =
       reinterpret_cast<GetModuleFileNameWFunction>(
-          g_originals[GET_MODULE_FILENAME_W]);
+          g_originals.functions[GET_MODULE_FILENAME_W]);
   return TargetGetModuleFileNameW(orig_fn, hModule, lpFilename, nSize);
 }
 
@@ -200,7 +200,7 @@ DWORD TargetGetModuleFileNameExW64(HANDLE hProcess,
                                    DWORD nSize) {
   GetModuleFileNameExWFunction orig_fn =
       reinterpret_cast<GetModuleFileNameExWFunction>(
-          g_originals[GET_MODULE_FILENAME_EX_W]);
+          g_originals.functions[GET_MODULE_FILENAME_EX_W]);
   return TargetGetModuleFileNameExW(orig_fn, hProcess, hModule, lpFilename,
                                     nSize);
 }

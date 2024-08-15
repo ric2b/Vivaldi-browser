@@ -36,31 +36,33 @@
 
 namespace dawn::native::d3d11 {
 
-class CommandRecordingContext;
 class Device;
 class PersistentPipelineState;
+class ScopedSwapStateCommandRecordingContext;
 
 class RenderPipeline final : public RenderPipelineBase {
   public:
-    static Ref<RenderPipeline> CreateUninitialized(Device* device,
-                                                   const RenderPipelineDescriptor* descriptor);
+    static Ref<RenderPipeline> CreateUninitialized(
+        Device* device,
+        const UnpackedPtr<RenderPipelineDescriptor>& descriptor);
 
     static void InitializeAsync(Ref<RenderPipelineBase> renderPipeline,
                                 WGPUCreateRenderPipelineAsyncCallback callback,
                                 void* userdata);
 
-    void ApplyNow(CommandRecordingContext* commandContext,
+    void ApplyNow(const ScopedSwapStateCommandRecordingContext* commandContext,
                   const std::array<float, 4>& blendColor,
                   uint32_t stencilReference);
-    void ApplyBlendState(CommandRecordingContext* commandContext,
+    void ApplyBlendState(const ScopedSwapStateCommandRecordingContext* commandContext,
                          const std::array<float, 4>& blendColor);
-    void ApplyDepthStencilState(CommandRecordingContext* commandContext, uint32_t stencilReference);
+    void ApplyDepthStencilState(const ScopedSwapStateCommandRecordingContext* commandContext,
+                                uint32_t stencilReference);
 
     bool UsesVertexIndex() const { return mUsesVertexIndex; }
     bool UsesInstanceIndex() const { return mUsesInstanceIndex; }
 
   private:
-    RenderPipeline(Device* device, const RenderPipelineDescriptor* descriptor);
+    RenderPipeline(Device* device, const UnpackedPtr<RenderPipelineDescriptor>& descriptor);
     ~RenderPipeline() override;
 
     MaybeError Initialize() override;

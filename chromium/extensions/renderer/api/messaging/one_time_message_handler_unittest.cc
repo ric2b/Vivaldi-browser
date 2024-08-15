@@ -5,6 +5,7 @@
 #include "extensions/renderer/api/messaging/one_time_message_handler.h"
 
 #include <memory>
+#include <string_view>
 
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -14,6 +15,7 @@
 #include "extensions/common/api/messaging/port_id.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/message_port.mojom-shared.h"
 #include "extensions/renderer/api/messaging/message_target.h"
 #include "extensions/renderer/api/messaging/messaging_util.h"
@@ -61,8 +63,8 @@ class OneTimeMessageHandlerTest : public NativeExtensionBindingsSystemUnittest {
     v8::HandleScope handle_scope(isolate());
     v8::Local<v8::Context> context = MainContext();
 
-    script_context_ = CreateScriptContext(context, extension_.get(),
-                                          Feature::BLESSED_EXTENSION_CONTEXT);
+    script_context_ = CreateScriptContext(
+        context, extension_.get(), mojom::ContextType::kPrivilegedExtension);
     script_context_->set_url(extension_->url());
     bindings_system()->UpdateBindingsForContext(script_context_);
   }
@@ -74,7 +76,7 @@ class OneTimeMessageHandlerTest : public NativeExtensionBindingsSystemUnittest {
   bool UseStrictIPCMessageSender() override { return true; }
 
   std::string GetGlobalProperty(v8::Local<v8::Context> context,
-                                base::StringPiece property) {
+                                std::string_view property) {
     return GetStringPropertyFromObject(context->Global(), context, property);
   }
 

@@ -65,6 +65,8 @@ tint_target_add_dependencies(tint_lang_wgsl_resolver lib
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_intrinsic
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
@@ -115,12 +117,14 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/evaluation_stage_test.cc
   lang/wgsl/resolver/expression_kind_test.cc
   lang/wgsl/resolver/f16_extension_test.cc
+  lang/wgsl/resolver/framebuffer_fetch_extension_test.cc
   lang/wgsl/resolver/function_validation_test.cc
   lang/wgsl/resolver/host_shareable_validation_test.cc
   lang/wgsl/resolver/increment_decrement_validation_test.cc
   lang/wgsl/resolver/inferred_type_test.cc
   lang/wgsl/resolver/is_host_shareable_test.cc
   lang/wgsl/resolver/is_storeable_test.cc
+  lang/wgsl/resolver/language_features_test.cc
   lang/wgsl/resolver/load_test.cc
   lang/wgsl/resolver/materialize_test.cc
   lang/wgsl/resolver/override_test.cc
@@ -158,6 +162,8 @@ tint_target_add_dependencies(tint_lang_wgsl_resolver_test test
   tint_lang_wgsl_ast
   tint_lang_wgsl_ast_transform
   tint_lang_wgsl_ast_test
+  tint_lang_wgsl_common
+  tint_lang_wgsl_features
   tint_lang_wgsl_intrinsic
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver

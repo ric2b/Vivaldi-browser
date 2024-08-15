@@ -22,7 +22,9 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/manifest_handlers/externally_connectable.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/message_port.mojom-shared.h"
+#include "extensions/common/utils/extension_utils.h"
 #include "extensions/renderer/api/messaging/message_target.h"
 #include "extensions/renderer/api/messaging/messaging_util.h"
 #include "extensions/renderer/api_activity_logger.h"
@@ -181,8 +183,16 @@ class NativeRendererMessagingService::MessagePortScope
   }
 
   mojom::MessagePortHost* GetMessagePortHost(const PortId& port_id) {
+    auto* result = GetMessagePortHostIfExists(port_id);
+    CHECK(result);
+    return result;
+  }
+
+  mojom::MessagePortHost* GetMessagePortHostIfExists(const PortId& port_id) {
     auto it = message_port_hosts_.find(port_id);
-    CHECK(it != message_port_hosts_.end());
+    if (it == message_port_hosts_.end()) {
+      return nullptr;
+    }
     return it->second.get();
   }
 
@@ -300,7 +310,7 @@ void NativeRendererMessagingService::DispatchOnConnect(
 
   bool port_created = false;
   context_set->ForEach(
-      info.target_id, restrict_to_render_frame,
+      GenerateHostIdFromExtensionId(info.target_id), restrict_to_render_frame,
       base::BindRepeating(
           &NativeRendererMessagingService::DispatchOnConnectToScriptContext,
           base::Unretained(this), target_port_id, channel_type, channel_name,
@@ -607,7 +617,7 @@ void NativeRendererMessagingService::DeliverMessageToBackgroundPage(
     bool sender_is_privileged = message.from_privileged_context;
     bool receiver_is_privileged =
         script_context->context_type() ==
-        extensions::Feature::BLESSED_EXTENSION_CONTEXT;
+        extensions::mojom::ContextType::kPrivilegedExtension;
     UserActivationNotificationType notification_type;
     if (sender_is_privileged && receiver_is_privileged) {
       notification_type =
@@ -833,9 +843,16 @@ gin::Handle<GinPort> NativeRendererMessagingService::CreatePort(
   else
     DCHECK_NE(port_id.context_id, script_context->context_id());
 
+#if BUILDFLAG(ENABLE_EXTENSIONS_LEGACY_IPC)
   content::RenderFrame* render_frame = script_context->GetRenderFrame();
   int routing_id =
       render_frame ? render_frame->GetRoutingID() : MSG_ROUTING_NONE;
+#else
+  // We do not use routing_id for anything in the mojo based IPC mechanism.
+  // TODO(dtapuska): Remove this and clean up the API when build flag is
+  // removed.
+  int routing_id = MSG_ROUTING_NONE;
+#endif
 
   MessagingPerContextData* data =
       GetPerContextData<MessagingPerContextData>(context, kCreateIfMissing);
@@ -896,6 +913,14 @@ mojom::MessagePortHost* NativeRendererMessagingService::GetMessagePortHost(
     const PortId& port_id) {
   return GetMessagePortScope(script_context->GetRenderFrame())
       ->GetMessagePortHost(port_id);
+}
+
+mojom::MessagePortHost*
+NativeRendererMessagingService::GetMessagePortHostIfExists(
+    ScriptContext* script_context,
+    const PortId& port_id) {
+  return GetMessagePortScope(script_context->GetRenderFrame())
+      ->GetMessagePortHostIfExists(port_id);
 }
 
 base::SafeRef<NativeRendererMessagingService>

@@ -12,10 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(clippy::unwrap_used)]
+
 extern crate std;
 
+use crate::deserialization_arena;
 use crate::extended::data_elements::TxPowerDataElement;
-use crate::extended::deserialize::{DecryptedSection, EncryptionInfo, RawV1Salt};
+use crate::extended::deserialize::{
+    DataElementParseError, DecryptedSection, EncryptionInfo, RawV1Salt, SectionContents,
+};
+use crate::extended::serialize::AdvertisementType;
 use crate::shared_data::TxPower;
 use crate::{
     credential::v1::*,
@@ -23,23 +29,22 @@ use crate::{
     extended::{
         deserialize::{
             encrypted_section::{
-                SignatureEncryptedSection, SignatureEncryptedSectionDeserializationError,
+                EncryptedSectionContents, IdentityResolutionOrDeserializationError,
+                SignatureEncryptedSection, SignatureVerificationError,
             },
             parse_sections,
             test_stubs::IntermediateSectionExt,
-            CiphertextSection, EncryptedIdentityMetadata, OffsetDataElement, SectionContents,
-            VerificationMode,
+            CiphertextSection, DataElement, EncryptedIdentityMetadata, VerificationMode,
         },
         section_signature_payload::*,
         serialize::{
-            AdvBuilder, CapacityLimitedVec, SignedEncrypted, SingleTypeDataElement,
+            AdvBuilder, CapacityLimitedVec, SignedEncryptedSectionEncoder, SingleTypeDataElement,
             WriteDataElement,
         },
         NP_ADV_MAX_SECTION_LEN,
     },
-    parse_adv_header, AdvHeader, Section,
+    parse_adv_header, AdvHeader, MetadataKey, Section,
 };
-use array_view::ArrayView;
 use crypto_provider::{aes::ctr::AesCtrNonce, CryptoProvider};
 use crypto_provider_default::CryptoProviderImpl;
 use np_hkdf::v1_salt;
@@ -51,7 +56,7 @@ type KeyPair = np_ed25519::KeyPair<CryptoProviderImpl>;
 
 #[test]
 fn deserialize_signature_encrypted_correct_keys() {
-    let metadata_key = [1; 16];
+    let metadata_key = MetadataKey([1; 16]);
     let key_seed = [2; 32];
     let raw_salt = RawV1Salt([3; 16]);
     let section_salt = V1Salt::<CryptoProviderImpl>::from(raw_salt);
@@ -59,15 +64,16 @@ fn deserialize_signature_encrypted_correct_keys() {
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
     let key_pair = KeyPair::generate();
 
-    let mut adv_builder = AdvBuilder::new();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
+
+    let broadcast_cm =
+        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
 
     let mut section_builder = adv_builder
-        .section_builder(SignedEncrypted::new(
+        .section_builder(SignedEncryptedSectionEncoder::<CryptoProviderImpl>::new(
             identity_type,
             V1Salt::from(*section_salt.as_array_ref()),
-            &metadata_key,
-            &key_pair,
-            &key_seed_hkdf,
+            &broadcast_cm,
         ))
         .unwrap();
 
@@ -86,7 +92,7 @@ fn deserialize_signature_encrypted_correct_keys() {
         panic!("incorrect header");
     };
 
-    let sections = parse_sections(&adv_header, remaining).unwrap();
+    let sections = parse_sections(adv_header, remaining).unwrap();
     assert_eq!(1, sections.len());
 
     let section = sections.into_iter().next().unwrap();
@@ -105,38 +111,48 @@ fn deserialize_signature_encrypted_correct_keys() {
     let section_len = 19 + 2 + 16 + 2 + 64;
     assert_eq!(
         &SignatureEncryptedSection {
-            section_header: section_len,
-            adv_header: &adv_header,
-            encryption_info: EncryptionInfo { bytes: encryption_info_bytes },
-            identity: EncryptedIdentityMetadata {
-                header_bytes: [0x90, 0x1],
-                offset: 1.into(),
-                identity_type: EncryptedIdentityDataElementType::Private,
+            contents: EncryptedSectionContents {
+                section_header: section_len,
+                adv_header,
+                encryption_info: EncryptionInfo { bytes: encryption_info_bytes },
+                identity: EncryptedIdentityMetadata {
+                    header_bytes: [0x90, 0x1],
+                    offset: 1.into(),
+                    identity_type: EncryptedIdentityDataElementType::Private,
+                },
+                // adv header + salt + section header + encryption info + identity header
+                all_ciphertext: &adv.as_slice()[1 + 1 + 19 + 2..],
             },
-            // adv header + salt + section header + encryption info + identity header
-            all_ciphertext: &adv.as_slice()[1 + 1 + 19 + 2..],
         },
         contents
     );
 
     // plaintext is correct
     {
-        let crypto_material = MinimumFootprintV1CryptoMaterial::new::<CryptoProviderImpl>(
+        let crypto_material = V1DiscoveryCredential::new(
             key_seed,
-            key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key),
-            key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key),
-            key_pair.public(),
+            key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
+            key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
+            key_pair.public().to_bytes(),
         );
         let signed_identity_resolution_material =
             crypto_material.signed_identity_resolution_material::<CryptoProviderImpl>();
-        let decrypted = contents
-            .try_decrypt::<CryptoProviderImpl>(&signed_identity_resolution_material)
+        let identity_resolution_contents =
+            contents.contents.compute_identity_resolution_contents::<CryptoProviderImpl>();
+        let identity_match = identity_resolution_contents
+            .try_match::<CryptoProviderImpl>(
+                &signed_identity_resolution_material.into_raw_resolution_material(),
+            )
             .unwrap();
 
-        let mut expected = metadata_key.as_slice().to_vec();
-        // battery de
+        let arena = deserialization_arena!();
+        let mut allocator = arena.into_allocator();
+        let decrypted =
+            contents.contents.decrypt_ciphertext(&mut allocator, identity_match).unwrap();
+
+        let mut expected = Vec::new();
         expected.extend_from_slice(txpower_de.de_header().serialize().as_slice());
-        txpower_de.write_de_contents(&mut expected);
+        let _ = txpower_de.write_de_contents(&mut expected);
 
         let nonce: AesCtrNonce = section_salt.derive(Some(1.into())).unwrap();
 
@@ -151,29 +167,34 @@ fn deserialize_signature_encrypted_correct_keys() {
             &encryption_info,
             &nonce,
             [0x90, 0x1],
+            metadata_key,
             &expected,
         );
 
         expected.extend_from_slice(&sig_payload.sign(&key_pair).to_bytes());
-
-        assert_eq!(&expected, decrypted.as_slice());
+        assert_eq!(metadata_key, decrypted.metadata_key_plaintext);
+        assert_eq!(nonce, decrypted.nonce);
+        assert_eq!(&expected, decrypted.plaintext_contents);
     }
 
     // deserialization to Section works
     {
-        let crypto_material = MinimumFootprintV1CryptoMaterial::new::<CryptoProviderImpl>(
+        let crypto_material = V1DiscoveryCredential::new(
             key_seed,
-            key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key),
-            key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key),
-            key_pair.public(),
+            key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
+            key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
+            key_pair.public().to_bytes(),
         );
         let signed_identity_resolution_material =
             crypto_material.signed_identity_resolution_material::<CryptoProviderImpl>();
         let signed_verification_material =
             crypto_material.signed_verification_material::<CryptoProviderImpl>();
 
+        let arena = deserialization_arena!();
+        let mut allocator = arena.into_allocator();
         let section = contents
-            .try_deserialize::<CryptoProviderImpl>(
+            .try_resolve_identity_and_deserialize::<CryptoProviderImpl>(
+                &mut allocator,
                 &signed_identity_resolution_material,
                 &signed_verification_material,
             )
@@ -187,27 +208,23 @@ fn deserialize_signature_encrypted_correct_keys() {
                 raw_salt,
                 SectionContents {
                     section_header: 19 + 2 + 16 + 1 + 1 + 64,
-                    // battery DE
-                    de_data: ArrayView::try_from_slice(&[7]).unwrap(),
-                    data_elements: vec![OffsetDataElement {
-                        offset: 2.into(),
-                        de_type: 0x05_u8.into(),
-                        start_of_contents: 0,
-                        contents_len: 1,
-                    }],
+                    data_element_start_offset: 2,
+                    de_region_excl_identity:
+                        &[txpower_de.de_header().serialize().as_slice(), &[7],].concat(),
                 },
             ),
             section
         );
+        let data_elements = section.collect_data_elements().unwrap();
+        assert_eq!(
+            data_elements,
+            &[DataElement { offset: 2.into(), de_type: 0x05_u8.into(), contents: &[7] }]
+        );
 
         assert_eq!(
-            vec![(
-                v1_salt::DataElementOffset::from(2_usize),
-                TxPowerDataElement::DE_TYPE,
-                vec![7u8]
-            )],
-            section
-                .data_elements()
+            vec![(v1_salt::DataElementOffset::from(2_u8), TxPowerDataElement::DE_TYPE, vec![7u8])],
+            data_elements
+                .into_iter()
                 .map(|de| (de.offset(), de.de_type(), de.contents().to_vec()))
                 .collect::<Vec<_>>()
         );
@@ -218,7 +235,7 @@ fn deserialize_signature_encrypted_correct_keys() {
 fn deserialize_signature_encrypted_incorrect_aes_key_error() {
     // bad aes key -> bad metadata key plaintext
     do_bad_deserialize_params::<CryptoProviderImpl>(
-        SignatureEncryptedSectionDeserializationError::MetadataKeyMacMismatch,
+        IdentityResolutionOrDeserializationError::IdentityMatchingError,
         Some([0xFF; 16].into()),
         None,
         None,
@@ -230,7 +247,7 @@ fn deserialize_signature_encrypted_incorrect_aes_key_error() {
 fn deserialize_signature_encrypted_incorrect_metadata_key_hmac_key_error() {
     // bad metadata key hmac key -> bad calculated metadata key mac
     do_bad_deserialize_params::<CryptoProviderImpl>(
-        SignatureEncryptedSectionDeserializationError::MetadataKeyMacMismatch,
+        IdentityResolutionOrDeserializationError::IdentityMatchingError,
         None,
         Some([0xFF; 32].into()),
         None,
@@ -242,7 +259,7 @@ fn deserialize_signature_encrypted_incorrect_metadata_key_hmac_key_error() {
 fn deserialize_signature_encrypted_incorrect_expected_metadata_key_hmac_error() {
     // bad expected metadata key mac
     do_bad_deserialize_params::<CryptoProviderImpl>(
-        SignatureEncryptedSectionDeserializationError::MetadataKeyMacMismatch,
+        IdentityResolutionOrDeserializationError::IdentityMatchingError,
         None,
         None,
         Some([0xFF; 32]),
@@ -254,7 +271,7 @@ fn deserialize_signature_encrypted_incorrect_expected_metadata_key_hmac_error() 
 fn deserialize_signature_encrypted_incorrect_pub_key_error() {
     // a random pub key will lead to signature mismatch
     do_bad_deserialize_params::<CryptoProviderImpl>(
-        SignatureEncryptedSectionDeserializationError::SignatureMismatch,
+        SignatureVerificationError::SignatureMismatch.into(),
         None,
         None,
         None,
@@ -266,7 +283,9 @@ fn deserialize_signature_encrypted_incorrect_pub_key_error() {
 fn deserialize_signature_encrypted_incorrect_salt_error() {
     // bad salt -> bad iv -> bad metadata key plaintext
     do_bad_deserialize_tampered(
-        SignatureEncryptedSectionDeserializationError::MetadataKeyMacMismatch,
+        DeserializeError::IdentityResolutionOrDeserializationError(
+            IdentityResolutionOrDeserializationError::IdentityMatchingError,
+        ),
         None,
         |_| {},
         |adv_mut| adv_mut[5..21].copy_from_slice(&[0xFF; 16]),
@@ -276,7 +295,9 @@ fn deserialize_signature_encrypted_incorrect_salt_error() {
 #[test]
 fn deserialize_signature_encrypted_tampered_signature_error() {
     do_bad_deserialize_tampered(
-        SignatureEncryptedSectionDeserializationError::SignatureMismatch,
+        DeserializeError::IdentityResolutionOrDeserializationError(
+            SignatureVerificationError::SignatureMismatch.into(),
+        ),
         None,
         |_| {},
         // flip a bit in the middle of the signature
@@ -290,7 +311,9 @@ fn deserialize_signature_encrypted_tampered_signature_error() {
 #[test]
 fn deserialize_signature_encrypted_tampered_ciphertext_error() {
     do_bad_deserialize_tampered(
-        SignatureEncryptedSectionDeserializationError::SignatureMismatch,
+        DeserializeError::IdentityResolutionOrDeserializationError(
+            SignatureVerificationError::SignatureMismatch.into(),
+        ),
         None,
         |_| {},
         // flip a bit outside of the signature
@@ -305,7 +328,9 @@ fn deserialize_signature_encrypted_tampered_ciphertext_error() {
 fn deserialize_signature_encrypted_missing_signature_de_error() {
     let section_len = 19 + 2 + 16 + 1 + 1;
     do_bad_deserialize_tampered(
-        SignatureEncryptedSectionDeserializationError::SignatureMissing,
+        DeserializeError::IdentityResolutionOrDeserializationError(
+            SignatureVerificationError::SignatureMissing.into(),
+        ),
         Some(section_len),
         |_| {},
         |adv_mut| {
@@ -320,7 +345,7 @@ fn deserialize_signature_encrypted_missing_signature_de_error() {
 #[test]
 fn deserialize_signature_encrypted_des_wont_parse() {
     do_bad_deserialize_tampered(
-        SignatureEncryptedSectionDeserializationError::DeParseError,
+        DeserializeError::DataElementParseError(DataElementParseError::UnexpectedDataAfterEnd),
         Some(19 + 2 + 16 + 1 + 1 + 64 + 1),
         // add an impossible DE
         |section| section.try_push(0xFF).unwrap(),
@@ -331,28 +356,29 @@ fn deserialize_signature_encrypted_des_wont_parse() {
 /// Attempt a deserialization that will fail when using the provided parameters for decryption only.
 /// `None` means use the correct value for that parameter.
 fn do_bad_deserialize_params<C: CryptoProvider>(
-    error: SignatureEncryptedSectionDeserializationError,
+    error: IdentityResolutionOrDeserializationError<SignatureVerificationError>,
     aes_key: Option<crypto_provider::aes::Aes128Key>,
     metadata_key_hmac_key: Option<np_hkdf::NpHmacSha256Key<C>>,
     expected_metadata_key_hmac: Option<[u8; 32]>,
     pub_key: Option<np_ed25519::PublicKey<C>>,
 ) {
-    let metadata_key = [1; 16];
+    let metadata_key = MetadataKey([1; 16]);
     let key_seed = [2; 32];
     let section_salt: v1_salt::V1Salt<C> = [3; 16].into();
     let identity_type = EncryptedIdentityDataElementType::Private;
     let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::new(&key_seed);
     let key_pair = np_ed25519::KeyPair::<C>::generate();
 
-    let mut adv_builder = AdvBuilder::new();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
+
+    let broadcast_cm =
+        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
 
     let mut section_builder = adv_builder
-        .section_builder(SignedEncrypted::new(
+        .section_builder(SignedEncryptedSectionEncoder::new(
             identity_type,
             section_salt,
-            &metadata_key,
-            &key_pair,
-            &key_seed_hkdf,
+            &broadcast_cm,
         ))
         .unwrap();
 
@@ -370,7 +396,7 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
         panic!("incorrect header");
     };
 
-    let sections = parse_sections(&v1_header, remaining).unwrap();
+    let sections = parse_sections(v1_header, remaining).unwrap();
     assert_eq!(1, sections.len());
 
     let section = sections.into_iter().next().unwrap();
@@ -389,7 +415,9 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
                 .unwrap_or_else(|| key_seed_hkdf.extended_signed_metadata_key_hmac_key())
                 .as_bytes(),
             expected_metadata_key_hmac: expected_metadata_key_hmac.unwrap_or_else(|| {
-                key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key)
+                key_seed_hkdf
+                    .extended_signed_metadata_key_hmac_key()
+                    .calculate_hmac(&metadata_key.0)
             }),
         });
 
@@ -400,7 +428,8 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
     assert_eq!(
         error,
         contents
-            .try_deserialize::<C>(
+            .try_resolve_identity_and_deserialize::<C>(
+                &mut deserialization_arena!().into_allocator(),
                 &signed_identity_resolution_material,
                 &signed_verification_material,
             )
@@ -408,34 +437,40 @@ fn do_bad_deserialize_params<C: CryptoProvider>(
     );
 }
 
+#[derive(Debug, PartialEq)]
+enum DeserializeError {
+    IdentityResolutionOrDeserializationError(
+        IdentityResolutionOrDeserializationError<SignatureVerificationError>,
+    ),
+    DataElementParseError(DataElementParseError),
+}
+
 /// Run a test that mangles the advertisement contents before attempting to deserialize.
 ///
 /// Since the advertisement is ciphertext, only changes outside
-fn do_bad_deserialize_tampered<
-    A: Fn(&mut Vec<u8>),
-    S: Fn(&mut CapacityLimitedVec<u8, NP_ADV_MAX_SECTION_LEN>),
->(
-    expected_error: SignatureEncryptedSectionDeserializationError,
+fn do_bad_deserialize_tampered(
+    expected_error: DeserializeError,
     expected_section_len: Option<u8>,
-    mangle_section: S,
-    mangle_adv_contents: A,
+    mangle_section: impl Fn(&mut CapacityLimitedVec<u8, NP_ADV_MAX_SECTION_LEN>),
+    mangle_adv_contents: impl Fn(&mut Vec<u8>),
 ) {
-    let metadata_key = [1; 16];
+    let metadata_key = MetadataKey([1; 16]);
     let key_seed = [2; 32];
     let section_salt: v1_salt::V1Salt<CryptoProviderImpl> = [3; 16].into();
     let identity_type = EncryptedIdentityDataElementType::Private;
-    let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::new(&key_seed);
+    let key_seed_hkdf = np_hkdf::NpKeySeedHkdf::<CryptoProviderImpl>::new(&key_seed);
     let key_pair = KeyPair::generate();
 
-    let mut adv_builder = AdvBuilder::new();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Encrypted);
+
+    let broadcast_cm =
+        SimpleSignedBroadcastCryptoMaterial::new(key_seed, metadata_key, key_pair.private_key());
 
     let mut section_builder = adv_builder
-        .section_builder(SignedEncrypted::new(
+        .section_builder(SignedEncryptedSectionEncoder::new(
             identity_type,
             section_salt,
-            &metadata_key,
-            &key_pair,
-            &key_seed_hkdf,
+            &broadcast_cm,
         ))
         .unwrap();
 
@@ -457,7 +492,7 @@ fn do_bad_deserialize_tampered<
         panic!("incorrect header");
     };
 
-    let sections = parse_sections(&adv_header, remaining).unwrap();
+    let sections = parse_sections(adv_header, remaining).unwrap();
     assert_eq!(1, sections.len());
 
     let section = sections.into_iter().next().unwrap();
@@ -476,37 +511,48 @@ fn do_bad_deserialize_tampered<
     let section_len = 19 + 2 + 16 + 2 + 64;
     assert_eq!(
         &SignatureEncryptedSection {
-            section_header: expected_section_len.unwrap_or(section_len),
-            adv_header: &adv_header,
-            encryption_info: EncryptionInfo { bytes: encryption_info_bytes },
-            identity: EncryptedIdentityMetadata {
-                header_bytes: [0x90, 0x1],
-                offset: 1.into(),
-                identity_type: EncryptedIdentityDataElementType::Private,
+            contents: EncryptedSectionContents {
+                section_header: expected_section_len.unwrap_or(section_len),
+                adv_header,
+                encryption_info: EncryptionInfo { bytes: encryption_info_bytes },
+                identity: EncryptedIdentityMetadata {
+                    header_bytes: [0x90, 0x1],
+                    offset: 1.into(),
+                    identity_type: EncryptedIdentityDataElementType::Private,
+                },
+                all_ciphertext: &adv_mut[1 + 1 + 19 + 2..],
             },
-            all_ciphertext: &adv_mut[1 + 1 + 19 + 2..],
         },
         contents
     );
 
-    let crypto_material = MinimumFootprintV1CryptoMaterial::new::<CryptoProviderImpl>(
+    let crypto_material = V1DiscoveryCredential::new(
         key_seed,
-        key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key),
-        key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key),
-        key_pair.public(),
+        key_seed_hkdf.extended_unsigned_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
+        key_seed_hkdf.extended_signed_metadata_key_hmac_key().calculate_hmac(&metadata_key.0),
+        key_pair.public().to_bytes(),
     );
     let identity_resolution_material =
         crypto_material.signed_identity_resolution_material::<CryptoProviderImpl>();
     let verification_material =
         crypto_material.signed_verification_material::<CryptoProviderImpl>();
 
-    assert_eq!(
-        expected_error,
-        contents
-            .try_deserialize::<CryptoProviderImpl>(
-                &identity_resolution_material,
-                &verification_material,
-            )
-            .unwrap_err()
-    );
+    match contents.try_resolve_identity_and_deserialize::<CryptoProviderImpl>(
+        &mut deserialization_arena!().into_allocator(),
+        &identity_resolution_material,
+        &verification_material,
+    ) {
+        Ok(section) => {
+            assert_eq!(
+                expected_error,
+                DeserializeError::DataElementParseError(
+                    section.collect_data_elements().unwrap_err()
+                ),
+            );
+        }
+        Err(e) => assert_eq!(
+            expected_error,
+            DeserializeError::IdentityResolutionOrDeserializationError(e),
+        ),
+    };
 }

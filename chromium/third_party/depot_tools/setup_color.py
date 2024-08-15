@@ -16,8 +16,8 @@ OUT_TYPE = 'unknown'
 def enable_native_ansi():
     """Enables native ANSI sequences in console. Windows 10 only.
 
-  Returns whether successful.
-  """
+    Returns whether successful.
+    """
     kernel32 = ctypes.windll.kernel32
     ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x04
 

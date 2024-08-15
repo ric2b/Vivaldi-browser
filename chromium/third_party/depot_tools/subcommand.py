@@ -56,8 +56,8 @@ def usage(more):
 def epilog(text):
     """Adds an 'epilog' property to a CMD function.
 
-  It will be shown in the epilog. Usually useful for examples.
-  """
+    It will be shown in the epilog. Usually useful for examples.
+    """
     def hook(fn):
         fn.epilog = text
         return fn
@@ -79,8 +79,8 @@ def CMDhelp(parser, args):
 def _get_color_module():
     """Returns the colorama module if available.
 
-  If so, assumes colors are supported and return the module handle.
-  """
+    If so, assumes colors are supported and return the module handle.
+    """
     return sys.modules.get('colorama') or sys.modules.get(
         'third_party.colorama')
 
@@ -95,29 +95,30 @@ class CommandDispatcher(object):
         """module is the name of the main python module where to look for
         commands.
 
-    The python builtin variable __name__ MUST be used for |module|. If the
-    script is executed in the form 'python script.py', __name__ == '__main__'
-    and sys.modules['script'] doesn't exist. On the other hand if it is unit
-    tested, __main__ will be the unit test's module so it has to reference to
-    itself with 'script'. __name__ always match the right value.
-    """
+        The python builtin variable __name__ MUST be used for |module|. If the
+        script is executed in the form 'python script.py',
+        __name__ == '__main__' and sys.modules['script'] doesn't exist. On the
+        other hand if it is unit tested, __main__ will be the unit test's
+        module so it has to reference to itself with 'script'. __name__ always
+        match the right value.
+        """
         self.module = sys.modules[module]
 
     def enumerate_commands(self):
         """Returns a dict of command and their handling function.
 
-    The commands must be in the '__main__' modules. To import a command from a
-    submodule, use:
-      from mysubcommand import CMDfoo
+        The commands must be in the '__main__' modules. To import a command
+        from a submodule, use:
+            from mysubcommand import CMDfoo
 
-    Automatically adds 'help' if not already defined.
+        Automatically adds 'help' if not already defined.
 
-    Normalizes '_' in the commands to '-'.
+        Normalizes '_' in the commands to '-'.
 
-    A command can be effectively disabled by defining a global variable to None,
-    e.g.:
-      CMDhelp = None
-    """
+        A command can be effectively disabled by defining a global variable to
+        None, e.g.:
+            CMDhelp = None
+        """
         cmds = dict((_function_to_name(name), getattr(self.module, name))
                     for name in dir(self.module) if name.startswith('CMD'))
         cmds.setdefault('help', CMDhelp)
@@ -126,9 +127,9 @@ class CommandDispatcher(object):
     def find_nearest_command(self, name_asked):
         """Retrieves the function to handle a command as supplied by the user.
 
-    It automatically tries to guess the _intended command_ by handling typos
-    and/or incomplete names.
-    """
+        It automatically tries to guess the _intended command_ by handling typos
+        and/or incomplete names.
+        """
         commands = self.enumerate_commands()
         name_to_dash = name_asked.replace('_', '-')
         if name_to_dash in commands:
@@ -225,8 +226,8 @@ class CommandDispatcher(object):
     def execute(self, parser, args):
         """Dispatches execution to the right command.
 
-    Fallbacks to 'help' if not disabled.
-    """
+        Fallbacks to 'help' if not disabled.
+        """
         # Unconditionally disable format_description() and format_epilog().
         # Technically, a formatter should be used but it's not worth (yet) the
         # trouble.

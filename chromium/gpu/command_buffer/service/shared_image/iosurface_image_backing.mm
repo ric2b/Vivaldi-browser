@@ -103,27 +103,27 @@ base::apple::scoped_nsprotocol<id<MTLTexture>> CreateMetalTexture(
   }
 
   base::apple::scoped_nsobject<MTLTextureDescriptor> mtl_tex_desc(
-      [MTLTextureDescriptor new]);
-  [mtl_tex_desc setTextureType:MTLTextureType2D];
-  [mtl_tex_desc
+      [[MTLTextureDescriptor alloc] init]);
+  [mtl_tex_desc.get() setTextureType:MTLTextureType2D];
+  [mtl_tex_desc.get()
       setUsage:MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget];
-  [mtl_tex_desc setPixelFormat:mtl_pixel_format];
-  [mtl_tex_desc setWidth:size.width()];
-  [mtl_tex_desc setHeight:size.height()];
-  [mtl_tex_desc setDepth:1];
-  [mtl_tex_desc setMipmapLevelCount:1];
-  [mtl_tex_desc setArrayLength:1];
-  [mtl_tex_desc setSampleCount:1];
+  [mtl_tex_desc.get() setPixelFormat:mtl_pixel_format];
+  [mtl_tex_desc.get() setWidth:size.width()];
+  [mtl_tex_desc.get() setHeight:size.height()];
+  [mtl_tex_desc.get() setDepth:1];
+  [mtl_tex_desc.get() setMipmapLevelCount:1];
+  [mtl_tex_desc.get() setArrayLength:1];
+  [mtl_tex_desc.get() setSampleCount:1];
   // TODO(https://crbug.com/952063): For zero-copy resources that are populated
   // on the CPU (e.g, video frames), it may be that MTLStorageModeManaged will
   // be more appropriate.
 #if BUILDFLAG(IS_IOS)
   // On iOS we are using IOSurfaces which must use MTLStorageModeShared.
-  [mtl_tex_desc setStorageMode:MTLStorageModeShared];
+  [mtl_tex_desc.get() setStorageMode:MTLStorageModeShared];
 #else
-  [mtl_tex_desc setStorageMode:MTLStorageModeManaged];
+  [mtl_tex_desc.get() setStorageMode:MTLStorageModeManaged];
 #endif
-  mtl_texture.reset([mtl_device newTextureWithDescriptor:mtl_tex_desc
+  mtl_texture.reset([mtl_device newTextureWithDescriptor:mtl_tex_desc.get()
                                                iosurface:io_surface
                                                    plane:plane_index]);
   DCHECK(mtl_texture);
@@ -541,7 +541,7 @@ bool OverlayIOSurfaceRepresentation::IsInUseByWindowServer() const {
   if (backing()->usage() & SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX)
     return false;
 
-  return IOSurfaceIsInUse(io_surface_);
+  return IOSurfaceIsInUse(io_surface_.get());
 }
 
 #if BUILDFLAG(USE_DAWN)
@@ -553,18 +553,19 @@ DawnIOSurfaceRepresentation::DawnIOSurfaceRepresentation(
     SharedImageBacking* backing,
     MemoryTypeTracker* tracker,
     wgpu::Device device,
-    base::apple::ScopedCFTypeRef<IOSurfaceRef> io_surface,
+    wgpu::SharedTextureMemory shared_texture_memory,
     const gfx::Size& io_surface_size,
     wgpu::TextureFormat wgpu_format,
     std::vector<wgpu::TextureFormat> view_formats)
     : DawnImageRepresentation(manager, backing, tracker),
       device_(std::move(device)),
-      io_surface_(std::move(io_surface)),
+      shared_texture_memory_(shared_texture_memory),
       io_surface_size_(io_surface_size),
       wgpu_format_(wgpu_format),
       view_formats_(std::move(view_formats)) {
   CHECK(device_);
-  CHECK(io_surface_);
+  CHECK(device_.HasFeature(wgpu::FeatureName::SharedTextureMemoryIOSurface));
+  CHECK(shared_texture_memory);
 }
 
 DawnIOSurfaceRepresentation::~DawnIOSurfaceRepresentation() {
@@ -604,11 +605,11 @@ wgpu::Texture DawnIOSurfaceRepresentation::BeginAccess(
 
   texture_descriptor.nextInChain = &internalDesc;
 
-  dawn::native::metal::ExternalImageDescriptorIOSurface descriptor;
-  descriptor.cTextureDescriptor =
-      reinterpret_cast<WGPUTextureDescriptor*>(&texture_descriptor);
-  descriptor.isInitialized = IsCleared();
-  descriptor.ioSurface = io_surface_.get();
+  wgpu::SharedTextureMemoryBeginAccessDescriptor begin_access_desc = {};
+  begin_access_desc.initialized = IsCleared();
+
+  std::vector<wgpu::SharedFence> shared_fences;
+  std::vector<uint64_t> signaled_values;
 
   // Synchronize with all of the MTLSharedEvents that have been
   // stored in the backing as a consequence of earlier BeginAccess/
@@ -621,17 +622,34 @@ wgpu::Texture DawnIOSurfaceRepresentation::BeginAccess(
         static_cast<IOSurfaceImageBacking*>(backing);
     std::vector<std::unique_ptr<SharedEventAndSignalValue>> signals =
         iosurface_backing->TakeSharedEvents();
+
+    // Populate `shared_fences` and `signaled_values` with the data from
+    // `signals`.
     for (const auto& signal : signals) {
-      dawn::native::metal::ExternalImageMTLSharedEventDescriptor external_desc;
-      external_desc.sharedEvent =
-          static_cast<id<MTLSharedEvent>>(signal->shared_event());
-      external_desc.signaledValue = signal->signaled_value();
-      descriptor.waitEvents.push_back(external_desc);
+      wgpu::SharedFenceMTLSharedEventDescriptor shared_event_desc;
+      shared_event_desc.sharedEvent = signal->shared_event();
+      wgpu::SharedFenceDescriptor fence_desc;
+      fence_desc.nextInChain = &shared_event_desc;
+      shared_fences.push_back(device_.ImportSharedFence(&fence_desc));
+
+      signaled_values.push_back(signal->signaled_value());
     }
   }
 
-  texture_ = wgpu::Texture::Acquire(
-      dawn::native::metal::WrapIOSurface(device_.Get(), &descriptor));
+  // Populate `begin_access_desc` with the fence data.
+  CHECK(shared_fences.size() == signaled_values.size());
+  begin_access_desc.fenceCount = shared_fences.size();
+  begin_access_desc.fences = shared_fences.data();
+  begin_access_desc.signaledValues = signaled_values.data();
+
+  texture_ = shared_texture_memory_.CreateTexture(&texture_descriptor);
+  if (!shared_texture_memory_.BeginAccess(texture_, &begin_access_desc)) {
+    // NOTE: WebGPU CTS tests intentionally pass in formats that are
+    // incompatible with the format of the backing IOSurface to check error
+    // handling.
+    LOG(ERROR) << "SharedTextureMemory::BeginAccess() failed";
+    texture_ = {};
+  }
   return texture_.Get();
 }
 
@@ -640,10 +658,10 @@ void DawnIOSurfaceRepresentation::EndAccess() {
     return;
   }
 
-  dawn::native::metal::ExternalImageIOSurfaceEndAccessDescriptor descriptor;
-  dawn::native::metal::IOSurfaceEndAccess(texture_.Get(), &descriptor);
+  wgpu::SharedTextureMemoryEndAccessState end_access_desc;
+  CHECK(shared_texture_memory_.EndAccess(texture_.Get(), &end_access_desc));
 
-  if (descriptor.isInitialized) {
+  if (end_access_desc.initialized) {
     SetCleared();
   }
 
@@ -652,12 +670,24 @@ void DawnIOSurfaceRepresentation::EndAccess() {
   DCHECK_EQ(backing->GetType(), SharedImageBackingType::kIOSurface);
   IOSurfaceImageBacking* iosurface_backing =
       static_cast<IOSurfaceImageBacking*>(backing);
-  // Dawn's Metal backend has enqueued a MTLSharedEvent which
-  // consumers of the IOSurface must wait upon before attempting to
-  // use that IOSurface on another MTLDevice. Store this event in
-  // the underlying SharedImageBacking.
-  iosurface_backing->AddSharedEventAndSignalValue(descriptor.sharedEvent,
-                                                  descriptor.signaledValue);
+
+  // Dawn's Metal backend has enqueued MTLSharedEvents which consumers of the
+  // IOSurface must wait upon before attempting to use that IOSurface on
+  // another MTLDevice. Store these events in the underlying
+  // SharedImageBacking.
+  for (size_t i = 0; i < end_access_desc.fenceCount; i++) {
+    auto fence = end_access_desc.fences[i];
+    auto signaled_value = end_access_desc.signaledValues[i];
+
+    wgpu::SharedFenceExportInfo fence_export_info;
+    wgpu::SharedFenceMTLSharedEventExportInfo fence_mtl_export_info;
+    fence_export_info.nextInChain = &fence_mtl_export_info;
+    fence.ExportInfo(&fence_export_info);
+
+    iosurface_backing->AddSharedEventAndSignalValue(
+        static_cast<id<MTLSharedEvent>>(fence_mtl_export_info.sharedEvent),
+        signaled_value);
+  }
 
   // All further operations on the textures are errors (they would be racy
   // with other backings).
@@ -721,7 +751,7 @@ IOSurfaceImageBacking::IOSurfaceImageBacking(
     bool framebuffer_attachment_angle,
     bool is_cleared,
     bool retain_gl_texture,
-    absl::optional<gfx::BufferUsage> buffer_usage)
+    std::optional<gfx::BufferUsage> buffer_usage)
     : SharedImageBacking(mailbox,
                          format,
                          size,
@@ -734,10 +764,10 @@ IOSurfaceImageBacking::IOSurfaceImageBacking(
                          std::move(buffer_usage)),
       io_surface_(std::move(io_surface)),
       io_surface_plane_(io_surface_plane),
-      io_surface_size_(IOSurfaceGetWidth(io_surface_),
-                       IOSurfaceGetHeight(io_surface_)),
-      io_surface_format_(IOSurfaceGetPixelFormat(io_surface_)),
-      io_surface_num_planes_(IOSurfaceGetPlaneCount(io_surface_)),
+      io_surface_size_(IOSurfaceGetWidth(io_surface_.get()),
+                       IOSurfaceGetHeight(io_surface_.get())),
+      io_surface_format_(IOSurfaceGetPixelFormat(io_surface_.get())),
+      io_surface_num_planes_(IOSurfaceGetPlaneCount(io_surface_.get())),
       io_surface_id_(io_surface_id),
       gl_target_(gl_target),
       framebuffer_attachment_angle_(framebuffer_attachment_angle),
@@ -771,24 +801,24 @@ bool IOSurfaceImageBacking::ReadbackToMemory(
     const std::vector<SkPixmap>& pixmaps) {
   CHECK_LE(pixmaps.size(), 3u);
 
-  ScopedIOSurfaceLock io_surface_lock(io_surface_, /*options=*/0);
+  ScopedIOSurfaceLock io_surface_lock(io_surface_.get(), /*options=*/0);
 
   for (int plane_index = 0; plane_index < static_cast<int>(pixmaps.size());
        ++plane_index) {
     const gfx::Size plane_size = format().GetPlaneSize(plane_index, size());
 
     const void* io_surface_base_address =
-        IOSurfaceGetBaseAddressOfPlane(io_surface_, plane_index);
+        IOSurfaceGetBaseAddressOfPlane(io_surface_.get(), plane_index);
     DCHECK_EQ(plane_size.width(), static_cast<int>(IOSurfaceGetWidthOfPlane(
-                                      io_surface_, plane_index)));
+                                      io_surface_.get(), plane_index)));
     DCHECK_EQ(plane_size.height(), static_cast<int>(IOSurfaceGetHeightOfPlane(
-                                       io_surface_, plane_index)));
+                                       io_surface_.get(), plane_index)));
 
     int io_surface_row_bytes = 0;
     int dst_bytes_per_row = 0;
 
     base::CheckedNumeric<int> checked_io_surface_row_bytes =
-        IOSurfaceGetBytesPerRowOfPlane(io_surface_, plane_index);
+        IOSurfaceGetBytesPerRowOfPlane(io_surface_.get(), plane_index);
     base::CheckedNumeric<int> checked_dst_bytes_per_row =
         pixmaps[plane_index].rowBytes();
 
@@ -818,24 +848,24 @@ bool IOSurfaceImageBacking::UploadFromMemory(
     const std::vector<SkPixmap>& pixmaps) {
   CHECK_LE(pixmaps.size(), 3u);
 
-  ScopedIOSurfaceLock io_surface_lock(io_surface_, /*options=*/0);
+  ScopedIOSurfaceLock io_surface_lock(io_surface_.get(), /*options=*/0);
 
   for (int plane_index = 0; plane_index < static_cast<int>(pixmaps.size());
        ++plane_index) {
     const gfx::Size plane_size = format().GetPlaneSize(plane_index, size());
 
     void* io_surface_base_address =
-        IOSurfaceGetBaseAddressOfPlane(io_surface_, plane_index);
+        IOSurfaceGetBaseAddressOfPlane(io_surface_.get(), plane_index);
     DCHECK_EQ(plane_size.width(), static_cast<int>(IOSurfaceGetWidthOfPlane(
-                                      io_surface_, plane_index)));
+                                      io_surface_.get(), plane_index)));
     DCHECK_EQ(plane_size.height(), static_cast<int>(IOSurfaceGetHeightOfPlane(
-                                       io_surface_, plane_index)));
+                                       io_surface_.get(), plane_index)));
 
     int io_surface_row_bytes = 0;
     int src_bytes_per_row = 0;
 
     base::CheckedNumeric<int> checked_io_surface_row_bytes =
-        IOSurfaceGetBytesPerRowOfPlane(io_surface_, plane_index);
+        IOSurfaceGetBytesPerRowOfPlane(io_surface_.get(), plane_index);
     base::CheckedNumeric<int> checked_src_bytes_per_row =
         pixmaps[plane_index].rowBytes();
 
@@ -942,12 +972,12 @@ base::trace_event::MemoryAllocatorDump* IOSurfaceImageBacking::OnMemoryDump(
   size_t size_bytes = 0u;
   if (format().is_single_plane()) {
     size_bytes =
-        IOSurfaceGetBytesPerRowOfPlane(io_surface_, io_surface_plane_) *
-        IOSurfaceGetHeightOfPlane(io_surface_, io_surface_plane_);
+        IOSurfaceGetBytesPerRowOfPlane(io_surface_.get(), io_surface_plane_) *
+        IOSurfaceGetHeightOfPlane(io_surface_.get(), io_surface_plane_);
   } else {
     for (int plane = 0; plane < format().NumberOfPlanes(); plane++) {
-      size_bytes += IOSurfaceGetBytesPerRowOfPlane(io_surface_, plane) *
-                    IOSurfaceGetHeightOfPlane(io_surface_, plane);
+      size_bytes += IOSurfaceGetBytesPerRowOfPlane(io_surface_.get(), plane) *
+                    IOSurfaceGetHeightOfPlane(io_surface_.get(), plane);
     }
   }
 
@@ -1025,7 +1055,8 @@ std::unique_ptr<DawnImageRepresentation> IOSurfaceImageBacking::ProduceDawn(
     MemoryTypeTracker* tracker,
     const wgpu::Device& device,
     wgpu::BackendType backend_type,
-    std::vector<wgpu::TextureFormat> view_formats) {
+    std::vector<wgpu::TextureFormat> view_formats,
+    scoped_refptr<SharedContextState> context_state) {
 #if BUILDFLAG(USE_DAWN)
   wgpu::TextureFormat wgpu_format = ToDawnFormat(format());
   // See comments in IOSurfaceImageBackingFactory::CreateSharedImage about
@@ -1047,9 +1078,61 @@ std::unique_ptr<DawnImageRepresentation> IOSurfaceImageBacking::ProduceDawn(
   }
 
   if (backend_type == wgpu::BackendType::Metal) {
+    // Clear out any cached SharedTextureMemory instances for which the
+    // associated Device has been lost - this both saves memory and more
+    // importantly ensures that a new SharedTextureMemory instance will be
+    // created if another Device occupies the same memory as a previously-used,
+    // now-lost Device.
+    for (auto iter : shared_texture_memory_cache_) {
+      if (iter.second.IsDeviceLost()) {
+        shared_texture_memory_cache_.erase(iter.first);
+      }
+    }
+
+    CHECK(device.HasFeature(wgpu::FeatureName::SharedTextureMemoryIOSurface));
+    auto iter = shared_texture_memory_cache_.find(device.Get());
+
+    wgpu::SharedTextureMemory shared_texture_memory;
+    if (iter == shared_texture_memory_cache_.end()) {
+      wgpu::SharedTextureMemoryIOSurfaceDescriptor io_surface_desc;
+      io_surface_desc.ioSurface = io_surface_.get();
+      wgpu::SharedTextureMemoryDescriptor desc = {};
+      desc.nextInChain = &io_surface_desc;
+
+      shared_texture_memory = device.ImportSharedTextureMemory(&desc);
+      if (!shared_texture_memory) {
+        LOG(ERROR) << "Unable to create SharedTextureMemory - device lost?";
+        return nullptr;
+      }
+      // NOTE: We currently do not cache SharedTextureMemory objects that are
+      // associated with devices created for WebGPU. The reason is that
+      // SharedTextureMemory holds on to a reference for the device, and
+      // WebGPUDecoderImpl does not currently destroy devices that it creates
+      // on its own destruction. Hence, caching SharedTextureMemory objects for
+      // these devices could lead to memory leakage over time (e.g., for
+      // SharedImages maintained in a client-side pool on which WebGPU is used
+      // repeatedly). If Graphite is being used, however, we can and do cache
+      // the SharedTextureMemory instance that is associated with the Graphite
+      // device.
+      // TODO(crbug.com/1493854): Cache SharedTextureMemory objects for WebGPU
+      // as well once crbug.com/1515822 is resolved.
+      // NOTE: `dawn_context_provider` may be null if Graphite is not being
+      // used.
+      auto* dawn_context_provider = context_state->dawn_context_provider();
+      if (dawn_context_provider &&
+          dawn_context_provider->GetDevice().Get() == device.Get()) {
+        // This is the Graphite device, so its SharedTextureMemory instance can
+        // and should be cached.
+        shared_texture_memory_cache_[device.Get()] = shared_texture_memory;
+      }
+    } else {
+      shared_texture_memory = iter->second;
+    }
+
     return std::make_unique<DawnIOSurfaceRepresentation>(
-        manager, this, tracker, wgpu::Device(device), io_surface_,
-        io_surface_size_, wgpu_format, std::move(view_formats));
+        manager, this, tracker, wgpu::Device(device),
+        std::move(shared_texture_memory), io_surface_size_, wgpu_format,
+        std::move(view_formats));
   }
 
   CHECK_EQ(backend_type, wgpu::BackendType::Vulkan);
@@ -1075,11 +1158,8 @@ IOSurfaceImageBacking::ProduceSkiaGanesh(
 
   for (int plane_index = 0; plane_index < format().NumberOfPlanes();
        plane_index++) {
-    bool angle_rgbx_internal_format = context_state->feature_info()
-                                          ->feature_flags()
-                                          .angle_rgbx_internal_format;
     GLFormatDesc format_desc =
-        ToGLFormatDesc(format(), plane_index, angle_rgbx_internal_format);
+        context_state->GetGLFormatCaps().ToGLFormatDesc(format(), plane_index);
     GrBackendTexture backend_texture;
     auto plane_size = format().GetPlaneSize(plane_index, size());
     GetGrBackendTexture(context_state->feature_info(), egl_state->GetGLTarget(),
@@ -1111,8 +1191,9 @@ IOSurfaceImageBacking::ProduceSkiaGraphite(
 #if BUILDFLAG(SKIA_USE_DAWN)
     auto device = context_state->dawn_context_provider()->GetDevice();
     auto backend_type = context_state->dawn_context_provider()->backend_type();
-    auto dawn_representation = ProduceDawn(manager, tracker, device,
-                                           backend_type, /*view_formats=*/{});
+    auto dawn_representation =
+        ProduceDawn(manager, tracker, device, backend_type, /*view_formats=*/{},
+                    context_state);
     if (!dawn_representation) {
       LOG(ERROR) << "Could not create Dawn Representation";
       return nullptr;
@@ -1123,7 +1204,7 @@ IOSurfaceImageBacking::ProduceSkiaGraphite(
     return SkiaGraphiteDawnImageRepresentation::Create(
         std::move(dawn_representation), context_state,
         context_state->gpu_main_graphite_recorder(), manager, this, tracker,
-        static_cast<int>(io_surface_plane_), is_yuv_plane);
+        is_yuv_plane, static_cast<int>(io_surface_plane_));
 #endif
   } else {
     CHECK_EQ(context_state->gr_context_type(), GrContextType::kGraphiteMetal);
@@ -1168,7 +1249,7 @@ void IOSurfaceImageBacking::SetPurgeable(bool purgeable) {
   }
 
   uint32_t old_state;
-  IOSurfaceSetPurgeable(io_surface_, purgeable, &old_state);
+  IOSurfaceSetPurgeable(io_surface_.get(), purgeable, &old_state);
 }
 
 bool IOSurfaceImageBacking::IsPurgeable() const {
@@ -1312,8 +1393,8 @@ bool IOSurfaceImageBacking::IOSurfaceBackingEGLStateBeginAccess(
       }
 
       auto egl_surface = gl::ScopedEGLSurfaceIOSurface::Create(
-          egl_state->egl_display_, egl_state->GetGLTarget(), io_surface_, plane,
-          buffer_format);
+          egl_state->egl_display_, egl_state->GetGLTarget(), io_surface_.get(),
+          plane, buffer_format);
       if (!egl_surface) {
         LOG(ERROR) << "Failed to create ScopedEGLSurfaceIOSurface.";
         return false;
@@ -1330,13 +1411,8 @@ bool IOSurfaceImageBacking::IOSurfaceBackingEGLStateBeginAccess(
             format().NumberOfPlanes());
   for (int plane_index = 0; plane_index < format().NumberOfPlanes();
        plane_index++) {
-    // NOTE: We pass `restore_prev_even_if_invalid=true` to maintain behavior
-    // from when this class was using a duplicate-but-not-identical utility.
-    // TODO(crbug.com/1367187): Eliminate this behavior with a Finch
-    // killswitch.
     gl::ScopedRestoreTexture scoped_restore(
         gl::g_current_gl_context, egl_state->GetGLTarget(),
-        /*restore_prev_even_if_invalid=*/true,
         egl_state->GetGLServiceId(plane_index));
     // Un-bind the IOSurface from the GL texture (this will be a no-op if it is
     // not yet bound).
@@ -1424,14 +1500,8 @@ void IOSurfaceImageBacking::IOSurfaceBackingEGLStateEndAccess(
       if (!egl_state->egl_surfaces_.empty()) {
         for (int plane_index = 0; plane_index < format().NumberOfPlanes();
              plane_index++) {
-          // NOTE: We pass `restore_prev_even_if_invalid=true` to maintain
-          // behavior from when this class was using a
-          // duplicate-but-not-identical utility.
-          // TODO(crbug.com/1367187): Eliminate this behavior with a Finch
-          // killswitch.
           gl::ScopedRestoreTexture scoped_restore(
               gl::g_current_gl_context, egl_state->GetGLTarget(),
-              /*restore_prev_even_if_invalid=*/true,
               egl_state->GetGLServiceId(plane_index));
           egl_state->egl_surfaces_[plane_index]->ReleaseTexImage();
         }
@@ -1464,12 +1534,13 @@ void IOSurfaceImageBacking::IOSurfaceBackingEGLStateBeingDestroyed(
 
 bool IOSurfaceImageBacking::InitializePixels(
     base::span<const uint8_t> pixel_data) {
-  ScopedIOSurfaceLock io_surface_lock(io_surface_, kIOSurfaceLockAvoidSync);
+  ScopedIOSurfaceLock io_surface_lock(io_surface_.get(),
+                                      kIOSurfaceLockAvoidSync);
 
   uint8_t* dst_data = reinterpret_cast<uint8_t*>(
-      IOSurfaceGetBaseAddressOfPlane(io_surface_, io_surface_plane_));
+      IOSurfaceGetBaseAddressOfPlane(io_surface_.get(), io_surface_plane_));
   size_t dst_stride =
-      IOSurfaceGetBytesPerRowOfPlane(io_surface_, io_surface_plane_);
+      IOSurfaceGetBytesPerRowOfPlane(io_surface_.get(), io_surface_plane_);
 
   const uint8_t* src_data = pixel_data.data();
   const size_t src_stride = (format().BitsPerPixel() / 8) * size().width();

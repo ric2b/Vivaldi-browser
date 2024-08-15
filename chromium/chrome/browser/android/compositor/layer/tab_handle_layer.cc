@@ -59,7 +59,6 @@ void TabHandleLayer::SetProperties(
     float spinner_rotation,
     float brightness,
     float opacity,
-    bool is_tab_strip_redesign_enabled,
 
     float tab_alpha, // Vivaldi
     bool is_shown_as_favicon, // Vivaldi
@@ -75,16 +74,7 @@ void TabHandleLayer::SetProperties(
     // rather than adding a brightness filter. We can't swap to simply setting
     // the opacity when TSR is disabled, because then, the tab containers can
     // be seen overlapping. (See https://crbug.com/1373632).
-    if (is_tab_strip_redesign_enabled) {
-      tab_->SetOpacity(brightness_);
-    } else {
-      std::vector<cc::slim::Filter> filters;
-      if (brightness_ != 1.0f) {
-        filters.push_back(cc::slim::Filter::CreateBrightness(brightness_));
-      }
-      layer_->SetFilters(std::move(filters));
-      tab_outline_->SetIsDrawable(true);
-    }
+    tab_->SetOpacity(brightness_);
   }
 
   y += top_margin;
@@ -200,6 +190,9 @@ void TabHandleLayer::SetProperties(
     start_divider_->SetUIResourceId(divider_resource->ui_resource()->id());
     start_divider_->SetBounds(divider_resource->size());
     int divider_x = is_rtl ? width - divider_offset_x : divider_offset_x;
+    if (foreground_) {
+      divider_x += original_x;
+    }
     start_divider_->SetPosition(gfx::PointF(divider_x, divider_y));
     start_divider_->SetOpacity(1.0f);
   }
@@ -211,6 +204,9 @@ void TabHandleLayer::SetProperties(
     end_divider_->SetUIResourceId(divider_resource->ui_resource()->id());
     end_divider_->SetBounds(divider_resource->size());
     int divider_x = is_rtl ? divider_offset_x : width - divider_offset_x;
+    if (foreground_) {
+      divider_x += original_x;
+    }
     end_divider_->SetPosition(gfx::PointF(divider_x, divider_y));
     end_divider_->SetOpacity(1.0f);
   }
@@ -220,12 +216,11 @@ void TabHandleLayer::SetProperties(
     float title_y_offset_mid = (tab_handle_resource->padding().y() + height -
                                 title_layer->size().height()) /
                                2;
-    if (is_tab_strip_redesign_enabled) {
-      // 8dp top padding for folio and 10 dp for detached at default text size.
-      title_y = std::min(content_offset_y, title_y_offset_mid);
-    } else {
+    // 8dp top padding for folio.
+    title_y = std::min(content_offset_y, title_y_offset_mid);
+
+    if (vivaldi::IsVivaldiRunning())
       title_y = title_y_offset_mid;
-    }
 
     int title_x = is_rtl ? padding_left + close_width : padding_left;
 
@@ -257,22 +252,24 @@ void TabHandleLayer::SetProperties(
     close_button_->SetIsDrawable(true);
     close_button_hover_highlight_->SetIsDrawable(true);
     int close_y;
-    float close_y_offset_mid = (tab_handle_resource->padding().y() + height -
-                                close_button_->bounds().height()) /
-                               2;
-    if (is_tab_strip_redesign_enabled) {
-      // Close button image is larger than divider image, so close button will
-      // appear slightly lower even the close_y are set in the same value as
-      // divider_y. Thus need this offset to account for the effect of image
-      // size difference has on close_y.
-      int close_y_offset_tsr =
-          std::max(0, (close_button_resource->size().height() -
-                       divider_resource->size().height()) /
-                          2);
-      close_y = content_offset_y - std::abs(close_y_offset_tsr);
-    } else {
+
+    // Close button image is larger than divider image, so close button will
+    // appear slightly lower even the close_y are set in the same value as
+    // divider_y. Thus need this offset to account for the effect of image
+    // size difference has on close_y.
+    int close_y_offset_tsr =
+        std::max(0, (close_button_resource->size().height() -
+                     divider_resource->size().height()) /
+                        2);
+    close_y = content_offset_y - std::abs(close_y_offset_tsr);
+
+    if (vivaldi::IsVivaldiRunning()) {
+      float close_y_offset_mid = (tab_handle_resource->padding().y() + height -
+                                  close_button_->bounds().height()) /
+                                 2;
       close_y = close_y_offset_mid;
     }
+
     int close_x = is_rtl ? padding_left - close_button_padding
                          : width - padding_right - close_width;
     if (foreground_) {

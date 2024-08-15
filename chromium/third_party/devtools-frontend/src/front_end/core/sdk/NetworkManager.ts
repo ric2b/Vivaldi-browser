@@ -41,14 +41,14 @@ import * as Host from '../host/host.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
 
+import {ContentData as ContentDataClass, type ContentDataOrError} from './ContentData.js';
 import {Cookie} from './Cookie.js';
+import {parseContentType} from './MimeType.js';
 import {
   type BlockedCookieWithReason,
-  type ContentData,
   Events as NetworkRequestEvents,
   type ExtraRequestInfo,
   type ExtraResponseInfo,
-  type MIME_TYPE,
   type NameValue,
   NetworkRequest,
   type WebBundleInfo,
@@ -183,30 +183,34 @@ export class NetworkManager extends SDKModel<EventTypes> {
     return TextUtils.TextUtils.performSearchInSearchMatches(response.result || [], query, caseSensitive, isRegex);
   }
 
-  static async requestContentData(request: NetworkRequest): Promise<ContentData> {
+  static async requestContentData(request: NetworkRequest): Promise<ContentDataOrError> {
     if (request.resourceType() === Common.ResourceType.resourceTypes.WebSocket) {
-      return {error: i18nString(UIStrings.noContentForWebSocket), content: null, encoded: false};
+      return {error: i18nString(UIStrings.noContentForWebSocket)};
     }
     if (!request.finished) {
       await request.once(NetworkRequestEvents.FinishedLoading);
     }
     if (request.isRedirect()) {
-      return {error: i18nString(UIStrings.noContentForRedirect), content: null, encoded: false};
+      return {error: i18nString(UIStrings.noContentForRedirect)};
     }
     if (request.isPreflightRequest()) {
-      return {error: i18nString(UIStrings.noContentForPreflight), content: null, encoded: false};
+      return {error: i18nString(UIStrings.noContentForPreflight)};
     }
     const manager = NetworkManager.forRequest(request);
     if (!manager) {
-      return {error: 'No network manager for request', content: null, encoded: false};
+      return {error: 'No network manager for request'};
     }
     const requestId = request.backendRequestId();
     if (!requestId) {
-      return {error: 'No backend request id for request', content: null, encoded: false};
+      return {error: 'No backend request id for request'};
     }
     const response = await manager.#networkAgent.invoke_getResponseBody({requestId});
-    const error = response.getError() || null;
-    return {error: error, content: error ? null : response.body, encoded: response.base64Encoded};
+    const error = response.getError();
+    if (error) {
+      return {error};
+    }
+    return new ContentDataClass(
+        response.body, response.base64Encoded, request.mimeType, request.charset() ?? undefined);
   }
 
   static async requestPostData(request: NetworkRequest): Promise<string|null> {
@@ -304,8 +308,6 @@ export class NetworkManager extends SDKModel<EventTypes> {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   RequestStarted = 'RequestStarted',
   RequestUpdated = 'RequestUpdated',
@@ -468,7 +470,7 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     if (response.url && networkRequest.url() !== response.url) {
       networkRequest.setUrl(response.url as Platform.DevToolsPath.UrlString);
     }
-    networkRequest.mimeType = (response.mimeType as MIME_TYPE);
+    networkRequest.mimeType = response.mimeType;
     if (!networkRequest.statusCode || networkRequest.wasIntercepted()) {
       networkRequest.statusCode = response.status;
     }
@@ -511,6 +513,10 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
 
     if (response.cacheStorageCacheName) {
       networkRequest.setResponseCacheStorageCacheName(response.cacheStorageCacheName);
+    }
+
+    if (response.serviceWorkerRouterInfo) {
+      networkRequest.serviceWorkerRouterInfo = response.serviceWorkerRouterInfo;
     }
 
     if (response.responseTime) {
@@ -1561,9 +1567,7 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
 }
 
 export namespace MultitargetNetworkManager {
-  // TODO(crbug.com/1167717): Make this a const enum again
-  // eslint-disable-next-line rulesdir/const_enum
-  export enum Events {
+  export const enum Events {
     BlockedPatternsChanged = 'BlockedPatternsChanged',
     ConditionsChanged = 'ConditionsChanged',
     UserAgentChanged = 'UserAgentChanged',
@@ -1729,14 +1733,37 @@ export class InterceptedRequest {
     void this.#fetchAgent.invoke_failRequest({requestId: this.requestId, errorReason});
   }
 
-  async responseBody(): Promise<ContentData> {
+  async responseBody(): Promise<ContentDataOrError> {
     const response = await this.#fetchAgent.invoke_getResponseBody({requestId: this.requestId});
-    const error = response.getError() || null;
-    return {error: error, content: error ? null : response.body, encoded: response.base64Encoded};
+    const error = response.getError();
+    if (error) {
+      return {error};
+    }
+
+    const {mimeType, charset} = this.getMimeTypeAndCharset();
+    return new ContentDataClass(
+        response.body, response.base64Encoded, mimeType ?? 'application/octet-stream', charset ?? undefined);
   }
 
   isRedirect(): boolean {
     return this.responseStatusCode !== undefined && this.responseStatusCode >= 300 && this.responseStatusCode < 400;
+  }
+
+  /**
+   * Tries to determine the MIME type and charset for this intercepted request.
+   * Looks at the interecepted response headers first (for Content-Type header), then
+   * checks the `NetworkRequest` if we have one.
+   */
+  getMimeTypeAndCharset(): {mimeType: string|null, charset: string|null} {
+    for (const header of this.responseHeaders ?? []) {
+      if (header.name.toLowerCase() === 'content-type') {
+        return parseContentType(header.value);
+      }
+    }
+
+    const mimeType = this.networkRequest?.mimeType ?? null;
+    const charset = this.networkRequest?.charset() ?? null;
+    return {mimeType, charset};
   }
 }
 

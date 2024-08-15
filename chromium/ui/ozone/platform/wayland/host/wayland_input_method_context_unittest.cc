@@ -240,6 +240,32 @@ class TestInputMethodContextDelegate : public LinuxInputMethodContextDelegate {
   absl::optional<gfx::Rect> virtual_keyboard_bounds_;
 };
 
+class TestKeyboardDelegate : public WaylandKeyboard::Delegate {
+ public:
+  TestKeyboardDelegate() = default;
+  TestKeyboardDelegate(const TestKeyboardDelegate&) = delete;
+  TestKeyboardDelegate& operator=(const TestKeyboardDelegate&) = delete;
+  ~TestKeyboardDelegate() override = default;
+
+  void OnKeyboardFocusChanged(WaylandWindow* window, bool focused) override {}
+  void OnKeyboardModifiersChanged(int modifiers) override {}
+  uint32_t OnKeyboardKeyEvent(EventType type,
+                              DomCode dom_code,
+                              bool repeat,
+                              absl::optional<uint32_t> serial,
+                              base::TimeTicks timestamp,
+                              int device_id,
+                              WaylandKeyboard::KeyEventKind kind) override {
+    last_event_timestamp_ = timestamp;
+    return 0;
+  }
+
+  base::TimeTicks last_event_timestamp() const { return last_event_timestamp_; }
+
+ private:
+  base::TimeTicks last_event_timestamp_;
+};
+
 class WaylandInputMethodContextTestBase : public WaylandTest {
  public:
   void SetUp() override {
@@ -266,8 +292,9 @@ class WaylandInputMethodContextTestBase : public WaylandTest {
   void SetUpInternal() {
     input_method_context_delegate_ =
         std::make_unique<TestInputMethodContextDelegate>();
+    keyboard_delegate_ = std::make_unique<TestKeyboardDelegate>();
     input_method_context_ = std::make_unique<WaylandInputMethodContext>(
-        connection_.get(), connection_->event_source(),
+        connection_.get(), keyboard_delegate_.get(),
         input_method_context_delegate_.get());
     input_method_context_->Init(true);
     connection_->Flush();
@@ -288,6 +315,7 @@ class WaylandInputMethodContextTestBase : public WaylandTest {
 
   std::unique_ptr<TestInputMethodContextDelegate>
       input_method_context_delegate_;
+  std::unique_ptr<TestKeyboardDelegate> keyboard_delegate_;
   std::unique_ptr<WaylandInputMethodContext> input_method_context_;
   raw_ptr<wl::MockZwpTextInput> zwp_text_input_ = nullptr;
   raw_ptr<wl::MockZcrExtendedTextInput> zcr_extended_text_input_ = nullptr;
@@ -306,15 +334,8 @@ INSTANTIATE_TEST_SUITE_P(
         wl::ServerConfig{
             .text_input_extension_version =
                 wl::TestZcrTextInputExtensionV1::Version::kV8,
-            .use_ime_keep_selection_fix = true,
         },
-        wl::ServerConfig{
-            .text_input_extension_version =
-                wl::TestZcrTextInputExtensionV1::Version::kV8,
-            .use_ime_keep_selection_fix = false,
-        },
-        wl::ServerConfig{.use_ime_keep_selection_fix = true},
-        wl::ServerConfig{.use_ime_keep_selection_fix = false}));
+        wl::ServerConfig{}));
 
 INSTANTIATE_TEST_SUITE_P(
     TextInputExtensionV7,
@@ -1268,9 +1289,7 @@ TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionText) {
     auto* text_input = server->text_input_manager_v1()->text_input();
     Mock::VerifyAndClearExpectations(text_input);
 
-    const auto sent_range = GetParam().use_ime_keep_selection_fix
-                                ? gfx::Range(10, 7)
-                                : gfx::Range(7, 10);
+    const gfx::Range sent_range(10, 7);
     zwp_text_input_v1_send_cursor_position(
         text_input->resource(), sent_range.start(), sent_range.end());
     zwp_text_input_v1_send_commit_string(text_input->resource(), 0,
@@ -1417,11 +1436,8 @@ TEST_P(WaylandInputMethodContextTest, OnConfirmCompositionTextForLongRange) {
     auto* text_input = server->text_input_manager_v1()->text_input();
     Mock::VerifyAndClearExpectations(text_input);
 
-    gfx::Range range = expected_sent_range;
-    if (GetParam().use_ime_keep_selection_fix) {
-      range =
-          gfx::Range(expected_sent_range.end(), expected_sent_range.start());
-    }
+    gfx::Range range =
+        gfx::Range(expected_sent_range.end(), expected_sent_range.start());
 
     zwp_text_input_v1_send_cursor_position(text_input->resource(),
                                            range.start(), range.end());
@@ -1715,6 +1731,20 @@ TEST_P(WaylandInputMethodContextTest, UpdateVirtualKeyboardState) {
   });
 
   EXPECT_FALSE(input_method_context_->IsKeyboardVisible());
+}
+
+TEST_P(WaylandInputMethodContextTest, OnKeySym) {
+#if BUILDFLAG(USE_XKBCOMMON)
+  MaybeSetUpXkb();
+
+  uint32_t test_timestamp = 100;
+  input_method_context_->OnKeysym(
+      XKB_KEY_Shift_L, wl_keyboard_key_state::WL_KEYBOARD_KEY_STATE_PRESSED, 0,
+      test_timestamp);
+
+  ASSERT_EQ(wl::EventMillisecondsToTimeTicks(test_timestamp),
+            keyboard_delegate_->last_event_timestamp());
+#endif
 }
 
 class WaylandInputMethodContextNoKeyboardTest

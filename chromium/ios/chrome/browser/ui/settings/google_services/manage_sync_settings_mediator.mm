@@ -25,7 +25,7 @@
 #import "components/sync/service/local_data_description.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
-#import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/settings/model/sync/utils/account_error_ui_info.h"
 #import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
@@ -39,10 +39,10 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/signin/authentication_service.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
-#import "ios/chrome/browser/signin/constants.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
+#import "ios/chrome/browser/signin/model/constants.h"
 #import "ios/chrome/browser/sync/model/enterprise_utils.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_setup_service.h"
@@ -1015,7 +1015,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
                  kNeedsTrustedVaultKeyForPasswords &&
          _syncService->GetUserActionableError() !=
              syncer::SyncService::UserActionableError::
-                 kNeedsTrustedVaultKeyForEverything;
+                 kNeedsTrustedVaultKeyForEverything &&
+         _syncService->GetUserSettings()->IsCustomPassphraseAllowed();
 }
 
 - (NSString*)overrideViewControllerTitle {
@@ -1380,6 +1381,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   item.text = l10n_util::GetNSString(buttonLabelID);
   item.textColor = [UIColor colorNamed:kBlueColor];
   item.accessibilityTraits = UIAccessibilityTraitButton;
+  item.accessibilityIdentifier = kSyncErrorButtonIdentifier;
   return item;
 }
 
@@ -1415,7 +1417,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 - (void)updateSyncErrorsSection:(BOOL)notifyConsumer {
   // Checks if the sync setup service state has changed from the saved state in
   // the table view model.
-  absl::optional<SyncSettingsItemType> type = [self syncErrorItemType];
+  std::optional<SyncSettingsItemType> type = [self syncErrorItemType];
   if (![self needsErrorSectionUpdate:type]) {
     return;
   }
@@ -1501,42 +1503,37 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   }
 }
 
-// Returns the sync error item type or absl::nullopt if the item
+// Returns the sync error item type or std::nullopt if the item
 // is not an error.
-- (absl::optional<SyncSettingsItemType>)syncErrorItemType {
+- (std::optional<SyncSettingsItemType>)syncErrorItemType {
   if (self.isSyncDisabledByAdministrator) {
-    return absl::make_optional<SyncSettingsItemType>(
-        SyncDisabledByAdministratorErrorItemType);
+    return SyncDisabledByAdministratorErrorItemType;
   }
   switch (_syncService->GetUserActionableError()) {
     case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
-      return absl::make_optional<SyncSettingsItemType>(
-          PrimaryAccountReauthErrorItemType);
+      return PrimaryAccountReauthErrorItemType;
     case syncer::SyncService::UserActionableError::kNeedsPassphrase:
-      return absl::make_optional<SyncSettingsItemType>(
-          ShowPassphraseDialogErrorItemType);
+      return ShowPassphraseDialogErrorItemType;
     case syncer::SyncService::UserActionableError::
         kNeedsTrustedVaultKeyForPasswords:
     case syncer::SyncService::UserActionableError::
         kNeedsTrustedVaultKeyForEverything:
-      return absl::make_optional<SyncSettingsItemType>(
-          SyncNeedsTrustedVaultKeyErrorItemType);
+      return SyncNeedsTrustedVaultKeyErrorItemType;
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForPasswords:
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForEverything:
-      return absl::make_optional<SyncSettingsItemType>(
-          SyncTrustedVaultRecoverabilityDegradedErrorItemType);
+      return SyncTrustedVaultRecoverabilityDegradedErrorItemType;
     case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
     case syncer::SyncService::UserActionableError::kNone:
-      return absl::nullopt;
+      return std::nullopt;
   }
   NOTREACHED();
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // Returns whether the error state has changed since the last update.
-- (BOOL)needsErrorSectionUpdate:(absl::optional<SyncSettingsItemType>)type {
+- (BOOL)needsErrorSectionUpdate:(std::optional<SyncSettingsItemType>)type {
   BOOL hasError = type.has_value();
   return (hasError && !self.syncErrorItem) ||
          (!hasError && self.syncErrorItem) ||

@@ -1,21 +1,12 @@
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /// <reference types="node" />
 import type { ChildProcess } from 'child_process';
 import type { Protocol } from 'devtools-protocol';
+import type { ProtocolType } from '../common/ConnectOptions.js';
 import { EventEmitter, type EventType } from '../common/EventEmitter.js';
 import { asyncDisposeSymbol, disposeSymbol } from '../util/disposable.js';
 import type { BrowserContext } from './BrowserContext.js';
@@ -159,7 +150,7 @@ export interface BrowserEvents extends Record<EventType, unknown> {
  * // Store the endpoint to be able to reconnect to the browser.
  * const browserWSEndpoint = browser.wsEndpoint();
  * // Disconnect puppeteer from the browser.
- * browser.disconnect();
+ * await browser.disconnect();
  *
  * // Use the endpoint to reestablish a connection
  * const browser2 = await puppeteer.connect({browserWSEndpoint});
@@ -175,25 +166,13 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      */
     constructor();
     /**
-     * @internal
-     */
-    _attach(): Promise<void>;
-    /**
-     * @internal
-     */
-    _detach(): void;
-    /**
      * Gets the associated
      * {@link https://nodejs.org/api/child_process.html#class-childprocess | ChildProcess}.
      *
      * @returns `null` if this instance was connected to via
      * {@link Puppeteer.connect}.
      */
-    process(): ChildProcess | null;
-    /**
-     * @internal
-     */
-    _getIsPageTargetCallback(): IsPageTargetCallback | undefined;
+    abstract process(): ChildProcess | null;
     /**
      * Creates a new incognito {@link BrowserContext | browser context}.
      *
@@ -229,22 +208,18 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      */
     abstract defaultBrowserContext(): BrowserContext;
     /**
-     * @internal
-     */
-    _disposeContext(contextId?: string): Promise<void>;
-    /**
      * Gets the WebSocket URL to connect to this {@link Browser | browser}.
      *
      * This is usually used with {@link Puppeteer.connect}.
      *
      * You can find the debugger URL (`webSocketDebuggerUrl`) from
-     * `http://${host}:${port}/json/version`.
+     * `http://HOST:PORT/json/version`.
      *
      * See {@link
      * https://chromedevtools.github.io/devtools-protocol/#how-do-i-access-the-browser-target
      * | browser endpoint} for more information.
      *
-     * @remarks The format is always `ws://${host}:${port}/devtools/browser/<id>`.
+     * @remarks The format is always `ws://HOST:PORT/devtools/browser/<id>`.
      */
     abstract wsEndpoint(): string;
     /**
@@ -252,10 +227,6 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * {@link Browser.defaultBrowserContext | default browser context}.
      */
     abstract newPage(): Promise<Page>;
-    /**
-     * @internal
-     */
-    _createPageInContext(contextId?: string): Promise<Page>;
     /**
      * Gets all active {@link Target | targets}.
      *
@@ -313,8 +284,9 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      *
      * {@link Page | Pages} can override the user agent with
      * {@link Page.setUserAgent}.
+     *
      */
-    userAgent(): Promise<string>;
+    abstract userAgent(): Promise<string>;
     /**
      * Closes this {@link Browser | browser} and all associated
      * {@link Page | pages}.
@@ -324,7 +296,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * Disconnects Puppeteer from this {@link Browser | browser}, but leaves the
      * process running.
      */
-    disconnect(): void;
+    abstract disconnect(): Promise<void>;
     /**
      * Whether Puppeteer is connected to this {@link Browser | browser}.
      *
@@ -339,5 +311,9 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
     [disposeSymbol](): void;
     /** @internal */
     [asyncDisposeSymbol](): Promise<void>;
+    /**
+     * @internal
+     */
+    abstract get protocol(): ProtocolType;
 }
 //# sourceMappingURL=Browser.d.ts.map

@@ -16,6 +16,7 @@
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_pool_util.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
+#include "media/capture/video/video_capture_metrics.h"
 #include "media/capture/video/video_frame_receiver_on_task_runner.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/video_capture/public/cpp/receiver_mojo_to_media_adapter.h"
@@ -176,7 +177,7 @@ void DeviceMediaToMojoAdapter::StartInternal(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   auto device_client = std::make_unique<media::VideoCaptureDeviceClient>(
-      requested_settings.buffer_type, std::move(media_receiver), buffer_pool,
+      std::move(media_receiver), buffer_pool,
       base::BindRepeating(
           &CreateGpuJpegDecoder, jpeg_decoder_task_runner_,
           jpeg_decoder_factory_callback_,
@@ -187,12 +188,15 @@ void DeviceMediaToMojoAdapter::StartInternal(
               &media::VideoFrameReceiver::OnLog, video_frame_receiver))));
 #else   // BUILDFLAG(IS_CHROMEOS_ASH)
   auto device_client = std::make_unique<media::VideoCaptureDeviceClient>(
-      requested_settings.buffer_type, std::move(media_receiver), buffer_pool,
-      std::move(video_effects_manager));
+      std::move(media_receiver), buffer_pool, std::move(video_effects_manager));
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   device_->AllocateAndStart(requested_settings, std::move(device_client));
   device_started_ = true;
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  device_->GetPhotoState(base::BindOnce(&media::LogCaptureDeviceEffects));
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 }
 
 void DeviceMediaToMojoAdapter::StopInProcess() {

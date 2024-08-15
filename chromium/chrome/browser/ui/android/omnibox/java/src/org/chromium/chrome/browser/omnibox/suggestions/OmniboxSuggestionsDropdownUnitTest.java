@@ -49,12 +49,12 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownEmbedder.OmniboxAlignment;
 import org.chromium.chrome.browser.omnibox.test.R;
-import org.chromium.chrome.test.util.browser.Features;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.base.WindowDelegate;
 
@@ -124,7 +124,7 @@ public class OmniboxSuggestionsDropdownUnitTest {
                 new ContextThemeWrapper(
                         ApplicationProvider.getApplicationContext(),
                         R.style.Theme_BrowserUI_DayNight);
-        mDropdown = new OmniboxSuggestionsDropdown(mContext, mPool);
+        mDropdown = new OmniboxSuggestionsDropdown(mContext, mPool, false);
         mDropdown.setAdapter(mAdapter);
         mListener = mDropdown.getLayoutScrollListener();
     }
@@ -424,7 +424,7 @@ public class OmniboxSuggestionsDropdownUnitTest {
     @SmallTest
     @LooperMode(Mode.PAUSED)
     public void testAlignmentProvider_changeDuringlayout() {
-        mDropdown = Mockito.spy(new OmniboxSuggestionsDropdown(mContext, mPool));
+        mDropdown = Mockito.spy(new OmniboxSuggestionsDropdown(mContext, mPool, false));
         mDropdown.setAdapter(mAdapter);
         mDropdown.setEmbedder(mEmbedder);
         mDropdown.onAttachedToWindow();

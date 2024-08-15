@@ -5,6 +5,7 @@
 #include "chrome/browser/web_applications/app_shim_registry_mac.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/base64.h"
@@ -19,7 +20,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "crypto/hmac.h"
 #include "crypto/random.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
 const char kAppShims[] = "app_shims";
@@ -247,11 +247,15 @@ AppShimRegistry::GetHandlersForApp(const std::string& app_id) {
   return result;
 }
 
-absl::optional<AppShimRegistry::HmacKey>
+bool AppShimRegistry::HasSavedAnyCdHashes() const {
+  return GetPrefService()->HasPrefPath(kAppShimsCdHashHmacKey);
+}
+
+std::optional<AppShimRegistry::HmacKey>
 AppShimRegistry::GetExistingCdHashHmacKey() {
   std::string key_base64 = GetPrefService()->GetString(kAppShimsCdHashHmacKey);
   if (key_base64.empty()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // The key used for the HMACs of code directory hash values is encrypted then
@@ -262,7 +266,7 @@ AppShimRegistry::GetExistingCdHashHmacKey() {
     std::string key;
     if (OSCrypt::DecryptString(encrypted_key, &key)) {
       if (key.length() == kHmacKeySize) {
-        return absl::make_optional<HmacKey>(key.begin(), key.end());
+        return std::make_optional<HmacKey>(key.begin(), key.end());
       }
     }
   }
@@ -271,7 +275,7 @@ AppShimRegistry::GetExistingCdHashHmacKey() {
   // OSCrypt, or the wrong length. We rely on the caller to generate a new key
   // and re-create the app shims.
   LOG(WARNING) << "Key retrieved from preferences was not valid. Discarding.";
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 // Encrypt the key using OSCrypt and base64-encode the encrypted data before

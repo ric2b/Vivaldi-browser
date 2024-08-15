@@ -10,6 +10,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,11 +34,7 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
-#include "content/browser/renderer_host/input/input_disposition_handler.h"
-#include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
-#include "content/browser/renderer_host/input/synthetic_gesture.h"
-#include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "content/browser/renderer_host/render_frame_metadata_provider_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -46,6 +43,10 @@
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom-forward.h"
 #include "content/common/input/event_with_latency_info.h"
+#include "content/common/input/input_disposition_handler.h"
+#include "content/common/input/input_router_impl.h"
+#include "content/common/input/synthetic_gesture.h"
+#include "content/common/input/synthetic_gesture_controller.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/render_process_host_priority_client.h"
 #include "content/public/browser/render_widget_host.h"
@@ -56,9 +57,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom-forward.h"
 #include "services/viz/public/mojom/hit_test/input_target_client.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
-#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom.h"
 #include "third_party/blink/public/mojom/input/pointer_lock_context.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -268,7 +267,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   display::ScreenInfo GetScreenInfo() const override;
   display::ScreenInfos GetScreenInfos() const override;
   float GetDeviceScaleFactor() override;
-  absl::optional<cc::TouchAction> GetAllowedTouchAction() override;
+  std::optional<cc::TouchAction> GetAllowedTouchAction() override;
   void WriteIntoTrace(perfetto::TracedValue context) override;
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
@@ -783,14 +782,16 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   blink::mojom::WidgetInputHandler* GetWidgetInputHandler() override;
   void OnImeCompositionRangeChanged(
       const gfx::Range& range,
-      const absl::optional<std::vector<gfx::Rect>>& character_bounds,
-      const absl::optional<std::vector<gfx::Rect>>& line_bounds) override;
+      const std::optional<std::vector<gfx::Rect>>& character_bounds,
+      const std::optional<std::vector<gfx::Rect>>& line_bounds) override;
   void OnImeCancelComposition() override;
-  RenderWidgetHostViewBase* GetRenderWidgetHostViewBase() override;
+  StylusInterface* GetStylusInterface() override;
   void OnStartStylusWriting() override;
   bool IsWheelScrollInProgress() override;
   bool IsAutoscrollInProgress() override;
   void SetMouseCapture(bool capture) override;
+  void SetAutoscrollSelectionActiveInMainFrame(
+      bool autoscroll_selection) override;
   void RequestMouseLock(
       bool from_user_gesture,
       bool unadjusted_movement,
@@ -808,6 +809,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void ProgressFlingIfNeeded(base::TimeTicks current_time);
   void StopFling();
 
+  RenderWidgetHostViewBase* GetRenderWidgetHostViewBase();
+
   // The RenderWidgetHostImpl will keep showing the old page (for a while) after
   // navigation until the first frame of the new page arrives. This reduces
   // flicker. However, if for some reason it is known that the frames won't be
@@ -822,7 +825,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // If |codes| has no value then all keys will be locked, otherwise only the
   // keys specified will be intercepted and routed to the web page.
   // Returns true if the lock request was successfully registered.
-  bool RequestKeyboardLock(absl::optional<base::flat_set<ui::DomCode>> codes);
+  bool RequestKeyboardLock(std::optional<base::flat_set<ui::DomCode>> codes);
 
   // Cancels a previous keyboard lock request.
   void CancelKeyboardLock();
@@ -883,7 +886,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
     return blink_widget_host_receiver_;
   }
 
-  absl::optional<blink::VisualProperties> LastComputedVisualProperties() const;
+  std::optional<blink::VisualProperties> LastComputedVisualProperties() const;
 
   // Generates widget creation params that will be passed to the renderer to
   // create a new widget. As a side effect, this resets various widget and frame
@@ -924,6 +927,13 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // to its renderer side widget. If the renderer issued a FrameSink request
   // before this handoff, the request is buffered and will be issued here.
   void SetViewIsFrameSinkIdOwner(bool is_owner);
+  bool view_is_frame_sink_id_owner() const {
+    return view_is_frame_sink_id_owner_;
+  }
+
+  base::TimeTicks create_frame_sink_timestamp() const {
+    return create_frame_sink_timestamp_;
+  }
 
   // NOTE(david@vivaldi.com): Returns the status of the device
   // emulation.
@@ -969,8 +979,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnGestureEventAck(
       const GestureEventWithLatencyInfo& event,
       blink::mojom::InputEventResultSource ack_source,
-      blink::mojom::InputEventResultState ack_result,
-      blink::mojom::ScrollResultDataPtr scroll_result_data) override;
+      blink::mojom::InputEventResultState ack_result) override;
 
   // virtual for testing.
   virtual void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
@@ -979,14 +988,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // ---------------------------------------------------------------------------
 
   bool IsMouseLocked() const;
-
-  // The View associated with the RenderWidgetHost. The lifetime of this object
-  // is associated with the lifetime of the Render process. If the Renderer
-  // crashes, its View is destroyed and this pointer becomes NULL, even though
-  // render_view_host_ lives on to load another URL (creating a new View while
-  // doing so).
-  base::WeakPtr<RenderWidgetHostViewBase> view_;
-
  private:
   FRIEND_TEST_ALL_PREFIXES(FullscreenDetectionTest,
                            EncompassingDivNotFullscreen);
@@ -1105,8 +1106,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const blink::WebInputEvent& event,
       const ui::LatencyInfo& latency_info) override;
   void IncrementInFlightEventCount() override;
-  void NotifyUISchedulerOfScrollStateUpdate(
-      BrowserUIThreadScheduler::ScrollState scroll_state) override;
+  void NotifyUISchedulerOfGestureEventUpdate(
+      blink::WebInputEvent::Type gesture_event) override;
   void DecrementInFlightEventCount(
       blink::mojom::InputEventResultSource ack_source) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
@@ -1133,8 +1134,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // needed for stylus writing service. These bounds would be null when the
   // stylus writable element could not be focused.
   void OnEditElementFocusedForStylusWriting(
-      const absl::optional<gfx::Rect>& focused_edit_bounds,
-      const absl::optional<gfx::Rect>& caret_bounds);
+      const std::optional<gfx::Rect>& focused_edit_bounds,
+      const std::optional<gfx::Rect>& caret_bounds);
 
   // Called by the RenderProcessHost to handle the case when the process
   // changed its state of being blocked.
@@ -1390,7 +1391,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   bool pending_mouse_lock_request_ = false;
   bool mouse_lock_raw_movement_ = false;
   // Stores the keyboard keys to lock while waiting for a pending lock request.
-  absl::optional<base::flat_set<ui::DomCode>> keyboard_keys_to_lock_;
+  std::optional<base::flat_set<ui::DomCode>> keyboard_keys_to_lock_;
   bool keyboard_lock_requested_ = false;
   bool keyboard_lock_allowed_ = false;
 
@@ -1472,8 +1473,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       frame_widget_input_handler_;
   mojo::Remote<viz::mojom::InputTargetClient> input_target_client_;
 
-  absl::optional<uint16_t> screen_orientation_angle_for_testing_;
-  absl::optional<display::mojom::ScreenOrientation>
+  std::optional<uint16_t> screen_orientation_angle_for_testing_;
+  std::optional<display::mojom::ScreenOrientation>
       screen_orientation_type_for_testing_;
 
   bool force_enable_zoom_ = false;
@@ -1516,7 +1517,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
     bool is_evicted;
     blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request;
   };
-  absl::optional<PendingShowParams> pending_show_params_;
+  std::optional<PendingShowParams> pending_show_params_;
 
   // If this is initialized with a frame this member will be valid and
   // can be used to send messages directly to blink.
@@ -1535,7 +1536,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   mojo::Remote<blink::mojom::WidgetCompositor> widget_compositor_;
 
-  absl::optional<BrowserUIThreadScheduler::UserInputActiveHandle>
+  std::optional<BrowserUIThreadScheduler::UserInputActiveHandle>
       user_input_active_handle_;
 
   // Same-process cross-RenderFrameHost navigations may reuse the compositor
@@ -1547,6 +1548,17 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // produce frames associated with `frame_sink_id_` only when it owns that
   // FrameSinkId.
   bool view_is_frame_sink_id_owner_{false};
+
+  // The timestamp of the last call to `MaybeDispatchBufferedFrameSinkRequest()`
+  // where we run `create_frame_sink_callback_`.
+  base::TimeTicks create_frame_sink_timestamp_;
+
+  // The View associated with the RenderWidgetHost. The lifetime of this object
+  // is associated with the lifetime of the Render process. If the Renderer
+  // crashes, its View is destroyed and this pointer becomes NULL, even though
+  // render_view_host_ lives on to load another URL (creating a new View while
+  // doing so).
+  base::WeakPtr<RenderWidgetHostViewBase> view_;
 
   // NOTE(david@vivaldi.com): |device_emulation_active_| indicates if the device
   // emulation is active for this specific RenderWidgetHostImpl.

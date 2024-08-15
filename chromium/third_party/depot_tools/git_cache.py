@@ -26,6 +26,7 @@ import subcommand
 GC_AUTOPACKLIMIT = 50
 
 GIT_CACHE_CORRUPT_MESSAGE = 'WARNING: The Git cache is corrupt.'
+INIT_SENTIENT_FILE = ".mirror_init"
 
 # gsutil creates many processes and threads. Creating too many gsutil cp
 # processes may result in running out of resources, and may perform worse due to
@@ -54,23 +55,23 @@ def exponential_backoff_retry(fn,
                               printerr=None):
     """Executes |fn| up to |count| times, backing off exponentially.
 
-  Args:
-    fn (callable): The function to execute. If this raises a handled
-        exception, the function will retry with exponential backoff.
-    excs (tuple): A tuple of Exception types to handle. If one of these is
-        raised by |fn|, a retry will be attempted. If |fn| raises an Exception
-        that is not in this list, it will immediately pass through. If |excs|
-        is empty, the Exception base class will be used.
-    name (str): Optional operation name to print in the retry string.
-    count (int): The number of times to try before allowing the exception to
-        pass through.
-    sleep_time (float): The initial number of seconds to sleep in between
-        retries. This will be doubled each retry.
-    printerr (callable): Function that will be called with the error string upon
-        failures. If None, |logging.warning| will be used.
+    Args:
+        fn (callable): The function to execute. If this raises a handled
+            exception, the function will retry with exponential backoff.
+        excs (tuple): A tuple of Exception types to handle. If one of these is
+            raised by |fn|, a retry will be attempted. If |fn| raises an
+            Exception that is not in this list, it will immediately pass
+            through. If |excs| is empty, the Exception base class will be used.
+        name (str): Optional operation name to print in the retry string.
+        count (int): The number of times to try before allowing the exception
+            to pass through.
+        sleep_time (float): The initial number of seconds to sleep in between
+            retries. This will be doubled each retry.
+        printerr (callable): Function that will be called with the error string
+            upon failures. If None, |logging.warning| will be used.
 
-  Returns: The return value of the successful fn.
-  """
+    Returns: The return value of the successful fn.
+    """
     printerr = printerr or logging.warning
     for i in range(count):
         try:
@@ -101,9 +102,9 @@ class Mirror(object):
     def parse_fetch_spec(spec):
         """Parses and canonicalizes a fetch spec.
 
-    Returns (fetchspec, value_regex), where value_regex can be used
-    with 'git config --replace-all'.
-    """
+        Returns (fetchspec, value_regex), where value_regex can be used
+        with 'git config --replace-all'.
+        """
         parts = spec.split(':', 1)
         src = parts[0].lstrip('+').rstrip('/')
         if not src.startswith('refs/'):
@@ -135,6 +136,10 @@ class Mirror(object):
         finally:
             self.print('%s took %.1f minutes' % (what,
                                                  (time.time() - start) / 60.0))
+
+    @property
+    def _init_sentient_file(self):
+        return os.path.join(self.mirror_path, INIT_SENTIENT_FILE)
 
     @property
     def bootstrap_bucket(self):
@@ -290,8 +295,9 @@ class Mirror(object):
     def bootstrap_repo(self, directory):
         """Bootstrap the repo from Google Storage if possible.
 
-    More apt-ly named bootstrap_repo_from_cloud_if_possible_else_do_nothing().
-    """
+        More apt-ly named
+        bootstrap_repo_from_cloud_if_possible_else_do_nothing().
+        """
         if not self.bootstrap_bucket:
             return False
 
@@ -369,14 +375,15 @@ class Mirror(object):
     def _preserve_fetchspec(self):
         """Read and preserve remote.origin.fetch from an existing mirror.
 
-    This modifies self.fetch_specs.
-    """
+        This modifies self.fetch_specs.
+        """
         if not self.exists():
             return
         try:
-            config_fetchspecs = subprocess.check_output(
-                [self.git_exe, 'config', '--get-all', 'remote.origin.fetch'],
-                cwd=self.mirror_path).decode('utf-8', 'ignore')
+            config_fetchspecs = subprocess.check_output([
+                self.git_exe, '--git-dir', self.mirror_path, 'config',
+                '--get-all', 'remote.origin.fetch'
+            ]).decode('utf-8', 'ignore')
             for fetchspec in config_fetchspecs.splitlines():
                 self.fetch_specs.add(self.parse_fetch_spec(fetchspec))
         except subprocess.CalledProcessError:
@@ -413,9 +420,10 @@ class Mirror(object):
         if 'master' in head_ref:
             # Some repos could still have master so verify if the ref exists
             # first.
-            show_ref_master_cmd = subprocess.run(
-                [Mirror.git_exe, 'show-ref', '--verify', 'refs/heads/master'],
-                cwd=self.mirror_path)
+            show_ref_master_cmd = subprocess.run([
+                Mirror.git_exe, '--git-dir', self.mirror_path, 'show-ref',
+                '--verify', 'refs/heads/master'
+            ])
 
             if show_ref_master_cmd.returncode != 0:
                 # Remove mirror
@@ -456,6 +464,9 @@ class Mirror(object):
                 # 2. Project doesn't have a bootstrap folder.
                 # Start with a bare git dir.
                 self.RunGit(['init', '--bare'])
+                with open(self._init_sentient_file, 'w'):
+                    # Create sentient file
+                    pass
                 # Set appropriate symbolic-ref
                 remote_info = exponential_backoff_retry(
                     lambda: subprocess.check_output(
@@ -520,6 +531,8 @@ class Mirror(object):
                     self.RunGit(['fetch', 'origin', commit], retry=True)
             except subprocess.CalledProcessError:
                 logging.warning('Fetch of %s failed' % commit)
+        if os.path.isfile(self._init_sentient_file):
+            os.remove(self._init_sentient_file)
 
     def populate(self,
                  depth=None,
@@ -534,20 +547,29 @@ class Mirror(object):
             depth = 10000
         gclient_utils.safe_makedirs(self.GetCachePath())
 
+        def bootstrap(force=False):
+            self._ensure_bootstrapped(depth,
+                                      bootstrap,
+                                      reset_fetch_config,
+                                      force=force)
+            self._fetch(verbose, depth, no_fetch_tags, reset_fetch_config)
+
+        def wipe_cache():
+            self.print(GIT_CACHE_CORRUPT_MESSAGE)
+            gclient_utils.rmtree(self.mirror_path)
+
         with lockfile.lock(self.mirror_path, lock_timeout):
+            if os.path.isfile(self._init_sentient_file):
+                # Previous bootstrap didn't finish
+                wipe_cache()
+
             try:
-                self._ensure_bootstrapped(depth, bootstrap, reset_fetch_config)
-                self._fetch(verbose, depth, no_fetch_tags, reset_fetch_config)
+                bootstrap()
             except ClobberNeeded:
                 # This is a major failure, we need to clean and force a
                 # bootstrap.
-                gclient_utils.rmtree(self.mirror_path)
-                self.print(GIT_CACHE_CORRUPT_MESSAGE)
-                self._ensure_bootstrapped(depth,
-                                          bootstrap,
-                                          reset_fetch_config,
-                                          force=True)
-                self._fetch(verbose, depth, no_fetch_tags, reset_fetch_config)
+                wipe_cache()
+                bootstrap(force=True)
 
     def update_bootstrap(self, prune=False, gc_aggressive=False):
         # NOTE: There have been cases where repos were being recursively
@@ -563,9 +585,9 @@ class Mirror(object):
             gclient_utils.rmtree(recursed_dir)
 
         # The folder is <git number>
-        gen_number = subprocess.check_output([self.git_exe, 'number'],
-                                             cwd=self.mirror_path).decode(
-                                                 'utf-8', 'ignore').strip()
+        gen_number = subprocess.check_output(
+            [self.git_exe, '--git-dir', self.mirror_path,
+             'number']).decode('utf-8', 'ignore').strip()
         gsutil = Gsutil(path=self.gsutil_exe, boto_path=None)
 
         dest_prefix = '%s/%s' % (self._gs_path, gen_number)

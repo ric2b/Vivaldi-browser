@@ -52,6 +52,7 @@
 #include "ash/touch/touch_observer_hud.h"
 #include "ash/wallpaper/views/wallpaper_widget_controller.h"
 #include "ash/wm/always_on_top_controller.h"
+#include "ash/wm/bounds_tracker/window_bounds_tracker.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_util.h"
@@ -70,7 +71,6 @@
 #include "ash/wm/switchable_windows.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
 #include "ash/wm/system_wallpaper_controller.h"
-#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_parenting_controller.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
@@ -99,6 +99,7 @@
 #include "ui/base/models/menu_model.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -201,8 +202,12 @@ void ReparentWindow(aura::Window* window, aura::Window* new_parent) {
   gfx::Rect restore_bounds;
   const bool has_restore_bounds = state && state->HasRestoreBounds();
 
+  auto* window_bounds_tracker = Shell::Get()->window_bounds_tracker();
+  // `WindowBoundsTracker` will handle the window's bounds on root window
+  // changes if the feature `kWindowBoundsTracker` is enabled.
   const bool update_bounds =
-      state && (state->IsNormalStateType() || state->IsMinimized());
+      state && (state->IsNormalStateType() || state->IsMinimized()) &&
+      !window_bounds_tracker;
   gfx::Rect work_area_in_new_parent =
       screen_util::GetDisplayWorkAreaBoundsInParent(new_parent);
 
@@ -217,6 +222,10 @@ void ReparentWindow(aura::Window* window, aura::Window* new_parent) {
     restore_bounds = state->GetRestoreBoundsInParent();
     MoveOriginRelativeToSize(src_size, dst_size, &restore_bounds);
     restore_bounds.AdjustToFit(work_area_in_new_parent);
+  }
+
+  if (window_bounds_tracker) {
+    window_bounds_tracker->AddWindowDisplayIdOnDisplayRemoval(window);
   }
 
   new_parent->AddChild(window);
@@ -265,7 +274,7 @@ void ReparentAllWindows(aura::Window* src, aura::Window* dst) {
     }
   }
 
-  const std::vector<aura::Window*> mru_list =
+  const std::vector<raw_ptr<aura::Window, VectorExperimental>> mru_list =
       Shell::Get()->mru_window_tracker()->BuildWindowForCycleList(kAllDesks);
   for (int id : container_ids) {
     aura::Window* src_container = src->GetChildById(id);
@@ -443,21 +452,23 @@ class RootWindowMenuModelAdapter : public AppMenuModelAdapter {
     const base::TimeDelta user_journey_time =
         base::TimeTicks::Now() - menu_open_time();
 
-    UMA_HISTOGRAM_TIMES("Apps.ContextMenuUserJourneyTime.Desktop",
+    UMA_HISTOGRAM_TIMES("Apps.ContextMenuUserJourneyTimeV2.Desktop",
                         user_journey_time);
-    UMA_HISTOGRAM_ENUMERATION("Apps.ContextMenuShowSource.Desktop",
+    UMA_HISTOGRAM_ENUMERATION("Apps.ContextMenuShowSourceV2.Desktop",
                               source_type(), ui::MENU_SOURCE_TYPE_LAST);
     if (is_tablet_mode()) {
-      UMA_HISTOGRAM_TIMES("Apps.ContextMenuUserJourneyTime.Desktop.TabletMode",
-                          user_journey_time);
-      UMA_HISTOGRAM_ENUMERATION("Apps.ContextMenuShowSource.Desktop.TabletMode",
-                                source_type(), ui::MENU_SOURCE_TYPE_LAST);
-    } else {
       UMA_HISTOGRAM_TIMES(
-          "Apps.ContextMenuUserJourneyTime.Desktop.ClamshellMode",
+          "Apps.ContextMenuUserJourneyTimeV2.Desktop.TabletMode",
           user_journey_time);
       UMA_HISTOGRAM_ENUMERATION(
-          "Apps.ContextMenuShowSource.Desktop.ClamshellMode", source_type(),
+          "Apps.ContextMenuShowSourceV2.Desktop.TabletMode", source_type(),
+          ui::MENU_SOURCE_TYPE_LAST);
+    } else {
+      UMA_HISTOGRAM_TIMES(
+          "Apps.ContextMenuUserJourneyTimeV2.Desktop.ClamshellMode",
+          user_journey_time);
+      UMA_HISTOGRAM_ENUMERATION(
+          "Apps.ContextMenuShowSourceV2.Desktop.ClamshellMode", source_type(),
           ui::MENU_SOURCE_TYPE_LAST);
     }
   }
@@ -486,7 +497,7 @@ class FillLayoutManager : public aura::LayoutManager {
   void Relayout() {
     // Fill the window that is set to be maximizable.
     const gfx::Rect fullscreen(container_->bounds().size());
-    for (auto* child : container_->children()) {
+    for (aura::Window* child : container_->children()) {
       const int resize_behavior =
           child->GetProperty(aura::client::kResizeBehaviorKey);
       if (resize_behavior & aura::client::kResizeBehaviorCanMaximize) {
@@ -495,7 +506,7 @@ class FillLayoutManager : public aura::LayoutManager {
     }
   }
 
-  raw_ptr<aura::Window, ExperimentalAsh> container_;
+  raw_ptr<aura::Window> container_;
 };
 
 }  // namespace
@@ -505,7 +516,7 @@ std::vector<RootWindowController*>*
     RootWindowController::root_window_controllers_ = nullptr;
 
 RootWindowController::~RootWindowController() {
-  Shutdown();
+  Shutdown(/*destination_root=*/nullptr);
   DCHECK(!wallpaper_widget_controller_.get());
   work_area_insets_.reset();
   ash_host_.reset();
@@ -682,8 +693,12 @@ ScreenRotationAnimator* RootWindowController::GetScreenRotationAnimator() {
   return screen_rotation_animator_.get();
 }
 
-void RootWindowController::Shutdown() {
+void RootWindowController::Shutdown(aura::Window* destination_root) {
   is_shutting_down_ = true;
+
+  if (destination_root) {
+    MoveWindowsTo(destination_root);
+  }
 
   // Destroy the `screen_rotation_animator_` now to avoid any potential crashes
   // if there's any ongoing animation. See http://b/293667233.
@@ -798,23 +813,6 @@ void RootWindowController::CloseChildWindows() {
   ::wm::SetTooltipClient(GetRootWindow(), nullptr);
 }
 
-void RootWindowController::MoveWindowsTo(aura::Window* dst) {
-  // Suspend unnecessary updates of the shelf visibility indefinitely since it
-  // is going away.
-  if (GetShelfLayoutManager()) {
-    GetShelfLayoutManager()->SuspendVisibilityUpdateForShutdown();
-  }
-
-  // Clear the workspace controller to avoid a lot of unnecessary operations
-  // when window are removed.
-  // TODO(afakhry): Should we also clear the WorkspaceLayoutManagers of the pip,
-  // always-on-top, and other containers?
-  aura::Window* root = GetRootWindow();
-  ClearWorkspaceControllers(root);
-
-  ReparentAllWindows(root, dst);
-}
-
 void RootWindowController::InitTouchHuds() {
   // Enable touch debugging features when each display is initialized.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -850,8 +848,7 @@ void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
                                  ->GetDisplayNearestWindow(GetRootWindow())
                                  .id();
 
-  const bool tablet_mode =
-      Shell::Get()->tablet_mode_controller()->InTabletMode();
+  const bool tablet_mode = display::Screen::GetScreen()->InTabletMode();
   root_window_menu_model_adapter_ =
       std::make_unique<RootWindowMenuModelAdapter>(
           std::make_unique<ShelfContextMenuModel>(nullptr, display_id,
@@ -996,9 +993,16 @@ RootWindowController::security_curtain_widget_controller() {
 
 void RootWindowController::StartSplitViewOverviewSession(
     aura::Window* window,
-    absl::optional<OverviewStartAction> action,
-    absl::optional<OverviewEnterExitType> type,
+    std::optional<OverviewStartAction> action,
+    std::optional<OverviewEnterExitType> type,
     WindowSnapActionSource snap_action_source) {
+  if (split_view_overview_session_ ||
+      !OverviewController::Get()->CanEnterOverview()) {
+    // If we can't start overview, we shouldn't start split view overview
+    // either. This can happen when we restore snap state after exiting
+    // overview.
+    return;
+  }
   split_view_overview_session_ =
       std::make_unique<SplitViewOverviewSession>(window, snap_action_source);
   split_view_overview_session_->Init(action, type);
@@ -1042,6 +1046,23 @@ RootWindowController::RootWindowController(AshWindowTreeHost* ash_host)
   window_parenting_controller_ =
       std::make_unique<WindowParentingController>(root_window);
   capture_client_ = std::make_unique<::wm::ScopedCaptureClient>(root_window);
+}
+
+void RootWindowController::MoveWindowsTo(aura::Window* dst) {
+  // Suspend unnecessary updates of the shelf visibility indefinitely since it
+  // is going away.
+  if (GetShelfLayoutManager()) {
+    GetShelfLayoutManager()->SuspendVisibilityUpdateForShutdown();
+  }
+
+  // Clear the workspace controller to avoid a lot of unnecessary operations
+  // when window are removed.
+  // TODO(afakhry): Should we also clear the WorkspaceLayoutManagers of the pip,
+  // always-on-top, and other containers?
+  aura::Window* root = GetRootWindow();
+  ClearWorkspaceControllers(root);
+
+  ReparentAllWindows(root, dst);
 }
 
 void RootWindowController::Init(RootWindowType root_window_type) {
@@ -1417,7 +1438,7 @@ void RootWindowController::CreateContainers() {
 
   // Make sure booting animation container is always on top of all other
   // siblings under the `magnified_container`.
-  if (ash::features::IsOobeSimonEnabled()) {
+  if (ash::features::IsBootAnimationEnabled()) {
     aura::Window* booting_animation_container =
         CreateContainer(kShellWindowId_BootingAnimationContainer,
                         "BootingAnimationContainer", magnified_container);

@@ -75,15 +75,10 @@ static_assert(std::size(g_max_sockets_per_proxy_chain) ==
 // entirely.
 scoped_refptr<ClientSocketPool::SocketParams> CreateSocketParams(
     const ClientSocketPool::GroupId& group_id,
-    const ProxyChain& proxy_chain,
-    const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy) {
+    const SSLConfig& ssl_config_for_origin) {
   bool using_ssl = GURL::SchemeIsCryptographic(group_id.destination().scheme());
-  bool using_proxy_ssl = proxy_chain.proxy_server().is_secure_http_like();
   return base::MakeRefCounted<ClientSocketPool::SocketParams>(
-      using_ssl ? std::make_unique<SSLConfig>(ssl_config_for_origin) : nullptr,
-      using_proxy_ssl ? std::make_unique<SSLConfig>(ssl_config_for_proxy)
-                      : nullptr);
+      using_ssl ? std::make_unique<SSLConfig>(ssl_config_for_origin) : nullptr);
 }
 
 int InitSocketPoolHelper(
@@ -93,8 +88,6 @@ int InitSocketPoolHelper(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
-    bool is_for_websockets,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,
@@ -116,12 +109,13 @@ int InitSocketPoolHelper(
                                    session->params().testing_fixed_https_port);
   }
 
+  bool disable_cert_network_fetches =
+      !!(request_load_flags & LOAD_DISABLE_CERT_NETWORK_FETCHES);
   ClientSocketPool::GroupId connection_group(
       std::move(endpoint), privacy_mode, std::move(network_anonymization_key),
-      secure_dns_policy);
+      secure_dns_policy, disable_cert_network_fetches);
   scoped_refptr<ClientSocketPool::SocketParams> socket_params =
-      CreateSocketParams(connection_group, proxy_info.proxy_chain(),
-                         ssl_config_for_origin, ssl_config_for_proxy);
+      CreateSocketParams(connection_group, ssl_config_for_origin);
 
   ClientSocketPool* pool =
       session->GetSocketPool(socket_pool_type, proxy_info.proxy_chain());
@@ -228,7 +222,6 @@ int InitSocketHandleForHttpRequest(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,
@@ -240,8 +233,7 @@ int InitSocketHandleForHttpRequest(
   DCHECK(socket_handle);
   return InitSocketPoolHelper(
       std::move(endpoint), request_load_flags, request_priority, session,
-      proxy_info, ssl_config_for_origin, ssl_config_for_proxy,
-      false /* is_for_websockets */, privacy_mode,
+      proxy_info, ssl_config_for_origin, privacy_mode,
       std::move(network_anonymization_key), secure_dns_policy, socket_tag,
       net_log, 0, socket_handle, HttpNetworkSession::NORMAL_SOCKET_POOL,
       std::move(callback), proxy_auth_callback);
@@ -254,7 +246,6 @@ int InitSocketHandleForWebSocketRequest(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     const NetLogWithSource& net_log,
@@ -273,8 +264,7 @@ int InitSocketHandleForWebSocketRequest(
 
   return InitSocketPoolHelper(
       std::move(endpoint), request_load_flags, request_priority, session,
-      proxy_info, ssl_config_for_origin, ssl_config_for_proxy,
-      true /* is_for_websockets */, privacy_mode,
+      proxy_info, ssl_config_for_origin, privacy_mode,
       std::move(network_anonymization_key), SecureDnsPolicy::kAllow,
       SocketTag(), net_log, 0, socket_handle,
       HttpNetworkSession::WEBSOCKET_SOCKET_POOL, std::move(callback),
@@ -288,7 +278,6 @@ int PreconnectSocketsForHttpRequest(
     HttpNetworkSession* session,
     const ProxyInfo& proxy_info,
     const SSLConfig& ssl_config_for_origin,
-    const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
     NetworkAnonymizationKey network_anonymization_key,
     SecureDnsPolicy secure_dns_policy,
@@ -305,8 +294,7 @@ int PreconnectSocketsForHttpRequest(
 
   return InitSocketPoolHelper(
       std::move(endpoint), request_load_flags, request_priority, session,
-      proxy_info, ssl_config_for_origin, ssl_config_for_proxy,
-      false /* force_tunnel */, privacy_mode,
+      proxy_info, ssl_config_for_origin, privacy_mode,
       std::move(network_anonymization_key), secure_dns_policy, SocketTag(),
       net_log, num_preconnect_streams, nullptr,
       HttpNetworkSession::NORMAL_SOCKET_POOL, std::move(callback),

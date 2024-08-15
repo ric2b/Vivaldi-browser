@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/api/quick_unlock_private/quick_unlock_private_api.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -31,7 +32,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/event_router.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace extensions {
 
@@ -67,8 +67,7 @@ const char kInvalidCredential[] = "Invalid credential.";
 const char kInternalError[] = "Internal error.";
 const char kWeakCredential[] = "Weak credential.";
 
-const char kAuthTokenExpired[] = "Authentication token expired.";
-const char kAuthTokenInvalid[] = "Authentication token invalid.";
+const char kAuthTokenExpired[] = "Authentication token invalid or expired.";
 
 // PINs greater in length than |kMinLengthForWeakPin| will be checked for
 // weakness.
@@ -90,7 +89,7 @@ void ComputeActiveModes(Profile* profile, ActiveModeCallback result) {
           [](ActiveModeCallback result, bool is_set) {
             QuickUnlockModeList modes;
             if (is_set)
-              modes.push_back(quick_unlock_private::QUICK_UNLOCK_MODE_PIN);
+              modes.push_back(quick_unlock_private::QuickUnlockMode::kPin);
             std::move(result).Run(modes);
           },
           std::move(result)));
@@ -145,14 +144,14 @@ CredentialProblem GetCredentialProblemForPin(const std::string& pin,
 
   // Check if the PIN is shorter than the minimum specified length.
   if (pin.size() < static_cast<size_t>(min_length))
-    return CredentialProblem::CREDENTIAL_PROBLEM_TOO_SHORT;
+    return CredentialProblem::kTooShort;
 
   // If the maximum specified length is zero, there is no maximum length.
   // Otherwise check if the PIN is longer than the maximum specified length.
   if (max_length != 0 && pin.size() > static_cast<size_t>(max_length))
-    return CredentialProblem::CREDENTIAL_PROBLEM_TOO_LONG;
+    return CredentialProblem::kTooLong;
 
-  return CredentialProblem::CREDENTIAL_PROBLEM_NONE;
+  return CredentialProblem::kNone;
 }
 
 // Checks if a given |pin| is weak or not. A PIN is considered weak if it:
@@ -203,30 +202,13 @@ Profile* GetActiveProfile(content::BrowserContext* browser_context) {
   return profile;
 }
 
-AuthToken* GetActiveProfileAuthToken(content::BrowserContext* browser_context) {
-  CHECK(!ash::features::ShouldUseAuthSessionStorage());
-  return ash::quick_unlock::QuickUnlockFactory::GetForProfile(
-             GetActiveProfile(browser_context))
-      ->GetAuthToken();
-}
-
-absl::optional<std::string> CheckTokenValidity(
+std::optional<std::string> CheckTokenValidity(
     content::BrowserContext* browser_context,
     const std::string& token) {
-  if (ash::features::ShouldUseAuthSessionStorage()) {
-    if (!ash::AuthSessionStorage::Get()->IsValid(token)) {
-      return kAuthTokenExpired;
-    }
-  } else {
-    AuthToken* auth_token = GetActiveProfileAuthToken(browser_context);
-    if (!auth_token) {
-      return kAuthTokenExpired;
-    }
-    if (token != auth_token->Identifier()) {
-      return kAuthTokenInvalid;
-    }
+  if (!ash::AuthSessionStorage::Get()->IsValid(token)) {
+    return kAuthTokenExpired;
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 }  // namespace
@@ -241,7 +223,7 @@ QuickUnlockPrivateGetAuthTokenFunction::
 
 ExtensionFunction::ResponseAction
 QuickUnlockPrivateGetAuthTokenFunction::Run() {
-  absl::optional<quick_unlock_private::GetAuthToken::Params> params =
+  std::optional<quick_unlock_private::GetAuthToken::Params> params =
       quick_unlock_private::GetAuthToken::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
@@ -257,12 +239,11 @@ QuickUnlockPrivateGetAuthTokenFunction::Run() {
 }
 
 void QuickUnlockPrivateGetAuthTokenFunction::OnResult(
-    absl::optional<api::quick_unlock_private::TokenInfo> token_info,
-    absl::optional<ash::AuthenticationError> error) {
+    std::optional<api::quick_unlock_private::TokenInfo> token_info,
+    std::optional<ash::AuthenticationError> error) {
   if (!token_info.has_value()) {
     DCHECK(error.has_value());
-    Respond(
-        Error(LegacyQuickUnlockPrivateGetAuthTokenHelper::kPasswordIncorrect));
+    Respond(Error(kInvalidCredential));
     return;
   }
 
@@ -283,7 +264,7 @@ ExtensionFunction::ResponseAction
 QuickUnlockPrivateSetLockScreenEnabledFunction::Run() {
   auto params =
       quick_unlock_private::SetLockScreenEnabled::Params::Create(args());
-  absl::optional<std::string> error =
+  std::optional<std::string> error =
       CheckTokenValidity(browser_context(), params->token);
   if (error.has_value()) {
     return RespondNow(Error(error.value()));
@@ -311,7 +292,7 @@ QuickUnlockPrivateSetPinAutosubmitEnabledFunction::Run() {
   auto params =
       quick_unlock_private::SetPinAutosubmitEnabled::Params::Create(args());
 
-  absl::optional<std::string> error =
+  std::optional<std::string> error =
       CheckTokenValidity(browser_context(), params->token);
   if (error.has_value()) {
     return RespondNow(Error(error.value()));
@@ -380,7 +361,7 @@ QuickUnlockPrivateGetAvailableModesFunction::Run() {
   if (!ash::quick_unlock::IsPinDisabledByPolicy(
           GetActiveProfile(browser_context())->GetPrefs(),
           ash::quick_unlock::Purpose::kAny)) {
-    modes.push_back(quick_unlock_private::QUICK_UNLOCK_MODE_PIN);
+    modes.push_back(quick_unlock_private::QuickUnlockMode::kPin);
   }
 
   return RespondNow(ArgumentList(GetAvailableModes::Results::Create(modes)));
@@ -419,15 +400,16 @@ QuickUnlockPrivateCheckCredentialFunction::
 
 ExtensionFunction::ResponseAction
 QuickUnlockPrivateCheckCredentialFunction::Run() {
-  absl::optional<CheckCredential::Params> params_ =
+  std::optional<CheckCredential::Params> params_ =
       CheckCredential::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params_);
 
   auto result = std::make_unique<CredentialCheck>();
 
   // Only handles pins for now.
-  if (params_->mode != QuickUnlockMode::QUICK_UNLOCK_MODE_PIN)
+  if (params_->mode != QuickUnlockMode::kPin) {
     return RespondNow(ArgumentList(CheckCredential::Results::Create(*result)));
+  }
 
   const std::string& credential = params_->credential;
 
@@ -442,17 +424,18 @@ QuickUnlockPrivateCheckCredentialFunction::Run() {
   std::vector<CredentialProblem>& warnings = result->warnings;
   std::vector<CredentialProblem>& errors = result->errors;
   if (!IsPinNumeric(credential))
-    errors.push_back(CredentialProblem::CREDENTIAL_PROBLEM_CONTAINS_NONDIGIT);
+    errors.push_back(CredentialProblem::kContainsNondigit);
 
   CredentialProblem length_problem =
       GetCredentialProblemForPin(credential, pref_service);
-  if (length_problem != CredentialProblem::CREDENTIAL_PROBLEM_NONE)
+  if (length_problem != CredentialProblem::kNone) {
     errors.push_back(length_problem);
+  }
 
   if ((!allow_weak || !is_allow_weak_pin_pref_set) &&
       !IsPinDifficultEnough(credential)) {
     auto& log = allow_weak ? warnings : errors;
-    log.push_back(CredentialProblem::CREDENTIAL_PROBLEM_TOO_WEAK);
+    log.push_back(CredentialProblem::kTooWeak);
   }
 
   return RespondNow(ArgumentList(CheckCredential::Results::Create(*result)));
@@ -466,7 +449,7 @@ QuickUnlockPrivateGetCredentialRequirementsFunction::
 
 ExtensionFunction::ResponseAction
 QuickUnlockPrivateGetCredentialRequirementsFunction::Run() {
-  absl::optional<GetCredentialRequirements::Params> params_ =
+  std::optional<GetCredentialRequirements::Params> params_ =
       GetCredentialRequirements::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params_);
 
@@ -515,7 +498,7 @@ ExtensionFunction::ResponseAction QuickUnlockPrivateSetModesFunction::Run() {
   if (params_->modes.size() > 1)
     return RespondNow(Error(kMultipleModesNotSupported));
 
-  absl::optional<std::string> error =
+  std::optional<std::string> error =
       CheckTokenValidity(browser_context(), params_->token);
   if (error.has_value()) {
     return RespondNow(Error(error.value()));
@@ -527,7 +510,7 @@ ExtensionFunction::ResponseAction QuickUnlockPrivateSetModesFunction::Run() {
   // Do not allow setting a PIN if it is disabled by policy. It is disabled
   // on the UI, but users can still reach here via dev tools.
   for (auto& mode : params_->modes) {
-    if (mode == QuickUnlockMode::QUICK_UNLOCK_MODE_PIN &&
+    if (mode == QuickUnlockMode::kPin &&
         ash::quick_unlock::IsPinDisabledByPolicy(
             pref_service, ash::quick_unlock::Purpose::kAny)) {
       return RespondNow(Error(kPinDisabledByPolicy));
@@ -541,16 +524,18 @@ ExtensionFunction::ResponseAction QuickUnlockPrivateSetModesFunction::Run() {
     if (params_->credentials[i].empty())
       continue;
 
-    if (params_->modes[i] != QuickUnlockMode::QUICK_UNLOCK_MODE_PIN)
+    if (params_->modes[i] != QuickUnlockMode::kPin) {
       continue;
+    }
 
     if (!IsPinNumeric(params_->credentials[i]))
       return RespondNow(Error(kInvalidPIN));
 
     CredentialProblem problem =
         GetCredentialProblemForPin(params_->credentials[i], pref_service);
-    if (problem != CredentialProblem::CREDENTIAL_PROBLEM_NONE)
+    if (problem != CredentialProblem::kNone) {
       return RespondNow(Error(kInvalidCredential));
+    }
 
     if (!allow_weak && !IsPinDifficultEnough(params_->credentials[i]))
       return RespondNow(Error(kWeakCredential));
@@ -584,7 +569,7 @@ void QuickUnlockPrivateSetModesFunction::OnGetActiveModes(
     const QuickUnlockMode mode = params_->modes[i];
     const std::string& credential = params_->credentials[i];
 
-    if (mode == quick_unlock_private::QUICK_UNLOCK_MODE_PIN) {
+    if (mode == quick_unlock_private::QuickUnlockMode::kPin) {
       update_pin = !credential.empty();
       pin_credential = credential;
     }

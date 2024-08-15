@@ -34,7 +34,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   nearby_protocol::RawAdvertisementPayload payload(
       (nearby_protocol::ByteBuffer<255>(raw_bytes)));
 
-  auto credential_book = nearby_protocol::CredentialBook::TryCreate();
+  auto credential_slab = nearby_protocol::CredentialSlab::TryCreate();
+  if (!credential_slab.ok()) {
+    printf("Error: create Credential slab failed\n");
+    __builtin_trap();
+  }
+
+  auto credential_book = nearby_protocol::CredentialBook::TryCreateFromSlab(credential_slab.value());
   if (!credential_book.ok()) {
     printf("Error: create Credential book failed\n");
     __builtin_trap();

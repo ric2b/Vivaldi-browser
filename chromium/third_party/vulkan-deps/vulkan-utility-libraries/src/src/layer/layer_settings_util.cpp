@@ -49,7 +49,7 @@ std::string GetFileSettingName(const char *pLayerName, const char *pSettingName)
 
 static const char *GetDefaultPrefix() {
 #ifdef __ANDROID__
-    return "vulkan.";
+    return "vulkan";
 #else
     return "";
 #endif
@@ -99,14 +99,14 @@ std::string GetEnvSettingName(const char *layer_key, const char *requested_prefi
 }
 
 char GetEnvDelimiter() {
-#ifdef WIN32 // a define is necessary because ':' is used for disk drives on Windows path
+#ifdef WIN32  // a define is necessary because ':' is used for disk drives on Windows path
     return ';';
 #else
     return ':';
 #endif
 }
 
-char FindDelimiter(const std::string& s) {
+char FindDelimiter(const std::string &s) {
     if (s.find(',') != std::string::npos) {
         return ',';
     } else if (s.find(GetEnvDelimiter()) != std::string::npos) {

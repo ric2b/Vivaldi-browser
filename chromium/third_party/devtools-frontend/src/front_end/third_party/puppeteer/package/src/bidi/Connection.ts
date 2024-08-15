@@ -1,17 +1,7 @@
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import type * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
@@ -21,6 +11,7 @@ import type {ConnectionTransport} from '../common/ConnectionTransport.js';
 import {debug} from '../common/Debug.js';
 import {EventEmitter} from '../common/EventEmitter.js';
 import {debugError} from '../common/util.js';
+import {assert} from '../util/assert.js';
 
 import {type BrowsingContext, cdpSessions} from './BrowsingContext.js';
 
@@ -97,6 +88,10 @@ export interface Commands {
     params: Bidi.BrowsingContext.SetViewportParameters;
     returnType: Bidi.EmptyResult;
   };
+  'browsingContext.traverseHistory': {
+    params: Bidi.BrowsingContext.TraverseHistoryParameters;
+    returnType: Bidi.EmptyResult;
+  };
 
   'input.performActions': {
     params: Bidi.Input.PerformActionsParameters;
@@ -107,6 +102,10 @@ export interface Commands {
     returnType: Bidi.EmptyResult;
   };
 
+  'session.end': {
+    params: Bidi.EmptyParams;
+    returnType: Bidi.EmptyResult;
+  };
   'session.new': {
     params: Bidi.Session.NewParameters;
     returnType: Bidi.Session.NewResult;
@@ -168,7 +167,7 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
 
     this.#transport = transport;
     this.#transport.onmessage = this.onMessage.bind(this);
-    this.#transport.onclose = this.#onClose.bind(this);
+    this.#transport.onclose = this.unbind.bind(this);
   }
 
   get closed(): boolean {
@@ -183,6 +182,8 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
     method: T,
     params: Commands[T]['params']
   ): Promise<{result: Commands[T]['returnType']}> {
+    assert(!this.#closed, 'Protocol error: Connection closed.');
+
     return this.#callbacks.create(method, this.#timeout, id => {
       const stringifiedMessage = JSON.stringify({
         id,
@@ -221,6 +222,12 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
           );
           return;
         case 'event':
+          if (isCdpEvent(object)) {
+            cdpSessions
+              .get(object.params.session)
+              ?.emit(object.params.event, object.params.params);
+            return;
+          }
           this.#maybeEmitOnContext(object);
           // SAFETY: We know the method and parameter still match here.
           this.emit(
@@ -229,6 +236,15 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
           );
           return;
       }
+    }
+    // Even if the response in not in BiDi protocol format but `id` is provided, reject
+    // the callback. This can happen if the endpoint supports CDP instead of BiDi.
+    if ('id' in object) {
+      this.#callbacks.reject(
+        (object as {id: number}).id,
+        `Protocol Error. Message is not in BiDi protocol format: '${message}'`,
+        object.message
+      );
     }
     debugError(object);
   }
@@ -244,10 +260,6 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
       event.params.source.context !== undefined
     ) {
       context = this.#browsingContexts.get(event.params.source.context);
-    } else if (isCdpEvent(event)) {
-      cdpSessions
-        .get(event.params.session)
-        ?.emit(event.params.event, event.params.params);
     }
     context?.emit(event.method, event.params);
   }
@@ -283,7 +295,12 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
     this.#browsingContexts.delete(id);
   }
 
-  #onClose(): void {
+  /**
+   * Unbinds the connection, but keeps the transport open. Useful when the transport will
+   * be reused by other connection e.g. with different protocol.
+   * @internal
+   */
+  unbind(): void {
     if (this.#closed) {
       return;
     }
@@ -292,11 +309,15 @@ export class BidiConnection extends EventEmitter<BidiEvents> {
     this.#transport.onmessage = () => {};
     this.#transport.onclose = () => {};
 
+    this.#browsingContexts.clear();
     this.#callbacks.clear();
   }
 
+  /**
+   * Unbinds the connection and closes the transport.
+   */
   dispose(): void {
-    this.#onClose();
+    this.unbind();
     this.#transport.close();
   }
 }

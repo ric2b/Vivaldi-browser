@@ -13,9 +13,13 @@
 // limitations under the License.
 
 #include <cstdlib>
-#include <filesystem>
+#include <filesystem>  // NOLINT
+#include <string>
 #include <string_view>
+#include <system_error>  // NOLINT
 
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "./centipede/logging.h"
 
@@ -55,6 +59,18 @@ std::filesystem::path GetDataDependencyFilepath(std::string_view rel_path) {
   CHECK(std::filesystem::exists(path))  //
       << "No such path: " << VV(path) << VV(runfiles_dir) << VV(rel_path);
   return path;
+}
+
+std::string GetLLVMSymbolizerPath() {
+  CHECK_EQ(system("which llvm-symbolizer"), EXIT_SUCCESS)
+      << "llvm-symbolizer has to be installed and findable via PATH";
+  return "llvm-symbolizer";
+}
+
+std::string GetObjDumpPath() {
+  CHECK_EQ(system("which objdump"), EXIT_SUCCESS)
+      << "objdump has to be installed and findable via PATH";
+  return "objdump";
 }
 
 void PrependDirToPathEnvvar(std::string_view dir) {

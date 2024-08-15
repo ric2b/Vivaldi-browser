@@ -55,6 +55,8 @@ constexpr int kInteriorGlanceableBubbleMargin = 16;
 constexpr int kAddNewButtonCornerRadius = 16;
 constexpr auto kAddNewTaskButtonMargins = gfx::Insets::TLBR(0, 0, 16, 0);
 constexpr auto kHeaderIconButtonMargins = gfx::Insets::TLBR(0, 0, 0, 4);
+constexpr int kFooterStartSpacing = 6;
+constexpr int kFooterVerticalSpacing = 7;
 
 constexpr char kTasksManagementPage[] =
     "https://calendar.google.com/calendar/u/0/r/week?opentasks=1";
@@ -93,9 +95,8 @@ std::unique_ptr<views::LabelButton> CreateAddNewTaskButton(
 
 }  // namespace
 
-TasksBubbleView::TasksBubbleView(DetailedViewDelegate* delegate,
-                                 ui::ListModel<api::TaskList>* task_list)
-    : GlanceablesTasksViewBase(delegate) {
+TasksBubbleView::TasksBubbleView(
+    const ui::ListModel<api::TaskList>* task_lists) {
   auto* layout_manager =
       SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout_manager
@@ -144,12 +145,12 @@ TasksBubbleView::TasksBubbleView(DetailedViewDelegate* delegate,
                               TasksLaunchSource::kHeaderButton),
           IconButton::Type::kMedium, &kGlanceablesTasksIcon,
           IDS_GLANCEABLES_TASKS_HEADER_ICON_ACCESSIBLE_NAME));
-  header_icon->SetBackgroundColorId(cros_tokens::kCrosSysBaseElevated);
+  header_icon->SetBackgroundColor(cros_tokens::kCrosSysBaseElevated);
   header_icon->SetProperty(views::kMarginsKey, kHeaderIconButtonMargins);
   header_icon->SetID(
       base::to_underlying(GlanceablesViewId::kTasksBubbleHeaderIcon));
 
-  tasks_combobox_model_ = std::make_unique<TasksComboboxModel>(task_list);
+  tasks_combobox_model_ = std::make_unique<TasksComboboxModel>(task_lists);
   task_list_combo_box_view_ = tasks_header_view_->AddChildView(
       std::make_unique<Combobox>(tasks_combobox_model_.get()));
   task_list_combo_box_view_->SetID(
@@ -174,6 +175,10 @@ TasksBubbleView::TasksBubbleView(DetailedViewDelegate* delegate,
                           TasksLaunchSource::kFooterButton)));
   list_footer_view_->SetID(
       base::to_underlying(GlanceablesViewId::kTasksBubbleListFooter));
+  list_footer_view_->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets::TLBR(kFooterVerticalSpacing, kFooterStartSpacing,
+                        kFooterVerticalSpacing, 0));
 
   ScheduleUpdateTasksList(/*initial_update=*/true);
 }
@@ -196,6 +201,10 @@ void TasksBubbleView::OnViewFocused(views::View* view) {
 
 void TasksBubbleView::ActionButtonPressed(TasksLaunchSource source) {
   RecordTasksLaunchSource(source);
+  if (source == TasksLaunchSource::kAddNewTaskButton &&
+      tasks_combobox_model_->GetItemCount() == 1) {
+    RecordAddTaskButtonUsageForNewTasksUsersTT(/*pressed=*/true);
+  }
   NewWindowDelegate::GetPrimary()->OpenUrl(
       GURL(kTasksManagementPage),
       NewWindowDelegate::OpenUrlFrom::kUserInteraction,
@@ -217,7 +226,7 @@ void TasksBubbleView::ScheduleUpdateTasksList(bool initial_update) {
   progress_bar_->UpdateProgressBarVisibility(/*visible=*/true);
   task_list_combo_box_view_->SetAccessibleDescription(u"");
 
-  api::TaskList* active_task_list = tasks_combobox_model_->GetTaskListAt(
+  const auto* const active_task_list = tasks_combobox_model_->GetTaskListAt(
       task_list_combo_box_view_->GetSelectedIndex().value());
   tasks_combobox_model_->SaveLastSelectedTaskList(active_task_list->id);
   Shell::Get()->glanceables_controller()->GetTasksClient()->GetTasks(
@@ -230,7 +239,7 @@ void TasksBubbleView::ScheduleUpdateTasksList(bool initial_update) {
 void TasksBubbleView::UpdateTasksList(const std::string& task_list_id,
                                       const std::string& task_list_title,
                                       bool initial_update,
-                                      ui::ListModel<api::Task>* tasks) {
+                                      const ui::ListModel<api::Task>* tasks) {
   if (initial_update) {
     base::UmaHistogramCounts100(
         "Ash.Glanceables.TimeManagement.TasksCountInDefaultTaskList",
@@ -255,9 +264,8 @@ void TasksBubbleView::UpdateTasksList(const std::string& task_list_id,
 
     if (num_tasks_shown_ < kMaximumTasks) {
       task_items_container_view_->AddChildView(
-          std::make_unique<GlanceablesTaskView>(
-              task.get(), mark_task_as_completed,
-              /*save_callback=*/base::DoNothing()));
+          std::make_unique<GlanceablesTaskView>(task.get(),
+                                                mark_task_as_completed));
       ++num_tasks_shown_;
     }
     ++num_tasks_;
@@ -266,7 +274,10 @@ void TasksBubbleView::UpdateTasksList(const std::string& task_list_id,
 
   const bool add_new_task_button_visible = (num_tasks_shown_ == 0);
   if (add_new_task_button_visible) {
-    RecordAddTaskButtonShown();
+    RecordAddTaskButtonShownForTT();
+    if (tasks_combobox_model_->GetItemCount() == 1) {
+      RecordAddTaskButtonUsageForNewTasksUsersTT(/*pressed=*/false);
+    }
     add_new_task_button_->SetVisible(true);
   } else {
     add_new_task_button_->SetVisible(false);

@@ -39,59 +39,211 @@ namespace centipede {
 // All such objects may be read synchronously by another thread,
 // hence the use of atomics.
 // These objects may also be accessed after all worker threads have joined.
+// TODO(ussuri): Too many atomics now: danger of grabbing stats half-way
+//  through updating in centipede.cc. Replace with a mutex instead.
 struct Stats {
-  std::atomic<uint64_t> unix_micros;
-  std::atomic<uint64_t> num_executions;
-  std::atomic<uint64_t> num_covered_pcs;
-  std::atomic<uint64_t> corpus_size;
-  std::atomic<uint64_t> max_corpus_element_size;
-  std::atomic<uint64_t> avg_corpus_element_size;
+  std::atomic<uint64_t> timestamp_unix_micros = 0;
 
-  enum class Aggregation { kMinMaxAvg, kMinMax };
+  // Performance.
+  std::atomic<uint64_t> fuzz_time_sec = 0;
+  std::atomic<uint64_t> num_executions = 0;
+  std::atomic<uint64_t> num_target_crashes = 0;
 
-  struct FieldInfo {
-    std::atomic<uint64_t> Stats::*field;
-    std::string_view name;
-    std::string_view description;
-    Aggregation aggregation;
+  // Coverage.
+  std::atomic<uint64_t> num_covered_pcs = 0;
+  std::atomic<uint64_t> num_8bit_counter_features = 0;
+  std::atomic<uint64_t> num_data_flow_features = 0;
+  std::atomic<uint64_t> num_cmp_features = 0;
+  std::atomic<uint64_t> num_call_stack_features = 0;
+  std::atomic<uint64_t> num_bounded_path_features = 0;
+  std::atomic<uint64_t> num_pc_pair_features = 0;
+  std::atomic<uint64_t> num_user_features = 0;
+  std::atomic<uint64_t> num_unknown_features = 0;
+  std::atomic<uint64_t> num_funcs_in_frontier = 0;
+
+  // Corpus & element sizes.
+  std::atomic<uint64_t> active_corpus_size = 0;
+  std::atomic<uint64_t> total_corpus_size = 0;
+  std::atomic<uint64_t> max_corpus_element_size = 0;
+  std::atomic<uint64_t> avg_corpus_element_size = 0;
+
+  // Rusage.
+  std::atomic<uint64_t> engine_rusage_avg_millicores = 0;
+  std::atomic<uint64_t> engine_rusage_cpu_percent = 0;
+  std::atomic<uint64_t> engine_rusage_rss_mb = 0;
+  std::atomic<uint64_t> engine_rusage_vsize_mb = 0;
+
+  using Traits = uint32_t;
+  enum TraitBits : Traits {
+    // The kind of the stat.
+    kTimestamp = 1UL << 0,
+    kFuzzStat = 1UL << 1,
+    kRUsageStat = 1UL << 2,
+
+    // The aggregate value(s) to report for the stat.
+    kMin = 1UL << 8,
+    kMax = 1UL << 9,
+    kAvg = 1UL << 10,
+    kSum = 1UL << 11,
   };
 
+  // Ascribes some properties to each stat. Used in `StatReporter` & subclasses.
+  struct FieldInfo {
+    std::atomic<uint64_t> Stats::*field;
+    // The machine-readable name of the field. Used in the CSV header.
+    std::string_view name;
+    // The human-readable description of the field. Used in logging.
+    std::string_view description;
+    Traits traits;
+  };
+
+  // WARNING!!! Before reordering these or changing the aggregation types,
+  // consider the backward compatibility implications for historical CSVs out
+  // there: if some end-user has a CSV post-processing step that relies on the
+  // old order or the aggregation type of the CSV fields, that step will break
+  // if either of those things change; if the post-processing step relies on the
+  // field names in the CSV header, than might break if those names change; etc.
+  // In other words: do not change the names or the order of the old fields
+  // without a very good reason.
   static constexpr std::initializer_list<FieldInfo> kFieldInfos = {
       {
           &Stats::num_covered_pcs,
           "NumCoveredPcs",
           "Coverage",
-          Aggregation::kMinMaxAvg,
+          kFuzzStat | kMin | kMax | kAvg,
       },
       {
           &Stats::num_executions,
           "NumExecs",
           "Number of executions",
-          Aggregation::kMinMaxAvg,
+          kFuzzStat | kMin | kMax | kAvg,
       },
       {
-          &Stats::corpus_size,
-          "CorpusSize",
-          "Corpus size",
-          Aggregation::kMinMaxAvg,
+          &Stats::active_corpus_size,
+          "ActiveCorpusSize",
+          "Active corpus size",
+          kFuzzStat | kMin | kMax | kAvg,
       },
       {
           &Stats::max_corpus_element_size,
           "MaxEltSize",
           "Max element size",
-          Aggregation::kMinMaxAvg,
+          kFuzzStat | kMin | kMax | kAvg,
       },
       {
           &Stats::avg_corpus_element_size,
           "AvgEltSize",
           "Avg element size",
-          Aggregation::kMinMaxAvg,
+          kFuzzStat | kMin | kMax | kAvg,
       },
       {
-          &Stats::unix_micros,
+          &Stats::timestamp_unix_micros,
           "UnixMicros",
           "Timestamp",
-          Aggregation::kMinMax,
+          kTimestamp | kMin | kMax,
+      },
+      {
+          &Stats::fuzz_time_sec,
+          "FuzzTimeSec",
+          "Fuzz time (sec)",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_target_crashes,
+          "NumProxyCrashes",
+          "Num proxy crashes",
+          kFuzzStat | kMin | kMax | kSum,
+      },
+      {
+          &Stats::total_corpus_size,
+          "TotalCorpusSize",
+          "Total corpus size",
+          kFuzzStat | kMin | kMax | kSum,
+      },
+      {
+          &Stats::num_8bit_counter_features,
+          "Num8BitCounterFts",
+          "Num 8-bit counter features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_data_flow_features,
+          "NumDataFlowFts",
+          "Num data flow features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_cmp_features,
+          "NumCmpFts",
+          "Num cmp features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_call_stack_features,
+          "NumCallStackFts",
+          "Num call stack features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_bounded_path_features,
+          "NumBoundedPathFts",
+          "Num bounded path features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_pc_pair_features,
+          "NumPcPairFts",
+          "Num PC pair features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_user_features,
+          "NumUserFts",
+          "Num user features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_unknown_features,
+          "NumUnknownFts",
+          "Num unknown features",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      {
+          &Stats::num_funcs_in_frontier,
+          "NumFuncsInFrontier",
+          "Num funcs in frontier",
+          kFuzzStat | kMin | kMax | kAvg,
+      },
+      // Rusage. Each shard of a run is a thread of the same process, but it
+      // measures the following metrics for the whole process. That means that
+      // all the shards should return more or less the same number for the same
+      // thing, sampling jitter and noise notwithstanding. Therefore, for the
+      // aggregate stat we use the upper bound of the samples.
+      // TODO(ussuri): Revise aggregation for CPU metrics once/if we start
+      // measuring them per-thread.
+      {
+          &Stats::engine_rusage_avg_millicores,
+          "EngineRusageAvgCores",
+          "Engine rusage avg cores",
+          kRUsageStat | kMax,
+      },
+      {
+          &Stats::engine_rusage_cpu_percent,
+          "EngineRusageCpuPct",
+          "Engine rusage CPU %",
+          kRUsageStat | kMax,
+      },
+      {
+          &Stats::engine_rusage_rss_mb,
+          "EngineRusageRssMb",
+          "Engine rusage RSS (MB)",
+          kRUsageStat | kMax,
+      },
+      {
+          &Stats::engine_rusage_vsize_mb,
+          "EngineRusageVSizeMb",
+          "Engine rusage VSize (MB)",
+          kRUsageStat | kMax,
       },
   };
 };
@@ -126,6 +278,11 @@ class StatsReporter {
   // `ReportCurrStats()`, that subclasses need to override to implement their
   // stats reporting.
 
+  // Should this field be reported or skipped for the particular type of
+  // reporting that the subclass does. Can use `field.traits` to determine that.
+  virtual bool ShouldReportThisField(const Stats::FieldInfo &field) {
+    return true;
+  }
   // Gives a chance to subclasses to learn ahead of time the fields for which
   // samples are going to be reported, in this order. Is called once.
   virtual void PreAnnounceFields(
@@ -171,6 +328,7 @@ class StatsLogger : public StatsReporter {
   ~StatsLogger() override = default;
 
  private:
+  bool ShouldReportThisField(const Stats::FieldInfo &field) override;
   void PreAnnounceFields(
       std::initializer_list<Stats::FieldInfo> fields) override;
   void SetCurrGroup(const Environment &master_env) override;
@@ -180,6 +338,7 @@ class StatsLogger : public StatsReporter {
   void ReportFlags(const GroupToFlags &group_to_flags) override;
 
   std::stringstream os_;
+  std::string curr_experiment_name_;
   Stats::FieldInfo curr_field_info_;
 };
 

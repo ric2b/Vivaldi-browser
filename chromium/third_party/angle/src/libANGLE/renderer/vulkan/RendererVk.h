@@ -121,23 +121,6 @@ void CollectGarbage(std::vector<vk::GarbageObject> *garbageOut, ArgT object, Arg
 // Recursive function to process variable arguments for garbage destroy
 inline void DestroyGarbage(RendererVk *renderer) {}
 
-class WaitableCompressEvent
-{
-  public:
-    WaitableCompressEvent(std::shared_ptr<angle::WaitableEvent> waitableEvent)
-        : mWaitableEvent(waitableEvent)
-    {}
-
-    virtual ~WaitableCompressEvent() {}
-
-    void wait() { return mWaitableEvent->wait(); }
-
-    bool isReady() { return mWaitableEvent->isReady(); }
-
-  private:
-    std::shared_ptr<angle::WaitableEvent> mWaitableEvent;
-};
-
 class OneOffCommandPool : angle::NonCopyable
 {
   public:
@@ -550,9 +533,7 @@ class RendererVk : angle::NonCopyable
 
     uint32_t getStagingBufferMemoryTypeIndex(vk::MemoryCoherency coherency) const
     {
-        return coherency == vk::MemoryCoherency::Coherent
-                   ? mCoherentStagingBufferMemoryTypeIndex
-                   : mNonCoherentStagingBufferMemoryTypeIndex;
+        return mStagingBufferMemoryTypeIndex[coherency];
     }
     size_t getStagingBufferAlignment() const { return mStagingBufferAlignment; }
 
@@ -934,9 +915,8 @@ class RendererVk : angle::NonCopyable
 
     // The default alignment for BufferVk object
     size_t mDefaultBufferAlignment;
-    // The cached memory type index for staging buffer that is host visible.
-    uint32_t mCoherentStagingBufferMemoryTypeIndex;
-    uint32_t mNonCoherentStagingBufferMemoryTypeIndex;
+    // The memory type index for staging buffer that is host visible.
+    angle::PackedEnumMap<vk::MemoryCoherency, uint32_t> mStagingBufferMemoryTypeIndex;
     size_t mStagingBufferAlignment;
     // For vertex conversion buffers
     uint32_t mHostVisibleVertexConversionBufferMemoryTypeIndex;
@@ -1024,7 +1004,7 @@ class RendererVk : angle::NonCopyable
     VkShaderStageFlags mSupportedVulkanShaderStageMask;
 
     // Use thread pool to compress cache data.
-    std::shared_ptr<rx::WaitableCompressEvent> mCompressEvent;
+    std::shared_ptr<angle::WaitableEvent> mCompressEvent;
 
     VulkanLayerVector mEnabledDeviceLayerNames;
     vk::ExtensionNameList mEnabledInstanceExtensions;

@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "base/containers/contains.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/system/sys_info.h"
@@ -98,13 +99,7 @@ gfx::Rect SafeIntersectRects(const gfx::Rect& one, const gfx::Rect& two) {
 }  // namespace
 
 PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl, int id)
-    : LayerImpl(tree_impl, id, /*will_always_push_properties=*/true),
-      is_backdrop_filter_mask_(false),
-      was_screen_space_transform_animating_(false),
-      only_used_low_res_last_append_quads_(false),
-      nearest_neighbor_(false),
-      raster_source_size_changed_(false),
-      directly_composited_image_default_raster_scale_changed_(false) {
+    : LayerImpl(tree_impl, id, /*will_always_push_properties=*/true) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
 }
 
@@ -468,11 +463,11 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
           // The raster_contents_scale_ is the best scale that the layer is
           // trying to produce, even though it may not be ideal. Since that's
           // the best the layer can promise in the future, consider those as
-          // complete. But if a tile is ideal scale, we don't want to consider
-          // it incomplete and trying to replace it with a tile at a worse
-          // scale.
+          // complete. Also consider a tile complete if it is ideal scale or
+          // better. Note that PLTS::CoverageIterator prefers the _smallest_
+          // scale that is >= ideal, which may be < raster_contents_scale_.
           if (iter->contents_scale_key() != raster_contents_scale_key() &&
-              iter->contents_scale_key() != ideal_contents_scale_key() &&
+              iter->contents_scale_key() < ideal_contents_scale_key() &&
               geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
             append_quads_data->num_incomplete_tiles++;
           }
@@ -1065,8 +1060,7 @@ bool PictureLayerImpl::ShouldAnimate(PaintImage::Id paint_image_id) const {
 }
 
 gfx::Size PictureLayerImpl::CalculateTileSize(const gfx::Size& content_bounds) {
-  content_bounds_ = content_bounds;
-  return tile_size_calculator_.CalculateTileSize();
+  return tile_size_calculator_.CalculateTileSize(content_bounds);
 }
 
 void PictureLayerImpl::GetContentsResourceId(
@@ -1678,7 +1672,8 @@ void PictureLayerImpl::AdjustRasterScaleForTransformAnimation(
 }
 
 void PictureLayerImpl::CleanUpTilingsOnActiveLayer(
-    const std::vector<PictureLayerTiling*>& used_tilings) {
+    const std::vector<raw_ptr<PictureLayerTiling, VectorExperimental>>&
+        used_tilings) {
   DCHECK(layer_tree_impl()->IsActiveTree());
   if (tilings_->num_tilings() == 0)
     return;
@@ -2126,9 +2121,9 @@ void PictureLayerImpl::SetPaintWorkletInputs(
     // Attempt to re-use an existing PaintRecord if possible.
     new_records[input] = std::make_pair(
         paint_image_id, std::move(paint_worklet_records_[input].second));
-    // The move constructor of absl::optional does not clear the source to
+    // The move constructor of std::optional does not clear the source to
     // nullopt.
-    paint_worklet_records_[input].second = absl::nullopt;
+    paint_worklet_records_[input].second = std::nullopt;
   }
   paint_worklet_records_.swap(new_records);
 
@@ -2150,15 +2145,19 @@ void PictureLayerImpl::SetPaintWorkletInputs(
 }
 
 void PictureLayerImpl::InvalidatePaintWorklets(
-    const PaintWorkletInput::PropertyKey& key) {
+    const PaintWorkletInput::PropertyKey& key,
+    const PaintWorkletInput::PropertyValue& prev,
+    const PaintWorkletInput::PropertyValue& next) {
   for (auto& entry : paint_worklet_records_) {
     const std::vector<PaintWorkletInput::PropertyKey>& prop_ids =
         entry.first->GetPropertyKeys();
     // If the PaintWorklet depends on the property whose value was changed by
     // the animation system, then invalidate its associated PaintRecord so that
     // we can repaint the PaintWorklet during impl side invalidation.
-    if (base::Contains(prop_ids, key))
+    if (base::Contains(prop_ids, key) &&
+        entry.first->ValueChangeShouldCauseRepaint(prev, next)) {
       entry.second.second = absl::nullopt;
+    }
   }
 }
 

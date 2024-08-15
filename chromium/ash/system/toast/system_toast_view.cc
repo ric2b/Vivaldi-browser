@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include "ash/accessibility/accessibility_controller.h"
+#include "ash/accessibility/scoped_a11y_override_window_setter.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/public/cpp/system/toast_data.h"

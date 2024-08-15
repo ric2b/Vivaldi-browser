@@ -61,15 +61,15 @@ void MemoryReducer::TimerTask::RunInternal() {
       false,
       low_allocation_rate || optimize_for_memory,
       heap->incremental_marking()->IsStopped() &&
-          (heap->incremental_marking()->CanBeStarted() || optimize_for_memory),
+          heap->incremental_marking()->CanBeStarted(),
   };
   memory_reducer_->NotifyTimer(event);
 }
 
 
 void MemoryReducer::NotifyTimer(const Event& event) {
+  if (state_.id() != kWait) return;
   DCHECK_EQ(kTimer, event.type);
-  DCHECK_EQ(kWait, state_.id());
   state_ = Step(state_, event);
   if (state_.id() == kRun) {
     DCHECK(heap()->incremental_marking()->IsStopped());
@@ -121,6 +121,7 @@ void MemoryReducer::NotifyMarkCompact(size_t committed_memory_before) {
 }
 
 void MemoryReducer::NotifyPossibleGarbage() {
+  if (!v8_flags.incremental_marking) return;
   const MemoryReducer::Event event{MemoryReducer::kPossibleGarbage,
                                    heap()->MonotonicallyIncreasingTimeInMs(),
                                    0,

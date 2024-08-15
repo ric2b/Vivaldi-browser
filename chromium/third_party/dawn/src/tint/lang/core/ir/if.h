@@ -31,6 +31,7 @@
 #include <string>
 
 #include "src/tint/lang/core/ir/control_instruction.h"
+#include "src/tint/utils/containers/const_propagating_ptr.h"
 
 // Forward declarations
 namespace tint::core::ir {
@@ -60,6 +61,9 @@ class If final : public Castable<If, ControlInstruction> {
     /// The index of the condition operand
     static constexpr size_t kConditionOperandOffset = 0;
 
+    /// Constructor (no results, no operands, no blocks)
+    If();
+
     /// Constructor
     /// @param cond the if condition
     /// @param t the true block
@@ -76,18 +80,33 @@ class If final : public Castable<If, ControlInstruction> {
     /// @returns the if condition
     Value* Condition() { return operands_[kConditionOperandOffset]; }
 
+    /// @returns the if condition
+    const Value* Condition() const { return operands_[kConditionOperandOffset]; }
+
     /// @returns the true block
     ir::Block* True() { return true_; }
+
+    /// @returns the true block
+    const ir::Block* True() const { return true_; }
+
+    /// @param block the new true block
+    void SetTrue(ir::Block* block);
 
     /// @returns the false block
     ir::Block* False() { return false_; }
 
+    /// @returns the false block
+    const ir::Block* False() const { return false_; }
+
+    /// @param block the new false block
+    void SetFalse(ir::Block* block);
+
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "if"; }
+    std::string FriendlyName() const override { return "if"; }
 
   private:
-    ir::Block* true_ = nullptr;
-    ir::Block* false_ = nullptr;
+    ConstPropagatingPtr<ir::Block> true_;
+    ConstPropagatingPtr<ir::Block> false_;
 };
 
 }  // namespace tint::core::ir

@@ -41,7 +41,7 @@ import {
 import { ValidationTest } from '../../validation_test.js';
 
 const kCommandValidationStages = ['finish', 'submit'];
-type CommandValidationStage = typeof kCommandValidationStages[number];
+type CommandValidationStage = (typeof kCommandValidationStages)[number];
 
 class DeviceDestroyTests extends ValidationTest {
   /**
@@ -704,10 +704,7 @@ Tests import external texture on destroyed device. Tests valid combinations of:
           entries: [
             {
               binding: 0,
-              resource: t.device.importExternalTexture({
-                /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-                source: source as any,
-              }),
+              resource: t.device.importExternalTexture({ source }),
             },
           ],
         });
@@ -899,7 +896,12 @@ Tests encoding and finishing a writeTimestamp command on destroyed device.
     const { type, stage, awaitLost } = t.params;
     const querySet = t.device.createQuerySet({ type, count: 2 });
     await t.executeCommandsAfterDestroy(stage, awaitLost, 'non-pass', maker => {
-      maker.encoder.writeTimestamp(querySet, 0);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (maker.encoder as any).writeTimestamp(querySet, 0);
+      } catch (ex) {
+        t.skipIf(ex instanceof TypeError, 'writeTimestamp is actually not available');
+      }
       return maker;
     });
   });
@@ -1124,7 +1126,7 @@ Tests copyExternalImageToTexture from canvas on queue on destroyed device.
       usage: GPUTextureUsage.COPY_DST,
     });
 
-    const ctx = ((canvas as unknown) as HTMLCanvasElement).getContext(contextType);
+    const ctx = (canvas as unknown as HTMLCanvasElement).getContext(contextType);
     if (ctx === null) {
       t.skip('Failed to get context for canvas element');
       return;

@@ -14,8 +14,9 @@ class AutofillAgentTestApi {
  public:
   explicit AutofillAgentTestApi(AutofillAgent* agent) : agent_(*agent) {}
 
-  void DidAddOrRemoveFormRelatedElementsDynamically() {
-    agent_->DidAddOrRemoveFormRelatedElementsDynamically();
+  FormTracker& form_tracker() { return *agent_->form_tracker_; }
+  void set_form_tracker(std::unique_ptr<FormTracker> form_tracker) {
+    agent_->form_tracker_ = std::move(form_tracker);
   }
 
  private:

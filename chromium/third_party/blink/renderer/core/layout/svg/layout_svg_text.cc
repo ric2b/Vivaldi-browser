@@ -7,10 +7,10 @@
 #include <limits>
 
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
+#include "third_party/blink/renderer/core/layout/block_node.h"
+#include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/inline/fragment_item.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_inline_text.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_container.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
@@ -76,11 +76,6 @@ void LayoutSVGText::WillBeDestroyed() {
 const char* LayoutSVGText::GetName() const {
   NOT_DESTROYED();
   return "LayoutSVGText";
-}
-
-bool LayoutSVGText::IsOfType(LayoutObjectType type) const {
-  NOT_DESTROYED();
-  return type == kLayoutObjectSVGText || LayoutSVGBlock::IsOfType(type);
 }
 
 bool LayoutSVGText::CreatesNewFormattingContext() const {
@@ -241,11 +236,11 @@ void LayoutSVGText::UpdateLayout() {
   const gfx::RectF old_boundaries = ObjectBoundingBox();
 
   const ComputedStyle& style = StyleRef();
-  NGConstraintSpaceBuilder builder(
+  ConstraintSpaceBuilder builder(
       style.GetWritingMode(), style.GetWritingDirection(),
       /* is_new_fc */ true, /* adjust_inline_size_if_needed */ false);
   builder.SetAvailableSize(LogicalSize());
-  NGBlockNode(this).Layout(builder.ToConstraintSpace());
+  BlockNode(this).Layout(builder.ToConstraintSpace());
 
   needs_update_bounding_box_ = true;
 
@@ -296,12 +291,11 @@ gfx::RectF LayoutSVGText::ObjectBoundingBox() const {
         continue;
       }
       for (const auto& item : fragment.Items()->Items()) {
-        if (item.Type() != FragmentItem::kSvgText) {
-          continue;
+        if (item.IsSvgText()) {
+          // Do not use item.RectInContainerFragment() in order to avoid
+          // precision loss.
+          bbox.Union(item.ObjectBoundingBox(*fragment.Items()));
         }
-        // Do not use item.RectInContainerFragment() in order to avoid
-        // precision loss.
-        bbox.Union(item.ObjectBoundingBox(*fragment.Items()));
       }
     }
     bounding_box_ = bbox;

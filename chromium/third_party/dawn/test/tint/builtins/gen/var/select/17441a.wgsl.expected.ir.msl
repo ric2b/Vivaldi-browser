@@ -1,0 +1,17 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void select_17441a() {
+  bool arg_2 = true;
+  float4 res = select(float4(1.0f), float4(1.0f), arg_2);
+}
+vertex float4 vertex_main() {
+  select_17441a();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  select_17441a();
+}
+kernel void compute_main() {
+  select_17441a();
+}

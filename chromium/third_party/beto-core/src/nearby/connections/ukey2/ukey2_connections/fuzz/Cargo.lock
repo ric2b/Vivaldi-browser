@@ -25,6 +25,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes-gcm"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "831010a0f742e1209b3bcea8fab6a8e149051ba6099432c8cb2cc117dec3ead1"
+dependencies = [
+ "aead",
+ "aes",
+ "cipher",
+ "ctr",
+ "ghash",
+ "subtle",
+]
+
+[[package]]
 name = "aes-gcm-siv"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,6 +350,9 @@ dependencies = [
 [[package]]
 name = "crypto_provider"
 version = "0.1.0"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "crypto_provider_rustcrypto"
@@ -343,6 +360,7 @@ version = "0.1.0"
 dependencies = [
  "aead",
  "aes",
+ "aes-gcm",
  "aes-gcm-siv",
  "cbc",
  "cfg-if",
@@ -372,9 +390,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.0.0-rc.3"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "436ace70fc06e06f7f689d2624dc4e2f0ea666efb5aa704215f7249ae6e047a7"
+checksum = "f711ade317dd348950a9910f81c5947e3d8907ebd2b83f76203ff1807e6a2bc2"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -394,7 +412,7 @@ checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn",
 ]
 
 [[package]]
@@ -408,17 +426,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "derive-getters"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0122f262bf9c9a367829da84f808d9fb128c10ef283bbe7b0922a77cf07b2747"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "derive_arbitrary"
 version = "1.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -426,7 +433,7 @@ checksum = "53e0efad4403bfc52dc201159c4b842a246a14b98c64b55dfd0f2d89729dfeb8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn",
 ]
 
 [[package]]
@@ -451,9 +458,9 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.0.0-rc.3"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faa8e9049d5d72bfc12acbc05914731b5322f79b5e2f195e9f2d705fca22ab4c"
+checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
@@ -552,6 +559,16 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "ghash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d930750de5717d2dd0b8c0d42c076c0e884c81a73e6cab859bbd2339c71e3e40"
+dependencies = [
+ "opaque-debug",
+ "polyval",
 ]
 
 [[package]]
@@ -1123,7 +1140,7 @@ checksum = "389894603bd18c46fa56231694f8d827779c0951a667087194cf9de94ed24682"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn",
 ]
 
 [[package]]
@@ -1159,17 +1176,6 @@ name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
-
-[[package]]
-name = "syn"
-version = "1.0.109"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
-dependencies = [
- "proc-macro2",
- "quote",
- "unicode-ident",
-]
 
 [[package]]
 name = "syn"
@@ -1219,7 +1225,7 @@ checksum = "463fe12d7993d3b327787537ce8dd4dfa058de32fc2b195ef3cde03dc4771e8f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn",
 ]
 
 [[package]]
@@ -1231,6 +1237,12 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "tinyvec"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87cc5ceb3875bb20c2890005a4e226a4651264a5c75edb2421b52861a0a0cb50"
 
 [[package]]
 name = "typenum"
@@ -1276,7 +1288,6 @@ name = "ukey2_rs"
 version = "0.1.0"
 dependencies = [
  "crypto_provider",
- "derive-getters",
  "log",
  "num-bigint",
  "rand",
@@ -1342,7 +1353,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn",
  "wasm-bindgen-shared",
 ]
 
@@ -1364,7 +1375,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.26",
+ "syn",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -1495,9 +1506,9 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 
 [[package]]
 name = "x25519-dalek"
-version = "2.0.0-rc.3"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec7fae07da688e17059d5886712c933bb0520f15eff2e09cfa18e30968f4e63a"
+checksum = "fb66477291e7e8d2b0ff1bcb900bf29489a9692816d79874bea351e7a8b6de96"
 dependencies = [
  "curve25519-dalek",
  "rand_core",

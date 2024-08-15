@@ -38,11 +38,11 @@ export class BezierEditor extends Common.ObjectWrapper.eventMixin<EventTypes, ty
 
     // Preview UI
     this.previewElement = this.contentElement.createChild('div', 'bezier-preview-container');
-    this.previewElement.setAttribute('jslog', `${VisualLogging.bezierPreview().track({click: true})}`);
+    this.previewElement.setAttribute('jslog', `${VisualLogging.preview().track({click: true})}`);
     this.previewElement.createChild('div', 'bezier-preview-animation');
     this.previewElement.addEventListener('click', this.startPreviewAnimation.bind(this));
     this.previewOnion = this.contentElement.createChild('div', 'bezier-preview-onion');
-    this.previewOnion.setAttribute('jslog', `${VisualLogging.bezierPreview().track({click: true})}`);
+    this.previewOnion.setAttribute('jslog', `${VisualLogging.preview().track({click: true})}`);
     this.previewOnion.addEventListener('click', this.startPreviewAnimation.bind(this));
 
     this.outerContainer = this.contentElement.createChild('div', 'bezier-container');
@@ -82,10 +82,10 @@ export class BezierEditor extends Common.ObjectWrapper.eventMixin<EventTypes, ty
     this.header = this.contentElement.createChild('div', 'bezier-header');
     const minus = this.createPresetModifyIcon(this.header, 'bezier-preset-minus', 'M 12 6 L 8 10 L 12 14');
     minus.addEventListener('click', this.presetModifyClicked.bind(this, false));
-    minus.setAttribute('jslog', `${VisualLogging.previous().track({click: true})}`);
+    minus.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('bezier.prev-preset')}`);
     const plus = this.createPresetModifyIcon(this.header, 'bezier-preset-plus', 'M 8 6 L 12 10 L 8 14');
     plus.addEventListener('click', this.presetModifyClicked.bind(this, true));
-    plus.setAttribute('jslog', `${VisualLogging.next().track({click: true})}`);
+    plus.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context('bezier.next-preset')}`);
     this.label = this.header.createChild('span', 'source-code bezier-display-value');
   }
 
@@ -226,9 +226,7 @@ export class BezierEditor extends Common.ObjectWrapper.eventMixin<EventTypes, ty
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
-export enum Events {
+export const enum Events {
   BezierChanged = 'BezierChanged',
 }
 

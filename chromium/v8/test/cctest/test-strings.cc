@@ -600,7 +600,7 @@ TEST(ConsStringWithEmptyFirstFlatten) {
       isolate->factory()->NewStringFromAsciiChecked("snd012345012345678");
   cons->set_first(*new_fst);
   cons->set_second(*new_snd);
-  CHECK(!cons->IsFlat(GetPtrComprCageBase(*cons)));
+  CHECK(!cons->IsFlat());
   CHECK_EQ(initial_length, new_fst->length() + new_snd->length());
   CHECK_EQ(initial_length, cons->length());
 
@@ -1689,16 +1689,16 @@ TEST(InvalidExternalString) {
     HandleScope scope(isolate);
     DummyOneByteResource r;
     CHECK(isolate->factory()->NewExternalStringFromOneByte(&r).is_null());
-    CHECK(isolate->has_pending_exception());
-    isolate->clear_pending_exception();
+    CHECK(isolate->has_exception());
+    isolate->clear_exception();
   }
 
   {
     HandleScope scope(isolate);
     DummyResource r;
     CHECK(isolate->factory()->NewExternalStringFromTwoByte(&r).is_null());
-    CHECK(isolate->has_pending_exception());
-    isolate->clear_pending_exception();
+    CHECK(isolate->has_exception());
+    isolate->clear_exception();
   }
 }
 
@@ -1716,8 +1716,8 @@ TEST(InvalidExternalString) {
               ->FUN(v8::base::Vector<const TYPE>::cast(dummy))           \
               .is_null());                                               \
     memset(dummy.begin(), 0x20, dummy.length() * sizeof(TYPE));          \
-    CHECK(isolate->has_pending_exception());                             \
-    isolate->clear_pending_exception();                                  \
+    CHECK(isolate->has_exception());                                     \
+    isolate->clear_exception();                                          \
     dummy.Dispose();                                                     \
   }
 

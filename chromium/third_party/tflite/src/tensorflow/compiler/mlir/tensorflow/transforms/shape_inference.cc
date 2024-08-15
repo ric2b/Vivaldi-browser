@@ -835,6 +835,11 @@ class ShapeInference {
   // Returns whether it was able to compute constant values.
   LogicalResult TryToFold(Operation* op);
 
+  // Forcely assign operand types to result types (the i-th operand type will
+  // assign to i-th result type). Returns true if anything is changed.
+  bool ForceTypeForPassThroughOperands(Operation* op, OperandRange operands,
+                                       ResultRange results);
+
   // Makes result types match the operand types (the i-th result type will
   // match the i-th operand type). Returns true if anything is changed.
   bool RefineTypeForPassThroughOperands(Operation* op, OperandRange operands,
@@ -1252,12 +1257,17 @@ bool ShapeInference::InferShapeForXlaCallModule(XlaCallModuleOp op) {
   if (!status.ok()) {
     LLVM_DEBUG(llvm::dbgs() << "Failed during XlaCallModule shape refinement: "
                             << status.ToString());
-    return false;
+    // RefineDynamicShapes returns ok only when it produces full static shapes.
+    // It may partially succeed by producing RankedTensor shapes with dynamic
+    // dimensions. Such info is still useful for the downstream. We don't need
+    // to abort here.
+    // TODO(b/316639984): improve RefineDynamicShapes return values to include
+    // these info.
   }
 
   bool changed = false;
   for (auto [result, type] :
-       llvm::zip(op.getResults(), loader->output_types())) {
+       llvm::zip(op.getResults(), loader->OutputTypes())) {
     auto ranked = type.dyn_cast<RankedTensorType>();
     if (ranked == nullptr) {
       LLVM_DEBUG(llvm::dbgs()
@@ -1891,7 +1901,8 @@ bool ShapeInference::InferShapeForXlaSelectAndScatterOp(
 
 bool ShapeInference::InferShapeForXlaGatherOp(XlaGatherOp op) {
   xla::Shape input_shape = xla::TypeToShape(op.getOperand().getType());
-  if (input_shape == xla::Shape()) return false;
+  if (input_shape == xla::Shape() || input_shape.is_unbounded_dynamic())
+    return false;
 
   xla::Shape start_indices_shape =
       xla::TypeToShape(op.getStartIndices().getType());
@@ -2288,6 +2299,23 @@ ShapeHandle ShapeInference::ComputeOutputAsShape(OpResult result,
   return ic->MakeShape(dims);
 }
 
+bool ShapeInference::ForceTypeForPassThroughOperands(Operation* op,
+                                                     OperandRange operands,
+                                                     ResultRange results) {
+  bool changed = false;
+  for (auto entry : llvm::zip(operands, results)) {
+    Type operand_type = std::get<0>(entry).getType();
+    Value result = std::get<1>(entry);
+    TensorType result_type = dyn_cast<TensorType>(result.getType());
+    if (result_type == operand_type) continue;
+
+    if (!UpdateTypeAndInsertIncompatibleUseCasts(operand_type, result))
+      continue;
+    changed = true;
+  }
+  return changed;
+}
+
 bool ShapeInference::RefineTypeForPassThroughOperands(Operation* op,
                                                       OperandRange operands,
                                                       ResultRange results) {
@@ -2323,14 +2351,14 @@ bool ShapeInference::RefineShapeForPassThroughOps(Operation* op) {
 
 bool ShapeInference::InferShapeForNonTFDialectOperation(Operation* op) {
   if (auto graph_op = dyn_cast<tf_executor::GraphOp>(op)) {
-    return RefineTypeForPassThroughOperands(graph_op.GetFetch(),
-                                            graph_op.GetFetch().getFetches(),
-                                            op->getResults());
+    return ForceTypeForPassThroughOperands(graph_op.GetFetch(),
+                                           graph_op.GetFetch().getFetches(),
+                                           op->getResults());
   }
   if (auto island_op = dyn_cast<tf_executor::IslandOp>(op)) {
-    return RefineTypeForPassThroughOperands(island_op.GetYield(),
-                                            island_op.GetYield().getFetches(),
-                                            op->getResults());
+    return ForceTypeForPassThroughOperands(island_op.GetYield(),
+                                           island_op.GetYield().getFetches(),
+                                           op->getResults());
   }
   if (auto iter_sink = dyn_cast<tf_executor::NextIterationSinkOp>(op)) {
     auto iter_source = cast<tf_executor::NextIterationSourceOp>(
@@ -2939,6 +2967,8 @@ LogicalResult ShapeInference::TryToFold(Operation* op) {
       RecordValue(ValuePort(std::get<0>(result)), attr);
     } else {
       auto value = fold_result.get<Value>();
+      assert(value.getType() == std::get<0>(result).getType() &&
+             "folder produced value of incorrect type");
       if ((attr = ComputeOutputComponent(ValuePort(value)))) {
         DCOMMENT("\t\tValue Result mapped to " << attr);
         RecordValue(ValuePort(std::get<0>(result)), attr);

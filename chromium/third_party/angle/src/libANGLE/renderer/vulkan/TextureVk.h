@@ -530,7 +530,9 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
     angle::Result maybeUpdateBaseMaxLevels(ContextVk *contextVk,
                                            TextureUpdateResult *changeResultOut);
 
-    bool isFastUnpackPossible(const vk::Format &vkFormat, size_t offset) const;
+    bool isFastUnpackPossible(const vk::Format &vkFormat,
+                              size_t offset,
+                              const vk::Format &bufferVkFormat) const;
 
     bool shouldUpdateBeStaged(gl::LevelIndex textureLevelIndexGL,
                               angle::FormatID dstFormatID) const;
@@ -566,6 +568,9 @@ class TextureVk : public TextureImpl, public angle::ObserverInterface
     vk::BufferHelper *getRGBAConversionBufferHelper(RendererVk *renderer,
                                                     angle::FormatID formatID) const;
     angle::Result convertBufferToRGBA(ContextVk *contextVk, size_t &conversionBufferSize);
+    bool isCompressedFormatEmulated(const gl::Context *context,
+                                    const gl::TextureTarget target,
+                                    GLint level);
 
     bool mOwnsImage;
     // Generated from ImageVk if EGLImage target, or from throw-away generator if Surface target.

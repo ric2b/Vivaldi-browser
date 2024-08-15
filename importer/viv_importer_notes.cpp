@@ -111,7 +111,8 @@ void OperaNotesReader::AddNote(
   entry.content = std::move(content);
   entry.path = current_folder;
   entry.url = GURL(url ? *url : std::string());
-  entry.creation_time = base::Time::FromTimeT(created_time);
+  entry.last_modification_time = entry.creation_time =
+      base::Time::FromTimeT(created_time);
 
   notes_.push_back(std::move(entry));
 }

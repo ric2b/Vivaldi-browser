@@ -113,17 +113,25 @@
   user-select: text;
 }
 
-.data-grid th {
-  text-align: left;
+.data-grid tr:has(th) {
   background-color: var(--sys-color-surface1);
+}
+
+.data-grid th {
   border-bottom: 1px solid var(--sys-color-divider);
+  text-align: left;
   font-weight: normal;
   vertical-align: middle;
 }
 
 .data-grid th:first-child,
 .data-grid td:first-child {
-  border-left: none !important; /* stylelint-disable-line declaration-no-important */
+  border-left-width: 0;
+}
+
+.data-grid tr.selected td,
+.data-grid tr.selected th {
+  border-left-color: var(--sys-color-divider-on-tonal-container);
 }
 
 .data-grid td > div,
@@ -163,12 +171,20 @@
 .data-grid th .sort-order-icon {
   margin-right: 4px;
   margin-bottom: -2px;
+  width: 14px;
+  height: 14px;
   display: none;
+  background-color: var(--icon-default);
 }
 
-.data-grid th.sort-ascending .sort-order-icon,
+.data-grid th.sort-ascending .sort-order-icon {
+  display: inline-block;
+  mask-image: var(--image-file-triangle-up);
+}
+
 .data-grid th.sort-descending .sort-order-icon {
-  display: block;
+  display: inline-block;
+  mask-image: var(--image-file-triangle-down);
 }
 
 .data-grid th.sort-ascending,
@@ -177,7 +193,7 @@
 }
 
 .data-grid th.sortable:hover {
-  background-color: var(--app-color-idle);
+  background-color: var(--sys-color-state-hover-on-subtle);
 }
 
 .data-grid .top-filler-td {
@@ -192,7 +208,7 @@
 
 .data-grid td.disclosure::before {
   user-select: none;
-  -webkit-mask-image: var(--image-file-triangle-right);
+  mask-image: var(--image-file-triangle-right);
   float: left;
   width: 14px;
   height: 14px;
@@ -212,10 +228,6 @@
   transform: rotate(90deg);
 }
 
-.data-grid tbody tr.revealed:hover {
-  background-color: var(--sys-color-state-hover-on-subtle);
-}
-
 .data-grid tbody tr.revealed.selected {
   background-color: var(--sys-color-neutral-container);
   color: inherit;
@@ -227,6 +239,10 @@
 
 .data-grid tbody tr.revealed:focus-within {
   background-color: var(--sys-color-tonal-container);
+}
+
+.data-grid tbody tr.revealed:not(.data-grid-filler-row):not(.selected):hover {
+  background-color: var(--sys-color-state-hover-on-subtle);
 }
 
 .data-grid tbody tr.revealed.selected.dirty {
@@ -290,10 +306,14 @@
 }
 
 @media (forced-colors: active) {
-  .sort-order-icon-container [is="ui-icon"].icon-mask,
-  .data-grid td.disclosure::before {
+  .sort-order-icon-container .sort-order-icon {
     forced-color-adjust: none;
     background-color: ButtonText;
+  }
+
+  .data-grid td.disclosure::before {
+    forced-color-adjust: none;
+    color: ButtonText;
   }
 
   .data-grid.no-selection:focus-visible * {
@@ -301,10 +321,13 @@
   }
 
   .data-grid th.sortable:hover *,
-  .data-grid th.sortable:hover .sort-order-icon-container [is="ui-icon"].icon-mask,
   .data-grid tr.parent.selected td.disclosure::before,
   .data-grid:focus tr.parent.selected td.disclosure::before,
   .data-grid tbody tr.parent.revealed:hover td.disclosure::before {
+    color: HighlightText;
+  }
+
+  .data-grid th.sortable:hover .sort-order-icon-container .sort-order-icon {
     background-color: HighlightText;
   }
 

@@ -270,8 +270,8 @@ source_set("winsparkle_no_gui") {
   ]
   public_deps = [
     "//base:base",
+    "//base/version_info:generate_version_info",
     "//chrome/installer/util:with_no_strings",
-    "//components/version_info:generate_version_info",
     "//crypto",
     "//url:url",
     "//vivaldi/update_notifier:generate_strings",

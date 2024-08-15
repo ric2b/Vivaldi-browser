@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ka">
+<translation id="2392002507524894126">საავტორო უფლებები <ph name="YEAR" /> Vivaldi Technologies AS. ყველა უფლება დაცულია.</translation>
+<translation id="2611953850925269349">გავიდე მაინც Vivaldi-დან?</translation>
+<translation id="2885378588091291677">ამოცანების მმართველი</translation>
+<translation id="3642991949832251880">გავიდე მაინც Vivaldi-დან?</translation>
+<translation id="4308441064174569580">Vivaldi-ში &amp;გახსნა</translation>
+<translation id="5167047459440711824">გაფრთხილება: Vivaldi ვერ შეუშლის ხელს გაფართოებებს ვების დათვალიერების ისტორიის შენახვაში. ამ გაფართოების ინკოგნიტო რეჟიმში გამოსართავად მოხსენით მონიშვნა ამ ვარიანტზე.</translation>
+<translation id="5288672417093782294">Vivaldi-ის გაფრთხილების პარამეტრებზე გადასვლა</translation>
+<translation id="5743878272102782872">ამოცანათა მმართველი - Vivaldi</translation>
+<translation id="6524604576097824284">როცა ჩართულია, Vivaldi არააქტიური ჩანართების მეხსიერება გამოათავისუფლებს. ეს ჩანართებს და თქვენს კომპიუტერზე გაშვებულ სხვა აპებს მეტ მეხსიერებას მისცემს და Vivaldi-ის მაღალ წარმადობას უზრუნველყოფს. თქვენი არააქტიური ჩანართები ისევ აქტიური გახდება, თუ მასზე გადართავთ. <ph name="BEGIN_LINK" />გაიგეთ მეტი<ph name="END_LINK" /></translation>
+<translation id="6569282126279967574">ეს რას ვხედავ! Vivaldi ავარიულად დასრულდა! გავუშვა თავიდან?</translation>
+<translation id="7642161109152167169">როცა ჩართულია, Vivaldi ელემენტის მუხტს ვიზუალური ეფექტების, როგორებიცაა რბილი გადახვევა და ვიდეოს კარების სიჩქარის და ფონური აქტივობების შეზღუდვა, ინახავს. <ph name="BEGIN_LINK" />გაიგეთ მეტი<ph name="END_LINK" /></translation>
+<translation id="8031581238030785388">Vivaldi-ის აპები</translation>
 </translationbundle>

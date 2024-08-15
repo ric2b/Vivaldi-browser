@@ -22,7 +22,6 @@ import "third_party/blink/public/mojom/loader/fetch_later.mojom";
 import "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom";
 import "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom";
 import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
-import "third_party/blink/public/mojom/loader/resource_cache.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_params.mojom";
 import "third_party/blink/public/mojom/permissions_policy/document_policy_feature.mojom";
 import "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom";
@@ -277,6 +276,13 @@ interface NavigationClient {
   // browser. These may be null if the NavigationThreadingOptimizations feature
   // is disabled. |cookie_manager_info| may also be null for non HTTP/HTTPS
   // navigations, or if the origin is opaque.
+  //
+  // The [SupportsUrgent] attribute enables marking this message as urgent by
+  // calling the method in an UrgentMessageScope. Urgent messages cause the
+  // renderer to prioritize the IPC task queue while there are urgent messages
+  // pending, which increases their priority while maintaining ordering
+  // guarantees. See also mojo/public/tools/bindings/README.md.
+  [SupportsUrgent]
   CommitNavigation(
       blink.mojom.CommonNavigationParams common_params,
       blink.mojom.CommitNavigationParams request_params,
@@ -295,7 +301,7 @@ interface NavigationClient {
       array<blink.mojom.ParsedPermissionsPolicyDeclaration>? permissions_policy,
       blink.mojom.PolicyContainer policy_container,
       pending_remote<blink.mojom.CodeCacheHost>? code_cache_host,
-      pending_remote<blink.mojom.ResourceCache>? resource_cache,
+      pending_remote<blink.mojom.CodeCacheHost>? code_cache_host_for_background,
       CookieManagerInfo? cookie_manager_info,
       StorageInfo? storage_info)
       => (DidCommitProvisionalLoadParams params,
@@ -313,6 +319,13 @@ interface NavigationClient {
   //
   // |info| contains values used to customise the error page. It may be null if
   // the page which displays an error should not be customized.
+  //
+  // The [SupportsUrgent] attribute enables marking this message as urgent by
+  // calling the method in an UrgentMessageScope. Urgent messages cause the
+  // renderer to prioritize the IPC task queue while there are urgent messages
+  // pending, which increases their priority while maintaining ordering
+  // guarantees. See also mojo/public/tools/bindings/README.md.
+  [SupportsUrgent]
   CommitFailedNavigation(
       blink.mojom.CommonNavigationParams common_params,
       blink.mojom.CommitNavigationParams request_params,

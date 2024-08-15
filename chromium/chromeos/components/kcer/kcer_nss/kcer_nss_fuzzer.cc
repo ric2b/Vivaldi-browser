@@ -27,6 +27,9 @@
 #include "net/test/cert_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/boringssl/src/pki/extended_key_usage.h"
+#include "third_party/boringssl/src/pki/input.h"
+#include "third_party/boringssl/src/pki/parse_certificate.h"
 #include "url/gurl.h"
 
 using testing::UnorderedElementsAreArray;
@@ -87,6 +90,8 @@ enum class Method {
   kGetAvailableTokens,
   kGetTokenInfo,
   kGetKeyInfo,
+  kGetKeyPermissions,
+  kGetCertProvisioningProfileId,
   kSetKeyNickname,
   kSetKeyPermissions,
   kSetCertProvisioningProfileId,
@@ -108,7 +113,7 @@ struct Environment {
     base::test::AllowCheckIsTestForTesting();
     base::CommandLine::Init(0, nullptr);
     TestTimeouts::Initialize();
-    logging::SetMinLogLevel(logging::LOG_FATAL);
+    logging::SetMinLogLevel(logging::LOGGING_FATAL);
   }
 };
 
@@ -169,7 +174,7 @@ struct FuzzKey {
   FuzzKey(PublicKey pub_key,
           Token token,
           KeyType type,
-          absl::optional<RsaModulusLength> rsa_key_size,
+          std::optional<RsaModulusLength> rsa_key_size,
           bool can_be_listed)
       : public_key(std::move(pub_key)),
         token(token),
@@ -192,7 +197,7 @@ struct FuzzKey {
   PublicKey public_key;
   Token token;
   KeyType key_type;
-  absl::optional<RsaModulusLength> rsa_key_size;
+  std::optional<RsaModulusLength> rsa_key_size;
   // Contains imported net::X509Certificate certs. The corresponding kcer::Cert
   // certs will be found on the next ListCerts (from the related token) and
   // pending certs will be "converted" into kcer::Cert certs and stored in
@@ -210,9 +215,9 @@ struct FuzzKey {
   // cases. Kcer-without-NSS won't do that. For now for simplicity the nickname
   // is only checked after a SetNickname() call, and not after importing certs.
   bool nickname_known = false;
-  absl::optional<std::string> nickname;
-  absl::optional<chaps::KeyPermissions> key_permissions;
-  absl::optional<std::string> cert_provisioning_profile_id;
+  std::optional<std::string> nickname;
+  std::optional<chaps::KeyPermissions> key_permissions;
+  std::optional<std::string> cert_provisioning_profile_id;
 };
 
 //==============================================================================
@@ -234,7 +239,7 @@ class CertGenerator {
   inline std::vector<uint8_t> GetBytes();
   inline GURL GetGurl();
   inline net::IPAddress GetIpAddress();
-  std::vector<net::KeyUsageBit> GetKeyUsages();
+  std::vector<bssl::KeyUsageBit> GetKeyUsages();
 
   void GenerateCert();
 
@@ -314,35 +319,35 @@ inline net::IPAddress CertGenerator::GetIpAddress() {
   }
 }
 
-std::vector<net::KeyUsageBit> CertGenerator::GetKeyUsages() {
-  std::vector<net::KeyUsageBit> result;
+std::vector<bssl::KeyUsageBit> CertGenerator::GetKeyUsages() {
+  std::vector<bssl::KeyUsageBit> result;
   uint16_t key_usages = data_provider_.ConsumeIntegral<uint16_t>();
-  if (key_usages & net::KEY_USAGE_BIT_DIGITAL_SIGNATURE) {
-    result.push_back(net::KEY_USAGE_BIT_DIGITAL_SIGNATURE);
+  if (key_usages & bssl::KEY_USAGE_BIT_DIGITAL_SIGNATURE) {
+    result.push_back(bssl::KEY_USAGE_BIT_DIGITAL_SIGNATURE);
   }
-  if (key_usages & net::KEY_USAGE_BIT_NON_REPUDIATION) {
-    result.push_back(net::KEY_USAGE_BIT_NON_REPUDIATION);
+  if (key_usages & bssl::KEY_USAGE_BIT_NON_REPUDIATION) {
+    result.push_back(bssl::KEY_USAGE_BIT_NON_REPUDIATION);
   }
-  if (key_usages & net::KEY_USAGE_BIT_KEY_ENCIPHERMENT) {
-    result.push_back(net::KEY_USAGE_BIT_KEY_ENCIPHERMENT);
+  if (key_usages & bssl::KEY_USAGE_BIT_KEY_ENCIPHERMENT) {
+    result.push_back(bssl::KEY_USAGE_BIT_KEY_ENCIPHERMENT);
   }
-  if (key_usages & net::KEY_USAGE_BIT_DATA_ENCIPHERMENT) {
-    result.push_back(net::KEY_USAGE_BIT_DATA_ENCIPHERMENT);
+  if (key_usages & bssl::KEY_USAGE_BIT_DATA_ENCIPHERMENT) {
+    result.push_back(bssl::KEY_USAGE_BIT_DATA_ENCIPHERMENT);
   }
-  if (key_usages & net::KEY_USAGE_BIT_KEY_AGREEMENT) {
-    result.push_back(net::KEY_USAGE_BIT_KEY_AGREEMENT);
+  if (key_usages & bssl::KEY_USAGE_BIT_KEY_AGREEMENT) {
+    result.push_back(bssl::KEY_USAGE_BIT_KEY_AGREEMENT);
   }
-  if (key_usages & net::KEY_USAGE_BIT_KEY_CERT_SIGN) {
-    result.push_back(net::KEY_USAGE_BIT_KEY_CERT_SIGN);
+  if (key_usages & bssl::KEY_USAGE_BIT_KEY_CERT_SIGN) {
+    result.push_back(bssl::KEY_USAGE_BIT_KEY_CERT_SIGN);
   }
-  if (key_usages & net::KEY_USAGE_BIT_CRL_SIGN) {
-    result.push_back(net::KEY_USAGE_BIT_CRL_SIGN);
+  if (key_usages & bssl::KEY_USAGE_BIT_CRL_SIGN) {
+    result.push_back(bssl::KEY_USAGE_BIT_CRL_SIGN);
   }
-  if (key_usages & net::KEY_USAGE_BIT_ENCIPHER_ONLY) {
-    result.push_back(net::KEY_USAGE_BIT_ENCIPHER_ONLY);
+  if (key_usages & bssl::KEY_USAGE_BIT_ENCIPHER_ONLY) {
+    result.push_back(bssl::KEY_USAGE_BIT_ENCIPHER_ONLY);
   }
-  if (key_usages & net::KEY_USAGE_BIT_DECIPHER_ONLY) {
-    result.push_back(net::KEY_USAGE_BIT_DECIPHER_ONLY);
+  if (key_usages & bssl::KEY_USAGE_BIT_DECIPHER_ONLY) {
+    result.push_back(bssl::KEY_USAGE_BIT_DECIPHER_ONLY);
   }
   return result;
 }
@@ -364,8 +369,8 @@ void CertGenerator::GenerateCert() {
                                                              issuer_.get());
   // Set some default values to increases the chances for a correct cert.
   cert_builder_->SetSignatureAlgorithm(
-      issuer_uses_rsa_key ? net::SignatureAlgorithm::kRsaPkcs1Sha256
-                          : net::SignatureAlgorithm::kEcdsaSha256);
+      issuer_uses_rsa_key ? bssl::SignatureAlgorithm::kRsaPkcs1Sha256
+                          : bssl::SignatureAlgorithm::kEcdsaSha256);
   auto now = base::Time::Now();
   cert_builder_->SetValidity(now, now + base::Days(30));
   cert_builder_->SetSubjectCommonName("SubjectCommonName");
@@ -379,7 +384,7 @@ void CertGenerator::GenerateCert() {
     // RFC 5280 guarantees that these values are from [0,2].
     int version = data_provider_.ConsumeIntegralInRange(0, 2);
     cert_builder_->SetCertificateVersion(
-        static_cast<net::CertificateVersion>(version));
+        static_cast<bssl::CertificateVersion>(version));
   }
   if (GetBool()) {
     cert_builder_->ClearExtensions();
@@ -389,7 +394,7 @@ void CertGenerator::GenerateCert() {
     std::string oid_str = GetString();
     std::string value = GetString();
     bool critical = GetBool();
-    cert_builder_->SetExtension(net::der::Input(oid_str), std::move(value),
+    cert_builder_->SetExtension(bssl::der::Input(oid_str), std::move(value),
                                 critical);
   }
   if (GetBool()) {
@@ -447,14 +452,14 @@ void CertGenerator::GenerateCert() {
     cert_builder_->SetSubjectAltNames(dns_names, ip_addresses);
   }
   if (GetBool()) {
-    std::vector<net::KeyUsageBit> key_usages = GetKeyUsages();
+    std::vector<bssl::KeyUsageBit> key_usages = GetKeyUsages();
     if (!key_usages.empty()) {  // Empty not allowed.
       cert_builder_->SetKeyUsages(key_usages);
     }
   }
   if (GetBool()) {
     std::vector<std::string> memory_holder;
-    std::vector<net::der::Input> purpose_oids;
+    std::vector<bssl::der::Input> purpose_oids;
     while (GetBool()) {
       memory_holder.push_back(GetString());
       purpose_oids.emplace_back(memory_holder.back());
@@ -478,11 +483,11 @@ void CertGenerator::GenerateCert() {
     cert_builder_->SetPolicyMappings(policy_mappings);
   }
   if (GetBool()) {
-    absl::optional<uint64_t> require_explicit_policy;
+    std::optional<uint64_t> require_explicit_policy;
     if (GetBool()) {
       require_explicit_policy = GetUint64();
     }
-    absl::optional<uint64_t> inhibit_policy_mapping;
+    std::optional<uint64_t> inhibit_policy_mapping;
     if (GetBool()) {
       inhibit_policy_mapping = GetUint64();
     }
@@ -505,7 +510,7 @@ void CertGenerator::GenerateCert() {
   }
   if (GetBool()) {
     cert_builder_->SetSignatureAlgorithm(
-        data_provider_.ConsumeEnum<net::SignatureAlgorithm>());
+        data_provider_.ConsumeEnum<bssl::SignatureAlgorithm>());
   }
   if (GetBool()) {
     cert_builder_->SetSignatureAlgorithmTLV(GetString());
@@ -548,6 +553,8 @@ class KcerFuzzer {
   void RunGetAvailableTokens();
   void RunGetTokenInfo();
   void RunGetKeyInfo();
+  void RunGetKeyPermissions();
+  void RunGetCertProvisioningProfileId();
   void RunSetKeyNickname();
   void RunSetKeyPermissions();
   void RunSetCertProvisioningProfileId();
@@ -667,6 +674,10 @@ void KcerFuzzer::RunNextMethod() {
       return RunGetTokenInfo();
     case Method::kGetKeyInfo:
       return RunGetKeyInfo();
+    case Method::kGetKeyPermissions:
+      return RunGetKeyPermissions();
+    case Method::kGetCertProvisioningProfileId:
+      return RunGetCertProvisioningProfileId();
     case Method::kSetKeyNickname:
       return RunSetKeyNickname();
     case Method::kSetKeyPermissions:
@@ -735,7 +746,7 @@ void KcerFuzzer::RunGenerateEcKey() {
 
   kcer_data_.emplace(std::move(spki),
                      FuzzKey(std::move(public_key), token, KeyType::kEcc,
-                             /*rsa_key_size=*/absl::nullopt,
+                             /*rsa_key_size=*/std::nullopt,
                              /*can_be_listed=*/true));
 }
 
@@ -745,8 +756,7 @@ void KcerFuzzer::RunImportKey() {
   std::vector<uint8_t> pkcs8_key;
   bool good_key_is_used = false;
   if (!example_pkcs8_key_used_ && data_provider_.ConsumeBool()) {
-    absl::optional<std::vector<uint8_t>> key_der =
-        base::Base64Decode(kPkcs8Key);
+    std::optional<std::vector<uint8_t>> key_der = base::Base64Decode(kPkcs8Key);
     ASSERT_TRUE(key_der.has_value());
     pkcs8_key = std::move(key_der).value();
     example_pkcs8_key_used_ = true;
@@ -772,7 +782,7 @@ void KcerFuzzer::RunImportKey() {
 
     kcer_data_.emplace(std::move(spki),
                        FuzzKey(std::move(public_key), token, KeyType::kRsa,
-                               /*rsa_key_size=*/absl::nullopt,
+                               /*rsa_key_size=*/std::nullopt,
                                /*can_be_listed=*/false));
     return;
   }
@@ -1275,13 +1285,11 @@ void KcerFuzzer::RunGetKeyInfo() {
                        key_handle.GetTokenInternal().value()))) {
     ASSERT_FALSE(key_info_waiter.Get().has_value());
     EXPECT_EQ(key_info_waiter.Get().error(), Error::kTokenIsNotAvailable);
-
     return;
   }
 
   if (!expected_key) {
     EXPECT_FALSE(key_info_waiter.Get().has_value());
-
     return;
   }
   ASSERT_TRUE(key_info_waiter.Get().has_value());
@@ -1294,9 +1302,60 @@ void KcerFuzzer::RunGetKeyInfo() {
   if (expected_key->nickname_known) {
     EXPECT_EQ(key_info.nickname, expected_key->nickname);
   }
-  EXPECT_TRUE(KeyPermissionsEqual(key_info.key_permissions,
+}
+
+void KcerFuzzer::RunGetKeyPermissions() {
+  FuzzKey* expected_key = nullptr;
+  PrivateKeyHandle key_handle = GeneratePrivateKeyHandle(&expected_key);
+
+  base::test::TestFuture<
+      base::expected<std::optional<chaps::KeyPermissions>, Error>>
+      key_permissions_waiter;
+  kcer_->GetKeyPermissions(key_handle, key_permissions_waiter.GetCallback());
+
+  if (available_tokens_.empty() ||
+      (key_handle.GetTokenInternal().has_value() &&
+       !base::Contains(available_tokens_,
+                       key_handle.GetTokenInternal().value()))) {
+    ASSERT_FALSE(key_permissions_waiter.Get().has_value());
+    EXPECT_EQ(key_permissions_waiter.Get().error(),
+              Error::kTokenIsNotAvailable);
+    return;
+  }
+
+  if (!expected_key) {
+    EXPECT_FALSE(key_permissions_waiter.Get().has_value());
+    return;
+  }
+  ASSERT_TRUE(key_permissions_waiter.Get().has_value());
+  EXPECT_TRUE(KeyPermissionsEqual(key_permissions_waiter.Get().value(),
                                   expected_key->key_permissions));
-  EXPECT_EQ(key_info.cert_provisioning_profile_id,
+}
+
+void KcerFuzzer::RunGetCertProvisioningProfileId() {
+  FuzzKey* expected_key = nullptr;
+  PrivateKeyHandle key_handle = GeneratePrivateKeyHandle(&expected_key);
+
+  base::test::TestFuture<base::expected<std::optional<std::string>, Error>>
+      cert_prov_waiter;
+  kcer_->GetCertProvisioningProfileId(key_handle,
+                                      cert_prov_waiter.GetCallback());
+
+  if (available_tokens_.empty() ||
+      (key_handle.GetTokenInternal().has_value() &&
+       !base::Contains(available_tokens_,
+                       key_handle.GetTokenInternal().value()))) {
+    ASSERT_FALSE(cert_prov_waiter.Get().has_value());
+    EXPECT_EQ(cert_prov_waiter.Get().error(), Error::kTokenIsNotAvailable);
+    return;
+  }
+
+  if (!expected_key) {
+    EXPECT_FALSE(cert_prov_waiter.Get().has_value());
+    return;
+  }
+  ASSERT_TRUE(cert_prov_waiter.Get().has_value());
+  EXPECT_EQ(cert_prov_waiter.Get().value(),
             expected_key->cert_provisioning_profile_id);
 }
 

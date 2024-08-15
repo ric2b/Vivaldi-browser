@@ -19,14 +19,14 @@ import {TimelineSelection} from './TimelineSelection.js';
 export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.FlameChartDataProvider {
   #minimumBoundaryInternal: number;
   #timeSpan: number;
-  #events: TraceEngine.Types.TraceEvents.TraceEventSyntheticNetworkRequest[];
+  #events: TraceEngine.Types.TraceEvents.SyntheticNetworkRequest[];
   #maxLevel: number;
   #networkTrackAppender: NetworkTrackAppender|null;
 
   #timelineDataInternal?: PerfUI.FlameChart.FlameChartTimelineData|null;
   #lastSelection?: Selection;
   #priorityToValue?: Map<string, number>;
-  #traceEngineData: TraceEngine.Handlers.Migration.PartialTraceData|null;
+  #traceEngineData: TraceEngine.Handlers.Types.TraceParseData|null;
   constructor() {
     this.#minimumBoundaryInternal = 0;
     this.#timeSpan = 0;
@@ -37,7 +37,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
     this.#traceEngineData = null;
   }
 
-  setModel(traceEngineData: TraceEngine.Handlers.Migration.PartialTraceData|null): void {
+  setModel(traceEngineData: TraceEngine.Handlers.Types.TraceParseData|null): void {
     this.#timelineDataInternal = null;
     this.#traceEngineData = traceEngineData;
     this.#events = traceEngineData?.NetworkRequests.byTime || [];
@@ -149,7 +149,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
    * @returns the pixels to draw waiting time and left and right whiskers and url text
    */
   getDecorationPixels(
-      event: TraceEngine.Types.TraceEvents.TraceEventSyntheticNetworkRequest, unclippedBarX: number,
+      event: TraceEngine.Types.TraceEvents.SyntheticNetworkRequest, unclippedBarX: number,
       timeToPixelRatio: number): {sendStart: number, headersEnd: number, finish: number, start: number, end: number} {
     const beginTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(event.ts);
     const timeToPixel = (time: number): number => Math.floor(unclippedBarX + (time - beginTime) * timeToPixelRatio);
@@ -302,7 +302,7 @@ export class TimelineFlameChartNetworkDataProvider implements PerfUI.FlameChart.
    * Sets the minimum time and total time span of a trace using the
    * new engine data.
    */
-  #setTimingBoundsData(newTraceEngineData: TraceEngine.Handlers.Migration.PartialTraceData): void {
+  #setTimingBoundsData(newTraceEngineData: TraceEngine.Handlers.Types.TraceParseData): void {
     const {traceBounds} = newTraceEngineData.Meta;
     const minTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceBounds.min);
     const maxTime = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(traceBounds.max);

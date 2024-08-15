@@ -24,4 +24,8 @@ declare_args() {
   vivaldi_net_oauth_client_id = ""
   # Fastmail OAuth client id
   vivaldi_fastmail_oauth_client_id = ""
+  # AOL OAuth client ID
+  vivaldi_aol_oauth_client_id = ""
+  # AOL OAuth client secret
+  vivaldi_aol_oauth_client_secret = ""
 }

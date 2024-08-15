@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/memory/weak_ptr.h"
@@ -54,12 +55,10 @@ class FakeWebState : public WebState {
   base::WeakPtr<WebState> GetWeakPtr() override;
   void OpenURL(const OpenURLParams& params) override {}
   void LoadSimulatedRequest(const GURL& url,
-                            NSString* response_html_string) override
-      API_AVAILABLE(ios(15.0));
+                            NSString* response_html_string) override;
   void LoadSimulatedRequest(const GURL& url,
                             NSData* response_data,
-                            NSString* mime_type) override
-      API_AVAILABLE(ios(15.0));
+                            NSString* mime_type) override;
   void Stop() override {}
   const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;
@@ -88,7 +87,7 @@ class FakeWebState : public WebState {
   int GetNavigationItemCount() const override;
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
-  absl::optional<GURL> GetLastCommittedURLIfTrusted() const override;
+  std::optional<GURL> GetLastCommittedURLIfTrusted() const override;
   CRWWebViewProxyType GetWebViewProxy() const override;
 
   void AddObserver(WebStateObserver* observer) override;
@@ -100,17 +99,14 @@ class FakeWebState : public WebState {
   bool SetSessionStateData(NSData* data) override;
   NSData* SessionStateData() override;
 
-  PermissionState GetStateForPermission(Permission permission) const override
-      API_AVAILABLE(ios(15.0));
+  PermissionState GetStateForPermission(Permission permission) const override;
   void SetStateForPermission(PermissionState state,
-                             Permission permission) override
-      API_AVAILABLE(ios(15.0));
+                             Permission permission) override;
   NSDictionary<NSNumber*, NSNumber*>* GetStatesForAllPermissions()
-      const override API_AVAILABLE(ios(15.0));
+      const override;
   void DownloadCurrentPage(NSString* destination_file,
                            id<CRWWebViewDownloadDelegate> delegate,
-                           void (^handler)(id<CRWWebViewDownload>)) override
-      API_AVAILABLE(ios(14.5));
+                           void (^handler)(id<CRWWebViewDownload>)) override;
   bool IsFindInteractionSupported() final;
   bool IsFindInteractionEnabled() final;
   void SetFindInteractionEnabled(bool enabled) final;
@@ -125,7 +121,7 @@ class FakeWebState : public WebState {
   bool HasOpener() const override;
   void SetHasOpener(bool has_opener) override;
   bool CanTakeSnapshot() const override;
-  void TakeSnapshot(const gfx::RectF& rect, SnapshotCallback callback) override;
+  void TakeSnapshot(const CGRect rect, SnapshotCallback callback) override;
   void CreateFullPagePdf(base::OnceCallback<void(NSData*)> callback) override;
   void CloseMediaPresentations() override;
 

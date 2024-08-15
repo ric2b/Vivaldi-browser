@@ -12,11 +12,13 @@
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
+#include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "skia/ext/rgba_to_yuva.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -40,6 +42,7 @@
 #include "third_party/skia/include/gpu/graphite/Recorder.h"
 #include "third_party/skia/include/gpu/graphite/YUVABackendTextures.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 
 namespace gpu {
 
@@ -452,12 +455,13 @@ base::expected<void, GLError> CopySharedImageHelper::ConvertRGBAToYUVAMailboxes(
   SkSurface* yuva_sk_surfaces[SkYUVAInfo::kMaxPlanes];
   for (int i = 0; i < num_yuva_planes; ++i) {
     yuva_sk_surfaces[i] = yuva_scoped_access[i]->surface();
-    if (!begin_semaphores.empty()) {
-      bool ret = yuva_sk_surfaces[i]->wait(begin_semaphores.size(),
-                                           begin_semaphores.data(),
-                                           /*deleteSemaphoresAfterWait=*/false);
-      DCHECK(ret);
-    }
+  }
+  if (!begin_semaphores.empty()) {
+    GrDirectContext* direct_context = shared_context_state_->gr_context();
+    bool ret =
+        direct_context->wait(begin_semaphores.size(), begin_semaphores.data(),
+                             /*deleteSemaphoresAfterWait=*/false);
+    DCHECK(ret);
   }
 
   SkYUVAInfo yuva_info(rgba_sk_image->dimensions(), dst_plane_config,
@@ -829,9 +833,10 @@ base::expected<void, GLError> CopySharedImageHelper::CopySharedImage(
       source_scoped_access = source_shared_image->BeginScopedReadAccess(
           &begin_semaphores, &end_semaphores);
   if (!begin_semaphores.empty()) {
-    bool ret = dest_scoped_access->surface()->wait(
-        begin_semaphores.size(), begin_semaphores.data(),
-        /*deleteSemaphoresAfterWait=*/false);
+    GrDirectContext* direct_context = shared_context_state_->gr_context();
+    bool ret =
+        direct_context->wait(begin_semaphores.size(), begin_semaphores.data(),
+                             /*deleteSemaphoresAfterWait=*/false);
     DCHECK(ret);
   }
   if (!source_scoped_access) {
@@ -1081,16 +1086,8 @@ base::expected<void, GLError> CopySharedImageHelper::ReadPixels(
                                     "Couldn't create SkImage for reading."));
   }
 
-  gfx::Size src_size = source_shared_image->size();
-  gfx::Rect src_rect(src_x, src_y, dst_info.width(), dst_info.height());
-  if (!gfx::Rect(src_size).Contains(src_rect)) {
-    source_scoped_access->ApplyBackendSurfaceEndState();
-    SubmitIfNecessary(std::move(end_semaphores), shared_context_state_,
-                      is_drdc_enabled_);
-    return base::unexpected(GLError(GL_INVALID_VALUE, "glReadbackImagePixels",
-                                    "source shared image bad dimensions."));
-  }
-
+  // TODO(crbug.com/1502623): Add back src_rect validation once renderer passes
+  // a correct rect size.
   bool success = false;
   if (gr_context) {
     success = sk_image->readPixels(gr_context, dst_info, pixel_address,
@@ -1098,6 +1095,7 @@ base::expected<void, GLError> CopySharedImageHelper::ReadPixels(
   } else {
     CHECK(shared_context_state_->graphite_context());
     ReadPixelsContext context;
+    gfx::Rect src_rect(src_x, src_y, dst_info.width(), dst_info.height());
     shared_context_state_->graphite_context()->asyncRescaleAndReadPixels(
         sk_image.get(), dst_info, RectToSkIRect(src_rect),
         SkImage::RescaleGamma::kSrc, SkImage::RescaleMode::kRepeatedLinear,

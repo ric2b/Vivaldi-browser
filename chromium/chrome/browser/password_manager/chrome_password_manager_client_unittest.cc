@@ -50,11 +50,11 @@
 #include "components/password_manager/core/browser/credential_cache.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/mock_password_manager_settings_service.h"
-#include "components/password_manager/core/browser/mock_password_store_interface.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/password_store_consumer.h"
+#include "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
+#include "components/password_manager/core/browser/password_store/password_store_consumer.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/sessions/content/content_record_password_state.h"
@@ -92,8 +92,10 @@
 #include "chrome/browser/autofill/mock_manual_filling_controller.h"
 #include "chrome/browser/autofill/mock_manual_filling_view.h"
 #include "chrome/browser/autofill/mock_password_accessory_controller.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/android/password_accessory_controller_impl.h"
 #include "chrome/browser/password_manager/android/password_generation_controller.h"
+#include "chrome/browser/password_manager/android/password_manager_android_util.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 using autofill::CalculateFormSignature;
@@ -1218,7 +1220,7 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
   PasswordGenerationController* pwd_generation_controller =
       PasswordGenerationController::GetOrCreate(web_contents());
   pwd_generation_controller->FocusedInputChanged(
-      FocusedFieldType::kFillablePasswordField, base::AsWeakPtr(driver.get()));
+      FocusedFieldType::kFillablePasswordField, driver->AsWeakPtrImpl());
 
   ChromePasswordManagerClient* client = GetClient();
 
@@ -1314,8 +1316,8 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
   driver->GetPasswordManager()->OnPasswordFormsParsed(driver.get(),
                                                       {observed_form_data});
 
-  std::vector<std::unique_ptr<PasswordForm>> forms;
-  forms.push_back(MakePasswordForm());
+  std::vector<PasswordForm> forms;
+  forms.push_back(*MakePasswordForm());
   store_consumer->OnGetPasswordStoreResultsOrErrorFrom(mock_store,
                                                        std::move(forms));
 
@@ -1462,4 +1464,80 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
   EXPECT_CALL(settings_service(), RequestSettingsFromBackend);
   GetClient()->RefreshPasswordManagerSettingsIfNeeded();
 }
+
+class ChromePasswordManagerClientWithAccountStoreAndroidTest
+    : public ChromePasswordManagerClientAndroidTest {
+  void SetUp() override {
+    // Using the account store on Android also requires UPM support for local
+    // passwords.
+    feature_list_.InitWithFeatures(
+        {password_manager::features::kEnablePasswordsAccountStorage,
+         password_manager::features::
+             kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration,
+         password_manager::features::kSharedPasswordNotificationUI},
+        {});
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        password_manager_android_util::
+            kSkipLocalUpmGmsCoreVersionCheckForTesting);
+
+    ChromePasswordManagerClientAndroidTest::SetUp();
+
+    AccountPasswordStoreFactory::GetInstance()->SetTestingFactory(
+        GetBrowserContext(),
+        base::BindRepeating(
+            &password_manager::BuildPasswordStoreInterface<
+                content::BrowserContext, MockPasswordStoreInterface>));
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(ChromePasswordManagerClientWithAccountStoreAndroidTest,
+       MarkSharedCredentialsAsNotified) {
+  GURL kURL = GURL("https://example.com");
+  auto origin = url::Origin::Create(kURL);
+  auto not_shared = MakePasswordForm();
+  not_shared->username_value = u"not_shared";
+
+  auto shared_and_notified = MakePasswordForm();
+  shared_and_notified->username_value = u"shared_and_notified";
+  shared_and_notified->type = PasswordForm::Type::kReceivedViaSharing;
+  shared_and_notified->sharing_notification_displayed = true;
+
+  auto shared_not_notified_profile = MakePasswordForm();
+  shared_not_notified_profile->username_value = u"shared_not_notified_profile";
+  shared_not_notified_profile->type = PasswordForm::Type::kReceivedViaSharing;
+  shared_not_notified_profile->sharing_notification_displayed = false;
+  shared_not_notified_profile->in_store = PasswordForm::Store::kProfileStore;
+
+  auto shared_not_notified_account = MakePasswordForm();
+  shared_not_notified_account->username_value = u"shared_not_notified_account";
+  shared_not_notified_account->type = PasswordForm::Type::kReceivedViaSharing;
+  shared_not_notified_account->sharing_notification_displayed = false;
+  shared_not_notified_account->in_store = PasswordForm::Store::kAccountStore;
+
+  GetClient()
+      ->GetCredentialCacheForTesting()
+      ->SaveCredentialsAndBlocklistedForOrigin(
+          {not_shared.get(), shared_and_notified.get(),
+           shared_not_notified_profile.get(),
+           shared_not_notified_account.get()},
+          CredentialCache::IsOriginBlocklisted(false), origin);
+
+  MockPasswordStoreInterface* profile_store =
+      static_cast<MockPasswordStoreInterface*>(
+          GetClient()->GetProfilePasswordStore());
+
+  MockPasswordStoreInterface* account_store =
+      static_cast<MockPasswordStoreInterface*>(
+          GetClient()->GetAccountPasswordStore());
+
+  shared_not_notified_profile->sharing_notification_displayed = true;
+  shared_not_notified_account->sharing_notification_displayed = true;
+  EXPECT_CALL(*profile_store, UpdateLogin(*shared_not_notified_profile, _));
+  EXPECT_CALL(*account_store, UpdateLogin(*shared_not_notified_account, _));
+  GetClient()->MarkSharedCredentialsAsNotified(kURL);
+}
+
 #endif  //  BUILDFLAG(IS_ANDROID)

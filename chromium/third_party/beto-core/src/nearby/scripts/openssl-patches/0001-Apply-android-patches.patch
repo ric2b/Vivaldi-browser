@@ -1,0 +1,1017 @@
+From 5c9103f02cb56f0f04444b16dd67eeaa05429d47 Mon Sep 17 00:00:00 2001
+From: Nabil Wadih <nwadih@google.com>
+Date: Thu, 24 Aug 2023 15:51:26 -0700
+Subject: [PATCH] Apply android patches
+
+---
+ openssl/.cargo/config.toml |   2 +
+ openssl/src/asn1.rs        |   2 +-
+ openssl/src/bio.rs         |   6 +-
+ openssl/src/bn.rs          |   2 +-
+ openssl/src/cipher.rs      |   4 +
+ openssl/src/dh.rs          |   2 +-
+ openssl/src/dsa.rs         |   5 +-
+ openssl/src/ec.rs          |  20 ++++
+ openssl/src/ecdsa.rs       |   2 +-
+ openssl/src/encrypt.rs     |   4 +-
+ openssl/src/hash.rs        |   2 +-
+ openssl/src/hkdf.rs        |  89 +++++++++++++++
+ openssl/src/hmac.rs        | 217 +++++++++++++++++++++++++++++++++++++
+ openssl/src/lib.rs         |  12 ++
+ openssl/src/md_ctx.rs      |   2 +-
+ openssl/src/pkey.rs        |  22 ++--
+ openssl/src/pkey_ctx.rs    |  21 +++-
+ openssl/src/rsa.rs         |   2 +-
+ openssl/src/sign.rs        |  10 +-
+ openssl/src/symm.rs        |   7 +-
+ openssl/src/x509/mod.rs    |  52 +++++++--
+ 21 files changed, 439 insertions(+), 46 deletions(-)
+ create mode 100644 openssl/.cargo/config.toml
+ create mode 100644 openssl/src/hkdf.rs
+ create mode 100644 openssl/src/hmac.rs
+
+diff --git a/openssl/.cargo/config.toml b/openssl/.cargo/config.toml
+new file mode 100644
+index 00000000..e2b197d8
+--- /dev/null
++++ b/openssl/.cargo/config.toml
+@@ -0,0 +1,2 @@
++[patch.crates-io]
++bssl-ffi = { package = "bssl-sys", version = "0.1.0", path = "../../../boringssl/build/rust", optional=true }
+diff --git a/openssl/src/asn1.rs b/openssl/src/asn1.rs
+index b02f9ac4..939a1732 100644
+--- a/openssl/src/asn1.rs
++++ b/openssl/src/asn1.rs
+@@ -651,7 +651,7 @@ impl fmt::Debug for Asn1ObjectRef {
+ }
+ 
+ cfg_if! {
+-    if #[cfg(any(ossl110, libressl273))] {
++    if #[cfg(any(ossl110, libressl273, boringssl))] {
+         use ffi::ASN1_STRING_get0_data;
+     } else {
+         #[allow(bad_style)]
+diff --git a/openssl/src/bio.rs b/openssl/src/bio.rs
+index 6a72552a..03242188 100644
+--- a/openssl/src/bio.rs
++++ b/openssl/src/bio.rs
+@@ -4,7 +4,7 @@ use std::marker::PhantomData;
+ use std::ptr;
+ use std::slice;
+ 
+-use crate::cvt_p;
++use crate::{cvt_p, SignedLenType};
+ use crate::error::ErrorStack;
+ 
+ pub struct MemBioSlice<'a>(*mut ffi::BIO, PhantomData<&'a [u8]>);
+@@ -25,7 +25,7 @@ impl<'a> MemBioSlice<'a> {
+         let bio = unsafe {
+             cvt_p(BIO_new_mem_buf(
+                 buf.as_ptr() as *const _,
+-                buf.len() as c_int,
++                buf.len() as SignedLenType,
+             ))?
+         };
+ 
+@@ -78,7 +78,7 @@ cfg_if! {
+         use ffi::BIO_new_mem_buf;
+     } else {
+         #[allow(bad_style)]
+-        unsafe fn BIO_new_mem_buf(buf: *const ::libc::c_void, len: ::libc::c_int) -> *mut ffi::BIO {
++        unsafe fn BIO_new_mem_buf(buf: *const ::libc::c_void, len: SignedLenType) -> *mut ffi::BIO {
+             ffi::BIO_new_mem_buf(buf as *mut _, len)
+         }
+     }
+diff --git a/openssl/src/bn.rs b/openssl/src/bn.rs
+index 1cd00dd4..dbd7ae94 100644
+--- a/openssl/src/bn.rs
++++ b/openssl/src/bn.rs
+@@ -814,7 +814,7 @@ impl BigNumRef {
+     /// assert_eq!(&bn_vec, &[0, 0, 0x45, 0x43]);
+     /// ```
+     #[corresponds(BN_bn2binpad)]
+-    #[cfg(ossl110)]
++    #[cfg(any(boringssl, ossl110))]
+     pub fn to_vec_padded(&self, pad_to: i32) -> Result<Vec<u8>, ErrorStack> {
+         let mut v = Vec::with_capacity(pad_to as usize);
+         unsafe {
+diff --git a/openssl/src/cipher.rs b/openssl/src/cipher.rs
+index ab5f49d2..84a82654 100644
+--- a/openssl/src/cipher.rs
++++ b/openssl/src/cipher.rs
+@@ -208,6 +208,7 @@ impl Cipher {
+         unsafe { CipherRef::from_ptr(ffi::EVP_aes_192_cfb1() as *mut _) }
+     }
+ 
++    #[cfg(not(boringssl))]
+     pub fn aes_192_cfb128() -> &'static CipherRef {
+         unsafe { CipherRef::from_ptr(ffi::EVP_aes_192_cfb128() as *mut _) }
+     }
+@@ -253,6 +254,7 @@ impl Cipher {
+         unsafe { CipherRef::from_ptr(ffi::EVP_aes_256_cfb1() as *mut _) }
+     }
+ 
++    #[cfg(not(boringssl))]
+     pub fn aes_256_cfb128() -> &'static CipherRef {
+         unsafe { CipherRef::from_ptr(ffi::EVP_aes_256_cfb128() as *mut _) }
+     }
+@@ -282,11 +284,13 @@ impl Cipher {
+     }
+ 
+     #[cfg(not(osslconf = "OPENSSL_NO_BF"))]
++    #[cfg(not(boringssl))]
+     pub fn bf_cbc() -> &'static CipherRef {
+         unsafe { CipherRef::from_ptr(ffi::EVP_bf_cbc() as *mut _) }
+     }
+ 
+     #[cfg(not(osslconf = "OPENSSL_NO_BF"))]
++    #[cfg(not(boringssl))]
+     pub fn bf_ecb() -> &'static CipherRef {
+         unsafe { CipherRef::from_ptr(ffi::EVP_bf_ecb() as *mut _) }
+     }
+diff --git a/openssl/src/dh.rs b/openssl/src/dh.rs
+index 12170b99..e781543e 100644
+--- a/openssl/src/dh.rs
++++ b/openssl/src/dh.rs
+@@ -239,7 +239,7 @@ where
+ }
+ 
+ cfg_if! {
+-    if #[cfg(any(ossl110, libressl270))] {
++    if #[cfg(any(ossl110, libressl270, boringssl))] {
+         use ffi::{DH_set0_pqg, DH_get0_pqg, DH_get0_key, DH_set0_key};
+     } else {
+         #[allow(bad_style)]
+diff --git a/openssl/src/dsa.rs b/openssl/src/dsa.rs
+index 5f59ba8a..0aceeb55 100644
+--- a/openssl/src/dsa.rs
++++ b/openssl/src/dsa.rs
+@@ -7,6 +7,7 @@
+ 
+ use cfg_if::cfg_if;
+ use foreign_types::{ForeignType, ForeignTypeRef};
++#[cfg(not(boringssl))]
+ use libc::c_int;
+ use std::fmt;
+ use std::mem;
+@@ -283,7 +284,7 @@ impl<T> fmt::Debug for Dsa<T> {
+ }
+ 
+ cfg_if! {
+-    if #[cfg(any(ossl110, libressl273))] {
++    if #[cfg(any(ossl110, libressl273, boringssl))] {
+         use ffi::{DSA_get0_key, DSA_get0_pqg, DSA_set0_key, DSA_set0_pqg};
+     } else {
+         #[allow(bad_style)]
+@@ -462,7 +463,7 @@ impl DsaSigRef {
+ }
+ 
+ cfg_if! {
+-    if #[cfg(any(ossl110, libressl273))] {
++    if #[cfg(any(ossl110, libressl273, boringssl))] {
+         use ffi::{DSA_SIG_set0, DSA_SIG_get0};
+     } else {
+         #[allow(bad_style)]
+diff --git a/openssl/src/ec.rs b/openssl/src/ec.rs
+index 24b38322..20785428 100644
+--- a/openssl/src/ec.rs
++++ b/openssl/src/ec.rs
+@@ -954,6 +954,26 @@ impl EcKey<Private> {
+         EcKey<Private>,
+         ffi::d2i_ECPrivateKey
+     }
++
++    /// Decodes a DER-encoded elliptic curve private key structure for the specified curve.
++    #[corresponds(EC_KEY_parse_private_key)]
++    #[cfg(boringssl)]
++    pub fn private_key_from_der_for_group(
++        der: &[u8],
++        group: &EcGroupRef,
++    ) -> Result<EcKey<Private>, ErrorStack> {
++        unsafe {
++            let mut cbs = ffi::CBS {
++                data: der.as_ptr(),
++                len: der.len(),
++            };
++            cvt_p(ffi::EC_KEY_parse_private_key(
++                &mut cbs as *mut ffi::CBS,
++                group.as_ptr(),
++            ))
++            .map(|p| EcKey::from_ptr(p))
++        }
++    }
+ }
+ 
+ impl<T> Clone for EcKey<T> {
+diff --git a/openssl/src/ecdsa.rs b/openssl/src/ecdsa.rs
+index 0a960e7b..f3b27b39 100644
+--- a/openssl/src/ecdsa.rs
++++ b/openssl/src/ecdsa.rs
+@@ -110,7 +110,7 @@ impl EcdsaSigRef {
+ }
+ 
+ cfg_if! {
+-    if #[cfg(any(ossl110, libressl273))] {
++    if #[cfg(any(ossl110, libressl273, boringssl))] {
+         use ffi::{ECDSA_SIG_set0, ECDSA_SIG_get0};
+     } else {
+         #[allow(bad_style)]
+diff --git a/openssl/src/encrypt.rs b/openssl/src/encrypt.rs
+index 3cb10fcc..34a9eb8b 100644
+--- a/openssl/src/encrypt.rs
++++ b/openssl/src/encrypt.rs
+@@ -148,7 +148,7 @@ impl<'a> Encrypter<'a> {
+     /// This corresponds to [`EVP_PKEY_CTX_set_rsa_oaep_md`].
+     ///
+     /// [`EVP_PKEY_CTX_set_rsa_oaep_md`]: https://www.openssl.org/docs/manmaster/man3/EVP_PKEY_CTX_set_rsa_oaep_md.html
+-    #[cfg(any(ossl102, libressl310))]
++    #[cfg(any(ossl102, libressl310, boringssl))]
+     pub fn set_rsa_oaep_md(&mut self, md: MessageDigest) -> Result<(), ErrorStack> {
+         unsafe {
+             cvt(ffi::EVP_PKEY_CTX_set_rsa_oaep_md(
+@@ -352,7 +352,7 @@ impl<'a> Decrypter<'a> {
+     /// This corresponds to [`EVP_PKEY_CTX_set_rsa_oaep_md`].
+     ///
+     /// [`EVP_PKEY_CTX_set_rsa_oaep_md`]: https://www.openssl.org/docs/manmaster/man3/EVP_PKEY_CTX_set_rsa_oaep_md.html
+-    #[cfg(any(ossl102, libressl310))]
++    #[cfg(any(ossl102, libressl310, boringssl))]
+     pub fn set_rsa_oaep_md(&mut self, md: MessageDigest) -> Result<(), ErrorStack> {
+         unsafe {
+             cvt(ffi::EVP_PKEY_CTX_set_rsa_oaep_md(
+diff --git a/openssl/src/hash.rs b/openssl/src/hash.rs
+index 8e27505a..7f6fa89e 100644
+--- a/openssl/src/hash.rs
++++ b/openssl/src/hash.rs
+@@ -43,7 +43,7 @@ use crate::nid::Nid;
+ use crate::{cvt, cvt_p};
+ 
+ cfg_if! {
+-    if #[cfg(ossl110)] {
++    if #[cfg(any(ossl110, boringssl))] {
+         use ffi::{EVP_MD_CTX_free, EVP_MD_CTX_new};
+     } else {
+         use ffi::{EVP_MD_CTX_create as EVP_MD_CTX_new, EVP_MD_CTX_destroy as EVP_MD_CTX_free};
+diff --git a/openssl/src/hkdf.rs b/openssl/src/hkdf.rs
+new file mode 100644
+index 00000000..cc7e5b3a
+--- /dev/null
++++ b/openssl/src/hkdf.rs
+@@ -0,0 +1,89 @@
++use crate::cvt;
++use crate::error::ErrorStack;
++use crate::md::MdRef;
++use foreign_types::ForeignTypeRef;
++use openssl_macros::corresponds;
++
++/// Computes HKDF (as specified by RFC 5869).
++///
++/// HKDF is an Extract-and-Expand algorithm. It does not do any key stretching,
++/// and as such, is not suited to be used alone to generate a key from a
++/// password.
++#[corresponds(HKDF)]
++#[inline]
++pub fn hkdf(
++    out_key: &mut [u8],
++    md: &MdRef,
++    secret: &[u8],
++    salt: &[u8],
++    info: &[u8],
++) -> Result<(), ErrorStack> {
++    unsafe {
++        cvt(ffi::HKDF(
++            out_key.as_mut_ptr(),
++            out_key.len(),
++            md.as_ptr(),
++            secret.as_ptr(),
++            secret.len(),
++            salt.as_ptr(),
++            salt.len(),
++            info.as_ptr(),
++            info.len(),
++        ))?;
++    }
++
++    Ok(())
++}
++
++/// Computes a HKDF PRK (as specified by RFC 5869).
++///
++/// WARNING: This function orders the inputs differently from RFC 5869
++/// specification. Double-check which parameter is the secret/IKM and which is
++/// the salt when using.
++#[corresponds(HKDF_extract)]
++#[inline]
++pub fn hkdf_extract<'a>(
++    out_key: &'a mut [u8],
++    md: &MdRef,
++    secret: &[u8],
++    salt: &[u8],
++) -> Result<&'a [u8], ErrorStack> {
++    let mut out_len = out_key.len();
++    unsafe {
++        cvt(ffi::HKDF_extract(
++            out_key.as_mut_ptr(),
++            &mut out_len,
++            md.as_ptr(),
++            secret.as_ptr(),
++            secret.len(),
++            salt.as_ptr(),
++            salt.len(),
++        ))?;
++    }
++
++    Ok(&out_key[..out_len])
++}
++
++/// Computes a HKDF OKM (as specified by RFC 5869).
++#[corresponds(HKDF_expand)]
++#[inline]
++pub fn hkdf_expand(
++    out_key: &mut [u8],
++    md: &MdRef,
++    prk: &[u8],
++    info: &[u8],
++) -> Result<(), ErrorStack> {
++    unsafe {
++        cvt(ffi::HKDF_expand(
++            out_key.as_mut_ptr(),
++            out_key.len(),
++            md.as_ptr(),
++            prk.as_ptr(),
++            prk.len(),
++            info.as_ptr(),
++            info.len(),
++        ))?;
++    }
++
++    Ok(())
++}
+diff --git a/openssl/src/hmac.rs b/openssl/src/hmac.rs
+new file mode 100644
+index 00000000..465781e2
+--- /dev/null
++++ b/openssl/src/hmac.rs
+@@ -0,0 +1,217 @@
++use crate::error::ErrorStack;
++use crate::md::MdRef;
++use crate::{cvt, cvt_p};
++use ffi::HMAC_CTX;
++use foreign_types::ForeignTypeRef;
++use libc::{c_uint, c_void};
++use openssl_macros::corresponds;
++use std::convert::TryFrom;
++use std::ptr;
++
++/// Computes the HMAC as a one-shot operation.
++///
++/// Calculates the HMAC of data, using the given |key|
++/// and hash function |md|, and returns the result re-using the space from
++/// buffer |out|. On entry, |out| must contain at least |EVP_MD_size| bytes
++/// of space. The actual length of the result is used to resize the returned
++/// slice. An output size of |EVP_MAX_MD_SIZE| will always be large enough.
++/// It returns a resized |out| or ErrorStack on error.
++#[corresponds(HMAC)]
++#[inline]
++pub fn hmac<'a>(
++    md: &MdRef,
++    key: &[u8],
++    data: &[u8],
++    out: &'a mut [u8],
++) -> Result<&'a [u8], ErrorStack> {
++    assert!(out.len() >= md.size());
++    let mut out_len = c_uint::try_from(out.len()).unwrap();
++    unsafe {
++        cvt_p(ffi::HMAC(
++            md.as_ptr(),
++            key.as_ptr() as *const c_void,
++            key.len(),
++            data.as_ptr(),
++            data.len(),
++            out.as_mut_ptr(),
++            &mut out_len,
++        ))?;
++    }
++    Ok(&out[..out_len as usize])
++}
++
++/// A context object used to perform HMAC operations.
++///
++/// HMAC is a MAC (message authentication code), i.e. a keyed hash function used for message
++/// authentication, which is based on a hash function.
++///
++/// Note: Only available in boringssl. For openssl, use `PKey::hmac` instead.
++#[cfg(boringssl)]
++pub struct HmacCtx {
++    ctx: *mut HMAC_CTX,
++    output_size: usize,
++}
++
++#[cfg(boringssl)]
++impl HmacCtx {
++    /// Creates a new [HmacCtx] to use the hash function `md` and key `key`.
++    #[corresponds(HMAC_Init_ex)]
++    pub fn new(key: &[u8], md: &MdRef) -> Result<Self, ErrorStack> {
++        unsafe {
++            // Safety: If an error occurred, the resulting null from HMAC_CTX_new is converted into
++            // ErrorStack in the returned result by `cvt_p`.
++            let ctx = cvt_p(ffi::HMAC_CTX_new())?;
++            // Safety:
++            // - HMAC_Init_ex must be called with a context previously created with HMAC_CTX_new,
++            //   which is the line above.
++            // - HMAC_Init_ex may return an error if key is null but the md is different from
++            //   before. This is avoided here since key is guaranteed to be non-null.
++            cvt(ffi::HMAC_Init_ex(
++                ctx,
++                key.as_ptr() as *const c_void,
++                key.len(),
++                md.as_ptr(),
++                ptr::null_mut(),
++            ))?;
++            Ok(Self {
++                ctx,
++                output_size: md.size(),
++            })
++        }
++    }
++
++    /// `update` can be called repeatedly with chunks of the message `data` to be authenticated.
++    #[corresponds(HMAC_Update)]
++    pub fn update(&mut self, data: &[u8]) -> Result<(), ErrorStack> {
++        unsafe {
++            // Safety: HMAC_Update returns 0 on error, and that is converted into ErrorStack in the
++            // returned result by `cvt`.
++            cvt(ffi::HMAC_Update(self.ctx, data.as_ptr(), data.len())).map(|_| ())
++        }
++    }
++
++    /// Finishes the HMAC process, and places the message authentication code in `output`.
++    /// The number of bytes written to `output` is returned.
++    ///
++    /// # Panics
++    ///
++    /// Panics if the `output` is smaller than the required size. The output size is indicated by
++    /// `md.size()` for the `Md` instance passed in [new]. An output size of |EVP_MAX_MD_SIZE| will
++    /// always be large enough.
++    #[corresponds(HMAC_Final)]
++    pub fn finalize(&mut self, output: &mut [u8]) -> Result<usize, ErrorStack> {
++        assert!(output.len() >= self.output_size);
++        unsafe {
++            // Safety: The length assertion above makes sure that `HMAC_Final` will not write longer
++            // than the length of `output`.
++            let mut size: c_uint = 0;
++            cvt(ffi::HMAC_Final(
++                self.ctx,
++                output.as_mut_ptr(),
++                &mut size as *mut c_uint,
++            ))
++            .map(|_| size as usize)
++        }
++    }
++}
++
++impl Drop for HmacCtx {
++    #[corresponds(HMAC_CTX_free)]
++    fn drop(&mut self) {
++        unsafe {
++            ffi::HMAC_CTX_free(self.ctx);
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::md::Md;
++
++    const SHA_256_DIGEST_SIZE: usize = 32;
++
++    #[test]
++    fn hmac_sha256_test() {
++        let expected_hmac = [
++            0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53, 0x5c, 0xa8, 0xaf, 0xce, 0xaf, 0xb,
++            0xf1, 0x2b, 0x88, 0x1d, 0xc2, 0x0, 0xc9, 0x83, 0x3d, 0xa7, 0x26, 0xe9, 0x37, 0x6c,
++            0x2e, 0x32, 0xcf, 0xf7,
++        ];
++        let mut out: [u8; SHA_256_DIGEST_SIZE] = [0; SHA_256_DIGEST_SIZE];
++        let key: [u8; 20] = [0x0b; 20];
++        let data = b"Hi There";
++        let hmac_result =
++            hmac(Md::sha256(), &key, data, &mut out).expect("Couldn't calculate sha256 hmac");
++        assert_eq!(&hmac_result, &expected_hmac);
++    }
++
++    #[test]
++    #[should_panic]
++    fn hmac_sha256_output_too_short() {
++        let mut out = vec![0_u8; 1];
++        let key: [u8; 20] = [0x0b; 20];
++        let data = b"Hi There";
++        hmac(Md::sha256(), &key, data, &mut out).expect("Couldn't calculate sha256 hmac");
++    }
++
++    #[test]
++    fn hmac_sha256_test_big_buffer() {
++        let expected_hmac = [
++            0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53, 0x5c, 0xa8, 0xaf, 0xce, 0xaf, 0xb,
++            0xf1, 0x2b, 0x88, 0x1d, 0xc2, 0x0, 0xc9, 0x83, 0x3d, 0xa7, 0x26, 0xe9, 0x37, 0x6c,
++            0x2e, 0x32, 0xcf, 0xf7,
++        ];
++        let mut out: [u8; 100] = [0; 100];
++        let key: [u8; 20] = [0x0b; 20];
++        let data = b"Hi There";
++        let hmac_result =
++            hmac(Md::sha256(), &key, data, &mut out).expect("Couldn't calculate sha256 hmac");
++        assert_eq!(hmac_result.len(), SHA_256_DIGEST_SIZE);
++        assert_eq!(&hmac_result, &expected_hmac);
++    }
++
++    #[test]
++    fn hmac_sha256_update_test() {
++        let expected_hmac = [
++            0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53, 0x5c, 0xa8, 0xaf, 0xce, 0xaf, 0xb,
++            0xf1, 0x2b, 0x88, 0x1d, 0xc2, 0x0, 0xc9, 0x83, 0x3d, 0xa7, 0x26, 0xe9, 0x37, 0x6c,
++            0x2e, 0x32, 0xcf, 0xf7,
++        ];
++        let mut out: [u8; SHA_256_DIGEST_SIZE] = [0; SHA_256_DIGEST_SIZE];
++        let key: [u8; 20] = [0x0b; 20];
++        let data = b"Hi There";
++        let mut hmac_ctx = HmacCtx::new(&key, Md::sha256()).unwrap();
++        hmac_ctx.update(data).unwrap();
++        let size = hmac_ctx.finalize(&mut out).unwrap();
++        assert_eq!(&out, &expected_hmac);
++        assert_eq!(size, SHA_256_DIGEST_SIZE);
++    }
++
++    #[test]
++    fn hmac_sha256_update_chunks_test() {
++        let expected_hmac = [
++            0xb0, 0x34, 0x4c, 0x61, 0xd8, 0xdb, 0x38, 0x53, 0x5c, 0xa8, 0xaf, 0xce, 0xaf, 0xb,
++            0xf1, 0x2b, 0x88, 0x1d, 0xc2, 0x0, 0xc9, 0x83, 0x3d, 0xa7, 0x26, 0xe9, 0x37, 0x6c,
++            0x2e, 0x32, 0xcf, 0xf7,
++        ];
++        let mut out: [u8; SHA_256_DIGEST_SIZE] = [0; SHA_256_DIGEST_SIZE];
++        let key: [u8; 20] = [0x0b; 20];
++        let mut hmac_ctx = HmacCtx::new(&key, Md::sha256()).unwrap();
++        hmac_ctx.update(b"Hi").unwrap();
++        hmac_ctx.update(b" There").unwrap();
++        let size = hmac_ctx.finalize(&mut out).unwrap();
++        assert_eq!(&out, &expected_hmac);
++        assert_eq!(size, SHA_256_DIGEST_SIZE);
++    }
++
++    #[test]
++    #[should_panic]
++    fn hmac_sha256_update_output_too_short() {
++        let mut out = vec![0_u8; 1];
++        let key: [u8; 20] = [0x0b; 20];
++        let mut hmac_ctx = HmacCtx::new(&key, Md::sha256()).unwrap();
++        hmac_ctx.update(b"Hi There").unwrap();
++        hmac_ctx.finalize(&mut out).unwrap();
++    }
++}
+diff --git a/openssl/src/lib.rs b/openssl/src/lib.rs
+index 891651ec..e8d07d8a 100644
+--- a/openssl/src/lib.rs
++++ b/openssl/src/lib.rs
+@@ -120,6 +120,9 @@
+ #![doc(html_root_url = "https://docs.rs/openssl/0.10")]
+ #![warn(rust_2018_idioms)]
+ 
++#[cfg(all(soong, boringssl))]
++extern crate bssl_ffi as ffi;
++
+ #[doc(inline)]
+ pub use ffi::init;
+ 
+@@ -155,6 +158,10 @@ pub mod ex_data;
+ #[cfg(not(any(libressl, ossl300)))]
+ pub mod fips;
+ pub mod hash;
++#[cfg(boringssl)]
++pub mod hkdf;
++#[cfg(boringssl)]
++pub mod hmac;
+ #[cfg(ossl300)]
+ pub mod lib_ctx;
+ pub mod md;
+@@ -189,6 +196,11 @@ type LenType = libc::size_t;
+ #[cfg(not(boringssl))]
+ type LenType = libc::c_int;
+ 
++#[cfg(boringssl)]
++type SignedLenType = libc::ssize_t;
++#[cfg(not(boringssl))]
++type SignedLenType = libc::c_int;
++
+ #[inline]
+ fn cvt_p<T>(r: *mut T) -> Result<*mut T, ErrorStack> {
+     if r.is_null() {
+diff --git a/openssl/src/md_ctx.rs b/openssl/src/md_ctx.rs
+index c4d3f06b..156f3c2f 100644
+--- a/openssl/src/md_ctx.rs
++++ b/openssl/src/md_ctx.rs
+@@ -93,7 +93,7 @@ use std::convert::TryFrom;
+ use std::ptr;
+ 
+ cfg_if! {
+-    if #[cfg(ossl110)] {
++    if #[cfg(any(ossl110, boringssl))] {
+         use ffi::{EVP_MD_CTX_free, EVP_MD_CTX_new};
+     } else {
+         use ffi::{EVP_MD_CTX_create as EVP_MD_CTX_new, EVP_MD_CTX_destroy as EVP_MD_CTX_free};
+diff --git a/openssl/src/pkey.rs b/openssl/src/pkey.rs
+index 2039e7e9..21ba7118 100644
+--- a/openssl/src/pkey.rs
++++ b/openssl/src/pkey.rs
+@@ -47,7 +47,7 @@ use crate::dh::Dh;
+ use crate::dsa::Dsa;
+ use crate::ec::EcKey;
+ use crate::error::ErrorStack;
+-#[cfg(ossl110)]
++#[cfg(any(boringssl, ossl110))]
+ use crate::pkey_ctx::PkeyCtx;
+ use crate::rsa::Rsa;
+ use crate::symm::Cipher;
+@@ -86,14 +86,14 @@ impl Id {
+     pub const DH: Id = Id(ffi::EVP_PKEY_DH);
+     pub const EC: Id = Id(ffi::EVP_PKEY_EC);
+ 
+-    #[cfg(ossl110)]
++    #[cfg(any(boringssl, ossl110))]
+     pub const HKDF: Id = Id(ffi::EVP_PKEY_HKDF);
+ 
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub const ED25519: Id = Id(ffi::EVP_PKEY_ED25519);
+     #[cfg(ossl111)]
+     pub const ED448: Id = Id(ffi::EVP_PKEY_ED448);
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub const X25519: Id = Id(ffi::EVP_PKEY_X25519);
+     #[cfg(ossl111)]
+     pub const X448: Id = Id(ffi::EVP_PKEY_X448);
+@@ -252,7 +252,7 @@ where
+     /// This function only works for algorithms that support raw public keys.
+     /// Currently this is: [`Id::X25519`], [`Id::ED25519`], [`Id::X448`] or [`Id::ED448`].
+     #[corresponds(EVP_PKEY_get_raw_public_key)]
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn raw_public_key(&self) -> Result<Vec<u8>, ErrorStack> {
+         unsafe {
+             let mut len = 0;
+@@ -303,7 +303,7 @@ where
+     /// This function only works for algorithms that support raw private keys.
+     /// Currently this is: [`Id::HMAC`], [`Id::X25519`], [`Id::ED25519`], [`Id::X448`] or [`Id::ED448`].
+     #[corresponds(EVP_PKEY_get_raw_private_key)]
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn raw_private_key(&self) -> Result<Vec<u8>, ErrorStack> {
+         unsafe {
+             let mut len = 0;
+@@ -484,7 +484,7 @@ impl PKey<Private> {
+         ctx.keygen()
+     }
+ 
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     fn generate_eddsa(id: Id) -> Result<PKey<Private>, ErrorStack> {
+         let mut ctx = PkeyCtx::new_id(id)?;
+         ctx.keygen_init()?;
+@@ -514,7 +514,7 @@ impl PKey<Private> {
+     /// assert_eq!(secret.len(), 32);
+     /// # Ok(()) }
+     /// ```
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn generate_x25519() -> Result<PKey<Private>, ErrorStack> {
+         PKey::generate_eddsa(Id::X25519)
+     }
+@@ -568,7 +568,7 @@ impl PKey<Private> {
+     /// assert_eq!(signature.len(), 64);
+     /// # Ok(()) }
+     /// ```
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn generate_ed25519() -> Result<PKey<Private>, ErrorStack> {
+         PKey::generate_eddsa(Id::ED25519)
+     }
+@@ -718,7 +718,7 @@ impl PKey<Private> {
+     ///
+     /// Algorithm types that support raw private keys are HMAC, X25519, ED25519, X448 or ED448
+     #[corresponds(EVP_PKEY_new_raw_private_key)]
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn private_key_from_raw_bytes(
+         bytes: &[u8],
+         key_type: Id,
+@@ -759,7 +759,7 @@ impl PKey<Public> {
+     ///
+     /// Algorithm types that support raw public keys are X25519, ED25519, X448 or ED448
+     #[corresponds(EVP_PKEY_new_raw_public_key)]
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn public_key_from_raw_bytes(
+         bytes: &[u8],
+         key_type: Id,
+diff --git a/openssl/src/pkey_ctx.rs b/openssl/src/pkey_ctx.rs
+index f79372fb..3d4203fa 100644
+--- a/openssl/src/pkey_ctx.rs
++++ b/openssl/src/pkey_ctx.rs
+@@ -470,7 +470,7 @@ impl<T> PkeyCtxRef<T> {
+     ///
+     /// Requires OpenSSL 1.1.0 or newer.
+     #[corresponds(EVP_PKEY_CTX_set_hkdf_md)]
+-    #[cfg(ossl110)]
++    #[cfg(any(ossl110, boringssl))]
+     #[inline]
+     pub fn set_hkdf_md(&mut self, digest: &MdRef) -> Result<(), ErrorStack> {
+         unsafe {
+@@ -503,10 +503,13 @@ impl<T> PkeyCtxRef<T> {
+     ///
+     /// Requires OpenSSL 1.1.0 or newer.
+     #[corresponds(EVP_PKEY_CTX_set1_hkdf_key)]
+-    #[cfg(ossl110)]
++    #[cfg(any(ossl110, boringssl))]
+     #[inline]
+     pub fn set_hkdf_key(&mut self, key: &[u8]) -> Result<(), ErrorStack> {
++        #[cfg(not(boringssl))]
+         let len = c_int::try_from(key.len()).unwrap();
++        #[cfg(boringssl)]
++        let len = key.len();
+ 
+         unsafe {
+             cvt(ffi::EVP_PKEY_CTX_set1_hkdf_key(
+@@ -523,10 +526,13 @@ impl<T> PkeyCtxRef<T> {
+     ///
+     /// Requires OpenSSL 1.1.0 or newer.
+     #[corresponds(EVP_PKEY_CTX_set1_hkdf_salt)]
+-    #[cfg(ossl110)]
++    #[cfg(any(ossl110, boringssl))]
+     #[inline]
+     pub fn set_hkdf_salt(&mut self, salt: &[u8]) -> Result<(), ErrorStack> {
++        #[cfg(not(boringssl))]
+         let len = c_int::try_from(salt.len()).unwrap();
++        #[cfg(boringssl)]
++        let len = salt.len();
+ 
+         unsafe {
+             cvt(ffi::EVP_PKEY_CTX_set1_hkdf_salt(
+@@ -543,10 +549,13 @@ impl<T> PkeyCtxRef<T> {
+     ///
+     /// Requires OpenSSL 1.1.0 or newer.
+     #[corresponds(EVP_PKEY_CTX_add1_hkdf_info)]
+-    #[cfg(ossl110)]
++    #[cfg(any(ossl110, boringssl))]
+     #[inline]
+     pub fn add_hkdf_info(&mut self, info: &[u8]) -> Result<(), ErrorStack> {
++        #[cfg(not(boringssl))]
+         let len = c_int::try_from(info.len()).unwrap();
++        #[cfg(boringssl)]
++        let len = info.len();
+ 
+         unsafe {
+             cvt(ffi::EVP_PKEY_CTX_add1_hkdf_info(
+@@ -604,7 +613,7 @@ mod test {
+     #[cfg(not(boringssl))]
+     use crate::cipher::Cipher;
+     use crate::ec::{EcGroup, EcKey};
+-    #[cfg(any(ossl102, libressl310))]
++    #[cfg(any(ossl102, libressl310, boringssl))]
+     use crate::md::Md;
+     use crate::nid::Nid;
+     use crate::pkey::PKey;
+@@ -689,7 +698,7 @@ mod test {
+     }
+ 
+     #[test]
+-    #[cfg(ossl110)]
++    #[cfg(any(ossl110, boringssl))]
+     fn hkdf() {
+         let mut ctx = PkeyCtx::new_id(Id::HKDF).unwrap();
+         ctx.derive_init().unwrap();
+diff --git a/openssl/src/rsa.rs b/openssl/src/rsa.rs
+index 68cf64b0..f155b12d 100644
+--- a/openssl/src/rsa.rs
++++ b/openssl/src/rsa.rs
+@@ -581,7 +581,7 @@ impl<T> fmt::Debug for Rsa<T> {
+ }
+ 
+ cfg_if! {
+-    if #[cfg(any(ossl110, libressl273))] {
++    if #[cfg(any(ossl110, libressl273, boringssl))] {
+         use ffi::{
+             RSA_get0_key, RSA_get0_factors, RSA_get0_crt_params, RSA_set0_key, RSA_set0_factors,
+             RSA_set0_crt_params,
+diff --git a/openssl/src/sign.rs b/openssl/src/sign.rs
+index b675825e..e5e80608 100644
+--- a/openssl/src/sign.rs
++++ b/openssl/src/sign.rs
+@@ -290,7 +290,7 @@ impl<'a> Signer<'a> {
+         self.len_intern()
+     }
+ 
+-    #[cfg(not(ossl111))]
++    #[cfg(not(any(boringssl, ossl111)))]
+     fn len_intern(&self) -> Result<usize, ErrorStack> {
+         unsafe {
+             let mut len = 0;
+@@ -303,7 +303,7 @@ impl<'a> Signer<'a> {
+         }
+     }
+ 
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     fn len_intern(&self) -> Result<usize, ErrorStack> {
+         unsafe {
+             let mut len = 0;
+@@ -360,7 +360,7 @@ impl<'a> Signer<'a> {
+     /// OpenSSL documentation at [`EVP_DigestSign`].
+     ///
+     /// [`EVP_DigestSign`]: https://www.openssl.org/docs/man1.1.1/man3/EVP_DigestSign.html
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn sign_oneshot(
+         &mut self,
+         sig_buf: &mut [u8],
+@@ -382,7 +382,7 @@ impl<'a> Signer<'a> {
+     /// Returns the signature.
+     ///
+     /// This is a simple convenience wrapper over `len` and `sign_oneshot`.
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn sign_oneshot_to_vec(&mut self, data_buf: &[u8]) -> Result<Vec<u8>, ErrorStack> {
+         let mut sig_buf = vec![0; self.len()?];
+         let len = self.sign_oneshot(&mut sig_buf, data_buf)?;
+@@ -596,7 +596,7 @@ impl<'a> Verifier<'a> {
+     /// OpenSSL documentation at [`EVP_DigestVerify`].
+     ///
+     /// [`EVP_DigestVerify`]: https://www.openssl.org/docs/man1.1.1/man3/EVP_DigestVerify.html
+-    #[cfg(ossl111)]
++    #[cfg(any(boringssl, ossl111))]
+     pub fn verify_oneshot(&mut self, signature: &[u8], buf: &[u8]) -> Result<bool, ErrorStack> {
+         unsafe {
+             let r = ffi::EVP_DigestVerify(
+diff --git a/openssl/src/symm.rs b/openssl/src/symm.rs
+index c75bbc0c..beff5fc2 100644
+--- a/openssl/src/symm.rs
++++ b/openssl/src/symm.rs
+@@ -119,6 +119,7 @@ impl Cipher {
+         unsafe { Cipher(ffi::EVP_aes_128_cfb1()) }
+     }
+ 
++    #[cfg(not(boringssl))]
+     pub fn aes_128_cfb128() -> Cipher {
+         unsafe { Cipher(ffi::EVP_aes_128_cfb128()) }
+     }
+@@ -164,6 +165,7 @@ impl Cipher {
+         unsafe { Cipher(ffi::EVP_aes_192_cfb1()) }
+     }
+ 
++    #[cfg(not(boringssl))]
+     pub fn aes_192_cfb128() -> Cipher {
+         unsafe { Cipher(ffi::EVP_aes_192_cfb128()) }
+     }
+@@ -214,6 +216,7 @@ impl Cipher {
+         unsafe { Cipher(ffi::EVP_aes_256_cfb1()) }
+     }
+ 
++    #[cfg(not(boringssl))]
+     pub fn aes_256_cfb128() -> Cipher {
+         unsafe { Cipher(ffi::EVP_aes_256_cfb128()) }
+     }
+@@ -242,12 +245,12 @@ impl Cipher {
+         unsafe { Cipher(ffi::EVP_aes_256_ocb()) }
+     }
+ 
+-    #[cfg(not(osslconf = "OPENSSL_NO_BF"))]
++    #[cfg(not(any(boringssl, osslconf = "OPENSSL_NO_BF")))]
+     pub fn bf_cbc() -> Cipher {
+         unsafe { Cipher(ffi::EVP_bf_cbc()) }
+     }
+ 
+-    #[cfg(not(osslconf = "OPENSSL_NO_BF"))]
++    #[cfg(not(any(boringssl, osslconf = "OPENSSL_NO_BF")))]
+     pub fn bf_ecb() -> Cipher {
+         unsafe { Cipher(ffi::EVP_bf_ecb()) }
+     }
+diff --git a/openssl/src/x509/mod.rs b/openssl/src/x509/mod.rs
+index edd54aa8..a03a8aa6 100644
+--- a/openssl/src/x509/mod.rs
++++ b/openssl/src/x509/mod.rs
+@@ -353,6 +353,19 @@ impl X509Builder {
+         unsafe { cvt(ffi::X509_sign(self.0.as_ptr(), key.as_ptr(), hash.as_ptr())).map(|_| ()) }
+     }
+ 
++    /// Signs the certificate with a private key but without a digest.
++    ///
++    /// This is the only way to sign with Ed25519 keys as BoringSSL doesn't support the null
++    /// message digest.
++    #[cfg(boringssl)]
++    #[corresponds(X509_sign)]
++    pub fn sign_without_digest<T>(&mut self, key: &PKeyRef<T>) -> Result<(), ErrorStack>
++    where
++        T: HasPrivate,
++    {
++        unsafe { cvt(ffi::X509_sign(self.0.as_ptr(), key.as_ptr(), ptr::null())).map(|_| ()) }
++    }
++
+     /// Consumes the builder, returning the certificate.
+     pub fn build(self) -> X509 {
+         self.0
+@@ -880,13 +893,13 @@ impl X509NameBuilder {
+     pub fn append_entry_by_text(&mut self, field: &str, value: &str) -> Result<(), ErrorStack> {
+         unsafe {
+             let field = CString::new(field).unwrap();
+-            assert!(value.len() <= c_int::max_value() as usize);
++            assert!(value.len() <= isize::max_value() as usize);
+             cvt(ffi::X509_NAME_add_entry_by_txt(
+                 self.0.as_ptr(),
+                 field.as_ptr() as *mut _,
+                 ffi::MBSTRING_UTF8,
+                 value.as_ptr(),
+-                value.len() as c_int,
++                value.len() as isize,
+                 -1,
+                 0,
+             ))
+@@ -907,13 +920,13 @@ impl X509NameBuilder {
+     ) -> Result<(), ErrorStack> {
+         unsafe {
+             let field = CString::new(field).unwrap();
+-            assert!(value.len() <= c_int::max_value() as usize);
++            assert!(value.len() <= isize::max_value() as usize);
+             cvt(ffi::X509_NAME_add_entry_by_txt(
+                 self.0.as_ptr(),
+                 field.as_ptr() as *mut _,
+                 ty.as_raw(),
+                 value.as_ptr(),
+-                value.len() as c_int,
++                value.len() as isize,
+                 -1,
+                 0,
+             ))
+@@ -928,13 +941,13 @@ impl X509NameBuilder {
+     /// [`X509_NAME_add_entry_by_NID`]: https://www.openssl.org/docs/man1.1.0/crypto/X509_NAME_add_entry_by_NID.html
+     pub fn append_entry_by_nid(&mut self, field: Nid, value: &str) -> Result<(), ErrorStack> {
+         unsafe {
+-            assert!(value.len() <= c_int::max_value() as usize);
++            assert!(value.len() <= isize::max_value() as usize);
+             cvt(ffi::X509_NAME_add_entry_by_NID(
+                 self.0.as_ptr(),
+                 field.as_raw(),
+                 ffi::MBSTRING_UTF8,
+                 value.as_ptr() as *mut _,
+-                value.len() as c_int,
++                value.len() as isize,
+                 -1,
+                 0,
+             ))
+@@ -954,13 +967,13 @@ impl X509NameBuilder {
+         ty: Asn1Type,
+     ) -> Result<(), ErrorStack> {
+         unsafe {
+-            assert!(value.len() <= c_int::max_value() as usize);
++            assert!(value.len() <= isize::max_value() as usize);
+             cvt(ffi::X509_NAME_add_entry_by_NID(
+                 self.0.as_ptr(),
+                 field.as_raw(),
+                 ty.as_raw(),
+                 value.as_ptr() as *mut _,
+-                value.len() as c_int,
++                value.len() as isize,
+                 -1,
+                 0,
+             ))
+@@ -1260,6 +1273,29 @@ impl X509ReqBuilder {
+         }
+     }
+ 
++    /// Sign the request using a private key without a digest.
++    ///
++    /// This is the only way to sign with Ed25519 keys as BoringSSL doesn't support the null
++    /// message digest.
++    ///
++    /// This corresponds to [`X509_REQ_sign`].
++    ///
++    /// [`X509_REQ_sign`]: https://www.openssl.org/docs/man1.1.0/crypto/X509_REQ_sign.html
++    #[cfg(boringssl)]
++    pub fn sign_without_digest<T>(&mut self, key: &PKeyRef<T>) -> Result<(), ErrorStack>
++    where
++        T: HasPrivate,
++    {
++        unsafe {
++            cvt(ffi::X509_REQ_sign(
++                self.0.as_ptr(),
++                key.as_ptr(),
++                ptr::null(),
++            ))
++            .map(|_| ())
++        }
++    }
++
+     /// Returns the `X509Req`.
+     pub fn build(self) -> X509Req {
+         self.0
+-- 
+2.42.0.rc2.253.gd59a3bf2b4-goog
+

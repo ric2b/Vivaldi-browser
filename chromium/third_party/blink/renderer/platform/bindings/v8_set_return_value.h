@@ -65,12 +65,9 @@ struct V8ReturnValue {
   static void SetWrapper(const CallbackInfo& info,
                          ScriptWrappable* wrappable,
                          v8::Local<v8::Context> creation_context) {
-    v8::Local<v8::Value> wrapper;
-    if (!wrappable->Wrap(ScriptState::From(creation_context))
-             .ToLocal(&wrapper)) {
-      return;
-    }
-    info.GetReturnValue().Set(wrapper);
+    v8::Local<v8::Value> wrapper =
+        wrappable->Wrap(ScriptState::From(creation_context));
+    info.GetReturnValue().SetNonEmpty(wrapper);
   }
 };
 
@@ -155,6 +152,16 @@ void V8SetReturnValue(const CallbackInfo& info, std::nullptr_t) {
 // Primitive types
 template <typename CallbackInfo>
 void V8SetReturnValue(const CallbackInfo& info, bool value) {
+  info.GetReturnValue().Set(value);
+}
+
+template <typename CallbackInfo>
+void V8SetReturnValue(const CallbackInfo& info, int16_t value) {
+  info.GetReturnValue().Set(value);
+}
+
+template <typename CallbackInfo>
+void V8SetReturnValue(const CallbackInfo& info, uint16_t value) {
   info.GetReturnValue().Set(value);
 }
 

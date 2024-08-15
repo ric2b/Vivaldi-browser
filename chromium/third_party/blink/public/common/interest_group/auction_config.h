@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "base/uuid.h"
+#include "base/values.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -286,6 +287,10 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
     // config as its container size.
     absl::optional<blink::AdSize> requested_size;
 
+    // All ad slot sizes on a page. Each AdSize must be unique. Interest
+    // groups can request this be included in trusted seller signals fetches.
+    absl::optional<std::vector<blink::AdSize>> all_slots_requested_sizes;
+
     // A unique identifier associated with this and only this invocation of
     // runAdAuction. This must come from a prior call to createAuctionNonce.
     // This is only required for auctions that provide additional bids, and each
@@ -320,6 +325,9 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
       const absl::optional<blink::DirectFromSellerSignals>&
           direct_from_seller_signals) const;
 
+  // Serializes the configuration in a manner suitable for sending to devtools.
+  base::Value::Dict SerializeForDevtools() const;
+
   // Seller running the auction.
   url::Origin seller;
 
@@ -328,6 +336,11 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
   // Both URLS, if present, must be same-origin to `seller`.
   absl::optional<GURL> decision_logic_url;
   absl::optional<GURL> trusted_scoring_signals_url;
+
+  // The maximum length limit for the trusted scoring signal fetch URL. Can
+  // only be set as either 0 or a positive number. A value of 0 indicates that
+  // there is no limit.
+  int32_t max_trusted_scoring_signals_url_length = 0;
 
   // Other parameters are grouped in a struct that is passed to SellerWorklets.
   NonSharedParams non_shared_params;

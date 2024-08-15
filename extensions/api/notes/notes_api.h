@@ -155,6 +155,27 @@ class NotesEmptyTrashFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
+class NotesBeginImportFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("notes.beginImport", NOTES_BEGINIMPORT)
+  NotesBeginImportFunction() = default;
+
+ protected:
+  ~NotesBeginImportFunction() override = default;
+  // ExtensionFunction:
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class NotesEndImportFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("notes.endImport", NOTES_ENDIMPORT)
+  NotesEndImportFunction() = default;
+
+ protected:
+  ~NotesEndImportFunction() override = default;
+  // ExtensionFunction:
+  ExtensionFunction::ResponseAction Run() override;
+};
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_NOTES_NOTES_API_H_

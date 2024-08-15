@@ -142,7 +142,9 @@ std::string GenerateFeaturesString(const multidevice::RemoteDeviceRef& device) {
 ProximityAuthWebUIHandler::ProximityAuthWebUIHandler(
     device_sync::DeviceSyncClient* device_sync_client)
     : device_sync_client_(device_sync_client),
-      web_contents_initialized_(false) {}
+      web_contents_initialized_(false) {
+  CHECK(device_sync_client_);
+}
 
 ProximityAuthWebUIHandler::~ProximityAuthWebUIHandler() {
   multidevice::LogBuffer::GetInstance()->RemoveObserver(this);
@@ -257,7 +259,7 @@ void ProximityAuthWebUIHandler::GetLocalState(const base::Value::List& args) {
 }
 
 base::Value ProximityAuthWebUIHandler::GetTruncatedLocalDeviceId() {
-  absl::optional<multidevice::RemoteDeviceRef> local_device_metadata =
+  std::optional<multidevice::RemoteDeviceRef> local_device_metadata =
       device_sync_client_->GetLocalDeviceMetadata();
 
   std::string device_id =

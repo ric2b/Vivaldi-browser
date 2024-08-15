@@ -4,18 +4,25 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_sharing/password_sharing_constants.h"
 
-NSString* const kFamilyPickerTableViewId = @"FamilyPickerTableViewId";
-NSString* const kFamilyPickerBackButtonId = @"FamilyPickerBackButtonId";
-NSString* const kFamilyPickerCancelButtonId = @"FamilyPickerCancelButtonId";
-NSString* const kFamilyPickerShareButtonId = @"FamilyPickerShareButtonId";
-NSString* const kFamilyPickerInfoButtonId = @"FamilyPickerInfoButtonId";
+NSString* const kFamilyPickerTableViewID = @"FamilyPickerTableViewID";
+NSString* const kFamilyPickerBackButtonID = @"FamilyPickerBackButtonID";
+NSString* const kFamilyPickerCancelButtonID = @"FamilyPickerCancelButtonID";
+NSString* const kFamilyPickerShareButtonID = @"FamilyPickerShareButtonID";
+NSString* const kFamilyPickerInfoButtonID = @"FamilyPickerInfoButtonID";
 
-NSString* const kPasswordPickerCancelButtonId = @"PasswordPickerCancelButtonId";
-NSString* const kPasswordPickerNextButtonId = @"PasswordPickerNextButtonId";
+NSString* const kFamilyPromoViewID = @"FamilyPromoViewID";
 
-NSString* const kSharingStatusDoneButtonId = @"SharingStatusDoneButtonId";
+NSString* const kPasswordPickerViewID = @"PasswordPickerViewID";
+NSString* const kPasswordPickerCancelButtonID = @"PasswordPickerCancelButtonID";
+NSString* const kPasswordPickerNextButtonID = @"PasswordPickerNextButtonID";
 
-const char kFamilyGroupSiteURL[] = "https://families.google.com/families/";
+NSString* const kSharingStatusViewID = @"SharingStatusViewID";
+NSString* const kSharingStatusDoneButtonID = @"SharingStatusDoneButtonID";
+
+const char kCreateFamilyGroupURL[] =
+    "https://myaccount.google.com/family/create?utm_source=cpwd";
+const char kManageFamilyGroupURL[] =
+    "https://myaccount.google.com/family/details?utm_source=cpwd";
 
 const char kPasswordSharingLearnMoreURL[] =
     "https://support.google.com/chrome/?p=password_sharing";

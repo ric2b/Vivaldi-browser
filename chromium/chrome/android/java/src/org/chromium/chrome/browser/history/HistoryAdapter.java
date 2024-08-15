@@ -33,9 +33,7 @@ import java.util.function.Function;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
-/**
- * Bridges the user's browsing history and the UI used to display it.
- */
+/** Bridges the user's browsing history and the UI used to display it. */
 public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistoryObserver {
     private static final String EMPTY_QUERY = "";
 
@@ -67,12 +65,15 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     private boolean mClearBrowsingDataButtonVisible;
     private String mQueryText = EMPTY_QUERY;
     private String mHostName;
+    private String mAppId; // Not used if null i.e. query all entries regardless of app ID
 
     private boolean mDisableScrollToLoadForTest;
     private ObservableSupplier<Boolean> mShowHistoryToggleSupplier;
     private Function<ViewGroup, ViewGroup> mToggleViewFactory;
 
-    public HistoryAdapter(HistoryContentManager manager, HistoryProvider provider,
+    public HistoryAdapter(
+            HistoryContentManager manager,
+            HistoryProvider provider,
             ObservableSupplier<Boolean> showHistoryToggleSupplier,
             Function<ViewGroup, ViewGroup> toggleViewFactory) {
         mToggleViewFactory = toggleViewFactory;
@@ -86,9 +87,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mItemViews = new ArrayList<>();
     }
 
-    /**
-     * Called when the activity/native page is destroyed.
-     */
+    /** Called when the activity/native page is destroyed. */
     public void onDestroyed() {
         mIsDestroyed = true;
 
@@ -99,9 +98,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mFaviconHelper.clearCache();
     }
 
-    /**
-     * Starts loading the first set of browsing history items.
-     */
+    /** Starts loading the first set of browsing history items. */
     public void startLoadingItems() {
         mAreHeadersInitialized = false;
         mIsLoadingItems = true;
@@ -109,7 +106,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         if (mHostName != null) {
             mHistoryProvider.queryHistoryForHost(mHostName);
         } else {
-            mHistoryProvider.queryHistory(mQueryText);
+            mHistoryProvider.queryHistory(mQueryText, mAppId);
         }
     }
 
@@ -155,12 +152,10 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mQueryText = query;
         mIsSearching = true;
         mClearOnNextQueryComplete = true;
-        mHistoryProvider.queryHistory(mQueryText);
+        mHistoryProvider.queryHistory(mQueryText, mAppId);
     }
 
-    /**
-     * Called when a search is ended.
-     */
+    /** Called when a search is ended. */
     public void onEndSearch() {
         mQueryText = EMPTY_QUERY;
         mIsSearching = false;
@@ -179,16 +174,12 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mHistoryProvider.markItemForRemoval(item);
     }
 
-    /**
-     * Removes all items that have been marked for removal through #markItemForRemoval().
-     */
+    /** Removes all items that have been marked for removal through #markItemForRemoval(). */
     public void removeItems() {
         mHistoryProvider.removeItems();
     }
 
-    /**
-     * Should be called when the user's sign in state changes.
-     */
+    /** Should be called when the user's sign in state changes. */
     public void onSignInStateChange() {
         int visibility = mManager.getRemoveItemButtonVisibility();
         for (HistoryItemView itemView : mItemViews) {
@@ -218,8 +209,9 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
 
     @Override
     protected ViewHolder createViewHolder(ViewGroup parent) {
-        View v = LayoutInflater.from(parent.getContext()).inflate(
-                R.layout.history_item_view, parent, false);
+        View v =
+                LayoutInflater.from(parent.getContext())
+                        .inflate(R.layout.history_item_view, parent, false);
         ViewHolder viewHolder = mManager.getHistoryItemViewHolder(v);
         HistoryItemView itemView = (HistoryItemView) viewHolder.itemView;
         itemView.setFaviconHelper(mFaviconHelper);
@@ -295,8 +287,9 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
      * during page loading.
      */
     void generateFooterItems() {
-        mMoreProgressButton = (MoreProgressButton) View.inflate(
-                mManager.getContext(), R.layout.more_progress_button, null);
+        mMoreProgressButton =
+                (MoreProgressButton)
+                        View.inflate(mManager.getContext(), R.layout.more_progress_button, null);
 
         mMoreProgressButton.setOnClickRunnable(this::loadMoreItems);
         mMoreProgressButtonFooterItem = new FooterItem(-1, mMoreProgressButton);
@@ -319,9 +312,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         addGroup(footer);
     }
 
-    /**
-     * Update footer when the content change.
-     */
+    /** Update footer when the content change. */
     private void updateFooter() {
         if (isScrollToLoadDisabled() || mIsLoadingItems) addFooter();
     }
@@ -343,8 +334,10 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
         mPrivacyDisclaimerBottomSpace =
                 privacyDisclaimerContainer.findViewById(R.id.privacy_disclaimer_bottom_space);
         mClearBrowsingDataButtonHeaderItem = new HeaderItem(1, clearBrowsingDataButtonContainer);
-        mClearBrowsingDataButton = (Button) clearBrowsingDataButtonContainer.findViewById(
-                R.id.clear_browsing_data_button);
+        mClearBrowsingDataButton =
+                (Button)
+                        clearBrowsingDataButtonContainer.findViewById(
+                                R.id.clear_browsing_data_button);
 
         ViewGroup toggleContainer = mToggleViewFactory.apply(null);
         if (toggleContainer != null) {
@@ -357,8 +350,10 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
 
     ViewGroup getClearBrowsingDataButtonContainer(ViewGroup parent) {
         ViewGroup viewGroup =
-                (ViewGroup) LayoutInflater.from(mManager.getContext())
-                        .inflate(R.layout.history_clear_browsing_data_header, parent, false);
+                (ViewGroup)
+                        LayoutInflater.from(mManager.getContext())
+                                .inflate(
+                                        R.layout.history_clear_browsing_data_header, parent, false);
         Button clearBrowsingDataButton =
                 (Button) viewGroup.findViewById(R.id.clear_browsing_data_button);
         clearBrowsingDataButton.setOnClickListener(v -> mManager.onClearBrowsingDataClicked());
@@ -367,25 +362,28 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
 
     ViewGroup getPrivacyDisclaimerContainer(ViewGroup parent) {
         Context context = mManager.getContext();
-        ViewGroup privacyDisclaimerContainer = (ViewGroup) LayoutInflater.from(context).inflate(
-                R.layout.history_privacy_disclaimer_header, parent, false);
+        ViewGroup privacyDisclaimerContainer =
+                (ViewGroup)
+                        LayoutInflater.from(context)
+                                .inflate(R.layout.history_privacy_disclaimer_header, parent, false);
 
         TextView privacyDisclaimerTextView =
                 privacyDisclaimerContainer.findViewById(R.id.privacy_disclaimer);
         privacyDisclaimerTextView.setMovementMethod(LinkMovementMethod.getInstance());
 
-        NoUnderlineClickableSpan link = new NoUnderlineClickableSpan(
-                context, (view) -> mManager.onPrivacyDisclaimerLinkClicked());
-        CharSequence disclaimerText = SpanApplier.applySpans(
-                context.getResources().getString(R.string.android_history_other_forms_of_history),
-                new SpanApplier.SpanInfo("<link>", "</link>", link));
+        NoUnderlineClickableSpan link =
+                new NoUnderlineClickableSpan(
+                        context, (view) -> mManager.onPrivacyDisclaimerLinkClicked());
+        CharSequence disclaimerText =
+                SpanApplier.applySpans(
+                        context.getResources()
+                                .getString(R.string.android_history_other_forms_of_history),
+                        new SpanApplier.SpanInfo("<link>", "</link>", link));
         privacyDisclaimerTextView.setText(disclaimerText);
         return privacyDisclaimerContainer;
     }
 
-    /**
-     * Pass header items to {@link #setHeaders(HeaderItem...)} as parameters.
-     */
+    /** Pass header items to {@link #setHeaders(HeaderItem...)} as parameters. */
     private void setHeaders() {
         ArrayList<HeaderItem> args = new ArrayList<>();
         if (mPrivacyDisclaimersVisible) args.add(mPrivacyDisclaimerHeaderItem);
@@ -414,9 +412,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
                 || (mManager != null && mManager.isScrollToLoadDisabled());
     }
 
-    /**
-     * Set text of privacy disclaimer and visibility of its container.
-     */
+    /** Set text of privacy disclaimer and visibility of its container. */
     void setPrivacyDisclaimer() {
         boolean shouldShowPrivacyDisclaimers =
                 hasPrivacyDisclaimers() && mManager.getShouldShowPrivacyDisclaimersIfAvailable();
@@ -443,6 +439,13 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
     /** @param hostName The hostName to retrieve history entries for. */
     public void setHostName(String hostName) {
         mHostName = hostName;
+    }
+
+    /**
+     * @param appId The app ID to retrieve history entries for.
+     */
+    public void setAppId(String appId) {
+        mAppId = appId;
     }
 
     ItemGroup getFirstGroupForTests() {

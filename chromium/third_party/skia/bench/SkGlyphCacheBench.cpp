@@ -10,6 +10,7 @@
 #include "bench/Benchmark.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkGraphics.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/chromium/SkChromeRemoteGlyphCache.h"
@@ -60,7 +61,7 @@ protected:
     void onDraw(int loops, SkCanvas*) override {
         size_t oldCacheLimitSize = SkGraphics::GetFontCacheLimit();
         SkGraphics::SetFontCacheLimit(fCacheSize);
-        SkFont font;
+        SkFont font = ToolUtils::DefaultFont();
         font.setEdging(SkFont::Edging::kAntiAlias);
         font.setSubpixel(true);
         font.setTypeface(ToolUtils::CreatePortableTypeface("serif", SkFontStyle::Italic()));
@@ -100,7 +101,7 @@ protected:
 
         for (int work = 0; work < loops; work++) {
             SkTaskGroup().batch(16, [&](int threadIndex) {
-                SkFont font;
+                SkFont font = ToolUtils::DefaultFont();
                 font.setEdging(SkFont::Edging::kAntiAlias);
                 font.setSubpixel(true);
                 font.setTypeface(typefaces[threadIndex % 2]);
@@ -242,7 +243,7 @@ class DiffCanvasBench : public Benchmark {
         auto stream = fDataProvider();
         fDiscardableManager = sk_make_sp<DiscardableManager>();
         fServer.init(fDiscardableManager.get());
-        fTrace = SkTextBlobTrace::CreateBlobTrace(stream.get());
+        fTrace = SkTextBlobTrace::CreateBlobTrace(stream.get(), nullptr);
     }
 
 public:

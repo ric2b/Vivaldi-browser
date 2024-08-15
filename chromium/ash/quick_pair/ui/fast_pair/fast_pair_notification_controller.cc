@@ -109,8 +109,8 @@ class NotificationDelegate : public message_center::NotificationDelegate {
   ~NotificationDelegate() override = default;
 
   // message_center::NotificationDelegate override:
-  void Click(const absl::optional<int>& button_index,
-             const absl::optional<std::u16string>& reply) override {
+  void Click(const std::optional<int>& button_index,
+             const std::optional<std::u16string>& reply) override {
     if (!button_index)
       return;
 
@@ -155,8 +155,7 @@ class NotificationDelegate : public message_center::NotificationDelegate {
   base::RepeatingClosure on_primary_click_;
   base::RepeatingClosure on_secondary_click_;
   base::OnceCallback<void(FastPairNotificationDismissReason)> on_close_;
-  raw_ptr<base::OneShotTimer, DanglingUntriaged | ExperimentalAsh>
-      expire_notification_timer_;
+  raw_ptr<base::OneShotTimer, DanglingUntriaged> expire_notification_timer_;
 };
 
 FastPairNotificationController::FastPairNotificationController(

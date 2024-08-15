@@ -205,6 +205,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/testing/find_cc_layer.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_loader_mock_factory.h"
@@ -503,6 +504,7 @@ class WebFrameTest : public testing::Test {
   std::string not_base_url_;
   std::string chrome_url_;
 
+  test::TaskEnvironment task_environment_;
   ScopedTestingPlatformSupport<TestingPlatformSupport> platform_;
   url::ScopedSchemeRegistryForTests scoped_registry_;
 };
@@ -1023,9 +1025,6 @@ class CapabilityDelegationMessageListener final : public NativeEventListener {
 }  // namespace
 
 TEST_F(WebFrameTest, CapabilityDelegationMessageEventTest) {
-  ScopedCapabilityDelegationFullscreenRequestForTest fullscreen_delegation(
-      true);
-
   RegisterMockedHttpURLLoad("single_iframe.html");
   RegisterMockedHttpURLLoad("visible_iframe.html");
 
@@ -1382,6 +1381,7 @@ class WebFrameCSSCallbackTest : public testing::Test {
     RunPendingTasks();
   }
 
+  test::TaskEnvironment task_environment_;
   CSSCallbackWebFrameClient client_;
   frame_test_helpers::WebViewHelper helper_;
   WebLocalFrame* frame_;
@@ -6613,9 +6613,9 @@ class CompositedSelectionBoundsTest
     v8::Array& expected_result = *v8::Array::Cast(*result);
     ASSERT_GE(expected_result.Length(), 10u);
 
-    v8::Local<v8::Context> context = web_view_helper_.GetAgentGroupScheduler()
-                                         .Isolate()
-                                         ->GetCurrentContext();
+    v8::Local<v8::Context> context =
+        expected_result.GetCreationContext().ToLocalChecked();
+    v8::Context::Scope v8_context_scope(context);
 
     int start_edge_start_in_layer_x = expected_result.Get(context, 1)
                                           .ToLocalChecked()
@@ -7315,6 +7315,9 @@ class TestAccessInitialDocumentLocalFrameHost
                      SetWindowRectCallback callback) override {
     std::move(callback).Run();
   }
+  void Minimize() override {}
+  void Maximize() override {}
+  void Restore() override {}
   void SetResizable(bool resizable) override {}
   void DidFirstVisuallyNonEmptyPaint() override {}
   void DidAccessInitialMainDocument() override {
@@ -9898,7 +9901,8 @@ TEST_F(WebFrameSwapTest, SetTimeoutAfterSwap) {
     EXPECT_EQ(
         "SecurityError: Blocked a frame with origin \"http://internal.test\" "
         "from accessing a cross-origin frame.",
-        ToCoreString(exception
+        ToCoreString(isolate,
+                     exception
                          ->ToString(ToScriptStateForMainWorld(
                                         WebView()->MainFrameImpl()->GetFrame())
                                         ->GetContext())
@@ -10231,6 +10235,33 @@ TEST_F(RemoteWindowCloseTest, WindowOpenRemoteClose) {
   // that the JS finishes executing, so we need to wait for pending tasks first.
   RunPendingTasks();
   EXPECT_TRUE(Closed());
+}
+
+// Tests that calling window.close() when detaching document as a result of
+// closing the WebView shouldn't crash. This is a regression test for
+// https://crbug.com/5058796.
+TEST_F(WebFrameTest, WindowCloseOnDetach) {
+  // Open a page that calls window.close() from its pagehide handler.
+  RegisterMockedHttpURLLoad("close-on-pagehide.html");
+  frame_test_helpers::WebViewHelper main_web_view;
+  main_web_view.InitializeAndLoad(base_url_ + "close-on-pagehide.html");
+
+  // Mark the Page as opened by DOM so that window.close() will work.
+  LocalFrame* local_frame = main_web_view.LocalMainFrame()->GetFrame();
+  local_frame->GetPage()->SetOpenedByDOM();
+
+  // Reset the WebView, which will detach the document, triggering the pagehide
+  // handler, eventually calling window.close().
+  main_web_view.Reset();
+
+  // window.close() should synchronously mark the page as closed.
+  EXPECT_TRUE(local_frame->DomWindow()->closed());
+
+  // We used to still post a task to close the WebView even after the WebView is
+  // reset, causing a crash when the task runs. Now we won't post the task, and
+  // the crash should not happen. Verify that we won't crash if we run pending
+  // tasks.
+  RunPendingTasks();
 }
 
 TEST_F(WebFrameTest, NavigateRemoteToLocalWithOpener) {
@@ -11572,6 +11603,7 @@ static void EnableGlobalReuseForUnownedMainFrames(WebSettings* settings) {
 // A main frame with no opener should have a unique security origin. Thus, the
 // global should never be reused on the initial navigation.
 TEST(WebFrameGlobalReuseTest, MainFrameWithNoOpener) {
+  test::TaskEnvironment task_environment;
   frame_test_helpers::WebViewHelper helper;
   helper.Initialize();
 
@@ -11588,6 +11620,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithNoOpener) {
 // if the setting is enabled. It's not safe to since the parent could have
 // injected script before the initial navigation.
 TEST(WebFrameGlobalReuseTest, ChildFrame) {
+  test::TaskEnvironment task_environment;
   frame_test_helpers::WebViewHelper helper;
   helper.Initialize(nullptr, nullptr, EnableGlobalReuseForUnownedMainFrames);
 
@@ -11607,6 +11640,7 @@ TEST(WebFrameGlobalReuseTest, ChildFrame) {
 // navigation, even if the setting is enabled. It's not safe to since the opener
 // could have injected script.
 TEST(WebFrameGlobalReuseTest, MainFrameWithOpener) {
+  test::TaskEnvironment task_environment;
   frame_test_helpers::WebViewHelper opener_helper;
   opener_helper.Initialize();
   frame_test_helpers::WebViewHelper helper;
@@ -11628,18 +11662,21 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithOpener) {
 // the embedder enabling this setting is a signal that the injected script needs
 // to persist on the first navigation away from the initial empty document.
 TEST(WebFrameGlobalReuseTest, ReuseForMainFrameIfEnabled) {
+  test::TaskEnvironment task_environment;
   frame_test_helpers::WebViewHelper helper;
   helper.Initialize(nullptr, nullptr, EnableGlobalReuseForUnownedMainFrames);
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
-  v8::HandleScope scope(helper.GetAgentGroupScheduler().Isolate());
+  v8::Isolate* isolate = helper.GetAgentGroupScheduler().Isolate();
+  v8::HandleScope scope(isolate);
   main_frame->ExecuteScript(WebScriptSource("hello = 'world';"));
   frame_test_helpers::LoadFrame(main_frame, "data:text/html,new page");
   v8::Local<v8::Value> result =
       main_frame->ExecuteScriptAndReturnValue(WebScriptSource("hello"));
   ASSERT_TRUE(result->IsString());
   EXPECT_EQ("world",
-            ToCoreString(result->ToString(main_frame->MainWorldScriptContext())
+            ToCoreString(isolate,
+                         result->ToString(main_frame->MainWorldScriptContext())
                              .ToLocalChecked()));
 }
 
@@ -12774,10 +12811,10 @@ TEST_F(WebFrameSimTest, ScrollFocusedIntoViewClipped) {
       ->ScrollFocusedEditableElementIntoView();
 
   Element* input = GetDocument().getElementById(AtomicString("target"));
-  gfx::Rect input_rect(input->getBoundingClientRect()->top(),
-                       input->getBoundingClientRect()->left(),
-                       input->getBoundingClientRect()->width(),
-                       input->getBoundingClientRect()->height());
+  gfx::Rect input_rect(input->GetBoundingClientRect()->top(),
+                       input->GetBoundingClientRect()->left(),
+                       input->GetBoundingClientRect()->width(),
+                       input->GetBoundingClientRect()->height());
 
   gfx::Rect visible_content_rect(frame_view->Size());
   EXPECT_TRUE(visible_content_rect.Contains(input_rect))
@@ -12899,7 +12936,7 @@ TEST_F(WebFrameSimTest, DoubleTapZoomWhileScrolled) {
       ScrollOffset(2000 - 440, 3000 - 450),
       mojom::blink::ScrollType::kProgrammatic);
   Element* target = GetDocument().QuerySelector(AtomicString("#target"));
-  DOMRect* rect = target->getBoundingClientRect();
+  DOMRect* rect = target->GetBoundingClientRect();
   ASSERT_EQ(440, rect->left());
   ASSERT_EQ(450, rect->top());
 
@@ -13545,7 +13582,7 @@ TEST_F(WebFrameTest, AltTextOnAboutBlankPage) {
   String text = "";
   for (LayoutObject* obj = layout_object; obj; obj = obj->NextInPreOrder()) {
     if (obj->IsText()) {
-      text = To<LayoutText>(obj)->GetText();
+      text = To<LayoutText>(obj)->TransformedText();
       break;
     }
   }
@@ -13593,14 +13630,14 @@ void RecursiveCollectTextRunDOMNodeIds(
     DOMNodeId dom_node_id,
     std::vector<TextRunDOMNodeIdInfo>* text_runs) {
   for (const cc::PaintOp& op : paint_record) {
-    if (op.GetType() == cc::PaintOpType::kDrawrecord) {
+    if (op.GetType() == cc::PaintOpType::kDrawRecord) {
       const auto& draw_record_op = static_cast<const cc::DrawRecordOp&>(op);
       RecursiveCollectTextRunDOMNodeIds(draw_record_op.record, dom_node_id,
                                         text_runs);
-    } else if (op.GetType() == cc::PaintOpType::kSetnodeid) {
+    } else if (op.GetType() == cc::PaintOpType::kSetNodeId) {
       const auto& set_node_id_op = static_cast<const cc::SetNodeIdOp&>(op);
       dom_node_id = set_node_id_op.node_id;
-    } else if (op.GetType() == cc::PaintOpType::kDrawtextblob) {
+    } else if (op.GetType() == cc::PaintOpType::kDrawTextBlob) {
       const auto& draw_text_op = static_cast<const cc::DrawTextBlobOp&>(op);
       SkTextBlob::Iter iter(*draw_text_op.blob);
       SkTextBlob::Iter::Run run;

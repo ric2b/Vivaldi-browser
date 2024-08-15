@@ -45,11 +45,14 @@ class FakeLaunchedVideoCaptureDevice
   }
   void MaybeSuspendDevice() override { device_->MaybeSuspend(); }
   void ResumeDevice() override { device_->Resume(); }
-  void Crop(const base::Token& crop_id,
-            uint32_t sub_capture_target_version,
-            base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
-                callback) override {
-    device_->Crop(crop_id, sub_capture_target_version, std::move(callback));
+  void ApplySubCaptureTarget(
+      media::mojom::SubCaptureTargetType type,
+      const base::Token& target,
+      uint32_t sub_capture_target_version,
+      base::OnceCallback<void(media::mojom::ApplySubCaptureTargetResult)>
+          callback) override {
+    device_->ApplySubCaptureTarget(type, target, sub_capture_target_version,
+                                   std::move(callback));
   }
   void RequestRefreshFrame() override { device_->RequestRefreshFrame(); }
   void SetDesktopCaptureWindowIdAsync(gfx::NativeViewId window_id,
@@ -100,7 +103,6 @@ void FakeVideoCaptureDeviceLauncher::LaunchDeviceAsync(
 #endif  // BUILDFLAG(IS_WIN)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   auto device_client = std::make_unique<media::VideoCaptureDeviceClient>(
-      media::VideoCaptureBufferType::kSharedMemory,
       std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
           receiver, base::SingleThreadTaskRunner::GetCurrentDefault()),
       std::move(buffer_pool), base::BindRepeating([]() {
@@ -108,7 +110,6 @@ void FakeVideoCaptureDeviceLauncher::LaunchDeviceAsync(
       }));
 #else
   auto device_client = std::make_unique<media::VideoCaptureDeviceClient>(
-      params.buffer_type,
       std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
           receiver, base::SingleThreadTaskRunner::GetCurrentDefault()),
       std::move(buffer_pool),

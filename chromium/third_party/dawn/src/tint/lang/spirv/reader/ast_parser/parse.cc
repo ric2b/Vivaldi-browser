@@ -33,15 +33,48 @@
 #include "src/tint/lang/spirv/reader/ast_lower/decompose_strided_array.h"
 #include "src/tint/lang/spirv/reader/ast_lower/decompose_strided_matrix.h"
 #include "src/tint/lang/spirv/reader/ast_lower/fold_trivial_lets.h"
+#include "src/tint/lang/spirv/reader/ast_lower/pass_workgroup_id_as_argument.h"
 #include "src/tint/lang/spirv/reader/ast_parser/ast_parser.h"
 #include "src/tint/lang/wgsl/ast/transform/manager.h"
 #include "src/tint/lang/wgsl/ast/transform/remove_unreachable_statements.h"
 #include "src/tint/lang/wgsl/ast/transform/simplify_pointers.h"
 #include "src/tint/lang/wgsl/ast/transform/unshadow.h"
+#include "src/tint/lang/wgsl/extension.h"
 #include "src/tint/lang/wgsl/program/clone_context.h"
 #include "src/tint/lang/wgsl/resolver/resolve.h"
 
 namespace tint::spirv::reader::ast_parser {
+
+namespace {
+
+/// Trivial transform that removes the enable directive that disables the uniformity analysis.
+class ReenableUniformityAnalysis final
+    : public Castable<ReenableUniformityAnalysis, ast::transform::Transform> {
+  public:
+    ReenableUniformityAnalysis() {}
+    ~ReenableUniformityAnalysis() override {}
+
+    /// @copydoc ast::transform::Transform::Apply
+    ApplyResult Apply(const Program& src,
+                      const ast::transform::DataMap&,
+                      ast::transform::DataMap&) const override {
+        ProgramBuilder b;
+        program::CloneContext ctx = {&b, &src, /* auto_clone_symbols */ true};
+
+        // Remove the extension that disables the uniformity analysis.
+        for (auto* enable : src.AST().Enables()) {
+            if (enable->HasExtension(wgsl::Extension::kChromiumDisableUniformityAnalysis) &&
+                enable->extensions.Length() == 1u) {
+                ctx.Remove(src.AST().GlobalDeclarations(), enable);
+            }
+        }
+
+        ctx.Clone();
+        return resolver::Resolve(b);
+    }
+};
+
+}  // namespace
 
 Program Parse(const std::vector<uint32_t>& input, const Options& options) {
     ASTParser parser(input);
@@ -60,33 +93,11 @@ Program Parse(const std::vector<uint32_t>& input, const Options& options) {
         builder.DiagnosticDirective(wgsl::DiagnosticSeverity::kOff, "derivative_uniformity");
     }
 
-    if (!options.allow_chromium_extensions) {
-        // Check if any Chromium extensions were used.
-        for (auto* enable : builder.AST().Enables()) {
-            for (auto* extension : enable->extensions) {
-                switch (extension->name) {
-                    case wgsl::Extension::kUndefined:
-                    case wgsl::Extension::kChromiumDisableUniformityAnalysis:
-                    case wgsl::Extension::kChromiumExperimentalDp4A:
-                    case wgsl::Extension::kChromiumExperimentalFullPtrParameters:
-                    case wgsl::Extension::kChromiumExperimentalPixelLocal:
-                    case wgsl::Extension::kChromiumExperimentalPushConstant:
-                    case wgsl::Extension::kChromiumExperimentalReadWriteStorageTexture:
-                    case wgsl::Extension::kChromiumExperimentalSubgroups:
-                    case wgsl::Extension::kChromiumInternalDualSourceBlending:
-                    case wgsl::Extension::kChromiumInternalRelaxedUniformLayout: {
-                        StringStream ss;
-                        ss << "module requires " << ToString(extension->name)
-                           << ", but 'allow-chromium-extensions' was not passed";
-                        builder.Diagnostics().add_error(diag::System::Reader, ss.str());
-                        return Program(std::move(builder));
-                    }
-                    case wgsl::Extension::kF16:
-                        break;
-                }
-            }
-        }
-    }
+    // Disable the uniformity analysis temporarily.
+    // We will run transforms that attempt to change the AST to satisfy the analysis.
+    auto allowed_features = options.allowed_features;
+    allowed_features.extensions.insert(wgsl::Extension::kChromiumDisableUniformityAnalysis);
+    builder.Enable(wgsl::Extension::kChromiumDisableUniformityAnalysis);
 
     // The SPIR-V parser can construct disjoint AST nodes, which is invalid for
     // the Resolver. Clone the Program to clean these up.
@@ -94,7 +105,7 @@ Program Parse(const std::vector<uint32_t>& input, const Options& options) {
 
     ProgramBuilder output;
     program::CloneContext(&output, &program_with_disjoint_ast, false).Clone();
-    auto program = Program(resolver::Resolve(output));
+    auto program = Program(resolver::Resolve(output, allowed_features));
     if (!program.IsValid()) {
         return program;
     }
@@ -104,11 +115,15 @@ Program Parse(const std::vector<uint32_t>& input, const Options& options) {
     manager.Add<ast::transform::Unshadow>();
     manager.Add<ast::transform::SimplifyPointers>();
     manager.Add<FoldTrivialLets>();
+    manager.Add<PassWorkgroupIdAsArgument>();
     manager.Add<DecomposeStridedMatrix>();
     manager.Add<DecomposeStridedArray>();
     manager.Add<ast::transform::RemoveUnreachableStatements>();
     manager.Add<Atomics>();
+    manager.Add<ReenableUniformityAnalysis>();
     return manager.Run(program, {}, outputs);
 }
 
 }  // namespace tint::spirv::reader::ast_parser
+
+TINT_INSTANTIATE_TYPEINFO(tint::spirv::reader::ast_parser::ReenableUniformityAnalysis);

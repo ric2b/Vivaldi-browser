@@ -29,12 +29,23 @@ BASE_FEATURE(kAllowEyeDropperWGCScreenCapture,
 #endif  // BUILDFLAG(IS_WIN)
 );
 
+// Enables icon in titlebar for web apps.
+BASE_FEATURE(kWebAppIconInTitlebar,
+             "WebAppIconInTitlebar",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables Chrome Labs menu in the toolbar. See https://crbug.com/1145666
 BASE_FEATURE(kChromeLabs, "ChromeLabs", base::FEATURE_ENABLED_BY_DEFAULT);
 const char kChromeLabsActivationParameterName[] =
     "chrome_labs_activation_percentage";
 const base::FeatureParam<int> kChromeLabsActivationPercentage{
     &kChromeLabs, kChromeLabsActivationParameterName, 99};
+
+// When enabled, clicks outside the omnibox and its popup will close an open
+// omnibox popup.
+BASE_FEATURE(kCloseOmniboxPopupOnInactiveAreaClick,
+             "CloseOmniboxPopupOnInactiveAreaClick",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Create new Extensions app menu option (removing "More Tools -> Extensions")
 // with submenu to manage extensions and visit chrome web store.
@@ -54,18 +65,12 @@ BASE_FEATURE(kAccessCodeCastUI,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_FUCHSIA)
 // Enables camera preview in permission bubble and site settings.
 BASE_FEATURE(kCameraMicPreview,
              "CameraMicPreview",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// Enables displaying the submenu to open a link with a different profile if
-// there is at least one other active profile. Fully rolled out on Desktop.
-BASE_FEATURE(kDisplayOpenLinkAsProfile,
-             "DisplayOpenLinkAsProfile",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables showing the EV certificate details in the Page Info bubble.
 BASE_FEATURE(kEvDetailsInPageInfo,
@@ -106,7 +111,7 @@ BASE_FEATURE(kResponsiveToolbar,
 
 // Enables the side search feature for Google Search. Presents recent Google
 // search results in a browser side panel.
-BASE_FEATURE(kSideSearch, "SideSearch", base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kSideSearch, "SideSearch", base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSideSearchFeedback,
              "SideSearchFeedback",
@@ -146,6 +151,26 @@ BASE_FEATURE(kSidePanelCompanionDefaultPinned,
 BASE_FEATURE(kSidePanelPinning,
              "SidePanelPinning",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsSidePanelPinningEnabled() {
+  return (IsChromeRefresh2023() &&
+          base::FeatureList::IsEnabled(kSidePanelPinning));
+}
+
+BASE_FEATURE(kSidePanelMinimumWidth,
+             "SidePanelMinimumWidth",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+const base::FeatureParam<int> kSidePanelMinimumWidthParameter{
+    &kSidePanelMinimumWidth, "minPanelWidth", 360};
+int GetSidePanelMinimumWidth() {
+  if (base::FeatureList::IsEnabled(kSidePanelMinimumWidth)) {
+    return kSidePanelMinimumWidthParameter.Get();
+  }
+
+  // This is the default value used without this feature.
+  return 320;
+}
+
 #endif
 
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
@@ -188,9 +213,7 @@ BASE_FEATURE(kTabGroupsCollapseFreezing,
 
 // Enables users to explicitly save and recall tab groups.
 // https://crbug.com/1223929
-BASE_FEATURE(kTabGroupsSave,
-             "TabGroupsSave",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTabGroupsSave, "TabGroupsSave", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables configuring tab hover card image previews in the settings.
 BASE_FEATURE(kTabHoverCardImageSettings,
@@ -231,6 +254,25 @@ bool IsTabOrganization() {
   return IsChromeRefresh2023() &&
          base::FeatureList::IsEnabled(features::kTabOrganization);
 }
+
+const base::FeatureParam<base::TimeDelta> kTabOrganizationTriggerPeriod{
+    &kTabOrganization, "trigger_period", base::Hours(6)};
+
+const base::FeatureParam<double> kTabOrganizationTriggerBackoffBase{
+    &kTabOrganization, "backoff_base", 2.0};
+
+const base::FeatureParam<double> kTabOrganizationTriggerThreshold{
+    &kTabOrganization, "trigger_threshold", 7.0};
+
+const base::FeatureParam<double> kTabOrganizationTriggerSensitivityThreshold{
+    &kTabOrganization, "trigger_sensitivity_threshold", 0.5};
+
+const base::FeatureParam<bool> KTabOrganizationTriggerDemoMode{
+    &kTabOrganization, "trigger_demo_mode", false};
+
+BASE_FEATURE(kTabOrganizationRefreshButton,
+             "TabOrganizationRefreshButton",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabSearchChevronIcon,
              "TabSearchChevronIcon",
@@ -288,6 +330,12 @@ const base::FeatureParam<int> kTabSearchRecentlyClosedTabCountThreshold{
 
 BASE_FEATURE(kTabSearchUseMetricsReporter,
              "TabSearchUseMetricsReporter",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables creating a web app window when tearing off a tab with a url
+// controlled by a web app.
+BASE_FEATURE(kTearOffWebAppTabOpensWebAppWindow,
+             "TearOffWebAppTabOpensWebAppWindow",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kToolbarUseHardwareBitmapDraw,

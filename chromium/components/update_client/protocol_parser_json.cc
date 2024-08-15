@@ -116,8 +116,9 @@ bool ParseManifest(const base::Value& manifest_node_val,
 
 void ParseActions(const base::Value& actions_node,
                   ProtocolParser::Result* result) {
-  if (!actions_node.is_dict())
+  if (!actions_node.is_dict()) {
     return;
+  }
 
   const base::Value::List* action_node =
       actions_node.GetDict().FindList("action");
@@ -126,8 +127,9 @@ void ParseActions(const base::Value& actions_node,
   }
 
   const base::Value::List& action_list = *action_node;
-  if (action_list.empty() || !action_list[0].is_dict())
+  if (action_list.empty() || !action_list[0].is_dict()) {
     return;
+  }
 
   result->action_run = GetValueString(action_list[0].GetDict(), "run");
 }
@@ -212,15 +214,17 @@ bool ParseUpdateCheck(const base::Value& updatecheck_node_val,
   result->status = *status;
   if (result->status == "noupdate") {
     const auto* actions_node = updatecheck_node.Find("actions");
-    if (actions_node)
+    if (actions_node) {
       ParseActions(*actions_node, result);
+    }
     return true;
   }
 
   if (result->status == "ok") {
     const auto* actions_node = updatecheck_node.Find("actions");
-    if (actions_node)
+    if (actions_node) {
       ParseActions(*actions_node, result);
+    }
 
     const auto* urls_node = updatecheck_node.Find("urls");
     if (!urls_node) {
@@ -228,8 +232,9 @@ bool ParseUpdateCheck(const base::Value& updatecheck_node_val,
       return false;
     }
 
-    if (!ParseUrls(*urls_node, result, error))
+    if (!ParseUrls(*urls_node, result, error)) {
       return false;
+    }
 
     const auto* manifest_node = updatecheck_node.Find("manifest");
     if (!manifest_node) {
@@ -278,8 +283,14 @@ bool ParseApp(const base::Value& app_node_val,
     result->status = *status;
     if (result->status == "restricted" ||
         result->status == "error-unknownApplication" ||
-        result->status == "error-invalidAppId")
+        result->status == "error-invalidAppId" ||
+        result->status == "error-osnotsupported" ||
+        result->status == "error-hwnotsupported" ||
+        result->status == "error-hash" ||
+        result->status == "error-unsupportedprotocol" ||
+        result->status == "error-internal") {
       return true;
+    }
 
     // If the status was not handled above and the status is not "ok", then
     // this must be a status literal that that the parser does not know about.
@@ -389,10 +400,11 @@ bool ProtocolParserJSON::DoParse(const std::string& response_json,
     for (const auto& app : *app_node) {
       Result result;
       std::string error;
-      if (ParseApp(app, &result, &error))
+      if (ParseApp(app, &result, &error)) {
         results->list.push_back(result);
-      else
+      } else {
         ParseError("%s", error.c_str());
+      }
     }
   }
 

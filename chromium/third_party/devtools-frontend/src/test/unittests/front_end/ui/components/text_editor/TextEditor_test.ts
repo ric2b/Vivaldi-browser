@@ -5,7 +5,6 @@
 import * as Common from '../../../../../../front_end/core/common/common.js';
 import type * as Platform from '../../../../../../front_end/core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../../../front_end/core/platform/platform.js';
-import * as Root from '../../../../../../front_end/core/root/root.js';
 import * as SDK from '../../../../../../front_end/core/sdk/sdk.js';
 import type * as Protocol from '../../../../../../front_end/generated/protocol.js';
 import * as Bindings from '../../../../../../front_end/models/bindings/bindings.js';
@@ -108,13 +107,6 @@ describeWithEnvironment('TextEditor', () => {
   });
 
   describe('configuration', () => {
-    it('can guess indentation', () => {
-      assert.strictEqual(
-          TextEditor.Config.guessIndent(CodeMirror.Text.of(['hello():', '    world();', '    return;'])), '    ');
-      assert.strictEqual(
-          TextEditor.Config.guessIndent(CodeMirror.Text.of(['hello():', '\tworld();', '\treturn;'])), '\t');
-    });
-
     it('can detect line separators', () => {
       assert.strictEqual(makeState('one\r\ntwo\r\nthree').lineBreak, '\r\n');
       assert.strictEqual(makeState('one\ntwo\nthree').lineBreak, '\n');
@@ -240,12 +232,8 @@ describeWithMockConnection('TextEditor autocompletion', () => {
     const targetManager = SDK.TargetManager.TargetManager.instance();
     const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
 
-    Root.Runtime.experiments.setEnabled('wasmDWARFDebugging', true);
-    const pluginManager = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding
-                              .instance({forceNew: true, targetManager, resourceMapping})
-                              .initPluginManagerForTest();
-    assertNotNullOrUndefined(pluginManager);
-
+    const {pluginManager} = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
+        {forceNew: true, targetManager, resourceMapping});
     const testScript = debuggerModel.parsedScriptSource(
         '1' as Protocol.Runtime.ScriptId, 'script://1' as Platform.DevToolsPath.UrlString, 0, 0, 0, 0,
         executionContext.id, '', undefined, false, undefined, false, false, 0, null, null, null, null, null, null);

@@ -9,7 +9,6 @@
 
 #include "src/base/macros.h"
 #include "src/codegen/bailout-reason.h"
-#include "src/codegen/code-factory.h"
 #include "src/codegen/tnode.h"
 #include "src/common/globals.h"
 #include "src/common/message-template.h"
@@ -166,6 +165,7 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
   V(EmptyArrayList, empty_array_list, EmptyArrayList)                        \
   V(EmptyByteArray, empty_byte_array, EmptyByteArray)                        \
   V(EmptyFixedArray, empty_fixed_array, EmptyFixedArray)                     \
+  V(EmptyOrderedHashSet, empty_ordered_hash_set, EmptyOrderedHashSet)        \
   V(EmptyScopeInfo, empty_scope_info, EmptyScopeInfo)                        \
   V(EmptyPropertyDictionary, empty_property_dictionary,                      \
     EmptyPropertyDictionary)                                                 \
@@ -177,6 +177,7 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
     EmptySlowElementDictionary)                                              \
   V(empty_string, empty_string, EmptyString)                                 \
   V(error_to_string, error_to_string, ErrorToString)                         \
+  V(error_string, error_string, ErrorString)                                 \
   V(errors_string, errors_string, ErrorsString)                              \
   V(FalseValue, false_value, False)                                          \
   V(FixedArrayMap, fixed_array_map, FixedArrayMap)                           \
@@ -189,6 +190,7 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
   V(Infinity_string, Infinity_string, InfinityString)                        \
   V(is_concat_spreadable_symbol, is_concat_spreadable_symbol,                \
     IsConcatSpreadableSymbol)                                                \
+  V(Iterator_string, Iterator_string, IteratorString)                        \
   V(iterator_symbol, iterator_symbol, IteratorSymbol)                        \
   V(keys_string, keys_string, KeysString)                                    \
   V(async_iterator_symbol, async_iterator_symbol, AsyncIteratorSymbol)       \
@@ -211,6 +213,7 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
   V(number_string, number_string, NumberString)                              \
   V(number_to_string, number_to_string, NumberToString)                      \
   V(Object_string, Object_string, ObjectString)                              \
+  V(object_string, object_string, objectString)                              \
   V(object_to_string, object_to_string, ObjectToString)                      \
   V(SeqOneByteStringMap, seq_one_byte_string_map, SeqOneByteStringMap)       \
   V(OneClosureCellMap, one_closure_cell_map, OneClosureCellMap)              \
@@ -241,10 +244,12 @@ enum class PrimitiveType { kBoolean, kNumber, kString, kSymbol };
   V(StoreHandler0Map, store_handler0_map, StoreHandler0Map)                  \
   V(string_string, string_string, StringString)                              \
   V(string_to_string, string_to_string, StringToString)                      \
+  V(suppressed_string, suppressed_string, SuppressedString)                  \
   V(SeqTwoByteStringMap, seq_two_byte_string_map, SeqTwoByteStringMap)       \
   V(TheHoleValue, the_hole_value, TheHole)                                   \
   V(PropertyCellHoleValue, property_cell_hole_value, PropertyCellHole)       \
   V(HashTableHoleValue, hash_table_hole_value, HashTableHole)                \
+  V(PromiseHoleValue, promise_hole_value, PromiseHole)                       \
   V(then_string, then_string, ThenString)                                    \
   V(toJSON_string, toJSON_string, ToJSONString)                              \
   V(toString_string, toString_string, ToStringString)                        \
@@ -888,25 +893,32 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
 
   void Dcheck(const BranchGenerator& branch, const char* message,
               const char* file, int line,
-              std::initializer_list<ExtraNode> extra_nodes = {});
+              std::initializer_list<ExtraNode> extra_nodes = {},
+              SourceLocation loc = SourceLocation::Current());
   void Dcheck(const NodeGenerator<BoolT>& condition_body, const char* message,
               const char* file, int line,
-              std::initializer_list<ExtraNode> extra_nodes = {});
+              std::initializer_list<ExtraNode> extra_nodes = {},
+              SourceLocation loc = SourceLocation::Current());
   void Dcheck(TNode<Word32T> condition_node, const char* message,
               const char* file, int line,
-              std::initializer_list<ExtraNode> extra_nodes = {});
+              std::initializer_list<ExtraNode> extra_nodes = {},
+              SourceLocation loc = SourceLocation::Current());
   void Check(const BranchGenerator& branch, const char* message,
              const char* file, int line,
-             std::initializer_list<ExtraNode> extra_nodes = {});
+             std::initializer_list<ExtraNode> extra_nodes = {},
+             SourceLocation loc = SourceLocation::Current());
   void Check(const NodeGenerator<BoolT>& condition_body, const char* message,
              const char* file, int line,
-             std::initializer_list<ExtraNode> extra_nodes = {});
+             std::initializer_list<ExtraNode> extra_nodes = {},
+             SourceLocation loc = SourceLocation::Current());
   void Check(TNode<Word32T> condition_node, const char* message,
              const char* file, int line,
-             std::initializer_list<ExtraNode> extra_nodes = {});
+             std::initializer_list<ExtraNode> extra_nodes = {},
+             SourceLocation loc = SourceLocation::Current());
   void FailAssert(const char* message,
                   const std::vector<FileAndLine>& files_and_lines,
-                  std::initializer_list<ExtraNode> extra_nodes = {});
+                  std::initializer_list<ExtraNode> extra_nodes = {},
+                  SourceLocation loc = SourceLocation::Current());
 
   void FastCheck(TNode<BoolT> condition);
 
@@ -917,23 +929,11 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   // one finds in the EcmaScript spec, operating on an Callable (e.g. a
   // JSFunction or proxy) rather than a InstructionStream object.
   template <class... TArgs>
-  TNode<Object> Call(TNode<Context> context, TNode<Object> callable,
-                     TNode<JSReceiver> receiver, TArgs... args) {
-    return CallJS(
-        CodeFactory::Call(isolate(), ConvertReceiverMode::kNotNullOrUndefined),
-        context, callable, receiver, args...);
-  }
+  inline TNode<Object> Call(TNode<Context> context, TNode<Object> callable,
+                            TNode<JSReceiver> receiver, TArgs... args);
   template <class... TArgs>
-  TNode<Object> Call(TNode<Context> context, TNode<Object> callable,
-                     TNode<Object> receiver, TArgs... args) {
-    if (IsUndefinedConstant(receiver) || IsNullConstant(receiver)) {
-      return CallJS(
-          CodeFactory::Call(isolate(), ConvertReceiverMode::kNullOrUndefined),
-          context, callable, receiver, args...);
-    }
-    return CallJS(CodeFactory::Call(isolate()), context, callable, receiver,
-                  args...);
-  }
+  inline TNode<Object> Call(TNode<Context> context, TNode<Object> callable,
+                            TNode<Object> receiver, TArgs... args);
 
   TNode<Object> CallApiCallback(TNode<Object> context, TNode<RawPtrT> callback,
                                 TNode<Int32T> argc, TNode<Object> data,
@@ -959,8 +959,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                                         TNode<JSReceiver> target,
                                         TNode<JSReceiver> new_target,
                                         TArgs... args) {
-    return CAST(ConstructJSWithTarget(CodeFactory::Construct(isolate()),
-                                      context, target, new_target,
+    return CAST(ConstructJSWithTarget(Builtin::kConstruct, context, target,
+                                      new_target,
                                       implicit_cast<TNode<Object>>(args)...));
   }
   template <class... TArgs>
@@ -1190,12 +1190,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                                     TNode<RawPtrT> pointer,
                                     ExternalPointerTag tag);
 
-  // Load an indirect pointer field.
-  // Only available when the sandbox is enabled.
-  TNode<HeapObject> LoadIndirectPointerFromObject(TNode<HeapObject> object,
-                                                  int offset,
-                                                  IndirectPointerTag tag);
-
   // Load a trusted pointer field.
   // When the sandbox is enabled, these are indirect pointers using the trusted
   // pointer table. Otherwise they are regular tagged fields.
@@ -1208,6 +1202,33 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   // enabled, reference code objects through the code pointer table.
   TNode<Code> LoadCodePointerFromObject(TNode<HeapObject> object, int offset);
 
+#ifdef V8_ENABLE_SANDBOX
+  // Load an indirect pointer field.
+  TNode<HeapObject> LoadIndirectPointerFromObject(TNode<HeapObject> object,
+                                                  int offset,
+                                                  IndirectPointerTag tag);
+
+  // Determines whether the given indirect pointer handle is a trusted pointer
+  // handle or a code pointer handle.
+  TNode<BoolT> IsTrustedPointerHandle(TNode<IndirectPointerHandleT> handle);
+
+  // Retrieve the heap object referenced by the given indirect pointer handle,
+  // which can either be a trusted pointer handle or a code pointer handle.
+  TNode<HeapObject> ResolveIndirectPointerHandle(
+      TNode<IndirectPointerHandleT> handle, IndirectPointerTag tag);
+
+  // Retrieve the Code object referenced by the given trusted pointer handle.
+  TNode<Code> ResolveCodePointerHandle(TNode<IndirectPointerHandleT> handle);
+
+  // Retrieve the heap object referenced by the given trusted pointer handle.
+  TNode<HeapObject> ResolveTrustedPointerHandle(
+      TNode<IndirectPointerHandleT> handle, IndirectPointerTag tag);
+
+  // Helper function to compute the offset into the code pointer table from a
+  // code pointer handle.
+  TNode<UintPtrT> ComputeCodePointerTableEntryOffset(
+      TNode<IndirectPointerHandleT> handle);
+
   // Load the pointer to a Code's entrypoint via code pointer.
   // Only available when the sandbox is enabled as it requires the code pointer
   // table.
@@ -1218,12 +1239,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   }
   TNode<RawPtrT> LoadCodeEntrypointViaCodePointerField(TNode<HeapObject> object,
                                                        TNode<IntPtrT> offset);
-
-#ifdef V8_ENABLE_SANDBOX
-  // Helper function to load a CodePointerHandle from an object and compute the
-  // offset into the code pointer table from it.
-  TNode<UintPtrT> ComputeCodePointerTableEntryOffset(
-      TNode<HeapObject> object, TNode<IntPtrT> field_offset);
 #endif
 
   TNode<RawPtrT> LoadForeignForeignAddressPtr(TNode<Foreign> object) {
@@ -1239,8 +1254,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   }
 
   TNode<RawPtrT> LoadExternalStringResourcePtr(TNode<ExternalString> object) {
-    return LoadExternalPointerFromObject(
-        object, ExternalString::kResourceOffset, kExternalStringResourceTag);
+    return LoadExternalPointerFromObject(object,
+                                         offsetof(ExternalString, resource_),
+                                         kExternalStringResourceTag);
   }
 
   TNode<RawPtrT> LoadExternalStringResourceDataPtr(
@@ -1251,9 +1267,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                          Word32And(LoadInstanceType(object),
                                    Int32Constant(kUncachedExternalStringMask)),
                          Int32Constant(kUncachedExternalStringTag)));
-    return LoadExternalPointerFromObject(object,
-                                         ExternalString::kResourceDataOffset,
-                                         kExternalStringResourceDataTag);
+    return LoadExternalPointerFromObject(
+        object, offsetof(ExternalString, resource_data_),
+        kExternalStringResourceDataTag);
   }
 
   TNode<RawPtr<Uint64T>> Log10OffsetTable() {
@@ -1267,6 +1283,18 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
     return LoadExternalPointerFromObject(
         object, WasmInternalFunction::kCallTargetOffset,
         kWasmInternalFunctionCallTargetTag);
+  }
+
+  TNode<RawPtrT> LoadWasmInternalFunctionInstructionStart(
+      TNode<WasmInternalFunction> object) {
+#ifdef V8_ENABLE_SANDBOX
+    return LoadCodeEntrypointViaCodePointerField(
+        object, WasmInternalFunction::kCodeOffset);
+#else
+    TNode<Code> code =
+        LoadObjectField<Code>(object, WasmInternalFunction::kCodeOffset);
+    return LoadCodeInstructionStart(code);
+#endif  // V8_ENABLE_SANDBOX
   }
 
   TNode<RawPtrT> LoadWasmTypeInfoNativeTypePtr(TNode<WasmTypeInfo> object) {
@@ -1823,8 +1851,17 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   // Load the "code" property of a JSFunction.
   TNode<Code> LoadJSFunctionCode(TNode<JSFunction> function);
 
+  // Load the data object associated with a SFI.
+  // If the (expected) data type is known, prefer using one of the specialized
+  // accessors (e.g. LoadSharedFunctionInfoBuiltinId).
+  TNode<Object> LoadSharedFunctionInfoData(TNode<SharedFunctionInfo> sfi);
+
+  TNode<BoolT> SharedFunctionInfoHasBaselineCode(TNode<SharedFunctionInfo> sfi);
+
+  TNode<Smi> LoadSharedFunctionInfoBuiltinId(TNode<SharedFunctionInfo> sfi);
+
   TNode<BytecodeArray> LoadSharedFunctionInfoBytecodeArray(
-      TNode<SharedFunctionInfo> shared);
+      TNode<SharedFunctionInfo> sfi);
 
   void StoreObjectByteNoWriteBarrier(TNode<HeapObject> object, int offset,
                                      TNode<Word32T> value);
@@ -2159,6 +2196,7 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                                            Label* large_object_fallback);
 
   TNode<OrderedHashSet> AllocateOrderedHashSet();
+  TNode<OrderedHashSet> AllocateOrderedHashSet(TNode<IntPtrT> capacity);
 
   TNode<OrderedHashMap> AllocateOrderedHashMap();
 
@@ -2260,6 +2298,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
       AllocationFlags flags = AllocationFlag::kNone,
       base::Optional<TNode<Map>> fixed_array_map = base::nullopt);
 
+  TNode<NativeContext> GetCreationContextFromMap(TNode<Map> map,
+                                                 Label* if_bailout);
   TNode<NativeContext> GetCreationContext(TNode<JSReceiver> receiver,
                                           Label* if_bailout);
   TNode<NativeContext> GetFunctionRealm(TNode<Context> context,
@@ -2801,6 +2841,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   void SetPendingMessage(TNode<HeapObject> message);
   TNode<BoolT> IsExecutionTerminating();
 
+  TNode<Object> GetContinuationPreservedEmbedderData();
+  void SetContinuationPreservedEmbedderData(TNode<Object> value);
+
   // Type checks.
   // Check whether the map is for an object with special properties, such as a
   // JSProxy or an object with interceptors.
@@ -2816,6 +2859,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   TNode<BoolT> IsCallableMap(TNode<Map> map);
   TNode<BoolT> IsCallable(TNode<HeapObject> object);
   TNode<BoolT> TaggedIsCallable(TNode<Object> object);
+  TNode<BoolT> IsCode(TNode<HeapObject> object);
+  TNode<BoolT> TaggedIsCode(TNode<Object> object);
   TNode<BoolT> IsConsStringInstanceType(TNode<Int32T> instance_type);
   TNode<BoolT> IsConstructorMap(TNode<Map> map);
   TNode<BoolT> IsConstructor(TNode<HeapObject> object);
@@ -3011,8 +3056,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   template <typename TIndex>
   TNode<BoolT> FixedArraySizeDoesntFitInNewSpace(TNode<TIndex> element_count,
                                                  int base_size);
-
-  TNode<BoolT> IsMetaMap(TNode<HeapObject> o) { return IsMapMap(o); }
 
   // ElementsKind helpers:
   TNode<BoolT> ElementsKindEqual(TNode<Int32T> a, TNode<Int32T> b) {
@@ -3608,17 +3651,6 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   TNode<JSObject> CreateAsyncFromSyncIterator(TNode<Context> context,
                                               TNode<JSReceiver> sync_iterator,
                                               TNode<Object> next);
-
-  template <class... TArgs>
-  TNode<Object> CallBuiltin(Builtin id, TNode<Object> context, TArgs... args) {
-    return CallStub<Object>(Builtins::CallableFor(isolate(), id), context,
-                            args...);
-  }
-
-  template <class... TArgs>
-  void TailCallBuiltin(Builtin id, TNode<Object> context, TArgs... args) {
-    return TailCallStub(Builtins::CallableFor(isolate(), id), context, args...);
-  }
 
   void LoadPropertyFromFastObject(TNode<HeapObject> object, TNode<Map> map,
                                   TNode<DescriptorArray> descriptors,
@@ -4582,6 +4614,10 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
                               TNode<Uint8T> property_details,
                               Label* needs_resize);
 
+  TNode<Object> CallOnCentralStack(TNode<Context> context, TNode<Object> target,
+                                   TNode<Int32T> num_args,
+                                   TNode<FixedArray> args);
+
  private:
   friend class CodeStubArguments;
 
@@ -4733,6 +4769,10 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
   void EmitElementStoreTypedArrayUpdateValue(
       TNode<Object> value, ElementsKind elements_kind,
       TNode<TValue> converted_value, TVariable<Object>* maybe_converted_value);
+
+  TNode<RawPtrT> SwitchToTheCentralStackForJS(TNode<Object> callable_node);
+  void SwitchFromTheCentralStackForJS(TNode<RawPtrT> old_sp,
+                                      TNode<Object> callable);
 };
 
 class V8_EXPORT_PRIVATE CodeStubArguments {

@@ -187,8 +187,7 @@ void WebRtcTextLogHandler::SetMetaData(
   FireGenericDoneCallback(std::move(callback), true, "");
 }
 
-bool WebRtcTextLogHandler::StartLogging(WebRtcLogUploader* log_uploader,
-                                        GenericDoneCallback callback) {
+bool WebRtcTextLogHandler::StartLogging(GenericDoneCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!callback.is_null());
 
@@ -204,6 +203,7 @@ bool WebRtcTextLogHandler::StartLogging(WebRtcLogUploader* log_uploader,
     return false;
   }
 
+  WebRtcLogUploader* log_uploader = WebRtcLogUploader::GetInstance();
   if (!log_uploader->ApplyForStartLogging()) {
     FireGenericDoneCallback(std::move(callback), false,
                             "Cannot start, maybe the maximum number of "
@@ -418,7 +418,7 @@ void WebRtcTextLogHandler::SetWebAppId(int web_app_id) {
 
 void WebRtcTextLogHandler::OnGetNetworkInterfaceList(
     GenericDoneCallback callback,
-    const absl::optional<net::NetworkInterfaceList>& networks) {
+    const std::optional<net::NetworkInterfaceList>& networks) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   // Hop to a background thread to get the distro string, which can block.
   base::ThreadPool::PostTaskAndReplyWithResult(
@@ -433,7 +433,7 @@ void WebRtcTextLogHandler::OnGetNetworkInterfaceList(
 
 void WebRtcTextLogHandler::OnGetNetworkInterfaceListFinish(
     GenericDoneCallback callback,
-    const absl::optional<net::NetworkInterfaceList>& networks,
+    const std::optional<net::NetworkInterfaceList>& networks,
     const std::string& linux_distro) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -479,7 +479,7 @@ void WebRtcTextLogHandler::OnGetNetworkInterfaceListFinish(
 #if BUILDFLAG(IS_MAC)
   computer_model = base::SysInfo::HardwareModelName();
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
-  if (const absl::optional<base::StringPiece> computer_model_statistic =
+  if (const std::optional<base::StringPiece> computer_model_statistic =
           ash::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
               ash::system::kHardwareClassKey)) {
     computer_model = std::string(computer_model_statistic.value());

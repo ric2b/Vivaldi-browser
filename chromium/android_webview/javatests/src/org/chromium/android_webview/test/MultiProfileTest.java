@@ -20,8 +20,11 @@ import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwBrowserContext;
+import org.chromium.android_webview.AwBrowserContextStore;
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwCookieManager;
@@ -40,12 +43,18 @@ import java.util.List;
 import java.util.Set;
 
 /** Tests the management of multiple AwBrowserContexts (profiles) */
-@RunWith(AwJUnit4ClassRunner.class)
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
 @DoNotBatch(reason = "Tests focus on manipulation of global profile state")
-public class MultiProfileTest {
-    @Rule public MultiProfileTestRule mRule = new MultiProfileTestRule();
+public class MultiProfileTest extends AwParameterizedTest {
+    @Rule public MultiProfileTestRule mRule;
 
-    private TestAwContentsClient mContentsClient = mRule.getContentsClient();
+    private TestAwContentsClient mContentsClient;
+
+    public MultiProfileTest(AwSettingsMutation param) {
+        this.mRule = new MultiProfileTestRule(param.getMutation());
+        this.mContentsClient = mRule.getContentsClient();
+    }
 
     @After
     public void tearDown() {
@@ -72,7 +81,8 @@ public class MultiProfileTest {
         Assert.assertNotSame(nonDefaultProfile2, defaultProfile);
 
         final List<String> names =
-                ThreadUtils.runOnUiThreadBlockingNoException(AwBrowserContext::listAllContexts);
+                ThreadUtils.runOnUiThreadBlockingNoException(
+                        AwBrowserContextStore::listAllContexts);
         Assert.assertTrue(names.contains("1"));
         Assert.assertTrue(names.contains("2"));
         Assert.assertTrue(names.contains("Default"));
@@ -107,7 +117,7 @@ public class MultiProfileTest {
                     Assert.assertThrows(
                             IllegalArgumentException.class,
                             () -> {
-                                AwBrowserContext.deleteNamedContext("Default");
+                                AwBrowserContextStore.deleteNamedContext("Default");
                             });
                 });
     }
@@ -122,7 +132,7 @@ public class MultiProfileTest {
                     Assert.assertThrows(
                             IllegalStateException.class,
                             () -> {
-                                AwBrowserContext.deleteNamedContext("myProfile");
+                                AwBrowserContextStore.deleteNamedContext("myProfile");
                             });
                 });
     }
@@ -133,7 +143,7 @@ public class MultiProfileTest {
     public void testCanDeleteNonExistent() {
         mRule.runOnUiThread(
                 () -> {
-                    Assert.assertFalse(AwBrowserContext.deleteNamedContext("DoesNotExist"));
+                    Assert.assertFalse(AwBrowserContextStore.deleteNamedContext("DoesNotExist"));
                 });
     }
 

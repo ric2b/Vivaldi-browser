@@ -54,7 +54,6 @@ FEATURE_FLAGS = {
     'ShadowRealm': '--harmony-shadow-realm',
     'regexp-v-flag': '--harmony-regexp-unicode-sets',
     'array-grouping': '--harmony-array-grouping',
-    'change-array-by-copy': '--harmony-change-array-by-copy',
     'String.prototype.isWellFormed': '--harmony-string-is-well-formed',
     'String.prototype.toWellFormed': '--harmony-string-is-well-formed',
     'arraybuffer-transfer': '--harmony-rab-gsab-transfer',
@@ -63,6 +62,7 @@ FEATURE_FLAGS = {
     'set-methods': '--harmony-set-methods',
     'promise-with-resolvers': '--js-promise-withresolvers',
     'Array.fromAsync': '--harmony-array-from-async',
+    'import-attributes': '--harmony-import-attributes',
 }
 
 SKIPPED_FEATURES = set([])

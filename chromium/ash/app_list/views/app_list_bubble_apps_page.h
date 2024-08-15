@@ -103,7 +103,7 @@ class ASH_EXPORT AppListBubbleAppsPage
   // Handles `AppListController::UpdateAppListWithNewSortingOrder()` for the
   // bubble launcher apps page.
   void UpdateForNewSortingOrder(
-      const absl::optional<AppListSortOrder>& new_order,
+      const std::optional<AppListSortOrder>& new_order,
       bool animate,
       base::OnceClosure update_position_closure,
       base::OnceClosure animation_done_closure);
@@ -115,6 +115,7 @@ class ASH_EXPORT AppListBubbleAppsPage
   // views::View:
   void Layout() override;
   void VisibilityChanged(views::View* starting_from, bool is_visible) override;
+  void OnBoundsChanged(const gfx::Rect& old_bounds) override;
 
   // view::ViewObserver:
   void OnViewVisibilityChanged(views::View* observed_view,
@@ -190,7 +191,7 @@ class ASH_EXPORT AppListBubbleAppsPage
   // Called when the animation to fade out app list items is completed.
   // `aborted` indicates whether the fade out animation is aborted.
   void OnAppsGridViewFadeOutAnimationEnded(
-      const absl::optional<AppListSortOrder>& new_order,
+      const std::optional<AppListSortOrder>& new_order,
       bool aborted);
 
   // Called when the animation to fade in app list items is completed.
@@ -219,27 +220,23 @@ class ASH_EXPORT AppListBubbleAppsPage
   // Pressed callback for `toggle_continue_section_button_`.
   void OnToggleContinueSection();
 
-  raw_ptr<AppListViewDelegate, ExperimentalAsh> view_delegate_ = nullptr;
-  raw_ptr<views::ScrollView, ExperimentalAsh> scroll_view_ = nullptr;
-  raw_ptr<RoundedScrollBar, ExperimentalAsh> scroll_bar_ = nullptr;
+  raw_ptr<AppListViewDelegate> view_delegate_ = nullptr;
+  raw_ptr<views::ScrollView> scroll_view_ = nullptr;
+  raw_ptr<RoundedScrollBar> scroll_bar_ = nullptr;
 
   // Wraps both the continue label and the toggle continue section button.
-  raw_ptr<views::View, ExperimentalAsh> continue_label_container_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> continue_label_ = nullptr;
-  raw_ptr<IconButton, ExperimentalAsh> toggle_continue_section_button_ =
-      nullptr;
+  raw_ptr<views::View> continue_label_container_ = nullptr;
+  raw_ptr<views::Label> continue_label_ = nullptr;
+  raw_ptr<IconButton> toggle_continue_section_button_ = nullptr;
 
-  raw_ptr<ContinueSectionView, ExperimentalAsh> continue_section_ = nullptr;
-  raw_ptr<RecentAppsView, ExperimentalAsh> recent_apps_ = nullptr;
-  raw_ptr<views::Separator, ExperimentalAsh> separator_ = nullptr;
-  raw_ptr<AppListToastContainerView, ExperimentalAsh> toast_container_ =
-      nullptr;
-  raw_ptr<ScrollableAppsGridView, ExperimentalAsh> scrollable_apps_grid_view_ =
-      nullptr;
+  raw_ptr<ContinueSectionView> continue_section_ = nullptr;
+  raw_ptr<RecentAppsView> recent_apps_ = nullptr;
+  raw_ptr<views::Separator> separator_ = nullptr;
+  raw_ptr<AppListToastContainerView> toast_container_ = nullptr;
+  raw_ptr<ScrollableAppsGridView> scrollable_apps_grid_view_ = nullptr;
 
   // The search box owned by AppListBubbleView.
-  raw_ptr<SearchBoxView, DanglingUntriaged | ExperimentalAsh> search_box_ =
-      nullptr;
+  raw_ptr<SearchBoxView, DanglingUntriaged> search_box_ = nullptr;
 
   std::unique_ptr<AppListKeyboardController> app_list_keyboard_controller_;
   std::unique_ptr<AppListNudgeController> app_list_nudge_controller_;

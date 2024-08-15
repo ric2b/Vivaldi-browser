@@ -47,14 +47,8 @@ struct Usage {
     /// The index of the operand that is the value being used.
     size_t operand_index = 0u;
 
-    /// A specialization of Hasher for Usage.
-    struct Hasher {
-        /// @param u the usage to hash
-        /// @returns a hash of the usage
-        inline std::size_t operator()(const Usage& u) const {
-            return Hash(u.instruction, u.operand_index);
-        }
-    };
+    /// @returns the hash code of the Usage
+    size_t HashCode() const { return Hash(instruction, operand_index); }
 
     /// An equality helper for Usage.
     /// @param other the usage to compare against
@@ -71,7 +65,7 @@ class Value : public Castable<Value> {
     ~Value() override;
 
     /// @returns the type of the value
-    virtual const core::type::Type* Type() { return nullptr; }
+    virtual const core::type::Type* Type() const { return nullptr; }
 
     /// Destroys the Value. Once called, the Value must not be used again.
     /// The Value must not be in use by any instruction.
@@ -94,7 +88,20 @@ class Value : public Castable<Value> {
 
     /// @returns the set of usages of this value. An instruction may appear multiple times if it
     /// uses the value for multiple different operands.
-    const Hashset<Usage, 4, Usage::Hasher>& Usages() { return uses_; }
+    const Hashset<Usage, 4>& Usages() { return uses_; }
+
+    /// @returns true if this Value has any usages
+    bool IsUsed() const { return !uses_.IsEmpty(); }
+
+    /// @returns the number of usages of this Value
+    size_t NumUsages() const { return uses_.Count(); }
+
+    /// @returns true if the usages contains the instruction and operand index pair.
+    /// @param instruction the instruction
+    /// @param operand_index the in
+    bool HasUsage(const Instruction* instruction, size_t operand_index) const {
+        return uses_.Contains({const_cast<Instruction*>(instruction), operand_index});
+    }
 
     /// Apply a function to all uses of the value that exist prior to calling this method.
     /// @param func the function will be applied to each use
@@ -119,7 +126,7 @@ class Value : public Castable<Value> {
         kDead,
     };
 
-    Hashset<Usage, 4, Usage::Hasher> uses_;
+    Hashset<Usage, 4> uses_;
 
     /// Bitset of value flags
     tint::EnumSet<Flag> flags_;

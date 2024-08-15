@@ -10,8 +10,8 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/focus_mode/focus_mode_controller.h"
+#include "ash/system/focus_mode/focus_mode_session.h"
 #include "ash/system/focus_mode/focus_mode_util.h"
-#include "ash/system/unified/feature_pod_button.h"
 #include "ash/system/unified/feature_tile.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "base/check.h"
@@ -25,7 +25,6 @@ namespace ash {
 FocusModeFeaturePodController::FocusModeFeaturePodController(
     UnifiedSystemTrayController* tray_controller)
     : tray_controller_(tray_controller) {
-  CHECK(features::IsQsRevampEnabled());
   CHECK(features::IsFocusModeEnabled());
   FocusModeController::Get()->AddObserver(this);
 }
@@ -33,7 +32,6 @@ FocusModeFeaturePodController::FocusModeFeaturePodController(
 FocusModeFeaturePodController::~FocusModeFeaturePodController() {
   FocusModeController::Get()->RemoveObserver(this);
 }
-
 
 std::unique_ptr<FeatureTile> FocusModeFeaturePodController::CreateTile(
     bool compact) {
@@ -55,8 +53,9 @@ std::unique_ptr<FeatureTile> FocusModeFeaturePodController::CreateTile(
                           weak_factory_.GetWeakPtr()));
   tile_->CreateDecorativeDrillInArrow();
   tile_->SetVectorIcon(kFocusModeLampIcon);
-  tile_->SetToggled(FocusModeController::Get()->in_focus_session());
-  UpdateUI();
+  auto* controller = FocusModeController::Get();
+  tile_->SetToggled(controller->in_focus_session());
+  UpdateUI(controller->GetSnapshot(base::Time::Now()));
   return tile;
 }
 
@@ -66,15 +65,19 @@ QsFeatureCatalogName FocusModeFeaturePodController::GetCatalogName() {
 
 void FocusModeFeaturePodController::OnIconPressed() {
   auto* controller = FocusModeController::Get();
-  controller->ToggleFocusMode();
-  const bool new_state = controller->in_focus_session();
-  TrackToggleUMA(new_state);
 
-  // TODO(b/302194469): centralize bubble-closing logic.
-  if (new_state) {
-    // Close the system tray bubble. Deletes `this`.
-    tray_controller_->CloseBubble();
+  // As part of the first time user flow, if the user has never started a
+  // session before, we want to direct them to the focus panel so they can get
+  // more context and change focus settings instead of starting a session
+  // immediately.
+  if (!controller->HasStartedSessionBefore()) {
+    OnLabelPressed();
+    return;
   }
+
+  TrackToggleUMA(/*target_toggle_state=*/!controller->in_focus_session());
+  controller->ToggleFocusMode(
+      focus_mode_histogram_names::ToggleSource::kFeaturePod);
 }
 
 void FocusModeFeaturePodController::OnLabelPressed() {
@@ -83,44 +86,77 @@ void FocusModeFeaturePodController::OnLabelPressed() {
 }
 
 void FocusModeFeaturePodController::OnFocusModeChanged(bool in_focus_session) {
-  UpdateUI();
+  UpdateUI(FocusModeController::Get()->GetSnapshot(base::Time::Now()));
   tile_->SetToggled(in_focus_session);
 }
 
-void FocusModeFeaturePodController::OnTimerTick() {
-  UpdateUI();
+void FocusModeFeaturePodController::OnTimerTick(
+    const FocusModeSession::Snapshot& session_snapshot) {
+  UpdateUI(session_snapshot);
 }
 
-void FocusModeFeaturePodController::UpdateUI() {
+void FocusModeFeaturePodController::OnInactiveSessionDurationChanged(
+    const base::TimeDelta& session_duration) {
+  CHECK(tile_);
+
+  if (!FocusModeController::Get()->HasStartedSessionBefore()) {
+    return;
+  }
+
+  tile_->SetSubLabel(focus_mode_util::GetDurationString(
+      session_duration, /*digital_format=*/false));
+}
+
+void FocusModeFeaturePodController::OnActiveSessionDurationChanged(
+    const FocusModeSession::Snapshot& session_snapshot) {
+  UpdateUI(session_snapshot);
+}
+
+void FocusModeFeaturePodController::UpdateUI(
+    const FocusModeSession::Snapshot& session_snapshot) {
   auto* controller = FocusModeController::Get();
   CHECK(controller);
   CHECK(tile_);
 
-  const bool in_focus_session = controller->in_focus_session();
+  const bool in_focus_session =
+      session_snapshot.state == FocusModeSession::State::kOn;
   const std::u16string label_text = l10n_util::GetStringUTF16(
       in_focus_session ? IDS_ASH_STATUS_TRAY_FOCUS_MODE_TOGGLE_ACTIVE_LABEL
                        : IDS_ASH_STATUS_TRAY_FOCUS_MODE);
   tile_->SetLabel(label_text);
-  tile_->SetIconButtonTooltipText(label_text);
-  tile_->SetTooltipText(label_text);
+
+  // As part of the first time user flow, if the user has never started a
+  // session before, we hide the session duration sublabel since they are not
+  // able to start a focus session immediately anyway.
+  if (!controller->HasStartedSessionBefore()) {
+    const std::u16string tooltip_text =
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_FOCUS_MODE_TILE_INITIAL);
+    tile_->SetTooltipText(tooltip_text);
+    tile_->SetIconButtonTooltipText(tooltip_text);
+    tile_->SetSubLabelVisibility(false);
+    tile_->SetIconClickable(false);
+    return;
+  }
 
   const base::TimeDelta session_duration_remaining =
-      in_focus_session ? controller->end_time() - base::Time::Now()
-                       : controller->session_duration();
-
-  // We only show seconds if there is less than a minute remaining. This can
-  // only happen during a focus session.
-  // TODO(b/302044981): `UpdateUI` shouldn't have to know about internal
-  // implementation details of `focus_mode_util` (i.e. needing to round up the
-  // seconds, which time format to use, etc.) in order to function correctly. We
-  // should clean this up to provide a better API.
-  const bool should_show_seconds =
-      base::ClampRound<int64_t>(session_duration_remaining.InSecondsF()) <
-      base::Time::kSecondsPerMinute;
-  tile_->SetSubLabel(focus_mode_util::GetDurationString(
-      session_duration_remaining,
-      should_show_seconds ? focus_mode_util::TimeFormatType::kFull
-                          : focus_mode_util::TimeFormatType::kMinutesOnly));
+      in_focus_session ? session_snapshot.remaining_time
+                       : controller->GetSessionDuration();
+  const std::u16string duration_string = focus_mode_util::GetDurationString(
+      session_duration_remaining, /*digital_format=*/false);
+  tile_->SetSubLabel(
+      in_focus_session
+          ? l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_FOCUS_MODE_TIME_SUBLABEL, duration_string)
+          : duration_string);
+  tile_->SetTooltipText(l10n_util::GetStringFUTF16(
+      in_focus_session ? IDS_ASH_STATUS_TRAY_FOCUS_MODE_TILE_ACTIVE
+                       : IDS_ASH_STATUS_TRAY_FOCUS_MODE_TILE_INACTIVE,
+      duration_string));
+  tile_->SetIconClickable(true);
+  tile_->SetIconButtonTooltipText(l10n_util::GetStringFUTF16(
+      in_focus_session ? IDS_ASH_STATUS_TRAY_FOCUS_MODE_TILE_BUTTON_ACTIVE
+                       : IDS_ASH_STATUS_TRAY_FOCUS_MODE_TILE_BUTTON_INACTIVE,
+      duration_string));
 }
 
 }  // namespace ash

@@ -16,8 +16,8 @@ namespace internal {
 
 class AllocationObserver;
 class CodeLargeObjectSpace;
-class ConcurrentAllocator;
 class Heap;
+class LocalHeap;
 class LinearAllocationArea;
 class MainAllocator;
 class NewSpace;
@@ -31,10 +31,12 @@ class Space;
 // right bottleneck.
 class V8_EXPORT_PRIVATE HeapAllocator final {
  public:
-  explicit HeapAllocator(Heap*);
+  explicit HeapAllocator(LocalHeap*);
 
-  void Setup(LinearAllocationArea& new_allocation_info,
-             LinearAllocationArea& old_allocation_info);
+  // Set up all LABs for this LocalHeap.
+  void Setup(LinearAllocationArea* new_allocation_info = nullptr,
+             LinearAllocationArea* old_allocation_info = nullptr);
+
   void SetReadOnlySpace(ReadOnlySpace*);
 
   // Supports all `AllocationType` types.
@@ -119,8 +121,8 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
   MainAllocator* code_space_allocator() {
     return &code_space_allocator_.value();
   }
-  ConcurrentAllocator* shared_space_allocator() {
-    return shared_space_allocator_.get();
+  MainAllocator* shared_space_allocator() {
+    return &shared_space_allocator_.value();
   }
 
  private:
@@ -151,6 +153,7 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
   void IncrementObjectCounters();
 #endif  // DEBUG
 
+  LocalHeap* local_heap_;
   Heap* const heap_;
   Space* spaces_[LAST_SPACE + 1];
   ReadOnlySpace* read_only_space_;
@@ -161,7 +164,7 @@ class V8_EXPORT_PRIVATE HeapAllocator final {
   base::Optional<MainAllocator> code_space_allocator_;
 
   // Allocators for the shared spaces.
-  std::unique_ptr<ConcurrentAllocator> shared_space_allocator_;
+  base::Optional<MainAllocator> shared_space_allocator_;
   OldLargeObjectSpace* shared_lo_space_;
 
 #ifdef V8_ENABLE_ALLOCATION_TIMEOUT

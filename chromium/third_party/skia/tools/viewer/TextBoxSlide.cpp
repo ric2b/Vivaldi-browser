@@ -21,6 +21,7 @@
 #include "src/base/SkTime.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkOSFile.h"
+#include "tools/fonts/FontToolUtils.h"
 #include "tools/viewer/Slide.h"
 
 typedef std::unique_ptr<SkShaper> (*ShaperFactory)();
@@ -99,7 +100,7 @@ private:
                     SkShaper::MakeFontMgrRunIterator(utf8,
                                                      utf8Bytes,
                                                      srcFont,
-                                                     SkFontMgr::RefDefault(),
+                                                     ToolUtils::TestFontMgr(),
                                                      "Arial",
                                                      SkFontStyle::Bold(),
                                                      &*language));
@@ -118,7 +119,7 @@ private:
     std::unique_ptr<SkShaper> fShaper;
 };
 
-DEF_SLIDE( return new TextBoxSlide([](){ return SkShaper::Make(); }, "default"); );
+DEF_SLIDE( return new TextBoxSlide([](){ return SkShaper::Make(SkFontMgr::RefEmpty()); }, "default"); );
 #ifdef SK_SHAPER_CORETEXT_AVAILABLE
 DEF_SLIDE( return new TextBoxSlide(SkShaper::MakeCoreText, "coretext"); );
 #endif
@@ -133,7 +134,7 @@ public:
         const char text[] = "world";
 
         for (SkScalar size = 30; size <= 30; size += 10) {
-            this->drawTest(canvas, text, size, SkShaper::Make());
+            this->drawTest(canvas, text, size, SkShaper::Make(SkFontMgr::RefEmpty()));
             canvas->translate(0, size + 5);
             #ifdef SK_SHAPER_CORETEXT_AVAILABLE
             this->drawTest(canvas, text, size, SkShaper::MakeCoreText());
@@ -175,8 +176,13 @@ private:
         }
 
         std::unique_ptr<SkShaper::FontRunIterator> font(
-                SkShaper::MakeFontMgrRunIterator(str, len, srcFont, SkFontMgr::RefDefault(),
-                                                 "Arial", SkFontStyle::Bold(), &*language));
+                SkShaper::MakeFontMgrRunIterator(str,
+                                                 len,
+                                                 srcFont,
+                                                 ToolUtils::TestFontMgr(),
+                                                 "Arial",
+                                                 SkFontStyle::Bold(),
+                                                 &*language));
         if (!font) {
             return;
         }

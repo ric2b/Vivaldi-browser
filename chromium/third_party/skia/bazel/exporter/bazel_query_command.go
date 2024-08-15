@@ -41,7 +41,6 @@ var allSkiaFlags = []string{
 	"--enable_svg_canvas",
 	"--enable_tracing",
 	"--enable_vma",
-	// "--fontmgr_factory=custom_embedded_fontmgr_factory", // external dependency on ft2build.h
 	"--gpu_backend=gl_backend",
 	// "--include_decoder=*",  // All decoders have external dependencies.
 	// "--include_encoder",    // All encoders have external dependencies.
@@ -108,9 +107,9 @@ func (c *BazelQueryCommand) Read() ([]byte, error) {
 	_ = os.Chdir(pwd)
 	data, err := cmd.Output()
 	if err != nil {
-	    if exiterr, ok := err.(*exec.ExitError); ok {
-	        fmt.Printf("Stderr: %s\n", exiterr.Stderr)
-	    }
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			fmt.Printf("Stderr: %s\n", exiterr.Stderr)
+		}
 		return nil, skerr.Wrapf(err, `error running %v`, cmd)
 	}
 	return data, nil

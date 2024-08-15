@@ -68,7 +68,6 @@ using IconPurpose = web_app::IconPurpose;
 
 class WebAppIconFactoryTest : public testing::Test {
  public:
-  // TODO(crbug.com/1462253): Also test with Lacros flags enabled.
   WebAppIconFactoryTest() = default;
 
   ~WebAppIconFactoryTest() override = default;
@@ -762,7 +761,7 @@ class AppServiceWebAppIconTest : public WebAppIconFactoryTest {
 
   apps::IconValuePtr LoadIcon(const std::string& app_id, IconType icon_type) {
     base::test::TestFuture<apps::IconValuePtr> result;
-    app_service_proxy().LoadIcon(AppType::kWeb, app_id, icon_type, kSizeInDip,
+    app_service_proxy().LoadIcon(app_id, icon_type, kSizeInDip,
                                  /*allow_placeholder_icon=*/false,
                                  result.GetCallback());
     return result.Take();
@@ -773,7 +772,7 @@ class AppServiceWebAppIconTest : public WebAppIconFactoryTest {
                                              IconType icon_type) {
     base::test::TestFuture<apps::IconValuePtr> result;
     app_service_proxy().LoadIconWithIconEffects(
-        AppType::kWeb, app_id, icon_effects, icon_type, kSizeInDip,
+        app_id, icon_effects, icon_type, kSizeInDip,
         /*allow_placeholder_icon=*/false, result.GetCallback());
     return result.Take();
   }
@@ -790,10 +789,10 @@ class AppServiceWebAppIconTest : public WebAppIconFactoryTest {
         base::BarrierCallback<apps::IconValuePtr>(2, result.GetCallback());
 
     app_service_proxy().LoadIconWithIconEffects(
-        AppType::kWeb, app_id, icon_effects, icon_type, kSizeInDip,
+        app_id, icon_effects, icon_type, kSizeInDip,
         /*allow_placeholder_icon=*/false, barrier_callback);
     app_service_proxy().LoadIconWithIconEffects(
-        AppType::kWeb, app_id, icon_effects, icon_type, kSizeInDip,
+        app_id, icon_effects, icon_type, kSizeInDip,
         /*allow_placeholder_icon=*/false, barrier_callback);
 
     return result.Take();
@@ -812,10 +811,10 @@ class AppServiceWebAppIconTest : public WebAppIconFactoryTest {
         base::BarrierCallback<apps::IconValuePtr>(2, result.GetCallback());
 
     app_service_proxy().LoadIconWithIconEffects(
-        AppType::kWeb, app_id, icon_effects1, icon_type, kSizeInDip,
+        app_id, icon_effects1, icon_type, kSizeInDip,
         /*allow_placeholder_icon=*/false, barrier_callback);
     app_service_proxy().LoadIconWithIconEffects(
-        AppType::kWeb, app_id, icon_effects2, icon_type, kSizeInDip,
+        app_id, icon_effects2, icon_type, kSizeInDip,
         /*allow_placeholder_icon=*/false, barrier_callback);
 
     return result.Take();
@@ -825,7 +824,6 @@ class AppServiceWebAppIconTest : public WebAppIconFactoryTest {
     std::vector<AppPtr> apps;
     AppPtr app = std::make_unique<App>(AppType::kWeb, app_id);
     app->icon_key = std::move(*icon_key.Clone());
-    app->icon_key->raw_icon_updated = true;
     apps.push_back(std::move(app));
     app_service_proxy().OnApps(std::move(apps), AppType::kWeb,
                                /*should_notify_initialized=*/false);
@@ -1298,8 +1296,7 @@ TEST_F(AppServiceWebAppIconTest, IconUpdate) {
   gfx::ImageSkia src_image_skia2 = test_helper().GenerateWebAppIcon(
       app_id, IconPurpose::ANY, sizes_px, scale_to_size_in_px);
 
-  IconKey icon_key;
-  icon_key.icon_effects = icon_effects;
+  IconKey icon_key(/*raw_icon_updated=*/true, icon_effects);
   UpdateIcon(app_id, icon_key);
 
   // Load the kStandard icon again after updating the icon.

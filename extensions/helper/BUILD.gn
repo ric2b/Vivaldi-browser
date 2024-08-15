@@ -31,5 +31,7 @@ static_library("helper") {
     "vivaldi_frame_observer.h",
     "vivaldi_init_helpers.cc",
     "vivaldi_init_helpers.h",
+    "vivaldi_panel_helper.cc",
+    "vivaldi_panel_helper.h",
   ]
 }

@@ -3,7 +3,7 @@
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
 
 #import "base/apple/foundation_util.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/text_view_util.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"

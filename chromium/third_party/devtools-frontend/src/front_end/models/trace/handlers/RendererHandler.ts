@@ -32,10 +32,10 @@ const compositorTileWorkers = Array<{
   pid: Types.TraceEvents.ProcessID,
   tid: Types.TraceEvents.ThreadID,
 }>();
-const entryToNode: Map<Types.TraceEvents.TraceEntry, Helpers.TreeHelpers.TraceEntryNode> = new Map();
-const allRendererEvents: Types.TraceEvents.TraceEventRendererEvent[] = [];
+const entryToNode: Map<Types.TraceEvents.SyntheticTraceEntry, Helpers.TreeHelpers.TraceEntryNode> = new Map();
+let allTraceEntries: Types.TraceEvents.SyntheticTraceEntry[] = [];
 
-const completeEventStack: (Types.TraceEvents.TraceEventSyntheticCompleteEvent)[] = [];
+const completeEventStack: (Types.TraceEvents.SyntheticCompleteEvent)[] = [];
 
 let handlerState = HandlerState.UNINITIALIZED;
 let config: Types.Configuration.Configuration = Types.Configuration.DEFAULT;
@@ -68,7 +68,7 @@ export function handleUserConfig(userConfig: Types.Configuration.Configuration):
 export function reset(): void {
   processes.clear();
   entryToNode.clear();
-  allRendererEvents.length = 0;
+  allTraceEntries.length = 0;
   completeEventStack.length = 0;
   compositorTileWorkers.length = 0;
   handlerState = HandlerState.UNINITIALIZED;
@@ -102,7 +102,7 @@ export function handleEvent(event: Types.TraceEvents.TraceEventData): void {
       return;
     }
     thread.entries.push(completeEvent);
-    allRendererEvents.push(completeEvent);
+    allTraceEntries.push(completeEvent);
     return;
   }
 
@@ -110,7 +110,7 @@ export function handleEvent(event: Types.TraceEvents.TraceEventData): void {
     const process = getOrCreateRendererProcess(processes, event.pid);
     const thread = getOrCreateRendererThread(process, event.tid);
     thread.entries.push(event);
-    allRendererEvents.push(event);
+    allTraceEntries.push(event);
   }
 }
 
@@ -124,7 +124,7 @@ export async function finalize(): Promise<void> {
   sanitizeProcesses(processes);
   buildHierarchy(processes);
   sanitizeThreads(processes);
-
+  Helpers.Trace.sortTraceEventsInPlace(allTraceEntries);
   handlerState = HandlerState.FINALIZED;
 }
 
@@ -137,7 +137,7 @@ export function data(): RendererHandlerData {
     processes: new Map(processes),
     compositorTileWorkers: new Map(gatherCompositorThreads()),
     entryToNode: new Map(entryToNode),
-    allRendererEvents: [...allRendererEvents],
+    allTraceEntries: [...allTraceEntries],
   };
 }
 
@@ -230,13 +230,10 @@ export function assignThreadName(
     threadsInProcess:
         Map<Types.TraceEvents.ProcessID, Map<Types.TraceEvents.ThreadID, Types.TraceEvents.TraceEventThreadName>>):
     void {
-  for (const [, renderProcessesByPid] of rendererProcessesByFrame) {
-    for (const [pid] of renderProcessesByPid) {
-      const process = getOrCreateRendererProcess(processes, pid);
-      for (const [tid, threadInfo] of threadsInProcess.get(pid) ?? []) {
-        const thread = getOrCreateRendererThread(process, tid);
-        thread.name = threadInfo?.args.name ?? `${tid}`;
-      }
+  for (const [pid, process] of processes) {
+    for (const [tid, threadInfo] of threadsInProcess.get(pid) ?? []) {
+      const thread = getOrCreateRendererThread(process, tid);
+      thread.name = threadInfo?.args.name ?? `${tid}`;
     }
   }
 }
@@ -248,6 +245,10 @@ export function assignThreadName(
  */
 export function sanitizeProcesses(processes: Map<Types.TraceEvents.ProcessID, RendererProcess>): void {
   const auctionWorklets = auctionWorkletsData().worklets;
+  const metaData = metaHandlerData();
+  if (metaData.traceIsGeneric) {
+    return;
+  }
   for (const [pid, process] of processes) {
     // If the process had no url, or if it had a malformed url that could not be
     // parsed for some reason, or if it's an "about:" origin, delete it.
@@ -267,10 +268,6 @@ export function sanitizeProcesses(processes: Map<Types.TraceEvents.ProcessID, Re
         processes.delete(pid);
       }
       continue;
-    }
-    const asUrl = new URL(process.url);
-    if (asUrl.protocol === 'about:') {
-      processes.delete(pid);
     }
   }
 }
@@ -331,6 +328,7 @@ export function buildHierarchy(
           cpuProfile && new Helpers.SamplesIntegrator.SamplesIntegrator(cpuProfile, pid, tid, config);
       const profileCalls = samplesIntegrator?.buildProfileCalls(thread.entries);
       if (profileCalls) {
+        allTraceEntries = [...allTraceEntries, ...profileCalls];
         thread.entries = Helpers.Trace.mergeEventsInOrder(thread.entries, profileCalls);
       }
       // Step 3. Build the tree.
@@ -344,8 +342,8 @@ export function buildHierarchy(
   }
 }
 
-export function makeCompleteEvent(event: Types.TraceEvents.TraceEventBegin|Types.TraceEvents.TraceEventEnd):
-    Types.TraceEvents.TraceEventSyntheticCompleteEvent|null {
+export function makeCompleteEvent(event: Types.TraceEvents.TraceEventBegin|
+                                  Types.TraceEvents.TraceEventEnd): Types.TraceEvents.SyntheticCompleteEvent|null {
   if (Types.TraceEvents.isTraceEventEnd(event)) {
     // Quietly ignore unbalanced close events, they're legit (we could
     // have missed start one).
@@ -367,7 +365,7 @@ export function makeCompleteEvent(event: Types.TraceEvents.TraceEventBegin|Types
 
   // Create a synthetic event using the begin event, when we find the
   // matching end event later we will update its duration.
-  const syntheticComplete: Types.TraceEvents.TraceEventSyntheticCompleteEvent = {
+  const syntheticComplete: Types.TraceEvents.SyntheticCompleteEvent = {
     ...event,
     ph: Types.TraceEvents.Phase.COMPLETE,
     dur: Types.Timing.MicroSeconds(0),
@@ -388,12 +386,12 @@ export interface RendererHandlerData {
    * by the process ID.
    */
   compositorTileWorkers: Map<Types.TraceEvents.ProcessID, Types.TraceEvents.ThreadID[]>;
-  entryToNode: Map<Types.TraceEvents.TraceEntry, Helpers.TreeHelpers.TraceEntryNode>;
+  entryToNode: Map<Types.TraceEvents.SyntheticTraceEntry, Helpers.TreeHelpers.TraceEntryNode>;
   /**
    * All trace events and synthetic profile calls made from
    * samples.
    */
-  allRendererEvents: Types.TraceEvents.TraceEventRendererEvent[];
+  allTraceEntries: Types.TraceEvents.SyntheticTraceEntry[];
 }
 
 export interface RendererProcess {
@@ -410,6 +408,6 @@ export interface RendererThread {
    * Contains trace events and synthetic profile calls made from
    * samples.
    */
-  entries: Types.TraceEvents.TraceEntry[];
+  entries: Types.TraceEvents.SyntheticTraceEntry[];
   tree?: Helpers.TreeHelpers.TraceEntryTree;
 }

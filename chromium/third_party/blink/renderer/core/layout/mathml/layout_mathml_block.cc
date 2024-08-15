@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/layout/mathml/layout_mathml_block.h"
 
-#include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
+#include "third_party/blink/renderer/core/layout/layout_result.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_under_over_element.h"
 
@@ -12,11 +12,9 @@ namespace blink {
 
 LayoutMathMLBlock::LayoutMathMLBlock(Element* element) : LayoutBlock(element) {}
 
-bool LayoutMathMLBlock::IsOfType(LayoutObjectType type) const {
-  return type == kLayoutObjectMathML ||
-         (type == kLayoutObjectMathMLRoot && GetNode() &&
-          GetNode()->HasTagName(mathml_names::kMathTag)) ||
-         LayoutBlock::IsOfType(type);
+bool LayoutMathMLBlock::IsMathMLRoot() const {
+  NOT_DESTROYED();
+  return GetNode() && GetNode()->HasTagName(mathml_names::kMathTag);
 }
 
 bool LayoutMathMLBlock::IsChildAllowed(LayoutObject* child,

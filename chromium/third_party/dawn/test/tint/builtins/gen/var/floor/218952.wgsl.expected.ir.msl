@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void floor_218952() {
+  float4 res = float4(1.0f);
+}
+vertex float4 vertex_main() {
+  floor_218952();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  floor_218952();
+}
+kernel void compute_main() {
+  floor_218952();
+}

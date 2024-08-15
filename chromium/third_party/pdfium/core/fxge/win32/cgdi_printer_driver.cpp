@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_system.h"
@@ -39,7 +40,7 @@ int CGdiPrinterDriver::GetDeviceCaps(int caps_id) const {
   return CGdiDeviceDriver::GetDeviceCaps(caps_id);
 }
 
-bool CGdiPrinterDriver::SetDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CGdiPrinterDriver::SetDIBits(const RetainPtr<const CFX_DIBBase>& pSource,
                                   uint32_t color,
                                   const FX_RECT& src_rect,
                                   int left,
@@ -48,13 +49,14 @@ bool CGdiPrinterDriver::SetDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   if (pSource->IsMaskFormat()) {
     FX_RECT clip_rect(left, top, left + src_rect.Width(),
                       top + src_rect.Height());
-    return StretchDIBits(pSource, color, left - src_rect.left,
-                         top - src_rect.top, pSource->GetWidth(),
-                         pSource->GetHeight(), &clip_rect,
-                         FXDIB_ResampleOptions(), BlendMode::kNormal);
+    int dest_width = pSource->GetWidth();
+    int dest_height = pSource->GetHeight();
+    return StretchDIBits(std::move(pSource), color, left - src_rect.left,
+                         top - src_rect.top, dest_width, dest_height,
+                         &clip_rect, FXDIB_ResampleOptions(),
+                         BlendMode::kNormal);
   }
-  DCHECK(pSource);
-  DCHECK(!pSource->IsMaskFormat());
+
   DCHECK_EQ(blend_type, BlendMode::kNormal);
   if (pSource->IsAlphaFormat())
     return false;
@@ -62,7 +64,7 @@ bool CGdiPrinterDriver::SetDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   return GDI_SetDIBits(pSource, src_rect, left, top);
 }
 
-bool CGdiPrinterDriver::StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
+bool CGdiPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                                       uint32_t color,
                                       int dest_left,
                                       int dest_top,
@@ -71,61 +73,63 @@ bool CGdiPrinterDriver::StretchDIBits(const RetainPtr<CFX_DIBBase>& pSource,
                                       const FX_RECT* pClipRect,
                                       const FXDIB_ResampleOptions& options,
                                       BlendMode blend_type) {
-  if (pSource->IsMaskFormat()) {
+  if (bitmap->IsMaskFormat()) {
     int alpha = FXARGB_A(color);
-    if (pSource->GetBPP() != 1 || alpha != 255)
+    if (bitmap->GetBPP() != 1 || alpha != 255) {
       return false;
+    }
 
     if (dest_width < 0 || dest_height < 0) {
-      RetainPtr<CFX_DIBBase> pFlipped =
-          pSource->FlipImage(dest_width < 0, dest_height < 0);
-      if (!pFlipped)
+      bitmap = bitmap->FlipImage(dest_width < 0, dest_height < 0);
+      if (!bitmap) {
         return false;
+      }
 
       if (dest_width < 0)
         dest_left += dest_width;
       if (dest_height < 0)
         dest_top += dest_height;
 
-      return GDI_StretchBitMask(pFlipped, dest_left, dest_top, abs(dest_width),
-                                abs(dest_height), color);
+      dest_width = abs(dest_width);
+      dest_height = abs(dest_height);
     }
 
-    return GDI_StretchBitMask(pSource, dest_left, dest_top, dest_width,
-                              dest_height, color);
+    return GDI_StretchBitMask(std::move(bitmap), dest_left, dest_top,
+                              dest_width, dest_height, color);
   }
 
-  if (pSource->IsAlphaFormat())
+  if (bitmap->IsAlphaFormat()) {
     return false;
+  }
 
   if (dest_width < 0 || dest_height < 0) {
-    RetainPtr<CFX_DIBBase> pFlipped =
-        pSource->FlipImage(dest_width < 0, dest_height < 0);
-    if (!pFlipped)
+    bitmap = bitmap->FlipImage(dest_width < 0, dest_height < 0);
+    if (!bitmap) {
       return false;
+    }
 
     if (dest_width < 0)
       dest_left += dest_width;
     if (dest_height < 0)
       dest_top += dest_height;
 
-    return GDI_StretchDIBits(pFlipped, dest_left, dest_top, abs(dest_width),
-                             abs(dest_height), options);
+    dest_width = abs(dest_width);
+    dest_height = abs(dest_height);
   }
 
-  return GDI_StretchDIBits(pSource, dest_left, dest_top, dest_width,
+  return GDI_StretchDIBits(std::move(bitmap), dest_left, dest_top, dest_width,
                            dest_height, options);
 }
 
-bool CGdiPrinterDriver::StartDIBits(const RetainPtr<CFX_DIBBase>& pSource,
-                                    int bitmap_alpha,
+bool CGdiPrinterDriver::StartDIBits(RetainPtr<const CFX_DIBBase> bitmap,
+                                    float alpha,
                                     uint32_t color,
                                     const CFX_Matrix& matrix,
                                     const FXDIB_ResampleOptions& options,
                                     std::unique_ptr<CFX_ImageRenderer>* handle,
                                     BlendMode blend_type) {
-  if (bitmap_alpha < 255 || pSource->IsAlphaFormat() ||
-      (pSource->IsMaskFormat() && (pSource->GetBPP() != 1))) {
+  if (alpha != 1.0f || bitmap->IsAlphaFormat() ||
+      (bitmap->IsMaskFormat() && (bitmap->GetBPP() != 1))) {
     return false;
   }
   CFX_FloatRect unit_rect = matrix.GetUnitRect();
@@ -134,7 +138,7 @@ bool CGdiPrinterDriver::StartDIBits(const RetainPtr<CFX_DIBBase>& pSource,
       matrix.d != 0) {
     bool bFlipX = matrix.a < 0;
     bool bFlipY = matrix.d > 0;
-    return StretchDIBits(pSource, color,
+    return StretchDIBits(std::move(bitmap), color,
                          bFlipX ? full_rect.right : full_rect.left,
                          bFlipY ? full_rect.bottom : full_rect.top,
                          bFlipX ? -full_rect.Width() : full_rect.Width(),
@@ -144,12 +148,14 @@ bool CGdiPrinterDriver::StartDIBits(const RetainPtr<CFX_DIBBase>& pSource,
   if (fabs(matrix.a) >= 0.5f || fabs(matrix.d) >= 0.5f)
     return false;
 
-  RetainPtr<CFX_DIBBase> pTransformed =
-      pSource->SwapXY(matrix.c > 0, matrix.b < 0);
-  if (!pTransformed)
+  const bool flip_x = matrix.c > 0;
+  const bool flip_y = matrix.b < 0;
+  bitmap = bitmap->SwapXY(flip_x, flip_y);
+  if (!bitmap) {
     return false;
+  }
 
-  return StretchDIBits(pTransformed, color, full_rect.left, full_rect.top,
+  return StretchDIBits(std::move(bitmap), color, full_rect.left, full_rect.top,
                        full_rect.Width(), full_rect.Height(), nullptr,
                        FXDIB_ResampleOptions(), blend_type);
 }

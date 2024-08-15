@@ -154,10 +154,9 @@ class IntraPredTest : public IntraPredTestBase<bitdepth, Pixel> {
     if (absl::StartsWith(test_case, "C/")) {
       memset(base_intrapreds_, 0, sizeof(base_intrapreds_));
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        IntraPredInit_SSE4_1();
-        IntraPredSmoothInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      IntraPredInit_SSE4_1();
+      IntraPredSmoothInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       IntraPredInit_NEON();
       IntraPredSmoothInit_NEON();

@@ -28,9 +28,9 @@ import {
 import { ValidationTest } from '../../validation_test.js';
 
 const kComputeCmds = ['dispatch', 'dispatchIndirect'] as const;
-type ComputeCmd = typeof kComputeCmds[number];
+type ComputeCmd = (typeof kComputeCmds)[number];
 const kRenderCmds = ['draw', 'drawIndexed', 'drawIndirect', 'drawIndexedIndirect'] as const;
-type RenderCmd = typeof kRenderCmds[number];
+type RenderCmd = (typeof kRenderCmds)[number];
 
 // Test resource type compatibility in pipeline and bind group
 // [1]: Need to add externalTexture
@@ -38,7 +38,9 @@ const kResourceTypes: ValidBindableResource[] = [
   'uniformBuf',
   'filtSamp',
   'sampledTex',
-  'storageTex',
+  'readonlyStorageTex',
+  'writeonlyStorageTex',
+  'readwriteStorageTex',
 ];
 
 function getTestCmds(
@@ -75,7 +77,17 @@ class F extends ValidationTest {
     if (entry.buffer !== undefined) return 'uniformBuf';
     if (entry.sampler !== undefined) return 'filtSamp';
     if (entry.texture !== undefined) return 'sampledTex';
-    if (entry.storageTexture !== undefined) return 'storageTex';
+    if (entry.storageTexture !== undefined) {
+      switch (entry.storageTexture.access) {
+        case undefined:
+        case 'write-only':
+          return 'writeonlyStorageTex';
+        case 'read-only':
+          return 'readonlyStorageTex';
+        case 'read-write':
+          return 'readwriteStorageTex';
+      }
+    }
     unreachable();
   }
 
@@ -208,8 +220,14 @@ class F extends ValidationTest {
       case 'sampledTex':
         entry.texture = {}; // default sampleType: float
         break;
-      case 'storageTex':
-        entry.storageTexture = { access: 'write-only', format: 'rgba8unorm' };
+      case 'readonlyStorageTex':
+        entry.storageTexture = { access: 'read-only', format: 'r32float' };
+        break;
+      case 'writeonlyStorageTex':
+        entry.storageTexture = { access: 'write-only', format: 'r32float' };
+        break;
+      case 'readwriteStorageTex':
+        entry.storageTexture = { access: 'read-write', format: 'r32float' };
         break;
     }
 
@@ -488,15 +506,8 @@ g.test('bgl_binding_mismatch')
       .combine('useU32Array', [false, true])
   )
   .fn(t => {
-    const {
-      encoderType,
-      call,
-      callWithZero,
-      bgBindings,
-      plBindings,
-      _success,
-      useU32Array,
-    } = t.params;
+    const { encoderType, call, callWithZero, bgBindings, plBindings, _success, useU32Array } =
+      t.params;
     const visibility =
       encoderType === 'compute pass' ? GPUShaderStage.COMPUTE : GPUShaderStage.VERTEX;
 
@@ -607,14 +618,8 @@ g.test('bgl_resource_type_mismatch')
       .expand('useU32Array', p => (p.bgResourceType === 'uniformBuf' ? [true, false] : [false]))
   )
   .fn(t => {
-    const {
-      encoderType,
-      call,
-      callWithZero,
-      bgResourceType,
-      plResourceType,
-      useU32Array,
-    } = t.params;
+    const { encoderType, call, callWithZero, bgResourceType, plResourceType, useU32Array } =
+      t.params;
 
     const bglEntries: Array<GPUBindGroupLayoutEntry> = [
       t.createBindGroupLayoutEntry(encoderType, bgResourceType, useU32Array),

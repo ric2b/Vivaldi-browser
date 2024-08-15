@@ -21,7 +21,6 @@
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/fake_picture_layer_impl.h"
 #include "cc/test/fake_proxy.h"
-#include "cc/test/fake_recording_source.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/test/property_tree_test_utils.h"
 #include "cc/test/skia_common.h"
@@ -54,7 +53,8 @@ TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
   EXPECT_EQ(0, host->SourceFrameNumber());
   host->WillCommit(/*completion=*/nullptr, /*has_updates=*/false);
   EXPECT_EQ(1, host->SourceFrameNumber());
-  host->CommitComplete({base::TimeTicks(), base::TimeTicks::Now()});
+  host->CommitComplete(host->SourceFrameNumber(),
+                       {base::TimeTicks(), base::TimeTicks::Now()});
   EXPECT_EQ(1, host->SourceFrameNumber());
 
   layer->SetBounds(gfx::Size(0, 0));
@@ -184,7 +184,8 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
 
   EXPECT_EQ(0, host->SourceFrameNumber());
   host->WillCommit(/*completion=*/nullptr, /*has_updates=*/false);
-  host->CommitComplete({base::TimeTicks(), base::TimeTicks::Now()});
+  host->CommitComplete(host->SourceFrameNumber(),
+                       {base::TimeTicks(), base::TimeTicks::Now()});
   EXPECT_EQ(1, host->SourceFrameNumber());
 
   layer->Update();
@@ -211,7 +212,8 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   std::unique_ptr<CommitState> commit_state =
       host->WillCommit(/*completion=*/nullptr, /*has_updates=*/true);
   layer->PushPropertiesTo(layer_impl, *commit_state, unsafe_state);
-  host->CommitComplete({base::TimeTicks(), base::TimeTicks::Now()});
+  host->CommitComplete(commit_state->source_frame_number,
+                       {base::TimeTicks(), base::TimeTicks::Now()});
 
   EXPECT_EQ(2, host->SourceFrameNumber());
 
@@ -315,6 +317,9 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
 
   animation_host->SetMutatorHostClient(nullptr);
   animation_host2->SetMutatorHostClient(nullptr);
+
+  host_client1.SetLayerTreeHost(nullptr);
+  host_client2.SetLayerTreeHost(nullptr);
 }
 
 // Verify that PictureLayer::DropRecordingSourceContentIfInvalid does not
@@ -391,6 +396,9 @@ TEST(PictureLayerTest, ChangingHostsWithCollidingFrames) {
   // This layer should also drop its recording source because it was resized
   // and not recorded.
   EXPECT_EQ(gfx::Size(), layer->GetRecordingSourceForTesting()->GetSize());
+
+  host_client1.SetLayerTreeHost(nullptr);
+  host_client2.SetLayerTreeHost(nullptr);
 }
 
 TEST(PictureLayerTest, RecordingScaleIsCorrectlySet) {
@@ -415,12 +423,7 @@ TEST(PictureLayerTest, RecordingScaleIsCorrectlySet) {
                                  std::round(390 * recording_scale), 1, 1),
                        non_solid_flags);
 
-  std::unique_ptr<FakeRecordingSource> recording_source_owned =
-      FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
-  FakeRecordingSource* recording_source = recording_source_owned.get();
-  scoped_refptr<FakePictureLayer> layer =
-      FakePictureLayer::CreateWithRecordingSource(
-          &client, std::move(recording_source_owned));
+  scoped_refptr<FakePictureLayer> layer = FakePictureLayer::Create(&client);
   layer->SetBounds(layer_bounds);
 
   FakeLayerTreeHostClient host_client;
@@ -438,7 +441,7 @@ TEST(PictureLayerTest, RecordingScaleIsCorrectlySet) {
   // Solid color analysis will return true since the layer tree host has the
   // recording scale set to its default value of 1. The non solid pixel is
   // out of bounds for the unscaled layer size in this particular case.
-  EXPECT_TRUE(recording_source->is_solid_color());
+  EXPECT_TRUE(layer->GetRecordingSourceForTesting()->is_solid_color());
 
   host->SetRecordingScaleFactor(recording_scale);
   layer->SetNeedsDisplayRect(invalidation_bounds);
@@ -446,7 +449,7 @@ TEST(PictureLayerTest, RecordingScaleIsCorrectlySet) {
 
   // Once the recording scale is set and propagated to the recording source,
   // the solid color analysis should work as expected and return false.
-  EXPECT_FALSE(recording_source->is_solid_color());
+  EXPECT_FALSE(layer->GetRecordingSourceForTesting()->is_solid_color());
 }
 
 }  // namespace

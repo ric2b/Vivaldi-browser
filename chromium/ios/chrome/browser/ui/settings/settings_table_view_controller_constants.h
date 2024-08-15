@@ -60,13 +60,16 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeVivaldiSyncSettings,
   SettingsItemTypeVivaldiTabsSettings,
   SettingsItemTypeAppearanceSettings,
-  SettingsItemTypeVivaldiStartPageLayoutSettings,
+  SettingsItemTypeVivaldiStartPageSettings,
   SettingsItemTypeVivaldiATBSettings,
   SettingsItemTypeAppIconSettings,
 };
 
 // The accessibility identifier of the settings TableView.
 extern NSString* const kSettingsTableViewId;
+
+// The accessibility identifier of SearchEngineTableViewController.
+extern NSString* const kSearchEngineTableViewControllerId;
 
 // The accessibility identifier of the sign in cell.
 extern NSString* const kSettingsSignInCellId;
@@ -174,6 +177,9 @@ extern NSString* const kSettingsDefaultSiteModeCellId;
 // The accessibility identifier of the Web Inspector cell.
 extern NSString* const kSettingsWebInspectorCellId;
 
+// The accessibility identifier of the Safety Check cell.
+extern NSString* const kSettingsSafetyCheckCellId;
+
 // The accessibility identifier of the default browser settings TableView.
 extern NSString* const kDefaultBrowserSettingsTableViewId;
 
@@ -189,6 +195,10 @@ extern NSString* const kSettingsIncognitoInterstitialDisabledId;
 // The accessibility identifier of the Notifications setting.
 extern NSString* const kSettingsNotificationsId;
 
+// The accessibility identifier of the wait button that is used on top of the
+// setting tables view to prevent user interactions.
+extern NSString* const kSettingsWaitButtonId;
+
 // The accessibility identifier of the tabs cell.
 extern NSString* const kSettingsTabsCellId;
 
@@ -200,5 +210,8 @@ extern NSString* const kSettingsTabPickupCellId;
 
 // The accessibility identifier of the Privacy Guide settings cell.
 extern NSString* const kSettingsPrivacyGuideCellId;
+
+// The accessibility identifier of the Detect Units cell.
+extern NSString* const kSettingsDetectUnitsCellId;
 
 #endif  // IOS_CHROME_BROWSER_UI_SETTINGS_SETTINGS_TABLE_VIEW_CONTROLLER_CONSTANTS_H_

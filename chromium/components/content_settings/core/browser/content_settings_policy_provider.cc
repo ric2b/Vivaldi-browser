@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/containers/contains.h"
@@ -16,6 +17,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
+#include "components/content_settings/core/browser/content_settings_origin_value_map.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_rule.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
@@ -24,6 +26,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "net/cookies/cookie_constants.h"
 
@@ -116,6 +119,8 @@ constexpr PrefsForManagedContentSettingsMapEntry
          CONTENT_SETTING_ALLOW},
         {prefs::kManagedMidiBlockedForUrls, ContentSettingsType::MIDI,
          CONTENT_SETTING_BLOCK},
+        {prefs::kManagedMidiBlockedForUrls, ContentSettingsType::MIDI_SYSEX,
+         CONTENT_SETTING_BLOCK},
 };
 
 constexpr const char* kManagedPrefs[] = {
@@ -194,9 +199,34 @@ constexpr const char* kManagedDefaultPrefs[] = {
     prefs::kManagedDefaultMidi,
 };
 
-void ReportCookiesAllowedForUrlsUsage(bool has_pattern_with_wildcard_primary,
-                                      bool has_pattern_with_wildcard_secondary,
-                                      bool has_pattern_with_no_wildcard) {
+void ReportCookiesAllowedForUrlsUsage(
+    content_settings::OriginValueMap& value_map) {
+  base::AutoLock lock(value_map.GetLock());
+
+  bool has_pattern_with_wildcard_primary = false;
+  bool has_pattern_with_wildcard_secondary = false;
+  bool has_pattern_with_no_wildcard = false;
+
+  auto it = value_map.find(ContentSettingsType::COOKIES);
+  if (it == value_map.end()) {
+    return;
+  }
+  for (const auto& jt : it->second) {
+    if (static_cast<ContentSetting>(jt.second.value.GetIfInt().value()) !=
+        CONTENT_SETTING_ALLOW) {
+      continue;
+    }
+    const auto& pattern_pair = jt.first;
+    if (pattern_pair.primary_pattern == ContentSettingsPattern::Wildcard()) {
+      has_pattern_with_wildcard_primary = true;
+    } else if (pattern_pair.secondary_pattern ==
+               ContentSettingsPattern::Wildcard()) {
+      has_pattern_with_wildcard_secondary = true;
+    } else {
+      has_pattern_with_no_wildcard = true;
+    }
+  }
+
   if (!has_pattern_with_wildcard_primary &&
       !has_pattern_with_wildcard_secondary && !has_pattern_with_no_wildcard) {
     return;
@@ -276,6 +306,7 @@ const PolicyProvider::PrefsForManagedDefaultMapEntry
         {ContentSettingsType::THIRD_PARTY_STORAGE_PARTITIONING,
          prefs::kManagedDefaultThirdPartyStoragePartitioningSetting},
         {ContentSettingsType::MIDI, prefs::kManagedDefaultMidi},
+        {ContentSettingsType::MIDI_SYSEX, prefs::kManagedDefaultMidi},
 };
 
 // static
@@ -294,42 +325,17 @@ PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
   ReadManagedDefaultSettings();
   ReadManagedContentSettings(false);
 
-  pref_change_registrar_.Init(prefs_);
+  pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
+  pref_change_registrar_->Init(prefs_);
   PrefChangeRegistrar::NamedChangeCallback callback = base::BindRepeating(
       &PolicyProvider::OnPreferenceChanged, base::Unretained(this));
   for (const char* pref : kManagedPrefs)
-    pref_change_registrar_.Add(pref, callback);
+    pref_change_registrar_->Add(pref, callback);
 
   for (const char* pref : kManagedDefaultPrefs)
-    pref_change_registrar_.Add(pref, callback);
+    pref_change_registrar_->Add(pref, callback);
 
-  bool has_pattern_with_wildcard_primary = false;
-  bool has_pattern_with_wildcard_secondary = false;
-  bool has_pattern_with_no_wildcard = false;
-
-  auto it = value_map_.find(ContentSettingsType::COOKIES);
-  if (it == value_map_.end()) {
-    return;
-  }
-  for (auto jt = it->second.begin(); jt != it->second.end(); ++jt) {
-    if (static_cast<ContentSetting>(jt->second.value.GetIfInt().value()) !=
-        CONTENT_SETTING_ALLOW) {
-      continue;
-    }
-    const auto& pattern_pair = jt->first;
-    if (pattern_pair.primary_pattern == ContentSettingsPattern::Wildcard()) {
-      has_pattern_with_wildcard_primary = true;
-    } else if (pattern_pair.secondary_pattern ==
-               ContentSettingsPattern::Wildcard()) {
-      has_pattern_with_wildcard_secondary = true;
-    } else {
-      has_pattern_with_no_wildcard = true;
-    }
-  }
-
-  ReportCookiesAllowedForUrlsUsage(has_pattern_with_wildcard_primary,
-                                   has_pattern_with_wildcard_secondary,
-                                   has_pattern_with_no_wildcard);
+  ReportCookiesAllowedForUrlsUsage(value_map_);
 }
 
 PolicyProvider::~PolicyProvider() {
@@ -338,8 +344,19 @@ PolicyProvider::~PolicyProvider() {
 
 std::unique_ptr<RuleIterator> PolicyProvider::GetRuleIterator(
     ContentSettingsType content_type,
-    bool incognito) const {
+    bool incognito,
+    const PartitionKey& partition_key) const {
   return value_map_.GetRuleIterator(content_type);
+}
+
+std::unique_ptr<content_settings::Rule> PolicyProvider::GetRule(
+    const GURL& primary_url,
+    const GURL& secondary_url,
+    ContentSettingsType content_type,
+    bool off_the_record,
+    const content_settings::PartitionKey& partition_key) const {
+  base::AutoLock auto_lock(value_map_.GetLock());
+  return value_map_.GetRule(primary_url, secondary_url, content_type);
 }
 
 void PolicyProvider::GetContentSettingsFromPreferences() {
@@ -553,19 +570,21 @@ bool PolicyProvider::SetWebsiteSetting(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
     base::Value&& value,
-    const ContentSettingConstraints& constraints) {
+    const ContentSettingConstraints& constraints,
+    const PartitionKey& partition_key) {
   return false;
 }
 
 void PolicyProvider::ClearAllContentSettingsRules(
-    ContentSettingsType content_type) {}
+    ContentSettingsType content_type,
+    const PartitionKey& partition_key) {}
 
 void PolicyProvider::ShutdownOnUIThread() {
   DCHECK(CalledOnValidThread());
   RemoveAllObservers();
   if (!prefs_)
     return;
-  pref_change_registrar_.RemoveAll();
+  pref_change_registrar_.reset();
   prefs_ = nullptr;
 }
 
@@ -584,7 +603,7 @@ void PolicyProvider::OnPreferenceChanged(const std::string& name) {
 
   NotifyObservers(ContentSettingsPattern::Wildcard(),
                   ContentSettingsPattern::Wildcard(),
-                  ContentSettingsType::DEFAULT);
+                  ContentSettingsType::DEFAULT, /*partition_key=*/nullptr);
 }
 
 }  // namespace content_settings

@@ -5,7 +5,10 @@
 #ifndef IOS_CHROME_BROWSER_UI_SETTINGS_NOTIFICATIONS_NOTIFICATIONS_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_UI_SETTINGS_NOTIFICATIONS_NOTIFICATIONS_COORDINATOR_H_
 
+#import <Foundation/Foundation.h>
+
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
+#import "ios/chrome/browser/ui/push_notification/notifications_alert_presenter.h"
 
 @class NotificationsCoordinator;
 
@@ -19,7 +22,8 @@
 @end
 
 // The coordinator for the Notifications screen.
-@interface NotificationsCoordinator : ChromeCoordinator
+@interface NotificationsCoordinator
+    : ChromeCoordinator <NotificationsAlertPresenter>
 
 @property(nonatomic, weak) id<NotificationsCoordinatorDelegate> delegate;
 

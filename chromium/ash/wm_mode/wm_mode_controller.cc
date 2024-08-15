@@ -233,8 +233,9 @@ void WmModeController::UpdateDimmers() {
     return;
   }
 
-  for (auto* root : Shell::GetAllRootWindows())
+  for (aura::Window* root : Shell::GetAllRootWindows()) {
     dimmers_[root] = CreateDimmerForRoot(root);
+  }
 }
 
 void WmModeController::UpdateTrayButtons() {
@@ -275,7 +276,7 @@ void WmModeController::OnLocatedEvent(ui::LocatedEvent* event) {
     return;
   }
 
-  base::AutoReset<absl::optional<gfx::Point>> reset_release_location(
+  base::AutoReset<std::optional<gfx::Point>> reset_release_location(
       &last_release_event_screen_point_, screen_location);
 
   MaybeChangeRoot(capture_mode_util::GetPreferredRootWindow(screen_location));

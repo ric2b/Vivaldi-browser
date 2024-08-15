@@ -710,6 +710,33 @@
         }
       },
       {
+        "name": "clearRecentlyClosedTabs",
+        "type": "function",
+        "description": "Clears one or more recently closed tabs.",
+        "parameters": [
+          {
+            "name": "ids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result",
+              "description": "A boolean variable stating if removing recently closed tabs was successfull or not."
+            }
+          ]
+        }
+      },
+
+
+      {
         "name": "isTabInLastSession",
         "type": "function",
         "description": "Checks whether a given tab is part of the last loaded session",
@@ -1779,6 +1806,38 @@
         }
       },
       {
+        "name": "getAOLOAuthClientId",
+        "type": "function",
+        "description": "Returns AOL OAuth client id.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's AOL OAuth client id."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getAOLOAuthClientSecret",
+        "type": "function",
+        "description": "Returns AOL OAuth client secret.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "Vivaldi's AOL OAuth API client secret."
+            }
+          ]
+        }
+      },
+      {
         "name": "getCommandLineValue",
         "type": "function",
         "description": "Gets the command line value for the given named argument.",
@@ -1919,7 +1978,7 @@
         "type": "function",
         "description": "Get information of other proxies running.",
         "parameters": [
-           {
+          {
             "name": "options",
             "$ref": "ProxyHost",
             "description": "Ignore this proxy. Can be used to filter out our own."
@@ -1970,7 +2029,7 @@
           ]
         }
       },
-       {
+      {
         "name": "browserWindowReady",
         "type": "function",
         "description": "Signals that JS has fully set up browser window and its event listeners.",
@@ -2007,6 +2066,21 @@
             {
               "name": "data",
               "$ref": "ReadImageData"
+            }
+          ]
+        }
+      },
+      {
+        "name": "detectNewCrashes",
+        "type": "function",
+        "description": "Checks to see if there are any new crash reports since the last function call.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "hasNewCrashes",
+              "type": "boolean"
             }
           ]
         }

@@ -5,10 +5,13 @@
 #ifndef MEDIA_GPU_V4L2_STATELESS_V4L2_STATELESS_VIDEO_DECODER_H_
 #define MEDIA_GPU_V4L2_STATELESS_V4L2_STATELESS_VIDEO_DECODER_H_
 
+#include <queue>
 #include <vector>
 
+#include "base/containers/lru_cache.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decoder.h"
@@ -59,15 +62,15 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   size_t GetMaxOutputFramePoolSize() const override;
 
   // StatelessDecodeSurfaceHandler implementation.
-  scoped_refptr<V4L2DecodeSurface> CreateSurface() override;
-  void SurfaceReady(scoped_refptr<V4L2DecodeSurface> dec_surface,
+  scoped_refptr<StatelessDecodeSurface> CreateSurface() override;
+  void SurfaceReady(scoped_refptr<StatelessDecodeSurface> dec_surface,
                     int32_t bitstream_id,
                     const gfx::Rect& visible_rect,
                     const VideoColorSpace& color_space) override;
   bool SubmitFrame(void* ctrls,
                    const uint8_t* data,
                    size_t size,
-                   int32_t bitstream_id) override;
+                   scoped_refptr<StatelessDecodeSurface> dec_surface) override;
 
  private:
   V4L2StatelessVideoDecoder(
@@ -76,6 +79,30 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
       base::WeakPtr<VideoDecoderMixin::Client> client,
       scoped_refptr<StatelessDevice> device);
   ~V4L2StatelessVideoDecoder() override;
+
+  // Request for decoding buffer. Every EnqueueDecodeTask() call generates 1
+  // DecodeRequest.
+  struct DecodeRequest {
+    // The decode buffer passed to EnqueueDecodeTask().
+    scoped_refptr<DecoderBuffer> buffer;
+    // The callback function passed to EnqueueDecodeTask().
+    VideoDecoder::DecodeCB decode_cb;
+    // The identifier for the decoder buffer.
+    int32_t bitstream_id;
+
+    DecodeRequest(scoped_refptr<DecoderBuffer> buf,
+                  VideoDecoder::DecodeCB cb,
+                  int32_t id);
+
+    DecodeRequest(const DecodeRequest&) = delete;
+    DecodeRequest& operator=(const DecodeRequest&) = delete;
+
+    // Allow move, but not copy
+    DecodeRequest(DecodeRequest&&);
+    DecodeRequest& operator=(DecodeRequest&&);
+
+    ~DecodeRequest();
+  };
 
   // Create a codec specific decoder. When successful this decoder is stored in
   // the |decoder_| member variable.
@@ -86,10 +113,31 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   // can be created.
   bool CreateInputQueue(VideoCodecProfile profile, const gfx::Size resolution);
 
-  // Process the data in the |compressed_buffer| using the |decoder_|.
-  void ProcessCompressedBuffer(scoped_refptr<DecoderBuffer> compressed_buffer,
-                               VideoDecoder::DecodeCB decode_cb,
-                               int32_t bitstream_id);
+  // The uncompressed format that the driver produces is setup by the
+  // |output_queue_|. This format then needs to be passed further down the
+  // pipeline.
+  bool SetupOutputFormatForPipeline();
+
+  // Restart the thread that will wait on a dequeue event from the driver.
+  void ArmBufferMonitor();
+
+  // Callbacks used to handle buffers that have been dequeued.
+  void HandleDequeuedOutputBuffers(Buffer buffer);
+  void HandleDequeuedInputBuffers(Buffer buffer);
+
+  // Callback for VideoFrame destructor observer that will enqueue the output
+  // buffer after it is done being used.
+  void EnqueueDecodedOutputBufferByFrameID(uint64_t frame_id);
+
+  // Match up frames that have been decoded and are sitting in the
+  // |output_queue_| with |display_queue_| which holds the frames in display
+  // order.
+  void ServiceDisplayQueue();
+
+  // Service the queue of outstanding decode request. The client can send
+  // multiple compressed frames without waiting for a callback. These frames
+  // need to be queued up as there may not be free input buffers available.
+  void ServiceDecodeRequestQueue();
 
   SEQUENCE_CHECKER(decoder_sequence_checker_);
 
@@ -97,12 +145,27 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
 
   // Callback obtained from Initialize() to be called after every frame
   // has finished decoding and is ready for the client to display.
-  OutputCB output_cb_;
+  OutputCB output_cb_ GUARDED_BY_CONTEXT(decoder_sequence_checker_);
+
+  // Hold the callback that came in with the EOS signal until the rest of the
+  // frames have finished decoding.
+  DecodeCB flush_cb_ GUARDED_BY_CONTEXT(decoder_sequence_checker_);
 
   // Video decoder used to parse stream headers by software.
   std::unique_ptr<AcceleratedVideoDecoder> decoder_;
 
+  // Queue to hold compressed bitstream buffers to be submitted to the hardware
   std::unique_ptr<InputQueue> input_queue_;
+
+  // Queue to hold uncompressed image buffers returned by the hardware
+  std::unique_ptr<OutputQueue> output_queue_;
+
+  // Surfaces enqueued to V4L2 device. Since we are stateless, they are
+  // guaranteed to be proceeded in FIFO order.
+  base::queue<scoped_refptr<StatelessDecodeSurface>> surfaces_queued_;
+
+  // Aspect ratio from config to use for output frames.
+  VideoAspectRatio aspect_ratio_;
 
   // Int32 safe ID generator, starting at 0. Generated IDs are used to uniquely
   // identify a Decode() request for stateless backends. BitstreamID is just
@@ -110,6 +173,41 @@ class MEDIA_GPU_EXPORT V4L2StatelessVideoDecoder
   struct BitstreamID {};
   base::IdType32<BitstreamID>::Generator bitstream_id_generator_
       GUARDED_BY_CONTEXT(decoder_sequence_checker_);
+
+  // Unique enough identifier so that all outstanding reference frames have a
+  // unique identifier
+  struct FrameID {};
+  base::IdTypeU64<FrameID>::Generator frame_id_generator_
+      GUARDED_BY_CONTEXT(decoder_sequence_checker_);
+
+  // On an EOS the decoder must make sure that all the frames have made it
+  // through the queue. To do that the |last_frame_id_generated_| holds the id
+  // of the last input buffer while |last_frame_id_dequeued_| holds the id of
+  // the last output buffer.
+  uint64_t last_frame_id_generated_;
+  uint64_t last_frame_id_dequeued_;
+
+  base::LRUCache<int32_t, base::TimeDelta> bitstream_id_to_timestamp_;
+
+  // Queue of pending decode request.
+  std::queue<DecodeRequest> decode_request_queue_;
+
+  // The decode request decode loop needs to keep this alive.
+  absl::optional<DecodeRequest> current_decode_request_;
+
+  base::CancelableTaskTracker cancelable_output_queue_tracker_;
+  base::CancelableTaskTracker cancelable_input_queue_tracker_;
+
+  // Workers that block and wait for buffers to be ready to be dequeued.
+  scoped_refptr<base::SequencedTaskRunner> input_queue_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> output_queue_task_runner_;
+
+  // Queue holding surfaces in display order.
+  std::queue<scoped_refptr<StatelessDecodeSurface>> display_queue_;
+
+  // Weak factories associated with the main thread
+  // (|decoder_sequence_checker_|).
+  base::WeakPtrFactory<V4L2StatelessVideoDecoder> weak_ptr_factory_for_events_;
 };
 
 }  // namespace media

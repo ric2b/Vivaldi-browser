@@ -112,11 +112,11 @@ def MakeTimestampsFileName(root, sha1):
 
 def CalculateHash(root, expected_hash):
     """Calculates the sha1 of the paths to all files in the given |root| and the
-  contents of those files, and returns as a hex string.
+    contents of those files, and returns as a hex string.
 
-  |expected_hash| is the expected hash value for this toolchain if it has
-  already been installed.
-  """
+    |expected_hash| is the expected hash value for this toolchain if it has
+    already been installed.
+    """
     if expected_hash:
         full_root_path = os.path.join(root, expected_hash)
     else:
@@ -197,7 +197,7 @@ def CalculateHash(root, expected_hash):
 
 def CalculateToolchainHashes(root, remove_corrupt_toolchains):
     """Calculate the hash of the different toolchains installed in the |root|
-  directory."""
+    directory."""
     hashes = []
     dir_list = [
         d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))
@@ -219,7 +219,7 @@ def CalculateToolchainHashes(root, remove_corrupt_toolchains):
 
 def SaveTimestampsAndHash(root, sha1):
     """Saves timestamps and the final hash to be able to early-out more quickly
-  next time."""
+    next time."""
     file_list = GetFileList(os.path.join(root, sha1))
     timestamps_data = {
         'files': [[f, os.path.getmtime(f)] for f in file_list],
@@ -249,7 +249,7 @@ def HaveSrcInternalAccess():
 
 def LooksLikeGoogler():
     """Checks for a USERDOMAIN environment variable of 'GOOGLE', which
-  probably implies the current user is a Googler."""
+    probably implies the current user is a Googler."""
     return os.environ.get('USERDOMAIN', '').upper() == 'GOOGLE'
 
 
@@ -283,9 +283,9 @@ def UsesToolchainFromHttp():
 
 def RequestGsAuthentication():
     """Requests that the user authenticate to be able to access gs:// as a
-  Googler. This allows much faster downloads, and pulling (old) toolchains
-  that match src/ revisions.
-  """
+    Googler. This allows much faster downloads, and pulling (old) toolchains
+    that match src/ revisions.
+    """
     print('Access to gs://chrome-wintoolchain/ not configured.')
     print('-----------------------------------------------------------------')
     print()
@@ -362,8 +362,8 @@ def RmDir(path):
 
 def DoTreeMirror(target_dir, tree_sha1):
     """In order to save temporary space on bots that do not have enough space to
-  download ISOs, unpack them, and copy to the target location, the whole tree
-  is uploaded as a zip to internal storage, and then mirrored here."""
+    download ISOs, unpack them, and copy to the target location, the whole tree
+    is uploaded as a zip to internal storage, and then mirrored here."""
     if UsesToolchainFromFile():
         temp_dir = None
         local_zip = os.path.join(ToolchainBaseURL(), tree_sha1 + '.zip')
@@ -444,9 +444,9 @@ def RemoveUnusedToolchains(root):
 
 def EnableCrashDumpCollection():
     """Tell Windows Error Reporting to record crash dumps so that we can diagnose
-  linker crashes and other toolchain failures. Documented at:
-  https://msdn.microsoft.com/en-us/library/windows/desktop/bb787181.aspx
-  """
+    linker crashes and other toolchain failures. Documented at:
+    https://msdn.microsoft.com/en-us/library/windows/desktop/bb787181.aspx
+    """
     if sys.platform == 'win32' and os.environ.get('CHROME_HEADLESS') == '1':
         key_name = r'SOFTWARE\Microsoft\Windows\Windows Error Reporting'
         try:

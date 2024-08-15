@@ -7,22 +7,38 @@
 #include "base/functional/callback_forward.h"
 #include "base/notreached.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "ui/accessibility/ax_tree_id.h"
 
 namespace ax {
 FakeServiceClient::FakeServiceClient(mojom::AccessibilityService* service)
-    : service_(service) {}
+    : service_(service) {
+  desktop_tree_id_ = ui::AXTreeID::CreateNewAXTreeID();
+}
 
 FakeServiceClient::~FakeServiceClient() = default;
 
 void FakeServiceClient::BindAutomation(
-    mojo::PendingAssociatedRemote<ax::mojom::Automation> automation,
-    mojo::PendingReceiver<ax::mojom::AutomationClient> automation_client) {
-  automation_client_receivers_.Add(this, std::move(automation_client));
+    mojo::PendingAssociatedRemote<ax::mojom::Automation> automation) {
   automation_remotes_.Add(std::move(automation));
   if (automation_bound_closure_) {
     std::move(automation_bound_closure_).Run();
   }
 }
+
+void FakeServiceClient::BindAutomationClient(
+    mojo::PendingReceiver<ax::mojom::AutomationClient> automation_client) {
+  automation_client_receivers_.Add(this, std::move(automation_client));
+}
+
+void FakeServiceClient::Enable(EnableCallback callback) {
+  std::move(callback).Run(desktop_tree_id_);
+}
+
+void FakeServiceClient::Disable() {}
+
+void FakeServiceClient::EnableTree(const ui::AXTreeID& tree_id) {}
+
+void FakeServiceClient::PerformAction(const ui::AXActionData& data) {}
 
 #if BUILDFLAG(SUPPORTS_OS_ACCESSIBILITY_SERVICE)
 void FakeServiceClient::BindAutoclickClient(
@@ -38,6 +54,11 @@ void FakeServiceClient::BindSpeechRecognition(
 void FakeServiceClient::BindTts(
     mojo::PendingReceiver<ax::mojom::Tts> tts_receiver) {
   tts_receivers_.Add(this, std::move(tts_receiver));
+}
+
+void FakeServiceClient::BindUserInput(
+    mojo::PendingReceiver<mojom::UserInput> ui_receiver) {
+  ui_receivers_.Add(this, std::move(ui_receiver));
 }
 
 void FakeServiceClient::BindUserInterface(
@@ -60,7 +81,14 @@ void FakeServiceClient::Start(ax::mojom::StartOptionsPtr options,
                               StartCallback callback) {
   auto info = mojom::SpeechRecognitionStartInfo::New();
   info->type = mojom::SpeechRecognitionType::kNetwork;
-  info->observer = sr_event_observer_.BindNewPipeAndPassReceiver();
+  if (speech_recognition_start_error_.has_value()) {
+    info->observer_or_error = mojom::ObserverOrError::NewError(
+        speech_recognition_start_error_.value());
+  } else {
+    info->observer_or_error = mojom::ObserverOrError::NewObserver(
+        sr_event_observer_.BindNewPipeAndPassReceiver());
+  }
+
   std::move(callback).Run(std::move(info));
   if (speech_recognition_start_callback_) {
     speech_recognition_start_callback_.Run();
@@ -69,7 +97,7 @@ void FakeServiceClient::Start(ax::mojom::StartOptionsPtr options,
 
 void FakeServiceClient::Stop(ax::mojom::StopOptionsPtr options,
                              StopCallback callback) {
-  std::move(callback).Run();
+  std::move(callback).Run(speech_recognition_stop_error_);
 }
 
 void FakeServiceClient::BindAccessibilityFileLoader(
@@ -155,6 +183,14 @@ void FakeServiceClient::GetVoices(GetVoicesCallback callback) {
   voices.emplace_back(std::move(first_voice));
   voices.emplace_back(std::move(second_voice));
   std::move(callback).Run(std::move(voices));
+}
+
+void FakeServiceClient::SendSyntheticKeyEventForShortcutOrNavigation(
+    mojom::SyntheticKeyEventPtr key_event) {
+  key_events_.emplace_back(std::move(key_event));
+  if (synthetic_key_event_callback_) {
+    synthetic_key_event_callback_.Run();
+  }
 }
 
 void FakeServiceClient::DarkenScreen(bool darken) {
@@ -248,6 +284,16 @@ void FakeServiceClient::SendSpeechRecognitionErrorEvent() {
   sr_event_observer_->OnError(std::move(event));
 }
 
+void FakeServiceClient::SetSpeechRecognitionStartError(
+    const std::string& error) {
+  speech_recognition_start_error_ = error;
+}
+
+void FakeServiceClient::SetSpeechRecognitionStopError(
+    const std::string& error) {
+  speech_recognition_stop_error_ = error;
+}
+
 void FakeServiceClient::SetTtsSpeakCallback(
     base::RepeatingCallback<void(const std::string&, mojom::TtsOptionsPtr)>
         callback) {
@@ -257,6 +303,16 @@ void FakeServiceClient::SetTtsSpeakCallback(
 void FakeServiceClient::SendTtsUtteranceEvent(mojom::TtsEventPtr tts_event) {
   CHECK(tts_utterance_client_.is_bound());
   tts_utterance_client_->OnEvent(std::move(tts_event));
+}
+
+void FakeServiceClient::SetSyntheticKeyEventCallback(
+    base::RepeatingCallback<void()> callback) {
+  synthetic_key_event_callback_ = std::move(callback);
+}
+
+const std::vector<mojom::SyntheticKeyEventPtr>&
+FakeServiceClient::GetKeyEvents() const {
+  return key_events_;
 }
 
 void FakeServiceClient::SetDarkenScreenCallback(
@@ -293,6 +349,17 @@ const std::vector<mojom::FocusRingInfoPtr>&
 FakeServiceClient::GetFocusRingsForType(
     mojom::AssistiveTechnologyType type) const {
   return focus_rings_for_type_.at(type);
+}
+
+void FakeServiceClient::SendAccessibilityEvents(
+    const ui::AXTreeID& tree_id,
+    const std::vector<ui::AXTreeUpdate>& updates,
+    const gfx::Point& mouse_location,
+    const std::vector<ui::AXEvent>& events) {
+  for (auto& remote : automation_remotes_) {
+    remote->DispatchAccessibilityEvents(tree_id, updates, mouse_location,
+                                        events);
+  }
 }
 
 #endif  // BUILDFLAG(SUPPORTS_OS_ACCESSIBILITY_SERVICE)

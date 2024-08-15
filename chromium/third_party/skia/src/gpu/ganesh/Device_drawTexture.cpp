@@ -371,7 +371,8 @@ void Device::drawEdgeAAImage(const SkImage* image,
 void Device::drawSpecial(SkSpecialImage* special,
                          const SkMatrix& localToDevice,
                          const SkSamplingOptions& origSampling,
-                         const SkPaint& paint) {
+                         const SkPaint& paint,
+                         SkCanvas::SrcRectConstraint constraint) {
     SkASSERT(!paint.getMaskFilter() && !paint.getImageFilter());
     SkASSERT(special->isGaneshBacked());
 
@@ -385,6 +386,12 @@ void Device::drawSpecial(SkSpecialImage* special,
                                                        : SkCanvas::kNone_QuadAAFlags;
 
     GrSurfaceProxyView view = SkSpecialImages::AsView(this->recordingContext(), special);
+    if (!view) {
+        // This shouldn't happen since we shouldn't be mixing SkSpecialImage subclasses but
+        // returning early should avoid problems in release builds.
+        SkASSERT(false);
+        return;
+    }
     SkImage_Ganesh image(sk_ref_sp(special->getContext()),
                          special->uniqueID(),
                          std::move(view),
@@ -399,7 +406,7 @@ void Device::drawSpecial(SkSpecialImage* special,
                           localToDevice,
                           sampling,
                           paint,
-                          SkCanvas::kStrict_SrcRectConstraint,
+                          constraint,
                           srcToDst,
                           SkTileMode::kClamp);
 }

@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LCP_CRITICAL_PATH_PREDICTOR_LCP_CRITICAL_PATH_PREDICTOR_H_
 
 #include "base/task/single_thread_task_runner.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-blink.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -39,11 +40,14 @@ class CORE_EXPORT LCPCriticalPathPredictor final
   // Meant to be used as preconditions on metrics.
   bool HasAnyHintData() const;
 
-  void set_lcp_element_locators(Vector<ElementLocator> locators);
+  void set_lcp_element_locators(
+      const std::vector<std::string>& lcp_element_locator_strings);
 
   const Vector<ElementLocator>& lcp_element_locators() {
     return lcp_element_locators_;
   }
+
+  bool IsElementMatchingLocator(const Element& element);
 
   void set_lcp_influencer_scripts(HashSet<KURL> scripts);
 
@@ -66,11 +70,18 @@ class CORE_EXPORT LCPCriticalPathPredictor final
     return lcp_script_observer_.Get();
   }
   void OnFontFetched(const KURL& url);
+  void OnStartPreload(const KURL& url);
+  void OnOutermostMainFrameDocumentLoad();
+
+  using LCPCallback = base::OnceCallback<void(const Element*)>;
+  void AddLCPPredictedCallback(LCPCallback callback);
+
   void Trace(Visitor*) const;
 
  private:
   LocalFrame& GetFrame() { return *frame_.Get(); }
   mojom::blink::LCPCriticalPathPredictorHost& GetHost();
+  void MayRunPredictedCallbacks(const Element* lcp_element);
 
   Member<LocalFrame> frame_;
   HeapMojoRemote<mojom::blink::LCPCriticalPathPredictorHost> host_;
@@ -80,8 +91,16 @@ class CORE_EXPORT LCPCriticalPathPredictor final
   // LCPP hints for consumption (read path):
 
   Vector<ElementLocator> lcp_element_locators_;
+  Vector<std::string> lcp_element_locator_strings_;
   HashSet<KURL> lcp_influencer_scripts_;
   Vector<KURL> fetched_fonts_;
+
+  // Callbacks are called when predicted LCP is painted. Never called if
+  // prediction is incorrect.
+  Vector<LCPCallback> lcp_predicted_callbacks_;
+  bool called_predicted_callbacks_ = false;
+  bool is_lcp_candidate_found_ = false;
+  bool is_outermost_main_frame_document_loaded_ = false;
 };
 
 }  // namespace blink

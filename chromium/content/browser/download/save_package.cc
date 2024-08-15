@@ -65,7 +65,12 @@
 #include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/network/public/cpp/request_mode.h"
 #include "url/url_constants.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
+#endif
 
 namespace content {
 namespace {
@@ -174,6 +179,15 @@ const base::FilePath::CharType SavePackage::kDefaultHtmlExtension[] =
 SavePackage::SavePackage(PageImpl& page)
     : page_(page.GetWeakPtrImpl()),
       page_url_(GetUrlToBeSaved(&page.GetMainDocument())),
+      page_isolation_info_(
+          page.GetMainDocument().ComputeIsolationInfoForNavigation(
+              page_url_,
+              page.GetMainDocument().IsCredentialless(),
+              page.GetMainDocument()
+                  .GetIsolationInfoForSubresources()
+                  .nonce())),
+      page_is_outermost_main_frame_(
+          page.GetMainDocument().IsOutermostMainFrame()),
       title_(GetTitle(page)),
       start_tick_(base::TimeTicks::Now()),
       file_name_set_(&base::FilePath::CompareLessIgnoreCase),
@@ -191,6 +205,15 @@ SavePackage::SavePackage(PageImpl& page,
       page_url_(GetUrlToBeSaved(&page.GetMainDocument())),
       saved_main_file_path_(file_full_path),
       saved_main_directory_path_(directory_full_path),
+      page_isolation_info_(
+          page.GetMainDocument().ComputeIsolationInfoForNavigation(
+              page_url_,
+              page.GetMainDocument().IsCredentialless(),
+              page.GetMainDocument()
+                  .GetIsolationInfoForSubresources()
+                  .nonce())),
+      page_is_outermost_main_frame_(
+          page.GetMainDocument().IsOutermostMainFrame()),
       title_(GetTitle(page)),
       start_tick_(base::TimeTicks::Now()),
       save_type_(save_type),
@@ -350,7 +373,9 @@ void SavePackage::InitWithDownloadItem(
     wait_state_ = NET_FILES;
     // Add this item to waiting list.
     waiting_item_queue_.push_back(base::WrapUnique(new SaveItem(
-        page_url_, Referrer(), this, SaveFileCreateInfo::SAVE_FILE_FROM_NET,
+        page_url_, Referrer(), page_isolation_info_,
+        network::mojom::RequestMode::kNavigate, page_is_outermost_main_frame_,
+        this, SaveFileCreateInfo::SAVE_FILE_FROM_NET,
         FrameTreeNode::kFrameTreeNodeInvalidId,
         page_->GetMainDocument().GetFrameTreeNodeId())));
     all_save_items_count_ = 1;
@@ -764,6 +789,15 @@ void SavePackage::Finish() {
   wait_state_ = SUCCESSFUL;
   finished_ = true;
 
+#if BUILDFLAG(IS_MAC)
+  // Always set tags on the main HTML file, and if there is an associated
+  // "_files" directory, set the tags on it, too.
+  base::mac::SetFileTags(saved_main_file_path_, file_tags_);
+  if (save_type_ == SAVE_PAGE_TYPE_AS_COMPLETE_HTML) {
+    base::mac::SetFileTags(saved_main_directory_path_, file_tags_);
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
   if (download_) {
     std::vector<download::DownloadSaveItemData::ItemInfo> files;
     for (auto& item : saved_success_items_) {
@@ -903,6 +937,8 @@ void SavePackage::SaveNextFile(bool process_all_remaining_items) {
 
     file_manager_->SaveURL(
         save_item_ptr->id(), save_item_ptr->url(), save_item_ptr->referrer(),
+        save_item_ptr->isolation_info(), save_item_ptr->request_mode(),
+        save_item_ptr->is_outermost_main_frame(),
         requester_frame->GetProcess()->GetID(),
         requester_frame->render_view_host()->GetRoutingID(),
         requester_frame->GetRoutingID(), save_item_ptr->save_source(),
@@ -1075,7 +1111,7 @@ void SavePackage::GetSerializedHtmlWithLocalLinksForFrame(
           continue;
         }
 
-        absl::optional<blink::FrameToken> frame_token =
+        std::optional<blink::FrameToken> frame_token =
             save_item_frame_tree_node->render_manager()
                 ->GetFrameTokenForSiteInstanceGroup(
                     target->GetSiteInstance()->group());
@@ -1259,9 +1295,14 @@ SaveItem* SavePackage::CreatePendingSaveItem(
     SaveFileCreateInfo::SaveFileSource save_source) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   Referrer sanitized_referrer = Referrer::SanitizeForRequest(url, referrer);
-  SaveItem* save_item =
-      new SaveItem(url, sanitized_referrer, this, save_source,
-                   save_item_frame_tree_node_id, container_frame_tree_node_id);
+  // Use an empty Isolation Info for subresources.
+  // TODO(crbug.com/1513122): Populate the correct site isolation and fetch mode
+  // per-resource.
+  const net::IsolationInfo isolation_info;
+  SaveItem* save_item = new SaveItem(
+      url, sanitized_referrer, isolation_info,
+      network::mojom::RequestMode::kNavigate, false, this, save_source,
+      save_item_frame_tree_node_id, container_frame_tree_node_id);
   waiting_item_queue_.push_back(base::WrapUnique(save_item));
 
   frame_tree_node_id_to_contained_save_items_[container_frame_tree_node_id]
@@ -1449,18 +1490,17 @@ void SavePackage::ContinueGetSaveInfo(bool can_save_as_complete,
 }
 
 void SavePackage::OnPathPicked(
-    const base::FilePath& final_name,
-    SavePageType type,
+    SavePackagePathPickedParams params,
     SavePackageDownloadCreatedCallback download_created_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK((type == SAVE_PAGE_TYPE_AS_ONLY_HTML) ||
-         (type == SAVE_PAGE_TYPE_AS_MHTML) ||
-         (type == SAVE_PAGE_TYPE_AS_COMPLETE_HTML))
-      << type;
+  DCHECK((params.save_type == SAVE_PAGE_TYPE_AS_ONLY_HTML) ||
+         (params.save_type == SAVE_PAGE_TYPE_AS_MHTML) ||
+         (params.save_type == SAVE_PAGE_TYPE_AS_COMPLETE_HTML))
+      << params.save_type;
   if (!page_)
     return;
   // Ensure the filename is safe.
-  saved_main_file_path_ = final_name;
+  saved_main_file_path_ = params.file_path;
   // TODO(asanka): This call may block on IO and shouldn't be made
   // from the UI thread.  See http://crbug.com/61827.
   std::string mime_type =
@@ -1468,13 +1508,17 @@ void SavePackage::OnPathPicked(
   net::GenerateSafeFileName(mime_type, false, &saved_main_file_path_);
 
   saved_main_directory_path_ = saved_main_file_path_.DirName();
-  save_type_ = type;
+  save_type_ = params.save_type;
   if (save_type_ == SAVE_PAGE_TYPE_AS_COMPLETE_HTML) {
     // Make new directory for saving complete file.
     saved_main_directory_path_ = saved_main_directory_path_.Append(
         saved_main_file_path_.RemoveExtension().BaseName().value() +
         FILE_PATH_LITERAL("_files"));
   }
+
+#if BUILDFLAG(IS_MAC)
+  file_tags_ = params.file_tags;
+#endif
 
   Init(std::move(download_created_callback));
 }

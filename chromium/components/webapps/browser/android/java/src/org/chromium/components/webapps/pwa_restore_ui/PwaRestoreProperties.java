@@ -4,6 +4,7 @@
 
 package org.chromium.components.webapps.pwa_restore_ui;
 
+import android.util.Pair;
 import android.view.View.OnClickListener;
 
 import androidx.annotation.IntDef;
@@ -18,35 +19,55 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
-/**
- * Contains the properties that a pwa-restore {@link PropertyModel} can have.
- */
+/** Contains the properties that a pwa-restore {@link PropertyModel} can have. */
 public class PwaRestoreProperties {
     /** Encapsulates the information about an app to show in the PWA Restore dialog. */
     public static class AppInfo {
         private final String mAppId;
         private final String mAppName;
+        private int mLastUsedDaysAgo;
+
+        // Whether the app is selected or not.
+        private boolean mSelected;
 
         /**
          * @param appId the ID of the app.
          * @param appName the name of the app.
+         * @param lastUsedDaysAgo when the app was last used (days ago).
          */
-        public AppInfo(String appId, String appName) {
+        public AppInfo(String appId, String appName, int lastUsedDaysAgo) {
             mAppId = appId;
             mAppName = appName;
+            mLastUsedDaysAgo = lastUsedDaysAgo;
+
+            mSelected = false;
         }
 
-        public String appName() {
+        public String getId() {
+            return mAppId;
+        }
+
+        public String getName() {
             return mAppName;
+        }
+
+        public long getLastUsedDaysAgo() {
+            return mLastUsedDaysAgo;
+        }
+
+        public boolean isSelected() {
+            return mSelected;
+        }
+
+        public void toggleSelection() {
+            mSelected = !mSelected;
         }
     }
 
-    /**
-     * View states of the PWA Restore Bottom Sheet.
-     */
+    /** View states of the PWA Restore Bottom Sheet. */
     @IntDef({
-            ViewState.PREVIEW,
-            ViewState.VIEW_PWA_LIST,
+        ViewState.PREVIEW,
+        ViewState.VIEW_PWA_LIST,
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface ViewState {
@@ -57,8 +78,9 @@ public class PwaRestoreProperties {
     // PropertyKey indicating the view state of the bottom sheet:
     static final WritableIntPropertyKey VIEW_STATE = new WritableIntPropertyKey();
 
-    // App list:
-    static final WritableObjectPropertyKey<List<AppInfo>> APPS = new WritableObjectPropertyKey<>();
+    // App list (recent apps and older apps):
+    static final WritableObjectPropertyKey<Pair<List<AppInfo>, List<AppInfo>>> APPS =
+            new WritableObjectPropertyKey<>(/* skipEquality= */ true);
 
     // Simple labels:
     static final WritableObjectPropertyKey<String> PEEK_DESCRIPTION =
@@ -90,6 +112,10 @@ public class PwaRestoreProperties {
     static final ReadableObjectPropertyKey<OnClickListener> RESTORE_BUTTON_ON_CLICK_CALLBACK =
             new ReadableObjectPropertyKey<>();
 
+    // Checkbox handling:
+    static final ReadableObjectPropertyKey<OnClickListener> SELECTION_TOGGLE_CLICK_CALLBACK =
+            new ReadableObjectPropertyKey<>();
+
     static final PropertyKey[] ALL_KEYS = {
         VIEW_STATE,
         APPS,
@@ -106,15 +132,21 @@ public class PwaRestoreProperties {
         REVIEW_BUTTON_ON_CLICK_CALLBACK,
         DESELECT_BUTTON_ON_CLICK_CALLBACK,
         RESTORE_BUTTON_ON_CLICK_CALLBACK,
+        SELECTION_TOGGLE_CLICK_CALLBACK,
     };
 
-    static PropertyModel createModel(Runnable onReviewClicked, Runnable onBackClicked,
-            Runnable onDeselectClicked, Runnable onRestoreClicked) {
+    static PropertyModel createModel(
+            Runnable onReviewClicked,
+            Runnable onBackClicked,
+            Runnable onDeselectClicked,
+            Runnable onRestoreClicked,
+            OnClickListener onAppToggled) {
         return new PropertyModel.Builder(ALL_KEYS)
                 .with(BACK_BUTTON_ON_CLICK_CALLBACK, v -> onBackClicked.run())
                 .with(REVIEW_BUTTON_ON_CLICK_CALLBACK, v -> onReviewClicked.run())
                 .with(DESELECT_BUTTON_ON_CLICK_CALLBACK, v -> onDeselectClicked.run())
                 .with(RESTORE_BUTTON_ON_CLICK_CALLBACK, v -> onRestoreClicked.run())
+                .with(SELECTION_TOGGLE_CLICK_CALLBACK, onAppToggled)
                 .build();
     }
 }

@@ -16,6 +16,8 @@ BASE_DECLARE_FEATURE(kFileSystemAccessLocalUNCPathBlock);
 #endif
 
 BASE_DECLARE_FEATURE(kFileSystemAccessPersistentPermissions);
+
+BASE_DECLARE_FEATURE(kFileSystemAccessSymbolicLinkCheck);
 }  // namespace features
 
 #endif  // CHROME_BROWSER_FILE_SYSTEM_ACCESS_FILE_SYSTEM_ACCESS_FEATURES_H_

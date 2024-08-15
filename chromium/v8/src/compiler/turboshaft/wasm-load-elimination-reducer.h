@@ -9,11 +9,12 @@
 #ifndef V8_COMPILER_TURBOSHAFT_WASM_LOAD_ELIMINATION_REDUCER_H_
 #define V8_COMPILER_TURBOSHAFT_WASM_LOAD_ELIMINATION_REDUCER_H_
 
+#include "src/base/doubly-threaded-list.h"
 #include "src/compiler/turboshaft/analyzer-iterator.h"
 #include "src/compiler/turboshaft/assembler.h"
-#include "src/compiler/turboshaft/doubly-threaded-list.h"
 #include "src/compiler/turboshaft/graph.h"
 #include "src/compiler/turboshaft/loop-finder.h"
+#include "src/compiler/turboshaft/phase.h"
 #include "src/compiler/turboshaft/snapshot-table-opindex.h"
 #include "src/compiler/turboshaft/utils.h"
 #include "src/wasm/wasm-subtyping.h"
@@ -37,6 +38,7 @@ static constexpr int kArrayLengthFieldIndex = -1;
 static constexpr int kStringPrepareForGetCodeunitIndex = -2;
 static constexpr int kStringAsWtf16Index = -3;
 static constexpr int kAnyConvertExternIndex = -4;
+static constexpr int kAssertNotNullIndex = -5;
 
 // All "load-like" special cases use the same fake size and type. The specific
 // values we use don't matter; for accurate alias analysis, the type should
@@ -91,7 +93,7 @@ struct BaseListTraits {
 struct BaseData {
   using Key = SnapshotTable<OpIndex, KeyData>::Key;
   // List of every value at this base that has an offset rather than an index.
-  DoublyThreadedList<Key, BaseListTraits> with_offsets;
+  v8::base::DoublyThreadedList<Key, BaseListTraits> with_offsets;
 };
 
 class WasmMemoryContentTable
@@ -102,10 +104,11 @@ class WasmMemoryContentTable
 
   explicit WasmMemoryContentTable(
       Zone* zone, SparseOpIndexSnapshotTable<bool>& non_aliasing_objects,
-      FixedOpIndexSidetable<OpIndex>& replacements)
+      FixedOpIndexSidetable<OpIndex>& replacements, Graph& graph)
       : ChangeTrackingSnapshotTable(zone),
         non_aliasing_objects_(non_aliasing_objects),
         replacements_(replacements),
+        graph_(graph),
         all_keys_(zone),
         base_keys_(zone),
         offset_keys_(zone) {}
@@ -291,9 +294,23 @@ class WasmMemoryContentTable
     }
   }
 
+ public:
   OpIndex ResolveBase(OpIndex base) {
-    while (replacements_[base] != OpIndex::Invalid()) {
-      base = replacements_[base];
+    while (true) {
+      if (replacements_[base] != OpIndex::Invalid()) {
+        base = replacements_[base];
+        continue;
+      }
+      Operation& op = graph_.Get(base);
+      if (AssertNotNullOp* check = op.TryCast<AssertNotNullOp>()) {
+        base = check->object();
+        continue;
+      }
+      if (WasmTypeCastOp* cast = op.TryCast<WasmTypeCastOp>()) {
+        base = cast->object();
+        continue;
+      }
+      break;  // Terminate if nothing happened.
     }
     return base;
   }
@@ -303,10 +320,10 @@ class WasmMemoryContentTable
     OpIndex base = key.data().mem.base;
     auto base_keys = base_keys_.find(base);
     if (base_keys != base_keys_.end()) {
-      base_keys->second.with_offsets.Add(key);
+      base_keys->second.with_offsets.PushFront(key);
     } else {
       BaseData data;
-      data.with_offsets.Add(key);
+      data.with_offsets.PushFront(key);
       base_keys_.insert({base, std::move(data)});
     }
 
@@ -314,22 +331,24 @@ class WasmMemoryContentTable
     int offset = key.data().mem.offset;
     auto offset_keys = offset_keys_.find(offset);
     if (offset_keys != offset_keys_.end()) {
-      offset_keys->second.Add(key);
+      offset_keys->second.PushFront(key);
     } else {
-      DoublyThreadedList<Key, OffsetListTraits> list;
-      list.Add(key);
+      v8::base::DoublyThreadedList<Key, OffsetListTraits> list;
+      list.PushFront(key);
       offset_keys_.insert({offset, std::move(list)});
     }
   }
 
   void RemoveKeyFromBaseOffsetMaps(Key key) {
     // Removing from {base_keys_}.
-    DoublyThreadedList<Key, BaseListTraits>::Remove(key);
-    DoublyThreadedList<Key, OffsetListTraits>::Remove(key);
+    v8::base::DoublyThreadedList<Key, BaseListTraits>::Remove(key);
+    v8::base::DoublyThreadedList<Key, OffsetListTraits>::Remove(key);
   }
 
   SparseOpIndexSnapshotTable<bool>& non_aliasing_objects_;
   FixedOpIndexSidetable<OpIndex>& replacements_;
+
+  Graph& graph_;
 
   const wasm::WasmModule* module_ = PipelineData::Get().wasm_module();
 
@@ -342,7 +361,8 @@ class WasmMemoryContentTable
   // Map from base OpIndex to keys associated with this base.
   ZoneUnorderedMap<OpIndex, BaseData> base_keys_;
   // Map from offsets to keys associated with this offset.
-  ZoneUnorderedMap<int, DoublyThreadedList<Key, OffsetListTraits>> offset_keys_;
+  ZoneUnorderedMap<int, v8::base::DoublyThreadedList<Key, OffsetListTraits>>
+      offset_keys_;
 };
 
 }  // namespace wle
@@ -356,14 +376,12 @@ class WasmLoadEliminationAnalyzer {
   using MemoryKey = wle::WasmMemoryContentTable::Key;
   using MemorySnapshot = wle::WasmMemoryContentTable::Snapshot;
 
-  WasmLoadEliminationAnalyzer(Graph& graph, Zone* phase_zone,
-                              JSHeapBroker* broker)
+  WasmLoadEliminationAnalyzer(Graph& graph, Zone* phase_zone)
       : graph_(graph),
         phase_zone_(phase_zone),
-        broker_(broker),
         replacements_(graph.op_id_count(), phase_zone, &graph),
         non_aliasing_objects_(phase_zone),
-        memory_(phase_zone, non_aliasing_objects_, replacements_),
+        memory_(phase_zone, non_aliasing_objects_, replacements_, graph_),
         block_to_snapshot_mapping_(graph.block_count(), phase_zone),
         predecessor_alias_snapshots_(phase_zone),
         predecessor_memory_snapshots_(phase_zone) {}
@@ -430,6 +448,7 @@ class WasmLoadEliminationAnalyzer {
   void ProcessStringPrepareForGetCodeUnit(
       OpIndex op_idx, const StringPrepareForGetCodeUnitOp& op);
   void ProcessAnyConvertExtern(OpIndex op_idx, const AnyConvertExternOp& op);
+  void ProcessAssertNotNull(OpIndex op_idx, const AssertNotNullOp& op);
   void ProcessAllocate(OpIndex op_idx, const AllocateOp& op);
   void ProcessCall(OpIndex op_idx, const CallOp& op);
   void ProcessPhi(OpIndex op_idx, const PhiOp& op);
@@ -445,12 +464,16 @@ class WasmLoadEliminationAnalyzer {
   // modifications. If the snapshots are unchanged, we discard them and don't
   // revisit the loop.
   void SealAndDiscard();
+  void StoreLoopSnapshotInForwardPredecessor(const Block& loop_header);
+
+  // Returns true if the loop's backedge already has snapshot data (meaning that
+  // it was already visited).
+  bool BackedgeHasSnapshot(const Block& loop_header) const;
 
   void InvalidateIfAlias(OpIndex op_idx);
 
   Graph& graph_;
   Zone* phase_zone_;
-  JSHeapBroker* broker_;
 
   FixedOpIndexSidetable<OpIndex> replacements_;
 
@@ -489,11 +512,6 @@ class WasmLoadEliminationReducer : public Next {
       OpIndex ig_replacement_index = analyzer_.Replacement(ig_index);          \
       if (ig_replacement_index.valid()) {                                      \
         OpIndex replacement = Asm().MapToNewGraph(ig_replacement_index);       \
-        DCHECK(Asm()                                                           \
-                   .output_graph()                                             \
-                   .Get(replacement)                                           \
-                   .outputs_rep()[0]                                           \
-                   .AllowImplicitRepresentationChangeTo(op.outputs_rep()[0])); \
         return replacement;                                                    \
       }                                                                        \
     }                                                                          \
@@ -524,14 +542,22 @@ class WasmLoadEliminationReducer : public Next {
 
  private:
   WasmLoadEliminationAnalyzer analyzer_{Asm().modifiable_input_graph(),
-                                        Asm().phase_zone(),
-                                        PipelineData::Get().broker()};
+                                        Asm().phase_zone()};
 };
 
 void WasmLoadEliminationAnalyzer::ProcessBlock(const Block& block,
                                                bool compute_start_snapshot) {
   if (compute_start_snapshot) {
     BeginBlock(&block);
+  }
+  if (block.IsLoop() && BackedgeHasSnapshot(block)) {
+    // Update the associated snapshot for the forward edge with the merged
+    // snapshot information from the forward- and backward edge.
+    // This will make sure that when evaluating whether a loop needs to be
+    // revisited, the inner loop compares the merged state with the backedge
+    // preventing us from exponential revisits for loops where the backedge
+    // invalidates loads which are eliminatable on the forward edge.
+    StoreLoopSnapshotInForwardPredecessor(block);
   }
 
   for (OpIndex op_idx : graph_.OperationIndices(block)) {
@@ -560,6 +586,11 @@ void WasmLoadEliminationAnalyzer::ProcessBlock(const Block& block,
         break;
       case Opcode::kAnyConvertExtern:
         ProcessAnyConvertExtern(op_idx, op.Cast<AnyConvertExternOp>());
+        break;
+      case Opcode::kAssertNotNull:
+        // TODO(14108): We'll probably want to handle WasmTypeCast as
+        // a "load-like" instruction too, to eliminate repeated casts.
+        ProcessAssertNotNull(op_idx, op.Cast<AssertNotNullOp>());
         break;
       case Opcode::kArraySet:
         break;
@@ -702,7 +733,7 @@ void WasmLoadEliminationAnalyzer::ProcessWasmAllocateArray(
 void WasmLoadEliminationAnalyzer::ProcessStringAsWtf16(
     OpIndex op_idx, const StringAsWtf16Op& op) {
   static constexpr int offset = wle::kStringAsWtf16Index;
-  OpIndex existing = memory_.FindLoadLike(op_idx, offset);
+  OpIndex existing = memory_.FindLoadLike(op.string(), offset);
   if (existing.valid()) {
     DCHECK_EQ(Opcode::kStringAsWtf16, graph_.Get(existing).opcode);
     replacements_[op_idx] = existing;
@@ -739,6 +770,19 @@ void WasmLoadEliminationAnalyzer::ProcessAnyConvertExtern(
   memory_.InsertLoadLike(convert.object(), offset, op_idx);
 }
 
+void WasmLoadEliminationAnalyzer::ProcessAssertNotNull(
+    OpIndex op_idx, const AssertNotNullOp& assert) {
+  static constexpr int offset = wle::kAssertNotNullIndex;
+  OpIndex existing = memory_.FindLoadLike(assert.object(), offset);
+  if (existing.valid()) {
+    DCHECK_EQ(Opcode::kAssertNotNull, graph_.Get(existing).opcode);
+    replacements_[op_idx] = existing;
+    return;
+  }
+  replacements_[op_idx] = OpIndex::Invalid();
+  memory_.InsertLoadLike(assert.object(), offset, op_idx);
+}
+
 // Since we only loosely keep track of what can or can't alias, we assume that
 // anything that was guaranteed to not alias with anything (because it's in
 // {non_aliasing_objects_}) can alias with anything when coming back from the
@@ -748,13 +792,12 @@ void WasmLoadEliminationAnalyzer::ProcessCall(OpIndex op_idx,
   // Some builtins do not create aliases and do not invalidate existing
   // memory, and some even return fresh objects. For such cases, we don't
   // invalidate the state, and record the non-alias if any.
-  if (!op.Effects().can_write()) return;
-  if (op.IsStackCheck(graph_, broker_, StackCheckKind::kJSIterationBody)) {
-    // This is a stack check that cannot write heap memory.
+  if (!op.Effects().can_write()) {
     return;
   }
   // TODO(jkummerow): Add special handling to builtins that are known not to
-  // have relevant side effects.
+  // have relevant side effects. Alternatively, specify their effects to not
+  // include `CanWriteMemory()`.
 #if 0
   if (auto builtin_id = TryGetBuiltinId(
           graph_.Get(op.callee()).TryCast<ConstantOp>(), broker_)) {
@@ -796,7 +839,8 @@ void WasmLoadEliminationAnalyzer::ProcessAllocate(OpIndex op_idx,
 }
 
 void WasmLoadEliminationAnalyzer::ProcessPhi(OpIndex op_idx, const PhiOp& phi) {
-  for (OpIndex input : phi.inputs()) {
+  base::Vector<const OpIndex> inputs = phi.inputs();
+  for (OpIndex input : inputs) {
     if (auto key = non_aliasing_objects_.TryGetKeyFor(input)) {
       non_aliasing_objects_.Set(*key, false);
     }
@@ -804,6 +848,25 @@ void WasmLoadEliminationAnalyzer::ProcessPhi(OpIndex op_idx, const PhiOp& phi) {
     // known as non-aliasing (and is thus considered by default as
     // maybe-aliasing), so there is no need to create an entry for it in
     // {non_aliasing_objects_}.
+  }
+  // This copies some of the functionality of {RequiredOptimizationReducer}:
+  // Phis whose inputs are all the same value can be replaced by that value.
+  // We need to have this logic here because interleaving it with other cases
+  // of load elimination can unlock further optimizations: simplifying Phis
+  // can allow elimination of more loads, which can then allow simplification
+  // of even more Phis.
+  if (inputs.size() > 0) {
+    bool same_inputs = true;
+    OpIndex first = memory_.ResolveBase(inputs.first());
+    for (const OpIndex& input : inputs.SubVectorFrom(1)) {
+      if (memory_.ResolveBase(input) != first) {
+        same_inputs = false;
+        break;
+      }
+    }
+    if (same_inputs) {
+      replacements_[op_idx] = first;
+    }
   }
 }
 
@@ -815,6 +878,26 @@ void WasmLoadEliminationAnalyzer::FinishBlock(const Block* block) {
 void WasmLoadEliminationAnalyzer::SealAndDiscard() {
   non_aliasing_objects_.Seal();
   memory_.Seal();
+}
+
+void WasmLoadEliminationAnalyzer::StoreLoopSnapshotInForwardPredecessor(
+    const Block& loop_header) {
+  auto non_aliasing_snapshot = non_aliasing_objects_.Seal();
+  auto memory_snapshot = memory_.Seal();
+
+  block_to_snapshot_mapping_
+      [loop_header.LastPredecessor()->NeighboringPredecessor()->index()] =
+          Snapshot{non_aliasing_snapshot, memory_snapshot};
+
+  non_aliasing_objects_.StartNewSnapshot(non_aliasing_snapshot);
+  memory_.StartNewSnapshot(memory_snapshot);
+}
+
+bool WasmLoadEliminationAnalyzer::BackedgeHasSnapshot(
+    const Block& loop_header) const {
+  DCHECK(loop_header.IsLoop());
+  return block_to_snapshot_mapping_[loop_header.LastPredecessor()->index()]
+      .has_value();
 }
 
 template <bool for_loop_revisit>
@@ -876,7 +959,7 @@ bool WasmLoadEliminationAnalyzer::BeginBlock(const Block* block) {
   // TODO(dmercadier): we could insert of Phis during the pass to merge existing
   // information. This is a bit hard, because we are currently in an analyzer
   // rather than a reducer. Still, we could "prepare" the insertion now and then
-  // really insert them during the Reduce phase of the OptimizationPhase.
+  // really insert them during the Reduce phase of the CopyingPhase.
   auto merge_memory = [&](MemoryKey key,
                           base::Vector<const OpIndex> predecessors) -> OpIndex {
     if (for_loop_revisit && predecessors[kForwardEdgeOffset].valid() &&

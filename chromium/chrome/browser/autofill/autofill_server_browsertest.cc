@@ -43,31 +43,6 @@ using version_info::GetProductNameAndVersionForUserAgent;
 namespace autofill {
 namespace {
 
-// TODO(bondd): PdmChangeWaiter in autofill_uitest_util.cc is a replacement for
-// this class. Remove this class and use helper functions in that file instead.
-class WindowedPersonalDataManagerObserver : public PersonalDataManagerObserver {
- public:
-  explicit WindowedPersonalDataManagerObserver(Profile* profile)
-      : profile_(profile),
-        message_loop_runner_(new content::MessageLoopRunner) {
-    PersonalDataManagerFactory::GetForProfile(profile_)->AddObserver(this);
-  }
-  ~WindowedPersonalDataManagerObserver() override {}
-
-  // Waits for the PersonalDataManager's list of profiles to be updated.
-  void Wait() {
-    message_loop_runner_->Run();
-    PersonalDataManagerFactory::GetForProfile(profile_)->RemoveObserver(this);
-  }
-
-  // PersonalDataManagerObserver:
-  void OnPersonalDataChanged() override { message_loop_runner_->Quit(); }
-
- private:
-  raw_ptr<Profile> profile_;
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-};
-
 class WindowedNetworkObserver {
  public:
   explicit WindowedNetworkObserver(Matcher<std::string> expected_upload_data)
@@ -81,7 +56,7 @@ class WindowedNetworkObserver {
   WindowedNetworkObserver(const WindowedNetworkObserver&) = delete;
   WindowedNetworkObserver& operator=(const WindowedNetworkObserver&) = delete;
 
-  ~WindowedNetworkObserver() {}
+  ~WindowedNetworkObserver() = default;
 
   // Waits for a network request with the |expected_upload_data_|.
   void Wait() {
@@ -107,7 +82,7 @@ class WindowedNetworkObserver {
 
   bool OnIntercept(content::URLLoaderInterceptor::RequestParams* params) {
     // NOTE: This constant matches the one defined in
-    // components/autofill/core/browser/autofill_download_manager.cc
+    // components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
     static const char kDefaultAutofillServerURL[] =
         "https://content-autofill.googleapis.com/";
     DCHECK(params);
@@ -146,7 +121,8 @@ class AutofillServerTest : public InProcessBrowserTest {
     scoped_feature_list_.InitWithFeatures(
         // Enabled.
         {features::test::kAutofillAllowNonHttpActivation,
-         features::test::kAutofillServerCommunication},
+         features::test::kAutofillServerCommunication,
+         features::kAutofillEnableSupportForApartmentNumbers},
         // Disabled.
         {});
 
@@ -204,8 +180,7 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
                        QueryAndUploadBothIncludeFieldsWithAutocompleteOff) {
   // Seed some test Autofill profile data, as upload requests are only made when
   // there is local data available to use as a baseline.
-  WindowedPersonalDataManagerObserver personal_data_observer(
-      browser()->profile());
+  PdmChangeWaiter personal_data_observer(browser()->profile());
   PersonalDataManagerFactory::GetForProfile(browser()->profile())
       ->AddProfile(test::GetFullProfile());
   personal_data_observer.Wait();
@@ -263,14 +238,7 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
   // |EncodeFieldTypes()| in components/autofill/core/browser/form_structure.cc.
   // The resulting bit mask in this test is hard-coded to capture regressions in
   // the calculation of the mask.
-
-  std::string data_present;
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForHonorificPrefixes)) {
-    data_present = "1f7e0003f80000080004000001c424180002";
-  } else {
-    data_present = "1f7e0003f80000080004000001c420180002";
-  }
+  std::string data_present = "1f7e0003f80000080004000001c420180002";
 
   // TODO(crbug.com/1311937): Additional phone number trunk types are present
   // if AutofillEnableSupportForPhoneNumberTrunkTypes is enabled. Clean-up
@@ -280,8 +248,6 @@ IN_PROC_BROWSER_TEST_F(AutofillServerTest,
     data_present.rbegin()[5] = '7';
   }
   upload->set_data_present(data_present);
-
-  upload->set_passwords_revealed(false);
   upload->set_submission_event(
       AutofillUploadContents_SubmissionIndicatorEvent_HTML_FORM_SUBMISSION);
   upload->set_has_form_tag(true);

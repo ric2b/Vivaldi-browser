@@ -12,7 +12,6 @@ import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.SnackbarActivity;
 import org.chromium.chrome.browser.back_press.BackPressHelper;
-import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkManagerCoordinator;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
@@ -36,24 +35,33 @@ public class BookmarkActivity extends SnackbarActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        boolean isIncognito = IntentUtils.safeGetBooleanExtra(
-                getIntent(), IntentHandler.EXTRA_INCOGNITO_MODE, false);
-        mBookmarkManagerCoordinator = new BookmarkManagerCoordinator(this,
-                IntentUtils.safeGetParcelableExtra(
-                        getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT),
-                true, isIncognito, getSnackbarManager(), Profile.getLastUsedRegularProfile(),
-                new BookmarkUiPrefs(ChromeSharedPreferences.getInstance()));
+        boolean isIncognito =
+                IntentUtils.safeGetBooleanExtra(
+                        getIntent(), IntentHandler.EXTRA_INCOGNITO_MODE, false);
+        Profile profile = Profile.getLastUsedRegularProfile();
+        // TODO(crbug/1410601): Instead of using getPrimaryOTRProfile, this should account for
+        //                      instances where the incognito profile is using a non-primary key.
+        //                      Because the Bookmark model redirects to the original profile
+        //                      regardless, this is not a critical issue.
+        if (isIncognito) profile = profile.getPrimaryOTRProfile(true);
+        mBookmarkManagerCoordinator =
+                new BookmarkManagerCoordinator(
+                        this,
+                        IntentUtils.safeGetParcelableExtra(
+                                getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT),
+                        true,
+                        getSnackbarManager(),
+                        profile,
+                        new BookmarkUiPrefs(ChromeSharedPreferences.getInstance()));
         String url = getIntent().getDataString();
         if (TextUtils.isEmpty(url)) url = UrlConstants.BOOKMARKS_URL;
         mBookmarkManagerCoordinator.updateForUrl(url);
         setContentView(mBookmarkManagerCoordinator.getView());
-        if (BackPressManager.isSecondaryActivityEnabled()) {
-            BackPressHelper.create(this, getOnBackPressedDispatcher(), mBookmarkManagerCoordinator,
-                    SecondaryActivity.BOOKMARK);
-        } else {
-            BackPressHelper.create(this, getOnBackPressedDispatcher(),
-                    mBookmarkManagerCoordinator::onBackPressed, SecondaryActivity.BOOKMARK);
-        }
+        BackPressHelper.create(
+                this,
+                getOnBackPressedDispatcher(),
+                mBookmarkManagerCoordinator,
+                SecondaryActivity.BOOKMARK);
     }
 
     @Override
@@ -66,8 +74,9 @@ public class BookmarkActivity extends SnackbarActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == EDIT_BOOKMARK_REQUEST_CODE && resultCode == RESULT_OK) {
-            BookmarkId bookmarkId = BookmarkId.getBookmarkIdFromString(
-                    data.getStringExtra(INTENT_VISIT_BOOKMARK_ID));
+            BookmarkId bookmarkId =
+                    BookmarkId.getBookmarkIdFromString(
+                            data.getStringExtra(INTENT_VISIT_BOOKMARK_ID));
             mBookmarkManagerCoordinator.openBookmark(bookmarkId);
         }
     }

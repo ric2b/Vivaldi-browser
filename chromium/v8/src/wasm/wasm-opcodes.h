@@ -42,6 +42,8 @@ V8_EXPORT_PRIVATE bool IsJSCompatibleSignature(const FunctionSig* sig);
   V(Catch, 0x07, _, "catch")                                                   \
   V(Throw, 0x08, _, "throw")                                                   \
   V(Rethrow, 0x09, _, "rethrow")                                               \
+  V(TryTable, 0x1f, _, "try_table")                                            \
+  V(ThrowRef, 0x0a, _, "throw_ref")                                            \
   V(End, 0x0b, _, "end")                                                       \
   V(Br, 0x0c, _, "br")                                                         \
   V(BrIf, 0x0d, _, "br_if")                                                    \
@@ -116,8 +118,8 @@ V8_EXPORT_PRIVATE bool IsJSCompatibleSignature(const FunctionSig* sig);
 
 // Expressions with signatures.
 
-// The following opcodes can be used as constant expressions under
-// --experimental-wasm-extended-const.
+// Opcodes that can also be used in constant expressions (via the 'extended
+// constant expressions' proposal).
 #define FOREACH_SIMPLE_EXTENDED_CONST_OPCODE(V) \
   V(I32Add, 0x6a, i_ii, "i32.add")              \
   V(I32Sub, 0x6b, i_ii, "i32.sub")              \

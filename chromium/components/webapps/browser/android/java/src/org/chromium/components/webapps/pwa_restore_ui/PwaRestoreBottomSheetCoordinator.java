@@ -8,33 +8,57 @@ import android.app.Activity;
 import android.view.View;
 
 import androidx.annotation.MainThread;
+import androidx.annotation.NonNull;
 
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
-/**
- * The Coordinator for managing the Pwa Restore bottom sheet experience.
- */
+import java.util.ArrayList;
+
+/** The Coordinator for managing the Pwa Restore bottom sheet experience. */
 public class PwaRestoreBottomSheetCoordinator {
     private final BottomSheetController mController;
     private final PwaRestoreBottomSheetView mView;
     private final PwaRestoreBottomSheetContent mContent;
     private final PwaRestoreBottomSheetMediator mMediator;
 
-    /**
-     * Constructs the PwaRestoreBottomSheetCoordinator.
-     */
+    // How long an app can go unused and still be considered 'recent' in terms
+    // of the restore UI.
+    private static final int CUTOFF_FOR_OLDER_APPS_IN_DAYS = 30;
+
+    /** Constructs the PwaRestoreBottomSheetCoordinator. */
     @MainThread
     public PwaRestoreBottomSheetCoordinator(
-            Activity activity, BottomSheetController bottomSheetController, int backArrowId) {
+            @NonNull String[][] appList,
+            @NonNull int[] lastUsedInDays,
+            Activity activity,
+            BottomSheetController bottomSheetController,
+            int backArrowId) {
         mController = bottomSheetController;
+
+        ArrayList<PwaRestoreProperties.AppInfo> recentApps = new ArrayList();
+        ArrayList<PwaRestoreProperties.AppInfo> olderApps = new ArrayList();
+        int i = 0;
+        for (String[] app : appList) {
+            if (lastUsedInDays[i] < CUTOFF_FOR_OLDER_APPS_IN_DAYS) {
+                recentApps.add(new PwaRestoreProperties.AppInfo(app[0], app[1], lastUsedInDays[i]));
+            } else {
+                olderApps.add(new PwaRestoreProperties.AppInfo(app[0], app[1], lastUsedInDays[i]));
+            }
+            i++;
+        }
 
         mView = new PwaRestoreBottomSheetView(activity);
         mView.initialize(backArrowId);
         mContent = new PwaRestoreBottomSheetContent(mView);
-        mMediator = new PwaRestoreBottomSheetMediator(
-                activity, this::onReviewButtonClicked, this::onBackButtonClicked);
+        mMediator =
+                new PwaRestoreBottomSheetMediator(
+                        recentApps,
+                        olderApps,
+                        activity,
+                        this::onReviewButtonClicked,
+                        this::onBackButtonClicked);
 
         PropertyModelChangeProcessor.create(
                 mMediator.getModel(), mView, PwaRestoreBottomSheetViewBinder::bind);
@@ -42,6 +66,7 @@ public class PwaRestoreBottomSheetCoordinator {
 
     /**
      * Attempts to show the bottom sheet on the screen.
+     *
      * @return True if showing is successful.
      */
     public boolean show() {

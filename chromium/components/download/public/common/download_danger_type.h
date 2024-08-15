@@ -11,8 +11,8 @@ namespace download {
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
-// Update histogram suffixes in
-// tools/metrics/histograms/metadata/histogram_suffixes_list.xml, and variants
+// Update enum names in
+// tools/metrics/histograms/metadata/download/enums.xml, and variants
 // in tools/metrics/histograms/metadata/download/histograms.xml on additions.
 enum DownloadDangerType {
   // The download is safe.
@@ -97,6 +97,10 @@ enum DownloadDangerType {
   // The server has recommend this encrypted archive prompt the user for a
   // pssword to use locally for further scanning.
   DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING = 21,
+
+  // Download is pending a more detailed verdict after a prompt to use the
+  // password locally for further scanning.
+  DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING = 22,
 
   // Memory space for histograms is determined by the max.
   // ALWAYS ADD NEW VALUES BEFORE THIS ONE.

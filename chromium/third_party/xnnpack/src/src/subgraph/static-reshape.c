@@ -32,20 +32,17 @@ static enum xnn_status create_copy_operator(
   switch (node->compute_type) {
     case xnn_compute_type_fp16:
       status = xnn_create_copy_nc_x16(
-        1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         node->flags,
         &opdata->operator_objects[0]);
       break;
     case xnn_compute_type_fp32:
       status = xnn_create_copy_nc_x32(
-        1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         node->flags,
         &opdata->operator_objects[0]);
       break;
     case xnn_compute_type_qs8:
     case xnn_compute_type_qu8:
       status = xnn_create_copy_nc_x8(
-        1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         node->flags,
         &opdata->operator_objects[0]);
       break;
@@ -57,7 +54,7 @@ static enum xnn_status create_copy_operator(
 
 static enum xnn_status reshape_copy_operator(
   struct xnn_operator_data* opdata,
-  const struct xnn_value* values,
+  struct xnn_value* values,
   size_t num_values,
   pthreadpool_t threadpool)
 {
@@ -69,18 +66,21 @@ static enum xnn_status reshape_copy_operator(
       return xnn_reshape_copy_nc_x8(
         opdata->operator_objects[0],
         batch_size,
+        1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         threadpool);
       break;
     case xnn_operator_type_copy_nc_x16:
       return xnn_reshape_copy_nc_x16(
         opdata->operator_objects[0],
         batch_size,
+        1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         threadpool);
       break;
     case xnn_operator_type_copy_nc_x32:
       return xnn_reshape_copy_nc_x32(
         opdata->operator_objects[0],
         batch_size,
+        1 /* channels */, 1 /* input stride */, 1 /* output stride */,
         threadpool);
       break;
     default:
@@ -237,7 +237,9 @@ enum xnn_status xnn_define_static_reshape(
   }
 
   node->params.static_reshape.new_shape.num_dims = num_dims;
-  memcpy(&node->params.static_reshape.new_shape.dim, new_shape, num_dims * sizeof(size_t));
+  if (num_dims != 0) {
+    memcpy(&node->params.static_reshape.new_shape.dim, new_shape, num_dims * sizeof(size_t));
+  }
 
   node->type = xnn_node_type_static_reshape;
   node->compute_type = compute_type;

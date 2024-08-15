@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void saturate_d55822() {
+  float3 res = float3(1.0f);
+}
+vertex float4 vertex_main() {
+  saturate_d55822();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  saturate_d55822();
+}
+kernel void compute_main() {
+  saturate_d55822();
+}

@@ -6,6 +6,8 @@
 
 #import <utility>
 
+#import "base/memory/raw_ptr.h"
+#import "base/memory/weak_ptr.h"
 #import "base/no_destructor.h"
 #import "base/time/time.h"
 #import "components/dom_distiller/core/url_constants.h"
@@ -21,15 +23,14 @@
 #import "components/sync_sessions/session_sync_service_impl.h"
 #import "components/sync_sessions/sync_sessions_client.h"
 #import "components/sync_sessions/synced_window_delegates_getter.h"
-#import "ios/chrome/browser/favicon/favicon_service_factory.h"
-#import "ios/chrome/browser/history/history_service_factory.h"
+#import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/sync/model/device_info_sync_service_factory.h"
 #import "ios/chrome/browser/sync/model/glue/sync_start_util.h"
 #import "ios/chrome/browser/sync/model/model_type_store_service_factory.h"
-#import "ios/chrome/browser/sync/model/sessions/ios_chrome_local_session_event_router.h"
+#import "ios/chrome/browser/tabs/model/ios_chrome_local_session_event_router.h"
 #import "ios/chrome/browser/tabs/model/ios_synced_window_delegate_getter.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/components/webui/web_ui_url_constants.h"
@@ -55,20 +56,25 @@ bool ShouldSyncURLImpl(const GURL& url) {
 // iOS implementation of SyncSessionsClient. Needs to be in a separate class
 // due to possible multiple inheritance issues, wherein IOSChromeSyncClient
 // might inherit from other interfaces with same methods.
-class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
+class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
  public:
-  SyncSessionsClientImpl(ChromeBrowserState* browser_state,
-                         BrowserList* browser_list)
-      : browser_state_(browser_state),
-        window_delegates_getter_(
-            std::make_unique<IOSSyncedWindowDelegatesGetter>()),
+  SyncSessionsClientImpl(
+      const base::FilePath& browser_state_path,
+      PrefService* pref_service,
+      BrowserList* browser_list,
+      history::HistoryService* history_service,
+      syncer::DeviceInfoSyncService* device_info_service,
+      syncer::ModelTypeStoreService* model_type_store_service)
+      : history_service_(history_service),
+        device_info_service_(device_info_service),
+        model_type_store_service_(model_type_store_service),
+        window_delegates_getter_(browser_list),
         local_session_event_router_(
-            std::make_unique<IOSChromeLocalSessionEventRouter>(
-                browser_list,
-                this,
-                ios::sync_start_util::GetFlareForSyncableService(
-                    browser_state_->GetStatePath()))),
-        session_sync_prefs_(browser_state->GetPrefs()) {}
+            browser_list,
+            this,
+            ios::sync_start_util::GetFlareForSyncableService(
+                browser_state_path)),
+        session_sync_prefs_(pref_service) {}
 
   SyncSessionsClientImpl(const SyncSessionsClientImpl&) = delete;
   SyncSessionsClientImpl& operator=(const SyncSessionsClientImpl&) = delete;
@@ -81,18 +87,14 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
   }
 
   syncer::RepeatingModelTypeStoreFactory GetStoreFactory() override {
-    return ModelTypeStoreServiceFactory::GetForBrowserState(browser_state_)
-        ->GetStoreFactory();
+    return model_type_store_service_->GetStoreFactory();
   }
 
   void ClearAllOnDemandFavicons() override {
-    history::HistoryService* history_service =
-        ios::HistoryServiceFactory::GetForBrowserState(
-            browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-    if (!history_service) {
+    if (!history_service_) {
       return;
     }
-    history_service->ClearAllOnDemandFavicons();
+    history_service_->ClearAllOnDemandFavicons();
   }
 
   bool ShouldSyncURL(const GURL& url) const override {
@@ -100,28 +102,32 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
   }
 
   bool IsRecentLocalCacheGuid(const std::string& cache_guid) const override {
-    return DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state_)
-        ->GetDeviceInfoTracker()
-        ->IsRecentLocalCacheGuid(cache_guid);
+    return device_info_service_->GetDeviceInfoTracker()->IsRecentLocalCacheGuid(
+        cache_guid);
   }
 
   sync_sessions::SyncedWindowDelegatesGetter* GetSyncedWindowDelegatesGetter()
       override {
-    return window_delegates_getter_.get();
+    return &window_delegates_getter_;
   }
 
   sync_sessions::LocalSessionEventRouter* GetLocalSessionEventRouter()
       override {
-    return local_session_event_router_.get();
+    return &local_session_event_router_;
+  }
+
+  base::WeakPtr<SyncSessionsClient> AsWeakPtr() override {
+    return weak_ptr_factory_.GetWeakPtr();
   }
 
  private:
-  ChromeBrowserState* const browser_state_;
-  const std::unique_ptr<sync_sessions::SyncedWindowDelegatesGetter>
-      window_delegates_getter_;
-  const std::unique_ptr<IOSChromeLocalSessionEventRouter>
-      local_session_event_router_;
+  raw_ptr<history::HistoryService> history_service_;
+  raw_ptr<syncer::DeviceInfoSyncService> device_info_service_;
+  raw_ptr<syncer::ModelTypeStoreService> model_type_store_service_;
+  IOSSyncedWindowDelegatesGetter window_delegates_getter_;
+  IOSChromeLocalSessionEventRouter local_session_event_router_;
   sync_sessions::SessionSyncPrefs session_sync_prefs_;
+  base::WeakPtrFactory<SyncSessionsClientImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace
@@ -148,9 +154,9 @@ SessionSyncServiceFactory::SessionSyncServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "SessionSyncService",
           BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(ios::FaviconServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
   DependsOn(ModelTypeStoreServiceFactory::GetInstance());
+  DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
 }
 
 SessionSyncServiceFactory::~SessionSyncServiceFactory() {}
@@ -160,9 +166,13 @@ SessionSyncServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(context);
-  BrowserList* browser_list =
-      BrowserListFactory::GetForBrowserState(browser_state);
   return std::make_unique<sync_sessions::SessionSyncServiceImpl>(
       ::GetChannel(),
-      std::make_unique<SyncSessionsClientImpl>(browser_state, browser_list));
+      std::make_unique<SyncSessionsClientImpl>(
+          browser_state->GetStatePath(), browser_state->GetPrefs(),
+          BrowserListFactory::GetForBrowserState(browser_state),
+          ios::HistoryServiceFactory::GetForBrowserState(
+              browser_state, ServiceAccessType::EXPLICIT_ACCESS),
+          DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state),
+          ModelTypeStoreServiceFactory::GetForBrowserState(browser_state)));
 }

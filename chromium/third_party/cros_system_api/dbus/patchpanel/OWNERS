@@ -1,1 +1,1 @@
-include /patchpanel/OWNERS
+include chromiumos/owners:v1:/platform/OWNERS.networking

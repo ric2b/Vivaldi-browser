@@ -17,23 +17,21 @@
 using ::fuzztest::Arbitrary;
 using ::fuzztest::InRange;
 
-namespace libavif {
+namespace avif {
 namespace testutil {
 namespace {
 
-::testing::Environment* const stack_limit_env =
-    ::testing::AddGlobalTestEnvironment(
-        new FuzztestStackLimitEnvironment("524288"));  // 512 * 1024
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo512x1024Bytes();
 
 // Encodes an image into an AVIF grid then decodes it.
-void EncodeDecodeGridValid(AvifImagePtr image, AvifEncoderPtr encoder,
-                           AvifDecoderPtr decoder, uint32_t grid_cols,
+void EncodeDecodeGridValid(ImagePtr image, EncoderPtr encoder,
+                           DecoderPtr decoder, uint32_t grid_cols,
                            uint32_t grid_rows, bool is_encoded_data_persistent,
                            bool give_size_hint_to_decoder) {
   ASSERT_NE(image, nullptr);
   ASSERT_NE(encoder, nullptr);
 
-  const std::vector<AvifImagePtr> cells =
+  const std::vector<ImagePtr> cells =
       ImageToGrid(image.get(), grid_cols, grid_rows);
   if (cells.empty()) return;
   const uint32_t cell_width = cells.front()->width;
@@ -61,15 +59,15 @@ void EncodeDecodeGridValid(AvifImagePtr image, AvifEncoderPtr encoder,
       avifEncoderFinish(encoder.get(), &encoded_data);
   ASSERT_EQ(finish_result, AVIF_RESULT_OK) << avifResultToString(finish_result);
 
-  DecodeNonIncrementallyAndIncrementally(encoded_data, decoder.get(),
-                                         is_encoded_data_persistent,
-                                         give_size_hint_to_decoder,
-                                         /*useNthImageApi=*/true, cell_height);
+  const avifResult decode_result = DecodeNonIncrementallyAndIncrementally(
+      encoded_data, decoder.get(), is_encoded_data_persistent,
+      give_size_hint_to_decoder, /*use_nth_image_api=*/true, cell_height);
+  ASSERT_EQ(decode_result, AVIF_RESULT_OK) << avifResultToString(decode_result);
 }
 
 FUZZ_TEST(EncodeDecodeAvifFuzzTest, EncodeDecodeGridValid)
     .WithDomains(ArbitraryAvifImage(), ArbitraryAvifEncoder(),
-                 ArbitraryAvifDecoder({AVIF_CODEC_CHOICE_AUTO}),
+                 ArbitraryAvifDecoder(),
                  /*grid_cols=*/InRange<uint32_t>(1, 32),
                  /*grid_rows=*/InRange<uint32_t>(1, 32),
                  /*is_encoded_data_persistent=*/Arbitrary<bool>(),
@@ -77,4 +75,4 @@ FUZZ_TEST(EncodeDecodeAvifFuzzTest, EncodeDecodeGridValid)
 
 }  // namespace
 }  // namespace testutil
-}  // namespace libavif
+}  // namespace avif

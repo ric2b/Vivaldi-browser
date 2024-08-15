@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void round_773a8f() {
+  float res = 4.0f;
+}
+vertex float4 vertex_main() {
+  round_773a8f();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  round_773a8f();
+}
+kernel void compute_main() {
+  round_773a8f();
+}

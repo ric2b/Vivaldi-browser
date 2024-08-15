@@ -31,6 +31,7 @@
 #include <atomic>
 
 #include "dawn/native/Error.h"
+#include "dawn/native/EventManager.h"
 #include "dawn/native/IntegerTypes.h"
 
 namespace dawn::native {
@@ -72,6 +73,10 @@ class ExecutionQueueBase {
     // device loss, this function doesn't need to be called since the driver already closed all
     // resources.
     virtual MaybeError WaitForIdleForDestruction() = 0;
+
+    // Wait at most `timeout` synchronously for the ExecutionSerial to pass. Returns true
+    // if the serial passed.
+    virtual ResultOrError<bool> WaitForQueueSerial(ExecutionSerial serial, Nanoseconds timeout) = 0;
 
     // In the 'Normal' mode, currently recorded commands in the backend submitted in the next Tick.
     // However in the 'Passive' mode, the submission will be postponed as late as possible, for

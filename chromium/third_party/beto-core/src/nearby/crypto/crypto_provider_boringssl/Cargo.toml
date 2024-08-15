@@ -6,10 +6,9 @@ publish = false
 
 [dependencies]
 crypto_provider = { path = "../crypto_provider", features = ["alloc", "std"] }
-crypto_provider_stubs = { path = "../crypto_provider_stubs" }
 
-# Note: before this crate will work you need to run `scripts/prepare-boringssl.sh`
-bssl-crypto = {path = "../bssl-crypto"}
+# Note: before this crate will work you need to run `cargo run -p build_scripts -- build-boringssl`
+bssl-crypto = {path = "../../../third_party/boringssl/rust/bssl-crypto"}
 
 [dev-dependencies]
 crypto_provider_test = {path = "../crypto_provider_test"}

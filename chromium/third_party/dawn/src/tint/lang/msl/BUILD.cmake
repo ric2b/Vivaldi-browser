@@ -34,5 +34,21 @@
 #                       Do not modify this file directly
 ################################################################################
 
+include(lang/msl/intrinsic/BUILD.cmake)
+include(lang/msl/ir/BUILD.cmake)
 include(lang/msl/validate/BUILD.cmake)
 include(lang/msl/writer/BUILD.cmake)
+
+################################################################################
+# Target:    tint_lang_msl
+# Kind:      lib
+################################################################################
+tint_add_target(tint_lang_msl lib
+  lang/msl/barrier_type.h
+  lang/msl/builtin_fn.cc
+  lang/msl/builtin_fn.h
+)
+
+tint_target_add_dependencies(tint_lang_msl lib
+  tint_utils_traits
+)

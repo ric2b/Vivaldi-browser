@@ -42,8 +42,7 @@ class FrameScheduler : public FrameOrWorkerScheduler {
     virtual const base::UnguessableToken& GetAgentClusterId() const = 0;
 
     virtual void OnTaskCompleted(base::TimeTicks start_time,
-                                 base::TimeTicks end_time,
-                                 base::TimeTicks desired_execution_time) = 0;
+                                 base::TimeTicks end_time) = 0;
     virtual void MainFrameInteractive() {}
   };
 
@@ -64,6 +63,16 @@ class FrameScheduler : public FrameOrWorkerScheduler {
   // The scheduler may throttle tasks associated with offscreen frames.
   virtual void SetFrameVisible(bool) = 0;
   virtual bool IsFrameVisible() const = 0;
+
+  // The scheduler may throttle tasks associated with cross origin frames using
+  // small proportion of the page's visible area.
+  virtual void SetVisibleAreaLarge(bool) = 0;
+  virtual bool IsVisibleAreaLarge() const = 0;
+
+  // The scheduler may throttle tasks associated with cross origin frames
+  // without user activation.
+  virtual void SetHadUserActivation(bool) = 0;
+  virtual bool HadUserActivation() const = 0;
 
   // Query the page visibility state for the page associated with this frame.
   // The scheduler may throttle tasks associated with pages that are not

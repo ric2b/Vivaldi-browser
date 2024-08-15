@@ -198,10 +198,6 @@ class BookmarkToolbarMediator
             mModel.set(BookmarkToolbarProperties.CHECKED_VIEW_MENU_ID, id);
             return true;
         } else if (id == R.id.edit_menu_id) {
-            if (isVivaldiTablet()) {
-                mBookmarkPanelDelegate.startEditFolder(mCurrentFolder);
-                return true;
-            }
             if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
                 BookmarkUtils.startEditActivity(mContext, mCurrentFolder);
             } else {
@@ -235,30 +231,14 @@ class BookmarkToolbarMediator
             assert list.size() == 1;
             BookmarkItem item = mBookmarkModel.getBookmarkById(list.get(0));
             if (item.isFolder() && !BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
-                if (isVivaldiTablet()) {
-                    mBookmarkPanelDelegate.startEditFolder(item.getId());
-                    return true;
-                }
-
                 BookmarkAddEditFolderActivity.startEditFolderActivity(mContext, item.getId());
             } else {
-                if (isVivaldiTablet()) {
-                    mBookmarkPanelDelegate.openEditBookmark(item.getId(), mCurrentFolder);
-                    return true;
-                }
-
                 BookmarkUtils.startEditActivity(mContext, item.getId());
             }
             return true;
         } else if (id == R.id.selection_mode_move_menu_id) {
             List<BookmarkId> list = mSelectionDelegate.getSelectedItemsAsList();
             if (list.size() >= 1) {
-                if (isVivaldiTablet()) {
-                    mBookmarkPanelDelegate.chooseFolder(mContext,
-                            list.toArray(new BookmarkId[list.size()]));
-                    return true;
-                }
-
                 if (BookmarkFeatures.isAndroidImprovedBookmarksEnabled()) {
                     BookmarkUtils.startFolderPickerActivity(
                             mContext, list.toArray(new BookmarkId[0]));
@@ -302,7 +282,7 @@ class BookmarkToolbarMediator
 
                 BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmark);
                 mBookmarkModel.setReadStatusForReadingList(
-                        bookmarkItem.getUrl(), /* read= */ id == R.id.reading_list_mark_as_read_id);
+                        bookmarkItem.getId(), /* read= */ id == R.id.reading_list_mark_as_read_id);
             }
             mSelectionDelegate.clearSelection();
             return true;
@@ -426,7 +406,7 @@ class BookmarkToolbarMediator
 
         // Vivaldi
         boolean isReadingListFolder = mCurrentFolder != null &&
-                mCurrentFolder.equals(mBookmarkModel.getReadingListFolder());
+                mCurrentFolder.equals(mBookmarkModel.getDefaultReadingListFolder());
         if (ChromeApplicationImpl.isVivaldi()) {
             mModel.set(BookmarkToolbarProperties.CLOSE_BUTTON_VISIBLE,
                     PanelUtils.isPanelOpen((mTabbedActivity)));
@@ -459,7 +439,7 @@ class BookmarkToolbarMediator
             title = res.getString(R.string.bookmarks);
             navigationButton = NavigationButton.BACK;
         } else if (ChromeApplicationImpl.isVivaldi() &&
-                folder.equals(mBookmarkModel.getReadingListFolder())) {
+                folder.equals(mBookmarkModel.getDefaultReadingListFolder())) {
                 navigationButton = NavigationButton.NONE;
             title = res.getString(R.string.menu_reading_list);
         } else {
@@ -489,8 +469,10 @@ class BookmarkToolbarMediator
             // Special behavior in reading list:
             // - Select CHRONOLOGICAL as sort order.
             // - Disable sort menu items.
+            // TODO(crbug.com/1501998): Add account reading list folder support here.
             boolean inReadingList =
-                    Objects.equals(mCurrentFolder, mBookmarkModel.getReadingListFolder());
+                    Objects.equals(
+                            mCurrentFolder, mBookmarkModel.getLocalOrSyncableReadingListFolder());
             mModel.set(BookmarkToolbarProperties.SORT_MENU_IDS_ENABLED, !inReadingList);
             if (inReadingList) {
                 // Reading list items are always sorted by date added.
@@ -570,10 +552,5 @@ class BookmarkToolbarMediator
     /** Vivaldi */
     public void setBookmarkPanelDelegate(VivaldiBookmarkPanelDelegate bookmarkPanelDelegate) {
         mBookmarkPanelDelegate = bookmarkPanelDelegate;
-    }
-
-    private boolean isVivaldiTablet() {
-        return ChromeApplicationImpl.isVivaldi() &&
-                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
     }
 }

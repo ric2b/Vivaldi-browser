@@ -13,11 +13,11 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-CREATE PERFETTO FUNCTION vsync_from_name(slice_name STRING)
+CREATE OR REPLACE PERFETTO FUNCTION vsync_from_name(slice_name STRING)
 RETURNS STRING AS
 SELECT CAST(STR_SPLIT($slice_name, " ", 1) AS INTEGER);
 
-CREATE PERFETTO FUNCTION gpu_completion_fence_id_from_name(slice_name STRING)
+CREATE OR REPLACE PERFETTO FUNCTION gpu_completion_fence_id_from_name(slice_name STRING)
 RETURNS STRING AS
 SELECT
   CASE
@@ -229,7 +229,7 @@ CREATE PERFETTO TABLE android_jank_cuj_sf_on_message_invalidate_slice AS
 SELECT * FROM FIND_ANDROID_JANK_CUJ_SF_MAIN_THREAD_SLICE('onMessageInvalidate *');
 
 DROP VIEW IF EXISTS android_jank_cuj_sf_root_slice;
-CREATE VIEW android_jank_cuj_sf_root_slice AS
+CREATE PERFETTO VIEW android_jank_cuj_sf_root_slice AS
 SELECT * FROM android_jank_cuj_sf_commit_slice
 UNION ALL
 SELECT * FROM android_jank_cuj_sf_composite_slice

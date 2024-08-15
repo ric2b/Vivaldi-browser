@@ -28,8 +28,6 @@ struct TaskList;
 
 class CalendarView;
 class ClassroomBubbleStudentView;
-class ClassroomBubbleTeacherView;
-class DetailedViewDelegate;
 class Shelf;
 
 // The bubble associated with the `GlanceableTrayBubble`. This bubble is the
@@ -46,13 +44,13 @@ class GlanceableTrayBubbleView : public TrayBubbleView,
   void InitializeContents();
 
   views::View* GetTasksView() { return tasks_bubble_view_; }
-  ClassroomBubbleTeacherView* GetClassroomTeacherView() {
-    return classroom_bubble_teacher_view_;
-  }
   ClassroomBubbleStudentView* GetClassroomStudentView() {
     return classroom_bubble_student_view_;
   }
   CalendarView* GetCalendarView() { return calendar_view_; }
+
+  // views::View:
+  int GetHeightForWidth(int w) const override;
 
   // TrayBubbleView:
   void AddedToWidget() override;
@@ -62,43 +60,52 @@ class GlanceableTrayBubbleView : public TrayBubbleView,
   void OnDisplayConfigurationChanged() override;
 
  private:
-  // Creates classroom student or teacher view if needed (if the corresponding
-  // role is active) and stores the pointer in `view`.
-  // NOTE: in the rare case, when a single user has both student and teacher
-  // roles in different courses, the order of the two bubbles is not guaranteed.
-  template <typename T>
-  void AddClassroomBubbleViewIfNeeded(raw_ptr<T, ExperimentalAsh>* view,
-                                      bool is_role_active);
-  void AddTaskBubbleViewIfNeeded(ui::ListModel<api::TaskList>* task_lists);
+  // Creates classroom student view if needed (if the corresponding
+  // role is active).
+  void AddClassroomBubbleStudentViewIfNeeded(bool is_role_active);
+  void AddTaskBubbleViewIfNeeded(
+      const ui::ListModel<api::TaskList>* task_lists);
 
   void OnGlanceablesContainerPreferredSizeChanged();
   void OnGlanceablesContainerHeightChanged(int height_delta);
 
-  const raw_ptr<Shelf, ExperimentalAsh> shelf_;
-  const std::unique_ptr<DetailedViewDelegate> detailed_view_delegate_;
+  // Adjusts the order of the views in the focus list under
+  // GlanceableTrayBubbleView.
+  void AdjustChildrenFocusOrder();
+
+  // Sets the preferred size of `calendar_view_`. This is called during
+  // initialization and when the screen height changes.
+  void SetCalendarPreferredSize() const;
+
+  // For GlanceablesV2CalendarView: clips the `scroll_view_` height based on
+  // `screen_max_height` and `calendar_view_` height. This is called during
+  // initialization and when the `calendar_view_` height changes.
+  void ClipScrollViewHeight(int screen_max_height) const;
+
+  const raw_ptr<Shelf> shelf_;
 
   // Whether the bubble view has been initialized.
   bool initialized_ = false;
 
   // A scrollable view which contains the individual glanceables.
-  raw_ptr<views::ScrollView, ExperimentalAsh> scroll_view_ = nullptr;
+  raw_ptr<views::ScrollView> scroll_view_ = nullptr;
 
-  // Child bubble view for the tasks glanceable. Owned by bubble_view_.
-  raw_ptr<GlanceablesTasksViewBase, ExperimentalAsh> tasks_bubble_view_ =
-      nullptr;
+  // Container view for the tasks and classroom glanceables. Owned by this view.
+  raw_ptr<views::FlexLayoutView> time_management_container_view_ = nullptr;
 
-  // Child bubble view for the teacher classrooms glanceable. Owned by
-  // bubble_view_.
-  raw_ptr<ClassroomBubbleTeacherView, ExperimentalAsh>
-      classroom_bubble_teacher_view_ = nullptr;
+  // Child bubble view for the tasks glanceable. Owned by this view.
+  raw_ptr<GlanceablesTasksViewBase> tasks_bubble_view_ = nullptr;
 
   // Child bubble view for the student classrooms glanceable. Owned by
-  // bubble_view_.
-  raw_ptr<ClassroomBubbleStudentView, ExperimentalAsh>
-      classroom_bubble_student_view_ = nullptr;
+  // this view.
+  raw_ptr<ClassroomBubbleStudentView> classroom_bubble_student_view_ = nullptr;
 
-  // Child bubble view for the calendar glanceable. Owned by bubble_view_.
-  raw_ptr<CalendarView, ExperimentalAsh> calendar_view_ = nullptr;
+  // The parent container of `calendar_view_`. Only exists if the glanceables
+  // calendar flag is on.
+  raw_ptr<views::FlexLayoutView> calendar_container_ = nullptr;
+
+  // Child bubble view for the calendar glanceable. Owned by this view.
+  raw_ptr<CalendarView> calendar_view_ = nullptr;
 
   base::CallbackListSubscription on_contents_scrolled_subscription_;
 

@@ -45,6 +45,9 @@ class UserCall final : public Castable<UserCall, Call> {
     /// The base offset in Operands() for the call arguments
     static constexpr size_t kArgsOperandOffset = 1;
 
+    /// Constructor (no results, no operands)
+    UserCall();
+
     /// Constructor
     /// @param result the result value
     /// @param func the function being called
@@ -55,8 +58,8 @@ class UserCall final : public Castable<UserCall, Call> {
     /// @copydoc Instruction::Clone()
     UserCall* Clone(CloneContext& ctx) override;
 
-    /// @returns the call arguments
-    tint::Slice<Value*> Args() override { return operands_.Slice().Offset(kArgsOperandOffset); }
+    /// @returns the offset of the arguments in Operands()
+    size_t ArgsOperandOffset() const override { return kArgsOperandOffset; }
 
     /// Replaces the call arguments to @p arguments
     /// @param arguments the new call arguments
@@ -65,12 +68,15 @@ class UserCall final : public Castable<UserCall, Call> {
     /// @returns the called function
     Function* Target() { return operands_[kFunctionOperandOffset]->As<ir::Function>(); }
 
+    /// @returns the called function
+    const Function* Target() const { return operands_[kFunctionOperandOffset]->As<ir::Function>(); }
+
     /// Sets called function
     /// @param target the new target of the call
     void SetTarget(Function* target) { SetOperand(kFunctionOperandOffset, target); }
 
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "call"; }
+    std::string FriendlyName() const override { return "call"; }
 };
 
 }  // namespace tint::core::ir

@@ -6,13 +6,14 @@
 
 #include "components/request_filter/request_filter_proxying_webtransport.h"
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "components/request_filter/filtered_request_info.h"
 #include "content/public/browser/render_process_host.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/public/mojom/web_transport.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace vivaldi {
@@ -127,7 +128,7 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
         base::BindOnce(&WebTransportHandshakeProxy::OnError,
                        base::Unretained(this), net::ERR_ABORTED));
     std::move(create_callback_)
-        .Run(receiver_.BindNewPipeAndPassRemote(), absl::nullopt);
+        .Run(receiver_.BindNewPipeAndPassRemote(), std::nullopt);
     receiver_.set_disconnect_handler(
         base::BindOnce(&WebTransportHandshakeProxy::OnError,
                        base::Unretained(this), net::ERR_ABORTED));
@@ -138,11 +139,12 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
   void OnConnectionEstablished(
       mojo::PendingRemote<network::mojom::WebTransport> transport,
       mojo::PendingReceiver<network::mojom::WebTransportClient> client,
-      const scoped_refptr<net::HttpResponseHeaders>& response_headers)
-      override {
+      const scoped_refptr<net::HttpResponseHeaders>& response_headers,
+      network::mojom::WebTransportStatsPtr initial_stats) override {
     receiver_.reset();
     pending_transport_ = std::move(transport);
     pending_client_ = std::move(client);
+    initial_stats_ = std::move(initial_stats);
     response_headers_ = response_headers;
     // Since WebTransport doesn't support redirect, 'redirect_url' is ignored
     // even if extensions assigned it.
@@ -177,16 +179,16 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
 
     request_handler_->OnResponseStarted(browser_context_, &info_, net::OK);
 
-    remote_->OnConnectionEstablished(std::move(pending_transport_),
-                                     std::move(pending_client_),
-                                     response.headers);
+    remote_->OnConnectionEstablished(
+        std::move(pending_transport_), std::move(pending_client_),
+        response.headers, std::move(initial_stats_));
 
     OnCompleted();
     // `this` is deleted.
   }
 
   void OnHandshakeFailed(
-      const absl::optional<net::WebTransportError>& error) override {
+      const std::optional<net::WebTransportError>& error) override {
     remote_->OnHandshakeFailed(error);
 
     int error_code = net::ERR_ABORTED;
@@ -235,6 +237,7 @@ class WebTransportHandshakeProxy : public RequestFilterManager::Proxy,
   scoped_refptr<net::HttpResponseHeaders> override_headers_;
   mojo::PendingRemote<network::mojom::WebTransport> pending_transport_;
   mojo::PendingReceiver<network::mojom::WebTransportClient> pending_client_;
+  network::mojom::WebTransportStatsPtr initial_stats_;
 
   CreateCallback create_callback_;
 };
@@ -264,7 +267,7 @@ void StartWebRequestProxyingWebTransport(
       request_id, process_id, frame_routing_id, request,
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
       /*is_async=*/true, /*is_webtransport=*/true,
-      /*navigation_id=*/absl::nullopt);
+      /*navigation_id=*/std::nullopt);
 
   auto proxy = std::make_unique<WebTransportHandshakeProxy>(
       std::move(handshake_client), request_handler, proxies, browser_context,

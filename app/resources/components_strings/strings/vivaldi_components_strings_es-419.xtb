@@ -6,8 +6,6 @@
 <translation id="1110994991967754504">Selecciona el permiso para <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> cerró la conexión de forma inesperada.</translation>
 <translation id="1161325031994447685">Volver a conectar a Wi-Fi</translation>
-<translation id="1175364870820465910">Im&amp;primir...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Intenta borrar tus cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Acerca de la versión</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no envió ningún dato.</translation>
 <translation id="1559528461873125649">El archivo o directorio no existe</translation>
@@ -18,7 +16,6 @@
 <translation id="1734878702283171397">Intenta contactar con el administrador del sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Trate de ejecutar diagnósticos de Red de Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este sitio contiene programas dañinos</translation>
-<translation id="1916770123977586577">Para aplicar la configuración actualizada en este sitio, recarga la página</translation>
 <translation id="1974060860693918893">Avanzada</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprobar el proxy y el firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitida para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -202,7 +199,6 @@
 <translation id="8940028675168378100">Bloqueada por el <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir a la configuración del sitio</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y su contraseña.</translation>
-<translation id="9008201768610948239">Ignorar</translation>
 <translation id="9025348182339809926">(No válido)</translation>
 <translation id="9039213469156557790">Además, esta página incluye otros recursos que no son seguros. Otras personas pueden ver estos recursos mientras se encuentran en tránsito, y un atacante puede modificarlos para cambiar el funcionamiento de la página.</translation>
 <translation id="9062620674789239642">Es posible que se haya movido, editado o borrado.</translation>

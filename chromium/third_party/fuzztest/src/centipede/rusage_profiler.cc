@@ -14,6 +14,7 @@
 
 #include "./centipede/rusage_profiler.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -22,15 +23,21 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <string_view>
+#include <thread>  // NOLINT
 #include <utility>
 
+#include "absl/base/attributes.h"
+#include "absl/base/const_init.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "./centipede/rusage_stats.h"
 
 namespace centipede::perf {
 
@@ -491,31 +498,35 @@ void RUsageProfiler::PrintReport(  //
   // with automatic timelapse snapshotting.
   class ReportLogger final : public ReportSink {
    public:
+    ReportLogger(SourceLocation loc) : loc_{loc} {}
+
     ~ReportLogger() override {
       if (!buffer_.empty()) {
-        LOG(INFO).NoPrefix() << buffer_;
+        LOG(INFO).AtLocation(loc_.file, loc_.line).NoPrefix() << buffer_;
       }
     }
 
-    ReportLogger& operator<<(const std::string& fragment) override {
+    ReportLogger& operator<<(std::string_view fragment) override {
       const auto last_newline = fragment.rfind('\n');
-      if (last_newline == std::string::npos) {
+      if (last_newline == std::string_view::npos) {
         // Accumulate no-'\n' fragments: LOG() always wraps around.
         buffer_ += fragment;
       } else {
         // Now we can log, but save the last bit of text
-        LOG(INFO).NoPrefix() << buffer_ << fragment.substr(0, last_newline);
+        LOG(INFO).AtLocation(loc_.file, loc_.line).NoPrefix()
+            << buffer_ << fragment.substr(0, last_newline);
         buffer_ = fragment.substr(last_newline + 1);
       }
       return *this;
     }
 
    private:
+    const SourceLocation loc_;
     std::string buffer_;
   };
 
   LOG(INFO).AtLocation(loc.file, loc.line) << title << "\n";
-  ReportLogger report_logger;
+  ReportLogger report_logger{loc};
   GenerateReport(&report_logger);
 }
 

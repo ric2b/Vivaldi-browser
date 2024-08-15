@@ -78,12 +78,15 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   struct PdfOcrRequest {
     PdfOcrRequest(const ui::AXNodeID& image_node_id,
                   const chrome_pdf::AccessibilityImageInfo& image,
+                  const ui::AXNodeID& root_node_id,
                   const ui::AXNodeID& parent_node_id,
                   const ui::AXNodeID& page_node_id,
                   uint32_t page_index);
+    PdfOcrRequest(const PdfOcrRequest& other);
 
     const ui::AXNodeID image_node_id;
     const chrome_pdf::AccessibilityImageInfo image;
+    const ui::AXNodeID root_node_id;
     const ui::AXNodeID parent_node_id;
     const ui::AXNodeID page_node_id;
     const uint32_t page_index;
@@ -105,6 +108,7 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
 
     PdfOcrService(chrome_pdf::PdfAccessibilityImageFetcher* image_fetcher,
                   content::RenderFrame& render_frame,
+                  ui::AXNodeID root_node_id,
                   uint32_t page_count,
                   OnOcrDataReceivedCallback callback);
 
@@ -115,9 +119,8 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
 
     // If the OCR Service is created before the PDF is loaded or reloaded, i.e.
     // before `PdfAccessibilityTree::SetAccessibilityDocInfo` is called,
-    // `PdfAccessibilityTree::remaining_page_count_` would be wrong, hence
-    // PdfAccessibilityTree must call this method to keep it up to date.
-    void SetPageCount(uint32_t page_count);
+    // previous requests are removed and page count and root node are re-set.
+    void ResetService(ui::AXNodeID root_node_id, uint32_t page_count);
     void OcrPage(base::queue<PdfOcrRequest> page_requests);
     bool AreAllPagesOcred() const;
     bool AreAllPagesInBatchOcred() const;
@@ -140,12 +143,14 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
 
     uint32_t pages_per_batch_;
     uint32_t remaining_page_count_;
+    ui::AXNodeID root_node_id_;
 
     // True if there are pending OCR requests. Used to determine if `OcrPage`
     // should call `OcrNextImage` or if the next call to
     // `ReceiveOcrResultsForImage` should do it instead. This avoids the
     // possibility of processing requests in the wrong order.
     bool is_ocr_in_progress_ = false;
+
     // A PDF is made up of a number of pages, and each page might have one or
     // more inaccessible images that need to be OCRed. This queue could contain
     // the OCR requests for all the images on several pages, so the requests
@@ -370,6 +375,7 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
   std::unique_ptr<ui::AXNodeData> banner_node_;
   // The status node contains a notification message for the user.
   std::unique_ptr<ui::AXNodeData> status_node_;
+  std::unique_ptr<ui::AXNodeData> status_node_text_;
   std::vector<std::unique_ptr<ui::AXNodeData>> nodes_;
 
   // Map from the id of each static text AXNode and inline text box

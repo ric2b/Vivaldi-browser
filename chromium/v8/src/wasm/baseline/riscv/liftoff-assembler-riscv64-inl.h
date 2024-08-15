@@ -91,6 +91,15 @@ inline void Load(LiftoffAssembler* assm, LiftoffRegister dst, MemOperand src,
     case kF64:
       assm->LoadDouble(dst.fp(), src);
       break;
+    case kS128:{
+      assm->VU.set(kScratchReg, E8, m1);
+      Register src_reg = src.offset() == 0 ? src.rm() : kScratchReg;
+      if (src.offset() != 0) {
+        assm->AddWord(src_reg, src.rm(), src.offset());
+      }
+      assm->vl(dst.fp().toV(), src_reg, 0, E8);
+      break;
+    }
     default:
       UNREACHABLE();
   }
@@ -115,6 +124,15 @@ inline void Store(LiftoffAssembler* assm, Register base, int32_t offset,
     case kF64:
       assm->StoreDouble(src.fp(), dst);
       break;
+    case kS128:{
+      assm->VU.set(kScratchReg, E8, m1);
+      Register dst_reg = dst.offset() == 0 ? dst.rm() : kScratchReg;
+      if (dst.offset() != 0) {
+        assm->Add64(kScratchReg, dst.rm(), dst.offset());
+      }
+      assm->vs(src.fp().toV(), dst_reg, 0, VSew::E8);
+      break;
+    }
     default:
       UNREACHABLE();
   }
@@ -140,8 +158,87 @@ inline void push(LiftoffAssembler* assm, LiftoffRegister reg, ValueKind kind) {
       assm->addi(sp, sp, -kSystemPointerSize);
       assm->StoreDouble(reg.fp(), MemOperand(sp, 0));
       break;
+    case kS128:{
+      assm->VU.set(kScratchReg, E8, m1);
+      assm->addi(sp, sp, -kSystemPointerSize * 2);
+      assm->vs(reg.fp().toV(), sp, 0, VSew::E8);
+      break;
+    }
     default:
       UNREACHABLE();
+  }
+}
+
+inline void StoreToMemory(LiftoffAssembler* assm, MemOperand dst,
+                          const LiftoffAssembler::VarState& src) {
+  UseScratchRegisterScope temps(assm);
+  if (src.is_const()) {
+    Register src_reg = no_reg;
+    if (src.i32_const() == 0) {
+      src_reg = zero_reg;
+    } else {
+      src_reg = temps.Acquire();
+      assm->li(src_reg, src.i32_const());
+    }
+    assm->StoreWord(src_reg, dst);
+  } else if (src.is_reg()) {
+    switch (src.kind()) {
+      case kI32:
+        return assm->Sw(src.reg().gp(), dst);
+      case kI64:
+      case kRef:
+      case kRefNull:
+      case kRtt:
+        return assm->Sd(src.reg().gp(), dst);
+      case kF32:
+        return assm->StoreFloat(src.reg().fp(), dst);
+      case kF64:
+        return assm->StoreDouble(src.reg().fp(), dst);
+      case kS128: {
+        assm->VU.set(kScratchReg, E8, m1);
+        Register dst_reg = temps.Acquire();
+        assm->Add64(dst_reg, dst.rm(), dst.offset());
+        assm->vs(src.reg().fp().toV(), dst_reg, 0, VSew::E8);
+        return;
+      }
+      default:
+        UNREACHABLE();
+    }
+  } else {
+    DCHECK(src.is_stack());
+    Register temp = temps.Acquire();
+    switch (src.kind()) {
+      case kI32:
+        assm->Lw(temp, GetStackSlot(src.offset()));
+        assm->Sw(temp, dst);
+        return;
+      case kI64:
+      case kRef:
+      case kRefNull:
+        assm->Ld(temp, GetStackSlot(src.offset()));
+        assm->Sd(temp, dst);
+        return;
+      case kF32:
+        assm->LoadFloat(kScratchDoubleReg, GetStackSlot(src.offset()));
+        assm->StoreFloat(kScratchDoubleReg, dst);
+        return;
+      case kF64:
+        assm->LoadDouble(kScratchDoubleReg, GetStackSlot(src.offset()));
+        assm->StoreDouble(kScratchDoubleReg, dst);
+        return;
+      case kS128: {
+        assm->VU.set(kScratchReg, E8, m1);
+        Register src_reg = temp;
+        assm->Add64(src_reg, sp, src.offset());
+        assm->vl(kScratchDoubleReg.toV(), src_reg, 0, VSew::E8);
+        Register dst_reg = temp;
+        assm->Add64(dst_reg, dst.rm(), dst.offset());
+        assm->vs(kScratchDoubleReg.toV(), dst_reg, 0, VSew::E8);
+        return;
+      }
+      default:
+        UNREACHABLE();
+    }
   }
 }
 
@@ -179,11 +276,25 @@ void LiftoffAssembler::LoadConstant(LiftoffRegister reg, WasmValue value) {
 
 void LiftoffAssembler::LoadTaggedPointer(Register dst, Register src_addr,
                                          Register offset_reg,
-                                         int32_t offset_imm, bool needs_shift) {
+                                         int32_t offset_imm,
+                                         uint32_t* protected_load_pc,
+                                         bool needs_shift) {
   unsigned shift_amount = !needs_shift ? 0 : COMPRESS_POINTERS_BOOL ? 2 : 3;
   MemOperand src_op = liftoff::GetMemOp(this, src_addr, offset_reg, offset_imm,
                                         false, shift_amount);
   LoadTaggedField(dst, src_op);
+
+  // Since LoadTaggedField might start with an instruction loading an immediate
+  // argument to a register, we have to compute the {protected_load_pc} after
+  // calling it.
+  // In case of compressed pointers, there is an additional instruction
+  // (pointer decompression) after the load.
+  uint8_t protected_instruction_offset_bias =
+      COMPRESS_POINTERS_BOOL ? 2 * kInstrSize : kInstrSize;
+  if (protected_load_pc) {
+    *protected_load_pc = pc_offset() - protected_instruction_offset_bias;
+    DCHECK(InstructionAt(*protected_load_pc)->IsLoad());
+  }
 }
 
 void LiftoffAssembler::LoadFullPointer(Register dst, Register src_addr,
@@ -196,11 +307,21 @@ void LiftoffAssembler::StoreTaggedPointer(Register dst_addr,
                                           Register offset_reg,
                                           int32_t offset_imm, Register src,
                                           LiftoffRegList pinned,
+                                          uint32_t* protected_store_pc,
                                           SkipWriteBarrier skip_write_barrier) {
   UseScratchRegisterScope temps(this);
   Register scratch = temps.Acquire();
   MemOperand dst_op = liftoff::GetMemOp(this, dst_addr, offset_reg, offset_imm);
+
   StoreTaggedField(src, dst_op);
+
+  // Since StoreTaggedField might start with an instruction loading an immediate
+  // argument to a register, we have to compute the {protected_load_pc} after
+  // calling it.
+  if (protected_store_pc) {
+    *protected_store_pc = pc_offset() - kInstrSize;
+    DCHECK(InstructionAt(*protected_store_pc)->IsStore());
+  }
 
   if (skip_write_barrier || v8_flags.disable_write_barriers) return;
   Label exit;
@@ -224,7 +345,6 @@ void LiftoffAssembler::Load(LiftoffRegister dst, Register src_addr,
   MemOperand src_op = liftoff::GetMemOp(this, src_addr, offset_reg, offset_imm,
                                         i64_offset, shift_amount);
 
-  if (protected_load_pc) *protected_load_pc = pc_offset();
   switch (type.value()) {
     case LoadType::kI32Load8U:
     case LoadType::kI64Load8U:
@@ -270,7 +390,13 @@ void LiftoffAssembler::Load(LiftoffRegister dst, Register src_addr,
     default:
       UNREACHABLE();
   }
-
+  // Since {Ldr*} macros might start with an instruction loading an immediate
+  // argument to a register, we have to compute the {protected_load_pc} after
+  // calling them.
+  if (protected_load_pc) {
+    *protected_load_pc = pc_offset() - kInstrSize;
+    DCHECK(InstructionAt(*protected_load_pc)->IsLoad());
+  }
 #if defined(V8_TARGET_BIG_ENDIAN)
   if (is_load_mem) {
     pinned.set(src_op.rm());
@@ -300,7 +426,6 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
   }
 #endif
 
-  if (protected_store_pc) *protected_store_pc = pc_offset();
 
   switch (type.value()) {
     case StoreType::kI32Store8:
@@ -336,22 +461,32 @@ void LiftoffAssembler::Store(Register dst_addr, Register offset_reg,
     default:
       UNREACHABLE();
   }
+  // Since {Str*} macros might start with an instruction loading an immediate
+  // argument to a register, we have to compute the {protected_load_pc} after
+  // calling them.
+  if (protected_store_pc) {
+    *protected_store_pc = pc_offset() - kInstrSize;
+    DCHECK(InstructionAt(*protected_store_pc)->IsStore());
+  }
 }
 
 namespace liftoff {
 #define __ lasm->
 
 inline Register CalculateActualAddress(LiftoffAssembler* lasm,
+                                       UseScratchRegisterScope& temps,
                                        Register addr_reg, Register offset_reg,
-                                       uintptr_t offset_imm,
-                                       Register result_reg) {
-  DCHECK_NE(offset_reg, no_reg);
+                                       uintptr_t offset_imm) {
   DCHECK_NE(addr_reg, no_reg);
-  __ AddWord(result_reg, addr_reg, Operand(offset_reg));
-  if (offset_imm != 0) {
-    __ AddWord(result_reg, result_reg, Operand(offset_imm));
+  if (offset_reg == no_reg && offset_imm == 0) return addr_reg;
+  Register result = temps.Acquire();
+  if (offset_reg == no_reg) {
+    __ AddWord(result, addr_reg, Operand(offset_imm));
+  } else {
+    __ AddWord(result, addr_reg, Operand(offset_reg));
+    if (offset_imm != 0) __ AddWord(result, result, Operand(offset_imm));
   }
-  return result_reg;
+  return result;
 }
 
 enum class Binop { kAdd, kSub, kAnd, kOr, kXor, kExchange };
@@ -360,7 +495,8 @@ inline void AtomicBinop(LiftoffAssembler* lasm, Register dst_addr,
                         Register offset_reg, uintptr_t offset_imm,
                         LiftoffRegister value, LiftoffRegister result,
                         StoreType type, Binop op) {
-  LiftoffRegList pinned{dst_addr, offset_reg, value, result};
+  LiftoffRegList pinned{dst_addr, value, result};
+  if (offset_reg != no_reg) pinned.set(offset_reg);
   Register store_result = pinned.set(__ GetUnusedRegister(kGpReg, pinned)).gp();
 
   // Make sure that {result} is unique.
@@ -372,7 +508,7 @@ inline void AtomicBinop(LiftoffAssembler* lasm, Register dst_addr,
 
   UseScratchRegisterScope temps(lasm);
   Register actual_addr = liftoff::CalculateActualAddress(
-      lasm, dst_addr, offset_reg, offset_imm, temps.Acquire());
+      lasm, temps, dst_addr, offset_reg, offset_imm);
 
   // Allocate an additional {temp} register to hold the result that should be
   // stored to memory. Note that {temp} and {store_result} are not allowed to be
@@ -466,8 +602,8 @@ void LiftoffAssembler::AtomicLoad(LiftoffRegister dst, Register src_addr,
                                   LoadType type, LiftoffRegList pinned,
                                   bool i64_offset) {
   UseScratchRegisterScope temps(this);
-  Register src_reg = liftoff::CalculateActualAddress(
-      this, src_addr, offset_reg, offset_imm, temps.Acquire());
+  Register src_reg = liftoff::CalculateActualAddress(this, temps, src_addr,
+                                                     offset_reg, offset_imm);
   switch (type.value()) {
     case LoadType::kI32Load8U:
     case LoadType::kI64Load8U:
@@ -501,8 +637,8 @@ void LiftoffAssembler::AtomicStore(Register dst_addr, Register offset_reg,
                                    StoreType type, LiftoffRegList pinned,
                                    bool i64_offset) {
   UseScratchRegisterScope temps(this);
-  Register dst_reg = liftoff::CalculateActualAddress(
-      this, dst_addr, offset_reg, offset_imm, temps.Acquire());
+  Register dst_reg = liftoff::CalculateActualAddress(this, temps, dst_addr,
+                                                     offset_reg, offset_imm);
   switch (type.value()) {
     case StoreType::kI64Store8:
     case StoreType::kI32Store8:
@@ -618,7 +754,9 @@ void LiftoffAssembler::AtomicCompareExchange(
     Register dst_addr, Register offset_reg, uintptr_t offset_imm,
     LiftoffRegister expected, LiftoffRegister new_value, LiftoffRegister result,
     StoreType type, bool i64_offset) {
-  LiftoffRegList pinned{dst_addr, offset_reg, expected, new_value, result};
+  LiftoffRegList pinned{dst_addr, expected, new_value, result};
+  if (offset_reg != no_reg) pinned.set(offset_reg);
+
   Register temp0 = pinned.set(GetUnusedRegister(kGpReg, pinned)).gp();
   Register temp1 = pinned.set(GetUnusedRegister(kGpReg, pinned)).gp();
   Register temp2 = pinned.set(GetUnusedRegister(kGpReg, pinned)).gp();
@@ -1645,62 +1783,7 @@ void LiftoffAssembler::CallCWithStackBuffer(
 
   int arg_offset = 0;
   for (const VarState& arg : args) {
-    UseScratchRegisterScope temps(this);
-    Register src = no_reg;
-    MemOperand dst{sp, arg_offset};
-    if (arg.is_reg()) {
-      switch (arg.kind()) {
-        case kI32:
-          Sw(arg.reg().gp(), dst);
-          break;
-        case kI64:
-          StoreWord(arg.reg().gp(), dst);
-          break;
-        case kF32:
-          StoreFloat(arg.reg().fp(), dst);
-          break;
-        case kF64:
-          StoreDouble(arg.reg().fp(), dst);
-          break;
-        case kS128: {
-          auto scratch = temps.Acquire();
-          AddWord(scratch, sp, Operand(arg_offset));
-          vs(arg.reg().fp().toV(), scratch, 0, VSew::E8);
-          break;
-        }
-        default:
-          UNREACHABLE();
-      }
-    } else if (arg.is_const()) {
-      if (arg.kind() == kI32) {
-        if (arg.i32_const() == 0) {
-          Sw(zero_reg, dst);
-        } else {
-          src = temps.Acquire();
-          li(src, arg.i32_const());
-          Sw(src, dst);
-        }
-      } else {
-        if (arg.i32_const() == 0) {
-          StoreWord(zero_reg, dst);
-        } else {
-          src = temps.Acquire();
-          li(src, static_cast<int64_t>(arg.i32_const()));
-          StoreWord(src, dst);
-        }
-      }
-    } else if (value_kind_size(arg.kind()) == 4) {
-      MemOperand src = liftoff::GetStackSlot(arg.offset());
-      auto scratch = temps.Acquire();
-      Lw(scratch, src);
-      Sw(scratch, dst);
-    } else {
-      DCHECK_EQ(8, value_kind_size(arg.kind()));
-      MemOperand src = liftoff::GetStackSlot(arg.offset());
-      auto scratch = temps.Acquire();
-      Ld(scratch, src);
-      Sd(scratch, dst);
-    }
+    liftoff::StoreToMemory(this, MemOperand{sp, arg_offset}, arg);
     arg_offset += value_kind_size(arg.kind());
   }
   DCHECK_LE(arg_offset, stack_bytes);
@@ -1733,20 +1816,24 @@ void LiftoffAssembler::CallCWithStackBuffer(
   AddWord(sp, sp, Operand(stack_bytes));
 }
 
-void LiftoffAssembler::CallC(const std::initializer_list<VarState> args,
+void LiftoffAssembler::CallC(const std::initializer_list<VarState> args_list,
                              ExternalReference ext_ref) {
-  constexpr Register kArgRegs[] = {arg_reg_1, arg_reg_2, arg_reg_3, arg_reg_4};
-  DCHECK_LE(args.size(), arraysize(kArgRegs));
-  const Register* next_arg_reg = kArgRegs;
+  const int num_args = static_cast<int>(args_list.size());
+  const VarState* const args = args_list.begin();
+  // Note: If we ever need more than eight arguments we would need to load the
+  // stack arguments to registers (via LoadToRegister) in pairs of two, then use
+  // Stp with MemOperand{sp, -2 * kSystemPointerSize, PreIndex} to push them to
+  // the stack.
+  // Execute the parallel register move for register parameters.
+  DCHECK_GE(arraysize(kCArgRegs), num_args);
   ParallelMove parallel_move{this};
-  for (const VarState& arg : args) {
-    parallel_move.LoadIntoRegister(LiftoffRegister{*next_arg_reg}, arg);
-    ++next_arg_reg;
+  for (int reg_arg = 0; reg_arg < num_args; ++reg_arg) {
+    parallel_move.LoadIntoRegister(LiftoffRegister{kCArgRegs[reg_arg]},
+                                   args[reg_arg]);
   }
   parallel_move.Execute();
-
   // Now call the C function.
-  int num_args = static_cast<int>(args.size());
+  PrepareCallCFunction(num_args, kScratchReg);
   CallCFunction(ext_ref, num_args);
 }
 

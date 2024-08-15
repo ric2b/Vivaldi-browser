@@ -609,10 +609,11 @@ ScopedJavaLocalRef<jobject> NotesBridge::CreateJavaNote(const NoteNode* node) {
   url = node->GetURL().spec();
 
   int64_t java_timestamp = node->GetCreationTime().InMillisecondsSinceUnixEpoch();
+  int64_t java_modified_time = node->GetLastModificationTime().InMillisecondsSinceUnixEpoch();
 
   return Java_NotesBridge_createNoteItem(
       env, node->id(), ConvertUTF16ToJavaString(env, GetTitle(node)),
-      ConvertUTF16ToJavaString(env, GetContent(node)), java_timestamp,
+      ConvertUTF16ToJavaString(env, GetContent(node)), java_timestamp, java_modified_time,
       ConvertUTF8ToJavaString(env, url), node->is_folder(), parent_id,
       IsEditable(node), IsManaged(node));
 }

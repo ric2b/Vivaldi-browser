@@ -4,15 +4,18 @@
 
 #include "ash/webui/personalization_app/personalization_app_ui.h"
 
+#include <memory>
 #include <string>
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
-#include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/rgb_keyboard/rgb_keyboard_manager.h"
 #include "ash/shell.h"
 #include "ash/wallpaper/wallpaper_constants.h"
+#include "ash/webui/common/mojom/sea_pen.mojom.h"
+#include "ash/webui/common/sea_pen_provider.h"
+#include "ash/webui/common/sea_pen_resources.h"
 #include "ash/webui/common/trusted_types_util.h"
 #include "ash/webui/grit/ash_personalization_app_resources.h"
 #include "ash/webui/grit/ash_personalization_app_resources_map.h"
@@ -24,7 +27,6 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -34,7 +36,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "content/public/common/url_constants.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -153,6 +155,18 @@ void AddStrings(content::WebUIDataSource* source) {
       {"ariaLabelEnableAutoColorMode",
        IDS_PERSONALIZATION_APP_ARIA_LABEL_ENABLE_AUTO_COLOR_MODE},
       {"tooltipAutoColorMode", IDS_PERSONALIZATION_APP_TOOLTIP_AUTO_COLOR_MODE},
+      {"geolocationWarningTextForWallpaper",
+       IDS_PERSONALIZATION_APP_THEME_GEOLOCATION_WARNING_TEXT_FOR_WALLPAPER},
+      {"geolocationWarningTextForWeather",
+       IDS_PERSONALIZATION_APP_THEME_GEOLOCATION_WARNING_TEXT_FOR_WEATHER},
+      {"systemGeolocationDialogTitle",
+       IDS_PERSONALIZATION_APP_GEOLOCATION_DIALOG_TITLE},
+      {"systemGeolocationDialogBody",
+       IDS_PERSONALIZATION_APP_GEOLOCATION_DIALOG_BODY},
+      {"systemGeolocationDialogConfirmButton",
+       IDS_PERSONALIZATION_APP_GEOLOCATION_DIALOG_CONFIRM_BUTTON},
+      {"systemGeolocationDialogCancelButton",
+       IDS_PERSONALIZATION_APP_GEOLOCATION_DIALOG_CANCEL_BUTTON},
 
       // User/avatar related strings.
       {"avatarLabel", IDS_PERSONALIZATION_APP_AVATAR_LABEL},
@@ -336,9 +350,19 @@ void AddStrings(content::WebUIDataSource* source) {
       {"timeOfDayBannerDescriptionNoScreensaver",
        IDS_PERSONALIZATION_APP_TIME_OF_DAY_BANNER_DESCRIPTION_NO_SCREENSAVER},
       {"timeOfDayWallpaperCollectionSublabel",
-       IDS_PERSONALIZATION_APP_TIME_OF_DAY_WALLPAPER_COLLECTION_SUBLABEL}};
+       IDS_PERSONALIZATION_APP_TIME_OF_DAY_WALLPAPER_COLLECTION_SUBLABEL},
+      {"timeOfDayWallpaperDialogTitle",
+       IDS_PERSONALIZATION_APP_TIME_OF_DAY_WALLPAPER_DIALOG_TITLE},
+      {"timeOfDayWallpaperDialogContent",
+       IDS_PERSONALIZATION_APP_TIME_OF_DAY_WALLPAPER_DIALOG_CONTENT},
+      {"timeOfDayWallpaperDialogBackButton",
+       IDS_PERSONALIZATION_APP_TIME_OF_DAY_WALLPAPER_DIALOG_BACK_BUTTON},
+      {"timeOfDayWallpaperDialogConfirmButton",
+       IDS_PERSONALIZATION_APP_TIME_OF_DAY_WALLPAPER_DIALOG_CONFIRM_BUTTON}};
 
   source->AddLocalizedStrings(kLocalizedStrings);
+
+  ::ash::common::AddSeaPenStrings(source);
 
   source->AddString("googlePhotosURL", GetGooglePhotosURL());
 
@@ -347,6 +371,9 @@ void AddStrings(content::WebUIDataSource* source) {
 
   source->AddString("timeOfDayBannerImageUrl",
                     GetAmbientBackendController()->GetPromoBannerUrl());
+
+  source->AddString("systemGeolocationDialogLearnMoreUrl",
+                    kPrivacyHubGeolocationLearnMoreUrl);
 
   // Product name does not need to be translated.
   auto product_name =
@@ -391,12 +418,14 @@ PersonalizationAppUI::PersonalizationAppUI(
     std::unique_ptr<PersonalizationAppAmbientProvider> ambient_provider,
     std::unique_ptr<PersonalizationAppKeyboardBacklightProvider>
         keyboard_backlight_provider,
+    std::unique_ptr<::ash::common::SeaPenProvider> sea_pen_provider,
     std::unique_ptr<PersonalizationAppThemeProvider> theme_provider,
     std::unique_ptr<PersonalizationAppUserProvider> user_provider,
     std::unique_ptr<PersonalizationAppWallpaperProvider> wallpaper_provider)
     : ui::MojoWebUIController(web_ui),
       ambient_provider_(std::move(ambient_provider)),
       keyboard_backlight_provider_(std::move(keyboard_backlight_provider)),
+      sea_pen_provider_(std::move(sea_pen_provider)),
       theme_provider_(std::move(theme_provider)),
       user_provider_(std::move(user_provider)),
       wallpaper_provider_(std::move(wallpaper_provider)) {
@@ -415,8 +444,7 @@ PersonalizationAppUI::PersonalizationAppUI(
 
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test chrome://webui-test "
-      "'self';");
+      "script-src chrome://resources chrome://webui-test 'self';");
 
   ash::EnableTrustedTypesCSP(source);
 
@@ -444,6 +472,12 @@ void PersonalizationAppUI::BindInterface(
     mojo::PendingReceiver<personalization_app::mojom::KeyboardBacklightProvider>
         receiver) {
   keyboard_backlight_provider_->BindInterface(std::move(receiver));
+}
+
+void PersonalizationAppUI::BindInterface(
+    mojo::PendingReceiver<::ash::personalization_app::mojom::SeaPenProvider>
+        receiver) {
+  sea_pen_provider_->BindInterface(std::move(receiver));
 }
 
 void PersonalizationAppUI::BindInterface(
@@ -497,11 +531,17 @@ void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
   source->AddBoolean("isTimeOfDayWallpaperEnabled",
                      features::IsTimeOfDayWallpaperEnabled());
 
-  source->AddBoolean(
-      "isSeaPenEnabled",
-      features::IsSeaPenEnabled() && manta::features::IsMantaServiceEnabled());
+  source->AddBoolean("isTimeOfDayWallpaperForcedAutoScheduleEnabled",
+                     features::IsTimeOfDayWallpaperForcedAutoScheduleEnabled());
+
+  source->AddBoolean("isCrosPrivacyHubLocationEnabled",
+                     features::IsCrosPrivacyHubLocationEnabled());
+
+  source->AddBoolean("isSeaPenEnabled",
+                     ::ash::features::IsSeaPenEnabled() &&
+                         manta::features::IsMantaServiceEnabled());
   source->AddBoolean("isSeaPenTextInputEnabled",
-                     features::IsSeaPenTextInputEnabled() &&
+                     ::ash::features::IsSeaPenTextInputEnabled() &&
                          manta::features::IsMantaServiceEnabled());
 }
 

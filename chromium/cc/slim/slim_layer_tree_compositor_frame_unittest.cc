@@ -77,7 +77,7 @@ class SlimLayerTreeCompositorFrameTest : public testing::Test {
   }
 
   viz::CompositorFrame ProduceFrame(
-      absl::optional<viz::HitTestRegionList>* out_list = nullptr) {
+      std::optional<viz::HitTestRegionList>* out_list = nullptr) {
     layer_tree_->SetNeedsRedraw();
     EXPECT_TRUE(layer_tree_->NeedsBeginFrames());
     base::TimeTicks frame_time = base::TimeTicks::Now();
@@ -147,14 +147,15 @@ TEST_F(SlimLayerTreeCompositorFrameTest, CompositorFrameMetadataBasics) {
     EXPECT_EQ(1.0f, metadata.device_scale_factor);
     EXPECT_EQ(SkColors::kWhite, metadata.root_background_color);
     EXPECT_EQ(gfx::OVERLAY_TRANSFORM_NONE, metadata.display_transform_hint);
-    EXPECT_EQ(absl::nullopt, metadata.top_controls_visible_height);
+    EXPECT_EQ(std::nullopt, metadata.top_controls_visible_height);
   }
 
   IncrementLocalSurfaceId();
   layer_tree_->SetViewportRectAndScale(viewport_, /*device_scale_factor=*/2.0f,
                                        local_surface_id_);
   layer_tree_->set_background_color(SkColors::kBlue);
-  layer_tree_->set_display_transform_hint(gfx::OVERLAY_TRANSFORM_ROTATE_90);
+  layer_tree_->set_display_transform_hint(
+      gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_90);
   layer_tree_->UpdateTopControlsVisibleHeight(5.0f);
   {
     viz::CompositorFrame frame = ProduceFrame();
@@ -164,7 +165,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, CompositorFrameMetadataBasics) {
     EXPECT_EQ(sequence_id_, metadata.begin_frame_ack.frame_id.sequence_number);
     EXPECT_EQ(2.0f, metadata.device_scale_factor);
     EXPECT_EQ(SkColors::kBlue, metadata.root_background_color);
-    EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_90,
+    EXPECT_EQ(gfx::OVERLAY_TRANSFORM_ROTATE_CLOCKWISE_90,
               metadata.display_transform_hint);
     EXPECT_EQ(5.0f, metadata.top_controls_visible_height);
   }
@@ -194,7 +195,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, OneSolidColorQuad) {
 
   EXPECT_EQ(shared_quad_state->quad_layer_rect, viewport_);
   EXPECT_EQ(shared_quad_state->visible_quad_layer_rect, viewport_);
-  EXPECT_EQ(shared_quad_state->clip_rect, absl::nullopt);
+  EXPECT_EQ(shared_quad_state->clip_rect, std::nullopt);
   EXPECT_EQ(shared_quad_state->are_contents_opaque, true);
   EXPECT_EQ(shared_quad_state->blend_mode, SkBlendMode::kSrcOver);
 }
@@ -344,8 +345,8 @@ TEST_F(SlimLayerTreeCompositorFrameTest, PresentationCallback) {
       CreateSolidColorLayer(viewport_.size(), SkColors::kGray);
   layer_tree_->SetRoot(solid_color_layer);
 
-  absl::optional<gfx::PresentationFeedback> feedback_opt_1;
-  absl::optional<gfx::PresentationFeedback> feedback_opt_2;
+  std::optional<gfx::PresentationFeedback> feedback_opt_1;
+  std::optional<gfx::PresentationFeedback> feedback_opt_2;
   layer_tree_->RequestPresentationTimeForNextFrame(base::BindLambdaForTesting(
       [&](const gfx::PresentationFeedback& feedback) {
         feedback_opt_1 = feedback;
@@ -373,14 +374,14 @@ TEST_F(SlimLayerTreeCompositorFrameTest, PresentationCallbackMissedFrame) {
       CreateSolidColorLayer(viewport_.size(), SkColors::kGray);
   layer_tree_->SetRoot(solid_color_layer);
 
-  absl::optional<gfx::PresentationFeedback> feedback_opt_1;
+  std::optional<gfx::PresentationFeedback> feedback_opt_1;
   layer_tree_->RequestPresentationTimeForNextFrame(base::BindLambdaForTesting(
       [&](const gfx::PresentationFeedback& feedback) {
         feedback_opt_1 = feedback;
       }));
   viz::CompositorFrame frame1 = ProduceFrame();
 
-  absl::optional<gfx::PresentationFeedback> feedback_opt_2;
+  std::optional<gfx::PresentationFeedback> feedback_opt_2;
   layer_tree_->RequestPresentationTimeForNextFrame(base::BindLambdaForTesting(
       [&](const gfx::PresentationFeedback& feedback) {
         feedback_opt_2 = feedback;
@@ -421,8 +422,8 @@ TEST_F(SlimLayerTreeCompositorFrameTest, SuccessPresentationCallback) {
       CreateSolidColorLayer(viewport_.size(), SkColors::kGray);
   layer_tree_->SetRoot(solid_color_layer);
 
-  absl::optional<base::TimeTicks> feedback_time_opt_1;
-  absl::optional<base::TimeTicks> feedback_time_opt_2;
+  std::optional<base::TimeTicks> feedback_time_opt_1;
+  std::optional<base::TimeTicks> feedback_time_opt_2;
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
       base::BindLambdaForTesting(
           [&](base::TimeTicks timeticks) { feedback_time_opt_1 = timeticks; }));
@@ -451,14 +452,14 @@ TEST_F(SlimLayerTreeCompositorFrameTest,
       CreateSolidColorLayer(viewport_.size(), SkColors::kGray);
   layer_tree_->SetRoot(solid_color_layer);
 
-  absl::optional<base::TimeTicks> feedback_time_opt_1;
+  std::optional<base::TimeTicks> feedback_time_opt_1;
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
       base::BindLambdaForTesting(
           [&](base::TimeTicks timeticks) { feedback_time_opt_1 = timeticks; }));
   viz::CompositorFrame frame1 = ProduceFrame();
   viz::CompositorFrame frame2 = ProduceFrame();
 
-  absl::optional<base::TimeTicks> feedback_time_opt_2;
+  std::optional<base::TimeTicks> feedback_time_opt_2;
   layer_tree_->RequestSuccessfulPresentationTimeForNextFrame(
       base::BindLambdaForTesting(
           [&](base::TimeTicks timeticks) { feedback_time_opt_2 = timeticks; }));
@@ -879,7 +880,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, SimpleHitTestRegionList) {
         cc::DeadlinePolicy::UseDefaultDeadline();
     surface_layer->SetSurfaceId(surface_id, deadline_policy);
 
-    absl::optional<viz::HitTestRegionList> hit_test_region_list;
+    std::optional<viz::HitTestRegionList> hit_test_region_list;
     viz::CompositorFrame frame = ProduceFrame(&hit_test_region_list);
     ASSERT_TRUE(hit_test_region_list);
     EXPECT_EQ(hit_test_region_list->bounds, viewport_);
@@ -908,7 +909,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, SimpleHitTestRegionList) {
   child_surface_layer->SetSurfaceId(surface_id, deadline_policy);
 
   {
-    absl::optional<viz::HitTestRegionList> hit_test_region_list;
+    std::optional<viz::HitTestRegionList> hit_test_region_list;
     viz::CompositorFrame frame = ProduceFrame(&hit_test_region_list);
 
     ASSERT_TRUE(hit_test_region_list);
@@ -962,7 +963,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, HitTestRegionInNonRootPass) {
   filter_layer->AddChild(surface_layer);
 
   {
-    absl::optional<viz::HitTestRegionList> hit_test_region_list;
+    std::optional<viz::HitTestRegionList> hit_test_region_list;
     viz::CompositorFrame frame = ProduceFrame(&hit_test_region_list);
     ASSERT_TRUE(hit_test_region_list);
     EXPECT_EQ(hit_test_region_list->bounds, viewport_);
@@ -1105,7 +1106,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, NonAxisAlignedClip) {
   auto* shared_quad_state = render_pass_quad->shared_quad_state;
   EXPECT_EQ(shared_quad_state->quad_layer_rect, gfx::Rect(50, 50));
   EXPECT_EQ(shared_quad_state->visible_quad_layer_rect, gfx::Rect(50, 50));
-  EXPECT_EQ(shared_quad_state->clip_rect, absl::nullopt);
+  EXPECT_EQ(shared_quad_state->clip_rect, std::nullopt);
 }
 
 TEST_F(SlimLayerTreeCompositorFrameTest, ChildPassOutputRect) {
@@ -1174,7 +1175,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, ChildPassOutputRect) {
     EXPECT_EQ(shared_quad_state->quad_layer_rect, gfx::Rect(20, 20, 30, 30));
     EXPECT_EQ(shared_quad_state->visible_quad_layer_rect,
               gfx::Rect(20, 20, 30, 30));
-    EXPECT_EQ(shared_quad_state->clip_rect, absl::nullopt);
+    EXPECT_EQ(shared_quad_state->clip_rect, std::nullopt);
   }
 }
 
@@ -1239,7 +1240,7 @@ TEST_F(SlimLayerTreeCompositorFrameTest, Filters) {
     auto* shared_quad_state = render_pass_quad->shared_quad_state;
     EXPECT_EQ(shared_quad_state->quad_layer_rect, gfx::Rect(40, 40));
     EXPECT_EQ(shared_quad_state->visible_quad_layer_rect, gfx::Rect(40, 40));
-    EXPECT_EQ(shared_quad_state->clip_rect, absl::nullopt);
+    EXPECT_EQ(shared_quad_state->clip_rect, std::nullopt);
   }
 }
 

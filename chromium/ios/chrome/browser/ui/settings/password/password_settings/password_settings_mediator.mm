@@ -10,7 +10,6 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/password_manager/core/browser/features/password_features.h"
 #import "components/password_manager/core/browser/features/password_manager_features_util.h"
 #import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
@@ -410,9 +409,6 @@ bool IsCredentialNotInAccountStore(const CredentialUIEntry& credential) {
     return AccountStorageSwitchState::kHidden;
   }
 
-  CHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kEnablePasswordsAccountStorage));
-
   if (_prefService->IsManagedPreference(kCredentialsEnableService) ||
       _syncService->GetUserSettings()->IsTypeManagedByPolicy(
           syncer::UserSelectableType::kPasswords) ||
@@ -433,10 +429,10 @@ bool IsCredentialNotInAccountStore(const CredentialUIEntry& credential) {
     return;
   }
 
-  [self.consumer setLocalPasswordsCount:[self computeLocalPasswordsCount]
-                    withUserEligibility:password_manager::features_util::
-                                            IsOptedInForAccountStorage(
-                                                _prefService, _syncService)];
+  [self.consumer
+      setLocalPasswordsCount:[self computeLocalPasswordsCount]
+         withUserEligibility:password_manager::features_util::
+                                 IsOptedInForAccountStorage(_syncService)];
 }
 
 // Returns the amount of local passwords.

@@ -41,7 +41,6 @@
 
 namespace blink {
 
-class CustomWrappable;
 class DOMWrapperWorld;
 class ScriptWrappable;
 
@@ -109,9 +108,8 @@ struct PLATFORM_EXPORT WrapperTypeInfo final {
     return false;
   }
 
-  void ConfigureWrapper(v8::TracedReference<v8::Object>* wrapper) const {
-    if (wrapper_class_id != kNoInternalFieldClassId)
-      wrapper->SetWrapperClassId(wrapper_class_id);
+  bool SupportsDroppingWrapper() const {
+    return wrapper_class_id != kNoInternalFieldClassId;
   }
 
   // Returns a v8::Template of interface object, namespace object, or the
@@ -187,6 +185,14 @@ inline T* GetInternalField(v8::Local<v8::Object> wrapper) {
 }
 
 template <typename T, int offset>
+inline T* GetInternalField(v8::Isolate* isolate,
+                           v8::Local<v8::Object> wrapper) {
+  DCHECK_LT(offset, wrapper->InternalFieldCount());
+  return reinterpret_cast<T*>(
+      wrapper->GetAlignedPointerFromInternalField(isolate, offset));
+}
+
+template <typename T, int offset>
 inline T* GetInternalField(v8::Object* wrapper) {
   DCHECK_LT(offset, wrapper->InternalFieldCount());
   return reinterpret_cast<T*>(
@@ -204,21 +210,14 @@ inline ScriptWrappable* ToScriptWrappable(v8::Local<v8::Object> wrapper) {
   return GetInternalField<ScriptWrappable, kV8DOMWrapperObjectIndex>(wrapper);
 }
 
+inline ScriptWrappable* ToScriptWrappable(v8::Isolate* isolate,
+                                          v8::Local<v8::Object> wrapper) {
+  return GetInternalField<ScriptWrappable, kV8DOMWrapperObjectIndex>(isolate,
+                                                                     wrapper);
+}
+
 inline ScriptWrappable* ToScriptWrappable(v8::Object* wrapper) {
   return GetInternalField<ScriptWrappable, kV8DOMWrapperObjectIndex>(wrapper);
-}
-
-inline CustomWrappable* ToCustomWrappable(v8::Local<v8::Object> wrapper) {
-  return GetInternalField<CustomWrappable, kV8DOMWrapperObjectIndex>(wrapper);
-}
-
-inline void* ToUntypedWrappable(
-    const v8::TracedReference<v8::Object>& wrapper) {
-  return GetInternalField<void, kV8DOMWrapperObjectIndex>(wrapper);
-}
-
-inline void* ToUntypedWrappable(v8::Local<v8::Object> wrapper) {
-  return GetInternalField<void, kV8DOMWrapperObjectIndex>(wrapper);
 }
 
 inline const WrapperTypeInfo* ToWrapperTypeInfo(

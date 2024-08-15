@@ -38,7 +38,8 @@ struct SharedFenceExportInfo;
 
 class SharedFenceBase : public ApiObjectBase {
   public:
-    static SharedFenceBase* MakeError(DeviceBase* device, const SharedFenceDescriptor* descriptor);
+    static Ref<SharedFenceBase> MakeError(DeviceBase* device,
+                                          const SharedFenceDescriptor* descriptor);
 
     ObjectType GetType() const override;
 
@@ -54,7 +55,7 @@ class SharedFenceBase : public ApiObjectBase {
 
   private:
     void DestroyImpl() override;
-    virtual MaybeError ExportInfoImpl(SharedFenceExportInfo* info) const = 0;
+    virtual MaybeError ExportInfoImpl(UnpackedPtr<SharedFenceExportInfo>& info) const = 0;
 };
 
 struct FenceAndSignalValue {

@@ -19,6 +19,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/isolation_info.h"
+#include "net/http/http_connection_info.h"
 #include "net/http/http_request_headers.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -154,12 +155,9 @@ class MockNavigationHandle : public NavigationHandle {
   MOCK_METHOD0(
       GetLCPPNavigationHint,
       const blink::mojom::LCPCriticalPathPredictorNavigationTimeHintPtr&());
-  MOCK_METHOD0(GetConnectionInfo, net::HttpResponseInfo::ConnectionInfo());
-  const absl::optional<net::SSLInfo>& GetSSLInfo() override {
-    return ssl_info_;
-  }
-  const absl::optional<net::AuthChallengeInfo>& GetAuthChallengeInfo()
-      override {
+  MOCK_METHOD0(GetConnectionInfo, net::HttpConnectionInfo());
+  const std::optional<net::SSLInfo>& GetSSLInfo() override { return ssl_info_; }
+  const std::optional<net::AuthChallengeInfo>& GetAuthChallengeInfo() override {
     return auth_challenge_info_;
   }
   void SetAuthChallengeInfo(const net::AuthChallengeInfo& challenge);
@@ -176,20 +174,19 @@ class MockNavigationHandle : public NavigationHandle {
   MOCK_METHOD0(IsSignedExchangeInnerResponse, bool());
   MOCK_METHOD0(HasPrefetchedAlternativeSubresourceSignedExchange, bool());
   bool WasResponseCached() override { return was_response_cached_; }
-  const net::ProxyServer& GetProxyServer() override { return proxy_server_; }
   const std::string& GetHrefTranslate() override { return href_translate_; }
-  const absl::optional<blink::Impression>& GetImpression() override {
+  const std::optional<blink::Impression>& GetImpression() override {
     return impression_;
   }
-  const absl::optional<blink::LocalFrameToken>& GetInitiatorFrameToken()
+  const std::optional<blink::LocalFrameToken>& GetInitiatorFrameToken()
       override {
     return initiator_frame_token_;
   }
   int GetInitiatorProcessId() override { return initiator_process_id_; }
-  const absl::optional<url::Origin>& GetInitiatorOrigin() override {
+  const std::optional<url::Origin>& GetInitiatorOrigin() override {
     return initiator_origin_;
   }
-  const absl::optional<GURL>& GetInitiatorBaseUrl() override {
+  const std::optional<GURL>& GetInitiatorBaseUrl() override {
     return initiator_base_url_;
   }
   const std::vector<std::string>& GetDnsAliases() override {
@@ -221,7 +218,7 @@ class MockNavigationHandle : public NavigationHandle {
   MOCK_METHOD(bool, IsPdf, ());
   void WriteIntoTrace(perfetto::TracedProto<TraceProto>) const override {}
   MOCK_METHOD(bool, SetNavigationTimeout, (base::TimeDelta));
-  MOCK_METHOD(PrerenderTriggerType, GetPrerenderTriggerType, ());
+  MOCK_METHOD(PreloadingTriggerType, GetPrerenderTriggerType, ());
   MOCK_METHOD(std::string, GetPrerenderEmbedderHistogramSuffix, ());
   MOCK_METHOD(void, SetAllowCookiesFromBrowser, (bool));
   MOCK_METHOD(void, GetResponseBody, (ResponseBodyCallback));
@@ -315,9 +312,6 @@ class MockNavigationHandle : public NavigationHandle {
   void set_was_response_cached(bool was_response_cached) {
     was_response_cached_ = was_response_cached;
   }
-  void set_proxy_server(const net::ProxyServer& proxy_server) {
-    proxy_server_ = proxy_server;
-  }
   void set_impression(const blink::Impression& impression) {
     impression_ = impression;
   }
@@ -359,19 +353,18 @@ class MockNavigationHandle : public NavigationHandle {
   bool is_error_page_ = false;
   net::HttpRequestHeaders request_headers_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
-  absl::optional<net::SSLInfo> ssl_info_;
-  absl::optional<net::AuthChallengeInfo> auth_challenge_info_;
+  std::optional<net::SSLInfo> ssl_info_;
+  std::optional<net::AuthChallengeInfo> auth_challenge_info_;
   net::ResolveErrorInfo resolve_error_info_;
   content::GlobalRequestID global_request_id_;
   bool is_form_submission_ = false;
   bool was_response_cached_ = false;
-  net::ProxyServer proxy_server_;
-  absl::optional<url::Origin> initiator_origin_;
-  absl::optional<GURL> initiator_base_url_;
+  std::optional<url::Origin> initiator_origin_;
+  std::optional<GURL> initiator_base_url_;
   ReloadType reload_type_ = content::ReloadType::NONE;
   std::string href_translate_;
-  absl::optional<blink::Impression> impression_;
-  absl::optional<blink::LocalFrameToken> initiator_frame_token_;
+  std::optional<blink::Impression> impression_;
+  std::optional<blink::LocalFrameToken> initiator_frame_token_;
   int initiator_process_id_ = ChildProcessHost::kInvalidUniqueID;
   bool was_started_from_context_menu_ = false;
   blink::RuntimeFeatureStateContext runtime_feature_state_context_;

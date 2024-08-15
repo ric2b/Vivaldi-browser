@@ -44,4 +44,16 @@ batch_fuzz() {
 centipede::run_some_fuzzing batch_fuzz
 centipede::test_crashing_target batch_fuzz "foo" "fuz" "Catch you"
 
+CENTIPEDE_RUNNER_FLAGS=":use_pc_features:use_cmp_features" \
+centipede::test_replaying_target batch_fuzz "Ratio of inputs with features: 2/2" "foo" "foo"
+
+export CENTIPEDE_RUNNER_FLAGS=":use_pc_features:use_cmp_features:skip_seen_features:"
+centipede::test_replaying_target batch_fuzz "Ratio of inputs with features: 1/2" "foo" "foo"
+
+export CENTIPEDE_RUNNER_FLAGS=":rss_limit_mb=1024:"
+centipede::test_replaying_target batch_fuzz 'RSS limit exceeded: [0-9][0-9]* > 1024' "oom"
+
+export CENTIPEDE_RUNNER_FLAGS=":timeout_per_input=1:"
+centipede::test_replaying_target batch_fuzz 'Per-input timeout exceeded: [0-9][0-9]* > 1' "slp"
+
 echo "PASS"

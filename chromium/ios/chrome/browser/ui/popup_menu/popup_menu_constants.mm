@@ -47,4 +47,5 @@ NSString* const kToolsMenuEditActionsId = @"kToolsMenuEditActionsId";
 
 // Vivaldi
 NSString* const kToolsMenuAboutVivaldiId = @"kToolsMenuAboutVivaldiId";
+NSString* const kToolsMenuShareId = @"kToolsMenuShareId";
 // End Vivaldi

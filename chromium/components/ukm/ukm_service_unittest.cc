@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
@@ -31,6 +32,7 @@
 #include "components/metrics/cloned_install_detector.h"
 #include "components/metrics/log_decoder.h"
 #include "components/metrics/metrics_features.h"
+#include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/test/test_metrics_provider.h"
@@ -160,6 +162,37 @@ Report GetPersistedReport(TestingPrefServiceSimple& prefs) {
   return report;
 }
 
+metrics::LogMetadata GetPersistedLogMetadata(TestingPrefServiceSimple& prefs) {
+  EXPECT_GE(GetPersistedLogCount(prefs), 1);
+  metrics::UnsentLogStore result_unsent_log_store(
+      std::make_unique<UnsentLogStoreMetricsImpl>(), &prefs,
+      prefs::kUkmUnsentLogStore, /*metadata_pref_name=*/nullptr,
+      // Set to 3 so logs are not dropped in the test.
+      metrics::UnsentLogStore::UnsentLogStoreLimits{
+          .min_log_count = 3,
+      },
+      /*signing_key=*/std::string(),
+      /*logs_event_manager=*/nullptr);
+
+  result_unsent_log_store.LoadPersistedUnsentLogs();
+  result_unsent_log_store.StageNextLog();
+
+  return result_unsent_log_store.staged_log_metadata();
+}
+
+void AddSourceToReport(Report& report,
+                       int64_t other_id,
+                       SourceIdType id_type,
+                       std::string url) {
+  Source* proto_source = report.add_sources();
+  SourceId source_id = ConvertToSourceId(other_id, id_type);
+  proto_source->set_id(source_id);
+  proto_source->add_urls()->set_url(url);
+  // Add entry for the source.
+  Entry* entry = report.add_entries();
+  entry->set_source_id(source_id);
+}
+
 class ScopedUkmFeatureParams {
  public:
   explicit ScopedUkmFeatureParams(const base::FieldTrialParams& params) {
@@ -184,6 +217,11 @@ class MockDemographicMetricsProvider
   // DemographicMetricsProvider:
   MOCK_METHOD1(ProvideSyncedUserNoisedBirthYearAndGenderToReport,
                void(Report* report));
+};
+
+class MockUkmRecorderObserver : public UkmRecorder::Observer {
+ public:
+  MOCK_METHOD0(OnStartingShutdown, void());
 };
 
 // A simple Provider that emits a 'TestProviderEvent' on session close (i.e. a
@@ -225,6 +263,10 @@ class UkmServiceTest : public testing::Test {
   int GetPersistedLogCount() { return ukm::GetPersistedLogCount(prefs_); }
 
   Report GetPersistedReport() { return ukm::GetPersistedReport(prefs_); }
+
+  metrics::LogMetadata GetPersistedLogMetadata() {
+    return ukm::GetPersistedLogMetadata(prefs_);
+  }
 
   static SourceId GetAllowlistedSourceId(int64_t id) {
     return ConvertToSourceId(id, SourceIdType::NAVIGATION_ID);
@@ -604,6 +646,54 @@ TEST_F(UkmServiceTest, PurgeMsbbDataFromUnsentLogStore) {
   EXPECT_EQ(source_id_3, filtered_report.entries(1).source_id());
 }
 
+TEST_F(UkmServiceTest, PurgeAppDataLogMetadataUpdate) {
+  UkmService service(&prefs_, &client_,
+                     std::make_unique<MockDemographicMetricsProvider>());
+  auto* unsent_log_store = service.reporting_service_.ukm_log_store();
+
+  // Initialize a Report to be saved to the log store.
+  Report report;
+  report.set_client_id(1);
+  report.set_session_id(1);
+  report.set_report_id(1);
+
+  // A URL from browser navigation.
+  std::string non_app_url = "https://www.google.ca";
+  // A URL with app:// scheme.
+  std::string app_url = "app://mgndgikekgjfcpckkfioiadnlibdjbkf";
+  // OS Settings is an app on ChromeOS without the app:// scheme.
+  std::string os_settings_url = "chrome://os-settings";
+
+  // Add sources to the Report.
+  AddSourceToReport(report, 1, SourceIdType::NAVIGATION_ID, non_app_url);
+  AddSourceToReport(report, 2, SourceIdType::APP_ID, app_url);
+  AddSourceToReport(report, 3, SourceIdType::APP_ID, os_settings_url);
+  AddSourceToReport(report, 4, SourceIdType::NAVIGATION_ID, app_url);
+
+  // Save the Report to the store.
+  std::string serialized_log;
+  report.SerializeToString(&serialized_log);
+
+  // Make sure that the serialized ukm report can be parsed.
+  ASSERT_TRUE(UkmService::LogCanBeParsed(serialized_log));
+
+  metrics::LogMetadata log_metadata;
+  log_metadata.log_source_type = metrics::UkmLogSourceType::BOTH_UKM_AND_APPKM;
+  unsent_log_store->StoreLog(
+      serialized_log, log_metadata,
+      metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+
+  // Do app data purging.
+  service.PurgeAppsData();
+
+  // Get the Report in the log store and verify log metadata is updated.
+  unsent_log_store->StageNextLog();
+  const metrics::LogMetadata updated_log_metadata =
+      unsent_log_store->staged_log_metadata();
+  EXPECT_EQ(updated_log_metadata.log_source_type,
+            metrics::UkmLogSourceType::UKM_ONLY);
+}
+
 TEST_F(UkmServiceTest, SourceSerialization) {
   UkmService service(&prefs_, &client_,
                      std::make_unique<MockDemographicMetricsProvider>());
@@ -632,6 +722,81 @@ TEST_F(UkmServiceTest, SourceSerialization) {
   EXPECT_EQ(id, proto_source.id());
   EXPECT_EQ(GURL("https://google.com/final").spec(),
             proto_source.urls(1).url());
+}
+
+TEST_F(UkmServiceTest, LogMetadataOnlyAppKMSourceType) {
+  UkmService service(&prefs_, &client_,
+                     std::make_unique<MockDemographicMetricsProvider>());
+  TestRecordingHelper recorder(&service);
+  EXPECT_EQ(GetPersistedLogCount(), 0);
+  service.Initialize();
+  task_runner_->RunUntilIdle();
+  service.UpdateRecording({UkmConsentType::APPS});
+  service.EnableReporting();
+  const GURL kAppURL("app://google.com/foobar");
+
+  SourceId id = GetAppIDSourceId(0);
+  recorder.UpdateSourceURL(id, kAppURL);
+
+  service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+  EXPECT_EQ(GetPersistedLogCount(), 1);
+
+  metrics::LogMetadata log_metadata = GetPersistedLogMetadata();
+  EXPECT_TRUE(log_metadata.log_source_type.has_value());
+  EXPECT_TRUE(log_metadata.log_source_type.value() ==
+              metrics::UkmLogSourceType::APPKM_ONLY);
+}
+
+TEST_F(UkmServiceTest, LogMetadataOnlyUKMSourceType) {
+  UkmService service(&prefs_, &client_,
+                     std::make_unique<MockDemographicMetricsProvider>());
+  TestRecordingHelper recorder(&service);
+  EXPECT_EQ(GetPersistedLogCount(), 0);
+  service.Initialize();
+  task_runner_->RunUntilIdle();
+  service.UpdateRecording({UkmConsentType::MSBB, UkmConsentType::APPS});
+  service.EnableReporting();
+  const GURL kURL("https://google.com/foobar");
+
+  SourceId id = GetAllowlistedSourceId(0);
+  recorder.UpdateSourceURL(id, kURL);
+
+  service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+  EXPECT_EQ(GetPersistedLogCount(), 1);
+
+  metrics::LogMetadata log_metadata = GetPersistedLogMetadata();
+  EXPECT_TRUE(log_metadata.log_source_type.has_value());
+  EXPECT_TRUE(log_metadata.log_source_type.value() ==
+              metrics::UkmLogSourceType::UKM_ONLY);
+}
+
+TEST_F(UkmServiceTest, LogMetadataBothSourceType) {
+  UkmService service(&prefs_, &client_,
+                     std::make_unique<MockDemographicMetricsProvider>());
+  TestRecordingHelper recorder(&service);
+  EXPECT_EQ(GetPersistedLogCount(), 0);
+  service.Initialize();
+  task_runner_->RunUntilIdle();
+  service.UpdateRecording({UkmConsentType::MSBB, UkmConsentType::APPS});
+  service.EnableReporting();
+
+  const GURL kAppURL("app://google.com/foobar");
+
+  SourceId app_id = GetAppIDSourceId(0);
+  recorder.UpdateSourceURL(app_id, kAppURL);
+
+  const GURL kURL("https://google.com/foobar");
+
+  SourceId id = GetAllowlistedSourceId(0);
+  recorder.UpdateSourceURL(id, kURL);
+
+  service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+  EXPECT_EQ(GetPersistedLogCount(), 1);
+
+  metrics::LogMetadata log_metadata = GetPersistedLogMetadata();
+  EXPECT_TRUE(log_metadata.log_source_type.has_value() &&
+              log_metadata.log_source_type.value() ==
+                  metrics::UkmLogSourceType::BOTH_UKM_AND_APPKM);
 }
 
 TEST_F(UkmServiceTest, AddEntryWithEmptyMetrics) {
@@ -1293,8 +1458,9 @@ TEST_F(UkmServiceTest, SupportedSchemes) {
     auto source_id = GetAllowlistedSourceId(id_counter++);
     recorder.UpdateSourceURL(source_id, GURL(test.url));
     TestEvent1(source_id).Record(&service);
-    if (test.expected_kept)
+    if (test.expected_kept) {
       ++expected_kept_count;
+    }
   }
 
   service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
@@ -1349,8 +1515,9 @@ TEST_F(UkmServiceTest, SupportedSchemesNoExtensions) {
     auto source_id = GetAllowlistedSourceId(id_counter++);
     recorder.UpdateSourceURL(source_id, GURL(test.url));
     TestEvent1(source_id).Record(&service);
-    if (test.expected_kept)
+    if (test.expected_kept) {
       ++expected_kept_count;
+    }
   }
 
   service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
@@ -1627,8 +1794,9 @@ TEST_F(UkmServiceTest, FilterRejectsEvent) {
     bool FilterEntry(
         mojom::UkmEntry* entry,
         base::flat_set<uint64_t>* filtered_metric_hashes) override {
-      if (entry->event_hash == kTestEvent1EntryNameHash)
+      if (entry->event_hash == kTestEvent1EntryNameHash) {
         return true;
+      }
 
       filtered_metric_hashes->replace(base::test::ToVector(
           entry->metrics, &decltype(entry->metrics)::value_type::first));
@@ -1669,213 +1837,94 @@ TEST_F(UkmServiceTest, FilterRejectsEvent) {
       proto_report.aggregates(0).metrics(0).has_dropped_due_to_filter());
 }
 
-TEST_F(UkmServiceTest, PruneUnseenFirst) {
-  // We will be testing with the prune unseen feature both off and on.
-  for (bool prune_unseen_sources_first : {true, false}) {
-    const GURL kURL("https://google.com/foobar");
+TEST_F(UkmServiceTest, PruneOldSources) {
+  const GURL kURL("https://google.com/foobar");
 
-    // Set the 'MaxKeptSources' value to 3 so it is easier to test.
-    ScopedUkmFeatureParams params(
-        {{"MaxKeptSources", "3"},
-         {"PruneUnseenSourcesFirst",
-          prune_unseen_sources_first ? "true" : "false"}});
+  // Set the 'MaxKeptSources' value to 3 so it is easier to test.
+  ScopedUkmFeatureParams params({{"MaxKeptSources", "3"}});
 
-    ClearPrefs();
-    UkmService service(&prefs_, &client_,
-                       std::make_unique<MockDemographicMetricsProvider>());
-    TestRecordingHelper recorder(&service);
-    EXPECT_EQ(0, GetPersistedLogCount());
-    service.Initialize();
-    task_runner_->RunUntilIdle();
-    service.UpdateRecording({UkmConsentType::MSBB});
-    service.EnableReporting();
+  ClearPrefs();
+  UkmService service(&prefs_, &client_,
+                     std::make_unique<MockDemographicMetricsProvider>());
+  TestRecordingHelper recorder(&service);
+  EXPECT_EQ(0, GetPersistedLogCount());
+  service.Initialize();
+  task_runner_->RunUntilIdle();
+  service.UpdateRecording({UkmConsentType::MSBB});
+  service.EnableReporting();
 
-    // Create 5 allowlisted ids. Allowlisted ids (like APP_ID) will not be
-    // automatically removed when they emit events. They're only removed via the
-    // pruning mechanism. Note that the are added in order, so 4 is the
-    // youngest/newest.
-    std::vector<SourceId> ids;
-    base::TimeTicks last_time = base::TimeTicks::Now();
-    for (int i = 0; i < 5; ++i) {
-      // Wait until base::TimeTicks::Now() no longer equals |last_time|. This
-      // ensures each source has a unique timestamp to avoid flakes. Should take
-      // between 1-15ms per documented resolution of base::TimeTicks.
-      while (base::TimeTicks::Now() == last_time) {
-        base::PlatformThread::Sleep(base::Milliseconds(1));
-      }
-      ids.push_back(GetAllowlistedSourceId(i));
-      recorder.UpdateSourceURL(ids.back(), kURL);
-      last_time = base::TimeTicks::Now();
+  // Create 5 allowlisted ids. Allowlisted ids (like APP_ID) will not be
+  // automatically removed when they emit events. They're only removed via the
+  // pruning mechanism. Note that the are added in order, so 4 is the
+  // youngest/newest.
+  std::vector<SourceId> ids;
+  base::TimeTicks last_time = base::TimeTicks::Now();
+  for (int i = 0; i < 5; ++i) {
+    // Wait until base::TimeTicks::Now() no longer equals |last_time|. This
+    // ensures each source has a unique timestamp to avoid flakes. Should take
+    // between 1-15ms per documented resolution of base::TimeTicks.
+    while (base::TimeTicks::Now() == last_time) {
+      base::PlatformThread::Sleep(base::Milliseconds(1));
     }
-
-    // Events on 0 and 4. This will be important to this test, as we are testing
-    // how pruning will vary based on this. So keep this in mind.
-    TestEvent1(ids[0]).Record(&service);
-    TestEvent1(ids[4]).Record(&service);
-
-    service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
-    EXPECT_EQ(1, GetPersistedLogCount());
-    auto proto_report = GetPersistedReport();
-
-    EXPECT_EQ(5, proto_report.source_counts().observed());
-    // All are navigation sources.
-    EXPECT_EQ(5, proto_report.source_counts().navigation_sources());
-    EXPECT_EQ(0, proto_report.source_counts().unmatched_sources());
-
-    // In all cases, 3 will be deferred since that is our max allowed.
-    EXPECT_EQ(3, proto_report.source_counts().deferred_sources());
-    // This is from last time, so none there.
-    EXPECT_EQ(0, proto_report.source_counts().carryover_sources());
-
-    // All 5 sources will be included in this first report.
-    ASSERT_EQ(5, proto_report.sources_size());
-    EXPECT_EQ(ids[0], proto_report.sources(0).id());
-    EXPECT_EQ(ids[1], proto_report.sources(1).id());
-    EXPECT_EQ(ids[2], proto_report.sources(2).id());
-    EXPECT_EQ(ids[3], proto_report.sources(3).id());
-    EXPECT_EQ(ids[4], proto_report.sources(4).id());
-
-    // Depending on the PruneUnseenSourcesFirst setting, different ones will be
-    // removed.
-    // We have MaxKeptSources=3.
-    // If PruneUnseenSourcesFirst was set, then the ones kept should be the two
-    // that were used, which are 0 and 4. The one remaining one will be picked
-    // via age which will be 3, so 0, 3, 4 are kept.
-    // Otherwise, it will be entirely based on age, which is 2,3,4.
-
-    // New events on 0,2,4. This actually doesn't matter with respect to what
-    // sources are emitted here, as some sources are already pruned.
-    TestEvent1(ids[0]).Record(&service);
-    TestEvent1(ids[2]).Record(&service);
-    TestEvent1(ids[4]).Record(&service);
-
-    service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
-    EXPECT_EQ(2, GetPersistedLogCount());
-    proto_report = GetPersistedReport();
-
-    // No new sources observed.
-    EXPECT_EQ(0, proto_report.source_counts().observed());
-    // 0 again, as this is for newly observed ones.
-    EXPECT_EQ(0, proto_report.source_counts().navigation_sources());
-    EXPECT_EQ(0, proto_report.source_counts().unmatched_sources());
-
-    // Since no new sources added, we still are keeping the same 3. So all 3 are
-    // kept and retained, in both cases.
-    EXPECT_EQ(3, proto_report.source_counts().deferred_sources());
-    EXPECT_EQ(3, proto_report.source_counts().carryover_sources());
-    ASSERT_EQ(3, proto_report.sources_size());
-
-    if (prune_unseen_sources_first) {
-      // 0, 3, 4 as 0 and 4 were used last time, and 3 is the newest of the
-      // remaining.
-      EXPECT_EQ(ids[0], proto_report.sources(0).id());
-      EXPECT_EQ(ids[3], proto_report.sources(1).id());
-      EXPECT_EQ(ids[4], proto_report.sources(2).id());
-    } else {
-      // 2, 3, 4 as these are the 3 newest, which is the only criteria we are
-      // using for this test.
-      EXPECT_EQ(ids[2], proto_report.sources(0).id());
-      EXPECT_EQ(ids[3], proto_report.sources(1).id());
-      EXPECT_EQ(ids[4], proto_report.sources(2).id());
-    }
+    ids.push_back(GetAllowlistedSourceId(i));
+    recorder.UpdateSourceURL(ids.back(), kURL);
+    last_time = base::TimeTicks::Now();
   }
-}
 
-TEST_F(UkmServiceTest, PruneAppIDLast) {
-  // We will be testing with the PruneAppIdLast feature both off and on.
-  for (bool prune_app_id_last : {true, false}) {
-    const GURL kURL("https://google.com/foobar");
+  // Events on 0 and 4. This doesn't affect the pruning.
+  TestEvent1(ids[0]).Record(&service);
+  TestEvent1(ids[4]).Record(&service);
 
-    // Set the 'MaxKeptSources' value to 3 so it is easier to test.
-    ScopedUkmFeatureParams params(
-        {{"MaxKeptSources", "3"},
-         {"PruneAppIdLast", prune_app_id_last ? "true" : "false"}});
+  service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+  EXPECT_EQ(1, GetPersistedLogCount());
+  auto proto_report = GetPersistedReport();
 
-    ClearPrefs();
-    UkmService service(&prefs_, &client_,
-                       std::make_unique<MockDemographicMetricsProvider>());
-    TestRecordingHelper recorder(&service);
-    EXPECT_EQ(0, GetPersistedLogCount());
-    service.Initialize();
-    task_runner_->RunUntilIdle();
-    service.UpdateRecording({UkmConsentType::MSBB, UkmConsentType::APPS});
-    service.EnableReporting();
+  EXPECT_EQ(5, proto_report.source_counts().observed());
+  // All are navigation sources.
+  EXPECT_EQ(5, proto_report.source_counts().navigation_sources());
+  EXPECT_EQ(0, proto_report.source_counts().unmatched_sources());
 
-    // Create 5 sources. We set source 0 and 4 to be APP_ID Sources, where
-    // 1,2,3 are allowlisted/navigation sources.
-    std::vector<SourceId> ids;
-    base::TimeTicks last_time = base::TimeTicks::Now();
-    for (int i = 0; i < 5; ++i) {
-      // Wait until base::TimeTicks::Now() no longer equals |last_time|. This
-      // ensures each source has a unique timestamp to avoid flakes. Should take
-      // between 1-15ms per documented resolution of base::TimeTicks.
-      while (base::TimeTicks::Now() == last_time) {
-        base::PlatformThread::Sleep(base::Milliseconds(1));
-      }
-      // Note, this is where we are setting the source types. Important for the
-      // testing.
-      if (i == 0 || i == 4) {
-        ids.push_back(GetAppIDSourceId(i));
-      } else {
-        ids.push_back(GetAllowlistedSourceId(i));
-      }
-      recorder.UpdateSourceURL(ids.back(), kURL);
-      last_time = base::TimeTicks::Now();
-    }
+  // In all cases, 3 will be deferred since that is our max allowed.
+  EXPECT_EQ(3, proto_report.source_counts().deferred_sources());
+  // This is from last time, so none there.
+  EXPECT_EQ(0, proto_report.source_counts().carryover_sources());
 
-    service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
-    EXPECT_EQ(1, GetPersistedLogCount());
-    auto proto_report = GetPersistedReport();
+  // All 5 sources will be included in this first report.
+  ASSERT_EQ(5, proto_report.sources_size());
+  EXPECT_EQ(ids[0], proto_report.sources(0).id());
+  EXPECT_EQ(ids[1], proto_report.sources(1).id());
+  EXPECT_EQ(ids[2], proto_report.sources(2).id());
+  EXPECT_EQ(ids[3], proto_report.sources(3).id());
+  EXPECT_EQ(ids[4], proto_report.sources(4).id());
 
-    EXPECT_EQ(5, proto_report.source_counts().observed());
+  // We have MaxKeptSources=3, and we keep by age, so we should keep 2,3,4.
 
-    // In all cases, 3 will be deferred since that is our max allowed.
-    EXPECT_EQ(3, proto_report.source_counts().deferred_sources());
-    // This is from last time, so none there.
-    EXPECT_EQ(0, proto_report.source_counts().carryover_sources());
+  // New events on 0,2,4. This actually doesn't matter with respect to what
+  // sources are emitted here, as some sources are already pruned.
+  TestEvent1(ids[0]).Record(&service);
+  TestEvent1(ids[2]).Record(&service);
+  TestEvent1(ids[4]).Record(&service);
 
-    // All 5 sources will be included in this first report.
-    ASSERT_EQ(5, proto_report.sources_size());
-    EXPECT_EQ(ids[0], proto_report.sources(0).id());
-    EXPECT_EQ(ids[1], proto_report.sources(1).id());
-    EXPECT_EQ(ids[2], proto_report.sources(2).id());
-    EXPECT_EQ(ids[3], proto_report.sources(3).id());
-    EXPECT_EQ(ids[4], proto_report.sources(4).id());
+  service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
+  EXPECT_EQ(2, GetPersistedLogCount());
+  proto_report = GetPersistedReport();
 
-    // We have MaxKeptSources=3.
-    // If PruneAppIdLast was set, then the ones kept should be the two that were
-    // set as APP_ID, which are 0 and 4. The one remaining one will be picked
-    // via age which will be 3, so 0, 3, 4 are kept.
-    // Otherwise, it will be entirely based on age, which is 2,3,4.
+  // No new sources observed.
+  EXPECT_EQ(0, proto_report.source_counts().observed());
+  // 0 again, as this is for newly observed ones.
+  EXPECT_EQ(0, proto_report.source_counts().navigation_sources());
+  EXPECT_EQ(0, proto_report.source_counts().unmatched_sources());
 
-    service.Flush(metrics::MetricsLogsEventManager::CreateReason::kUnknown);
-    EXPECT_EQ(2, GetPersistedLogCount());
-    proto_report = GetPersistedReport();
+  // Since no new sources added, we still are keeping the same 3. So all 3 are
+  // kept and retained, in both cases.
+  EXPECT_EQ(3, proto_report.source_counts().deferred_sources());
+  EXPECT_EQ(3, proto_report.source_counts().carryover_sources());
+  ASSERT_EQ(3, proto_report.sources_size());
 
-    // No new sources observed.
-    EXPECT_EQ(0, proto_report.source_counts().observed());
-    // 0 again, as this is for newly observed ones.
-    EXPECT_EQ(0, proto_report.source_counts().unmatched_sources());
-
-    // Since no new sources added, we still are keeping the same 3. So all 3 are
-    // kept and retained, in both cases.
-    EXPECT_EQ(3, proto_report.source_counts().deferred_sources());
-    EXPECT_EQ(3, proto_report.source_counts().carryover_sources());
-    ASSERT_EQ(3, proto_report.sources_size());
-
-    if (prune_app_id_last) {
-      // 0, 3, 4 as 0 and 4 are APP_ID, and 3 is the newest of the remaining.
-      EXPECT_EQ(ids[0], proto_report.sources(0).id());
-      EXPECT_EQ(ids[3], proto_report.sources(1).id());
-      EXPECT_EQ(ids[4], proto_report.sources(2).id());
-    } else {
-      // 2, 3, 4 as these are the 3 newest, which is the only criteria we are
-      // using for this test.
-      EXPECT_EQ(ids[2], proto_report.sources(0).id());
-      EXPECT_EQ(ids[3], proto_report.sources(1).id());
-      EXPECT_EQ(ids[4], proto_report.sources(2).id());
-    }
-  }
+  // 2, 3, 4 as these are the 3 newest.
+  EXPECT_EQ(ids[2], proto_report.sources(0).id());
+  EXPECT_EQ(ids[3], proto_report.sources(1).id());
+  EXPECT_EQ(ids[4], proto_report.sources(2).id());
 }
 
 TEST_F(UkmServiceTest, UseExternalClientID) {
@@ -1932,6 +1981,16 @@ TEST_F(UkmServiceTest, PurgeLogsOnClonedInstallDetected) {
   EXPECT_FALSE(test_log_store->has_unsent_logs());
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(UkmServiceTest, NotifyObserverOnShutdown) {
+  MockUkmRecorderObserver observer;
+  UkmService service(&prefs_, &client_,
+                     std::make_unique<MockDemographicMetricsProvider>());
+  ukm::UkmRecorder::Get()->AddObserver(&observer);
+  EXPECT_CALL(observer, OnStartingShutdown()).Times(1);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 namespace {
 
@@ -1986,8 +2045,7 @@ TEST_P(UkmServiceTestWithIndependentAppKM, RejectWhenNotConsented) {
 
   std::vector<SourceId> source_ids;
   for (int i = 0; i < 5; ++i) {
-    if (std::find(app_indices.begin(), app_indices.end(), i) !=
-        app_indices.end()) {
+    if (base::Contains(app_indices, i)) {
       source_ids.push_back(UkmServiceTest::GetAppIDSourceId(i));
       recorder.UpdateSourceURL(source_ids.back(), kAppURL);
     } else {
@@ -2019,10 +2077,11 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(UkmConsentType::APPS, UkmConsentType::MSBB),
     [](const testing::TestParamInfo<
         UkmServiceTestWithIndependentAppKM::ParamType>& info) {
-      if (info.param == UkmConsentType::APPS)
+      if (info.param == UkmConsentType::APPS) {
         return "TestApps";
-      else
+      } else {
         return "TestMSBB";
+      }
     });
 
 namespace {
@@ -2078,8 +2137,7 @@ TEST_P(UkmServiceTestWithIndependentAppKMFullConsent, VerifyAllAndNoneConsent) {
 
   std::vector<SourceId> source_ids;
   for (int i = 0; i < 5; ++i) {
-    if (std::find(app_indices.begin(), app_indices.end(), i) !=
-        app_indices.end()) {
+    if (base::Contains(app_indices, i)) {
       source_ids.push_back(UkmServiceTest::GetAppIDSourceId(i));
       recorder.UpdateSourceURL(source_ids.back(), kAppURL);
     } else {
@@ -2113,10 +2171,11 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(true, false),
     [](const testing::TestParamInfo<
         UkmServiceTestWithIndependentAppKMFullConsent::ParamType>& info) {
-      if (info.param)
+      if (info.param) {
         return "TestAllConsent";
-      else
+      } else {
         return "TestNoConsent";
+      }
     });
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

@@ -65,6 +65,7 @@ enum class ImageCapture::MediaTrackConstraintSetType {
 namespace {
 
 using BackgroundBlurMode = media::mojom::blink::BackgroundBlurMode;
+using EyeGazeCorrectionMode = media::mojom::blink::EyeGazeCorrectionMode;
 using FillLightMode = media::mojom::blink::FillLightMode;
 using MeteringMode = media::mojom::blink::MeteringMode;
 using RedEyeReduction = media::mojom::blink::RedEyeReduction;
@@ -196,6 +197,9 @@ void CopyCommonMembers(const T* source,
   }
   if (source->hasBackgroundBlur()) {
     destination->setBackgroundBlur(source->backgroundBlur());
+  }
+  if (source->hasEyeGazeCorrection()) {
+    destination->setEyeGazeCorrection(source->eyeGazeCorrection());
   }
   if (source->hasFaceFraming()) {
     destination->setFaceFraming(source->faceFraming());
@@ -514,6 +518,10 @@ BackgroundBlurMode ParseBackgroundBlur(bool blink_mode) {
   return blink_mode ? BackgroundBlurMode::BLUR : BackgroundBlurMode::OFF;
 }
 
+EyeGazeCorrectionMode ParseEyeGazeCorrection(bool blink_mode) {
+  return blink_mode ? EyeGazeCorrectionMode::ON : EyeGazeCorrectionMode::OFF;
+}
+
 MeteringMode ParseFaceFraming(bool blink_mode) {
   return blink_mode ? MeteringMode::CONTINUOUS : MeteringMode::NONE;
 }
@@ -545,6 +553,17 @@ bool ToBooleanMode(BackgroundBlurMode mode) {
     case BackgroundBlurMode::OFF:
       return false;
     case BackgroundBlurMode::BLUR:
+      return true;
+  }
+  NOTREACHED_NORETURN();
+}
+
+bool ToBooleanMode(EyeGazeCorrectionMode mode) {
+  switch (mode) {
+    case EyeGazeCorrectionMode::OFF:
+      return false;
+    case EyeGazeCorrectionMode::ON:
+    case EyeGazeCorrectionMode::STARE:
       return true;
   }
   NOTREACHED_NORETURN();
@@ -1423,6 +1442,42 @@ absl::optional<HeapVector<Member<Point2D>>> ApplyValueConstraint(
   }
 }
 
+void MaybeSetBackgroundBlurSetting(bool value,
+                                   const Vector<bool>& capability,
+                                   bool& has_setting,
+                                   BackgroundBlurMode& setting) {
+  if (!base::Contains(capability, value)) {
+    return;
+  }
+
+  has_setting = true;
+  setting = ParseBackgroundBlur(value);
+}
+
+void MaybeSetBoolSetting(bool value,
+                         const Vector<bool>& capability,
+                         bool& has_setting,
+                         bool& setting) {
+  if (!base::Contains(capability, value)) {
+    return;
+  }
+
+  has_setting = true;
+  setting = value;
+}
+
+void MaybeSetDoubleSetting(double value,
+                           const MediaSettingsRange& capability,
+                           bool& has_setting,
+                           double& setting) {
+  if (!(capability.min() <= value && value <= capability.max())) {
+    return;
+  }
+
+  has_setting = true;
+  setting = value;
+}
+
 }  // anonymous namespace
 
 ImageCapture* ImageCapture::Create(ExecutionContext* context,
@@ -1788,7 +1843,7 @@ void ImageCapture::SetMediaTrackConstraints(
                     WrapPersistent(resolver), /*trigger_take_photo=*/false));
 }
 
-void ImageCapture::SetPanTiltZoomSettingsFromTrack(
+void ImageCapture::SetVideoTrackDeviceSettingsFromTrack(
     base::OnceClosure initialized_callback,
     media::mojom::blink::PhotoStatePtr photo_state) {
   UpdateMediaTrackSettingsAndCapabilities(base::DoNothing(),
@@ -1797,61 +1852,74 @@ void ImageCapture::SetPanTiltZoomSettingsFromTrack(
   auto* video_track = MediaStreamVideoTrack::From(stream_track_->Component());
   DCHECK(video_track);
 
-  absl::optional<double> pan = video_track->pan();
-  absl::optional<double> tilt = video_track->tilt();
-  absl::optional<double> zoom = video_track->zoom();
+  const auto& device_settings = video_track->image_capture_device_settings();
 
-  const bool ptz_requested =
-      pan.has_value() || tilt.has_value() || zoom.has_value();
-  const bool ptz_supported = capabilities_->hasPan() ||
-                             capabilities_->hasTilt() ||
-                             capabilities_->hasZoom();
-  if (!ptz_supported || !ptz_requested || !HasPanTiltZoomPermissionGranted() ||
-      !service_.is_bound()) {
-    std::move(initialized_callback).Run();
-    return;
+  if (device_settings) {
+    ExecutionContext* context = GetExecutionContext();
+    if (device_settings->pan.has_value()) {
+      UseCounter::Count(context, WebFeature::kImageCapturePan);
+    }
+    if (device_settings->tilt.has_value()) {
+      UseCounter::Count(context, WebFeature::kImageCaptureTilt);
+    }
+    if (device_settings->zoom.has_value()) {
+      UseCounter::Count(context, WebFeature::kImageCaptureZoom);
+    }
+    if (device_settings->torch.has_value()) {
+      UseCounter::Count(context, WebFeature::kImageCaptureTorch);
+    }
+    if (device_settings->background_blur.has_value()) {
+      UseCounter::Count(context, WebFeature::kImageCaptureBackgroundBlur);
+    }
+
+    auto settings = media::mojom::blink::PhotoSettings::New();
+
+    if (HasPanTiltZoomPermissionGranted()) {
+      if (device_settings->pan.has_value() && capabilities_->hasPan()) {
+        MaybeSetDoubleSetting(*device_settings->pan, *capabilities_->pan(),
+                              settings->has_pan, settings->pan);
+      }
+      if (device_settings->tilt.has_value() && capabilities_->hasTilt()) {
+        MaybeSetDoubleSetting(*device_settings->tilt, *capabilities_->tilt(),
+                              settings->has_tilt, settings->tilt);
+      }
+      if (device_settings->zoom.has_value() && capabilities_->hasZoom()) {
+        MaybeSetDoubleSetting(*device_settings->zoom, *capabilities_->zoom(),
+                              settings->has_zoom, settings->zoom);
+      }
+    }
+    if (device_settings->torch.has_value() && capabilities_->hasTorch()) {
+      MaybeSetBoolSetting(
+          *device_settings->torch,
+          capabilities_->torch() ? Vector<bool>({false, true}) : Vector<bool>(),
+          settings->has_torch, settings->torch);
+    }
+    if (device_settings->background_blur.has_value() &&
+        capabilities_->hasBackgroundBlur()) {
+      MaybeSetBackgroundBlurSetting(
+          *device_settings->background_blur, capabilities_->backgroundBlur(),
+          settings->has_background_blur_mode, settings->background_blur_mode);
+    }
+
+    if (service_.is_bound() &&
+        (settings->has_pan || settings->has_tilt || settings->has_zoom ||
+         settings->has_torch || settings->has_background_blur_mode)) {
+      service_->SetPhotoOptions(
+          SourceId(), std::move(settings),
+          WTF::BindOnce(&ImageCapture::OnSetVideoTrackDeviceSettingsFromTrack,
+                        WrapPersistent(this), std::move(initialized_callback)));
+      return;
+    }
   }
 
-  ExecutionContext* context = GetExecutionContext();
-  if (pan.has_value())
-    UseCounter::Count(context, WebFeature::kImageCapturePan);
-  if (tilt.has_value())
-    UseCounter::Count(context, WebFeature::kImageCaptureTilt);
-  if (zoom.has_value())
-    UseCounter::Count(context, WebFeature::kImageCaptureZoom);
-
-  auto settings = media::mojom::blink::PhotoSettings::New();
-
-  if (capabilities_->hasPan() && pan.has_value() &&
-      pan.value() >= capabilities_->pan()->min() &&
-      pan.value() <= capabilities_->pan()->max()) {
-    settings->has_pan = true;
-    settings->pan = pan.value();
-  }
-  if (capabilities_->hasTilt() && tilt.has_value() &&
-      tilt.value() >= capabilities_->tilt()->min() &&
-      tilt.value() <= capabilities_->tilt()->max()) {
-    settings->has_tilt = true;
-    settings->tilt = tilt.value();
-  }
-  if (capabilities_->hasZoom() && zoom.has_value() &&
-      zoom.value() >= capabilities_->zoom()->min() &&
-      zoom.value() <= capabilities_->zoom()->max()) {
-    settings->has_zoom = true;
-    settings->zoom = zoom.value();
-  }
-
-  service_->SetPhotoOptions(
-      SourceId(), std::move(settings),
-      WTF::BindOnce(&ImageCapture::OnSetPanTiltZoomSettingsFromTrack,
-                    WrapPersistent(this), std::move(initialized_callback)));
+  std::move(initialized_callback).Run();
 }
 
-void ImageCapture::OnSetPanTiltZoomSettingsFromTrack(
+void ImageCapture::OnSetVideoTrackDeviceSettingsFromTrack(
     base::OnceClosure done_callback,
     bool result) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
-               "ImageCapture::OnSetPanTiltZoomSettingsFromTrack");
+               "ImageCapture::OnSetVideoTrackDeviceSettingsFromTrack");
   service_->GetPhotoState(
       SourceId(),
       WTF::BindOnce(&ImageCapture::UpdateMediaTrackSettingsAndCapabilities,
@@ -1915,7 +1983,7 @@ ImageCapture::ImageCapture(ExecutionContext* context,
   // to avoid blocking the main UI thread.
   service_->GetPhotoState(
       SourceId(),
-      WTF::BindOnce(&ImageCapture::SetPanTiltZoomSettingsFromTrack,
+      WTF::BindOnce(&ImageCapture::SetVideoTrackDeviceSettingsFromTrack,
                     WrapPersistent(this), std::move(initialized_callback)));
 
   ConnectToPermissionService(
@@ -2079,6 +2147,18 @@ void ImageCapture::ApplyMediaTrackConstraintSetToSettings(
     if (has_setting) {
       settings->has_background_blur_mode = true;
       settings->background_blur_mode = ParseBackgroundBlur(setting);
+    }
+  }
+  if (constraint_set->hasEyeGazeCorrection() &&
+      effective_capabilities->hasEyeGazeCorrection()) {
+    bool has_setting = false;
+    bool setting;
+    effective_capabilities->setEyeGazeCorrection(ApplyValueConstraint(
+        &has_setting, &setting, effective_capabilities->eyeGazeCorrection(),
+        constraint_set->eyeGazeCorrection(), constraint_set_type));
+    if (has_setting) {
+      settings->eye_gaze_correction_mode.emplace(
+          ParseEyeGazeCorrection(setting));
     }
   }
   if (constraint_set->hasFaceFraming() &&
@@ -2263,6 +2343,16 @@ bool ImageCapture::CheckMediaTrackConstraintSet(
     MaybeRejectWithOverconstrainedError(
         resolver, "backgroundBlur",
         "backgroundBlur setting value not supported");
+    return false;
+  }
+  if (constraint_set->hasEyeGazeCorrection() &&
+      effective_capabilities->hasEyeGazeCorrection() &&
+      !CheckValueConstraint(effective_capabilities->eyeGazeCorrection(),
+                            constraint_set->eyeGazeCorrection(),
+                            constraint_set_type)) {
+    MaybeRejectWithOverconstrainedError(
+        resolver, "eyeGazeCorrection",
+        "eyeGazeCorrection setting value not supported");
     return false;
   }
   if (constraint_set->hasFaceFraming() &&
@@ -2542,12 +2632,31 @@ void ImageCapture::UpdateMediaTrackSettingsAndCapabilities(
   if (photo_state->supported_background_blur_modes &&
       !photo_state->supported_background_blur_modes->empty()) {
     Vector<bool> supported_background_blur_modes;
-    for (auto mode : *photo_state->supported_background_blur_modes)
-      supported_background_blur_modes.push_back(ToBooleanMode(mode));
+    for (auto mode : *photo_state->supported_background_blur_modes) {
+      bool boolean_mode = ToBooleanMode(mode);
+      if (!base::Contains(supported_background_blur_modes, boolean_mode)) {
+        supported_background_blur_modes.push_back(boolean_mode);
+      }
+    }
     capabilities_->setBackgroundBlur(
         std::move(supported_background_blur_modes));
     settings_->setBackgroundBlur(
         ToBooleanMode(photo_state->background_blur_mode));
+  }
+
+  if (photo_state->supported_eye_gaze_correction_modes &&
+      !photo_state->supported_eye_gaze_correction_modes->empty()) {
+    Vector<bool> supported_eye_gaze_correction_modes;
+    for (const auto& mode : *photo_state->supported_eye_gaze_correction_modes) {
+      bool boolean_mode = ToBooleanMode(mode);
+      if (!base::Contains(supported_eye_gaze_correction_modes, boolean_mode)) {
+        supported_eye_gaze_correction_modes.push_back(boolean_mode);
+      }
+    }
+    capabilities_->setEyeGazeCorrection(
+        std::move(supported_eye_gaze_correction_modes));
+    settings_->setEyeGazeCorrection(
+        ToBooleanMode(photo_state->current_eye_gaze_correction_mode));
   }
 
   if (photo_state->supported_face_framing_modes &&
@@ -2739,6 +2848,13 @@ ImageCapture::GetConstraintWithCapabilityExistenceMismatch(
           CapabilityExists(capabilities_->hasBackgroundBlur()),
           constraint_set_type)) {
     return "backgroundBlur";
+  }
+  if (constraint_set->hasEyeGazeCorrection() &&
+      !CheckIfCapabilityExistenceSatisfiesConstraint(
+          constraint_set->eyeGazeCorrection(),
+          CapabilityExists(capabilities_->hasEyeGazeCorrection()),
+          constraint_set_type)) {
+    return "eyeGazeCorrection";
   }
   if (constraint_set->hasFaceFraming() &&
       !CheckIfCapabilityExistenceSatisfiesConstraint(

@@ -48,6 +48,8 @@ GLenum GLPrimitiveTopology(wgpu::PrimitiveTopology primitiveTopology) {
             return GL_TRIANGLES;
         case wgpu::PrimitiveTopology::TriangleStrip:
             return GL_TRIANGLE_STRIP;
+        case wgpu::PrimitiveTopology::Undefined:
+            break;
     }
     DAWN_UNREACHABLE();
 }
@@ -106,7 +108,8 @@ GLenum GLBlendFactor(wgpu::BlendFactor factor, bool alpha) {
             return GL_SRC1_ALPHA;
         case wgpu::BlendFactor::OneMinusSrc1Alpha:
             return GL_ONE_MINUS_SRC1_ALPHA;
-            DAWN_UNREACHABLE();
+        case wgpu::BlendFactor::Undefined:
+            break;
     }
     DAWN_UNREACHABLE();
 }
@@ -123,6 +126,8 @@ GLenum GLBlendMode(wgpu::BlendOperation operation) {
             return GL_MIN;
         case wgpu::BlendOperation::Max:
             return GL_MAX;
+        case wgpu::BlendOperation::Undefined:
+            break;
     }
     DAWN_UNREACHABLE();
 }
@@ -189,6 +194,8 @@ GLuint OpenGLStencilOperation(wgpu::StencilOperation stencilOperation) {
             return GL_INCR_WRAP;
         case wgpu::StencilOperation::DecrementWrap:
             return GL_DECR_WRAP;
+        case wgpu::StencilOperation::Undefined:
+            break;
     }
     DAWN_UNREACHABLE();
 }
@@ -238,11 +245,12 @@ void ApplyDepthStencilState(const OpenGLFunctions& gl,
 // static
 Ref<RenderPipeline> RenderPipeline::CreateUninitialized(
     Device* device,
-    const RenderPipelineDescriptor* descriptor) {
+    const UnpackedPtr<RenderPipelineDescriptor>& descriptor) {
     return AcquireRef(new RenderPipeline(device, descriptor));
 }
 
-RenderPipeline::RenderPipeline(Device* device, const RenderPipelineDescriptor* descriptor)
+RenderPipeline::RenderPipeline(Device* device,
+                               const UnpackedPtr<RenderPipelineDescriptor>& descriptor)
     : RenderPipelineBase(device, descriptor),
       mVertexArrayObject(0),
       mGlPrimitiveTopology(GLPrimitiveTopology(GetPrimitiveTopology())) {}
@@ -268,8 +276,7 @@ GLenum RenderPipeline::GetGLPrimitiveTopology() const {
     return mGlPrimitiveTopology;
 }
 
-ityp::bitset<VertexAttributeLocation, kMaxVertexAttributes>
-RenderPipeline::GetAttributesUsingVertexBuffer(VertexBufferSlot slot) const {
+VertexAttributeMask RenderPipeline::GetAttributesUsingVertexBuffer(VertexBufferSlot slot) const {
     DAWN_ASSERT(!IsError());
     return mAttributesUsingVertexBuffer[slot];
 }
@@ -300,6 +307,7 @@ void RenderPipeline::CreateVAOForVertexState() {
                     gl.VertexAttribDivisor(glAttrib, 1);
                     break;
                 case wgpu::VertexStepMode::VertexBufferNotUsed:
+                case wgpu::VertexStepMode::Undefined:
                     DAWN_UNREACHABLE();
             }
         }
@@ -338,12 +346,12 @@ void RenderPipeline::ApplyNow(PersistentPipelineState& persistentPipelineState) 
     }
 
     if (!GetDevice()->IsToggleEnabled(Toggle::DisableIndexedDrawBuffers)) {
-        for (ColorAttachmentIndex attachmentSlot : IterateBitSet(GetColorAttachmentsMask())) {
+        for (auto attachmentSlot : IterateBitSet(GetColorAttachmentsMask())) {
             ApplyColorState(gl, attachmentSlot, GetColorTargetState(attachmentSlot));
         }
     } else {
         const ColorTargetState* prevDescriptor = nullptr;
-        for (ColorAttachmentIndex attachmentSlot : IterateBitSet(GetColorAttachmentsMask())) {
+        for (auto attachmentSlot : IterateBitSet(GetColorAttachmentsMask())) {
             const ColorTargetState* descriptor = GetColorTargetState(attachmentSlot);
             if (!prevDescriptor) {
                 ApplyColorState(gl, descriptor);

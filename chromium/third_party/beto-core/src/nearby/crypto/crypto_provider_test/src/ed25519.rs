@@ -18,7 +18,9 @@ extern crate std;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
-use crypto_provider::ed25519::{Ed25519Provider, KeyPair, PublicKey, Signature};
+use crypto_provider::ed25519::{
+    Ed25519Provider, KeyPair, PublicKey, RawPrivateKeyPermit, RawSignature, Signature,
+};
 use wycheproof::TestResult;
 
 // These are test vectors from the creators of Ed25519: https://ed25519.cr.yp.to/ which are referenced
@@ -27,7 +29,7 @@ use wycheproof::TestResult;
 // also used for test cases in the above RFC:
 // https://dev.gnupg.org/source/libgcrypt/browse/master/tests/t-ed25519.inp
 const PATH_TO_RFC_VECTORS_FILE: &str =
-    "crypto/crypto_provider_test/src/testdata/ecdsa/rfc_test_vectors.txt";
+    "crypto/crypto_provider_test/src/testdata/EdDSA/rfc_test_vectors.txt";
 
 /// Runs set of Ed25519 wycheproof test vectors against a provided ed25519 implementation
 /// Tests vectors from Project Wycheproof: <https://github.com/google/wycheproof>
@@ -39,10 +41,7 @@ where
         .expect("should be able to load test set");
 
     for test_group in test_set.test_groups {
-        let key_pair = test_group.key;
-        let public_key = key_pair.pk;
-        let secret_key = key_pair.sk;
-
+        let public_key = test_group.key.pk.to_vec();
         for test in test_group.tests {
             let tc_id = test.tc_id;
             let comment = test.comment;
@@ -53,8 +52,7 @@ where
                 TestResult::Invalid => false,
                 TestResult::Valid | TestResult::Acceptable => true,
             };
-            let result =
-                run_test::<E>(public_key.clone(), secret_key.clone(), sig.clone(), msg.clone());
+            let result = run_wycheproof_test::<E>(public_key.to_vec(), sig.to_vec(), msg.to_vec());
             if valid {
                 if let Err(desc) = result {
                     panic!(
@@ -71,6 +69,20 @@ where
             }
         }
     }
+}
+
+fn run_wycheproof_test<E>(pub_key: Vec<u8>, sig: Vec<u8>, msg: Vec<u8>) -> Result<(), &'static str>
+where
+    E: Ed25519Provider,
+{
+    let pub_key = E::PublicKey::from_bytes(pub_key.as_slice().try_into().unwrap())
+        .map_err(|_| "Invalid public key bytes")?;
+
+    let raw_sig: RawSignature =
+        sig.as_slice().try_into().map_err(|_| "Invalid length signature")?;
+    let signature = E::Signature::from_bytes(&raw_sig);
+
+    pub_key.verify_strict(msg.as_slice(), &signature).map_err(|_| "Signature verification failed")
 }
 
 /// Runs the RFC specified test vectors against an Ed25519 implementation
@@ -126,7 +138,10 @@ where
 {
     let private_key_bytes: [u8; 32] =
         private_key.as_slice().try_into().expect("Secret key is the wrong length");
-    let kp = E::KeyPair::from_private_key(&private_key_bytes);
+
+    // Permits: Test-only code, not a production leak of the private key
+    let permit = RawPrivateKeyPermit::default();
+    let kp = E::KeyPair::from_raw_private_key(&private_key_bytes, &permit);
 
     let sig_result = kp.sign(msg.as_slice());
     (sig.as_slice() == sig_result.to_bytes()).then_some(()).ok_or("sig not matching expected")?;

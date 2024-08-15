@@ -35,7 +35,7 @@ class CancellingSelectFileDialog : public ui::SelectFileDialog {
       if (file_types) {
         out_params_->file_types = *file_types;
       } else {
-        out_params_->file_types = absl::nullopt;
+        out_params_->file_types = std::nullopt;
       }
       out_params_->owning_window = owning_window;
       out_params_->file_type_index = file_type_index;
@@ -44,8 +44,12 @@ class CancellingSelectFileDialog : public ui::SelectFileDialog {
       if (caller) {
         out_params_->caller = *caller;
       } else {
-        out_params_->caller = absl::nullopt;
+        out_params_->caller = std::nullopt;
       }
+
+      // Free the pointer since output parameters should only be written to
+      // once.
+      out_params_ = nullptr;
     }
     listener_->FileSelectionCanceled(params);
   }
@@ -57,7 +61,11 @@ class CancellingSelectFileDialog : public ui::SelectFileDialog {
   bool HasMultipleFileTypeChoicesImpl() override { return false; }
 
  private:
-  ~CancellingSelectFileDialog() override { out_params_ = nullptr; }
+  ~CancellingSelectFileDialog() override {
+    if (out_params_) {
+      out_params_ = nullptr;
+    }
+  }
   raw_ptr<SelectFileDialogParams> out_params_;
 };
 
@@ -86,7 +94,7 @@ class FakeSelectFileDialog : public ui::SelectFileDialog {
       if (file_types) {
         out_params_->file_types = *file_types;
       } else {
-        out_params_->file_types = absl::nullopt;
+        out_params_->file_types = std::nullopt;
       }
       out_params_->owning_window = owning_window;
       out_params_->file_type_index = file_type_index;
@@ -95,17 +103,20 @@ class FakeSelectFileDialog : public ui::SelectFileDialog {
       if (caller) {
         out_params_->caller = *caller;
       } else {
-        out_params_->caller = absl::nullopt;
+        out_params_->caller = std::nullopt;
       }
+
+      // Clean up the output parameters; they should only be filled in once.
+      out_params_ = nullptr;
     }
     // The selected files are passed by reference to the listener. Ensure they
     // outlive the dialog if it is immediately deleted by the listener.
     std::vector<ui::SelectedFileInfo> result = std::move(result_);
     result_.clear();
     if (result.size() == 1) {
-      listener_->FileSelectedWithExtraInfo(result[0], 0, params);
+      listener_->FileSelected(result[0], 0, params);
     } else {
-      listener_->MultiFilesSelectedWithExtraInfo(result, params);
+      listener_->MultiFilesSelected(result, params);
     }
   }
 
@@ -116,9 +127,13 @@ class FakeSelectFileDialog : public ui::SelectFileDialog {
   bool HasMultipleFileTypeChoicesImpl() override { return false; }
 
  private:
-  ~FakeSelectFileDialog() override = default;
+  ~FakeSelectFileDialog() override {
+    if (out_params_) {
+      out_params_ = nullptr;
+    }
+  }
   std::vector<ui::SelectedFileInfo> result_;
-  raw_ptr<SelectFileDialogParams, LeakedDanglingUntriaged> out_params_;
+  raw_ptr<SelectFileDialogParams> out_params_;
 };
 
 }  // namespace
@@ -153,7 +168,9 @@ FakeSelectFileDialogFactory::FakeSelectFileDialogFactory(
     SelectFileDialogParams* out_params)
     : result_(std::move(result)), out_params_(out_params) {}
 
-FakeSelectFileDialogFactory::~FakeSelectFileDialogFactory() = default;
+FakeSelectFileDialogFactory::~FakeSelectFileDialogFactory() {
+  out_params_ = nullptr;
+}
 
 ui::SelectFileDialog* FakeSelectFileDialogFactory::Create(
     ui::SelectFileDialog::Listener* listener,

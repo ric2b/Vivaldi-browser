@@ -38,9 +38,6 @@ BASE_DECLARE_FEATURE(kFeedHeaderSettings);
 // its own does nothing; relies on feature parameters.
 BASE_DECLARE_FEATURE(kOverrideFeedSettings);
 
-// Feature flag to enable synthentic capabilities.
-BASE_DECLARE_FEATURE(kEnableFeedSyntheticCapabilities);
-
 // Feature flag to enable sending discover feedback to an updated target
 BASE_DECLARE_FEATURE(kWebFeedFeedbackReroute);
 
@@ -50,6 +47,9 @@ BASE_DECLARE_FEATURE(kEnableFollowManagementInstantReload);
 
 // Feature flag to enable signed out user view demotion.
 BASE_DECLARE_FEATURE(kEnableSignedOutViewDemotion);
+
+// Feature flag to enable ghost cards on the iPad feeds.
+BASE_DECLARE_FEATURE(kEnableiPadFeedGhostCards);
 
 #pragma mark - Feature parameters
 
@@ -118,10 +118,6 @@ bool IsStickyHeaderDisabledForFollowingFeed();
 // Following feed.
 bool IsDotEnabledForNewFollowedContent();
 
-// YES if synthetic capabilities will be used to inform the server of client
-// capabilities.
-bool IsFeedSyntheticCapabilitiesEnabled();
-
 // Returns a custom height for the Following feed header if it is overridden
 // from the server, or returns the default value.
 int FollowingFeedHeaderHeight();
@@ -129,10 +125,13 @@ int FollowingFeedHeaderHeight();
 // YES if discover feedback is going to be sent to the updated target.
 bool IsWebFeedFeedbackRerouteEnabled();
 
-// Yes when enabling follow management page instant reload when being opened.
+// YES when enabling follow management page instant reload when being opened.
 bool IsFollowManagementInstantReloadEnabled();
 
-// Yes if the signed out user view demotion is enabled.
+// YES if the signed out user view demotion is enabled.
 bool IsSignedOutViewDemotionEnabled();
+
+// Whether ghost cards are enabled on the iPad feeds.
+bool IsiPadFeedGhostCardsEnabled();
 
 #endif  // IOS_CHROME_BROWSER_UI_NTP_NEW_TAB_PAGE_FEATURE_H_

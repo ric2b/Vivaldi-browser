@@ -13,10 +13,10 @@ import sys
 
 def complain(message):
     """If any exception occurs in this file, we'll probably try to print it
-  on stderr, which makes for frustrating debugging if stderr is directed
-  to our wrapper. So be paranoid about catching errors and reporting them
-  to sys.__stderr__, so that the user has a higher chance to see them.
-  """
+    on stderr, which makes for frustrating debugging if stderr is directed
+    to our wrapper. So be paranoid about catching errors and reporting them
+    to sys.__stderr__, so that the user has a higher chance to see them.
+    """
     print(isinstance(message, str) and message or repr(message),
           file=sys.__stderr__)
 
@@ -24,11 +24,11 @@ def complain(message):
 def fix_default_encoding():
     """Forces utf8 solidly on all platforms.
 
-  By default python execution environment is lazy and defaults to ascii
-  encoding.
+    By default python execution environment is lazy and defaults to ascii
+    encoding.
 
-  http://uucode.com/blog/2007/03/23/shut-up-you-dummy-7-bit-python/
-  """
+    http://uucode.com/blog/2007/03/23/shut-up-you-dummy-7-bit-python/
+    """
     if sys.getdefaultencoding() == 'utf-8':
         return False
 
@@ -79,10 +79,10 @@ def fix_win_codec():
 
 class WinUnicodeOutputBase(object):
     """Base class to adapt sys.stdout or sys.stderr to behave correctly on
-  Windows.
+    Windows.
 
-  Setting encoding to utf-8 is recommended.
-  """
+    Setting encoding to utf-8 is recommended.
+    """
     def __init__(self, fileno, name, encoding):
         # Corresponding file handle.
         self._fileno = fileno
@@ -122,8 +122,8 @@ class WinUnicodeOutputBase(object):
 class WinUnicodeConsoleOutput(WinUnicodeOutputBase):
     """Output adapter to a Windows Console.
 
-  Understands how to use the win32 console API.
-  """
+    Understands how to use the win32 console API.
+    """
     def __init__(self, console_handle, fileno, stream_name, encoding):
         super(WinUnicodeConsoleOutput,
               self).__init__(fileno, '<Unicode console %s>' % stream_name,
@@ -183,9 +183,9 @@ class WinUnicodeConsoleOutput(WinUnicodeOutputBase):
 class WinUnicodeOutput(WinUnicodeOutputBase):
     """Output adaptor to a file output on Windows.
 
-  If the standard FileWrite function is used, it will be encoded in the current
-  code page. WriteConsoleW() permits writing any character.
-  """
+    If the standard FileWrite function is used, it will be encoded in the
+    current code page. WriteConsoleW() permits writing any character.
+    """
     def __init__(self, stream, fileno, encoding):
         super(WinUnicodeOutput,
               self).__init__(fileno, '<Unicode redirected %s>' % stream.name,
@@ -247,11 +247,11 @@ def win_handle_is_a_console(handle):
 def win_get_unicode_stream(stream, excepted_fileno, output_handle, encoding):
     """Returns a unicode-compatible stream.
 
-  This function will return a direct-Console writing object only if:
-  - the file number is the expected console file number
-  - the handle the expected file handle
-  - the 'real' handle is in fact a handle to a console.
-  """
+    This function will return a direct-Console writing object only if:
+    - the file number is the expected console file number
+    - the handle the expected file handle
+    - the 'real' handle is in fact a handle to a console.
+    """
     old_fileno = getattr(stream, 'fileno', lambda: None)()
     if old_fileno == excepted_fileno:
         # These types are available on linux but not Mac.
@@ -276,12 +276,12 @@ def win_get_unicode_stream(stream, excepted_fileno, output_handle, encoding):
 def fix_win_console(encoding):
     """Makes Unicode console output work independently of the current code page.
 
-  This also fixes <http://bugs.python.org/issue1602>.
-  Credit to Michael Kaplan
-  <http://blogs.msdn.com/b/michkap/archive/2010/04/07/9989346.aspx> and
-  TZOmegaTZIOY
-  <http://stackoverflow.com/questions/878972/windows-cmd-encoding-change-causes-python-crash/1432462#1432462>.
-  """
+    This also fixes <http://bugs.python.org/issue1602>.
+    Credit to Michael Kaplan
+    <http://blogs.msdn.com/b/michkap/archive/2010/04/07/9989346.aspx> and
+    TZOmegaTZIOY
+    <http://stackoverflow.com/questions/878972/windows-cmd-encoding-change-causes-python-crash/1432462#1432462>.
+    """
     if (isinstance(sys.stdout, WinUnicodeOutputBase)
             or isinstance(sys.stderr, WinUnicodeOutputBase)):
         return False
@@ -308,8 +308,8 @@ def fix_win_console(encoding):
 def fix_encoding():
     """Fixes various encoding problems on all platforms.
 
-  Should be called at the very beginning of the process.
-  """
+    Should be called at the very beginning of the process.
+    """
     ret = True
     if sys.platform == 'win32':
         ret &= fix_win_codec()

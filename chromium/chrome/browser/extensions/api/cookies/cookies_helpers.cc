@@ -155,10 +155,9 @@ CookieStore CreateCookieStore(Profile* profile, base::Value::List tab_ids) {
   dict.Set(cookies_api_constants::kIdKey, GetStoreIdFromProfile(profile));
   dict.Set(cookies_api_constants::kTabIdsKey, std::move(tab_ids));
 
-  CookieStore cookie_store;
-  bool rv = CookieStore::Populate(dict, cookie_store);
-  CHECK(rv);
-  return cookie_store;
+  auto cookie_store = CookieStore::FromValue(dict);
+  CHECK(cookie_store);
+  return std::move(cookie_store).value();
 }
 
 void GetCookieListFromManager(
@@ -223,9 +222,9 @@ void AppendToTabIdList(Browser* browser, base::Value::List& tab_ids) {
 }
 
 bool ValidateCookieApiPartitionKey(
-    const absl::optional<extensions::api::cookies::CookiePartitionKey>&
+    const std::optional<extensions::api::cookies::CookiePartitionKey>&
         partition_key,
-    absl::optional<net::CookiePartitionKey>& net_partition_key,
+    std::optional<net::CookiePartitionKey>& net_partition_key,
     std::string& error_message) {
   if (partition_key &&
       base::FeatureList::IsEnabled(net::features::kPartitionedCookies)) {
@@ -249,27 +248,34 @@ bool CookieMatchesPartitionKeyCollection(
   return cookie_partition_key_collection.Contains(*cookie.PartitionKey());
 }
 
-bool CookieMatchesPartitionKeyInDetails(
-    const absl::optional<extensions::api::cookies::CookiePartitionKey>&
-        partition_key,
-    const net::CanonicalCookie& cookie) {
-  if (!partition_key) {
-    return !cookie.IsPartitioned();
+bool CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+    const std::optional<extensions::api::cookies::CookiePartitionKey>&
+        api_partition_key,
+    const absl::optional<net::CookiePartitionKey>& net_partition_key) {
+  if (!api_partition_key.has_value()) {
+    return !net_partition_key.has_value();
   }
 
-  if (cookie.IsPartitioned() && !cookie.PartitionKey()->IsSerializeable()) {
+  if (!net_partition_key.has_value()) {
     return false;
   }
 
-  std::string serialized_partition_key;
-  return net::CookiePartitionKey::Serialize(cookie.PartitionKey(),
-                                            serialized_partition_key) &&
-         serialized_partition_key == partition_key->top_level_site.value();
+  // If both keys are present, they both must be serializable for a match.
+  if (!net_partition_key->IsSerializeable() ||
+      !api_partition_key->top_level_site.has_value()) {
+    return false;
+  }
+
+  std::string serialized_net_partition_key;
+  return net::CookiePartitionKey::Serialize(net_partition_key,
+                                            serialized_net_partition_key) &&
+         serialized_net_partition_key ==
+             api_partition_key->top_level_site.value();
 }
 
 net::CookiePartitionKeyCollection
 CookiePartitionKeyCollectionFromApiPartitionKey(
-    const absl::optional<extensions::api::cookies::CookiePartitionKey>&
+    const std::optional<extensions::api::cookies::CookiePartitionKey>&
         partition_key) {
   if (!partition_key) {
     return net::CookiePartitionKeyCollection();
@@ -279,7 +285,7 @@ CookiePartitionKeyCollectionFromApiPartitionKey(
     return net::CookiePartitionKeyCollection::ContainsAll();
   }
 
-  absl::optional<net::CookiePartitionKey> net_partition_key;
+  std::optional<net::CookiePartitionKey> net_partition_key;
   if (!net::CookiePartitionKey::Deserialize(
           partition_key->top_level_site.value(), net_partition_key)) {
     return net::CookiePartitionKeyCollection();

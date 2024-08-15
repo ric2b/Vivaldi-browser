@@ -13,7 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager_impl.h"
-#include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
+#include "third_party/nearby/sharing/proto/rpc_resources.pb.h"
 
 class NearbyShareClientFactory;
 class NearbyShareLocalDeviceDataManager;
@@ -37,7 +37,8 @@ class FakeNearbyShareContactManager : public NearbyShareContactManager {
 
     // Returns all FakeNearbyShareContactManager instances created by
     // CreateInstance().
-    std::vector<FakeNearbyShareContactManager*>& instances() {
+    std::vector<raw_ptr<FakeNearbyShareContactManager, VectorExperimental>>&
+    instances() {
       return instances_;
     }
 
@@ -64,14 +65,14 @@ class FakeNearbyShareContactManager : public NearbyShareContactManager {
         NearbyShareLocalDeviceDataManager* local_device_data_manager,
         NearbyShareProfileInfoProvider* profile_info_provider) override;
 
-    std::vector<FakeNearbyShareContactManager*> instances_;
-    raw_ptr<PrefService, ExperimentalAsh> latest_pref_service_ = nullptr;
-    raw_ptr<NearbyShareClientFactory, DanglingUntriaged | ExperimentalAsh>
+    std::vector<raw_ptr<FakeNearbyShareContactManager, VectorExperimental>>
+        instances_;
+    raw_ptr<PrefService> latest_pref_service_ = nullptr;
+    raw_ptr<NearbyShareClientFactory, DanglingUntriaged>
         latest_http_client_factory_ = nullptr;
-    raw_ptr<NearbyShareLocalDeviceDataManager,
-            DanglingUntriaged | ExperimentalAsh>
+    raw_ptr<NearbyShareLocalDeviceDataManager, DanglingUntriaged>
         latest_local_device_data_manager_ = nullptr;
-    raw_ptr<NearbyShareProfileInfoProvider, DanglingUntriaged | ExperimentalAsh>
+    raw_ptr<NearbyShareProfileInfoProvider, DanglingUntriaged>
         latest_profile_info_provider_ = nullptr;
   };
 

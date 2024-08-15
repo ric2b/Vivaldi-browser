@@ -47,6 +47,7 @@ class DetectHostArchTest(unittest.TestCase):
             platform.machine.return_value = machine
             platform.processor.return_value = processor
             platform.architecture.return_value = arch
+            detect_host_arch.HostArch.cache_clear()
             self.assertEqual(expected, detect_host_arch.HostArch())
 
 

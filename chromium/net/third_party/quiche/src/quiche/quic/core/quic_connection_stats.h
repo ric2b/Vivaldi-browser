@@ -247,9 +247,12 @@ struct QUICHE_EXPORT QuicConnectionStats {
   // is performed by TlsServerHandshaker. If an operation is done within
   // BoringSSL, e.g. ticket decrypted without using
   // TlsServerHandshaker::SessionTicketOpen, it will not be recorded here.
-  absl::optional<TlsServerOperationStats> tls_server_select_cert_stats;
-  absl::optional<TlsServerOperationStats> tls_server_compute_signature_stats;
-  absl::optional<TlsServerOperationStats> tls_server_decrypt_ticket_stats;
+  std::optional<TlsServerOperationStats> tls_server_select_cert_stats;
+  std::optional<TlsServerOperationStats> tls_server_compute_signature_stats;
+  std::optional<TlsServerOperationStats> tls_server_decrypt_ticket_stats;
+
+  // The total number of streams which were pending from some time.
+  size_t num_total_pending_streams = 0;
 };
 
 }  // namespace quic

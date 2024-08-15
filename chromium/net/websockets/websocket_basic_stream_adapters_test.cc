@@ -135,14 +135,13 @@ class WebSocketClientSocketHandleAdapterTest : public TestWithTaskEnvironment {
     ssl_config_for_origin->alpn_protos = {kProtoHTTP11};
     scoped_refptr<ClientSocketPool::SocketParams> socks_params =
         base::MakeRefCounted<ClientSocketPool::SocketParams>(
-            std::move(ssl_config_for_origin),
-            /*ssl_config_for_proxy=*/nullptr);
+            std::move(ssl_config_for_origin));
     TestCompletionCallback callback;
     int rv = connection->Init(
         ClientSocketPool::GroupId(
             url::SchemeHostPort(url::kHttpsScheme, "www.example.org", 443),
             PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
-            SecureDnsPolicy::kAllow),
+            SecureDnsPolicy::kAllow, /*disable_cert_network_fetches=*/false),
         socks_params, /*proxy_annotation_tag=*/TRAFFIC_ANNOTATION_FOR_TESTS,
         MEDIUM, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
         callback.callback(), ClientSocketPool::ProxyAuthCallback(),
@@ -215,7 +214,7 @@ TEST_F(WebSocketClientSocketHandleAdapterTest, Read) {
 
   // Buffer larger than each MockRead.
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   int rv = adapter.Read(read_buf.get(), kReadBufSize, CompletionOnceCallback());
   ASSERT_EQ(3, rv);
   EXPECT_EQ("foo", base::StringPiece(read_buf->data(), rv));
@@ -246,7 +245,7 @@ TEST_F(WebSocketClientSocketHandleAdapterTest, ReadIntoSmallBuffer) {
 
   // Buffer smaller than each MockRead.
   const int kReadBufSize = 2;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   int rv = adapter.Read(read_buf.get(), kReadBufSize, CompletionOnceCallback());
   ASSERT_EQ(2, rv);
   EXPECT_EQ("fo", base::StringPiece(read_buf->data(), rv));
@@ -318,7 +317,7 @@ TEST_F(WebSocketClientSocketHandleAdapterTest, AsyncReadAndWrite) {
   EXPECT_TRUE(adapter.is_initialized());
 
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback read_callback;
   int rv = adapter.Read(read_buf.get(), kReadBufSize, read_callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -683,7 +682,7 @@ TEST_F(WebSocketSpdyStreamAdapterTest, OnHeadersReceivedThenStreamEnd) {
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   constexpr int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback read_callback;
   rv = adapter.Read(read_buf.get(), kReadBufSize, read_callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -772,7 +771,7 @@ TEST_F(WebSocketSpdyStreamAdapterTest, Read) {
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   const int kReadBufSize = 3;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback callback;
   rv = adapter.Read(read_buf.get(), kReadBufSize, callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -842,7 +841,7 @@ TEST_F(WebSocketSpdyStreamAdapterTest, CallDelegateOnCloseShouldNotCrash) {
 
   // Buffer larger than each MockRead.
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback callback;
   rv = adapter.Read(read_buf.get(), kReadBufSize, callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -944,7 +943,7 @@ TEST_F(WebSocketSpdyStreamAdapterTest, AsyncReadAndWrite) {
   base::RunLoop().RunUntilIdle();
 
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback read_callback;
   rv = adapter.Read(read_buf.get(), kReadBufSize, read_callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -1022,7 +1021,7 @@ TEST_F(WebSocketSpdyStreamAdapterTest, ReadCallbackDestroysAdapter) {
   KillerCallback callback(std::move(adapter));
 
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   rv = adapter_raw->Read(read_buf.get(), kReadBufSize, callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
@@ -1120,7 +1119,7 @@ TEST_F(WebSocketSpdyStreamAdapterTest,
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback callback;
   rv = adapter.Read(read_buf.get(), kReadBufSize, callback.callback());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -1196,7 +1195,6 @@ class WebSocketQuicStreamAdapterTest
   std::unique_ptr<quic::QuicReceivedPacket> ConstructServerDataPacket(
       uint64_t packet_number,
       base::StringPiece data) {
-    DCHECK(version_.HasIetfQuicFrames());
     quiche::QuicheBuffer buffer = quic::HttpEncoder::SerializeDataFrameHeader(
         data.size(), quiche::SimpleBufferAllocator::Get());
     return server_maker_.MakeDataPacket(
@@ -1280,7 +1278,8 @@ class WebSocketQuicStreamAdapterTest
         quic::QuicTime::Delta::FromMilliseconds(
             kDefaultRetransmittableOnWireTimeout.InMilliseconds()),
         /*migrate_idle_session=*/true, /*allow_port_migration=*/false,
-        kDefaultIdleSessionMigrationPeriod, kMaxTimeOnNonDefaultNetwork,
+        kDefaultIdleSessionMigrationPeriod, /*multi_port_probing_interval=*/0,
+        kMaxTimeOnNonDefaultNetwork,
         kMaxMigrationsToNonDefaultNetworkOnWriteError,
         kMaxMigrationsToNonDefaultNetworkOnPathDegrading,
         kQuicYieldAfterPacketsRead,
@@ -1288,8 +1287,7 @@ class WebSocketQuicStreamAdapterTest
             kQuicYieldAfterDurationMilliseconds),
         /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
-        dns_start, dns_end,
-        base::DefaultTickClock::GetInstance(),
+        dns_start, dns_end, base::DefaultTickClock::GetInstance(),
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         /*socket_performance_watcher=*/nullptr, HostResolverEndpointResult(),
         NetLog::Get());
@@ -1596,7 +1594,7 @@ TEST_P(WebSocketQuicStreamAdapterTest, Read) {
 
   // Buffer larger than each MockRead.
   const int kReadBufSize = 1024;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback read_callback;
 
   int rv =
@@ -1678,7 +1676,7 @@ TEST_P(WebSocketQuicStreamAdapterTest, ReadIntoSmallBuffer) {
   run_loop.Run();
 
   const int kReadBufSize = 3;
-  auto read_buf = base::MakeRefCounted<IOBuffer>(kReadBufSize);
+  auto read_buf = base::MakeRefCounted<IOBufferWithSize>(kReadBufSize);
   TestCompletionCallback read_callback;
 
   int rv =

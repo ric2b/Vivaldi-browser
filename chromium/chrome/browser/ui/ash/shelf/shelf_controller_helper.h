@@ -6,12 +6,13 @@
 #define CHROME_BROWSER_UI_ASH_SHELF_SHELF_CONTROLLER_HELPER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "ash/public/cpp/shelf_types.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "components/services/app_service/public/cpp/shortcut/shortcut.h"
 
 class ArcAppListPrefs;
 class ExtensionEnableFlow;
@@ -42,7 +43,7 @@ class ShelfControllerHelper : public ExtensionEnableFlowDelegate {
   // Get the accessible label that should be announced by the screenreader for
   // the specified promise app name and status.
   static std::u16string GetAccessibleLabelForPromiseStatus(
-      absl::optional<std::string> app_name,
+      std::optional<std::string> app_name,
       apps::PromiseStatus status);
 
   // Helper function to return the title associated with |app_id|.
@@ -92,6 +93,12 @@ class ShelfControllerHelper : public ExtensionEnableFlowDelegate {
   // Check whether this item is an app service shortcut.
   static bool IsAppServiceShortcut(Profile* profile, const std::string& id);
 
+  // Get the accessible label that should be announced by the scrrenreader for
+  // the specific app service shortcut shelf item.
+  static std::u16string GetAppServiceShortcutAccessibleLabel(
+      Profile* profile,
+      const apps::ShortcutId& shortcut_id);
+
   // Returns true if |id| is valid for the currently active profile.
   // Used during restore to ignore no longer valid extensions.
   // Note that already running applications are ignored by the restore process.
@@ -100,7 +107,8 @@ class ShelfControllerHelper : public ExtensionEnableFlowDelegate {
   void LaunchApp(const ash::ShelfID& id,
                  ash::ShelfLaunchSource source,
                  int event_flags,
-                 int64_t display_id);
+                 int64_t display_id,
+                 bool new_window);
 
   virtual ArcAppListPrefs* GetArcAppListPrefs() const;
 
@@ -124,7 +132,7 @@ class ShelfControllerHelper : public ExtensionEnableFlowDelegate {
   bool IsValidIDFromAppService(const std::string& app_id) const;
 
   // The currently active profile for the usage of |GetAppID|.
-  raw_ptr<Profile, DanglingUntriaged | ExperimentalAsh> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
   std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
 };
 

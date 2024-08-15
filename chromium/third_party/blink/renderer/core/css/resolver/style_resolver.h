@@ -195,6 +195,13 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   static const CSSValue* ComputeValue(Element* element,
                                       const CSSPropertyName&,
                                       const CSSValue&);
+  // Resolves a single CSSValue in the context of some element's computed style.
+  //
+  // This is intended for use by the Inspector Agent.
+  static const CSSValue* ResolveValue(Element& element,
+                                      const ComputedStyle& style,
+                                      const CSSPropertyName&,
+                                      const CSSValue&);
 
   // Compute FilterOperations from the specified CSSValue, using the provided
   // Font to resolve any font-relative units.
@@ -225,6 +232,22 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   // Check if the BODY or HTML element's display or containment stops
   // propagation of BODY style to HTML and viewport.
   bool ShouldStopBodyPropagation(const Element& body_or_html);
+
+  // If enabled, will attempt to count the number of bytes used by the
+  // generated ComputedStyle objects. Note that most of the fast paths
+  // (e.g. inline incremental style) and the non-element styles
+  // (e.g. @page) are not accounted for. However, the effect of the MPC
+  // should be correctly modeled. Note that there is a significant
+  // CPU overhead through this, and it will also allocate a fairly large
+  // amount of temporary GC memory for the diffing.
+  void SetCountComputedStyleBytes(bool enabled) {
+    count_computed_style_bytes_ = enabled;
+    computed_style_bytes_used_ = 0;
+  }
+  size_t GetComputedStyleBytesUsed() const {
+    DCHECK(count_computed_style_bytes_);
+    return computed_style_bytes_used_;
+  }
 
   void Trace(Visitor*) const;
 
@@ -268,6 +291,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                             ElementRuleCollector&,
                             bool for_shadow_pseudo = false);
   void MatchPseudoPartRulesForUAHost(const Element&, ElementRuleCollector&);
+  void MatchTryRules(const Element&, ElementRuleCollector&);
   void MatchAuthorRules(const Element&,
                         ElementRuleCollector&);
   void MatchAllRules(StyleResolverState&,
@@ -353,12 +377,17 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   // style computations; see `EnsureElementForFormattedText`.
   Member<Element> formatted_text_element_;
 
+  // See SetCountComputedStyleBytes().
+  bool count_computed_style_bytes_ = false;
+  size_t computed_style_bytes_used_ = 0;
+
   bool print_media_type_ = false;
   bool was_viewport_resized_ = false;
 
   FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, ApplyInternalLightDarkColor);
   friend class StyleResolverTest;
-  FRIEND_TEST_ALL_PREFIXES(StyleResolverTest, TreeScopedReferences);
+  FRIEND_TEST_ALL_PREFIXES(ParameterizedStyleResolverTest,
+                           TreeScopedReferences);
 
   Element& EnsureElementForFormattedText();
   const ComputedStyle* StyleForFormattedText(

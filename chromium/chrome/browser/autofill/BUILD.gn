@@ -109,7 +109,10 @@ static_library("autofill") {
       "ui/autofill_image_fetcher_impl.cc",
       "ui/autofill_image_fetcher_impl.h",
     ]
-    deps += [ "//components/sync/base" ]
+    deps += [
+      "//chrome/browser/image_fetcher",
+      "//components/sync/base",
+    ]
   }
 
   if (build_with_tflite_lib) {
@@ -174,8 +177,8 @@ if (!is_android) {
     testonly = true
 
     sources = [
+      "autocomplete_browsertest.cc",
       "autofill_across_iframes_browsertest.cc",
-      "autofill_autocomplete_browsertest.cc",
       "autofill_browsertest.cc",
       "autofill_metrics_browsertest.cc",
       "autofill_server_browsertest.cc",

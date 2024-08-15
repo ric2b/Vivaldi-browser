@@ -5,6 +5,7 @@
 #include "chrome/browser/tpcd/experiment/eligibility_service.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -35,7 +36,6 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace tpcd::experiment {
 
@@ -124,7 +124,7 @@ TEST_F(EligibilityServiceTest,
   base::HistogramTester histograms;
 
   EXPECT_CALL(*experiment_manager_, IsClientEligible)
-      .WillOnce(Return(absl::nullopt));
+      .WillOnce(Return(std::nullopt));
 
   EXPECT_CALL(*privacy_sandbox_delegate_,
               GetCookieDeprecationExperimentCurrentEligibility)
@@ -151,7 +151,7 @@ TEST_F(EligibilityServiceTest,
   base::HistogramTester histograms;
 
   EXPECT_CALL(*experiment_manager_, IsClientEligible)
-      .WillOnce(Return(absl::nullopt));
+      .WillOnce(Return(std::nullopt));
 
   EXPECT_CALL(*privacy_sandbox_delegate_,
               GetCookieDeprecationExperimentCurrentEligibility)
@@ -319,6 +319,32 @@ TEST_F(EligibilityServiceDisable3PCsTest, Onboarded_NotifyManager) {
       TrackingProtectionOnboardingFactory::GetForProfile(&profile_);
   // Simulate onboarding a profile.
   onboarding_service->OnboardingNoticeShown();
+}
+
+class EligibilityServiceSilentOnboardingTest
+    : public EligibilityServiceTestBase {
+ public:
+  EligibilityServiceSilentOnboardingTest() {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        features::kCookieDeprecationFacilitatedTesting,
+        {{kDisable3PCookiesName, "false"},
+         {kEnableSilentOnboardingName, "true"}});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(EligibilityServiceSilentOnboardingTest, Onboarded_NotifyManager) {
+  EXPECT_CALL(*experiment_manager_, IsClientEligible).WillOnce(Return(true));
+  EligibilityService eligibility_service(&profile_, experiment_manager_.get());
+
+  EXPECT_CALL(*experiment_manager_, NotifyProfileTrackingProtectionOnboarded);
+
+  auto* onboarding_service =
+      TrackingProtectionOnboardingFactory::GetForProfile(&profile_);
+  // Simulate onboarding a profile.
+  onboarding_service->SilentOnboardingNoticeShown();
 }
 
 }  // namespace tpcd::experiment

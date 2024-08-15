@@ -13,39 +13,13 @@ Note: The result is not mathematically meaningful when e < 1.
 
 import { makeTestGroup } from '../../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../../gpu_test.js';
-import { TypeF32, TypeF16 } from '../../../../../util/conversion.js';
-import { FP } from '../../../../../util/floating_point.js';
-import { biasedRange, fullF32Range, fullF16Range } from '../../../../../util/math.js';
-import { makeCaseCache } from '../../case_cache.js';
+import { TypeF16, TypeF32 } from '../../../../../util/conversion.js';
 import { allInputSources, run } from '../../expression.js';
 
+import { d } from './acosh.cache.js';
 import { builtin } from './builtin.js';
 
 export const g = makeTestGroup(GPUTest);
-
-const f32_inputs = [
-  ...biasedRange(1, 2, 100), // x near 1 can be problematic to implement
-  ...fullF32Range(),
-];
-const f16_inputs = [
-  ...biasedRange(1, 2, 100), // x near 1 can be problematic to implement
-  ...fullF16Range(),
-];
-
-export const d = makeCaseCache('acosh', {
-  f32_const: () => {
-    return FP.f32.generateScalarToIntervalCases(f32_inputs, 'finite', ...FP.f32.acoshIntervals);
-  },
-  f32_non_const: () => {
-    return FP.f32.generateScalarToIntervalCases(f32_inputs, 'unfiltered', ...FP.f32.acoshIntervals);
-  },
-  f16_const: () => {
-    return FP.f16.generateScalarToIntervalCases(f16_inputs, 'finite', ...FP.f16.acoshIntervals);
-  },
-  f16_non_const: () => {
-    return FP.f16.generateScalarToIntervalCases(f16_inputs, 'unfiltered', ...FP.f16.acoshIntervals);
-  },
-});
 
 g.test('abstract_float')
   .specURL('https://www.w3.org/TR/WGSL/#float-builtin-functions')

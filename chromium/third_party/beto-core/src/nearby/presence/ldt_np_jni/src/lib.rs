@@ -20,18 +20,19 @@
 //! - <https://www.iitk.ac.in/esc101/05Aug/tutorial/native1.1/index.html>
 //! - <https://docs.oracle.com/javase/8/docs/technotes/guides/jni/spec/jniTOC.html>
 
+// We are not actually no_std because the jni crate is pulling it in, but at least this enforces
+// that this lib isn't using anything from the std lib
 #![no_std]
-#![deny(missing_docs)]
+#![allow(unsafe_code)]
 
 // Allow using Box in no_std
 extern crate alloc;
 
 use alloc::boxed::Box;
 
-use jni::objects::JByteArray;
 use jni::{
-    objects::JClass,
-    sys::{jbyte, jbyteArray, jchar, jint, jlong},
+    objects::{JByteArray, JClass},
+    sys::{jbyte, jchar, jint, jlong},
     JNIEnv,
 };
 
@@ -45,149 +46,202 @@ use crypto_provider_default::CryptoProviderImpl;
 const MIN_DATA_LEN: usize = crypto_provider::aes::BLOCK_SIZE;
 const MAX_DATA_LEN: usize = crypto_provider::aes::BLOCK_SIZE * 2 - 1;
 
-/// Error return value for creating handles
+/// Required size constraints of input parameters
+const KEY_SEED_SIZE: usize = 32;
+const TAG_SIZE: usize = 32;
+
+/// Error return value for create operations
 const CREATE_ERROR: jlong = 0;
 
-// TODO: don't allow panics to cross FFI boundary
-// TODO: JNI null checks? (only if jni crate isn't doing them already).
+/// Status code returned on successful cipher operations
+const SUCCESS: jint = 0;
 
-// TODO: split this into separate APIs for encrypt and decrypt
-struct Ldt {
-    ldt_enc: LdtEncrypterXtsAes128<CryptoProviderImpl>,
-    ldt_dec: LdtNpAdvDecrypterXtsAes128<CryptoProviderImpl>,
-}
+type LdtAdvDecrypter = LdtNpAdvDecrypterXtsAes128<CryptoProviderImpl>;
+type LdtAdvEncrypter = LdtEncrypterXtsAes128<CryptoProviderImpl>;
 
-/// Create an LDT cipher.
+/// Marker trait to ensure above types are thread safe
+trait JniThreadSafe: Send + Sync {}
+
+impl JniThreadSafe for LdtAdvDecrypter {}
+
+impl JniThreadSafe for LdtAdvEncrypter {}
+
+/// Create a LDT Encryption cipher.
 ///
-/// Returns 0 for error, or the pointer as a jlong/i64.
-/// Safety: We know the key pointer is safe as it is coming directly from the JVM.
+/// Returns 0 on failure, or the non-zero handle as a jlong/i64 on success.
 #[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_createLdtCipher(
+extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_createEncryptionCipher(
     env: JNIEnv,
     _class: JClass,
-    key_seed: jbyteArray,
-    metadata_key_hmac_tag: jbyteArray,
+    java_key_seed: JByteArray,
 ) -> jlong {
-    env.get_array_length(unsafe { &JByteArray::from_raw(key_seed) })
-        .map_err(|_| CREATE_ERROR)
-        // check length
-        .and_then(|len| if len as usize != 32 { Err(CREATE_ERROR) } else { Ok(len) })
-        // extract u8 array
-        .and_then(|len| {
-            let mut jbyte_buf = [jbyte::default(); 32];
-            env.get_byte_array_region(
-                unsafe { &JByteArray::from_raw(key_seed) },
-                0,
-                &mut jbyte_buf[..],
-            )
-            .map_err(|_| CREATE_ERROR)
-            .map(|_| (len, jbyte_array_to_u8_array(jbyte_buf)))
-        })
-        // initialize ldt -- we already know the key is the right length
-        .and_then(|(_len, key_seed_buf)| {
-            let hkdf_key_seed = NpKeySeedHkdf::new(&key_seed_buf);
-            let ldt_enc = ldt_np_adv::LdtEncrypterXtsAes128::<CryptoProviderImpl>::new(
-                &hkdf_key_seed.legacy_ldt_key(),
-            );
+    create_map_to_error(|| {
+        let key_seed =
+            env.convert_byte_array(&java_key_seed).map_err(|_| CREATE_ERROR).and_then(|seed| {
+                if seed.len() != KEY_SEED_SIZE {
+                    Err(CREATE_ERROR)
+                } else {
+                    Ok(seed)
+                }
+            })?;
 
-            let mut tag_buff = [jbyte::default(); 32];
-            let tag = env
-                .get_byte_array_region(
-                    unsafe { &JByteArray::from_raw(metadata_key_hmac_tag) },
-                    0,
-                    &mut tag_buff[..],
-                )
-                .map_err(|_| CREATE_ERROR)
-                .map(|_| jbyte_array_to_u8_array(tag_buff))
-                .unwrap();
-            // TODO: Error handling
+        let hkdf_key_seed = NpKeySeedHkdf::<CryptoProviderImpl>::new(
+            #[allow(clippy::expect_used)]
+            key_seed.as_slice().try_into().expect("Length is checked above"),
+        );
 
-            let ldt_dec = ldt_np_adv::build_np_adv_decrypter_from_key_seed::<CryptoProviderImpl>(
-                &hkdf_key_seed,
-                tag,
-            );
-            box_to_handle(Ldt { ldt_enc, ldt_dec }).map_err(|_| CREATE_ERROR)
-        })
-        .unwrap_or_else(|e| e)
+        let cipher = LdtAdvEncrypter::new(&hkdf_key_seed.legacy_ldt_key());
+        box_to_handle(cipher).map_err(|_| CREATE_ERROR)
+    })
 }
 
-/// Close an LDT cipher.
+/// Create a LDT Decryption cipher.
+///
+/// Returns 0 on failure, or the non-zero handle as a jlong/i64 on success.
 #[no_mangle]
-pub extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_closeLdtCipher(
+extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_createDecryptionCipher(
+    env: JNIEnv,
+    _class: JClass,
+    java_key_seed: JByteArray,
+    java_hmac_tag: JByteArray,
+) -> jlong {
+    create_map_to_error(|| {
+        let key_seed =
+            env.convert_byte_array(&java_key_seed).map_err(|_| CREATE_ERROR).and_then(|seed| {
+                if seed.len() != KEY_SEED_SIZE {
+                    Err(CREATE_ERROR)
+                } else {
+                    Ok(seed)
+                }
+            })?;
+        let hmac_tag =
+            env.convert_byte_array(&java_hmac_tag).map_err(|_| CREATE_ERROR).and_then(|tag| {
+                if tag.len() != TAG_SIZE {
+                    Err(CREATE_ERROR)
+                } else {
+                    Ok(tag)
+                }
+            })?;
+        let hkdf_key_seed = NpKeySeedHkdf::<CryptoProviderImpl>::new(
+            #[allow(clippy::expect_used)]
+            key_seed.as_slice().try_into().expect("Length is checked above"),
+        );
+
+        #[allow(clippy::expect_used)]
+        let cipher = ldt_np_adv::build_np_adv_decrypter_from_key_seed::<CryptoProviderImpl>(
+            &hkdf_key_seed,
+            hmac_tag.as_slice().try_into().expect("Length is checked above"),
+        );
+        box_to_handle(cipher).map_err(|_| CREATE_ERROR)
+    })
+}
+
+fn create_map_to_error<F: Fn() -> Result<jlong, jlong>>(f: F) -> jlong {
+    f().unwrap_or_else(|e| e)
+}
+
+/// Close an LDT Encryption Cipher
+#[no_mangle]
+extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_closeEncryptCipher(
     _env: JNIEnv,
     _class: JClass,
-    ldt_handle: jlong,
-) -> jint {
+    handle: jlong,
+) {
     // create the box, let it be dropped
-    let _ = boxed_from_handle::<Ldt>(ldt_handle);
-    // success -- are there any meaningful error condtions we can even detect?
-    0
+    let _ = boxed_from_handle::<LdtAdvEncrypter>(handle);
+}
+
+/// Close an LDT Decryption Cipher
+#[no_mangle]
+extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_closeDecryptCipher(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) {
+    // create the box, let it be dropped
+    let _ = boxed_from_handle::<LdtAdvDecrypter>(handle);
 }
 
 /// Encrypt a buffer in place.
-/// Safety: We know the data jArray pointer is safe because it is coming directly from the JVM.
 #[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_encrypt(
+extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_encrypt(
     env: JNIEnv,
     _class: JClass,
-    ldt_handle: jlong,
+    handle: jlong,
     salt: jchar,
-    data: jbyteArray,
+    data: JByteArray,
 ) -> jint {
-    jbyte_cipher_data_as_u8_array(&env, data)
-        .and_then(|(len, mut data_u8)| {
-            with_handle::<Ldt, _, _>(ldt_handle, |ldt| {
-                ldt.ldt_enc.encrypt(&mut data_u8[..len], &expand_np_salt_to_padder(salt)).map_err(
-                    |err| match err {
-                        ldt::LdtError::InvalidLength(_) => CipherOpError::DataLen,
-                    },
-                )?;
-                env.set_byte_array_region(
-                    unsafe { &JByteArray::from_raw(data) },
-                    0,
-                    &u8_slice_to_jbyte_array(data_u8)[..len],
-                )
-                .map_err(|_| CipherOpError::JniOp)
-                .map(|_| 0) // success
-            })
+    map_to_error_code(|| {
+        let mut buffer =
+            env.convert_byte_array(&data).map_err(|_| EncryptError::JniOp).and_then(|data| {
+                if !(MIN_DATA_LEN..=MAX_DATA_LEN).contains(&data.len()) {
+                    Err(EncryptError::DataLen)
+                } else {
+                    Ok(data)
+                }
+            })?;
+
+        with_handle::<LdtAdvEncrypter, _, _>(handle, |cipher| {
+            cipher.encrypt(buffer.as_mut_slice(), &expand_np_salt_to_padder(salt)).map_err(
+                |err| match err {
+                    ldt::LdtError::InvalidLength(_) => EncryptError::DataLen,
+                },
+            )?;
+
+            // Avoid a copy since transmuting from a &[u8] to a &[i8] is safe
+            // Safety:
+            // - u8 and jbyte/i8 are the same size have the same alignment
+            let jbyte_buffer = bytes_to_jbytes(buffer.as_slice());
+
+            env.set_byte_array_region(&data, 0, jbyte_buffer)
+                .map_err(|_| EncryptError::JniOp)
+                .map(|_| SUCCESS)
         })
-        .unwrap_or_else(|e| e.to_jni_error_code())
+    })
 }
 
 /// Decrypt a buffer in place.
 /// Safety: We know the data pointer is safe because it is coming directly from the JVM.
 #[no_mangle]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_decrypt_1and_1verify(
+extern "system" fn Java_com_google_android_gms_nearby_presence_hazmat_LdtNpJni_decryptAndVerify(
     env: JNIEnv,
     _class: JClass,
-    ldt_handle: jlong,
+    handle: jlong,
     salt: jchar,
-    data: jbyteArray,
+    data: JByteArray,
 ) -> jint {
-    jbyte_cipher_data_as_u8_array(&env, data)
-        .and_then(|(len, mut data_u8)| {
-            with_handle::<Ldt, _, _>(ldt_handle, |ldt| {
-                let result = ldt
-                    .ldt_dec
-                    .decrypt_and_verify(&data_u8[..len], &expand_np_salt_to_padder(salt))
-                    .map_err(|err| match err {
-                        LdtAdvDecryptError::InvalidLength(_) => CipherOpError::DataLen,
-                        LdtAdvDecryptError::MacMismatch => CipherOpError::MacMisMatch,
-                    })?;
-                data_u8[..result.len()].copy_from_slice(result.as_slice());
-                env.set_byte_array_region(
-                    unsafe { &JByteArray::from_raw(data) },
-                    0,
-                    &u8_slice_to_jbyte_array(data_u8)[..len],
-                )
-                .map_err(|_| CipherOpError::JniOp)
-                .map(|_| 0) // success
-            })
+    map_to_error_code(|| {
+        let mut buffer =
+            env.convert_byte_array(&data).map_err(|_| DecryptError::JniOp).and_then(|data| {
+                if !(MIN_DATA_LEN..=MAX_DATA_LEN).contains(&data.len()) {
+                    Err(DecryptError::DataLen)
+                } else {
+                    Ok(data)
+                }
+            })?;
+
+        with_handle::<LdtAdvDecrypter, _, _>(handle, |cipher| {
+            let result = cipher
+                .decrypt_and_verify(buffer.as_mut_slice(), &expand_np_salt_to_padder(salt))
+                .map_err(|err| match err {
+                    LdtAdvDecryptError::InvalidLength(_) => DecryptError::DataLen,
+                    LdtAdvDecryptError::MacMismatch => DecryptError::MacMisMatch,
+                })?;
+
+            let jbyte_buffer = bytes_to_jbytes(result.as_slice());
+
+            env.set_byte_array_region(&data, 0, jbyte_buffer)
+                .map_err(|_| DecryptError::JniOp)
+                .map(|_| SUCCESS)
         })
-        .unwrap_or_else(|e| e.to_jni_error_code())
+    })
+}
+
+/// A zero-copy conversion from a u8 slice to a jbyte slice
+fn bytes_to_jbytes(bytes: &[u8]) -> &[jbyte] {
+    // Safety:
+    // - u8 and jbyte/i8 are the same size have the same alignment
+    unsafe { alloc::slice::from_raw_parts(bytes.as_ptr() as *const jbyte, bytes.len()) }
 }
 
 /// Reconstruct a `Box<T>` from `handle`, and invoke `f` with the resulting `&T`.
@@ -201,8 +255,7 @@ fn with_handle<T, U, F: FnMut(&T) -> U>(handle: jlong, mut f: F) -> U {
     let ret = f(&boxed);
 
     // don't consume the box -- need to keep the handle alive
-    Box::leak(boxed);
-
+    let _ = Box::leak(boxed);
     ret
 }
 
@@ -243,52 +296,6 @@ fn box_to_handle<T>(thing: T) -> Result<jlong, ()> {
         .map(|ptr_64: u64| ptr_64 as jlong)
 }
 
-/// Extract data suitable for Ldt128 cipher ops from a JNI jbyteArray.
-///
-/// Returns `(data len in buffer, buffer)`, or `Err` if any JNI ops fail.
-fn jbyte_cipher_data_as_u8_array(
-    env: &JNIEnv,
-    cipher_data: jbyteArray,
-) -> Result<(usize, [u8; MAX_DATA_LEN]), CipherOpError> {
-    let data_len = env
-        .get_array_length(unsafe { &JByteArray::from_raw(cipher_data) })
-        .map_err(|_| CipherOpError::JniOp)? as usize;
-    if !(MIN_DATA_LEN..=MAX_DATA_LEN).contains(&data_len) {
-        return Err(CipherOpError::DataLen);
-    }
-
-    let mut buf = [jbyte::default(); MAX_DATA_LEN];
-    env.get_byte_array_region(
-        unsafe { &JByteArray::from_raw(cipher_data) },
-        0,
-        &mut buf[0..data_len],
-    )
-    .map_err(|_| CipherOpError::JniOp)?;
-
-    Ok((data_len, jbyte_array_to_u8_array(buf)))
-}
-
-/// Convert a jbyte array to a u8 array
-fn jbyte_array_to_u8_array<const N: usize>(src: [jbyte; N]) -> [u8; N] {
-    let mut dest = [0_u8; N];
-    for i in 0..N {
-        // numeric cast doesn't alter bits, which is what we want
-        // https://doc.rust-lang.org/reference/expressions/operator-expr.html#semantics
-        dest[i] = src[i] as u8;
-    }
-    dest
-}
-
-fn u8_slice_to_jbyte_array<const N: usize>(src: [u8; N]) -> [jbyte; N] {
-    let mut dest = [0_i8; N];
-    for i in 0..N {
-        // numeric cast doesn't alter bits, which is what we want
-        // https://doc.rust-lang.org/reference/expressions/operator-expr.html#semantics
-        dest[i] = src[i] as jbyte;
-    }
-    dest
-}
-
 /// Expand the NP salt to the size needed to be an LDT XorPadder.
 ///
 /// Returns a XorPadder containing the HKDF of the salt.
@@ -297,23 +304,48 @@ fn expand_np_salt_to_padder(np_salt: jchar) -> XorPadder<{ crypto_provider::aes:
     ldt_np_adv::salt_padder::<16, CryptoProviderImpl>(salt_bytes.into())
 }
 
+fn map_to_error_code<E: JniError, F: Fn() -> Result<jint, E>>(f: F) -> jint {
+    f().unwrap_or_else(|e| e.to_jni_error_code())
+}
+
+trait JniError {
+    fn to_jni_error_code(&self) -> jint;
+}
+
 #[derive(Debug)]
-enum CipherOpError {
-    /// The mac did not match the provided tag
-    MacMisMatch,
+enum EncryptError {
     /// Data is the wrong length
     DataLen,
     /// JNI op failed
     JniOp,
 }
 
-impl CipherOpError {
+impl JniError for EncryptError {
+    fn to_jni_error_code(&self) -> jint {
+        match self {
+            Self::DataLen => -1,
+            Self::JniOp => -2,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum DecryptError {
+    /// Data is the wrong length
+    DataLen,
+    /// The mac did not match the provided tag
+    MacMisMatch,
+    /// JNI op failed
+    JniOp,
+}
+
+impl JniError for DecryptError {
     /// Returns an error code suitable for returning from Ldt encrypt/decrypt JNI calls.
     fn to_jni_error_code(&self) -> jint {
         match self {
-            CipherOpError::DataLen => -1,
-            CipherOpError::MacMisMatch => -2,
-            CipherOpError::JniOp => -3,
+            Self::DataLen => -1,
+            Self::JniOp => -2,
+            Self::MacMisMatch => -3,
         }
     }
 }

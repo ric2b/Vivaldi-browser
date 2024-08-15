@@ -57,7 +57,7 @@ template<typename AddressType, typename EntryType>
 bool RangeMap<AddressType, EntryType>::StoreRangeInternal(
     const AddressType& base, const AddressType& delta,
     const AddressType& size, const EntryType& entry) {
-  AddressType high;
+  AddressType high = AddressType();
   bool high_ok = false;
   if (size > 0) {
     std::pair<AddressType, bool> result = AddWithOverflowCheck(base, size - 1);

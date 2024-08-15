@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,7 +17,6 @@
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/service_worker_version_base_info.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/badging/badging.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_ancestor_frame_type.mojom.h"
 #include "url/gurl.h"
@@ -35,10 +35,6 @@ class RenderProcessHost;
 namespace ukm {
 class UkmRecorder;
 }  // namespace ukm
-
-namespace web_app {
-class WebAppSyncBridge;
-}  // namespace web_app
 
 namespace badging {
 class BadgeManagerDelegate;
@@ -72,9 +68,9 @@ constexpr base::TimeDelta kBadgingMinimumUpdateInterval = base::Hours(2);
 class BadgeManager : public KeyedService, public blink::mojom::BadgeService {
  public:
   // The badge being applied to a document URL or service worker scope. If the
-  // optional is |absl::nullopt| then the badge is "flag". Otherwise the badge
+  // optional is |std::nullopt| then the badge is "flag". Otherwise the badge
   // is a non-zero integer.
-  using BadgeValue = absl::optional<uint64_t>;
+  using BadgeValue = std::optional<uint64_t>;
 
   explicit BadgeManager(Profile* profile);
 
@@ -98,9 +94,9 @@ class BadgeManager : public KeyedService, public blink::mojom::BadgeService {
       const content::ServiceWorkerVersionBaseInfo& info,
       mojo::PendingReceiver<blink::mojom::BadgeService> receiver);
 
-  // Gets the badge for |app_id|. This will be absl::nullopt if the app is not
+  // Gets the badge for |app_id|. This will be std::nullopt if the app is not
   // badged.
-  absl::optional<BadgeValue> GetBadgeValue(const webapps::AppId& app_id);
+  std::optional<BadgeValue> GetBadgeValue(const webapps::AppId& app_id);
 
   bool HasRecentApiUsage(const webapps::AppId& app_id) const;
 
@@ -110,11 +106,6 @@ class BadgeManager : public KeyedService, public blink::mojom::BadgeService {
   void ClearBadgeForTesting(const webapps::AppId& app_id,
                             ukm::UkmRecorder* test_recorder);
   const base::Clock* SetClockForTesting(const base::Clock* clock);
-  void SetSyncBridgeForTesting(web_app::WebAppSyncBridge* sync_bridge);
-
- protected:
-  // Protected for tests.
-  BadgeManager(Profile* profile, web_app::WebAppSyncBridge* sync_bridge);
 
  private:
   // The BindingContext of a mojo request. Allows mojo calls to be tied back
@@ -166,10 +157,10 @@ class BadgeManager : public KeyedService, public blink::mojom::BadgeService {
     GURL scope_;
   };
 
-  // Updates the badge for |app_id| to be |value|, if it is not absl::nullopt.
-  // If value is |absl::nullopt| then this clears the badge.
+  // Updates the badge for |app_id| to be |value|, if it is not std::nullopt.
+  // If value is |std::nullopt| then this clears the badge.
   void UpdateBadge(const webapps::AppId& app_id,
-                   absl::optional<BadgeValue> value);
+                   std::optional<BadgeValue> value);
 
   // blink::mojom::BadgeService:
   // Note: These are private to stop them being called outside of mojo as they
@@ -180,8 +171,6 @@ class BadgeManager : public KeyedService, public blink::mojom::BadgeService {
   const raw_ptr<Profile, DanglingUntriaged> profile_;
 
   raw_ptr<const base::Clock> clock_;
-
-  raw_ptr<web_app::WebAppSyncBridge, DanglingUntriaged> sync_bridge_;
 
   // All the mojo receivers for the BadgeManager. Keeps track of the
   // render_frame the binding is associated with, so as to not have to rely

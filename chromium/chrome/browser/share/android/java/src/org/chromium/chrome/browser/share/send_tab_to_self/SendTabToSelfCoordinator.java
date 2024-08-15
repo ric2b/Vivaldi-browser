@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.share.send_tab_to_self;
 
-import android.accounts.Account;
 import android.content.Context;
 
 import androidx.annotation.StringRes;
@@ -22,7 +21,7 @@ import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerDelegat
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
-import org.chromium.components.signin.AccountUtils;
+import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.base.GoogleServiceAuthError;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.SyncService;
@@ -31,16 +30,14 @@ import org.chromium.ui.base.WindowAndroid;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Coordinator for displaying the send tab to self feature.
- */
+/** Coordinator for displaying the send tab to self feature. */
 public class SendTabToSelfCoordinator {
     /**
      * Waits for Sync to download the list of target devices after sign-in. Aborts if the
      * user dismisses the sign-in bottom sheet ("account picker") before success.
      */
-    private static class TargetDeviceListWaiter
-            extends EmptyBottomSheetObserver implements SyncService.SyncStateChangedListener {
+    private static class TargetDeviceListWaiter extends EmptyBottomSheetObserver
+            implements SyncService.SyncStateChangedListener {
         private final BottomSheetController mBottomSheetController;
         private final String mUrl;
         private final Runnable mGotDeviceListCallback;
@@ -51,8 +48,11 @@ public class SendTabToSelfCoordinator {
          * account picker bottom sheet was closed and there's nothing left to do (simply don't
          * show any other bottom sheet).
          */
-        public TargetDeviceListWaiter(BottomSheetController bottomSheetController, String url,
-                Runnable gotDeviceListCallback, Profile profile) {
+        public TargetDeviceListWaiter(
+                BottomSheetController bottomSheetController,
+                String url,
+                Runnable gotDeviceListCallback,
+                Profile profile) {
             mBottomSheetController = bottomSheetController;
             mUrl = url;
             mGotDeviceListCallback = gotDeviceListCallback;
@@ -114,11 +114,11 @@ public class SendTabToSelfCoordinator {
 
         @Override
         public void signIn(
-                String accountEmail, Callback<GoogleServiceAuthError> onSignInErrorCallback) {
+                CoreAccountInfo accountInfo,
+                Callback<GoogleServiceAuthError> onSignInErrorCallback) {
             SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(mProfile);
-            Account account = AccountUtils.createAccountFromName(accountEmail);
             signinManager.signin(
-                    account,
+                    accountInfo,
                     SigninAccessPoint.SEND_TAB_TO_SELF_PROMO,
                     new SigninManager.SignInCallback() {
                         @Override
@@ -145,8 +145,13 @@ public class SendTabToSelfCoordinator {
     private final Profile mProfile;
     private final DeviceLockActivityLauncher mDeviceLockActivityLauncher;
 
-    public SendTabToSelfCoordinator(Context context, WindowAndroid windowAndroid, String url,
-            String title, BottomSheetController controller, Profile profile,
+    public SendTabToSelfCoordinator(
+            Context context,
+            WindowAndroid windowAndroid,
+            String url,
+            String title,
+            BottomSheetController controller,
+            Profile profile,
             DeviceLockActivityLauncher deviceLockActivityLauncher) {
         mContext = context;
         mWindowAndroid = windowAndroid;
@@ -177,13 +182,18 @@ public class SendTabToSelfCoordinator {
                                 mContext, mUrl, mTitle, mController, targetDevices, mProfile),
                         true);
                 return;
-            case EntryPointDisplayReason.OFFER_SIGN_IN: {
-                MetricsRecorder.recordSendingEvent(SendingEvent.SHOW_SIGNIN_PROMO);
-                new AccountPickerBottomSheetCoordinator(mWindowAndroid, mController,
-                        new SendTabToSelfAccountPickerDelegate(this::onSignInComplete, mProfile),
-                        new BottomSheetStrings(), mDeviceLockActivityLauncher);
-                return;
-            }
+            case EntryPointDisplayReason.OFFER_SIGN_IN:
+                {
+                    MetricsRecorder.recordSendingEvent(SendingEvent.SHOW_SIGNIN_PROMO);
+                    new AccountPickerBottomSheetCoordinator(
+                            mWindowAndroid,
+                            mController,
+                            new SendTabToSelfAccountPickerDelegate(
+                                    this::onSignInComplete, mProfile),
+                            new BottomSheetStrings(),
+                            mDeviceLockActivityLauncher);
+                    return;
+                }
         }
     }
 
@@ -192,7 +202,7 @@ public class SendTabToSelfCoordinator {
     }
 
     private void onTargetDeviceListReady() {
-        mController.hideContent(mController.getCurrentSheetContent(), /*animate=*/true);
+        mController.hideContent(mController.getCurrentSheetContent(), /* animate= */ true);
         show();
     }
 

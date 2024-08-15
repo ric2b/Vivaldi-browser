@@ -79,7 +79,7 @@ enum class NotificationCatalogName {
   kBluetoothPairingRequest = 64,
   // [Deprecated] kBluetoothPairedDevice = 65,
   kCellularSetup = 66,
-  kScreenSecurity = 67,
+  // [Deprecated] kScreenSecurity = 67,
   kWifiToggle = 68,
   kUSBPeripheralInvalidDpCable = 69,
   kUSBPeripheralInvalidUSB4ValidTBTCable = 70,
@@ -190,22 +190,24 @@ enum class NotificationCatalogName {
   kSubAppsUninstall = 175,
   kNetworkCarrierUnlock = 176,
   kCoralFeature = 177,
-  kMaxValue = kCoralFeature
+  kInputDeviceSettings = 178,
+  kMaxValue = kInputDeviceSettings
 };
 
 // A living catalog that registers system nudges.
 // Current values should not be renumbered or removed. Please keep in sync with
-// "NudgeCatalogName" in tools/metrics/histograms/enums.xml.
+// "NudgeCatalogName" in tools/metrics/histograms/metadata/ash/enums.xml.
 // To deprecate comment out the entry.
-// Please call `SystemNudgeController::RecordNudgeAction` when the nudge's
+// Please call `SystemNudgeController::MaybeRecordNudgeAction()` (old nudges) or
+// `AnchoredNudgeManager::Get()->MaybeRecordNudgeAction()` when the nudge's
 // suggested action is performed by the user, if applicable.
 enum class NudgeCatalogName {
   kTestCatalogName = 0,
   kDictation = 1,
   // [Deprecated] kMultipaste = 2,
-  kDarkLightMode = 3,
+  // [Deprecated] kDarkLightMode = 3,
   kAutozoom = 4,
-  kAdaptiveCharging = 5,
+  // [Deprecated] kAdaptiveCharging = 5,
   kPhoneHub = 6,
   kClipboardHistoryZeroState = 7,
   kClipboardHistoryOnboarding = 8,
@@ -222,7 +224,13 @@ enum class NudgeCatalogName {
   kVideoConferenceTrayCameraMicrophoneUseWhileDisabled = 19,
   kMultitaskMenuClamshell = 20,
   kMultitaskMenuTablet = 21,
-  kMaxValue = kMultitaskMenuTablet
+  kCaptureModeEducationShortcutNudge = 22,
+  kCaptureModeEducationShortcutTutorial = 23,
+  kCaptureModeEducationQuickSettingsNudge = 24,
+  kGameDashboardControlsNudge = 25,
+  // [Deprecated] kWebsiteTelemetryReportingNudge = 26,
+  kStandaloneWindowMigrationUx = 27,
+  kMaxValue = kStandaloneWindowMigrationUx
 };
 
 // A living catalog that registers toasts.
@@ -247,10 +255,10 @@ enum class ToastCatalogName {
   kAssistantLoading = 14,
   kTestCatalogName = 15,
   kMaximumDeskLaunchTemplate = 16,
-  kEnterOverviewGesture = 17,
-  kExitOverviewGesture = 18,
-  kNextDeskGesture = 19,
-  kPreviousDeskGesture = 20,
+  // [Deprecated] kEnterOverviewGesture = 17,
+  // [Deprecated] kExitOverviewGesture = 18,
+  // [Deprecated] kNextDeskGesture = 19,
+  // [Deprecated] kPreviousDeskGesture = 20,
   kMoveVisibleOnAllDesksWindow = 21,
   kAppCannotSnap = 22,
   kCrostiniUnsupportedVirtualKeyboard = 23,
@@ -279,7 +287,8 @@ enum class ToastCatalogName {
   kBatterySaverEnabled = 46,
   kDictationMicMuted = 47,
   kVideoConferenceTraySpeakOnMuteOptInConfirmation = 48,
-  kMaxValue = kVideoConferenceTraySpeakOnMuteOptInConfirmation
+  kAppNotClosable = 49,
+  kMaxValue = kAppNotClosable
 };
 
 }  // namespace ash

@@ -317,23 +317,6 @@ class InputMethodPrivateSetCompositionRangeFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class InputMethodPrivateGetTextFieldBoundsFunction : public ExtensionFunction {
- public:
-  InputMethodPrivateGetTextFieldBoundsFunction(
-      const InputMethodPrivateGetTextFieldBoundsFunction&) = delete;
-  InputMethodPrivateGetTextFieldBoundsFunction& operator=(
-      const InputMethodPrivateGetTextFieldBoundsFunction&) = delete;
-  InputMethodPrivateGetTextFieldBoundsFunction() = default;
-
- protected:
-  ~InputMethodPrivateGetTextFieldBoundsFunction() override = default;
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
- private:
-  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.getTextFieldBounds",
-                             INPUTMETHODPRIVATE_GETTEXTFIELDBOUNDS)
-};
 class InputMethodPrivateResetFunction : public ExtensionFunction {
  public:
   InputMethodPrivateResetFunction() = default;
@@ -450,7 +433,7 @@ class InputMethodAPI : public BrowserContextKeyedAPI,
   }
   static const bool kServiceIsNULLWhileTesting = true;
 
-  const raw_ptr<content::BrowserContext, ExperimentalAsh> context_;
+  const raw_ptr<content::BrowserContext> context_;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<chromeos::ExtensionInputMethodEventRouter>

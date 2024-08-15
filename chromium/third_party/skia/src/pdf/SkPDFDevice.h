@@ -96,7 +96,7 @@ public:
 
     void drawDevice(SkDevice*, const SkSamplingOptions&, const SkPaint&) override;
     void drawSpecial(SkSpecialImage*, const SkMatrix&, const SkSamplingOptions&,
-                     const SkPaint&) override;
+                     const SkPaint&, SkCanvas::SrcRectConstraint) override;
 
     sk_sp<SkSurface> makeSurface(const SkImageInfo&, const SkSurfaceProps&) override;
     sk_sp<SkDevice> createDevice(const CreateInfo&, const SkPaint*) override;
@@ -192,7 +192,7 @@ private:
 
     void clearMaskOnGraphicState(SkDynamicMemoryWStream*);
     void setGraphicState(SkPDFIndirectReference gs, SkDynamicMemoryWStream*);
-    void drawFormXObject(SkPDFIndirectReference xObject, SkDynamicMemoryWStream*);
+    void drawFormXObject(SkPDFIndirectReference xObject, SkDynamicMemoryWStream*, SkPath* shape);
 
     bool hasEmptyClip() const { return this->cs().isEmpty(this->bounds()); }
 

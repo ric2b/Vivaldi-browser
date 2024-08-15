@@ -21,29 +21,23 @@ namespace borealis {
 // find it ~if you go to the place we all know and love~.
 class BorealisTokenHardwareChecker : public TokenHardwareChecker {
  public:
-  static BorealisFeatures::AllowStatus BuildAndCheck(Data data);
+  // Returns true if hardware is sufficient, false otherwise.
+  static bool BuildAndCheck(Data data);
 
   explicit BorealisTokenHardwareChecker(Data data);
 
   ~BorealisTokenHardwareChecker();
 
-  BorealisFeatures::AllowStatus Check() const;
+  // Returns true if hardware is sufficient, false otherwise.
+  bool Check() const;
 
  private:
   // Helper method that performs different checks based on the user's board.
-  BorealisFeatures::AllowStatus BoardSpecificChecks() const;
+  bool BoardSpecificChecks() const;
 
   // Returns the true if the board's CPU matches the given |cpu_regex| and RAM
   // is more than 7G.
   bool HasSufficientHardware(const std::string& cpu_regex) const;
-
-  // Performs a token check for the |expected| token with the given |salt|. If
-  // the token matches we log a WARNING, identifying the token by |name|, since
-  // we only expect tokens to be used on unreleased/underpowered devices by
-  // internal developers.
-  bool HasNamedToken(const char* name,
-                     const char* salt,
-                     const char* expected) const;
 
   // Determines if this hardware has the correct segmentation parameters (see
   // b/274537000 for details).

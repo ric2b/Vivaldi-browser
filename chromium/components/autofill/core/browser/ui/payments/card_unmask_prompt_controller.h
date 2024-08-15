@@ -23,7 +23,8 @@ class CardUnmaskPromptController {
   virtual void OnUnmaskPromptAccepted(const std::u16string& cvc,
                                       const std::u16string& exp_month,
                                       const std::u16string& exp_year,
-                                      bool enable_fido_auth) = 0;
+                                      bool enable_fido_auth,
+                                      bool was_checkbox_visible) = 0;
   virtual void NewCardLinkClicked() = 0;
 
   // State.
@@ -33,7 +34,7 @@ class CardUnmaskPromptController {
   virtual int GetCvcImageRid() const = 0;
   virtual bool ShouldRequestExpirationDate() const = 0;
 #if BUILDFLAG(IS_ANDROID)
-  virtual std::string GetCardIconString() const = 0;
+  virtual Suggestion::Icon GetCardIcon() const = 0;
   virtual std::u16string GetCardName() const = 0;
   virtual std::u16string GetCardLastFourDigits() const = 0;
   virtual std::u16string GetCardExpiration() const = 0;

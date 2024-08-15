@@ -337,7 +337,7 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   base::FilePath relative_partition_path = GetStoragePartitionPath(
       partition_config.partition_domain(), partition_config.partition_name());
 
-  absl::optional<StoragePartitionConfig> fallback_config =
+  std::optional<StoragePartitionConfig> fallback_config =
       partition_config.GetFallbackForBlobUrls();
   StoragePartitionImpl* fallback_for_blob_urls =
       fallback_config.has_value() ? Get(*fallback_config, /*can_create=*/false)
@@ -437,11 +437,9 @@ void StoragePartitionImplMap::GarbageCollect(
 }
 
 void StoragePartitionImplMap::ForEach(
-    BrowserContext::StoragePartitionCallback callback) {
-  for (PartitionMap::const_iterator it = partitions_.begin();
-       it != partitions_.end();
-       ++it) {
-    callback.Run(it->second.get());
+    base::FunctionRef<void(StoragePartition*)> fn) {
+  for (const auto& [config, partition] : partitions_) {
+    fn(partition.get());
   }
 }
 

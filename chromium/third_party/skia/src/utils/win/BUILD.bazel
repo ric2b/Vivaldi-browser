@@ -22,7 +22,6 @@ WIN_FILES = [
     "SkIStream.h",
     "SkObjBase.h",
     "SkTScopedComPtr.h",
-    "SkWGL.h",
     "SkWGL_win.cpp",
 ]
 

@@ -58,6 +58,7 @@
 #define FFMPEG_OPT_ADRIFT_THRESHOLD 1
 #define FFMPEG_OPT_ENC_TIME_BASE_NUM 1
 #define FFMPEG_OPT_TOP 1
+#define FFMPEG_OPT_FORCE_KF_SOURCE_NO_DROP 1
 
 enum VideoSyncMethod {
     VSYNC_AUTO = -1,
@@ -301,6 +302,9 @@ typedef struct OutputFilter {
 
     /* pts of the last frame received from this filter, in AV_TIME_BASE_Q */
     int64_t last_pts;
+
+    uint64_t nb_frames_dup;
+    uint64_t nb_frames_drop;
 } OutputFilter;
 
 typedef struct FilterGraph {
@@ -342,8 +346,6 @@ typedef struct InputStream {
     const AVCodecDescriptor *codec_desc;
 
     AVRational framerate_guessed;
-
-    int64_t nb_samples; /* number of samples in the last decoded audio frame before looping */
 
     AVDictionary *decoder_opts;
     AVRational framerate;               /* framerate forced with -r */
@@ -387,11 +389,6 @@ typedef struct InputStream {
     uint64_t decode_errors;
 } InputStream;
 
-typedef struct LastFrameDuration {
-    int     stream_idx;
-    int64_t duration;
-} LastFrameDuration;
-
 typedef struct InputFile {
     const AVClass *class;
 
@@ -423,9 +420,9 @@ typedef struct InputFile {
     int accurate_seek;
 
     /* when looping the input file, this queue is used by decoders to report
-     * the last frame duration back to the demuxer thread */
-    AVThreadMessageQueue *audio_duration_queue;
-    int                   audio_duration_queue_size;
+     * the last frame timestamp back to the demuxer thread */
+    AVThreadMessageQueue *audio_ts_queue;
+    int                   audio_ts_queue_size;
 } InputFile;
 
 enum forced_keyframes_const {
@@ -484,7 +481,9 @@ typedef enum {
 
 enum {
     KF_FORCE_SOURCE         = 1,
+#if FFMPEG_OPT_FORCE_KF_SOURCE_NO_DROP
     KF_FORCE_SOURCE_NO_DROP = 2,
+#endif
 };
 
 typedef struct KeyframeForceCtx {
@@ -533,10 +532,6 @@ typedef struct OutputStream {
     Encoder *enc;
     AVCodecContext *enc_ctx;
 
-    uint64_t nb_frames_dup;
-    uint64_t nb_frames_drop;
-    int64_t last_dropped;
-
     /* video only */
     AVRational frame_rate;
     AVRational max_frame_rate;
@@ -582,8 +577,6 @@ typedef struct OutputStream {
     // The encoder and the bitstream filters have been initialized and the stream
     // parameters are set in the AVStream.
     int initialized;
-
-    int inputs_done;
 
     const char *attachment_filename;
 
@@ -817,7 +810,7 @@ int dec_packet(InputStream *ist, const AVPacket *pkt, int no_eof);
 int enc_alloc(Encoder **penc, const AVCodec *codec);
 void enc_free(Encoder **penc);
 
-int enc_open(OutputStream *ost, AVFrame *frame);
+int enc_open(OutputStream *ost, const AVFrame *frame);
 int enc_subtitle(OutputFile *of, OutputStream *ost, const AVSubtitle *sub);
 int enc_frame(OutputStream *ost, AVFrame *frame);
 int enc_flush(void);
@@ -880,17 +873,6 @@ int trigger_fix_sub_duration_heartbeat(OutputStream *ost, const AVPacket *pkt);
 int fix_sub_duration_heartbeat(InputStream *ist, int64_t signal_pts);
 void update_benchmark(const char *fmt, ...);
 
-/**
- * Merge two return codes - return one of the error codes if at least one of
- * them was negative, 0 otherwise.
- * Currently just picks the first one, eventually we might want to do something
- * more sophisticated, like sorting them by priority.
- */
-static inline int err_merge(int err0, int err1)
-{
-    return (err0 < 0) ? err0 : FFMIN(err1, 0);
-}
-
 #define SPECIFIER_OPT_FMT_str  "%s"
 #define SPECIFIER_OPT_FMT_i    "%i"
 #define SPECIFIER_OPT_FMT_i64  "%"PRId64
@@ -941,15 +923,5 @@ extern const char * const opt_name_frame_rates[];
 #if FFMPEG_OPT_TOP
 extern const char * const opt_name_top_field_first[];
 #endif
-
-static inline void pkt_move(void *dst, void *src)
-{
-    av_packet_move_ref(dst, src);
-}
-
-static inline void frame_move(void *dst, void *src)
-{
-    av_frame_move_ref(dst, src);
-}
 
 #endif /* FFTOOLS_FFMPEG_H */

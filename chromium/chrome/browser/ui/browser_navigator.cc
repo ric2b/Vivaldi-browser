@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
+#include "chrome/browser/apps/link_capturing/link_capturing_tab_data.h"
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/platform_util.h"
@@ -41,6 +42,7 @@
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/url_constants.h"
 #include "components/captive_portal/core/buildflags.h"
+#include "components/constrained_window/constrained_window_views.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/password_manager/content/common/web_ui_constants.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -183,7 +185,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
   Profile* profile = params.initiating_profile;
 
   if (params.open_pwa_window_if_possible) {
-    absl::optional<webapps::AppId> app_id =
+    std::optional<webapps::AppId> app_id =
         web_app::FindInstalledAppWithUrlInScope(profile, params.url,
                                                 /*window_only=*/true);
     if (!app_id && params.force_open_pwa_window) {
@@ -502,9 +504,19 @@ class ScopedBrowserShower {
   ~ScopedBrowserShower() {
     BrowserWindow* window = params_->browser->window();
     if (params_->window_action == NavigateParams::SHOW_WINDOW_INACTIVE) {
+      // TODO(crbug.com/1490267): investigate if SHOW_WINDOW_INACTIVE needs to
+      // be supported for tab modal popups.
+      CHECK_EQ(params_->is_tab_modal_popup, false);
       window->ShowInactive();
     } else if (params_->window_action == NavigateParams::SHOW_WINDOW) {
-      window->Show();
+      if (params_->is_tab_modal_popup) {
+        CHECK_EQ(params_->disposition, WindowOpenDisposition::NEW_POPUP);
+        CHECK_NE(source_contents_, nullptr);
+        constrained_window::ShowModalDialog(window->GetNativeWindow(),
+                                            source_contents_);
+      } else {
+        window->Show();
+      }
       // If a user gesture opened a popup window, focus the contents.
       if (params_->user_gesture &&
           (params_->disposition == WindowOpenDisposition::NEW_POPUP ||
@@ -517,9 +529,14 @@ class ScopedBrowserShower {
     }
   }
 
+  void set_source_contents(content::WebContents* source_contents) {
+    source_contents_ = source_contents;
+  }
+
  private:
   raw_ptr<NavigateParams> params_;
   raw_ptr<content::WebContents*> contents_;
+  raw_ptr<content::WebContents> source_contents_;
 };
 
 std::unique_ptr<content::WebContents> CreateTargetContents(
@@ -606,7 +623,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   // TODO(crbug.com/1096345): Remove this code after we integrate with intent
   // handling.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  const absl::optional<ash::SystemWebAppType> capturing_system_app_type =
+  const std::optional<ash::SystemWebAppType> capturing_system_app_type =
       ash::GetCapturingSystemAppForURL(params->initiating_profile, params->url);
   if (capturing_system_app_type &&
       (!params->browser ||
@@ -669,17 +686,15 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   // Picture-in-picture browser windows must have a source contents in order for
   // the window to function correctly. If we have no source contents to work
   // with (e.g. if an extension popup attempts to open a PiP window), we should
-  // cancel the navigation.
-  //
-  // If it does have source contents, only allow the navigation if the scheme of
-  // the URL in the omnibox is either https:// or file://, otherwise the omnibox
-  // displayed in the PiP window may be misleading in certain scenarios (see
-  // https://crbug.com/1460025)
+  // cancel the navigation.  The source URL must also be of a type that's
+  // allowed to open document PiP.  See `PictureInPictureWindowManager` for
+  // details on what's allowed.
   if (params->disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
     const GURL& url = params->source_contents
                           ? params->source_contents->GetLastCommittedURL()
                           : GURL();
-    if (!url.SchemeIs(url::kHttpsScheme) && !url.SchemeIsFile()) {
+    if (!PictureInPictureWindowManager::IsSupportedForDocumentPictureInPicture(
+            url)) {
       return nullptr;
     }
   }
@@ -796,6 +811,9 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
 
   // Make sure the Browser is shown if params call for it.
   ScopedBrowserShower shower(params, &contents_to_navigate_or_insert);
+  if (params->is_tab_modal_popup) {
+    shower.set_source_contents(params->source_contents);
+  }
 
   // Makes sure any WebContents created by this function is destroyed if
   // not properly added to a tab strip.
@@ -883,6 +901,21 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
     params->source_contents->Focus();
   }
   } // Vivaldi
+
+  if (contents_to_insert) {
+    // Save data needed for link capturing into apps that cannot otherwise be
+    // inferred later in the navigation. These are only needed when the
+    // navigation happens in a different tab to the link click.
+    apps::SetLinkCapturingSourceDisposition(contents_to_insert.get(),
+                                            params->disposition);
+#if BUILDFLAG(IS_CHROMEOS)
+    if (source_browser && source_browser != params->browser &&
+        source_browser->app_controller()) {
+      apps::SetLinkCapturingSourceAppId(
+          contents_to_insert.get(), source_browser->app_controller()->app_id());
+    }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+  }
 
   if (params->source_contents == contents_to_navigate_or_insert) {
     // The navigation occurred in the source tab.

@@ -48,10 +48,10 @@ import getopt
 import math  # for log
 import os
 import re
-import sre_compile
 import string
 import sys
 import unicodedata
+
 
 _USAGE = r"""
 Syntax: cpplint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
@@ -777,16 +777,16 @@ _global_error_suppressions = {}
 def ParseNolintSuppressions(filename, raw_line, linenum, error):
     """Updates the global list of line error-suppressions.
 
-  Parses any NOLINT comments on the current line, updating the global
-  error_suppressions store.  Reports an error if the NOLINT comment
-  was malformed.
+    Parses any NOLINT comments on the current line, updating the global
+    error_suppressions store.  Reports an error if the NOLINT comment
+    was malformed.
 
-  Args:
-    filename: str, the name of the input file.
-    raw_line: str, the line of input text, with comments.
-    linenum: int, the number of the current line.
-    error: function, an error handler.
-  """
+    Args:
+        filename: str, the name of the input file.
+        raw_line: str, the line of input text, with comments.
+        linenum: int, the number of the current line.
+        error: function, an error handler.
+    """
     matched = Search(r'\bNOLINT(NEXTLINE)?\b(\([^)]+\))?', raw_line)
     if matched:
         if matched.group(1):
@@ -810,12 +810,12 @@ def ParseNolintSuppressions(filename, raw_line, linenum, error):
 def ProcessGlobalSuppresions(lines):
     """Updates the list of global error suppressions.
 
-  Parses any lint directives in the file that have global effect.
+    Parses any lint directives in the file that have global effect.
 
-  Args:
-    lines: An array of strings, each representing a line of the file, with the
-           last element being empty if the file is terminated with a newline.
-  """
+    Args:
+        lines: An array of strings, each representing a line of the file, with the
+            last element being empty if the file is terminated with a newline.
+    """
     for line in lines:
         if _SEARCH_C_FILE.search(line):
             for category in _DEFAULT_C_SUPPRESSED_CATEGORIES:
@@ -834,16 +834,16 @@ def ResetNolintSuppressions():
 def IsErrorSuppressedByNolint(category, linenum):
     """Returns true if the specified error category is suppressed on this line.
 
-  Consults the global error_suppressions map populated by
-  ParseNolintSuppressions/ProcessGlobalSuppresions/ResetNolintSuppressions.
+    Consults the global error_suppressions map populated by
+    ParseNolintSuppressions/ProcessGlobalSuppresions/ResetNolintSuppressions.
 
-  Args:
-    category: str, the category of the error.
-    linenum: int, the current line number.
-  Returns:
-    bool, True iff the error should be suppressed due to a NOLINT comment or
-    global suppression.
-  """
+    Args:
+        category: str, the category of the error.
+        linenum: int, the current line number.
+    Returns:
+        bool, True iff the error should be suppressed due to a NOLINT comment or
+        global suppression.
+    """
     return (_global_error_suppressions.get(category, False)
             or linenum in _error_suppressions.get(category, set())
             or linenum in _error_suppressions.get(None, set()))
@@ -855,32 +855,32 @@ def Match(pattern, s):
     # performance reasons; factoring it out into a separate function turns out
     # to be noticeably expensive.
     if pattern not in _regexp_compile_cache:
-        _regexp_compile_cache[pattern] = sre_compile.compile(pattern)
+        _regexp_compile_cache[pattern] = re.compile(pattern)
     return _regexp_compile_cache[pattern].match(s)
 
 
 def ReplaceAll(pattern, rep, s):
     """Replaces instances of pattern in a string with a replacement.
 
-  The compiled regex is kept in a cache shared by Match and Search.
+    The compiled regex is kept in a cache shared by Match and Search.
 
-  Args:
-    pattern: regex pattern
-    rep: replacement text
-    s: search string
+    Args:
+        pattern: regex pattern
+        rep: replacement text
+        s: search string
 
-  Returns:
-    string with replacements made (or original string if no replacements)
-  """
+    Returns:
+        string with replacements made (or original string if no replacements)
+    """
     if pattern not in _regexp_compile_cache:
-        _regexp_compile_cache[pattern] = sre_compile.compile(pattern)
+        _regexp_compile_cache[pattern] = re.compile(pattern)
     return _regexp_compile_cache[pattern].sub(rep, s)
 
 
 def Search(pattern, s):
     """Searches the string for the pattern, caching the compiled regexp."""
     if pattern not in _regexp_compile_cache:
-        _regexp_compile_cache[pattern] = sre_compile.compile(pattern)
+        _regexp_compile_cache[pattern] = re.compile(pattern)
     return _regexp_compile_cache[pattern].search(s)
 
 
@@ -892,15 +892,15 @@ def _IsSourceExtension(s):
 class _IncludeState(object):
     """Tracks line numbers for includes, and the order in which includes appear.
 
-  include_list contains list of lists of (header, line number) pairs.
-  It's a lists of lists rather than just one flat list to make it
-  easier to update across preprocessor boundaries.
+    include_list contains list of lists of (header, line number) pairs.
+    It's a lists of lists rather than just one flat list to make it
+    easier to update across preprocessor boundaries.
 
-  Call CheckNextIncludeOrder() once for each header in the file, passing
-  in the type constants defined above. Calls in an illegal order will
-  raise an _IncludeError with an appropriate error message.
+    Call CheckNextIncludeOrder() once for each header in the file, passing
+    in the type constants defined above. Calls in an illegal order will
+    raise an _IncludeError with an appropriate error message.
 
-  """
+    """
     # self._section will move monotonically through this set. If it ever
     # needs to move backwards, CheckNextIncludeOrder will raise an error.
     _INITIAL_SECTION = 0
@@ -931,12 +931,12 @@ class _IncludeState(object):
     def FindHeader(self, header):
         """Check if a header has already been included.
 
-    Args:
-      header: header to check.
-    Returns:
-      Line number of previous occurrence, or -1 if the header has not
-      been seen before.
-    """
+        Args:
+            header: header to check.
+        Returns:
+            Line number of previous occurrence, or -1 if the header has not
+            been seen before.
+        """
         for section_list in self.include_list:
             for f in section_list:
                 if f[0] == header:
@@ -946,9 +946,9 @@ class _IncludeState(object):
     def ResetSection(self, directive):
         """Reset section checking for preprocessor directive.
 
-    Args:
-      directive: preprocessor directive (e.g. "if", "else").
-    """
+        Args:
+            directive: preprocessor directive (e.g. "if", "else").
+        """
         # The name of the current section.
         self._section = self._INITIAL_SECTION
         # The path of last found header.
@@ -967,29 +967,29 @@ class _IncludeState(object):
     def CanonicalizeAlphabeticalOrder(self, header_path):
         """Returns a path canonicalized for alphabetical comparison.
 
-    - replaces "-" with "_" so they both cmp the same.
-    - removes '-inl' since we don't require them to be after the main header.
-    - lowercase everything, just in case.
+        - replaces "-" with "_" so they both cmp the same.
+        - removes '-inl' since we don't require them to be after the main header.
+        - lowercase everything, just in case.
 
-    Args:
-      header_path: Path to be canonicalized.
+        Args:
+            header_path: Path to be canonicalized.
 
-    Returns:
-      Canonicalized path.
-    """
+        Returns:
+            Canonicalized path.
+        """
         return header_path.replace('-inl.h', '.h').replace('-', '_').lower()
 
     def IsInAlphabeticalOrder(self, clean_lines, linenum, header_path):
         """Check if a header is in alphabetical order with the previous header.
 
-    Args:
-      clean_lines: A CleansedLines instance containing the file.
-      linenum: The number of the line to check.
-      header_path: Canonicalized header to be checked.
+        Args:
+            clean_lines: A CleansedLines instance containing the file.
+            linenum: The number of the line to check.
+            header_path: Canonicalized header to be checked.
 
-    Returns:
-      Returns true if the header is in alphabetical order.
-    """
+        Returns:
+            Returns true if the header is in alphabetical order.
+        """
         # If previous section is different from current section, _last_header
         # will be reset to empty string, so it's always less than current
         # header.
@@ -1004,17 +1004,17 @@ class _IncludeState(object):
     def CheckNextIncludeOrder(self, header_type):
         """Returns a non-empty error message if the next header is out of order.
 
-    This function also updates the internal state to be ready to check
-    the next include.
+        This function also updates the internal state to be ready to check
+        the next include.
 
-    Args:
-      header_type: One of the _XXX_HEADER constants defined above.
+        Args:
+            header_type: One of the _XXX_HEADER constants defined above.
 
-    Returns:
-      The empty string if the header is in the right order, or an
-      error message describing what's wrong.
+        Returns:
+            The empty string if the header is in the right order, or an
+            error message describing what's wrong.
 
-    """
+        """
         error_message = (
             'Found %s after %s' %
             (self._TYPE_NAMES[header_type], self._SECTION_NAMES[self._section]))
@@ -1089,23 +1089,23 @@ class _CppLintState(object):
     def SetFilters(self, filters):
         """Sets the error-message filters.
 
-    These filters are applied when deciding whether to emit a given
-    error message.
+        These filters are applied when deciding whether to emit a given
+        error message.
 
-    Args:
-      filters: A string of comma-separated filters (eg "+whitespace/indent").
-               Each filter should start with + or -; else we die.
+        Args:
+            filters: A string of comma-separated filters (eg "+whitespace/indent").
+                Each filter should start with + or -; else we die.
 
-    Raises:
-      ValueError: The comma-separated filters did not all start with '+' or '-'.
-                  E.g. "-,+whitespace,-whitespace/indent,whitespace/badfilter"
-    """
+        Raises:
+            ValueError: The comma-separated filters did not all start with '+' or '-'.
+                E.g. "-,+whitespace,-whitespace/indent,whitespace/badfilter"
+        """
         # Default filters always have less priority than the flag ones.
         self.filters = _DEFAULT_FILTERS[:]
         self.AddFilters(filters)
 
     def AddFilters(self, filters):
-        """ Adds more filters to the existing list of error-message filters. """
+        """Adds more filters to the existing list of error-message filters."""
         for filt in filters.split(','):
             clean_filt = filt.strip()
             if clean_filt:
@@ -1117,11 +1117,11 @@ class _CppLintState(object):
                     ' (%s does not)' % filt)
 
     def BackupFilters(self):
-        """ Saves the current filter list to backup storage."""
+        """Saves the current filter list to backup storage."""
         self._filters_backup = self.filters[:]
 
     def RestoreFilters(self):
-        """ Restores filters previously backed up."""
+        """Restores filters previously backed up."""
         self.filters = self._filters_backup[:]
 
     def ResetErrorCounts(self):
@@ -1183,36 +1183,36 @@ def _Filters():
 def _SetFilters(filters):
     """Sets the module's error-message filters.
 
-  These filters are applied when deciding whether to emit a given
-  error message.
+    These filters are applied when deciding whether to emit a given
+    error message.
 
-  Args:
-    filters: A string of comma-separated filters (eg "whitespace/indent").
-             Each filter should start with + or -; else we die.
-  """
+    Args:
+        filters: A string of comma-separated filters (eg "whitespace/indent").
+            Each filter should start with + or -; else we die.
+    """
     _cpplint_state.SetFilters(filters)
 
 
 def _AddFilters(filters):
     """Adds more filter overrides.
 
-  Unlike _SetFilters, this function does not reset the current list of filters
-  available.
+    Unlike _SetFilters, this function does not reset the current list of filters
+    available.
 
-  Args:
-    filters: A string of comma-separated filters (eg "whitespace/indent").
-             Each filter should start with + or -; else we die.
-  """
+    Args:
+        filters: A string of comma-separated filters (eg "whitespace/indent").
+            Each filter should start with + or -; else we die.
+    """
     _cpplint_state.AddFilters(filters)
 
 
 def _BackupFilters():
-    """ Saves the current filter list to backup storage."""
+    """Saves the current filter list to backup storage."""
     _cpplint_state.BackupFilters()
 
 
 def _RestoreFilters():
-    """ Restores filters previously backed up."""
+    """Restores filters previously backed up."""
     _cpplint_state.RestoreFilters()
 
 
@@ -1230,9 +1230,9 @@ class _FunctionState(object):
     def Begin(self, function_name):
         """Start analyzing function body.
 
-    Args:
-      function_name: The name of the function being tracked.
-    """
+        Args:
+            function_name: The name of the function being tracked.
+        """
         self.in_a_function = True
         self.lines_in_function = 0
         self.current_function = function_name
@@ -1245,11 +1245,11 @@ class _FunctionState(object):
     def Check(self, error, filename, linenum):
         """Report if too many lines in function body.
 
-    Args:
-      error: The function to call with any errors found.
-      filename: The name of the current file.
-      linenum: The number of the line to check.
-    """
+        Args:
+            error: The function to call with any errors found.
+            filename: The name of the current file.
+            linenum: The number of the line to check.
+        """
         if not self.in_a_function:
             return
 
@@ -1285,9 +1285,9 @@ class _IncludeError(Exception):
 class FileInfo(object):
     """Provides utility functions for filenames.
 
-  FileInfo provides easy access to the components of a file's path
-  relative to the project root.
-  """
+    FileInfo provides easy access to the components of a file's path
+    relative to the project root.
+    """
     def __init__(self, filename):
         self._filename = filename
 
@@ -1298,13 +1298,13 @@ class FileInfo(object):
     def RepositoryName(self):
         r"""FullName after removing the local path to the repository.
 
-    If we have a real absolute path name here we can try to do something smart:
-    detecting the root of the checkout and truncating /path/to/checkout from
-    the name so that we get header guards that don't include things like
-    "C:\Documents and Settings\..." or "/home/username/..." in them and thus
-    people on different computers who have checked the source out to different
-    locations won't see bogus errors.
-    """
+        If we have a real absolute path name here we can try to do something smart:
+        detecting the root of the checkout and truncating /path/to/checkout from
+        the name so that we get header guards that don't include things like
+        "C:\Documents and Settings\..." or "/home/username/..." in them and thus
+        people on different computers who have checked the source out to different
+        locations won't see bogus errors.
+        """
         fullname = self.FullName()
 
         if os.path.exists(fullname):
@@ -1348,12 +1348,12 @@ class FileInfo(object):
     def Split(self):
         """Splits the file into the directory, basename, and extension.
 
-    For 'chrome/browser/browser.cc', Split() would
-    return ('chrome/browser', 'browser', '.cc')
+        For 'chrome/browser/browser.cc', Split() would
+        return ('chrome/browser', 'browser', '.cc')
 
-    Returns:
-      A tuple of (directory, basename, extension).
-    """
+        Returns:
+            A tuple of (directory, basename, extension).
+        """
 
         googlename = self.RepositoryName()
         project, rest = os.path.split(googlename)
@@ -1407,25 +1407,25 @@ def _ShouldPrintError(category, confidence, linenum):
 def Error(filename, linenum, category, confidence, message):
     """Logs the fact we've found a lint error.
 
-  We log where the error was found, and also our confidence in the error,
-  that is, how certain we are this is a legitimate style regression, and
-  not a misidentification or a use that's sometimes justified.
+    We log where the error was found, and also our confidence in the error,
+    that is, how certain we are this is a legitimate style regression, and
+    not a misidentification or a use that's sometimes justified.
 
-  False positives can be suppressed by the use of
-  "cpplint(category)"  comments on the offending line.  These are
-  parsed into _error_suppressions.
+    False positives can be suppressed by the use of
+    "cpplint(category)"  comments on the offending line.  These are
+    parsed into _error_suppressions.
 
-  Args:
-    filename: The name of the file containing the error.
-    linenum: The number of the line containing the error.
-    category: A string used to describe the "category" this bug
-      falls under: "whitespace", say, or "runtime".  Categories
-      may have a hierarchy separated by slashes: "whitespace/indent".
-    confidence: A number from 1-5 representing a confidence score for
-      the error, with 5 meaning that we are certain of the problem,
-      and 1 meaning that it could be a legitimate construct.
-    message: The error message.
-  """
+    Args:
+        filename: The name of the file containing the error.
+        linenum: The number of the line containing the error.
+        category: A string used to describe the "category" this bug
+            falls under: "whitespace", say, or "runtime".  Categories
+            may have a hierarchy separated by slashes: "whitespace/indent".
+        confidence: A number from 1-5 representing a confidence score for
+            the error, with 5 meaning that we are certain of the problem,
+            and 1 meaning that it could be a legitimate construct.
+        message: The error message.
+    """
     if _ShouldPrintError(category, confidence, linenum):
         _cpplint_state.IncrementErrorCount(category)
         if _cpplint_state.output_format == 'vs7':
@@ -1465,15 +1465,15 @@ _RE_PATTERN_CLEANSE_LINE_C_COMMENTS = re.compile(r'(\s*' +
 def IsCppString(line):
     """Does line terminate so, that the next symbol is in string constant.
 
-  This function does not consider single-line nor multi-line comments.
+    This function does not consider single-line nor multi-line comments.
 
-  Args:
-    line: is a partial line of code starting from the 0..n.
+    Args:
+        line: is a partial line of code starting from the 0..n.
 
-  Returns:
-    True, if next character appended to 'line' is inside a
-    string constant.
-  """
+    Returns:
+        True, if next character appended to 'line' is inside a
+        string constant.
+    """
 
     line = line.replace(r'\\', 'XX')  # after this, \\" does not match to \"
     return ((line.count('"') - line.count(r'\"') - line.count("'\"'")) & 1) == 1
@@ -1492,12 +1492,12 @@ def CleanseRawStrings(raw_lines):
           (replaced by blank line)
           "";
 
-  Args:
-    raw_lines: list of raw lines.
+    Args:
+        raw_lines: list of raw lines.
 
-  Returns:
-    list of lines with C++11 raw strings replaced by empty strings.
-  """
+    Returns:
+        list of lines with C++11 raw strings replaced by empty strings.
+    """
 
     delimiter = None
     lines_without_raw_strings = []
@@ -1604,12 +1604,12 @@ def RemoveMultiLineComments(filename, lines, error):
 def CleanseComments(line):
     """Removes //-comments and single-line C-style /* */ comments.
 
-  Args:
-    line: A line of C++ source.
+    Args:
+        line: A line of C++ source.
 
-  Returns:
-    The line with single-line comments removed.
-  """
+    Returns:
+        The line with single-line comments removed.
+    """
     commentpos = line.find('//')
     if commentpos != -1 and not IsCppString(line[:commentpos]):
         line = line[:commentpos].rstrip()
@@ -1620,13 +1620,13 @@ def CleanseComments(line):
 class CleansedLines(object):
     """Holds 4 copies of all lines with different preprocessing applied to them.
 
-  1) elided member contains lines without strings and comments.
-  2) lines member contains lines without comments.
-  3) raw_lines member contains all the lines without processing.
-  4) lines_without_raw_strings member is same as raw_lines, but with C++11 raw
-     strings removed.
-  All these members are of <type 'list'>, and of the same length.
-  """
+    1) elided member contains lines without strings and comments.
+    2) lines member contains lines without comments.
+    3) raw_lines member contains all the lines without processing.
+    4) lines_without_raw_strings member is same as raw_lines, but with C++11 raw
+        strings removed.
+    All these members are of <type 'list'>, and of the same length.
+    """
     def __init__(self, lines):
         self.elided = []
         self.lines = []
@@ -1648,14 +1648,14 @@ class CleansedLines(object):
     def _CollapseStrings(elided):
         """Collapses strings and chars on a line to simple "" or '' blocks.
 
-    We nix strings first so we're not fooled by text like '"http://"'
+        We nix strings first so we're not fooled by text like '"http://"'
 
-    Args:
-      elided: The line being processed.
+        Args:
+            elided: The line being processed.
 
-    Returns:
-      The line with collapsed strings.
-    """
+        Returns:
+            The line with collapsed strings.
+        """
         if _RE_PATTERN_INCLUDE.match(elided):
             return elided
 
@@ -1717,16 +1717,16 @@ class CleansedLines(object):
 def FindEndOfExpressionInLine(line, startpos, stack):
     """Find the position just after the end of current parenthesized expression.
 
-  Args:
-    line: a CleansedLines line.
-    startpos: start searching at this position.
-    stack: nesting stack at startpos.
+    Args:
+        line: a CleansedLines line.
+        startpos: start searching at this position.
+        stack: nesting stack at startpos.
 
-  Returns:
-    On finding matching end: (index just after matching end, None)
-    On finding an unclosed expression: (-1, None)
-    Otherwise: (-1, new stack at end of this line)
-  """
+    Returns:
+        On finding matching end: (index just after matching end, None)
+        On finding an unclosed expression: (-1, None)
+        Otherwise: (-1, new stack at end of this line)
+    """
     for i in range(startpos, len(line)):
         char = line[i]
         if char in '([{':
@@ -1796,25 +1796,25 @@ def FindEndOfExpressionInLine(line, startpos, stack):
 def CloseExpression(clean_lines, linenum, pos):
     """If input points to ( or { or [ or <, finds the position that closes it.
 
-  If lines[linenum][pos] points to a '(' or '{' or '[' or '<', finds the
-  linenum/pos that correspond to the closing of the expression.
+    If lines[linenum][pos] points to a '(' or '{' or '[' or '<', finds the
+    linenum/pos that correspond to the closing of the expression.
 
-  TODO(unknown): cpplint spends a fair bit of time matching parentheses.
-  Ideally we would want to index all opening and closing parentheses once
-  and have CloseExpression be just a simple lookup, but due to preprocessor
-  tricks, this is not so easy.
+    TODO(unknown): cpplint spends a fair bit of time matching parentheses.
+    Ideally we would want to index all opening and closing parentheses once
+    and have CloseExpression be just a simple lookup, but due to preprocessor
+    tricks, this is not so easy.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    pos: A position on the line.
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        pos: A position on the line.
 
-  Returns:
-    A tuple (line, linenum, pos) pointer *past* the closing brace, or
-    (line, len(lines), -1) if we never find a close.  Note we ignore
-    strings and comments when matching; and the line we return is the
-    'cleansed' line at linenum.
-  """
+    Returns:
+        A tuple (line, linenum, pos) pointer *past* the closing brace, or
+        (line, len(lines), -1) if we never find a close.  Note we ignore
+        strings and comments when matching; and the line we return is the
+        'cleansed' line at linenum.
+    """
 
     line = clean_lines.elided[linenum]
     if (line[pos] not in '({[<') or Match(r'<[<=]', line[pos:]):
@@ -1840,19 +1840,19 @@ def CloseExpression(clean_lines, linenum, pos):
 def FindStartOfExpressionInLine(line, endpos, stack):
     """Find position at the matching start of current expression.
 
-  This is almost the reverse of FindEndOfExpressionInLine, but note
-  that the input position and returned position differs by 1.
+    This is almost the reverse of FindEndOfExpressionInLine, but note
+    that the input position and returned position differs by 1.
 
-  Args:
-    line: a CleansedLines line.
-    endpos: start searching at this position.
-    stack: nesting stack at endpos.
+    Args:
+        line: a CleansedLines line.
+        endpos: start searching at this position.
+        stack: nesting stack at endpos.
 
-  Returns:
-    On finding matching start: (index at matching start, None)
-    On finding an unclosed expression: (-1, None)
-    Otherwise: (-1, new stack at beginning of this line)
-  """
+    Returns:
+        On finding matching start: (index at matching start, None)
+        On finding an unclosed expression: (-1, None)
+        Otherwise: (-1, new stack at beginning of this line)
+    """
     i = endpos
     while i >= 0:
         char = line[i]
@@ -1916,20 +1916,20 @@ def FindStartOfExpressionInLine(line, endpos, stack):
 def ReverseCloseExpression(clean_lines, linenum, pos):
     """If input points to ) or } or ] or >, finds the position that opens it.
 
-  If lines[linenum][pos] points to a ')' or '}' or ']' or '>', finds the
-  linenum/pos that correspond to the opening of the expression.
+    If lines[linenum][pos] points to a ')' or '}' or ']' or '>', finds the
+    linenum/pos that correspond to the opening of the expression.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    pos: A position on the line.
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        pos: A position on the line.
 
-  Returns:
-    A tuple (line, linenum, pos) pointer *at* the opening brace, or
-    (line, 0, -1) if we never find the matching opening brace.  Note
-    we ignore strings and comments when matching; and the line we
-    return is the 'cleansed' line at linenum.
-  """
+    Returns:
+        A tuple (line, linenum, pos) pointer *at* the opening brace, or
+        (line, 0, -1) if we never find the matching opening brace.  Note
+        we ignore strings and comments when matching; and the line we
+        return is the 'cleansed' line at linenum.
+    """
     line = clean_lines.elided[linenum]
     if line[pos] not in ')}]>':
         return (line, 0, -1)
@@ -1969,12 +1969,12 @@ def CheckForCopyright(filename, lines, error):
 def GetIndentLevel(line):
     """Return the number of leading spaces in line.
 
-  Args:
-    line: A string to check.
+    Args:
+        line: A string to check.
 
-  Returns:
-    An integer count of leading spaces, possibly zero.
-  """
+    Returns:
+        An integer count of leading spaces, possibly zero.
+    """
     indent = Match(r'^( *)\S', line)
     if indent:
         return len(indent.group(1))
@@ -1985,12 +1985,12 @@ def GetIndentLevel(line):
 def PathSplitToList(path):
     """Returns the path split into a list by the separator.
 
-  Args:
-    path: An absolute or relative path (e.g. '/a/b/c/' or '../a')
+    Args:
+        path: An absolute or relative path (e.g. '/a/b/c/' or '../a')
 
-  Returns:
-    A list of path components (e.g. ['a', 'b', 'c]).
-  """
+    Returns:
+        A list of path components (e.g. ['a', 'b', 'c]).
+    """
     lst = []
     while True:
         (head, tail) = os.path.split(path)
@@ -2011,14 +2011,13 @@ def PathSplitToList(path):
 def GetHeaderGuardCPPVariable(filename):
     """Returns the CPP variable that should be used as a header guard.
 
-  Args:
-    filename: The name of a C++ header file.
+    Args:
+        filename: The name of a C++ header file.
 
-  Returns:
-    The CPP variable that should be used as a header guard in the
-    named file.
-
-  """
+    Returns:
+        The CPP variable that should be used as a header guard in the
+        named file.
+    """
 
     # Restores original filename in case that cpplint is invoked from Emacs's
     # flymake.
@@ -2092,14 +2091,14 @@ def GetHeaderGuardCPPVariable(filename):
 def CheckForHeaderGuard(filename, clean_lines, error):
     """Checks that the file contains a header guard.
 
-  Logs an error if no #ifndef header guard is present.  For other
-  headers, checks that the full pathname is used.
+    Logs an error if no #ifndef header guard is present.  For other
+    headers, checks that the full pathname is used.
 
-  Args:
-    filename: The name of the C++ header file.
-    clean_lines: A CleansedLines instance containing the file.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the C++ header file.
+        clean_lines: A CleansedLines instance containing the file.
+        error: The function to call with any errors found.
+    """
 
     # Don't check for header guards if there are error suppression
     # comments somewhere in this file.
@@ -2219,20 +2218,20 @@ def CheckHeaderFileIncluded(filename, include_state, error):
 def CheckForBadCharacters(filename, lines, error):
     """Logs an error for each line containing bad characters.
 
-  Two kinds of bad characters:
+    Two kinds of bad characters:
 
-  1. Unicode replacement characters: These indicate that either the file
-  contained invalid UTF-8 (likely) or Unicode replacement characters (which
-  it shouldn't).  Note that it's possible for this to throw off line
-  numbering if the invalid UTF-8 occurred adjacent to a newline.
+    1. Unicode replacement characters: These indicate that either the file
+    contained invalid UTF-8 (likely) or Unicode replacement characters (which
+    it shouldn't).  Note that it's possible for this to throw off line
+    numbering if the invalid UTF-8 occurred adjacent to a newline.
 
-  2. NUL bytes.  These are problematic for some tools.
+    2. NUL bytes.  These are problematic for some tools.
 
-  Args:
-    filename: The name of the current file.
-    lines: An array of strings, each representing a line of the file.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        lines: An array of strings, each representing a line of the file.
+        error: The function to call with any errors found.
+    """
     for linenum, line in enumerate(lines):
         if u'\ufffd' in line:
             error(
@@ -2247,11 +2246,11 @@ def CheckForBadCharacters(filename, lines, error):
 def CheckForNewlineAtEOF(filename, lines, error):
     """Logs an error if there is no newline char at the end of the file.
 
-  Args:
-    filename: The name of the current file.
-    lines: An array of strings, each representing a line of the file.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        lines: An array of strings, each representing a line of the file.
+        error: The function to call with any errors found.
+    """
 
     # The array lines() was created by adding two newlines to the
     # original file (go figure), then splitting on \n.
@@ -2266,20 +2265,20 @@ def CheckForNewlineAtEOF(filename, lines, error):
 def CheckForMultilineCommentsAndStrings(filename, clean_lines, linenum, error):
     """Logs an error if we see /* ... */ or "..." that extend past one line.
 
-  /* ... */ comments are legit inside macros, for one line.
-  Otherwise, we prefer // comments, so it's ok to warn about the
-  other.  Likewise, it's ok for strings to extend across multiple
-  lines, as long as a line continuation character (backslash)
-  terminates each line. Although not currently prohibited by the C++
-  style guide, it's ugly and unnecessary. We don't do well with either
-  in this lint program, so we warn about both.
+    /* ... */ comments are legit inside macros, for one line.
+    Otherwise, we prefer // comments, so it's ok to warn about the
+    other.  Likewise, it's ok for strings to extend across multiple
+    lines, as long as a line continuation character (backslash)
+    terminates each line. Although not currently prohibited by the C++
+    style guide, it's ugly and unnecessary. We don't do well with either
+    in this lint program, so we warn about both.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Remove all \\ (escaped backslashes) from the line. They are OK, and the
@@ -2335,18 +2334,18 @@ _THREADING_LIST = (
 def CheckPosixThreading(filename, clean_lines, linenum, error):
     """Checks for calls to thread-unsafe functions.
 
-  Much code has been originally written without consideration of
-  multi-threading. Also, engineers are relying on their old experience;
-  they have learned posix before threading extensions were added. These
-  tests guide the engineers to use thread-safe functions (when using
-  posix directly).
+    Much code has been originally written without consideration of
+    multi-threading. Also, engineers are relying on their old experience;
+    they have learned posix before threading extensions were added. These
+    tests guide the engineers to use thread-safe functions (when using
+    posix directly).
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
     for single_thread_func, multithread_safe_func, pattern in _THREADING_LIST:
         # Additional pattern matching check to confirm that this is the
@@ -2361,15 +2360,15 @@ def CheckPosixThreading(filename, clean_lines, linenum, error):
 def CheckVlogArguments(filename, clean_lines, linenum, error):
     """Checks that VLOG() is only used for defining a logging level.
 
-  For example, VLOG(2) is correct. VLOG(INFO), VLOG(WARNING), VLOG(ERROR), and
-  VLOG(FATAL) are not.
+    For example, VLOG(2) is correct. VLOG(INFO), VLOG(WARNING), VLOG(ERROR), and
+    VLOG(FATAL) are not.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
     if Search(r'\bVLOG\((INFO|ERROR|WARNING|DFATAL|FATAL)\)', line):
         error(
@@ -2386,19 +2385,19 @@ _RE_PATTERN_INVALID_INCREMENT = re.compile(r'^\s*\*\w+(\+\+|--);')
 def CheckInvalidIncrement(filename, clean_lines, linenum, error):
     """Checks for invalid increment *count++.
 
-  For example following function:
-  void increment_counter(int* count) {
-    *count++;
-  }
-  is invalid, because it effectively does count++, moving pointer, and should
-  be replaced with ++*count, (*count)++ or *count += 1.
+    For example following function:
+    void increment_counter(int* count) {
+        *count++;
+    }
+    is invalid, because it effectively does count++, moving pointer, and should
+    be replaced with ++*count, (*count)++ or *count += 1.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
     if _RE_PATTERN_INVALID_INCREMENT.match(line):
         error(
@@ -2432,40 +2431,40 @@ class _BlockInfo(object):
     def CheckBegin(self, filename, clean_lines, linenum, error):
         """Run checks that applies to text up to the opening brace.
 
-    This is mostly for checking the text after the class identifier
-    and the "{", usually where the base class is specified.  For other
-    blocks, there isn't much to check, so we always pass.
+        This is mostly for checking the text after the class identifier
+        and the "{", usually where the base class is specified.  For other
+        blocks, there isn't much to check, so we always pass.
 
-    Args:
-      filename: The name of the current file.
-      clean_lines: A CleansedLines instance containing the file.
-      linenum: The number of the line to check.
-      error: The function to call with any errors found.
-    """
+        Args:
+            filename: The name of the current file.
+            clean_lines: A CleansedLines instance containing the file.
+            linenum: The number of the line to check.
+            error: The function to call with any errors found.
+        """
         pass
 
     def CheckEnd(self, filename, clean_lines, linenum, error):
         """Run checks that applies to text after the closing brace.
 
-    This is mostly used for checking end of namespace comments.
+        This is mostly used for checking end of namespace comments.
 
-    Args:
-      filename: The name of the current file.
-      clean_lines: A CleansedLines instance containing the file.
-      linenum: The number of the line to check.
-      error: The function to call with any errors found.
-    """
+        Args:
+            filename: The name of the current file.
+            clean_lines: A CleansedLines instance containing the file.
+            linenum: The number of the line to check.
+            error: The function to call with any errors found.
+        """
         pass
 
     def IsBlockInfo(self):
         """Returns true if this block is a _BlockInfo.
 
-    This is convenient for verifying that an object is an instance of
-    a _BlockInfo, but not an instance of any of the derived classes.
+        This is convenient for verifying that an object is an instance of
+        a _BlockInfo, but not an instance of any of the derived classes.
 
-    Returns:
-      True for this class, False for derived classes.
-    """
+        Returns:
+            True for this class, False for derived classes.
+        """
         return self.__class__ == _BlockInfo
 
 
@@ -2650,54 +2649,54 @@ class NestingState(object):
     def SeenOpenBrace(self):
         """Check if we have seen the opening brace for the innermost block.
 
-    Returns:
-      True if we have seen the opening brace, False if the innermost
-      block is still expecting an opening brace.
-    """
+        Returns:
+            True if we have seen the opening brace, False if the innermost
+            block is still expecting an opening brace.
+        """
         return (not self.stack) or self.stack[-1].seen_open_brace
 
     def InNamespaceBody(self):
         """Check if we are currently one level inside a namespace body.
 
-    Returns:
-      True if top of the stack is a namespace block, False otherwise.
-    """
+        Returns:
+            True if top of the stack is a namespace block, False otherwise.
+        """
         return self.stack and isinstance(self.stack[-1], _NamespaceInfo)
 
     def InExternC(self):
         """Check if we are currently one level inside an 'extern "C"' block.
 
-    Returns:
-      True if top of the stack is an extern block, False otherwise.
-    """
+        Returns:
+            True if top of the stack is an extern block, False otherwise.
+        """
         return self.stack and isinstance(self.stack[-1], _ExternCInfo)
 
     def InClassDeclaration(self):
         """Check if we are currently one level inside a class or struct declaration.
 
-    Returns:
-      True if top of the stack is a class/struct, False otherwise.
-    """
+        Returns:
+            True if top of the stack is a class/struct, False otherwise.
+        """
         return self.stack and isinstance(self.stack[-1], _ClassInfo)
 
     def InAsmBlock(self):
         """Check if we are currently one level inside an inline ASM block.
 
-    Returns:
-      True if the top of the stack is a block containing inline ASM.
-    """
+        Returns:
+            True if the top of the stack is a block containing inline ASM.
+        """
         return self.stack and self.stack[-1].inline_asm != _NO_ASM
 
     def InTemplateArgumentList(self, clean_lines, linenum, pos):
         """Check if current position is inside template argument list.
 
-    Args:
-      clean_lines: A CleansedLines instance containing the file.
-      linenum: The number of the line to check.
-      pos: position just after the suspected template argument.
-    Returns:
-      True if (linenum, pos) is inside template arguments.
-    """
+        Args:
+            clean_lines: A CleansedLines instance containing the file.
+            linenum: The number of the line to check.
+            pos: position just after the suspected template argument.
+        Returns:
+            True if (linenum, pos) is inside template arguments.
+        """
         while linenum < clean_lines.NumLines():
             # Find the earliest character that might indicate a template
             # argument
@@ -2745,24 +2744,24 @@ class NestingState(object):
     def UpdatePreprocessor(self, line):
         """Update preprocessor stack.
 
-    We need to handle preprocessors due to classes like this:
-      #ifdef SWIG
-      struct ResultDetailsPageElementExtensionPoint {
-      #else
-      struct ResultDetailsPageElementExtensionPoint : public Extension {
-      #endif
+        We need to handle preprocessors due to classes like this:
+            #ifdef SWIG
+            struct ResultDetailsPageElementExtensionPoint {
+            #else
+            struct ResultDetailsPageElementExtensionPoint : public Extension {
+            #endif
 
-    We make the following assumptions (good enough for most files):
-    - Preprocessor condition evaluates to true from #if up to first
-      #else/#elif/#endif.
+        We make the following assumptions (good enough for most files):
+        - Preprocessor condition evaluates to true from #if up to first
+          #else/#elif/#endif.
 
-    - Preprocessor condition evaluates to false from #else/#elif up
-      to #endif.  We still perform lint checks on these lines, but
-      these do not affect nesting stack.
+        - Preprocessor condition evaluates to false from #else/#elif up
+          to #endif.  We still perform lint checks on these lines, but
+          these do not affect nesting stack.
 
-    Args:
-      line: current line to check.
-    """
+        Args:
+            line: current line to check.
+        """
         if Match(r'^\s*#\s*(if|ifdef|ifndef)\b', line):
             # Beginning of #if block, save the nesting stack here.  The saved
             # stack will allow us to restore the parsing state in the #else
@@ -2804,12 +2803,12 @@ class NestingState(object):
     def Update(self, filename, clean_lines, linenum, error):
         """Update nesting state with current line.
 
-    Args:
-      filename: The name of the current file.
-      clean_lines: A CleansedLines instance containing the file.
-      linenum: The number of the line to check.
-      error: The function to call with any errors found.
-    """
+        Args:
+            filename: The name of the current file.
+            clean_lines: A CleansedLines instance containing the file.
+            linenum: The number of the line to check.
+            error: The function to call with any errors found.
+        """
         line = clean_lines.elided[linenum]
 
         # Remember top of the previous nesting stack.
@@ -2969,9 +2968,9 @@ class NestingState(object):
     def InnermostClass(self):
         """Get class info on the top of the stack.
 
-    Returns:
-      A _ClassInfo object if we are inside a class, or None otherwise.
-    """
+        Returns:
+            A _ClassInfo object if we are inside a class, or None otherwise.
+        """
         for i in range(len(self.stack), 0, -1):
             classinfo = self.stack[i - 1]
             if isinstance(classinfo, _ClassInfo):
@@ -2981,11 +2980,11 @@ class NestingState(object):
     def CheckCompletedBlocks(self, filename, error):
         """Checks that all classes and namespaces have been completely parsed.
 
-    Call this when all lines in a file have been processed.
-    Args:
-      filename: The name of the current file.
-      error: The function to call with any errors found.
-    """
+        Call this when all lines in a file have been processed.
+        Args:
+            filename: The name of the current file.
+            error: The function to call with any errors found.
+        """
         # Note: This test can result in false positives if #ifdef constructs
         # get in the way of brace matching. See the testBuildClass test in
         # cpplint_unittest.py for an example of this.
@@ -3004,32 +3003,32 @@ class NestingState(object):
 
 def CheckForNonStandardConstructs(filename, clean_lines, linenum, nesting_state,
                                   error):
-    r"""Logs an error if we see certain non-ANSI constructs ignored by gcc-2.
+    """Logs an error if we see certain non-ANSI constructs ignored by gcc-2.
 
-  Complain about several constructs which gcc-2 accepts, but which are
-  not standard C++.  Warning about these in lint is one way to ease the
-  transition to new compilers.
-  - put storage class first (e.g. "static const" instead of "const static").
-  - "%lld" instead of %qd" in printf-type functions.
-  - "%1$d" is non-standard in printf-type functions.
-  - "\%" is an undefined character escape sequence.
-  - text after #endif is not allowed.
-  - invalid inner-style forward declaration.
-  - >? and <? operators, and their >?= and <?= cousins.
+    Complain about several constructs which gcc-2 accepts, but which are
+    not standard C++.  Warning about these in lint is one way to ease the
+    transition to new compilers.
+    - put storage class first (e.g. "static const" instead of "const static").
+    - "%lld" instead of %qd" in printf-type functions.
+    - "%1$d" is non-standard in printf-type functions.
+    - "\%" is an undefined character escape sequence.
+    - text after #endif is not allowed.
+    - invalid inner-style forward declaration.
+    - >? and <? operators, and their >?= and <?= cousins.
 
-  Additionally, check for constructor/destructor style violations and reference
-  members, as it is very convenient to do so while checking for
-  gcc-2 compliance.
+    Additionally, check for constructor/destructor style violations and reference
+    members, as it is very convenient to do so while checking for
+    gcc-2 compliance.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: A callable to which errors are reported, which takes 4 arguments:
-           filename, line number, error level, and message
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: A callable to which errors are reported, which takes 4 arguments:
+            filename, line number, error level, and message
+    """
 
     # Remove comments from the line, but leave in strings for now.
     line = clean_lines.lines[linenum]
@@ -3171,12 +3170,12 @@ def CheckForNonStandardConstructs(filename, clean_lines, linenum, nesting_state,
 def CheckSpacingForFunctionCall(filename, clean_lines, linenum, error):
     """Checks for the correctness of various spacing around function calls.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Since function calls often occur inside if/for/while/switch
@@ -3250,15 +3249,15 @@ def CheckSpacingForFunctionCall(filename, clean_lines, linenum, error):
 def IsBlankLine(line):
     """Returns true if the given line is blank.
 
-  We consider a line to be blank if the line is empty or consists of
-  only white spaces.
+    We consider a line to be blank if the line is empty or consists of
+    only white spaces.
 
-  Args:
-    line: A line of a string.
+    Args:
+        line: A line of a string.
 
-  Returns:
-    True, if the given line is blank.
-  """
+    Returns:
+        True, if the given line is blank.
+    """
     return not line or line.isspace()
 
 
@@ -3280,25 +3279,25 @@ def CheckForFunctionLengths(filename, clean_lines, linenum, function_state,
                             error):
     """Reports for long function bodies.
 
-  For an overview why this is done, see:
-  https://google.github.io/styleguide/cppguide.html#Write_Short_Functions
+    For an overview why this is done, see:
+    https://google.github.io/styleguide/cppguide.html#Write_Short_Functions
 
-  Uses a simplistic algorithm assuming other style guidelines
-  (especially spacing) are followed.
-  Only checks unindented functions, so class members are unchecked.
-  Trivial bodies are unchecked, so constructors with huge initializer lists
-  may be missed.
-  Blank/comment lines are not counted so as to avoid encouraging the removal
-  of vertical space and comments just to get through a lint check.
-  NOLINT *on the last line of a function* disables this check.
+    Uses a simplistic algorithm assuming other style guidelines
+    (especially spacing) are followed.
+    Only checks unindented functions, so class members are unchecked.
+    Trivial bodies are unchecked, so constructors with huge initializer lists
+    may be missed.
+    Blank/comment lines are not counted so as to avoid encouraging the removal
+    of vertical space and comments just to get through a lint check.
+    NOLINT *on the last line of a function* disables this check.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    function_state: Current function name and lines in body so far.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        function_state: Current function name and lines in body so far.
+        error: The function to call with any errors found.
+    """
     lines = clean_lines.lines
     line = lines[linenum]
     joined_line = ''
@@ -3353,13 +3352,13 @@ _RE_PATTERN_TODO = re.compile(
 def CheckComment(line, filename, linenum, next_line_start, error):
     """Checks for common mistakes in comments.
 
-  Args:
-    line: The line in question.
-    filename: The name of the current file.
-    linenum: The number of the line to check.
-    next_line_start: The first non-whitespace column of the next line.
-    error: The function to call with any errors found.
-  """
+    Args:
+        line: The line in question.
+        filename: The name of the current file.
+        linenum: The number of the line to check.
+        next_line_start: The first non-whitespace column of the next line.
+        error: The function to call with any errors found.
+    """
     commentpos = line.find('//')
     if commentpos != -1:
         # Check if the // may be in quotes.  If so, ignore it
@@ -3410,20 +3409,20 @@ def CheckComment(line, filename, linenum, next_line_start, error):
 def CheckSpacing(filename, clean_lines, linenum, nesting_state, error):
     """Checks for the correctness of various spacing issues in the code.
 
-  Things we check for: spaces around operators, spaces after
-  if/for/while/switch, no spaces around parens in function calls, two
-  spaces between code and comment, don't start a block with a blank
-  line, don't end a function with a blank line, don't add a blank line
-  after public/protected/private, don't have too many blank lines in a row.
+    Things we check for: spaces around operators, spaces after
+    if/for/while/switch, no spaces around parens in function calls, two
+    spaces between code and comment, don't start a block with a blank
+    line, don't end a function with a blank line, don't add a blank line
+    after public/protected/private, don't have too many blank lines in a row.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: The function to call with any errors found.
+    """
 
     # Don't use "elided" lines here, otherwise we can't check commented lines.
     # Don't want to use "raw" either, because we don't want to check inside
@@ -3541,12 +3540,12 @@ def CheckSpacing(filename, clean_lines, linenum, nesting_state, error):
 def CheckOperatorSpacing(filename, clean_lines, linenum, error):
     """Checks for horizontal spacing around operators.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Don't try to do spacing checks for operator methods.  Do this by
@@ -3656,12 +3655,12 @@ def CheckOperatorSpacing(filename, clean_lines, linenum, error):
 def CheckParenthesisSpacing(filename, clean_lines, linenum, error):
     """Checks for horizontal spacing around parentheses.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # No spaces after an if, while, switch, or for
@@ -3695,12 +3694,12 @@ def CheckParenthesisSpacing(filename, clean_lines, linenum, error):
 def CheckCommaSpacing(filename, clean_lines, linenum, error):
     """Checks for horizontal spacing near commas and semicolons.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     raw = clean_lines.lines_without_raw_strings
     line = clean_lines.elided[linenum]
 
@@ -3731,14 +3730,14 @@ def CheckCommaSpacing(filename, clean_lines, linenum, error):
 def _IsType(clean_lines, nesting_state, expr):
     """Check if expression looks like a type name, returns true if so.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    expr: The expression to check.
-  Returns:
-    True, if token looks like a type.
-  """
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        expr: The expression to check.
+    Returns:
+        True, if token looks like a type.
+    """
     # Keep only the last token in the expression
     last_word = Match(r'^.*(\b\S+)$', expr)
     if last_word:
@@ -3795,14 +3794,14 @@ def _IsType(clean_lines, nesting_state, expr):
 def CheckBracesSpacing(filename, clean_lines, linenum, nesting_state, error):
     """Checks for horizontal spacing near commas.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Except after an opening paren, or after another opening brace (in case of
@@ -3886,13 +3885,13 @@ def CheckBracesSpacing(filename, clean_lines, linenum, nesting_state, error):
 def IsDecltype(clean_lines, linenum, column):
     """Check if the token ending on (linenum, column) is decltype().
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: the number of the line to check.
-    column: end column of the token to check.
-  Returns:
-    True if this token is decltype() expression, False otherwise.
-  """
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: the number of the line to check.
+        column: end column of the token to check.
+    Returns:
+        True if this token is decltype() expression, False otherwise.
+    """
     (text, _, start_col) = ReverseCloseExpression(clean_lines, linenum, column)
     if start_col < 0:
         return False
@@ -3904,15 +3903,15 @@ def IsDecltype(clean_lines, linenum, column):
 def CheckSectionSpacing(filename, clean_lines, class_info, linenum, error):
     """Checks for additional blank line issues related to sections.
 
-  Currently the only thing checked here is blank line before protected/private.
+    Currently the only thing checked here is blank line before protected/private.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    class_info: A _ClassInfo objects.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        class_info: A _ClassInfo objects.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     # Skip checks if the class is small, where small means 25 lines or less.
     # 25 lines seems like a good cutoff since that's the usual height of
     # terminals, and any class that can't fit in one screen can't really
@@ -3962,16 +3961,16 @@ def CheckSectionSpacing(filename, clean_lines, class_info, linenum, error):
 def GetPreviousNonBlankLine(clean_lines, linenum):
     """Return the most recent non-blank line and its line number.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file contents.
-    linenum: The number of the line to check.
+    Args:
+        clean_lines: A CleansedLines instance containing the file contents.
+        linenum: The number of the line to check.
 
-  Returns:
-    A tuple with two elements.  The first element is the contents of the last
-    non-blank line before the current line, or the empty string if this is the
-    first non-blank line.  The second is the line number of that line, or -1
-    if this is the first non-blank line.
-  """
+    Returns:
+        A tuple with two elements.  The first element is the contents of the last
+        non-blank line before the current line, or the empty string if this is the
+        first non-blank line.  The second is the line number of that line, or -1
+        if this is the first non-blank line.
+    """
 
     prevlinenum = linenum - 1
     while prevlinenum >= 0:
@@ -3985,12 +3984,12 @@ def GetPreviousNonBlankLine(clean_lines, linenum):
 def CheckBraces(filename, clean_lines, linenum, error):
     """Looks for misplaced braces (e.g. at the end of line).
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
 
     line = clean_lines.elided[linenum]  # get rid of comments and strings
 
@@ -4115,12 +4114,12 @@ def CheckBraces(filename, clean_lines, linenum, error):
 def CheckTrailingSemicolon(filename, clean_lines, linenum, error):
     """Looks for redundant trailing semicolon.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
 
     line = clean_lines.elided[linenum]
 
@@ -4260,12 +4259,12 @@ def CheckTrailingSemicolon(filename, clean_lines, linenum, error):
 def CheckEmptyBlockBody(filename, clean_lines, linenum, error):
     """Look for empty loop/conditional body with only a single semicolon.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
 
     # Search for loop keywords at the beginning of the line.  Because only
     # whitespaces are allowed before the keywords, this will also ignore most
@@ -4377,12 +4376,12 @@ def CheckEmptyBlockBody(filename, clean_lines, linenum, error):
 def FindCheckMacro(line):
     """Find a replaceable CHECK-like macro.
 
-  Args:
-    line: line to search on.
-  Returns:
-    (macro name, start position), or (None, -1) if no replaceable
-    macro is found.
-  """
+    Args:
+        line: line to search on.
+    Returns:
+        (macro name, start position), or (None, -1) if no replaceable
+        macro is found.
+    """
     for macro in _CHECK_MACROS:
         i = line.find(macro)
         if i >= 0:
@@ -4400,12 +4399,12 @@ def FindCheckMacro(line):
 def CheckCheck(filename, clean_lines, linenum, error):
     """Checks the use of CHECK and EXPECT macros.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
 
     # Decide the set of replacement macros that should be suggested
     lines = clean_lines.elided
@@ -4519,12 +4518,12 @@ def CheckCheck(filename, clean_lines, linenum, error):
 def CheckAltTokens(filename, clean_lines, linenum, error):
     """Check alternative keywords being used in boolean expressions.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Avoid preprocessor lines
@@ -4553,19 +4552,19 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, nesting_state,
                error):
     """Checks rules from the 'C++ style rules' section of cppguide.html.
 
-  Most of these rules are hard to test (naming, comment style), but we
-  do what we can.  In particular we check for 2-space indents, line lengths,
-  tab usage, spaces inside code, etc.
+    Most of these rules are hard to test (naming, comment style), but we
+    do what we can.  In particular we check for 2-space indents, line lengths,
+    tab usage, spaces inside code, etc.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    file_extension: The extension (without the dot) of the filename.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        file_extension: The extension (without the dot) of the filename.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: The function to call with any errors found.
+    """
 
     # Don't use "elided" lines here, otherwise we can't check commented lines.
     # Don't want to use "raw" either, because we don't want to check inside
@@ -4680,22 +4679,22 @@ _RE_FIRST_COMPONENT = re.compile(r'^[^-_.]+')
 def _DropCommonSuffixes(filename):
     """Drops common suffixes like _test.cc or -inl.h from filename.
 
-  For example:
-    >>> _DropCommonSuffixes('foo/foo-inl.h')
-    'foo/foo'
-    >>> _DropCommonSuffixes('foo/bar/foo.cc')
-    'foo/bar/foo'
-    >>> _DropCommonSuffixes('foo/foo_internal.h')
-    'foo/foo'
-    >>> _DropCommonSuffixes('foo/foo_unusualinternal.h')
-    'foo/foo_unusualinternal'
+    For example:
+        >>> _DropCommonSuffixes('foo/foo-inl.h')
+        'foo/foo'
+        >>> _DropCommonSuffixes('foo/bar/foo.cc')
+        'foo/bar/foo'
+        >>> _DropCommonSuffixes('foo/foo_internal.h')
+        'foo/foo'
+        >>> _DropCommonSuffixes('foo/foo_unusualinternal.h')
+        'foo/foo_unusualinternal'
 
-  Args:
-    filename: The input filename.
+    Args:
+        filename: The input filename.
 
-  Returns:
-    The filename with the common suffix removed.
-  """
+    Returns:
+        The filename with the common suffix removed.
+    """
     for suffix in ('test.cc', 'regtest.cc', 'unittest.cc', 'inl.h', 'impl.h',
                    'internal.h'):
         if (filename.endswith(suffix) and len(filename) > len(suffix)
@@ -4707,27 +4706,27 @@ def _DropCommonSuffixes(filename):
 def _ClassifyInclude(fileinfo, include, is_system):
     """Figures out what kind of header 'include' is.
 
-  Args:
-    fileinfo: The current file cpplint is running over. A FileInfo instance.
-    include: The path to a #included file.
-    is_system: True if the #include used <> rather than "".
+    Args:
+        fileinfo: The current file cpplint is running over. A FileInfo instance.
+        include: The path to a #included file.
+        is_system: True if the #include used <> rather than "".
 
-  Returns:
-    One of the _XXX_HEADER constants.
+    Returns:
+        One of the _XXX_HEADER constants.
 
-  For example:
-    >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'stdio.h', True)
-    _C_SYS_HEADER
-    >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'string', True)
-    _CPP_SYS_HEADER
-    >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'foo/foo.h', False)
-    _LIKELY_MY_HEADER
-    >>> _ClassifyInclude(FileInfo('foo/foo_unknown_extension.cc'),
-    ...                  'bar/foo_other_ext.h', False)
-    _POSSIBLE_MY_HEADER
-    >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'foo/bar.h', False)
-    _OTHER_HEADER
-  """
+    For example:
+        >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'stdio.h', True)
+        _C_SYS_HEADER
+        >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'string', True)
+        _CPP_SYS_HEADER
+        >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'foo/foo.h', False)
+        _LIKELY_MY_HEADER
+        >>> _ClassifyInclude(FileInfo('foo/foo_unknown_extension.cc'),
+        ...                  'bar/foo_other_ext.h', False)
+        _POSSIBLE_MY_HEADER
+        >>> _ClassifyInclude(FileInfo('foo/foo.cc'), 'foo/bar.h', False)
+        _OTHER_HEADER
+    """
     # This is a list of all standard c++ header files, except
     # those already checked for above.
     is_cpp_h = include in _CPP_HEADERS
@@ -4766,17 +4765,17 @@ def _ClassifyInclude(fileinfo, include, is_system):
 def CheckIncludeLine(filename, clean_lines, linenum, include_state, error):
     """Check rules that are applicable to #include lines.
 
-  Strings on #include lines are NOT removed from elided line, to make
-  certain tasks easier. However, to prevent false positives, checks
-  applicable to #include lines in CheckLanguage must be put here.
+    Strings on #include lines are NOT removed from elided line, to make
+    certain tasks easier. However, to prevent false positives, checks
+    applicable to #include lines in CheckLanguage must be put here.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    include_state: An _IncludeState instance in which the headers are inserted.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        include_state: An _IncludeState instance in which the headers are inserted.
+        error: The function to call with any errors found.
+    """
     fileinfo = FileInfo(filename)
     line = clean_lines.lines[linenum]
 
@@ -4840,25 +4839,25 @@ def CheckIncludeLine(filename, clean_lines, linenum, include_state, error):
 
 
 def _GetTextInside(text, start_pattern):
-    r"""Retrieves all the text between matching open and close parentheses.
+    """Retrieves all the text between matching open and close parentheses.
 
-  Given a string of lines and a regular expression string, retrieve all the text
-  following the expression and between opening punctuation symbols like
-  (, [, or {, and the matching close-punctuation symbol. This properly nested
-  occurrences of the punctuations, so for the text like
-    printf(a(), b(c()));
-  a call to _GetTextInside(text, r'printf\(') will return 'a(), b(c())'.
-  start_pattern must match string having an open punctuation symbol at the end.
+    Given a string of lines and a regular expression string, retrieve all the text
+    following the expression and between opening punctuation symbols like
+    (, [, or {, and the matching close-punctuation symbol. This properly nested
+    occurrences of the punctuations, so for the text like
+        printf(a(), b(c()));
+    a call to _GetTextInside(text, r'printf\(') will return 'a(), b(c())'.
+    start_pattern must match string having an open punctuation symbol at the end.
 
-  Args:
-    text: The lines to extract text. Its comments and strings must be elided.
-           It can be single line and can span multiple lines.
-    start_pattern: The regexp string indicating where to start extracting
-                   the text.
-  Returns:
-    The extracted text.
-    None if either the opening string or ending punctuation could not be found.
-  """
+    Args:
+        text: The lines to extract text. Its comments and strings must be elided.
+            It can be single line and can span multiple lines.
+        start_pattern: The regexp string indicating where to start extracting
+            the text.
+    Returns:
+        The extracted text.
+        None if either the opening string or ending punctuation could not be found.
+    """
     # TODO(unknown): Audit cpplint.py to see what places could be profitably
     # rewritten to use _GetTextInside (and use inferior regexp matching today).
 
@@ -4929,19 +4928,19 @@ def CheckLanguage(filename, clean_lines, linenum, file_extension, include_state,
                   nesting_state, error):
     """Checks rules from the 'C++ language rules' section of cppguide.html.
 
-  Some of these rules are hard to test (function overloading, using
-  uint32 inappropriately), but we do the best we can.
+    Some of these rules are hard to test (function overloading, using
+    uint32 inappropriately), but we do the best we can.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    file_extension: The extension (without the dot) of the filename.
-    include_state: An _IncludeState instance in which the headers are inserted.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        file_extension: The extension (without the dot) of the filename.
+        include_state: An _IncludeState instance in which the headers are inserted.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: The function to call with any errors found.
+    """
     # If the line is empty or consists of entirely a comment, no need to
     # check it.
     line = clean_lines.elided[linenum]
@@ -5097,12 +5096,12 @@ def CheckLanguage(filename, clean_lines, linenum, file_extension, include_state,
 def CheckGlobalStatic(filename, clean_lines, linenum, error):
     """Check for unsafe global or static objects.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Match two lines at a time to support multiline declarations
@@ -5158,12 +5157,12 @@ def CheckGlobalStatic(filename, clean_lines, linenum, error):
 def CheckPrintf(filename, clean_lines, linenum, error):
     """Check for printf related issues.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # When snprintf is used, the second argument shouldn't be a literal.
@@ -5188,13 +5187,13 @@ def CheckPrintf(filename, clean_lines, linenum, error):
 def IsDerivedFunction(clean_lines, linenum):
     """Check if current line contains an inherited function.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-  Returns:
-    True if current line contains a function with "override"
-    virt-specifier.
-  """
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+    Returns:
+        True if current line contains a function with "override"
+        virt-specifier.
+    """
     # Scan back a few lines for start of current function
     for i in range(linenum, max(-1, linenum - 10), -1):
         match = Match(r'^([^()]*\w+)\(', clean_lines.elided[i])
@@ -5210,12 +5209,12 @@ def IsDerivedFunction(clean_lines, linenum):
 def IsOutOfLineMethodDefinition(clean_lines, linenum):
     """Check if current line contains an out-of-line method definition.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-  Returns:
-    True if current line contains an out-of-line method definition.
-  """
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+    Returns:
+        True if current line contains an out-of-line method definition.
+    """
     # Scan back a few lines for start of current function
     for i in range(linenum, max(-1, linenum - 10), -1):
         if Match(r'^([^()]*\w+)\(', clean_lines.elided[i]):
@@ -5227,13 +5226,13 @@ def IsOutOfLineMethodDefinition(clean_lines, linenum):
 def IsInitializerList(clean_lines, linenum):
     """Check if current line is inside constructor initializer list.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-  Returns:
-    True if current line appears to be inside constructor initializer
-    list, False otherwise.
-  """
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+    Returns:
+        True if current line appears to be inside constructor initializer
+        list, False otherwise.
+    """
     for i in range(linenum, 1, -1):
         line = clean_lines.elided[i]
         if i == linenum:
@@ -5271,17 +5270,17 @@ def CheckForNonConstReference(filename, clean_lines, linenum, nesting_state,
                               error):
     """Check for non-const references.
 
-  Separate from CheckLanguage since it scans backwards from current
-  line, instead of scanning forward.
+    Separate from CheckLanguage since it scans backwards from current
+    line, instead of scanning forward.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: The function to call with any errors found.
+    """
     # Do nothing if there is no '&' on current line.
     line = clean_lines.elided[linenum]
     if '&' not in line:
@@ -5411,12 +5410,12 @@ def CheckForNonConstReference(filename, clean_lines, linenum, nesting_state,
 def CheckCasts(filename, clean_lines, linenum, error):
     """Various cast related checks.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     # Check to see if they're using an conversion function cast.
@@ -5532,19 +5531,19 @@ def CheckCasts(filename, clean_lines, linenum, error):
 def CheckCStyleCast(filename, clean_lines, linenum, cast_type, pattern, error):
     """Checks for a C-style cast by looking for the pattern.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    cast_type: The string for the C++ cast to recommend.  This is either
-      reinterpret_cast, static_cast, or const_cast, depending.
-    pattern: The regular expression used to find C-style casts.
-    error: The function to call with any errors found.
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        cast_type: The string for the C++ cast to recommend.  This is either
+        reinterpret_cast, static_cast, or const_cast, depending.
+        pattern: The regular expression used to find C-style casts.
+        error: The function to call with any errors found.
 
-  Returns:
-    True if an error was emitted.
-    False otherwise.
-  """
+    Returns:
+        True if an error was emitted.
+        False otherwise.
+    """
     line = clean_lines.elided[linenum]
     match = Search(pattern, line)
     if not match:
@@ -5586,14 +5585,14 @@ def CheckCStyleCast(filename, clean_lines, linenum, cast_type, pattern, error):
 def ExpectingFunctionArgs(clean_lines, linenum):
     """Checks whether where function type arguments are expected.
 
-  Args:
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
+    Args:
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
 
-  Returns:
-    True if the line at 'linenum' is inside something that expects arguments
-    of function types.
-  """
+    Returns:
+        True if the line at 'linenum' is inside something that expects arguments
+        of function types.
+    """
     line = clean_lines.elided[linenum]
     return (Match(r'^\s*MOCK_(CONST_)?METHOD\d+(_T)?\(', line)
             or _TYPE_TRAITS_RE.search(line)
@@ -5720,32 +5719,32 @@ for _header, _templates in _HEADERS_CONTAINING_TEMPLATES:
 def FilesBelongToSameModule(filename_cc, filename_h):
     """Check if these two filenames belong to the same module.
 
-  The concept of a 'module' here is a as follows:
-  foo.h, foo-inl.h, foo.cc, foo_test.cc and foo_unittest.cc belong to the
-  same 'module' if they are in the same directory.
-  some/path/public/xyzzy and some/path/internal/xyzzy are also considered
-  to belong to the same module here.
+    The concept of a 'module' here is a as follows:
+    foo.h, foo-inl.h, foo.cc, foo_test.cc and foo_unittest.cc belong to the
+    same 'module' if they are in the same directory.
+    some/path/public/xyzzy and some/path/internal/xyzzy are also considered
+    to belong to the same module here.
 
-  If the filename_cc contains a longer path than the filename_h, for example,
-  '/absolute/path/to/base/sysinfo.cc', and this file would include
-  'base/sysinfo.h', this function also produces the prefix needed to open the
-  header. This is used by the caller of this function to more robustly open the
-  header file. We don't have access to the real include paths in this context,
-  so we need this guesswork here.
+    If the filename_cc contains a longer path than the filename_h, for example,
+    '/absolute/path/to/base/sysinfo.cc', and this file would include
+    'base/sysinfo.h', this function also produces the prefix needed to open the
+    header. This is used by the caller of this function to more robustly open the
+    header file. We don't have access to the real include paths in this context,
+    so we need this guesswork here.
 
-  Known bugs: tools/base/bar.cc and base/bar.h belong to the same module
-  according to this implementation. Because of this, this function gives
-  some false positives. This should be sufficiently rare in practice.
+    Known bugs: tools/base/bar.cc and base/bar.h belong to the same module
+    according to this implementation. Because of this, this function gives
+    some false positives. This should be sufficiently rare in practice.
 
-  Args:
-    filename_cc: is the path for the .cc file
-    filename_h: is the path for the header path
+    Args:
+        filename_cc: is the path for the .cc file
+        filename_h: is the path for the header path
 
-  Returns:
-    Tuple with a bool and a string:
-    bool: True if filename_cc and filename_h belong to the same module.
-    string: the additional prefix needed to open the header file.
-  """
+    Returns:
+        Tuple with a bool and a string:
+        bool: True if filename_cc and filename_h belong to the same module.
+        string: the additional prefix needed to open the header file.
+    """
 
     fileinfo = FileInfo(filename_cc)
     if not fileinfo.IsSource():
@@ -5775,14 +5774,14 @@ def FilesBelongToSameModule(filename_cc, filename_h):
 def UpdateIncludeState(filename, include_dict, io=codecs):
     """Fill up the include_dict with new includes found from the file.
 
-  Args:
-    filename: the name of the header to read.
-    include_dict: a dictionary in which the headers are inserted.
-    io: The io factory to use to read the file. Provided for testability.
+    Args:
+        filename: the name of the header to read.
+        include_dict: a dictionary in which the headers are inserted.
+        io: The io factory to use to read the file. Provided for testability.
 
-  Returns:
-    True if a header was successfully added. False otherwise.
-  """
+    Returns:
+        True if a header was successfully added. False otherwise.
+    """
     headerfile = None
     try:
         headerfile = io.open(filename, 'r', 'utf8', 'replace')
@@ -5818,20 +5817,20 @@ def CheckForIncludeWhatYouUse(filename,
                               io=codecs):
     """Reports for missing stl includes.
 
-  This function will output warnings to make sure you are including the headers
-  necessary for the stl containers and functions that you use. We only give one
-  reason to include a header. For example, if you use both equal_to<> and
-  less<> in a .h file, only one (the latter in the file) of these will be
-  reported as a reason to include the <functional>.
+    This function will output warnings to make sure you are including the headers
+    necessary for the stl containers and functions that you use. We only give one
+    reason to include a header. For example, if you use both equal_to<> and
+    less<> in a .h file, only one (the latter in the file) of these will be
+    reported as a reason to include the <functional>.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    include_state: An _IncludeState instance.
-    error: The function to call with any errors found.
-    io: The IO factory to use to read the header file. Provided for unittest
-        injection.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        include_state: An _IncludeState instance.
+        error: The function to call with any errors found.
+        io: The IO factory to use to read the header file. Provided for unittest
+            injection.
+    """
     # A map of header name to linenumber and the template entity.
     # Example of required: { '<functional>': (1219, 'less<>') }
     required = {}
@@ -5914,15 +5913,15 @@ _RE_PATTERN_EXPLICIT_MAKEPAIR = re.compile(r'\bmake_pair\s*<')
 def CheckMakePairUsesDeduction(filename, clean_lines, linenum, error):
     """Check that make_pair's template arguments are deduced.
 
-  G++ 4.6 in C++11 mode fails badly if make_pair's template arguments are
-  specified explicitly, and such use isn't intended in any case.
+    G++ 4.6 in C++11 mode fails badly if make_pair's template arguments are
+    specified explicitly, and such use isn't intended in any case.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
     match = _RE_PATTERN_EXPLICIT_MAKEPAIR.search(line)
     if match:
@@ -5939,12 +5938,12 @@ def CheckMakePairUsesDeduction(filename, clean_lines, linenum, error):
 def CheckRedundantVirtual(filename, clean_lines, linenum, error):
     """Check if line contains a redundant "virtual" function-specifier.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     # Look for "virtual" on current line.
     line = clean_lines.elided[linenum]
     virtual = Match(r'^(.*)(\bvirtual\b)(.*)$', line)
@@ -6004,12 +6003,12 @@ def CheckRedundantVirtual(filename, clean_lines, linenum, error):
 def CheckRedundantOverrideOrFinal(filename, clean_lines, linenum, error):
     """Check if line contains a redundant "override" or "final" virt-specifier.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     # Look for closing parenthesis nearby.  We need one to confirm where
     # the declarator ends and where the virt-specifier starts to avoid
     # false positives.
@@ -6035,12 +6034,12 @@ def CheckRedundantOverrideOrFinal(filename, clean_lines, linenum, error):
 def IsBlockInNameSpace(nesting_state, is_forward_declaration):
     """Checks that the new block is directly in a namespace.
 
-  Args:
-    nesting_state: The _NestingState object that contains info about our state.
-    is_forward_declaration: If the class is a forward declared class.
-  Returns:
-    Whether or not the new block is directly in a namespace.
-  """
+    Args:
+        nesting_state: The _NestingState object that contains info about our state.
+        is_forward_declaration: If the class is a forward declared class.
+    Returns:
+        Whether or not the new block is directly in a namespace.
+    """
     if is_forward_declaration:
         if len(nesting_state.stack) >= 1 and (isinstance(
                 nesting_state.stack[-1], _NamespaceInfo)):
@@ -6057,18 +6056,18 @@ def ShouldCheckNamespaceIndentation(nesting_state, is_namespace_indent_item,
                                     raw_lines_no_comments, linenum):
     """This method determines if we should apply our namespace indentation check.
 
-  Args:
-    nesting_state: The current nesting state.
-    is_namespace_indent_item: If we just put a new class on the stack, True.
-      If the top of the stack is not a class, or we did not recently
-      add the class, False.
-    raw_lines_no_comments: The lines without the comments.
-    linenum: The current line number we are processing.
+    Args:
+        nesting_state: The current nesting state.
+        is_namespace_indent_item: If we just put a new class on the stack, True.
+            If the top of the stack is not a class, or we did not recently
+            add the class, False.
+        raw_lines_no_comments: The lines without the comments.
+        linenum: The current line number we are processing.
 
-  Returns:
-    True if we should apply our namespace indentation check. Currently, it
-    only works for classes and namespaces inside of a namespace.
-  """
+    Returns:
+        True if we should apply our namespace indentation check. Currently, it
+        only works for classes and namespaces inside of a namespace.
+    """
 
     is_forward_declaration = IsForwardClassDeclaration(raw_lines_no_comments,
                                                        linenum)
@@ -6105,22 +6104,22 @@ def ProcessLine(filename,
                 extra_check_functions=[]):
     """Processes a single line in the file.
 
-  Args:
-    filename: Filename of the file that is being processed.
-    file_extension: The extension (dot not included) of the file.
-    clean_lines: An array of strings, each representing a line of the file,
-                 with comments stripped.
-    line: Number of line being processed.
-    include_state: An _IncludeState instance in which the headers are inserted.
-    function_state: A _FunctionState instance which counts function lines, etc.
-    nesting_state: A NestingState instance which maintains information about
-                   the current stack of nested blocks being parsed.
-    error: A callable to which errors are reported, which takes 4 arguments:
-           filename, line number, error level, and message
-    extra_check_functions: An array of additional check functions that will be
-                           run on each source line. Each function takes 4
-                           arguments: filename, clean_lines, line, error
-  """
+    Args:
+        filename: Filename of the file that is being processed.
+        file_extension: The extension (dot not included) of the file.
+        clean_lines: An array of strings, each representing a line of the file,
+            with comments stripped.
+        line: Number of line being processed.
+        include_state: An _IncludeState instance in which the headers are inserted.
+        function_state: A _FunctionState instance which counts function lines, etc.
+        nesting_state: A NestingState instance which maintains information about
+            the current stack of nested blocks being parsed.
+        error: A callable to which errors are reported, which takes 4 arguments:
+            filename, line number, error level, and message
+        extra_check_functions: An array of additional check functions that will be
+            run on each source line. Each function takes 4 arguments: filename,
+            clean_lines, line, error
+    """
     raw_lines = clean_lines.raw_lines
     ParseNolintSuppressions(filename, raw_lines[line], line, error)
     nesting_state.Update(filename, clean_lines, line, error)
@@ -6149,12 +6148,12 @@ def ProcessLine(filename,
 def FlagCxx11Features(filename, clean_lines, linenum, error):
     """Flag those c++11 features that we only allow in certain places.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     include = Match(r'\s*#\s*include\s+[<"]([^<"]+)[">]', line)
@@ -6203,12 +6202,12 @@ def FlagCxx11Features(filename, clean_lines, linenum, error):
 def FlagCxx14Features(filename, clean_lines, linenum, error):
     """Flag those C++14 features that we restrict.
 
-  Args:
-    filename: The name of the current file.
-    clean_lines: A CleansedLines instance containing the file.
-    linenum: The number of the line to check.
-    error: The function to call with any errors found.
-  """
+    Args:
+        filename: The name of the current file.
+        clean_lines: A CleansedLines instance containing the file.
+        linenum: The number of the line to check.
+        error: The function to call with any errors found.
+    """
     line = clean_lines.elided[linenum]
 
     include = Match(r'\s*#\s*include\s+[<"]([^<"]+)[">]', line)
@@ -6226,17 +6225,17 @@ def ProcessFileData(filename,
                     extra_check_functions=[]):
     """Performs lint checks and reports any errors to the given error function.
 
-  Args:
-    filename: Filename of the file that is being processed.
-    file_extension: The extension (dot not included) of the file.
-    lines: An array of strings, each representing a line of the file, with the
-           last element being empty if the file is terminated with a newline.
-    error: A callable to which errors are reported, which takes 4 arguments:
-           filename, line number, error level, and message
-    extra_check_functions: An array of additional check functions that will be
-                           run on each source line. Each function takes 4
-                           arguments: filename, clean_lines, line, error
-  """
+    Args:
+        filename: Filename of the file that is being processed.
+        file_extension: The extension (dot not included) of the file.
+        lines: An array of strings, each representing a line of the file, with the
+            last element being empty if the file is terminated with a newline.
+        error: A callable to which errors are reported, which takes 4 arguments:
+            filename, line number, error level, and message
+        extra_check_functions: An array of additional check functions that will be
+            run on each source line. Each function takes 4 arguments: filename,
+            clean_lines, line, error
+    """
     lines = (['// marker so line numbers and indices both start at 1'] + lines +
              ['// marker so line numbers end in a known way'])
 
@@ -6274,14 +6273,14 @@ def ProcessFileData(filename,
 
 
 def ProcessConfigOverrides(filename):
-    """ Loads the configuration files and processes the config overrides.
+    """Loads the configuration files and processes the config overrides.
 
-  Args:
-    filename: The name of the file being processed by the linter.
+    Args:
+        filename: The name of the file being processed by the linter.
 
-  Returns:
-    False if the current |filename| should not be processed further.
-  """
+    Returns:
+        False if the current |filename| should not be processed further.
+    """
 
     abs_filename = os.path.abspath(filename)
     cfg_filters = []
@@ -6355,16 +6354,16 @@ def ProcessConfigOverrides(filename):
 def ProcessFile(filename, vlevel, extra_check_functions=[]):
     """Does google-lint on a single file.
 
-  Args:
-    filename: The name of the file to parse.
+    Args:
+        filename: The name of the file to parse.
 
-    vlevel: The level of errors to report.  Every error of confidence
-    >= verbose_level will be reported.  0 is a good default.
+        vlevel: The level of errors to report.  Every error of confidence
+        >= verbose_level will be reported.  0 is a good default.
 
-    extra_check_functions: An array of additional check functions that will be
-                           run on each source line. Each function takes 4
-                           arguments: filename, clean_lines, line, error
-  """
+        extra_check_functions: An array of additional check functions that will be
+            run on each source line. Each function takes 4 arguments: filename,
+            clean_lines, line, error
+    """
 
     _SetVerboseLevel(vlevel)
     _BackupFilters()
@@ -6443,9 +6442,9 @@ def ProcessFile(filename, vlevel, extra_check_functions=[]):
 def PrintUsage(message):
     """Prints a brief usage string and exits, optionally with an error message.
 
-  Args:
-    message: The optional error message.
-  """
+    Args:
+        message: The optional error message.
+    """
     sys.stderr.write(_USAGE)
     if message:
         sys.exit('\nFATAL ERROR: ' + message)
@@ -6456,8 +6455,8 @@ def PrintUsage(message):
 def PrintCategories():
     """Prints a list of all the error-categories used by error messages.
 
-  These are the categories used to filter messages via --filter.
-  """
+    These are the categories used to filter messages via --filter.
+    """
     sys.stderr.write(''.join('  %s\n' % cat for cat in _ERROR_CATEGORIES))
     sys.exit(0)
 
@@ -6465,14 +6464,14 @@ def PrintCategories():
 def ParseArguments(args):
     """Parses the command line arguments.
 
-  This may set the output format and verbosity level as side-effects.
+    This may set the output format and verbosity level as side-effects.
 
-  Args:
-    args: The command line arguments:
+    Args:
+        args: The command line arguments:
 
-  Returns:
-    The list of filenames to lint.
-  """
+    Returns:
+        The list of filenames to lint.
+    """
     try:
         (opts, filenames) = getopt.getopt(
             args,

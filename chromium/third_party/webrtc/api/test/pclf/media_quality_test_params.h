@@ -49,8 +49,6 @@ struct PeerConnectionFactoryComponents {
   std::unique_ptr<NetworkControllerFactoryInterface> network_controller_factory;
   std::unique_ptr<NetEqFactory> neteq_factory;
 
-  // Will be passed to MediaEngineInterface, that will be used in
-  // PeerConnectionFactory.
   std::unique_ptr<VideoEncoderFactory> video_encoder_factory;
   std::unique_ptr<VideoDecoderFactory> video_decoder_factory;
   rtc::scoped_refptr<webrtc::AudioEncoderFactory> audio_encoder_factory;
@@ -138,6 +136,7 @@ struct Params {
   // provided into VideoEncoder::SetRates(...).
   double video_encoder_bitrate_multiplier = 1.0;
 
+  PeerConnectionFactoryInterface::Options peer_connection_factory_options;
   PeerConnectionInterface::RTCConfiguration rtc_configuration;
   PeerConnectionInterface::RTCOfferAnswerOptions rtc_offer_answer_options;
   BitrateSettings bitrate_settings;

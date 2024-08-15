@@ -4,6 +4,7 @@
 #define COMPONENTS_REQUEST_FILTER_FILTERED_REQUEST_INFO_H_
 
 #include <stdint.h>
+#include <optional>
 
 #include "content/public/browser/content_browser_client.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -21,7 +22,7 @@ struct FilteredRequestInfo {
       content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
       bool is_async,
       bool is_webtransport,
-      absl::optional<int64_t> navigation_id);
+      std::optional<int64_t> navigation_id);
 
   FilteredRequestInfo(FilteredRequestInfo&&);
   FilteredRequestInfo& operator=(FilteredRequestInfo&&) = delete;
@@ -55,7 +56,7 @@ struct FilteredRequestInfo {
   const bool is_webtransport;
 
   // Valid if this request corresponds to a navigation.
-  const absl::optional<int64_t> navigation_id;
+  const std::optional<int64_t> navigation_id;
 };
 
 }  // namespace vivaldi

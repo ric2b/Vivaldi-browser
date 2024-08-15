@@ -4,7 +4,6 @@
 <translation id="1016495303386450659">Item bijgewerkt</translation>
 <translation id="1041637248958093184">Zoekopdrachten, bezochte sites, cookies en tijdelijke bestanden worden niet opgeslagen door Vivaldi bij gebruik van privé-tabbladen.</translation>
 <translation id="1066692930984703744">Blokkering van traceerders en reclame inschakelen voor sneller en veiliger browsen</translation>
-<translation id="1076258485383101882">Synchroniseer getypte URL's</translation>
 <translation id="1116694919640316211">Over</translation>
 <translation id="1123707809902612118">Traceerders en advertenties blokkeren</translation>
 <translation id="1151972924205500581">Wachtwoord vereist</translation>
@@ -46,6 +45,7 @@
 <translation id="1754797958074421486">Gebruiksvoorwaarden</translation>
 <translation id="1771413903824396513">Op bijnaam</translation>
 <translation id="1804522390855853698">Chinees (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Licht</translation>
 <translation id="1809939268435598390">Map verwijderen</translation>
 <translation id="1813686536470127172">Andere map</translation>
 <translation id="1828800626900562968">Tik hieronder op de plus om een nieuwe tab aan te maken.</translation>
@@ -71,12 +71,17 @@
 <translation id="2388224692799337242">Zodra je begint met browsen, verschijnt hier jouw geschiedenis</translation>
 <translation id="2391028308389203648">Turks (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Activeren</translation>
+<translation id="2414886740292270097">Donker</translation>
+<translation id="2433507940547922241">Uiterlijk</translation>
 <translation id="2434910957904013691">Alles synchroniseren</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />Gebruikersnaam<ph name="END_LINK" /> of <ph name="BEGIN_LINK" />wachtwoord<ph name="END_LINK" /> vergeten?</translation>
 <translation id="2536780277491102902">UITZONDERINGEN</translation>
 <translation id="2558801801411970131">Traceerders blokkeren</translation>
+<translation id="2562040727226360285">Neemt ergernissen weg, websites kunnen slecht werken (<ph name="ORIGIN" />)</translation>
 <translation id="2577446409661931381">Nieuwe notitie</translation>
 <translation id="2619628557366098325">Portugees (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Systeem</translation>
+<translation id="2666092431469916601">Bovenaan</translation>
 <translation id="2677862276555105603">Advertentie
 geblokkeerd</translation>
 <translation id="2678542925523700624">Ests (<ph name="ORIGIN" />)</translation>
@@ -85,6 +90,7 @@ geblokkeerd</translation>
 <translation id="2745324713975967671">Coderingswachtwoord</translation>
 <translation id="276436995507680929">Synchroniseer de leeslijst</translation>
 <translation id="2765217105034171413">Klein</translation>
+<translation id="2767124759205735526">Synchroniseer geschiedenis en ingetypte adressen</translation>
 <translation id="2825232297853754349">Je moet akkoord gaan met de algemene voorwaarden.</translation>
 <translation id="2842985007712546952">Bovenliggende map</translation>
 <translation id="2843343418360315034">Hongaars (<ph name="ORIGIN" />)</translation>
@@ -98,6 +104,7 @@ geblokkeerd</translation>
 <translation id="3073196329485613487">Bij je account aanmelden</translation>
 <translation id="307859903981308731">Door verder te gaan, ga je akkoord met Vivaldi's</translation>
 <translation id="3086746722712840547">notitie</translation>
+<translation id="3087734570205094154">Onderaan</translation>
 <translation id="3091563570137981919">Traceerder- en advertentieblokkering</translation>
 <translation id="3134385238404760368">Geen recente tabs</translation>
 <translation id="3157931365184549694">Herstellen</translation>
@@ -127,12 +134,14 @@ geblokkeerd</translation>
 <translation id="3699026013955941879">De code is verlopen. Vraag een nieuwe activatiecode aan.</translation>
 <translation id="3700829948786686853">Welkom bij Vivaldi</translation>
 <translation id="3766350025418769949">Je kunt de in Vivaldi Wachtwoordbeheer opgeslagen wachtwoorden gebruiken in andere apps op jouw iPad.</translation>
+<translation id="3842727926262967527">Selecteer waar je de tabbalk en het adresveld wilt hebben.</translation>
 <translation id="3845564230651302310">Toepassen nieuwe traceringsfilterinstellingen...</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="3866249974567520381">Beschrijving</translation>
 <translation id="3872195896030547485">Voer een geldig e-mailadres in.</translation>
 <translation id="3894427358181296146">Map toevoegen</translation>
 <translation id="3897092660631435901">Menu</translation>
+<translation id="3921585859122905677">Positie adresbalk</translation>
 <translation id="3953599441418463312">Japans (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Traceerder geblokkeerd</translation>
 <translation id="3958433364221339259">Zoeken met <ph name="SEARCH_ENGINE" /></translation>
@@ -163,7 +172,9 @@ geblokkeerd</translation>
 <translation id="4394049700291259645">Uitschakelen</translation>
 <translation id="4413780690230851155">Browsegeschiedenis wissen</translation>
 <translation id="4452878871193896747">Indonesisch (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Tabbladstijl</translation>
 <translation id="4474581062946673155">Er zijn momenteel geen tabbladen gesynchroniseerd vanaf andere apparaten.</translation>
+<translation id="4488900295693536220">Van toepassing met adresbalk onderaan, maakt de bovenste suggesties beter bereikbaar.</translation>
 <translation id="4493850495402472953">en</translation>
 <translation id="4497115807425788318">Locatie</translation>
 <translation id="4507213865286211606">Voorbeeldgrootte</translation>
@@ -207,6 +218,7 @@ geblokkeerd</translation>
 <translation id="5238642303473095117">Gegevens wissen</translation>
 <translation id="5245732982828228444">Hier vind je je notities</translation>
 <translation id="5249199221558969362">Voer een realistische levensduur in.</translation>
+<translation id="5271549068863921519">Wachtwoord opslaan</translation>
 <translation id="5290452628447338707">Geen notities</translation>
 <translation id="5317780077021120954">Opslaan</translation>
 <translation id="5349678548463426691">Op beschrijving</translation>
@@ -240,6 +252,7 @@ geblokkeerd</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> items verplaatst</translation>
 <translation id="6147094071357011481">Onlangs gesloten tabs zijn niet beschikbaar</translation>
 <translation id="6193995664633100765">Indisch (<ph name="ORIGIN" />)</translation>
+<translation id="6278428485366576908">Thema</translation>
 <translation id="6365929278691047681">Duits (<ph name="ORIGIN" />)</translation>
 <translation id="6404511346730675251">Bladwijzer bewerken</translation>
 <translation id="6406506848690869874">Synchronisatie</translation>
@@ -278,7 +291,6 @@ geblokkeerd</translation>
 <translation id="7041964446309059643">Handmatig</translation>
 <translation id="7110758301321962823">Gebruikersnaam herstellen</translation>
 <translation id="7194677467200983873">Laatst gesynchroniseerd:</translation>
-<translation id="7196846668589096106">Desktoptabbladen</translation>
 <translation id="7210372243397300116">Map doorzoeken</translation>
 <translation id="7215420652436283416">Op adres</translation>
 <translation id="7229439505896086266">Notitie aanmaken</translation>
@@ -318,6 +330,7 @@ geblokkeerd</translation>
 <translation id="8076492880354921740">Tabs</translation>
 <translation id="8112996065264879835">Deze code komt niet overeen met hetgeen we je hebben gestuurd.
         Je hebt de maximale limiet voor verkeerde pogingen bereikt. Vraag hieronder een nieuwe code aan met de optie Opnieuw verzenden.</translation>
+<translation id="8142291334394582384">Draai volgorde zoeksuggesties om</translation>
 <translation id="8147118677117542370">Geef je leeftijd op.</translation>
 <translation id="8165573437634525334">Gegevens beveiligd door coderingswachtwoord</translation>
 <translation id="8182979418912184986">Nieuw privétab</translation>
@@ -326,6 +339,7 @@ geblokkeerd</translation>
 <translation id="8273666073173891138">Notitie opgeslagen in <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Importeren</translation>
 <translation id="8284356787013856231">Toestemming om het bestand te openen geweigerd</translation>
+<translation id="8289933454364510719">Boven of onder</translation>
 <translation id="8326104954595890674">Nieuwe privétab</translation>
 <translation id="8329813750766387010">Bijgewerkt: <ph name="DATE" /></translation>
 <translation id="8347535536909603600">Cookiewaarschuwingen verwijderen (<ph name="TYPE" />)</translation>
@@ -349,6 +363,8 @@ geblokkeerd</translation>
 <translation id="8684294196284714094">Klaar om Vivaldi in te stellen als je standaardbrowser?</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> items verwijderd</translation>
 <translation id="8763006697839582351">In Vivaldi privé openen</translation>
+<translation id="8765173886020357878">Zoeksuggesties</translation>
+<translation id="8786689981011401964">Achtergrondafbeeldingen</translation>
 <translation id="8804164990146287819">Privacybeleid</translation>
 <translation id="8819841443522803117">Tijd om te wisselen van standaardbrowser? Kies Vivaldi.</translation>
 <translation id="8820817407110198400">Bladwijzers</translation>

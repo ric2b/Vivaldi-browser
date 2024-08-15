@@ -8,11 +8,11 @@ import("../visibility.gni")
 
 devtools_module("trace") {
   sources = [
+    "EntriesFilter.ts",
     "LegacyTracingModel.ts",
     "ModelImpl.ts",
     "Processor.ts",
     "TracingManager.ts",
-    "TreeManipulator.ts",
   ]
 
   deps = [
@@ -22,6 +22,7 @@ devtools_module("trace") {
     "extras:bundle",
     "handlers:bundle",
     "helpers:bundle",
+    "root-causes:bundle",
     "types:bundle",
   ]
 }

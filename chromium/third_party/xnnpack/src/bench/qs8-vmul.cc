@@ -18,7 +18,7 @@
 #include <xnnpack/common.h>
 #include <xnnpack/microfnptr.h>
 #include <xnnpack/microparams-init.h>
-#include <xnnpack/vmul.h>
+#include <xnnpack/vbinary.h>
 
 
 static void qs8_vmul(
@@ -181,6 +181,21 @@ static void qs8_vmul(
     ->Apply(benchmark::utils::BinaryElementwiseParameters<int8_t, int8_t>)
     ->UseRealTime();
 #endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
+
+#if XNN_ENABLE_RISCV_VECTOR && XNN_ARCH_RISCV
+  BENCHMARK_CAPTURE(qs8_vmul, rvv_u1v,
+                    xnn_qs8_vmul_minmax_fp32_ukernel__rvv_u1v,
+                    xnn_init_qs8_mul_minmax_fp32_scalar_params,
+                    benchmark::utils::CheckRVV)
+    ->Apply(benchmark::utils::BinaryElementwiseParameters<int8_t, int8_t>)
+    ->UseRealTime();
+  BENCHMARK_CAPTURE(qs8_vmul, rvv_u2v,
+                    xnn_qs8_vmul_minmax_fp32_ukernel__rvv_u2v,
+                    xnn_init_qs8_mul_minmax_fp32_scalar_params,
+                    benchmark::utils::CheckRVV)
+    ->Apply(benchmark::utils::BinaryElementwiseParameters<int8_t, int8_t>)
+    ->UseRealTime();
+#endif  // XNN_ENABLE_RISCV_VECTOR && XNN_ARCH_RISCV
 
 BENCHMARK_CAPTURE(qs8_vmul, scalar_u1,
                   xnn_qs8_vmul_minmax_fp32_ukernel__scalar_u1,

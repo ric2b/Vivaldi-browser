@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -28,7 +29,6 @@
 #include "components/attribution_reporting/test_utils.h"
 #include "content/browser/attribution_reporting/attribution_config.h"
 #include "content/browser/attribution_reporting/attribution_reporting.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace content {
@@ -154,7 +154,7 @@ class AttributionInteropParser {
     AttributionInteropOutput output;
 
     {
-      absl::optional<base::Value> reports = dict.Extract(kReportsKey);
+      std::optional<base::Value> reports = dict.Extract(kReportsKey);
       auto context = PushContext(kReportsKey);
       ParseListOfDicts(base::OptionalToPtr(reports),
                        [&](base::Value::Dict report) {
@@ -163,7 +163,7 @@ class AttributionInteropParser {
     }
 
     {
-      absl::optional<base::Value> regs =
+      std::optional<base::Value> regs =
           dict.Extract(kUnparsableRegistrationsKey);
       auto context = PushContext(kUnparsableRegistrationsKey);
       ParseListOfDicts(base::OptionalToPtr(regs), [&](base::Value::Dict reg) {
@@ -180,9 +180,12 @@ class AttributionInteropParser {
     return output;
   }
 
-  [[nodiscard]] std::string ParseConfig(const base::Value::Dict& dict,
-                                        AttributionConfig& config,
-                                        bool required) && {
+  [[nodiscard]] std::string ParseConfig(
+      const base::Value::Dict& dict,
+      AttributionInteropConfig& interop_config,
+      bool required) && {
+    AttributionConfig& config = interop_config.attribution_config;
+
     ParseInt(dict, "max_sources_per_origin", config.max_sources_per_origin,
              required);
 
@@ -235,7 +238,7 @@ class AttributionInteropParser {
     ParseInt(dict, "max_event_level_reports_per_destination",
              config.event_level_limit.max_reports_per_destination, required);
     ParseDouble(dict, "randomized_response_epsilon",
-                config.event_level_limit.randomized_response_epsilon, required);
+                interop_config.max_event_level_epsilon, required);
     ParseInt(dict, "max_aggregatable_reports_per_destination",
              config.aggregate_limit.max_reports_per_destination, required);
 
@@ -312,7 +315,7 @@ class AttributionInteropParser {
   void VerifyReportingOrigin(const base::Value::Dict& dict,
                              const SuitableOrigin& reporting_origin) {
     static constexpr char kUrlKey[] = "url";
-    absl::optional<SuitableOrigin> origin = ParseOrigin(dict, kUrlKey);
+    std::optional<SuitableOrigin> origin = ParseOrigin(dict, kUrlKey);
     if (has_error_) {
       return;
     }
@@ -330,9 +333,9 @@ class AttributionInteropParser {
                                                    : events.back().time,
                   /*strictly_greater=*/true);
 
-    absl::optional<SuitableOrigin> context_origin;
-    absl::optional<SuitableOrigin> reporting_origin;
-    absl::optional<SourceType> source_type;
+    std::optional<SuitableOrigin> context_origin;
+    std::optional<SuitableOrigin> reporting_origin;
+    std::optional<SourceType> source_type;
 
     ParseDict(dict, kRegistrationRequestKey, [&](base::Value::Dict reg_req) {
       context_origin = ParseOrigin(reg_req, "context_origin");
@@ -361,10 +364,10 @@ class AttributionInteropParser {
 
             ParseDict(
                 response, kResponseKey, [&](base::Value::Dict response_dict) {
-                  absl::optional<base::Value> source = response_dict.Extract(
+                  std::optional<base::Value> source = response_dict.Extract(
                       "Attribution-Reporting-Register-Source");
 
-                  absl::optional<base::Value> trigger = response_dict.Extract(
+                  std::optional<base::Value> trigger = response_dict.Extract(
                       "Attribution-Reporting-Register-Trigger");
 
                   if (source.has_value() == trigger.has_value()) {
@@ -416,7 +419,7 @@ class AttributionInteropParser {
                   /*strictly_greater=*/false);
     dict.Remove(kReportTimeKey);
 
-    if (absl::optional<base::Value> url = dict.Extract(kReportUrlKey);
+    if (std::optional<base::Value> url = dict.Extract(kReportUrlKey);
         const std::string* str = url ? url->GetIfString() : nullptr) {
       report.url = GURL(*str);
     }
@@ -425,7 +428,7 @@ class AttributionInteropParser {
       *Error() << "must be a valid URL";
     }
 
-    if (absl::optional<base::Value> payload = dict.Extract(kPayloadKey)) {
+    if (std::optional<base::Value> payload = dict.Extract(kPayloadKey)) {
       report.payload = std::move(*payload);
     } else {
       auto context = PushContext(kPayloadKey);
@@ -453,7 +456,7 @@ class AttributionInteropParser {
     dict.Remove(kTimeKey);
 
     {
-      absl::optional<base::Value> type = dict.Extract(kTypeKey);
+      std::optional<base::Value> type = dict.Extract(kTypeKey);
       bool ok = false;
 
       if (const std::string* str = type ? type->GetIfString() : nullptr) {
@@ -487,11 +490,11 @@ class AttributionInteropParser {
     }
   }
 
-  absl::optional<SuitableOrigin> ParseOrigin(const base::Value::Dict& dict,
-                                             base::StringPiece key) {
+  std::optional<SuitableOrigin> ParseOrigin(const base::Value::Dict& dict,
+                                            base::StringPiece key) {
     auto context = PushContext(key);
 
-    absl::optional<SuitableOrigin> origin;
+    std::optional<SuitableOrigin> origin;
     if (const std::string* s = dict.FindString(key)) {
       origin = SuitableOrigin::Deserialize(*s);
     }
@@ -529,18 +532,18 @@ class AttributionInteropParser {
     return base::Time();
   }
 
-  absl::optional<bool> ParseBool(const base::Value::Dict& dict,
-                                 base::StringPiece key) {
+  std::optional<bool> ParseBool(const base::Value::Dict& dict,
+                                base::StringPiece key) {
     auto context = PushContext(key);
 
     const base::Value* v = dict.Find(key);
     if (!v) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (!v->is_bool()) {
       *Error() << "must be a bool";
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     return v->GetBool();
@@ -550,13 +553,13 @@ class AttributionInteropParser {
     return ParseBool(dict, "debug_permission").value_or(false);
   }
 
-  absl::optional<SourceType> ParseSourceType(const base::Value::Dict& dict) {
+  std::optional<SourceType> ParseSourceType(const base::Value::Dict& dict) {
     static constexpr char kNavigation[] = "navigation";
     static constexpr char kEvent[] = "event";
 
     const std::string* v = dict.FindString(kSourceTypeKey);
     if (!v) {
-      return absl::nullopt;
+      return std::nullopt;
     }
 
     if (*v == kNavigation) {
@@ -567,7 +570,7 @@ class AttributionInteropParser {
       auto context = PushContext(kSourceTypeKey);
       *Error() << "must be either \"" << kNavigation << "\" or \"" << kEvent
                << "\"";
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 
@@ -696,9 +699,9 @@ ParseAttributionInteropInput(base::Value::Dict input,
   return AttributionInteropParser(offset_time).ParseInput(std::move(input));
 }
 
-base::expected<AttributionConfig, std::string> ParseAttributionConfig(
-    const base::Value::Dict& dict) {
-  AttributionConfig config;
+base::expected<AttributionInteropConfig, std::string>
+ParseAttributionInteropConfig(const base::Value::Dict& dict) {
+  AttributionInteropConfig config;
   std::string error =
       AttributionInteropParser().ParseConfig(dict, config, /*required=*/true);
   if (!error.empty()) {
@@ -707,8 +710,8 @@ base::expected<AttributionConfig, std::string> ParseAttributionConfig(
   return config;
 }
 
-std::string MergeAttributionConfig(const base::Value::Dict& dict,
-                                   AttributionConfig& config) {
+std::string MergeAttributionInteropConfig(const base::Value::Dict& dict,
+                                          AttributionInteropConfig& config) {
   return AttributionInteropParser().ParseConfig(dict, config,
                                                 /*required=*/false);
 }
@@ -786,20 +789,6 @@ AttributionInteropOutput::Report& AttributionInteropOutput::Report::operator=(
   url = other.url;
   payload = other.payload.Clone();
   return *this;
-}
-
-// TODO(apaseltiner): The payload comparison here is too brittle. Reports can
-// be logically equivalent without having exactly the same JSON structure.
-bool operator==(const AttributionInteropOutput::Report& a,
-                const AttributionInteropOutput::Report& b) {
-  return a.time == b.time &&  //
-         a.url == b.url &&    //
-         a.payload == b.payload;
-}
-
-bool operator==(const AttributionInteropOutput::UnparsableRegistration& a,
-                const AttributionInteropOutput::UnparsableRegistration& b) {
-  return a.time == b.time && a.type == b.type;
 }
 
 std::ostream& operator<<(std::ostream& out,

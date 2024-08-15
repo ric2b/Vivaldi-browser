@@ -31,12 +31,13 @@
 #include <algorithm>
 #include <map>
 #include <memory>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "dawn/wire/WireCmd_autogen.h"
 #include "dawn/wire/WireServer.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::wire::server {
 
@@ -75,7 +76,7 @@ struct ObjectData<WGPUBuffer> : public ObjectDataBase<WGPUBuffer> {
 };
 
 struct DeviceInfo {
-    Server* server;
+    raw_ptr<Server> server;
     ObjectHandle self;
 };
 
@@ -90,7 +91,7 @@ struct ObjectData<WGPUDevice> : public ObjectDataBase<WGPUDevice> {
 template <typename T>
 struct Known {
     ObjectId id;
-    ObjectData<T>* data;
+    raw_ptr<ObjectData<T>> data;
 
     const ObjectData<T>* operator->() const {
         DAWN_ASSERT(data != nullptr);
@@ -263,7 +264,7 @@ class KnownObjects<WGPUDevice> : public KnownObjectsBase<WGPUDevice> {
         KnownObjectsBase<WGPUDevice>::Free(id);
     }
 
-    bool IsKnown(WGPUDevice device) const { return mKnownSet.count(device) != 0; }
+    bool IsKnown(WGPUDevice device) const { return mKnownSet.contains(device); }
 
   private:
     void AddToKnownSet(Known<WGPUDevice> device) {
@@ -271,35 +272,7 @@ class KnownObjects<WGPUDevice> : public KnownObjectsBase<WGPUDevice> {
             mKnownSet.insert(device->handle);
         }
     }
-    std::unordered_set<WGPUDevice> mKnownSet;
-};
-
-// ObjectIds are lost in deserialization. Store the ids of deserialized
-// objects here so they can be used in command handlers. This is useful
-// for creating ReturnWireCmds which contain client ids
-template <typename T>
-class ObjectIdLookupTable {
-  public:
-    void Store(T key, ObjectId id) { mTable[key] = id; }
-
-    // Return the cached ObjectId, or 0 (null handle)
-    ObjectId Get(T key) const {
-        const auto it = mTable.find(key);
-        if (it != mTable.end()) {
-            return it->second;
-        }
-        return 0;
-    }
-
-    void Remove(T key) {
-        auto it = mTable.find(key);
-        if (it != mTable.end()) {
-            mTable.erase(it);
-        }
-    }
-
-  private:
-    std::map<T, ObjectId> mTable;
+    absl::flat_hash_set<WGPUDevice> mKnownSet;
 };
 
 }  // namespace dawn::wire::server

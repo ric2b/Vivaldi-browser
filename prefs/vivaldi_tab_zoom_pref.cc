@@ -13,12 +13,11 @@
 namespace vivaldi {
 
 bool IsTabZoomEnabled(content::WebContents* web_contents) {
+  if (!::vivaldi::IsVivaldiRunning())
+    return false;
+
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
-
-  bool is_vivaldi = ::vivaldi::IsVivaldiRunning();
-  if (!is_vivaldi)
-    return false;
 
   bool tabZoom =
       profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesTabZoomEnabled);

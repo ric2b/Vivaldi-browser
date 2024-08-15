@@ -7,10 +7,10 @@
 
 #include "build/branding_buildflags.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
+#include "chrome/test/base/chromeos/crosier/ash_integration_test.h"
 #include "chrome/test/base/chromeos/crosier/chromeos_integration_login_mixin.h"
-#include "chrome/test/base/chromeos/crosier/interactive_ash_test.h"
 
-class LoginIntegrationTest : public InteractiveAshTest {
+class LoginIntegrationTest : public AshIntegrationTest {
  public:
   LoginIntegrationTest() {
     set_exit_when_last_browser_closes(false);
@@ -29,11 +29,13 @@ IN_PROC_BROWSER_TEST_F(LoginIntegrationTest, TestLogin) {
 
   // Waits for the primary user session to start.
   ash::test::WaitForPrimaryUserSessionStart();
+
+  EXPECT_TRUE(login_mixin().IsCryptohomeMounted());
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Gaia login is only supported for branded build.
-class GaiaLoginIntegrationTest : public InteractiveAshTest {
+class GaiaLoginIntegrationTest : public AshIntegrationTest {
  public:
   GaiaLoginIntegrationTest() {
     set_exit_when_last_browser_closes(false);
@@ -55,5 +57,7 @@ IN_PROC_BROWSER_TEST_F(GaiaLoginIntegrationTest, GaiaLogin) {
 
   // Waits for the primary user session to start.
   ash::test::WaitForPrimaryUserSessionStart();
+
+  EXPECT_TRUE(login_mixin().IsCryptohomeMounted());
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)

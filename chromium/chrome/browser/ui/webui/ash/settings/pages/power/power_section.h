@@ -49,7 +49,10 @@ class PowerSection : public OsSettingsSection,
   void PowerChanged(const power_manager::PowerSupplyProperties& proto) override;
 
   void OnGotSwitchStates(
-      absl::optional<chromeos::PowerManagerClient::SwitchStates> result);
+      std::optional<chromeos::PowerManagerClient::SwitchStates> result);
+
+  // False until we observe the first PowerChanged event.
+  bool has_observed_power_status_{false};
 
   raw_ptr<PrefService> pref_service_;
   base::WeakPtrFactory<PowerSection> weak_ptr_factory_{this};

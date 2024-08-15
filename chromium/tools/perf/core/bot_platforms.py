@@ -142,6 +142,7 @@ class BenchmarkConfig(object):
     self.benchmark = benchmark
     self.abridged = abridged
     self._stories = None
+    self._exhaustive_stories = None
     self.is_telemetry = True
 
   @property
@@ -164,6 +165,20 @@ class BenchmarkConfig(object):
     stories = story_filter_obj.FilterStories(story_set)
     self._stories = [story.name for story in stories]
     return self._stories
+
+  @property
+  def exhaustive_stories(self):
+    if self._exhaustive_stories is not None:
+      return self._exhaustive_stories
+    story_set = benchmark_utils.GetBenchmarkStorySet(self.benchmark(),
+                                                     exhaustive=True)
+    abridged_story_set_tag = (story_set.GetAbridgedStorySetTagFilter()
+                              if self.abridged else None)
+    story_filter_obj = story_filter.StoryFilter(
+        abridged_story_set_tag=abridged_story_set_tag)
+    stories = story_filter_obj.FilterStories(story_set)
+    self._exhaustive_stories = [story.name for story in stories]
+    return self._exhaustive_stories
 
 
 class ExecutableConfig(object):
@@ -389,8 +404,8 @@ _LINUX_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
     'blink_perf.svg',
     'blink_perf.paint',
 ])
-_LINUX_BENCHMARK_CONFIGS_WITH_MINORMC = PerfSuite(_LINUX_BENCHMARK_CONFIGS).Add(
-    [
+_LINUX_BENCHMARK_CONFIGS_WITH_NOMINORMS = PerfSuite(
+    _LINUX_BENCHMARK_CONFIGS).Add([
         'jetstream2-nominorms',
         'octane-nominorms',
         'speedometer2-nominorms',
@@ -473,6 +488,16 @@ _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('octane'),
     _GetBenchmarkConfig('speedometer2'),
 ])
+_WIN_11_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
+    'blink_perf.display_locking',
+    'v8.runtime_stats.top_25',
+])
+_WIN_11_EXECUTABLE_CONFIGS = frozenset([
+    _base_perftests(200),
+    _components_perftests(125),
+    _dawn_perf_tests(600),
+    _views_perftests(),
+])
 _ANDROID_GO_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('system_health.memory_mobile'),
     _GetBenchmarkConfig('system_health.common_mobile'),
@@ -515,7 +540,10 @@ _ANDROID_PIXEL6_PGO_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('speedometer3'),
 ])
 _ANDROID_PIXEL6_PRO_BENCHMARK_CONFIGS = PerfSuite(
-    _OFFICIAL_EXCEPT_DISPLAY_LOCKING)
+    _OFFICIAL_EXCEPT_DISPLAY_LOCKING).Add([
+        _GetBenchmarkConfig('jetstream2-nominorms'),
+        _GetBenchmarkConfig('speedometer2-nominorms'),
+    ])
 _ANDROID_PIXEL6_EXECUTABLE_CONFIGS = frozenset([
     _components_perftests(60),
 ])
@@ -565,7 +593,7 @@ _ANDROID_PIXEL2_PERF_CALIBRATION_BENCHMARK_CONFIGS = PerfSuite([
 # Linux
 LINUX = PerfPlatform('linux-perf',
                      'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
-                     _LINUX_BENCHMARK_CONFIGS_WITH_MINORMC,
+                     _LINUX_BENCHMARK_CONFIGS_WITH_NOMINORMS,
                      26,
                      'linux',
                      executables=_LINUX_EXECUTABLE_CONFIGS)
@@ -679,27 +707,28 @@ WIN_10_PGO = PerfPlatform(
     pinpoint_only=True)
 WIN_10_AMD_LAPTOP = PerfPlatform('win-10_amd_laptop-perf',
                                  'Windows 10 Laptop with AMD chipset.',
-                                 _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS, 5, 'win')
+                                 _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS, 3, 'win')
 WIN_10_AMD_LAPTOP_PGO = PerfPlatform('win-10_amd_laptop-perf-pgo',
                                      'Windows 10 Laptop with AMD chipset.',
                                      _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS,
-                                     5,
+                                     3,
                                      'win',
                                      pinpoint_only=True)
+WIN_11 = PerfPlatform('win-11-perf',
+                      'Windows Dell PowerEdge R350',
+                      _WIN_11_BENCHMARK_CONFIGS,
+                      20,
+                      'win',
+                      executables=_WIN_11_EXECUTABLE_CONFIGS)
+WIN_11_PGO = PerfPlatform('win-11-perf-pgo',
+                          'Windows Dell PowerEdge R350',
+                          _WIN_11_BENCHMARK_CONFIGS,
+                          26,
+                          'win',
+                          executables=_WIN_11_EXECUTABLE_CONFIGS,
+                          pinpoint_only=True)
 
 # Android
-ANDROID_GO = PerfPlatform('android-go-perf', 'Android O (gobo)',
-                          _ANDROID_GO_BENCHMARK_CONFIGS, 13, 'android')
-ANDROID_GO_PGO = PerfPlatform('android-go-perf-pgo',
-                              'Android O (gobo)',
-                              _ANDROID_GO_BENCHMARK_CONFIGS,
-                              13,
-                              'android',
-                              pinpoint_only=True)
-ANDROID_GO_WEBVIEW = PerfPlatform('android-go_webview-perf',
-                                  'Android OPM1.171019.021 (gobo)',
-                                  _ANDROID_GO_WEBVIEW_BENCHMARK_CONFIGS, 8,
-                                  'android')
 ANDROID_PIXEL2 = PerfPlatform('android-pixel2-perf',
                               'Android OPM1.171019.021',
                               _ANDROID_PIXEL2_BENCHMARK_CONFIGS,

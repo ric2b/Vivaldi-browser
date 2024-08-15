@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(np_cpp_sample main.cpp)
+add_executable(np_cpp_sample main.cc)
 
 target_link_libraries(np_cpp_sample nearby_protocol)
 

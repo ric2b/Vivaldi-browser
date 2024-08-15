@@ -225,46 +225,46 @@ using extensions::vivaldi::tabs_private::TranslateStep;
 TranslateStep ToVivaldiTranslateStep(translate::TranslateStep step) {
   switch (step) {
     case translate::TranslateStep::TRANSLATE_STEP_BEFORE_TRANSLATE:
-      return TranslateStep::TRANSLATE_STEP_BEFORE_TRANSLATE;
+      return TranslateStep::kBeforeTranslate;
     case translate::TranslateStep::TRANSLATE_STEP_TRANSLATING:
-      return TranslateStep::TRANSLATE_STEP_TRANSLATING;
+      return TranslateStep::kTranslating;
     case translate::TranslateStep::TRANSLATE_STEP_AFTER_TRANSLATE:
-      return TranslateStep::TRANSLATE_STEP_AFTER_TRANSLATE;
+      return TranslateStep::kAfterTranslate;
     case translate::TranslateStep::TRANSLATE_STEP_TRANSLATE_ERROR:
-      return TranslateStep::TRANSLATE_STEP_TRANSLATE_ERROR;
+      return TranslateStep::kTranslateError;
     default:
       NOTREACHED();
-      return TranslateStep::TRANSLATE_STEP_IDLE;
+      return TranslateStep::kIdle;
   }
 }
 
 TranslateError ToVivaldiTranslateError(translate::TranslateErrors error) {
   switch (error) {
     case translate::TranslateErrors::NONE:
-      return TranslateError::TRANSLATE_ERROR_NO_ERROR;
+      return TranslateError::kNoError;
     case translate::TranslateErrors::NETWORK:
-      return TranslateError::TRANSLATE_ERROR_NETWORK;
+      return TranslateError::kNetwork;
     case translate::TranslateErrors::INITIALIZATION_ERROR:
-      return TranslateError::TRANSLATE_ERROR_INIT_ERROR;
+      return TranslateError::kInitError;
     case translate::TranslateErrors::UNKNOWN_LANGUAGE:
-      return TranslateError::TRANSLATE_ERROR_UNKNOWN_LANGUAGE;
+      return TranslateError::kUnknownLanguage;
     case translate::TranslateErrors::UNSUPPORTED_LANGUAGE:
-      return TranslateError::TRANSLATE_ERROR_UNSUPPORTED_LANGUAGE;
+      return TranslateError::kUnsupportedLanguage;
     case translate::TranslateErrors::IDENTICAL_LANGUAGES:
-      return TranslateError::TRANSLATE_ERROR_IDENTICAL_LANGUAGES;
+      return TranslateError::kIdenticalLanguages;
     case translate::TranslateErrors::TRANSLATION_ERROR:
-      return TranslateError::TRANSLATE_ERROR_TRANSLATION_ERROR;
+      return TranslateError::kTranslationError;
     case translate::TranslateErrors::TRANSLATION_TIMEOUT:
-      return TranslateError::TRANSLATE_ERROR_TRANSLATION_TIMEOUT;
+      return TranslateError::kTranslationTimeout;
     case translate::TranslateErrors::UNEXPECTED_SCRIPT_ERROR:
-      return TranslateError::TRANSLATE_ERROR_UNEXPECTED_SCRIPT_ERROR;
+      return TranslateError::kUnexpectedScriptError;
     case translate::TranslateErrors::BAD_ORIGIN:
-      return TranslateError::TRANSLATE_ERROR_BAD_ORIGIN;
+      return TranslateError::kBadOrigin;
     case translate::TranslateErrors::SCRIPT_LOAD_ERROR:
-      return TranslateError::TRANSLATE_ERROR_SCRIPT_LOAD_ERROR;
+      return TranslateError::kScriptLoadError;
     default:
       NOTREACHED();
-      return TranslateError::TRANSLATE_ERROR_NONE;
+      return TranslateError::kNone;
   }
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)

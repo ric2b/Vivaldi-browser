@@ -25,7 +25,7 @@ namespace internal {
 // that's permanent consistent).
 BASE_FEATURE(kSidePanelCompanion,
              "SidePanelCompanion",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kSidePanelCompanion2,
              "SidePanelCompanion2",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -69,10 +69,10 @@ bool ShouldOverrideCheckingUserPermissionsForCompanion() {
   return command_line->HasSwitch(kDisableCheckUserPermissionsForCompanion);
 }
 
-absl::optional<bool> ShouldForceOverrideCompanionPinState() {
+std::optional<bool> ShouldForceOverrideCompanionPinState() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(kForceCompanionPinnedState)) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   std::string pinned_state =
@@ -86,7 +86,7 @@ absl::optional<bool> ShouldForceOverrideCompanionPinState() {
 
   NOTREACHED() << "Invalid Companion pin state command line switch value: "
                << pinned_state;
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 }  // namespace switches

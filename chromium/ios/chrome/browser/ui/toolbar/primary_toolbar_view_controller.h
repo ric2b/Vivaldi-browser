@@ -39,10 +39,6 @@
 // Pan gesture handler for the toolbar.
 @property(nonatomic, weak) ViewRevealingVerticalPanHandler* panGestureHandler;
 
-// Vivaldi
-- (void)updateVivaldiShieldState:(ATBSettingType)setting;
-// End Vivaldi
-
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_PRIMARY_TOOLBAR_VIEW_CONTROLLER_H_

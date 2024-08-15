@@ -133,6 +133,7 @@ tint::ast::transform::VertexStepMode ToTintVertexStepMode(wgpu::VertexStepMode m
         case wgpu::VertexStepMode::Instance:
             return tint::ast::transform::VertexStepMode::kInstance;
         case wgpu::VertexStepMode::VertexBufferNotUsed:
+        case wgpu::VertexStepMode::Undefined:
             break;
     }
     DAWN_UNREACHABLE();
@@ -178,7 +179,7 @@ tint::ast::transform::VertexPulling::Config BuildVertexPullingTransformConfig(
     cfg.pulling_group = static_cast<uint32_t>(pullingBufferBindingSet);
 
     cfg.vertex_state.resize(renderPipeline.GetVertexBufferCount());
-    for (VertexBufferSlot slot : IterateBitSet(renderPipeline.GetVertexBufferSlotsUsed())) {
+    for (VertexBufferSlot slot : IterateBitSet(renderPipeline.GetVertexBuffersUsed())) {
         const VertexBufferInfo& dawnInfo = renderPipeline.GetVertexBuffer(slot);
         tint::ast::transform::VertexBufferLayoutDescriptor* tintInfo =
             &cfg.vertex_state[static_cast<uint8_t>(slot)];

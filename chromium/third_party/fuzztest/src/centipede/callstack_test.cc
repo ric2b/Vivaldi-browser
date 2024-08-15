@@ -14,8 +14,10 @@
 
 #include "./centipede/callstack.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 #include "gmock/gmock.h"
@@ -25,6 +27,8 @@
 
 namespace centipede {
 namespace {
+
+using ::testing::Pointwise;
 
 // Simple test, calls OnFunctionEntry with fake sp values.
 TEST(CallStack, SimpleTest) {
@@ -109,6 +113,13 @@ __attribute__((noinline)) void Func0() {
   BreakOptimization(0);
 }
 
+// A 2-tuple matcher conversion of `::testing::IsSupersetOf`.
+MATCHER(IsSupersetOf, "") {
+  auto [actual, expected] = arg;
+  return ::testing::ExplainMatchResult(::testing::IsSupersetOf(expected),
+                                       actual, result_listener);
+}
+
 // This test actually creates a function call tree, and calls OnFunctionEntry
 // with real sp values (and fake PCs).
 TEST(CallStack, RealCallsTest) {
@@ -121,7 +132,33 @@ TEST(CallStack, RealCallsTest) {
   std::vector<TestCallstack> expected_test_callstacks = {
       {0, 1, 2, 3}, {0, 1, 2, 3}, {0, 1, 3}, {0, 2, 3}, {0, 2, 3}, {1, 2, 3},
       {1, 2, 3},    {1, 3},       {2, 3},    {2, 3},    {3}};
-  EXPECT_EQ(g_test_callstacks, expected_test_callstacks);
+
+  // Each computed callstack should correctly include every function on the
+  // callstack. It may also contain some additional spurious functions - these
+  // are ones that have exited but not yet removed.
+  EXPECT_THAT(g_test_callstacks,
+              Pointwise(IsSupersetOf(), expected_test_callstacks));
+
+  // Check that the additional elements in each computed callstack only
+  // correspond to previous calls not yet removed.
+  for (TestCallstack &cs : g_test_callstacks) {
+    std::sort(cs.begin(), cs.end());
+  }
+  for (TestCallstack &cs : expected_test_callstacks) {
+    std::sort(cs.begin(), cs.end());
+  }
+  std::vector<TestCallstack> extra_calls(g_test_callstacks.size());
+  for (auto it_1 = g_test_callstacks.begin(),
+            it_2 = expected_test_callstacks.begin(), it = extra_calls.begin();
+       it_1 != g_test_callstacks.end(); it_1++, it_2++, it++) {
+    std::set_difference(it_1->begin(), it_1->end(), it_2->begin(), it_2->end(),
+                        std::inserter(*it, it->begin()));
+  }
+  EXPECT_THAT(std::vector<TestCallstack>(g_test_callstacks.begin(),
+                                         g_test_callstacks.end() - 1),
+              Pointwise(IsSupersetOf(),
+                        std::vector<TestCallstack>(extra_calls.begin() + 1,
+                                                   extra_calls.end())));
 }
 
 // Tests deep recursion.

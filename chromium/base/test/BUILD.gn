@@ -250,7 +250,6 @@ static_library("test_support") {
       "android/url_utils.cc",
       "android/url_utils.h",
       "multiprocess_test_android.cc",
-      "reached_code_profiler_android.cc",
       "test_file_util_android.cc",
       "test_file_util_linux.cc",
       "test_support_android.cc",
@@ -302,6 +301,7 @@ static_library("test_support") {
     sources += [
       "../fuchsia/test_component_context_for_process.cc",
       "../fuchsia/test_component_context_for_process.h",
+      "fidl_matchers.h",
       "scoped_dev_zero_fuchsia.cc",
       "scoped_dev_zero_fuchsia.h",
     ]
@@ -408,6 +408,9 @@ shared_library("immediate_crash_test_helper") {
   # Note: the helper has a header-only dependency on //base/immediate_helper.h.
   # However, the build rule intentionally omits an explicit //base dependency
   # to avoid potential ODR violations and minimize the amount of code linked in.
+  # We do however need to depend upon a buildflag header included in
+  # base/immediate_crash.h.
+  deps = [ "//base:fuzzing_buildflags" ]
 
   # Try to minimize the risk of non-official builds generating different code.
   if (!is_official_build) {
@@ -462,6 +465,7 @@ if (is_android) {
     ]
   }
 
+  # Used by all base test targets: gtests, robolectric, and instrumentation tests.
   android_library("test_support_java") {
     testonly = true
 
@@ -647,6 +651,7 @@ if (is_android) {
       "android/javatests/src/org/chromium/base/test/transit/InstrumentationThreadCondition.java",
       "android/javatests/src/org/chromium/base/test/transit/PublicTransitConfig.java",
       "android/javatests/src/org/chromium/base/test/transit/StationFacility.java",
+      "android/javatests/src/org/chromium/base/test/transit/TrafficControl.java",
       "android/javatests/src/org/chromium/base/test/transit/TransitAsserts.java",
       "android/javatests/src/org/chromium/base/test/transit/TransitStation.java",
       "android/javatests/src/org/chromium/base/test/transit/Transition.java",

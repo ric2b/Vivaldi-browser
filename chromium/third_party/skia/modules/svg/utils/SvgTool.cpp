@@ -15,6 +15,13 @@
 #include "modules/svg/include/SkSVGDOM.h"
 #include "src/utils/SkOSPath.h"
 #include "tools/flags/CommandLineFlags.h"
+#include "tools/fonts/FontToolUtils.h"
+
+#if defined(SK_BUILD_FOR_MAC)
+#include "include/ports/SkFontMgr_mac_ct.h"
+#else
+#include "include/ports/SkFontMgr_empty.h"
+#endif
 
 static DEFINE_string2(input , i, nullptr, "Input SVG file.");
 static DEFINE_string2(output, o, nullptr, "Output PNG file.");
@@ -41,15 +48,24 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // If necessary, clients should use a font manager that would load fonts from the system.
+#if defined(SK_BUILD_FOR_MAC)
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_CoreText(nullptr);
+#else
+    sk_sp<SkFontMgr> fontMgr = SkFontMgr_New_Custom_Empty();
+#endif
+
+    auto predecode = skresources::ImageDecodeStrategy::kPreDecode;
     auto rp = skresources::DataURIResourceProviderProxy::Make(
-                  skresources::FileResourceProvider::Make(SkOSPath::Dirname(FLAGS_input[0]),
-                                                          /*predecode=*/true),
-                  /*predecode=*/true);
+            skresources::FileResourceProvider::Make(SkOSPath::Dirname(FLAGS_input[0]), predecode),
+            predecode,
+            fontMgr);
 
     auto svg_dom = SkSVGDOM::Builder()
-                        .setFontManager(SkFontMgr::RefDefault())
+                        .setFontManager(fontMgr)
                         .setResourceProvider(std::move(rp))
                         .make(in);
+
     if (!svg_dom) {
         std::cerr << "Could not parse " << FLAGS_input[0] << "\n";
         return 1;

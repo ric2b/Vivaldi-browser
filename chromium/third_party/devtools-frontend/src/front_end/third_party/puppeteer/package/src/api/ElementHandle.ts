@@ -1,17 +1,7 @@
 /**
- * Copyright 2023 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2023 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 import type {Protocol} from 'devtools-protocol';
@@ -109,7 +99,7 @@ export interface Point {
  */
 export interface ElementScreenshotOptions extends ScreenshotOptions {
   /**
-   * @defaultValue true
+   * @defaultValue `true`
    */
   scrollIntoView?: boolean;
 }
@@ -443,7 +433,7 @@ export abstract class ElementHandle<
    *
    * JavaScript:
    *
-   * ```js
+   * ```ts
    * const feedHandle = await page.$('.feed');
    * expect(
    *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText))
@@ -963,13 +953,10 @@ export abstract class ElementHandle<
    * For locals script connecting to remote chrome environments, paths must be
    * absolute.
    */
-  async uploadFile(
+  abstract uploadFile(
     this: ElementHandle<HTMLInputElement>,
     ...paths: string[]
   ): Promise<void>;
-  async uploadFile(this: ElementHandle<HTMLInputElement>): Promise<void> {
-    throw new Error('Not implemented');
-  }
 
   /**
    * This method scrolls element into view if needed, and then uses
@@ -1158,7 +1145,8 @@ export abstract class ElementHandle<
 
   /**
    * This method returns the bounding box of the element (relative to the main frame),
-   * or `null` if the element is not visible.
+   * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+   * (example: `display: none`).
    */
   @throwIfDisposed()
   @ElementHandle.bindIsolatedHandle
@@ -1190,7 +1178,9 @@ export abstract class ElementHandle<
   }
 
   /**
-   * This method returns boxes of the element, or `null` if the element is not visible.
+   * This method returns boxes of the element,
+   * or `null` if the element is {@link https://drafts.csswg.org/css-display-4/#box-generation | not part of the layout}
+   * (example: `display: none`).
    *
    * @remarks
    *
@@ -1335,27 +1325,21 @@ export abstract class ElementHandle<
    * {@link Page.(screenshot:2) } to take a screenshot of the element.
    * If the element is detached from DOM, the method throws an error.
    */
+  async screenshot(
+    options: Readonly<ScreenshotOptions> & {encoding: 'base64'}
+  ): Promise<string>;
+  async screenshot(options?: Readonly<ScreenshotOptions>): Promise<Buffer>;
   @throwIfDisposed()
   @ElementHandle.bindIsolatedHandle
   async screenshot(
     this: ElementHandle<Element>,
     options: Readonly<ElementScreenshotOptions> = {}
   ): Promise<string | Buffer> {
-    const {
-      scrollIntoView = true,
-      captureBeyondViewport = true,
-      allowViewportExpansion = captureBeyondViewport,
-    } = options;
+    const {scrollIntoView = true} = options;
 
     let clip = await this.#nonEmptyVisibleBoundingBox();
 
     const page = this.frame.page();
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    await using _ =
-      allowViewportExpansion && clip
-        ? await page._createTemporaryViewportContainingBox(clip)
-        : null;
 
     if (scrollIntoView) {
       await this.scrollIntoViewIfNeeded();
@@ -1376,11 +1360,7 @@ export abstract class ElementHandle<
     clip.x += pageLeft;
     clip.y += pageTop;
 
-    return await page.screenshot({
-      ...options,
-      captureBeyondViewport: false,
-      clip,
-    });
+    return await page.screenshot({...options, clip});
   }
 
   async #nonEmptyVisibleBoundingBox() {

@@ -68,6 +68,7 @@ class TextureZeroInitTest : public DawnTest {
         descriptor.format = format;
         descriptor.mipLevelCount = mipLevelCount;
         descriptor.usage = usage;
+
         return descriptor;
     }
     wgpu::TextureViewDescriptor CreateTextureViewDescriptor(
@@ -1082,12 +1083,24 @@ TEST_P(TextureZeroInitTest, RenderPassSampledTextureClear) {
 // sampled and attachment (with LoadOp::Clear so the lazy clear can be skipped) then the sampled
 // subresource is correctly cleared.
 TEST_P(TextureZeroInitTest, TextureBothSampledAndAttachmentClear) {
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
+
     // Create a 2D array texture, layer 0 will be used as attachment, layer 1 as sampled.
     wgpu::TextureDescriptor texDesc;
     texDesc.usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment |
                     wgpu::TextureUsage::CopySrc;
     texDesc.size = {1, 1, 2};
     texDesc.format = wgpu::TextureFormat::RGBA8Unorm;
+
+    // Only set the textureBindingViewDimension in compat mode. It's not needed nor used in
+    // non-compat.
+    wgpu::TextureBindingViewDimensionDescriptor textureBindingViewDimensionDesc;
+    if (IsCompatibilityMode()) {
+        textureBindingViewDimensionDesc.textureBindingViewDimension =
+            wgpu::TextureViewDimension::e2DArray;
+        texDesc.nextInChain = &textureBindingViewDimensionDesc;
+    }
+
     wgpu::Texture texture = device.CreateTexture(&texDesc);
 
     wgpu::TextureViewDescriptor viewDesc;
@@ -1169,7 +1182,6 @@ TEST_P(TextureZeroInitTest, ComputePassSampledTextureClear) {
         }
     )";
     computePipelineDescriptor.compute.module = utils::CreateShaderModule(device, cs);
-    computePipelineDescriptor.compute.entryPoint = "main";
     wgpu::ComputePipeline computePipeline =
         device.CreateComputePipeline(&computePipelineDescriptor);
 
@@ -1519,11 +1531,23 @@ TEST_P(TextureZeroInitTest, PreservesInitializedMip) {
 // Test that if one layer of a texture is initialized and another is uninitialized, lazy clearing
 // the uninitialized layer does not clear the initialized layer.
 TEST_P(TextureZeroInitTest, PreservesInitializedArrayLayer) {
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
+
     wgpu::TextureDescriptor sampleTextureDescriptor =
         CreateTextureDescriptor(1, 2,
                                 wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
                                     wgpu::TextureUsage::TextureBinding,
                                 kColorFormat);
+
+    // Only set the textureBindingViewDimension in compat mode. It's not needed
+    // nor used in non-compat.
+    wgpu::TextureBindingViewDimensionDescriptor textureBindingViewDimensionDesc;
+    if (IsCompatibilityMode()) {
+        textureBindingViewDimensionDesc.textureBindingViewDimension =
+            wgpu::TextureViewDimension::e2D;
+        sampleTextureDescriptor.nextInChain = &textureBindingViewDimensionDesc;
+    }
+
     wgpu::Texture sampleTexture = device.CreateTexture(&sampleTextureDescriptor);
 
     wgpu::TextureDescriptor renderTextureDescriptor = CreateTextureDescriptor(

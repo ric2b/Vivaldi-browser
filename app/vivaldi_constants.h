@@ -21,6 +21,8 @@
 #define VIVALDI_HELP_SETTINGS_ABOUT "https://help.vivaldi.com/?pk_campaign=v-menu"
 #define VIVALDI_HELP_PRIVACY_ABOUT_UNSAFE \
   "https://help.vivaldi.com/desktop/privacy/warnings-about-unsafe-websites/"
+#define VIVALDI_CRASH_REPORT_UPLOAD_URL "https://crash.vivaldi.com/submit"
+#define VIVALDI_BUGREPORT_URL "https://vivaldi.com/bugreport"
 
 namespace vivaldi {
 
@@ -34,6 +36,8 @@ extern const char kVivaldiAppId[];
 extern const char kVivaldiAppIdHex[];
 
 extern const char kVivaldiAppURLDomain[];
+extern const char kVivaldiBugReportUrl[];
+extern const char kVivaldiCrashReportUploadUrl[];
 extern const char kVivaldiNewTabURL[];
 extern const char kVivaldiIncognitoURL[];
 extern const char kVivaldiGuestSessionURL[];

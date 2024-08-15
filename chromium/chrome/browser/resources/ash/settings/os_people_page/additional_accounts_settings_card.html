@@ -4,6 +4,10 @@
     --account-item-padding-size: 8px;
   }
 
+  .settings-box-text {
+    padding-inline-start: var(--cr-section-padding);
+  }
+
   #addAccountButtonContainer {
     padding-top: 8px;
     padding-bottom: 8px;
@@ -78,7 +82,6 @@
     -webkit-mask-image: url(chrome://resources/images/add.svg);
     background-color: currentColor;
     height: 24px;
-    margin-inline-end: 0.5em;
     width: 24px;
   }
 
@@ -117,24 +120,20 @@
     --active-shadow-action-rgb: var(--cros-color-alert-rgb);
     --bg-action: var(--cros-color-alert);
     --focus-shadow-color: var(--cros-highlight-color-error);
-    --hover-bg-action: rgba(var(--cros-color-alert-rgb), .9);
-    --hover-shadow-action-rgb: var(--cros-color-alert-rgb);
-  }
-
-  :host-context(body.jelly-enabled) #removeConfirmationButton {
     --hover-bg-action: var(--cros-sys-hover_on_prominent);
+    --hover-shadow-action-rgb: var(--cros-color-alert-rgb);
   }
 </style>
 
 <settings-card header-text="[[getAccountListHeader_(isChildUser_)]]">
   <!-- Secondary Accounts list header -->
-  <div class="settings-box first secondary">
+  <div class="settings-box-text first secondary">
     [[getAccountListDescription_(isChildUser_)]]
   </div>
 
   <!-- Secondary Accounts list -->
   <template is="dom-repeat" id="accountList"
-      items="[[getSecondaryAccounts_(accounts_)]]">
+      items="[[getSecondaryAccounts_(accounts)]]">
     <div class="settings-box" role="listitem">
       <div class="profile-icon"
           style="background-image: [[getIconImageSet_(item.pic)]]">
@@ -213,7 +212,7 @@
     <cr-button disabled="[[!isSecondaryGoogleAccountSigninAllowed_]]"
         id="addAccountButton" on-click="addAccount_"
         deep-link-focus-id$="[[Setting.kAddAccount]]">
-      <div id="addAccountIcon"></div>
+      <div id="addAccountIcon" slot="prefix-icon"></div>
       [[getAddAccountLabel_(isChildUser_,
           isSecondaryGoogleAccountSigninAllowed_)]]
     </cr-button>

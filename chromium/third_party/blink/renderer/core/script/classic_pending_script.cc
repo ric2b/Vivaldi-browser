@@ -71,14 +71,6 @@ ClassicPendingScript* ClassicPendingScript::Fetch(
       url, context->GetSecurityOrigin(), context->GetCurrentWorld(),
       cross_origin, encoding, defer));
 
-  constexpr WebFeature kCountOrbBlockAs[2][2] = {
-      {WebFeature::kORBBlockWithoutAnyEventHandler,
-       WebFeature::kORBBlockWithOnErrorButWithoutOnLoadEventHandler},
-      {WebFeature::kORBBlockWithOnLoadButWithoutOnErrorEventHandler,
-       WebFeature::kORBBlockWithOnLoadAndOnErrorEventHandler}};
-  params.SetCountORBBlockAs(kCountOrbBlockAs[element->HasLoadEventHandler()]
-                                            [element->HasErrorEventHandler()]);
-
   ClassicPendingScript* pending_script =
       MakeGarbageCollected<ClassicPendingScript>(
           element, TextPosition::MinimumPosition(), KURL(), KURL(), String(),
@@ -290,6 +282,15 @@ bool ClassicPendingScript::IsEligibleForLowPriorityAsyncScriptExecution()
         return false;
       }
     }
+  }
+
+  static const bool disable_when_lcp_not_in_html =
+      features::kLowPriorityAsyncScriptExecutionDisableWhenLcpNotInHtmlParam
+          .Get();
+  if (disable_when_lcp_not_in_html && !top_document.IsLcpElementFoundInHtml()) {
+    // If LCP element isn't found in main document HTML during preload scanning,
+    // disable delaying.
+    return false;
   }
 
   static const bool cross_site_only =

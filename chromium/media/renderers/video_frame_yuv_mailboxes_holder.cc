@@ -11,10 +11,12 @@
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "media/base/media_switches.h"
+#include "media/base/video_util.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -95,10 +97,11 @@ void VideoFrameYUVMailboxesHolder::ReleaseCachedData() {
 
   auto* sii = provider_->SharedImageInterface();
   DCHECK(sii);
-  for (auto& mailbox_holder : holders_) {
-    if (!mailbox_holder.mailbox.IsZero())
-      sii->DestroySharedImage(token, mailbox_holder.mailbox);
-    mailbox_holder.mailbox.SetZero();
+  for (unsigned int i = 0; i < kMaxPlanes; ++i) {
+    if (shared_images_[i]) {
+      sii->DestroySharedImage(token, std::move(shared_images_[i]));
+    }
+    holders_[i].mailbox.SetZero();
   }
 
   created_shared_images_ = false;
@@ -147,13 +150,19 @@ void VideoFrameYUVMailboxesHolder::VideoFrameToMailboxes(
   constexpr SkAlphaType kPlaneAlphaType = kPremul_SkAlphaType;
   auto* sii = provider_->SharedImageInterface();
   DCHECK(sii);
+
+  // These SharedImages will be written to (and later read from) via the raster
+  // interface. The correct usage depends on whether raster is OOP or is going
+  // over the GLES2 interface.
   uint32_t mailbox_usage;
   auto& caps = provider_->ContextCapabilities();
-  if (caps.supports_oop_raster) {
-    mailbox_usage = gpu::SHARED_IMAGE_USAGE_RASTER |
+  if (caps.gpu_rasterization) {
+    mailbox_usage = gpu::SHARED_IMAGE_USAGE_RASTER_READ |
+                    gpu::SHARED_IMAGE_USAGE_RASTER_WRITE |
                     gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
   } else {
-    mailbox_usage = gpu::SHARED_IMAGE_USAGE_GLES2;
+    mailbox_usage = gpu::SHARED_IMAGE_USAGE_GLES2_READ |
+                    gpu::SHARED_IMAGE_USAGE_GLES2_WRITE;
   }
 
   // Enabled with flags UseWritePixelsYUV and
@@ -167,11 +176,14 @@ void VideoFrameYUVMailboxesHolder::VideoFrameToMailboxes(
     // Create a multiplanar shared image to upload the data to, if one doesn't
     // exist already.
     if (!created_shared_images_) {
-      holders_[0].mailbox = sii->CreateSharedImage(
+      auto client_shared_image = sii->CreateSharedImage(
           format, video_frame->coded_size(), video_frame->ColorSpace(),
           kTopLeft_GrSurfaceOrigin, kPlaneAlphaType, mailbox_usage,
           "VideoFrameYUV", gpu::kNullSurfaceHandle);
+      CHECK(client_shared_image);
+      holders_[0].mailbox = client_shared_image->mailbox();
       holders_[0].texture_target = GL_TEXTURE_2D;
+      shared_images_[0] = std::move(client_shared_image);
 
       // Split up shared image creation from upload so we only have to wait on
       // one sync token.
@@ -205,11 +217,14 @@ void VideoFrameYUVMailboxesHolder::VideoFrameToMailboxes(
       int num_channels = yuva_info_.numChannelsInPlane(plane);
       viz::SharedImageFormat format =
           PlaneSharedImageFormat(num_channels, caps.texture_rg);
-      holders_[plane].mailbox = sii->CreateSharedImage(
+      auto client_shared_image = sii->CreateSharedImage(
           format, tex_size, video_frame->ColorSpace(), kTopLeft_GrSurfaceOrigin,
           kPlaneAlphaType, mailbox_usage, "VideoFrameYUV",
           gpu::kNullSurfaceHandle);
+      CHECK(client_shared_image);
+      holders_[plane].mailbox = client_shared_image->mailbox();
       holders_[plane].texture_target = GL_TEXTURE_2D;
+      shared_images_[plane] = std::move(client_shared_image);
     }
 
     // Split up shared image creation from upload so we only have to wait on
@@ -369,28 +384,6 @@ void VideoFrameYUVMailboxesHolder::ReleaseTextures() {
   }
 
   imported_textures_ = false;
-}
-
-// static
-std::tuple<SkYUVAInfo::PlaneConfig, SkYUVAInfo::Subsampling>
-VideoFrameYUVMailboxesHolder::VideoPixelFormatToSkiaValues(
-    VideoPixelFormat video_format) {
-  // To expand support for additional VideoFormats expand this switch. Note that
-  // we do assume 8 bit formats. With that exception, anything else should work.
-  switch (video_format) {
-    case PIXEL_FORMAT_NV12:
-    case PIXEL_FORMAT_P016LE:
-      return {SkYUVAInfo::PlaneConfig::kY_UV, SkYUVAInfo::Subsampling::k420};
-    case PIXEL_FORMAT_NV12A:
-      return {SkYUVAInfo::PlaneConfig::kY_UV_A, SkYUVAInfo::Subsampling::k420};
-    case PIXEL_FORMAT_I420:
-      return {SkYUVAInfo::PlaneConfig::kY_U_V, SkYUVAInfo::Subsampling::k420};
-    case PIXEL_FORMAT_I420A:
-      return {SkYUVAInfo::PlaneConfig::kY_U_V_A, SkYUVAInfo::Subsampling::k420};
-    default:
-      return {SkYUVAInfo::PlaneConfig::kUnknown,
-              SkYUVAInfo::Subsampling::kUnknown};
-  }
 }
 
 // static

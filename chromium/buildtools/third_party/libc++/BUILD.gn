@@ -7,6 +7,7 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/toolchain.gni")
 
 # Used by libc++ and libc++abi.
+# See //build/config/c++:runtime_library for the config used by users of libc++.
 config("config") {
   cflags = [ "-fstrict-aliasing" ]
   if (is_win) {
@@ -68,7 +69,10 @@ target(_libcxx_target_type, "libc++") {
     libs = [ "atomic" ]
   }
 
-  inputs = [ "__config_site" ]
+  inputs = [
+    "__assertion_handler",
+    "__config_site",
+  ]
 
   # TODO(crbug.com/1458042): Move this build file to third_party/libc++/BUILD.gn once submodule migration is done
   sources = [
@@ -77,6 +81,7 @@ target(_libcxx_target_type, "libc++") {
     "//third_party/libc++/src/src/atomic.cpp",
     "//third_party/libc++/src/src/barrier.cpp",
     "//third_party/libc++/src/src/bind.cpp",
+    "//third_party/libc++/src/src/call_once.cpp",
     "//third_party/libc++/src/src/charconv.cpp",
     "//third_party/libc++/src/src/chrono.cpp",
     "//third_party/libc++/src/src/condition_variable.cpp",

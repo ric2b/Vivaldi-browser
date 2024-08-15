@@ -196,8 +196,7 @@ struct TensorPrinter {
       const IndexType total_size = internal::array_prod(_t.dimensions());
       if (total_size > 0) {
         const IndexType first_dim = Eigen::internal::array_get<0>(_t.dimensions());
-        Map<const Array<Scalar, Dynamic, Dynamic, layout> > matrix(_t.data(), first_dim,
-                                                                   total_size / first_dim);
+        Map<const Array<Scalar, Dynamic, Dynamic, layout>> matrix(_t.data(), first_dim, total_size / first_dim);
         s << matrix;
         return;
       }
@@ -205,13 +204,14 @@ struct TensorPrinter {
 
     eigen_assert(layout == RowMajor);
     typedef std::conditional_t<is_same<Scalar, char>::value || is_same<Scalar, unsigned char>::value ||
-                             is_same<Scalar, numext::int8_t>::value || is_same<Scalar, numext::uint8_t>::value,
-                          int,
-                          std::conditional_t<is_same<Scalar, std::complex<char> >::value ||
-                                                is_same<Scalar, std::complex<unsigned char> >::value ||
-                                                is_same<Scalar, std::complex<numext::int8_t> >::value ||
-                                                is_same<Scalar, std::complex<numext::uint8_t> >::value,
-                                        std::complex<int>, const Scalar&>> PrintType;
+                                   is_same<Scalar, numext::int8_t>::value || is_same<Scalar, numext::uint8_t>::value,
+                               int,
+                               std::conditional_t<is_same<Scalar, std::complex<char>>::value ||
+                                                      is_same<Scalar, std::complex<unsigned char>>::value ||
+                                                      is_same<Scalar, std::complex<numext::int8_t>>::value ||
+                                                      is_same<Scalar, std::complex<numext::uint8_t>>::value,
+                                                  std::complex<int>, const Scalar&>>
+        PrintType;
 
     const IndexType total_size = array_prod(_t.dimensions());
 

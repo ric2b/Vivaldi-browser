@@ -23,9 +23,6 @@ extern "C" {
 bool av1_resize_plane(const uint8_t *const input, int height, int width,
                       int in_stride, uint8_t *output, int height2, int width2,
                       int out_stride);
-bool av1_upscale_plane_double_prec(const double *const input, int height,
-                                   int width, int in_stride, double *output,
-                                   int height2, int width2, int out_stride);
 // TODO(aomedia:3228): In libaom 4.0.0, remove av1_resize_frame420 from
 // av1/exports_com and delete this function.
 void av1_resize_frame420(const uint8_t *const y, int y_stride,

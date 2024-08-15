@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.107"
+version = "1.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbe98ba1789d56fb3db3bee5e032774d4f421b685de7ba703643584ba24effbe"
+checksum = "7129e341034ecb940c9072817cd9007974ea696844fc4dd582dc1653a7fbe2e8"
 dependencies = [
  "cc",
  "cxxbridge-flags",
@@ -25,15 +25,15 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.107"
+version = "1.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20888d9e1d2298e2ff473cee30efe7d5036e437857ab68bbfea84c74dba91da2"
+checksum = "06fdd177fc61050d63f67f5bd6351fac6ab5526694ea8e359cd9cd3b75857f44"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.107"
+version = "1.0.110"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fa16a70dd58129e4dfffdff535fb1bce66673f7bbeec4a5a1765a504e1ccd84"
+checksum = "587663dd5fb3d10932c8aecfe7c844db1bcf0aee93eeab08fac13dc1212c2e7f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -42,12 +42,12 @@ dependencies = [
 
 [[package]]
 name = "font-types"
-version = "0.4.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02186306cae98ae594620ea5fb50db3706f54525a35ee9acf61dcac2978b3cba"
+checksum = "0bd7f3ea17572640b606b35df42cfb6ecdf003704b062580e59918692190b73d"
 
 [[package]]
-name = "fontations_bridge"
+name = "fontations"
 version = "0.1.0"
 dependencies = [
  "cxx",
@@ -58,9 +58,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.148"
+version = "0.2.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cdc71e17332e86d2e1d38c1f99edcb6288ee11b815fb1a4b049eaa2114d369b"
+checksum = "89d92a4743f9a61002fae18374ed11e7973f530cb3a3255fb354818118b2203c"
 
 [[package]]
 name = "link-cplusplus"
@@ -73,9 +73,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.67"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d433d9f1a3e8c1263d9456598b16fec66f4acc9a74dacffd35c7bb09b3a1328"
+checksum = "134c189feb4956b20f6f547d2cf727d4c0fe06722b20a0eec87ed445a97f92da"
 dependencies = [
  "unicode-ident",
 ]
@@ -91,27 +91,27 @@ dependencies = [
 
 [[package]]
 name = "read-fonts"
-version = "0.11.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c9f2eddf6bdea54097838571db91b94d57a862ad855ce5fc75600be84138a43"
+checksum = "e5c4fe2e013f061f20dbb4e0d71b92b79066e665d09b40dce29aab4dc1d0706f"
 dependencies = [
  "font-types",
 ]
 
 [[package]]
 name = "skrifa"
-version = "0.10.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32384b5dc3de1dbc18e281e8988b2ee8633624a177c22448a174769a3588f8af"
+checksum = "6aec20c3b3b8a93cf88f261326a5e729f07c7e9a1c486846c3ee67765a40e5a8"
 dependencies = [
  "read-fonts",
 ]
 
 [[package]]
 name = "syn"
-version = "2.0.37"
+version = "2.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7303ef2c05cd654186cb250d29049a24840ca25d2747c25c0381c8d9e2f582e8"
+checksum = "23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a"
 dependencies = [
  "proc-macro2",
  "quote",

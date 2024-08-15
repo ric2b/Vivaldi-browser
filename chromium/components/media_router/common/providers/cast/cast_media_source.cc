@@ -16,6 +16,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/media_router/common/media_source.h"
+#include "components/media_router/common/providers/cast/channel/cast_device_capability.h"
 #include "components/media_router/common/providers/cast/channel/cast_message_util.h"
 #include "components/media_router/common/providers/cast/channel/enum_table.h"
 #include "net/base/url_util.h"
@@ -60,15 +61,14 @@ const EnumTable<CastDeviceCapability>&
 EnumTable<CastDeviceCapability>::GetInstance() {
   static const EnumTable<CastDeviceCapability> kInstance(
       {
-          {CastDeviceCapability::MULTIZONE_GROUP, "multizone_group"},
-          {CastDeviceCapability::DEV_MODE, "dev_mode"},
-          {CastDeviceCapability::AUDIO_IN, "audio_in"},
-          {CastDeviceCapability::AUDIO_OUT, "audio_out"},
-          {CastDeviceCapability::VIDEO_IN, "video_in"},
-          {CastDeviceCapability::VIDEO_OUT, "video_out"},
-          // NONE deliberately omitted
+          {CastDeviceCapability::kVideoOut, "video_out"},
+          {CastDeviceCapability::kVideoIn, "video_in"},
+          {CastDeviceCapability::kAudioOut, "audio_out"},
+          {CastDeviceCapability::kAudioIn, "audio_in"},
+          {CastDeviceCapability::kDevMode, "dev_mode"},
+          {CastDeviceCapability::kMultizoneGroup, "multizone_group"},
       },
-      NonConsecutiveEnumTable);
+      CastDeviceCapability::kMultizoneGroup);
   return kInstance;
 }
 
@@ -156,17 +156,17 @@ base::flat_map<std::string, std::string> MakeQueryMap(const GURL& url) {
   return result;
 }
 
-// Converts a string containing a comma-separated list of capabilities into a
-// bitwise OR of CastDeviceCapability values.
-BitwiseOr<CastDeviceCapability> CastDeviceCapabilitiesFromString(
+// Converts a string containing a comma-separated list of capabilities into an
+// EnumSet of CastDeviceCapability values.
+CastDeviceCapabilitySet CastDeviceCapabilitiesFromString(
     const base::StringPiece& s) {
-  BitwiseOr<CastDeviceCapability> result{};
+  CastDeviceCapabilitySet result;
   for (const auto& capability_str : base::SplitStringPiece(
            s, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
     const auto capability =
         cast_util::StringToEnum<CastDeviceCapability>(capability_str);
     if (capability) {
-      result.Add(*capability);
+      result.Put(*capability);
     } else {
       DLOG(ERROR) << "Unkown capability name: " << capability_str;
     }
@@ -199,15 +199,20 @@ std::unique_ptr<CastMediaSource> CastMediaSourceForTabMirroring(
 
 std::unique_ptr<CastMediaSource> CastMediaSourceForDesktopMirroring(
     const MediaSource& source) {
-  // TODO(https://crbug.com/849335): Add back audio-only devices for desktop
-  // mirroring when proper support is implemented.
-  CastAppInfo info = CastAppInfo::ForCastStreaming();
-  if (info.required_capabilities.Has(CastDeviceCapability::AUDIO_OUT) &&
-      !source.IsDesktopSourceWithAudio()) {
-    info.required_capabilities.Remove(CastDeviceCapability::AUDIO_OUT);
+  std::vector<CastAppInfo> app_infos;
+  CastAppInfo audio_video_info = CastAppInfo::ForCastStreaming();
+  if (source.IsDesktopSourceWithAudio()) {
+    // Screen capture will result in audio and video streams.  Include
+    // audio-only Cast Streaming receivers.
+    app_infos.push_back(audio_video_info);
+    app_infos.push_back(CastAppInfo::ForCastStreamingAudio());
+  } else {
+    // Screen capture will result in a video stream only.
+    audio_video_info.required_capabilities.Remove(
+        CastDeviceCapability::kAudioOut);
+    app_infos.push_back(audio_video_info);
   }
-  return std::make_unique<CastMediaSource>(source.id(),
-                                           std::vector<CastAppInfo>({info}));
+  return std::make_unique<CastMediaSource>(source.id(), app_infos);
 }
 
 std::unique_ptr<CastMediaSource> CastMediaSourceForRemotePlayback(
@@ -378,9 +383,8 @@ bool IsSiteInitiatedMirroringSource(const MediaSource::Id& source_id) {
       base::CompareCase::SENSITIVE);
 }
 
-CastAppInfo::CastAppInfo(
-    const std::string& app_id,
-    BitwiseOr<cast_channel::CastDeviceCapability> required_capabilities)
+CastAppInfo::CastAppInfo(const std::string& app_id,
+                         CastDeviceCapabilitySet required_capabilities)
     : app_id(app_id), required_capabilities(required_capabilities) {}
 
 CastAppInfo::~CastAppInfo() = default;
@@ -391,13 +395,13 @@ CastAppInfo::CastAppInfo(const CastAppInfo& other) = default;
 CastAppInfo CastAppInfo::ForCastStreaming() {
   return CastAppInfo(
       openscreen::cast::GetCastStreamingAudioVideoAppId(),
-      {CastDeviceCapability::VIDEO_OUT, CastDeviceCapability::AUDIO_OUT});
+      {CastDeviceCapability::kVideoOut, CastDeviceCapability::kAudioOut});
 }
 
 // static
 CastAppInfo CastAppInfo::ForCastStreamingAudio() {
   return CastAppInfo(openscreen::cast::GetCastStreamingAudioOnlyAppId(),
-                     {CastDeviceCapability::AUDIO_OUT});
+                     {CastDeviceCapability::kAudioOut});
 }
 
 // static
@@ -490,7 +494,7 @@ bool CastMediaSource::ProvidesStreamingAudioCapture() const {
   }
   for (const auto& info : app_infos_) {
     if (openscreen::cast::IsCastStreamingAppId(info.app_id) &&
-        info.required_capabilities.Has(CastDeviceCapability::AUDIO_OUT)) {
+        info.required_capabilities.Has(CastDeviceCapability::kAudioOut)) {
       return true;
     }
   }

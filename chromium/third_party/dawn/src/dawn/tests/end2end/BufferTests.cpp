@@ -25,33 +25,85 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <limits>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include "dawn/tests/DawnTest.h"
+#include "dawn/utils/ComboRenderPipelineDescriptor.h"
+#include "dawn/utils/WGPUHelpers.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn {
 namespace {
 
-class BufferMappingTests : public DawnTest {
+using FutureCallbackMode = std::optional<wgpu::CallbackMode>;
+DAWN_TEST_PARAM_STRUCT(BufferMappingTestParams, FutureCallbackMode);
+
+class BufferMappingTests : public DawnTestWithParams<BufferMappingTestParams> {
   protected:
+    void SetUp() override {
+        DawnTestWithParams<BufferMappingTestParams>::SetUp();
+        // Wire only supports polling / spontaneous futures.
+        DAWN_TEST_UNSUPPORTED_IF(UsesWire() && GetParam().mFutureCallbackMode &&
+                                 *GetParam().mFutureCallbackMode ==
+                                     wgpu::CallbackMode::WaitAnyOnly);
+    }
+
     void MapAsyncAndWait(const wgpu::Buffer& buffer,
                          wgpu::MapMode mode,
                          size_t offset,
-                         size_t size) {
-        bool done = false;
-        buffer.MapAsync(
-            mode, offset, size,
-            [](WGPUBufferMapAsyncStatus status, void* userdata) {
-                ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-                *static_cast<bool*>(userdata) = true;
-            },
-            &done);
+                         size_t size,
+                         wgpu::BufferMapCallback cb = nullptr,
+                         void* ud = nullptr) {
+        struct Userdata {
+            wgpu::BufferMapCallback cb;
+            raw_ptr<void> ud;
+            bool done = false;
+        };
+        Userdata userdata = Userdata{cb, ud};
+        auto callback = [](WGPUBufferMapAsyncStatus status, void* rawUserdata) {
+            auto* userdata = static_cast<Userdata*>(rawUserdata);
+            userdata->done = true;
+            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+            auto cb = userdata->cb;
+            auto ud = userdata->ud;
+            if (cb) {
+                cb(status, ud);
+            }
+        };
 
-        while (!done) {
-            WaitABit();
+        // Legacy MapAsync
+        if (!GetParam().mFutureCallbackMode) {
+            buffer.MapAsync(mode, offset, size, callback, &userdata);
+            while (!userdata.done) {
+                // Flush wire and call instance process events.
+                WaitABit();
+            }
+            return;
+        }
+
+        wgpu::Future future = buffer.MapAsyncF(
+            mode, offset, size, {nullptr, *GetParam().mFutureCallbackMode, callback, &userdata});
+        switch (*GetParam().mFutureCallbackMode) {
+            case wgpu::CallbackMode::WaitAnyOnly: {
+                wgpu::FutureWaitInfo waitInfo = {future};
+                GetInstance().WaitAny(1, &waitInfo, UINT64_MAX);
+                ASSERT_TRUE(waitInfo.completed);
+                ASSERT_TRUE(userdata.done);
+                break;
+            }
+            case wgpu::CallbackMode::AllowProcessEvents:
+            case wgpu::CallbackMode::AllowSpontaneous:
+                while (!userdata.done) {
+                    // Flush wire and call instance process events.
+                    WaitABit();
+                }
+                break;
         }
     }
 
@@ -191,34 +243,24 @@ TEST_P(BufferMappingTests, MapRead_InCallback) {
     queue.WriteBuffer(buffer, 0, &myData, kSize);
 
     struct UserData {
-        bool done;
         wgpu::Buffer buffer;
-        void* expected;
+        raw_ptr<void> expected;
     };
-    UserData user{false, buffer, &myData};
+    UserData user{buffer, &myData};
 
-    buffer.MapAsync(
-        wgpu::MapMode::Read, 0, kBufferSize,
+    MapAsyncAndWait(
+        buffer, wgpu::MapMode::Read, 0, kBufferSize,
         [](WGPUBufferMapAsyncStatus status, void* userdata) {
             UserData* user = static_cast<UserData*>(userdata);
+            CheckMapping(user->buffer.GetConstMappedRange(), user->expected, kSize);
+            CheckMapping(user->buffer.GetConstMappedRange(0, kSize), user->expected, kSize);
 
-            EXPECT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-            if (status == WGPUBufferMapAsyncStatus_Success) {
-                CheckMapping(user->buffer.GetConstMappedRange(), user->expected, kSize);
-                CheckMapping(user->buffer.GetConstMappedRange(0, kSize), user->expected, kSize);
+            CheckMapping(user->buffer.GetConstMappedRange(8, 4),
+                         static_cast<const uint32_t*>(user->expected) + 2, sizeof(uint32_t));
 
-                CheckMapping(user->buffer.GetConstMappedRange(8, 4),
-                             static_cast<const uint32_t*>(user->expected) + 2, sizeof(uint32_t));
-
-                user->buffer.Unmap();
-            }
-            user->done = true;
+            user->buffer.Unmap();
         },
         &user);
-
-    while (!user.done) {
-        WaitABit();
-    }
 }
 
 // Test that the simplest map write works.
@@ -387,25 +429,71 @@ TEST_P(BufferMappingTests, MapWrite_ManySimultaneous) {
     std::array<wgpu::Buffer, kBuffers> buffers;
     uint32_t mapCompletedCount = 0;
 
-    // Create buffers and request mapping them.
+    // Create buffers.
     wgpu::BufferDescriptor descriptor;
     descriptor.size = static_cast<uint32_t>(kDataSize * sizeof(uint32_t));
     descriptor.usage = wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc;
     for (uint32_t i = 0; i < kBuffers; ++i) {
         buffers[i] = device.CreateBuffer(&descriptor);
-
-        buffers[i].MapAsync(
-            wgpu::MapMode::Write, 0, descriptor.size,
-            [](WGPUBufferMapAsyncStatus status, void* userdata) {
-                ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-                (*static_cast<uint32_t*>(userdata))++;
-            },
-            &mapCompletedCount);
     }
 
-    // Wait for all mappings to complete
-    while (mapCompletedCount != kBuffers) {
-        WaitABit();
+    // Legacy MapAsync
+    if (!GetParam().mFutureCallbackMode) {
+        // Map all the buffers.
+        for (uint32_t i = 0; i < kBuffers; ++i) {
+            buffers[i].MapAsync(
+                wgpu::MapMode::Write, 0, descriptor.size,
+                [](WGPUBufferMapAsyncStatus status, void* userdata) {
+                    ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+                    (*static_cast<uint32_t*>(userdata))++;
+                },
+                &mapCompletedCount);
+        }
+
+        // Wait for all mappings to complete
+        while (mapCompletedCount != kBuffers) {
+            WaitABit();
+        }
+    } else {
+        std::array<wgpu::Future, kBuffers> futures;
+        for (uint32_t i = 0; i < kBuffers; ++i) {
+            futures[i] =
+                buffers[i].MapAsyncF(wgpu::MapMode::Write, 0, descriptor.size,
+                                     {nullptr, *GetParam().mFutureCallbackMode,
+                                      [](WGPUBufferMapAsyncStatus status, void* userdata) {
+                                          ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+                                          (*static_cast<uint32_t*>(userdata))++;
+                                      },
+                                      &mapCompletedCount});
+        }
+
+        switch (*GetParam().mFutureCallbackMode) {
+            case wgpu::CallbackMode::WaitAnyOnly: {
+                std::array<wgpu::FutureWaitInfo, kBuffers> waitInfos;
+                for (uint32_t i = 0; i < kBuffers; ++i) {
+                    waitInfos[i] = {futures[i]};
+                }
+                size_t count = waitInfos.size();
+                wgpu::InstanceFeatures instanceFeatures;
+                wgpu::GetInstanceFeatures(&instanceFeatures);
+                do {
+                    size_t waitCount = std::min(count, instanceFeatures.timedWaitAnyMaxCount);
+                    auto waitInfoStart = waitInfos.begin() + (count - waitCount);
+                    GetInstance().WaitAny(waitCount, &*waitInfoStart, UINT64_MAX);
+                    auto it = std::partition(waitInfoStart, waitInfoStart + waitCount,
+                                             [](const auto& info) { return !info.completed; });
+                    count = std::distance(waitInfos.begin(), it);
+                } while (count > 0);
+                break;
+            }
+            case wgpu::CallbackMode::AllowProcessEvents:
+            case wgpu::CallbackMode::AllowSpontaneous:
+                // Wait for all mappings to complete
+                while (mapCompletedCount != kBuffers) {
+                    WaitABit();
+                }
+                break;
+        }
     }
 
     // All buffers are mapped, write into them and unmap them all.
@@ -426,31 +514,66 @@ TEST_P(BufferMappingTests, OffsetNotUpdatedOnError) {
     wgpu::Buffer buffer = CreateMapReadBuffer(sizeof(data));
     queue.WriteBuffer(buffer, 0, data, sizeof(data));
 
-    // Map the buffer but do not wait on the result yet.
     bool done1 = false;
     bool done2 = false;
-    buffer.MapAsync(
-        wgpu::MapMode::Read, 8, 4,
-        [](WGPUBufferMapAsyncStatus status, void* userdata) {
-            ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-            *static_cast<bool*>(userdata) = true;
-        },
-        &done1);
-
-    // Call MapAsync another time, the callback will be rejected with error status
+    auto cb1 = [](WGPUBufferMapAsyncStatus status, void* userdata) {
+        ASSERT_EQ(WGPUBufferMapAsyncStatus_Success, status);
+        *static_cast<bool*>(userdata) = true;
+    };
+    // Calling MapAsync another time, will reject the callback with error status
     // (but doesn't produce a validation error) and mMapOffset is not updated
     // because the buffer is already being mapped and it doesn't allow multiple
     // MapAsync requests.
-    buffer.MapAsync(
-        wgpu::MapMode::Read, 0, 4,
-        [](WGPUBufferMapAsyncStatus status, void* userdata) {
-            ASSERT_EQ(WGPUBufferMapAsyncStatus_MappingAlreadyPending, status);
-            *static_cast<bool*>(userdata) = true;
-        },
-        &done2);
+    auto cb2 = [](WGPUBufferMapAsyncStatus status, void* userdata) {
+        ASSERT_EQ(WGPUBufferMapAsyncStatus_MappingAlreadyPending, status);
+        *static_cast<bool*>(userdata) = true;
+    };
 
-    while (!done1 || !done2) {
-        WaitABit();
+    // Legacy MapAsync
+    if (!GetParam().mFutureCallbackMode) {
+        // Map the buffer but do not wait on the result yet.
+        buffer.MapAsync(wgpu::MapMode::Read, 8, 4, cb1, &done1);
+
+        // Call MapAsync another time, the callback will be rejected with error status
+        // (but doesn't produce a validation error) and mMapOffset is not updated
+        // because the buffer is already being mapped and it doesn't allow multiple
+        // MapAsync requests.
+        buffer.MapAsync(wgpu::MapMode::Read, 0, 4, cb2, &done2);
+
+        while (!done1 || !done2) {
+            WaitABit();
+        }
+    } else {
+        // Map the buffer but do not wait on the result yet.
+        wgpu::Future f1 = buffer.MapAsyncF(wgpu::MapMode::Read, 8, 4,
+                                           {nullptr, *GetParam().mFutureCallbackMode, cb1, &done1});
+
+        // Call MapAsync another time, the callback will be rejected with error status
+        // (but doesn't produce a validation error) and mMapOffset is not updated
+        // because the buffer is already being mapped and it doesn't allow multiple
+        // MapAsync requests.
+        wgpu::Future f2 = buffer.MapAsyncF(wgpu::MapMode::Read, 0, 4,
+                                           {nullptr, *GetParam().mFutureCallbackMode, cb2, &done2});
+
+        switch (*GetParam().mFutureCallbackMode) {
+            case wgpu::CallbackMode::WaitAnyOnly: {
+                wgpu::FutureWaitInfo waitInfo[] = {{f1}, {f2}};
+                GetInstance().WaitAny(2, waitInfo, UINT64_MAX);
+
+                if (!waitInfo[0].completed) {
+                    GetInstance().WaitAny(1, &waitInfo[0], UINT64_MAX);
+                } else if (!waitInfo[1].completed) {
+                    GetInstance().WaitAny(1, &waitInfo[1], UINT64_MAX);
+                }
+                break;
+            }
+            case wgpu::CallbackMode::AllowProcessEvents:
+            case wgpu::CallbackMode::AllowSpontaneous:
+                while (!done1 || !done2) {
+                    WaitABit();
+                }
+                break;
+        }
     }
 
     // mMapOffset has not been updated so it should still be 4, which is data[1]
@@ -464,36 +587,21 @@ TEST_P(BufferMappingTests, MapWrite_InCallbackDefault) {
     static constexpr uint32_t myData = 2934875;
     static constexpr size_t kSize = sizeof(myData);
 
-    struct UserData {
-        bool done;
-        wgpu::Buffer buffer;
-    };
-    UserData user{false, buffer};
-
-    buffer.MapAsync(
-        wgpu::MapMode::Write, 0, kSize,
+    MapAsyncAndWait(
+        buffer, wgpu::MapMode::Write, 0, kSize,
         [](WGPUBufferMapAsyncStatus status, void* userdata) {
-            UserData* user = static_cast<UserData*>(userdata);
+            wgpu::Buffer* buffer = static_cast<wgpu::Buffer*>(userdata);
 
-            EXPECT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-            if (status == WGPUBufferMapAsyncStatus_Success) {
-                EXPECT_NE(nullptr, user->buffer.GetConstMappedRange());
-                void* ptr = user->buffer.GetMappedRange();
-                EXPECT_NE(nullptr, ptr);
-                if (ptr != nullptr) {
-                    uint32_t data = myData;
-                    memcpy(ptr, &data, kSize);
-                }
-
-                user->buffer.Unmap();
+            EXPECT_NE(nullptr, buffer->GetConstMappedRange());
+            void* ptr = buffer->GetMappedRange();
+            EXPECT_NE(nullptr, ptr);
+            if (ptr != nullptr) {
+                uint32_t data = myData;
+                memcpy(ptr, &data, kSize);
             }
-            user->done = true;
+            buffer->Unmap();
         },
-        &user);
-
-    while (!user.done) {
-        WaitABit();
-    }
+        &buffer);
 
     EXPECT_BUFFER_U32_EQ(myData, buffer, 0);
 }
@@ -505,36 +613,21 @@ TEST_P(BufferMappingTests, MapWrite_InCallbackRange) {
     static constexpr uint32_t myData = 2934875;
     static constexpr size_t kSize = sizeof(myData);
 
-    struct UserData {
-        bool done;
-        wgpu::Buffer buffer;
-    };
-    UserData user{false, buffer};
-
-    buffer.MapAsync(
-        wgpu::MapMode::Write, 0, kSize,
+    MapAsyncAndWait(
+        buffer, wgpu::MapMode::Write, 0, kSize,
         [](WGPUBufferMapAsyncStatus status, void* userdata) {
-            UserData* user = static_cast<UserData*>(userdata);
+            wgpu::Buffer* buffer = static_cast<wgpu::Buffer*>(userdata);
 
-            EXPECT_EQ(WGPUBufferMapAsyncStatus_Success, status);
-            if (status == WGPUBufferMapAsyncStatus_Success) {
-                EXPECT_NE(nullptr, user->buffer.GetConstMappedRange(0, kSize));
-                void* ptr = user->buffer.GetMappedRange(0, kSize);
-                EXPECT_NE(nullptr, ptr);
-                if (ptr != nullptr) {
-                    uint32_t data = myData;
-                    memcpy(ptr, &data, kSize);
-                }
-
-                user->buffer.Unmap();
+            EXPECT_NE(nullptr, buffer->GetConstMappedRange(0, kSize));
+            void* ptr = buffer->GetMappedRange(0, kSize);
+            EXPECT_NE(nullptr, ptr);
+            if (ptr != nullptr) {
+                uint32_t data = myData;
+                memcpy(ptr, &data, kSize);
             }
-            user->done = true;
+            buffer->Unmap();
         },
-        &user);
-
-    while (!user.done) {
-        WaitABit();
-    }
+        &buffer);
 
     EXPECT_BUFFER_U32_EQ(myData, buffer, 0);
 }
@@ -568,16 +661,52 @@ TEST_P(BufferMappingTests, RegressChromium1421170) {
     device.Tick();
 }
 
-DAWN_INSTANTIATE_TEST(BufferMappingTests,
-                      D3D11Backend(),
-                      D3D12Backend(),
-                      MetalBackend(),
-                      OpenGLBackend(),
-                      OpenGLESBackend(),
-                      VulkanBackend());
+DAWN_INSTANTIATE_PREFIXED_TEST_P(Legacy,
+                                 BufferMappingTests,
+                                 {D3D11Backend(), D3D12Backend(), MetalBackend(), OpenGLBackend(),
+                                  OpenGLESBackend(), VulkanBackend()},
+                                 {std::nullopt});
+
+DAWN_INSTANTIATE_PREFIXED_TEST_P(Future,
+                                 BufferMappingTests,
+                                 {D3D11Backend(), D3D12Backend(), MetalBackend(), VulkanBackend(),
+                                  OpenGLBackend(), OpenGLESBackend()},
+                                 std::initializer_list<std::optional<wgpu::CallbackMode>>{
+                                     wgpu::CallbackMode::WaitAnyOnly,
+                                     wgpu::CallbackMode::AllowProcessEvents,
+                                     wgpu::CallbackMode::AllowSpontaneous});
+
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(BufferMappingTests);
 
 class BufferMappingCallbackTests : public BufferMappingTests {
   protected:
+    wgpu::Future DoMapAsync(wgpu::Buffer& buffer,
+                            wgpu::MapMode mapMode,
+                            size_t offset,
+                            size_t size,
+                            wgpu::BufferMapCallback callback,
+                            void* userdata) {
+        if (!GetParam().mFutureCallbackMode) {
+            buffer.MapAsync(mapMode, offset, size, callback, userdata);
+            return {0};
+        } else {
+            return buffer.MapAsyncF(mapMode, offset, size,
+                                    {nullptr, *GetParam().mFutureCallbackMode, callback, userdata});
+        }
+    }
+
+    wgpu::Future DoOnSubmittedWorkDone(wgpu::Queue& queueObj,
+                                       wgpu::QueueWorkDoneCallback callback,
+                                       void* userdata) {
+        if (!GetParam().mFutureCallbackMode) {
+            queueObj.OnSubmittedWorkDone(callback, userdata);
+            return {0};
+        } else {
+            return queueObj.OnSubmittedWorkDoneF(
+                {nullptr, *GetParam().mFutureCallbackMode, callback, userdata});
+        }
+    }
+
     void SubmitCommandBuffer(wgpu::Buffer buffer) {
         wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
@@ -605,10 +734,26 @@ class BufferMappingCallbackTests : public BufferMappingTests {
         queue.Submit(1, &commandBuffer);
     }
 
-    void Wait(std::vector<bool>& done) {
-        do {
-            WaitABit();
-        } while (std::any_of(done.begin(), done.end(), [](bool done) { return !done; }));
+    void WaitAll(std::vector<bool>& done, std::vector<wgpu::Future> futures) {
+        if (GetParam().mFutureCallbackMode &&
+            *GetParam().mFutureCallbackMode == wgpu::CallbackMode::WaitAnyOnly) {
+            std::vector<wgpu::FutureWaitInfo> waitInfos;
+            waitInfos.reserve(futures.size());
+            for (wgpu::Future f : futures) {
+                waitInfos.push_back({f});
+            }
+            size_t count = waitInfos.size();
+            do {
+                GetInstance().WaitAny(count, waitInfos.data(), UINT64_MAX);
+                auto it = std::partition(waitInfos.begin(), waitInfos.end(),
+                                         [](const auto& info) { return !info.completed; });
+                count = std::distance(waitInfos.begin(), it);
+            } while (count > 0);
+        } else {
+            do {
+                WaitABit();
+            } while (std::any_of(done.begin(), done.end(), [](bool done) { return !done; }));
+        }
     }
 };
 
@@ -621,7 +766,8 @@ TEST_P(BufferMappingCallbackTests, EmptySubmissionAndThenMap) {
 
     // 1. submission without using buffer.
     SubmitCommandBuffer({});
-    queue.OnSubmittedWorkDone(
+    wgpu::Future f1 = DoOnSubmittedWorkDone(
+        queue,
         [](WGPUQueueWorkDoneStatus status, void* userdata) {
             EXPECT_EQ(status, WGPUQueueWorkDoneStatus_Success);
             auto& done = *static_cast<std::vector<bool>*>(userdata);
@@ -633,8 +779,8 @@ TEST_P(BufferMappingCallbackTests, EmptySubmissionAndThenMap) {
         &done);
 
     // 2.
-    buffer.MapAsync(
-        wgpu::MapMode::Write, 0, wgpu::kWholeMapSize,
+    wgpu::Future f2 = DoMapAsync(
+        buffer, wgpu::MapMode::Write, 0, wgpu::kWholeMapSize,
         [](WGPUBufferMapAsyncStatus status, void* userdata) {
             EXPECT_EQ(status, WGPUBufferMapAsyncStatus_Success);
             auto& done = *static_cast<std::vector<bool>*>(userdata);
@@ -645,7 +791,7 @@ TEST_P(BufferMappingCallbackTests, EmptySubmissionAndThenMap) {
         },
         &done);
 
-    Wait(done);
+    WaitAll(done, {f1, f2});
 }
 
 TEST_P(BufferMappingCallbackTests, UseTheBufferAndThenMap) {
@@ -657,7 +803,8 @@ TEST_P(BufferMappingCallbackTests, UseTheBufferAndThenMap) {
 
     // 1. Submit a command buffer which uses the buffer
     SubmitCommandBuffer(buffer);
-    queue.OnSubmittedWorkDone(
+    wgpu::Future f1 = DoOnSubmittedWorkDone(
+        queue,
         [](WGPUQueueWorkDoneStatus status, void* userdata) {
             EXPECT_EQ(status, WGPUQueueWorkDoneStatus_Success);
             auto& done = *static_cast<std::vector<bool>*>(userdata);
@@ -669,8 +816,8 @@ TEST_P(BufferMappingCallbackTests, UseTheBufferAndThenMap) {
         &done);
 
     // 2.
-    buffer.MapAsync(
-        wgpu::MapMode::Write, 0, wgpu::kWholeMapSize,
+    wgpu::Future f2 = DoMapAsync(
+        buffer, wgpu::MapMode::Write, 0, wgpu::kWholeMapSize,
         [](WGPUBufferMapAsyncStatus status, void* userdata) {
             EXPECT_EQ(status, WGPUBufferMapAsyncStatus_Success);
             auto& done = *static_cast<std::vector<bool>*>(userdata);
@@ -681,7 +828,7 @@ TEST_P(BufferMappingCallbackTests, UseTheBufferAndThenMap) {
         },
         &done);
 
-    Wait(done);
+    WaitAll(done, {f1, f2});
 
     buffer.Unmap();
 }
@@ -695,7 +842,8 @@ TEST_P(BufferMappingCallbackTests, EmptySubmissionWriteAndThenMap) {
 
     // 1. submission without using buffer.
     SubmitCommandBuffer({});
-    queue.OnSubmittedWorkDone(
+    wgpu::Future f1 = DoOnSubmittedWorkDone(
+        queue,
         [](WGPUQueueWorkDoneStatus status, void* userdata) {
             EXPECT_EQ(status, WGPUQueueWorkDoneStatus_Success);
             auto& done = *static_cast<std::vector<bool>*>(userdata);
@@ -710,8 +858,8 @@ TEST_P(BufferMappingCallbackTests, EmptySubmissionWriteAndThenMap) {
     queue.WriteBuffer(buffer, 0, &data, sizeof(data));
 
     // 2.
-    buffer.MapAsync(
-        wgpu::MapMode::Read, 0, wgpu::kWholeMapSize,
+    wgpu::Future f2 = DoMapAsync(
+        buffer, wgpu::MapMode::Read, 0, wgpu::kWholeMapSize,
         [](WGPUBufferMapAsyncStatus status, void* userdata) {
             EXPECT_EQ(status, WGPUBufferMapAsyncStatus_Success);
             auto& done = *static_cast<std::vector<bool>*>(userdata);
@@ -722,16 +870,25 @@ TEST_P(BufferMappingCallbackTests, EmptySubmissionWriteAndThenMap) {
         },
         &done);
 
-    Wait(done);
+    WaitAll(done, {f1, f2});
 
     buffer.Unmap();
 }
 
-DAWN_INSTANTIATE_TEST(BufferMappingCallbackTests,
-                      D3D11Backend(),
-                      D3D12Backend(),
-                      MetalBackend(),
-                      VulkanBackend());
+DAWN_INSTANTIATE_PREFIXED_TEST_P(Legacy,
+                                 BufferMappingCallbackTests,
+                                 {D3D11Backend(), D3D12Backend(), MetalBackend(), VulkanBackend()},
+                                 {std::nullopt});
+
+DAWN_INSTANTIATE_PREFIXED_TEST_P(Future,
+                                 BufferMappingCallbackTests,
+                                 {D3D11Backend(), D3D12Backend(), MetalBackend(), VulkanBackend()},
+                                 std::initializer_list<std::optional<wgpu::CallbackMode>>{
+                                     wgpu::CallbackMode::WaitAnyOnly,
+                                     wgpu::CallbackMode::AllowProcessEvents,
+                                     wgpu::CallbackMode::AllowSpontaneous});
+
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(BufferMappingCallbackTests);
 
 class BufferMappedAtCreationTests : public DawnTest {
   protected:
@@ -1169,6 +1326,338 @@ DAWN_INSTANTIATE_TEST(BufferNoSuballocationTests,
                       OpenGLBackend({"disable_resource_suballocation"}),
                       OpenGLESBackend({"disable_resource_suballocation"}),
                       VulkanBackend({"disable_resource_suballocation"}));
+
+class BufferMapExtendedUsagesTests : public BufferMappingTests {
+  protected:
+    void SetUp() override {
+        BufferMappingTests::SetUp();
+
+        DAWN_TEST_UNSUPPORTED_IF(UsesWire());
+        // Skip all tests if the BufferMapExtendedUsages feature is not supported.
+        DAWN_TEST_UNSUPPORTED_IF(!SupportsFeatures({wgpu::FeatureName::BufferMapExtendedUsages}));
+    }
+
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        std::vector<wgpu::FeatureName> requiredFeatures = {};
+        if (!UsesWire() && SupportsFeatures({wgpu::FeatureName::BufferMapExtendedUsages})) {
+            requiredFeatures.push_back(wgpu::FeatureName::BufferMapExtendedUsages);
+        }
+        return requiredFeatures;
+    }
+
+    wgpu::RenderPipeline CreateRenderPipelineForTest(bool colorFromUniformBuffer) {
+        utils::ComboRenderPipelineDescriptor pipelineDescriptor;
+
+        std::ostringstream vs;
+        vs << R"(
+            struct VertexOut {
+                @location(0) color : vec4f,
+                @builtin(position) position : vec4f,
+            }
+
+            const vertexPos = array(
+                vec2f(-1.0, -1.0),
+                vec2f( 3.0, -1.0),
+                vec2f(-1.0,  3.0));
+        )";
+
+        if (colorFromUniformBuffer) {
+            // Color is from uniform buffer.
+            vs << R"(
+            struct Uniforms {
+                color : vec4f,
+            }
+            @binding(0) @group(0) var<uniform> uniforms : Uniforms;
+
+            @vertex
+            fn main(@builtin(vertex_index) vertexIndex : u32) -> VertexOut {
+                var output : VertexOut;
+                output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
+                output.color = uniforms.color;
+                return output;
+            })";
+        } else {
+            // Color is from vertex buffer.
+            vs << R"(
+            @vertex
+            fn main(@location(0) vertexColor : vec4f,
+                    @builtin(vertex_index) vertexIndex : u32) -> VertexOut {
+                var output : VertexOut;
+                output.position = vec4f(vertexPos[vertexIndex % 3], 0.0, 1.0);
+                output.color = vertexColor;
+                return output;
+            })";
+
+            pipelineDescriptor.vertex.bufferCount = 1;
+            pipelineDescriptor.cBuffers[0].arrayStride = 4;
+            pipelineDescriptor.cBuffers[0].attributeCount = 1;
+            pipelineDescriptor.cBuffers[0].stepMode = wgpu::VertexStepMode::Vertex;
+            pipelineDescriptor.cAttributes[0].format = wgpu::VertexFormat::Unorm8x4;
+        }
+        constexpr char fs[] = R"(
+            @fragment
+            fn main(@location(0) color : vec4f) -> @location(0) vec4f {
+                return color;
+            })";
+
+        pipelineDescriptor.vertex.module = utils::CreateShaderModule(device, vs.str().c_str());
+        pipelineDescriptor.cFragment.module = utils::CreateShaderModule(device, fs);
+
+        pipelineDescriptor.cFragment.targetCount = 1;
+        pipelineDescriptor.cTargets[0].format = wgpu::TextureFormat::RGBA8Unorm;
+
+        wgpu::RenderPipeline pipeline = device.CreateRenderPipeline(&pipelineDescriptor);
+        return pipeline;
+    }
+
+    void EncodeAndSubmitRenderPassForTest(const wgpu::RenderPassDescriptor& renderPass,
+                                          wgpu::RenderPipeline pipeline,
+                                          wgpu::Buffer vertexBuffer,
+                                          wgpu::Buffer indexBuffer,
+                                          wgpu::BindGroup uniformsBindGroup) {
+        wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
+        wgpu::RenderPassEncoder renderPassEncoder = commandEncoder.BeginRenderPass(&renderPass);
+        renderPassEncoder.SetPipeline(pipeline);
+        if (uniformsBindGroup) {
+            renderPassEncoder.SetBindGroup(0, uniformsBindGroup);
+        }
+        if (vertexBuffer) {
+            renderPassEncoder.SetVertexBuffer(0, vertexBuffer);
+        }
+
+        if (indexBuffer) {
+            renderPassEncoder.SetIndexBuffer(indexBuffer, wgpu::IndexFormat::Uint16);
+            renderPassEncoder.DrawIndexed(3);
+        } else {
+            renderPassEncoder.Draw(3);
+        }
+        renderPassEncoder.End();
+
+        wgpu::CommandBuffer commands = commandEncoder.Finish();
+        queue.Submit(1, &commands);
+    }
+
+    static constexpr wgpu::BufferUsage kNonMapUsages[] = {
+        wgpu::BufferUsage::CopySrc,  wgpu::BufferUsage::CopyDst,      wgpu::BufferUsage::Index,
+        wgpu::BufferUsage::Vertex,   wgpu::BufferUsage::Uniform,      wgpu::BufferUsage::Storage,
+        wgpu::BufferUsage::Indirect, wgpu::BufferUsage::QueryResolve,
+    };
+};
+
+// Test that the map read for any kind of buffer works
+TEST_P(BufferMapExtendedUsagesTests, MapReadWithAnyUsage) {
+    wgpu::BufferDescriptor descriptor;
+    descriptor.size = 4;
+
+    for (const auto otherUsage : kNonMapUsages) {
+        descriptor.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst | otherUsage;
+        wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
+
+        uint32_t myData = 0x01020304;
+        constexpr size_t kSize = sizeof(myData);
+        queue.WriteBuffer(buffer, 0, &myData, kSize);
+
+        MapAsyncAndWait(buffer, wgpu::MapMode::Read, 0, 4);
+        CheckMapping(buffer.GetConstMappedRange(), &myData, kSize);
+        CheckMapping(buffer.GetConstMappedRange(0, kSize), &myData, kSize);
+        buffer.Unmap();
+    }
+}
+
+// Test that the map write for any kind of buffer works
+TEST_P(BufferMapExtendedUsagesTests, MapWriteWithAnyUsage) {
+    wgpu::BufferDescriptor descriptor;
+    descriptor.size = 4;
+
+    for (const auto otherUsage : kNonMapUsages) {
+        descriptor.usage = wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc | otherUsage;
+        wgpu::Buffer buffer = device.CreateBuffer(&descriptor);
+
+        uint32_t myData = 2934875;
+        MapAsyncAndWait(buffer, wgpu::MapMode::Write, 0, 4);
+        ASSERT_NE(nullptr, buffer.GetMappedRange());
+        ASSERT_NE(nullptr, buffer.GetConstMappedRange());
+        memcpy(buffer.GetMappedRange(), &myData, sizeof(myData));
+        buffer.Unmap();
+
+        EXPECT_BUFFER_U32_EQ(myData, buffer, 0);
+    }
+}
+
+// Test that mapping a vertex buffer, modifying the data then draw with the buffer works.
+TEST_P(BufferMapExtendedUsagesTests, MapWriteVertexBufferAndDraw) {
+    const utils::RGBA8 kReds[] = {utils::RGBA8::kRed, utils::RGBA8::kRed, utils::RGBA8::kRed};
+    const utils::RGBA8 kGreens[] = {utils::RGBA8::kGreen, utils::RGBA8::kGreen,
+                                    utils::RGBA8::kGreen};
+
+    // Create buffer with initial red color data.
+    wgpu::Buffer vertexBuffer = utils::CreateBufferFromData(
+        device, kReds, sizeof(kReds), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Vertex);
+
+    wgpu::RenderPipeline renderPipeline =
+        CreateRenderPipelineForTest(/*colorFromUniformBuffer=*/false);
+
+    auto redRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+    auto greenRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+
+    // First render pass: draw with red color vertex buffer.
+    EncodeAndSubmitRenderPassForTest(redRenderPass.renderPassInfo, renderPipeline, vertexBuffer,
+                                     nullptr, nullptr);
+
+    // Second render pass: draw with green color vertex buffer.
+    MapAsyncAndWait(vertexBuffer, wgpu::MapMode::Write, 0, sizeof(kGreens));
+    ASSERT_NE(nullptr, vertexBuffer.GetMappedRange());
+    memcpy(vertexBuffer.GetMappedRange(), kGreens, sizeof(kGreens));
+    vertexBuffer.Unmap();
+
+    EncodeAndSubmitRenderPassForTest(greenRenderPass.renderPassInfo, renderPipeline, vertexBuffer,
+                                     nullptr, nullptr);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kRed, redRenderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, greenRenderPass.color, 0, 0);
+}
+
+// Test that mapping a index buffer, modifying the data then draw with the buffer works.
+TEST_P(BufferMapExtendedUsagesTests, MapWriteIndexBufferAndDraw) {
+    const utils::RGBA8 kVertexColors[] = {
+        utils::RGBA8::kRed,   utils::RGBA8::kRed,   utils::RGBA8::kRed,
+        utils::RGBA8::kGreen, utils::RGBA8::kGreen, utils::RGBA8::kGreen,
+    };
+    // Last index is unused. It is only to make sure the index buffer's size is multiple of 4.
+    const uint16_t kRedIndices[] = {0, 1, 2, 0};
+    const uint16_t kGreenIndices[] = {3, 4, 5, 3};
+
+    wgpu::Buffer vertexBuffer = utils::CreateBufferFromData(
+        device, kVertexColors, sizeof(kVertexColors), wgpu::BufferUsage::Vertex);
+    wgpu::Buffer indexBuffer =
+        utils::CreateBufferFromData(device, kRedIndices, sizeof(kRedIndices),
+                                    wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Index);
+
+    wgpu::RenderPipeline renderPipeline =
+        CreateRenderPipelineForTest(/*colorFromUniformBuffer=*/false);
+
+    auto redRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+    auto greenRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+
+    // First render pass: draw with red color index buffer.
+    EncodeAndSubmitRenderPassForTest(redRenderPass.renderPassInfo, renderPipeline, vertexBuffer,
+                                     indexBuffer, nullptr);
+
+    // Second render pass: draw with green color index buffer.
+    MapAsyncAndWait(indexBuffer, wgpu::MapMode::Write, 0, sizeof(kGreenIndices));
+    ASSERT_NE(nullptr, indexBuffer.GetMappedRange());
+    memcpy(indexBuffer.GetMappedRange(), kGreenIndices, sizeof(kGreenIndices));
+    indexBuffer.Unmap();
+
+    EncodeAndSubmitRenderPassForTest(greenRenderPass.renderPassInfo, renderPipeline, vertexBuffer,
+                                     indexBuffer, nullptr);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kRed, redRenderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, greenRenderPass.color, 0, 0);
+}
+
+// Test that mapping a uniform buffer, modifying the data then draw with the buffer works.
+TEST_P(BufferMapExtendedUsagesTests, MapWriteUniformBufferAndDraw) {
+    const float kRed[] = {1.0f, 0.0f, 0.0f, 1.0f};
+    const float kGreen[] = {0.0f, 1.0f, 0.0f, 1.0f};
+
+    // Create buffer with initial red color data.
+    wgpu::Buffer uniformBuffer = utils::CreateBufferFromData(
+        device, &kRed, sizeof(kRed), wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::Uniform);
+
+    wgpu::RenderPipeline renderPipeline =
+        CreateRenderPipelineForTest(/*colorFromUniformBuffer=*/true);
+    wgpu::BindGroup uniformsBindGroup = utils::MakeBindGroup(
+        device, renderPipeline.GetBindGroupLayout(0), {{0, uniformBuffer, 0, sizeof(kRed)}});
+
+    auto redRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+    auto greenRenderPass = utils::CreateBasicRenderPass(device, 1, 1);
+
+    // First render pass: draw with red color uniform buffer.
+    EncodeAndSubmitRenderPassForTest(redRenderPass.renderPassInfo, renderPipeline, nullptr, nullptr,
+                                     uniformsBindGroup);
+
+    // Second render pass: draw with green color uniform buffer.
+    MapAsyncAndWait(uniformBuffer, wgpu::MapMode::Write, 0, sizeof(kGreen));
+    ASSERT_NE(nullptr, uniformBuffer.GetMappedRange());
+    memcpy(uniformBuffer.GetMappedRange(), &kGreen, sizeof(kGreen));
+    uniformBuffer.Unmap();
+
+    EncodeAndSubmitRenderPassForTest(greenRenderPass.renderPassInfo, renderPipeline, nullptr,
+                                     nullptr, uniformsBindGroup);
+
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kRed, redRenderPass.color, 0, 0);
+    EXPECT_PIXEL_RGBA8_EQ(utils::RGBA8::kGreen, greenRenderPass.color, 0, 0);
+}
+
+// Test that map write a storage buffer, modifying it on GPU, then map read it on CPU works.
+TEST_P(BufferMapExtendedUsagesTests, MapWriteThenGPUWriteStorageBufferThenMapRead) {
+    const uint32_t kInitialValue = 1;
+    const uint32_t kExpectedValue = 2;
+    constexpr size_t kSize = sizeof(kExpectedValue);
+
+    wgpu::ComputePipeline pipeline;
+    {
+        wgpu::ComputePipelineDescriptor csDesc;
+        csDesc.compute.module = utils::CreateShaderModule(device, R"(
+            struct SSBO {
+                value : u32
+            }
+            @group(0) @binding(0) var<storage, read_write> ssbo : SSBO;
+
+            @compute @workgroup_size(1) fn main() {
+                ssbo.value += 1u;
+            })");
+
+        pipeline = device.CreateComputePipeline(&csDesc);
+    }
+
+    // Create buffer and write initial value.
+    wgpu::Buffer ssbo;
+    {
+        wgpu::BufferDescriptor descriptor;
+        descriptor.size = kSize;
+
+        descriptor.usage =
+            wgpu::BufferUsage::Storage | wgpu::BufferUsage::MapRead | wgpu::BufferUsage::MapWrite;
+        ssbo = device.CreateBuffer(&descriptor);
+
+        MapAsyncAndWait(ssbo, wgpu::MapMode::Write, 0, 4);
+        ASSERT_NE(nullptr, ssbo.GetMappedRange());
+        memcpy(ssbo.GetMappedRange(), &kInitialValue, sizeof(kInitialValue));
+        ssbo.Unmap();
+    }
+
+    // Modify the buffer's value in compute shader.
+    {
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+        wgpu::ComputePassEncoder pass = encoder.BeginComputePass();
+
+        ASSERT_NE(nullptr, pipeline.Get());
+        wgpu::BindGroup bindGroup = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                         {
+                                                             {0, ssbo, 0, kSize},
+                                                         });
+        pass.SetBindGroup(0, bindGroup);
+        pass.SetPipeline(pipeline);
+        pass.DispatchWorkgroups(1);
+        pass.End();
+
+        wgpu::CommandBuffer commands = encoder.Finish();
+
+        queue.Submit(1, &commands);
+    }
+
+    // Read the modified value.
+    MapAsyncAndWait(ssbo, wgpu::MapMode::Read, 0, 4);
+    CheckMapping(ssbo.GetConstMappedRange(0, kSize), &kExpectedValue, kSize);
+    ssbo.Unmap();
+}
+
+DAWN_INSTANTIATE_TEST_P(BufferMapExtendedUsagesTests,
+                        {D3D11Backend(), D3D12Backend(), MetalBackend(), OpenGLBackend(),
+                         OpenGLESBackend(), VulkanBackend()},
+                        {std::nullopt});
 
 }  // anonymous namespace
 }  // namespace dawn

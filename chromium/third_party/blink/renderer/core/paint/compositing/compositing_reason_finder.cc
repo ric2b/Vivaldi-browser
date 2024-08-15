@@ -150,7 +150,7 @@ CompositingReasons CompositingReasonsFor3DSceneLeaf(
   // This could be improved by skipping this if we know that the descendants
   // won't produce any quads in the render pass's quad list.
   if (layout_object.IsText()) {
-    // A LayoutNGBR is both IsText() and IsForElement(), but we shouldn't
+    // A LayoutBR is both IsText() and IsForElement(), but we shouldn't
     // produce compositing reasons if IsText() is true.  Since we only need
     // this for objects that have interesting descendants, we can just return.
     return CompositingReason::kNone;
@@ -220,9 +220,8 @@ CompositingReasons CompositingReasonsForViewportScrollEffect(
   // This ensures that the scroll_translation_for_fixed will be initialized in
   // FragmentPaintPropertyTreeBuilder::UpdatePaintOffsetTranslation which in
   // turn ensures that a TransformNode is created (for fixed elements) in cc.
-  if (RuntimeEnabledFeatures::FixedElementsDontOverscrollEnabled() &&
-      frame->GetPage()->GetVisualViewport().GetOverscrollType() ==
-          OverscrollType::kTransform) {
+  if (frame->GetPage()->GetVisualViewport().GetOverscrollType() ==
+      OverscrollType::kTransform) {
     reasons |= CompositingReason::kFixedPosition;
     if (!To<LayoutBox>(layout_object)
              .AnchorPositionScrollAdjustmentAfectedByViewportScrolling()) {
@@ -284,6 +283,34 @@ bool ObjectTypeSupportsCompositedTransformAnimation(
   }
   // Transforms don't apply on non-replaced inline elements.
   return object.IsBox();
+}
+
+// Defined by the Element Capture specification:
+// https://screen-share.github.io/element-capture/#elements-eligible-for-restriction
+bool IsEligibleForElementCapture(const LayoutObject& object) {
+  // The element forms a stacking context.
+  if (!object.IsStackingContext()) {
+    return false;
+  }
+
+  // The element is flattened in 3D.
+  if (!object.CreatesGroup()) {
+    return false;
+  }
+
+  // The element forms a backdrop root.
+  // See ViewTransitionUtils::IsViewTransitionParticipant and
+  // NeedsEffectIgnoringClipPath for how View Transitions meets this
+  // requirement.
+  // TODO(https://issuetracker.google.com/291602746): handle backdrop root case.
+
+  // The element has exactly one box fragment.
+  if (object.IsBox() && To<LayoutBox>(object).PhysicalFragmentCount() > 1) {
+    return false;
+  }
+
+  // Meets all of the conditions for element capture.
+  return true;
 }
 
 }  // anonymous namespace
@@ -358,9 +385,11 @@ CompositingReasons CompositingReasonFinder::DirectReasonsForPaintProperties(
     }
   }
 
-  if (RuntimeEnabledFeatures::ElementCaptureEnabled()) {
-    auto* element = DynamicTo<Element>(object.GetNode());
-    if (element && element->GetRegionCaptureCropId()) {
+  auto* element = DynamicTo<Element>(object.GetNode());
+  if (element && element->GetRestrictionTargetId()) {
+    const bool is_eligible = IsEligibleForElementCapture(object);
+    element->SetIsEligibleForElementCapture(is_eligible);
+    if (is_eligible) {
       reasons |= CompositingReason::kElementCapture;
     }
   }

@@ -23,11 +23,11 @@ struct random_without_cast_overflow {
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && NumTraits<SrcScalar>::IsSigned && NumTraits<TgtScalar>::IsInteger &&
-                   !NumTraits<TgtScalar>::IsSigned &&
-                   (std::numeric_limits<SrcScalar>::digits < std::numeric_limits<TgtScalar>::digits ||
-                    (std::numeric_limits<SrcScalar>::digits == std::numeric_limits<TgtScalar>::digits &&
-                     NumTraits<SrcScalar>::IsSigned))>> {
+    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && NumTraits<SrcScalar>::IsSigned &&
+                     NumTraits<TgtScalar>::IsInteger && !NumTraits<TgtScalar>::IsSigned &&
+                     (std::numeric_limits<SrcScalar>::digits < std::numeric_limits<TgtScalar>::digits ||
+                      (std::numeric_limits<SrcScalar>::digits == std::numeric_limits<TgtScalar>::digits &&
+                       NumTraits<SrcScalar>::IsSigned))>> {
   static SrcScalar value() {
     SrcScalar a = internal::random<SrcScalar>();
     return a < SrcScalar(0) ? -(a + 1) : a;
@@ -38,11 +38,11 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsSigned && NumTraits<TgtScalar>::IsInteger &&
-                   !NumTraits<TgtScalar>::IsSigned &&
-                   (std::numeric_limits<SrcScalar>::digits < std::numeric_limits<TgtScalar>::digits ||
-                    (std::numeric_limits<SrcScalar>::digits == std::numeric_limits<TgtScalar>::digits &&
-                     NumTraits<SrcScalar>::IsSigned))>> {
+    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsSigned &&
+                     NumTraits<TgtScalar>::IsInteger && !NumTraits<TgtScalar>::IsSigned &&
+                     (std::numeric_limits<SrcScalar>::digits < std::numeric_limits<TgtScalar>::digits ||
+                      (std::numeric_limits<SrcScalar>::digits == std::numeric_limits<TgtScalar>::digits &&
+                       NumTraits<SrcScalar>::IsSigned))>> {
   static SrcScalar value() {
     SrcScalar a = internal::random<SrcScalar>();
     return a;
@@ -53,9 +53,9 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<
-        NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger && NumTraits<TgtScalar>::IsSigned && !NumTraits<SrcScalar>::IsSigned &&
-        (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
+    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger &&
+                     NumTraits<TgtScalar>::IsSigned && !NumTraits<SrcScalar>::IsSigned &&
+                     (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
   static SrcScalar value() {
     TgtScalar b = internal::random<TgtScalar>();
     return static_cast<SrcScalar>(b < TgtScalar(0) ? -(b + 1) : b);
@@ -66,9 +66,9 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<
-        NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger && !NumTraits<TgtScalar>::IsSigned && !NumTraits<SrcScalar>::IsSigned &&
-        (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
+    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger &&
+                     !NumTraits<TgtScalar>::IsSigned && !NumTraits<SrcScalar>::IsSigned &&
+                     (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
   static SrcScalar value() {
     TgtScalar b = internal::random<TgtScalar>();
     return static_cast<SrcScalar>(b);
@@ -79,9 +79,9 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<
-        NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger && NumTraits<SrcScalar>::IsSigned &&
-        (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
+    std::enable_if_t<NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger &&
+                     NumTraits<SrcScalar>::IsSigned &&
+                     (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
   static SrcScalar value() { return static_cast<SrcScalar>(internal::random<TgtScalar>()); }
 };
 
@@ -91,8 +91,7 @@ struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
     std::enable_if_t<NumTraits<SrcScalar>::IsInteger && NumTraits<TgtScalar>::IsInteger &&
                      !NumTraits<SrcScalar>::IsSigned && NumTraits<TgtScalar>::IsSigned &&
-                     (std::numeric_limits<SrcScalar>::digits ==
-                      std::numeric_limits<TgtScalar>::digits)>> {
+                     (std::numeric_limits<SrcScalar>::digits == std::numeric_limits<TgtScalar>::digits)>> {
   static SrcScalar value() { return internal::random<SrcScalar>() / 2; }
 };
 
@@ -100,9 +99,9 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<
-        !NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsInteger &&
-        (std::numeric_limits<TgtScalar>::digits <= std::numeric_limits<SrcScalar>::digits)>> {
+    std::enable_if_t<!NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex &&
+                     NumTraits<TgtScalar>::IsInteger &&
+                     (std::numeric_limits<TgtScalar>::digits <= std::numeric_limits<SrcScalar>::digits)>> {
   static SrcScalar value() { return static_cast<SrcScalar>(internal::random<TgtScalar>()); }
 };
 
@@ -110,9 +109,9 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<
-        !NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsInteger && NumTraits<TgtScalar>::IsSigned &&
-        (std::numeric_limits<TgtScalar>::digits > std::numeric_limits<SrcScalar>::digits)>> {
+    std::enable_if_t<!NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex &&
+                     NumTraits<TgtScalar>::IsInteger && NumTraits<TgtScalar>::IsSigned &&
+                     (std::numeric_limits<TgtScalar>::digits > std::numeric_limits<SrcScalar>::digits)>> {
   static SrcScalar value() {
     // NOTE: internal::random<T>() is limited by RAND_MAX, so random<int64_t> is always within that range.
     // This prevents us from simply shifting bits, which would result in only 0 or -1.
@@ -126,9 +125,9 @@ struct random_without_cast_overflow<
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
-    std::enable_if_t<
-        !NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsInteger && !NumTraits<TgtScalar>::IsSigned &&
-        (std::numeric_limits<TgtScalar>::digits > std::numeric_limits<SrcScalar>::digits)>> {
+    std::enable_if_t<!NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex &&
+                     NumTraits<TgtScalar>::IsInteger && !NumTraits<TgtScalar>::IsSigned &&
+                     (std::numeric_limits<TgtScalar>::digits > std::numeric_limits<SrcScalar>::digits)>> {
   static SrcScalar value() {
     // NOTE: internal::random<T>() is limited by RAND_MAX, so random<int64_t> is always within that range.
     // This prevents us from simply shifting bits, which would result in only 0 or -1.
@@ -156,16 +155,14 @@ struct random_without_cast_overflow<
     SrcScalar, TgtScalar,
     std::enable_if_t<!NumTraits<SrcScalar>::IsInteger && !NumTraits<SrcScalar>::IsComplex &&
                      !NumTraits<TgtScalar>::IsInteger && !NumTraits<TgtScalar>::IsComplex &&
-                     (std::numeric_limits<SrcScalar>::digits >
-                      std::numeric_limits<TgtScalar>::digits)>> {
+                     (std::numeric_limits<SrcScalar>::digits > std::numeric_limits<TgtScalar>::digits)>> {
   static SrcScalar value() { return static_cast<SrcScalar>(internal::random<TgtScalar>()); }
 };
 
 // Complex to non-complex.
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
-    SrcScalar, TgtScalar,
-    std::enable_if_t<NumTraits<SrcScalar>::IsComplex && !NumTraits<TgtScalar>::IsComplex>> {
+    SrcScalar, TgtScalar, std::enable_if_t<NumTraits<SrcScalar>::IsComplex && !NumTraits<TgtScalar>::IsComplex>> {
   typedef typename NumTraits<SrcScalar>::Real SrcReal;
   static SrcScalar value() { return SrcScalar(random_without_cast_overflow<SrcReal, TgtScalar>::value(), 0); }
 };
@@ -173,8 +170,7 @@ struct random_without_cast_overflow<
 // Non-complex to complex.
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
-    SrcScalar, TgtScalar,
-    std::enable_if_t<!NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsComplex>> {
+    SrcScalar, TgtScalar, std::enable_if_t<!NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsComplex>> {
   typedef typename NumTraits<TgtScalar>::Real TgtReal;
   static SrcScalar value() { return random_without_cast_overflow<SrcScalar, TgtReal>::value(); }
 };
@@ -182,8 +178,7 @@ struct random_without_cast_overflow<
 // Complex to complex.
 template <typename SrcScalar, typename TgtScalar>
 struct random_without_cast_overflow<
-    SrcScalar, TgtScalar,
-    std::enable_if_t<NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsComplex>> {
+    SrcScalar, TgtScalar, std::enable_if_t<NumTraits<SrcScalar>::IsComplex && NumTraits<TgtScalar>::IsComplex>> {
   typedef typename NumTraits<SrcScalar>::Real SrcReal;
   typedef typename NumTraits<TgtScalar>::Real TgtReal;
   static SrcScalar value() {

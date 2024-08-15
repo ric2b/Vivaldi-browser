@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void distance_ac5535() {
+  float res = 0.0f;
+}
+vertex float4 vertex_main() {
+  distance_ac5535();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  distance_ac5535();
+}
+kernel void compute_main() {
+  distance_ac5535();
+}

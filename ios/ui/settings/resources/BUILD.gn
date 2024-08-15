@@ -10,8 +10,9 @@ group("main_settings") {
     ":vivaldi_setting_passwords",
     ":vivaldi_setting_payment_methods",
     ":vivaldi_setting_addresses",
+    ":vivaldi_setting_appearance",
     ":vivaldi_setting_tabs",
-    ":vivaldi_setting_start_page_layout",
+    ":vivaldi_setting_start_page",
     ":vivaldi_setting_privacy",
     ":vivaldi_setting_atb",
     ":vivaldi_setting_languages",
@@ -141,6 +142,13 @@ imageset("vivaldi_setting_addresses") {
   ]
 }
 
+imageset("vivaldi_setting_appearance") {
+  sources = [
+    "vivaldi_setting_appearance.imageset/Contents.json",
+    "vivaldi_setting_appearance.imageset/vivaldi_setting_appearance.pdf",
+  ]
+}
+
 imageset("vivaldi_setting_tabs") {
   sources = [
     "vivaldi_setting_tabs.imageset/Contents.json",
@@ -148,10 +156,10 @@ imageset("vivaldi_setting_tabs") {
   ]
 }
 
-imageset("vivaldi_setting_start_page_layout") {
+imageset("vivaldi_setting_start_page") {
   sources = [
-    "vivaldi_setting_start_page_layout.imageset/Contents.json",
-    "vivaldi_setting_start_page_layout.imageset/vivaldi_setting_start_page_layout.pdf",
+    "vivaldi_setting_start_page.imageset/Contents.json",
+    "vivaldi_setting_start_page.imageset/vivaldi_setting_start_page.pdf",
   ]
 }
 

@@ -50,6 +50,7 @@ struct AutocompleteMatch {
   url.mojom.Url destination_url;
   mojo_base.mojom.String16 inline_autocompletion;
   mojo_base.mojom.String16 fill_into_edit;
+  bool? is_weather_answer_suggestion;
   // The url for the suggestion icon. This is a relative url pointing to a
   // bundled resource and is used directly in CSS to show the icon.
   string icon_url;
@@ -173,6 +174,8 @@ interface PageHandler {
 interface Page {
   // Updates the page with the autocomplete results.
   AutocompleteResultChanged(AutocompleteResult result);
-  // Updates the UI's selected line and action based on the |selection|.
-  UpdateSelection(OmniboxPopupSelection selection);
+  // Updates the UI's selected line and action based on the |selection| and
+  // |old_selection|.
+  UpdateSelection(OmniboxPopupSelection old_selection,
+                  OmniboxPopupSelection selection);
 };

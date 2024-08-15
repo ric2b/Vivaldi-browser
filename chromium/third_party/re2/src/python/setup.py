@@ -53,9 +53,20 @@ class BuildExt(setuptools.command.build_ext.build_ext):
 
     cmd = ['bazel', 'build']
     try:
-      cmd.append(f'--cpu={os.environ["BAZEL_CPU"].lower()}')
+      cpu = os.environ['BAZEL_CPU']
+      cmd.append(f'--cpu={cpu}')
+      cmd.append(f'--platforms=//python:{cpu}')
+      if cpu == 'x64_x86_windows':
+        # Register the local 32-bit C++ toolchain with highest priority.
+        # (This is likely to break in some release of Bazel after 7.0.0,
+        # but this special case can hopefully be entirely removed then.)
+        cmd.append(f'--extra_toolchains=@local_config_cc//:cc-toolchain-{cpu}')
     except KeyError:
       pass
+    # Register the local Python toolchain with highest priority.
+    cmd.append('--extra_toolchains=@local_config_python//:py_toolchain')
+    # Print debug information during toolchain resolution.
+    cmd.append('--toolchain_resolution_debug=.*')
     cmd += ['--compilation_mode=opt', '--', ':all']
     self.spawn(cmd)
 

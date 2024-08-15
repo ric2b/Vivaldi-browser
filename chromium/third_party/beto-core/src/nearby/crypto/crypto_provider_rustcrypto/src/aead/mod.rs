@@ -13,3 +13,5 @@
 // limitations under the License.
 
 pub(crate) mod aes_gcm_siv;
+
+pub(crate) mod aes_gcm;

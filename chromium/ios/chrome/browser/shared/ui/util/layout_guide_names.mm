@@ -23,3 +23,8 @@ GuideName* const kAutofillFirstSuggestionGuide =
     @"kAutofillFirstSuggestionGuide";
 GuideName* const kLensKeyboardButtonGuide = @"kLensKeyboardButtonGuide";
 GuideName* const kMagicStackGuide = @"kMagicStackGuide";
+
+// Vivaldi
+GuideName* const vivaldiBottomOmniboxGuide = @"vivaldiBottomOmniboxGuide";
+GuideName* const vToolsMenuGuide = @"vToolsMenuGuide";
+// End Vivaldi

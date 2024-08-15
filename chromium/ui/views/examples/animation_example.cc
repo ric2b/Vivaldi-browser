@@ -46,8 +46,9 @@ AnimationExample::AnimationExample() : ExampleBase("Animation") {}
 AnimationExample::~AnimationExample() = default;
 
 class AnimatingSquare : public View {
+  METADATA_HEADER(AnimatingSquare, View)
+
  public:
-  METADATA_HEADER(AnimatingSquare);
   explicit AnimatingSquare(size_t index);
   AnimatingSquare(const AnimatingSquare&) = delete;
   AnimatingSquare& operator=(const AnimatingSquare&) = delete;
@@ -65,7 +66,7 @@ class AnimatingSquare : public View {
                                         style::STYLE_PRIMARY);
 };
 
-BEGIN_METADATA(AnimatingSquare, View)
+BEGIN_METADATA(AnimatingSquare)
 END_METADATA
 
 AnimatingSquare::AnimatingSquare(size_t index) : index_(index) {
@@ -145,7 +146,7 @@ ProposedLayout SquaresLayoutManager::CalculateProposedLayout(
     const gfx::Point origin(kPadding + column * item_width,
                             kPadding + row * item_height);
     layout.child_layouts.push_back(
-        {children[i], true, gfx::Rect(origin, kSize), SizeBounds(kSize)});
+        {children[i].get(), true, gfx::Rect(origin, kSize), SizeBounds(kSize)});
   }
 
   const size_t num_rows = (children.size() + views_per_row - 1) / views_per_row;
@@ -188,7 +189,7 @@ void AnimationExample::CreateExampleView(View* container) {
     gfx::RoundedCornersF rounded_corners(12.0f, 12.0f, 12.0f, 12.0f);
     AnimationBuilder b;
     abort_handle_ = b.GetAbortHandle();
-    for (auto* view : squares_container->children()) {
+    for (views::View* view : squares_container->children()) {
       b.Once()
           .SetDuration(base::Seconds(10))
           .SetRoundedCorners(view, rounded_corners);

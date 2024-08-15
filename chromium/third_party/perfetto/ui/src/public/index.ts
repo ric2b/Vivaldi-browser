@@ -15,13 +15,14 @@
 import m from 'mithril';
 
 import {Hotkey} from '../base/hotkeys';
-import {duration, Span, time} from '../base/time';
-import {EngineProxy} from '../common/engine';
-import {Store} from '../frontend/store';
-import {PxSpan, TimeScale} from '../frontend/time_scale';
-import {SliceRect} from '../frontend/track';
+import {duration, time} from '../base/time';
+import {ColorScheme} from '../common/colorizer';
+import {PanelSize} from '../frontend/panel';
+import {Migrate, Store} from '../frontend/store';
+import {EngineProxy} from '../trace_processor/engine';
 
-export {EngineProxy} from '../common/engine';
+export {createStore, Migrate, Store} from '../frontend/store';
+export {EngineProxy} from '../trace_processor/engine';
 export {
   LONG,
   LONG_NULL,
@@ -29,35 +30,37 @@ export {
   NUM_NULL,
   STR,
   STR_NULL,
-} from '../common/query_result';
-export {createStore, Store} from '../frontend/store';
+} from '../trace_processor/query_result';
 
+export interface Slice {
+  // These properties are updated only once per query result when the Slice
+  // object is created and don't change afterwards.
+  readonly id: number;
+  readonly startNsQ: time;
+  readonly endNsQ: time;
+  readonly durNsQ: duration;
+  readonly ts: time;
+  readonly dur: duration;
+  readonly depth: number;
+  readonly flags: number;
 
-// An imperative API for plugins to change the UI.
-export interface Viewer {
-  // Control of the sidebar.
-  sidebar: {
-    // Show the sidebar.
-    show(): void;
-    // Hide the sidebar.
-    hide(): void;
-    // Returns true if the sidebar is visble.
-    isVisible(): boolean;
-  }
+  // Each slice can represent some extra numerical information by rendering a
+  // portion of the slice with a lighter tint.
+  // |fillRatio\ describes the ratio of the normal area to the tinted area
+  // width of the slice, normalized between 0.0 -> 1.0.
+  // 0.0 means the whole slice is tinted.
+  // 1.0 means none of the slice is tinted.
+  // E.g. If |fillRatio| = 0.65 the slice will be rendered like this:
+  // [############|*******]
+  // ^------------^-------^
+  //     Normal     Light
+  readonly fillRatio: number;
 
-  // Tracks
-  tracks: {
-    pin(predicate: TrackPredicate): void;
-    unpin(predicate: TrackPredicate): void;
-  }
-
-  // Control over the bottom details pane.
-  tabs: {
-    // Creates a new tab running the provided query.
-    openQuery(query: string, title: string): void;
-  }
-
-  commands: {run(name: string, ...args: any[]): void;}
+  // These can be changed by the Impl.
+  title: string;
+  subTitle: string;
+  colorScheme: ColorScheme;
+  isHighlighted: boolean;
 }
 
 export interface Command {
@@ -66,7 +69,8 @@ export interface Command {
   // A human-friendly name for this command.
   name: string;
   // Callback is called when the command is invoked.
-  callback: (...args: any[]) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  callback: (...args: any[]) => any;
   // Default hotkey for this command.
   // Note: this is just the default and may be changed by the user.
   // Examples:
@@ -116,14 +120,28 @@ export interface PluginContext {
   // The unique ID for this plugin.
   readonly pluginId: string;
 
-  // The viewer API, used to interface with Perfetto.
-  readonly viewer: Viewer;
+  // Register command against this plugin context.
+  registerCommand(command: Command): void;
 
-  // Add a command.
-  addCommand(command: Command): void;
+  // Retrieve a list of all commands.
+  commands: Command[];
+
+  // Run a command, optionally passing some args.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  runCommand(id: string, ...args: any[]): any;
+
+  // Control of the sidebar.
+  sidebar: {
+    // Show the sidebar.
+    show(): void;
+
+    // Hide the sidebar.
+    hide(): void;
+
+    // Returns true if the sidebar is visible.
+    isVisible(): boolean;
+  };
 }
-
-export type Migrate<State> = (init: unknown) => State;
 
 export interface TrackContext {
   // This track's key, used for making selections et al.
@@ -143,20 +161,48 @@ export interface TrackContext {
   mountStore<State>(migrate: Migrate<State>): Store<State>;
 }
 
+export interface SliceRect {
+  left: number;
+  width: number;
+  top: number;
+  height: number;
+  visible: boolean;
+}
+
 export interface Track {
-  onCreate(ctx: TrackContext): void;
-  render(ctx: CanvasRenderingContext2D): void;
-  onFullRedraw(): void;
-  getSliceRect(
-      visibleTimeScale: TimeScale, visibleWindow: Span<time, duration>,
-      windowSpan: PxSpan, tStart: time, tEnd: time, depth: number): SliceRect
-      |undefined;
+  /**
+   * Optional: Called when the track is first materialized on the timeline.
+   * If this function returns a Promise, this promise is awaited before onUpdate
+   * or onDestroy is called. Any calls made to these functions in the meantime
+   * will be queued up and the hook will be called later once onCreate returns.
+   * @param ctx Our track context object.
+   */
+  onCreate?(ctx: TrackContext): Promise<void>|void;
+
+  /**
+   * Optional: Called every render cycle while the track is visible, just before
+   * render().
+   * If this function returns a Promise, this promise is awaited before another
+   * onUpdate is called or onDestroy is called.
+   */
+  onUpdate?(): Promise<void>|void;
+
+  /**
+   * Optional: Called when the track is no longer visible. Should be used to
+   * clean up resources.
+   * This function can return nothing or a promise. The promise is currently
+   * ignored.
+   */
+  onDestroy?(): Promise<void>|void;
+
+  render(ctx: CanvasRenderingContext2D, size: PanelSize): void;
+  onFullRedraw?(): void;
+  getSliceRect?(tStart: time, tEnd: time, depth: number): SliceRect|undefined;
   getHeight(): number;
-  getTrackShellButtons(): m.Children;
-  onMouseMove(position: {x: number, y: number}): void;
-  onMouseClick(position: {x: number, y: number}): boolean;
-  onMouseOut(): void;
-  onDestroy(): void;
+  getTrackShellButtons?(): m.Children;
+  onMouseMove?(position: {x: number, y: number}): void;
+  onMouseClick?(position: {x: number, y: number}): boolean;
+  onMouseOut?(): void;
 }
 
 // A definition of a track, including a renderer implementation and metadata.
@@ -164,7 +210,7 @@ export interface TrackDescriptor {
   // A unique identifier for this track.
   uri: string;
 
-  // A factory function returning a track object.
+  // A factory function returning the track object.
   track: (ctx: TrackContext) => Track;
 
   // The track "kind", used by various subsystems e.g. aggregation controllers.
@@ -190,6 +236,9 @@ export interface TrackDescriptor {
 
   // Optional: A list of tags used for sorting, grouping and "chips".
   tags?: TrackTags;
+
+  // Placeholder - presently unused.
+  displayName?: string;
 }
 
 // Tracks within track groups (usually corresponding to processes) are sorted.
@@ -222,27 +271,99 @@ export enum PrimaryTrackSortKey {
   ORDINARY_TRACK,
 }
 
+export interface SliceTrackColNames {
+  ts: string;
+  name: string;
+  dur: string;
+}
+
+export interface DebugSliceTrackArgs {
+  // Title of the track. If omitted a placeholder name will be chosen instead.
+  trackName?: string;
+
+  // Mapping definitions of the 'ts', 'dur', and 'name' columns.
+  // By default, columns called ts, dur and name will be used.
+  // If dur is assigned the value '0', all slices shall be instant events.
+  columnMapping?: Partial<SliceTrackColNames>;
+
+  // Any extra columns to be used as args.
+  args?: string[];
+
+  // Optional renaming of columns.
+  columns?: string[];
+}
+
+export interface CounterTrackColNames {
+  ts: string;
+  value: string;
+}
+
+export interface DebugCounterTrackArgs {
+  // Title of the track. If omitted a placeholder name will be chosen instead.
+  trackName?: string;
+
+  // Mapping definitions of the ts and value columns.
+  columnMapping?: Partial<CounterTrackColNames>;
+}
+
 // Similar to PluginContext but with additional methods to operate on the
 // currently loaded trace. Passed to trace-relevant hooks on a plugin instead of
 // PluginContext.
 export interface PluginContextTrace extends PluginContext {
   readonly engine: EngineProxy;
 
+  // Control over the main timeline.
+  timeline: {
+    // Add a new track to the scrolling track section, returning the newly
+    // created track key.
+    addTrack(uri: string, displayName: string, params?: unknown): string;
+
+    // Remove a single track from the timeline.
+    removeTrack(key: string): void;
+
+    // Pin a single track.
+    pinTrack(key: string): void;
+
+    // Unpin a single track.
+    unpinTrack(key: string): void;
+
+    // Pin all tracks that match a predicate.
+    pinTracksByPredicate(predicate: TrackPredicate): void;
+
+    // Unpin all tracks that match a predicate.
+    unpinTracksByPredicate(predicate: TrackPredicate): void;
+
+    // Remove all tracks that match a predicate.
+    removeTracksByPredicate(predicate: TrackPredicate): void;
+
+    // Retrieve a list of tracks on the timeline.
+    tracks: TrackRef[];
+
+    // Bring a timestamp into view.
+    panToTimestamp(ts: time): void;
+  }
+
+  // Control over the bottom details pane.
+  tabs: {
+    // Creates a new tab running the provided query.
+    openQuery(query: string, title: string): void;
+  }
+
   // Register a new track against a unique key known as a URI.
   // Once a track is registered it can be referenced multiple times on the
-  // timeline.
+  // timeline with different params to allow customising each instance.
   registerTrack(trackDesc: TrackDescriptor): void;
 
-  // Add a new entry to the pool of default tracks. Default tracks are a list of
-  // track references that describe the list of tracks that should be added to
-  // the main timeline on startup.
-  // Default tracks are only used when a trace is first loaded, not when loading
-  // from a permalink, where the existing list of tracks from the shared state
-  // is used instead.
+  // Add a new entry to the pool of default tracks. Default tracks are a list
+  // of track references that describe the list of tracks that should be added
+  // to the main timeline on startup.
+  // Default tracks are only used when a trace is first loaded, not when
+  // loading from a permalink, where the existing list of tracks from the
+  // shared state is used instead.
   addDefaultTrack(track: TrackRef): void;
 
   // Simultaneously register a track and add it as a default track in one go.
-  // This is simply a helper which calls registerTrack() then addDefaultTrack()
+  // This is simply a helper which calls registerTrack() and addDefaultTrack()
   // with the same URI.
   registerStaticTrack(track: TrackDescriptor&TrackRef): void;
 

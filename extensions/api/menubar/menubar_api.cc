@@ -190,7 +190,7 @@ bool MenubarAPI::GetIsEnabled(int id, bool hasWindow, bool* enabled) {
 // items in the Help menu enabled.
 // static
 bool MenubarAPI::HasActiveWindow() {
-  for (auto* browser : *BrowserList::GetInstance()) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser->window() && browser->window()->IsActive()) {
       return true;
     }
@@ -227,7 +227,7 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
 
   // Set up map based on the incoming actions and update id to match this map.
   if (SetIds(params->items, true)) {
-    for (auto* browser : *BrowserList::GetInstance()) {
+    for (Browser* browser : *BrowserList::GetInstance()) {
       chrome::BrowserCommandController* command_controller =
           browser->command_controller();
       command_controller->InitVivaldiCommandState();

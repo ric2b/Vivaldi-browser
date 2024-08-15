@@ -5,6 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_INTEREST_GROUP_AUCTION_CONFIG_MOJOM_TRAITS_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_INTEREST_GROUP_AUCTION_CONFIG_MOJOM_TRAITS_H_
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -325,6 +327,12 @@ struct BLINK_COMMON_EXPORT
     return params.requested_size;
   }
 
+  static const absl::optional<std::vector<blink::AdSize>>
+  all_slots_requested_sizes(
+      const blink::AuctionConfig::NonSharedParams& params) {
+    return params.all_slots_requested_sizes;
+  }
+
   static const absl::optional<base::Uuid>& auction_nonce(
       const blink::AuctionConfig::NonSharedParams& params) {
     return params.auction_nonce;
@@ -359,6 +367,11 @@ struct BLINK_COMMON_EXPORT
   static const absl::optional<GURL>& trusted_scoring_signals_url(
       const blink::AuctionConfig& config) {
     return config.trusted_scoring_signals_url;
+  }
+
+  static int32_t max_trusted_scoring_signals_url_length(
+      const blink::AuctionConfig& config) {
+    return config.max_trusted_scoring_signals_url_length;
   }
 
   static const blink::AuctionConfig::NonSharedParams&

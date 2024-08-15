@@ -39,6 +39,34 @@ bool deleteFile(base::FilePath file_path,
   return base::DeleteFile(file_path);
 }
 
+bool renameFile(base::FilePath file_path, base::FilePath::StringType file_name,
+                base::FilePath::StringType new_file_name) {
+  if (file_name.length() == 0) {
+    return false;
+  }
+
+  if (new_file_name.length() == 0) {
+    return false;
+  }
+
+  if (!file_path.IsAbsolute()) {
+    return false;
+  }
+
+  file_path = file_path.Append(file_name);
+  base::FilePath new_file_path = file_path.Append(new_file_name);
+
+  if (!base::PathExists(file_path)) {
+    return false;
+  }
+
+  if (base::PathExists(new_file_path)) {
+    return false;
+  }
+
+  return base::Move(file_path, new_file_path);
+}
+
 base::FilePath::StringType FilePathAsString(const base::FilePath& path) {
 #if BUILDFLAG(IS_WIN)
   return path.value();
@@ -84,12 +112,85 @@ namespace extensions {
 
 namespace mail_private = vivaldi::mail_private;
 
+namespace OnUpgradeProgress = vivaldi::mail_private::OnUpgradeProgress;
+namespace OnDeleteMessagesProgress =
+    vivaldi::mail_private::OnDeleteMessagesProgress;
+
 Profile* MailPrivateAsyncFunction::GetProfile() const {
   return Profile::FromBrowserContext(browser_context());
 }
 
 MailClientService* MailPrivateAsyncFunction::GetMailClientService() {
   return MailClientServiceFactory::GetForProfile(GetProfile());
+}
+
+MailEventRouter::MailEventRouter(Profile* profile,
+                                 MailClientService* mail_client_service)
+    : profile_(profile) {
+  DCHECK(profile);
+  mail_service_observation_.Observe(mail_client_service);
+}
+
+MailEventRouter::~MailEventRouter() {}
+
+void MailEventRouter::OnMigrationProgress(MailClientService* service,
+                                          int progress,
+                                          int total,
+                                          std::string msg) {
+  base::Value::List args = OnUpgradeProgress::Create(progress, total, msg);
+  DispatchEvent(profile_, OnUpgradeProgress::kEventName, std::move(args));
+}
+
+void MailEventRouter::OnDeleteMessagesProgress(MailClientService* service,
+                                               int total) {
+  base::Value::List args = OnDeleteMessagesProgress::Create(total);
+  DispatchEvent(profile_, OnDeleteMessagesProgress::kEventName,
+                std::move(args));
+}
+
+// Helper to actually dispatch an event to extension listeners.
+void MailEventRouter::DispatchEvent(Profile* profile,
+                                    const std::string& event_name,
+                                    base::Value::List event_args) {
+  if (profile && EventRouter::Get(profile)) {
+    EventRouter* event_router = EventRouter::Get(profile);
+    if (event_router) {
+      event_router->BroadcastEvent(base::WrapUnique(
+          new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
+                                event_name, std::move(event_args))));
+    }
+  }
+}
+
+MailAPI::MailAPI(content::BrowserContext* context) : browser_context_(context) {
+  EventRouter* event_router = EventRouter::Get(browser_context_);
+  event_router->RegisterObserver(this, OnUpgradeProgress::kEventName);
+  event_router->RegisterObserver(this, OnDeleteMessagesProgress::kEventName);
+}
+
+MailAPI::~MailAPI() {}
+
+void MailAPI::Shutdown() {
+  mail_client_event_router_.reset();
+  EventRouter::Get(browser_context_)->UnregisterObserver(this);
+}
+
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<MailAPI>>::DestructorAtExit g_factory_mail =
+    LAZY_INSTANCE_INITIALIZER;
+
+// static
+BrowserContextKeyedAPIFactory<MailAPI>* MailAPI::GetFactoryInstance() {
+  return g_factory_mail.Pointer();
+}
+
+void MailAPI::OnListenerAdded(const EventListenerInfo& details) {
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
+
+  mail_client_event_router_ = std::make_unique<MailEventRouter>(
+      profile, MailClientServiceFactory::GetForProfile(profile));
+
+  EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
 ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
@@ -364,6 +465,39 @@ void MailPrivateDeleteMessageFileFunction::OnFinished(bool result) {
   }
 }
 
+ExtensionFunction::ResponseAction MailPrivateRenameMessageFileFunction::Run() {
+  absl::optional<mail_private::RenameMessageFile::Params> params(
+      mail_private::RenameMessageFile::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  std::vector<std::string>& string_paths = params->paths;
+  base::FilePath::StringType file_name = StringToStringType(params->file_name);
+  base::FilePath::StringType new_file_name = StringToStringType(
+    params->new_file_name);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  base::FilePath file_path = profile->GetPath();
+
+  file_path = file_path.Append(kMailDirectory);
+
+  size_t count = string_paths.size();
+
+  for (size_t i = 0; i < count; i++) {
+    file_path = file_path.AppendASCII(string_paths[i]);
+  }
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&renameFile, file_path, file_name, new_file_name),
+      base::BindOnce(&MailPrivateRenameMessageFileFunction::OnFinished, this));
+
+  return RespondLater();
+}
+
+void MailPrivateRenameMessageFileFunction::OnFinished(bool result) {
+  Respond(ArgumentList(mail_private::RenameMessageFile::Results::Create(result)));
+}
+
 ReadFileResult Read(base::FilePath file_path) {
   std::string raw = "";
   ReadFileResult result;
@@ -410,8 +544,8 @@ ExtensionFunction::ResponseAction MailPrivateReadFileToBufferFunction::Run() {
 
 void MailPrivateReadFileToBufferFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
-    Respond(
-      WithArguments(base::Value(base::as_bytes(base::make_span(result.raw)))));
+    Respond(WithArguments(
+        base::Value(base::as_bytes(base::make_span(result.raw)))));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
@@ -479,8 +613,8 @@ MailPrivateReadMessageFileToBufferFunction::Run() {
 void MailPrivateReadMessageFileToBufferFunction::OnFinished(
     ReadFileResult result) {
   if (result.success == true) {
-    Respond(
-      WithArguments(base::Value(base::as_bytes(base::make_span(result.raw)))));
+    Respond(WithArguments(
+        base::Value(base::as_bytes(base::make_span(result.raw)))));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
@@ -593,29 +727,12 @@ mail_client::MessageRow GetMessageRow(const mail_private::Message& message) {
   mail_client::MessageRow row;
   row.searchListId = message.search_list_id;
 
-  if (message.to) {
-    row.to = base::UTF8ToUTF16(*message.to);
-  }
-
-  if (message.body) {
-    row.body = base::UTF8ToUTF16(*message.body);
-  }
-
-  if (message.subject) {
-    row.subject = base::UTF8ToUTF16(*message.subject);
-  }
-
-  if (message.from) {
-    row.from = base::UTF8ToUTF16(*message.from);
-  }
-
-  if (message.cc) {
-    row.cc = base::UTF8ToUTF16(*message.cc);
-  }
-
-  if (message.reply_to) {
-    row.replyTo = base::UTF8ToUTF16(*message.reply_to);
-  }
+  row.to = base::UTF8ToUTF16(message.to);
+  row.body = base::UTF8ToUTF16(message.body);
+  row.subject = base::UTF8ToUTF16(message.subject);
+  row.from = base::UTF8ToUTF16(message.from);
+  row.cc = base::UTF8ToUTF16(message.cc);
+  row.replyTo = base::UTF8ToUTF16(message.reply_to);
 
   return row;
 }
@@ -651,9 +768,8 @@ ExtensionFunction::ResponseAction MailPrivateCreateMessagesFunction::Run() {
                           // asynchronously.
 }
 
-void MailPrivateCreateMessagesFunction::CreateMessagesComplete(
-    std::shared_ptr<bool> result) {
-  Respond(ArgumentList(mail_private::CreateMessages::Results::Create(*result)));
+void MailPrivateCreateMessagesFunction::CreateMessagesComplete(bool result) {
+  Respond(ArgumentList(mail_private::CreateMessages::Results::Create(result)));
 }
 
 ExtensionFunction::ResponseAction MailPrivateDeleteMessagesFunction::Run() {
@@ -661,18 +777,17 @@ ExtensionFunction::ResponseAction MailPrivateDeleteMessagesFunction::Run() {
       mail_private::DeleteMessages::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  std::vector<int> search_list_ids = params->search_list_ids;
+  std::vector<int>& messages = params->messages;
+  mail_client::SearchListIDs messageIds;
 
-  mail_client::SearchListIdRows search_list;
-
-  for (size_t i = 0; i < search_list_ids.size(); i++) {
-    search_list.push_back(search_list_ids[i]);
+  for (size_t i = 0; i < messages.size(); i++) {
+    messageIds.push_back(messages[i]);
   }
 
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
   service->DeleteMessages(
-      search_list,
+      messageIds,
       base::BindOnce(&MailPrivateDeleteMessagesFunction::DeleteMessagesComplete,
                      this),
       &task_tracker_);
@@ -680,39 +795,37 @@ ExtensionFunction::ResponseAction MailPrivateDeleteMessagesFunction::Run() {
   return RespondLater();
 }
 
-void MailPrivateDeleteMessagesFunction::DeleteMessagesComplete(
-    std::shared_ptr<bool> result) {
-  Respond(ArgumentList(mail_private::DeleteMessages::Results::Create(*result)));
+void MailPrivateDeleteMessagesFunction::DeleteMessagesComplete(bool result) {
+  Respond(ArgumentList(mail_private::DeleteMessages::Results::Create(result)));
 }
 
-ExtensionFunction::ResponseAction MailPrivateAddMessageBodyFunction::Run() {
-  absl::optional<mail_private::AddMessageBody::Params> params(
-      mail_private::AddMessageBody::Params::Create(args()));
+ExtensionFunction::ResponseAction MailPrivateUpdateMessageFunction::Run() {
+  absl::optional<mail_private::UpdateMessage::Params> params(
+      mail_private::UpdateMessage::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  std::u16string body;
-  body = base::UTF8ToUTF16(params->body);
-  mail_client::SearchListID search_list_id = params->search_list_id;
+  mail_private::Message& email = params->message;
+  mail_client::MessageRow messageRow = GetMessageRow(email);
 
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
-  service->AddMessageBody(
-      search_list_id, body,
-      base::BindOnce(&MailPrivateAddMessageBodyFunction::AddMessageBodyComplete,
+  service->UpdateMessage(
+      messageRow,
+      base::BindOnce(&MailPrivateUpdateMessageFunction::UpdateMessageComplete,
                      this),
       &task_tracker_);
 
   return RespondLater();
 }
 
-void MailPrivateAddMessageBodyFunction::AddMessageBodyComplete(
-    std::shared_ptr<mail_client::MessageResult> results) {
-  if (!results->success) {
-    Respond(Error(results->message));
+void MailPrivateUpdateMessageFunction::UpdateMessageComplete(
+    mail_client::MessageResult results) {
+  if (!results.success) {
+    Respond(Error(results.message));
   } else {
     Respond(ArgumentList(
-        mail_private::AddMessageBody::Results::Create(results->success)));
+        mail_private::UpdateMessage::Results::Create(results.success)));
   }
 }
 
@@ -738,11 +851,11 @@ ExtensionFunction::ResponseAction MailPrivateSearchMessagesFunction::Run() {
 }
 
 void MailPrivateSearchMessagesFunction::MessagesSearchComplete(
-    std::shared_ptr<mail_client::SearchListIdRows> rows) {
+    mail_client::SearchListIDs rows) {
   std::vector<double> results;
 
-  for (mail_client::SearchListIdRows::iterator it = rows->begin();
-       it != rows->end(); ++it) {
+  for (mail_client::SearchListIDs ::iterator it = rows.begin();
+       it != rows.end(); ++it) {
     results.push_back(double(*it));
   }
 
@@ -772,30 +885,43 @@ ExtensionFunction::ResponseAction MailPrivateMatchMessageFunction::Run() {
                           // asynchronously.
 }
 
-void MailPrivateMatchMessageFunction::MatchMessageComplete(
-    std::shared_ptr<bool> match) {
-  Respond(ArgumentList(mail_private::MatchMessage::Results::Create(*match)));
+void MailPrivateMatchMessageFunction::MatchMessageComplete(bool match) {
+  Respond(ArgumentList(mail_private::MatchMessage::Results::Create(match)));
 }
 
-ExtensionFunction::ResponseAction
-MailPrivateRebuildAndVacuumDatabaseFunction::Run() {
+ExtensionFunction::ResponseAction MailPrivateGetDBVersionFunction::Run() {
   MailClientService* service =
       MailClientServiceFactory::GetForProfile(GetProfile());
 
-  service->RebuildAndVacuumDatabase(
-      base::BindOnce(
-          &MailPrivateRebuildAndVacuumDatabaseFunction::RebuildStartedCallback,
-          this),
+  service->GetDBVersion(
+      base::BindOnce(&MailPrivateGetDBVersionFunction::OnGetDBVersionFinished,
+                     this),
       &task_tracker_);
-
-  return RespondLater();  // RebuildStartedCallback() will be called
-                          // asynchronously.
+  return RespondLater();
 }
 
-void MailPrivateRebuildAndVacuumDatabaseFunction::RebuildStartedCallback(
-    std::shared_ptr<bool> started) {
-  Respond(ArgumentList(
-      mail_private::RebuildAndVacuumDatabase::Results::Create(*started)));
+void MailPrivateGetDBVersionFunction::OnGetDBVersionFinished(
+    mail_client::Migration migration_row) {
+  mail_private::Migration migration;
+  migration.db_version = migration_row.db_version;
+  migration.migration_needed = migration_row.migration_needed;
+
+  Respond(ArgumentList(mail_private::GetDBVersion::Results::Create(migration)));
+}
+
+ExtensionFunction::ResponseAction MailPrivateStartMigrationFunction::Run() {
+  MailClientService* service =
+      MailClientServiceFactory::GetForProfile(GetProfile());
+
+  service->MigrateSerchDB(
+      base::BindOnce(&MailPrivateStartMigrationFunction::OnMigrationFinished,
+                     this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void MailPrivateStartMigrationFunction::OnMigrationFinished(bool success) {
+  Respond(ArgumentList(mail_private::StartMigration::Results::Create(success)));
 }
 
 }  //  namespace extensions

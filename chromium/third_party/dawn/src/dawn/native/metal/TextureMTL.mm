@@ -32,8 +32,10 @@
 #include "dawn/common/IOSurfaceUtils.h"
 #include "dawn/common/Math.h"
 #include "dawn/common/Platform.h"
+#include "dawn/native/ChainUtils.h"
 #include "dawn/native/DynamicUploader.h"
 #include "dawn/native/EnumMaskIterator.h"
+#include "dawn/native/Queue.h"
 #include "dawn/native/metal/BufferMTL.h"
 #include "dawn/native/metal/DeviceMTL.h"
 #include "dawn/native/metal/QueueMTL.h"
@@ -46,6 +48,16 @@
 namespace dawn::native::metal {
 
 namespace {
+
+// NOTE: When creating MTLTextures from IOSurfaces vended by
+// SharedTextureMemory, we pass all Metal texture usages. This will facilitate an
+// upcoming change to have SharedTextureMemory cache MTLTextures. See
+// discussion in https://bugs.chromium.org/p/dawn/issues/detail?id=2152#c14 and
+// following comments for both (a) why this is necessary and (b) why it is not
+// harmful to performance.
+const MTLTextureUsage kMetalTextureUsageForSharedTextureMemoryIOSurface =
+    MTLTextureUsageShaderWrite | MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView |
+    MTLTextureUsageRenderTarget;
 
 MTLTextureUsage MetalTextureUsage(const Format& format, wgpu::TextureUsage usage) {
     MTLTextureUsage result = MTLTextureUsageUnknown;  // This is 0
@@ -67,6 +79,11 @@ MTLTextureUsage MetalTextureUsage(const Format& format, wgpu::TextureUsage usage
     }
 
     if (usage & wgpu::TextureUsage::RenderAttachment) {
+        result |= MTLTextureUsageRenderTarget;
+    }
+
+    if (usage & wgpu::TextureUsage::StorageAttachment) {
+        // TODO(dawn:1704): Support PLS on non-tiler Metal devices.
         result |= MTLTextureUsageRenderTarget;
     }
 
@@ -98,8 +115,9 @@ bool RequiresCreatingNewTextureView(const TextureBase* texture,
                                     const TextureViewDescriptor* textureViewDescriptor) {
     constexpr wgpu::TextureUsage kShaderUsageNeedsView =
         wgpu::TextureUsage::StorageBinding | wgpu::TextureUsage::TextureBinding;
-    constexpr wgpu::TextureUsage kUsageNeedsView =
-        kShaderUsageNeedsView | wgpu::TextureUsage::RenderAttachment;
+    constexpr wgpu::TextureUsage kUsageNeedsView = kShaderUsageNeedsView |
+                                                   wgpu::TextureUsage::RenderAttachment |
+                                                   wgpu::TextureUsage::StorageAttachment;
     if ((texture->GetInternalUsage() & kUsageNeedsView) == 0) {
         return false;
     }
@@ -214,474 +232,7 @@ bool AllowFormatReinterpretationWithoutFlag(MTLPixelFormat origin,
 #undef SRGB_PAIR
 }
 
-ResultOrError<wgpu::TextureFormat> GetFormatEquivalentToIOSurfaceFormat(uint32_t format) {
-    switch (format) {
-        case kCVPixelFormatType_64RGBAHalf:
-            return wgpu::TextureFormat::RGBA16Float;
-        case kCVPixelFormatType_TwoComponent16Half:
-            return wgpu::TextureFormat::RG16Float;
-        case kCVPixelFormatType_OneComponent16Half:
-            return wgpu::TextureFormat::R16Float;
-        case kCVPixelFormatType_ARGB2101010LEPacked:
-            return wgpu::TextureFormat::RGB10A2Unorm;
-        case kCVPixelFormatType_32RGBA:
-            return wgpu::TextureFormat::RGBA8Unorm;
-        case kCVPixelFormatType_32BGRA:
-            return wgpu::TextureFormat::BGRA8Unorm;
-        case kCVPixelFormatType_TwoComponent8:
-            return wgpu::TextureFormat::RG8Unorm;
-        case kCVPixelFormatType_OneComponent8:
-            return wgpu::TextureFormat::R8Unorm;
-        case kCVPixelFormatType_TwoComponent16:
-            return wgpu::TextureFormat::RG16Unorm;
-        case kCVPixelFormatType_OneComponent16:
-            return wgpu::TextureFormat::R16Unorm;
-        case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
-            return wgpu::TextureFormat::R8BG8Biplanar420Unorm;
-        case kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange:
-            return wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm;
-        default:
-            return DAWN_VALIDATION_ERROR("Unsupported IOSurface format (%x).", format);
-    }
-}
-
-#if DAWN_PLATFORM_IS(MACOS)
-MTLStorageMode kIOSurfaceStorageMode = MTLStorageModeManaged;
-#elif DAWN_PLATFORM_IS(IOS)
-MTLStorageMode kIOSurfaceStorageMode = MTLStorageModePrivate;
-#else
-#error "Unsupported Apple platform."
-#endif
 }  // namespace
-
-MTLPixelFormat MetalPixelFormat(const DeviceBase* device, wgpu::TextureFormat format) {
-    switch (format) {
-        case wgpu::TextureFormat::R8Unorm:
-            return MTLPixelFormatR8Unorm;
-        case wgpu::TextureFormat::R8Snorm:
-            return MTLPixelFormatR8Snorm;
-        case wgpu::TextureFormat::R8Uint:
-            return MTLPixelFormatR8Uint;
-        case wgpu::TextureFormat::R8Sint:
-            return MTLPixelFormatR8Sint;
-
-        case wgpu::TextureFormat::R16Unorm:
-            return MTLPixelFormatR16Unorm;
-        case wgpu::TextureFormat::R16Snorm:
-            return MTLPixelFormatR16Snorm;
-        case wgpu::TextureFormat::R16Uint:
-            return MTLPixelFormatR16Uint;
-        case wgpu::TextureFormat::R16Sint:
-            return MTLPixelFormatR16Sint;
-        case wgpu::TextureFormat::R16Float:
-            return MTLPixelFormatR16Float;
-        case wgpu::TextureFormat::RG8Unorm:
-            return MTLPixelFormatRG8Unorm;
-        case wgpu::TextureFormat::RG8Snorm:
-            return MTLPixelFormatRG8Snorm;
-        case wgpu::TextureFormat::RG8Uint:
-            return MTLPixelFormatRG8Uint;
-        case wgpu::TextureFormat::RG8Sint:
-            return MTLPixelFormatRG8Sint;
-
-        case wgpu::TextureFormat::R32Uint:
-            return MTLPixelFormatR32Uint;
-        case wgpu::TextureFormat::R32Sint:
-            return MTLPixelFormatR32Sint;
-        case wgpu::TextureFormat::R32Float:
-            return MTLPixelFormatR32Float;
-        case wgpu::TextureFormat::RG16Unorm:
-            return MTLPixelFormatRG16Unorm;
-        case wgpu::TextureFormat::RG16Snorm:
-            return MTLPixelFormatRG16Snorm;
-        case wgpu::TextureFormat::RG16Uint:
-            return MTLPixelFormatRG16Uint;
-        case wgpu::TextureFormat::RG16Sint:
-            return MTLPixelFormatRG16Sint;
-        case wgpu::TextureFormat::RG16Float:
-            return MTLPixelFormatRG16Float;
-        case wgpu::TextureFormat::RGBA8Unorm:
-            return MTLPixelFormatRGBA8Unorm;
-        case wgpu::TextureFormat::RGBA8UnormSrgb:
-            return MTLPixelFormatRGBA8Unorm_sRGB;
-        case wgpu::TextureFormat::RGBA8Snorm:
-            return MTLPixelFormatRGBA8Snorm;
-        case wgpu::TextureFormat::RGBA8Uint:
-            return MTLPixelFormatRGBA8Uint;
-        case wgpu::TextureFormat::RGBA8Sint:
-            return MTLPixelFormatRGBA8Sint;
-        case wgpu::TextureFormat::BGRA8Unorm:
-            return MTLPixelFormatBGRA8Unorm;
-        case wgpu::TextureFormat::BGRA8UnormSrgb:
-            return MTLPixelFormatBGRA8Unorm_sRGB;
-        case wgpu::TextureFormat::RGB10A2Uint:
-            return MTLPixelFormatRGB10A2Uint;
-        case wgpu::TextureFormat::RGB10A2Unorm:
-            return MTLPixelFormatRGB10A2Unorm;
-        case wgpu::TextureFormat::RG11B10Ufloat:
-            return MTLPixelFormatRG11B10Float;
-        case wgpu::TextureFormat::RGB9E5Ufloat:
-            return MTLPixelFormatRGB9E5Float;
-
-        case wgpu::TextureFormat::RG32Uint:
-            return MTLPixelFormatRG32Uint;
-        case wgpu::TextureFormat::RG32Sint:
-            return MTLPixelFormatRG32Sint;
-        case wgpu::TextureFormat::RG32Float:
-            return MTLPixelFormatRG32Float;
-        case wgpu::TextureFormat::RGBA16Unorm:
-            return MTLPixelFormatRGBA16Unorm;
-        case wgpu::TextureFormat::RGBA16Snorm:
-            return MTLPixelFormatRGBA16Snorm;
-        case wgpu::TextureFormat::RGBA16Uint:
-            return MTLPixelFormatRGBA16Uint;
-        case wgpu::TextureFormat::RGBA16Sint:
-            return MTLPixelFormatRGBA16Sint;
-        case wgpu::TextureFormat::RGBA16Float:
-            return MTLPixelFormatRGBA16Float;
-
-        case wgpu::TextureFormat::RGBA32Uint:
-            return MTLPixelFormatRGBA32Uint;
-        case wgpu::TextureFormat::RGBA32Sint:
-            return MTLPixelFormatRGBA32Sint;
-        case wgpu::TextureFormat::RGBA32Float:
-            return MTLPixelFormatRGBA32Float;
-
-        case wgpu::TextureFormat::Depth32Float:
-            return MTLPixelFormatDepth32Float;
-        case wgpu::TextureFormat::Depth24Plus:
-            return MTLPixelFormatDepth32Float;
-        case wgpu::TextureFormat::Depth24PlusStencil8:
-        case wgpu::TextureFormat::Depth32FloatStencil8:
-            return MTLPixelFormatDepth32Float_Stencil8;
-        case wgpu::TextureFormat::Depth16Unorm:
-            if (@available(macOS 10.12, iOS 13.0, *)) {
-                return MTLPixelFormatDepth16Unorm;
-            }
-            DAWN_UNREACHABLE();
-        case wgpu::TextureFormat::Stencil8:
-            if (device->IsToggleEnabled(Toggle::MetalUseCombinedDepthStencilFormatForStencil8)) {
-                return MTLPixelFormatDepth32Float_Stencil8;
-            }
-            return MTLPixelFormatStencil8;
-
-#if DAWN_PLATFORM_IS(MACOS)
-        case wgpu::TextureFormat::BC1RGBAUnorm:
-            return MTLPixelFormatBC1_RGBA;
-        case wgpu::TextureFormat::BC1RGBAUnormSrgb:
-            return MTLPixelFormatBC1_RGBA_sRGB;
-        case wgpu::TextureFormat::BC2RGBAUnorm:
-            return MTLPixelFormatBC2_RGBA;
-        case wgpu::TextureFormat::BC2RGBAUnormSrgb:
-            return MTLPixelFormatBC2_RGBA_sRGB;
-        case wgpu::TextureFormat::BC3RGBAUnorm:
-            return MTLPixelFormatBC3_RGBA;
-        case wgpu::TextureFormat::BC3RGBAUnormSrgb:
-            return MTLPixelFormatBC3_RGBA_sRGB;
-        case wgpu::TextureFormat::BC4RSnorm:
-            return MTLPixelFormatBC4_RSnorm;
-        case wgpu::TextureFormat::BC4RUnorm:
-            return MTLPixelFormatBC4_RUnorm;
-        case wgpu::TextureFormat::BC5RGSnorm:
-            return MTLPixelFormatBC5_RGSnorm;
-        case wgpu::TextureFormat::BC5RGUnorm:
-            return MTLPixelFormatBC5_RGUnorm;
-        case wgpu::TextureFormat::BC6HRGBFloat:
-            return MTLPixelFormatBC6H_RGBFloat;
-        case wgpu::TextureFormat::BC6HRGBUfloat:
-            return MTLPixelFormatBC6H_RGBUfloat;
-        case wgpu::TextureFormat::BC7RGBAUnorm:
-            return MTLPixelFormatBC7_RGBAUnorm;
-        case wgpu::TextureFormat::BC7RGBAUnormSrgb:
-            return MTLPixelFormatBC7_RGBAUnorm_sRGB;
-#else
-        case wgpu::TextureFormat::BC1RGBAUnorm:
-        case wgpu::TextureFormat::BC1RGBAUnormSrgb:
-        case wgpu::TextureFormat::BC2RGBAUnorm:
-        case wgpu::TextureFormat::BC2RGBAUnormSrgb:
-        case wgpu::TextureFormat::BC3RGBAUnorm:
-        case wgpu::TextureFormat::BC3RGBAUnormSrgb:
-        case wgpu::TextureFormat::BC4RSnorm:
-        case wgpu::TextureFormat::BC4RUnorm:
-        case wgpu::TextureFormat::BC5RGSnorm:
-        case wgpu::TextureFormat::BC5RGUnorm:
-        case wgpu::TextureFormat::BC6HRGBFloat:
-        case wgpu::TextureFormat::BC6HRGBUfloat:
-        case wgpu::TextureFormat::BC7RGBAUnorm:
-        case wgpu::TextureFormat::BC7RGBAUnormSrgb:
-#endif
-
-        case wgpu::TextureFormat::ETC2RGB8Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatETC2_RGB8;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ETC2RGB8UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatETC2_RGB8_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ETC2RGB8A1Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatETC2_RGB8A1;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ETC2RGB8A1UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatETC2_RGB8A1_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ETC2RGBA8Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatEAC_RGBA8;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ETC2RGBA8UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatEAC_RGBA8_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::EACR11Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatEAC_R11Unorm;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::EACR11Snorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatEAC_R11Snorm;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::EACRG11Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatEAC_RG11Unorm;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::EACRG11Snorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatEAC_RG11Snorm;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-
-        case wgpu::TextureFormat::ASTC4x4Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_4x4_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC4x4UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_4x4_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC5x4Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_5x4_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC5x4UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_5x4_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC5x5Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_5x5_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC5x5UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_5x5_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC6x5Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_6x5_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC6x5UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_6x5_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC6x6Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_6x6_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC6x6UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_6x6_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC8x5Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_8x5_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC8x5UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_8x5_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC8x6Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_8x6_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC8x6UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_8x6_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC8x8Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_8x8_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC8x8UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_8x8_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x5Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x5_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x5UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x5_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x6Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x6_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x6UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x6_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x8Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x8_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x8UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x8_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x10Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x10_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC10x10UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_10x10_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC12x10Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_12x10_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC12x10UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_12x10_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC12x12Unorm:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_12x12_LDR;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-        case wgpu::TextureFormat::ASTC12x12UnormSrgb:
-            if (@available(macOS 11.0, iOS 8.0, *)) {
-                return MTLPixelFormatASTC_12x12_sRGB;
-            } else {
-                DAWN_UNREACHABLE();
-            }
-
-        case wgpu::TextureFormat::R8BG8Biplanar420Unorm:
-        case wgpu::TextureFormat::R10X6BG10X6Biplanar420Unorm:
-        case wgpu::TextureFormat::Undefined:
-            DAWN_UNREACHABLE();
-    }
-}
-
-MaybeError ValidateIOSurfaceCanBeWrapped(const DeviceBase*,
-                                         const TextureDescriptor* descriptor,
-                                         IOSurfaceRef ioSurface) {
-    DAWN_INVALID_IF(descriptor->dimension != wgpu::TextureDimension::e2D,
-                    "Texture dimension (%s) is not %s.", descriptor->dimension,
-                    wgpu::TextureDimension::e2D);
-
-    DAWN_INVALID_IF(descriptor->mipLevelCount != 1, "Mip level count (%u) is not 1.",
-                    descriptor->mipLevelCount);
-
-    DAWN_INVALID_IF(descriptor->size.depthOrArrayLayers != 1, "Array layer count (%u) is not 1.",
-                    descriptor->size.depthOrArrayLayers);
-
-    DAWN_INVALID_IF(descriptor->sampleCount != 1, "Sample count (%u) is not 1.",
-                    descriptor->sampleCount);
-
-    uint32_t surfaceWidth = IOSurfaceGetWidth(ioSurface);
-    uint32_t surfaceHeight = IOSurfaceGetHeight(ioSurface);
-
-    DAWN_INVALID_IF(
-        descriptor->size.width != surfaceWidth || descriptor->size.height != surfaceHeight ||
-            descriptor->size.depthOrArrayLayers != 1,
-        "IOSurface size (width: %u, height %u, depth: 1) doesn't match descriptor size %s.",
-        surfaceWidth, surfaceHeight, &descriptor->size);
-
-    wgpu::TextureFormat ioSurfaceFormat;
-    DAWN_TRY_ASSIGN(ioSurfaceFormat,
-                    GetFormatEquivalentToIOSurfaceFormat(IOSurfaceGetPixelFormat(ioSurface)));
-    DAWN_INVALID_IF(descriptor->format != ioSurfaceFormat,
-                    "IOSurface format (%s) doesn't match the descriptor format (%s).",
-                    ioSurfaceFormat, descriptor->format);
-
-    return {};
-}
 
 NSRef<MTLTextureDescriptor> Texture::CreateMetalTextureDescriptor() const {
     NSRef<MTLTextureDescriptor> mtlDescRef = AcquireNSRef([MTLTextureDescriptor new]);
@@ -716,6 +267,9 @@ NSRef<MTLTextureDescriptor> Texture::CreateMetalTextureDescriptor() const {
     // Choose the correct MTLTextureType and paper over differences in how the array layer count
     // is specified.
     switch (GetDimension()) {
+        case wgpu::TextureDimension::Undefined:
+            DAWN_UNREACHABLE();
+
         case wgpu::TextureDimension::e1D:
             mtlDesc.arrayLength = 1;
             mtlDesc.depth = 1;
@@ -749,35 +303,17 @@ NSRef<MTLTextureDescriptor> Texture::CreateMetalTextureDescriptor() const {
 }
 
 // static
-ResultOrError<Ref<Texture>> Texture::Create(Device* device, const TextureDescriptor* descriptor) {
+ResultOrError<Ref<Texture>> Texture::Create(Device* device,
+                                            const UnpackedPtr<TextureDescriptor>& descriptor) {
     Ref<Texture> texture = AcquireRef(new Texture(device, descriptor));
-
-    if (texture->GetFormat().IsMultiPlanar()) {
-        // Metal doesn't allow creating multiplanar texture directly. So we create an IOSurface
-        // internally and wrap it.
-        ExternalImageDescriptorIOSurface ioSurfaceImageDesc;
-        ioSurfaceImageDesc.isInitialized = false;
-
-        DAWN_ASSERT(descriptor->dimension == wgpu::TextureDimension::e2D &&
-                    descriptor->mipLevelCount == 1 && descriptor->size.depthOrArrayLayers == 1);
-
-        IOSurfaceRef iosurface = CreateMultiPlanarIOSurface(
-            descriptor->format, descriptor->size.width, descriptor->size.height);
-
-        DAWN_INVALID_IF(iosurface == nullptr,
-                        "Failed to create IOSurface for multiplanar texture.");
-        DAWN_TRY(texture->InitializeFromIOSurface(&ioSurfaceImageDesc, descriptor, iosurface, {}));
-
-    } else {
-        DAWN_TRY(texture->InitializeAsInternalTexture(descriptor));
-    }
+    DAWN_TRY(texture->InitializeAsInternalTexture(descriptor));
 
     if (device->IsToggleEnabled(Toggle::NonzeroClearResourcesOnCreationForTesting)) {
-        DAWN_TRY(texture->ClearTexture(device->GetPendingCommandContext(),
+        DAWN_TRY(texture->ClearTexture(ToBackend(device->GetQueue())->GetPendingCommandContext(),
                                        texture->GetAllSubresources(),
                                        TextureBase::ClearValue::NonZero));
     } else if (texture->ShouldKeepInitialized()) {
-        DAWN_TRY(texture->ClearTexture(device->GetPendingCommandContext(),
+        DAWN_TRY(texture->ClearTexture(ToBackend(device->GetQueue())->GetPendingCommandContext(),
                                        texture->GetAllSubresources(),
                                        TextureBase::ClearValue::Zero));
     }
@@ -786,62 +322,78 @@ ResultOrError<Ref<Texture>> Texture::Create(Device* device, const TextureDescrip
 }
 
 // static
-ResultOrError<Ref<Texture>> Texture::CreateFromIOSurface(
-    Device* device,
-    const ExternalImageDescriptor* descriptor,
-    IOSurfaceRef ioSurface,
-    std::vector<MTLSharedEventAndSignalValue> waitEvents) {
-    const TextureDescriptor* textureDescriptor = FromAPI(descriptor->cTextureDescriptor);
-
-    Ref<Texture> texture = AcquireRef(new Texture(device, textureDescriptor));
-    DAWN_TRY(texture->InitializeFromIOSurface(descriptor, textureDescriptor, ioSurface,
-                                              std::move(waitEvents)));
-    return texture;
-}
-
-// static
 ResultOrError<Ref<Texture>> Texture::CreateFromSharedTextureMemory(
     SharedTextureMemory* memory,
-    const TextureDescriptor* descriptor) {
-    ExternalImageDescriptorIOSurface ioSurfaceImageDesc;
-    ioSurfaceImageDesc.isInitialized = false;  // Initialized state is set on memory.BeginAccess.
+    const UnpackedPtr<TextureDescriptor>& descriptor) {
+    // Note: Initialized state is set on memory.BeginAccess, so we leave
+    // subresources as uninitialized at this point.
 
     Device* device = ToBackend(memory->GetDevice());
     Ref<Texture> texture = AcquireRef(new Texture(device, descriptor));
-    DAWN_TRY(texture->InitializeFromIOSurface(&ioSurfaceImageDesc, descriptor,
-                                              memory->GetIOSurface(), {}));
+    DAWN_TRY(texture->InitializeFromSharedTextureMemory(memory, descriptor));
     texture->mSharedTextureMemoryContents = memory->GetContents();
     return texture;
 }
 
 // static
 Ref<Texture> Texture::CreateWrapping(Device* device,
-                                     const TextureDescriptor* descriptor,
+                                     const UnpackedPtr<TextureDescriptor>& descriptor,
                                      NSPRef<id<MTLTexture>> wrapped) {
     Ref<Texture> texture = AcquireRef(new Texture(device, descriptor));
     texture->InitializeAsWrapping(descriptor, std::move(wrapped));
     return texture;
 }
 
-MaybeError Texture::InitializeAsInternalTexture(const TextureDescriptor* descriptor) {
+MaybeError Texture::InitializeAsInternalTexture(const UnpackedPtr<TextureDescriptor>& descriptor) {
     Device* device = ToBackend(GetDevice());
 
-    NSRef<MTLTextureDescriptor> mtlDesc = CreateMetalTextureDescriptor();
-    mMtlUsage = [*mtlDesc usage];
-    mMtlFormat = [*mtlDesc pixelFormat];
-    mMtlPlaneTextures->resize(1);
-    mMtlPlaneTextures[0] =
-        AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:mtlDesc.Get()]);
+    if (!GetFormat().IsMultiPlanar()) {
+        NSRef<MTLTextureDescriptor> mtlDesc = CreateMetalTextureDescriptor();
+        mMtlUsage = [*mtlDesc usage];
+        mMtlFormat = [*mtlDesc pixelFormat];
+        mMtlPlaneTextures->resize(1);
+        mMtlPlaneTextures[0] =
+            AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:mtlDesc.Get()]);
 
-    if (mMtlPlaneTextures[0] == nil) {
-        return DAWN_OUT_OF_MEMORY_ERROR("Failed to allocate texture.");
+        if (mMtlPlaneTextures[0] == nil) {
+            return DAWN_OUT_OF_MEMORY_ERROR("Failed to allocate texture.");
+        }
+    } else {
+        // Metal doesn't allow creating multiplanar texture directly. So we create an IOSurface
+        // internally and wrap it.
+        DAWN_ASSERT(descriptor->dimension == wgpu::TextureDimension::e2D &&
+                    descriptor->mipLevelCount == 1 && descriptor->size.depthOrArrayLayers == 1);
+
+        mIOSurface = CreateMultiPlanarIOSurface(descriptor->format, descriptor->size.width,
+                                                descriptor->size.height);
+
+        DAWN_INVALID_IF(mIOSurface == nullptr,
+                        "Failed to create IOSurface for multiplanar texture.");
+        DAWN_INVALID_IF(
+            GetInternalUsage() & wgpu::TextureUsage::TransientAttachment,
+            "Usage flags (%s) include %s, which is not compatible with creation from IOSurface.",
+            GetInternalUsage(), wgpu::TextureUsage::TransientAttachment);
+
+        mMtlUsage = MetalTextureUsage(GetFormat(), GetInternalUsage());
+        // Multiplanar format doesn't have equivalent MTLPixelFormat so just set it to invalid.
+        mMtlFormat = MTLPixelFormatInvalid;
+        const size_t numPlanes = IOSurfaceGetPlaneCount(GetIOSurface());
+        mMtlPlaneTextures->resize(numPlanes);
+        for (size_t plane = 0; plane < numPlanes; ++plane) {
+            mMtlPlaneTextures[plane] = AcquireNSPRef(CreateTextureMtlForPlane(
+                mMtlUsage, GetFormat(), plane, device, GetSampleCount(), GetIOSurface()));
+            if (mMtlPlaneTextures[plane] == nil) {
+                return DAWN_INTERNAL_ERROR("Failed to create MTLTexture plane view for IOSurface.");
+            }
+        }
     }
+
     SetLabelImpl();
 
     return {};
 }
 
-void Texture::InitializeAsWrapping(const TextureDescriptor* descriptor,
+void Texture::InitializeAsWrapping(const UnpackedPtr<TextureDescriptor>& descriptor,
                                    NSPRef<id<MTLTexture>> wrapped) {
     NSRef<MTLTextureDescriptor> mtlDesc = CreateMetalTextureDescriptor();
     mMtlUsage = [*mtlDesc usage];
@@ -851,66 +403,53 @@ void Texture::InitializeAsWrapping(const TextureDescriptor* descriptor,
     SetLabelImpl();
 }
 
-MaybeError Texture::InitializeFromIOSurface(const ExternalImageDescriptor* descriptor,
-                                            const TextureDescriptor* textureDescriptor,
-                                            IOSurfaceRef ioSurface,
-                                            std::vector<MTLSharedEventAndSignalValue> waitEvents) {
+MaybeError Texture::InitializeFromSharedTextureMemory(
+    SharedTextureMemory* memory,
+    const UnpackedPtr<TextureDescriptor>& textureDescriptor) {
     DAWN_INVALID_IF(
         GetInternalUsage() & wgpu::TextureUsage::TransientAttachment,
         "Usage flags (%s) include %s, which is not compatible with creation from IOSurface.",
         GetInternalUsage(), wgpu::TextureUsage::TransientAttachment);
 
-    mIOSurface = ioSurface;
-    mWaitEvents = std::move(waitEvents);
+    mIOSurface = memory->GetIOSurface();
 
     Device* device = ToBackend(GetDevice());
 
-    // Uses WGPUTexture which wraps multiplanar ioSurface needs to create
-    // texture view explicitly.
+    // NOTE: The texture is guaranteed to be 2D/single-sampled/array length of
+    // 1/single mipmap level per SharedTextureMemory semantics and validation.
     if (!GetFormat().IsMultiPlanar()) {
-        NSRef<MTLTextureDescriptor> mtlDesc = CreateMetalTextureDescriptor();
-        [*mtlDesc setStorageMode:kIOSurfaceStorageMode];
+        // Create the descriptor for the Metal texture.
+        NSRef<MTLTextureDescriptor> mtlDescRef = AcquireNSRef([MTLTextureDescriptor new]);
+        MTLTextureDescriptor* mtlDesc = mtlDescRef.Get();
 
-        mMtlUsage = [*mtlDesc usage];
-        mMtlFormat = [*mtlDesc pixelFormat];
+        mtlDesc.storageMode = IOSurfaceStorageMode();
+        mtlDesc.width = GetBaseSize().width;
+        mtlDesc.height = GetBaseSize().height;
+        // NOTE: MetalTextureDescriptor defaults to the values mentioned above
+        // for the given parameters, so none of these need to be set explicitly.
+
+        // Metal only allows format reinterpretation to happen on swizzle pattern or conversion
+        // between linear space and sRGB. For example, creating bgra8Unorm texture view on
+        // rgba8Unorm texture or creating rgba8Unorm_srgb texture view on rgab8Unorm texture.
+        mtlDesc.usage = kMetalTextureUsageForSharedTextureMemoryIOSurface;
+        mtlDesc.pixelFormat = MetalPixelFormat(GetDevice(), GetFormat().format);
+
+        mMtlUsage = mtlDesc.usage;
+        mMtlFormat = mtlDesc.pixelFormat;
         mMtlPlaneTextures->resize(1);
         mMtlPlaneTextures[0] =
-            AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:mtlDesc.Get()
-                                                                 iosurface:ioSurface
+            AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:mtlDesc
+                                                                 iosurface:mIOSurface.Get()
                                                                      plane:0]);
     } else {
-        mMtlUsage = MetalTextureUsage(GetFormat(), GetInternalUsage());
+        mMtlUsage = kMetalTextureUsageForSharedTextureMemoryIOSurface;
         // Multiplanar format doesn't have equivalent MTLPixelFormat so just set it to invalid.
         mMtlFormat = MTLPixelFormatInvalid;
         const size_t numPlanes = IOSurfaceGetPlaneCount(GetIOSurface());
         mMtlPlaneTextures->resize(numPlanes);
         for (size_t plane = 0; plane < numPlanes; ++plane) {
-            Aspect aspect = GetPlaneAspect(GetFormat(), plane);
-            const auto& aspectInfo = GetFormat().GetAspectInfo(aspect);
-
-            NSRef<MTLTextureDescriptor> mtlDescRef = AcquireNSRef([MTLTextureDescriptor new]);
-            MTLTextureDescriptor* mtlDesc = mtlDescRef.Get();
-
-            mtlDesc.sampleCount = GetSampleCount();
-            mtlDesc.usage = mMtlUsage;
-            mtlDesc.pixelFormat = MetalPixelFormat(device, aspectInfo.format);
-            mtlDesc.mipmapLevelCount = GetNumMipLevels();
-            mtlDesc.storageMode = kIOSurfaceStorageMode;
-
-            mtlDesc.width = IOSurfaceGetWidthOfPlane(GetIOSurface(), plane);
-            mtlDesc.height = IOSurfaceGetHeightOfPlane(GetIOSurface(), plane);
-
-            // Multiplanar texture is validated to only have single layer, single mipLevel
-            // and 2d textures (depth == 1)
-            DAWN_ASSERT(GetArrayLayers() == 1 && GetDimension() == wgpu::TextureDimension::e2D &&
-                        GetNumMipLevels() == 1);
-            mtlDesc.arrayLength = 1;
-            mtlDesc.depth = 1;
-
-            mMtlPlaneTextures[plane] =
-                AcquireNSPRef([device->GetMTLDevice() newTextureWithDescriptor:mtlDesc
-                                                                     iosurface:GetIOSurface()
-                                                                         plane:plane]);
+            mMtlPlaneTextures[plane] = AcquireNSPRef(CreateTextureMtlForPlane(
+                mMtlUsage, GetFormat(), plane, device, /*sampleCount=*/1, GetIOSurface()));
             if (mMtlPlaneTextures[plane] == nil) {
                 return DAWN_INTERNAL_ERROR("Failed to create MTLTexture plane view for IOSurface.");
             }
@@ -918,7 +457,6 @@ MaybeError Texture::InitializeFromIOSurface(const ExternalImageDescriptor* descr
     }
 
     SetLabelImpl();
-    SetIsSubresourceContentInitialized(descriptor->isInitialized, GetAllSubresources());
 
     return {};
 }
@@ -929,7 +467,7 @@ void Texture::SynchronizeTextureBeforeUse(CommandRecordingContext* commandContex
         SharedTextureMemoryContents* contents = GetSharedTextureMemoryContents();
         if (contents != nullptr) {
             contents->AcquirePendingFences(&fences);
-            contents->SetLastUsageSerial(GetDevice()->GetPendingCommandSerial());
+            contents->SetLastUsageSerial(GetDevice()->GetQueue()->GetPendingCommandSerial());
         }
 
         if (!mWaitEvents.empty() || !fences->empty()) {
@@ -960,7 +498,8 @@ void Texture::IOSurfaceEndAccess(ExternalImageIOSurfaceEndAccessDescriptor* desc
     Destroy();
 }
 
-Texture::Texture(DeviceBase* dev, const TextureDescriptor* desc) : TextureBase(dev, desc) {}
+Texture::Texture(DeviceBase* dev, const UnpackedPtr<TextureDescriptor>& desc)
+    : TextureBase(dev, desc) {}
 
 Texture::~Texture() {}
 
@@ -997,6 +536,9 @@ id<MTLTexture> Texture::GetMTLTexture(Aspect aspect) const {
         case Aspect::Plane1:
             DAWN_ASSERT(mMtlPlaneTextures->size() > 1);
             return mMtlPlaneTextures[1].Get();
+        case Aspect::Plane2:
+            DAWN_ASSERT(mMtlPlaneTextures->size() > 2);
+            return mMtlPlaneTextures[2].Get();
         default:
             DAWN_ASSERT(mMtlPlaneTextures->size() == 1);
             return mMtlPlaneTextures[0].Get();
@@ -1215,9 +757,10 @@ MaybeError Texture::ClearTexture(CommandRecordingContext* commandContext,
 
             DynamicUploader* uploader = device->GetDynamicUploader();
             UploadHandle uploadHandle;
-            DAWN_TRY_ASSIGN(uploadHandle,
-                            uploader->Allocate(bufferSize, device->GetPendingCommandSerial(),
-                                               blockInfo.byteSize));
+            DAWN_TRY_ASSIGN(
+                uploadHandle,
+                uploader->Allocate(bufferSize, device->GetQueue()->GetPendingCommandSerial(),
+                                   blockInfo.byteSize));
             memset(uploadHandle.mappedBuffer, clearColor, bufferSize);
 
             id<MTLBuffer> uploadBuffer = ToBackend(uploadHandle.stagingBuffer)->GetMTLBuffer();
@@ -1320,8 +863,9 @@ MaybeError TextureView::Initialize(const TextureViewDescriptor* descriptor) {
     if (!needsNewView) {
         mMtlTextureView = mtlTexture;
     } else if (texture->GetFormat().IsMultiPlanar()) {
-        // For multiplanar texture, plane view is already created in InitializeFromIOSurface().
-        // The view is only nullptr if aspect is invalid.
+        // For multiplanar texture, plane view is already created in
+        // InitializeFromInternalMultiPlanarTexture(). The view is only nullptr if aspect is
+        // invalid.
         DAWN_ASSERT(mtlTexture != nullptr);
         mMtlTextureView = mtlTexture;
     } else {
@@ -1369,7 +913,8 @@ id<MTLTexture> TextureView::GetMTLTexture() const {
 }
 
 TextureView::AttachmentInfo TextureView::GetAttachmentInfo() const {
-    DAWN_ASSERT(GetTexture()->GetInternalUsage() & wgpu::TextureUsage::RenderAttachment);
+    DAWN_ASSERT(GetTexture()->GetInternalUsage() &
+                (wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::StorageAttachment));
     // Use our own view if the formats do not match.
     // If the formats do not match, format reinterpretation will be required.
     // Note: Depth/stencil formats don't support reinterpretation.

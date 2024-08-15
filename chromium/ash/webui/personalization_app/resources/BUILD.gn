@@ -68,6 +68,7 @@ build_webui("build") {
     "js/personalization_router_element.ts",
     "js/personalization_toast_element.ts",
     "js/personalization_breadcrumb_element.ts",
+    "js/geolocation_dialog.ts",
     "js/time_of_day_banner_element.ts",
     "js/theme/personalization_theme_element.ts",
     "js/theme/color_scheme_icon_svg_element.ts",
@@ -84,20 +85,14 @@ build_webui("build") {
     "js/wallpaper/google_photos_zero_state_element.ts",
     "js/wallpaper/info_svg_element.ts",
     "js/wallpaper/local_images_element.ts",
-    "js/wallpaper/sea_pen/sea_pen_collection_element.ts",
-    "js/wallpaper/sea_pen/sea_pen_input_query_element.ts",
-    "js/wallpaper/sea_pen/sea_pen_template_query_element.ts",
-    "js/wallpaper/sea_pen/sea_pen_images_element.ts",
-    "js/wallpaper/sea_pen/sea_pen_templates_element.ts",
+    "js/wallpaper/time_of_day_wallpaper_dialog_element.ts",
     "js/wallpaper/wallpaper_collections_element.ts",
     "js/wallpaper/wallpaper_error_element.ts",
     "js/wallpaper/wallpaper_fullscreen_element.ts",
-    "js/wallpaper/wallpaper_grid_item_element.ts",
     "js/wallpaper/wallpaper_images_element.ts",
     "js/wallpaper/wallpaper_preview_element.ts",
     "js/wallpaper/wallpaper_selected_element.ts",
     "js/wallpaper/wallpaper_subpage_element.ts",
-    "js/wallpaper/wallpaper_subpage_top_element.ts",
   ]
 
   non_web_component_files = [
@@ -123,6 +118,7 @@ build_webui("build") {
     "js/personalization_state.ts",
     "js/personalization_store.ts",
     "js/personalization_test_api.ts",
+    "js/sea_pen_store_adapter.ts",
     "js/theme/theme_actions.ts",
     "js/theme/theme_controller.ts",
     "js/theme/theme_interface_provider.ts",
@@ -153,12 +149,6 @@ build_webui("build") {
   ]
 
   icons_html_files = [ "common/icons.html" ]
-
-  css_files = [
-    "css/common.css",
-    "css/cros_button_style.css",
-    "css/wallpaper.css",
-  ]
 
   mojo_files_deps = [
     "../mojom:mojom_ts__generator",

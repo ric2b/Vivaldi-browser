@@ -25,6 +25,7 @@
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_data_exchange_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
@@ -94,24 +95,28 @@ class TestDataTransferPolicyController : ui::DataTransferPolicyController {
 
  private:
   // ui::DataTransferPolicyController:
-  bool IsClipboardReadAllowed(const ui::DataTransferEndpoint* const data_src,
-                              const ui::DataTransferEndpoint* const data_dst,
-                              const absl::optional<size_t> size) override {
-    if (data_src)
+  bool IsClipboardReadAllowed(
+      base::optional_ref<const ui::DataTransferEndpoint> data_src,
+      base::optional_ref<const ui::DataTransferEndpoint> data_dst,
+      const absl::optional<size_t> size) override {
+    if (data_src.has_value()) {
       last_src_type_ = data_src->type();
+    }
     last_dst_type_ = data_dst->type();
     return true;
   }
 
-  void PasteIfAllowed(const ui::DataTransferEndpoint* const data_src,
-                      const ui::DataTransferEndpoint* const data_dst,
-                      const absl::optional<size_t> size,
-                      content::RenderFrameHost* web_contents,
-                      base::OnceCallback<void(bool)> callback) override {}
+  void PasteIfAllowed(
+      base::optional_ref<const ui::DataTransferEndpoint> data_src,
+      base::optional_ref<const ui::DataTransferEndpoint> data_dst,
+      absl::variant<size_t, std::vector<base::FilePath>> pasted_content,
+      content::RenderFrameHost* web_contents,
+      base::OnceCallback<void(bool)> callback) override {}
 
-  void DropIfAllowed(const ui::OSExchangeData* const drag_data,
-                     const ui::DataTransferEndpoint* const data_dst,
-                     base::OnceClosure drop_cb) override {
+  void DropIfAllowed(
+      const ui::OSExchangeData* const drag_data,
+      base::optional_ref<const ui::DataTransferEndpoint> data_dst,
+      base::OnceClosure drop_cb) override {
     std::move(drop_cb).Run();
   }
 

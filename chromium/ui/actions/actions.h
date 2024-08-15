@@ -29,7 +29,7 @@ namespace actions {
 
 class ActionItem;
 using ActionListVector = std::vector<std::unique_ptr<ActionItem>>;
-using ActionItemVector = std::vector<ActionItem*>;
+using ActionItemVector = std::vector<raw_ptr<ActionItem, VectorExperimental>>;
 
 class COMPONENT_EXPORT(ACTIONS) ActionList {
  public:
@@ -134,6 +134,8 @@ class COMPONENT_EXPORT(ACTIONS) ActionInvocationContext
 };
 
 class COMPONENT_EXPORT(ACTIONS) ActionItem : public BaseAction {
+  METADATA_HEADER(ActionItem, BaseAction)
+
  public:
   using ActionChangedCallback = ui::metadata::PropertyChangedCallback;
   using InvokeActionCallback =
@@ -230,8 +232,6 @@ class COMPONENT_EXPORT(ACTIONS) ActionItem : public BaseAction {
     std::unique_ptr<ActionItem> action_item_;
     ChildList children_;
   };
-
-  METADATA_HEADER(ActionItem);
 
   ActionItem();
   explicit ActionItem(InvokeActionCallback callback);

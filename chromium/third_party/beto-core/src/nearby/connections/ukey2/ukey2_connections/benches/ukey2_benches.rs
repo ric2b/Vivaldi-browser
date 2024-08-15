@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(missing_docs, clippy::expect_used, clippy::unwrap_used)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rand::{Rng, SeedableRng};
 
 use crypto_provider::CryptoProvider;
-use crypto_provider_rustcrypto::RustCrypto;
+use crypto_provider_default::CryptoProviderImpl;
 use ukey2_connections::{
     D2DConnectionContextV1, D2DHandshakeContext, InitiatorD2DHandshakeContext,
     ServerD2DHandshakeContext,
@@ -63,16 +65,18 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("throughput");
     let mut plaintext = Vec::new();
     let (mut initiator_ctx, mut server_ctx) =
-        run_handshake_with_rng::<RustCrypto, _>(rand::rngs::StdRng::from_entropy());
+        run_handshake_with_rng::<CryptoProviderImpl, _>(rand::rngs::StdRng::from_entropy());
     for len in [10 * kib, 1024 * kib] {
-        group.throughput(Throughput::Bytes(len as u64));
+        let _ = group.throughput(Throughput::Bytes(len as u64));
         plaintext.resize(len, 0);
         rand::thread_rng().fill(&mut plaintext[..]);
-        group.bench_function(format!("UKEY2 encrypt/decrypt {}KiB", len / kib), |b| {
+        let _ = group.bench_function(format!("UKEY2 encrypt/decrypt {}KiB", len / kib), |b| {
             b.iter(|| {
-                let msg =
-                    initiator_ctx.encode_message_to_peer::<RustCrypto, &[u8]>(&plaintext, None);
-                black_box(server_ctx.decode_message_from_peer::<RustCrypto, &[u8]>(&msg, None))
+                let msg = initiator_ctx
+                    .encode_message_to_peer::<CryptoProviderImpl, &[u8]>(&plaintext, None);
+                black_box(
+                    server_ctx.decode_message_from_peer::<CryptoProviderImpl, &[u8]>(&msg, None),
+                )
             })
         });
     }

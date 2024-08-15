@@ -27,7 +27,7 @@ from testing_support import fake_repos
 
 class SkiaDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
     """Simulate the behavior of bisect bots as they transition across the Skia
-  DEPS change."""
+    DEPS change."""
 
     FAKE_REPOS_CLASS = fake_repos.FakeRepoSkiaDEPS
 
@@ -128,7 +128,7 @@ class SkiaDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
 
 class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
     """Simulate the behavior of bisect bots as they transition across the Blink
-  DEPS change."""
+    DEPS change."""
 
     FAKE_REPOS_CLASS = fake_repos.FakeRepoBlinkDEPS
 
@@ -183,7 +183,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
     @unittest.skip('flaky')
     def testBlinkDEPSChangeUsingGclient(self):
         """Checks that {src,blink} repos are consistent when syncing going back and
-    forth using gclient sync src@revision."""
+        forth using gclient sync src@revision."""
         self.gclient([
             'config', '--spec', 'solutions=['
             '{"name": "src",'
@@ -210,7 +210,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
     @unittest.skip('flaky')
     def testBlinkDEPSChangeUsingGit(self):
         """Like testBlinkDEPSChangeUsingGclient, but move the main project using
-    directly git and not gclient sync."""
+        directly git and not gclient sync."""
         self.gclient([
             'config', '--spec', 'solutions=['
             '{"name": "src",'
@@ -242,7 +242,7 @@ class BlinkDEPSTransitionSmokeTest(gclient_smoketest_base.GClientSmokeBase):
     @unittest.skip('flaky')
     def testBlinkLocalBranchesArePreserved(self):
         """Checks that the state of local git branches are effectively preserved
-    when going back and forth."""
+        when going back and forth."""
         self.gclient([
             'config', '--spec', 'solutions=['
             '{"name": "src",'

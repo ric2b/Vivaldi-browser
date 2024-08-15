@@ -14,12 +14,12 @@
  * TensorReductionSycl.h
  *
  * \brief:
- *  This is the specialization of the reduction operation. Two phase reduction approach 
- * is used since the GPU does not have Global Synchronization for global memory among 
- * different work-group/thread block. To solve the problem, we need to create two kernels 
- * to reduce the data, where the first kernel reduce the data locally and each local 
+ *  This is the specialization of the reduction operation. Two phase reduction approach
+ * is used since the GPU does not have Global Synchronization for global memory among
+ * different work-group/thread block. To solve the problem, we need to create two kernels
+ * to reduce the data, where the first kernel reduce the data locally and each local
  * workgroup/thread-block save the input data into global memory. In the second phase (global reduction)
- * one work-group uses one work-group/thread-block to reduces the intermediate data into one single element. 
+ * one work-group uses one work-group/thread-block to reduces the intermediate data into one single element.
  * Here is an NVIDIA presentation explaining the optimized two phase reduction algorithm on GPU:
  * https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
  *
@@ -114,8 +114,8 @@ struct SecondStepFullReducer {
   }
 };
 
-// Full reduction first phase. In this version the vectorization is true and the reduction accept 
-// any generic reducerOp  e.g( max, min, sum, mean, iamax, iamin, etc ). 
+// Full reduction first phase. In this version the vectorization is true and the reduction accept
+// any generic reducerOp  e.g( max, min, sum, mean, iamax, iamin, etc ).
 template <typename Evaluator, typename OpType, typename Evaluator::Index local_range>
 class FullReductionKernelFunctor {
  public:
@@ -128,8 +128,9 @@ class FullReductionKernelFunctor {
   typedef typename OpDef::type Op;
   typedef typename Evaluator::EvaluatorPointerType EvaluatorPointerType;
   typedef typename Evaluator::PacketReturnType PacketReturnType;
-  typedef std::conditional_t<(Evaluator::ReducerTraits::PacketAccess & Evaluator::InputPacketAccess),
-                                              PacketReturnType, CoeffReturnType> OutType;
+  typedef std::conditional_t<(Evaluator::ReducerTraits::PacketAccess & Evaluator::InputPacketAccess), PacketReturnType,
+                             CoeffReturnType>
+      OutType;
   typedef cl::sycl::accessor<OutType, 1, cl::sycl::access::mode::read_write, cl::sycl::access::target::local>
       LocalAccessor;
   LocalAccessor scratch;
@@ -222,7 +223,7 @@ class GenericNondeterministicReducer {
   typedef typename OpDef::type Op;
   template <typename Scratch>
   GenericNondeterministicReducer(Scratch, Evaluator evaluator_, EvaluatorPointerType output_accessor_, OpType functor_,
-                       Index range_, Index num_values_to_reduce_)
+                                 Index range_, Index num_values_to_reduce_)
       : evaluator(evaluator_),
         output_accessor(output_accessor_),
         functor(OpDef::get_op(functor_)),
@@ -230,9 +231,9 @@ class GenericNondeterministicReducer {
         num_values_to_reduce(num_values_to_reduce_) {}
 
   void operator()(cl::sycl::nd_item<1> itemID) const {
-    //This is to bypass the statefull condition in Eigen meanReducer
+    // This is to bypass the statefull condition in Eigen meanReducer
     Op non_const_functor;
-    std::memcpy(&non_const_functor, &functor, sizeof (Op));
+    std::memcpy(&non_const_functor, &functor, sizeof(Op));
     auto output_accessor_ptr = output_accessor;
     Index globalid = static_cast<Index>(itemID.get_global_linear_id());
     if (globalid < range) {
@@ -314,9 +315,8 @@ struct PartialReductionKernel {
 
     Index globalPId = pGroupId * PannelParameters::LocalThreadSizeP + pLocalThreadId;
     const Index globalRId = rGroupId * PannelParameters::LocalThreadSizeR + rLocalThreadId;
-    CoeffReturnType*  scratchPtr = scratch.get_pointer();
-    auto outPtr =
-        output_accessor + (reduce_elements_num_groups > 1 ? rGroupId * num_coeffs_to_preserve : 0);
+    CoeffReturnType *scratchPtr = scratch.get_pointer();
+    auto outPtr = output_accessor + (reduce_elements_num_groups > 1 ? rGroupId * num_coeffs_to_preserve : 0);
     CoeffReturnType accumulator = op.initialize();
 
     element_wise_reduce(globalRId, globalPId, accumulator);
@@ -391,7 +391,7 @@ struct SecondStepPartialReduction {
     auto in_ptr = input_accessor + globalId;
 
     OutScalar accumulator = op.initialize();
-// num_coeffs_to_reduce is not bigger that 256
+    // num_coeffs_to_reduce is not bigger that 256
     for (Index i = 0; i < num_coeffs_to_reduce; i++) {
       op.reduce(*in_ptr, &accumulator);
       in_ptr += num_coeffs_to_preserve;
@@ -453,19 +453,22 @@ struct PartialReducerLauncher {
           dev.allocate_temp(num_coeffs_to_preserve * rNumGroups * sizeof(CoeffReturnType)));
       EvaluatorPointerType temp_accessor = dev.get(temp_pointer);
       dev.template unary_kernel_launcher<CoeffReturnType, SyclReducerKerneType>(
-          self, temp_accessor, thread_range, scratchSize, reducer, pNumGroups, rNumGroups, num_coeffs_to_preserve,
-          num_coeffs_to_reduce).wait();
+             self, temp_accessor, thread_range, scratchSize, reducer, pNumGroups, rNumGroups, num_coeffs_to_preserve,
+             num_coeffs_to_reduce)
+          .wait();
       typedef SecondStepPartialReduction<CoeffReturnType, Index, EvaluatorPointerType, EvaluatorPointerType, Op>
           SecondStepPartialReductionKernel;
       dev.template unary_kernel_launcher<CoeffReturnType, SecondStepPartialReductionKernel>(
-          temp_accessor, output,
-          cl::sycl::nd_range<1>(cl::sycl::range<1>(pNumGroups * localRange), cl::sycl::range<1>(localRange)), Index(1),
-          reducer, num_coeffs_to_preserve, rNumGroups).wait();
+             temp_accessor, output,
+             cl::sycl::nd_range<1>(cl::sycl::range<1>(pNumGroups * localRange), cl::sycl::range<1>(localRange)),
+             Index(1), reducer, num_coeffs_to_preserve, rNumGroups)
+          .wait();
       self.device().deallocate_temp(temp_pointer);
     } else {
       dev.template unary_kernel_launcher<CoeffReturnType, SyclReducerKerneType>(
-          self, output, thread_range, scratchSize, reducer, pNumGroups, rNumGroups, num_coeffs_to_preserve,
-          num_coeffs_to_reduce).wait();
+             self, output, thread_range, scratchSize, reducer, pNumGroups, rNumGroups, num_coeffs_to_preserve,
+             num_coeffs_to_reduce)
+          .wait();
     }
     return false;
   }
@@ -510,19 +513,21 @@ struct FullReducer<Self, Op, Eigen::SyclDevice, Vectorizable> {
           static_cast<CoeffReturnType *>(dev.allocate_temp(num_work_group * sizeof(CoeffReturnType)));
       typename Self::EvaluatorPointerType tmp_global_accessor = dev.get(temp_pointer);
       dev.template unary_kernel_launcher<OutType, reduction_kernel_t>(self, tmp_global_accessor, thread_range,
-                                                                      local_range, inputSize, reducer).wait();
+                                                                      local_range, inputSize, reducer)
+          .wait();
       typedef TensorSycl::internal::SecondStepFullReducer<CoeffReturnType, Op, EvaluatorPointerType,
                                                           EvaluatorPointerType, Index, local_range>
           GenericRKernel;
       dev.template unary_kernel_launcher<CoeffReturnType, GenericRKernel>(
-          tmp_global_accessor, data,
-          cl::sycl::nd_range<1>(cl::sycl::range<1>(num_work_group), cl::sycl::range<1>(num_work_group)), num_work_group,
-          reducer).wait();    
+             tmp_global_accessor, data,
+             cl::sycl::nd_range<1>(cl::sycl::range<1>(num_work_group), cl::sycl::range<1>(num_work_group)),
+             num_work_group, reducer)
+          .wait();
       dev.deallocate_temp(temp_pointer);
     } else {
       dev.template unary_kernel_launcher<OutType, reduction_kernel_t>(self, data, thread_range, local_range, inputSize,
-                                                                      reducer).wait();
-
+                                                                      reducer)
+          .wait();
     }
   }
 };
@@ -570,8 +575,9 @@ struct GenericReducer<Self, Op, Eigen::SyclDevice> {
 
     dev.template unary_kernel_launcher<typename Self::CoeffReturnType,
                                        TensorSycl::internal::GenericNondeterministicReducer<Self, Op>>(
-        self, output, cl::sycl::nd_range<1>(cl::sycl::range<1>(GRange), cl::sycl::range<1>(tileSize)), Index(1),
-        reducer, range, (num_values_to_reduce != 0) ? num_values_to_reduce : static_cast<Index>(1)).wait();
+           self, output, cl::sycl::nd_range<1>(cl::sycl::range<1>(GRange), cl::sycl::range<1>(tileSize)), Index(1),
+           reducer, range, (num_values_to_reduce != 0) ? num_values_to_reduce : static_cast<Index>(1))
+        .wait();
     return false;
   }
 };

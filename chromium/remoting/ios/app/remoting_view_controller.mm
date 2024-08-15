@@ -8,7 +8,6 @@
 #include <netinet/in.h>
 
 #import <MaterialComponents/MDCAppBarViewController.h>
-#import <MaterialComponents/MaterialAnimationTiming.h>
 #import <MaterialComponents/MaterialDialogs.h>
 #import <MaterialComponents/MaterialShadowElevations.h>
 #import <MaterialComponents/MaterialShadowLayer.h>
@@ -59,7 +58,7 @@ ConnectionType GetConnectionType() {
       SCNetworkReachabilityCreateWithAddress(
           kCFAllocatorDefault, reinterpret_cast<struct sockaddr*>(&addr)));
   SCNetworkReachabilityFlags flags;
-  BOOL success = SCNetworkReachabilityGetFlags(reachability, &flags);
+  BOOL success = SCNetworkReachabilityGetFlags(reachability.get(), &flags);
   if (!success) {
     return ConnectionType::UNKNOWN;
   }

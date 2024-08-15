@@ -26,12 +26,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
-import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu;
-import org.chromium.components.browser_ui.widget.listmenu.BasicListMenu.ListMenuItemType;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenu.Delegate;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButtonDelegate;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
+import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.components.messages.DismissReason;
 import org.chromium.components.messages.MessageBannerProperties;
 import org.chromium.components.messages.MessageDispatcher;
@@ -40,6 +35,11 @@ import org.chromium.components.messages.PrimaryActionClickBehavior;
 import org.chromium.components.privacy_sandbox.TrackingProtectionSettings;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
+import org.chromium.ui.listmenu.BasicListMenu;
+import org.chromium.ui.listmenu.ListMenu;
+import org.chromium.ui.listmenu.ListMenu.Delegate;
+import org.chromium.ui.listmenu.ListMenuButtonDelegate;
+import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -141,6 +141,18 @@ public class TrackingProtectionNoticeController {
 
         if (mMessage != null) {
             logNoticeControllerEvent(NoticeControllerEvent.NOTICE_ALREADY_SHOWING);
+        }
+
+        if (getNoticeType() == NoticeType.SILENT_ONBOARDING) {
+            TrackingProtectionBridge.noticeShown(getNoticeType());
+            destroy();
+            return;
+        }
+
+        if (ChromeFeatureList.isEnabled(
+                ChromeFeatureList.TRACKING_PROTECTION_NOTICE_REQUEST_TRACKING)) {
+            // At this point, we're enqueuing the message, aka requesting the notice.
+            TrackingProtectionBridge.noticeRequested(getNoticeType());
         }
 
         mMessage =
@@ -294,25 +306,31 @@ public class TrackingProtectionNoticeController {
                                             ? R.string
                                                     .tracking_protection_onboarding_notice_learn_more_button_label
                                             : R.string
-                                                    .tracking_protection_offboarding_notice_learn_more_button_label));
+                                                    .tracking_protection_offboarding_notice_learn_more_button_label),
+                            res.getString(
+                                    getNoticeType() == NoticeType.ONBOARDING
+                                            ? R.string
+                                                    .tracking_protection_onboarding_notice_learn_more_button_a11y_label
+                                            : R.string
+                                                    .tracking_protection_offboarding_notice_learn_more_button_a11y_label));
 
             MVCListAdapter.ModelList menuItems = new MVCListAdapter.ModelList();
             menuItems.add(settingsItem);
             menuItems.add(learnMoreItem);
 
-            BasicListMenu listMenu = new BasicListMenu(mContext, menuItems, onClickDelegate());
+            BasicListMenu listMenu =
+                    BrowserUiListMenuUtils.getBasicListMenu(mContext, menuItems, onClickDelegate());
 
             return listMenu;
         }
 
         private ListItem getMenuItem(int itemID, String title) {
-            PropertyModel.Builder settingsModel =
-                    new PropertyModel.Builder(ListMenuItemProperties.ALL_KEYS)
-                            .with(ListMenuItemProperties.ENABLED, true)
-                            .with(ListMenuItemProperties.MENU_ITEM_ID, itemID)
-                            .with(ListMenuItemProperties.TITLE, title);
-            ListItem settingsItem = new ListItem(ListMenuItemType.MENU_ITEM, settingsModel.build());
-            return settingsItem;
+            return BrowserUiListMenuUtils.buildMenuListItem(title, itemID, 0, true);
+        }
+
+        private ListItem getMenuItem(int itemID, String title, String contentDescription) {
+            return BrowserUiListMenuUtils.buildMenuListItem(
+                    title, itemID, 0, contentDescription, true);
         }
 
         private Delegate onClickDelegate() {

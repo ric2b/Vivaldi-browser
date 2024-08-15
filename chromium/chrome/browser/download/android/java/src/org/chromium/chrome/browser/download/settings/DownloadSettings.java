@@ -11,12 +11,18 @@ import androidx.preference.Preference;
 
 import org.chromium.chrome.browser.download.DownloadDialogBridge;
 import org.chromium.chrome.browser.download.DownloadPromptStatus;
+import org.chromium.chrome.browser.download.MimeUtils;
 import org.chromium.chrome.browser.download.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.prefs.PrefService;
+import org.chromium.components.user_prefs.UserPrefs;
 
 // Vivaldi
 import android.view.Gravity;
@@ -30,17 +36,17 @@ import org.chromium.build.BuildConfig;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
-/**
- * Fragment containing Download settings.
- */
-public class DownloadSettings
-        extends ChromeBaseSettingsFragment implements Preference.OnPreferenceChangeListener {
+/** Fragment containing Download settings. */
+public class DownloadSettings extends ChromeBaseSettingsFragment
+        implements Preference.OnPreferenceChangeListener {
     public static final String PREF_LOCATION_CHANGE = "location_change";
     public static final String PREF_LOCATION_PROMPT_ENABLED = "location_prompt_enabled";
+    public static final String PREF_AUTO_OPEN_PDF_ENABLED = "auto_open_pdf_enabled";
 
     private DownloadLocationPreference mLocationChangePref;
     private ChromeSwitchPreference mLocationPromptEnabledPref;
     private ManagedPreferenceDelegate mLocationPromptEnabledPrefDelegate;
+    private ChromeSwitchPreference mAutoOpenPdfEnabledPref;
 
     //Vivaldi
     private static final String PREF_EXTERNAL_DOWNLOAD_MANAGER = "external_download_manager";
@@ -54,14 +60,29 @@ public class DownloadSettings
         mLocationPromptEnabledPref =
                 (ChromeSwitchPreference) findPreference(PREF_LOCATION_PROMPT_ENABLED);
         mLocationPromptEnabledPref.setOnPreferenceChangeListener(this);
-        mLocationPromptEnabledPrefDelegate = new ChromeManagedPreferenceDelegate(getProfile()) {
-            @Override
-            public boolean isPreferenceControlledByPolicy(Preference preference) {
-                return DownloadDialogBridge.isLocationDialogManaged();
-            }
-        };
+        mLocationPromptEnabledPrefDelegate =
+                new ChromeManagedPreferenceDelegate(getProfile()) {
+                    @Override
+                    public boolean isPreferenceControlledByPolicy(Preference preference) {
+                        return DownloadDialogBridge.isLocationDialogManaged();
+                    }
+                };
         mLocationPromptEnabledPref.setManagedPreferenceDelegate(mLocationPromptEnabledPrefDelegate);
         mLocationChangePref = (DownloadLocationPreference) findPreference(PREF_LOCATION_CHANGE);
+        mAutoOpenPdfEnabledPref =
+                (ChromeSwitchPreference) findPreference(PREF_AUTO_OPEN_PDF_ENABLED);
+        mAutoOpenPdfEnabledPref.setOnPreferenceChangeListener(this);
+        String summary =
+                (MimeUtils.getPdfIntentHandlers().size() == 1)
+                        ? getActivity()
+                                .getString(
+                                        R.string.auto_open_pdf_enabled_with_app_description,
+                                        MimeUtils.getDefaultPdfViewerName())
+                        : getActivity().getString(R.string.auto_open_pdf_enabled_description);
+        mAutoOpenPdfEnabledPref.setSummaryOn(summary);
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.OPEN_DOWNLOAD_DIALOG)) {
+            getPreferenceScreen().removePreference(findPreference(PREF_AUTO_OPEN_PDF_ENABLED));
+        }
 
         // Vivaldi
         mExternalDownloadManagerPref = findPreference(PREF_EXTERNAL_DOWNLOAD_MANAGER);
@@ -95,10 +116,16 @@ public class DownloadSettings
                     DownloadDialogBridge.getPromptForDownloadPolicy());
         } else {
             // Location prompt is marked enabled if the prompt status is not DONT_SHOW.
-            boolean isLocationPromptEnabled = DownloadDialogBridge.getPromptForDownloadAndroid()
-                    != DownloadPromptStatus.DONT_SHOW;
+            boolean isLocationPromptEnabled =
+                    DownloadDialogBridge.getPromptForDownloadAndroid()
+                            != DownloadPromptStatus.DONT_SHOW;
             mLocationPromptEnabledPref.setChecked(isLocationPromptEnabled);
             mLocationPromptEnabledPref.setEnabled(true);
+        }
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.OPEN_DOWNLOAD_DIALOG)) {
+            mAutoOpenPdfEnabledPref.setChecked(
+                    getPrefService().getBoolean(Pref.AUTO_OPEN_PDF_ENABLED));
+            mAutoOpenPdfEnabledPref.setEnabled(true);
         }
 
         // Vivaldi - update external download Manager summary
@@ -123,12 +150,21 @@ public class DownloadSettings
             } else {
                 DownloadDialogBridge.setPromptForDownloadAndroid(DownloadPromptStatus.DONT_SHOW);
             }
+        } else if (PREF_AUTO_OPEN_PDF_ENABLED.equals(preference.getKey())) {
+            getPrefService().setBoolean(Pref.AUTO_OPEN_PDF_ENABLED, (boolean) newValue);
         }
         return true;
     }
 
     public ManagedPreferenceDelegate getLocationPromptEnabledPrefDelegateForTesting() {
         return mLocationPromptEnabledPrefDelegate;
+    }
+
+    /**
+     * @return pref service from last used regular profile.
+     */
+    public static PrefService getPrefService() {
+        return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
     /** Vivaldi **/
@@ -138,7 +174,7 @@ public class DownloadSettings
             boolean isTablet = DeviceFormFactor
                     .isNonMultiDisplayContextOnTablet(view.getContext());
             if (isTablet) {
-                getView().setBackgroundColor(getResources()
+                getView().setBackgroundColor(getContext()
                         .getColor(R.color.tablet_panel_bg_color));
                 Toolbar toolbar = new Toolbar(getContext());
                 if (getView() != null) {
@@ -146,7 +182,7 @@ public class DownloadSettings
                     toolbar.getLayoutParams().height =
                     Math.round(56 * getResources().getDisplayMetrics().density);
                     toolbar.setBackgroundColor(
-                            getResources().getColor(R.color.tablet_panel_bg_color));
+                            getContext().getColor(R.color.tablet_panel_bg_color));
                     toolbar.setSubtitle(getResources().getString(R.string.downloads));
                     toolbar.setNavigationIcon(R.drawable.vivaldi_nav_button_back);
                     ((LinearLayout.LayoutParams) toolbar.getLayoutParams()).gravity = Gravity.TOP;

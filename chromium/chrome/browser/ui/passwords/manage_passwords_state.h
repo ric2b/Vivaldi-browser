@@ -11,7 +11,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/password_store_change.h"
+#include "components/password_manager/core/browser/password_store/password_store_change.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
 #include "url/gurl.h"
@@ -80,13 +80,17 @@ class ManagePasswordsState {
   // autofilled. In addition, |federated_matches|, if not null, contains stored
   // federated credentials to show to the user as well.
   void OnPasswordAutofilled(
-      const std::vector<const password_manager::PasswordForm*>& password_forms,
+      const std::vector<raw_ptr<const password_manager::PasswordForm,
+                                VectorExperimental>>& password_forms,
       url::Origin origin,
-      const std::vector<const password_manager::PasswordForm*>*
-          federated_matches);
+      const std::vector<raw_ptr<const password_manager::PasswordForm,
+                                VectorExperimental>>* federated_matches);
 
   // Move to INACTIVE_STATE.
   void OnInactive();
+
+  // Move to KEYCHAIN_ERROR_STATE.
+  void OnKeychainError();
 
   // Move to CAN_MOVE_PASSWORD_TO_ACCOUNT_STATE. Triggers a bubble to move the
   // just submitted form to the user's account store.

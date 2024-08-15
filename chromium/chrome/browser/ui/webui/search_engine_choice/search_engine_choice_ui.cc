@@ -8,8 +8,10 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/json/json_writer.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
+#include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/ui/webui/search_engine_choice/icon_utils.h"
 #include "chrome/browser/ui/webui/search_engine_choice/search_engine_choice_handler.h"
@@ -19,8 +21,10 @@
 #include "chrome/grit/search_engine_choice_resources.h"
 #include "chrome/grit/search_engine_choice_resources_map.h"
 #include "chrome/grit/signin_resources.h"
+#include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/search_engine_choice_utils.h"
 #include "components/search_engines/template_url.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_branded_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -29,20 +33,25 @@
 namespace {
 std::string GetChoiceListJSON(Profile& profile) {
   base::Value::List choice_value_list;
-  SearchEngineChoiceService* search_engine_choice_service =
-      SearchEngineChoiceServiceFactory::GetForProfile(&profile);
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(&profile);
   const std::vector<std::unique_ptr<TemplateURL>> choices =
-      search_engine_choice_service->GetSearchEngines();
+      search_engine_choice_dialog_service->GetSearchEngines();
 
   for (const auto& choice : choices) {
     base::Value::Dict choice_value;
 
-    const std::u16string icon_path = GetGeneratedIconPath(
-        choice->keyword(), /*parent_directory_path=*/u"images/");
-    choice_value.Set("prepopulate_id", choice->prepopulate_id());
+    std::string_view icon_path =
+        GetSearchEngineGeneratedIconPath(choice->keyword());
+    if (icon_path.empty()) {
+      icon_path = "chrome://theme/IDR_DEFAULT_FAVICON";
+    }
+    choice_value.Set("prepopulateId", choice->prepopulate_id());
     choice_value.Set("name", choice->short_name());
-    choice_value.Set("icon_path", icon_path);
+    choice_value.Set("iconPath", icon_path);
     choice_value.Set("url", choice->url());
+    choice_value.Set("marketingSnippet",
+                     search_engines::GetMarketingSnippetString(choice->data()));
     choice_value_list.Append(std::move(choice_value));
   }
   std::string json_choice_list;
@@ -69,7 +78,7 @@ SearchEngineChoiceUI::SearchEngineChoiceUI(content::WebUI* web_ui)
   source->AddLocalizedString(
       "subtitleInfoLinkA11yLabel",
       IDS_SEARCH_ENGINE_CHOICE_PAGE_SUBTITLE_INFO_LINK_A11Y_LABEL);
-  source->AddLocalizedString("buttonText",
+  source->AddLocalizedString("submitButtonText",
                              IDS_SEARCH_ENGINE_CHOICE_BUTTON_TITLE);
   source->AddLocalizedString("infoDialogTitle",
                              IDS_SEARCH_ENGINE_CHOICE_INFO_DIALOG_TITLE);
@@ -87,8 +96,10 @@ SearchEngineChoiceUI::SearchEngineChoiceUI(content::WebUI* web_ui)
                              IDS_SHORT_PRODUCT_LOGO_ALT_TEXT);
   source->AddLocalizedString("fakeOmniboxText",
                              IDS_SEARCH_ENGINE_CHOICE_FAKE_OMNIBOX_TEXT);
-
-  AddGeneratedIconResources(source, /*directory=*/"images/");
+  source->AddLocalizedString("chevronA11yLabel",
+                             IDS_SEARCH_ENGINE_CHOICE_CHEVRON_A11Y_LABEL);
+  source->AddLocalizedString("moreButtonText",
+                             IDS_SEARCH_ENGINE_CHOICE_MORE_BUTTON);
   source->AddResourcePath("images/left_illustration.svg",
                           IDR_SIGNIN_IMAGES_SHARED_LEFT_BANNER_SVG);
   source->AddResourcePath("images/left_illustration_dark.svg",
@@ -127,16 +138,17 @@ void SearchEngineChoiceUI::BindInterface(
 void SearchEngineChoiceUI::Initialize(
     base::OnceClosure display_dialog_callback,
     base::OnceClosure on_choice_made_callback,
-    SearchEngineChoiceService::EntryPoint entry_point) {
+    SearchEngineChoiceDialogService::EntryPoint entry_point) {
   display_dialog_callback_ = std::move(display_dialog_callback);
   on_choice_made_callback_ = std::move(on_choice_made_callback);
   entry_point_ = entry_point;
 }
 
 void SearchEngineChoiceUI::HandleSearchEngineChoiceMade(int prepopulate_id) {
-  SearchEngineChoiceService* search_engine_choice_service =
-      SearchEngineChoiceServiceFactory::GetForProfile(&profile_.get());
-  search_engine_choice_service->NotifyChoiceMade(prepopulate_id, entry_point_);
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(&profile_.get());
+  search_engine_choice_dialog_service->NotifyChoiceMade(prepopulate_id,
+                                                        entry_point_);
 
   // Notify that the choice was made.
   if (on_choice_made_callback_) {
@@ -145,10 +157,10 @@ void SearchEngineChoiceUI::HandleSearchEngineChoiceMade(int prepopulate_id) {
 }
 
 void SearchEngineChoiceUI::HandleLearnMoreLinkClicked() {
-  SearchEngineChoiceService* search_engine_choice_service =
-      SearchEngineChoiceServiceFactory::GetForProfile(&profile_.get());
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(&profile_.get());
 
-  search_engine_choice_service->NotifyLearnMoreLinkClicked(entry_point_);
+  search_engine_choice_dialog_service->NotifyLearnMoreLinkClicked(entry_point_);
 }
 
 void SearchEngineChoiceUI::CreatePageHandler(

@@ -31,7 +31,6 @@ target_link_libraries(
     ldt_c_sample
     optimized "${CMAKE_SOURCE_DIR}/ldt_np_adv_ffi/target/release/${CMAKE_STATIC_LIBRARY_PREFIX}ldt_np_adv_ffi${CMAKE_STATIC_LIBRARY_SUFFIX}"
     debug "${CMAKE_SOURCE_DIR}/ldt_np_adv_ffi/target/debug/${CMAKE_STATIC_LIBRARY_PREFIX}ldt_np_adv_ffi${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    OpenSSL::SSL
 )
 
 if(UNIX)

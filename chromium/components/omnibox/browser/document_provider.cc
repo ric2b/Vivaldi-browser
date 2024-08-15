@@ -24,7 +24,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
@@ -43,6 +43,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
+#include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -64,43 +65,57 @@ namespace {
 // from the backend.
 const size_t kMaxQueryLength = 200;
 
-// TODO(skare): Pull the enum in search_provider.cc into its .h file, and switch
-// this file and zero_suggest_provider.cc to use it.
-enum DocumentRequestsHistogramValue {
-  DOCUMENT_REQUEST_SENT = 1,
-  DOCUMENT_REQUEST_INVALIDATED = 2,
-  DOCUMENT_REPLY_RECEIVED = 3,
-  DOCUMENT_MAX_REQUEST_HISTOGRAM_VALUE
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// Keep up to date with DocumentProviderAllowedReason in
+// //tools/metrics/histograms/enums.xml.
+enum class DocumentProviderAllowedReason : int {
+  kAllowed = 0,
+  kUnknown = 1,
+  kFeatureDisabled = 2,
+  kSuggestSettingDisabled = 3,
+  kDriveSettingDisabled = 4,
+  kOffTheRecord = 5,
+  kNotLoggedIn = 6,
+  kNotSyncing = 7,
+  kBackoff = 8,
+  kDSENotGoogle = 9,
+  kInputOnFocusOrEmpty = 10,
+  kInputTooShort = 11,
+  kInputLooksLikeUrl = 12,
+  kMaxValue = kInputLooksLikeUrl
 };
 
-void LogOmniboxDocumentRequest(DocumentRequestsHistogramValue request_value) {
-  UMA_HISTOGRAM_ENUMERATION("Omnibox.DocumentSuggest.Requests", request_value,
-                            DOCUMENT_MAX_REQUEST_HISTOGRAM_VALUE);
+void LogOmniboxDocumentRequest(RemoteRequestHistogramValue request_value) {
+  base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.Requests",
+                                request_value,
+                                RemoteRequestHistogramValue::kMaxValue);
 }
 
 void LogTotalTime(base::TimeTicks start_time, bool interrupted) {
   DCHECK(!start_time.is_null());
   const base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
-  UMA_HISTOGRAM_TIMES("Omnibox.DocumentSuggest.TotalTime", elapsed_time);
+  base::UmaHistogramTimes("Omnibox.DocumentSuggest.TotalTime", elapsed_time);
   if (interrupted) {
-    UMA_HISTOGRAM_TIMES("Omnibox.DocumentSuggest.TotalTime.Interrupted",
-                        elapsed_time);
+    base::UmaHistogramTimes("Omnibox.DocumentSuggest.TotalTime.Interrupted",
+                            elapsed_time);
   } else {
-    UMA_HISTOGRAM_TIMES("Omnibox.DocumentSuggest.TotalTime.NotInterrupted",
-                        elapsed_time);
+    base::UmaHistogramTimes("Omnibox.DocumentSuggest.TotalTime.NotInterrupted",
+                            elapsed_time);
   }
 }
 
 void LogRequestTime(base::TimeTicks start_time, bool interrupted) {
   DCHECK(!start_time.is_null());
   const base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
-  UMA_HISTOGRAM_TIMES("Omnibox.DocumentSuggest.RequestTime", elapsed_time);
+  base::UmaHistogramTimes("Omnibox.DocumentSuggest.RequestTime", elapsed_time);
   if (interrupted) {
-    UMA_HISTOGRAM_TIMES("Omnibox.DocumentSuggest.RequestTime.Interrupted",
-                        elapsed_time);
+    base::UmaHistogramTimes("Omnibox.DocumentSuggest.RequestTime.Interrupted",
+                            elapsed_time);
   } else {
-    UMA_HISTOGRAM_TIMES("Omnibox.DocumentSuggest.RequestTime.NotInterrupted",
-                        elapsed_time);
+    base::UmaHistogramTimes(
+        "Omnibox.DocumentSuggest.RequestTime.NotInterrupted", elapsed_time);
   }
 }
 
@@ -330,27 +345,40 @@ bool DocumentProvider::IsDocumentProviderAllowed(
     const AutocompleteInput& input) {
   // Feature must be on.
   if (!base::FeatureList::IsEnabled(omnibox::kDocumentProvider)) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kFeatureDisabled);
     return false;
   }
 
   // These may seem like search suggestions, so gate on that setting too.
   if (!client_->SearchSuggestEnabled()) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kSuggestSettingDisabled);
     return false;
   }
 
   // Client-side toggle must be enabled.
   if (!base::FeatureList::IsEnabled(omnibox::kDocumentProviderNoSetting) &&
       !client_->GetPrefs()->GetBoolean(omnibox::kDocumentSuggestEnabled)) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kDriveSettingDisabled);
     return false;
   }
 
   // No incognito.
   if (client_->IsOffTheRecord()) {
+    base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
+                                  DocumentProviderAllowedReason::kOffTheRecord);
     return false;
   }
 
   // Must be logged in.
   if (!client_->IsAuthenticated()) {
+    base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
+                                  DocumentProviderAllowedReason::kNotLoggedIn);
     return false;
   }
 
@@ -358,24 +386,33 @@ bool DocumentProvider::IsDocumentProviderAllowed(
   if (!base::FeatureList::IsEnabled(
           omnibox::kDocumentProviderNoSyncRequirement) &&
       !client_->IsSyncActive()) {
+    base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
+                                  DocumentProviderAllowedReason::kNotSyncing);
     return false;
   }
 
   // We haven't received a server backoff signal.
   if (backoff_for_session_) {
+    base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
+                                  DocumentProviderAllowedReason::kBackoff);
     return false;
   }
 
   // Google must be set as default search provider.
   auto* template_url_service = client_->GetTemplateURLService();
   if (!search::DefaultSearchProviderIsGoogle(template_url_service)) {
+    base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
+                                  DocumentProviderAllowedReason::kDSENotGoogle);
     return false;
   }
 
   // There should be no document suggestions fetched for on-focus suggestion
   // requests, or if the input is empty.
-  if (input.focus_type() != metrics::OmniboxFocusType::INTERACTION_DEFAULT ||
+  if (input.IsZeroSuggest() ||
       input.type() == metrics::OmniboxInputType::EMPTY) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kInputOnFocusOrEmpty);
     return false;
   }
 
@@ -383,14 +420,22 @@ bool DocumentProvider::IsDocumentProviderAllowed(
   if (input.text().length() <
           omnibox_feature_configs::DocumentProvider::Get().min_query_length ||
       input.text().length() > kMaxQueryLength) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kInputTooShort);
     return false;
   }
 
   // Don't issue queries for input likely to be a URL.
   if (IsInputLikelyURL(input)) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kInputLooksLikeUrl);
     return false;
   }
 
+  base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
+                                DocumentProviderAllowedReason::kAllowed);
   return true;
 }
 
@@ -469,7 +514,7 @@ void DocumentProvider::Stop(bool clear_cached_results,
     loader_.reset();
     LogRequestTime(time_request_sent_, true);
     time_request_sent_ = base::TimeTicks();
-    LogOmniboxDocumentRequest(DOCUMENT_REQUEST_INVALIDATED);
+    LogOmniboxDocumentRequest(RemoteRequestHistogramValue::kRequestInvalidated);
   }
 
   // If `Run()` has been invoked, log its duration. It's possible `Stop()` is
@@ -520,13 +565,18 @@ void DocumentProvider::OnURLLoadComplete(
   DCHECK_EQ(loader_.get(), source);
 
   LogRequestTime(time_request_sent_, false);
-  LogOmniboxDocumentRequest(DOCUMENT_REPLY_RECEIVED);
+  LogOmniboxDocumentRequest(
+      RemoteRequestHistogramValue::kRemoteResponseReceived);
+  base::UmaHistogramSparse("Omnibox.DocumentSuggest.HttpResponseCode",
+                           response_code);
 
   // The following are codes that we believe indicate non-transient failures,
   // based on experience working with the owners of the API. Since they are
   // expected to be semi-persistent, it does not make sense to continue to issue
   // requests during the current session after receiving one.
-  if (response_code == 400 || response_code == 403 || response_code == 499) {
+  if (response_code == 400 || response_code == 403 || response_code == 499 ||
+      (omnibox_feature_configs::DocumentProvider::Get().backoff_on_401 &&
+       response_code == 401)) {
     backoff_for_session_ = true;
   }
 
@@ -571,7 +621,7 @@ void DocumentProvider::OnDocumentSuggestionsLoaderAvailable(
     std::unique_ptr<network::SimpleURLLoader> loader) {
   time_request_sent_ = base::TimeTicks::Now();
   loader_ = std::move(loader);
-  LogOmniboxDocumentRequest(DOCUMENT_REQUEST_SENT);
+  LogOmniboxDocumentRequest(RemoteRequestHistogramValue::kRequestSent);
 }
 
 // static
@@ -653,7 +703,8 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     return matches;
   }
   size_t num_results = results->size();
-  UMA_HISTOGRAM_COUNTS_1M("Omnibox.DocumentSuggest.ResultCount", num_results);
+  base::UmaHistogramCounts1M("Omnibox.DocumentSuggest.ResultCount",
+                             num_results);
 
   // Ensure server's suggestions are added with monotonically decreasing scores.
   int previous_score = INT_MAX;

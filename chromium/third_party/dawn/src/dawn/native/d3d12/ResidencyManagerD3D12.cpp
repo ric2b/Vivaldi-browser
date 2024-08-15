@@ -177,15 +177,13 @@ ResultOrError<Pageable*> ResidencyManager::RemoveSingleEntryFromLRU(
     // If the next candidate for eviction was inserted into the LRU during the current serial,
     // it is because more memory is being used in a single command list than is available.
     // In this scenario, we cannot make any more resources resident and thrashing must occur.
-    if (lastSubmissionSerial == mDevice->GetPendingCommandSerial()) {
+    if (lastSubmissionSerial == mDevice->GetQueue()->GetPendingCommandSerial()) {
         return nullptr;
     }
 
     // We must ensure that any previous use of a resource has completed before the resource can
     // be evicted.
-    if (lastSubmissionSerial > mDevice->GetQueue()->GetCompletedCommandSerial()) {
-        DAWN_TRY(mDevice->WaitForSerial(lastSubmissionSerial));
-    }
+    DAWN_TRY(ToBackend(mDevice->GetQueue())->WaitForSerial(lastSubmissionSerial));
 
     pageable->RemoveFromList();
     return pageable;
@@ -259,7 +257,7 @@ MaybeError ResidencyManager::EnsureHeapsAreResident(Heap** heaps, size_t heapCou
     uint64_t localSizeToMakeResident = 0;
     uint64_t nonLocalSizeToMakeResident = 0;
 
-    ExecutionSerial pendingCommandSerial = mDevice->GetPendingCommandSerial();
+    ExecutionSerial pendingCommandSerial = mDevice->GetQueue()->GetPendingCommandSerial();
     for (size_t i = 0; i < heapCount; i++) {
         Heap* heap = heaps[i];
 

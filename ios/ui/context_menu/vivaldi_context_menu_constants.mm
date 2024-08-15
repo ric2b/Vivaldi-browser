@@ -2,14 +2,10 @@
 
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
-
 #pragma mark - ICONS
 
 NSString* vMenuNewTab = @"vivaldi_new_tab";
+NSString* vMenuNewBackgroundTab = @"vivaldi_new_background_tab";
 NSString* vMenuPrivateTab = @"vivaldi_private_tab";
 NSString* vMenuLink = @"vivaldi_link";
 NSString* vMenuEdit = @"vivaldi_edit";
@@ -17,6 +13,7 @@ NSString* vMenuShare = @"vivaldi_share";
 NSString* vMenuMove = @"vivaldi_move";
 NSString* vMenuCopy = @"vivaldi_copy";
 NSString* vMenuSave = @"vivaldi_save";
+NSString* vMenuSaveToPhotos = @"vivaldi_save_to_photos";
 NSString* vMenuClose = @"vivaldi_close";
 NSString* vMenuPin = @"vivaldi_pin";
 NSString* vMenuUnpin = @"vivaldi_unpin";

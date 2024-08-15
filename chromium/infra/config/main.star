@@ -23,6 +23,7 @@ lucicfg.config(
     config_dir = "generated",
     tracked_files = [
         "builders/*/*/*",
+        "builders/*/*/*/*",
         "builders/gn_args_locations.json",
         "cq-builders.md",
         "cq-usage/default.cfg",
@@ -248,16 +249,20 @@ exec("//swarming.star")
 exec("//recipes.star")
 exec("//gn_args/gn_args.star")
 exec("//targets/basic_suites.star")
+exec("//targets/binaries.star")
+exec("//targets/bundles.star")
+exec("//targets/compile_targets.star")
 exec("//targets/compound_suites.star")
 exec("//targets/matrix_compound_suites.star")
 exec("//targets/mixins.star")
-exec("//targets/targets.star")
+exec("//targets/tests.star")
 exec("//targets/variants.star")
 
 exec("//notifiers.star")
 
-exec("//subprojects/chromium/subproject.star")
+exec("//subprojects/build/subproject.star")
 exec("//subprojects/chrome/subproject.star")
+exec("//subprojects/chromium/subproject.star")
 exec("//subprojects/infra.star")
 branches.exec("//subprojects/codesearch/subproject.star")
 branches.exec("//subprojects/findit/subproject.star")

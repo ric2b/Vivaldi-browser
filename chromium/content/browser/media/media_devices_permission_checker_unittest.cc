@@ -30,7 +30,7 @@ class TestWebContentsDelegate : public content::WebContentsDelegate {
   ~TestWebContentsDelegate() override {}
 
   bool CheckMediaAccessPermission(RenderFrameHost* render_Frame_host,
-                                  const GURL& security_origin,
+                                  const url::Origin& security_origin,
                                   blink::mojom::MediaStreamType type) override {
     return true;
   }
@@ -60,7 +60,7 @@ class MediaDevicesPermissionCheckerTest : public RenderViewHostImplTestHarness {
           *blink::OriginWithPossibleWildcards::FromOrigin(origin_));
     }
     navigation->SetPermissionsPolicyHeader({{feature, allowlist,
-                                             /*self_if_matches=*/absl::nullopt,
+                                             /*self_if_matches=*/std::nullopt,
                                              /*matches_all_origins=*/false,
                                              /*matches_opaque_src=*/false}});
     navigation->Commit();

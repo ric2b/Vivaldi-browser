@@ -82,13 +82,17 @@ struct StageVariable {
     /// Destructor
     ~StageVariable();
 
-    /// Name of the variable in the shader.
+    /// Name of the variable in the shader. (including struct nested accessing, e.g. 'struct.var')
     std::string name;
-    /// Is location attribute present
-    bool has_location_attribute = false;
-    /// Value of the location attribute, only valid if #has_location_attribute is
-    /// true.
-    uint32_t location_attribute;
+    /// Name of the variable itself. (e.g. 'var')
+    std::string variable_name;
+    /// Attributes applied to the variable
+    struct {
+        /// Value of the location attribute, if set.
+        std::optional<uint32_t> location;
+        /// Value of the color attribute, if set.
+        std::optional<uint32_t> color;
+    } attributes;
     /// Scalar type that the variable is composed of.
     ComponentType component_type = ComponentType::kUnknown;
     /// How the scalars are composed for the variable.

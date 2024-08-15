@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void sign_f5da6a() {
+  float4 res = float4(1.0f);
+}
+vertex float4 vertex_main() {
+  sign_f5da6a();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  sign_f5da6a();
+}
+kernel void compute_main() {
+  sign_f5da6a();
+}

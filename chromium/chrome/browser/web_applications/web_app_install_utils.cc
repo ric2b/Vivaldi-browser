@@ -7,6 +7,7 @@
 #include <array>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <ostream>
 #include <set>
 #include <string>
@@ -17,7 +18,6 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/containers/cxx20_erase_map.h"
 #include "base/containers/extend.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -61,7 +61,6 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "net/http/http_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
@@ -289,10 +288,10 @@ apps::ShareTarget::Enctype ToAppsShareTargetEnctype(
   NOTREACHED();
 }
 
-absl::optional<apps::ShareTarget> ToWebAppShareTarget(
-    const absl::optional<blink::Manifest::ShareTarget>& share_target) {
+std::optional<apps::ShareTarget> ToWebAppShareTarget(
+    const std::optional<blink::Manifest::ShareTarget>& share_target) {
   if (!share_target) {
-    return absl::nullopt;
+    return std::nullopt;
   }
   apps::ShareTarget apps_share_target;
   apps_share_target.action = share_target->action;
@@ -782,24 +781,26 @@ WebAppInstallInfo CreateWebAppInfoFromManifest(
 
 namespace {
 
-std::vector<GURL> GetAppIconUrls(const WebAppInstallInfo& web_app_info) {
-  std::vector<GURL> urls;
+std::vector<IconUrlsWithSizes> GetAppIconUrls(
+    const WebAppInstallInfo& web_app_info) {
+  std::vector<IconUrlsWithSizes> urls;
 
   for (const apps::IconInfo& info : web_app_info.manifest_icons) {
-    urls.push_back(info.url);
+    urls.emplace_back(info.url, gfx::Size());
   }
 
   return urls;
 }
 
-std::vector<GURL> GetShortcutIcons(const WebAppInstallInfo& web_app_info) {
-  std::vector<GURL> urls;
+std::vector<IconUrlsWithSizes> GetShortcutIcons(
+    const WebAppInstallInfo& web_app_info) {
+  std::vector<IconUrlsWithSizes> urls;
   for (const WebAppShortcutsMenuItemInfo& shortcut :
        web_app_info.shortcuts_menu_item_infos) {
     for (IconPurpose purpose : kIconPurposes) {
       for (const WebAppShortcutsMenuItemInfo::Icon& icon :
            shortcut.GetShortcutIconInfosForPurpose(purpose)) {
-        urls.push_back(icon.url);
+        urls.emplace_back(icon.url, gfx::Size());
       }
     }
   }
@@ -807,20 +808,22 @@ std::vector<GURL> GetShortcutIcons(const WebAppInstallInfo& web_app_info) {
   return urls;
 }
 
-std::vector<GURL> GetFileHandlingIcons(const WebAppInstallInfo& web_app_info) {
-  std::vector<GURL> urls;
+std::vector<IconUrlsWithSizes> GetFileHandlingIcons(
+    const WebAppInstallInfo& web_app_info) {
+  std::vector<IconUrlsWithSizes> urls;
 
   for (const apps::FileHandler& file_handler : web_app_info.file_handlers) {
     for (const apps::IconInfo& icon : file_handler.downloaded_icons) {
-      urls.push_back(icon.url);
+      urls.emplace_back(icon.url, gfx::Size());
     }
   }
 
   return urls;
 }
 
-std::vector<GURL> GetHomeTabIcons(const WebAppInstallInfo& web_app_info) {
-  std::vector<GURL> urls;
+std::vector<IconUrlsWithSizes> GetHomeTabIcons(
+    const WebAppInstallInfo& web_app_info) {
+  std::vector<IconUrlsWithSizes> urls;
 
   if (!HomeTabIconsExistInTabStrip(&web_app_info)) {
     return urls;
@@ -830,25 +833,27 @@ std::vector<GURL> GetHomeTabIcons(const WebAppInstallInfo& web_app_info) {
       web_app_info.tab_strip.value().home_tab);
 
   for (const auto& icon : home_tab.icons) {
-    urls.push_back(icon.src);
+    urls.emplace_back(icon.src, gfx::Size());
   }
 
   return urls;
 }
 
-base::flat_set<GURL> RemoveDuplicates(std::vector<GURL> from_urls) {
-  return base::flat_set<GURL>{from_urls};
+IconUrlSizeSet RemoveDuplicates(std::vector<IconUrlsWithSizes> from_urls) {
+  return IconUrlSizeSet{from_urls};
 }
 
-void RemoveInvalidUrls(std::vector<GURL>& urls) {
-  base::EraseIf(urls, [](const GURL& url) { return !url.is_valid(); });
+void RemoveInvalidUrls(std::vector<IconUrlsWithSizes>& urls) {
+  std::erase_if(urls, [](const std::tuple<GURL, gfx::Size>& url) {
+    return !get<GURL>(url).is_valid();
+  });
 }
 
 }  // namespace
 
-base::flat_set<GURL> GetValidIconUrlsToDownload(
+IconUrlSizeSet GetValidIconUrlsToDownload(
     const WebAppInstallInfo& web_app_info) {
-  std::vector<GURL> icon_urls;
+  std::vector<IconUrlsWithSizes> icon_urls;
 
   base::Extend(icon_urls, GetAppIconUrls(web_app_info));
   base::Extend(icon_urls, GetShortcutIcons(web_app_info));
@@ -1324,7 +1329,8 @@ void ApplyParamsToFinalizeOptions(
     options.chromeos_data.emplace();
     options.chromeos_data->show_in_launcher =
         install_params.add_to_applications_menu;
-    options.chromeos_data->show_in_search = install_params.add_to_search;
+    options.chromeos_data->show_in_search_and_shelf =
+        install_params.add_to_search;
     options.chromeos_data->show_in_management =
         install_params.add_to_management;
     options.chromeos_data->is_disabled = install_params.is_disabled;
@@ -1332,6 +1338,7 @@ void ApplyParamsToFinalizeOptions(
     options.chromeos_data->handles_file_open_intents =
         install_params.handles_file_open_intents;
   }
+  options.locally_installed = install_params.locally_installed;
   options.bypass_os_hooks = install_params.bypass_os_hooks;
   options.add_to_applications_menu = install_params.add_to_applications_menu;
   options.add_to_desktop = install_params.add_to_desktop;

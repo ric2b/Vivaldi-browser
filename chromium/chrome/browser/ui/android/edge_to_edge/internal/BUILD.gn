@@ -8,6 +8,7 @@ android_library("java") {
   visibility = [
     ":*",
     "//chrome/android:chrome_all_java",
+    "//chrome/android:chrome_test_java",
     "//chrome/browser/ui/android/edge_to_edge/test:*",
   ]
   sources = [
@@ -15,6 +16,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/EdgeToEdgeControllerImpl.java",
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/EdgeToEdgeOSWrapper.java",
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/EdgeToEdgeOSWrapperImpl.java",
+    "java/src/org/chromium/chrome/browser/ui/edge_to_edge/SimpleEdgeToEdgePadAdjuster.java",
   ]
   deps = [
     "//base:base_java",

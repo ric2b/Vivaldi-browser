@@ -1,13 +1,16 @@
 {
   "$build/chromium_tests_builder_config": {
     "builder_config": {
+      "additional_exclusions": [
+        "infra/config/generated/builders/try/android-cronet-arm-dbg/gn-args.json"
+      ],
       "builder_db": {
         "entries": [
           {
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-arm-dbg",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -40,7 +43,7 @@
         {
           "bucket": "ci",
           "builder": "android-cronet-arm-dbg",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
       ]
     }
@@ -54,6 +57,15 @@
     "jobs": 150,
     "metrics_project": "chromium-reclient-metrics",
     "scandeps_server": true
+  },
+  "$build/siso": {
+    "configs": [
+      "builder"
+    ],
+    "enable_cloud_profiler": true,
+    "enable_cloud_trace": true,
+    "experiments": [],
+    "project": "rbe-chromium-untrusted"
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

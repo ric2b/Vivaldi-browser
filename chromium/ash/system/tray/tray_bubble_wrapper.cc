@@ -11,6 +11,7 @@
 #include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/tray/tray_event_filter.h"
 #include "ui/aura/window.h"
+#include "ui/display/screen.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/transient_window_manager.h"
@@ -23,11 +24,15 @@ TrayBubbleWrapper::TrayBubbleWrapper(TrayBackgroundView* tray,
 
 TrayBubbleWrapper::~TrayBubbleWrapper() {
   if (bubble_widget_) {
+    // A bubble might have transcient child open (i.e. the network info bubble
+    // in the network detailed view of QS). Thus, we need to remove all those
+    // transient children before destruction.
     auto* transient_manager = ::wm::TransientWindowManager::GetOrCreate(
         bubble_widget_->GetNativeWindow());
     if (transient_manager) {
-      for (auto* window : transient_manager->transient_children())
+      for (aura::Window* window : transient_manager->transient_children()) {
         transient_manager->RemoveTransientChild(window);
+      }
     }
     bubble_widget_->RemoveObserver(this);
     bubble_widget_->Close();
@@ -49,8 +54,10 @@ void TrayBubbleWrapper::ShowBubble(
   TrayBackgroundView::InitializeBubbleAnimations(bubble_widget_);
   bubble_view_->InitializeAndShowBubble();
 
-  if (!Shell::Get()->tablet_mode_controller()->InTabletMode())
+  // We need to explicitly dismiss app list bubble here due to b/1186479.
+  if (!display::Screen::GetScreen()->InTabletMode()) {
     Shell::Get()->app_list_controller()->DismissAppList();
+  }
 
   if (event_handling_) {
     tray_event_filter_ = std::make_unique<TrayEventFilter>(
@@ -74,12 +81,6 @@ void TrayBubbleWrapper::OnWidgetDestroying(views::Widget* widget) {
   CHECK_EQ(bubble_widget_, widget);
   bubble_widget_->RemoveObserver(this);
   bubble_widget_ = nullptr;
-
-  // Although the bubble is already closed, the next mouse release event
-  // will invoke PerformAction which reopens the bubble again. To prevent the
-  // reopen, the mouse capture of |tray_| has to be released.
-  // See crbug.com/177075
-  tray_->GetWidget()->GetNativeWindow()->ReleaseCapture();
 
   tray_->HideBubbleWithView(bubble_view_);  // May destroy |bubble_view_|
 }

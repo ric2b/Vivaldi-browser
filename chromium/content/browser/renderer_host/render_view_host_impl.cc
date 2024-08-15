@@ -44,7 +44,6 @@
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
-#include "content/browser/renderer_host/input/timeout_monitor.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/page_delegate.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
@@ -57,11 +56,11 @@
 #include "content/common/agent_scheduling_group.mojom.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/features.h"
+#include "content/common/input/timeout_monitor.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -320,8 +319,8 @@ RenderViewHostImpl::RenderViewHostImpl(
       frame_tree_(frame_tree),
       main_browsing_context_state_(
           main_browsing_context_state
-              ? absl::make_optional(main_browsing_context_state->GetSafeRef())
-              : absl::nullopt),
+              ? std::make_optional(main_browsing_context_state->GetSafeRef())
+              : std::nullopt),
       is_speculative_(create_case == CreateRenderViewHostCase::kSpeculative) {
   TRACE_EVENT("navigation", "RenderViewHostImpl::RenderViewHostImpl",
               ChromeTrackEvent::kRenderViewHost, *this);
@@ -410,7 +409,7 @@ void RenderViewHostImpl::DisallowReuse() {
 }
 
 bool RenderViewHostImpl::CreateRenderView(
-    const absl::optional<blink::FrameToken>& opener_frame_token,
+    const std::optional<blink::FrameToken>& opener_frame_token,
     int proxy_route_id,
     bool window_was_opened_by_another_window) {
   TRACE_EVENT0("renderer_host,navigation",
@@ -451,6 +450,7 @@ bool RenderViewHostImpl::CreateRenderView(
   params->renderer_preferences = delegate_->GetRendererPrefs();
   RenderViewHostImpl::GetPlatformSpecificPrefs(&params->renderer_preferences);
   params->web_preferences = delegate_->GetOrCreateWebPreferences();
+  params->color_provider_colors = delegate_->GetColorProviderColorMaps();
   params->opener_frame_token = opener_frame_token;
   params->replication_state =
       frame_tree_node->current_replication_state().Clone();
@@ -513,6 +513,14 @@ bool RenderViewHostImpl::CreateRenderView(
       // RenderFrame.
       local_frame_params->previous_frame_token =
           frame_tree_node->current_frame_host()->GetFrameToken();
+
+      if (frame_tree_node->current_frame_host()->ShouldReuseCompositing(
+              *main_rfh->GetSiteInstance())) {
+        local_frame_params->widget_params
+            ->previous_frame_token_for_compositor_reuse =
+            frame_tree_node->current_frame_host()->GetFrameToken();
+        main_rfh->NotifyWillCreateRenderWidgetOnCommit();
+      }
     }
 
     params->main_frame = mojom::CreateMainFrameUnion::NewLocalParams(
@@ -543,22 +551,10 @@ bool RenderViewHostImpl::CreateRenderView(
     }
   }
 
-  bool is_portal = frame_tree_->delegate()->IsPortal();
-  bool is_guest_view = delegate_->IsGuest();
-  bool is_fenced_frame = frame_tree_->is_fenced_frame();
-
-  if (is_fenced_frame) {
-    params->type = mojom::ViewWidgetType::kFencedFrame;
-
+  params->type = ViewWidgetType();
+  if (params->type == mojom::ViewWidgetType::kFencedFrame) {
     params->fenced_frame_mode =
         frame_tree_->root()->GetDeprecatedFencedFrameMode();
-  } else if (is_portal) {
-    DCHECK(!is_guest_view);
-    params->type = mojom::ViewWidgetType::kPortal;
-  } else if (is_guest_view) {
-    params->type = mojom::ViewWidgetType::kGuestView;
-  } else {
-    params->type = mojom::ViewWidgetType::kTopLevel;
   }
 
   // Send the current page's browsing context group to the renderer. It is
@@ -919,7 +915,7 @@ std::vector<viz::SurfaceId> RenderViewHostImpl::CollectSurfaceIdsForEviction() {
     FrameTree& tree = root->frame_tree();
 
     // Inner tree nodes are used for several purposes, e.g. fenced frames,
-    // <webview>, portals and PDF. These may have a compositor surface as well,
+    // <webview>, and PDF. These may have a compositor surface as well,
     // in which case we need to explore not the outer node only, but the inner
     // ones as well.
     FrameTree::NodeRange node_range =
@@ -928,8 +924,7 @@ std::vector<viz::SurfaceId> RenderViewHostImpl::CollectSurfaceIdsForEviction() {
             ? tree.NodesIncludingInnerTreeNodes()
             : tree.SubtreeNodes(root);
     CollectSurfaceIdsForEvictionForFrameTreeNodeRange(node_range, ids);
-  } else if (is_in_back_forward_cache_ &&
-             base::FeatureList::IsEnabled(features::kEvictSubtree)) {
+  } else if (is_in_back_forward_cache_) {
     // `FrameTree::SubtreeAndInnerTreeNodes` starts with the children of `rfh`
     // so we need to add our current viz::SurfaceId to ensure it is evicted.
     if (render_widget_host_) {
@@ -1000,6 +995,25 @@ void RenderViewHostImpl::WriteIntoTrace(
 
 base::SafeRef<RenderViewHostImpl> RenderViewHostImpl::GetSafeRef() {
   return weak_factory_.GetSafeRef();
+}
+
+mojom::ViewWidgetType RenderViewHostImpl::ViewWidgetType() {
+  if (view_widget_type_) {
+    return *view_widget_type_;
+  }
+
+  bool is_guest_view = delegate_->IsGuest();
+  bool is_fenced_frame = frame_tree_->is_fenced_frame();
+
+  if (is_fenced_frame) {
+    view_widget_type_ = mojom::ViewWidgetType::kFencedFrame;
+  } else if (is_guest_view) {
+    view_widget_type_ = mojom::ViewWidgetType::kGuestView;
+  } else {
+    view_widget_type_ = mojom::ViewWidgetType::kTopLevel;
+  }
+
+  return *view_widget_type_;
 }
 
 }  // namespace content

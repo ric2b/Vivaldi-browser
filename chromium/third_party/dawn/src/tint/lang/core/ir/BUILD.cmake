@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+include(lang/core/ir/binary/BUILD.cmake)
 include(lang/core/ir/transform/BUILD.cmake)
 
 ################################################################################
@@ -71,8 +72,12 @@ tint_add_target(tint_lang_core_ir lib
   lang/core/ir/control_instruction.h
   lang/core/ir/convert.cc
   lang/core/ir/convert.h
+  lang/core/ir/core_binary.cc
+  lang/core/ir/core_binary.h
   lang/core/ir/core_builtin_call.cc
   lang/core/ir/core_builtin_call.h
+  lang/core/ir/core_unary.cc
+  lang/core/ir/core_unary.h
   lang/core/ir/disassembler.cc
   lang/core/ir/disassembler.h
   lang/core/ir/discard.cc
@@ -89,6 +94,7 @@ tint_add_target(tint_lang_core_ir lib
   lang/core/ir/function.h
   lang/core/ir/function_param.cc
   lang/core/ir/function_param.h
+  lang/core/ir/ice.h
   lang/core/ir/if.cc
   lang/core/ir/if.h
   lang/core/ir/instruction.cc
@@ -168,7 +174,6 @@ tint_target_add_dependencies(tint_lang_core_ir lib
 ################################################################################
 tint_add_target(tint_lang_core_ir_test test
   lang/core/ir/access_test.cc
-  lang/core/ir/binary_test.cc
   lang/core/ir/bitcast_test.cc
   lang/core/ir/block_param_test.cc
   lang/core/ir/block_test.cc
@@ -177,7 +182,9 @@ tint_add_target(tint_lang_core_ir_test test
   lang/core/ir/construct_test.cc
   lang/core/ir/continue_test.cc
   lang/core/ir/convert_test.cc
+  lang/core/ir/core_binary_test.cc
   lang/core/ir/core_builtin_call_test.cc
+  lang/core/ir/core_unary_test.cc
   lang/core/ir/discard_test.cc
   lang/core/ir/exit_if_test.cc
   lang/core/ir/exit_loop_test.cc
@@ -203,7 +210,6 @@ tint_add_target(tint_lang_core_ir_test test
   lang/core/ir/swizzle_test.cc
   lang/core/ir/terminate_invocation_test.cc
   lang/core/ir/traverse_test.cc
-  lang/core/ir/unary_test.cc
   lang/core/ir/unreachable_test.cc
   lang/core/ir/user_call_test.cc
   lang/core/ir/validator_test.cc

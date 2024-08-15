@@ -2,10 +2,6 @@
   .settings-columned-section {
     padding-top: 4px;
   }
-  .additional-section {
-    border-top: var(--cr-separator-line);
-    padding-inline-start: var(--cr-section-padding);
-  }
 </style>
 <settings-toggle-button
     id="pageContentToggle"
@@ -15,9 +11,9 @@
 </settings-toggle-button>
 <div class="settings-columned-section">
   <div class="column">
-    <div class="description-header">
+    <h2 class="description-header">
       $i18n{privacyGuideFeatureDescriptionHeader}
-    </div>
+    </h2>
     <ul class="icon-bulleted-list">
       <li>
         <iron-icon icon="settings20:astrophotography-mode" aria-hidden="true">
@@ -27,9 +23,7 @@
     </ul>
   </div>
   <div class="column">
-    <div class="description-header">
-      $i18n{privacyGuideThingsToConsider}
-    </div>
+    <h2 class="description-header">$i18n{privacyGuideThingsToConsider}</h2>
     <ul class="icon-bulleted-list">
       <li>
         <iron-icon icon="settings20:find-in-path" aria-hidden="true">
@@ -50,14 +44,3 @@
     </ul>
   </div>
 </div>
-<template is="dom-if" if="[[showComposeToggle_]]">
-  <div class="additional-section">
-    <h2>$i18n{privacyGuideComposeAdditionalSettings}</h2>
-    <settings-toggle-button
-      id="composeToggle"
-      pref="{{prefs.autofill_assistance.enabled}}"
-      label="$i18n{privacyGuideComposeHeader}"
-      sub-label="$i18n{privacyGuideComposeDescription}">
-    </settings-toggle-button>
-  </div>
-</template>

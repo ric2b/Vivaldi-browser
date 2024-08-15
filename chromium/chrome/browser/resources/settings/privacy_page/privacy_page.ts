@@ -38,7 +38,7 @@ import {BaseMixin} from '../base_mixin.js';
 import {FocusConfig} from '../focus_config.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions} from '../metrics_browser_proxy.js';
+import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions, SafetyHubEntryPoint} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
 import {RouteObserverMixin, Router} from '../router.js';
 import {NotificationPermission, SafetyHubBrowserProxy, SafetyHubBrowserProxyImpl, SafetyHubEvent} from '../safety_hub/safety_hub_browser_proxy.js';
@@ -56,7 +56,6 @@ interface BlockAutoplayStatus {
 export interface SettingsPrivacyPageElement {
   $: {
     clearBrowsingData: CrLinkRowElement,
-    cookiesLinkRow: CrLinkRowElement,
     permissionsLinkRow: CrLinkRowElement,
     securityLinkRow: CrLinkRowElement,
   };
@@ -101,8 +100,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
           return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
         },
       },
-
-      cookieSettingDescription_: String,
 
       enableBlockAutoplayContentSetting_: {
         type: Boolean,
@@ -155,6 +152,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
             loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
       },
 
+      enableWebPrintingContentSetting_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableWebPrintingContentSetting'),
+      },
+
       showNotificationPermissionsReview_: {
         type: Boolean,
         value: false,
@@ -169,11 +171,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         type: Boolean,
         value: () =>
             loadTimeData.getBoolean('isPrivacySandboxRestrictedNoticeEnabled'),
-      },
-
-      isPrivacySandboxSettings4_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('isPrivacySandboxSettings4'),
       },
 
       is3pcdRedesignEnabled_: {
@@ -215,6 +212,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         value: () => loadTimeData.getBoolean('blockMidiByDefault'),
       },
 
+      isProactiveTopicsBlockingEnabled_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('isProactiveTopicsBlockingEnabled'),
+      },
+
       focusConfig_: {
         type: Object,
         value() {
@@ -225,12 +228,12 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
           }
 
           if (routes.COOKIES) {
-            const selector =
-                loadTimeData.getBoolean('isPrivacySandboxSettings4') ?
-                '#thirdPartyCookiesLinkRow' :
-                '#cookiesLinkRow';
-            map.set(`${routes.COOKIES.path}_${routes.PRIVACY.path}`, selector);
-            map.set(`${routes.COOKIES.path}_${routes.BASIC.path}`, selector);
+            map.set(
+                `${routes.COOKIES.path}_${routes.PRIVACY.path}`,
+                '#thirdPartyCookiesLinkRow');
+            map.set(
+                `${routes.COOKIES.path}_${routes.BASIC.path}`,
+                '#thirdPartyCookiesLinkRow');
           }
 
           if (routes.TRACKING_PROTECTION) {
@@ -242,9 +245,11 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
             map.set(routes.SITE_SETTINGS.path, '#permissionsLinkRow');
           }
 
+          /*
           if (routes.PRIVACY_GUIDE) {
             map.set(routes.PRIVACY_GUIDE.path, '#privacyGuideLinkRow');
           }
+          */
 
           /*
           if (routes.PRIVACY_SANDBOX) {
@@ -312,12 +317,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         },
       },
 
-      showPreloadingSubpage_: {
-        type: Boolean,
-        value: () => !loadTimeData.getBoolean(
-            'isPerformanceSettingsPreloadingSubpageEnabled'),
-      },
-
       showDedicatedCpssSetting_: {
         type: Boolean,
         value() {
@@ -337,7 +336,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private showClearBrowsingDataDialog_: boolean;
   private showPrivacyGuideDialog_: boolean;
   private enableSafeBrowsingSubresourceFilter_: boolean;
-  private cookieSettingDescription_: string;
   private enableBlockAutoplayContentSetting_: boolean;
   private blockAutoplayStatus_: BlockAutoplayStatus;
   private blockMidiByDefault_: boolean;
@@ -346,17 +344,17 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private enableExperimentalWebPlatformFeatures_: boolean;
   private enableSecurityKeysSubpage_: boolean;
   private enableWebBluetoothNewPermissionsBackend_: boolean;
+  private enableWebPrintingContentSetting_: boolean;
   private showNotificationPermissionsReview_: boolean;
   private isPrivacySandboxRestricted_: boolean;
   private isPrivacySandboxRestrictedNoticeEnabled_: boolean;
-  private isPrivacySandboxSettings4_: boolean;
+  private isProactiveTopicsBlockingEnabled_: boolean;
   private is3pcdRedesignEnabled_: boolean;
   private privateStateTokensEnabled_: boolean;
   private autoPictureInPictureEnabled_: boolean;
   private safetyCheckNotificationPermissionsEnabled_: boolean;
   private enablePermissionStorageAccessApi_: boolean;
   private enableSafetyHub_: boolean;
-  private showPreloadingSubpage_: boolean;
   private focusConfig_: FocusConfig;
   private searchFilter_: string;
   private notificationPermissionsReviewHeader_: string;
@@ -390,13 +388,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         (status: BlockAutoplayStatus) =>
             this.onBlockAutoplayStatusChanged_(status));
 
-    this.siteSettingsPrefsBrowserProxy_.getCookieSettingDescription().then(
-        (description: string) => this.cookieSettingDescription_ = description);
-
-    this.addWebUiListener(
-        'cookieSettingDescriptionChanged',
-        (description: string) => this.cookieSettingDescription_ = description);
-
     if (this.safetyCheckNotificationPermissionsEnabled_ && !this.isGuest_) {
       this.addWebUiListener(
           SafetyHubEvent.NOTIFICATION_PERMISSIONS_MAYBE_CHANGED,
@@ -417,6 +408,15 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     this.showPrivacyGuideDialog_ =
         Router.getInstance().getCurrentRoute() === routes.PRIVACY_GUIDE &&
         this.isPrivacyGuideAvailable;
+
+    // Only record the metrics when the user navigates to the notification
+    // settings page that shows the entry point.
+    if (Router.getInstance().getCurrentRoute() ===
+            routes.SITE_SETTINGS_NOTIFICATIONS &&
+        this.showNotificationPermissionsReview_) {
+      this.metricsBrowserProxy_.recordSafetyHubEntryPointShown(
+          SafetyHubEntryPoint.NOTIFICATIONS);
+    }
   }
 
   /**
@@ -448,7 +448,8 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
 
   private onTrackingProtectionClick_() {
     this.interactedWithPage_();
-
+    this.metricsBrowserProxy_.recordAction(
+        'Settings.TrackingProtection.OpenedFromPrivacyPage');
     Router.getInstance().navigateTo(routes.TRACKING_PROTECTION);
   }
 
@@ -490,19 +491,8 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     this.interactedWithPage_();
     this.metricsBrowserProxy_.recordAction(
         'Settings.PrivacySandbox.OpenedFromSettingsParent');
-
-    if (this.isPrivacySandboxSettings4_) {
-      Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX);
-      return;
-    }
-
-    // Create a MouseEvent directly to avoid Polymer failing to synthesise a
-    // click event if this function was called in response to a touch event.
-    // See crbug.com/1253883 for details.
-    // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call.
-    this.shadowRoot!.querySelector<HTMLAnchorElement>('#privacySandboxLink')!
-        .dispatchEvent(new MouseEvent('click'));
-        */
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX);
+    */
   }
 
   private async updateLocationAndNotificationState_() {
@@ -518,32 +508,43 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
         (locationDefaultValue.setting === ContentSetting.ASK);
   }
 
-  private onLocationAskClicked_() {
-    this.isLocationAllowed_ = true;
-    this.setPrefValue('generated.geolocation', SettingsState.CPSS);
+  private onLocationTopLevelRadioChanged_(event: CustomEvent<{value: string}>) {
+    const radioButtonName = event.detail.value;
+    switch (radioButtonName) {
+      case 'location-block-radio-button':
+        this.setPrefValue('generated.geolocation', SettingsState.BLOCK);
+        this.isLocationAllowed_ = false;
+        break;
+      case 'location-ask-radio-button':
+        this.setPrefValue('generated.geolocation', SettingsState.CPSS);
+        this.isLocationAllowed_ = true;
+        break;
+    }
   }
 
-  private onNotificationAskClicked_() {
-    this.isNotificationAllowed_ = true;
-    this.setPrefValue('generated.notification', SettingsState.CPSS);
-  }
-
-  private onLocationBlockClicked_() {
-    this.isLocationAllowed_ = false;
-  }
-
-  private onNotificationBlockClicked_() {
-    this.isNotificationAllowed_ = false;
+  private onNotificationTopLevelRadioChanged_(
+      event: CustomEvent<{value: string}>) {
+    const radioButtonName = event.detail.value;
+    switch (radioButtonName) {
+      case 'notification-block-radio-button':
+        this.setPrefValue('generated.notification', SettingsState.BLOCK);
+        this.isNotificationAllowed_ = false;
+        break;
+      case 'notification-ask-radio-button':
+        this.setPrefValue('generated.notification', SettingsState.CPSS);
+        this.isNotificationAllowed_ = true;
+        break;
+    }
   }
 
   private onPrivacyGuideClick_() {
-    this.metricsBrowserProxy_.recordPrivacyGuideEntryExitHistogram(
-        PrivacyGuideInteractions.SETTINGS_LINK_ROW_ENTRY);
-    this.metricsBrowserProxy_.recordAction(
-        'Settings.PrivacyGuide.StartPrivacySettings');
-    Router.getInstance().navigateTo(
-        routes.PRIVACY_GUIDE, /* dynamicParams */ undefined,
-        /* removeSearch */ true);
+    // this.metricsBrowserProxy_.recordPrivacyGuideEntryExitHistogram(
+    //     PrivacyGuideInteractions.SETTINGS_LINK_ROW_ENTRY);
+    // this.metricsBrowserProxy_.recordAction(
+    //     'Settings.PrivacyGuide.StartPrivacySettings');
+    // Router.getInstance().navigateTo(
+    //     routes.PRIVACY_GUIDE, /* dynamicParams */ undefined,
+    //     /* removeSearch */ true);
   }
 
   private async onReviewNotificationPermissionListChanged_(
@@ -571,12 +572,6 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
   private interactedWithPage_() {
     HatsBrowserProxyImpl.getInstance().trustSafetyInteractionOccurred(
         TrustSafetyInteraction.USED_PRIVACY_CARD);
-  }
-
-  private computePrivacySandboxSublabel_(): string {
-    const enabled = this.getPref('privacy_sandbox.apis_enabled_v2').value;
-    return enabled ? this.i18n('privacySandboxTrialsEnabled') :
-                     this.i18n('privacySandboxTrialsDisabled');
   }
 
   private computeAdPrivacySublabel_(): string {
@@ -609,26 +604,19 @@ export class SettingsPrivacyPageElement extends SettingsPrivacyPageElementBase {
     }
   }
 
-  private isPrivacySandboxSettings3Enabled_(): boolean {
-    return !this.isPrivacySandboxRestricted_ &&
-        !this.isPrivacySandboxSettings4_;
+  private shouldShowAdPrivacy_(): boolean {
+    return !this.isPrivacySandboxRestricted_ ||
+        this.isPrivacySandboxRestrictedNoticeEnabled_;
   }
 
-  private isPrivacySandboxSettings4Enabled_(): boolean {
-    return (!this.isPrivacySandboxRestricted_ ||
-            this.isPrivacySandboxRestrictedNoticeEnabled_) &&
-        this.isPrivacySandboxSettings4_;
-  }
-
-  private isPrivacySandboxSettings4CookiesPageEnabled_(): boolean {
-    return this.isPrivacySandboxSettings4_ && !this.is3pcdRedesignEnabled_;
-  }
-
-  private isPrivacySandboxSettings3CookiesPageEnabled_(): boolean {
-    return !this.isPrivacySandboxSettings4_ && !this.is3pcdRedesignEnabled_;
+  private shouldShowManageTopics_(): boolean {
+    return this.isProactiveTopicsBlockingEnabled_ &&
+        !this.isPrivacySandboxRestricted_;
   }
 
   private onSafetyHubButtonClick_() {
+    this.metricsBrowserProxy_.recordSafetyHubEntryPointClicked(
+        SafetyHubEntryPoint.NOTIFICATIONS);
     Router.getInstance().navigateTo(routes.SAFETY_HUB);
   }
 }

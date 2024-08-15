@@ -28,8 +28,9 @@ UninstallDialog::UninstallDialog(Profile* profile,
       app_name_(app_name),
       parent_window_(parent_window),
       uninstall_callback_(std::move(uninstall_callback)) {
-  if (parent_window)
+  if (parent_window) {
     parent_window_tracker_ = views::NativeWindowTracker::Create(parent_window);
+  }
 }
 
 UninstallDialog::~UninstallDialog() = default;
@@ -97,15 +98,9 @@ void UninstallDialog::OnLoadIcon(IconValuePtr icon_value) {
     return;
   }
 
-  UiBase::Create(profile_, app_type_, app_id_, app_name_,
-                 icon_value->uncompressed, parent_window_,
-                 base::BindOnce(&UninstallDialog::OnUninstallDialogCreated,
-                                weak_ptr_factory_.GetWeakPtr()),
-                 this);
-}
+  widget_ = UiBase::Create(profile_, app_type_, app_id_, app_name_,
+                           icon_value->uncompressed, parent_window_, this);
 
-void UninstallDialog::OnUninstallDialogCreated(views::Widget* widget) {
-  widget_ = widget;
   if (uninstall_dialog_created_callback_) {
     std::move(uninstall_dialog_created_callback_).Run(true);
   }

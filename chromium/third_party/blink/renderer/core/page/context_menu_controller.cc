@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/editing/selection_controller.h"
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
@@ -122,8 +123,10 @@ void SetPasswordManagerData(Element* element, ContextMenuData& data) {
     const AtomicString& id = input->GetIdAttribute();
     const AtomicString& name = input->GetNameAttribute();
 
+    // TODO(crbug.com/1504626): This should be generic V8PerIsolateData.
     DEFINE_STATIC_LOCAL(Persistent<ScriptRegexp>, passwordRegexp,
                         (MakeGarbageCollected<ScriptRegexp>(
+                            element->GetDocument().GetAgent().isolate(),
                             kPasswordRe, kTextCaseUnicodeInsensitive)));
 
     data.is_password_type_by_heuristics =
@@ -814,6 +817,11 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         ContextMenuData::kCheckableMenuItemChecked;
   }
 
+  if (Document* doc = selected_frame->GetDocument()) {
+    data.is_image_media_plugin_document = doc->IsImageDocument() ||
+                                          doc->IsMediaDocument() ||
+                                          doc->IsPluginDocument();
+  }
   data.referrer_policy = selected_frame->DomWindow()->GetReferrerPolicy();
 
   if (menu_provider_) {

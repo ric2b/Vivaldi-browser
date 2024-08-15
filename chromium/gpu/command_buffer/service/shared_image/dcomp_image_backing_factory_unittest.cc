@@ -13,6 +13,7 @@
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -672,7 +673,7 @@ class DCompImageBackingFactoryVisualTreeTest
   };
 
   gfx::Size window_size_;
-  absl::optional<SkColor4f> background_fill_override_;
+  std::optional<SkColor4f> background_fill_override_;
 
   TestPlatformDelegate platform_delegate_;
   ui::WinWindow window_;

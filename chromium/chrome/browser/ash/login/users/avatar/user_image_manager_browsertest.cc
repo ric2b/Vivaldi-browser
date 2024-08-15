@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -75,7 +76,6 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
@@ -231,7 +231,7 @@ class UserImageManagerTestBase : public LoginManagerTest,
     const base::Value::Dict* image_properties =
         images_pref.FindDict(account_id.GetUserEmail());
     ASSERT_TRUE(image_properties);
-    absl::optional<int> actual_image_index =
+    std::optional<int> actual_image_index =
         image_properties->FindInt(UserImageManagerImpl::kImageIndexNodeName);
     const std::string* actual_image_path =
         image_properties->FindString(UserImageManagerImpl::kImagePathNodeName);
@@ -299,7 +299,7 @@ class UserImageManagerTestBase : public LoginManagerTest,
   base::FilePath test_data_dir_;
   base::FilePath user_data_dir_;
 
-  raw_ptr<PrefService, DanglingUntriaged | ExperimentalAsh> local_state_;
+  raw_ptr<PrefService, DanglingUntriaged> local_state_;
 
   gfx::ImageSkia decoded_image_;
 

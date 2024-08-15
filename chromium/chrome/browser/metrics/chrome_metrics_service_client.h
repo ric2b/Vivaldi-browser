@@ -40,10 +40,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/metrics/per_user_state_manager_chromeos.h"
-#endif
-
 class BrowserActivityWatcher;
 class Profile;
 class ProfileManager;
@@ -56,6 +52,10 @@ class NetworkTimeTracker;
 namespace metrics {
 class MetricsService;
 class MetricsStateManager;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+class PerUserStateManagerChromeOS;
+#endif
 }  // namespace metrics
 
 // ChromeMetricsServiceClient provides an implementation of MetricsServiceClient
@@ -128,8 +128,8 @@ class ChromeMetricsServiceClient
   bool ShouldUploadMetricsForUserId(const uint64_t user_id) override;
   void InitPerUserMetrics() override;
   void UpdateCurrentUserMetricsConsent(bool user_metrics_consent) override;
-  absl::optional<bool> GetCurrentUserMetricsConsent() const override;
-  absl::optional<std::string> GetCurrentUserId() const override;
+  std::optional<bool> GetCurrentUserMetricsConsent() const override;
+  std::optional<std::string> GetCurrentUserId() const override;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // ukm::HistoryDeleteObserver:
@@ -218,6 +218,9 @@ class ChromeMetricsServiceClient
   void ResetClientStateWhenMsbbOrAppConsentIsRevoked(
       ukm::UkmConsentState previous_consent_state);
 
+  // Creates the Structured Metrics Service based on the platform.
+  void CreateStructuredMetricsService();
+
   SEQUENCE_CHECKER(sequence_checker_);
 
   // Chrome's privacy budget identifiability study state.
@@ -241,11 +244,9 @@ class ChromeMetricsServiceClient
   // needed by other metrics providers.
   std::unique_ptr<metrics::MetricsProvider> cros_system_profile_provider_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   // The StructuredMetricsService that |this| is a client of.
   std::unique_ptr<metrics::structured::StructuredMetricsService>
       structured_metrics_service_;
-#endif
 
   // The MetricsService that |this| is a client of.
   std::unique_ptr<metrics::MetricsService> metrics_service_;

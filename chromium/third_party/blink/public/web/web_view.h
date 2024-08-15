@@ -63,9 +63,10 @@ class PointF;
 class Rect;
 class Size;
 class SizeF;
-}
+}  // namespace gfx
 
 namespace blink {
+struct ColorProviderColorMaps;
 class PageScheduler;
 class WebFrame;
 class WebFrameWidget;
@@ -368,6 +369,12 @@ class BLINK_EXPORT WebView {
   virtual void SetDeviceColorSpaceForTesting(
       const gfx::ColorSpace& color_space) = 0;
 
+  // Sets the initial color maps for this WebView. All frames in a WebView
+  // share the same color map; updates to the color map will be broadcast
+  // over the `UpdateColorProviders()` Mojo IPC.
+  virtual void SetColorProviders(
+      const ColorProviderColorMaps& color_provider_colors) = 0;
+
   // Scheduling -----------------------------------------------------------
 
   virtual PageScheduler* Scheduler() const = 0;
@@ -406,7 +413,7 @@ class BLINK_EXPORT WebView {
   // third_party/blink/public/platform/autoplay.mojom
   virtual void AddAutoplayFlags(int32_t flags) = 0;
   virtual void ClearAutoplayFlags() = 0;
-  virtual int32_t AutoplayFlagsForTest() = 0;
+  virtual int32_t AutoplayFlagsForTest() const = 0;
   virtual gfx::Size GetPreferredSizeForTest() = 0;
 
   // Non-composited support -----------------------------------------------
@@ -470,6 +477,11 @@ class BLINK_EXPORT WebView {
 
   // Returns whether this WebView represents a fenced frame root or not.
   virtual bool IsFencedFrameRoot() const = 0;
+
+  // Draggable Regions ---------------------------------------------------
+  // Indicates that this WebView should collect draggable regions set using the
+  // app-region CSS property.
+  virtual void SetSupportsAppRegion(bool supports_app_region) = 0;
 
   // Misc -------------------------------------------------------------
 

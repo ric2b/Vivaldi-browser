@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat de ferbining ûnferwachts ferbrutsen.</translation>
 <translation id="1161325031994447685">Meitsje op 'e nei ferbining mei Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Printsje...</translation>
-<translation id="129863573139666797"><ph name="BEGIN_LINK" />Besykje jo koekjes op te romjen<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">Oer dizze ferzje</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat gjin gegevens stjoerd.</translation>
 <translation id="1559528461873125649">Triem of triemtafel bestiet net</translation>
@@ -18,7 +17,6 @@
 <translation id="1734878702283171397">Besykje kontakt op te nimmen mei de systeembehearder.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Besykje it útfieren fan Windows netwurk diagnoaze<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Dizze webstee befettet skealike programma's</translation>
-<translation id="1916770123977586577">Ferfarskje dizze webstee opnij foar it tapassen fan de oanpaste ynstellings op dizze webstee</translation>
 <translation id="1974060860693918893">Avansearre</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolearje de proksy en de brânmuorre<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ferlient oan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -31,6 +29,7 @@
 <translation id="2355395290879513365">Oanfallers kinne mooglik de ôfbyldingen sjen dy jo op dizze webstee besjogge en jo ferrifelje troch har te feroarjen.</translation>
 <translation id="2356070529366658676">Freegje</translation>
 <translation id="2359808026110333948">Trochgean</translation>
+<translation id="2388886110302389394">Side iepenje yn in nij Privee finster (Ctrl+Shift+N)</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Dizze side is tsjinkeard troch in tafoeging</translation>
 <translation id="2501278716633472235">Tebek</translation>
@@ -79,6 +78,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3950820424414687140">Ynlogge</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is tsjinkeard</translation>
 <translation id="3987940399970879459">Minder dan 1 MB</translation>
+<translation id="4075123085690634698">Side iepenje yn nij Privee finster (⇧⌘N)</translation>
 <translation id="4075732493274867456">De kliïnt en tsjinner stypje net in algemiene SSL protokol ferzje of sifer suite.</translation>
 <translation id="4116663294526079822">Altyd tastean op dizze webstee</translation>
 <translation id="4130226655945681476">Kontrolearje de netwurk kabels, modem, en router</translation>
@@ -155,6 +155,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6757797048963528358">Jo apparaat is gean sliepen.</translation>
 <translation id="6890956352250146925">Opsjes foar koekjes en webstee gegevens</translation>
 <translation id="6897140037006041989">Brûkers agint</translation>
+<translation id="6957624206566198865">Side iepenje nij privee ljepper</translation>
 <translation id="7053983685419859001">Tsjinkeare</translation>
 <translation id="7079718277001814089">Dizze webstee befettet malware</translation>
 <translation id="7096937462164235847">De identiteit fan dizze webstee is net ferifiearre.</translation>
@@ -183,6 +184,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7834399512844817676"><ph name="SITE" /> brûkt gewoanlik fersifiering om jo gegevens te berskermjen. Doe Vivaldi dizze kear besocht ferbining te krijen mei <ph name="SITE" />, stjoerde de webstee frjemde en net goede ynlochgegevens.Dit kin barre as in oanfolle him foardocht as <ph name="SITE" />, of in Wi-Fi ynloch skerm de ferbining ferbrutsen hat. Jo ynformaasje is noch steeds feilich omdat Vivaldi de ferbining ferbrutsen hat foardat der ynformaasje útwiksele wurde koe.</translation>
 <translation id="7878562273885520351">Jo wachtwurd is mooglik hackt</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
+<translation id="7953236668995583915">Dizze side ferfarskje om de fernijde ynstellingen op dizze side ta te passen</translation>
 <translation id="8025119109950072390">Oanfallers op dizze webstee besykje jo te ferrifeljen om eat gefaarliks te dwaan, lykas sêftguod ynstallearje of jo persoanlike gegevens bekend meitsje (lykas wachtwurden, telefoannûmers of kredytkaarten).</translation>
 <translation id="8037357227543935929">Freegje (standert)</translation>
 <translation id="8041940743680923270">Algemiene standert ynstelling brûke (Freegje)</translation>

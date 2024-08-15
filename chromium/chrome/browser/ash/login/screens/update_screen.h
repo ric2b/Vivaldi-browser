@@ -170,7 +170,7 @@ class UpdateScreen : public BaseScreen,
   static bool CheckIfOptOutIsEnabled();
 
   base::WeakPtr<UpdateView> view_;
-  raw_ptr<ErrorScreen, ExperimentalAsh> error_screen_;
+  raw_ptr<ErrorScreen> error_screen_;
   ScreenExitCallback exit_callback_;
 
   // Whether the update screen is shown.
@@ -184,7 +184,7 @@ class UpdateScreen : public BaseScreen,
   bool is_critical_checked_ = false;
 
   // Caches the result of HasCriticalUpdate function.
-  absl::optional<bool> has_critical_update_;
+  std::optional<bool> has_critical_update_;
 
   // True if the update progress should be hidden even if update_info suggests
   // the opposite.
@@ -230,7 +230,7 @@ class UpdateScreen : public BaseScreen,
   // Time to delay showing the screen.
   base::TimeDelta show_delay_;
 
-  raw_ptr<const base::TickClock, ExperimentalAsh> tick_clock_;
+  raw_ptr<const base::TickClock> tick_clock_;
 
   base::TimeTicks start_update_downloading_;
   // Support variables for update stages time recording.

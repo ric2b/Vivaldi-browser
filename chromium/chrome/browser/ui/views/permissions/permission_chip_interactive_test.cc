@@ -56,13 +56,6 @@
 
 namespace {
 
-enum ChipFeatureConfig {
-  REQUEST_CHIP,
-  REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE,
-  REQUEST_AND_CONFIRMATION_CHIP,
-  REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE
-};
-
 constexpr char kAddNotificationsEventListener[] = R"(
     new Promise(async resolve => {
       const PermissionStatus =
@@ -165,7 +158,7 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
   }
 
   OmniboxChipButton* GetChip() {
-    return GetLocationBarView()->chip_controller()->chip();
+    return GetLocationBarView()->GetChipController()->chip();
   }
 
   ChipController* GetChipController() {
@@ -173,7 +166,7 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
         BrowserView::GetBrowserViewForBrowser(browser());
     LocationBarView* lbv = browser_view->toolbar()->location_bar();
 
-    return lbv->chip_controller();
+    return lbv->GetChipController();
   }
 
   PermissionPromptChip* GetPermissionPromptChip() {
@@ -252,7 +245,7 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
         BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
     return **base::ranges::find(
         location_bar_view->GetContentSettingViewsForTest(), image_type,
-        &ContentSettingImageView::GetTypeForTesting);
+        &ContentSettingImageView::GetType);
   }
 
   // Create an <iframe> inside |parent_rfh|, and navigate it toward |url|.
@@ -282,37 +275,12 @@ class PermissionChipInteractiveTest : public InProcessBrowserTest {
     return ChildFrameAt(parent_rfh, 0);
   }
 
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<test::PermissionRequestManagerTestApi> test_api_;
 };
 
-class LocationBarIconOverrideTest
-    : public PermissionChipInteractiveTest,
-      public ::testing::WithParamInterface<ChipFeatureConfig> {
+class LocationBarIconOverrideTest : public PermissionChipInteractiveTest {
  public:
-  LocationBarIconOverrideTest() {
-    std::vector<base::test::FeatureRef> disabled_features = {};
-
-    switch (GetParam()) {
-      case REQUEST_CHIP:
-        break;
-      case REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE:
-        scoped_feature_list_.InitWithFeatures(
-            {permissions::features::kChipLocationBarIconOverride},
-            disabled_features);
-        break;
-      case REQUEST_AND_CONFIRMATION_CHIP:
-        scoped_feature_list_.InitWithFeatures(
-            {permissions::features::kConfirmationChip}, disabled_features);
-        break;
-      case REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE:
-        scoped_feature_list_.InitWithFeatures(
-            {permissions::features::kConfirmationChip,
-             permissions::features::kChipLocationBarIconOverride},
-            disabled_features);
-        break;
-    }
-  }
+  LocationBarIconOverrideTest() = default;
 
   bool IsLocationIconVisible() {
     return BrowserView::GetBrowserViewForBrowser(browser())
@@ -320,16 +288,9 @@ class LocationBarIconOverrideTest
         ->location_icon_view()
         ->GetVisible();
   }
-
-  bool IsTestWithOverridenLocationBarIcon() {
-    return base::FeatureList::IsEnabled(
-        permissions::features::kChipLocationBarIconOverride);
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(LocationBarIconOverrideTest,
+IN_PROC_BROWSER_TEST_F(LocationBarIconOverrideTest,
                        OverrideLocationBarIconDuringChipOnlyForOverrideFlags) {
   // Initially the location bar icon should be visible for any feature flag
   // configuration
@@ -337,13 +298,8 @@ IN_PROC_BROWSER_TEST_P(LocationBarIconOverrideTest,
 
   RequestPermission(permissions::RequestType::kGeolocation);
 
-  // After a request, a chip is shown, which should override the lock icon for
-  // feature flags featuring this.
-  if (IsTestWithOverridenLocationBarIcon()) {
-    EXPECT_FALSE(IsLocationIconVisible());
-  } else {
-    EXPECT_TRUE(IsLocationIconVisible());
-  }
+  // After a request, a chip is shown, which should override the lock icon.
+  EXPECT_FALSE(IsLocationIconVisible());
 
   base::RunLoop().RunUntilIdle();
 
@@ -363,34 +319,28 @@ IN_PROC_BROWSER_TEST_P(LocationBarIconOverrideTest,
       ->GetLocationBarView()
       ->Layout();
 
-  if (base::FeatureList::IsEnabled(permissions::features::kConfirmationChip)) {
-    // Test with confirmation chip.
-    // Verify chip is still visible and has the confirmation text
-    EXPECT_TRUE(GetChip()->GetVisible());
-    EXPECT_TRUE(GetChip()->GetText() ==
-                l10n_util::GetStringUTF16(
-                    IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION));
+  // Test with confirmation chip.
+  // Verify chip is still visible and has the confirmation text
+  EXPECT_TRUE(GetChip()->GetVisible());
+  EXPECT_TRUE(GetChip()->GetText() ==
+              l10n_util::GetStringUTF16(
+                  IDS_PERMISSIONS_PERMISSION_ALLOWED_CONFIRMATION));
 
-    if (IsTestWithOverridenLocationBarIcon()) {
-      EXPECT_FALSE(IsLocationIconVisible());
-    } else {
-      EXPECT_TRUE(IsLocationIconVisible());
-    }
+    EXPECT_FALSE(IsLocationIconVisible());
 
-    // Check collapse timer is running and fast forward fire callback. Then,
-    // fast forward animation to trigger callback and wait until it completes.
-    EXPECT_TRUE(GetChipController()->is_collapse_timer_running_for_testing());
-    GetChipController()->fire_collapse_timer_for_testing();
-    GetChip()->animation_for_testing()->End();
-    base::RunLoop().RunUntilIdle();
+  // Check collapse timer is running and fast forward fire callback. Then,
+  // fast forward animation to trigger callback and wait until it completes.
+  EXPECT_TRUE(GetChipController()->is_collapse_timer_running_for_testing());
+  GetChipController()->fire_collapse_timer_for_testing();
+  GetChip()->animation_for_testing()->End();
+  base::RunLoop().RunUntilIdle();
 
-    // Force synchronous update of layout values. In the actual code,
-    // InvalidateLayout() is sufficient, but leaves stale visibility values for
-    // testing.
-    BrowserView::GetBrowserViewForBrowser(browser())
-        ->GetLocationBarView()
-        ->Layout();
-  }
+  // Force synchronous update of layout values. In the actual code,
+  // InvalidateLayout() is sufficient, but leaves stale visibility values for
+  // testing.
+  BrowserView::GetBrowserViewForBrowser(browser())
+      ->GetLocationBarView()
+      ->Layout();
 
   // With any feature flag configuration, we have to ensure that the location
   // bar icon is visible after the chip collapsed.
@@ -398,42 +348,13 @@ IN_PROC_BROWSER_TEST_P(LocationBarIconOverrideTest,
   EXPECT_TRUE(IsLocationIconVisible());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    LocationBarIconOverrideTest,
-    ::testing::Values(
-        REQUEST_CHIP,
-        REQUEST_CHIP_LOCATION_BAR_ICON_OVERRIDE,
-        REQUEST_AND_CONFIRMATION_CHIP,
-        REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE));
-
 class ConfirmationChipEnabledInteractiveTest
-    : public PermissionChipInteractiveTest,
-      public ::testing::WithParamInterface<ChipFeatureConfig> {
+    : public PermissionChipInteractiveTest {
  public:
-  ConfirmationChipEnabledInteractiveTest() {
-    std::vector<base::test::FeatureRef> disabled_features = {};
-    switch (GetParam()) {
-      case REQUEST_AND_CONFIRMATION_CHIP:
-        scoped_feature_list_.InitWithFeatures(
-            {permissions::features::kConfirmationChip}, disabled_features);
-        break;
-      case REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE:
-        scoped_feature_list_.InitWithFeatures(
-            {permissions::features::kConfirmationChip,
-             permissions::features::kChipLocationBarIconOverride},
-            disabled_features);
-        break;
-      default:
-        NOTREACHED_NORETURN();
-    }
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  ConfirmationChipEnabledInteractiveTest() = default;
 };
 
-IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
+IN_PROC_BROWSER_TEST_F(ConfirmationChipEnabledInteractiveTest,
                        ShouldDisplayAllowAndDenyConfirmationCorrectly) {
   RequestPermission(permissions::RequestType::kGeolocation);
   base::RunLoop().RunUntilIdle();
@@ -482,7 +403,7 @@ IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
             OmniboxChipTheme::kLowVisibility);
 }
 
-IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
+IN_PROC_BROWSER_TEST_F(ConfirmationChipEnabledInteractiveTest,
                        IncomingRequestShouldOverrideConfirmation) {
   RequestPermission(permissions::RequestType::kGeolocation);
   base::RunLoop().RunUntilIdle();
@@ -506,7 +427,7 @@ IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
                 IDS_PERMISSIONS_PERMISSION_NOT_ALLOWED_CONFIRMATION));
 }
 
-IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
+IN_PROC_BROWSER_TEST_F(ConfirmationChipEnabledInteractiveTest,
                        ClickOnConfirmationChipShouldOpenPageInfoDialog) {
   RequestPermission(permissions::RequestType::kGeolocation);
   base::RunLoop().RunUntilIdle();
@@ -533,23 +454,10 @@ IN_PROC_BROWSER_TEST_P(ConfirmationChipEnabledInteractiveTest,
   ASSERT_FALSE(GetChip()->GetVisible());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ConfirmationChipEnabledInteractiveTest,
-    ::testing::Values(
-        REQUEST_AND_CONFIRMATION_CHIP,
-        REQUEST_AND_CONFIRMATION_CHIP_LOCATION_BAR_ICON_OVERRIDE));
-
 class ConfirmationChipUmaInteractiveTest
     : public PermissionChipInteractiveTest {
  public:
-  ConfirmationChipUmaInteractiveTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {permissions::features::kConfirmationChip}, {});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  ConfirmationChipUmaInteractiveTest() = default;
 };
 
 IN_PROC_BROWSER_TEST_F(ConfirmationChipUmaInteractiveTest, VerifyUmaMetrics) {
@@ -613,10 +521,7 @@ IN_PROC_BROWSER_TEST_F(ConfirmationChipUmaInteractiveTest, VerifyUmaMetrics) {
 
 class PageInfoChangedWithin1mUmaTest : public PermissionChipInteractiveTest {
  public:
-  PageInfoChangedWithin1mUmaTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {permissions::features::kConfirmationChip}, {});
-  }
+  PageInfoChangedWithin1mUmaTest() = default;
 
   void InitAndRequestNotification() {
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -701,7 +606,6 @@ class PageInfoChangedWithin1mUmaTest : public PermissionChipInteractiveTest {
                        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
   }
 
-  base::test::ScopedFeatureList scoped_feature_list_;
   GURL url_;
 };
 
@@ -781,7 +685,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoChangedWithin1mUmaTest,
               GetLocationBarView()->GetWebContents()->GetBrowserContext());
 
   // Get recorded entry and manually change its time to 2 minutes ago.
-  absl::optional<permissions::PermissionActionTime> record =
+  std::optional<permissions::PermissionActionTime> record =
       permission_action_service->GetLastActionEntry(
           origin, ContentSettingsType::NOTIFICATIONS);
   EXPECT_TRUE(record.has_value());
@@ -844,8 +748,8 @@ class QuietChipAutoPopupBubbleInteractiveTest
   using QuietUiReason = permissions::PermissionUiSelector::QuietUiReason;
   using WarningReason = permissions::PermissionUiSelector::WarningReason;
 
-  void SetCannedUiDecision(absl::optional<QuietUiReason> quiet_ui_reason,
-                           absl::optional<WarningReason> warning_reason) {
+  void SetCannedUiDecision(std::optional<QuietUiReason> quiet_ui_reason,
+                           std::optional<WarningReason> warning_reason) {
     test_api_->manager()->set_permission_ui_selector_for_testing(
         std::make_unique<TestQuietNotificationPermissionUiSelector>(
             permissions::PermissionUiSelector::Decision(quiet_ui_reason,
@@ -946,7 +850,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason :
        {QuietUiReason::kEnabledInPrefs,
         QuietUiReason::kServicePredictedVeryUnlikelyGrant}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -979,7 +883,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason :
        {QuietUiReason::kEnabledInPrefs,
         QuietUiReason::kServicePredictedVeryUnlikelyGrant}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1021,7 +925,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1056,7 +960,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1085,7 +989,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1114,7 +1018,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1143,7 +1047,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1172,7 +1076,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
   for (QuietUiReason reason : {QuietUiReason::kTriggeredByCrowdDeny,
                                QuietUiReason::kTriggeredDueToAbusiveRequests,
                                QuietUiReason::kTriggeredDueToAbusiveContent}) {
-    SetCannedUiDecision(reason, absl::nullopt);
+    SetCannedUiDecision(reason, std::nullopt);
 
     RequestPermission(permissions::RequestType::kNotifications);
 
@@ -1215,7 +1119,7 @@ IN_PROC_BROWSER_TEST_F(QuietChipAutoPopupBubbleInteractiveTest,
       base::FeatureList::IsEnabled(features::kQuietNotificationPrompts));
 
   SetCannedUiDecision(QuietUiReason::kTriggeredDueToAbusiveContent,
-                      absl::nullopt);
+                      std::nullopt);
 
   RequestPermission(permissions::RequestType::kGeolocation);
 
@@ -1258,8 +1162,8 @@ class QuietChipFailFastInteractiveTest : public PermissionChipInteractiveTest {
   using QuietUiReason = permissions::PermissionUiSelector::QuietUiReason;
   using WarningReason = permissions::PermissionUiSelector::WarningReason;
 
-  void SetCannedUiDecision(absl::optional<QuietUiReason> quiet_ui_reason,
-                           absl::optional<WarningReason> warning_reason) {
+  void SetCannedUiDecision(std::optional<QuietUiReason> quiet_ui_reason,
+                           std::optional<WarningReason> warning_reason) {
     test_api_->manager()->set_permission_ui_selector_for_testing(
         std::make_unique<TestQuietNotificationPermissionUiSelector>(
             permissions::PermissionUiSelector::Decision(quiet_ui_reason,
@@ -1629,7 +1533,7 @@ IN_PROC_BROWSER_TEST_F(PermissionChipInteractiveTest,
 
     EXPECT_TRUE(manager->IsRequestInProgress());
     EXPECT_FALSE(permissions::PermissionUtil::HasUserGesture(manager));
-    absl::optional<permissions::PermissionPromptDisposition> disposition =
+    std::optional<permissions::PermissionPromptDisposition> disposition =
         manager->current_request_prompt_disposition_for_testing();
 
     ASSERT_TRUE(disposition.has_value());
@@ -1651,7 +1555,7 @@ IN_PROC_BROWSER_TEST_F(PermissionChipInteractiveTest,
 
     EXPECT_TRUE(manager->IsRequestInProgress());
     EXPECT_TRUE(permissions::PermissionUtil::HasUserGesture(manager));
-    absl::optional<permissions::PermissionPromptDisposition> disposition =
+    std::optional<permissions::PermissionPromptDisposition> disposition =
         manager->current_request_prompt_disposition_for_testing();
 
     ASSERT_TRUE(disposition.has_value());
@@ -1688,7 +1592,7 @@ IN_PROC_BROWSER_TEST_F(PermissionChipInteractiveTest,
   LocationBarView* location_bar =
       BrowserView::GetBrowserViewForBrowser(browser())->GetLocationBarView();
   ASSERT_TRUE(location_bar);
-  ChipController* chip_controller = location_bar->chip_controller();
+  ChipController* chip_controller = location_bar->GetChipController();
   ChipExpansionObserver chip_expansion_observer(chip_controller->chip());
 
   EXPECT_FALSE(manager->IsRequestInProgress());

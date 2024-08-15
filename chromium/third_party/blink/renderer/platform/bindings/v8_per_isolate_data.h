@@ -32,6 +32,7 @@
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
 #include "third_party/blink/renderer/platform/bindings/active_script_wrappable_manager.h"
+#include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -127,6 +128,9 @@ class PLATFORM_EXPORT V8PerIsolateData final {
   static void EnableIdleTasks(v8::Isolate*,
                               std::unique_ptr<gin::V8IdleTaskRunner>);
 
+  // No hash-map / tree-map look-up when it's the main world.
+  DOMWrapperWorld& GetMainWorld() { return *main_world_; }
+
   v8::Isolate* GetIsolate() { return isolate_holder_.isolate(); }
 
   StringCache* GetStringCache() { return string_cache_.get(); }
@@ -176,8 +180,15 @@ class PLATFORM_EXPORT V8PerIsolateData final {
       const void* lookup_key,
       const base::span<const char* const>& names);
 
-  v8::Local<v8::Context> EnsureScriptRegexpContext();
-  void ClearScriptRegexpContext();
+  ScriptState* EnsureScriptRegexpScriptState() {
+    return EnsureUtilityScriptState();
+  }
+
+  ScriptState* EnsureContinuationPreservedEmbedderDataScriptState() {
+    return EnsureUtilityScriptState();
+  }
+
+  void ClearUtilityScriptState();
 
   ThreadDebugger* GetThreadDebugger() const { return thread_debugger_.get(); }
   void SetThreadDebugger(std::unique_ptr<ThreadDebugger> thread_debugger);
@@ -233,6 +244,15 @@ class PLATFORM_EXPORT V8PerIsolateData final {
       v8::Local<v8::Value> untrusted_value,
       const V8TemplateMap& map);
 
+  ScriptState* EnsureUtilityScriptState() {
+    if (LIKELY(utility_script_state_)) {
+      return utility_script_state_.Get();
+    }
+    return EnsureUtilityScriptStateSlow();
+  }
+
+  ScriptState* EnsureUtilityScriptStateSlow();
+
   V8ContextSnapshotMode v8_context_snapshot_mode_;
 
   // This isolate_holder_ must be initialized before initializing some other
@@ -248,7 +268,9 @@ class PLATFORM_EXPORT V8PerIsolateData final {
 
   std::unique_ptr<StringCache> string_cache_;
   std::unique_ptr<V8PrivateProperty> private_property_;
-  Persistent<ScriptState> script_regexp_script_state_;
+  // ScriptState corresponding to the BlinkInternalNonJSExposed world, used
+  // for regexp and continuation preserved embedder data.
+  Persistent<ScriptState> utility_script_state_;
 
   bool constructor_mode_;
   friend class ConstructorMode;
@@ -258,7 +280,6 @@ class PLATFORM_EXPORT V8PerIsolateData final {
 
   bool is_handling_recursion_level_error_ = false;
 
-  Vector<base::OnceClosure> end_of_scope_tasks_;
   std::unique_ptr<ThreadDebugger> thread_debugger_;
   Persistent<GarbageCollectedData> profiler_group_;
   Persistent<GarbageCollectedData> canvas_resource_tracker_;
@@ -270,6 +291,8 @@ class PLATFORM_EXPORT V8PerIsolateData final {
   v8::Isolate::GCCallback prologue_callback_;
   v8::Isolate::GCCallback epilogue_callback_;
   size_t gc_callback_depth_ = 0;
+
+  scoped_refptr<DOMWrapperWorld> main_world_;
 };
 
 // Creates a histogram for V8. The returned value is a base::Histogram, but

@@ -158,7 +158,7 @@ static bool BlockIsRowOfLinks(const LayoutBlock* block) {
     if (!IsPotentialClusterRoot(layout_object)) {
       if (layout_object->IsText() &&
           To<LayoutText>(layout_object)
-                  ->GetText()
+                  ->TransformedText()
                   .LengthWithStrippedWhiteSpace() > 3) {
         return false;
       }
@@ -510,7 +510,7 @@ float TextAutosizer::Inflate(LayoutObject* parent,
     // the wrong cluster root to work from and get the wrong value.
     LayoutObject* marker = To<LayoutListItem>(parent)->Marker();
 
-    // A LayoutNGOutsideListMarker has a text child that needs its font
+    // A LayoutOutsideListMarker has a text child that needs its font
     // multiplier updated. Just mark the entire subtree, to make sure we get to
     // it.
     for (LayoutObject* walker = marker; walker;
@@ -811,9 +811,10 @@ bool TextAutosizer::ClusterHasEnoughTextToAutosize(
       // resolvedTextLength() because the lineboxes will not be built until
       // layout. These values can be different.
       // Note: This is an approximation assuming each character is 1em wide.
-      length +=
-          To<LayoutText>(descendant)->GetText().LengthWithStrippedWhiteSpace() *
-          descendant->StyleRef().SpecifiedFontSize();
+      length += To<LayoutText>(descendant)
+                    ->TransformedText()
+                    .LengthWithStrippedWhiteSpace() *
+                descendant->StyleRef().SpecifiedFontSize();
 
       if (length >= minimum_text_length_to_autosize) {
         cluster->has_enough_text_to_autosize_ = kHasEnoughText;
@@ -1451,7 +1452,7 @@ TextAutosizer::NGLayoutScope::NGLayoutScope(LayoutBox* box,
   // Bail if:
   //  - Text autosizing isn't enabled.
   //  - If the chid isn't a LayoutBlock.
-  //  - If the child is a LayoutNGOutsideListMarker. (They are super-small
+  //  - If the child is a LayoutOutsideListMarker. (They are super-small
   //    blocks, and using them to determine if we should autosize the text will
   //    typically false, overriding whatever its parent has already correctly
   //    determined).

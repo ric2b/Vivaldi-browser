@@ -73,13 +73,17 @@ public class PasswordReauthenticationFragment extends Fragment {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == CONFIRM_DEVICE_CREDENTIAL_REQUEST_CODE) {
             if (resultCode == Activity.RESULT_OK) {
-                RecordHistogram.recordEnumeratedHistogram(SETTINGS_REAUTHENTICATION_HISTOGRAM,
-                        ReauthResult.SUCCESS, ReauthResult.MAX_VALUE + 1);
+                RecordHistogram.recordEnumeratedHistogram(
+                        SETTINGS_REAUTHENTICATION_HISTOGRAM,
+                        ReauthResult.SUCCESS,
+                        ReauthResult.MAX_VALUE + 1);
                 ReauthenticationManager.recordLastReauth(
                         System.currentTimeMillis(), getArguments().getInt(SCOPE_ID));
             } else {
-                RecordHistogram.recordEnumeratedHistogram(SETTINGS_REAUTHENTICATION_HISTOGRAM,
-                        ReauthResult.FAILURE, ReauthResult.MAX_VALUE + 1);
+                RecordHistogram.recordEnumeratedHistogram(
+                        SETTINGS_REAUTHENTICATION_HISTOGRAM,
+                        ReauthResult.FAILURE,
+                        ReauthResult.MAX_VALUE + 1);
                 ReauthenticationManager.resetLastReauth();
             }
             mFragmentManager.popBackStack();
@@ -94,9 +98,7 @@ public class PasswordReauthenticationFragment extends Fragment {
         }
     }
 
-    /**
-     * Prevent calling the {@link #lockDevice} method in {@link #onCreate}.
-     */
+    /** Prevent calling the {@link #lockDevice} method in {@link #onCreate}. */
     public static void preventLockingForTesting() {
         sPreventLockDevice = true;
     }

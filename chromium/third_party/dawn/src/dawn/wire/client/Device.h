@@ -37,15 +37,18 @@
 #include "dawn/wire/client/LimitsAndFeatures.h"
 #include "dawn/wire/client/ObjectBase.h"
 #include "dawn/wire/client/RequestTracker.h"
+#include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::wire::client {
 
 class Client;
 class Queue;
 
-class Device final : public ObjectBase {
+class Device final : public ObjectWithEventsBase {
   public:
-    explicit Device(const ObjectBaseParams& params, const WGPUDeviceDescriptor* descriptor);
+    explicit Device(const ObjectBaseParams& params,
+                    const ObjectHandle& eventManagerHandle,
+                    const WGPUDeviceDescriptor* descriptor);
     ~Device() override;
 
     void SetUncapturedErrorCallback(WGPUErrorCallback errorCallback, void* errorUserdata);
@@ -88,14 +91,16 @@ class Device final : public ObjectBase {
     LimitsAndFeatures mLimitsAndFeatures;
     struct ErrorScopeData {
         WGPUErrorCallback callback = nullptr;
-        void* userdata = nullptr;
+        // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
+        raw_ptr<void, DanglingUntriaged> userdata = nullptr;
     };
     RequestTracker<ErrorScopeData> mErrorScopes;
 
     struct CreatePipelineAsyncRequest {
         WGPUCreateComputePipelineAsyncCallback createComputePipelineAsyncCallback = nullptr;
         WGPUCreateRenderPipelineAsyncCallback createRenderPipelineAsyncCallback = nullptr;
-        void* userdata = nullptr;
+        // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire:
+        raw_ptr<void, DanglingUntriaged> userdata = nullptr;
         ObjectId pipelineObjectID;
     };
     RequestTracker<CreatePipelineAsyncRequest> mCreatePipelineAsyncRequests;
@@ -104,11 +109,14 @@ class Device final : public ObjectBase {
     WGPUDeviceLostCallback mDeviceLostCallback = nullptr;
     WGPULoggingCallback mLoggingCallback = nullptr;
     bool mDidRunLostCallback = false;
-    void* mErrorUserdata = nullptr;
-    void* mDeviceLostUserdata = nullptr;
-    void* mLoggingUserdata = nullptr;
+    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire:
+    raw_ptr<void, DanglingUntriaged> mErrorUserdata = nullptr;
+    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire:
+    raw_ptr<void, DanglingUntriaged> mDeviceLostUserdata = nullptr;
+    raw_ptr<void> mLoggingUserdata = nullptr;
 
-    Queue* mQueue = nullptr;
+    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire:
+    raw_ptr<Queue, DanglingUntriaged> mQueue = nullptr;
 
     std::shared_ptr<bool> mIsAlive;
 };

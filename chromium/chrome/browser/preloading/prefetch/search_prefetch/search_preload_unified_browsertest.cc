@@ -53,6 +53,7 @@
 #include "third_party/blink/public/common/features.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/toolbar_manager_test_helper_android.h"
 #include "chrome/test/base/android/android_browser_test.h"
 #else  // BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
@@ -89,6 +90,14 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
       : prerender_helper_(base::BindRepeating(
             &SearchPreloadUnifiedBrowserTest::GetActiveWebContents,
             base::Unretained(this))) {
+#if BUILDFLAG(IS_ANDROID)
+    // Skips recreating the Android ChromeTabbedActivity when
+    // homepage settings are changed.
+    // This happens when the feature chrome::android::kStartSurfaceAndroid is
+    // enabled (currently enabled by default).
+    toolbar_manager::setSkipRecreateForTesting(true);
+#endif  // BUILDFLAG(IS_ANDROID)
+
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {
             {features::kSupportSearchSuggestionForPrerender2,
@@ -311,7 +320,7 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
       const GURL& canonical_search_url,
       std::vector<SearchPrefetchStatus> acceptable_status) {
     while (true) {
-      absl::optional<SearchPrefetchStatus> current_status =
+      std::optional<SearchPrefetchStatus> current_status =
           search_prefetch_service()->GetSearchPrefetchStatusForTesting(
               canonical_search_url);
       if (current_status &&
@@ -458,8 +467,16 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
 
 // Tests that the SearchSuggestionService can trigger prerendering after the
 // corresponding prefetch request succeeds.
+// TODO(crbug.com/1503002): enable the flaky test.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_PrerenderHintReceivedBeforeSucceed \
+  DISABLED_PrerenderHintReceivedBeforeSucceed
+#else
+#define MAYBE_PrerenderHintReceivedBeforeSucceed \
+  PrerenderHintReceivedBeforeSucceed
+#endif
 IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
-                       PrerenderHintReceivedBeforeSucceed) {
+                       MAYBE_PrerenderHintReceivedBeforeSucceed) {
   SearchPrefetchServiceFactory::GetForProfile(chrome_test_utils::GetProfile(this));
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -494,7 +511,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
       SearchPrefetchServingReason::kServed, 1);
 
   // Prefetch should be triggered as well.
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_EQ(prefetch_status.value(), SearchPrefetchStatus::kPrerendered);
@@ -609,7 +626,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                            PrerenderHint::kDisabled, PrefetchHint::kEnabled);
 
   // Wait until prefetch request succeeds.
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -716,7 +733,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                            PrerenderHint::kEnabled, PrefetchHint::kEnabled);
 
   // Prefetch should be triggered, and the prefetch request should fail.
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(
               GetSearchUrl(prerender_query, UrlType::kPrerender)));
@@ -816,7 +833,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
   prerender_helper().WaitForPrerenderLoadCompletion(*GetActiveWebContents(),
                                                     expected_prerender_url);
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prerender_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1049,7 +1066,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest, DoNotRefetchSameTerms) {
   prerender_helper().WaitForPrerenderLoadCompletion(*GetActiveWebContents(),
                                                     expected_prerender_url);
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prerender_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1147,7 +1164,7 @@ class HoldbackSearchPreloadUnifiedBrowserTest
                              PrerenderHint::kDisabled, PrefetchHint::kEnabled);
 
     // Wait until prefetch request succeeds.
-    absl::optional<SearchPrefetchStatus> prefetch_status =
+    std::optional<SearchPrefetchStatus> prefetch_status =
         search_prefetch_service()->GetSearchPrefetchStatusForTesting(
             GetCanonicalSearchURL(expected_prefetch_url));
     EXPECT_TRUE(prefetch_status.has_value());
@@ -1439,7 +1456,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest, TriggerAndActivate) {
   prerender_helper().WaitForPrerenderLoadCompletion(*GetActiveWebContents(),
                                                     expected_prerender_url);
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1506,7 +1523,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
   prerender_helper().WaitForPrerenderLoadCompletion(*GetActiveWebContents(),
                                                     expected_prerender_url);
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1597,7 +1614,7 @@ IN_PROC_BROWSER_TEST_F(NoCancelSearchPreloadUnifiedBrowserTest,
   prerender_helper().WaitForPrerenderLoadCompletion(*GetActiveWebContents(),
                                                     expected_prerender_url);
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           canonical_search_url);
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1726,7 +1743,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
                                                     expected_prerender_url);
 
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prerender_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1800,7 +1817,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
                                                     expected_prerender_url);
 
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prerender_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1848,7 +1865,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
                            PrerenderHint::kDisabled, PrefetchHint::kEnabled);
 
   // Wait until prefetch request succeeds.
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1915,7 +1932,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
                            PrerenderHint::kDisabled, PrefetchHint::kEnabled);
 
   // Wait until prefetch request succeeds.
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -1982,7 +1999,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
                            PrerenderHint::kEnabled, PrefetchHint::kEnabled);
 
   // Wait until prefetch request succeeds.
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prefetch_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -2105,10 +2122,10 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
   // 5. After activation, the request would be deleted from the prefetched
   // request list.
-  absl::optional<SearchPrefetchStatus> status =
+  std::optional<SearchPrefetchStatus> status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prerender_url));
-  ASSERT_EQ(status, absl::nullopt);
+  ASSERT_EQ(status, std::nullopt);
 
   // 6. And then we can dispatch the result.
   DispatchDelayedResponseTask();
@@ -2157,7 +2174,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
                                                     expected_prerender_url);
 
   EXPECT_TRUE(prerender_manager()->HasSearchResultPagePrerendered());
-  absl::optional<SearchPrefetchStatus> prefetch_status =
+  std::optional<SearchPrefetchStatus> prefetch_status =
       search_prefetch_service()->GetSearchPrefetchStatusForTesting(
           GetCanonicalSearchURL(expected_prerender_url));
   EXPECT_TRUE(prefetch_status.has_value());
@@ -2246,7 +2263,7 @@ class SearchPreloadServingTestURLLoader
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr head,
       mojo::ScopedDataPipeConsumerHandle body,
-      absl::optional<mojo_base::BigBuffer> cached_metadata) override {
+      std::optional<mojo_base::BigBuffer> cached_metadata) override {
     pipe_drainer_ =
         std::make_unique<mojo::DataPipeDrainer>(this, std::move(body));
   }

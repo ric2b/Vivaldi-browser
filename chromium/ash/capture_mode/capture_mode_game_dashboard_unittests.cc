@@ -25,9 +25,9 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/icon_button.h"
 #include "ash/style/pill_button.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/ash_test_util.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "base/system/sys_info.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -256,7 +256,9 @@ TEST_F(GameDashboardCaptureModeTest, NotificationView) {
 
   controller->EndVideoRecording(EndRecordingReason::kStopRecordingButton);
   EXPECT_FALSE(controller->is_recording_in_progress());
+  EXPECT_FALSE(controller->can_start_new_recording());
   CaptureNotificationWaiter().Wait();
+  EXPECT_TRUE(controller->can_start_new_recording());
 
   const message_center::Notification* notification = GetPreviewNotification();
   EXPECT_TRUE(notification);

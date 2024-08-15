@@ -15,6 +15,7 @@
 #include "base/scoped_multi_source_observation.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -38,6 +39,8 @@ class ResizeToggleMenu : public views::WidgetObserver,
                          public aura::WindowObserver {
  public:
   class MenuButtonView : public views::Button {
+    METADATA_HEADER(MenuButtonView, views::Button)
+
    public:
     MenuButtonView(PressedCallback callback,
                    const gfx::VectorIcon& icon,
@@ -57,10 +60,10 @@ class ResizeToggleMenu : public views::WidgetObserver,
     void UpdateState();
 
     // Owned by views hierarchy.
-    raw_ptr<views::ImageView, ExperimentalAsh> icon_view_{nullptr};
-    raw_ptr<views::Label, ExperimentalAsh> title_{nullptr};
+    raw_ptr<views::ImageView> icon_view_{nullptr};
+    raw_ptr<views::Label> title_{nullptr};
 
-    const raw_ref<const gfx::VectorIcon, ExperimentalAsh> icon_;
+    const raw_ref<const gfx::VectorIcon> icon_;
     bool is_selected_{false};
   };
 
@@ -104,9 +107,9 @@ class ResizeToggleMenu : public views::WidgetObserver,
 
   base::OnceClosure on_bubble_widget_closing_callback_;
 
-  raw_ptr<views::Widget, ExperimentalAsh> widget_;
+  raw_ptr<views::Widget> widget_;
 
-  raw_ptr<ArcResizeLockPrefDelegate, ExperimentalAsh> pref_delegate_;
+  raw_ptr<ArcResizeLockPrefDelegate> pref_delegate_;
 
   base::ScopedMultiSourceObservation<views::Widget, views::WidgetObserver>
       widget_observations_{this};
@@ -115,15 +118,12 @@ class ResizeToggleMenu : public views::WidgetObserver,
 
   base::CancelableOnceClosure auto_close_closure_;
 
-  raw_ptr<views::Widget, ExperimentalAsh> bubble_widget_{nullptr};
+  raw_ptr<views::Widget> bubble_widget_{nullptr};
 
   // Store only for testing.
-  raw_ptr<MenuButtonView, DanglingUntriaged | ExperimentalAsh> phone_button_{
-      nullptr};
-  raw_ptr<MenuButtonView, DanglingUntriaged | ExperimentalAsh> tablet_button_{
-      nullptr};
-  raw_ptr<MenuButtonView, DanglingUntriaged | ExperimentalAsh>
-      resizable_button_{nullptr};
+  raw_ptr<MenuButtonView, DanglingUntriaged> phone_button_{nullptr};
+  raw_ptr<MenuButtonView, DanglingUntriaged> tablet_button_{nullptr};
+  raw_ptr<MenuButtonView, DanglingUntriaged> resizable_button_{nullptr};
 
   base::WeakPtrFactory<ResizeToggleMenu> weak_ptr_factory_{this};
 };

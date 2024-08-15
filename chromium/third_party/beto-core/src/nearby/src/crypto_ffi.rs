@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::support::{run_cmd_shell, run_cmd_shell_with_color, YellowStderr};
-use crate::BuildBoringSslOptions;
 use anyhow::anyhow;
+use cmd_runner::{run_cmd_shell, run_cmd_shell_with_color, YellowStderr};
 use owo_colors::OwoColorize as _;
 use semver::{Version, VersionReq};
 use std::{
@@ -22,7 +21,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn build_boringssl(root: &Path, options: &BuildBoringSslOptions) -> anyhow::Result<()> {
+use crate::CargoOptions;
+
+pub fn boringssl_check_everything(root: &Path, cargo_options: &CargoOptions) -> anyhow::Result<()> {
+    check_boringssl(root, cargo_options)?;
+    check_openssl(root, cargo_options)?;
+    Ok(())
+}
+
+pub fn build_boringssl(root: &Path) -> anyhow::Result<()> {
     let bindgen_version_req = VersionReq::parse(">=0.61.0")?;
     let bindgen_version = get_bindgen_version()?;
 
@@ -30,23 +37,16 @@ pub fn build_boringssl(root: &Path, options: &BuildBoringSslOptions) -> anyhow::
         return Err(anyhow!("Bindgen does not match expected version: {bindgen_version_req}"));
     }
 
-    let mut vendor_dir =
-        root.parent().ok_or_else(|| anyhow!("project root dir no parent dir"))?.to_path_buf();
-    vendor_dir.push("boringssl-build");
+    let vendor_dir = root
+        .parent()
+        .ok_or_else(|| anyhow!("project root dir no parent dir"))?
+        .join("boringssl-build");
     fs::create_dir_all(&vendor_dir)?;
 
-    let mut build_dir = clone_repo_if_needed(
-        &vendor_dir,
-        "boringssl",
-        "https://boringssl.googlesource.com/boringssl",
-    )?;
-
-    run_cmd_shell_with_color::<YellowStderr>(
-        &build_dir,
-        format!("git checkout {}", &options.commit_hash),
-    )?;
-
-    build_dir.push("build");
+    let build_dir = root
+        .parent()
+        .ok_or_else(|| anyhow!("project root dir no parent dir"))?
+        .join("third_party/boringssl/build");
     fs::create_dir_all(&build_dir)?;
 
     let target = run_cmd_shell_with_color::<YellowStderr>(&vendor_dir, "rustc -vV")?
@@ -70,19 +70,23 @@ pub fn build_boringssl(root: &Path, options: &BuildBoringSslOptions) -> anyhow::
     Ok(())
 }
 
-pub fn check_boringssl(root: &Path, options: &BuildBoringSslOptions) -> anyhow::Result<()> {
+pub fn check_boringssl(root: &Path, cargo_options: &CargoOptions) -> anyhow::Result<()> {
     log::info!("Checking boringssl");
 
-    build_boringssl(root, options)?;
+    build_boringssl(root)?;
 
-    let mut bssl_dir = root.to_path_buf();
-    bssl_dir.push("crypto/crypto_provider_boringssl");
+    let bssl_dir = root.join("crypto/crypto_provider_boringssl");
 
-    run_cmd_shell(&bssl_dir, "cargo check")?;
+    let locked_arg = if cargo_options.locked { "--locked" } else { "" };
+
+    run_cmd_shell(&bssl_dir, format!("cargo check {locked_arg}"))?;
     run_cmd_shell(&bssl_dir, "cargo fmt --check")?;
     run_cmd_shell(&bssl_dir, "cargo clippy --all-targets")?;
-    run_cmd_shell(&bssl_dir, "cargo test -- --color=always")?;
+    run_cmd_shell(&bssl_dir, format!("cargo test {locked_arg} -- --color=always"))?;
     run_cmd_shell(&bssl_dir, "cargo doc --no-deps")?;
+
+    run_cmd_shell(root, "cargo test -p ukey2_connections -p ukey2_rs --no-default-features --features test_boringssl")?;
+
     Ok(())
 }
 
@@ -100,7 +104,7 @@ pub fn prepare_patched_rust_openssl(root: &Path) -> anyhow::Result<()> {
 
     run_cmd_shell_with_color::<YellowStderr>(
         &repo_dir,
-        "git checkout 11797d9ecb73e94b7f55a49274318abc9dc074d2",
+        "git checkout 7df56869c5e1e32369091ab106750d644d3aa0c4",
     )?;
     run_cmd_shell_with_color::<YellowStderr>(&repo_dir, "git branch -f BASE_COMMIT")?;
     run_cmd_shell_with_color::<YellowStderr>(
@@ -121,16 +125,20 @@ You can now build and test with boringssl using the following command
     Ok(())
 }
 
-pub fn check_openssl(root: &Path) -> anyhow::Result<()> {
+pub fn check_openssl(root: &Path, cargo_options: &CargoOptions) -> anyhow::Result<()> {
     log::info!("Checking rust openssl");
     prepare_patched_rust_openssl(root)?;
+    let locked_arg = if cargo_options.locked { "--locked" } else { "" };
 
     // test the openssl crate with the boringssl feature
     run_cmd_shell(
         root,
-        concat!(
-            "cargo --config .cargo/config-boringssl.toml test -p crypto_provider_openssl ",
-            "--features=boringssl -- --color=always"
+        format!(
+            concat!(
+                "cargo --config .cargo/config-boringssl.toml test {locked_arg} -p crypto_provider_openssl ",
+                "--features=boringssl -- --color=always"
+            ),
+            locked_arg=locked_arg
         ),
     )?;
 

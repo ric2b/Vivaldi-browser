@@ -11,8 +11,8 @@
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
-#include "chrome/browser/ui/commerce/price_tracking/mock_shopping_list_ui_tab_helper.h"
-#include "chrome/browser/ui/commerce/price_tracking/shopping_list_ui_tab_helper.h"
+#include "chrome/browser/ui/commerce/commerce_ui_tab_helper.h"
+#include "chrome/browser/ui/commerce/mock_commerce_ui_tab_helper.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_bubble_dialog_view.h"
 #include "chrome/common/pref_names.h"
@@ -115,7 +115,7 @@ class PriceTrackingIconViewInteractiveTest : public InteractiveBrowserTest {
     bookmarks::BookmarkModel* bookmark_model =
         BookmarkModelFactory::GetForBrowserContext(browser()->profile());
 
-    mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(true);
+    mock_shopping_service_->SetIsSubscribedCallbackValue(true);
 
     commerce::AddProductBookmark(bookmark_model, u"title", url, 0,
                                  is_price_tracked);
@@ -124,10 +124,10 @@ class PriceTrackingIconViewInteractiveTest : public InteractiveBrowserTest {
  protected:
   raw_ptr<commerce::MockShoppingService, AcrossTasksDanglingUntriaged>
       mock_shopping_service_;
-  raw_ptr<commerce::ShoppingListUiTabHelper, AcrossTasksDanglingUntriaged>
+  raw_ptr<commerce::CommerceUiTabHelper, AcrossTasksDanglingUntriaged>
       tab_helper_;
   std::unique_ptr<image_fetcher::MockImageFetcher> image_fetcher_;
-  absl::optional<commerce::ProductInfo> product_info_;
+  std::optional<commerce::ProductInfo> product_info_;
   base::CallbackListSubscription create_services_subscription_;
   bool is_browser_context_services_created{false};
 
@@ -156,10 +156,11 @@ class PriceTrackingIconViewInteractiveTest : public InteractiveBrowserTest {
                   .Run(std::move(image), image_fetcher::RequestMetadata());
             });
 
-    tab_helper_ = static_cast<commerce::ShoppingListUiTabHelper*>(
-        commerce::ShoppingListUiTabHelper::FromWebContents(
+    tab_helper_ = static_cast<commerce::CommerceUiTabHelper*>(
+        commerce::CommerceUiTabHelper::FromWebContents(
             browser()->tab_strip_model()->GetActiveWebContents()));
-    tab_helper_->SetImageFetcherForTesting(image_fetcher_.get());
+    tab_helper_->GetPriceTrackingControllerForTesting()
+        ->SetImageFetcherForTesting(image_fetcher_.get());
 
     product_info_ = commerce::ProductInfo();
     product_info_->title = "Product";
@@ -182,7 +183,7 @@ class PriceTrackingIconViewInteractiveTest : public InteractiveBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        FUEBubbleShownOnPress) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   RunTestSequence(
       InstrumentTab(kShoppingTab),
       NavigateWebContents(kShoppingTab,
@@ -209,7 +210,7 @@ IN_PROC_BROWSER_TEST_F(
   commerce::AddProductBookmark(bookmark_model, u"title",
                                embedded_test_server()->GetURL(kShoppingURL), 0,
                                true);
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(true);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(true);
 
   RunTestSequence(
       InstrumentTab(kShoppingTab),
@@ -242,7 +243,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        PriceTrackingBubbleShownOnPress_AfterFUE) {
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
 
   RunTestSequence(
       InstrumentTab(kShoppingTab),
@@ -262,7 +263,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        BubbleCanBeReshowOnPress) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
 
   RunTestSequence(
       InstrumentTab(kShoppingTab),
@@ -288,11 +289,12 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                   WaitForShow(kPriceTrackingBubbleDialogId));
 }
 
+// TODO(crbug.com/1510975): fix and re-enable for CR2023.
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
-                       EnablePriceTrackOnPress) {
+                       DISABLED_EnablePriceTrackOnPress) {
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
 
   const GURL shopping_url = embedded_test_server()->GetURL(kShoppingURL);
 
@@ -320,7 +322,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
       WaitForShow(kPriceTrackingBubbleDialogId));
 
   SimulateServerPriceTrackStateUpdated(true, shopping_url);
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(true);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(true);
 
   RunTestSequence(
       CheckView(kPriceTrackingChipElementId,
@@ -349,7 +351,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        CreateBookmarkOnPressIfNotExist) {
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
 
   const GURL shopping_url = embedded_test_server()->GetURL(kShoppingURL);
   RunTestSequence(InstrumentTab(kShoppingTab),
@@ -367,7 +369,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        RecordOmniboxChipClicked) {
   base::UserActionTester user_action_tester;
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   EXPECT_EQ(user_action_tester.GetActionCount(
                 "Commerce.PriceTracking.OmniboxChipClicked"),
             0);
@@ -385,7 +387,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        RecordOmniboxChipTracked) {
   base::UserActionTester user_action_tester;
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
 
@@ -406,7 +408,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        NoRecordOmniboxChipTracked_ForTrackedProduct) {
   base::UserActionTester user_action_tester;
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(true);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(true);
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
 
@@ -428,7 +430,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        NoRecordOmniboxChipTracked_ForFUEFlow) {
   base::UserActionTester user_action_tester;
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   EXPECT_EQ(user_action_tester.GetActionCount(
                 "Commerce.PriceTracking.OmniboxChip.Tracked"),
             0);
@@ -445,7 +447,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewInteractiveTest,
                        IconViewAccessibleName) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(true);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(true);
   RunTestSequence(
       InstrumentTab(kShoppingTab),
       NavigateWebContents(kShoppingTab,
@@ -478,7 +480,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingIconViewErrorHandelingTest,
                        IconRevertedOnFailure) {
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
 
   // Simulate subscription failure.
   mock_shopping_service_->SetSubscribeCallbackValue(false);
@@ -545,7 +547,7 @@ class PriceTrackingBubbleInteractiveTest
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
                        RecordFirstRunBubbleShown) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   EXPECT_EQ(user_action_tester_.GetActionCount(
                 "Commerce.PriceTracking.FirstRunBubbleShown"),
             0);
@@ -565,7 +567,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
                        RecordConfirmationShown) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
   EXPECT_EQ(user_action_tester_.GetActionCount(
@@ -586,7 +588,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
                        RecordConfirmationUntracked) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
   EXPECT_EQ(user_action_tester_.GetActionCount(
@@ -614,7 +616,7 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
 
 IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
                        RecordEditedBookmarkFolderFromOmniboxBubble) {
-  mock_shopping_service_->SetIsClusterIdTrackedByUserResponse(false);
+  mock_shopping_service_->SetIsSubscribedCallbackValue(false);
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kShouldShowPriceTrackFUEBubble, false);
   EXPECT_EQ(user_action_tester_.GetActionCount(
@@ -640,4 +642,3 @@ IN_PROC_BROWSER_TEST_F(PriceTrackingBubbleInteractiveTest,
                 "Commerce.PriceTracking.EditedBookmarkFolderFromOmniboxBubble"),
             1);
 }
-

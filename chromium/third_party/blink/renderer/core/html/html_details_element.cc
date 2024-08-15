@@ -38,7 +38,7 @@
 #include "third_party/blink/renderer/core/html/html_summary_element.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -100,9 +100,6 @@ void HTMLDetailsElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
 
   summary_slot_ = MakeGarbageCollected<HTMLSlotElement>(GetDocument());
   summary_slot_->SetIdAttribute(shadow_element_names::kIdDetailsSummary);
-  if (RuntimeEnabledFeatures::DetailsStylingEnabled()) {
-    summary_slot_->SetShadowPseudoId(shadow_element_names::kIdDetailsSummary);
-  }
   summary_slot_->AppendChild(default_summary);
   root.AppendChild(summary_slot_);
 
@@ -360,6 +357,39 @@ bool HTMLDetailsElement::ExpandDetailsAncestors(const Node& node) {
   }
 
   return details_to_open.size();
+}
+
+bool HTMLDetailsElement::HandleInvokeInternal(HTMLElement& invoker,
+                                              AtomicString& action) {
+  if (HTMLElement::HandleInvokeInternal(invoker, action)) {
+    return true;
+  }
+
+  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
+    return false;
+  }
+
+  if (!(EqualIgnoringASCIICase(action, keywords::kAuto) ||
+        EqualIgnoringASCIICase(action, keywords::kToggle) ||
+        EqualIgnoringASCIICase(action, keywords::kClose) ||
+        EqualIgnoringASCIICase(action, keywords::kOpen))) {
+    return false;
+  }
+
+  if (EqualIgnoringASCIICase(action, keywords::kAuto) ||
+      EqualIgnoringASCIICase(action, keywords::kToggle)) {
+    ToggleOpen();
+  } else if (EqualIgnoringASCIICase(action, keywords::kClose)) {
+    if (is_open_) {
+      setAttribute(html_names::kOpenAttr, g_null_atom);
+    }
+  } else {
+    if (!is_open_) {
+      setAttribute(html_names::kOpenAttr, g_empty_atom);
+    }
+  }
+
+  return true;
 }
 
 }  // namespace blink

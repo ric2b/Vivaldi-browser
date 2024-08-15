@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -17,9 +18,14 @@
 #include "services/accessibility/public/mojom/accessibility_service.mojom.h"
 #include "services/accessibility/public/mojom/speech_recognition.mojom.h"
 #include "services/accessibility/public/mojom/tts.mojom.h"
+#include "services/accessibility/public/mojom/user_input.mojom.h"
 #include "services/accessibility/public/mojom/user_interface.mojom-shared.h"
 #include "services/accessibility/public/mojom/user_interface.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/accessibility/ax_tree_id.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/mojom/event_constants.mojom-shared.h"
 
 namespace ax {
 
@@ -103,9 +109,8 @@ class AtpJSApiTest : public testing::Test {
   }
 
  private:
-  raw_ptr<AssistiveTechnologyControllerImpl,
-          DanglingUntriaged | ExperimentalAsh>
-      at_controller_ = nullptr;
+  raw_ptr<AssistiveTechnologyControllerImpl, DanglingUntriaged> at_controller_ =
+      nullptr;
   std::unique_ptr<OSAccessibilityService> service_;
   base::test::TaskEnvironment task_environment_;
   base::RunLoop test_waiter_;
@@ -505,7 +510,7 @@ class AccessibilityPrivateJSApiTest : public AtpJSApiTest {
   ~AccessibilityPrivateJSApiTest() override = default;
 
   mojom::AssistiveTechnologyType GetATTypeForTest() const override {
-    return mojom::AssistiveTechnologyType::kSelectToSpeak;
+    return mojom::AssistiveTechnologyType::kChromeVox;
   }
 
   const std::vector<std::string> GetJSFilePathsToLoad() const override {
@@ -514,10 +519,15 @@ class AccessibilityPrivateJSApiTest : public AtpJSApiTest {
     // permissions so we load support JS within the test.
     return std::vector<std::string>{
         "services/accessibility/features/mojo/test/mojom_test_support.js",
+        "mojo/public/mojom/base/time.mojom-lite.js",
         "skia/public/mojom/skcolor.mojom-lite.js",
         "ui/gfx/geometry/mojom/geometry.mojom-lite.js",
+        "ui/latency/mojom/latency_info.mojom-lite.js",
+        "ui/events/mojom/event_constants.mojom-lite.js",
+        "ui/events/mojom/event.mojom-lite.js",
         "services/accessibility/public/mojom/"
         "assistive_technology_type.mojom-lite.js",
+        "services/accessibility/public/mojom/user_input.mojom-lite.js",
         "services/accessibility/public/mojom/user_interface.mojom-lite.js",
         "services/accessibility/features/javascript/chrome_event.js",
         "services/accessibility/features/javascript/accessibility_private.js",
@@ -792,6 +802,161 @@ TEST_F(AccessibilityPrivateJSApiTest, SetVirtualKeyboardInvisible) {
   waiter.Run();
 }
 
+TEST_F(AccessibilityPrivateJSApiTest, GetDisplayNameForLocale) {
+  ExecuteJS(R"JS(
+    const locale1 = 'en-US';
+    const locale2 = 'es';
+    const notreal = '';
+
+    const remote = axtest.mojom.TestBindingInterface.getRemote();
+
+    let displayName = chrome.accessibilityPrivate.getDisplayNameForLocale(
+        locale2, locale1);
+    if (displayName !== 'Spanish') {
+      remote.log('Expected "' + displayName + '" to equal "Spanish"');
+      remote.testComplete(/*success=*/false);
+    }
+    displayName = chrome.accessibilityPrivate.getDisplayNameForLocale(
+        locale1, locale1);
+    if (!displayName.includes('English')) {
+      remote.log('Expected "' + displayName + '" to contain "English"');
+      remote.testComplete(/*success=*/false);
+    }
+    displayName = chrome.accessibilityPrivate.getDisplayNameForLocale(
+        locale2, locale2);
+    if (displayName !== 'español') {
+      remote.log('Expected "' + displayName + '" to equal "español"');
+      remote.testComplete(/*success=*/false);
+    }
+    displayName = chrome.accessibilityPrivate.getDisplayNameForLocale(
+        locale2, notreal);
+    if (displayName !== '') {
+      remote.log('Expected "' + displayName + '" to equal ""');
+      remote.testComplete(/*success=*/false);
+    }
+    displayName = chrome.accessibilityPrivate.getDisplayNameForLocale(
+        notreal, locale1);
+    if (displayName !== '') {
+      remote.log('Expected "' + displayName + '" to equal ""');
+      remote.testComplete(/*success=*/false);
+    }
+
+    remote.testComplete(/*success=*/ true);
+  )JS");
+
+  WaitForJSTestComplete();
+}
+
+TEST_F(AccessibilityPrivateJSApiTest,
+       SendSyntheticKeyEventForShortcutOrNavigation) {
+  base::RunLoop waiter;
+
+  client_->SetSyntheticKeyEventCallback(
+      base::BindLambdaForTesting([&waiter, this]() {
+        const std::vector<mojom::SyntheticKeyEventPtr>& events =
+            client_->GetKeyEvents();
+        if (events.size() < 2) {
+          return;
+        }
+
+        ASSERT_EQ(events.size(), 2u);
+
+        auto& press_event = events[0];
+        ASSERT_EQ(press_event->type, ui::mojom::EventType::KEY_PRESSED);
+        ASSERT_EQ(press_event->key_data->key_code, ui::VKEY_X);
+        // TODO(b/307553499): Update SyntheticKeyEvent to use dom_code and
+        // dom_key.
+        ASSERT_EQ(press_event->key_data->dom_code, 0u);
+        ASSERT_EQ(press_event->key_data->dom_key, 0);
+        ASSERT_FALSE(press_event->key_data->is_char);
+        ASSERT_EQ(press_event->flags, ui::EF_NONE);
+
+        auto& release_event = events[1];
+        ASSERT_EQ(release_event->type, ui::mojom::EventType::KEY_RELEASED);
+        ASSERT_EQ(release_event->key_data->key_code, ui::VKEY_X);
+        // TODO(b/307553499): Update SyntheticKeyEvent to use dom_code and
+        // dom_key.
+        ASSERT_EQ(release_event->key_data->dom_code, 0u);
+        ASSERT_EQ(release_event->key_data->dom_key, 0);
+        ASSERT_FALSE(release_event->key_data->is_char);
+        ASSERT_EQ(release_event->flags, ui::EF_NONE);
+
+        waiter.Quit();
+      }));
+
+  ExecuteJS(R"JS(
+    chrome.accessibilityPrivate.sendSyntheticKeyEvent(
+        {type: 'keydown', keyCode: /*X=*/ 88});
+    chrome.accessibilityPrivate.sendSyntheticKeyEvent(
+        {type: 'keyup', keyCode: /*X=*/ 88});
+  )JS");
+  waiter.Run();
+}
+
+TEST_F(AccessibilityPrivateJSApiTest,
+       SendSyntheticKeyEventForShortcutOrNavigationWithModifiers) {
+  base::RunLoop waiter;
+
+  client_->SetSyntheticKeyEventCallback(base::BindLambdaForTesting([&waiter,
+                                                                    this]() {
+    const std::vector<mojom::SyntheticKeyEventPtr>& events =
+        client_->GetKeyEvents();
+    if (events.size() < 2) {
+      return;
+    }
+
+    ASSERT_EQ(events.size(), 2u);
+
+    auto& press_event = events[0];
+    ASSERT_EQ(press_event->type, ui::mojom::EventType::KEY_PRESSED);
+    ASSERT_EQ(press_event->key_data->key_code, ui::VKEY_ESCAPE);
+    // TODO(b/307553499): Update SyntheticKeyEvent to use dom_code and  dom_key.
+    ASSERT_EQ(press_event->key_data->dom_code, 0u);
+    ASSERT_EQ(press_event->key_data->dom_key, 0);
+    ASSERT_FALSE(press_event->key_data->is_char);
+    ASSERT_EQ(press_event->flags, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+                                      ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN);
+
+    auto& release_event = events[1];
+    ASSERT_EQ(release_event->type, ui::mojom::EventType::KEY_RELEASED);
+    ASSERT_EQ(release_event->key_data->key_code, ui::VKEY_ESCAPE);
+    // TODO(b/307553499): Update SyntheticKeyEvent to use dom_code and dom_key.
+    ASSERT_EQ(release_event->key_data->dom_code, 0u);
+    ASSERT_EQ(release_event->key_data->dom_key, 0);
+    ASSERT_FALSE(release_event->key_data->is_char);
+    ASSERT_EQ(release_event->flags, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+                                        ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN);
+
+    waiter.Quit();
+  }));
+
+  ExecuteJS(R"JS(
+    chrome.accessibilityPrivate.sendSyntheticKeyEvent({
+      type: 'keydown',
+      keyCode: /*ESC=*/ 27,
+      modifiers: {
+        alt: true,
+        ctrl: true,
+        search: true,
+        shift: true,
+      },
+    });
+
+    chrome.accessibilityPrivate.sendSyntheticKeyEvent({
+      type: 'keyup',
+      keyCode: /*ESC=*/ 27,
+      modifiers: {
+        alt: true,
+        ctrl: true,
+        search: true,
+        shift: true,
+      },
+    });
+  )JS");
+
+  waiter.Run();
+}
+
 class SpeechRecognitionJSApiTest : public AtpJSApiTest {
  public:
   SpeechRecognitionJSApiTest() = default;
@@ -810,6 +975,8 @@ class SpeechRecognitionJSApiTest : public AtpJSApiTest {
     // permissions so we load support JS within the test.
     return std::vector<std::string>{
         "services/accessibility/features/mojo/test/mojom_test_support.js",
+        "services/accessibility/public/mojom/"
+        "assistive_technology_type.mojom-lite.js",
         "services/accessibility/public/mojom/speech_recognition.mojom-lite.js",
         "services/accessibility/features/javascript/chrome_event.js",
         "services/accessibility/features/javascript/speech_recognition.js",
@@ -822,6 +989,9 @@ TEST_F(SpeechRecognitionJSApiTest, Start) {
     const remote = axtest.mojom.TestBindingInterface.getRemote();
     const options = {};
     chrome.speechRecognitionPrivate.start(options, (type) => {
+      if (chrome.runtime.lastError) {
+        remote.testComplete(/*success=*/false);
+      }
       if (type === 'network') {
         remote.testComplete(/*success=*/true);
       } else {
@@ -843,6 +1013,9 @@ TEST_F(SpeechRecognitionJSApiTest, StartAndStop) {
       }
 
       chrome.speechRecognitionPrivate.stop(options, () => {
+        if (chrome.runtime.lastError) {
+          remote.testComplete(/*success=*/false);
+        }
         remote.testComplete(/*success=*/true);
       });
     });
@@ -895,6 +1068,135 @@ TEST_F(SpeechRecognitionJSApiTest, ErrorEvent) {
 
     const options = {};
     chrome.speechRecognitionPrivate.start(options, (type) => {});
+  )JS");
+  WaitForJSTestComplete();
+}
+
+TEST_F(SpeechRecognitionJSApiTest, StartError) {
+  client_->SetSpeechRecognitionStartError("Test start error");
+  ExecuteJS(R"JS(
+    const remote = axtest.mojom.TestBindingInterface.getRemote();
+    const options = {};
+    chrome.speechRecognitionPrivate.start(options, (type) => {
+      if (type !== 'network') {
+        remote.testComplete(/*success=*/false);
+        return;
+      }
+
+      const lastError = chrome.runtime.lastError;
+      if (lastError && lastError.message === 'Test start error') {
+        remote.testComplete(/*success=*/true);
+      }
+    });
+  )JS");
+  WaitForJSTestComplete();
+}
+
+TEST_F(SpeechRecognitionJSApiTest, StopError) {
+  client_->SetSpeechRecognitionStopError("Test stop error");
+  ExecuteJS(R"JS(
+    const remote = axtest.mojom.TestBindingInterface.getRemote();
+    const options = {};
+    chrome.speechRecognitionPrivate.stop(options, () => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError && lastError.message === 'Test stop error') {
+        remote.testComplete(/*success=*/true);
+      }
+    });
+  )JS");
+  WaitForJSTestComplete();
+}
+
+class AutomationJSApiTest : public AtpJSApiTest {
+ public:
+  AutomationJSApiTest() = default;
+  AutomationJSApiTest(const AutomationJSApiTest&) = delete;
+  AutomationJSApiTest& operator=(const AutomationJSApiTest&) = delete;
+  ~AutomationJSApiTest() override = default;
+
+  mojom::AssistiveTechnologyType GetATTypeForTest() const override {
+    return mojom::AssistiveTechnologyType::kAutoClick;
+  }
+
+  const std::vector<std::string> GetJSFilePathsToLoad() const override {
+    // TODO(b:266856702): Eventually ATP will load its own JS instead of us
+    // doing it in the test. Right now the service doesn't have enough
+    // permissions so we load support JS within the test.
+    return std::vector<std::string>{
+        "services/accessibility/features/mojo/test/mojom_test_support.js",
+        "ui/gfx/geometry/mojom/geometry.mojom-lite.js",
+        "mojo/public/mojom/base/unguessable_token.mojom-lite.js",
+        "ui/accessibility/ax_enums.mojom-lite.js",
+        "ui/accessibility/mojom/ax_tree_id.mojom-lite.js",
+        "ui/accessibility/mojom/ax_action_data.mojom-lite.js",
+        "services/accessibility/public/mojom/automation_client.mojom-lite.js",
+        "services/accessibility/features/javascript/automation.js",
+    };
+  }
+};
+
+// Ensures chrome.automation.getDesktop exists and returns something.
+// Note that there are no tree updates so properties of the desktop object
+// can't yet be calculated.
+TEST_F(AutomationJSApiTest, GetDesktop) {
+  ExecuteJS(R"JS(
+    const remote = axtest.mojom.TestBindingInterface.getRemote();
+    chrome.automation.getDesktop(desktop => {
+      remote.testComplete(/*success=*/desktop !== null && desktop.isRootNode);
+    });
+  )JS");
+  WaitForJSTestComplete();
+}
+
+// Ensures chrome.automation.getFocus exists and gets the correct node.
+TEST_F(AutomationJSApiTest, GetFocus) {
+  std::vector<ui::AXTreeUpdate> updates;
+  updates.emplace_back();
+  auto& tree_update = updates.back();
+  tree_update.has_tree_data = true;
+  tree_update.root_id = 1;
+  auto& tree_data = tree_update.tree_data;
+  tree_data.tree_id = client_->desktop_tree_id();
+  tree_data.focus_id = 2;
+  tree_update.nodes.emplace_back();
+  auto& node_data1 = tree_update.nodes.back();
+  node_data1.id = 1;
+  node_data1.role = ax::mojom::Role::kDesktop;
+  node_data1.child_ids.push_back(2);
+  tree_update.nodes.emplace_back();
+  auto& node_data2 = tree_update.nodes.back();
+  node_data2.id = 2;
+  node_data2.role = ax::mojom::Role::kButton;
+  std::vector<ui::AXEvent> events;
+  client_->SendAccessibilityEvents(tree_data.tree_id, updates, gfx::Point(),
+                                   events);
+
+  ExecuteJS(R"JS(
+    const remote = axtest.mojom.TestBindingInterface.getRemote();
+    chrome.automation.getDesktop(desktop => {
+        if (!desktop) {
+          remote.testComplete(/*success=*/false);
+        }
+        if (desktop.children.length !== 1 ||
+            desktop.firstChild !== desktop.lastChild) {
+          remote.testComplete(/*success=*/false);
+        }
+        const button = desktop.firstChild;
+        if (button.role !== 'button') {
+          remote.testComplete(/*success=*/false);
+        }
+        // Spot check button node.
+        if (button.parent !== desktop || button.root !== desktop ||
+            button.indexInParent !== 0 || button.children.length !== 0) {
+          remote.testComplete(/*success=*/false);
+        }
+        chrome.automation.getFocus(focus => {
+          if (!focus) {
+            remote.testComplete(/*success=*/false);
+          }
+         remote.testComplete(/*success=*/focus === button);
+        });
+    });
   )JS");
   WaitForJSTestComplete();
 }

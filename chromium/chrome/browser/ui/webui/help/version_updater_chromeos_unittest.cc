@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/help/version_updater_chromeos.h"
 
 #include <memory>
+#include <optional>
 
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
@@ -21,7 +22,6 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 using ::testing::_;
@@ -98,9 +98,8 @@ class VersionUpdaterCrosTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<ash::NetworkHandlerTestHelper> network_handler_test_helper_;
   std::unique_ptr<VersionUpdater> version_updater_;
-  raw_ptr<VersionUpdaterCros, DanglingUntriaged | ExperimentalAsh>
-      version_updater_cros_ptr_;
-  raw_ptr<ash::FakeUpdateEngineClient, DanglingUntriaged | ExperimentalAsh>
+  raw_ptr<VersionUpdaterCros, DanglingUntriaged> version_updater_cros_ptr_;
+  raw_ptr<ash::FakeUpdateEngineClient, DanglingUntriaged>
       fake_update_engine_client_;  // Not owned.
 
   user_manager::ScopedUserManager user_manager_enabler_;

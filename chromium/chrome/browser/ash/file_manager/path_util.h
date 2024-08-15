@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ASH_FILE_MANAGER_PATH_UTIL_H_
 #define CHROME_BROWSER_ASH_FILE_MANAGER_PATH_UTIL_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -12,7 +13,6 @@
 #include "base/functional/callback.h"
 #include "chrome/browser/ash/guest_os/guest_id.h"
 #include "storage/browser/file_system/file_system_url.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class GURL;
 class Profile;
@@ -66,6 +66,7 @@ extern const char kFuseBoxMountNamePrefix[];
 // e.g. $PATH-like environment variables are colon separated.
 extern const char kFuseBoxSubdirPrefixADP[];
 extern const char kFuseBoxSubdirPrefixFSP[];
+extern const char kFuseBoxSubdirPrefixLOC[];
 extern const char kFuseBoxSubdirPrefixMTP[];
 extern const char kFuseBoxSubdirPrefixTMP[];
 
@@ -240,9 +241,9 @@ std::u16string GetDisplayableFileName16(storage::FileSystemURL file_url);
 
 // Turns an absolute path into one suitable for display. Returns nullopt if the
 // given path is invalid or not on a mounted volume.
-absl::optional<base::FilePath> GetDisplayablePath(Profile* profile,
-                                                  base::FilePath path);
-absl::optional<base::FilePath> GetDisplayablePath(
+std::optional<base::FilePath> GetDisplayablePath(Profile* profile,
+                                                 base::FilePath path);
+std::optional<base::FilePath> GetDisplayablePath(
     Profile* profile,
     storage::FileSystemURL file_url);
 

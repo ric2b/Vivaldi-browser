@@ -77,7 +77,7 @@
 [submodule "third_party/cros_system_api"]
 	path = third_party/cros_system_api
 	url = ../../chromiumos/platform2/system_api.git
-	gclient-condition = checkout_linux
+	gclient-condition = checkout_linux or checkout_chromeos
 [submodule "third_party/depot_tools"]
 	path = third_party/depot_tools
 	url = ../tools/depot_tools.git

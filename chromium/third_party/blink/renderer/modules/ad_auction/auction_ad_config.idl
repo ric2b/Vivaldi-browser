@@ -37,6 +37,7 @@ dictionary AuctionAdConfig {
   USVString trustedScoringSignalsURL;
   [ImplementedAs=trustedScoringSignalsUrlDeprecated]
   USVString trustedScoringSignalsUrl;
+  long maxTrustedScoringSignalsURLLength;
   sequence<USVString> interestGroupBuyers;
   Promise<any> auctionSignals;
   Promise<any> sellerSignals;
@@ -67,6 +68,8 @@ dictionary AuctionAdConfig {
   sequence<DOMString> requiredSellerCapabilities;
 
   AuctionAdInterestGroupSize requestedSize;
+  [RuntimeEnabled=FledgeTrustedBiddingSignalsSlotSize]
+  sequence<AuctionAdInterestGroupSize> allSlotsRequestedSizes;
 
   [RuntimeEnabled=FledgeNegativeTargeting]
   Promise<undefined> additionalBids;

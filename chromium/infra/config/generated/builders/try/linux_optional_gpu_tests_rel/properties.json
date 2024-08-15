@@ -1,13 +1,16 @@
 {
   "$build/chromium_tests_builder_config": {
     "builder_config": {
+      "additional_exclusions": [
+        "infra/config/generated/builders/try/linux_optional_gpu_tests_rel/gn-args.json"
+      ],
       "builder_db": {
         "entries": [
           {
             "builder_id": {
               "bucket": "try",
               "builder": "linux_optional_gpu_tests_rel",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-fyi-archive",
@@ -19,7 +22,8 @@
                 ],
                 "build_config": "Release",
                 "config": "chromium",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "linux"
               },
               "legacy_gclient_config": {
                 "apply_configs": [
@@ -35,7 +39,7 @@
         {
           "bucket": "try",
           "builder": "linux_optional_gpu_tests_rel",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
       ],
       "retry_failed_shards": false

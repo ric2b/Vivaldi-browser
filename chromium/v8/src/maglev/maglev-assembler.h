@@ -67,7 +67,7 @@ class MapCompare {
   Register map_ = Register::no_reg();
 };
 
-class MaglevAssembler : public MacroAssembler {
+class V8_EXPORT_PRIVATE MaglevAssembler : public MacroAssembler {
  public:
   class ScratchRegisterScope;
 
@@ -338,10 +338,7 @@ class MaglevAssembler : public MacroAssembler {
   inline void IncrementAddress(Register reg, int32_t delta);
   inline void LoadAddress(Register dst, MemOperand location);
 
-  // Depending on architecture either pushes the address on the target to the
-  // stack or sets link register to the target.
-  // Returns the number of words actually pushed on the stack (0 or 1).
-  inline int PushOrSetReturnAddressTo(Label* target);
+  inline void Call(Label* target);
 
   inline void EmitEnterExitFrame(int extra_slots, StackFrame::Type frame_type,
                                  Register c_function, Register scratch);
@@ -359,9 +356,14 @@ class MaglevAssembler : public MacroAssembler {
   inline void Move(Register dst, Register src);
   inline void Move(Register dst, Tagged<TaggedIndex> i);
   inline void Move(Register dst, int32_t i);
+  inline void Move(Register dst, uint32_t i);
   inline void Move(DoubleRegister dst, double n);
   inline void Move(DoubleRegister dst, Float64 n);
   inline void Move(Register dst, Handle<HeapObject> obj);
+
+  inline void MoveTagged(Register dst, Handle<HeapObject> obj);
+
+  inline void LoadMapForCompare(Register dst, Register obj);
 
   inline void LoadByte(Register dst, MemOperand src);
 
@@ -501,6 +503,9 @@ class MaglevAssembler : public MacroAssembler {
   inline void CompareInt32AndJumpIf(Register r1, Register r2, Condition cond,
                                     Label* target,
                                     Label::Distance distance = Label::kFar);
+  inline void CompareIntPtrAndJumpIf(Register r1, Register r2, Condition cond,
+                                     Label* target,
+                                     Label::Distance distance = Label::kFar);
   inline void CompareInt32AndJumpIf(Register r1, int32_t value, Condition cond,
                                     Label* target,
                                     Label::Distance distance = Label::kFar);
@@ -589,6 +594,8 @@ class MaglevAssembler : public MacroAssembler {
   inline void SetMapAsRoot(Register object, RootIndex map);
 
   inline void LoadHeapNumberValue(DoubleRegister result, Register heap_number);
+  inline void LoadHeapNumberOrOddballValue(DoubleRegister result,
+                                           Register object);
 
   void LoadDataField(const PolymorphicAccessInfo& access_info, Register result,
                      Register object, Register scratch);

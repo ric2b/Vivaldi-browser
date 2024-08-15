@@ -40,6 +40,9 @@ class BuiltinCall : public Castable<BuiltinCall, Call> {
     /// The base offset in Operands() for the args
     static constexpr size_t kArgsOperandOffset = 0;
 
+    /// Constructor (no results, no operands)
+    BuiltinCall();
+
     /// Constructor
     /// @param result the result value
     /// @param args the conversion arguments
@@ -47,10 +50,10 @@ class BuiltinCall : public Castable<BuiltinCall, Call> {
     ~BuiltinCall() override;
 
     /// @returns the identifier for the function
-    virtual size_t FuncId() = 0;
+    virtual size_t FuncId() const = 0;
 
     /// @returns the table data to validate this builtin
-    virtual const core::intrinsic::TableData& TableData() = 0;
+    virtual const core::intrinsic::TableData& TableData() const = 0;
 };
 
 }  // namespace tint::core::ir

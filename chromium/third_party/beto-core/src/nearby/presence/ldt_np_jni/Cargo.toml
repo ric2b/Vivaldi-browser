@@ -4,12 +4,15 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 ldt.workspace = true
 ldt_np_adv.workspace = true
 np_hkdf.workspace = true
 crypto_provider.workspace = true
-crypto_provider_default = {workspace = true, default-features = false}
+crypto_provider_default = { workspace = true, default-features = false }
 
 cfg-if.workspace = true
 jni.workspace = true

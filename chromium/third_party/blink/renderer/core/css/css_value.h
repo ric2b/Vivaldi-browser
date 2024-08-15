@@ -84,6 +84,9 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsCounterValue() const { return class_type_ == kCounterClass; }
   bool IsCursorImageValue() const { return class_type_ == kCursorImageClass; }
   bool IsCrossfadeValue() const { return class_type_ == kCrossfadeClass; }
+  bool IsDynamicRangeLimitMixValue() const {
+    return class_type_ == kDynamicRangeLimitMixClass;
+  }
   bool IsPaintValue() const { return class_type_ == kPaintClass; }
   bool IsFontFeatureValue() const { return class_type_ == kFontFeatureClass; }
   bool IsFontFamilyValue() const { return class_type_ == kFontFamilyClass; }
@@ -97,11 +100,12 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsFunctionValue() const { return class_type_ == kFunctionClass; }
   bool IsCustomIdentValue() const { return class_type_ == kCustomIdentClass; }
   bool IsImageGeneratorValue() const {
-    return class_type_ >= kCrossfadeClass && class_type_ <= kConicGradientClass;
+    return class_type_ >= kCrossfadeClass &&
+           class_type_ <= kConstantGradientClass;
   }
   bool IsGradientValue() const {
     return class_type_ >= kLinearGradientClass &&
-           class_type_ <= kConicGradientClass;
+           class_type_ <= kConstantGradientClass;
   }
   bool IsImageSetOptionValue() const {
     return class_type_ == kImageSetOptionClass;
@@ -132,6 +136,9 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   }
   bool IsConicGradientValue() const {
     return class_type_ == kConicGradientClass;
+  }
+  bool IsConstantGradientValue() const {
+    return class_type_ == kConstantGradientClass;
   }
   bool IsReflectValue() const { return class_type_ == kReflectClass; }
   bool IsShadowValue() const { return class_type_ == kShadowClass; }
@@ -223,6 +230,9 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   void TraceAfterDispatch(blink::Visitor* visitor) const {}
   void Trace(Visitor*) const;
 
+  static const size_t kValueListSeparatorBits = 2;
+  enum ValueListSeparator { kSpaceSeparator, kCommaSeparator, kSlashSeparator };
+
  protected:
   enum ClassType {
     kNumericLiteralClass,
@@ -260,6 +270,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kLinearGradientClass,
     kRadialGradientClass,
     kConicGradientClass,
+    kConstantGradientClass,
 
     // Timing function classes.
     kLinearTimingFunctionClass,
@@ -268,6 +279,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
 
     // Other class types.
     kBorderImageSliceClass,
+    kDynamicRangeLimitMixClass,
     kFontFeatureClass,
     kFontFaceSrcClass,
     kFontFamilyClass,
@@ -316,9 +328,6 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kAxisClass,
     // Do not append non-list class types here.
   };
-
-  static const size_t kValueListSeparatorBits = 2;
-  enum ValueListSeparator { kSpaceSeparator, kCommaSeparator, kSlashSeparator };
 
   ClassType GetClassType() const { return static_cast<ClassType>(class_type_); }
 

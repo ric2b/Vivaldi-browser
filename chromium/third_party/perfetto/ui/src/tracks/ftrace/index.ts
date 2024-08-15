@@ -13,19 +13,21 @@
 // limitations under the License.
 
 import {duration, Time, time} from '../../base/time';
-import {BasicAsyncTrack} from '../../common/basic_async_track';
-import {colorForString} from '../../common/colorizer';
-import {LONG, NUM, STR} from '../../common/query_result';
+import {colorForFtrace} from '../../common/colorizer';
 import {LIMIT, TrackData} from '../../common/track_data';
+import {TimelineFetcher} from '../../common/track_helper';
 import {checkerboardExcept} from '../../frontend/checkerboard';
 import {globals} from '../../frontend/globals';
+import {PanelSize} from '../../frontend/panel';
 import {
   EngineProxy,
   Plugin,
   PluginContext,
   PluginContextTrace,
   PluginDescriptor,
+  Track,
 } from '../../public';
+import {LONG, NUM, STR} from '../../trace_processor/query_result';
 
 export const FTRACE_RAW_TRACK_KIND = 'FtraceRawTrack';
 
@@ -42,9 +44,17 @@ const MARGIN = 2;
 const RECT_HEIGHT = 18;
 const TRACK_HEIGHT = (RECT_HEIGHT) + (2 * MARGIN);
 
-class FtraceRawTrack extends BasicAsyncTrack<Data> {
-  constructor(private engine: EngineProxy, private cpu: number) {
-    super();
+class FtraceRawTrack implements Track {
+  private fetcher = new TimelineFetcher(this.onBoundsChange.bind(this));
+
+  constructor(private engine: EngineProxy, private cpu: number) {}
+
+  async onUpdate(): Promise<void> {
+    await this.fetcher.requestDataForCurrentTime();
+  }
+
+  async onDestroy?(): Promise<void> {
+    this.fetcher.dispose();
   }
 
   getHeight(): number {
@@ -89,40 +99,26 @@ class FtraceRawTrack extends BasicAsyncTrack<Data> {
     return result;
   }
 
-  renderCanvas(ctx: CanvasRenderingContext2D): void {
+  render(ctx: CanvasRenderingContext2D, size: PanelSize): void {
     const {
       visibleTimeScale,
-      windowSpan,
-    } = globals.frontendLocalState;
+    } = globals.timeline;
 
-    const data = this.data;
+    const data = this.fetcher.data;
 
     if (data === undefined) return;  // Can't possibly draw anything.
 
     const dataStartPx = visibleTimeScale.timeToPx(data.start);
     const dataEndPx = visibleTimeScale.timeToPx(data.end);
-    const visibleStartPx = windowSpan.start;
-    const visibleEndPx = windowSpan.end;
 
     checkerboardExcept(
-        ctx,
-        this.getHeight(),
-        visibleStartPx,
-        visibleEndPx,
-        dataStartPx,
-        dataEndPx);
+        ctx, this.getHeight(), 0, size.width, dataStartPx, dataEndPx);
 
     const diamondSideLen = RECT_HEIGHT / Math.sqrt(2);
 
     for (let i = 0; i < data.timestamps.length; i++) {
       const name = data.names[i];
-      const color = colorForString(name);
-      const hsl = `hsl(
-        ${color.h},
-        ${color.s - 20}%,
-        ${Math.min(color.l + 10, 60)}%
-      )`;
-      ctx.fillStyle = hsl;
+      ctx.fillStyle = colorForFtrace(name).base.cssString;
       const timestamp = Time.fromRaw(data.timestamps[i]);
       const xPos = Math.floor(visibleTimeScale.timeToPx(timestamp));
 
@@ -144,7 +140,7 @@ class FtraceRawPlugin implements Plugin {
     for (const cpuNum of cpus) {
       const uri = `perfetto.FtraceRaw#cpu${cpuNum}`;
 
-      ctx.registerStaticTrack({
+      ctx.registerTrack({
         uri,
         displayName: `Ftrace Track for CPU ${cpuNum}`,
         kind: FTRACE_RAW_TRACK_KIND,

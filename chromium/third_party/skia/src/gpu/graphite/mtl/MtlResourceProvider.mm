@@ -33,6 +33,7 @@
 #include "src/gpu/mtl/MtlUtilsPriv.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/ir/SkSLProgram.h"
 
 #import <Metal/Metal.h>
 
@@ -114,26 +115,24 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
 
     settings.fForceNoRTFlip = true;
 
-    SkSL::Compiler skslCompiler(fSharedContext->caps()->shaderCaps());
+    SkSL::Compiler skslCompiler;
     ShaderErrorHandler* errorHandler = fSharedContext->caps()->shaderErrorHandler();
 
     const RenderStep* step =
             fSharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
-
-    bool useShadingSsboIndex =
-            fSharedContext->caps()->storageBufferPreferred() && step->performsShading();
+    const bool useStorageBuffers = fSharedContext->caps()->storageBufferPreferred();
 
     FragSkSLInfo fsSkSLInfo = BuildFragmentSkSL(fSharedContext->caps(),
                                                 fSharedContext->shaderCodeDictionary(),
                                                 runtimeDict,
                                                 step,
                                                 pipelineDesc.paintParamsID(),
-                                                useShadingSsboIndex,
+                                                useStorageBuffers,
                                                 renderPassDesc.fWriteSwizzle);
     std::string& fsSkSL = fsSkSLInfo.fSkSL;
     const BlendInfo& blendInfo = fsSkSLInfo.fBlendInfo;
     const bool localCoordsNeeded = fsSkSLInfo.fRequiresLocalCoords;
-    if (!SkSLToMSL(&skslCompiler,
+    if (!SkSLToMSL(fSharedContext->caps()->shaderCaps(),
                    fsSkSL,
                    SkSL::ProgramKind::kGraphiteFragment,
                    settings,
@@ -143,11 +142,12 @@ sk_sp<GraphicsPipeline> MtlResourceProvider::createGraphicsPipeline(
         return nullptr;
     }
 
-    std::string vsSkSL = BuildVertexSkSL(fSharedContext->caps()->resourceBindingRequirements(),
-                                         step,
-                                         useShadingSsboIndex,
-                                         localCoordsNeeded);
-    if (!SkSLToMSL(&skslCompiler,
+    VertSkSLInfo vsSkSLInfo = BuildVertexSkSL(fSharedContext->caps()->resourceBindingRequirements(),
+                                              step,
+                                              useStorageBuffers,
+                                              localCoordsNeeded);
+    const std::string& vsSkSL = vsSkSLInfo.fSkSL;
+    if (!SkSLToMSL(fSharedContext->caps()->shaderCaps(),
                    vsSkSL,
                    SkSL::ProgramKind::kGraphiteVertex,
                    settings,
@@ -206,9 +206,9 @@ sk_sp<ComputePipeline> MtlResourceProvider::createComputePipeline(
         SkSL::Program::Interface interface;
         SkSL::ProgramSettings settings;
 
-        SkSL::Compiler skslCompiler(fSharedContext->caps()->shaderCaps());
+        SkSL::Compiler skslCompiler;
         std::string sksl = BuildComputeSkSL(fSharedContext->caps(), pipelineDesc.computeStep());
-        if (!SkSLToMSL(&skslCompiler,
+        if (!SkSLToMSL(fSharedContext->caps()->shaderCaps(),
                        sksl,
                        SkSL::ProgramKind::kCompute,
                        settings,

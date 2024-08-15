@@ -37,6 +37,7 @@
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
+#include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_selection_mode.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -60,6 +61,7 @@
 #include "third_party/blink/renderer/core/fileapi/file_list.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/email_input_type.h"
@@ -78,6 +80,8 @@
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/keywords.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_theme_font_provider.h"
@@ -87,7 +91,6 @@
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/language.h"
@@ -104,6 +107,8 @@ using mojom::blink::FormControlType;
 namespace {
 
 const unsigned kMaxEmailFieldLength = 254;
+
+const unsigned kMinStrongPasswordLabelWidth = 220;
 
 static bool is_default_font_prewarmed_ = false;
 
@@ -301,8 +306,9 @@ bool HTMLInputElement::HasCustomFocusLogic() const {
   return input_type_view_->HasCustomFocusLogic();
 }
 
-bool HTMLInputElement::IsKeyboardFocusable() const {
-  return input_type_->IsKeyboardFocusable();
+bool HTMLInputElement::IsKeyboardFocusable(
+    UpdateBehavior update_behavior) const {
+  return input_type_->IsKeyboardFocusable(update_behavior);
 }
 
 bool HTMLInputElement::MayTriggerVirtualKeyboard() const {
@@ -414,12 +420,12 @@ void HTMLInputElement::InitializeTypeInParsing() {
   }
 }
 
-void HTMLInputElement::UpdateType() {
+void HTMLInputElement::UpdateType(const AtomicString& type_attribute_value) {
   DCHECK(input_type_);
   DCHECK(input_type_view_);
 
   const AtomicString& new_type_name =
-      InputType::NormalizeTypeName(FastGetAttribute(html_names::kTypeAttr));
+      InputType::NormalizeTypeName(type_attribute_value);
   if (input_type_->FormControlTypeAsString() == new_type_name) {
     return;
   }
@@ -475,7 +481,8 @@ void HTMLInputElement::UpdateType() {
   const AtomicString& dir = FastGetAttribute(html_names::kDirAttr);
   if ((!dir && (old_type->IsTelephoneInputType() || IsTelephone())) ||
       (EqualIgnoringASCIICase(dir, "auto") &&
-       (old_type->ShouldAutoDirUseValue() || ShouldAutoDirUseValue()))) {
+       (old_type->IsAutoDirectionalityFormAssociated() ||
+        IsAutoDirectionalityFormAssociated()))) {
     const AtomicString& value_dir = AtomicString(DirectionForFormData());
     UpdateDirectionalityAfterInputTypeChange(dir, value_dir);
   }
@@ -824,7 +831,9 @@ void HTMLInputElement::ParseAttribute(
         autocomplete_ = kOn;
     }
   } else if (name == html_names::kTypeAttr) {
-    UpdateType();
+    if (params.old_value != value) {
+      UpdateType(value);
+    }
   } else if (name == html_names::kValueAttr) {
     // We only need to setChanged if the form is looking at the default value
     // right now.
@@ -1026,8 +1035,8 @@ bool HTMLInputElement::IsTelephone() const {
   return input_type_->IsTelephoneInputType();
 }
 
-bool HTMLInputElement::ShouldAutoDirUseValue() const {
-  return input_type_->ShouldAutoDirUseValue();
+bool HTMLInputElement::IsAutoDirectionalityFormAssociated() const {
+  return input_type_->IsAutoDirectionalityFormAssociated();
 }
 
 bool HTMLInputElement::HasBeenPasswordField() const {
@@ -1210,6 +1219,10 @@ void HTMLInputElement::SetSuggestedValue(const String& value) {
       placeholder->classList().Remove(reveal);
     }
 
+    // Prevent fade out and displaying strong password label in narrow forms.
+    if (GetBoundingClientRect()->width() < kMinStrongPasswordLabelWidth) {
+      should_show_strong_password_label_ = false;
+    }
     const AtomicString fade_out("fade-out-password");
     if (should_show_strong_password_label_) {
       placeholder->classList().Add(fade_out);
@@ -1339,7 +1352,8 @@ ScriptValue HTMLInputElement::valueAsDate(ScriptState* script_state) const {
     return ScriptValue::CreateNull(isolate);
   return ScriptValue(
       isolate,
-      ToV8(base::Time::FromMillisecondsSinceUnixEpoch(date), script_state));
+      ToV8Traits<IDLNullable<IDLDate>>::ToV8(
+          script_state, base::Time::FromMillisecondsSinceUnixEpoch(date)));
 }
 
 void HTMLInputElement::setValueAsDate(ScriptState* script_state,
@@ -2256,8 +2270,14 @@ void HTMLInputElement::SetFilesFromPaths(const Vector<String>& paths) {
 void HTMLInputElement::ChildrenChanged(const ChildrenChange& change) {
   // Some input types only need shadow roots to hide any children that may
   // have been appended by script. For such types, shadow roots are lazily
-  // created when children are added for the first time.
-  EnsureUserAgentShadowRoot();
+  // created when children are added for the first time. For the case of
+  // `kFinishedBuildingDocumentFragmentTree` this function may be called
+  // when the HTMLInputElement has no children.
+  if (change.type !=
+          ChildrenChangeType::kFinishedBuildingDocumentFragmentTree ||
+      HasChildren()) {
+    EnsureUserAgentShadowRoot();
+  }
   ContainerNode::ChildrenChanged(change);
 }
 
@@ -2341,6 +2361,55 @@ void HTMLInputElement::showPicker(ExceptionState& exception_state) {
   }
 
   input_type_view_->OpenPopupView();
+}
+
+bool HTMLInputElement::HandleInvokeInternal(HTMLElement& invoker,
+                                            AtomicString& action) {
+  if (HTMLElement::HandleInvokeInternal(invoker, action)) {
+    return true;
+  }
+
+  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
+    return false;
+  }
+
+  // Step 3. If action is an ASCII case-insensitive match for showPicker ...
+  // Early return instead of doing this in step 3.
+  if (!EqualIgnoringASCIICase(action, keywords::kShowPicker)) {
+    return false;
+  }
+
+  // Step 1. If this is not mutable, then return.
+  if (!isMutable()) {
+    return false;
+  }
+
+  // Step 2. If this's relevant settings object's origin is not same origin with
+  // this's relevant settings object's top-level origin, [...], then return.
+  Document& document = GetDocument();
+  LocalFrame* frame = document.GetFrame();
+  if (frame && !frame->IsSameOrigin()) {
+    String message = "Input cannot be invoked from cross-origin iframe.";
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kJavaScript,
+        mojom::ConsoleMessageLevel::kWarning, message));
+    return false;
+  }
+
+  // If this's relevant global object does not have transient
+  // activation, then return.
+  if (!LocalFrame::HasTransientUserActivation(frame)) {
+    String message = "Input cannot be invoked without a user gesture.";
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kJavaScript,
+        mojom::ConsoleMessageLevel::kWarning, message));
+    return false;
+  }
+
+  // Step 3. ... show the picker, if applicable, for this.
+  input_type_view_->OpenPopupView();
+
+  return true;
 }
 
 }  // namespace blink

@@ -57,18 +57,12 @@ class ArcChromeFeatureFlagsBridgeTest : public testing::Test {
   user_prefs::TestBrowserContextWithPrefs context_;
   FakeChromeFeatureFlagsInstance instance_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  const raw_ptr<ArcChromeFeatureFlagsBridge, ExperimentalAsh> bridge_;
+  const raw_ptr<ArcChromeFeatureFlagsBridge> bridge_;
 };
 
 TEST_F(ArcChromeFeatureFlagsBridgeTest, ConstructDestruct) {
   Connect();
   EXPECT_NE(nullptr, bridge());
-}
-
-TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyQsRevamp_Enabled) {
-  scoped_feature_list()->InitAndEnableFeature(ash::features::kQsRevamp);
-  Connect();
-  EXPECT_TRUE(instance()->flags_called_value()->qs_revamp);
 }
 
 TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyJelly_Enabled) {
@@ -172,6 +166,30 @@ TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyPipDoubleTapToResize_Disabled) {
       ash::features::kPipDoubleTapToResize);
   Connect();
   EXPECT_FALSE(instance()->flags_called_value()->enable_pip_double_tap);
+}
+
+TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyGameDashboard_Enabled) {
+  scoped_feature_list()->InitAndEnableFeature(ash::features::kGameDashboard);
+  Connect();
+  EXPECT_TRUE(instance()->flags_called_value()->game_dashboard);
+}
+
+TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyGameDashboard_Disabled) {
+  scoped_feature_list()->InitAndDisableFeature(ash::features::kGameDashboard);
+  Connect();
+  EXPECT_FALSE(instance()->flags_called_value()->game_dashboard);
+}
+
+TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyResizeCompat_Enabled) {
+  scoped_feature_list()->InitAndEnableFeature(arc::kResizeCompat);
+  Connect();
+  EXPECT_TRUE(instance()->flags_called_value()->resize_compat);
+}
+
+TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyResizeCompat_Disabled) {
+  scoped_feature_list()->InitAndDisableFeature(arc::kResizeCompat);
+  Connect();
+  EXPECT_FALSE(instance()->flags_called_value()->resize_compat);
 }
 
 }  // namespace

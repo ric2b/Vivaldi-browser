@@ -6,6 +6,7 @@
 #define ASH_WM_LOCK_STATE_CONTROLLER_H_
 
 #include <memory>
+#include <optional>
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/session/session_observer.h"
@@ -20,8 +21,8 @@
 #include "base/timer/timer.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window_tree_host_observer.h"
+#include "ui/gfx/image/image.h"
 
 namespace ash {
 
@@ -183,6 +184,22 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
   // Notifies observers.
   void OnLockStateEvent(LockStateObserver::EventType event);
 
+  // Triggers the shutdown way on `Pine`.
+  void ShutdownOnPine(bool with_pre_animation);
+
+  // Takes a pine image first and then start the shutdown process.
+  void TakePineImageAndShutdown(bool with_pre_animation);
+
+  // Starts the shutdown process. If `with_pre_animation` is true, then starts
+  // with the pre-shutdown animation, otherwise, starts the real shutdown.
+  void StartShutdownProcess(bool with_pre_animation);
+
+  // Callback invoked inside `TakePineImageAndShutdown` once the image is
+  // taken. Note: `gfx::Image` is cheap to pass by value.
+  void OnPineImageTaken(bool with_pre_animation,
+                        const base::FilePath& file_path,
+                        gfx::Image pine_image);
+
   std::unique_ptr<SessionStateAnimator> animator_;
 
   // Current lock status.
@@ -192,7 +209,7 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
   bool shutting_down_ = false;
 
   // The reason (e.g. user action) for a pending shutdown.
-  absl::optional<ShutdownReason> shutdown_reason_;
+  std::optional<ShutdownReason> shutdown_reason_;
 
   // Indicates whether controller should proceed to (cancellable) shutdown after
   // locking.
@@ -217,8 +234,7 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
   std::unique_ptr<base::ElapsedTimer> lock_duration_timer_;
 
   // Controller used to trigger the actual shutdown.
-  raw_ptr<ShutdownController, DanglingUntriaged | ExperimentalAsh>
-      shutdown_controller_;
+  raw_ptr<ShutdownController, DanglingUntriaged> shutdown_controller_;
 
   // Started when we request that the screen be locked.  When it fires, we
   // assume that our request got dropped.
@@ -250,7 +266,11 @@ class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
   base::ObserverList<LockStateObserver>::Unchecked observers_;
 
   // To access the pref kLoginShutdownTimestampPrefName
-  raw_ptr<PrefService, ExperimentalAsh> local_state_;
+  raw_ptr<PrefService> local_state_;
+
+  // If set, it will be called once the operation on the pine image is
+  // completed, either it was deleted or saved to the disk.
+  base::OnceClosure pine_image_callback_for_test_;
 
   base::WeakPtrFactory<LockStateController> weak_ptr_factory_{this};
 };

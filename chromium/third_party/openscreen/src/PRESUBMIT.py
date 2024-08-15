@@ -18,7 +18,11 @@ _IMPORT_SUBFOLDERS = ['tools', os.path.join('buildtools', 'checkdeps')]
 
 # git-cl upload is not compatible with __init__.py based subfolder imports, so
 # we extend the system path instead.
+#
+# TODO(crbug.com/1502599): Migrate these modules to depot_tools and import from
+# there.
 sys.path.extend(os.path.join(_REPO_PATH, p) for p in _IMPORT_SUBFOLDERS)
+
 
 from checkdeps import DepsChecker  # pylint: disable=wrong-import-position
 import licenses  # pylint: disable=wrong-import-position

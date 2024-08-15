@@ -1,0 +1,16 @@
+#include <metal_stdlib>
+using namespace metal;
+
+void determinant_1bf6e7() {
+  float res = 0.0f;
+}
+vertex float4 vertex_main() {
+  determinant_1bf6e7();
+  return float4(0.0f);
+}
+fragment void fragment_main() {
+  determinant_1bf6e7();
+}
+kernel void compute_main() {
+  determinant_1bf6e7();
+}

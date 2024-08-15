@@ -20,6 +20,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/signin/public/base/account_consistency_method.h"
+#include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "content/public/browser/web_contents.h"
@@ -77,6 +78,7 @@ class MockDiceWebSigninInterceptor : public DiceWebSigninInterceptor {
               MaybeInterceptWebSignin,
               (content::WebContents * web_contents,
                CoreAccountId account_id,
+               signin_metrics::AccessPoint access_point,
                bool is_new_account,
                bool is_sync_signin),
               (override));
@@ -168,7 +170,7 @@ class ProcessDiceHeaderDelegateImplTest
       return std::make_unique<ProcessDiceHeaderDelegateImpl>(
           web_contents(), /*is_sync_signin_tab=*/false,
           signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-          kTestPromoAction, signin_metrics::Reason::kUnknownReason, GURL(),
+          kTestPromoAction, GURL(),
           ProcessDiceHeaderDelegateImpl::EnableSyncCallback(),
           base::BindRepeating(
               &ProcessDiceHeaderDelegateImplTest::OnSigninHeaderReceived,
@@ -198,13 +200,11 @@ class ProcessDiceHeaderDelegateImplTest
   void StartSyncCallback(Profile* profile,
                          signin_metrics::AccessPoint access_point,
                          signin_metrics::PromoAction promo_action,
-                         signin_metrics::Reason reason,
                          content::WebContents* contents,
                          const CoreAccountInfo& account_info) {
     EXPECT_EQ(profile, this->profile());
     EXPECT_EQ(access_point, kTestAccessPoint);
     EXPECT_EQ(promo_action, kTestPromoAction);
-    EXPECT_EQ(reason, signin_reason_);
     EXPECT_EQ(web_contents(), contents);
     EXPECT_EQ(account_info_, account_info);
     enable_sync_called_ = true;
@@ -440,20 +440,30 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::ValuesIn(kHandleTokenExchangeFailureTestCases));
 
 struct TokenExchangeSuccessConfiguration {
-  bool is_reauth;   // User was already signed in with the account.
-  bool signin_tab;  // A DiceTabHelper is attached to the tab.
-  Reason reason;
-  bool sync_signin;  // Expected value for the MaybeInterceptWebSigin call.
+  bool is_reauth = false;   // User was already signed in with the account.
+  bool signin_tab = false;  // A DiceTabHelper is attached to the tab.
+  Reason reason = Reason::kSigninPrimaryAccount;
+  // Expected value for the MaybeInterceptWebSigin call.
+  bool sync_signin = false;
+  signin_metrics::AccessPoint access_point =
+      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN;
 };
 
 TokenExchangeSuccessConfiguration kHandleTokenExchangeSuccessTestCases[] = {
     // clang-format off
-    // is_reauth | signin_tab |       reason               | sync_signin
-    {  false,      false,     Reason::kSigninPrimaryAccount, false },
-    {  false,      true,      Reason::kSigninPrimaryAccount, true },
-    {  false,      true,      Reason::kAddSecondaryAccount,  false },
-    {  true,       false,     Reason::kSigninPrimaryAccount, false },
-    {  true,       true,      Reason::kSigninPrimaryAccount, true },
+    // is_reauth | signin_tab |       reason               |
+    //      sync_signin  | access_point
+    {  false,      false,     Reason::kSigninPrimaryAccount,
+            false, signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN },
+    {  false,      true,      Reason::kSigninPrimaryAccount,
+            true, signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE },
+    {  false,      true,      Reason::kAddSecondaryAccount,
+            false, signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE },
+    {  true,       false,     Reason::kSigninPrimaryAccount,
+            false, signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN },
+    {  true,       true,      Reason::kSigninPrimaryAccount,
+            true, signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE },
+
     // clang-format on
 };
 
@@ -473,10 +483,12 @@ TEST_P(ProcessDiceHeaderDelegateImplTestHandleTokenExchangeSuccess,
       CreateDelegateAndNavigateToSignin(
           GetParam().signin_tab,
           /*redirect_url=*/GURL(chrome::kChromeUINewTabURL), GetParam().reason);
+
   EXPECT_CALL(
       *mock_interceptor(),
       MaybeInterceptWebSignin(web_contents(), account_info_.account_id,
-                              !GetParam().is_reauth, GetParam().sync_signin));
+                              GetParam().access_point, !GetParam().is_reauth,
+                              GetParam().sync_signin));
   delegate->HandleTokenExchangeSuccess(account_info_.account_id,
                                        !GetParam().is_reauth);
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/page_load_metrics/observers/core/ukm_page_load_metrics_observer.h"
 
 #include <memory>
+#include <optional>
 
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/metrics_hashes.h"
@@ -60,7 +61,6 @@
 #include "services/metrics/public/cpp/ukm_source.h"
 #include "services/network/public/cpp/network_quality_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/performance/largest_contentful_paint_type.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 #include "third_party/perfetto/include/perfetto/tracing/track.h"
@@ -176,7 +176,7 @@ class UkmPageLoadMetricsObserverTest
       LargestContentTextOrImage text_or_image,
       bool test_main_frame,
       uint32_t bpp_bucket = 0,
-      absl::optional<net::RequestPriority> request_priority = absl::nullopt,
+      std::optional<net::RequestPriority> request_priority = std::nullopt,
       blink::LargestContentfulPaintType type =
           blink::LargestContentfulPaintType::kNone) {
     std::map<ukm::SourceId, ukm::mojom::UkmEntryPtr> merged_entries =
@@ -493,8 +493,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, LargestImagePaintVideo) {
   // `image_request_priority_valid` is unset above for video, so no priorities
   // are reported.
   TestLCP(600, LargestContentTextOrImage::kImage, true /* test_main_frame */,
-          30 /* image_bpp = "8.0 - 9.0" */,
-          absl::nullopt /* request_priority */,
+          30 /* image_bpp = "8.0 - 9.0" */, std::nullopt /* request_priority */,
           blink::LargestContentfulPaintType::kVideo);
 }
 
@@ -935,7 +934,7 @@ TEST_F(UkmPageLoadMetricsObserverTest,
     tester()->SimulateTimingUpdate(timing);
 
     timing.paint_timing->largest_contentful_paint->largest_text_paint =
-        absl::optional<base::TimeDelta>();
+        std::optional<base::TimeDelta>();
     timing.paint_timing->largest_contentful_paint->largest_text_paint_size = 0;
     PopulateRequiredTimingFields(&timing);
 
@@ -1281,12 +1280,16 @@ TEST_F(UkmPageLoadMetricsObserverTest, NormalizedUserInteractionLatencies) {
   auto& max_event_durations =
       input_timing.max_event_durations->get_user_interaction_latencies();
 
+  base::TimeTicks current_time = base::TimeTicks::Now();
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(50), UserInteractionType::kKeyboard));
+      base::Milliseconds(50), UserInteractionType::kKeyboard, 1,
+      current_time + base::Milliseconds(1000)));
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(100), UserInteractionType::kTapOrClick));
+      base::Milliseconds(100), UserInteractionType::kTapOrClick, 2,
+      current_time + base::Milliseconds(2000)));
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(150), UserInteractionType::kDrag));
+      base::Milliseconds(150), UserInteractionType::kDrag, 3,
+      current_time + base::Milliseconds(3000)));
 
   tester()->SimulateInputTimingUpdate(input_timing);
 
@@ -1312,6 +1315,8 @@ TEST_F(UkmPageLoadMetricsObserverTest, NormalizedUserInteractionLatencies) {
             kInteractiveTiming_UserInteractionLatency_HighPercentile2_MaxEventDurationName,
         150);
     tester()->test_ukm_recorder().ExpectEntryMetric(
+        kv.second.get(), PageLoad::kInteractiveTiming_INPOffsetName, 3);
+    tester()->test_ukm_recorder().ExpectEntryMetric(
         kv.second.get(), PageLoad::kInteractiveTiming_NumInteractionsName, 3);
   }
 }
@@ -1328,7 +1333,8 @@ TEST_F(UkmPageLoadMetricsObserverTest,
       input_timing.max_event_durations->get_user_interaction_latencies();
 
   max_event_durations.emplace_back(UserInteractionLatency::New(
-      base::Milliseconds(50), UserInteractionType::kKeyboard));
+      base::Milliseconds(50), UserInteractionType::kKeyboard, 0,
+      base::TimeTicks::Now()));
 
   tester()->SimulateInputTimingUpdate(input_timing);
 

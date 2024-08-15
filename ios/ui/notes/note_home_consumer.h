@@ -3,7 +3,7 @@
 #ifndef IOS_UI_NOTES_NOTE_HOME_CONSUMER_H_
 #define IOS_UI_NOTES_NOTE_HOME_CONSUMER_H_
 
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_consumer.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_consumer.h"
 
 @class NSIndexPath;
 @class ShowSigninCommand;
@@ -21,7 +21,7 @@ typedef NS_ENUM(NSInteger, NoteHomeBackgroundStyle) {
 };
 
 // NoteHomeConsumer provides methods that allow mediators to update the UI.
-@protocol NoteHomeConsumer<ChromeTableViewConsumer>
+@protocol NoteHomeConsumer<LegacyChromeTableViewConsumer>
 
 // Refreshes the UI.
 - (void)refreshContents;

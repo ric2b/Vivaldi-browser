@@ -68,13 +68,11 @@
                 role="presentation"></iron-icon>
             $i18n{siteSettingsSiteDeleteStorageOfflineData}
           </div>
-          <template is="dom-if" if="[[isPrivacySandboxSettings4_]]">
-            <div class="detail" id="adPersonalization">
-              <iron-icon icon="all-sites:tag" aria-hidden="true"
-                  role="presentation"></iron-icon>
-              $i18n{siteSettingsRemoveSiteAdPersonalization}
-            </div>
-          </template>
+          <div class="detail" id="adPersonalization">
+            <iron-icon icon="all-sites:tag" aria-hidden="true"
+                role="presentation"></iron-icon>
+            $i18n{siteSettingsRemoveSiteAdPersonalization}
+          </div>
         </div>
       </div>
       <div slot="button-container">
@@ -209,6 +207,11 @@
           icon="settings:serial-port" label="$i18n{siteSettingsSerialPorts}"
           chooser-type="[[chooserTypeEnum_.SERIAL_PORTS]]">
       </site-details-permission>
+      <site-details-permission
+          category="[[contentSettingsTypesEnum_.WEB_PRINTING]]"
+          icon="settings:printer"
+          label="$i18n{siteSettingsWebPrinting}">
+      </site-details-permission>
       <template is="dom-if" if="[[enableWebBluetoothNewPermissionsBackend_]]">
         <site-details-permission
             category="[[contentSettingsTypesEnum_.BLUETOOTH_DEVICES]]"
@@ -252,6 +255,11 @@
           category="[[contentSettingsTypesEnum_.MIXEDSCRIPT]]"
           icon="settings:insecure-content"
           label="$i18n{siteSettingsInsecureContent}">
+      </site-details-permission>
+      <site-details-permission
+          category="[[contentSettingsTypesEnum_.JAVASCRIPT_JIT]]"
+          icon="settings:lock-outline"
+          label="$i18n{siteSettingsJavascriptJit}">
       </site-details-permission>
       <site-details-permission
           category="[[contentSettingsTypesEnum_.FEDERATED_IDENTITY_API]]"

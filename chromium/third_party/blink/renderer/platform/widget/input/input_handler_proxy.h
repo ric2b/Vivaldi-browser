@@ -15,7 +15,6 @@
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
-#include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 
@@ -53,7 +52,6 @@ class CompositorThreadEventQueue;
 class EventWithCallback;
 class InputHandlerProxyClient;
 class ScrollPredictor;
-class MomentumScrollJankTracker;
 class CursorControlHandler;
 
 class SynchronousInputHandler {
@@ -153,8 +151,7 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
       std::unique_ptr<blink::WebCoalescedInputEvent> event,
       std::unique_ptr<DidOverscrollParams>,
       const blink::WebInputEventAttribution&,
-      std::unique_ptr<cc::EventMetrics> metrics,
-      mojom::blink::ScrollResultDataPtr)>;
+      std::unique_ptr<cc::EventMetrics> metrics)>;
   void HandleInputEventWithLatencyInfo(
       std::unique_ptr<blink::WebCoalescedInputEvent> event,
       std::unique_ptr<cc::EventMetrics> metrics,
@@ -372,11 +369,6 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
   // bundled in the event ack, saving an IPC.
   std::unique_ptr<DidOverscrollParams> current_overscroll_params_;
 
-  // Used to cache the scroll result data - e.g. root scroll offset - when a
-  // scroll gesture is handled. This data is then passed back using
-  // |EventDispositionCallback|.
-  mojom::blink::ScrollResultDataPtr current_scroll_result_data_;
-
   std::unique_ptr<CompositorThreadEventQueue> compositor_event_queue_;
 
   // Set only when the compositor input handler is handling a gesture. Tells
@@ -425,9 +417,6 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
 
   // This tracks whether the user has set prefers reduced motion.
   bool prefers_reduced_motion_ = false;
-
-  // Helpers for the momentum scroll jank UMAs.
-  std::unique_ptr<MomentumScrollJankTracker> momentum_scroll_jank_tracker_;
 
   // Swipe to move cursor feature.
   std::unique_ptr<CursorControlHandler> cursor_control_handler_;

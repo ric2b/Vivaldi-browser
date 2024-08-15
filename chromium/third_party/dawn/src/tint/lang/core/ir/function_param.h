@@ -31,6 +31,7 @@
 #include <utility>
 
 #include "src/tint/api/common/binding_point.h"
+#include "src/tint/lang/core/builtin_value.h"
 #include "src/tint/lang/core/ir/location.h"
 #include "src/tint/lang/core/ir/value.h"
 #include "src/tint/utils/containers/vector.h"
@@ -42,63 +43,39 @@ namespace tint::core::ir {
 /// A function parameter in the IR.
 class FunctionParam : public Castable<FunctionParam, Value> {
   public:
-    /// Builtin attribute
-    enum class Builtin {
-        /// Builtin Vertex index
-        kVertexIndex,
-        /// Builtin Instance index
-        kInstanceIndex,
-        /// Builtin Position
-        kPosition,
-        /// Builtin FrontFacing
-        kFrontFacing,
-        /// Builtin Local invocation id
-        kLocalInvocationId,
-        /// Builtin Local invocation index
-        kLocalInvocationIndex,
-        /// Builtin Global invocation id
-        kGlobalInvocationId,
-        /// Builtin Workgroup id
-        kWorkgroupId,
-        /// Builtin Num workgroups
-        kNumWorkgroups,
-        /// Builtin Sample index
-        kSampleIndex,
-        /// Builtin Sample mask
-        kSampleMask,
-        /// Builtin Subgroup invocation id
-        kSubgroupInvocationId,
-        /// Builtin Subgroup size
-        kSubgroupSize,
-    };
-
     /// Constructor
     /// @param type the type of the var
     explicit FunctionParam(const core::type::Type* type);
     ~FunctionParam() override;
 
     /// @returns the type of the var
-    const core::type::Type* Type() override { return type_; }
+    const core::type::Type* Type() const override { return type_; }
 
     /// @copydoc Value::Clone()
     FunctionParam* Clone(CloneContext& ctx) override;
 
     /// Sets the builtin information. Note, it is currently an error if the builtin is already set.
     /// @param val the builtin to set
-    void SetBuiltin(FunctionParam::Builtin val) {
+    void SetBuiltin(core::BuiltinValue val) {
         TINT_ASSERT(!builtin_.has_value());
         builtin_ = val;
     }
     /// @returns the builtin set for the parameter
-    std::optional<FunctionParam::Builtin> Builtin() { return builtin_; }
+    std::optional<core::BuiltinValue> Builtin() const { return builtin_; }
+
     /// Clears the builtin attribute.
     void ClearBuiltin() { builtin_ = {}; }
 
     /// Sets the parameter as invariant
     /// @param val the value to set for invariant
     void SetInvariant(bool val) { invariant_ = val; }
+
     /// @returns true if parameter is invariant
-    bool Invariant() { return invariant_; }
+    bool Invariant() const { return invariant_; }
+
+    /// Sets the location
+    /// @param location the location
+    void SetLocation(ir::Location location) { location_ = std::move(location); }
 
     /// Sets the location
     /// @param loc the location value
@@ -106,8 +83,10 @@ class FunctionParam : public Castable<FunctionParam, Value> {
     void SetLocation(uint32_t loc, std::optional<core::Interpolation> interpolation) {
         location_ = {loc, interpolation};
     }
+
     /// @returns the location if `Attributes` contains `kLocation`
-    std::optional<struct Location> Location() { return location_; }
+    std::optional<ir::Location> Location() const { return location_; }
+
     /// Clears the location attribute.
     void ClearLocation() { location_ = {}; }
 
@@ -115,28 +94,17 @@ class FunctionParam : public Castable<FunctionParam, Value> {
     /// @param group the group
     /// @param binding the binding
     void SetBindingPoint(uint32_t group, uint32_t binding) { binding_point_ = {group, binding}; }
+
     /// @returns the binding points if `Attributes` contains `kBindingPoint`
-    std::optional<struct BindingPoint>& BindingPoint() { return binding_point_; }
+    std::optional<struct BindingPoint> BindingPoint() const { return binding_point_; }
 
   private:
     const core::type::Type* type_ = nullptr;
-    std::optional<enum FunctionParam::Builtin> builtin_;
+    std::optional<core::BuiltinValue> builtin_;
     std::optional<struct Location> location_;
     std::optional<struct BindingPoint> binding_point_;
     bool invariant_ = false;
 };
-
-/// @param value the enum value
-/// @returns the string for the given enum value
-std::string_view ToString(enum FunctionParam::Builtin value);
-
-/// @param out the stream to write to
-/// @param value the FunctionParam::Builtin
-/// @returns @p out so calls can be chained
-template <typename STREAM, typename = traits::EnableIfIsOStream<STREAM>>
-auto& operator<<(STREAM& out, enum FunctionParam::Builtin value) {
-    return out << ToString(value);
-}
 
 }  // namespace tint::core::ir
 

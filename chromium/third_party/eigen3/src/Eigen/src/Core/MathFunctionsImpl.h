@@ -35,30 +35,26 @@ namespace internal {
 template <typename Packet, int Steps>
 struct generic_reciprocal_newton_step {
   static_assert(Steps > 0, "Steps must be at least 1.");
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE  Packet
-  run(const Packet& a, const Packet& approx_a_recip) {
+  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(const Packet& a, const Packet& approx_a_recip) {
     using Scalar = typename unpacket_traits<Packet>::type;
     const Packet two = pset1<Packet>(Scalar(2));
     // Refine the approximation using one Newton-Raphson step:
     //   x_{i} = x_{i-1} * (2 - a * x_{i-1})
-     const Packet x =
-         generic_reciprocal_newton_step<Packet,Steps - 1>::run(a, approx_a_recip);
-     const Packet tmp = pnmadd(a, x, two);
-     // If tmp is NaN, it means that a is either +/-0 or +/-Inf.
-     // In this case return the approximation directly.
-     const Packet is_not_nan = pcmp_eq(tmp, tmp);
-     return pselect(is_not_nan, pmul(x, tmp), x);
+    const Packet x = generic_reciprocal_newton_step<Packet, Steps - 1>::run(a, approx_a_recip);
+    const Packet tmp = pnmadd(a, x, two);
+    // If tmp is NaN, it means that a is either +/-0 or +/-Inf.
+    // In this case return the approximation directly.
+    const Packet is_not_nan = pcmp_eq(tmp, tmp);
+    return pselect(is_not_nan, pmul(x, tmp), x);
   }
 };
 
-template<typename Packet>
+template <typename Packet>
 struct generic_reciprocal_newton_step<Packet, 0> {
-   EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet
-   run(const Packet& /*unused*/, const Packet& approx_rsqrt) {
+  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(const Packet& /*unused*/, const Packet& approx_rsqrt) {
     return approx_rsqrt;
   }
 };
-
 
 /** \internal Fast reciprocal sqrt using Newton-Raphson's method.
 
@@ -79,9 +75,8 @@ template <typename Packet, int Steps>
 struct generic_rsqrt_newton_step {
   static_assert(Steps > 0, "Steps must be at least 1.");
   using Scalar = typename unpacket_traits<Packet>::type;
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet
-  run(const Packet& a, const Packet& approx_rsqrt) {
-    constexpr Scalar kMinusHalf = Scalar(-1)/Scalar(2);
+  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(const Packet& a, const Packet& approx_rsqrt) {
+    constexpr Scalar kMinusHalf = Scalar(-1) / Scalar(2);
     const Packet cst_minus_half = pset1<Packet>(kMinusHalf);
     const Packet cst_minus_one = pset1<Packet>(Scalar(-1));
 
@@ -104,10 +99,9 @@ struct generic_rsqrt_newton_step {
   }
 };
 
-template<typename Packet>
+template <typename Packet>
 struct generic_rsqrt_newton_step<Packet, 0> {
-   EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet
-   run(const Packet& /*unused*/, const Packet& approx_rsqrt) {
+  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(const Packet& /*unused*/, const Packet& approx_rsqrt) {
     return approx_rsqrt;
   }
 };
@@ -127,12 +121,11 @@ struct generic_rsqrt_newton_step<Packet, 0> {
    and correctly handles zero and infinity, and NaN. Positive denormal inputs
    are treated as zero.
 */
-template <typename Packet, int Steps=1>
+template <typename Packet, int Steps = 1>
 struct generic_sqrt_newton_step {
   static_assert(Steps > 0, "Steps must be at least 1.");
 
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE  Packet
-  run(const Packet& a, const Packet& approx_rsqrt) {
+  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(const Packet& a, const Packet& approx_rsqrt) {
     using Scalar = typename unpacket_traits<Packet>::type;
     const Packet one_point_five = pset1<Packet>(Scalar(1.5));
     const Packet minus_half = pset1<Packet>(Scalar(-0.5));
@@ -163,9 +156,8 @@ struct generic_sqrt_newton_step {
 
     This implementation works on both scalars and packets.
 */
-template<typename T>
-T generic_fast_tanh_float(const T& a_x)
-{
+template <typename T>
+T generic_fast_tanh_float(const T& a_x) {
   // Clamp the inputs to the range [-c, c]
 #ifdef EIGEN_VECTORIZE_FMA
   const T plus_clamp = pset1<T>(7.99881172180175781f);
@@ -213,31 +205,24 @@ T generic_fast_tanh_float(const T& a_x)
   return pselect(tiny_mask, x, pdiv(p, q));
 }
 
-template<typename RealScalar>
-EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
-RealScalar positive_real_hypot(const RealScalar& x, const RealScalar& y)
-{
+template <typename RealScalar>
+EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE RealScalar positive_real_hypot(const RealScalar& x, const RealScalar& y) {
   // IEEE IEC 6059 special cases.
-  if ((numext::isinf)(x) || (numext::isinf)(y))
-    return NumTraits<RealScalar>::infinity();
-  if ((numext::isnan)(x) || (numext::isnan)(y))
-    return NumTraits<RealScalar>::quiet_NaN();
-    
+  if ((numext::isinf)(x) || (numext::isinf)(y)) return NumTraits<RealScalar>::infinity();
+  if ((numext::isnan)(x) || (numext::isnan)(y)) return NumTraits<RealScalar>::quiet_NaN();
+
   EIGEN_USING_STD(sqrt);
   RealScalar p, qp;
-  p = numext::maxi(x,y);
-  if(numext::is_exactly_zero(p)) return RealScalar(0);
-  qp = numext::mini(y,x) / p;
-  return p * sqrt(RealScalar(1) + qp*qp);
+  p = numext::maxi(x, y);
+  if (numext::is_exactly_zero(p)) return RealScalar(0);
+  qp = numext::mini(y, x) / p;
+  return p * sqrt(RealScalar(1) + qp * qp);
 }
 
-template<typename Scalar>
-struct hypot_impl
-{
+template <typename Scalar>
+struct hypot_impl {
   typedef typename NumTraits<Scalar>::Real RealScalar;
-  static EIGEN_DEVICE_FUNC
-  inline RealScalar run(const Scalar& x, const Scalar& y)
-  {
+  static EIGEN_DEVICE_FUNC inline RealScalar run(const Scalar& x, const Scalar& y) {
     EIGEN_USING_STD(abs);
     return positive_real_hypot<RealScalar>(abs(x), abs(y));
   }
@@ -245,7 +230,7 @@ struct hypot_impl
 
 // Generic complex sqrt implementation that correctly handles corner cases
 // according to https://en.cppreference.com/w/cpp/numeric/complex/sqrt
-template<typename T>
+template <typename T>
 EIGEN_DEVICE_FUNC std::complex<T> complex_sqrt(const std::complex<T>& z) {
   // Computes the principal sqrt of the input.
   //
@@ -274,15 +259,14 @@ EIGEN_DEVICE_FUNC std::complex<T> complex_sqrt(const std::complex<T>& z) {
   const T zero = T(0);
   const T w = numext::sqrt(T(0.5) * (numext::abs(x) + numext::hypot(x, y)));
 
-  return
-    (numext::isinf)(y) ? std::complex<T>(NumTraits<T>::infinity(), y)
-      : numext::is_exactly_zero(x) ? std::complex<T>(w, y < zero ? -w : w)
-                                   : x > zero ? std::complex<T>(w, y / (2 * w))
-      : std::complex<T>(numext::abs(y) / (2 * w), y < zero ? -w : w );
+  return (numext::isinf)(y)           ? std::complex<T>(NumTraits<T>::infinity(), y)
+         : numext::is_exactly_zero(x) ? std::complex<T>(w, y < zero ? -w : w)
+         : x > zero                   ? std::complex<T>(w, y / (2 * w))
+                                      : std::complex<T>(numext::abs(y) / (2 * w), y < zero ? -w : w);
 }
 
 // Generic complex rsqrt implementation.
-template<typename T>
+template <typename T>
 EIGEN_DEVICE_FUNC std::complex<T> complex_rsqrt(const std::complex<T>& z) {
   // Computes the principal reciprocal sqrt of the input.
   //
@@ -314,15 +298,14 @@ EIGEN_DEVICE_FUNC std::complex<T> complex_rsqrt(const std::complex<T>& z) {
   const T w = numext::sqrt(T(0.5) * (numext::abs(x) + abs_z));
   const T woz = w / abs_z;
   // Corner cases consistent with 1/sqrt(z) on gcc/clang.
-  return
-          numext::is_exactly_zero(abs_z) ? std::complex<T>(NumTraits<T>::infinity(), NumTraits<T>::quiet_NaN())
-                                         : ((numext::isinf)(x) || (numext::isinf)(y)) ? std::complex<T>(zero, zero)
-      : numext::is_exactly_zero(x) ? std::complex<T>(woz, y < zero ? woz : -woz)
-                                   : x > zero ? std::complex<T>(woz, -y / (2 * w * abs_z))
-      : std::complex<T>(numext::abs(y) / (2 * w * abs_z), y < zero ? woz : -woz );
+  return numext::is_exactly_zero(abs_z) ? std::complex<T>(NumTraits<T>::infinity(), NumTraits<T>::quiet_NaN())
+         : ((numext::isinf)(x) || (numext::isinf)(y)) ? std::complex<T>(zero, zero)
+         : numext::is_exactly_zero(x)                 ? std::complex<T>(woz, y < zero ? woz : -woz)
+         : x > zero                                   ? std::complex<T>(woz, -y / (2 * w * abs_z))
+                    : std::complex<T>(numext::abs(y) / (2 * w * abs_z), y < zero ? woz : -woz);
 }
 
-template<typename T>
+template <typename T>
 EIGEN_DEVICE_FUNC std::complex<T> complex_log(const std::complex<T>& z) {
   // Computes complex log.
   T a = numext::abs(z);
@@ -331,8 +314,8 @@ EIGEN_DEVICE_FUNC std::complex<T> complex_log(const std::complex<T>& z) {
   return std::complex<T>(numext::log(a), b);
 }
 
-} // end namespace internal
+}  // end namespace internal
 
-} // end namespace Eigen
+}  // end namespace Eigen
 
-#endif // EIGEN_MATHFUNCTIONSIMPL_H
+#endif  // EIGEN_MATHFUNCTIONSIMPL_H

@@ -155,7 +155,7 @@ class RendererFreezerTest : public testing::Test {
   }
 
   // Owned by |renderer_freezer_|.
-  raw_ptr<TestDelegate, DanglingUntriaged | ExperimentalAsh> test_delegate_;
+  raw_ptr<TestDelegate, DanglingUntriaged> test_delegate_;
   std::unique_ptr<RendererFreezer> renderer_freezer_;
 
  private:
@@ -199,7 +199,7 @@ TEST_F(RendererFreezerTest, ErrorThawingRenderers) {
   // The "threadsafe" style of death test re-executes the unit test binary,
   // which in turn re-initializes some global state leading to failed CHECKs.
   // Instead, we use the "fast" style here to prevent re-initialization.
-  ::testing::FLAGS_gtest_death_test_style = "fast";
+  GTEST_FLAG_SET(death_test_style, "fast");
   Init();
   test_delegate_->set_thaw_renderers_result(false);
 
@@ -275,7 +275,7 @@ class RendererFreezerTestWithExtensions : public RendererFreezerTest {
   }
 
   // Owned by |profile_manager_|.
-  raw_ptr<TestingProfile, ExperimentalAsh> profile_;
+  raw_ptr<TestingProfile> profile_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
 
  private:

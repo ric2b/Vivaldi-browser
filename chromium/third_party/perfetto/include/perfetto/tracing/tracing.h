@@ -152,6 +152,17 @@ struct TracingInitArgs {
   // event tracks for the same thread.
   bool disallow_merging_with_system_tracks = false;
 
+  // If set, this function will be called by the producer client to create a
+  // socket for connection to the system service. The function takes one
+  // argument: a callback that takes an open file descriptor. The function
+  // should create a socket with the name defined by
+  // perfetto::GetProducerSocket(), connect to it, and return the corresponding
+  // descriptor via the callback.
+  // This is intended for the use-case where a process being traced is run
+  // inside a sandbox and can't create sockets directly.
+  // Not yet supported for consumer connections currently.
+  CreateSocketAsync create_socket_async = nullptr;
+
  protected:
   friend class Tracing;
   friend class internal::TracingMuxerImpl;

@@ -51,9 +51,9 @@ class MockChromeSigninClient : public ChromeSigninClient {
                     signin_metrics::SignoutDelete,
                     SigninClient::SignoutDecision signout_decision));
 
-  MOCK_METHOD0(GetAllBookmarksCount, absl::optional<size_t>());
-  MOCK_METHOD0(GetBookmarkBarBookmarksCount, absl::optional<size_t>());
-  MOCK_METHOD0(GetExtensionsCount, absl::optional<size_t>());
+  MOCK_METHOD0(GetAllBookmarksCount, std::optional<size_t>());
+  MOCK_METHOD0(GetBookmarkBarBookmarksCount, std::optional<size_t>());
+  MOCK_METHOD0(GetExtensionsCount, std::optional<size_t>());
 };
 
 class ChromeSigninClientSignoutTest : public BrowserWithTestWindowTest {
@@ -209,11 +209,14 @@ bool IsAlwaysAllowedSignoutSources(
         kUserDeclinedHistorySyncAfterDedicatedSignIn:
     case signin_metrics::ProfileSignout::kDeviceLockRemovedOnAutomotive:
     case signin_metrics::ProfileSignout::kRevokeSyncFromSettings:
+    case signin_metrics::ProfileSignout::kIdleTimeoutPolicyTriggeredSignOut:
       return false;
 
     case signin_metrics::ProfileSignout::kAccountRemovedFromDevice:
     // Allow signout because data has not been synced yet.
     case signin_metrics::ProfileSignout::kAbortSignin:
+    case signin_metrics::ProfileSignout::
+        kCancelSyncConfirmationOnWebOnlySignedIn:
     // Allow signout for tests that want to force it.
     case signin_metrics::ProfileSignout::kForceSignoutAlwaysAllowedForTest:
     case signin_metrics::ProfileSignout::kUserClickedRevokeSyncConsentSettings:
@@ -361,6 +364,8 @@ const signin_metrics::ProfileSignout kSignoutSources[] = {
         kUserDeclinedHistorySyncAfterDedicatedSignIn,
     signin_metrics::ProfileSignout::kDeviceLockRemovedOnAutomotive,
     signin_metrics::ProfileSignout::kRevokeSyncFromSettings,
+    signin_metrics::ProfileSignout::kCancelSyncConfirmationOnWebOnlySignedIn,
+    signin_metrics::ProfileSignout::kIdleTimeoutPolicyTriggeredSignOut,
 };
 // kNumberOfObsoleteSignoutSources should be updated when a ProfileSignout
 // value is deprecated.
@@ -828,13 +833,13 @@ TEST_F(ChromeSigninClientMetricsTest,
        ExentsionsAndBookmarksCountWithAccountSigningin_ServiceNull) {
   MockChromeSigninClient client(profile());
 
-  // Returning `absl::nullopt` to simulate the service being nullptr.
+  // Returning `std::nullopt` to simulate the service being nullptr.
   EXPECT_CALL(client, GetAllBookmarksCount())
-      .WillOnce(testing::Return(absl::nullopt));
+      .WillOnce(testing::Return(std::nullopt));
   EXPECT_CALL(client, GetBookmarkBarBookmarksCount())
-      .WillOnce(testing::Return(absl::nullopt));
+      .WillOnce(testing::Return(std::nullopt));
   EXPECT_CALL(client, GetExtensionsCount())
-      .WillOnce(testing::Return(absl::nullopt));
+      .WillOnce(testing::Return(std::nullopt));
 
   CoreAccountInfo account;
   account.email = "example@example.com";

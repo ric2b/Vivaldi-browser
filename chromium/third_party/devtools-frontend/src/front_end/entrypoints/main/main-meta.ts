@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
@@ -11,7 +12,6 @@ import type * as InspectorMain from '../inspector_main/inspector_main.js';
 
 import type * as Main from './main.js';
 
-import * as i18n from '../../core/i18n/i18n.js';
 const UIStrings = {
   /**
    *@description Text in Main
@@ -231,10 +231,10 @@ async function loadInspectorMainModule(): Promise<typeof InspectorMain> {
 
 UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.DRAWER,
-  actionId: 'inspector_main.focus-debuggee',
+  actionId: 'inspector-main.focus-debuggee',
   async loadActionDelegate() {
     const InspectorMain = await loadInspectorMainModule();
-    return InspectorMain.InspectorMain.FocusDebuggeeActionDelegate.instance();
+    return new InspectorMain.InspectorMain.FocusDebuggeeActionDelegate();
   },
   order: 100,
   title: i18nLazyString(UIStrings.focusDebuggee),
@@ -244,7 +244,7 @@ UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.DRAWER,
   actionId: 'main.toggle-drawer',
   async loadActionDelegate() {
-    return UI.InspectorView.ActionDelegate.instance();
+    return new UI.InspectorView.ActionDelegate();
   },
   order: 101,
   title: i18nLazyString(UIStrings.toggleDrawer),
@@ -260,7 +260,7 @@ UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
   title: i18nLazyString(UIStrings.nextPanel),
   async loadActionDelegate() {
-    return UI.InspectorView.ActionDelegate.instance();
+    return new UI.InspectorView.ActionDelegate();
   },
   bindings: [
     {
@@ -279,7 +279,7 @@ UI.ActionRegistration.registerActionExtension({
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
   title: i18nLazyString(UIStrings.previousPanel),
   async loadActionDelegate() {
-    return UI.InspectorView.ActionDelegate.instance();
+    return new UI.InspectorView.ActionDelegate();
   },
   bindings: [
     {
@@ -299,7 +299,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.reloadDevtools),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.ReloadActionDelegate.instance();
+    return new Main.MainImpl.ReloadActionDelegate();
   },
   bindings: [
     {
@@ -313,7 +313,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.restoreLastDockPosition),
   actionId: 'main.toggle-dock',
   async loadActionDelegate() {
-    return UI.DockController.ToggleDockActionDelegate.instance();
+    return new UI.DockController.ToggleDockActionDelegate();
   },
   bindings: [
     {
@@ -333,7 +333,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.zoomIn),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.ZoomActionDelegate.instance();
+    return new Main.MainImpl.ZoomActionDelegate();
   },
   bindings: [
     {
@@ -385,7 +385,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.zoomOut),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.ZoomActionDelegate.instance();
+    return new Main.MainImpl.ZoomActionDelegate();
   },
   bindings: [
     {
@@ -437,7 +437,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.resetZoomLevel),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.ZoomActionDelegate.instance();
+    return new Main.MainImpl.ZoomActionDelegate();
   },
   bindings: [
     {
@@ -465,7 +465,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.searchInPanel),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.SearchActionDelegate.instance();
+    return new Main.MainImpl.SearchActionDelegate();
   },
   bindings: [
     {
@@ -497,7 +497,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.cancelSearch),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.SearchActionDelegate.instance();
+    return new Main.MainImpl.SearchActionDelegate();
   },
   order: 10,
   bindings: [
@@ -513,7 +513,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.findNextResult),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.SearchActionDelegate.instance();
+    return new Main.MainImpl.SearchActionDelegate();
   },
   bindings: [
     {
@@ -545,7 +545,7 @@ UI.ActionRegistration.registerActionExtension({
   title: i18nLazyString(UIStrings.findPreviousResult),
   async loadActionDelegate() {
     const Main = await loadMainModule();
-    return Main.MainImpl.SearchActionDelegate.instance();
+    return new Main.MainImpl.SearchActionDelegate();
   },
   bindings: [
     {
@@ -787,7 +787,7 @@ UI.ContextMenu.registerProvider({
     ];
   },
   async loadProvider() {
-    return Components.Linkifier.ContentProviderContextMenuProvider.instance();
+    return new Components.Linkifier.ContentProviderContextMenuProvider();
   },
   experiment: undefined,
 });
@@ -799,7 +799,7 @@ UI.ContextMenu.registerProvider({
     ];
   },
   async loadProvider() {
-    return UI.XLink.ContextMenuProvider.instance();
+    return new UI.XLink.ContextMenuProvider();
   },
   experiment: undefined,
 });
@@ -811,7 +811,7 @@ UI.ContextMenu.registerProvider({
     ];
   },
   async loadProvider() {
-    return Components.Linkifier.LinkContextMenuProvider.instance();
+    return new Components.Linkifier.LinkContextMenuProvider();
   },
   experiment: undefined,
 });

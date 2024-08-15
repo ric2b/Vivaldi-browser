@@ -20,8 +20,8 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/components/network/network_handler.h"
-#include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "chromeos/ash/components/network/proxy/proxy_config_service_impl.h"
 #include "components/captive_portal/core/captive_portal_detector.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -77,34 +77,40 @@ Profile* GetOTROrActiveProfile() {
   return otr_profile;
 }
 
-std::unique_ptr<ui::WebDialogDelegate> CreateWebDialogDelegate(GURL url) {
-  auto delegate = std::make_unique<ui::WebDialogDelegate>();
-  delegate->set_can_close(true);
-  delegate->set_can_resize(false);
-  delegate->set_dialog_content_url(url);
-  delegate->set_dialog_modal_type(ui::MODAL_TYPE_SYSTEM);
-  delegate->set_dialog_title(
-      l10n_util::GetStringUTF16(IDS_CAPTIVE_PORTAL_AUTHORIZATION_DIALOG_NAME));
-  delegate->set_show_dialog_title(true);
+class SigninWebDialogDelegate : public ui::WebDialogDelegate {
+ public:
+  explicit SigninWebDialogDelegate(GURL url) {
+    set_can_close(true);
+    set_can_resize(false);
+    set_dialog_content_url(url);
+    set_dialog_modal_type(ui::MODAL_TYPE_SYSTEM);
+    set_dialog_title(l10n_util::GetStringUTF16(
+        IDS_CAPTIVE_PORTAL_AUTHORIZATION_DIALOG_NAME));
+    set_show_dialog_title(true);
 
-  const display::Display display =
-      display::Screen::GetScreen()->GetPrimaryDisplay();
-  const float kScale = 0.8;
-  delegate->set_dialog_size(gfx::ScaleToRoundedSize(display.size(), kScale));
+    const float kScale = 0.8;
+    set_dialog_size(gfx::ScaleToRoundedSize(
+        display::Screen::GetScreen()->GetPrimaryDisplay().size(), kScale));
+  }
 
-  return delegate;
-}
+  ~SigninWebDialogDelegate() override = default;
+
+  void OnLoadingStateChanged(content::WebContents* source) override {
+    network_portal_detector::GetInstance()->RequestCaptivePortalDetection();
+  }
+};
 
 }  // namespace
+
+// static
+NetworkPortalSigninController* NetworkPortalSigninController::Get() {
+  static base::NoDestructor<NetworkPortalSigninController> instance;
+  return instance.get();
+}
 
 NetworkPortalSigninController::NetworkPortalSigninController() = default;
 
 NetworkPortalSigninController::~NetworkPortalSigninController() = default;
-
-base::WeakPtr<NetworkPortalSigninController>
-NetworkPortalSigninController::GetWeakPtr() {
-  return weak_factory_.GetWeakPtr();
-}
 
 void NetworkPortalSigninController::ShowSignin(SigninSource source) {
   GURL url;
@@ -122,7 +128,7 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
     // If no portal or proxy signin is required, do not attempt to show the
     // signin page.
     NET_LOG(EVENT) << "Show signin mode from: " << source << ": Network '"
-                   << default_network->guid()
+                   << NetworkId(default_network)
                    << "' is in a non portal state: " << portal_state;
     return;
   }
@@ -131,10 +137,18 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
   if (url.is_empty())
     url = GURL(captive_portal::CaptivePortalDetector::kDefaultURL);
 
-  SigninMode mode = GetSigninMode();
+  SigninMode mode = GetSigninMode(portal_state);
   NET_LOG(EVENT) << "Show signin mode: " << mode << " from: " << source;
   base::UmaHistogramEnumeration("Network.NetworkPortalSigninMode", mode);
   base::UmaHistogramEnumeration("Network.NetworkPortalSigninSource", source);
+
+  signin_network_guid_ = default_network->guid();
+  signin_start_time_ = base::TimeTicks::Now();
+  if (!network_state_handler_observation_.IsObserving()) {
+    network_state_handler_observation_.Observe(
+        NetworkHandler::Get()->network_state_handler());
+  }
+
   switch (mode) {
     case SigninMode::kSigninDialog:
       ShowDialog(ProfileHelper::GetSigninProfile(), url);
@@ -156,7 +170,8 @@ void NetworkPortalSigninController::ShowSignin(SigninSource source) {
 }
 
 NetworkPortalSigninController::SigninMode
-NetworkPortalSigninController::GetSigninMode() const {
+NetworkPortalSigninController::GetSigninMode(
+    NetworkState::PortalState portal_state) const {
   if (!user_manager::UserManager::IsInitialized()
       || !user_manager::UserManager::Get()->IsUserLoggedIn()) {
     NET_LOG(DEBUG) << "GetSigninMode: Not logged in";
@@ -175,10 +190,15 @@ NetworkPortalSigninController::GetSigninMode() const {
     return SigninMode::kSigninDialog;
   }
 
+  // When showing a proxy auth window, use a normal tab with proxies enabled.
+  if (portal_state == NetworkState::PortalState::kProxyAuthRequired) {
+    return SigninMode::kNormalTab;
+  }
+
   // This pref defaults to true, but if a policy is active the policy value
   // defaults to false ("any captive portal authentication pages are shown in a
   // regular tab [if a proxy is active]").
-  // Note: Generally we always want to show the portal signin UI in an incognito
+  // Note: Generally we always want to show the portal signin UI in an OTR
   // tab to avoid providing cookies, see b/245578628 for details.
   const bool ignore_proxy = profile->GetPrefs()->GetBoolean(
       prefs::kCaptivePortalAuthenticationIgnoresProxy);
@@ -227,14 +247,50 @@ void NetworkPortalSigninController::OnWidgetDestroying(views::Widget* widget) {
   SigninProfileHandler::Get()->ClearSigninProfile(base::NullCallback());
 }
 
-void NetworkPortalSigninController::ShowDialog(Profile* profile,
-                                               const GURL& url) {
-  if (dialog_widget_) {
+void NetworkPortalSigninController::PortalStateChanged(
+    const NetworkState* default_network,
+    NetworkState::PortalState portal_state) {
+  bool is_signin_network =
+      default_network && default_network->guid() == signin_network_guid_;
+  if (is_signin_network && !default_network->IsOnline()) {
+    // Signin network is still not online, nothing to do.
     return;
   }
 
-  std::unique_ptr<ui::WebDialogDelegate> web_dialog_delegate =
-      CreateWebDialogDelegate(url);
+  if (!signin_network_guid_.empty()) {
+    // If the signin network is online, record the time since the signin UI was
+    // shown. Otherwise record 0 to indicate that signin did not occur.
+    base::TimeDelta elapsed;
+    if (is_signin_network) {
+      elapsed = base::TimeTicks::Now() - signin_start_time_;
+    }
+    base::UmaHistogramMediumTimes("Network.NetworkPortalSigninTime", elapsed);
+    signin_network_guid_ = "";
+    network_state_handler_observation_.Reset();
+  }
+
+  // If signin is using a dialog in the OOBE/login screen, close it if the
+  // default network changed or became online.
+  if (dialog_widget_) {
+    dialog_widget_->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+  }
+
+  // If signin is using a browser window, the user may still be using the window
+  // so we don't try to close it.
+}
+
+void NetworkPortalSigninController::OnShuttingDown() {
+  network_state_handler_observation_.Reset();
+}
+
+void NetworkPortalSigninController::ShowDialog(Profile* profile,
+                                               const GURL& url) {
+  if (dialog_widget_) {
+    dialog_widget_->Show();
+    return;
+  }
+
+  auto web_dialog_delegate = std::make_unique<SigninWebDialogDelegate>(url);
 
   dialog_widget_ = views::Widget::GetWidgetForNativeWindow(
       // ui::WebDialogDelegate is self-deleting, so pass ownership of it (as a

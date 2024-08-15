@@ -186,6 +186,12 @@ void RemoveSiteSettingsData(const base::Time& delete_begin,
       ContentSettingsType::FILE_SYSTEM_ACCESS_EXTENDED_PERMISSION, delete_begin,
       delete_end, HostContentSettingsMap::PatternSourcePredicate());
 #endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+  host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
+      ContentSettingsType::SMART_CARD_DATA, delete_begin, delete_end,
+      HostContentSettingsMap::PatternSourcePredicate());
+#endif
 }
 
 void RemoveFederatedSiteSettingsData(
@@ -193,10 +199,6 @@ void RemoveFederatedSiteSettingsData(
     const base::Time& delete_end,
     HostContentSettingsMap::PatternSourcePredicate pattern_predicate,
     HostContentSettingsMap* host_content_settings_map) {
-  host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
-      ContentSettingsType::FEDERATED_IDENTITY_ACTIVE_SESSION, delete_begin,
-      delete_end, pattern_predicate);
-
   host_content_settings_map->ClearSettingsForOneTypeWithPredicate(
       ContentSettingsType::FEDERATED_IDENTITY_API, delete_begin, delete_end,
       pattern_predicate);
@@ -256,7 +258,7 @@ int GetUniqueThirdPartyCookiesHostCount(
         (!top_frame_domain.empty() && !url::DomainIs(host, top_frame_domain))) {
       for (auto storage_type : entry.data_details->storage_types) {
         if (browsing_data_model.IsBlockedByThirdPartyCookieBlocking(
-                storage_type)) {
+                entry.data_key.get(), storage_type)) {
           unique_hosts.insert(*entry.data_owner);
           break;
         }

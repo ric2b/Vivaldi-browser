@@ -77,7 +77,7 @@ Tagged<Code> SharedFunctionInfo::GetCode(Isolate* isolate) const {
   // GetSharedFunctionInfoCode method in code-stub-assembler.cc.
   // ======
 
-  Tagged<Object> data = function_data(kAcquireLoad);
+  Tagged<Object> data = GetData(isolate);
   if (IsSmi(data)) {
     // Holding a Smi means we are a builtin.
     DCHECK(HasBuiltinId());
@@ -102,13 +102,13 @@ Tagged<Code> SharedFunctionInfo::GetCode(Isolate* isolate) const {
   if (IsWasmExportedFunctionData(data)) {
     // Having a WasmExportedFunctionData means the code is in there.
     DCHECK(HasWasmExportedFunctionData());
-    return wasm_exported_function_data()->wrapper_code();
+    return wasm_exported_function_data()->wrapper_code(isolate);
   }
   if (IsWasmJSFunctionData(data)) {
-    return wasm_js_function_data()->wrapper_code();
+    return wasm_js_function_data()->wrapper_code(isolate);
   }
   if (IsWasmCapiFunctionData(data)) {
-    return wasm_capi_function_data()->wrapper_code();
+    return wasm_capi_function_data()->wrapper_code(isolate);
   }
   if (IsWasmResumeData(data)) {
     if (static_cast<wasm::OnResume>(wasm_resume_data()->on_resume()) ==
@@ -130,7 +130,7 @@ Tagged<Code> SharedFunctionInfo::GetCode(Isolate* isolate) const {
     return isolate->builtins()->code(Builtin::kHandleApiCallOrConstruct);
   }
   if (IsInterpreterData(data)) {
-    Tagged<Code> code = InterpreterTrampoline();
+    Tagged<Code> code = InterpreterTrampoline(isolate);
     DCHECK(IsCode(code));
     DCHECK(code->is_interpreter_trampoline_builtin());
     return code;
@@ -218,8 +218,17 @@ void SharedFunctionInfo::SetScript(ReadOnlyRoots roots,
   set_script(script_object, kReleaseStore);
 }
 
-void SharedFunctionInfo::CopyFrom(Tagged<SharedFunctionInfo> other) {
+void SharedFunctionInfo::CopyFrom(Tagged<SharedFunctionInfo> other,
+                                  IsolateForSandbox isolate) {
   PtrComprCageBase cage_base = GetPtrComprCageBase(*this);
+#ifdef V8_ENABLE_SANDBOX
+  if (other->has_trusted_function_data()) {
+    set_trusted_function_data(
+        other->trusted_function_data(isolate, kAcquireLoad), kReleaseStore);
+  } else {
+    clear_trusted_function_data(kReleaseStore);
+  }
+#endif
   set_function_data(other->function_data(cage_base, kAcquireLoad),
                     kReleaseStore);
   set_name_or_scope_info(other->name_or_scope_info(cage_base, kAcquireLoad),
@@ -318,6 +327,10 @@ Handle<String> SharedFunctionInfo::DebugName(
 }
 
 bool SharedFunctionInfo::PassesFilter(const char* raw_filter) {
+  // Filters are almost always "*", so check for that and exit quickly.
+  if (V8_LIKELY(raw_filter[0] == '*' && raw_filter[1] == '\0')) {
+    return true;
+  }
   base::Vector<const char> filter = base::CStrVector(raw_filter);
   return v8::internal::PassesFilter(base::CStrVector(DebugNameCStr().get()),
                                     filter);
@@ -398,7 +411,7 @@ void SharedFunctionInfo::DiscardCompiled(
     // Update the function data to point to the UncompiledData without preparse
     // data created above. Use the raw function data setter to avoid validity
     // checks, since we're performing the unusual task of decompiling.
-    shared_info->set_function_data(*data.ToHandleChecked(), kReleaseStore);
+    shared_info->SetData(*data.ToHandleChecked(), kReleaseStore);
   }
 }
 
@@ -760,6 +773,15 @@ void SharedFunctionInfo::UpdateFromFunctionLiteralForLiveEdit(
                            lit->start_position());
 }
 
+CachedTieringDecision SharedFunctionInfo::cached_tiering_decision() {
+  return CachedTieringDecisionBits::decode(flags2());
+}
+
+void SharedFunctionInfo::set_cached_tiering_decision(
+    CachedTieringDecision decision) {
+  set_flags2(CachedTieringDecisionBits::update(flags2(), decision));
+}
+
 // static
 void SharedFunctionInfo::EnsureBytecodeArrayAvailable(
     Isolate* isolate, Handle<SharedFunctionInfo> shared_info,
@@ -779,6 +801,10 @@ void SharedFunctionInfo::EnsureBytecodeArrayAvailable(
 void SharedFunctionInfo::EnsureSourcePositionsAvailable(
     Isolate* isolate, Handle<SharedFunctionInfo> shared_info) {
   if (shared_info->CanCollectSourcePosition(isolate)) {
+    base::Optional<Isolate::ExceptionScope> exception_scope;
+    if (isolate->has_exception()) {
+      exception_scope.emplace(isolate);
+    }
     Compiler::CollectSourcePositions(isolate, shared_info);
   }
 }
@@ -800,7 +826,7 @@ void SharedFunctionInfo::InstallDebugBytecode(Handle<SharedFunctionInfo> shared,
     debug_info->set_original_bytecode_array(*original_bytecode_array,
                                             kReleaseStore);
     debug_info->set_debug_bytecode_array(*debug_bytecode_array, kReleaseStore);
-    shared->SetActiveBytecodeArray(*debug_bytecode_array);
+    shared->SetActiveBytecodeArray(*debug_bytecode_array, isolate);
   }
 }
 
@@ -814,9 +840,9 @@ void SharedFunctionInfo::UninstallDebugBytecode(
   Tagged<BytecodeArray> original_bytecode_array =
       debug_info->OriginalBytecodeArray(isolate);
   DCHECK(!shared->HasBaselineCode());
-  shared->SetActiveBytecodeArray(original_bytecode_array);
-  debug_info->clear_original_bytecode_array(kReleaseStore);
-  debug_info->clear_debug_bytecode_array(kReleaseStore);
+  shared->SetActiveBytecodeArray(original_bytecode_array, isolate);
+  debug_info->clear_original_bytecode_array();
+  debug_info->clear_debug_bytecode_array();
 }
 
 // static

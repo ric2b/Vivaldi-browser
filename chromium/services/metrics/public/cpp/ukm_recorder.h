@@ -7,6 +7,8 @@
 
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/threading/thread_checker.h"
 #include "base/types/pass_key.h"
 #include "services/metrics/public/cpp/metrics_export.h"
@@ -18,7 +20,6 @@
 class DIPSNavigationHandle;
 class DIPSService;
 class PermissionUmaUtil;
-class WebApkUkmRecorder;
 
 namespace apps {
 class WebsiteMetrics;
@@ -71,6 +72,19 @@ METRICS_EXPORT BASE_DECLARE_FEATURE(kUkmReduceAddEntryIPC);
 // Interface for recording UKM
 class METRICS_EXPORT UkmRecorder {
  public:
+  // Currently is used for AppKM on ChromeOS only.
+  class Observer : public base::CheckedObserver {
+   public:
+    // Can be used to save some metrics locally before shutting down. Do not
+    // call blocking methods as this might significantly increase the shutdown
+    // time. Do not use async methods as there is no guarantee the `UkmRecorder`
+    // will still be there.
+    virtual void OnStartingShutdown() = 0;
+
+   protected:
+    ~Observer() override = default;
+  };
+
   UkmRecorder();
 
   UkmRecorder(const UkmRecorder&) = delete;
@@ -87,12 +101,6 @@ class METRICS_EXPORT UkmRecorder {
   // Get the new SourceId, which is unique for the duration of a browser
   // session.
   static SourceId GetNewSourceID();
-
-  // Gets new source Id for WEBAPK_ID type and updates the manifest URL. This
-  // method should only be called by WebApkUkmRecorder class.
-  static SourceId GetSourceIdForWebApkManifestUrl(
-      base::PassKey<WebApkUkmRecorder>,
-      const GURL& manifest_url);
 
   // Gets new source Id for PAYMENT_APP_ID type and updates the source URL to
   // the scope of the app. This method should only be called by
@@ -132,6 +140,14 @@ class METRICS_EXPORT UkmRecorder {
   static SourceId GetSourceIdForChromeOSWebsiteURL(
       base::PassKey<apps::WebsiteMetrics>,
       const GURL& chromeos_website_url);
+
+  // This method should be called when the system is about to shutdown, but
+  // `UkmRecorder` is still available to record metrics.
+  // Calls `OnStartingShutdown` on each observer from `observers_`.
+  void NotifyStartShutdown();
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   // Add an entry to the UkmEntry list.
   virtual void AddEntry(mojom::UkmEntryPtr entry) = 0;
@@ -185,6 +201,8 @@ class METRICS_EXPORT UkmRecorder {
   // this source. This reduces UkmRecorder's memory usage. Not to be used
   // through mojo interface.
   virtual void MarkSourceForDeletion(ukm::SourceId source_id) = 0;
+
+  base::ObserverList<Observer> observers_;
 };
 
 }  // namespace ukm

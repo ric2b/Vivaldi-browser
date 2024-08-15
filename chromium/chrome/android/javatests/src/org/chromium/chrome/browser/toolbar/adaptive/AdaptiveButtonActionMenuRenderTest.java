@@ -26,14 +26,12 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.listmenu.ListMenuButton;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.ui.test.util.NightModeTestUtils;
 
@@ -43,10 +41,8 @@ import java.util.List;
 /** Render tests for adaptive test long-press menu popup. */
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@EnableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR)
 @CommandLineFlags.Add({
     ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-    "enable-features=" + ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR + "<Study",
     "force-fieldtrials=Study/Group",
     "force-fieldtrial-params=Study.Group:mode/always-share"
 })

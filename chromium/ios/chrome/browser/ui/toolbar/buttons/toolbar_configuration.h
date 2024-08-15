@@ -30,8 +30,13 @@
 // Used only in Updated Popup treatment 2.
 @property(nonatomic, readonly) UIColor* focusedBackgroundColor;
 
+#if defined(VIVALDI_BUILD)
+// Tint color of the buttons.
+@property(nonatomic, readwrite) UIColor* buttonsTintColor;
+#else
 // Tint color of the buttons.
 @property(nonatomic, readonly) UIColor* buttonsTintColor;
+#endif  // VIVALDI_BUILD
 
 // Tint color of the buttons in the highlighted state. This is only to be used
 // if the button has a custom style.
@@ -53,6 +58,18 @@
 // color. Even with a `visibilityFactor` of 1, the final color could is
 // translucent.
 - (UIColor*)locationBarBackgroundColorWithVisibility:(CGFloat)visibilityFactor;
+
+// Vivaldi
+/// Returns the default accent color for the primary toolbar.
+@property(nonatomic, readonly) UIColor* primaryToolbarAccentColor;
+/// Returns the background color for omnibox which is calculated
+/// from the current accent color.
+- (UIColor*)locationBarBackgroundColorForAccentColor:(UIColor*)accentColor;
+/// Returns the steady view contents tint color from the current accent color.
+- (UIColor*)locationBarSteadyViewTintColorForAccentColor:(UIColor*)accentColor;
+/// Returns the toolbar buttons tint color from the current accent color.
+- (UIColor*)buttonsTintColorForAccentColor:(UIColor*)accentColor;
+// End Vivaldi
 
 @end
 

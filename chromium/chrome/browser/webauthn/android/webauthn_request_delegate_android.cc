@@ -13,8 +13,8 @@
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/password_manager/chrome_webauthn_credentials_delegate.h"
 #include "chrome/browser/password_manager/chrome_webauthn_credentials_delegate_factory.h"
-#include "chrome/browser/touch_to_fill/touch_to_fill_controller.h"
-#include "chrome/browser/touch_to_fill/touch_to_fill_controller_webauthn_delegate.h"
+#include "chrome/browser/touch_to_fill/password_manager/touch_to_fill_controller.h"
+#include "chrome/browser/touch_to_fill/password_manager/touch_to_fill_controller_webauthn_delegate.h"
 #include "chrome/browser/webauthn/webauthn_metrics_util.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/keyboard_replacing_surface_visibility_controller_impl.h"
@@ -112,8 +112,8 @@ void WebAuthnRequestDelegateAndroid::OnWebAuthnRequestPending(
           this, !hybrid_callback_.is_null()),
       WebAuthnCredManDelegateFactory::GetFactory(web_contents())
           ->GetRequestDelegate(frame_host),
-      base::AsWeakPtr(
-          ContentPasswordManagerDriver::GetForRenderFrameHost(frame_host)));
+      ContentPasswordManagerDriver::GetForRenderFrameHost(frame_host)
+          ->AsWeakPtrImpl());
 }
 
 void WebAuthnRequestDelegateAndroid::CleanupWebAuthnRequest(

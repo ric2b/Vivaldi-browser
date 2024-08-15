@@ -17,7 +17,7 @@
 
 #include "core/fxcodec/scanlinedecoder.h"
 #include "core/fxcrt/data_vector.h"
-#include "core/fxcrt/fixed_zeroed_data_vector.h"
+#include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memory_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
@@ -137,25 +137,25 @@ class CLZWDecoder {
   uint32_t dest_buf_size_ = 0;  // Actual allocated size.
   uint32_t dest_byte_pos_ = 0;  // Size used.
   uint32_t stack_len_ = 0;
-  FixedZeroedDataVector<uint8_t> decode_stack_;
+  FixedSizeDataVector<uint8_t> decode_stack_;
   const uint8_t early_change_;
   uint8_t code_len_ = 9;
   uint32_t current_code_ = 0;
-  FixedZeroedDataVector<uint32_t> codes_;
+  FixedSizeDataVector<uint32_t> codes_;
 };
 
 CLZWDecoder::CLZWDecoder(pdfium::span<const uint8_t> src_span,
                          bool early_change)
     : src_span_(src_span),
-      decode_stack_(4000),
+      decode_stack_(FixedSizeDataVector<uint8_t>::Zeroed(4000)),
       early_change_(early_change ? 1 : 0),
-      codes_(5021) {}
+      codes_(FixedSizeDataVector<uint32_t>::Zeroed(5021)) {}
 
 void CLZWDecoder::AddCode(uint32_t prefix_code, uint8_t append_char) {
   if (current_code_ + early_change_ == 4094)
     return;
 
-  pdfium::span<uint32_t> codes_span = codes_.writable_span();
+  pdfium::span<uint32_t> codes_span = codes_.span();
   codes_span[current_code_++] = (prefix_code << 16) | append_char;
   if (current_code_ + early_change_ == 512 - 258)
     code_len_ = 10;
@@ -166,7 +166,7 @@ void CLZWDecoder::AddCode(uint32_t prefix_code, uint8_t append_char) {
 }
 
 void CLZWDecoder::DecodeString(uint32_t code) {
-  pdfium::span<uint8_t> decode_span = decode_stack_.writable_span();
+  pdfium::span<uint8_t> decode_span = decode_stack_.span();
   pdfium::span<const uint32_t> codes_span = codes_.span();
   while (true) {
     int index = code - 258;
@@ -199,7 +199,7 @@ void CLZWDecoder::ExpandDestBuf(uint32_t additional_size) {
 }
 
 bool CLZWDecoder::Decode() {
-  pdfium::span<uint8_t> decode_span = decode_stack_.writable_span();
+  pdfium::span<uint8_t> decode_span = decode_stack_.span();
   uint32_t old_code = 0xFFFFFFFF;
   uint8_t last_char = 0;
 
@@ -605,9 +605,9 @@ void FlateUncompress(pdfium::span<const uint8_t> src_buf,
     std::unique_ptr<uint8_t, FxFreeDeleter> tmp_buf =
         std::move(result_tmp_bufs[i]);
     uint32_t tmp_buf_size = buf_size;
-    if (i == result_tmp_bufs.size() - 1)
+    if (i + 1 == result_tmp_bufs.size()) {
       tmp_buf_size = last_buf_size;
-
+    }
     uint32_t cp_size = std::min(tmp_buf_size, remaining);
     memcpy(result_buf.get() + result_pos, tmp_buf.get(), cp_size);
     result_pos += cp_size;

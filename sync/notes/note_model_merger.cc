@@ -436,7 +436,11 @@ NoteModelMerger::NoteModelMerger(UpdateResponseDataList updates,
       remote_forest_(BuildRemoteForest(std::move(updates), note_tracker)),
       uuid_to_match_map_(
           FindGuidMatchesOrReassignLocal(remote_forest_, notes_model_)) {
-  DCHECK(note_tracker_->IsEmpty());
+  CHECK(note_tracker_->IsEmpty());
+  CHECK(notes_model);
+  CHECK(notes_model->main_node());
+  CHECK(notes_model->other_node());
+  CHECK(notes_model->trash_node());
 }
 
 NoteModelMerger::~NoteModelMerger() = default;

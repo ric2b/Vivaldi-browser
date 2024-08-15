@@ -29,6 +29,20 @@ import("//build_overrides/build.gni")
 
 import("../../scripts/tint_overrides_with_defaults.gni")
 
+if (tint_has_protobuf) {
+  import("//third_party/protobuf/proto_library.gni")
+}
+
+###############################################################################
+# OS defines
+###############################################################################
+tint_build_is_win = is_win
+tint_build_is_mac = is_mac
+tint_build_is_linux = is_linux
+
+###############################################################################
+# Tint library target
+###############################################################################
 template("libtint_source_set") {
   source_set(target_name) {
     forward_variables_from(invoker, "*", [ "configs" ])
@@ -53,6 +67,21 @@ template("libtint_source_set") {
     }
 
     public_configs += [ "${tint_src_dir}:tint_public_config" ]
+  }
+}
+
+###############################################################################
+# Tint protobuf library target
+###############################################################################
+template("tint_proto_library") {
+  if (!tint_has_protobuf) {
+    error("Tint needs protobuf to build a proto library")
+  }
+  proto_library(target_name) {
+    forward_variables_from(invoker, "*", [ "configs" ])
+    generate_cc = true
+    generate_python = false
+    use_protobuf_full = true
   }
 }
 

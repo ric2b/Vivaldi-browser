@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
-#include <json/json.h>
-
 extern "C" {
 #include "np_ldt.h"
 }
@@ -26,6 +23,9 @@ extern "C" {
 #ifndef _WIN32
 #include <pthread.h>
 #endif
+
+#include "gtest/gtest.h"
+#include "json/json.h"
 
 #ifdef LDT_TEST_VECTORS
 static const char *PATH_TO_DATA_FILE = LDT_TEST_VECTORS;

@@ -27,7 +27,7 @@
 
 package build
 
-// Config for a single target of a directory
+// TargetConfig holds configuration options for a single target of a directory
 type TargetConfig struct {
 	// Override for the output name of this target
 	OutputName string
@@ -42,12 +42,14 @@ type TargetConfig struct {
 	}
 }
 
-// Config for a directory
+// DirectoryConfig holds configuration options for a directory
 type DirectoryConfig struct {
 	// Condition for all targets in the directory
 	Condition string
 	// Configuration for the 'lib' target
 	Lib *TargetConfig
+	// Configuration for the 'proto' target
+	Proto *TargetConfig
 	// Configuration for the 'test' target
 	Test *TargetConfig
 	// Configuration for the 'test_cmd' target

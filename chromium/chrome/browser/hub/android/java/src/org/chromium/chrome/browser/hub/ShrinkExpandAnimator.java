@@ -48,8 +48,9 @@ public class ShrinkExpandAnimator {
         assert mView.getTranslationX() == 0.0f;
         assert mView.getTranslationY() == 0.0f;
 
-        mInitialRect = initialRect;
-        mFinalRect = finalRect;
+        // Copy these rects to ensure they aren't re-used.
+        mInitialRect = new Rect(initialRect);
+        mFinalRect = new Rect(finalRect);
         mImageMatrix = new Matrix();
     }
 
@@ -76,10 +77,14 @@ public class ShrinkExpandAnimator {
         // makes the animation efficient and smooth compared to manually resizing.
         mView.setScaleX(scaleX);
         mView.setScaleY(scaleY);
-        mView.setTranslationX(rect.left
-                - Math.round(mInitialRect.left + (1.0 - scaleX) * mInitialRect.width() / 2.0));
-        mView.setTranslationY(rect.top
-                - Math.round(mInitialRect.top + (1.0 - scaleY) * mInitialRect.height() / 2.0));
+        mView.setTranslationX(
+                rect.left
+                        - Math.round(
+                                mInitialRect.left + (1.0 - scaleX) * mInitialRect.width() / 2.0));
+        mView.setTranslationY(
+                rect.top
+                        - Math.round(
+                                mInitialRect.top + (1.0 - scaleY) * mInitialRect.height() / 2.0));
 
         // If there is no image we don't need to do anything else.
         mImageMatrix.reset();
@@ -97,7 +102,8 @@ public class ShrinkExpandAnimator {
         // This section handles y-offset of the image so that a view that is initially partially
         // offscreen at the top correctly "crops" the top of the image throughout the animation.
         // This is only necessary when expanding the rect.
-        if (mThumbnailSize != null && mInitialRect.top == 0
+        if (mThumbnailSize != null
+                && mInitialRect.top == mFinalRect.top
                 && mInitialRect.height() < mThumbnailSize.getHeight()) {
             // Y translation offset shifts in line with the scaling of the rectangle. It should
             // progress from initialYOffset -> 0 as the scaling progresses.
@@ -114,8 +120,11 @@ public class ShrinkExpandAnimator {
             // using preTranslate because it isn't affected by scale.
             final float finalScaleX = (float) mFinalRect.width() / mInitialRect.width();
             final int initialYOffset = mInitialRect.height() - mThumbnailSize.getHeight();
-            final int yOffset = (int) Math.round(
-                    (float) initialYOffset * ((1.0 - scaleX) / (finalScaleX - 1.0) + 1.0));
+            final int yOffset =
+                    (int)
+                            Math.round(
+                                    (float) initialYOffset
+                                            * ((1.0 - scaleX) / (finalScaleX - 1.0) + 1.0));
             mImageMatrix.preTranslate(0, yOffset);
         }
 

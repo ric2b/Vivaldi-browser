@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.omnibox.suggestions;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -31,6 +32,7 @@ import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.OmniboxMetrics;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownEmbedder.OmniboxAlignment;
+import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewBinder;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -75,6 +77,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     private int mListViewMaxHeight;
     private int mLastBroadcastedListViewMaxHeight;
     private @Nullable Callback<OmniboxAlignment> mOmniboxAlignmentObserver;
+    private final boolean mForcePhoneStyleOmnibox;
 
     // Vivaldi
     private LocationBarLayout mLocationBarLayout;
@@ -232,11 +235,15 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
      *
      * @param context Context used for contained views.
      */
-    public OmniboxSuggestionsDropdown(@NonNull Context context, RecycledViewPool recycledViewPool) {
+    public OmniboxSuggestionsDropdown(
+            @NonNull Context context,
+            RecycledViewPool recycledViewPool,
+            boolean forcePhoneStyleOmnibox) {
         super(context, null, android.R.attr.dropDownListViewStyle);
         setFocusable(true);
         setFocusableInTouchMode(true);
         setRecycledViewPool(recycledViewPool);
+        mForcePhoneStyleOmnibox = forcePhoneStyleOmnibox;
         setId(R.id.omnibox_suggestions_dropdown);
 
         // By default RecyclerViews come with item animators.
@@ -266,13 +273,17 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
                 shouldShowModernizeVisualUpdate
                         ? context.getColor(incognitoBgColorRes)
                         : ChromeColors.getDefaultThemeColor(context, true);
-        if (OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
-                && DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
+        if (!mForcePhoneStyleOmnibox
+                && OmniboxFeatures.shouldShowModernizeVisualUpdate(context)
+                && DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                && context.getResources().getConfiguration().screenWidthDp
+                        >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP) {
             setOutlineProvider(
                     new RoundedCornerOutlineProvider(
                             context.getResources()
                                     .getDimensionPixelSize(
-                                            R.dimen.omnibox_suggestion_bg_round_corner_radius)));
+                                            R.dimen
+                                                    .omnibox_suggestion_dropdown_round_corner_radius)));
             setClipToOutline(true);
         }
     }
@@ -431,12 +442,17 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
             }
             // Note(nagamani@vivaldi.com):  Return the calculated margin value to properly anchor
             // the search engine suggestion layout
-            if (mSearchEngineSuggestionCallback != null) {
-                if (mEmbedder != null)
+            if (mEmbedder != null) {
+                // Inform the embedder about the controls height.
+                ((OmniboxSuggestionsDropdownEmbedderImpl) mEmbedder)
+                        .setControlsHeight(getBottomControlsHeight()
+                                + getSearchEngineSuggestionLayoutHeight());
+                if (mSearchEngineSuggestionCallback != null) {
                     layoutMargins.leftMargin = mEmbedder.getCurrentAlignment().left;
-                layoutMargins.topMargin = mEmbedder.getCurrentAlignment().top;
-                layoutMargins.bottomMargin = getBottomControlsHeight();
-                mSearchEngineSuggestionCallback.onResult(layoutMargins);
+                    layoutMargins.topMargin = mEmbedder.getCurrentAlignment().top;
+                    layoutMargins.bottomMargin = getBottomControlsHeight();
+                    mSearchEngineSuggestionCallback.onResult(layoutMargins);
+                }
             }
         }
     }
@@ -449,8 +465,11 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
             // Note(david@vivaldi.com): We consider the bottomMargin when we can anchor to the
             // bottom.
             if (shouldAnchorToBottom()) {
-                ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin =
-                        getBottomControlsHeight() + getSearchEngineSuggestionLayoutHeight();
+                int margin = getBottomControlsHeight() + getSearchEngineSuggestionLayoutHeight();
+                ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = margin;
+                if (mAdapter != null && mAdapter.getItemCount() > 1) // ref. VAB-8487
+                  margin = 0;
+                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = margin;
             } else
             ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = topMargin
                 + getSearchEngineSuggestionLayoutHeight();
@@ -563,6 +582,10 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
             // If our width has changed, we may have views in our pool that are now the wrong width.
             // Recycle them by calling swapAdapter() to avoid showing views of the wrong size.
             swapAdapter(mAdapter, true);
+            Configuration configuration = getContext().getResources().getConfiguration();
+            setClipToOutline(
+                    configuration.screenWidthDp >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP);
+            BaseSuggestionViewBinder.resetCachedResources();
         }
         if (isInLayout()) {
             // requestLayout doesn't behave predictably in the middle of a layout pass. Even if it
@@ -691,6 +714,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
     /** Vivaldi: Returns the bottom controls height including address bar, tab strip(if enabled) */
     public int getBottomControlsHeight() {
+        if (!isAddressBarAtBottom()) return 0;
         if (mEmbedder == null) return 0;
         // To adjust the gap between url field and search engine suggestion layout
         int bottomPadding = 10;

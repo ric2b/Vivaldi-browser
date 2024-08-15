@@ -80,4 +80,9 @@ interface VivaldiFrameService {
       gfx.mojom.Rect rect, bool full_page, gfx.mojom.Size target_size)
     => (gfx.mojom.Size image_size,
         mojo_base.mojom.ReadOnlySharedMemoryRegion? image_region);
+
+  // Indicates that the frame should collect draggable regions set using the
+  // app-region CSS property.
+  SetSupportsAppRegion(bool supports_app_region);
+
 };

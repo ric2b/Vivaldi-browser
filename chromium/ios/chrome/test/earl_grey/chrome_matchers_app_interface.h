@@ -49,6 +49,11 @@
 // Matcher for element with an image defined by its name in the main bundle.
 + (id<GREYMatcher>)imageViewWithImageNamed:(NSString*)imageName;
 
+// Matcher for element with a custom symbol defined by its name and point size
+// in the main bundle.
++ (id<GREYMatcher>)imageViewWithCustomSymbolNamed:(NSString*)symbolName
+                                        pointSize:(CGFloat)pointSize;
+
 // Matcher for element with an image corresponding to `imageID` and
 // accessibility trait UIAccessibilityTraitButton.
 + (id<GREYMatcher>)buttonWithImage:(int)imageID;
@@ -263,6 +268,13 @@
 // "Not johndoe@example.com" button.
 + (id<GREYMatcher>)secondarySignInButton;
 
+// Returns matcher for the identity chooser scrim that is shown behind the
+// identity chooser dialog. Tapping on the scrim dismisses the dialog.
++ (id<GREYMatcher>)identityChooserScrim;
+
+// Returns matcher for the cancel button in the fake add account flow.
++ (id<GREYMatcher>)fakeFakeAddAccountScreenCancelButton;
+
 // Returns matcher for the button for the currently signed in account in the
 // settings menu.
 + (id<GREYMatcher>)settingsAccountButton;
@@ -326,6 +338,10 @@
 // Returns matcher for the Google Services Settings view.
 + (id<GREYMatcher>)googleServicesSettingsView;
 
+// Returns matcher for the Navigation Bar embedded in the Settings Navigation
+// Controller.
++ (id<GREYMatcher>)settingsNavigationBar;
+
 // Returns matcher for the back button on a settings menu.
 + (id<GREYMatcher>)settingsMenuBackButton;
 
@@ -341,6 +357,9 @@
 
 // Returns matcher for the Save passwords cell on the main Settings screen.
 + (id<GREYMatcher>)settingsMenuPasswordsButton;
+
+// Returns matcher for the Safety Check cell on the main Settings screen.
++ (id<GREYMatcher>)settingsMenuSafetyCheckButton;
 
 // Returns matcher for the payment request collection view.
 + (id<GREYMatcher>)paymentRequestView;
@@ -504,6 +523,9 @@
 // PageControl panel always exist only on the tab grid normal mode, So this can
 // be used to validate that the tab grid normal mode is active.
 + (id<GREYMatcher>)tabGridNormalModePageControl;
+
+// Returns the GREYMatcher for the Inactive Tabs button of the tab grid.
++ (id<GREYMatcher>)tabGridInactiveTabsButton;
 
 // Returns the GREYMatcher for the background of the tab grid.
 + (id<GREYMatcher>)tabGridBackground;

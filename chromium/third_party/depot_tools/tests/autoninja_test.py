@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env vpython3
 # Copyright (c) 2022 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import glob
 import multiprocessing
 import os
 import os.path
@@ -11,6 +12,8 @@ import sys
 import unittest
 import contextlib
 from unittest import mock
+
+from parameterized import parameterized
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
@@ -151,6 +154,34 @@ class AutoninjaTest(trial_dir.TestCase):
             args = autosiso_main.call_args.args[0]
         self.assertIn('-C', args)
         self.assertEqual(args[args.index('-C') + 1], out_dir)
+
+    @parameterized.expand([
+        ("non corp machine", False, None, None, False),
+        ("non corp adc account", True, "foo@chromium.org", None, True),
+        ("corp adc account", True, "foo@google.com", None, False),
+        ("non corp gcloud auth account", True, None, "foo@chromium.org", True),
+        ("corp gcloud auth account", True, None, "foo@google.com", False),
+    ])
+    def test_is_corp_machine_using_external_account(self, _, is_corp,
+                                                    adc_account,
+                                                    gcloud_auth_account,
+                                                    expected):
+        for shelve_file in glob.glob(
+                os.path.join(autoninja.SCRIPT_DIR, ".autoninja*")):
+            # Clear cache.
+            os.remove(shelve_file)
+
+        with mock.patch('autoninja._is_google_corp_machine',
+                        return_value=is_corp), mock.patch(
+                            'autoninja._adc_account',
+                            return_value=adc_account), mock.patch(
+                                'autoninja._gcloud_auth_account',
+                                return_value=gcloud_auth_account):
+            self.assertEqual(
+                bool(
+                    # pylint: disable=line-too-long
+                    autoninja._is_google_corp_machine_using_external_account()),
+                expected)
 
     def test_gn_lines(self):
         out_dir = os.path.join('out', 'dir')

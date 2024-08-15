@@ -16,16 +16,19 @@
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
+#import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/tabs/model/features.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
+#import "ios/chrome/browser/ui/bubble/bubble_constants.h"
+#import "ios/chrome/browser/ui/bubble/side_swipe_bubble/side_swipe_bubble_view.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
@@ -42,10 +45,11 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions/suggested_actions_delegate.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_collection_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_provider.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_activity_observer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_consumer.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mediator_provider_wrangler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_metrics.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mutator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_bottom_toolbar.h"
@@ -53,6 +57,7 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_page_control.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_top_toolbar.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/tab_grid_transition_layout.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -70,10 +75,6 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
-
-BASE_FEATURE(kTabGridAccessibilityScrollKillSwitch,
-             "TabGridAccessibilityScrollKillSwitch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Types of configurations of this view controller.
 typedef NS_ENUM(NSUInteger, TabGridConfiguration) {
@@ -174,8 +175,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     NSArray<NSLayoutConstraint*>* pinnedTabsConstraints;
 // The configuration for tab grid pages.
 @property(nonatomic, assign) TabGridPageConfiguration pageConfiguration;
-// If the scrim view is being presented.
-@property(nonatomic, assign) BOOL isScrimDisplayed;
 // Wether there is a search being performed in the tab grid or not.
 @property(nonatomic, assign) BOOL isPerformingSearch;
 // Pan gesture for when the search results view is scrolled during the search
@@ -185,11 +184,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 @property(nonatomic, assign, getter=isDragSessionInProgress)
     BOOL dragSessionInProgress;
 
-// YES if it is possible to undo the close all conditions.
-@property(nonatomic, assign) BOOL undoCloseAllAvailable;
-
 // The timestamp of the user entering the tab grid.
 @property(nonatomic, assign) base::TimeTicks tabGridEnterTime;
+
+// The in-product help view to instruct the user to swipe to incognito, and its
+// bottom constraint.
+@property(nonatomic, strong) SideSwipeBubbleView* swipeToIncognitoIPH;
+@property(nonatomic, strong)
+    NSLayoutConstraint* swipeToIncognitoIPHBottomConstraint;
 
 @end
 
@@ -219,6 +221,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     _pageConfiguration = tabGridPageConfiguration;
     _dragSessionInProgress = NO;
 
+    // TODO(crbug.com/845192): This should move to a proper Recent Tabs in Grid
+    // coordinator.
     if (_pageConfiguration == TabGridPageConfiguration::kIncognitoPageOnly) {
       _remoteDisabledViewController = [[DisabledGridViewController alloc]
           initWithPage:TabGridPageRemoteTabs];
@@ -326,6 +330,17 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (IsPinnedTabsEnabled()) {
     [self updatePinnedTabsViewControllerConstraints];
   }
+  if ([self.swipeToIncognitoIPH superview] == self.view) {
+    self.swipeToIncognitoIPHBottomConstraint.active = NO;
+    self.swipeToIncognitoIPHBottomConstraint =
+        [self.swipeToIncognitoIPH.bottomAnchor
+            constraintEqualToAnchor:[self shouldUseCompactLayout]
+                                        ? self.bottomToolbar.topAnchor
+                                        : self.regularTabsViewController.view
+                                              .bottomAnchor];
+
+    self.swipeToIncognitoIPHBottomConstraint.active = YES;
+  }
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -337,15 +352,15 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         self.scrollView.contentSize.width - self.scrollView.frame.size.width;
     CGFloat offset = scrollView.contentOffset.x / offsetWidth;
     // In RTL, flip the offset.
-    if (UseRTLLayout())
+    if (UseRTLLayout()) {
       offset = 1.0 - offset;
+    }
     self.topToolbar.pageControl.sliderPosition = offset;
 
     TabGridPage page = GetPageFromScrollView(scrollView);
     if (page != self.currentPage) {
       self.currentPage = page;
       [self broadcastIncognitoContentVisibility];
-      [self configureButtonsForActiveAndCurrentPage];
       // Records when the user drags the scrollView to switch pages.
       [self.mutator pageChanged:page
                     interaction:TabSwitcherPageChangeInteraction::kScrollDrag];
@@ -374,13 +389,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (page != self.currentPage) {
     self.currentPage = page;
     [self broadcastIncognitoContentVisibility];
-    [self configureButtonsForActiveAndCurrentPage];
-    if (base::FeatureList::IsEnabled(kTabGridAccessibilityScrollKillSwitch)) {
-      [self.mutator
-          pageChanged:page
-          interaction:TabSwitcherPageChangeInteraction::kAccessibilitySwipe];
-      [self.topToolbar.pageControl setSelectedPage:page animated:YES];
-    }
+    [self.mutator
+        pageChanged:page
+        interaction:TabSwitcherPageChangeInteraction::kAccessibilitySwipe];
+    [self.topToolbar.pageControl setSelectedPage:page animated:YES];
   }
 }
 
@@ -396,7 +408,16 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.currentPage = currentPage;
   self.scrollViewAnimatingContentOffset = NO;
   [self broadcastIncognitoContentVisibility];
-  [self configureButtonsForActiveAndCurrentPage];
+  if (!self.isDragSessionInProgress) {
+    [self maybeShowSwipeToIncognitoIPH];
+  }
+}
+
+#pragma mark - Accessibility
+
+- (BOOL)accessibilityPerformEscape {
+  [self doneButtonTapped:self];
+  return YES;
 }
 
 #pragma mark - UIScrollViewAccessibilityDelegate
@@ -444,11 +465,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (BOOL)shouldReparentSelectedCell:(GridAnimationDirection)animationDirection {
   switch (animationDirection) {
-    // For contracting animation only selected pinned cells should be
-    // reparented.
+      // For contracting animation only selected pinned cells should be
+      // reparented.
     case GridAnimationDirectionContracting:
       return [self isPinnedCellSelected];
-    // For expanding animation any selected cell should be reparented.
+      // For expanding animation any selected cell should be reparented.
     case GridAnimationDirectionExpanding:
       return YES;
   }
@@ -472,11 +493,15 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return self.scrollView;
 }
 
-#pragma mark - Public Methods
+#pragma mark - TabGridTransitionLayoutProviding
 
-- (void)prepareForAppearance {
-  [[self gridViewControllerForPage:self.activePage] prepareForAppearance];
+- (TabGridTransitionLayout*)transitionLayout {
+  TabGridTransitionItem* activeCell =
+      [self transitionItemForActiveCellWithActivePage:self.activePage];
+  return [TabGridTransitionLayout layoutWithActiveCell:activeCell];
 }
+
+#pragma mark - Public Methods
 
 - (void)contentWillAppearAnimated:(BOOL)animated {
   [self resetIdlePageStatus];
@@ -519,6 +544,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (self.remoteTabsViewController) {
     [self setInsetForRemoteTabs];
   }
+  [self maybeShowSwipeToIncognitoIPH];
 
   // Vivaldi
   // Modify Recent Tabs Insets when page appears and during rotation.
@@ -526,15 +552,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self setInsetForClosedTabs];
   }
   // End Vivaldi
-
-  // Let the active grid view know the initial appearance is done.
-  [[self gridViewControllerForPage:self.activePage] contentDidAppear];
 }
 
 - (void)contentWillDisappearAnimated:(BOOL)animated {
   [self recordIdlePageStatus];
 
-  self.undoCloseAllAvailable = NO;
   if (self.tabGridMode != TabGridModeSearch || !animated) {
     // Updating the mode reset the items on the grid, in that case of search
     // mode the animation to show the tab will start from the tab cell after the
@@ -543,6 +565,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
   [self.regularTabsDelegate discardSavedClosedItems];
   [self.inactiveTabsDelegate discardSavedClosedItems];
+
+  [self.swipeToIncognitoIPH
+      dismissWithReason:IPHDismissalReasonType::kTappedOutsideIPHAndAnchorView];
+
   // When the view disappears, the toolbar alpha should be set to 0; either as
   // part of the animation, or directly with -hideToolbars.
   if (animated && self.transitionCoordinator) {
@@ -553,8 +579,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
   self.viewVisible = NO;
 
-  [self.incognitoTabsViewController contentWillDisappear];
-  [self.regularTabsViewController contentWillDisappear];
   [self.pinnedTabsViewController contentWillDisappear];
   self.remoteTabsViewController.preventUpdates = YES;
 
@@ -655,13 +679,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       self.currentPage != TabGridPageRegularTabs;
 }
 
-- (void)setRemoteTabsViewController:
-    (RecentTabsTableViewController*)remoteTabsViewController {
-  _remoteTabsViewController = remoteTabsViewController;
-  _remoteTabsViewController.view.accessibilityElementsHidden =
-      self.currentPage != TabGridPageRemoteTabs;
-}
-
 - (void)setRemoteDisabledViewController:
     (DisabledGridViewController*)remoteDisabledViewController {
   _remoteDisabledViewController = remoteDisabledViewController;
@@ -699,20 +716,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-- (void)setReauthAgent:(IncognitoReauthSceneAgent*)reauthAgent {
-  if (_reauthAgent) {
-    [_reauthAgent removeObserver:self];
-  }
-
-  _reauthAgent = reauthAgent;
-
-  [_reauthAgent addObserver:self];
-}
-
 #pragma mark - TabGridPaging
 
 - (void)setActivePage:(TabGridPage)activePage {
   [self scrollToPage:activePage animated:YES];
+  [self.activityObserver updateLastActiveTabPage:activePage];
   _activePage = activePage;
 }
 
@@ -752,8 +760,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.incognitoTabsViewController.mode = self.tabGridMode;
 
   self.scrollView.scrollEnabled = (self.tabGridMode == TabGridModeNormal);
-  if (mode == TabGridModeSelection)
-    [self updateSelectionModeToolbars];
 }
 
 #pragma mark - Private
@@ -955,7 +961,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       arrayByAddingObjectsFromArray:secondaryInactiveItems];
 }
 
-// Sets the proper insets for the Remote Tabs ViewController to accomodate for
+// Sets the proper insets for the Remote Tabs ViewController to accommodate for
 // the safe area, toolbar, and status bar.
 - (void)setInsetForRemoteTabs {
   // Sync the scroll view offset to the current page value if the scroll view
@@ -989,7 +995,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-// Sets the proper insets for the Grid ViewControllers to accomodate for the
+// Sets the proper insets for the Grid ViewControllers to accommodate for the
 // safe area and toolbars.
 - (void)setInsetForGridViews {
   // Sync the scroll view offset to the current page value if the scroll view
@@ -999,10 +1005,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self scrollToPage:self.currentPage animated:NO];
   }
 
-  self.incognitoTabsViewController.gridView.contentInset =
-      [self calculateInsetForIncognitoGridView];
-  self.regularTabsViewController.gridView.contentInset =
-      [self calculateInsetForRegularGridView];
+  self.incognitoTabsViewController.contentInsets =
+      [self calculateInsetsForIncognitoGridView];
+  self.regularTabsViewController.contentInsets =
+      [self calculateInsetsForRegularGridView];
 }
 
 // Returns the corresponding BaseGridViewController for `page`. Returns `nil` if
@@ -1110,7 +1116,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // made at the end of scrolling animations after `self.currentPage` is set.
     // Since this codepath has no animations, updates must be called manually.
     [self broadcastIncognitoContentVisibility];
-    [self configureButtonsForActiveAndCurrentPage];
   } else {
     // Only set `scrollViewAnimatingContentOffset` to YES if there's an actual
     // change in the contentOffset, as `-scrollViewDidEndScrollingAnimation:` is
@@ -1127,7 +1132,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         // Something easy to reproduce with the two edges (incognito / recent
         // tabs), but also possible with middle position (normal).
         [self broadcastIncognitoContentVisibility];
-        [self configureButtonsForActiveAndCurrentPage];
       }
     }
   }
@@ -1195,6 +1199,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   scrollView.contentInsetAdjustmentBehavior =
       UIScrollViewContentInsetAdjustmentNever;
 
+  [self addChildViewController:self.incognitoGridContainerViewController];
+  [self addChildViewController:self.regularGridContainerViewController];
+  [self addChildViewController:self.remoteGridContainerViewController];
   UIStackView* gridsStack = [[UIStackView alloc] initWithArrangedSubviews:@[
     self.incognitoGridContainerViewController.view,
     self.regularGridContainerViewController.view,
@@ -1210,6 +1217,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
   [scrollView addSubview:gridsStack];
   [self.view addSubview:scrollView];
+  [self.incognitoGridContainerViewController
+      didMoveToParentViewController:self];
+  [self.regularGridContainerViewController didMoveToParentViewController:self];
+  [self.remoteGridContainerViewController didMoveToParentViewController:self];
 
   self.scrollView = scrollView;
   self.scrollView.scrollEnabled = YES;
@@ -1350,143 +1361,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // vertically long or the selection mode is enabled.
     self.configuration = TabGridConfigurationBottomToolbar;
   }
-  [self configureButtonsForActiveAndCurrentPage];
-}
-
-- (void)configureButtonsForActiveAndCurrentPage {
-  self.bottomToolbar.page = self.currentPage;
-  self.topToolbar.page = self.currentPage;
-  self.bottomToolbar.mode = self.tabGridMode;
-  self.topToolbar.mode = self.tabGridMode;
-
-  [self configureAddToButtonMenuForSelectedItems];
-  BOOL incognitoTabsNeedsAuth =
-      (self.currentPage == TabGridPageIncognitoTabs &&
-       self.incognitoTabsViewController.contentNeedsAuthentication);
-  [self.bottomToolbar setAddToButtonEnabled:!incognitoTabsNeedsAuth];
-
-  // When current page is a remote tabs page.
-  if (self.currentPage == TabGridPageRemoteTabs) {
-    if (self.pageConfiguration ==
-        TabGridPageConfiguration::kIncognitoPageOnly) {
-      // Disable done button if showing a disabled tab view for recent tab.
-      [self configureDoneButtonOnDisabledPage];
-    } else {
-      [self configureDoneButtonBasedOnPage:self.activePage];
-    }
-    // Configure the "Close All" button on the recent tabs page.
-    [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
-    return;
-  }
-
-  // Vivaldi
-  // When current page is a recently closed tabs page.
-  if (self.currentPage == TabGridPageClosedTabs) {
-    if (self.pageConfiguration ==
-        TabGridPageConfiguration::kIncognitoPageOnly) {
-      // Disable done button if showing a disabled tab view for recent tab.
-      [self configureDoneButtonOnDisabledPage];
-    } else {
-      [self configureDoneButtonBasedOnPage:self.activePage];
-    }
-    // Configure the "Close All" button on the recently closed tabs page.
-    [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
-    return;
-  }
-  // End Vivaldi
-
-  BOOL incognitoIsDisabled =
-      _pageConfiguration == TabGridPageConfiguration::kIncognitoPageDisabled;
-  BOOL regularIsDisabled =
-      _pageConfiguration == TabGridPageConfiguration::kIncognitoPageOnly;
-  // When current page is a disabled tab page.
-  if ((self.currentPage == TabGridPageIncognitoTabs && incognitoIsDisabled) ||
-      (self.currentPage == TabGridPageRegularTabs && regularIsDisabled)) {
-    [self configureDoneButtonOnDisabledPage];
-    [self.topToolbar setCloseAllButtonEnabled:NO];
-    [self.bottomToolbar setCloseAllButtonEnabled:NO];
-    [self.bottomToolbar setEditButtonEnabled:NO];
-    [self.topToolbar setEditButtonEnabled:NO];
-    return;
-  }
-
-  if (self.tabGridMode == TabGridModeSelection) {
-    [self updateSelectionModeToolbars];
-  }
-
-  [self configureDoneButtonBasedOnPage:self.currentPage];
-  [self configureNewTabButtonBasedOnContentPermissions];
-  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
-}
-
-// Updates the add to menu items with all the currently selected items.
-- (void)configureAddToButtonMenuForSelectedItems {
-  BaseGridViewController* gridViewController =
-      [self gridViewControllerForPage:self.currentPage];
-  // This can be called when the current page is not tied to a grid view
-  // controller. If so, return early, because getting the std::set off of a nil
-  // gridViewController would return a garbage std::set.
-  if (!gridViewController) {
-    return;
-  }
-  const std::set<web::WebStateID> items =
-      gridViewController.selectedShareableItemIDsForEditing;
-  UIMenu* menu = nil;
-  switch (self.currentPage) {
-    case TabGridPageIncognitoTabs:
-      menu =
-          [UIMenu menuWithChildren:[self.incognitoTabsDelegate
-                                       addToButtonMenuElementsForItems:items]];
-      break;
-    case TabGridPageRegularTabs:
-      menu =
-          [UIMenu menuWithChildren:[self.regularTabsDelegate
-                                       addToButtonMenuElementsForItems:items]];
-      break;
-    case TabGridPageRemoteTabs:
-      // No-op, Add To button inaccessible in remote tabs page.
-      break;
-    // Vivaldi
-    case TabGridPageClosedTabs:
-      // No-op, Add To button inaccessible in recently closed tabs page.
-      break;
-    // End Vivaldi
-  }
-  [self.bottomToolbar setAddToButtonMenu:menu];
-}
-
-// TODO(crbug.com/1457146): Remove this when incognito authentication is take
-// into account for button configuration.
-- (void)configureNewTabButtonBasedOnContentPermissions {
-  BOOL isRecentTabPage = self.currentPage == TabGridPageRemoteTabs;
-
-  // Vivaldi
-  if (IsVivaldiRunning()) {
-    isRecentTabPage = (self.currentPage == TabGridPageRemoteTabs) ||
-                      (self.currentPage == TabGridPageClosedTabs);
-  }
-  // End Vivaldi
-
-  BOOL allowedByContentAuthentication =
-      !((self.currentPage == TabGridPageIncognitoTabs) &&
-        self.incognitoTabsViewController.contentNeedsAuthentication);
-  BOOL allowNewTab = !isRecentTabPage && allowedByContentAuthentication;
-  [self.bottomToolbar setNewTabButtonEnabled:allowNewTab];
-}
-
-- (void)configureDoneButtonBasedOnPage:(TabGridPage)page {
-  const BOOL tabsPresent = [self tabsPresentForPage:page];
-
-  self.topToolbar.pageControl.userInteractionEnabled = YES;
-
-  // The Done button should have the same behavior as the other buttons on the
-  // top Toolbar.
-  BOOL incognitoTabsNeedsAuth =
-      (self.currentPage == TabGridPageIncognitoTabs &&
-       self.incognitoTabsViewController.contentNeedsAuthentication);
-  BOOL doneEnabled = tabsPresent && !incognitoTabsNeedsAuth;
-  [self.topToolbar setDoneButtonEnabled:doneEnabled];
-  [self.bottomToolbar setDoneButtonEnabled:doneEnabled];
 }
 
 // YES if there are tabs present on `page`. For `TabGridPageRemoteTabs`, YES
@@ -1510,42 +1384,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       return NO;
     // End Vivaldi
   }
-}
-
-// Disables the done button on bottom toolbar if a disabled tab view is
-// presented.
-- (void)configureDoneButtonOnDisabledPage {
-  self.topToolbar.pageControl.userInteractionEnabled = YES;
-  [self.bottomToolbar setDoneButtonEnabled:NO];
-  [self.topToolbar setDoneButtonEnabled:NO];
-}
-
-- (void)configureCloseAllButtonForCurrentPageAndUndoAvailability {
-  BOOL useUndo =
-      self.undoCloseAllAvailable && self.currentPage == TabGridPageRegularTabs;
-  [self.bottomToolbar useUndoCloseAll:useUndo];
-  [self.topToolbar useUndoCloseAll:useUndo];
-  if (useUndo)
-    return;
-
-  // Otherwise setup as a Close All button.
-  BaseGridViewController* gridViewController =
-      [self gridViewControllerForPage:self.currentPage];
-
-  // "Close all" can be called if there is element in regular tab grid or in
-  // inactive tabs.
-  BOOL enabled =
-      gridViewController && (![gridViewController isGridEmpty] ||
-                             ![gridViewController isInactiveGridEmpty]);
-  BOOL incognitoTabsNeedsAuth =
-      (self.currentPage == TabGridPageIncognitoTabs &&
-       self.incognitoTabsViewController.contentNeedsAuthentication);
-  enabled = enabled && !incognitoTabsNeedsAuth && !self.isDragSessionInProgress;
-
-  [self.topToolbar setCloseAllButtonEnabled:enabled];
-  [self.bottomToolbar setCloseAllButtonEnabled:enabled];
-  [self.bottomToolbar setEditButtonEnabled:enabled];
-  [self.topToolbar setEditButtonEnabled:enabled];
 }
 
 // Shows the two toolbars and the floating button. Suitable for use in
@@ -1637,44 +1475,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                               completion:cleanup];
 }
 
-// Updates the labels and the buttons on the top and the bottom toolbars based
-// based on the selected tabs count.
-- (void)updateSelectionModeToolbars {
-  BaseGridViewController* currentBaseGridViewController =
-      [self gridViewControllerForPage:self.currentPage];
-  // This can be called when the current page is not tied to a grid view
-  // controller. If so, return early, because getting the std::set off of a nil
-  // gridViewController would return a garbage std::set.
-  if (!currentBaseGridViewController) {
-    return;
-  }
-  NSUInteger selectedItemsCount =
-      currentBaseGridViewController.selectedItemIDsForEditing.size();
-  NSUInteger sharableSelectedItemsCount =
-      currentBaseGridViewController.selectedShareableItemIDsForEditing.size();
-  self.topToolbar.selectedTabsCount = selectedItemsCount;
-  self.bottomToolbar.selectedTabsCount = selectedItemsCount;
-
-  BOOL incognitoTabsNeedsAuth =
-      (self.currentPage == TabGridPageIncognitoTabs &&
-       self.incognitoTabsViewController.contentNeedsAuthentication);
-  BOOL enableMultipleItemsSharing =
-      !incognitoTabsNeedsAuth && sharableSelectedItemsCount > 0;
-  [self.bottomToolbar setShareTabsButtonEnabled:enableMultipleItemsSharing];
-  [self.bottomToolbar setAddToButtonEnabled:enableMultipleItemsSharing];
-  [self.bottomToolbar
-      setCloseTabsButtonEnabled:!incognitoTabsNeedsAuth && selectedItemsCount];
-  [self.topToolbar setSelectAllButtonEnabled:!incognitoTabsNeedsAuth];
-
-  if (currentBaseGridViewController.allItemsSelectedForEditing) {
-    [self.topToolbar configureDeselectAllButtonTitle];
-  } else {
-    [self.topToolbar configureSelectAllButtonTitle];
-  }
-
-  [self configureAddToButtonMenuForSelectedItems];
-}
-
 // Tells the appropriate delegate to create a new item, and then tells the
 // presentation delegate to show the new item.
 - (void)openNewTabInPage:(TabGridPage)page focusOmnibox:(BOOL)focusOmnibox {
@@ -1750,21 +1550,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 // Updates the views, buttons, toolbars as well as broadcasts incognito tabs
 // visibility after the tab count has changed.
 - (void)handleTabCountChangeWithTabCount:(NSUInteger)tabCount {
-  if (self.tabGridMode == TabGridModeSelection) {
-    // Exit selection mode if there are no more tabs.
-    if (tabCount == 0) {
-      self.tabGridMode = TabGridModeNormal;
-    }
-
-    [self updateSelectionModeToolbars];
-  }
-
-  if (tabCount > 0) {
-    // Undo is only available when the tab grid is empty.
-    self.undoCloseAllAvailable = NO;
-  }
-
-  [self configureButtonsForActiveAndCurrentPage];
   [self broadcastIncognitoContentVisibility];
 }
 
@@ -1787,7 +1572,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.scrimView.translatesAutoresizingMaskIntoConstraints = NO;
   self.scrimView.accessibilityIdentifier = kTabGridScrimIdentifier;
   [self.scrimView addTarget:self
-                     action:@selector(cancelSearchButtonTapped:)
+                     action:@selector(quitSearchMode)
            forControlEvents:UIControlEventTouchUpInside];
   // Add a gesture recognizer to identify when the user interactions with the
   // search results.
@@ -1820,7 +1605,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         TabGridViewController* strongSelf = weakSelf;
         if (!strongSelf)
           return;
-        strongSelf.isScrimDisplayed = (strongSelf.scrimView.alpha > 0);
         strongSelf.currentPageViewController.accessibilityElementsHidden = YES;
       }];
 }
@@ -1842,7 +1626,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
         if (!strongSelf)
           return;
         strongSelf.currentPageViewController.accessibilityElementsHidden = NO;
-        strongSelf.isScrimDisplayed = (strongSelf.scrimView.alpha > 0);
       }];
 }
 
@@ -1856,33 +1639,30 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (IsVivaldiRunning())
     return; // End Vivaldi
 
-  UIScrollView* scrollView;
+  BOOL gridScrolledToTop;
+  BOOL gridScrolledToBottom;
   switch (self.currentPage) {
     case TabGridPageIncognitoTabs:
-      scrollView = self.incognitoTabsViewController.gridView;
+      gridScrolledToTop = self.incognitoTabsViewController.scrolledToTop;
+      gridScrolledToBottom = self.incognitoTabsViewController.scrolledToBottom;
       break;
     case TabGridPageRegularTabs:
-      scrollView = self.regularTabsViewController.gridView;
+      gridScrolledToTop = self.regularTabsViewController.scrolledToTop;
+      gridScrolledToBottom = self.regularTabsViewController.scrolledToBottom;
       break;
     case TabGridPageRemoteTabs:
-      scrollView = self.remoteTabsViewController.tableView;
+      gridScrolledToTop = self.remoteTabsViewController.scrolledToTop;
+      gridScrolledToBottom = self.remoteTabsViewController.scrolledToBottom;
       break;
 
     // Vivaldi
     case TabGridPageClosedTabs:
-      scrollView = self.closedTabsViewController.tableView;
+      gridScrolledToTop = self.closedTabsViewController.scrolledToTop;
+      gridScrolledToBottom = self.closedTabsViewController.scrolledToBottom;
       break;
     // End Vivaldi
   }
-
-  BOOL gridScrolledToTop =
-      scrollView.contentOffset.y <= -scrollView.adjustedContentInset.top;
   [self.topToolbar setScrollViewScrolledToEdge:gridScrolledToTop];
-
-  CGFloat scrollableHeight = scrollView.contentSize.height +
-                             scrollView.adjustedContentInset.bottom -
-                             scrollView.bounds.size.height;
-  BOOL gridScrolledToBottom = scrollView.contentOffset.y >= scrollableHeight;
   [self.bottomToolbar setScrollViewScrolledToEdge:gridScrolledToBottom];
 }
 
@@ -1917,12 +1697,124 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-// Returns YES if a new tab action that tagets the `destinationPage` can be
+// Returns YES if a new tab action that targets the `destinationPage` can be
 // performed. The _currentPage can be the same page as the `destinationPage`.
 - (BOOL)canPerformOpenNewTabActionForDestinationPage:
     (TabGridPage)destinationPage {
   return [self isPageEnabled:destinationPage] &&
          self.currentPage != TabGridPageRemoteTabs;
+}
+
+// Returns transition layout for the provided `page`.
+- (TabGridTransitionItem*)transitionItemForActiveCellWithActivePage:
+    (TabGridPage)activePage {
+  switch (activePage) {
+    case TabGridPageIncognitoTabs:
+      return [self.incognitoTabsViewController transitionItemForActiveCell];
+    case TabGridPageRegularTabs:
+      return [self transitionItemForRegularActiveCell];
+    case TabGridPageRemoteTabs:
+      return nil;
+
+      // Vivaldi
+    case TabGridPageClosedTabs:
+      return nil;
+      // End Vivaldi
+  }
+}
+
+// Returns transition layout provider for the regular tabs page.
+- (TabGridTransitionItem*)transitionItemForRegularActiveCell {
+  if (IsPinnedTabsEnabled() && self.pinnedTabsViewController.hasSelectedCell) {
+    return [self.pinnedTabsViewController transitionItemForActiveCell];
+  }
+
+  return [self.regularTabsViewController transitionItemForActiveCell];
+}
+
+// Quit search mode.
+- (void)quitSearchMode {
+  self.tabGridMode = TabGridModeNormal;
+}
+
+// Optionally presents a full screen IPH that instructs the user to right swipe
+// to view the incognito tab grid. If the delegate determines that the user
+// supposed to see this tip, and the IPH fits on the current screen both
+// contextually and visually, then it initializes `swipeToIncognitoIPH` and
+// presents a SideSwipeBubbleView. Otherwise, it keeps `swipeToIncognitoIPH` to
+// `nil` and no gestural tip is shown.
+- (void)maybeShowSwipeToIncognitoIPH {
+  // Return if the regular tabs are visible.
+  if (!self.viewVisible || self.currentPage != TabGridPageRegularTabs) {
+    return;
+  }
+
+  if (UIAccessibilityIsVoiceOverRunning()) {
+    // TODO(crbug.com/1467873): Add a voiceover announcement to the IPH view
+    // instead of returning.
+    return;
+  }
+  // Check whether the user should see the IPH.
+  if (![self.delegate tabGridIsUserEligibleForSwipeToIncognitoIPH]) {
+    return;
+  }
+  // Return if the IPH has already been presented.
+  if (self.swipeToIncognitoIPH) {
+    return;
+  }
+
+  // Create the view.
+  UIView* regularGridView = self.regularTabsViewController.view;
+  CGSize expectedSize = CGSize();
+  expectedSize.height =
+      regularGridView.bounds.size.height - self.topToolbar.bounds.size.height;
+  if ([self shouldUseCompactLayout]) {
+    expectedSize.height -= self.bottomToolbar.bounds.size.height;
+  }
+  expectedSize.width = regularGridView.bounds.size.width;
+  SideSwipeBubbleView* sideSwipeBubbleView = [[SideSwipeBubbleView alloc]
+            initWithText:l10n_util::GetNSString(
+                             UseRTLLayout()
+                                 ? IDS_IOS_SWIPE_LEFT_TO_INCOGNITO_IPH
+                                 : IDS_IOS_SWIPE_RIGHT_TO_INCOGNITO_IPH)
+      bubbleBoundingSize:expectedSize
+          arrowDirection:BubbleArrowDirectionLeading];
+  [sideSwipeBubbleView setTranslatesAutoresizingMaskIntoConstraints:NO];
+
+  // Return if the view does NOT fit in the regular tab grid.
+  CGSize smallestPossibleSizeOfIPH = [sideSwipeBubbleView
+      systemLayoutSizeFittingSize:UILayoutFittingCompressedSize];
+  if (smallestPossibleSizeOfIPH.width > expectedSize.width ||
+      smallestPossibleSizeOfIPH.height > expectedSize.height) {
+    return;
+  }
+
+  // Coast is clear. Show the message!
+  id<TabGridViewControllerDelegate> delegate = self.delegate;
+  sideSwipeBubbleView.dismissCallback =
+      ^(IPHDismissalReasonType IPHDismissalReasonType,
+        feature_engagement::Tracker::SnoozeAction snoozeAction) {
+        [delegate tabGridDidDismissSwipeToIncognitoIPH];
+      };
+  if (![delegate tabGridShouldPresentSwipeToIncognitoIPH]) {
+    return;
+  }
+  self.swipeToIncognitoIPH = sideSwipeBubbleView;
+  [self.view addSubview:self.swipeToIncognitoIPH];
+  self.swipeToIncognitoIPHBottomConstraint = [sideSwipeBubbleView.bottomAnchor
+      constraintEqualToAnchor:[self shouldUseCompactLayout]
+                                  ? self.bottomToolbar.topAnchor
+                                  : regularGridView.bottomAnchor];
+  [NSLayoutConstraint activateConstraints:@[
+    [sideSwipeBubbleView.leadingAnchor
+        constraintEqualToAnchor:regularGridView.leadingAnchor],
+    [sideSwipeBubbleView.trailingAnchor
+        constraintEqualToAnchor:regularGridView.trailingAnchor],
+    [sideSwipeBubbleView.topAnchor
+        constraintEqualToAnchor:self.topToolbar.bottomAnchor],
+    self.swipeToIncognitoIPHBottomConstraint
+  ]];
+  [self.swipeToIncognitoIPH startAnimation];
 }
 
 #pragma mark - UIGestureRecognizerDelegate
@@ -2009,8 +1901,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 // Calculates the proper insets for the Incognito Grid ViewController to
-// accomodate for the safe area and toolbar.
-- (UIEdgeInsets)calculateInsetForIncognitoGridView {
+// accommodate for the safe area and toolbar.
+- (UIEdgeInsets)calculateInsetsForIncognitoGridView {
   // The content inset of the tab grids must be modified so that the toolbars
   // do not obscure the tabs. This may change depending on orientation.
   CGFloat bottomInset = self.configuration == TabGridConfigurationBottomToolbar
@@ -2028,9 +1920,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 // Calculates the proper insets for the Regular Grid ViewController to
-// accomodate for the safe area and toolbars.
-- (UIEdgeInsets)calculateInsetForRegularGridView {
-  UIEdgeInsets inset = [self calculateInsetForIncognitoGridView];
+// accommodate for the safe area and toolbars.
+- (UIEdgeInsets)calculateInsetsForRegularGridView {
+  UIEdgeInsets inset = [self calculateInsetsForIncognitoGridView];
 
   if (IsPinnedTabsEnabled() && self.pinnedTabsViewController.visible) {
     CGFloat pinnedViewHeight =
@@ -2053,7 +1945,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)fetchSearchHistoryResultsCountForText:(NSString*)searchText
                                    completion:(void (^)(size_t))completion {
   if (self.currentPage == TabGridPageIncognitoTabs) {
-    // History retrival shouldn't be done from incognito tabs page.
+    // History retrieval shouldn't be done from incognito tabs page.
     completion(0);
     return;
   }
@@ -2081,10 +1973,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)pinnedTabsViewController:
             (PinnedTabsViewController*)pinnedTabsViewController
              didSelectItemWithID:(web::WebStateID)itemID {
+  base::RecordAction(base::UserMetricsAction("MobileTabGridPinnedTabSelected"));
+  LogPinnedTabsUsedForDefaultBrowserPromo();
   // Record how long it took to select an item.
   [self reportTabSelectionTime];
 
-  [self.pinnedTabsDelegate selectItemWithID:itemID];
+  [self.regularTabsDelegate selectItemWithID:itemID pinned:YES];
 
   self.activePage = self.currentPage;
   [self setCurrentIdlePageStatus:NO];
@@ -2106,11 +2000,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)pinnedTabsViewControllerVisibilityDidChange:
     (PinnedTabsViewController*)pinnedTabsViewController {
-  UIEdgeInsets inset = [self calculateInsetForRegularGridView];
+  UIEdgeInsets insets = [self calculateInsetsForRegularGridView];
   [UIView animateWithDuration:kPinnedViewInsetAnimationTime
                    animations:^{
-                     self.regularTabsViewController.gridView.contentInset =
-                         inset;
+                     self.regularTabsViewController.contentInsets = insets;
                    }];
 }
 
@@ -2135,15 +2028,16 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.regularTabsViewController.dropAnimationInProgress = NO;
 }
 
+- (void)pinnedViewControllerDragSessionWillBegin:
+    (PinnedTabsViewController*)pinnedTabsViewController {
+  self.dragSessionInProgress = YES;
+  [self.mutator dragAndDropSessionStarted];
+}
+
 - (void)pinnedViewControllerDragSessionDidEnd:
     (PinnedTabsViewController*)pinnedTabsViewController {
   self.dragSessionInProgress = NO;
-
-  [self.topToolbar setSearchButtonEnabled:YES];
-
-  [self configureDoneButtonBasedOnPage:self.currentPage];
-  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
-  [self configureNewTabButtonBasedOnContentPermissions];
+  [self.mutator dragAndDropSessionEnded];
 }
 
 #pragma mark - BaseGridViewControllerDelegate
@@ -2163,7 +2057,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 
   if (self.tabGridMode == TabGridModeSelection) {
-    [self updateSelectionModeToolbars];
     return;
   }
 
@@ -2193,7 +2086,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self setCurrentIdlePageStatus:NO];
   }
 
-  [tabsDelegate selectItemWithID:itemID];
+  [tabsDelegate selectItemWithID:itemID pinned:NO];
+
+  // TODO(crbug.com/1501837): Change the condition to verify if the given item
+  // ID is a group or not.
+  if (base::FeatureList::IsEnabled(kTabGroupsInGrid)) {
+    // Do not present the currently selected tab.
+    return;
+  }
 
   if (self.tabGridMode == TabGridModeSearch) {
     if (![tabsDelegate isItemWithIDSelected:itemID]) {
@@ -2267,11 +2167,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     (BaseGridViewController*)gridViewController {
 }
 
-- (void)gridViewController:(BaseGridViewController*)gridViewController
-    contentNeedsAuthenticationChanged:(BOOL)needsAuth {
-  [self configureButtonsForActiveAndCurrentPage];
-}
-
 - (void)gridViewControllerWillBeginDragging:
     (BaseGridViewController*)gridViewController {
 }
@@ -2279,18 +2174,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)gridViewControllerDragSessionWillBegin:
     (BaseGridViewController*)gridViewController {
   self.dragSessionInProgress = YES;
+  [self.mutator dragAndDropSessionStarted];
 
   // Actions on both bars should be disabled during dragging.
-  [self.topToolbar setDoneButtonEnabled:NO];
   self.topToolbar.pageControl.userInteractionEnabled = NO;
-  [self.bottomToolbar setDoneButtonEnabled:NO];
-  [self.topToolbar setSelectAllButtonEnabled:NO];
-  [self.topToolbar setEditButtonEnabled:NO];
-  [self.topToolbar setSearchButtonEnabled:NO];
-  [self.bottomToolbar setEditButtonEnabled:NO];
-  [self.bottomToolbar setAddToButtonEnabled:NO];
-  [self.bottomToolbar setShareTabsButtonEnabled:NO];
-  [self.bottomToolbar setCloseTabsButtonEnabled:NO];
   if (IsPinnedTabsEnabled()) {
     [self.pinnedTabsViewController dragSessionEnabled:YES];
   }
@@ -2299,18 +2186,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)gridViewControllerDragSessionDidEnd:
     (BaseGridViewController*)gridViewController {
   self.dragSessionInProgress = NO;
+  [self.mutator dragAndDropSessionEnded];
+  self.topToolbar.pageControl.userInteractionEnabled = YES;
 
-  [self.topToolbar setSearchButtonEnabled:YES];
-
-  // -configureDoneButtonBasedOnPage will enable the page control.
-  [self configureDoneButtonBasedOnPage:self.currentPage];
-  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
-  [self configureNewTabButtonBasedOnContentPermissions];
   if (IsPinnedTabsEnabled()) {
     [self.pinnedTabsViewController dragSessionEnabled:NO];
-  }
-  if (self.tabGridMode == TabGridModeSelection) {
-    [self updateSelectionModeToolbars];
   }
 }
 
@@ -2346,18 +2226,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   NOTREACHED();
 }
 
-#pragma mark - TabGridToolbarsActionWrangler
+#pragma mark - TabGridToolbarsMainTabGridDelegate
 
 - (void)doneButtonTapped:(id)sender {
-  // Tapping Done when in selection mode, should only return back to the normal
-  // mode.
-  if (self.tabGridMode == TabGridModeSelection) {
-    self.tabGridMode = TabGridModeNormal;
-    // Records action when user exit the selection mode.
-    base::RecordAction(base::UserMetricsAction("MobileTabGridSelectionDone"));
-    return;
-  }
-
   TabGridPage newActivePage = self.currentPage;
 
   if (self.currentPage == TabGridPageRemoteTabs) {
@@ -2382,44 +2253,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // tab.
     base::RecordAction(base::UserMetricsAction("MobileTabGridDone"));
   }
-}
-
-- (void)selectTabsButtonTapped:(id)sender {
-  self.tabGridMode = TabGridModeSelection;
-  base::RecordAction(base::UserMetricsAction("MobileTabGridSelectTabs"));
-}
-
-- (void)selectAllButtonTapped:(id)sender {
-  BaseGridViewController* gridViewController =
-      [self gridViewControllerForPage:self.currentPage];
-  CHECK(gridViewController);
-
-  // Deselect all items if they are all already selected.
-  if (gridViewController.allItemsSelectedForEditing) {
-    base::RecordAction(
-        base::UserMetricsAction("MobileTabGridSelectionDeselectAll"));
-    [gridViewController deselectAllItemsForEditing];
-  } else {
-    base::RecordAction(
-        base::UserMetricsAction("MobileTabGridSelectionSelectAll"));
-    [gridViewController selectAllItemsForEditing];
-  }
-
-  [self updateSelectionModeToolbars];
-}
-
-- (void)searchButtonTapped:(id)sender {
-  self.tabGridMode = TabGridModeSearch;
-  base::RecordAction(base::UserMetricsAction("MobileTabGridSearchTabs"));
-}
-
-- (void)cancelSearchButtonTapped:(id)sender {
-  if (!self.isScrimDisplayed) {
-    // Only record search cancel event when an actual search happened.
-    base::RecordAction(
-        base::UserMetricsAction("MobileTabGridCancelSearchTabs"));
-  }
-  self.tabGridMode = TabGridModeNormal;
 }
 
 - (void)pageControlChangedValue:(id)sender {
@@ -2493,17 +2326,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 
   if (isTabGridUpdated) {
-    [self configureButtonsForActiveAndCurrentPage];
     [self broadcastIncognitoContentVisibility];
-  }
-}
-
-#pragma mark - IncognitoReauthObserver
-
-- (void)reauthAgent:(IncognitoReauthSceneAgent*)agent
-    didUpdateAuthenticationRequirement:(BOOL)isRequired {
-  if (isRequired) {
-    self.tabGridMode = TabGridModeNormal;
   }
 }
 
@@ -2535,7 +2358,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // menu.
   return @[
     UIKeyCommand.cr_openNewRegularTab,
-    UIKeyCommand.cr_close,
     // TODO(crbug.com/1385469): Move it to the menu builder once we have the
     // strings.
     UIKeyCommand.cr_select2,
@@ -2554,9 +2376,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (sel_isEqual(action, @selector(keyCommand_openNewIncognitoTab))) {
     return [self
         canPerformOpenNewTabActionForDestinationPage:TabGridPageIncognitoTabs];
-  }
-  if (sel_isEqual(action, @selector(keyCommand_find))) {
-    return self.viewVisible;
   }
   return [super canPerformAction:action withSender:sender];
 }
@@ -2588,11 +2407,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self openNewIncognitoTabForKeyboardCommand];
 }
 
-- (void)keyCommand_find {
-  base::RecordAction(base::UserMetricsAction("MobileKeyCommandSearchTabs"));
-  [self searchButtonTapped:nil];
-}
-
 - (void)keyCommand_select1 {
   base::RecordAction(
       base::UserMetricsAction("MobileKeyCommandGoToIncognitoTabGrid"));
@@ -2609,15 +2423,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   base::RecordAction(
       base::UserMetricsAction("MobileKeyCommandGoToRemoteTabGrid"));
   [self setCurrentPageAndPageControl:TabGridPageRemoteTabs animated:YES];
-}
-
-- (void)keyCommand_close {
-  base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
-  if (self.tabGridMode == TabGridModeSearch) {
-    [self cancelSearchButtonTapped:nil];
-  } else {
-    [self doneButtonTapped:nil];
-  }
 }
 
 // Returns `YES` if should use compact layout.
@@ -2703,6 +2508,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)setActivePageFromPage:(TabGridPage)page {
   self.activePage = page;
+}
+
+- (void)setPageMode:(TabGridMode)mode {
+  self.tabGridMode = mode;
 }
 
 - (void)prepareForDismissal {

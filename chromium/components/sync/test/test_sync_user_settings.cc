@@ -108,6 +108,12 @@ bool TestSyncUserSettings::IsTypeManagedByCustodian(
   return false;
 }
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+int TestSyncUserSettings::GetNumberOfAccountsWithPasswordsSelected() const {
+  return selected_types_.Has(UserSelectableType::kPasswords) ? 1 : 0;
+}
+#endif
+
 ModelTypeSet TestSyncUserSettings::GetPreferredDataTypes() const {
   ModelTypeSet types = UserSelectableTypesToModelTypes(GetSelectedTypes());
   types.PutAll(AlwaysPreferredUserTypes());
@@ -256,10 +262,11 @@ bool TestSyncUserSettings::SetDecryptionPassphrase(
   return false;
 }
 
-void TestSyncUserSettings::SetDecryptionNigoriKey(
+void TestSyncUserSettings::SetExplicitPassphraseDecryptionNigoriKey(
     std::unique_ptr<Nigori> nigori) {}
 
-std::unique_ptr<Nigori> TestSyncUserSettings::GetDecryptionNigoriKey() const {
+std::unique_ptr<Nigori>
+TestSyncUserSettings::GetExplicitPassphraseDecryptionNigoriKey() const {
   return nullptr;
 }
 

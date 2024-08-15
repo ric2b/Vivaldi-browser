@@ -11,19 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//! Core functionality common to all NP Rust FFI layers
-#![cfg_attr(not(feature = "std"), no_std)]
-#![forbid(unsafe_code)]
-#![deny(
-    missing_docs,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::expect_used
-)]
 
-extern crate alloc;
-extern crate core;
+//! Core functionality common to all NP Rust FFI layers
+
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 pub mod utils;

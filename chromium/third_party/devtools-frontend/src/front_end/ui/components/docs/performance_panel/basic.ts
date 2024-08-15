@@ -4,6 +4,7 @@
 
 import * as FrontendHelpers from '../../../../../test/unittests/front_end/helpers/EnvironmentHelpers.js';
 import * as Common from '../../../../core/common/common.js';
+import * as Root from '../../../../core/root/root.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Bindings from '../../../../models/bindings/bindings.js';
 import * as Workspace from '../../../../models/workspace/workspace.js';
@@ -61,6 +62,9 @@ UI.ActionRegistration.registerActionExtension({
   contextTypes() {
     return [Timeline.TimelinePanel.TimelinePanel];
   },
+  async loadActionDelegate() {
+    return new Timeline.TimelinePanel.ActionDelegate();
+  },
 });
 UI.ActionRegistration.registerActionExtension({
   actionId: 'components.collect-garbage',
@@ -86,26 +90,18 @@ UI.ActionRegistration.registerActionExtension({
     },
   ],
 });
+
 const actionRegistry = UI.ActionRegistry.ActionRegistry.instance();
 UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistry});
 Common.Settings.settingForTest('flamechartMouseWheelAction').set('zoom');
-
 const params = new URLSearchParams(window.location.search);
 const traceFileName = params.get('trace');
 const cpuprofileName = params.get('cpuprofile');
 const nodeMode = params.get('isNode');
 const isNodeMode = nodeMode === 'true' ? true : false;
-// By default we run both engines in the dev server, but this can be overridden by passing the parameter.
-let threadTracksSource = Timeline.TimelinePanel.ThreadTracksSource.BOTH_ENGINES;
-const threadTracksSourceParam = params.get('threadTracksSource');
-if (threadTracksSourceParam === 'new') {
-  threadTracksSource = Timeline.TimelinePanel.ThreadTracksSource.NEW_ENGINE;
-} else if (threadTracksSourceParam === 'old') {
-  threadTracksSource = Timeline.TimelinePanel.ThreadTracksSource.OLD_ENGINE;
-}
+Root.Runtime.experiments.setEnabled('timelineInvalidationTracking', params.has('invalidations'));
 
-const timeline =
-    Timeline.TimelinePanel.TimelinePanel.instance({forceNew: true, isNode: isNodeMode, threadTracksSource});
+const timeline = Timeline.TimelinePanel.TimelinePanel.instance({forceNew: true, isNode: isNodeMode});
 const container = document.getElementById('container');
 if (!container) {
   throw new Error('could not find container');
@@ -122,11 +118,17 @@ if (traceFileName) {
 }
 
 if (fileName) {
-  const file = new URL(`../../../../../test/unittests/fixtures/traces/${fileName}`, import.meta.url);
+  await loadFromFile(fileName);
+}
+
+async function loadFromFile(fileNameWithExtension: string) {
+  const file = new URL(`../../../../../test/unittests/fixtures/traces/${fileNameWithExtension}`, import.meta.url);
   const response = await fetch(file);
   const asBlob = await response.blob();
-  const asFile = new File([asBlob], `${fileName}`, {
+  const asFile = new File([asBlob], `${fileNameWithExtension}`, {
     type: 'application/gzip',
   });
-  void timeline.loadFromFile(asFile);
+  await timeline.loadFromFile(asFile);
 }
+// @ts-expect-error
+window.loadFromFile = loadFromFile;

@@ -27,6 +27,10 @@ If you have created an example website to generate a trace, consider contributin
 
 ## basic
 
+Contains a navigation to about:blank first and then to another URL. Includes data from about:blank to ensure a track for that URL is rendered.
+
+## basic
+
 A very barebones trace; contains info on browser processes and threads but very little else.
 
 ## slow-interaction-button-click
@@ -51,6 +55,10 @@ This trace is a trace of example.com which was recorded via the OPP's "Start pro
 ### web-dev
 
 A trace of web.dev being loaded.
+
+### web-dev-with-commit
+
+The web-dev trace is old (recorded in 2021) and since its recording the events relating to frames have changed. In particular CompositeLayers was replaced by Commit, and frameSeqId was added to more events. This is a more recent (Nov 2023) trace that has the newer frame-related events in it. This was used when migrating the TimelineFrameModel to the new engine.
 
 ### multiple-top-level-renderers
 
@@ -123,10 +131,24 @@ Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/f
 
 ### large-recalc-style
 
-Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/forced-layout-main-thread. Has a large recalc style event.
+Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/forced-layout-main-thread. Has a large recalc style event that isn't forced by JS.
 
 ### two-workers
 
 Generated from https://github.com/ChromeDevTools/performance-stories/tree/main/two-workers. Runs two workers that both calculcate fibonnaci numbers.
 
+### timer-initiators
 
+Contains a `setTimeout`, `requestAnimationFrame` and `requestIdleCallback` call.
+
+### nested-initiators
+
+Contains a `setTimeout` triggered by a prior `setTimeout`, so there is a larger initiator chain.
+
+### multiple-navigations-same-id
+
+Contains a trace with two identical navigation events with matching IDs. See crbug.com/1503982 for the context and comments in MetaHandler.ts for the fix. This trace is included to avoid a regression.
+
+### web-dev-initial-url
+
+This is a trace where we loaded web.dev/inp, but the initial URL reported by the TraceStartedInBrowser event states google.com (the previous page). In this situation the MetaHandler would produce google.com as the mainFrameURL which is incorrect. This trace was used to write a test to ensure in this instance if we can we try to calculate the actual domain by looking at the first navigation.

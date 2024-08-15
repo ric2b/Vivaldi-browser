@@ -8,7 +8,6 @@ import {
   activeElement,
   activeElementTextContent,
   click,
-  enableExperiment,
   goToResource,
   pasteText,
   pressKey,
@@ -17,6 +16,7 @@ import {
   waitForFunction,
 } from '../../shared/helper.js';
 import {describe, it} from '../../shared/mocha-extensions.js';
+import {openSoftContextMenuAndClickOnItem} from '../helpers/context-menu-helpers.js';
 import {
   getTextFromHeadersRow,
   navigateToNetworkTab,
@@ -24,7 +24,6 @@ import {
   waitForSomeRequestsToAppear,
 } from '../helpers/network-helpers.js';
 import {
-  clickOnContextMenu,
   enableLocalOverrides,
   openOverridesSubPane,
   openSourcesPanel,
@@ -40,7 +39,7 @@ const RESPONSE_HEADERS_SELECTOR = '[aria-label="Response Headers"]';
 const HEADER_ROW_SELECTOR = '.row';
 
 async function createHeaderOverride() {
-  await clickOnContextMenu(OVERRIDES_FILESYSTEM_SELECTOR, 'New file');
+  await openSoftContextMenuAndClickOnItem(OVERRIDES_FILESYSTEM_SELECTOR, 'New file');
   await waitFor('.being-edited');
   await typeText('.headers\n');
   await click('.add-block');
@@ -67,7 +66,7 @@ async function openHeadersTab() {
 }
 
 async function editorTabHasPurpleDot(): Promise<boolean> {
-  const tabHeaderIcon = await waitFor('.tabbed-pane-header-tab-icon .spritesheet-mediumicons');
+  const tabHeaderIcon = await waitFor('.tabbed-pane-header-tab-icon devtools-icon');
   return await tabHeaderIcon?.evaluate(node => node.classList.contains('dot') && node.classList.contains('purple'));
 }
 
@@ -100,7 +99,6 @@ describe('The Overrides Panel', async function() {
 
   // Skip until flake is fixed
   it.skip('[crbug.com/1432925]: can create header overrides', async () => {
-    await enableExperiment('headerOverrides');
     await goToResource('empty.html');
     await openSourcesPanel();
     await enableLocalOverrides();
@@ -121,7 +119,6 @@ describe('The Overrides Panel', async function() {
 
   // Skip until flake is fixed
   it.skip('[crbug.com/1432925]: can override headers via network panel', async () => {
-    await enableExperiment('headerOverrides');
     await navigateToNetworkTab('hello.html');
     await waitForSomeRequestsToAppear(1);
     await selectRequestByName('hello.html');

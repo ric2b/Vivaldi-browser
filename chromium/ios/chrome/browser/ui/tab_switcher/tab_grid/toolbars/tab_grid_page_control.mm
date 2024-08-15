@@ -723,15 +723,17 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   // All of the guides are of the same height, and vertically centered in the
   // control.
   for (UILayoutGuide* guide in @[ incognitoGuide, regularGuide, remoteGuide ]) {
+
+    if (IsVivaldiRunning()) {
+      [guide.heightAnchor
+          constraintEqualToConstant:vOverallHeight].active = YES;
+      [guide.widthAnchor constraintEqualToConstant:vSegmentWidth].active = YES;
+    } else {
     [guide.heightAnchor constraintEqualToConstant:kOverallHeight].active = YES;
     // Guides are all the same width. The regular guide is centered in the
     // control, and the incognito and remote guides are on the leading and
     // trailing sides of it, with separators in between.
     [guide.widthAnchor constraintEqualToConstant:kSegmentWidth].active = YES;
-
-    if (IsVivaldiRunning()) {
-      [guide.heightAnchor
-          constraintEqualToConstant:vOverallHeight].active = YES;
     } // End Vivaldi
 
     [guide.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active =
@@ -741,26 +743,19 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   if (IsVivaldiRunning()) {
 
     [closedGuide.heightAnchor
-     constraintEqualToConstant:vOverallHeight].active = YES;
+        constraintEqualToConstant:vOverallHeight].active = YES;
+    [closedGuide.widthAnchor
+        constraintEqualToConstant:vSegmentWidth].active = YES;
     [closedGuide.centerYAnchor
-     constraintEqualToAnchor:self.centerYAnchor].active = YES;
+        constraintEqualToAnchor:self.centerYAnchor].active = YES;
 
     [NSLayoutConstraint activateConstraints:@[
-      [incognitoGuide.widthAnchor constraintEqualToConstant:vSegmentWidth],
       [incognitoGuide.leadingAnchor
           constraintEqualToAnchor:self.leadingAnchor],
-
-      [regularGuide.widthAnchor
-          constraintEqualToConstant:vSegmentWidth],
       [regularGuide.leadingAnchor
           constraintEqualToAnchor:incognitoGuide.trailingAnchor],
-
-      [remoteGuide.widthAnchor
-          constraintEqualToConstant:vSegmentWidth],
       [remoteGuide.leadingAnchor
           constraintEqualToAnchor:regularGuide.trailingAnchor],
-
-      [closedGuide.widthAnchor constraintEqualToConstant:vSegmentWidth],
       [closedGuide.leadingAnchor
           constraintEqualToAnchor:remoteGuide.trailingAnchor],
     ]];

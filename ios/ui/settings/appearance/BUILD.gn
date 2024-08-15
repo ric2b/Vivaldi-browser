@@ -2,20 +2,30 @@
 
 import("//build/config/ios/swift_source_set.gni")
 
-source_set("vivaldi_appearance_setting") {
+source_set("vivaldi_appearance_settings") {
   sources = [
-    "vivaldi_theme_setting_prefs_helper.h",
-    "vivaldi_theme_setting_prefs_helper.mm",
-    "vivaldi_theme_setting_prefs.h",
-    "vivaldi_theme_setting_prefs.mm"
+    "vivaldi_appearance_settings_prefs_helper.h",
+    "vivaldi_appearance_settings_prefs_helper.mm",
+    "vivaldi_appearance_settings_prefs.h",
+    "vivaldi_appearance_settings_prefs.mm",
+    "vivaldi_appearance_settings_coordinator.h",
+    "vivaldi_appearance_settings_coordinator.mm",
+    "vivaldi_appearance_settings_mediator.h",
+    "vivaldi_appearance_settings_mediator.mm",
+    "vivaldi_appearance_settings_consumer.h",
   ]
 
   deps = [
-    "resources:imagesets",
-    "resources/vivaldi_wallpapers:imagesets",
-    ":vivaldi_appearance_setting_swift",
+    "resources",
     "//base",
-    "//ui/base"
+    "//ui/base",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/prefs",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    ":vivaldi_appearance_settings_swift"
   ]
 
   frameworks = [
@@ -24,24 +34,44 @@ source_set("vivaldi_appearance_setting") {
   ]
 }
 
-swift_source_set("vivaldi_appearance_setting_swift") {
-  bridge_header = "vivaldi_appearance_setting_swift_bridge.h"
+swift_source_set("vivaldi_appearance_settings_swift") {
+  bridge_header = "vivaldi_appearance_settings_swift_bridge.h"
   sources = [
-    "vivaldi_theme_segment_control.swift",
-    "vivaldi_theme_view.swift",
-    "vivaldi_wallpaper_model.swift",
-    "vivaldi_wallpaper_selector.swift",
-    "vivaldi_wallpaper_thumbnail_image.swift",
-    "vivaldi_appearance_view_provider.swift",
-    "vivaldi_appearance_mode.swift",
-    "vivaldi_appearance_theme_manager.swift",
-    "ThemeConstants.swift"
+    # Common
+    "vivaldi_appearance_settings_constants.swift",
+    "vivaldi_appearance_settings_state.swift",
+    "vivaldi_appearance_settings_view_provider.swift",
+    "vivaldi_appearance_settings_view.swift",
+    "vivaldi_predefined_accent_color.swift",
+    # Utils
+    "//vivaldi/ios/ui/settings/appearance/utils/color_extension.swift",
+    "//vivaldi/ios/ui/settings/appearance/utils/view_section_header_style.swift",
+    # Accent Color
+    "//vivaldi/ios/ui/settings/appearance/accent_color/view_clipped_corner_style.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_address_bar_preview_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_custom_picker_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_picker_preloaded_collection_cell.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_picker_preloaded_collection.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_preloaded_collection_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_preloaded_picker_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_settings_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_tab_bar_preview_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_tab_bar_tab_strip_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/accent_color/vivaldi_accent_color_toolbar_preview_view.swift",
+    # Browser Theme
+    "//vivaldi/ios/ui/settings/appearance/browser_theme/vivaldi_browser_theme_manager.swift",
+    "//vivaldi/ios/ui/settings/appearance/browser_theme/vivaldi_browser_theme_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/browser_theme/vivaldi_browser_theme.swift",
+    # Website Appearance
+    "//vivaldi/ios/ui/settings/appearance/website_appearance/view_static_button_style.swift",
+    "//vivaldi/ios/ui/settings/appearance/website_appearance/vivaldi_website_appearance_settings_option.swift",
+    "//vivaldi/ios/ui/settings/appearance/website_appearance/vivaldi_website_appearance_settings_view.swift",
+    "//vivaldi/ios/ui/settings/appearance/website_appearance/vivaldi_website_appearance_style.swift",
   ]
 
   deps = [
     "//base",
     "//ui/base",
-    "//url",
     "//ios/chrome/app/strings"
   ]
 

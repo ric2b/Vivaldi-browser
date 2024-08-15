@@ -22,12 +22,15 @@ limitations under the License.
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/IR/Visitors.h"  // from @llvm-project
+#include "tensorflow/compiler/mlir/mlir_graph_optimization_pass.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_structs.h"
-#include "tensorflow/compiler/mlir/tensorflow/transforms/bridge.h"
 #include "tensorflow/compiler/mlir/tensorflow/transforms/host_runtime/lower_cluster_to_runtime_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/device_util.h"
 #include "tensorflow/compiler/mlir/tf2xla/api/v1/cluster_tf.h"
+#include "tensorflow/compiler/mlir/tf2xla/api/v1/tf_dialect_to_executor.h"
 #include "tensorflow/compiler/mlir/tf2xla/api/v2/cluster_tf.h"
 #include "tensorflow/compiler/mlir/tf2xla/api/v2/tf_dialect_to_executor.h"
 #include "tensorflow/compiler/tf2xla/tf2xla_defs.h"
@@ -35,6 +38,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/device_set.h"
 #include "tensorflow/core/framework/metrics.h"
 #include "tensorflow/core/lib/monitoring/gauge.h"
+#include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/public/session_options.h"
 #include "tensorflow/core/tpu/tpu_defs.h"
 #include "tensorflow/core/util/device_name_utils.h"
@@ -51,6 +55,8 @@ auto* mlir_bridge_gauge_v2 = monitoring::Gauge<bool, 0>::New(
     "Tracks usage of the MLIR-based TF2XLA bridge among TF2 models");
 
 namespace {
+
+using ::mlir::ModuleOp;
 
 bool HasTPUDevice(mlir::ModuleOp module) {
   mlir::TF::RuntimeDevices devices;
@@ -133,6 +139,33 @@ bool HasTPUPartitionedCallOpInModule(mlir::ModuleOp module) {
   return has_tpu_partitioned_call;
 }
 
+// V1 Compat Bridge extracts out a program into a submodule and runs clustering
+// only on the submodule.
+absl::Status RunLowerToRuntimeOpsOnSubmodule(ModuleOp parent_module,
+                                             bool is_in_fallback_enabled_mode) {
+  int num_submodules = 0;
+  absl::Status runtime_lowering_status;
+  parent_module.walk([&](ModuleOp submodule) {
+    if (submodule == parent_module) return mlir::WalkResult::advance();
+    num_submodules++;
+    runtime_lowering_status =
+        tensorflow::tfrt_compiler::RunLowerClusterToRuntimeOpsPassPipeline(
+            submodule, tsl::DeviceType(DEVICE_TPU_XLA_JIT));
+    if (num_submodules > 1) {
+      return mlir::WalkResult::interrupt();
+    }
+
+    return mlir::WalkResult::advance();
+  });
+
+  if (num_submodules > 1) {
+    return absl::InternalError(
+        "Lower to runtime has more than one submodule. Erroring out.");
+  }
+
+  return runtime_lowering_status;
+}
+
 }  // namespace
 
 // Analyzes the user requested policy as well as the contents of the graph and
@@ -204,13 +237,13 @@ MlirOptimizationPassState GetPassStateImpl(
       return MlirOptimizationPassState::FallbackEnabled;
     case MlirBridgeRolloutPolicy::kDisabledByUser:
       VLOG(1) << "Skipping MLIR CPU/GPU Bridge, disabled by user.";
-      metrics::UpdateTfMlirBridgeFirstPhaseCounter("cpu/gpu", "tfxla", false,
+      metrics::UpdateTfMlirBridgeFirstPhaseCounter("cpu/gpu", "v2", false,
                                                    "disabled_by_user");
       return MlirOptimizationPassState::Disabled;
     default:
       // This case should never be hit. Added here to be consistent with OSS
       // implementation.
-      metrics::UpdateTfMlirBridgeFirstPhaseCounter("cpu/gpu", "ftxla", false,
+      metrics::UpdateTfMlirBridgeFirstPhaseCounter("cpu/gpu", "v2", false,
                                                    "invalid_graph");
       return MlirOptimizationPassState::Disabled;
   }
@@ -254,7 +287,10 @@ Status MlirBridgePass::Run(const std::string& function_name,
   }
 
   if (HasTPUPartitionedCallOpInModule(module)) {
-    VLOG(1) << "This is an inference module.";
+    VLOG(1) << "Skipping MLIR TF2XLA Bridge. This is an inference graph, "
+               "Session V1 Bridge should be used during execution of "
+               "TPUPartitionedCall.";
+    return OkStatus();
   }
 
   // TODO(b/241853328): Add caching of pass state and call logging/metrics
@@ -289,23 +325,26 @@ Status MlirBridgePass::Run(const std::string& function_name,
 
     TF_RETURN_IF_ERROR(
         tensorflow::tf2xla::v2::RunFunctionTf2xlaClusteringBridge(
-            module, tf2xla::v2::DeviceType::XLA_TPU_JIT, fallback_enabled));
+            module, tf2xla::v2::DeviceType::XLA_TPU_JIT, fallback_enabled,
+            function_name));
 
     TF_RETURN_IF_ERROR(
         tensorflow::tfrt_compiler::RunLowerClusterToRuntimeOpsPassPipeline(
-            module, tsl::DeviceType(DEVICE_TPU_XLA_JIT)));
+            module, tsl::DeviceType(DEVICE_TPU_XLA_JIT), function_name));
   } else {
     VLOG(1) << "Running GPU/CPU Bridge";
     TF_RETURN_IF_ERROR(
         tensorflow::tf2xla::v2::RunFunctionTf2xlaClusteringBridge(
-            module, tf2xla::v2::DeviceType::XLA_GPU_JIT, fallback_enabled));
+            module, tf2xla::v2::DeviceType::XLA_GPU_JIT, fallback_enabled,
+            function_name));
 
     TF_RETURN_IF_ERROR(
         tensorflow::tfrt_compiler::RunLowerClusterToRuntimeOpsPassPipeline(
-            module, tsl::DeviceType(DEVICE_GPU_XLA_JIT)));
+            module, tsl::DeviceType(DEVICE_GPU_XLA_JIT), function_name));
   }
 
-  return tensorflow::tf2xla::v2::ExportFromTensorflowDialectToExecutor(module);
+  return tensorflow::tf2xla::v2::ExportFromTensorflowDialectToExecutor(
+      module, function_name);
 }
 
 MlirOptimizationPassState MlirBridgeV1CompatPass::GetPassState(
@@ -407,10 +446,19 @@ Status MlirBridgeV1CompatPass::Run(const GraphOptimizationPassOptions& options,
   }
 
   VLOG(1) << "Running MLIR TPU Bridge V1 Compat";
-
   mlir_bridge_gauge_v1->GetCell()->Set(true);
-  return tensorflow::tf2xla::v1::RunSessionTf2xlaClusteringBridge(
-      module, fallback_enabled);
+  TF_RETURN_IF_ERROR(tensorflow::tf2xla::v1::RunSessionTf2xlaClusteringBridge(
+      module, fallback_enabled));
+
+  auto lower_cluster_to_runtime_ops_pass_pipeline =
+      RunLowerToRuntimeOpsOnSubmodule(module, fallback_enabled);
+  if (!lower_cluster_to_runtime_ops_pass_pipeline.ok()) {
+    VLOG(1) << "Error while lowering cluster to runtime ops: "
+            << lower_cluster_to_runtime_ops_pass_pipeline;
+    return lower_cluster_to_runtime_ops_pass_pipeline;
+  }
+
+  return tensorflow::tf2xla::v1::ExportFromTensorflowDialectToExecutor(module);
 }
 
 }  // namespace tensorflow

@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Generates LDT test vectors which can be used to verify implementations
+
+#![allow(clippy::unwrap_used)]
+
 use crypto_provider::aes::BLOCK_SIZE;
 use crypto_provider::{aes, CryptoProvider, CryptoRng};
 use crypto_provider_rustcrypto::RustCrypto;

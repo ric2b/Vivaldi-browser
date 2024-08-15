@@ -40,9 +40,12 @@ void CohortImpl::Run(base::OnceCallback<void()> callback) {
   callback_ = std::move(callback);
 
   if (!IsDevicePingRequired()) {
+    utils::RecordIsDevicePingRequired(utils::PsmUseCase::kCohort, false);
     std::move(callback_).Run();
     return;
   }
+
+  utils::RecordIsDevicePingRequired(utils::PsmUseCase::kCohort, true);
 
   // Perform check membership if the local state pref has default value.
   // This is done to avoid duplicate check in if the device pinged already.
@@ -61,9 +64,11 @@ base::WeakPtr<CohortImpl> CohortImpl::GetWeakPtr() {
 }
 
 void CohortImpl::CheckMembershipOprf() {
-  SetPsmRlweClient(kPsmUseCase, GetPsmIdentifiersToQuery());
+  PsmClientManager* psm_client_manager = GetParams()->GetPsmClientManager();
 
-  if (!GetPsmRlweClient()) {
+  psm_client_manager->SetPsmRlweClient(kPsmUseCase, GetPsmIdentifiersToQuery());
+
+  if (!psm_client_manager->GetPsmRlweClient()) {
     LOG(ERROR) << "Check membership failed since the PSM RLWE client could "
                << "not be initialized.";
     std::move(callback_).Run();
@@ -71,7 +76,7 @@ void CohortImpl::CheckMembershipOprf() {
   }
 
   // Generate PSM Oprf request body.
-  const auto status_or_oprf_request = GetPsmRlweClient()->CreateOprfRequest();
+  const auto status_or_oprf_request = psm_client_manager->CreateOprfRequest();
   if (!status_or_oprf_request.ok()) {
     LOG(ERROR) << "Failed to create OPRF request.";
     std::move(callback_).Run();
@@ -142,9 +147,11 @@ void CohortImpl::OnCheckMembershipOprfComplete(
 
 void CohortImpl::CheckMembershipQuery(
     const psm_rlwe::PrivateMembershipRlweOprfResponse& oprf_response) {
+  PsmClientManager* psm_client_manager = GetParams()->GetPsmClientManager();
+
   // Generate PSM Query request body.
   const auto status_or_query_request =
-      GetPsmRlweClient()->CreateQueryRequest(oprf_response);
+      psm_client_manager->CreateQueryRequest(oprf_response);
   if (!status_or_query_request.ok()) {
     std::move(callback_).Run();
     return;
@@ -209,7 +216,7 @@ void CohortImpl::OnCheckMembershipQueryComplete(
   psm_rlwe::PrivateMembershipRlweQueryResponse query_response =
       psm_query_response.rlwe_query_response();
   auto status_or_response =
-      GetPsmRlweClient()->ProcessQueryResponse(query_response);
+      GetParams()->GetPsmClientManager()->ProcessQueryResponse(query_response);
 
   if (!status_or_response.ok()) {
     LOG(ERROR) << "Failed to process query response.";
@@ -246,7 +253,7 @@ void CohortImpl::OnCheckMembershipQueryComplete(
 }
 
 void CohortImpl::CheckIn() {
-  absl::optional<FresnelImportDataRequest> import_request =
+  std::optional<FresnelImportDataRequest> import_request =
       GenerateImportRequestBody();
   if (!import_request.has_value()) {
     LOG(ERROR) << "Failed to create the import request body.";
@@ -304,7 +311,7 @@ std::vector<psm_rlwe::RlwePlaintextId> CohortImpl::GetPsmIdentifiersToQuery() {
   return query_psm_ids;
 }
 
-absl::optional<FresnelImportDataRequest>
+std::optional<FresnelImportDataRequest>
 CohortImpl::GenerateImportRequestBody() {
   FresnelImportDataRequest import_request;
   import_request.set_use_case(kPsmUseCase);
@@ -323,14 +330,14 @@ CohortImpl::GenerateImportRequestBody() {
   device_metadata->set_market_segment(market_segment);
 
   std::string window_id = utils::TimeToYYYYMMString(GetParams()->GetActiveTs());
-  absl::optional<psm_rlwe::RlwePlaintextId> psm_id =
+  std::optional<psm_rlwe::RlwePlaintextId> psm_id =
       utils::GeneratePsmIdentifier(GetParams()->GetHighEntropySeed(),
                                    psm_rlwe::RlweUseCase_Name(kPsmUseCase),
                                    window_id);
 
   if (window_id.empty() || !psm_id.has_value()) {
     LOG(ERROR) << "Window ID or Psm ID is empty.";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   FresnelImportData* import_data = import_request.add_import_data();
@@ -340,11 +347,11 @@ CohortImpl::GenerateImportRequestBody() {
 
   ChurnCohortMetadata* cohort_metadata =
       import_data->mutable_churn_cohort_metadata();
-  absl::optional<ChurnCohortMetadata> new_cohort_metadata =
+  std::optional<ChurnCohortMetadata> new_cohort_metadata =
       active_status_->CalculateCohortMetadata(GetParams()->GetActiveTs());
   if (!new_cohort_metadata.has_value()) {
     LOG(ERROR) << "Failed to calculate new cohort metadata.";
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   *cohort_metadata = new_cohort_metadata.value();
@@ -353,7 +360,7 @@ CohortImpl::GenerateImportRequestBody() {
 
 void CohortImpl::UpdateLocalStateOnCheckInSuccess() {
   // Check the new cohort active status value is valid.
-  absl::optional<int> new_active_val =
+  std::optional<int> new_active_val =
       active_status_->CalculateNewValue(GetParams()->GetActiveTs());
   if (!new_active_val.has_value()) {
     LOG(ERROR)

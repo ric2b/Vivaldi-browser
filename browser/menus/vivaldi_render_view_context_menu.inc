@@ -4,6 +4,9 @@
 // class RenderViewContextMenu .... {
 // other declarations
 
+// private
+  std::unique_ptr<NotesSubMenuObserver> insert_note_submenu_observer_;
+
  public:
   void VivaldiAppendSpellingSuggestionItems() {
     AppendSpellingSuggestionItems();

@@ -23,10 +23,11 @@ cc_library(
     ],
     copts = ["-DCORE_ADAPTER_DLL"],
     visibility = [
+        "//chrome/chromeos/assistant/data_migration/lib:__pkg__",
         "//connections:__subpackages__",
         "//location/nearby/cpp/sharing:__subpackages__",
         "//location/nearby/testing:__subpackages__",
-        "//third_party/nearby/sharing:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         ":core_types",
@@ -69,10 +70,11 @@ cc_library(
     ],
     copts = ["-DCORE_ADAPTER_DLL"],
     visibility = [
+        "//chrome/chromeos/assistant/data_migration/lib:__pkg__",
         "//connections:__subpackages__",
         "//location/nearby/cpp/sharing:__subpackages__",
         "//location/nearby/testing:__subpackages__",
-        "//third_party/nearby/sharing:__subpackages__",
+        "//sharing:__subpackages__",
     ],
     deps = [
         "//internal/platform:base",

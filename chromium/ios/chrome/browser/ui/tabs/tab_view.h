@@ -35,6 +35,18 @@
 // Stops the progress spinner animation.
 - (void)stopProgressSpinner;
 
+// Vivaldi
+- (id)initWithEmptyView:(BOOL)emptyView
+             isSelected:(BOOL)isSelected
+   bottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled
+             themeColor:(UIColor*)themeColor
+              tintColor:(UIColor*)tintColor;
+- (void)updateTabViewStyleWithBottomOmniboxEnabled:(BOOL)bottomOmniboxEnabled;
+- (void)updateTabViewStyleWithThemeColor:(UIColor*)themeColor
+                               tintColor:(UIColor*)tintColor
+                              isSelected:(BOOL)isSelected;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TABS_TAB_VIEW_H_

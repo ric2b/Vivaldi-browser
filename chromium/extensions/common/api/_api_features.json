@@ -354,8 +354,10 @@
       "chrome://tab-search.top-chrome/*",
       "chrome://tab-strip.top-chrome/*",
       "chrome://welcome/*",
+      "chrome://vc-background/*",
       "chrome://app-settings/*",
-      "chrome://compose/*"
+      "chrome://compose/*",
+      "chrome://search-engine-choice/*"
     ]
   }, {
     "channel": "stable",
@@ -466,6 +468,11 @@
       "chrome://os-settings/*"
     ]
   }],
+  "odfsConfigPrivate": {
+    "dependencies": ["permission:odfsConfigPrivate"],
+    "contexts": ["blessed_extension"],
+    "feature_flag": "ApiOdfsConfigPrivate"
+  },
   "offscreen": {
     "dependencies": ["permission:offscreen"],
     "contexts": ["blessed_extension"]
@@ -541,8 +548,7 @@
   },
   "runtime.getContexts": {
     "min_manifest_version": 3,
-    "contexts": ["blessed_extension"],
-    "feature_flag": "ApiRuntimeGetContexts"
+    "contexts": ["blessed_extension"]
   },
   "runtime.getURL": {
     "contexts": [
@@ -742,7 +748,7 @@
       "chrome://extensions/*",
       // System Web App version of File Manager.
       "chrome://file-manager/*",
-      "chrome://test/*"
+      "chrome://webui-test/*"
     ]
   }, {
     "channel": "stable",
@@ -762,7 +768,6 @@
   "userScripts": {
     "dependencies": [ "permission:userScripts" ],
     "contexts": [ "blessed_extension" ],
-    "channel": "stable",
     "developer_mode_only": true,
     "feature_flag": "ApiUserScripts"
   },

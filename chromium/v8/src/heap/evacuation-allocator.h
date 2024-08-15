@@ -18,9 +18,6 @@ namespace internal {
 // that all other allocations also go through EvacuationAllocator.
 class EvacuationAllocator {
  public:
-  static const int kLabSize = 32 * KB;
-  static const int kMaxLabObjectSize = 8 * KB;
-
   EvacuationAllocator(Heap* heap, CompactionSpaceKind compaction_space_kind);
 
   // Needs to be called from the main thread to finalize this
@@ -33,20 +30,10 @@ class EvacuationAllocator {
                 int object_size);
 
  private:
-  inline AllocationResult AllocateInNewSpace(int object_size,
-                                             AllocationAlignment alignment);
+  void FreeLastInMainAllocator(MainAllocator* allocator,
+                               Tagged<HeapObject> object, int object_size);
 
-  V8_WARN_UNUSED_RESULT AllocationResult AllocateInNewSpaceSynchronized(
-      int size_in_bytes, AllocationAlignment alignment);
-
-  bool NewLocalAllocationBuffer();
-  inline AllocationResult AllocateInLAB(int object_size,
-                                        AllocationAlignment alignment);
-  void FreeLastInNewSpace(Tagged<HeapObject> object, int object_size);
-  void FreeLastInCompactionSpace(MainAllocator* allocator,
-                                 Tagged<HeapObject> object, int object_size);
-
-  MainAllocator* new_space_allocator() { return new_space_allocator_; }
+  MainAllocator* new_space_allocator() { return &new_space_allocator_.value(); }
   MainAllocator* old_space_allocator() { return &old_space_allocator_.value(); }
   MainAllocator* code_space_allocator() {
     return &code_space_allocator_.value();
@@ -61,13 +48,11 @@ class EvacuationAllocator {
   Heap* const heap_;
   NewSpace* const new_space_;
   CompactionSpaceCollection compaction_spaces_;
-  LocalAllocationBuffer new_space_lab_;
-  MainAllocator* new_space_allocator_;
+  base::Optional<MainAllocator> new_space_allocator_;
   base::Optional<MainAllocator> old_space_allocator_;
   base::Optional<MainAllocator> code_space_allocator_;
   base::Optional<MainAllocator> shared_space_allocator_;
   base::Optional<MainAllocator> trusted_space_allocator_;
-  bool lab_allocation_will_fail_;
 };
 
 }  // namespace internal

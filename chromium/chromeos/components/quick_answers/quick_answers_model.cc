@@ -37,13 +37,39 @@ QuickAnswersRequest::QuickAnswersRequest(const QuickAnswersRequest& other) =
 QuickAnswersRequest::~QuickAnswersRequest() = default;
 
 Sense::Sense() = default;
+Sense::Sense(const Sense& other) = default;
+Sense& Sense::Sense::operator=(const Sense& other) = default;
 Sense::~Sense() = default;
 
 DefinitionResult::DefinitionResult() = default;
+DefinitionResult::DefinitionResult(const DefinitionResult& other) = default;
+DefinitionResult& DefinitionResult::DefinitionResult::operator=(
+    const DefinitionResult& other) = default;
 DefinitionResult::~DefinitionResult() = default;
 
 TranslationResult::TranslationResult() = default;
+TranslationResult::TranslationResult(const TranslationResult& other) = default;
+TranslationResult& TranslationResult::TranslationResult::operator=(
+    const TranslationResult& other) = default;
 TranslationResult::~TranslationResult() = default;
+
+StandardUnitConversionRates::StandardUnitConversionRates(double source_rate,
+                                                         double dest_rate)
+    : source_to_standard_conversion_rate(source_rate),
+      dest_to_standard_conversion_rate(dest_rate) {}
+StandardUnitConversionRates::StandardUnitConversionRates(
+    const StandardUnitConversionRates& other) = default;
+StandardUnitConversionRates&
+StandardUnitConversionRates::StandardUnitConversionRates::operator=(
+    const StandardUnitConversionRates& other) = default;
+StandardUnitConversionRates::~StandardUnitConversionRates() = default;
+
+UnitConversionResult::UnitConversionResult() = default;
+UnitConversionResult::UnitConversionResult(const UnitConversionResult& other) =
+    default;
+UnitConversionResult& UnitConversionResult::UnitConversionResult::operator=(
+    const UnitConversionResult& other) = default;
+UnitConversionResult::~UnitConversionResult() = default;
 
 StructuredResult::StructuredResult() = default;
 StructuredResult::~StructuredResult() = default;

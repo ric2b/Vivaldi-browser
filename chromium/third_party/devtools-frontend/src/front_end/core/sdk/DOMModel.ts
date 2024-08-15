@@ -33,23 +33,22 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
+import * as Protocol from '../../generated/protocol.js';
 import * as Common from '../common/common.js';
 import * as Host from '../host/host.js';
 import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
-import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
-import * as Protocol from '../../generated/protocol.js';
 
 import {CSSModel} from './CSSModel.js';
 import {FrameManager} from './FrameManager.js';
 import {OverlayModel} from './OverlayModel.js';
 import {type RemoteObject} from './RemoteObject.js';
-import {RuntimeModel} from './RuntimeModel.js';
-
-import {Capability, type Target} from './Target.js';
-import {SDKModel} from './SDKModel.js';
-import {TargetManager} from './TargetManager.js';
 import {ResourceTreeModel} from './ResourceTreeModel.js';
+import {RuntimeModel} from './RuntimeModel.js';
+import {SDKModel} from './SDKModel.js';
+import {Capability, type Target} from './Target.js';
+import {TargetManager} from './TargetManager.js';
 
 export class DOMNode {
   #domModelInternal: DOMModel;
@@ -75,9 +74,7 @@ export class DOMNode {
   assignedSlot: DOMNodeShortcut|null;
   readonly shadowRootsInternal: DOMNode[];
   #attributesInternal: Map<string, Attribute>;
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #markers: Map<string, any>;
+  #markers: Map<string, unknown>;
   #subtreeMarkerCount: number;
   childNodeCountInternal!: number;
   childrenInternal: DOMNode[]|null;
@@ -236,6 +233,20 @@ export class DOMNode {
 
   isMediaNode(): boolean {
     return this.#nodeNameInternal === 'AUDIO' || this.#nodeNameInternal === 'VIDEO';
+  }
+
+  isViewTransitionPseudoNode(): boolean {
+    if (!this.#pseudoTypeInternal) {
+      return false;
+    }
+
+    return [
+      Protocol.DOM.PseudoType.ViewTransition,
+      Protocol.DOM.PseudoType.ViewTransitionGroup,
+      Protocol.DOM.PseudoType.ViewTransitionImagePair,
+      Protocol.DOM.PseudoType.ViewTransitionOld,
+      Protocol.DOM.PseudoType.ViewTransitionNew,
+    ].includes(this.#pseudoTypeInternal);
   }
 
   creationStackTrace(): Promise<Protocol.Runtime.StackTrace|null> {
@@ -793,9 +804,7 @@ export class DOMNode {
     return Boolean(this.#xmlVersion);
   }
 
-  // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setMarker(name: string, value: any): void {
+  setMarker(name: string, value: unknown): void {
     if (value === null) {
       if (!this.#markers.has(name)) {
         return;
@@ -823,7 +832,7 @@ export class DOMNode {
   }
 
   marker<T>(name: string): T|null {
-    return this.#markers.get(name) || null;
+    return this.#markers.get(name) as T || null;
   }
 
   getMarkerKeysForTest(): string[] {
@@ -923,9 +932,7 @@ export class DOMNode {
     if (!object) {
       return;
     }
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // @ts-expect-error
-    void object.callFunction(scrollIntoView);
+    await object.callFunction(scrollIntoView);
     object.release();
     node.highlightForTwoSeconds();
 
@@ -943,8 +950,6 @@ export class DOMNode {
     if (!object) {
       return;
     }
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-    // @ts-expect-error
     await object.callFunction(focusInPage);
     object.release();
     node.highlightForTwoSeconds();
@@ -974,13 +979,14 @@ export class DOMNode {
       const classList = classes.trim().split(/\s+/g);
       return (lowerCaseName === 'div' ? '' : lowerCaseName) + '.' + classList.map(cls => CSS.escape(cls)).join('.');
     }
+    if (this.pseudoIdentifier()) {
+      return `${lowerCaseName}(${this.pseudoIdentifier()})`;
+    }
     return lowerCaseName;
   }
 }
 
 export namespace DOMNode {
-  // TODO(crbug.com/1167717): Make this a const enum again
-  // eslint-disable-next-line rulesdir/const_enum
   export enum ShadowRootTypes {
     UserAgent = 'user-agent',
     Open = 'open',
@@ -1273,11 +1279,16 @@ export class DOMModel extends SDKModel<EventTypes> {
   }
 
   documentUpdated(): void {
+    // If this frame doesn't have a document now,
+    // it means that its document is not requested yet and
+    // it will be requested when needed. (ex: setChildNodes event is received for the frame owner node)
+    // So, we don't need to request the document if we don't
+    // already have a document.
+    const alreadyHasDocument = Boolean(this.#document);
+    this.setDocument(null);
     // If we have this.#pendingDocumentRequestPromise in flight,
     // it will contain most recent result.
-    const documentWasRequested = this.#pendingDocumentRequestPromise;
-    this.setDocument(null);
-    if (this.parentModel() && !documentWasRequested) {
+    if (this.parentModel() && alreadyHasDocument && !this.#pendingDocumentRequestPromise) {
       void this.requestDocument();
     }
   }
@@ -1294,6 +1305,10 @@ export class DOMModel extends SDKModel<EventTypes> {
     if (!this.parentModel()) {
       this.dispatchEventToListeners(Events.DocumentUpdated, this);
     }
+  }
+
+  setDocumentForTest(document: Protocol.DOM.Node|null): void {
+    this.setDocument(document);
   }
 
   private setDetachedRoot(payload: Protocol.DOM.Node): void {
@@ -1566,8 +1581,6 @@ export class DOMModel extends SDKModel<EventTypes> {
   }
 }
 
-// TODO(crbug.com/1167717): Make this a const enum again
-// eslint-disable-next-line rulesdir/const_enum
 export enum Events {
   AttrModified = 'AttrModified',
   AttrRemoved = 'AttrRemoved',

@@ -1,17 +1,7 @@
 /**
- * Copyright 2017 Google Inc. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * @license
+ * Copyright 2017 Google Inc.
+ * SPDX-License-Identifier: Apache-2.0
  */
 /// <reference types="node" />
 /// <reference types="node" />
@@ -22,14 +12,20 @@ import type { Readable } from 'stream';
 import type { Protocol } from 'devtools-protocol';
 import { type Observable } from '../../third_party/rxjs/rxjs.js';
 import type { CDPSession } from '../api/CDPSession.js';
-import type { Page } from '../api/Page.js';
-import { Deferred } from '../util/Deferred.js';
+import type { Deferred } from '../util/Deferred.js';
 import type { EventEmitter, EventType } from './EventEmitter.js';
 import type { NetworkManagerEvents } from './NetworkManagerEvents.js';
 /**
  * @internal
  */
 export declare const debugError: (...args: unknown[]) => void;
+/**
+ * @internal
+ */
+export declare const DEFAULT_VIEWPORT: Readonly<{
+    width: 800;
+    height: 600;
+}>;
 /**
  * @internal
  */
@@ -98,10 +94,6 @@ export declare function pageBindingInitString(type: string, name: string): strin
 /**
  * @internal
  */
-export declare function waitWithTimeout<T>(promise: Promise<T>, taskName: string, timeout: number): Promise<T>;
-/**
- * @internal
- */
 export declare function importFSPromises(): Promise<typeof FS>;
 /**
  * @internal
@@ -111,10 +103,6 @@ export declare function getReadableAsBuffer(readable: Readable, path?: string): 
  * @internal
  */
 export declare function getReadableFromProtocolStream(client: CDPSession, handle: string): Promise<Readable>;
-/**
- * @internal
- */
-export declare function setPageContent(page: Pick<Page, 'evaluate'>, content: string): Promise<void>;
 /**
  * @internal
  */
@@ -147,4 +135,8 @@ export declare function waitForHTTP<T extends {
 }>(networkManager: EventEmitter<NetworkManagerEvents>, eventName: EventType, urlOrPredicate: string | ((res: T) => boolean | Promise<boolean>), 
 /** Time after the function will timeout */
 ms: number, cancelation: Deferred<never>): Promise<T>;
+/**
+ * @internal
+ */
+export declare const NETWORK_IDLE_TIME = 500;
 //# sourceMappingURL=util.d.ts.map

@@ -9,6 +9,8 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/bubble/webui_bubble_dialog_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/compose/core/browser/compose_features.h"
+#include "components/compose/core/browser/compose_metrics.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
@@ -47,43 +49,120 @@ void ChromeComposeDialogController::ShowComposeDialog(
     views::View* anchor_view,
     const gfx::RectF& element_bounds_in_screen) {
   if (!web_contents_) {
+    compose::LogOpenComposeDialogResult(
+        compose::OpenComposeDialogResult::kNoWebContents);
     return;
   }
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-  bubble_wrapper_ = std::make_unique<BubbleContentsWrapperT<ComposeUI>>(
-      GURL(kComposeURL), profile, IDS_COMPOSE_TITLE);
-  bubble_wrapper_->ReloadWebContents();
+  auto bubble_wrapper = std::make_unique<BubbleContentsWrapperT<ComposeUI>>(
+      GURL(kComposeURL), profile, IDS_COMPOSE_DIALOG_TITLE);
+  bubble_wrapper->ReloadWebContents();
 
   // This WebUI needs to know the calling BrowserContents so that the compose
   // request/result can be properly associated with the triggering form.
-  bubble_wrapper_->GetWebUIController()->set_triggering_web_contents(
+  bubble_wrapper->GetWebUIController()->set_triggering_web_contents(
       web_contents_.get());
 
-  auto bubble_view = std::make_unique<WebUIBubbleDialogView>(
-      anchor_view, bubble_wrapper_.get(),
-      gfx::ToRoundedRect(element_bounds_in_screen));
+  // The element will not be visible if it is outside the Browser View bounds,
+  // so clamp the element bounds to be within them.
+  gfx::Rect clamped_element_bounds =
+      gfx::ToRoundedRect(element_bounds_in_screen);
+  clamped_element_bounds.Intersect(anchor_view->GetBoundsInScreen());
 
-  // Allows the bubble bounds to escape the browser window.
-  bubble_view->set_has_parent(false);
+  auto compose_dialog_view = std::make_unique<ComposeDialogView>(
+      anchor_view, std::move(bubble_wrapper), clamped_element_bounds,
+      views::BubbleBorder::Arrow::TOP_CENTER);
+  bubble_ = compose_dialog_view->GetWeakPtr();
+  views::BubbleDialogDelegateView::CreateBubble(std::move(compose_dialog_view));
+  if (bubble_) {
+    compose::LogOpenComposeDialogResult(
+        compose::OpenComposeDialogResult::kSuccess);
+    // This must be called after CreateBubble, as that resets the
+    // |adjust_if_offscreen| field to the platform-dependent default.
+    bubble_->set_adjust_if_offscreen(true);
 
-  auto weak_ptr = bubble_view->GetWeakPtr();
-  views::BubbleDialogDelegateView::CreateBubble(std::move(bubble_view));
+    if (base::FeatureList::IsEnabled(
+            compose::features::kEnableComposeSavedStateNotification)) {
+      // Prevent closing when losing focus to show saved state notification.
+      bubble_->set_close_on_deactivate(false);
 
-  weak_ptr->set_adjust_if_offscreen(true);
-  weak_ptr->ShowUI();
+      // Observe parent widget for resize and repositioning events.
+      if (bubble_->GetWidget() && bubble_->GetWidget()->parent()) {
+        widget_observation_.Observe(bubble_->GetWidget()->parent());
+      }
+
+      zoom_observation_.Observe(
+          zoom::ZoomController::FromWebContents(web_contents_.get()));
+    }
+  } else {
+    compose::LogOpenComposeDialogResult(
+        compose::OpenComposeDialogResult::kFailedCreatingComposeDialogView);
+  }
 }
 
 BubbleContentsWrapperT<ComposeUI>*
 ChromeComposeDialogController::GetBubbleWrapper() const {
-  return bubble_wrapper_.get();
+  if (bubble_) {
+    return bubble_->bubble_wrapper();
+  }
+  return nullptr;
+}
+
+void ChromeComposeDialogController::ShowUI() {
+  if (bubble_) {
+    bubble_->ShowUI();
+  }
 }
 
 // TODO(b/300939629): Flesh out implementation and cover other closing paths.
 void ChromeComposeDialogController::Close() {
-  bubble_wrapper_->CloseUI();
-  bubble_wrapper_.reset();
+  // This will no-op if there is no observation.
+  widget_observation_.Reset();
+  zoom_observation_.Reset();
+  auto* wrapper = GetBubbleWrapper();
+  if (wrapper) {
+    wrapper->CloseUI();
+  }
+}
+
+bool ChromeComposeDialogController::IsDialogShowing() {
+  return bubble_ && !bubble_->GetWidget()->IsClosed();
+}
+
+void ChromeComposeDialogController::OnWidgetBoundsChanged(
+    views::Widget* widget,
+    const gfx::Rect& new_bounds) {
+  if (base::FeatureList::IsEnabled(
+          compose::features::kEnableComposeSavedStateNotification) &&
+      IsDialogShowing() && widget == bubble_->GetWidget()->parent()) {
+    // Resizing or repositioning the parent view should close the compose
+    // dialog since it does not yet follow the associated HTML element.
+    Close();
+  }
+}
+
+void ChromeComposeDialogController::OnWidgetDestroying(views::Widget* widget) {
+  // This will no-op if there is no observation.
+  widget_observation_.Reset();
+}
+
+void ChromeComposeDialogController::OnZoomChanged(
+    const zoom::ZoomController::ZoomChangedEventData& data) {
+  if (base::FeatureList::IsEnabled(
+          compose::features::kEnableComposeSavedStateNotification) &&
+      IsDialogShowing()) {
+    // Zooming should close the compose dialog since it does not yet change
+    // position to follow the associated HTML element.
+    Close();
+  }
+}
+
+void ChromeComposeDialogController::OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) {
+  // This will no-op if there is no observation.
+  zoom_observation_.Reset();
 }
 
 ChromeComposeDialogController::ChromeComposeDialogController(

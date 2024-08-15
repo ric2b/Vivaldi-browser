@@ -10,8 +10,8 @@
 #include "include/core/SkColorSpace.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "src/base/SkAutoMalloc.h"
-#include "src/codec/SkMasks.h"
 #include "src/core/SkDistanceFieldGen.h"
+#include "src/core/SkMasks.h"
 #include "src/gpu/graphite/AtlasProvider.h"
 #include "src/gpu/graphite/DrawAtlas.h"
 #include "src/gpu/graphite/RecorderPriv.h"
@@ -140,8 +140,8 @@ static void get_packed_glyph_image(
                                      (masks.getBlue(color565) << 16) |
                                      (0xFF << 24);
                 memcpy(dst, &colorRGBA, argbBpp);
-                src = (char*)src + a565Bpp;
-                dst = (char*)dst + argbBpp;
+                src = (const char*)src + a565Bpp;
+                dst = (      char*)dst + argbBpp;
             }
             dstRow += dstRB;
         }
@@ -240,9 +240,9 @@ DrawAtlas::ErrorCode TextAtlasManager::addGlyphToAtlas(const SkGlyph& skGlyph,
     return errorCode;
 }
 
-bool TextAtlasManager::recordUploads(UploadList* ul, bool useCachedUploads) {
+bool TextAtlasManager::recordUploads(UploadList* ul) {
     for (int i = 0; i < skgpu::kMaskFormatCount; i++) {
-        if (fAtlases[i] && !fAtlases[i]->recordUploads(ul, fRecorder, useCachedUploads)) {
+        if (fAtlases[i] && !fAtlases[i]->recordUploads(ul, fRecorder)) {
             return false;
         }
     }

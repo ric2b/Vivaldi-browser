@@ -83,7 +83,7 @@ TEST_F(PasswordTabHelperTest, RedirectsToPasswordsAndCancelsRequest) {
   const web::WebStatePolicyDecider::RequestInfo request_info(
       ui::PageTransition::PAGE_TRANSITION_LINK, /*target_frame_is_main=*/true,
       /*target_frame_is_cross_origin=*/false,
-      /*has_user_gesture=*/false);
+      /*is_user_initiated=*/false, /*user_tapped_recently=*/false);
   __block bool callback_called = false;
   __block web::WebStatePolicyDecider::PolicyDecision request_policy =
       web::WebStatePolicyDecider::PolicyDecision::Allow();
@@ -94,8 +94,7 @@ TEST_F(PasswordTabHelperTest, RedirectsToPasswordsAndCancelsRequest) {
       });
 
   OCMExpect([dispatcher_ showSavedPasswordsSettingsFromViewController:nil
-                                                     showCancelButton:NO
-                                                   startPasswordCheck:NO]);
+                                                     showCancelButton:NO]);
 
   helper_->ShouldAllowRequest(request, request_info, std::move(callback));
 
@@ -114,7 +113,7 @@ TEST_F(PasswordTabHelperTest, NoRedirectWhenWrongLink) {
   const web::WebStatePolicyDecider::RequestInfo request_info(
       ui::PageTransition::PAGE_TRANSITION_LINK, /*target_frame_is_main=*/true,
       /*target_frame_is_cross_origin=*/false,
-      /*has_user_gesture=*/false);
+      /*is_user_initiated=*/false, /*user_tapped_recently=*/false);
   __block bool callback_called = false;
   __block web::WebStatePolicyDecider::PolicyDecision request_policy =
       web::WebStatePolicyDecider::PolicyDecision::Allow();
@@ -142,7 +141,7 @@ TEST_F(PasswordTabHelperTest, NoRedirectWhenWrongTransition) {
   const web::WebStatePolicyDecider::RequestInfo request_info(
       ui::PageTransition::PAGE_TRANSITION_TYPED, /*target_frame_is_main=*/true,
       /*target_frame_is_cross_origin=*/false,
-      /*has_user_gesture=*/false);
+      /*is_user_initiated=*/false, /*user_tapped_recently=*/false);
   __block bool callback_called = false;
   __block web::WebStatePolicyDecider::PolicyDecision request_policy =
       web::WebStatePolicyDecider::PolicyDecision::Allow();

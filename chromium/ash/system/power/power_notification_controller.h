@@ -90,7 +90,7 @@ class ASH_EXPORT PowerNotificationController : public PowerStatus::Observer {
   // Determines whether a Battery Saver Notification should be shown. Returns
   // true if a notification should be shown, or nullopt if none of the bsm
   // branches were triggered.
-  absl::optional<bool> HandleBatterySaverNotifications();
+  std::optional<bool> HandleBatterySaverNotifications();
 
   // Sets |notification_state_|. Returns true if a notification should be shown.
   bool UpdateNotificationState();
@@ -100,8 +100,7 @@ class ASH_EXPORT PowerNotificationController : public PowerStatus::Observer {
 
   static const char kUsbNotificationId[];
 
-  const raw_ptr<message_center::MessageCenter, ExperimentalAsh>
-      message_center_;  // Unowned.
+  const raw_ptr<message_center::MessageCenter> message_center_;  // Unowned.
   std::unique_ptr<BatteryNotification> battery_notification_;
   std::unique_ptr<DualRoleNotification> dual_role_notification_;
   NotificationState notification_state_ = NOTIFICATION_NONE;

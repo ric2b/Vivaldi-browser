@@ -9,30 +9,44 @@
 PasswordCheckupLauncherHelperImpl::~PasswordCheckupLauncherHelperImpl() =
     default;
 
-void PasswordCheckupLauncherHelperImpl::LaunchCheckupInAccountWithWindowAndroid(
+void PasswordCheckupLauncherHelperImpl::LaunchCheckupOnlineWithWindowAndroid(
     JNIEnv* env,
     const base::android::JavaRef<jstring>& checkupUrl,
     const base::android::JavaRef<jobject>& windowAndroid) {
-  Java_PasswordCheckupLauncher_launchCheckupInAccountWithWindowAndroid(
+  Java_PasswordCheckupLauncher_launchCheckupOnlineWithWindowAndroid(
       env, checkupUrl, windowAndroid);
 }
 
-void PasswordCheckupLauncherHelperImpl::LaunchLocalCheckup(
+void PasswordCheckupLauncherHelperImpl::LaunchCheckupOnDevice(
     JNIEnv* env,
     ui::WindowAndroid* windowAndroid,
-    password_manager::PasswordCheckReferrerAndroid passwordCheckReferrer) {
+    password_manager::PasswordCheckReferrerAndroid passwordCheckReferrer,
+    std::string account_email) {
   if (!windowAndroid) {
     return;
   }
-  Java_PasswordCheckupLauncher_launchLocalCheckup(
+  Java_PasswordCheckupLauncher_launchCheckupOnDevice(
       env, windowAndroid->GetJavaObject(),
-      static_cast<int>(passwordCheckReferrer));
+      static_cast<int>(passwordCheckReferrer),
+      account_email.empty()
+          ? nullptr
+          : base::android::ConvertUTF8ToJavaString(env, account_email));
 }
 
-void PasswordCheckupLauncherHelperImpl::LaunchCheckupInAccountWithActivity(
+void PasswordCheckupLauncherHelperImpl::LaunchCheckupOnlineWithActivity(
     JNIEnv* env,
     const base::android::JavaRef<jstring>& checkupUrl,
     const base::android::JavaRef<jobject>& activity) {
-  Java_PasswordCheckupLauncher_launchCheckupInAccountWithActivity(
-      env, checkupUrl, activity);
+  Java_PasswordCheckupLauncher_launchCheckupOnlineWithActivity(env, checkupUrl,
+                                                               activity);
+}
+
+void PasswordCheckupLauncherHelperImpl::LaunchSafetyCheck(
+    JNIEnv* env,
+    ui::WindowAndroid* windowAndroid) {
+  if (windowAndroid == nullptr) {
+    return;
+  }
+  Java_PasswordCheckupLauncher_launchSafetyCheck(
+      env, windowAndroid->GetJavaObject());
 }

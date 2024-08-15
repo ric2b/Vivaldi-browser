@@ -8,6 +8,7 @@
 #include <iterator>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/check_op.h"
@@ -72,6 +73,11 @@ static const FilePath::CharType kLevelDBTestDirectoryPrefix[] =
 // This name should not be changed or users involved in a crash might not be
 // able to recover data.
 static const char kDatabaseNameSuffixForRebuildDB[] = "__tmp_for_rebuild";
+
+DBFactoryMethod& GetDBFactoryOverride() {
+  static base::NoDestructor<DBFactoryMethod> instance;
+  return *instance;
+}
 
 class ChromiumFileLock : public FileLock {
  public:
@@ -1369,6 +1375,10 @@ void DBTracker::DatabaseDestroyed(TrackedDBImpl* database,
 leveldb::Status OpenDB(const leveldb_env::Options& options,
                        const std::string& name,
                        std::unique_ptr<leveldb::DB>* dbptr) {
+  if (!GetDBFactoryOverride().is_null()) {
+    return GetDBFactoryOverride().Run(options, name, dbptr);
+  }
+
   // For UMA logging purposes we need the block cache to be created outside of
   // leveldb so that the size can be logged and it can be pruned.
   DCHECK(options.block_cache != nullptr);
@@ -1414,6 +1424,10 @@ leveldb::Status OpenDB(const leveldb_env::Options& options,
   return s;
 }
 
+void SetDBFactoryForTesting(DBFactoryMethod factory) {
+  GetDBFactoryOverride() = factory;
+}
+
 leveldb::Status RewriteDB(const leveldb_env::Options& options,
                           const std::string& name,
                           std::unique_ptr<leveldb::DB>* dbptr) {
@@ -1457,11 +1471,11 @@ leveldb::Status RewriteDB(const leveldb_env::Options& options,
   return leveldb_env::OpenDB(options, name, dbptr);
 }
 
-base::StringPiece MakeStringPiece(const leveldb::Slice& s) {
-  return base::StringPiece(s.data(), s.size());
+std::string_view MakeStringView(const leveldb::Slice& s) {
+  return std::string_view(s.data(), s.size());
 }
 
-leveldb::Slice MakeSlice(const base::StringPiece& s) {
+leveldb::Slice MakeSlice(std::string_view s) {
   return leveldb::Slice(s.begin(), s.size());
 }
 

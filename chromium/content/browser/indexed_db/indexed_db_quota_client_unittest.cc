@@ -23,7 +23,6 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread.h"
-#include "base/time/default_clock.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
@@ -81,9 +80,8 @@ class IndexedDBQuotaClientTest : public testing::Test,
         base::SingleThreadTaskRunner::GetCurrentDefault(),
         special_storage_policy_);
 
-    idb_context_ = base::MakeRefCounted<IndexedDBContextImpl>(
+    idb_context_ = std::make_unique<IndexedDBContextImpl>(
         temp_dir_.GetPath(), quota_manager_->proxy(),
-        base::DefaultClock::GetInstance(),
         /*blob_storage_context=*/mojo::NullRemote(),
         /*file_system_access_context=*/mojo::NullRemote(),
         base::SequencedTaskRunner::GetCurrentDefault(),
@@ -213,7 +211,7 @@ class IndexedDBQuotaClientTest : public testing::Test,
   base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
 
-  scoped_refptr<IndexedDBContextImpl> idb_context_;
+  std::unique_ptr<IndexedDBContextImpl> idb_context_;
   scoped_refptr<storage::MockQuotaManager> quota_manager_;
   base::WeakPtrFactory<IndexedDBQuotaClientTest> weak_factory_{this};
 };
@@ -493,9 +491,8 @@ TEST_P(IndexedDBQuotaClientTest, IncognitoQuotaFirstParty) {
       /*in_memory=*/true, base::FilePath(),
       base::SingleThreadTaskRunner::GetCurrentDefault(),
       special_storage_policy_);
-  auto incognito_idb_context = base::MakeRefCounted<IndexedDBContextImpl>(
+  auto incognito_idb_context = std::make_unique<IndexedDBContextImpl>(
       base::FilePath(), quota_manager->proxy(),
-      base::DefaultClock::GetInstance(),
       /*blob_storage_context=*/mojo::NullRemote(),
       /*file_system_access_context=*/mojo::NullRemote(),
       base::SequencedTaskRunner::GetCurrentDefault(),
@@ -521,9 +518,8 @@ TEST_P(IndexedDBQuotaClientTest, IncognitoQuotaThirdParty) {
       /*in_memory=*/true, base::FilePath(),
       base::SingleThreadTaskRunner::GetCurrentDefault(),
       special_storage_policy_);
-  auto incognito_idb_context = base::MakeRefCounted<IndexedDBContextImpl>(
+  auto incognito_idb_context = std::make_unique<IndexedDBContextImpl>(
       base::FilePath(), quota_manager->proxy(),
-      base::DefaultClock::GetInstance(),
       /*blob_storage_context=*/mojo::NullRemote(),
       /*file_system_access_context=*/mojo::NullRemote(),
       base::SequencedTaskRunner::GetCurrentDefault(),

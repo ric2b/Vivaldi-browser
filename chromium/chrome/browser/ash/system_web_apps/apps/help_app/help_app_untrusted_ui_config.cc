@@ -8,7 +8,6 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
-#include "ash/public/cpp/tablet_mode.h"
 #include "ash/rgb_keyboard/rgb_keyboard_manager.h"
 #include "ash/shell.h"
 #include "ash/webui/help_app_ui/help_app_untrusted_ui.h"
@@ -41,6 +40,7 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "ui/display/screen.h"
 #include "ui/events/devices/device_data_manager.h"
 
 namespace ash {
@@ -67,9 +67,9 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
       system::StatisticsProvider::GetInstance();
   // MachineStatistics may not exist for browser tests, but it is fine for these
   // to be empty strings.
-  const absl::optional<base::StringPiece> customization_id =
+  const std::optional<base::StringPiece> customization_id =
       provider->GetMachineStatistic(system::kCustomizationIdKey);
-  const absl::optional<base::StringPiece> hwid =
+  const std::optional<base::StringPiece> hwid =
       provider->GetMachineStatistic(system::kHardwareClassKey);
   source->AddString("customizationId",
                     std::string(customization_id.value_or("")));
@@ -80,26 +80,37 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
                         "device-help-content-id"));
 
   // Add any features that have been enabled.
-  source->AddBoolean("colorThemes", true);
-  source->AddBoolean("HelpAppAppsGamesBannerV2", true);
-  source->AddBoolean("HelpAppDynamicHomePageBanner", true);
-  source->AddBoolean("HelpAppReleaseNotes", true);
-  source->AddBoolean(
-      "HelpAppHomePageAppArticles",
-      base::FeatureList::IsEnabled(ash::features::kHelpAppHomePageAppArticles));
   source->AddBoolean(
       "HelpAppLauncherSearch",
       base::FeatureList::IsEnabled(features::kHelpAppLauncherSearch) &&
           base::FeatureList::IsEnabled(features::kEnableLocalSearchService));
   source->AddBoolean(
-      "HelpAppAutoTriggerInstallDialog",
-      base::FeatureList::IsEnabled(features::kHelpAppAutoTriggerInstallDialog));
-  source->AddBoolean(
       "HelpAppSearchServiceIntegration",
       base::FeatureList::IsEnabled(features::kEnableLocalSearchService));
   source->AddBoolean("isCloudGamingDevice",
                      chromeos::features::IsCloudGamingDeviceEnabled());
-  source->AddBoolean("jelly", chromeos::features::IsJellyEnabled());
+  // Features the background page does not need to query:
+  if (web_ui->GetWebContents()->GetVisibleURL().path() != "/background") {
+    // By default, querying the feature flag is what marks a Finch study as
+    // active for a client. For features that only happen when the user is
+    // actively browsing the help app (such as UI-only features), avoid querying
+    // them in the background page.
+    source->AddBoolean("HelpAppAppsGamesBannerV2", true);
+    source->AddBoolean(
+        "HelpAppAppDetailPage",
+        base::FeatureList::IsEnabled(ash::features::kHelpAppAppDetailPage));
+    source->AddBoolean("HelpAppAppsList", base::FeatureList::IsEnabled(
+                                              ash::features::kHelpAppAppsList));
+    source->AddBoolean(
+        "HelpAppCrosComponents",
+        base::FeatureList::IsEnabled(ash::features::kHelpAppCrosComponents));
+    source->AddBoolean("HelpAppHomePageAppArticles",
+                       base::FeatureList::IsEnabled(
+                           ash::features::kHelpAppHomePageAppArticles));
+    source->AddBoolean("HelpAppAutoTriggerInstallDialog",
+                       base::FeatureList::IsEnabled(
+                           features::kHelpAppAutoTriggerInstallDialog));
+  }
 
   Profile* profile = Profile::FromWebUI(web_ui);
   PrefService* pref_service = profile->GetPrefs();
@@ -131,7 +142,8 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
   source->AddBoolean(
       "multiDeviceFeaturesAllowed",
       multidevice_setup::AreAnyMultiDeviceFeaturesAllowed(pref_service));
-  source->AddBoolean("tabletMode", TabletMode::Get()->InTabletMode());
+  source->AddBoolean("tabletMode",
+                     display::Screen::GetScreen()->InTabletMode());
   // Whether or not RGB Keyboard is supported and configurable from the
   // Personalization Hub.
   RgbKeyboardManager* rgb_keyboard_manager =
@@ -168,7 +180,8 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
   source->AddBoolean("isManagedDevice",
                      profile->GetProfilePolicyConnector()->IsManaged());
   if (user_manager->GetActiveUser()) {
-    source->AddInteger("userType", user_manager->GetActiveUser()->GetType());
+    source->AddInteger(
+        "userType", static_cast<int>(user_manager->GetActiveUser()->GetType()));
   } else {
     // It's possible that there is no logged-in user. Set to -1 to indicate when
     // this is the case.

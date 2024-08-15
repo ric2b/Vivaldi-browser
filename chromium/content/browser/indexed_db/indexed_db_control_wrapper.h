@@ -31,7 +31,6 @@ class IndexedDBControlWrapper : public storage::mojom::IndexedDBControl {
       const base::FilePath& data_path,
       scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      base::Clock* clock,
       mojo::PendingRemote<storage::mojom::BlobStorageContext>
           blob_storage_context,
       mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
@@ -50,14 +49,11 @@ class IndexedDBControlWrapper : public storage::mojom::IndexedDBControl {
       mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
           client_state_checker_remote,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) override;
-  void GetUsage(GetUsageCallback usage_callback) override;
   void DeleteForStorageKey(const blink::StorageKey& storage_key,
                            DeleteForStorageKeyCallback callback) override;
   void ForceClose(storage::BucketId bucket_id,
                   storage::mojom::ForceCloseReason reason,
                   base::OnceClosure callback) override;
-  void GetConnectionCount(storage::BucketId bucket_id,
-                          GetConnectionCountCallback callback) override;
   void DownloadBucketData(storage::BucketId bucket_id,
                           DownloadBucketDataCallback callback) override;
   void GetAllBucketsDetails(GetAllBucketsDetailsCallback callback) override;
@@ -73,10 +69,10 @@ class IndexedDBControlWrapper : public storage::mojom::IndexedDBControl {
  private:
   void BindRemoteIfNeeded();
 
-  absl::optional<storage::StoragePolicyObserver> storage_policy_observer_;
+  std::optional<storage::StoragePolicyObserver> storage_policy_observer_;
 
   mojo::Remote<storage::mojom::IndexedDBControl> indexed_db_control_;
-  scoped_refptr<IndexedDBContextImpl> context_;
+  std::unique_ptr<IndexedDBContextImpl> context_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<IndexedDBControlWrapper> weak_factory_{this};

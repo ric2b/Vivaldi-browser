@@ -13,7 +13,7 @@ import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as Models from '../models/models.js';
-import * as Actions from '../recorder-actions.js';  // eslint-disable-line rulesdir/es_modules_import
+import * as Actions from '../recorder-actions/recorder-actions.js';
 
 import createRecordingViewStyles from './createRecordingView.css.js';
 
@@ -283,15 +283,7 @@ export class CreateRecordingView extends HTMLElement {
           <label class="row-label" for="selector-attribute">
             <span>${i18nString(UIStrings.selectorAttribute)}</span>
             <x-link class="link" href="https://g.co/devtools/recorder#selector">
-              <${IconButton.Icon.Icon.litTagName}
-                .data=${
-                  {
-                    iconName: 'help',
-                    color: 'var(--icon-default)',
-                    width: '16px',
-                    height: '16px',
-                  } as IconButton.Icon.IconData
-                }>
+              <${IconButton.Icon.Icon.litTagName} name="help">
               </${IconButton.Icon.Icon.litTagName}>
             </x-link>
           </label>
@@ -305,16 +297,8 @@ export class CreateRecordingView extends HTMLElement {
           <label class="row-label">
             <span>${i18nString(UIStrings.selectorTypes)}</span>
             <x-link class="link" href="https://g.co/devtools/recorder#selector">
-              <${IconButton.Icon.Icon.litTagName}
-                .data=${
-                  {
-                    iconName: 'help',
-                    color: 'var(--icon-default)',
-                    width: '16px',
-                    height: '16px',
-                  } as IconButton.Icon.IconData
-                }
-              ></${IconButton.Icon.Icon.litTagName}>
+              <${IconButton.Icon.Icon.litTagName} name="help">
+              </${IconButton.Icon.Icon.litTagName}>
             </x-link>
           </label>
           <div class="checkbox-container">

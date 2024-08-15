@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/wm/multi_display/persistent_window_controller.h"
+#include "base/memory/raw_ptr.h"
 
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -98,41 +99,12 @@ constexpr char
     PersistentWindowController::kNumOfWindowsRestoredOnScreenRotation[];
 
 PersistentWindowController::PersistentWindowController() {
+  display_manager_observation_.Observe(Shell::Get()->display_manager());
   Shell::Get()->session_controller()->AddObserver(this);
 }
 
 PersistentWindowController::~PersistentWindowController() {
   Shell::Get()->session_controller()->RemoveObserver(this);
-}
-
-void PersistentWindowController::OnWillProcessDisplayChanges() {
-  if (!ShouldProcessWindowList()) {
-    return;
-  }
-
-  for (auto* window : GetWindowList()) {
-    WindowState* window_state = WindowState::Get(window);
-    // This implies that we keep the first persistent info until they're valid
-    // to restore, or until they're cleared by user-invoked bounds change.
-    if (PersistentWindowInfo* info =
-            window_state->persistent_window_info_of_display_removal();
-        info) {
-      info->set_display_id_after_removal(
-          display::Screen::GetScreen()->GetDisplayNearestWindow(window).id());
-      continue;
-    }
-    // Place the window that needs persistent window info into the temporary
-    // set. The persistent window info will be created and set if a display is
-    // removed. Store the window's restore bounds in parent here instead of
-    // `OnDisplayRemoved`. As the window's restore bounds in parent are
-    // converted from its restore bounds in screen, which relies on the
-    // displays' layout. And displays' layout will have been updated inside
-    // `OnDisplayRemoved`.
-    need_persistent_info_windows_.Add(
-        window, window_state->HasRestoreBounds()
-                    ? window_state->GetRestoreBoundsInParent()
-                    : gfx::Rect());
-  }
 }
 
 void PersistentWindowController::OnDisplayAdded(
@@ -167,7 +139,7 @@ void PersistentWindowController::OnDisplayMetricsChanged(
       base::Contains(is_landscape_orientation_map_, display.id())
           ? is_landscape_orientation_map_[display.id()]
           : false;
-  for (auto* window : GetWindowList()) {
+  for (aura::Window* window : GetWindowList()) {
     if (window->GetRootWindow() !=
         Shell::GetRootWindowForDisplayId(display.id())) {
       continue;
@@ -198,7 +170,38 @@ void PersistentWindowController::OnDisplayMetricsChanged(
                      base::Unretained(this));
 }
 
-void PersistentWindowController::OnDidProcessDisplayChanges() {
+void PersistentWindowController::OnWillProcessDisplayChanges() {
+  if (!ShouldProcessWindowList()) {
+    return;
+  }
+
+  for (aura::Window* window : GetWindowList()) {
+    WindowState* window_state = WindowState::Get(window);
+    // This implies that we keep the first persistent info until they're valid
+    // to restore, or until they're cleared by user-invoked bounds change.
+    if (PersistentWindowInfo* info =
+            window_state->persistent_window_info_of_display_removal();
+        info) {
+      info->set_display_id_after_removal(
+          display::Screen::GetScreen()->GetDisplayNearestWindow(window).id());
+      continue;
+    }
+    // Place the window that needs persistent window info into the temporary
+    // set. The persistent window info will be created and set if a display is
+    // removed. Store the window's restore bounds in parent here instead of
+    // `OnDisplayRemoved`. As the window's restore bounds in parent are
+    // converted from its restore bounds in screen, which relies on the
+    // displays' layout. And displays' layout will have been updated inside
+    // `OnDisplayRemoved`.
+    need_persistent_info_windows_.Add(
+        window, window_state->HasRestoreBounds()
+                    ? window_state->GetRestoreBoundsInParent()
+                    : gfx::Rect());
+  }
+}
+
+void PersistentWindowController::OnDidProcessDisplayChanges(
+    const DisplayConfigurationChange& configuration_change) {
   if (display_added_restore_callback_) {
     std::move(display_added_restore_callback_).Run();
   }
@@ -210,8 +213,7 @@ void PersistentWindowController::OnDidProcessDisplayChanges() {
 
   if (display::Screen::GetScreen()) {
     for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
-      is_landscape_orientation_map_[display.id()] =
-          chromeos::IsDisplayLayoutHorizontal(display);
+      is_landscape_orientation_map_[display.id()] = display.is_landscape();
     }
   }
 }
@@ -222,8 +224,7 @@ void PersistentWindowController::OnFirstSessionStarted() {
   }
 
   for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
-    is_landscape_orientation_map_[display.id()] =
-        chromeos::IsDisplayLayoutHorizontal(display);
+    is_landscape_orientation_map_[display.id()] = display.is_landscape();
   }
 }
 
@@ -238,8 +239,9 @@ void PersistentWindowController::
   // their persistent window info. Go backwards so that if they do get added to
   // another root window's container, the stacking order will match the MRU
   // order (windows added first are stacked at the bottom).
-  std::vector<aura::Window*> mru_window_list = GetWindowList();
-  for (auto* window : base::Reversed(mru_window_list)) {
+  std::vector<raw_ptr<aura::Window, VectorExperimental>> mru_window_list =
+      GetWindowList();
+  for (aura::Window* window : base::Reversed(mru_window_list)) {
     WindowState* window_state = WindowState::Get(window);
     if (!window_state->persistent_window_info_of_display_removal()) {
       continue;
@@ -313,7 +315,7 @@ void PersistentWindowController::
   }
 
   int window_restored_count = 0;
-  for (auto* window : GetWindowList()) {
+  for (aura::Window* window : GetWindowList()) {
     WindowState* window_state = WindowState::Get(window);
     if (!window_state->persistent_window_info_of_screen_rotation()) {
       continue;
@@ -331,8 +333,8 @@ void PersistentWindowController::
     // `kLandscapeSecondary` will be treated the same in this case since
     // window's bounds should be the same in each landscape orientation. Same
     // for portrait screen orientation.
-    if (chromeos::IsDisplayLayoutHorizontal(display_manager->GetDisplayForId(
-            display_id)) == info->is_landscape()) {
+    if (display_manager->GetDisplayForId(display_id).is_landscape() ==
+        info->is_landscape()) {
       window->SetBounds(info->window_bounds_in_screen());
       ++window_restored_count;
     }

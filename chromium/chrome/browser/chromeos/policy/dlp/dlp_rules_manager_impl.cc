@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -33,7 +34,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_matcher/url_util.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
 namespace policy {
@@ -455,13 +455,9 @@ void DlpRulesManagerImpl::OnDataLeakPreventionRulesUpdate() {
   src_url_matcher_->AddConditionSets(src_conditions_);
   dst_url_matcher_->AddConditionSets(dst_conditions_);
   if (base::Contains(restrictions_map_, Restriction::kClipboard)
-  // TODO(b/269610458): It should be instantiated for files in
-  // Lacros as well.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
       || (base::FeatureList::IsEnabled(
               features::kDataLeakPreventionFilesRestriction) &&
           request_to_daemon.rules_size() > 0)
-#endif
   ) {
     DataTransferDlpController::Init(*this);
   } else {

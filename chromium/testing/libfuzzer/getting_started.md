@@ -38,14 +38,15 @@ More detail in all the following sections.
 ## Creating a new `FUZZ_TEST` target
 
 *** note
-**Note:** Fuzztests don't yet build on Android or Windows component builds
-. We recommendwrapping these new targets in `if (fuzztest_supported) { }`
+**Note:** Fuzztests don't yet build on Windows component builds.
+We recommend wrapping these new targets in `if (fuzztest_supported) { }`
 blocks in your `gn` file for now. We'll remove these in future when it works on
 all platforms.
 ***
 
 ```
 import("//build/config/sanitizers/sanitizers.gni")
+import("//testing/test.gni")
 
 if (fuzztest_supported) {
   test("hypothetical_fuzztests") {
@@ -60,6 +61,8 @@ if (fuzztest_supported) {
   }
 }
 ```
+
+You may also need to add `third_party/fuzztest` to your DEPS file.
 
 ## Adding `FUZZ_TEST` support to a target
 
@@ -172,10 +175,17 @@ run for one second:
 
 On other platforms, the test will be ignored.
 
-If you want to try actually fuzzing with FuzzTest, add the gn argument
-`enable_fuzztest_fuzz = true`. You can then run your unit test
-with the extra command line argument `--fuzz=`, optionally specifying a test
-name. You'll see lots of output as it explores your code:
+If you want to try actually fuzzing with FuzzTest, modify your gn arguments to
+contain:
+
+```
+enable_fuzztest_fuzz=true
+is_component_build=false
+```
+
+You can then run your unit test with the extra command line argument `--fuzz=`,
+optionally specifying a test name. You'll see lots of output as it explores your
+code:
 
 ```
 [*] Corpus size:     1 | Edges covered:     73 | Fuzzing time:        1.60482ms | Total runs:  1.00e+00 | Runs/secs:   623 | Max stack usage:        0
@@ -197,6 +207,11 @@ Nothing special is required here!
 After a day or two, we should see [ClusterFuzz] starting to run your new fuzzer,
 and it should be visible on [ClusterFuzz Fuzzer Stats]. Look for fuzzers starting
 with `centipede_` and your test target's name.
+
+*** note
+**Note:** This is all very new, and ClusterFuzz isn't reliably spotting these
+new fuzztests yet. We're working on it!
+***
 
 Thanks very much for doing your part in making Chromium more secure!
 

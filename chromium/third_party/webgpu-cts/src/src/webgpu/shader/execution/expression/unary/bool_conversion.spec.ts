@@ -4,77 +4,13 @@ Execution Tests for the boolean conversion operations
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { GPUTest } from '../../../../gpu_test.js';
-import { anyOf } from '../../../../util/compare.js';
-import {
-  bool,
-  f32,
-  f16,
-  i32,
-  Scalar,
-  TypeBool,
-  TypeF32,
-  TypeF16,
-  TypeI32,
-  TypeU32,
-  u32,
-} from '../../../../util/conversion.js';
-import {
-  fullF32Range,
-  fullF16Range,
-  fullI32Range,
-  fullU32Range,
-  isSubnormalNumberF32,
-  isSubnormalNumberF16,
-} from '../../../../util/math.js';
-import { makeCaseCache } from '../case_cache.js';
-import { allInputSources, run, ShaderBuilder } from '../expression.js';
+import { TypeBool, TypeF16, TypeF32, TypeI32, TypeU32 } from '../../../../util/conversion.js';
+import { ShaderBuilder, allInputSources, run } from '../expression.js';
 
+import { d } from './bool_conversion.cache.js';
 import { unary } from './unary.js';
 
 export const g = makeTestGroup(GPUTest);
-
-export const d = makeCaseCache('unary/bool_conversion', {
-  bool: () => {
-    return [
-      { input: bool(true), expected: bool(true) },
-      { input: bool(false), expected: bool(false) },
-    ];
-  },
-  u32: () => {
-    return fullU32Range().map(u => {
-      return { input: u32(u), expected: u === 0 ? bool(false) : bool(true) };
-    });
-  },
-  i32: () => {
-    return fullI32Range().map(i => {
-      return { input: i32(i), expected: i === 0 ? bool(false) : bool(true) };
-    });
-  },
-  f32: () => {
-    return fullF32Range().map(f => {
-      const expected: Scalar[] = [];
-      if (f !== 0) {
-        expected.push(bool(true));
-      }
-      if (isSubnormalNumberF32(f)) {
-        expected.push(bool(false));
-      }
-      return { input: f32(f), expected: anyOf(...expected) };
-    });
-  },
-  f16: () => {
-    return fullF16Range().map(f => {
-      const expected: Scalar[] = [];
-      if (f !== 0) {
-        expected.push(bool(true));
-      }
-      if (isSubnormalNumberF16(f)) {
-        expected.push(bool(false));
-      }
-      return { input: f16(f), expected: anyOf(...expected) };
-    });
-  },
-});
 
 /** Generate expression builder based on how the test case is to be vectorized */
 function vectorizeToExpression(vectorize: undefined | 2 | 3 | 4): ShaderBuilder {

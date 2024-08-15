@@ -27,10 +27,98 @@
 
 #include "dawn/wire/client/Instance.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "dawn/common/Log.h"
+#include "dawn/common/WGSLFeatureMapping.h"
 #include "dawn/wire/client/Client.h"
 #include "dawn/wire/client/EventManager.h"
+#include "partition_alloc/pointers/raw_ptr.h"
+#include "tint/lang/wgsl/features/language_feature.h"
+#include "tint/lang/wgsl/features/status.h"
 
 namespace dawn::wire::client {
+namespace {
+
+class RequestAdapterEvent : public TrackedEvent {
+  public:
+    static constexpr EventType kType = EventType::RequestAdapter;
+
+    RequestAdapterEvent(const WGPURequestAdapterCallbackInfo& callbackInfo, Adapter* adapter)
+        : TrackedEvent(callbackInfo.mode),
+          mCallback(callbackInfo.callback),
+          mUserdata(callbackInfo.userdata),
+          mAdapter(adapter) {}
+
+    EventType GetType() override { return kType; }
+
+    WireResult ReadyHook(FutureID futureID,
+                         WGPURequestAdapterStatus status,
+                         const char* message,
+                         const WGPUAdapterProperties* properties,
+                         const WGPUSupportedLimits* limits,
+                         uint32_t featuresCount,
+                         const WGPUFeatureName* features) {
+        DAWN_ASSERT(mAdapter != nullptr);
+        mStatus = status;
+        if (message != nullptr) {
+            mMessage = message;
+        }
+        if (status == WGPURequestAdapterStatus_Success) {
+            mAdapter->SetProperties(properties);
+            mAdapter->SetLimits(limits);
+            mAdapter->SetFeatures(features, featuresCount);
+        }
+        return WireResult::Success;
+    }
+
+  private:
+    void CompleteImpl(FutureID futureID, EventCompletionType completionType) override {
+        if (completionType == EventCompletionType::Shutdown) {
+            mStatus = WGPURequestAdapterStatus_Unknown;
+            mMessage = "GPU connection lost";
+        }
+        if (mStatus != WGPURequestAdapterStatus_Success && mAdapter != nullptr) {
+            // If there was an error, we may need to reclaim the adapter allocation, otherwise the
+            // adapter is returned to the user who owns it.
+            mAdapter->GetClient()->Free(mAdapter.get());
+            mAdapter = nullptr;
+        }
+        if (mCallback) {
+            mCallback(mStatus, ToAPI(mAdapter), mMessage ? mMessage->c_str() : nullptr, mUserdata);
+        }
+    }
+
+    WGPURequestAdapterCallback mCallback;
+    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
+    raw_ptr<void, DanglingUntriaged> mUserdata;
+
+    // Note that the message is optional because we want to return nullptr when it wasn't set
+    // instead of a pointer to an empty string.
+    WGPURequestAdapterStatus mStatus;
+    std::optional<std::string> mMessage;
+
+    // The adapter is created when we call RequestAdapter(F). It is guaranteed to be alive
+    // throughout the duration of a RequestAdapterEvent because the Event essentially takes
+    // ownership of it until either an error occurs at which point the Event cleans it up, or it
+    // returns the adapter to the user who then takes ownership as the Event goes away.
+    // TODO(https://crbug.com/dawn/2345): Investigate `DanglingUntriaged` in dawn/wire.
+    raw_ptr<Adapter, DanglingUntriaged> mAdapter = nullptr;
+};
+
+WGPUWGSLFeatureName ToWGPUFeature(tint::wgsl::LanguageFeature f) {
+    switch (f) {
+#define CASE(WgslName, WgpuName)                \
+    case tint::wgsl::LanguageFeature::WgslName: \
+        return WGPUWGSLFeatureName_##WgpuName;
+        DAWN_FOREACH_WGSL_FEATURE(CASE)
+#undef CASE
+    }
+}
+
+}  // anonymous namespace
 
 // Free-standing API functions
 
@@ -51,92 +139,96 @@ WGPUInstance ClientCreateInstance(WGPUInstanceDescriptor const* descriptor) {
 
 // Instance
 
+Instance::Instance(const ObjectBaseParams& params) : ObjectWithEventsBase(params, params.handle) {}
+
 Instance::~Instance() {
-    mRequestAdapterRequests.CloseAll([](RequestAdapterData* request) {
-        request->callback(WGPURequestAdapterStatus_Unknown, nullptr,
-                          "Instance destroyed before callback", request->userdata);
-    });
+    GetEventManager().TransitionTo(EventManager::State::InstanceDropped);
 }
 
-void Instance::CancelCallbacksForDisconnect() {
-    mRequestAdapterRequests.CloseAll([](RequestAdapterData* request) {
-        request->callback(WGPURequestAdapterStatus_Unknown, nullptr, "GPU connection lost",
-                          request->userdata);
-    });
+WireResult Instance::Initialize(const WGPUInstanceDescriptor* descriptor) {
+    if (descriptor == nullptr) {
+        return WireResult::Success;
+    }
+
+    if (descriptor->features.timedWaitAnyEnable) {
+        dawn::ErrorLog() << "Wire client instance doesn't support timedWaitAnyEnable = true";
+        return WireResult::FatalError;
+    }
+    if (descriptor->features.timedWaitAnyMaxCount > 0) {
+        dawn::ErrorLog() << "Wire client instance doesn't support non-zero timedWaitAnyMaxCount";
+        return WireResult::FatalError;
+    }
+
+    const WGPUDawnWireWGSLControl* wgslControl = nullptr;
+    const WGPUDawnWGSLBlocklist* wgslBlocklist = nullptr;
+    for (const WGPUChainedStruct* chain = descriptor->nextInChain; chain != nullptr;
+         chain = chain->next) {
+        switch (chain->sType) {
+            case WGPUSType_DawnWireWGSLControl:
+                wgslControl = reinterpret_cast<const WGPUDawnWireWGSLControl*>(chain);
+                break;
+            case WGPUSType_DawnWGSLBlocklist:
+                wgslBlocklist = reinterpret_cast<const WGPUDawnWGSLBlocklist*>(chain);
+                break;
+            default:
+                dawn::ErrorLog() << "Wire client instance doesn't support InstanceDescriptor "
+                                    "extension structure with sType ("
+                                 << chain->sType << ")";
+                return WireResult::FatalError;
+        }
+    }
+
+    GatherWGSLFeatures(wgslControl, wgslBlocklist);
+
+    return WireResult::Success;
 }
 
 void Instance::RequestAdapter(const WGPURequestAdapterOptions* options,
                               WGPURequestAdapterCallback callback,
                               void* userdata) {
-    Client* client = GetClient();
-    if (client->IsDisconnected()) {
-        callback(WGPURequestAdapterStatus_Error, nullptr, "GPU connection lost", userdata);
-        return;
-    }
+    WGPURequestAdapterCallbackInfo callbackInfo = {};
+    callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+    callbackInfo.callback = callback;
+    callbackInfo.userdata = userdata;
+    RequestAdapterF(options, callbackInfo);
+}
 
-    Adapter* adapter = client->Make<Adapter>();
-    uint64_t serial = mRequestAdapterRequests.Add({callback, adapter->GetWireId(), userdata});
+WGPUFuture Instance::RequestAdapterF(const WGPURequestAdapterOptions* options,
+                                     const WGPURequestAdapterCallbackInfo& callbackInfo) {
+    Client* client = GetClient();
+    Adapter* adapter = client->Make<Adapter>(GetEventManagerHandle());
+    auto [futureIDInternal, tracked] =
+        GetEventManager().TrackEvent(std::make_unique<RequestAdapterEvent>(callbackInfo, adapter));
+    if (!tracked) {
+        return {futureIDInternal};
+    }
 
     InstanceRequestAdapterCmd cmd;
     cmd.instanceId = GetWireId();
-    cmd.requestSerial = serial;
+    cmd.eventManagerHandle = GetEventManagerHandle();
+    cmd.future = {futureIDInternal};
     cmd.adapterObjectHandle = adapter->GetWireHandle();
     cmd.options = options;
 
     client->SerializeCommand(cmd);
+    return {futureIDInternal};
 }
 
-bool Client::DoInstanceRequestAdapterCallback(Instance* instance,
-                                              uint64_t requestSerial,
+bool Client::DoInstanceRequestAdapterCallback(ObjectHandle eventManager,
+                                              WGPUFuture future,
                                               WGPURequestAdapterStatus status,
                                               const char* message,
                                               const WGPUAdapterProperties* properties,
                                               const WGPUSupportedLimits* limits,
                                               uint32_t featuresCount,
                                               const WGPUFeatureName* features) {
-    // May have been deleted or recreated so this isn't an error.
-    if (instance == nullptr) {
-        return true;
-    }
-    return instance->OnRequestAdapterCallback(requestSerial, status, message, properties, limits,
-                                              featuresCount, features);
-}
-
-bool Instance::OnRequestAdapterCallback(uint64_t requestSerial,
-                                        WGPURequestAdapterStatus status,
-                                        const char* message,
-                                        const WGPUAdapterProperties* properties,
-                                        const WGPUSupportedLimits* limits,
-                                        uint32_t featuresCount,
-                                        const WGPUFeatureName* features) {
-    RequestAdapterData request;
-    if (!mRequestAdapterRequests.Acquire(requestSerial, &request)) {
-        return false;
-    }
-
-    Client* client = GetClient();
-    Adapter* adapter = client->Get<Adapter>(request.adapterObjectId);
-
-    // If the return status is a failure we should give a null adapter to the callback and
-    // free the allocation.
-    if (status != WGPURequestAdapterStatus_Success) {
-        client->Free(adapter);
-        request.callback(status, nullptr, message, request.userdata);
-        return true;
-    }
-
-    adapter->SetProperties(properties);
-    adapter->SetLimits(limits);
-    adapter->SetFeatures(features, featuresCount);
-
-    request.callback(status, ToAPI(adapter), message, request.userdata);
-    return true;
+    return GetEventManager(eventManager)
+               .SetFutureReady<RequestAdapterEvent>(future.id, status, message, properties, limits,
+                                                    featuresCount, features) == WireResult::Success;
 }
 
 void Instance::ProcessEvents() {
-    // TODO(crbug.com/dawn/2061): This should only process events for this Instance, not others
-    // on the same client. When EventManager is moved to Instance, this can be fixed.
-    GetClient()->GetEventManager()->ProcessPollEvents();
+    GetEventManager().ProcessPollEvents();
 
     // TODO(crbug.com/dawn/1987): The responsibility of ProcessEvents here is a bit mixed. It both
     // processes events coming in from the server, and also prompts the server to check for and
@@ -158,10 +250,86 @@ void Instance::ProcessEvents() {
 }
 
 WGPUWaitStatus Instance::WaitAny(size_t count, WGPUFutureWaitInfo* infos, uint64_t timeoutNS) {
-    // In principle the EventManager should be on the Instance, not the Client.
-    // But it's hard to get from an object to its Instance right now, so we can
-    // store it on the Client.
-    return GetClient()->GetEventManager()->WaitAny(count, infos, timeoutNS);
+    return GetEventManager().WaitAny(count, infos, timeoutNS);
+}
+
+void Instance::GatherWGSLFeatures(const WGPUDawnWireWGSLControl* wgslControl,
+                                  const WGPUDawnWGSLBlocklist* wgslBlocklist) {
+    WGPUDawnWireWGSLControl defaultWgslControl{};
+    if (wgslControl == nullptr) {
+        wgslControl = &defaultWgslControl;
+    }
+
+    for (auto wgslFeature : tint::wgsl::kAllLanguageFeatures) {
+        // Skip over testing features if we don't have the toggle to expose them.
+        if (!wgslControl->enableTesting) {
+            switch (wgslFeature) {
+                case tint::wgsl::LanguageFeature::kChromiumTestingUnimplemented:
+                case tint::wgsl::LanguageFeature::kChromiumTestingUnsafeExperimental:
+                case tint::wgsl::LanguageFeature::kChromiumTestingExperimental:
+                case tint::wgsl::LanguageFeature::kChromiumTestingShippedWithKillswitch:
+                case tint::wgsl::LanguageFeature::kChromiumTestingShipped:
+                    continue;
+                default:
+                    break;
+            }
+        }
+
+        // Expose the feature depending on its status and wgslControl.
+        bool enable = false;
+        switch (tint::wgsl::GetLanguageFeatureStatus(wgslFeature)) {
+            case tint::wgsl::FeatureStatus::kUnknown:
+            case tint::wgsl::FeatureStatus::kUnimplemented:
+                enable = false;
+                break;
+
+            case tint::wgsl::FeatureStatus::kUnsafeExperimental:
+                enable = wgslControl->enableUnsafe;
+                break;
+            case tint::wgsl::FeatureStatus::kExperimental:
+                enable = wgslControl->enableExperimental;
+                break;
+
+            case tint::wgsl::FeatureStatus::kShippedWithKillswitch:
+            case tint::wgsl::FeatureStatus::kShipped:
+                enable = true;
+                break;
+        }
+
+        if (enable) {
+            mWGSLFeatures.emplace(ToWGPUFeature(wgslFeature));
+        }
+    }
+
+    // Remove blocklisted features.
+    if (wgslBlocklist != nullptr) {
+        for (size_t i = 0; i < wgslBlocklist->blocklistedFeatureCount; i++) {
+            const char* name = wgslBlocklist->blocklistedFeatures[i];
+            tint::wgsl::LanguageFeature tintFeature = tint::wgsl::ParseLanguageFeature(name);
+            WGPUWGSLFeatureName feature = ToWGPUFeature(tintFeature);
+
+            // Ignore unknown features in the blocklist.
+            if (feature == WGPUWGSLFeatureName_Undefined) {
+                continue;
+            }
+
+            mWGSLFeatures.erase(feature);
+        }
+    }
+}
+
+bool Instance::HasWGSLLanguageFeature(WGPUWGSLFeatureName feature) const {
+    return mWGSLFeatures.contains(feature);
+}
+
+size_t Instance::EnumerateWGSLLanguageFeatures(WGPUWGSLFeatureName* features) const {
+    if (features != nullptr) {
+        for (WGPUWGSLFeatureName f : mWGSLFeatures) {
+            *features = f;
+            ++features;
+        }
+    }
+    return mWGSLFeatures.size();
 }
 
 }  // namespace dawn::wire::client

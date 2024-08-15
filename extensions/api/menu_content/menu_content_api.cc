@@ -66,34 +66,34 @@ MenuTreeNode MakeAPITreeNode(Menu_Node* menu_node) {
   }
   switch (menu_node->type()) {
     case menus::Menu_Node::MENU:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_MENU;
+      tree_node.type = vivaldi::menu_content::NodeType::kMenu;
       break;
     case menus::Menu_Node::COMMAND:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_COMMAND;
+      tree_node.type = vivaldi::menu_content::NodeType::kCommand;
       tree_node.parameter = menu_node->parameter();
       break;
     case menus::Menu_Node::CHECKBOX:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_CHECKBOX;
+      tree_node.type = vivaldi::menu_content::NodeType::kCheckbox;
       break;
     case menus::Menu_Node::RADIO:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_RADIO;
+      tree_node.type = vivaldi::menu_content::NodeType::kRadio;
       tree_node.radiogroup = menu_node->radioGroup();
       break;
     case menus::Menu_Node::FOLDER:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_FOLDER;
+      tree_node.type = vivaldi::menu_content::NodeType::kFolder;
       break;
     case menus::Menu_Node::SEPARATOR:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_SEPARATOR;
+      tree_node.type = vivaldi::menu_content::NodeType::kSeparator;
       break;
     case menus::Menu_Node::CONTAINER:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_CONTAINER;
+      tree_node.type = vivaldi::menu_content::NodeType::kContainer;
       tree_node.containermode =
           vivaldi::menu_content::ParseContainerMode(menu_node->containerMode());
       tree_node.containeredge =
           vivaldi::menu_content::ParseContainerEdge(menu_node->containerEdge());
       break;
     default:
-      tree_node.type = vivaldi::menu_content::NODE_TYPE_NONE;
+      tree_node.type = vivaldi::menu_content::NodeType::kNone;
       break;
   }
 
@@ -169,7 +169,7 @@ void MenuContentAPI::SendOnChanged(BrowserContext* browser_context,
 
     vivaldi::menu_content::Role role =
         vivaldi::menu_content::ParseRole(node->role());
-    if (role == vivaldi::menu_content::ROLE_NONE) {
+    if (role == vivaldi::menu_content::Role::kNone) {
       LOG(ERROR) << "Menu changed. Unknown menu role detected.";
       return;
     }
@@ -229,7 +229,7 @@ void MenuContentGetFunction::SendResponse(Menu_Model* model,
   } else {
     vivaldi::menu_content::Role role =
         vivaldi::menu_content::ParseRole(node->role());
-    if (role == vivaldi::menu_content::ROLE_NONE) {
+    if (role == vivaldi::menu_content::Role::kNone) {
       Respond(Error("Unknown menu role"));
       return;
     }
@@ -295,40 +295,40 @@ ExtensionFunction::ResponseAction MenuContentCreateFunction::Run() {
       std::unique_ptr<Menu_Node> node = std::make_unique<Menu_Node>(
           base::Uuid::GenerateRandomV4().AsLowercaseString(), Menu_Node::GetNewId());
       node->SetOrigin(Menu_Node::USER);
-      if (item.type == vivaldi::menu_content::NODE_TYPE_SEPARATOR) {
+      if (item.type == vivaldi::menu_content::NodeType::kSeparator) {
         node->SetType(Menu_Node::SEPARATOR);
-      } else if (item.type == vivaldi::menu_content::NODE_TYPE_COMMAND) {
+      } else if (item.type == vivaldi::menu_content::NodeType::kCommand) {
         node->SetType(Menu_Node::COMMAND);
         node->SetAction(item.action);
         if (item.parameter) {
           node->SetParameter(*item.parameter);
         }
-      } else if (item.type == vivaldi::menu_content::NODE_TYPE_CHECKBOX) {
+      } else if (item.type == vivaldi::menu_content::NodeType::kCheckbox) {
         node->SetType(Menu_Node::CHECKBOX);
         node->SetAction(item.action);
-      } else if (item.type == vivaldi::menu_content::NODE_TYPE_RADIO) {
+      } else if (item.type == vivaldi::menu_content::NodeType::kRadio) {
         node->SetType(Menu_Node::RADIO);
         node->SetAction(item.action);
-      } else if (item.type == vivaldi::menu_content::NODE_TYPE_FOLDER) {
+      } else if (item.type == vivaldi::menu_content::NodeType::kFolder) {
         node->SetType(Menu_Node::FOLDER);
         std::string action = std::string("MENU_") + std::to_string(node->id());
         node->SetAction(action);
-      } else if (item.type == vivaldi::menu_content::NODE_TYPE_CONTAINER) {
+      } else if (item.type == vivaldi::menu_content::NodeType::kContainer) {
         node->SetType(Menu_Node::CONTAINER);
         node->SetAction(item.action);
         node->SetContainerMode(vivaldi::menu_content::ToString(
-            item.containermode == vivaldi::menu_content::CONTAINER_MODE_NONE
-                ? vivaldi::menu_content::CONTAINER_MODE_FOLDER
+            item.containermode == vivaldi::menu_content::ContainerMode::kNone
+                ? vivaldi::menu_content::ContainerMode::kFolder
                 : item.containermode));
         node->SetContainerEdge(vivaldi::menu_content::ToString(
-            item.containeredge == vivaldi::menu_content::CONTAINER_EDGE_NONE
-                ? vivaldi::menu_content::CONTAINER_EDGE_BELOW
+            item.containeredge == vivaldi::menu_content::ContainerEdge::kNone
+                ? vivaldi::menu_content::ContainerEdge::kBelow
                 : item.containeredge));
       } else {
         continue;
       }
       if (item.title &&
-          item.type != vivaldi::menu_content::NODE_TYPE_SEPARATOR) {
+          item.type != vivaldi::menu_content::NodeType::kSeparator) {
         node->SetTitle(base::UTF8ToUTF16(*item.title));
         node->SetHasCustomTitle(true);
       }
@@ -433,12 +433,14 @@ ExtensionFunction::ResponseAction MenuContentUpdateFunction::Run() {
         success = pair.second->SetShowShortcut(pair.first,
                                                *params->changes.showshortcut);
       }
-      if (success && params->changes.container_mode) {
+      if (success &&
+          params->changes.container_mode != vivaldi::menu_content::ContainerMode::kNone) {
         success = pair.second->SetContainerMode(
             node,
             vivaldi::menu_content::ToString(params->changes.container_mode));
       }
-      if (success && params->changes.container_edge) {
+      if (success &&
+          params->changes.container_edge != vivaldi::menu_content::ContainerEdge::kNone) {
         success = pair.second->SetContainerEdge(
             node,
             vivaldi::menu_content::ToString(params->changes.container_edge));

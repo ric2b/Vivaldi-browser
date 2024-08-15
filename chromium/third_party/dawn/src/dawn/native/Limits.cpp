@@ -84,21 +84,33 @@
 
 // TODO(crbug.com/dawn/685):
 // These limits aren't really tiered and could probably be grouped better.
-// All Chrome platforms support 64 (iOS is 32) so there's no fingerprinting hazard in
-// extra additional buckets.
-//                                                             compat      tier0       tier1
+// All Chrome platforms support 64 (iOS is 32) so there's are really only two exposed
+// buckets: 64 and 128.
+//                                                             compat  tier0  tier1  tier2
 #define LIMITS_ATTACHMENTS(X)   \
-    X(Maximum,            maxColorAttachmentBytesPerSample,       32,         32,         64)
+    X(Maximum,            maxColorAttachmentBytesPerSample,       32,     32,    64,   128)
+
+// Tiers for limits related to inter-stage shader variables.
+//                                                             compat      tier0       tier1
+#define LIMITS_INTER_STAGE_SHADER_VARIABLES(X) \
+    X(Maximum,               maxInterStageShaderComponents,       60,        60,        112) \
+    X(Maximum,               maxInterStageShaderVariables,        15,        16,         28) \
+
+// Tiered limits for texture dimensions.
+// TODO(crbug.com/dawn/685): Define these better. For now, use two tiers where some dimensions
+// offers slightly better than default limits.
+//                                                             compat      tier0       tier1
+#define LIMITS_TEXTURE_DIMENSIONS(X) \
+    X(Maximum,                       maxTextureDimension1D,      4096,      8192,      16384) \
+    X(Maximum,                       maxTextureDimension2D,      4096,      8192,      16384) \
+    X(Maximum,                       maxTextureDimension3D,      1024,      2048,       2048) \
+    X(Maximum,                       maxTextureArrayLayers,       256,       256,        256)
 
 // TODO(crbug.com/dawn/685):
 // These limits don't have tiers yet. Define two tiers with the same values since the macros
 // in this file expect more than one tier.
 //                                                             compat      tier0       tier1
 #define LIMITS_OTHER(X)                                                                       \
-    X(Maximum,                       maxTextureDimension1D,      4096,      8192,       8192) \
-    X(Maximum,                       maxTextureDimension2D,      4096,      8192,       8192) \
-    X(Maximum,                       maxTextureDimension3D,      1024,      2048,       2048) \
-    X(Maximum,                       maxTextureArrayLayers,       256,       256,        256) \
     X(Maximum,                               maxBindGroups,         4,         4,          4) \
     X(Maximum,              maxBindGroupsPlusVertexBuffers,        24,        24,         24) \
     X(Maximum,                     maxBindingsPerBindGroup,      1000,      1000,       1000) \
@@ -106,32 +118,33 @@
     X(Alignment,           minUniformBufferOffsetAlignment,       256,       256,        256) \
     X(Alignment,           minStorageBufferOffsetAlignment,       256,       256,        256) \
     X(Maximum,                            maxVertexBuffers,         8,         8,          8) \
-    X(Maximum,                         maxVertexAttributes,        16,        16,         16) \
+    X(Maximum,                         maxVertexAttributes,        16,        16,         30) \
     X(Maximum,                  maxVertexBufferArrayStride,      2048,      2048,       2048) \
-    X(Maximum,               maxInterStageShaderComponents,        60,        60,         60) \
-    X(Maximum,                maxInterStageShaderVariables,        16,        16,         16) \
     X(Maximum,                         maxColorAttachments,         4,         8,          8)
 
 // clang-format on
 
-#define LIMITS_EACH_GROUP(X)              \
-    X(LIMITS_WORKGROUP_STORAGE_SIZE)      \
-    X(LIMITS_WORKGROUP_SIZE)              \
-    X(LIMITS_STORAGE_BUFFER_BINDING_SIZE) \
-    X(LIMITS_MAX_BUFFER_SIZE)             \
-    X(LIMITS_RESOURCE_BINDINGS)           \
-    X(LIMITS_STORAGE_BUFFER_BINDINGS)     \
-    X(LIMITS_ATTACHMENTS)                 \
+#define LIMITS_EACH_GROUP(X)               \
+    X(LIMITS_WORKGROUP_STORAGE_SIZE)       \
+    X(LIMITS_WORKGROUP_SIZE)               \
+    X(LIMITS_STORAGE_BUFFER_BINDING_SIZE)  \
+    X(LIMITS_MAX_BUFFER_SIZE)              \
+    X(LIMITS_RESOURCE_BINDINGS)            \
+    X(LIMITS_STORAGE_BUFFER_BINDINGS)      \
+    X(LIMITS_ATTACHMENTS)                  \
+    X(LIMITS_INTER_STAGE_SHADER_VARIABLES) \
     X(LIMITS_OTHER)
 
-#define LIMITS(X)                         \
-    LIMITS_WORKGROUP_STORAGE_SIZE(X)      \
-    LIMITS_WORKGROUP_SIZE(X)              \
-    LIMITS_STORAGE_BUFFER_BINDING_SIZE(X) \
-    LIMITS_MAX_BUFFER_SIZE(X)             \
-    LIMITS_RESOURCE_BINDINGS(X)           \
-    LIMITS_STORAGE_BUFFER_BINDINGS(X)     \
-    LIMITS_ATTACHMENTS(X)                 \
+#define LIMITS(X)                          \
+    LIMITS_WORKGROUP_STORAGE_SIZE(X)       \
+    LIMITS_WORKGROUP_SIZE(X)               \
+    LIMITS_STORAGE_BUFFER_BINDING_SIZE(X)  \
+    LIMITS_MAX_BUFFER_SIZE(X)              \
+    LIMITS_RESOURCE_BINDINGS(X)            \
+    LIMITS_STORAGE_BUFFER_BINDINGS(X)      \
+    LIMITS_ATTACHMENTS(X)                  \
+    LIMITS_INTER_STAGE_SHADER_VARIABLES(X) \
+    LIMITS_TEXTURE_DIMENSIONS(X)           \
     LIMITS_OTHER(X)
 
 namespace dawn::native {

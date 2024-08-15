@@ -338,7 +338,7 @@ DEF_TEST(SkPDF_FontCanEmbedTypeface, reporter) {
     SkPDFDocument doc(&nullWStream, SkPDF::Metadata());
 
     const char resource[] = "fonts/Roboto2-Regular_NoEmbed.ttf";
-    sk_sp<SkTypeface> noEmbedTypeface(MakeResourceAsTypeface(resource));
+    sk_sp<SkTypeface> noEmbedTypeface(ToolUtils::CreateTypefaceFromResource(resource));
     if (noEmbedTypeface) {
         REPORTER_ASSERT(reporter,
                         !SkPDFFont::CanEmbedTypeface(noEmbedTypeface.get(), &doc));
@@ -422,7 +422,7 @@ static sktext::GlyphRun make_run(size_t len, const SkGlyphID* glyphs, SkPoint* p
 }
 
 DEF_TEST(SkPDF_Clusterator, reporter) {
-    SkFont font;
+    SkFont font = ToolUtils::DefaultFont();
     {
         constexpr unsigned len = 11;
         const uint32_t clusters[len] = { 3, 2, 2, 1, 0, 4, 4, 7, 6, 6, 5 };

@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BASE_CONTAINERS_SPAN_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <array>
@@ -176,6 +177,10 @@ using EnableIfConstSpanCompatibleContainer =
 // Differences from [span.elem]:
 // - no operator ()()
 // - using size_t instead of ptrdiff_t for indexing
+//
+// Additions beyond the C++ standard draft
+// - as_byte_span() function.
+// - span_from_ref() function.
 
 // [span], class template span
 template <typename T>
@@ -350,6 +355,24 @@ template <
     typename = internal::EnableIfConstSpanCompatibleContainer<Container, T>>
 constexpr span<T> make_span(const Container& container) {
   return span<T>(container);
+}
+
+// `span_from_ref` converts a reference to T into a span of length 1.  This is a
+// non-std helper that is inspired by the `std::slice::from_ref()` function from
+// Rust.
+template <typename T>
+static constexpr span<T> span_from_ref(T& single_object) noexcept {
+  return span<T>(&single_object, 1u);
+}
+
+// Convenience function for converting an object which is itself convertible
+// to span into a span of bytes (i.e. span of const uint8_t). Typically used
+// to convert std::string or string-objects holding chars, or std::vector
+// or vector-like objects holding other scalar types, prior to passing them
+// into an API that requires byte spans.
+template <typename T>
+span<const uint8_t> as_byte_span(const T& arg) {
+  return as_bytes(make_span(arg));
 }
 
 }  // namespace pdfium

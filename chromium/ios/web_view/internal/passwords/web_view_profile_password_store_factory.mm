@@ -9,13 +9,14 @@
 
 #import "base/command_line.h"
 #import "base/functional/callback.h"
+#import "base/functional/callback_helpers.h"
 #import "base/no_destructor.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/task/thread_pool.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
-#import "components/password_manager/core/browser/login_database.h"
-#import "components/password_manager/core/browser/password_store_built_in_backend.h"
+#import "components/password_manager/core/browser/password_store/login_database.h"
+#import "components/password_manager/core/browser/password_store/password_store_built_in_backend.h"
 #import "components/password_manager/core/browser/password_store_factory_util.h"
 #import "components/sync/service/sync_service.h"
 #import "ios/web_view/internal/app/application_context.h"
@@ -59,7 +60,8 @@ WebViewProfilePasswordStoreFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       password_manager::CreateLoginDatabaseForProfileStorage(
-          context->GetStatePath()));
+          context->GetStatePath(),
+          /*is_empty_cb=*/base::NullCallback()));
 
   scoped_refptr<base::SequencedTaskRunner> main_task_runner(
       base::SequencedTaskRunner::GetCurrentDefault());

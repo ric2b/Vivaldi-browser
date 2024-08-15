@@ -20,6 +20,7 @@
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
+#include "base/types/expected.h"
 #include "base/version.h"
 #include "net/base/schemeful_site.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -29,6 +30,8 @@ class PrivacySandboxAttestationsObserver;
 }  // namespace content
 
 namespace privacy_sandbox {
+
+enum class ParsingStatus;
 
 const base::FilePath::CharType kSentinelFileName[] =
     FILE_PATH_LITERAL("attestations_sentinel");
@@ -185,9 +188,9 @@ class PrivacySandboxAttestations {
   // Called when attestations parsing finishes. Stores the parsed attestations
   // map and its version. Also notifies the observers the attestations map has
   // been loaded / updated.
-  void OnAttestationsParsed(
-      base::Version version,
-      absl::optional<PrivacySandboxAttestationsMap> attestations_map);
+  void OnAttestationsParsed(base::Version version,
+                            base::expected<PrivacySandboxAttestationsMap,
+                                           ParsingStatus> attestations_map);
 
   // Notify observers that attestations have been loaded.
   void NotifyObserversOnAttestationsLoaded();
@@ -211,6 +214,9 @@ class PrivacySandboxAttestations {
   // The attestations file from the component updater should always carry a
   // valid version. If this is a `nullopt`, this implies the attestations list
   // has not been loaded yet.
+  // The attestations file version uses a format of YYYY.MM.DD.VV. The last two
+  // digits "VV" is used for multiple versions released in the same day. It has
+  // a range from 0 to 99. It is usually 0.
   base::Version file_version_ GUARDED_BY_CONTEXT(sequence_checker_);
 
   // A data structure for storing and checking Privacy Sandbox attestations,

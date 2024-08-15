@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/policy/dlp/data_transfer_dlp_controller.h"
 
 #include <memory>
+#include <optional>
 
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
@@ -14,6 +15,7 @@
 #include "base/test/mock_callback.h"
 #include "base/types/optional_util.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/test/mock_dlp_rules_manager.h"
 #include "chrome/browser/enterprise/data_controls/dlp_reporting_manager.h"
@@ -32,17 +34,13 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/lacros_service.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller_ash.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace policy {
 
@@ -56,34 +54,38 @@ class MockDlpController : public DataTransferDlpController {
   explicit MockDlpController(const DlpRulesManager& dlp_rules_manager)
       : DataTransferDlpController(dlp_rules_manager) {}
 
-  MOCK_METHOD2(NotifyBlockedPaste,
-               void(const ui::DataTransferEndpoint* const data_src,
-                    const ui::DataTransferEndpoint* const data_dst));
+  MOCK_METHOD2(
+      NotifyBlockedPaste,
+      void(base::optional_ref<const ui::DataTransferEndpoint> data_src,
+           base::optional_ref<const ui::DataTransferEndpoint> data_dst));
 
-  MOCK_METHOD2(NotifyBlockedDrop,
-               void(const ui::DataTransferEndpoint* const data_src,
-                    const ui::DataTransferEndpoint* const data_dst));
+  MOCK_METHOD2(
+      NotifyBlockedDrop,
+      void(base::optional_ref<const ui::DataTransferEndpoint> data_src,
+           base::optional_ref<const ui::DataTransferEndpoint> data_dst));
 
   MOCK_METHOD3(WarnOnPaste,
-               void(const ui::DataTransferEndpoint* const data_src,
-                    const ui::DataTransferEndpoint* const data_dst,
-                    base::RepeatingCallback<void()> reporting_cb));
+               void(base::optional_ref<const ui::DataTransferEndpoint> data_src,
+                    base::optional_ref<const ui::DataTransferEndpoint> data_dst,
+                    base::OnceClosure reporting_cb));
 
   MOCK_METHOD4(WarnOnBlinkPaste,
-               void(const ui::DataTransferEndpoint* const data_src,
-                    const ui::DataTransferEndpoint* const data_dst,
+               void(base::optional_ref<const ui::DataTransferEndpoint> data_src,
+                    base::optional_ref<const ui::DataTransferEndpoint> data_dst,
                     content::WebContents* web_contents,
                     base::OnceCallback<void(bool)> paste_cb));
 
-  MOCK_METHOD1(ShouldPasteOnWarn,
-               bool(const ui::DataTransferEndpoint* const data_dst));
+  MOCK_METHOD1(
+      ShouldPasteOnWarn,
+      bool(base::optional_ref<const ui::DataTransferEndpoint> data_dst));
 
-  MOCK_METHOD1(ShouldCancelOnWarn,
-               bool(const ui::DataTransferEndpoint* const data_dst));
+  MOCK_METHOD1(
+      ShouldCancelOnWarn,
+      bool(base::optional_ref<const ui::DataTransferEndpoint> data_dst));
 
   MOCK_METHOD3(WarnOnDrop,
-               void(const ui::DataTransferEndpoint* const data_src,
-                    const ui::DataTransferEndpoint* const data_dst,
+               void(base::optional_ref<const ui::DataTransferEndpoint> data_src,
+                    base::optional_ref<const ui::DataTransferEndpoint> data_dst,
                     base::OnceClosure drop_cb));
 
  protected:
@@ -94,7 +96,7 @@ class MockDlpController : public DataTransferDlpController {
   }
 };
 
-absl::optional<ui::DataTransferEndpoint> CreateEndpoint(
+std::optional<ui::DataTransferEndpoint> CreateEndpoint(
     ui::EndpointType* type,
     bool notify_if_restricted) {
   if (type && *type == ui::EndpointType::kUrl) {
@@ -106,7 +108,7 @@ absl::optional<ui::DataTransferEndpoint> CreateEndpoint(
         *type,
         /*notify_if_restricted=*/notify_if_restricted);
   }
-  return absl::nullopt;
+  return std::nullopt;
 }
 
 std::unique_ptr<content::WebContents> CreateTestWebContents(
@@ -135,7 +137,7 @@ data_controls::Component GetComponent(ui::EndpointType endpoint_type) {
 
 class DataTransferDlpControllerTest
     : public ::testing::TestWithParam<
-          std::tuple<absl::optional<ui::EndpointType>, bool>> {
+          std::tuple<std::optional<ui::EndpointType>, bool>> {
  protected:
   DataTransferDlpControllerTest() {}
 
@@ -172,14 +174,14 @@ class DataTransferDlpControllerTest
 };
 
 TEST_F(DataTransferDlpControllerTest, NullSrc) {
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(nullptr, nullptr,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(
+                      std::nullopt, std::nullopt, std::nullopt));
 
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
   auto drag_data = ui::OSExchangeData();
-  dlp_controller_->DropIfAllowed(&drag_data, nullptr, callback.Get());
+  dlp_controller_->DropIfAllowed(&drag_data, std::nullopt, callback.Get());
 
   histogram_tester_.ExpectUniqueSample(
       data_controls::GetDlpHistogramPrefix() +
@@ -194,8 +196,8 @@ TEST_F(DataTransferDlpControllerTest, NullSrc) {
 TEST_F(DataTransferDlpControllerTest, ClipboardHistoryDst) {
   ui::DataTransferEndpoint data_src((GURL(kExample1Url)));
   ui::DataTransferEndpoint data_dst(ui::EndpointType::kClipboardHistory);
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src, &data_dst,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src, data_dst,
+                                                          std::nullopt));
   histogram_tester_.ExpectUniqueSample(
       data_controls::GetDlpHistogramPrefix() +
           data_controls::dlp::kClipboardReadBlockedUMA,
@@ -206,8 +208,8 @@ TEST_F(DataTransferDlpControllerTest, ClipboardHistoryDst) {
 TEST_F(DataTransferDlpControllerTest, LacrosDst) {
   ui::DataTransferEndpoint data_src((GURL(kExample1Url)));
   ui::DataTransferEndpoint data_dst(ui::EndpointType::kLacros);
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src, &data_dst,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src, data_dst,
+                                                          std::nullopt));
   histogram_tester_.ExpectUniqueSample(
       data_controls::GetDlpHistogramPrefix() +
           data_controls::dlp::kClipboardReadBlockedUMA,
@@ -226,10 +228,11 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_Allow) {
   ::testing::StrictMock<base::MockOnceCallback<void(bool)>> callback;
   EXPECT_CALL(callback, Run(true));
 
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content = 0;
   auto web_contents = CreateTestWebContents(testing_profile_.get());
-  dlp_controller_->PasteIfAllowed(&data_src, &data_dst, absl::nullopt,
-                                  web_contents->GetPrimaryMainFrame(),
-                                  callback.Get());
+  dlp_controller_->PasteIfAllowed(
+      &data_src, &data_dst, std::move(pasted_content),
+      web_contents->GetPrimaryMainFrame(), callback.Get());
 }
 
 TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_NullWebContents) {
@@ -238,8 +241,10 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_NullWebContents) {
 
   ::testing::StrictMock<base::MockOnceCallback<void(bool)>> callback;
   EXPECT_CALL(callback, Run(false));
-  dlp_controller_->PasteIfAllowed(&data_src, &data_dst, absl::nullopt, nullptr,
-                                  callback.Get());
+
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content = 0;
+  dlp_controller_->PasteIfAllowed(
+      &data_src, &data_dst, std::move(pasted_content), nullptr, callback.Get());
 }
 
 TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_WarnDst) {
@@ -259,9 +264,10 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_WarnDst) {
       .WillRepeatedly(testing::Return(false));
   EXPECT_CALL(*dlp_controller_, WarnOnBlinkPaste);
 
-  dlp_controller_->PasteIfAllowed(&data_src, &data_dst, absl::nullopt,
-                                  web_contents->GetPrimaryMainFrame(),
-                                  callback.Get());
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content = 0;
+  dlp_controller_->PasteIfAllowed(
+      &data_src, &data_dst, std::move(pasted_content),
+      web_contents->GetPrimaryMainFrame(), callback.Get());
   // We are not expecting warning proceeded event here. Warning proceeded event
   // is sent after a user accept the warn dialogue.
   // However, DataTransferDlpController::WarnOnBlinkPaste method is mocked
@@ -291,9 +297,10 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_ProceedDst) {
       .WillRepeatedly(testing::Return(false));
 
   EXPECT_CALL(callback, Run(true));
-  dlp_controller_->PasteIfAllowed(&data_src, &data_dst, absl::nullopt,
-                                  web_contents->GetPrimaryMainFrame(),
-                                  callback.Get());
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content = 0;
+  dlp_controller_->PasteIfAllowed(
+      &data_src, &data_dst, std::move(pasted_content),
+      web_contents->GetPrimaryMainFrame(), callback.Get());
   EXPECT_EQ(events_.size(), 1u);
   EXPECT_THAT(
       events_[0],
@@ -319,90 +326,148 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_CancelDst) {
       .WillRepeatedly(testing::Return(true));
 
   EXPECT_CALL(callback, Run(false));
-  dlp_controller_->PasteIfAllowed(&data_src, &data_dst, absl::nullopt,
-                                  web_contents->GetPrimaryMainFrame(),
-                                  callback.Get());
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content = 0;
+  dlp_controller_->PasteIfAllowed(
+      &data_src, &data_dst, std::move(pasted_content),
+      web_contents->GetPrimaryMainFrame(), callback.Get());
   EXPECT_TRUE(events_.empty());
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-
-class MockFilesController : public policy::DlpFilesControllerAsh {
+class MockFilesController : public policy::DlpFilesController {
  public:
-  explicit MockFilesController(const policy::DlpRulesManager& rules_manager,
-                               Profile* profile)
-      : DlpFilesControllerAsh(rules_manager, profile) {}
+  explicit MockFilesController(const policy::DlpRulesManager& rules_manager)
+      : DlpFilesController(rules_manager) {}
   ~MockFilesController() override = default;
 
   MOCK_METHOD(void,
-              CheckIfDropAllowed,
-              (const std::vector<ui::FileInfo>& dropped_files,
+              CheckIfPasteOrDropIsAllowed,
+              (const std::vector<base::FilePath>& files,
                const ui::DataTransferEndpoint* data_dst,
                CheckIfDlpAllowedCallback result_callback),
+              (override));
+
+  MOCK_METHOD(std::optional<data_controls::Component>,
+              MapFilePathToPolicyComponent,
+              (Profile * profile, const base::FilePath& file_path),
+              (override));
+
+  MOCK_METHOD(bool,
+              IsInLocalFileSystem,
+              (const base::FilePath& file_path),
+              (override));
+
+  MOCK_METHOD(void,
+              ShowDlpBlockedFiles,
+              (std::optional<uint64_t> task_id,
+               std::vector<base::FilePath> blocked_files,
+               dlp::FileAction action),
               (override));
 };
 
 TEST_F(DataTransferDlpControllerTest, DropFile_Blocked) {
+  const base::FilePath path("file1.txt");
+
   auto drag_data = ui::OSExchangeData();
-  drag_data.SetFilename(base::FilePath("file1.txt"));
+  drag_data.SetFilename(path);
   drag_data.SetSource(std::make_unique<ui::DataTransferEndpoint>(
       GURL(base::StrCat({extensions::kExtensionScheme, "://",
                          extension_misc::kFilesManagerAppId}))));
   ui::DataTransferEndpoint data_dst((GURL(kExample1Url)));
 
-  MockFilesController files_controller(*rules_manager_, testing_profile_.get());
+  MockFilesController files_controller(*rules_manager_);
   std::vector<ui::FileInfo> file_names;
   ASSERT_TRUE(drag_data.GetFilenames(&file_names));
 
   EXPECT_CALL(*rules_manager_, GetDlpFilesController)
       .WillOnce(testing::Return(&files_controller));
-  EXPECT_CALL(files_controller,
-              CheckIfDropAllowed(file_names, &data_dst,
-                                 base::test::IsNotNullCallback()))
+  EXPECT_CALL(files_controller, CheckIfPasteOrDropIsAllowed(
+                                    std::vector<base::FilePath>{path},
+                                    &data_dst, base::test::IsNotNullCallback()))
       .WillOnce(base::test::RunOnceCallback<2>(false));
-  EXPECT_CALL(*dlp_controller_, NotifyBlockedDrop);
 
   ::testing::StrictMock<base::MockOnceClosure> drop_callback;
   dlp_controller_->DropIfAllowed(&drag_data, &data_dst, drop_callback.Get());
-
-  histogram_tester_.ExpectUniqueSample(
-      data_controls::GetDlpHistogramPrefix() +
-          data_controls::dlp::kDragDropBlockedUMA,
-      true, 1);
 }
 
 TEST_F(DataTransferDlpControllerTest, DropFile_Allowed) {
+  const base::FilePath path("file1.txt");
+
   auto drag_data = ui::OSExchangeData();
-  drag_data.SetFilename(base::FilePath("file1.txt"));
+  drag_data.SetFilename(path);
   drag_data.SetSource(std::make_unique<ui::DataTransferEndpoint>(
       GURL(base::StrCat({extensions::kExtensionScheme, "://",
                          extension_misc::kFilesManagerAppId}))));
   ui::DataTransferEndpoint data_dst((GURL(kExample1Url)));
 
-  MockFilesController files_controller(*rules_manager_, testing_profile_.get());
+  MockFilesController files_controller(*rules_manager_);
   std::vector<ui::FileInfo> file_names;
   ASSERT_TRUE(drag_data.GetFilenames(&file_names));
 
   EXPECT_CALL(*rules_manager_, GetDlpFilesController)
       .WillOnce(testing::Return(&files_controller));
-  EXPECT_CALL(*rules_manager_, IsRestrictedDestination)
-      .WillOnce(testing::Return(DlpRulesManager::Level::kAllow));
-  EXPECT_CALL(files_controller,
-              CheckIfDropAllowed(file_names, &data_dst,
-                                 base::test::IsNotNullCallback()))
+  EXPECT_CALL(files_controller, CheckIfPasteOrDropIsAllowed(
+                                    std::vector<base::FilePath>{path},
+                                    &data_dst, base::test::IsNotNullCallback()))
       .WillOnce(base::test::RunOnceCallback<2>(true));
 
   ::testing::StrictMock<base::MockOnceClosure> drop_callback;
   EXPECT_CALL(drop_callback, Run);
   dlp_controller_->DropIfAllowed(&drag_data, &data_dst, drop_callback.Get());
-
-  histogram_tester_.ExpectUniqueSample(
-      data_controls::GetDlpHistogramPrefix() +
-          data_controls::dlp::kDragDropBlockedUMA,
-      false, 1);
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+TEST_F(DataTransferDlpControllerTest, PasteFile_Blocked) {
+  ui::DataTransferEndpoint* data_src = nullptr;
+
+  auto path = base::FilePath("file1.txt");
+  ui::DataTransferEndpoint data_dst((GURL(kExample1Url)));
+
+  MockFilesController files_controller(*rules_manager_);
+
+  EXPECT_CALL(*rules_manager_, GetDlpFilesController)
+      .WillOnce(testing::Return(&files_controller));
+  EXPECT_CALL(files_controller, CheckIfPasteOrDropIsAllowed(
+                                    std::vector<base::FilePath>{path},
+                                    &data_dst, base::test::IsNotNullCallback()))
+      .WillOnce(base::test::RunOnceCallback<2>(false));
+
+  auto web_contents = CreateTestWebContents(testing_profile_.get());
+
+  ::testing::StrictMock<base::MockOnceCallback<void(bool)>> paste_callback;
+  EXPECT_CALL(paste_callback, Run(false));
+
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content =
+      std::vector<base::FilePath>{path};
+  dlp_controller_->PasteIfAllowed(data_src, data_dst, std::move(pasted_content),
+                                  web_contents->GetPrimaryMainFrame(),
+                                  paste_callback.Get());
+}
+
+TEST_F(DataTransferDlpControllerTest, PasteFile_Allowed) {
+  ui::DataTransferEndpoint* data_src = nullptr;
+
+  auto path = base::FilePath("file1.txt");
+  ui::DataTransferEndpoint data_dst((GURL(kExample1Url)));
+
+  MockFilesController files_controller(*rules_manager_);
+
+  EXPECT_CALL(*rules_manager_, GetDlpFilesController)
+      .WillOnce(testing::Return(&files_controller));
+  EXPECT_CALL(files_controller, CheckIfPasteOrDropIsAllowed(
+                                    std::vector<base::FilePath>{path},
+                                    &data_dst, base::test::IsNotNullCallback()))
+      .WillOnce(base::test::RunOnceCallback<2>(true));
+
+  auto web_contents = CreateTestWebContents(testing_profile_.get());
+
+  ::testing::StrictMock<base::MockOnceCallback<void(bool)>> paste_callback;
+  EXPECT_CALL(paste_callback, Run(true));
+
+  absl::variant<size_t, std::vector<base::FilePath>> pasted_content =
+      std::vector<base::FilePath>{path};
+  dlp_controller_->PasteIfAllowed(data_src, data_dst, std::move(pasted_content),
+                                  web_contents->GetPrimaryMainFrame(),
+                                  paste_callback.Get());
+}
 
 // Create a version of the test class for parameterized testing.
 class DlpControllerTest : public DataTransferDlpControllerTest {
@@ -411,23 +476,21 @@ class DlpControllerTest : public DataTransferDlpControllerTest {
     DataTransferDlpControllerTest::SetUp();
     data_src_ = ui::DataTransferEndpoint((GURL(kExample1Url)));
     drag_data_.SetSource(std::make_unique<ui::DataTransferEndpoint>(data_src_));
-    absl::optional<ui::EndpointType> endpoint_type;
+    std::optional<ui::EndpointType> endpoint_type;
     std::tie(endpoint_type, do_notify_) = GetParam();
     data_dst_ = CreateEndpoint(base::OptionalToPtr(endpoint_type), do_notify_);
-    dst_ptr_ = base::OptionalToPtr(data_dst_);
   }
 
   ui::DataTransferEndpoint data_src_{ui::EndpointType::kDefault};
   bool do_notify_;
-  absl::optional<ui::DataTransferEndpoint> data_dst_;
+  std::optional<ui::DataTransferEndpoint> data_dst_;
   ui::OSExchangeData drag_data_;
-  raw_ptr<ui::DataTransferEndpoint> dst_ptr_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
     DlpClipboard,
     DlpControllerTest,
-    ::testing::Combine(::testing::Values(absl::nullopt,
+    ::testing::Combine(::testing::Values(std::nullopt,
                                          ui::EndpointType::kDefault,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
                                          ui::EndpointType::kUnknownVm,
@@ -441,8 +504,8 @@ TEST_P(DlpControllerTest, Allow) {
   EXPECT_CALL(*rules_manager_, IsRestrictedDestination)
       .WillOnce(testing::Return(DlpRulesManager::Level::kAllow));
 
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src_, dst_ptr_,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                          std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   // DropIfAllowed
@@ -451,7 +514,7 @@ TEST_P(DlpControllerTest, Allow) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_->DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
+  dlp_controller_->DropIfAllowed(&drag_data_, data_dst_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   histogram_tester_.ExpectUniqueSample(
@@ -467,12 +530,12 @@ TEST_P(DlpControllerTest, Allow) {
 TEST_P(DlpControllerTest, Block_IsClipboardReadAllowed) {
   EXPECT_CALL(*rules_manager_, IsRestrictedDestination)
       .WillOnce(testing::Return(DlpRulesManager::Level::kBlock));
-  if (do_notify_ || !dst_ptr_) {
+  if (do_notify_ || !data_dst_.has_value()) {
     EXPECT_CALL(*dlp_controller_, NotifyBlockedPaste);
   }
 
-  EXPECT_EQ(false, dlp_controller_->IsClipboardReadAllowed(&data_src_, dst_ptr_,
-                                                           absl::nullopt));
+  EXPECT_EQ(false, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                           std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   if (!data_dst_ || do_notify_) {
@@ -498,7 +561,7 @@ TEST_P(DlpControllerTest, Block_DropIfAllowed) {
   EXPECT_CALL(*dlp_controller_, NotifyBlockedDrop);
   ::testing::StrictMock<base::MockOnceClosure> callback;
 
-  dlp_controller_->DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
+  dlp_controller_->DropIfAllowed(&drag_data_, data_dst_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   EXPECT_EQ(events_.size(), 1u);
@@ -518,8 +581,8 @@ TEST_P(DlpControllerTest, Report_IsClipboardReadAllowed) {
   EXPECT_CALL(*rules_manager_, IsRestrictedDestination)
       .WillOnce(testing::Return(DlpRulesManager::Level::kReport));
 
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src_, dst_ptr_,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                          std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   if (!data_dst_ || do_notify_) {
@@ -540,7 +603,7 @@ TEST_P(DlpControllerTest, Report_DropIfAllowed) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_->DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
+  dlp_controller_->DropIfAllowed(&drag_data_, data_dst_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   EXPECT_EQ(events_.size(), 1u);
@@ -559,13 +622,14 @@ TEST_P(DlpControllerTest, Warn_IsClipboardReadAllowed) {
       .WillRepeatedly(testing::Return(false));
   EXPECT_CALL(*dlp_controller_, ShouldCancelOnWarn)
       .WillRepeatedly(testing::Return(false));
-  bool show_warning = dst_ptr_ ? (do_notify_ && !dst_ptr_->IsUrlType()) : true;
+  bool show_warning =
+      data_dst_.has_value() ? (do_notify_ && !data_dst_->IsUrlType()) : true;
   if (show_warning) {
     EXPECT_CALL(*dlp_controller_, WarnOnPaste);
   }
 
   EXPECT_EQ(!show_warning, dlp_controller_->IsClipboardReadAllowed(
-                               &data_src_, dst_ptr_, absl::nullopt));
+                               data_src_, data_dst_, std::nullopt));
   if (show_warning) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(
@@ -583,8 +647,8 @@ TEST_P(DlpControllerTest, Warn_IsClipboardReadAllowed) {
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(*dlp_controller_, ShouldCancelOnWarn)
       .WillRepeatedly(testing::Return(false));
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src_, dst_ptr_,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                          std::nullopt));
   EXPECT_EQ(events_.size(), show_warning ? 1u : 0u);
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
@@ -605,8 +669,8 @@ TEST_P(DlpControllerTest, Warn_ShouldCancelOnWarn) {
   EXPECT_CALL(*dlp_controller_, ShouldCancelOnWarn)
       .WillRepeatedly(testing::Return(true));
 
-  EXPECT_EQ(false, dlp_controller_->IsClipboardReadAllowed(&data_src_, dst_ptr_,
-                                                           absl::nullopt));
+  EXPECT_EQ(false, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                           std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 }
 
@@ -617,7 +681,7 @@ TEST_P(DlpControllerTest, Warn_DropIfAllowed) {
 
   ::testing::StrictMock<base::MockOnceClosure> callback;
 
-  dlp_controller_->DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
+  dlp_controller_->DropIfAllowed(&drag_data_, data_dst_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   histogram_tester_.ExpectUniqueSample(
@@ -641,7 +705,7 @@ class DlpControllerVMsTest : public DataTransferDlpControllerTest {
 
   ui::DataTransferEndpoint data_src_{ui::EndpointType::kDefault};
   ui::OSExchangeData drag_data_;
-  absl::optional<ui::EndpointType> endpoint_type_;
+  std::optional<ui::EndpointType> endpoint_type_;
   bool do_notify_;
   ui::DataTransferEndpoint data_dst_{ui::EndpointType::kDefault};
 };
@@ -664,8 +728,8 @@ TEST_P(DlpControllerVMsTest, Allow) {
   EXPECT_CALL(*rules_manager_, IsRestrictedComponent)
       .WillOnce(testing::Return(DlpRulesManager::Level::kAllow));
 
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src, &data_dst,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src, data_dst,
+                                                          std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   // DropIfAllowed
@@ -694,8 +758,8 @@ TEST_P(DlpControllerVMsTest, Block_IsClipboardReadAllowed) {
     EXPECT_CALL(*dlp_controller_, NotifyBlockedPaste);
   }
 
-  EXPECT_EQ(false, dlp_controller_->IsClipboardReadAllowed(
-                       &data_src_, &data_dst_, absl::nullopt));
+  EXPECT_EQ(false, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                           std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   if (do_notify_) {
@@ -741,8 +805,8 @@ TEST_P(DlpControllerVMsTest, Report_IsClipboardReadAllowed) {
   EXPECT_CALL(*rules_manager_, IsRestrictedComponent)
       .WillOnce(testing::Return(DlpRulesManager::Level::kReport));
 
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(
-                      &data_src_, &data_dst_, absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src_, data_dst_,
+                                                          std::nullopt));
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   if (do_notify_) {
@@ -787,8 +851,8 @@ TEST_P(DlpControllerVMsTest, Warn_IsClipboardReadAllowed) {
     EXPECT_CALL(*dlp_controller_, WarnOnPaste);
   }
 
-  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(&data_src, &data_dst,
-                                                          absl::nullopt));
+  EXPECT_EQ(true, dlp_controller_->IsClipboardReadAllowed(data_src, data_dst,
+                                                          std::nullopt));
   if (do_notify) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0], data_controls::IsDlpPolicyEvent(

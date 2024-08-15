@@ -49,8 +49,9 @@ std::unique_ptr<views::Border> CreateBorderWithVerticalSpacing(
 // layout should be the same whether or not the icon is badged, so allow the
 // badged part of the icon to extend into the padding.
 class IconWrapper : public views::View {
+  METADATA_HEADER(IconWrapper, views::View)
+
  public:
-  METADATA_HEADER(IconWrapper);
   explicit IconWrapper(std::unique_ptr<views::View> icon, int vertical_spacing)
       : icon_(AddChildView(std::move(icon))) {
     SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -79,15 +80,19 @@ class IconWrapper : public views::View {
   raw_ptr<views::View> icon_;
 };
 
-BEGIN_METADATA(IconWrapper, views::View)
+BEGIN_METADATA(IconWrapper)
 END_METADATA
 
 }  // namespace
 
 HoverButton::HoverButton(PressedCallback callback, const std::u16string& text)
-    : views::LabelButton(callback, text, views::style::CONTEXT_BUTTON) {
+    : views::LabelButton(
+          base::BindRepeating(&HoverButton::OnPressed, base::Unretained(this)),
+          text,
+          views::style::CONTEXT_BUTTON),
+      callback_(std::move(callback)) {
   SetButtonController(std::make_unique<HoverButtonController>(
-      this, std::move(callback),
+      this,
       std::make_unique<views::Button::DefaultButtonControllerDelegate>(this)));
 
   views::InstallRectHighlightPathGenerator(this);
@@ -240,7 +245,7 @@ void HoverButton::SetTitleText(const std::u16string& text) {
 
 void HoverButton::SetTitleTextStyle(views::style::TextStyle text_style,
                                     SkColor background_color,
-                                    absl::optional<ui::ColorId> color_id) {
+                                    std::optional<ui::ColorId> color_id) {
   if (!title()) {
     return;
   }
@@ -328,5 +333,11 @@ views::View* HoverButton::GetTooltipHandlerForPoint(const gfx::Point& point) {
   return this;
 }
 
-BEGIN_METADATA(HoverButton, views::LabelButton)
+void HoverButton::OnPressed(const ui::Event& event) {
+  if (callback_) {
+    callback_.Run(event);
+  }
+}
+
+BEGIN_METADATA(HoverButton)
 END_METADATA

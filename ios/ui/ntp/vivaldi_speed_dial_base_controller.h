@@ -8,10 +8,6 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_item.h"
 
-namespace web {
-class WebState;
-}
-
 // The controller that contains the speed dial folder menu and the child pages.
 @interface VivaldiSpeedDialBaseController : UIViewController
 

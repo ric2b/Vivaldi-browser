@@ -64,6 +64,11 @@ class DeviceChooserExtensionBrowserTest
     ASSERT_EQ(url, web_contents()->GetLastCommittedURL());
   }
 
+  void TearDownOnMainThread() override {
+    extension_ = nullptr;
+    ExtensionBrowserTest::TearDownOnMainThread();
+  }
+
   const std::string& extension_id() { return extension_->id(); }
 
   content::WebContents* web_contents() {
@@ -103,12 +108,13 @@ class DeviceChooserExtensionBrowserTest
     };
 
     std::vector<ToolbarActionView*> result;
-    for (auto* child : extensions_container()->children()) {
+    for (views::View* child : extensions_container()->children()) {
       // Ensure we don't downcast the ExtensionsToolbarButton.
       if (views::IsViewClass<ToolbarActionView>(child)) {
         auto* action = static_cast<ToolbarActionView*>(child);
-        if (is_visible(action))
+        if (is_visible(action)) {
           result.push_back(action);
+        }
       }
     }
     return result;
@@ -130,7 +136,7 @@ class DeviceChooserExtensionBrowserTest
   }
 
  private:
-  raw_ptr<const extensions::Extension, DanglingUntriaged> extension_ = nullptr;
+  raw_ptr<const extensions::Extension> extension_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_P(DeviceChooserExtensionBrowserTest,

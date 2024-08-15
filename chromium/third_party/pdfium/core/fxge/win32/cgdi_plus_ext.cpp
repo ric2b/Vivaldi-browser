@@ -182,7 +182,7 @@ using FuncType_GdipSetPixelOffsetMode =
     decltype(&Gdiplus::DllExports::GdipSetPixelOffsetMode);
 #define CallFunc(funcname)               \
   reinterpret_cast<FuncType_##funcname>( \
-      GdiplusExt.m_Functions[FuncId_##funcname])
+      GdiplusExt.functions()[FuncId_##funcname])
 
 Gdiplus::GpFillMode FillType2Gdip(CFX_FillRenderOptions::FillType fill_type) {
   return fill_type == CFX_FillRenderOptions::FillType::kEvenOdd
@@ -204,7 +204,7 @@ Gdiplus::GpBrush* GdipCreateBrushImpl(DWORD argb) {
 }
 
 void OutputImage(Gdiplus::GpGraphics* pGraphics,
-                 const RetainPtr<CFX_DIBBase>& source,
+                 RetainPtr<const CFX_DIBBase> source,
                  const FX_RECT& src_rect,
                  int dest_left,
                  int dest_top,
@@ -215,11 +215,12 @@ void OutputImage(Gdiplus::GpGraphics* pGraphics,
   const CGdiplusExt& GdiplusExt = GetGdiplusExt();
   if (source->GetBPP() == 1 && (src_rect.left % 8)) {
     FX_RECT new_rect(0, 0, src_width, src_height);
-    RetainPtr<CFX_DIBBase> pCloned = source->ClipTo(src_rect);
-    if (!pCloned)
+    source = source->ClipTo(src_rect);
+    if (!source) {
       return;
-    OutputImage(pGraphics, pCloned, new_rect, dest_left, dest_top, dest_width,
-                dest_height);
+    }
+    OutputImage(pGraphics, std::move(source), new_rect, dest_left, dest_top,
+                dest_width, dest_height);
     return;
   }
 
@@ -344,10 +345,11 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
     for (size_t i = 0; i < pGraphState->m_DashArray.size(); i += 2) {
       float on_phase = pGraphState->m_DashArray[i];
       float off_phase;
-      if (i == pGraphState->m_DashArray.size() - 1)
-        off_phase = on_phase;
-      else
+      if (i + 1 < pGraphState->m_DashArray.size()) {
         off_phase = pGraphState->m_DashArray[i + 1];
+      } else {
+        off_phase = on_phase;
+      }
       on_phase /= width;
       off_phase /= width;
       if (on_phase + off_phase <= 0.00002f) {
@@ -557,8 +559,7 @@ class GpStream final : public IStream {
 CGdiplusExt::CGdiplusExt() = default;
 
 CGdiplusExt::~CGdiplusExt() {
-  FreeLibrary(m_GdiModule);
-  FreeLibrary(m_hModule);
+  FreeLibrary(gdiplus_module_);
 }
 
 void CGdiplusExt::Load() {
@@ -566,28 +567,29 @@ void CGdiplusExt::Load() {
   GetSystemDirectoryA(buf, MAX_PATH);
   ByteString dllpath = buf;
   dllpath += "\\GDIPLUS.DLL";
-  m_hModule = LoadLibraryA(dllpath.c_str());
-  if (!m_hModule)
+  gdiplus_module_ = LoadLibraryA(dllpath.c_str());
+  if (!gdiplus_module_) {
     return;
+  }
 
-  m_Functions.resize(std::size(g_GdipFuncNames));
+  gdiplus_functions_.resize(std::size(g_GdipFuncNames));
   for (size_t i = 0; i < std::size(g_GdipFuncNames); ++i) {
-    m_Functions[i] = GetProcAddress(m_hModule, g_GdipFuncNames[i]);
-    if (!m_Functions[i]) {
-      m_hModule = nullptr;
+    gdiplus_functions_[i] = GetProcAddress(gdiplus_module_, g_GdipFuncNames[i]);
+    if (!gdiplus_functions_[i]) {
+      FreeLibrary(gdiplus_module_);
+      gdiplus_module_ = nullptr;
       return;
     }
   }
 
   ULONG_PTR gdiplus_token;
   Gdiplus::GdiplusStartupInput gdiplus_startup_input;
-  ((FuncType_GdiplusStartup)m_Functions[FuncId_GdiplusStartup])(
+  ((FuncType_GdiplusStartup)gdiplus_functions_[FuncId_GdiplusStartup])(
       &gdiplus_token, &gdiplus_startup_input, nullptr);
-  m_GdiModule = LoadLibraryA("GDI32.DLL");
 }
 
 bool CGdiplusExt::StretchDIBits(HDC hDC,
-                                const RetainPtr<CFX_DIBBase>& source,
+                                RetainPtr<const CFX_DIBBase> source,
                                 int dest_left,
                                 int dest_top,
                                 int dest_width,
@@ -610,8 +612,8 @@ bool CGdiplusExt::StretchDIBits(HDC hDC,
                                        Gdiplus::InterpolationModeBilinear);
   }
   FX_RECT src_rect(0, 0, source->GetWidth(), source->GetHeight());
-  OutputImage(pGraphics, source, src_rect, dest_left, dest_top, dest_width,
-              dest_height);
+  OutputImage(pGraphics, std::move(source), src_rect, dest_left, dest_top,
+              dest_width, dest_height);
   CallFunc(GdipDeleteGraphics)(pGraphics);
   CallFunc(GdipDeleteGraphics)(pGraphics);
   return true;
@@ -673,7 +675,7 @@ bool CGdiplusExt::DrawPath(HDC hDC,
     } else if (point_type == CFX_Path::Point::Type::kLine) {
       gp_types[i] = Gdiplus::PathPointTypeLine;
       if (points[i - 1].IsTypeAndOpen(CFX_Path::Point::Type::kMove) &&
-          (i == points.size() - 1 ||
+          (i + 1 == points.size() ||
            points[i + 1].IsTypeAndOpen(CFX_Path::Point::Type::kMove)) &&
           gp_points[i].Y == gp_points[i - 1].Y &&
           gp_points[i].X == gp_points[i - 1].X) {
@@ -759,7 +761,7 @@ bool CGdiplusExt::DrawPath(HDC hDC,
     } else {
       size_t iStart = 0;
       for (size_t i = 0; i < points.size(); ++i) {
-        if (i == points.size() - 1 ||
+        if (i + 1 == points.size() ||
             gp_types[i + 1] == Gdiplus::PathPointTypeStart) {
           Gdiplus::GpPath* pSubPath;
           CallFunc(GdipCreatePath2)(

@@ -18,14 +18,20 @@ config("trace_logging_config") {
   }
 }
 
-# The set of util classes which have no dependency on platform:api.
-source_set("base") {
-  visibility += [ "../*" ]
-
+source_set("util") {
   public = [
+    "alarm.h",
     "base64.h",
     "big_endian.h",
     "chrono_helpers.h",
+    "crypto/certificate_utils.h",
+    "crypto/digest_sign.h",
+    "crypto/openssl_util.h",
+    "crypto/pem_helpers.h",
+    "crypto/random_bytes.h",
+    "crypto/rsa_private_key.h",
+    "crypto/secure_hash.h",
+    "crypto/sha2.h",
     "enum_name_table.h",
     "flat_map.h",
     "hashing.h",
@@ -35,63 +41,22 @@ source_set("base") {
     "json/json_value.h",
     "osp_logging.h",
     "saturate_cast.h",
+    "serial_delete_ptr.h",
     "simple_fraction.h",
     "span_util.h",
     "std_util.h",
     "stringprintf.h",
+    "stringutil.h",
+    "trace_logging.h",
     "url.h",
     "weak_ptr.h",
     "yet_another_bit_vector.h",
   ]
 
   sources = [
+    "alarm.cc",
     "base64.cc",
     "big_endian.cc",
-    "json/json_serialization.cc",
-    "json/json_value.cc",
-    "simple_fraction.cc",
-    "span_util.cc",
-    "std_util.cc",
-    "stringprintf.cc",
-    "url.cc",
-    "yet_another_bit_vector.cc",
-  ]
-
-  public_deps = [
-    "../platform:base",
-    "../platform:logging",
-    "../third_party/abseil",
-    "../third_party/jsoncpp",
-  ]
-
-  deps = [
-    "../third_party/googleurl",
-
-    # We do a clone of Chrome's modp_b64 in order to share their BUILD.gn
-    # and license files, so this should always be an absolute reference.
-    "//third_party/modp_b64",
-  ]
-
-  public_configs = [ "../build:openscreen_include_dirs" ]
-}
-
-source_set("util") {
-  public = [
-    "alarm.h",
-    "crypto/certificate_utils.h",
-    "crypto/digest_sign.h",
-    "crypto/openssl_util.h",
-    "crypto/pem_helpers.h",
-    "crypto/random_bytes.h",
-    "crypto/rsa_private_key.h",
-    "crypto/secure_hash.h",
-    "crypto/sha2.h",
-    "serial_delete_ptr.h",
-    "trace_logging.h",
-  ]
-
-  sources = [
-    "alarm.cc",
     "crypto/certificate_utils.cc",
     "crypto/digest_sign.cc",
     "crypto/openssl_util.cc",
@@ -100,22 +65,38 @@ source_set("util") {
     "crypto/rsa_private_key.cc",
     "crypto/secure_hash.cc",
     "crypto/sha2.cc",
+    "json/json_serialization.cc",
+    "json/json_value.cc",
     "scoped_wake_lock.cc",
+    "simple_fraction.cc",
+    "span_util.cc",
+    "std_util.cc",
+    "stringprintf.cc",
+    "stringutil.cc",
     "trace_logging/macro_support.h",
     "trace_logging/scoped_trace_operations.cc",
     "trace_logging/scoped_trace_operations.h",
+    "url.cc",
+    "yet_another_bit_vector.cc",
   ]
 
   public_deps = [
-    ":base",
     "../platform:api",
     "../platform:base",
+    "../platform:logging",
     "../third_party/abseil",
     "../third_party/boringssl",
     "../third_party/jsoncpp",
   ]
 
-  deps = [ "../third_party/boringssl" ]
+  deps = [
+    "../third_party/boringssl",
+    "../third_party/googleurl",
+
+    # We do a clone of Chrome's modp_b64 in order to share their BUILD.gn
+    # and license files, so this should always be an absolute reference.
+    "//third_party/modp_b64",
+  ]
 
   public_configs = [
     "../build:openscreen_include_dirs",
@@ -154,6 +135,7 @@ source_set("unittests") {
     "simple_fraction_unittest.cc",
     "std_util_unittest.cc",
     "stringprintf_unittest.cc",
+    "stringutil_unittest.cc",
     "trace_logging/scoped_trace_operations_unittest.cc",
     "url_unittest.cc",
     "weak_ptr_unittest.cc",

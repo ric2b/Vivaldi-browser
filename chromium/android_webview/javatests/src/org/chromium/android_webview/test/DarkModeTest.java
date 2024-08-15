@@ -11,6 +11,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.UseParametersRunnerFactory;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwSettings;
@@ -18,13 +20,18 @@ import org.chromium.android_webview.settings.ForceDarkBehavior;
 import org.chromium.android_webview.settings.ForceDarkMode;
 
 /** Tests dark-mode related data are correctly passed to blink. */
-@RunWith(AwJUnit4ClassRunner.class)
-public class DarkModeTest {
-    @Rule public AwActivityTestRule mRule = new AwActivityTestRule();
+@RunWith(Parameterized.class)
+@UseParametersRunnerFactory(AwJUnit4ClassRunnerWithParameters.Factory.class)
+public class DarkModeTest extends AwParameterizedTest {
+    @Rule public AwActivityTestRule mRule;
 
     private TestAwContentsClient mContentsClient = new TestAwContentsClient();
     private AwContents mContents;
     private AwSettings mSettings;
+
+    public DarkModeTest(AwSettingsMutation param) {
+        this.mRule = new AwActivityTestRule(param.getMutation());
+    }
 
     @Before
     public void setUp() {

@@ -50,6 +50,9 @@ namespace network {
 
 namespace {
 
+static constexpr int kHoursInOneWeek = 24 * 7;
+static constexpr int kHoursInOneYear = 24 * 365;
+
 BASE_FEATURE(kIncreaseCoookieAccesCacheSize,
              "IncreaseCoookieAccesCacheSize",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -154,6 +157,29 @@ net::CookieOptions MakeOptionsForGet(
   }
 
   return options;
+}
+
+// Records the time until expiration for a cookie set via script.
+void HistogramScriptCookieExpiration(const net::CanonicalCookie& cookie) {
+  // Ignore session cookies as they have no expiration date.
+  if (!cookie.IsPersistent()) {
+    return;
+  }
+
+  // We are studying the requested expiration dates of cookies set via script.
+  // Network cookies are handled in
+  // URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete.
+  const int script_cookie_expiration_in_hours =
+      (cookie.ExpiryDate() - base::Time::Now()).InHours();
+  if (script_cookie_expiration_in_hours > kHoursInOneWeek) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Cookie.ScriptExpirationInHoursGTOneWeek",
+                                script_cookie_expiration_in_hours,
+                                kHoursInOneWeek + 1, kHoursInOneYear, 100);
+  } else {
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Cookie.ScriptExpirationInHoursLTEOneWeek",
+                                script_cookie_expiration_in_hours, 1,
+                                kHoursInOneWeek + 1, 100);
+  }
 }
 
 }  // namespace
@@ -375,6 +401,7 @@ class RestrictedCookieManager::Listener : public base::LinkNode<Listener> {
     // the user explicitly deleting all cookies.
     if (!restricted_cookie_manager_->cookie_settings().IsCookieAccessible(
             change.cookie, url_, site_for_cookies_, top_frame_origin_,
+            restricted_cookie_manager_->first_party_set_metadata_,
             restricted_cookie_manager_->GetCookieSettingOverrides(
                 has_storage_access_, /*is_ad_tagged=*/false),
             /*cookie_inclusion_status=*/nullptr)) {
@@ -722,6 +749,7 @@ void RestrictedCookieManager::SetCanonicalCookie(
   // TODO(morlovich): Try to validate site_for_cookies as well.
   bool blocked = !cookie_settings_->IsCookieAccessible(
       cookie, url, site_for_cookies, top_frame_origin,
+      first_party_set_metadata_,
       GetCookieSettingOverrides(has_storage_access, /*is_ad_tagged=*/false),
       &status);
 
@@ -827,8 +855,8 @@ void RestrictedCookieManager::SetCanonicalCookie(
       net::CanonicalCookie::FromStorage(
           cookie.Name(), cookie.Value(), cookie.Domain(), cookie.Path(), now,
           cookie.ExpiryDate(), now, now, cookie.IsSecure(), cookie.IsHttpOnly(),
-          cookie.SameSite(), cookie.Priority(), cookie.IsSameParty(),
-          cookie_partition_key, source_scheme, origin_.port());
+          cookie.SameSite(), cookie.Priority(), cookie_partition_key,
+          source_scheme, origin_.port());
   DCHECK(sanitized_cookie);
   // FromStorage() uses a less strict version of IsCanonical(), we need to check
   // the stricter version as well here.
@@ -958,6 +986,7 @@ void RestrictedCookieManager::SetCookieFromString(
     }
     return;
   }
+  HistogramScriptCookieExpiration(*parsed_cookie);
 
   // Further checks (origin_, settings), as well as logging done by
   // SetCanonicalCookie()

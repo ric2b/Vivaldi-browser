@@ -556,7 +556,9 @@ class AvdConfig:
       # https://bit.ly/3agmjcM).
       # Wait for this step to complete since it can take a while for old OSs
       # like M, otherwise the avd may have "Encryption Unsuccessful" error.
-      instance.device.WaitUntilFullyBooted(decrypt=True, timeout=180, retries=0)
+      instance.device.WaitUntilFullyBooted(decrypt=True, timeout=360, retries=0)
+      logging.info('The build fingerprint of the system is %r',
+                   instance.device.build_fingerprint)
 
       if additional_apks:
         for apk in additional_apks:
@@ -884,8 +886,11 @@ class AvdConfig:
       with ini.update_ini_file(config_path) as config_contents:
         config_contents.update(properties)
 
-    # Create qt config file to disable adb warning when launched in window mode.
+    # Create qt config file to disable certain warnings when launched in window.
     with ini.update_ini_file(self._qt_config_path) as config_contents:
+      # Disable nested virtualization warning.
+      config_contents['General'] = {'showNestedWarning': 'false'}
+      # Disable adb warning.
       config_contents['set'] = {'autoFindAdb': 'false'}
 
   def _Initialize(self):
@@ -1209,6 +1214,10 @@ def _EnsureSystemSettings(device):
   strgmtime = time.strftime(set_date_format, time.gmtime())
   set_date_command.append(strgmtime)
   device.RunShellCommand(set_date_command, check_return=True, as_root=True)
+
+  logging.info('Hide system error dialogs such as crash and ANR dialogs.')
+  device.RunShellCommand(
+      ['settings', 'put', 'global', 'hide_error_dialogs', '1'])
 
 
 def _EnableNetwork(device):

@@ -11,6 +11,7 @@ import org.jni_zero.JNINamespace;
 
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.common.SafeModeAction;
+import org.chromium.android_webview.common.SafeModeActionIds;
 
 /**
  * A {@link SafeModeAction} to disable safe browsing.
@@ -19,12 +20,11 @@ import org.chromium.android_webview.common.SafeModeAction;
  * AwUrlCheckerDelegateImpl.ShouldSkipRequestCheck skips safe browsing checks for URL loads.
  * AwContentsStatics.initSafeBrowsing skips GMSCore communication in safe browsing initialization.
  */
-
 @JNINamespace("android_webview")
 @Lifetime.Singleton
 public class AwSafeBrowsingSafeModeAction implements SafeModeAction {
     // This ID should not be changed or reused.
-    public static final String ID = "disable_safe_browsing";
+    private static final String ID = SafeModeActionIds.DISABLE_AW_SAFE_BROWSING;
 
     private static boolean sSafeBrowsingDisabled;
 

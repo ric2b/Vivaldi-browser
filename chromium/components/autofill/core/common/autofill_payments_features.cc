@@ -32,7 +32,11 @@ BASE_FEATURE(kAutofillEnableAndroidNKeyForFidoAuthentication,
 // Payments Autofill UI.
 BASE_FEATURE(kAutofillEnableCardArtImage,
              "AutofillEnableCardArtImage",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // When enabled, server will return card art images of the exact required
 // dimension.
@@ -40,11 +44,21 @@ BASE_FEATURE(kAutofillEnableCardArtServerSideStretching,
              "AutofillEnableCardArtServerSideStretching",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, card benefits offered by issuers will be shown in Payments
+// Autofill UI.
+BASE_FEATURE(kAutofillEnableCardBenefits,
+             "AutofillEnableCardBenefits",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // When enabled, card product name (instead of issuer network) will be shown in
 // Payments Autofill UI.
 BASE_FEATURE(kAutofillEnableCardProductName,
              "AutofillEnableCardProductName",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // When enabled, we will store CVC for both local and server credit cards. This
 // will also allow the users to autofill their CVCs on checkout pages.
@@ -80,6 +94,13 @@ BASE_FEATURE(kAutofillEnableFpanRiskBasedAuthentication,
              "AutofillEnableFpanRiskBasedAuthentication",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_ANDROID)
+// When enabled, the bottom sheet for IBAN save will be displayed on Android.
+BASE_FEATURE(kAutofillEnableIbanAndroidBottomSheet,
+             "AutofillEnableIbanAndroidBottomSheet",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // When enabled, enable manual falling component for virtual cards on Android.
 BASE_FEATURE(kAutofillEnableManualFallbackForVirtualCards,
              "AutofillEnableManualFallbackForVirtualCards",
@@ -91,12 +112,12 @@ BASE_FEATURE(kAutofillEnableMerchantDomainInUnmaskCardRequest,
              "AutofillEnableMerchantDomainInUnmaskCardRequest",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, client side URL filtering will be triggered for the merchant
-// opt-out use-case, so that virtual card suggestions are not shown on websites
-// that are opted-out of virtual cards.
-BASE_FEATURE(kAutofillEnableMerchantOptOutClientSideUrlFiltering,
-             "AutofillEnableMerchantOptOutClientSideUrlFiltering",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// When enabled, the user's avatar and email will appear in the bottom
+// footer of the upload card save bubble. This will provide users with more
+// context about which account the card is being saved to.
+BASE_FEATURE(kAutofillEnableUserAvatarInSaveCardFooter,
+             "AutofillEnableUserAvatarInSaveCardFooter",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, the GPay logo will be moved to the right side in payments
 // autofill dialogs and bubbles on desktop.
@@ -127,6 +148,12 @@ BASE_FEATURE(kAutofillEnableOffersInClankKeyboardAccessory,
 // displayed instead of the info bar on Android.
 BASE_FEATURE(kAutofillEnablePaymentsAndroidBottomSheet,
              "AutofillEnablePaymentsAndroidBottomSheet",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When enabled, the account email is included in the legal message provided
+// from the payments server. Only on Android.
+BASE_FEATURE(kAutofillEnablePaymentsAndroidBottomSheetAccountEmail,
+             "AutofillEnablePaymentsAndroidBottomSheetAccountEmail",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -135,12 +162,29 @@ BASE_FEATURE(kAutofillEnablePaymentsAndroidBottomSheet,
 // authentication.
 BASE_FEATURE(kAutofillEnablePaymentsMandatoryReauth,
              "AutofillEnablePaymentsMandatoryReauth",
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
 
 // When enabled, some extra metrics logging for Autofill Downstream will start.
 BASE_FEATURE(kAutofillEnableRemadeDownstreamMetrics,
              "AutofillEnableRemadeDownstreamMetrics",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When enabled, the save card screen will present a loading spinner when
+// uploading the card to the server and present a confirmation screen with the
+// result when completed.
+BASE_FEATURE(kAutofillEnableSaveCardLoadingAndConfirmation,
+             "AutofillEnableSaveCardLoadingAndConfirmation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, save card will fallback to a local save if the server upload of
+// a card encounters a failure.
+BASE_FEATURE(kAutofillEnableSaveCardLocalSaveFallback,
+             "AutofillEnableSaveCardLocalSaveFallback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, Autofill will attempt to offer upload save for IBANs
 // (International Bank Account Numbers) and autofill server-based IBANs.
@@ -161,32 +205,36 @@ BASE_FEATURE(kAutofillEnableStickyManualFallbackForCards,
 BASE_FEATURE(kAutofillEnableUpdateVirtualCardEnrollment,
              "AutofillEnableUpdateVirtualCardEnrollment",
 #if BUILDFLAG(IS_IOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
-
-// When enabled, after a successful authentication to autofill a virtual card,
-// the user will be prompted to opt-in to FIDO if the user is not currently
-// opted-in, and if the user is opted-in already and the virtual card is FIDO
-// eligible the user will be prompted to register the virtual card into FIDO.
-BASE_FEATURE(kAutofillEnableVirtualCardFidoEnrollment,
-             "AutofillEnableVirtualCardFidoEnrollment",
              base::FEATURE_DISABLED_BY_DEFAULT);
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+
+// When enabled, Chrome will trigger 3DS authentication during a virtual card
+// retrieval if a challenge is required, 3DS authentication is available for
+// the card, and FIDO is not.
+BASE_FEATURE(kAutofillEnableVcn3dsAuthentication,
+             "AutofillEnableVcn3dsAuthentication",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, the vcn enroll screen will present a loading spinner while
+// enrolling the card to the server and present a confirmation screen with the
+// result when completed.
+BASE_FEATURE(kAutofillEnableVcnEnrollLoadingAndConfirmation,
+             "AutofillEnableVcnEnrollLoadingAndConfirmation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, uses the refactored VirtualCardEnrollMetricsLogger in
+// VirtualCardEnrollBubbleController on all platforms.
+BASE_FEATURE(kAutofillEnableVirtualCardEnrollMetricsLogger,
+             "AutofillEnableVirtualCardEnrollMetricsLogger",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, Chrome will show metadata along with other card information
 // when the virtual card is presented to users.
 BASE_FEATURE(kAutofillEnableVirtualCardMetadata,
              "AutofillEnableVirtualCardMetadata",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, legal term of save card view and virtual card enroll view will
-// be moved before action buttons and icon will be moved after titles in those
-// views.
-BASE_FEATURE(kAutofillMoveLegalTermsAndIconForNewCardEnrollment,
-             "AutofillMoveLegalTermsAndIconForNewCardEnrollment",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, Autofill will attempt to find standalone CVC fields for VCN
 // card on file when parsing forms.
@@ -199,7 +247,7 @@ BASE_FEATURE(kAutofillParseVcnCardOnFileStandaloneCvcFields,
 // instead of the local card.
 BASE_FEATURE(kAutofillSuggestServerCardInsteadOfLocalCard,
              "AutofillSuggestServerCardInsteadOfLocalCard",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, GPay-related links direct to the newer GPay Web site instead of
 // the legacy Payments Center.
@@ -216,45 +264,17 @@ BASE_FEATURE(kAutofillUpstream,
              "AutofillUpstream",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, Chrome allows credit card upload to Google Payments if the
-// user's email domain is from a common email provider (thus unlikely to be an
-// enterprise or education user).
-BASE_FEATURE(kAutofillUpstreamAllowAdditionalEmailDomains,
-             "AutofillUpstreamAllowAdditionalEmailDomains",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// When enabled, Chrome allows credit card upload to Google Payments, no matter
-// the user's email domain.
-BASE_FEATURE(kAutofillUpstreamAllowAllEmailDomains,
-             "AutofillUpstreamAllowAllEmailDomains",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #if BUILDFLAG(IS_IOS)
 // When enabled, use two '•' when displaying the last four digits of a credit
 // card number. (E.g., '•• 8888' rather than '•••• 8888').
 BASE_FEATURE(kAutofillUseTwoDotsForLastFourDigits,
              "AutofillUseTwoDotsForLastFourDigits",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When this and the above `kAutofillEnablePaymentsMandatoryReauth` are both
-// enabled, in use-cases where we would not have triggered any user-visible
-// authentication to autofill payment methods, we will trigger a device
-// authentication on Bling.
-BASE_FEATURE(kAutofillEnablePaymentsMandatoryReauthOnBling,
-             "AutofillEnablePaymentsMandatoryReauthOnBling",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When this is enabled, virtual card enrollment and retrieval will be enabled
 // on Bling.
 BASE_FEATURE(kAutofillEnableVirtualCards,
              "AutofillEnableVirtualCards",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-// When enabled, Chrome will offer to pay with accounts supporting Pix.
-BASE_FEATURE(kEnablePixPayments,
-             "EnablePixPayments",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 

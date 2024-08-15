@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
-<translation id="3830627370375585318">允許 Vivaldi存取受到防火牆或防毒軟體設定
+<translation id="3830627370375585318">允許 Vivaldi 存取受到防火牆或防毒軟體設定
 所阻擋的網路。</translation>
 <translation id="4200102020577305737">前往
           Vivaldi 主選單 &gt;
@@ -22,6 +22,7 @@
           <ph name="PROXIES_TITLE" />
           並確認您的設定為「不使用代理」或「直接連線」</translation>
 <translation id="5248344925342018662">您正在瀏覽的是安全的 Vivaldi 網頁</translation>
+<translation id="6690242244468452299">如果您啟用了當機回報功能，此頁面會顯示您最近的當機資訊。</translation>
 <translation id="7023871570427738255">前往
         Vivaldi 選單 &gt;
         <ph name="SETTINGS_TITLE" />

@@ -70,8 +70,16 @@ class BaseUrlInheritanceIframeTest
       public ::testing::WithParamInterface<bool> {
  public:
   BaseUrlInheritanceIframeTest() {
-    feature_list_.InitWithFeatureState(
-        blink::features::kNewBaseUrlInheritanceBehavior, GetParam());
+    if (GetParam()) {  // Test new base url behavior.
+      feature_list_.InitWithFeatureState(
+          blink::features::kNewBaseUrlInheritanceBehavior, true);
+    } else {
+      // Need to force off kIsolateSandboxedIframes if it's enabled in order to
+      // test the legacy base url behavior.
+      feature_list_.InitWithFeatureStates(
+          {{blink::features::kNewBaseUrlInheritanceBehavior, false},
+           {blink::features::kIsolateSandboxedIframes, false}});
+    }
   }
 
   void SetUpOnMainThread() override {
@@ -89,7 +97,7 @@ class BaseUrlInheritanceIframeTest
 
 // A test to make sure that restoring a session history entry that was saved
 // with an about:blank subframe never results in an initiator_base_url of
-// an empty string. absl::nullopt is expected instead of an empty GURL with
+// an empty string. std::nullopt is expected instead of an empty GURL with
 // legacy base url behavior, or the non-empty initiator base url in the
 // new base url inheritance mode. This test runs in both modes.
 IN_PROC_BROWSER_TEST_P(BaseUrlInheritanceIframeTest,
@@ -133,7 +141,7 @@ IN_PROC_BROWSER_TEST_P(BaseUrlInheritanceIframeTest,
   } else {
     // Make sure the about:blank child has nullopt, and not an empty string, for
     // the initiator_base_url.
-    EXPECT_EQ(absl::nullopt,
+    EXPECT_EQ(std::nullopt,
               exploded_page_state.top.children[0].initiator_base_url_string);
   }
 }
@@ -197,9 +205,8 @@ IN_PROC_BROWSER_TEST_F(BaseUrlLegacyBehaviorIframeTest,
           new_shell->web_contents()->GetController());
   // Create the restored entry.
   std::unique_ptr<NavigationEntryImpl> restored_entry = entry->Clone();
-  std::unique_ptr<NavigationEntryRestoreContextImpl> context =
-      std::make_unique<NavigationEntryRestoreContextImpl>();
-  restored_entry->SetPageState(page_state, context.get());
+  NavigationEntryRestoreContextImpl context;
+  restored_entry->SetPageState(page_state, &context);
   EXPECT_EQ(main_url, restored_entry->root_node()->frame_entry->url());
   ASSERT_EQ(1U, restored_entry->root_node()->children.size());
   EXPECT_EQ(child_frame_url,

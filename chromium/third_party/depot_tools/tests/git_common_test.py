@@ -96,8 +96,8 @@ class Support(GitCommonTestBase):
 def slow_square(i):
     """Helper for ScopedPoolTest.
 
-  Must be global because non top-level functions aren't pickleable.
-  """
+    Must be global because non top-level functions aren't pickleable.
+    """
     return i**2
 
 

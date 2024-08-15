@@ -5,6 +5,7 @@
 #include "ash/system/input_device_settings/input_device_settings_utils.h"
 
 #include <cstdint>
+#include <optional>
 
 #include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
@@ -16,7 +17,6 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/events/devices/input_device.h"
 
 namespace ash {
@@ -63,6 +63,18 @@ const mojom::ButtonRemapping button_remapping5(
     /*remapping_action=*/
     mojom::RemappingAction::NewStaticShortcutAction(
         mojom::StaticShortcutAction::kCopy));
+const mojom::ButtonRemapping button_remapping6(
+    /*name=*/"test6",
+    /*button=*/mojom::Button::NewVkey(::ui::KeyboardCode::VKEY_A),
+    /*remapping_action=*/
+    mojom::RemappingAction::NewStaticShortcutAction(
+        mojom::StaticShortcutAction::kCopy));
+const mojom::ButtonRemapping button_remapping7(
+    /*name=*/"test7",
+    /*button=*/mojom::Button::NewVkey(::ui::KeyboardCode::VKEY_LEFT),
+    /*remapping_action=*/
+    mojom::RemappingAction::NewStaticShortcutAction(
+        mojom::StaticShortcutAction::kCopy));
 }  // namespace
 
 class DeviceKeyTest : public testing::TestWithParam<
@@ -97,7 +109,7 @@ TEST(GetLoginScreenSettingsDictTest, RetrieveSettingsDict) {
       GetLoginScreenSettingsDict(local_state.get(), account_id, kTestPrefKey);
   EXPECT_EQ(nullptr, settings);
   known_user.SetPath(account_id, kTestPrefKey,
-                     absl::make_optional<base::Value>(base::Value::Dict()));
+                     std::make_optional<base::Value>(base::Value::Dict()));
   const base::Value::Dict* valid_settings =
       GetLoginScreenSettingsDict(local_state.get(), account_id, kTestPrefKey);
   EXPECT_NE(nullptr, valid_settings);
@@ -112,7 +124,7 @@ TEST(GetLoginScreenButtonRemappingListTest, RetrieveButtonRemappingList) {
                                         kTestPrefKey);
   EXPECT_EQ(nullptr, button_remapping_list);
   known_user.SetPath(account_id, kTestPrefKey,
-                     absl::make_optional<base::Value>(base::Value::List()));
+                     std::make_optional<base::Value>(base::Value::List()));
   const base::Value::List* valid_button_remapping_list =
       GetLoginScreenButtonRemappingList(local_state.get(), account_id,
                                         kTestPrefKey);
@@ -189,7 +201,7 @@ TEST_F(ButtonRemappingConversionTest, ConvertButtonRemappingToDict) {
   EXPECT_EQ(static_cast<int>(button_remapping4.button->get_vkey()),
             *dict4.FindInt(prefs::kButtonRemappingKeyboardCode));
   EXPECT_EQ(nullptr, dict4.FindDict(prefs::kButtonRemappingKeyEvent));
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             dict4.FindInt(prefs::kButtonRemappingAcceleratorAction));
 
   const base::Value::Dict dict5 = ConvertButtonRemappingToDict(
@@ -199,7 +211,7 @@ TEST_F(ButtonRemappingConversionTest, ConvertButtonRemappingToDict) {
   EXPECT_EQ(static_cast<int>(button_remapping5.button->get_vkey()),
             *dict5.FindInt(prefs::kButtonRemappingKeyboardCode));
   EXPECT_EQ(nullptr, dict5.FindDict(prefs::kButtonRemappingKeyEvent));
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             dict5.FindInt(prefs::kButtonRemappingAcceleratorAction));
   EXPECT_EQ(
       static_cast<int>(
@@ -218,6 +230,30 @@ TEST_F(ButtonRemappingConversionTest,
       button_remapping3,
       mojom::CustomizationRestriction::kDisableKeyEventRewrites);
   EXPECT_TRUE(dict2.empty());
+
+  // Rewrite alphabet letter key event.
+  const base::Value::Dict dict3 = ConvertButtonRemappingToDict(
+      button_remapping6,
+      mojom::CustomizationRestriction::kAllowAlphabetKeyEventRewrites);
+  EXPECT_FALSE(dict3.empty());
+
+  // Rewrite non alphabet letter key event.
+  const base::Value::Dict dict4 = ConvertButtonRemappingToDict(
+      button_remapping3,
+      mojom::CustomizationRestriction::kAllowAlphabetKeyEventRewrites);
+  EXPECT_TRUE(dict4.empty());
+
+  // Rewrite number key event.
+  const base::Value::Dict dict5 = ConvertButtonRemappingToDict(
+      button_remapping3,
+      mojom::CustomizationRestriction::kAllowAlphabetOrNumberKeyEventRewrites);
+  EXPECT_FALSE(dict5.empty());
+
+  // Rewrite neither alphabet letter key event or number key event.
+  const base::Value::Dict dict6 = ConvertButtonRemappingToDict(
+      button_remapping7,
+      mojom::CustomizationRestriction::kAllowAlphabetOrNumberKeyEventRewrites);
+  EXPECT_TRUE(dict6.empty());
 }
 
 TEST_F(ButtonRemappingConversionTest, ConvertDictToButtonRemapping) {
@@ -353,7 +389,7 @@ TEST_F(ButtonRemappingConversionTest, ConvertDictToButtonRemapping) {
   EXPECT_EQ(static_cast<::ui::KeyboardCode>(
                 *dict4.FindInt(prefs::kButtonRemappingKeyboardCode)),
             remapping4->button->get_vkey());
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             dict4.FindInt(prefs::kButtonRemappingAcceleratorAction));
   EXPECT_EQ(nullptr, dict4.FindDict(prefs::kButtonRemappingKeyEvent));
 
@@ -496,7 +532,7 @@ TEST_F(ButtonRemappingConversionTest, ConvertButtonRemappingArrayToList) {
   EXPECT_EQ(static_cast<int>(button_remapping4.button->get_vkey()),
             *dict3.FindInt(prefs::kButtonRemappingKeyboardCode));
   EXPECT_EQ(nullptr, dict3.FindDict(prefs::kButtonRemappingKeyEvent));
-  EXPECT_EQ(absl::nullopt,
+  EXPECT_EQ(std::nullopt,
             dict3.FindInt(prefs::kButtonRemappingAcceleratorAction));
 
   base::Value::List list2 = ConvertButtonRemappingArrayToList(
@@ -623,23 +659,14 @@ TEST_F(ButtonRemappingConversionTest, ConvertListToButtonRemappingArray) {
             remapping3->remapping_action->get_accelerator_action());
 }
 
-TEST(IsMouseCustomizable, IsMouseCustomizable) {
-  const ui::InputDevice kSampleUncustomizableMouse(
-      5, ui::INPUT_DEVICE_USB, "kSampleUncustomizableMouse",
-      /*phys=*/"",
-      /*sys_path=*/base::FilePath(),
-      /*vendor=*/0xffff,
-      /*product=*/0xffff,
-      /*version=*/0x0009);
-  const ui::InputDevice kSampleCustomizableMouse(4, ui::INPUT_DEVICE_USB,
-                                                 "kSampleCustomizableMouse",
-                                                 /*phys=*/"",
-                                                 /*sys_path=*/base::FilePath(),
-                                                 /*vendor=*/0x0007,
-                                                 /*product=*/0x0008,
-                                                 /*version=*/0x0009);
-  EXPECT_FALSE(IsMouseCustomizable(kSampleUncustomizableMouse));
-  EXPECT_TRUE(IsMouseCustomizable(kSampleCustomizableMouse));
+TEST_F(ButtonRemappingConversionTest, RedactButtonNames) {
+  auto button_remapping_dict = ConvertButtonRemappingToDict(
+      button_remapping1, mojom::CustomizationRestriction::kAllowCustomizations,
+      /*redact_button_names=*/true);
+  auto button_remapping = ConvertDictToButtonRemapping(
+      button_remapping_dict,
+      mojom::CustomizationRestriction::kAllowCustomizations);
+  EXPECT_EQ("REDACTED", button_remapping->name);
 }
 
 }  // namespace ash

@@ -58,6 +58,9 @@ class Var final : public Castable<Var, OperandInstruction<1, 1>> {
     /// The offset in Operands() for the initializer
     static constexpr size_t kInitializerOperandOffset = 0;
 
+    /// Constructor (no results, no operands)
+    Var();
+
     /// Constructor
     /// @param result the result value
     explicit Var(InstructionResult* result);
@@ -71,25 +74,27 @@ class Var final : public Castable<Var, OperandInstruction<1, 1>> {
     void SetInitializer(Value* initializer);
     /// @returns the initializer
     Value* Initializer() { return operands_[kInitializerOperandOffset]; }
+    /// @returns the initializer
+    const Value* Initializer() const { return operands_[kInitializerOperandOffset]; }
 
     /// Sets the binding point
     /// @param group the group
     /// @param binding the binding
     void SetBindingPoint(uint32_t group, uint32_t binding) { binding_point_ = {group, binding}; }
     /// @returns the binding points if `Attributes` contains `kBindingPoint`
-    std::optional<struct BindingPoint> BindingPoint() { return binding_point_; }
+    std::optional<struct BindingPoint> BindingPoint() const { return binding_point_; }
 
     /// Sets the IO attributes
     /// @param attrs the attributes
     void SetAttributes(const IOAttributes& attrs) { attributes_ = attrs; }
     /// @returns the IO attributes
-    const IOAttributes& Attributes() { return attributes_; }
+    const IOAttributes& Attributes() const { return attributes_; }
 
     /// Destroys this instruction along with any assignment instructions, if the var is never read.
     void DestroyIfOnlyAssigned();
 
     /// @returns the friendly name for the instruction
-    std::string FriendlyName() override { return "var"; }
+    std::string FriendlyName() const override { return "var"; }
 
   private:
     std::optional<struct BindingPoint> binding_point_;

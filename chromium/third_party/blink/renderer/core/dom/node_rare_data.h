@@ -79,8 +79,8 @@ class NodeData : public GarbageCollected<NodeData> {
  public:
   enum {
     kConnectedFrameCountBits = 10,  // Must fit Page::maxNumberOfFrames.
-    kNumberOfElementFlags = 6,
-    kNumberOfDynamicRestyleFlags = 14
+    kNumberOfElementFlags = 8,
+    kNumberOfDynamicRestyleFlags = 15
   };
 
   // NOTE: This can only distinguish between NodeRareData and ElementRareData,
@@ -247,7 +247,6 @@ class NodeRareData : public NodeData {
 
   uint16_t connected_frame_count_ : kConnectedFrameCountBits;
   uint16_t element_flags_ : kNumberOfElementFlags;
-  // 16 free bits here.
 
  private:
   NodeListsNodeData& CreateNodeLists();

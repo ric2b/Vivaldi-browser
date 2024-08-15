@@ -18,7 +18,7 @@ std::string KeychainPassword::GetPassword(
 
   UInt32 password_length = 0;
   void* password_data = NULL;
-  OSStatus error = keychain_.FindGenericPassword(service_name.size(),
+  OSStatus error = keychain_->FindGenericPassword(service_name.size(),
                                                  service_name.data(),
                                                  account_name.size(),
                                                  account_name.data(),
@@ -29,7 +29,7 @@ std::string KeychainPassword::GetPassword(
   if (error == noErr) {
     std::string password =
     std::string(static_cast<char*>(password_data), password_length);
-    keychain_.ItemFreeContent(password_data);
+    keychain_->ItemFreeContent(password_data);
     return password;
   } else if (error == errSecItemNotFound) {
     // The requested account has no passwords in keychain, we can stop

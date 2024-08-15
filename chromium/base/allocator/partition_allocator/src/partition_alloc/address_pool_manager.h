@@ -8,22 +8,22 @@
 #include <bitset>
 #include <limits>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/address_pool_manager_types.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_address_space.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/compiler_specific.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/component_export.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/thread_annotations.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_lock.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/alignment.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.h"
 #include "build/build_config.h"
+#include "partition_alloc/address_pool_manager_types.h"
+#include "partition_alloc/partition_address_space.h"
+#include "partition_alloc/partition_alloc_base/compiler_specific.h"
+#include "partition_alloc/partition_alloc_base/component_export.h"
+#include "partition_alloc/partition_alloc_base/debug/debugging_buildflags.h"
+#include "partition_alloc/partition_alloc_base/thread_annotations.h"
+#include "partition_alloc/partition_alloc_buildflags.h"
+#include "partition_alloc/partition_alloc_check.h"
+#include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/partition_lock.h"
+#include "partition_alloc/thread_isolation/alignment.h"
+#include "partition_alloc/thread_isolation/thread_isolation.h"
 
 #if !BUILDFLAG(HAS_64_BIT_POINTERS)
-#include "base/allocator/partition_allocator/src/partition_alloc/address_pool_manager_bitmap.h"
+#include "partition_alloc/address_pool_manager_bitmap.h"
 #endif
 
 namespace partition_alloc {
@@ -186,10 +186,17 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC)
   // front of the pools so that the isolated one starts on a page boundary.
   // We also skip the Lock at the beginning of the pool since it needs to be
   // used in contexts where we didn't enable write access to the pool memory.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-length-array"
+#endif
   char pad_[PA_THREAD_ISOLATED_ARRAY_PAD_SZ_WITH_OFFSET(
       Pool,
       kNumPools,
       offsetof(Pool, alloc_bitset_))] = {};
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
   Pool pools_[kNumPools];
 
 #endif  // BUILDFLAG(HAS_64_BIT_POINTERS)

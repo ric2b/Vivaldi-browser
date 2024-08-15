@@ -4,6 +4,7 @@
 
 #import "ios/chrome/app/tests_hook.h"
 
+#import "base/time/time.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
 
 namespace tests_hook {
@@ -20,7 +21,10 @@ bool DisableContentSuggestions() {
 bool DisableDiscoverFeed() {
   return false;
 }
-bool DisableFirstRun() {
+bool DisableDefaultFirstRun() {
+  return false;
+}
+bool DisableDefaultSearchEngineChoice() {
   return false;
 }
 bool DisableGeolocation() {
@@ -62,5 +66,13 @@ GetOverriddenRecipientsFetcher() {
 }
 void SetUpTestsIfPresent() {}
 void RunTestsIfPresent() {}
+
+base::TimeDelta PasswordCheckMinimumDuration() {
+  return base::Seconds(3);
+}
+
+std::unique_ptr<drive::DriveService> GetOverriddenDriveService() {
+  return nullptr;
+}
 
 }  // namespace tests_hook

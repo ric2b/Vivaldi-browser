@@ -11,8 +11,6 @@
 #include <sstream>
 #include <vector>
 
-#include "absl/strings/ascii.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_join.h"
 #include "discovery/mdns/public/mdns_writer.h"
 

@@ -6,7 +6,7 @@
 
 #import "base/test/ios/wait_util.h"
 #import "base/time/time.h"
-#import "ios/chrome/browser/ntp/home/features.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_constants.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
@@ -22,7 +22,32 @@
 
 namespace {
 // The delay to wait for an element to appear before tapping on it.
-constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(2);
+constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(4);
+
+// Checks that the visibility of the tab resumption tile matches `should_show`.
+void WaitUntilTabResumptionTileVisibleOrTimeout(bool should_show) {
+  GREYCondition* tile_shown = [GREYCondition
+      conditionWithName:@"Tab Resumption Module shown"
+                  block:^BOOL {
+                    NSError* error;
+                    [[EarlGrey
+                        selectElementWithMatcher:
+                            grey_accessibilityID(
+                                kMagicStackContentSuggestionsModuleTabResumptionAccessibilityIdentifier)]
+                        assertWithMatcher:grey_notNil()
+                                    error:&error];
+                    return error == nil;
+                  }];
+  // Wait for the tile to be shown or timeout after kWaitForUIElementTimeout.
+  BOOL success = [tile_shown
+      waitWithTimeout:base::test::ios::kWaitForUIElementTimeout.InSecondsF()];
+  if (should_show) {
+    GREYAssertTrue(success, @"Tab Resumption Module did not appear.");
+  } else {
+    GREYAssertFalse(success, @"Tab Resumption Module appeared.");
+  }
+}
+
 }  // namespace
 
 // Integration tests for the Start Surface user flows.
@@ -36,7 +61,9 @@ constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(2);
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
   config.additional_args.push_back(
       "--enable-features=" + std::string(kStartSurface.name) + "<" +
-      std::string(kStartSurface.name));
+      std::string(kStartSurface.name) + "," + std::string(kMagicStack.name) +
+      "," + std::string(kTabResumption.name) + ":" +
+      kTabResumptionParameterName + "/" + kTabResumptionAllTabsParam);
   config.additional_args.push_back(
       "--force-fieldtrials=" + std::string(kStartSurface.name) + "/Test");
   config.additional_args.push_back(
@@ -44,6 +71,12 @@ constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(2);
       ".Test:" + std::string(kReturnToStartSurfaceInactiveDurationInSeconds) +
       "/" + "0");
   return config;
+}
+
+- (void)setUp {
+  [super setUp];
+  [[self class] closeAllTabs];
+  [ChromeEarlGrey openNewTab];
 }
 
 // Tests that navigating to a page and restarting upon cold start, an NTP page
@@ -65,52 +98,28 @@ constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(2);
 }
 
 // Tests that navigating to a page and then backgrounding and foregrounding, an
-// NTP page is opened. Then, verifying that tapping on the tab resumption module
-// switches back to the last tab.
-// Disable due to https://crbug.com/1494900.
-- (void)DISABLED_testWarmStartOpenStartSurface {
+// NTP page is opened.
+- (void)testWarmStartOpenStartSurface {
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   const GURL destinationUrl = self.testServer->GetURL("/pony.html");
   [ChromeEarlGrey loadURL:destinationUrl];
+  [ChromeEarlGrey
+      waitForWebStateContainingText:"Anyone know any good pony jokes?"];
 
   [[AppLaunchManager sharedManager] backgroundAndForegroundApp];
   // Give time for NTP to be fully loaded so all elements are accessible.
   base::test::ios::SpinRunLoopWithMinDelay(base::Seconds(1.0));
+
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
       assertWithMatcher:grey_sufficientlyVisible()];
-
-  // Rotate to landscape to Magic Stack can be scrollable for iPhone.
-  if (![ChromeEarlGrey isIPadIdiom]) {
-    [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationLandscapeLeft
-                                  error:nil];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::NTPCollectionView()]
-        performAction:grey_scrollInDirection(kGREYDirectionDown, 100)];
-  }
-
-  // Swipe over to the tab resumption module if needed.
-  [[[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(l10n_util::GetNSString(
-                                       IDS_IOS_TAB_RESUMPTION_TITLE)),
-                                   grey_sufficientlyVisible(), nil)]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 343)
-      onElementWithMatcher:grey_accessibilityID(
-                               kMagicStackScrollViewAccessibilityIdentifier)]
-      assertWithMatcher:grey_sufficientlyVisible()];
-
-  // Tap on Return to Recent Tab tile and switch back to NTP.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kTabResumptionViewIdentifier)]
-      performAction:grey_tap()];
-
-  [ChromeEarlGrey
-      waitForWebStateContainingText:"Anyone know any good pony jokes?"];
+  GREYAssertEqual([ChromeEarlGrey mainTabCount], 2,
+                  @"Two tabs were expected to be open");
 }
 
 // Tests that navigating to a page and restarting upon cold start, an NTP page
 // is opened with the Return to Recent Tab tile. Then, removing that last tab
 // also removes the tile while that NTP is still being shown.
-- (void)testRemoveRecentTabRemovesReturnToRecenTabTile {
+- (void)testRemoveRecentTabRemovesReturnToRecentTabTile {
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   const GURL destinationUrl = self.testServer->GetURL("/pony.html");
   [ChromeEarlGrey loadURL:destinationUrl];
@@ -126,24 +135,7 @@ constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(2);
   [[EarlGrey selectElementWithMatcher:chrome_test_util::FakeOmnibox()]
       assertWithMatcher:grey_sufficientlyVisible()];
 
-  // Rotate to landscape to Magic Stack can be scrollable for iPhone.
-  if (![ChromeEarlGrey isIPadIdiom]) {
-    [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationLandscapeLeft
-                                  error:nil];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::NTPCollectionView()]
-        performAction:grey_scrollInDirection(kGREYDirectionDown, 100)];
-  }
-
-  // Swipe over to the tab resumption module if needed.
-  [[[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(l10n_util::GetNSString(
-                                       IDS_IOS_TAB_RESUMPTION_TITLE)),
-                                   grey_sufficientlyVisible(), nil)]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 343)
-      onElementWithMatcher:grey_accessibilityID(
-                               kMagicStackScrollViewAccessibilityIdentifier)]
-      assertWithMatcher:grey_sufficientlyVisible()];
+  WaitUntilTabResumptionTileVisibleOrTimeout(true);
 
   NSUInteger nb_main_tab = [ChromeEarlGrey mainTabCount];
   [ChromeEarlGrey closeTabAtIndex:non_start_tab_index];
@@ -155,9 +147,32 @@ constexpr base::TimeDelta kWaitElementTimeout = base::Seconds(2);
                  kWaitElementTimeout, waitForTabToCloseCondition),
              @"Waiting for tab to close");
   [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
-                                   IDS_IOS_TAB_RESUMPTION_TITLE))]
+      selectElementWithMatcher:
+          grey_accessibilityLabel(
+              kMagicStackContentSuggestionsModuleTabResumptionAccessibilityIdentifier)]
       assertWithMatcher:grey_notVisible()];
+}
+
+#pragma mark - Multiwindow
+
+// Tests that when a new window is being opened on iPad and the app enters split
+// screen mode, Chrome will NOT force open a new tab page even when it does not
+// have existing tabs.
+- (void)testOpenNewWindowDoesNotReopenNTP {
+  if (![ChromeEarlGrey areMultipleWindowsSupported]) {
+    EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
+  }
+
+  // Make sure there are no tabs on the current window.
+  [ChromeEarlGrey closeAllExtraWindows];
+  [ChromeEarlGrey closeAllTabs];
+  // Open a new window.
+  [ChromeEarlGrey openNewWindow];
+  [ChromeEarlGrey waitUntilReadyWindowWithNumber:1];
+  // NTP should be opened in the new window, but not in the original one.
+  [ChromeEarlGrey waitForMainTabCount:1 inWindowWithNumber:1];
+  [ChromeEarlGrey waitForMainTabCount:0 inWindowWithNumber:0];
+  [ChromeEarlGrey closeAllExtraWindows];
 }
 
 @end

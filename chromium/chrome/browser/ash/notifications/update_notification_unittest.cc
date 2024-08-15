@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ash/notifications/update_notification.h"
 
+#include <optional>
+
 #include "ash/constants/ash_features.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
@@ -23,7 +25,6 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/user_manager/scoped_user_manager.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/message_center/public/cpp/notification.h"
 
 namespace ash {
@@ -91,7 +92,7 @@ class UpdateNotificationTest : public testing::Test,
     TestingBrowserProcess::GetGlobal()->SetProfileManager(nullptr);
   }
 
-  absl::optional<message_center::Notification> GetNotification() {
+  std::optional<message_center::Notification> GetNotification() {
     UserSessionManager::GetInstance()->MaybeShowUpdateNotification(
         ProfileManager::GetPrimaryUserProfile());
     return display_service_->GetNotification("chrome://update_notification");
@@ -100,15 +101,13 @@ class UpdateNotificationTest : public testing::Test,
  private:
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<FakeChromeUserManager> user_manager_;
-  raw_ptr<FakeProfileManager, DanglingUntriaged | ExperimentalAsh>
-      fake_profile_manager_;
+  raw_ptr<FakeProfileManager, DanglingUntriaged> fake_profile_manager_;
   ScopedTestingLocalState local_state_;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::ScopedTempDir user_data_dir_;
-  raw_ptr<Profile, DanglingUntriaged | ExperimentalAsh> profile_;
-  raw_ptr<StubNotificationDisplayService, DanglingUntriaged | ExperimentalAsh>
-      display_service_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
+  raw_ptr<StubNotificationDisplayService, DanglingUntriaged> display_service_;
 };
 
 INSTANTIATE_TEST_SUITE_P(UpdateNotification,
@@ -116,7 +115,7 @@ INSTANTIATE_TEST_SUITE_P(UpdateNotification,
                          testing::Bool());
 
 TEST_P(UpdateNotificationTest, ShowNotification) {
-  absl::optional<message_center::Notification> notification = GetNotification();
+  std::optional<message_center::Notification> notification = GetNotification();
 
   // Should not show the update notification if the flag is not enabled.
   if (!IsUpdateNotificationEnabled()) {

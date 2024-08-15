@@ -11,6 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
@@ -39,6 +40,8 @@ constexpr base::TimeDelta kSelectorAnimationDuration = base::Milliseconds(150);
 // selected, it moves from the previously selected button to the currently
 // selected button.
 class TabSlider::SelectorView : public views::View {
+  METADATA_HEADER(SelectorView, views::View)
+
  public:
   explicit SelectorView(bool has_animation) : has_animation_(has_animation) {
     SetPaintToLayer();
@@ -88,8 +91,11 @@ class TabSlider::SelectorView : public views::View {
   // Indicates if there is a movement animation.
   const bool has_animation_;
   // Now owned.
-  raw_ptr<TabSliderButton, ExperimentalAsh> button_ = nullptr;
+  raw_ptr<TabSliderButton> button_ = nullptr;
 };
+
+BEGIN_METADATA(TabSlider, SelectorView, views::View)
+END_METADATA
 
 //------------------------------------------------------------------------------
 // TabSlider:
@@ -135,7 +141,7 @@ void TabSlider::OnButtonSelected(TabSliderButton* button) {
   DCHECK(button->selected());
 
   // Deselect all the other buttons.
-  for (auto* b : buttons_) {
+  for (ash::TabSliderButton* b : buttons_) {
     b->SetSelected(b == button);
   }
 
@@ -207,7 +213,7 @@ void TabSlider::OnEnabledStateChanged() {
   // Propagate the enabled state to all slider buttons and the selector view.
   const bool enabled = GetEnabled();
 
-  for (auto* b : buttons_) {
+  for (ash::TabSliderButton* b : buttons_) {
     b->SetEnabled(enabled);
   }
 

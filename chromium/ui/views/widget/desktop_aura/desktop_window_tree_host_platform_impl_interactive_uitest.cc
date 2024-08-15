@@ -6,6 +6,7 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -184,10 +185,7 @@ class HitTestNonClientFrameView : public NativeFrameView {
 // This is used to return HitTestNonClientFrameView on create call.
 class HitTestWidgetDelegate : public WidgetDelegate {
  public:
-  HitTestWidgetDelegate() {
-    SetCanResize(true);
-    SetOwnedByWidget(true);
-  }
+  HitTestWidgetDelegate() { SetCanResize(true); }
 
   HitTestWidgetDelegate(const HitTestWidgetDelegate&) = delete;
   HitTestWidgetDelegate& operator=(const HitTestWidgetDelegate&) = delete;
@@ -248,7 +246,8 @@ class TestDesktopWindowTreeHostPlatformImpl
 }  // namespace
 
 class DesktopWindowTreeHostPlatformImplTest
-    : public test::DesktopWidgetTestInteractive {
+    : public test::DesktopWidgetTestInteractive,
+      public views::WidgetObserver {
  public:
   DesktopWindowTreeHostPlatformImplTest() = default;
 
@@ -262,7 +261,7 @@ class DesktopWindowTreeHostPlatformImplTest
  protected:
   Widget* BuildTopLevelDesktopWidget(const gfx::Rect& bounds) {
     Widget* toplevel = new Widget;
-    delegate_ = new HitTestWidgetDelegate();
+    delegate_ = std::make_unique<HitTestWidgetDelegate>();
     Widget::InitParams toplevel_params =
         CreateParams(Widget::InitParams::TYPE_WINDOW);
     auto* native_widget = new DesktopNativeWidgetAura(toplevel);
@@ -274,6 +273,7 @@ class DesktopWindowTreeHostPlatformImplTest
     toplevel_params.bounds = bounds;
     toplevel_params.remove_standard_frame = true;
     toplevel->Init(std::move(toplevel_params));
+    widget_observation_.Observe(toplevel);
     return toplevel;
   }
 
@@ -314,9 +314,17 @@ class DesktopWindowTreeHostPlatformImplTest
                                 base::TimeTicks::Now(), gesture_details);
   }
 
-  raw_ptr<HitTestWidgetDelegate, DanglingUntriaged> delegate_ = nullptr;
-  raw_ptr<TestDesktopWindowTreeHostPlatformImpl, DanglingUntriaged> host_ =
-      nullptr;
+  // views::WidgetObserver:
+  void OnWidgetDestroying(Widget* widget) override {
+    CHECK(widget_observation_.IsObservingSource(widget));
+    widget_observation_.Reset();
+    host_ = nullptr;
+  }
+
+  std::unique_ptr<HitTestWidgetDelegate> delegate_ = nullptr;
+  raw_ptr<TestDesktopWindowTreeHostPlatformImpl> host_ = nullptr;
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 };
 
 // These tests are run using either click or touch events.

@@ -19,6 +19,7 @@
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/platform/api/quic_ip_address_family.h"
 #include "quiche/quic/platform/api/quic_socket_address.h"
+#include "quiche/common/platform/api/quiche_bug_tracker.h"
 #include "quiche/common/platform/api/quiche_logging.h"
 
 // accept4() is a Linux-specific extension that is available in glibc 2.10+.
@@ -79,6 +80,10 @@ ssize_t SyscallRecv(int sockfd, void* buf, size_t len, int flags) {
 }
 ssize_t SyscallSend(int sockfd, const void* buf, size_t len, int flags) {
   return SyscallWrapper(&::send, sockfd, buf, len, flags);
+}
+ssize_t SyscallSendTo(int sockfd, const void* buf, size_t len, int flags,
+                      const sockaddr* addr, socklen_t addrlen) {
+  return SyscallWrapper(&::sendto, sockfd, buf, len, flags, addr, addrlen);
 }
 
 // Wrapper of absl::ErrnoToStatus that ensures the `unavailable_error_numbers`
@@ -206,6 +211,46 @@ absl::Status SetSocketBlocking(SocketFd fd, bool blocking) {
     return SetSocketFlags(fd, /*to_add=*/0, /*to_remove=*/O_NONBLOCK);
   } else {
     return SetSocketFlags(fd, /*to_add=*/O_NONBLOCK, /*to_remove=*/0);
+  }
+}
+
+absl::Status SetIpHeaderIncluded(SocketFd fd, IpAddressFamily address_family,
+                                 bool ip_header_included) {
+  QUICHE_DCHECK_NE(fd, kInvalidSocketFd);
+
+  int level;
+  int option;
+  switch (address_family) {
+    case IpAddressFamily::IP_V4:
+      level = IPPROTO_IP;
+      option = IP_HDRINCL;
+      break;
+    case IpAddressFamily::IP_V6:
+#if defined(IPPROTO_IPV6) and defined(IPV6_HDRINCL)
+      level = IPPROTO_IPV6;
+      option = IPV6_HDRINCL;
+#else
+      // If IPv6 options aren't defined, try with the IPv4 ones.
+      level = IPPROTO_IP;
+      option = IP_HDRINCL;
+#endif
+      break;
+    default:
+      QUICHE_BUG(set_ip_header_included_invalid_family)
+          << "Invalid address family: " << static_cast<int>(address_family);
+      return absl::InvalidArgumentError("Invalid address family.");
+  }
+
+  int value = static_cast<int>(ip_header_included);
+  int result = ::setsockopt(fd, level, option, &value, sizeof(value));
+
+  if (result >= 0) {
+    return absl::OkStatus();
+  } else {
+    absl::Status status = LastSocketOperationError("::setsockopt()");
+    QUICHE_DVLOG(1) << "Failed to set socket " << fd << " option " << option
+                    << " to " << value << " with error: " << status;
+    return status;
   }
 }
 

@@ -33,6 +33,7 @@
 
 #include <memory>
 
+#include "base/debug/stack_trace.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
@@ -90,6 +91,7 @@ class WebViewHelper;
 }
 
 class BrowserControls;
+struct ColorProviderColorMaps;
 class DevToolsEmulator;
 class Frame;
 class FullscreenController;
@@ -221,6 +223,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   void SetDeviceColorSpaceForTesting(
       const gfx::ColorSpace& color_space) override;
   void PaintContent(cc::PaintCanvas*, const gfx::Rect&) override;
+  void SetColorProviders(
+      const ColorProviderColorMaps& color_provider_colors) override;
   void RegisterRendererPreferenceWatcher(
       CrossVariantMojoRemote<mojom::RendererPreferenceWatcherInterfaceBase>
           watcher) override;
@@ -237,6 +241,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   int32_t HistoryListLength() const { return history_list_length_; }
   const SessionStorageNamespaceId& GetSessionStorageNamespaceId() override;
   bool IsFencedFrameRoot() const override;
+  void SetSupportsAppRegion(bool supports_app_region) override;
 
   // Functions to add and remove observers for this object.
   void AddObserver(WebViewObserver* observer);
@@ -301,7 +306,6 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       mojom::blink::PrerenderPageActivationParamsPtr
           prerender_page_activation_params,
       ActivatePrerenderedPageCallback callback) override;
-  void SetInsidePortal(bool is_inside_portal) override;
   void UpdateWebPreferences(
       const blink::web_pref::WebPreferences& preferences) override;
   void UpdateRendererPreferences(
@@ -322,6 +326,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       const BrowsingContextGroupInfo& browsing_context_group_info) override;
   void SetPageAttributionSupport(
       network::mojom::AttributionSupport support) override;
+  void UpdateColorProviders(
+      const ColorProviderColorMaps& color_provider_colors) override;
 
   void DispatchPersistedPageshow(base::TimeTicks navigation_start);
   void DispatchPagehide(mojom::blink::PagehideDispatch pagehide_dispatch);
@@ -518,7 +524,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
 
   void AddAutoplayFlags(int32_t) override;
   void ClearAutoplayFlags() override;
-  int32_t AutoplayFlagsForTest() override;
+  int32_t AutoplayFlagsForTest() const override;
   gfx::Size GetPreferredSizeForTest() override;
 
   gfx::Size Size();
@@ -528,9 +534,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
 
   gfx::Vector2dF ElasticOverscroll() const { return elastic_overscroll_; }
 
-  class ChromeClient& GetChromeClient() const {
-    return *chrome_client_.Get();
-  }
+  class ChromeClient& GetChromeClient() const { return *chrome_client_.Get(); }
 
   // Allows main frame updates to occur if they were previously blocked. They
   // are blocked during loading a navigation, to allow Blink to proceed without
@@ -549,7 +553,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   // Called when some JS code has instructed the window associated to the main
   // frame to close, which will result in a request to the browser to close the
   // Widget associated to it.
-  void CloseWindowSoon();
+  void CloseWindow();
 
   // Controls whether pressing Tab key advances focus to links.
   bool TabsToLinks() const;
@@ -598,6 +602,12 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   // empty document of a main frame.
   void DidAccessInitialMainDocument();
 
+  // Sends window.minimize() requests to the browser window.
+  void Minimize();
+  // Sends window.maximize() requests to the browser window.
+  void Maximize();
+  // Sends window.restore() requests to the browser window.
+  void Restore();
   // Sends window.setResizable() requests to the browser window.
   void SetResizable(bool resizable);
 
@@ -624,6 +634,9 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   void DidFirstVisuallyNonEmptyPaint();
 
   scheduler::WebAgentGroupScheduler& GetWebAgentGroupScheduler();
+
+  // Returns true if the page supports app-region: drag/no-drag.
+  bool SupportsAppRegion();
 
   // Vivaldi start
   void SetImagesEnabled(const bool images_enabled) override;
@@ -988,6 +1001,15 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       ui::mojom::blink::VirtualKeyboardMode::kUnset;
 
   scheduler::WebAgentGroupScheduler& web_agent_group_scheduler_;
+
+  // TODO(crbug.com/1499519): Remove this temporary debugging.
+  absl::optional<base::debug::StackTrace> close_task_posted_stack_trace_;
+  absl::optional<base::debug::StackTrace> close_called_stack_trace_;
+  absl::optional<base::debug::StackTrace> close_window_called_stack_trace_;
+
+  // Indicates whether the page supports draggable regions via the app-region
+  // CSS property.
+  bool supports_app_region_ = false;
 
   // All the registered observers.
   base::ObserverList<WebViewObserver> observers_;

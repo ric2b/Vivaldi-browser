@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -327,10 +326,6 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
   state_ = syncer::NigoriState::CreateFromLocalProto(
       deserialized_data->nigori_model());
 
-  base::UmaHistogramBoolean(
-      "Sync.CrossUserSharingPublicPrivateKeyInitializedOnStartup",
-      state_.cross_user_sharing_public_key.has_value());
-
   // Restore metadata.
   NigoriMetadataBatch metadata_batch;
   metadata_batch.model_type_state = deserialized_data->model_type_state();
@@ -345,8 +340,7 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
         PendingLocalNigoriCommit::ForKeystoreInitialization());
   }
 
-  if (base::FeatureList::IsEnabled(kSharingOfferKeyPairBootstrap) &&
-      !state_.cross_user_sharing_public_key.has_value()) {
+  if (state_.NeedsGenerateCrossUserSharingKeyPair()) {
     QueuePendingLocalCommit(
         PendingLocalNigoriCommit::
             ForCrossUserSharingPublicPrivateKeyInitializer());
@@ -607,6 +601,8 @@ absl::optional<ModelError> NigoriSyncBridgeImpl::MergeFullSyncData(
   if (specifics.passphrase_type() != NigoriSpecifics::IMPLICIT_PASSPHRASE ||
       !specifics.encryption_keybag().blob().empty()) {
     // We received regular Nigori.
+    // TODO(crbug.com/1445056): consider generating a new public-private key
+    // pair after the initial sync.
     return UpdateLocalState(data->specifics.nigori());
   }
   // Ensure we have |keystore_keys| during the initial download, requested to
@@ -853,8 +849,12 @@ absl::optional<ModelError> NigoriSyncBridgeImpl::TryDecryptPendingKeysWith(
       state_.cross_user_sharing_key_pair_version = absl::nullopt;
       state_.cross_user_sharing_public_key = absl::nullopt;
     } else if (state_.cross_user_sharing_key_pair_version.has_value()) {
-      state_.cryptographer->EmplaceCrossUserSharingKeysFrom(
-          new_cross_user_sharing_keys);
+      // Use the keys from the server and replace any pre-existing ones (so in
+      // case of conflict the server wins). One of cases when this can happen is
+      // when one of older clients is upgraded to a newer version and generated
+      // a new key pair because it wasn't aware of the previous key pair.
+      state_.cryptographer->ReplaceCrossUserSharingKeys(
+          std::move(new_cross_user_sharing_keys));
       state_.cryptographer->SelectDefaultCrossUserSharingKey(
           state_.cross_user_sharing_key_pair_version.value());
     }
@@ -1025,6 +1025,8 @@ void NigoriSyncBridgeImpl::MaybeTriggerKeystoreReencryption() {
 
 void NigoriSyncBridgeImpl::QueuePendingLocalCommit(
     std::unique_ptr<PendingLocalNigoriCommit> local_commit) {
+  // TODO(crbug.com/1445056): Consider adding more validations in ctor to get
+  // stronger guarantee around DCHECK() below.
   DCHECK(processor_->IsTrackingMetadata());
 
   pending_local_commit_queue_.push_back(std::move(local_commit));

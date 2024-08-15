@@ -3,7 +3,6 @@
 <translationbundle lang="lt">
 <translation id="1056898198331236512">Įspėjimas</translation>
 <translation id="1165039591588034296">Klaida</translation>
-<translation id="1175364870820465910">&amp;Spausdinti...</translation>
 <translation id="1244303850296295656">Plėtinio klaida</translation>
 <translation id="1546280085599573572">Šis plėtinys pakeitė puslapį, kuris rodomas spustelėjus pagrindinio puslapio mygtuką.</translation>
 <translation id="1588438908519853928">Įprastas</translation>
@@ -27,7 +26,6 @@
 <translation id="2861941300086904918">„Native Client“ saugos valdytojas</translation>
 <translation id="2932883381142163287">Pranešti apie piktnaudžiavimą</translation>
 <translation id="2941112035454246133">Žema</translation>
-<translation id="2972581237482394796">&amp;Atlikti iš naujo</translation>
 <translation id="3080207940057008665">Kita jūsų kompiuteryje esanti programa pridėjo temą, kuri gali pakeisti „Vivaldi“ veikimo būdą.</translation>
 <translation id="3122464029669770682">Centrinis procesorius</translation>
 <translation id="3222066309010235055">Iš anksto pateikti: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
@@ -37,9 +35,7 @@
 <translation id="3678156199662914018">Plėtinys: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3905761538810670789">Pataisyti programą</translation>
 <translation id="3908501907586732282">Įgalinti plėtinį</translation>
-<translation id="3909791450649380159">Iškir&amp;pti</translation>
 <translation id="3927932062596804919">Uždrausti</translation>
-<translation id="3943582379552582368">&amp;Grįžti</translation>
 <translation id="3979395879372752341">Pridėtas naujas plėtinys (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4087089424473531098">Sukurtas plėtinys:
@@ -47,12 +43,9 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Išjunkite kūrėjo režimu veikiančius plėtinius</translation>
 <translation id="4100839878934973028">Kita jūsų kompiuteryje esanti programa pridėjo programą, kuri gali pakeisti „Vivaldi“ veikimo būdą.</translation>
-<translation id="4130207949184424187">Šis plėtinys pakeitė, kuris puslapis rodomas ieškant „Omnibox“.</translation>
 <translation id="4176463684765177261">Neleista</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB tiesiogiai)</translation>
 <translation id="4384652540891215547">Aktyvinti plėtinį</translation>
-<translation id="4394049700291259645">Neleisti</translation>
-<translation id="4593021220803146968">&amp;Eiti į <ph name="URL" /></translation>
 <translation id="4595560905247879544">Programas ir plėtinius gali keisti tik valdytojas (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Plėtinys pakeitė puslapį, kuris rodomas atidarius naują skirtuko puslapį.</translation>
 <translation id="488785315393301722">Rodyti išsamią informaciją</translation>
@@ -62,22 +55,16 @@
 <translation id="5233231016133573565">Apdoroti ID</translation>
 <translation id="52912272896845572">Asmeninio rakto failas neteisingas.</translation>
 <translation id="5301954838959518834">Gerai, supratau</translation>
-<translation id="5355926466126177564">Plėtinys „<ph name="EXTENSION_NAME" />“ pakeitė, kuris puslapis rodomas ieškant „Omnibox“.</translation>
 <translation id="5362741141255528695">Pasirinkti asmeninio rakto failą.</translation>
-<translation id="5370819323174483825">&amp;Įkelti iš naujo</translation>
 <translation id="5485102783864353244">Pridėti programą</translation>
 <translation id="5521078259930077036">Ar tai pagrindinis puslapis, kurį tikėjotės išvysti?</translation>
 <translation id="5542132724887566711">Profilis</translation>
 <translation id="5556459405103347317">Įkelti iš naujo</translation>
 <translation id="5575473780076478375">Inkognito plėtinys: <ph name="EXTENSION_NAME" /></translation>
-<translation id="5627086634964711283">Ji taip pat kontroliuoja, koks puslapis rodomas, kai spustelėjate pagrindinio puslapio mygtuką.</translation>
 <translation id="5715711091495208045">Papildinių tarpininkas: „<ph name="PLUGIN_NAME" />“</translation>
 <translation id="583281660410589416">Nežinoma</translation>
-<translation id="5956585768868398362">Ar tai paieškos puslapis, kurį tikėjotės išvysti?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maks. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
-<translation id="5965661248935608907">Ji taip pat kontroliuoja, koks puslapis rodomas, kai spustelėjate pagrindinio puslapio mygtuką ar ieškote „Omnibox“.</translation>
 <translation id="6101226222197207147">Pridėta nauja programa (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">Jūsų interneto ryšys yra kontroliuojamas</translation>
 <translation id="6196854373336333322">Plėtinys „<ph name="EXTENSION_NAME" />“ perėmė tarpinio serverio valdymą. Tai reiškia, kad jis gali keisti, nutraukti ar stebėti visus prisijungus atliekamus veiksmus. Jei nesate tikri, kodėl įvyko šis pakeitimas, tikriausiai jūs jo nenorite.</translation>
 <translation id="6247802389331535091">Sistema: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6445450263907939268">Jei nepageidaujate šių pakeitimų, galite atkurti ankstesnius nustatymus.</translation>
@@ -85,7 +72,6 @@
 <translation id="6498249116389603658">&amp;Visos jūsų kalbos</translation>
 <translation id="6503077044568424649">Dažniausiai lankomi</translation>
 <translation id="6508261954199872201">Programa: <ph name="APP_NAME" /></translation>
-<translation id="6691936601825168937">&amp;Persiųsti</translation>
 <translation id="6798954102094737107">Papildinys: „<ph name="PLUGIN_NAME" />“</translation>
 <translation id="6900284862687837908">Foninė programa: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="7287143125007575591">Prieiga atmesta.</translation>
@@ -93,10 +79,8 @@
 <translation id="7629827748548208700">Skirtukas: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Gavėjas: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Užduotis</translation>
-<translation id="7760004034676677601">Ar tai paleidimo puslapis, kurį tikėjotės išvysti?</translation>
 <translation id="7791543448312431591">Pridėti</translation>
 <translation id="7818135753970109980">Pridėta nauja tema (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="7857949311770343000">Ar tai naujo skirtuko puslapis, kurį tikėjotės išvysti?</translation>
 <translation id="786073089922909430">Paslauga: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Paslaugų programa: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7978412674231730200">Asmeninis raktas</translation>
@@ -116,9 +100,7 @@ Rakto failą laikykite saugioje vietoje. Jo reikės, kai norėsite sukurti nauja
 <translation id="8859174528519900719">Antrinis kadras: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8916476537757519021">Inkognito antrinis kadras: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8962083179518285172">Slėpti išsamią informaciją</translation>
-<translation id="9170848237812810038">&amp;Atšaukti</translation>
 <translation id="9215293857209265904">Pridėtas „<ph name="EXTENSION_NAME" />“</translation>
 <translation id="93766956588638423">Pataisyti plėtinį</translation>
-<translation id="994289308992179865">&amp;Ciklas</translation>
 <translation id="998747458861718449">A&amp;pžiūrėti</translation>
 </translationbundle>

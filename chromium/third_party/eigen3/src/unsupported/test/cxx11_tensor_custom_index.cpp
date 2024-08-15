@@ -16,10 +16,8 @@
 
 using Eigen::Tensor;
 
-
 template <int DataLayout>
-static void test_map_as_index()
-{
+static void test_map_as_index() {
   Tensor<float, 4, DataLayout> tensor(2, 3, 5, 7);
   tensor.setRandom();
 
@@ -30,55 +28,48 @@ static void test_map_as_index()
   coeffC[1] = 2;
   coeffC[2] = 4;
   coeffC[3] = 1;
-  NormalIndex coeff(1,2,4,1);
+  NormalIndex coeff(1, 2, 4, 1);
 
   VERIFY_IS_EQUAL(tensor.coeff(coeffC), tensor.coeff(coeff));
   VERIFY_IS_EQUAL(tensor.coeffRef(coeffC), tensor.coeffRef(coeff));
 }
 
-
 template <int DataLayout>
-static void test_matrix_as_index()
-{
+static void test_matrix_as_index() {
   Tensor<float, 4, DataLayout> tensor(2, 3, 5, 7);
   tensor.setRandom();
 
   using NormalIndex = DSizes<ptrdiff_t, 4>;
   using CustomIndex = Matrix<unsigned int, 4, 1>;
-  CustomIndex coeffC(1,2,4,1);
-  NormalIndex coeff(1,2,4,1);
+  CustomIndex coeffC(1, 2, 4, 1);
+  NormalIndex coeff(1, 2, 4, 1);
 
   VERIFY_IS_EQUAL(tensor.coeff(coeffC), tensor.coeff(coeff));
   VERIFY_IS_EQUAL(tensor.coeffRef(coeffC), tensor.coeffRef(coeff));
 }
 
-
 template <int DataLayout>
-static void test_varlist_as_index()
-{
+static void test_varlist_as_index() {
   Tensor<float, 4, DataLayout> tensor(2, 3, 5, 7);
   tensor.setRandom();
 
-  DSizes<ptrdiff_t, 4> coeff(1,2,4,1);
+  DSizes<ptrdiff_t, 4> coeff(1, 2, 4, 1);
 
-  VERIFY_IS_EQUAL(tensor.coeff({1,2,4,1}), tensor.coeff(coeff));
-  VERIFY_IS_EQUAL(tensor.coeffRef({1,2,4,1}), tensor.coeffRef(coeff));
+  VERIFY_IS_EQUAL(tensor.coeff({1, 2, 4, 1}), tensor.coeff(coeff));
+  VERIFY_IS_EQUAL(tensor.coeffRef({1, 2, 4, 1}), tensor.coeffRef(coeff));
 }
 
-
 template <int DataLayout>
-static void test_sizes_as_index()
-{
+static void test_sizes_as_index() {
   Tensor<float, 4, DataLayout> tensor(2, 3, 5, 7);
   tensor.setRandom();
 
-  DSizes<ptrdiff_t, 4> coeff(1,2,4,1);
-  Sizes<1,2,4,1> coeffC;
+  DSizes<ptrdiff_t, 4> coeff(1, 2, 4, 1);
+  Sizes<1, 2, 4, 1> coeffC;
 
   VERIFY_IS_EQUAL(tensor.coeff(coeffC), tensor.coeff(coeff));
   VERIFY_IS_EQUAL(tensor.coeffRef(coeffC), tensor.coeffRef(coeff));
 }
-
 
 EIGEN_DECLARE_TEST(cxx11_tensor_custom_index) {
   test_map_as_index<ColMajor>();

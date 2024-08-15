@@ -104,14 +104,26 @@ class GitApi(recipe_api.RecipeApi):
         raise recipe_api.InfraFailure('count-objects failed: %s' % ex)
       return None
 
-  def checkout(self, url, ref=None, dir_path=None, recursive=False,
-               submodules=True, submodule_update_force=False,
-               keep_paths=None, step_suffix=None,
-               curl_trace_file=None, raise_on_failure=True,
-               set_got_revision=False, remote_name=None,
-               display_fetch_size=None, file_name=None,
+  def checkout(self,
+               url,
+               ref=None,
+               dir_path=None,
+               recursive=False,
+               submodules=True,
+               submodule_update_force=False,
+               keep_paths=None,
+               step_suffix=None,
+               curl_trace_file=None,
+               raise_on_failure=True,
+               set_got_revision=False,
+               remote_name=None,
+               display_fetch_size=None,
+               file_name=None,
                submodule_update_recursive=True,
-               use_git_cache=False, progress=True, tags=False):
+               use_git_cache=False,
+               progress=True,
+               tags=False,
+               depth=None):
     """Performs a full git checkout and returns sha1 of checked out revision.
 
     Args:
@@ -145,6 +157,8 @@ class GitApi(recipe_api.RecipeApi):
            * arbitrary refs such refs/whatever/not-fetched-by-default-to-cache
        progress (bool): whether to show progress for fetch or not
       * tags (bool): Also fetch tags.
+      * depth (int): if > 0, limit fetching to the given number of commits from
+        the tips of the remote tree.
 
     Returns: If the checkout was successful, this returns the commit hash of
       the checked-out-repo. Otherwise this returns None.
@@ -245,6 +259,10 @@ class GitApi(recipe_api.RecipeApi):
 
       if tags:
         fetch_args.append('--tags')
+
+      if depth:
+        assert isinstance(depth, int)
+        fetch_args += ['--depth', depth]
 
       fetch_step_name = 'git fetch%s' % step_suffix
       if display_fetch_size:

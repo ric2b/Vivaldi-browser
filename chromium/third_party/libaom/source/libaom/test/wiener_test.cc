@@ -738,6 +738,11 @@ INSTANTIATE_TEST_SUITE_P(AVX2, WienerTestHighbd,
                          ::testing::Values(av1_compute_stats_highbd_avx2));
 #endif  // HAVE_AVX2
 
+#if HAVE_NEON
+INSTANTIATE_TEST_SUITE_P(NEON, WienerTestHighbd,
+                         ::testing::Values(av1_compute_stats_highbd_neon));
+#endif  // HAVE_NEON
+
 // A test that reproduces b/274668506: signed integer overflow in
 // update_a_sep_sym().
 TEST(SearchWienerTest, 10bitSignedIntegerOverflowInUpdateASepSym) {

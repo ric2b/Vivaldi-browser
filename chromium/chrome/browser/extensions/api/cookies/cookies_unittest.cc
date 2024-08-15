@@ -5,9 +5,12 @@
 // Tests common functionality used by the Chrome Extensions Cookies API
 // implementation.
 
+#include "chrome/common/extensions/api/cookies.h"
+
 #include <stddef.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -15,13 +18,11 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/api/cookies/cookies_api_constants.h"
 #include "chrome/browser/extensions/api/cookies/cookies_helpers.h"
-#include "chrome/common/extensions/api/cookies.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 using extensions::api::cookies::Cookie;
@@ -94,8 +95,7 @@ TEST_F(ExtensionCookiesTest, ExtensionTypeCreation) {
       net::CanonicalCookie::CreateUnsafeCookieForTesting(
           "ABC", "DEF", "www.example.com", "/", base::Time(), base::Time(),
           base::Time(), base::Time(), false, false,
-          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
-          false);
+          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT);
   ASSERT_NE(nullptr, canonical_cookie1.get());
   Cookie cookie1 =
       cookies_helpers::CreateCookie(*canonical_cookie1, "some cookie store");
@@ -116,7 +116,7 @@ TEST_F(ExtensionCookiesTest, ExtensionTypeCreation) {
           "ABC", "DEF", ".example.com", "/", base::Time(),
           base::Time::FromSecondsSinceUnixEpoch(10000), base::Time(),
           base::Time(), false, false, net::CookieSameSite::STRICT_MODE,
-          net::COOKIE_PRIORITY_DEFAULT, false);
+          net::COOKIE_PRIORITY_DEFAULT);
   ASSERT_NE(nullptr, canonical_cookie2.get());
   Cookie cookie2 =
       cookies_helpers::CreateCookie(*canonical_cookie2, "some cookie store");
@@ -140,8 +140,7 @@ TEST_F(ExtensionCookiesTest, GetURLFromCanonicalCookie) {
       net::CanonicalCookie::CreateUnsafeCookieForTesting(
           "ABC", "DEF", ".example.com", "/", base::Time(), base::Time(),
           base::Time(), base::Time(), false, false,
-          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
-          false);
+          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT);
   ASSERT_NE(nullptr, cookie1.get());
   EXPECT_EQ("http://example.com/",
             cookies_helpers::GetURLFromCanonicalCookie(*cookie1).spec());
@@ -150,8 +149,7 @@ TEST_F(ExtensionCookiesTest, GetURLFromCanonicalCookie) {
       net::CanonicalCookie::CreateUnsafeCookieForTesting(
           "ABC", "DEF", ".helloworld.com", "/", base::Time(), base::Time(),
           base::Time(), base::Time(), true, false,
-          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
-          false);
+          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT);
   ASSERT_NE(nullptr, cookie2.get());
   EXPECT_EQ("https://helloworld.com/",
             cookies_helpers::GetURLFromCanonicalCookie(*cookie2).spec());
@@ -159,10 +157,9 @@ TEST_F(ExtensionCookiesTest, GetURLFromCanonicalCookie) {
 
 TEST_F(ExtensionCookiesTest, EmptyDictionary) {
   base::Value::Dict dict;
-  GetAll::Params::Details details;
-  bool rv = GetAll::Params::Details::Populate(dict, details);
-  ASSERT_TRUE(rv);
-  cookies_helpers::MatchFilter filter(&details);
+  auto details = GetAll::Params::Details::FromValue(dict);
+  ASSERT_TRUE(details);
+  cookies_helpers::MatchFilter filter(&details.value());
   net::CanonicalCookie cookie;
   EXPECT_TRUE(filter.MatchesCookie(cookie));
 }
@@ -180,15 +177,14 @@ TEST_F(ExtensionCookiesTest, DomainMatching) {
     base::Value::Dict dict;
     dict.Set(keys::kDomainKey, tests[i].filter);
     args.Append(std::move(dict));
-    absl::optional<GetAll::Params> params = GetAll::Params::Create(args);
+    std::optional<GetAll::Params> params = GetAll::Params::Create(args);
 
     cookies_helpers::MatchFilter filter(&params->details);
     std::unique_ptr<net::CanonicalCookie> cookie =
         net::CanonicalCookie::CreateUnsafeCookieForTesting(
             "name", std::string(), tests[i].domain, "/", base::Time(),
             base::Time(), base::Time(), base::Time(), false, false,
-            net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
-            false);
+            net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT);
     ASSERT_NE(nullptr, cookie.get());
     EXPECT_EQ(tests[i].matches, filter.MatchesCookie(*cookie)) << " test " << i;
   }
@@ -198,8 +194,8 @@ TEST_F(ExtensionCookiesTest, DecodeUTF8WithErrorHandling) {
   std::unique_ptr<net::CanonicalCookie> canonical_cookie(
       net::CanonicalCookie::Create(
           GURL("http://test.com"), "=011Q255bNX_1!yd\203e+;path=/path\203",
-          base::Time::Now(), absl::nullopt /* server_time */,
-          absl::nullopt /* cookie_partition_key */));
+          base::Time::Now(), std::nullopt /* server_time */,
+          std::nullopt /* cookie_partition_key */));
   ASSERT_NE(nullptr, canonical_cookie.get());
   Cookie cookie =
       cookies_helpers::CreateCookie(*canonical_cookie, "some cookie store");
@@ -211,13 +207,18 @@ TEST_F(ExtensionCookiesTest, DecodeUTF8WithErrorHandling) {
 
 TEST_F(ExtensionCookiesTest, PartitionKeySerialization) {
   std::string top_level_site = "https://toplevelsite.com";
-  absl::optional<extensions::api::cookies::CookiePartitionKey>
+  std::optional<extensions::api::cookies::CookiePartitionKey>
       partition_key_for_nonce_and_regular =
           extensions::api::cookies::CookiePartitionKey();
-  absl::optional<extensions::api::cookies::CookiePartitionKey>
+  std::optional<extensions::api::cookies::CookiePartitionKey>
       partition_key_for_opaque = extensions::api::cookies::CookiePartitionKey();
   partition_key_for_nonce_and_regular->top_level_site = top_level_site;
   partition_key_for_opaque->top_level_site = "";
+
+  // Partition key to confirm crbug.com/1522601 is addressed.
+  std::optional<extensions::api::cookies::CookiePartitionKey>
+      partition_key_with_no_top_level_site_set =
+          extensions::api::cookies::CookiePartitionKey();
 
   // Make a CanonicalCookie with a opaque top_level_site or nonce in partition
   // key.
@@ -225,7 +226,7 @@ TEST_F(ExtensionCookiesTest, PartitionKeySerialization) {
       "__Host-A", "B", "x.y", "/", base::Time(), base::Time(), base::Time(),
       base::Time(), /*secure=*/true,
       /*httponly=*/false, net::CookieSameSite::UNSPECIFIED,
-      net::COOKIE_PRIORITY_LOW, /*same_party=*/false,
+      net::COOKIE_PRIORITY_LOW,
       net::CookiePartitionKey::FromURLForTesting(GURL(top_level_site)));
   EXPECT_TRUE(cookie->IsPartitioned());
   EXPECT_FALSE(net::CookiePartitionKey::HasNonce(cookie->PartitionKey()));
@@ -236,7 +237,7 @@ TEST_F(ExtensionCookiesTest, PartitionKeySerialization) {
       "__Host-A", "B", "x.y", "/", base::Time(), base::Time(), base::Time(),
       base::Time(), /*secure=*/true,
       /*httponly=*/false, net::CookieSameSite::UNSPECIFIED,
-      net::COOKIE_PRIORITY_LOW, /*same_party=*/false,
+      net::COOKIE_PRIORITY_LOW,
       net::CookiePartitionKey::FromURLForTesting(GURL()));
 
   EXPECT_TRUE(opaque_cookie->IsPartitioned());
@@ -247,7 +248,7 @@ TEST_F(ExtensionCookiesTest, PartitionKeySerialization) {
       "__Host-A", "B", "x.y", "/", base::Time(), base::Time(), base::Time(),
       base::Time(), /*secure=*/true,
       /*httponly=*/false, net::CookieSameSite::UNSPECIFIED,
-      net::COOKIE_PRIORITY_LOW, /*same_party=*/false,
+      net::COOKIE_PRIORITY_LOW,
       net::CookiePartitionKey::FromURLForTesting(
           GURL("https://toplevelsite.com"), base::UnguessableToken::Create()));
 
@@ -257,12 +258,26 @@ TEST_F(ExtensionCookiesTest, PartitionKeySerialization) {
 
   // Confirm that to be matchable, the partition key
   // must be serializable.
-  EXPECT_TRUE(cookies_helpers::CookieMatchesPartitionKeyInDetails(
-      partition_key_for_nonce_and_regular, *cookie));
-  EXPECT_FALSE(cookies_helpers::CookieMatchesPartitionKeyInDetails(
-      partition_key_for_nonce_and_regular, *nonce_cookie));
-  EXPECT_FALSE(cookies_helpers::CookieMatchesPartitionKeyInDetails(
-      partition_key_for_opaque, *opaque_cookie));
+  EXPECT_TRUE(
+      cookies_helpers::CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+          partition_key_for_nonce_and_regular, *cookie->PartitionKey()));
+  EXPECT_FALSE(
+      cookies_helpers::CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+          partition_key_for_nonce_and_regular, *nonce_cookie->PartitionKey()));
+  EXPECT_FALSE(
+      cookies_helpers::CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+          partition_key_for_opaque, *opaque_cookie->PartitionKey()));
+  EXPECT_FALSE(
+      cookies_helpers::CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+          partition_key_with_no_top_level_site_set, *cookie->PartitionKey()));
+  EXPECT_FALSE(
+      cookies_helpers::CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+          partition_key_with_no_top_level_site_set,
+          *nonce_cookie->PartitionKey()));
+  EXPECT_FALSE(
+      cookies_helpers::CanonicalCookiePartitionKeyMatchesApiCookiePartitionKey(
+          partition_key_with_no_top_level_site_set,
+          *opaque_cookie->PartitionKey()));
 
   // Confirm that a CanonicalCookie with serializable partition key
   // can be used to create a cookie.

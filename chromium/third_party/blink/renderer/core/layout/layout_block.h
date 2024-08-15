@@ -34,8 +34,8 @@
 
 namespace blink {
 
+class BlockNode;
 struct PaintInfo;
-class NGBlockNode;
 
 typedef HeapLinkedHashSet<Member<LayoutBox>> TrackedLayoutBoxLinkedHashSet;
 typedef HeapHashMap<WeakMember<const LayoutBlock>,
@@ -173,7 +173,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
       const LayoutObject* parent) const override;
 
  public:
-  RecalcLayoutOverflowResult RecalcLayoutOverflow() override;
+  RecalcScrollableOverflowResult RecalcScrollableOverflow() override;
 
   void RecalcVisualOverflow() override;
 
@@ -233,16 +233,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   void AddOutlineRects(OutlineRectCollector&,
                        OutlineInfo*,
                        const PhysicalOffset& additional_offset,
-                       NGOutlineType) const override;
-
-  // TODO(jchaffraix): We should rename this function as inline-flex and
-  // inline-grid as also covered.
-  // Alternatively it should be removed as we clarify the meaning of
-  // IsAtomicInlineLevel to imply isInline.
-  bool IsInlineBlockOrInlineTable() const final {
-    NOT_DESTROYED();
-    return IsInline() && IsAtomicInlineLevel();
-  }
+                       OutlineType) const override;
 
   bool IsInSelfHitTestingPhase(HitTestPhase phase) const final {
     NOT_DESTROYED();
@@ -297,7 +288,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   // This is necessary for now for interoperability between the old and new
   // layout code. Primarily for calling layoutPositionedObjects at the moment.
-  friend class NGBlockNode;
+  friend class BlockNode;
 };
 
 template <>

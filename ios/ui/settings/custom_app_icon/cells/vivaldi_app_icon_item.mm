@@ -3,7 +3,7 @@
 #import "ios/ui/settings/custom_app_icon/cells/vivaldi_app_icon_item.h"
 
 #import "base/check.h"
-#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_cells_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"

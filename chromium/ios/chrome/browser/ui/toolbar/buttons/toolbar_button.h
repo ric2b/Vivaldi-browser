@@ -50,6 +50,10 @@
 // afterwards it calls setHiddenForCurrentStateAndSizeClass if needed.
 - (void)updateHiddenInCurrentSizeClass;
 
+// Vivaldi
+- (void)updateTintColor;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_BUTTONS_TOOLBAR_BUTTON_H_

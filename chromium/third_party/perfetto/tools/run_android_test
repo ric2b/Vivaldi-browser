@@ -154,7 +154,10 @@ def Main():
   AdbCall('shell', 'test -d "%s" || mkdir -p "%s"' % (2 * (trace_dir,)))
   AdbCall('shell', 'rm -rf "%s/*";  ' % trace_dir)
   AdbCall('shell', 'mkdir -p /data/nativetest')
-  AdbCall('shell', 'echo 0 > /d/tracing/tracing_on')
+  AdbCall('shell', 'test -f /sys/kernel/tracing/tracing_on ' +
+                   '&& echo 0 > /sys/kernel/tracing/tracing_on || true')
+  AdbCall('shell', 'test -f /sys/kernel/debug/tracing/tracing_on ' +
+                   '&& echo 0 > /sys/kernel/debug/tracing/tracing_on || true')
 
   # This needs to go into /data/nativetest in order to have the system linker
   # namespace applied, which we need in order to link libdexfile.so.
@@ -163,9 +166,16 @@ def Main():
   # See https://android.googlesource.com/platform/system/core/+/main/rootdir/etc/ld.config.txt.
   AdbPush(test_bin, "/data/nativetest")
 
+  ld_library_paths = []
   # These two binaries are required to run perfetto_integrationtests.
   AdbPush(os.path.join(args.out_dir, "perfetto"), "/data/nativetest")
   AdbPush(os.path.join(args.out_dir, "trigger_perfetto"), "/data/nativetest")
+  if os.path.exists(os.path.join(args.out_dir, "libperfetto.so")):
+    # libperfetto.so is required by the two binaries.
+    libperfetto_ondevice_dir = "%s/ld_library_path/" % (target_dir);
+    AdbCall('shell', 'mkdir -p "%s"' % (libperfetto_ondevice_dir))
+    AdbPush(os.path.join(args.out_dir, "libperfetto.so"), libperfetto_ondevice_dir)
+    ld_library_paths.append(libperfetto_ondevice_dir)
 
   if not args.no_data_deps:
     for dep in EnumerateDataDeps():
@@ -176,7 +186,9 @@ def Main():
   env = ' '.join(args.env if args.env is not None else []) + ' '
   if os.path.exists(sanitizer_libs):
     AdbPush(sanitizer_libs, target_dir)
-    env += 'LD_LIBRARY_PATH="%s/sanitizer_libs" ' % (target_dir)
+    ld_library_paths.append("%s/sanitizer_libs" % (target_dir))
+  if ld_library_paths:
+    env += 'LD_LIBRARY_PATH=' + ':'.join(ld_library_paths) + ' '
   cmd = 'cd %s;' % target_dir
   binary = env + '/data/nativetest/%s' % args.test_name
   cmd += binary

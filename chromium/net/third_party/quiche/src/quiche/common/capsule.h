@@ -6,12 +6,12 @@
 #define QUICHE_COMMON_CAPSULE_H_
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "absl/types/variant.h"
 #include "quiche/common/platform/api/quiche_export.h"
 #include "quiche/common/platform/api/quiche_logging.h"
@@ -390,6 +390,15 @@ class QUICHE_EXPORT CapsuleParser {
 // Serializes |capsule| into a newly allocated buffer.
 QUICHE_EXPORT quiche::QuicheBuffer SerializeCapsule(
     const Capsule& capsule, quiche::QuicheBufferAllocator* allocator);
+
+// Serializes the header for a datagram of size |datagram_size|.
+QUICHE_EXPORT QuicheBuffer SerializeDatagramCapsuleHeader(
+    uint64_t datagram_size, QuicheBufferAllocator* allocator);
+
+// Serializes the header for a WT_STREAM or a WT_STREAM_WITH_FIN capsule.
+QUICHE_EXPORT QuicheBuffer SerializeWebTransportStreamCapsuleHeader(
+    webtransport::StreamId stream_id, bool fin, uint64_t write_size,
+    QuicheBufferAllocator* allocator);
 
 }  // namespace quiche
 

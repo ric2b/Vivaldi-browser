@@ -237,28 +237,6 @@ from :3
 
 
 class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
-    @mock.patch('gclient_scm.GitWrapper._IsCog')
-    @mock.patch('gclient_scm.GitWrapper._Run', return_value=True)
-    @mock.patch('gclient_scm.GitWrapper._SetFetchConfig')
-    @mock.patch('gclient_scm.GitWrapper._GetCurrentBranch')
-    def testCloneInCog(self, mockGetCurrentBranch, mockSetFetchConfig, mockRun,
-                       _mockIsCog):
-        """Test that we call the correct commands when in a cog workspace."""
-        if not self.enabled:
-            return
-        options = self.Options()
-        scm = gclient_scm.GitWrapper(self.url, self.root_dir, self.relpath)
-        scm._Clone('123123ab', self.url, options)
-        mockRun.assert_called_once_with(
-            ['citc', 'clone-repo', self.url, scm.checkout_path, '123123ab'],
-            options,
-            cwd=scm._root_dir,
-            retry=True,
-            print_stdout=False,
-            filter_fn=scm.filter)
-        mockSetFetchConfig.assert_called_once()
-        mockGetCurrentBranch.assert_called_once()
-
     def testRevertMissing(self):
         if not self.enabled:
             return
@@ -606,7 +584,7 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
             scm.update(options, (), [])
         self.assertEqual(
             e.exception.args[0], '\n____ . at refs/remotes/origin/main\n'
-            '\tYou have unstaged changes.\n'
+            '\tYou have uncommitted changes.\n'
             '\tcd into ., run git status to see changes,\n'
             '\tand commit, stash, or reset.\n')
 
@@ -657,7 +635,6 @@ class ManagedGitWrapperTestCaseMock(unittest.TestCase):
         self.backup_base_path = os.path.join(self.root_dir,
                                              'old_%s.git' % self.relpath)
         mock.patch('gclient_scm.scm.GIT.ApplyEnvVars').start()
-        mock.patch('gclient_scm.GitWrapper._CheckMinVersion').start()
         mock.patch('gclient_scm.GitWrapper._Fetch').start()
         mock.patch('gclient_scm.GitWrapper._DeleteOrMove').start()
         mock.patch('sys.stdout', StringIO()).start()
@@ -1204,7 +1181,7 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
 
     def assertCommits(self, commits):
         """Check that all, and only |commits| are present in the current checkout.
-    """
+        """
         for i in commits:
             name = os.path.join(self.root_dir, 'commit ' + str(i))
             self.assertTrue(os.path.exists(name), 'Commit not found: %s' % name)
@@ -1287,10 +1264,10 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
     def testCheckoutOlderThanPatchBase(self):
         """Test applying a patch on an old checkout.
 
-    We first checkout commit 1, and try to patch refs/changes/35/1235/1, which
-    contains commits 5 and 6, and is based on top of commit 3.
-    The final result should contain commits 1, 5 and 6, but not commits 2 or 3.
-    """
+        We first checkout commit 1, and try to patch refs/changes/35/1235/1, which
+        contains commits 5 and 6, and is based on top of commit 3.
+        The final result should contain commits 1, 5 and 6, but not commits 2 or 3.
+        """
         scm = gclient_scm.GitWrapper(self.url, self.root_dir, '.')
         file_list = []
 
@@ -1372,8 +1349,7 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
                          self.gitrevparse(self.root_dir))
 
     def testDoesntRebasePatchMaster(self):
-        """Tests that we can apply a patch without rebasing it.
-    """
+        """Tests that we can apply a patch without rebasing it."""
         scm = gclient_scm.GitWrapper(self.url, self.root_dir, '.')
         file_list = []
 
@@ -1392,7 +1368,7 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
 
     def testDoesntRebasePatchOldCheckout(self):
         """Tests that we can apply a patch without rebasing it on an old checkout.
-    """
+        """
         scm = gclient_scm.GitWrapper(self.url, self.root_dir, '.')
         file_list = []
 

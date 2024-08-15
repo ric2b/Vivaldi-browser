@@ -52,9 +52,8 @@ constexpr char kClassroomHomePage[] = "https://classroom.google.com/u/0/h";
 }  // namespace
 
 ClassroomBubbleBaseView::ClassroomBubbleBaseView(
-    DetailedViewDelegate* delegate,
     std::unique_ptr<ui::ComboboxModel> combobox_model)
-    : GlanceableTrayChildBubble(delegate, /*for_glanceables_container=*/true) {
+    : GlanceableTrayChildBubble(/*for_glanceables_container=*/true) {
   layout_manager_ = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout_manager_
       ->SetInteriorMargin(gfx::Insets::TLBR(kInteriorGlanceableBubbleMargin,
@@ -76,7 +75,7 @@ ClassroomBubbleBaseView::ClassroomBubbleBaseView(
                               base::Unretained(this)),
           IconButton::Type::kMedium, &kGlanceablesClassroomIcon,
           IDS_GLANCEABLES_CLASSROOM_HEADER_ICON_ACCESSIBLE_NAME));
-  header_icon->SetBackgroundColorId(cros_tokens::kCrosSysBaseElevated);
+  header_icon->SetBackgroundColor(cros_tokens::kCrosSysBaseElevated);
   header_icon->SetProperty(views::kMarginsKey, kHeaderIconButtonMargins);
   header_icon->SetID(
       base::to_underlying(GlanceablesViewId::kClassroomBubbleHeaderIcon));
@@ -238,18 +237,14 @@ void ClassroomBubbleBaseView::AnnounceListStateOnComboBoxAccessibility() {
 
 void ClassroomBubbleBaseView::OnItemViewPressed(bool initial_list_selected,
                                                 const GURL& url) {
-  if (initial_list_selected) {
-    base::RecordAction(base::UserMetricsAction(
-        "Glanceables_Classroom_AssignmentPressed_DefaultList"));
-  }
-  base::RecordAction(
-      base::UserMetricsAction("Glanceables_Classroom_AssignmentPressed"));
+  RecordStudentAssignmentPressed(/*default_list=*/initial_list_selected);
+
   OpenUrl(url);
 }
 
 void ClassroomBubbleBaseView::OnHeaderIconPressed() {
-  base::RecordAction(
-      base::UserMetricsAction("Glanceables_Classroom_HeaderIconPressed"));
+  RecordClassroomHeaderIconPressed();
+
   OpenUrl(GURL(kClassroomHomePage));
 }
 

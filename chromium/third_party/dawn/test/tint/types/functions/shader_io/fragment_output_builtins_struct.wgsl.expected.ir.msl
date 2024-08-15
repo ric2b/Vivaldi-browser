@@ -1,0 +1,10 @@
+#include <metal_stdlib>
+using namespace metal;
+struct FragmentOutputs {
+  float frag_depth [[depth(any)]];
+  uint sample_mask [[sample_mask]];
+};
+
+fragment FragmentOutputs tint_symbol() {
+  return FragmentOutputs{.frag_depth=1.0f, .sample_mask=1u};
+}

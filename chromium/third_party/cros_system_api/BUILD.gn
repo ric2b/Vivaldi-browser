@@ -15,7 +15,6 @@ group("all") {
     ":system_api-arcvm_data_migrator-protos",
     ":system_api-attestation-goprotos",
     ":system_api-attestation-protos",
-    ":system_api-authpolicy-protos",
     ":system_api-biod-goprotos",
     ":system_api-biod-protos",
     ":system_api-bootlockbox-goprotos",
@@ -28,6 +27,7 @@ group("all") {
     ":system_api-dlcservice-goprotos",
     ":system_api-dlcservice-protos",
     ":system_api-dlp-protos",
+    ":system_api-fbpreprocessor-protos",
     ":system_api-featured-goprotos",
     ":system_api-featured-protos",
     ":system_api-fusebox-protos",
@@ -193,6 +193,7 @@ proto_library("system_api-cryptohome-protos") {
     "${proto_in_dir}/auth_factor.proto",
     "${proto_in_dir}/fido.proto",
     "${proto_in_dir}/key.proto",
+    "${proto_in_dir}/recoverable_key_store.proto",
     "${proto_in_dir}/rpc.proto",
   ]
   standalone = true
@@ -211,16 +212,9 @@ goproto_library("system_api-cryptohome-goprotos") {
     "${proto_in_dir}/auth_factor.proto",
     "${proto_in_dir}/fido.proto",
     "${proto_in_dir}/key.proto",
+    "${proto_in_dir}/recoverable_key_store.proto",
     "${proto_in_dir}/rpc.proto",
   ]
-}
-
-proto_library("system_api-authpolicy-protos") {
-  proto_in_dir = "dbus/authpolicy"
-  proto_out_dir = "include/authpolicy/proto_bindings"
-  sources = [ "${proto_in_dir}/active_directory_info.proto" ]
-  standalone = true
-  install_package = true
 }
 
 proto_library("system_api-biod-protos") {
@@ -324,9 +318,14 @@ proto_library("system_api-chaps-protos") {
   proto_in_dir = "dbus/chaps"
   proto_out_dir = "include/chaps/proto_bindings"
   sources = [
+    "${proto_in_dir}/attributes.proto",
     "${proto_in_dir}/ck_structs.proto",
     "${proto_in_dir}/key_permissions.proto",
   ]
+  if (use.fuzzer) {
+    # Override optimize_for option in proto file.
+    gen_cpp_mode = "speed"
+  }
   standalone = true
   install_package = true
 
@@ -879,4 +878,12 @@ goproto_library("system_api-stack_sampled_metrics_status-goprotos") {
   proto_in_dir = "proto/stack_sampled_metrics_status"
   proto_out_dir = "go/src/"
   sources = [ "${proto_in_dir}/stack_sampled_metrics_status.proto" ]
+}
+
+proto_library("system_api-fbpreprocessor-protos") {
+  proto_in_dir = "dbus/fbpreprocessor"
+  proto_out_dir = "include/fbpreprocessor/proto_bindings"
+  sources = [ "${proto_in_dir}/fbpreprocessor.proto" ]
+  standalone = true
+  install_package = true
 }

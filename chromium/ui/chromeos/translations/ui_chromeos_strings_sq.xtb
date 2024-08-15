@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sq">
 <translation id="1000498691615767391">Zgjidh një dosje për ta hapur</translation>
+<translation id="1014208178561091457">Skedari <ph name="FILE_NAME" /> nuk mund të kopjohej sepse është i enkriptuar.</translation>
 <translation id="1047956942837015229">Po fshin <ph name="COUNT" /> artikuj...</translation>
 <translation id="1049926623896334335">Dokument Word</translation>
 <translation id="1056775291175587022">Nuk ka rrjete</translation>
@@ -55,6 +56,7 @@
 <translation id="1435838927755162558">Ndaje dosjen me Parallels Desktop</translation>
 <translation id="1439919885608649279">Person me lule</translation>
 <translation id="1458457385801829801">Nxirr <ph name="TARGET_NAME" /></translation>
+<translation id="146691674290220697"><ph name="NUMBER_OF_FILES" /> skedarë nuk mund të kopjoheshin sepse janë të enkriptuar.</translation>
 <translation id="1471718551822868769">Sllovakisht</translation>
 <translation id="1482884275703521657">Finlandisht</translation>
 <translation id="148466539719134488">Zvicerane</translation>
@@ -74,7 +76,6 @@
 <translation id="162175252992296058">Portugalisht me tastierë ndërkombëtare amerikane</translation>
 <translation id="1629521517399325891">Certifikata e përdoruesit nuk është e disponueshme për vërtetimin e rrjetit.</translation>
 <translation id="1641780993263690097">Kinezisht Pinyin</translation>
-<translation id="1646019627374511909">Po i bën të disponueshëm offline <ph name="NUMBER_OF_ITEMS" /> skedarë</translation>
 <translation id="164969095109328410">Pajisje Chrome</translation>
 <translation id="1661207570040737402">E ke përdorur të gjithë hapësirën ruajtëse të Google Workspace për diskun e ndarë.</translation>
 <translation id="1661867754829461514">Kodi PIN mungon</translation>
@@ -276,6 +277,7 @@
 <translation id="3253225298092156258">Nuk ofrohet</translation>
 <translation id="3254434849914415189">Zgjidh aplikacionin e parazgjedhur për skedarët <ph name="FILE_TYPE" />:</translation>
 <translation id="3255159654094949700">Arabisht</translation>
+<translation id="326396468955264502"><ph name="NUMBER_OF_FILES" /> skedarë nuk mund të zhvendoseshin sepse janë të enkriptuar.</translation>
 <translation id="3264582393905923483">Konteksti</translation>
 <translation id="3272909651715601089">Nuk mund të hapej "<ph name="PATH" />"</translation>
 <translation id="3280431534455935878">Po përgatitet</translation>
@@ -306,13 +308,13 @@
 <translation id="3475447146579922140">Fletëllogaritësja e Google</translation>
 <translation id="3479552764303398839">Jo tani</translation>
 <translation id="3486821258960016770">Mongolisht</translation>
-<translation id="3495304270784461826"><ph name="COUNT" /> gabime.</translation>
 <translation id="3509680540198371098">Rrjeti <ph name="NETWORK_INDEX" /> nga <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, fuqia e sinjalit <ph name="SIGNAL_STRENGTH" />%, detaje</translation>
 <translation id="3511705761158917664">Po përgatitet për të sinkronizuar <ph name="NUMBER_OF_ITEMS" /> artikuj...</translation>
 <translation id="3522708245912499433">Portugalisht</translation>
 <translation id="3523225005467146490">1 dosje u nda me <ph name="VM_NAME" /></translation>
 <translation id="3524311639100184459">Kujdes! Këta skedarë janë të përkohshëm dhe mund të fshihen automatikisht për të liruar hapësirën në disk.  <ph name="BEGIN_LINK" />Mëso më shumë<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Dosje</translation>
+<translation id="3529424493985988200">Kontakto me administratorin tënd për detaje.</translation>
 <translation id="3548125359243647069">Është futur shumë herë një kod PIN i gabuar.</translation>
 <translation id="3549797760399244642">Shko te drive.google.com...</translation>
 <translation id="3553048479571901246">Për të hapur skedarët me <ph name="APP_NAME" />, në fillim kopjoji në dosjen e skedarëve të Windows.</translation>
@@ -456,7 +458,7 @@
 <translation id="4656777537938206294">Bëji skedarët të disponueshëm offline</translation>
 <translation id="4658782175094886150">Person në dëborë</translation>
 <translation id="4669606053856530811">Anëtarët e "<ph name="SOURCE_NAME" />" do të humbin qasjen në rast se këta artikuj nuk ndahen me ta.</translation>
-<translation id="467809019005607715">Google Slides</translation>
+<translation id="467809019005607715">Diapozitivat e Google</translation>
 <translation id="4690246192099372265">Suedisht</translation>
 <translation id="4693155481716051732">Sushi</translation>
 <translation id="4694604912444486114">Majmun</translation>
@@ -501,6 +503,7 @@
 <translation id="4935975195727477204">Lule Gazania</translation>
 <translation id="4943368462779413526">Futboll</translation>
 <translation id="4961158930123534723">1 dosje e ndarë me Parallels Desktop</translation>
+<translation id="4965874878399872778">Skedarët po kontrollohen me politikat e sigurisë së organizatës sate...</translation>
 <translation id="496656650103537022"><ph name="FILE_NAME" /> u restaurua</translation>
 <translation id="4969785127455456148">Albumi</translation>
 <translation id="4972330214479971536">Konfigurimi i sinkronizimit të skedarëve nuk mund të përfundonte</translation>
@@ -556,7 +559,6 @@
 <translation id="5275973617553375938">Skedarët e rikuperuar nga "Disku i Google"</translation>
 <translation id="5278111733643988471">Për ta restauruar këtë artikull, zvarrite atë te një dosje e re jashtë koshit. Dosja origjinale "<ph name="PARENT_FOLDER_NAME" />" për këtë artikull është fshirë.</translation>
 <translation id="5283101102242354279">Aktivizo një shtesë në modalitetin "e fshehtë":</translation>
-<translation id="5286194356314741248">Po skanon</translation>
 <translation id="5288441970121584418">Hamburger</translation>
 <translation id="5293615890992542006">Zhvendosja e këtij skedari është bllokuar nga politika e administratorit</translation>
 <translation id="5305688511332277257">Nuk është instaluar asnjë</translation>
@@ -701,11 +703,13 @@
 <translation id="637062427944097960">Ky skedar u hap në një desktop tjetër. Lëviz te <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) për ta parë.</translation>
 <translation id="6394388407447716302">Vetëm për lexim</translation>
 <translation id="6395575651121294044"><ph name="NUMBER_OF_FILES" /> artikuj</translation>
+<translation id="6407769893376380348">Skedari <ph name="FILE_NAME" /> nuk mund të zhvendosej sepse është i enkriptuar.</translation>
 <translation id="642282551015776456">Ky emër nuk mund të përdoret si emër skedari ose dosjeje</translation>
 <translation id="6423031066725912715">Vietnamisht me tastierë TCVN</translation>
 <translation id="6430271654280079150">Ke 1 përpjekje të mbetur.</translation>
 <translation id="643243556292470964">Skedarët e fshirë tani zhvendosen te koshi</translation>
 <translation id="6438480100790416671">Po kontrollon hapësirën ruajtëse…</translation>
+<translation id="6451527188465304418">Skedari po kontrollohet me politikat e sigurisë të organizatës sate...</translation>
 <translation id="6485131920355264772">Dështoi në marrjen e informacionit të hapësirës</translation>
 <translation id="6495925982925244349">Rrjeti <ph name="NETWORK_INDEX" /> nga <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, fuqia e sinjalit <ph name="SIGNAL_STRENGTH" />%, menaxhuar nga administratori yt, detaje</translation>
 <translation id="649877868557234318"><ph name="FILE_NAME" /> po nxirret te "<ph name="FOLDER_NAME" />"</translation>
@@ -713,7 +717,6 @@
 <translation id="6503285896705205014">Kopjimi i <ph name="COUNT" /> skedarëve është bllokuar nga politika e administratorit</translation>
 <translation id="6509122719576673235">Norvegjisht</translation>
 <translation id="6528513914570774834">Lejo që përdoruesit e tjerë të kësaj pajisjeje të përdorin këtë rrjet</translation>
-<translation id="653019979737152879">Po sinkronizon <ph name="FILE_NAME" />...</translation>
 <translation id="6549689063733911810">Të fundit</translation>
 <translation id="6558280019477628686">Ndodhi një gabim. Disa artikuj mund të mos jenë fshirë.</translation>
 <translation id="656398493051028875">Po fshin "<ph name="FILENAME" />"...</translation>
@@ -847,7 +850,6 @@
 <translation id="7553492409867692754">Jepu leje aplikacioneve të Linux që të qasen në skedarët në dosjen <ph name="FOLDER_NAME" /></translation>
 <translation id="7555339735447658365">Aktualisht je offline. Sinkronizimi i skedarëve do të vazhdojë kur të jesh lidhur me internetin.</translation>
 <translation id="7589661784326793847">Prit vetëm një sekondë</translation>
-<translation id="7592775719802218421">Po bën <ph name="FILE_NAME" /> të disponueshëm offline</translation>
 <translation id="7600126690270271294">Serbisht</translation>
 <translation id="7603724359189955920">Rrjeta</translation>
 <translation id="7627790789328695202">Mos, <ph name="FILE_NAME" /> ekziston tashmë. Riemërtoje dhe provo sërish.</translation>
@@ -931,6 +933,7 @@
 <translation id="813913629614996137">Po fillon...</translation>
 <translation id="8147028810663464959">Gjerësia e karaktereve është e plotë</translation>
 <translation id="8151638057146502721">Konfiguro</translation>
+<translation id="8154666764013920974">{NUM_ERROR,plural, =1{1 gabim.}other{# gabime.}}</translation>
 <translation id="8154842056504218462">U zgjodhën të gjitha regjistrimet.</translation>
 <translation id="8157684860301034423">Marrja e informacioneve të aplikacionit dështoi.</translation>
 <translation id="8175731104491895765">Frëngjisht (Belgjikë)</translation>
@@ -964,6 +967,7 @@
 <translation id="83651606385705612">Jepi leje <ph name="VM_NAME" /> që të ketë qasje te skedarët në dosjen "<ph name="FOLDER_NAME" />"</translation>
 <translation id="8372369524088641025">Çelës WEP i gabuar</translation>
 <translation id="8372852072747894550">Greqisht</translation>
+<translation id="8377269993083688872">Strukturat e email-it</translation>
 <translation id="8386903983509584791">Skanimi përfundoi</translation>
 <translation id="8387733224523483503"><ph name="FILE_NAME" /> u nxor.</translation>
 <translation id="8395901698320285466">Përmasat</translation>
@@ -1002,7 +1006,6 @@
 <translation id="8569764466147087991">Zgjidh një skedar për ta hapur</translation>
 <translation id="8577897833047451336">Kroatisht</translation>
 <translation id="8578308463707544055">Indonezisht</translation>
-<translation id="8579285237314169903">Po sinkronizohen <ph name="NUMBER_OF_FILES" /> artikuj...</translation>
 <translation id="8600173386174225982">Lista e skedarëve ka ndryshuar në pamjen e miniaturës.</translation>
 <translation id="8601932370724196034">Skedar imazhi Crostini</translation>
 <translation id="8609695766746872526">Islandisht</translation>
@@ -1023,6 +1026,7 @@
 <translation id="8787254343425541995">Lejo përfaqësues për rrjete të ndara</translation>
 <translation id="8790981080411996443">Person duke ujitur lulet</translation>
 <translation id="8798099450830957504">I parazgjedhur</translation>
+<translation id="8806832560029769670">{NUM_WARNING,plural, =1{1 paralajmërim.}other{# paralajmërime.}}</translation>
 <translation id="8808686172382650546">Macja</translation>
 <translation id="8810671769985673465">Ngjeshja dështoi, artikulli ekziston: "<ph name="FILE_NAME" />"</translation>
 <translation id="8813284582615685103">Spanjisht (Spanjë)</translation>
@@ -1053,7 +1057,6 @@
 <translation id="9038620279323455325">Skedari me emrin "<ph name="FILE_NAME" />" ekziston tashmë. Zgjidh një emër tjetër.</translation>
 <translation id="9046895021617826162">Lidhja dështoi</translation>
 <translation id="9065512565307033593">Nëse nuk e verifikon, qasja jote në rrjet do të çaktivizohet.</translation>
-<translation id="9083722265619106011">{0,plural, =1{1 paralajmërim.}other{<ph name="COUNT" /> paralajmërime.}}</translation>
 <translation id="908378762078012445">Rusisht me tastierë fonetike AATSEEL</translation>
 <translation id="9086302186042011942">Po sinkronizon</translation>
 <translation id="9099674669267916096">Numri i faqeve</translation>

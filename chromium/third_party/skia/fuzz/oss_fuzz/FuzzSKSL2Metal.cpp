@@ -9,19 +9,20 @@
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/SkSLProgramKind.h"
 #include "src/sksl/SkSLProgramSettings.h"
+#include "src/sksl/codegen/SkSLMetalCodeGenerator.h"
 #include "src/sksl/ir/SkSLProgram.h"
 
 #include "fuzz/Fuzz.h"
 
 bool FuzzSKSL2Metal(const uint8_t *data, size_t size) {
-    SkSL::Compiler compiler(SkSL::ShaderCapsFactory::Default());
+    SkSL::Compiler compiler;
     SkSL::ProgramSettings settings;
     std::unique_ptr<SkSL::Program> program =
             compiler.convertProgram(SkSL::ProgramKind::kFragment,
                                     std::string(reinterpret_cast<const char*>(data), size),
                                     settings);
     std::string output;
-    if (!program || !compiler.toMetal(*program, &output)) {
+    if (!program || !SkSL::ToMetal(*program, SkSL::ShaderCapsFactory::Default(), &output)) {
         return false;
     }
     return true;

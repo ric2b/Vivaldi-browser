@@ -88,7 +88,7 @@ const CGFloat locationImageViewRightPadding = 2;
   _locationLabel = locationLabel;
   locationLabel.adjustsFontForContentSizeCategory = YES;
   locationLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   locationLabel.backgroundColor = UIColor.clearColor;
   locationLabel.textColor = UIColor.labelColor;
 
@@ -166,14 +166,9 @@ const CGFloat locationImageViewRightPadding = 2;
   }
 }
 
-- (void)setTintColor:(BOOL)isPrivateMode {
-  if (isPrivateMode) {
-    self.locationLabel.textColor = UIColor.whiteColor;
-    self.locationIconImageView.tintColor = UIColor.whiteColor;
-  } else {
-    self.locationLabel.textColor = UIColor.labelColor;
-    self.locationIconImageView.tintColor = UIColor.labelColor;
-  }
+- (void)setTintColor:(UIColor*)tintColor {
+  self.locationLabel.textColor = tintColor;
+  self.locationIconImageView.tintColor = tintColor;
 }
 
 - (void)setSecurityLevelAccessibilityString:(NSString*)string {

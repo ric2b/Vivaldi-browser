@@ -9,7 +9,6 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <vector>
 
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
@@ -17,17 +16,15 @@
 #include "base/sequence_checker.h"
 #include "build/chromeos_buildflags.h"
 #include "components/safe_search_api/url_checker.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/supervised_user_error_page.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/core/common/supervised_user_utils.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
-
-namespace base {
-class TaskRunner;
-}
-
-class KidsChromeManagementClient;
+class PrefService;
 
 // Callback type for additional url validations.
 typedef base::RepeatingCallback<bool(const GURL&)> ValidateURLSupportCallback;
@@ -43,36 +40,6 @@ namespace supervised_user {
 //     sources.
 class SupervisedUserURLFilter {
  public:
-  // A Java counterpart will be generated for this enum.
-  // Values are stored in prefs under kDefaultSupervisedUserFilteringBehavior.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.superviseduser
-  enum FilteringBehavior {
-    ALLOW = 0,
-    // Deprecated, WARN = 1.
-    BLOCK = 2,
-    INVALID = 3,
-  };
-
-  // This enum describes the filter types of Chrome, which is
-  // set by Family Link App or at families.google.com/families. These values
-  // are logged to UMA. Entries should not be renumbered and numeric values
-  // should never be reused. Please keep in sync with "FamilyLinkWebFilterType"
-  // in src/tools/metrics/histograms/enums.xml.
-  enum class WebFilterType {
-    // The web filter is set to "Allow all sites".
-    kAllowAllSites = 0,
-
-    // The web filter is set to "Try to block mature sites".
-    kTryToBlockMatureSites = 1,
-
-    // The web filter is set to "Only allow certain sites".
-    kCertainSites = 2,
-
-    // Used for UMA. Update kMaxValue to the last value. Add future entries
-    // above this comment. Sync with enums.xml.
-    kMaxValue = kCertainSites,
-  };
-
   // This enum describes whether the approved list or blocked list is used on
   // Chrome on Chrome OS, which is set by Family Link App or at
   // families.google.com/families via "manage sites" setting. This is also
@@ -125,7 +92,7 @@ class SupervisedUserURLFilter {
   };
 
   using FilteringBehaviorCallback =
-      base::OnceCallback<void(FilteringBehavior,
+      base::OnceCallback<void(supervised_user::FilteringBehavior,
                               supervised_user::FilteringBehaviorReason,
                               bool /* uncertain */)>;
 
@@ -143,6 +110,7 @@ class SupervisedUserURLFilter {
   };
 
   SupervisedUserURLFilter(
+      PrefService& user_prefs,
       ValidateURLSupportCallback check_webstore_url_callback,
       std::unique_ptr<Delegate> delegate);
 
@@ -156,9 +124,6 @@ class SupervisedUserURLFilter {
   static const char* GetManagedSiteListConflictTypeHistogramNameForTest();
 
   static FilteringBehavior BehaviorFromInt(int behavior_value);
-
-  static bool ReasonIsAutomatic(
-      supervised_user::FilteringBehaviorReason reason);
 
   // Returns true if the |host| matches the pattern. A pattern is a hostname
   // with one or both of the following modifications:
@@ -216,18 +181,10 @@ class SupervisedUserURLFilter {
       const GURL& main_frame_url,
       FilteringBehaviorCallback callback);
 
-  // Gets all the allowlists that the url is part of. Returns id->name of each
-  // allowlist.
-  std::map<std::string, std::u16string> GetMatchingAllowlistTitles(
-      const GURL& url) const;
-
   // Sets the filtering behavior for pages not on a list (default is ALLOW).
   void SetDefaultFilteringBehavior(FilteringBehavior behavior);
 
   FilteringBehavior GetDefaultFilteringBehavior() const;
-
-  // Set the list of matched patterns to the passed in list, for testing.
-  void SetFromPatternsForTesting(const std::vector<std::string>& patterns);
 
   // Sets the set of manually allowed or blocked hosts.
   void SetManualHosts(std::map<std::string, bool> host_map);
@@ -237,7 +194,8 @@ class SupervisedUserURLFilter {
 
   // Initializes the experimental asynchronous checker.
   void InitAsyncURLChecker(
-      KidsChromeManagementClient* kids_chrome_management_client);
+      signin::IdentityManager* identity_manager,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
   // Clears any asynchronous checker.
   void ClearAsyncURLChecker();
@@ -252,18 +210,19 @@ class SupervisedUserURLFilter {
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  // Sets a different task runner for testing.
-  void SetBlockingTaskRunnerForTesting(
-      const scoped_refptr<base::TaskRunner>& task_runner);
-
   WebFilterType GetWebFilterType() const;
 
-  // Reports FamilyUser.WebFilterType metrics when `is_filter_initialized_` is
-  // true.
+  // Emits URL filter metrics based on the parent web filter configuration
+  // applied to the supervised user. Returns true if one or more metrics were
+  // emitted.
+  bool EmitURLFilterMetrics() const;
+
+  // Reports FamilyUser.WebFilterType metrics based on parent web filter type
+  // configuration.
   void ReportWebFilterTypeMetrics() const;
 
-  // Reports FamilyUser.ManagedSiteList metrics when `is_filter_initialized_` is
-  // true.
+  // Reports FamilyUser.ManagedSiteList metrics based on parent web filter allow
+  // and blocklist configuration.
   void ReportManagedSiteListMetrics() const;
 
   // Set value for `is_filter_initialized_`.
@@ -316,11 +275,11 @@ class SupervisedUserURLFilter {
   std::set<std::string> blocked_host_list_;
   std::set<std::string> allowed_host_list_;
 
+  const raw_ref<PrefService> user_prefs_;
+
   std::unique_ptr<Delegate> service_delegate_;
 
   std::unique_ptr<safe_search_api::URLChecker> async_url_checker_;
-
-  scoped_refptr<base::TaskRunner> blocking_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

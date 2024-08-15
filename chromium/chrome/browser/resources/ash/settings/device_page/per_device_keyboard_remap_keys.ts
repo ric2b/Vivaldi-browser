@@ -23,7 +23,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {RouteObserverMixin, RouteObserverMixinInterface} from '../route_observer_mixin.js';
+import {RouteObserverMixin, RouteObserverMixinInterface} from '../common/route_observer_mixin.js';
 import {Route, Router, routes} from '../router.js';
 
 import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
@@ -434,11 +434,11 @@ export class SettingsPerDeviceKeyboardRemapKeysElement extends
       this.set('f12KeyPref.value', searchedKeyboard.settings?.f12);
       this.f11KeyPref = {
         ...this.f11KeyPref,
-        ...getFkeyPrefPolicyFields(this.keyboardPolicies.extendedFkeysPolicy),
+        ...getFkeyPrefPolicyFields(this.keyboardPolicies?.extendedFkeysPolicy),
       };
       this.f12KeyPref = {
         ...this.f12KeyPref,
-        ...getFkeyPrefPolicyFields(this.keyboardPolicies.extendedFkeysPolicy),
+        ...getFkeyPrefPolicyFields(this.keyboardPolicies?.extendedFkeysPolicy),
       };
     }
 
@@ -664,11 +664,11 @@ export class SettingsPerDeviceKeyboardRemapKeysElement extends
     if (this.shouldShowFkeys()) {
       this.f11KeyPref = {
         ...this.f11KeyPref,
-        ...getFkeyPrefPolicyFields(this.keyboardPolicies.extendedFkeysPolicy),
+        ...getFkeyPrefPolicyFields(this.keyboardPolicies?.extendedFkeysPolicy),
       };
       this.f12KeyPref = {
         ...this.f12KeyPref,
-        ...getFkeyPrefPolicyFields(this.keyboardPolicies.extendedFkeysPolicy),
+        ...getFkeyPrefPolicyFields(this.keyboardPolicies?.extendedFkeysPolicy),
       };
     }
   }

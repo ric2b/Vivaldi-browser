@@ -28,10 +28,14 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.LooperMode;
 
+import org.chromium.base.FeatureList;
+import org.chromium.base.FeatureList.TestValues;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeJni;
+import org.chromium.chrome.browser.page_insights.proto.Config.PageInsightsConfig;
 import org.chromium.chrome.browser.page_insights.proto.PageInsights.AutoPeekConditions;
 import org.chromium.chrome.browser.page_insights.proto.PageInsights.Page;
 import org.chromium.chrome.browser.page_insights.proto.PageInsights.PageInsightsMetadata;
@@ -39,6 +43,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.optimization_guide.OptimizationGuideDecision;
 import org.chromium.components.optimization_guide.proto.CommonTypesProto;
 import org.chromium.components.optimization_guide.proto.HintsProto;
+import org.chromium.components.optimization_guide.proto.HintsProto.PageInsightsHubRequestContextMetadata;
+import org.chromium.components.optimization_guide.proto.HintsProto.RequestContextMetadata;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -60,6 +66,8 @@ public class PageInsightsDataLoaderTest {
 
     private final GURL mUrl2 = JUnitTestGURLs.GOOGLE_URL;
 
+    private OptimizationGuideBridge.OnDemandOptimizationGuideCallback mOptimizationGuideCallback;
+
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -68,6 +76,16 @@ public class PageInsightsDataLoaderTest {
         Profile.setLastUsedProfileForTesting(mProfile);
         mockOptimizationGuideResponse(
                 mUrl, anyPageInsights(mPageInsightsMetadata), OptimizationGuideDecision.TRUE);
+        createDataLoader();
+    }
+
+    private void createDataLoader() {
+        createDataLoader(new TestValues());
+    }
+
+    private void createDataLoader(TestValues testValues) {
+        testValues.addFeatureFlagOverride(ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB, true);
+        FeatureList.mergeTestValues(testValues, /* replace= */ true);
         mPageInsightsDataLoader = new PageInsightsDataLoader();
     }
 
@@ -77,23 +95,35 @@ public class PageInsightsDataLoaderTest {
 
         mPageInsightsDataLoader.loadInsightsData(
                 mUrl,
-                /* shouldAttachGaiaToRequest= */ true,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
                 (data) -> {
                     assertEquals(data, mPageInsightsMetadata);
                 });
     }
 
     @Test
-    public void testLoadInsightsData_destroyed_callbackNotExecuted() {
+    public void testLoadInsightsData_cancelCallback_callbackNotExecuted() {
+        mockOptimizationGuideResponse(
+                mUrl,
+                anyPageInsights(mPageInsightsMetadata),
+                OptimizationGuideDecision.TRUE,
+                /* shouldRunCallbackImmediately= */ false);
         mPageInsightsDataLoader.clearCacheForTesting();
 
-        mPageInsightsDataLoader.destroy();
         mPageInsightsDataLoader.loadInsightsData(
                 mUrl,
-                /* shouldAttachGaiaToRequest= */ true,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
                 (data) -> {
-                    fail("Callback should not have been called after loader destroyed.");
+                    fail("Callback should not have been called after cancelled.");
                 });
+        mPageInsightsDataLoader.cancelCallback();
+        mOptimizationGuideCallback.onOnDemandOptimizationGuideDecision(
+                mUrl,
+                HintsProto.OptimizationType.PAGE_INSIGHTS,
+                OptimizationGuideDecision.TRUE,
+                anyPageInsights(mPageInsightsMetadata));
     }
 
     @Test
@@ -104,7 +134,8 @@ public class PageInsightsDataLoaderTest {
 
         mPageInsightsDataLoader.loadInsightsData(
                 mUrl,
-                /* shouldAttachGaiaToRequest= */ true,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
                 (data) -> {
                     assertNull(data);
                 });
@@ -115,18 +146,27 @@ public class PageInsightsDataLoaderTest {
         mPageInsightsDataLoader.clearCacheForTesting();
         mPageInsightsDataLoader.loadInsightsData(
                 null,
-                /* shouldAttachGaiaToRequest= */ true,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
                 (data) -> {
                     assertNull(data);
                 });
     }
 
     @Test
-    public void testLoadInsightsData_emptyCache_gaia_callsOptimizationGuideBridge() {
-        mPageInsightsDataLoader.clearCacheForTesting();
+    public void testLoadInsightsData_doNotSendContentMetadata_shouldLogAndPersonalise_allowsGaia() {
+        TestValues testValues = new TestValues();
+        testValues.addFieldTrialParamOverride(
+                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                PageInsightsDataLoader.PAGE_INSIGHTS_SEND_CONTEXT_METADATA,
+                "false");
+        createDataLoader(testValues);
 
         mPageInsightsDataLoader.loadInsightsData(
-                mUrl, /* shouldAttachGaiaToRequest= */ true, (data) -> {});
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.newBuilder().setServerShouldNotLogOrPersonalize(false).build(),
+                (data) -> {});
 
         verify(mOptimizationGuideBridgeJniMock, times(1))
                 .canApplyOptimizationOnDemand(
@@ -134,15 +174,25 @@ public class PageInsightsDataLoaderTest {
                         eq(new GURL[] {mUrl}),
                         eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
                         eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        eq(RequestContextMetadata.getDefaultInstance().toByteArray()));
     }
 
     @Test
-    public void testLoadInsightsData_emptyCache_noGaia_callsOptimizationGuideBridge() {
-        mPageInsightsDataLoader.clearCacheForTesting();
+    public void
+            testLoadInsightsData_doNotSendContentMetadata_shouldNotLogAndPersonalise_disallowsGaia() {
+        TestValues testValues = new TestValues();
+        testValues.addFieldTrialParamOverride(
+                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                PageInsightsDataLoader.PAGE_INSIGHTS_SEND_CONTEXT_METADATA,
+                "false");
+        createDataLoader(testValues);
 
         mPageInsightsDataLoader.loadInsightsData(
-                mUrl, /* shouldAttachGaiaToRequest= */ false, (data) -> {});
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.newBuilder().setServerShouldNotLogOrPersonalize(true).build(),
+                (data) -> {});
 
         verify(mOptimizationGuideBridgeJniMock, times(1))
                 .canApplyOptimizationOnDemand(
@@ -153,17 +203,108 @@ public class PageInsightsDataLoaderTest {
                                 CommonTypesProto.RequestContext
                                         .CONTEXT_NON_PERSONALIZED_PAGE_INSIGHTS_HUB
                                         .getNumber()),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        eq(RequestContextMetadata.getDefaultInstance().toByteArray()));
+    }
+
+    @Test
+    public void testLoadInsightsData_sendAllContentMetadata_sendsMetadataAndAllowsGaia() {
+        TestValues testValues = new TestValues();
+        testValues.addFieldTrialParamOverride(
+                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                PageInsightsDataLoader.PAGE_INSIGHTS_SEND_CONTEXT_METADATA,
+                "true");
+        testValues.addFieldTrialParamOverride(
+                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                PageInsightsDataLoader.PAGE_INSIGHTS_SEND_TIMESTAMP,
+                "true");
+        createDataLoader(testValues);
+
+        mPageInsightsDataLoader.loadInsightsData(
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.newBuilder()
+                        .setIsInitialPage(true)
+                        .setServerShouldNotLogOrPersonalize(true)
+                        .setNavigationTimestampMs(1234L)
+                        .build(),
+                (data) -> {});
+
+        RequestContextMetadata expectedMetadata =
+                RequestContextMetadata.newBuilder()
+                        .setPageInsightsHubMetadata(
+                                PageInsightsHubRequestContextMetadata.newBuilder()
+                                        .setIsUserInitiated(true)
+                                        .setIsInitialPage(true)
+                                        .setShouldNotLogOrPersonalize(true)
+                                        .setNavigationTimestampMs(1234L))
+                        .build();
+        verify(mOptimizationGuideBridgeJniMock, times(1))
+                .canApplyOptimizationOnDemand(
+                        eq(1L),
+                        eq(new GURL[] {mUrl}),
+                        eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
+                        eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        eq(expectedMetadata.toByteArray()));
+    }
+
+    @Test
+    public void
+            testLoadInsightsData_sendContentMetadataExceptTimestamp_sendsMetadataAndAllowsGaia() {
+        TestValues testValues = new TestValues();
+        testValues.addFieldTrialParamOverride(
+                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                PageInsightsDataLoader.PAGE_INSIGHTS_SEND_CONTEXT_METADATA,
+                "true");
+        testValues.addFieldTrialParamOverride(
+                ChromeFeatureList.CCT_PAGE_INSIGHTS_HUB,
+                PageInsightsDataLoader.PAGE_INSIGHTS_SEND_TIMESTAMP,
+                "false");
+        createDataLoader(testValues);
+
+        mPageInsightsDataLoader.loadInsightsData(
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.newBuilder()
+                        .setIsInitialPage(true)
+                        .setServerShouldNotLogOrPersonalize(true)
+                        .setNavigationTimestampMs(1234L)
+                        .build(),
+                (data) -> {});
+
+        RequestContextMetadata expectedMetadata =
+                RequestContextMetadata.newBuilder()
+                        .setPageInsightsHubMetadata(
+                                PageInsightsHubRequestContextMetadata.newBuilder()
+                                        .setIsUserInitiated(true)
+                                        .setIsInitialPage(true)
+                                        .setShouldNotLogOrPersonalize(true))
+                        .build();
+        verify(mOptimizationGuideBridgeJniMock, times(1))
+                .canApplyOptimizationOnDemand(
+                        eq(1L),
+                        eq(new GURL[] {mUrl}),
+                        eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
+                        eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        eq(expectedMetadata.toByteArray()));
     }
 
     @Test
     public void testLoadInsightsData_sameUrl_doesNotCallOptimizationGuideBridge() {
         mPageInsightsDataLoader.clearCacheForTesting();
         mPageInsightsDataLoader.loadInsightsData(
-                mUrl, /* shouldAttachGaiaToRequest= */ true, (data) -> {});
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
+                (data) -> {});
 
         mPageInsightsDataLoader.loadInsightsData(
-                mUrl, /* shouldAttachGaiaToRequest= */ true, (data) -> {});
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
+                (data) -> {});
 
         verify(mOptimizationGuideBridgeJniMock, times(1))
                 .canApplyOptimizationOnDemand(
@@ -171,17 +312,24 @@ public class PageInsightsDataLoaderTest {
                         eq(new GURL[] {mUrl}),
                         eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
                         eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        any());
     }
 
     @Test
     public void testLoadInsightsData_differentUrls_callsOptimizationGuideBridge() {
         mPageInsightsDataLoader.clearCacheForTesting();
         mPageInsightsDataLoader.loadInsightsData(
-                mUrl, /* shouldAttachGaiaToRequest= */ true, (data) -> {});
+                mUrl,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
+                (data) -> {});
 
         mPageInsightsDataLoader.loadInsightsData(
-                mUrl2, /* shouldAttachGaiaToRequest= */ true, (data) -> {});
+                mUrl2,
+                /* isUserInitiated= */ true,
+                PageInsightsConfig.getDefaultInstance(),
+                (data) -> {});
 
         verify(mOptimizationGuideBridgeJniMock, times(1))
                 .canApplyOptimizationOnDemand(
@@ -189,30 +337,43 @@ public class PageInsightsDataLoaderTest {
                         eq(new GURL[] {mUrl}),
                         eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
                         eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        any());
         verify(mOptimizationGuideBridgeJniMock, times(1))
                 .canApplyOptimizationOnDemand(
                         eq(1L),
                         eq(new GURL[] {mUrl2}),
                         eq(new int[] {HintsProto.OptimizationType.PAGE_INSIGHTS.getNumber()}),
                         eq(CommonTypesProto.RequestContext.CONTEXT_PAGE_INSIGHTS_HUB.getNumber()),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        any());
     }
 
     private void mockOptimizationGuideResponse(
             GURL url, CommonTypesProto.Any metadata, int decision) {
+        mockOptimizationGuideResponse(
+                url, metadata, decision, /* shouldRunCallbackImmediately= */ true);
+    }
+
+    private void mockOptimizationGuideResponse(
+            GURL url,
+            CommonTypesProto.Any metadata,
+            int decision,
+            boolean shouldRunCallbackImmediately) {
         doAnswer(
                         new Answer<Void>() {
                             @Override
                             public Void answer(InvocationOnMock invocation) {
-                                OptimizationGuideBridge.OnDemandOptimizationGuideCallback callback =
+                                mOptimizationGuideCallback =
                                         (OptimizationGuideBridge.OnDemandOptimizationGuideCallback)
                                                 invocation.getArguments()[4];
-                                callback.onOnDemandOptimizationGuideDecision(
-                                        url,
-                                        HintsProto.OptimizationType.PAGE_INSIGHTS,
-                                        decision,
-                                        metadata);
+                                if (shouldRunCallbackImmediately) {
+                                    mOptimizationGuideCallback.onOnDemandOptimizationGuideDecision(
+                                            url,
+                                            HintsProto.OptimizationType.PAGE_INSIGHTS,
+                                            decision,
+                                            metadata);
+                                }
                                 return null;
                             }
                         })
@@ -222,7 +383,8 @@ public class PageInsightsDataLoaderTest {
                         any(),
                         any(),
                         anyInt(),
-                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class));
+                        any(OptimizationGuideBridge.OnDemandOptimizationGuideCallback.class),
+                        any());
     }
 
     private static CommonTypesProto.Any anyPageInsights(PageInsightsMetadata pageInsightsMetaData) {

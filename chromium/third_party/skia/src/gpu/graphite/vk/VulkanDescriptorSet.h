@@ -10,7 +10,7 @@
 
 #include "src/gpu/graphite/Resource.h"
 
-#include "src/gpu/graphite/DescriptorTypes.h"
+#include "src/gpu/graphite/DescriptorData.h"
 #include "src/gpu/graphite/vk/VulkanGraphiteUtilsPriv.h"
 
 namespace skgpu::graphite {
@@ -25,14 +25,15 @@ class VulkanSharedContext;
 class VulkanDescriptorSet : public Resource {
 public:
     static sk_sp<VulkanDescriptorSet> Make(const VulkanSharedContext*,
-                                           const sk_sp<VulkanDescriptorPool>&,
-                                           const VkDescriptorSetLayout);
+                                           const sk_sp<VulkanDescriptorPool>&);
 
     VulkanDescriptorSet(const VulkanSharedContext*,
                         VkDescriptorSet,
                         sk_sp<VulkanDescriptorPool>);
 
     const VkDescriptorSet* descriptorSet() { return &fDescSet; }
+
+    const char* getResourceType() const override { return "Vulkan Descriptor Set"; }
 
 private:
     void freeGpuData() override;

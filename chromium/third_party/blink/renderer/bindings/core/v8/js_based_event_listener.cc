@@ -5,12 +5,14 @@
 #include "third_party/blink/renderer/bindings/core/v8/js_based_event_listener.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
+#include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_parser.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 
@@ -89,6 +91,7 @@ void JSBasedEventListener::Invoke(
   if (!script_state_of_listener->ContextIsValid())
     return;  // Silently fail.
 
+  probe::InvokeEventHandler probe_scope(script_state_of_listener, event, this);
   ScriptState::Scope listener_script_state_scope(script_state_of_listener);
 
   // https://dom.spec.whatwg.org/#firing-events
@@ -123,10 +126,8 @@ void JSBasedEventListener::Invoke(
     return;
   }
 
-  v8::Local<v8::Value> js_event =
-      ToV8(event, v8_context_of_event_target->Global(), isolate);
-  if (js_event.IsEmpty())
-    return;
+  v8::Local<v8::Value> js_event = ToV8Traits<Event>::ToV8(
+      ScriptState::From(v8_context_of_event_target), event);
 
   // Step 7: Let |current_event| be undefined.
   Event* current_event = nullptr;
@@ -170,8 +171,10 @@ std::unique_ptr<SourceLocation> JSBasedEventListener::GetSourceLocation(
     EventTarget& target) {
   v8::HandleScope handle_scope(GetIsolate());
   v8::Local<v8::Value> effective_function = GetEffectiveFunction(target);
-  if (effective_function->IsFunction())
-    return CaptureSourceLocation(effective_function.As<v8::Function>());
+  if (effective_function->IsFunction()) {
+    return CaptureSourceLocation(GetIsolate(),
+                                 effective_function.As<v8::Function>());
+  }
   return nullptr;
 }
 

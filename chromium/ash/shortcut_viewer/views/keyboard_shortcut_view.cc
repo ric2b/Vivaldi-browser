@@ -68,7 +68,7 @@ namespace {
 
 KeyboardShortcutView* g_ksv_view = nullptr;
 
-constexpr absl::nullopt_t kAllCategories = absl::nullopt;
+constexpr std::nullopt_t kAllCategories = std::nullopt;
 
 // Light mode colors:
 constexpr SkColor kSearchIllustrationIconColorLight =
@@ -79,6 +79,8 @@ constexpr SkColor kSearchIllustrationIconColorDark =
 
 // Custom No Results image view to handle color theme changes.
 class KSVNoResultsImageView : public views::ImageView {
+  METADATA_HEADER(KSVNoResultsImageView, views::ImageView)
+
  public:
   KSVNoResultsImageView()
       : dark_light_mode_controller_(ash::DarkLightModeControllerImpl::Get()) {}
@@ -102,9 +104,11 @@ class KSVNoResultsImageView : public views::ImageView {
   }
 
  private:
-  const raw_ptr<ash::DarkLightModeControllerImpl, ExperimentalAsh>
-      dark_light_mode_controller_;
+  const raw_ptr<ash::DarkLightModeControllerImpl> dark_light_mode_controller_;
 };
+
+BEGIN_METADATA(KSVNoResultsImageView)
+END_METADATA
 
 // Creates the no search result view.
 std::unique_ptr<views::View> CreateNoSearchResultView() {
@@ -177,7 +181,8 @@ std::unique_ptr<ShortcutsListScrollView> CreateScrollView(
 }
 
 void UpdateAXNodeDataPosition(
-    std::vector<KeyboardShortcutItemView*>& shortcut_items) {
+    std::vector<raw_ptr<KeyboardShortcutItemView, VectorExperimental>>&
+        shortcut_items) {
   // Update list item AXNodeData position for assistive tool.
   const int number_shortcut_items = shortcut_items.size();
   for (int i = 0; i < number_shortcut_items; ++i) {
@@ -441,7 +446,7 @@ void KeyboardShortcutView::InitViews() {
 }
 
 void KeyboardShortcutView::InitCategoriesTabbedPane(
-    absl::optional<ash::ShortcutCategory> initial_category) {
+    std::optional<ash::ShortcutCategory> initial_category) {
   active_tab_index_ = categories_tabbed_pane_->GetSelectedTabIndex();
   // If the tab count is 0, GetSelectedTabIndex() will return kNoSelectedTab,
   // which we do not want to cache.
@@ -451,7 +456,8 @@ void KeyboardShortcutView::InitCategoriesTabbedPane(
 
   ash::ShortcutCategory current_category = ash::ShortcutCategory::kUnknown;
   KeyboardShortcutItemListView* item_list_view = nullptr;
-  std::vector<KeyboardShortcutItemView*> shortcut_items;
+  std::vector<raw_ptr<KeyboardShortcutItemView, VectorExperimental>>
+      shortcut_items;
   const bool already_has_tabs = categories_tabbed_pane_->GetTabCount() > 0;
   size_t tab_index = 0;
   views::View* const tab_contents = categories_tabbed_pane_->children()[1];
@@ -639,7 +645,7 @@ KSVSearchBoxView* KeyboardShortcutView::GetSearchBoxViewForTesting() {
   return search_box_view_;
 }
 
-const std::vector<KeyboardShortcutItemView*>&
+const std::vector<raw_ptr<KeyboardShortcutItemView, VectorExperimental>>&
 KeyboardShortcutView::GetFoundShortcutItemsForTesting() const {
   return found_shortcut_items_;
 }

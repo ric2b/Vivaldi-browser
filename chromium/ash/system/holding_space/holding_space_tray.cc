@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/ash_element_identifiers.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/tray_background_view_catalog.h"
@@ -349,6 +349,9 @@ void HoldingSpaceTray::CloseBubble() {
   holding_space_metrics::RecordPodAction(
       holding_space_metrics::PodAction::kCloseBubble);
 
+  HoldingSpaceController::Get()->OnHoldingSpaceTrayBubbleVisibilityChanged(
+      this, /*visible=*/false);
+
   widget_observer_.Reset();
 
   bubble_.reset();
@@ -366,6 +369,9 @@ void HoldingSpaceTray::ShowBubble() {
 
   bubble_ = std::make_unique<HoldingSpaceTrayBubble>(this);
   bubble_->Init();
+
+  HoldingSpaceController::Get()->OnHoldingSpaceTrayBubbleVisibilityChanged(
+      this, /*visible=*/true);
 
   // Observe the bubble widget so that we can close the bubble when a holding
   // space item is being dragged.
@@ -820,7 +826,7 @@ bool HoldingSpaceTray::PreviewsShown() const {
 }
 
 void HoldingSpaceTray::UpdateDefaultTrayIcon() {
-  const absl::optional<float>& progress = progress_indicator_->progress();
+  const std::optional<float>& progress = progress_indicator_->progress();
 
   // If `progress` is not `complete`, there is potential for overlap between the
   // `default_tray_icon_` and the `progress_indicator_`'s inner icon. To address

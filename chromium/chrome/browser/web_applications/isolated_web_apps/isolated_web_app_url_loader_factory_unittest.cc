@@ -95,6 +95,7 @@ std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url) {
   web_app->SetManifestId(start_url.DeprecatedGetOriginAsURL());
   web_app->AddSource(WebAppManagement::Type::kCommandLine);
   web_app->SetIsLocallyInstalled(true);
+  web_app->SetUserDisplayMode(mojom::UserDisplayMode::kStandalone);
   return web_app;
 }
 
@@ -112,13 +113,13 @@ class ScopedUrlHandler {
       : interceptor_(base::BindRepeating(&ScopedUrlHandler::Intercept,
                                          base::Unretained(this))) {}
 
-  absl::optional<network::ResourceRequest> request() const { return request_; }
+  std::optional<network::ResourceRequest> request() const { return request_; }
 
-  absl::optional<GURL> intercepted_url() const {
+  std::optional<GURL> intercepted_url() const {
     if (request_.has_value()) {
       return request_->url;
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
  private:
@@ -130,7 +131,7 @@ class ScopedUrlHandler {
   }
 
   content::URLLoaderInterceptor interceptor_;
-  absl::optional<network::ResourceRequest> request_;
+  std::optional<network::ResourceRequest> request_;
 };
 
 }  // namespace
@@ -238,7 +239,7 @@ class IsolatedWebAppURLLoaderFactoryTest
 
     content::SimpleURLLoaderTestHelper helper;
     loader->DownloadToString(
-        factory_.get(), helper.GetCallback(),
+        factory_.get(), helper.GetCallbackDeprecated(),
         network::SimpleURLLoader::kMaxBoundedStringDownloadSize);
 
     helper.WaitForCallback();
@@ -286,7 +287,7 @@ TEST_F(IsolatedWebAppURLLoaderFactoryTest,
   RegisterWebApp(CreateWebApp(kDevAppStartUrl));
 
   // Verify that a PWA is installed at kAppStartUrl's origin.
-  absl::optional<webapps::AppId> installed_app =
+  std::optional<webapps::AppId> installed_app =
       fake_provider().registrar_unsafe().FindInstalledAppWithUrlInScope(
           kDevAppStartUrl);
   EXPECT_THAT(installed_app.has_value(), IsTrue());
@@ -310,7 +311,7 @@ TEST_F(IsolatedWebAppURLLoaderFactoryTest,
   RegisterWebApp(std::move(iwa));
 
   // Verify that a PWA is installed at kAppStartUrl's origin.
-  absl::optional<webapps::AppId> installed_app =
+  std::optional<webapps::AppId> installed_app =
       fake_provider().registrar_unsafe().FindAppWithUrlInScope(kDevAppStartUrl);
   EXPECT_THAT(installed_app.has_value(), IsTrue());
 
@@ -555,7 +556,7 @@ TEST_F(IsolatedWebAppURLLoaderFactoryTest, ProxyUrlRemovesOriginalRequestData) {
               Eq(GURL("http://example.com/foo/bar.html")));
   EXPECT_THAT(url_handler().request()->credentials_mode,
               Eq(network::mojom::CredentialsMode::kOmit));
-  EXPECT_THAT(url_handler().request()->request_initiator, Eq(absl::nullopt));
+  EXPECT_THAT(url_handler().request()->request_initiator, Eq(std::nullopt));
 }
 
 TEST_F(IsolatedWebAppURLLoaderFactoryTest, ProxyRequestCopiesAcceptHeader) {
@@ -663,7 +664,7 @@ TEST_F(IsolatedWebAppURLLoaderFactoryTest,
   int status = CreateLoaderAndRun(std::move(request));
 
   EXPECT_THAT(status, IsNetError(net::OK));
-  EXPECT_THAT(url_handler().intercepted_url(), Eq(absl::nullopt));
+  EXPECT_THAT(url_handler().intercepted_url(), Eq(std::nullopt));
   ASSERT_THAT(ResponseInfo(), NotNull());
   EXPECT_THAT(ResponseInfo()->headers->response_code(), Eq(200));
   EXPECT_THAT(ResponseBody(), HasSubstr("/manifest.webmanifest"));
@@ -729,7 +730,7 @@ TEST_F(IsolatedWebAppURLLoaderFactoryTest,
   int status = CreateLoaderAndRun(std::move(request));
 
   EXPECT_THAT(status, IsNetError(net::ERR_FAILED));
-  EXPECT_THAT(url_handler().intercepted_url(), Eq(absl::nullopt));
+  EXPECT_THAT(url_handler().intercepted_url(), Eq(std::nullopt));
   EXPECT_THAT(ResponseInfo(), IsNull());
 }
 
@@ -769,7 +770,7 @@ TEST_F(IsolatedWebAppURLLoaderFactoryWebAppProviderReadyTest, Waits) {
 
   content::SimpleURLLoaderTestHelper helper;
   loader->DownloadToString(
-      factory.get(), helper.GetCallback(),
+      factory.get(), helper.GetCallbackDeprecated(),
       network::SimpleURLLoader::kMaxBoundedStringDownloadSize);
 
   task_environment()->RunUntilIdle();

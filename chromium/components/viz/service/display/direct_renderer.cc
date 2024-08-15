@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <stddef.h>
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -29,6 +30,7 @@
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/resources/platform_color.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/viz_utils.h"
 #include "components/viz/service/display/bsp_tree.h"
@@ -38,6 +40,8 @@
 #include "components/viz/service/display/skia_output_surface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "media/base/video_util.h"
+#include "ui/gfx/buffer_types.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size.h"
@@ -167,9 +171,31 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
   base::flat_map<AggregatedRenderPassId, RenderPassRequirements>
       render_passes_in_frame;
   for (const auto& pass : render_passes_in_draw_order) {
+    const bool is_root = pass == root_render_pass;
+
+#if BUILDFLAG(IS_WIN)
+    // For delegated compositing the root pass is preserved, but not rendered.
+    // If a previous frame fell out of delegated compositing we want to make
+    // sure that we deallocate its backing when switching back to delegated
+    // compositing.
+    if (is_root && output_surface_->IsDisplayedAsOverlayPlane() &&
+        !current_frame()->output_surface_plane) {
+      // We expect to be in delegated compositing mode, which means the root
+      // damage rect has been cleared.
+      CHECK(current_frame()->root_damage_rect.IsEmpty());
+      continue;
+    }
+#else
+    // TODO(crbug.com/1322528): Consider deallocating the primary plane in this
+    // case.
+    // Non-Windows platforms use BufferQueue, which are not owned by the render
+    // pass backing. ChromeOS must hold on to the root surface buffers to ensure
+    // overlay-ability and macOS wants to just discard the underlying surfaces
+    // for performance.
+#endif
+
     // If there's a copy request, we need an explicit renderpass backing so
     // only try to draw directly if there are no copy requests.
-    bool is_root = pass == root_render_pass;
     if (!is_root && pass->copy_requests.empty()) {
       if (const DrawQuad* quad = CanPassBeDrawnDirectly(pass.get())) {
         // If the render pass is drawn directly, it will not be drawn from as
@@ -197,9 +223,6 @@ void DirectRenderer::DrawFrame(
     SurfaceDamageRectList surface_damage_rect_list) {
   DCHECK(visible_);
   TRACE_EVENT0("viz,benchmark", "DirectRenderer::DrawFrame");
-  UMA_HISTOGRAM_COUNTS_1M(
-      "Renderer4.renderPassCount",
-      base::saturated_cast<int>(render_passes_in_draw_order->size()));
 
   auto* root_render_pass = render_passes_in_draw_order->back().get();
   DCHECK(root_render_pass);
@@ -974,7 +997,20 @@ gfx::Size DirectRenderer::CalculateTextureSizeForRenderPass(
     constexpr int multiple = 64;
     width = cc::MathUtil::CheckedRoundUp(width, multiple);
     height = cc::MathUtil::CheckedRoundUp(height, multiple);
+
+    // There are no guarantees that max texture size is a multiple of 64 so
+    // clamp the rounded up dimensions to avoid ending up with dimensions
+    // larger than max texture size. Note: Software surfaces and some
+    // test only surfaces does not have max_texture_size set so assume that
+    // we don't have to clamp the dimensions when max texture size is zero.
+    const int max_texture_size =
+        output_surface_->capabilities().max_texture_size;
+    if (max_texture_size > 0) {
+      width = std::min(max_texture_size, width);
+      height = std::min(max_texture_size, height);
+    }
   }
+
   return gfx::Size(width, height);
 }
 
@@ -1051,28 +1087,11 @@ bool DirectRenderer::HasAllocatedResourcesForTesting(
 }
 
 bool DirectRenderer::ShouldApplyRoundedCorner(const DrawQuad* quad) const {
-  const SharedQuadState* sqs = quad->shared_quad_state;
-  const gfx::MaskFilterInfo& mask_filter_info = sqs->mask_filter_info;
-
-  // There is no rounded corner set.
-  if (!mask_filter_info.HasRoundedCorners())
-    return false;
-
-  const gfx::RRectF& rounded_corner_bounds =
-      mask_filter_info.rounded_corner_bounds();
-
   const gfx::RectF target_quad = cc::MathUtil::MapClippedRect(
-      sqs->quad_to_target_transform, gfx::RectF(quad->visible_rect));
+      quad->shared_quad_state->quad_to_target_transform,
+      gfx::RectF(quad->visible_rect));
 
-  const gfx::RRectF::Corner corners[] = {
-      gfx::RRectF::Corner::kUpperLeft, gfx::RRectF::Corner::kUpperRight,
-      gfx::RRectF::Corner::kLowerRight, gfx::RRectF::Corner::kLowerLeft};
-  for (auto c : corners) {
-    if (rounded_corner_bounds.CornerBoundingRect(c).Intersects(target_quad)) {
-      return true;
-    }
-  }
-  return false;
+  return QuadRoundedCornersBoundsIntersects(quad, target_quad);
 }
 
 float DirectRenderer::CurrentFrameSDRWhiteLevel() const {
@@ -1091,14 +1110,7 @@ gfx::ColorSpace DirectRenderer::RootRenderPassColorSpace() const {
       current_frame()->display_color_spaces.GetOutputColorSpace(
           current_frame()->root_render_pass->content_color_usage,
           current_frame()->root_render_pass->has_transparent_background);
-
-  if (root_color_space.IsAffectedBySDRWhiteLevel()) {
-    auto sk_color_space =
-        root_color_space.ToSkColorSpace(CurrentFrameSDRWhiteLevel());
-    root_color_space = gfx::ColorSpace(*sk_color_space, /*is_hdr=*/true);
-  }
-
-  return root_color_space;
+  return root_color_space.GetWithSdrWhiteLevel(CurrentFrameSDRWhiteLevel());
 }
 
 gfx::ColorSpace DirectRenderer::RenderPassColorSpace(
@@ -1106,9 +1118,11 @@ gfx::ColorSpace DirectRenderer::RenderPassColorSpace(
   if (render_pass == current_frame()->root_render_pass) {
     return RootRenderPassColorSpace();
   }
-  return current_frame()->display_color_spaces.GetCompositingColorSpace(
-      render_pass->has_transparent_background,
-      render_pass->content_color_usage);
+  return current_frame()
+      ->display_color_spaces
+      .GetCompositingColorSpace(render_pass->has_transparent_background,
+                                render_pass->content_color_usage)
+      .GetWithSdrWhiteLevel(CurrentFrameSDRWhiteLevel());
 }
 
 gfx::ColorSpace DirectRenderer::CurrentRenderPassColorSpace() const {
@@ -1119,9 +1133,21 @@ SharedImageFormat DirectRenderer::GetColorSpaceSharedImageFormat(
     gfx::ColorSpace color_space) const {
   gpu::Capabilities caps;
   caps.texture_format_bgra8888 = SupportsBGRA();
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  auto gfx_hdr_format =
+      current_frame()->display_color_spaces.GetOutputBufferFormat(
+          gfx::ContentColorUsage::kHDR, /*needs_alpha=*/true);
+  auto viz_hdr_format = gfx_hdr_format == gfx::BufferFormat::RGBA_F16
+                            ? SinglePlaneFormat::kRGBA_F16
+                            : SinglePlaneFormat::kRGBA_1010102;
+  auto format = color_space.IsHDR()
+                    ? viz_hdr_format
+                    : PlatformColor::BestSupportedTextureFormat(caps);
+#else
   auto format = color_space.IsHDR()
                     ? SinglePlaneFormat::kRGBA_F16
                     : PlatformColor::BestSupportedTextureFormat(caps);
+#endif
   return format;
 }
 

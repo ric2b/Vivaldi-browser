@@ -12,16 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate alloc;
+use tinyvec::ArrayVec;
 
 use crate::elliptic_curve::{Curve, EcdhProvider, PublicKey};
-use alloc::vec::Vec;
 use core::fmt::Debug;
 
 /// Marker type for P256 implementation. This is used by EcdhProvider as its type parameter.
 #[derive(Debug, PartialEq, Eq)]
 pub enum P256 {}
 impl Curve for P256 {}
+
+/// Longest length for a sec-1 encoded P256 public key, which is the uncompressed format
+/// `04 || X || Y` as defined in section 2.3.3 of the SECG SEC 1 ("Elliptic Curve Cryptography")
+/// standard.
+const P256_PUBLIC_KEY_MAX_LENGTH: usize = 65;
+
+/// Whether an elliptic curve point should be compressed or not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PointCompression {
+    /// The elliptic curve point should be compressed (`02 || X` or `03 || X`),
+    /// as defined in section 2.3.3 of the SECG SEC 1 ("Elliptic Curve
+    /// Cryptography").
+    Compressed,
+    /// The elliptic curve point should be uncompressed (`04 || X || Y`), as
+    /// defined in section 2.3.3 of the SECG SEC 1 ("Elliptic Curve
+    /// Cryptography").
+    Uncompressed,
+}
 
 /// Trait for a NIST-P256 public key.
 pub trait P256PublicKey: Sized + PartialEq + Debug {
@@ -36,7 +53,10 @@ pub trait P256PublicKey: Sized + PartialEq + Debug {
     /// ("Elliptic Curve Cryptography") standard. Note that it is not necessarily true that
     /// `from_sec1_bytes(bytes)?.to_sec1_bytes() == bytes` because of point compression. (But it is
     /// always true that `from_sec1_bytes(key.to_sec1_bytes())? == key`).
-    fn to_sec1_bytes(&self) -> Vec<u8>;
+    fn to_sec1_bytes(
+        &self,
+        point_compression: PointCompression,
+    ) -> ArrayVec<[u8; P256_PUBLIC_KEY_MAX_LENGTH]>;
 
     /// Converts this public key's x and y coordinates on the elliptic curve to big endian octet
     /// strings.
@@ -48,13 +68,14 @@ pub trait P256PublicKey: Sized + PartialEq + Debug {
 
 impl<P: P256PublicKey> PublicKey<P256> for P {
     type Error = <Self as P256PublicKey>::Error;
+    type EncodedPublicKey = ArrayVec<[u8; P256_PUBLIC_KEY_MAX_LENGTH]>;
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
         Self::from_sec1_bytes(bytes)
     }
 
-    fn to_bytes(&self) -> Vec<u8> {
-        Self::to_sec1_bytes(self)
+    fn to_bytes(&self) -> Self::EncodedPublicKey {
+        Self::to_sec1_bytes(self, PointCompression::Uncompressed)
     }
 }
 

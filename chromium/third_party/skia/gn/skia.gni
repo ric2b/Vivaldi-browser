@@ -20,14 +20,15 @@ declare_args() {
   skia_enable_fontmgr_empty = false
   skia_enable_fontmgr_fuchsia = is_fuchsia
   skia_enable_fontmgr_win = is_win
+  skia_enable_gpu_debug_layers = is_skia_dev_build && is_debug
   skia_enable_optimize_size = false
   skia_enable_pdf = !is_wasm
+  skia_enable_precompile = true
   skia_enable_skottie = !(is_win && is_component_build) ||
                         (is_wasm && skia_canvaskit_enable_skottie)
-  skia_enable_precompile = true
   skia_enable_svg = !is_component_build
   skia_enable_tools = is_skia_dev_build
-  skia_enable_gpu_debug_layers = is_skia_dev_build && is_debug
+  skia_disable_tracing = is_official_build
   skia_enable_vello_shaders = false
   skia_disable_vma_stl_shared_mutex = false
   skia_enable_winuwp = false
@@ -53,10 +54,11 @@ declare_args() {
   skia_use_harfbuzz = true
   skia_use_gl = !is_fuchsia
   skia_use_icu = !is_fuchsia
+  skia_use_icu4x = false
+  skia_use_jpeg_gainmaps = is_skia_dev_build
   skia_use_libavif = false
   skia_use_libgrapheme = false
   skia_use_libheif = is_skia_dev_build
-  skia_use_jpeg_gainmaps = is_skia_dev_build
   skia_use_libjpeg_turbo_decode = true
   skia_use_libjpeg_turbo_encode = true
   skia_use_no_jpeg_encode = false
@@ -118,9 +120,7 @@ declare_args() {
     skia_gl_standard = ""
   }
 
-  if (is_android) {
-    skia_use_vulkan = defined(ndk_api) && ndk_api >= 24
-  } else if (is_fuchsia) {
+  if (is_fuchsia) {
     skia_use_vulkan = true
   } else {
     skia_use_vulkan = false
@@ -131,8 +131,8 @@ declare_args() {
 }
 
 declare_args() {
-  skia_enable_skunicode =
-      skia_use_icu || skia_use_client_icu || skia_use_libgrapheme
+  skia_enable_skunicode = skia_use_icu || skia_use_client_icu ||
+                          skia_use_libgrapheme || skia_use_icu4x
 }
 
 if (skia_use_angle && skia_gl_standard != "gles") {
@@ -170,31 +170,6 @@ declare_args() {
 
   # libgrapheme sources
   skia_libgrapheme_third_party_dir = "//third_party/libgrapheme"
-}
-
-declare_args() {
-  # skia_fontmgr_factory should define SkFontMgr::Factory()
-  if (skia_enable_fontmgr_empty) {
-    skia_fontmgr_factory = ":fontmgr_empty_factory"
-  } else if (is_android && skia_enable_fontmgr_android) {
-    skia_fontmgr_factory = ":fontmgr_android_factory"
-  } else if (is_win && skia_enable_fontmgr_win) {
-    skia_fontmgr_factory = ":fontmgr_win_factory"
-  } else if ((is_mac || is_ios) && skia_use_fonthost_mac) {
-    skia_fontmgr_factory = ":fontmgr_mac_ct_factory"
-  } else if (skia_enable_fontmgr_fontconfig) {
-    skia_fontmgr_factory = ":fontmgr_fontconfig_factory"
-  } else if (skia_enable_fontmgr_custom_directory) {
-    skia_fontmgr_factory = ":fontmgr_custom_directory_factory"
-  } else if (skia_enable_fontmgr_custom_embedded) {
-    skia_fontmgr_factory = ":fontmgr_custom_embedded_factory"
-  } else if (skia_enable_fontmgr_custom_empty) {
-    skia_fontmgr_factory = ":fontmgr_custom_empty_factory"
-  } else {
-    #"src/ports/SkFontMgr_FontConfigInterface_factory.cpp" #WontFix
-    #"src/ports/SkFontMgr_win_gdi_factory.cpp" # WontFix
-    skia_fontmgr_factory = ":fontmgr_empty_factory"
-  }
 }
 
 assert(!skia_use_dawn || skia_enable_graphite)  # Dawn is Graphite-only

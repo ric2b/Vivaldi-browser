@@ -128,9 +128,8 @@ class LoopFilterTest : public testing::TestWithParam<LoopFilterSize> {
     if (absl::StartsWith(test_case, "C/")) {
       memset(base_loop_filters_, 0, sizeof(base_loop_filters_));
     } else if (absl::StartsWith(test_case, "SSE41/")) {
-      if ((GetCpuInfo() & kSSE4_1) != 0) {
-        LoopFilterInit_SSE4_1();
-      }
+      if ((GetCpuInfo() & kSSE4_1) == 0) GTEST_SKIP() << "No SSE4.1 support!";
+      LoopFilterInit_SSE4_1();
     } else if (absl::StartsWith(test_case, "NEON/")) {
       LoopFilterInit_NEON();
 #if LIBGAV1_MAX_BITDEPTH >= 10

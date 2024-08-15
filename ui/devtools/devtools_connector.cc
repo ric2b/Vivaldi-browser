@@ -88,9 +88,10 @@ void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
     content::BrowserContext* browser_context,
     Browser* closing_browser) {
   DevtoolsConnectorAPI* api = GetFactoryInstance()->Get(browser_context);
-  DCHECK(api);
-  if (!api)
+  if (!api) {
+    // This can happen when closing windows.
     return;
+  }
   content::WebContents* tabstrip_contents = nullptr;
   Browser* browser;
   int tab_index;
@@ -330,7 +331,8 @@ bool DevtoolsConnectorItem::HandleKeyboardEvent(
       (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) &&
       ((event.GetModifiers() & modifier_mask) == modifier_mask)) {
     if (event.windows_key_code == ui::VKEY_I) {
-      DevToolsWindow::OpenDevToolsWindow(source);
+      DevToolsWindow::OpenDevToolsWindow(
+          source, DevToolsOpenedByAction::kMainMenuOrMainShortcut);
     }
   }
 
@@ -558,5 +560,25 @@ void UIBindingsDelegate::SetOpenNewWindowForPopups(bool value) {
     ui_bindings_delegate_->SetOpenNewWindowForPopups(value);
   }
 }
+
+int UIBindingsDelegate::GetDockStateForLogging() {
+  if (ui_bindings_delegate_) {
+    return ui_bindings_delegate_->GetDockStateForLogging();
+  }
+  return 0; // kUndocked
+}
+int UIBindingsDelegate::GetOpenedByForLogging() {
+  if (ui_bindings_delegate_) {
+    return ui_bindings_delegate_->GetDockStateForLogging();
+  }
+  return 0; // kUndocked
+}
+int UIBindingsDelegate::GetClosedByForLogging() {
+  if (ui_bindings_delegate_) {
+    return ui_bindings_delegate_->GetDockStateForLogging();
+  }
+  return 0; // kUndocked
+}
+
 
 }  // namespace extensions

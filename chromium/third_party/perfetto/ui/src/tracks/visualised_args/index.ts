@@ -80,7 +80,9 @@ export class VisualisedArgsTrack extends ChromeSliceTrack {
   }
 
   async onDestroy(): Promise<void> {
-    this.engine.query(`drop view ${this.helperViewName}`);
+    if (this.engine.isAlive) {
+      await this.engine.query(`drop view ${this.helperViewName}`);
+    }
   }
 
   getFont() {

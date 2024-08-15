@@ -31,12 +31,12 @@ class CFX_DIBitmap final : public CFX_DIBBase {
               uint8_t* pBuffer,
               uint32_t pitch);
 
-  bool Copy(const RetainPtr<CFX_DIBBase>& pSrc);
+  bool Copy(RetainPtr<const CFX_DIBBase> source);
 
   // CFX_DIBBase
   pdfium::span<const uint8_t> GetScanline(int line) const override;
   size_t GetEstimatedImageMemoryBurden() const override;
-#if BUILDFLAG(IS_WIN) || defined(_SKIA_SUPPORT_)
+#if BUILDFLAG(IS_WIN) || defined(PDF_USE_SKIA)
   RetainPtr<const CFX_DIBitmap> RealizeIfNeeded() const override;
 #endif
 
@@ -55,24 +55,23 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   bool ConvertFormat(FXDIB_Format format);
   void Clear(uint32_t color);
 
-#if defined(_SKIA_SUPPORT_)
-  uint32_t GetPixel(int x, int y) const;
-  void SetPixel(int x, int y, uint32_t color);
-#endif  // defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
+  uint32_t GetPixelForTesting(int x, int y) const;
+#endif  // defined(PDF_USE_SKIA)
 
-  bool SetRedFromBitmap(const RetainPtr<CFX_DIBBase>& pSrcBitmap);
-  bool SetAlphaFromBitmap(const RetainPtr<CFX_DIBBase>& pSrcBitmap);
+  bool SetRedFromBitmap(RetainPtr<const CFX_DIBBase> source);
+  bool SetAlphaFromBitmap(RetainPtr<const CFX_DIBBase> source);
   bool SetUniformOpaqueAlpha();
 
   // TODO(crbug.com/pdfium/2007): Migrate callers to `CFX_RenderDevice`.
-  bool MultiplyAlpha(int alpha);
-  bool MultiplyAlpha(const RetainPtr<CFX_DIBBase>& pSrcBitmap);
+  bool MultiplyAlpha(float alpha);
+  bool MultiplyAlphaMask(RetainPtr<const CFX_DIBBase> source);
 
   bool TransferBitmap(int dest_left,
                       int dest_top,
                       int width,
                       int height,
-                      const RetainPtr<CFX_DIBBase>& pSrcBitmap,
+                      RetainPtr<const CFX_DIBBase> source,
                       int src_left,
                       int src_top);
 
@@ -80,7 +79,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                        int dest_top,
                        int width,
                        int height,
-                       const RetainPtr<CFX_DIBBase>& pSrcBitmap,
+                       RetainPtr<const CFX_DIBBase> source,
                        int src_left,
                        int src_top,
                        BlendMode blend_type,
@@ -91,7 +90,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                      int dest_top,
                      int width,
                      int height,
-                     const RetainPtr<CFX_DIBBase>& pMask,
+                     const RetainPtr<const CFX_DIBBase>& pMask,
                      uint32_t color,
                      int src_left,
                      int src_top,
@@ -103,7 +102,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                            int dest_top,
                            int width,
                            int height,
-                           const RetainPtr<CFX_DIBBase>& pSrcBitmap,
+                           RetainPtr<const CFX_DIBBase> source,
                            int src_left,
                            int src_top);
 
@@ -127,7 +126,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                                                             FXDIB_Format format,
                                                             uint32_t pitch);
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
   // Converts to un-pre-multiplied alpha if necessary.
   void UnPreMultiply();
 
@@ -137,14 +136,14 @@ class CFX_DIBitmap final : public CFX_DIBBase {
 #endif
 
  protected:
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
   bool IsPremultiplied() const override;
-#endif  // defined(_SKIA_SUPPORT_)
+#endif  // defined(PDF_USE_SKIA)
 
  private:
   enum class Channel : uint8_t { kRed, kAlpha };
 
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
   enum class Format { kCleared, kPreMultiplied, kUnPreMultiplied };
 #endif
 
@@ -152,34 +151,34 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   CFX_DIBitmap(const CFX_DIBitmap& src);
   ~CFX_DIBitmap() override;
 
-  bool SetChannelFromBitmap(Channel destChannel,
-                            const RetainPtr<CFX_DIBBase>& pSrcBitmap);
+  bool SetChannelFromBitmap(Channel dest_channel,
+                            RetainPtr<const CFX_DIBBase> source);
   void ConvertBGRColorScale(uint32_t forecolor, uint32_t backcolor);
   bool TransferWithUnequalFormats(FXDIB_Format dest_format,
                                   int dest_left,
                                   int dest_top,
                                   int width,
                                   int height,
-                                  const RetainPtr<CFX_DIBBase>& pSrcBitmap,
+                                  RetainPtr<const CFX_DIBBase> source,
                                   int src_left,
                                   int src_top);
   void TransferWithMultipleBPP(int dest_left,
                                int dest_top,
                                int width,
                                int height,
-                               const RetainPtr<CFX_DIBBase>& pSrcBitmap,
+                               RetainPtr<const CFX_DIBBase> source,
                                int src_left,
                                int src_top);
   void TransferEqualFormatsOneBPP(int dest_left,
                                   int dest_top,
                                   int width,
                                   int height,
-                                  const RetainPtr<CFX_DIBBase>& pSrcBitmap,
+                                  RetainPtr<const CFX_DIBBase> source,
                                   int src_left,
                                   int src_top);
 
   MaybeOwned<uint8_t, FxFreeDeleter> m_pBuffer;
-#if defined(_SKIA_SUPPORT_)
+#if defined(PDF_USE_SKIA)
   Format m_nFormat = Format::kCleared;
 #endif
 };

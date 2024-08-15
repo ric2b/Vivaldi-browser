@@ -5,6 +5,7 @@ import * as http from 'http';
 import { AddressInfo } from 'net';
 
 import { dataCache } from '../framework/data_cache.js';
+import { getResourcePath, setBaseResourcePath } from '../framework/resources.js';
 import { globalTestConfig } from '../framework/test_config.js';
 import { DefaultTestFileLoader } from '../internal/file_loader.js';
 import { prettyPrintLog } from '../internal/logging/log_message.js';
@@ -20,12 +21,11 @@ import sys from './helper/sys.js';
 
 function usage(rc: number): never {
   console.log(`Usage:
-  tools/run_${sys.type} [OPTIONS...]
+  tools/server [OPTIONS...]
 Options:
   --colors                  Enable ANSI colors in output.
   --compat                  Run tests in compatibility mode.
   --coverage                Add coverage data to each result.
-  --data                    Path to the data cache directory.
   --verbose                 Print result/log of every test as it runs.
   --gpu-provider            Path to node module that provides the GPU implementation.
   --gpu-provider-flag       Flag to set on the gpu-provider as <flag>=<value>
@@ -33,8 +33,10 @@ Options:
   --u                       Flag to set on the gpu-provider as <flag>=<value>
 
 Provides an HTTP server used for running tests via an HTTP RPC interface
-To run a test, perform an HTTP GET or POST at the URL:
-  http://localhost:port/run?<test-name>
+First, load some tree or subtree of tests:
+  http://localhost:port/load?unittests:basic:*
+To run a single test case, perform an HTTP GET or POST at the URL:
+  http://localhost:port/run?unittests:basic:test,sync
 To shutdown the server perform an HTTP GET or POST at the URL:
   http://localhost:port/terminate
 `);
@@ -71,13 +73,13 @@ if (!sys.existsSync('src/common/runtime/cmdline.ts')) {
   console.log('Must be run from repository root');
   usage(1);
 }
+setBaseResourcePath('out-node/resources');
 
 Colors.enabled = false;
 
 let emitCoverage = false;
 let verbose = false;
 let gpuProviderModule: GPUProviderModule | undefined = undefined;
-let dataPath: string | undefined = undefined;
 
 const gpuProviderFlags: string[] = [];
 for (let i = 0; i < sys.args.length; ++i) {
@@ -89,8 +91,6 @@ for (let i = 0; i < sys.args.length; ++i) {
       globalTestConfig.compatibility = true;
     } else if (a === '--coverage') {
       emitCoverage = true;
-    } else if (a === '--data') {
-      dataPath = sys.args[++i];
     } else if (a === '--gpu-provider') {
       const modulePath = sys.args[++i];
       gpuProviderModule = require(modulePath);
@@ -130,21 +130,20 @@ Did you remember to build with code coverage instrumentation enabled?`
   }
 }
 
-if (dataPath !== undefined) {
-  dataCache.setStore({
-    load: (path: string) => {
-      return new Promise<Uint8Array>((resolve, reject) => {
-        fs.readFile(`${dataPath}/${path}`, (err, data) => {
-          if (err !== null) {
-            reject(err.message);
-          } else {
-            resolve(data);
-          }
-        });
+dataCache.setStore({
+  load: (path: string) => {
+    return new Promise<Uint8Array>((resolve, reject) => {
+      fs.readFile(getResourcePath(`cache/${path}`), (err, data) => {
+        if (err !== null) {
+          reject(err.message);
+        } else {
+          resolve(data);
+        }
       });
-    },
-  });
-}
+    });
+  },
+});
+
 if (verbose) {
   dataCache.setDebugLogger(console.log);
 }

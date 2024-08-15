@@ -68,7 +68,7 @@ class LacrosFirstRunSignedInFlowController
             account_info,
             std::move(contents),
             signin_metrics::AccessPoint::ACCESS_POINT_FOR_YOU_FRE,
-            absl::optional<SkColor>()),
+            std::optional<SkColor>()),
         sync_confirmation_seen_callback_(
             std::move(sync_confirmation_seen_callback)),
         step_completed_callback_(std::move(step_completed_callback)) {}
@@ -127,8 +127,8 @@ class LacrosFirstRunSignedInFlowController
             base::Unretained(this), std::move(proceed_callback)));
   }
 
-  void SwitchToEnterpriseProfileWelcome(
-      EnterpriseProfileWelcomeUI::ScreenType type,
+  void SwitchToManagedUserProfileNotice(
+      ManagedUserProfileNoticeUI::ScreenType type,
       signin::SigninChoiceCallback proceed_callback) override {
     NOTREACHED();
   }

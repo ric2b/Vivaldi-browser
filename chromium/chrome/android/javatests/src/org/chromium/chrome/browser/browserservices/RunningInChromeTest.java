@@ -34,6 +34,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
@@ -48,6 +49,7 @@ import org.chromium.components.browser_ui.notifications.MockNotificationManagerP
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
+import org.chromium.ui.test.util.DeviceRestriction;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -88,6 +90,7 @@ public class RunningInChromeTest {
                                     layoutManagerSupplier,
                                     lifecycleDispatcher,
                                     snackbarManagerSupplier,
+                                    profileProvider,
                                     activityTabProvider,
                                     tabContentManager,
                                     activityWindowAndroid,
@@ -120,6 +123,7 @@ public class RunningInChromeTest {
                                         layoutManagerSupplier,
                                         lifecycleDispatcher,
                                         snackbarManagerSupplier,
+                                        profileProvider,
                                         activityTabProvider,
                                         tabContentManager,
                                         activityWindowAndroid,
@@ -182,6 +186,7 @@ public class RunningInChromeTest {
 
     @Test
     @MediumTest
+    @Restriction(DeviceRestriction.RESTRICTION_TYPE_NON_AUTO)
     public void showsNotification() throws TimeoutException {
         mMockNotificationManager.setNotificationsEnabled(true);
 
@@ -193,6 +198,19 @@ public class RunningInChromeTest {
 
     @Test
     @MediumTest
+    @Restriction(DeviceRestriction.RESTRICTION_TYPE_AUTO)
+    public void showsNoNotificationOnAutomotive() throws TimeoutException {
+        mMockNotificationManager.setNotificationsEnabled(true);
+
+        launch(createTrustedWebActivityIntent(mTestPage));
+
+        String scope = Origin.createOrThrow(mTestPage).toString();
+        CriteriaHelper.pollUiThread(() -> !showingNotification(scope));
+    }
+
+    @Test
+    @MediumTest
+    @Restriction(DeviceRestriction.RESTRICTION_TYPE_NON_AUTO)
     public void dismissesNotification_onNavigation() throws TimeoutException {
         mMockNotificationManager.setNotificationsEnabled(true);
 
@@ -208,6 +226,7 @@ public class RunningInChromeTest {
 
     @Test
     @MediumTest
+    @Restriction(DeviceRestriction.RESTRICTION_TYPE_NON_AUTO)
     public void dismissesNotification_onActivityClose() throws TimeoutException {
         mMockNotificationManager.setNotificationsEnabled(true);
 

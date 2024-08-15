@@ -52,13 +52,15 @@ public:
     static std::unique_ptr<Expression> Make(const Context& context, Position pos, CapsPtr capsPtr);
 
     // Converts a Setting expression to its actual ShaderCaps value (boolean true/false).
-    std::unique_ptr<Expression> toLiteral(const Context& context) const;
+    std::unique_ptr<Expression> toLiteral(const ShaderCaps& caps) const;
 
     std::unique_ptr<Expression> clone(Position pos) const override {
         return std::make_unique<Setting>(pos, fCapsPtr, &this->type());
     }
 
     std::string_view name() const;
+
+    CapsPtr capsPtr() const { return fCapsPtr; }
 
     std::string description(OperatorPrecedence) const override {
         return "sk_Caps." + std::string(this->name());

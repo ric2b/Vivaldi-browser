@@ -70,12 +70,8 @@ void SpeechRecognitionImpl::Bind(
 void SpeechRecognitionImpl::Start(ax::mojom::StartOptionsPtr options,
                                   StartCallback callback) {
   // Extract arguments.
-  absl::optional<int> client_id;
-  absl::optional<std::string> locale;
-  absl::optional<bool> interim_results;
-  if (options->client_id) {
-    client_id = *options->client_id;
-  }
+  std::optional<std::string> locale;
+  std::optional<bool> interim_results;
   if (options->locale) {
     locale = *options->locale;
   }
@@ -83,7 +79,7 @@ void SpeechRecognitionImpl::Start(ax::mojom::StartOptionsPtr options,
     interim_results = *options->interim_results;
   }
 
-  std::string key = CreateKey(client_id);
+  std::string key = CreateKey(options->type);
   GetSpeechRecognizer(key)->HandleStart(
       locale, interim_results,
       base::BindOnce(&SpeechRecognitionImpl::StartHelper, GetWeakPtr(),
@@ -92,13 +88,7 @@ void SpeechRecognitionImpl::Start(ax::mojom::StartOptionsPtr options,
 
 void SpeechRecognitionImpl::Stop(ax::mojom::StopOptionsPtr options,
                                  StopCallback callback) {
-  // Extract arguments.
-  absl::optional<int> client_id;
-  if (options->client_id) {
-    client_id = *options->client_id;
-  }
-
-  std::string key = CreateKey(client_id);
+  std::string key = CreateKey(options->type);
   GetSpeechRecognizer(key)->HandleStop(
       base::BindOnce(&SpeechRecognitionImpl::StopHelper, GetWeakPtr(),
                      std::move(callback), key));
@@ -147,40 +137,43 @@ void SpeechRecognitionImpl::HandleSpeechRecognitionError(
 void SpeechRecognitionImpl::StartHelper(StartCallback callback,
                                         const std::string& key,
                                         speech::SpeechRecognitionType type,
-                                        absl::optional<std::string> error) {
-  if (error.has_value()) {
-    // TODO(b/304305202): Implement error handling.
-    return;
-  }
-
+                                        std::optional<std::string> error) {
   // Send relevant information back to the caller.
   auto info = ax::mojom::SpeechRecognitionStartInfo::New();
   info->type = ToMojo(type);
+  if (error.has_value()) {
+    info->observer_or_error =
+        ax::mojom::ObserverOrError::NewError(error.value());
+    std::move(callback).Run(std::move(info));
+    return;
+  }
+
   CreateEventObserverWrapper(key);
   auto* observer = GetEventObserverWrapper(key);
-  info->observer = observer->PassReceiver();
+  info->observer_or_error =
+      ax::mojom::ObserverOrError::NewObserver(observer->PassReceiver());
   std::move(callback).Run(std::move(info));
 }
 
 void SpeechRecognitionImpl::StopHelper(StopCallback callback,
                                        const std::string& key,
-                                       absl::optional<std::string> error) {
+                                       std::optional<std::string> error) {
+  RemoveEventObserverWrapper(key);
   if (error.has_value()) {
-    // TODO(b/304305202): Implement error handling.
+    std::move(callback).Run(std::move(error));
     return;
   }
 
-  RemoveEventObserverWrapper(key);
-  std::move(callback).Run();
+  std::move(callback).Run(std::optional<std::string>());
 }
 
-std::string SpeechRecognitionImpl::CreateKey(absl::optional<int> client_id) {
-  std::string base = "Atp";
-  if (!client_id.has_value()) {
-    return base;
-  }
-
-  return base::StringPrintf("%s.%d", base.c_str(), *client_id);
+std::string SpeechRecognitionImpl::CreateKey(
+    ax::mojom::AssistiveTechnologyType type) {
+  // Dictation is the only accessibility feature that uses speech recognition.
+  // In the future, we can add support other accessibility features e.g.
+  // Voice Access.
+  DCHECK(type == ax::mojom::AssistiveTechnologyType::kDictation);
+  return "AtpSpeechRecognition.Dictation";
 }
 
 extensions::SpeechRecognitionPrivateRecognizer*

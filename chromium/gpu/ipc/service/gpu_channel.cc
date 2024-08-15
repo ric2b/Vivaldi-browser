@@ -62,6 +62,7 @@
 #include "gpu/ipc/service/webgpu_command_buffer_stub.h"
 #include "ipc/ipc_channel.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
@@ -417,11 +418,11 @@ bool GpuChannelMessageFilter::IsNativeBufferSupported(
   if (!supported_gmb_configurations_inited_) {
     supported_gmb_configurations_inited_ = true;
     if (WillGetGmbConfigFromGpu()) {
-#if defined(USE_OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_OZONE_X11)
       for (const auto& config : gpu_extra_info_.gpu_memory_buffer_support_x11) {
         supported_gmb_configurations_.emplace(config);
       }
-#endif
+#endif  // BUILDFLAG(IS_OZONE_X11)
     } else {
       supported_gmb_configurations_ =
           gpu::GpuMemoryBufferSupport::GetNativeGpuMemoryBufferConfigurations();
@@ -1028,16 +1029,16 @@ void GpuChannel::CreateCommandBuffer(
     mojo::PendingAssociatedRemote<mojom::CommandBufferClient> client,
     mojom::GpuChannel::CreateCommandBufferCallback callback) {
   ScopedCreateCommandBufferResponder responder(std::move(callback));
-  TRACE_EVENT2("gpu", "GpuChannel::CreateCommandBuffer", "route_id", route_id,
-               "offscreen",
-               (init_params->surface_handle == kNullSurfaceHandle));
+  TRACE_EVENT1("gpu", "GpuChannel::CreateCommandBuffer", "route_id", route_id);
 
+#if BUILDFLAG(IS_ANDROID)
   if (init_params->surface_handle != kNullSurfaceHandle && !is_gpu_host_) {
     LOG(ERROR)
         << "ContextResult::kFatalFailure: "
            "attempt to create a view context on a non-privileged channel";
     return;
   }
+#endif
 
   if (gpu_channel_manager_->delegate()->IsExiting()) {
     LOG(ERROR) << "ContextResult::kTransientFailure: trying to create command "
@@ -1217,7 +1218,7 @@ void GpuChannel::RegisterSysmemBufferCollection(
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
-absl::optional<gpu::GpuDiskCacheHandle> GpuChannel::GetCacheHandleForType(
+std::optional<gpu::GpuDiskCacheHandle> GpuChannel::GetCacheHandleForType(
     gpu::GpuDiskCacheType type) {
   auto it = caches_.find(type);
   if (it == caches_.end()) {

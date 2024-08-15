@@ -5,14 +5,16 @@
 #include "components/permissions/request_type.h"
 
 #include "base/check.h"
+#include "base/containers/contains.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
-#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permissions_client.h"
+#include "content/public/common/content_features.h"
 #include "ui/base/ui_base_features.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -86,6 +88,8 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
     case RequestType::kCameraStream:
       return cr23 ? vector_icons::kVideocamChromeRefreshIcon
                   : vector_icons::kVideocamIcon;
+    case RequestType::kCapturedSurfaceControl:
+      return vector_icons::kTouchpadMouseIcon;
     case RequestType::kClipboard:
       return cr23 ? vector_icons::kContentPasteChromeRefreshIcon
                   : vector_icons::kContentPasteIcon;
@@ -123,6 +127,16 @@ const gfx::VectorIcon& GetIconIdDesktop(RequestType type) {
 #endif
     case RequestType::kRegisterProtocolHandler:
       return vector_icons::kProtocolHandlerIcon;
+#if BUILDFLAG(IS_CHROMEOS)
+    case RequestType::kSmartCard:
+      // TODO(crbug.com/1503624): Use a proper smart card icon.
+      return cr23 ? vector_icons::kDevicesChromeRefreshIcon
+                  : vector_icons::kDevicesIcon;
+#endif
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_CUPS)
+    case RequestType::kWebPrinting:
+      return vector_icons::kPrinterIcon;
+#endif
     case RequestType::kStorageAccess:
     case RequestType::kTopLevelStorageAccess:
       if (base::FeatureList::IsEnabled(
@@ -157,6 +171,8 @@ const gfx::VectorIcon& GetBlockedIconIdDesktop(RequestType type) {
     case RequestType::kCameraStream:
       return cr23 ? vector_icons::kVideocamOffChromeRefreshIcon
                   : vector_icons::kVideocamOffIcon;
+    case RequestType::kCapturedSurfaceControl:
+      return vector_icons::kTouchpadMouseOffIcon;
     case RequestType::kClipboard:
       return cr23 ? vector_icons::kContentPasteOffChromeRefreshIcon
                   : vector_icons::kContentPasteOffIcon;
@@ -197,6 +213,8 @@ absl::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
 #if !BUILDFLAG(IS_ANDROID)
     case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
       return RequestType::kCameraPanTiltZoom;
+    case ContentSettingsType::CAPTURED_SURFACE_CONTROL:
+      return RequestType::kCapturedSurfaceControl;
 #endif
     case ContentSettingsType::MEDIASTREAM_CAMERA:
       return RequestType::kCameraStream;
@@ -213,7 +231,7 @@ absl::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
     case ContentSettingsType::MEDIASTREAM_MIC:
       return RequestType::kMicStream;
     case ContentSettingsType::MIDI:
-      if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+      if (base::FeatureList::IsEnabled(::features::kBlockMidiByDefault)) {
         return RequestType::kMidi;
       } else {
         return absl::nullopt;
@@ -244,6 +262,14 @@ absl::optional<RequestType> ContentSettingsTypeToRequestTypeIfExists(
     case ContentSettingsType::FILE_SYSTEM_WRITE_GUARD:
       return RequestType::kFileSystemAccess;
 #endif
+#if BUILDFLAG(IS_CHROMEOS)
+    case ContentSettingsType::SMART_CARD_DATA:
+      return RequestType::kSmartCard;
+#endif
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_CUPS)
+    case ContentSettingsType::WEB_PRINTING:
+      return RequestType::kWebPrinting;
+#endif
     default:
       return absl::nullopt;
   }
@@ -270,6 +296,10 @@ absl::optional<ContentSettingsType> RequestTypeToContentSettingsType(
 #endif
     case RequestType::kCameraStream:
       return ContentSettingsType::MEDIASTREAM_CAMERA;
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kCapturedSurfaceControl:
+      return ContentSettingsType::CAPTURED_SURFACE_CONTROL;
+#endif
     case RequestType::kClipboard:
       return ContentSettingsType::CLIPBOARD_READ_WRITE;
 #if !BUILDFLAG(IS_ANDROID)
@@ -283,7 +313,7 @@ absl::optional<ContentSettingsType> RequestTypeToContentSettingsType(
     case RequestType::kMicStream:
       return ContentSettingsType::MEDIASTREAM_MIC;
     case RequestType::kMidi:
-      if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+      if (base::FeatureList::IsEnabled(::features::kBlockMidiByDefault)) {
         return ContentSettingsType::MIDI;
       } else {
         return absl::nullopt;
@@ -300,10 +330,18 @@ absl::optional<ContentSettingsType> RequestTypeToContentSettingsType(
     case RequestType::kProtectedMediaIdentifier:
       return ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER;
 #endif
+#if BUILDFLAG(IS_CHROMEOS)
+    case RequestType::kSmartCard:
+      return ContentSettingsType::SMART_CARD_DATA;
+#endif
     case RequestType::kStorageAccess:
       return ContentSettingsType::STORAGE_ACCESS;
     case RequestType::kVrSession:
       return ContentSettingsType::VR;
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_CUPS)
+    case RequestType::kWebPrinting:
+      return ContentSettingsType::WEB_PRINTING;
+#endif
 #if !BUILDFLAG(IS_ANDROID)
     case RequestType::kWindowManagement:
       return ContentSettingsType::WINDOW_MANAGEMENT;
@@ -318,13 +356,16 @@ absl::optional<ContentSettingsType> RequestTypeToContentSettingsType(
 
 // Returns whether confirmation chips can be displayed
 bool IsConfirmationChipSupported(RequestType for_request_type) {
-  return base::ranges::any_of(
-      std::vector<RequestType>{
-          RequestType::kNotifications, RequestType::kGeolocation,
-          RequestType::kCameraStream, RequestType::kMicStream},
-      [for_request_type](permissions::RequestType request_type) {
-        return request_type == for_request_type;
+  static constexpr auto kRequestsWithChip =
+      base::MakeFixedFlatSet<RequestType>({
+          // clang-format off
+          RequestType::kNotifications,
+          RequestType::kGeolocation,
+          RequestType::kCameraStream,
+          RequestType::kMicStream,
+          // clang-format on
       });
+  return base::Contains(kRequestsWithChip, for_request_type);
 }
 
 IconId GetIconId(RequestType type) {
@@ -358,6 +399,10 @@ const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
 #endif
     case permissions::RequestType::kCameraStream:
       return "camera_stream";
+#if !BUILDFLAG(IS_ANDROID)
+    case permissions::RequestType::kCapturedSurfaceControl:
+      return "captured_surface_control";
+#endif
     case permissions::RequestType::kClipboard:
       return "clipboard";
     case permissions::RequestType::kDiskQuota:
@@ -377,7 +422,7 @@ const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
     case permissions::RequestType::kMicStream:
       return "mic_stream";
     case permissions::RequestType::kMidi:
-      if (base::FeatureList::IsEnabled(features::kBlockMidiByDefault)) {
+      if (base::FeatureList::IsEnabled(::features::kBlockMidiByDefault)) {
         return "midi";
       } else {
         return nullptr;
@@ -400,12 +445,20 @@ const char* PermissionKeyForRequestType(permissions::RequestType request_type) {
     case permissions::RequestType::kRegisterProtocolHandler:
       return "register_protocol_handler";
 #endif
+#if BUILDFLAG(IS_CHROMEOS)
+    case RequestType::kSmartCard:
+      return "smart_card";
+#endif
     case permissions::RequestType::kStorageAccess:
       return "storage_access";
     case permissions::RequestType::kTopLevelStorageAccess:
       return "top_level_storage_access";
     case permissions::RequestType::kVrSession:
       return "vr_session";
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_CUPS)
+    case RequestType::kWebPrinting:
+      return "web_printing";
+#endif
 #if !BUILDFLAG(IS_ANDROID)
     case permissions::RequestType::kWindowManagement:
       if (base::FeatureList::IsEnabled(

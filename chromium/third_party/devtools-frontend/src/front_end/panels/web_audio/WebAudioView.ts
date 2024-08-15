@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import webAudioStyles from './webAudio.css.js';
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as UI from '../../ui/legacy/legacy.js';
 import type * as Protocol from '../../generated/protocol.js';
-import * as GraphVisualizer from './graph_visualizer/graph_visualizer.js';
+import * as UI from '../../ui/legacy/legacy.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {ContextDetailBuilder, ContextSummaryBuilder} from './AudioContextContentBuilder.js';
 import {AudioContextSelector, Events as SelectorEvents} from './AudioContextSelector.js';
+import * as GraphVisualizer from './graph_visualizer/graph_visualizer.js';
+import webAudioStyles from './webAudio.css.js';
 import {Events as ModelEvents, WebAudioModel} from './WebAudioModel.js';
 
 const UIStrings = {
@@ -23,7 +24,6 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/web_audio/WebAudioView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-let webAudioViewInstance: WebAudioView;
 export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
     SDK.TargetManager.SDKModelObserver<WebAudioModel> {
   private readonly contextSelector: AudioContextSelector;
@@ -34,6 +34,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
   private readonly summaryBarContainer: HTMLElement;
   constructor() {
     super(true, 1000);
+    this.element.setAttribute('jslog', `${VisualLogging.panel().context('web-audio')}`);
     this.element.classList.add('web-audio-drawer');
 
     // Creates the toolbar.
@@ -76,15 +77,6 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
         });
 
     SDK.TargetManager.TargetManager.instance().observeModels(WebAudioModel, this);
-  }
-
-  static instance(opts = {forceNew: null}): WebAudioView {
-    const {forceNew} = opts;
-    if (!webAudioViewInstance || forceNew) {
-      webAudioViewInstance = new WebAudioView();
-    }
-
-    return webAudioViewInstance;
   }
 
   override wasShown(): void {

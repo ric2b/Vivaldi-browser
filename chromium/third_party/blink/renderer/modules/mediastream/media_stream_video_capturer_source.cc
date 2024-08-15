@@ -14,6 +14,7 @@
 #include "media/capture/video_capture_types.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -24,7 +25,46 @@
 
 namespace blink {
 
+using mojom::blink::CapturedSurfaceControlResult;
 using mojom::blink::MediaStreamRequestResult;
+
+namespace {
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+String CscResultToString(CapturedSurfaceControlResult result) {
+  switch (result) {
+    case CapturedSurfaceControlResult::kSuccess:
+      return String();
+    case CapturedSurfaceControlResult::kUnknownError:
+      return "Unknown error.";
+    case CapturedSurfaceControlResult::kNoPermissionError:
+      return "No permission.";
+    case CapturedSurfaceControlResult::kCapturedSurfaceNotFoundError:
+      return "Captured surface not found (likely stopped asynchronously.)";
+    case CapturedSurfaceControlResult::kDisallowedForSelfCaptureError:
+      return "API not supported for self-capture.";
+  }
+  NOTREACHED_NORETURN();
+}
+
+void OnCapturedSurfaceControlResult(
+    base::OnceCallback<void(bool, const String&)> callback,
+    CapturedSurfaceControlResult result) {
+  const String error_string = CscResultToString(result);
+  std::move(callback).Run(/*success=*/error_string.empty(),
+                          /*error=*/error_string);
+}
+
+void OnGetZoomLevelResult(
+    base::OnceCallback<void(absl::optional<int>, const String&)> callback,
+    absl::optional<int> zoom_level,
+    CapturedSurfaceControlResult result) {
+  const String error_string = CscResultToString(result);
+  std::move(callback).Run(/*zoom_level=*/zoom_level, /*error=*/error_string);
+}
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
+}  // namespace
 
 MediaStreamVideoCapturerSource::MediaStreamVideoCapturerSource(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
@@ -196,7 +236,62 @@ void MediaStreamVideoCapturerSource::ChangeSourceImpl(
                          weak_factory_.GetWeakPtr(), capture_params_));
 }
 
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+void MediaStreamVideoCapturerSource::SendWheel(
+    double relative_x,
+    double relative_y,
+    int wheel_delta_x,
+    int wheel_delta_y,
+    base::OnceCallback<void(bool, const String&)> callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  const absl::optional<base::UnguessableToken>& session_id =
+      device().serializable_session_id();
+  if (!session_id.has_value()) {
+    std::move(callback).Run(false, "Missing session ID.");
+    return;
+  }
+
+  GetMediaStreamDispatcherHost()->SendWheel(
+      session_id.value(),
+      blink::mojom::blink::CapturedWheelAction::New(
+          relative_x, relative_y, wheel_delta_x, wheel_delta_y),
+      WTF::BindOnce(&OnCapturedSurfaceControlResult, std::move(callback)));
+}
+
+void MediaStreamVideoCapturerSource::GetZoomLevel(
+    base::OnceCallback<void(absl::optional<int>, const String&)> callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  const absl::optional<base::UnguessableToken>& session_id =
+      device().serializable_session_id();
+  if (!session_id.has_value()) {
+    std::move(callback).Run(false, "Missing session ID.");
+    return;
+  }
+
+  GetMediaStreamDispatcherHost()->GetZoomLevel(
+      session_id.value(),
+      WTF::BindOnce(&OnGetZoomLevelResult, std::move(callback)));
+}
+
+void MediaStreamVideoCapturerSource::SetZoomLevel(
+    int zoom_level,
+    base::OnceCallback<void(bool, const String&)> callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  const absl::optional<base::UnguessableToken>& session_id =
+      device().serializable_session_id();
+  if (!session_id.has_value()) {
+    std::move(callback).Run(false, "Missing session ID.");
+    return;
+  }
+
+  GetMediaStreamDispatcherHost()->SetZoomLevel(
+      session_id.value(), zoom_level,
+      WTF::BindOnce(&OnCapturedSurfaceControlResult, std::move(callback)));
+}
+
 void MediaStreamVideoCapturerSource::ApplySubCaptureTarget(
     media::mojom::blink::SubCaptureTargetType type,
     const base::Token& sub_capture_target,

@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
-#include "base/strings/string_piece_forward.h"
+#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/user_education/common/feature_promo_result.h"
@@ -28,11 +28,8 @@ class HelpBubble;
 // question through `FeaturePromoStorageService`.
 class FeaturePromoLifecycle {
  public:
-  using CloseReason = FeaturePromoStorageService::CloseReason;
   using PromoSubtype = FeaturePromoSpecification::PromoSubtype;
   using PromoType = FeaturePromoSpecification::PromoType;
-
-  static constexpr base::TimeDelta kDefaultSnoozeDuration = base::Days(7);
 
   FeaturePromoLifecycle(FeaturePromoStorageService* storage_service,
                         const base::StringPiece& app_id,
@@ -48,6 +45,10 @@ class FeaturePromoLifecycle {
   // be shown again; for example, a snoozeable IPH cannot show if it is
   // currently in the snooze period.
   FeaturePromoResult CanShow() const;
+
+  // Returns whether the policy and previous usage of this IPH would allow it to
+  // be snoozed if it were shown; meaningless if `CanShow()` is false.
+  bool CanSnooze() const;
 
   // Notifies that the promo was shown. `tracker` will be used to release the
   // feature when the promo ends.
@@ -68,7 +69,8 @@ class FeaturePromoLifecycle {
   // May result in pref data and/or histogram logging. If `continue_promo` is
   // true, the bubble should be closed but the promo is not ended -
   // `OnContinuedPromoEnded()` should be called when the continuation finishes.
-  void OnPromoEnded(CloseReason close_reason, bool continue_promo = false);
+  void OnPromoEnded(FeaturePromoClosedReason close_reason,
+                    bool continue_promo = false);
 
   // For custom action, Tutorial, etc. indicates that the
   void OnContinuedPromoEnded(bool completed_successfully);
@@ -89,17 +91,26 @@ class FeaturePromoLifecycle {
   enum class State { kNotStarted, kRunning, kContinued, kClosed };
 
   // Records `PromoData` about the promo closing, unless in demo mode.
-  void MaybeWriteClosePromoData(CloseReason close_reason);
+  void MaybeWriteClosedPromoData(FeaturePromoClosedReason close_reason);
 
   // Records that an IPH was shown, including type and identity.
   void RecordShown();
 
   // Records user actions and histograms that discern what action was taken to
   // close a promotion. Does not record in demo mode.
-  void MaybeRecordCloseReason(CloseReason close_reason);
+  void MaybeRecordClosedReason(FeaturePromoClosedReason close_reason);
 
   // If the promo is running, ends it, possibly dismissing the Tracker.
   bool MaybeEndPromo();
+
+  // Returns whether `promo_data` satisfies the requirements for being shown as
+  // a snooze promo.
+  FeaturePromoResult CanShowSnoozePromo(
+      const FeaturePromoData& promo_data) const;
+
+  // Gets the current time, which is based on the reference clock provided by
+  // `storage_service` and can be overridden by tests.
+  base::Time GetCurrentTime() const;
 
   // The service that stores non-transient data about the IPH.
   const raw_ptr<FeaturePromoStorageService> storage_service_;

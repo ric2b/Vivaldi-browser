@@ -4,12 +4,14 @@
 
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/glanceables/post_login_glanceables_metrics_recorder.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/shell.h"
 #include "ash/webui/settings/public/constants/routes.mojom.h"
+#include "ash/webui/settings/public/constants/setting.mojom-shared.h"
 #include "ash/wm/desks/templates/saved_desk_controller.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
@@ -314,8 +316,8 @@ void FullRestoreService::Close(bool by_user) {
   }
 }
 
-void FullRestoreService::Click(const absl::optional<int>& button_index,
-                               const absl::optional<std::u16string>& reply) {
+void FullRestoreService::Click(const std::optional<int>& button_index,
+                               const std::optional<std::u16string>& reply) {
   DCHECK(notification_);
   skip_notification_histogram_ = true;
 
@@ -338,8 +340,14 @@ void FullRestoreService::Click(const absl::optional<int>& button_index,
   if (notification_->id() == kRestoreNotificationId) {
     // Show the 'On Startup' OS setting page if the user clicks the settings
     // button of the restore notification.
-    chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-        profile_, chromeos::settings::mojom::kAppsSectionPath);
+    ash::features::IsOsSettingsRevampWayfindingEnabled()
+        ? chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+              profile_,
+              chromeos::settings::mojom::kSystemPreferencesSectionPath,
+              chromeos::settings::mojom::Setting::kRestoreAppsAndPages)
+        : chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+              profile_, chromeos::settings::mojom::kAppsSectionPath);
+
     return;
   }
 

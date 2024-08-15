@@ -32,6 +32,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
@@ -63,6 +67,14 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 // The under page background color.
 @property(nonatomic, strong) UIColor* underPageBackgroundColor;
 
+// Vivaldi
+@property(nonatomic, assign) BOOL isOmniboxFocused;
+@property(nonatomic, assign) BOOL isTabBarEnabled;
+@property(nonatomic, assign) BOOL isBottomOmniboxEnabled;
+@property(nonatomic, assign) BOOL isDynamicAccentColorEnabled;
+@property(nonatomic, strong) UIColor* customAccentColor;
+// End Vivaldi
+
 @end
 
 @implementation AdaptiveToolbarViewController
@@ -71,6 +83,13 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 @synthesize buttonFactory = _buttonFactory;
 @synthesize loading = _loading;
 @synthesize isNTP = _isNTP;
+
+// Vivaldi
+@synthesize isOmniboxFocused = _isOmniboxFocused;
+@synthesize isTabBarEnabled = _isTabBarEnabled;
+@synthesize isBottomOmniboxEnabled = _isBottomOmniboxEnabled;
+@synthesize isDynamicAccentColorEnabled = _isDynamicAccentColorEnabled;
+// End Vivaldi
 
 #pragma mark - Public
 
@@ -134,6 +153,11 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 }
 
 - (BOOL)hasOmnibox {
+
+  if (IsVivaldiRunning()) {
+    return self.locationBarViewController != nil && self.shouldShowProgressBar;
+  } // End Vivaldi
+
   return self.locationBarViewController != nil;
 }
 
@@ -199,7 +223,11 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   if (IsRegularXRegularSizeClass(self)) {
     [self.view.progressBar setHidden:YES animated:NO completion:nil];
   } else if (self.loading) {
+
+    if (IsVivaldiRunning() && self.shouldShowProgressBar) {
     [self.view.progressBar setHidden:NO animated:NO completion:nil];
+    } // End Vivaldi
+
   }
 
   // Restore locationBarContainer height with previous fullscreen progress.
@@ -255,10 +283,20 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 
 - (void)setCanGoForward:(BOOL)canGoForward {
   self.view.forwardButton.enabled = canGoForward;
+
+  // Vivaldi
+  self.view.canShowForward = canGoForward;
+  // End Vivaldi
+
 }
 
 - (void)setCanGoBack:(BOOL)canGoBack {
   self.view.backButton.enabled = canGoBack;
+
+  // Vivaldi
+  self.view.canShowBack = canGoBack;
+  // End Vivaldi
+
 }
 
 - (void)setLoadingState:(BOOL)loading {
@@ -333,6 +371,11 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 
 - (void)setShareMenuEnabled:(BOOL)enabled {
   self.view.shareButton.enabled = enabled;
+
+  // Vivaldi
+  self.view.canShowAdTrackerBlocker = enabled;
+  // End Vivaldi
+
 }
 
 - (void)setIsNTP:(BOOL)isNTP {
@@ -369,9 +412,19 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   const CGFloat alphaValue = fmax(progress * 2 - 1, 0);
 
   [self updateLocationBarHeightForFullscreenProgress:progress];
+
+  if (IsVivaldiRunning()) {
+    // Note: (prio@vivaldi.com): We will use the same alpha computation for tab
+    // strip and toolbar from BVC so that at the time of scrolling
+    // all the related views fade in sync.
+    const CGFloat alpha = fmax((progress - 0.85) / 0.15, 0);
+    self.view.locationBarContainer.alpha = alpha;
+  } else {
   self.view.locationBarContainer.backgroundColor =
       [self.buttonFactory.toolbarConfiguration
           locationBarBackgroundColorWithVisibility:alphaValue];
+  } // End Vivaldi
+
   self.view.collapsedToolbarButton.hidden = progress > 0.05;
 }
 
@@ -409,6 +462,10 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 }
 
 - (void)updateBackgroundColor {
+
+  // Note:(prio@vivaldi.com) - Skip chromium dynamic color logic since we
+  // have our own implementation on this on the subclasses.
+  if (!IsVivaldiRunning()) {
   UIColor* colorToTransform = nil;
   if (base::FeatureList::IsEnabled(kDynamicThemeColor) &&
       [self isValidColorForDynamicBackground:self.pageThemeColor]) {
@@ -449,6 +506,8 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   }
 
   self.view.backgroundColor = backgroundColor;
+  } // End Vivaldi
+
 }
 
 #pragma mark - PopupMenuUIUpdating
@@ -480,7 +539,14 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
       AlignValueToPixel(collapsedHeight + expandedCollapsedDelta * progress);
 
   self.view.locationBarContainerHeight.constant = height;
+
+  if (IsVivaldiRunning()) {
+    self.view.locationBarContainer.layer.cornerRadius =
+        vNTPSearchBarCornerRadius;
+  } else {
   self.view.locationBarContainer.layer.cornerRadius = height / 2;
+  } // End Vivaldi
+
 }
 
 // Makes sure that the visibility of the progress bar is matching the one which
@@ -489,6 +555,11 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
   __weak __typeof(self) weakSelf = self;
 
   BOOL hasOmnibox = self.locationBarViewController != nil;
+
+  if (IsVivaldiRunning()) {
+    hasOmnibox = [self hasOmnibox];
+  } // End Vivaldi
+
   if (!hasOmnibox) {
     self.view.progressBar.hidden = YES;
     return;
@@ -622,10 +693,120 @@ const CGFloat kFullscreenProgressFullyExpanded = 1.0;
 }
 
 #pragma mark - VIVALDI
+// Returns the appropriate background color for toolbar. Important piece or code
+// for non tab bar state.
+- (UIColor*)toolbarBackgroundColorForType:(ToolbarType)type {
+
+  // Default toolbar background
+  UIColor *backgroundColor =
+      self.buttonFactory.toolbarConfiguration.backgroundColor;
+
+  // When omnibox is at the bottom primary toolbar should use clear color as
+  // the accent color applied to the bottom toolbar.
+  BOOL shouldUseClearBackground = type == ToolbarType::kPrimary &&
+      self.isBottomOmniboxEnabled && !self.isTabBarEnabled;
+
+  // Check if toolbar background with accent color should be used.
+  BOOL shouldUseToolbarAccentColor = NO;
+
+  // Common conditions applies to both primary and secondary toolbar.
+  BOOL commonConditionsMet = !self.isIncognito && !self.isOmniboxFocused &&
+      !self.isTabBarEnabled;
+  if (type == ToolbarType::kSecondary) {
+    shouldUseToolbarAccentColor =
+        commonConditionsMet && self.isBottomOmniboxEnabled;
+  } else {
+    shouldUseToolbarAccentColor = commonConditionsMet;
+  }
+
+  if (shouldUseClearBackground) {
+    backgroundColor = UIColor.clearColor;
+  } else if (shouldUseToolbarAccentColor) {
+    backgroundColor =
+        self.buttonFactory.toolbarConfiguration.primaryToolbarAccentColor;
+
+    // Dynamically adjust background color based on the page theme or custom
+    // accent color
+    if (self.isDynamicAccentColorEnabled) {
+      // Use page theme color if not on a new tab page and the theme color
+      // is available
+      if (!self.isNTP && self.pageThemeColor) {
+        BOOL shouldUseDefaultThemeColor =
+            [VivaldiGlobalHelpers
+                shouldUseDefaultThemeColor:self.pageThemeColor];
+        if (!shouldUseDefaultThemeColor) {
+          backgroundColor = self.pageThemeColor;
+        }
+      }
+    } else {
+      // For primary toolbar always show custom accent color. But, for secondary
+      // toolbar show the accent color only when omnibox is at the bottom.
+      if ((self.isBottomOmniboxEnabled && type == ToolbarType::kSecondary) ||
+          type == ToolbarType::kPrimary) {
+        backgroundColor = self.customAccentColor;
+      }
+    }
+  }
+
+  return backgroundColor;
+}
+
+#pragma mark - Setters
+- (void)setIsOmniboxFocused:(BOOL)focused {
+  if (_isOmniboxFocused == focused) {
+    return;
+  }
+  _isOmniboxFocused = focused;
+  [self updateBackgroundColor];
+}
+
+#pragma mark - ToolbarConsumer (Vivaldi)
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
                   desktopTabEnabled:(BOOL)desktopTabEnabled {
   [self.view reloadButtonsWithNewTabPage:isNewTabPage
                        desktopTabEnabled:desktopTabEnabled];
+}
+
+- (void)setIsTabBarEnabled:(BOOL)enabled {
+  if (_isTabBarEnabled == enabled) {
+    return;
+  }
+  _isTabBarEnabled = enabled;
+  [self updateBackgroundColor];
+}
+
+- (void)setIsBottomOmniboxEnabled:(BOOL)enabled {
+  if (_isBottomOmniboxEnabled == enabled) {
+    return;
+  }
+  _isBottomOmniboxEnabled = enabled;
+  [self updateBackgroundColor];
+}
+
+- (void)setIsDynamicAccentColorEnabled:(BOOL)enabled {
+  if (_isDynamicAccentColorEnabled == enabled) {
+    return;
+  }
+  _isDynamicAccentColorEnabled = enabled;
+  [self updateBackgroundColor];
+}
+
+- (void)setCustomAccentColor:(UIColor*)accentColor {
+  if ([_customAccentColor isEqual:accentColor]) {
+    return;
+  }
+  _customAccentColor = accentColor;
+  [self updateBackgroundColor];
+}
+
+#pragma mark - Private
+- (void)refreshToolbarButtonsGuide {
+  [self updateAllButtonsVisibility];
+}
+
+- (BOOL)isIncognito {
+  return self.buttonFactory.toolbarConfiguration.style ==
+              ToolbarStyle::kIncognito;
 }
 // End Vivaldi
 

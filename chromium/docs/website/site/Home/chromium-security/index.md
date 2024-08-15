@@ -115,6 +115,16 @@ before applying:
             association that is an ethical conflict of interest (e.g. keeping
             vulnerabilities or exploits private, or sharing with parties other
             than the vendor).
+*   \[required\]: A need to access information about unfixed Chromium security
+            bugs in order to build defenses which will benefit multiple
+            products that embed Chromium.
+
+The final criterion above can be demonstrated by a strong organizational
+track record of benefiting Chromium security, such that it would be clearly
+obstructive for an individual to lack access. For example, if an organization
+were comprehensively responsible for all Chromium fuzzing, or all of Chromium
+supply chain security, it would be obviously necessary for some individuals to
+have access to all security bug information.
 
 To apply for membership, please email
 [security@chromium.org](mailto:security@chromium.org).
@@ -138,5 +148,36 @@ criteria, and require advanced notice of vulnerabilities, request access via
 [security@chromium.org](mailto:security@chromium.org). Your email should explain
 your need for access (embedder, Linux distribution, etc.) and your continued
 access will require that you follow the terms of list membership.
+(This is known as "security-notify" access).
 
-### There is one simple rule for any party with advance access to security vulnerabilities in Chromium: any details of a vulnerability should be considered confidential and only shared on a need to know basis until such time that the vulnerability is responsibly disclosed by the Chromium project. Additionally, any vulnerabilities in third-party dependencies (e.g. Blink, open source parser libraries, etc.) must be treated with the same consideration. Access will be terminated for any member who fails to comply with this rule in letter or spirit.
+Individuals with such “security-notify” access may additionally request access
+to non-embargoed vulnerabilities which are not yet fixed, for which there's
+evidence of an exploit existing in the wild. (This is known as
+"security-notify-itw" access). The intention here is to allow these extra-urgent
+fixes to be distributed to users with minimal delay. To apply for this extra
+membership, we require evidence that your users receive all important security
+fixes very rapidly, and will therefore benefit from a further reduced fix time
+for these fixes.
+
+This evidence must be provided at least every six months and must cover (at
+least) all high severity fixes (not just those with evidence of in-the-wild
+exploitation). There's no set format for this evidence, but an example might
+be a table showing the date each high-severity, stable-impacting fix was made
+available to your users. Other equivalent information is also acceptable.
+Request and justification artifacts for this membership should be sent to
+[security@chromium.org](mailto:security@chromium.org).
+
+Irrespective of membership of these groups, individuals are often granted access
+to specific Chromium security bugs which they may be able to help fix or progress.
+
+
+
+There is one simple rule for any party granted advance access to security
+vulnerabilities in Chromium: any details of a vulnerability should be considered
+confidential until the vulnerability is responsibly disclosed by the Chromium
+project. Information may only be shared with parties who need to know in order
+to defend Chromium or directly related software or hardware. Additionally,
+any vulnerabilities in third-party dependencies (e.g. Blink, open source parser
+libraries, etc.) must be treated with the same consideration. Access will be
+terminated immediately for any member who fails to comply with this rule in
+letter or spirit.

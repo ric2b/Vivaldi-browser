@@ -368,74 +368,74 @@ ImportTypes MapImportType(const importer::ImporterType& importer_type) {
   switch (importer_type) {
 #if BUILDFLAG(IS_WIN)
     case importer::TYPE_IE:
-      type = vivaldi::import_data::IMPORT_TYPES_INTERNET_EXPLORER;
+      type = vivaldi::import_data::ImportTypes::kInternetExplorer;
       break;
 #endif
     case importer::TYPE_FIREFOX:
-      type = vivaldi::import_data::IMPORT_TYPES_FIREFOX;
+      type = vivaldi::import_data::ImportTypes::kFirefox;
       break;
 #if BUILDFLAG(IS_MAC)
     case importer::TYPE_SAFARI:
-      type = vivaldi::import_data::IMPORT_TYPES_SAFARI;
+      type = vivaldi::import_data::ImportTypes::kSafari;
       break;
 #endif
     case importer::TYPE_BOOKMARKS_FILE:
-      type = vivaldi::import_data::IMPORT_TYPES_BOOKMARKS_FILE;
+      type = vivaldi::import_data::ImportTypes::kBookmarksFile;
       break;
 
     case importer::TYPE_OPERA:
-      type = vivaldi::import_data::IMPORT_TYPES_OPERA;
+      type = vivaldi::import_data::ImportTypes::kOpera;
       break;
 
     case importer::TYPE_OPERA_BOOKMARK_FILE:
-      type = vivaldi::import_data::IMPORT_TYPES_OPERA_BOOKMARK;
+      type = vivaldi::import_data::ImportTypes::kOperaBookmark;
       break;
 
     case importer::TYPE_CHROME:
-      type = vivaldi::import_data::IMPORT_TYPES_CHROME;
+      type = vivaldi::import_data::ImportTypes::kChrome;
       break;
 
     case importer::TYPE_CHROMIUM:
-      type = vivaldi::import_data::IMPORT_TYPES_CHROMIUM;
+      type = vivaldi::import_data::ImportTypes::kChromium;
       break;
 
     case importer::TYPE_VIVALDI:
-      type = vivaldi::import_data::IMPORT_TYPES_VIVALDI;
+      type = vivaldi::import_data::ImportTypes::kVivaldi;
       break;
 
     case importer::TYPE_YANDEX:
-      type = vivaldi::import_data::IMPORT_TYPES_YANDEX;
+      type = vivaldi::import_data::ImportTypes::kYandex;
       break;
 
     case importer::TYPE_OPERA_OPIUM_BETA:
-      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM_BETA;
+      type = vivaldi::import_data::ImportTypes::kOperaOpiumBeta;
       break;
 
     case importer::TYPE_OPERA_OPIUM_DEV:
-      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM_DEV;
+      type = vivaldi::import_data::ImportTypes::kOperaOpiumDev;
       break;
     case importer::TYPE_BRAVE:
-      type = vivaldi::import_data::IMPORT_TYPES_BRAVE;
+      type = vivaldi::import_data::ImportTypes::kBrave;
       break;
 #if BUILDFLAG(IS_WIN)
     case importer::TYPE_EDGE:
-      type = vivaldi::import_data::IMPORT_TYPES_EDGE;
+      type = vivaldi::import_data::ImportTypes::kEdge;
       break;
 #endif
     case importer::TYPE_EDGE_CHROMIUM:
-      type = vivaldi::import_data::IMPORT_TYPES_EDGE_CHROMIUM;
+      type = vivaldi::import_data::ImportTypes::kEdgeChromium;
       break;
 
     case importer::TYPE_THUNDERBIRD:
-      type = vivaldi::import_data::IMPORT_TYPES_THUNDERBIRD;
+      type = vivaldi::import_data::ImportTypes::kThunderbird;
       break;
 
     case importer::TYPE_OPERA_OPIUM:
-      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM;
+      type = vivaldi::import_data::ImportTypes::kOperaOpium;
       break;
 
     case importer::TYPE_UNKNOWN:
-      type = vivaldi::import_data::IMPORT_TYPES_OPERA_OPIUM;
+      type = vivaldi::import_data::ImportTypes::kOperaOpium;
       break;
   }
   return type;

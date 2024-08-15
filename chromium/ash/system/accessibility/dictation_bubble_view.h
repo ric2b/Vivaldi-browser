@@ -5,12 +5,12 @@
 #ifndef ASH_SYSTEM_ACCESSIBILITY_DICTATION_BUBBLE_VIEW_H_
 #define ASH_SYSTEM_ACCESSIBILITY_DICTATION_BUBBLE_VIEW_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "ash/ash_export.h"
 #include "base/memory/raw_ptr.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/view.h"
@@ -42,10 +42,9 @@ class ASH_EXPORT DictationBubbleView : public views::BubbleDialogDelegateView {
 
   // Updates the visibility of all child views, displays the icon/animation
   // specified by `icon`, and updates text content and size of this view.
-  void Update(
-      DictationBubbleIconType icon,
-      const absl::optional<std::u16string>& text,
-      const absl::optional<std::vector<DictationBubbleHintType>>& hints);
+  void Update(DictationBubbleIconType icon,
+              const std::optional<std::u16string>& text,
+              const std::optional<std::vector<DictationBubbleHintType>>& hints);
 
   // views::BubbleDialogDelegateView:
   void Init() override;
@@ -66,8 +65,8 @@ class ASH_EXPORT DictationBubbleView : public views::BubbleDialogDelegateView {
  private:
   friend class DictationBubbleControllerTest;
 
-  raw_ptr<TopRowView, ExperimentalAsh> top_row_view_ = nullptr;
-  raw_ptr<DictationHintView, ExperimentalAsh> hint_view_ = nullptr;
+  raw_ptr<TopRowView> top_row_view_ = nullptr;
+  raw_ptr<DictationHintView> hint_view_ = nullptr;
 };
 
 BEGIN_VIEW_BUILDER(/* no export */,
@@ -87,8 +86,7 @@ class ASH_EXPORT DictationHintView : public views::View {
   ~DictationHintView() override;
 
   // Updates the text content and visibility of all labels in this view.
-  void Update(
-      const absl::optional<std::vector<DictationBubbleHintType>>& hints);
+  void Update(const std::optional<std::vector<DictationBubbleHintType>>& hints);
 
   // views::View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
@@ -100,8 +98,7 @@ class ASH_EXPORT DictationHintView : public views::View {
 
   // Labels containing hints for users of Dictation. A max of five hints can be
   // shown at any given time.
-  std::vector<raw_ptr<views::Label, ExperimentalAsh>> labels_{kMaxLabelHints,
-                                                              nullptr};
+  std::vector<raw_ptr<views::Label>> labels_{kMaxLabelHints, nullptr};
 };
 
 }  // namespace ash

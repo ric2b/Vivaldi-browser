@@ -11,7 +11,6 @@
 <translation id="1084824384139382525">Copiar &amp;enderezo da ligazón</translation>
 <translation id="1163931534039071049">&amp;Ver código fonte do marco</translation>
 <translation id="1165039591588034296">Erro</translation>
-<translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Eliminar</translation>
 <translation id="1187722533808055681">Activación inactiva</translation>
 <translation id="1221825588892235038">Só seleccionar</translation>
@@ -24,7 +23,6 @@
 <translation id="1451375123200651445">Páxina web, ficheiro único</translation>
 <translation id="1465176863081977902">C&amp;opiar o enderezo do audio</translation>
 <translation id="1476607407192946488">&amp;Configuración do idioma</translation>
-<translation id="150411034776756821">Eliminar <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Esta extensión cambiou como a páxina se amosa cando premes o botón de Inicio.</translation>
 <translation id="1552752544932680961">Xestionar extensión</translation>
 <translation id="15662109988763471">A impresora seleccionada non está dispoñible ou non se instalou correctamente. Revisa a túa impresora ou proba a seleccionar outra.</translation>
@@ -101,7 +99,6 @@
 <translation id="2932085390869194046">Suxerir contrasinal…</translation>
 <translation id="2932883381142163287">Notificar sobre abusos</translation>
 <translation id="2941112035454246133">Baixa</translation>
-<translation id="2972581237482394796">&amp;Refacer</translation>
 <translation id="2993517869960930405">Información do aplicativo</translation>
 <translation id="3003623123441819449">Caché CSS</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -147,7 +144,6 @@
 <translation id="3711931198657368127">Pe&amp;gar e Ir a <ph name="URL" /></translation>
 <translation id="3727187387656390258">Inspeccionar emerxente</translation>
 <translation id="3760460896538743390">Inspeccionar páxina de &amp;fondo</translation>
-<translation id="3797900183766075808">&amp;Buscar <ph name="SEARCH_ENGINE" /> por “<ph name="SEARCH_TERMS" />”</translation>
 <translation id="3810973564298564668">Xestionar</translation>
 <translation id="3838085852053358637">Fallou ao cargar a extensión</translation>
 <translation id="383891835335927981">Ningún sitio foi ampliado ou reducido</translation>
@@ -155,10 +151,8 @@
 <translation id="3905761538810670789">Reparar aplicativo</translation>
 <translation id="3908501907586732282">Activar extensión</translation>
 <translation id="3909701002594999354">Amosar todos os &amp;controis</translation>
-<translation id="3909791450649380159">Cor&amp;tar</translation>
 <translation id="3927932062596804919">Denegar</translation>
 <translation id="3936390757709632190">Abrir &amp;o audio nunha nova lapela</translation>
-<translation id="3943582379552582368">A&amp;nterior</translation>
 <translation id="3948116654032448504">&amp;Buscar imaxe en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Nova extensión engadida (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="398477389655464998">Copiar ligazón ao texto destacado</translation>
@@ -172,7 +166,6 @@
 <translation id="4096508467498758490">Desactivar extensións no modo desenvolvedor</translation>
 <translation id="4100839878934973028">Outro programa do teu equipo engadiu un aplicativo que pode cambiar o funcionamiento de Vivaldi.</translation>
 <translation id="4109898769411476438">Pechar navegador antes de importar</translation>
-<translation id="4130207949184424187">Esta extensión cambiou como a páxina se amosa cando buscas desde Omnibox.</translation>
 <translation id="4131410914670010031">Negro e branco</translation>
 <translation id="4165986682804962316">Configuración do sitio</translation>
 <translation id="4176463684765177261">Desactivada</translation>
@@ -184,11 +177,9 @@
 <translation id="4348766275249686434">Recompilar erros</translation>
 <translation id="4363771538994847871">Non se atoparon destinos aos que transmitir. Necesitas axuda?</translation>
 <translation id="4384652540891215547">Activar a extensión</translation>
-<translation id="4394049700291259645">Desactivar</translation>
 <translation id="4409697491990005945">Marxes</translation>
 <translation id="4423376891418188461">Restaurar configuración</translation>
 <translation id="4478664379124702289">Gardar liga&amp;zón como…</translation>
-<translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Só o administrador (<ph name="CUSTODIAN_NAME" />) pode modificar aplicativos e extensións.</translation>
 <translation id="4613271546271159013">Unha extensión cambiou a páxina que se amosa ao abrir unha lapela nova.</translation>
 <translation id="4643612240819915418">&amp;Abrir vídeo na nova lapela</translation>
@@ -228,11 +219,9 @@
 <translation id="5301954838959518834">Entendido</translation>
 <translation id="5317780077021120954">Gardar</translation>
 <translation id="5334142896108694079">Caché de secuencia de comandos</translation>
-<translation id="5355926466126177564">A extensión <ph name="EXTENSION_NAME" /> cambiou a páxina que se amosa ao buscar desde Omnibox.</translation>
 <translation id="5360150013186312835">Amosar na barra de ferramentas</translation>
 <translation id="5362741141255528695">Selecciona un ficheiro de chave privada.</translation>
 <translation id="536638840841140142">Ningunha</translation>
-<translation id="5370819323174483825">&amp;Recargar</translation>
 <translation id="5398572795982417028">A referencia da páxina está fóra do límite, o cal é <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continuar descargando</translation>
 <translation id="5427459444770871191">Xirar á &amp;dereita</translation>
@@ -246,7 +235,6 @@
 <translation id="5575473780076478375">Extensión de incógnito: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5614553682702429503">Gardar contrasinal?</translation>
 <translation id="5623842676595125836">Rexistro</translation>
-<translation id="5627086634964711283">Tamén controla a páxina que se amosa ao premer no botón de inicio.</translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Fallou ao cargar a extensión desde:</translation>
 <translation id="5713171467967533494">Abrir no navegador Vivaldi</translation>
@@ -261,15 +249,11 @@
 <translation id="583281660410589416">Descoñecido</translation>
 <translation id="5860491529813859533">Activar</translation>
 <translation id="5910363049092958439">Gar&amp;dar imaxe como…</translation>
-<translation id="5956585768868398362">É esta a páxina de busca que esperabas?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> máximo)</translation>
-<translation id="5965661248935608907">Tamén controla a páxina que se amosa ao premer no botón de inicio ou ao buscar desde Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Usar un corrector ortográfico básico</translation>
-<translation id="5979421442488174909">&amp;Traducir a <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Máis</translation>
 <translation id="6086846494333236931">Instalado polo teu administrador</translation>
 <translation id="6101226222197207147">Novo aplicativo engadido (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="6122081475643980456">A conexión a Internet está sendo controlada</translation>
 <translation id="6147020289383635445">Fallou a previsualización da impresión.</translation>
 <translation id="6156863943908443225">Caché de script</translation>
 <translation id="6196854373336333322">A extensión "<ph name="EXTENSION_NAME" />" tomou o control dea túa configuración do proxy, o que significa que pode cambiar, interromper ou espiar o que fagas en liña. Se non estás seguro de por que ocorreu este cambio, probablemente non o queiras manter.</translation>
@@ -301,7 +285,6 @@
 <translation id="6639554308659482635">Memoria de SQLite</translation>
 <translation id="666731172850799929">Abrir en <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Gardar o teu contrasinal</translation>
-<translation id="6691936601825168937">A&amp;diante</translation>
 <translation id="6798954102094737107">Complemento: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter cambios</translation>
 <translation id="6824564591481349393">Copiar o enderezo &amp;electrónico</translation>
@@ -327,11 +310,9 @@
 <translation id="7421925624202799674">&amp;Ver fonte da páxina</translation>
 <translation id="7427348830195639090">Páxina de fondo:<ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Ao seleccionar esta impresora, concedes permiso para que a seguinte extensión acceda a ela:</translation>
-<translation id="749028671485790643">Persoa <ph name="VALUE" /></translation>
 <translation id="7564847347806291057">Rematar proceso</translation>
 <translation id="7576690715254076113">Agrupar</translation>
 <translation id="7629827748548208700">Lapela: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Cancelar</translation>
 <translation id="7659154729610375585">Queres saír do modo de incógnito de todas formas?</translation>
 <translation id="7661259717474717992">Permitir sitios para gardar e ler os datos da cookie</translation>
 <translation id="7663719505383602579">Recibidor: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -341,22 +322,18 @@
 <translation id="7704305437604973648">Tarefas</translation>
 <translation id="7710568461918838723">&amp;Transmitir...</translation>
 <translation id="7750228210027921155">Imaxe sobre imaxe</translation>
-<translation id="7760004034676677601">É esta a páxina de inicio que esperabas?</translation>
 <translation id="7771452384635174008">Deseño</translation>
 <translation id="7782102568078991263">Non hai máis suxestións de Google</translation>
 <translation id="7786889348652477777">&amp;Recargar o aplicativo</translation>
 <translation id="7791543448312431591">Engadir</translation>
 <translation id="7800518121066352902">Xirar á &amp;esquerda</translation>
-<translation id="7814458197256864873">&amp;Copiar</translation>
 <translation id="7818135753970109980">Novo tema engadido (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opiar o enderezo do vídeo</translation>
 <translation id="7849264908733290972">Abri &amp;imaxe na nova lapela</translation>
-<translation id="7857949311770343000">É esta a páxina de lapela nova que esperabas?</translation>
 <translation id="786073089922909430">Servizo: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7903925330883316394">Utilidade: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7947962633355574091">C&amp;opiar o enderezo do vídeo</translation>
 <translation id="7966241909927244760">C&amp;opiar o enderezo do imaxe</translation>
-<translation id="7973394300052703468">Nova xanela &amp;privada</translation>
 <translation id="7978412674231730200">Chave privada</translation>
 <translation id="7982789257301363584">Rede</translation>
 <translation id="7997826902155442747">Prioridade do proceso</translation>
@@ -406,19 +383,16 @@ Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versión
 <translation id="895944840846194039">Memoria de JavaScript</translation>
 <translation id="8962083179518285172">Agochar detalles</translation>
 <translation id="8973557916016709913">Eliminar o nivel de ampliación</translation>
-<translation id="897939795688207351">En <ph name="ORIGIN" /></translation>
 <translation id="9003647077635673607">Permitir en todos os sitios web</translation>
 <translation id="9027459031423301635">Abrir ligazón nunha nova &amp;lapela</translation>
 <translation id="9056810968620647706">Non se atoparon coincidencias.</translation>
 <translation id="9084064520949870008">Abrir como unha xanela</translation>
 <translation id="9137916601698928395">Abrir ligazón como <ph name="USER" /></translation>
 <translation id="916607977885256133">Imaxe sobre imaxe</translation>
-<translation id="9170848237812810038">An&amp;ular</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" engadido</translation>
 <translation id="9218430445555521422">Establecer como predeterminado</translation>
 <translation id="93766956588638423">Reparar extensión</translation>
 <translation id="961012016278832836">Legado de Microsoft Edge</translation>
 <translation id="98515147261107953">Paisaxe</translation>
-<translation id="994289308992179865">Buc&amp;le</translation>
 <translation id="998747458861718449">I&amp;nspeccionar</translation>
 </translationbundle>

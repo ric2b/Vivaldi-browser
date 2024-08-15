@@ -7,19 +7,18 @@
 #import "ios/panel/slide_in_animator.h"
 #import "ios/panel/slide_out_animator.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 @implementation PanelTransitioningDelegate
 
 - (UIPresentationController*)
 presentationControllerForPresentedViewController:(UIViewController*)presented
                         presentingViewController:(UIViewController*)presenting
                             sourceViewController:(UIViewController*)source {
-    return [[SidebarPanelPresentationController alloc]
-            initWithPresentedViewController:presented
-            presentingViewController:presenting];
+  SidebarPanelPresentationController *presentationController =
+      [[SidebarPanelPresentationController alloc]
+          initWithPresentedViewController:presented
+                 presentingViewController:presenting];
+  presentationController.toolbarType = self.toolbarType;
+  return presentationController;
 }
 
 - (id<UIViewControllerAnimatedTransitioning>)

@@ -41,8 +41,7 @@ namespace {
 
 using AllowStatus = ::borealis::BorealisFeatures::AllowStatus;
 
-using MaybeAction =
-    absl::optional<std::pair<std::u16string, base::OnceClosure>>;
+using MaybeAction = std::optional<std::pair<std::u16string, base::OnceClosure>>;
 
 // Views uses tricks like this to ensure singleton-ness of dialogs.
 static Widget* g_instance_ = nullptr;
@@ -54,7 +53,7 @@ class BehaviourProvider {
   virtual std::u16string GetMessage() const = 0;
 
   // Get a label and callback for the "call to action" button, if present.
-  virtual MaybeAction GetAction() const { return absl::nullopt; }
+  virtual MaybeAction GetAction() const { return std::nullopt; }
 
   virtual std::vector<std::pair<std::u16string, GURL>> GetLinks() const {
     return {};
@@ -224,9 +223,7 @@ std::unique_ptr<BehaviourProvider> StatusBehaviour(AllowStatus status) {
       // Unreachable in practice. Show "failed" message just in case.
       return std::make_unique<DisallowedFailure>();
     case AllowStatus::kFeatureDisabled:
-    case AllowStatus::kUnsupportedModel:
-    case AllowStatus::kHardwareChecksFailed:
-    case AllowStatus::kIncorrectToken:
+    case AllowStatus::kInsufficientHardware:
       return std::make_unique<DisallowedHardware>();
     case AllowStatus::kFailedToDetermine:
       return std::make_unique<DisallowedFailure>();

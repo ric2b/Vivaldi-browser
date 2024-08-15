@@ -24,9 +24,16 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/common/password_manager_constants.h"
 #include "components/sync/base/features.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/views/controls/styled_label.h"
+#include "ui/views/layout/fill_layout.h"
+#include "ui/views/layout/flex_layout.h"
+#include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/layout/table_layout.h"
+#include "ui/views/layout/table_layout_view.h"
 #include "ui/views/view_class_properties.h"
 
 using password_manager::metrics_util::PasswordManagementBubbleInteractions;
@@ -91,8 +98,7 @@ void ManagePasswordsView::AddedToWidget() {
   // Since PasswordBubbleViewBase creates the bubble using
   // BubbleDialogDelegateView::CreateBubble() *after* the construction of the
   // ManagePasswordsView, the title view cannot be set in the constructor.
-  GetBubbleFrameView()->SetTitleView(
-      ManagePasswordsListView::CreateTitleView(controller_.GetTitle()));
+  GetBubbleFrameView()->SetTitleView(CreateTitleView(controller_.GetTitle()));
 }
 
 bool ManagePasswordsView::Accept() {
@@ -102,12 +108,12 @@ bool ManagePasswordsView::Accept() {
   DCHECK(controller_.get_currently_selected_password().has_value());
   password_manager::PasswordForm updated_form =
       controller_.get_currently_selected_password().value();
-  absl::optional<std::u16string> updated_username =
+  std::optional<std::u16string> updated_username =
       password_details_view_->GetUserEnteredUsernameValue();
   if (updated_username.has_value()) {
     updated_form.username_value = updated_username.value();
   }
-  absl::optional<std::u16string> updated_note =
+  std::optional<std::u16string> updated_note =
       password_details_view_->GetUserEnteredPasswordNoteValue();
   if (updated_note.has_value()) {
     updated_form.SetNoteWithEmptyUniqueDisplayName(updated_note.value());
@@ -147,7 +153,8 @@ ManagePasswordsView::CreatePasswordListView() {
                     PasswordManagementBubbleInteractions::
                         kManagePasswordsButtonClicked);
           },
-          base::Unretained(this)));
+          base::Unretained(this)),
+      controller_.IsOptedInForAccountStorage());
 }
 
 std::unique_ptr<ManagePasswordsDetailsView>
@@ -223,6 +230,46 @@ std::unique_ptr<views::View> ManagePasswordsView::CreateFooterView() {
   }
 }
 
+std::unique_ptr<views::View>
+ManagePasswordsView::CreateMovePasswordFooterView() {
+  const ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
+  base::RepeatingClosure move_password_closure = base::BindRepeating(
+      [](ManagePasswordsView* dialog) {
+        dialog->controller_.OnMovePasswordLinkClicked();
+      },
+      base::Unretained(this));
+
+  auto footer = std::make_unique<views::FlexLayoutView>();
+
+  views::ImageView* icon_view = footer->AddChildView(
+      std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
+          vector_icons::kSaveCloudIcon, ui::kColorIcon,
+          layout_provider->GetDistanceMetric(
+              DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE))));
+  icon_view->SetVerticalAlignment(views::ImageView::Alignment::kLeading);
+  icon_view->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets::TLBR(
+          0, 0, 0,
+          layout_provider->GetInsetsMetric(views::INSETS_DIALOG_TITLE).left()));
+
+  views::StyledLabel* footer_label =
+      footer->AddChildView(CreateGooglePasswordManagerLabel(
+          /*text_message_id=*/
+          IDS_PASSWORD_MANAGER_MANAGEMENT_BUBBLE_FOOTER_MOVE_PASSWORD,
+          /*link_message_id=*/
+          IDS_PASSWORD_MANAGER_MANAGEMENT_BUBBLE_LINK_TEXT_MOVE_PASSWORD,
+          move_password_closure, views::style::CONTEXT_BUBBLE_FOOTER));
+
+  const int footer_label_width =
+      layout_provider->GetDistanceMetric(
+          views::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+      2 * layout_provider->GetInsetsMetric(views::INSETS_DIALOG).width();
+  footer_label->SizeToFit(footer_label_width);
+
+  return footer;
+}
+
 void ManagePasswordsView::RecreateLayout() {
   views::BubbleFrameView* frame_view = GetBubbleFrameView();
   CHECK(frame_view);
@@ -241,10 +288,18 @@ void ManagePasswordsView::RecreateLayout() {
         gfx::Insets().set_bottom(ChromeLayoutProvider::Get()
                                      ->GetInsetsMetric(views::INSETS_DIALOG)
                                      .bottom()));
+    if (controller_.IsOptedInForAccountStorage() &&
+        !controller_.get_currently_selected_password()
+             .value()
+             .IsUsingAccountStore() &&
+        base::FeatureList::IsEnabled(
+            password_manager::features::kButterOnDesktopFollowup)) {
+      frame_view->SetFootnoteView(CreateMovePasswordFooterView());
+      frame_view->SetProperty(views::kElementIdentifierKey, kFooterId);
+    }
   } else {
     password_details_view_ = nullptr;
-    frame_view->SetTitleView(
-        ManagePasswordsListView::CreateTitleView(controller_.GetTitle()));
+    frame_view->SetTitleView(CreateTitleView(controller_.GetTitle()));
     page_container_->SwitchToPage(CreatePasswordListView());
     page_container_->SetProperty(
         views::kMarginsKey,
@@ -264,7 +319,7 @@ void ManagePasswordsView::SwitchToReadingMode() {
 void ManagePasswordsView::SwitchToListView() {
   auth_timer_.Stop();
   SetButtons(ui::DIALOG_BUTTON_NONE);
-  controller_.set_currently_selected_password(absl::nullopt);
+  controller_.set_currently_selected_password(std::nullopt);
   RecreateLayout();
 }
 
@@ -326,3 +381,7 @@ void ManagePasswordsView::AuthenticateUserAndDisplayDetailsOf(
 }
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ManagePasswordsView, kTopView);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ManagePasswordsView, kFooterId);
+
+BEGIN_METADATA(ManagePasswordsView)
+END_METADATA

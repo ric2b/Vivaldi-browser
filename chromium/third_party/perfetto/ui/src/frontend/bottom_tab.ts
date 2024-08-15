@@ -16,11 +16,12 @@ import m from 'mithril';
 import {v4 as uuidv4} from 'uuid';
 
 import {stringifyJsonWithBigints} from '../base/json_utils';
+import {exists} from '../base/utils';
 import {Actions} from '../common/actions';
-import {EngineProxy} from '../common/engine';
 import {traceEvent} from '../common/metatracing';
 import {Registry} from '../common/registry';
 import {raf} from '../core/raf_scheduler';
+import {EngineProxy} from '../trace_processor/engine';
 
 import {globals} from './globals';
 
@@ -329,7 +330,7 @@ export class BottomTabList {
   }
 
   private schedulePendingTabsFlush(waitTimeMs: number) {
-    if (this.scheduledFlushSetTimeoutId) {
+    if (exists(this.scheduledFlushSetTimeoutId)) {
       // The flush is already pending, no action is required.
       return;
     }

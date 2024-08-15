@@ -102,8 +102,9 @@ VP9Decoder::VP9Accelerator::VP9Accelerator() {}
 
 VP9Decoder::VP9Accelerator::~VP9Accelerator() {}
 
-bool VP9Decoder::VP9Accelerator::SupportsContextProbabilityReadback() const {
-  return false;
+scoped_refptr<VP9Picture> VP9Decoder::VP9Accelerator::CreateVP9PictureSecure(
+    uint64_t secure_handle) {
+  return nullptr;
 }
 
 VP9Decoder::VP9Decoder(std::unique_ptr<VP9Accelerator> accelerator,
@@ -114,8 +115,7 @@ VP9Decoder::VP9Decoder(std::unique_ptr<VP9Accelerator> accelerator,
       // TODO(hiroh): Set profile to UNKNOWN.
       profile_(profile),
       accelerator_(std::move(accelerator)),
-      parser_(accelerator_->NeedsCompressedHeaderParsed(),
-              accelerator_->SupportsContextProbabilityReadback()) {}
+      parser_(accelerator_->NeedsCompressedHeaderParsed()) {}
 
 VP9Decoder::~VP9Decoder() = default;
 
@@ -133,6 +133,12 @@ void VP9Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
   if (!GetSpatialLayerFrameSize(decoder_buffer, frame_sizes)) {
     SetError();
     return;
+  }
+  if (decoder_buffer.has_side_data() &&
+      decoder_buffer.side_data()->secure_handle) {
+    secure_handle_ = decoder_buffer.side_data()->secure_handle;
+  } else {
+    secure_handle_ = 0;
   }
 
   parser_.SetStream(ptr, size, frame_sizes,
@@ -153,6 +159,8 @@ void VP9Decoder::Reset() {
   ref_frames_.Clear();
 
   parser_.Reset();
+
+  secure_handle_ = 0;
 
   if (state_ == kDecoding) {
     state_ = kAfterReset;
@@ -195,10 +203,6 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
           DVLOG(1) << "Error parsing stream";
           SetError();
           return kDecodeError;
-
-        case Vp9Parser::kAwaitingRefresh:
-          DVLOG(4) << "Awaiting context update";
-          return kNeedContextUpdate;
       }
     }
 
@@ -344,7 +348,12 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
       return kConfigChange;
     }
 
-    scoped_refptr<VP9Picture> pic = accelerator_->CreateVP9Picture();
+    scoped_refptr<VP9Picture> pic;
+    if (secure_handle_) {
+      pic = accelerator_->CreateVP9PictureSecure(secure_handle_);
+    } else {
+      pic = accelerator_->CreateVP9Picture();
+    }
     if (!pic) {
       return kRanOutOfSurfaces;
     }
@@ -370,39 +379,14 @@ VP9Decoder::DecodeResult VP9Decoder::Decode() {
   }
 }
 
-void VP9Decoder::UpdateFrameContext(
-    scoped_refptr<VP9Picture> pic,
-    Vp9Parser::ContextRefreshCallback context_refresh_cb) {
-  DCHECK(context_refresh_cb);
-  Vp9FrameContext frame_ctx;
-  memset(&frame_ctx, 0, sizeof(frame_ctx));
-
-  if (!accelerator_->GetFrameContext(std::move(pic), &frame_ctx)) {
-    SetError();
-    return;
-  }
-
-  std::move(context_refresh_cb).Run(frame_ctx);
-}
-
 VP9Decoder::VP9Accelerator::Status VP9Decoder::DecodeAndOutputPicture(
     scoped_refptr<VP9Picture> pic) {
   DCHECK(!pic_size_.IsEmpty());
   DCHECK(pic->frame_hdr);
 
-  base::OnceClosure done_cb;
-  Vp9Parser::ContextRefreshCallback context_refresh_cb =
-      parser_.GetContextRefreshCb(pic->frame_hdr->frame_context_idx);
-  if (context_refresh_cb) {
-    done_cb =
-        base::BindOnce(&VP9Decoder::UpdateFrameContext, base::Unretained(this),
-                       pic, std::move(context_refresh_cb));
-  }
-
   const Vp9Parser::Context& context = parser_.context();
   VP9Accelerator::Status status = accelerator_->SubmitDecode(
-      pic, context.segmentation(), context.loop_filter(), ref_frames_,
-      std::move(done_cb));
+      pic, context.segmentation(), context.loop_filter(), ref_frames_);
   if (status != VP9Accelerator::Status::kOk) {
     if (status == VP9Accelerator::Status::kTryAgain)
       pending_pic_ = std::move(pic);

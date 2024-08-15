@@ -1,13 +1,16 @@
 {
   "$build/chromium_tests_builder_config": {
     "builder_config": {
+      "additional_exclusions": [
+        "infra/config/generated/builders/try/win-official/gn-args.json"
+      ],
       "builder_db": {
         "entries": [
           {
             "builder_id": {
               "bucket": "ci",
               "builder": "win-official",
-              "project": "chromium-m120"
+              "project": "chromium-m122"
             },
             "builder_spec": {
               "builder_group": "chromium",
@@ -17,7 +20,8 @@
                   "mb"
                 ],
                 "config": "chromium",
-                "target_bits": 64
+                "target_bits": 64,
+                "target_platform": "win"
               },
               "legacy_gclient_config": {
                 "apply_configs": [
@@ -33,9 +37,10 @@
         {
           "bucket": "ci",
           "builder": "win-official",
-          "project": "chromium-m120"
+          "project": "chromium-m122"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/try/win-official/targets"
     }
   },
   "$build/reclient": {

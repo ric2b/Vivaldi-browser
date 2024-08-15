@@ -18,7 +18,8 @@
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
-#import "ios/ui/ntp/vivaldi_start_page_prefs.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -27,9 +28,6 @@ using vivaldi_bookmark_kit::SetNodeSpeeddial;
 using vivaldi_bookmark_kit::IsSeparator;
 using bookmarks::ManagedBookmarkService;
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
 
 @interface VivaldiSpeedDialHomeMediator ()<BookmarkModelBridgeObserver> {
   // Bridge to register for bookmark changes.
@@ -62,9 +60,8 @@ using bookmarks::ManagedBookmarkService;
   if ((self = [super init])) {
     _browserState = browserState;
     _bookmarkModel = bookmarkModel;
-    _model_bridge.reset(new BookmarkModelBridge(self,
-                                                           _bookmarkModel));
-
+    _model_bridge.reset(new BookmarkModelBridge(self,_bookmarkModel));
+    [VivaldiStartPagePrefs setPrefService:browserState->GetPrefs()];
     [self setUpStartPageLayoutChangeListener];
   }
   return self;
@@ -158,8 +155,7 @@ using bookmarks::ManagedBookmarkService;
 
 /// Returns current sorting mode
 - (SpeedDialSortingMode)currentSortingMode {
-  return [VivaldiStartPagePrefs
-            getSDSortingModeWithPrefService:self.browserState->GetPrefs()];
+  return [VivaldiStartPagePrefsHelper getSDSortingMode];
 }
 
 /// Fetches speed dial folders and their children and notifies the consumers.
@@ -339,7 +335,7 @@ using bookmarks::ManagedBookmarkService;
 
 - (void)bookmarkModel:(bookmarks::BookmarkModel*)model
         didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
-  [self refreshContents];
+  [self.consumer refreshNode:bookmarkNode];
 }
 
 - (void)bookmarkModel:(bookmarks::BookmarkModel*)model
@@ -365,7 +361,7 @@ using bookmarks::ManagedBookmarkService;
 }
 
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode {
-  if (bookmarkNode->is_folder() && (GetSpeeddial(bookmarkNode))) {
+  if (bookmarkNode->is_folder()) {
     [self refreshContents];
   }
 }

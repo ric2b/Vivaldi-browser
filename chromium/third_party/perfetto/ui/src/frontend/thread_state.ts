@@ -22,10 +22,10 @@ import {
 } from '../base/time';
 import {exists} from '../base/utils';
 import {Actions} from '../common/actions';
-import {EngineProxy} from '../common/engine';
 import {pluginManager} from '../common/plugins';
-import {LONG, NUM, NUM_NULL, STR_NULL} from '../common/query_result';
 import {translateState} from '../common/thread_state';
+import {EngineProxy} from '../trace_processor/engine';
+import {LONG, NUM, NUM_NULL, STR_NULL} from '../trace_processor/query_result';
 import {CPU_SLICE_TRACK_KIND} from '../tracks/cpu_slices';
 import {THREAD_STATE_TRACK_KIND} from '../tracks/thread_state';
 import {Anchor} from '../widgets/anchor';
@@ -108,6 +108,7 @@ export async function getThreadStateFromConstraints(
 
   for (; it.valid(); it.next()) {
     const ioWait = it.ioWait === null ? undefined : it.ioWait > 0;
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     const wakerUtid = asUtid(it.wakerUtid || undefined);
 
     // TODO(altimin): Consider fetcing thread / process info using a single
@@ -181,14 +182,15 @@ export class ThreadStateRef implements m.ClassComponent<ThreadStateRefAttrs> {
             let trackKey: string|number|undefined;
             for (const track of Object.values(globals.state.tracks)) {
               const trackDesc = pluginManager.resolveTrackInfo(track.uri);
-              // TODO(stevegolton): Handle v2.
               if (trackDesc && trackDesc.kind === THREAD_STATE_TRACK_KIND &&
                   trackDesc.utid === vnode.attrs.utid) {
                 trackKey = track.key;
               }
             }
 
+            /* eslint-disable @typescript-eslint/strict-boolean-expressions */
             if (trackKey) {
+              /* eslint-enable */
               globals.makeSelection(Actions.selectThreadState({
                 id: vnode.attrs.id,
                 trackKey: trackKey.toString(),

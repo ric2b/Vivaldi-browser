@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -14,7 +15,6 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "openssl/sha.h"
 #include "openssl/ssl.h"
 #include "quiche/quic/core/crypto/aes_128_gcm_12_decrypter.h"
@@ -748,7 +748,7 @@ void QuicCryptoServerConfig::ProcessClientHello(
   if (!context->signed_config()->chain) {
     const std::string chlo_hash = CryptoUtils::HashHandshakeMessage(
         context->client_hello(), Perspective::IS_SERVER);
-    const QuicSocketAddress server_address = context->server_address();
+    const QuicSocketAddress context_server_address = context->server_address();
     const std::string sni = std::string(context->info().sni);
     const QuicTransportVersion transport_version = context->transport_version();
 
@@ -756,7 +756,7 @@ void QuicCryptoServerConfig::ProcessClientHello(
         this, std::move(context), configs);
 
     QUICHE_DCHECK(proof_source_.get());
-    proof_source_->GetProof(server_address, client_address, sni,
+    proof_source_->GetProof(context_server_address, client_address, sni,
                             configs.primary->serialized, transport_version,
                             chlo_hash, std::move(cb));
     return;
@@ -1536,7 +1536,7 @@ void QuicCryptoServerConfig::BuildRejection(
           std::unique_ptr<CertificateView> view =
               CertificateView::ParseSingleCertificate(certs[0]);
           if (view != nullptr) {
-            absl::optional<std::string> maybe_ca_subject =
+            std::optional<std::string> maybe_ca_subject =
                 view->GetHumanReadableSubject();
             if (maybe_ca_subject.has_value()) {
               ca_subject = *maybe_ca_subject;
@@ -1780,11 +1780,11 @@ HandshakeFailureReason QuicCryptoServerConfig::ParseSourceAddressToken(
     // Some clients might still be using the old source token format so
     // attempt to parse that format.
     // TODO(rch): remove this code once the new format is ubiquitous.
-    SourceAddressToken token;
-    if (!token.ParseFromArray(plaintext.data(), plaintext.size())) {
+    SourceAddressToken old_source_token;
+    if (!old_source_token.ParseFromArray(plaintext.data(), plaintext.size())) {
       return SOURCE_ADDRESS_TOKEN_PARSE_FAILURE;
     }
-    *tokens.add_tokens() = token;
+    *tokens.add_tokens() = old_source_token;
   }
 
   return HANDSHAKE_OK;

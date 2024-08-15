@@ -466,32 +466,25 @@ void Connection::DeregisterReceivedPacketCallback() {
 void Connection::OnReadPacket(const char* data,
                               size_t size,
                               int64_t packet_time_us) {
+  OnReadPacket(
+      rtc::ReceivedPacket::CreateFromLegacy(data, size, packet_time_us));
+}
+void Connection::OnReadPacket(const rtc::ReceivedPacket& packet) {
   RTC_DCHECK_RUN_ON(network_thread_);
   std::unique_ptr<IceMessage> msg;
   std::string remote_ufrag;
   const rtc::SocketAddress& addr(remote_candidate_.address());
-  if (!port_->GetStunMessage(data, size, addr, &msg, &remote_ufrag)) {
+  if (!port_->GetStunMessage(
+          reinterpret_cast<const char*>(packet.payload().data()),
+          packet.payload().size(), addr, &msg, &remote_ufrag)) {
     // The packet did not parse as a valid STUN message
     // This is a data packet, pass it along.
     last_data_received_ = rtc::TimeMillis();
     UpdateReceiving(last_data_received_);
-    recv_rate_tracker_.AddSamples(size);
+    recv_rate_tracker_.AddSamples(packet.payload().size());
     stats_.packets_received++;
     if (received_packet_callback_) {
-      RTC_DCHECK(packet_time_us == -1 || packet_time_us >= 0);
-      RTC_DCHECK(SignalReadPacket.is_empty());
-      received_packet_callback_(
-          this, rtc::ReceivedPacket(
-                    rtc::reinterpret_array_view<const uint8_t>(
-                        rtc::MakeArrayView(data, size)),
-                    (packet_time_us >= 0)
-                        ? absl::optional<webrtc::Timestamp>(
-                              webrtc::Timestamp::Micros(packet_time_us))
-                        : absl::nullopt));
-    } else {
-      // TODO(webrtc:11943): Remove SignalReadPacket once upstream projects have
-      // switched to use RegisterReceivedPacket.
-      SignalReadPacket(this, data, size, packet_time_us);
+      received_packet_callback_(this, packet);
     }
     // If timed out sending writability checks, start up again
     if (!pruned_ && (write_state_ == STATE_WRITE_TIMEOUT)) {
@@ -597,10 +590,8 @@ void Connection::HandleStunBindingOrGoogPingRequest(IceMessage* msg) {
   // This connection should now be receiving.
   ReceivedPing(msg->transaction_id());
   if (field_trials_->extra_ice_ping && last_ping_response_received_ == 0) {
-    if (local_candidate().type() == RELAY_PORT_TYPE ||
-        local_candidate().type() == PRFLX_PORT_TYPE ||
-        remote_candidate().type() == RELAY_PORT_TYPE ||
-        remote_candidate().type() == PRFLX_PORT_TYPE) {
+    if (local_candidate().is_relay() || local_candidate().is_prflx() ||
+        remote_candidate().is_relay() || remote_candidate().is_prflx()) {
       const int64_t now = rtc::TimeMillis();
       if (last_ping_sent_ + kMinExtraPingDelayMs <= now) {
         RTC_LOG(LS_INFO) << ToString()
@@ -1586,8 +1577,7 @@ void Connection::MaybeSetRemoteIceParametersAndGeneration(
 
 void Connection::MaybeUpdatePeerReflexiveCandidate(
     const Candidate& new_candidate) {
-  if (remote_candidate_.type() == PRFLX_PORT_TYPE &&
-      new_candidate.type() != PRFLX_PORT_TYPE &&
+  if (remote_candidate_.is_prflx() && !new_candidate.is_prflx() &&
       remote_candidate_.protocol() == new_candidate.protocol() &&
       remote_candidate_.address() == new_candidate.address() &&
       remote_candidate_.username() == new_candidate.username() &&

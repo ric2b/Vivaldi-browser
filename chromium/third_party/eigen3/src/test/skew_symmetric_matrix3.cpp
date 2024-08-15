@@ -74,15 +74,14 @@ void plusMinus() {
   VERIFY_IS_APPROX((sk1 - sk2).toDenseMatrix(), sq1 - sq2);
 
   SquareMatrix sq3 = v1.asSkewSymmetric();
-  VERIFY_IS_APPROX( sq3 = v1.asSkewSymmetric() + v2.asSkewSymmetric(), sq1 + sq2);
-  VERIFY_IS_APPROX( sq3 = v1.asSkewSymmetric() - v2.asSkewSymmetric(), sq1 - sq2);
-  VERIFY_IS_APPROX( sq3 = v1.asSkewSymmetric() - 2*v2.asSkewSymmetric() + v1.asSkewSymmetric(), sq1 - 2*sq2 + sq1);
+  VERIFY_IS_APPROX(sq3 = v1.asSkewSymmetric() + v2.asSkewSymmetric(), sq1 + sq2);
+  VERIFY_IS_APPROX(sq3 = v1.asSkewSymmetric() - v2.asSkewSymmetric(), sq1 - sq2);
+  VERIFY_IS_APPROX(sq3 = v1.asSkewSymmetric() - 2 * v2.asSkewSymmetric() + v1.asSkewSymmetric(), sq1 - 2 * sq2 + sq1);
 
-  VERIFY_IS_APPROX((sk1 + sk1).vector(), 2*v1);
+  VERIFY_IS_APPROX((sk1 + sk1).vector(), 2 * v1);
   VERIFY((sk1 - sk1).vector().isZero());
   VERIFY((sk1 - sk1).toDenseMatrix().isZero());
 }
-
 
 template <typename Scalar>
 void multiplyScale() {
@@ -96,8 +95,8 @@ void multiplyScale() {
   sk1 = v1.asSkewSymmetric();
 
   const Scalar s1 = internal::random<Scalar>();
-  VERIFY_IS_APPROX(SkewSymmetricMatrix3<Scalar>(sk1*s1).vector(), sk1.vector() * s1);
-  VERIFY_IS_APPROX(SkewSymmetricMatrix3<Scalar>(s1*sk1).vector(), s1 * sk1.vector());
+  VERIFY_IS_APPROX(SkewSymmetricMatrix3<Scalar>(sk1 * s1).vector(), sk1.vector() * s1);
+  VERIFY_IS_APPROX(SkewSymmetricMatrix3<Scalar>(s1 * sk1).vector(), s1 * sk1.vector());
   VERIFY_IS_APPROX(sq1 * (sk1 * s1), (sq1 * sk1) * s1);
 
   const Vector v2 = Vector::Random();
@@ -105,14 +104,14 @@ void multiplyScale() {
   sq2 = v2.asSkewSymmetric();
   SkewSymmetricMatrix3<Scalar> sk2;
   sk2 = v2.asSkewSymmetric();
-  VERIFY_IS_APPROX(sk1*sk2, sq1*sq2);
+  VERIFY_IS_APPROX(sk1 * sk2, sq1 * sq2);
 
   // null space
-  VERIFY((sk1*v1).isZero());
-  VERIFY((sk2*v2).isZero());
+  VERIFY((sk1 * v1).isZero());
+  VERIFY((sk2 * v2).isZero());
 }
 
-template<typename Matrix>
+template <typename Matrix>
 void skewSymmetricMultiplication(const Matrix& m) {
   typedef Eigen::Matrix<typename Matrix::Scalar, 3, 1> Vector;
   const Vector v = Vector::Random();
@@ -127,7 +126,7 @@ void traceAndDet() {
   typedef Matrix<Scalar, 3, 1> Vector;
   const Vector v = Vector::Random();
   // this does not work, values larger than 1.e-08 can be seen
-  //VERIFY_IS_APPROX(sq.determinant(), static_cast<Scalar>(0));
+  // VERIFY_IS_APPROX(sq.determinant(), static_cast<Scalar>(0));
   VERIFY_IS_APPROX(v.asSkewSymmetric().determinant(), static_cast<Scalar>(0));
   VERIFY_IS_APPROX(v.asSkewSymmetric().toDenseMatrix().trace(), static_cast<Scalar>(0));
 }
@@ -149,10 +148,10 @@ void exponentialIdentity() {
 
   Vector v2 = Vector::Random();
   v2.normalize();
-  VERIFY((2*EIGEN_PI*v2).asSkewSymmetric().exponential().isIdentity());
+  VERIFY((2 * EIGEN_PI * v2).asSkewSymmetric().exponential().isIdentity());
 
   Vector v3;
-  const auto precision = static_cast<Scalar>(1.1)*NumTraits<Scalar>::dummy_precision();
+  const auto precision = static_cast<Scalar>(1.1) * NumTraits<Scalar>::dummy_precision();
   v3 << 0, 0, precision;
   VERIFY(v3.asSkewSymmetric().exponential().isIdentity(precision));
 }
@@ -174,23 +173,20 @@ void exponentialRotation() {
   // rotation axis is invariant
   const Vector v1 = Vector::Random();
   const SquareMatrix r1 = v1.asSkewSymmetric().exponential();
-  VERIFY_IS_APPROX(r1*v1, v1);
+  VERIFY_IS_APPROX(r1 * v1, v1);
 
   // rotate around z-axis
   Vector v2;
   v2 << 0, 0, EIGEN_PI;
   const SquareMatrix r2 = v2.asSkewSymmetric().exponential();
-  VERIFY_IS_APPROX(r2*(Vector() << 1,0,0).finished(), (Vector() << -1,0,0).finished());
-  VERIFY_IS_APPROX(r2*(Vector() << 0,1,0).finished(), (Vector() << 0,-1,0).finished());
+  VERIFY_IS_APPROX(r2 * (Vector() << 1, 0, 0).finished(), (Vector() << -1, 0, 0).finished());
+  VERIFY_IS_APPROX(r2 * (Vector() << 0, 1, 0).finished(), (Vector() << 0, -1, 0).finished());
 }
 
+}  // namespace
 
-} // namespace
-
-
-EIGEN_DECLARE_TEST(skew_symmetric_matrix3)
-{
-  for(int i = 0; i < g_repeat; i++) {
+EIGEN_DECLARE_TEST(skew_symmetric_matrix3) {
+  for (int i = 0; i < g_repeat; i++) {
     CALL_SUBTEST_1(constructors<float>());
     CALL_SUBTEST_1(constructors<double>());
     CALL_SUBTEST_1(assignments<float>());
@@ -200,8 +196,8 @@ EIGEN_DECLARE_TEST(skew_symmetric_matrix3)
     CALL_SUBTEST_2(plusMinus<double>());
     CALL_SUBTEST_2(multiplyScale<float>());
     CALL_SUBTEST_2(multiplyScale<double>());
-    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXf(3,internal::random<int>(1,EIGEN_TEST_MAX_SIZE))));
-    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXd(3,internal::random<int>(1,EIGEN_TEST_MAX_SIZE))));
+    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXf(3, internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));
+    CALL_SUBTEST_2(skewSymmetricMultiplication(MatrixXd(3, internal::random<int>(1, EIGEN_TEST_MAX_SIZE))));
     CALL_SUBTEST_2(traceAndDet<float>());
     CALL_SUBTEST_2(traceAndDet<double>());
     CALL_SUBTEST_2(transpose<float>());

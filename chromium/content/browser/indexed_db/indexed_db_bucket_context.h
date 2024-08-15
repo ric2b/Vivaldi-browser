@@ -16,18 +16,22 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "components/services/storage/indexed_db/locks/partitioned_lock_manager.h"
+#include "components/services/storage/privileged/mojom/indexed_db_bucket_types.mojom.h"
+#include "components/services/storage/privileged/mojom/indexed_db_client_state_checker.mojom-forward.h"
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
 #include "components/services/storage/public/cpp/quota_error_or.h"
 #include "components/services/storage/public/mojom/blob_storage_context.mojom.h"
 #include "components/services/storage/public/mojom/file_system_access_context.mojom.h"
-#include "content/browser/indexed_db/indexed_db_bucket_context_handle.h"
+#include "content/browser/indexed_db/indexed_db_data_loss_info.h"
+#include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_external_object.h"
 #include "content/browser/indexed_db/indexed_db_task_helper.h"
 #include "content/common/content_export.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 
@@ -37,6 +41,7 @@ class QuotaManagerProxy;
 
 namespace content {
 class IndexedDBBackingStore;
+class IndexedDBBucketContextHandle;
 class IndexedDBDatabase;
 class IndexedDBDataItemReader;
 class IndexedDBFactory;
@@ -50,11 +55,11 @@ constexpr const char kIDBCloseImmediatelySwitch[] = "idb-close-immediately";
 // IndexedDBBucketContext will keep itself alive while any of these is true:
 // * There are handles referencing the factory,
 // * There are outstanding blob references to this database's blob files, or
-// * The factory is in an incognito profile.
+// * The factory is in-memory (i.e. an incognito profile).
 //
-// When these qualities are no longer true, `RunTasks()` will return
-// `kCanBeDestroyed` which lets the owning `IndexedDBFactory` know it's time to
-// delete this object.
+// When these qualities are no longer true, `RunTasks()` will invoke
+// `on_ready_for_destruction`, which lets the owner (`IndexedDBFactory`) know
+// it's time to destroy this.
 //
 // TODO(crbug.com/1474996): it's intended that each bucket gets its own
 // IndexedDB task runner. To facilitate IndexedDB code running on multiple task
@@ -63,7 +68,8 @@ constexpr const char kIDBCloseImmediatelySwitch[] = "idb-close-immediately";
 // as `IndexedDBFactory`, and those that pertain to a specific bucket and
 // therefore run on a bucket's IDB task runner, such as `IndexedDBDatabase` or
 // `IndexedDBCursor`.
-class CONTENT_EXPORT IndexedDBBucketContext {
+class CONTENT_EXPORT IndexedDBBucketContext
+    : public base::trace_event::MemoryDumpProvider {
  public:
   using DBMap =
       base::flat_map<std::u16string, std::unique_ptr<IndexedDBDatabase>>;
@@ -126,14 +132,18 @@ class CONTENT_EXPORT IndexedDBBucketContext {
     Delegate(const Delegate&) = delete;
     Delegate& operator=(const Delegate&) = delete;
 
-    // Called to pump the IDB task queue (generally results in `RunTasks()`
-    // being called).
-    base::RepeatingClosure on_tasks_available;
-
     // Called when a fatal error has occurred that should result in tearing down
     // the backing store. `IndexedDBBucketContext` *may* be synchronously
-    // destroyed after this is invoked.
-    base::RepeatingCallback<void(leveldb::Status)> on_fatal_error;
+    // destroyed after this is invoked. The string, if non-empty, is used as an
+    // error message.
+    base::RepeatingCallback<void(leveldb::Status, const std::string&)>
+        on_fatal_error;
+
+    // Called when the backing store has been corrupted.
+    base::RepeatingCallback<void(const IndexedDBDatabaseError&)> on_corruption;
+
+    // Called when the bucket context is ready to be destroyed.
+    base::RepeatingCallback<void()> on_ready_for_destruction;
 
     // Called when database content has changed. Technically this is called when
     // the content *probably will* change --- it's invoked before a transaction
@@ -164,8 +174,6 @@ class CONTENT_EXPORT IndexedDBBucketContext {
   // `IndexedDBBucketContext` it creates.
   IndexedDBBucketContext(
       storage::BucketInfo bucket_info,
-      bool persist_for_incognito,
-      base::Clock* clock,
       std::unique_ptr<PartitionedLockManager> lock_manager,
       Delegate&& delegate,
       std::unique_ptr<IndexedDBBackingStore> backing_store,
@@ -180,9 +188,13 @@ class CONTENT_EXPORT IndexedDBBucketContext {
   IndexedDBBucketContext(const IndexedDBBucketContext&) = delete;
   IndexedDBBucketContext& operator=(const IndexedDBBucketContext&) = delete;
 
-  ~IndexedDBBucketContext();
+  ~IndexedDBBucketContext() override;
 
-  void ForceClose();
+  void QueueRunTasks();
+
+  // Normally, in-memory bucket contexts never self-close. If this is called
+  // with `doom` set to true, they will self-close.
+  void ForceClose(bool doom);
 
   bool IsClosing() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -195,8 +207,6 @@ class CONTENT_EXPORT IndexedDBBucketContext {
   }
 
   void ReportOutstandingBlobs(bool blobs_outstanding);
-
-  void StopPersistingForIncognito();
 
   // Runs `method` on `this`. This exists to facilitate running the setter on
   // the correct sequence.
@@ -226,7 +236,12 @@ class CONTENT_EXPORT IndexedDBBucketContext {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return backing_store_.get();
   }
+  // TODO(crbug.com/1474996): remove this.
   const DBMap& databases() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return databases_;
+  }
+  const DBMap& GetDatabasesForTesting() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return databases_;
   }
@@ -245,17 +260,10 @@ class CONTENT_EXPORT IndexedDBBucketContext {
 
   Delegate& delegate() { return delegate_; }
 
-  bool is_running_tasks() const { return running_tasks_; }
-  bool is_task_run_scheduled() const { return task_run_scheduled_; }
-  void set_task_run_scheduled() { task_run_scheduled_ = true; }
-
   base::OneShotTimer* close_timer() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return &close_timer_;
   }
-
-  enum class RunTasksResult { kDone, kError, kCanBeDestroyed };
-  std::tuple<RunTasksResult, leveldb::Status> RunTasks();
 
   base::WeakPtr<IndexedDBBucketContext> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -272,17 +280,55 @@ class CONTENT_EXPORT IndexedDBBucketContext {
     return file_system_access_context_.get();
   }
 
+  // `pending_factory_client` must be bound on the thread that uses it, hence it
+  // is not safe to bind it before passing here.
+  void OpenDatabase(
+      const std::u16string& name,
+      int64_t version,
+      mojo::PendingAssociatedRemote<blink::mojom::IDBFactoryClient>
+          pending_factory_client,
+      mojo::PendingAssociatedRemote<blink::mojom::IDBDatabaseCallbacks>
+          database_callbacks_remote,
+      int64_t transaction_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::IDBTransaction>
+          transaction_receiver,
+      bool was_cold_open,
+      IndexedDBDataLossInfo data_loss_info,
+      mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
+          state_checker);
+
+  // `pending_factory_client` must be bound on the thread that uses it, hence it
+  // is not safe to bind it before passing here.
+  void DeleteDatabase(
+      mojo::PendingAssociatedRemote<blink::mojom::IDBFactoryClient>
+          pending_factory_client,
+      std::u16string name,
+      bool force_close,
+      base::OnceClosure on_deletion_complete);
+
+  // Finishes filling in `info` with data relevant to idb-internals and passes
+  // the result back via `result`.
+  void FillInMetadata(
+      storage::mojom::IdbBucketMetadataPtr info,
+      base::OnceCallback<void(storage::mojom::IdbBucketMetadataPtr)> result);
+
+  void CompactBackingStoreForTesting();
+
+  // base::trace_event::MemoryDumpProvider:
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
  private:
   friend IndexedDBFactory;
   friend IndexedDBBucketContextHandle;
+  friend class IndexedDBDatabaseTest;
+  friend class IndexedDBTransactionTest;
 
   // Test needs access to ShouldRunTombstoneSweeper.
-  FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTestWithMockTime,
-                           TombstoneSweeperTiming);
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTest, TombstoneSweeperTiming);
 
   // Test needs access to ShouldRunCompaction.
-  FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTestWithMockTime,
-                           CompactionTaskTiming);
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTest, CompactionTaskTiming);
 
   // Test needs access to CompactionKillSwitchWorks.
   FRIEND_TEST_ALL_PREFIXES(IndexedDBFactoryTest, CompactionKillSwitchWorks);
@@ -309,6 +355,8 @@ class CONTENT_EXPORT IndexedDBBucketContext {
   void StartClosing();
   void CloseNow();
   void StartPreCloseTasks();
+
+  void RunTasks();
 
   // Executes database operations, and if `true` is returned by this function,
   // then the current time will be written to the database as the last sweep
@@ -340,19 +388,13 @@ class CONTENT_EXPORT IndexedDBBucketContext {
 
   storage::BucketInfo bucket_info_;
 
-  // True if this factory should be remain alive due to the storage partition
-  // being for incognito mode, and our backing store being in-memory. This is
-  // used as closing criteria for this object, see CanClose.
-  bool persist_for_incognito_;
   // True if there are blobs referencing this backing store that are still
   // alive. This is used as closing criteria for this object, see
   // CanClose.
   bool has_blobs_outstanding_ = false;
   bool skip_closing_sequence_ = false;
-  const raw_ptr<base::Clock> clock_;
 
   bool running_tasks_ = false;
-  bool task_run_scheduled_ = false;
 
   base::Time earliest_global_sweep_time_;
   base::Time earliest_global_compaction_time_;
@@ -362,6 +404,9 @@ class CONTENT_EXPORT IndexedDBBucketContext {
   std::unique_ptr<IndexedDBBackingStore> backing_store_;
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
 
+  // Databases in the backing store which are already loaded/represented by
+  // IndexedDBDatabase objects. The backing store may have other databases which
+  // have not yet been loaded.
   DBMap databases_;
   // This is the refcount for the number of IndexedDBBucketContextHandle's
   // given out for this factory using OpenReference. This is used as closing
@@ -397,6 +442,15 @@ class CONTENT_EXPORT IndexedDBBucketContext {
   std::unique_ptr<IndexedDBPreCloseTaskQueue> pre_close_task_queue_;
 
   Delegate delegate_;
+
+  // In-memory contexts will not self-close until this bit is flipped to true.
+  bool is_doomed_ = false;
+
+  // True if there's already a task queued to call `RunTasks()`.
+  bool task_run_queued_ = false;
+
+  // Base directory for blobs and backing store files.
+  base::FilePath data_path_;
 
   base::WeakPtrFactory<IndexedDBBucketContext> weak_factory_{this};
 };

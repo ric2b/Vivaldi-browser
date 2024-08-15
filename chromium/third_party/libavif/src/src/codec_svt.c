@@ -80,12 +80,12 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
     EbErrorType res = EB_ErrorNone;
 
     int y_shift = 0;
-    // EbColorRange svt_range;
+    EbColorRange svt_range;
     if (alpha) {
-        // svt_range = EB_CR_FULL_RANGE;
+        svt_range = EB_CR_FULL_RANGE;
         y_shift = 1;
     } else {
-        // svt_range = (image->yuvRange == AVIF_RANGE_FULL) ? EB_CR_FULL_RANGE : EB_CR_STUDIO_RANGE;
+        svt_range = (image->yuvRange == AVIF_RANGE_FULL) ? EB_CR_FULL_RANGE : EB_CR_STUDIO_RANGE;
         switch (image->yuvFormat) {
             case AVIF_PIXEL_FORMAT_YUV444:
                 color_format = EB_YUV444;
@@ -117,11 +117,12 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
         }
         svt_config->encoder_color_format = color_format;
         svt_config->encoder_bit_depth = (uint8_t)image->depth;
+        svt_config->color_range = svt_range;
 #if !SVT_AV1_CHECK_VERSION(0, 9, 0)
         svt_config->is_16bit_pipeline = image->depth > 8;
 #endif
 
-        // Follow comment in svt header: set if input is HDR10 BT2020 using SMPTE ST2084.
+        // Follow comment in svt header: set if input is HDR10 BT2020 using SMPTE ST2084 (PQ).
         svt_config->high_dynamic_range_input = (image->depth == 10 && image->colorPrimaries == AVIF_COLOR_PRIMARIES_BT2020 &&
                                                 image->transferCharacteristics == AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084 &&
                                                 image->matrixCoefficients == AVIF_MATRIX_COEFFICIENTS_BT2020_NCL);
@@ -155,8 +156,12 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
             svt_config->tile_columns = tileColsLog2;
         }
         if (encoder->speed != AVIF_SPEED_DEFAULT) {
+#if SVT_AV1_CHECK_VERSION(0, 9, 0)
+            svt_config->enc_mode = (int8_t)encoder->speed;
+#else
             int speed = AVIF_CLAMP(encoder->speed, 0, 8);
             svt_config->enc_mode = (int8_t)speed;
+#endif
         }
 
         if (color_format == EB_YUV422 || image->depth > 10) {
@@ -280,12 +285,19 @@ static void svtCodecDestroyInternal(avifCodec * codec)
 avifCodec * avifCodecCreateSvt(void)
 {
     avifCodec * codec = (avifCodec *)avifAlloc(sizeof(avifCodec));
+    if (codec == NULL) {
+        return NULL;
+    }
     memset(codec, 0, sizeof(struct avifCodec));
     codec->encodeImage = svtCodecEncodeImage;
     codec->encodeFinish = svtCodecEncodeFinish;
     codec->destroyInternal = svtCodecDestroyInternal;
 
     codec->internal = (struct avifCodecInternal *)avifAlloc(sizeof(avifCodecInternal));
+    if (codec->internal == NULL) {
+        avifFree(codec);
+        return NULL;
+    }
     memset(codec->internal, 0, sizeof(struct avifCodecInternal));
     return codec;
 }

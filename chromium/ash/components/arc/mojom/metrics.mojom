@@ -355,22 +355,6 @@ enum MainAccountHashMigrationStatus {
   // tools/metrics/histograms/enums.xml.
 };
 
-// The list of subdirectories of Android /data that are covered in the
-// statistics on the directory size and the number of files contained.
-enum AndroidDataSubdirectory {
-    // /data/app
-    kUserInstalledAppDir = 0,
-
-    // /data/data
-    kInternalDataDir = 1,
-
-    // /data/media/0
-    kExternalDataRootUserDir = 2,
-
-    // /data/user_de/0
-    kDEStorageRootUserDir = 3,
-};
-
 // Enumerates the types of Wayland timing events where the message processing
 // completed late and could cause UI jank in ARC apps. This enum is persisted to
 // logs. Existing values should not be changed and new values should only be
@@ -390,8 +374,22 @@ enum WaylandTimingEvent {
   kZcrVsyncTimingUpdate = 10,
 };
 
-// Deprecated method IDs: 25
-// Next method ID: 35
+// Enumerates the types of select ARC KeyMint error codes.
+[Extensible]
+enum ArcKeyMintError {
+  [Default] kOther = 0,
+  kOk = 1,
+  kUnknownError = 2,
+  kInvalidKeyBlob = 3,
+  kInvalidArgument = 4,
+  kUnsupportedAlgorithm = 5,
+  kUnimplemented = 6,
+};
+
+// This interface is implemented in ash by ArcMetricsService. It is called by
+// ARC side.
+// Deprecated method IDs: 25, 26, 27, 28, 29
+// Next method ID: 36
 interface MetricsHost {
   // Reports boot progress events from ARC instance.
   ReportBootProgress@0(array<BootProgressEvent> events,
@@ -498,35 +496,6 @@ interface MetricsHost {
   [MinVersion=26] ReportWaylandLateTimingEvent@30(
       WaylandTimingEvent event, mojo_base.mojom.TimeDelta duration);
 
-  // Reports the number of directories and non-directory files under the
-  // "Play files" folder in ChromeOS Files app except for the "Android" folder.
-  [MinVersion=25] ReportNonAndroidPlayFilesCount@26(
-      uint32 number_of_directories, uint32 number_of_non_directories);
-
-  // For each package, reports the number of directories and non-directory files
-  // and the total size of files contained in one of its package-specific
-  // directories, which can be found in /data/app, /data/data,
-  // /data/media/0/Android/{data,obb} or /data/user_de/0.
-  [MinVersion=25] ReportPerAppFileStatsOfAndroidDataDirs@27(
-      uint32 number_of_directories, uint32 number_of_non_directories,
-      uint32 size_in_kilobytes);
-
-  // Reports the number of directories and non-directory files and the total
-  // size of the files in /data/app, /data/data, /data/media/0 and
-  // /data/user_de/0 combined. Also reports the duration of the file system
-  // traversal to get the data in milliseconds.
-  [MinVersion=25] ReportTotalFileStatsOfAndroidDataDirs@28(
-      uint32 number_of_directories, uint32 number_of_non_directories,
-      uint32 size_in_kilobytes, mojo_base.mojom.TimeDelta duration);
-
-  // Reports the number of directories and non-directory files and the total
-  // size of the files in one of the selected subdirectories of /data
-  // (/data/app, /data/data, /data/media/0 and /data/user_de/0), which is
-  // specified in the first argument.
-  [MinVersion=25] ReportTotalFileStatsOfAndroidDataSubdir@29(
-      AndroidDataSubdirectory target, uint32 number_of_directories,
-      uint32 number_of_non_directories, uint32 size_in_kilobytes);
-
   // Reports first WebView started event to collect WebView usage in ARC.
   [MinVersion=27] ReportWebViewProcessStarted@31();
 
@@ -547,6 +516,9 @@ interface MetricsHost {
   // conversion code at the entry or exit of mojo data.
   // Range of perc arg will be [0, 100].
   [MinVersion=30] ReportQosSocketPercentage@34(int32 perc);
+
+  // Reports select error codes on select KeyMint calls (on ARC T+ only).
+  [MinVersion=31] ReportArcKeyMintError@35(ArcKeyMintError error);
 };
 
 // Deprecated method IDs: 0

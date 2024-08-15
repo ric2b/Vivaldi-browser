@@ -61,11 +61,6 @@
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gfx/native_pixmap_handle.h"
 
-#if BUILDFLAG(IS_OZONE)
-#include "ui/ozone/public/ozone_platform.h"
-#include "ui/ozone/public/surface_factory_ozone.h"
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include <va/va_prot.h>
 using media_gpu_vaapi::kModuleVa_prot;
@@ -345,11 +340,7 @@ media::VAImplementation VendorStringToImplementationType(
   return media::VAImplementation::kOther;
 }
 
-bool UseGlobalVaapiLock(media::VAImplementation implementation_type) {
-  if (!media::VaapiWrapper::allow_disabling_global_lock_) {
-    return true;
-  }
-
+bool IsThreadSafeDriver(media::VAImplementation implementation_type) {
   // Only iHD and Mesa Gallium are known to be thread safe at the moment.
   // * Mesa Gallium: b/144877595
   // * iHD: crbug.com/1123429.
@@ -357,7 +348,15 @@ bool UseGlobalVaapiLock(media::VAImplementation implementation_type) {
       base::MakeFixedFlatSet<media::VAImplementation>(
           {media::VAImplementation::kMesaGallium,
            media::VAImplementation::kIntelIHD});
-  return !kNoVaapiLockImplementations.contains(implementation_type) ||
+  return kNoVaapiLockImplementations.contains(implementation_type);
+}
+
+bool UseGlobalVaapiLock(media::VAImplementation implementation_type) {
+  if (!media::VaapiWrapper::allow_disabling_global_lock_) {
+    return true;
+  }
+
+  return !IsThreadSafeDriver(implementation_type) ||
          base::FeatureList::IsEnabled(media::kGlobalVaapiLock);
 }
 
@@ -406,7 +405,7 @@ bool FillVADRMPRIMESurfaceDescriptor(const gfx::NativePixmap& pixmap,
   for (size_t i = 0u; i < num_planes; i++) {
     const int dma_buf_fd = pixmap.GetDmaBufFd(i);
     if (dma_buf_fd < 0) {
-      LOG(ERROR) << "Failed to get dmabuf from an Ozone NativePixmap";
+      LOG(ERROR) << "Failed to get dmabuf from a NativePixmap";
       return false;
     }
     const off_t data_size = lseek(dma_buf_fd, /*offset=*/0, SEEK_END);
@@ -480,7 +479,7 @@ bool FillVASurfaceAttribExternalBuffers(
 
   const int dma_buf_fd = pixmap.GetDmaBufFd(0);
   if (dma_buf_fd < 0) {
-    LOG(ERROR) << "Failed to get dmabuf from an Ozone NativePixmap";
+    LOG(ERROR) << "Failed to get dmabuf from a NativePixmap";
     return false;
   }
   const off_t data_size = lseek(dma_buf_fd, /*offset=*/0, SEEK_END);
@@ -672,6 +671,15 @@ bool ClearNV12Padding(const VAImage& image,
   }
 
   return true;
+}
+
+// Creates an AutoLock iff |va_lock_| is not null and the libva backend is
+// thread-safe.
+std::unique_ptr<base::AutoLock> AutoLockOnlyIfNeeded(base::Lock* lock) {
+  if (lock && !IsThreadSafeDriver(VaapiWrapper::GetImplementationType())) {
+    return std::make_unique<base::AutoLock>(*lock);
+  }
+  return nullptr;
 }
 
 // Can't statically initialize the profile map:
@@ -1445,54 +1453,6 @@ bool IsVBREncodingSupported(VAProfile va_profile) {
   return VASupportedProfiles::Get().IsProfileSupported(mode, va_profile);
 }
 
-#if BUILDFLAG(IS_LINUX)
-// Some VA-API drivers (vdpau-va-driver) will crash if used with VA/DRM on
-// NVIDIA GPUs. This function checks if such drivers are present.
-bool IsBrokenNvidiaVaapiDriverPresent() {
-  std::vector<std::string> va_drivers_paths;
-
-  std::string va_drivers_paths_env;
-  auto env = base::Environment::Create();
-  if (env->GetVar("LIBVA_DRIVERS_PATH", &va_drivers_paths_env)) {
-    va_drivers_paths =
-        base::SplitString(va_drivers_paths_env, ":", base::KEEP_WHITESPACE,
-                          base::SPLIT_WANT_NONEMPTY);
-  } else {
-    // All known default VA driver paths of distributions shipping
-    // vdpau-va-driver
-    va_drivers_paths = {
-        "/usr/lib32/dri",
-        "/usr/lib64/dri",
-        "/usr/lib/dri",
-
-        "/usr/lib/aarch64-linux-gnu/dri",
-        "/usr/lib/i386-linux-gnu/dri",
-        "/usr/lib/x86_64-linux-gnu/dri",
-    };
-  }
-
-  // For NVIDIA GPUs (i.e., DRM driver name "nvidia-drm"), libva will look for
-  // nvidia_drv_video.so [1]. Therefore, all we need to check is whether
-  // nvidia_drv_video.so actually points to vdpau_drv_video.so. This check is
-  // best effort: base::MakeAbsoluteFilePath() resolves symbolic links, but it's
-  // entirely possible that nvidia_drv_video.so is actually a hard link to
-  // vdpau_drv_video.so or just a plain rename of it. We don't attempt to detect
-  // those cases.
-  //
-  // [1]
-  // https://github.com/intel/libva/blob/b4870fdfe2d41b579036dae280dfc7a5e732127f/va/drm/va_drm_utils.c#L67
-  for (const auto& va_drivers_path : va_drivers_paths) {
-    const auto nvidia_va_driver_path = base::MakeAbsoluteFilePath(
-        base::FilePath(va_drivers_path).Append("nvidia_drv_video.so"));
-    if (nvidia_va_driver_path.BaseName().value() == "vdpau_drv_video.so") {
-      return true;
-    }
-  }
-
-  return false;
-}
-#endif
-
 }  // namespace
 
 // static
@@ -1505,19 +1465,6 @@ VADisplayStateSingleton& VADisplayStateSingleton::GetInstance() {
 void VADisplayStateSingleton::PreSandboxInitialization() {
   VADisplayStateSingleton& va_display_state = GetInstance();
   base::AutoLock lock(va_display_state.lock_);
-
-#if BUILDFLAG(IS_LINUX)
-  std::string va_driver_name;
-  auto env = base::Environment::Create();
-  if (env->GetVar("LIBVA_DRIVER_NAME", &va_driver_name) &&
-      va_driver_name == "vdpau") {
-    // The vdpau VA driver will crash if used with VA/DRM. Do not open any DRM
-    // device if the user explicitly requested this driver.
-    return;
-  }
-
-  const bool is_nvidia_va_drm_broken = IsBrokenNvidiaVaapiDriverPresent();
-#endif
 
   constexpr char kRenderNodeFilePattern[] = "/dev/dri/renderD%d";
   // This loop ends on either the first card that does not exist or the first
@@ -1543,14 +1490,13 @@ void VADisplayStateSingleton::PreSandboxInitialization() {
     if (base::EqualsCaseInsensitiveASCII(version_name, "vgem")) {
       continue;
     }
-#if BUILDFLAG(IS_LINUX)
-    // Skip NVIDIA GPUs if the VA-API driver used for them is known for crashing
-    // with VA/DRM.
-    if (is_nvidia_va_drm_broken &&
-        base::EqualsCaseInsensitiveASCII(version_name, "nvidia-drm")) {
+    // Skip NVIDIA device because their VA-API drivers do not support
+    // Chromium and can sometimes cause crashes (see crbug.com/1492880).
+    if (base::EqualsCaseInsensitiveASCII(version_name, "nvidia-drm") &&
+        !base::FeatureList::IsEnabled(kVaapiOnNvidiaGPUs)) {
+      LOG(WARNING) << "Skipping nVidia device named: " << version_name;
       continue;
     }
-#endif
     va_display_state.drm_fd_ = base::ScopedFD(drm_file.TakePlatformFile());
     return;
   }
@@ -1575,19 +1521,6 @@ VADisplayStateHandle VADisplayStateSingleton::GetHandle() {
            "been called or that method failed to find a suitable render node";
     return {};
   }
-
-#if BUILDFLAG(IS_OZONE) && BUILDFLAG(IS_LINUX)
-  // TODO(crbug.com/1116701): add vaapi support for other Ozone platforms on
-  // Linux. See comment in OzonePlatform::PlatformProperties::supports_vaapi
-  // for more details. This will also require revisiting everything that's
-  // guarded by USE_VAAPI_X11. For example, if USE_VAAPI_X11 is true, but the
-  // user chooses the Wayland backend for Ozone at runtime, then many things (if
-  // not all) that we do for X11 won't apply.
-  auto* ozone = ui::OzonePlatform::GetInstance();
-  if (!ozone || !ozone->GetPlatformProperties().supports_vaapi) {
-    return {};
-  }
-#endif
 
   const bool libraries_initialized = IsVaInitialized() && IsVa_drmInitialized();
   if (!libraries_initialized) {
@@ -2787,11 +2720,13 @@ std::unique_ptr<ScopedVAImage> VaapiWrapper::CreateVaImage(
 
 bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
                                              VASurfaceID va_surface_id,
-                                             const gfx::Size& va_surface_size) {
+                                             const gfx::Size& va_surface_size)
+    NO_THREAD_SAFETY_ANALYSIS {
   CHECK(!enforce_sequence_affinity_ ||
         sequence_checker_.CalledOnValidSequence());
   TRACE_EVENT0("media,gpu", "VaapiWrapper::UploadVideoFrameToSurface");
-  base::AutoLockMaybe auto_lock(va_lock_.get());
+  std::unique_ptr<base::AutoLock> auto_lock =
+      AutoLockOnlyIfNeeded(va_lock_.get());
   TRACE_EVENT0("media,gpu", "VaapiWrapper::UploadVideoFrameToSurfaceLocked");
 
   if (frame.visible_rect().origin() != gfx::Point(0, 0)) {
@@ -2836,9 +2771,11 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
     return false;
   }
 
-  ScopedVABufferMapping mapping(va_lock_, va_display_, image.buf);
-  if (!mapping.IsValid())
+  ScopedVABufferMapping mapping(auto_lock ? va_lock_ : nullptr, va_display_,
+                                image.buf);
+  if (!mapping.IsValid()) {
     return false;
+  }
   uint8_t* image_ptr = static_cast<uint8_t*>(mapping.data());
 
   if (!ClearNV12Padding(image, visible_size, image_ptr)) {
@@ -2851,8 +2788,10 @@ bool VaapiWrapper::UploadVideoFrameToSurface(const VideoFrame& frame,
     TRACE_EVENT0("media,gpu", "VaapiWrapper::UploadVideoFrameToSurface_copy");
 
     std::unique_ptr<base::AutoUnlock> auto_unlock;
-    if (va_lock_)
+    if (auto_lock) {
       auto_unlock = std::make_unique<base::AutoUnlock>(*va_lock_);
+    }
+
     if (frame.format() == PIXEL_FORMAT_I420) {
       ret = libyuv::I420ToNV12(
           frame.data(VideoFrame::kYPlane), frame.stride(VideoFrame::kYPlane),
@@ -2898,13 +2837,14 @@ std::unique_ptr<ScopedVABuffer> VaapiWrapper::CreateVABuffer(VABufferType type,
 }
 
 uint64_t VaapiWrapper::GetEncodedChunkSize(VABufferID buffer_id,
-                                           VASurfaceID sync_surface_id) {
+                                           VASurfaceID sync_surface_id)
+    NO_THREAD_SAFETY_ANALYSIS {
   CHECK(!enforce_sequence_affinity_ ||
         sequence_checker_.CalledOnValidSequence());
   TRACE_EVENT0("media,gpu", "VaapiWrapper::GetEncodedChunkSize");
-  base::AutoLockMaybe auto_lock(va_lock_.get());
+  std::unique_ptr<base::AutoLock> auto_lock =
+      AutoLockOnlyIfNeeded(va_lock_.get());
   TRACE_EVENT0("media,gpu", "VaapiWrapper::GetEncodedChunkSizeLocked");
-
   // vaSyncSurface() is not necessary on Intel platforms as long as there is a
   // vaMapBuffer() like in ScopedVABufferMapping below.
   // vaSyncSurface() synchronizes all active workloads (potentially many, e.g.
@@ -2916,7 +2856,8 @@ uint64_t VaapiWrapper::GetEncodedChunkSize(VABufferID buffer_id,
     VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVASyncSurface, 0u);
   }
 
-  ScopedVABufferMapping mapping(va_lock_, va_display_, buffer_id);
+  ScopedVABufferMapping mapping(auto_lock ? va_lock_ : nullptr, va_display_,
+                                buffer_id);
   if (!mapping.IsValid())
     return 0u;
 
@@ -2935,14 +2876,14 @@ bool VaapiWrapper::DownloadFromVABuffer(
     absl::optional<VASurfaceID> sync_surface_id,
     uint8_t* target_ptr,
     size_t target_size,
-    size_t* coded_data_size) {
+    size_t* coded_data_size) NO_THREAD_SAFETY_ANALYSIS {
   CHECK(!enforce_sequence_affinity_ ||
         sequence_checker_.CalledOnValidSequence());
   DCHECK(target_ptr);
   TRACE_EVENT0("media,gpu", "VaapiWrapper::DownloadFromVABuffer");
-  base::AutoLockMaybe auto_lock(va_lock_.get());
+  std::unique_ptr<base::AutoLock> auto_lock =
+      AutoLockOnlyIfNeeded(va_lock_.get());
   TRACE_EVENT0("media,gpu", "VaapiWrapper::DownloadFromVABufferLocked");
-
   // vaSyncSurface() is not necessary on Intel platforms as long as there is a
   // vaMapBuffer() like in ScopedVABufferMapping below, see b/184312032.
   // |sync_surface_id| will be nullopt because it has been synced already.
@@ -2955,7 +2896,8 @@ bool VaapiWrapper::DownloadFromVABuffer(
     VA_SUCCESS_OR_RETURN(va_res, VaapiFunctions::kVASyncSurface, false);
   }
 
-  ScopedVABufferMapping mapping(va_lock_, va_display_, buffer_id);
+  ScopedVABufferMapping mapping(auto_lock ? va_lock_ : nullptr, va_display_,
+                                buffer_id);
   if (!mapping.IsValid())
     return false;
   auto* buffer_segment =
@@ -3300,6 +3242,10 @@ bool VaapiWrapper::VaInitialize(
   }
 
   return true;
+}
+
+bool VaapiWrapper::HasContext() const {
+  return va_context_id_ != VA_INVALID_ID;
 }
 
 void VaapiWrapper::DestroyContext() {

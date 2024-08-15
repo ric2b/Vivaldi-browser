@@ -146,7 +146,7 @@ class InteractionTracker : public ui::EventHandler,
       native_window_->RemovePreTargetHandler(this);
   }
 
-  const absl::optional<gfx::Point>& last_interaction_location() const {
+  const std::optional<gfx::Point>& last_interaction_location() const {
     return last_interaction_location_;
   }
 
@@ -178,7 +178,7 @@ class InteractionTracker : public ui::EventHandler,
     }
   }
 
-  absl::optional<gfx::Point> last_interaction_location_;
+  std::optional<gfx::Point> last_interaction_location_;
   gfx::NativeWindow native_window_;
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       scoped_widget_observation_{this};
@@ -224,8 +224,8 @@ class TabCounterAnimator : public gfx::AnimationDelegate {
   int GetDisappearingLabelTargetPosition() const;
   int GetBorderStartingY() const;
 
-  absl::optional<int> last_num_tabs_;
-  absl::optional<int> pending_num_tabs_ = 0;
+  std::optional<int> last_num_tabs_;
+  std::optional<int> pending_num_tabs_ = 0;
   bool pending_throbber_ = false;
   TabCounterAnimationType current_animation_ = TabCounterAnimationType::kNone;
 
@@ -436,9 +436,9 @@ class WebUITabCounterButton : public views::Button,
                               public TabStripModelObserver,
                               public views::ContextMenuController,
                               public ui::SimpleMenuModel::Delegate {
- public:
-  METADATA_HEADER(WebUITabCounterButton);
+  METADATA_HEADER(WebUITabCounterButton, views::Button)
 
+ public:
   static constexpr int WEBUI_TAB_COUNTER_CXMENU_CLOSE_TAB = 13;
   static constexpr int WEBUI_TAB_COUNTER_CXMENU_NEW_TAB = 14;
 
@@ -693,7 +693,7 @@ void WebUITabCounterButton::ExecuteCommand(int command_id, int event_flags) {
   }
 }
 
-BEGIN_METADATA(WebUITabCounterButton, views::Button)
+BEGIN_METADATA(WebUITabCounterButton)
 END_METADATA
 
 }  // namespace

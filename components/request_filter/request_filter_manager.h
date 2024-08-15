@@ -5,6 +5,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -265,7 +266,7 @@ class RequestFilterManager : public KeyedService {
       content::RenderFrameHost* frame,
       int render_process_id,
       content::ContentBrowserClient::URLLoaderFactoryType type,
-      absl::optional<int64_t> navigation_id,
+      std::optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -280,7 +281,7 @@ class RequestFilterManager : public KeyedService {
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const net::SiteForCookies& site_for_cookies,
-      const absl::optional<std::string>& user_agent,
+      const std::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -296,7 +297,7 @@ class RequestFilterManager : public KeyedService {
       const url::Origin& frame_origin,
       content::ContentBrowserClient::WebSocketFactory factory,
       const net::SiteForCookies& site_for_cookies,
-      const absl::optional<std::string>& user_agent,
+      const std::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
@@ -313,7 +314,7 @@ class RequestFilterManager : public KeyedService {
       content::ContentBrowserClient::WillCreateWebTransportCallback callback,
       mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
           handshake_client,
-      absl::optional<network::mojom::WebTransportErrorPtr> error);
+      std::optional<network::mojom::WebTransportErrorPtr> error);
 
   void ProxyWebTransport(
       content::RenderProcessHost& render_process_host,

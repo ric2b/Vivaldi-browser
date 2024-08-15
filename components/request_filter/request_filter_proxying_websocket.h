@@ -7,6 +7,7 @@
 #ifndef COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_PROXYING_WEBSOCKET_H_
 #define COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_PROXYING_WEBSOCKET_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -97,7 +98,7 @@ class RequestFilterProxyingWebSocket
   static void StartProxying(
       WebSocketFactory factory,
       const net::SiteForCookies& site_for_cookies,
-      const absl::optional<std::string>& user_agent,
+      const std::optional<std::string>& user_agent,
       const GURL& url,
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>

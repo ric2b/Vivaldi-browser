@@ -14,6 +14,10 @@ struct tint_array {
     T elements[N];
 };
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 struct S {
   int before;
   half4x3 m;
@@ -39,10 +43,7 @@ struct S_tint_packed_vec3 {
 };
 
 half4x3 tint_unpack_vec3_in_composite(tint_array<tint_packed_vec3_f16_array_element, 4> in) {
-  half4x3 result = half4x3(0.0h);
-  for(uint i = 0u; (i < 4u); i = (i + 1u)) {
-    result[i] = half3(in[i].elements);
-  }
+  half4x3 result = half4x3(half3(in[0].elements), half3(in[1].elements), half3(in[2].elements), half3(in[3].elements));
   return result;
 }
 
@@ -55,15 +56,12 @@ S tint_unpack_vec3_in_composite_1(S_tint_packed_vec3 in) {
 }
 
 tint_array<S, 4> tint_unpack_vec3_in_composite_2(tint_array<S_tint_packed_vec3, 4> in) {
-  tint_array<S, 4> result = {};
-  for(uint i = 0u; (i < 4u); i = (i + 1u)) {
-    result[i] = tint_unpack_vec3_in_composite_1(in[i]);
-  }
+  tint_array<S, 4> result = tint_array<S, 4>{tint_unpack_vec3_in_composite_1(in[0]), tint_unpack_vec3_in_composite_1(in[1]), tint_unpack_vec3_in_composite_1(in[2]), tint_unpack_vec3_in_composite_1(in[3])};
   return result;
 }
 
 void f_inner(uint local_invocation_index, threadgroup tint_array<S, 4>* const tint_symbol_1, const constant tint_array<S_tint_packed_vec3, 4>* const tint_symbol_2) {
-  for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
+  TINT_ISOLATE_UB(tint_volatile_true) for(uint idx = local_invocation_index; (idx < 4u); idx = (idx + 1u)) {
     uint const i = idx;
     S const tint_symbol = S{};
     (*(tint_symbol_1))[i] = tint_symbol;

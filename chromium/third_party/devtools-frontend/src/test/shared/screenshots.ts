@@ -77,6 +77,11 @@ export const assertElementScreenshotUnchanged = async (
   if (!element) {
     assert.fail(`Given element for test ${fileName} was not found.`);
   }
+  // Only assert screenshots on Linux. We don't observe platform-specific differences enough to justify
+  // the costs of asserting 3 platforms per screenshot.
+  if (platform !== 'linux') {
+    return;
+  }
   return assertScreenshotUnchangedWithRetries(element, fileName, maximumDiffThreshold, DEFAULT_RETRIES_COUNT, options);
 };
 
@@ -95,7 +100,11 @@ const assertScreenshotUnchangedWithRetries = async (
     const goldenScreenshotPath = path.join(GOLDENS_FOLDER, fileNameForPlatform);
     const generatedScreenshotPath = path.join(generatedScreenshotFolder, fileNameForPlatform);
 
-    if (fs.existsSync(generatedScreenshotPath)) {
+    // You can run the tests with ITERATIONS=2 to run each test twice. In that
+    // case we would expect the generated screenshots to already exists, so if
+    // we are running more than 1 iteration, we do not error.
+    const testIterations = process.env.ITERATIONS ? parseInt(process.env.ITERATIONS, 10) : 1;
+    if (fs.existsSync(generatedScreenshotPath) && testIterations < 2) {
       // If this happened something went wrong during the clean-up at the start of the test run, so let's bail.
       throw new Error(`${generatedScreenshotPath} already exists.`);
     }
@@ -271,7 +280,6 @@ async function execImageDiffCommand(cmd: string) {
 
 async function compare(golden: string, generated: string, maximumDiffThreshold: number) {
   const isOnBot = process.env.LUCI_CONTEXT !== undefined;
-
   if (!isOnBot && process.env.SKIP_SCREENSHOT_COMPARISONS_FOR_FAST_COVERAGE) {
     // When checking test coverage locally the tests get sped up significantly
     // if we do not do the actual image comparison. Obviously this makes the

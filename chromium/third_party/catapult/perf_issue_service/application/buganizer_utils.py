@@ -14,14 +14,49 @@ be reconciled to the Monorail format on perf_issue_service.
 
 import logging
 
+from application.clients import monorail_client
+
 # ============ mapping helpers start ============
 # The mapping here are for ad hoc testing. The real mappings will be different
 # from project to project and will be added in future CLs.
 
+# components, labels and hotlists for testing:
+# Buganizer component 1325852 is "ChromePerf testing"
+# Monorail labels "chromeperf-test" and "chromeperf-test-2"
+# Buganizer hotlists 5141966 and 5142065
+COMPONENT_MAP_CR2B = {
+  'UntriagedPerformanceAlerts': 1454999, # Trackers > Fuchsia > UntriagedPerformanceAlerts
+  'ChromePerf testing': 1325852
+}
+
+COMPONENT_MAP_B2CR = {
+  '1454999' : 'fuchsia',
+  # test
+  '1325852' : 'MigratedProject'
+}
+
+PROJECT_MAP_CR2B = {
+  'fuchsia': ['1454999'],
+  # test
+  'MigratedProject': ['1325852']
+}
+
+# string to int
+LABEL_MAP_CR2B = {
+  'Performance': '5424295', # Performance
+  # test
+  'chromeperf-test': '5141966',
+  'chromeperf-test-2': '5142065'
+}
+
+HOTLIST_MAP_B2CR = {
+  hotlist:label for label, hotlist in LABEL_MAP_CR2B.items()
+}
+
+
 def FindBuganizerComponentId(monorail_component):
-  # temp. will have real mapping.
-  del monorail_component
-  return 1325852
+  return COMPONENT_MAP_CR2B.get(monorail_component, 1325852)
+
 
 def FindBuganizerComponents(monorail_project_name):
   """return a list of components in buganizer based on the monorail project
@@ -29,34 +64,42 @@ def FindBuganizerComponents(monorail_project_name):
   The current implementation is ad hoc as the component mappings are not
   fully set up on buganizer yet.
   """
-  if monorail_project_name == 'MigratedProject':
-    return ['1325852']
-  return []
+  return PROJECT_MAP_CR2B.get(monorail_project_name, [])
+
 
 def FindMonorailProject(buganizer_component_id):
-  if buganizer_component_id == '1325852':
-    return 'MigratedProject'
-  return ''
+  return COMPONENT_MAP_B2CR.get(buganizer_component_id, '')
 
 
 def FindBuganizerHotlists(monorail_labels):
+  '''Find the hotlist mappings for monorail labels.
+
+  Some of the Monorail labels are mapped to Buganizer hotlists. However,
+  some of them are not, and they will be copied over to a custome field
+  in Buganizer. For Fuchsia project, the custome field is 'Monorail labels',
+  for other project, the custome field is 'Chromium labels'.
+  Args:
+    monorail_labels: the labels in Monorail
+  Returns:
+    hotlists: the hotlists in Buganizer
+    extra_labels: the Monorail labels with no mapping in Buganizer
+  '''
   hotlists = []
+  extra_labels = []
   for label in monorail_labels:
     hotlist = _FindBuganizerHotlist(label)
     if hotlist:
       hotlists.append(hotlist)
+    else:
+      extra_labels.append(label)
   logging.debug(
-    '[PerfIssueService] labels (%s) -> hotlists (%s)',
-    monorail_labels, hotlists)
-  return hotlists
+    '[PerfIssueService] labels (%s) -> hotlists (%s). Leftover: %s',
+    monorail_labels, hotlists, extra_labels)
+  return hotlists, extra_labels
 
 
 def _FindBuganizerHotlist(monorail_label):
-  if monorail_label == 'chromeperf-test':
-    return '5141966'
-  elif monorail_label == 'chromeperf-test-2':
-    return '5142065'
-  return None
+  return LABEL_MAP_CR2B.get(monorail_label, None)
 
 
 def _FindMonorailLabel(buganizer_hotlist):
@@ -160,15 +203,13 @@ def LoadPriorityFromMonorailLabels(monorail_labels):
   Returns:
     the priority from the label if any, otherwise 2 by default.
   '''
-  priority = 99
-  for label in monorail_labels:
-    if label.startswith('Pri-'):
-      label_priority = int(label[4])
-      priority = min(priority, label_priority)
-  if priority == 99:
-    return 2
-  return priority
-
+  if monorail_labels:
+    for label in monorail_labels:
+      if label.startswith('Pri-'):
+        label_priority = int(label[4])
+        if 0 <= label_priority < 5:
+          return label_priority
+  return 2
 
 def ReconcileBuganizerIssue(buganizer_issue):
   '''Reconcile a Buganizer issue into the Monorail format
@@ -206,3 +247,55 @@ def ReconcileBuganizerIssue(buganizer_issue):
   monorail_issue['labels'] = [label for label in label_names if label]
 
   return monorail_issue
+
+
+def FindBuganizerIdByMonorailId(monorail_project, monorail_id):
+  '''Try to find the buganizer id using the monorail id
+
+  After a monorail issue is migrated to buganizer, the buganizer id will
+  be populated to the monorail issue record, in a property 'migratedId'.
+  '''
+  logging.debug('Looking for b/ id for crbug %s in %s', monorail_id, monorail_project)
+  if int(monorail_id) < 2000000:
+    # This is a hack to handle the use case that:
+    #  - we have the monorail issue id in our database
+    #  - the issue is migrated to buganizer
+    #  - we need to update the issue but we don't know the id on buganizer
+    # Assuming all monorail id are less than 2000000, trying to access an
+    # issue using buganizer client and a monorail id means the project has
+    # been migrated.
+    # In this case, we should find the buganizer id first.
+
+    client = monorail_client.MonorailClient()
+    issue = client.GetIssue(
+      issue_id=monorail_id,
+      project=monorail_project)
+    buganizer_id = issue.get('migrated_id', None)
+    logging.debug('Migrated ID %s found for %s/%s.',
+                  buganizer_id, monorail_project, monorail_id)
+    if not buganizer_id:
+      err_msg = 'Cannot find the migrated id for crbug %s in %s' % (
+        monorail_id, monorail_project)
+      logging.error(err_msg)
+    return buganizer_id
+  return monorail_id
+
+
+def GetCustomField(monorail_project):
+  '''Get the custom field name based on monorail project.
+
+  More context in FindBuganizerHotlists()
+  '''
+  if monorail_project == 'fuchsia':
+     return 'customfield1241047'
+  return 'customfield1223031'
+
+
+def GetCustomFieldId(monorail_project):
+  '''Get the custom field ID based on monorail project.
+
+  More context in FindBuganizerHotlists()
+  '''
+  if monorail_project == 'fuchsia':
+     return 1241047
+  return 1223031
